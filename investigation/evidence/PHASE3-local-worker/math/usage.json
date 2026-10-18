@@ -1,0 +1,13 @@
+{
+  "model": "devstral-small-2:24b-instruct-2512-q4_K_M",
+  "done": true,
+  "done_reason": "stop",
+  "prompt_eval_count": 454,
+  "eval_count": 291,
+  "load_duration": 1027300,
+  "elapsed_seconds": 8.08,
+  "raw_bytes": 46123,
+  "context_bytes": 1350,
+  "input_sha256": "5cd792af8f370b6f03000609dd68bb7aceeea18c5dabd2f5452ea2dba4ead56f",
+  "execution_authority": "NONE"
+}

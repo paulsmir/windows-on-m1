@@ -1,0 +1,22 @@
+[
+    {
+        "Name":  "stage-receipt.json",
+        "Bytes":  311,
+        "SHA256":  "F10470A2E51EE963150904907D141E8830A9EB5A4E4021D46B95C40051EDB56A"
+    },
+    {
+        "Name":  "cleanup.json",
+        "Bytes":  873,
+        "SHA256":  "C094AA0E154D63BCF2B9F7261E7EC8D31E493B8A45C7DDF055CC12E9E2918B91"
+    },
+    {
+        "Name":  "cleanup-transition.json",
+        "Bytes":  301,
+        "SHA256":  "EC15279F1DDEBCB52A93814A9A8D219BF8844D3645BE5FD411109CE76C6D5CE2"
+    },
+    {
+        "Name":  "diagnostics-clean.json",
+        "Bytes":  266,
+        "SHA256":  "35AE64421C2B89F8DC822C59CB901D65765B04489A352FBB90CDFB1C812BDACD"
+    }
+]

@@ -1,0 +1,1753 @@
+{
+  "schema_version": 1,
+  "feature_level": "D3D_FEATURE_LEVEL_10_0",
+  "ddi": "D3D10_0_DDI_INTERFACE_VERSION",
+  "optional_msaa": false,
+  "optional_xr_bias": false,
+  "entries": [
+    {
+      "format": "DXGI_FORMAT_UNKNOWN",
+      "families": [
+        "buffer"
+      ],
+      "representations": [
+        "buffer"
+      ],
+      "required_uses": [
+        "buffer-storage",
+        "cpu-access"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32B32A32_TYPELESS",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32B32A32_FLOAT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32B32A32_UINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32B32A32_SINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16B16A16_TYPELESS",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16B16A16_FLOAT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16B16A16_UNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16B16A16_UINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16B16A16_SNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16B16A16_SINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32_TYPELESS",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32_FLOAT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32_UINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32_SINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16_TYPELESS",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16_FLOAT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16_UNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16_UINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16_SNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16G16_SINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32_TYPELESS",
+      "families": [
+        "ordinary-color",
+        "depth-stencil"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views",
+        "depth-stencil"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64",
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32_FLOAT",
+      "families": [
+        "ordinary-color",
+        "depth-stencil"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64",
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32_UINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32_SINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8B8A8_TYPELESS",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8B8A8_UNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8B8A8_UNORM_SRGB",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8B8A8_UINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8B8A8_SNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8B8A8_SINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8_TYPELESS",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8_UNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8_UINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8_SNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8_SINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16_TYPELESS",
+      "families": [
+        "ordinary-color",
+        "depth-stencil"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views",
+        "depth-stencil"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64",
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16_FLOAT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16_UNORM",
+      "families": [
+        "ordinary-color",
+        "depth-stencil"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64",
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16_UINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16_SNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R16_SINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8_TYPELESS",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8_UNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8_UINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8_SNORM",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8_SINT",
+      "families": [
+        "ordinary-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32B32_TYPELESS",
+      "families": [
+        "rgb32"
+      ],
+      "representations": [
+        "rgba32-lowered"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-lowered-textures-green-20260920kc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32B32_FLOAT",
+      "families": [
+        "rgb32"
+      ],
+      "representations": [
+        "rgba32-lowered"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-lowered-textures-green-20260920kc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32B32_UINT",
+      "families": [
+        "rgb32"
+      ],
+      "representations": [
+        "rgba32-lowered"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-lowered-textures-green-20260920kc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G32B32_SINT",
+      "families": [
+        "rgb32"
+      ],
+      "representations": [
+        "rgba32-lowered"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "stream-output",
+        "srv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-lowered-textures-green-20260920kc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R10G10B10A2_TYPELESS",
+      "families": [
+        "packed-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-packed-final-20260920jn-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R10G10B10A2_UNORM",
+      "families": [
+        "packed-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-packed-final-20260920jn-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R10G10B10A2_UINT",
+      "families": [
+        "packed-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "srv",
+        "rtv"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-packed-final-20260920jn-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R11G11B10_FLOAT",
+      "families": [
+        "packed-color"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "typed-buffer",
+        "vertex",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-packed-final-20260920jn-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_D16_UNORM",
+      "families": [
+        "depth-stencil"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "depth-stencil"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_D32_FLOAT",
+      "families": [
+        "depth-stencil"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "depth-stencil"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R24G8_TYPELESS",
+      "families": [
+        "depth-stencil"
+      ],
+      "representations": [
+        "split-stencil"
+      ],
+      "required_uses": [
+        "depth-stencil",
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_D24_UNORM_S8_UINT",
+      "families": [
+        "depth-stencil"
+      ],
+      "representations": [
+        "split-stencil"
+      ],
+      "required_uses": [
+        "depth-stencil"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R24_UNORM_X8_TYPELESS",
+      "families": [
+        "depth-stencil"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "depth-stencil",
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_X24_TYPELESS_G8_UINT",
+      "families": [
+        "depth-stencil"
+      ],
+      "representations": [
+        "split-stencil"
+      ],
+      "required_uses": [
+        "depth-stencil",
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32G8X24_TYPELESS",
+      "families": [
+        "depth-stencil"
+      ],
+      "representations": [
+        "split-stencil"
+      ],
+      "required_uses": [
+        "depth-stencil",
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_D32_FLOAT_S8X24_UINT",
+      "families": [
+        "depth-stencil"
+      ],
+      "representations": [
+        "split-stencil"
+      ],
+      "required_uses": [
+        "depth-stencil"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS",
+      "families": [
+        "depth-stencil"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "depth-stencil",
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_X32_TYPELESS_G8X24_UINT",
+      "families": [
+        "depth-stencil"
+      ],
+      "representations": [
+        "split-stencil"
+      ],
+      "required_uses": [
+        "depth-stencil",
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC1_TYPELESS",
+      "families": [
+        "bc1"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC1_UNORM",
+      "families": [
+        "bc1"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC1_UNORM_SRGB",
+      "families": [
+        "bc1"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC2_TYPELESS",
+      "families": [
+        "bc2"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC2_UNORM",
+      "families": [
+        "bc2"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC2_UNORM_SRGB",
+      "families": [
+        "bc2"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC3_TYPELESS",
+      "families": [
+        "bc3"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC3_UNORM",
+      "families": [
+        "bc3"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC3_UNORM_SRGB",
+      "families": [
+        "bc3"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC4_TYPELESS",
+      "families": [
+        "bc4"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC4_UNORM",
+      "families": [
+        "bc4"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC4_SNORM",
+      "families": [
+        "bc4"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC5_TYPELESS",
+      "families": [
+        "bc5"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC5_UNORM",
+      "families": [
+        "bc5"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_BC5_SNORM",
+      "families": [
+        "bc5"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_A8_UNORM",
+      "families": [
+        "alpha8"
+      ],
+      "representations": [
+        "rgba8-lowered"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-lowered-textures-green-20260920kc-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R9G9B9E5_SHAREDEXP",
+      "families": [
+        "shared-exponent"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-packed-final-20260920jn-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_R8G8_B8G8_UNORM",
+      "families": [
+        "packed-pair"
+      ],
+      "representations": [
+        "rgba8-lowered"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-packed-final-20260920jn-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_G8R8_G8B8_UNORM",
+      "families": [
+        "packed-pair"
+      ],
+      "representations": [
+        "rgba8-lowered"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-packed-final-20260920jn-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_B5G6R5_UNORM",
+      "families": [
+        "win8-packed"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter",
+        "rtv",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-win8-formats-green-20260920jq-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_B5G5R5A1_UNORM",
+      "families": [
+        "win8-packed"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-win8-formats-green-20260920jq-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_B4G4R4A4_UNORM",
+      "families": [
+        "win8-packed"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "filter"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-win8-formats-green-20260920jq-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_B8G8R8A8_TYPELESS",
+      "families": [
+        "extended-bgra"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_B8G8R8A8_UNORM",
+      "families": [
+        "extended-bgra"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_B8G8R8A8_UNORM_SRGB",
+      "families": [
+        "extended-bgra"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_B8G8R8X8_TYPELESS",
+      "families": [
+        "extended-bgra"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "storage",
+        "compatible-views"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_B8G8R8X8_UNORM",
+      "families": [
+        "extended-bgra"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    },
+    {
+      "format": "DXGI_FORMAT_B8G8R8X8_UNORM_SRGB",
+      "families": [
+        "extended-bgra"
+      ],
+      "representations": [
+        "native"
+      ],
+      "required_uses": [
+        "texture",
+        "srv",
+        "rtv",
+        "filter",
+        "blend"
+      ],
+      "evidence": [
+        "investigation/evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64"
+      ]
+    }
+  ],
+  "subresource_evidence": "investigation/evidence/AD04-runtime-closure/required-subresource-final-20260920jz-x64",
+  "mesa_commit": "9aa1215f878b504f66159dd2ead4c7973142126e",
+  "mapping_source": "src/gallium/frontends/d3d10umd/Format.cpp plus Windows projection"
+}

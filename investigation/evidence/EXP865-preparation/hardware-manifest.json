@@ -1,0 +1,70 @@
+{
+  "experiment": "EXP865",
+  "status": "PREPARED_WAIT_GO",
+  "profile": {
+    "reserve_version": 2,
+    "reserve_bytes": 1073741824,
+    "local_bytes": 1048576000,
+    "private_bytes": 16777216,
+    "backend_bytes": 8388608,
+    "scanout_bytes": 58720256,
+    "scanout_abi_version": 2,
+    "gpuva_broker_version": 5
+  },
+  "package_source_commit": "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
+  "immutable_reference_sha256": {
+    "EXP855E-r141-attachment-envelope/firmware/m1n1-r110.macho": "14872dba0a6ecab9d4e49e42237298b44909126f0d5f7267cc5deaed587372b1",
+    "EXP855E-r141-attachment-envelope/firmware/J313_EFI-r110.fd": "3a76857cb650cae6b8d7c5d22250debeec437cd28c2dfd032ebecb1cbd0f6eca",
+    "EXP810-g4-package817/recovery/m1n1-exp377.macho": "fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a",
+    "EXP810-g4-package817/recovery/J313_EFI-exp392.fd": "16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06",
+    "EXP-20260903-385-hvc-single-page/recovery/J313_EFI-no-agx-autoboot.fd": "279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c"
+  },
+  "recovery": "evidence first; ordered restart to immutable EXP377/385 hiddenCode45; exact package cleanup; immutable EXP377/392 ordinaryCode28; no live Code0 removal",
+  "signing": {
+    "catalog_membership_SYS_UMD": "PASS (builder native signtool)",
+    "signer_thumbprint": "E9BE15BD2A184BFABA0C8035B3C620C58037A241",
+    "same_as_EXP855E": true,
+    "builder_chain_trust": "UnknownError / untrusted test root; no trust-store change; native catalog membership and unchanged signer verified",
+    "guest_signing_verification": "NOT_RUN"
+  },
+  "build_command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pauls\\EXP865-r150-owner\\build-kmd.ps1",
+  "launch_command": "R145_AIR_AUTHORIZATION=GO_EXP865 .local/experiments/EXP865-r150-owner/full-owner-direct.sh",
+  "operator": "Codex direct execution",
+  "build_result": "ARM64 UMD and KMD 0 warnings/0 errors; SourceCommit=NativeArchiveCommit=26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917; package 30.0.865.0",
+  "source_manifest_sha256": "909d9df2e26904be93c90fbfc1d28bbd2b72523353250323184c9add51b6b680",
+  "inf_sha256": "5cccbd5bb1040847f104c4fcd04c1c56117123cb307dc77f1a6f6d24a5e7ab11",
+  "build_receipt_sha256": "9bf3c63c746ca94f93289584a1a79d8548dab574738c79f019ff5bc281390678",
+  "utc_prepared": "2026-09-28T11:57:35.580077+00:00",
+  "hardware_checkpoint": [
+    "one GO_EXP865-authorized first armed cold R143 full-owner boot; no retry/rearm",
+    "no 0x116; render fences advance beyond first submission with DMA completion/fence-notify evidence",
+    "TA/3D completion, firmware/UAT fault receipts, nonzero scanout, ten-minute original-boot SSH/DWM stability"
+  ],
+  "limitations": [
+    "Preparation only: STOP before GO_EXP865; no Air transfer/stage/launch in this task",
+    "Only G3 backend identity source/test change vs a9ecd3ea; Flush0f51f3f5 excluded",
+    "Full host suite1161 tests18F40E2S; identities and limitations in full-suite-result.json",
+    "Active GPU reset remains fail-closed; crash/hang requires hidden Code45 dump-first cleanup",
+    "Collect original ETL before ordered reboot. If original SSH is lost first, record original ETL unavailable and label recovery trace separately; verify native ETL BootTime before attributing events."
+  ],
+  "artifact_sha256": {
+    "firmware/m1n1-r143.macho": "5fe13d19c5ca4d21327c44934613ae0f5109b8de096590db69f455e439e61a01",
+    "firmware/J313_EFI-r143.fd": "e54c009847e64a4b2b327f54385eedb94f5a9e5fd3b459fd6101b07af4c023fc",
+    "firmware/J313AppleAgxAbiAdmissionSsdt.aml": "3bdb28edb9def16f147f00947d9a2368f1f99036d601c86ead8b0ff46ccbab7f",
+    "source-manifest.json": "909d9df2e26904be93c90fbfc1d28bbd2b72523353250323184c9add51b6b680",
+    "source.zip": "5c63baa1baf58c8e9f3ff01f6a1f96d7b3bebed802a4e591cf007d650e8072d6",
+    "AppleAgxRenderAdmission.inf": "5cccbd5bb1040847f104c4fcd04c1c56117123cb307dc77f1a6f6d24a5e7ab11",
+    "AppleAgxRenderAdmission.sys": "2d274a457ff07b13cb00c3d7a2027e1690f9438ef140850347154cf5f7e378de",
+    "AppleAgxRenderAdmissionUmd.dll": "2a3c13171ab5c332e97b404c01cd02dca37e31430b3c2c3886752511adf151bc",
+    "appleagxrenderadmission.cat": "85bab541d55a7cb50a6937a959deb3a7656badba6dfdaf5f93f392ed84069afd",
+    "kmd-build-receipt.json": "9bf3c63c746ca94f93289584a1a79d8548dab574738c79f019ff5bc281390678",
+    "build-kmd.ps1": "23bb33fb7ec5d914ae028d08240809bdaf25afc43f7a96998ba0c88a6c954ffc",
+    "arm64-build.log": "8d06c03f2c5b5a68d580db65a08db5973acaf42e8a150d43af554dad80b1d6ed",
+    "launch-configuration.json": "2c783ff01ae73eec73406a67eceb2789075c538c1b03bb59d7ddca5eb325501d",
+    "guest-transfer-manifest.json": "674255b4e597349ceb23fa30baabfe771cc1dc6fba4cddada5658332ffe10fe0",
+    "full-owner-direct.sh": "5ec32c234b8a5696fe0430c290209e1313881e691b2dd3c94c8b0cecbcc2ce05",
+    "emergency-hidden.sh": "1c18d13608dfceba822790067aed52eee12263393ea91a23eb963f3aa27e78b7",
+    "ordinary-direct-final.sh": "a77d39f5e8daed978ab9528de22b3b7efcea2e6ec987f382df13fa0e17366e3d",
+    "source-proof.json": "22898f546bcec9c2a40447abbce6f01371ffe5d804c57b5a8022d413e8918b05"
+  }
+}

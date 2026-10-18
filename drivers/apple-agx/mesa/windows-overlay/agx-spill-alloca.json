@@ -1,0 +1,5 @@
+{
+  "source_sha256": "83f42ca52cc42ba9ac06fb265494df50485d2a256a0021c9f7bf79f6ea018379",
+  "old": "#include \"util/bitset.h\"",
+  "new": "#include \"c99_alloca.h\"\n#include \"util/bitset.h\""
+}

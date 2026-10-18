@@ -1,0 +1,22 @@
+C:\Users\pauls\R148-memory\build\Device-baseline.cpp(95,41): error: unused parameter 'hAdapter' [-Werror,-Wunused-parameter]
+   95 | CalcPrivateDeviceSize(D3D10DDI_HADAPTER hAdapter,                          // IN
+      |                                         ^
+C:\Users\pauls\R148-memory\build\Device-baseline.cpp(96,69): error: unused parameter 'pData' [-Werror,-Wunused-parameter]
+   96 |                       __in const D3D10DDIARG_CALCPRIVATEDEVICESIZE *pData) // IN
+      |                                                                     ^
+C:\Users\pauls\R148-memory\build\Device-baseline.cpp(484,39): error: unused parameter 'hDevice' [-Werror,-Wunused-parameter]
+  484 |  RelocateDeviceFuncs(D3D10DDI_HDEVICE hDevice,                           // IN
+      |                                       ^
+C:\Users\pauls\R148-memory\build\Device-baseline.cpp(485,55): error: unused parameter 'pDeviceFunctions' [-Werror,-Wunused-parameter]
+  485 |                     __in struct D3D10DDI_DEVICEFUNCS *pDeviceFunctions) // IN
+      |                                                       ^
+C:\Users\pauls\R148-memory\build\Device-baseline.cpp(507,39): error: unused parameter 'hDevice' [-Werror,-Wunused-parameter]
+  507 | RelocateDeviceFuncs1(D3D10DDI_HDEVICE hDevice,                           // IN
+      |                                       ^
+C:\Users\pauls\R148-memory\build\Device-baseline.cpp(508,57): error: unused parameter 'pDeviceFunctions' [-Werror,-Wunused-parameter]
+  508 |                     __in struct D3D10_1DDI_DEVICEFUNCS *pDeviceFunctions) // IN
+      |                                                         ^
+C:\Users\pauls\R148-memory\build\Device-baseline.cpp(646,36): error: unused parameter 'hDevice' [-Werror,-Wunused-parameter]
+  646 | SetTextFilterSize(D3D10DDI_HDEVICE hDevice,  // IN
+      |                                    ^
+7 errors generated.

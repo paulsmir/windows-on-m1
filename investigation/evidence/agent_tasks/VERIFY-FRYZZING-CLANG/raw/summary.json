@@ -1,0 +1,33 @@
+{
+  "automatic_merge": false,
+  "command": [
+    "ssh",
+    "-i",
+    "/Users/pavel/.ssh/windows_builder",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=8",
+    "pauls@192.168.1.24",
+    "cmd /c \"C:\\Users\\pauls\\AD04-asahi-windows-compiler\\llvm20\\bin\\clang-cl.exe --version\""
+  ],
+  "command_id": "FRYZZING_VERIFY_CLANG",
+  "exit_code": null,
+  "hardware_used": false,
+  "input_commit": "c073bc68f288d55216af0cfb02f424ec29f962a3",
+  "raw_evidence": [
+    "/private/tmp/apple-agx-tier-c-remote.lMZQVe/result/stdout.log",
+    "/private/tmp/apple-agx-tier-c-remote.lMZQVe/result/stderr.log",
+    "/private/tmp/apple-agx-tier-c-remote.lMZQVe/result/scope.json"
+  ],
+  "reason": "command_timeout",
+  "result": "TIMEOUT",
+  "scope": {
+    "changed_paths": [],
+    "forbidden_paths": [],
+    "scope_ok": true,
+    "source_changed": false
+  },
+  "task_id": "VERIFY-FRYZZING-CLANG",
+  "timed_out": true
+}

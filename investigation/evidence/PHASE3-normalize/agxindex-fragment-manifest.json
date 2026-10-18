@@ -1,0 +1,22 @@
+{
+  "actual_fragment_sha256": "294f000dc93ac2c4b7ed3ca2575027108d034dab87e94ad97746820bd7460f79",
+  "actual_header_sha256": "51e711161bbf90501c11fde7582238023503fcd585da5e3c807897ca11a1319a",
+  "constructors": [
+    "agx_get_vec_index",
+    "agx_immediate",
+    "agx_memory_register",
+    "agx_register_like",
+    "agx_undef",
+    "agx_uniform",
+    "agx_null",
+    "agx_zero",
+    "agx_negzero",
+    "agx_abs",
+    "agx_neg",
+    "agx_replace_index",
+    "agx_is_null"
+  ],
+  "pinned_fragment_sha256": "e17127484ead3842e1bc7eefeef0620c2fcbcdce80174804dc814051d2c8532b",
+  "pinned_header_sha256": "c41df12679c1692cc50617e81d57eb03cf906d8c5fbada482b89fc6dde0c7741",
+  "source_mutated": false
+}

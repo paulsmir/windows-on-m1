@@ -1,0 +1,7 @@
+UMD COMPOSER: Composer_failures=0
+UMD ASAHI BATCH ADAPTER: failures=0
+NATIVE_POOL_WINDOWS_OWNER: errors=0
+NATIVE_PPP_CAPTURE: errors=0 (native PPP helpers and USC emitter; no draw or GPU execution)
+NATIVE_ENCODER_ROOT_RESERVE: errors=0 (root owner contract; no native draw execution)
+ACTUAL_NATIVE_BUILD_PIPELINE: errors=0 (controlled shader input; no GPU execution)
+NATIVE_OWNER_BALANCE: creates=9 maps=9 unlocks=9 deletes=9 expected=9 backends=0

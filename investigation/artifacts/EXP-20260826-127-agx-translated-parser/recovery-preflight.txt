@@ -1,0 +1,13 @@
+BootUtc=2026-08-26T20:40:15.4979380Z
+CPU=8
+APPL0002=0
+AppleAgxService=0
+AppleInput=Running
+NVMe=Running
+XHCI=Running
+Critical=0
+Event129=0
+PackageRoot=0
+SignerRoot=0
+SignerPublisher=0
+AppleAgxDriverStoreMatches=0

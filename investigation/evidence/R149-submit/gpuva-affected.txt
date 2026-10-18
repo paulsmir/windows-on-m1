@@ -1,0 +1,66 @@
+..................E.E.............
+======================================================================
+ERROR: test_portable_cpu_view_validator (test_gpuva_g3_cpu_visible_segment.G3CpuVisibleSegmentTests.test_portable_cpu_view_validator)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_gpuva_g3_cpu_visible_segment.py", line 38, in test_portable_cpu_view_validator
+    subprocess.run([
+    ~~~~~~~~~~~~~~^^
+        os.environ.get("LLVM_LINK", "llvm-link"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        *(str(path) for path in bitcode), "-o", str(linked),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ], check=True, cwd=ROOT)
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 1991, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'llvm-link'
+
+======================================================================
+ERROR: test_gpuva_system_context_object_contract (test_gpuva_g3_createcontext_contract.G3CreateContextContractTests.test_gpuva_system_context_object_contract)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_gpuva_g3_createcontext_contract.py", line 28, in test_gpuva_system_context_object_contract
+    subprocess.run([
+    ~~~~~~~~~~~~~~^^
+        os.environ.get("LLVM_LINK", "llvm-link"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        *(str(path) for path in bitcode), "-o", str(linked),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ], check=True, cwd=ROOT)
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 1991, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'llvm-link'
+
+----------------------------------------------------------------------
+Ran 34 tests in 3.844s
+
+FAILED (errors=2)
+{"harness":"PASS","checks":330,"shared_uat":true,"representable_16k_groups":"PASS","arbitrary_4k_groups":"COUNTEREXAMPLE","selected_segment_scatter":"UNREACHABLE_IN_GENERATOR","vidmm_segment_granularity_assumed":true,"wddm_input_domain_proven":false,"hardware":false}

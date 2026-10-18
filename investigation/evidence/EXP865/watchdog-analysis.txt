@@ -1,0 +1,213 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.000 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\Users\pauls\EXP865-r150-owner\Live-WATCHDOG-20260928-1411.dmp]
+Mini Kernel Dump File: Only registers and stack trace are available
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\EXP865-r150-owner
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\EXP865-r150-owner
+Executable search path is:
+Windows 10 Kernel Version 26200 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Kernel base = 0xfffff800`d3a00000 PsLoadedModuleList = 0xfffff800`d476ac50
+Debug session time: Mon Sep 28 14:11:33.617 2026 (UTC + 2:00)
+System Uptime: 0 days 0:00:39.160
+Loading Kernel Symbols
+...............................................................
+................................................................
+...................................
+Loading User Symbols
+
+Mini Kernel Dump does not contain unloaded driver list
+For analysis of this file, run !analyze -v
+3: kd> cdb: Reading initial command '.bugcheck; !analyze -v; kv; q'
+Bugcheck code 00000141
+Arguments ffffd00f`21ea6010 fffff800`d1fa6d60 00000000`00000000 ffffd00f`1dabb080
+*******************************************************************************
+*                                                                             *
+*                        Bugcheck Analysis                                    *
+*                                                                             *
+*******************************************************************************
+
+VIDEO_ENGINE_TIMEOUT_DETECTED (141)
+One of the display engines failed to respond in timely fashion.
+(This code can never be used for a real BugCheck; it is used to identify live dumps.)
+Arguments:
+Arg1: ffffd00f21ea6010, Optional pointer to internal TDR recovery context (TDR_RECOVERY_CONTEXT).
+Arg2: fffff800d1fa6d60, The pointer into responsible device driver module (e.g. owner tag).
+Arg3: 0000000000000000, The secondary driver specific bucketing key.
+Arg4: ffffd00f1dabb080, Optional internal context dependent data.
+
+Debugging Details:
+------------------
+
+
+KEY_VALUES_STRING: 1
+
+    Key  : Analysis.CPU.mSec
+    Value: 1483
+
+    Key  : Analysis.Elapsed.mSec
+    Value: 1551
+
+    Key  : Analysis.IO.Other.Mb
+    Value: 0
+
+    Key  : Analysis.IO.Read.Mb
+    Value: 0
+
+    Key  : Analysis.IO.Write.Mb
+    Value: 0
+
+    Key  : Analysis.Init.CPU.mSec
+    Value: 249
+
+    Key  : Analysis.Init.Elapsed.mSec
+    Value: 1559
+
+    Key  : Analysis.Memory.CommitPeak.Mb
+    Value: 105
+
+    Key  : Bugcheck.Code.LegacyAPI
+    Value: 0x141
+
+    Key  : Dump.Attributes.AsUlong
+    Value: 18
+
+    Key  : Dump.Attributes.KernelGeneratedTriageDump
+    Value: 1
+
+    Key  : Failure.Bucket
+    Value: LKD_0x141_IMAGE_AppleAgxRenderAdmission.sys
+
+    Key  : Failure.Hash
+    Value: {8c92cfeb-112b-660f-09e6-8285e738ac21}
+
+
+BUGCHECK_CODE:  141
+
+BUGCHECK_P1: ffffd00f21ea6010
+
+BUGCHECK_P2: fffff800d1fa6d60
+
+BUGCHECK_P3: 0
+
+BUGCHECK_P4: ffffd00f1dabb080
+
+FILE_IN_CAB:  Live-WATCHDOG-20260928-1411.dmp
+
+DUMP_FILE_ATTRIBUTES: 0x18
+  Kernel Generated Triage Dump
+  Live Generated Dump
+
+TAG_NOT_DEFINED_202b:  *** Unknown TAG in analysis list 202b
+
+
+VIDEO_TDR_CONTEXT: dt dxgkrnl!_TDR_RECOVERY_CONTEXT ffffd00f21ea6010
+Symbol dxgkrnl!_TDR_RECOVERY_CONTEXT not found.
+
+PROCESS_OBJECT: ffffd00f1dabb080
+
+PROCESS_NAME:  System
+
+STACK_TEXT:
+ffffe100`c1528220 fffff800`d4085200     : 60000044`00400007 00000000`00000000 00000000`00000000 00000000`00040000 : nt!DbgkpWerCaptureLiveTriageDump+0x74
+ffffe100`c15285e0 fffff800`d4084fd0     : ffffe100`c1528660 fffff800`d4084fd0 00000001`21ea6001 ffffd00f`00000141 : nt!DbgkWerCaptureLiveKernelDump2+0x210
+ffffe100`c1528660 fffff800`cd8d2154     : ffffe100`c1528820 fffff800`cd8d2154 00000028`00000001 fffff800`cd8d12d0 : nt!DbgkWerCaptureLiveKernelDump+0x30
+ffffe100`c15286a0 fffff800`d1b15358     : ffff960b`00000003 00000000`00000100 fffff800`00000901 00000000`00000000 : dxgkrnl!TdrCollectDbgInfoStage1+0xdd4
+ffffe100`c1528880 fffff800`d1b50514     : fffff800`d3cf13b4 fffff800`d402dcd4 fffff800`d1ae959c fffff800`d1af9b80 : dxgmms2!VidSchiResetEngine+0x330
+ffffe100`c1528a80 fffff800`d1bc00cc     : ffffe100`c1528ae0 fffff800`d1bc00cc 00000000`00000102 ffffe100`c1528b50 : dxgmms2!VidSchiResetEngines+0xec
+ffffe100`c1528ae0 fffff800`d1bb9d10     : ffffe100`c1528b40 fffff800`d1bb9d10 ffffffff`feced300 00000000`00000001 : dxgmms2!VidSchWaitForCompletionEvent+0x2bc
+ffffe100`c1528b40 fffff800`d1ae959c     : ffffe100`c1528c00 fffff800`d1ae959c 00000000`00000000 00000000`00000000 : dxgmms2!VidSchiWaitForCompletePreemption+0x80
+ffffe100`c1528c00 fffff800`d1af9b80     : ffffe100`c1528c10 fffff800`d1af9b80 ffffe100`c1528c90 fffff800`d1bb8df8 : dxgmms2!VidSchiCompletePreemption+0x1c
+ffffe100`c1528c10 fffff800`d1bb8df8     : ffffe100`c1528c90 fffff800`d1bb8df8 00000000`00000000 ffffd00f`2109c7c0 : dxgmms2!VidSchiSwitchFromSuspendedDevices+0x240
+ffffe100`c1528c90 fffff800`d1b50b94     : ffffe100`c1528d00 fffff800`d1b50b94 ffffd00f`2109c000 ffffd00f`2109c000 : dxgmms2!VidSchiRun_PriorityTable+0x1d8
+ffffe100`c1528d00 fffff800`d3cf13b4     : ffffe100`c1528d30 fffff800`d3cf13b4 fffff800`00000001 ffffd00f`1b017180 : dxgmms2!VidSchiWorkerThread+0xd4
+ffffe100`c1528d30 fffff800`d402dcd4     : 00000000`00000000 fffff800`d402dcd4 fffff800`d4809ab8 00000000`2dadd7ca : nt!PspSystemThreadStartup+0x54
+ffffe100`c1528d90 00000000`00000000     : ffffd00f`2109c000 fffff800`d1b50ac0 fffff800`d3cf1360 00000000`00000000 : nt!KiStartSystemThread+0x24
+
+
+FAULTING_SOURCE_LINE:  C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\src\scheduler_windows.c
+
+FAULTING_SOURCE_FILE:  C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\src\scheduler_windows.c
+
+FAULTING_SOURCE_LINE_NUMBER:  510
+
+SYMBOL_NAME:  AppleAgxRenderAdmission!AdmissionDdiCollectDbgInfo+0
+
+MODULE_NAME: AppleAgxRenderAdmission
+
+IMAGE_NAME:  AppleAgxRenderAdmission.sys
+
+IMAGE_VERSION:  30.0.865.0
+
+STACK_COMMAND:  .cxr; .ecxr ; kb
+
+FAILURE_BUCKET_ID:  LKD_0x141_IMAGE_AppleAgxRenderAdmission.sys
+
+OSPLATFORM_TYPE:  arm64
+
+OSNAME:  Windows 10
+
+FAILURE_ID_HASH:  {8c92cfeb-112b-660f-09e6-8285e738ac21}
+
+Followup:     MachineOwner
+---------
+
+ # Child-SP          RetAddr               : Args to Child                                                           : Call Site
+00 ffffe100`c1528220 fffff800`d4085200     : 60000044`00400007 00000000`00000000 00000000`00000000 00000000`00040000 : nt!DbgkpWerCaptureLiveTriageDump+0x74
+01 ffffe100`c15285e0 fffff800`d4084fd0     : ffffe100`c1528660 fffff800`d4084fd0 00000001`21ea6001 ffffd00f`00000141 : nt!DbgkWerCaptureLiveKernelDump2+0x210
+02 ffffe100`c1528660 fffff800`cd8d2154     : ffffe100`c1528820 fffff800`cd8d2154 00000028`00000001 fffff800`cd8d12d0 : nt!DbgkWerCaptureLiveKernelDump+0x30
+03 ffffe100`c15286a0 fffff800`d1b15358     : ffff960b`00000003 00000000`00000100 fffff800`00000901 00000000`00000000 : dxgkrnl!TdrCollectDbgInfoStage1+0xdd4
+04 ffffe100`c1528880 fffff800`d1b50514     : fffff800`d3cf13b4 fffff800`d402dcd4 fffff800`d1ae959c fffff800`d1af9b80 : dxgmms2!VidSchiResetEngine+0x330
+05 ffffe100`c1528a80 fffff800`d1bc00cc     : ffffe100`c1528ae0 fffff800`d1bc00cc 00000000`00000102 ffffe100`c1528b50 : dxgmms2!VidSchiResetEngines+0xec
+06 ffffe100`c1528ae0 fffff800`d1bb9d10     : ffffe100`c1528b40 fffff800`d1bb9d10 ffffffff`feced300 00000000`00000001 : dxgmms2!VidSchWaitForCompletionEvent+0x2bc
+07 ffffe100`c1528b40 fffff800`d1ae959c     : ffffe100`c1528c00 fffff800`d1ae959c 00000000`00000000 00000000`00000000 : dxgmms2!VidSchiWaitForCompletePreemption+0x80
+08 ffffe100`c1528c00 fffff800`d1af9b80     : ffffe100`c1528c10 fffff800`d1af9b80 ffffe100`c1528c90 fffff800`d1bb8df8 : dxgmms2!VidSchiCompletePreemption+0x1c
+09 ffffe100`c1528c10 fffff800`d1bb8df8     : ffffe100`c1528c90 fffff800`d1bb8df8 00000000`00000000 ffffd00f`2109c7c0 : dxgmms2!VidSchiSwitchFromSuspendedDevices+0x240
+0a ffffe100`c1528c90 fffff800`d1b50b94     : ffffe100`c1528d00 fffff800`d1b50b94 ffffd00f`2109c000 ffffd00f`2109c000 : dxgmms2!VidSchiRun_PriorityTable+0x1d8
+0b ffffe100`c1528d00 fffff800`d3cf13b4     : ffffe100`c1528d30 fffff800`d3cf13b4 fffff800`00000001 ffffd00f`1b017180 : dxgmms2!VidSchiWorkerThread+0xd4
+0c ffffe100`c1528d30 fffff800`d402dcd4     : 00000000`00000000 fffff800`d402dcd4 fffff800`d4809ab8 00000000`2dadd7ca : nt!PspSystemThreadStartup+0x54
+0d ffffe100`c1528d90 00000000`00000000     : ffffd00f`2109c000 fffff800`d1b50ac0 fffff800`d3cf1360 00000000`00000000 : nt!KiStartSystemThread+0x24
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

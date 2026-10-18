@@ -1,0 +1,13 @@
+EXP-20260826-127 candidate storage window
+Candidate boot UTC: 2026-08-26T20:58:26.7081160Z
+Initial collector UTC: 2026-08-26T20:59:51.3168622Z
+
+2026-08-26T20:59:35.739Z  stornvme  Event 129  Record 5948
+Reset to device, \Device\RaidPort0, was issued.
+
+2026-08-26T21:00:45.379Z  stornvme  Event 129  Record 5979
+Reset to device, \Device\RaidPort0, was issued.
+
+The initial collector counted one event because the second reset occurred
+54.062 seconds after collection. A later read-only query of the complete
+candidate time window established the final count of two.

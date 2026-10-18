@@ -1,0 +1,450 @@
+
+Algorithm       Hash                                                                   Path
+---------       ----                                                                   ----
+SHA256          C29D41E871C9ECC97CD2147EC037DCC4B2667B8BAB430213816A810B211D404E       C:\agx\r150-dump\Kernel-MEMOR...
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.032 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\agx\r150-dump\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 97%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\ARM64\Release
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\ARM64\Release
+Executable search path is:
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff802`f8000000 PsLoadedModuleList = 0xfffff802`f8d6ac50
+Debug session time: Mon Sep 28 13:06:50.548 2026 (UTC + 2:00)
+System Uptime: 0 days 0:00:29.063
+Loading Kernel Symbols
+...............................................................
+.........................................................Page 958782 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+...................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+0: kd> cdb: Reading initial command '.bugcheck; !analyze -v; !drvobj AppleAgxAdmission 7; x AppleAgxRenderAdmission!*Context*; dt dxgkrnl!_TDR_RECOVERY_CONTEXT ffff998fcc15e010; q'
+Bugcheck code 00000116
+Arguments ffff998f`cc15e010 fffff802`f6ef6cb0 ffffffff`c0000483 00000000`00000003
+*******************************************************************************
+*                                                                             *
+*                        Bugcheck Analysis                                    *
+*                                                                             *
+*******************************************************************************
+
+VIDEO_TDR_FAILURE (116)
+Attempt to reset the display driver and recover from timeout failed.
+Arguments:
+Arg1: ffff998fcc15e010, Optional pointer to internal TDR recovery context (TDR_RECOVERY_CONTEXT).
+Arg2: fffff802f6ef6cb0, The pointer into responsible device driver module (e.g. owner tag).
+Arg3: ffffffffc0000483, Optional error code (NTSTATUS) of the last failed operation.
+Arg4: 0000000000000003, Optional internal context dependent data.
+
+Debugging Details:
+------------------
+
+
+KEY_VALUES_STRING: 1
+
+    Key  : Analysis.CPU.mSec
+    Value: 1655
+
+    Key  : Analysis.Elapsed.mSec
+    Value: 2275
+
+    Key  : Analysis.IO.Other.Mb
+    Value: 0
+
+    Key  : Analysis.IO.Read.Mb
+    Value: 0
+
+    Key  : Analysis.IO.Write.Mb
+    Value: 0
+
+    Key  : Analysis.Init.CPU.mSec
+    Value: 171
+
+    Key  : Analysis.Init.Elapsed.mSec
+    Value: 310
+
+    Key  : Analysis.Memory.CommitPeak.Mb
+    Value: 106
+
+    Key  : Bugcheck.Code.KiBugCheckData
+    Value: 0x116
+
+    Key  : Bugcheck.Code.LegacyAPI
+    Value: 0x116
+
+    Key  : Dump.Attributes.AsUlong
+    Value: 21000
+
+    Key  : Dump.Attributes.DiagDataWrittenToHeader
+    Value: 1
+
+    Key  : Dump.Attributes.ErrorCode
+    Value: 0
+
+    Key  : Dump.Attributes.LastLine
+    Value: Dump completed successfully.
+
+    Key  : Dump.Attributes.ProgressPercentage
+    Value: 97
+
+    Key  : Failure.Bucket
+    Value: 0x116_IMAGE_AppleAgxRenderAdmission.sys
+
+    Key  : Failure.Hash
+    Value: {fdf7eac1-3a4f-82ab-6fec-09e2a3edd913}
+
+    Key  : Hypervisor.Enlightenments.Value
+    Value: 0
+
+    Key  : Hypervisor.Enlightenments.ValueHex
+    Value: 0
+
+    Key  : Hypervisor.Flags.AnyHypervisorPresent
+    Value: 0
+
+    Key  : Hypervisor.Flags.ApicEnlightened
+    Value: 0
+
+    Key  : Hypervisor.Flags.ApicVirtualizationAvailable
+    Value: 0
+
+    Key  : Hypervisor.Flags.AsyncMemoryHint
+    Value: 0
+
+    Key  : Hypervisor.Flags.CoreSchedulerRequested
+    Value: 0
+
+    Key  : Hypervisor.Flags.CpuManager
+    Value: 0
+
+    Key  : Hypervisor.Flags.DeprecateAutoEoi
+    Value: 0
+
+    Key  : Hypervisor.Flags.DynamicCpuDisabled
+    Value: 0
+
+    Key  : Hypervisor.Flags.Epf
+    Value: 0
+
+    Key  : Hypervisor.Flags.ExtendedProcessorMasks
+    Value: 0
+
+    Key  : Hypervisor.Flags.HardwareMbecAvailable
+    Value: 1
+
+    Key  : Hypervisor.Flags.MaxBankNumber
+    Value: 0
+
+    Key  : Hypervisor.Flags.MemoryZeroingControl
+    Value: 0
+
+    Key  : Hypervisor.Flags.NoExtendedRangeFlush
+    Value: 0
+
+    Key  : Hypervisor.Flags.NoNonArchCoreSharing
+    Value: 0
+
+    Key  : Hypervisor.Flags.Phase0InitDone
+    Value: 0
+
+    Key  : Hypervisor.Flags.PowerSchedulerQos
+    Value: 0
+
+    Key  : Hypervisor.Flags.RootScheduler
+    Value: 0
+
+    Key  : Hypervisor.Flags.SynicAvailable
+    Value: 0
+
+    Key  : Hypervisor.Flags.UseQpcBias
+    Value: 0
+
+    Key  : Hypervisor.Flags.Value
+    Value: 131072
+
+    Key  : Hypervisor.Flags.ValueHex
+    Value: 20000
+
+    Key  : Hypervisor.Flags.VpAssistPage
+    Value: 0
+
+    Key  : Hypervisor.Flags.VsmAvailable
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.AccessStats
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.CrashdumpEnlightened
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.CreateVirtualProcessor
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.DisableHyperthreading
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.HostTimelineSync
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.HypervisorDebuggingEnabled
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.IsHyperV
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.LivedumpEnlightened
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.MapDeviceInterrupt
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.MceEnlightened
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.Nested
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.StartLogicalProcessor
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.Value
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.ValueHex
+    Value: 0
+
+    Key  : SecureKernel.HalpHvciEnabled
+    Value: 0
+
+    Key  : WER.OS.Branch
+    Value: ge_release
+
+    Key  : WER.OS.Version
+    Value: 10.0.26100.1
+
+
+BUGCHECK_CODE:  116
+
+BUGCHECK_P1: ffff998fcc15e010
+
+BUGCHECK_P2: fffff802f6ef6cb0
+
+BUGCHECK_P3: ffffffffc0000483
+
+BUGCHECK_P4: 3
+
+FILE_IN_CAB:  Kernel-MEMORY.DMP
+
+DUMP_FILE_ATTRIBUTES: 0x21000
+
+VIDEO_TDR_CONTEXT: dt dxgkrnl!_TDR_RECOVERY_CONTEXT ffff998fcc15e010
+Symbol dxgkrnl!_TDR_RECOVERY_CONTEXT not found.
+
+PROCESS_OBJECT: 0000000000000003
+
+BLACKBOXBSD: 1 (!blackboxbsd)
+
+
+BLACKBOXNTFS: 1 (!blackboxntfs)
+
+
+BLACKBOXPNP: 1 (!blackboxpnp)
+
+
+BLACKBOXWINLOGON: 1
+
+PROCESS_NAME:  System
+
+STACK_TEXT:
+ffff9700`6a4fc3a0 fffff802`f825b8f4     : ffff8dc6`e371bf00 fffff802`f8c4ab80 ffff9700`6a4fc9c0 fffff802`f825b8f4 : nt!KeBugCheck2+0x32c
+ffff9700`6a4fc9c0 fffff802`f1e7449c     : ffff9700`6a4fc9d0 fffff802`f1e7449c ffff9700`6a4fca30 fffff802`f1e2a030 : nt!KeBugCheckEx+0x14
+ffff9700`6a4fc9d0 fffff802`f1e2a030     : ffff9700`6a4fca30 fffff802`f1e2a030 fffff802`f6ef6cb0 00000000`00000000 : dxgkrnl!TdrBugcheckOnTimeout+0x104
+ffff9700`6a4fca20 fffff802`f1e2bb0c     : ffff998f`cbd33088 ffff998f`cbd33010 ffff9700`6a4fca90 fffff802`f1e2bb0c : dxgkrnl!DXGADAPTER::PrepareToReset+0x230
+ffff9700`6a4fca80 fffff802`f1e739d0     : 00000000`00000000 00000000`00000000 ffff9700`6a4fcb10 fffff802`f1e739d0 : dxgkrnl!DXGADAPTER::Reset+0x2c4
+ffff9700`6a4fcb10 fffff802`f1e73b48     : ffff9700`6a4fcb30 fffff802`f1e73b48 ffff998f`cc15e010 ffff998f`c16effa8 : dxgkrnl!TdrResetFromTimeout+0x20
+ffff9700`6a4fcb30 fffff802`f8376690     : ffff9700`6a4fccd0 fffff802`f8376690 ffff998f`c16dd080 fffff802`f1e73b20 : dxgkrnl!TdrResetFromTimeoutWorkItem+0x28
+ffff9700`6a4fcb60 fffff802`f82f13b4     : fffff802`f8e14300 00000000`00000000 ffff998f`c167e8b0 00000000`00000000 : nt!ExpWorkerThread+0x180
+ffff9700`6a4fcd30 fffff802`f862dcd4     : 00000000`00000000 fffff802`f862dcd4 fffff802`f8e09ab8 00000000`014da077 : nt!PspSystemThreadStartup+0x54
+ffff9700`6a4fcd90 00000000`00000000     : ffff998f`c1725c90 fffff802`f8376510 fffff802`f82f1360 00000000`00000000 : nt!KiStartSystemThread+0x24
+
+
+FAULTING_SOURCE_LINE:  C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\src\scheduler_windows.c
+
+FAULTING_SOURCE_FILE:  C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\src\scheduler_windows.c
+
+FAULTING_SOURCE_LINE_NUMBER:  491
+
+SYMBOL_NAME:  AppleAgxRenderAdmission!AdmissionDdiResetFromTimeout+0
+
+MODULE_NAME: AppleAgxRenderAdmission
+
+IMAGE_NAME:  AppleAgxRenderAdmission.sys
+
+STACK_COMMAND:  .cxr; .ecxr ; kb
+
+FAILURE_BUCKET_ID:  0x116_IMAGE_AppleAgxRenderAdmission.sys
+
+OS_VERSION:  10.0.26100.1
+
+BUILDLAB_STR:  ge_release
+
+OSPLATFORM_TYPE:  arm64
+
+OSNAME:  Windows 10
+
+FAILURE_ID_HASH:  {fdf7eac1-3a4f-82ab-6fec-09e2a3edd913}
+
+Followup:     MachineOwner
+---------
+
+Driver object (ffff998fca51f4a0) is for:
+ \Driver\AppleAgxAdmission
+
+Driver Extension List: (id , addr)
+(ffff998fca51f4a0 ffff998fca90e6c0)
+Device Object list:
+ffff998fcadfc060  ffff998fcadfa380  ffff998fca90f030
+
+DriverEntry:   fffff802f6f28390	AppleAgxRenderAdmission!GsDriverEntry
+DriverStartIo: 00000000
+DriverUnload:  fffff802f1ee3960	dxgkrnl!DpiDriverUnload
+AddDevice:     fffff802f1ee15e0	dxgkrnl!DpiAddDevice
+
+Dispatch routines:
+[00] IRP_MJ_CREATE                      fffff802f2066f90	dxgkrnl!DpiDispatchCreate
+[01] IRP_MJ_CREATE_NAMED_PIPE           fffff802f8240e80	nt!IopInvalidDeviceRequest
+[02] IRP_MJ_CLOSE                       fffff802f2066e80	dxgkrnl!DpiDispatchCleanupAndClose
+[03] IRP_MJ_READ                        fffff802f8240e80	nt!IopInvalidDeviceRequest
+[04] IRP_MJ_WRITE                       fffff802f8240e80	nt!IopInvalidDeviceRequest
+[05] IRP_MJ_QUERY_INFORMATION           fffff802f8240e80	nt!IopInvalidDeviceRequest
+[06] IRP_MJ_SET_INFORMATION             fffff802f8240e80	nt!IopInvalidDeviceRequest
+[07] IRP_MJ_QUERY_EA                    fffff802f8240e80	nt!IopInvalidDeviceRequest
+[08] IRP_MJ_SET_EA                      fffff802f8240e80	nt!IopInvalidDeviceRequest
+[09] IRP_MJ_FLUSH_BUFFERS               fffff802f8240e80	nt!IopInvalidDeviceRequest
+[0a] IRP_MJ_QUERY_VOLUME_INFORMATION    fffff802f8240e80	nt!IopInvalidDeviceRequest
+[0b] IRP_MJ_SET_VOLUME_INFORMATION      fffff802f8240e80	nt!IopInvalidDeviceRequest
+[0c] IRP_MJ_DIRECTORY_CONTROL           fffff802f8240e80	nt!IopInvalidDeviceRequest
+[0d] IRP_MJ_FILE_SYSTEM_CONTROL         fffff802f8240e80	nt!IopInvalidDeviceRequest
+[0e] IRP_MJ_DEVICE_CONTROL              fffff802f2067400	dxgkrnl!DpiDispatchIoctl
+[0f] IRP_MJ_INTERNAL_DEVICE_CONTROL     fffff802f2067140	dxgkrnl!DpiDispatchInternalIoctl
+[10] IRP_MJ_SHUTDOWN                    fffff802f8240e80	nt!IopInvalidDeviceRequest
+[11] IRP_MJ_LOCK_CONTROL                fffff802f8240e80	nt!IopInvalidDeviceRequest
+[12] IRP_MJ_CLEANUP                     fffff802f2066e80	dxgkrnl!DpiDispatchCleanupAndClose
+[13] IRP_MJ_CREATE_MAILSLOT             fffff802f8240e80	nt!IopInvalidDeviceRequest
+[14] IRP_MJ_QUERY_SECURITY              fffff802f8240e80	nt!IopInvalidDeviceRequest
+[15] IRP_MJ_SET_SECURITY                fffff802f8240e80	nt!IopInvalidDeviceRequest
+[16] IRP_MJ_POWER                       fffff802f2067870	dxgkrnl!DpiDispatchPower
+[17] IRP_MJ_SYSTEM_CONTROL              fffff802f1ee3760	dxgkrnl!DpiDispatchSystemControl
+[18] IRP_MJ_DEVICE_CHANGE               fffff802f8240e80	nt!IopInvalidDeviceRequest
+[19] IRP_MJ_QUERY_QUOTA                 fffff802f8240e80	nt!IopInvalidDeviceRequest
+[1a] IRP_MJ_SET_QUOTA                   fffff802f8240e80	nt!IopInvalidDeviceRequest
+[1b] IRP_MJ_PNP                         fffff802f2067630	dxgkrnl!DpiDispatchPnp
+
+
+Device Object stacks:
+
+!devstack ffff998fcadfc060 :
+  !DevObj           !DrvObj            !DevExt           ObjectName
+> ffff998fcadfc060  \Driver\AppleAgxAdmissionffff998fcadfc1b0  Video1
+
+!devstack ffff998fcadfa380 :
+  !DevObj           !DrvObj            !DevExt           ObjectName
+  ffff998fcb4e9de0  \Driver\monitor    ffff998fca377350
+> ffff998fcadfa380  \Driver\AppleAgxAdmissionffff998fcadfa4d0  0000003d
+!DevNode ffff998fcb4eaba0 :
+  DeviceInst is "DISPLAY\Default_Monitor\3&1018bb11&fe&UID0"
+  ServiceName is "monitor"
+
+!devstack ffff998fca90f030 :
+  !DevObj           !DrvObj            !DevExt           ObjectName
+> ffff998fca90f030  \Driver\AppleAgxAdmissionffff998fca90f180
+  ffff998fc1aa5dc0  \Driver\ACPI       ffff998fc29d9930  00000019
+!DevNode ffff998fc29f28a0 :
+  DeviceInst is "ACPI\APPL0002\0"
+  ServiceName is "AppleAgxAdmission"
+
+Processed 3 device objects.
+fffff802`f6ede5a0 AppleAgxRenderAdmission!AdmissionGpuvaG3AttachContext (struct _ADMISSION_RENDER_CONTEXT *, struct _ADMISSION_DEVICE *)
+fffff802`f6ef7fb8 AppleAgxRenderAdmission!AdmissionRecordGpuvaG3DmaContext (struct _DEVICE_OBJECT *, struct _DXGKARG_CREATECONTEXT *)
+fffff802`f6ef72c8 AppleAgxRenderAdmission!AdmissionRecordContext0Inventory (struct _ADMISSION_CONTEXT *, unsigned long, unsigned long, struct _APPLE_AGX_CONTEXT0_BROKER *)
+fffff802`f6f05f30 AppleAgxRenderAdmission!AppleAgxContext0BrokerRetire (struct _APPLE_AGX_CONTEXT0_BROKER *)
+fffff802`f6f00cc0 AppleAgxRenderAdmission!AppleAgxUatPublishJ313Context (struct _APPLE_AGX_CONFIG_SNAPSHOT *, struct _APPLE_AGX_UAT_TTBR_PAIR *, struct _APPLE_AGX_UAT_PUBLICATION_IO *, struct _APPLE_AGX_UAT_PUBLICATION_STATE *, unsigned int)
+fffff802`f6eefa20 AppleAgxRenderAdmission!AdmissionContext0Ipa (void *, struct _APPLE_AGX_MEMORY_OBJECT *, unsigned int64, unsigned int64 *)
+fffff802`f6ed58f0 AppleAgxRenderAdmission!AdmissionDdiDestroyContext (void *)
+fffff802`f6f00940 AppleAgxRenderAdmission!AppleAgxResidencyContextCreate (struct _APPLE_AGX_RESIDENCY_CONTEXT *, struct _APPLE_AGX_MEMORY_IO *, struct _APPLE_AGX_MEMORY_OBJECT *, struct _APPLE_AGX_UAT_PAGE *, struct _APPLE_AGX_UAT_MAPPING *, struct _APPLE_AGX_RESIDENCY_STATUS *, unsigned int, unsigned int, unsigned int, unsigned int)
+fffff802`f6ed8428 AppleAgxRenderAdmission!AdmissionObjectsDestroyContext (struct _ADMISSION_OBJECT_CONTEXT *)
+fffff802`f6ed5330 AppleAgxRenderAdmission!AdmissionDdiCreateContext (void *, struct _DXGKARG_CREATECONTEXT *)
+fffff802`f6ed53ac AppleAgxRenderAdmission!AdmissionRecordGpuvaG3ContextInput =  (inline caller) AppleAgxRenderAdmission!AdmissionDdiCreateContext+7c
+fffff802`f6ed54a4 AppleAgxRenderAdmission!AdmissionWin32ContextCreateValidate =  (inline caller) AppleAgxRenderAdmission!AdmissionDdiCreateContext+174
+fffff802`f6ed55f8 AppleAgxRenderAdmission!AdmissionObjectsCreateContext =  (inline caller) AppleAgxRenderAdmission!AdmissionDdiCreateContext+2c8
+fffff802`f6ed55c4 AppleAgxRenderAdmission!AppleAgxSchedulerContextInitialize =  (inline caller) AppleAgxRenderAdmission!AdmissionDdiCreateContext+294
+fffff802`f6ed56e0 AppleAgxRenderAdmission!AppleAgxSchedulerCreateContext =  (inline caller) AppleAgxRenderAdmission!AdmissionDdiCreateContext+3b0
+fffff802`f6ed57b4 AppleAgxRenderAdmission!AppleAgxSchedulerDestroyContext =  (inline caller) AppleAgxRenderAdmission!AdmissionDdiCreateContext+484
+fffff802`f6ed5b14 AppleAgxRenderAdmission!AppleAgxSchedulerDestroyContext =  (inline caller) AppleAgxRenderAdmission!AdmissionDdiDestroyContext+224
+fffff802`f6ed5948 AppleAgxRenderAdmission!AdmissionGpuvaG3PrivateRetireContext =  (inline caller) AppleAgxRenderAdmission!AdmissionDdiDestroyContext+58
+fffff802`f6ed5b5c AppleAgxRenderAdmission!AdmissionGpuvaG3DetachContext =  (inline caller) AppleAgxRenderAdmission!AdmissionDdiDestroyContext+26c
+fffff802`f6edade0 AppleAgxRenderAdmission!AppleAgxResidencyContextDestroy =  (inline caller) AppleAgxRenderAdmission!AdmissionMemoryRuntimeDestroy+238
+fffff802`f6eefebc AppleAgxRenderAdmission!AppleAgxContext0BrokerVerify =  (inline caller) AppleAgxRenderAdmission!AdmissionFirmwareCompleteManagement+5c
+fffff802`f6ef0ba0 AppleAgxRenderAdmission!AppleAgxContext0BrokerMap =  (inline caller) AppleAgxRenderAdmission!AdmissionFirmwarePublishUat+990
+fffff802`f6ef4c68 AppleAgxRenderAdmission!AdmissionMemoryRuntimeContextPublished =  (inline caller) AppleAgxRenderAdmission!AdmissionPlatformRuntimeStart+68
+fffff802`f6ef1738 AppleAgxRenderAdmission!AdmissionMemoryRuntimeContextPublished =  (inline caller) AppleAgxRenderAdmission!AdmissionRenderPublish+18
+fffff802`f6f00960 AppleAgxRenderAdmission!AppleAgxResidencySetContextStatus =  (inline caller) AppleAgxRenderAdmission!AppleAgxResidencyContextCreate+20
+fffff802`f6f00b08 AppleAgxRenderAdmission!AppleAgxResidencySetContextStatus =  (inline caller) AppleAgxRenderAdmission!AppleAgxResidencyContextCreate+1c8
+fffff802`f6f00afc AppleAgxRenderAdmission!AppleAgxResidencySetContextStatus =  (inline caller) AppleAgxRenderAdmission!AppleAgxResidencyContextCreate+1bc
+fffff802`f6f00ab8 AppleAgxRenderAdmission!AppleAgxResidencySetContextStatus =  (inline caller) AppleAgxRenderAdmission!AppleAgxResidencyContextCreate+178
+fffff802`f6f00aec AppleAgxRenderAdmission!AppleAgxResidencySetContextStatus =  (inline caller) AppleAgxRenderAdmission!AppleAgxResidencyContextCreate+1ac
+Symbol dxgkrnl!_TDR_RECOVERY_CONTEXT not found.
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

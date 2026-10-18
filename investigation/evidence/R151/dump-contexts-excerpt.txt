@@ -1,0 +1,152 @@
+1: kd> cdb: Reading initial command '.for (r @$t0=poi(ffffd00f21087040); @$t0 != ffffd00f21087040; r @$t0=poi(@$t0)) { dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS @$t0 Graph PrivateManager PrivateScenes Contexts DxgkProcess; dq poi(@$t0+1e8) L18; dt AppleAgxRenderAdmission!_ADMISSION_RENDER_CONTEXT poi(@$t0+1e0) Win32Generation GpuvaG3PrivateFence; dt -r2 AppleAgxRenderAdmission!_ADMISSION_G3_PRIVATE_SCENE poi(@$t0+1d8); }; dx -r2 ((AppleAgxRenderAdmission!_ADMISSION_BACKEND_IMAGE*)0xffffd00f20b7dd40)->G4Header; dt -r2 AppleAgxRenderAdmission!_ADMISSION_SCANOUT_RUNTIME ffffd00f1d8abbe0; dt -r2 AppleAgxRenderAdmission!_ADMISSION_RENDER_CORRELATION_STATE ffffd00f20b7d8f8; q'
+   +0x018 Graph          : _APPLE_AGX_GPUVA_G3_GRAPH
+   +0x190 PrivateManager : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes  : (null) 
+   +0x1e0 Contexts       : 0xffffd00f`20eb9d00 _ADMISSION_RENDER_CONTEXT
+   +0x1e8 DxgkProcess    : 0xffffd00f`17df88a0 Void
+ffffd00f`17df88a0  00000000`00000000 ffff960b`01fc6ae0
+ffffd00f`17df88b0  00000000`00000000 ffffd00f`1d383010
+ffffd00f`17df88c0  ffff960a`fd298b50 ffffd00f`1668f080
+ffffd00f`17df88d0  00000000`00000000 00000000`00000000
+ffffd00f`17df88e0  fffff800`cda91210 ffff960a`fd298b50
+ffffd00f`17df88f0  00000000`00000004 00000000`00000000
+ffffd00f`17df8900  ffffd00f`167d4270 ffffd00f`17df8908
+ffffd00f`17df8910  ffffd00f`17df8908 00000000`00000000
+ffffd00f`17df8920  00000000`00000000 00000004`00000000
+ffffd00f`17df8930  00000000`04750000 00000000`00000000
+ffffd00f`17df8940  6553694d`020b0000 00000000`00000000
+ffffd00f`17df8950  00000000`00000000 00000000`00000000
+   +0x0c0 Win32Generation     : 0
+   +0x0e0 GpuvaG3PrivateFence : 0n0
+   +0x000 Next             : Ptr64 _ADMISSION_G3_PRIVATE_SCENE
+   +0x018 Graph          : _APPLE_AGX_GPUVA_G3_GRAPH
+   +0x190 PrivateManager : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes  : (null) 
+   +0x1e0 Contexts       : 0xffffd00f`20eb6400 _ADMISSION_RENDER_CONTEXT
+   +0x1e8 DxgkProcess    : 0xffffd00f`1bef7c10 Void
+ffffd00f`1bef7c10  00000000`00000000 ffff960b`01fc7410
+ffffd00f`1bef7c20  00000000`00000000 ffffd00f`1d34d010
+ffffd00f`1bef7c30  ffff960b`01fa4050 ffffd00f`1d64e180
+ffffd00f`1bef7c40  00000000`00000000 00000000`00000000
+ffffd00f`1bef7c50  fffff800`cda91210 ffff960b`01fa4050
+ffffd00f`1bef7c60  00000000`00000314 00000000`00000000
+ffffd00f`1bef7c70  ffffd00f`1ce15bd0 ffffd00f`1bef7c78
+ffffd00f`1bef7c80  ffffd00f`1bef7c78 00000000`00000000
+ffffd00f`1bef7c90  00000000`00000000 00000314`00000000
+ffffd00f`1bef7ca0  5e1f5a0c`04750001 00000000`01dd4f42
+ffffd00f`1bef7cb0  6d547845`020b0000 00000000`00000000
+ffffd00f`1bef7cc0  00000000`00000019 ffffd00f`1bef7cc8
+   +0x0c0 Win32Generation     : 0
+   +0x0e0 GpuvaG3PrivateFence : 0n0
+   +0x000 Next             : Ptr64 _ADMISSION_G3_PRIVATE_SCENE
+   +0x018 Graph          : _APPLE_AGX_GPUVA_G3_GRAPH
+   +0x190 PrivateManager : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes  : (null) 
+   +0x1e0 Contexts       : 0xffffd00f`209f2b50 _ADMISSION_RENDER_CONTEXT
+   +0x1e8 DxgkProcess    : 0xffffd00f`1d6b73e0 Void
+ffffd00f`1d6b73e0  00000000`00000000 ffff960b`02639710
+ffffd00f`1d6b73f0  00000000`00000000 ffffd00f`1db2d010
+ffffd00f`1d6b7400  ffff960b`02963da0 ffffd00f`1dabf080
+ffffd00f`1d6b7410  00000000`00000000 00000000`00000000
+ffffd00f`1d6b7420  fffff800`cda91210 ffff960b`02963da0
+ffffd00f`1d6b7430  00000000`000004c8 00000000`00000000
+ffffd00f`1d6b7440  ffffd00f`1d896b70 ffffd00f`1d6b7448
+ffffd00f`1d6b7450  ffffd00f`1d6b7448 00000000`00000000
+ffffd00f`1d6b7460  00000000`00000000 000004c8`00010000
+ffffd00f`1d6b7470  5e702690`04750001 00000000`01dd4f42
+ffffd00f`1d6b7480  6e496c41`020b0000 00000000`00000000
+ffffd00f`1d6b7490  00000000`00000000 00000000`00000004
+   +0x0c0 Win32Generation     : 0x4c80002
+   +0x0e0 GpuvaG3PrivateFence : 0n0
+   +0x000 Next             : Ptr64 _ADMISSION_G3_PRIVATE_SCENE
+   +0x018 Graph          : _APPLE_AGX_GPUVA_G3_GRAPH
+   +0x190 PrivateManager : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes  : (null) 
+   +0x1e0 Contexts       : 0xffffd00f`20eb6eb0 _ADMISSION_RENDER_CONTEXT
+   +0x1e8 DxgkProcess    : 0xffffd00f`2086fce0 Void
+ffffd00f`2086fce0  00000000`00000000 ffff960b`047681c0
+ffffd00f`2086fcf0  00000000`00000000 ffffd00f`210852f0
+ffffd00f`2086fd00  ffff960b`04aa3d40 ffffd00f`21069080
+ffffd00f`2086fd10  00000000`00000000 00000000`00000000
+ffffd00f`2086fd20  fffff800`cda91210 ffff960b`04aa3d40
+ffffd00f`2086fd30  00000000`000014dc 00000000`00000000
+ffffd00f`2086fd40  ffffd00f`167d43b0 ffffd00f`2086fd48
+ffffd00f`2086fd50  ffffd00f`2086fd48 00000000`00000000
+ffffd00f`2086fd60  00000000`00000000 000014dc`00000000
+ffffd00f`2086fd70  60ca3863`04750001 00000000`01dd4f42
+ffffd00f`2086fd80  6e496c41`020b0000 00000000`00000000
+ffffd00f`2086fd90  00000000`00000000 00000000`00000004
+   +0x0c0 Win32Generation     : 0x14dc0001
+   +0x0e0 GpuvaG3PrivateFence : 0n0
+   +0x000 Next             : Ptr64 _ADMISSION_G3_PRIVATE_SCENE
+   +0x018 Graph          : _APPLE_AGX_GPUVA_G3_GRAPH
+   +0x190 PrivateManager : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes  : 0xffffd00f`219d0db0 _ADMISSION_G3_PRIVATE_SCENE
+   +0x1e0 Contexts       : 0xffffd00f`209f3270 _ADMISSION_RENDER_CONTEXT
+   +0x1e8 DxgkProcess    : 0xffffd00f`1d6ba350 Void
+ffffd00f`1d6ba350  00000000`00000000 ffff960b`02639c50
+ffffd00f`1d6ba360  00000000`00000000 ffffd00f`1db04010
+ffffd00f`1d6ba370  ffff960b`02876d80 ffffd00f`1dabb080
+ffffd00f`1d6ba380  00000000`00000000 00000000`00000000
+ffffd00f`1d6ba390  fffff800`cda91210 ffff960b`02876d80
+ffffd00f`1d6ba3a0  00000000`000004c0 00000000`00000000
+ffffd00f`1d6ba3b0  ffffd00f`1d896cb0 ffffd00f`1d6ba3b8
+ffffd00f`1d6ba3c0  ffffd00f`1d6ba3b8 00000000`00000000
+ffffd00f`1d6ba3d0  00000000`00000000 000004c0`00000000
+ffffd00f`1d6ba3e0  5e6fe65e`04750001 00000000`01dd4f42
+ffffd00f`1d6ba3f0  6e496c41`020b0000 00000000`00000000
+ffffd00f`1d6ba400  00000000`00000000 00000000`00000004
+   +0x0c0 Win32Generation     : 0x4c00001
+   +0x0e0 GpuvaG3PrivateFence : 0n220
+   +0x000 Next             : (null) 
+   +0x018 Graph          : _APPLE_AGX_GPUVA_G3_GRAPH
+   +0x190 PrivateManager : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes  : 0xffffd00f`21ec4db0 _ADMISSION_G3_PRIVATE_SCENE
+   +0x1e0 Contexts       : 0xffffd00f`219f6eb0 _ADMISSION_RENDER_CONTEXT
+   +0x1e8 DxgkProcess    : 0xffffd00f`2086f340 Void
+ffffd00f`2086f340  00000000`00000000 ffff960b`04766390
+ffffd00f`2086f350  00000000`00000000 ffffd00f`206d2060
+ffffd00f`2086f360  ffff960b`04a80820 ffffd00f`2104a100
+ffffd00f`2086f370  00000000`00000000 00000000`00000000
+ffffd00f`2086f380  fffff800`cda91210 ffff960b`04a80820
+ffffd00f`2086f390  00000000`000014a4 00000000`00000000
+ffffd00f`2086f3a0  ffffd00f`1bde26f0 ffffd00f`2086f3a8
+ffffd00f`2086f3b0  ffffd00f`2086f3a8 00000000`00000000
+ffffd00f`2086f3c0  00000000`00000000 000014a4`00000000
+ffffd00f`2086f3d0  60bedc7c`04750001 00000000`01dd4f42
+ffffd00f`2086f3e0  77776d4d`020b0000 00000000`00000000
+ffffd00f`2086f3f0  00000000`00000000 00000000`00000200
+   +0x0c0 Win32Generation     : 0x14a40001
+   +0x0e0 GpuvaG3PrivateFence : 0n0
+   +0x000 Next             : (null) 
+   +0x008 Panel            : _APPLE_AGX_FIXED_PANEL
+      +0x000 Scanout          : _APPLE_AGX_SCANOUT_CLIENT
+         +0x000 Io               : _APPLE_AGX_SCANOUT_IO
+         +0x038 NextSequence     : 3
+         +0x040 MaxPolls         : 0x9c40
+         +0x044 LastBrokerResult : 0
+         +0x048 AbiVersion       : 2
+         +0x04c Capabilities     : 0x7f
+         +0x050 PendingPresentSequence : 0
+         +0x058 Qualified        : 0x1 ''
+         +0x059 PresentPending   : 0 ''
+      +0x060 PoolIpa          : 0x00000008`e0000000
+      +0x068 ActiveOffset     : 0
+      +0x070 LastSwapId       : 0
+      +0x074 Started          : 0x1 ''
+      +0x075 Committed        : 0x1 ''
+      +0x076 Visible          : 0x1 ''
+      +0x077 PresentConsumed  : 0 ''
+      +0x078 Ownership        : 1 ( AppleAgxFixedPanelRegistered )
+   +0x088 PresentGate      : 0n0
+   +0x08c PendingValid     : 0n0
+   +0x090 IrqEnabled       : 0n1
+   +0x094 VsyncNotifyEnabled : 0n1
+   +0x098 Faulted          : 0n0
+   +0x0a0 PendingPhysicalAddress : 0n0
+   +0x0a8 PendingSequence  : 0n0
+   +0x0b0 LastNotifiedSequence : 0n2
+   +0x000 Version          : 3
+   +0x004 Bytes            : 0x250
+   +0x008 CandidateBuild   : 0x361
+   +0x00c BootGeneration   : 0x1491a256

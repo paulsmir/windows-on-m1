@@ -1,0 +1,66 @@
+{
+  "experiment": "EXP866",
+  "status": "STOP_AT_GO",
+  "source_commit": "17ee8894e26224db16bfdb6836fd2fc205e1679c",
+  "source_diff_sha256": "0929325d6184d2ab44362ee3a46335909ef9ca1f99e67f01435bf57b53ca0a31",
+  "Flush_ancestor": false,
+  "package_version": "30.0.866.0",
+  "provenance_0_0": true,
+  "package_sha256": {
+    "appleagxrenderadmission.cat": "3833fd3953072c84fbed4f49ba4e563d6eac325e80a80adcdd3460eb31d65827",
+    "AppleAgxRenderAdmission.inf": "b2c7e2993d6d92eabf301d9db6bf640fa4c1ffe3cea145c47a3e8bc3c587ce21",
+    "AppleAgxRenderAdmission.sys": "813a0c746cb200c79a96ead7571bec10768fd3dd7123da40448d4a5f9b426cd1",
+    "AppleAgxRenderAdmissionUmd.dll": "1010eb9b13ee7e58f623fb7dd10ccba780b2b71b0b1558d948a68d86444def50"
+  },
+  "firmware_sha256": {
+    "J313_EFI-r143.fd": "e54c009847e64a4b2b327f54385eedb94f5a9e5fd3b459fd6101b07af4c023fc",
+    "m1n1-r143.macho": "5fe13d19c5ca4d21327c44934613ae0f5109b8de096590db69f455e439e61a01",
+    "J313AppleAgxAbiAdmissionSsdt.aml": "3bdb28edb9def16f147f00947d9a2368f1f99036d601c86ead8b0ff46ccbab7f"
+  },
+  "hardware_manifest_sha256": "0a2268bdafa69116ab1c7b057f41ca2292455711a698392bbb71659c313534a7",
+  "guest_transfer_manifest_sha256": "d732416e8845a251a81753a91caeddfded837899444996677b6eb71efcbae6d9",
+  "payload_sha256": "adf57fbf9a7fb5c58bbcfa250c475bf454dbc11e6e49eec4160280df5f8b1f53",
+  "GO_gate": "/Users/pavel/public_windows/.local/tandem/GO_EXP866",
+  "hardware": "NOT_RUN",
+  "utc": "2026-09-28T12:56:58.161455+00:00",
+  "source_inputs": 536,
+  "arm64_kmd_warnings_errors": [
+    0,
+    0
+  ],
+  "arm64_umd_warnings_errors": [
+    0,
+    0
+  ],
+  "catalog_membership": "PASS_SYS_UMD",
+  "signer": "E9BE15BD2A184BFABA0C8035B3C620C58037A241",
+  "guest_transfer_members": 39,
+  "payload_members": 42,
+  "powershell_syntax": "PARSE_FILES 42 ERRORS 0",
+  "etl_receipt_regression": "PASS",
+  "full_host_suite": {
+    "tests": 1161,
+    "failures": 15,
+    "errors": 39,
+    "skipped": 2,
+    "new_failure_identities_vs_EXP865": 0
+  },
+  "Air_transfer_stage_launch": "NOT_PERFORMED",
+  "recovery": "mandatory GPU-hidden Code45 dump-first exact cleanup then ordinary Code28",
+  "artifact_sha256": {
+    "source-manifest.json": "a398222c4075ff255e4f71c92fa82757998b60fde67c04c1ea33ca143304acf2",
+    "source.zip": "518a56fd0c4ac8483d0962924ac9c95e4cb879e7a732491c50db812ab892c5cb",
+    "kmd-build-receipt.json": "13db5700f0cfae8d3c93e6af1447bdf75e777c43eaf64333c2e989cdc96516bc",
+    "hardware-manifest.json": "0a2268bdafa69116ab1c7b057f41ca2292455711a698392bbb71659c313534a7",
+    "guest-transfer-manifest.json": "d732416e8845a251a81753a91caeddfded837899444996677b6eb71efcbae6d9",
+    "guest-payload.tar": "adf57fbf9a7fb5c58bbcfa250c475bf454dbc11e6e49eec4160280df5f8b1f53",
+    "build-kmd.ps1": "4d67108e41b1fed2b62434fab0b12816c67725c9f1ebd1d2cd114b833a9a24e8",
+    "full-owner-direct.sh": "d5a72ecfd34de18bd30a6320eae40057bfd89d23d51897c8169543253533c8a4",
+    "stage.ps1": "0496aaf47c4bfb6c9c0d17505b20e0716a1221204f0e4faece69cef0b784dda7",
+    "verify-transfer.ps1": "67a7d62f4d895a8300bcd563140d36a8f159a403bd99c150955442f387ca93ee",
+    "extract-verify.ps1": "647e487a576588f73a7e1465c9f06e355b9ec0ce697923f7edba2d1eee974ec5",
+    "signing-verification.log": "caf3f01d294b33704f208d9aa7f1c870cd3601c5047661bbd8fcfedb7cc8827a",
+    "full-suite-result.json": "41c37b8f52a11d833aec0066746716ee22fe83d814c22b4716f8e7579f9d4362",
+    "source-proof.json": "2f3f27dbf9d1fb796e62d7ef7ef0ab19ca9279f3f26ab8b55bf5d9679fe5ac4b"
+  }
+}

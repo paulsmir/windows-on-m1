@@ -128,6 +128,7 @@ from m1n1.proxyutils import *
 from m1n1.utils import *
 from m1n1.hv import HV, TraceMode
 from tools.j313_launch_descriptor import pack_descriptor
+from tools import j313_ramdisk
 from tools.launch_contract import encode_record
 
 iface = UartInterface()
@@ -137,6 +138,16 @@ cpufreq_result = p.cpufreq_init()
 if cpufreq_result != 0:
     raise RuntimeError(f"CPU frequency preflight failed: cpufreq_init={cpufreq_result}")
 print("CPU frequency preflight: clusters raised to their configured performance states")
+# EXP1084: Windows has no Apple SoC DVFS driver, so the P-cluster stays at
+# m1n1's default P-state 7 (1956 MHz). WOM1_PCPU_PSTATE requests a fixed
+# non-turbo operating point (tools/j313_cpufreq.py); unset keeps the default.
+if os.environ.get("WOM1_PCPU_PSTATE"):
+    from tools.j313_cpufreq import PCPU_MHZ, requested_pstate, set_pcpu_pstate
+    _requested = int(os.environ["WOM1_PCPU_PSTATE"])
+    _before, _after = set_pcpu_pstate(p, _requested)
+    print(f"CPU frequency: P-cluster P-state {requested_pstate(_before)} -> "
+          f"{requested_pstate(_after)} ({PCPU_MHZ[_requested]} MHz), "
+          f"raw 0x{_before:x} -> 0x{_after:x}")
 u = ProxyUtils(p, heap_size=768 * 1024 * 1024)
 hv = HV(iface, p, u)
 
@@ -165,6 +176,19 @@ mem_top = u.ba.phys_base + u.ba.mem_size
 adt_blob = u.adt.build()
 uart_base = u.adt["/arm-io/uart0"].get_reg(0)[0]
 dart_base = u.adt["/arm-io/dart-usb1"].get_reg(0)[0]
+# M1: decide about the boot medium before m1n1 sees the descriptor. A preloaded
+# image is published as a ramdisk region (m1n1 keeps GPU DMA out of it); without
+# one the window is ordinary guest RAM for Mu, Windows and the GPU alike.
+ramdisk_blob = None
+ramdisk_regions = ()
+if args.ramdisk:
+    ramdisk_blob = args.ramdisk.read_bytes()
+    try:
+        j313_ramdisk.check_fits(len(ramdisk_blob), args.ramdisk_base, args.ramdisk_max_size,
+                                args.phys_base, mem_top)
+    except ValueError as error:
+        sys.exit(str(error))
+    ramdisk_regions = (j313_ramdisk.descriptor_region(args.ramdisk_base, args.ramdisk_max_size),)
 descriptor = pack_descriptor(
     boot=(args.phys_base, mem_top - args.phys_base, guest_base,
           (bootargs_base, 0, 0, 0)),
@@ -179,7 +203,7 @@ descriptor = pack_descriptor(
         # A bounded getter for the dynamically allocated DART page tables is
         # still pending. Zero size + UNOBSERVED is explicit, never guessed.
         (7, 1, args.phys_base, 0),
-    ),
+    ) + ramdisk_regions,
     devices=(layout.pci_ecam, 0, layout.xhci_base, dart_base, uart_base,
              fb.base, fb.width, fb.height, fb.stride, 0),
     adt_size=len(adt_blob),
@@ -293,26 +317,22 @@ if args.low_mem:
 fb.validate((hv.phys_base, mem_top), occupied_windows)
 print("Framebuffer validation against RAM/firmware/ramdisk: OK")
 
-if args.ramdisk:
-    # Layout must match PRELOADED_RAMDISK_HEADER in BootRamdiskHelperDxe.h: an 8-byte
-    # magic and a 64-bit size, with the payload one page in so the image stays aligned.
-    PAYLOAD_OFF = 0x1000
-    blob = args.ramdisk.read_bytes()
-    room = args.ramdisk_max_size - PAYLOAD_OFF
-    if len(blob) > room:
-        sys.exit(f"image size {len(blob)} does not fit in the {room}-byte window "
-                 f"(increase PcdPreloadedRamdiskMaxSize and --ramdisk-max-size)")
-
-    if not (args.phys_base <= args.ramdisk_base and
-            args.ramdisk_base + args.ramdisk_max_size <= mem_top):
-        sys.exit(f"window 0x{args.ramdisk_base:x}+0x{args.ramdisk_max_size:x} is outside "
-                 f"guest RAM 0x{args.phys_base:x}..0x{mem_top:x}")
-
-    header = b"ASIRAMDK" + len(blob).to_bytes(8, "little")
-    print(f"Loading disk image: {len(blob)/(1<<20):.1f} MiB -> "
-          f"0x{args.ramdisk_base + PAYLOAD_OFF:x}...")
-    u.compressed_writemem(args.ramdisk_base + PAYLOAD_OFF, blob, True)
-    iface.writemem(args.ramdisk_base, header.ljust(PAYLOAD_OFF, b"\0"))
+# The header page must match PRELOADED_RAMDISK_HEADER in Mu's PreloadedRamdisk.h: an
+# 8-byte magic and a 64-bit size, with the payload one page in so the image stays
+# aligned. Mu's PEI reads it with the MMU off, so the page is cleaned to the point of
+# coherency after it is written.
+if ramdisk_blob is not None:
+    print(f"Loading disk image: {len(ramdisk_blob)/(1<<20):.1f} MiB -> "
+          f"0x{args.ramdisk_base + j313_ramdisk.PAYLOAD_OFFSET:x}...")
+    u.compressed_writemem(args.ramdisk_base + j313_ramdisk.PAYLOAD_OFFSET, ramdisk_blob, True)
+    iface.writemem(args.ramdisk_base, j313_ramdisk.header(len(ramdisk_blob)))
+else:
+    # M1: no boot medium. Clear a header an earlier ramdisk launch may have left without
+    # a SoC reset, so Mu gives the window to Windows as m1n1 does to GPU backing pages.
+    iface.writemem(args.ramdisk_base, j313_ramdisk.cleared_header())
+    print(f"Ramdisk window 0x{args.ramdisk_base:x}: no image, header page cleared "
+          f"(system memory)")
+p.dc_cvac(args.ramdisk_base, j313_ramdisk.PAYLOAD_OFFSET)
 
 if args.low_mem:
     if args.low_mem_backing + args.low_mem_size > mem_top:

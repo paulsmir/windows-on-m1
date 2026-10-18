@@ -1,0 +1,68 @@
+{
+  "experiment": "EXP867",
+  "source": "hardware-evidence/umd.log",
+  "sha256": "90a6017e34fb9a021875a29c4fa40f9e99e757428d03f0ea449c20c998dd2c59",
+  "lines": 17986,
+  "seterror_count": 546,
+  "failures": [
+    {
+      "ddi": "ResourceCopyRegion",
+      "generated_line": 1321,
+      "hresult": "0x80004005",
+      "count": 210,
+      "share_of_logged_seterrors_pct": 38.4615
+    },
+    {
+      "ddi": "DrawIndexedInstanced",
+      "generated_line": 297,
+      "hresult": "0x80004005",
+      "count": 335,
+      "share_of_logged_seterrors_pct": 61.3553
+    },
+    {
+      "ddi": "DrawIndexed",
+      "generated_line": 206,
+      "hresult": "0x80004005",
+      "count": 1,
+      "share_of_logged_seterrors_pct": 0.1832
+    }
+  ],
+  "by_pid": {
+    "1216": {
+      "ResourceCopyRegion": 4,
+      "DrawIndexedInstanced": 19
+    },
+    "536": {
+      "ResourceCopyRegion": 133,
+      "DrawIndexedInstanced": 128
+    },
+    "6616": {
+      "DrawIndexedInstanced": 92,
+      "ResourceCopyRegion": 13
+    },
+    "4408": {
+      "DrawIndexedInstanced": 1
+    },
+    "5444": {
+      "DrawIndexedInstanced": 1
+    },
+    "1224": {
+      "DrawIndexed": 1,
+      "ResourceCopyRegion": 42
+    },
+    "8536": {
+      "DrawIndexedInstanced": 1
+    },
+    "5996": {
+      "DrawIndexedInstanced": 93,
+      "ResourceCopyRegion": 18
+    }
+  },
+  "observed_pending_map_callbacks": 2601,
+  "live_log_is_final_prefix": true,
+  "final_after_loss_identical": true,
+  "ddi_attempt_denominators_available": false,
+  "timing_or_scheduler_fence_correlation_available": false,
+  "dwm_normal_records": 128,
+  "explorer_normal_records": 128
+}

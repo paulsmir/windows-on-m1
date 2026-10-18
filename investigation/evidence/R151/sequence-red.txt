@@ -1,0 +1,21 @@
+test_completion_uses_bound_output_snapshot_after_release (test_apple_agx_render_backend_image.AppleAgxRenderBackendImageTests.test_completion_uses_bound_output_snapshot_after_release) ... ok
+test_exact_exp208_image_is_materialized_rebased_and_relocated (test_apple_agx_render_backend_image.AppleAgxRenderBackendImageTests.test_exact_exp208_image_is_materialized_rebased_and_relocated) ... Assertion failed: (image.Sequence == 1u), function test_g4_native_scene_stages_and_releases, file render_backend_image_test.c, line 655.
+ERROR
+test_production_lifecycle_borrows_the_memory_owner_tail (test_apple_agx_render_backend_image.AppleAgxRenderBackendImageTests.test_production_lifecycle_borrows_the_memory_owner_tail) ... ok
+
+======================================================================
+ERROR: test_exact_exp208_image_is_materialized_rebased_and_relocated (test_apple_agx_render_backend_image.AppleAgxRenderBackendImageTests.test_exact_exp208_image_is_materialized_rebased_and_relocated)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_apple_agx_render_backend_image.py", line 43, in test_exact_exp208_image_is_materialized_rebased_and_relocated
+    subprocess.run([str(binary)], check=True, cwd=ROOT)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/tmppw8o73xg/render_backend_image_test']' died with <Signals.SIGABRT: 6>.
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.505s
+
+FAILED (errors=1)

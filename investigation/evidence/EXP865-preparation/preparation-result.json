@@ -1,0 +1,56 @@
+{
+  "experiment": "EXP865",
+  "status": "PREPARED_STOP_AT_GO",
+  "utc": "2026-09-28T12:03:17.810865+00:00",
+  "source_commit": "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
+  "code_diff_sha256": "f5595c3c8d0e7d5bd0afa0ffeb283db1ba4e0627014d1430ccd22d5a6bb2ba85",
+  "Flush_ancestor": false,
+  "SourceCommit_equals_NativeArchiveCommit_equals_tip": true,
+  "package_version": "30.0.865.0",
+  "source_inputs": 536,
+  "ARM64_KMD_warnings_errors": [
+    0,
+    0
+  ],
+  "ARM64_UMD_warnings_errors": [
+    0,
+    0
+  ],
+  "catalog_membership_SYS_UMD": "PASS",
+  "signer": "E9BE15BD2A184BFABA0C8035B3C620C58037A241",
+  "builder_trust": "test root untrusted; guest native trust verification pending GO",
+  "hardware_manifest_sha256": "7ca944a67db38d4a85672c2c1399c42270e69abe9deded96a80b02b944d1bd86",
+  "guest_payload_sha256": "cce217e994909d01e6689d3eec0538a9af79ecb28a109ef797f39f4427410bbc",
+  "firmware": "byte-identical R143",
+  "guest_transfer_members": 39,
+  "payload_members": 42,
+  "powershell_syntax": "PARSE_FILES 45 ERRORS 0",
+  "etl_receipt_regression": "PASS original/foreign/armed/stale-boot/tampered/missing cases",
+  "stale_hash_scan": {
+    "active_files": 55,
+    "stale_hash_count": 12,
+    "rg_exit": 1,
+    "stale_hash_matches": 0,
+    "EXP864_references": 0,
+    "pending_placeholders": 0,
+    "payload_members": 42,
+    "macOS_metadata_members": 0
+  },
+  "full_host_suite": {
+    "tests": 1161,
+    "failures": 18,
+    "errors": 40,
+    "skipped": 2,
+    "details": "full-suite-result.json"
+  },
+  "targeted_identity": "PASS legacy/B1/G3",
+  "hardware": "NOT_RUN",
+  "Air_transfer_stage_launch": "NOT_PERFORMED",
+  "GO_gate": "/Users/pavel/public_windows/.local/tandem/GO_EXP865",
+  "recovery": "mandatory immutable hiddenCode45 exact cleanup then ordinaryCode28",
+  "limits": [
+    "No hardware completion/scanout/stability claim",
+    "True GPU hang reset remains fail-closed",
+    "Original ETL may be lost before SSH; collector records inability and keeps recovery trace distinct; native header BootTime must be checked before event attribution"
+  ]
+}

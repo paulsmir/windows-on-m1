@@ -1,0 +1,9 @@
+0: kd> cdb: Reading initial command '.for (r @$t0=poi(ffffe20519be67e0+18+70); @$t0 != 0; r @$t0=poi(@$t0)) { .if (dwo(@$t0+20)==8) { dt AppleAgxRenderAdmission!_APPLE_AGX_GPUVA_G3_NODE @$t0 Ipa AuxIpa Index Kind; }; .if (dwo(@$t0+20)==c) { dt AppleAgxRenderAdmission!_APPLE_AGX_GPUVA_G3_NODE @$t0 Ipa AuxIpa Index Kind; }; .if (dwo(@$t0+20)==134) { dt AppleAgxRenderAdmission!_APPLE_AGX_GPUVA_G3_NODE @$t0 Ipa AuxIpa Index Kind; }; .if (dwo(@$t0+20)==138) { dt AppleAgxRenderAdmission!_APPLE_AGX_GPUVA_G3_NODE @$t0 Ipa AuxIpa Index Kind; }; }; q'
+   +0x008 Ipa    : 0x00000009`1ecc0000
+   +0x010 AuxIpa : 0x00000009`1ece0000
+   +0x020 Index  : 0x138
+   +0x040 Kind   : 2 ( AppleAgxGpuvaG3PrivateBacking )
+   +0x008 Ipa    : 0x00000009`1ecc0000
+   +0x010 AuxIpa : 0x00000009`1ecd0000
+   +0x020 Index  : 0x134
+   +0x040 Kind   : 2 ( AppleAgxGpuvaG3PrivateBacking )

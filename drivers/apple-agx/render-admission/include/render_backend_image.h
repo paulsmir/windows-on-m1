@@ -1,0 +1,197 @@
+#ifndef APPLE_AGX_RENDER_BACKEND_IMAGE_H
+#define APPLE_AGX_RENDER_BACKEND_IMAGE_H
+
+#include "render_memory.h"
+#include "render_submission.h"
+#include "render_allocation.h"
+#include "apple_agx_exp208_gdi.h"
+#include "apple_agx_exp208_adapter.h"
+#include "apple_agx_exp208_dynamic.h"
+#include "apple_agx_relocation.h"
+#include "apple_agx_render_template_rebase.h"
+#include "apple_agx_g4_builder.h"
+#include "apple_agx_render_manager.h"
+#include "apple_agx_present_job.h"
+
+/* G2 HW2b: a present blt the KMD runs as a compute job in the presenting
+ * process's VM: its present arena (KMD view and job-VM VA) and the surfaces
+ * and rects proven at submission (AppleAgxPresentValidate, graph access). */
+typedef struct _ADMISSION_PRESENT_COMPUTE {
+  APPLE_AGX_PRESENT_ARENA Arena;
+  APPLE_AGX_PRESENT_SURFACE Source, Destination;
+  APPLE_AGX_PRESENT_RECT SourceRect, DestinationRect;
+  APPLE_AGX_PRESENT_RECT Rects[APPLE_AGX_PRESENT_MAX_RECTS];
+  APPLE_AGX_U32 RectCount, Fill, Colour;
+} ADMISSION_PRESENT_COMPUTE;
+
+typedef struct _ADMISSION_BACKEND_IMAGE {
+  APPLE_AGX_RENDER_TEMPLATE_ROOTS Roots;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT
+      Objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  void *ArenaCpuAddress;
+  APPLE_AGX_U64 ArenaPhysicalAddress;
+  APPLE_AGX_U64 ArenaGpuAddress;
+  APPLE_AGX_U32 ArenaBytes;
+  APPLE_AGX_U32 ArenaCapacity;
+  APPLE_AGX_EXP208_GDI_BINDING Binding;
+  APPLE_AGX_EXP208_DYNAMIC_RESULT Dynamic;
+  APPLE_AGX_BACKEND_JOB_IMAGE Job;
+  APPLE_AGX_U32 Sequence;
+  APPLE_AGX_U32 BoundFence;
+  APPLE_AGX_U32 JobFence;
+  APPLE_AGX_BOOL JobReady;
+  APPLE_AGX_BOOL Ready;
+  APPLE_AGX_BOOL NativeBound;
+  APPLE_AGX_BOOL G4Native;
+  /* Arena and objects are exactly the last Prepare's image: every bind
+   * clears it; only Prepare sets it. A G4 bind of a pristine image skips
+   * rematerializing the 6 MiB arena. */
+  APPLE_AGX_BOOL Pristine;
+  APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
+  unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+  APPLE_AGX_U32 G4CommandBytes;
+  APPLE_AGX_G4_PRIVATE_LEASE G4Lease;
+  /* D3D-G1: a v5 render's compute prelude. G4Command keeps the whole
+   * stream (compute, attachments, render); the job builder adds the compute
+   * as the queue provider's compute-before-render work item. */
+  APPLE_AGX_BOOL G4WithCompute;
+  APPLE_AGX_G4_NATIVE_COMPUTE G4PreludeCompute;
+  APPLE_AGX_G4_PROCESS_RANGE G4PreludePreemption;
+  APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;
+  APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
+  APPLE_AGX_U32 NativeWidth, NativeHeight, NativePitch;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT NativeOriginalOutput;
+  /* G2: a standalone compute job keeps only its validated envelope; the
+   * KMD builds RunCompute in the shared compute sidecar, so the template
+   * arena stays untouched (and Pristine). */
+  APPLE_AGX_BOOL G4Compute;
+  APPLE_AGX_G4_COMPUTE_ENVELOPE G4ComputeEnvelope;
+  /* G2 HW2b: a present blt compute job; its arena is the presenting
+   * process's, the template arena stays untouched. */
+  APPLE_AGX_BOOL PresentCompute;
+  ADMISSION_PRESENT_COMPUTE Present;
+} ADMISSION_BACKEND_IMAGE;
+
+/* EXP1105: the exact Prepare image of the objects a G4 job can change,
+ * taken right after Prepare (before any VM slot selection). A G4 release
+ * restores from it instead of rematerializing the 6 MiB arena. */
+#define ADMISSION_BACKEND_SNAPSHOT_BYTES 0x10000u
+typedef struct _ADMISSION_BACKEND_IMAGE_SNAPSHOT {
+  APPLE_AGX_BOOL Valid;
+  APPLE_AGX_U32 StoredBytes;
+  /* Nonzero prefix kept per restored object; the rest is zero. */
+  APPLE_AGX_U32 Stored[APPLE_AGX_RENDER_TEMPLATE_OBJECT_COUNT];
+  ADMISSION_BACKEND_IMAGE Image;
+  unsigned char Data[ADMISSION_BACKEND_SNAPSHOT_BYTES];
+} ADMISSION_BACKEND_IMAGE_SNAPSHOT;
+
+typedef enum _ADMISSION_BACKEND_OUTPUT_VERIFICATION {
+  AdmissionBackendOutputVerificationUniform = 1u,
+  AdmissionBackendOutputVerificationTriangle = 2u,
+  AdmissionBackendOutputVerificationNativeCapture = 3u,
+} ADMISSION_BACKEND_OUTPUT_VERIFICATION;
+
+typedef struct _ADMISSION_BACKEND_OUTPUT_VIEW {
+  void *AllocationCpuAddress;
+  APPLE_AGX_U64 AllocationGpuAddress;
+  APPLE_AGX_U64 AllocationPhysicalAddress;
+  APPLE_AGX_U32 AllocationBytes;
+  void *RenderedCpuAddress;
+  APPLE_AGX_U64 RenderedGpuAddress;
+  APPLE_AGX_U64 RenderedPhysicalAddress;
+  APPLE_AGX_U32 RenderedOffset;
+  APPLE_AGX_U32 RenderedBytes;
+  APPLE_AGX_U32 AllocationWidth;
+  APPLE_AGX_U32 AllocationHeight;
+  APPLE_AGX_U32 AllocationPitch;
+  APPLE_AGX_U32 AllocationFormat;
+  APPLE_AGX_U32 RenderWidth;
+  APPLE_AGX_U32 RenderHeight;
+  APPLE_AGX_U32 RenderPitch;
+  APPLE_AGX_U32 ExpectedColor;
+  APPLE_AGX_U32 BackgroundColor;
+  APPLE_AGX_U32 VerificationKind;
+  APPLE_AGX_BOOL Framebuffer;
+} ADMISSION_BACKEND_OUTPUT_VIEW;
+
+APPLE_AGX_BOOL AdmissionBackendImagePrepare(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_LOCAL_MEMORY_VIEW *BackendView);
+
+APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    void *DestinationCpuAddress,
+    const unsigned char *SubmissionBytes,
+    APPLE_AGX_U32 SubmissionByteCount,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding);
+
+APPLE_AGX_BOOL AdmissionBackendImageBindDynamicSubmission(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    void *DestinationCpuAddress,
+    APPLE_AGX_U32 BackgroundColor,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding);
+struct _ADMISSION_DYNAMIC_OVERLAY_BINDINGS;
+APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
+    ADMISSION_BACKEND_IMAGE *, const ADMISSION_RENDER_PACKET_DESCRIPTION *,
+    void *, const struct _ADMISSION_DYNAMIC_OVERLAY_BINDINGS *,
+    APPLE_AGX_EXP208_GDI_BINDING *);
+
+APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    void *DestinationCpuAddress,
+    const APPLE_AGX_G4_SUBMIT_VIEW *View,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding);
+
+/* G2: bind a compute envelope the caller validated against the process
+ * graph. Only an idle image (no bound fence, no staged job) accepts it. */
+APPLE_AGX_BOOL AdmissionBackendImageBindG4Compute(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_G4_COMPUTE_ENVELOPE *Envelope);
+APPLE_AGX_BOOL AdmissionBackendImageBindPresentCompute(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    const ADMISSION_PRESENT_COMPUTE *Present);
+
+APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    const ADMISSION_ALLOCATION_DESCRIPTION *Allocation,
+    ADMISSION_BACKEND_OUTPUT_VIEW *Output);
+
+APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence);
+
+/* Select the firmware VM slot in the arena's context_id fields. Selection
+ * is an arena write outside any submission, so it clears Pristine. */
+APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Slot);
+/* Objects a G4 job can change: the CPU writes the command objects (< 36)
+ * and the relocation fields of 41, 42 and 63; the GPU reaches only the
+ * arena-backed GBM objects 36..40. Every other relocation target is rebound
+ * to process-private memory or null by the G4 bind. */
+APPLE_AGX_BOOL AdmissionBackendImageRestoredObject(APPLE_AGX_U32 Index);
+APPLE_AGX_BOOL AdmissionBackendImageCaptureSnapshot(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot);
+/* A G4 release restores from a matching valid snapshot; any other release
+ * is AdmissionBackendImageReleaseSubmission. */
+APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmissionRestore(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence);
+
+APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(
+    ADMISSION_BACKEND_IMAGE *Image);
+
+APPLE_AGX_BOOL AdmissionBackendImageStageJob(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 TaEvent, APPLE_AGX_U32 D3Event,
+    APPLE_AGX_U32 TaExpectedDonePointer,
+    APPLE_AGX_U32 D3ExpectedDonePointer,
+    APPLE_AGX_BOOL IncludeInitBm,
+    APPLE_AGX_BACKEND_JOB_IMAGE *Job);
+
+void AdmissionBackendImageReset(ADMISSION_BACKEND_IMAGE *Image);
+
+#endif /* APPLE_AGX_RENDER_BACKEND_IMAGE_H */

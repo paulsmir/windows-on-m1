@@ -1,0 +1,2 @@
+clang-cl: warning: argument unused during compilation: '/Zc:enumTypes' [-Wunused-command-line-argument]
+clang-cl: warning: argument unused during compilation: '/Zc:preprocessor' [-Wunused-command-line-argument]

@@ -1,0 +1,410 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.016 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\Users\pauls\EXP867-r153-bm\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 96%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\EXP867-r153-bm
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\EXP867-r153-bm
+Executable search path is: 
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff803`a9a00000 PsLoadedModuleList = 0xfffff803`aa76ac50
+Debug session time: Mon Sep 28 16:51:13.265 2026 (UTC + 2:00)
+System Uptime: 0 days 0:04:48.630
+Loading Kernel Symbols
+...............................................................
+........................................................Page 96fda5 not present in the dump file. Type ".hh dbgerr004" for details
+.Page 94fe35 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+....................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+1: kd> cdb: Reading initial command 'dt -r1 AppleAgxRenderAdmission!_ADMISSION_RENDER_CONTEXT ffff9b0acb092170; dx -r2 ((AppleAgxRenderAdmission!_ADMISSION_CONTEXT*)0xffff9b0acef02000)->G4SubmitFailure; dx -r2 ((AppleAgxRenderAdmission!_ADMISSION_CONTEXT*)0xffff9b0acef02000)->BackendImage; q'
+   +0x000 Object           : _ADMISSION_OBJECT_CONTEXT
+      +0x000 Magic            : 0x434f4152
+      +0x004 Flags            : 4
+      +0x008 Device           : 0xffff9b0a`d0f8a810 _ADMISSION_OBJECT_DEVICE
+      +0x010 RuntimeHandle    : 0xffff9b0a`c9c0e1f0 Void
+      +0x018 NodeOrdinal      : 0
+      +0x01c EngineAffinity   : 1
+      +0x020 FenceOutstanding : 0x8e05
+   +0x028 SchedulerContext : _APPLE_AGX_SCHEDULER_CONTEXT
+      +0x000 NodeOrdinal      : 0
+      +0x004 EngineAffinity   : 1
+      +0x008 Active           : 0x1 ''
+   +0x038 PrepatchedRender : _ADMISSION_PREPATCHED_RENDER
+      +0x000 Active           : 0
+      +0x008 Description      : _ADMISSION_RENDER_PACKET_DESCRIPTION
+   +0x0c0 Win32Generation  : 0x2180105
+   +0x0c4 Win32Transport   : 0x1 ''
+   +0x0c8 GpuvaG3Process   : 0xffff9b0a`ce26b520 Void
+   +0x0d0 GpuvaG3NextContext : (null) 
+   +0x0d8 GpuvaG3PrivateManagerGeneration : 0x1a
+   +0x0e0 GpuvaG3PrivateFence : 0n36357
+   +0x0e4 GpuvaG3CancelFence : 0n36357
+   +0x0e8 GpuvaG3CancelUncertain : 0n1
+   +0x0ec GpuvaG3Closing   : 0 ''
+   +0x0f0 GpuvaG3RootIpa   : 0x00000009`d5a38000
+   +0x0f8 GpuvaG3LastSetRootIpa : 0x00000009`d5a38000
+   +0x100 GpuvaG3SetRootCount : 1
+   +0x108 GpuvaG3DmaBufferVa : 0x3d950000
+   +0x110 GpuvaG3MappingGeneration : 0x2ba36
+   +0x118 GpuvaG3DmaBufferBytes : 0x118
+   +0x11c GpuvaG3Poisoned  : 0 ''
+((AppleAgxRenderAdmission!_ADMISSION_CONTEXT*)0xffff9b0acef02000)->G4SubmitFailure                 [Type: _ADMISSION_G4_SUBMIT_FAILURE]
+    [+0x000] Version          : 0x2 [Type: unsigned long]
+    [+0x004] Bytes            : 0xc0 [Type: unsigned long]
+    [+0x008] Branch           : 0x7 [Type: unsigned long]
+    [+0x00c] Status           : 0xc000000d [Type: unsigned long]
+    [+0x010] DownstreamStatus : 0x0 [Type: unsigned long]
+    [+0x018] DmaBufferVirtualAddress : 0x1100b90000 [Type: unsigned __int64]
+    [+0x020] DmaBufferSize    : 0x118 [Type: unsigned long]
+    [+0x024] PrivateDataSize  : 0x51000 [Type: unsigned long]
+    [+0x028] UmdPrivateDataSize : 0x1e0 [Type: unsigned long]
+    [+0x02c] Flags            : 0x80 [Type: unsigned long]
+    [+0x030] ContextFlags     : 0x4 [Type: unsigned long]
+    [+0x034] Pid              : 0x4 [Type: unsigned long]
+    [+0x038] TotalFailures    : 0x1 [Type: unsigned long]
+    [+0x03c] Subsite          : 0x0 [Type: unsigned long]
+    [+0x040] Kind             : 0x0 [Type: unsigned long]
+    [+0x044] Ordinal          : 0x0 [Type: unsigned long]
+    [+0x048] AccessBytes      : 0x0 [Type: unsigned long]
+    [+0x04c] Write            : 0x0 [Type: unsigned long]
+    [+0x050] GraphPresent     : 0x0 [Type: unsigned long]
+    [+0x058] Va               : 0x0 [Type: unsigned __int64]
+    [+0x060] OwnerProcessId   : 0x0 [Type: unsigned __int64]
+    [+0x068] RootIpa          : 0x0 [Type: unsigned __int64]
+    [+0x070] ProcessGeneration : 0x0 [Type: unsigned __int64]
+    [+0x078] MappingGeneration : 0x0 [Type: unsigned __int64]
+    [+0x080] LogicalIpa       [Type: unsigned __int64 [4]]
+        [0]              : 0x0 [Type: unsigned __int64]
+        [1]              : 0x0 [Type: unsigned __int64]
+        [2]              : 0x0 [Type: unsigned __int64]
+        [3]              : 0x0 [Type: unsigned __int64]
+    [+0x0a0] LogicalSegment   [Type: unsigned long [4]]
+        [0]              : 0x0 [Type: unsigned long]
+        [1]              : 0x0 [Type: unsigned long]
+        [2]              : 0x0 [Type: unsigned long]
+        [3]              : 0x0 [Type: unsigned long]
+    [+0x0b0] LogicalFlags     [Type: unsigned long [4]]
+        [0]              : 0x0 [Type: unsigned long]
+        [1]              : 0x0 [Type: unsigned long]
+        [2]              : 0x0 [Type: unsigned long]
+        [3]              : 0x0 [Type: unsigned long]
+((AppleAgxRenderAdmission!_ADMISSION_CONTEXT*)0xffff9b0acef02000)->BackendImage                 [Type: _ADMISSION_BACKEND_IMAGE]
+    [+0x000] Roots            [Type: _APPLE_AGX_RENDER_TEMPLATE_ROOTS]
+        [+0x000] Ta               [Type: unsigned __int64 [2]]
+        [+0x010] D3               [Type: unsigned __int64 [2]]
+    [+0x020] Objects          [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT [76]]
+        [0]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [1]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [2]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [3]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [4]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [5]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [6]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [7]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [8]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [9]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [10]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [11]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [12]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [13]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [14]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [15]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [16]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [17]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [18]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [19]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [20]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [21]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [22]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [23]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [24]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [25]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [26]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [27]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [28]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [29]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [30]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [31]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [32]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [33]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [34]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [35]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [36]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [37]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [38]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [39]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [40]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [41]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [42]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [43]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [44]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [45]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [46]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [47]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [48]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [49]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [50]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [51]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [52]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [53]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [54]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [55]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [56]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [57]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [58]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [59]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [60]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [61]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [62]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [63]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [64]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [65]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [66]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [67]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [68]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [69]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [70]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [71]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [72]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [73]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [74]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [75]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x9a0] ArenaCpuAddress  : 0xffffabf03f800000 [Type: void *]
+    [+0x9a8] ArenaPhysicalAddress : 0x91f800000 [Type: unsigned __int64]
+    [+0x9b0] ArenaGpuAddress  : 0x153f800000 [Type: unsigned __int64]
+    [+0x9b8] ArenaBytes       : 0x5d0000 [Type: unsigned int]
+    [+0x9bc] ArenaCapacity    : 0x800000 [Type: unsigned int]
+    [+0x9c0] Binding          [Type: _APPLE_AGX_EXP208_GDI_BINDING]
+        [+0x000] OutputObject     : 0x28 [Type: unsigned int]
+        [+0x008] DestinationGpuVa : 0x110cea0000 [Type: unsigned __int64]
+        [+0x010] DestinationPhysical : 0x8e19a0000 [Type: unsigned __int64]
+        [+0x018] DestinationBytes : 0x4000 [Type: unsigned int]
+        [+0x01c] StoreDescriptorObject : 0x0 [Type: unsigned int]
+        [+0x020] StoreDescriptorOffset : 0x0 [Type: unsigned int]
+        [+0x028] OriginalOutputGpuVa : 0x0 [Type: unsigned __int64]
+        [+0x030] OriginalOutputPhysical : 0x0 [Type: unsigned __int64]
+        [+0x038] OriginalOutputBytes : 0x0 [Type: unsigned int]
+        [+0x040] OriginalOutputData : 0x0 [Type: void *]
+        [+0x048] OriginalStoreDescriptor : 0x0 [Type: unsigned __int64]
+        [+0x050] PatchedStoreDescriptor : 0x0 [Type: unsigned __int64]
+        [+0x058] StorePipelineObject : 0x0 [Type: unsigned int]
+        [+0x05c] ClearUniformOffset : 0x0 [Type: unsigned int]
+        [+0x060] StoreTextureOffset : 0x0 [Type: unsigned int]
+        [+0x064] StoreUniformOffset : 0x0 [Type: unsigned int]
+        [+0x068] OriginalStoreTexture : 0x0 [Type: unsigned __int64]
+        [+0x070] PatchedStoreTexture : 0x0 [Type: unsigned __int64]
+        [+0x078] OriginalStoreUniform : 0x0 [Type: unsigned __int64]
+        [+0x080] PatchedStoreUniform : 0x0 [Type: unsigned __int64]
+        [+0x088] OriginalClearUniform : 0x0 [Type: unsigned __int64]
+        [+0x090] PatchedClearUniform : 0x0 [Type: unsigned __int64]
+        [+0x098] Framebuffer      [Type: _APPLE_AGX_EXP208_FRAMEBUFFER_BINDING]
+    [+0xb18] Dynamic          [Type: _APPLE_AGX_EXP208_DYNAMIC_RESULT]
+        [+0x000] TaPreviousStamp  : 0x0 [Type: unsigned int]
+        [+0x004] D3PreviousStamp  : 0x0 [Type: unsigned int]
+        [+0x008] TaCurrentStamp   : 0x0 [Type: unsigned int]
+        [+0x00c] D3CurrentStamp   : 0x0 [Type: unsigned int]
+        [+0x010] EventCount       : 0x0 [Type: unsigned int]
+        [+0x014] Start3dQueueCommandCount : 0x0 [Type: unsigned int]
+    [+0xb30] Job              [Type: _APPLE_AGX_BACKEND_JOB_IMAGE]
+        [+0x000] TaWorkAddresses  [Type: unsigned __int64 [2]]
+        [+0x010] D3WorkAddresses  [Type: unsigned __int64 [2]]
+        [+0x020] ComputeWorkAddresses [Type: unsigned __int64 [2]]
+        [+0x030] TaWorkAddressCount : 0x0 [Type: unsigned int]
+        [+0x034] D3WorkAddressCount : 0x0 [Type: unsigned int]
+        [+0x038] ComputeWorkAddressCount : 0x0 [Type: unsigned int]
+        [+0x03c] TaEvent          : 0x0 [Type: unsigned int]
+        [+0x040] D3Event          : 0x0 [Type: unsigned int]
+        [+0x044] ComputeEvent     : 0x0 [Type: unsigned int]
+        [+0x048] TaExpectedStamp  : 0x0 [Type: unsigned int]
+        [+0x04c] D3ExpectedStamp  : 0x0 [Type: unsigned int]
+        [+0x050] ComputeExpectedStamp : 0x0 [Type: unsigned int]
+        [+0x054] TaExpectedDonePointer : 0x0 [Type: unsigned int]
+        [+0x058] D3ExpectedDonePointer : 0x0 [Type: unsigned int]
+        [+0x05c] ComputeExpectedDonePointer : 0x0 [Type: unsigned int]
+    [+0xb90] Sequence         : 0x51 [Type: unsigned int]
+    [+0xb94] BoundFence       : 0x8e05 [Type: unsigned int]
+    [+0xb98] JobFence         : 0x0 [Type: unsigned int]
+    [+0xb9c] JobReady         : 0x0 [Type: unsigned char]
+    [+0xb9d] Ready            : 0x1 [Type: unsigned char]
+    [+0xb9e] NativeBound      : 0x1 [Type: unsigned char]
+    [+0xb9f] G4Native         : 0x1 [Type: unsigned char]
+    [+0xba0] G4Header         [Type: APPLE_AGX_G4_PRIVATE_HEADER_V2]
+        [+0x000] Base             [Type: APPLE_AGX_G4_PRIVATE_HEADER]
+        [+0x018] Process          [Type: APPLE_AGX_G4_PROCESS_RANGE [9]]
+    [+0xc48] G4Command        [Type: unsigned char [4096]]
+        [0]              : 0x3 [Type: unsigned char]
+        [1]              : 0x0 [Type: unsigned char]
+        [2]              : 0x18 [Type: unsigned char]
+        [3]              : 0x0 [Type: unsigned char]
+        [4]              : 0xff [Type: unsigned char]
+        [5]              : 0xff [Type: unsigned char]
+        [6]              : 0xff [Type: unsigned char]
+        [7]              : 0xff [Type: unsigned char]
+        [8]              : 0x0 [Type: unsigned char]
+        [9]              : 0x0 [Type: unsigned char]
+        [10]             : 0xea [Type: unsigned char]
+        [11]             : 0xc [Type: unsigned char]
+        [12]             : 0x11 [Type: unsigned char]
+        [13]             : 0x0 [Type: unsigned char]
+        [14]             : 0x0 [Type: unsigned char]
+        [15]             : 0x0 [Type: unsigned char]
+        [16]             : 0x0 [Type: unsigned char]
+        [17]             : 0x40 [Type: unsigned char]
+        [18]             : 0x0 [Type: unsigned char]
+        [19]             : 0x0 [Type: unsigned char]
+        [20]             : 0x0 [Type: unsigned char]
+        [21]             : 0x0 [Type: unsigned char]
+        [22]             : 0x0 [Type: unsigned char]
+        [23]             : 0x0 [Type: unsigned char]
+        [24]             : 0x0 [Type: unsigned char]
+        [25]             : 0x0 [Type: unsigned char]
+        [26]             : 0x0 [Type: unsigned char]
+        [27]             : 0x0 [Type: unsigned char]
+        [28]             : 0x0 [Type: unsigned char]
+        [29]             : 0x0 [Type: unsigned char]
+        [30]             : 0x0 [Type: unsigned char]
+        [31]             : 0x0 [Type: unsigned char]
+        [32]             : 0x0 [Type: unsigned char]
+        [33]             : 0x0 [Type: unsigned char]
+        [34]             : 0xf0 [Type: unsigned char]
+        [35]             : 0x0 [Type: unsigned char]
+        [36]             : 0x0 [Type: unsigned char]
+        [37]             : 0x0 [Type: unsigned char]
+        [38]             : 0x0 [Type: unsigned char]
+        [39]             : 0x0 [Type: unsigned char]
+        [40]             : 0x4 [Type: unsigned char]
+        [41]             : 0x0 [Type: unsigned char]
+        [42]             : 0x0 [Type: unsigned char]
+        [43]             : 0x0 [Type: unsigned char]
+        [44]             : 0x0 [Type: unsigned char]
+        [45]             : 0x0 [Type: unsigned char]
+        [46]             : 0x0 [Type: unsigned char]
+        [47]             : 0x0 [Type: unsigned char]
+        [48]             : 0x0 [Type: unsigned char]
+        [49]             : 0x0 [Type: unsigned char]
+        [50]             : 0x2f [Type: unsigned char]
+        [51]             : 0x3d [Type: unsigned char]
+        [52]             : 0x0 [Type: unsigned char]
+        [53]             : 0x0 [Type: unsigned char]
+        [54]             : 0x0 [Type: unsigned char]
+        [55]             : 0x0 [Type: unsigned char]
+        [56]             : 0x0 [Type: unsigned char]
+        [57]             : 0x0 [Type: unsigned char]
+        [58]             : 0x0 [Type: unsigned char]
+        [59]             : 0x0 [Type: unsigned char]
+        [60]             : 0x0 [Type: unsigned char]
+        [61]             : 0x0 [Type: unsigned char]
+        [62]             : 0x0 [Type: unsigned char]
+        [63]             : 0x0 [Type: unsigned char]
+        [64]             : 0x0 [Type: unsigned char]
+        [65]             : 0x0 [Type: unsigned char]
+        [66]             : 0x0 [Type: unsigned char]
+        [67]             : 0x0 [Type: unsigned char]
+        [68]             : 0x0 [Type: unsigned char]
+        [69]             : 0x0 [Type: unsigned char]
+        [70]             : 0x0 [Type: unsigned char]
+        [71]             : 0x0 [Type: unsigned char]
+        [72]             : 0x0 [Type: unsigned char]
+        [73]             : 0x0 [Type: unsigned char]
+        [74]             : 0x0 [Type: unsigned char]
+        [75]             : 0x0 [Type: unsigned char]
+        [76]             : 0x0 [Type: unsigned char]
+        [77]             : 0x0 [Type: unsigned char]
+        [78]             : 0x0 [Type: unsigned char]
+        [79]             : 0x0 [Type: unsigned char]
+        [80]             : 0x0 [Type: unsigned char]
+        [81]             : 0x0 [Type: unsigned char]
+        [82]             : 0x0 [Type: unsigned char]
+        [83]             : 0x0 [Type: unsigned char]
+        [84]             : 0x0 [Type: unsigned char]
+        [85]             : 0x0 [Type: unsigned char]
+        [86]             : 0x0 [Type: unsigned char]
+        [87]             : 0x0 [Type: unsigned char]
+        [88]             : 0x40 [Type: unsigned char]
+        [89]             : 0xe [Type: unsigned char]
+        [90]             : 0x2b [Type: unsigned char]
+        [91]             : 0x3d [Type: unsigned char]
+        [92]             : 0x0 [Type: unsigned char]
+        [93]             : 0x0 [Type: unsigned char]
+        [94]             : 0x0 [Type: unsigned char]
+        [95]             : 0x0 [Type: unsigned char]
+        [96]             : 0x80 [Type: unsigned char]
+        [97]             : 0xe [Type: unsigned char]
+        [98]             : 0x2b [Type: unsigned char]
+        [99]             : 0x3d [Type: unsigned char]
+        [...]            [Type: unsigned char [4096]]
+    [+0x1c48] G4CommandBytes   : 0x118 [Type: unsigned int]
+    [+0x1c50] G4Lease          [Type: APPLE_AGX_G4_PRIVATE_LEASE]
+        [+0x000] ManagerId        : 0x8 [Type: unsigned __int64]
+        [+0x008] ManagerGeneration : 0x1a [Type: unsigned __int64]
+        [+0x010] SceneId          : 0xbd2 [Type: unsigned __int64]
+        [+0x018] SceneGeneration  : 0xbd2 [Type: unsigned __int64]
+    [+0x1c70] G4Manager        : 0x0 [Type: _APPLE_AGX_RENDER_MANAGER_STATE *]
+    [+0x1c78] G4ManagerKey     [Type: _APPLE_AGX_RENDER_MANAGER_KEY]
+        [+0x000] Owner            : 0x0 [Type: unsigned __int64]
+        [+0x008] Generation       : 0x0 [Type: unsigned __int64]
+        [+0x010] RootIpa          : 0x0 [Type: unsigned __int64]
+        [+0x018] Backing          [Type: APPLE_AGX_G4_PROCESS_RANGE [3]]
+    [+0x1cc0] NativeWidth      : 0x10 [Type: unsigned int]
+    [+0x1cc4] NativeHeight     : 0x10 [Type: unsigned int]
+    [+0x1cc8] NativePitch      : 0x40 [Type: unsigned int]
+    [+0x1cd0] NativeOriginalOutput [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+        [+0x000] GpuVa            : 0x110cea0000 [Type: unsigned __int64]
+        [+0x008] PhysicalAddress  : 0x91fae0000 [Type: unsigned __int64]
+        [+0x010] Size             : 0x4000 [Type: unsigned int]
+Page 91fae0 not present in the dump file. Type ".hh dbgerr004" for details
+        [+0x018] Data             : 0xffffabf03fae0000 : Unable to read memory at Address 0xffffabf03fae0000 [Type: unsigned char *]
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

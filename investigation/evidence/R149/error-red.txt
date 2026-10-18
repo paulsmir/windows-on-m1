@@ -1,0 +1,19 @@
+R149 rejected=1 terminal=0 frontend_errors=0 status=0
+Assertion failed: (frontend_errors==1 && FAILED(frontend_error)), function run, file replay.c, line 270.
+E
+======================================================================
+ERROR: test_rejected_batch_reports_error_and_releases_rollback (test_r149_submit_error.SubmitError.test_rejected_batch_reports_error_and_releases_rollback)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_r149_submit_error.py", line 94, in test_rejected_batch_reports_error_and_releases_rollback
+    subprocess.run([str(binary)], check=True, timeout=10)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/r149-submit-error-59nrpolx/replay']' died with <Signals.SIGABRT: 6>.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.336s
+
+FAILED (errors=1)

@@ -1,0 +1,225 @@
+{
+  "experiment": "EXP865",
+  "utc_verdict": "2026-09-28T12:32:04.251878+00:00",
+  "verdict": "OWNER_CHECKPOINT_CONFIRMED_LATER_TA_COMPLETION_FAILED",
+  "ten_minute_checkpoint": "FAILED_EARLY_TDR",
+  "source_commit": "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
+  "package": 865,
+  "single_variable": "G3 preserves backend owner63; hardware process slot1 unchanged",
+  "source_base": "a9ecd3eac75cc4058979bdfd8fd97052d8831fb2",
+  "Flush0f51f3f5_ancestor": false,
+  "firmware": "R143 unchanged",
+  "hardware_manifest_sha256": "7ca944a67db38d4a85672c2c1399c42270e69abe9deded96a80b02b944d1bd86",
+  "launch_utc": "2026-09-28T12:10:42.197564+00:00",
+  "armed_boots": 1,
+  "rearms": 0,
+  "retry_boots": 0,
+  "bugcheck": {
+    "code": "0x116",
+    "parameters": [
+      "0xffffd00f21f42030",
+      "0xfffff800d1fa6cb0",
+      "0xffffffffc0000483",
+      "0x3"
+    ],
+    "uptime_seconds": 39.288,
+    "cpu": 1,
+    "owner": "AppleAgxRenderAdmission!AdmissionDdiResetFromTimeout",
+    "meaning_limit": "Reset refused active private scene; stack alone does not identify why TA completion was absent"
+  },
+  "watchdog": {
+    "code": "0x141",
+    "uptime_seconds": 39.16,
+    "cpu": 3,
+    "stack": "WaitForCompletionEvent -> WaitForCompletePreemption -> CompletePreemption -> SwitchFromSuspendedDevices"
+  },
+  "admission": {
+    "StartStage": 12,
+    "StartStatus": 0,
+    "arm_consumed": true,
+    "original_Code0_sampled": false,
+    "cpu_entries": 8
+  },
+  "dump_boundary": {
+    "matching_private_symbols": "AppleAgxRenderAdmission.pdb package865",
+    "kernel_dump_sha256": "03d421e1c00558795220a10f0ff8e790a6d3dea868a31520dfb0bb34a3193b20",
+    "adapter": "0xffffd00f20b02000",
+    "adapter_physical_device": "0xffffd00f179f48f0",
+    "backend_phase": "Submitted",
+    "backend_owner": 63,
+    "pending_submission_owner": 63,
+    "scheduler_completed_fence": 219,
+    "scheduler_active_fence": 220,
+    "preemption_fence": 1,
+    "preemption_phase": "WaitCurrentBoundary",
+    "g3_last_completed_fence": 149,
+    "queue_last_completion": {
+      "fence": 149,
+      "status": "Success"
+    },
+    "current_fence": 220,
+    "current_node": 0,
+    "current_engine": 0,
+    "queue_provider_phase": "Faulted",
+    "queue_runtime_phase": "Faulted",
+    "ta": {
+      "event": 0,
+      "done_pointer": 3,
+      "expected_done_pointer": 3,
+      "stamp": "0x7a000000",
+      "expected_stamp": "0x7a000100",
+      "event_seen": false,
+      "complete": false
+    },
+    "d3": {
+      "event": 1,
+      "done_pointer": 4,
+      "expected_done_pointer": 4,
+      "stamp": "0x3d000100",
+      "expected_stamp": "0x3d000100",
+      "event_seen": true,
+      "complete": true
+    },
+    "process": {
+      "driver_id": 6,
+      "root": "0x9d6490000",
+      "mapping_generation": 895,
+      "lease_token": 2,
+      "job_in_flight": true,
+      "poisoned": true
+    },
+    "private_scene": {
+      "fence": 220,
+      "queued": 1,
+      "started": 1,
+      "gpu_done": 0,
+      "reported": 0,
+      "quarantined": 1
+    },
+    "first_completion_interpretation": "Queue success149 + G3 LastCompletedFence149 + scheduler219 corroborate earlier completion. AdmissionBackendComplete checks both TA/D3 before G3CompleteJob. Scheduler219 includes CPU work, not219 GPU renders.",
+    "current_completion_limit": "D3 complete is the saved software event/stamp observation; no second full TA+3D completion or pixel correctness claim.",
+    "fault_receipts": {
+      "Wom1QueueFaultSnapshot": "ABSENT",
+      "Wom1G4SubmitFailure": "ABSENT",
+      "SGX_MMIO_dump_pages": "NOT_PRESENT"
+    },
+    "next_boundary": "Determine why submitted fence220 lacks TA event0/stamp0x7a000100; preserve distinction between execution fault and reuse/completion identity. No new hardware authorized."
+  },
+  "query_v3": {
+    "version": 3,
+    "bytes": 168,
+    "predicate": 24,
+    "status": "0xc000000d",
+    "flags": 11,
+    "write": false,
+    "missing_level": null,
+    "missing_index": null,
+    "missing_reason": "none",
+    "component_reason": "none",
+    "process_set_root_count": 1,
+    "context_set_root_count": 0,
+    "graph_root_ipa": "0x9d6490000",
+    "bootstrap_ipa": "0x9d64b0000",
+    "process_last_set_root_ipa": "0x9d6490000",
+    "context_last_set_root_ipa": "0x0",
+    "query_va": "0x20000",
+    "query_bytes": 0,
+    "missing_va": "0x0",
+    "process_generation": 1,
+    "mapping_generation": 895,
+    "context_root_ipa": "0x0",
+    "process_id": 6,
+    "context_token": "0x0",
+    "captured_under_lock": true,
+    "process_available": true,
+    "context_available": false,
+    "request_available": true,
+    "range_validated": false,
+    "root_is_bootstrap": false,
+    "graph_details_available": true,
+    "request_allocation_handle": "0x40000fc0",
+    "canonical_allocation_identity": "0x0",
+    "canonical_allocation_bytes": 0,
+    "resident_group_available": false,
+    "canonical_allocation_available": false
+  },
+  "g4_rejection_receipt": "ABSENT; not standalone proof of accepted GPU work",
+  "scanout": {
+    "snapshots": 1,
+    "sequence": 2,
+    "offset": "0x130000",
+    "pa": "0x8e0130000",
+    "nonzero_pixels": 0,
+    "physical_display_observation": "NONE"
+  },
+  "runtime_observations": {
+    "original_code0_samples": 0,
+    "ssh_failures": 3,
+    "original_boot_stability": "FAILED_EARLY_0x116",
+    "uptime_bugcheck_seconds": 39.288,
+    "uptime_live141_seconds": 39.16,
+    "ten_minute_checkpoint": "FAILED",
+    "visible_frame_checkpoint": "FAILED_NONZERO_0",
+    "physical_display_and_input": "NOT_OBSERVED",
+    "runtime_DWM_and_memory_trend": "NOT_OBSERVED",
+    "recovery_samples_excluded": true
+  },
+  "etl": {
+    "original": "UNAVAILABLE; spontaneous reset before any pinned SSH sample made copy-before-reboot impossible",
+    "recovery": "hardware-evidence/recovery-EXP801DxgBoot.etl",
+    "recovery_excluded_from_original_boot_claims": true,
+    "native_header_not_used_for_original_claim": true
+  },
+  "firmware_fault_limits": "No durable Wom1QueueFaultSnapshot; SUBMIT-only telemetry excluded from G3; SGX MMIO pages absent in kernel dump. No no-fault claim.",
+  "original_input_RDP_storage": "Unobserved through SSH; booted ANS/USB paths in raw log are not full runtime health proof",
+  "recovery": {
+    "Utc": "2026-09-28T12:23:35.3742925Z",
+    "Boot": "2026-09-28T12:22:22.2520140Z",
+    "Problem": 28,
+    "Present": 1,
+    "Inf": null,
+    "Staged": 0,
+    "G3Arm": null,
+    "B1Arm": null,
+    "Sys": false,
+    "Umd": false,
+    "ServicePresent": false,
+    "SignerRoot": false,
+    "SignerPublisher": false,
+    "AutoLogger": false,
+    "DwmDumps": false,
+    "ExplorerDumps": false,
+    "Cpu": 8,
+    "Disks": [
+      {
+        "Model": "m1n1 Apple ANS NVMe bridge",
+        "Status": "OK"
+      },
+      {
+        "Model": "Generic Mass-Storage USB Device",
+        "Status": "OK"
+      }
+    ],
+    "UsbCount": 5,
+    "Rdp": "Running",
+    "AutoAdminLogon": "1",
+    "DefaultPasswordPresent": true
+  },
+  "cleanup_receipt_sha256": "b6958c5dbe572fb4d8e9fae8c685a1757eb56bfafd67724be31e83441ecc2168",
+  "evidence": {
+    "guest_files": 27,
+    "guest_bytes": 754887182,
+    "all_guest_hashes_verified": true,
+    "guest_manifest_sha256": "9ffd84b31e56b58499687f8a63b188562b994c5709da5b7773e0c058dd5fee26",
+    "kernel_sha256": "03d421e1c00558795220a10f0ff8e790a6d3dea868a31520dfb0bb34a3193b20",
+    "minidump_sha256": "3c23e144ed9d1f2323413c177b1731874449cbc1d771a7e0295fa5c433a910eb",
+    "watchdog_sha256": "fc24e893ccb463da304562597fb14624dbe5650367e86c4895bd0b1e818a2b89",
+    "final_manifest_sha256": "caefc834fa5e01996ecfbf30f52b90901ba18a3272aceaef4add5df96796e80e"
+  },
+  "excluded_evidence": [
+    "old 092826-14000-01.dmp from four-hour collector window",
+    "recovery ETL and hidden Code45 state as original runtime metrics"
+  ],
+  "clock_corrections": "Hidden +122.914s and ordinary +115.500s explain absolute-time offsets; use dump uptime for failure duration",
+  "next": "Offline fence220 TA event/stamp boundary and completion freshness; no new package or hardware run authorized by this result"
+}

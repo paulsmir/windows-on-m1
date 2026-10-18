@@ -1,0 +1,121 @@
+{
+    "Utc":  "2026-09-28T12:28:41.3590858Z",
+    "Boot":  "2026-09-28T12:22:22.2531280Z",
+    "Uptime":  387,
+    "BootEvents":  [
+                       {
+                           "TimeCreated":  "\/Date(1790598164870)\/",
+                           "Id":  1,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The system time has changed to ?2026?-?09?-?28T12:22:44.870314600Z from ?2026?-?09?-?28T12:22:44.869201200Z.\r\nTime Delta: 1 ms\r\n\r\nChange Reason: An application or system component changed the time.\r\nProcess: \u0027\\Device\\HarddiskVolume7\\Windows\\System32\\svchost.exe\u0027 (PID 6832).\r\n\r\nRTC time: ?2026?-?09?-?28T14:22:44.870314600Z\r\nCurrent time zone bias: -120\r\nRTC time is in UTC: false\r\nSystem time was based on RTC time: false"
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790598163349)\/",
+                           "Id":  1,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The system time has changed to ?2026?-?09?-?28T12:22:43.349610200Z from ?2026?-?09?-?28T12:22:43.348742900Z.\r\nTime Delta: 0 ms\r\n\r\nChange Reason: An application or system component changed the time.\r\nProcess: \u0027\\Device\\HarddiskVolume7\\Windows\\System32\\svchost.exe\u0027 (PID 6832).\r\n\r\nRTC time: ?2026?-?09?-?28T14:22:43.349610200Z\r\nCurrent time zone bias: -120\r\nRTC time is in UTC: false\r\nSystem time was based on RTC time: false"
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790598163348)\/",
+                           "Id":  1,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The system time has changed to ?2026?-?09?-?28T12:22:43.348742900Z from ?2026?-?09?-?28T12:20:47.848190500Z.\r\nTime Delta: 115500 ms\r\n\r\nChange Reason: An application or system component changed the time.\r\nProcess: \u0027\\Device\\HarddiskVolume7\\Windows\\System32\\svchost.exe\u0027 (PID 6832).\r\n\r\nRTC time: ?2026?-?09?-?28T14:22:43.348742900Z\r\nCurrent time zone bias: -120\r\nRTC time is in UTC: false\r\nSystem time was based on RTC time: false"
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790598027034)\/",
+                           "Id":  12,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The operating system started at system time ?2026?-?09?-?28T12:20:26.750595100Z."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790598025531)\/",
+                           "Id":  13,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The operating system is shutting down at system time ?2026?-?09?-?28T12:20:25.531289900Z."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790598038238)\/",
+                           "Id":  6005,
+                           "ProviderName":  "EventLog",
+                           "Message":  "The Event log service was started."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790598024238)\/",
+                           "Id":  6006,
+                           "ProviderName":  "EventLog",
+                           "Message":  "The Event log service was stopped."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790598012898)\/",
+                           "Id":  1074,
+                           "ProviderName":  "User32",
+                           "Message":  "The process C:\\Windows\\system32\\shutdown.exe (J313-WIN) has initiated the restart of computer J313-WIN on behalf of user J313-WIN\\pavel for the following reason: No title for this reason could be found\r\n Reason Code: 0x800000ff\r\n Shut-down Type: restart\r\n Comment: "
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597582142)\/",
+                           "Id":  1,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The system time has changed to ?2026?-?09?-?28T12:13:02.142266100Z from ?2026?-?09?-?28T12:13:02.141453300Z.\r\nTime Delta: 0 ms\r\n\r\nChange Reason: An application or system component changed the time.\r\nProcess: \u0027\\Device\\HarddiskVolume7\\Windows\\System32\\svchost.exe\u0027 (PID 5588).\r\n\r\nRTC time: ?2026?-?09?-?28T14:13:02.142266100Z\r\nCurrent time zone bias: -120\r\nRTC time is in UTC: false\r\nSystem time was based on RTC time: false"
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597580530)\/",
+                           "Id":  1,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The system time has changed to ?2026?-?09?-?28T12:13:00.530028300Z from ?2026?-?09?-?28T12:13:00.529622400Z.\r\nTime Delta: 0 ms\r\n\r\nChange Reason: An application or system component changed the time.\r\nProcess: \u0027\\Device\\HarddiskVolume7\\Windows\\System32\\svchost.exe\u0027 (PID 5588).\r\n\r\nRTC time: ?2026?-?09?-?28T14:13:00.530028300Z\r\nCurrent time zone bias: -120\r\nRTC time is in UTC: false\r\nSystem time was based on RTC time: false"
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597580529)\/",
+                           "Id":  1,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The system time has changed to ?2026?-?09?-?28T12:13:00.529622400Z from ?2026?-?09?-?28T12:10:57.615285300Z.\r\nTime Delta: 122914 ms\r\n\r\nChange Reason: An application or system component changed the time.\r\nProcess: \u0027\\Device\\HarddiskVolume7\\Windows\\System32\\svchost.exe\u0027 (PID 5588).\r\n\r\nRTC time: ?2026?-?09?-?28T14:13:00.529622400Z\r\nCurrent time zone bias: -120\r\nRTC time is in UTC: false\r\nSystem time was based on RTC time: false"
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597438941)\/",
+                           "Id":  41,
+                           "ProviderName":  "Microsoft-Windows-Kernel-Power",
+                           "Message":  "The system has rebooted without cleanly shutting down first. This error could be caused if the system stopped responding, crashed, or lost power unexpectedly."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597449538)\/",
+                           "Id":  6005,
+                           "ProviderName":  "EventLog",
+                           "Message":  "The Event log service was started."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597436957)\/",
+                           "Id":  12,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The operating system started at system time ?2026?-?09?-?28T12:10:36.642347100Z."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597406156)\/",
+                           "Id":  12,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The operating system started at system time ?2026?-?09?-?28T12:10:05.842335500Z."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597404679)\/",
+                           "Id":  13,
+                           "ProviderName":  "Microsoft-Windows-Kernel-General",
+                           "Message":  "The operating system is shutting down at system time ?2026?-?09?-?28T12:10:04.679045800Z."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597437057)\/",
+                           "Id":  6005,
+                           "ProviderName":  "EventLog",
+                           "Message":  "The Event log service was started."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597399425)\/",
+                           "Id":  6006,
+                           "ProviderName":  "EventLog",
+                           "Message":  "The Event log service was stopped."
+                       },
+                       {
+                           "TimeCreated":  "\/Date(1790597387326)\/",
+                           "Id":  1074,
+                           "ProviderName":  "User32",
+                           "Message":  "The process C:\\Windows\\system32\\shutdown.exe (J313-WIN) has initiated the shutdown of computer J313-WIN on behalf of user J313-WIN\\pavel for the following reason: No title for this reason could be found\r\n Reason Code: 0x800000ff\r\n Shut-down Type: shutdown\r\n Comment: "
+                       }
+                   ]
+}

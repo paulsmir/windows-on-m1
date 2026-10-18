@@ -1,0 +1,5 @@
+agx_size=20 agx_align=4 sentinel_before=8 sentinel_after=8 fields=0 pragma=0
+default-x64 COMPILE=0 RUN=1
+pragma-x64 COMPILE=1 RUN=-1
+default-arm64 COMPILE=0
+pragma-arm64 COMPILE=1

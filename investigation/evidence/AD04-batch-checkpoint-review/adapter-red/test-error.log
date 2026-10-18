@@ -1,0 +1,16 @@
+COMPOSER line 424: batch->Phase==AdmissionAsahiBatchSubmitted
+COMPOSER line 426: AdmissionUmdAsahiBatchDispatch(&Composer_device,batch)==HRESULT_FROM_WIN32(ERROR_BUSY)
+COMPOSER line 433: batch->Phase==AdmissionAsahiBatchSubmitted
+COMPOSER line 441: AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==HRESULT_FROM_WIN32(ERROR_TIMEOUT)
+COMPOSER line 442: batch->Phase==AdmissionAsahiBatchSubmitted
+COMPOSER line 443: batch->Submission.Fence!=0 && capture.Fence==batch->Submission.Fence
+COMPOSER line 449: AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==S_OK
+COMPOSER line 450: owner.Holds==0 && owner.Releases==10 && Composer_calls==1
+COMPOSER line 451: Composer_device.ScreenBuffers[i].SubmissionHolds==0
+COMPOSER line 451: Composer_device.ScreenBuffers[i].SubmissionHolds==0
+COMPOSER line 451: Composer_device.ScreenBuffers[i].SubmissionHolds==0
+COMPOSER line 451: Composer_device.ScreenBuffers[i].SubmissionHolds==0
+COMPOSER line 451: Composer_device.ScreenBuffers[i].SubmissionHolds==0
+COMPOSER line 451: Composer_device.ScreenBuffers[i].SubmissionHolds==0
+COMPOSER line 451: Composer_device.ScreenBuffers[i].SubmissionHolds==0
+COMPOSER line 451: Composer_device.ScreenBuffers[i].SubmissionHolds==0

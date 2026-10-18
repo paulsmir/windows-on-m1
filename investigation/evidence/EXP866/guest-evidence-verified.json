@@ -1,0 +1,15 @@
+{
+    "Utc":  "2026-09-28T13:18:51.8232597Z",
+    "Files":  27,
+    "Bytes":  861605328,
+    "ManifestSHA256":  "7D4C1918798DB7A634A1A1349F67D9A88BA8E737D340B18E6FBCC4E00B34C1A3",
+    "Watchdogs":  [
+                      {
+                          "Source":  "C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportQueue\\Kernel_141_ee7b412488a64cc36a8d5b2c7d951c04d2eef67_00000000_881c3b7c-9998-410f-afe4-667b569e48de\\WATCHDOG-20260928-1512.dmp",
+                          "Name":  "Live-WATCHDOG-20260928-1512.dmp",
+                          "Bytes":  283829,
+                          "SHA256":  "08100282CAB5CF90719CD8B90165DDC152A93CA30D05D8EE8151958A0F0CA38A",
+                          "LastWriteTimeUtc":  "2026-09-28T13:12:04.1149876Z"
+                      }
+                  ]
+}

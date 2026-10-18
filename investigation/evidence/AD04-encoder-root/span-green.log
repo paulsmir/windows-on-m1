@@ -1,0 +1,10 @@
+..
+----------------------------------------------------------------------
+Ran 2 tests in 1.051s
+
+OK
+NATIVE ENCODER: exact 69-byte termination at two placements PASS
+NATIVE PPP v3: disconnected extra Encoder rejected
+NATIVE PPP v3: two placements/masked relative fields PASS
+NATIVE USC v3: preshader/texture/sampler two placements, all counts PASS
+CAPTURE -> WIRE -> KMD MATERIALIZER: two placements/lifetime PASS

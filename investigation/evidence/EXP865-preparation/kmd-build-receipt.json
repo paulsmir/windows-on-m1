@@ -1,0 +1,18 @@
+{
+    "NativeArchiveCommit":  "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
+    "NativeArchiveSha256":  "0d3fa142227b77cad5683fcaa6c12b80c56e3e09ed35ad5f8bede035382a1a24",
+    "NativeResourceSourceSha256":  "24fc43101b109b6c2fd206b9b1470611bff028bc2f06a061af45e33f1b353aaf",
+    "NativePreparedResultSha256":  "b0456c860539baa63327ca8f6fb3cb5f43da06ac83951aad8e2fe5831d3f5982",
+    "Verdict":  "R85_BUILD_ONLY",
+    "SourceCommit":  "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
+    "PackageBuild":  865,
+    "SourceManifestSha256":  "909d9df2e26904be93c90fbfc1d28bbd2b72523353250323184c9add51b6b680",
+    "BuildLogSha256":  "8d06c03f2c5b5a68d580db65a08db5973acaf42e8a150d43af554dad80b1d6ed",
+    "ArtifactSha256":  {
+                           "AppleAgxRenderAdmission.sys":  "2d274a457ff07b13cb00c3d7a2027e1690f9438ef140850347154cf5f7e378de",
+                           "AppleAgxRenderAdmissionUmd.dll":  "2a3c13171ab5c332e97b404c01cd02dca37e31430b3c2c3886752511adf151bc",
+                           "AppleAgxRenderAdmission.inf":  "5cccbd5bb1040847f104c4fcd04c1c56117123cb307dc77f1a6f6d24a5e7ab11",
+                           "appleagxrenderadmission.cat":  "85bab541d55a7cb50a6937a959deb3a7656badba6dfdaf5f93f392ed84069afd"
+                       },
+    "Hardware":  "NOT_RUN"
+}

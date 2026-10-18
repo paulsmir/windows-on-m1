@@ -1,0 +1,14 @@
+{
+  "decoded_events": 145466,
+  "first_event": "2026-09-28T09:25:31.2690057Z",
+  "last_event": "2026-09-28T09:26:56.5446902Z",
+  "provider_counts": {
+    "": 1,
+    "Microsoft-Windows-DxgKrnl": 135825,
+    "Microsoft-Windows-Kernel-EventTracing": 9640
+  },
+  "pc_window": "0x7ff8eb980000 <= address < 0x7ff8eb990000",
+  "stack_matches": 0,
+  "image_load_provider_present": false,
+  "input_etl_sha256": "54f134cd07bf3c7871638430c1add2347a3de25fd3e05bece2cdf1c0cf645999"
+}

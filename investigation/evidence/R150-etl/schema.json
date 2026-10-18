@@ -1,0 +1,98 @@
+[
+    {
+        "Id":  24,
+        "Version":  0,
+        "Description":  null,
+        "Task":  "Adapter",
+        "Opcode":  "win:Start",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"pDeviceObject\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"pDxgAdapter\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"NbVidPnSources\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"HighestAcceptableAddress\" inType=\"win:UInt64\" outType=\"xs:unsignedLong\"/\u003e\r\n  \u003cdata name=\"MaxSlotId\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"ApertureSegmentCommitLimit\" inType=\"win:UInt64\" outType=\"xs:unsignedLong\"/\u003e\r\n  \u003cdata name=\"MaxPointerWidth\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"MaxPointerHeight\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"InterruptMessageNumber\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"NumberOfSwizzlingRanges\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"MaxOverlays\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"MaxQueuedFlipOnVSync\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"PointerCaps\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"GammaRampCaps\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"PresentationCaps\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"AlignmentShift\" inType=\"win:UInt8\" outType=\"xs:unsignedByte\"/\u003e\r\n  \u003cdata name=\"MaxTextureWidthShift\" inType=\"win:UInt8\" outType=\"xs:unsignedByte\"/\u003e\r\n  \u003cdata name=\"MaxTextureHeightShift\" inType=\"win:UInt8\" outType=\"xs:unsignedByte\"/\u003e\r\n  \u003cdata name=\"Reserved\" inType=\"win:UInt8\" outType=\"xs:unsignedByte\"/\u003e\r\n  \u003cdata name=\"FlipCaps\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"SchedulingCaps\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"ReservedMemoryManagementCaps\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"PagingNode\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"NbAsymetricProcessingNodes\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"ReservedTopology\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\" count=\"NbAsymetricProcessingNodes\"/\u003e\r\n  \u003cdata name=\"NumPowerComponents\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"AdapterType\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"pMiniportContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"VirtualGpuLuid\" inType=\"win:UInt64\" outType=\"win:HexInt64\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  27,
+        "Version":  2,
+        "Description":  null,
+        "Task":  "Device",
+        "Opcode":  "win:Start",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"hProcessId\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"pDxgAdapter\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"ClientType\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"hDevice\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"RequestVSync\" inType=\"win:Boolean\" outType=\"xs:boolean\"/\u003e\r\n  \u003cdata name=\"DisableGpuTimeout\" inType=\"win:Boolean\" outType=\"xs:boolean\"/\u003e\r\n  \u003cdata name=\"hThunkHandle\" inType=\"win:UInt32\" outType=\"win:HexInt32\"/\u003e\r\n  \u003cdata name=\"DxgProcess\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"HostDeviceHandle\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"VirtualGpu\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  30,
+        "Version":  0,
+        "Description":  null,
+        "Task":  "Context",
+        "Opcode":  "win:Start",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"hDevice\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"NodeOrdinal\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"EngineAffinity\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"DmaBufferSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"DmaBufferSegmentSet\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"DmaBufferPrivateDataSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"AllocationListSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"PatchLocationListSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"Flags\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"hContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"ContextHandle\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"ParentDxgContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  31,
+        "Version":  0,
+        "Description":  null,
+        "Task":  "Context",
+        "Opcode":  "win:Stop",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"hDevice\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"NodeOrdinal\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"EngineAffinity\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"DmaBufferSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"DmaBufferSegmentSet\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"DmaBufferPrivateDataSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"AllocationListSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"PatchLocationListSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"Flags\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"hContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"ContextHandle\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"ParentDxgContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  110,
+        "Version":  1,
+        "Description":  null,
+        "Task":  "DpiReportAdapter",
+        "Opcode":  "win:Info",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"pDxgAdapter\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"ConfigSpaceSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"ConfigSpace\" inType=\"win:UInt8\" outType=\"win:HexInt8\" count=\"ConfigSpaceSize\"/\u003e\r\n  \u003cdata name=\"ChainUid\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"NumberOfLinksInChain\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"LeadLink\" inType=\"win:Boolean\" outType=\"xs:boolean\"/\u003e\r\n  \u003cdata name=\"BusType\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"VendorID\" inType=\"win:UInt32\" outType=\"win:HexInt32\"/\u003e\r\n  \u003cdata name=\"DeviceID\" inType=\"win:UInt32\" outType=\"win:HexInt32\"/\u003e\r\n  \u003cdata name=\"SubVendorID\" inType=\"win:UInt32\" outType=\"win:HexInt32\"/\u003e\r\n  \u003cdata name=\"SubSystemID\" inType=\"win:UInt32\" outType=\"win:HexInt32\"/\u003e\r\n  \u003cdata name=\"RevisionID\" inType=\"win:UInt32\" outType=\"win:HexInt32\"/\u003e\r\n  \u003cdata name=\"AdapterLuid\" inType=\"win:UInt64\" outType=\"win:HexInt64\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  175,
+        "Version":  1,
+        "Description":  null,
+        "Task":  "DmaPacket",
+        "Opcode":  "win:Start",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"hContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"hQueuePacketContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"PacketType\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"uliSubmissionId\" inType=\"win:UInt64\" outType=\"xs:unsignedLong\"/\u003e\r\n  \u003cdata name=\"ulQueueSubmitSequence\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"pDmaBuffer\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"QuantumStatus\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  176,
+        "Version":  0,
+        "Description":  null,
+        "Task":  "DmaPacket",
+        "Opcode":  "win:Stop",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"hContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"PacketType\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"uliCompletionId\" inType=\"win:UInt64\" outType=\"xs:unsignedLong\"/\u003e\r\n  \u003cdata name=\"ulQueueSubmitSequence\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"bPreempted\" inType=\"win:Boolean\" outType=\"xs:boolean\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  177,
+        "Version":  1,
+        "Description":  null,
+        "Task":  "DmaPacket",
+        "Opcode":  "win:Info",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"hContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"PacketType\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"uliCompletionId\" inType=\"win:UInt64\" outType=\"xs:unsignedLong\"/\u003e\r\n  \u003cdata name=\"ulQueueSubmitSequence\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"InterruptType\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"QuantumStatus\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"FaultedVirtualAddress\" inType=\"win:UInt64\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"PageFaultFlags\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"FaultedProcessHandle\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  178,
+        "Version":  1,
+        "Description":  null,
+        "Task":  "QueuePacket",
+        "Opcode":  "win:Start",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"hContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"PacketType\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"SubmitSequence\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"DmaBufferSize\" inType=\"win:UInt64\" outType=\"xs:unsignedLong\"/\u003e\r\n  \u003cdata name=\"AllocationListSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"PatchLocationListSize\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"bPresent\" inType=\"win:Boolean\" outType=\"xs:boolean\"/\u003e\r\n  \u003cdata name=\"hDmaBuffer\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"pQueuePacket\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"ProgressFenceValue\" inType=\"win:UInt64\" outType=\"xs:unsignedLong\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  179,
+        "Version":  0,
+        "Description":  null,
+        "Task":  "QueuePacket",
+        "Opcode":  "win:Info",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"hContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"PacketType\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"SubmitSequence\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  180,
+        "Version":  1,
+        "Description":  null,
+        "Task":  "QueuePacket",
+        "Opcode":  "win:Stop",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"hContext\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"PacketType\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"SubmitSequence\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"bPreempted\" inType=\"win:Boolean\" outType=\"xs:boolean\"/\u003e\r\n  \u003cdata name=\"bTimeouted\" inType=\"win:Boolean\" outType=\"xs:boolean\"/\u003e\r\n  \u003cdata name=\"pQueuePacket\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n\u003c/template\u003e\r\n"
+    },
+    {
+        "Id":  250,
+        "Version":  0,
+        "Description":  null,
+        "Task":  "NodeMetadata",
+        "Opcode":  "win:Info",
+        "Template":  "\u003ctemplate xmlns=\"http://schemas.microsoft.com/win/2004/08/events\"\u003e\r\n  \u003cdata name=\"pDxgAdapter\" inType=\"win:Pointer\" outType=\"win:HexInt64\"/\u003e\r\n  \u003cdata name=\"NodeOrdinal\" inType=\"win:UInt32\" outType=\"xs:unsignedInt\"/\u003e\r\n  \u003cdata name=\"EngineType\" inType=\"win:UInt32\" outType=\"win:HexInt32\"/\u003e\r\n  \u003cdata name=\"FriendlyName\" inType=\"win:UnicodeString\" outType=\"xs:string\"/\u003e\r\n\u003c/template\u003e\r\n"
+    }
+]

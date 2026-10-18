@@ -1,0 +1,9 @@
+{
+ "task_id":"AD04-MATH-CONSTANTS-PORTABILITY-006-REVIEW",
+ "instruction":"Fresh read-only review. Return JSON fields review PASS/FAIL/QUESTION, scope, semantics, test_coverage, unauthorized_expansion, architecture_risk. No edits or invented test results.",
+ "contract":"Fix only math constant availability in compiler build configuration, preserve all Mesa source and constant values, stop after first new compiler boundary.",
+ "change":"One shared compileArgs assignment in run-phase3-normalized.ps1 gains /D_USE_MATH_DEFINES before /FI overlay; x64 and ARM64 consume the same array. No other source change.",
+ "primary_sources":"Pinned Mesa meson Windows MSVC-syntax pre_args include -D_USE_MATH_DEFINES. SDK26100 math.h lines13/14 gates corecrt_math_defines.h with _USE_MATH_DEFINES. That header owns M_LOG2E/M_PI/M_1_PI.",
+ "evidence":"Exact script SHA c1a5d554c941a78c3fa02e77c370e8cbb0e5ecb8291177f277f079a07cd67d13 verified by fixed RUN_MATH_CONTROL runner. Windows x64 constants probe compiles/runs0; ARM64 compiles0. Native and Windows x64 double bit patterns match (M_LOG2E3ff71547652b82fe,M_PI400921fb54442d18,M_1_PI3fd45f306dc9c883). Exact agx_compile.c x64 and ARM64 entries both exit0; no next compile diagnostic. Existing wrapper returns1 because it still expects two compiler failures; this policy was not silently changed. No linked whole compiler/device/hardware PASS claimed.",
+ "scope_result":"Exactly one allowed file changed by model patch; raw proposal preserved, git apply --check succeeded, no model-supplied shell executed."
+}

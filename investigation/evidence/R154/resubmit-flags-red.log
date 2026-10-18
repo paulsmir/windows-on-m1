@@ -1,0 +1,18 @@
+.Assertion failed: (AdmissionG4SubmitVirtualEnvelope(&adapter, &context, &args) == STATUS_SUCCESS), function main, file g4_submit_virtual_replay.c, line 410.
+E
+======================================================================
+ERROR: test_native_submit_queues_only_after_graph_and_image_bind (test_g4_submit_virtual_replay.G4SubmitVirtualReplay.test_native_submit_queues_only_after_graph_and_image_bind)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_g4_submit_virtual_replay.py", line 63, in test_native_submit_queues_only_after_graph_and_image_bind
+    subprocess.run([str(binary)], check=True, timeout=10)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/g4-submit-virtual-v9m1jnt4/replay']' died with <Signals.SIGABRT: 6>.
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.422s
+
+FAILED (errors=1)

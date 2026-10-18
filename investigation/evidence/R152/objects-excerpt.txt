@@ -1,0 +1,821 @@
+0: kd> cdb: Reading initial command 'dt -r2 AppleAgxRenderAdmission!_APPLE_AGX_RENDER_SHARED_MEMORY_OWNER ffffe20519fe7800; dx -r2 ((AppleAgxRenderAdmission!_APPLE_AGX_RENDER_SHARED_MEMORY_OWNER*)0xffffe20519fe7800)->Objects; dx -r2 ((AppleAgxRenderAdmission!_APPLE_AGX_PLATFORM_PROVIDER*)0xffffe20519fec228)->QueueRelocationObjects; dt -r2 AppleAgxRenderAdmission!_ADMISSION_G3_PRIVATE_SCENE ffffe2051b4d8db0; dt AppleAgxRenderAdmission!APPLE_AGX_G4_NATIVE_RENDER ffffe20519d7dd40+c48+28; q'
+   +0x000 MemoryIo         : 0xffffe205`19fe4008 _APPLE_AGX_MEMORY_IO
+      +0x000 Context          : 0xffffe205`19b59c40 Void
+      +0x008 AllocateContiguous : 0xfffff801`35efa820        unsigned char  AppleAgxRenderAdmission!AdmissionMemoryAllocateContiguous+0
+      +0x010 FreeContiguous   : 0xfffff801`35efa980        unsigned char  AppleAgxRenderAdmission!AdmissionMemoryFreeContiguous+0
+      +0x018 AllocatePageList : (null)
+      +0x020 FreePageList     : (null)
+   +0x008 Objects          : [40] _APPLE_AGX_MEMORY_OBJECT
+      +0x000 AllocationCpuBase : 0xffffcc03`f5350000 Void
+      +0x008 CpuAddress       : 0xffffcc03`f5350000 Void
+      +0x010 AllocationHandle : 0xffffe205`19510670 Void
+      +0x018 AllocationDeviceBase : 0x00000009`d795c000
+      +0x020 DeviceAddress    : 0x00000009`d795c000
+      +0x028 AllocationLength : 0x8000
+      +0x030 Length           : 0x4000
+      +0x038 DevicePages      : (null)
+      +0x040 DevicePageCount  : 0
+      +0x048 GpuVirtualAddress : 0xffffffa0`00360000
+      +0x050 SubmittedFence   : 0
+      +0x058 Context          : 0
+      +0x05c State            : 3 ( AppleAgxMemoryGpuMapped )
+   +0xf08 VirtualAddresses : [40] 0xffffffa0`00360000
+   +0x1048 ObjectOffsets    : [40] 0x3fc0
+   +0x1188 ObjectCount      : 0x28
+   +0x118c Initialized      : 0x1 ''
+   +0x118d Built            : 0x1 ''
+   +0x118e ClassArenasApplied : 0x1 ''
+   +0x1190 LastResult       : 0 ( AppleAgxRenderSharedMemoryResultOk )
+((AppleAgxRenderAdmission!_APPLE_AGX_RENDER_SHARED_MEMORY_OWNER*)0xffffe20519fe7800)->Objects                 [Type: _APPLE_AGX_MEMORY_OBJECT [40]]
+    [0]              [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5350000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5350000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519510670 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d795c000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d795c000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000360000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [1]              [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5358000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5358000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519510ad0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7954000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7954000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000368000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [2]              [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5360000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5360000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519510b40 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d794c000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d794c000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000370000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [3]              [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5368000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5368000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195122e0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7944000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7944000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000378000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [4]              [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5370000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5370000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519512820 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d793c000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d793c000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000380000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [5]              [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5378000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5378000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519512b30 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7934000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7934000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000388000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [6]              [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5380000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5380000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519513620 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d792c000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d792c000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000390000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [7]              [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5388000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5388000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195137e0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7924000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7924000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000398000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [8]              [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5390000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5390000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519512ba0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d791c000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d791c000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa0003a0000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [9]              [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5398000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5398000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519511d30 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7914000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7914000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa0003a8000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [10]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53a0000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53a0000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519512c10 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d790c000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d790c000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa0003b0000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [11]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53a8000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53a8000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519512cf0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7904000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7904000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa0003b8000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [12]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53b0000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53b0000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519512f90 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78fc000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78fc000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa0003c0000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [13]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53b8000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53b8000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195130e0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78f4000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78f4000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa0003c8000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [14]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53c0000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53c0000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519511f60 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78ec000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78ec000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa0003d0000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [15]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53c8000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53c8000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519513310 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78e4000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78e4000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa0003d8000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [16]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53d0000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53d0000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195133f0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78dc000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78dc000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa0003e0000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [17]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53d8000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53d8000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519514420 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78d4000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78d4000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa0003e8000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [18]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53e0000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53e0000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519513d20 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78cc000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78cc000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa021000000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [19]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53e8000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53e8000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519514ce0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78c4000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78c4000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa021044000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [20]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53f0000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53f0000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195141f0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78bc000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78bc000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000400000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [21]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f53f8000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f53f8000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519514500 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78b4000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78b4000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000408000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [22]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5554000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5554000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195158b0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78ac000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78ac000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000410000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [23]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f555c000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f555c000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195163a0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d78a4000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d78a4000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000418000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [24]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5564000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5564000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519515bc0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7830000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7830000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000420000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [25]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f556c000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f556c000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519516560 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7828000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7828000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000428000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [26]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5574000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5574000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519515c30 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7820000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7820000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000430000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [27]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f557c000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f557c000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519518a90 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7818000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7818000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000438000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [28]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5584000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5584000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195182b0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7810000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7810000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000440000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [29]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f558c000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f558c000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195171a0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7808000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7808000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000448000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [30]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f5594000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f5594000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519517e50 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d7800000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d7800000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000450000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [31]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f559c000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f559c000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195181d0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d61f8000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d61f8000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000458000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [32]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f55a4000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f55a4000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195184e0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d61f0000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d61f0000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000460000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [33]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f55ac000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f55ac000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519518630 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d61e8000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d61e8000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000468000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [34]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f55b4000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f55b5000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519518c50 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d61df000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d61e0000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000470000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [35]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f55bc000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f55bd000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195186a0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d61d7000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d61d8000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000478000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [36]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f55c4000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f55c4000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195187f0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d6108000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d6108000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000480000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [37]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f55cc000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f55cc000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519518860 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d6100000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d6100000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000488000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [38]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f55d4000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f55d4000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe205195188d0 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d60f8000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d60f8000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x8000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x4000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000490000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+    [39]             [Type: _APPLE_AGX_MEMORY_OBJECT]
+        [+0x000] AllocationCpuBase : 0xffffcc03f55dc000 [Type: void *]
+        [+0x008] CpuAddress       : 0xffffcc03f55dc000 [Type: void *]
+        [+0x010] AllocationHandle : 0xffffe20519518940 [Type: void *]
+        [+0x018] AllocationDeviceBase : 0x9d60e4000 [Type: unsigned __int64]
+        [+0x020] DeviceAddress    : 0x9d60e4000 [Type: unsigned __int64]
+        [+0x028] AllocationLength : 0x14000 [Type: unsigned __int64]
+        [+0x030] Length           : 0x10000 [Type: unsigned __int64]
+        [+0x038] DevicePages      : 0x0 [Type: unsigned __int64 *]
+        [+0x040] DevicePageCount  : 0x0 [Type: unsigned int]
+        [+0x048] GpuVirtualAddress : 0xffffffa000498000 [Type: unsigned __int64]
+        [+0x050] SubmittedFence   : 0x0 [Type: unsigned __int64]
+        [+0x058] Context          : 0x0 [Type: unsigned int]
+        [+0x05c] State            : AppleAgxMemoryGpuMapped (3) [Type: _APPLE_AGX_MEMORY_STATE]
+Error: Unable to bind name 'QueueRelocationObjects'
+   +0x000 Next             : 0xffffe205`1a9e8db0 _ADMISSION_G3_PRIVATE_SCENE
+      +0x000 Next             : (null)
+      +0x008 Context          : 0xffffe205`1a1fa130 _ADMISSION_RENDER_CONTEXT
+         +0x000 Object           : _ADMISSION_OBJECT_CONTEXT
+         +0x028 SchedulerContext : _APPLE_AGX_SCHEDULER_CONTEXT
+         +0x038 PrepatchedRender : _ADMISSION_PREPATCHED_RENDER
+         +0x0c0 Win32Generation  : 0x14980001
+         +0x0c4 Win32Transport   : 0x1 ''
+         +0x0c8 GpuvaG3Process   : 0xffffe205`19be67e0 Void
+         +0x0d0 GpuvaG3NextContext : (null)
+         +0x0d8 GpuvaG3PrivateManagerGeneration : 0x14
+         +0x0e0 GpuvaG3PrivateFence : 0n0
+         +0x0e4 GpuvaG3CancelFence : 0n0
+         +0x0e8 GpuvaG3CancelUncertain : 0n0
+         +0x0ec GpuvaG3Closing   : 0 ''
+         +0x0f0 GpuvaG3RootIpa   : 0
+         +0x0f8 GpuvaG3LastSetRootIpa : 0
+         +0x100 GpuvaG3SetRootCount : 0
+         +0x108 GpuvaG3DmaBufferVa : 0
+         +0x110 GpuvaG3MappingGeneration : 0
+         +0x118 GpuvaG3DmaBufferBytes : 0
+         +0x11c GpuvaG3Poisoned  : 0 ''
+      +0x010 Storage          : APPLE_AGX_G3_PRIVATE_SCENE
+         +0x000 Generation       : 0x17
+         +0x008 Extents          : [6] APPLE_AGX_G3_PRIVATE_EXTENT
+         +0x068 Ranges           : [9] APPLE_AGX_G4_PROCESS_RANGE
+      +0x108 Geometry         : APPLE_AGX_G4_NATIVE_RENDER
+         +0x000 Flags            : 0
+         +0x004 IspZlsPixels     : 0
+         +0x008 VdmCtrlStreamBase : 0
+         +0x010 VertexHelper     : APPLE_AGX_G4_HELPER
+         +0x020 FragmentHelper   : APPLE_AGX_G4_HELPER
+         +0x030 IspScissorBase   : 0
+         +0x038 IspDbiasBase     : 0
+         +0x040 IspOclQryBase    : 0
+         +0x048 Depth            : APPLE_AGX_G4_ZLS
+         +0x060 Stencil          : APPLE_AGX_G4_ZLS
+         +0x078 ZlsCtrl          : 0
+         +0x080 PppMultisampleCtrl : 0
+         +0x088 SamplerHeap      : 0
+         +0x090 PppCtrl          : 0
+         +0x094 WidthPx          : 0x400
+         +0x096 HeightPx         : 0x400
+         +0x098 Layers           : 1
+         +0x09a SamplerCount     : 0
+         +0x09c UtileWidthPx     : 0x20 ' '
+         +0x09d UtileHeightPx    : 0x20 ' '
+         +0x09e Samples          : 0x1 ''
+         +0x09f SampleSizeBytes  : 0 ''
+         +0x0a0 IspMergeUpperX   : 0
+         +0x0a4 IspMergeUpperY   : 0
+         +0x0a8 Bg               : APPLE_AGX_G4_BG_EOT
+         +0x0b0 Eot              : APPLE_AGX_G4_BG_EOT
+         +0x0b8 PartialBg        : APPLE_AGX_G4_BG_EOT
+         +0x0c0 PartialEot       : APPLE_AGX_G4_BG_EOT
+         +0x0c8 IspBgObjDepth    : 0
+         +0x0cc IspBgObjVals     : 0
+         +0x0d0 TimestampsVertex : APPLE_AGX_G4_TIMESTAMPS
+         +0x0e0 TimestampsFragment : APPLE_AGX_G4_TIMESTAMPS
+      +0x1f8 Fence            : 0
+      +0x1fc Submitting       : 0
+      +0x200 Queued           : 0
+      +0x204 Started          : 0
+      +0x208 GpuDone          : 0
+      +0x20c Reported         : 0
+      +0x210 ReleaseRequested : 0
+      +0x214 Quarantined      : 0
+   +0x008 Context          : 0xffffe205`1b335090 _ADMISSION_RENDER_CONTEXT
+      +0x000 Object           : _ADMISSION_OBJECT_CONTEXT
+         +0x000 Magic            : 0x434f4152
+         +0x004 Flags            : 4
+         +0x008 Device           : 0xffffe205`1b59fa50 _ADMISSION_OBJECT_DEVICE
+         +0x010 RuntimeHandle    : 0xffffe205`1adfc950 Void
+         +0x018 NodeOrdinal      : 0
+         +0x01c EngineAffinity   : 1
+         +0x020 FenceOutstanding : 0x3bb
+      +0x028 SchedulerContext : _APPLE_AGX_SCHEDULER_CONTEXT
+         +0x000 NodeOrdinal      : 0
+         +0x004 EngineAffinity   : 1
+         +0x008 Active           : 0x1 ''
+      +0x038 PrepatchedRender : _ADMISSION_PREPATCHED_RENDER
+         +0x000 Active           : 0
+         +0x008 Description      : _ADMISSION_RENDER_PACKET_DESCRIPTION
+      +0x0c0 Win32Generation  : 0x14980002
+      +0x0c4 Win32Transport   : 0x1 ''
+      +0x0c8 GpuvaG3Process   : 0xffffe205`19be67e0 Void
+      +0x0d0 GpuvaG3NextContext : 0xffffe205`1a1fa130 _ADMISSION_RENDER_CONTEXT
+         +0x000 Object           : _ADMISSION_OBJECT_CONTEXT
+         +0x028 SchedulerContext : _APPLE_AGX_SCHEDULER_CONTEXT
+         +0x038 PrepatchedRender : _ADMISSION_PREPATCHED_RENDER
+         +0x0c0 Win32Generation  : 0x14980001
+         +0x0c4 Win32Transport   : 0x1 ''
+         +0x0c8 GpuvaG3Process   : 0xffffe205`19be67e0 Void
+         +0x0d0 GpuvaG3NextContext : (null)
+         +0x0d8 GpuvaG3PrivateManagerGeneration : 0x14
+         +0x0e0 GpuvaG3PrivateFence : 0n0
+         +0x0e4 GpuvaG3CancelFence : 0n0
+         +0x0e8 GpuvaG3CancelUncertain : 0n0
+         +0x0ec GpuvaG3Closing   : 0 ''
+         +0x0f0 GpuvaG3RootIpa   : 0
+         +0x0f8 GpuvaG3LastSetRootIpa : 0
+         +0x100 GpuvaG3SetRootCount : 0
+         +0x108 GpuvaG3DmaBufferVa : 0
+         +0x110 GpuvaG3MappingGeneration : 0
+         +0x118 GpuvaG3DmaBufferBytes : 0
+         +0x11c GpuvaG3Poisoned  : 0 ''
+      +0x0d8 GpuvaG3PrivateManagerGeneration : 0x14
+      +0x0e0 GpuvaG3PrivateFence : 0n955
+      +0x0e4 GpuvaG3CancelFence : 0n0
+      +0x0e8 GpuvaG3CancelUncertain : 0n0
+      +0x0ec GpuvaG3Closing   : 0 ''
+      +0x0f0 GpuvaG3RootIpa   : 0x00000009`d6014000
+      +0x0f8 GpuvaG3LastSetRootIpa : 0x00000009`d6014000
+      +0x100 GpuvaG3SetRootCount : 1
+      +0x108 GpuvaG3DmaBufferVa : 0x18e0000
+      +0x110 GpuvaG3MappingGeneration : 0x578
+      +0x118 GpuvaG3DmaBufferBytes : 0x118
+      +0x11c GpuvaG3Poisoned  : 0 ''
+   +0x010 Storage          : APPLE_AGX_G3_PRIVATE_SCENE
+      +0x000 Generation       : 0x3d
+      +0x008 Extents          : [6] APPLE_AGX_G3_PRIVATE_EXTENT
+         +0x000 Generation       : 0x3d
+         +0x008 Offset           : 0x440000
+         +0x00c Bytes            : 0x20000
+      +0x068 Ranges           : [9] APPLE_AGX_G4_PROCESS_RANGE
+         +0x000 Va               : 0x24d0000
+         +0x008 Bytes            : 0x10000
+         +0x00c Reserved         : 0
+   +0x108 Geometry         : APPLE_AGX_G4_NATIVE_RENDER
+      +0x000 Flags            : 0
+      +0x004 IspZlsPixels     : 0
+      +0x008 VdmCtrlStreamBase : 0
+      +0x010 VertexHelper     : APPLE_AGX_G4_HELPER
+         +0x000 Binary           : 0
+         +0x004 Cfg              : 0
+         +0x008 Data             : 0
+      +0x020 FragmentHelper   : APPLE_AGX_G4_HELPER
+         +0x000 Binary           : 0
+         +0x004 Cfg              : 0
+         +0x008 Data             : 0
+      +0x030 IspScissorBase   : 0
+      +0x038 IspDbiasBase     : 0
+      +0x040 IspOclQryBase    : 0
+      +0x048 Depth            : APPLE_AGX_G4_ZLS
+         +0x000 Base             : 0
+         +0x008 CompBase         : 0
+         +0x010 Stride           : 0
+         +0x014 CompStride       : 0
+      +0x060 Stencil          : APPLE_AGX_G4_ZLS
+         +0x000 Base             : 0
+         +0x008 CompBase         : 0
+         +0x010 Stride           : 0
+         +0x014 CompStride       : 0
+      +0x078 ZlsCtrl          : 0
+      +0x080 PppMultisampleCtrl : 0
+      +0x088 SamplerHeap      : 0
+      +0x090 PppCtrl          : 0
+      +0x094 WidthPx          : 0x10
+      +0x096 HeightPx         : 0x10
+      +0x098 Layers           : 1
+      +0x09a SamplerCount     : 0
+      +0x09c UtileWidthPx     : 0x20 ' '
+      +0x09d UtileHeightPx    : 0x20 ' '
+      +0x09e Samples          : 0x1 ''
+      +0x09f SampleSizeBytes  : 0 ''
+      +0x0a0 IspMergeUpperX   : 0
+      +0x0a4 IspMergeUpperY   : 0
+      +0x0a8 Bg               : APPLE_AGX_G4_BG_EOT
+         +0x000 Usc              : 0
+         +0x004 ResourceSpec     : 0
+      +0x0b0 Eot              : APPLE_AGX_G4_BG_EOT
+         +0x000 Usc              : 0
+         +0x004 ResourceSpec     : 0
+      +0x0b8 PartialBg        : APPLE_AGX_G4_BG_EOT
+         +0x000 Usc              : 0
+         +0x004 ResourceSpec     : 0
+      +0x0c0 PartialEot       : APPLE_AGX_G4_BG_EOT
+         +0x000 Usc              : 0
+         +0x004 ResourceSpec     : 0
+      +0x0c8 IspBgObjDepth    : 0
+      +0x0cc IspBgObjVals     : 0
+      +0x0d0 TimestampsVertex : APPLE_AGX_G4_TIMESTAMPS
+         +0x000 StartHandle      : 0
+         +0x004 StartOffset      : 0
+         +0x008 EndHandle        : 0
+         +0x00c EndOffset        : 0
+      +0x0e0 TimestampsFragment : APPLE_AGX_G4_TIMESTAMPS
+         +0x000 StartHandle      : 0
+         +0x004 StartOffset      : 0
+         +0x008 EndHandle        : 0
+         +0x00c EndOffset        : 0
+   +0x1f8 Fence            : 0x3bb
+   +0x1fc Submitting       : 0
+   +0x200 Queued           : 1
+   +0x204 Started          : 1
+   +0x208 GpuDone          : 0
+   +0x20c Reported         : 0
+   +0x210 ReleaseRequested : 0
+   +0x214 Quarantined      : 1
+   +0x000 Flags            : 4
+   +0x004 IspZlsPixels     : 0
+   +0x008 VdmCtrlStreamBase : 0x1860000
+   +0x010 VertexHelper     : APPLE_AGX_G4_HELPER
+   +0x020 FragmentHelper   : APPLE_AGX_G4_HELPER
+   +0x030 IspScissorBase   : 0x1820e40
+   +0x038 IspDbiasBase     : 0x1820e80
+   +0x040 IspOclQryBase    : 0
+   +0x048 Depth            : APPLE_AGX_G4_ZLS
+   +0x060 Stencil          : APPLE_AGX_G4_ZLS
+   +0x078 ZlsCtrl          : 0
+   +0x080 PppMultisampleCtrl : 0x88
+   +0x088 SamplerHeap      : 0
+   +0x090 PppCtrl          : 0x202
+   +0x094 WidthPx          : 0x10
+   +0x096 HeightPx         : 0x10
+   +0x098 Layers           : 1
+   +0x09a SamplerCount     : 0
+   +0x09c UtileWidthPx     : 0x20 ' '
+   +0x09d UtileHeightPx    : 0x20 ' '
+   +0x09e Samples          : 0x1 ''
+   +0x09f SampleSizeBytes  : 0x8 ''
+   +0x0a0 IspMergeUpperX   : 0x3dddb3d9
+   +0x0a4 IspMergeUpperY   : 0x3dddb3d9
+   +0x0a8 Bg               : APPLE_AGX_G4_BG_EOT
+   +0x0b0 Eot              : APPLE_AGX_G4_BG_EOT
+   +0x0b8 PartialBg        : APPLE_AGX_G4_BG_EOT
+   +0x0c0 PartialEot       : APPLE_AGX_G4_BG_EOT
+   +0x0c8 IspBgObjDepth    : 0
+   +0x0cc IspBgObjVals     : 0x300
+   +0x0d0 TimestampsVertex : APPLE_AGX_G4_TIMESTAMPS
+   +0x0e0 TimestampsFragment : APPLE_AGX_G4_TIMESTAMPS

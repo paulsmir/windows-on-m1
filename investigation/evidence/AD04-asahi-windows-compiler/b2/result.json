@@ -1,0 +1,7 @@
+{
+    "Scope":  "compile-only",
+    "ExitCode":  2,
+    "Source":  "src/asahi/compiler/agx_compile.c",
+    "Target":  "x64",
+    "Compiler":  "MSVC14.44.35207"
+}

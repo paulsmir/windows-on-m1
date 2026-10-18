@@ -1,0 +1,872 @@
+"""Windows ownership projection of the pinned native batch/pipe lifecycle.
+
+Original MIT sources stay in the build tree with their notices. Common native
+initialization, state, resources and finalization remain the producer; only OS
+submission/synchronization ownership is redirected to the existing UMD adapter.
+"""
+import hashlib
+import re
+
+
+def replace(text, old, new):
+    if text.count(old) != 1:
+        raise RuntimeError('Native lifecycle anchor mismatch: '+old[:100])
+    return text.replace(old,new,1)
+
+
+def function(text, name):
+    m=re.search(r'\n'+re.escape(name)+r'\s*\(',text)
+    if not m: raise RuntimeError('Native function missing: '+name)
+    a=text.index('{',m.end()); depth=1; i=a+1
+    # Pinned functions have no brace literals; lexical comments may have braces.
+    while depth:
+        if text.startswith('/*',i): i=text.index('*/',i+2)+2;continue
+        if text.startswith('//',i): i=text.index('\n',i)+1;continue
+        if text[i] in '\"\'':
+            q=text[i];i+=1
+            while text[i]!=q:
+                i+=2 if text[i]=='\\' else 1
+            i+=1;continue
+        depth += (text[i]=='{')-(text[i]=='}'); i+=1
+    return a,i
+
+
+def body(text,name,new):
+    a,b=function(text,name)
+    return text[:a]+'{\n'+new+'\n}'+text[b:]
+
+
+def project_sources(out,project,overlays):
+    def save(path,text):
+        p=out/path;p.write_text(text)
+        overlays.setdefault(path,{})['final_sha256']=hashlib.sha256(p.read_bytes()).hexdigest()
+    # Windows enum bitfields are signed: ZERO=17 and MAX=4 must survive
+    # their 5/3-bit storage. Keep the native packed word and public enum APIs.
+    lp='src/asahi/lib/agx_linker.h';linker=(out/lp).read_text()
+    start=linker.index('struct agx_blend_standard {')
+    end=linker.index('\n};',start)+3
+    original=linker[start:end]
+    packed=original.replace('enum pipe_blend_func ', 'unsigned ').replace('enum pipe_blendfactor ', 'unsigned ')
+    if original.count('enum pipe_blend_func ')!=2 or original.count('enum pipe_blendfactor ')!=4:
+        raise RuntimeError('Native standard blend storage changed')
+    save(lp,replace(linker,original,packed))
+    hp='src/gallium/drivers/asahi/agx_state.h'
+    h=(out/hp).read_text()
+    h=replace(h,'struct agx_batch {','struct agx_batch {\n   void *windows_batch; /* stable request/capture/adapter capsule */')
+    # EXP1070: on Windows every perf_debug message (flush/sync reasons,
+    # shadowing, fallbacks) is counted per process, whatever AGX_DBG_PERF says.
+    h,n=re.subn(r'#define perf_debug\(dev, \.\.\.\)[^\n]*\\\n(?:[^\n]*\\\n)*[^\n]*while \(0\)\n',
+        lambda m:'#ifdef _WIN32\n#ifdef __cplusplus\nextern "C"\n#endif\nvoid AgxWin32PerfNote(const char *fmt, ...);\n'
+                 '#define perf_debug(dev, ...) do { (void)(dev); AgxWin32PerfNote(__VA_ARGS__); } while (0)\n'
+                 '#else\n'+m.group(0)+'#endif\n',h)
+    if n!=1: raise RuntimeError('perf_debug definition changed')
+    save(hp,h)
+    dp='src/asahi/lib/agx_device.h';device=(out/dp).read_text()
+    device=replace(device,'   return util_sparse_array_get(&dev->bo_map, handle);',
+        '   extern struct agx_bo *AgxWin32AsahiLookupBo(struct agx_device *, uint32_t);\n   return AgxWin32AsahiLookupBo(dev, handle);')
+    save(dp,device)
+    original_device=(out/'src/asahi/lib/agx_device.c').read_text()
+    pure=original_device[:original_device.index('#include')]+'#include "agx_device.h"\n#include "agx_compile.h"\n#include "util/bitscan.h"\n#include "util/u_tristate.h"\n'
+    for name,decl in (('agx_get_num_cores','unsigned'),('agx_gather_device_key','struct agx_device_key')):
+        a,b=function(original_device,name)
+        start=original_device.rfind(decl+'\n'+name,0,a)
+        if start<0: raise RuntimeError('Pure device declaration missing: '+name)
+        pure+=original_device[start:b]+'\n'
+    save('src/asahi/lib/agx_win32_device_key.c',pure)
+    # EXP1069: per-device zero/scratch pages replace Asahi's fixed VM pages.
+    ap='src/asahi/lib/agx_abi.h';abi=(out/ap).read_text()
+    abi=replace(abi,'#define AGX_ZERO_PAGE_ADDRESS (((uint64_t)1) << 32)','''#ifdef _WIN32
+/* EXP1069: no VM-wide fixed pages on Windows; the thread that builds a
+ * device's commands publishes that device's zero/scratch page VAs. */
+extern __declspec(thread) uint64_t agx_win32_zero_page_va;
+extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
+#define AGX_ZERO_PAGE_ADDRESS (agx_win32_zero_page_va)
+#else
+#define AGX_ZERO_PAGE_ADDRESS (((uint64_t)1) << 32)
+#endif''')
+    abi=replace(abi,'#define AGX_SCRATCH_PAGE_ADDRESS (AGX_ZERO_PAGE_ADDRESS + AGX_ZERO_PAGE_SIZE)','''#ifdef _WIN32
+#define AGX_SCRATCH_PAGE_ADDRESS (agx_win32_scratch_page_va)
+#else
+#define AGX_SCRATCH_PAGE_ADDRESS (AGX_ZERO_PAGE_ADDRESS + AGX_ZERO_PAGE_SIZE)
+#endif''')
+    save(ap,abi)
+    bp='src/gallium/drivers/asahi/agx_batch.c'
+    s=(out/bp).read_text()
+    # GPU timestamps (EXP1341): a D3D TIMESTAMP follows every previous
+    # command, also batches a barrier already submitted (Dispatch11 flushes
+    # its compute batch); the winsys fills their slots from the KMD record
+    # at cleanup (AgxWin32AsahiBatchTimestamps).
+    s=replace(s,'''   foreach_active(ctx, idx) {
+      agx_batch_add_timestamp_query(&ctx->batches.slots[idx], q);
+   }
+}''','''   foreach_active(ctx, idx) {
+      agx_batch_add_timestamp_query(&ctx->batches.slots[idx], q);
+   }
+   foreach_submitted(ctx, idx) {
+      agx_batch_add_timestamp_query(&ctx->batches.slots[idx], q);
+   }
+}''')
+    s=s.replace('#include <xf86drm.h>','/* Windows runtime owns synchronization. */')
+    s=s.replace('#include "vdrm.h"','')
+    s=s.replace('#include "asahi/lib/agx_device_virtio.h"','#include "agx_device.h"')
+    s=replace(s,'#include "agx_state.h"','#include "agx_state.h"\n#include "agx_win32_asahi_batch.h"')
+    # EXP1207: the batch pools record into cached shadows, published into
+    # their allocations at submission (agx_win32_gpuva_batch.c).
+    s=replace(s,'''   agx_pool_init(&batch->pool, dev, "Batch pool", 0, true);
+   agx_pool_init(&batch->pipeline_pool, dev, "Batch low VA pool", AGX_BO_LOW_VA,
+                 true);''','''#ifdef APPLE_AGX_GPUVA_WINSYS
+   agx_pool_init(&batch->pool, dev, "Batch pool", AGX_WIN32_BO_SHADOW, true);
+   agx_pool_init(&batch->pipeline_pool, dev, "Batch low VA pool",
+                 AGX_BO_LOW_VA | AGX_WIN32_BO_SHADOW, true);
+#else
+   agx_pool_init(&batch->pool, dev, "Batch pool", 0, true);
+   agx_pool_init(&batch->pipeline_pool, dev, "Batch low VA pool", AGX_BO_LOW_VA,
+                 true);
+#endif''')
+    a,b=function(s,'agx_batch_init');part=s[a:b]
+    begin=part.index('   if (!batch->syncobj) {');end=part.index('   agx_batch_mark_active(batch);',begin)
+    part=part[:begin]+'''   agx_batch_mark_active(batch);
+   if (!AgxWin32AsahiBatchBegin(batch)) {
+      ctx->any_faults = true;
+      ((AGX_WIN32_ASAHI_BACKEND *)dev->windows_private)->Failed = 1;
+   }
+'''+part[end+len('   agx_batch_mark_active(batch);'):]
+    s=s[:a]+part+s[b:]
+    a,b=function(s,'agx_batch_cleanup');part=s[a:b]
+    part=replace(part,'   assert(batch->ctx == ctx);','''   /* GPU timestamps: the winsys writes the KMD's values into this batch's
+    * slot of ctx->timestamps after Poll, before they are read below. */
+   if (!AgxWin32AsahiBatchPoll(batch, 0) || !AgxWin32AsahiBatchTimestamps(batch) ||
+       !AgxWin32AsahiBatchRelease(batch)) return;
+   assert(batch->ctx == ctx);''')
+    part=part.replace('      agx_batch_print_stats(dev, batch);','      /* Windows completion is the existing ordered runtime marker. */')
+    s=s[:a]+part+s[b:]
+    s=body(s,'agx_cleanup_batches','''   unsigned i;
+   foreach_submitted(ctx, i) {
+      struct agx_batch *batch = &ctx->batches.slots[i];
+      if (AgxWin32AsahiBatchPoll(batch, 0)) {
+         agx_batch_cleanup(ctx, batch, false);
+         if (!agx_batch_is_submitted(batch)) return i;
+      }
+   }
+   return -1;''')
+    a,b=function(s,'agx_get_in_sync');start=s.rfind('static int',0,a)
+    s=s[:start]+'#ifndef _WIN32\n'+s[start:b]+'\n#endif\n'+s[b:]
+    s=body(s,'agx_batch_submit','''   /* G2: a compute-only batch submits its compute command alone.
+    * D3D-G1: a render batch's compute command runs first in the same
+    * submission and the render waits on it, as upstream submits both. */
+   bool entered = render ?
+      ((compute != NULL) == (batch->cdm.bo != NULL)) &&
+         AgxWin32AsahiBatchFinish(batch, render, compute) :
+      compute != NULL && AgxWin32AsahiBatchFinishCompute(batch, compute);
+   if (!entered && !AgxWin32AsahiBatchAbort(batch)) { ctx->any_faults = true; return; }
+   agx_batch_mark_submitted(batch);
+   if (ctx->batch == batch) ctx->batch = NULL;
+   if (!entered) ctx->any_faults = true;
+   /* The event may already be signalled before flush returns. Keep the
+    * capsule until explicit Windows retirement so the owner can snapshot the
+    * exact completed graph and submission result without a dangling pointer.
+    * Normal explicit sync/next-native cleanup paths still perform retirement. */''')
+    s=body(s,'agx_sync_batch','''   if (agx_batch_is_active(batch)) agx_flush_batch(ctx, batch);
+   if (!agx_batch_is_submitted(batch)) return;
+   if (!AgxWin32AsahiBatchPoll(batch, 1000)) { ctx->any_faults = true; return; }
+   agx_batch_cleanup(ctx, batch, false);''')
+    s=body(s,'agx_batch_reset','''   if (!AgxWin32AsahiBatchAbort(batch)) return;
+   if (agx_batch_is_active(batch)) agx_batch_mark_submitted(batch);
+   if (ctx->batch == batch) ctx->batch = NULL;
+   /* Cancelled native clear/draw may already own writer records. */
+   agx_batch_cleanup(ctx, batch, false);''')
+    s=replace(s,'   /* Batch is now free */','   if (agx_batch_is_submitted(batch) || agx_batch_is_active(batch)) return NULL;\n\n   /* Batch is now free */')
+    s=replace(s,'   assert(util_framebuffer_state_equal(&ctx->framebuffer, &ctx->batch->key));','   if (!ctx->batch) return NULL;\n   assert(util_framebuffer_state_equal(&ctx->framebuffer, &ctx->batch->key));')
+    save(bp,s)
+    qp='src/gallium/drivers/asahi/agx_query.c';query=(out/qp).read_text()
+    a,b=function(query,'agx_end_query');part=query[a:b]
+    old='''   case PIPE_QUERY_TIMESTAMP: {
+      /* Timestamp logically written now, set up batches to MAX their finish
+       * time in. If there are no batches, it's just the current time stamp.
+       */
+      agx_add_timestamp_end_query(ctx, query);
+
+      uint64_t *value = query->ptr.cpu;
+      *value = agx_get_gpu_timestamp(dev);
+
+      return true;
+   }'''
+    # GPU timestamps (docs/superpowers/plans/2026-10-16-gpu-timestamps.md):
+    # Asahi's TIMESTAMP end stays: the batches' firmware end times come back
+    # from the KMD (AgxWin32AsahiBatchTimestamps) and agx_get_gpu_timestamp
+    # is the winsys's estimate of the firmware clock now.
+    if old not in part: raise RuntimeError('agx_end_query TIMESTAMP changed')
+    query=query[:a]+part+query[b:]
+    # D3D-G3: D3D GetData polls. Without `wait`, submit the query's writers
+    # and report not-ready until every one completed (polled, then retired
+    # by agx_cleanup_batches) instead of blocking the caller.
+    query=replace(query,'''   /* TODO: Honour `wait` */
+   sync_query_writers(ctx, query, "Reading query results");''','''   if (!wait) {
+      flush_query_writers(ctx, query, "Polling query results");
+      while (is_query_busy(ctx, query) && agx_cleanup_batches(ctx) >= 0)
+         ;
+      if (is_query_busy(ctx, query))
+         return false;
+   }
+   sync_query_writers(ctx, query, "Reading query results");''')
+    save(qp,query)
+    # Real draw entrypoint is wrapped so every native early return unwinds the
+    # stable root. No manually constructed command/capture substitutes this call.
+    sp='src/gallium/drivers/asahi/agx_state.c';s=(out/sp).read_text()
+    s=replace(s,'#include "agx_win32_pipeline.inc"','#include "agx_win32_pipeline.inc"\n#include "agx_win32_asahi_batch.h"')
+    a,b=function(s,'agx_draw_vbo');decl=s.rfind('static void',0,a);signature=s[decl:a]
+    renamed=signature.replace('agx_draw_vbo(','agx_draw_vbo_windows_body(')
+    wrapper=signature+'''{
+   struct agx_context *ctx = agx_context(pctx);
+   AgxWin32AsahiPublishPages(agx_device(pctx->screen));
+   /* EXP1061: Draw(0)/DrawIndexed(0) and zero-instance draws are D3D no-ops
+    * that d3d10umd forwards unchanged; refusing them below poisoned the
+    * context for good (Notepad: noise surfaces, no text). */
+   if (!indirect && num_draws == 1 && draws &&
+       (!draws[0].count || !info->instance_count))
+      return;
+   /* EXP1287: Asahi's CPU render condition flushes and retires the
+    * predicate's writer -- the very batch this draw would enter. As
+    * upstream, it is evaluated first, here before the batch is taken (the
+    * body no longer evaluates it; DrawAuto and multi-draw re-enter here). */
+   if (unlikely(!agx_render_condition_check(ctx)))
+      return;
+   if (indirect && indirect->count_from_stream_output) {
+      /* DrawAuto is expanded by upstream Asahi into a direct draw.  The graph
+       * gate validates the exact count-from-XFB form before the CPU read; the
+       * recursive direct call below owns normal batch creation and entry. */
+      agx_draw_vbo_windows_body(pctx, info, drawid_offset, indirect, draws,
+                                num_draws);
+      return;
+   }
+   if (!AgxWin32AsahiBatchDrawAllowed(ctx, info, drawid_offset, indirect, draws, num_draws)) {
+      AgxWin32AsahiBatchTraceDraw(ctx, ctx->batch, 1u);
+      /* EXP1063: refused before any batch work; the backend decides whether
+       * the draw is dropped or the context fails. */
+      if (ctx->any_faults ||
+          !AgxWin32AsahiBatchDrawRefused(ctx, info, indirect, draws, num_draws))
+         return;
+      ctx->any_faults = true; return;
+   }
+   /* EXP1189: as upstream, legalize feedback loops and transform-feedback
+    * writes before taking the batch: they may flush the bound render
+    * target's writer, i.e. this batch. Taken first, an empty batch was
+    * reset under the entered draw (capsule freed), the body drew into a new
+    * one and Leave faulted the context. The body's own calls then find
+    * nothing left to legalize. */
+   agx_legalize_feedback_loops(ctx);
+   agx_legalize_xfb(ctx);
+   struct agx_batch *batch = agx_get_batch(ctx);
+   /* One check per line: the fault receipt site names the refusing check. */
+   if (!batch) {
+      AgxWin32AsahiBatchTraceDraw(ctx, batch, 2u);
+      ctx->any_faults = true; return;
+   }
+   if (!AgxWin32AsahiBatchPrepareDraw(batch,info,indirect,draws)) {
+      AgxWin32AsahiBatchTraceDraw(ctx, batch, 2u);
+      ctx->any_faults = true; return;
+   }
+   if (!AgxWin32AsahiBatchEnter(batch)) {
+      AgxWin32AsahiBatchTraceDraw(ctx, batch, 2u);
+      ctx->any_faults = true; return;
+   }
+   agx_draw_vbo_windows_body(pctx, info, drawid_offset, indirect, draws, num_draws);
+   AgxWin32AsahiBatchTraceDraw(ctx, batch, 3u);
+   if (!AgxWin32AsahiBatchLeave(batch)) {
+      AgxWin32AsahiBatchTraceDraw(ctx, batch, 4u);
+      ctx->any_faults = true;
+   }
+}
+'''
+    # EXP1202 receipt-only (GPUVA profile): time per phase of the native draw
+    # body -- batch/index setup, shader variants, descriptors and uploads,
+    # agx_encode_state (pipelines), VDM emission -- read by the ICD.
+    drawbody=s[a:b]
+    drawbody=replace(drawbody,
+        '   if (unlikely(!agx_render_condition_check(ctx)))\n      return;\n\n','')
+    def mark(text, line, phase, after):
+        i=text.index(line)
+        cut=i+len(line) if after else i
+        return text[:cut]+'   AGX_WIN32_DRAW_PHASE(%d);\n'%phase+text[cut:]
+    drawbody=mark(drawbody,'   struct agx_batch *batch = agx_get_batch(ctx);\n',0,True)
+    drawbody=mark(drawbody,'   agx_batch_init_state(batch);\n',1,True)
+    drawbody=mark(drawbody,'   agx_update_descriptors(batch, ctx->vs);\n',2,False)
+    drawbody=mark(drawbody,'   uint8_t *out = agx_encode_state(batch, batch->vdm.current);\n',3,False)
+    drawbody=mark(drawbody,'   uint8_t *out = agx_encode_state(batch, batch->vdm.current);\n',4,True)
+    drawbody=mark(drawbody,'   batch->draws++;\n',5,False)
+    phase_decl='''#ifdef APPLE_AGX_GPUVA_WINSYS
+void AgxWin32AsahiDrawPhase(unsigned phase);
+extern int AgxWin32AsahiDrawPhasesOn;
+#define AGX_WIN32_DRAW_PHASE(i) \\
+   do { if (unlikely(AgxWin32AsahiDrawPhasesOn)) AgxWin32AsahiDrawPhase(i); } while (0)
+#else
+#define AGX_WIN32_DRAW_PHASE(i) ((void)0)
+#endif
+'''
+    s=s[:decl]+phase_decl+signature.rstrip()+';\n'+renamed+drawbody+'\n'+wrapper+s[b:]
+    # A graphics GS batch temporarily owns the real CDM encoder. Switch the
+    # active capture scope only around the upstream preraster launches.
+    a,b=function(s,'agx_launch_gs_prerast');part=s[a:b]
+    part=replace(part,'''   if (!batch->cdm.bo) {
+      batch->cdm = agx_encoder_allocate(batch, dev);
+   }
+''','''   if (!batch->cdm.bo) {
+      batch->cdm = agx_encoder_allocate(batch, dev);
+   }
+   if (!AgxWin32AsahiBatchComputeEnter(batch)) {
+      ctx->any_faults = true; return;
+   }
+''')
+    part=part[:-1]+'''   if (!AgxWin32AsahiBatchComputeLeave(batch)) {
+      ctx->any_faults = true;
+   }
+}'''
+    s=s[:a]+part+s[b:]
+    save(sp,s)
+    pp='src/gallium/drivers/asahi/agx_pipe.c';s=(out/pp).read_text()
+    # GPU timestamps: upstream agx_flush_compute names comp_start for the
+    # end too, so comp_end -- which agx_batch_cleanup reads -- was never
+    # written; the end goes to comp_end.
+    s=replace(s,'      cmdbuf->ts.end.offset = timestamp_offset(batch, comp_start);',
+              '      cmdbuf->ts.end.offset = timestamp_offset(batch, comp_end);')
+    s=s.replace('#include <xf86drm.h>','/* Windows synchronization belongs to UMD. */')
+    # u_drm.h contains pure modifier-array helpers and is portable.
+    s=s.replace('#include "asahi/lib/decode.h"','#include "agx_device.h"\n#include "libagx_shaders.h"\n#include "asahi/lib/decode.h"')
+    s=replace(s,'#include "agx_state.h"','#include "agx_state.h"\n#include "agx_win32_asahi_batch.h"')
+    s=s.replace('#include "gallium/auxiliary/renderonly/renderonly.h"','')
+    for excluded in ('agx_resource_from_handle','agx_resource_get_handle','agx_resource_get_param'):
+        a,b=function(s,excluded);start=s.rfind('static ',0,a)
+        s=s[:start]+'#ifndef _WIN32\n'+s[start:b]+'\n#endif\n'+s[b:]
+    s=s.replace('   if (rsrc->scanout)\n      renderonly_scanout_destroy(rsrc->scanout, agx_screen->dev.ro);','')
+    s=s.replace('   if (screen->dev.ro)\n      screen->dev.ro->destroy(screen->dev.ro);','')
+    s=s.replace('strcasestr(util_get_process_name(), "ryujinx")', 'windows_strcasestr(util_get_process_name(), "ryujinx")')
+    marker='#include "agx_win32_asahi_batch.h"'
+    s=s.replace(marker,marker+'''\nstatic const char *windows_strcasestr(const char *s, const char *needle) {
+   if (!s || !needle) return NULL;
+   size_t n = strlen(needle);
+   for (; *s; ++s) if (_strnicmp(s, needle, n) == 0) return s;
+   return n ? NULL : s;
+}
+''',1)
+    # Flush still calls the original native render finalization and cmdbuf
+    # constructor. The internal DRM-named value is never sent to Linux APIs.
+    s=body(s,'agx_flush_batch','''   if (!agx_batch_is_active(batch) || agx_batch_is_submitted(batch)) return;
+   if (!batch->draws && !batch->cdm.bo &&
+       !(batch->vdm.bo && (batch->clear || batch->initialized))) {
+      if (!AgxWin32AsahiBatchAbort(batch)) { ctx->any_faults = true; return; }
+      agx_batch_reset(ctx, batch);
+      return;
+   }
+   /* G2: a compute-only batch (agx_get_compute_batch: buffer copies, query
+    * copies, grid launches) is one compute command, as upstream submits it. */
+   if (agx_batch_is_compute(batch)) {
+      struct drm_asahi_cmd_compute compute_only;
+      if (ctx->any_faults || !batch->cdm.bo || batch->vdm.bo) {
+         ctx->any_faults = true;
+         if (AgxWin32AsahiBatchAbort(batch)) agx_batch_reset(ctx, batch);
+         return;
+      }
+      if (!AgxWin32AsahiBatchComputeEnter(batch)) {
+         ctx->any_faults = true; return;
+      }
+      agx_flush_compute(ctx, batch, &compute_only);
+      if (!AgxWin32AsahiBatchComputeLeave(batch) ||
+          !AgxWin32AsahiBatchComputeFinalize(batch, batch->cdm.current)) {
+         ctx->any_faults = true; return;
+      }
+      agx_batch_submit(ctx, batch, &compute_only, NULL);
+      return;
+   }
+   if (ctx->any_faults || !batch->vdm.bo || !batch->initialized ||
+       (!batch->draws && !batch->clear)) {
+      ctx->any_faults = true;
+      if (AgxWin32AsahiBatchAbort(batch)) agx_batch_reset(ctx, batch);
+      return;
+   }
+   struct drm_asahi_cmd_compute compute_storage;
+   struct drm_asahi_cmd_compute *compute = NULL;
+   if (batch->cdm.bo) {
+      if (!AgxWin32AsahiBatchComputeEnter(batch)) {
+         ctx->any_faults = true; return;
+      }
+      agx_flush_compute(ctx, batch, &compute_storage);
+      if (!AgxWin32AsahiBatchComputeLeave(batch)) {
+         ctx->any_faults = true; return;
+      }
+      if (!AgxWin32AsahiBatchComputeFinalize(batch,batch->cdm.current)) {
+         ctx->any_faults = true; return;
+      }
+      compute = &compute_storage;
+   }
+   /* D3D-G1: the render is finalized inside the batch scope whether or not
+    * its draws launched compute work. */
+   if (!AgxWin32AsahiBatchEnter(batch)) {
+      ctx->any_faults = true;
+      if (AgxWin32AsahiBatchAbort(batch)) agx_batch_reset(ctx, batch);
+      return;
+   }
+   struct drm_asahi_cmd_render render;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   /* EXP1201 receipt-only: the kinds of batches submitted (framebuffer
+    * size, draws bucket, clear mask, depth), counted by text by the ICD. */
+   perf_debug_ctx(ctx, "submit %ux%u d%s c%x z%u", batch->key.width,
+                  batch->key.height,
+                  !batch->draws ? "0" : batch->draws == 1 ? "1" :
+                  batch->draws < 10 ? "2-9" : batch->draws < 100 ? "10-99" : "100+",
+                  batch->clear, batch->key.zsbuf.texture != NULL);
+#endif
+   agx_flush_render(ctx, batch, &render);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   if (render.fragment_helper.binary) /* EXP1317 receipt-only */
+      AgxWin32AsahiScratchReceipt(ctx, 1u, &render);
+#endif
+   if (!AgxWin32AsahiBatchLeave(batch)) { ctx->any_faults = true; return; }
+   agx_batch_submit(ctx, batch, compute, &render);''')
+    # CS 1.6 ICD (EXP1146): Mesa's GL frontend asks for a fence on glFinish
+    # and SwapBuffers and waits on screen->fence_finish; the D3D10 frontend
+    # never asks (it would have faulted every context). Windows batches
+    # complete by event + stamp polling (agx_sync_batch), so a fence request
+    # waits for every submitted batch and returns a fence that is signalled
+    # by construction; a failed wait leaves the context faulted, no fence.
+    # EXP1148: st/mesa calls flush_resource on the window back buffer before
+    # SwapBuffers. Upstream converts a non-shareable BO into a SHARED one
+    # (Linux dma-buf export); the Windows BO layer refuses AGX_BO_SHAREABLE,
+    # so transition_resource got no resource and asserted. Windows shares
+    # through kernel allocations, never BO export, and the ICD displays by
+    # CPU readback: flushing the resource's writer is the whole contract.
+    # The D3D10 frontend never calls flush_resource.
+    s=body(s,'agx_flush_resource','''   agx_flush_writer(agx_context(pctx), agx_resource(pres), "flush_resource");''')
+    s=replace(s,'''   bool staging_blit = ail_is_level_logically_compressed(&rsrc->layout, level);''','''   bool staging_blit = ail_is_level_logically_compressed(&rsrc->layout, level);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   /* EXP1200 receipt-only: which textures the CPU writes through a staging
+    * blit (counted by text by the ICD's perf-note receipt). */
+   if (staging_blit && (usage & PIPE_MAP_WRITE))
+      perf_debug_ctx(ctx, "CPU staging %ux%u f%u l%u v%u b%x w%u",
+                     rsrc->base.width0, rsrc->base.height0,
+                     (unsigned)rsrc->base.format, level,
+                     (unsigned)agx_resource_valid(rsrc, level),
+                     (unsigned)resource->bind,
+                     (unsigned)(box->width == u_minify(rsrc->base.width0, level) &&
+                                box->height == u_minify(rsrc->base.height0, level)));
+#endif''')
+    # EXP1195 (GPUVA profile): pipe fences are real. A flush that asks for
+    # a fence submits like any flush and returns a fence holding the device's
+    # newest accepted submission's completion fence (the GPU completes them in
+    # order); fence_finish polls it with timeout 0 and waits otherwise. The
+    # EXP1146 fence (sync every batch, return a signalled fence) blocked the
+    # caller at fence creation -- glFenceSync and the ICD's present ring could
+    # never test a fence without waiting. The D3D10 profile keeps EXP1146.
+    s=replace(s,'static void\nagx_flush(struct pipe_context *pctx,','''#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "util/os_time.h"
+struct agx_windows_fence {
+   struct pipe_reference reference;
+   struct agx_device *dev;
+   uint64_t value; /* 0: nothing was submitted, signalled */
+};
+
+static void
+agx_windows_fence_reference(struct pipe_screen *screen,
+                            struct pipe_fence_handle **ptr,
+                            struct pipe_fence_handle *fence)
+{
+   struct agx_windows_fence *old = (struct agx_windows_fence *)*ptr;
+   struct agx_windows_fence *new_ = (struct agx_windows_fence *)fence;
+   (void)screen;
+   if (pipe_reference(old ? &old->reference : NULL,
+                      new_ ? &new_->reference : NULL))
+      free(old);
+   *ptr = fence;
+}
+
+static bool
+agx_windows_fence_finish(struct pipe_screen *screen, struct pipe_context *ctx,
+                         struct pipe_fence_handle *fence, uint64_t timeout)
+{
+   struct agx_windows_fence *f = (struct agx_windows_fence *)fence;
+   (void)screen; (void)ctx;
+   if (!f) return false;
+   if (AgxWin32AsahiFenceSignalled(f->dev, f->value)) return true;
+   if (!timeout) return false;
+   if (timeout == OS_TIMEOUT_INFINITE)
+      return AgxWin32AsahiFenceWait(f->dev, f->value) != 0;
+   int64_t end = os_time_get_nano() + (int64_t)MIN2(timeout, (uint64_t)INT64_MAX / 2);
+   while (!AgxWin32AsahiFenceSignalled(f->dev, f->value)) {
+      if (os_time_get_nano() >= end) return false;
+      os_time_sleep(50);
+   }
+   return true;
+}
+#else
+static char agx_windows_fence_storage;
+#define AGX_WINDOWS_SIGNALLED_FENCE \\
+   ((struct pipe_fence_handle *)&agx_windows_fence_storage)
+
+static void
+agx_windows_fence_reference(struct pipe_screen *screen,
+                            struct pipe_fence_handle **ptr,
+                            struct pipe_fence_handle *fence)
+{
+   (void)screen;
+   *ptr = fence;
+}
+
+static bool
+agx_windows_fence_finish(struct pipe_screen *screen, struct pipe_context *ctx,
+                         struct pipe_fence_handle *fence, uint64_t timeout)
+{
+   (void)screen; (void)ctx; (void)timeout;
+   return fence == AGX_WINDOWS_SIGNALLED_FENCE;
+}
+#endif
+
+static void
+agx_flush(struct pipe_context *pctx,''')
+    s=body(s,'agx_flush','''   struct agx_context *ctx = agx_context(pctx);
+   (void)flags;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   agx_flush_all(ctx, fence ? "Windows fence" : "Windows runtime flush");
+   if (fence) {
+      struct agx_windows_fence *f =
+         ctx->any_faults ? NULL : calloc(1, sizeof(*f));
+      if (f) {
+         pipe_reference_init(&f->reference, 1);
+         f->dev = agx_device(pctx->screen);
+         f->value = AgxWin32AsahiNewestFence(ctx);
+      }
+      agx_windows_fence_reference(pctx->screen, fence, NULL);
+      *fence = (struct pipe_fence_handle *)f;
+   }
+#else
+   if (fence) {
+      agx_sync_all(ctx, "Windows fence");
+      *fence = ctx->any_faults ? NULL : AGX_WINDOWS_SIGNALLED_FENCE;
+      return;
+   }
+   agx_flush_all(ctx, "Windows runtime flush");
+#endif''')
+    # Clear is native state mutation/upload; it uses the same batch capsule.
+    a,b=function(s,'agx_clear');decl=s.rfind('static void',0,a);signature=s[decl:a]
+    wrapper=signature+'''{
+   struct agx_context *ctx = agx_context(pctx);
+   /* Gallium clear masks: color_clear_mask carries 4 bits per colour buffer
+    * (GL passes its whole ColorMask, 0xffffffff by default) and only buffer
+    * 0's nibble applies here; stencil_clear_mask applies only with
+    * PIPE_CLEAR_STENCIL (GL passes the stencil write mask, D3D10 passes 0).
+    * Partial masks never reach pipe->clear (st/mesa clears with quads), and
+    * the Asahi body ignores both masks. EXP1148: a GL glClear(COLOR|DEPTH)
+    * was refused by the former D3D10-shaped guard and faulted the context.
+    * Accepted: COLOR0, DEPTH and STENCIL-with-DEPTH, alone or together. */
+   const unsigned supported = PIPE_CLEAR_COLOR0 | PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL;
+   bool shape = buffers && !(buffers & ~supported) &&
+                (!(buffers & PIPE_CLEAR_STENCIL) || (buffers & PIPE_CLEAR_DEPTH));
+   bool color_ok = !(buffers & PIPE_CLEAR_COLOR0) || (color_clear_mask & 0xf) == 0xf;
+   bool depth_ok = !(buffers & PIPE_CLEAR_DEPTH) || (depth >= 0.0 && depth <= 1.0);
+   bool stencil_ok = !(buffers & PIPE_CLEAR_STENCIL) ||
+                     stencil_clear_mask == 0 || stencil_clear_mask == 0xff;
+   /* EXP1287: as in agx_draw_vbo, the render condition is evaluated before
+    * the batch is taken (upstream takes the batch first; the check may
+    * retire it). A clear it skips touches no state. */
+   if (!ctx->any_faults && unlikely(!agx_render_condition_check(ctx)))
+      return;
+   if (ctx->any_faults || !shape || !color_ok || !depth_ok || !stencil_ok ||
+       !color || scissor_state) { ctx->any_faults = true; return; }
+   struct agx_batch *batch = agx_get_batch(ctx);
+   if (!batch || !AgxWin32AsahiBatchEnter(batch)) { ctx->any_faults = true; return; }
+   agx_clear_windows_body(pctx, buffers, color_clear_mask, stencil_clear_mask, scissor_state, color, depth, stencil);
+   if (!AgxWin32AsahiBatchLeave(batch)) ctx->any_faults = true;
+}
+'''
+    clearbody=replace(s[a:b],
+        '   if (unlikely(!agx_render_condition_check(ctx)))\n      return;\n\n','')
+    s=s[:decl]+signature.replace('agx_clear(','agx_clear_windows_body(')+clearbody+'\n'+wrapper+s[b:]
+    a,b=function(s,'agx_create_context');part=s[a:b]
+    start=part.index('   enum drm_asahi_priority');end=part.index('   pctx->destroy',start)
+    part=part[:start]+'   /* Existing Windows context owns queue and synchronization. */\n'+part[end:]
+    part=part.replace('   int ret;','')
+    # D3D-G3 (EXP1283): the context keeps Mesa's query functions; without
+    # them pipe->create_query is NULL (CreateQuery crashed) and
+    # active_queries stays false (no draw would count).
+    for line in ('   pctx->create_fence_fd = agx_create_fence_fd;','   pctx->fence_server_sync = agx_fence_server_sync;'):
+        part=part.replace(line,'')
+    start=part.index('   struct agx_device *dev = agx_device(screen);');end=part.index('   /* By default all samples',start)
+    part=part[:start]+'''   ctx->in_sync_fd = -1;
+   /* GPU timestamps: Mesa's per-batch timestamp slots. The winsys fills them
+    * from the KMD (AgxWin32AsahiBatchTimestamps), so the object handle Asahi
+    * binds for the kernel is only a nonzero marker the winsys strips. */
+   ctx->timestamps = agx_bo_create(agx_device(screen),
+      sizeof(struct agx_timestamps) * AGX_MAX_BATCHES, 0, AGX_BO_WRITEBACK,
+      "Timestamp buffer");
+   ctx->timestamp_handle = ctx->timestamps ? 1u : 0u;
+'''+part[end:]
+    s=s[:a]+part+s[b:]
+    a,b=function(s,'agx_destroy_context');part=s[a:b]
+    part=replace(part,'   agx_sync_all(ctx, "destroy context");','''   agx_sync_all(ctx, "destroy context");
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   AgxWin32AsahiScratchReceipt(ctx, 2u, NULL); /* EXP1317 receipt-only */
+#endif
+   for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i)
+      if (ctx->batches.slots[i].windows_batch) return; /* retains pending context */''')
+    start=part.index('   /* Lock around the syncobj destruction');end=part.index('   pipe_resource_reference(&ctx->heap',start)
+    part=part[:start]+'   if (ctx->timestamps) agx_bo_unreference(dev, ctx->timestamps);\n'+part[end:]
+    part=part.replace('   agx_destroy_command_queue(dev, ctx->queue_id);','')
+    s=s[:a]+part+s[b:]
+    # Build-only Linux entry is excluded; expose a Windows-native constructor
+    # with explicit platform parameters and the existing allocation owner.
+    a,b=function(s,'agx_screen_create');decl=s.rfind('struct pipe_screen *',0,a)
+    old=s[decl:b]
+    signature='''struct pipe_screen *
+AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *windows,
+    const AGX_WIN32_ASAHI_OWNER_OPS *owners, void *owner,
+    const AGX_WIN32_ASAHI_BATCH_OPS *batches,
+    const struct drm_asahi_params_global *params)
+'''
+    original=s[a:b]
+    start=original.index('   /* parse driconf');end=original.index('   screen->destroy =',start)
+    original=original[:start]+'''   if (!params || params->gpu_generation != 13 || params->num_clusters_total != 1) {
+      ralloc_free(agx_screen); return NULL;
+   }
+   if (!AgxWin32AsahiAttach(backend, &agx_screen->dev, windows, owners, owner, 0x1100000000ULL)) {
+      ralloc_free(agx_screen); return NULL;
+   }
+   if (!AgxWin32AsahiBatchConfigure(backend, batches, owner)) {
+      if (AgxWin32AsahiDetach(backend)) ralloc_free(agx_screen);
+      return NULL;
+   }
+   agx_screen->dev.params = *params;
+   agx_screen->dev.chip = AGX_CHIP_G13G;
+   /* GPU timestamps: the winsys hands Mesa nanoseconds (it converts the
+    * firmware's counter ticks with the KMD's frequency), so Asahi's
+    * command_timestamp_frequency_hz is 1 GHz and the conversion 1/1. */
+   agx_screen->dev.params.command_timestamp_frequency_hz = 1000000000ULL;
+   agx_screen->dev.user_timestamp_to_ns.num = 1u;
+   agx_screen->dev.user_timestamp_to_ns.den = 1u;
+   /* EXP1162: GoldSrc picked a 4x multisampled GL framebuffer as soon as
+    * the screen advertised one; the OpenGL ICD keeps advertising none.
+    * D3D-G5: the D3D UMD (Backend.Multisample) advertises 2x/4x, which the
+    * KMD encodes (utile_config log2, tib_blocks). */
+   if (!backend->Multisample) agx_screen->dev.debug |= AGX_DBG_NOMSAA;
+   /* The Linux driver's ASAHI_MESA_DEBUG=nocompress (agx_open_device, which
+    * this Windows screen does not call): no lossless compression for the
+    * resources this process creates (EXP1292 MSAA diagnosis). */
+   {
+      const char *asahi_debug = getenv("ASAHI_MESA_DEBUG");
+      if (asahi_debug && strstr(asahi_debug, "nocompress"))
+         agx_screen->dev.debug |= AGX_DBG_NOCOMPRESS;
+   }
+   /* GL_RENDERER / adapter name: Linux builds it from the kernel's
+    * parameters (agx_device.c); the compiled Windows contract is G13G. */
+   snprintf(agx_screen->dev.name, sizeof(agx_screen->dev.name), "Apple M1 (G13G)");
+   agx_screen->dev.libagx_programs = libagx_g13g;
+   agx_screen->dev.fd = -1;
+   glsl_type_singleton_init_or_ref();
+   u_rwlock_init(&agx_screen->destroy_lock);
+   simple_mtx_init(&agx_screen->flush_seqid_lock, mtx_plain);
+   agx_screen->heap_memory_percent = 1.0f;
+'''+original[end:]
+    for field in ('get_screen_fd','query_dmabuf_modifiers','query_memory_info','is_dmabuf_modifier_supported','resource_from_handle','resource_get_handle','resource_get_param','get_timestamp','fence_reference','fence_finish','fence_get_fd','get_device_uuid','get_driver_uuid','get_cl_cts_version'):
+        original=re.sub(r'   screen->'+field+r' = [^;]+;\n','',original)
+    original=original.replace('   agx_disk_cache_init(agx_screen);','')
+    original=replace(original,'   screen->destroy =','''   screen->fence_reference = agx_windows_fence_reference;
+   screen->fence_finish = agx_windows_fence_finish;
+   screen->destroy =''')
+    original=original.replace('   agx_init_compute_caps(screen);','')
+    original=replace(original,'   agx_init_screen_caps(screen);','''   agx_init_screen_caps(screen);
+   struct pipe_caps *windows_caps = (struct pipe_caps *)&screen->caps;
+   windows_caps->occlusion_query = true;
+   /* GPU timestamps (docs/superpowers/plans/2026-10-16-gpu-timestamps.md). */
+   windows_caps->query_timestamp = true;
+   windows_caps->query_time_elapsed = true;
+   windows_caps->query_so_overflow = false;
+   windows_caps->query_memory_info = false;
+   windows_caps->query_pipeline_statistics_single = false;
+   windows_caps->query_buffer_object = false;
+   windows_caps->compute = false;
+   windows_caps->max_stream_output_buffers = 0;
+   windows_caps->stream_output_pause_resume = false;
+   windows_caps->stream_output_interleave_buffers = false;''')
+    original=replace(original,'''      struct agx_bo *bo =
+         agx_bo_create(&agx_screen->dev, 16384, 0, 0, "Rodata");
+
+      agx_pack_txf_sampler((struct agx_sampler_packed *)agx_bo_map(bo));
+
+      agx_pack(&agx_screen->dev.txf_sampler, USC_SAMPLER, cfg) {
+         cfg.start = 0;
+         cfg.count = 1;
+         cfg.buffer = bo->va->addr;
+      }
+
+      agx_screen->rodata = bo;''','''      struct agx_bo *bo =
+         agx_bo_create(&agx_screen->dev, 16384, 0, 0, "Rodata");
+      void *map = bo ? agx_bo_map(bo) : NULL;
+      if (!bo || !map) {
+         if (bo) agx_bo_unreference(&agx_screen->dev, bo);
+         screen->destroy(screen);
+         return NULL;
+      }
+
+      agx_pack_txf_sampler((struct agx_sampler_packed *)map);
+
+      agx_pack(&agx_screen->dev.txf_sampler, USC_SAMPLER, cfg) {
+         cfg.start = 0;
+         cfg.count = 1;
+         cfg.buffer = bo->va->addr;
+      }
+
+      agx_screen->rodata = bo;
+
+      /* EXP1069: Asahi reads unbound vertex buffers, null textures and XFB
+       * offsets from a zero page and discards null-image writes into a
+       * scratch page; Linux binds both at fixed VAs in every VM. Windows has
+       * no such per-VM mapping (EXP1068: an unbound vertex buffer hung the
+       * GPU), so each device owns one of each as ordinary BOs. */
+      struct agx_bo *zero = agx_bo_create(&agx_screen->dev, AGX_ZERO_PAGE_SIZE,
+                                          0, 0, "Zero page");
+      struct agx_bo *scratch = agx_bo_create(&agx_screen->dev,
+                                             AGX_ZERO_PAGE_SIZE, 0, 0,
+                                             "Scratch page");
+      void *zero_map = zero ? agx_bo_map(zero) : NULL;
+      void *scratch_map = scratch ? agx_bo_map(scratch) : NULL;
+      if (!zero_map || !scratch_map) {
+         if (zero) agx_bo_unreference(&agx_screen->dev, zero);
+         if (scratch) agx_bo_unreference(&agx_screen->dev, scratch);
+         screen->destroy(screen);
+         return NULL;
+      }
+      memset(zero_map, 0, AGX_ZERO_PAGE_SIZE);
+      memset(scratch_map, 0, AGX_ZERO_PAGE_SIZE);
+      agx_screen->dev.zero_bo = zero;
+      agx_screen->dev.scratch_bo = scratch;''')
+    s=s[:decl]+signature+original+s[b:]
+    a,b=function(s,'agx_destroy_screen');part=s[a:b]
+    part=part.replace('   drmSyncobjDestroy(screen->dev.fd, screen->flush_syncobj);','')
+    part=replace(part,'   agx_bo_unreference(&screen->dev, screen->rodata);','''   struct agx_bo *rodata = screen->rodata;
+   screen->rodata = NULL;
+   /* The owner retains zero-ref backing if deallocation fails. Relinquish the
+    * screen's reference once; Detach/Collect is the only retry owner. */
+   agx_bo_unreference(&screen->dev, rodata);
+   struct agx_bo *zero_page = screen->dev.zero_bo;
+   struct agx_bo *scratch_page = screen->dev.scratch_bo;
+   screen->dev.zero_bo = NULL;
+   screen->dev.scratch_bo = NULL;
+   if (zero_page) agx_bo_unreference(&screen->dev, zero_page);
+   if (scratch_page) agx_bo_unreference(&screen->dev, scratch_page);''')
+    part=replace(part,'   u_transfer_helper_destroy(pscreen->transfer_helper);','')
+    part=replace(part,'   agx_close_device(&screen->dev);','''   AGX_WIN32_ASAHI_BACKEND *backend = screen->dev.windows_private;
+   if (!AgxWin32AsahiDetach(backend)) return;
+   u_transfer_helper_destroy(pscreen->transfer_helper);
+   pscreen->transfer_helper = NULL;
+   glsl_type_singleton_decref();''')
+    s=s[:a]+part+s[b:]
+    s=replace(s,'   ctx->blitter = util_blitter_create(pctx);','''   ctx->blitter = util_blitter_create(pctx);
+   if (ctx->blitter) ctx->blitter->use_single_triangle = true;''')
+    save(pp,s)
+
+    blit_path='src/gallium/drivers/asahi/agx_blit.c'
+    blit=(out/blit_path).read_text()
+    blit=replace(blit,'   if (asahi_compute_blit_supported(info)) {','''   if (!agx_device(pipe->screen)->windows_private &&
+       asahi_compute_blit_supported(info)) {''')
+    save(blit_path,blit)
+    project_d3d_robustness(out,save)
+
+
+def project_d3d_robustness(out,save):
+    """D3D-H6: D3D10/11 out-of-bounds buffer semantics for the D3D UMD.
+
+    The D3D device's context was created with flags 0 (no robustness at
+    all), and Asahi's only robustness is GL's: an out-of-bounds UBO/SSBO
+    load reads offset 0, a store whose last component is out of bounds is
+    dropped whole, vertex fetch clamps to element 0 and an unbound constant
+    buffer slot keeps its previous base. A backend whose D3dRobustness is
+    set (the D3D UMD, agx_d3d10_windows.cpp) makes its contexts robust with
+    the D3D lowering (winsys/agx_win32_d3d_robustness.h), AGX_ROBUSTNESS_D3D
+    vertex fetch and unbound constant buffers on the zero page. The OpenGL
+    ICD keeps the robustness its contexts ask for.
+    """
+    hp='src/gallium/drivers/asahi/agx_state.h';h=(out/hp).read_text()
+    h=replace(h,'''   bool support_lod_bias;
+   bool robust;
+''','''   bool support_lod_bias;
+   bool robust;
+   /* D3D-H6: D3D10/11 out-of-bounds semantics (implies robust) */
+   bool windows_d3d_robust;
+''')
+    save(hp,h)
+    pp='src/gallium/drivers/asahi/agx_pipe.c';pipe=(out/pp).read_text()
+    pipe=replace(pipe,'''   ctx->robust = (flags & PIPE_CONTEXT_ROBUST_BUFFER_ACCESS);
+''','''   ctx->robust = (flags & PIPE_CONTEXT_ROBUST_BUFFER_ACCESS);
+   {
+      AGX_WIN32_ASAHI_BACKEND *windows = agx_device(screen)->windows_private;
+      ctx->windows_d3d_robust = windows && windows->D3dRobustness;
+      if (ctx->windows_d3d_robust)
+         ctx->robust = true;
+   }
+''')
+    save(pp,pipe)
+    sp='src/gallium/drivers/asahi/agx_state.c';state=(out/sp).read_text()
+    state=replace(state,'#include "agx_state.h"\n',
+        '#include "agx_state.h"\n#include "agx_win32_d3d_robustness.h"\n')
+    a,b=function(state,'should_lower_robustness')
+    state=state[:b]+'''
+
+/* D3D-H6: UBO/SSBO loads and SSBO stores are lowered by
+ * agx_win32_lower_d3d_buffer_access; buffer images and atomics as for GL
+ * robustness, which gives D3D's rules (nothing written, result 0). */
+static bool
+agx_win32_should_lower_robustness_d3d(const nir_intrinsic_instr *intr,
+                                      const void *data)
+{
+   const bool robust = true;
+
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_ubo:
+   case nir_intrinsic_load_ssbo:
+   case nir_intrinsic_store_ssbo:
+      return false;
+   default:
+      return should_lower_robustness(intr, &robust);
+   }
+}'''+state[b:]
+    state=replace(state,'''                      nir_shader *nir, bool support_lod_bias, bool robust)''',
+        '''                      nir_shader *nir, bool support_lod_bias, bool robust,
+                      bool d3d_robust)''')
+    state=replace(state,'''   NIR_PASS(_, nir, nir_lower_robust_access, should_lower_robustness, &robust);''',
+        '''   if (d3d_robust)
+      NIR_PASS(_, nir, agx_win32_lower_d3d_buffer_access);
+   NIR_PASS(_, nir, nir_lower_robust_access,
+            d3d_robust ? agx_win32_should_lower_robustness_d3d : should_lower_robustness,
+            &robust);''')
+    call='   agx_shader_initialize(dev, so, nir, ctx->support_lod_bias, ctx->robust);'
+    if state.count(call)!=2:
+        raise RuntimeError('Native shader initialization callers changed')
+    state=state.replace(call,'''   agx_shader_initialize(dev, so, nir, ctx->support_lod_bias, ctx->robust,
+                         ctx->windows_d3d_robust);''')
+    a,b=function(state,'agx_update_vs')
+    state=state[:a]+replace(state[a:b],'''      .prolog.vs.robustness.level =
+         ctx->robust ? AGX_ROBUSTNESS_GL : AGX_ROBUSTNESS_DISABLED,''','''      .prolog.vs.robustness.level =
+         ctx->windows_d3d_robust ? AGX_ROBUSTNESS_D3D :
+         ctx->robust ? AGX_ROBUSTNESS_GL : AGX_ROBUSTNESS_DISABLED,''')+state[b:]
+    save(sp,state)
+    up='src/gallium/drivers/asahi/agx_uniforms.c';uniforms=(out/up).read_text()
+    a,b=function(uniforms,'agx_set_cbuf_uniforms')
+    uniforms=uniforms[:a]+replace(uniforms[a:b],'''      unif->ubo_size[cb] = st->cb[cb].buffer_size;
+   }
+''','''      unif->ubo_size[cb] = st->cb[cb].buffer_size;
+   }
+
+   /* D3D-H6 (D3D11.3 7.5): a slot with nothing bound reads 0. The D3D
+    * lowering clamps the offset to 0 and selects 0, but the load still reads
+    * the slot's base: point every unbound slot at the device zero page with
+    * size 0 on every upload (Asahi keeps an unbound slot's previous base and
+    * size, or 0, an unmapped VA). */
+   if (batch->ctx->windows_d3d_robust) {
+      struct agx_bo *zero = agx_device(batch->ctx->base.screen)->zero_bo;
+
+      for (unsigned cb = 0; cb < PIPE_MAX_CONSTANT_BUFFERS; ++cb) {
+         if (!(st->cb_mask & BITFIELD_BIT(cb)) || !st->cb[cb].buffer) {
+            unif->ubo_base[cb] = zero->va->addr;
+            unif->ubo_size[cb] = 0;
+         }
+      }
+   }
+''')+uniforms[b:]
+    save(up,uniforms)

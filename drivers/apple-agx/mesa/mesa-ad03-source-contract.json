@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "mesa_repository": "https://gitlab.freedesktop.org/mesa/mesa.git",
+  "mesa_commit": "9aa1215f878b504f66159dd2ead4c7973142126e",
+  "license_path": "licenses/MIT",
+  "license_sha256": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f",
+  "pipeline_advertised": false,
+  "forbidden_hardware_links": [
+    "gdi_create_sw_winsys",
+    "llvmpipe_create_screen",
+    "softpipe_create_screen",
+    "drmIoctl",
+    "drmSyncobjCreate"
+  ],
+  "generated_sources": [
+    {
+      "output": "src/asahi/compiler/agx_opcodes.c",
+      "generator": "src/asahi/compiler/agx_opcodes.c.py"
+    },
+    {
+      "output": "src/asahi/compiler/agx_opcodes.h",
+      "generator": "src/asahi/compiler/agx_opcodes.h.py"
+    },
+    {
+      "output": "src/asahi/compiler/agx_builder.h",
+      "generator": "src/asahi/compiler/agx_builder.h.py"
+    },
+    {
+      "output": "src/asahi/compiler/agx_nir_algebraic.c",
+      "generator": "src/asahi/compiler/agx_nir_algebraic.py"
+    }
+  ],
+  "sources": [
+    {
+      "path": "src/gallium/frontends/d3d10umd/Shader.cpp",
+      "sha256": "48a7de2a42b25abac677cd903c10f21fc91b86aef167266a32a6d7d9da21097c",
+      "classification": "FRONTEND",
+      "action": "reuse",
+      "signatures": ["Shader_tgsi_translate", "pipe->create_vs_state", "pipe->create_fs_state"]
+    },
+    {
+      "path": "src/gallium/frontends/d3d10umd/Draw.cpp",
+      "sha256": "da5904f2ac6b8a79373bcc60d2cef0546e8da0bc1ba92d21812aff3ea2338f7e",
+      "classification": "FRONTEND",
+      "action": "reuse",
+      "signatures": ["ResolveState(pDevice)", "util_draw_arrays", "draw_vbo"]
+    },
+    {
+      "path": "src/gallium/drivers/asahi/agx_state.c",
+      "sha256": "5015b75863202a170f8d6015eb82a76a70ecd4b92204894fa3d1886b1baa94ba",
+      "classification": "ENCODER",
+      "action": "reuse",
+      "signatures": ["tgsi_to_nir", "agx_compile_shader_nir", "agx_draw_vbo", "agx_build_pipeline"]
+    },
+    {
+      "path": "src/gallium/drivers/asahi/agx_pipe.c",
+      "sha256": "e29b0c206bdadfa14de83c439526fef5f8d8650a3f7ae223aa2e8e945386d86e",
+      "classification": "ENCODER",
+      "action": "reuse",
+      "signatures": ["agx_cmdbuf", "agx_flush_render", "vdm_ctrl_stream_base"]
+    },
+    {
+      "path": "src/asahi/compiler/agx_compile.c",
+      "sha256": "1a5b056a18ffdd1fa6d3813129221e0ead2bf114c794844bbc14bdcd5ebc0c27",
+      "classification": "COMPILER",
+      "action": "reuse",
+      "signatures": ["agx_compile_shader_nir", "agx_compile_function_nir"]
+    },
+    {
+      "path": "src/asahi/compiler/agx_compile.h",
+      "sha256": "32104a9829776363ca142d207020d2fa11a96952a24e2ef47b2a58b81a50ca32",
+      "classification": "COMPILER",
+      "action": "reuse",
+      "signatures": ["struct agx_shader_part", "binary_size", "main_offset"]
+    },
+    {
+      "path": "src/gallium/targets/d3d10umd/d3d10_gdi.c",
+      "sha256": "12f062871db17487f8f007d58367dd273a911696a7244b63f217e88259582aed",
+      "classification": "SOFTWARE_ONLY",
+      "action": "reject-as-hardware",
+      "signatures": ["gdi_create_sw_winsys", "llvmpipe_create_screen", "softpipe_create_screen"]
+    },
+    {
+      "path": "src/gallium/drivers/asahi/agx_batch.c",
+      "sha256": "b99fac69d414e0f34420ef38243d31da644745f62d88a50835d734e627997778",
+      "classification": "DRM_ONLY",
+      "action": "replace-with-wddm",
+      "signatures": ["drmSyncobjCreate", "dev->ops.submit"]
+    },
+    {
+      "path": "src/asahi/lib/agx_device.c",
+      "sha256": "0f7304919dc4cd0a274817d4d02fa9e90941195cc07b2e8e17c27758c3ea7132",
+      "classification": "DRM_ONLY",
+      "action": "replace-with-wddm",
+      "signatures": ["vm_create.vm_id", "util_vma_heap_init", "agx_bo_create"]
+    },
+    {
+      "path": "src/asahi/lib/agx_bo.c",
+      "sha256": "4de6f392a483cd80e56a7d387d84253e632105e5276aeca4455e7ee49f4d19ce",
+      "classification": "DRM_ONLY",
+      "action": "replace-with-wddm",
+      "signatures": ["dev->ops.bo_alloc", "agx_bo_create"]
+    },
+    {
+      "path": "src/gallium/winsys/asahi/drm/asahi_drm_winsys.c",
+      "sha256": "1c21bb62ad51b87b8c7367a96869306fc4edcf5f64440f33f955f8d7131e1ce4",
+      "classification": "DRM_ONLY",
+      "action": "replace-with-wddm",
+      "signatures": ["agx_screen_create(fd", "os_dupfd_cloexec"]
+    },
+    {
+      "path": "include/drm-uapi/asahi_drm.h",
+      "sha256": "69fe416b7294dfec4794217bd11379effd53caff4e86010bb803f1b34bdf5e89",
+      "classification": "DRM_ONLY",
+      "action": "replace-with-wddm",
+      "signatures": ["struct drm_asahi_cmd_render", "struct drm_asahi_submit"]
+    }
+  ]
+}

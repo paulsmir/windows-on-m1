@@ -1,0 +1,11 @@
+{
+  "discarded_runs": {
+    "baseline-suite.log": "Started on main tree but overlapped test/source edits; NOT a baseline or acceptance run.",
+    "epoch-focused.log": "Overlapped resubmission RED-test edits; replaced by isolated frozen epoch run."
+  },
+  "accepted_baseline": "frozen-baseline-suite.log, detached f92e19dd tree with source-identical m1n1/Mu symlinks",
+  "baseline_environment": "17 failures/42 errors/2 skips, 1164 tests. Six additional path-dependent identities versus recorded R153 main-tree baseline; final candidate must be tested in same isolated tree.",
+  "epoch_green": "epoch-isolated-green.log:5 tests PASS; epoch-tree captured before resubmission changes.",
+  "hardware": false,
+  "package": false
+}

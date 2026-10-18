@@ -1,0 +1,881 @@
+{
+  "etl_sha256": "ab90d4e527f86438ede7d13202ba09d2e45cae3940100304e647169d80bcac14",
+  "header": "HEADER lost=0 bufferslost=5 start=134349755673340902 end=134349757539100427 pointer=8 build=1",
+  "summary": "SUMMARY status=0 events=1669674 extended=1669672 stacks=1669672 reason_events=84",
+  "stack_match_id": "0000000000000000",
+  "frames": [
+    "fffff80370a6d1b0",
+    "fffff80370a6c428",
+    "fffff80370b59d98",
+    "fffff80370b5a080",
+    "fffff80370b568dc",
+    "fffff80370b55bd4",
+    "fffff8036e03ad00",
+    "fffff8036e03b084",
+    "fffff8036e03135c",
+    "fffff8036e024b1c",
+    "fffff8036e0e8ebc",
+    "fffff8036e0e98e8",
+    "fffff8036e0e8d8c",
+    "fffff8036e080b94",
+    "fffff80370af13b4",
+    "fffff80370e2dcd4"
+  ],
+  "identical_stack_event_count": 84,
+  "events": [
+    {
+      "record_id": "52636",
+      "native_sequence": 52638,
+      "utc": "2026-09-27T09:40:02.4391858Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b672e8820",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "62743",
+      "native_sequence": 62745,
+      "utc": "2026-09-27T09:40:03.0483914Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b672e8820",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "78957",
+      "native_sequence": 78959,
+      "utc": "2026-09-27T09:40:03.9226147Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b672e8820",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "96646",
+      "native_sequence": 96648,
+      "utc": "2026-09-27T09:40:04.6128868Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b672e8820",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "114148",
+      "native_sequence": 114150,
+      "utc": "2026-09-27T09:40:05.4144827Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b672e8820",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "131738",
+      "native_sequence": 131740,
+      "utc": "2026-09-27T09:40:06.2781283Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b672e8820",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "154435",
+      "native_sequence": 154437,
+      "utc": "2026-09-27T09:40:07.3012283Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6988c7e0",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "156728",
+      "native_sequence": 156730,
+      "utc": "2026-09-27T09:40:07.4054563Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68a6c7e0",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "170087",
+      "native_sequence": 170089,
+      "utc": "2026-09-27T09:40:08.1272898Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68cc07e0",
+      "owner_pid": 1236,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "184442",
+      "native_sequence": 184444,
+      "utc": "2026-09-27T09:40:08.8628297Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69c02820",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "192216",
+      "native_sequence": 192218,
+      "utc": "2026-09-27T09:40:09.1029417Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68cbd820",
+      "owner_pid": 5248,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "194874",
+      "native_sequence": 194876,
+      "utc": "2026-09-27T09:40:09.1886679Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6904a010",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "195025",
+      "native_sequence": 195027,
+      "utc": "2026-09-27T09:40:09.1896609Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6853a820",
+      "owner_pid": 5600,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "240751",
+      "native_sequence": 240753,
+      "utc": "2026-09-27T09:40:11.3592636Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6988c7e0",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "254107",
+      "native_sequence": 254109,
+      "utc": "2026-09-27T09:40:12.0407341Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a043010",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "257231",
+      "native_sequence": 257233,
+      "utc": "2026-09-27T09:40:12.1790019Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68a6c7e0",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "273296",
+      "native_sequence": 273298,
+      "utc": "2026-09-27T09:40:12.8920029Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69e9f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "334995",
+      "native_sequence": 334997,
+      "utc": "2026-09-27T09:40:15.6477730Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a043010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "337516",
+      "native_sequence": 337518,
+      "utc": "2026-09-27T09:40:15.7531934Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "339644",
+      "native_sequence": 339646,
+      "utc": "2026-09-27T09:40:15.8200144Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68a6c7e0",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "378902",
+      "native_sequence": 378904,
+      "utc": "2026-09-27T09:40:17.7191382Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69e9f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "389833",
+      "native_sequence": 389835,
+      "utc": "2026-09-27T09:40:18.3191807Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a785010",
+      "owner_pid": 7896,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "429476",
+      "native_sequence": 429478,
+      "utc": "2026-09-27T09:40:19.8590209Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "432498",
+      "native_sequence": 432500,
+      "utc": "2026-09-27T09:40:19.9632174Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68a6c7e0",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "438306",
+      "native_sequence": 438308,
+      "utc": "2026-09-27T09:40:20.1287017Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a043010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "463645",
+      "native_sequence": 463647,
+      "utc": "2026-09-27T09:40:20.9374512Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69e9f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "506779",
+      "native_sequence": 506781,
+      "utc": "2026-09-27T09:40:22.3919674Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "511767",
+      "native_sequence": 511769,
+      "utc": "2026-09-27T09:40:22.5540775Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68a6c7e0",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "516947",
+      "native_sequence": 516949,
+      "utc": "2026-09-27T09:40:22.7074079Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a043010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "535494",
+      "native_sequence": 535496,
+      "utc": "2026-09-27T09:40:23.5213875Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a89f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "589886",
+      "native_sequence": 589888,
+      "utc": "2026-09-27T09:40:25.5132072Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "594591",
+      "native_sequence": 594593,
+      "utc": "2026-09-27T09:40:25.6287884Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a051010",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "598854",
+      "native_sequence": 598856,
+      "utc": "2026-09-27T09:40:25.7617310Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a043010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "612188",
+      "native_sequence": 612190,
+      "utc": "2026-09-27T09:40:26.1781638Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a89f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "678101",
+      "native_sequence": 678103,
+      "utc": "2026-09-27T09:41:17.6120121Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "690265",
+      "native_sequence": 690267,
+      "utc": "2026-09-27T09:41:18.0238062Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a051010",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "692352",
+      "native_sequence": 692354,
+      "utc": "2026-09-27T09:41:18.0661544Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a043010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "715819",
+      "native_sequence": 715821,
+      "utc": "2026-09-27T09:41:18.8397268Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a89f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "749648",
+      "native_sequence": 749650,
+      "utc": "2026-09-27T09:41:19.8595845Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "776491",
+      "native_sequence": 776493,
+      "utc": "2026-09-27T09:41:20.8127151Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a051010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "780942",
+      "native_sequence": 780944,
+      "utc": "2026-09-27T09:41:20.9455216Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a043010",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "796385",
+      "native_sequence": 796387,
+      "utc": "2026-09-27T09:41:21.4726538Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a89f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "823477",
+      "native_sequence": 823479,
+      "utc": "2026-09-27T09:41:22.3844490Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "857901",
+      "native_sequence": 857903,
+      "utc": "2026-09-27T09:41:23.5491649Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a071010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "859445",
+      "native_sequence": 859447,
+      "utc": "2026-09-27T09:41:23.6012937Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a043010",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "880424",
+      "native_sequence": 880426,
+      "utc": "2026-09-27T09:41:24.2400097Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a89f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "917826",
+      "native_sequence": 917828,
+      "utc": "2026-09-27T09:41:25.3779697Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "935806",
+      "native_sequence": 935808,
+      "utc": "2026-09-27T09:41:25.9095849Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6da8c010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "942458",
+      "native_sequence": 942460,
+      "utc": "2026-09-27T09:41:26.1074329Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69eb66a0",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "965150",
+      "native_sequence": 965152,
+      "utc": "2026-09-27T09:41:26.9149902Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a89f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "994279",
+      "native_sequence": 994281,
+      "utc": "2026-09-27T09:41:27.7222119Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1019177",
+      "native_sequence": 1019179,
+      "utc": "2026-09-27T09:41:28.4150576Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6da8c010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1025659",
+      "native_sequence": 1025661,
+      "utc": "2026-09-27T09:41:28.5749743Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69eb66a0",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1045655",
+      "native_sequence": 1045657,
+      "utc": "2026-09-27T09:41:29.0871950Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a89f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1083945",
+      "native_sequence": 1083947,
+      "utc": "2026-09-27T09:41:30.1724677Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1095966",
+      "native_sequence": 1095968,
+      "utc": "2026-09-27T09:41:30.5346202Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6da8c010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1118050",
+      "native_sequence": 1118052,
+      "utc": "2026-09-27T09:41:31.2995629Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69eb66a0",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1136700",
+      "native_sequence": 1136702,
+      "utc": "2026-09-27T09:41:31.9900862Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a89f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1157901",
+      "native_sequence": 1157903,
+      "utc": "2026-09-27T09:41:32.5985436Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69b9f030",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1179636",
+      "native_sequence": 1179638,
+      "utc": "2026-09-27T09:41:33.3577823Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6da8c010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1198016",
+      "native_sequence": 1198018,
+      "utc": "2026-09-27T09:41:33.9348247Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b69eb66a0",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1222654",
+      "native_sequence": 1222656,
+      "utc": "2026-09-27T09:41:34.6724167Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6a89f7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1241207",
+      "native_sequence": 1241209,
+      "utc": "2026-09-27T09:41:35.3181484Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68284050",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1256781",
+      "native_sequence": 1256783,
+      "utc": "2026-09-27T09:41:35.7235937Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6da8c010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1285433",
+      "native_sequence": 1285435,
+      "utc": "2026-09-27T09:41:36.5978006Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68b45520",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1301417",
+      "native_sequence": 1301419,
+      "utc": "2026-09-27T09:41:37.0192495Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6e2487e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1322282",
+      "native_sequence": 1322284,
+      "utc": "2026-09-27T09:41:37.5998681Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b682ed7e0",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1337519",
+      "native_sequence": 1337521,
+      "utc": "2026-09-27T09:41:38.0859469Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6da8c010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1361458",
+      "native_sequence": 1361460,
+      "utc": "2026-09-27T09:41:38.6466961Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68b45520",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1401405",
+      "native_sequence": 1401407,
+      "utc": "2026-09-27T09:41:39.7917568Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6e2487e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1403450",
+      "native_sequence": 1403452,
+      "utc": "2026-09-27T09:41:39.8513116Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b682ed7e0",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1416872",
+      "native_sequence": 1416874,
+      "utc": "2026-09-27T09:41:40.2266128Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6da8c010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1445817",
+      "native_sequence": 1445819,
+      "utc": "2026-09-27T09:41:45.5128807Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68b45520",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1468507",
+      "native_sequence": 1468509,
+      "utc": "2026-09-27T09:41:46.0720505Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6e2487e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1470850",
+      "native_sequence": 1470852,
+      "utc": "2026-09-27T09:41:46.1332283Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b682ed7e0",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1493590",
+      "native_sequence": 1493592,
+      "utc": "2026-09-27T09:41:46.8205406Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6da8c010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1518324",
+      "native_sequence": 1518326,
+      "utc": "2026-09-27T09:41:47.5550637Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68b45520",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1550121",
+      "native_sequence": 1550123,
+      "utc": "2026-09-27T09:41:48.4796879Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6e2487e0",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1552501",
+      "native_sequence": 1552503,
+      "utc": "2026-09-27T09:41:48.5233476Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b682ed7e0",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1562409",
+      "native_sequence": 1562411,
+      "utc": "2026-09-27T09:41:48.7260750Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6da8c010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1597180",
+      "native_sequence": 1597182,
+      "utc": "2026-09-27T09:41:49.7514902Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b68b45520",
+      "owner_pid": 5316,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1620041",
+      "native_sequence": 1620043,
+      "utc": "2026-09-27T09:41:50.2756090Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6e2487e0",
+      "owner_pid": 1228,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1622484",
+      "native_sequence": 1622486,
+      "utc": "2026-09-27T09:41:50.3316918Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6e24b010",
+      "owner_pid": 1328,
+      "adapter": "0xffffe20e4b18c000"
+    },
+    {
+      "record_id": "1645563",
+      "native_sequence": 1645565,
+      "utc": "2026-09-27T09:41:50.8950848Z",
+      "kernel_pid": 4,
+      "kernel_tid": 5528,
+      "device": "0xffffb60b6da8c010",
+      "owner_pid": 4524,
+      "adapter": "0xffffe20e4b18c000"
+    }
+  ],
+  "symbol_reconstruction": {
+    "qualification": "Module bases inferred from coherent call sites and profiler Function=0x13c7; ETL lacks image rundown. PE/PDB pairs match each other; no EXP848 live module list was captured.",
+    "dxgmms2_base": "fffff8036e000000",
+    "dxgkrnl_base": "fffff8036a490000",
+    "version": "10.0.26100.9444",
+    "dxgmms2_image_sha256": "177d4436e0423f299d196aac8758045376ec38ab168e4e259b89005f048a567b",
+    "dxgmms2_pdb": "0913F44653039D025278DCF68B91EDDC1",
+    "dxgkrnl_image_sha256": "5d04895951336fd3733503dbbd57365c96a5bdc5e07389ff8b2077da48769fca",
+    "dxgkrnl_pdb": "76608A0A73DA7AD79EF71EFAD90E311C1"
+  },
+  "first_error_raw": [
+    "EVENT seq=52638 id=467 pid=4 tid=5528 filetime=134349756024391858 ext=1 bytes=16 data=20882e670bb6ffff0000000013000000",
+    "EXT type=6 size=136 data=0000000000000000,fffff80370a6d1b0,fffff80370a6c428,fffff80370b59d98,fffff80370b5a080,fffff80370b568dc,fffff80370b55bd4,fffff8036e03ad00,fffff8036e03b084,fffff8036e03135c,fffff8036e024b1c,fffff8036e0e8ebc,fffff8036e0e98e8,fffff8036e0e8d8c,fffff8036e080b94,fffff80370af13b4,fffff80370e2dcd4,"
+  ]
+}

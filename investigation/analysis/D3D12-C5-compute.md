@@ -1,0 +1,141 @@
+# D3D12 C5: compute pipeline and Dispatch
+
+Status 2026-10-17. Builds on C4b (D3D12-C4-copy.md): every D3D12 heap is a
+buffer of the device's native Asahi owner, and lists replay through the
+owner's Gallium context. C5 is the first shader a D3D12 list runs: a
+compute pipeline bound through a root signature whose only parameter is a
+root UAV, dispatched over a committed DEFAULT buffer.
+
+Sources inspected: WDK 26100 d3d12umddi.h (PFND3D12DDI_SET_PIPELINE_STATE,
+PFND3D12DDI_SET_ROOT_SIGNATURE, PFND3D12DDI_SET_ROOT_BUFFER_VIEW,
+PFND3D12DDI_DISPATCH, D3D12DDI_ROOT_PARAMETER/ROOT_DESCRIPTOR,
+D3D12DDIARG_CREATE_PIPELINE_STATE_0001); the repository's D3D11 compute
+path (mesa/d3d11/agx_d3d11_ddi.cpp CreateComputeShader11, bind_uavs,
+Dispatch11); dxbc_to_nir.h binding conventions; Mesa asahi agx_state.c
+agx_set_shader_buffers and gallium util_set_shader_buffers_mask.
+
+## WINDOWS CONTRACT
+
+- The runtime hands the driver the tokenized program at shader creation
+  (pShaderCode[0] = type/version, [1] = length in DWORDs) and references the
+  shader object from D3D12DDIARG_CREATE_PIPELINE_STATE_0001.hComputeShader;
+  CalcPrivatePipelineStateSize receives the same arguments, so the
+  pipeline object can be sized to hold its own copy of the program.
+- Root signatures (D3D12DDI_ROOT_SIGNATURE): a root UAV is a
+  D3D12DDI_ROOT_DESCRIPTOR {ShaderRegister, RegisterSpace}; its argument is
+  a GPU VA set with SetComputeRootUnorderedAccessView. Root descriptors are
+  raw or structured buffers and carry no size (no bounds checking in D3D12).
+  Setting a root signature invalidates all root arguments.
+- Dispatch(x, y, z) launches x*y*z thread groups of the bound pipeline;
+  a group count of zero in any dimension is a no-op. UAV writes are visible
+  to later commands after a UAV or transition barrier.
+
+## AGX/ASAHI CONTRACT
+
+- Gallium compute: create_compute_state(PIPE_SHADER_IR_NIR), bind,
+  set_shader_buffers(MESA_SHADER_COMPUTE), launch_grid(block, grid),
+  memory_barrier. agx_set_shader_buffers references each buffer; the batch
+  tracks the BOs a launch uses, so bindings may be dropped after the
+  launch. This is the path the D3D11 frontend has run on hardware.
+- dxbc_to_nir: a raw/structured UAV u# is shader-buffer slot #
+  (u0..u7); the program's dcl_thread_group gives the block
+  (dxbc_nir_compute_info).
+
+## TRANSLATION
+
+1. Pipeline: copy the compute program into the pipeline object at
+   creation; compile it (dxbc_translate_tokens -> create_compute_state) on
+   the device's owner the first time a list dispatches it, so device
+   initialisation's internal compute pipeline still needs no owner.
+2. List state: SetPipelineState records the pipeline,
+   SetComputeRootSignature records the signature and clears root
+   arguments, SetComputeRootUnorderedAccessView records the VA of a UAV
+   parameter.
+3. Dispatch: each root UAV parameter (space 0, register < 8) resolves its
+   VA to an owner heap + offset (device heap registry) and becomes
+   shader-buffer slot u# spanning [offset, heap end). Any other root
+   parameter (constants, root CBV/SRV, tables) refuses the dispatch with
+   receipt measure-d3d12-dispatch {reason, x, y, z, parameters} until C5b.
+4. ExecuteCommandLists replays copies and dispatches in recording order on
+   the owner; each dispatch ends with PIPE_BARRIER_ALL, so D3D12 barriers
+   between them need no AGX work yet; then flush + wait (C4b).
+
+## WHAT IS STILL UNKNOWN
+
+- Hardware only: whether the owner's compute launch on the D3D12 device's
+  kernel context runs and writes the heap the runtime later copies from
+  (the D3D11 compute path runs on its own device's context).
+
+## Checkpoint
+
+C5 probe step (agx_d3d12_probe.c compute_dispatch, after C4b PASS): root
+signature {UAV u0}, cs_5_0 agx_d3d12_probe_cs.hlsl (dword i = 3i + 7),
+Dispatch(256, 1, 1) over 64 KiB, transition, CopyBufferRegion to READBACK,
+Signal(4); PASS = readback bad 0. Receipts: measure-d3d12-compute {block},
+measure-d3d12-dispatch {0, 256, 1, 1, 1}, measure-d3d12-owner-submit
+{copies | dispatches << 16, retired, faulted}.
+
+## C5b: constant buffers from the root
+
+- WINDOWS: PFND3D12DDI_SET_ROOT_32BIT_CONSTANT(S) write DWORDs at
+  DestOffset of a 32-bit-constants parameter (b#); a root CBV
+  (PFND3D12DDI_SET_ROOT_BUFFER_VIEW) is a GPU VA without size (a D3D
+  constant buffer is at most 4096 vec4 = 64 KiB); pfnClearRootArguments
+  (the runtime's list default state) clears argument values.
+- AGX/ASAHI: set_constant_buffer(MESA_SHADER_COMPUTE, b#) with a buffer
+  view or a user buffer; agx_set_constant_buffer uploads a user buffer
+  immediately (const_uploader), so root constants are captured when the
+  dispatch is replayed. dxbc_to_nir reads cb# as UBO #.
+- TRANSLATION: the list keeps the root DWORDs at each parameter's offset;
+  Dispatch copies them into the recorded command, resolves each root CBV
+  VA to (owner heap, offset), and binds b# from either; size = min(64 KiB,
+  heap end) for views, Num32BitValues * 4 rounded to 16 bytes for
+  constants. Root SRVs and tables still refuse (reason 4).
+- UNKNOWN: none beyond C5's (same context, same launch path).
+- Checkpoint: probe C5B (agx_d3d12_probe_cs_cb.hlsl): root {UAV u0,
+  constants b1 x2, CBV b0}, scale 5 via SetComputeRoot32BitConstants, bias
+  11 via SetComputeRoot32BitConstant, CBV extra.y = 1000; PASS = every
+  dword == 5i + 1011, Signal(5).
+
+## C5c: CBV/UAV descriptor tables
+
+- WINDOWS: D3D12DDI_ROOT_DESCRIPTOR_TABLE ranges {type, NumDescriptors
+  (UINT_MAX unbounded), BaseShaderRegister, space, offset or APPEND};
+  pfnCreateConstantBufferView (VA + size), pfnCreateUnorderedAccessView
+  (buffer: FirstElement/NumElements, StructureByteStride or RAW, counter
+  resource), pfnCopyDescriptors(Simple) between CPU and shader-visible
+  heaps, pfnSetComputeRootDescriptorTable (GPU handle). With root signature
+  1.0 descriptors are volatile: they may change until the list executes.
+- AGX/ASAHI: unchanged from C5/C5b (shader buffers, constant buffers).
+- TRANSLATION: a descriptor is a CPU record {kind, owner heap, byte offset,
+  bytes} (lists replay as Gallium bindings, the GPU never reads it); views
+  resolve VA/resource to the owner heap at creation; copies are byte
+  copies; Dispatch maps each CBV/UAV range to slot pointers into the
+  shader-visible heap (an owner heap found by the table's GPU handle) and
+  reads them at ExecuteCommandLists. Typed/texture/counter UAVs write a
+  null descriptor with receipt measure-d3d12-uav {reason}; SRV/sampler
+  ranges refuse the dispatch (reason 4).
+- UNKNOWN: whether the runtime routes CopyDescriptorsSimple to the driver
+  or copies itself (both work with byte-copied records) -- receipts show it.
+- Checkpoint: probe C5C (agx_d3d12_probe_cs_table.hlsl): CPU heap {raw UAV,
+  CBV k = (7, 3)}, CopyDescriptorsSimple to a shader-visible heap,
+  SetDescriptorHeaps + table {UAV u0, CBV b0 APPEND}; PASS = 7i + 3,
+  Signal(6).
+
+## C5d: buffer SRVs
+
+- WINDOWS: root SRVs (PFND3D12DDI_SET_ROOT_BUFFER_VIEW, raw/structured,
+  no size) and SRV ranges in tables; pfnCreateShaderResourceView_0002
+  buffer views (FirstElement/NumElements, StructureByteStride or RAW).
+- AGX/ASAHI: create_sampler_view(PIPE_BUFFER, R32_UINT, u.buf offset/size)
+  + set_sampler_views(MESA_SHADER_COMPUTE); agx_set_sampler_views keeps its
+  own references, so views are released after unbinding. dxbc_to_nir reads
+  a raw/structured SRV t# as texel buffer # of 32-bit words (the D3D11
+  path's srv_10 conversion).
+- TRANSLATION: root SRV VA -> (owner heap, offset), to the heap end; SRV
+  descriptor record {heap, offset, bytes}; t0..t15; the owner creates the
+  views per dispatch. Typed buffer and texture SRVs: null descriptor +
+  measure-d3d12-srv {reason}; sampler ranges still refuse (reason 4).
+- Checkpoint: probe C5D (agx_d3d12_probe_cs_srv.hlsl): root SRV t0 raw
+  A = 3i, table {SRV t1 structured B = i + 100} written directly into the
+  shader-visible heap; PASS = 5i + 200, Signal(7).

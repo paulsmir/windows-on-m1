@@ -1,0 +1,22 @@
+{
+  "integration": {
+    "commit": "f4d624aaad63292a152a9171424a23ca1faf6b04",
+    "diff_sha256": "9348fbb4dc4b3e3b1b5ecad2892c133135160930861ba8bec5ffae75ddc5f36c"
+  },
+  "source": {
+    "commit": "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
+    "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "m1n1": {
+    "commit": "20d55f4c9532df4bcd6bdb8a04ad01089c453672",
+    "diff_sha256": "68387a2e4a778333004ae9e8e035304dfd70c5d83c8e1ec4dcff4c949427f0e7"
+  },
+  "Mu": {
+    "commit": "0dac68712f3bc520d46f88af84a430cfb916dfc4",
+    "diff_sha256": "2e654da05fbcd83288511c5161cc749c8b87d69e222cfc3f6fed3fceaea79a7d"
+  },
+  "utc": "2026-09-28T12:07:48.757202+00:00",
+  "GO_sha256": "f37a5e3c8d9359a1a6d290cc616b9b07fcc4b064ebc0c3e27f8ed0099bc03af9",
+  "readiness_sha256": "6a54612d5c141cce5d45f82812fb5f8c123f8a8a063976e7038c59d4633031c5",
+  "review_sha256": "753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5"
+}

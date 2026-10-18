@@ -1,0 +1,184 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.000 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\Users\pauls\EXP865-r150-owner\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 97%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\EXP865-r150-owner
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\EXP865-r150-owner
+Executable search path is:
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff800`d3a00000 PsLoadedModuleList = 0xfffff800`d476ac50
+Debug session time: Mon Sep 28 14:11:33.745 2026 (UTC + 2:00)
+System Uptime: 0 days 0:00:39.288
+Loading Kernel Symbols
+...............................................................
+.........................................................Page 9bbf82 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+...................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+1: kd> cdb: Reading initial command 'dq ffffd00f20ae9180 L80; !poolfind xgAA 0; q'
+ffffd00f`20ae9180  ffffd00f`20ac0058 ffffd00f`20ac0058
+ffffd00f`20ae9190  00000002`74727044 ffffd00f`20ae9030
+ffffd00f`20ae91a0  ffffd00f`20ae9030 ffffd00f`20ac0020
+ffffd00f`20ae91b0  ffffd00f`20b02000 00000000`00000001
+ffffd00f`20ae91c0  00000001`00000000 00000000`00060001
+ffffd00f`20ae91d0  ffffd00f`20ae91d0 ffffd00f`20ae91d0
+ffffd00f`20ae91e0  00000000`00000000 00000000`00000000
+ffffd00f`20ae91f0  fffff800`cd945bb0 00000000`00000000
+ffffd00f`20ae9200  fffff800`cd945f20 fffff800`cdac5120
+ffffd00f`20ae9210  fffff800`cd946fa0 ffffd00f`179f48f0
+ffffd00f`20ae9220  ffffd00f`179f48f0 ffffd00f`20a43b10
+ffffd00f`20ae9230  00000001`00000002 ffffd00f`20ae9238
+ffffd00f`20ae9240  ffffd00f`20ae9238 00000000`00000000
+ffffd00f`20ae9250  00000000`00000000 00000000`00000000
+ffffd00f`20ae9260  00000000`00000100 00000002`00000000
+ffffd00f`20ae9270  00000000`00000001 00000000`00000000
+ffffd00f`20ae9280  00000000`00000000 00000000`00000000
+ffffd00f`20ae9290  00000002`00000000 00000001`00000001
+ffffd00f`20ae92a0  fffff800`cd948270 00000000`00000000
+ffffd00f`20ae92b0  fffff800`cd947dd0 00000000`00000000
+ffffd00f`20ae92c0  fffff800`cd948b40 00000000`00000000
+ffffd00f`20ae92d0  00000000`00000000 fffff800`cdacae40
+ffffd00f`20ae92e0  fffff800`cdad03f0 00000000`00000000
+ffffd00f`20ae92f0  00000000`00000000 00000000`00000000
+ffffd00f`20ae9300  00000000`00000000 fffff800`cd947710
+ffffd00f`20ae9310  00000000`00000000 00000000`00000000
+ffffd00f`20ae9320  00000000`00000000 00000000`00000000
+ffffd00f`20ae9330  00000000`00000000 00000000`00000000
+ffffd00f`20ae9340  00000000`00000000 00000000`00000000
+ffffd00f`20ae9350  00000000`00000000 fffff800`cd948f20
+ffffd00f`20ae9360  00000001`00000000 00000000`00000000
+ffffd00f`20ae9370  00000000`00000000 00000000`00000000
+ffffd00f`20ae9380  00000000`009c009a ffff960b`04607630
+ffffd00f`20ae9390  00000000`00c200c0 ffff960b`048734c0
+ffffd00f`20ae93a0  4942001a`d7b46895 43a81066`d4a71f89
+ffffd00f`20ae93b0  00000000`00000000 00000000`00000000
+ffffd00f`20ae93c0  00000000`00000000 00000000`00000000
+ffffd00f`20ae93d0  00000000`00000000 00000000`00000000
+ffffd00f`20ae93e0  00000000`00000000 00000000`00000000
+ffffd00f`20ae93f0  00000000`00000000 00000000`00000000
+ffffd00f`20ae9400  00000000`00000000 00000000`00000000
+ffffd00f`20ae9410  00000000`00000000 00000000`00000000
+ffffd00f`20ae9420  00000000`00000000 00000000`00000000
+ffffd00f`20ae9430  00000000`00000000 00000000`00000000
+ffffd00f`20ae9440  00000000`00000000 00000000`00000000
+ffffd00f`20ae9450  00000000`00000000 00000000`00000000
+ffffd00f`20ae9460  00000000`00000000 00000000`00000000
+ffffd00f`20ae9470  00000000`00000000 00000000`00000000
+ffffd00f`20ae9480  00000000`00000000 00000000`00000000
+ffffd00f`20ae9490  00000000`00000000 00000000`00000000
+ffffd00f`20ae94a0  00000000`00000000 00000000`00000000
+ffffd00f`20ae94b0  00000000`00000000 00000000`00000000
+ffffd00f`20ae94c0  00000000`00000000 00000000`00000000
+ffffd00f`20ae94d0  00000000`00000000 00000000`00010058
+ffffd00f`20ae94e0  ffffd00f`179f48f0 fffff800`cdfc0f40
+ffffd00f`20ae94f0  fffff800`cdfc0f40 fffff800`cdfcbaa0
+ffffd00f`20ae9500  fffff800`cdfcbd90 fffff800`cdfcbee0
+ffffd00f`20ae9510  fffff800`cdfcbc90 fffff800`cdfcba40
+ffffd00f`20ae9520  fffff800`cdfc4f40 fffff800`cdfc50d0
+ffffd00f`20ae9530  00000000`00000000 00000000`00000000
+ffffd00f`20ae9540  00000000`00000000 00000000`00000000
+ffffd00f`20ae9550  00000000`00000000 00000000`00000000
+ffffd00f`20ae9560  00000000`00000000 00000000`00000000
+ffffd00f`20ae9570  00000000`00000000 00000000`00000000
+Usage: !poolfind [-tag] <tag> [options] [-x "cmd"]
+
+  tag:       A string or a hex value specifying the tag to search for,
+             may include * and ? wildcards. If the tag contains spaces,
+             use -tag switch and put the tag in quotes.
+
+  cmd:       Command to execute for each found allocation. The @$extret register
+             contains the address of the allocation.
+
+Search options:
+
+  -nonpaged  Search non-paged pool.
+  -paged     Search paged pool.
+
+  -global    Search global (non-session) pool.
+  -session   Search session pool.
+
+  -regular   Search regular (non-special) pool.
+  -special   Search special pool.
+
+  -small     Include small (sub-page) allocations.
+  -large     Include large (page-aligned) allocations.
+
+  -busy      Include busy allocations.
+  -free      Include free allocations.
+
+             The options above are additive. For example, specifying -global
+             and -session will search both global and session pools.
+             If no options are specified, a global non-paged search is
+             performed. Both small and large allocations are included, as well
+             regular and special pool. Free allocations are not included.
+
+  -process   Interpret tag value as a process pointer and search for
+             quota allocations charged to that process.
+
+Notes:
+
+  Allocation sizes reported by this command do not include the size of the
+  pool header (if one is present). Similarly, allocation addresses represent
+  the start of the user accessible portion of the allocation.
+
+Examples:
+
+  !poolfind Mm*               - Find all Mm allocations in nonpaged pool.
+  !poolfind MmSt -paged       - Find MmSt allocations in paged pool.
+  !poolfind Gla1 -session     - Find Gla1 allocations in session pool.
+  !poolfind -tag "AB C"       - Find pool tag which contains a space.
+  !poolfind -x "dt nt!_MDL @$extret" Mdl  - Find and print MDL allocations.
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

@@ -1,0 +1,14 @@
+{
+  "source_sha256": "5015b75863202a170f8d6015eb82a76a70ecd4b92204894fa3d1886b1baa94ba",
+  "function": "agx_build_pipeline",
+  "address_expressions": [
+    "t.gpu",
+    "cs->bo->va->addr",
+    "cs->bo->va->addr + cs->b.info.main_offset",
+    "cs->bo->va->addr + cs->b.info.preamble_offset",
+    "batch->stage_uniforms[stage].texture_base",
+    "batch->samplers[stage]",
+    "batch->uniforms.tables[table]"
+  ],
+  "status": "inventory-only"
+}

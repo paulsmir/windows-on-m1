@@ -1,0 +1,8 @@
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compiler.h:478:   off_t offset, last_offset;
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:12:   off_t offset;
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:14:   /* Value to patch with will be block->offset */
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:1195:   uint8_t *location = ((uint8_t *)emission->data) + fix.offset + 2;
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:1197:   off_t target = fix.skip_to_end ? fix.block->last_offset : fix.block->offset;
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:1200:   int32_t patch = (int32_t)target - (int32_t)fix.offset;
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:1215:      block->offset = emission->size;
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:1218:         block->last_offset = emission->size;

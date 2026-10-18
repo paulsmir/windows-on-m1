@@ -1,0 +1,13 @@
+# B1 Stage4→5 retirement receipts
+
+## Sources and observed contract
+
+- EXP766 `state.json`, `devnode-values.json`, and `armed-full.log`: slot1 app output became `0xFF112233`; `CompletedJobs=0`, `Stage=4`, `CleanupStatus=1`, terminal `STATUS_DEVICE_BUSY`. The first failing retirement operation is not recorded.
+- Asahi `queue/render.rs`, `event.rs`, `workqueue.rs`: completion stamps are `KernelAllocators.shared` and firmware stamps `KernelAllocators.private`, both in context0 kernel memory. User `vm_slot` selects GPU-facing TTBR0 data independently. The queue owner reads the shared stamp after firmware signals the event.
+- `gpuva_b1_windows.c`, `backend_platform_windows.c`, `render_backend_image.c`, `apple_agx_g13_queue_runtime.c`, `apple_agx_platform_provider.c`: B1 uses the inherited context0 queue stamp/event buffers. Its provider polls event ring plus TA/3D stamp and done pointers. `AdmissionB1Complete` unbound the output through `AdmissionBackendImageReleaseSubmission` before `RunFirmware` called `FlushForCpu`. The latter uses `AdmissionPlatformContains`, which then no longer finds the B1 output. This is a deterministic ordering defect after successful completion. Cleanup also replaces every first error with `STATUS_DEVICE_BUSY`.
+- m1n1 `hv_agx_gpuva_v5.c` and `hv_agx_retained_platform.c`: `JOB_END` decrements the slot's in-flight count; `RELEASE` refuses an in-flight slot and, on success, clears the slot plus invalidates TLB before replying. Mu `Platform/MacBookAirMid2020Pkg/AcpiTables/J313AppleAgx.asl.inc` exposes one APPL0002, broker MMIO in the `0x300000000` range, and AGX interrupts; no firmware or ACPI edit is needed.
+- Microsoft WDK `ZwFlushKey` and PnP registry guidance: write the device's hardware-key receipts through `IoOpenDeviceRegistryKey`, then flush at PASSIVE_LEVEL for crash-surviving evidence.
+
+## Change and checkpoint
+
+Keep the existing B1 execution and fail-closed ownership path. Move image release from the completion callback to after the CPU flush, while output binding still authorizes that flush. Add per-owner durable receipts for JOB_BEGIN, submit, completion poll before/after with stamp/event/done values and poll guard, CPU output flush, image release, JOB_END, RELEASE, and the TLB ack implied by a successful RELEASE response. Preserve `FirstFailureStatus` separately from terminal cleanup status. Regression test both the flush-before-release invariant and first-error masking RED→GREEN. The smallest hardware checkpoint is the first app job's `CpuFlush` then `ImageRelease` receipt, followed by `JOB_END` and `RELEASE`; recover by disarm, orderly shutdown, hash-guarded GPU-hidden package removal, ordinary Code28.

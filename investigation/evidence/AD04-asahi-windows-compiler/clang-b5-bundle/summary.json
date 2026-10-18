@@ -1,0 +1,15 @@
+{
+  "architectural_recommendation": "NOT_REQUESTED",
+  "first_failure": "Mesa u_atomic Windows intrinsic spelling mismatch: _interlockedexchange64 is undeclared; Clang declares _InterlockedExchange64",
+  "hardware_used": false,
+  "input_commit": "5f42d6481661df44c6c114921c514adee50c2988",
+  "raw_logs": [
+    "investigation/evidence/AD04-asahi-windows-compiler/clang-b5-bundle/raw/compile.log",
+    "investigation/evidence/AD04-asahi-windows-compiler/clang-b5-bundle/raw/result.json",
+    "investigation/evidence/AD04-asahi-windows-compiler/clang-b5-bundle/raw/clang-version.log"
+  ],
+  "result": "FAIL",
+  "source_changed": null,
+  "task_id": "AD04-CLANG-DISCRIMINATOR",
+  "worker": "deterministic-tier-c-runner-with-devstral-unavailable-for-tool-use"
+}

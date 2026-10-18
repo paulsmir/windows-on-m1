@@ -1,0 +1,7 @@
+In file included from C:\Users\pauls\AD04-uatomic\uatomic_mesa_semantics_test.c:1:
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/u_atomic.h(9,10): fatal error: 'no_extern_c.h' file not found
+    9 | #include "no_extern_c.h"
+      |          ^~~~~~~~~~~~~~~
+1 error generated.
+COMPILE=1
+RUN=0

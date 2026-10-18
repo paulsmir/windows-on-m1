@@ -1,0 +1,437 @@
+{
+  "receipt": {
+    "version": 2,
+    "bytes": 192,
+    "branch": 9,
+    "status": 3221225485,
+    "result": 3,
+    "dma_bytes": 280,
+    "capacity": 331776,
+    "umd_bytes": 480,
+    "pid": 4,
+    "total_failures": 1696,
+    "subsite": 1,
+    "kind": 4,
+    "ordinal": 11,
+    "access_bytes": 1,
+    "write": 0,
+    "graph_present": 0,
+    "dma_va": "0x3b0000",
+    "va": "0x2f0000",
+    "owner": "0x5",
+    "root_ipa": "0x9de570000",
+    "process_generation": "0x1",
+    "mapping_generation": "0x192",
+    "ptes": [
+      {
+        "ipa": "0x97627d000",
+        "pfn": "0x97627d",
+        "segment": 0,
+        "flags": 3
+      },
+      {
+        "ipa": "0x97638a000",
+        "pfn": "0x97638a",
+        "segment": 0,
+        "flags": 3
+      },
+      {
+        "ipa": "0x976389000",
+        "pfn": "0x976389",
+        "segment": 0,
+        "flags": 3
+      },
+      {
+        "ipa": "0x976388000",
+        "pfn": "0x976388",
+        "segment": 0,
+        "flags": 3
+      }
+    ],
+    "representable16k": false
+  },
+  "unpublished_state_json": [
+    382558,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "adapter": "0xffffbc851aae6000",
+  "segments": [
+    {
+      "ulSegmentId": "1",
+      "pDxgAdapter": "0xffffbc851aae6000",
+      "BaseAddress": "94489280512",
+      "CpuTranslatedAddress": "0",
+      "Size": "268435456",
+      "NbOfBanks": "0",
+      "Flags": "1",
+      "CommitLimit": "268435456",
+      "SystemMemoryEndAddress": "0x0",
+      "MemorySegmentGroup": "2"
+    },
+    {
+      "ulSegmentId": "2",
+      "pDxgAdapter": "0xffffbc851aae6000",
+      "BaseAddress": "90194313216",
+      "CpuTranslatedAddress": "38117834752",
+      "Size": "41943040",
+      "NbOfBanks": "0",
+      "Flags": "84",
+      "CommitLimit": "41943040",
+      "SystemMemoryEndAddress": "0x0",
+      "MemorySegmentGroup": "2"
+    },
+    {
+      "ulSegmentId": "3",
+      "pDxgAdapter": "0xffffbc851aae6000",
+      "BaseAddress": "0",
+      "CpuTranslatedAddress": "0",
+      "Size": "5541072896",
+      "NbOfBanks": "0",
+      "Flags": "528772",
+      "CommitLimit": "18446744073709551615",
+      "SystemMemoryEndAddress": "0x0",
+      "MemorySegmentGroup": "0"
+    }
+  ],
+  "segment_residency_peaks": {
+    "3": 663552,
+    "2": 34783232,
+    "1": 22347776
+  },
+  "page_in_pairs": [
+    {
+      "segment": "1",
+      "bytes": "1048576",
+      "flags": "32769",
+      "write_set": "3",
+      "status": "0",
+      "count": 87
+    },
+    {
+      "segment": "1",
+      "bytes": "16384000",
+      "flags": "67141641",
+      "write_set": "1",
+      "status": "0",
+      "count": 1
+    },
+    {
+      "segment": "1",
+      "bytes": "262144",
+      "flags": "32769",
+      "write_set": "3",
+      "status": "0",
+      "count": 216
+    },
+    {
+      "segment": "1",
+      "bytes": "524288",
+      "flags": "32769",
+      "write_set": "3",
+      "status": "0",
+      "count": 152
+    },
+    {
+      "segment": "1",
+      "bytes": "65536",
+      "flags": "32769",
+      "write_set": "3",
+      "status": "0",
+      "count": 1192
+    },
+    {
+      "segment": "2",
+      "bytes": "131072",
+      "flags": "64",
+      "write_set": "2",
+      "status": "0",
+      "count": 258
+    },
+    {
+      "segment": "2",
+      "bytes": "131072",
+      "flags": "65",
+      "write_set": "2",
+      "status": "0",
+      "count": 1
+    },
+    {
+      "segment": "2",
+      "bytes": "16384",
+      "flags": "64",
+      "write_set": "2",
+      "status": "0",
+      "count": 127
+    },
+    {
+      "segment": "2",
+      "bytes": "16384",
+      "flags": "65",
+      "write_set": "2",
+      "status": "0",
+      "count": 1
+    },
+    {
+      "segment": "2",
+      "bytes": "16384000",
+      "flags": "1073774592",
+      "write_set": "2",
+      "status": "0",
+      "count": 1
+    },
+    {
+      "segment": "2",
+      "bytes": "16384000",
+      "flags": "32769",
+      "write_set": "3",
+      "status": "0",
+      "count": 1
+    },
+    {
+      "segment": "2",
+      "bytes": "196608",
+      "flags": "32769",
+      "write_set": "3",
+      "status": "0",
+      "count": 1
+    },
+    {
+      "segment": "2",
+      "bytes": "32768",
+      "flags": "64",
+      "write_set": "2",
+      "status": "0",
+      "count": 127
+    },
+    {
+      "segment": "2",
+      "bytes": "32768",
+      "flags": "65",
+      "write_set": "2",
+      "status": "0",
+      "count": 1
+    },
+    {
+      "segment": "2",
+      "bytes": "4194304",
+      "flags": "536903680",
+      "write_set": "2",
+      "status": "0",
+      "count": 87
+    },
+    {
+      "segment": "2",
+      "bytes": "65536",
+      "flags": "32769",
+      "write_set": "3",
+      "status": "0",
+      "count": 67
+    },
+    {
+      "segment": "3",
+      "bytes": "327680",
+      "flags": "72",
+      "write_set": "1",
+      "status": "0",
+      "count": 2
+    },
+    {
+      "segment": "3",
+      "bytes": "4096",
+      "flags": "268435520",
+      "write_set": "1",
+      "status": "0",
+      "count": 2
+    }
+  ],
+  "local_cpu_visible_mesa_shape_examples": [
+    {
+      "utc": "2026-09-27T23:00:50.0667505Z",
+      "request": {
+        "SegmentId": "2",
+        "hAllocationGlobalHandle": "0xffffcc8b10741a60",
+        "MinAddress": "0",
+        "MaxAddress": "0",
+        "NoEvict": "true",
+        "TrimmingPriorityLimit": "0",
+        "Restriction": "0",
+        "ProcessCommittedState": "0"
+      },
+      "allocation": {
+        "hProcessId": "0x4c8",
+        "hDevice": "0xffffcc8b0f328040",
+        "pDxgAdapter": "0xffffbc851aae6000",
+        "Flags": "32769",
+        "allocSize": "65536",
+        "ulAlignment": "65536",
+        "dwReadSegment": "0",
+        "dwWriteSegment": "3",
+        "PreferredSegment": "2",
+        "HintedBank": "0",
+        "dwEvictionSegment": "0",
+        "Priority": "2013265920",
+        "hVidMmGlobalAlloc": "0xffffcc8b10741a60",
+        "hDxgGlobalAlloc": "0xffffcc8b106cc740",
+        "hDxgSharedResource": "0x0",
+        "UsageVersion": "0",
+        "UsageFlags": "0",
+        "Format": "0",
+        "SwizzledFormat": "0",
+        "ByteOffset": "0",
+        "Width": "0",
+        "Height": "0",
+        "Pitch": "0",
+        "Depth": "0",
+        "SlicePitch": "0",
+        "BackingStoreWasPinned": "false",
+        "pSectionObject": "0x0",
+        "PhysicalAdapterIndex": "0",
+        "PageTableOrDirectory": "false"
+      },
+      "result": {
+        "Status": "0"
+      }
+    },
+    {
+      "utc": "2026-09-27T23:00:50.4253307Z",
+      "request": {
+        "SegmentId": "2",
+        "hAllocationGlobalHandle": "0xffffcc8b10eb6800",
+        "MinAddress": "0",
+        "MaxAddress": "0",
+        "NoEvict": "true",
+        "TrimmingPriorityLimit": "0",
+        "Restriction": "0",
+        "ProcessCommittedState": "0"
+      },
+      "allocation": {
+        "hProcessId": "0x4c8",
+        "hDevice": "0xffffcc8b0f328040",
+        "pDxgAdapter": "0xffffbc851aae6000",
+        "Flags": "32769",
+        "allocSize": "65536",
+        "ulAlignment": "65536",
+        "dwReadSegment": "0",
+        "dwWriteSegment": "3",
+        "PreferredSegment": "2",
+        "HintedBank": "0",
+        "dwEvictionSegment": "0",
+        "Priority": "2013265920",
+        "hVidMmGlobalAlloc": "0xffffcc8b10eb6800",
+        "hDxgGlobalAlloc": "0xffffcc8b106ddc20",
+        "hDxgSharedResource": "0x0",
+        "UsageVersion": "0",
+        "UsageFlags": "0",
+        "Format": "0",
+        "SwizzledFormat": "0",
+        "ByteOffset": "0",
+        "Width": "0",
+        "Height": "0",
+        "Pitch": "0",
+        "Depth": "0",
+        "SlicePitch": "0",
+        "BackingStoreWasPinned": "false",
+        "pSectionObject": "0x0",
+        "PhysicalAdapterIndex": "0",
+        "PageTableOrDirectory": "false"
+      },
+      "result": {
+        "Status": "0"
+      }
+    },
+    {
+      "utc": "2026-09-27T23:00:50.8522349Z",
+      "request": {
+        "SegmentId": "2",
+        "hAllocationGlobalHandle": "0xffffcc8b10ec4840",
+        "MinAddress": "0",
+        "MaxAddress": "0",
+        "NoEvict": "true",
+        "TrimmingPriorityLimit": "0",
+        "Restriction": "0",
+        "ProcessCommittedState": "0"
+      },
+      "allocation": {
+        "hProcessId": "0x4c8",
+        "hDevice": "0xffffcc8b0f328040",
+        "pDxgAdapter": "0xffffbc851aae6000",
+        "Flags": "32769",
+        "allocSize": "65536",
+        "ulAlignment": "65536",
+        "dwReadSegment": "0",
+        "dwWriteSegment": "3",
+        "PreferredSegment": "2",
+        "HintedBank": "0",
+        "dwEvictionSegment": "0",
+        "Priority": "2013265920",
+        "hVidMmGlobalAlloc": "0xffffcc8b10ec4840",
+        "hDxgGlobalAlloc": "0xffffcc8b106d6240",
+        "hDxgSharedResource": "0x0",
+        "UsageVersion": "0",
+        "UsageFlags": "0",
+        "Format": "0",
+        "SwizzledFormat": "0",
+        "ByteOffset": "0",
+        "Width": "0",
+        "Height": "0",
+        "Pitch": "0",
+        "Depth": "0",
+        "SlicePitch": "0",
+        "BackingStoreWasPinned": "false",
+        "pSectionObject": "0x0",
+        "PhysicalAdapterIndex": "0",
+        "PageTableOrDirectory": "false"
+      },
+      "result": {
+        "Status": "0"
+      }
+    }
+  ],
+  "etl_selected_event_counts": {
+    "78": 5,
+    "33": 10821,
+    "67": 2328,
+    "274": 4607,
+    "68": 2328,
+    "313": 6,
+    "34": 10425
+  },
+  "sha256": {
+    "EXP855E-r141-attachment-envelope/hardware-evidence/Wom1G4SubmitFailure.bin": "03e795a28e74431b325b2ea93667c5e6fad57daa7ff951b1206f1c81ac8e0a5b",
+    "EXP855E-r141-attachment-envelope/hardware-evidence/umd.log": "b44a8b45d6a77d361abba969c4474d43f1eb5e40aae254031ba2e0a7f1217090",
+    "EXP855E-r141-attachment-envelope/hardware-evidence/EXP801DxgBoot.etl": "98e07b40d18a00b8505db18f28a201f950335011d5b1bf3596d105d7f572e5a2",
+    "EXP855E-r141-attachment-envelope/hardware-evidence/state.json": "4f6cb5513be4dcc523fe4cde83cbc4f2a7f929dac7ce1d9b1885fd96df85125f",
+    "R142-offline/placement-events.xml": "8c4aea1c58e0d3429f006bd0e1e3603723d515927a2d0ae4d264063125666f9e",
+    "R142-offline/decode.py": "75e7f9e155d67a17685a5653ca92e79a8988756f79ef4188cedc859559bfe57f"
+  }
+}

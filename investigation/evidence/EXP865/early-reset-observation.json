@@ -1,0 +1,9 @@
+{
+  "utc": "2026-09-28T12:12:26.754647+00:00",
+  "host_elapsed_seconds_upper_bound": 104.561567,
+  "original_ssh_successes": 0,
+  "PSCI_RESET": true,
+  "original_etl": "IMPOSSIBLE_TO_COPY_BEFORE_UNREQUESTED_RESET_NO_SSH",
+  "stop_code": "PENDING_DUMP",
+  "armed_retry": false
+}

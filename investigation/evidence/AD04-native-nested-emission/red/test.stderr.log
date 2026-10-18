@@ -1,0 +1,1 @@
+NATIVE_POOL line=149 backend->LiveBos==1 && !AgxWin32AsahiCollect(backend)

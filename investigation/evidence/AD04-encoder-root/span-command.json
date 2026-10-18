@@ -1,0 +1,1 @@
+["python3", "-m", "unittest", "tests.test_apple_agx_render_win32_transport", "tests.test_apple_agx_reloc_capture"]

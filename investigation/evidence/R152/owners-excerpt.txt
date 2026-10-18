@@ -1,0 +1,139 @@
+0: kd> cdb: Reading initial command 'dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffffe20516069dd0 Graph.ProcessId Contexts PrivateManager PrivateScenes LastSetRootIpa; dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffffe20516004dd0 Graph.ProcessId Contexts PrivateManager PrivateScenes LastSetRootIpa; dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffffe20519e49530 Graph.ProcessId Contexts PrivateManager PrivateScenes LastSetRootIpa; dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffffe2051952add0 Graph.ProcessId Contexts PrivateManager PrivateScenes LastSetRootIpa; dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffffe20519a97010 Graph.ProcessId Contexts PrivateManager PrivateScenes LastSetRootIpa; dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffffe20519be67e0 Graph.ProcessId Contexts PrivateManager PrivateScenes LastSetRootIpa; dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffffe20516dbfdb0 Graph.ProcessId Contexts PrivateManager PrivateScenes LastSetRootIpa; dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffffe2051a1cbdb0 Graph.ProcessId Contexts PrivateManager PrivateScenes LastSetRootIpa; dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffffe2051a1cadb0 Graph.ProcessId Contexts PrivateManager PrivateScenes LastSetRootIpa; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects; dt -r2 AppleAgxRenderAdmission!APPLE_AGX_G3_PRIVATE_MANAGER ffffe20519be67e0+168; q'
+   +0x018 Graph           :
+      +0x020 ProcessId       : 1
+   +0x148 LastSetRootIpa  : 0x00000009`d6084000
+   +0x190 PrivateManager  : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes   : (null)
+   +0x1e0 Contexts        : 0xffffe205`199f84b0 _ADMISSION_RENDER_CONTEXT
+   +0x018 Graph           :
+      +0x020 ProcessId       : 2
+   +0x148 LastSetRootIpa  : 0
+   +0x190 PrivateManager  : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes   : (null)
+   +0x1e0 Contexts        : 0xffffe205`199f58c0 _ADMISSION_RENDER_CONTEXT
+   +0x018 Graph           :
+      +0x020 ProcessId       : 4
+   +0x148 LastSetRootIpa  : 0
+   +0x190 PrivateManager  : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes   : 0xffffe205`18ea8db0 _ADMISSION_G3_PRIVATE_SCENE
+   +0x1e0 Contexts        : 0xffffe205`1a1f6e20 _ADMISSION_RENDER_CONTEXT
+   +0x018 Graph           :
+      +0x020 ProcessId       : 5
+   +0x148 LastSetRootIpa  : 0x00000009`d6044000
+   +0x190 PrivateManager  : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes   : (null)
+   +0x1e0 Contexts        : 0xffffe205`1b33db80 _ADMISSION_RENDER_CONTEXT
+   +0x018 Graph           :
+      +0x020 ProcessId       : 6
+   +0x148 LastSetRootIpa  : 0
+   +0x190 PrivateManager  : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes   : (null)
+   +0x1e0 Contexts        : 0xffffe205`1a1f6830 _ADMISSION_RENDER_CONTEXT
+   +0x018 Graph           :
+      +0x020 ProcessId       : 7
+   +0x148 LastSetRootIpa  : 0x00000009`d6014000
+   +0x190 PrivateManager  : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes   : 0xffffe205`1b4d8db0 _ADMISSION_G3_PRIVATE_SCENE
+   +0x1e0 Contexts        : 0xffffe205`1b335090 _ADMISSION_RENDER_CONTEXT
+   +0x018 Graph           :
+      +0x020 ProcessId       : 8
+   +0x148 LastSetRootIpa  : 0
+   +0x190 PrivateManager  : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes   : (null)
+   +0x1e0 Contexts        : 0xffffe205`1aaf9b40 _ADMISSION_RENDER_CONTEXT
+   +0x018 Graph           :
+      +0x020 ProcessId       : 9
+   +0x148 LastSetRootIpa  : 0
+   +0x190 PrivateManager  : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes   : (null)
+   +0x1e0 Contexts        : 0xffffe205`1b3352f0 _ADMISSION_RENDER_CONTEXT
+   +0x018 Graph           :
+      +0x020 ProcessId       : 0xa
+   +0x148 LastSetRootIpa  : 0
+   +0x190 PrivateManager  : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes   : (null)
+   +0x1e0 Contexts        : 0xffffe205`1aafad10 _ADMISSION_RENDER_CONTEXT
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT [76]]
+    [0]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [1]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [2]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [3]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [4]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [5]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [6]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [7]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [8]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [9]              [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [10]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [11]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [12]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [13]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [14]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [15]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [16]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [17]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [18]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [19]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [20]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [21]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [22]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [23]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [24]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [25]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [26]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [27]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [28]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [29]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [30]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [31]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [32]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [33]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [34]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [35]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [36]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [37]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [38]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [39]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [40]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [41]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [42]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [43]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [44]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [45]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [46]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [47]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [48]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [49]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [50]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [51]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [52]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [53]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [54]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [55]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [56]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [57]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [58]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [59]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [60]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [61]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [62]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [63]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [64]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [65]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [66]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [67]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [68]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [69]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [70]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [71]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [72]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [73]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [74]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [75]             [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+   +0x000 Owner            : 0x00000009`1ecc0000
+   +0x008 Generation       : 0x12
+   +0x010 VaBase           : 0x00010000`004b0000
+   +0x018 Extents          : [3] APPLE_AGX_G3_PRIVATE_EXTENT
+      +0x000 Generation       : 0x13
+      +0x008 Offset           : 0x4c0000
+      +0x00c Bytes            : 0x10000

@@ -1,0 +1,98 @@
+{
+  "analyze.py": {
+    "bytes": 4008,
+    "sha256": "dbdb698e6e51a578552ae61fcebd522d4941fa0615871fb78e7ae276f275403c"
+  },
+  "shared-retention.py": {
+    "bytes": 1710,
+    "sha256": "484b9b976417cb2e0f530c5a701239952b627c9c65e6cfc01e5f0d84db1e2469"
+  },
+  "summary.json": {
+    "bytes": 16635,
+    "sha256": "8d67535128a74f585038bbadd2dd9c8218477c6b7e08db2a5316e57ef393e175"
+  },
+  "shared-retention.json": {
+    "bytes": 393216,
+    "sha256": "a1afc2f7c41a0f4c17907ee99e7f5027586ed60d0fdef06f49bb666f9e85dd1e"
+  },
+  "decode-lifetime.ps1": {
+    "bytes": 1196,
+    "sha256": "48a6b9ea7441602d2b6fb25fdb7a0ff7cf061d4a36ba2409800261b933a8f5b8"
+  },
+  "trace-summary.txt": {
+    "bytes": 46359,
+    "sha256": "9093fade4e902c3d1eecf241c62375a981f2f114232c7e0a5d32cd9ea493087d"
+  },
+  "changed-hashes.json": {
+    "bytes": 523,
+    "sha256": "f32a8c6687dc8aa62f6aa3cf9b3e4b519cf91323acba9414e63b02df76b48b0d"
+  },
+  "red.txt": {
+    "bytes": 957,
+    "sha256": "83923dffc1dc86ab4a772a2e57bbbeccc9779fd9ea59474a06801443126d4e0d"
+  },
+  "green.txt": {
+    "bytes": 98,
+    "sha256": "1a99c57eda7ec900dc74204d3f2acb6bf019ee9b6a64ae5e9a3e13fd02bdee12"
+  },
+  "compile-memory.py": {
+    "bytes": 3923,
+    "sha256": "e4c5382bfa8f5f72cdbe72c6cfed8dd8658bbaa2253b803a586ad44de9ca0ac2"
+  },
+  "compile-device.py": {
+    "bytes": 2336,
+    "sha256": "1da25e69aff7a4d90814493d620b1ff03fa9815ce55de5ddc7aa8e8d0169eaa2"
+  },
+  "compile-winsys.py": {
+    "bytes": 1883,
+    "sha256": "1b74f98040f630b0fff735f809862e9f6818476eb33445b4a7d47e00c91bca61"
+  },
+  "device-result.json": {
+    "bytes": 20567,
+    "sha256": "79987716b892d5a3dec8c8661f67c6e0eee19d868401a861456b78a887a9bd1f"
+  },
+  "device-baseline-w4.log": {
+    "bytes": 1916,
+    "sha256": "0b9366e8cc97d415b9ffea4fc88223423464303cbfaccf879488b20504f5587d"
+  },
+  "device-arm64.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "device-analyze.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "winsys-result.json": {
+    "bytes": 2977,
+    "sha256": "769ee0166d4d1679fa6856dcbd8a2c36eb564e506a560598c93eef6795341bc2"
+  },
+  "winsys-arm64.log": {
+    "bytes": 23,
+    "sha256": "3c62114f3a493f2dd4d32f25038adc08102a59fd0613c47b8293f4f38738707d"
+  },
+  "generate-windows-replay.py": {
+    "bytes": 2117,
+    "sha256": "b26c58e1558c654d050c9fb34c45919b848cd10e5279bcfda80a21e21428afa7"
+  },
+  "windows-replay.py": {
+    "bytes": 1432,
+    "sha256": "3014908727e6deedf13592ca7f44134f053e4ead794f2a2cf36f0d9a59b91e1a"
+  },
+  "windows-replay-result.json": {
+    "bytes": 615,
+    "sha256": "a419634fa90ee90cd518fcd87078eeacba1ed89d7cd70c10a9af27f51e5253fd"
+  },
+  "windows-replay-compile.log": {
+    "bytes": 20,
+    "sha256": "65409e35e4aebeaa82007f579aad1532c4596bf96c35bb83054daeff39826c86"
+  },
+  "windows-replay-run.log": {
+    "bytes": 30,
+    "sha256": "8463c2897a40ec2da6cf8fb3cbc82a61f2078618b5958e472c9c66fb281654f1"
+  },
+  "windows-replay/windows-replay.cpp": {
+    "bytes": 13947,
+    "sha256": "7cf0598d5ef50a6dc52ead3fe43847d45c8fde24414a1bd6003927dbdf79091e"
+  }
+}

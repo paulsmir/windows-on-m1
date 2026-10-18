@@ -1,0 +1,58 @@
+[
+    {
+        "arguments":  [
+                          "/nologo",
+                          "/std:c11",
+                          "/W4",
+                          "/WX",
+                          "/O2",
+                          "--target=x86_64-pc-windows-msvc",
+                          "/DHAVE_STRUCT_TIMESPEC",
+                          "/D_USE_MATH_DEFINES",
+                          "/FIC:\\Users\\pauls\\AD04-fullcompiler-001\\uatomic_clang_compat.h",
+                          "/IC:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002",
+                          "/imsvcC:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\native",
+                          "/imsvcC:\\Users\\pauls\\AD04-d3d10-frontend-build\\mesa\\src",
+                          "/imsvcC:\\Users\\pauls\\AD04-d3d10-frontend-build\\mesa\\include",
+                          "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_reloc_capture_test.c",
+                          "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_reloc_capture.c",
+                          "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_transport.c",
+                          "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_win32_abi.c",
+                          "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_dynamic_job.c",
+                          "/FeC:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-capture-7ac671dac1c74e6791146d913e4c2358\\x64.exe",
+                          "/FoC:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-capture-7ac671dac1c74e6791146d913e4c2358\\\\"
+                      ],
+        "name":  "x64-build-link",
+        "exit":  0
+    },
+    {
+        "exit":  0,
+        "name":  "x64-execute"
+    },
+    {
+        "arguments":  [
+                          "/nologo",
+                          "/std:c11",
+                          "/W4",
+                          "/WX",
+                          "/O2",
+                          "--target=aarch64-pc-windows-msvc",
+                          "/DHAVE_STRUCT_TIMESPEC",
+                          "/D_USE_MATH_DEFINES",
+                          "/FIC:\\Users\\pauls\\AD04-fullcompiler-001\\uatomic_clang_compat.h",
+                          "/IC:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002",
+                          "/imsvcC:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\native",
+                          "/imsvcC:\\Users\\pauls\\AD04-d3d10-frontend-build\\mesa\\src",
+                          "/imsvcC:\\Users\\pauls\\AD04-d3d10-frontend-build\\mesa\\include",
+                          "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_reloc_capture_test.c",
+                          "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_reloc_capture.c",
+                          "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_transport.c",
+                          "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_win32_abi.c",
+                          "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_dynamic_job.c",
+                          "/FeC:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-capture-7ac671dac1c74e6791146d913e4c2358\\arm64.exe",
+                          "/FoC:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-capture-7ac671dac1c74e6791146d913e4c2358\\\\"
+                      ],
+        "name":  "arm64-build-link",
+        "exit":  0
+    }
+]

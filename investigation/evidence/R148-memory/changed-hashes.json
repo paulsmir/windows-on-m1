@@ -1,0 +1,6 @@
+{
+  "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.cpp": "05d756a3017a3f01de35ebed7bf3461646aa52a0989e6802b31516ea08aeaab0",
+  "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.h": "733c1ce004ad435fa7f096bba9d4c5092cacb4f1ad9699e1b8a0d0f00812baf1",
+  "drivers/apple-agx/mesa/scripts/build-native-asahi-state.py": "d83e2e918a5d823009e2ea8b86c46c41b565ca7bebfcf9e87e2477e359e2a801",
+  "drivers/apple-agx/render-admission/umd/tests/umd_contract_windows.c": "a1ecbd2154400d03d1d2aefd35ab794c9c7511d29efeab562150cd485f3223f2"
+}

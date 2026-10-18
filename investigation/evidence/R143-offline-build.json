@@ -1,0 +1,85 @@
+{
+  "task": "R143",
+  "status": "implemented",
+  "hardware": "NOT_RUN; no Air access",
+  "package_source_commit": "0400dd3209702d502ce0b7e9780d6b95cf1e6db1",
+  "implementation_commits": [
+    "37f9e46f",
+    "5f6165d2",
+    "85e9d27b"
+  ],
+  "nested_commits": {
+    "m1n1_windows": "20d55f4c9532df4bcd6bdb8a04ad01089c453672",
+    "mu": "0dac68712f3bc520d46f88af84a430cfb916dfc4"
+  },
+  "artifacts_base": "/Users/pavel/public_windows/.local/experiments/EXP856-r143-reserve1g",
+  "hardware_manifest_sha256": "ecd1f20e3ceb4715f79c2b325c15046b0711d7737f302a4b46d47efc1a1dc4cc",
+  "artifact_sha256": {
+    "firmware/m1n1-r143.macho": "5fe13d19c5ca4d21327c44934613ae0f5109b8de096590db69f455e439e61a01",
+    "firmware/J313_EFI-r143.fd": "e54c009847e64a4b2b327f54385eedb94f5a9e5fd3b459fd6101b07af4c023fc",
+    "firmware/J313AppleAgxAbiAdmissionSsdt.aml": "3bdb28edb9def16f147f00947d9a2368f1f99036d601c86ead8b0ff46ccbab7f",
+    "source-manifest.json": "e76ef32fe563334591cb5babdcdd41ec9aef52f700b0454ee0c7972f5abdf3bd",
+    "source.zip": "4c354d9274c852bbe8e263bb408e1eb35240e43517bba718423e5607223c9781",
+    "launch-configuration.json": "a6fb1597519c601ac26546d9296c7c33607488e5b1dc9565b8b9aace2f070525",
+    "m1n1-build-info.json": "ccab244455aab859517e43f865da31f55e55a024b5aa40b48d6f08e8b582a11c",
+    "actual-aml-verification.json": "b501dd0811641bb4e6e8e1dedd6fc155b156c4c469b1ad84e309dadea5b51b35",
+    "AppleAgxRenderAdmission.sys": "0ea8251bc34ca99a1f711dd15e4cc70623442d0a9e468c1d85530488af56178a",
+    "AppleAgxRenderAdmissionUmd.dll": "73f265498e57ab90b75409eb549e58937dca922ed47c2e5d85a3fbf66fca351c",
+    "AppleAgxRenderAdmission.inf": "174f3046ac6818c7ada070c5732a04501ad883ce7213184339e6b9d2dd53234a",
+    "appleagxrenderadmission.cat": "f7222562dc054ca7cefa39f5aa30436ee1efcdd53158fcb40d25a7cad761735d",
+    "native_runtime.lib": "93af652932a099ad3bb5db18d440cfadaa2a33f3f76d3c445688bfa9925d7239",
+    "native-result.json": "eb04494863cc73b692d045dd3416e541d8dce00ca10f2b432e562dfcf5d25b85",
+    "kmd-build-receipt.json": "dd303a8fb996e9bf82740dd33f2caa01a06f1cd691e87da30314d3c75c9c0fae",
+    "signer-receipt.json": "f8e12db091759bd8e308fd0b085d781b815b7d79afb57f6e3f494ce03aab9812",
+    "AppleAgxRenderAdmission.pdb": "88d34baf26a09c17528d18f4d8fbb5ce607845446436aa539e677ce8b80dbb69",
+    "AppleAgxRenderAdmissionUmd.pdb": "65fe0c11a50f3fedb3046236609fc5dc671f0270a0f9cce3525f85f1877023cb",
+    "full-owner-direct.sh": "08f498f2b9551e8d07439b472b1fbe49ec7669fd29f949a3678c8af8fa675610",
+    "emergency-hidden.sh": "71eeac99bdccb529f1cb568d552d639c514fb0ec63589c07a69d8e00ec82f52c",
+    "ordinary-direct-final.sh": "e89fe4ac41c0fd17acdaf38f0d6b20cc133fd02e62641dfc9068ecfbb6267fec",
+    "build-mu.sh": "1e716208afad4e0611d115020cd0d3bf008c93d683c8fe7ef13c35daf5faad54",
+    "build-kmd.ps1": "e0c5dc58b2d564c255d0cdd8288f5d57d5c0fc4fecc8ee9b78baae6b170de446",
+    "root-final-tree.json": "40111604b96b86caa7e4089e460b8517ee0cd340580fad5aec01ccf67869a0b3",
+    "m1n1-final-tree.json": "c10006e033b9b20d13acce1739c89f6c443877effeb25486ee0a42783c20e032",
+    "mu-final-tree.json": "e0f25d49d9a32a8eff1d0b8519dae0c81f01326742b093c2546b665190a6ca6e",
+    "host-test-comparison.json": "1bc3dc5f196dae16199b85271397bb225fbeeb0b1d0cc461672a0630ba03d0c4"
+  },
+  "signing": {
+    "catalog_membership_SYS_UMD": "PASS (native signtool)",
+    "signer_thumbprint": "E9BE15BD2A184BFABA0C8035B3C620C58037A241",
+    "same_as_EXP855E": true,
+    "builder_chain_trust": "NOT_TRUSTED test root; no trust-store change",
+    "guest_signing_verification": "NOT_RUN"
+  },
+  "tests": {
+    "full": "1146 tests:15 failures38errors2skips; no new names;3 old generator errors fixed",
+    "comparison": "host-test-comparison.json",
+    "G3": "25 PASS, including16/64 subcases",
+    "G4": "31 PASS",
+    "reserve": "16 PASS",
+    "lifecycle": "production Start/Destroy/Stop,5 failure stages; zeroing mutation rejected",
+    "AML": "actual FV-contained built AML:4 cases PASS",
+    "launch_scripts": "3 verify-only PASS; invalid version and mixed firmware hash refused before serial"
+  },
+  "recovery_sha256": {
+    "EXP855E-r141-attachment-envelope/firmware/m1n1-r110.macho": "14872dba0a6ecab9d4e49e42237298b44909126f0d5f7267cc5deaed587372b1",
+    "EXP855E-r141-attachment-envelope/firmware/J313_EFI-r110.fd": "3a76857cb650cae6b8d7c5d22250debeec437cd28c2dfd032ebecb1cbd0f6eca",
+    "EXP810-g4-package817/recovery/m1n1-exp377.macho": "fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a",
+    "EXP810-g4-package817/recovery/J313_EFI-exp392.fd": "16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06",
+    "EXP-20260903-385-hvc-single-page/recovery/J313_EFI-no-agx-autoboot.fd": "279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c"
+  },
+  "preexisting_nested_diffs": "Both diffs byte-identical to initial snapshots after implementation commits",
+  "next_hardware_checkpoint": [
+    "one explicitly authorized cold full-owner boot",
+    "m1n1 Mu ACPI KMD reserve v2 identity1GiB",
+    "APPL0002 Code0 StartStage12 Status0 arm consumed",
+    "600-second window from Windows boot; pinnedSSH no bugcheck",
+    "record usableOS memory and segment1000MiB CPU8 disks USB RDP display/input or unmeasured"
+  ],
+  "limitations": [
+    "No Air access or hardware result",
+    "No EBS memory map validation",
+    "v5 grants remain8192; full1GiB execution not proved",
+    "scanout W0/56MiB; high primary refused; relocation not implemented",
+    "R142 GPU-only canonical/staging path not implemented"
+  ]
+}

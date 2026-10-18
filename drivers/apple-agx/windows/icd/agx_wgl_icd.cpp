@@ -1,0 +1,1715 @@
+/* CS 1.6 ICD plan, phase 2/4: the WGL target of the AGX OpenGL ICD.
+ *
+ * Replaces Mesa's targets/wgl/wgl.c (softpipe/llvmpipe) in libgallium_wgl:
+ * stw_winsys::create_screen opens the AGX adapter behind the window's DC,
+ * creates a D3DKMT device, drives the validated umd_* device/screen code
+ * through the GPUVA D3DKMT bridge and returns the Windows Asahi pipe_screen;
+ * present blits the finished colour buffer into a shared texture and D3D11
+ * presents it through the window's DXGI flip-model swap chain on the same
+ * adapter (G2 HW3c); a DC without a window (a memory DC) gets a synchronous
+ * GDI copy. One screen per process, created on the first DC, as Mesa's stw
+ * device expects. */
+#include <windows.h>
+#include <psapi.h>   /* K32EnumProcessModules (kernel32): EXP1222 module receipt */
+#include <d3d11.h>   /* G2 HW3c: the GL window's DXGI flip-model swap chain */
+#include <dxgi1_2.h>
+#include <string.h>
+#include "agx_kmt_gpuva_bridge.h"
+/* C units of this DLL (render_allocation.c, agx_win32_screen.c) whose
+ * headers have no C++ guards: C linkage, as umd_win32_screen.c sees them. */
+extern "C" {
+#include "render_allocation.h"
+#include "agx_win32_screen.h"
+}
+#include "agx_wgl_draw_hook.h"
+/* winsys (closure): EXP1206 switch for the native draw phase marks. */
+extern "C" int AgxWin32AsahiDrawPhasesOn;
+#include "umd_internal.h"
+/* umd_asahi_owner.c / umd_asahi_batch_adapter.c define these with C linkage. */
+extern "C" {
+#include "umd_asahi_owner.h"
+#include "umd_asahi_batch_adapter.h"
+}
+#include "agx_win32_asahi_scene.h"
+/* Mesa headers carry their own C++ guards (and C++-only templates). */
+#include "util/u_debug.h"
+#include "util/box.h"
+#include "util/format/u_format.h"
+#include "util/u_inlines.h"
+extern "C" {
+#include "stw_winsys.h" /* declares stw_init/stw_cleanup without C++ guards */
+}
+#include "stw_device.h"
+#include "pipe/p_screen.h"
+#include "pipe/p_context.h"
+#include "pipe/p_state.h"
+
+typedef struct AGX_WGL_ADAPTER {
+  AGX_KMT_THUNKS Kmt;
+  PFND3DKMT_OPENADAPTERFROMHDC OpenAdapterFromHdc;
+  PFND3DKMT_CREATEDEVICE CreateDevice;
+  D3DKMT_HANDLE AdapterHandle, DeviceHandle;
+  LUID Luid;
+  D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId;  /* G3: the display's vblanks */
+  AGX_KMT_GPUVA_BRIDGE Bridge;
+  ADMISSION_UMD_ADAPTER Runtime;
+  ADMISSION_UMD_DEVICE Device;
+  ADMISSION_UMD_ASAHI_OWNER Owner;
+  AGX_WIN32_ASAHI_BACKEND Backend;
+  AGX_WIN32_ASAHI_OWNER_OPS OwnerOperations;
+  struct pipe_screen *Screen;
+  HRESULT Failure;
+} AGX_WGL_ADAPTER;
+
+static AGX_WGL_ADAPTER *AgxWgl;
+
+/* EXP1147: the native batch path reports refusals and faults through these
+ * winsys hooks, which only the D3D10 glue (agx_d3d10_windows.cpp) set, so the
+ * ICD's GL jobs failed silently. Log them like the D3D10 glue does. */
+extern "C" {
+extern void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
+extern void (*AgxWin32BackendFailHook)(unsigned site);
+extern void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context,
+                                      unsigned flags, unsigned draws);
+extern void (*AgxWin32VdmTraceHook)(uint64_t va, const uint32_t *words,
+                                    unsigned count, unsigned draws);
+extern void (*AgxWin32PerfHook)(const char *message);
+}
+
+static void wgl_batch_refusal(unsigned kind, unsigned site, unsigned d0, unsigned d1) {
+  UINT values[4] = {kind, site, d0, d1};
+  AdmissionUmdDiagnostic("reject-batch", E_FAIL, values, 4u);
+}
+
+static void wgl_backend_fail(unsigned site) { wgl_batch_refusal(4u, site, 0u, 0u); }
+
+static void wgl_first_fault(unsigned site, uintptr_t context, unsigned flags,
+                            unsigned draws) {
+  static volatile LONG records;
+  if (InterlockedIncrement(&records) > 64) return;
+  UINT values[4] = {site, (UINT)context, flags, draws};
+  AdmissionUmdDiagnostic("measure-native-first-fault", S_OK, values, 4u);
+}
+
+/* EXP1182 receipt-only: the winsys calls this hook once per submitted render
+ * batch with its draw count; count batches and draws for measure-wgl-draws. */
+static volatile LONG AgxWglBatches, AgxWglDraws, AgxWglMaxDraws;
+
+static void wgl_vdm_trace(uint64_t va, const uint32_t *words, unsigned count,
+                          unsigned draws) {
+  static volatile LONG records;
+  InterlockedIncrement(&AgxWglBatches);
+  InterlockedExchangeAdd(&AgxWglDraws, (LONG)draws);
+  if ((LONG)draws > AgxWglMaxDraws) AgxWglMaxDraws = (LONG)draws;
+  if (InterlockedIncrement(&records) > 32 || count > 13u) return;
+  UINT values[16] = {(UINT)va, (UINT)(va >> 32), draws};
+  for (unsigned i = 0; i < count; ++i) values[3 + i] = words[i];
+  AdmissionUmdDiagnostic("measure-vdm", S_OK, values, 3u + count);
+}
+
+/* Asahi perf_debug text (why batches flush or sync): the first 200 lines. */
+/* EXP1198 receipt-only: steady-state counts of the perf notes (flush and
+ * sync reasons, BO cache hits/misses) by text, reported and reset with the
+ * present receipt (the first 200 notes are still written one by one). */
+#define AGX_WGL_PERF_SLOTS 24u
+static struct { char Text[64]; UINT Count; } AgxWglPerfCounts[AGX_WGL_PERF_SLOTS];
+static UINT AgxWglPerfLost;
+static SRWLOCK AgxWglPerfLock = SRWLOCK_INIT;
+
+static void wgl_perf_count(const char *message) {
+  AcquireSRWLockExclusive(&AgxWglPerfLock);
+  unsigned i = 0;
+  for (; i < AGX_WGL_PERF_SLOTS && AgxWglPerfCounts[i].Count; ++i)
+    if (!strncmp(AgxWglPerfCounts[i].Text, message, sizeof(AgxWglPerfCounts[i].Text) - 1)) break;
+  if (i == AGX_WGL_PERF_SLOTS) ++AgxWglPerfLost;
+  else {
+    if (!AgxWglPerfCounts[i].Count)
+      strncpy_s(AgxWglPerfCounts[i].Text, sizeof(AgxWglPerfCounts[i].Text), message, _TRUNCATE);
+    ++AgxWglPerfCounts[i].Count;
+  }
+  ReleaseSRWLockExclusive(&AgxWglPerfLock);
+}
+
+static void wgl_perf_report(void) {
+  AcquireSRWLockExclusive(&AgxWglPerfLock);
+  for (unsigned i = 0; i < AGX_WGL_PERF_SLOTS && AgxWglPerfCounts[i].Count; ++i) {
+    char stage[96];
+    if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-perfc %s", AgxWglPerfCounts[i].Text) >= 0) {
+      for (unsigned k = 0; k < sizeof(stage) && stage[k]; ++k)
+        if (stage[k] == '\n' || stage[k] == '\r' || stage[k] == ' ') stage[k] = '_';
+      UINT values[2] = {AgxWglPerfCounts[i].Count, AgxWglPerfLost};
+      AdmissionUmdDiagnostic(stage, S_OK, values, 2u);
+    }
+  }
+  ZeroMemory(AgxWglPerfCounts, sizeof(AgxWglPerfCounts));
+  AgxWglPerfLost = 0;
+  ReleaseSRWLockExclusive(&AgxWglPerfLock);
+}
+
+static void wgl_perf_note(const char *message) {
+  static volatile LONG records;
+  char stage[96];
+  if (message) wgl_perf_count(message);
+  if (!message || InterlockedIncrement(&records) > 200) return;
+  if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-perf %s", message) < 0) return;
+  /* One token per line: measure-perf_<text>. */
+  for (unsigned i = 0; i < sizeof(stage) && stage[i]; ++i)
+    if (stage[i] == '\n' || stage[i] == '\r' || stage[i] == ' ') stage[i] = '_';
+  AdmissionUmdDiagnostic(stage, S_OK, NULL, 0u);
+}
+static struct pipe_resource *(*AgxWglResourceCreate)(struct pipe_screen *,
+                                                     const struct pipe_resource *);
+
+/* EXP1146: Mesa's WGL frontend creates window colour buffers with
+ * PIPE_BIND_DISPLAY_TARGET (display through a winsys display target); the
+ * Asahi driver turns that into AGX_BO_SHAREABLE, which the Windows BO layer
+ * refuses, so the back buffer was never created ("no readbuffer"). This
+ * winsys displays by CPU readback (wgl_present), so a window colour buffer is
+ * an ordinary render target here. */
+static struct pipe_resource *wgl_resource_create(struct pipe_screen *screen,
+                                                 const struct pipe_resource *templ) {
+  struct pipe_resource local;
+  if (!templ) return NULL;
+  local = *templ;
+  local.bind &= ~(unsigned)PIPE_BIND_DISPLAY_TARGET;
+  return AgxWglResourceCreate(screen, &local);
+}
+
+/* EXP1206: the per-draw and per-note diagnostics (draw phase and
+ * draw/flush timers, fence-wait stack scans, perf-note formatting and
+ * counts) run only with the UMD trace and APPLE_AGX_ICD_PHASES=1; the UMD
+ * trace alone (machine-wide for experiments and play) keeps the per-frame
+ * receipts only. */
+static BOOL wgl_deep_diagnostics(void) {
+  static int enabled = -1;
+  if (enabled < 0) {
+    char value[4];
+    enabled = AdmissionUmdDiagnosticEnabled() &&
+              GetEnvironmentVariableA("APPLE_AGX_ICD_PHASES", value, sizeof(value)) == 1u &&
+              value[0] == '1';
+  }
+  return enabled > 0;
+}
+
+static void wgl_note(const char *stage, HRESULT status) {
+  UINT values[1] = {AgxWgl ? AgxWgl->Bridge.Receipt.LastFailedOp : 0u};
+  AdmissionUmdDiagnostic(stage, status, values, 1u);
+}
+
+static HRESULT open_adapter(AGX_WGL_ADAPTER *a, HDC hdc) {
+  HMODULE gdi = GetModuleHandleW(L"gdi32.dll");
+  D3DKMT_OPENADAPTERFROMHDC open;
+  D3DKMT_CREATEDEVICE create;
+  NTSTATUS status;
+  if (!gdi || !AgxKmtThunksLoad(&a->Kmt)) return E_NOINTERFACE;
+  *(FARPROC *)&a->OpenAdapterFromHdc = GetProcAddress(gdi, "D3DKMTOpenAdapterFromHdc");
+  *(FARPROC *)&a->CreateDevice = GetProcAddress(gdi, "D3DKMTCreateDevice");
+  if (!a->OpenAdapterFromHdc || !a->CreateDevice) return E_NOINTERFACE;
+  ZeroMemory(&open, sizeof(open));
+  open.hDc = hdc;
+  status = a->OpenAdapterFromHdc(&open);
+  if (status < 0) return AgxKmtGpuvaResult(status);
+  a->AdapterHandle = open.hAdapter;
+  a->Luid = open.AdapterLuid;
+  a->VidPnSourceId = open.VidPnSourceId;
+  ZeroMemory(&create, sizeof(create));
+  create.hAdapter = open.hAdapter;
+  status = a->CreateDevice(&create);
+  if (status < 0) return AgxKmtGpuvaResult(status);
+  a->DeviceHandle = create.hDevice;
+  return S_OK;
+}
+
+/* The umd_* entry points take the D3D10 DDI argument blocks; fill them with
+ * the bridge's callback tables (the bridge is every runtime handle). */
+static HRESULT open_runtime(AGX_WGL_ADAPTER *a) {
+  D3D10DDIARG_OPENADAPTER open;
+  D3D10DDIARG_CREATEDEVICE create;
+  HRESULT result = AgxKmtGpuvaBridgeInitialize(&a->Bridge, &a->Kmt,
+                                               a->AdapterHandle, a->DeviceHandle);
+  if (FAILED(result)) return result;
+  a->Bridge.Receipt.ScanWaits = wgl_deep_diagnostics();
+  ZeroMemory(&open, sizeof(open));
+  open.hRTAdapter.handle = &a->Bridge;
+  open.Interface = D3DWDDM1_3_DDI_INTERFACE_VERSION;
+  open.Version = D3DWDDM1_3_DDI_BUILD_VERSION;
+  open.pAdapterCallbacks = &a->Bridge.AdapterCallbacks;
+  result = AdmissionUmdRuntimeAdapterInitialize(&a->Runtime, &open);
+  if (FAILED(result)) return result;
+  ZeroMemory(&create, sizeof(create));
+  create.hRTDevice.handle = &a->Bridge;
+  create.hRTCoreLayer.handle = &a->Bridge;
+  create.Interface = D3DWDDM1_3_DDI_INTERFACE_VERSION;
+  create.Version = D3DWDDM1_3_DDI_BUILD_VERSION;
+  create.pKTCallbacks = &a->Bridge.DeviceCallbacks;
+  create.p11UMCallbacks = &a->Bridge.CoreCallbacks;
+  create.DXGIBaseDDI.pDXGIBaseCallbacks = &a->Bridge.DxgiCallbacks;
+  return AdmissionUmdRuntimeDeviceInitialize(&a->Device, &a->Runtime, &create);
+}
+
+static struct pipe_screen *wgl_screen_create(HDC hdc) {
+  AGX_WGL_ADAPTER *a;
+  HRESULT result;
+  if (AgxWgl) return AgxWgl->Screen;
+  a = (AGX_WGL_ADAPTER *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*a));
+  if (!a) return NULL;
+  AgxWgl = a;
+  AgxWin32BatchRefusalHook = wgl_batch_refusal;
+  AgxWin32BackendFailHook = wgl_backend_fail;
+  AgxWin32FirstFaultHook = wgl_first_fault;
+  AgxWin32VdmTraceHook = wgl_vdm_trace;
+  /* EXP1206: a perf hook makes the winsys format every perf note. */
+  AgxWin32PerfHook = wgl_deep_diagnostics() ? wgl_perf_note : NULL;
+  AgxWin32AsahiDrawPhasesOn = wgl_deep_diagnostics();
+  agx_wgl_draw_hook_timing(wgl_deep_diagnostics() != FALSE);
+  result = open_adapter(a, hdc);
+  if (SUCCEEDED(result)) result = open_runtime(a);
+  if (SUCCEEDED(result)) {
+    a->Owner.Device = &a->Device;
+    a->Owner.Backend = &a->Backend;
+    /* Every Mesa WGL pixel format has depth: GL windows submit ZLS. */
+    a->Backend.ZlsAttachments = 1;
+    AdmissionUmdAsahiOwnerOperations(&a->OwnerOperations);
+    a->Screen = AgxWin32AsahiScreenCreateForWindows(&a->Backend, &a->Device.Screen,
+        &a->OwnerOperations, &a->Owner, AdmissionUmdAsahiBatchOperations());
+    if (!a->Screen)
+      result = FAILED(a->Device.LastScreenError) ? a->Device.LastScreenError : E_FAIL;
+    else if (!a->Screen->resource_create)
+      result = E_NOINTERFACE;
+    else {
+      AgxWglResourceCreate = a->Screen->resource_create;
+      a->Screen->resource_create = wgl_resource_create;
+      /* EXP1183: merge GL multi-draws before Asahi splits them per draw. */
+      if (!agx_wgl_draw_hook_install(a->Screen))
+        wgl_note("reject-wgl-draw-hook", E_FAIL);
+    }
+  }
+  a->Failure = result;
+  wgl_note(SUCCEEDED(result) ? "wgl-screen-create" : "reject-wgl-screen-create", result);
+  /* G2 HW3 receipt-only: which present callbacks opengl32 handed the ICD
+   * (DrvSetCallbackProcs, before the first context): PresentBuffers,
+   * GetAdapterLuid, CheckFullscreenSupport, PresentToRedirectionSurface,
+   * SubmitPresentToRedirectionSurface, and the D3DKMTPresent export. */
+  if (stw_dev) {
+    UINT callbacks[6] = {
+      stw_dev->callbacks.pfnPresentBuffers != NULL,
+#if WINVER >= 0xA00
+      stw_dev->callbacks.pfnGetAdapterLuid != NULL,
+      stw_dev->callbacks.pfnCheckFullscreenSupport != NULL,
+      stw_dev->callbacks.pfnPresentToRedirectionSurface != NULL,
+      stw_dev->callbacks.pfnSubmitPresentToRedirectionSurface != NULL,
+#else
+      2u, 2u, 2u, 2u,
+#endif
+      a->Kmt.Present != NULL };
+    AdmissionUmdDiagnostic("measure-wgl-callbacks", S_OK, callbacks, 6u);
+  }
+  /* A failed adapter stays recorded (no second attempt with half-owned
+   * kernel objects); stw reports the missing screen to the application. */
+  return a->Screen;
+}
+
+/* Copy a mapped BGRX/RGBX image into the window: SetDIBitsToDevice with a
+ * top-down 32-bit DIB, repacking when the pitch or channel order differs. */
+static void wgl_blit_to_dc(HDC hdc, const BYTE *map, unsigned stride,
+                           unsigned width, unsigned height, BOOL bgra) {
+  BITMAPINFO info;
+  ZeroMemory(&info, sizeof(info));
+  info.bmiHeader.biSize = sizeof(info.bmiHeader);
+  info.bmiHeader.biWidth = (LONG)width;
+  info.bmiHeader.biHeight = -(LONG)height;
+  info.bmiHeader.biPlanes = 1;
+  info.bmiHeader.biBitCount = 32;
+  info.bmiHeader.biCompression = BI_RGB;
+  if (bgra && stride == width * 4u) {
+    SetDIBitsToDevice(hdc, 0, 0, width, height, 0, 0, 0, height, map, &info,
+                      DIB_RGB_COLORS);
+    return;
+  }
+  BYTE *packed = (BYTE *)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)width * height * 4u);
+  if (!packed) return;
+  for (unsigned y = 0; y < height; ++y) {
+    const BYTE *src = map + (SIZE_T)y * stride;
+    BYTE *dst = packed + (SIZE_T)y * width * 4u;
+    if (bgra) memcpy(dst, src, (SIZE_T)width * 4u);
+    else for (unsigned x = 0; x < width; ++x) {
+      dst[4 * x + 0] = src[4 * x + 2]; dst[4 * x + 1] = src[4 * x + 1];
+      dst[4 * x + 2] = src[4 * x + 0]; dst[4 * x + 3] = src[4 * x + 3];
+    }
+  }
+  SetDIBitsToDevice(hdc, 0, 0, width, height, 0, 0, 0, height, packed, &info,
+                    DIB_RGB_COLORS);
+  HeapFree(GetProcessHeap(), 0, packed);
+}
+
+/* Synchronous show for a DC without a window (a memory DC). */
+static void wgl_show_now(struct pipe_context *ctx, struct pipe_resource *image,
+                         HDC hdc, unsigned width, unsigned height, BOOL bgra) {
+  struct pipe_transfer *transfer = NULL;
+  struct pipe_box box;
+  u_box_2d(0, 0, (int)width, (int)height, &box);
+  const BYTE *map = (const BYTE *)ctx->texture_map(ctx, image, 0, PIPE_MAP_READ,
+                                                   &box, &transfer);
+  if (!map || !transfer) {
+    wgl_note("reject-wgl-present-map", E_FAIL);
+    return;
+  }
+  wgl_blit_to_dc(hdc, map, transfer->stride, width, height, bgra);
+  ctx->texture_unmap(ctx, transfer);
+}
+
+/* EXP1173 receipt-only: kernel time of the last 120 presents, per group of
+ * D3DKMT thunks (calls, microseconds): submit, CPU wait, lock/unlock,
+ * residency, allocation, GPU VA, escape, signals. With the present on a
+ * worker, the game thread's frame is its own work plus these calls. */
+static unsigned wgl_kmt_group(unsigned op) {
+  switch (op) {
+  case AgxKmtGpuvaSubmit: return 1;
+  case AgxKmtGpuvaWaitCpu: return 2;
+  case AgxKmtGpuvaLock: case AgxKmtGpuvaUnlock: return 3;
+  case AgxKmtGpuvaMakeResident: case AgxKmtGpuvaEvict:
+  case AgxKmtGpuvaQueryResidency: case AgxKmtGpuvaSetPriority: return 4;
+  case AgxKmtGpuvaAllocate: case AgxKmtGpuvaDeallocate: return 5;
+  case AgxKmtGpuvaReserve: case AgxKmtGpuvaMap: case AgxKmtGpuvaFree: return 6;
+  case AgxKmtGpuvaEscape: return 7;
+  case AgxKmtGpuvaSignalGpu2: case AgxKmtGpuvaSignal2: return 8;
+  default: return 0;
+  }
+}
+
+extern "C" IMAGE_DOS_HEADER __ImageBase;  /* this image (linker-provided) */
+/* agx_wgl_framebuffer.c */
+extern "C" struct stw_winsys_framebuffer *agx_wgl_create_framebuffer(
+    struct pipe_screen *screen, HWND window, int pixel_format);
+extern "C" void agx_wgl_framebuffer_counters(UINT out[6]);
+extern "C" void agx_wgl_pace_counters(UINT out[8]);
+extern "C" void agx_wgl_vblank_counters(UINT out[6]);
+/* winsys (closure): EXP1202 native draw phase receipt. */
+extern "C" void AgxWin32AsahiDrawPhases(unsigned out[6]);
+
+static void wgl_kmt_receipt(LONGLONG us) {
+  static UINT last_calls[AgxKmtGpuvaOpCount];
+  static LONGLONG last_ticks[AgxKmtGpuvaOpCount];
+  UINT calls[8] = {0};
+  LONGLONG ticks[8] = {0};
+  if (!AgxWgl || !us) return;
+  AGX_KMT_GPUVA_RECEIPT *r = &AgxWgl->Bridge.Receipt;
+  for (unsigned op = 0; op < AgxKmtGpuvaOpCount; ++op) {
+    unsigned g = wgl_kmt_group(op);
+    if (g) {
+      calls[g - 1] += r->Calls[op] - last_calls[op];
+      ticks[g - 1] += r->Ticks[op] - last_ticks[op];
+    }
+    last_calls[op] = r->Calls[op];
+    last_ticks[op] = r->Ticks[op];
+  }
+  UINT values[16];
+  for (unsigned i = 0; i < 8; ++i) {
+    values[2 * i] = calls[i];
+    values[2 * i + 1] = (UINT)(ticks[i] * 1000000 / us);
+  }
+  AdmissionUmdDiagnostic("measure-wgl-kmt", S_OK, values, 16u);
+  /* EXP1189: per caller chain of the fence waits since the last receipt,
+   * the return addresses (image RVAs; EXP1192: eight), waits and
+   * microseconds. */
+  for (unsigned i = 0; i < AGX_KMT_WAIT_SITES; ++i) {
+    AGX_KMT_WAIT_SITE *s = &r->WaitSites[i];
+    if (!s->Calls) continue;
+    UINT site[AGX_KMT_WAIT_DEPTH + 3u];
+    for (unsigned k = 0; k < AGX_KMT_WAIT_DEPTH; ++k)
+      site[k] = s->Return[k] ? (UINT)(s->Return[k] - (ULONG_PTR)&__ImageBase) : 0u;
+    site[AGX_KMT_WAIT_DEPTH] = s->Calls;
+    site[AGX_KMT_WAIT_DEPTH + 1u] = (UINT)(s->Ticks * 1000000 / us);
+    site[AGX_KMT_WAIT_DEPTH + 2u] = r->WaitSitesLost;
+    AdmissionUmdDiagnostic("measure-wgl-wait", S_OK, site, AGX_KMT_WAIT_DEPTH + 3u);
+    /* EXP1193: the site's callers in other modules: chain RVA 0 (to pair
+     * the line with its site), position, module RVA, waits, microseconds. */
+    for (unsigned k = 0; k < AGX_KMT_WAIT_FOREIGN; ++k) {
+      HMODULE module = NULL;
+      char path[MAX_PATH], stage[96];
+      if (!s->Foreign[k] ||
+          !GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                              (LPCSTR)s->Foreign[k], &module) ||
+          !GetModuleFileNameA(module, path, MAX_PATH)) continue;
+      const char *slash = strrchr(path, '\\');
+      if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-wgl-waitf_%s",
+                      slash ? slash + 1 : path) < 0) continue;
+      UINT caller[5] = {site[0], k, (UINT)(s->Foreign[k] - (ULONG_PTR)module),
+                        s->Calls, site[AGX_KMT_WAIT_DEPTH + 1u]};
+      AdmissionUmdDiagnostic(stage, S_OK, caller, 5u);
+    }
+  }
+  ZeroMemory(r->WaitSites, sizeof(r->WaitSites));
+  r->WaitSitesLost = 0;
+}
+
+/* The receipts of every 120 presents. */
+static void wgl_common_receipt(LONGLONG us) {
+  wgl_kmt_receipt(us);
+  /* EXP1182: render batches, draws and the largest batch of the 120 presents. */
+  UINT draws[3] = {(UINT)InterlockedExchange(&AgxWglBatches, 0),
+                   (UINT)InterlockedExchange(&AgxWglDraws, 0),
+                   (UINT)InterlockedExchange(&AgxWglMaxDraws, 0)};
+  AdmissionUmdDiagnostic("measure-wgl-draws", S_OK, draws, 3u);
+  /* EXP1183: draw calls/draws reaching the driver hook, merged calls/draws,
+   * POLYGON/QUADS calls converted per draw. */
+  UINT merge[AGX_WGL_MERGE_COUNTERS];
+  agx_wgl_draw_hook_counters(merge);
+  AdmissionUmdDiagnostic("measure-wgl-merge", S_OK, merge, AGX_WGL_MERGE_COUNTERS);
+  /* EXP1197: draw_vbo calls/us and flush calls/us below the draw hook. */
+  UINT cpu[AGX_WGL_CPU_COUNTERS];
+  agx_wgl_draw_hook_cpu(cpu);
+  AdmissionUmdDiagnostic("measure-wgl-cpu", S_OK, cpu, AGX_WGL_CPU_COUNTERS);
+  wgl_perf_report();  /* EXP1198 */
+  /* EXP1202: native draw phases (draws, us per phase). */
+  UINT phases[6];
+  AgxWin32AsahiDrawPhases(phases);
+  AdmissionUmdDiagnostic("measure-wgl-phase", S_OK, phases, 6u);
+  /* EXP1203: CPU time of the presenting (game) thread and of the process
+   * over the last 120 presents, us (kernel+user): with the frame interval it
+   * tells pure CPU work from waiting or preemption. */
+  {
+    static ULONGLONG last_thread, last_process;
+    FILETIME c, e, k, u;
+    ULONGLONG thread = 0, process = 0;
+    if (GetThreadTimes(GetCurrentThread(), &c, &e, &k, &u))
+      thread = (((ULONGLONG)k.dwHighDateTime << 32) | k.dwLowDateTime) +
+               (((ULONGLONG)u.dwHighDateTime << 32) | u.dwLowDateTime);
+    if (GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u))
+      process = (((ULONGLONG)k.dwHighDateTime << 32) | k.dwLowDateTime) +
+                (((ULONGLONG)u.dwHighDateTime << 32) | u.dwLowDateTime);
+    UINT times[2] = {last_thread ? (UINT)((thread - last_thread) / 10u) : 0u,
+                     last_process ? (UINT)((process - last_process) / 10u) : 0u};
+    last_thread = thread; last_process = process;
+    AdmissionUmdDiagnostic("measure-wgl-threadtime", S_OK, times, 2u);
+  }
+  /* EXP1192: winsys framebuffers created, refused (last refused pixel
+   * format's dwFlags and samples), presents, failed presents. */
+  UINT fb[6];
+  agx_wgl_framebuffer_counters(fb);
+  AdmissionUmdDiagnostic("measure-wgl-winsysfb", S_OK, fb, 6u);
+  /* EXP1209: swap pacing (paced swaps, waits, waited us, grid restarts,
+   * swap intervals < 3/4, 3/4..5/4, 5/4..7/4, >= 7/4 refresh periods). */
+  UINT pace[8];
+  agx_wgl_pace_counters(pace);
+  AdmissionUmdDiagnostic("measure-wgl-pace", S_OK, pace, 8u);
+  /* G3: vblank-paced swaps, vblank waits, waited us, late swaps (no wait),
+   * failed waits, last failure status. */
+  UINT vblank[6];
+  agx_wgl_vblank_counters(vblank);
+  AdmissionUmdDiagnostic("measure-wgl-vblank", S_OK, vblank, 6u);
+}
+
+/* EXP1174 diagnostic, only when the UMD trace is enabled and the process has
+ * APPLE_AGX_ICD_SAMPLE=1: a sampling
+ * profiler of the presenting (game) thread. EXP1173 gameplay: ~25 ms of a
+ * 27 ms frame is CPU work outside the kernel (game, Mesa and this ICD under
+ * x86 emulation) and WPR CPU sampling is unavailable in this guest. Every
+ * 2 ms the sampler suspends the game thread, reads its x86 EIP and resumes
+ * it (no other call while it is suspended); every 5000 samples it reports
+ * the samples per module (measure-sample-module_<file>: index, base, count)
+ * and the 48 hottest 16-byte buckets (measure-sample-top: module index, RVA,
+ * count; symbolised offline from the PDBs). */
+#define AGX_WGL_SAMPLE_SLOTS 8192u
+#define AGX_WGL_SAMPLE_REPORT 5000u
+typedef struct { ULONG_PTR Bucket; UINT Count; } AGX_WGL_SAMPLE;
+static AGX_WGL_SAMPLE AgxWglSamples[AGX_WGL_SAMPLE_SLOTS];
+static UINT AgxWglSampleLost;
+/* EXP1185: for samples whose EIP is outside any image (the emulator's
+ * native-call gate: 18-50% of the game thread in EXP1184), the code
+ * addresses found in the top 64 bytes of the x86 stack, i.e. who called. */
+static AGX_WGL_SAMPLE AgxWglCallers[AGX_WGL_SAMPLE_SLOTS];
+static UINT AgxWglCallerLost;
+static HANDLE AgxWglSampler;
+
+static void wgl_sample_put(AGX_WGL_SAMPLE *table, UINT *lost, ULONG_PTR eip) {
+  ULONG_PTR bucket = eip & ~(ULONG_PTR)15;
+  UINT slot = (UINT)((bucket >> 4) * 2654435761u) & (AGX_WGL_SAMPLE_SLOTS - 1u);
+  for (UINT probe = 0; probe < 64u; ++probe) {
+    AGX_WGL_SAMPLE *s = &table[(slot + probe) & (AGX_WGL_SAMPLE_SLOTS - 1u)];
+    if (s->Bucket == bucket) { ++s->Count; return; }
+    if (!s->Count) { s->Bucket = bucket; s->Count = 1; return; }
+  }
+  ++*lost;
+}
+
+static void wgl_sample_add(ULONG_PTR eip) {
+  wgl_sample_put(AgxWglSamples, &AgxWglSampleLost, eip);
+}
+
+static BOOL wgl_sample_in_image(ULONG_PTR address) {
+  MEMORY_BASIC_INFORMATION info;
+  return address >= 0x10000u &&
+         VirtualQuery((LPCVOID)address, &info, sizeof(info)) &&
+         info.Type == MEM_IMAGE && (info.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ |
+                                                   PAGE_EXECUTE_READWRITE |
+                                                   PAGE_EXECUTE_WRITECOPY));
+}
+
+static void wgl_sample_callers(ULONG_PTR eip, const DWORD *stack, SIZE_T words) {
+  if (wgl_sample_in_image(eip)) return;
+  for (SIZE_T i = 0, found = 0; i < words && found < 3u; ++i)
+    if (wgl_sample_in_image(stack[i])) {
+      wgl_sample_put(AgxWglCallers, &AgxWglCallerLost, stack[i]);
+      ++found;
+    }
+}
+
+static ULONG_PTR wgl_sample_base(ULONG_PTR address) {
+  MEMORY_BASIC_INFORMATION info;
+  if (!VirtualQuery((LPCVOID)address, &info, sizeof(info))) return 0;
+  return (ULONG_PTR)info.AllocationBase;
+}
+
+static void wgl_sample_report_table(AGX_WGL_SAMPLE *table, UINT *lost,
+                                    const char *module_tag, const char *top_tag) {
+  ULONG_PTR bases[16] = {0};
+  UINT counts[16] = {0}, modules = 0;
+  UINT order[48], ranked = 0;
+  for (UINT i = 0; i < AGX_WGL_SAMPLE_SLOTS; ++i) {
+    if (!table[i].Count) continue;
+    ULONG_PTR base = wgl_sample_base(table[i].Bucket);
+    UINT m = 0;
+    while (m < modules && bases[m] != base) ++m;
+    if (m == modules && modules < 15u) bases[modules++] = base;
+    else if (m == modules) m = 15u;   /* everything else */
+    counts[m] += table[i].Count;
+    /* keep the 48 hottest buckets (insertion into a small sorted list) */
+    UINT at;
+    if (ranked < 48u) at = ranked++;
+    else if (table[order[47]].Count >= table[i].Count) continue;
+    else at = 47u;
+    while (at && table[order[at - 1]].Count < table[i].Count) {
+      order[at] = order[at - 1];
+      --at;
+    }
+    order[at] = i;
+  }
+  for (UINT m = 0; m < 16u; ++m) {
+    if (!counts[m]) continue;
+    char path[MAX_PATH], stage[96];
+    const char *name = "other";
+    if (m < 15u && bases[m] && GetModuleFileNameA((HMODULE)bases[m], path, MAX_PATH)) {
+      const char *slash = strrchr(path, '\\');
+      name = slash ? slash + 1 : path;
+    } else if (m < 15u) name = "anonymous";
+    if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "%s%s", module_tag, name) < 0) continue;
+    UINT values[4] = {m, (UINT)bases[m], counts[m], *lost};
+    AdmissionUmdDiagnostic(stage, S_OK, values, 4u);
+  }
+  for (UINT r = 0; r < ranked; r += 5u) {
+    UINT values[15], n = 0;
+    for (UINT k = r; k < ranked && k < r + 5u; ++k) {
+      const AGX_WGL_SAMPLE *s = &table[order[k]];
+      ULONG_PTR base = wgl_sample_base(s->Bucket);
+      UINT m = 0;
+      while (m < modules && bases[m] != base) ++m;
+      if (m == modules) m = 15u;
+      values[n++] = m;
+      values[n++] = (UINT)(s->Bucket - base);
+      values[n++] = s->Count;
+    }
+    AdmissionUmdDiagnostic(top_tag, S_OK, values, n);
+  }
+  ZeroMemory(table, sizeof(AGX_WGL_SAMPLE) * AGX_WGL_SAMPLE_SLOTS);
+  *lost = 0;
+}
+
+static void wgl_sample_report(void) {
+  wgl_sample_report_table(AgxWglSamples, &AgxWglSampleLost,
+                          "measure-sample-module_", "measure-sample-top");
+  wgl_sample_report_table(AgxWglCallers, &AgxWglCallerLost,
+                          "measure-sample-cmodule_", "measure-sample-ctop");
+}
+
+static DWORD WINAPI wgl_sampler_main(LPVOID parameter) {
+  HANDLE game = (HANDLE)parameter;
+  HANDLE timer = CreateWaitableTimerExW(NULL, NULL,
+      CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+  if (!timer) timer = CreateWaitableTimerW(NULL, FALSE, NULL);
+  LARGE_INTEGER due;
+  due.QuadPart = -20000;   /* 2 ms */
+  if (!timer || !SetWaitableTimer(timer, &due, 2, NULL, NULL, FALSE)) return 0;
+  for (UINT samples = 0;;) {
+    WaitForSingleObject(timer, INFINITE);
+    if (SuspendThread(game) == (DWORD)-1) return 0;   /* the game thread exited */
+    CONTEXT context;
+    ZeroMemory(&context, sizeof(context));
+    context.ContextFlags = CONTEXT_CONTROL;
+    BOOL ok = GetThreadContext(game, &context);
+#if defined(_M_IX86)
+    DWORD stack[16];
+    SIZE_T got = 0;
+    /* Read the top of the x86 stack while the thread is still suspended. */
+    if (ok && !ReadProcessMemory(GetCurrentProcess(), (LPCVOID)(ULONG_PTR)context.Esp,
+                                 stack, sizeof(stack), &got)) got = 0;
+    ResumeThread(game);
+    if (ok) {
+      wgl_sample_add((ULONG_PTR)context.Eip);
+      wgl_sample_callers((ULONG_PTR)context.Eip, stack, got / sizeof(DWORD));
+    }
+#else
+    ResumeThread(game);
+    if (ok) wgl_sample_add((ULONG_PTR)context.Pc);
+#endif
+    if (ok && ++samples % AGX_WGL_SAMPLE_REPORT == 0) wgl_sample_report();
+  }
+}
+
+static void wgl_sampler_start(void) {
+  HMODULE self = NULL;
+  HANDLE game = NULL;
+  char enabled[4];
+  /* EXP1174: 500 suspensions a second cost the emulated game ~20% of its
+   * frame rate, so sampling needs APPLE_AGX_ICD_SAMPLE=1 besides the trace. */
+  if (AgxWglSampler || !AdmissionUmdDiagnosticEnabled() ||
+      GetEnvironmentVariableA("APPLE_AGX_ICD_SAMPLE", enabled, sizeof(enabled)) != 1u ||
+      enabled[0] != '1') return;
+  if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
+                       &game, THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, 0))
+    return;
+  /* Like the present worker, the sampler never exits and pins the ICD. */
+  if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                          (LPCWSTR)(void *)&wgl_sampler_main, &self)) {
+    CloseHandle(game);
+    return;
+  }
+  AgxWglSampler = CreateThread(NULL, 0, wgl_sampler_main, game, 0, NULL);
+  if (!AgxWglSampler) { FreeLibrary(self); CloseHandle(game); return; }
+  SetThreadPriority(AgxWglSampler, THREAD_PRIORITY_TIME_CRITICAL);
+}
+
+/* G2 HW3: present through the kernel. Each window has a present source: one
+ * linear A8R8G8B8 GPU-local allocation of the back buffer's size, described
+ * like DWM's presentation surfaces (AdmissionUmdDescribePrimary) and adopted
+ * as a direct Mesa BO (as the D3D10 glue's attach_presentation_render_
+ * resource). A present blits the back buffer into it on the GPU and flushes.
+ *
+ * G2 HW3b: EXP1218 showed that dxgkrnl refuses the legacy windowed blt
+ * (D3DKMTPresent with hWindow, Microsoft's OpenGL ICD example) while DWM
+ * owns the VidPN source (STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE). Under DWM an
+ * ICD presents through opengl32's redirection protocol (gldrv.h, all of it
+ * offered here per measure-wgl-callbacks): the ICD calls PresentBuffers;
+ * opengl32 calls the ICD back (DrvPresentBuffers) with the window's shared
+ * redirection surface and a present token; the ICD opens that surface on its
+ * device and calls PresentToRedirectionSurface with its kernel context, the
+ * source, the opened destination, the shared handle and the token; opengl32
+ * submits the blt (DxgkDdiPresent on the GL context: the KMD's GPU present
+ * job, after the blit -- one kernel context, in order) and tells DWM. No CPU
+ * copy. (Redirected blts are not serviced on this driver -- EXP1231-D2 --
+ * so APPLE_AGX_PRESENT=redirect is kept for that work; the default is the
+ * DXGI flip path below.) A present that does not complete is not shown; its
+ * receipts name the stage. */
+#define AGX_WGL_KMT_SOURCES 4u
+/* The present sources and the redirection requests; taken by the presenting
+ * thread for a whole present. */
+static SRWLOCK AgxWglPresentLock = SRWLOCK_INIT;
+#define AGX_WGL_KMT_PENDING 8u
+/* Where a redirected present stopped (measure-wgl-redirect). */
+enum {
+  AGX_WGL_REDIRECT_SHOWN,         /* PresentToRedirectionSurface accepted it */
+  AGX_WGL_REDIRECT_REFUSED,       /* PresentBuffers FALSE, no callback */
+  AGX_WGL_REDIRECT_NO_CALLBACK,   /* PresentBuffers TRUE, no callback */
+  AGX_WGL_REDIRECT_NO_SURFACE,    /* callback without a surface */
+  AGX_WGL_REDIRECT_OPEN,          /* the surface did not open (NTSTATUS) */
+  AGX_WGL_REDIRECT_DESCRIPTION,   /* not a description this driver made */
+  AGX_WGL_REDIRECT_ADOPT,         /* adopting or importing it failed */
+  AGX_WGL_REDIRECT_PRESENT,       /* PresentToRedirectionSurface FALSE */
+  AGX_WGL_REDIRECT_RETURN,        /* PresentBuffers FALSE after the present */
+  AGX_WGL_REDIRECT_STAGES
+};
+/* One present in flight through opengl32 (pPrivData of PresentBuffers). The
+ * requests are never freed, so a callback for an old request is still
+ * recognised as this ICD's and never reaches stw as a resource pointer. */
+#define AGX_WGL_REDIRECT_MAGIC 0x52445741u /* "AWDR" */
+typedef struct {
+  UINT Magic;
+  BOOL Active;            /* PresentBuffers is running for it */
+  DWORD Thread;           /* the presenting thread */
+  void *Source;           /* its AGX_WGL_KMT_SOURCE */
+  RECT Rect;
+  struct pipe_context *Context; /* the presenting GL context (copy into the surface) */
+  POINT Offset;           /* the client area's origin in the window (surface) */
+  BOOL Called;            /* DrvPresentBuffers ran for it */
+  UINT Stage;
+  LONG Status;
+} AGX_WGL_REDIRECT_REQUEST;
+static AGX_WGL_REDIRECT_REQUEST AgxWglRedirectRequests[AGX_WGL_KMT_SOURCES];
+typedef struct {
+  HWND Window;
+  unsigned Width, Height;          /* the back buffer's */
+  D3DKMT_HANDLE Allocation;
+  AGX_WIN32_SCREEN_BUFFER Buffer;
+  struct pipe_resource *Image;
+  BOOL Refused;                    /* no source could be made for this size */
+  /* G2 HW3b: the window's redirection surface, opened on this device. */
+  AGX_KMT_SHARED_SURFACE Surface;
+  ADMISSION_ALLOCATION_DESCRIPTION Destination;
+  AGX_WIN32_SCREEN_BUFFER DestinationBuffer;
+  struct pipe_resource *DestinationImage;
+  UINT RedirectVersion;            /* PresentToRedirectionSurface nVersion */
+  UINT DestinationStage;           /* wgl_redirect_open's result for Surface.Shared */
+  LONG DestinationStatus;
+  /* EXP1221: PresentBuffers attempts, the variant kept (1-4, 0 none), and per
+   * variant the calls answered by a callback, TRUE without one, FALSE. */
+  UINT PbAttempts, PbVariant, PbCalled[4], PbTrue[4], PbFalse[4];
+  UINT Stages[AGX_WGL_REDIRECT_STAGES], LastStage, LastStatus, Async;
+  /* G2 HW3c (EXP1232): the window's DXGI flip-model swap chain on this
+   * adapter's D3D11 device in this process, and the shared texture the ICD
+   * writes (opened as Surface/DestinationImage) and D3D11 copies into the
+   * swap chain's back buffer. */
+  IDXGISwapChain1 *Chain;
+  ID3D11Texture2D *Shared;
+  UINT DxgiStage; LONG DxgiStatus;
+  LONGLONG SumWait;
+  /* Receipt sums (measure-wgl-kmtpresent), microseconds after scaling. */
+  LONGLONG Frames, LastTick, SumPresent, SumInterval, SumCopy, SumKernel;
+  unsigned Shown, Failed, Empty, LastFailure;
+} AGX_WGL_KMT_SOURCE;
+static AGX_WGL_KMT_SOURCE AgxWglKmtSources[AGX_WGL_KMT_SOURCES];
+/* Released sources and destinations whose BO the winsys still holds (as
+ * collect_presentations): own allocations are deallocated, opened shared
+ * resources destroyed, once the winsys has dropped them. */
+typedef struct { D3DKMT_HANDLE Allocation, Resource; } AGX_WGL_KMT_PENDING_ENTRY;
+static AGX_WGL_KMT_PENDING_ENTRY AgxWglKmtPending[AGX_WGL_KMT_PENDING];
+
+static void wgl_kmt_deallocate(D3DKMT_HANDLE allocation) {
+  D3DDDICB_DEALLOCATE release;
+  ZeroMemory(&release, sizeof(release));
+  release.NumAllocations = 1u;
+  release.HandleList = &allocation;
+  (void)AgxWgl->Bridge.DeviceCallbacks.pfnDeallocateCb(&AgxWgl->Bridge, &release);
+}
+
+static void wgl_kmt_collect(void) {
+  for (unsigned i = 0; i < AGX_WGL_KMT_PENDING; ++i) {
+    AGX_WGL_KMT_PENDING_ENTRY *e = &AgxWglKmtPending[i];
+    if (!e->Allocation ||
+        AdmissionUmdScreenAllocationRegistered(&AgxWgl->Device, e->Allocation)) continue;
+    if (e->Resource) {
+      AGX_KMT_SHARED_SURFACE opened;
+      ZeroMemory(&opened, sizeof(opened));
+      opened.Resource = e->Resource;
+      (void)AgxKmtGpuvaCloseShared(&AgxWgl->Bridge, &opened);
+    } else {
+      wgl_kmt_deallocate(e->Allocation);
+    }
+    ZeroMemory(e, sizeof(*e));
+  }
+}
+
+static void wgl_kmt_pend(D3DKMT_HANDLE allocation, D3DKMT_HANDLE resource) {
+  unsigned i = 0;
+  if (!allocation) return;
+  while (i < AGX_WGL_KMT_PENDING && AgxWglKmtPending[i].Allocation) ++i;
+  if (i < AGX_WGL_KMT_PENDING) {
+    AgxWglKmtPending[i].Allocation = allocation;
+    AgxWglKmtPending[i].Resource = resource;
+  } else {
+    wgl_note("reject-wgl-kmt-release", E_OUTOFMEMORY);   /* kept: never freed under the GPU */
+  }
+}
+
+/* Drop the opened redirection surface (a new one or a released window). */
+static void wgl_redirect_close(AGX_WGL_KMT_SOURCE *s) {
+  if (s->DestinationImage) AgxWin32AsahiResourceRelease(&s->DestinationImage);
+  if (s->Surface.Resource) {
+    if (s->DestinationBuffer.Transport.Token)
+      wgl_kmt_pend(s->Surface.Allocation, s->Surface.Resource);
+    else
+      (void)AgxKmtGpuvaCloseShared(&AgxWgl->Bridge, &s->Surface);
+  }
+  ZeroMemory(&s->Surface, sizeof(s->Surface));
+  ZeroMemory(&s->Destination, sizeof(s->Destination));
+  ZeroMemory(&s->DestinationBuffer, sizeof(s->DestinationBuffer));
+}
+
+static void wgl_kmt_release(AGX_WGL_KMT_SOURCE *s) {
+  wgl_redirect_close(s);
+  if (s->Shared) s->Shared->Release();
+  if (s->Chain) s->Chain->Release();
+  if (s->Image) AgxWin32AsahiResourceRelease(&s->Image);
+  wgl_kmt_pend(s->Allocation, 0);
+  ZeroMemory(s, sizeof(*s));
+  wgl_kmt_collect();
+}
+
+static BOOL wgl_kmt_create(AGX_WGL_KMT_SOURCE *s, HWND window, unsigned width,
+                           unsigned height) {
+  ADMISSION_ALLOCATION_DESCRIPTION description;
+  D3DDDI_ALLOCATIONINFO info;
+  D3DDDICB_ALLOCATE allocate;
+  HRESULT result;
+  if (!AdmissionAllocationDescribe(width, height, 4u, (UINT)D3DKMDT_GDISURFACE_TEXTURE,
+                                   (UINT)D3DDDIFMT_A8R8G8B8, 0u, &description)) {
+    wgl_note("reject-wgl-kmt-describe", E_INVALIDARG);
+    return FALSE;
+  }
+  description.Size = (description.Size + 127ULL) & ~127ULL;
+  ZeroMemory(&info, sizeof(info));
+  ZeroMemory(&allocate, sizeof(allocate));
+  info.pPrivateDriverData = &description;
+  info.PrivateDriverDataSize = sizeof(description);
+  allocate.NumAllocations = 1u;
+  allocate.pAllocationInfo = &info;
+  result = AgxWgl->Bridge.DeviceCallbacks.pfnAllocateCb(&AgxWgl->Bridge, &allocate);
+  if (FAILED(result) || !info.hAllocation) {
+    wgl_note("reject-wgl-kmt-allocate", FAILED(result) ? result : E_FAIL);
+    return FALSE;
+  }
+  s->Allocation = info.hAllocation;
+  result = AdmissionUmdScreenAdoptAllocation(&AgxWgl->Device, info.hAllocation,
+      description.Size, 0x10000ULL, AgxWin32BufferClassGeneral,
+      AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+          AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite,
+      FALSE, TRUE, &s->Buffer);
+  if (FAILED(result)) {
+    wgl_note("reject-wgl-kmt-adopt", result);
+    wgl_kmt_deallocate(s->Allocation);
+    ZeroMemory(s, sizeof(*s));
+    return FALSE;
+  }
+  s->Image = AgxWin32AsahiImportLinearColor32(AgxWgl->Screen, &s->Buffer,
+      description.Width, description.Height, description.Pitch, description.Size,
+      AgxWin32AsahiLinearFormatBgra8Unorm);
+  if (!s->Image) {
+    wgl_note("reject-wgl-kmt-import", E_FAIL);
+    (void)AgxWin32ScreenDestroyBuffer(&AgxWgl->Device.Screen, &s->Buffer);
+    wgl_kmt_deallocate(s->Allocation);
+    ZeroMemory(s, sizeof(*s));
+    return FALSE;
+  }
+  s->Window = window;
+  s->Width = width;
+  s->Height = height;
+  return TRUE;
+}
+
+/* The window's source for a back buffer of this size; NULL: none can be made. */
+static AGX_WGL_KMT_SOURCE *wgl_kmt_get(HWND window, unsigned width, unsigned height) {
+  AGX_WGL_KMT_SOURCE *free_source = NULL;
+  wgl_kmt_collect();
+  for (unsigned i = 0; i < AGX_WGL_KMT_SOURCES; ++i) {
+    AGX_WGL_KMT_SOURCE *s = &AgxWglKmtSources[i];
+    if (s->Window == window) {
+      if (s->Width == width && s->Height == height)
+        return s->Refused || !s->Image ? NULL : s;
+      wgl_kmt_release(s);
+    }
+    if (!s->Window && !free_source) free_source = s;
+  }
+  if (!free_source) {
+    free_source = &AgxWglKmtSources[0];
+    wgl_kmt_release(free_source);
+  }
+  if (!wgl_kmt_create(free_source, window, width, height)) {
+    /* Remember the refusal for this size: no allocation each frame. */
+    free_source->Window = window;
+    free_source->Width = width;
+    free_source->Height = height;
+    free_source->Refused = TRUE;
+    return NULL;
+  }
+  return free_source;
+}
+
+#if WINVER >= 0xA00 && defined(_M_IX86)
+/* The x86 layout opengl32 reads (EXP1227, SysWOW64\opengl32.dll). */
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, hContext) == 0x4, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, hSource) == 0x8, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, hDestination) == 0xc, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, hSharedHandle) == 0x10, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, updateId) == 0x18, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, updateRect) == 0x20, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, broadcastContextCount) == 0x30, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, broadcastSrcAllocation) == 0x134, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, cbPrivateDriverDataSize) == 0x334, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, pPrivateDriverData) == 0x338, "opengl32 ABI");
+#endif
+
+/* G2 HW3b: open the window's redirection surface (opengl32's hSurface) on
+ * this device and adopt it as a direct BO, so it has a GPU VA in this
+ * process for the KMD's present job. Returns the stage that failed or
+ * AGX_WGL_REDIRECT_SHOWN; *status carries the step's status. */
+static UINT wgl_redirect_open(AGX_WGL_KMT_SOURCE *s, HANDLE shared, LONG *status) {
+  ADMISSION_ALLOCATION_DESCRIPTION d;
+  AGX_WIN32_ASAHI_LINEAR_FORMAT format;
+  HRESULT result;
+  wgl_redirect_close(s);
+  *status = (LONG)AgxKmtGpuvaOpenShared(&AgxWgl->Bridge, shared, &s->Surface);
+  {
+    /* receipt: the surface as it opened */
+    const ADMISSION_ALLOCATION_DESCRIPTION *r =
+        (const ADMISSION_ALLOCATION_DESCRIPTION *)s->Surface.AllocationPrivate;
+    UINT values[16] = {(UINT)(UINT_PTR)shared, (UINT)*status, s->Surface.Kind,
+        s->Surface.NumAllocations, s->Surface.RuntimePrivateBytes,
+        s->Surface.ResourcePrivateBytes, s->Surface.AllocationPrivateBytes,
+        r->Magic, r->Type, r->Format, r->Width, r->Height, r->Pitch, r->CpuVisible,
+        (UINT)s->Surface.GpuVirtualAddress, (UINT)(s->Surface.GpuVirtualAddress >> 32)};
+    AdmissionUmdDiagnostic("measure-wgl-redirect-surface", S_OK, values, 16u);
+  }
+  if (*status < 0) { ZeroMemory(&s->Surface, sizeof(s->Surface)); return AGX_WGL_REDIRECT_OPEN; }
+  memcpy(&d, s->Surface.AllocationPrivate, sizeof(d));
+  if (s->Surface.AllocationPrivateBytes != sizeof(d) || !AdmissionAllocationDescriptionValid(&d) ||
+      d.BytesPerPixel != 4u ||
+      (d.Format != (UINT)D3DDDIFMT_A8R8G8B8 && d.Format != (UINT)D3DDDIFMT_A8B8G8R8)) {
+    *status = (LONG)d.Format;
+    return AGX_WGL_REDIRECT_DESCRIPTION;
+  }
+  s->Destination = d;
+  /* A CPU-visible surface lives in the aperture: no direct BO; its VA is
+   * whatever dxgkrnl gives the present (the KMD receipt records it). */
+  if (d.CpuVisible) return AGX_WGL_REDIRECT_SHOWN;
+  result = AdmissionUmdScreenAdoptAllocation(&AgxWgl->Device, s->Surface.Allocation, d.Size,
+      0x10000ULL, AgxWin32BufferClassGeneral,
+      AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+          AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite,
+      FALSE, TRUE, &s->DestinationBuffer);
+  if (FAILED(result)) {
+    *status = (LONG)result;
+    ZeroMemory(&s->DestinationBuffer, sizeof(s->DestinationBuffer));
+    return AGX_WGL_REDIRECT_ADOPT;
+  }
+  format = d.Format == (UINT)D3DDDIFMT_A8R8G8B8 ? AgxWin32AsahiLinearFormatBgra8Unorm
+                                               : AgxWin32AsahiLinearFormatRgba8Unorm;
+  s->DestinationImage = AgxWin32AsahiImportLinearColor32(AgxWgl->Screen, &s->DestinationBuffer,
+      d.Width, d.Height, d.Pitch, d.Size, format);
+  if (!s->DestinationImage) {
+    *status = (LONG)E_FAIL;
+    (void)AgxWin32ScreenDestroyBuffer(&AgxWgl->Device.Screen, &s->DestinationBuffer);
+    ZeroMemory(&s->DestinationBuffer, sizeof(s->DestinationBuffer));
+    return AGX_WGL_REDIRECT_ADOPT;
+  }
+  return AGX_WGL_REDIRECT_SHOWN;
+}
+
+/* EXP1229 receipt-only: what this process sees in the redirection surface
+ * after its copy (DWM composed it as all zeros). Texel at the copy's centre
+ * in the surface and the same texel in the source image, read through a
+ * 2x1 staging texture (the READ map waits for the copies); the first four
+ * presents, then every 120th. */
+static void wgl_redirect_readback(struct pipe_context *ctx, AGX_WGL_KMT_SOURCE *s,
+                                  int x, int y, int width, int height) {
+  static volatile LONG presents;
+  LONG n = InterlockedIncrement(&presents);
+  if (n > 4 && n % 120) return;
+  struct pipe_screen *screen = ctx->screen;
+  struct pipe_resource templ;
+  memset(&templ, 0, sizeof(templ));
+  templ.target = PIPE_TEXTURE_2D;
+  templ.format = s->DestinationImage->format;
+  templ.width0 = 2; templ.height0 = 1; templ.depth0 = 1; templ.array_size = 1;
+  templ.usage = PIPE_USAGE_STAGING;
+  struct pipe_resource *staging = screen->resource_create(screen, &templ);
+  UINT values[8] = {(UINT)n, 0u, 0u, (UINT)(x + width / 2), (UINT)(y + height / 2),
+                    (UINT)s->DestinationImage->format, (UINT)s->Image->format, 0u};
+  if (staging) {
+    struct pipe_resource *from[2] = {s->DestinationImage, s->Image};
+    const int fx[2] = {x + width / 2, width / 2}, fy[2] = {y + height / 2, height / 2};
+    for (unsigned i = 0; i < 2u; ++i) {
+      struct pipe_blit_info blit;
+      memset(&blit, 0, sizeof(blit));
+      blit.dst.resource = staging; blit.dst.format = staging->format;
+      blit.dst.box.x = (int)i; blit.dst.box.width = 1; blit.dst.box.height = 1;
+      blit.dst.box.depth = 1;
+      blit.src.resource = from[i]; blit.src.format = from[i]->format;
+      blit.src.box = blit.dst.box; blit.src.box.x = fx[i]; blit.src.box.y = fy[i];
+      blit.mask = PIPE_MASK_RGBA; blit.filter = PIPE_TEX_FILTER_NEAREST;
+      ctx->blit(ctx, &blit);
+    }
+    ctx->flush(ctx, NULL, 0);
+    struct pipe_transfer *transfer = NULL;
+    struct pipe_box box;
+    u_box_2d(0, 0, 2, 1, &box);
+    const UINT *map = (const UINT *)ctx->texture_map(ctx, staging, 0, PIPE_MAP_READ, &box,
+                                                     &transfer);
+    if (map && transfer) {
+      values[1] = map[0]; values[2] = map[1]; values[7] = 1u;
+      ctx->texture_unmap(ctx, transfer);
+    }
+    pipe_resource_reference(&staging, NULL);
+  }
+  AdmissionUmdDiagnostic("measure-wgl-redirect-readback", S_OK, values, 8u);
+}
+
+/* opengl32's DrvPresentBuffers callback for a present started by
+ * wgl_redirect_present (agx_wgl_glthread.c routes it here first): open the
+ * surface if it changed and hand the blt to PresentToRedirectionSurface.
+ * Runs on the presenting thread, which holds AgxWglPresentLock. Returns -1 for
+ * a call that is not this ICD's, else the BOOL for opengl32. */
+/* EXP1221 receipt-only: every DrvPresentBuffers call opengl32 makes (the
+ * first 16 one by one: sequence, ours, during its PresentBuffers, on the
+ * presenting thread, hSurface, token low and high, microseconds since that
+ * PresentBuffers began, pPrivData low; then counts in measure-wgl-redirect). */
+static volatile LONG AgxWglDpbCalls, AgxWglDpbForeign;
+static LONGLONG AgxWglDpbStartQpc;
+
+extern "C" int agx_wgl_redirect_buffers(HDC hdc, LPPRESENTBUFFERS data) {
+  AGX_WGL_REDIRECT_REQUEST *request = data ? (AGX_WGL_REDIRECT_REQUEST *)data->pPrivData : NULL;
+  BOOL ours = request && request >= &AgxWglRedirectRequests[0] &&
+      request < &AgxWglRedirectRequests[AGX_WGL_KMT_SOURCES] &&
+      request->Magic == AGX_WGL_REDIRECT_MAGIC;
+  LONG seq = InterlockedIncrement(&AgxWglDpbCalls);
+  if (!ours) InterlockedIncrement(&AgxWglDpbForeign);
+  if (seq <= 16) {
+    LARGE_INTEGER now, frequency;
+    QueryPerformanceCounter(&now); QueryPerformanceFrequency(&frequency);
+    UINT values[9] = {(UINT)seq, ours ? 1u : 0u, ours && request->Active ? 1u : 0u,
+        ours && request->Thread == GetCurrentThreadId() ? 1u : 0u,
+        data ? (UINT)(UINT_PTR)data->hSurface : 0u,
+        data ? (UINT)data->ullPresentToken : 0u, data ? (UINT)(data->ullPresentToken >> 32) : 0u,
+        frequency.QuadPart && AgxWglDpbStartQpc ?
+            (UINT)((now.QuadPart - AgxWglDpbStartQpc) * 1000000 / frequency.QuadPart) : 0u,
+        data ? (UINT)(UINT_PTR)data->pPrivData : 0u};
+    AdmissionUmdDiagnostic("measure-wgl-dpb", S_OK, values, 9u);
+  }
+  if (!ours) return -1;
+  AGX_WGL_KMT_SOURCE *s = (AGX_WGL_KMT_SOURCE *)request->Source;
+  /* Only during its PresentBuffers call and on its thread: a late or
+   * foreign-thread callback must not touch the source. */
+  if (!request->Active || request->Thread != GetCurrentThreadId() || !s || !AgxWgl) {
+    if (s) InterlockedIncrement((volatile LONG *)&s->Async);
+    return 0;
+  }
+  request->Called = TRUE;
+  if (!data->hSurface) { request->Stage = AGX_WGL_REDIRECT_NO_SURFACE; return 0; }
+  if (s->Surface.Shared != data->hSurface) {
+    LONG status = 0;
+    s->DestinationStage = wgl_redirect_open(s, data->hSurface, &status);
+    s->DestinationStatus = status;
+  }
+  /* A surface that opened but cannot be used is not reopened each frame;
+   * one that did not open is retried (Surface.Shared stays 0). */
+  if (s->DestinationStage != AGX_WGL_REDIRECT_SHOWN || !s->Surface.Resource) {
+    request->Stage = s->DestinationStage != AGX_WGL_REDIRECT_SHOWN ? s->DestinationStage
+                                                                    : AGX_WGL_REDIRECT_OPEN;
+    request->Status = s->DestinationStatus;
+    return 0;
+  }
+#if WINVER >= 0xA00
+  /* updateRect stays in the client (source) coordinates D3DKMTPresent takes
+   * as its source rect; the copy lands at the client offset in the surface. */
+  RECT rect = request->Rect;
+  const LONG x = request->Offset.x, y = request->Offset.y;
+  if (x < 0 || y < 0 || x >= (LONG)s->Destination.Width || y >= (LONG)s->Destination.Height) {
+    request->Stage = AGX_WGL_REDIRECT_DESCRIPTION;
+    request->Status = (LONG)E_INVALIDARG;
+    return 0;
+  }
+  if (rect.right > (LONG)s->Destination.Width - x) rect.right = (LONG)s->Destination.Width - x;
+  if (rect.bottom > (LONG)s->Destination.Height - y) rect.bottom = (LONG)s->Destination.Height - y;
+  /* EXP1228: a redirected present from this GPU-VA context reaches no
+   * DxgkDdiPresent (WDDM 2: the user-mode driver writes the redirection
+   * surface; the present only hands DWM the update). Copy the frame (already
+   * in s->Image) into the surface on this context, ordered before the
+   * present that D3DKMTPresent queues on the same context. */
+  if (!s->DestinationImage || !request->Context || rect.right <= 0 || rect.bottom <= 0) {
+    request->Stage = AGX_WGL_REDIRECT_ADOPT;
+    request->Status = (LONG)E_NOTIMPL;
+    return 0;
+  }
+  {
+    struct pipe_blit_info blit;
+    memset(&blit, 0, sizeof(blit));
+    blit.dst.resource = s->DestinationImage;
+    blit.dst.format = s->DestinationImage->format;
+    blit.dst.box.x = (int)x;
+    blit.dst.box.y = (int)y;
+    blit.dst.box.width = (int)rect.right;
+    blit.dst.box.height = (int)rect.bottom;
+    blit.dst.box.depth = 1;
+    blit.src.resource = s->Image;
+    blit.src.format = s->Image->format;
+    blit.src.box = blit.dst.box;
+    blit.src.box.x = 0;
+    blit.src.box.y = 0;
+    blit.mask = PIPE_MASK_RGBA;
+    blit.filter = PIPE_TEX_FILTER_NEAREST;
+    request->Context->blit(request->Context, &blit);
+    request->Context->flush(request->Context, NULL, 0);
+    wgl_redirect_readback(request->Context, s, (int)x, (int)y, (int)rect.right,
+                          (int)rect.bottom);
+  }
+  PRESENTTOREDIRECTIONSURFACECB args;
+  ZeroMemory(&args, sizeof(args));
+  args.hContext = (UINT)(UINT_PTR)AgxWgl->Device.KernelContext;
+  args.hSource = s->Allocation;
+  args.hDestination = s->Surface.Allocation;
+  args.hSharedHandle = data->hSurface;
+  args.updateId = data->ullPresentToken;
+  args.updateRect = rect;
+  /* gldrv.h gives the structure, not its version. EXP1227: this Windows'
+   * SysWOW64\opengl32.dll returns FALSE without SetLastError unless
+   * nVersion == 3 (then it requires hContext and hSource, at most 64
+   * broadcast contexts, and issues D3DKMTPresent with Blt | SrcRectValid |
+   * RedirectedBlt); 1 and 2 stay as fallbacks for other builds. The first
+   * accepted version is kept (measure-wgl-redirect records it). */
+  static const UINT versions[] = {3u, 2u, 1u};
+  BOOL ok = FALSE;
+  for (unsigned i = 0; i < ARRAYSIZE(versions) && !ok; ++i) {
+    if (s->RedirectVersion && versions[i] != s->RedirectVersion) continue;
+    args.nVersion = versions[i];
+    SetLastError(0);
+    ok = stw_dev->callbacks.pfnPresentToRedirectionSurface(hdc, &args);
+    if (ok) s->RedirectVersion = versions[i];
+  }
+  if (!ok) {
+    request->Stage = AGX_WGL_REDIRECT_PRESENT;
+    request->Status = (LONG)GetLastError();
+    return 0;
+  }
+  request->Stage = AGX_WGL_REDIRECT_SHOWN;
+  return 1;
+#else
+  request->Stage = AGX_WGL_REDIRECT_PRESENT;
+  return 0;
+#endif
+}
+
+/* EXP1222 receipt-only: the modules PresentBuffers loads into the process
+ * (EXP1221: nVersion 2 returned TRUE without a callback and left
+ * ERROR_MOD_NOT_FOUND). The module list before the first call is kept; after
+ * each of the first 32 calls every module not in it is reported once
+ * (measure-wgl-pb-module_<file>: attempt, variant, GetLastError). */
+#define AGX_WGL_PB_MODULES 256u
+static HMODULE AgxWglPbModules[AGX_WGL_PB_MODULES];
+static DWORD AgxWglPbModuleCount;
+static UINT AgxWglPbModuleCalls;
+
+static void wgl_pb_modules(UINT attempt, UINT variant, DWORD error) {
+  HMODULE now[AGX_WGL_PB_MODULES];
+  DWORD bytes = 0;
+  if (AgxWglPbModuleCalls > 32u) return;
+  if (!K32EnumProcessModules(GetCurrentProcess(), now, sizeof(now), &bytes)) return;
+  DWORD count = bytes / sizeof(HMODULE);
+  if (count > AGX_WGL_PB_MODULES) count = AGX_WGL_PB_MODULES;
+  if (AgxWglPbModuleCalls++ == 0u) {
+    memcpy(AgxWglPbModules, now, count * sizeof(HMODULE));
+    AgxWglPbModuleCount = count;
+    UINT values[2] = {count, 0u};
+    AdmissionUmdDiagnostic("measure-wgl-pb-modules", S_OK, values, 2u);
+    return;
+  }
+  for (DWORD i = 0; i < count; ++i) {
+    DWORD k = 0;
+    while (k < AgxWglPbModuleCount && AgxWglPbModules[k] != now[i]) ++k;
+    if (k < AgxWglPbModuleCount) continue;
+    char path[MAX_PATH], stage[96];
+    if (!GetModuleFileNameA(now[i], path, MAX_PATH)) continue;
+    const char *slash = strrchr(path, '\\');
+    if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-wgl-pb-module_%s",
+                    slash ? slash + 1 : path) < 0) continue;
+    UINT values[3] = {attempt, variant, (UINT)error};
+    AdmissionUmdDiagnostic(stage, S_OK, values, 3u);
+    if (AgxWglPbModuleCount < AGX_WGL_PB_MODULES) AgxWglPbModules[AgxWglPbModuleCount++] = now[i];
+  }
+}
+
+/* One present through opengl32: PresentBuffers with this source's request;
+ * opengl32 calls agx_wgl_redirect_buffers back. Returns the stage. */
+static UINT wgl_redirect_present(AGX_WGL_KMT_SOURCE *s, struct pipe_context *ctx, HWND window,
+                                 const RECT *rect, LONG *status) {
+  AGX_WGL_REDIRECT_REQUEST *request =
+      &AgxWglRedirectRequests[s - AgxWglKmtSources];
+  PRESENTBUFFERSCB cb;
+  HDC dc = GetDC(window);
+  BOOL ok;
+  *status = 0;
+  if (!dc) { *status = (LONG)GetLastError(); return AGX_WGL_REDIRECT_REFUSED; }
+  ZeroMemory(request, sizeof(*request));
+  request->Magic = AGX_WGL_REDIRECT_MAGIC;
+  request->Source = s;
+  request->Rect = *rect;
+  request->Context = ctx;
+  {
+    /* The redirection surface covers the whole window (EXP1227: 656x519 for
+     * a 640x480 client); the frame goes to the client area's place in it. */
+    POINT origin = {0, 0};
+    RECT frame;
+    if (ClientToScreen(window, &origin) && GetWindowRect(window, &frame)) {
+      request->Offset.x = origin.x - frame.left;
+      request->Offset.y = origin.y - frame.top;
+    }
+  }
+  request->Thread = GetCurrentThreadId();
+  request->Active = TRUE;
+  ZeroMemory(&cb, sizeof(cb));
+  /* EXP1221 measurement of the undocumented half: until a callback comes,
+   * attempts 1-8 use nVersion 2 without sync (Mesa stw's call), 9-16 with
+   * vsync, 17-24 nVersion 1, 25-32 nVersion 3; then nVersion 2. A variant
+   * that is called back is kept. EXP1221: nVersion 3 is called back (with
+   * no surface); nVersion 2 returns TRUE without a callback. */
+  static const UINT variants[4][2] = {{2u, PRESCB_SYNCTYPE_NONE}, {2u, PRESCB_SYNCTYPE_VSYNC},
+                                      {1u, PRESCB_SYNCTYPE_NONE}, {3u, PRESCB_SYNCTYPE_NONE}};
+  UINT variant = s->PbVariant ? s->PbVariant - 1u :
+      s->PbAttempts < 32u ? s->PbAttempts / 8u : 0u;
+  ++s->PbAttempts;
+  cb.nVersion = variants[variant][0];
+  cb.syncType = variants[variant][1];   /* G3 paces the swaps otherwise */
+  cb.luidAdapter = AgxWgl->Luid;
+  cb.pPrivData = request;
+  cb.updateRect = *rect;
+  if (!AgxWglPbModuleCalls) wgl_pb_modules(0u, variant, 0u);   /* the baseline, before the first call */
+  SetLastError(0);
+  {
+    LARGE_INTEGER t; QueryPerformanceCounter(&t); AgxWglDpbStartQpc = t.QuadPart;
+  }
+  ok = stw_dev->callbacks.pfnPresentBuffers(dc, &cb);
+  if (!request->Called) *status = (LONG)GetLastError();
+  request->Active = FALSE;
+  wgl_pb_modules(s->PbAttempts, variant, (DWORD)*status);
+  if (request->Called) {
+    ++s->PbCalled[variant];
+    if (!s->PbVariant) s->PbVariant = variant + 1u;
+  } else {
+    ++(ok ? s->PbTrue : s->PbFalse)[variant];
+  }
+  ReleaseDC(window, dc);
+  if (!request->Called) return ok ? AGX_WGL_REDIRECT_NO_CALLBACK : AGX_WGL_REDIRECT_REFUSED;
+  if (request->Stage != AGX_WGL_REDIRECT_SHOWN) { *status = request->Status; return request->Stage; }
+  return ok ? AGX_WGL_REDIRECT_SHOWN : AGX_WGL_REDIRECT_RETURN;
+}
+
+/* Receipt (G2 HW3b), with measure-wgl-kmtpresent: presents per stage
+ * (AGX_WGL_REDIRECT_*), last failing stage and status, async callbacks,
+ * PresentToRedirectionSurface version, destination format, width, height,
+ * CPU-visible, open kind, opened GPU VA low. */
+static void wgl_redirect_receipt(AGX_WGL_KMT_SOURCE *s) {
+  /* The UMD diagnostic takes at most 16 values (EXP1220 lost a 19-value line). */
+  UINT values[16], n = 0;
+  for (unsigned i = 0; i < AGX_WGL_REDIRECT_STAGES; ++i) values[n++] = s->Stages[i];
+  values[n++] = s->LastStage; values[n++] = s->LastStatus; values[n++] = s->Async;
+  values[n++] = s->RedirectVersion; values[n++] = s->Surface.Kind;
+  values[n++] = (UINT)AgxWglDpbCalls; values[n++] = (UINT)AgxWglDpbForeign;
+  AdmissionUmdDiagnostic("measure-wgl-redirect", S_OK, values, n);
+  UINT dest[16] = {s->Destination.Format, s->Destination.Width, s->Destination.Height,
+      s->Destination.CpuVisible, (UINT)s->Surface.GpuVirtualAddress,
+      (UINT)(s->Surface.GpuVirtualAddress >> 32), s->DestinationStage, (UINT)s->DestinationStatus,
+      s->PbAttempts, s->PbVariant, 0u, 0u, 0u, 0u, 0u, 0u};
+  AdmissionUmdDiagnostic("measure-wgl-redirect-dest", S_OK, dest, 10u);
+  UINT pb[12];
+  for (unsigned i = 0; i < 4u; ++i) { pb[3 * i] = s->PbCalled[i]; pb[3 * i + 1] = s->PbTrue[i]; pb[3 * i + 2] = s->PbFalse[i]; }
+  AdmissionUmdDiagnostic("measure-wgl-redirect-pb", S_OK, pb, 12u);
+  ZeroMemory(s->Stages, sizeof(s->Stages));
+  s->Async = 0;
+}
+
+/* Receipt (G2 HW3): every 120 kernel presents, in microseconds, the mean
+ * present (blit, flush and D3DKMTPresent), interval, GPU blit submission and
+ * D3DKMTPresent, the presented size, presents shown, refused and skipped
+ * (empty client area), the last refusal status and refused-window state. */
+static void wgl_kmt_present_receipt(AGX_WGL_KMT_SOURCE *s, unsigned width,
+                                    unsigned height, BOOL now) {
+  LARGE_INTEGER frequency;
+  QueryPerformanceFrequency(&frequency);
+  if (!frequency.QuadPart || (!now && s->Frames % 120 != 0)) return;
+  LONGLONG us = frequency.QuadPart, frames = s->Frames % 120 ? s->Frames % 120 : 120;
+  UINT values[11] = {
+    (UINT)(s->SumPresent * 1000000 / us / frames),
+    (UINT)(s->SumInterval * 1000000 / us / frames),
+    (UINT)(s->SumCopy * 1000000 / us / frames),
+    (UINT)(s->SumKernel * 1000000 / us / frames),
+    width, height, s->Shown, s->Failed, s->Empty, s->LastFailure,
+    s->Refused ? 1u : 0u };
+  AdmissionUmdDiagnostic("measure-wgl-kmtpresent", S_OK, values, 11u);
+  {
+    /* G2 HW3c: last DXGI stage and status, mean wait for the ICD's blit (us),
+     * swap chain present, shared texture size. */
+    UINT dxgi[7] = {s->DxgiStage, (UINT)s->DxgiStatus,
+        (UINT)(s->SumWait * 1000000 / us / frames), s->Chain ? 1u : 0u,
+        s->Destination.Width, s->Destination.Height, s->Surface.Kind};
+    AdmissionUmdDiagnostic("measure-wgl-dxgi", S_OK, dxgi, 7u);
+    s->SumWait = 0;
+  }
+  wgl_redirect_receipt(s);
+  s->SumPresent = s->SumInterval = s->SumCopy = s->SumKernel = 0;
+  s->Shown = s->Failed = s->Empty = 0;
+  if (!now) wgl_common_receipt(us);
+}
+
+/* G2 HW3c (EXP1232): present a GL frame through a DXGI flip-model swap chain.
+ * EXP1231 proved flip-model presents from this driver composed on screen
+ * (32-bit D3D11 smoke) while redirected (blt) presents are not serviced
+ * (EXP1231-D2: no DxgkDdiPresent Blt at all). The ICD makes a D3D11 device
+ * on its adapter (the WOW64 UMD in this process), a flip-discard swap chain
+ * for the window and a shared B8G8R8A8 texture it opens on its own device
+ * (wgl_redirect_open); per frame it blits the GL colour buffer into that
+ * texture, waits for the blit, and D3D11 copies it into the back buffer and
+ * presents. Stages for measure-wgl-dxgi. */
+enum {
+  AGX_WGL_DXGI_SHOWN,
+  AGX_WGL_DXGI_DEVICE,       /* no D3D11 device on this adapter */
+  AGX_WGL_DXGI_CHAIN,        /* CreateSwapChainForHwnd */
+  AGX_WGL_DXGI_TEXTURE,      /* CreateTexture2D / GetSharedHandle */
+  AGX_WGL_DXGI_OPEN,         /* the ICD could not open/adopt the texture */
+  AGX_WGL_DXGI_WAIT,         /* the blit's fence */
+  AGX_WGL_DXGI_BUFFER,       /* GetBuffer */
+  AGX_WGL_DXGI_PRESENT,      /* IDXGISwapChain::Present */
+  AGX_WGL_DXGI_STAGES
+};
+typedef HRESULT (WINAPI *AGX_CREATE_DXGI_FACTORY1)(REFIID, void **);
+static struct {
+  BOOL Tried;
+  HRESULT Status;
+  IDXGIFactory2 *Factory;
+  ID3D11Device *Device;
+  ID3D11DeviceContext *Context;
+} AgxWglDxgi;
+
+static HRESULT wgl_dxgi_device(void) {
+  if (AgxWglDxgi.Tried) return AgxWglDxgi.Status;
+  AgxWglDxgi.Tried = TRUE;
+  HMODULE dxgi = LoadLibraryW(L"dxgi.dll"), d3d11 = LoadLibraryW(L"d3d11.dll");
+  AGX_CREATE_DXGI_FACTORY1 createFactory = dxgi ?
+      (AGX_CREATE_DXGI_FACTORY1)(void *)GetProcAddress(dxgi, "CreateDXGIFactory1") : NULL;
+  PFN_D3D11_CREATE_DEVICE createDevice = d3d11 ?
+      (PFN_D3D11_CREATE_DEVICE)(void *)GetProcAddress(d3d11, "D3D11CreateDevice") : NULL;
+  HRESULT result = createFactory && createDevice ? S_OK : HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
+  IDXGIAdapter1 *adapter = NULL, *pick = NULL;
+  if (SUCCEEDED(result))
+    result = createFactory(__uuidof(IDXGIFactory2), (void **)&AgxWglDxgi.Factory);
+  for (UINT i = 0; SUCCEEDED(result) && !pick &&
+       AgxWglDxgi.Factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
+    DXGI_ADAPTER_DESC1 desc;
+    if (SUCCEEDED(adapter->GetDesc1(&desc)) &&
+        desc.AdapterLuid.LowPart == AgxWgl->Luid.LowPart &&
+        desc.AdapterLuid.HighPart == AgxWgl->Luid.HighPart)
+      pick = adapter;
+    else
+      adapter->Release();
+  }
+  if (SUCCEEDED(result) && !pick) result = DXGI_ERROR_NOT_FOUND;
+  if (SUCCEEDED(result)) {
+    const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
+                                        D3D_FEATURE_LEVEL_10_0};
+    D3D_FEATURE_LEVEL level;
+    result = createDevice(pick, D3D_DRIVER_TYPE_UNKNOWN, NULL, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                          levels, 3u, D3D11_SDK_VERSION, &AgxWglDxgi.Device, &level,
+                          &AgxWglDxgi.Context);
+  }
+  if (pick) pick->Release();
+  AgxWglDxgi.Status = result;
+  if (FAILED(result)) wgl_note("reject-wgl-dxgi-device", result);
+  return result;
+}
+
+/* The window's swap chain and shared texture at the client size; a size
+ * change rebuilds both. Returns AGX_WGL_DXGI_SHOWN when ready. */
+static UINT wgl_dxgi_target(AGX_WGL_KMT_SOURCE *s, HWND window, unsigned width,
+                            unsigned height, LONG *status) {
+  if (s->Chain && s->Shared && s->DestinationImage &&
+      s->Destination.Width == width && s->Destination.Height == height)
+    return AGX_WGL_DXGI_SHOWN;
+  wgl_redirect_close(s);
+  if (s->Shared) { s->Shared->Release(); s->Shared = NULL; }
+  HRESULT result;
+  if (!s->Chain) {
+    DXGI_SWAP_CHAIN_DESC1 desc;
+    ZeroMemory(&desc, sizeof(desc));
+    desc.Width = width; desc.Height = height;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1u;
+    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.BufferCount = 2u;
+    desc.Scaling = DXGI_SCALING_STRETCH;
+    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+    result = AgxWglDxgi.Factory->CreateSwapChainForHwnd(AgxWglDxgi.Device, window, &desc,
+                                                         NULL, NULL, &s->Chain);
+    if (FAILED(result)) { s->Chain = NULL; *status = (LONG)result; return AGX_WGL_DXGI_CHAIN; }
+    (void)AgxWglDxgi.Factory->MakeWindowAssociation(window,
+        DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_ALT_ENTER);
+  } else {
+    DXGI_SWAP_CHAIN_DESC1 desc;
+    if (SUCCEEDED(s->Chain->GetDesc1(&desc)) && (desc.Width != width || desc.Height != height)) {
+      result = s->Chain->ResizeBuffers(0u, width, height, DXGI_FORMAT_UNKNOWN, 0u);
+      if (FAILED(result)) { *status = (LONG)result; return AGX_WGL_DXGI_CHAIN; }
+    }
+  }
+  D3D11_TEXTURE2D_DESC texture;
+  ZeroMemory(&texture, sizeof(texture));
+  texture.Width = width; texture.Height = height;
+  texture.MipLevels = 1u; texture.ArraySize = 1u;
+  texture.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  texture.SampleDesc.Count = 1u;
+  texture.Usage = D3D11_USAGE_DEFAULT;
+  texture.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+  texture.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+  result = AgxWglDxgi.Device->CreateTexture2D(&texture, NULL, &s->Shared);
+  HANDLE shared = NULL;
+  if (SUCCEEDED(result)) {
+    IDXGIResource *resource = NULL;
+    result = s->Shared->QueryInterface(__uuidof(IDXGIResource), (void **)&resource);
+    if (SUCCEEDED(result)) {
+      result = resource->GetSharedHandle(&shared);
+      resource->Release();
+    }
+  }
+  if (FAILED(result) || !shared) {
+    if (s->Shared) { s->Shared->Release(); s->Shared = NULL; }
+    *status = (LONG)(FAILED(result) ? result : E_HANDLE);
+    return AGX_WGL_DXGI_TEXTURE;
+  }
+  LONG openStatus = 0;
+  UINT stage = wgl_redirect_open(s, shared, &openStatus);
+  if (stage != AGX_WGL_REDIRECT_SHOWN || !s->DestinationImage) {
+    *status = openStatus ? openStatus : (LONG)stage;
+    return AGX_WGL_DXGI_OPEN;
+  }
+  return AGX_WGL_DXGI_SHOWN;
+}
+
+static UINT wgl_dxgi_present(AGX_WGL_KMT_SOURCE *s, struct pipe_context *ctx,
+                             struct pipe_resource *res, HWND window, unsigned width,
+                             unsigned height, LONG *status) {
+  *status = 0;
+  if (FAILED(wgl_dxgi_device())) { *status = (LONG)AgxWglDxgi.Status; return AGX_WGL_DXGI_DEVICE; }
+  UINT stage = wgl_dxgi_target(s, window, width, height, status);
+  if (stage != AGX_WGL_DXGI_SHOWN) return stage;
+  struct pipe_blit_info blit;
+  memset(&blit, 0, sizeof(blit));
+  blit.dst.resource = s->DestinationImage;
+  blit.dst.format = s->DestinationImage->format;
+  blit.dst.box.width = (int)width;
+  blit.dst.box.height = (int)height;
+  blit.dst.box.depth = 1;
+  blit.src.resource = res;
+  blit.src.format = res->format;
+  blit.src.box = blit.dst.box;
+  blit.mask = PIPE_MASK_RGBA;
+  blit.filter = PIPE_TEX_FILTER_NEAREST;
+  ctx->blit(ctx, &blit);
+  /* The D3D11 device is another device: its copy may read the texture only
+   * after this blit completed. */
+  LARGE_INTEGER before, after;
+  QueryPerformanceCounter(&before);
+  struct pipe_fence_handle *fence = NULL;
+  ctx->flush(ctx, &fence, 0);
+  bool done = fence && ctx->screen->fence_finish(ctx->screen, NULL, fence, ~0ull);
+  if (fence) ctx->screen->fence_reference(ctx->screen, &fence, NULL);
+  QueryPerformanceCounter(&after);
+  s->SumWait += after.QuadPart - before.QuadPart;
+  if (!done) { *status = (LONG)E_FAIL; return AGX_WGL_DXGI_WAIT; }
+  ID3D11Texture2D *back = NULL;
+  HRESULT result = s->Chain->GetBuffer(0u, __uuidof(ID3D11Texture2D), (void **)&back);
+  if (FAILED(result)) { *status = (LONG)result; return AGX_WGL_DXGI_BUFFER; }
+  AgxWglDxgi.Context->CopyResource(back, s->Shared);
+  back->Release();
+  result = s->Chain->Present(0u, 0u);
+  if (FAILED(result)) { *status = (LONG)result; return AGX_WGL_DXGI_PRESENT; }
+  return AGX_WGL_DXGI_SHOWN;
+}
+
+/* APPLE_AGX_PRESENT: "dxgi" (default) or "redirect" (opengl32 PresentBuffers,
+ * G2 HW3b). */
+static int wgl_present_mode(void) {
+  static int mode = -1;
+  if (mode < 0) {
+    char value[16];
+    DWORD n = GetEnvironmentVariableA("APPLE_AGX_PRESENT", value, sizeof(value));
+    mode = n && n < sizeof(value) && !strcmp(value, "redirect") ? 1 : 0;
+  }
+  return mode;
+}
+
+/* TRUE: the frame was presented (or there is nothing to show); FALSE: it
+ * was not shown. Called with AgxWglPresentLock held. */
+static BOOL wgl_kmt_present(struct pipe_context *ctx, struct pipe_resource *res,
+                            HWND window, LONGLONG start) {
+  static volatile LONG first;
+  LARGE_INTEGER copied, end;
+  RECT client;
+#if WINVER >= 0xA00
+  if (!AgxWgl || !stw_dev || !stw_dev->callbacks.pfnPresentBuffers ||
+      !stw_dev->callbacks.pfnPresentToRedirectionSurface ||
+      !AgxWgl->Device.KernelContext || !ctx->blit || !ctx->flush)
+    return FALSE;
+#else
+  return FALSE;
+#endif
+  AGX_WGL_KMT_SOURCE *s = wgl_kmt_get(window, res->width0, res->height0);
+  if (!s) return FALSE;
+  if (s->LastTick) s->SumInterval += start - s->LastTick;
+  s->LastTick = start;
+  ++s->Frames;
+  /* The KMD blits without stretching: present the part of the frame the
+   * client area shows (a window being resized or minimized). */
+  unsigned width = res->width0, height = res->height0;
+  if (GetClientRect(window, &client)) {
+    if (client.right < (LONG)width) width = client.right > 0 ? (unsigned)client.right : 0u;
+    if (client.bottom < (LONG)height) height = client.bottom > 0 ? (unsigned)client.bottom : 0u;
+  }
+  if (!width || !height) {
+    ++s->Empty;
+    QueryPerformanceCounter(&end);
+    s->SumPresent += end.QuadPart - start;
+    wgl_kmt_present_receipt(s, width, height, FALSE);
+    return TRUE;
+  }
+  if (wgl_present_mode() == 0) {
+    LONG status = 0;
+    UINT stage = wgl_dxgi_present(s, ctx, res, window, width, height, &status);
+    QueryPerformanceCounter(&end);
+    s->SumPresent += end.QuadPart - start;
+    s->DxgiStage = stage;
+    if (stage == AGX_WGL_DXGI_SHOWN) {
+      ++s->Shown;
+      wgl_kmt_present_receipt(s, width, height, FALSE);
+      return TRUE;
+    }
+    ++s->Failed;
+    s->DxgiStatus = status;
+    s->LastFailure = (0x80u << 24) | (stage << 16) | ((UINT)status & 0xffffu);
+    if (s->Failed == 1u) {
+      UINT values[2] = {stage, (UINT)status};
+      AdmissionUmdDiagnostic("reject-wgl-dxgi-present", E_FAIL, values, 2u);
+    }
+    wgl_kmt_present_receipt(s, width, height, FALSE);
+    return FALSE;
+  }
+  struct pipe_blit_info blit;
+  memset(&blit, 0, sizeof(blit));
+  blit.dst.resource = s->Image;
+  blit.dst.format = s->Image->format;
+  blit.dst.box.width = (int)width;
+  blit.dst.box.height = (int)height;
+  blit.dst.box.depth = 1;
+  blit.src.resource = res;
+  blit.src.format = res->format;
+  blit.src.box = blit.dst.box;
+  blit.mask = PIPE_MASK_RGBA;
+  blit.filter = PIPE_TEX_FILTER_NEAREST;
+  ctx->blit(ctx, &blit);
+  /* Submitted before the present: the kernel context runs them in order. */
+  ctx->flush(ctx, NULL, 0);
+  QueryPerformanceCounter(&copied);
+  RECT rect = {0, 0, (LONG)width, (LONG)height};
+  LONG status = 0;
+  UINT stage = wgl_redirect_present(s, ctx, window, &rect, &status);
+  QueryPerformanceCounter(&end);
+  s->SumCopy += copied.QuadPart - start;
+  s->SumKernel += end.QuadPart - copied.QuadPart;
+  s->SumPresent += end.QuadPart - start;
+  ++s->Stages[stage];
+  if (stage == AGX_WGL_REDIRECT_SHOWN) {
+    ++s->Shown;
+    if (InterlockedCompareExchange(&first, 1, 0) == 0) {
+      UINT values[3] = {width, height, s->RedirectVersion};
+      AdmissionUmdDiagnostic("measure-wgl-kmt-present-first", S_OK, values, 3u);
+    }
+    wgl_kmt_present_receipt(s, width, height, FALSE);
+    return TRUE;
+  }
+  ++s->Failed;
+  s->LastStage = stage;
+  s->LastStatus = (UINT)status;
+  s->LastFailure = (stage << 24) | ((UINT)status & 0xffffffu);
+  if (s->Failed == 1u) {
+    UINT values[2] = {stage, (UINT)status};
+    AdmissionUmdDiagnostic("reject-wgl-kmt-present", E_FAIL, values, 2u);
+  }
+  wgl_kmt_present_receipt(s, width, height, FALSE);
+  return FALSE;
+}
+
+/* Present one frame to a window through its DXGI flip-model swap chain (G2
+ * HW3c; APPLE_AGX_PRESENT=redirect: opengl32's redirection protocol). Called
+ * by stw's GDI present (after the frame finished: stw waited) and by the
+ * winsys framebuffer (EXP1191: stw flushed without waiting; the blit into
+ * the shared texture is ordered after the frame on the same context).
+ * FALSE: the frame was not shown (measure-wgl-kmtpresent and
+ * measure-wgl-dxgi name the stage). */
+extern "C" BOOL agx_wgl_present_window(struct pipe_screen *screen,
+                                       struct pipe_context *ctx,
+                                       struct pipe_resource *res, HWND window) {
+  LARGE_INTEGER start;
+  BOOL shown;
+  (void)screen;
+  if (!ctx || !res || !window) return FALSE;
+  if (res->format != PIPE_FORMAT_B8G8R8A8_UNORM &&
+      res->format != PIPE_FORMAT_B8G8R8X8_UNORM &&
+      res->format != PIPE_FORMAT_R8G8B8A8_UNORM &&
+      res->format != PIPE_FORMAT_R8G8B8X8_UNORM) {
+    wgl_note("reject-wgl-present-format", E_NOTIMPL);
+    return FALSE;
+  }
+  QueryPerformanceCounter(&start);
+  AcquireSRWLockExclusive(&AgxWglPresentLock);
+  wgl_sampler_start();
+  shown = wgl_kmt_present(ctx, res, window, start.QuadPart);
+  ReleaseSRWLockExclusive(&AgxWglPresentLock);
+  return shown;
+}
+
+/* G3: one vertical blank of the display the screen's DC showed
+ * (D3DKMTWaitForVerticalBlankEvent); negative when it is unavailable. */
+extern "C" LONG agx_wgl_wait_vblank(void) {
+  if (!AgxWgl || !AgxWgl->Screen) return (LONG)0xc00000bbL;
+  return (LONG)AgxKmtGpuvaWaitVerticalBlank(&AgxWgl->Bridge, AgxWgl->VidPnSourceId);
+}
+
+/* stw's GDI present (formats without a winsys framebuffer). */
+static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
+                        struct pipe_resource *res, HDC hdc) {
+  HWND window = hdc ? WindowFromDC(hdc) : NULL;
+  if (!ctx || !res || !hdc) return;
+  if (window) {
+    (void)agx_wgl_present_window(screen, ctx, res, window);
+    return;
+  }
+  /* A DC without a window (memory DC): show synchronously. */
+  if (res->format == PIPE_FORMAT_B8G8R8A8_UNORM || res->format == PIPE_FORMAT_B8G8R8X8_UNORM)
+    wgl_show_now(ctx, res, hdc, res->width0, res->height0, TRUE);
+  else if (res->format == PIPE_FORMAT_R8G8B8A8_UNORM || res->format == PIPE_FORMAT_R8G8B8X8_UNORM)
+    wgl_show_now(ctx, res, hdc, res->width0, res->height0, FALSE);
+}
+
+static bool wgl_get_adapter_luid(struct pipe_screen *screen, HDC hdc, LUID *luid) {
+  (void)screen; (void)hdc;
+  if (!AgxWgl || !AgxWgl->Screen || !luid) return false;
+  *luid = AgxWgl->Luid;
+  return true;
+}
+
+static const char *wgl_get_name(void) { return "agx"; }
+
+
+static const struct stw_winsys AgxWglWinsys = {
+  &wgl_screen_create,
+  &wgl_present,
+  &wgl_get_adapter_luid,
+  NULL, /* shared_surface_open */
+  NULL, /* shared_surface_close */
+  NULL, /* compose */
+  &agx_wgl_create_framebuffer, /* EXP1191 */
+  &wgl_get_name,
+};
+
+extern "C" BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
+  (void)instance;
+  switch (reason) {
+  case DLL_PROCESS_ATTACH:
+    stw_init(&AgxWglWinsys);
+    stw_init_thread();
+    break;
+  case DLL_THREAD_ATTACH:
+    stw_init_thread();
+    break;
+  case DLL_THREAD_DETACH:
+    stw_cleanup_thread();
+    break;
+  case DLL_PROCESS_DETACH:
+    if (reserved == NULL) {
+      /* FreeLibrary. */
+      stw_cleanup_thread();
+      stw_cleanup();
+    } else {
+      /* Process exit: as Mesa's wgl.c, never clean up from a torn-down
+       * process; the kernel releases the device with the process. */
+      stw_dev = NULL;
+    }
+    break;
+  }
+  return TRUE;
+}

@@ -1,0 +1,8 @@
+{
+  "utc": "2026-09-28T13:13:12.375816+00:00",
+  "checkpoint": "FAILED_EARLY_RESET",
+  "original_ssh_samples": 0,
+  "serial": "PSCI RESET followed by USB disconnect",
+  "original_etl": "unavailable before spontaneous reset; no original SSH",
+  "recovery": "immutable hiddenCode45 dump-first; no rearm/retry"
+}

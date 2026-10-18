@@ -1,0 +1,136 @@
+0: kd> cdb: Reading initial command 'dt -r3 AppleAgxRenderAdmission!APPLE_AGX_G3_PRIVATE_MANAGER ffffe20519be67e0+190; dt -r3 AppleAgxRenderAdmission!APPLE_AGX_G3_PRIVATE_MANAGER ffffe2051952add0+190; dt -r3 AppleAgxRenderAdmission!APPLE_AGX_G3_PRIVATE_MANAGER ffffe20519e49530+190; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[1]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[13]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[16]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[17]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[18]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[19]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[20]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[21]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[22]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[28]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[29]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[30]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[31]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[41]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[42]; dx -r1 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[72]; dt -r1 AppleAgxRenderAdmission!_ADMISSION_RENDER_CONTEXT ffffe2051b33db80; q'
+   +0x000 Owner            : 7
+   +0x008 Generation       : 0x14
+   +0x010 VaBase           : 0x2000000
+   +0x018 Extents          : [3] APPLE_AGX_G3_PRIVATE_EXTENT
+      +0x000 Generation       : 0x14
+      +0x008 Offset           : 0x4d0000
+      +0x00c Bytes            : 0x10000
+   +0x000 Owner            : 0
+   +0x008 Generation       : 0
+   +0x010 VaBase           : 0
+   +0x018 Extents          : [3] APPLE_AGX_G3_PRIVATE_EXTENT
+      +0x000 Generation       : 0
+      +0x008 Offset           : 0
+      +0x00c Bytes            : 0
+   +0x000 Owner            : 4
+   +0x008 Generation       : 0x34
+   +0x010 VaBase           : 0x2000000
+   +0x018 Extents          : [3] APPLE_AGX_G3_PRIVATE_EXTENT
+      +0x000 Generation       : 0x34
+      +0x008 Offset           : 0x980000
+      +0x00c Bytes            : 0x10000
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[1]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa00036bf44 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d7957f44 [Type: unsigned __int64]
+    [+0x010] Size             : 0xbc [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f535bf44 : 0x4 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[13]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa0003cbfb8 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d78f7fb8 [Type: unsigned __int64]
+    [+0x010] Size             : 0x48 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f53bbfb8 : 0x0 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[16]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa0003e3fe0 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d78dffe0 [Type: unsigned __int64]
+    [+0x010] Size             : 0x20 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f53d3fe0 : 0x6 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[17]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa0003eb000 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d78d7000 [Type: unsigned __int64]
+    [+0x010] Size             : 0x1000 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f53db000 : 0x22 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[18]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa021003680 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d78cf680 [Type: unsigned __int64]
+    [+0x010] Size             : 0x974 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f53e3680 : 0x1 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[19]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa0210479e0 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d78c79e0 [Type: unsigned __int64]
+    [+0x010] Size             : 0x61c [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f53eb9e0 : 0x0 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[20]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa000403fc0 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d78bffc0 [Type: unsigned __int64]
+    [+0x010] Size             : 0x40 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f53f3fc0 : 0x20 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[21]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa00040bfc0 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d78b7fc0 [Type: unsigned __int64]
+    [+0x010] Size             : 0x40 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f53fbfc0 : 0x1 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[22]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa000413fc0 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d78affc0 [Type: unsigned __int64]
+    [+0x010] Size             : 0x40 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f5557fc0 : 0x3 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[28]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa000443ff8 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d7813ff8 [Type: unsigned __int64]
+    [+0x010] Size             : 0x8 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f5587ff8 : 0x52 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[29]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa00044bff8 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d780bff8 [Type: unsigned __int64]
+    [+0x010] Size             : 0x8 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f558fff8 : 0x51 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[30]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa000453ff8 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d7803ff8 [Type: unsigned __int64]
+    [+0x010] Size             : 0x8 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f5597ff8 : 0x44 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[31]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0xffffffa00045bff8 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x9d61fbff8 [Type: unsigned __int64]
+    [+0x010] Size             : 0x8 [Type: unsigned int]
+    [+0x018] Data             : 0xffffcc03f559fff8 : 0xf0 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[41]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0x24d0000 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x91fae8000 [Type: unsigned __int64]
+    [+0x010] Size             : 0x10000 [Type: unsigned int]
+Page 91fae8 not present in the dump file. Type ".hh dbgerr004" for details
+    [+0x018] Data             : 0xffffccf07fae8000 : Unable to read memory at Address 0xffffccf07fae8000 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[42]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0x24e0000 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x91faf8000 [Type: unsigned __int64]
+    [+0x010] Size             : 0x8000 [Type: unsigned int]
+Page 91faf8 not present in the dump file. Type ".hh dbgerr004" for details
+    [+0x018] Data             : 0xffffccf07faf8000 : Unable to read memory at Address 0xffffccf07faf8000 [Type: unsigned char *]
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffffe20519fe4000)->QueueObjects[72]                 [Type: _APPLE_AGX_EXP208_RELOCATION_OBJECT]
+    [+0x000] GpuVa            : 0x2440000 [Type: unsigned __int64]
+    [+0x008] PhysicalAddress  : 0x91fd80000 [Type: unsigned __int64]
+    [+0x010] Size             : 0x80 [Type: unsigned int]
+Page 91fd80 not present in the dump file. Type ".hh dbgerr004" for details
+    [+0x018] Data             : 0xffffccf07fd80000 : Unable to read memory at Address 0xffffccf07fd80000 [Type: unsigned char *]
+   +0x000 Object           : _ADMISSION_OBJECT_CONTEXT
+      +0x000 Magic            : 0x434f4152
+      +0x004 Flags            : 4
+      +0x008 Device           : 0xffffe205`1b5a7310 _ADMISSION_OBJECT_DEVICE
+      +0x010 RuntimeHandle    : 0xffffe205`1adfb390 Void
+      +0x018 NodeOrdinal      : 0
+      +0x01c EngineAffinity   : 1
+      +0x020 FenceOutstanding : 0
+   +0x028 SchedulerContext : _APPLE_AGX_SCHEDULER_CONTEXT
+      +0x000 NodeOrdinal      : 0
+      +0x004 EngineAffinity   : 1
+      +0x008 Active           : 0x1 ''
+   +0x038 PrepatchedRender : _ADMISSION_PREPATCHED_RENDER
+      +0x000 Active           : 0
+      +0x008 Description      : _ADMISSION_RENDER_PACKET_DESCRIPTION
+   +0x0c0 Win32Generation  : 0x4cc0001
+   +0x0c4 Win32Transport   : 0x1 ''
+   +0x0c8 GpuvaG3Process   : 0xffffe205`1952add0 Void
+   +0x0d0 GpuvaG3NextContext : (null)
+   +0x0d8 GpuvaG3PrivateManagerGeneration : 0
+   +0x0e0 GpuvaG3PrivateFence : 0n0
+   +0x0e4 GpuvaG3CancelFence : 0n0
+   +0x0e8 GpuvaG3CancelUncertain : 0n0
+   +0x0ec GpuvaG3Closing   : 0 ''
+   +0x0f0 GpuvaG3RootIpa   : 0
+   +0x0f8 GpuvaG3LastSetRootIpa : 0
+   +0x100 GpuvaG3SetRootCount : 0
+   +0x108 GpuvaG3DmaBufferVa : 0
+   +0x110 GpuvaG3MappingGeneration : 0
+   +0x118 GpuvaG3DmaBufferBytes : 0
+   +0x11c GpuvaG3Poisoned  : 0 ''

@@ -1,0 +1,47 @@
+FF
+======================================================================
+FAIL: test_real_paging_copy_and_relocation_without_setroot (test_g3_paging_root_ordering.PagingRootOrderingTests.test_real_paging_copy_and_relocation_without_setroot) (profile='16')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_g3_paging_root_ordering.py", line 15, in test_real_paging_copy_and_relocation_without_setroot
+    self.assertEqual(run.returncode, 0, run.stdout+run.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : R147 paging before SetRoot QUERY: status c000000d
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/g3_vidmm_replay.py", line 209, in <module>
+    sys.exit(main(args.revision, overrides, args.old_context_flags))
+             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/g3_vidmm_replay.py", line 197, in main
+    subprocess.run([str(binary)], check=True, cwd=ROOT, env=env)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/g3-vidmm-w3i2_mli/replay']' returned non-zero exit status 1.
+
+
+======================================================================
+FAIL: test_real_paging_copy_and_relocation_without_setroot (test_g3_paging_root_ordering.PagingRootOrderingTests.test_real_paging_copy_and_relocation_without_setroot) (profile='64')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_g3_paging_root_ordering.py", line 15, in test_real_paging_copy_and_relocation_without_setroot
+    self.assertEqual(run.returncode, 0, run.stdout+run.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : R147 paging before SetRoot QUERY: status c000000d
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/g3_vidmm_replay.py", line 209, in <module>
+    sys.exit(main(args.revision, overrides, args.old_context_flags))
+             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/g3_vidmm_replay.py", line 197, in main
+    subprocess.run([str(binary)], check=True, cwd=ROOT, env=env)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/g3-vidmm-3t0r81ea/replay']' returned non-zero exit status 1.
+
+
+----------------------------------------------------------------------
+Ran 1 test in 2.390s
+
+FAILED (failures=2)

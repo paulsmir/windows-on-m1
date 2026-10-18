@@ -1,0 +1,199 @@
+#define COBJMACROS
+#include <windows.h>
+#include <d3d10.h>
+#include <d3dcompiler.h>
+#include <d3dkmthk.h>
+#include <dxgi.h>
+#include <stdio.h>
+
+#include "render_qualification.h"
+
+#define RELEASE_IF(p, T) do { if (p) { T##_Release(p); (p)=NULL; } } while (0)
+
+static LRESULT CALLBACK StandardWindowProc(HWND window, UINT message,
+                                            WPARAM wparam, LPARAM lparam) {
+  if (message == WM_DESTROY) { PostQuitMessage(0); return 0; }
+  return DefWindowProcW(window,message,wparam,lparam);
+}
+
+static HRESULT CompileShader(const char *source, const char *target,
+                             ID3DBlob **bytecode) {
+  ID3DBlob *errors=NULL;
+  HRESULT result=D3DCompile(source,strlen(source),"AppleAgxStandard",NULL,NULL,
+      "main",target,D3DCOMPILE_ENABLE_STRICTNESS,0,bytecode,&errors);
+  if (FAILED(result) && errors)
+    fprintf(stderr,"SHADER_COMPILE: %.*s\n",(int)ID3D10Blob_GetBufferSize(errors),
+            (const char *)ID3D10Blob_GetBufferPointer(errors));
+  RELEASE_IF(errors,ID3D10Blob);
+  return result;
+}
+
+static NTSTATUS StandardPresentTraceQuery(D3DKMT_HANDLE adapter,
+    ADMISSION_STANDARD_PRESENT_TRACE_COMMAND command,
+    ADMISSION_STANDARD_PRESENT_TRACE *trace) {
+  D3DKMT_ESCAPE escape={0};
+  if(!adapter || !trace) return (NTSTATUS)0xc000000dL;
+  ZeroMemory(trace,sizeof(*trace));
+  trace->Magic=ADMISSION_STANDARD_PRESENT_TRACE_MAGIC;
+  trace->Version=ADMISSION_STANDARD_PRESENT_TRACE_VERSION;
+  trace->Bytes=sizeof(*trace);
+  trace->Command=command;
+  escape.hAdapter=adapter;escape.Type=D3DKMT_ESCAPE_DRIVERPRIVATE;
+  escape.pPrivateDriverData=trace;escape.PrivateDriverDataSize=sizeof(*trace);
+  return D3DKMTEscape(&escape);
+}
+
+static void StandardPresentTracePrint(const ADMISSION_STANDARD_PRESENT_TRACE *trace,
+                                      NTSTATUS status) {
+  if(!trace) return;
+  fprintf(stderr,"STANDARD_TRACE query=0x%08lx build=%u boot=%u events=%u overflow=%u\n",
+      (ULONG)status,trace->CandidateBuild,trace->BootGeneration,
+      trace->EventCount,trace->Overflow);
+  for(UINT i=0;i<trace->EventCount && i<ADMISSION_STANDARD_PRESENT_TRACE_CAPACITY;++i) {
+    const ADMISSION_STANDARD_PRESENT_EVENT *e=&trace->Events[i];
+    fprintf(stderr,"STANDARD_EVENT index=%u valid=%u kind=%u phase=%u sequence=%u status=0x%08x irql=%u flags=0x%x context=0x%llx allocation=0x%llx source=%u segment=%u address=0x%llx src_count=%u dst_count=%u\n",
+        i,e->Valid,e->Kind,e->Phase,e->Sequence,e->Status,e->Irql,e->Flags,
+        e->ContextToken,e->AllocationToken,e->SourceId,e->Segment,
+        e->PrimaryAddress,e->NumSrc,e->NumDst);
+  }
+  fflush(stderr);
+}
+
+int wmain(void) {
+  static const char vsSource[]=
+      "float4 main(float4 p:POSITION):SV_POSITION{return p;}";
+  static const char psSource[]=
+      "float4 main():SV_Target{return float4(0.15,0.55,0.25,1.0);}";
+  static const float vertices[12]={-0.75f,-0.75f,0.0f,1.0f,
+                                    0.0f, 0.75f,0.0f,1.0f,
+                                    0.75f,-0.75f,0.0f,1.0f};
+  WNDCLASSW wc={0}; HWND window=NULL; IDXGISwapChain *swap=NULL;
+  ID3D10Device *device=NULL; ID3D10Texture2D *back=NULL;
+  ID3D10RenderTargetView *rtv=NULL; ID3DBlob *vsBytes=NULL,*psBytes=NULL;
+  ID3D10VertexShader *vs=NULL; ID3D10PixelShader *ps=NULL;
+  ID3D10InputLayout *layout=NULL; ID3D10Buffer *vb=NULL;
+  IDXGIDevice *dxgiDevice=NULL; IDXGIAdapter *adapter=NULL;
+  IDXGIFactory *factory=NULL;
+  D3DKMT_HANDLE traceAdapter=0u;
+  ADMISSION_STANDARD_PRESENT_TRACE presentTrace={0};
+  const char *stage="window";
+  HRESULT result=E_FAIL; DXGI_ADAPTER_DESC adapterDesc={0};
+  wc.lpfnWndProc=StandardWindowProc;wc.hInstance=GetModuleHandleW(NULL);
+  wc.lpszClassName=L"AppleAgxStandardRuntimeQualification";
+  if(!RegisterClassW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) goto done;
+  window=CreateWindowExW(0,wc.lpszClassName,L"Apple AGX Standard Runtime",
+      WS_OVERLAPPEDWINDOW,0,0,2560,1600,NULL,NULL,wc.hInstance,NULL);
+  if(!window) goto done;
+  ShowWindow(window,SW_SHOW);UpdateWindow(window);
+  DXGI_SWAP_CHAIN_DESC sd={0};sd.BufferDesc.Width=2560;sd.BufferDesc.Height=1600;
+  sd.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+  sd.SampleDesc.Count=1;sd.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
+  sd.BufferCount=1;sd.OutputWindow=window;sd.Windowed=TRUE;
+  sd.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
+  stage="create-device";
+  result=D3D10CreateDevice(NULL,D3D10_DRIVER_TYPE_HARDWARE,NULL,0,
+      D3D10_SDK_VERSION,&device);
+  fprintf(stderr,"STANDARD_STAGE stage=%s hr=0x%08lx\n",stage,(ULONG)result);
+  fflush(stderr);
+  if(FAILED(result)) goto done;
+  stage="device-adapter";
+  result=ID3D10Device_QueryInterface(device,&IID_IDXGIDevice,(void **)&dxgiDevice);
+  if(FAILED(result)) goto done;
+  result=IDXGIDevice_GetAdapter(dxgiDevice,&adapter);if(FAILED(result)) goto done;
+  result=IDXGIAdapter_GetDesc(adapter,&adapterDesc);if(FAILED(result)) goto done;
+  wprintf(L"STANDARD_ADAPTER vendor=0x%04x device=0x%04x desc=%ls\n",
+      adapterDesc.VendorId,adapterDesc.DeviceId,adapterDesc.Description);
+  /* EXP691: DXGI reports the ACPI APPL0002 identity, not a PCI vendor ID. */
+  if(adapterDesc.VendorId!=0x4c505041u || adapterDesc.DeviceId!=0x32303030u){result=DXGI_ERROR_UNSUPPORTED;goto done;}
+  {
+    D3DKMT_OPENADAPTERFROMLUID open={0};
+    open.AdapterLuid=adapterDesc.AdapterLuid;
+    NTSTATUS status=D3DKMTOpenAdapterFromLuid(&open);
+    if(status>=0) {
+      traceAdapter=open.hAdapter;
+      status=StandardPresentTraceQuery(traceAdapter,
+          AdmissionStandardPresentTraceArm,&presentTrace);
+    }
+    StandardPresentTracePrint(&presentTrace,status);
+  }
+  stage="adapter-factory";
+  result=IDXGIAdapter_GetParent(adapter,&IID_IDXGIFactory,(void **)&factory);
+  if(FAILED(result)) goto done;
+  /* Read-only runtime evidence: do not infer support from the UMD table. */
+  const DXGI_FORMAT probeFormats[]={DXGI_FORMAT_B8G8R8A8_UNORM,
+                                    DXGI_FORMAT_R8G8B8A8_UNORM};
+  for(UINT i=0;i<2u;++i) {
+    UINT support=0,quality=0;
+    HRESULT formatResult=ID3D10Device_CheckFormatSupport(device,probeFormats[i],&support);
+    HRESULT sampleResult=ID3D10Device_CheckMultisampleQualityLevels(
+        device,probeFormats[i],1,&quality);
+    fprintf(stderr,"STANDARD_FORMAT format=%u hr=0x%08lx support=0x%08x sample_hr=0x%08lx quality=%u\n",
+        (UINT)probeFormats[i],(ULONG)formatResult,support,(ULONG)sampleResult,quality);
+  }
+  fflush(stderr);
+  stage="create-swap-chain";
+  result=IDXGIFactory_CreateSwapChain(factory,(IUnknown *)device,&sd,&swap);
+  fprintf(stderr,"STANDARD_STAGE stage=%s hr=0x%08lx\n",stage,(ULONG)result);
+  fflush(stderr);
+  if(FAILED(result)) goto done;
+  stage="back-buffer";
+  result=IDXGISwapChain_GetBuffer(swap,0,&IID_ID3D10Texture2D,(void **)&back);
+  if(FAILED(result)) goto done;
+  stage="render-target-view";
+  result=ID3D10Device_CreateRenderTargetView(device,(ID3D10Resource *)back,NULL,&rtv);
+  if(FAILED(result)) goto done;
+  stage="compile-vertex-shader";
+  result=CompileShader(vsSource,"vs_4_0",&vsBytes);if(FAILED(result)) goto done;
+  stage="compile-pixel-shader";
+  result=CompileShader(psSource,"ps_4_0",&psBytes);if(FAILED(result)) goto done;
+  stage="vertex-shader";
+  result=ID3D10Device_CreateVertexShader(device,ID3D10Blob_GetBufferPointer(vsBytes),
+      ID3D10Blob_GetBufferSize(vsBytes),&vs);if(FAILED(result)) goto done;
+  stage="pixel-shader";
+  result=ID3D10Device_CreatePixelShader(device,ID3D10Blob_GetBufferPointer(psBytes),
+      ID3D10Blob_GetBufferSize(psBytes),&ps);if(FAILED(result)) goto done;
+  D3D10_INPUT_ELEMENT_DESC element={"POSITION",0,DXGI_FORMAT_R32G32B32A32_FLOAT,
+      0,0,D3D10_INPUT_PER_VERTEX_DATA,0};
+  stage="input-layout";
+  result=ID3D10Device_CreateInputLayout(device,&element,1,
+      ID3D10Blob_GetBufferPointer(vsBytes),ID3D10Blob_GetBufferSize(vsBytes),&layout);
+  if(FAILED(result)) goto done;
+  D3D10_BUFFER_DESC bd={sizeof(vertices),D3D10_USAGE_DEFAULT,
+      D3D10_BIND_VERTEX_BUFFER,0,0};D3D10_SUBRESOURCE_DATA init={vertices,0,0};
+  stage="vertex-buffer";
+  result=ID3D10Device_CreateBuffer(device,&bd,&init,&vb);if(FAILED(result)) goto done;
+  UINT stride=16,offset=0;D3D10_VIEWPORT viewport={0,0,2560,1600,0.0f,1.0f};
+  ID3D10Device_OMSetRenderTargets(device,1,&rtv,NULL);
+  ID3D10Device_RSSetViewports(device,1,&viewport);
+  ID3D10Device_IASetInputLayout(device,layout);
+  ID3D10Device_IASetVertexBuffers(device,0,1,&vb,&stride,&offset);
+  ID3D10Device_IASetPrimitiveTopology(device,D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  ID3D10Device_VSSetShader(device,vs);ID3D10Device_PSSetShader(device,ps);
+  const float clear[4]={0.02f,0.02f,0.04f,1.0f};
+  ID3D10Device_ClearRenderTargetView(device,rtv,clear);
+  ID3D10Device_Draw(device,3,0);ID3D10Device_Flush(device);
+  stage="present";
+  result=IDXGISwapChain_Present(swap,0,0);if(FAILED(result)) goto done;
+  puts("STANDARD_RUNTIME_PASS create=PASS draw=PASS present=PASS");
+ done:
+  if(traceAdapter) {
+    NTSTATUS traceStatus=StandardPresentTraceQuery(traceAdapter,
+        AdmissionStandardPresentTraceRead,&presentTrace);
+    StandardPresentTracePrint(&presentTrace,traceStatus);
+  }
+  if(FAILED(result) && device) {
+    HRESULT removed=ID3D10Device_GetDeviceRemovedReason(device);
+    fprintf(stderr,"STANDARD_DEVICE_REASON hr=0x%08lx\n",(ULONG)removed);
+  }
+  if(FAILED(result)) fprintf(stderr,"STANDARD_RUNTIME_FAIL stage=%s hr=0x%08lx\n",stage,(ULONG)result);
+  RELEASE_IF(vb,ID3D10Buffer);RELEASE_IF(layout,ID3D10InputLayout);
+  RELEASE_IF(ps,ID3D10PixelShader);RELEASE_IF(vs,ID3D10VertexShader);
+  RELEASE_IF(psBytes,ID3D10Blob);RELEASE_IF(vsBytes,ID3D10Blob);
+  RELEASE_IF(rtv,ID3D10RenderTargetView);RELEASE_IF(back,ID3D10Texture2D);
+  RELEASE_IF(factory,IDXGIFactory);
+  RELEASE_IF(adapter,IDXGIAdapter);RELEASE_IF(dxgiDevice,IDXGIDevice);
+  RELEASE_IF(device,ID3D10Device);RELEASE_IF(swap,IDXGISwapChain);
+  if(traceAdapter) {D3DKMT_CLOSEADAPTER close={traceAdapter};D3DKMTCloseAdapter(&close);}
+  if(window) DestroyWindow(window);
+  return FAILED(result)?1:0;
+}

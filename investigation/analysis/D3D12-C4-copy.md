@@ -1,0 +1,145 @@
+# D3D12 C4: command lists and the first GPU copy
+
+Status 2026-10-17. C1 (EXP1355), C2 (EXP1359) and C3 (EXP1362) are proven.
+C4a (95f8a45e, EXP1363) adds allocators, lists with their runtime DDI table,
+Close/Reset and execution of lists that record nothing. C4b is the first
+GPU work recorded by a D3D12 list: CopyBufferRegion between two committed
+buffers, verified on the CPU.
+
+## WINDOWS CONTRACT
+
+- d3d12umddi.h: list-table PFND3D12DDI_COPYBUFFERREGION_0003 (dst resource,
+  dst offset, src resource, src offset, bytes) and PFND3D12DDI_RESOURCEBARRIER
+  (transitions UPLOAD/COPY_DEST/COPY_SOURCE); queue-table
+  PFND3D12DDI_EXECUTECOMMANDLISTS; the runtime signals the fence through the
+  queue's kernel context after the execute (C3: EXP1362).
+- WDDM 2 GpuMmu submission from a UMD: D3DDDICB_SUBMITCOMMAND on the queue's
+  context (the D3D12 core-layer callbacks expose the KM callbacks of the
+  device), command buffer GPU VA + private driver data; the runtime orders a
+  later queue signal after it (Dxgkrnl monitored-fence re-read at DMA
+  completion, "Context monitoring").
+
+## AGX/ASAHI CONTRACT
+
+- Kernels: Mesa libagx copy.cl `libagx_copy_uint4` (32 lanes, 16 bytes per
+  lane) and `libagx_copy_uchar` (tail), precompiled for G13 by the Mesa build
+  (the same libagx the D3D11 path links).
+- Submission: the KMD G4 compute envelope (apple_agx_g4_submit.h):
+  APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE (+ CPMT preemption range) +
+  APPLE_AGX_G4_NATIVE_COMPUTE (drm_asahi_cmd_compute: CDM control stream
+  base/end, sampler heap, helper, timestamps); USC addresses are 32-bit
+  offsets from APPLE_AGX_G4_USC_EXECUTION_BASE (0x1100000000) inside the
+  4 GiB USC window; the CDM stream and programs live in the process GPU VA.
+  The KMD parser (apple_agx_g4_submit.c, AppleAgxG4ParseComputeEx) proves every
+  referenced range is mapped and builds the firmware RunCompute item.
+- CDM encoding: Asahi genxml (CDM launch with USC pipeline, grid/workgroup,
+  stream terminate), as agx_launch / hk_dispatch emit it.
+
+## TRANSLATION
+
+1. Device: one CPU-visible C2a heap in the USC window holding the uploaded
+   libagx copy programs (shader binary + USC control words) and a per-queue
+   arena for CDM streams, argument buffers and the CPMT buffer.
+2. CopyBufferRegion records {dst VA + offset, src VA + offset, bytes} in the
+   list.
+3. ExecuteCommandLists: for each recorded copy, write the kernel arguments
+   (dest, src pointers) and a CDM launch of ceil(bytes / 16) lanes of
+   copy_uint4 (+ copy_uchar for the tail) into the arena, then one G4 compute
+   envelope submitted on the queue's context with the allocation list of the
+   heaps involved (residency).
+4. ResourceBarrier: no AGX work between copy kernels on one queue beyond the
+   CDM barrier bits the envelope already carries (APPLE_AGX_G4_NATIVE_HEADER
+   CdmBarrier); recorded as a no-op until a case needs more.
+
+## WHAT IS STILL UNKNOWN
+
+- How the D3D12 frontend reaches the precompiled libagx binaries and the CDM
+  encoders without a Gallium context (link the libagx/genxml objects the
+  D3D11 UMD already builds; RED -> GREEN offline test of the encoded stream
+  against Mesa's agx_launch for the same kernel).
+- Whether the KMD's compute parser accepts a submission from a D3D12 queue
+  context whose process mappings come from the D3D12 heaps (it validates the
+  same GPU VA space) -- hardware.
+- The CPMT size requirement for G13 (the KMD passes it to the parser).
+
+## Reuse points (source, Mesa asahi)
+
+- honeykrisp hk_dispatch_precomp (src/asahi/vulkan/hk_cmd_buffer.c):
+  `agx_get_precompiled(&dev->bg_eot, idx)` uploads the precompiled libagx
+  kernel into USC memory once (agx_bg_eot cache), `agx_usc_words_precomp`
+  writes the USC words for the kernel arguments, and
+  `hk_dispatch_with_usc_launch` encodes the CDM launch; gallium does the same
+  through libagx_copy_uint4(batch, agx_1d(n), AGX_BARRIER_ALL, dst, src)
+  (src/gallium/drivers/asahi/agx_blit.c).
+- All three need an agx_device (BO allocation, USC window placement). In this
+  UMD the agx_device over the KMD is the GPUVA winsys, which is tied to the
+  D3D11 ADMISSION_UMD_DEVICE (callbacks, paging queue, render sync object,
+  screen buffers). C4b's main work item: an agx_device for the D3D12 device
+  (either a winsys context built from the D3D12 device's kernel callbacks and
+  queue context, or a narrow D3D12 implementation of the BO/USC hooks
+  agx_bg_eot needs) -- decide after reading agx_win32_gpuva*.c ownership.
+- Decision input (agx_win32_gpuva.h): the winsys already isolates the WDDM
+  side behind AGX_WIN32_GPUVA_OPS {Reserve, Map, Free, MakeResident,
+  WaitPaging, Submit, WaitRender, Evict, PrivateEscape, QueryRender,
+  GpuTimestamps} with an opaque context ("host-testable boundary around WDDM
+  callbacks"); the D3D11 UMD implements it in umd_gpuva_windows.c over
+  ADMISSION_UMD_DEVICE. Plan: the D3D12 device implements the same ops over
+  its own kernel callbacks, paging queue (C2a) and queue context (C3b), and
+  instantiates the same agx_device/screen; the libagx precompiled copy then
+  runs through Mesa's own launch path. Offline: the existing
+  agx_win32_gpuva_test.c harness exercises an ops table without hardware.
+
+- Scope found (umd_win32_screen.c AdmissionUmdScreenInitialize): the screen
+  takes a transport table (CreateBuffer/MapBuffer/UnmapBuffer/DestroyBuffer/
+  SubmitClear/WaitFence/RetireFence), screen hooks (QueryDevice,
+  CreateClassBuffer) and the GPUVA ops; all are implemented over
+  ADMISSION_UMD_DEVICE (~2800 lines in umd_win32_screen.c and
+  umd_gpuva_windows.c). The D3D12 pKTCallbacks is the same
+  D3DDDI_DEVICECALLBACKS type, so the shortest truthful route is an embedded
+  ADMISSION_UMD_DEVICE inside the D3D12 device: KernelCallbacks = D3D12
+  pKTCallbacks, RuntimeDevice = hRTDevice, Adapter = an ADMISSION_UMD_ADAPTER
+  filled from the D3D12 adapter's device-info query, KernelContext = the
+  queue's context (C3b) so the copy submissions and the runtime's fence
+  signal share one ordered context (d3d12core rejects contexts that belong to
+  another queue), paging queue from C2a. AdmissionUmdRuntimeDeviceInitialize
+  creates a device-level context; the D3D12 variant must take the queue
+  context instead (new initializer, RED -> GREEN on the existing
+  umd_gpuva_contract harness).
+
+## C4b implementation plan (after EXP1364)
+
+Template: the D3D10 Windows frontend (mesa/winsys/agx_d3d10_windows.cpp)
+owns {ADMISSION_UMD_DEVICE Runtime, ADMISSION_UMD_ASAHI_OWNER Owner,
+AGX_WIN32_ASAHI_BACKEND Backend, owner ops, pipe_screen, pipe_context} and
+builds them with AdmissionUmdRuntimeDeviceInitialize ->
+AgxWin32AsahiScreenCreateForWindows(&Backend, &Runtime.Screen, &OwnerOps,
+&Owner, AdmissionUmdAsahiBatchOperations()) -> AgxWin32AsahiContextCreate.
+
+1. umd_runtime_device.c: a D3D12 initializer taking {adapter,
+   D3DDDI_DEVICECALLBACKS*, hRTDevice, kernel context} instead of
+   D3D10DDIARG_CREATEDEVICE: no context creation (the queue's C3b context),
+   no DXGI callbacks; SetErrorCallback = a shim forwarding to the D3D12
+   core-layer pfnSetErrorCb (RuntimeCoreLayer carries the D3D12 runtime
+   device handle). Paging queue, render monitored fence and screen as today.
+2. mesa/winsys/agx_d3d12_windows.cpp (new, Mesa side): create/destroy the
+   owner for a D3D12 queue; CopyBuffer(dst VA, src VA, bytes) through the
+   Asahi context (libagx_copy_uint4/uchar on a compute batch, the same call
+   agx_blit.c makes); Flush + wait for the batch fence.
+3. Heaps: decided by source (agx_win32_gpuva.c AgxWin32GpuvaSubmit): a
+   submission's residency list is built only from winsys BOs
+   (AGX_WIN32_GPUVA_BO{Allocation = UMD token resolved by the adapter, Va,
+   Bound}); raw KMT handles of the C2a heaps cannot be referenced. So D3D12
+   heaps move onto the owner's screen as winsys class buffers bound in its
+   GPUVA space (the allocator the D3D11 path uses), keeping the C2a DDI
+   behaviour (row-major buffers, Map via the screen's CPU mapping, GPU VA from
+   the bind); C2 is re-proved on the new allocator in the same run.
+4. ExecuteCommandLists: replay recorded copies on the queue's owner, flush;
+   the runtime's later Signal on the same context orders after it.
+5. Offline: RED -> GREEN tests for the initializer contract (no context
+   creation, error shim) and for copy recording/replay bounds.
+
+## Checkpoints
+
+- C4a (EXP1363): empty list execute + signal.
+- C4b: CopyBufferRegion 64 KiB UPLOAD -> DEFAULT -> READBACK (two copies),
+  CPU compares; receipts for the envelope and the KMD parse.

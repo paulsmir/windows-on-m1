@@ -1,0 +1,32 @@
+{
+  "task_id": "AD04-MATH-CONSTANTS-PORTABILITY-006",
+  "input_commit": "05d6f6bed8d4fe9dbe20420999572c30be78625c",
+  "goal": "Determine current math-constant owner from source evidence and propose the minimum build-composition correction. Stop at next compiler blocker. No changes to math values, Mesa source, ABI, other flags or overlays.",
+  "allowed_paths": [
+    "drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1"
+  ],
+  "max_files_changed": 1,
+  "max_diff_lines": 6,
+  "diagnostics": [
+    "nir_builtin_builder.h:114 M_LOG2E undeclared",
+    "nir_builtin_builder.h:173 M_PI undeclared",
+    "agx_compile.c:2750 M_1_PI undeclared"
+  ],
+  "primary_source_evidence": {
+    "mesa_commit": "9aa1215f878b504f66159dd2ead4c7973142126e",
+    "meson_build_1335_1352": "elif host_machine.system() == 'windows'\n pre_args += ['-D_WIN32_WINNT=0x0A00', '-DWINVER=0x0A00']\n if cc.get_argument_syntax() == 'msvc'\n  pre_args += ['-D_USE_MATH_DEFINES', '-D_CRT_NONSTDC_NO_DEPRECATE', '-D_CRT_SECURE_NO_WARNINGS', ...]",
+    "include_chain": "agx_compile.c includes nir_builtin_builder.h; NIR and Asahi headers reach math.h. Exact owner must be justified from this and target CRT; no constant literals may be invented.",
+    "current_script": "param(\n   [Parameter(Mandatory = $true)][string]$InputRoot,\n   [Parameter(Mandatory = $true)][string]$ResultRoot\n)\n$ErrorActionPreference = 'Stop'\nif (Test-Path $ResultRoot) { throw \"refusing to reuse existing result root: $ResultRoot\" }\n\n$clang = 'C:\\Users\\pauls\\AD04-asahi-windows-compiler\\llvm20\\bin\\clang-cl.exe'\n$mesa = 'C:\\Users\\pauls\\AD04-d3d10-frontend-build\\mesa'\n$generated = 'C:\\Users\\pauls\\AD04-asahi-windows-compiler\\b5\\generated'\n$fourcc = 'C:\\Users\\pauls\\AD04-uatomic\\include'\n$work = Join-Path $env:TEMP ('ad04-phase3-normalized-' + [guid]::NewGuid().ToString('N'))\n$compilerWork = Join-Path $work 'compiler'\n$include = @('/I', $fourcc, '/I', $InputRoot, '/I', $compilerWork, '/I', \"$mesa\\include\", '/I', \"$mesa\\src\", '/I', \"$mesa\\src\\compiler\", '/I', \"$mesa\\src\\compiler\\nir\", '/I', \"$mesa\\src\\asahi\\compiler\", '/I', \"$mesa\\src\\asahi\\libagx\", '/I', \"$generated\\src\", '/I', \"$generated\\src\\compiler\", '/I', \"$generated\\src\\compiler\\nir\", '/I', \"$generated\\src\\asahi\\compiler\", '/I', \"$generated\\src\\asahi\\libagx\")\nNew-Item -ItemType Directory -Force $ResultRoot, $work | Out-Null\nCopy-Item \"$mesa\\src\\asahi\\compiler\" $compilerWork -Recurse -Force\nCopy-Item (Join-Path $InputRoot 'compiler\\agx_compiler.h') (Join-Path $compilerWork 'agx_compiler.h') -Force\nCopy-Item (Join-Path $InputRoot 'compiler\\agx_pack.c') (Join-Path $compilerWork 'agx_pack.c') -Force\n\nfunction Invoke-Captured([string]$Name, [string]$File, [string[]]$Arguments, [bool]$Run) {\n   $stdout = Join-Path $ResultRoot \"$Name.stdout.log\"\n   $stderr = Join-Path $ResultRoot \"$Name.stderr.log\"\n   $process = Start-Process -FilePath $File -ArgumentList $Arguments -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr\n   $entry = [ordered]@{ name=$Name; command=$File; arguments=$Arguments; exit_code=$process.ExitCode; stdout=$stdout; stderr=$stderr }\n   if ($Run -and $process.ExitCode -eq 0) {\n      $exe = $Arguments | Where-Object { $_ -like '/Fe:*' } | Select-Object -First 1\n      $path = $exe.Substring(4)\n      $runOut = Join-Path $ResultRoot \"$Name.run.stdout.log\"; $runErr = Join-Path $ResultRoot \"$Name.run.stderr.log\"\n      $runProcess = Start-Process -FilePath $path -Wait -PassThru -NoNewWindow -RedirectStandardOutput $runOut -RedirectStandardError $runErr\n      $entry.run_exit_code = $runProcess.ExitCode; $entry.run_stdout=$runOut; $entry.run_stderr=$runErr\n   }\n   return $entry\n}\n\n$entries = @()\n$overlay = Join-Path $InputRoot 'uatomic_clang_compat.h'\n$entries += Invoke-Captured 'uatomic-x64' $clang @('/nologo','/W3','/std:c11','/FI',$overlay,(Join-Path $InputRoot 'uatomic_semantics_test.c'),\"/Fe:$(Join-Path $work 'uatomic.exe')\") $true\n$entries += Invoke-Captured 'lut-derived-x64' $clang @('/nologo','/W3','/std:c11','/I',$InputRoot,(Join-Path $InputRoot 'lut_semantics_test.c'),\"/Fe:$(Join-Path $work 'lut.exe')\") $true\n$entries += Invoke-Captured 'agxindex-actual-x64' $clang @('/nologo','/W3','/std:c11','/I',(Join-Path $InputRoot 'actual'),(Join-Path $InputRoot 'agxindex_fragment_corpus.c'),\"/Fe:$(Join-Path $work 'agx-actual.exe')\") $true\n$compileArgs = @('/nologo','/c','/std:c11','/W3','/DNDEBUG','/DHAVE_STRUCT_TIMESPEC','/DMESA_DEBUG=0','/DBUILDING_MESA','/FI',$overlay) + $include + @((Join-Path $compilerWork 'agx_compile.c'))\n$entries += Invoke-Captured 'agx-compile-x64' $clang $compileArgs $false\n$entries += Invoke-Captured 'agx-compile-arm64' $clang ($compileArgs + '/clang:--target=aarch64-pc-windows-msvc') $false\n$manifest = [ordered]@{ compiler=$clang; mesa=$mesa; generated=$generated; input_root=$InputRoot; result_root=$ResultRoot; work_root=$work; entries=$entries }\n$manifest | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $ResultRoot 'manifest.json')\n$bad = $entries | Where-Object { $_.exit_code -ne 0 -or ($_.Contains('run_exit_code') -and $_.run_exit_code -ne 0) }\nif ($bad.Count -ne 2 -or $bad[0].name -ne 'agx-compile-x64' -or $bad[1].name -ne 'agx-compile-arm64') { exit 1 }\n"
+  },
+  "allowed_command_ids": [],
+  "return_schema": {
+    "result": "PATCH_PROPOSED or QUESTION",
+    "rationale": "State source ownership why minimal change follows upstream Windows build contract and limits",
+    "patch": "valid unified diff including diff --git and hunk",
+    "requested_command_ids": [],
+    "unresolved": [],
+    "architecture_question": ""
+  },
+  "instruction": "Return structured JSON proposal only. You cannot run commands. Review/read-only checks and compiler test execution are separate. Do not solve any later compiler error.",
+  "format_feedback": "Previous proposal was rejected as patch_malformed; nothing applied. Return the same minimal semantic change as a unified diff with ONE deletion and ONE addition only; omit index line and surrounding context. The current compileArgs assignment is line 41. Use a standard @@ -41 +41 @@ header with NO trailing text. Exactly one old and one new full line. Do not modify any other line."
+}

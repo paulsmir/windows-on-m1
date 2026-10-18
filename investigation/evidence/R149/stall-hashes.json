@@ -1,0 +1,92 @@
+[
+  {
+    "path": "build.txt",
+    "bytes": 28,
+    "sha256": "d70ca63c6d8eeb962c2cb84ffb6f3ec32f2f9287d4c7e0283d50b27800594136"
+  },
+  {
+    "path": "convert.txt",
+    "bytes": 74,
+    "sha256": "a27742ef5d06462e6573d2a80555985a946493cf06437dea4bcccfb2e6cd2710"
+  },
+  {
+    "path": "error-green.txt",
+    "bytes": 462,
+    "sha256": "2dc7eb75c409f7fa1354c71e66138c4ebf963ca872df8bdad61bc2deb68fde28"
+  },
+  {
+    "path": "error-red.txt",
+    "bytes": 1285,
+    "sha256": "8b1138d44d035f3335642dce9341fcfcfdc6be75353341bb7ca431092c1bda37"
+  },
+  {
+    "path": "etl-summary.json",
+    "bytes": 471,
+    "sha256": "ef80a8e559c7c907bb86cfd2528fbe86c60b21ba571cad70e2c2c64c6cf081cd"
+  },
+  {
+    "path": "etl.ps1",
+    "bytes": 970,
+    "sha256": "aa1d74521f9094023428f8d278f855b14ae8849ed703205da756439556c00e30"
+  },
+  {
+    "path": "event-counts.json",
+    "bytes": 6973,
+    "sha256": "43264d489539d543d0050ad80c36532e591d890063d59efbe64e95168f43c94a"
+  },
+  {
+    "path": "event-examples.json",
+    "bytes": 207298,
+    "sha256": "72be892d75bced2ea33b3305fbbbce739396c6423271dfcbcfeb1638a1e02322"
+  },
+  {
+    "path": "events.jsonl",
+    "bytes": 31815688,
+    "sha256": "875453161280b8308f5bc47e2c5076f3d58f0720636963c9bea581ead8dbd61f"
+  },
+  {
+    "path": "identity.json",
+    "bytes": 780,
+    "sha256": "8ce114d98a55bc7bb24e248d668a62c234660dfca689af1bbe006b8ca8634e46"
+  },
+  {
+    "path": "input-hash.txt",
+    "bytes": 302,
+    "sha256": "ca81b63dec397736693b5bec98d90e49dedeabc7c5e2fbc214573fc48bcf2d39"
+  },
+  {
+    "path": "native-summary.txt",
+    "bytes": 1995,
+    "sha256": "a2e1b59e4c90476348479da93067b8ab89ac4f9d1a2d0f73bb1afa5c4904c535"
+  },
+  {
+    "path": "native.ps1",
+    "bytes": 326,
+    "sha256": "16400f52e24944883f4207da5c6ec8ad0ba0a9f08e8b8b1fd3e4196f3e8eb6bb"
+  },
+  {
+    "path": "query-matches.json",
+    "bytes": 2710,
+    "sha256": "32f62d8ef3f830e5aa271d99705fa883ef4c73d18605df60ecf6643f82c01256"
+  },
+  {
+    "path": "readetl.cpp",
+    "bytes": 3423,
+    "sha256": "c7af4ec20dc2b331dbd55942234a49bdf38ab8e466575b9cc9c3749a15164834"
+  },
+  {
+    "path": "run.ps1",
+    "bytes": 415,
+    "sha256": "a8ec029cf89029106d4d4b64bb3d76d7f909d80caecea4edfa450eb050704751"
+  },
+  {
+    "path": "source-comparison.json",
+    "bytes": 1115,
+    "sha256": "c33c07f2337f041343ed331876bade1e5cc3a3ae5f87e3cd6b87c4ff135a98f6"
+  },
+  {
+    "path": "source-function-comparison.json",
+    "bytes": 860,
+    "sha256": "9882e1b99a15c4540b35ccea8cca9baa44184d85839ced27306c25c45fc42933"
+  }
+]

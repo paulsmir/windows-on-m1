@@ -1,0 +1,20 @@
+# EXP933: deterministic HVC return contract
+
+WHY THIS HYPOTHESIS:
+1. EXP932 fresh930 on repaired registry consumes arm250087441; full firmware logs ARM_CONSUMED, but KMD receipt Phase6 reports0xffffa20141176e40 and Code43/Stage1. ZwFlushKey is no longer the boundary. Expected private-ABI success is1, not0.
+2. Actual930 disassembly: HVC4d32 followed by MOV X3,X8, CMP X3,1. m1n1 handles HVC through the generic handled-exception epilogue and adds4 to architectural ELR, skipping the first consumer instruction. Actual epilogue host regression fails precisely because HVC saved0x1004 returns0x1008. Linux arm64 KVM handle_hvc leaves PC unchanged while trapped SMC explicitly increments it.
+3. A minimal compile with installed MSVC19.44.35228 reproduces __hvc returning X8: direct_return emits HVC; MOV X0,X8; RET. Our private handler writes X0. This is a separate caller/transport mismatch and must not be hidden by writing an unrelated register in the hypervisor.
+
+WINDOWS CONTRACT: FULL GRAPHICS admission remains fail-closed, consumes and flushes one-shot before GPU. Explicit ARM64 assembly leaf functions obey normal Windows ARM64 C ABI: one payload argument X0, scalar status result X0. Microsoft intrinsic listing alone does not establish our private ABI; pinned compiler output is the evidence for its X8 behavior. Read https://learn.microsoft.com/en-us/cpp/intrinsics/arm64-intrinsics and ARM64 calling convention. Keep status1 convention, payload version and both HVC immediates unchanged.
+
+AGX/ASAHI CONTRACT: Boundary precedes GPU access; no RTKit/UAT/IRQ/queue change. m1n1 hv_guest_ipa_pa handler uses X0 for request and status. HVC exception ELR already points to the next instruction; trapped MSR/SMC still require existing advance. Source inspection: hv_exc.c handler and generic epilogue, hv.c hv_get_elr, hv_asm.S saved registers, hv_guest_ipa_pa.c/.h. Linux reference https://raw.githubusercontent.com/torvalds/linux/master/arch/arm64/kvm/handle_exit.c consulted for semantics only; no external implementation code copied. MuR143 dynamic reserve/ACPI contract unchanged; firmware-resource gate already passes before this HVC. Accepted full m1n1d3e0f999/MuR143e54c0098 and normal377/392 pinned.
+
+TRANSLATION: Fix return-PC ownership in m1n1: no extra increment for handled HVC64. Separately replace KMD compiler intrinsic at both private-HVC call sites with explicit assembly leaf entry points using X0 input/output. Do not modify status values, broaden admission, change the consumption flush, or fake a successful result. Review/commit changes independently and verify both offline before considering a coherent hardware call path.
+
+ATOMIC CONTRACT for any subsequent end-to-end run: X0 payload, X0 returned status, and resume at the instruction following HVC jointly define one callable transport. Each independently found defect has its own regression. Do not use a GPU experiment with a knowingly mismatched half of this ABI; hardware validates the coherent call path only after both regressions pass.
+
+WHAT IS STILL UNKNOWN: Whether the corrected coherent transport reaches natural StartDevice runtime and allows the already corrected resource preparation path to present. Do not run hardware to guess documented PC/register behavior. Hardware package/firmware build and install not yet authorized by an unsealed artifact; preregister exact hashes before running.
+
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Execute the actual handled-exception epilogue with architectural saved PCs: HVC must execute its immediately following return consumer, trapped MSR/SMC advance once. Exercise actual compiled caller/callee bytes with X8 deliberately unequal to success and hypervisor X0 status set to1, plus failure status2. This must reproduce old wrong-register return and prove new leaf returns the true status.
+
+Recovery: original932 guest remains Code43 before GPU. Collect/hash original evidence, then ordered normal377/392 recovery and exact930 cleanup before next experiment. Do not carry packages across runs. Preserve immutable firmware and repaired SYSTEM backups. No physical action required while SSH works.

@@ -1,0 +1,8 @@
+{
+  "review": "PASS",
+  "scope": "The patch adds a single file with a single line containing 'runner-marker'.",
+  "semantics": "The content matches the expected 'runner-marker' as required by the check definition.",
+  "test_coverage": "The patch includes a harmless check command that executed successfully.",
+  "unauthorized_expansion": "NONE",
+  "architecture_risk": "NONE"
+}

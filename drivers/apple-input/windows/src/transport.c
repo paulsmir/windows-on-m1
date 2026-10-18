@@ -430,11 +430,27 @@ BOOLEAN AiInputInterruptIsr(WDFINTERRUPT Interrupt, ULONG MessageID)
         !AiGpioInputAsserted(context))
         return FALSE;
 
-    AiGpioAcknowledge(context);
     AiCounterIncrement(&context->Diagnostics.InterruptCount);
     queue_worker = ai_transport_irq(&context->TransportQueue) ? TRUE : FALSE;
-    if (queue_worker && WdfInterruptQueueWorkItemForIsr(Interrupt))
-        AiCounterIncrement(&context->Diagnostics.WorkerQueuedCount);
+    if (queue_worker) {
+        /*
+         * The SPI-HID device holds its active-low GPIO until the packet is
+         * drained.  Acknowledge alone therefore cannot silence this level
+         * interrupt before the passive ISR returns.  Gate only this pin until
+         * the worker has drained the packet; otherwise KMDF immediately
+         * unmasks the parent GSI and repeatedly invokes the ISR.
+         */
+        (VOID)AiGpioDisableInputInterrupt(context);
+        if (WdfInterruptQueueWorkItemForIsr(Interrupt)) {
+            AiCounterIncrement(&context->Diagnostics.WorkerQueuedCount);
+        } else {
+            (VOID)ai_transport_worker_begin(&context->TransportQueue);
+            (VOID)ai_transport_worker_complete(&context->TransportQueue, false);
+            (VOID)AiGpioEnableInputInterrupt(context);
+        }
+    } else {
+        AiGpioAcknowledge(context);
+    }
     return TRUE;
 }
 
@@ -492,6 +508,9 @@ VOID AiTransportWorker(WDFINTERRUPT Interrupt, WDFOBJECT AssociatedObject)
         }
         WdfInterruptReleaseLock(Interrupt);
     } while (drain_again && !context->Stopping && context->HardwareStarted);
+
+    if (!context->Stopping && context->HardwareStarted)
+        (VOID)AiGpioEnableInputInterrupt(context);
 
     WdfWaitLockRelease(context->TransportLock);
 

@@ -1,0 +1,86 @@
+{
+  "bugcheck": {
+    "code": "0x116",
+    "uptime_seconds": 43.603,
+    "cpu": 0,
+    "parameters": [
+      "ffffe2051be8b010",
+      "fffff80135f16ce0",
+      "ffffffffc0000483",
+      "3"
+    ]
+  },
+  "watchdog": {
+    "code": "0x141",
+    "uptime_seconds": 43.54,
+    "cpu": 3,
+    "parameters": [
+      "ffffe2051be98010",
+      "fffff80135f16d90",
+      "0",
+      "ffffe20519e4a080"
+    ]
+  },
+  "context": "ffffe20519d02000",
+  "native_sequence": 5,
+  "active_fence": 955,
+  "g3_last_completed_fence": 760,
+  "queue_completion": {
+    "fence": 760,
+    "status": "AppleAgxG13QueueCompletionSuccess"
+  },
+  "scheduler_completed_fence": 954,
+  "scheduler_fence_count_is_not_native_job_count": true,
+  "active_process": {
+    "image": "explorer.exe",
+    "pid": 5272,
+    "context_win32_generation": "14980002",
+    "scene_id": 61,
+    "process_root_ipa": "9d6014000",
+    "mapping_generation": 1400
+  },
+  "ta": {
+    "cpu_write_pointer": 6,
+    "gpu_done_pointer": 5,
+    "observed_stamp": "7a000400",
+    "expected_stamp": "7a000500",
+    "event_seen": false,
+    "complete": false
+  },
+  "d3": {
+    "cpu_write_pointer": 10,
+    "gpu_done_pointer": 8,
+    "observed_stamp": "3d000400",
+    "expected_stamp": "3d000500",
+    "event_seen": false,
+    "complete": false
+  },
+  "native_completions": {
+    "inferred_count": 4,
+    "greater_than_one": true,
+    "basis": "Current sequence5; persistent TA consumed5 entries (initial initBM plus4 jobs) and D3 consumed8 (barrier/work pairs for4 jobs); positive queue completion760 corroborated by G3.LastCompletedFence760. Previous-stamp values alone are not a completion counter because materialization writes previous stamp values."
+  },
+  "current_private_scene": {
+    "queued": true,
+    "started": true,
+    "gpu_done": false,
+    "quarantined": true
+  },
+  "other_processes_present_in_dump": {
+    "dwm.exe": 1236,
+    "LogonUI.exe": 1228
+  },
+  "original_ssh_samples": 0,
+  "original_etl": "UNAVAILABLE_EARLY_SPONTANEOUS_RESET",
+  "scanout": {
+    "snapshot_sequence": 2,
+    "pixels": 4096000,
+    "nonzero": 0
+  },
+  "limitations": [
+    "No original ETL or original live Code0 SSH sample",
+    "No Present or visible frame proven",
+    "MMIO broker pages absent from dump; firmware/UAT fault unknown",
+    "Number4 is inferred from serialized queue history; not a durable per-job counter or preserved list of all4 fence owners"
+  ]
+}

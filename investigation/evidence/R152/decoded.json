@@ -1,0 +1,93 @@
+{
+  "firmware_events": [
+    {
+      "slot": 0,
+      "kind": 1,
+      "payload_u64": 2,
+      "timeout_stamp_index": null
+    },
+    {
+      "slot": 1,
+      "kind": 1,
+      "payload_u64": 1,
+      "timeout_stamp_index": null
+    },
+    {
+      "slot": 2,
+      "kind": 1,
+      "payload_u64": 2,
+      "timeout_stamp_index": null
+    },
+    {
+      "slot": 3,
+      "kind": 1,
+      "payload_u64": 1,
+      "timeout_stamp_index": null
+    },
+    {
+      "slot": 4,
+      "kind": 1,
+      "payload_u64": 2,
+      "timeout_stamp_index": null
+    },
+    {
+      "slot": 5,
+      "kind": 1,
+      "payload_u64": 1,
+      "timeout_stamp_index": null
+    },
+    {
+      "slot": 6,
+      "kind": 1,
+      "payload_u64": 2,
+      "timeout_stamp_index": null
+    },
+    {
+      "slot": 7,
+      "kind": 1,
+      "payload_u64": 1,
+      "timeout_stamp_index": null
+    },
+    {
+      "slot": 8,
+      "kind": 4,
+      "payload_u64": 0,
+      "timeout_stamp_index": 0
+    }
+  ],
+  "buffer_manager": {
+    "gpu_counter": 4,
+    "gpu_counter2": 4,
+    "page_list": "0x2020000",
+    "block_list": "0x2030000",
+    "page_count": 128,
+    "block_count": 32,
+    "block_control_total": 32,
+    "block_control_write": 32,
+    "counter": 1
+  },
+  "scene_user_buffer": "0x2440000",
+  "work_buffer_manager": {
+    "ta": "0xffffffa00036bf44",
+    "d3": "0xffffffa00036bf44"
+  },
+  "vm_slots": {
+    "init_bm": 1,
+    "work_ta": 1,
+    "work_3d": 1,
+    "start_ta": 1,
+    "finalize_ta": 1
+  },
+  "last_init_bm_stamp": "0x7a000100",
+  "timestamps": {
+    "28": 2396453714,
+    "29": 2493792337,
+    "30": 2396450884,
+    "31": 2493789680
+  },
+  "limitations": [
+    "Timestamp objects persist between jobs and have no sequence tag",
+    "No MMIO UAT fault registers or TTBR table in the dump",
+    "No retained mapping from all prior completions to Windows processes"
+  ]
+}

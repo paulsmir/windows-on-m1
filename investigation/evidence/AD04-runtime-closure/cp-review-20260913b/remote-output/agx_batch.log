@@ -1,0 +1,75 @@
+clang-cl: warning: argument unused during compilation: '/Zc:enumTypes' [-Wunused-command-line-argument]
+clang-cl: warning: argument unused during compilation: '/Zc:preprocessor' [-Wunused-command-line-argument]
+In file included from C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c:10:
+In file included from C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\asahi/lib/agx_device_virtio.h:9:
+In file included from C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\asahi/lib\agx_device.h:27:
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\asahi\libagx\libagx_dgc.h(26,55): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+   26 |    static_assert(__builtin_ctz(1) == AGX_INDEX_SIZE_U8);
+      |                                                       ^
+      |                                                       , ""
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\asahi\libagx\libagx_dgc.h(27,56): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+   27 |    static_assert(__builtin_ctz(2) == AGX_INDEX_SIZE_U16);
+      |                                                        ^
+      |                                                        , ""
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\asahi\libagx\libagx_dgc.h(28,56): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+   28 |    static_assert(__builtin_ctz(4) == AGX_INDEX_SIZE_U32);
+      |                                                        ^
+      |                                                        , ""
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\asahi\libagx\libagx_dgc.h(237,4): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+  237 |    agx_push_packed(out, launch, CDM_LAUNCH_WORD_0);
+      |    ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\asahi\libagx\libagx_dgc.h(18,49): note: expanded from macro 'agx_push_packed'
+   18 |    static_assert(sizeof(src) == AGX_##T##_LENGTH);                             \
+      |                                                 ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(163,17): error: call to undeclared function 'drmSyncobjCreate'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  163 |       int ret = drmSyncobjCreate(dev->fd, 0, &batch->syncobj);
+      |                 ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(300,14): error: call to undeclared function 'drmSyncobjWait'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  300 |    int ret = drmSyncobjWait(dev->fd, syncobjs, count, 0, 0, &first);
+      |              ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(604,10): error: call to undeclared function 'drmSyncobjImportSyncFile'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  604 |          drmSyncobjImportSyncFile(dev->fd, ctx->in_sync_obj, ctx->in_sync_fd);
+      |          ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(718,20): error: call to undeclared function 'drmSyncobjCreate'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  718 |          int ret = drmSyncobjCreate(dev->fd, 0, &sync_handle);
+      |                    ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(722,16): error: call to undeclared function 'drmSyncobjImportSyncFile'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  722 |          ret = drmSyncobjImportSyncFile(dev->fd, sync_handle, in_sync_fd);
+      |                ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(755,37): error: invalid application of 'sizeof' to an incomplete type 'struct asahi_ccmd_submit_res'
+  755 |          malloc(virt.extres_count * sizeof(struct asahi_ccmd_submit_res));
+      |                                     ^     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\asahi/lib\agx_device.h(34,8): note: forward declaration of 'struct asahi_ccmd_submit_res'
+   34 | struct asahi_ccmd_submit_res;
+      |        ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(760,21): error: subscript of pointer to incomplete type 'struct asahi_ccmd_submit_res'
+  760 |          virt.extres[i].res_id = (*p)->uapi_handle;
+      |          ~~~~~~~~~~~^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\asahi/lib\agx_device.h(34,8): note: forward declaration of 'struct asahi_ccmd_submit_res'
+   34 | struct asahi_ccmd_submit_res;
+      |        ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(761,21): error: subscript of pointer to incomplete type 'struct asahi_ccmd_submit_res'
+  761 |          virt.extres[i].flags = ASAHI_EXTRES_READ | ASAHI_EXTRES_WRITE;
+      |          ~~~~~~~~~~~^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\asahi/lib\agx_device.h(34,8): note: forward declaration of 'struct asahi_ccmd_submit_res'
+   34 | struct asahi_ccmd_submit_res;
+      |        ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(761,33): error: use of undeclared identifier 'ASAHI_EXTRES_READ'
+  761 |          virt.extres[i].flags = ASAHI_EXTRES_READ | ASAHI_EXTRES_WRITE;
+      |                                 ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(761,53): error: use of undeclared identifier 'ASAHI_EXTRES_WRITE'
+  761 |          virt.extres[i].flags = ASAHI_EXTRES_READ | ASAHI_EXTRES_WRITE;
+      |                                                     ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(908,17): error: call to undeclared function 'drmSyncobjExportSyncFile'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  908 |       int ret = drmSyncobjExportSyncFile(dev->fd, batch->syncobj, &out_sync_fd);
+      |                 ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(920,16): error: call to undeclared function 'drmSyncobjDestroy'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  920 |          ret = drmSyncobjDestroy(dev->fd, syncs[i].handle);
+      |                ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(960,17): error: call to undeclared function 'drmSyncobjWait'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  960 |       int ret = drmSyncobjWait(dev->fd, &batch->syncobj, 1, INT64_MAX, 0, NULL);
+      |                 ^
+C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-x64-cp-review-20260913b\src\gallium\drivers\asahi\agx_batch.c(1013,14): error: call to undeclared function 'drmSyncobjWait'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+ 1013 |    int ret = drmSyncobjWait(dev->fd, &batch->syncobj, 1, INT64_MAX, 0, NULL);
+      |              ^
+4 warnings and 14 errors generated.

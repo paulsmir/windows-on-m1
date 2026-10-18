@@ -1,0 +1,6 @@
+test_firmware_visible_render_objects (test_apple_agx_render_shared_memory.AppleAgxRenderSharedMemoryTests.test_firmware_visible_render_objects) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.786s
+
+OK

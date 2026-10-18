@@ -1,0 +1,48 @@
+{
+  "Wom1G3WorkInput": {
+    "Version": 1,
+    "Bytes": 112,
+    "Operation": 8,
+    "Irql": 0,
+    "DmaSize": 4096,
+    "PrivateSize": 4096,
+    "MultipassOffset": 188416,
+    "DmaBufferWriteOffset": 0,
+    "Direction": 0,
+    "Flags": 0,
+    "Pattern": 0,
+    "Reserved": 0,
+    "SystemContext": 18446711110265439408,
+    "Allocation": 18446711110277875328,
+    "AllocationOffset": 0,
+    "SourceVa": 68354048,
+    "DestinationVa": 68616192,
+    "WorkBytes": 262144,
+    "SourcePageTable": 0,
+    "DestinationPageTable": 0
+  },
+  "Wom1G3FlushInput": {
+    "Version": 1,
+    "Bytes": 88,
+    "Branch": 5,
+    "RootSegment": 2,
+    "ResolveStatus": 0,
+    "BrokerStatus": 0,
+    "Process": 18446711110260403664,
+    "RootOffset": 1048379392,
+    "ResolvedRootIpa": 39166214144,
+    "GraphRootIpa": 42245308416,
+    "InputStart": 65536,
+    "InputEnd": 69632,
+    "FlushStart": 65536,
+    "FlushEnd": 81920
+  },
+  "Start": {
+    "Wom1StartStage": 12,
+    "Wom1StartStatus": 0,
+    "Wom1PlatformStage": 14,
+    "Wom1PlatformStatus": 0
+  },
+  "G4_failure_receipt_present": false,
+  "QUERY_failure_receipt_present": false
+}

@@ -1,0 +1,20 @@
+{
+  "head": "452ce35df96374bde1e3574fe889363659469e8b",
+  "last_pass": "Request-scoped UMD draw composer: 20 controlled Windows scenarios + existing KMD validator/materializer; x64 execution and ARM64 build; x64 optional factory execution",
+  "first_error": "No new build error. Native Asahi producer has not yet supplied the owner identity sidecar/source lifetime to the composer. Internal API is not published as a winsys provider.",
+  "include_or_call_chain": [
+    "Actual native BO/pool -> typed capture identity sidecar",
+    "AdmissionUmdDrawSeal -> BuildDrawVersion + dense Windows allocation list",
+    "AdmissionUmdDrawDispatch -> one pfnRenderCb -> KMD validator/materializer",
+    "AdmissionUmdDrawRetire -> in-order completion event -> release"
+  ],
+  "constraints": [
+    "Full Graphics standard D3D/DXGI/DWM objective remains active; no software substitute",
+    "GPUVA CLOSED/NO; physical/patch-list typed relocation",
+    "One active transaction per context; no Render replay after acceptance",
+    "Source bytes must remain stable until consumption; submission hold is not VidMm residency",
+    "Do not enable provider before native capture, shared command-buffer serialization and terminal teardown contracts"
+  ],
+  "evidence": "investigation/evidence/AD04-umd-draw-composer",
+  "decision": "investigation/agent_tasks/AD04-DRAW-COMPOSER-RESULT.md"
+}

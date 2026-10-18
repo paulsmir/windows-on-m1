@@ -1,0 +1,330 @@
+[
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_reloc_capture.c",
+        "Hash":  "5696462A03AC403702F8DD0A40AB4A049EC37E1B5B407193052F4A62F174A616"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_reloc_capture.h",
+        "Hash":  "26EB13ADCE58251D978B3FB01E1A7FD4CEA047415B45C4FA166D13BFF01F6F58"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_reloc_capture_test.c",
+        "Hash":  "C05DD17DE14D9CDD20B0585DC23C2E2F82C1D3DDDB6DDCF18541404E30C144A6"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_transport.c",
+        "Hash":  "52EF7B8D935FFC4A08B4DE5DB12FEAA0ADFDF91442BD499914A972A0CF17BFA8"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\agx_win32_transport.h",
+        "Hash":  "8ED01AB5EF9CE1347AD6627DD513DCC06C7079DFF5E8367EEC88F797FA122BD3"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_aperture.h",
+        "Hash":  "7A4407D7CD88C6AD288950595BF30422BB095BF073B9DAEC83B82ED3D31BC826"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_asc_transport.h",
+        "Hash":  "819F6337A6A9D1284DB5E0A91D5AFB76ACDC416A69783B7242FC9742C2C2B126"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_backend_memory_bridge.h",
+        "Hash":  "B84C5159F544FD105671A3629E28A2F2DDD878CEC220392B013EFBCAF294538C"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_backend_runtime.h",
+        "Hash":  "EAA3E53B59ED5DE44388675396C92EEF8C1E2F210E62743576F81C9FAB05F917"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_channel_info.h",
+        "Hash":  "8EA29583262C62803A56B52442D783DF4DDC761CBC27B736CB5A2FE5CB4E6BBF"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_channel_memory.h",
+        "Hash":  "78C73C351654B65A1C28E7B890EB3DAFB60ECFCDBFB3D807D3629931B6A9C49B"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_config_snapshot.h",
+        "Hash":  "FDD107E465768DCACFC11205B6278E91A826CEC8254F4379AF2B2089CB0BE4A7"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_context0_broker.h",
+        "Hash":  "4B342711B7AAB5A2B421B6232C2AF5CB48B2AA1BF55900541CFE6B18DAE5A029"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_device_control.h",
+        "Hash":  "7FE6B7D7C6BC6B5E41A4DC319A9FFEF70707C7E26D2DE7A2DB39E1F4F5D8EFF5"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_dma_shadow.h",
+        "Hash":  "29D51662EB36885DBF48020AAE3A8002F1BB9BB3ADEEE5157A8FD9EFA5F55770"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_dynamic_job.c",
+        "Hash":  "7B2F4547175321DD1D2733FC2BC1EE8911C5D2AEAC1FB7D9D6A9B22C14D4D5BF"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_dynamic_job.h",
+        "Hash":  "D5EFED1617669154B8B65304B6A8EBBBD176600C72451CAA0F8D961EDC03E2F1"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_event_allocator.h",
+        "Hash":  "648CBB86F74A566F86360B09D44D9D46E37EF7046F075DE0888736F78831A0F0"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_exp208_adapter.h",
+        "Hash":  "E4467FAB1B29B6C041676F2A162F313AC1649C19802CF61C0DBE6D8D1F3773FE"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_exp208_dynamic.h",
+        "Hash":  "4FD56202767E301C249A73C02A9BAB77C5B2C650D994FF59534FF1531996E5EE"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_exp208_framebuffer.h",
+        "Hash":  "58062FC77CB8046989C69FD1143D2739705F6CB0F66D62D885ADFBFD59CF11DF"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_exp208_gdi.h",
+        "Hash":  "5335E574247B75479F6B6C04ADDCF98141E270B5DAE1FFBF354A89415CC5DE8C"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_exp208_relocation.h",
+        "Hash":  "407DDCAD1403EA06DDA240CD396037844B44A7444517B911F5C63703E5C6D15B"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_firmware.h",
+        "Hash":  "45C489214413519D8A934EC0D8402FA236082557A55E65F7E09B28F0FDA19982"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_firmware_io.h",
+        "Hash":  "C146E6848382B7331C0F4A34694CA14E2E9C231F905369942D509A29BAA89E4E"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_firmware_prefix.h",
+        "Hash":  "7E2CFCD061163077E9444A20B3F6AE630761B602A5ADE2508FB79E5B6A3F9292"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_firmware_provider.h",
+        "Hash":  "9AD3AE63195DB30062A2AF6B870EA71DF2A7C78F94B8981940262F034A28FEB0"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_firmware_start_receipt.h",
+        "Hash":  "C2C593E2A37D743AEB1D7F9DDFAFBEE2D704A08F52A44DA430CB326EA3D28D37"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_firmware_status.h",
+        "Hash":  "4BC24D3B9E0865275308D4261C5222A8B4A9E551E3F69FA41DBCDEE07C0E9DE0"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_fixed_panel.h",
+        "Hash":  "A8510F89111C5C66E3246531692F3351C2E7FDA0D1C70FE6F76FBE9FA738534B"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_g13_codec.h",
+        "Hash":  "DEBA95DE7A56D0222733968ADEE5DD87E1CF55CE8E2E3958F53C33A72FE61EA1"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_g13_queue_provider.h",
+        "Hash":  "1CFB5D53886F678D0E0F568157E643D0F09E1A9C23108AF228A1B877D3026AED"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_g13_queue_runtime.h",
+        "Hash":  "29C9F570228F24F2641EA2D94FFC9FE880D7C1E8985C01251CA3D0893CC18110"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_gdi.h",
+        "Hash":  "ACD061381E0D33F544D8695929A06BC2F3BF180F6C3FFFB5C311B6419BC06E06"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_gfx_handoff.h",
+        "Hash":  "8BC09D3AB06A994AB784685ED37CCA1925A2CD3612D2C82992CE4A13FD731D65"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_hwdata_profile.generated.h",
+        "Hash":  "4A5DF599339585D620209D19A147E0420AB91B5F55D39B9F8052CA8A2F338451"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_hwdata_profile.h",
+        "Hash":  "0D1E66628E5B1E644277E0D556B6DDEEDA1CDC33B0DE9F8B472352C492A826C7"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_hwdata_profile_abi.h",
+        "Hash":  "36D5A3AC540243A14F4C7FBED21F997B595863A4B96FBE83D5A4B2756D5FB94E"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_initdata.h",
+        "Hash":  "BA9ADA22A0E523EF072B9504FD1537F2F76F7521EB466BCC91D0ABB21E6528D9"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_initdata_memory.h",
+        "Hash":  "8913D2894403811ADCE5C69BC1C8FD49A5182CF585944FFB41DB0B4B949088AE"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_local_segment.h",
+        "Hash":  "1D7AC450DABF7677CCC380713B8FB3E389DDCC16BF8FC884C74AD9553DEAAE3F"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_mapping.h",
+        "Hash":  "32C4745035856A38A34E7022D5BE8CCA63D9728A9CECC9B18E242415AC710F29"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_memory.h",
+        "Hash":  "4F08A8CE6B97B6F55B229CECB0B4F9A4272FCB3E1C84B01E780AFF7124BF7777"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_physical_paging.h",
+        "Hash":  "6B59CF90F1C8B4B782914E1B7A7E4CC9A57CDE21E5FDD054EB442B3CFE42EE4B"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_physical_topology.h",
+        "Hash":  "CCE919640A44CF24F3130D52EA1AFCBD331CDDB5DC527B1CBA5B2E4EFE855651"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_platform_composer.h",
+        "Hash":  "A3FE146EBF8378B68962837C3FF9D7584E35BAC7C5F36B7593B7AA3995A3A679"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_platform_provider.h",
+        "Hash":  "6A1C6D37BB9D94E738646AE0A41E43355E31F4982220027F55F8AE1E91B8FEB0"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_platform_transport_validation.h",
+        "Hash":  "26A3FB30B2B261C1B4EAD79F961C630875E301A6F06A51EE7385DD891BF2C496"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_power.h",
+        "Hash":  "E6379F4DC5B6538841C10DED4300C92546CA983A945B0F4C2B007AE63B2D2693"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_regionb.h",
+        "Hash":  "6940D0FF3315C9F98DD9D8003854627FDF2419C334C79B6D404D6D3D9F88C218"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_regionb_memory.h",
+        "Hash":  "92400D504404378D98882AB75E76CA18FE48DDE653A4929782F1697CA1C6EBD9"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_regionc.h",
+        "Hash":  "C4CA3B46288D803E9AA7E9D8C372D4D7B837862FD178BEA8F9D5990ED9B2BFC8"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_relocation.h",
+        "Hash":  "FFE309D9357A4F6E00E72812A4F7CCF110B91378A92E2BB99F6F65EDB97C756C"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_render_provider.h",
+        "Hash":  "EA298B15F414F6B25C8916C3AFBCFF36B05638E132E0ACFBECBEBEBD4FC88CC6"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_render_shared_memory.h",
+        "Hash":  "68249BBBBF22F3C124272114F899456B23EA2E7E450B68DBFD2ACE49800B2D0D"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_render_template.h",
+        "Hash":  "52B4DDE84D88ADA03A85B9EF4B3DF3C0CB7B3B2AA6C4BE5B5D43BDA70A442B0A"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_render_template_rebase.h",
+        "Hash":  "BC8E1CC2262E2FD152D60096B8C0E0AB769768F1BA88EA85BC7F4184777C678B"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_residency.h",
+        "Hash":  "444FFB706A7BBB44EF241DBA9A56A6762B0B9F61FECF2B1911833A5A2F2DC12E"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_retained_root_abi.h",
+        "Hash":  "2D9F2D233E156C16C0CB4A69CC32D832F4AA243152801EB5896C45C97A9CDC19"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_retained_root_client.h",
+        "Hash":  "DB338090A14BAFD3268317778481B85C96B526DF086B4D9D9F1A52A2BFBCE372"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_rtkit.h",
+        "Hash":  "4223092B57681DE03B8824642A8002C9EDC6AEDE7B26EA64FDC9D6873B7C012D"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_rtkit_boot.h",
+        "Hash":  "CA1720AF06381004A01ADE2BCE9C7A05DFF280C89CEEF39ADEAC7CD894797357"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_rtkit_session.h",
+        "Hash":  "8A629CE0E4915AB589E5AD0AD405E927086925C6E645F1E21AB8653F970DDB9E"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_scanout.h",
+        "Hash":  "267C20D6900F0A99443CD72AFD62ACD3BE1B150A7544C8924BE459051D44C957"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_scheduler.h",
+        "Hash":  "5AA5C36DE976E9EFA81DB7A201039654AD2ACE0B685B4B08ADF9BDBB8883D2A1"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_software_aperture.h",
+        "Hash":  "01251F495B0C74E67F1507D18A82B8A3027AF4F52B22D70F72B980B8963DE084"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_state.h",
+        "Hash":  "45449EA5C73B308C30A3D9A056EC6C7E88CE4331BDA9BB339B2447D2FF1838F5"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_submission.h",
+        "Hash":  "AF30BE78F39BDFAD69047D56BD5C7A9CD040CC3B0A06BCB739C34AA89C068D8C"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_submission_coordinator.h",
+        "Hash":  "CBD0FAFD867114524B083E2FBA29E01E0203CA4238AC18D36EB993381244D680"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_uat.h",
+        "Hash":  "95A3166D31F4D4A4B26F876A6C79944E6938144825053845C8E8FAF611D82035"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_uat_memory.h",
+        "Hash":  "5A8B9D3EEC9B03C59E9C6C30258DF6278B31B14EB00FCE6ECD0FFCF24EB29671"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_uat_publication.h",
+        "Hash":  "D2020AECC7952A9B3BBDE0E62E9866F03E62812660A94B3A40BFA015B9FB42FB"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_uat_table.h",
+        "Hash":  "99A45B1FC0CD4FA627A38E0A42F80C76AAA6EA60506AB95BDA0B922DC6EA6540"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_wddm_feature_contract.h",
+        "Hash":  "665ABF904E6CDA7BAC0694921A29626BC01106C1C122BEDF99F20944FC901119"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_win32_abi.c",
+        "Hash":  "6AB61396658B41B1613F215151183813920A08B3717F37A438E66AAF546E1E9E"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_win32_abi.h",
+        "Hash":  "65C11C25CFEF64082E3FA354BD3F0F4B1D88439CB9C0EB9F00F32521681A789F"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_win32_device_info.h",
+        "Hash":  "E94911EE739B4D1C949641AECA6D58505D1BA493F0D13727482CA079A8CB0244"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\apple_agx_work_queue.h",
+        "Hash":  "D627E97365BD16C8ECE2AC4A025B2F58C1C268A9DB42250635A7653D3330FF76"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\build-reloc-capture.ps1",
+        "Hash":  "1257E9C743BD4722BE27CA583E35E9A7B1C1320E7F755453EDA721FEA178C98B"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\j313_agx_g2.generated.h",
+        "Hash":  "CD5973D7215D03916D26F4021DD0AF05BFE99600C0CD4BC81A34F94D390BAA19"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\render_allocation.h",
+        "Hash":  "35449479472F1AAC557F39B7B0F4FFF83061188BA663BCAB19217D12F1AE88E1"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-input-002\\render_win32_transport.h",
+        "Hash":  "F71BE604A8C10D8775920C4E319741AD8EF45A0268F9E18862D9BA35B2727547"
+    }
+]

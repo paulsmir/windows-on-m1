@@ -1,0 +1,663 @@
+#include "apple_agx_exp208_dynamic.h"
+#include "apple_agx_render_shared_memory.h"
+#include "apple_agx_exp208_adapter.h"
+#include "apple_agx_exp208_gdi.h"
+#include "apple_agx_relocation.h"
+#include "apple_agx_render_template_rebase.h"
+
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct _FAKE_ALLOCATION {
+  void *Storage;
+  APPLE_AGX_U64 DeviceAddress;
+} FAKE_ALLOCATION;
+
+typedef struct _FAKE_MEMORY {
+  FAKE_ALLOCATION Allocations[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
+  APPLE_AGX_U32 Allocated;
+  APPLE_AGX_U32 Freed;
+} FAKE_MEMORY;
+
+static unsigned char allocate_contiguous(void *Context,
+                                         unsigned long long Bytes,
+                                         void **CpuBase,
+                                         unsigned long long *DeviceBase,
+                                         void **Handle) {
+  FAKE_MEMORY *fake = Context;
+  FAKE_ALLOCATION *allocation = &fake->Allocations[fake->Allocated];
+  allocation->Storage = aligned_alloc(APPLE_AGX_MEMORY_PAGE_SIZE, Bytes);
+  assert(allocation->Storage != NULL);
+  allocation->DeviceAddress = 0x20000000ULL + fake->Allocated * 0x20000ULL;
+  *CpuBase = allocation->Storage;
+  *DeviceBase = allocation->DeviceAddress;
+  *Handle = allocation;
+  ++fake->Allocated;
+  return 1u;
+}
+
+static unsigned char free_contiguous(void *Context, void *Handle) {
+  FAKE_MEMORY *fake = Context;
+  FAKE_ALLOCATION *allocation = Handle;
+  free(allocation->Storage);
+  allocation->Storage = NULL;
+  ++fake->Freed;
+  return 1u;
+}
+
+static APPLE_AGX_U64 read_u64(const unsigned char *Address) {
+  APPLE_AGX_U64 value = 0ULL;
+  APPLE_AGX_U32 index;
+  for (index = 0u; index < 8u; ++index)
+    value |= (APPLE_AGX_U64)Address[index] << (index * 8u);
+  return value;
+}
+
+static APPLE_AGX_U32 read_u32(const unsigned char *Address) {
+  APPLE_AGX_U32 value = 0u;
+  APPLE_AGX_U32 index;
+  for (index = 0u; index < 4u; ++index)
+    value |= (APPLE_AGX_U32)Address[index] << (index * 8u);
+  return value;
+}
+
+int main(void) {
+  FAKE_MEMORY fake;
+  APPLE_AGX_MEMORY_IO io;
+  APPLE_AGX_RENDER_SHARED_MEMORY_OWNER owner;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT
+      objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  APPLE_AGX_EXP208_RELOCATION_OBJECT
+      source_objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  APPLE_AGX_EXP208_RELOCATION_OBJECT
+      active_objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  APPLE_AGX_RENDER_TEMPLATE_ROOTS roots;
+  APPLE_AGX_BACKEND_JOB_IMAGE staged_job;
+  APPLE_AGX_BACKEND_JOB_IMAGE active_job;
+  APPLE_AGX_RENDER_RUNTIME_BINDINGS bindings;
+  unsigned char *arena;
+  const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
+  APPLE_AGX_U32 index;
+  APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG queue_config;
+  APPLE_AGX_U64 original_vas[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
+  unsigned char persistent_bm[188u];
+  unsigned char persistent_ring[10240u];
+  unsigned char persistent_job_list[24u];
+  unsigned char persistent_queue_pointers[96u];
+  unsigned char persistent_init_bm[32u];
+
+  memset(&fake, 0, sizeof(fake));
+  memset(&owner, 0, sizeof(owner));
+  memset(objects, 0, sizeof(objects));
+  memset(&io, 0, sizeof(io));
+  io.Context = &fake;
+  io.AllocateContiguous = allocate_contiguous;
+  io.FreeContiguous = free_contiguous;
+  arena = aligned_alloc(APPLE_AGX_MEMORY_PAGE_SIZE,
+                        APPLE_AGX_EXP208_ARENA_BYTES);
+  assert(arena != NULL);
+  assert(AppleAgxRenderTemplateMaterialize(
+      arena, APPLE_AGX_EXP208_ARENA_BYTES, &roots));
+  assert(AppleAgxRenderTemplateBuildRelocationObjectsRebased(
+      arena, APPLE_AGX_EXP208_ARENA_BYTES, 0x9d5000000ULL,
+      0x1500800000ULL, 0x1500000000ULL, 0x01000000ULL,
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      &roots));
+  assert(AppleAgxApplyRelocations(
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      AppleAgxRenderTemplateRelocations(),
+      AppleAgxRenderTemplateRelocationCount()));
+  assert(AppleAgxExp208AdoptNativePipelineLayout(
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+
+  assert(AppleAgxRenderSharedMemoryBuild(
+             &owner, &io, 0xffffffa001000000ULL) ==
+         AppleAgxRenderSharedMemoryResultOk);
+  assert(owner.ObjectCount == APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);
+  layouts = AppleAgxRenderTemplateObjectLayouts();
+  assert((owner.VirtualAddresses[0] & 0x7fffULL) == 0ULL);
+  assert((owner.VirtualAddresses[35] & 0x7fffULL) == 0ULL);
+  memcpy(original_vas, owner.VirtualAddresses, sizeof(original_vas));
+  assert(AppleAgxRenderSharedMemoryApplyClassArenas(
+             &owner, AGX_RR_SHARED_ARENA_VA, APPLE_AGX_MEMORY_PAGE_SIZE,
+             AGX_RR_TIMESTAMP_ARENA_VA, AGX_RR_TIMESTAMP_ARENA_BYTES) ==
+         AppleAgxRenderSharedMemoryResultInvalidArgument);
+  assert(memcmp(original_vas, owner.VirtualAddresses, sizeof(original_vas)) == 0);
+  assert(AppleAgxRenderSharedMemoryApplyClassArenas(
+             &owner, AGX_RR_SHARED_ARENA_VA, AGX_RR_SHARED_ARENA_BYTES,
+             AGX_RR_TIMESTAMP_ARENA_VA, AGX_RR_TIMESTAMP_ARENA_BYTES) ==
+         AppleAgxRenderSharedMemoryResultOk);
+  for (index = 0u; index < 20u; ++index)
+    assert(owner.VirtualAddresses[index] == original_vas[index]);
+  for (index = 20u; index < 32u; ++index) {
+    assert(owner.VirtualAddresses[index] >= AGX_RR_SHARED_ARENA_VA);
+    assert(owner.VirtualAddresses[index] + owner.Objects[index].Length <=
+           AGX_RR_SHARED_ARENA_VA + AGX_RR_SHARED_ARENA_BYTES);
+    assert(owner.VirtualAddresses[index] + owner.ObjectOffsets[index] ==
+           layouts[index].OriginalGpuVa + 0x01000000ULL);
+  }
+  for (index = 32u; index < 36u; ++index) {
+    assert(owner.VirtualAddresses[index] >= AGX_RR_TIMESTAMP_ARENA_VA);
+    assert(owner.VirtualAddresses[index] + owner.Objects[index].Length <=
+           AGX_RR_TIMESTAMP_ARENA_VA + AGX_RR_TIMESTAMP_ARENA_BYTES);
+    assert(owner.VirtualAddresses[index] + owner.ObjectOffsets[index] ==
+           layouts[index].OriginalGpuVa + 0x00100000ULL);
+  }
+  assert(AppleAgxRenderSharedMemoryApplyClassArenas(
+             &owner, AGX_RR_SHARED_ARENA_VA, AGX_RR_SHARED_ARENA_BYTES,
+             AGX_RR_TIMESTAMP_ARENA_VA, AGX_RR_TIMESTAMP_ARENA_BYTES) ==
+         AppleAgxRenderSharedMemoryResultInvalidArgument);
+  assert(AppleAgxRenderSharedMemoryBindRelocationObjects(
+      &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES, objects,
+      APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index)
+    assert(AppleAgxMemoryMarkPrepared(&owner.Objects[index]) ==
+           AppleAgxMemoryResultOk);
+  /* Production initializes the compute queue immediately after the broker
+   * graph is prepared, before the context-0 mappings become live. */
+  assert(AppleAgxRenderSharedMemoryInitializeComputeQueue(&owner));
+  assert(*(APPLE_AGX_U64 *)owner.Objects[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO].CpuAddress==
+      owner.VirtualAddresses[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS]);
+  assert(*(APPLE_AGX_U64 *)((unsigned char *)owner.Objects[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO].CpuAddress+8u)==
+      owner.VirtualAddresses[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_RING]);
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index) {
+    assert(AppleAgxMemoryMarkGpuMapped(&owner.Objects[index], 0u,
+                                       owner.VirtualAddresses[index]) ==
+           AppleAgxMemoryResultOk);
+  }
+  memset(&queue_config, 0, sizeof(queue_config));
+  assert(AppleAgxRenderSharedMemoryBuildQueueConfig(
+      &owner, 500u, &queue_config));
+  assert(queue_config.D3.QueueInfoGpuAddress ==
+         owner.VirtualAddresses[3] + owner.ObjectOffsets[3]);
+  assert(queue_config.D3.RingCpuAddress ==
+         (APPLE_AGX_U64 *)((unsigned char *)owner.Objects[4].CpuAddress +
+                           owner.ObjectOffsets[4]));
+  assert(queue_config.D3.GpuDonePointer ==
+         (volatile APPLE_AGX_U32 *)((unsigned char *)
+             owner.Objects[24].CpuAddress + owner.ObjectOffsets[24]));
+  assert(queue_config.D3.CpuWritePointer ==
+         (volatile APPLE_AGX_U32 *)((unsigned char *)
+             owner.Objects[24].CpuAddress + owner.ObjectOffsets[24] + 0x40u));
+  assert(queue_config.D3.Stamp ==
+         (volatile APPLE_AGX_U32 *)((unsigned char *)
+             owner.Objects[27].CpuAddress + owner.ObjectOffsets[27]));
+  assert(queue_config.Ta.QueueInfoGpuAddress ==
+         owner.VirtualAddresses[6] + owner.ObjectOffsets[6]);
+  assert(queue_config.Ta.RingCpuAddress ==
+         (APPLE_AGX_U64 *)((unsigned char *)owner.Objects[7].CpuAddress +
+                           owner.ObjectOffsets[7]));
+  assert(queue_config.Ta.GpuDonePointer ==
+         (volatile APPLE_AGX_U32 *)((unsigned char *)
+             owner.Objects[25].CpuAddress + owner.ObjectOffsets[25]));
+  assert(queue_config.Ta.CpuWritePointer ==
+         (volatile APPLE_AGX_U32 *)((unsigned char *)
+             owner.Objects[25].CpuAddress + owner.ObjectOffsets[25] + 0x40u));
+  assert(queue_config.Ta.Stamp ==
+         (volatile APPLE_AGX_U32 *)((unsigned char *)
+             owner.Objects[26].CpuAddress + owner.ObjectOffsets[26]));
+  assert(queue_config.HasCompute);
+  assert(queue_config.Compute.QueueInfoGpuAddress==owner.VirtualAddresses[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO]);
+  assert(queue_config.Compute.RingCpuAddress==(APPLE_AGX_U64 *)owner.Objects[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_RING].CpuAddress);
+  assert(queue_config.Compute.GpuDonePointer==(volatile APPLE_AGX_U32 *)
+      owner.Objects[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress);
+  assert(queue_config.Compute.CpuWritePointer==(volatile APPLE_AGX_U32 *)
+      ((unsigned char *)owner.Objects[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress+0x40u));
+  assert(queue_config.Compute.Stamp==(volatile APPLE_AGX_U32 *)
+      ((unsigned char *)owner.Objects[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress+0x80u));
+  assert(queue_config.TimeoutTicks == 500u);
+  {
+    APPLE_AGX_RENDER_COMPUTE_INPUT input={0};
+    APPLE_AGX_RENDER_COMPUTE_OUTPUT output={0};
+    input.CdmStreamBase=0x1500400000ULL;input.CdmStreamBytes=72u;
+    input.Counter=7u;input.UscExecutionBase=0x1100000000ULL;
+    input.VmSlot=2u;input.EventNumber=2u;input.StampValue=9u;
+    input.EventSequence=11u;input.ClientSequence=5u;
+    assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    assert(output.WorkGpuAddress==owner.VirtualAddresses[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
+        APPLE_AGX_COMPUTE_WORK_OFFSET);
+    assert(output.SidecarCpuAddress==owner.Objects[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress &&
+        output.SidecarBytes==0x10000u);
+    assert(((const unsigned char *)output.SidecarCpuAddress)[
+        APPLE_AGX_COMPUTE_WORK_OFFSET]==APPLE_AGX_G13_COMPUTE_TAG);
+    {
+      /* Without a process buffer the prelude keeps the sidecar area. */
+      const unsigned char *work=(const unsigned char *)output.SidecarCpuAddress+
+          APPLE_AGX_COMPUTE_WORK_OFFSET;
+      APPLE_AGX_U64 preempt=0u;
+      memcpy(&preempt,work+0x70u,sizeof(preempt));
+      assert(preempt==owner.VirtualAddresses[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
+          APPLE_AGX_COMPUTE_PREEMPT_OFFSET);
+      /* G2: a standalone job stores its CDM context in its own VM. */
+      input.PreemptionGpuAddress=0x1500600000ULL;
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      memcpy(&preempt,work+0x70u,sizeof(preempt));
+      assert(preempt==0x1500600000ULL);
+      input.PreemptionGpuAddress=0x1500600020ULL;
+      assert(!AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      input.PreemptionGpuAddress=0x1500600000ULL;
+      {
+        /* EXP1339: the compute helper (scratch) reaches RunCompute. */
+        APPLE_AGX_U32 program=0u,config=1u;APPLE_AGX_U64 argument=0u;
+        input.HelperProgram=0x1c0u;input.HelperArgument=0x1500700000ULL;
+        input.HelperConfig=0u;
+        assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+        memcpy(&program,work+0xb0u,sizeof(program));
+        memcpy(&argument,work+0xb8u,sizeof(argument));
+        memcpy(&config,work+0xc0u,sizeof(config));
+        assert(program==0x1c0u&&argument==0x1500700000ULL&&config==0u);
+        input.HelperArgument=0u;
+        assert(!AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+        input.HelperProgram=0u;
+      }
+      {
+        /* GPU timestamps: the job runs the timestamp microsequence and names
+         * the sidecar timestamp block; the plain job keeps its sequence. */
+        const unsigned char *side=(const unsigned char *)output.SidecarCpuAddress;
+        const APPLE_AGX_U64 gpu=owner.VirtualAddresses[
+            APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR];
+        APPLE_AGX_U64 seq=0u,ts=0u;APPLE_AGX_U32 bytes=0u,op=0u;
+        assert(APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET>=
+               APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET+APPLE_AGX_G13_BARRIER_BYTES &&
+               APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET+
+               APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_TIMESTAMP_BYTES<=
+               APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET &&
+               APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET+APPLE_AGX_G13_TIMESTAMP_BLOCK_BYTES<=
+               APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET);
+        assert(output.TimestampCpuAddress==NULL);
+        input.Timestamps=1u;
+        assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+        assert(output.TimestampCpuAddress==side+APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET);
+        memcpy(&seq,work+0x1f0u,8);memcpy(&bytes,work+0x1f8u,4);
+        memcpy(&ts,work+0x2c8u,8);
+        memcpy(&op,side+APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET+0x16cu,4);
+        assert(seq==gpu+APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET &&
+               bytes==APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_TIMESTAMP_BYTES &&
+               ts==gpu+APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET+0x10u && op==0x80000019u);
+        input.Timestamps=0u;
+        assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+        memcpy(&seq,work+0x1f0u,8);memcpy(&bytes,work+0x1f8u,4);memcpy(&ts,work+0x2c8u,8);
+        assert(seq==gpu+APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET &&
+               bytes==APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES && ts==0u &&
+               output.TimestampCpuAddress==NULL);
+      }
+    }
+    {
+      /* D3D-G1b: the TA queue's Barrier on the compute stamp has the G13
+       * layout of the captured WorkCommandBarrier (template object 14, the
+       * 3D queue's barrier on TA): built with that object's own wait stamp,
+       * value, slot and self stamp it reproduces its first 0x18 bytes; uuid
+       * is Asahi's explicit-barrier tag and external_barrier stays 0. */
+      const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *l=
+          AppleAgxRenderTemplateObjectLayouts();
+      unsigned char *arena=calloc(1,AppleAgxRenderTemplateBytes());
+      APPLE_AGX_RENDER_TEMPLATE_ROOTS roots;
+      APPLE_AGX_RENDER_BARRIER_INPUT barrier={0};
+      APPLE_AGX_U64 address=0u,stamp=0u;
+      const unsigned char *built,*captured;
+      APPLE_AGX_U32 word=0u;
+      assert(arena && AppleAgxRenderTemplateMaterialize(
+          arena,AppleAgxRenderTemplateBytes(),&roots));
+      captured=arena+l[14].ArenaOffset;
+      assert(l[14].Size==APPLE_AGX_G13_BARRIER_BYTES);
+      memcpy(&word,captured,4u); assert(word==APPLE_AGX_G13_BARRIER_TAG);
+      memcpy(&stamp,captured+0x04u,8u);
+      barrier.WaitStampGpuAddress=stamp;
+      memcpy(&barrier.WaitValue,captured+0x0cu,4u);
+      memcpy(&barrier.WaitSlot,captured+0x10u,4u);
+      memcpy(&barrier.StampSelf,captured+0x14u,4u);
+      assert(AppleAgxRenderSharedMemoryBuildComputeBarrier(&owner,&barrier,&address));
+      assert(address==owner.VirtualAddresses[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
+          APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET && (address&0x1fu)==0u);
+      built=(const unsigned char *)owner.Objects[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress+
+          APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET;
+      assert(memcmp(built,captured,0x18u)==0);
+      memcpy(&word,built+0x18u,4u); assert(word==0xffffbbbbu);
+      memcpy(&word,built+0x1cu,4u); assert(word==0u);
+      /* The barrier sits outside the work words a compute rebuild zeroes. */
+      assert(APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET>=
+             APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET+8u &&
+             APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET+APPLE_AGX_G13_BARRIER_BYTES<=
+             APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET);
+      input.PreemptionGpuAddress=0u;
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output) &&
+             memcmp(built,captured,0x18u)==0);
+      /* The compute output names the stamp the barrier waits on. */
+      assert(output.FirmwareStampGpuAddress==owner.VirtualAddresses[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
+          APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET);
+      barrier.WaitSlot=0x80u;
+      assert(!AppleAgxRenderSharedMemoryBuildComputeBarrier(&owner,&barrier,&address));
+      barrier.WaitSlot=0u;barrier.WaitStampGpuAddress=0u;
+      assert(!AppleAgxRenderSharedMemoryBuildComputeBarrier(&owner,&barrier,&address));
+      free(arena);
+    }
+  }
+  layouts = AppleAgxRenderTemplateObjectLayouts();
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT;
+       ++index) {
+    APPLE_AGX_U64 object_offset =
+        layouts[index].OriginalGpuVa & (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL);
+    assert(owner.ObjectOffsets[index] == object_offset);
+    assert(object_offset + layouts[index].Size <=
+           owner.Objects[index].Length);
+    assert(objects[index].GpuVa ==
+           owner.VirtualAddresses[index] + object_offset);
+    if (index >= 20u)
+      assert(objects[index].GpuVa != layouts[index].OriginalGpuVa);
+    assert(objects[index].PhysicalAddress ==
+           owner.Objects[index].DeviceAddress + object_offset);
+    assert(objects[index].Data ==
+           (unsigned char *)owner.Objects[index].CpuAddress + object_offset);
+    assert(objects[index].Size == layouts[index].Size);
+    /* The compute job built above counted its one notification. */
+    if (index == APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD)
+      assert(read_u32(objects[index].Data) == 1u);
+    else
+      assert(memcmp(objects[index].Data,
+                    arena + layouts[index].ArenaOffset,
+                    layouts[index].Size) == 0);
+  }
+
+  memset(&staged_job, 0, sizeof(staged_job));
+  staged_job.TaWorkAddresses[0] = source_objects[16].GpuVa;
+  staged_job.TaWorkAddresses[1] = source_objects[19].GpuVa;
+  staged_job.D3WorkAddresses[0] = source_objects[14].GpuVa;
+  staged_job.D3WorkAddresses[1] = source_objects[18].GpuVa;
+  staged_job.TaWorkAddressCount = 2u;
+  staged_job.D3WorkAddressCount = 2u;
+  staged_job.TaEvent = 0u;
+  staged_job.D3Event = 1u;
+  staged_job.TaExpectedStamp = 0x7a000100u;
+  staged_job.D3ExpectedStamp = 0x3d000100u;
+  staged_job.TaExpectedDonePointer = 2u;
+  staged_job.D3ExpectedDonePointer = 2u;
+  memset(&bindings, 0, sizeof(bindings));
+  bindings.StatsTaOwnerGpuAddress = 0xffffffa000304000ULL;
+  bindings.StatsTaOwnerBytes = J313_AGX_G2_REGIONB_STATS_TA_SIZE;
+  bindings.Stats3dOwnerGpuAddress = 0xffffffa00030c000ULL;
+  bindings.Stats3dOwnerBytes = J313_AGX_G2_REGIONB_STATS_3D_SIZE;
+  arena[layouts[0].ArenaOffset] = 0x5au;
+  {
+    APPLE_AGX_RENDER_RUNTIME_BINDINGS invalid = bindings;
+    invalid.StatsTaOwnerBytes = APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET;
+    assert(!AppleAgxRenderSharedMemoryBuildActiveJob(
+        &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
+        source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+        0x1500800000ULL, APPLE_AGX_TRUE, &invalid, &staged_job,
+        active_objects, &active_job));
+  }
+  assert(AppleAgxRenderSharedMemoryBuildActiveJob(
+      &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      0x1500800000ULL, APPLE_AGX_TRUE, &bindings, &staged_job,
+      active_objects, &active_job));
+  assert(read_u64(active_objects[18].Data + 0x90u) == 0x22004ULL);
+  assert(read_u32(active_objects[18].Data + 0x3ccu) == 0x24004u);
+  assert(read_u64(active_objects[18].Data + 0x618u) == 0x23004ULL);
+  assert(read_u64(active_objects[18].Data + 0x648u) == 0x23004ULL);
+  assert(read_u32(active_objects[18].Data + 0x714u) == 0x24004u);
+  assert(read_u32(active_objects[18].Data + 0x734u) == 0x24004u);
+  assert(active_objects[36].Data == source_objects[36].Data &&
+         active_objects[36].GpuVa == source_objects[36].GpuVa &&
+         active_objects[36].PhysicalAddress ==
+             source_objects[36].PhysicalAddress);
+  assert(active_objects[73].Data == source_objects[73].Data &&
+         active_objects[73].GpuVa == source_objects[73].GpuVa &&
+         active_objects[73].PhysicalAddress ==
+             source_objects[73].PhysicalAddress);
+  assert(read_u64(active_objects[17].Data + 36u) ==
+         bindings.StatsTaOwnerGpuAddress +
+             APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET);
+  assert(read_u64(active_objects[17].Data + 540u) ==
+         bindings.StatsTaOwnerGpuAddress +
+             APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET);
+  assert(read_u64(active_objects[15].Data + 28u) ==
+         bindings.Stats3dOwnerGpuAddress +
+             APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET);
+  assert(read_u64(active_objects[15].Data + 604u) ==
+         bindings.Stats3dOwnerGpuAddress +
+             APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET);
+  assert(active_job.TaWorkAddresses[0] ==
+         owner.VirtualAddresses[16] + owner.ObjectOffsets[16]);
+  assert(active_job.TaWorkAddresses[1] ==
+         owner.VirtualAddresses[19] + owner.ObjectOffsets[19]);
+  assert(active_job.D3WorkAddresses[0] ==
+         owner.VirtualAddresses[14] + owner.ObjectOffsets[14]);
+  assert(active_job.D3WorkAddresses[1] ==
+         owner.VirtualAddresses[18] + owner.ObjectOffsets[18]);
+  assert(active_job.TaWorkAddresses[0] != staged_job.TaWorkAddresses[0]);
+  assert(((unsigned char *)owner.Objects[0].CpuAddress)
+             [owner.ObjectOffsets[0]] == 0x5au);
+  assert(*(unsigned int *)(active_objects[20].Data + 4u) ==
+         *(unsigned int *)active_objects[20].Data);
+
+  memset(active_objects[1].Data, 0xa1, sizeof(persistent_bm));
+  memset(active_objects[4].Data, 0xa4, sizeof(persistent_ring));
+  memset(active_objects[23].Data, 0xb7, sizeof(persistent_job_list));
+  memset(active_objects[24].Data, 0xb8, sizeof(persistent_queue_pointers));
+  memset(active_objects[16].Data, 0xc0, sizeof(persistent_init_bm));
+  memcpy(persistent_bm, active_objects[1].Data, sizeof(persistent_bm));
+  memcpy(persistent_ring, active_objects[4].Data, sizeof(persistent_ring));
+  memcpy(persistent_job_list, active_objects[23].Data,
+         sizeof(persistent_job_list));
+  memcpy(persistent_queue_pointers, active_objects[24].Data,
+         sizeof(persistent_queue_pointers));
+  memcpy(persistent_init_bm, active_objects[16].Data,
+         sizeof(persistent_init_bm));
+  /* Multi-job phase 1 (Asahi event.rs, m1n1 render.py): stamps are
+   * written by the CPU only when the queues are initialised. */
+  arena[layouts[9].ArenaOffset] = 0x92u;
+  active_objects[9].Data[0] = 0x9fu;
+  arena[layouts[14].ArenaOffset + layouts[14].Size - 1u] = 0xaeu;
+  arena[layouts[18].ArenaOffset + layouts[18].Size - 1u] = 0xbeu;
+  arena[layouts[19].ArenaOffset + layouts[19].Size - 1u] = 0xbfu;
+  staged_job.TaExpectedStamp = 0x7a000200u;
+  staged_job.D3ExpectedStamp = 0x3d000200u;
+  staged_job.TaExpectedDonePointer = 3u;
+  staged_job.D3ExpectedDonePointer = 4u;
+  assert(AppleAgxRenderSharedMemoryBuildActiveJob(
+      &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      0x1500800000ULL, APPLE_AGX_FALSE, &bindings, &staged_job,
+      active_objects, &active_job));
+  assert(memcmp(active_objects[1].Data, persistent_bm,
+                sizeof(persistent_bm)) == 0);
+  assert(memcmp(active_objects[4].Data, persistent_ring,
+                sizeof(persistent_ring)) == 0);
+  assert(memcmp(active_objects[23].Data, persistent_job_list,
+                sizeof(persistent_job_list)) == 0);
+  assert(memcmp(active_objects[24].Data, persistent_queue_pointers,
+                sizeof(persistent_queue_pointers)) == 0);
+  /* A job without InitBM leaves slot 0's InitBM copy untouched. */
+  assert(memcmp((unsigned char *)owner.Objects[16].CpuAddress +
+                    owner.ObjectOffsets[16],
+                persistent_init_bm, sizeof(persistent_init_bm)) == 0);
+  assert(active_objects[9].Data[0] == 0x9fu);
+  assert(active_objects[14].Data[active_objects[14].Size - 1u] == 0xaeu);
+  assert(active_objects[18].Data[active_objects[18].Size - 1u] == 0xbeu);
+  assert(active_objects[19].Data[active_objects[19].Size - 1u] == 0xbfu);
+  assert(active_job.TaExpectedStamp == 0x7a000200u);
+  assert(active_job.D3ExpectedStamp == 0x3d000200u);
+  assert(active_job.TaExpectedDonePointer == 3u);
+  assert(active_job.D3ExpectedDonePointer == 4u);
+  /* Multi-job phase 2: consecutive jobs (stamp steps of 0x100) alternate
+   * between two copies of every per-job object; the second copy sits in the
+   * free space below the original in the same 16 KiB page, keeping the
+   * original's alignment, so no new firmware mapping is needed. */
+  {
+    static const unsigned int slotted[15]={13u,14u,15u,16u,17u,18u,19u,
+        28u,29u,30u,31u,32u,33u,34u,35u};
+    static const unsigned int delta[15]={0x48u,0x20u,0x1000u,0x20u,0x1000u,
+        0x980u,0x620u,8u,8u,8u,8u,8u,8u,8u,8u};
+    for(index=0u;index<15u;++index) {
+      const unsigned int o=slotted[index];
+      assert(active_objects[o].GpuVa==
+             owner.VirtualAddresses[o]+owner.ObjectOffsets[o]-delta[index]);
+      assert(active_objects[o].Data==
+             (unsigned char *)owner.Objects[o].CpuAddress+
+             owner.ObjectOffsets[o]-delta[index]);
+    }
+    assert(active_job.TaWorkAddresses[1]==active_objects[19].GpuVa);
+    assert(active_job.D3WorkAddresses[0]==active_objects[14].GpuVa);
+    assert(active_job.D3WorkAddresses[1]==active_objects[18].GpuVa);
+    /* Pointers inside a slot's objects name that slot's copies. */
+    assert(read_u64(active_objects[18].Data+20u)==active_objects[15].GpuVa);
+    assert(read_u64(active_objects[18].Data+2336u)==active_objects[28].GpuVa);
+    assert(read_u64(active_objects[19].Data+1140u)==active_objects[17].GpuVa);
+    assert(read_u64(active_objects[15].Data+68u)==active_objects[18].GpuVa);
+    /* Persistent objects (rings, stamps, manager) do not move. */
+    assert(active_objects[4].GpuVa==owner.VirtualAddresses[4]+owner.ObjectOffsets[4]);
+    assert(active_objects[26].GpuVa==owner.VirtualAddresses[26]+owner.ObjectOffsets[26]);
+    assert(active_objects[1].GpuVa==owner.VirtualAddresses[1]+owner.ObjectOffsets[1]);
+  }
+  source_objects[63].GpuVa=0ULL;
+  for(index=67u;index<=71u;++index) source_objects[index].GpuVa=0ULL;
+  assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
+      &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      0x1500800000ULL, APPLE_AGX_FALSE, &bindings, &staged_job,
+      active_objects, &active_job));
+  assert(read_u64(active_objects[18].Data+2220u)==0ULL);
+  assert(read_u64(active_objects[19].Data+88u)==0ULL);
+  assert(read_u64(active_objects[19].Data+1352u)==0ULL);
+  assert(active_job.TaWorkAddresses[1]==
+         owner.VirtualAddresses[19]+owner.ObjectOffsets[19]-0x620u);
+  /* R151: publish the second dynamic epoch into real active G4 objects.
+   * Runtime-owned event-control state survives, event_count (CPU-owned,
+   * m1n1 render.py += 2 per job) and the work commands take the new pair,
+   * and the stamp words keep what the firmware wrote (multi-job phase 1). */
+  {
+    APPLE_AGX_EXP208_DYNAMIC_INPUT dynamic={2u,1u,2u,APPLE_AGX_FALSE};
+    static const unsigned int fw_stamp[4]={0x7a0001ffu,0x3d0001ffu,0x7a0001feu,0x3d0001feu};
+    static const unsigned int stamp_object[4]={9u,10u,26u,27u};
+    unsigned char event_control;
+    for(index=0u;index<4u;++index)
+      memcpy(active_objects[stamp_object[index]].Data,&fw_stamp[index],4u);
+    active_objects[11].Data[0] ^= 0x80u;
+    event_control=active_objects[11].Data[0];
+    assert(AppleAgxExp208PatchDynamic(arena,APPLE_AGX_EXP208_ARENA_BYTES,
+        &dynamic));
+    assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
+        &owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,source_objects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,0x1500800000ULL,
+        APPLE_AGX_FALSE,&bindings,&staged_job,active_objects,&active_job));
+    assert(active_objects[11].Data[0]==event_control);
+    assert(read_u32(active_objects[12].Data)==4u);
+    for(index=0u;index<4u;++index)
+      assert(read_u32(active_objects[stamp_object[index]].Data)==fw_stamp[index]);
+    assert(read_u32(active_objects[14].Data+12u)==0x7a000200u);
+    assert(read_u32(active_objects[15].Data+0x23cu)==0x3d000200u);
+    assert(read_u32(active_objects[17].Data+0x24cu)==0x7a000200u);
+    assert(active_job.TaExpectedStamp==0x7a000200u);
+    assert(active_job.D3ExpectedStamp==0x3d000200u);
+    assert(memcmp(active_objects[24].Data,persistent_queue_pointers,
+                  sizeof(persistent_queue_pointers))==0);
+    /* Queue (re)initialisation still seeds the stamps with the previous
+     * values of the current epoch. */
+    assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
+        &owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,source_objects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,0x1500800000ULL,
+        APPLE_AGX_TRUE,&bindings,&staged_job,active_objects,&active_job));
+    assert(read_u32(active_objects[9].Data)==0x7a000100u);
+    assert(read_u32(active_objects[10].Data)==0x3d000100u);
+    assert(read_u32(active_objects[26].Data)==0x7a000100u);
+    assert(read_u32(active_objects[27].Data)==0x3d000100u);
+  }
+  /* EXP1213: a compute job joins the Queue's notifier like the render jobs
+   * (Asahi queue/mod.rs: one notifier per Queue; queue/compute.rs:
+   * notifier_buf = &notifier.state.unk_buf, event_generation = the
+   * notifier generation) and its one notification is counted in the shared
+   * threshold (notification_count = 2 * render + compute). EXP1213 left the
+   * firmware holding the job's stamp in a private notifier whose threshold
+   * pointer was zero. */
+  {
+    APPLE_AGX_RENDER_COMPUTE_INPUT input={0};
+    APPLE_AGX_RENDER_COMPUTE_OUTPUT output={0};
+    APPLE_AGX_EXP208_DYNAMIC_INPUT dynamic={3u,1u,2u,APPLE_AGX_FALSE};
+    const APPLE_AGX_U64 notifier=owner.VirtualAddresses[11]+owner.ObjectOffsets[11];
+    unsigned char *control=(unsigned char *)owner.Objects[11].CpuAddress+
+        owner.ObjectOffsets[11];
+    unsigned char *event_count=(unsigned char *)owner.Objects[12].CpuAddress+
+        owner.ObjectOffsets[12];
+    const unsigned char *work,*micro;
+    assert(read_u32(event_count)==4u);
+    control[8]=5u;
+    input.CdmStreamBase=0x1500400000ULL;input.CdmStreamBytes=72u;
+    input.Counter=7u;input.UscExecutionBase=0x1100000000ULL;
+    input.VmSlot=1u;input.EventNumber=2u;input.StampValue=0x300u;
+    input.EventSequence=11u;input.ClientSequence=5u;
+    assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    work=(const unsigned char *)output.SidecarCpuAddress+
+        APPLE_AGX_COMPUTE_WORK_OFFSET;
+    micro=(const unsigned char *)output.SidecarCpuAddress+
+        APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET;
+    assert(read_u64(work+0x14u)==notifier);
+    assert(read_u64(micro+0x164u)==notifier+0xa8u);
+    assert(read_u32(micro+0x2cu)==5u);
+    assert(read_u32(event_count)==5u && output.NotifierThreshold==5u);
+    /* rebuilding the same job does not count it twice; the work queue
+     * state the firmware owns survives it (Asahi workqueue.rs: gpu_buf per
+     * work queue; event fw stamps and statistics persist), while the
+     * default context store is the job's own (queue/compute.rs) */
+    {
+      unsigned char *side=(unsigned char *)owner.Objects[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress;
+      side[APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET+0x2c17u]=0x5au;
+      side[APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET]=0x36u;
+      side[APPLE_AGX_COMPUTE_STATISTICS_OFFSET]=0x11u;
+      side[APPLE_AGX_COMPUTE_PREEMPT_OFFSET]=0x77u;
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      assert(side[APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET+0x2c17u]==0x5au &&
+             side[APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET]==0x36u &&
+             side[APPLE_AGX_COMPUTE_STATISTICS_OFFSET]==0x11u &&
+             side[APPLE_AGX_COMPUTE_PREEMPT_OFFSET]==0u);
+    }
+    assert(read_u32(event_count)==5u);
+    input.StampValue=0x301u;
+    assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    assert(read_u32(event_count)==6u);
+    /* the next render job adds its two notifications to both */
+    assert(AppleAgxExp208PatchDynamic(arena,APPLE_AGX_EXP208_ARENA_BYTES,
+        &dynamic));
+    assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
+        &owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,source_objects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,0x1500800000ULL,
+        APPLE_AGX_FALSE,&bindings,&staged_job,active_objects,&active_job));
+    assert(read_u32(active_objects[12].Data)==8u);
+    /* queue initialisation resets the firmware count and ours with it */
+    assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
+        &owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,source_objects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,0x1500800000ULL,
+        APPLE_AGX_TRUE,&bindings,&staged_job,active_objects,&active_job));
+    assert(read_u32(active_objects[12].Data)==6u);
+    /* a fresh queue lifetime is idle: a compute job before any render job
+     * waits for its own notification only */
+    assert(AppleAgxRenderSharedMemoryBindRelocationObjects(
+        &owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,objects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+    assert(read_u32(event_count)==read_u32(arena+layouts[12].ArenaOffset));
+    input.StampValue=0x302u;
+    assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    assert(read_u32(event_count)==1u && read_u32(micro+0x2cu)==0u);
+  }
+  assert(AppleAgxRenderSharedMemoryDestroy(&owner) ==
+         AppleAgxRenderSharedMemoryResultOk);
+  assert(fake.Freed == APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);
+  free(arena);
+  return 0;
+}

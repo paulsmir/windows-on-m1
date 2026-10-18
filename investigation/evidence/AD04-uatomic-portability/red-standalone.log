@@ -1,0 +1,28 @@
+C:\Users\pauls\AD04-uatomic\uatomic_semantics_test.c(8,8): error: call to undeclared function '_interlockedexchange64'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+    8 |    if (_interlockedexchange64(&value, 9) != 3 || value != 9)
+      |        ^
+C:\Users\pauls\AD04-uatomic\uatomic_semantics_test.c(8,8): note: did you mean '_InterlockedExchange64'?
+C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\intrin0.h(77,9): note: '_InterlockedExchange64' declared here
+   77 | __int64 _InterlockedExchange64(__int64 volatile *_Target, __int64 _Value);
+      |         ^
+C:\Users\pauls\AD04-uatomic\uatomic_semantics_test.c(10,8): error: call to undeclared function '_interlockedexchangeadd64'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   10 |    if (_interlockedexchangeadd64(&value, 4) != 9 || value != 13)
+      |        ^
+C:\Users\pauls\AD04-uatomic\uatomic_semantics_test.c(12,8): error: call to undeclared function '_interlockedincrement64'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   12 |    if (_interlockedincrement64(&value) != 14 || value != 14)
+      |        ^
+C:\Users\pauls\AD04-uatomic\uatomic_semantics_test.c(12,8): note: did you mean '_InterlockedIncrement64'?
+C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\intrin0.h(80,9): note: '_InterlockedIncrement64' declared here
+   80 | __int64 _InterlockedIncrement64(__int64 volatile *_Addend);
+      |         ^
+C:\Users\pauls\AD04-uatomic\uatomic_semantics_test.c(14,8): error: call to undeclared function '_interlockeddecrement64'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   14 |    if (_interlockeddecrement64(&value) != 13 || value != 13)
+      |        ^
+C:\Users\pauls\AD04-uatomic\uatomic_semantics_test.c(16,8): error: call to undeclared function '_interlockedadd64'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   16 |    if (_interlockedadd64(&value, -5) != 8 || value != 8)
+      |        ^
+C:\Users\pauls\AD04-uatomic\uatomic_semantics_test.c(16,8): note: did you mean '_InterlockedAnd64'?
+C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\intrin0.h(83,9): note: '_InterlockedAnd64' declared here
+   83 | __int64 _InterlockedAnd64(__int64 volatile *_Value, __int64 _Mask);
+      |         ^
+5 errors generated.

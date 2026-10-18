@@ -1,0 +1,16 @@
+{
+  "Version": 1,
+  "Bytes": 88,
+  "Branch": 5,
+  "RootSegment": 2,
+  "ResolveStatus": 0,
+  "BrokerStatus": 0,
+  "Process": 18446691362139930064,
+  "RootOffset": 1047838720,
+  "ResolvedRootIpa": 39165673472,
+  "GraphRootIpa": 42293395456,
+  "InputStart": 73015427072,
+  "InputEnd": 73015492608,
+  "FlushStart": 73015427072,
+  "FlushEnd": 73015492608
+}

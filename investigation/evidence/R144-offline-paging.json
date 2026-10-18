@@ -1,0 +1,222 @@
+{
+  "task": "R144",
+  "date_utc": "2026-09-28T02:38:33.409511+00:00",
+  "source_baseline": {
+    ".": {
+      "commit": "57c680e49fb1c8481a967c798c54af8f3c1c6086",
+      "diff_sha256": "9348fbb4dc4b3e3b1b5ecad2892c133135160930861ba8bec5ffae75ddc5f36c"
+    },
+    "m1n1_windows": {
+      "commit": "20d55f4c9532df4bcd6bdb8a04ad01089c453672",
+      "diff_sha256": "68387a2e4a778333004ae9e8e035304dfd70c5d83c8e1ec4dcff4c949427f0e7"
+    },
+    "mu": {
+      "commit": "0dac68712f3bc520d46f88af84a430cfb916dfc4",
+      "diff_sha256": "2e654da05fbcd83288511c5161cc749c8b87d69e222cfc3f6fed3fceaea79a7d"
+    }
+  },
+  "hardware": "NOT_RUN",
+  "root_cause": "VidMm table/local paging validated against DCP56MiB instead of local1000MiB",
+  "receipt": {
+    "Version": 3,
+    "Bytes": 104,
+    "Branch": 1,
+    "Level": 0,
+    "Index": 4294967295,
+    "PageTablePageSize": 0,
+    "Status": 3221225793,
+    "UpdateMode": 2,
+    "GraphLastStatus": 0,
+    "GraphUncertain": 0,
+    "TableAddress": 1048395776,
+    "TableIpa": 0,
+    "PteFlags": 0,
+    "PageAddress": 0,
+    "ChildIpa": 0,
+    "TableFirstNonzeroIndex": 4294967295,
+    "TableAddBranch": 0,
+    "TableFirstNonzeroWord": 0,
+    "BrokerTableIpa": 0,
+    "derived_table_ipa": 39166230528
+  },
+  "compiler": {
+    "kind": "ARM64 changed-TU compile only",
+    "inputs": 534,
+    "hardware": "NOT_RUN",
+    "objects": [
+      {
+        "name": "GPUVA_G3_PAGING_WINDOWS.C.obj",
+        "sha256": "d423ff2fc3a038d255ef6083a93c00fa56a85723db24153e84f44a9c18b729c9"
+      },
+      {
+        "name": "GPUVA_G3_WINDOWS.C.obj",
+        "sha256": "98f2dd6eafdfdc7e1f23dd8f3a7229d57ee727351ffd19701742ccae6614a169"
+      }
+    ]
+  },
+  "tests": {
+    "baseline": {
+      "summary": "Ran 1146 tests in 138.608s",
+      "result": "FAILED (failures=15, errors=38, skipped=2)",
+      "names": [
+        "test_active_render_consecutive_copies_and_reentrant_completion (test_apple_agx_render_work_queue.WorkQueueTests.test_active_render_consecutive_copies_and_reentrant_completion)",
+        "test_backend_runtime_is_registered_in_wdk_project (test_apple_agx_backend_runtime.BackendRuntimePackageTests.test_backend_runtime_is_registered_in_wdk_project)",
+        "test_bootargs_layout (unittest.loader._FailedTest.test_bootargs_layout)",
+        "test_bounded_fault_snapshot_is_captured_without_blocking_flush (test_apple_agx_queue_fault_snapshot.QueueFaultSnapshotTests.test_bounded_fault_snapshot_is_captured_without_blocking_flush)",
+        "test_budget_is_restored_when_final_nop_fails (test_agx_capture_bootstrap.CaptureBootstrapTests.test_budget_is_restored_when_final_nop_fails)",
+        "test_capture_aligns_ta_padding_after_appended_helper_configuration (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_aligns_ta_padding_after_appended_helper_configuration)",
+        "test_capture_initializes_appended_tiling_helper_configuration (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_initializes_appended_tiling_helper_configuration)",
+        "test_capture_maps_historical_helper_field_without_changing_m1n1 (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_maps_historical_helper_field_without_changing_m1n1)",
+        "test_capture_persists_the_complete_pulled_attachment_page (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_persists_the_complete_pulled_attachment_page)",
+        "test_capture_rejects_an_incomplete_pulled_attachment_page (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_rejects_an_incomplete_pulled_attachment_page)",
+        "test_capture_subprocesses_cannot_mutate_parent_shim_fd_map (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_subprocesses_cannot_mutate_parent_shim_fd_map)",
+        "test_capture_transport_materializer (test_apple_agx_reloc_capture.RelocCaptureTests.test_capture_transport_materializer)",
+        "test_clear_builder_emits_exact_immutable_command (test_apple_agx_mesa_win32_transport.AppleAgxMesaWin32TransportTests.test_clear_builder_emits_exact_immutable_command)",
+        "test_completion_is_dual_event_driven_and_exact_fence_only (test_apple_agx_render_platform.AppleAgxRenderPlatformTests.test_completion_is_dual_event_driven_and_exact_fence_only)",
+        "test_copy_once_relocation_and_rollback (test_apple_agx_dynamic_job.AppleAgxDynamicJobTests.test_copy_once_relocation_and_rollback)",
+        "test_default_type_loader_installs_historical_renderer_schema_compatibility (test_agx_m1n1_render_backend.RenderBackendTests.test_default_type_loader_installs_historical_renderer_schema_compatibility)",
+        "test_default_type_loader_uses_bundled_proxyclient (test_agx_m1n1_queue_backend.QueueSourceBoundaryTests.test_default_type_loader_uses_bundled_proxyclient)",
+        "test_derived_source_is_reproducible_and_cannot_overwrite_control (test_apple_agx_d3d10_frontend_prepare.FrontendPrepareTests.test_derived_source_is_reproducible_and_cannot_overwrite_control)",
+        "test_descriptor_preserves_format_and_rejects_rgba_primary (test_apple_agx_standard_rgba_backbuffer.RgbaBackbufferTests.test_descriptor_preserves_format_and_rejects_rgba_primary)",
+        "test_device_query_classed_buffers_and_reset_are_fail_closed (test_apple_agx_win32_screen.AppleAgxWin32ScreenTests.test_device_query_classed_buffers_and_reset_are_fail_closed)",
+        "test_display_mode_contract (unittest.loader._FailedTest.test_display_mode_contract)",
+        "test_driver_lowered_vs_fs_are_deterministic_and_source_sensitive (test_apple_agx_ad03_vs_fs_fixture.AppleAgxAd03VsFsFixtureTests.test_driver_lowered_vs_fs_are_deterministic_and_source_sensitive)",
+        "test_drm_owner_must_be_replaced_by_wddm (test_apple_agx_ad03_source_contract.AppleAgxAd03SourceContractTests.test_drm_owner_must_be_replaced_by_wddm)",
+        "test_dynamic_job_is_carried_inside_the_exact_dma_submission (test_apple_agx_dynamic_dma.AppleAgxDynamicDmaTests.test_dynamic_job_is_carried_inside_the_exact_dma_submission)",
+        "test_explicit_budget_covers_first_request_and_is_restored (test_agx_capture_bootstrap.CaptureBootstrapTests.test_explicit_budget_covers_first_request_and_is_restored)",
+        "test_generated_m1n1_policy_header_is_exact_and_deterministic (test_j313_agx_g2_contract.J313AgxG2ContractTests.test_generated_m1n1_policy_header_is_exact_and_deterministic)",
+        "test_generated_triangle_composes_through_production_overlay_contract (test_apple_agx_ad03_vs_fs_fixture.AppleAgxAd03VsFsFixtureTests.test_generated_triangle_composes_through_production_overlay_contract)",
+        "test_gpuva_system_context_object_contract (test_gpuva_g3_createcontext_contract.G3CreateContextContractTests.test_gpuva_system_context_object_contract)",
+        "test_hash_or_source_signature_drift_fails_closed (test_apple_agx_ad03_source_contract.AppleAgxAd03SourceContractTests.test_hash_or_source_signature_drift_fails_closed)",
+        "test_is_a_separate_full_render_wddm3_driver (test_apple_agx_render_admission.AppleAgxRenderAdmissionTests.test_is_a_separate_full_render_wddm3_driver)",
+        "test_kd_reboot (unittest.loader._FailedTest.test_kd_reboot)",
+        "test_manifest_validation_and_native_descriptors (test_agx_firmware_io.FirmwareIoContract.test_manifest_validation_and_native_descriptors)",
+        "test_opt_in_profile_reuses_production_memory_start_and_stop (test_apple_agx_render_memory_qualification.AppleAgxRenderMemoryQualificationTests.test_opt_in_profile_reuses_production_memory_start_and_stop)",
+        "test_pinned_agx_compiler_is_deterministic_and_source_sensitive (test_apple_agx_ad03_compiler_fixture.AppleAgxAd03CompilerFixtureTests.test_pinned_agx_compiler_is_deterministic_and_source_sensitive)",
+        "test_pinned_frontend_compiler_encoder_are_reused_but_targets_replaced (test_apple_agx_ad03_source_contract.AppleAgxAd03SourceContractTests.test_pinned_frontend_compiler_encoder_are_reused_but_targets_replaced)",
+        "test_pinned_mesa_checkout_and_mit_sources (test_apple_agx_mesa_source.AppleAgxMesaSourceTests.test_pinned_mesa_checkout_and_mit_sources)",
+        "test_portable_cpu_view_validator (test_gpuva_g3_cpu_visible_segment.G3CpuVisibleSegmentTests.test_portable_cpu_view_validator)",
+        "test_proxy_event_checksum (unittest.loader._FailedTest.test_proxy_event_checksum)",
+        "test_public_tooling_is_english_and_location_independent (test_repository_hygiene.RepositoryHygieneTests.test_public_tooling_is_english_and_location_independent)",
+        "test_real_c_route (test_apple_agx_post_display_route.PostDisplayRouteTests.test_real_c_route)",
+        "test_real_graph_native_defaults (test_agx_initdata_defaults.NativeInitdataDefaults.test_real_graph_native_defaults)",
+        "test_real_source_boundary_matches_adapter_expectations (test_agx_m1n1_render_backend.RenderBackendTests.test_real_source_boundary_matches_adapter_expectations)",
+        "test_release_cannot_erase_completed_oracle (test_apple_agx_output_expectation_lifetime.OutputExpectationLifetimeTests.test_release_cannot_erase_completed_oracle)",
+        "test_runtime_handle_resolution_and_rollback (test_apple_agx_render_open_allocation.OpenAllocationTests.test_runtime_handle_resolution_and_rollback)",
+        "test_single_allocation_resource_uses_existing_object_owner (test_apple_agx_render_standard_allocation.StandardAllocationTests.test_single_allocation_resource_uses_existing_object_owner)",
+        "test_size_phase_and_primary_shadow_translation (test_apple_agx_render_standard_allocation.StandardAllocationTests.test_size_phase_and_primary_shadow_translation)",
+        "test_software_target_cannot_be_marked_reusable (test_apple_agx_ad03_source_contract.AppleAgxAd03SourceContractTests.test_software_target_cannot_be_marked_reusable)",
+        "test_standalone_monitor (unittest.loader._FailedTest.test_standalone_monitor)",
+        "test_submission_coordinator_contract (test_apple_agx_submission_coordinator.AppleAgxSubmissionCoordinatorTest.test_submission_coordinator_contract)",
+        "test_type1_writer_is_atomic_and_exact (test_apple_agx_render_type1_ready.AppleAgxRenderType1ReadyTests.test_type1_writer_is_atomic_and_exact)",
+        "test_windows_renderkm_fails_before_dma_shadow_mutation (test_apple_agx_gdi.AppleAgxGdiContractTests.test_windows_renderkm_fails_before_dma_shadow_mutation)",
+        "test_wrong_commit_in_lock_is_rejected (test_apple_agx_mesa_source.AppleAgxMesaSourceTests.test_wrong_commit_in_lock_is_rejected)",
+        "unittest.case.FunctionTestCase (run_native_suite)"
+      ]
+    },
+    "final": {
+      "summary": "Ran 1147 tests in 142.748s",
+      "result": "FAILED (failures=15, errors=38, skipped=2)",
+      "names": [
+        "test_active_render_consecutive_copies_and_reentrant_completion (test_apple_agx_render_work_queue.WorkQueueTests.test_active_render_consecutive_copies_and_reentrant_completion)",
+        "test_backend_runtime_is_registered_in_wdk_project (test_apple_agx_backend_runtime.BackendRuntimePackageTests.test_backend_runtime_is_registered_in_wdk_project)",
+        "test_bootargs_layout (unittest.loader._FailedTest.test_bootargs_layout)",
+        "test_bounded_fault_snapshot_is_captured_without_blocking_flush (test_apple_agx_queue_fault_snapshot.QueueFaultSnapshotTests.test_bounded_fault_snapshot_is_captured_without_blocking_flush)",
+        "test_budget_is_restored_when_final_nop_fails (test_agx_capture_bootstrap.CaptureBootstrapTests.test_budget_is_restored_when_final_nop_fails)",
+        "test_capture_aligns_ta_padding_after_appended_helper_configuration (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_aligns_ta_padding_after_appended_helper_configuration)",
+        "test_capture_initializes_appended_tiling_helper_configuration (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_initializes_appended_tiling_helper_configuration)",
+        "test_capture_maps_historical_helper_field_without_changing_m1n1 (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_maps_historical_helper_field_without_changing_m1n1)",
+        "test_capture_persists_the_complete_pulled_attachment_page (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_persists_the_complete_pulled_attachment_page)",
+        "test_capture_rejects_an_incomplete_pulled_attachment_page (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_rejects_an_incomplete_pulled_attachment_page)",
+        "test_capture_subprocesses_cannot_mutate_parent_shim_fd_map (test_agx_capture_bootstrap.CaptureBootstrapTests.test_capture_subprocesses_cannot_mutate_parent_shim_fd_map)",
+        "test_capture_transport_materializer (test_apple_agx_reloc_capture.RelocCaptureTests.test_capture_transport_materializer)",
+        "test_clear_builder_emits_exact_immutable_command (test_apple_agx_mesa_win32_transport.AppleAgxMesaWin32TransportTests.test_clear_builder_emits_exact_immutable_command)",
+        "test_completion_is_dual_event_driven_and_exact_fence_only (test_apple_agx_render_platform.AppleAgxRenderPlatformTests.test_completion_is_dual_event_driven_and_exact_fence_only)",
+        "test_copy_once_relocation_and_rollback (test_apple_agx_dynamic_job.AppleAgxDynamicJobTests.test_copy_once_relocation_and_rollback)",
+        "test_default_type_loader_installs_historical_renderer_schema_compatibility (test_agx_m1n1_render_backend.RenderBackendTests.test_default_type_loader_installs_historical_renderer_schema_compatibility)",
+        "test_default_type_loader_uses_bundled_proxyclient (test_agx_m1n1_queue_backend.QueueSourceBoundaryTests.test_default_type_loader_uses_bundled_proxyclient)",
+        "test_derived_source_is_reproducible_and_cannot_overwrite_control (test_apple_agx_d3d10_frontend_prepare.FrontendPrepareTests.test_derived_source_is_reproducible_and_cannot_overwrite_control)",
+        "test_descriptor_preserves_format_and_rejects_rgba_primary (test_apple_agx_standard_rgba_backbuffer.RgbaBackbufferTests.test_descriptor_preserves_format_and_rejects_rgba_primary)",
+        "test_device_query_classed_buffers_and_reset_are_fail_closed (test_apple_agx_win32_screen.AppleAgxWin32ScreenTests.test_device_query_classed_buffers_and_reset_are_fail_closed)",
+        "test_display_mode_contract (unittest.loader._FailedTest.test_display_mode_contract)",
+        "test_driver_lowered_vs_fs_are_deterministic_and_source_sensitive (test_apple_agx_ad03_vs_fs_fixture.AppleAgxAd03VsFsFixtureTests.test_driver_lowered_vs_fs_are_deterministic_and_source_sensitive)",
+        "test_drm_owner_must_be_replaced_by_wddm (test_apple_agx_ad03_source_contract.AppleAgxAd03SourceContractTests.test_drm_owner_must_be_replaced_by_wddm)",
+        "test_dynamic_job_is_carried_inside_the_exact_dma_submission (test_apple_agx_dynamic_dma.AppleAgxDynamicDmaTests.test_dynamic_job_is_carried_inside_the_exact_dma_submission)",
+        "test_explicit_budget_covers_first_request_and_is_restored (test_agx_capture_bootstrap.CaptureBootstrapTests.test_explicit_budget_covers_first_request_and_is_restored)",
+        "test_generated_m1n1_policy_header_is_exact_and_deterministic (test_j313_agx_g2_contract.J313AgxG2ContractTests.test_generated_m1n1_policy_header_is_exact_and_deterministic)",
+        "test_generated_triangle_composes_through_production_overlay_contract (test_apple_agx_ad03_vs_fs_fixture.AppleAgxAd03VsFsFixtureTests.test_generated_triangle_composes_through_production_overlay_contract)",
+        "test_gpuva_system_context_object_contract (test_gpuva_g3_createcontext_contract.G3CreateContextContractTests.test_gpuva_system_context_object_contract)",
+        "test_hash_or_source_signature_drift_fails_closed (test_apple_agx_ad03_source_contract.AppleAgxAd03SourceContractTests.test_hash_or_source_signature_drift_fails_closed)",
+        "test_is_a_separate_full_render_wddm3_driver (test_apple_agx_render_admission.AppleAgxRenderAdmissionTests.test_is_a_separate_full_render_wddm3_driver)",
+        "test_kd_reboot (unittest.loader._FailedTest.test_kd_reboot)",
+        "test_manifest_validation_and_native_descriptors (test_agx_firmware_io.FirmwareIoContract.test_manifest_validation_and_native_descriptors)",
+        "test_opt_in_profile_reuses_production_memory_start_and_stop (test_apple_agx_render_memory_qualification.AppleAgxRenderMemoryQualificationTests.test_opt_in_profile_reuses_production_memory_start_and_stop)",
+        "test_pinned_agx_compiler_is_deterministic_and_source_sensitive (test_apple_agx_ad03_compiler_fixture.AppleAgxAd03CompilerFixtureTests.test_pinned_agx_compiler_is_deterministic_and_source_sensitive)",
+        "test_pinned_frontend_compiler_encoder_are_reused_but_targets_replaced (test_apple_agx_ad03_source_contract.AppleAgxAd03SourceContractTests.test_pinned_frontend_compiler_encoder_are_reused_but_targets_replaced)",
+        "test_pinned_mesa_checkout_and_mit_sources (test_apple_agx_mesa_source.AppleAgxMesaSourceTests.test_pinned_mesa_checkout_and_mit_sources)",
+        "test_portable_cpu_view_validator (test_gpuva_g3_cpu_visible_segment.G3CpuVisibleSegmentTests.test_portable_cpu_view_validator)",
+        "test_proxy_event_checksum (unittest.loader._FailedTest.test_proxy_event_checksum)",
+        "test_public_tooling_is_english_and_location_independent (test_repository_hygiene.RepositoryHygieneTests.test_public_tooling_is_english_and_location_independent)",
+        "test_real_c_route (test_apple_agx_post_display_route.PostDisplayRouteTests.test_real_c_route)",
+        "test_real_graph_native_defaults (test_agx_initdata_defaults.NativeInitdataDefaults.test_real_graph_native_defaults)",
+        "test_real_source_boundary_matches_adapter_expectations (test_agx_m1n1_render_backend.RenderBackendTests.test_real_source_boundary_matches_adapter_expectations)",
+        "test_release_cannot_erase_completed_oracle (test_apple_agx_output_expectation_lifetime.OutputExpectationLifetimeTests.test_release_cannot_erase_completed_oracle)",
+        "test_runtime_handle_resolution_and_rollback (test_apple_agx_render_open_allocation.OpenAllocationTests.test_runtime_handle_resolution_and_rollback)",
+        "test_single_allocation_resource_uses_existing_object_owner (test_apple_agx_render_standard_allocation.StandardAllocationTests.test_single_allocation_resource_uses_existing_object_owner)",
+        "test_size_phase_and_primary_shadow_translation (test_apple_agx_render_standard_allocation.StandardAllocationTests.test_size_phase_and_primary_shadow_translation)",
+        "test_software_target_cannot_be_marked_reusable (test_apple_agx_ad03_source_contract.AppleAgxAd03SourceContractTests.test_software_target_cannot_be_marked_reusable)",
+        "test_standalone_monitor (unittest.loader._FailedTest.test_standalone_monitor)",
+        "test_submission_coordinator_contract (test_apple_agx_submission_coordinator.AppleAgxSubmissionCoordinatorTest.test_submission_coordinator_contract)",
+        "test_type1_writer_is_atomic_and_exact (test_apple_agx_render_type1_ready.AppleAgxRenderType1ReadyTests.test_type1_writer_is_atomic_and_exact)",
+        "test_windows_renderkm_fails_before_dma_shadow_mutation (test_apple_agx_gdi.AppleAgxGdiContractTests.test_windows_renderkm_fails_before_dma_shadow_mutation)",
+        "test_wrong_commit_in_lock_is_rejected (test_apple_agx_mesa_source.AppleAgxMesaSourceTests.test_wrong_commit_in_lock_is_rejected)",
+        "unittest.case.FunctionTestCase (run_native_suite)"
+      ]
+    },
+    "new_names": [],
+    "removed_names": []
+  },
+  "mutations": {
+    "AdmissionGpuvaG3ResolveTable": {
+      "exit": 1,
+      "first_failure": "EXP856 receipt: branch=1 level=0 mode=2 offset=3e7d4000 status=c0000141"
+    },
+    "AdmissionGpuvaG3BuildPagingBuffer": {
+      "exit": 1,
+      "first_failure": "EXP856 receipt: branch=1 level=0 mode=2 offset=3e7d4000 status=c0000141"
+    },
+    "AdmissionG3UpdateLeaf": {
+      "exit": 1,
+      "first_failure": "R144 high local leaf: status c000000d"
+    },
+    "AdmissionG3ExecuteVirtualPaging": {
+      "exit": 1,
+      "first_failure": "R144 high paging fill: status c0000141"
+    }
+  },
+  "artifact_directory": ".local/experiments/EXP857-r144-paging-bounds",
+  "sha256": {
+    "cdb-r144.txt": "8f300066eb772a2f0e5af752c5427d4662bc20b5b60ecf4b45506a1f971b7f1f",
+    "cdb-input.txt": "41893f7eb692262591987fdcf49224c7e1e7e69dfe8a94e82317c9c147023646",
+    "receipt-decoded.json": "27661cda85b99070f460e532b982634df57482fe49dca57faf71db6929198319",
+    "red.log": "2db414b9590edf15db1c10b62df2b23f0188db4ebc768129df4cbe640afbcf5e",
+    "green16.log": "bceb71b81baf375c5560ae73bf5d43225245a23ea4270eff53f5d7ec7d3f8dd7",
+    "green64.log": "bceb71b81baf375c5560ae73bf5d43225245a23ea4270eff53f5d7ec7d3f8dd7",
+    "g3-replay.log": "5b4f7d03ff6b85f7aa17e986507d8740675aabf52bd35b2899cee084a8224c48",
+    "g4.log": "820b602cfdbad3e5246184c7a55baae5421439d1aa1146e026689d44af9de2d5",
+    "reserve.log": "a8c8b1c5caa2f77534e27e8589d81fce1a48c70c8602d564739e8e8e473b8070",
+    "real-views.log": "54f48100fcc7095235647ab963fce49afee9355be052de2e2d7c461a94398ae0",
+    "g3-contracts.log": "831bf48b477093a03b99d5a7d95f6621c6c11ad9f81dd0189e3126a855477d37",
+    "baseline-full.log": "1bac95963cad4d02407d6bd6efbcd9ae95e75d177cd28dfd206513e94695cf57",
+    "final-full.log": "010b575341f73327e37613ddd3fa652d3cdf913e7193d4d88b00a6e4a297f5f4",
+    "host-test-comparison.json": "91b90f4a059b7ec79616e020cf2c2110145d3e37f3ea49adbf566edc4b1300f1",
+    "mutation-results.json": "9ade1cad2673cbc79fd5399b27064d87d7c143e9d20d5081b91782457ecc8268",
+    "compile-inputs.json": "f98fe092b3a5135f9f6c0f9b6e518ce06a97f23032ef4c5e03dffe4cf2f054f9",
+    "compile.ps1": "c7fae8cc81e1c1fc13dad086d42721752a23881a93ce067148fe2a378a8b0587",
+    "compile.log": "6653f10052c1eb0d56a55360731946cd6670660bbd831285bd28bc37b612a186",
+    "compile-receipt.json": "fe54e97d3284b6b00001a73508e77388df97a5ab7a606a8c32e94b70d5651b67",
+    "immutable-verified.json": "cabfa4bc5083b2c556f5711eb3e08e805bb284c881074dcf03eac129adc7077a"
+  },
+  "review": "Independent read-only review: no actionable findings",
+  "next_rebuild": "KMD SYS/PDB and CAT/package; reuse exact EXP856 R143 m1n1/Mu. No package created here."
+}

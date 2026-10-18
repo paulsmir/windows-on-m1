@@ -1,0 +1,1327 @@
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include "apple_agx_g4_submit.h"
+#include "apple_agx_scheduler.h"
+#include "apple_agx_g3_private_storage.h"
+#include "apple_agx_render_manager.h"
+#include "apple_agx_gpuva_g3_translation.h"
+#include "apple_agx_g13_compute_work.h"
+#include "apple_agx_present_job.h"
+/* render_backend_image.h: a KMD present blt compute job (G2 HW2b). */
+typedef struct _ADMISSION_PRESENT_COMPUTE {
+  APPLE_AGX_PRESENT_ARENA Arena;
+  APPLE_AGX_PRESENT_SURFACE Source, Destination;
+  APPLE_AGX_PRESENT_RECT SourceRect, DestinationRect;
+  APPLE_AGX_PRESENT_RECT Rects[APPLE_AGX_PRESENT_MAX_RECTS];
+  unsigned RectCount, Fill, Colour;
+} ADMISSION_PRESENT_COMPUTE;
+
+typedef int NTSTATUS;
+typedef int LONG;
+typedef void VOID;
+typedef unsigned char BOOLEAN;
+typedef unsigned long long ULONGLONG;
+typedef uint32_t ULONG, UINT;
+typedef uintptr_t ULONG_PTR;
+typedef size_t SIZE_T;
+typedef unsigned char *PUCHAR;
+typedef void *PVOID;
+typedef int KIRQL;
+#define _Use_decl_annotations_
+#define _ReturnAddress() ((void *)0)
+#define DISPATCH_LEVEL 2
+typedef void *HANDLE;
+typedef union { unsigned Value; struct { unsigned Other:1, Present:1, Other2:5, Resubmission:1, Reserved:24; }; } REPLAY_FLAGS;
+typedef REPLAY_FLAGS DXGK_SUBMITCOMMANDFLAGS;
+#define PASSIVE_LEVEL 0
+#define TRUE 1
+#define FALSE 0
+#define MAXULONG 0xffffffffu
+#define MAXULONGLONG (~0ULL)
+#define STATUS_SUCCESS ((NTSTATUS)0)
+#define NT_SUCCESS(s) ((s)>=0)
+#define RtlZeroMemory(p,n) memset((p),0,(n))
+#define RtlCopyMemory(d,s,n) memcpy((d),(s),(n))
+#define RtlCompareMemory(a,b,n) (memcmp((a),(b),(n))==0 ? (n) : 0)
+#define STATUS_INVALID_PARAMETER ((NTSTATUS)0xC000000D)
+#define STATUS_INVALID_ADDRESS ((NTSTATUS)0xC0000141)
+#define STATUS_INVALID_DEVICE_STATE ((NTSTATUS)0xC0000184)
+#define STATUS_DEVICE_HARDWARE_ERROR ((NTSTATUS)0xC0000185)
+#define STATUS_NOT_SUPPORTED ((NTSTATUS)0xC00000BB)
+#define ADMISSION_CONTEXT_VIRTUAL_ADDRESSING 4u
+#define ADMISSION_CONTEXT_SYSTEM 1u
+#define ADMISSION_CONTEXT_GDI 2u
+#define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
+#define ADMISSION_MEMORY_POOL_SEGMENT 3u
+
+typedef struct _APPLE_AGX_GPUVA_G3_NODE {
+  struct _APPLE_AGX_GPUVA_G3_NODE *Next;
+  ULONGLONG Ipa, AuxIpa;
+  unsigned Index;
+} APPLE_AGX_GPUVA_G3_NODE;
+typedef struct _ADMISSION_G3_TABLE_SHADOW {
+  struct _ADMISSION_G3_TABLE_SHADOW *NextBroker;
+  struct _ADMISSION_G3_TABLE_SHADOW *Next;
+  ULONGLONG BrokerIpa;
+  APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes;
+} ADMISSION_G3_TABLE_SHADOW;
+typedef struct {
+  ULONGLONG RootIpa;
+  ULONGLONG ProcessId, ProcessGeneration, NextGeneration;
+  APPLE_AGX_GPUVA_G3_NODE *Parents;
+  unsigned Created, Uncertain;
+  ULONGLONG MappingGeneration;
+  unsigned AllowProcessRanges;
+} APPLE_AGX_GPUVA_G3_GRAPH;
+typedef struct _ADMISSION_G3_STATE {
+  int Lock;
+  struct _ADMISSION_G3_PROCESS *ActiveProcess;
+  unsigned ActiveFence,PrivateCompletionFence;
+  struct {
+    APPLE_AGX_G4_PRIVATE_HEADER_V5 Header;
+    unsigned char Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+  } G4ReparseV5;
+} ADMISSION_G3_STATE;
+typedef struct _ADMISSION_RENDER_CONTEXT ADMISSION_RENDER_CONTEXT;
+typedef struct _ADMISSION_G3_PRIVATE_SCENE {
+  struct _ADMISSION_G3_PRIVATE_SCENE *Next;
+  ADMISSION_RENDER_CONTEXT *Context;
+  APPLE_AGX_G3_PRIVATE_SCENE Storage;
+  APPLE_AGX_G4_NATIVE_RENDER Geometry;
+  ULONG Fence, ResumeFence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+  ULONG HeapBlocks;
+  ULONG Cached;
+  ULONGLONG CachedAt;
+} ADMISSION_G3_PRIVATE_SCENE;
+#define ADMISSION_G3_PRIVATE_SCENE_CACHE 8u
+
+typedef struct _ADMISSION_G3_PROCESS {
+  ULONGLONG PrivateVa;
+  APPLE_AGX_G3_PRIVATE_EXTENT PresentArena;
+  APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
+  APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
+  ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
+  ADMISSION_G3_STATE *State;
+  APPLE_AGX_GPUVA_G3_GRAPH Graph;
+  ADMISSION_G3_TABLE_SHADOW *TableShadows;
+  ADMISSION_G3_TABLE_SHADOW *TableShadowBrokerBuckets[256];
+  unsigned OsProcessId;
+  unsigned Poisoned;
+  unsigned PoisonSite, PoisonBrokerStatus;
+  unsigned char CpuOnlyMappings;
+} ADMISSION_G3_PROCESS;
+#define ADMISSION_G3_POISON(Process, File) do { \
+    (Process)->Poisoned = 1u; \
+    if (!(Process)->PoisonSite) \
+      (Process)->PoisonSite = ((unsigned)(File) << 16) | (unsigned)__LINE__; \
+  } while (0)
+typedef struct { void *Adapter; } REPLAY_DEVICE;
+typedef struct {
+  unsigned Flags, Magic;
+  REPLAY_DEVICE *Device;
+  unsigned FenceOutstanding;
+} ADMISSION_OBJECT_CONTEXT;
+#define ADMISSION_OBJECT_CONTEXT_MAGIC 0x47444358u
+typedef struct {
+  unsigned Fence, AllocationCount;
+  ULONGLONG ContextToken, AllocationToken, PrivateDataToken;
+  unsigned PrivateDataBytes, PrivateDataStart, PrivateDataEnd;
+  unsigned DmaStart, DmaEnd, DestinationIndex, DestinationBytes;
+  ULONGLONG DestinationCpuToken, DestinationGpuVa, DestinationPhysical;
+  unsigned Kind;
+} ADMISSION_RENDER_PACKET_DESCRIPTION;
+#define ADMISSION_RENDER_PACKET_KIND_RENDER 0u
+#define ADMISSION_RENDER_PACKET_KIND_COMPUTE 1u
+#define ADMISSION_GPUVA_G3_JOB_VM_SLOT 1u
+typedef struct {
+  unsigned State;
+  ADMISSION_RENDER_PACKET_DESCRIPTION Description;
+} ADMISSION_RENDER_PACKET;
+enum { AdmissionRenderPacketEmpty, AdmissionRenderPacketPrepared,
+       AdmissionRenderPacketQueued };
+/* Phase 5a pending submissions (mirrors render_admission.h). */
+#define ADMISSION_G4_PENDING_CAPACITY 2u
+typedef enum { AdmissionG4PendingFree = 0, AdmissionG4PendingFilling,
+  AdmissionG4PendingQueued, AdmissionG4PendingBinding,
+  AdmissionG4PendingDropped } ADMISSION_G4_PENDING_STATE;
+typedef struct {
+  ADMISSION_G4_PENDING_STATE State;
+  ULONG Fence;
+  ADMISSION_RENDER_CONTEXT *Context;
+  ADMISSION_RENDER_PACKET_DESCRIPTION Packet;
+  APPLE_AGX_G4_SUBMIT_VIEW View;
+  ULONGLONG MappingGeneration, DmaBufferVa;
+  ULONG DmaBufferBytes;
+  APPLE_AGX_G4_ATTACHMENT Attachments[APPLE_AGX_G4_MAX_ATTACHMENTS];
+  unsigned char Render[sizeof(APPLE_AGX_G4_NATIVE_RENDER)];
+  unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+  BOOLEAN Compute;
+  APPLE_AGX_G4_COMPUTE_ENVELOPE ComputeEnvelope;
+  BOOLEAN Present;
+  ADMISSION_PRESENT_COMPUTE PresentJob;
+} ADMISSION_G4_PENDING;
+typedef struct {
+  APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
+  unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+  unsigned G4CommandBytes, G4Native, BoundFence;
+  APPLE_AGX_G4_PRIVATE_LEASE G4Lease;
+  unsigned G4WithCompute;
+  APPLE_AGX_G4_NATIVE_COMPUTE G4PreludeCompute;
+  APPLE_AGX_G4_PROCESS_RANGE G4PreludePreemption;
+  APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;
+  APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
+  unsigned G4Compute;
+  APPLE_AGX_G4_COMPUTE_ENVELOPE G4ComputeEnvelope;
+  unsigned PresentCompute;
+  ADMISSION_PRESENT_COMPUTE Present;
+} ADMISSION_BACKEND_IMAGE;
+typedef struct { unsigned DestinationBytes; } APPLE_AGX_EXP208_GDI_BINDING;
+typedef struct {
+  PVOID CpuAddress;
+  ULONGLONG GuestIpaAddress, HostPhysicalAddress, Bytes;
+} ADMISSION_SCANOUT_MEMORY_VIEW;
+typedef struct {
+  void *GpuvaG3State;
+  int Started;
+  int ObjectAdapter;
+  volatile int G4SubmitFailureClaim;
+  volatile int G4SubmitFailureCount;
+  struct _ADMISSION_G4_SUBMIT_FAILURE {
+    unsigned Version, Bytes, Branch, Status, DownstreamStatus;
+    ULONGLONG DmaBufferVirtualAddress;
+    unsigned DmaBufferSize, PrivateDataSize, UmdPrivateDataSize;
+    unsigned Flags, ContextFlags, Pid, TotalFailures;
+    unsigned Subsite, Kind, Ordinal, AccessBytes, Write, GraphPresent;
+    ULONGLONG Va, OwnerProcessId, RootIpa, ProcessGeneration,
+        MappingGeneration;
+    ULONGLONG LogicalIpa[4];
+    unsigned LogicalSegment[4], LogicalFlags[4];
+  } G4SubmitFailure;
+  /* EXP1210 receipt-only overlap counters (AdmissionDdiSubmitCommandVirtual). */
+  volatile int G4SubmitVirtualInFlight, G4SubmitVirtualFence, G4SubmitVirtualFlags;
+  struct { volatile int Preemptions, Overlaps, Submissions, Resubmissions; } G4PreemptOverlap;
+  int SchedulerLock, SchedulerFaulted, RuntimeReady, RuntimeQueueable;
+  APPLE_AGX_SCHEDULER Scheduler;
+  ADMISSION_RENDER_PACKET RenderPacket;
+  ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
+  ULONG G4PendingHead, G4PendingCount, DispatchedFence;
+  struct { volatile int Immediate, Deferred, Binds; } SubmitPath;
+  ADMISSION_BACKEND_IMAGE BackendImage;
+} ADMISSION_CONTEXT;
+struct _ADMISSION_RENDER_CONTEXT {
+  volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain, GpuvaG3PreemptFence; BOOLEAN GpuvaG3Closing;
+  volatile LONG GpuvaG3PrivateFence2,GpuvaG3CancelFence2,GpuvaG3PreemptFence2;
+  volatile LONG GpuvaG3CancelCaller, GpuvaG3CancelCaller2;
+  ULONG GpuvaG3SecondFence;
+  ULONGLONG GpuvaG3PrivateManagerGeneration;
+  ADMISSION_G3_PROCESS *GpuvaG3Process;
+  unsigned GpuvaG3Poisoned;
+  ULONGLONG GpuvaG3RootIpa;
+  ULONGLONG GpuvaG3DmaBufferVa, GpuvaG3MappingGeneration;
+  unsigned GpuvaG3DmaBufferBytes;
+  unsigned Win32Transport;
+  ADMISSION_OBJECT_CONTEXT Object;
+  struct { unsigned Active; } SchedulerContext;
+};
+static inline void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, ULONG f) {
+  if (!c || !f) return;
+  if (c->Object.FenceOutstanding == f) { c->Object.FenceOutstanding = c->GpuvaG3SecondFence; c->GpuvaG3SecondFence = 0; }
+  else if (c->GpuvaG3SecondFence == f) c->GpuvaG3SecondFence = 0;
+}
+typedef struct {
+  REPLAY_FLAGS Flags;
+  void *hContext;
+  unsigned NodeOrdinal, EngineOrdinal, VidPnSourceId, FlipInterval;
+  const void *pDmaBufferPrivateData;
+  unsigned DmaBufferPrivateDataSize;
+  unsigned DmaBufferUmdPrivateDataSize;
+  ULONGLONG DmaBufferVirtualAddress;
+  unsigned DmaBufferSize;
+  unsigned SubmissionFenceId;
+} DXGKARG_SUBMITCOMMANDVIRTUAL;
+typedef struct { unsigned BytesUsed; } APPLE_AGX_DMA_SHADOW;
+typedef struct {
+  void *hContext;
+  ULONGLONG DmaBufferVirtualAddress;
+  unsigned DmaBufferSize, DmaBufferSubmissionStartOffset;
+  unsigned DmaBufferSubmissionEndOffset;
+  const void *pDmaBufferPrivateData;
+  unsigned DmaBufferPrivateDataSize;
+  unsigned DmaBufferPrivateDataSubmissionStartOffset;
+  unsigned DmaBufferPrivateDataSubmissionEndOffset;
+  unsigned SubmissionFenceId, VidPnSourceId, FlipInterval;
+  REPLAY_FLAGS Flags;
+  unsigned EngineOrdinal, NodeOrdinal;
+} DXGKARG_SUBMITCOMMAND;
+#define ADMISSION_GDI_DMA_PRIVATE_SIZE 64u
+static NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
+    ADMISSION_CONTEXT *a, ADMISSION_RENDER_CONTEXT *c,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *v) {
+  (void)a;(void)c;(void)v;return STATUS_INVALID_PARAMETER;
+}
+static NTSTATUS AdmissionPresentSubmitVirtual(
+    ADMISSION_CONTEXT *a, ADMISSION_RENDER_CONTEXT *c,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *v) {
+  (void)a;(void)c;(void)v;return STATUS_INVALID_PARAMETER;
+}
+static int AppleAgxDmaShadowOpen(APPLE_AGX_DMA_SHADOW *s,
+    const void *p, unsigned n) { (void)s;(void)p;(void)n;return 0; }
+#define ADMISSION_CPU_PACKET_NOP 3u
+static unsigned replay_touch_queued;
+static NTSTATUS AdmissionCpuQueueSubmit(ADMISSION_CONTEXT *a,
+    const DXGKARG_SUBMITCOMMAND *args, ULONG kind, const void *data, UINT bytes) {
+  (void)a; (void)args; assert(kind == ADMISSION_CPU_PACKET_NOP && !data && !bytes);
+  ++replay_touch_queued; return STATUS_SUCCESS;
+}
+static NTSTATUS AdmissionDdiSubmitRender(ADMISSION_CONTEXT *a,
+    const DXGKARG_SUBMITCOMMAND *p) {
+  (void)a;(void)p;return STATUS_INVALID_PARAMETER;
+}
+static void AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *a,
+    ADMISSION_RENDER_CONTEXT *c, unsigned pid, unsigned fence,
+    unsigned dma_bytes) {
+  (void)a;(void)c;(void)pid;(void)fence;(void)dma_bytes;
+}
+
+static int replay_irql, dispatches, bind_ok=1, compute_preempt_mapped=1;
+static unsigned v5_dma_bytes;
+static int graph_begin_calls;
+static int output_mapped=1;
+static ULONGLONG output_va_only; static unsigned output_va_only_bytes;
+static ULONGLONG output_ipa=0x90001000ULL;
+static NTSTATUS scanout_status = STATUS_SUCCESS;
+static int receipt_queues;
+static void __attribute__((unused)) AdmissionRenderCorrelationSubmitFailureWindows(
+    ADMISSION_CONTEXT *a) { (void)a; ++receipt_queues; }
+static void *__attribute__((unused)) PsGetCurrentProcessId(void) { return (void *)(uintptr_t)1234; }
+static APPLE_AGX_G4_PROCESS_RANGE ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
+static int KeGetCurrentIrql(void) { return replay_irql; }
+static void ExAcquireFastMutex(int *lock) { assert(!*lock); *lock = 1; }
+static void ExReleaseFastMutex(int *lock) { assert(*lock); *lock = 0; }
+static void KeAcquireSpinLock(int *lock, KIRQL *irql) {
+  assert(!*lock);*lock=1;*irql=0;
+}
+static void KeReleaseSpinLock(int *lock, KIRQL irql) {
+  (void)irql;assert(*lock);*lock=0;
+}
+static int InterlockedCompareExchange(volatile int *value, int exchange, int compare) {
+  int old=*value;if(old==compare)*value=exchange;return old;
+}
+static int InterlockedIncrement(volatile int *value) { return ++*value; }
+static int InterlockedDecrement(volatile int *value) { return --*value; }
+static int InterlockedExchange(volatile int *value, int exchange) {
+  int old=*value;*value=exchange;return old;
+}
+#define KeMemoryBarrier() __sync_synchronize()
+#define HandleToULong(x) ((unsigned)(uintptr_t)(x))
+#define UNREFERENCED_PARAMETER(x) ((void)(x))
+static int AdmissionPlatformRuntimeReady(ADMISSION_CONTEXT *adapter) {
+  return adapter->RuntimeReady;
+}
+static int worker_busy;
+static BOOLEAN AdmissionPlatformRuntimeQueueable(ADMISSION_CONTEXT *adapter,
+    BOOLEAN *busy) {
+  if (busy) *busy = worker_busy ? TRUE : FALSE;
+  return adapter->RuntimeQueueable ? TRUE : FALSE;
+}
+static void (*bind_hook)(void);
+static void AdmissionPlatformRuntimeSlotChanged(ADMISSION_CONTEXT *adapter) {
+  (void)adapter;
+}
+static int AdmissionPlatformRuntimeAwaitWork(ADMISSION_CONTEXT *adapter,
+                                             ULONG timeout_ms, ULONG *reason) {
+  (void)timeout_ms;
+  if (reason) *reason = adapter->RuntimeReady ? 0u : 4u;
+  return AdmissionPlatformRuntimeReady(adapter);
+}
+static NTSTATUS AdmissionMemoryRuntimeScanoutView(
+    ADMISSION_CONTEXT *adapter, ADMISSION_SCANOUT_MEMORY_VIEW *view) {
+  (void)adapter;
+  if (!NT_SUCCESS(scanout_status)) return scanout_status;
+  static unsigned char memory[0x4000];
+  view->CpuAddress=memory;view->GuestIpaAddress=0x90000000ULL;
+  view->HostPhysicalAddress=0x80000000ULL;view->Bytes=sizeof(memory);
+  return STATUS_SUCCESS;
+}
+static NTSTATUS AdmissionMemoryRuntimeLocalView(
+    ADMISSION_CONTEXT *adapter, ADMISSION_SCANOUT_MEMORY_VIEW *view) {
+  return AdmissionMemoryRuntimeScanoutView(adapter, view);
+}
+static int AppleAgxGpuvaG3GraphLeafTableIpa(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, ULONGLONG *ipa) {
+  APPLE_AGX_GPUVA_G3_NODE *edge;
+  if (!graph->Created || graph->Uncertain) return 0;
+  for (edge = graph->Parents; edge; edge = edge->Next)
+    if (edge->Ipa == graph->RootIpa && edge->Index == ((va >> 36) & 7u)) break;
+  if (!edge) return 0;
+  for (APPLE_AGX_GPUVA_G3_NODE *middle = graph->Parents; middle;
+       middle = middle->Next)
+    if (middle->Ipa == edge->AuxIpa &&
+        middle->Index == ((va >> 25) & 2047u)) {
+      *ipa = middle->AuxIpa;
+      return 1;
+    }
+  return 0;
+}
+static int AppleAgxGpuvaG3GraphTranslateVa(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, ULONGLONG *ipa) {
+  (void)graph;
+  if (!output_mapped) return 0;
+  if(va<0x40000000ULL || va>=0x40001000ULL)return 0;
+  *ipa=output_ipa+(va-0x40000000ULL);return 1;
+}
+static unsigned AdmissionRenderPacketState(ADMISSION_RENDER_PACKET *packet) {
+  return packet->State;
+}
+static int AdmissionRenderPacketPrepare(ADMISSION_RENDER_PACKET *packet,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *description) {
+  packet->Description=*description;packet->State=AdmissionRenderPacketPrepared;
+  return 1;
+}
+static int AdmissionRenderPacketCancelPrepared(ADMISSION_RENDER_PACKET *packet,
+    ULONGLONG context) {
+  (void)context;packet->State=AdmissionRenderPacketEmpty;return 1;
+}
+static int AdmissionRenderPacketQueue(ADMISSION_RENDER_PACKET *packet,
+    unsigned fence, ULONGLONG context, ULONGLONG private_data,
+    unsigned start, unsigned end) {
+  (void)fence;(void)context;(void)private_data;(void)start;(void)end;
+  packet->State=AdmissionRenderPacketQueued;return 1;
+}
+static int AdmissionRenderPacketReset(ADMISSION_RENDER_PACKET *packet,
+    unsigned fence, unsigned quiesced) {
+  (void)fence;(void)quiesced;packet->State=AdmissionRenderPacketEmpty;return 1;
+}
+static int AdmissionBackendImageBindG4Submission(ADMISSION_BACKEND_IMAGE *image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *packet, void *cpu,
+    const APPLE_AGX_G4_SUBMIT_VIEW *view,
+    APPLE_AGX_EXP208_GDI_BINDING *binding) {
+  (void)cpu;(void)binding;
+  if(bind_hook)bind_hook();
+  if(!bind_ok)return 0;
+  APPLE_AGX_G4_NATIVE_RENDER render;
+  memcpy(&render,view->Render,sizeof(render));
+  if (!AppleAgxG4ComposeHeaderV2(&image->G4Header,&render,view->CommandVa,
+          view->CommandBytes,view->ColorFormat,view->Process)) return 0;
+  image->G4Lease=view->Lease;
+  image->G4WithCompute=view->HasCompute ? 1u : 0u;
+  if(view->HasCompute) {
+    image->G4PreludeCompute=view->Compute;
+    image->G4PreludePreemption=view->Preemption;
+  }
+  memcpy(image->G4Command, view->Native, view->CommandBytes);
+  image->G4CommandBytes=view->CommandBytes;
+  image->G4Native=1;image->BoundFence=packet->Fence;return 1;
+}
+static int AppleAgxGpuvaG3GraphContainsRangeAccess(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes,
+    int write);
+static int AppleAgxGpuvaG3GraphContainsRange(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes) {
+  return AppleAgxGpuvaG3GraphContainsRangeAccess(graph, va, bytes, 0);
+}
+static unsigned graph_begin_slot;
+static int AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    unsigned slot) { (void)graph;graph_begin_slot=slot;++graph_begin_calls;return 1; }
+static int AdmissionBackendImageReleaseSubmission(
+    ADMISSION_BACKEND_IMAGE *image, unsigned fence) {
+  (void)fence;image->G4Native=0;image->G4Compute=0;image->BoundFence=0;return 1;
+}
+static int AdmissionBackendImageBindG4Compute(ADMISSION_BACKEND_IMAGE *image,
+    unsigned fence, const APPLE_AGX_G4_COMPUTE_ENVELOPE *envelope) {
+  if(bind_hook)bind_hook();
+  if(!bind_ok || image->BoundFence || image->G4Native || image->G4Compute)
+    return 0;
+  memcpy(&image->G4ComputeEnvelope,envelope,sizeof(*envelope));
+  image->G4Compute=1;image->BoundFence=fence;return 1;
+}
+static int AdmissionBackendImageBindPresentCompute(ADMISSION_BACKEND_IMAGE *image,
+    unsigned fence, const ADMISSION_PRESENT_COMPUTE *present) {
+  if(bind_hook)bind_hook();
+  if(!bind_ok || image->BoundFence || image->G4Native || image->G4Compute ||
+     image->PresentCompute)
+    return 0;
+  memcpy(&image->Present,present,sizeof(*present));
+  image->PresentCompute=1;image->BoundFence=fence;return 1;
+}
+static void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *adapter) {
+  (void)adapter;++dispatches;
+}
+static int AppleAgxGpuvaG3GraphContainsRangeAccess(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes,
+    int write) {
+  if (!graph || !bytes) return 0;
+  if (va == 0x20000 && !write && bytes == 280) return 1;
+  /* D3D-G1: a v5 DMA buffer (compute prelude + the same render). */
+  if (va == 0x20000 && !write && v5_dma_bytes && bytes == v5_dma_bytes) return 1;
+  if (va == 0x30000 && !write && bytes == 1) return 1;
+  /* G2 compute: CDM stream, writable 64 KiB context-store buffer. */
+  if (va == 0x50000 && !write && bytes == 0x40u) return 1;
+  if (va == 0x60000 && write && bytes == 0x10000u) return compute_preempt_mapped;
+  /* The parser probes the attachment's first byte; the whole output range
+   * is writable only while the output is mapped (M2-c VA-only outputs). */
+  if (va == 0x40000000ULL && write &&
+      (bytes==1u || bytes==4096u)) return bytes == 1u || output_mapped;
+  /* M2-c: an output mapped writable outside the local reserve. */
+  if (output_va_only_bytes && va == output_va_only && write &&
+      bytes <= output_va_only_bytes) return 1;
+  /* Mapped process ranges; EXP1115 checks only the backed heap prefix. */
+  for(unsigned i=0;i<APPLE_AGX_G4_PROCESS_RANGE_COUNT;++i)
+    if(va==ranges[i].Va && bytes<=ranges[i].Bytes && write)
+      return graph->AllowProcessRanges;
+  return 0;
+}
+
+static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {(void)p;return TRUE;}
+/* The Python driver inserts the unmodified production KMD functions here. */
+/* R162 upload re-hash is evidence-only and compiled out in production. */
+#if ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB
+static void AdmissionG3VerifyUploads(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_STATE *state, ADMISSION_G3_PROCESS *process) {
+  (void)adapter; (void)state; (void)process;
+}
+#endif
+#include "g4_submit_virtual_functions.inc"
+
+typedef struct {
+  APPLE_AGX_G4_PRIVATE_HEADER_V2 Header;
+  APPLE_AGX_G4_NATIVE_HEADER AttachCommand;
+  APPLE_AGX_G4_ATTACHMENT Attachment;
+  APPLE_AGX_G4_NATIVE_HEADER Command;
+  APPLE_AGX_G4_NATIVE_RENDER Render;
+} PACKET;
+
+static ADMISSION_CONTEXT *hook_adapter;
+static void drop_while_binding(void) {
+  KIRQL irql;
+  KeAcquireSpinLock(&hook_adapter->SchedulerLock, &irql);
+  AdmissionG4PendingDropLocked(hook_adapter, TRUE);
+  KeReleaseSpinLock(&hook_adapter->SchedulerLock, irql);
+}
+
+/* Phase 5a: with the render slot owned by context A's job (fence 7), a
+ * valid submission of context B queues instead of waiting on VidSch's
+ * thread, binds in order once the slot empties, and preemption drops it. */
+static void phase5a_cases(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *a, DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
+  static ADMISSION_RENDER_CONTEXT b;
+  DXGKARG_SUBMITCOMMANDVIRTUAL other = *args;
+  int before = dispatches;
+  assert(adapter->RenderPacket.State == AdmissionRenderPacketQueued &&
+         adapter->RenderPacket.Description.Fence == 7u);
+  b = *a;
+  b.Object.FenceOutstanding = 0u;
+  b.GpuvaG3DmaBufferVa = 0ULL;
+  b.GpuvaG3DmaBufferBytes = 0u;
+  other.hContext = &b;
+  /* Not queueable (runtime stopping/failed): today's path, slot busy -> refused. */
+  other.SubmissionFenceId = 8u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) != STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 0u && b.Object.FenceOutstanding == 0u);
+  adapter->RuntimeQueueable = 1;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) == STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 1u && dispatches == before + 1);
+  assert(adapter->G4Pending[adapter->G4PendingHead].State == AdmissionG4PendingQueued);
+  assert(adapter->G4Pending[adapter->G4PendingHead].Fence == 8u);
+  assert(b.Object.FenceOutstanding == 8u && b.GpuvaG3DmaBufferVa == 0ULL);
+  assert(adapter->RenderPacket.Description.Fence == 7u);
+  assert(adapter->Scheduler.LastSubmittedFence == 8u);
+  /* Phase 5b: a context may queue a second job behind its first (slot 2);
+   * a third is not queued. */
+  other.SubmissionFenceId = 9u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) == STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 2u && b.Object.FenceOutstanding == 8u &&
+         b.GpuvaG3SecondFence == 9u);
+  other.SubmissionFenceId = 10u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) != STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 2u && b.GpuvaG3SecondFence == 9u);
+  /* Nothing binds while A's job still owns the slot. */
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 2u &&
+         adapter->RenderPacket.Description.Fence == 7u);
+  /* A completes: the worker binds B's job from the copy, in order. */
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  a->Object.FenceOutstanding = 0u;
+  adapter->BackendImage.G4Native = 0u;
+  adapter->BackendImage.BoundFence = 0u;
+  assert(AppleAgxSchedulerActivateFence(&adapter->Scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&adapter->Scheduler, 0u, 0u, 7u));
+  memset(adapter->BackendImage.G4Command, 0, sizeof(adapter->BackendImage.G4Command));
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 1u && adapter->SubmitPath.Binds == 1);
+  assert(adapter->SubmitPath.Deferred == 2);
+  assert(adapter->RenderPacket.State == AdmissionRenderPacketQueued &&
+         adapter->RenderPacket.Description.Fence == 8u);
+  assert(adapter->BackendImage.BoundFence == 8u && adapter->BackendImage.G4Native);
+  assert(memcmp(adapter->BackendImage.G4Command,
+                (const unsigned char *)args->pDmaBufferPrivateData +
+                    sizeof(APPLE_AGX_G4_PRIVATE_HEADER_V2),
+                adapter->BackendImage.G4CommandBytes) == 0);
+  assert(b.GpuvaG3DmaBufferVa == other.DmaBufferVirtualAddress &&
+         b.GpuvaG3DmaBufferBytes == other.DmaBufferSize);
+  /* B's first job completes: its second becomes the oldest and binds next. */
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  adapter->BackendImage.G4Native = 0u;
+  adapter->BackendImage.BoundFence = 0u;
+  assert(AppleAgxSchedulerActivateFence(&adapter->Scheduler, 0u, 0u, 8u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&adapter->Scheduler, 0u, 0u, 8u));
+  AdmissionContextRetireFence(&b, 8u);
+  assert(b.Object.FenceOutstanding == 9u && b.GpuvaG3SecondFence == 0u);
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 0u && adapter->SubmitPath.Binds == 2 &&
+         adapter->RenderPacket.Description.Fence == 9u);
+  /* Preemption drops a pending job and releases its context. */
+  a->Object.FenceOutstanding = 0u;
+  other.hContext = a;
+  other.SubmissionFenceId = 10u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, a, &other) == STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 1u && a->Object.FenceOutstanding == 10u);
+  {
+    KIRQL irql;
+    KeAcquireSpinLock(&adapter->SchedulerLock, &irql);
+    adapter->DispatchedFence = 10u;
+    AdmissionG4PendingDropLocked(adapter, TRUE);
+    KeReleaseSpinLock(&adapter->SchedulerLock, irql);
+  }
+  assert(adapter->G4PendingCount == 0u && a->Object.FenceOutstanding == 0u &&
+         adapter->DispatchedFence == 0u);
+  assert(adapter->G4Pending[0].State == AdmissionG4PendingFree &&
+         adapter->G4Pending[1].State == AdmissionG4PendingFree);
+  /* Preemption while the worker binds: the entry is cancelled, not run. */
+  b.Object.FenceOutstanding = 0u;
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  adapter->BackendImage.G4Native = 0u;
+  adapter->BackendImage.BoundFence = 0u;
+  other.hContext = &b;
+  other.SubmissionFenceId = 11u;
+  /* Keep the slot busy so the submission queues (stand-in active job). */
+  adapter->RenderPacket.State = AdmissionRenderPacketQueued;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) == STATUS_SUCCESS);
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  assert(AppleAgxSchedulerQueueFence(&adapter->Scheduler, 0u, 0u, 11u));
+  hook_adapter = adapter;
+  bind_hook = drop_while_binding;
+  assert(AdmissionG4PendingBindHead(adapter));
+  bind_hook = NULL;
+  assert(adapter->G4PendingCount == 0u &&
+         adapter->RenderPacket.State == AdmissionRenderPacketEmpty);
+  assert(b.Object.FenceOutstanding == 0u && !adapter->BackendImage.G4Native);
+  assert(b.GpuvaG3DmaBufferVa == 0ULL && !adapter->SchedulerFaulted);
+  /* EXP1135: with the slot empty and nothing queued, a finishing worker
+   * (WorkScheduled) is busy too: queue rather than wait; an idle runtime
+   * keeps the immediate path. */
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  b.Object.FenceOutstanding = 0u;
+  other.SubmissionFenceId = 13u;
+  worker_busy = 1;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) == STATUS_SUCCESS);
+  worker_busy = 0;
+  assert(adapter->G4PendingCount == 1u && adapter->RenderPacket.State == AdmissionRenderPacketEmpty);
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 0u && adapter->RenderPacket.State == AdmissionRenderPacketQueued &&
+         adapter->RenderPacket.Description.Fence == 13u);
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  adapter->BackendImage.G4Native = 0u;
+  adapter->BackendImage.BoundFence = 0u;
+  b.Object.FenceOutstanding = 0u;
+  /* A bind failure of an accepted job is reported to the caller. The
+   * scheduler moved fence 11 to its preempted queue in the real driver. */
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  adapter->RenderPacket.State = AdmissionRenderPacketQueued;
+  other.SubmissionFenceId = 12u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) == STATUS_SUCCESS);
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  bind_ok = 0;
+  assert(!AdmissionG4PendingBindHead(adapter));
+  bind_ok = 1;
+  assert(adapter->G4PendingCount == 0u && b.Object.FenceOutstanding == 0u &&
+         adapter->RenderPacket.State == AdmissionRenderPacketEmpty);
+  /* Restore the caller's state: A's fence 7 queued in the slot. */
+  adapter->RuntimeQueueable = 0;
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  assert(AppleAgxSchedulerQueueFence(&adapter->Scheduler, 0u, 0u, 7u));
+  adapter->RenderPacket.State = AdmissionRenderPacketQueued;
+  adapter->RenderPacket.Description.Fence = 7u;
+  a->Object.FenceOutstanding = 7u;
+  a->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
+  puts("phase 5a pending submissions: PASS");
+}
+
+/* Phase 5b: two private jobs of one context use fixed slots matched by
+ * fence; a third is refused, markers land in the slot of their fence, and
+ * new jobs wait while a preempted job awaits its resubmission. */
+static void phase5b_private_slots(void) {
+  static ADMISSION_G3_STATE st;
+  static ADMISSION_G3_PROCESS p;
+  static ADMISSION_RENDER_CONTEXT c;
+  static ADMISSION_G3_PRIVATE_SCENE s1, s2, s3;
+  APPLE_AGX_G4_PRIVATE_LEASE l1={17,5,9,9}, l2={17,5,11,11}, l3={17,5,13,13};
+  p.State=&st; p.Graph.ProcessId=17; p.PrivateManager.Generation=5;
+  c.GpuvaG3Process=&p; c.GpuvaG3PrivateManagerGeneration=5;
+  s1.Context=s2.Context=s3.Context=&c;
+  s1.Storage.Generation=9; s2.Storage.Generation=11; s3.Storage.Generation=13;
+  s1.Next=&s2; s2.Next=&s3; p.PrivateScenes=&s1;
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l1,30,FALSE)==&s1);
+  s1.Queued=1; s1.Fence=30; c.GpuvaG3PrivateFence=30;
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l2,31,FALSE)==&s2);
+  s2.Queued=1; s2.Fence=31; c.GpuvaG3PrivateFence2=31;
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l3,32,FALSE)==NULL);
+  AdmissionGpuvaG3PrivatePreempt(&c,31);
+  assert(c.GpuvaG3PreemptFence2==31 && !c.GpuvaG3PreemptFence);
+  assert(AdmissionG3PrivateSlotPreempted(&c,31) && !AdmissionG3PrivateSlotPreempted(&c,30));
+  /* Slot 1 frees (job 30 reported), but job 31 awaits resubmission. */
+  s1.Queued=0; s1.Fence=0; c.GpuvaG3PrivateFence=0;
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l3,32,FALSE)==NULL);
+  assert(AdmissionG4FindPrivateResubmission(&p,&c,&l2,33)==&s2);
+  assert(AdmissionG4FindPrivateResubmission(&p,&c,&l1,33)==NULL);
+  c.GpuvaG3PreemptFence2=0;
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l3,32,FALSE)==&s3);
+  AdmissionGpuvaG3PrivateCancel(&c,31,FALSE);
+  assert(c.GpuvaG3CancelFence2==31 && !c.GpuvaG3CancelFence &&
+         !c.GpuvaG3CancelUncertain && AdmissionG3PrivateSlotCancelled(&c,31));
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l2,31,TRUE)==NULL);
+  AdmissionGpuvaG3PrivateCancel(&c,99,TRUE); /* not queued: no marker */
+  assert(!c.GpuvaG3CancelUncertain && !c.GpuvaG3CancelFence);
+  puts("phase 5b private slots: PASS");
+}
+
+/* G2: a compute envelope takes the render slot as a destination-less
+ * compute packet, binds only its envelope, re-proves it at BeginJob in the
+ * job VM slot, and queues behind a busy slot like a render job. */
+/* D3D-G1: a v5 render carries the compute command it waits on (Mesa
+ * agx_batch_submit: COMPUTE, attachments, RENDER with barriers NONE/1). The
+ * KMD binds both; BeginJob re-proves the prelude (its mappings and the bound
+ * copy) and refuses a stale, altered or dropped prelude before JOB_BEGIN. */
+static void render_compute_cases(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_STATE *state, ADMISSION_RENDER_CONTEXT *context,
+    ADMISSION_G3_PRIVATE_SCENE *scene, const PACKET *packet,
+    const APPLE_AGX_G4_PRIVATE_LEASE *lease, ULONGLONG dma_va) {
+  static struct {
+    APPLE_AGX_G4_PRIVATE_HEADER_V5 Header;
+    APPLE_AGX_G4_NATIVE_HEADER ComputeCommand;
+    APPLE_AGX_G4_NATIVE_COMPUTE Compute;
+    unsigned char Native[280];
+  } v5;
+  APPLE_AGX_G4_PRIVATE_HEADER_V3 v3;
+  APPLE_AGX_G4_PROCESS_RANGE preempt = {0x60000ULL, 0x10000u, 0u};
+  ADMISSION_BACKEND_IMAGE *image = &adapter->BackendImage;
+  PACKET render = *packet;
+  DXGKARG_SUBMITCOMMANDVIRTUAL args = {0};
+  const unsigned command_bytes = (unsigned)(sizeof(v5) - sizeof(v5.Header));
+  int begin_before;
+  assert(sizeof(v5) == sizeof(v5.Header) + sizeof(v5.ComputeCommand) +
+         sizeof(v5.Compute) + sizeof(v5.Native));
+  memset(&v5, 0, sizeof(v5));
+  memset(&v3, 0, sizeof(v3));
+  /* Retire the v3 job (fence 22) and free its scene. */
+  state->ActiveProcess = NULL; state->ActiveFence = 0u;
+  state->PrivateCompletionFence = 0u;
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  assert(AdmissionBackendImageReleaseSubmission(image, 22u));
+  image->G4Manager = NULL;
+  context->Object.FenceOutstanding = 0u; context->GpuvaG3SecondFence = 0u;
+  context->GpuvaG3PrivateFence = context->GpuvaG3PrivateFence2 = 0;
+  context->GpuvaG3CancelFence = context->GpuvaG3PreemptFence = 0;
+  scene->Started = scene->Queued = scene->Fence = scene->ResumeFence = 0u;
+  scene->Submitting = scene->ReleaseRequested = 0u;
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  render.Command.VdmBarrier = 0xffffu;
+  render.Command.CdmBarrier = 1u;
+  memcpy(v5.Native, &render.AttachCommand, sizeof(v5.Native));
+  v5.ComputeCommand.Type = APPLE_AGX_G4_COMPUTE;
+  v5.ComputeCommand.Size = sizeof(v5.Compute);
+  v5.Compute.CdmCtrlStreamBase = 0x50000ULL;
+  v5.Compute.CdmCtrlStreamEnd = 0x50040ULL;
+  assert(AppleAgxG4ComposeHeaderV3(&v3, &packet->Render, dma_va, command_bytes,
+      APPLE_AGX_G4_COLOR_BGRA8, ranges, lease));
+  assert(AppleAgxG4ComposeHeaderV5(&v5.Header, &v3, dma_va, command_bytes,
+      &preempt));
+  args.hContext = context;
+  args.pDmaBufferPrivateData = &v5;
+  args.DmaBufferPrivateDataSize = args.DmaBufferUmdPrivateDataSize = sizeof(v5);
+  args.DmaBufferVirtualAddress = dma_va;
+  args.DmaBufferSize = command_bytes;
+  args.SubmissionFenceId = 23u;
+  v5_dma_bytes = command_bytes;
+  /* A render that does not wait on the compute fails before any owner. */
+  memcpy(v5.Native + sizeof(render.AttachCommand) + sizeof(render.Attachment),
+         &packet->Command, sizeof(packet->Command));
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, context, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(!scene->Queued && !context->Object.FenceOutstanding);
+  memcpy(v5.Native + sizeof(render.AttachCommand) + sizeof(render.Attachment),
+         &render.Command, sizeof(render.Command));
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, context, &args) == STATUS_SUCCESS);
+  assert(scene->Queued && scene->Fence == 23u);
+  assert(image->G4Native && image->G4WithCompute && image->BoundFence == 23u &&
+         image->G4CommandBytes == command_bytes &&
+         memcmp(image->G4Command, &v5.ComputeCommand, command_bytes) == 0 &&
+         memcmp(&image->G4PreludeCompute, &v5.Compute, sizeof(v5.Compute)) == 0 &&
+         image->G4PreludePreemption.Va == preempt.Va &&
+         image->G4PreludePreemption.Bytes == preempt.Bytes);
+  begin_before = graph_begin_calls;
+  /* The preemption buffer was unmapped after submit. */
+  compute_preempt_mapped = 0;
+  assert(AdmissionGpuvaG3BeginJob(adapter, context, 23u) != STATUS_SUCCESS);
+  compute_preempt_mapped = 1;
+  /* The bound prelude no longer matches its stream copy. */
+  image->G4PreludeCompute.CdmCtrlStreamEnd += 4u;
+  assert(AdmissionGpuvaG3BeginJob(adapter, context, 23u) != STATUS_SUCCESS);
+  image->G4PreludeCompute.CdmCtrlStreamEnd -= 4u;
+  image->G4PreludePreemption.Va = 0x70000ULL;
+  assert(AdmissionGpuvaG3BeginJob(adapter, context, 23u) != STATUS_SUCCESS);
+  image->G4PreludePreemption.Va = preempt.Va;
+  /* A dropped prelude never runs the stream as a plain render. */
+  image->G4WithCompute = 0u;
+  assert(AdmissionGpuvaG3BeginJob(adapter, context, 23u) != STATUS_SUCCESS);
+  image->G4WithCompute = 1u;
+  assert(graph_begin_calls == begin_before && !scene->Started);
+  assert(AdmissionGpuvaG3BeginJob(adapter, context, 23u) == STATUS_SUCCESS);
+  assert(graph_begin_calls == begin_before + 1 && scene->Started);
+  v5_dma_bytes = 0u;
+}
+
+static void compute_cases(ADMISSION_CONTEXT *adapter, ADMISSION_G3_STATE *state,
+    ADMISSION_RENDER_CONTEXT *context) {
+  APPLE_AGX_G4_COMPUTE_ENVELOPE e = {0};
+  APPLE_AGX_G4_PROCESS_RANGE preempt = {0x60000ULL, 0x10000u, 0u};
+  DXGKARG_SUBMITCOMMANDVIRTUAL args = {0};
+  const ADMISSION_RENDER_PACKET_DESCRIPTION *d = &adapter->RenderPacket.Description;
+  int begin_before, dispatch_before = dispatches;
+  state->ActiveProcess = NULL; state->ActiveFence = 0u;
+  state->PrivateCompletionFence = 0u;
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  adapter->BackendImage.G4Native = 0u; adapter->BackendImage.BoundFence = 0u;
+  adapter->BackendImage.G4Manager = NULL;
+  adapter->G4PendingCount = 0u; adapter->G4PendingHead = 0u;
+  context->Object.FenceOutstanding = 0u; context->GpuvaG3SecondFence = 0u;
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  assert(AppleAgxG4ComposeHeaderCompute(&e.Header, 0x20000ULL,
+      sizeof(e.Native) + sizeof(e.Compute), &preempt));
+  e.Native.Type = APPLE_AGX_G4_COMPUTE;
+  e.Native.Size = sizeof(e.Compute);
+  e.Compute.CdmCtrlStreamBase = 0x50000ULL;
+  e.Compute.CdmCtrlStreamEnd = 0x50040ULL;
+  args.hContext = context;
+  args.pDmaBufferPrivateData = &e;
+  args.DmaBufferPrivateDataSize = args.DmaBufferUmdPrivateDataSize = sizeof(e);
+  args.DmaBufferVirtualAddress = 0x20000ULL;
+  args.DmaBufferSize = sizeof(e.Native) + sizeof(e.Compute);
+  args.SubmissionFenceId = 40u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, context, &args) == STATUS_SUCCESS);
+  assert(adapter->RenderPacket.State == AdmissionRenderPacketQueued &&
+         d->Kind == ADMISSION_RENDER_PACKET_KIND_COMPUTE && d->Fence == 40u &&
+         d->DestinationGpuVa == 0ULL && d->DestinationBytes == 0u &&
+         d->AllocationCount == 0u && d->DmaEnd == args.DmaBufferSize &&
+         d->PrivateDataToken == (ULONGLONG)(uintptr_t)&adapter->BackendImage.G4ComputeEnvelope &&
+         d->PrivateDataBytes == sizeof(e));
+  assert(adapter->BackendImage.G4Compute && adapter->BackendImage.BoundFence == 40u &&
+         memcmp(&adapter->BackendImage.G4ComputeEnvelope, &e, sizeof(e)) == 0);
+  assert(context->Object.FenceOutstanding == 40u &&
+         context->GpuvaG3DmaBufferVa == 0x20000ULL &&
+         context->GpuvaG3DmaBufferBytes == args.DmaBufferSize &&
+         dispatches == dispatch_before + 1 &&
+         adapter->Scheduler.LastSubmittedFence == 40u);
+  /* BeginJob re-proves the bound envelope against the current graph. */
+  begin_before = graph_begin_calls;
+  compute_preempt_mapped = 0;
+  assert(AdmissionGpuvaG3BeginJob(adapter, context, 40u) != STATUS_SUCCESS);
+  assert(graph_begin_calls == begin_before);
+  compute_preempt_mapped = 1;
+  assert(AdmissionGpuvaG3BeginJob(adapter, context, 41u) != STATUS_SUCCESS);
+  assert(AdmissionGpuvaG3BeginJob(adapter, context, 40u) == STATUS_SUCCESS);
+  assert(graph_begin_calls == begin_before + 1 &&
+         graph_begin_slot == ADMISSION_GPUVA_G3_JOB_VM_SLOT);
+  state->ActiveProcess = NULL; state->ActiveFence = 0u;
+  assert(AppleAgxSchedulerActivateFence(&adapter->Scheduler, 0u, 0u, 40u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&adapter->Scheduler, 0u, 0u, 40u));
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  context->Object.FenceOutstanding = 0u;
+  assert(AdmissionBackendImageReleaseSubmission(&adapter->BackendImage, 40u));
+  /* Refusals happen before any fence or slot owner. */
+  args.SubmissionFenceId = 41u;
+  e.Header.Preemption.Va = 0x70000ULL;
+  adapter->G4SubmitFailureClaim = 0;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, context, &args) == STATUS_INVALID_PARAMETER);
+  assert(adapter->G4SubmitFailure.Branch == 9u &&
+         adapter->G4SubmitFailure.DownstreamStatus == AppleAgxG4ParseUnmapped &&
+         adapter->G4SubmitFailure.Kind == AppleAgxG4AccessComputePreemption);
+  e.Header.Preemption.Va = 0x60000ULL;
+  args.DmaBufferUmdPrivateDataSize = sizeof(e) - 8u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, context, &args) == STATUS_INVALID_PARAMETER);
+  args.DmaBufferUmdPrivateDataSize = sizeof(e);
+  e.Compute.Helper.Binary = 0x100u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, context, &args) == STATUS_INVALID_PARAMETER);
+  e.Compute.Helper.Binary = 0u;
+  bind_ok = 0;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, context, &args) == STATUS_INVALID_PARAMETER);
+  bind_ok = 1;
+  assert(adapter->RenderPacket.State == AdmissionRenderPacketEmpty &&
+         context->Object.FenceOutstanding == 0u && !adapter->BackendImage.G4Compute &&
+         context->GpuvaG3DmaBufferVa == 0ULL);
+  /* A busy slot queues the compute job; the worker binds it in order. */
+  adapter->RuntimeQueueable = 1;
+  adapter->RenderPacket.State = AdmissionRenderPacketQueued; /* stand-in */
+  args.SubmissionFenceId = 42u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, context, &args) == STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 1u &&
+         adapter->G4Pending[adapter->G4PendingHead].Compute &&
+         adapter->G4Pending[adapter->G4PendingHead].Packet.Kind ==
+             ADMISSION_RENDER_PACKET_KIND_COMPUTE &&
+         memcmp(&adapter->G4Pending[adapter->G4PendingHead].ComputeEnvelope,
+                &e, sizeof(e)) == 0);
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 0u &&
+         adapter->RenderPacket.State == AdmissionRenderPacketQueued &&
+         d->Fence == 42u && d->Kind == ADMISSION_RENDER_PACKET_KIND_COMPUTE &&
+         adapter->BackendImage.G4Compute && adapter->BackendImage.BoundFence == 42u &&
+         context->GpuvaG3DmaBufferVa == 0x20000ULL);
+  adapter->RuntimeQueueable = 0;
+  puts("g2 compute envelope admission: PASS");
+}
+
+int main(void) {
+  PACKET packet = {0};
+  phase5b_private_slots();
+  ADMISSION_G3_STATE state = {0};
+  ADMISSION_G3_PROCESS process = {0};
+  ADMISSION_CONTEXT adapter = {0};
+  ADMISSION_RENDER_CONTEXT context = {0};
+  DXGKARG_SUBMITCOMMANDVIRTUAL args = {0};
+  APPLE_AGX_GPUVA_G3_NODE middle = {0}, root_edge = {0};
+  ADMISSION_G3_TABLE_SHADOW shadow = {0};
+  static APPLE_AGX_GPUVA_G3_LOGICAL_PTE logical[8192];
+  unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
+  AppleAgxSchedulerInitialize(&adapter.Scheduler);
+  process.State = &state;
+  process.PrivateVa = 1ULL << 36;
+  process.Graph.RootIpa = 0x9bf000000ULL;
+  process.Graph.Created = 1u;
+  process.Graph.ProcessId = 17u;
+  process.Graph.ProcessGeneration = 23u;
+  process.Graph.NextGeneration = 31u;
+  process.Graph.MappingGeneration = 31u;
+  root_edge.Ipa = process.Graph.RootIpa;
+  root_edge.AuxIpa = 0x9bf004000ULL;
+  root_edge.Next = &middle;
+  middle.Ipa = root_edge.AuxIpa;
+  middle.AuxIpa = 0x9bf008000ULL;
+  process.Graph.Parents = &root_edge;
+  shadow.BrokerIpa = middle.AuxIpa;
+  shadow.LogicalPtes = logical;
+  process.TableShadows = &shadow;
+  process.TableShadowBrokerBuckets[
+      ((shadow.BrokerIpa >> 14) ^ (shadow.BrokerIpa >> 22) ^
+       (shadow.BrokerIpa >> 30)) & 255u] = &shadow;
+  for (unsigned i = 0u; i < 4u; ++i) {
+    logical[0x100u + i].GuestIpa = 0x90000000ULL + i * 0x1000ULL;
+    logical[0x100u + i].SegmentId = 0u;
+    logical[0x100u + i].Flags = 3u;
+  }
+  logical[0x20u].GuestIpa = 0x81000000ULL;
+  logical[0x20u].Flags = 1u;
+  logical[0x21u].GuestIpa = 0x91003000ULL;
+  logical[0x21u].Flags = 1u;
+  assert(AdmissionG4LogicalEnvelopeAccess(&process, 0x100000ULL, 0x4000u));
+  logical[0x102u].Flags = 0u;
+  assert(!AdmissionG4LogicalEnvelopeAccess(&process, 0x100000ULL, 0x4000u));
+  logical[0x102u].Flags = 3u;
+  process.Graph.AllowProcessRanges = 1;
+  adapter.GpuvaG3State = &state;
+  adapter.RuntimeReady=1;
+  context.GpuvaG3Process = &process;
+  context.GpuvaG3RootIpa = process.Graph.RootIpa;
+  context.Win32Transport = 1;
+  context.Object.Flags = ADMISSION_CONTEXT_VIRTUAL_ADDRESSING;
+  context.Object.Magic = ADMISSION_OBJECT_CONTEXT_MAGIC;
+  static REPLAY_DEVICE device;
+  device.Adapter = &adapter.ObjectAdapter;
+  context.Object.Device = &device;
+  adapter.Started = 1;
+  args.hContext = &context;
+  context.SchedulerContext.Active=1;
+  packet.Header.Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
+  packet.Header.Base.Version = APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA;
+  packet.Header.Base.HeaderBytes = sizeof(packet.Header);
+  packet.Header.Base.CommandBytes = sizeof(packet) - sizeof(packet.Header);
+  packet.Header.Base.CommandVa = 0x20000;
+  packet.Header.Base.Reserved = APPLE_AGX_G4_COLOR_BGRA8;
+  packet.AttachCommand.Type=APPLE_AGX_G4_FRAGMENT_ATTACHMENTS;
+  packet.AttachCommand.Size=sizeof(packet.Attachment);
+  packet.AttachCommand.VdmBarrier=0xffffu;
+  packet.AttachCommand.CdmBarrier=0xffffu;
+  packet.Attachment.Pointer=0x40000000ULL;
+  packet.Attachment.Size=4096u;
+  packet.Command.Type = APPLE_AGX_G4_RENDER;
+  packet.Command.Size = sizeof(packet.Render);
+  packet.Render.VdmCtrlStreamBase = 0x30000;
+  packet.Render.WidthPx = 32;
+  packet.Render.HeightPx = 32;
+  packet.Render.Layers = 1;
+  packet.Render.UtileWidthPx = 32;
+  packet.Render.UtileHeightPx = 32;
+  packet.Render.Samples = 1;
+  packet.Render.SampleSizeBytes = 8;
+  packet.Render.Flags=1u<<2;
+  assert(AppleAgxG4ProcessRequiredBytes(&packet.Render,required));
+  for (unsigned i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
+    ranges[i].Va = 0x100000ULL + (ULONGLONG)i * 0x400000ULL;
+    ranges[i].Bytes = required[i];
+    packet.Header.Process[i]=ranges[i];
+  }
+  args.pDmaBufferPrivateData = &packet;
+  args.DmaBufferPrivateDataSize = sizeof(packet);
+  args.DmaBufferUmdPrivateDataSize = sizeof(packet);
+  args.DmaBufferVirtualAddress = 0x20000;
+  args.DmaBufferSize = packet.Header.Base.CommandBytes;
+  args.SubmissionFenceId=7u;
+  args.Flags.Value=0x80u; /* A documented nonpaging resubmission flag. */
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter, &context, &args) ==
+         STATUS_SUCCESS);
+  args.Flags.Value=0u;
+  assert(dispatches==1 && adapter.RenderPacket.State==
+         AdmissionRenderPacketQueued);
+  assert(context.Object.FenceOutstanding==7u &&
+         context.GpuvaG3DmaBufferVa==args.DmaBufferVirtualAddress);
+  phase5a_cases(&adapter, &context, &args);
+  adapter.RenderPacket.State=AdmissionRenderPacketEmpty;
+  context.Object.FenceOutstanding=0u;
+  adapter.BackendImage.G4Native=0u;
+  adapter.BackendImage.BoundFence=0u;
+  process.Graph.AllowProcessRanges = 0;
+  args.SubmissionFenceId=8u;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter, &context, &args) ==
+         STATUS_INVALID_PARAMETER);
+  process.Graph.AllowProcessRanges = 1;
+  bind_ok=0;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.RenderPacket.State==AdmissionRenderPacketEmpty &&
+         context.Object.FenceOutstanding==0u);
+  bind_ok=1;
+  process.Graph.Uncertain = 1;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter, &context, &args) ==
+         STATUS_INVALID_PARAMETER);
+  adapter.G4SubmitFailureClaim = 0;
+  adapter.G4SubmitFailureCount = 0;
+  memset(&adapter.G4SubmitFailure, 0, sizeof(adapter.G4SubmitFailure));
+  receipt_queues = 0;
+  args.hContext = NULL;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch == 1u);
+  assert(adapter.G4SubmitFailure.Status == (unsigned)STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailureCount == 1 && receipt_queues == 1);
+  args.hContext = &context;
+  process.Graph.Uncertain = 0;
+  packet.Header.Base.Magic = 0;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch == 1u);
+  assert(adapter.G4SubmitFailureCount == 2);
+  assert(adapter.G4SubmitFailure.DmaBufferVirtualAddress == args.DmaBufferVirtualAddress);
+  assert(adapter.G4SubmitFailure.Pid == 1234u);
+  assert(adapter.G4SubmitFailureClaim == 2 && receipt_queues == 2);
+  adapter.G4SubmitFailureClaim = 0;
+  adapter.G4SubmitFailureCount = 0;
+  memset(&adapter.G4SubmitFailure, 0, sizeof(adapter.G4SubmitFailure));
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch == 9u);
+  assert(adapter.G4SubmitFailure.Version == 2u);
+  assert(adapter.G4SubmitFailure.DownstreamStatus != 0u);
+  assert(adapter.G4SubmitFailure.PrivateDataSize == sizeof(packet));
+  assert(adapter.G4SubmitFailure.UmdPrivateDataSize == sizeof(packet));
+  assert(adapter.G4SubmitFailure.DmaBufferSize == args.DmaBufferSize);
+  assert(adapter.G4SubmitFailure.Flags == args.Flags.Value);
+  assert(adapter.G4SubmitFailure.ContextFlags == context.Object.Flags);
+  adapter.G4SubmitFailureClaim = 0;
+  process.Graph.AllowProcessRanges = 0;
+  packet.Header.Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
+  for (unsigned n = 0; n < 129u; ++n)
+    assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+           STATUS_INVALID_PARAMETER);
+  args.hContext = NULL;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  args.hContext = &context;
+  assert(adapter.G4SubmitFailure.Branch == 9u);
+  assert(adapter.G4SubmitFailure.Subsite == AppleAgxG4FailureAccess);
+  assert(adapter.G4SubmitFailure.Kind == AppleAgxG4AccessProcess);
+  assert(adapter.G4SubmitFailure.Ordinal == 0u);
+  assert(adapter.G4SubmitFailure.Va == ranges[0].Va);
+  assert(adapter.G4SubmitFailure.OwnerProcessId == 17u);
+  assert(adapter.G4SubmitFailure.RootIpa == process.Graph.RootIpa);
+  assert(adapter.G4SubmitFailure.ProcessGeneration == 23u);
+  assert(adapter.G4SubmitFailure.MappingGeneration == 31u);
+  assert(adapter.G4SubmitFailure.GraphPresent == 0u);
+  for (unsigned i = 0u; i < 4u; ++i) {
+    assert(adapter.G4SubmitFailure.LogicalIpa[i] ==
+           0x90000000ULL + i * 0x1000ULL);
+    assert(adapter.G4SubmitFailure.LogicalSegment[i] == 0u);
+    assert(adapter.G4SubmitFailure.LogicalFlags[i] == 3u);
+  }
+  assert(adapter.G4SubmitFailureCount == 131);
+  process.Graph.AllowProcessRanges = 1;
+  adapter.G4SubmitFailureClaim = 0;
+  output_mapped = 0;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  /* M2-c: the output is reached by VA; an unmapped output range is refused
+   * at the parser's writable-attachment check. */
+  assert(adapter.G4SubmitFailure.Subsite == AppleAgxG4FailureAccess);
+  assert(adapter.G4SubmitFailure.Kind == AppleAgxG4AccessAttachment);
+  output_mapped = 1;
+  packet.Header.Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
+  adapter.G4SubmitFailureClaim = 0;
+  adapter.G4SubmitFailureCount = 0;
+  memset(&adapter.G4SubmitFailure, 0, sizeof(adapter.G4SubmitFailure));
+  context.Object.Magic = 0;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch == 2u);
+  assert(adapter.G4SubmitFailure.Status == (unsigned)STATUS_INVALID_PARAMETER);
+  context.Object.Magic = ADMISSION_OBJECT_CONTEXT_MAGIC;
+  adapter.G4SubmitFailureClaim = 0;
+  adapter.G4SubmitFailureCount = 0;
+  memset(&adapter.G4SubmitFailure, 0, sizeof(adapter.G4SubmitFailure));
+  scanout_status = STATUS_INVALID_DEVICE_STATE;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch == 7u);
+  assert(adapter.G4SubmitFailure.DownstreamStatus ==
+         (unsigned)STATUS_INVALID_DEVICE_STATE);
+  assert(state.Lock == 0);
+  scanout_status = STATUS_SUCCESS;
+  adapter.G4SubmitFailureClaim = 0;
+  adapter.RenderPacket.State = AdmissionRenderPacketEmpty;
+  context.Object.FenceOutstanding = 0u;
+  adapter.BackendImage.G4Native = 0u;
+  packet.Header.Base.CommandVa = 0x20f80ULL;
+  args.DmaBufferVirtualAddress = 0x20f80ULL;
+  args.SubmissionFenceId = 13u;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) == STATUS_SUCCESS);
+  assert(context.GpuvaG3DmaBufferVa == 0x20f80ULL);
+  /* An unrelated process mapping update must not strand this accepted job.
+   * Referenced command bytes/ranges and cached output are still validated. */
+  ++process.Graph.MappingGeneration;
+  output_ipa += 0x1000ULL; /* same VA, different output backing is unsafe */
+  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
+  assert(graph_begin_calls == 0);
+  output_ipa -= 0x1000ULL;
+  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) == STATUS_SUCCESS);
+  assert(graph_begin_calls == 1);
+  assert(context.GpuvaG3MappingGeneration == process.Graph.MappingGeneration);
+  state.ActiveProcess = NULL;
+  /* An unmapped 64K PTE leaves its sixteen envelope slots empty. */
+  for (unsigned n = 0x20u; n < 0x30u; ++n) logical[n].Flags = 0u;
+  assert(logical[0x20u].Flags == 0u && logical[0x21u].Flags == 0u);
+  assert(logical[0x100u].Flags == 3u);
+  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
+  assert(graph_begin_calls == 1);
+  logical[0x20u].GuestIpa = 0x81000000ULL;
+  logical[0x20u].Flags = 1u;
+  logical[0x21u].GuestIpa = 0x91003000ULL;
+  logical[0x21u].Flags = 1u;
+  logical[0x21u].Flags = 0u;
+  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
+  assert(graph_begin_calls == 1);
+  logical[0x21u].Flags = 1u;
+  context.GpuvaG3DmaBufferVa++;
+  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
+  assert(graph_begin_calls == 1);
+  context.GpuvaG3DmaBufferVa--;
+  adapter.RenderPacket.State = AdmissionRenderPacketEmpty;
+  context.Object.FenceOutstanding = 0u;
+  adapter.BackendImage.G4Native = 0u;
+  logical[0x21u].Flags = 0u;
+  args.SubmissionFenceId = 14u;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailureClaim == 2);
+  logical[0x21u].Flags = 1u;
+  context.GpuvaG3RootIpa++;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  context.GpuvaG3RootIpa--;
+  args.DmaBufferSize--;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  args.DmaBufferSize++;
+  packet.Header.Base.CommandBytes--;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  packet.Header.Base.CommandBytes++;
+  packet.Render.VdmCtrlStreamBase = args.DmaBufferVirtualAddress;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  packet.Render.VdmCtrlStreamBase = 0x30000ULL;
+  packet.Attachment.Pointer = args.DmaBufferVirtualAddress;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  packet.Attachment.Pointer = 0x40000000ULL;
+  packet.Render.Bg.Usc = 0x20040u;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  packet.Render.Bg.Usc=0;
+  struct { APPLE_AGX_G4_PRIVATE_HEADER_V3 Header; unsigned char Native[280]; } v3={0};
+  ADMISSION_G3_PRIVATE_SCENE scene={0};
+  scene.Context=&context;scene.Geometry=packet.Render;scene.Storage.Generation=9;
+  process.PrivateManager.Generation=5;context.GpuvaG3PrivateManagerGeneration=5;
+  /* EXP1115: the manager backs only the render's min_tvb_blocks. */
+  process.PrivateManager.Blocks=AppleAgxG4MinTvbBlocks(packet.Render.WidthPx,
+      packet.Render.HeightPx);
+  assert(process.PrivateManager.Blocks>=8u && process.PrivateManager.Blocks<32u);
+  process.PrivateScenes=&scene;
+  ULONGLONG private_va=process.PrivateVa;
+  for(unsigned i=0;i<9;++i) {
+    ranges[i]=(APPLE_AGX_G4_PROCESS_RANGE){private_va,required[i],0};
+    scene.Storage.Ranges[i]=ranges[i];private_va+=required[i];
+  }
+  APPLE_AGX_G4_PRIVATE_LEASE lease={17,5,9,9};
+  memcpy(v3.Native,&packet.AttachCommand,sizeof(v3.Native));
+  assert(AppleAgxG4ComposeHeaderV3(&v3.Header,&packet.Render,args.DmaBufferVirtualAddress,
+      sizeof(v3.Native),APPLE_AGX_G4_COLOR_BGRA8,ranges,&lease));
+  args.pDmaBufferPrivateData=&v3;
+  args.DmaBufferPrivateDataSize=args.DmaBufferUmdPrivateDataSize=sizeof(v3);
+  AppleAgxSchedulerInitialize(&adapter.Scheduler);
+  args.SubmissionFenceId=21;
+  /* R141: synthetic barriers from EXP855D fail before any job/fence owner. */
+  APPLE_AGX_G4_NATIVE_HEADER *attachment_header=(void *)v3.Native;
+  int begin_before=graph_begin_calls;
+  attachment_header->VdmBarrier=attachment_header->CdmBarrier=0;
+  adapter.G4SubmitFailureClaim=adapter.G4SubmitFailureCount=0;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch==9 && adapter.G4SubmitFailure.DownstreamStatus==AppleAgxG4ParseInvalid);
+  assert(!adapter.G4SubmitFailure.Subsite && !adapter.G4SubmitFailure.Kind);
+  assert(!scene.Submitting && !scene.Queued && !scene.Started && !scene.Fence);
+  assert(graph_begin_calls==begin_before);
+  assert(!context.Object.FenceOutstanding && !context.GpuvaG3PrivateFence);
+  attachment_header->VdmBarrier=attachment_header->CdmBarrier=0xffff;
+  ++v3.Header.Lease.SceneGeneration;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  --v3.Header.Lease.SceneGeneration;
+  ADMISSION_RENDER_CONTEXT other=context;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&other,&args)!=STATUS_SUCCESS);
+  ++scene.Geometry.WidthPx;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  --scene.Geometry.WidthPx;
+  bind_ok=0;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  assert(!scene.Queued && !scene.Started);
+  bind_ok=1;
+  /* EXP1290: scene storage does not depend on the sample count (Asahi
+   * get_tiling_params / new_scene); a 4x render used a scene the acquire
+   * recorded as single-sampled and was refused at branch 9. */
+  scene.Geometry.Samples=packet.Render.Samples==4u ? 1u : 4u;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_SUCCESS);
+  scene.Geometry.Samples=packet.Render.Samples;
+  assert(scene.Queued && scene.Fence==21 && AdmissionGpuvaG3PrivateContextBusy(&context));
+  /* Real scheduler boundary + production private publisher/submit transfer. */
+  APPLE_AGX_PREEMPTION preempt={0};
+  assert(AppleAgxSchedulerBeginBoundaryPreemption(&adapter.Scheduler,0,0,91,21,0));
+  adapter.RenderPacket.State=AdmissionRenderPacketEmpty;
+  assert(AdmissionBackendImageReleaseSubmission(&adapter.BackendImage,21));
+  context.Object.FenceOutstanding=0;
+  AdmissionGpuvaG3PrivatePreempt(&context,21);
+  assert(!AdmissionG4FindPrivateScene(&process,&context,&lease,21,TRUE));
+  assert(AppleAgxSchedulerClaimBoundaryPreemption(&adapter.Scheduler,&preempt));
+  assert(preempt.LastCompletedFence==0);
+  assert(AppleAgxSchedulerCommitBoundaryPreemption(&adapter.Scheduler,91));
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
+  scene.ReleaseRequested=1; /* Deferred release cannot invalidate the suspended owner. */
+  args.SubmissionFenceId=22;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  args.Flags.Value=0x80;
+  for (unsigned bit=0;bit<32;++bit) {
+    if(bit==7) continue;
+    args.Flags.Value=0x80u|(1u<<bit);
+    assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  }
+  args.Flags.Value=0x80;
+  ++v3.Header.Lease.SceneGeneration;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  --v3.Header.Lease.SceneGeneration;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&other,&args)!=STATUS_SUCCESS);
+  context.GpuvaG3CancelUncertain=1;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  context.GpuvaG3CancelUncertain=0;
+  context.GpuvaG3CancelFence=21;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  context.GpuvaG3CancelFence=0;
+  scene.Started=1;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  scene.Started=0;
+  context.GpuvaG3PreemptFence=0;
+  adapter.G4SubmitFailureClaim=0;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  /* EXP1210: the refusal names the missing preempt mark (bit 16 only) and
+   * records the scene and slots. */
+  assert(adapter.G4SubmitFailure.Subsite==0x201u &&
+         adapter.G4SubmitFailure.AccessBytes==(1u<<16));
+  assert(adapter.G4SubmitFailure.LogicalIpa[0]==21u &&
+         adapter.G4SubmitFailure.LogicalSegment[0]==(1u|16u) && /* Queued, ReleaseRequested */
+         adapter.G4SubmitFailure.LogicalIpa[1]==21u &&
+         adapter.G4SubmitFailure.LogicalIpa[2]==0u);
+  context.GpuvaG3PreemptFence=21;
+  args.SubmissionFenceId=21;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  args.SubmissionFenceId=20; /* Real scheduler rejects backwards new fences. */
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  assert(scene.Queued && scene.Fence==21 && !scene.Submitting && !scene.ResumeFence);
+  assert(context.GpuvaG3PreemptFence==21 && context.GpuvaG3PrivateFence==21);
+  args.SubmissionFenceId=22;
+  ++scene.Geometry.WidthPx;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  --scene.Geometry.WidthPx;
+  assert(scene.Queued && scene.Fence==21 && context.GpuvaG3PreemptFence==21);
+  adapter.RenderPacket.State=AdmissionRenderPacketQueued; /* Another packet owns preparation. */
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  adapter.RenderPacket.State=AdmissionRenderPacketEmpty;
+  assert(scene.Queued && scene.Fence==21 && !scene.Submitting && !scene.ResumeFence);
+  assert(context.GpuvaG3PreemptFence==21 && context.GpuvaG3PrivateFence==21);
+  bind_ok=0;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  assert(scene.Queued && scene.Fence==21 && !scene.Submitting && !scene.ResumeFence);
+  assert(context.GpuvaG3PreemptFence==21 && context.GpuvaG3PrivateFence==21);
+  bind_ok=1;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_SUCCESS);
+  assert(scene.Queued && scene.Fence==22 && !scene.ResumeFence && !scene.Submitting);
+  assert(context.GpuvaG3PrivateFence==22 && !context.GpuvaG3PreemptFence);
+  assert(adapter.Scheduler.LastSubmittedFence==22 && !adapter.Scheduler.CompletedFence);
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  ++adapter.BackendImage.G4Lease.SceneGeneration;
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)!=STATUS_SUCCESS);
+  --adapter.BackendImage.G4Lease.SceneGeneration;
+  ++process.Graph.MappingGeneration; /* another scene may map/unmap meanwhile */
+  process.Graph.AllowProcessRanges=0;
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)!=STATUS_SUCCESS);
+  process.Graph.AllowProcessRanges=1;
+  context.GpuvaG3CancelFence=22;
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)!=STATUS_SUCCESS);
+  context.GpuvaG3CancelFence=0;
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)==STATUS_SUCCESS);
+  assert(context.GpuvaG3MappingGeneration==process.Graph.MappingGeneration);
+  assert(scene.Started);
+  assert(adapter.BackendImage.G4Manager==&process.FirmwareManager);
+  assert(adapter.BackendImage.G4ManagerKey.Owner==process.Graph.ProcessId);
+  assert(adapter.BackendImage.G4ManagerKey.Generation==process.PrivateManager.Generation);
+  assert(adapter.BackendImage.G4ManagerKey.RootIpa==process.Graph.RootIpa);
+  /* The key names the lists and heap window, and the backed block count
+   * the job was built with: a different count re-initializes the manager. */
+  assert(scene.HeapBlocks==process.PrivateManager.Blocks);
+  assert(memcmp(adapter.BackendImage.G4ManagerKey.Backing,scene.Storage.Ranges,
+      2u*sizeof(adapter.BackendImage.G4ManagerKey.Backing[0]))==0);
+  assert(adapter.BackendImage.G4ManagerKey.Backing[2].Va==scene.Storage.Ranges[2].Va);
+  assert(adapter.BackendImage.G4ManagerKey.Backing[2].Bytes==
+      process.PrivateManager.Blocks*0x20000u);
+  render_compute_cases(&adapter, &state, &context, &scene, &packet, &lease,
+                       args.DmaBufferVirtualAddress);
+  compute_cases(&adapter, &state, &context);
+  puts("g4_submit_virtual_replay: PASS");
+  return 0;
+}

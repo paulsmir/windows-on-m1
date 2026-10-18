@@ -28,14 +28,26 @@ and retained healthy built-in keyboard and Precision Touchpad devices. It is sti
 experimental checkpoint: standalone cold boot, suspend/resume, long-duration thermal stress,
 and GPU acceleration remain separate qualification gates.
 
-**GPU acceleration (work in progress, assisted mode only).** On 2026-10-05 the Windows
-desktop was, for the first time, composed by DWM through this project's own Apple AGX
-driver stack (a WDDM 3.2 kernel-mode driver plus a Mesa-based D3D10 user-mode driver) and
-scanned out by the Apple display coprocessor (DCP): wallpaper, desktop icons, and the
-taskbar render correctly on the internal panel. It is not usable yet: every GPU job
-currently takes 35–325 ms, so a full-screen redraw takes about 30 seconds and areas that
-have not been redrawn stay black. This requires the assisted m1n1 hypervisor launch and is
-developed on `feature/j313-gpu-acceleration`, not on `main`.
+### GPU (Apple AGX) -- experimental
+
+The AGX is a Windows WDDM render adapter (`drivers/apple-agx`): a kernel-mode driver
+that runs the AGX firmware queues, and user-mode drivers that compile and submit work
+through the Asahi Gallium driver from Mesa.
+
+- **Direct3D 11 at feature level 11_0** is the default: the accelerated DWM desktop and
+  D3D11 applications render on the AGX (system GL/D3D smoke suites pass).
+- **OpenGL** through the AGX OpenGL ICD: Counter-Strike 1.6 plays fullscreen (standard
+  benchmark about 43 fps; vsync-capped at 60 Hz without the Steam overlay).
+- **Direct3D 12** (in progress, opt-in profile): device creation at FL 11_0, buffers,
+  textures, compute and graphics pipelines with root signatures and descriptor tables,
+  depth, flip-model swapchain present, placed buffers, UAV clears, query heaps with GPU
+  timestamps, copy/compute queues and ExecuteIndirect pass their hardware checkpoints.
+  DXBC shaders only; DXIL (shader model 6) is the next major step.
+- Not yet: MSAA, video decode/encode, power management, standalone (non-assisted) GPU boot.
+
+Progress and every hardware experiment are recorded in
+[investigation/GPU_CURRENT_STATE.md](investigation/GPU_CURRENT_STATE.md) and
+[investigation/EXPERIMENTS.md](investigation/EXPERIMENTS.md).
 
 Only `j313` is currently supported. This is not a general Apple Silicon Windows installer.
 
@@ -43,8 +55,9 @@ Only `j313` is currently supported. This is not a general Apple Silicon Windows 
 
 | Branch | Purpose | State |
 | --- | --- | --- |
-| `main` | Published platform baseline and documentation | Eight CPU cores, NVMe, USB, built-in keyboard and touchpad; GOP framebuffer only |
-| `feature/j313-gpu-acceleration` | AGX GPU driver (KMD + Mesa UMD), DCP scanout, GPU VA broker in m1n1 | Active. First correct GPU-composed desktop; per-job latency is the current blocker |
+| `main` | Published platform baseline and documentation | Eight CPU cores, NVMe, USB, built-in keyboard and touchpad; AGX GPU (D3D11 FL 11_0, OpenGL, D3D12 in progress) as merged from integration |
+| `integration/ad04-windows-compiler` | AGX GPU development (KMD, Mesa-based D3D10/11/12 and OpenGL UMDs, m1n1 GPU VA broker) | Active development; merged into `main` at milestones |
+| `feature/j313-gpu-acceleration` | Earlier AGX GPU bring-up (first GPU-composed desktop) | Historical |
 | `feature/j313-native-input` | Built-in SPI-HID keyboard and Precision Touchpad | Validated checkpoint, merged into `main` |
 | `feature/j313-4e4p-cpu-stability` | Eight-core (4E+4P) bring-up | Validated, merged into `main` |
 | `feature/j313-cpu-stability`, `feature/j313-4e2p-cpu-stability`, `feature/j313-4e3p-cpu-stability` | Incremental P-core bring-up (4E+1P … 4E+3P) | Historical validated checkpoints |
@@ -53,8 +66,8 @@ Only `j313` is currently supported. This is not a general Apple Silicon Windows 
 
 The submodule forks follow the same naming: [`m1n1_windows`](https://github.com/paulsmir/m1n1_windows)
 and [`apple_silicon_platforms_mu`](https://github.com/paulsmir/apple_silicon_platforms_mu)
-carry the matching GPU work on their own `feature/j313-gpu-acceleration` branches, and the
-root branch pins the exact submodule commits it was tested with. Every hardware run on the
+carry the matching GPU work on their own branches (currently `m2/pool-window` and
+`m2/reserve-v3`), and the root branch pins the exact submodule commits it was tested with. Every hardware run on the
 GPU branch is recorded in `investigation/EXPERIMENTS.md` and indexed in
 `investigation/CHANGES.csv`.
 
@@ -117,7 +130,16 @@ Documentation distinguishes three states:
 The physical internal-panel handoff, full-panel 2560x1600 Windows framebuffer, all four
 Icestorm and all four Firestorm guest CPUs, synthetic NVMe bridge, physical USB, and the
 test-signed built-in Apple keyboard and Precision Touchpad driver have been validated together
-in the assisted J313 checkpoint. GPU acceleration remains an implementation milestone.
+in the assisted J313 checkpoint. The firmware-only AGX checkpoint is documented in
+[`documentation/AGX_BRINGUP.md`](documentation/AGX_BRINGUP.md); GPU acceleration remains
+an implementation milestone.
 
 Native built-in input build, installation, diagnostics, and rollback are documented in
 [`documentation/APPLE_INPUT.md`](documentation/APPLE_INPUT.md).
+
+## Author and license
+
+Original author: [paulsmir](https://github.com/paulsmir), 2026 -- the Windows on M1
+bring-up and the Apple AGX WDDM drivers in this repository were first developed here.
+This repository is licensed under the [MIT License](LICENSE); keep the copyright notice
+when you reuse it.

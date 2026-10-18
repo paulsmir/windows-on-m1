@@ -1,0 +1,15 @@
+# Persistent encoder source contract — 2026-09-13
+
+Base ce1e81875a43a4033007de3d54c264a9a2c45dd1, verified clean. Implements the exact next boundary from GPU_CURRENT_STATE; physical/patch-list architecture remains closed.
+
+Inspected pinned Mesa agx_batch.c initial encoder allocation, agx_state.c initial/dirty/direct draw and agx_ensure_cmdbuf_has_space, agx_pipe.c agx_flush_render. Repository owners: agx_win32_asahi_pipeline/capture/bo, typed capture, render_win32_transport and dynamic materializer. Native agx_state SHA remains 5015b75863202a170f8d6015eb82a76a70ecd4b92204894fa3d1886b1baa94ba. Native source is reference material under its existing MIT notices; no upstream implementation copied. This unit does not alter a Windows DDI/capability, m1n1/Mu, register, IRQ, DMA or power contract.
+
+Observed native contract: one initial 0x80000 Encoder allocation; state/draw append to current; finalization writes a 5+64 byte tail without advancing current. Separate per-state Encoder captures cannot later overlap one full final range. One stable caller-owned root must retain exactly one source reference; stack-local children borrow nonoverlapping or sequential write intervals and use root-relative relocation offsets. Child finish must not shorten root. Explicit enter/leave permits root storage to outlive native call stack; finalization records exact end once. Existing owner identities/map/construction bounds and generic overlap rejection remain authoritative. Complete source-byte immutability and batch capsule lifetime still need production finalization hookup.
+
+Separate source span invariant: only the designated exact Read Encoder root in v3 may have final length69+4n (32+69 in deterministic test); offsets/pointers/relocation fields/classes retain their alignment constraints, and v1/v2/write/General-Encoder remain rejected. No padding is invented. Tests reproduce current Alignment failure then verify admission plus exact tail preservation at two materializer placements.
+
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Overlapping/duplicate encoder references, child truncation of a full root, incorrect relocation offsets, stale map/owner reentry, active stack pointers after return, duplicate finalize, and incorrect rejection/rounding of a native termination interval.
+
+Ownership: native root/capture owns source BO holds; UMD composer owns runtime buffer serialization, dense allocation indices and ordered completion; KMD owns placement/patching/submission/interrupts. The stable root must survive until abort or ordered retirement, independently of detached temporary emission frames. Windows-only native batch initialization/flush must eventually own that storage. Do not connect incomplete graphs to adapter.
+
+Validation: source-defined owner fixtures, sanitizer ABI/reference/materializer suites, fresh hash-verified Windows x64 execution and ARM64 build/link. No hardware uncertainty in this unit; no hardware run. Eventual first complete-native-request physical completion checkpoint still requires full graph/runtime closure, all preregistered build/sign/hash gates and ordinary GPU-visible exact package rollback.

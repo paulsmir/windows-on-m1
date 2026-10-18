@@ -1,0 +1,34 @@
+{
+  "command": [
+    "clang",
+    "-std=c11",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-fsanitize=address,undefined",
+    "-I",
+    "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/shared/include",
+    "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/tests/models/gpuva_semantic_model_test.c",
+    "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/tests/models/gpuva_semantic_model.c",
+    "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/shared/src/apple_agx_uat.c",
+    "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/shared/src/apple_agx_uat_table.c",
+    "-o",
+    "/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/ad04-semantic-6nc6j4bn/model"
+  ],
+  "exit": 0,
+  "compiler": "Apple clang version 17.0.0 (clang-1700.6.4.2)",
+  "source_sha256": {
+    "tests/models/gpuva_semantic_model_test.c": "65fc7cc03c5e10e2f1c506321375078a268a28f4f24122797efe96542adea958",
+    "tests/models/gpuva_semantic_model.c": "79aee0ba4cafe299dbe0c84f772a550e8a32ef079c5f348553164f3fb23ab1da",
+    "drivers/apple-agx/shared/src/apple_agx_uat.c": "eaab658c47d3e6b270d393e035002b453b412993abce4ce668432e260a2a169d",
+    "drivers/apple-agx/shared/src/apple_agx_uat_table.c": "a8d7efcdb3b9b2f258fc9335d38f5be74c515dd90b4360722ec56fde1b73de5f",
+    "tests/models/gpuva_semantic_model.h": "372f0b50734fc34ce279462a782633937967163f3680ab3865a3c6f06ad084ec"
+  },
+  "assumptions": [
+    "synthetic owned backing",
+    "acknowledged invalidation event",
+    "abstract external residency grant",
+    "paging process plus two users one binding each one slot",
+    "not a WDDM caller trace or hardware proof"
+  ]
+}

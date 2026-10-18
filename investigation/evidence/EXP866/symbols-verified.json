@@ -1,0 +1,16 @@
+[
+  {
+    "binary": "AppleAgxRenderAdmission.sys",
+    "pdb": "AppleAgxRenderAdmission.pdb",
+    "guid": "{5F1DB684-2740-466C-A188-B48659987D9F}",
+    "matches": true,
+    "pdb_sha256": "cd3ad66b18f04ce38c3ea89dffd0bf37c1eacc47eeddee74ff16afb26d7fe15b"
+  },
+  {
+    "binary": "AppleAgxRenderAdmissionUmd.dll",
+    "pdb": "AppleAgxRenderAdmissionUmd.pdb",
+    "guid": "{941B7451-9338-4E3C-AC93-EFF5B03E52E7}",
+    "matches": true,
+    "pdb_sha256": "3bbe6a5285ae13308f487a2af94c563a2a4e64ad89fafb7e986ec6bc35a20514"
+  }
+]

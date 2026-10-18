@@ -1,0 +1,75 @@
+0: kd> cdb: Reading initial command '.writemem C:\Users\pauls\EXP866-r151-stamp\R152-object1.bin 0xffffcc03f535bf44 L0xbc; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object13.bin 0xffffcc03f53bbfb8 L0x48; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object16.bin 0xffffcc03f53d3fe0 L0x20; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object17.bin 0xffffcc03f53db000 L0x1000; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object18.bin 0xffffcc03f53e3680 L0x974; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object19.bin 0xffffcc03f53eb9e0 L0x61c; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object20.bin 0xffffcc03f53f3fc0 L0x40; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object21.bin 0xffffcc03f53fbfc0 L0x40; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object22.bin 0xffffcc03f5557fc0 L0x40; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object28.bin 0xffffcc03f5587ff8 L0x8; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object29.bin 0xffffcc03f558fff8 L0x8; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object30.bin 0xffffcc03f5597ff8 L0x8; .writemem C:\Users\pauls\EXP866-r151-stamp\R152-object31.bin 0xffffcc03f559fff8 L0x8; dd ffffcc03f5383f48 L2e; dd ffffcc03f536bf48 L2e; dx -r2 ((AppleAgxRenderAdmission!_ADMISSION_G3_PRIVATE_SCENE*)0xffffe2051b4d8db0)->Storage.Ranges; q'
+Writing bc bytes.
+Writing 48 bytes.
+Writing 20 bytes.
+Writing 1000 bytes..
+Writing 974 bytes..
+Writing 61c bytes.
+Writing 40 bytes.
+Writing 40 bytes.
+Writing 40 bytes.
+Writing 8 bytes.
+Writing 8 bytes.
+Writing 8 bytes.
+Writing 8 bytes.
+ffffcc03`f5383f48  0042bfa0 ffffffa0 00399800 ffffffa0
+ffffcc03`f5383f58  0041bfe8 ffffffa0 003a13e8 ffffffa0
+ffffcc03`f5383f68  00000006 00000006 00000006 00000000
+ffffcc03`f5383f78  00000000 00000000 ffff0000 ffffffff
+ffffcc03`f5383f88  00000001 00000000 00000001 ffffffff
+ffffcc03`f5383f98  007a0000 00000002 00000000 00000000
+ffffcc03`f5383fa8  00000001 00000000 00000000 00000000
+ffffcc03`f5383fb8  00000000 00000000 00000000 00000000
+ffffcc03`f5383fc8  00000000 00000000 00000000 00000000
+ffffcc03`f5383fd8  00000000 00000000 00000000 00000001
+ffffcc03`f5383fe8  00000000 00363fc0 ffffffa0 00000000
+ffffcc03`f5383ff8  00000000 00000000
+ffffcc03`f536bf48  00423fa0 ffffffa0 00381800 ffffffa0
+ffffcc03`f536bf58  0041bfe8 ffffffa0 003893e8 ffffffa0
+ffffcc03`f536bf68  0000000a 0000000a 0000000a 00000001
+ffffcc03`f536bf78  00000000 00000000 ffff0000 ffffffff
+ffffcc03`f536bf88  00000001 00000000 00000001 ffffffff
+ffffcc03`f536bf98  003d0000 00000004 00000000 00000000
+ffffcc03`f536bfa8  00000001 00000000 00000000 00000000
+ffffcc03`f536bfb8  00000000 00000000 00000000 00000000
+ffffcc03`f536bfc8  00000000 00000000 00000000 00000000
+ffffcc03`f536bfd8  00000000 00000000 00000000 00000001
+ffffcc03`f536bfe8  00000000 00363fc0 ffffffa0 00000000
+ffffcc03`f536bff8  00000000 00000000
+((AppleAgxRenderAdmission!_ADMISSION_G3_PRIVATE_SCENE*)0xffffe2051b4d8db0)->Storage.Ranges                 [Type: APPLE_AGX_G4_PROCESS_RANGE [9]]
+    [0]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x24d0000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [1]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x24e0000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [2]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x24f0000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x400000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [3]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2440000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x20000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [4]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2460000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [5]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2470000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [6]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2480000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [7]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2490000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [8]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x24a0000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]

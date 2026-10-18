@@ -1,0 +1,22 @@
+COMPILE=1
+RUN=0
+C:\Users\pauls\AD04-uatomic\uatomic_mesa_semantics_test.c(11,8): error: call to undeclared function '_interlockedadd'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   11 |    if (p_atomic_inc_return(&value) != 14 || value != 14)
+      |        ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/u_atomic.h(169,38): note: expanded from macro 'p_atomic_inc_return'
+  169 |    sizeof *(_v) == sizeof(char)    ? p_atomic_add_return((_v), 1) : \
+      |                                      ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/u_atomic.h(191,38): note: expanded from macro 'p_atomic_add_return'
+  191 |    sizeof *(_v) == sizeof(long)    ? _interlockedadd  ((long *)   (_v), (long) (_i)) : \
+      |                                      ^
+C:\Users\pauls\AD04-uatomic\uatomic_mesa_semantics_test.c(11,8): note: did you mean '_interlockedadd8'?
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/u_atomic.h(169,38): note: expanded from macro 'p_atomic_inc_return'
+  169 |    sizeof *(_v) == sizeof(char)    ? p_atomic_add_return((_v), 1) : \
+      |                                      ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/u_atomic.h(191,38): note: expanded from macro 'p_atomic_add_return'
+  191 |    sizeof *(_v) == sizeof(long)    ? _interlockedadd  ((long *)   (_v), (long) (_i)) : \
+      |                                      ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/u_atomic.h(122,20): note: '_interlockedadd8' declared here
+  122 | __forceinline char _interlockedadd8(char volatile * _Addend, char _Value)
+      |                    ^
+1 error generated.

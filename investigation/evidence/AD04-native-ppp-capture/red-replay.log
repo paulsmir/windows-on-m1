@@ -1,0 +1,1 @@
+Assertion failed: (AgxWin32RelocReference(&c,1,AppleAgxWin32RolePppState,AppleAgxWin32AccessRead, 0x8000,0x40,&index)==AgxRelocOk && index==10u), function native_ppp_fields, file agx_win32_reloc_capture_test.c, line 111.

@@ -1,0 +1,12 @@
+[
+    "C:\\Users\\pauls\\AD04-native-029\\drivers\\apple-agx\\render-admission\\umd\\tests\\UmdContractTest.vcxproj",
+    "/t:Build",
+    "/nr:false",
+    "/m:2",
+    "/p:Configuration=Release",
+    "/p:Platform=x64",
+    "/p:EnableNativePoolTest=true",
+    "/p:NativeObjectRoot=C:\\Users\\pauls\\AD04-native-state-029",
+    "/p:IntDir=C:\\Users\\pauls\\AD04-native-owner-031\\obj\\",
+    "/p:OutDir=C:\\Users\\pauls\\AD04-native-owner-031\\"
+]

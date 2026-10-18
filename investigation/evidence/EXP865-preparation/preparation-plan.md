@@ -1,0 +1,11 @@
+# EXP865 package preparation
+
+Task: NEXT_TASK_EXP865.md plus reviewer direction to apply source/test paths only.
+
+1. Apply exact backend_platform_windows.c and test_r150_backend_identity.py diff; targeted replay, full host suite, byte comparison, exclude Flush ancestor, commit requested subject.
+2. Export committed AGX sources; clone EXP864 build into new experiment directory, synchronize only differing persistent-builder files; build native archive with matching provenance, incremental ARM64 KMD/UMD package865; require 0/0 and exact receipt hashes. Native archive tooling creates a new output directory and offers no incremental switch: use the established provenance-enforcing script unchanged.
+3. Retain R143 firmware/recovery bytes and profiles. Clone and repin all scripts, guest manifest, payload, and wrappers; strip metadata using Python archive writers.
+4. Original armed Code0 collector stops/copies ETL before ordered reboot. Restart refuses a missing/stale/hash-mismatched receipt. Early loss proceeds to hidden Code45 collection, explicitly records original ETL unavailable, and labels recovery ETL separately. Capture kernel and minidumps, then exact cleanup and ordinary Code28.
+5. Syntax/functional/provenance checks, immutable firmware verification, stale hash scan, preregistration and integration ledger commit. Report readiness and STOP at GO gate per latest user direction.
+
+Inspected sources/contracts: exact R150 worker diff, real-worker regression, R150-contracts.md and R150-next-boundary.md; EXP864 build/stage/collection/recovery source and hardware manifest. Existing dump proves backend owner63 versus submitted1 before Resolve; process slot1 is independent. KMD owns this envelope, submission, interrupts, DMA lifecycle and fail-closed recovery; unchanged m1n1 broker/firmware owns power/lease contract and Mu exposes existing reserve/ACPI. Asahi hardware VM-slot semantics are unchanged. No firmware, ABI, caps, signing-policy or timeout changes. Smallest checkpoint: render fence passes first submission, real TA/3D completion, no0x116, nonzero scanout and bounded SSH/DWM stability. Recovery: immutable hidden Code45 dump-first exact package cleanup then ordinary Code28.

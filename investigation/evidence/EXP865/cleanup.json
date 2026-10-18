@@ -1,0 +1,25 @@
+﻿{
+    "Utc":  "2026-09-28T12:20:12.8195802Z",
+    "DeviceId":  "ACPI\\APPL0002\\0",
+    "PublishedName":  "oem5.inf",
+    "Remove":  [
+                   "Microsoft PnP Utility",
+                   "",
+                   "Removing device:          ACPI\\APPL0002\\0",
+                   "Device removed successfully.",
+                   ""
+               ],
+    "Delete":  [
+                   "Microsoft PnP Utility",
+                   "",
+                   "Driver package uninstalled.",
+                   "Driver package deleted successfully."
+               ],
+    "Staged":  0,
+    "Arm":  null,
+    "Sys":  false,
+    "Umd":  false,
+    "CleanupComplete":  false,
+    "Durability":  "PendingOrderedGuestRestart",
+    "NextRequiredAction":  "Ordered Windows restart scheduled; run durable preflight after reboot before any SoC reset"
+}

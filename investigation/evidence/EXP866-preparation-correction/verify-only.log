@@ -1,0 +1,10 @@
+full-owner-direct.sh --verify-only EXIT 0
+EXP866_ARTIFACTS_PASS
+
+emergency-hidden.sh --verify-only EXIT 0
+
+ordinary-direct-final.sh --verify-only EXIT 0
+
+PAYLOAD 42 members: exact bytes, manifest values and package placement PASS; metadata 0
+PARSE_ARCHIVE current scripts PASS
+STALE_AUTOLOGGER_AND_REPLACED_MANIFEST_PAYLOAD_HASHES matches 0

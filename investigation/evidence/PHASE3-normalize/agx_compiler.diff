@@ -1,0 +1,42 @@
+--- /tmp/phase3-normalize.wrIr6E/input/pinned/agx_compiler.h
++++ /tmp/phase3-normalize.wrIr6E/input/actual/agx_compiler.h
+@@ -68,22 +68,22 @@
+     * last use in a block and the source is not live after the block). Set by
+     * liveness analysis.
+     */
+-   bool kill : 1;
++   unsigned kill : 1;
+ 
+    /* Cache hints */
+-   bool cache   : 1;
+-   bool discard : 1;
++   unsigned cache   : 1;
++   unsigned discard : 1;
+ 
+    /* src - float modifiers */
+-   bool abs : 1;
+-   bool neg : 1;
++   unsigned abs : 1;
++   unsigned neg : 1;
+ 
+    /* Register class */
+-   bool memory : 1;
++   unsigned memory : 1;
+ 
+    unsigned channels_m1     : 3;
+-   enum agx_size size       : 2;
+-   enum agx_index_type type : 3;
++   unsigned size       : 2;
++   unsigned type : 3;
+ 
+    /* If has_reg is set (during register allocation), the register assigned to
+     * this SSA value This is used with NORMAL. Contrast REGISTER which uses
+@@ -92,7 +92,7 @@
+     * TODO: Unify.
+     */
+    unsigned reg : AGX_NUM_MODELED_REGS_LOG2;
+-   bool has_reg     : 1;
++   unsigned has_reg     : 1;
+    unsigned padding : 6;
+ } agx_index;
+ static_assert(sizeof(agx_index) == 8, "packed");

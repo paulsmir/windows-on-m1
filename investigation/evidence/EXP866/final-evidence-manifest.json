@@ -1,0 +1,300 @@
+{
+  "utc": "2026-09-28T13:32:28.310343+00:00",
+  "guest_original_collection_files": 27,
+  "guest_original_collection_bytes": 861605328,
+  "guest_manifest_sha256": "7d4c1918798db7a634a1a1349f67d9a88ba8e737d340b18e6fbcc4e00b34c1a3",
+  "recovery_receipts_files": 4,
+  "total_files": 48,
+  "total_bytes": 874646503,
+  "all_verified": true,
+  "files": [
+    {
+      "path": "hardware-evidence/092826-13750-01.dmp",
+      "bytes": 1119900,
+      "sha256": "ed49128a34c627e489eea3ef425c109135ade7a9286e838a264820981acc3065",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/092826-14265-01.dmp",
+      "bytes": 1063852,
+      "sha256": "3c23e144ed9d1f2323413c177b1731874449cbc1d771a7e0295fa5c433a910eb",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/AppleAgxAdmission.reg",
+      "bytes": 3358,
+      "sha256": "a1061c3ebdd0c129a8c0adcbc934adc87e9e53a31c03eadac9f9e33fccc45139",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/AppleAgxRenderAdmission.pdb",
+      "bytes": 2740224,
+      "sha256": "cd3ad66b18f04ce38c3ea89dffd0bf37c1eacc47eeddee74ff16afb26d7fe15b",
+      "origin": "matching_builder_symbols"
+    },
+    {
+      "path": "hardware-evidence/AppleAgxRenderAdmissionUmd.pdb",
+      "bytes": 9981952,
+      "sha256": "3bbe6a5285ae13308f487a2af94c563a2a4e64ad89fafb7e986ec6bc35a20514",
+      "origin": "matching_builder_symbols"
+    },
+    {
+      "path": "hardware-evidence/Application.evtx",
+      "bytes": 21041152,
+      "sha256": "4208c8ae4d98e8613e3553ff9bf9f5519337ae2220597d22fe06be10c2ee90d9",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/DxgKrnl-Admin.evtx",
+      "bytes": 69632,
+      "sha256": "58c5ccbd43e6a8b65e33b88b353dc3ee30eba55ff2e37e4a8bd7eff596bf3064",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/GraphicsDrivers.reg",
+      "bytes": 59246,
+      "sha256": "e7c813af6d6e1373e0ade7be5582bdfc578e00da6bf92dfded6c0d2222586832",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/Kernel-092826-13750-01.dmp",
+      "bytes": 1119900,
+      "sha256": "ed49128a34c627e489eea3ef425c109135ade7a9286e838a264820981acc3065",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/Kernel-MEMORY.DMP",
+      "bytes": 596191375,
+      "sha256": "931b8be709f69b8f51f457fa0c4d578a035ac5b7e10c8e1c307d53d28d0eee5a",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/Live-WATCHDOG-20260928-1512.dmp",
+      "bytes": 283829,
+      "sha256": "08100282cab5cf90719cd8b90165ddc152a93ca30d05d8ee8151958a0f0ca38a",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/Live-WATCHDOG-20260928-1512.dmp.Report.wer",
+      "bytes": 37948,
+      "sha256": "fa4dec25a13acf5fa2eea59b58bb9d6ce6ab520dd61502d967be1656762c9520",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/System.evtx",
+      "bytes": 21041152,
+      "sha256": "ee7fead1776defe14744e799382584abaff34bbbc86a48c6389411273498caa0",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/artifact-hashes.json",
+      "bytes": 4642,
+      "sha256": "7d4c1918798db7a634a1a1349f67d9a88ba8e737d340b18e6fbcc4e00b34c1a3",
+      "origin": "guest_manifest_digest_verified"
+    },
+    {
+      "path": "hardware-evidence/cleanup-transition.json",
+      "bytes": 301,
+      "sha256": "ec15279f1ddebcb52a93814a9a8d219bf8844d3645be5fd411109ce76c6d5ce2",
+      "origin": "guest_recovery_receipt_verified"
+    },
+    {
+      "path": "hardware-evidence/cleanup.json",
+      "bytes": 873,
+      "sha256": "c094aa0e154d63bcf2b9f7261e7ec8d31e493b8a45c7ddf055cc12e9e2918b91",
+      "origin": "guest_recovery_receipt_verified"
+    },
+    {
+      "path": "hardware-evidence/current-watchdog-receipts.json",
+      "bytes": 418,
+      "sha256": "78527d93f879c773a8ae44599c7010a6cebf3280702c21dbf776138ae05a2062",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/devnode.reg",
+      "bytes": 106868,
+      "sha256": "0133753fd82f4a0e92366875615fd894eee6a9e09c9a5aede544c0f0a41b6ace",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/diagnostics-clean.json",
+      "bytes": 266,
+      "sha256": "35ae64421c2b89f8dc822c59cb901d65765b04489a352fbb90cdfb1c812bdacd",
+      "origin": "guest_recovery_receipt_verified"
+    },
+    {
+      "path": "hardware-evidence/dump-backend.txt",
+      "bytes": 67386,
+      "sha256": "ce98617e4a2db3733714c6c5d0c0b00deeec7781e40f468e3b10c33bd1e322fb",
+      "origin": "host_analysis_or_recovery_sample"
+    },
+    {
+      "path": "hardware-evidence/dump-boundary.json",
+      "bytes": 2397,
+      "sha256": "c7ec16280c815f6d0b66c9306d05eefb01cb1e2c48abff0170e99223b401775f",
+      "origin": "host_analysis_or_recovery_sample"
+    },
+    {
+      "path": "hardware-evidence/dump-completion.txt",
+      "bytes": 12592,
+      "sha256": "c0478dba990851805037952272274ee7d8081710322421baa3b04e77de9e08a1",
+      "origin": "host_analysis_or_recovery_sample"
+    },
+    {
+      "path": "hardware-evidence/dump-first-receipts.json",
+      "bytes": 591,
+      "sha256": "7c7a80dbcfd26053e41626d0acc393653b53f268145bd380a83219a78b19a7b1",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/dump-progress.txt",
+      "bytes": 13354,
+      "sha256": "1b6902762d6a70860eb4d5ebeff410e4a69d3d84b37c1f340ad34c2fb83a1f06",
+      "origin": "host_analysis_or_recovery_sample"
+    },
+    {
+      "path": "hardware-evidence/dump-state.txt",
+      "bytes": 8456,
+      "sha256": "a5839d7ce2b32f92cef6a8de3afe8a9eb6e57e80f43e0051aa05a82388e34c92",
+      "origin": "host_analysis_or_recovery_sample"
+    },
+    {
+      "path": "hardware-evidence/hidden-state.json",
+      "bytes": 26086,
+      "sha256": "e6556070b5b2437b9894287f1bac1ec2584b6a0ba29b2598de52dac674769099",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/kernel-dumps.json",
+      "bytes": 581,
+      "sha256": "d470fe849b711d2942bcf262273aa0842347c2603c80671b161a1b6649b3e5c6",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/minidump-analysis.txt",
+      "bytes": 10458,
+      "sha256": "a3aa5bb47eb4909de148d1bf765373f45ff606a7af48aae3071528f658960604",
+      "origin": "host_analysis_or_recovery_sample"
+    },
+    {
+      "path": "hardware-evidence/ordinary-durable.json",
+      "bytes": 508,
+      "sha256": "91283d97b6e3d6f47bf190623a14c1c975e4fef93e033086226bad963407f80c",
+      "origin": "host_analysis_or_recovery_sample"
+    },
+    {
+      "path": "hardware-evidence/original-chainload.log",
+      "bytes": 10350,
+      "sha256": "169621952b5540ba326bfcd9d8ad43fbcaca0e30ca6779aaf88463294e058f7f",
+      "origin": "host_serial_capture"
+    },
+    {
+      "path": "hardware-evidence/original-full.log",
+      "bytes": 173908,
+      "sha256": "920463ae12f3a7e3d26d3bc699d1dba53eda7e7b343ac2e693202c7d1b44f847",
+      "origin": "host_serial_capture"
+    },
+    {
+      "path": "hardware-evidence/original-heartbeat.jsonl",
+      "bytes": 276,
+      "sha256": "7d9de914181f159af8b04fcdb4f495575835c9f879852af6b74b1d22134407a6",
+      "origin": "host_serial_capture"
+    },
+    {
+      "path": "hardware-evidence/pnp-properties.txt",
+      "bytes": 46584,
+      "sha256": "efabb6bf068de26b15e194f06f639d90c4e7ff5e29ea20c2f2e244d538927d77",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/pnputil-resources.txt",
+      "bytes": 796,
+      "sha256": "c9eed3efb9171b68e89bca4fb8400554c7ef4db1abf94eb53fd7d7daaf27d8f0",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/post-recovery-Application.evtx",
+      "bytes": 21041152,
+      "sha256": "427329284f0371c868ea5b3c0dbd5d58adc1c5446679f1432f91fe246a87f853",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/post-recovery-System.evtx",
+      "bytes": 21041152,
+      "sha256": "ee7fead1776defe14744e799382584abaff34bbbc86a48c6389411273498caa0",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/post-recovery-events.json",
+      "bytes": 871326,
+      "sha256": "ad56a1242d6a7031f6591dea217c5de5c54bc576c37b35ef33bc387f71d64e8b",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/receipts-decoded.json",
+      "bytes": 1120,
+      "sha256": "d2ea2b4aaddca4a47e8993da2449292a8e72d32cd840b465397d050351af7c6b",
+      "origin": "host_analysis_or_recovery_sample"
+    },
+    {
+      "path": "hardware-evidence/recovery-EXP801DxgBoot.etl",
+      "bytes": 172752896,
+      "sha256": "f6b1451b3d8ed8731798041c5782de7e32647d038e88c764d5d70ad05d969ecc",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/recovery-etl-receipt.json",
+      "bytes": 799,
+      "sha256": "65de7f5f41d21adc089a41b5268bfdb15ca0c23e82bdeb7682fe9abdbf0897d7",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/setupapi.dev.log",
+      "bytes": 3453706,
+      "sha256": "849f1648033d08d4494e8b3d60e20147611237747c64bcaea2193ab64806e352",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/stage-receipt.json",
+      "bytes": 311,
+      "sha256": "f10470a2e51ee963150904907d141e8830a9eb5a4e4021d46b95c40051edb56a",
+      "origin": "guest_recovery_receipt_verified"
+    },
+    {
+      "path": "hardware-evidence/state.json",
+      "bytes": 28273,
+      "sha256": "420d551f805beae3a581b2905c925d9b0f7195b8e7d9324f5f1087b5ea8c67d1",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/symbols-verified.json",
+      "bytes": 521,
+      "sha256": "6578945364a3ae21903435f4cb47c5457213551563e1f708df68472e4f1635be",
+      "origin": "host_analysis_or_recovery_sample"
+    },
+    {
+      "path": "hardware-evidence/umd-counts.json",
+      "bytes": 2261,
+      "sha256": "aff605c94b21c5a993c673155ae0471c2fdce802b651b40c144582e13c185061",
+      "origin": "host_analysis_or_recovery_sample"
+    },
+    {
+      "path": "hardware-evidence/umd-final-after-loss.log",
+      "bytes": 101378,
+      "sha256": "dbb4cbc8cd2be505cb06da9dd804e8ead80ffaff955d9093159b5235be26dec6",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/umd.log",
+      "bytes": 101378,
+      "sha256": "dbb4cbc8cd2be505cb06da9dd804e8ead80ffaff955d9093159b5235be26dec6",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/watchdog-analysis.txt",
+      "bytes": 9019,
+      "sha256": "4464655fce384ab4e7d648564afb8d1ab444d6d61fc2c53733b7307ccee16cb8",
+      "origin": "host_analysis_or_recovery_sample"
+    }
+  ]
+}

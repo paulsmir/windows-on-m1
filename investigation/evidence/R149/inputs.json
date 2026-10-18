@@ -1,0 +1,109 @@
+{
+  "base_commit": "318e3fc956c12f8402bae645e4b63d57a537cc13",
+  "package_source": "fd603f3033c20b883981775ca480ddb72ff9197f",
+  "verified_source_files": 536,
+  "guest_files": [
+    {
+      "path": "hardware-evidence/AppleAgxAdmission.reg",
+      "bytes": 3358,
+      "sha256": "69c67b00830683c89d518f89636ac27c7567fa1fefb9439ba73d6d9b05090cb3"
+    },
+    {
+      "path": "hardware-evidence/Application.evtx",
+      "bytes": 21041152,
+      "sha256": "8d73512dd336e5cd45879cfeecdf287437c009f131713628e777ee0ee78aa3cd"
+    },
+    {
+      "path": "hardware-evidence/devnode.reg",
+      "bytes": 113140,
+      "sha256": "848d83458ba8bf47854b925aa5ba3f6beac220834ad3c96a96f046cf4bcfd923"
+    },
+    {
+      "path": "hardware-evidence/DxgKrnl-Admin.evtx",
+      "bytes": 69632,
+      "sha256": "58c5ccbd43e6a8b65e33b88b353dc3ee30eba55ff2e37e4a8bd7eff596bf3064"
+    },
+    {
+      "path": "hardware-evidence/EXP801DxgBoot.etl",
+      "bytes": 86507520,
+      "sha256": "54f134cd07bf3c7871638430c1add2347a3de25fd3e05bece2cdf1c0cf645999"
+    },
+    {
+      "path": "hardware-evidence/GraphicsDrivers.reg",
+      "bytes": 59246,
+      "sha256": "fdbe4e192f142a7d5d42a8d15b481ec911bb1bc723a9b4ed704a71e15adbc7ce"
+    },
+    {
+      "path": "hardware-evidence/hidden-state.json",
+      "bytes": 27509,
+      "sha256": "6868c2f377536c7f7e0768c021c57988216e0987cf8c9df1667ce9a1cc26f102"
+    },
+    {
+      "path": "hardware-evidence/pnp-properties.txt",
+      "bytes": 46584,
+      "sha256": "a9f5ba67c6e115b4dc3e50c302826d5ebd9a352ef27687736123a98119297aba"
+    },
+    {
+      "path": "hardware-evidence/pnputil-resources.txt",
+      "bytes": 796,
+      "sha256": "c9eed3efb9171b68e89bca4fb8400554c7ef4db1abf94eb53fd7d7daaf27d8f0"
+    },
+    {
+      "path": "hardware-evidence/post-recovery-Application.evtx",
+      "bytes": 21041152,
+      "sha256": "4d93ed92d93e195302040cfc0cde3eb1aa3200e396bca2fe174e7b4b6c6471da"
+    },
+    {
+      "path": "hardware-evidence/post-recovery-events.json",
+      "bytes": 791177,
+      "sha256": "ab8e79e4becc876d2ade56a81d811d01fa3399667e089e39413a0f8387b39db6"
+    },
+    {
+      "path": "hardware-evidence/post-recovery-System.evtx",
+      "bytes": 21041152,
+      "sha256": "f85369299bb80b5ceb04636b0d76e3c6460917283202eccecf060697df4e78de"
+    },
+    {
+      "path": "hardware-evidence/setupapi.dev.log",
+      "bytes": 3382897,
+      "sha256": "db1d0810a59088e4d7304c685f41d8c4fba04b27d7a81d9368e1252b756080f1"
+    },
+    {
+      "path": "hardware-evidence/state.json",
+      "bytes": 29696,
+      "sha256": "9064323397e5b991e39402b8091500e47c291504464e23da4e84179d3d65e754"
+    },
+    {
+      "path": "hardware-evidence/System.evtx",
+      "bytes": 21041152,
+      "sha256": "eeba64c070a209e277432638c35e15f2c67218af146de79503b6d95ca67d44a7"
+    },
+    {
+      "path": "hardware-evidence/umd-final-after-loss.log",
+      "bytes": 191612,
+      "sha256": "d3e6be189d8ce46987887dd55ef6ca31ccd0483f182cf2e23acdf1d95a5f77b5"
+    },
+    {
+      "path": "hardware-evidence/umd.log",
+      "bytes": 191612,
+      "sha256": "d3e6be189d8ce46987887dd55ef6ca31ccd0483f182cf2e23acdf1d95a5f77b5"
+    },
+    {
+      "path": "hardware-evidence/Wom1G3CopyQueryFailure.bin",
+      "bytes": 168,
+      "sha256": "ede024938b38d4fdaeeca27ed4f56bde96fb4d786b33f29ff89c761edf99714a"
+    }
+  ],
+  "package_hashes": {
+    "AppleAgxRenderAdmission.sys": "bfb43f40448e687a0aebb686a3434935d14ab4ee532d4b6a83d6f1e8a515577b",
+    "AppleAgxRenderAdmissionUmd.dll": "817348ae8cce47e8685a301f30c48a3f7dc9da81c92d43108468893eed369849",
+    "AppleAgxRenderAdmission.inf": "bfbe4d0e5f44d15f5c7377733ff87bddb70b748a52304c83d2f6eb01daff4a6a",
+    "appleagxrenderadmission.cat": "8f1bcb1f7a8b7679a8ba3466e4c2f488f77b206b29f4e7d30e0dff1e41fc72fa"
+  },
+  "hardware_result_sha256": "de182b8caace46719d36ad60fb56d2ebf60815e2cdf758cf142321c1a6889c6f",
+  "review_sha256": "753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5",
+  "nested_dirty_diff_sha256": {
+    "m1n1_windows": "68387a2e4a778333004ae9e8e035304dfd70c5d83c8e1ec4dcff4c949427f0e7",
+    "mu": "2e654da05fbcd83288511c5161cc749c8b87d69e222cfc3f6fed3fceaea79a7d"
+  }
+}

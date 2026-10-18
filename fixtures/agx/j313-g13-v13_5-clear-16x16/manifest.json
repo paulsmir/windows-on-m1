@@ -1,0 +1,171 @@
+{
+  "capture_program_sha256": "a71737ec35abeb7efb422a54dcb0b146463f840c6da7169e99946c2a3771b87a",
+  "command_buffer_sha256": "f699bbc79e095613a33e12b7748f3539c6faec40683f5f45983943ba22d5eb34",
+  "fixture_sha256": "34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8",
+  "fixture_version": 1,
+  "identity": {
+    "adt_sha256": "c57d4c0db26125394409c3b5b518fdef553d8f4dfe2263ae9303e2276b0796a3",
+    "board": "J313",
+    "chip_generation": "G13",
+    "firmware_version": "V13_5",
+    "m1n1_commit": "9cd80ac652ac404e92ae279deeaec8c629d7d184",
+    "mesa_commit": "7a4f24061fa56ef7eff12132dd7b1461d5a890d8"
+  },
+  "members": {
+    "cmdbuf.json": {
+      "sha256": "f699bbc79e095613a33e12b7748f3539c6faec40683f5f45983943ba22d5eb34",
+      "size": 2182
+    },
+    "obj_1100010000.bin": {
+      "sha256": "af61d5a4bea89f96da3a1cfe52b08238047d49efd0f01be06a49545e6fa19d10",
+      "size": 16384
+    },
+    "obj_1100018000.bin": {
+      "sha256": "d2dbfd74650a51c77081765f3fce109c4b7b111e98158efed4869539050fa694",
+      "size": 16384
+    },
+    "obj_1100020000.bin": {
+      "sha256": "26893428218898ef4ba66f950a489bed1087b35695ace2256792faae45ee5910",
+      "size": 262144
+    },
+    "obj_1500000000.bin": {
+      "sha256": "269303bdcd9a2bcdb12bce860bc95f42921451957bb43deb712074316d20ff82",
+      "size": 262144
+    },
+    "obj_1500044000.bin": {
+      "sha256": "6619059829b025685bd4ea99263e02302c5de63c3925362ed9c8eade03e49453",
+      "size": 524288
+    },
+    "obj_15000c8000.bin": {
+      "sha256": "07854d2fef297a06ba81685e660c332de36d5d18d546927d30daad6d7fda1541",
+      "size": 524288
+    },
+    "obj_150014c000.bin": {
+      "sha256": "07854d2fef297a06ba81685e660c332de36d5d18d546927d30daad6d7fda1541",
+      "size": 524288
+    },
+    "obj_15001d0000.bin": {
+      "sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+      "size": 16384
+    },
+    "objects.json": {
+      "sha256": "ca8012225db63a6eba033655357825716c5d3c5a5510710a92b0397857716f0f",
+      "size": 1688
+    }
+  },
+  "objects": [
+    {
+      "gpu_va": 73014509568,
+      "map_flags": {
+        "AP": 0,
+        "PXN": 1,
+        "UXN": 1,
+        "nG": 1
+      },
+      "member": "obj_1100010000.bin",
+      "name": "GBM offset 0xffffc000",
+      "sha256": "af61d5a4bea89f96da3a1cfe52b08238047d49efd0f01be06a49545e6fa19d10",
+      "size": 16384
+    },
+    {
+      "gpu_va": 73014542336,
+      "map_flags": {
+        "AP": 0,
+        "PXN": 1,
+        "UXN": 1,
+        "nG": 1
+      },
+      "member": "obj_1100018000.bin",
+      "name": "GBM offset 0xffff8000",
+      "sha256": "d2dbfd74650a51c77081765f3fce109c4b7b111e98158efed4869539050fa694",
+      "size": 16384
+    },
+    {
+      "gpu_va": 90194313216,
+      "map_flags": {
+        "AP": 0,
+        "PXN": 1,
+        "UXN": 1,
+        "nG": 1
+      },
+      "member": "obj_1500000000.bin",
+      "name": "GBM offset 0xfffb8000",
+      "sha256": "269303bdcd9a2bcdb12bce860bc95f42921451957bb43deb712074316d20ff82",
+      "size": 262144
+    },
+    {
+      "gpu_va": 73014575104,
+      "map_flags": {
+        "AP": 0,
+        "PXN": 1,
+        "UXN": 1,
+        "nG": 1
+      },
+      "member": "obj_1100020000.bin",
+      "name": "GBM offset 0xfff78000",
+      "sha256": "26893428218898ef4ba66f950a489bed1087b35695ace2256792faae45ee5910",
+      "size": 262144
+    },
+    {
+      "gpu_va": 90194591744,
+      "map_flags": {
+        "AP": 0,
+        "PXN": 1,
+        "UXN": 1,
+        "nG": 1
+      },
+      "member": "obj_1500044000.bin",
+      "name": "GBM offset 0xffef8000",
+      "sha256": "6619059829b025685bd4ea99263e02302c5de63c3925362ed9c8eade03e49453",
+      "size": 524288
+    },
+    {
+      "gpu_va": 90195132416,
+      "map_flags": {
+        "AP": 0,
+        "PXN": 1,
+        "UXN": 1,
+        "nG": 1
+      },
+      "member": "obj_15000c8000.bin",
+      "name": "GBM offset 0xffe78000",
+      "sha256": "07854d2fef297a06ba81685e660c332de36d5d18d546927d30daad6d7fda1541",
+      "size": 524288
+    },
+    {
+      "gpu_va": 90195673088,
+      "map_flags": {
+        "AP": 0,
+        "PXN": 1,
+        "UXN": 1,
+        "nG": 1
+      },
+      "member": "obj_150014c000.bin",
+      "name": "GBM offset 0xffdf8000",
+      "sha256": "07854d2fef297a06ba81685e660c332de36d5d18d546927d30daad6d7fda1541",
+      "size": 524288
+    },
+    {
+      "gpu_va": 90196213760,
+      "map_flags": {
+        "AP": 0,
+        "PXN": 1,
+        "UXN": 1,
+        "nG": 1
+      },
+      "member": "obj_15001d0000.bin",
+      "name": "GBM offset 0xffdf4000",
+      "sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+      "size": 16384
+    }
+  ],
+  "output": {
+    "expected_output_sha256": "b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126",
+    "format": "BGRA8",
+    "gpu_va": 90196213760,
+    "height": 16,
+    "poison_sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+    "size": 16384,
+    "width": 16
+  }
+}

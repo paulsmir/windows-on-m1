@@ -887,14 +887,9 @@ int main(void)
         for required in (
             "J313_APPLE_INPUT_NUB_GPIO_PIN",
             "J313_APPLE_INPUT_IRQ_STARTUP_GROUP",
-            "AI_GPIO_MODE_IRQ_LOW",
-            "AiGpioIrqMode",
+            "AiGpioInputInterruptValue",
             "READ_REGISTER_NOFENCE_ULONG",
             "WRITE_REGISTER_NOFENCE_ULONG",
-            "AI_GPIO_MODE_MASK",
-            "AI_GPIO_GROUP_MASK",
-            "AI_GPIO_PERIPH_MASK",
-            "AI_GPIO_INPUT_ENABLE",
             "AiGpioAcknowledge",
         ):
             self.assertIn(required, enable)
@@ -903,6 +898,18 @@ int main(void)
         self.assertIn("AiGpioEnableInputInterrupt", start)
         self.assertLess(start.index("AiGpioEnableInputInterrupt"),
                         start.index("AiGpioResetInputController"))
+
+    def test_passive_isr_gates_level_until_worker_drains(self):
+        header = self.read("include/apple_input_device.h")
+        transport = self.read("src/transport.c")
+
+        self.assertIn("NTSTATUS AiGpioDisableInputInterrupt", header)
+        isr = self.c_function_body(transport, "AiInputInterruptIsr")
+        worker = self.c_function_body(transport, "AiTransportWorker")
+        self.assertLess(isr.index("AiGpioDisableInputInterrupt"),
+                        isr.index("WdfInterruptQueueWorkItemForIsr"))
+        self.assertGreater(worker.rindex("AiGpioEnableInputInterrupt"),
+                           worker.index("ai_transport_worker_complete"))
 
     def test_transport_worker_has_a_hard_packet_budget_and_protocol_validation(self):
         transport = self.read("src/transport.c")

@@ -1,0 +1,11 @@
+--- /Users/pavel/public_windows/.local/reference/mesa/src/util/lut.h
++++ /Users/pavel/public_windows/.worktrees/task-AD04-UTIL-LUT2-PORTABILITY-005/drivers/apple-agx/mesa/windows-overlay/lut.h
+@@ -21,7 +21,7 @@
+ typedef uint8_t util_lut2;
+ typedef uint8_t util_lut3;
+ 
+-#if !defined(_MSC_VER)
++#if !defined(_MSC_VER) || defined(__clang__)
+ /*
+  * Build a lookup table from a boolean expression. Bitwise operations are
+  * supported: &, |, ^, and ~. Note ~ must be used, not !.

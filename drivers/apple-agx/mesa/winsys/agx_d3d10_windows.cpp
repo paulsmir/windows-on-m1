@@ -1,0 +1,1354 @@
+#include <windows.h>
+#include <wingdi.h>
+#include <string.h>
+typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
+#pragma warning(push)
+#pragma warning(disable : 4201)
+#include <d3d10umddi.h>
+#pragma warning(pop)
+extern "C" {
+#include "umd_internal.h"
+#include "umd_asahi_owner.h"
+#include "umd_asahi_batch_adapter.h"
+}
+#include "agx_win32_asahi_scene.h"
+#include "agx_d3d10_windows.h"
+#include "pipe/p_context.h"
+#include "pipe/p_state.h"
+
+thread_local AgxD3d10RefusalScope *AgxD3d10RefusalScope::Current=nullptr;
+BOOL AgxD3d10WindowsDiagnosticRefusal(HRESULT status) {
+  AgxD3d10RefusalScope *scope=AgxD3d10RefusalScope::Current;
+  if(!scope || !scope->Name || SUCCEEDED(status)) return FALSE;
+  if(!scope->Emitted) {
+    scope->Emitted=true;
+    AdmissionUmdDiagnostic(scope->Name,status,scope->Values,scope->Count);
+  }
+  return TRUE;
+}
+
+VOID AgxD3d10WindowsDiagnostic(PCSTR Stage,HRESULT Status,
+                               const UINT *Values,UINT Count) {
+  AdmissionUmdDiagnostic(Stage,Status,Values,Count);
+}
+
+VOID AgxD3d10WindowsPresentMeasure(UINT Kind,HRESULT Status,
+                                   const UINT *Values,UINT Count) {
+  AdmissionUmdPresentMeasure(Kind,Status,Values,Count);
+}
+
+extern "C" void (*AgxWin32BackendFailHook)(unsigned site);
+extern "C" void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
+                                            unsigned detail0, unsigned detail1);
+extern "C" void (*AgxWin32FirstFaultHook)(unsigned site,uintptr_t context,
+                                          unsigned flags,unsigned draws);
+extern "C" void (*AgxWin32PerfHook)(const char *message);
+extern "C" void (*AgxWin32VdmTraceHook)(uint64_t va,const uint32_t *words,
+                                        unsigned count,unsigned draws);
+extern "C" void (*AgxWin32RenderTraceHook)(const uint32_t *values,unsigned count);
+extern "C" void (*AgxWin32ScratchTraceHook)(const uint32_t *values,unsigned count);
+static void AgxD3d10ScratchTrace(const uint32_t *values,unsigned count) {
+  static volatile LONG records;
+  if(InterlockedIncrement(&records)>32 || count>16u) return;
+  UINT copy[16];
+  for(unsigned i=0;i<count;++i) copy[i]=values[i];
+  AdmissionUmdDiagnostic("measure-scratch-helper",S_OK,copy,count);
+}
+static void AgxD3d10RenderTrace(const uint32_t *values,unsigned count) {
+  static volatile LONG records;
+  if(InterlockedIncrement(&records)>32 || count>16u) return;
+  UINT copy[16];
+  for(unsigned i=0;i<count;++i) copy[i]=values[i];
+  AdmissionUmdDiagnostic("measure-render-msaa",S_OK,copy,count);
+}
+static void AgxD3d10VdmTrace(uint64_t va,const uint32_t *words,
+                             unsigned count,unsigned draws) {
+  static volatile LONG records;
+  if(InterlockedIncrement(&records)>64 || count>13u) return;
+  UINT values[16]={(UINT)va,(UINT)(va>>32),draws};
+  for(unsigned i=0;i<count;++i) values[3+i]=words[i];
+  AdmissionUmdDiagnostic("measure-vdm",S_OK,values,3u+count);
+}
+
+static void AgxD3d10FirstFault(unsigned site,uintptr_t context,
+                              unsigned flags,unsigned draws) {
+  static volatile LONG records;
+  LONG count=InterlockedIncrement(&records);
+  if(count>128) return;
+  UINT values[6]={site,(UINT)context,(UINT)((uint64_t)context>>32),
+      flags,draws,(UINT)count};
+  AdmissionUmdDiagnostic("measure-native-first-fault",S_OK,values,ARRAYSIZE(values));
+}
+
+/* EXP870 diagnostic: every refused native batch, always logged ("reject-"
+ * bypasses the record budget). kind 1=Begin 2=Finish precondition 3=Finish
+ * fail site (detail0=GPUVA submit refusal line, detail1=callback result). */
+static void AgxD3d10BatchRefusal(unsigned kind, unsigned site,
+                                 unsigned detail0, unsigned detail1) {
+  UINT values[4]={kind,site,detail0,detail1};
+  AdmissionUmdDiagnostic("reject-batch",E_FAIL,values,4u);
+}
+/* EXP1070 diagnostic: per-process count of Asahi perf_debug messages (why
+ * batches are flushed or synced). Digits fold to '#' so numeric variants
+ * share one entry. Every 512 messages, one "measure-perf-reason" line per
+ * entry that changed: {serial, new count, total, presents, text[0..23]}. */
+static SRWLOCK AgxD3d10PerfLock=SRWLOCK_INIT;
+static struct { UINT Hash, Count, Reported; char Text[24]; } AgxD3d10PerfTable[48];
+static UINT AgxD3d10PerfTotal, AgxD3d10PerfSerial, AgxD3d10PerfLines;
+static volatile LONG AgxD3d10Presents;
+static void AgxD3d10PerfNote(const char *message) {
+  char text[24]={0};
+  UINT hash=2166136261u, index;
+  for(UINT i=0;message && message[i] && message[i]!='\n' && i<63u;++i) {
+    char c=message[i]>='0' && message[i]<='9' ? '#' : message[i];
+    hash=(hash^(unsigned char)c)*16777619u;
+    if(i<sizeof(text)) text[i]=c;
+  }
+  AcquireSRWLockExclusive(&AgxD3d10PerfLock);
+  for(index=0;index+1u<ARRAYSIZE(AgxD3d10PerfTable);++index)
+    if(!AgxD3d10PerfTable[index].Count || AgxD3d10PerfTable[index].Hash==hash) break;
+  if(!AgxD3d10PerfTable[index].Count) {
+    static const char other[24]="(other)";
+    AgxD3d10PerfTable[index].Hash=hash;
+    memcpy(AgxD3d10PerfTable[index].Text,
+           index+1u<ARRAYSIZE(AgxD3d10PerfTable) ? text : other,sizeof(text));
+  }
+  ++AgxD3d10PerfTable[index].Count;
+  if((++AgxD3d10PerfTotal & 511u)==0u && AgxD3d10PerfLines<4096u) {
+    ++AgxD3d10PerfSerial;
+    for(UINT i=0;i<ARRAYSIZE(AgxD3d10PerfTable) && AgxD3d10PerfTable[i].Count;++i) {
+      if(AgxD3d10PerfTable[i].Count==AgxD3d10PerfTable[i].Reported) continue;
+      UINT values[10]={AgxD3d10PerfSerial,
+          AgxD3d10PerfTable[i].Count-AgxD3d10PerfTable[i].Reported,
+          AgxD3d10PerfTotal,(UINT)AgxD3d10Presents};
+      memcpy(&values[4],AgxD3d10PerfTable[i].Text,sizeof(AgxD3d10PerfTable[i].Text));
+      AgxD3d10PerfTable[i].Reported=AgxD3d10PerfTable[i].Count;
+      ++AgxD3d10PerfLines;
+      AdmissionUmdDiagnostic("measure-perf-reason",S_OK,values,ARRAYSIZE(values));
+    }
+  }
+  ReleaseSRWLockExclusive(&AgxD3d10PerfLock);
+}
+
+/* EXP1080 diagnostic: inclusive QPC time per d3d10umd DDI (LOG_ENTRYPOINT)
+ * and top-level time per window. Every ~2 s one "measure-ddi-window" line
+ * {wall_us, toplevel_us, presents} and up to 12 "measure-ddi-time" lines
+ * {calls, total_us, max_us, name[0..23]} sorted by total time. */
+static SRWLOCK AgxD3d10DdiLock=SRWLOCK_INIT;
+static struct { const char *Name; LONGLONG Ticks, Max; UINT Calls; } AgxD3d10DdiTable[96];
+static LONGLONG AgxD3d10DdiTopLevel, AgxD3d10DdiWindowStart, AgxD3d10DdiFrequency;
+static LONG AgxD3d10DdiWindowPresents;
+static UINT AgxD3d10DdiLines;
+extern "C" void AgxD3d10DdiTimerNote(const char *name, long long ticks,
+                                     unsigned depth) {
+  LARGE_INTEGER now;
+  if(!name || ticks<0) return;
+  AcquireSRWLockExclusive(&AgxD3d10DdiLock);
+  if(!AgxD3d10DdiFrequency) {
+    LARGE_INTEGER f; QueryPerformanceFrequency(&f); AgxD3d10DdiFrequency=f.QuadPart;
+    QueryPerformanceCounter(&now); AgxD3d10DdiWindowStart=now.QuadPart;
+  }
+  UINT i=0;
+  for(;i<ARRAYSIZE(AgxD3d10DdiTable) && AgxD3d10DdiTable[i].Name &&
+       AgxD3d10DdiTable[i].Name!=name;++i) {}
+  if(i<ARRAYSIZE(AgxD3d10DdiTable)) {
+    AgxD3d10DdiTable[i].Name=name; AgxD3d10DdiTable[i].Ticks+=ticks;
+    if(ticks>AgxD3d10DdiTable[i].Max) AgxD3d10DdiTable[i].Max=ticks;
+    ++AgxD3d10DdiTable[i].Calls;
+  }
+  if(depth==0) AgxD3d10DdiTopLevel+=ticks;
+  QueryPerformanceCounter(&now);
+  if(depth==0 && now.QuadPart-AgxD3d10DdiWindowStart>2*AgxD3d10DdiFrequency &&
+     AgxD3d10DdiLines<4096u) {
+    const LONGLONG us=AgxD3d10DdiFrequency/1000000 ? AgxD3d10DdiFrequency/1000000 : 1;
+    UINT header[3]={(UINT)((now.QuadPart-AgxD3d10DdiWindowStart)/us),
+        (UINT)(AgxD3d10DdiTopLevel/us),(UINT)InterlockedExchange(&AgxD3d10DdiWindowPresents,0)};
+    AdmissionUmdDiagnostic("measure-ddi-window",S_OK,header,ARRAYSIZE(header));
+    ++AgxD3d10DdiLines;
+    for(UINT n=0;n<12u;++n) {
+      UINT best=ARRAYSIZE(AgxD3d10DdiTable);
+      for(UINT j=0;j<ARRAYSIZE(AgxD3d10DdiTable) && AgxD3d10DdiTable[j].Name;++j)
+        if(AgxD3d10DdiTable[j].Calls &&
+           (best==ARRAYSIZE(AgxD3d10DdiTable) ||
+            AgxD3d10DdiTable[j].Ticks>AgxD3d10DdiTable[best].Ticks)) best=j;
+      if(best==ARRAYSIZE(AgxD3d10DdiTable)) break;
+      UINT values[9]={AgxD3d10DdiTable[best].Calls,
+          (UINT)(AgxD3d10DdiTable[best].Ticks/us),(UINT)(AgxD3d10DdiTable[best].Max/us)};
+      char text[24]={0};
+      for(UINT k=0;k<sizeof(text) && AgxD3d10DdiTable[best].Name[k];++k)
+        text[k]=AgxD3d10DdiTable[best].Name[k];
+      memcpy(&values[3],text,sizeof(text));
+      AdmissionUmdDiagnostic("measure-ddi-time",S_OK,values,ARRAYSIZE(values));
+      ++AgxD3d10DdiLines;
+      AgxD3d10DdiTable[best].Calls=0;
+    }
+    for(UINT j=0;j<ARRAYSIZE(AgxD3d10DdiTable);++j) {
+      AgxD3d10DdiTable[j].Ticks=AgxD3d10DdiTable[j].Max=0; AgxD3d10DdiTable[j].Calls=0;
+    }
+    AgxD3d10DdiTopLevel=0; AgxD3d10DdiWindowStart=now.QuadPart;
+  }
+  ReleaseSRWLockExclusive(&AgxD3d10DdiLock);
+}
+
+/* EXP1056: kind 4 = first backend Failed transition, site = file<<16|line. */
+static void AgxD3d10BackendFail(unsigned site) {
+  AgxD3d10BatchRefusal(4u, site, 0u, 0u);
+}
+
+VOID AgxD3d10WindowsDiagnosticSetError(
+    PCSTR function,UINT line,HRESULT status) {
+  char stage[192];
+  if(!function || SUCCEEDED(status)) return;
+  if(_snprintf_s(stage,sizeof(stage),_TRUNCATE,
+      "reject-seterror fn=%s line=%u",function,line)<0) return;
+  AdmissionUmdDiagnostic(stage,status,NULL,0u);
+}
+
+VOID AgxD3d10WindowsDiagnosticResource(
+    PCSTR Stage,const D3D10DDIARG_CREATERESOURCE *r) {
+  UINT values[16]={0};
+  if(r) {
+    values[0]=(UINT)r->Format;values[1]=(UINT)r->ResourceDimension;
+    values[2]=(UINT)r->Usage;values[3]=r->BindFlags;
+    values[4]=r->MapFlags;values[5]=r->MiscFlags;
+    values[6]=r->MipLevels;values[7]=r->ArraySize;
+    values[8]=r->SampleDesc.Count;values[9]=r->SampleDesc.Quality;
+    values[10]=r->pPrimaryDesc!=NULL;values[11]=r->pInitialDataUP!=NULL;
+    if(r->pMipInfoList && r->MipLevels) {
+      values[12]=r->pMipInfoList[0].TexelWidth;
+      values[13]=r->pMipInfoList[0].TexelHeight;
+      values[14]=r->pMipInfoList[0].TexelDepth;
+    }
+    values[15]=r->pMipInfoList!=NULL;
+  }
+  AdmissionUmdDiagnostic(Stage,r?S_OK:E_INVALIDARG,values,16u);
+}
+
+VOID AgxD3d10WindowsDiagnosticBufferUsage(
+    const D3D10DDIARG_CREATERESOURCE *r) {
+  UINT values[5]={0};
+  if(r) {
+    values[0]=r->Usage;
+    values[1]=r->BindFlags;
+    values[2]=r->MapFlags;
+    values[3]=r->MiscFlags;
+    if(r->pMipInfoList && r->MipLevels)
+      values[4]=r->pMipInfoList[0].TexelWidth;
+  }
+  AdmissionUmdDiagnostic("reject-buffer-usage",E_NOTIMPL,values,ARRAYSIZE(values));
+}
+
+enum AGX_D3D10_WINDOWS_DEVICE_STAGE {
+  AgxD3d10DeviceAllocated,
+  AgxD3d10DeviceRuntimeReady,
+  AgxD3d10DeviceNativeScreenReady,
+  AgxD3d10DeviceNativeContextReady,
+  AgxD3d10DeviceReady,
+  AgxD3d10DeviceClosing,
+  AgxD3d10DeviceNativeContextReleased,
+  AgxD3d10DeviceNativeScreenReleased,
+  AgxD3d10DeviceRuntimeReleased,
+  AgxD3d10DeviceFreed
+};
+
+typedef struct _AGX_D3D10_WINDOWS_TERMINAL {
+  struct _AGX_D3D10_WINDOWS_TERMINAL *Next;
+  HRESULT Error;
+  ULONG Stage,ActiveBuffersAndQueryMarkers,NativeContexts,LiveBos;
+  BOOL KernelQuiesced;
+} AGX_D3D10_WINDOWS_TERMINAL;
+enum {
+  AgxD3d10TerminalCountMask=0xffffu,
+  AgxD3d10TerminalQueryShift=16u
+};
+static_assert(ADMISSION_UMD_SCREEN_BUFFER_LIMIT<=AgxD3d10TerminalCountMask,
+              "terminal active-buffer field is too small");
+static_assert(ADMISSION_UMD_SCREEN_FENCE_LIMIT<=AgxD3d10TerminalCountMask,
+              "terminal query-marker field is too small");
+
+struct AGX_D3D10_WINDOWS_ADAPTER {
+  ADMISSION_UMD_ADAPTER Runtime;
+  SRWLOCK Lock;
+  ULONG Devices;
+  AGX_D3D10_WINDOWS_DEVICE *Owners;
+  AGX_D3D10_WINDOWS_TERMINAL *Terminal;
+};
+struct AGX_D3D10_WINDOWS_DEVICE {
+  ADMISSION_UMD_DEVICE Runtime;
+  ADMISSION_UMD_ASAHI_OWNER Owner;
+  AGX_WIN32_ASAHI_BACKEND Backend;
+  AGX_WIN32_ASAHI_OWNER_OPS OwnerOperations;
+  struct pipe_screen *Screen;
+  struct pipe_context *Context;
+  AGX_D3D10_WINDOWS_ADAPTER *Adapter;
+  AGX_D3D10_WINDOWS_DEVICE *Next;
+  AGX_D3D10_WINDOWS_DEVICE_STAGE Stage;
+  HRESULT InitialFailure;
+  HRESULT CleanupStatus;
+  BOOL KernelQuiesced;
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *PendingPresentations;
+};
+struct AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE {
+  AGX_D3D10_WINDOWS_DEVICE *Device;
+  ADMISSION_UMD_RESOURCE Resource;
+  AGX_WIN32_SCREEN_BUFFER RenderBuffer;
+  struct pipe_resource *RenderResource;
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Next;
+};
+
+VOID AgxD3d10WindowsDiagnosticState(AGX_D3D10_WINDOWS_DEVICE *d,PCSTR stage) {
+  if(!d || d->Stage!=AgxD3d10DeviceReady) return;
+  UINT state[16],bindings[16];
+  AgxWin32AsahiContextDiagnostic(d->Context,state,bindings);
+  AdmissionUmdDiagnostic(stage,d->Runtime.LastScreenError,state,16);
+  AdmissionUmdDiagnostic("native-bindings",S_OK,bindings,16);
+  ADMISSION_UMD_ASAHI_BATCH *b=(ADMISSION_UMD_ASAHI_BATCH *)d->Runtime.NativeBatchTransaction;
+  UINT runtime[12]={ (UINT)d->Runtime.DrawTerminal,d->Runtime.CommandBufferSize,
+      d->Runtime.AllocationListSize,d->Runtime.PatchListSize,b!=NULL,
+      b?(UINT)b->Phase:0,b?(UINT)b->Submission.Phase:0,
+      b?(UINT)b->Submission.RenderStatus:0,b?(UINT)b->Submission.PostStatus:0,
+      b?b->Submission.CommandBytes:0,b?b->Submission.Count:0,
+      b?b->Submission.Fence:0 };
+  AdmissionUmdDiagnostic("native-runtime",d->Runtime.LastScreenError,runtime,12);
+}
+static BOOL presentation_linear_format(D3DDDIFORMAT windowsFormat,
+                                       AGX_WIN32_ASAHI_LINEAR_FORMAT *format) {
+  if(!format) return FALSE;
+  switch(windowsFormat) {
+  case D3DDDIFMT_A8R8G8B8:
+    *format=AgxWin32AsahiLinearFormatBgra8Unorm;return TRUE;
+  case D3DDDIFMT_A8B8G8R8:
+    *format=AgxWin32AsahiLinearFormatRgba8Unorm;return TRUE;
+  default: return FALSE;
+  }
+}
+
+static BOOL presentation_pipe_format(const struct pipe_resource *resource,
+                                     enum pipe_format *format) {
+  if(!resource || !format) return FALSE;
+  switch(resource->format) {
+  case PIPE_FORMAT_B8G8R8A8_UNORM:
+  case PIPE_FORMAT_R8G8B8A8_UNORM:
+    *format=resource->format;return TRUE;
+  default: return FALSE;
+  }
+}
+
+static BOOL collect_presentations(AGX_D3D10_WINDOWS_DEVICE *device) {
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **link=&device->PendingPresentations;
+  while(*link) {
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record=*link;
+    (void)AgxWin32AsahiCollect(&device->Backend);
+    if(AdmissionUmdScreenAllocationRegistered(&device->Runtime,
+                                               record->Resource.KernelAllocation)) {
+      link=&record->Next;continue;
+    }
+    D3D10DDI_HDEVICE deviceHandle={0};D3D10DDI_HRESOURCE resourceHandle={0};
+    deviceHandle.pDrvPrivate=&device->Runtime;
+    resourceHandle.pDrvPrivate=&record->Resource;
+    AdmissionUmdDestroyResource(deviceHandle,resourceHandle);
+    *link=record->Next;
+    HeapFree(GetProcessHeap(),0,record);
+  }
+  return device->PendingPresentations==NULL;
+}
+
+static HRESULT attach_presentation_render_resource(
+    AGX_D3D10_WINDOWS_DEVICE *device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record) {
+  const ADMISSION_ALLOCATION_DESCRIPTION *desc=&record->Resource.DirectFlip.Allocation;
+  AGX_WIN32_ASAHI_LINEAR_FORMAT format;
+  if(!presentation_linear_format((D3DDDIFORMAT)desc->Format,&format))
+    return E_INVALIDARG;
+  const APPLE_AGX_U32 access=AppleAgxWin32BufferCpuRead|
+      AppleAgxWin32BufferCpuWrite|AppleAgxWin32BufferGpuRead|
+      AppleAgxWin32BufferGpuWrite;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  const APPLE_AGX_U64 alignment=0x10000ULL;
+#else
+  const APPLE_AGX_U64 alignment=device->Runtime.Screen.Info.PageBytes;
+#endif
+  HRESULT result=AdmissionUmdScreenAdoptAllocation(&device->Runtime,
+      record->Resource.KernelAllocation,desc->Size,alignment,
+      AgxWin32BufferClassGeneral,access,
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      record->Resource.WrittenPrimary,desc->CpuVisible==0u,
+#endif
+      &record->RenderBuffer);
+  if(FAILED(result)) return result;
+  record->RenderResource=AgxWin32AsahiImportLinearColor32(device->Screen,
+      &record->RenderBuffer,desc->Width,desc->Height,desc->Pitch,desc->Size,format);
+  if(!record->RenderResource) {
+    (void)AgxWin32ScreenDestroyBuffer(&device->Runtime.Screen,&record->RenderBuffer);
+    ZeroMemory(&record->RenderBuffer,sizeof(record->RenderBuffer));
+    return FAILED(device->Runtime.LastScreenError)?device->Runtime.LastScreenError:E_FAIL;
+  }
+  return S_OK;
+}
+
+static void unlink_owner(AGX_D3D10_WINDOWS_DEVICE *owner) {
+  if(!owner || !owner->Adapter) return;
+  AGX_D3D10_WINDOWS_ADAPTER *adapter=owner->Adapter;
+  AcquireSRWLockExclusive(&adapter->Lock);
+  AGX_D3D10_WINDOWS_DEVICE **link=&adapter->Owners;
+  while(*link && *link!=owner) link=&(*link)->Next;
+  if(*link==owner) *link=owner->Next;
+  if(adapter->Devices) --adapter->Devices;
+  ReleaseSRWLockExclusive(&adapter->Lock);
+}
+
+static void unlink_and_free(AGX_D3D10_WINDOWS_DEVICE **inout) {
+  if(!inout || !*inout) return;
+  AGX_D3D10_WINDOWS_DEVICE *owner=*inout;
+  unlink_owner(owner);
+  owner->Stage=AgxD3d10DeviceFreed;
+  HeapFree(GetProcessHeap(),0,owner);
+  *inout=NULL;
+}
+
+static HRESULT native_close_error(const AGX_D3D10_WINDOWS_DEVICE *owner) {
+  return FAILED(owner->Runtime.LastScreenError) ? owner->Runtime.LastScreenError
+                                                : HRESULT_FROM_WIN32(ERROR_BUSY);
+}
+
+static HRESULT close_device(AGX_D3D10_WINDOWS_DEVICE **inout) {
+  AGX_D3D10_WINDOWS_DEVICE *owner=*inout;
+  BOOL consumed=FALSE;
+  HRESULT result;
+  if(owner->Stage<AgxD3d10DeviceRuntimeReady) {
+    unlink_and_free(inout);
+    return S_OK;
+  }
+  if(owner->Stage<AgxD3d10DeviceClosing) owner->Stage=AgxD3d10DeviceClosing;
+  owner->Backend.Closing=1;
+  if(owner->Stage==AgxD3d10DeviceClosing) {
+    if(owner->Backend.ContextCount>(owner->Context?1u:0u))
+      return owner->CleanupStatus=HRESULT_FROM_WIN32(ERROR_BUSY);
+    owner->Runtime.LastScreenError=S_OK;
+    if(owner->Context && !AgxWin32AsahiContextDestroy(owner->Context))
+      return owner->CleanupStatus=native_close_error(owner);
+    owner->Context=NULL;
+    if(!collect_presentations(owner))
+      return owner->CleanupStatus=HRESULT_FROM_WIN32(ERROR_BUSY);
+    owner->Stage=AgxD3d10DeviceNativeContextReleased;
+  }
+  if(owner->Stage==AgxD3d10DeviceNativeContextReleased) {
+    owner->Runtime.LastScreenError=S_OK;
+    if(owner->Screen && !AgxWin32AsahiScreenDestroy(owner->Screen))
+      return owner->CleanupStatus=native_close_error(owner);
+    owner->Screen=NULL;
+    owner->Stage=AgxD3d10DeviceNativeScreenReleased;
+  }
+  if(owner->Stage==AgxD3d10DeviceNativeScreenReleased) {
+    result=AdmissionUmdScreenBeginClose(&owner->Runtime);
+    if(FAILED(result)) return owner->CleanupStatus=result;
+    result=AdmissionUmdRuntimeDeviceFinalize(&owner->Runtime,&consumed);
+    if(!consumed) return owner->CleanupStatus=FAILED(result)?result:E_FAIL;
+    owner->Stage=AgxD3d10DeviceRuntimeReleased;
+    owner->CleanupStatus=result;
+  }
+  if(owner->Stage==AgxD3d10DeviceRuntimeReleased) {
+    result=owner->CleanupStatus;
+    unlink_and_free(inout);
+    return result;
+  }
+  return owner->CleanupStatus=E_FAIL;
+}
+
+HRESULT AgxD3d10WindowsOpenAdapter(const D3D10DDIARG_OPENADAPTER *Args,
+                                  AGX_D3D10_WINDOWS_ADAPTER **Adapter) {
+  AdmissionUmdDiagnostic("g4-open-adapter-enter",S_OK,NULL,0u);
+  if (Args) {
+    UINT values[2] = {Args->Interface, Args->Version};
+    AdmissionUmdDiagnostic("g4-open-adapter-args",S_OK,values,2u);
+  }
+  if (Adapter == NULL || *Adapter != NULL) {
+    AdmissionUmdDiagnostic("g4-open-adapter-exit",E_INVALIDARG,NULL,0u);
+    return E_INVALIDARG;
+  }
+  AGX_D3D10_WINDOWS_ADAPTER *owner =
+      (AGX_D3D10_WINDOWS_ADAPTER *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                                           sizeof(*owner));
+  if (owner == NULL) {
+    AdmissionUmdDiagnostic("g4-open-adapter-exit",E_OUTOFMEMORY,NULL,0u);
+    return E_OUTOFMEMORY;
+  }
+  HRESULT result = AdmissionUmdRuntimeAdapterInitialize(&owner->Runtime, Args);
+  if (FAILED(result)) {
+    AdmissionUmdDiagnostic("g4-open-adapter-exit",result,NULL,0u);
+    HeapFree(GetProcessHeap(), 0, owner); return result;
+  }
+  InitializeSRWLock(&owner->Lock);
+  *Adapter = owner;
+  AdmissionUmdDiagnostic("g4-open-adapter-exit",S_OK,NULL,0u);
+  return S_OK;
+}
+
+HRESULT AgxD3d10WindowsCloseAdapter(AGX_D3D10_WINDOWS_ADAPTER **Adapter) {
+  if (Adapter == NULL || *Adapter == NULL) return E_INVALIDARG;
+  AGX_D3D10_WINDOWS_ADAPTER *owner = *Adapter;
+  AcquireSRWLockExclusive(&owner->Lock);
+  if (owner->Devices != 0u || owner->Owners != NULL) {
+    ReleaseSRWLockExclusive(&owner->Lock);
+    return HRESULT_FROM_WIN32(ERROR_BUSY);
+  }
+  ReleaseSRWLockExclusive(&owner->Lock);
+  while(owner->Terminal) {
+    AGX_D3D10_WINDOWS_TERMINAL *record=owner->Terminal;
+    owner->Terminal=record->Next;
+    HeapFree(GetProcessHeap(),0,record);
+  }
+  /* As with the runtime adapter handle, the caller serializes CloseAdapter
+   * against new calls using that handle. Device callbacks run outside Lock. */
+  HeapFree(GetProcessHeap(), 0, owner);
+  *Adapter = NULL;
+  return S_OK;
+}
+
+HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
+                                   const D3D10DDIARG_CREATEDEVICE *Args,
+                                   AGX_D3D10_WINDOWS_DEVICE **Device) {
+  AdmissionUmdDiagnostic("g4-create-device-enter",S_OK,NULL,0u);
+  if (Args) {
+    UINT values[2] = {Args->Interface, Args->Version};
+    AdmissionUmdDiagnostic("g4-create-device-args",S_OK,values,2u);
+  }
+  if (Adapter == NULL || Device == NULL || *Device != NULL) {
+    AdmissionUmdDiagnostic("g4-create-device-exit",E_INVALIDARG,NULL,0u);
+    return E_INVALIDARG;
+  }
+  AGX_D3D10_WINDOWS_DEVICE *owner =
+      (AGX_D3D10_WINDOWS_DEVICE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                                          sizeof(*owner));
+  if (owner == NULL) {
+    AdmissionUmdDiagnostic("g4-create-device-exit",E_OUTOFMEMORY,NULL,0u);
+    return E_OUTOFMEMORY;
+  }
+  owner->Adapter=Adapter;
+  owner->Stage=AgxD3d10DeviceAllocated;
+  owner->InitialFailure=S_OK;
+  owner->CleanupStatus=S_OK;
+  AcquireSRWLockExclusive(&Adapter->Lock);
+  if (Adapter->Devices == ~(ULONG)0u) {
+    ReleaseSRWLockExclusive(&Adapter->Lock);
+    HeapFree(GetProcessHeap(), 0, owner);
+    AdmissionUmdDiagnostic("g4-create-device-exit",E_OUTOFMEMORY,NULL,0u);
+    return E_OUTOFMEMORY;
+  }
+  ++Adapter->Devices;
+  owner->Next=Adapter->Owners;
+  Adapter->Owners=owner;
+  ReleaseSRWLockExclusive(&Adapter->Lock);
+  HRESULT result = AdmissionUmdRuntimeDeviceInitialize(&owner->Runtime,
+                                                       &Adapter->Runtime, Args);
+  if(FAILED(result)) goto failed;
+  owner->Stage=AgxD3d10DeviceRuntimeReady;
+  owner->Owner.Device=&owner->Runtime;
+  owner->Owner.Backend=&owner->Backend;
+  AdmissionUmdAsahiOwnerOperations(&owner->OwnerOperations);
+  /* D3D-G4: D3D depth-stencil views submit ZLS attachments through the same
+   * winsys/KMD path the GL ICD validated (EXP1149). */
+  owner->Backend.ZlsAttachments=1;
+  /* D3D-H6: out-of-bounds constant-buffer, UAV and vertex reads return 0
+   * and out-of-bounds UAV writes are dropped (D3D11.3 7.5, 8.19.2). */
+  owner->Backend.D3dRobustness=1;
+  owner->Backend.Multisample=
+      AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SCREEN_MSAA") ? 1 : 0;
+  owner->Screen=AgxWin32AsahiScreenCreateForWindows(&owner->Backend,&owner->Runtime.Screen,
+      &owner->OwnerOperations,&owner->Owner,AdmissionUmdAsahiBatchOperations());
+  {
+    /* EXP1317: + the SGX core topology the KMD reported. */
+    UINT values[6]={owner->Screen!=NULL ? 1u : 0u,
+                    owner->Backend.Native!=NULL ? 1u : 0u,
+                    owner->Backend.Failed ? 1u : 0u,
+                    owner->Backend.GpuvaReady ? 1u : 0u,
+                    owner->Runtime.Screen.Info.CoresPerCluster,
+                    owner->Runtime.Screen.Info.CoreMask};
+    AdmissionUmdDiagnostic("g4-native-screen-create",owner->Runtime.LastScreenError,
+                           values,ARRAYSIZE(values));
+  }
+  if(!owner->Screen) {
+    owner->Screen=AgxWin32AsahiScreenRecover(&owner->Backend);
+    if(owner->Screen) owner->Stage=AgxD3d10DeviceNativeScreenReady;
+    result=FAILED(owner->Runtime.LastScreenError)?owner->Runtime.LastScreenError:E_OUTOFMEMORY;
+    goto failed;
+  }
+  owner->Stage=AgxD3d10DeviceNativeScreenReady;
+  owner->Context=AgxWin32AsahiContextCreate(owner->Screen,&owner->Owner);
+  if(!owner->Context) { result=E_OUTOFMEMORY;goto failed; }
+  owner->Stage=AgxD3d10DeviceNativeContextReady;
+  AgxWin32BatchRefusalHook=AgxD3d10BatchRefusal;
+  AgxWin32BackendFailHook=AgxD3d10BackendFail;
+  AgxWin32VdmTraceHook=AgxD3d10VdmTrace;
+  AgxWin32RenderTraceHook=AgxD3d10RenderTrace;
+  AgxWin32ScratchTraceHook=AgxD3d10ScratchTrace;
+  AgxWin32FirstFaultHook=AgxD3d10FirstFault;
+  AgxWin32PerfHook=AgxD3d10PerfNote;
+  owner->Stage=AgxD3d10DeviceReady;
+  *Device = owner;
+  AdmissionUmdDiagnostic("g4-create-device-exit",S_OK,NULL,0u);
+  return S_OK;
+failed:
+  owner->InitialFailure=result;
+  AdmissionUmdDiagnostic("g4-create-device-exit",result,NULL,0u);
+  {
+    AGX_D3D10_WINDOWS_DEVICE *cleanup=owner;
+    HRESULT cleanupResult=close_device(&cleanup);
+    if(cleanup) {
+      cleanup->CleanupStatus=cleanupResult;
+      *Device=cleanup;
+    }
+  }
+  return result;
+}
+
+HRESULT AgxD3d10WindowsCloseDevice(AGX_D3D10_WINDOWS_DEVICE **Device) {
+  if (Device == NULL || *Device == NULL) return E_INVALIDARG;
+  return close_device(Device);
+}
+
+static HRESULT terminalize_device(AGX_D3D10_WINDOWS_DEVICE **inout,HRESULT error) {
+  AGX_D3D10_WINDOWS_DEVICE *owner=*inout;
+  AGX_D3D10_WINDOWS_ADAPTER *adapter=owner->Adapter;
+  ULONG stage=owner->Stage,activeBuffers=0,queryMarkers=0;
+  ULONG nativeContexts=owner->Backend.ContextCount,liveBos=owner->Backend.LiveBos;
+  BOOL kernelQuiesced=owner->KernelQuiesced;
+  static_assert(sizeof(*owner)>=sizeof(AGX_D3D10_WINDOWS_TERMINAL),
+                "terminal record must fit the consumed owner allocation");
+  if(SUCCEEDED(error)) error=E_FAIL;
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(&owner->Runtime);++i)
+    if(owner->Runtime.ScreenBuffers[i].Active) ++activeBuffers;
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_FENCE_LIMIT;++i)
+    if(owner->Runtime.ScreenFences[i].Active &&
+       owner->Runtime.ScreenFences[i].Kind!=AdmissionUmdFenceDraw)
+      ++queryMarkers;
+  ULONG packedCounts=0;
+  if(activeBuffers<=AgxD3d10TerminalCountMask &&
+     queryMarkers<=AgxD3d10TerminalCountMask) {
+    packedCounts=activeBuffers|
+        (queryMarkers<<AgxD3d10TerminalQueryShift);
+  } else {
+    error=E_FAIL;
+  }
+  {
+    /* EXP1132: app DestroyDevice still terminalizes (ApplicationFrameHost,
+     * M365Copilot); name the close stage and state that refused it. */
+    UINT values[9]={stage,(UINT)error,(UINT)owner->CleanupStatus,
+        activeBuffers,queryMarkers,nativeContexts,liveBos,
+        (UINT)kernelQuiesced,(UINT)owner->Runtime.LastScreenError};
+    AdmissionUmdDiagnostic("device-terminal",error,values,ARRAYSIZE(values));
+  }
+  AdmissionUmdSetError(&owner->Runtime,error);
+  unlink_owner(owner);
+  ZeroMemory(owner,sizeof(*owner));
+  AGX_D3D10_WINDOWS_TERMINAL *record=(AGX_D3D10_WINDOWS_TERMINAL *)owner;
+  record->Error=error;record->Stage=stage;
+  record->ActiveBuffersAndQueryMarkers=packedCounts;
+  record->NativeContexts=nativeContexts;record->LiveBos=liveBos;
+  record->KernelQuiesced=kernelQuiesced;
+  AcquireSRWLockExclusive(&adapter->Lock);
+  record->Next=adapter->Terminal;
+  adapter->Terminal=record;
+  ReleaseSRWLockExclusive(&adapter->Lock);
+  *inout=NULL;
+  return error;
+}
+
+HRESULT AgxD3d10WindowsDestroyDeviceDdi(AGX_D3D10_WINDOWS_DEVICE **Device,
+                                       BOOL *Consumed) {
+  AGX_D3D10_WINDOWS_DEVICE *owner;
+  BOOL destroyed=FALSE;
+  HRESULT result;
+  if(Consumed) *Consumed=FALSE;
+  if(!Device || !*Device || !Consumed) return E_INVALIDARG;
+  owner=*Device;
+  if(owner->Stage<AgxD3d10DeviceClosing) owner->Stage=AgxD3d10DeviceClosing;
+  owner->Backend.Closing=1;
+  if(owner->Backend.ContextCount>(owner->Context?1u:0u))
+    return terminalize_device(Device,HRESULT_FROM_WIN32(ERROR_BUSY));
+  /* EXP1133 device-terminal: apps destroyed devices with a batch still
+   * active; once the kernel context was gone it could neither be submitted
+   * nor retired and the close terminalized (48-63 BOs kept). Submit and wait
+   * first, as Mesa's agx_destroy_context does (agx_sync_all). */
+  if(owner->Context) {
+    owner->Context->flush(owner->Context,NULL,0);
+    if(!AgxWin32AsahiContextRetire(owner->Context,INFINITE))
+      return terminalize_device(Device,E_FAIL);
+  }
+  result=AdmissionUmdRuntimeDeviceDestroyKernelContext(&owner->Runtime,&destroyed);
+  if(FAILED(result) || !destroyed)
+    return terminalize_device(Device,FAILED(result)?result:E_FAIL);
+  owner->KernelQuiesced=TRUE;
+  if(owner->Context && !AgxWin32AsahiContextRetire(owner->Context,INFINITE))
+    return terminalize_device(Device,E_FAIL);
+  result=close_device(Device);
+  if(*Device) return terminalize_device(Device,FAILED(result)?result:E_FAIL);
+  *Consumed=TRUE;
+  return result;
+}
+
+struct pipe_context *AgxD3d10WindowsContext(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  return Device != NULL && Device->Stage==AgxD3d10DeviceReady ? Device->Context : NULL;
+}
+
+BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name) {
+  char value[8];
+  DWORD length = Name ? GetEnvironmentVariableA(Name, value, sizeof(value)) : 0;
+  return length == 1 && value[0] == '1';
+}
+
+UINT AgxD3d10WindowsMsaaProbe(VOID) {
+  static volatile LONG cached = -1;
+  LONG value = InterlockedCompareExchange(&cached, -1, -1);
+  if (value < 0) {
+    char text[16];
+    DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D_MSAA_CAPS", text, sizeof(text));
+    value = 0;
+    for (DWORD i = 0; length && length < sizeof(text) && i < length; ++i) {
+      char c = text[i];
+      int digit = c >= '0' && c <= '9' ? c - '0' :
+                  c >= 'a' && c <= 'f' ? c - 'a' + 10 :
+                  c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+      if (digit < 0) { value = 0; break; }
+      value = ((value << 4) | digit) & 0xff;
+    }
+    InterlockedExchange(&cached, value);
+  }
+  return (UINT)value;
+}
+
+/* EXP1288 measured the runtime's rule for multisample reporting (it is not
+ * documented): it walks every cast family, typeless parent first, asks
+ * sample counts 2..31, and refuses the device when a member answers levels
+ * its typeless parent does not, or when a read-only member (one that can be
+ * neither a render nor a depth target) answers MULTISAMPLE_RENDERTARGET.
+ * The families below are the DXGI cast families (the runtime walked all
+ * but the BC ones, which have no render member); Role says what a member
+ * can be bound as. D3D-G10a: the same table decides which views a typeless
+ * resource admits (AgxD3d10WindowsCastParent). */
+enum AgxD3d10CastRole { AgxCastNone, AgxCastParent, AgxCastTarget,
+                        AgxCastDepth, AgxCastReadOnly };
+static DXGI_FORMAT AgxD3d10CastParent(DXGI_FORMAT Format, enum AgxD3d10CastRole *Role) {
+  struct member { DXGI_FORMAT Format, Parent; enum AgxD3d10CastRole Role; };
+  static const struct member members[] = {
+#define P(f) {DXGI_FORMAT_##f, DXGI_FORMAT_##f, AgxCastParent}
+#define T(f,p) {DXGI_FORMAT_##f, DXGI_FORMAT_##p, AgxCastTarget}
+#define D(f,p) {DXGI_FORMAT_##f, DXGI_FORMAT_##p, AgxCastDepth}
+#define R(f,p) {DXGI_FORMAT_##f, DXGI_FORMAT_##p, AgxCastReadOnly}
+    P(R32G32B32A32_TYPELESS), T(R32G32B32A32_FLOAT,R32G32B32A32_TYPELESS),
+    T(R32G32B32A32_UINT,R32G32B32A32_TYPELESS), T(R32G32B32A32_SINT,R32G32B32A32_TYPELESS),
+    P(R32G32B32_TYPELESS), T(R32G32B32_FLOAT,R32G32B32_TYPELESS),
+    T(R32G32B32_UINT,R32G32B32_TYPELESS), T(R32G32B32_SINT,R32G32B32_TYPELESS),
+    P(R16G16B16A16_TYPELESS), T(R16G16B16A16_FLOAT,R16G16B16A16_TYPELESS),
+    T(R16G16B16A16_UNORM,R16G16B16A16_TYPELESS), T(R16G16B16A16_UINT,R16G16B16A16_TYPELESS),
+    T(R16G16B16A16_SNORM,R16G16B16A16_TYPELESS), T(R16G16B16A16_SINT,R16G16B16A16_TYPELESS),
+    P(R32G32_TYPELESS), T(R32G32_FLOAT,R32G32_TYPELESS), T(R32G32_UINT,R32G32_TYPELESS),
+    T(R32G32_SINT,R32G32_TYPELESS),
+    P(R32G8X24_TYPELESS), D(D32_FLOAT_S8X24_UINT,R32G8X24_TYPELESS),
+    R(R32_FLOAT_X8X24_TYPELESS,R32G8X24_TYPELESS), R(X32_TYPELESS_G8X24_UINT,R32G8X24_TYPELESS),
+    P(R10G10B10A2_TYPELESS), T(R10G10B10A2_UNORM,R10G10B10A2_TYPELESS),
+    T(R10G10B10A2_UINT,R10G10B10A2_TYPELESS),
+    P(R8G8B8A8_TYPELESS), T(R8G8B8A8_UNORM,R8G8B8A8_TYPELESS),
+    T(R8G8B8A8_UNORM_SRGB,R8G8B8A8_TYPELESS), T(R8G8B8A8_UINT,R8G8B8A8_TYPELESS),
+    T(R8G8B8A8_SNORM,R8G8B8A8_TYPELESS), T(R8G8B8A8_SINT,R8G8B8A8_TYPELESS),
+    P(R16G16_TYPELESS), T(R16G16_FLOAT,R16G16_TYPELESS), T(R16G16_UNORM,R16G16_TYPELESS),
+    T(R16G16_UINT,R16G16_TYPELESS), T(R16G16_SNORM,R16G16_TYPELESS), T(R16G16_SINT,R16G16_TYPELESS),
+    P(R32_TYPELESS), D(D32_FLOAT,R32_TYPELESS), T(R32_FLOAT,R32_TYPELESS),
+    T(R32_UINT,R32_TYPELESS), T(R32_SINT,R32_TYPELESS),
+    P(R24G8_TYPELESS), D(D24_UNORM_S8_UINT,R24G8_TYPELESS),
+    R(R24_UNORM_X8_TYPELESS,R24G8_TYPELESS), R(X24_TYPELESS_G8_UINT,R24G8_TYPELESS),
+    P(R8G8_TYPELESS), T(R8G8_UNORM,R8G8_TYPELESS), T(R8G8_UINT,R8G8_TYPELESS),
+    T(R8G8_SNORM,R8G8_TYPELESS), T(R8G8_SINT,R8G8_TYPELESS),
+    P(R16_TYPELESS), T(R16_FLOAT,R16_TYPELESS), D(D16_UNORM,R16_TYPELESS),
+    T(R16_UNORM,R16_TYPELESS), T(R16_UINT,R16_TYPELESS), T(R16_SNORM,R16_TYPELESS),
+    T(R16_SINT,R16_TYPELESS),
+    P(R8_TYPELESS), T(R8_UNORM,R8_TYPELESS), T(R8_UINT,R8_TYPELESS), T(R8_SNORM,R8_TYPELESS),
+    T(R8_SINT,R8_TYPELESS),
+    P(BC1_TYPELESS), R(BC1_UNORM,BC1_TYPELESS), R(BC1_UNORM_SRGB,BC1_TYPELESS),
+    P(BC2_TYPELESS), R(BC2_UNORM,BC2_TYPELESS), R(BC2_UNORM_SRGB,BC2_TYPELESS),
+    P(BC3_TYPELESS), R(BC3_UNORM,BC3_TYPELESS), R(BC3_UNORM_SRGB,BC3_TYPELESS),
+    P(BC4_TYPELESS), R(BC4_UNORM,BC4_TYPELESS), R(BC4_SNORM,BC4_TYPELESS),
+    P(BC5_TYPELESS), R(BC5_UNORM,BC5_TYPELESS), R(BC5_SNORM,BC5_TYPELESS),
+    /* D3D-H5: BC6H/BC7 (FL 11_0; AGX samples BPTC natively) */
+    P(BC6H_TYPELESS), R(BC6H_UF16,BC6H_TYPELESS), R(BC6H_SF16,BC6H_TYPELESS),
+    P(BC7_TYPELESS), R(BC7_UNORM,BC7_TYPELESS), R(BC7_UNORM_SRGB,BC7_TYPELESS),
+    P(B8G8R8A8_TYPELESS), T(B8G8R8A8_UNORM,B8G8R8A8_TYPELESS),
+    T(B8G8R8A8_UNORM_SRGB,B8G8R8A8_TYPELESS),
+    P(B8G8R8X8_TYPELESS), T(B8G8R8X8_UNORM,B8G8R8X8_TYPELESS),
+    T(B8G8R8X8_UNORM_SRGB,B8G8R8X8_TYPELESS),
+#undef P
+#undef T
+#undef D
+#undef R
+  };
+  for (UINT i = 0; i < sizeof(members) / sizeof(members[0]); ++i)
+    if (members[i].Format == Format) { *Role = members[i].Role; return members[i].Parent; }
+  *Role = AgxCastNone;
+  return DXGI_FORMAT_UNKNOWN;
+}
+
+DXGI_FORMAT AgxD3d10WindowsCastParent(DXGI_FORMAT Format, UINT *ReadOnly) {
+  enum AgxD3d10CastRole role;
+  DXGI_FORMAT parent = AgxD3d10CastParent(Format, &role);
+  if (ReadOnly) *ReadOnly = role == AgxCastReadOnly;
+  return parent;
+}
+
+/* EXP1289 probe policies (APPLE_AGX_D3D_MSAA_CAPS; 0 = the EXP1284 answers):
+ * 0x10 the BGRA8, BGRX8, D24S8 and D32S8 families; 0x20 also the RGBA8,
+ * RGBA16, R32/D32 and R16/D16 families. A family answers 2x/4x for its
+ * parent and every member. */
+static BOOL AgxD3d10MsaaFamily(DXGI_FORMAT Parent, UINT Probe) {
+  if (Probe & 0x30u) {
+    if (Parent == DXGI_FORMAT_B8G8R8A8_TYPELESS || Parent == DXGI_FORMAT_B8G8R8X8_TYPELESS ||
+        Parent == DXGI_FORMAT_R24G8_TYPELESS || Parent == DXGI_FORMAT_R32G8X24_TYPELESS)
+      return TRUE;
+  }
+  if (Probe & 0x20u) {
+    if (Parent == DXGI_FORMAT_R8G8B8A8_TYPELESS || Parent == DXGI_FORMAT_R16G16B16A16_TYPELESS ||
+        Parent == DXGI_FORMAT_R32_TYPELESS || Parent == DXGI_FORMAT_R16_TYPELESS)
+      return TRUE;
+  }
+  return FALSE;
+}
+
+/* EXP1289: a read-only member answering levels was refused as well (its
+ * caps had no MULTISAMPLE_RENDERTARGET), so read-only members answer none;
+ * the parent, render and depth members answer the family's levels. The
+ * rule the six EXP1285-EXP1289 refusals agree with: levels need
+ * MULTISAMPLE_RENDERTARGET on a typed format, which a read-only member may
+ * not answer, and a member may not answer more than its typeless parent. */
+BOOL AgxD3d10WindowsMsaaFormat(DXGI_FORMAT Format, UINT Probe) {
+  enum AgxD3d10CastRole role;
+  DXGI_FORMAT parent = AgxD3d10CastParent(Format, &role);
+  return role != AgxCastNone && role != AgxCastReadOnly &&
+         AgxD3d10MsaaFamily(parent, Probe);
+}
+
+BOOL AgxD3d10WindowsMsaaRenderTarget(DXGI_FORMAT Format, UINT Probe) {
+  enum AgxD3d10CastRole role;
+  DXGI_FORMAT parent = AgxD3d10CastParent(Format, &role);
+  /* EXP1288: typeless parents with the bit passed (R16G16B16A16, R32G8X24);
+   * a read-only member with it was refused. */
+  return role != AgxCastNone && role != AgxCastReadOnly &&
+         AgxD3d10MsaaFamily(parent, Probe);
+}
+
+VOID AgxD3d10WindowsMsaaReceipt(UINT Kind, UINT Format, UINT SampleCount,
+                                UINT Answer) {
+  UINT values[4]={Kind,Format,SampleCount,Answer};
+  AgxD3d10WindowsDiagnostic("measure-msaa-check",S_OK,values,4u);
+}
+
+BOOL AgxD3d10WindowsIdentity(AGX_D3D10_WINDOWS_DEVICE *Device,
+                             ULONGLONG *OwnerCookie,
+                             ULONG *DeviceGeneration) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady ||
+     !OwnerCookie || !DeviceGeneration || !Device->Runtime.OwnerCookie ||
+     !Device->Runtime.Win32Generation) return FALSE;
+  *OwnerCookie=Device->Runtime.OwnerCookie;
+  *DeviceGeneration=Device->Runtime.Win32Generation;
+  return TRUE;
+}
+
+HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  AgxD3d10WindowsDiagnosticState(Device,"flush-state");
+  ADMISSION_UMD_ASAHI_BATCH *batch=
+      (ADMISSION_UMD_ASAHI_BATCH *)Device->Runtime.NativeBatchTransaction;
+  if(batch && (FAILED(batch->Submission.RenderStatus) ||
+               FAILED(batch->Submission.PostStatus)))
+    return FAILED(batch->Submission.PostStatus)?batch->Submission.PostStatus:
+        batch->Submission.RenderStatus;
+  if(!Device->Backend.Failed && !Device->Runtime.DrawTerminal) return S_OK;
+  return FAILED(Device->Runtime.LastScreenError)?
+      Device->Runtime.LastScreenError:E_FAIL;
+}
+
+HRESULT AgxD3d10WindowsFlushDeferredResources(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  /* Flush must release eligible shared resources even with no new commands.
+   * A registered native BO still owns source/submission references: collection
+   * leaves it pending, and only fully retired resources reach this queue. */
+  (void)collect_presentations(Device);
+  if(!AdmissionUmdRetirementDrain(&Device->Runtime.Retirement))
+    return FAILED(Device->Runtime.LastRetirementError) ?
+        Device->Runtime.LastRetirementError : E_FAIL;
+  return S_OK;
+}
+
+/* EXP1083 receipt-only: why a flush-retire failed (EXP1082: DWM ResourceMap
+ * returned ERROR_BUSY): step 1 context retirement, 2 presentation collection;
+ * timeout, result, screen error, draw terminal, pending presentations, then
+ * AgxWin32AsahiContextRetireDiagnostic. The first 16 per process. */
+static void flush_retire_receipt(AGX_D3D10_WINDOWS_DEVICE *Device,UINT step,
+                                 DWORD timeout,HRESULT result) {
+  static volatile LONG reported;
+  if(InterlockedIncrement(&reported)>16) return;
+  APPLE_AGX_U32 state[12];
+  AgxWin32AsahiContextRetireDiagnostic(Device->Context,state);
+  UINT values[18]={step,(UINT)timeout,(UINT)result,
+      (UINT)Device->Runtime.LastScreenError,(UINT)Device->Runtime.DrawTerminal,
+      (UINT)(Device->PendingPresentations!=NULL)};
+  for(UINT i=0;i<12u;++i) values[6u+i]=state[i];
+  AdmissionUmdDiagnostic("reject-flush-retire",result,values,ARRAYSIZE(values));
+}
+
+static HRESULT flush_retire(AGX_D3D10_WINDOWS_DEVICE *Device,DWORD timeout) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Device->Context)
+    return E_INVALIDARG;
+  Device->Context->flush(Device->Context,NULL,0);
+  HRESULT result=AgxD3d10WindowsFlushStatus(Device);
+  if(FAILED(result)) return result;
+  if(!AgxWin32AsahiContextRetire(Device->Context,timeout)) {
+    result=FAILED(Device->Runtime.LastScreenError)?
+        Device->Runtime.LastScreenError:HRESULT_FROM_WIN32(ERROR_BUSY);
+    flush_retire_receipt(Device,1u,timeout,result);
+    /* Only an unsignalled fence in a zero-time poll is a nonblocking retry.
+     * Preserve real errors and keep all submission holds until completion. */
+    if(timeout==0 && result==HRESULT_FROM_WIN32(ERROR_TIMEOUT))
+      return DXGI_DDI_ERR_WASSTILLDRAWING;
+    return result;
+  }
+  if(!collect_presentations(Device)) {
+    flush_retire_receipt(Device,2u,timeout,HRESULT_FROM_WIN32(ERROR_BUSY));
+    return timeout==0 ? DXGI_DDI_ERR_WASSTILLDRAWING : HRESULT_FROM_WIN32(ERROR_BUSY);
+  }
+  return S_OK;
+}
+HRESULT AgxD3d10WindowsFlushRetire(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  return flush_retire(Device,INFINITE);
+}
+HRESULT AgxD3d10WindowsTryFlushRetire(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  return flush_retire(Device,0);
+}
+
+HRESULT AgxD3d10WindowsQuerySignal(AGX_D3D10_WINDOWS_DEVICE *Device,
+    ULONGLONG OwnerCookie, ULONG DeviceGeneration, ULONG Issue, ULONG *Fence) {
+  APPLE_AGX_U32 token=0;
+  if(Fence) *Fence=0;
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Fence) return E_INVALIDARG;
+  HRESULT result=AdmissionUmdScreenSignalQueryFence(&Device->Runtime,OwnerCookie,
+      DeviceGeneration,Issue,&token);
+  if(SUCCEEDED(result)) *Fence=token;
+  return result;
+}
+HRESULT AgxD3d10WindowsQueryPoll(AGX_D3D10_WINDOWS_DEVICE *Device,
+    ULONGLONG OwnerCookie, ULONG DeviceGeneration, ULONG Issue, ULONG Fence,
+    BOOL *Completed) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  return AdmissionUmdScreenPollQueryFence(&Device->Runtime,OwnerCookie,
+      DeviceGeneration,Issue,Fence,Completed);
+}
+HRESULT AgxD3d10WindowsQueryConsume(AGX_D3D10_WINDOWS_DEVICE *Device,
+    ULONGLONG OwnerCookie, ULONG DeviceGeneration, ULONG Issue, ULONG Fence) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  return AdmissionUmdScreenConsumeQueryFence(&Device->Runtime,OwnerCookie,
+      DeviceGeneration,Issue,Fence);
+}
+HRESULT AgxD3d10WindowsQueryDetach(AGX_D3D10_WINDOWS_DEVICE *Device,
+    ULONGLONG OwnerCookie, ULONG DeviceGeneration, ULONG Issue, ULONG Fence) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  return AdmissionUmdScreenDetachQueryFence(&Device->Runtime,OwnerCookie,
+      DeviceGeneration,Issue,Fence);
+}
+HRESULT AgxD3d10WindowsQueryCollect(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  return AdmissionUmdScreenCollectDetachedQueryFences(&Device->Runtime);
+}
+
+HRESULT AgxD3d10WindowsPresentationOpen(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    const D3D10DDIARG_OPENRESOURCE *OpenResource,
+    D3D10DDI_HRTRESOURCE RuntimeResource,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resource) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !OpenResource ||
+     !Resource || *Resource || !RuntimeResource.handle) return E_INVALIDARG;
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record=
+      (AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *)HeapAlloc(
+          GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(*record));
+  if(!record) return E_OUTOFMEMORY;
+  D3D10DDI_HDEVICE deviceHandle={0};
+  D3D10DDI_HRESOURCE resourceHandle={0};
+  deviceHandle.pDrvPrivate=&Device->Runtime;
+  resourceHandle.pDrvPrivate=&record->Resource;
+  AdmissionUmdOpenResource(deviceHandle,OpenResource,resourceHandle,RuntimeResource);
+  if(record->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+     !record->Resource.Retirement) {
+    HeapFree(GetProcessHeap(),0,record);
+    return FAILED(Device->Runtime.LastScreenError)?
+        Device->Runtime.LastScreenError:E_INVALIDARG;
+  }
+  HRESULT result=attach_presentation_render_resource(Device,record);
+  AdmissionUmdDiagnostic("presentation-import",result,NULL,0u);
+  if(FAILED(result)) {
+    AdmissionUmdDestroyResource(deviceHandle,resourceHandle);
+    HeapFree(GetProcessHeap(),0,record);return result;
+  }
+  record->Device=Device;*Resource=record;return S_OK;
+}
+
+HRESULT AgxD3d10WindowsPresentationCreate(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    const D3D10DDIARG_CREATERESOURCE *CreateResource,
+    D3D10DDI_HRTRESOURCE RuntimeResource,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resource) {
+  AdmissionUmdDiagnostic("g4-create-resource-enter",S_OK,NULL,0u);
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !CreateResource ||
+     !Resource || *Resource || !RuntimeResource.handle) {
+    AdmissionUmdDiagnostic("g4-create-resource-exit",E_INVALIDARG,NULL,0u);
+    return E_INVALIDARG;
+  }
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record=
+      (AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *)HeapAlloc(
+          GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(*record));
+  if(!record) {
+    AdmissionUmdDiagnostic("g4-create-resource-exit",E_OUTOFMEMORY,NULL,0u);
+    return E_OUTOFMEMORY;
+  }
+  D3D11DDIARG_CREATERESOURCE create={0};
+  create.pMipInfoList=CreateResource->pMipInfoList;
+  create.pInitialDataUP=CreateResource->pInitialDataUP;
+  create.ResourceDimension=CreateResource->ResourceDimension;
+  create.Usage=CreateResource->Usage;create.BindFlags=CreateResource->BindFlags;
+  create.MapFlags=CreateResource->MapFlags;create.MiscFlags=CreateResource->MiscFlags;
+  create.Format=CreateResource->Format;create.SampleDesc=CreateResource->SampleDesc;
+  create.MipLevels=CreateResource->MipLevels;create.ArraySize=CreateResource->ArraySize;
+  create.pPrimaryDesc=CreateResource->pPrimaryDesc;
+  D3D10DDI_HDEVICE deviceHandle={0};D3D10DDI_HRESOURCE resourceHandle={0};
+  deviceHandle.pDrvPrivate=&Device->Runtime;resourceHandle.pDrvPrivate=&record->Resource;
+  AdmissionUmdCreateResource(deviceHandle,&create,resourceHandle,RuntimeResource);
+  if(record->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+     !record->Resource.Retirement) {
+    HeapFree(GetProcessHeap(),0,record);
+    AdmissionUmdDiagnostic("g4-create-resource-exit",E_INVALIDARG,NULL,0u);
+    return E_INVALIDARG;
+  }
+  HRESULT result=attach_presentation_render_resource(Device,record);
+  AdmissionUmdDiagnostic("presentation-import",result,NULL,0u);
+  if(FAILED(result)) {
+    AdmissionUmdDiagnostic("g4-create-resource-exit",result,NULL,0u);
+    AdmissionUmdDestroyResource(deviceHandle,resourceHandle);
+    HeapFree(GetProcessHeap(),0,record);return result;
+  }
+  record->Device=Device;*Resource=record;
+  AdmissionUmdDiagnostic("g4-create-resource-exit",S_OK,NULL,0u);
+  return S_OK;
+}
+
+HRESULT AgxD3d10WindowsPresentationDestroy(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resource) {
+  if(!Device || !Resource || !*Resource || (*Resource)->Device!=Device ||
+     Device->Stage<AgxD3d10DeviceRuntimeReady ||
+     Device->Stage>=AgxD3d10DeviceRuntimeReleased) return E_INVALIDARG;
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record=*Resource;
+  if(record->RenderResource) {
+    AgxWin32AsahiResourceRelease(&record->RenderResource);
+  }
+  /* EXP975: hRTResource is freed when the runtime's DestroyResource returns.
+   * Submit immediate-context work that may still name the resource, then
+   * release the runtime-owned KM resource now; only the native slot
+   * bookkeeping below may stay deferred. */
+  if(Device->Stage==AgxD3d10DeviceReady && Device->Context)
+    Device->Context->flush(Device->Context,NULL,0);
+  {
+    D3D10DDI_HDEVICE deviceHandle={0};D3D10DDI_HRESOURCE resourceHandle={0};
+    deviceHandle.pDrvPrivate=&Device->Runtime;
+    resourceHandle.pDrvPrivate=&record->Resource;
+    HRESULT released=AdmissionUmdReleaseRuntimeResource(deviceHandle,resourceHandle);
+    if(FAILED(released)) AdmissionUmdSetError(&Device->Runtime,released);
+  }
+  record->Next=Device->PendingPresentations;
+  Device->PendingPresentations=record;*Resource=NULL;
+  (void)collect_presentations(Device);
+  return S_OK;
+}
+
+HRESULT AgxD3d10WindowsPresentationSubmit(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource,
+    PVOID DxgiContext) {
+  return AgxD3d10WindowsPresentationSubmitSurfaces(Device,&Resource,1u,DxgiContext);
+}
+
+/* DXGI_DDI_ARG_PRESENT1: with several surfaces (no destination) every one
+ * becomes visible, and only the last source is passed to pfnPresentCb. One
+ * flush covers their rendering; each surface's pending CPU writes are
+ * published before the present. */
+HRESULT AgxD3d10WindowsPresentationSubmitSurfaces(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *const *Resources,
+    UINT Count, PVOID DxgiContext) {
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitEntry,S_OK,NULL,0u);
+  AdmissionUmdDiagnostic("g4-present-enter",S_OK,NULL,0u);
+  BOOL valid=Device && Device->Stage==AgxD3d10DeviceReady && Resources && Count;
+  for(UINT i=0;valid && i<Count;++i)
+    valid=Resources[i] && Resources[i]->Device==Device &&
+          Resources[i]->Resource.Magic==ADMISSION_UMD_RESOURCE_MAGIC;
+  if(!valid) {
+    AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,E_INVALIDARG,NULL,0u);
+    AdmissionUmdDiagnostic("g4-present-exit",E_INVALIDARG,NULL,0u);
+    return E_INVALIDARG;
+  }
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource=Resources[Count-1u];
+  InterlockedIncrement(&AgxD3d10Presents);
+  InterlockedIncrement(&AgxD3d10DdiWindowPresents);
+  APPLE_AGX_U32 before[16],after[16],bindings[16];
+  AgxWin32AsahiContextDiagnostic(Device->Context,before,bindings);
+  int flushed=AgxWin32AsahiContextFlushForPresent(Device->Context);
+  AgxWin32AsahiContextDiagnostic(Device->Context,after,bindings);
+  UINT contextState[12]={before[0],before[1],before[2],before[3],
+      after[0],after[1],after[2],after[3],
+      (UINT)Device->Runtime.LastScreenError,(UINT)Device->Runtime.DrawTerminal,
+      (UINT)(uintptr_t)Device->Context,
+      (UINT)((uint64_t)(uintptr_t)Device->Context>>32)};
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeContextFlush,
+      flushed?S_OK:E_FAIL,contextState,ARRAYSIZE(contextState));
+  if(!flushed) {
+    AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,E_FAIL,NULL,0u);
+    AdmissionUmdDiagnostic("g4-present-exit",E_FAIL,NULL,0u);
+    return E_FAIL;
+  }
+  HRESULT result=AgxD3d10WindowsFlushStatus(Device);
+  ADMISSION_UMD_ASAHI_BATCH *activeBatch=
+      (ADMISSION_UMD_ASAHI_BATCH *)Device->Runtime.NativeBatchTransaction;
+  UINT flushState[6]={after[0],after[1],after[2],after[3],
+      activeBatch?(UINT)activeBatch->Submission.RenderStatus:0u,
+      activeBatch?(UINT)activeBatch->Submission.PostStatus:0u};
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeFlushStatus,
+      result,flushState,ARRAYSIZE(flushState));
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  for(UINT i=0;SUCCEEDED(result) && i<Count;++i)
+    if(Resources[i]->RenderBuffer.Transport.Token &&
+       !AdmissionUmdGpuvaPublishDirectMap(&Device->Runtime,
+                                          Resources[i]->RenderBuffer.Transport.Token))
+      result=E_FAIL;
+#endif
+  if(SUCCEEDED(result))
+    result=AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,result,NULL,0u);
+  AdmissionUmdDiagnostic("g4-present-exit",result,NULL,0u);
+  return result;
+}
+
+HRESULT AgxD3d10WindowsPresentationSetDisplayMode(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Resource ||
+     Resource->Device!=Device ||
+     Resource->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC)
+    return E_INVALIDARG;
+  DXGI_DDI_ARG_SETDISPLAYMODE args={0};
+  args.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)&Device->Runtime;
+  args.hResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)&Resource->Resource;
+  return AdmissionUmdSetDisplayMode(&args);
+}
+
+struct pipe_resource *AgxD3d10WindowsPresentationPipeResource(
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource) {
+  return Resource ? Resource->RenderResource : NULL;
+}
+
+int AgxD3d10WindowsClearRenderTargetRect(
+    struct pipe_context *Pipe, struct pipe_surface *Surface,
+    const union pipe_color_union *Color, UINT X, UINT Y, UINT Width,
+    UINT Height) {
+  return AgxWin32AsahiClearRenderTargetRect(Pipe,Surface,Color,X,Y,Width,Height);
+}
+
+UINT AgxD3d10WindowsPresentationFormat(
+    const AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource) {
+  return Resource ? Resource->Resource.DxgiFormat : 0u;
+}
+
+HRESULT AgxD3d10WindowsPresentationRotate(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resources,UINT Count) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Resources || Count<2u)
+    return E_INVALIDARG;
+  HRESULT result=AgxD3d10WindowsFlushRetire(Device);
+  if(FAILED(result)) return result;
+  enum pipe_format rotationFormat=PIPE_FORMAT_NONE;
+  AcquireSRWLockExclusive(&Device->Runtime.ScreenBufferLock);
+  for(UINT i=0;i<Count;++i) {
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *r=Resources[i];
+    ADMISSION_UMD_SCREEN_BUFFER *slot=NULL;
+    enum pipe_format format;
+    if(!r || r->Device!=Device ||
+       r->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+       !r->Resource.Retirement || !r->RenderBuffer.Transport.Token ||
+       !presentation_pipe_format(r->RenderResource,&format) ||
+       (i && format!=rotationFormat)) {
+      ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);return E_INVALIDARG;
+    }
+    if(!i) rotationFormat=format;
+    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_SCAN(&Device->Runtime);++j)
+      if(Device->Runtime.ScreenBuffers[j].Active &&
+         Device->Runtime.ScreenBuffers[j].Token==r->RenderBuffer.Transport.Token)
+        slot=&Device->Runtime.ScreenBuffers[j];
+    if(!slot || !slot->Borrowed || slot->Transition || slot->SubmissionHolds ||
+       slot->SourceHolds ||
+#ifdef APPLE_AGX_GPUVA_WINSYS
+       (slot->Direct ? slot->KernelAllocation : slot->StagingAllocation)!=
+           r->Resource.KernelAllocation
+#else
+       slot->KernelAllocation!=r->Resource.KernelAllocation
+#endif
+       ) {
+      ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);
+      return HRESULT_FROM_WIN32(ERROR_BUSY);
+    }
+  }
+  D3DKMT_HANDLE saved=Resources[0]->Resource.KernelAllocation;
+  AGX_WIN32_SCREEN_BUFFER savedBuffer=Resources[0]->RenderBuffer;
+  struct pipe_resource *savedTarget=Resources[0]->RenderResource;
+  for(UINT i=0;i+1u<Count;++i) {
+    Resources[i]->Resource.KernelAllocation=
+        Resources[i+1u]->Resource.KernelAllocation;
+    Resources[i]->Resource.Retirement->KernelAllocation=
+        Resources[i+1u]->Resource.KernelAllocation;
+    Resources[i]->RenderBuffer=Resources[i+1u]->RenderBuffer;
+    Resources[i]->RenderResource=Resources[i+1u]->RenderResource;
+  }
+  Resources[Count-1u]->Resource.KernelAllocation=saved;
+  Resources[Count-1u]->Resource.Retirement->KernelAllocation=saved;
+  Resources[Count-1u]->RenderBuffer=savedBuffer;
+  Resources[Count-1u]->RenderResource=savedTarget;
+  ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);
+  return S_OK;
+}
+
+static HRESULT resource_allocation(
+    AGX_D3D10_WINDOWS_DEVICE *device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation,
+    struct pipe_resource *resource,D3DKMT_HANDLE *allocation) {
+  if(allocation) *allocation=0;
+  if(!device || device->Stage!=AgxD3d10DeviceReady || !allocation)
+    return E_INVALIDARG;
+  if(presentation) {
+    if(presentation->Device!=device ||
+       presentation->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+       !presentation->Resource.KernelAllocation) return E_INVALIDARG;
+    *allocation=presentation->Resource.KernelAllocation;return S_OK;
+  }
+  AGX_WIN32_RELOC_ALLOCATION identity={0};
+  if(!resource || !AgxWin32AsahiResourceIdentity(resource,&identity))
+    return E_INVALIDARG;
+  AcquireSRWLockShared(&device->Runtime.ScreenBufferLock);
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(&device->Runtime);++i) {
+    ADMISSION_UMD_SCREEN_BUFFER *slot=&device->Runtime.ScreenBuffers[i];
+    if(slot->Active && !slot->Transition && slot->Token==identity.Token &&
+       slot->Serial==identity.Serial && slot->Bytes==identity.Bytes) {
+      *allocation=slot->KernelAllocation;break;
+    }
+  }
+  ReleaseSRWLockShared(&device->Runtime.ScreenBufferLock);
+  return *allocation ? S_OK : E_INVALIDARG;
+}
+
+HRESULT AgxD3d10WindowsSetResourcePriority(
+    AGX_D3D10_WINDOWS_DEVICE *device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation,
+    struct pipe_resource *resource,UINT priority) {
+  D3DKMT_HANDLE allocation=0;D3DDDICB_SETPRIORITY args={0};
+  HRESULT result=resource_allocation(device,presentation,resource,&allocation);
+  if(FAILED(result) || !device->Runtime.KernelCallbacks ||
+     !device->Runtime.KernelCallbacks->pfnSetPriorityCb) return E_INVALIDARG;
+  args.NumAllocations=1;args.HandleList=&allocation;args.pPriorities=&priority;
+  return device->Runtime.KernelCallbacks->pfnSetPriorityCb(
+      device->Runtime.RuntimeDevice.handle,&args);
+}
+
+HRESULT AgxD3d10WindowsQueryResourceResidency(
+    AGX_D3D10_WINDOWS_DEVICE *device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation,
+    struct pipe_resource *resource,DXGI_DDI_RESIDENCY *status) {
+  D3DKMT_HANDLE allocation=0;D3DDDI_RESIDENCYSTATUS kernelStatus;
+  D3DDDICB_QUERYRESIDENCY args={0};
+  if(status) *status=(DXGI_DDI_RESIDENCY)0;
+  HRESULT result=resource_allocation(device,presentation,resource,&allocation);
+  if(FAILED(result) || !status || !device->Runtime.KernelCallbacks ||
+     !device->Runtime.KernelCallbacks->pfnQueryResidencyCb) return E_INVALIDARG;
+  args.NumAllocations=1;args.HandleList=&allocation;
+  args.pResidencyStatus=&kernelStatus;
+  result=device->Runtime.KernelCallbacks->pfnQueryResidencyCb(
+      device->Runtime.RuntimeDevice.handle,&args);
+  if(FAILED(result)) return result;
+  switch(kernelStatus) {
+  case D3DDDI_RESIDENCYSTATUS_RESIDENTINGPUMEMORY:
+    *status=DXGI_DDI_RESIDENCY_FULLY_RESIDENT;return S_OK;
+  case D3DDDI_RESIDENCYSTATUS_RESIDENTINSHAREDMEMORY:
+    *status=DXGI_DDI_RESIDENCY_RESIDENT_IN_SHARED_MEMORY;
+    return AGX_DXGI_STATUS_RESIDENT_IN_SHARED_MEMORY;
+  case D3DDDI_RESIDENCYSTATUS_NOTRESIDENT:
+    *status=DXGI_DDI_RESIDENCY_EVICTED_TO_DISK;
+    return AGX_DXGI_STATUS_NOT_RESIDENT;
+  default: return E_FAIL;
+  }
+}
+
+HRESULT AgxD3d10WindowsPresentationBlt(
+    AGX_D3D10_WINDOWS_DEVICE *device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *destination,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *source) {
+  if(!device || device->Stage!=AgxD3d10DeviceReady || !destination || !source ||
+     destination==source || destination->Device!=device || source->Device!=device ||
+     !destination->RenderResource || !source->RenderResource ||
+     destination->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+     source->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+     !device->Context || !device->Context->blit)
+    return E_INVALIDARG;
+  enum pipe_format destinationFormat,sourceFormat;
+  if(!presentation_pipe_format(destination->RenderResource,&destinationFormat) ||
+     !presentation_pipe_format(source->RenderResource,&sourceFormat))
+    return E_INVALIDARG;
+  struct pipe_blit_info info={0};
+  info.dst.resource=destination->RenderResource;info.dst.level=0;
+  info.dst.box.x=0;info.dst.box.y=0;info.dst.box.z=0;
+  info.dst.box.width=2560;info.dst.box.height=1600;info.dst.box.depth=1;
+  info.dst.format=destinationFormat;
+  info.src.resource=source->RenderResource;info.src.level=0;
+  info.src.box=info.dst.box;info.src.format=sourceFormat;
+  info.mask=PIPE_MASK_RGBA;info.filter=PIPE_TEX_FILTER_NEAREST;
+  device->Context->blit(device->Context,&info);
+  return AgxD3d10WindowsFlushStatus(device);
+}
+
+#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
+ADMISSION_UMD_DEVICE *AgxD3d10WindowsRuntimeForTest(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  return Device && Device->Stage>=AgxD3d10DeviceRuntimeReady &&
+      Device->Stage<AgxD3d10DeviceRuntimeReleased ? &Device->Runtime : NULL;
+}
+void *AgxD3d10WindowsOwnerForTest(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  return Device && Device->Stage>=AgxD3d10DeviceNativeScreenReady &&
+      Device->Stage<AgxD3d10DeviceNativeScreenReleased ? &Device->Owner : NULL;
+}
+BOOL AgxD3d10WindowsTerminalReceiptForTest(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
+    AGX_D3D10_WINDOWS_TERMINAL_RECEIPT *Receipt) {
+  if(!Adapter || !Receipt) return FALSE;
+  ZeroMemory(Receipt,sizeof(*Receipt));
+  Receipt->CallbacksCleared=TRUE;
+  AcquireSRWLockShared(&Adapter->Lock);
+  for(AGX_D3D10_WINDOWS_TERMINAL *record=Adapter->Terminal;record;record=record->Next) {
+    AGX_D3D10_WINDOWS_DEVICE *former=(AGX_D3D10_WINDOWS_DEVICE *)record;
+    ++Receipt->Count;Receipt->ActiveBuffers+=
+        record->ActiveBuffersAndQueryMarkers&AgxD3d10TerminalCountMask;
+    Receipt->NativeContexts+=record->NativeContexts;Receipt->LiveBos+=record->LiveBos;
+    Receipt->QueryMarkers+=(record->ActiveBuffersAndQueryMarkers>>
+        AgxD3d10TerminalQueryShift)&AgxD3d10TerminalCountMask;
+    Receipt->Quiesced+=record->KernelQuiesced?1u:0u;
+    if(SUCCEEDED(record->Error) || former->Runtime.KernelCallbacks ||
+       former->Runtime.SetErrorCallback || former->Owner.Device ||
+       former->Owner.Backend || former->Backend.Ops.Enter ||
+       former->Backend.Ops.Leave || former->Backend.Ops.Associate ||
+       former->Backend.Ops.Detach || former->Backend.Ops.Identity ||
+       former->Backend.Ops.NextBo || former->Backend.ContextCreate ||
+       former->Backend.ContextDestroy || former->Backend.BatchOps ||
+       former->Backend.BatchOwner)
+      Receipt->CallbacksCleared=FALSE;
+  }
+  ReleaseSRWLockShared(&Adapter->Lock);
+  return TRUE;
+}
+#endif

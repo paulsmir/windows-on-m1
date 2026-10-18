@@ -1,0 +1,686 @@
+[
+  {
+    "source": "driver.c",
+    "exit": 0,
+    "object_sha256": "380d2443e1af7d4418e279de2cd36e65eba27abdc42517530d5b7c78cfc0328b",
+    "argv_sha256": "3574d733db1175ccb432427601f4ba9483d3de41c8c37cb4d1d7a8b505a05137"
+  },
+  {
+    "source": "lifecycle.c",
+    "exit": 0,
+    "object_sha256": "aaa2b0d38d65df9dc3a1ec3afc610ac1197a715aab2e5b76e9a8feea38f89fdd",
+    "argv_sha256": "be90099c0f6a59b5b8cf05727dc6ebdce66a021a206d01590f8d8c3b2c47d47e"
+  },
+  {
+    "source": "callbacks.c",
+    "exit": 0,
+    "object_sha256": "9800f350ed669fc9d76cbb92f658766083b0e463182c3c945995b92059383b91",
+    "argv_sha256": "023b66de5c894c14abb93dcddb628fae9a8e4757488ff4dd0fce6cfae2dbef28"
+  },
+  {
+    "source": "display.c",
+    "exit": 0,
+    "object_sha256": "0b0763ad919c175ebede0fd4d9d0cf2ebc929883d83c11b4fce889f1e7e092dc",
+    "argv_sha256": "75f293cd47c5131802426e0fbbd6d30ed8244a9a44c0d9eef979449a6b63d7c1"
+  },
+  {
+    "source": "interrupt.c",
+    "exit": 0,
+    "object_sha256": "05f568372a796ba71392562362e8dee9754d4075cd270ee837c083e2d80051f9",
+    "argv_sha256": "33f8a1e10716ac86702125de3c682b36630efaecfd8e68bb6f01240ed5a1df3e"
+  },
+  {
+    "source": "objects.c",
+    "exit": 0,
+    "object_sha256": "fbceaee8ae1fbf08196d9ea8cb226f4a599d2a9a9e08374b5b9d3fb4499106c4",
+    "argv_sha256": "345f7452e9b43a68674a6ab137e178bac527601be2f5f0fe84dc48d6cd9f85cd"
+  },
+  {
+    "source": "render_memory.c",
+    "exit": 0,
+    "object_sha256": "b8f054c7e1acb38a345a7fd895793c6de1f5022b4b44e7a35ff66ed0344ffbfc",
+    "argv_sha256": "a0baf2225405dfd9d57c2d7d502d514a2ed308a2716ce2667cae7bf64e46189a"
+  },
+  {
+    "source": "memory_windows.c",
+    "exit": 0,
+    "object_sha256": "076f440dcd80adad9cbefc939d41c531e6c6b3702eb527348e713be552037695",
+    "argv_sha256": "39965ec5cf619442f738c7e1a1e8c9bca684283c80b2c78b0d5510f993e4dd3b"
+  },
+  {
+    "source": "render_allocation.c",
+    "exit": 0,
+    "object_sha256": "28b48a89cb8146169cfa7d8db0bd41d18a8b5168dcaa1cd1e69fd7d13f239405",
+    "argv_sha256": "6fb8e3676d335ae9cab4f92b00e2fbc0f49a4fb9600e21c35c797fbaefe286ed"
+  },
+  {
+    "source": "allocation_windows.c",
+    "exit": 0,
+    "object_sha256": "676e5d88b547ae2cf20c772003a4607c8859bcb34f5e057fb4c3004dfc989296",
+    "argv_sha256": "74e18c388840f8fdc1a493fc51c752a5db79c6abc12fed24152cc31176d4bb21"
+  },
+  {
+    "source": "render_hvc.c",
+    "exit": 0,
+    "object_sha256": "a5e0f164818d7179e2589bac2ca3f0adebb8f006901e82a6aa34a82aab630ba5",
+    "argv_sha256": "67bdeac45002d6038c12c654081ba4dbfb0730c80df370ef4bda3dfa9332e821"
+  },
+  {
+    "source": "physical_memory_windows.c",
+    "exit": 0,
+    "object_sha256": "4201dc21e4898604f58ee9275befd8342c39f5a2f4b70dced39047c90cf0fc0f",
+    "argv_sha256": "37d50cb987ccb5a7b582b68904088caf5dacf4c8b4f93ba65695c95f30fe7859"
+  },
+  {
+    "source": "memory_runtime_windows.c",
+    "exit": 0,
+    "object_sha256": "fa7856c68f24460bd7c65750fd32e965b0d587fececde0df5811f110910153d7",
+    "argv_sha256": "813f0db16decae77567b01fa15a5102e42511891b2a0947517379719d112a3a3"
+  },
+  {
+    "source": "gpuva_v5_windows.c",
+    "exit": 0,
+    "object_sha256": "4b35bb95fa0699448bf6975b2aad03f45654d3cfab35f81e04611d4f9c48d3f2",
+    "argv_sha256": "b430e5abadcd4077ed2e2540f3959053235132622c415b5236e014de7fa58726"
+  },
+  {
+    "source": "gpuva_g3_windows.c",
+    "exit": 0,
+    "object_sha256": "deee36c87bec10a7a873fbf290687cd96e5bfdc8a500a7dd456412327c2a23a3",
+    "argv_sha256": "6312ca958bc2b2eadf6a3239eb0f9573057d819784a5f4240799b9c4ca1537d0"
+  },
+  {
+    "source": "gpuva_g3_paging_windows.c",
+    "exit": 0,
+    "object_sha256": "ff4020e35ef2dab43c15c5a485e1c863fc0eb4fe028fdfa976fa8616dc0e763e",
+    "argv_sha256": "2d2be841ef9060011cdc4c43bf5b7ac52c3c925b51d97e515dc091bba495507e"
+  },
+  {
+    "source": "gpuva_b1_windows.c",
+    "exit": 0,
+    "object_sha256": "b75feef90919882475ef2bfc27d0e5fdca54743d4429fad197882dfff82391db",
+    "argv_sha256": "6bcc79f90ddfc9a90950b9adf50d3c5da84c211aec310f24614624e182ca12a9"
+  },
+  {
+    "source": "paging_windows.c",
+    "exit": 0,
+    "object_sha256": "80e80bde76afc99fe6e661e2b5202c19b1b7aa33be9c868917a4bf60d95f5b70",
+    "argv_sha256": "0ed67e93456685b022b14773d0d1e176ac72b38b5c76e0dc1d5931ebdd52a751"
+  },
+  {
+    "source": "render_paging.c",
+    "exit": 0,
+    "object_sha256": "6b4ad725f20bf5356b546fa2488124e9eff3cd5f78400a3b33c49c0095a5277d",
+    "argv_sha256": "bb6c3d32e8ed5726c8fabc27ad366c9ba84837a0cc7248a25c145bd510e44cc0"
+  },
+  {
+    "source": "render_gdi.c",
+    "exit": 0,
+    "object_sha256": "823e7eb38bd902991f103a09e3b0411e1ed4258283e1b30d5f4e4e462193714c",
+    "argv_sha256": "bba77ebfe58ac34d5d46985e67fa6609599be2cf6e4f8d37a1b6b41562332a77"
+  },
+  {
+    "source": "render_umd_command.c",
+    "exit": 0,
+    "object_sha256": "5e952ef17bfa5ce879a0b231c8264965dfc59b3e13c97e54c3953f7aff496356",
+    "argv_sha256": "ff67fb8680a75dfa2bb0a6ae0edb505368698f03e39a10098ae3cdf3c2c0c014"
+  },
+  {
+    "source": "render_win32_transport.c",
+    "exit": 0,
+    "object_sha256": "5dbb5f312f5485b24041ddd311077f65d4232219f86f2c86299f598dba764b93",
+    "argv_sha256": "6a84c22ee6f9d59e5f08936508eaa5eda32bfc5a3a324a80ea9585cb8e61616d"
+  },
+  {
+    "source": "apple_agx_dynamic_job.c",
+    "exit": 0,
+    "object_sha256": "5322b20352fe92e5c8706f4c4a5a09dc3c597f65b12251d2bc26ae21d2c596f3",
+    "argv_sha256": "a4386e0ead9748ad456e56ff5feb5c77e92167bc54120066ebb1ed6571eddf5a"
+  },
+  {
+    "source": "render_dynamic_overlay.c",
+    "exit": 0,
+    "object_sha256": "9be9094750516db9d1d4f3bf67bc41092ed280ad2b6c6cfe2e2283f587afd5e2",
+    "argv_sha256": "ad742e0094a209b33c02570f2581edcb503271793783ef4c4dd4cd3a4721d17c"
+  },
+  {
+    "source": "render_dynamic_dma.c",
+    "exit": 0,
+    "object_sha256": "2683807bde04a9acce5a76f9fefb3e34dde8dafad71da2d5ee954a75aaf717dc",
+    "argv_sha256": "ff7b737b5cfc8a90efbb657568e6a5691facecc44eaea3c5415584111e499366"
+  },
+  {
+    "source": "render_dynamic_windows.c",
+    "exit": 0,
+    "object_sha256": "0f5f3043520ebd11b52de7e58926b17dc67c22cf892e6636b120e3cd11fefcdc",
+    "argv_sha256": "51c450f322b3b0dba9c33d78b08d39c64f4a6a723dc08c78f5e21c45a810e378"
+  },
+  {
+    "source": "render_dynamic_output.c",
+    "exit": 0,
+    "object_sha256": "6af03becf6550c23279c056da02a3b5b4d56bd53745a30a5390c1058c2d516b9",
+    "argv_sha256": "2f41232ecdbef6dab0497c537486ef1502db1cbd00f59d487bc97a4f76e38ec6"
+  },
+  {
+    "source": "umd_render_windows.c",
+    "exit": 0,
+    "object_sha256": "7bcff80b258460e9225fb1140414d188ea88973a440cf277abe36790129137fa",
+    "argv_sha256": "7ab1ae4053b893ba174a11cba4a19c76d03e167674b6540e98da97f1c56ca7c7"
+  },
+  {
+    "source": "render_present.c",
+    "exit": 0,
+    "object_sha256": "42e5ad5d85629242e2270ee8282bbffef534e4f6e65801235fd710d79b5f9396",
+    "argv_sha256": "9ed47d2b9736056e76568bb5043dfb70ce4d7052895224eedd35b3e5841ad925"
+  },
+  {
+    "source": "render_visible_scanout.c",
+    "exit": 0,
+    "object_sha256": "41c833a3de9fc599db8b001b28be4357fb21a70344f122a10487ba9ede107a4e",
+    "argv_sha256": "920afad37317004460c769a0f3ed453a56e574d19e59ceebf1db1bc43fb7a04c"
+  },
+  {
+    "source": "present_windows.c",
+    "exit": 0,
+    "object_sha256": "3a166b7a87e8005af7d78fe526a83a0d41772d5bdebf5d3273f889a44f6ae431",
+    "argv_sha256": "f05aa760f5fff773a0457c6e5310d5f3d37593ff36c60cad15fd553bcea25965"
+  },
+  {
+    "source": "work_queue_windows.c",
+    "exit": 0,
+    "object_sha256": "9b65ad1f1ce9243ec17822d5b3aa15e0ff3218b1db63273632ff01053091aa88",
+    "argv_sha256": "b1f78ddb9a0df6206d68a283111e1979b93bd11e2eb2ee535328fe601db63506"
+  },
+  {
+    "source": "gdi_windows.c",
+    "exit": 0,
+    "object_sha256": "d5d1599ee87f1e14e574a9caf537c6a151c1146e48a3e7fbfc5dc9cd9af6a6c5",
+    "argv_sha256": "c81c3a517d200f66080d6cd3de398deeb8d2ef64c1868ac2fab19dd83d94ba9c"
+  },
+  {
+    "source": "render_submission.c",
+    "exit": 0,
+    "object_sha256": "7f5b59fec630088b19775736a087244a58353cfcbb967168cc82b073eb1b0835",
+    "argv_sha256": "71cf8f77211f5c421fef122bd7ec462f070945fa294c6bf65a71f255c5f73e3c"
+  },
+  {
+    "source": "render_gdi_receipt.c",
+    "exit": 0,
+    "object_sha256": "f9939f3dd5cde82e2173cfc3950d67ef7243db6f974dcf400a53f4fe99308efe",
+    "argv_sha256": "e8f5bba2bcfcaaca14e508cb7d54a46f4c495af625c0b9c4434ca5eed49e6d69"
+  },
+  {
+    "source": "render_call_correlation.c",
+    "exit": 0,
+    "object_sha256": "4d325ac7fcf239242db4b204c0c06df48bf09b8bed3f5aea5133983f7f198e6c",
+    "argv_sha256": "2fa1f3672cf3662369711477eff1df044a0da9ff1ece6fbfed85931ef846a585"
+  },
+  {
+    "source": "render_call_correlation_windows.c",
+    "exit": 0,
+    "object_sha256": "dffa16434a086c52cf382e8113a14d483bbd7c5afef7fff812fab6ec09135a8b",
+    "argv_sha256": "3ae835292a035e7a9cda90ddbf6a3b6a6a9b3818a8e3024930813cbb243e812a"
+  },
+  {
+    "source": "gdi_receipt_windows.c",
+    "exit": 0,
+    "object_sha256": "4bc547f7af527c02fa619151cfc463a1333fdf31496b220e8b18c741b3cde33d",
+    "argv_sha256": "24e0e8d5fec090f9c5c25c9a80fb39ef4f7544851a432f2312a70acc7b31a8c6"
+  },
+  {
+    "source": "submission_windows.c",
+    "exit": 0,
+    "object_sha256": "26c7444ece4946a3a81c0aed30ed13a61c86f042d1ccc435b097550ffbecef59",
+    "argv_sha256": "03076ee34b9505e3be500affbd7e3edcaaae3b6dc4a22ba3b95375a2c313eb9f"
+  },
+  {
+    "source": "submit_trace_windows.c",
+    "exit": 0,
+    "object_sha256": "2aeda8721bb1b776e95b84b189825ea3c320b746660650ceb45770148ee8729c",
+    "argv_sha256": "4d8711b043ae6d61e791566b3ea11c4a05d37f504179e8a5f9846ba5577936df"
+  },
+  {
+    "source": "render_backend_image.c",
+    "exit": 0,
+    "object_sha256": "36500465af7d1aebf696e900bc8adc082f7b2ea6cb085e50e5a29d68579297fa",
+    "argv_sha256": "672d6f8ce70b945c1c4d4e854053328bf3bd35721e2ab0ff693cc8dbc9ebe347"
+  },
+  {
+    "source": "render_completed_output.c",
+    "exit": 0,
+    "object_sha256": "d4acb69c390c45c532becbba52a12cba39396eb013df8d023472217ad983885b",
+    "argv_sha256": "a30044ce76235fe15988aaf2af8c17b4212b55713496f356bb7790890269bd17"
+  },
+  {
+    "source": "render_qualification.c",
+    "exit": 0,
+    "object_sha256": "cf44117c12864acdf9ef0433fa292c49179a7e2557a7a4a3866a39406f9cbfc3",
+    "argv_sha256": "ae10245156d7f02b109413f1d668f23332cebf86bce8333ea2018d27f1a6eecb"
+  },
+  {
+    "source": "standard_present_windows.c",
+    "exit": 0,
+    "object_sha256": "cf9a4ca4bc86ac136dc79f15faf6cce2d10ac556b8934f9ad3545e59b09104b2",
+    "argv_sha256": "7d40ebe8d5763ca60784430647a21a79d7cf273aad77d0b3c04e4eee349ee342"
+  },
+  {
+    "source": "blt_probe_windows.c",
+    "exit": 0,
+    "object_sha256": "74bbefc94d495ea362752ae9b818860d0fff1eb5f2055ed0e0a00f1dc857b7cf",
+    "argv_sha256": "4933ea7ee90c40a77bc0b5ca98bae98acd5d4923a90757349f8605d2c13cd442"
+  },
+  {
+    "source": "render_output_queue.c",
+    "exit": 0,
+    "object_sha256": "bfed283bc3c6c3e31ac2817971c016e6c50b5db00122cda830607c8352ec890f",
+    "argv_sha256": "7f996267c431516e995cf4222281ed89b8de18a573a3859555b2f95572795e90"
+  },
+  {
+    "source": "backend_image_windows.c",
+    "exit": 0,
+    "object_sha256": "5db6cf670b4e2f2e34fe2ec7f39e23937216c0f6eae163aff29407545e909470",
+    "argv_sha256": "67994bae1b356b9a2ab1afb1c26a653d4ecc244d8a53e37269abd945ddbb90ee"
+  },
+  {
+    "source": "backend_platform_windows.c",
+    "exit": 0,
+    "object_sha256": "5ddeb05f303302d0dd56b461762f7077c175a5950eb7c86bf8ff3afc665a2962",
+    "argv_sha256": "ef21dcf46898beb436d69ca51f77a1f2fd8bf636b3d68345121279762e80a0d3"
+  },
+  {
+    "source": "scanout_windows.c",
+    "exit": 0,
+    "object_sha256": "0bf3a2d900fadae95ffa13113a3f54650712f0ecd1f1ab227680855b64c58a77",
+    "argv_sha256": "abb25d4f0e319b77886f663d563a67a2ac219dbef1fe1aeeecc1c44a4536ac14"
+  },
+  {
+    "source": "scheduler_windows.c",
+    "exit": 0,
+    "object_sha256": "760e1623b4178fa9afeae64ee90582fc2659ff5002021b4bbfc77d63f5df3c46",
+    "argv_sha256": "735cdede8b68d6126d744a26e5baf365bbab15bdd09e5a81b5de1dc51a44a325"
+  },
+  {
+    "source": "receipts.c",
+    "exit": 0,
+    "object_sha256": "c1eda455450021bc79cb48e4983929c41dde1157a889d85daeeb1da2f800a898",
+    "argv_sha256": "d84042274c0b23d3bc8cf60bd485c9da3adead5028cab3f07c37660f7a7950cb"
+  },
+  {
+    "source": "apple_agx_wddm_feature_contract.c",
+    "exit": 0,
+    "object_sha256": "6ea9cc7fac7bedfea87455d16934e837b965155ff36495ba94f33d9c0de45c62",
+    "argv_sha256": "4e6a351c6661353a9674b13f9e05f9906acacb62e35b38557d406de8deb6e66e"
+  },
+  {
+    "source": "apple_agx_gpuva_broker_v5_client.c",
+    "exit": 0,
+    "object_sha256": "9d1b0cc3c0f124571889e14c1d8940668bc35e50958407d4aa190b6c072707f8",
+    "argv_sha256": "50ac5114c7bac968b95828735255ab542063ed911f0da296d768cac05d9520f9"
+  },
+  {
+    "source": "apple_agx_render_template_vm_slot.c",
+    "exit": 0,
+    "object_sha256": "3b8bea41b4952dd27ababfed5d7cd91fa33a104e46285655b33e65bb35747ee2",
+    "argv_sha256": "534dd6ca21113c94cdc7b0efd6c61ffaf5e70a5b490c6a0c7c965375df28663e"
+  },
+  {
+    "source": "apple_agx_gpuva_b1_graph.c",
+    "exit": 0,
+    "object_sha256": "1257ca7751adb575454a37fb88497a285bcbfd4d6320a6fcb45ecf5ee88777c8",
+    "argv_sha256": "bc8ea1cc8ed0c0f1fcb5024c7db0b1404697a82b82de67ed5aef7be18a52ecf0"
+  },
+  {
+    "source": "apple_agx_gpuva_b1_roots.c",
+    "exit": 0,
+    "object_sha256": "796e07925f937e9314cfe0165c767853badd152c3a5e897849a905a1e09f566a",
+    "argv_sha256": "1bd02be4e5ea6dc2542beece8d8f589f64598b351ac95993a76c34be95d73d0b"
+  },
+  {
+    "source": "apple_agx_gpuva_b1_submission.c",
+    "exit": 0,
+    "object_sha256": "fa1f2d913db13a98841367ce5e34d2d2b3212ce1ba1f3fc32f1d4025b3bdde9f",
+    "argv_sha256": "b359cfb93e6f16bf51dba7c12330e1cc1526d1e3156b66eec10105b238ef48a8"
+  },
+  {
+    "source": "apple_agx_gpuva_g3_translation.c",
+    "exit": 0,
+    "object_sha256": "136f023ffe7bcaeddfafc6b63334744c69ec42cc2ecaddd238c2d4033ac73a2e",
+    "argv_sha256": "0559943b5a9f502185c94e0f1204938c60827fe30bff42f91cd520aa9f60bec7"
+  },
+  {
+    "source": "apple_agx_gpuva_g3_graph.c",
+    "exit": 0,
+    "object_sha256": "160d569864cb46c6e5753f3380fbe289719d9f993fc5d4fa0565bf716019eba1",
+    "argv_sha256": "7c76635e2d687a19569ee7f3cb6427c9fe602046260815ad47bca4e7e64fe56a"
+  },
+  {
+    "source": "apple_agx_g4_submit.c",
+    "exit": 0,
+    "object_sha256": "02c2245ea906ba3cdf52e49dec1e481f7cd0c9838808a461e5e05f908ec89285",
+    "argv_sha256": "d4cd482790d346e185ad09622af723b1614a94ae4ed13c2bf877229ab4e311c4"
+  },
+  {
+    "source": "apple_agx_g4_builder.c",
+    "exit": 0,
+    "object_sha256": "d1565aa4bb09b9e9be2ed9f04ec52d50405d97ff1ab007604e1de1325b9ebdaa",
+    "argv_sha256": "2574539a261e204e45f5264718de5e15a4f911584bc568d22c4dd28bb037847e"
+  },
+  {
+    "source": "apple_agx_win32_abi.c",
+    "exit": 0,
+    "object_sha256": "d1b8af0dbdc5ed1c60cea63070133eb9af1113cbe9f455f043a534c44541c6a4",
+    "argv_sha256": "a95997aa92f84cc1b0cf39f5e1e2a27ae0170509159ca8c9a6ebe396c9546e65"
+  },
+  {
+    "source": "apple_agx_scheduler.c",
+    "exit": 0,
+    "object_sha256": "2c2dca66f599559813d2e6284c4aa6206e23ebd7bba444d050cd2d9e03cb51a0",
+    "argv_sha256": "6a205f2adc1a6b6f4121b4dee97bfb125b32f8035d6f2c5eeb79626617694564"
+  },
+  {
+    "source": "apple_agx_gdi.c",
+    "exit": 0,
+    "object_sha256": "3254dd6806ea713141e80abd9e9c8feaca426361904d60acec6110205fa63e23",
+    "argv_sha256": "2465321c2050e1f1e7148b54d686a6ebf7ab9823ea0971ba36ba68a201854ed1"
+  },
+  {
+    "source": "apple_agx_exp208_gdi.c",
+    "exit": 0,
+    "object_sha256": "0258fd501f1ae7b470c06c7d812e2fda8cb9709802bdbdec9fde1886dc2c60a2",
+    "argv_sha256": "796c50a52fe0cdef22920313f457255847da22eb2bb9d4cda0f47f33bf53245f"
+  },
+  {
+    "source": "apple_agx_exp208_framebuffer.c",
+    "exit": 0,
+    "object_sha256": "752acc2f9c6a367561a2ee081251bd99f3187e558a7e1cc4de56a039d883caf3",
+    "argv_sha256": "cc0f355be59eefc7d55b5dc78650b853640942ef515776c500060ad94d1f4607"
+  },
+  {
+    "source": "apple_agx_exp208_adapter.c",
+    "exit": 0,
+    "object_sha256": "51f757bc2eabc4e22eb907bbadc6294079212181c66ddef8e29e60bc5cb535ce",
+    "argv_sha256": "a4059fcf1b72c97fd8181963aaf36c9ffd4e8d8b8de153be3baf9de6163c3d5b"
+  },
+  {
+    "source": "apple_agx_exp208_dynamic.c",
+    "exit": 0,
+    "object_sha256": "67c1d274637975cb5a26c443eff73622afba6962550ac6febe1cd3a4f4b12a25",
+    "argv_sha256": "a16d2e956fbc6a167598deca647353be4827340d04516df9abff5c1a4106a1b9"
+  },
+  {
+    "source": "apple_agx_dma_shadow.c",
+    "exit": 0,
+    "object_sha256": "6a12ab668a66c826d144d7425038c3f5933f25ecfc59588eefd8775f9a30d6aa",
+    "argv_sha256": "b7b43b039c425b2973d1a8a925f04587de62d52d72a4c8509c91c58cba3bddc1"
+  },
+  {
+    "source": "apple_agx_software_aperture.c",
+    "exit": 0,
+    "object_sha256": "f3df292072f7066c52176ed93871530de69a65cc9f11e8a2f3978630607a2096",
+    "argv_sha256": "d6346e04c64da8b814bb0f6a56a4a94c6460b15aa1a7cbfb3cf2a4737921aa5d"
+  },
+  {
+    "source": "apple_agx_local_segment.c",
+    "exit": 0,
+    "object_sha256": "27beaf6d297459dc0bca762561c28be8aeaea8c3a88c80fa00c6f74fe0f86709",
+    "argv_sha256": "08268c059bbb382d1f37fb3ac8a445a1bba4e8e53c572e25a5cc0e405c31ca42"
+  },
+  {
+    "source": "apple_agx_physical_topology.c",
+    "exit": 0,
+    "object_sha256": "4d301fe73fbccdb4565fa30141d8ecab45f55776b17ea55ee9eafb740086ebf6",
+    "argv_sha256": "e5c39a7e36f223bd9c569256509e0aa5ab1853a4ba7f10d82d3f918278f3d565"
+  },
+  {
+    "source": "apple_agx_physical_paging.c",
+    "exit": 0,
+    "object_sha256": "16855062b016dffffd0bbbd63b5e7a503eadaf86e6daeaa02a3b2c8ce30adbf6",
+    "argv_sha256": "c60d8ec3ae3b8dc5eac30686632a62ebd0c3dae0c1d738c9a434a6a6b81118f4"
+  },
+  {
+    "source": "apple_agx_aperture.c",
+    "exit": 0,
+    "object_sha256": "367bc3a7a87a422671753ae451f787abb551088bd497669e2ebe8a60c69ae0c5",
+    "argv_sha256": "1687b9e231a6bc5c9de97b8a2082bb9ccb02d52e879bebaabd816e721d7de2c8"
+  },
+  {
+    "source": "apple_agx_memory.c",
+    "exit": 0,
+    "object_sha256": "325a9e71128b3ba9a22bb44883e1c2d5eee495ecaff65645943e69d520c5a7bf",
+    "argv_sha256": "044da81da9230504b9e0374b3dfb1d81be5ee9d1027662ec0e90ba77f8a23fd2"
+  },
+  {
+    "source": "apple_agx_uat.c",
+    "exit": 0,
+    "object_sha256": "db1b206b7f2694916699d0b88471f64f9a74bb448cc124a822837fd52cafc05e",
+    "argv_sha256": "04ba44a8bb354efac071235eee5d61fa9723abf27da2c52dcbdaf3a0ff3c7d23"
+  },
+  {
+    "source": "apple_agx_uat_table.c",
+    "exit": 0,
+    "object_sha256": "f666066a37a15c45caff4417e127fc9d7d6f99313c073beca94af954bd55a609",
+    "argv_sha256": "1571506ca9fe88c32a7281641fd1a9c3685621e7f7e252b3805d029f8e628d73"
+  },
+  {
+    "source": "apple_agx_uat_memory.c",
+    "exit": 0,
+    "object_sha256": "e32bb2d927f36d328c2de96783569293538bf07d0c2d8205e218e7d850a0e0be",
+    "argv_sha256": "4723ba357565dad7627f7fde96276864bed89e9ec52f4cf1247893fe7a625472"
+  },
+  {
+    "source": "apple_agx_residency.c",
+    "exit": 0,
+    "object_sha256": "4f4b219255ac61effc3975518f8195f08aa6e4d5598b8c226c1fa45ba464d490",
+    "argv_sha256": "6afc2d009767dae13486f02920ed20f61591dde96dce94d8aa9c625050c6fdcd"
+  },
+  {
+    "source": "apple_agx_uat_publication.c",
+    "exit": 0,
+    "object_sha256": "f5f564e0a27f231422c76682dee006db52ef23a688a18b8722577438fcffd4b6",
+    "argv_sha256": "ec5b74ef56e7a8e8f33dcf540cd87a91c080f7412e090e77c7cd6fd721ebf378"
+  },
+  {
+    "source": "apple_agx_render_template.generated.c",
+    "exit": 0,
+    "object_sha256": "2829c8e8f5b454d312751ba42ca9e3abd1d0af6a42cf61d28152ed24704cb4d2",
+    "argv_sha256": "4099125d2af80736e83d619c413ffabe4ddb0302a5aa99b920fa0c89816e2ca2"
+  },
+  {
+    "source": "apple_agx_render_template_rebase.c",
+    "exit": 0,
+    "object_sha256": "a4b918c297939de67530aba8b3115159b322562dfd1c8e3be1d9f6a78d2a2d48",
+    "argv_sha256": "2cc62eb5e83d9e3835d5eddafcaeed331e2ca3a8403a7a56793f311d90d553b6"
+  },
+  {
+    "source": "apple_agx_relocation.c",
+    "exit": 0,
+    "object_sha256": "b483b1695cd82f7c4685e7a3dffd40fffe60b59ce735aeac5b0510b1b7257bf3",
+    "argv_sha256": "d463a68af75021492e705814c38d895697552a4536110bd27519370278008e23"
+  },
+  {
+    "source": "apple_agx_backend_runtime.c",
+    "exit": 0,
+    "object_sha256": "139f4bf1f8f8b0bbe3fbea90407a0e49586323d15ceb15807e203f04ff6bc31c",
+    "argv_sha256": "1c9e8fd0dd10fccd583ba81cc157246fc61b82e82806edafdf35a814c45bc1af"
+  },
+  {
+    "source": "apple_agx_submission.c",
+    "exit": 0,
+    "object_sha256": "49929a4c6f1d6ad58fd806e8d31725e222ff687da238d196f0c8d1c0a8d80775",
+    "argv_sha256": "1ccbac0d31a965adbda4ca7ac0b163384eade2f864b8086973e4f09d49372e80"
+  },
+  {
+    "source": "apple_agx_firmware.c",
+    "exit": 0,
+    "object_sha256": "12e563e4cc404d0456c7b560fba56fb7e17e2c5f9da6285cf11d9f8f05d32a0a",
+    "argv_sha256": "f8e189c604cfc9247bee8737139a0b863dfa6e98d33402fee730a093fbe2a737"
+  },
+  {
+    "source": "apple_agx_firmware_provider.c",
+    "exit": 0,
+    "object_sha256": "d256d34ee4bf36bdbd1acd5354d3f6c6343ba5ac583b00d53e9e8aaa06269bb7",
+    "argv_sha256": "402a6a130dd54fd2fc4c97eda70a8b866d943aec749f6cb8c12cdf39555d41f1"
+  },
+  {
+    "source": "apple_agx_asc_transport.c",
+    "exit": 0,
+    "object_sha256": "0a5f68731747f4f6be5572005704d3926a955a2049455e9ed75302520394f002",
+    "argv_sha256": "fe9cc572b820b37012afcb6612c3b869739c1e08bfaf52303ca1b3e2f12fc982"
+  },
+  {
+    "source": "apple_agx_rtkit.c",
+    "exit": 0,
+    "object_sha256": "50192d824253b468c363d95f0c251a192f263919a9e6d4368ad53b9ab1d478b4",
+    "argv_sha256": "c2fe85e3088bb25949e2866acd7867ef2a91ad0fe8d7e95c9046efbea50943c0"
+  },
+  {
+    "source": "apple_agx_rtkit_boot.c",
+    "exit": 0,
+    "object_sha256": "4ac84e9dd0d83d8898e1c3b9ebb6d72a0ccedb94999b38fcaa3dfd101230d14d",
+    "argv_sha256": "41d466c9058d6811f4906e5c59f62e7503dc5c6af9ba601c24a1cf74ad6c1ab8"
+  },
+  {
+    "source": "apple_agx_rtkit_session.c",
+    "exit": 0,
+    "object_sha256": "7e9572159fe4e72e22ed21d0fbe5b0212e15534d8be20b599831b8b931827838",
+    "argv_sha256": "2360f9ab3d15358f7f3236db70713572f20d234b50b00bf373f964fe39803dad"
+  },
+  {
+    "source": "apple_agx_gfx_handoff.c",
+    "exit": 0,
+    "object_sha256": "975d4a9827944a8a425aef4617a704bb7d9e50f2942430af2fb4178c537ee9d4",
+    "argv_sha256": "c02c9ba87017ec5831b8ac6868b656c3c703e760303136c0643c0c5049f3be50"
+  },
+  {
+    "source": "apple_agx_initdata.c",
+    "exit": 0,
+    "object_sha256": "921c8ccb78c1b1b164a9137feaa8df7caec9a7e09cd50130dc7f01c4a59adf1c",
+    "argv_sha256": "4ac7164d7f7e71e8a705e343c62416cbfb5c9be3eeafd3b6fe74b262863e2cbc"
+  },
+  {
+    "source": "apple_agx_initdata_memory.c",
+    "exit": 0,
+    "object_sha256": "34ebf484c67baf440056f42c7fc1a0ae5e73b4bde511adab1d36ace9dbe37f80",
+    "argv_sha256": "d7a2b8395c1d91e586f54d806d40b5d35aec0d915ce44d2855544ce30f5a1511"
+  },
+  {
+    "source": "apple_agx_context0_broker.c",
+    "exit": 0,
+    "object_sha256": "e1387151920d6c449f54dcf9b48fab42e0194e46f61915a84ea0a89453678f4c",
+    "argv_sha256": "8013aae17103aafb16bf7dea34b7fc1b10cbd945adf5b33ca4c3e522f9cf14f4"
+  },
+  {
+    "source": "apple_agx_firmware_status.c",
+    "exit": 0,
+    "object_sha256": "a7a79fea0bd76eb58f2b157d14b8327a52e4a7be6fffc94ac2c6f2e63bf3a564",
+    "argv_sha256": "2ae85dd648d43cff87bd45ae6936a9eb526513ed782d2d6955ed3cc47501a913"
+  },
+  {
+    "source": "apple_agx_channel_info.c",
+    "exit": 0,
+    "object_sha256": "3e01b2de92d55d538212b5e1afcd1d031c83a3014e984f98ec6101b8be620b31",
+    "argv_sha256": "c977db98ebe464aafa805403022298d31f68391fde41ef6e1b6b81900d144d45"
+  },
+  {
+    "source": "apple_agx_channel_memory.c",
+    "exit": 0,
+    "object_sha256": "c309f9b3f97ec35dc7ebba6df09fc21763ca966fbd298db9535ed8f4e2711a5b",
+    "argv_sha256": "8822362399fee1a249233df2c1b5e391927d0201ffa6b0fe23c8e8ed76a9cd57"
+  },
+  {
+    "source": "apple_agx_regionb.c",
+    "exit": 0,
+    "object_sha256": "df3c3d9ed306664f363f1de15efb16cb5cb4291accba95f61c15a64f6075f3bf",
+    "argv_sha256": "914285bd74f6ad67edaab7304720a147761b04f680657d97892e0118b0df5b79"
+  },
+  {
+    "source": "apple_agx_regionb_memory.c",
+    "exit": 0,
+    "object_sha256": "c92fbb62a0a19b474da7323d4fd1d8c91e590a9dbc06c833df86d02a26dbbba1",
+    "argv_sha256": "6ab5f2dbfc1cac40362d706637cc8f7c3ffde2928e8d9056dcdb423ec311ddd6"
+  },
+  {
+    "source": "apple_agx_render_shared_memory.c",
+    "exit": 0,
+    "object_sha256": "663adff6944891f02d950a5b246b3cdf8368dc60c79b363e15bee94fb92a3026",
+    "argv_sha256": "f09cd047099d933a4840cceebbe332bc6e3df2cfaa742a5fd8938b3a5944aa22"
+  },
+  {
+    "source": "apple_agx_regionc.c",
+    "exit": 0,
+    "object_sha256": "9354625acc2639af899c58bc37c43fa1d7d1bd79889ec02429d6e93f4b4e4140",
+    "argv_sha256": "6c62b1e5ef7b8065f1ff768b23416df67a1bf2aaebec68a9330a19decf66d04d"
+  },
+  {
+    "source": "apple_agx_device_control.c",
+    "exit": 0,
+    "object_sha256": "93f2879264080be4b12f74d4a0c14319999d14e14b72b0dd7def310a5bbbb38b",
+    "argv_sha256": "4f32aeb89cdaf85791b44a87dfa7fb4bc2a8b50cbe07f47f94bd8701c4af5efd"
+  },
+  {
+    "source": "apple_agx_event_allocator.c",
+    "exit": 0,
+    "object_sha256": "8f34d249cc39fc4ca5193a3fd43eb0f8acebb51d1adc0cae4c04b57769f4a4a6",
+    "argv_sha256": "0b90ce9ea7f069d2bf60b294575e82763c64a21b3fe19cc88550d4a077dca72f"
+  },
+  {
+    "source": "apple_agx_g13_codec.c",
+    "exit": 0,
+    "object_sha256": "97fdd968bef840b307aaf9eba237c50457d5220f31f92318556af663be24da92",
+    "argv_sha256": "f4be68b0a1b570b64a86b32f03e3c49902d11e4f10df0d54173a06befd42e845"
+  },
+  {
+    "source": "apple_agx_g13_compute_work.c",
+    "exit": 0,
+    "object_sha256": "daf25373cea786f52fbe96462f1878957c78df96fc20f03547e3627131f47411",
+    "argv_sha256": "84f0f983fb3ab33c0b57390874c68f0a33557b5a47343ca1d24ea1253f5be32d"
+  },
+  {
+    "source": "apple_agx_g13_queue_runtime.c",
+    "exit": 0,
+    "object_sha256": "a74d85d189ccd86465dc42cdbdfb5e6c9e734ef75346b2e284ffd30a5f8b3db6",
+    "argv_sha256": "526a57a07adb861279dbcb4b2fd0f6c218c927dd0976fb8b0c88b2d0f9808878"
+  },
+  {
+    "source": "apple_agx_g13_queue_provider.c",
+    "exit": 0,
+    "object_sha256": "71d076620ec56443919f200751bccbb2355dcd6cab94b3850b3b7c4e95b0726f",
+    "argv_sha256": "d0bec915ff0189254ca0eda1e4cc1dd25de8ac96ea6a4a5eafce40e615b4dfe0"
+  },
+  {
+    "source": "apple_agx_platform_composer.c",
+    "exit": 0,
+    "object_sha256": "c5405096e791dc2cf99579bdef660cd30af4c784db25d4aff8c4f7f628b0028a",
+    "argv_sha256": "0f0298ce10f1fc437cf2b52983012bd2518513718c179219a47c179b6f721f53"
+  },
+  {
+    "source": "apple_agx_platform_provider.c",
+    "exit": 0,
+    "object_sha256": "8d785993911102b9463b9fa00820a256afb5c599513def0bd356001837ddc3bc",
+    "argv_sha256": "83d995ee911313547318072038022066a90c31972d4409c8dbe307ff093a18c3"
+  },
+  {
+    "source": "apple_agx_power.c",
+    "exit": 0,
+    "object_sha256": "4e16c902ea00971c513bd9c5b5d9942e264513ddef1d9dbf18f73db82bff65e2",
+    "argv_sha256": "9a55e3968c0f52a2cc69a85b613ae7e799706c8fc50640fb2fda27f87eee3fff"
+  },
+  {
+    "source": "apple_agx_config_snapshot.c",
+    "exit": 0,
+    "object_sha256": "20457e5a3b2933cbc1993aff2303785ca1a5bd0809a96286e62ca28d1d52e6c7",
+    "argv_sha256": "48851aa2ff41b66b5cef0ca31d481e318f173c2e18388530a7aa8a38dc292b05"
+  },
+  {
+    "source": "apple_agx_scanout.c",
+    "exit": 0,
+    "object_sha256": "4fa7d954cd93011c01a3e70285589ddb289a466368c38f1f803eebebdb2cfcec",
+    "argv_sha256": "59039954e3379a0351e710949d1a65c635d1a83b19c0233a79344772690acadb"
+  },
+  {
+    "source": "apple_agx_fixed_panel.c",
+    "exit": 0,
+    "object_sha256": "9eaaf22e24e3e9a770ae3f701dba3211a427a45a7a0afcc63a37915cb09ebfce",
+    "argv_sha256": "3980f94316947c85af3c4534b3d82de69cb9d1e9d16cbd0a464db2b0e70771f6"
+  }
+]

@@ -1,0 +1,3 @@
+Read before preparation correction commit. Review SHA256 753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5
+REVIEW R113: ACCEPT — existing direct cold full-owner and post-cleanup ordinary recovery ordering preserved.
+Other prior OPEN dispositions remain those in EXP866 review-exp866-prereg.txt; this correction changes hash pins only.

@@ -1,0 +1,151 @@
+#ifndef AGX_WIN32_ASAHI_BO_H
+#define AGX_WIN32_ASAHI_BO_H
+
+#include "agx_win32_native_device.h"
+#include "agx_win32_reloc_capture.h"
+#include <stdint.h>
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "agx_win32_gpuva.h"
+#endif
+
+/* EXP1076: with batches kept open (b77d9373) agx_flush_all retires many
+ * batches at once and their pool slabs overflowed 16 entries; DWM then
+ * re-created ~42 BOs/s, each a MakeResident + map paging-fence wait (phase 2:
+ * 9.4 s of a 60 s window drag, 2880/512/256/64 KiB BOs). */
+#define AGX_WIN32_BO_CACHE_LIMIT 128u
+#define AGX_WIN32_BO_CACHE_BYTES (64ull << 20)
+
+struct agx_device;
+struct agx_bo;
+struct pipe_screen;
+struct pipe_context;
+struct _AGX_WIN32_ASAHI_CAPTURE;
+typedef int (*AGX_WIN32_ASAHI_MAP_RELEASE)(
+    const void *NativeBo, const void *ExpectedAddress, int Commit);
+typedef struct {
+  int (*Enter)(void *, AGX_WIN32_SCREEN *);
+  void (*Leave)(void *);
+  int (*Associate)(void *, APPLE_AGX_U64, const void *, APPLE_AGX_U64,
+                   AGX_WIN32_ASAHI_MAP_RELEASE);
+  int (*Detach)(void *, APPLE_AGX_U64, const void *, APPLE_AGX_U64);
+  int (*Identity)(void *, const void *, APPLE_AGX_U64, AGX_WIN32_RELOC_ALLOCATION *);
+  const void *(*NextBo)(void *, APPLE_AGX_U32 *);
+} AGX_WIN32_ASAHI_OWNER_OPS;
+
+/* One caller-serialized native device. Screen/owner storage must outlive it.
+ * The Windows owner registry is authoritative; this is not another BO table. */
+typedef struct {
+  struct agx_device *Native;
+  AGX_WIN32_NATIVE_DEVICE Buffers;
+  AGX_WIN32_ASAHI_OWNER_OPS Ops;
+  void *Owner;
+  APPLE_AGX_U32 LiveBos;
+  void *UnpublishedBo; /* single failed-create rollback, never exposed to Mesa */
+  struct _AGX_WIN32_ASAHI_CAPTURE *ActiveCapture;
+  void *ActiveEmission;
+  const void *BatchOps; /* existing UMD transaction callbacks, caller-owned */
+  void *BatchOwner;
+  int EncoderAllocationIntent;
+  /* Depth/stencil (ZLS) attachments may be submitted: set by the OpenGL ICD
+   * (CS 1.6, EXP1149) and the D3D UMD (D3D-G4). */
+  int ZlsAttachments;
+  /* D3D-G5: the screen advertises 2x/4x multisampling (D3D UMD only; the
+   * OpenGL ICD keeps AGX_DBG_NOMSAA, EXP1162). */
+  int Multisample;
+  /* D3D-H6: the screen's contexts give D3D10/11 out-of-bounds buffer
+   * semantics (D3D UMD only; the OpenGL ICD keeps the robustness its
+   * contexts ask for). */
+  int D3dRobustness;
+  int Failed;
+  struct pipe_context *(*ContextCreate)(struct pipe_screen *, void *, unsigned);
+  void (*ContextDestroy)(struct pipe_context *);
+  APPLE_AGX_U32 ContextCount;
+  int Closing;
+  /* EXP1091: handle -> windows_bo for AgxWin32AsahiLookupBo (open addressing,
+   * power-of-two capacity, NULL = empty). */
+  void **HandleMap;
+  APPLE_AGX_U32 HandleMapCap, HandleMapCount;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  AGX_WIN32_GPUVA_SPACE Gpuva;
+  int GpuvaReady;
+  /* EXP1195: completion fence of the newest accepted submission (pipe
+   * fences); render fences increase with every submission. */
+  APPLE_AGX_U64 NewestFence;
+  /* EXP979: VA ranges whose allocation is already destroyed but whose
+   * reservation could not be freed yet (submission in flight). */
+  AGX_WIN32_GPUVA_BO PendingVa[64];
+  APPLE_AGX_U32 PendingVaCount;
+  /* EXP996: released native BOs kept bound, mapped and resident for reuse
+   * (Mesa's own BO cache is replaced by agx_bo_create below). */
+  void *Cache[AGX_WIN32_BO_CACHE_LIMIT];
+  APPLE_AGX_U32 CacheCount;
+  APPLE_AGX_U64 CacheBytes;
+  /* InitBM owns these TVB lists and blocks for the queue lifetime. */
+  /* GPU timestamps: the firmware tick frequency and the firmware-minus-
+   * counter offset in nanoseconds of the newest values the KMD returned
+   * (0 before the first). */
+  APPLE_AGX_U64 TimestampFrequency;
+  APPLE_AGX_U64 TimestampOffset;
+#endif
+} AGX_WIN32_ASAHI_BACKEND;
+
+/* EXP1056 receipt-only: the first transition of a backend to Failed reports
+ * (file << 16) | line through an optional hook; the result is unchanged.
+ * Files: 1 asahi_bo.c, 2 asahi_capture.c, 3 asahi_pipeline.c,
+ * 4 gpuva_batch.c. */
+extern void (*AgxWin32BackendFailHook)(unsigned site);
+#define AGX_WIN32_ASAHI_FAIL(backend, file) do {                          \
+    AGX_WIN32_ASAHI_BACKEND *agx_fail_backend_ = (backend);               \
+    if (!agx_fail_backend_->Failed && AgxWin32BackendFailHook)            \
+      AgxWin32BackendFailHook(((unsigned)(file) << 16) | (unsigned)__LINE__); \
+    agx_fail_backend_->Failed = 1;                                        \
+  } while (0)
+
+
+/* EXP1069: publish the device's zero/scratch page VAs to this thread. */
+void AgxWin32AsahiPublishPages(struct agx_device *native);
+/* EXP1070: per-process perf_debug counter, installed by the UMD. */
+extern void (*AgxWin32PerfHook)(const char *message);
+void AgxWin32PerfNote(const char *fmt, ...);
+int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *, struct agx_device *,
+    AGX_WIN32_SCREEN *, const AGX_WIN32_ASAHI_OWNER_OPS *, void *, APPLE_AGX_U64);
+int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *);
+int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *);
+int AgxWin32AsahiIdentity(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *,
+    AGX_WIN32_RELOC_ALLOCATION *);
+/* Caller-serialized native construction lookup; never a PA/GPUVA resolver.
+ * Returned BO is borrowed until caller immediately registers/retains it. */
+int AgxWin32AsahiFindAddress(AGX_WIN32_ASAHI_BACKEND *, APPLE_AGX_U64 Owner,
+    APPLE_AGX_U32 Generation, APPLE_AGX_U64 Address, APPLE_AGX_U64 Bytes,
+    struct agx_bo **Bo, APPLE_AGX_U64 *Offset);
+/* Validates an exact mapped CPU interval against the same current owner and
+ * returns its construction coordinate. It never scans emitted command bytes. */
+int AgxWin32AsahiFindCpuAddress(AGX_WIN32_ASAHI_BACKEND *, APPLE_AGX_U64 Owner,
+    APPLE_AGX_U32 Generation, const void *Cpu, APPLE_AGX_U64 Bytes,
+    struct agx_bo **Bo, APPLE_AGX_U64 *Address, APPLE_AGX_U64 *Offset);
+/* Explicit source-level intent for native initial VDM/CDM allocation. This
+ * must be called only by the transformed agx_encoder_allocate site. */
+struct agx_bo *AgxWin32AsahiEncoderCreate(struct agx_device *, size_t,
+    unsigned, const char *);
+int AgxWin32AsahiClass(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *,
+    APPLE_AGX_U32 *ClassId);
+struct agx_bo *AgxWin32AsahiImportBo(
+    AGX_WIN32_ASAHI_BACKEND *, const AGX_WIN32_SCREEN_BUFFER *,
+    const char *Label);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
+    AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *);
+/* EXP1207: winsys creation flag beside enum agx_bo_flags. The BO's CPU map
+ * (agx_bo_map) is a cached shadow of the allocation; nothing reaches the
+ * allocation the GPU reads until AgxWin32AsahiShadowPublish copies the
+ * shadow's first Bytes into its write-combined view (Bytes is clamped to the
+ * BO size). A BO without the flag, or never CPU-mapped, publishes nothing. */
+#define AGX_WIN32_BO_SHADOW (1u << 30)
+/* Bytes past an encoder's current pointer that the flush writes without
+ * advancing it: agx_flush_render's 5 + 64 byte stream terminator. */
+#define AGX_WIN32_ENCODER_TAIL 0x100u
+int AgxWin32AsahiShadowPublish(struct agx_bo *, size_t Bytes);
+#endif
+struct agx_bo *AgxWin32AsahiLookupBo(struct agx_device *, uint32_t);
+
+#endif

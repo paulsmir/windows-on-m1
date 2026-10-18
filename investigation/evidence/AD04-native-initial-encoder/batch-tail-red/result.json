@@ -1,0 +1,23 @@
+{
+  "exit": 0,
+  "first_error": "",
+  "native_draw_executed": false,
+  "architecture": "x64",
+  "pool_exit": 0,
+  "objects": {
+    "agx_state.obj": "a07de83caadc9a9a5ab0f8da133c9a7bff20a2ba5688b42be6dd02acb886ed76",
+    "pool.obj": "dada70f31d1e68cd437ef25c9a52cd2bcce1de4a0788d4e2e403edb389a7aab2",
+    "agx_win32_asahi_bo.obj": "a6ce852cadd31c8aaa81407cb1bc28fd1a9586f7ef4645826fe4f35c86a6a8ef",
+    "agx_win32_asahi_capture.obj": "0dc23711853f1c70e77fb47c74c6ba5cbcbdd494bb6dc55d65b689241922e75d",
+    "agx_win32_asahi_pipeline.obj": "d798f8a040cf28e6ddccac918862b774a36a6776f0d5e1c3bbfd5e5c8c609dd7",
+    "agx_win32_asahi_pool_test.obj": "3ac3f65049c2ff4db6961bf3af1b955820855eebe1fe0cc612d19babdb6c744d",
+    "agx_win32_asahi_pipeline_test.obj": "f974d2faac081b8bc33fce87cebd206d39193cfbbd9972b5428897e272361a8a",
+    "native_pipeline_contract.obj": "eb82651aeda435bd82cd3d3abc1ec1327e4612e1e8140eda20418483c35db669",
+    "native_batch_encoder_contract.obj": "3bb02ece3975c6a04e7316eef2efe4868d5267782e388c72009e19e311e4b355"
+  },
+  "batch_exit": 1,
+  "batch_first_error": "d declaration of 'struct asahi_ccmd_submit_res'\r\n   34 | struct asahi_ccmd_submit_res;\r\n      |        ^\r\nC:\\Users\\pauls\\AD04-native-state-042\\src\\gallium\\drivers\\asahi\\agx_batch.c(759,21): error: subscript of pointer to incomplete type 'struct asahi_ccmd_submit_res'\r\n  759 |          virt.extres[i].res_id = (*p)->uapi_handle;\r\n      |          ~~~~~~~~~~~^\r\nC:\\Users\\pauls\\AD04-native-state-042\\src\\asahi/lib\\agx_device.h(34,8): note: forward declaration of 'struct asahi_ccmd_submit_res'\r\n   34 | struct asahi_ccmd_submit_res;\r\n      |        ^\r\nC:\\Users\\pauls\\AD04-native-state-042\\src\\gallium\\drivers\\asahi\\agx_batch.c(760,21): error: subscript of pointer to incomplete type 'struct asahi_ccmd_submit_res'\r\n  760 |          virt.extres[i].flags = ASAHI_EXTRES_READ | ASAHI_EXTRES_WRITE;\r\n      |          ~~~~~~~~~~~^\r\nC:\\Users\\pauls\\AD04-native-state-042\\src\\asahi/lib\\agx_device.h(34,8): note: forward declaration of 'struct asahi_ccmd_submit_res'\r\n   34 | struct asahi_ccmd_submit_res;\r\n      |        ^\r\nC:\\Users\\pauls\\AD04-native-state-042\\src\\gallium\\drivers\\asahi\\agx_batch.c(760,33): error: use of undeclared identifier 'ASAHI_EXTRES_READ'\r\n  760 |          virt.extres[i].flags = ASAHI_EXTRES_READ | ASAHI_EXTRES_WRITE;\r\n      |                                 ^\r\nC:\\Users\\pauls\\AD04-native-state-042\\src\\gallium\\drivers\\asahi\\agx_batch.c(760,53): error: use of undeclared identifier 'ASAHI_EXTRES_WRITE'\r\n  760 |          virt.extres[i].flags = ASAHI_EXTRES_READ | ASAHI_EXTRES_WRITE;\r\n      |                                                     ^\r\nC:\\Users\\pauls\\AD04-native-state-042\\src\\gallium\\drivers\\asahi\\agx_batch.c(907,17): error: call to undeclared function 'drmSyncobjExportSyncFile'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]\r\n  907 |       int ret = drmSyncobjExportSyncFile(dev->fd, batch->syncobj, &out_sync_fd);\r\n      |                 ^\r\nC:\\Users\\pauls\\AD04-native-state-042\\src\\gallium\\drivers\\asahi\\agx_batch.c(919,16): error: call to undeclared function 'drmSyncobjDestroy'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]\r\n  919 |          ret = drmSyncobjDestroy(dev->fd, syncs[i].handle);\r\n      |                ^\r\nC:\\Users\\pauls\\AD04-native-state-042\\src\\gallium\\drivers\\asahi\\agx_batch.c(959,17): error: call to undeclared function 'drmSyncobjWait'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]\r\n  959 |       int ret = drmSyncobjWait(dev->fd, &batch->syncobj, 1, INT64_MAX, 0, NULL);\r\n      |                 ^\r\nC:\\Users\\pauls\\AD04-native-state-042\\src\\gallium\\drivers\\asahi\\agx_batch.c(1012,14): error: call to undeclared function 'drmSyncobjWait'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]\r\n 1012 |    int ret = drmSyncobjWait(dev->fd, &batch->syncobj, 1, INT64_MAX, 0, NULL);\r\n      |              ^\r\n4 warnings and 14 errors generated.\r\n",
+  "reloc_build_exit": 0,
+  "reloc_exe_sha256": "0e4072411c54295cf6f2afb0280064a06403d67c7aaf4e1b2c315edd0e4f14b1",
+  "reloc_execution": 0
+}

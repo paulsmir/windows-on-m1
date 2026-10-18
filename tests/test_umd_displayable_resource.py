@@ -1,0 +1,155 @@
+"""Replay EXP917's real composition buffer against the production validator."""
+from pathlib import Path
+import os
+import re
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+RENDER = ROOT / 'drivers/apple-agx/render-admission'
+
+
+class DisplayableResourceTests(unittest.TestCase):
+    def test_written_primary_requires_a_scanout_resource(self):
+        """EXP1038: the KMD admits WRITTEN_PRIMARY only for A8R8G8B8 GDI-surface
+        allocations; a displayable RGBA8 back buffer must not request it."""
+        source = (RENDER / 'umd/src/umd.c').read_text()
+        flags = source[source.index('resourceData.Flags ='):]
+        flags = flags[:flags.index(';')]
+        self.assertIn('description.Displayable', flags)
+
+    def test_observed_bgra_displayable_buffer_preserves_storage_contract(self):
+        source = (RENDER / 'umd/src/umd.c').read_text()
+        function = re.search(
+            r'static BOOLEAN AdmissionUmdSharedFormatStorage\(.*?^}',
+            source, re.S | re.M).group(0) + '\n' + re.search(
+            r'static BOOLEAN AdmissionUmdDescribePrimary\(.*?^}',
+            source, re.S | re.M).group(0)
+        # Values are the pinned WDK26100 enum values, including actual PRESENT80.
+        shim = r'''
+#include <assert.h>
+#include <string.h>
+#include "direct_flip_contract.h"
+typedef int BOOLEAN;
+typedef unsigned UINT;
+#define TRUE 1
+#define FALSE 0
+#define ZeroMemory(p,n) memset(p,0,n)
+#define D3D10DDIRESOURCE_TEXTURE2D 3u
+#define D3D10_DDI_USAGE_DEFAULT 0u
+#define DXGI_FORMAT_B8G8R8A8_UNORM 87u
+#define DXGI_FORMAT_B8G8R8A8_UNORM_SRGB 91u
+#define DXGI_FORMAT_R8G8B8A8_UNORM 28u
+#define DXGI_FORMAT_A8_UNORM 65u
+#define D3D10_DDI_BIND_SHADER_RESOURCE 8u
+#define D3D10_DDI_BIND_RENDER_TARGET 32u
+#define D3D10_DDI_BIND_PRESENT 128u
+#define D3D10_DDI_RESOURCE_MISC_SHARED 2u
+#define D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT 8u
+#define D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE 0x20000u
+#define D3DKMDT_GDISURFACE_TEXTURE 2u
+#define D3DDDIFMT_A8R8G8B8 21u
+#define D3DDDIFMT_A8B8G8R8 32u
+struct Mip { unsigned TexelWidth,TexelHeight,TexelDepth; };
+typedef struct {
+ struct Mip *pMipInfoList;
+ unsigned ResourceDimension,Format,MipLevels,ArraySize,BindFlags;
+ unsigned Usage,MapFlags,MiscFlags;
+ struct {unsigned Count,Quality;} SampleDesc;
+ void *pInitialDataUP,*pPrimaryDesc;
+} D3D11DDIARG_CREATERESOURCE;
+'''
+        replay = r'''
+int main(void) {
+ struct Mip mip={2560u,1600u,1u};
+ D3D11DDIARG_CREATERESOURCE c={0};
+ ADMISSION_UMD_DIRECT_FLIP_RESOURCE observed={0},reference={0};
+ c.pMipInfoList=&mip;c.ResourceDimension=3u;c.Format=87u;
+ c.MipLevels=1u;c.ArraySize=1u;c.SampleDesc.Count=1u;
+ c.BindFlags=0xa8u;c.MiscFlags=0x20002u;
+ assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Linear==1u && observed.Displayable==1u && observed.SegmentId==2u);
+ assert(observed.Allocation.Format==21u && observed.Allocation.Pitch==10240u);
+ assert(observed.Allocation.Size==16384000ULL);
+ assert(AdmissionAllocationDescriptionValid(&observed.Allocation));
+ c.MiscFlags=2u;assert(AdmissionUmdDescribePrimary(&c,&reference));
+ assert(memcmp(&observed,&reference,sizeof(observed))==0);
+ c.MiscFlags=0x20002u;
+ /* EXP1038: WinUI flip-model RGBA8 back buffers carry the displayable
+    flag (no DisplayableSupport cap); refusing them removed the device. They
+    stay a non-scanout RGBA allocation (Displayable 0, A8B8G8R8). */
+ c.Format=28u;c.pMipInfoList[0].TexelWidth=600u;c.pMipInfoList[0].TexelHeight=200u;
+ assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Displayable==0u && observed.Allocation.Format==32u);
+ c.pMipInfoList[0].TexelWidth=2560u;c.pMipInfoList[0].TexelHeight=1600u;
+ c.Format=10u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.Format=87u;
+ unsigned forbidden[]={0x1u,0x800u,0x1000u,0x2000u,0x4000u,0x10000u,0x80000000u};
+ for(unsigned i=0;i<sizeof(forbidden)/sizeof(forbidden[0]);++i){
+  c.MiscFlags=0x20002u|forbidden[i];
+  assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ }
+ /* EXP1226: opengl32's window redirection surface (PresentBuffers nVersion 2)
+    is a shared BGRA texture the GL ICD writes and DWM samples, created with
+    only the shader-resource bind; any non-empty RT/SRV subset is the same
+    linear BGRA allocation. Unshared resources are not presentation
+    resources. */
+ c.pMipInfoList[0].TexelWidth=656u;c.pMipInfoList[0].TexelHeight=519u;
+ c.BindFlags=8u;c.MiscFlags=2u;
+ assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Allocation.Format==21u && observed.Allocation.Pitch>=656u*4u);
+ assert(AdmissionAllocationDescriptionValid(&observed.Allocation));
+ c.BindFlags=32u;assert(AdmissionUmdDescribePrimary(&c,&observed));
+ c.BindFlags=0u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.BindFlags=8u;c.MiscFlags=0u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ /* EXP1327: D3D11.1 shares R8G8B8A8 Texture2Ds (guaranteed) and A8_UNORM
+    ones (ExtendedResourceSharing): the FL 11_0 desktop's 32x32 composition
+    masks, PRESENT|RT|SRV or RT|SRV. The frontend stores A8_UNORM as RGBA8,
+    so both take the non-displayable RGBA8 allocation; neither can be a
+    primary or displayable. */
+ c.MiscFlags=2u;c.Format=28u;c.BindFlags=0x28u;
+ assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Displayable==0u && observed.Allocation.Format==32u);
+ c.Format=65u;c.pMipInfoList[0].TexelWidth=32u;c.pMipInfoList[0].TexelHeight=32u;
+ assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Displayable==0u && observed.Allocation.Format==32u &&
+        observed.Allocation.BytesPerPixel==4u && observed.Allocation.Pitch==128u);
+ c.BindFlags=0xa8u;assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Displayable==0u && observed.Allocation.Format==32u);
+ c.MiscFlags=0x20002u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.MiscFlags=2u;c.pPrimaryDesc=&c;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.pPrimaryDesc=0;c.BindFlags=0x28u;c.MiscFlags=0u;
+ assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.MiscFlags=2u;c.Format=61u;/* R8_UNORM: no shared storage yet */
+ assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ /* An opened resource's recorded DXGI format must name its storage. */
+ assert(AdmissionUmdSharedFormatStorage(65u,32u) &&
+        AdmissionUmdSharedFormatStorage(28u,32u) &&
+        AdmissionUmdSharedFormatStorage(87u,21u) &&
+        AdmissionUmdSharedFormatStorage(91u,21u));
+ assert(!AdmissionUmdSharedFormatStorage(65u,21u) &&
+        !AdmissionUmdSharedFormatStorage(87u,32u) &&
+        !AdmissionUmdSharedFormatStorage(61u,32u));
+ c.BindFlags=8u;c.MiscFlags=2u;
+ c.Format=87u;c.BindFlags=0xa8u;
+ c.pMipInfoList[0].TexelWidth=2560u;c.pMipInfoList[0].TexelHeight=1600u;
+ c.MiscFlags=0x20002u;c.ArraySize=2u;
+ assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.ArraySize=1u;c.SampleDesc.Count=2u;
+ assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.SampleDesc.Count=1u;c.pInitialDataUP=&c;
+ assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ return 0;
+}
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            p = Path(directory)
+            (p / 'replay.c').write_text(shim + function + replay)
+            subprocess.run([
+                os.environ.get('CC', 'clang'), '-std=c11', '-Wall', '-Wextra',
+                '-Werror', '-fsanitize=address,undefined',
+                '-I', str(RENDER / 'include'), '-I', str(RENDER / 'umd/include'),
+                str(p / 'replay.c'), str(RENDER / 'src/render_allocation.c'),
+                '-o', str(p / 'replay')], check=True)
+            subprocess.run([str(p / 'replay')], check=True)

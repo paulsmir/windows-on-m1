@@ -1,0 +1,5 @@
+{
+  "source_sha256": "1a5b056a18ffdd1fa6d3813129221e0ead2bf114c794844bbc14bdcd5ebc0c27",
+  "old": "      FILE *fp = selftest ? fopen(\"/dev/null\", \"w\") : stdout;",
+  "new": "#if defined(_WIN32)\n      FILE *fp = selftest ? fopen(\"NUL\", \"w\") : stdout;\n#else\n      FILE *fp = selftest ? fopen(\"/dev/null\", \"w\") : stdout;\n#endif"
+}

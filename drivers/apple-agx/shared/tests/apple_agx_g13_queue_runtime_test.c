@@ -1,0 +1,923 @@
+#include "apple_agx_g13_queue_runtime.h"
+
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+
+static unsigned int QueueRuntimeFailures;
+#undef assert
+#define assert(x) do { if (!(x)) ++QueueRuntimeFailures; } while (0)
+
+typedef struct _TEST_IO {
+  unsigned int Sequence;
+  unsigned int WorkFlushes;
+  unsigned int RingFlushes;
+  unsigned int Barriers;
+  unsigned int PointerWrites;
+  unsigned int Sends;
+  unsigned int Quiesces;
+  unsigned int SendOrder[8];
+  unsigned int Published[2];
+  unsigned int FailSendAt;
+  unsigned int FailQuiesce;
+  unsigned int FailReads;
+  unsigned int Recovers;
+  unsigned int FailRecover;
+  unsigned int RecoverKind;
+} TEST_IO;
+
+static APPLE_AGX_BACKEND_BOOL TestFlush(void *Context, const void *Address,
+                                        APPLE_AGX_BACKEND_U32 Bytes) {
+  TEST_IO *io = (TEST_IO *)Context;
+  assert(Address != NULL);
+  assert(Bytes != 0u);
+  ++io->Sequence;
+  if (Bytes == APPLE_AGX_G13_RING_SLOT_SIZE)
+    ++io->RingFlushes;
+  else
+    ++io->WorkFlushes;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static void TestBarrier(void *Context) {
+  TEST_IO *io = (TEST_IO *)Context;
+  ++io->Sequence;
+  ++io->Barriers;
+}
+
+static APPLE_AGX_BACKEND_BOOL
+TestPublishU32(void *Context, volatile APPLE_AGX_BACKEND_U32 *Address,
+               APPLE_AGX_BACKEND_U32 Value) {
+  TEST_IO *io = (TEST_IO *)Context;
+  ++io->Sequence;
+  ++io->PointerWrites;
+  *Address = Value;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL TestReadU32(
+    void *Context, const volatile APPLE_AGX_BACKEND_U32 *Address,
+    APPLE_AGX_BACKEND_U32 *Value) {
+  if (Address == NULL || Value == NULL || ((TEST_IO *)Context)->FailReads)
+    return APPLE_AGX_BACKEND_FALSE;
+  *Value = *Address;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL TestSend(
+    void *Context, APPLE_AGX_BACKEND_U32 QueueType,
+    const unsigned char Message[APPLE_AGX_G13_RUN_MESSAGE_SIZE]) {
+  TEST_IO *io = (TEST_IO *)Context;
+  ++io->Sequence;
+  ++io->Sends;
+  io->SendOrder[io->Sends - 1u] = QueueType;
+  assert(Message != NULL);
+  if (io->FailSendAt == io->Sends)
+    return APPLE_AGX_BACKEND_FALSE;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL TestQuiesce(void *Context,
+                                          APPLE_AGX_BACKEND_U32 Fence) {
+  TEST_IO *io = (TEST_IO *)Context;
+  assert(Fence != 0u);
+  ++io->Quiesces;
+  return io->FailQuiesce ? APPLE_AGX_BACKEND_FALSE
+                         : APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL TestRecover(void *Context,
+                                          APPLE_AGX_BACKEND_U32 Fence,
+                                          APPLE_AGX_BACKEND_U32 Kind) {
+  TEST_IO *io = (TEST_IO *)Context;
+  assert(Fence != 0u);
+  ++io->Recovers;
+  io->RecoverKind = Kind;
+  return io->FailRecover ? APPLE_AGX_BACKEND_FALSE : APPLE_AGX_BACKEND_TRUE;
+}
+
+typedef struct _TEST_FIXTURE {
+  TEST_IO IoState;
+  APPLE_AGX_G13_QUEUE_RUNTIME Runtime;
+  unsigned long long TaRing[APPLE_AGX_G13_RING_CAPACITY];
+  unsigned long long D3Ring[APPLE_AGX_G13_RING_CAPACITY];
+  unsigned long long ComputeRing[APPLE_AGX_G13_RING_CAPACITY];
+  volatile APPLE_AGX_BACKEND_U32 TaWrite;
+  volatile APPLE_AGX_BACKEND_U32 D3Write;
+  volatile APPLE_AGX_BACKEND_U32 TaDone;
+  volatile APPLE_AGX_BACKEND_U32 D3Done;
+  volatile APPLE_AGX_BACKEND_U32 TaStamp;
+  volatile APPLE_AGX_BACKEND_U32 D3Stamp;
+  volatile APPLE_AGX_BACKEND_U32 ComputeWrite,ComputeDone,ComputeStamp;
+  unsigned char TaDestination[64];
+  unsigned char D3Destination[64];
+  unsigned char TaSource[64];
+  unsigned char D3Source[64];
+  unsigned char ComputeDestination[64],ComputeSource[64];
+} TEST_FIXTURE;
+
+static void TestInitialize(TEST_FIXTURE *Fixture) {
+  APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG config;
+  APPLE_AGX_G13_QUEUE_RUNTIME_IO io;
+
+  memset(Fixture, 0, sizeof(*Fixture));
+  memset(&config, 0, sizeof(config));
+  memset(&io, 0, sizeof(io));
+  memset(Fixture->TaSource, 0xa5, sizeof(Fixture->TaSource));
+  memset(Fixture->D3Source, 0x5a, sizeof(Fixture->D3Source));
+
+  config.Ta.QueueType = (APPLE_AGX_BACKEND_U32)AppleAgxG13QueueTa;
+  config.Ta.QueueInfoGpuAddress = 0x1500010000ULL;
+  config.Ta.RingCpuAddress = Fixture->TaRing;
+  config.Ta.RingCapacity = APPLE_AGX_G13_RING_CAPACITY;
+  config.Ta.CpuWritePointer = &Fixture->TaWrite;
+  config.Ta.GpuDonePointer = &Fixture->TaDone;
+  config.Ta.Stamp = &Fixture->TaStamp;
+  config.Ta.EventNumber = 7u;
+  config.D3.QueueType = (APPLE_AGX_BACKEND_U32)AppleAgxG13Queue3d;
+  config.D3.QueueInfoGpuAddress = 0x1500020000ULL;
+  config.D3.RingCpuAddress = Fixture->D3Ring;
+  config.D3.RingCapacity = APPLE_AGX_G13_RING_CAPACITY;
+  config.D3.CpuWritePointer = &Fixture->D3Write;
+  config.D3.GpuDonePointer = &Fixture->D3Done;
+  config.D3.Stamp = &Fixture->D3Stamp;
+  config.D3.EventNumber = 9u;
+  config.TimeoutTicks = 100u;
+
+  io.Context = &Fixture->IoState;
+  io.FlushForDevice = TestFlush;
+  io.MemoryBarrier = TestBarrier;
+  io.PublishU32 = TestPublishU32;
+  io.ReadU32 = TestReadU32;
+  io.SendRunMessage = TestSend;
+  io.Quiesce = TestQuiesce;
+  assert(AppleAgxG13QueueRuntimeInitialize(&Fixture->Runtime, &config, &io) ==
+         AppleAgxG13QueueRuntimeResultOk);
+}
+
+static void TestEnableCompute(TEST_FIXTURE *f) {
+  APPLE_AGX_G13_QUEUE_BINDING *c=&f->Runtime.Config.Compute;
+  memset(c,0,sizeof(*c));
+  c->QueueType=(APPLE_AGX_BACKEND_U32)AppleAgxG13QueueCompute;
+  c->QueueInfoGpuAddress=0x1500030000ULL;c->RingCpuAddress=f->ComputeRing;
+  c->RingCapacity=APPLE_AGX_G13_RING_CAPACITY;
+  c->CpuWritePointer=&f->ComputeWrite;c->GpuDonePointer=&f->ComputeDone;
+  c->Stamp=&f->ComputeStamp;c->EventNumber=11u;
+  f->Runtime.Config.HasCompute=APPLE_AGX_BACKEND_TRUE;
+  f->Runtime.ComputeFirstRun=APPLE_AGX_BACKEND_TRUE;
+  memset(f->ComputeSource,0x3c,sizeof(f->ComputeSource));
+}
+
+static APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION
+TestSubmission(TEST_FIXTURE *Fixture, APPLE_AGX_BACKEND_U32 Fence) {
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  memset(&submission, 0, sizeof(submission));
+  submission.Fence = Fence;
+  submission.Timestamp = 0x1122334455667788ULL;
+  submission.NowTicks = 1000ULL;
+  submission.Ta.Source = Fixture->TaSource;
+  submission.Ta.Destination = Fixture->TaDestination;
+  submission.Ta.Bytes = sizeof(Fixture->TaSource);
+  submission.Ta.GpuAddresses[0] = 0x1500100000ULL;
+  submission.Ta.GpuAddresses[1] = 0x1500108000ULL;
+  submission.Ta.GpuAddressCount = 2u;
+  submission.Ta.ExpectedStamp = 0x200u;
+  submission.D3.Source = Fixture->D3Source;
+  submission.D3.Destination = Fixture->D3Destination;
+  submission.D3.Bytes = sizeof(Fixture->D3Source);
+  submission.D3.GpuAddresses[0] = 0x1500200000ULL;
+  submission.D3.GpuAddresses[1] = 0x1500208000ULL;
+  submission.D3.GpuAddressCount = 2u;
+  submission.D3.ExpectedStamp = 0x300u;
+  return submission;
+}
+
+static void TestCompleteSubmission(
+    TEST_FIXTURE *,const APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION *);
+static void TestEvent(unsigned char [APPLE_AGX_G13_EVENT_MESSAGE_SIZE],
+                      unsigned int,unsigned int);
+
+/* D3D-G1b (EXP1278): a render's compute work is one submission with it.
+ * Compute, TA (led by the firmware Barrier on the compute stamp) and 3D are
+ * published and kicked together, and the fence completes only when all three
+ * are done: the shared notifier counts every notification, so waiting for the
+ * compute alone before publishing TA/3D deadlocked on hardware. */
+static void TestRenderWithComputeOneSubmission(void) {
+  TEST_FIXTURE f;APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s,bad,next;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+  TestInitialize(&f);TestEnableCompute(&f);s=TestSubmission(&f,60u);
+  s.Compute.Source=f.ComputeSource;s.Compute.Destination=f.ComputeDestination;
+  s.Compute.Bytes=sizeof(f.ComputeSource);
+  s.Compute.GpuAddresses[0]=0x1500300000ULL;
+  s.Compute.GpuAddressCount=1u;s.Compute.ExpectedStamp=0x600u;
+  s.Ta.GpuAddresses[2]=s.Ta.GpuAddresses[1];
+  s.Ta.GpuAddresses[1]=s.Ta.GpuAddresses[0];
+  s.Ta.GpuAddresses[0]=0x1500308800ULL;s.Ta.GpuAddressCount=3u;
+  s.TaLeadingBarrier=APPLE_AGX_BACKEND_TRUE;
+  /* Refused before anything is visible: no barrier, the plain render or
+   * compute entry points, a TA list without the barrier slot. */
+  bad=s;bad.TaLeadingBarrier=APPLE_AGX_BACKEND_FALSE;
+  assert(AppleAgxG13QueueRuntimeSubmitRenderWithCompute(&f.Runtime,&bad)==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+  assert(AppleAgxG13QueueRuntimeSubmit(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+  assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+  bad=s;bad.Ta.GpuAddressCount=2u;
+  assert(AppleAgxG13QueueRuntimeSubmitRenderWithCompute(&f.Runtime,&bad)==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+  assert(f.IoState.Sends==0u && f.Runtime.Phase==AppleAgxG13QueueRuntimeReady &&
+         f.ComputeWrite==0u && f.TaWrite==0u && f.D3Write==0u);
+  assert(AppleAgxG13QueueRuntimeSubmitRenderWithCompute(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(f.Runtime.Phase==AppleAgxG13QueueRuntimeSubmitted &&
+         f.Runtime.ComputeInRender && !f.Runtime.ComputeTerminal &&
+         f.ComputeRing[0]==s.Compute.GpuAddresses[0] && f.ComputeWrite==1u &&
+         f.TaRing[0]==0x1500308800ULL && f.TaRing[1]==s.Ta.GpuAddresses[1] &&
+         f.TaRing[2]==s.Ta.GpuAddresses[2] && f.TaWrite==3u &&
+         f.D3Write==2u && f.IoState.Sends==3u &&
+         f.IoState.SendOrder[0]==(unsigned)AppleAgxG13QueueCompute &&
+         f.IoState.SendOrder[1]==(unsigned)AppleAgxG13Queue3d &&
+         f.IoState.SendOrder[2]==(unsigned)AppleAgxG13QueueTa);
+  /* TA and 3D reported but the compute not: the fence stays pending. */
+  f.D3Stamp=s.D3.ExpectedStamp;f.D3Done=f.D3Write;
+  f.TaStamp=s.Ta.ExpectedStamp;f.TaDone=f.TaWrite;
+  TestEvent(event,7u,9u);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeSubmitted &&
+         !AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
+  f.ComputeStamp=s.Compute.ExpectedStamp;f.ComputeDone=f.ComputeWrite;
+  TestEvent(event,11u,APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeCompletionPending);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion) &&
+         completion.Fence==60u &&
+         completion.Status==AppleAgxG13QueueCompletionSuccess &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeReady &&
+         !f.Runtime.ComputeInRender);
+  /* With the manager initialized, the TA list is the barrier and the root. */
+  next=s;next.Fence=61u;next.Ta.GpuAddresses[1]=s.Ta.GpuAddresses[2];
+  next.Ta.GpuAddressCount=2u;next.Compute.ExpectedStamp=0x601u;
+  assert(AppleAgxG13QueueRuntimeSubmitRenderWithCompute(&f.Runtime,&next)==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.TaRing[3]==0x1500308800ULL && f.TaRing[4]==s.Ta.GpuAddresses[2] &&
+         f.TaWrite==5u && f.ComputeWrite==2u);
+}
+
+/* G2: a standalone compute job completes its fence on the compute event;
+ * no TA/3D follows, and the queues accept the next job afterwards. */
+static void TestStandaloneComputeCompletes(void) {
+  TEST_FIXTURE f;APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s,r;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+  TestInitialize(&f);TestEnableCompute(&f);
+  memset(&s,0,sizeof(s));
+  s.Fence=70u;s.Timestamp=0x1122334455667788ULL;s.NowTicks=1000ULL;
+  s.Compute.Source=f.ComputeSource;s.Compute.Destination=f.ComputeDestination;
+  s.Compute.Bytes=sizeof(f.ComputeSource);
+  s.Compute.GpuAddresses[0]=0x1500300000ULL;
+  s.Compute.GpuAddressCount=1u;s.Compute.ExpectedStamp=0x700u;
+  s.ComputeOnly=APPLE_AGX_BACKEND_TRUE;
+  assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted &&
+         f.Runtime.ComputeTerminal && f.ComputeWrite==1u && f.IoState.Sends==1u &&
+         f.IoState.SendOrder[0]==(unsigned)AppleAgxG13QueueCompute);
+  /* the event alone does not complete it */
+  TestEvent(event,11u,APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted);
+  f.ComputeStamp=s.Compute.ExpectedStamp;f.ComputeDone=f.ComputeWrite;
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeCompletionPending);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion) &&
+         completion.Fence==70u &&
+         completion.Status==AppleAgxG13QueueCompletionSuccess &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeReady &&
+         !f.Runtime.ComputeTerminal && f.IoState.Sends==1u);
+  /* a render job follows on the same queues */
+  r=TestSubmission(&f,71u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&f.Runtime,&r)==
+         AppleAgxG13QueueRuntimeResultOk);
+  TestCompleteSubmission(&f,&r);
+  /* D3D-G1b: compute that is not a standalone job never runs alone. */
+  s.Fence=72u;s.ComputeOnly=APPLE_AGX_BACKEND_FALSE;s.Compute.ExpectedStamp=0x701u;
+  assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+}
+
+/* EXP1213: a submitted standalone compute job is polled for its deadline
+ * like a render job. G4-recovery: the deadline is recorded,
+ * never terminal (no Quiesce), and the job stays pending. */
+static void TestComputeDeadlineIsPolled(void) {
+  TEST_FIXTURE f;APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  int prelude;
+  for(prelude=0;prelude<1;++prelude) {
+    TestInitialize(&f);TestEnableCompute(&f);
+    memset(&s,0,sizeof(s));
+    s.Fence=80u;s.Timestamp=0x1122334455667788ULL;s.NowTicks=1000ULL;
+    s.Compute.Source=f.ComputeSource;s.Compute.Destination=f.ComputeDestination;
+    s.Compute.Bytes=sizeof(f.ComputeSource);
+    s.Compute.GpuAddresses[0]=0x1500300000ULL;
+    s.Compute.GpuAddressCount=1u;s.Compute.ExpectedStamp=0x800u;
+    s.ComputeOnly=prelude ? APPLE_AGX_BACKEND_FALSE : APPLE_AGX_BACKEND_TRUE;
+    assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime,&s)==
+           AppleAgxG13QueueRuntimeResultOk);
+    assert(AppleAgxG13QueueRuntimeCheckTimeout(&f.Runtime,1099ULL)==
+           AppleAgxG13QueueRuntimeResultOk &&
+           f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted &&
+           f.IoState.Quiesces==0u);
+    assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
+    assert(AppleAgxG13QueueRuntimeCheckTimeout(&f.Runtime,1100ULL)==
+           AppleAgxG13QueueRuntimeResultOk && f.IoState.Quiesces==0u &&
+           f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted &&
+           f.Runtime.DeadlineExpiries==1u);
+    assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
+  }
+}
+
+static void PutU32(unsigned char *Destination, unsigned int Value) {
+  Destination[0] = (unsigned char)(Value & 0xffu);
+  Destination[1] = (unsigned char)((Value >> 8) & 0xffu);
+  Destination[2] = (unsigned char)((Value >> 16) & 0xffu);
+  Destination[3] = (unsigned char)((Value >> 24) & 0xffu);
+}
+
+static void PutU64(unsigned char *Destination, unsigned long long Value) {
+  PutU32(Destination, (unsigned int)Value);
+  PutU32(Destination + 4, (unsigned int)(Value >> 32));
+}
+
+static void TestEvent(unsigned char Message[APPLE_AGX_G13_EVENT_MESSAGE_SIZE],
+                      unsigned int FirstEvent,
+                      unsigned int SecondEvent) {
+  unsigned long long firing[2] = {0ULL, 0ULL};
+  memset(Message, 0, APPLE_AGX_G13_EVENT_MESSAGE_SIZE);
+  PutU32(Message, (unsigned int)AppleAgxG13EventFlag);
+  firing[FirstEvent / 64u] |= 1ULL << (FirstEvent % 64u);
+  if (SecondEvent < APPLE_AGX_G13_EVENT_COUNT)
+    firing[SecondEvent / 64u] |= 1ULL << (SecondEvent % 64u);
+  PutU64(Message + 4, firing[0]);
+  PutU64(Message + 12, firing[1]);
+}
+
+static void TestCompleteSubmission(
+    TEST_FIXTURE *Fixture,
+    const APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION *Submission) {
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+
+  Fixture->D3Stamp = Submission->D3.ExpectedStamp;
+  Fixture->D3Done = Fixture->D3Write;
+  Fixture->TaStamp = Submission->Ta.ExpectedStamp;
+  Fixture->TaDone = Fixture->TaWrite;
+  TestEvent(event, 7u, 9u);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &Fixture->Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&Fixture->Runtime,
+                                               &completion));
+  assert(completion.Fence == Submission->Fence);
+  assert(completion.Status == AppleAgxG13QueueCompletionSuccess);
+}
+
+static void TestJoinedPublishAndExactCompletion(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+
+  TestInitialize(&fixture);
+  submission = TestSubmission(&fixture, 42u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(memcmp(fixture.TaDestination, fixture.TaSource,
+                sizeof(fixture.TaSource)) == 0);
+  assert(memcmp(fixture.D3Destination, fixture.D3Source,
+                sizeof(fixture.D3Source)) == 0);
+  assert(fixture.D3Ring[0] == submission.D3.GpuAddresses[0]);
+  assert(fixture.D3Ring[1] == submission.D3.GpuAddresses[1]);
+  assert(fixture.TaRing[0] == submission.Ta.GpuAddresses[0]);
+  assert(fixture.TaRing[1] == submission.Ta.GpuAddresses[1]);
+  assert(fixture.D3Write == 2u && fixture.TaWrite == 2u);
+  assert(fixture.IoState.WorkFlushes == 2u);
+  assert(fixture.IoState.RingFlushes == 4u);
+  assert(fixture.IoState.PointerWrites == 2u);
+  assert(fixture.IoState.Sends == 2u);
+  assert(fixture.IoState.SendOrder[0] ==
+         (unsigned int)AppleAgxG13Queue3d);
+  assert(fixture.IoState.SendOrder[1] ==
+         (unsigned int)AppleAgxG13QueueTa);
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                                &completion));
+
+  fixture.D3Stamp = submission.D3.ExpectedStamp;
+  fixture.D3Done = 2u;
+  TestEvent(event, 9u, APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &fixture.Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                                &completion));
+
+  fixture.TaStamp = submission.Ta.ExpectedStamp;
+  fixture.TaDone = 2u;
+  TestEvent(event, 7u, APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &fixture.Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                               &completion));
+  assert(completion.Fence == 42u);
+  assert(completion.Status == AppleAgxG13QueueCompletionSuccess);
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                                &completion));
+}
+
+/* Multi-job phase 3 (Asahi workqueue.rs/event.rs): a job is complete when
+ * its event fired and its stamp reached its value. A later job on the same
+ * ring may already have moved the done pointer past this job's entries. */
+static void TestStampCompletesPastDonePointer(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+
+  TestInitialize(&fixture);
+  submission = TestSubmission(&fixture, 42u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  /* A later job's entries were published after this job's (write 4). */
+  fixture.D3Write = fixture.TaWrite = 4u;
+  /* Not yet retired: done behind this job's entries. */
+  fixture.D3Stamp = submission.D3.ExpectedStamp;
+  fixture.D3Done = 1u;
+  TestEvent(event, 9u, APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &fixture.Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(!fixture.Runtime.D3Pending.Complete);
+  fixture.D3Done = 3u;
+  TestEvent(event, 9u, APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &fixture.Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  fixture.TaStamp = submission.Ta.ExpectedStamp + 0x100u;
+  fixture.TaDone = 3u;
+  TestEvent(event, 7u, APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &fixture.Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                               &completion));
+  assert(completion.Fence == 42u);
+  assert(completion.Status == AppleAgxG13QueueCompletionSuccess);
+}
+
+static void TestPreparedRangesNeedNoCopy(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  TestInitialize(&fixture);
+  submission = TestSubmission(&fixture, 47u);
+  submission.Ta.Source = NULL;
+  submission.Ta.Destination = NULL;
+  submission.Ta.Bytes = 0u;
+  submission.Ta.PreparedRanges[0].Address = fixture.TaSource;
+  submission.Ta.PreparedRanges[0].Bytes = 16u;
+  submission.Ta.PreparedRanges[1].Address = fixture.TaSource + 16u;
+  submission.Ta.PreparedRanges[1].Bytes = 16u;
+  submission.Ta.PreparedRangeCount = 2u;
+  submission.D3.Source = NULL;
+  submission.D3.Destination = NULL;
+  submission.D3.Bytes = 0u;
+  submission.D3.PreparedRanges[0].Address = fixture.D3Source;
+  submission.D3.PreparedRanges[0].Bytes = 16u;
+  submission.D3.PreparedRanges[1].Address = fixture.D3Source + 16u;
+  submission.D3.PreparedRanges[1].Bytes = 16u;
+  submission.D3.PreparedRangeCount = 2u;
+  memset(fixture.TaDestination, 0x11, sizeof(fixture.TaDestination));
+  memset(fixture.D3Destination, 0x22, sizeof(fixture.D3Destination));
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.TaDestination[0] == 0x11u);
+  assert(fixture.D3Destination[0] == 0x22u);
+  assert(fixture.IoState.WorkFlushes == 4u);
+}
+
+static void TestFirstAndLaterTaPublicationContract(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION first;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION later;
+
+  TestInitialize(&fixture);
+  first = TestSubmission(&fixture, 50u);
+  assert(!fixture.Runtime.BufferManagerInitialized);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &first) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.TaRing[0] == first.Ta.GpuAddresses[0]);
+  assert(fixture.TaRing[1] == first.Ta.GpuAddresses[1]);
+  assert(fixture.D3Ring[0] == first.D3.GpuAddresses[0]);
+  assert(fixture.D3Ring[1] == first.D3.GpuAddresses[1]);
+  assert(fixture.TaWrite == 2u && fixture.D3Write == 2u);
+  assert(fixture.Runtime.BufferManagerInitialized);
+  TestCompleteSubmission(&fixture, &first);
+  assert(fixture.Runtime.BufferManagerInitialized);
+
+  memset(&fixture.IoState, 0, sizeof(fixture.IoState));
+  later = TestSubmission(&fixture, 51u);
+  later.NowTicks = 1200ULL;
+  later.Ta.GpuAddresses[0] = first.Ta.GpuAddresses[1];
+  later.Ta.GpuAddresses[1] = 0ULL;
+  later.Ta.GpuAddressCount = 1u;
+  later.Ta.ExpectedStamp = 0x400u;
+  later.D3.GpuAddresses[0] = 0x1500210000ULL;
+  later.D3.GpuAddresses[1] = 0x1500218000ULL;
+  later.D3.ExpectedStamp = 0x500u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &later) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.TaRing[2] == first.Ta.GpuAddresses[1]);
+  assert(fixture.TaRing[3] == 0ULL);
+  assert(fixture.D3Ring[2] == later.D3.GpuAddresses[0]);
+  assert(fixture.D3Ring[3] == later.D3.GpuAddresses[1]);
+  assert(fixture.TaWrite == 3u && fixture.D3Write == 4u);
+  assert(fixture.Runtime.TaPending.ExpectedDonePointer == 3u);
+  assert(fixture.Runtime.D3Pending.ExpectedDonePointer == 4u);
+  assert(fixture.IoState.RingFlushes == 3u);
+}
+
+static void TestCountsAreBoundedAndQueueSpecific(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+
+  TestInitialize(&fixture);
+  submission = TestSubmission(&fixture, 52u);
+  submission.Ta.GpuAddressCount = 1u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+  submission = TestSubmission(&fixture, 52u);
+  submission.D3.GpuAddressCount = 1u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+  submission = TestSubmission(&fixture, 52u);
+  submission.Ta.GpuAddressCount = 0u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+
+  submission = TestSubmission(&fixture, 52u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  TestCompleteSubmission(&fixture, &submission);
+  submission = TestSubmission(&fixture, 53u);
+  submission.NowTicks = 1200ULL;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+}
+
+static void TestLaterSubmitWrapUsesActualCounts(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+
+  TestInitialize(&fixture);
+  fixture.Runtime.BufferManagerInitialized = APPLE_AGX_BACKEND_TRUE;
+  fixture.Runtime.TaFirstRun = APPLE_AGX_BACKEND_FALSE;
+  fixture.Runtime.D3FirstRun = APPLE_AGX_BACKEND_FALSE;
+  fixture.Runtime.Config.Ta.RingCapacity = 4u;
+  fixture.Runtime.Config.D3.RingCapacity = 4u;
+  fixture.TaWrite = 3u;
+  fixture.D3Write = 3u;
+  fixture.TaDone = 2u;
+  fixture.D3Done = 2u;
+  submission = TestSubmission(&fixture, 54u);
+  submission.Ta.GpuAddresses[0] = submission.Ta.GpuAddresses[1];
+  submission.Ta.GpuAddresses[1] = 0ULL;
+  submission.Ta.GpuAddressCount = 1u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.TaRing[3] == submission.Ta.GpuAddresses[0]);
+  assert(fixture.TaRing[0] == 0ULL);
+  assert(fixture.D3Ring[3] == submission.D3.GpuAddresses[0]);
+  assert(fixture.D3Ring[0] == submission.D3.GpuAddresses[1]);
+  assert(fixture.TaWrite == 0u && fixture.D3Write == 1u);
+
+  TestInitialize(&fixture);
+  fixture.Runtime.BufferManagerInitialized = APPLE_AGX_BACKEND_TRUE;
+  fixture.Runtime.TaFirstRun = APPLE_AGX_BACKEND_FALSE;
+  fixture.Runtime.D3FirstRun = APPLE_AGX_BACKEND_FALSE;
+  fixture.Runtime.Config.Ta.RingCapacity = 4u;
+  fixture.Runtime.Config.D3.RingCapacity = 4u;
+  fixture.TaWrite = 3u;
+  fixture.D3Write = 3u;
+  fixture.TaDone = 1u;
+  fixture.D3Done = 1u;
+  submission = TestSubmission(&fixture, 55u);
+  submission.Ta.GpuAddresses[0] = submission.Ta.GpuAddresses[1];
+  submission.Ta.GpuAddresses[1] = 0ULL;
+  submission.Ta.GpuAddressCount = 1u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultBusy);
+  assert(fixture.TaRing[3] == 0ULL && fixture.D3Ring[3] == 0ULL);
+  assert(fixture.IoState.RingFlushes == 0u);
+}
+
+static void TestResetRequiresBufferManagerInitializationAgain(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+
+  TestInitialize(&fixture);
+  submission = TestSubmission(&fixture, 56u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  TestCompleteSubmission(&fixture, &submission);
+  assert(fixture.Runtime.BufferManagerInitialized);
+  assert(AppleAgxG13QueueRuntimeReset(&fixture.Runtime) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(!fixture.Runtime.BufferManagerInitialized);
+  assert(fixture.Runtime.TaFirstRun && fixture.Runtime.D3FirstRun);
+  submission = TestSubmission(&fixture, 57u);
+  submission.NowTicks = 1400ULL;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.Runtime.TaPending.ExpectedDonePointer == 4u);
+  assert(fixture.Runtime.D3Pending.ExpectedDonePointer == 4u);
+}
+
+static void TestTwoEntryWrapAndFreeSpace(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+
+  TestInitialize(&fixture);
+  fixture.Runtime.Config.Ta.RingCapacity = 4u;
+  fixture.Runtime.Config.D3.RingCapacity = 4u;
+  fixture.TaWrite = 3u;
+  fixture.D3Write = 3u;
+  fixture.TaDone = 2u;
+  fixture.D3Done = 2u;
+  submission = TestSubmission(&fixture, 48u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.TaRing[3] == submission.Ta.GpuAddresses[0]);
+  assert(fixture.TaRing[0] == submission.Ta.GpuAddresses[1]);
+  assert(fixture.D3Ring[3] == submission.D3.GpuAddresses[0]);
+  assert(fixture.D3Ring[0] == submission.D3.GpuAddresses[1]);
+  assert(fixture.TaWrite == 1u && fixture.D3Write == 1u);
+
+  TestInitialize(&fixture);
+  fixture.Runtime.Config.Ta.RingCapacity = 4u;
+  fixture.Runtime.Config.D3.RingCapacity = 4u;
+  fixture.TaWrite = 3u;
+  fixture.D3Write = 3u;
+  fixture.TaDone = 1u;
+  fixture.D3Done = 1u;
+  submission = TestSubmission(&fixture, 49u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultBusy);
+  assert(fixture.TaWrite == 3u && fixture.D3Write == 3u);
+  assert(fixture.TaRing[3] == 0ULL && fixture.TaRing[0] == 0ULL);
+  assert(fixture.D3Ring[3] == 0ULL && fixture.D3Ring[0] == 0ULL);
+  assert(fixture.IoState.WorkFlushes == 0u);
+  assert(fixture.IoState.RingFlushes == 0u);
+  assert(fixture.IoState.PointerWrites == 0u);
+  assert(fixture.IoState.Sends == 0u);
+}
+
+static void TestEventAloneCannotComplete(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+
+  TestInitialize(&fixture);
+  submission = TestSubmission(&fixture, 43u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  TestEvent(event, 7u, 9u);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &fixture.Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                                &completion));
+  fixture.TaStamp = submission.Ta.ExpectedStamp;
+  fixture.D3Stamp = submission.D3.ExpectedStamp;
+  fixture.TaDone = 2u;
+  fixture.D3Done = 2u;
+  TestEvent(event, 7u, 9u);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &fixture.Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                               &completion));
+}
+
+/* G4-recovery (EXP1241/EXP1242): the KMD deadline is not a hang verdict.
+ * The firmware reports job faults itself (Timeout/Fault events) and the
+ * Windows TDR owns hang detection; the terminal Quiesce that used to run here
+ * stopped a retained firmware that cannot be restarted. The expiry is counted
+ * once per job, the job stays pending, and a later firmware Timeout still
+ * recovers it. Cancel keeps its quiescing contract. */
+static void TestDeadlineIsRecordedNotTerminal(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+
+  TestInitialize(&fixture);
+  fixture.Runtime.Io.Recover = TestRecover;
+  submission = TestSubmission(&fixture, 44u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 1099ULL) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.Runtime.DeadlineExpiries == 0u);
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 1100ULL) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 5000ULL) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.IoState.Quiesces == 0u);
+  assert(fixture.Runtime.DeadlineExpiries == 1u);
+  assert(fixture.Runtime.Phase == AppleAgxG13QueueRuntimeSubmitted);
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                                &completion));
+  /* The firmware detects the stall later: resume, Recovered, queues usable. */
+  memset(event, 0, sizeof(event));
+  PutU32(event, (unsigned int)AppleAgxG13EventTimeout);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&fixture.Runtime, event,
+                                            sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.IoState.Recovers == 1u && fixture.IoState.Quiesces == 0u);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                               &completion));
+  assert(completion.Fence == 44u &&
+         completion.Status == AppleAgxG13QueueCompletionRecovered);
+  /* The next job arms a fresh deadline and is counted again. */
+  fixture.TaDone = fixture.TaWrite;
+  fixture.D3Done = fixture.D3Write;
+  submission = TestSubmission(&fixture, 45u);
+  submission.Ta.GpuAddressCount = 1u;
+  submission.NowTicks = 6000ULL;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 6099ULL) ==
+         AppleAgxG13QueueRuntimeResultOk &&
+         fixture.Runtime.DeadlineExpiries == 1u);
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 6100ULL) ==
+         AppleAgxG13QueueRuntimeResultOk &&
+         fixture.Runtime.DeadlineExpiries == 2u);
+  assert(AppleAgxG13QueueRuntimeCancel(&fixture.Runtime, 45u) ==
+         AppleAgxG13QueueRuntimeResultCancelled);
+  assert(fixture.IoState.Quiesces == 1u);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                               &completion));
+  assert(completion.Status == AppleAgxG13QueueCompletionCancelled);
+}
+
+static void TestPartialTransportFailureFaultsWithoutFence(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+
+  TestInitialize(&fixture);
+  fixture.IoState.FailSendAt = 2u;
+  submission = TestSubmission(&fixture, 46u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultTransportFailed);
+  assert(fixture.IoState.Quiesces == 1u);
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                                &completion));
+  assert(AppleAgxG13QueueRuntimeReset(&fixture.Runtime) ==
+         AppleAgxG13QueueRuntimeResultOk);
+
+  TestInitialize(&fixture);
+  fixture.IoState.FailSendAt = 2u;
+  fixture.IoState.FailQuiesce = 1u;
+  submission = TestSubmission(&fixture, 47u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultResetFailed);
+  assert(fixture.Runtime.Phase == AppleAgxG13QueueRuntimeFaulted);
+  assert(fixture.Runtime.PendingFence == 47u);
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                                &completion));
+}
+
+/* EXP1075: a firmware Timeout (kind 4) halted the firmware; resuming it
+ * completes the job as Recovered without the queue Quiesce (an RTKit stop the
+ * halted firmware cannot acknowledge), and the next job runs. A failed resume
+ * or a platform without Recover keeps the old terminal path. */
+static void TestFirmwareTimeoutRecovers(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+
+  TestInitialize(&fixture);
+  fixture.Runtime.Io.Recover = TestRecover;
+  submission = TestSubmission(&fixture, 50u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  memset(event, 0, sizeof(event));
+  PutU32(event, (unsigned int)AppleAgxG13EventTimeout);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&fixture.Runtime, event,
+                                            sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.IoState.Recovers == 1u && fixture.IoState.Quiesces == 0u);
+  assert(fixture.IoState.RecoverKind == (unsigned)AppleAgxG13EventTimeout);
+  assert(fixture.Runtime.RecoveredFaults == 1u);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime, &completion));
+  assert(completion.Fence == 50u &&
+         completion.Status == AppleAgxG13QueueCompletionRecovered);
+  assert(fixture.Runtime.Phase == AppleAgxG13QueueRuntimeReady);
+  /* The resumed firmware moved past the dropped work. */
+  fixture.TaDone = fixture.TaWrite;
+  fixture.D3Done = fixture.D3Write;
+  submission = TestSubmission(&fixture, 51u);
+  submission.Ta.GpuAddressCount = 1u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  TestCompleteSubmission(&fixture, &submission);
+
+  /* A Fault event (kind 0) recovers the same way. */
+  submission = TestSubmission(&fixture, 52u);
+  submission.Ta.GpuAddressCount = 1u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  memset(event, 0, sizeof(event));
+  PutU32(event, (unsigned int)AppleAgxG13EventFault);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&fixture.Runtime, event,
+                                            sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.IoState.Recovers == 2u && fixture.IoState.Quiesces == 0u);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime, &completion));
+  assert(completion.Status == AppleAgxG13QueueCompletionRecovered);
+
+  /* The firmware did not halt (resume refused): terminal path as before. */
+  TestInitialize(&fixture);
+  fixture.Runtime.Io.Recover = TestRecover;
+  fixture.IoState.FailRecover = 1u;
+  submission = TestSubmission(&fixture, 53u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  memset(event, 0, sizeof(event));
+  PutU32(event, (unsigned int)AppleAgxG13EventTimeout);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&fixture.Runtime, event,
+                                            sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultFaulted);
+  assert(fixture.IoState.Recovers == 1u && fixture.IoState.Quiesces == 1u);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime, &completion));
+  assert(completion.Status == AppleAgxG13QueueCompletionFaulted);
+
+  /* No Recover callback: unchanged terminal path. */
+  TestInitialize(&fixture);
+  submission = TestSubmission(&fixture, 54u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&fixture.Runtime, event,
+                                            sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultFaulted);
+  assert(fixture.IoState.Quiesces == 1u);
+}
+
+static void TestReadFailureCannotMasqueradeAsZeroPointer(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+
+  TestInitialize(&fixture);
+  fixture.IoState.FailReads = 1u;
+  submission = TestSubmission(&fixture, 48u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultBusy);
+  assert(fixture.IoState.PointerWrites == 0u);
+  assert(fixture.IoState.Sends == 0u);
+}
+
+unsigned AppleAgxG13QueueRuntimeContractTests(void) {
+  TestRenderWithComputeOneSubmission();
+  TestStandaloneComputeCompletes();
+  TestComputeDeadlineIsPolled();
+  TestJoinedPublishAndExactCompletion();
+  TestStampCompletesPastDonePointer();
+  TestPreparedRangesNeedNoCopy();
+  TestFirstAndLaterTaPublicationContract();
+  TestCountsAreBoundedAndQueueSpecific();
+  TestLaterSubmitWrapUsesActualCounts();
+  TestResetRequiresBufferManagerInitializationAgain();
+  TestTwoEntryWrapAndFreeSpace();
+  TestEventAloneCannotComplete();
+  TestDeadlineIsRecordedNotTerminal();
+  TestPartialTransportFailureFaultsWithoutFence();
+  TestReadFailureCannotMasqueradeAsZeroPointer();
+  TestFirmwareTimeoutRecovers();
+  return QueueRuntimeFailures;
+}
+
+#if defined(APPLE_AGX_G13_QUEUE_RUNTIME_STANDALONE)
+int main(void) {
+  unsigned failures=AppleAgxG13QueueRuntimeContractTests();
+  if(!failures) puts("apple_agx_g13_queue_runtime_test: ok");
+  return (int)failures;
+}
+#endif

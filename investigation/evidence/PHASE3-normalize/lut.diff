@@ -1,0 +1,11 @@
+--- /tmp/phase3-normalize.wrIr6E/input/util/lut.h
++++ /tmp/phase3-normalize.wrIr6E/input/util/lut.h.derived
+@@ -21,7 +21,7 @@
+ typedef uint8_t util_lut2;
+ typedef uint8_t util_lut3;
+ 
+-#if !defined(_MSC_VER)
++#if !defined(_MSC_VER) || defined(__clang__)
+ /*
+  * Build a lookup table from a boolean expression. Bitwise operations are
+  * supported: &, |, ^, and ~. Note ~ must be used, not !.

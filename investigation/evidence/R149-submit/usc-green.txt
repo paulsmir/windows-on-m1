@@ -1,0 +1,10 @@
+mapped=0x11002b0000 shader_base=0x1100000000 packed=0x2b0144 result=0 ordinal=0 va=0x0
+mapped=0x1100830000 shader_base=0x1100000000 packed=0x8308c4 result=0 ordinal=0 va=0x0
+mapped=0x1100f20000 shader_base=0x1100000000 packed=0x0 result=0 ordinal=0 va=0x0
+R149 USC window producer/parser and fail-closed bounds: PASS
+R149 non-GPUVA construction coordinates unchanged: PASS
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.535s
+
+OK

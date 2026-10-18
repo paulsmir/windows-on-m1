@@ -1,0 +1,42 @@
+{
+  "experiment": "EXP866",
+  "utc": "2026-09-28T13:04:34.252035+00:00",
+  "status": "PREPARED_WAIT_GO",
+  "finding": "resume-stage.ps1 pinned EXP865 autologger bytes; exact literal audit found no other independent mismatch",
+  "before": {
+    "files": 55,
+    "literals": 682,
+    "matches": 681,
+    "mismatches": 1
+  },
+  "after": {
+    "files": 55,
+    "literals": 682,
+    "matches": 682,
+    "mismatches": 0,
+    "unresolved": 0
+  },
+  "verification": [
+    "three wrappers --verify-only exit0",
+    "PowerShell42 parser errors0",
+    "native PowerShell autologger pin PASS",
+    "payload42 exact bytes and hashes PASS",
+    "source and native build references checked against archive members and copied builder artifacts",
+    "external immutable recovery and signing-tool references checked against named local files"
+  ],
+  "source_commit": "17ee8894e26224db16bfdb6836fd2fc205e1679c",
+  "package_and_firmware_changed": false,
+  "Air_transfer_stage_arm_launch": "NOT_PERFORMED",
+  "files": {
+    "resume-stage.ps1": "6babc20d476225f66cac8c75a2716bc2e21b12d8d5bdeff42aa62b4b6d3bd7db",
+    "guest-transfer-manifest.json": "d732416e8845a251a81753a91caeddfded837899444996677b6eb71efcbae6d9",
+    "hardware-manifest.json": "0a2268bdafa69116ab1c7b057f41ca2292455711a698392bbb71659c313534a7",
+    "verify-transfer.ps1": "67a7d62f4d895a8300bcd563140d36a8f159a403bd99c150955442f387ca93ee",
+    "extract-verify.ps1": "647e487a576588f73a7e1465c9f06e355b9ec0ce697923f7edba2d1eee974ec5",
+    "readiness-manifest.json": "28ca7bd0f3344903f0e7ee02c03502dbfb0f2195572ba520fe53ddf7ffc633fb",
+    "preparation-result.json": "c97faceeff7c18495330e62429d67e9f3f79ef24678908da262150d73e6a43fc",
+    "guest-payload.tar": "adf57fbf9a7fb5c58bbcfa250c475bf454dbc11e6e49eec4160280df5f8b1f53",
+    "parse-scripts.zip": "755f26f770fbcb042ab946b86b97bb40ac866f472f6af8f5bf1b40fc1d58e05c",
+    "audit_hash_literals.py": "54da2038e81e1a08e394e778b9eff0d9da5bd8d09435e6af597099c0467109cc"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "C:\\VS2022Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\cl.exe",
+    "/nologo",
+    "/std:c++17",
+    "/EHsc",
+    "/W4",
+    "/WX",
+    "/analyze",
+    "/MD",
+    "/FoC:\\Users\\pauls\\R148-memory\\build\\windows-replay.obj",
+    "/FeC:\\Users\\pauls\\R148-memory\\build\\windows-replay.exe",
+    "C:\\Users\\pauls\\R148-memory\\windows-replay.cpp"
+  ],
+  "compile_exit": 0,
+  "run_exit": 0,
+  "source_sha256": "7cf0598d5ef50a6dc52ead3fe43847d45c8fde24414a1bd6003927dbdf79091e",
+  "exe_sha256": "5cc312358a2fed7ccb951dcb4e3cea37ba25f9f18418b2aab6ceaded0558cbc0"
+}

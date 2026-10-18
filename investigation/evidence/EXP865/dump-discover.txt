@@ -1,0 +1,141 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.016 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\Users\pauls\EXP865-r150-owner\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 97%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\EXP865-r150-owner
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\EXP865-r150-owner
+Executable search path is:
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff800`d3a00000 PsLoadedModuleList = 0xfffff800`d476ac50
+Debug session time: Mon Sep 28 14:11:33.745 2026 (UTC + 2:00)
+System Uptime: 0 days 0:00:39.288
+Loading Kernel Symbols
+...............................................................
+.........................................................Page 9bbf82 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+...................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+1: kd> cdb: Reading initial command '.bugcheck; !drvobj AppleAgxAdmission 7; q'
+Bugcheck code 00000116
+Arguments ffffd00f`21f42030 fffff800`d1fa6cb0 ffffffff`c0000483 00000000`00000003
+Driver object (ffffd00f2099d5e0) is for:
+ \Driver\AppleAgxAdmission
+
+Driver Extension List: (id , addr)
+(ffffd00f2099d5e0 ffffd00f20ac0020)
+Device Object list:
+ffffd00f211dad50  ffffd00f1d08f350  ffffd00f20ae9030
+
+DriverEntry:   fffff800d1fd8390	AppleAgxRenderAdmission!GsDriverEntry
+DriverStartIo: 00000000
+DriverUnload:  fffff800cd943960	dxgkrnl!DpiDriverUnload
+AddDevice:     fffff800cd9415e0	dxgkrnl!DpiAddDevice
+
+Dispatch routines:
+[00] IRP_MJ_CREATE                      fffff800cdac6f90	dxgkrnl!DpiDispatchCreate
+[01] IRP_MJ_CREATE_NAMED_PIPE           fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[02] IRP_MJ_CLOSE                       fffff800cdac6e80	dxgkrnl!DpiDispatchCleanupAndClose
+[03] IRP_MJ_READ                        fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[04] IRP_MJ_WRITE                       fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[05] IRP_MJ_QUERY_INFORMATION           fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[06] IRP_MJ_SET_INFORMATION             fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[07] IRP_MJ_QUERY_EA                    fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[08] IRP_MJ_SET_EA                      fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[09] IRP_MJ_FLUSH_BUFFERS               fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[0a] IRP_MJ_QUERY_VOLUME_INFORMATION    fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[0b] IRP_MJ_SET_VOLUME_INFORMATION      fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[0c] IRP_MJ_DIRECTORY_CONTROL           fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[0d] IRP_MJ_FILE_SYSTEM_CONTROL         fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[0e] IRP_MJ_DEVICE_CONTROL              fffff800cdac7400	dxgkrnl!DpiDispatchIoctl
+[0f] IRP_MJ_INTERNAL_DEVICE_CONTROL     fffff800cdac7140	dxgkrnl!DpiDispatchInternalIoctl
+[10] IRP_MJ_SHUTDOWN                    fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[11] IRP_MJ_LOCK_CONTROL                fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[12] IRP_MJ_CLEANUP                     fffff800cdac6e80	dxgkrnl!DpiDispatchCleanupAndClose
+[13] IRP_MJ_CREATE_MAILSLOT             fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[14] IRP_MJ_QUERY_SECURITY              fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[15] IRP_MJ_SET_SECURITY                fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[16] IRP_MJ_POWER                       fffff800cdac7870	dxgkrnl!DpiDispatchPower
+[17] IRP_MJ_SYSTEM_CONTROL              fffff800cd943760	dxgkrnl!DpiDispatchSystemControl
+[18] IRP_MJ_DEVICE_CHANGE               fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[19] IRP_MJ_QUERY_QUOTA                 fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[1a] IRP_MJ_SET_QUOTA                   fffff800d3c40e80	nt!IopInvalidDeviceRequest
+[1b] IRP_MJ_PNP                         fffff800cdac7630	dxgkrnl!DpiDispatchPnp
+
+
+Device Object stacks:
+
+!devstack ffffd00f211dad50 :
+  !DevObj           !DrvObj            !DevExt           ObjectName
+> ffffd00f211dad50  \Driver\AppleAgxAdmissionffffd00f211daea0  Video1
+
+!devstack ffffd00f1d08f350 :
+  !DevObj           !DrvObj            !DevExt           ObjectName
+  ffffd00f20a88de0  \Driver\monitor    ffffd00f1d6ec990
+> ffffd00f1d08f350  \Driver\AppleAgxAdmissionffffd00f1d08f4a0  0000003d
+!DevNode ffffd00f20eeb010 :
+  DeviceInst is "DISPLAY\Default_Monitor\3&1018bb11&ff&UID0"
+  ServiceName is "monitor"
+
+!devstack ffffd00f20ae9030 :
+  !DevObj           !DrvObj            !DevExt           ObjectName
+> ffffd00f20ae9030  \Driver\AppleAgxAdmissionffffd00f20ae9180
+  ffffd00f179f48f0  \Driver\ACPI       ffffd00f179d94a0  00000019
+!DevNode ffffd00f179e6400 :
+  DeviceInst is "ACPI\APPL0002\0"
+  ServiceName is "AppleAgxAdmission"
+
+Processed 3 device objects.
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

@@ -1,0 +1,17 @@
+{
+  "exit": 0,
+  "first_error": "",
+  "native_draw_executed": false,
+  "architecture": "arm64",
+  "pool_exit": 0,
+  "objects": {
+    "agx_state.obj": "206bc786232e1dfd9119d12ea6b289e816a566c9ead56ac9e36978db30ce0bc7",
+    "pool.obj": "98ef317d3512333be66ccc96b29ade391e7d42f276dd0994b2a3fd4d9a1ded0b",
+    "agx_win32_asahi_bo.obj": "34c87a4a5aa83bf3c51341288bacd71effae13bd9497cf999d3914ca671352fd",
+    "agx_win32_asahi_capture.obj": "7b4bbb57a91b93ba5ec60ea0e2d68b7f6be65590b6036f5995625858ec3e4f96",
+    "agx_win32_asahi_pool_test.obj": "b5db861b65d38209ca57c61ae0a3aa54e3c8cc9114df7ef94ff9f86bccd92d02"
+  },
+  "reloc_build_exit": 0,
+  "reloc_exe_sha256": "f728c442c518462028f537f0a47bf0900226be24e8addcdb3d5d0f8363a93a47",
+  "reloc_execution": "NOT_RUN"
+}
