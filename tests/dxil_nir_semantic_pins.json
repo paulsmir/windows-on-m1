@@ -1,0 +1,400 @@
+{
+  "experiment": "EXP1401 BUILD_ONLY proposal; no compile/run yet",
+  "files": {
+    "/Users/pavel/public_windows/.local/c15-host-8434b063/build/libdxil-spirv-c-static.a": {
+      "sha256": "bf105d3d1862bffc861bcf8375a843c1b99ba1c9116246e1156cf11cbb03b711",
+      "bytes": 111480,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-host-8434b063/build/libdxil-spirv-c-static.a"
+    },
+    "/Users/pavel/public_windows/.local/c15-host-8434b063/build/libdxil-converter.a": {
+      "sha256": "9469a880938ec76a4307ca6478660b57648b8806bbeeabdfe3bbcf48ffa8f4db",
+      "bytes": 1677872,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-host-8434b063/build/libdxil-converter.a"
+    },
+    "/Users/pavel/public_windows/.local/c15-host-8434b063/build/libspirv-module.a": {
+      "sha256": "d961fe7a6d1746a4078fdc6fad106a84ff19c6f327dd236ad069ff08ecf82c96",
+      "bytes": 291464,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-host-8434b063/build/libspirv-module.a"
+    },
+    "/Users/pavel/public_windows/.local/c15-host-8434b063/build/bc/libllvm-bc.a": {
+      "sha256": "55d9e62a5c31c9b93e455bcc025f5b920e67aeee9f1372f550d68f094837fc09",
+      "bytes": 624416,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-host-8434b063/build/bc/libllvm-bc.a"
+    },
+    "/Users/pavel/public_windows/.local/c15-host-8434b063/build/third_party/libglslang-spirv-builder.a": {
+      "sha256": "3c4eb0255d485fda2bf8de24c9ca40e83b33894b1d817947023698ff57b75e1a",
+      "bytes": 218280,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-host-8434b063/build/third_party/libglslang-spirv-builder.a"
+    },
+    "/Users/pavel/public_windows/.local/c15-host-8434b063/build/third_party/libbc-decoder.a": {
+      "sha256": "3704a667a10b0c1c1351da88b36242bb70feea96b576dee6221275bb7b683610",
+      "bytes": 31824,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-host-8434b063/build/third_party/libbc-decoder.a"
+    },
+    "/Users/pavel/public_windows/.local/c15-host-8434b063/build/libdxil-utils.a": {
+      "sha256": "4e546f888c07d2408de6a23fe3e1d768dd628fe85e3c03189de9e107a6012ed2",
+      "bytes": 6536,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-host-8434b063/build/libdxil-utils.a"
+    },
+    "/Users/pavel/public_windows/.local/c15-host-8434b063/build/libdxil-debug.a": {
+      "sha256": "187634c422508fb171af41870a848bde695999af7c003b01f67b42498f782e2c",
+      "bytes": 1872,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-host-8434b063/build/libdxil-debug.a"
+    },
+    "/Users/pavel/public_windows/.local/c15-host-8434b063/build/third_party/libdxbc-spirv.a": {
+      "sha256": "4e3fe3ea8c9508598e756c5ab4dd59903b106fb7b6f0aeb25d8417f23b1a864e",
+      "bytes": 3120144,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-host-8434b063/build/third_party/libdxbc-spirv.a"
+    },
+    "/Users/pavel/public_windows/.local/c15-host-8434b063/source/dxil_spirv_c.h": {
+      "sha256": "4fbca14fe1de04b463cd8d8f6f449fc4e57490c5c900eaff9e6d6d65ea55303c",
+      "bytes": 43568,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-host-8434b063/source/dxil_spirv_c.h"
+    },
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/spirv/libvtn.a": {
+      "sha256": "6e5fa798b4b5953787d8a2f3747e23e890d95dba187da1f0df6531ae90772d81",
+      "bytes": 4393080,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/spirv/libvtn.a"
+    },
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/compiler/libasahi_compiler.a": {
+      "sha256": "f28c73fc3cc18fc724760f4d368f47ef98c9830de4a38d0e7170f23575767b54",
+      "bytes": 6534632,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/compiler/libasahi_compiler.a"
+    },
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/isa/libagx2_disasm.a": {
+      "sha256": "c955d1be99f75603e37b178b7745d472c36e81c1124d29210b3dec69bfe56f85",
+      "bytes": 302112,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/isa/libagx2_disasm.a"
+    },
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/layout/libasahi_layout.a": {
+      "sha256": "959e39df3a280422a7c8db9f3cd7c955a539594451cfe95dc918fc942cd0ae26",
+      "bytes": 152192,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/layout/libasahi_layout.a"
+    },
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a": {
+      "sha256": "ed2a3afcf609dc3277b704a8e4ff21f1b97e117fa2f17fffefb263a3224a0598",
+      "bytes": 45850960,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a"
+    },
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/libcompiler.a": {
+      "sha256": "c9be5de1032e4049dca14e69481c5e5f1b18592aa055ba76da099269a590ce7f",
+      "bytes": 360304,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/libcompiler.a"
+    },
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util.a": {
+      "sha256": "d2536eca98f8c7ec95830340a7cb9184dd4d786b97ecab0f4916c57d66400c7f",
+      "bytes": 6907320,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util.a"
+    },
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util_simd.a": {
+      "sha256": "1a6d03bfccb12d7541c357b54d1106f292b6c63ee7e350100fa45e93fa257d36",
+      "bytes": 3880,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util_simd.a"
+    },
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/c11/impl/libmesa_util_c11.a": {
+      "sha256": "ef036f3cb25bf989228659745e60b24eb5b274bf89771febb4ea85cb078e4f22",
+      "bytes": 26752,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/c11/impl/libmesa_util_c11.a"
+    },
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/blake3/libblake3.a": {
+      "sha256": "26dff477989b965d3af3ac9206530f0b6747589aac5eb80fcd7a5da5fe17fe7b",
+      "bytes": 237744,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/blake3/libblake3.a"
+    },
+    "/opt/homebrew/opt/spirv-tools/lib/libSPIRV-Tools.dylib": {
+      "sha256": "5d57212ec1d710fa3494be3efb1346ae57a22f4bdad03d899369e5585d4b9f70",
+      "bytes": 1948272,
+      "resolved_path": "/opt/homebrew/Cellar/spirv-tools/1.4.357.0/lib/libSPIRV-Tools.dylib"
+    },
+    "/usr/bin/clang": {
+      "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2",
+      "bytes": 200560,
+      "resolved_path": "/usr/bin/clang"
+    },
+    "/usr/bin/clang++": {
+      "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2",
+      "bytes": 200560,
+      "resolved_path": "/usr/bin/clang++"
+    },
+    "/Library/Developer/CommandLineTools/usr/bin/clang": {
+      "sha256": "4c458256bcdf913774de1bb4a37768244d3b41f32ad55afb2dfec3432f46f4fe",
+      "bytes": 264942528,
+      "resolved_path": "/Library/Developer/CommandLineTools/usr/bin/clang"
+    },
+    "/Library/Developer/CommandLineTools/usr/bin/clang++": {
+      "sha256": "4c458256bcdf913774de1bb4a37768244d3b41f32ad55afb2dfec3432f46f4fe",
+      "bytes": 264942528,
+      "resolved_path": "/Library/Developer/CommandLineTools/usr/bin/clang"
+    },
+    "/opt/homebrew/opt/zstd/lib/libzstd.dylib": {
+      "sha256": "69d8dee81bccdee425d167300d11431f3c5ecc34a3011400e536aa89f7756189",
+      "bytes": 653328,
+      "resolved_path": "/opt/homebrew/Cellar/zstd/1.5.7_1/lib/libzstd.1.5.7.dylib"
+    },
+    "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/libz.1.tbd": {
+      "sha256": "d8345b4949b529ffd6057d84816b2a741db2ec73c24a61be0a23cab37096a7d7",
+      "bytes": 1953,
+      "resolved_path": "/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/lib/libz.1.tbd"
+    },
+    "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/libc++.1.tbd": {
+      "sha256": "9308fbc3ad208130b750f66475035ea10d312b99a97259b3c7a07fa8a2658ac7",
+      "bytes": 149134,
+      "resolved_path": "/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/lib/libc++.1.tbd"
+    },
+    "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib/libSystem.B.tbd": {
+      "sha256": "4f96f1402e1950b1764ac6accd0d2b9c1ca197b7783caae5e838fd0a4b474028",
+      "bytes": 327843,
+      "resolved_path": "/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/lib/libSystem.B.tbd"
+    },
+    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/nir/nir.h": {
+      "sha256": "c3340cdc663076c0dedb62501b71533891cda53297b23e07a39b77ee843cde5f",
+      "bytes": 261367,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir.h"
+    },
+    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/nir/nir_builder.h": {
+      "sha256": "10925bc9b97f5d2c4133f91a1f19121d4fa916a68ad7dee992f26f374d251f7c",
+      "bytes": 75935,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_builder.h"
+    },
+    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/spirv/nir_spirv.h": {
+      "sha256": "af160db74b5fed349804eb06b5e230de17b6aea85416e7666c8ef1840b52e130",
+      "bytes": 5738,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/spirv/nir_spirv.h"
+    },
+    "/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compile.h": {
+      "sha256": "32104a9829776363ca142d207020d2fa11a96952a24e2ef47b2a58b81a50ca32",
+      "bytes": 12124,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compile.h"
+    },
+    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/glsl_types.h": {
+      "sha256": "534fbf183432c80ce2effcac67469874bf5a0a4c8e31ba9f49ada3b475bacb27",
+      "bytes": 45798,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/glsl_types.h"
+    },
+    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/spirv/vtn_variables.c": {
+      "sha256": "bd539039fed2c7cc22840a023fc8171322ca6f4db18c9e755e754ae55d3b50ee",
+      "bytes": 123327,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/spirv/vtn_variables.c"
+    },
+    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/spirv/spirv_to_nir.c": {
+      "sha256": "310e81fe57c5ea26c813d28d752ba79be2dc566c1daebd295252b7574bdf82fa",
+      "bytes": 299128,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/spirv/spirv_to_nir.c"
+    },
+    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/nir/nir_lower_samplers.c": {
+      "sha256": "80f0e6056bb10557d567b331f5bb3ffd1690b0d72589e2975c0455c364ce03b2",
+      "bytes": 5189,
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_lower_samplers.c"
+    },
+    "/Users/pavel/public_windows/.local/c15-owned-1398/green/mixed.spv": {
+      "bytes": 2152,
+      "sha256": "24e3df26411f940c71e4dc2322d38226cb3c1d50725e07d27b890aa9b2b307d4",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-owned-1398/green/mixed.spv"
+    },
+    "/Users/pavel/public_windows/.local/c15-owned-1398/green/post.nir": {
+      "bytes": 3848,
+      "sha256": "ee2c212cca1cd284b0eb8d11bd242e0eee1184ec76aca92af6b45cf19458708c",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-owned-1398/green/post.nir"
+    },
+    "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output/vectors.json": {
+      "bytes": 18475,
+      "sha256": "a1d083f17988f40c84f87809cda00ea4c8aae09284bd228b5a3eab95a47f0a07",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/vectors.json"
+    },
+    "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output/cbv_b0_space3.bin": {
+      "bytes": 16,
+      "sha256": "a8522a1dcbea0b5db570e2cf2fcf870bdb749b083fdbc9381c999421d713f1c5",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/cbv_b0_space3.bin"
+    },
+    "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output/expected_u0_space1.bin": {
+      "bytes": 768,
+      "sha256": "aba11b1d128a762fb39b374a9d1817115a34f468622a8b20f8be6a085cdac6f2",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/expected_u0_space1.bin"
+    },
+    "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output/expected_u0_space9.bin": {
+      "bytes": 768,
+      "sha256": "af2f46607d4dc7bf008997bc0f09b1df07ca7884e9cc3358894021e6eeef1967",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/expected_u0_space9.bin"
+    },
+    "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output/initial_u0_space1.bin": {
+      "bytes": 768,
+      "sha256": "d830053706e352ad46a336bcc29b6a7e7e93a1eee50b3e8b6403781a92606bb4",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/initial_u0_space1.bin"
+    },
+    "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output/initial_u0_space9.bin": {
+      "bytes": 768,
+      "sha256": "f080dcf3ec9f7c11262b0a5a697e20376dd9d8ba82a84faae39ae93d1ffa1311",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/initial_u0_space9.bin"
+    },
+    "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output/srv_t0_space2.bin": {
+      "bytes": 768,
+      "sha256": "901abe1c10552838ca6b03a6a278843ee164d57cb4ed87a7ae4e911ad95ac67e",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/srv_t0_space2.bin"
+    },
+    "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output/srv_t0_space7.bin": {
+      "bytes": 768,
+      "sha256": "9b84ababf0ae07d761e7751c5e0f4ffc6d45411938cf9ad3ed458e38ff454b2b",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/srv_t0_space7.bin"
+    },
+    "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/dxil_spaces_oracle.py": {
+      "bytes": 2452,
+      "sha256": "17637f129a1bfa7ba0d56d3fb0f873a48f14b6f88177c0dfeaee6fb1b50c1571",
+      "resolved_path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/dxil_spaces_oracle.py"
+    },
+    "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/dxil_owned_mixed_nir_fixture.c": {
+      "bytes": 5845,
+      "sha256": "243351487e444151bd29896bcea61eaa259b6554d8f3f98b8b57723ca36f0d79",
+      "resolved_path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/dxil_owned_mixed_nir_fixture.c"
+    },
+    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/nir/nir_opcodes.py": {
+      "bytes": 88357,
+      "sha256": "2af26b4bc61cc09536bf1e20c59b150d2394c76f6830896f7e4fd153bb08c098",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_opcodes.py"
+    },
+    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/nir/nir_intrinsics.py": {
+      "bytes": 153655,
+      "sha256": "25ab3bb0e77b858690f099b7d1cda0714f00cbf5d8842960d36ebff6d5fccf2b",
+      "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_intrinsics.py"
+    }
+  },
+  "spirv": "/Users/pavel/public_windows/.local/c15-owned-1398/green/mixed.spv",
+  "post_nir_sha256": "ee2c212cca1cd284b0eb8d11bd242e0eee1184ec76aca92af6b45cf19458708c",
+  "vectors_dir": "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output",
+  "binary_array_count": 7,
+  "nir_command_1398": [
+    "/usr/bin/clang",
+    "-std=c11",
+    "-g",
+    "-O1",
+    "-fsanitize=address,undefined",
+    "-D__STDC_CONSTANT_MACROS",
+    "-D__STDC_FORMAT_MACROS",
+    "-D__STDC_LIMIT_MACROS",
+    "-DPACKAGE_VERSION=\"26.3.0-devel\"",
+    "-DHAVE_OPENGL=0",
+    "-DHAVE_OPENGL_ES_1=0",
+    "-DHAVE_OPENGL_ES_2=0",
+    "-DHAVE_ASAHI",
+    "-DMESA_SYSTEM_HAS_KMS_DRM=0",
+    "-DBUILDING_MESA",
+    "-DVK_ENABLE_BETA_EXTENSIONS",
+    "-DVIDEO_CODEC_VC1DEC=0",
+    "-DVIDEO_CODEC_H264DEC=0",
+    "-DVIDEO_CODEC_H264ENC=0",
+    "-DVIDEO_CODEC_H265DEC=0",
+    "-DVIDEO_CODEC_H265ENC=0",
+    "-DVIDEO_CODEC_AV1DEC=1",
+    "-DVIDEO_CODEC_AV1ENC=1",
+    "-DVIDEO_CODEC_VP9DEC=1",
+    "-DVIDEO_CODEC_MPEG12DEC=1",
+    "-DVIDEO_CODEC_JPEGDEC=1",
+    "-DUSE_LIBGLVND=0",
+    "-DHAVE_GFX_COMPUTE",
+    "-DGLAPI_EXPORT_PROTO_ENTRY_POINTS=1",
+    "-DALLOW_KCMP",
+    "-DMESA_DEBUG=0",
+    "-DENABLE_SHADER_CACHE",
+    "-DHAVE___BUILTIN_BSWAP32",
+    "-DHAVE___BUILTIN_BSWAP64",
+    "-DHAVE___BUILTIN_CLZ",
+    "-DHAVE___BUILTIN_CLZLL",
+    "-DHAVE___BUILTIN_CTZ",
+    "-DHAVE___BUILTIN_EXPECT",
+    "-DHAVE___BUILTIN_FFS",
+    "-DHAVE___BUILTIN_FFSLL",
+    "-DHAVE___BUILTIN_POPCOUNT",
+    "-DHAVE___BUILTIN_POPCOUNTLL",
+    "-DHAVE___BUILTIN_UNREACHABLE",
+    "-DHAVE___BUILTIN_TYPES_COMPATIBLE_P",
+    "-DHAVE___BUILTIN_ADD_OVERFLOW",
+    "-DHAVE_FUNC_ATTRIBUTE_CONST",
+    "-DHAVE_FUNC_ATTRIBUTE_FLATTEN",
+    "-DHAVE_FUNC_ATTRIBUTE_MALLOC",
+    "-DHAVE_FUNC_ATTRIBUTE_PURE",
+    "-DHAVE_FUNC_ATTRIBUTE_UNUSED",
+    "-DHAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT",
+    "-DHAVE_FUNC_ATTRIBUTE_WEAK",
+    "-DHAVE_FUNC_ATTRIBUTE_FORMAT",
+    "-DHAVE_FUNC_ATTRIBUTE_PACKED",
+    "-DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL",
+    "-DHAVE_FUNC_ATTRIBUTE_NORETURN",
+    "-DHAVE_FUNC_ATTRIBUTE_COLD",
+    "-DHAVE_FUNC_ATTRIBUTE_VISIBILITY",
+    "-DHAVE_UINT128",
+    "-DHAVE_FMEMOPEN",
+    "-DUSE_GCC_ATOMIC_BUILTINS",
+    "-DHAS_SCHED_H",
+    "-DHAVE_SYS_SYSCTL_H",
+    "-DHAVE_XLOCALE_H",
+    "-DHAVE_DLFCN_H",
+    "-DHAVE_SYS_SHM_H",
+    "-DHAVE_CET_H",
+    "-DHAVE_POLL_H",
+    "-DHAVE_STRTOF",
+    "-DHAVE_MKOSTEMP",
+    "-DHAVE_FLOCK",
+    "-DHAVE_STRTOK_R",
+    "-DHAVE_SYSCONF",
+    "-DHAVE_BSD_QSORT_R",
+    "-DHAVE_STRUCT_TIMESPEC",
+    "-DHAVE_POSIX_MEMALIGN",
+    "-DHAVE_DIRENT_D_TYPE",
+    "-DHAVE_STRTOD_L",
+    "-DHAVE_DLADDR",
+    "-DHAVE_ZLIB",
+    "-DHAVE_ZSTD",
+    "-DHAVE_COMPRESSION",
+    "-DHAVE_PTHREAD",
+    "-DMESA_LLVM_VERSION_STRING=\"23.1.0\"",
+    "-DLLVM_IS_SHARED=1",
+    "-DDRAW_LLVM_AVAILABLE=1",
+    "-DAMD_LLVM_AVAILABLE=1",
+    "-DGALLIVM_USE_ORCJIT=0",
+    "-DHAVE_SPIRV_TOOLS",
+    "-DTHREAD_SANITIZER=0",
+    "-DHAVE_LIBUNWIND",
+    "-DHAVE_RENDERDOC_INTEGRATION=0",
+    "-DXXH_FORCE_ALIGN_CHECK=0",
+    "-DXXH_FORCE_MEMORY_ACCESS=0",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a.p",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src/compiler/nir",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/include",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/include",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src/compiler",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util",
+    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/format",
+    "-I/opt/homebrew/opt/zstd/include",
+    "-I",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi",
+    "-I",
+    "/Users/pavel/public_windows/.local/reference/mesa/src/asahi",
+    "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/dxil_owned_mixed_nir_fixture.c",
+    "-o",
+    "/Users/pavel/public_windows/.local/c15-owned-1398/green/mixed-nir-check",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/spirv/libvtn.a",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/compiler/libasahi_compiler.a",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/isa/libagx2_disasm.a",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/layout/libasahi_layout.a",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/libcompiler.a",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util.a",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util_simd.a",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/c11/impl/libmesa_util_c11.a",
+    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/blake3/libblake3.a",
+    "-L/opt/homebrew/opt/zstd/lib",
+    "-lzstd",
+    "-lz",
+    "-lpthread",
+    "/opt/homebrew/opt/spirv-tools/lib/libSPIRV-Tools.dylib",
+    "-lc++"
+  ],
+  "limits": [
+    "restricted actual-NIR CPU interpreter only",
+    "no production/DDI/owner/GPU execution",
+    "no complete external-library ASan coverage"
+  ]
+}
