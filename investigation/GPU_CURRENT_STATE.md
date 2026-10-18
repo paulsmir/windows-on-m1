@@ -147,29 +147,57 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   Currentoutputmanifest511eebdc5ca63839069f7ce15b14955a37b4fc65f7c6fdfae51c72fa6b76c0fc.
   InitialaliasmetadataSTOP and attempt1fourenumfixturecompileerrors preserved;
   attempt2changedonlyfourWDKspellings, source6ba98/headerf3a90unchanged.
-- NextSOURCEONLYconcurrentproviderdesign53ba6db3 in
-  .local/c15-concurrent-cpu-domain-design/design.md: thinwrappercannotcompose
-  oldmutableCalc/Copy/release/report. ProposedinternalBegin/Execute/Endpins,
-  narrowregistrylocks/coreandsinkoutside/pinnedgenerationresolver/scopedborrow/
-  releaseBusy/quiescence. kmdagent preparingprivateSOURCEONLYprototype;
-  Privateprototype nowEXP1443PASS121new+old114467/424029/79, exact10rc0/empty
-  stderr/post70directpinsMATCH, result1807393c284b966cd0d6f51c56df8d36d1de7dceb4192032206d28cf9b92b7c0.
-  Notadoptedyet; kmdpreparingdurableCURRENTROOT/nativeobjectsourceproposal. Root/DDIcapacity/runtimecontext/
-  Windowsreadability/librarybridge/errorpolicy remainOPEN; no DDIregistration.
-- NEWprivateNIRmap EXP1442CPU PASS: .local/c15-map-nir-lowering-attempt3-prep,
-  pass2f91d331/header0e64bf73/fixture43fdf6ed; originaltwoaccessorcompileerrors
-  preserved inattempt2, correctedonlynir_def_instrAPI. Fourrc0/empty stderr/
-  actualMMDclosure/44direct+6958headerpostpinsMATCH. Sevenrefusals unchangedNIR/map,
-  actualNIR192lanes173active19tail384words346stores/bothvectorsmatch; UBO0,
-  rawSRVtxf0,1/UAVSSBO0,1/noVulkanintrinsics/workgroup64x1x1/validationPASS.
-  Result563e7784a691e323e46f98e11d25f47f54f5451646963f864e41a8a9647a4b06.
-  PrivateUNLINKED/noexternalcodecopy; no translator/backend/preprocess/runtime/
-  generaloperationadmission/GPUclaim. sm51preparingdurableCURRENTROOTproposal.
-  SeparateWindowslibvtnclosure remainsunproved; sourceplan87eae1f6 in
-  .local/c15-owned-conversion-boundary-source-plan/PLAN.md. Capacity sourceplan
-  1c99061c in .local/c15-runtime-input-capacity-source-plan/PLAN.md foundexact0010
-  CalcSIZE_T/CreateVOID/noindependentlengthorcapacity; D3D10sameparams/-1docs
-  NOTsilentlytransferred. No pointerderivedcapacity/TLSCalcCreatehandoff.
+- CURRENT providerphasesd8cfe7d025e4a5ff10be0aa4719a537a60032ae2/rowb72dfaad,
+  docD3D12-C15-provider-operation-phases.md. One synchronizedregistry/internal
+  Begin/Execute/Endpins/coreandsinkoutside; Runningthroughpublication; ReleaseBusy;
+  scopedgenerationresolverdistinctlegacylookup; Retirekeepsknownlease reports,
+  explicitBeginQuiesceclosessinkgate/drains. Rawdomainentryexternallyretained;
+  no runtimeowner/tokenvalidityafterdevicequiescence. StillUNLINKED.
+  EXP1443private10rc0/empty stderr/70directpins/old114467+424029+79/new121PASS,
+  result1807393c284b966cd0d6f51c56df8d36d1de7dceb4192032206d28cf9b92b7c0.
+  CURRENT1211PASS1.874s/4commands62pins; old79compat1.988s/key979compat2.112s.
+  Native4MSVCW4WX/NOMINMAXARM64objects/provider/core/new+oldABI/actualdeps/
+  4906postpins/independentAA64PASS; no linkexecution. Manifest
+  53b6eb2f857cd5c13c6c2b5d72cbf29d03f03a601cbcaf077964fc248a068ca5.
+  NewconsumerlocalWDK4201guardbeforefirstnativeattempt, no globalflagchange.
+- CURRENT originalNIRmape0ff8fff0a064d8552b031f946fcb2f7f77416cc/rowe39485c9,
+  docD3D12-C15-nir-resource-map.md. Pass2f91d331/header0e64bf73, ROOTfixture
+  onlyoracleincludechangesfrom43fdf6ed. Sevenstructuralrefusals preserveNIR/map;
+  admittedsingletonCBV/rawSRV/rawUAV/exact32bitindexoffset2x32 preconditions.
+  UBO0/rawSRVtxf0,1/UAVSSBO0,1/noVulkanintrinsics/workgroup64x1x1/validation;
+  actualNIR192lanes173active19tail384words346stores/both1397vectorsmatch.
+  Private4rc0/empty stderr/MMD44direct+6958headers postpinsMATCH; result
+  563e7784a691e323e46f98e11d25f47f54f5451646963f864e41a8a9647a4b06.
+  CURRENT1PASS5.142s/42direct+6958headers/actualMMDclosure/4commands.
+  Outputmanifest a56a47d182cd3780de849f10909354d11cb25d189e4a828d903ebe81cfa725ed;
+  provideroutput b2d39fca45ce7195599003a7924cab145880750db3385aee0e464c220a8740e7.
+  No translator/backend/preprocess/Windowsfrontend/generaloperationvalidator/
+  OOM/GPUclaim. Initial2staleNIRaccessorcompileerrors preserved; only2accessor
+  correctionsbeforefirstsuccessfulrun. Allsourcesoriginal, noexternalcodecopied.
+- OnecombinedfullsuiteforNIR+provider:1611/221.143s exact119baseline68fail51error/
+  15skip/noaddedremoved/post12pinsMATCH; notwhole-suiteGREEN. SHA
+  2d9fa19eb299282741d0608a8d210f217271234839c6172dfaa4859fb46084ec.
+  Bothimplementationscommittedseparately; suitecoverscombinedtree, nottwofullruns.
+- Windowslibvtn nextcausaltarget: acceptedsourceinventory79b20c2b, actual14C
+  frontendTUs(12source2generated)/4outputs; no nativefrontendbuildclaimed.
+  Actualpackage1436usesbuilder AD04-fullcompiler-001\nir-arm64-ndebug.
+  Firstbroadread-onlysnapshot60stimeoutINCONCLUSIVE, c3802d2f (partialstreams
+  lostbywrapper, receiptstateslimitation), preserved. NarrowONEdirectreadrc0
+  0.72s: extractedcompileDB2858466B/860entries/14vtn/oneNIR, SHA
+  7e03662d375d4f2affbb88569dfea54bf82fb2dbe8fdddba52bf8f44dc78ec66.
+  InitialETSTextlocalparseSTOP preserved; supplementaryLOCALextractiononly,
+  no secondSSH; extraction1af5b47f. LOCALcomparison1ce15c0a proves14vtnentries
+  same65defines/projectorretainedflags/LLVM20clang-clARM64/C11/O2/MD/NDEBUG,
+  no HAVE_SPIRV_TOOLS/responsefiles; frontendspecificincludesmustretain.
+  Effectiveclosurestillopen: forced uatomic_clang_compat.h/build.ninja/generated
+  headers/archiveexistence notproved. sm51AUTHORIZEDboundedREADONLYgroups1+2
+  exactforcedheader+build.ninja, group3finiteGetItemONLY; no recursivehashloops,
+  mutations/compiler/generation/package/GPU. Stopfirstunexpected/capturestreams.
+  Paths .local/c15-windows-libvtn-{readonly-config,direct-config-readonly,db-analysis}.
+- Capacitysourceplan1c99061c in .local/c15-runtime-input-capacity-source-plan:
+  exact0010 CalcSIZE_T/CreateVOID/noindependentlengthorcapacity; D3D10sameparams/
+  SIZE_T(-1)referenceNOTsilentlytransferred. No pointercapacity/TLSCalcCreatehandoff.
+  Windowsreadability/capacity/errorpolicy/runtimecontext/librarybridge remainOPEN.
 - FailedFillpublication666abec6/row64ff5e54 host137RED6GREEN0; globaltokenlifetime
   stillnotfixed, excludedallhardware1436/38/39. Earlierfaultsweepautomaticsecurity
   rejection preserved; do not retryidenticalrequest. No C21E/nativefaultwork.
