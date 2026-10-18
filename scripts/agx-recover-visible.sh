@@ -11,12 +11,48 @@ mkdir -p "$R" /tmp/agx-lld-dir
 [ -x /tmp/agx-lld-dir/ld.lld ] || cp /Volumes/pwdev/public_windows/.local/toolchain22/ld.lld /tmp/agx-lld-dir/ld.lld
 ssh_long() { perl -e 'alarm 120; exec @ARGV' "$T/airssh" -o ConnectTimeout=6 "$@"; }
 ssh_bounded() { perl -e 'alarm 30; exec @ARGV' "$T/airssh" -o ConnectTimeout=6 "$@"; }
+select_recovery_owner() {
+  local selected status=0 launchers guest
+  selected=$(python3 "$W/scripts/agx-select-exact-launcher.py" "$N" --worktree "$W" 2>&1) || status=$?
+  if [ "$status" -eq 0 ] && [[ "$selected" =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s\n' "$selected"
+    return 0
+  fi
+  if [ "${AGX_RECOVERY_ALLOW_NO_OWNER:-0}" != 1 ] || [ "$status" -ne 3 ] ||
+     [ "$selected" != 'EXACT_OWNER_REFUSED: expected exactly one owner; found 0' ]; then
+    printf '%s\n' "$selected" >&2
+    return 3
+  fi
+  status=0
+  launchers=$(pgrep -f 'run_uefi[.]py' 2>&1) || status=$?
+  if [ "$status" -ne 1 ] || [ -n "$launchers" ]; then
+    printf 'NO_HOST_OWNER_REFUSED launcher_query_status=%s output=%s\n' "$status" "$launchers" >&2
+    return 3
+  fi
+  status=0
+  guest=$(ssh_bounded 'echo up') || status=$?
+  guest=${guest//$'\r'/}
+  if [ "$status" -ne 0 ] || [ "$guest" != up ]; then
+    printf 'NO_HOST_OWNER_REFUSED live_windows_ssh_status=%s\n' "$status" >&2
+    return 3
+  fi
+  printf '%s\n' NO_HOST_OWNER
+}
 wait_cycle() {
   local owner=$1 end=$(( $(date +%s) + 180 ))
-  while kill -0 "$owner" 2>/dev/null; do
-    [ "$(date +%s)" -lt "$end" ] || { echo "OWNED_LAUNCHER_STILL_RUNNING $owner"; return 1; }
-    sleep 3
-  done
+  if [ "$owner" = NO_HOST_OWNER ]; then
+    # The ordered Windows reboot must become observable before proxy/serial use.
+    while ssh_bounded 'echo up' >/dev/null 2>&1; do
+      [ "$(date +%s)" -lt "$end" ] || { echo NO_HOST_OWNER_WINDOWS_SSH_STILL_UP; return 1; }
+      sleep 3
+    done
+    echo NO_HOST_OWNER_WINDOWS_SSH_DOWN
+  else
+    while kill -0 "$owner" 2>/dev/null; do
+      [ "$(date +%s)" -lt "$end" ] || { echo "OWNED_LAUNCHER_STILL_RUNNING $owner"; return 1; }
+      sleep 3
+    done
+  fi
   end=$(( $(date +%s) + 60 ))
   until [ -e /dev/cu.usbmodemC02HDNCCQ6L41 ] && [ -e /dev/cu.usbmodemC02HDNCCQ6L43 ]; do
     [ "$(date +%s)" -lt "$end" ] || { echo USB_ENDPOINTS_MISSING; return 1; }
@@ -38,9 +74,12 @@ launch_normal() {
   cp /Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/normal2-contract.bin "$R/normal-$1-contract.bin"
 }
 # Select only this experiment's contract owner. Never terminate other launchers.
-owners=$(python3 "$W/scripts/agx-select-exact-launcher.py" "$N" --worktree "$W") || { echo EXACT_OWNER_NOT_FOUND; exit 3; }
-[[ "$owners" =~ ^[1-9][0-9]*$ ]] || { echo EXACT_OWNER_NOT_FOUND; exit 3; }
-printf '%s\n' "$owners" > "$R/visible-previous-owner.pid"
+owners=$(select_recovery_owner) || { echo EXACT_OWNER_NOT_FOUND; exit 3; }
+if [ "$owners" = NO_HOST_OWNER ]; then
+  printf '%s\n' NO_HOST_OWNER | tee "$R/visible-no-host-owner.txt"
+else
+  printf '%s\n' "$owners" > "$R/visible-previous-owner.pid"
+fi
 python3 - "$N" "$X" "$W" <<'PY'
 from pathlib import Path
 import re,sys
