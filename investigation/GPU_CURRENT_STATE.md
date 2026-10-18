@@ -35,7 +35,7 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   54logicalchecks preserved; source23df8488, builtARM64EXE3d5960170549453e1a97808c
   babf9554170a3bad56cf09b5e637f650e3315a48. No shader/compilerfixclaim.
   Probeorderbuildmanifestf078fa3c371ace782d8dba59c028e14d2e6e6e1b658a4d89ce2b0a8e7cea2291.
-- Guest currently idle recovered; next package not built or approved yet.
+- Guest now owned by EXP1436 pipeline; do not issue parallel guest/proxy commands.
 
 ## EXP1426 COMPLETE / ACTUAL+CHANGES24cd5dbd / exact package removed
 
@@ -113,16 +113,33 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   notsend_messagealone. Do not waitindefinitely; bench1419supervisorwarningapplies.
 
 
-## Current next EXP1436 preparation
+## EXP1436 ACTIVE — sole pipeline root68717, do not restart
 
-- NativePBE narrowretry3 actual7argv0/0/0/1/0/0/0; RED33checks2fail/GREEN33zero,
-  18non3D byteidentical/forcearray/singleplanePASS;100direct+6958headersstable,
+- Start21:25:12Z; PREP.local/preparation-1436; SP/run1436-entry/chain1436/
+  newexp1436/watchdog1436.log. Exactimmutable5aeb6046d2a1084bd4560bcfe1fe4936fb1329d6
+  parent5279; ONLYnativeprojector+probeC21Elast, noC23/C15/caps/KMD/firmware.
+- Nativeactual7argv0/0/0/1/0/0/0; RED33checks2mip1fail/GREEN33zero+18controls;
   artifact4b894663688846f6f27652744644860c8b18c501fe1f25eeb17934236f5edd30.
-- ROOTproductionpureprojector+durableactualnativefixtureadopted; targeted31PASS
-  1.088s. Fullsuite98960RUNNING against119baseline; nowholeGREENclaim.
-- Immutable1436source5aeb6046d2a1084bd4560bcfe1fe4936fb1329d6 parent5279 exactly
-  projector+probeC21Elast twofiles, NOcurrentHEAD C23/C15/DDI. Sourcearchive693
-  integrityPASS; build44812RUNNING, logsSP/build1436.log andXP/EXP1436-d3d12-volume-pbe-depth/build-ssh.log.
-  BUILD_BEFOREae4b37a5; separateHARDWAREmarkerABSENT/unapproved. PREP.local/preparation-1436.
-- Buildsnapshotproduced; nativepackage/fullsuite/PDB/stack/originalpreservation/
-  finalsignhashrecoverygatesbeforehardware. SoleguestcurrentlyinertAbsent/SSHup.
+  Mainimplementation5c1003de/probeorder0009d25d/CHANGESf878cc05.
+- CURRENT31targetedPASS1.088s. CorrectedROOTfull1594/195.875s exact119baseline
+  (68fail51errors11skip) noadded/noremoved SHA0ede804992d96ccb2d7e3e64123d128b1c1bb496804b2ba883d4e751c87ed5a9.
+  Wrongcwd1330run preserved andexplicitlyinvalidated; notfunctionalregression.
+- Build44812DONE/PACKAGE1436PASS/693/PDB/stackARM6413824WOW6544. Original4+log
+  preservationdf5e3e9c2e8aeef34fc88fe98e57c9d42af9f54953c10f6d8f74a64276345d9b.
+  NativeSYS341be905/UMD8d434312; finalsign/stagehashes serialpipelineBEFORE.
+  Sourcezipe2ccde7c97bc51fa3f784b19515ee50635a8178246a4734bc0cb601a6c93490c,
+  manifestc60e36971fac535b82b03b7d142afef0878f6a169bf17b70a0e86852b01b0bcd.
+- AllcodegatesPASS/phaseBEFOREd03504bc/hardwaremarkerexists; pipeline willwrite
+  finalartifact/profile/FactoryV2BEFORE beforeinstall/launch. DiagnosticEXE3d596017...
+  /pool5574. Expect53nonEchecks inclC21C exactmip1data, C21Eoutcomeseparately.
+  Wait TOOL_d3d12-on_END ANDNEWEXP_DONE; fullSMOKE/GL/CS/corpus/DWM/pool.
+  Thencollect first/soleFactoryV2 rec1436h/recover.sh ->RECOVERY_DONE/Code28Absent8CPU,
+  nointerposedhiddenboot/no adhoc prereboot. Guestcontrollerexclusive.
+- NextC23SOURCEONLY .local/preparation-1438 based5aeb+9c282files/noC15;
+  probe57C21Elast7d9ef8d8, nativeprojectorc20bbcunchanged. Notfrozen/built yet,
+  hardwareprereq1436C21C+53nonE/fullregressions/recovery. KeepC24separate.
+- C24 EXP1437privateCPUall10rc0/allstderrEMPTY/73+6958stable;48querycreate/
+  15viewrefusals/12copyrefusals/actualARRAYNIRPASS. Actual49152/65536confirmed
+  countingBOonly/noWindows/GPU. Receipt239af6aa908ea4c25f446f345bafcce2e014d965923d3765c968686111ab6bfd,
+  ACTUALf878cc05. Durable.sourceadoption2f628b22 andWindowsprivate4toolpinproposal
+  preparedbutUNRUN/UNADOPTED; kmdagentcontrollerpreponly. NoC24trackedcodeyet.
