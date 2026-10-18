@@ -1,3 +1,12 @@
+## EXP1390 ACTIVE; C15 offline preparation in parallel (2026-10-18T15:06Z)
+
+- DO NOTRESTART EXP1390 C19 cube/cubearray views. StageHASHES_MATCH23; BEFORE7c2fcf36; started15:03:04Z. ExactfullownerPID58886, source7df1519222fe7f13f274a43c3dfb063cde129b33/probe67a9fd5c; SYSebba5e05/UMD1bbdb0a3/finalINFe7feb049/catalog30342f57. Scratchpadrun1390-wrapper/chain1390/newexp1390/watchdog1390/run1390; execsession55267. WaitTOOL_d3d12-on_END/NEWEXP_DONE thenregressions/exactrec1390h/recover.sh. Do not issueparallelrecovery/guestcommands.
+- Stablepredecessor1387: all41D3D12PASS/C18PASS; RECOVERY_DONE PackageAbsent8CPU, finalmanifest30829edb, ACTUAL44e524b7. RecoveryV2unchanged host38909f54/helper7ab9f020/selectorbed44fab; verifyfactory again before1390recovery.
+-1391C20 and1392C21builtbutNOTLAUNCHED; eachrequirespredecessoracceptance/recovery. Neverold1382/1383. C15licensecompleted75632532.
+- C15neworiginalownedadapter offline1396 preregdc3102c9; agentownsagx_dxil_owned.h/c/test_dxil_owned.py/fixture, no commits untilparentreview. beforeinputsad3c9fcf fixesnineexistinghostarchives/header/originaltest; firstfeatureRED implementationabsent thenGREENsourcefreeze. No externalrebuild/productionlink/caps/GPU. Multi-spacefixture1397preparationonly, parentBEFORErequiredbeforeDXC/compile.
+- C15ownedconverter/threadingnotes committed2a9899a9: scan-successcaveat/frozennamespace/reported-errorcleanup; internaltranslatorOOM NOTrecoverablecontract atpin8434, requiresreviewedupstreamfix/newpin+faultinjectionbeforeproduction. Sharedowner reentrynormativeuncertainty remains; no blanketmutexguessed.
+-1395Windowshelper83TUs/9archives/CcallerAA64/MD/noticesPASS_NO_RUNTIME. Parentverifiedall243collectedfiles; 237/238originalmanifestentriesmatch, ONLYliveartifact-check.log appendedPASSafterhash. Finalmanifestf1905ed5 explicitlypreservesexception; originala4d08548 unchanged. ACTUALdc3102c9. No source/archive/binarymismatch; futureworkflowfixfreeze/excludelivelog andincludeextensionlesslicenses. Preserve dirtymu/untrackedagentcode.
+
 ## EXP1387 complete and recovered; EXP1390 next (2026-10-18T15:02:58Z)
 
 - All41D3D12PASS: C13 initialization checkpoint, C14 counted/no-count512, C16/C17 preserved, C18A/B copiedRGBA8 maps4096pixelsbad0, C7PresentPASS. Source d5bfef7a plusonlye8initfix vs1381; finalmanifest30829edbb669b54850c6feca624bb790c7f489c1a565b075c4acd34a05b44292.
