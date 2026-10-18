@@ -735,7 +735,8 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     /* C14 (D3D12-C14-execute-indirect.md): mode 5 is mode 4 drawn through
      * ExecuteIndirect -- two identical draw records, a count buffer of 1;
      * the counter shows whether the count limits the draws */
-    const int indirect = mode == 5;
+    const int indirect = mode == 5 || mode == 6;
+    const int indirect_no_count = mode == 6;
     const int counted = mode == 4 || indirect;
     ID3D12CommandSignature *signature = NULL;
     ID3D12Resource *counter = NULL, *counter_back = NULL;
@@ -751,7 +752,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {rooted ? 2u : counted ? 1u : 0u, rooted ? parameters : counted ? &uav_parameter : NULL, 0, NULL,
                                            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
-    const char *step = indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect ? "C14" : counted ? "C13" : "C6B";
+    const char *step = indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
     const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted ? 0 : 255),
                                    (unsigned char)(rooted ? 255 : 0)};
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
@@ -926,9 +927,11 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             D3D12_INDIRECT_ARGUMENT_DESC arg = {D3D12_INDIRECT_ARGUMENT_TYPE_DRAW};
             D3D12_COMMAND_SIGNATURE_DESC sd = {16, 1, &arg, 0};
             HRESULT sh = ID3D12Device_CreateCommandSignature(device, &sd, NULL, &IID_ID3D12CommandSignature, (void **)&signature);
-            printf("C14 CreateCommandSignature hr=0x%08lx\n", (unsigned long)sh);
+            printf("%s CreateCommandSignature hr=0x%08lx\n", step, (unsigned long)sh);
             if (SUCCEEDED(sh))
-                ID3D12GraphicsCommandList_ExecuteIndirect(list, signature, 2, vertices, 2048, vertices, 2080);
+                ID3D12GraphicsCommandList_ExecuteIndirect(list, signature, indirect_no_count ? 1 : 2,
+                                                           vertices, 2048, indirect_no_count ? NULL : vertices,
+                                                           indirect_no_count ? 0 : 2080);
         } else {
             ID3D12GraphicsCommandList_DrawInstanced(list, 3, 1, 0, 0);
         }
@@ -1011,7 +1014,8 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             counted_ok = c[0] == green;
             ID3D12Resource_Unmap(counter_back, 0, NULL);
         }
-        printf("AGX_D3D12_%s: %s\n", indirect ? "C14A" : "C13A", pass && counted_ok ? "PASS" : "FAIL");
+        printf("AGX_D3D12_%s: %s\n", indirect_no_count ? "C14NCA" : indirect ? "C14A" : "C13A",
+               pass && counted_ok ? "PASS" : "FAIL");
     }
     if (signature) ID3D12CommandSignature_Release(signature);
     if (counter_back) ID3D12Resource_Release(counter_back);
@@ -2103,6 +2107,7 @@ static int step_c6d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT
 static int step_c11(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 3); }
 static int step_c13(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 4); }
 static int step_c14(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 5); }
+static int step_c14nc(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 6); }
 static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step step) {
     ID3D12Device *device = NULL;
     ID3D12CommandQueue *queue = NULL;
@@ -2150,6 +2155,7 @@ int main(void) {
                 (void)run_isolated(adapter, "C12", queue_types);
                 (void)run_isolated(adapter, "C13", step_c13);
                 (void)run_isolated(adapter, "C14", step_c14);
+                (void)run_isolated(adapter, "C14NC", step_c14nc);
                 (void)run_isolated(adapter, "C14B", compute_indirect);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
             }
