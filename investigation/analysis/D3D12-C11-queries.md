@@ -80,5 +80,9 @@ C11C PASS = t0 != 0, t1 >= t0 and GetTimestampFrequency S_OK non-zero.
   leave the earlier one at 0 (the probe overlapped them; the counter read
   0). The probe now runs them sequentially; overlapping occlusion queries
   remain a known limitation of this translation.
-- Both timestamps took the CPU-fallback value at replay (t0 == t1): Gallium
-  timestamp queries do not yet carry the firmware batch end times.
+- t0 == t1: both EndQuery(TIMESTAMP) fell into the same render batch (the
+  clear had opened it); Asahi resolves a timestamp to MAX(its CPU value,
+  the batch's firmware end time) at batch cleanup (agx_finish_batch_queries;
+  the winsys fills vtx_start/frag_end and comp_start/comp_end from the KMD
+  job record, agx_win32_gpuva_batch.c write_timestamps). Timestamps are GPU
+  time at batch granularity, not per command.
