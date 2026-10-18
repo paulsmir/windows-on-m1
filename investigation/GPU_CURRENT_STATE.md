@@ -1,3 +1,10 @@
+## EXP1380 active (2026-10-18)
+
+- Package source2bd3b5d0; static SM5.1 namespaces4fd66dfd/8d4e54c5 and independent KMD foreign-cache reclaim0c458548; probes4f6e18cf/55740036. BEFORE c2de152c: ATOMIC CONTRACT none -- separate C17A/B/C and KMD_POOL checkpoints/receipts. No caps/profile/firmware/capacity changes.
+- Source gate45PASS, full1509 identical119failure signatures; DXBC439/13/0; builder3xrc0; stackARM6412800/x866544PASS. Package stages/hash23PASS. EXP1380 ACTUAL and exact rollback still pending; do not install next candidate until rec1380h RECOVERY_DONE/PackageAbsent.
+- Hardware evidence .local/experiments/EXP1380-d3d12-spaces-kmd-pressure/evidence/EXP1380. Scratchpad newexp1380.log/chain1380/watchdog1380; recovery evidence/rec1380h/recover.sh. Do not restart active experiment.
+- Concurrent next candidate C18 preserves SRV component mapping; excluded from pinned EXP1380 source. Known KMD global exhaustion is reclaim-policy defect, not proven lost-unit leak; KMD_POOL must observe new positive foreign-owner unit-release receipt, not merely fl11cs-a PASS.
+
 ## EXP1379 completed and rolled back (2026-10-18)
 
 - PROVEN: shared SRV capacity128 a1a954ef. C16A root t127/table t126/UAV u7/CBV b13:16384 exact words bad0 first207,212 last82122, fence7. All35D3D12 PASS including counted/no-count C14 and dispatch. Package snapshot94cf05de, SYS1d415f8c, UMDc8458268, probe98a330e1. No caps/KMD/firmware/space change.
