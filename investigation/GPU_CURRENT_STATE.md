@@ -6,36 +6,31 @@ ledgers, guest, launcher. Preserve dirty mu. Never restart active hardware.
 Skill /Users/pavel/.codex/skills/agx-d3d12-loop/SKILL.md and
 investigation/CLAUDE_WORKING_METHOD.md govern tools. CS allowed again.
 
-## EXP1426 ACTIVE, D3D12 completed; wait full harness, do NOT touch guest
+## EXP1426 COMPLETE / rollback done; EXP1430 build ready, gates running
 
-- Source939cf61a78833349e7be51e028fd9ddf82a2e85a/package30.0.1426.0.
-  Pipeline90538 active/newexp1426-alignment.log; TOOL_d3d12-on_END20:20Z,
-  NEWEXP_DONE notyet. LatestLONGJOBintentionalhang903ms/kind4, DWM0.
-- 54unique tags=49PASS+5C21FAIL. C14A/C22PASS. C21A/B/C/Epublicallocation
-  now131072/alignment65536; D65536/alignment65536. Alignmentfix35c6af14
-  provenatpublicqueryboundary. AllfiveCreateCommittedResource now8007000e.
-- PROVEN source+receiptcause: volumeDDIcreate invoked; EnsureOwnerPASS,
-  nativeallocateS_OK(4x131072,D65536), ordinarymapE_PENDING, then runtimeOOM.
-  OwnerCreateTexture3D rejectsGpuVa0 from AgxWin32AsahiBufferGpuAddress;
-  actualscene.c263 returns0 for ANY nonPIPE_BUFFER. Nativehelpercorrect;
-  textureconstructorfalsefailure. Existing2D permits0; publicMicrosoftGetGPUVA
-  docs specify alltextureGPUVA0. Currentoldofflinefixture alwaysfakepositive
-  VA foranytarget hidbug. Nextregression mustcomposeactualhelper+actualowner.
-- EXP1427built6df+57probe C23 MUSTNOTlaunch: prerequisiteALL54PASS unmet;
-  its1DownerhassamefalsezeroVAguard. Offlinegatescompleted/PASS_ROOT_APPROVED
-  only (beforecbbb7d5e/codegates4c4a326b), NOlaunchmarkerwritten. Preservepackage.
-- NEXT hardwareEXP1430: frozenBASE939c +ONLYowner3DfalsezeroVAfailurefix,
-  old54probeec529c/pool5574; noC23/C15. Agentkmdprivatepipelineprep, sm51
-  privateactualhelper+ownerRED/GREENproposal. Rootaloneapplies/commits/builds.
-  After1430verdict, updatedC23candidatecanfollow; nodependentfeaturebundle.
-- CS46.772fps/3771frames80.626s; GL52.8fps/internalGL59.7fps. CurrentMSAAknown
-  only, kmd-poolPASSworkers5/foreign_reclaim1, fl11cs-a/xPASS. Finalcorpuspending.
-- AfterNEWEXP_DONE collectfullresults, idempotentFactoryV2 andrec1426h controller
-  ->RECOVERY_DONE/Code28AbsentnoService8CPU. NOpre-reboot/guestcommandsoutside
-  controller; factoryDIRthenID. Wrapper130ecae1b98c23a09f9162b5cf879292791ba743cea2ab954d2fdaed241149e6.
-- FinalhardwareBEFOREfe125086. SYS6956d919/UMD8d8422d1/INF336cb65d/CAT4b3d4a1f.
-  Originalnative4+log protectedmanifest405209c3bb156b1f6a453ecd400166f69b51c2e7d15ce887deea786b819aa9d6.
-  Full1589 exact119baseline noadded/syntax3rc0/stack13824-6544 proofretained.
+- Exact939c/30.0.1426.0/original54probe:49PASS5C21FAIL. Alignment35c6af14
+  CONFIRMEDpublicquerycorrectsizes, thenCreate8007000e all5; no C21GPUexecution.
+- ProvenownerfalseOOM: successfulnativeResource rejectedbecause actualbuffer-only
+  GPUVAhelperreturns0 fornonPIPE_BUFFER. MicrosoftalltextureVA0; accepted2D
+  permits0. Actualcomposedhelper+constructors11checksRED3->GREEN0, sourcefix
+  onlyremove1D/3Dinvalidguards. Mainadoptedf4be82b1, notimplementationcommittedyet.
+- 73SMOKEPASS+knownMSAAonly;fl11cs-a/x/debugPASS;GL52.8/internal59.7/CS46.772;
+  corpus414each64+4createfail/zerohang-pixeldiff;DWM0;KMD_POOL5foreign1PASS;
+  onlyintentionalLONGJOB903mskind4/nounexpectedstop.
+- Controller46309exit0RECOVERY_DONE normalCode28AbsentnoService8CPU.
+  BeforeBoot2026-10-18T20:25:42.7897190Z/AfterBoot2026-10-18T20:27:43.8895580Z.
+  Finalmanifestffc52af19f179060f49fd01eb465a08ca3de966c5e2dbd6e9cc37a60b2e72936 (2269files).
+  Durability830ada695b4b977ba4cc887983d6920a89d2a96016f960e38f403ffab2866f8c; exactSHAverified/rootACTUALCHANGESnowrecorded.
+- EXP1430 immutable5279bc4fcdfd04b4c3218da832a0f3e9c5e47bab =BASE939c+ONLY3D
+  ownerguarddelete; noC23/C15. Prep.local/preparation-1430/sourceverifierPASS.
+  PACKAGE1430BUILD_PASS/693sources/PDB/stack13824+6544, root31776done.
+  Originalnative4+logpreservedPRErepackmanifestf0b18183eabde3e2df47cf719fefabbf4dee7cc463d1c52808ed5c69fbbbd42c.
+  Syntax3rc0/manifest184fa3a3; actual11RED3GREEN0manifestc3c46d58.
+  Fullcurrent1592/root46283RUNNING; focused44PASS10.827s. HardwareHOLDfullcomparison
+  plusfinalbefore/codegates/1426reviewmarker/rootapproval. No guestcurrentlyowned
+  byexperiment; recoveryDONE. Preparelaunchimmediatelyoncegatespass, noagentwait.
+- C23built1427MUSTNOTlaunch: ALL54prereqfailedandits1DownerhasidenticalfalseVAguard.
+  Preserve6dfpackageunlaunched. UpdatedC23canfollow1430verdict; no dependentbundle.
 
 ## EXP1424 COMPLETE / ACTUAL-CHANGES221e30cb / recovery done
 
