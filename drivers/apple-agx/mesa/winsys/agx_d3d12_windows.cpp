@@ -478,7 +478,6 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture1D(AGX_D3D12_OWNER *owner,DXGI_FORM
   struct pipe_resource *resource=owner->Screen->resource_create_with_modifiers(owner->Screen,&templ,&layout.Modifier,1);
   if(!resource)return E_OUTOFMEMORY;
   const unsigned long long va=AgxWin32AsahiBufferGpuAddress(resource);
-  if(!va){AgxWin32AsahiResourceRelease(&resource);return E_FAIL;}
   texture->Resource=resource;texture->GpuVa=va;texture->Bytes=bytes;return S_OK;
 }
 
@@ -495,7 +494,6 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture3D(AGX_D3D12_OWNER *owner,DXGI_FORM
   struct pipe_resource *resource=owner->Screen->resource_create_with_modifiers(owner->Screen,&templ,&layout.Modifier,1);
   if(!resource) return E_OUTOFMEMORY;
   texture->Resource=resource;texture->GpuVa=AgxWin32AsahiBufferGpuAddress(resource);texture->Bytes=actual;
-  if(!texture->GpuVa) {AgxWin32AsahiResourceRelease(&resource);memset(texture,0,sizeof(*texture));return E_OUTOFMEMORY;}
   return S_OK;
 }
 
