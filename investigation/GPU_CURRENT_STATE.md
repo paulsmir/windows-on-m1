@@ -1,3 +1,10 @@
+## EXP1387 preparing; requested C15 review complete (2026-10-18T14:27Z)
+
+- LatestuserpriorityDONE: requestedD3D12-C15-dxil-license-review.md +updatedintegrationplan +standalone1389note committed75632532, processCHANGES ea9cc8b0. YESselectedpinned8434b063runtime only, preserveMIT/BSD3/Khronosnotices beforecatalog; optionalnativeLLVM/Catch/bundlesandMicrosoftCRT/SDKredistrightsseparate. No externalproductionimport/capschange. C15nextmajoraftercurrentC19/C20/C21minorcheckpoints.
+- EXP1387 startedprepare via scratchpadrun1387.sh (session93769), chain1387/newexp1387/watchdog1387. Source d5bfef7a (=exactC18 56fe3977 +onlye8devicezeroing), sameprobe1b2809d4/KMDprobe55740036, 678inputs/stack13824-6544PASS. RepackedSYSac32d026/UMDc491c572/INFb52d6e27/cat649d45d5. Previousrec1381RECOVERY_DONE/PackageAbsent verified; stage/BEFORE/fullownerbootpending. DoNOTrestart; waitnewBEFOREautocommit beforetouchingEXPERIMENTS/index.
+- Newrecoveryf4eac518 usescanonicalDarwinargvselector9c003584 andfactoryV2pins5sources. V1historical1381legacyselectorPASS. OrdinaryvisibleCode32disabledservice->exactcleanup->durableCode28 only; emergencyhiddenretained.
+- C21sourcefrozenuncommitted: boundednativelegacy2patternregistry/query/create/existing/subresource +volumeproofs52affectedPASS, independentreadonlyreviewno blocker, builder3xrc0. Full1561/211.029s same119baselinefailure/error signatures, no new; oraclesbff4efec/pureguard9d49473dcommitted. Parentmustcommitimplementation/probeseparately andprebuildfuturecandidatewhile1387runs. C21excludedfrom1387snapshot. Preserve dirtymu.
+
 ## EXP1381 complete; normal inert guest; C15 priority before EXP1387 (2026-10-18T14:20Z)
 
 - RECOVERY_DONE/PackageAbsent, exactlyoneCode28/noService/8CPU; AfterBoot2026-10-18T14:19:15.8000310Z durablemanifestFE4904CF. No installed/activeexperimentpackage. VisibleCode32disabledservice thenexactcleanup; firstfullownerorderedshutdown+SIGTERMstalled, bothcontrolplanesunreachable, userphysicalresettoRunningproxy/NOPPASS. No hiddenboot. Source/continuations/receipts preserved inrec1381h.
