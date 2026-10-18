@@ -249,3 +249,12 @@ external implementation into this repository. A bounded original offline adapter
 may prove normal success and reported errors while explicitly retaining this
 production blocker. The Windows MSVC exception policy must be measured separately
 from the existing host build's confirmed -fno-exceptions flag.
+
+A positive [owned pipeline recipe/library design](D3D12-C15-owned-pipeline-library-contract.md)
+now separates pointer-free CPU components, deduplication and bounded private wire
+encoding from the typed runtime resolver. Its resource limits are proposed CPU
+policies. One bounded primary-source follow-up did not establish conditional
+LibraryReference field elision, repeated-index rules, runtime opaque-payload
+framing or DDI-specific mismatch propagation. Internal CPU storage tests alone
+cannot close those typed boundaries or justify a negotiation/capability change;
+retain the existing0003 path until the complete selected contract is established.
