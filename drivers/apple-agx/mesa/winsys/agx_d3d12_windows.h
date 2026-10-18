@@ -8,6 +8,7 @@
  * (Asahi: libagx_copy_uint4/uchar on a compute batch). No Mesa types cross
  * this boundary. */
 #include <windows.h>
+#include "../dxbc/dxbc_bindings.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,6 +54,7 @@ HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Dst,
 typedef struct {
   void *State;          /* the context's compute state object */
   unsigned Block[3];
+  struct dxbc_binding_map Bindings; /* C17: immutable SM5.1 semantic-to-slot map */
 } AGX_D3D12_COMPUTE;
 HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *Owner, const UINT *Tokens, AGX_D3D12_COMPUTE *Compute);
 void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *Owner, AGX_D3D12_COMPUTE *Compute);
@@ -241,6 +243,7 @@ typedef struct {
    * from IASetVertexBuffers) */
   void *Velems;
   unsigned VelemsStrides[16];
+  struct dxbc_binding_map VsBindings, PsBindings;
 } AGX_D3D12_GRAPHICS;
 HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *Owner, const AGX_D3D12_GRAPHICS_DESC *Desc,
                                     AGX_D3D12_GRAPHICS *Graphics);

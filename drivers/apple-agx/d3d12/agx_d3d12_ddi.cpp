@@ -2514,8 +2514,116 @@ static UINT BindTable(AgxD3d12CommandList *list, const AgxD3d12RootSignature *ro
  * root constants (a copy of the root DWORDs), CBV/SRV/UAV tables. Returns
  * the refusal reason (0 = bound). */
 static constexpr UINT kAnyStage = ~0u;
+/* C17: namespace-aware root resolution */
+static UINT MappedSlotLimit(UINT kind) {
+    switch (kind) {
+    case DXBC_BINDING_CBV: return kCbSlots;
+    case DXBC_BINDING_SRV: return kSrvSlots;
+    case DXBC_BINDING_UAV: return kUavSlots;
+    case DXBC_BINDING_SAMPLER: return kSamplerSlots;
+    default: return 0;
+    }
+}
+static UINT MappedRangeKind(UINT type) {
+    switch (type) {
+    case D3D12DDI_DESCRIPTOR_RANGE_TYPE_CBV: return DXBC_BINDING_CBV;
+    case D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV: return DXBC_BINDING_SRV;
+    case D3D12DDI_DESCRIPTOR_RANGE_TYPE_UAV: return DXBC_BINDING_UAV;
+    case D3D12DDI_DESCRIPTOR_RANGE_TYPE_SAMPLER: return DXBC_BINDING_SAMPLER;
+    default: return DXBC_BINDING_KIND_COUNT;
+    }
+}
+static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *root,
+                              const UINT64 *va, const UINT *dwords, UINT stage,
+                              const struct dxbc_binding_map &map, AgxD3d12Dispatch *out) {
+    if (map.count > DXBC_BINDING_MAP_MAX) return 5u;
+    memcpy(out->root_dwords, dwords, kRootArguments * sizeof(UINT));
+    for (UINT m = 0; m < map.count; ++m) {
+        const struct dxbc_binding &binding = map.bindings[m];
+        const UINT slot = binding.slot;
+        if (slot >= MappedSlotLimit(binding.kind)) return 5u;
+        for (UINT prev = 0; prev < m; ++prev) {
+            const struct dxbc_binding &other = map.bindings[prev];
+            if (other.kind == binding.kind && (other.slot == slot ||
+                (other.space == binding.space && other.reg == binding.reg))) return 5u;
+        }
+        bool matched = false;
+        for (UINT i = 0; root && i < root->parameters; ++i) {
+            const AgxD3d12RootParameter &p = root->parameter[i];
+            if (stage != kAnyStage && p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;
+            if (i >= kRootArguments) return 5u;
+            if (p.type == D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) {
+                const AgxD3d12Range *ranges = RangesOf(root) + p.first_range;
+                for (UINT r = 0; r < p.ranges; ++r) {
+                    const AgxD3d12Range &range = ranges[r];
+                    if (MappedRangeKind(range.type) != binding.kind || range.space != binding.space ||
+                        binding.reg < range.base_register) continue;
+                    const UINT delta = binding.reg - range.base_register;
+                    if (range.count != UINT_MAX && delta >= range.count) continue;
+                    if (matched || range.offset == UINT_MAX) return 5u;
+                    UINT64 offset = 0;
+                    AgxD3d12Heap *heap = HeapAt(list->device, va[i], &offset);
+                    if (!heap || !heap->cpu) return 6u;
+                    const bool sampler = binding.kind == DXBC_BINDING_SAMPLER;
+                    const UINT stride = DescriptorBytes(sampler ? D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER
+                                                                : D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    const UINT64 at = offset + (static_cast<UINT64>(range.offset) + delta) * stride;
+                    const UINT64 bytes = sampler ? sizeof(AgxD3d12SamplerDescriptor) : sizeof(AgxD3d12Descriptor);
+                    if (at > heap->bytes || bytes > heap->bytes - at) return 6u;
+                    if (sampler) {
+                        out->sampler[slot] = reinterpret_cast<const AgxD3d12SamplerDescriptor *>(static_cast<const BYTE *>(heap->cpu) + at);
+                    } else {
+                        const auto *view = reinterpret_cast<const AgxD3d12Descriptor *>(static_cast<const BYTE *>(heap->cpu) + at);
+                        (binding.kind == DXBC_BINDING_UAV ? out->uav_descriptor :
+                         binding.kind == DXBC_BINDING_SRV ? out->srv_descriptor : out->cb_descriptor)[slot] = view;
+                    }
+                    matched = true;
+                }
+                continue;
+            }
+            if (p.space != binding.space || p.shader_register != binding.reg) continue;
+            const bool uav = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_UAV && binding.kind == DXBC_BINDING_UAV;
+            const bool srv = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_SRV && binding.kind == DXBC_BINDING_SRV;
+            const bool cbv = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_CBV && binding.kind == DXBC_BINDING_CBV;
+            const bool constants = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS && binding.kind == DXBC_BINDING_CBV;
+            if (!uav && !srv && !cbv && !constants) continue;
+            if (matched) return 5u;
+            if (constants) {
+                if (p.offset > kRootArguments || p.dwords > kRootArguments - p.offset) return 5u;
+                out->cb_constants[slot] = p.offset + 1u;
+                out->cb_count[slot] = p.dwords;
+            } else {
+                UINT64 *offset = uav ? &out->uav_offset[slot] : srv ? &out->srv_offset[slot] : &out->cb_offset[slot];
+                AgxD3d12Heap **heap = uav ? &out->uav_heap[slot] : srv ? &out->srv_heap[slot] : &out->cb_heap[slot];
+                if (!(*heap = HeapAt(list->device, va[i], offset))) return 6u;
+            }
+            matched = true;
+        }
+        if (binding.kind == DXBC_BINDING_SAMPLER) {
+            const D3D12DDI_STATIC_SAMPLER *samplers = root ? StaticSamplersOf(root) : nullptr;
+            for (UINT i = 0; root && i < root->static_samplers; ++i) {
+                const D3D12DDI_STATIC_SAMPLER &s = samplers[i];
+                if (stage != kAnyStage && s.ShaderVisibility != D3D12DDI_SHADER_VISIBILITY_ALL &&
+                    static_cast<UINT>(s.ShaderVisibility) != stage) continue;
+                if (s.RegisterSpace != binding.space || s.ShaderRegister != binding.reg) continue;
+                if (matched) return 5u;
+                out->static_sampler[slot] = &s;
+                matched = true;
+            }
+        }
+        if (!matched) return 6u;
+    }
+    return 0u;
+}
 static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *root, const UINT64 *va, const UINT *dwords,
                         UINT stage, AgxD3d12Dispatch *out) {
+    if (list && list->pso) {
+        if (stage == D3D12DDI_SHADER_VISIBILITY_PIXEL && !list->pso->ps_dwords) return 0u;
+        const struct dxbc_binding_map *map = stage == kAnyStage ? &list->pso->compute.Bindings
+            : stage == D3D12DDI_SHADER_VISIBILITY_VERTEX ? &list->pso->graphics.VsBindings
+                                                       : &list->pso->graphics.PsBindings;
+        if (map->active) return ResolveMappedRoot(list, root, va, dwords, stage, *map, out);
+    }
     for (UINT i = 0; root && i < root->parameters; ++i) {
         const AgxD3d12RootParameter &p = root->parameter[i];
         if (stage != kAnyStage && p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;
@@ -2567,8 +2675,9 @@ static void RecordDispatch(AgxD3d12CommandList *list, UINT x, UINT y, UINT z, co
     const AgxD3d12RootSignature *root = list->compute_root;
     AgxD3d12Dispatch dispatch = {};
     UINT refusal = !pso || !pso->cs_dwords ? 1u : !root ? 2u : list->commands >= kListCommands ? 3u : 0u;
-    if (!refusal) refusal = ResolveRoot(list, root, list->compute_root_va, list->compute_root_dwords, kAnyStage, &dispatch);
+    /* C17: compilation produces the immutable namespace map used by ResolveRoot. */
     if (!refusal && FAILED(CompileCompute(list->device, pso))) refusal = 7u;
+    if (!refusal) refusal = ResolveRoot(list, root, list->compute_root_va, list->compute_root_dwords, kAnyStage, &dispatch);
     const UINT receipt[] = {refusal, x, y, z, root ? root->parameters : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-dispatch", refusal ? E_NOTIMPL : S_OK, receipt, 5);
     if (refusal) {
@@ -2610,11 +2719,11 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
                  : indirect && indexed && list->index_offset ? 8u /* C14: Gallium takes the start index from the arguments */
                  : list->commands >= kListCommands ? 3u : 0u;
     AgxD3d12Dispatch vs_bind = {}, ps_bind = {};
+    if (!refusal && FAILED(CompileGraphics(list->device, pso))) refusal = 7u;
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                                         D3D12DDI_SHADER_VISIBILITY_VERTEX, &vs_bind);
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                                         D3D12DDI_SHADER_VISIBILITY_PIXEL, &ps_bind);
-    if (!refusal && FAILED(CompileGraphics(list->device, pso))) refusal = 7u;
     const UINT receipt[] = {refusal, vertices, instances, list->rtvs, list->topology, indexed ? list->index_size : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-draw", refusal ? E_NOTIMPL : S_OK, receipt, 6);
     if (refusal) {

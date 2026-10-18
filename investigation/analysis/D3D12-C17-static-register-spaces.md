@@ -55,7 +55,7 @@ supplies the resource value for that identity.
   never mutate caller tokens. CBV buffer-element indexing may keep its existing
   relative offset; selecting the resource itself must be static for C17.
 - A new D3D12-only translate entry returns the map. Existing D3D11/OpenGL
-  entry points and their SM5.1 refusal remain unchanged. SM4/5.0 on the new
+  entry points remain unchanged, including their existing SM5.1 acceptance/refusal limitations. SM4/5.0 on the new
   entry returns an inactive map and the exact old translation.
 - Owner compute/VS/PS shader objects hold their maps. Compile before resolving
   roots. A mapped root resolver matches kind/space/register, respects stage
@@ -67,14 +67,14 @@ supplies the resource value for that identity.
 
 ## Implementation plan (inline parent lane)
 
-- [ ] Add deterministic static-normalization tests: two u0 in different spaces
+- [x] Add deterministic static-normalization tests: two u0 in different spaces
       map to distinct slots; CBV normalization; input tokens unchanged; invalid
       IDs, duplicate keys, array/dynamic references and capacity overflow refuse.
-- [ ] Implement shared map and parser normalization, then extended NIR entry.
+- [x] Implement shared map and parser normalization, then extended NIR entry.
       Validate/compile real SM5.1 fixture with NIR/Asahi; keep old corpus stable.
-- [ ] Integrate maps in compute/VS/PS owner objects and namespace-aware UMD
+- [x] Integrate maps in compute/VS/PS owner objects and namespace-aware UMD
       resolution; retain legacy behavior and32 current targeted tests.
-- [ ] Probe C17A compute: two root UAVs u0-space1/2 and root CBV b0-space3;
+- [x] Probe C17A compute: two root UAVs u0-space1/2 and root CBV b0-space3;
       initialize both outputs to sentinels, then expect3*i+17 and5*i+29.
       C17B fragment UAV u1-space4: counter=image512 as C13. C17C texture
       SRV/static sampler in separate spaces: existing quadrant image oracle.
@@ -108,3 +108,27 @@ and explicit BEFORE separation. While hardware runs, prepare the next source,
 unit tests, builder compile and probe/package gates. Parent coordinates commits,
 snapshots, ledgers and the single hardware control plane; KMD pool agent owns
 only its KMD implementation/tests/analysis files.
+
+Legacy source nuance found during actual graphics validation: the old translator
+accepts a raw-UAV-only SM5.1 PS by interpreting its range ID as a legacy slot;
+that is not blanket SM5.1 correctness. The new D3D12 path returns the complete
+u1/space4->physical0 map and correct root resolution. The old CS/array/texture
+refusals and old PS behavior are preserved without a new global guard. C17B/C
+root resources use PIXEL visibility, so the unchanged legacy VS path ignores
+those PS-only namespaces.
+
+## Pre-package verification
+
+45 affected tests PASS (namespace/parser/NIR/Asahi and private-pool invariants);
+three pinned MSVC /Zs /W4 /WX variants rc0. Ordinary ARM64 probe SHA256
+4f6e18cff1130d097a0513893ad5720ef8861750fcdc475e677bbd257c1075df;
+separate pool probe55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3.
+Full-suite comparison and package stack/sign/hash gates recorded below when complete.
+
+REVIEW R113 and historical G3/admission items: DEFER, preserved pinned full-owner
+launch and exact normal rollback rather than reopening historical boundaries.
+REVIEW R85/R47: ACCEPT pinned source/profile/hash/build receipts; R48: ACCEPT
+single launcher, no concurrent USB owner. R97: ACCEPT no old-reference archaeology.
+R14: ACCEPT targeted then full once, persistent builder.
+
+Full suite1509 tests in166.532s:68failures/51errors/2skips; all119 failure/error signatures match pre-C17 baseline exactly. DXBC corpus439 translated/13refused/0crashes. Logs /tmp/agx-c17-pool-{targeted,full-tests}.log and /tmp/agx-c17-syntax.log.

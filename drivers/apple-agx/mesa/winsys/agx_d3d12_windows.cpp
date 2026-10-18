@@ -263,13 +263,18 @@ extern "C" HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUF
 
 /* C5: the D3D11 frontend's compute path (agx_d3d11_ddi.cpp
  * CreateComputeShader11/Dispatch11) on this owner's context. */
+/* C17: independent per-kind capacities; sampler views are not sampler states. */
+static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
+  AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS, AGX_D3D12_UAV_SLOTS, AGX_D3D12_SAMPLER_SLOTS
+};
 extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,
                                               AGX_D3D12_COMPUTE *compute) {
   if (!owner || !owner->Context || !tokens || !compute) return E_INVALIDARG;
   memset(compute, 0, sizeof(*compute));
   struct pipe_context *pipe = owner->Context;
   struct dxbc_nir_error error = {};
-  struct nir_shader *nir = dxbc_translate_tokens(tokens, pipe->screen->nir_options[MESA_SHADER_COMPUTE], &error);
+  struct nir_shader *nir = dxbc_translate_tokens_bindings(tokens, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
+      owner_binding_limits, &compute->Bindings, &error);
   if (!nir) {
     receipt("measure-d3d12-compute", E_NOTIMPL, 0u, error.opcode, error.offset);
     return E_NOTIMPL;
@@ -890,9 +895,10 @@ static unsigned stencil_op(unsigned op) {
   default: return PIPE_STENCIL_OP_KEEP;
   }
 }
-static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_shader_stage stage) {
+static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_shader_stage stage,
+                           struct dxbc_binding_map *bindings) {
   struct dxbc_nir_error error = {};
-  struct nir_shader *nir = dxbc_translate_tokens(tokens, pipe->screen->nir_options[stage], &error);
+  struct nir_shader *nir = dxbc_translate_tokens_bindings(tokens, pipe->screen->nir_options[stage], owner_binding_limits, bindings, &error);
   receipt("measure-d3d12-graphics-shader", nir ? S_OK : E_NOTIMPL, static_cast<UINT>(stage), error.opcode, error.offset);
   if (!nir) return NULL;
   struct pipe_shader_state state = {};
@@ -919,8 +925,8 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
     return E_INVALIDARG;
   memset(graphics, 0, sizeof(*graphics));
   struct pipe_context *pipe = owner->Context;
-  graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX);
-  graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT) : NULL;
+  graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX, &graphics->VsBindings);
+  graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT, &graphics->PsBindings) : NULL;
   struct pipe_blend_state blend = {};
   blend.independent_blend_enable = desc->IndependentBlend ? 1 : 0;
   blend.alpha_to_coverage = desc->AlphaToCoverage ? 1 : 0;
