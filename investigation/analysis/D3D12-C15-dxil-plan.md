@@ -209,3 +209,26 @@ logical-key-to-physical-state mapping with owned metadata, validated SPIR-V/NIR/
 for the required feature surface, truthful model/optional capability reporting,
 and exact fresh-device GPU oracles with recovery evidence. Until then preserve the
 current DXBC baseline and unchanged shader-model admission.
+
+## Subsequent primary-source gates for the selected route
+
+The bounded [DDI/model contract review](D3D12-C15-ddi-model-contract.md) identifies
+R1/0011 as the smallest explicitly versioned candidate in the pinned WDK, without
+claiming a proved universal cross-version minimum. Its typed CORE_0010 adapters,
+PSO destination-handle argument move, model count/list, and shader program-body
+versus application-container distinction must be addressed together. FillDDITable's
+last UINT is a table index, not a negotiated interface version.
+
+The [pipeline-library gate](D3D12-C15-pipeline-library-gate.md) found no normative
+early-R1 absence field authorizing six generic failing callbacks. Preserve0003
+until a coherent owned CPU library/reference/serialization implementation or an
+explicit documented gate exists. Public API optionality and later driver-managed
+shader cache controls do not establish that early DDI mapping.
+
+The [owner threading contract](D3D12-C15-owner-threading-contract.md) establishes
+free-threaded device resource creation. Before production adapter integration,
+prove one-owner publication, heap-registry lifetime and actual shared Gallium
+context usage under that call model. Correct initial zeroing remains a separate
+already-fixed invariant; none of this attributes EXP1381's poison value to a race.
+These are implementation and offline regression gates, not reasons to probe caps
+or reinterpret the compiler-only EXP1389 result as runtime readiness.
