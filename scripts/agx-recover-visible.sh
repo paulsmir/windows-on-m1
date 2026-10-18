@@ -9,6 +9,7 @@ R="$N/evidence/rec${X}h"
 NORMAL=/Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/launch-normal2.sh
 mkdir -p "$R" /tmp/agx-lld-dir
 [ -x /tmp/agx-lld-dir/ld.lld ] || cp /Volumes/pwdev/public_windows/.local/toolchain22/ld.lld /tmp/agx-lld-dir/ld.lld
+ssh_long() { perl -e 'alarm 120; exec @ARGV' "$T/airssh" -o ConnectTimeout=6 "$@"; }
 ssh_bounded() { perl -e 'alarm 30; exec @ARGV' "$T/airssh" -o ConnectTimeout=6 "$@"; }
 wait_cycle() {
   local owner=$1 end=$(( $(date +%s) + 180 ))
@@ -33,6 +34,8 @@ launch_normal() {
     [ "$(date +%s)" -lt "$end" ] || { echo NORMAL_SSH_NOT_UP; return 1; }
     sleep 5
   done
+  cp /Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/normal2-full.log "$R/normal-$1-full.log"
+  cp /Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/normal2-contract.bin "$R/normal-$1-contract.bin"
 }
 # Select only this experiment's contract owner. Never terminate other launchers.
 owners=$(pgrep -f "[r]un_uefi.py.*${N}/contract.bin" || true)
@@ -55,20 +58,21 @@ PY
 for f in "$W/scripts/agx-recovery-disable-service.ps1" "$R/disable-visible.ps1" "$R/cleanup-visible.ps1"; do
   "$T/airscp" "$f" "pavel@192.168.1.37:C:/Users/pavel/EXP$X/cleanup$X/" >/dev/null
 done
-ssh_bounded "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\disable-visible.ps1" | tee "$R/visible-disable-output.txt"
+ssh_long "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\disable-visible.ps1" | tee "$R/visible-disable-output.txt"
 grep -q 'AGX_RECOVERY_DISABLE_SERVICE: PASS' "$R/visible-disable-output.txt"
 ssh_bounded 'shutdown /r /t 3'
 wait_cycle "$owners"
 launch_normal disabled
 ssh_bounded 'powershell -NoProfile -Command "$ErrorActionPreference=\"Stop\"; $d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); $s=Get-CimInstance Win32_SystemDriver -Filter \"Name='"'"'AppleAgxAdmission'"'"'\"; if($d.Count -ne 1 -or [int]$d[0].Problem -ne 32 -or $s.State -ne \"Stopped\" -or (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission).Start -ne 4){throw \"disabled-visible gate\"}; \"VISIBLE_CODE32_SERVICE_STOPPED\""' | tee "$R/visible-disabled-gate.txt"
 grep -q VISIBLE_CODE32_SERVICE_STOPPED "$R/visible-disabled-gate.txt"
-ssh_bounded "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\cleanup-visible.ps1" > "$R/cleanup-visible-output.txt" 2>&1
-grep -q '"Staged":  *0' "$R/cleanup-visible-output.txt"
-grep -q '"Sys":  *false' "$R/cleanup-visible-output.txt"
-grep -q '"Umd":  *false' "$R/cleanup-visible-output.txt"
+# Cleanup commits an ordered restart itself. An SSH EOF/timeout is not proof
+# that removal failed; the ordered restart and durable final preflight decide.
+cleanup_status=0
+perl -e 'alarm 180; exec @ARGV' "$T/airssh" -o ConnectTimeout=6 "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\cleanup-visible.ps1" > "$R/cleanup-visible-output.txt" 2>&1 || cleanup_status=$?
+echo "CLEANUP_SSH_STATUS $cleanup_status; require owned restart and final durable preflight"
 wait_cycle "$normal_pid"
 launch_normal absent
-ssh_bounded "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\durable-transition.ps1 -Mode Preflight -ManifestPath C:\\Users\\pavel\\EXP$X\\cleanup$X\\durability.json" | tr -d '\r' | tee "$R/visible-preflight.txt"
+ssh_long "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\durable-transition.ps1 -Mode Preflight -ManifestPath C:\\Users\\pavel\\EXP$X\\cleanup$X\\durability.json" | tr -d '\r' | tee "$R/visible-preflight.txt"
 grep -Eq '"Verdict": *"PASS"' "$R/visible-preflight.txt"
 ssh_bounded 'powershell -NoProfile -Command "$ErrorActionPreference=\"Stop\"; $d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); if($d.Count -ne 1 -or [int]$d[0].Problem -ne 28 -or (Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission)){throw \"normal-inert gate\"}; $p=(Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors; if($p -ne 8){throw \"CPU count\"}; \"VISIBLE_INERT_PACKAGE_ABSENT_8CPU\""' | tee "$R/visible-inert-gate.txt"
 grep -q VISIBLE_INERT_PACKAGE_ABSENT_8CPU "$R/visible-inert-gate.txt"

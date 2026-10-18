@@ -53,3 +53,5 @@ REVIEW R113: ACCEPT disarmed and service-disabled before ordinary visible boot.
 R85/R47: ACCEPT existing verified normal launch manifest and exact package hashes.
 R48: ACCEPT one serial guard and exact owned launcher; no global pkill.
 Historical hardware/admission items: DEFER, no unrelated platform modification.
+
+EXP1380 transition evidence: normalvisible Code32/serviceStopped succeeded. The30s cleanupSSH clientlimit expired while cleanup subsequently committed its orderedrestart (ownedlauncher reset/exited). Continuation booted onlynormal after PROXY_NOP_PASS, without repeating removal. Orchestrator now gives cleanup180s and requires ownedrestart plus durablefinalpreflight; an SSHreturn code alone is not its verdict. Preparation/preflight use bounded120s commands; shortnetworkprobes remain30s. No hardware action waits indefinitely.
