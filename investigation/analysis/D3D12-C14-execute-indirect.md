@@ -53,3 +53,13 @@ with the triangle drawn by ExecuteIndirect (2 identical records, count
 buffer 1); C14A PASS = image checks and counter == drawn (the count limits
 the draws). C14B: the C5 dispatch through ExecuteIndirect {256, 1, 1};
 PASS = 3i + 7 readback.
+
+## Hardware evidence (2026-10-18)
+
+EXP1375 validates indirect dispatch. EXP1377 exposed a common owner early-out
+before Gallium (direct counts are zero for indirect commands). Owner fix44323d3d
+limits that no-op check to direct commands. EXP1378 validates counted DRAW
+(C14A) and uncounted DRAW (C14NCA), each drawn=PS-counter=512, plus dispatch
+C14B bad0; all 34 D3D12 steps PASS. DrawIndexed and multi-grid dispatch coverage
+remain unmeasured; do not extrapolate those from the DRAW checkpoint. See
+D3D12-C14-count-buffer-checkpoint.md and EXP1378 evidence for regression limits.

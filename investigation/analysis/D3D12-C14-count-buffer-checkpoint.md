@@ -133,3 +133,32 @@ Verification: Windows builder syncheck reports rc=0 for native DDI, non-native D
 Build-only attempt before owner defect discovery: source 139fc962, package1378 build PASS and both stack gates PASS. It contains no owner fix and is discarded without installation or launch. Build receipt/source manifest/log archived in .local/experiments/EXP1378-discarded-probe-only-build. Final EXP1378 must rebuild from the owner-fix commit; no code snapshot ambiguity is permitted.
 
 Full host suite result: 1498 tests in 164.674 s, failures=68, errors=51, skipped=2. No D3D12 ABI/native-owner test failed. Failures include missing ninja, stale source-shape assertions, and standalone C fixtures outside the owner change. This is not a clean full-suite baseline; do not claim full repository GREEN. Summary and full output retained at .local/experiments/EXP1378-verification/.
+
+## EXP1378 hardware verdict
+
+TOOL_d3d12-on_START 11:29:22Z / END 11:29:34Z, PACKAGE1378 snapshot efa17240:
+C14A counted draw and C14NCA uncounted draw both PASS, each image drawn512 and
+PS UAV counter512; the count of one correctly limits two argument records.
+C14B indirect dispatch bad0 PASS; all 34 D3D12 checkpoint lines PASS. This
+confirms owner fix44323d3d. No Asahi count-map change is needed.
+
+Full regressions are not clean: 72 smoke PASS, known MSAA-a000r FAIL, and one
+fl11cs-a tessellation FAIL. Its immutable private-acquire receipt proves the
+separate known KMD private-pool capacity boundary (EXP1361): global1024/1024,
+largest-free0, owner42/246, branch11, prepare-predicate3, failed-range8,
+STATUS_INSUFFICIENT_RESOURCES. Failure precedes GPU submission; subsequent
+fl11cs-x and fl11dbg-a pass. Both hardware corpus passes have zero hangs and
+pixel_diff0, createfail64/4; DWM faults0. LONGJOB deliberately caused one
+firmware recovery. This validates the C14 fix, not a clean/stable package.
+
+First CS benchmark invocation failed before launch because scratchpad/bench was
+empty. Exact guest copies restored (hashes EXP1378-verification); post-harness
+repeat completed at 44.784fps (3771frames/84.204s), below the handoff expectation.
+Keep this distinct from internal GL smoke52.3fps and GL bench59.5fps. Different
+measurement order prevents attributing this performance result to the owner fix.
+
+Performance source correction: EXP1377 bench-playnoovl/bench.txt also records
+BENCH_COPY_FAIL. Its quoted59.6fps is FRAMES2400/40.293s internal GL, comparable
+with EXP1378 GL59.5fps. There is no EXP1377 CS timedemo baseline; the earlier
+comparison of CS44.784 to GL59.6 cannot establish a performance regression.
+The EXP1378 CS result and post-harness order remain recorded without alteration.

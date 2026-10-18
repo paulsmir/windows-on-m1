@@ -1,15 +1,11 @@
-## 2026-10-18 C14 owner fix prepared for EXP1378
+## EXP1378 completed and rolled back (2026-10-18)
 
-- EXP1377 rollback completed, Package Absent, bounded SSH succeeds.
-- Proven offline cause: owner discarded indirect draws on zero direct VertexCount/InstanceCount before reading Indirect.Buffer. ExecuteIndirect intentionally records zero direct fields. Fix 44323d3d restricts the early-out to direct draws; compiled predicate regression RED -> GREEN, 31 affected tests PASS, builder syncheck 3x rc=0.
-- Next hardware checkpoint EXP1378: one owner predicate fix, counted C14A and uncounted C14NCA, existing C13/C14B controls. No KMD/firmware/caps changes. Full host suite attempted: 1498 tests, 68 failures/51 errors/2 skipped outside D3D12 modules; details .local/experiments/EXP1378-verification.
-- Initial probe-only package1378 source 139fc962 was built but never installed; discarded and receipt archived. Final package must include 44323d3d. Analysis: investigation/analysis/D3D12-C14-count-buffer-checkpoint.md.
-
-## 2026-10-18T02:04Z EXP1377 D3D12 checkpoint (recovery completed)
-
-- EXP1377 exact-source rerun passed the EXP1376 idle SEGSTATS hang and reached NEWEXP_DONE. C11A sequential occlusion, C12A/B COPY/COMPUTE queues and cross-queue waits, and C13A graphics root UAV all PASS. C14A indirect draw with count buffer: DDI, close, execute and fence S_OK, but zero pixels and zero UAV counter; C14B indirect dispatch PASS. C7A present PASS, DWM faults 0, corpus 64/4, benchmark 59.6 fps. Evidence: EXP1377/tool-d3d12-on-{std.txt,umd.log}.
-- Active causal target: distinguish count-buffer handling from argument-buffer handling in Asahi's `util_draw_indirect` path with one no-count indirect draw probe. No driver fix is justified yet. This is a measurement hypothesis, not a proven cause.
-- Recovery completed at 2026-10-18T02:35Z: `rec1377h/recover.sh` reports RECOVERY_DONE and Package Absent; bounded Windows SSH succeeds on resume.
+- PROVEN: owner fix44323d3d, counted ExecuteIndirect DRAW C14A and no-count C14NCA both drawn=PS-counter=512; dispatch C14B bad0; all34 D3D12 checkpoints PASS. Package efa17240, probe4e6808ff. Cause was owner zero direct-count early-out, before Asahi; no count-map fix required.
+- Recovery: rec1378h RECOVERY_DONE, Preflight PASS, Package Absent, AfterBoot2026-10-18T11:41:19.5646950Z; normal inert devnode CM_PROB_FAILED_INSTALL,8CPU reported. No active experiment or retained package.
+- Regressions72SMOKE PASS; known MSAA FAIL plus fl11cs-a tessellation FAIL. Exact private-acquire receipt proves known KMD private-pool exhaustion (EXP1361):1024/1024/free0, owner42/246, branch11/predicate3/range8/0xc000009a. Later fl11cs-x and fl11dbg-a PASS. This separate pool defect remains open; package is not a clean regression baseline.
+- GL smoke52.3fps/internalGL59.5fps; corpus64/4, no hangs/pixel differences, DWM faults0; one deliberate LONGJOB recovery. CS retry44.784fps after harness. Correction: EXP1377 quoted59.6 was internalGL, while its CS benchmark failed to launch; no comparable EXP1377 CS result.
+- NEXT: handoff binding item. First one-variable correction SRV capacity16->128 (Tier1 and Asahi already128), root t127/table t126 probe; CBV14/UAV8/sampler16 unchanged. Then separate SM5.1 register-space compiler/replay mapping. Plan investigation/analysis/D3D12-C16-binding-map-plan.md; existing ps51 fixture and DXBC baseline11tests PASS, corpus439/13/0crashes. No hardware to guess a documented mapping.
+- Evidence .local/experiments/EXP1378-d3d12-c14-no-count/evidence/EXP1378 and scratchpad newexp1378.log/rec1378.log. C14 analysis investigation/analysis/D3D12-C14-count-buffer-checkpoint.md. Full host suite last1498 tests,68failures/51errors/2skips outside D3D12 tests; targeted31PASS and builder3x rc0. Preserve preexisting dirty mu submodule.
 
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
