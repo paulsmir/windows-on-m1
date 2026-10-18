@@ -319,3 +319,11 @@ Native8414postMATCH/no frontendarchive orlink/noPE/guestexecution. Next1447
 sourceprep diagnosticbuildonly completes19 whilepreservingallstderr forROOT
 review; rc/time/hash/deps/AA64/importchecksremainhardSTOP. Do notclaim
 frontendbuiltuntilfullclosure+diagnosticreview. Rootownsapproval/execution.
+
+## EXP1447 STOP commands0 / runner error-reporting defect
+
+Nativepre/post8414MATCH butexceptionbefore01argv; str(exc)EMPTY caused
+runnerfalseBUILD_COMPLETE/exit0. OutercontrollercorrectlySTOPcommands0;
+all14frozenfilesverified. No compiler ran. Underlyingcauseunknown/no traceback.
+Next1448sourceprep explicitfailureflag+type/repr/traceback/stage andprivate
+emptyexceptionregression;19source/flagsgraphunchanged. Preserveoldreceipts.
