@@ -97,3 +97,10 @@ an implementation milestone.
 
 Native built-in input build, installation, diagnostics, and rollback are documented in
 [`documentation/APPLE_INPUT.md`](documentation/APPLE_INPUT.md).
+
+## Author and license
+
+Original author: [paulsmir](https://github.com/paulsmir), 2026 -- the Windows on M1
+bring-up and the Apple AGX WDDM drivers in this repository were first developed here.
+This repository is licensed under the [MIT License](LICENSE); keep the copyright notice
+when you reuse it.
