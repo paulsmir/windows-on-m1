@@ -143,3 +143,30 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   countingBOonly/noWindows/GPU. Receipt239af6aa908ea4c25f446f345bafcce2e014d965923d3765c968686111ab6bfd,
   ACTUALf878cc05. Durable.sourceadoption2f628b22 andWindowsprivate4toolpinproposal
   preparedbutUNRUN/UNADOPTED; kmdagentcontrollerpreponly. NoC24trackedcodeyet.
+
+## Latest parallel progress (supersedes pending lines above)
+
+- EXP1436 CS3771frames79.840s47.232fps; GLcopytwoPASS; nowGSregressions,
+  DWM0sofar. NOT finalverdict, stillwaitTOOL_d3d12-on_END+NEWEXP_DONE.
+- EXP1438 immutable27dcaeb1812d4c3fe907b7fc3a363d235fb2757a frozenverified,
+  source695snapshot excludescurrentC24/C15. BUILD_BEFOREe40b7e44, build51307DONE/
+  PACKAGE1438PASS/PDB/stack13824+6544; preserve-native36424RUNNING beforeanyrepack.
+  C23driver6filesbyteequalc282/Windows1431gateinherited; full1594PBE+C23 vsfrozen
+  DDI12d55withoutC15publisherscope explicitlyin.local/preparation-1438/fullsuite-inheritance1438.json.
+  NEW57probeEXE254464B3713b6581cc44cfb476c1898a8deb12677aa3bbe8b46df16b49b99d5f7aeb594
+  compile0/AA64; originalexternalpostmetadataSTOPcommandtoolongb9e52preserved;
+  separateREADONLY47entrysupplement8332b1693194ece2cff4a373cf2797f974fecc37a8358fbfe0634876cd6481fdPASS,
+  no recompile/PEexecution. HardwaremarkerABSENT/held1436result+recovery.
+- C24adoptedDIRTY/UNCOMMITTED productionpatchad6e plusE_lastprobe bd55bc7894...
+  +2originalFXCheaders+durable4tests. Windows3PASS/4actualtoolpins/source6backup
+  artifact6235a611e60a6aa22c0e7f336a2ad8a739429d112925d97572efb7ef443ef718.
+  OldC23fixturedeps adapted; ONLYintentionaloraclechangesphysicalARRAY1assertion
+  andinvalid2049insteadnowvalid2, all65kquery/12create/10copyrefusalsretained.
+  CURRENT40PASS9.993s inclnew4; full1598/214.689s addsFOURvolume/resolvedfixture
+  compiledependencyfailures =>123vs119, no removed;22sourcepostpinsMATCH.
+  Preserve .local/c24-current-shared-gates/full.log SHA71a82d69b422f8e87817ae5975ad2161595c3f677831f0e1ff3108284fa2943d;
+  kmdagentpreparingSOURCEONLYminimalfixtureclosurefix, no productionfaultshown.
+  C24probe60build-onlyBEFORE442832b2/sourcebd55/29payload/shortPSmetadata,
+  kmdagentauthorizedONEexecutionafterfixtureprep; noPE/guest.
+- sm51agentONEsource-onlyC15nextbridgeplan(readablePROGRAM/rootownedprovider/
+  VOID-DDIpolicy) separatefromblockedC21E/faultsweep; no compiler/guest/edits.
