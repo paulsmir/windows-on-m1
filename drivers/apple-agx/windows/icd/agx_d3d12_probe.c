@@ -19,6 +19,9 @@
 #include "agx_d3d12_probe_vs_depth.h"
 #include "agx_d3d12_probe_cs_img.h"
 #include "agx_d3d12_probe_ps_uav.h"
+#include "agx_d3d12_probe_cs_spaces.h"
+#include "agx_d3d12_probe_ps_spaces.h"
+#include "agx_d3d12_probe_tex_spaces.h"
 
 /* C2 checkpoint (D3D12-C-implementation-plan.md): a committed upload buffer
  * and a Map/write/Unmap/Map/read round trip. Runs only after the device
@@ -753,7 +756,8 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
      * the counter shows whether the count limits the draws */
     const int indirect = mode == 5 || mode == 6;
     const int indirect_no_count = mode == 6;
-    const int counted = mode == 4 || indirect;
+    const int spaced = mode == 7;
+    const int counted = mode == 4 || indirect || spaced;
     ID3D12CommandSignature *signature = NULL;
     ID3D12Resource *counter = NULL, *counter_back = NULL;
     D3D12_ROOT_PARAMETER uav_parameter = {D3D12_ROOT_PARAMETER_TYPE_UAV};
@@ -768,7 +772,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {rooted ? 2u : counted ? 1u : 0u, rooted ? parameters : counted ? &uav_parameter : NULL, 0, NULL,
                                            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
-    const char *step = indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
+    const char *step = spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
     const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted ? 0 : 255),
                                    (unsigned char)(rooted ? 255 : 0)};
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
@@ -799,6 +803,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     parameters[1].Descriptor.ShaderRegister = 1;
     parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
     uav_parameter.Descriptor.ShaderRegister = 1;
+    uav_parameter.Descriptor.RegisterSpace = spaced ? 4u : 0u;
     uav_parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     if (counted) {
         counter = uav_buffer(device);
@@ -843,9 +848,9 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         pso_desc.pRootSignature = root;
         pso_desc.VS.pShaderBytecode = rooted ? g_agx_d3d12_probe_vs_root : g_agx_d3d12_probe_vs;
         pso_desc.VS.BytecodeLength = rooted ? sizeof(g_agx_d3d12_probe_vs_root) : sizeof(g_agx_d3d12_probe_vs);
-        pso_desc.PS.pShaderBytecode = rooted ? g_agx_d3d12_probe_ps_root : counted ? g_agx_d3d12_probe_ps_uav : g_agx_d3d12_probe_ps;
+        pso_desc.PS.pShaderBytecode = rooted ? g_agx_d3d12_probe_ps_root : spaced ? g_agx_d3d12_probe_ps_spaces : counted ? g_agx_d3d12_probe_ps_uav : g_agx_d3d12_probe_ps;
         pso_desc.PS.BytecodeLength = rooted ? sizeof(g_agx_d3d12_probe_ps_root)
-                                   : counted ? sizeof(g_agx_d3d12_probe_ps_uav) : sizeof(g_agx_d3d12_probe_ps);
+                                   : spaced ? sizeof(g_agx_d3d12_probe_ps_spaces) : counted ? sizeof(g_agx_d3d12_probe_ps_uav) : sizeof(g_agx_d3d12_probe_ps);
         pso_desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
         pso_desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
         pso_desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
@@ -1030,7 +1035,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             counted_ok = c[0] == green;
             ID3D12Resource_Unmap(counter_back, 0, NULL);
         }
-        printf("AGX_D3D12_%s: %s\n", indirect_no_count ? "C14NCA" : indirect ? "C14A" : "C13A",
+        printf("AGX_D3D12_%s: %s\n", spaced ? "C17B" : indirect_no_count ? "C14NCA" : indirect ? "C14A" : "C13A",
                pass && counted_ok ? "PASS" : "FAIL");
     }
     if (signature) ID3D12CommandSignature_Release(signature);
@@ -1057,7 +1062,8 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
  * sampling a 2x2 RGBA8 texture (green, blue / white, black) uploaded with
  * CopyTextureRegion, SRV t0 from a shader-visible table, static point-clamp
  * sampler s0, both visible to the PS; PASS = the four 32x32 quadrants. */
-static int draw_textured(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+static int draw_textured_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int spaces) {
+    const char *step = spaces ? "C17C" : "C6E";
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0}, tex_desc = {0};
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
@@ -1089,6 +1095,8 @@ static int draw_textured(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     parameter.DescriptorTable.NumDescriptorRanges = 1;
     parameter.DescriptorTable.pDescriptorRanges = &range;
     parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    range.RegisterSpace = spaces ? 5u : 0u;
+    sampler.RegisterSpace = spaces ? 6u : 0u;
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     desc.Width = 64;
     desc.Height = 64;
@@ -1133,13 +1141,13 @@ static int draw_textured(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
                                               ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature,
                                               (void **)&root);
-    printf("C6E resources/views/root hr=0x%08lx\n", (unsigned long)hr);
+    printf("%s resources/views/root hr=0x%08lx\n", step, (unsigned long)hr);
     if (SUCCEEDED(hr)) {
         pso_desc.pRootSignature = root;
         pso_desc.VS.pShaderBytecode = g_agx_d3d12_probe_vs_tex;
         pso_desc.VS.BytecodeLength = sizeof(g_agx_d3d12_probe_vs_tex);
-        pso_desc.PS.pShaderBytecode = g_agx_d3d12_probe_ps_tex;
-        pso_desc.PS.BytecodeLength = sizeof(g_agx_d3d12_probe_ps_tex);
+        pso_desc.PS.pShaderBytecode = spaces ? g_agx_d3d12_probe_tex_spaces : g_agx_d3d12_probe_ps_tex;
+        pso_desc.PS.BytecodeLength = spaces ? sizeof(g_agx_d3d12_probe_tex_spaces) : sizeof(g_agx_d3d12_probe_ps_tex);
         pso_desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
         pso_desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
         pso_desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
@@ -1165,7 +1173,7 @@ static int draw_textured(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         pso_desc.SampleDesc.Count = 1;
         hr = ID3D12Device_CreateGraphicsPipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
-        printf("C6E CreateGraphicsPipelineState hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s CreateGraphicsPipelineState hr=0x%08lx\n", step, (unsigned long)hr);
     }
     if (SUCCEEDED(hr))
         hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -1215,7 +1223,7 @@ static int draw_textured(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         ID3D12GraphicsCommandList_DrawInstanced(list, 4, 1, 0, 0);
         transition(list, target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
         ID3D12GraphicsCommandList_CopyTextureRegion(list, &back, 0, 0, 0, &target_loc, NULL);
-        hr = run_list(queue, fence, list, base + 1, "C6E draw");
+        hr = run_list(queue, fence, list, base + 1, spaces ? "C17C draw" : "C6E draw");
     }
     if (SUCCEEDED(hr)) {
         D3D12_RANGE all = {0, 16384};
@@ -1225,12 +1233,12 @@ static int draw_textured(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             const unsigned char *bl = bytes + 48 * 256 + 16 * 4, *br = bytes + 48 * 256 + 48 * 4;
             quadrants_ok = tl[0] == 0 && tl[1] == 255 && tl[2] == 0 && tr[0] == 0 && tr[1] == 0 && tr[2] == 255 &&
                            bl[0] == 255 && bl[1] == 255 && bl[2] == 255 && br[0] == 0 && br[1] == 0 && br[2] == 0;
-            printf("C6E quadrants tl=%u,%u,%u tr=%u,%u,%u bl=%u,%u,%u br=%u,%u,%u\n", tl[0], tl[1], tl[2], tr[0], tr[1],
+            printf("%s quadrants tl=%u,%u,%u tr=%u,%u,%u bl=%u,%u,%u br=%u,%u,%u\n", step, tl[0], tl[1], tl[2], tr[0], tr[1],
                    tr[2], bl[0], bl[1], bl[2], br[0], br[1], br[2]);
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("AGX_D3D12_C6E: %s\n", SUCCEEDED(hr) && quadrants_ok ? "PASS" : "FAIL");
+    printf("AGX_D3D12_%s: %s\n", step, SUCCEEDED(hr) && quadrants_ok ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (pso) ID3D12PipelineState_Release(pso);
@@ -1250,6 +1258,9 @@ static int draw_textured(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
  * cleared to 1.0, a near green triangle (z 0.25) drawn first, then a far
  * blue full-target quad (z 0.75) with DepthFunc LESS; PASS = centre green
  * (the far quad fails there), a point outside the triangle blue. */
+static int draw_textured(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_textured_impl(d, q, f, b, 0); }
+static int step_c17c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_textured_impl(d, q, f, b, 1); }
+
 static int draw_depth(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0}, depth_desc = {0};
@@ -2117,12 +2128,104 @@ static int queue_fence_signal(ID3D12Device *device) {
 
 /* EXP1369: a refused step removes its device, so the later steps run on a
  * fresh device each (device, direct queue, fence from 0). */
+/* C17A: equal logical UAV registers in two spaces must never alias. */
+static int compute_spaces(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_ROOT_PARAMETER parameters[3] = {{D3D12_ROOT_PARAMETER_TYPE_UAV},
+        {D3D12_ROOT_PARAMETER_TYPE_UAV}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {3, parameters};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    ID3D12Resource *outputs[2] = {uav_buffer(device), uav_buffer(device)};
+    ID3D12Resource *backs[2] = {
+        committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST),
+        committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST)};
+    ID3D12Resource *init = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *cb = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    UINT *words = NULL;
+    UINT first[2] = {0}, last[2] = {0}, bad = 32768;
+    HRESULT hr = outputs[0] && outputs[1] && backs[0] && backs[1] && init && cb ? S_OK : E_FAIL;
+    for (UINT p = 0; p < 3; ++p) parameters[p].Descriptor.RegisterSpace = p + 1;
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(init, 0, NULL, (void **)&words);
+    if (SUCCEEDED(hr)) {
+        for (UINT i = 0; i < 16384; ++i) words[i] = 0xdeadbeefu;
+        ID3D12Resource_Unmap(init, 0, NULL);
+        hr = ID3D12Resource_Map(cb, 0, NULL, (void **)&words);
+    }
+    if (SUCCEEDED(hr)) {
+        words[0] = 17; words[1] = 29; words[2] = words[3] = 0;
+        ID3D12Resource_Unmap(cb, 0, NULL);
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
+        ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature, (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_spaces;
+        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_spaces);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+    }
+    printf("C17A root/pipeline hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+        &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+        &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        for (UINT j = 0; j < 2; ++j) {
+            transition(list, outputs[j], D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
+            ID3D12GraphicsCommandList_CopyBufferRegion(list, outputs[j], 0, init, 0, 65536);
+            transition(list, outputs[j], D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
+        ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 0, ID3D12Resource_GetGPUVirtualAddress(outputs[0]));
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 1, ID3D12Resource_GetGPUVirtualAddress(outputs[1]));
+        ID3D12GraphicsCommandList_SetComputeRootConstantBufferView(list, 2, ID3D12Resource_GetGPUVirtualAddress(cb));
+        ID3D12GraphicsCommandList_Dispatch(list, 256, 1, 1);
+        for (UINT j = 0; j < 2; ++j) {
+            transition(list, outputs[j], D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            ID3D12GraphicsCommandList_CopyBufferRegion(list, backs[j], 0, outputs[j], 0, 65536);
+        }
+        hr = run_list(queue, fence, list, base + 1, "C17A dispatch");
+    }
+    if (SUCCEEDED(hr)) {
+        const D3D12_RANGE all = {0, 65536};
+        bad = 0;
+        for (UINT j = 0; j < 2; ++j) {
+            words = NULL;
+            hr = ID3D12Resource_Map(backs[j], 0, &all, (void **)&words);
+            if (FAILED(hr) || !words) { bad = 32768; break; }
+            first[j] = words[0]; last[j] = words[16383];
+            for (UINT i = 0; i < 16384; ++i) bad += words[i] != (j ? 5u * i + 29u : 3u * i + 17u);
+            ID3D12Resource_Unmap(backs[j], 0, NULL);
+        }
+        printf("C17A readback bad=%u first=%u,%u last=%u,%u\n", bad, first[0], first[1], last[0], last[1]);
+    }
+    printf("AGX_D3D12_C17A: %s\n", SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (blob) ID3D10Blob_Release(blob);
+    if (errors) ID3D10Blob_Release(errors);
+    for (UINT j = 0; j < 2; ++j) {
+        if (outputs[j]) ID3D12Resource_Release(outputs[j]);
+        if (backs[j]) ID3D12Resource_Release(backs[j]);
+    }
+    if (init) ID3D12Resource_Release(init);
+    if (cb) ID3D12Resource_Release(cb);
+    return !(SUCCEEDED(hr) && bad == 0);
+}
+
 typedef int (*probe_step)(ID3D12Device *, ID3D12CommandQueue *, ID3D12Fence *, UINT64);
 static int step_c6c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 1); }
 static int step_c6d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 2); }
 static int step_c11(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 3); }
 static int step_c13(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 4); }
 static int step_c14(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 5); }
+static int step_c17b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 7); }
 static int step_c16a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { (void)b; return compute_srv(d, q, f, 1); }
 static int step_c14nc(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 6); }
 static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step step) {
@@ -2175,6 +2278,9 @@ int main(void) {
                 (void)run_isolated(adapter, "C14NC", step_c14nc);
                 (void)run_isolated(adapter, "C14B", compute_indirect);
                 (void)run_isolated(adapter, "C16A", step_c16a);
+                (void)run_isolated(adapter, "C17A", compute_spaces);
+                (void)run_isolated(adapter, "C17B", step_c17b);
+                (void)run_isolated(adapter, "C17C", step_c17c);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
             }
             IDXGIAdapter1_Release(adapter);
