@@ -56,103 +56,39 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   validated. 1404C19/C20accepted. KMDforeigncache0c458548 repeatedlyvalidated,
   no provenlost-unit leak; never mask inUMD/increasecapacitywithoutcause.
 
-## C23 / EXP1431 PREBUILT — UNLAUNCHED / SUPERSEDED prerequisite
+## Held C23 / next C24 / C15 offline state
 
-- C23mainimplementationeb34f8ee/CHANGES94dfbe30, noteD3D12-C23-texture1d.md.
-  BoundedcommittedDEFAULTnonarray1D width1..16384/legalmips/R32UINT-RGBA8,
-  actualAILquery/create/0x105transitionff/checkedcopy/SRV/UAVdimensionmetadata
-  acrosscomputeVSPS/unused1Dskip. NoCAPSdelta.
-- Query65534cases458782mipsREDGREEN;actualcreate12negatives/view-bindcrossdim/
-  unusednull/copy10negativesPASS;FXC2+actualDXBCNIRAsahivalidationPASS;
-  durable5PASS7.931s/legacy25PASS3.343s. Main zeroVAfix757f nowcorrects1D too.
-- Old1427source6df built695/PDB/stackPASS but UNLAUNCHED: prerequisite1426ALL54
-  failed and native1D hadsamefalseVAguard. Preserve oldpackage/templates;
-  oldC23a875/preparation1426 alsoUNLAUNCHED. Never relabel oldpackage.
-- NEW immutable1431 c2827a2af667bff31cb0189c79dfe4a191d8f2b0 parent5279,
-  exactly9C23files from6df BUT ownerf55dd9e37144768a7a5611bff93513a7603155613fb37d6012deb5532693dfb3
-  withbothinvalidguardsremoved; DDI12d55 WITHOUTC15publisher, no unlinkedC15files.
-  Source9manifest68d451d35a6fe0e71ee94f0a0790626688c463642e0bce6aa8209af32e2a5db7.
-  PREP.local/preparation-1431/sourceverifierPASS. BUILD_BEFORE8104c510,
-  rootbuildsession57315DONE/PACKAGEPASS/695/PDB/stack13824+6544.
-  Originalnative4+logpreserved2283063cd1b722fb648184c4cbcd153a6f6ec26dae1a6c9a14ada65a1f815f2e.
-  Receipt4fc7c3b61d19cc1e1b5d3c6a7aab82492b4afe2e72da358986e7437544b28ec4. NOhardwareapproval.
-- ExactNEW1431Windows3rc0/source-toolpostpins/backup6PASSmanifest766921c85007d87c252a39478e4a2ba47a8a9bfe78245328090a97b0fd7775cd.
-  All7codegates+phasebeforeOFFLINEREADY9b4d0d81/json2d10595c33670d26ae58e57b0689e5587a922d1b67abf7bdb3d274c402286396.
-  Probe57ccf5127118f9c41958851183e415005122cf805226df39c6461bd4c48d4a3d55+pool5574 copiedto1431names/hashMATCH. NOlaunchmarker.
-  Inheritancescopeexplicit: currentfull1592vsfrozenDDIwithoutpublisher +prior6df1589 andfreshc282syntax, notsamewholesourcefullclaim.
-- Hardware requires actual1430ALL54PASS/NEWEXP_DONE+exactRECOVERY_DONE. Any1430new
-  fail ->receiptsfirst/newcausaltarget, noautolaunchofdependentC23.
-
-## C15 completed CPU checkpoints, unlinked; next primary-source bridge plan
-
-- License+plan75632532/processrowea9cc8b0: selecteddxil-spirv8434b0639fb2a48ce13aac08a420ecce5d23df0e
-  MIT/BSD/Khronos197inputs/83Cpp/9archives/notices, externalcodeoutsideGit.
-- Compositeexternalpatchdf3470.../12files/180noexceptmigrations3owned;
-  host1421retry3ASanUBSan2fixturesPASS; Windows83Cpp/9freshlibs/25commands0,
-  effectiveEHs-on/c-off/a-off/MD/PEimports/notices BUILD_ONLYPASS.
-- NativeCPU1425twofreshARM64EXEsPASS/rc0 oninertguest/noGPU/packagechange.
-  Originalstrict-hostSHA REVIEW_REQUIRED preserved; onlyID40/41rename4words.
-  Separate3existingofflineSPIRV-val/NIR/semantic384word192lane(173active19tail)
-  oracle/346storesPASS+3negative346badcontrols/all40pinsstable. Note509fe28e,
-  finalindex+CHANGES e8a63e01/47files94319a0a7c0be5174b22a97fcd4c79b19a01629cd46e7d588ff6cb4d59e9d252.
-- FailedFillpublication666abec669e344d3cc494812319720c5f6a3e553/CHANGES64ff5e54:
-  publishfirstvalidglobaltokenonlyAFTERsuccessfulFillTable. Actual137RED6GREEN0,
-  durableCURRENTnative3rc0/137PASS/all277pins/V2outer0; full1590exact119baseline.
-  OriginalV1outerFAIL(stderrEAPStop)/innerPASS preserved. No crossdevice/lifetimefix.
-  EXCLUDEDfrom1430/1431hardware. OriginalR1zeroCachec18d74e3/Librarybe917753,
-  positivefamilieslist0003(408)/queue0001(56), tableNum instanceindexnotversion.
-- NEW unlinkedshader-ownedcore82645900cd17e10ed4f032d0e4647a49064eb4a7/CHANGES8e85ac26.
-  Own PROGRAM/signatures/rootcompatbytes viarelativeoffsets; nonallocCalculate+
-  checkedplacementCreate/actualparser+actualzeroCache. Trustedspan/rootprovider
-  lifetime/readability is explicit precondition NOTimplementedprovider/VOID-DDI.
-  PrivateHOST1428 114467checksASanUBSan/3argvPASS, thennative3AA64objectPASS
-  undera6c879bd/localSDKC4201guardonly/all4904pins; no objectlink/run.
-  Native manifestbb8e4772ad6d77a6092fef02158e4b89d30f00be3491f45499d17b4aaa966ebc.
-- DurableCURRENTrepo gate6b7c3f98 exact3derivedargv/1unittestPASS1.244s/114467checks,
-  post22pinsunchanged. Manifest e79deaed2a64eedd7c53b5d475e588934c2a35106a888d1e0bd3bc26fe7673b5;
-  independent29fe4cd921747a4d1e7aec50b3b61296c94ba7316f59804bd0275c06d899a472.
-  Firstpath-spellingSTOP(no compiler)/nativeinitialABIwarningSTOP preserved.
-  Defaultfullskipsbeforetoolwork; full1592exact119baseline/10skip.
-- NEWunlinkedlegacyPROGRAMframer 826c7bcf17df24925ccfffd7ac8b8c5b4d440a80 /CHANGESrowpendingthiscommit.
-  OriginalhostwarningPASSthenrefinedHOST4rc0/allstderrEMPTY/3664checks/12actualFXC
-  compareCURRENTfullparser. NewC5f57/header75bb; checkedspan N<=floor(B/4) proves
-  product<=SIZE_MAX on32/64, no32executionclaim. Native54fb6a05 2AA64C-C++header
-  objects/W4WX0/4901postpins; manifestd084857077afd8df6512f037314ba2368dec93c3de08c159f03935e87ddaf9b1.
-  DurableCURRENT0b5a53ae1testPASS0.443s/4rc0/allstderrEMPTY/3664/36pinsstable,
-  manifest3e685cb71e0a55d4384b4749e23872f632737a00fae280f1f4ec58a96ffd576b.
-  Full1593/213.192s/exact119baselineNOaddedNOremoved/11skip SHA3a4624e275fb84e960e0f2bf4a032887f5ae7ce2504c951cdbed2bac5f56558c.
-  NoteD3D12-C15-legacy-program-frame.md. No existingparser/project/DDI/capschange;
-  hardware1430/1431EXCLUDE. Agentc18privateplan/patch taggedownedLEGACY-DXILstorage
-  continuity next, preserveownedlayout/oldDXILmagic+114467oracle, no newbridgeyet.
-- No IRvalidity/fullOOM/trustedprovider/componentlifetime/DDIregistration/production
-  DXILlink/SM6capsclaim. Agentc18ONEsourcepass nextreadablePROGRAMspan/rootowned
-  provider/VOID-DDIerrorpolicy/minimalbridgeplan. Faultsweep NOTAUTHORIZED/UNRUN;
-  earlier auto-security-review rejection preserved, do not retry identicaltask.
-
-## C24 arrays source policy / CPU gate stop / smaller gate pending
-
-- CanonicalPIPE_TEXTURE_1D_ARRAY backing evenarray_size1. Logicalnonarray image
-  single_layer_view=true ->actualutil sampler1D/PBE2D; logicalarrayfalse EVEN
-  selectedcount1 ->both2D_ARRAY matchingactualNIR image_writearrayflag. No target
-  mutation/arrays>=2hack. Actuallibagx_txs explicit1D/array+depthpreservescount.
-- EXP1429actualwholeagx_state.c+u_helpers2TU gate STOPfirstcompile missingxf86drm.h,
-  remaining3argvUNRUN.37direct+6958headerpinsstable; receiptb8f3d17eb0eb272b96577f35ac914a90c7c22b10989a1de6c4f2128cdff27974.
-  One sourcepass8ee8f70b foundno originalapprovedlibdrmheader/configureddep,
-  agx_stateobjectneverpreviouslybuilt. No shim/newinstall/retry; actual27SDK+tool1590.
-- Selectedactual10functionsourceview gate1432 preservedSTOPs: missingendianflag,
-  originalprintfuint64format, thennonheaderASanignorelistf0180e94. EachnewBEFORE/freshroot;
-  nativebodiesunchanged, no shims. FinalRETRY3 under54fb6a05 PASS4rc0/allstderrEMPTY/
-  18cases2formats/canonicalARRAY1nonarrayBYTEIDENTICAL/count1ARRAYdim3depth1/
-  layer1-2offset+0x4000-0x8000/stride16384; actual.dclosures/post55+6958pinsstable.
-  Receipta9f97c4b5bf8f3b1d0f813010e12bcfb3bf33e3d8816c47c9c00be6e141d4ac5.
-  FinitealreadywritableGPUlayoutCPUonly, notquerylegalization/GPU/generalarrays.
-- Sourcepath84663323 confirmsquery+createSAMEinitializer/updatebase/inferIMAGE
-  uncompresseddepth0==1 regardlessarraysize->setup->AIL. No unsupportedmigrationguess.
-- EXP1434FXC2 BEFOREd162a42b authorizedfreshsource .local/c24-fxc-array-prep
-  twoCS5_0actualheadersONLY; agentsm51EXECUTINGcompile+dataextractafteractualSHAfreeze.
-  Before5dcb2d7a/script5f8215e7/HLSL7018b8f4+d43c5f81; newbuilderc24-texture1d-array-fxc-fresh.
-  NO NIRcompilerpermissionuntilactualFXCbytesfrozen/newBEFORE; CURRENTmetadataOTHER
-  untilC24enum implementation. No newdriver/caps/guestmutation.
+- C23 production eb34f8ee/zeroVAfix757f4802 already implemented/offlineverified.
+  Old1431sourcec2827a2af667bff31cb0189c79dfe4a191d8f2b0/packagebuilt695/PDB/
+  Windows3rc0/stack13824+6544, NEVER LAUNCHED. Its prerequisite1430ALL54 failed.
+  Preserve1431/1427packages; do not reuse unchanged. NewC23 requiresnewID and
+  nativePBEfixbase. C23query65534/458782mips,create12negatives/viewcopy/NIRPASS.
+- C24 canonicalPIPE_TEXTURE_1D_ARRAY evenarray1, logicalnonarray single_layer_view
+  retains old1D/PBE2D; logicalarraycount1 remains2D_ARRAY. Actualselectednative
+  packers18caseCPU1432retry3PASSmanifest a9f97c4b5bf8f3b1d0f813010e12bcfb3bf33e3d8816c47c9c00be6e141d4ac5.
+  FXC1434load13a85e9d/store1ebabd5a actualDXBC andNIR3rc0/validationPASS,
+  metadataOTHERuntilcandidateenums. Noquerycapacity/generalarrays/GPUclaimyet.
+  SOURCEONLY.local/c24-array-implementation-prep patchad6e8a7a,
+  ten proposedCPUargv UNRUN; kmdagentonepassreview pending; no trackedC24edits.
+- C15 license+plan75632532/processrowea9cc8b0 selecteddxil-spirv8434b063...
+  MIT/BSD/Khronos197inputs83Cpp9archives/notices externaloutsideGit.
+  Compositeexternalnoexceptpatchdf3470/nativeCPU1425twoARM64EXEsPASS oninertguest;
+  originalstrictSHAREVIEW_REQUIRED retained/onlyID40-41rename4words;
+  semantic384words173active19tail346storesPASS, negativecontrolsPASS.
+  Note509fe28e/indexe8a63e01. No compilerGPUenable/capsclaim.
+- C15 failedFillpublication666abec6+row64ff5e54 actual137RED6GREEN0, globalfirstvalid
+  tokenlifetime stillunfixed; excluded1430/1436. Faultsweep earlierautomatic
+  securityreviewrejected; do not retry identicalrequest.
+- Unlinkedownedcore82645900/legacyframer826c7bcf/taggedcontinuity
+  e28a1096b0e3cabcba260163b96e3f8420630890; CHANGESd7ce1829.
+  ExactoldDXILmagic/88Bheader/privatelegacytypedkind/sharedCalculatebothactual
+  framers; trustedstable/nonaliasreadablespan/rootproviderexplicitpreconditions.
+  HOST114467baseline+424029continuity/all6rc0/stderrEMPTY; actualFXC9CSVSPSaccept/
+  3GSHSDS internalUnsupported/60storageaccept18refusals. Native3AA64/W4WX0,
+  manifest1e32d2310d9bfa685689f4f30d482ab20f3ad68c47e450273f05f56b1fadc7b6.
+  CURRENTdurable1PASS1.987s/sixrc0/57postpins; full1593/213.369s exact119baseline
+  (68fail51errors11skip)/noaddednoremovedSHA0744348cba0274ce6dce34d50ac85762b625ea46a0707b1fe10109253603e48b.
+  NoIRvalidity/trustedprovider/componentlifetime/VOID-DDIregistration/link/SM6GPU.
 
 ## Process / paths
 
@@ -176,14 +112,17 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
 - Agentsc18_crash/sm51_parser/kmd_private_pool; completedagent needsFOLLOWUP_TASK,
   notsend_messagealone. Do not waitindefinitely; bench1419supervisorwarningapplies.
 
-## Latest offline C15/C24 (supersedes pending statements above)
 
-- C15 taggedlegacy/DXILownedstorage e28a1096b0e3cabcba260163b96e3f8420630890,
-  CHANGESd7ce1829: host114467+424029checks/all6rc0/stderrEMPTY; native3AA64WX0;
-  CURRENTdurable1PASS1.987s/sixrc0/57postpins. Full1593/213.369s exact119baseline
-  (68fail51errors11skip), noadded/noremoved, SHA0744348cba0274ce6dce34d50ac85762b625ea46a0707b1fe10109253603e48b.
-  Still unlinked, no trustedprovider/VOID-DDI/lifetime/caps/GPUclaim.
-- C24 FXC1434twoactualheadersPASS; actualNIR3rc0/load1Darray/storeimagearrayPASS,
-  metadataOTHERuntilnewenum. Implementation SOURCEONLY .local/c24-array-implementation-prep,
-  patchad6e8a7a, ten proposedCPUargv UNRUN. Selectedactualpackers18casesPASS
-  does not establishgeneralarrayquery/GPU; holdcandidatebehindcurrentPBEfix.
+## Current next EXP1436 preparation
+
+- NativePBE narrowretry3 actual7argv0/0/0/1/0/0/0; RED33checks2fail/GREEN33zero,
+  18non3D byteidentical/forcearray/singleplanePASS;100direct+6958headersstable,
+  artifact4b894663688846f6f27652744644860c8b18c501fe1f25eeb17934236f5edd30.
+- ROOTproductionpureprojector+durableactualnativefixtureadopted; targeted31PASS
+  1.088s. Fullsuite98960RUNNING against119baseline; nowholeGREENclaim.
+- Immutable1436source5aeb6046d2a1084bd4560bcfe1fe4936fb1329d6 parent5279 exactly
+  projector+probeC21Elast twofiles, NOcurrentHEAD C23/C15/DDI. Sourcearchive693
+  integrityPASS; build44812RUNNING, logsSP/build1436.log andXP/EXP1436-d3d12-volume-pbe-depth/build-ssh.log.
+  BUILD_BEFOREae4b37a5; separateHARDWAREmarkerABSENT/unapproved. PREP.local/preparation-1436.
+- Buildsnapshotproduced; nativepackage/fullsuite/PDB/stack/originalpreservation/
+  finalsignhashrecoverygatesbeforehardware. SoleguestcurrentlyinertAbsent/SSHup.
