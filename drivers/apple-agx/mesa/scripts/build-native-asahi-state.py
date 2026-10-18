@@ -313,6 +313,94 @@ agx_update_shader(''')
    pipe->bind_vs_state''')
     return state, shader, device
 
+def project_resource_layout(pipe):
+    """Share the pinned native pre-BO prefix with an original no-BO query.
+
+    The reviewed MIT source stays in its original notice-bearing generated
+    file. Move its existing policy; never reimplement modifier/AIL arithmetic.
+    """
+    import hashlib
+
+    marker = 'static struct pipe_resource *\nagx_resource_create_with_modifiers('
+    if pipe.count(marker) != 1:
+        raise ValueError('Ambiguous native resource constructor')
+    constructor = pipe.index(marker)
+    start = pipe.index('   nresource->base = *templ;', constructor)
+    end = pipe.index('   if (templ->target == PIPE_BUFFER)', start)
+    prefix = pipe[start:end]
+    if hashlib.sha256(prefix.encode()).hexdigest() != '3160ca05ccc1be5f7119ba69dbffee7c28445e5206ceb424df524297802eabdb':
+        raise ValueError('Pinned native resource layout prefix changed')
+    refusal = '      free(nresource);\n      return NULL;'
+    reference = '   pipe_reference_init(&nresource->base.reference, 1);\n\n'
+    if prefix.count(refusal) != 2 or prefix.count(reference) != 1:
+        raise ValueError('Native resource layout ownership anchors changed')
+    shared = prefix.replace(refusal, '      return false;').replace(reference, '')
+    helper = '''
+/* C21: both creation and the no-BO query execute the original layout policy.
+ * Called only with a validated native resource template. */
+static bool
+agx_resource_layout_init(struct pipe_screen *screen,
+                         const struct pipe_resource *templ,
+                         const uint64_t *modifiers, int count,
+                         struct agx_resource *nresource)
+{
+   struct agx_device *dev = agx_device(screen);
+''' + shared + '''   return true;
+}
+
+int
+AgxWin32AsahiQueryResourceLayout(struct pipe_screen *screen,
+   const struct pipe_resource *templ, const uint64_t *modifiers, int count,
+   AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
+{
+   if (!result)
+      return 0;
+   memset(result, 0, sizeof(*result));
+   if (!screen || !templ || count < 0 || (count > 0 && !modifiers))
+      return 0;
+
+   struct agx_resource resource = {0};
+   if (!agx_resource_layout_init(screen, templ, modifiers, count, &resource))
+      return 0;
+   const struct ail_layout *layout = &resource.layout;
+   STATIC_ASSERT(AGX_WIN32_ASAHI_LAYOUT_LEVELS == AIL_MAX_MIP_LEVELS);
+   result->SizeBytes = layout->size_B;
+   result->Modifier = resource.modifier;
+   result->LayerStrideBytes = layout->layer_stride_B;
+   result->MetadataOffsetBytes = layout->metadata_offset_B;
+   result->CompressionLayerStrideBytes = layout->compression_layer_stride_B;
+   result->SparseTableSizeBytes = layout->sparse_table_size_B;
+   result->RequestedLevels = templ->last_level + 1;
+   result->AllocatedLevels = layout->levels;
+   result->Tiling = layout->tiling;
+   result->EffectiveBind = resource.base.bind;
+   result->Flags = (layout->mipmapped_z ? AGX_WIN32_ASAHI_LAYOUT_MIPMAPPED_Z : 0) |
+      (layout->compressed ? AGX_WIN32_ASAHI_LAYOUT_COMPRESSED : 0) |
+      (layout->page_aligned_layers ? AGX_WIN32_ASAHI_LAYOUT_PAGE_ALIGNED_LAYERS : 0) |
+      (layout->writeable_image ? AGX_WIN32_ASAHI_LAYOUT_WRITEABLE_IMAGE : 0) |
+      (layout->renderable ? AGX_WIN32_ASAHI_LAYOUT_RENDERABLE : 0);
+   memcpy(result->LevelOffsets, layout->level_offsets_B, sizeof(result->LevelOffsets));
+   memcpy(result->CompressedLevelOffsets, layout->level_offsets_compressed_B,
+          sizeof(result->CompressedLevelOffsets));
+   return 1;
+}
+
+'''
+    replacement = '''   if (!agx_resource_layout_init(screen, templ, modifiers, count, nresource)) {
+      free(nresource);
+      return NULL;
+   }
+   pipe_reference_init(&nresource->base.reference, 1);
+
+'''
+    pipe = pipe[:start] + replacement + pipe[end:]
+    pipe = pipe[:constructor] + helper + pipe[constructor:]
+    include = '#include "agx_state.h"'
+    if pipe.count(include) != 1:
+        raise ValueError('Ambiguous native layout header include')
+    return pipe.replace(include, include + '\n#include "agx_win32_asahi_layout.h"', 1)
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', required=True, type=Path)
 parser.add_argument('--windows-platform-declarations', action='store_true')
@@ -5793,6 +5881,27 @@ agx_shader_initialize("""
             overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
                 'after_staging_failure'] = hashlib.sha256(
                     pipe_target.read_bytes()).hexdigest()
+            # C21: one reviewed native layout policy serves creation and a
+            # no-BO query. The query does not admit any resource dimension.
+            reviewed_layout_sources = {
+                'src/gallium/drivers/asahi/agx_pipe.c':
+                    'e29b0c206bdadfa14de83c439526fef5f8d8650a3f7ae223aa2e8e945386d86e',
+                'src/asahi/layout/layout.c':
+                    '2620c7369759a671e606e4720b70e5b4fefb94f103ac3c085fe4b61afcfd0457',
+                'src/asahi/layout/layout.h':
+                    'e4c55c1541406d384e5c67df6ff81e0b45b38d424e287cf5c4256a8de822f2a3',
+            }
+            for layout_path, reviewed_sha in reviewed_layout_sources.items():
+                if hashlib.sha256((mesa/layout_path).read_bytes()).hexdigest() != reviewed_sha:
+                    raise SystemExit('Reviewed native layout source changed: '+layout_path)
+            layout_header = 'src/gallium/drivers/asahi/agx_win32_asahi_layout.h'
+            shutil.copy2(args.project/'drivers/apple-agx/mesa/winsys/agx_win32_asahi_layout.h',
+                         out/layout_header)
+            overlays.setdefault(layout_header, {})['project_source_sha256'] = hashlib.sha256(
+                (out/layout_header).read_bytes()).hexdigest()
+            pipe_target.write_text(project_resource_layout(pipe_target.read_text()))
+            overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
+                'after_resource_layout_query'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
                 path = out/key

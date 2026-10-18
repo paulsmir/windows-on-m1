@@ -1,10 +1,11 @@
 # D3D12 C21: coherent volume resource, copy and view contract
 
-Status: read-only source/design checkpoint, 2026-10-18. C19 source `53e02537`
-is pinned/building; parent and the C20 agent own subsequent production work.
-Only this note is written by the C21 lane. No C21 implementation, builder,
-package, hardware run, commit or ledger verdict is established.
-Classification: FULL GRAPHICS frontend resource/copy/view semantics.
+Status: offline layout-query foundation after parent-pinned C20 snapshot
+`80fe9e3c` (686 files), 2026-10-18. The volume resource/copy/view design below
+remains unimplemented. Parent authorized only the shared native pre-BO query
+projection, original header, deterministic tests and this note. No DDI/owner/
+probe/resource admission, capabilities, package/hardware verdict or commit is
+established. Classification: FULL GRAPHICS frontend layout/resource semantics.
 
 ## Sources inspected
 
@@ -359,9 +360,133 @@ actual creation; that policy still needs explicit tests. A post-create native
 extent accessor can verify this without pretending it retroactively repaired
 the earlier allocation-info callback.
 
-This identifies the required extension and its exact shared inputs; no native
-helper, Asahi refactor, allocation metadata correction or 3D admission is
-implemented by this note. Parent decides whether the small shared-prefix
-extension is accepted before implementation. Existing 2D metadata correction
-remains a separately reviewable defect, with no observed physical-underallocation
-or hardware-failure claim.
+This design checkpoint identified the required extension and its exact shared
+inputs. Parent subsequently authorized the small shared-prefix query foundation
+as recorded below. Allocation metadata correction and 3D admission remain
+unimplemented. Existing 2D metadata correction is a separately reviewable defect,
+with no observed physical-underallocation or hardware-failure claim.
+
+## C21 layout foundation: explicit per-file license/compatibility review
+
+Reviewed before any source projection patch, 2026-10-18. C20 snapshot
+`80fe9e3c` (686 files) is parent-pinned. Parent explicitly authorized only the
+native no-BO layout-query foundation; no resource/capability admission follows.
+
+- Upstream `agx_pipe.c` SHA256
+  `e29b0c206bdadfa14de83c439526fef5f8d8650a3f7ae223aa2e8e945386d86e`:
+  SPDX MIT; notices Red Hat Inc.2010, Broadcom2014-2017,
+  Collabora Ltd.2019-2020, VMware Inc.2006.
+- There is no current `agx_resource.h`. The actual agx_resource definition is
+  `agx_state.h:905-936`, SHA256
+  `6d5e7f85849bce3c3f2e5569373a24f6c0d692217a8e493754298750b755e7ab`:
+  SPDX MIT; Alyssa Rosenzweig2021, Collabora Ltd.2019-2021.
+- Called AIL `layout.c` SHA256
+  `2620c7369759a671e606e4720b70e5b4fefb94f103ac3c085fe4b61afcfd0457`
+  and `layout.h` SHA256
+  `e4c55c1541406d384e5c67df6ff81e0b45b38d424e287cf5c4256a8de822f2a3`:
+  SPDX MIT, Alyssa Rosenzweig2022. Their algorithm is linked/called, not copied
+  into a newly written layout implementation.
+
+Read upstream docs/license.rst (per-file SPDX governs) and licenses/MIT in full,
+and repository LICENSE (MIT). MIT permits use/modification/distribution with
+copyright and permission notices preserved, and supplies the warranty
+disclaimer. This same-license integration is compatible: generated build-local
+Mesa files retain their original headers/notices; the source checkout is not
+modified; original wrapper/header/tests are MIT. The projection moves the
+reviewed prefix within the same notice-bearing generated file rather than
+importing an unreviewed external algorithm. Preserve the existing Mesa notice/
+license packaging provenance; no license removal, relicensing, GPL import or
+new third-party source vendoring is authorized. This is the explicit license
+review required by AGENTS.md for the proposed source transform.
+
+
+## Layout-query foundation implementation and verification
+
+The original `project_resource_layout` transform in
+`drivers/apple-agx/mesa/scripts/build-native-asahi-state.py` moves the reviewed
+native constructor's existing pre-BO prefix into `agx_resource_layout_init` in
+the same generated notice-bearing agx_pipe.c. The prefix SHA256 is
+`3160ca05ccc1be5f7119ba69dbffee7c28445e5206ceb424df524297802eabdb`;
+changed/ambiguous anchors refuse projection. The native constructor calls that
+helper and then continues to BO creation. The exported original query calls
+the same helper and never reaches a BO allocator. Modifier selection, bind
+inference, resource setup, AIL sizing/auxiliary initialization and native size
+refusal are not reimplemented. The constructor's reference initialization moves
+after the shared prefix; no prefix consumer reads it, and failure still frees
+the same resource before any BO exists.
+
+The build-local lifecycle projection copies original header
+`mesa/winsys/agx_win32_asahi_layout.h` into the generated Asahi source directory,
+records the header hash, applies the query projection after existing source
+transforms, and records the authoritative final agx_pipe.c hash. It additionally
+checks the reviewed raw agx_pipe.c and AIL layout.c/h hashes; agx_state.h already
+has its own raw-source hash gate. The reference checkout is never rewritten.
+
+`AgxWin32AsahiQueryResourceLayout` takes the native screen, validated native
+pipe_resource template and optional modifier list. It returns owned plain-C
+metadata (328 bytes on host): exact native BO-request size, selected modifier,
+requested versus expanded levels, level/compressed-level offsets, layer stride,
+compression metadata offset/stride, sparse-table size and effective layout/bind
+flags. It does not claim a D3D12 heap alignment or convert physical extent into
+runtime ResourceDataSize. Input must meet the native constructor's format/
+dimension preconditions; this query does not replace format/admission checks
+or u_transfer_helper's physical format lowering. Pointer/count/modifier/native
+size failures clear the result. It borrows no resource or layout pointer.
+
+The query's single actual agx_resource scratch is 808 bytes on the host; it
+allocates neither a BO nor a native resource/handle. All resource_create policy
+remains shared with the actual constructor. No owner or DDI is wired to this
+query yet, so the known runtime metadata mismatch is not described as fixed.
+
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? A query using a logical texel
+sum, wrong modifier/debug state, omitted inferred bind, partial mip chain,
+missing layer alignment or compression metadata would disagree with the native
+BO request or layout. A query accidentally calling BO creation would violate
+the pre-create/no-allocation contract.
+
+`test_native_resource_layout.py` projects the actual pinned source, then
+compiles the original and projected complete resource_create_with_modifiers
+functions, actual resource struct, actual modifier/setup functions and linked
+host AIL into one ASan/UBSan fixture. Only BO allocation and diagnostics/device
+debug plumbing are supplied by the fixture. The BO stub records the real native
+size request; the layout algorithm/modifier policy are not mocked. Tests
+compare complete native layout bytes, query metadata/offsets and selected
+modifiers, assert template immutability and zero BO calls for every query.
+They exercise array/volume, depth-dominant and partial requested mip chains,
+linear/staging/shared, compressed/uncompressed, explicit modifier lists,
+compression-disabled policy, invalid selection and the native >=4GiB refusal.
+
+RED `/tmp/agx-c21-layout-red.log`: expected query/constructor mismatch and
+missing drift refusal against the initial unsupported query. GREEN
+`/tmp/agx-c21-layout-green.log`: 2 tests PASS; 16 matrix cases include 3 compressed,
+3 linear, 6 volume and 4 rejections; query-bo=0, scratch808/result328 bytes. Related
+shader failure/provenance/DDI-identifier suites plus these tests: 12 PASS 0.823s
+(`/tmp/agx-c21-layout-related-green.log`). Python compile and diff checks pass.
+
+A wider 15-test selection also reported two unrelated errors, retained openly in
+`/tmp/agx-c21-layout-affected.log`: sampler_ranges.test_full_partial_zero_and_atomic_rejection
+has a fixture enum missing MESA_SHADER_COMPUTE/TESS_CTRL/TESS_EVAL; frontend_prepare.
+test_derived_source_is_reproducible_and_cannot_overwrite_control refuses the dirty
+pinned frontend. Those paths were not edited by this change. Parent owns the
+full-suite baseline comparison rather than this lane changing unrelated tests.
+
+The query returns the AIL/native constructor's BO-input request, not the final
+allocator-rounded KMD BO storage. The Windows backend agx_win32_asahi_bo.c:
+309-317 rounds GPUVA allocation bytes/alignment to 64 KiB (non-GPUVA 16 KiB). The
+fixture additionally extracts that actual backend shape block and verifies
+rounding the query request matches both native constructor paths; 7 cases require
+allocator padding. No allocator rounding policy is duplicated in production
+query code, and no BO allocator is changed. A future owner/DDI integration must
+apply the actual backend/heap alignment contract before promising runtime size.
+
+No Windows/native builder compilation or hardware run is performed by this
+lane. Parent still owns generated native compile/stack/provenance gates,
+commits/ledger and the later query-to-owner/DDI review before any new dimension
+admission. The foundation does not establish a hardware result.
+
+## Parent foundation gate and next integration boundary
+
+Full1519 tests163.466s:68fail51errors2skips; all119failure/error signatures matchC20baseline. Related12PASS and actualnativeconstructor/query16caseASan/UBSan matrix includes7backend-paddedcases; noBOquerycalls. Newquery reportsAIL inputextent, not backend-roundedKMD/heapbytes. NativeWindows archive/packagecompile isnext; no3D/DDI/owneradmission orhardwareverdict yet. REVIEWR85/R47 ACCEPT pinnedrawsource/provenance;R48 onehardwareowner;historicalG3/admissionDEFER.
+
+Subsequent source-only decision: pinnedCheckResourceAllocationInfo0003 usesUINT64 alignment andseparate ResourceData/AdditionalData sizes. Microsoft ResourceHeaps requiresquery-before-create, deterministicconcurrentqueries andresolvedlayout consistency. EnsureOwner isunsynchronized and createskernelcontext/nativeScreen/Context; ScreencreatesrodataBO. Thereforeallocationqueriesmustnot callEnsureOwner orassumeexistingowner. Existing2D/presentationreflection isindependentlyobservable; preserveit untilseparatelydesigned/tested. Initial3D shoulduseoneexplicit supporteduncompressedGPU-tiledmodifier forqueryandcreation, withpureexplicit-policyadapter/sharedprefix; nofakescreen andnoexplicitPIPE_BIND_SHADER_IMAGE. Windows modifierpolicyreadsNOCOMPRESS; currentselectorreadsdev.debug eagerly evenwithexplicituncompressedlist. Factor thatpolicy dependence withsource-equivalence tests beforeDDIintegration. Existingupstreamget_resource_param/get_handle assignmentsareremovedbyWindowsprojection andcannotbeafallback. Thesearefuturedesignfindings, notpartofthisfoundationimplementation.
+Sources: https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d12umddi/nc-d3d12umddi-pfnd3d12ddi_checkresourceallocationinfo_0003 and https://microsoft.github.io/DirectX-Specs/d3d/ResourceHeaps.html
