@@ -80,10 +80,15 @@ guest/launcher. Preserve dirty mu. Read skill and CLAUDE_WORKING_METHOD for tool
   Root still needs verify/indexACTUAL; optionalreplay pinned1406/1398/1401tools
   requiresfreshBEFORE, no recompilation. Earlierattempts preserved: outputpath,
   two exactASan/SDKtool-input pins, thenhostlink-isysroot fixes, notfunctionalRED.
-- Windows composite NOTYETAUTHORIZED: all83+facade need effectiveEHs/EHc-
-  (final/EHsc-), MD, rsp/CL/_CL_ parser. ExternalpurePythonhelper22testPREP
-  .local/c15-msvc-eh-parser-prep/before-inputs.json4b3687471b15b23be2fb4bd115ecb0a467b5791b34dd3f23008af34cd1b33df2.
-  Tests unrun; do not use old nominalregex ascompleteWindowsproof.
+- Windows composite BUILD_ONLY PASS: EH22host/native22PASS (actualWindowsAPI),
+  newfreeze91b52456d500be58b505b1543db3c52686c42979480944b50ecdf71cd75143a8,
+  83freshCpp/9libs/25commands0/separatefacade/ARM64link/PEimports/notices.
+  All83effectiveEH native models s-on/c-off/a-off/MD; root3798hashesverified.
+  .local/c15-composite-windows-1421-retry1-result manifest703dd966cdb93758956ac38b836efa74d41e9ee240664b0f25ae5fafc279f7d3.
+  FirstconfigurefailedrawRCbackslash; retryONLYRC/MTpathspellingfixed, samepins.
+  NEVERexecutedARM64EXEs; no nativejob/OOM/productionlink/capclaim.
+  Durable composite host/build note tracks exactresults. C23 Texture1D nextprep
+  underway outsideGit; C15 failed-firstFill tokenpublication actualtestprep.
 - Fault sweep NOTAUTHORIZED/UNRUN. Original15filedbdca33bPREP preserved in
   .local/c15-composite-fault-prep-v1-frozen. Currentpartialamendment has sticky
   flags/parser/symbolvalidator drafts, NOnewfreeze. Oldmanifestnotauthoritative

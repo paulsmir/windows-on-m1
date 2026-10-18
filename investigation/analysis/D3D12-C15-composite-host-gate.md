@@ -68,3 +68,27 @@ native receipt270e275adadcb933a3644882421591c18e06bca70465f62a4662233a4e8ff6ef,
 lexical receipt4c4416da831e6e0f75a81296de8eca53f5aa2a7603d76dbf13f2ebcd74a444c1.
 This closes the selected parser API branch gate. The composite Windows build
 and its actual83 compile commands remain a separate unexecuted checkpoint.
+
+## Observed Windows ARM64 build
+
+EXP1421 WINDOWS_COMPOSITE_RETRY1 passed all25 recorded commands. Fresh83-unit
+archive compilation took66.96s and produced nine new libraries; separate project
+units and facade compiled and both ARM64 fixture executables linked. Root read
+all83 effective policy models: native CommandLineToArgvW, EHs on, EHc/EHa off,
+release /MD. The separate facade has the same effective exception/runtime policy.
+All3798 collected file hashes matched final manifest
+703dd966cdb93758956ac38b836efa74d41e9ee240664b0f25ae5fafc279f7d3
+in .local/c15-composite-windows-1421-retry1-result. The artifact manifest records
+531 outputs and source postchecks record2709 inputs; distribution23files includes
+required notices. Actual compiler dependency closure, CRT directives and ARM64
+PE/import receipts are retained.
+
+The first configure attempt failed because raw RC path backslashes were parsed
+as CMake escapes. Its complete2773-file evidence remains preserved. Retry1 changes
+only RC/MT configure path spelling to forward slashes for the identical pinned
+tools, under freeze91b52456d500be58b505b1543db3c52686c42979480944b50ecdf71cd75143a8.
+No upstream source, exception flags, archive graph or policy changed in this repair.
+
+Neither ARM64 executable was run. Successful native compilation/linking closes the
+selected Windows build gate and does not establish a Windows converter job, an
+allocation failure sweep, production linkage or R1/SM6 admission.
