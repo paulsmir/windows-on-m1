@@ -10,29 +10,32 @@ Read skill /Users/pavel/.codex/skills/agx-d3d12-loop/SKILL.md and
 investigation/CLAUDE_WORKING_METHOD.md. Full suite has119 known failures/errors,
 not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
 
-## EXP1439 RECOVERING — root tool session60577, sole guest controller
+## EXP1439 COMPLETE / ACTUAL+CHANGES4030799a / normal inert guest
 
-- Run81544finished. START22:46:38Z/TOOL_END23:14:20Z/NEWEXP_DONEobserved23:18:54Z.
-  PREP.local/preparation-1439; SP/run1439-entry/chain1439/
-  newexp1439/watchdog1439.log. Native prebuilt; finalrepack/stageHASHES_MATCH23PASS.
-- Immutableb5fcb91ceee169544e8bafba6f74f2a43d11864a parent27dcaeb addsC24arrays
-  only/exact8files/697sources; PBEc20/protectedDDI/noC15publisher/caps/KMD/firmwaredelta.
-- PhaseBEFORE7b1feed3; finalartifactBEFORE8d8e9b83. PrerequisiteJSON nowrootaccepted
-  actual1438a0d52257/56nonE/C23ABC/fullregressions/Code28Absent8CPU/RECOVERY_DONE.
-- Package30.0.1439.0/DriverVer10/19/2026: SYSf934d455/UMD38c9d0d7/INF432e817c/
-  CAT1ecd2c86/ICDd51ebf72/WOW1625ffde. FactoryV2wrapper26ce7b5a/host10f7771d.
-- ACTUAL59unique nonEALLPASS inclC24ABC/C23ABC/C14A/C21C; C24A/C6subresources/
-  165texels/paddingbad0; C24Bdims18/2/1+c2400001marker/bad_words0. C21Euncompleted
-  exact23Bubfe/numericexitblank(seconds10), neverALL60.73SMOKE+knownMSAAonly,
-  GL52.6/internal59.5/CS47.253;pool6/foreign1PASS;fl11allPASS;corpus414each64/4
-  nohangpixeldiff/allDWM0/onlyintentionalLONGJOBkind4/902ms. Result9cdb0f36
-  at evidence/root1439-result/result.json. RECOVERY_BEFORE recorded;60577uses
-  AGX_RECOVERY_ALLOW_NO_OWNER=1 exactguardedhost10f. Code32Stopped/exactcleanup
-  passed, secondnormalbootup/finaldurabilitypending. Do NOTrestart/adhocSSH.
-  New60AA64probe610d7166/C21Elast; previouscodegatessee1439sectionbelow.
-- WaitTOOL_d3d12-on_END ANDNEWEXP_DONE, inspect data/regressions thenexact
-  visible rec1439h/recover.sh. No parallelguestSSH/rawproxy/manualprereboot.
-  Existingguardedno-ownerflag permittedundernewRECOVERY_BEFORE, no hiddenboot.
+- Run81544and recovery60577finished. START22:46:38Z/TOOL_END23:14:20Z/
+  NEWEXP_DONEobserved23:18:54Z. Sourceb5fcb91ceee169544e8bafba6f74f2a43d11864a,
+  parent27dcaeb/exact8C24files/697sources/PBEc20/noC15publisher/capsKMDfirmwaredelta.
+  PREP.local/preparation-1439; phaseBEFORE7b1feed3/finalartifactBEFORE8d8e9b83.
+- Package30.0.1439.0/DriverVer10/19/2026 SYSf934d455/UMD38c9d0d7/INF432e817c/
+  CAT1ecd2c86/ICDd51ebf72/WOW1625ffde. ExactpackageREMOVEDafterevidence.
+-59unique nonEALLPASS inclC24ABC/C23ABC/C14A/C21A-D/C22AB/C7A. C24A/C6subresources/
+ 165texels/paddingbad0;C24Bdims18/2/1+c2400001marker/bad_words0. C21Cbothmipsbad0/
+ padding64960. C21E UNCOMPLETED exact23Bubfe/numericexitblank(seconds10),notALL60.
+-73SMOKE+knownMSAA-a000ronly;GL52.6/internal59.5/CS3771frames79.804s47.253fps;
+ poolworkers6/foreign1PASS;fl11a/x/debugPASS;corpus414each64/4createfail/nohangpixeldiff;
+ allDWM0/onlyintentionalLONGJOBkind4/902ms/no unexpectedstopobserved.
+-FactoryV2wrapper26ce7b5a/host10f7771d explicitguardedNO_HOST_OWNER/liveSSH ->
+ Code32Stopped/exactcleanup/orderednormalreboot/Code28Absent/noService8CPU/
+ RECOVERY_DONE. BeforeBoot23:20:54.9368930Z/AfterBoot23:22:53.2879610Z.
+ Rawstdoutbytecopydurability-final.json SHAa28a3ea4f2600a40697458842a408ba7354fd894c1dd807afc27b3dc2b7b5355.
+ Originalresult9cdb0f36preserved; finalresultf805f7fae5d9b1cf28aca4e478fbfb3871c832503a963a817191d785c5fbd780;
+ final2259filemanifest9f33ffcd86d296dfadfc74e4cc8e239d8b6890cbaad0cbac409a568f8c50ffab.
+ DesktopSSHstoragegatesalive;physicalUSBinput/RDPnotindependentlytested.
+-NO activeGPUexperiment; lastcontroller60577finished. Normalrecoverylauncher may
+ stillownports; checkbothplanesbeforephysicalaction. Preserve normalinertguest.
+ NextmajorC15 CPU/nativefrontend gates underway; no guessedGPU/model/cap run.
+ sm51native19buildproposal notyetapproved/executed; future nativeCPUsemantic
+ checkpoint mustdoactualwork, notrunnooplinkconsumer. Rootaloneownsallguestwrites.
 
 ## EXP1438 COMPLETE / exact package removed / ACTUAL+CHANGESa0d52257
 
@@ -94,7 +97,7 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   Legacy-template-onlyread-onlyvalidationallowsoldprovenance; new1438factory
   recordsnewhost10f. Helper7ab9/selectorbed4/normalEXP950 unchanged.
 
-## EXP1439 C24 source/offline gates — RECOVERING above
+## EXP1439 C24 source/offline gates — COMPLETE above
 
 - Sourceb5fcb91ceee169544e8bafba6f74f2a43d11864a parent27dcaeb. OriginalC24runtime
   hunksappliedtempindex, exact8files697sources; currentC15publisherneverselected;
@@ -111,7 +114,7 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   logpreserved8d8bb637d6fbbadbd0e385e8401819029cc03200f5b6579e2240f4174e0dc720.
   Probe60AA64 268288B610d71669249d0b83454cfdace09a70a914d0da9a33e5dc3e82af195aa8e9b51,
   sourcebd55bc78, build-onlyreceipt8fb515f8. Allcodegatescomplete; hardwaremarkerABSENT.
-- Prior1438accepted/recovered; current1439all59nonEPASS/recoverypending. C21Eactualseparate.
+- Prior1438accepted/recovered; current1439all59nonEPASS/recoveryDONE4030799a. C21Eactualseparate.
   Old1431/1427packages NEVERLAUNCHED/superseded; preserve, neverreuseunchanged.
 
 ## C15 CPU/ABI progression — unlinked, no SM6/runtime claim
@@ -222,8 +225,18 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
  rootaddedexplicitSDKmetadata7b93+ASanf018+6958headers/no sourceflagschange;
  supplementonlylast2commands. Final709e3c53f467a9035b7731145ff656e186bd6acbca4cec51b7f032609cf2e5e5.
  NewmixedSPV24e3+map byteequalaccepted1421; inheritsNIR1442inputproof/no rerun.
- Notadoptedyet; kmdSOURCEpreparingdurableCURRENTrecipe; oldpristineoptins
- mustnotbesilentlyusedwithcheckedcomposite. No generalOOM/native/GPUclaim.
+ CURRENTcheckedadapter751a950e293b7ae637c81a8ee80668e6502543ef/row4e0a62e4;
+ docD3D12-C15-checked-owned-adapter.md. Exact7filesfrom025320f6/4d0967ee.
+ CURRENT1PASS9.701s/9commands/post7008pins/exactdiagnostics/SPVmap equality;
+ default1skipbeforetools. Outputmanifest25fd2f26275c0f61da047eac596a20626e838102018f27210516627e3e7c9ee6.
+ Full1612/221.525s/noADDEDfailures/117existing67fail50error16skip/post7pinsMATCH,
+ SHAfdc681e1e4afe07fc6aabef6e17da59f8a8aca11e01196b97001b322d72a9b85.
+ Originalstrict119-vs117comparisonSTOP preserved; supplementary7f41653a proves
+ removedexact2serialguard outcomes dueoldglobalair.lock: busytestgotlauncherowned,
+ locktestBlockingIOError. Sourceguard+test unchangedvsd8cfe; no C15/serialfixcredit,
+ no whole-suiteGREEN. Oldpristineoptins/fixtures/receiptsunchanged/newrecipe nofallback.
+ No generalOOM/newnative/GPUclaim. Full96183finished; sourcecodecommitted.
+
 - Windowslibvtn sourceclosure narrowed further: actual18frontendfiles match
  primary;8nativeNIRheaders exactHOSTLF->CRLF bytes;LLVM20tools hashpinned.
  MissingseparateSIMDarchive provedgenuine1TU streaming-load-memcpy.c byNinja/
@@ -255,3 +268,34 @@ Agents c18erroredsecurityreview, kmdcompleted, sm51completedsourceplan; FOLLOWUP
 wakescompletedagent, send_messagealone doesnot. No indefiniteagentwaiting.
 Check tool exitcodes beforedependentactions; set-e for shellorchestration;
 usePythonargv forquoting. ASanignorelist f018 mustbeexplicitlypinned.
+
+## Latest parallel C15 tasks (after1439rollback)
+
+- sm51finishingSOURCErunnableWindowsfrontend19commands afterfinitepinclosure;
+ nativeactualNinja SIMDoneTU+archive additions justified, no blinddrop. No compiler/
+ build/generation/link executionyet. RootBEFORE+approval required. Read-only
+ transportold60stimeout/ETSparse/longcommandSTOPs preserved; lateststdinread
+ feb853e2 PASS2.67s/294LLVMresourcefiles+actualMDdefaultlibs/finiteCRT/Winlibpins.
+- kmdSOURCEpreparingmeaningfulWindowsARM64actualNIR-mapsemanticconsumer from
+ currentfixture/pass. agx_compile.h349 hasSTATICagx_nir_options, avoid backendlink
+ solelyforoptions. Preserveupstreamndebugconfig; test-localalways-evaluatingchecks
+ AFTERupstreamheaders/BEFOREprojectoracle soNDEBUGdoesnoteraseAPIcalls. Explicitly
+ disclose native nir_validate_shader no-op ifndebug (hostdebugvalidationseparate).
+ OnlyCPUfrontend/maps/192lane384wordoracle, no translator/backend/GPU/DDI/faults.
+ No compilation/guest/nativeexecutionauthorizedforthisproposal yet.
+
+## Native frontend19 final readiness / source-review correction (not run)
+
+- sm51 delivered .local/c15-libvtn-simd-build-ready-prep/READY39133dd5,
+ controller00ad2946/runnerc18594c0/bootstrap9fc7e365/execution07d9d92f/ZIP6ad344a6.
+ ROOTreviewhasreadall3scripts; BEFORE/approval notwritten, no hostgen/native/network.
+ RootASTcaughtsyntaxerror runnerline104 allowed_dllfor; also0pyc runtimepins with
+ bootstrap-Balone couldreadstale caches. sm51preparingSEPARATEminimalattempt2:
+ addmissingtokenwhitespace +establishedfreshpycache_prefixoptions native/hostgen,
+ updatehash/runnerpin/ZIP/approvalmetadata; NO19argv/sourcegraph/compilerflagschange.
+ Preserveoriginalfrozenprep andASTrefusal. RequireASTbothscripts beforefreeze.
+ Native19+3HOSTprimarygeneratorrepro4byteoracles/8414inputpins/actualshowIncludes/
+ AA64objectsPE/finiteactualSDKimports/noPEexec remainclosedselectedgraph.
+ Nextrootpriority: inspectminimaldiff+hashes, preregisterEXP1445nativebuild,
+ ROOT_APPROVEDapproval withactualSHA, executeonce/followboundedlogs; don'twait
+ indefinitelyforagent. No GPUpackage/model/cap runreadyorjustifiedcurrently.
