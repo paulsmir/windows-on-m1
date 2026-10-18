@@ -144,6 +144,18 @@ unsigned AgxD3d12FormatBlockBytes(DXGI_FORMAT Format);
 HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width, unsigned Height,
                                      unsigned Layers, unsigned Levels, unsigned Bind, unsigned long long Bytes,
                                      AGX_D3D12_BUFFER *Texture);
+/* C21 LIMITED: POT square1..32,depth1..2048,levels1/2,R32_UINT/RGBA8.
+ * Pure allocation query; no owner/Screen/device creation.
+ * Actual creation uses the same uncompressed one-BO modifier and64KiB size. */
+typedef struct {
+    unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];
+} AGX_D3D12_VOLUME_LAYOUT;
+HRESULT AgxD3d12QueryTexture3DLayout(DXGI_FORMAT Format,unsigned Width,unsigned Height,unsigned Depth,
+    unsigned Levels,unsigned Bind,AGX_D3D12_VOLUME_LAYOUT *Layout);
+HRESULT AgxD3d12QueryTexture3D(DXGI_FORMAT Format,unsigned Width,unsigned Height,unsigned Depth,
+    unsigned Levels,unsigned Bind,unsigned long long *Bytes,unsigned long long *MipOffsets /* NULL or16entries */);
+HRESULT AgxD3d12OwnerCreateTexture3D(AGX_D3D12_OWNER *Owner,DXGI_FORMAT Format,unsigned Width,
+    unsigned Height,unsigned Depth,unsigned Levels,unsigned Bind,unsigned long long Bytes,AGX_D3D12_BUFFER *Texture);
 /* Clears layers [FirstLayer, FirstLayer + Layers) of a mip level in the view
  * format; Rects NULL = the whole level. */
 HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Texture, DXGI_FORMAT ViewFormat,

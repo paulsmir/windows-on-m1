@@ -14,6 +14,7 @@ extern "C" {
 #include "agx_win32_asahi_scene.h"
 #include "agx_d3d12_windows.h"
 #include "agx_d3d12_view_mapping.h"
+#include "agx_win32_asahi_layout.h"
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
@@ -310,6 +311,9 @@ extern "C" void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *owner, AGX_D3D12_CO
   memset(compute, 0, sizeof(*compute));
 }
 
+static unsigned level_extent(unsigned extent,unsigned level);
+static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level);
+
 /* C6a: textures, render-target clears and footprint copies (the D3D10
  * frontend's RTV/clear path, OutputMerger.cpp, on this owner's context). */
 /* Bytes of a 1x1 texel block, 0 for other block shapes; read from the
@@ -357,9 +361,100 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
   return S_OK;
 }
 
+/* C21 LIMITED volume contract. Same pure template/query for allocation-info
+ * and actual creation; never construct a screen/context just to obtain size. */
+static bool texture3d_template(DXGI_FORMAT format, unsigned width, unsigned height,
+    unsigned depth, unsigned levels, unsigned bind, struct pipe_resource *templ) {
+  if (!templ || !width || width>32 || height!=width || (width&(width-1)) || !depth || depth>2048 ||
+      !levels || levels>2 || (format!=DXGI_FORMAT_R32_UINT && format!=DXGI_FORMAT_R8G8B8A8_UNORM) ||
+      (bind & ~(AGX_D3D12_BIND_RENDER_TARGET | AGX_D3D12_BIND_SAMPLER))) return false;
+  unsigned extent=width>height ? width:height;
+  if(depth>extent) extent=depth;
+  unsigned max_levels=1;
+  while(extent>1) {extent>>=1;++max_levels;}
+  if(levels>max_levels) return false;
+  const enum pipe_format physical=FormatTranslate(format,FALSE);
+  const struct util_format_description *desc=physical!=PIPE_FORMAT_NONE ? util_format_description(physical):NULL;
+  if(!desc || !block_bytes(physical) || desc->colorspace==UTIL_FORMAT_COLORSPACE_ZS) return false;
+  // Native screen-free query owns backend target/format/usage validation.
+  memset(templ,0,sizeof(*templ));
+  templ->target=PIPE_TEXTURE_3D;templ->format=physical;
+  templ->width0=width;templ->height0=static_cast<uint16_t>(height);templ->depth0=static_cast<uint16_t>(depth);
+  templ->array_size=1;templ->last_level=static_cast<uint8_t>(levels-1);
+  templ->nr_samples=templ->nr_storage_samples=1;templ->usage=PIPE_USAGE_DEFAULT;
+  templ->bind=((bind&AGX_D3D12_BIND_RENDER_TARGET)?PIPE_BIND_RENDER_TARGET:0) |
+              ((bind&AGX_D3D12_BIND_SAMPLER)?PIPE_BIND_SAMPLER_VIEW:0);
+  return true;
+}
+
+static bool texture3d_layout(DXGI_FORMAT format,unsigned width,unsigned height,unsigned depth,
+    unsigned levels,unsigned bind,struct pipe_resource *templ,
+    AGX_WIN32_ASAHI_RESOURCE_LAYOUT *layout,unsigned long long *bytes) {
+  *bytes=0;
+  if(!texture3d_template(format,width,height,depth,levels,bind,templ) ||
+      !AgxWin32AsahiQueryUncompressedResourceLayout(templ,layout) || !layout->SizeBytes ||
+      layout->SizeBytes>0xffff0000ULL || (layout->Flags&AGX_WIN32_ASAHI_LAYOUT_COMPRESSED) ||
+      layout->MetadataOffsetBytes || layout->CompressionLayerStrideBytes || layout->SparseTableSizeBytes)
+    return false;
+  *bytes=(layout->SizeBytes+0xffffULL)&~0xffffULL;
+  return true;
+}
+
+extern "C" HRESULT AgxD3d12QueryTexture3DLayout(DXGI_FORMAT format,unsigned width,unsigned height,
+    unsigned depth,unsigned levels,unsigned bind,AGX_D3D12_VOLUME_LAYOUT *result) {
+  if(!result) return E_INVALIDARG;
+  memset(result,0,sizeof(*result));
+  struct pipe_resource templ={};AGX_WIN32_ASAHI_RESOURCE_LAYOUT layout={};
+  unsigned long long bytes=0;
+  if(!texture3d_layout(format,width,height,depth,levels,bind,&templ,&layout,&bytes) ||
+      !layout.LayerStrideBytes || layout.RequestedLevels!=levels || layout.AllocatedLevels<levels ||
+      layout.AllocatedLevels>16 || layout.SizeBytes!=layout.LayerStrideBytes*depth) return E_NOTIMPL;
+  for(unsigned m=0;m<levels;++m) {
+    const unsigned side=(width>>m)?width>>m:1u, d=(depth>>m)?depth>>m:1u;
+    const unsigned long long block=4ull*side*side,off=layout.LevelOffsets[m];
+    if(off%block || off>layout.LayerStrideBytes || block>layout.LayerStrideBytes-off ||
+       off+(d-1)*layout.LayerStrideBytes+block>layout.SizeBytes ||
+       (m+1<layout.AllocatedLevels && off+block>layout.LevelOffsets[m+1])) return E_NOTIMPL;
+  }
+  result->Bytes=bytes;result->NativeBytes=layout.SizeBytes;result->DepthStride=layout.LayerStrideBytes;
+  for(unsigned m=0;m<levels;++m) result->MipOffsets[m]=layout.LevelOffsets[m];
+  return S_OK;
+}
+
+extern "C" HRESULT AgxD3d12QueryTexture3D(DXGI_FORMAT format,unsigned width,unsigned height,
+    unsigned depth,unsigned levels,unsigned bind,unsigned long long *bytes,unsigned long long *mipOffsets) {
+  if(!bytes) return E_INVALIDARG;
+  if(mipOffsets) memset(mipOffsets,0,16*sizeof(*mipOffsets));
+  struct pipe_resource templ={};AGX_WIN32_ASAHI_RESOURCE_LAYOUT layout={};
+  if(!texture3d_layout(format,width,height,depth,levels,bind,&templ,&layout,bytes)) return E_NOTIMPL;
+  if(mipOffsets) for(unsigned i=0;i<levels;++i) mipOffsets[i]=layout.LevelOffsets[i];
+  return S_OK;
+}
+
+extern "C" HRESULT AgxD3d12OwnerCreateTexture3D(AGX_D3D12_OWNER *owner,DXGI_FORMAT format,
+    unsigned width,unsigned height,unsigned depth,unsigned levels,unsigned bind,
+    unsigned long long bytes,AGX_D3D12_BUFFER *texture) {
+  if(!owner || !owner->Screen || !texture) return E_INVALIDARG;
+  memset(texture,0,sizeof(*texture));
+  struct pipe_resource templ={};AGX_WIN32_ASAHI_RESOURCE_LAYOUT layout={};
+  unsigned long long actual=0;
+  if(!texture3d_layout(format,width,height,depth,levels,bind,&templ,&layout,&actual) || actual!=bytes ||
+      !owner->Screen->is_format_supported || !owner->Screen->resource_create_with_modifiers ||
+      !owner->Screen->is_format_supported(owner->Screen,templ.format,templ.target,1,1,templ.bind)) return E_NOTIMPL;
+  struct pipe_resource *resource=owner->Screen->resource_create_with_modifiers(owner->Screen,&templ,&layout.Modifier,1);
+  if(!resource) return E_OUTOFMEMORY;
+  texture->Resource=resource;texture->GpuVa=AgxWin32AsahiBufferGpuAddress(resource);texture->Bytes=actual;
+  if(!texture->GpuVa) {AgxWin32AsahiResourceRelease(&resource);memset(texture,0,sizeof(*texture));return E_OUTOFMEMORY;}
+  return S_OK;
+}
+
 static unsigned level_extent(unsigned extent, unsigned level) {
   extent >>= level;
   return extent ? extent : 1u;
+}
+
+static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {
+  return resource->target==PIPE_TEXTURE_3D ? (level>resource->last_level ? 0u:level_extent(resource->depth0,level)):resource->array_size;
 }
 
 /* Asahi has no clear_render_target/clear_depth_stencil (EXP1368: the
@@ -414,8 +509,10 @@ extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const 
   if (!owner || !owner->Context || !texture || !texture->Resource || !color || !layers) return E_INVALIDARG;
   struct pipe_resource *resource = static_cast<struct pipe_resource *>(texture->Resource);
   const enum pipe_format format = FormatTranslate(view_format, FALSE);
-  if (format == PIPE_FORMAT_NONE || level > resource->last_level || first_layer >= resource->array_size ||
-      layers > resource->array_size - first_layer)
+  if (format == PIPE_FORMAT_NONE || level > resource->last_level) return E_INVALIDARG;
+  if(resource->target==PIPE_TEXTURE_3D) {
+    if(layers!=1 || first_layer>=texture_layer_extent(resource,level)) return E_INVALIDARG;
+  } else if(first_layer >= resource->array_size || layers > resource->array_size - first_layer)
     return E_INVALIDARG;
   struct pipe_surface surface = {};
   surface.format = format;
@@ -592,9 +689,10 @@ extern "C" HRESULT AgxD3d12OwnerClearUav(AGX_D3D12_OWNER *owner, const AGX_D3D12
     ++owner->PendingDispatches;
     return S_OK;
   }
+  const unsigned layers=texture_layer_extent(resource,uav->Level);
   if (resource->target == PIPE_BUFFER || uav->Level > resource->last_level || !uav->Layers ||
-      uav->FirstLayer >= resource->array_size || uav->Layers > resource->array_size - uav->FirstLayer)
-    return E_INVALIDARG;
+      uav->FirstLayer >= layers || uav->Layers > layers-uav->FirstLayer ||
+      (resource->target==PIPE_TEXTURE_3D && (uav->FirstLayer || uav->Layers!=layers))) return E_INVALIDARG;
   const unsigned width = resource->width0 >> uav->Level ? resource->width0 >> uav->Level : 1u;
   const unsigned height = resource->height0 >> uav->Level ? resource->height0 >> uav->Level : 1u;
   for (unsigned r = 0; r < (rect_count ? rect_count : 1u); ++r) {
@@ -742,11 +840,20 @@ extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const 
     return E_INVALIDARG;
   struct pipe_resource *d = static_cast<struct pipe_resource *>(dst->Resource);
   struct pipe_resource *s = static_cast<struct pipe_resource *>(src->Resource);
+  if(d->target==PIPE_TEXTURE_3D || s->target==PIPE_TEXTURE_3D) {
+    if(d->target!=PIPE_TEXTURE_3D || s->target!=PIPE_TEXTURE_3D || dst_level>d->last_level || src_level>s->last_level ||
+        dst_x>level_extent(d->width0,dst_level) || width>level_extent(d->width0,dst_level)-dst_x ||
+        dst_y>level_extent(d->height0,dst_level) || height>level_extent(d->height0,dst_level)-dst_y ||
+        src_x>level_extent(s->width0,src_level) || width>level_extent(s->width0,src_level)-src_x ||
+        src_y>level_extent(s->height0,src_level) || height>level_extent(s->height0,src_level)-src_y ||
+        dst_layer>texture_layer_extent(d,dst_level) || layers>texture_layer_extent(d,dst_level)-dst_layer ||
+        src_layer>texture_layer_extent(s,src_level) || layers>texture_layer_extent(s,src_level)-src_layer) return E_INVALIDARG;
+  }
   if (d->target == PIPE_BUFFER || s->target == PIPE_BUFFER || dst_level > d->last_level || src_level > s->last_level ||
       block_bytes(d->format) != block_bytes(s->format) || !block_bytes(d->format) ||
       dst_x + width > level_extent(d->width0, dst_level) || dst_y + height > level_extent(d->height0, dst_level) ||
       src_x + width > level_extent(s->width0, src_level) || src_y + height > level_extent(s->height0, src_level) ||
-      dst_layer + layers > d->array_size || src_layer + layers > s->array_size)
+      dst_layer + layers > texture_layer_extent(d,dst_level) || src_layer + layers > texture_layer_extent(s,src_level))
     return E_INVALIDARG;
   struct pipe_box box = {};
   box.x = static_cast<int>(src_x);
@@ -799,10 +906,14 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
   struct pipe_resource *buffer = static_cast<struct pipe_resource *>(copy->Buffer->Resource);
   const unsigned block = block_bytes(texture->format);
   const unsigned long long row = static_cast<unsigned long long>(copy->Width) * block;
+  if(texture->target==PIPE_TEXTURE_3D && (copy->Level>texture->last_level ||
+      copy->X>level_extent(texture->width0,copy->Level) || copy->Width>level_extent(texture->width0,copy->Level)-copy->X ||
+      copy->Y>level_extent(texture->height0,copy->Level) || copy->Height>level_extent(texture->height0,copy->Level)-copy->Y)) return E_INVALIDARG;
+  const unsigned layers=texture_layer_extent(texture,copy->Level);
   if (!block || copy->Level > texture->last_level ||
       copy->X + copy->Width > level_extent(texture->width0, copy->Level) ||
-      copy->Y + copy->Height > level_extent(texture->height0, copy->Level) || copy->Layer >= texture->array_size ||
-      copy->Depth > texture->array_size - copy->Layer || copy->Pitch < row ||
+      copy->Y + copy->Height > level_extent(texture->height0, copy->Level) || copy->Layer >= layers ||
+      copy->Depth > layers - copy->Layer || copy->Pitch < row ||
       (copy->Depth > 1 && copy->SlicePitch < static_cast<unsigned long long>(copy->Pitch) * copy->Height))
     return E_INVALIDARG;
   const unsigned long long span = static_cast<unsigned long long>(copy->Depth - 1) * copy->SlicePitch +
@@ -1067,6 +1178,12 @@ static bool uav_image(const AGX_D3D12_UAV *uav, struct pipe_image_view *image) {
     image->u.buf.size = static_cast<unsigned>(bytes);
     return true;
   }
+  if(resource->target==PIPE_TEXTURE_3D) {
+    if(resource->nr_samples>1 || uav->Level>resource->last_level || uav->FirstLayer ||
+        uav->Layers!=texture_layer_extent(resource,uav->Level)) return false;
+    image->u.tex.level=uav->Level;image->u.tex.first_layer=0;image->u.tex.last_layer=uav->Layers-1;
+    return true;
+  }
   if (resource->target == PIPE_BUFFER || resource->nr_samples > 1 || uav->Level > resource->last_level ||
       !uav->Layers || uav->FirstLayer >= resource->array_size || uav->Layers > resource->array_size - uav->FirstLayer)
     return false;
@@ -1134,6 +1251,10 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
       templ.format = format;
       templ.target = texture->target;
       const uint8_t dimension = dimensions ? dimensions[i] : DXBC_SRV_UNUSED;
+      if(texture->target==PIPE_TEXTURE_3D) {
+        if(dimension==DXBC_SRV_UNUSED) continue;
+        if(dimension!=DXBC_SRV_3D || srvs[i].Cube || srvs[i].FirstLayer || srvs[i].Layers!=1) return E_INVALIDARG;
+      } else if(dimension==DXBC_SRV_3D) return E_INVALIDARG;
       if (srvs[i].Cube) {
         if (dimension == DXBC_SRV_UNUSED) continue;
         if ((texture->target != PIPE_TEXTURE_2D_ARRAY && texture->target != PIPE_TEXTURE_2D) ||
@@ -1153,7 +1274,7 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
       *view_count = i + 1;
       continue;
     }
-    if (dimensions && (dimensions[i] == DXBC_SRV_CUBE || dimensions[i] == DXBC_SRV_CUBE_ARRAY)) return E_INVALIDARG;
+    if (dimensions && (dimensions[i] == DXBC_SRV_CUBE || dimensions[i] == DXBC_SRV_CUBE_ARRAY || dimensions[i] == DXBC_SRV_3D)) return E_INVALIDARG;
     if (!buffer->Resource || srvs[i].Offset >= buffer->Bytes) return E_INVALIDARG;
     const unsigned long long room = buffer->Bytes - srvs[i].Offset;
     /* C9: a typed buffer SRV reads texels of its format */
@@ -1310,6 +1431,8 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     struct pipe_resource *texture = static_cast<struct pipe_resource *>(draw->Rtv[i].Texture->Resource);
     const enum pipe_format format = FormatTranslate(draw->Rtv[i].Format, FALSE);
     if (format == PIPE_FORMAT_NONE || draw->Rtv[i].Level > texture->last_level || !draw->Rtv[i].Layers) return E_INVALIDARG;
+    if(texture->target==PIPE_TEXTURE_3D && (draw->Rtv[i].Layers!=1 ||
+        draw->Rtv[i].FirstLayer>=texture_layer_extent(texture,draw->Rtv[i].Level))) return E_INVALIDARG;
     fb.cbufs[i].format = format;
     fb.cbufs[i].level = draw->Rtv[i].Level;
     fb.cbufs[i].first_layer = static_cast<uint16_t>(draw->Rtv[i].FirstLayer);

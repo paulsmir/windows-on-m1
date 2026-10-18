@@ -91,6 +91,44 @@ template<class T, class F> static HRESULT Answer(const D3D12DDIARG_GETCAPS *arg,
     fill(*static_cast<T *>(arg->pData));
     return S_OK;
 }
+/* C21: immutable legacy two-slot registry. See resolved-layout-contract note.
+ * IDs are descending native square sizes32..1; only four-byte texels admitted. */
+static HRESULT VolumeLayoutCaps(const D3D12DDIARG_GETCAPS *arg) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if(!arg || !arg->pData) return E_INVALIDARG;
+    if(arg->Type==D3D12DDICAPS_TYPE_TEXTURE_LAYOUT) {
+        if(!arg->pInfo) {
+            if(arg->DataSize!=sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS) &&
+               arg->DataSize!=sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS_0001)) return E_INVALIDARG;
+            memset(arg->pData,0,arg->DataSize);
+            auto *caps=static_cast<D3D12DDI_TEXTURE_LAYOUT_CAPS *>(arg->pData);
+            caps->DeviceDependentLayoutCount=6;caps->DeviceDependentSwizzleCount=6;
+            return S_OK;
+        }
+        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));
+        if(index>=6 || arg->DataSize!=2*sizeof(D3D12DDI_SWIZZLE_PATTERN)) return E_INVALIDARG;
+        const D3D12DDI_SWIZZLE_PATTERN patterns[2]={
+            static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+index),
+            static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+(index<5?index+1:5u))};
+        memcpy(arg->pData,patterns,sizeof(patterns));return S_OK;
+    }
+    if(arg->Type==D3D12DDICAPS_TYPE_SWIZZLE_PATTERN) {
+        if(!arg->pInfo || arg->DataSize!=sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0003)) return E_INVALIDARG;
+        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));if(index>=6)return E_INVALIDARG;
+        D3D12DDI_SWIZZLE_PATTERN_DESC_0003 pattern={};
+        UINT n=0;
+        for(UINT b=0;b<2;++b) {auto &v=pattern.InterleavePatternSourceBits[n++];v.Valid=1;v.SourceBitIndex=static_cast<UINT8>(b);}
+        for(UINT b=0;b<5-index;++b) {
+            auto &x=pattern.InterleavePatternSourceBits[n++];x.Valid=1;x.SourceBitIndex=static_cast<UINT8>(b+2);
+            auto &y=pattern.InterleavePatternSourceBits[n++];y.Valid=1;y.ChannelIndex=1;y.SourceBitIndex=static_cast<UINT8>(b);
+        }
+        memcpy(arg->pData,&pattern,sizeof(pattern));return S_OK;
+    }
+#else
+    (void)arg;
+#endif
+    return E_NOTIMPL;
+}
 static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *arg) {
     HRESULT hr = E_NOTIMPL;
     if (arg && arg->pData) switch (arg->Type) {
@@ -147,10 +185,16 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         });
         break;
     case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT:
-        /* no device-dependent layouts or swizzles, no 64 KiB standard
-         * swizzle, no row-major textures (EXP1346: asked as the 16-byte
-         * D3D12DDI_TEXTURE_LAYOUT_CAPS_0001) */
-        hr = Answer<D3D12DDI_TEXTURE_LAYOUT_CAPS>(arg, [](auto &) {});
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        hr=VolumeLayoutCaps(arg);
+#else
+        hr=Answer<D3D12DDI_TEXTURE_LAYOUT_CAPS>(arg, [](auto &) {});
+#endif
+        break;
+    case D3D12DDICAPS_TYPE_SWIZZLE_PATTERN:
+        hr=VolumeLayoutCaps(arg);break;
+    case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT1:
+        /* <=2patterns: stay in the documented legacy mode. */
         break;
     case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS:
         /* EXP1346: asked for row-major ({D3D12DDI_TL_ROW_MAJOR, functional
@@ -564,6 +608,7 @@ static constexpr UINT64 kCpuVisibleMaximum = ADMISSION_WIN32_ALLOCATION_LEGACY_M
 struct AgxD3d12Heap {
     void *native; /* C4b: the owner's buffer resource (pipe_resource) */
     void *presentation; /* C7b: the owner presentation record of a shareable render target */
+    BOOL volume;  /* C21: DEFAULT volume heaps are never CPU mapped */
     BOOL alias;   /* C8c: a placed resource's view of its parent heap (owns nothing) */
     D3DKMT_HANDLE allocation;
     UINT64 gpuva;
@@ -581,6 +626,10 @@ struct AgxD3d12Resource {
     UINT type;
     DXGI_FORMAT format;
     UINT width, height, layers, levels;
+    UINT64 volume_offsets[16]; /* immutable queried physical mip starts,3D only */
+    UINT64 volume_depth_stride;
+    D3D12DDI_TEXTURE_LAYOUT volume_layout;
+    UINT8 volume_transition;
 };
 #ifndef APPLE_AGX_D3D12_NATIVE_OWNER
 static UINT AgxD3d12FormatBlockBytes(DXGI_FORMAT) { return 0; } /* textures need the native owner */
@@ -588,8 +637,32 @@ static UINT AgxD3d12FormatBlockBytes(DXGI_FORMAT) { return 0; } /* textures need
 /* C6a: the allocation size of a committed 2D texture: an upper bound of
  * the owner's layout (whole 16x16 tiles of each level, a 64 KiB granule);
  * 0 = not a texture this device creates (format, samples, dimension). */
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static bool VolumeLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *arg,AGX_D3D12_VOLUME_LAYOUT *layout,
+                             D3D12DDI_TEXTURE_LAYOUT *resolved,UINT8 *transition) {
+    if(!arg || !layout || arg->ResourceType!=D3D12DDI_RT_TEXTURE3D || arg->SampleDesc.Count!=1 ||
+       arg->SampleDesc.Quality || !arg->Width || arg->Width>32 || arg->Height!=arg->Width ||
+       (arg->Width&(arg->Width-1)) || !arg->DepthOrArraySize || arg->DepthOrArraySize>2048 ||
+       !arg->MipLevels || arg->MipLevels>2 ||
+       (arg->Format!=DXGI_FORMAT_R32_UINT && arg->Format!=DXGI_FORMAT_R8G8B8A8_UNORM) ||
+       (arg->Flags&~(D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET|D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE))) return false;
+    UINT index=0;for(UINT side=32;side>arg->Width;side>>=1) ++index;
+    const auto selected=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x100u+index);
+    if(arg->Layout!=D3D12DDI_TL_UNDEFINED && arg->Layout!=selected) return false;
+    const UINT bind=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?AGX_D3D12_BIND_RENDER_TARGET:0u)|
+                    ((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u);
+    if(FAILED(AgxD3d12QueryTexture3DLayout(arg->Format,static_cast<UINT>(arg->Width),arg->Height,
+        arg->DepthOrArraySize,arg->MipLevels,bind,layout))) return false;
+    if(resolved)*resolved=selected;
+    if(transition)*transition=(arg->MipLevels>1 && arg->Width>1)?1u:0xffu;
+    return true;
+}
+#endif
 static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *arg) {
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE3D) {
+        AGX_D3D12_VOLUME_LAYOUT layout={};return VolumeLayoutInfo(arg,&layout,nullptr,nullptr)?layout.Bytes:0;
+    }
     if (!arg || arg->ResourceType != D3D12DDI_RT_TEXTURE2D || arg->SampleDesc.Count != 1 || !arg->Width ||
         arg->Width > 16384 || !arg->Height || arg->Height > 16384 || !arg->DepthOrArraySize || !arg->MipLevels ||
         arg->MipLevels > 15)
@@ -613,12 +686,23 @@ static AgxD3d12Device *DeviceOf(D3D12DDI_HDEVICE handle) {
     return static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
 }
 static VOID APIENTRY CheckResourceAllocationInfo(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATERESOURCE_0003 *arg,
-                                                 D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS, UINT64, UINT,
+                                                 D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS, UINT64 alignmentRestriction, UINT,
                                                  D3D12DDI_RESOURCE_ALLOCATION_INFO *info) {
     if (!info) return;
     memset(info, 0, sizeof(*info));
     info->ResourceDataAlignment = kHeapPage;
     info->Layout = D3D12DDI_TL_ROW_MAJOR;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE3D) {
+        AGX_D3D12_VOLUME_LAYOUT layout={};
+        if((!alignmentRestriction || (!(alignmentRestriction&(alignmentRestriction-1)) && alignmentRestriction>=kHeapPage)) &&
+           VolumeLayoutInfo(arg,&layout,&info->Layout,&info->MipLevelSwizzleTransition)) info->ResourceDataSize=layout.Bytes;
+        else {info->Layout=D3D12DDI_TL_UNDEFINED;info->ResourceDataSize=~0ULL;}
+        return;
+    }
+#else
+    (void)alignmentRestriction;
+#endif
     if (arg && arg->ResourceType == D3D12DDI_RT_BUFFER && arg->Width && arg->Width <= kVaLimit - kVaMinimum) {
         info->ResourceDataSize = (arg->Width + kHeapPage - 1) & ~(kHeapPage - 1);
     } else if (const UINT64 texture = TextureBytes(arg)) {
@@ -864,6 +948,36 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
     if (FAILED(hr)) ReleaseHeap(device, heap);
     return hr;
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static HRESULT CreateVolumeResource(AgxD3d12Device *device,const D3D12DDIARG_CREATEHEAP_0001 *heap_arg,
+                                   AgxD3d12Heap *heap,const D3D12DDIARG_CREATERESOURCE_0003 *arg,
+                                   AgxD3d12Resource *resource) {
+    if(!device || !heap_arg || !heap || !resource || !arg ||
+       heap_arg->CPUPageProperty!=D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE ||
+       (heap_arg->Flags && heap_arg->Flags!=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?
+            D3D12DDI_HEAP_FLAG_RT_DS_TEXTURES:D3D12DDI_HEAP_FLAG_NON_RT_DS_TEXTURES)) ||
+       (heap_arg->Alignment && heap_arg->Alignment!=kHeapPage)) return E_NOTIMPL;
+    AGX_D3D12_VOLUME_LAYOUT layout={};D3D12DDI_TEXTURE_LAYOUT resolved={};UINT8 transition=0;
+    if(arg->Layout==D3D12DDI_TL_UNDEFINED || !VolumeLayoutInfo(arg,&layout,&resolved,&transition) ||
+       (heap_arg->ByteSize && heap_arg->ByteSize!=~0ULL && heap_arg->ByteSize<layout.Bytes)) return E_NOTIMPL;
+    AGX_D3D12_OWNER *owner=EnsureOwner(device);if(!owner)return E_FAIL;
+    const UINT bind=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?AGX_D3D12_BIND_RENDER_TARGET:0u)|
+                    ((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u);
+    AGX_D3D12_BUFFER texture={};
+    HRESULT hr=AgxD3d12OwnerCreateTexture3D(owner,arg->Format,static_cast<UINT>(arg->Width),arg->Height,
+        arg->DepthOrArraySize,arg->MipLevels,bind,layout.Bytes,&texture);
+    if(FAILED(hr))return hr;
+    memset(heap,0,sizeof(*heap));memset(resource,0,sizeof(*resource));
+    heap->native=texture.Resource;heap->gpuva=texture.GpuVa;heap->bytes=layout.Bytes;heap->volume=TRUE;
+    heap->allocation=AgxD3d12OwnerBufferAllocation(owner,&texture);
+    resource->heap=heap;resource->gpuva=heap->gpuva;resource->bytes=layout.Bytes;resource->type=D3D12DDI_RT_TEXTURE3D;
+    resource->format=arg->Format;resource->width=static_cast<UINT>(arg->Width);resource->height=arg->Height;
+    resource->layers=arg->DepthOrArraySize;resource->levels=arg->MipLevels;
+    memcpy(resource->volume_offsets,layout.MipOffsets,sizeof(resource->volume_offsets));
+    resource->volume_depth_stride=layout.DepthStride;resource->volume_layout=resolved;resource->volume_transition=transition;
+    return S_OK;
+}
+#endif
 static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATEHEAP_0001 *heap_arg,
                                               D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE runtime_resource,
                                               const D3D12DDIARG_CREATERESOURCE_0003 *resource_arg,
@@ -906,6 +1020,8 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         return reason ? E_NOTIMPL : S_OK;
     }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if(resource_arg && resource_arg->ResourceType==D3D12DDI_RT_TEXTURE3D)
+        return CreateVolumeResource(device,heap_arg,heap,resource_arg,resource);
     /* C6a: a committed 2D texture is one owner texture */
     if (heap_arg && heap && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D) {
         const UINT64 bytes = TextureBytes(resource_arg);
@@ -998,6 +1114,7 @@ static VOID APIENTRY DestroyHeapAndResource(D3D12DDI_HDEVICE handle, D3D12DDI_HH
 static HRESULT APIENTRY MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle, VOID **data) {
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+    if(heap && heap->volume) {if(data)*data=nullptr;return E_INVALIDARG;}
     if (device && heap && data && heap->native && heap->cpu) {
         *data = heap->cpu; /* C4b: persistent mapping of the owner's buffer */
         return S_OK;
@@ -1037,8 +1154,9 @@ static VOID APIENTRY CheckExistingResourceAllocationInfo(D3D12DDI_HDEVICE, D3D12
     if (info) {
         memset(info, 0, sizeof(*info));
         info->ResourceDataAlignment = kHeapPage;
-        info->Layout = D3D12DDI_TL_ROW_MAJOR;
+        info->Layout = resource && resource->type==D3D12DDI_RT_TEXTURE3D ? resource->volume_layout:D3D12DDI_TL_ROW_MAJOR;
         info->ResourceDataSize = resource && resource->heap ? resource->heap->bytes : ~0ULL;
+        if(resource && resource->type==D3D12DDI_RT_TEXTURE3D) info->MipLevelSwizzleTransition=resource->volume_transition;
     }
     if (allocation) *allocation = resource && resource->heap ? resource->heap->allocation : 0;
     const UINT receipt[] = {resource && resource->heap ? 1u : 0u,
@@ -1053,7 +1171,15 @@ static VOID APIENTRY CheckSubresourceInfo(D3D12DDI_HDEVICE, D3D12DDI_HRESOURCE h
     auto *resource = static_cast<AgxD3d12Resource *>(handle.pDrvPrivate);
     if (!info) return;
     memset(info, 0, sizeof(*info));
-    if (resource && subresource == 0) info->RowStride = info->DepthStride = resource->bytes;
+    if(resource && resource->type==D3D12DDI_RT_TEXTURE3D) {
+        if(subresource<resource->levels) {
+            const UINT side=(resource->width>>subresource)?resource->width>>subresource:1u;
+            info->Offset=resource->volume_offsets[subresource];
+            info->RowStride=4ull*side*side;info->DepthStride=resource->volume_depth_stride;
+        }
+    } else {
+        if (resource && subresource == 0) info->RowStride = info->DepthStride = resource->bytes;
+    }
     const UINT receipt[] = {subresource, resource ? static_cast<UINT>(resource->bytes) : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-subresource-info", S_OK, receipt, 2);
 }
@@ -1134,6 +1260,13 @@ static VOID APIENTRY CreateConstantBufferView(D3D12DDI_HDEVICE handle, const D3D
 /* Raw and structured buffer UAVs (the dxbc_to_nir shader-buffer binding);
  * typed buffers, textures and append/consume counters write a null
  * descriptor with a receipt naming the reason. */
+static bool VolumeViewRange(const AgxD3d12Resource *r,UINT level,UINT first,UINT requested,UINT *count) {
+    if(level>=r->levels) return false;
+    const UINT depth=r->layers>>level ? r->layers>>level:1u;
+    if(first>=depth) return false;
+    *count=requested==UINT_MAX?depth-first:requested;
+    return *count && *count<=depth-first;
+}
 static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_UNORDERED_ACCESS_VIEW_0002 *arg,
                                                D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
     auto *out = reinterpret_cast<AgxD3d12Descriptor *>(dest.ptr);
@@ -1141,6 +1274,17 @@ static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3
     memset(out, 0, sizeof(*out));
     (void)handle;
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE3D) {
+        UINT count=0;
+        const UINT depth=arg->Tex3D.MipSlice<resource->levels ? (resource->layers>>arg->Tex3D.MipSlice ? resource->layers>>arg->Tex3D.MipSlice:1u):0;
+        const UINT reason=arg->ResourceDimension!=D3D12DDI_RD_TEXTURE3D ||
+            !VolumeViewRange(resource,arg->Tex3D.MipSlice,arg->Tex3D.FirstW,arg->Tex3D.WSize,&count) ||
+            arg->Tex3D.FirstW || count!=depth ? 6u:0u;
+        if(!reason) {out->kind=kDescriptorUavTexture;out->heap=resource->heap;
+            out->format=arg->Format==DXGI_FORMAT_UNKNOWN?resource->format:arg->Format;
+            out->level=arg->Tex3D.MipSlice;out->levels=1;out->layers=count;}
+        ViewReceipt("measure-d3d12-uav",reason,static_cast<UINT>(arg->Format),count);return;
+    }
     /* C9: a typed UAV of a 2D (array) texture: one mip, a slice range */
     if (arg && resource && resource->heap && resource->type == D3D12DDI_RT_TEXTURE2D) {
         const D3D12DDIARG_TEX2D_UNORDERED_ACCESS_VIEW_0002 &v = arg->Tex2D;
@@ -1194,6 +1338,15 @@ static VOID APIENTRY CreateRenderTargetView(D3D12DDI_HDEVICE, const D3D12DDIARG_
     if (!out) return;
     memset(out, 0, sizeof(*out));
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE3D) {
+        UINT count=0;
+        const UINT reason=arg->ResourceDimension!=D3D12DDI_RD_TEXTURE3D ||
+            !VolumeViewRange(resource,arg->Tex3D.MipSlice,arg->Tex3D.FirstW,arg->Tex3D.WSize,&count) || count!=1 ? 6u:0u;
+        if(!reason) {out->kind=kDescriptorRtv;out->heap=resource->heap;
+            out->format=arg->Format==DXGI_FORMAT_UNKNOWN?resource->format:arg->Format;
+            out->level=arg->Tex3D.MipSlice;out->first_layer=arg->Tex3D.FirstW;out->layers=1;}
+        ViewReceipt("measure-d3d12-rtv",reason,static_cast<UINT>(arg->Format),count);return;
+    }
     UINT reason = !arg || !resource || !resource->heap ? 1u
                 : resource->type != D3D12DDI_RT_TEXTURE2D || arg->ResourceDimension != D3D12DDI_RD_TEXTURE2D ? 4u
                 : arg->Tex2D.PlaneSlice || arg->Tex2D.MipSlice >= resource->levels ||
@@ -1248,6 +1401,19 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
         return;
     }
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE3D) {
+        const auto &v=arg->Tex3D;
+        UINT levels=0;
+        UINT reason=arg->ResourceDimension!=D3D12DDI_RD_TEXTURE3D || v.ResourceMinLODClamp!=0.0f ||
+            v.MostDetailedMip>=resource->levels ? 6u:0u;
+        if(!reason) {levels=v.MipLevels==UINT_MAX?resource->levels-v.MostDetailedMip:v.MipLevels;
+            if(!levels || levels>resource->levels-v.MostDetailedMip)reason=6u;}
+        if(!reason) {out->kind=kDescriptorSrvTexture;out->heap=resource->heap;
+            out->format=arg->Format==DXGI_FORMAT_UNKNOWN?resource->format:arg->Format;
+            out->level=v.MostDetailedMip;out->levels=levels;out->layers=1;
+            out->component_mapping=arg->Shader4ComponentMapping;}
+        ViewReceipt("measure-d3d12-srv",reason,static_cast<UINT>(arg->Format),levels);return;
+    }
     /* C19: a cube view reuses an ordinary square 2D-array allocation.
      * The shader distinguishes nonarray cubes from one-element cube arrays. */
     if (arg && resource && resource->heap && resource->type == D3D12DDI_RT_TEXTURE2D &&
@@ -1657,6 +1823,7 @@ struct AgxD3d12TextureRegionCopy {
     UINT src_level, src_layer, src_x, src_y;
     UINT width, height, layers;
     UINT whole_levels; /* > 0: ResourceCopy of this many levels */
+    UINT volume; /* C21: minify depth per whole-resource mip */
 };
 enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kCommandTextureCopy = 4, kCommandDraw = 5,
               kCommandClearDepth = 6, kCommandTextureRegionCopy = 7, kCommandClearUav = 8,
@@ -1866,6 +2033,15 @@ static VOID APIENTRY ResourceCopy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOUR
     if (!list) return;
     auto *d = static_cast<AgxD3d12Resource *>(dst_handle.pDrvPrivate);
     auto *s = static_cast<AgxD3d12Resource *>(src_handle.pDrvPrivate);
+    if(d && s && (d->type==D3D12DDI_RT_TEXTURE3D || s->type==D3D12DDI_RT_TEXTURE3D)) {
+        if(!d->heap || !s->heap || !d->heap->native || !s->heap->native || d->type!=s->type || d->format!=s->format || d->width!=s->width ||
+            d->height!=s->height || d->layers!=s->layers || d->levels!=s->levels || list->commands>=kListCommands) {
+            ListError(list,E_INVALIDARG);return;
+        }
+        AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;
+        slot->kind=kCommandTextureRegionCopy;auto &r=slot->region_copy;r.dst=d->heap;r.src=s->heap;
+        r.width=s->width;r.height=s->height;r.layers=s->layers;r.whole_levels=s->levels;r.volume=1;return;
+    }
     const UINT refusal = !d || !s || !d->heap || !s->heap || !d->heap->native || !s->heap->native ? 1u
                        : (d->type == D3D12DDI_RT_TEXTURE2D) != (s->type == D3D12DDI_RT_TEXTURE2D) ? 4u
                        : list->commands >= kListCommands ? 3u : 0u;
@@ -2102,9 +2278,71 @@ static bool CopySide(const D3D12DDIARG_BUFFER_PLACEMENT *placement, D3D12DDIARG_
     side->footprint = layout.Layout == D3D12DDI_RL_PLACED_PHYSICAL_SUBRESOURCE_PITCHED
                           ? static_cast<const D3D12DDIARG_PHYSICAL_SUBRESOURCE_PITCHED_LAYOUT *>(layout.pLayout) : nullptr;
     if (!side->resource || !side->resource->heap) return false;
-    if (layout.Layout == D3D12DDI_RL_SELECT_SUBRESOURCE) return side->resource->type == D3D12DDI_RT_TEXTURE2D;
-    return side->footprint && side->resource->type != D3D12DDI_RT_TEXTURE2D;
+    if (layout.Layout == D3D12DDI_RL_SELECT_SUBRESOURCE) return side->resource->type == D3D12DDI_RT_TEXTURE2D || side->resource->type == D3D12DDI_RT_TEXTURE3D;
+    return side->footprint && side->resource->type != D3D12DDI_RT_TEXTURE2D && side->resource->type != D3D12DDI_RT_TEXTURE3D;
 }
+/* C21 LIMITED volume copy: a volume subresource is one entire mip, never a
+ * modulo-decoded array slice. Buffer coordinates use real runtime pitches. */
+static void CopyVolumeTextureRegion(AgxD3d12CommandList *list,
+    const AgxD3d12CopySide &dst,const AgxD3d12CopySide &src,
+    UINT dst_x,UINT dst_y,UINT dst_z,const D3D12DDI_BOX *box) {
+  const bool to_buffer=dst.footprint!=nullptr;
+  const AgxD3d12CopySide &t=to_buffer?src:dst;
+  const AgxD3d12CopySide &b=to_buffer?dst:src;
+  auto extent=[](UINT base,UINT level){return base>>level ? base>>level:1u;};
+  auto fail=[&](){ListError(list,E_INVALIDARG);};
+  if(box && (box->Left<0 || box->Top<0 || box->Front<0 || box->Right<=box->Left ||
+      box->Bottom<=box->Top || box->Back<=box->Front)) {fail();return;}
+  if(!dst.footprint && !src.footprint) {
+    if(dst.resource->type!=D3D12DDI_RT_TEXTURE3D || src.resource->type!=D3D12DDI_RT_TEXTURE3D ||
+        dst.offset>=dst.resource->levels || src.offset>=src.resource->levels ||
+        dst.resource->format!=src.resource->format) {fail();return;}
+    const UINT dl=static_cast<UINT>(dst.offset),sl=static_cast<UINT>(src.offset);
+    const UINT sx=box?static_cast<UINT>(box->Left):0u,sy=box?static_cast<UINT>(box->Top):0u,sz=box?static_cast<UINT>(box->Front):0u;
+    const UINT w=box?static_cast<UINT>(box->Right-box->Left):extent(src.resource->width,sl);
+    const UINT h=box?static_cast<UINT>(box->Bottom-box->Top):extent(src.resource->height,sl);
+    const UINT d=box?static_cast<UINT>(box->Back-box->Front):extent(src.resource->layers,sl);
+    const UINT sw=extent(src.resource->width,sl),sh=extent(src.resource->height,sl),sd=extent(src.resource->layers,sl);
+    const UINT dw=extent(dst.resource->width,dl),dh=extent(dst.resource->height,dl),dd=extent(dst.resource->layers,dl);
+    if(sx>sw || w>sw-sx || sy>sh || h>sh-sy || sz>sd || d>sd-sz ||
+        dst_x>dw || w>dw-dst_x || dst_y>dh || h>dh-dst_y || dst_z>dd || d>dd-dst_z) {fail();return;}
+    AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;
+    slot->kind=kCommandTextureRegionCopy;
+    auto &r=slot->region_copy;r.dst=dst.resource->heap;r.src=src.resource->heap;
+    r.dst_level=dl;r.src_level=sl;r.dst_layer=dst_z;r.src_layer=sz;
+    r.dst_x=dst_x;r.dst_y=dst_y;r.src_x=sx;r.src_y=sy;r.width=w;r.height=h;r.layers=d;
+    return;
+  }
+  if(t.resource->type!=D3D12DDI_RT_TEXTURE3D || !b.footprint ||
+      b.resource->type!=D3D12DDI_RT_BUFFER || t.offset>=t.resource->levels ||
+      b.footprint->Format!=t.resource->format || !b.footprint->PhysicalWidth ||
+      !b.footprint->PhysicalHeight || !b.footprint->PhysicalDepth) {fail();return;}
+  const UINT level=static_cast<UINT>(t.offset),block=AgxD3d12FormatBlockBytes(t.resource->format);
+  const UINT tw=extent(t.resource->width,level),th=extent(t.resource->height,level),td=extent(t.resource->layers,level);
+  const UINT fw=b.footprint->PhysicalWidth,fh=b.footprint->PhysicalHeight,fd=b.footprint->PhysicalDepth;
+  const UINT sx=box?static_cast<UINT>(box->Left):0u,sy=box?static_cast<UINT>(box->Top):0u,sz=box?static_cast<UINT>(box->Front):0u;
+  const UINT w=box?static_cast<UINT>(box->Right-box->Left):to_buffer?tw:fw;
+  const UINT h=box?static_cast<UINT>(box->Bottom-box->Top):to_buffer?th:fh;
+  const UINT d=box?static_cast<UINT>(box->Back-box->Front):to_buffer?td:fd;
+  const UINT tx=to_buffer?sx:dst_x,ty=to_buffer?sy:dst_y,tz=to_buffer?sz:dst_z;
+  const UINT bx=to_buffer?dst_x:sx,by=to_buffer?dst_y:sy,bz=to_buffer?dst_z:sz;
+  const UINT pitch=b.footprint->Pitch,slice=b.footprint->SlicePitch;
+  if(!block || !w || !h || !d || tx>tw || w>tw-tx || ty>th || h>th-ty || tz>td || d>td-tz ||
+      bx>fw || w>fw-bx || by>fh || h>fh-by || bz>fd || d>fd-bz ||
+      pitch<static_cast<UINT64>(fw)*block || (fd>1 && slice<static_cast<UINT64>(pitch)*fh) ||
+      b.resource->gpuva<b.resource->heap->gpuva) {fail();return;}
+  const UINT64 base=b.resource->gpuva-b.resource->heap->gpuva;
+  const UINT64 point=static_cast<UINT64>(bz)*slice+static_cast<UINT64>(by)*pitch+static_cast<UINT64>(bx)*block;
+  const UINT64 span=static_cast<UINT64>(d-1)*slice+static_cast<UINT64>(h-1)*pitch+static_cast<UINT64>(w)*block;
+  if(b.offset>b.resource->bytes || point>b.resource->bytes-b.offset || span>b.resource->bytes-b.offset-point ||
+      base>b.resource->heap->bytes || b.offset>b.resource->heap->bytes-base ||
+      point>b.resource->heap->bytes-base-b.offset || span>b.resource->heap->bytes-base-b.offset-point) {fail();return;}
+  AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;slot->kind=kCommandTextureCopy;
+  auto &c=slot->texture_copy;c.texture=t.resource->heap;c.buffer=b.resource->heap;
+  c.level=level;c.layer=tz;c.x=tx;c.y=ty;c.width=w;c.height=h;c.depth=d;
+  c.offset=base+b.offset+point;c.pitch=pitch;c.slice_pitch=slice;c.to_buffer=to_buffer;
+}
+
 static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_BUFFER_PLACEMENT *dst_placement,
                                        D3D12DDIARG_PLACED_RESOURCE dst_layout, UINT dst_x, UINT dst_y, UINT dst_z,
                                        const D3D12DDIARG_BUFFER_PLACEMENT *src_placement,
@@ -2115,6 +2353,9 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
     UINT refusal = !CopySide(dst_placement, dst_layout, &dst) || !CopySide(src_placement, src_layout, &src) ? 1u
                  : dst.footprint && src.footprint ? 4u /* buffer <-> buffer footprints */
                  : list->commands >= kListCommands ? 3u : 0u;
+    if(!refusal && (dst.resource->type==D3D12DDI_RT_TEXTURE3D || src.resource->type==D3D12DDI_RT_TEXTURE3D)) {
+        CopyVolumeTextureRegion(list,dst,src,dst_x,dst_y,dst_z,box);return;
+    }
     if (!refusal && !dst.footprint && !src.footprint) {
         /* C8b: texture subresource to texture subresource */
         AgxD3d12TextureRegionCopy rc = {};
@@ -3141,7 +3382,7 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                 if (rc.whole_levels) {
                     for (UINT level = 0; SUCCEEDED(hr) && level < rc.whole_levels; ++level) {
                         const UINT w = rc.width >> level ? rc.width >> level : 1u, h = rc.height >> level ? rc.height >> level : 1u;
-                        hr = AgxD3d12OwnerCopyTextureRegion(owner, &dst, level, 0, 0, 0, &src, level, 0, 0, 0, w, h, rc.layers);
+                        hr = AgxD3d12OwnerCopyTextureRegion(owner, &dst, level, 0, 0, 0, &src, level, 0, 0, 0, w, h, rc.volume ? (rc.layers>>level ? rc.layers>>level:1u):rc.layers);
                     }
                 } else {
                     hr = AgxD3d12OwnerCopyTextureRegion(owner, &dst, rc.dst_level, rc.dst_layer, rc.dst_x, rc.dst_y, &src,

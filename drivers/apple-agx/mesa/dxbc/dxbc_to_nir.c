@@ -3059,7 +3059,8 @@ bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
                default: break;
                }
             }
-            uint8_t dimension = tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE ? DXBC_SRV_OTHER :
+            uint8_t dimension = tex->sampler_dim == GLSL_SAMPLER_DIM_3D ? DXBC_SRV_3D :
+                                tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE ? DXBC_SRV_OTHER :
                                 tex->is_array ? DXBC_SRV_CUBE_ARRAY : DXBC_SRV_CUBE;
             uint8_t *slot = &dimensions[tex->texture_index];
             if (*slot != DXBC_SRV_UNUSED && *slot != dimension) goto fail;
