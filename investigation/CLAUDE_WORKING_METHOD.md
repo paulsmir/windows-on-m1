@@ -82,3 +82,24 @@ Scratchpad: /private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-
 - Probe bugs vs driver bugs: check D3D12 API rules (copy-list states,
   SM5 PS UAV register >= RT count, one active occlusion query in Asahi).
 - Report per EXP in Russian chat; plan/stage note before tasks.
+
+## User-authorized throughput update (2026-10-18)
+
+The user approved supervisor guidance: independent changes may share one
+experiment when each has a fresh-device probe step, its own
+AGX_D3D12_<step>: PASS/FAIL and receipts, and BEFORE explicitly records
+`ATOMIC CONTRACT: none -- separate steps ...`. Dependent changes remain one
+coherent change per experiment. A failed independent step does not block
+recording the others. While hardware runs, implement/offline-test/builder-check
+and prebuild the next candidate after its snapshot is pinned. Prepare for the
+next install immediately after exact rollback reports RECOVERY_DONE.
+
+Investigate/fix the known KMD private-scene-pool exhaustion in parallel with
+D3D12; do not hide it in the UMD or silently increase capacity. Give it a real
+regression and a dedicated hardware checkpoint/receipt. Keep shared Git commits,
+package snapshots, ledgers and the hardware launcher under one coordinator.
+
+Performance correction: the ~59.6fps regression reference in older summaries
+is the internal GL2400-frame benchmark, not the CS timedemo. EXP1377 CS did not
+launch (BENCH_COPY_FAIL); EXP1378 post-harness CS44.784fps and EXP1379 early
+CS46.391fps are separate measurements. Preserve that distinction.
