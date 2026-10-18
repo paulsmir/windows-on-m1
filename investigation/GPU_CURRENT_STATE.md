@@ -1,8 +1,10 @@
-## EXP1379 preparation (SRV capacity, 2026-10-18)
+## EXP1379 completed and rolled back (2026-10-18)
 
-- Driver a1a954ef raises the shared UMD/owner SRV limit16->128; compiled root-bound regression RED->GREEN. No caps, KMD, firmware or register-space change. Probe a9dd189f adds fresh-device C16A root t127/table t126/UAV u7/CBV b13; expected5*i+207 for16384 words; ARM64 probe98a330e1.
-- Targeted32testsPASS; syntax3x rc0. Full1499 tests has the exact same68failures/51errors/2skips as prior baseline, no new failure signatures. Logs EXP1379-verification. Next gate package1379 build and both stack frames<=16384 before any hardware install.
-- Guest currently normal/inert, EXP1378 rec1378h RECOVERY_DONE PackageAbsent. Do not repeat its hidden recovery before staging. Scripts scratchpad build1379.sh/newexp-kmd1379.sh/before1379.txt; chain/run to pin final snapshot after build.
+- PROVEN: shared SRV capacity128 a1a954ef. C16A root t127/table t126/UAV u7/CBV b13:16384 exact words bad0 first207,212 last82122, fence7. All35D3D12 PASS including counted/no-count C14 and dispatch. Package snapshot94cf05de, SYS1d415f8c, UMDc8458268, probe98a330e1. No caps/KMD/firmware/space change.
+- Regression baseline matched:73SMOKE PASS + knownMSAA only; fl11cs-a/x PASS, no private-acquire failure at those checks. GL52.3/internal59.6fps, CS46.391fps, corpus64/4 without hangs/pixel differences, DWM faults0; intentionalLONGJOB recovery1 only. Separate EXP1361/1378 KMD global-pool capacity issue is still open, not fixed by SRV capacity.
+- Recovery rec1379h RECOVERY_DONE, normal inert devnode CM_PROB_FAILED_INSTALL,8CPU reported. Durable Preflight PASS PackageAbsent AfterBoot2026-10-18T12:27:06.9180430Z. No active experiment/package.
+- NEXT: remaining handoff binding item, SM5.1 register spaces. Source example .local/d3d12-sm51-space-reference has two u0 buffers in spaces1/2 and b0/space3, emitted as U0/U1/CB0 range IDs. Current root namespace checks reason5 and translator resource operand dimensionality refuse it. Need one shared shader-declaration logical-key-to-physical-slot map for compiler and root replay; do not merely remove space checks. Static bindings first; arrays/dynamic indexing remain fail-closed until coherently designed. No shader-model/default-profile caps changes.
+- Plan/source review investigation/analysis/D3D12-C16-binding-map-plan.md. Targeted32testsPASS; full1499 same68fail/51errors/2skips as baseline. Builder3x rc0; stackARM6412800/x866544PASS. Evidence .local/experiments/EXP1379-d3d12-tier1-srv128/evidence/EXP1379; logs scratchpad newexp1379.log/rec1379.log. Preserve preexisting dirty mu and external README/license commits.
 
 ## EXP1378 completed and rolled back (2026-10-18)
 
