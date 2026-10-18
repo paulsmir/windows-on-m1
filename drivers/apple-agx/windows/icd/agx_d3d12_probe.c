@@ -9,6 +9,7 @@
 #include "agx_d3d12_probe_cs_cb.h"
 #include "agx_d3d12_probe_cs_table.h"
 #include "agx_d3d12_probe_cs_srv.h"
+#include "agx_d3d12_probe_cs_slots.h"
 #include "agx_d3d12_probe_vs.h"
 #include "agx_d3d12_probe_ps.h"
 #include "agx_d3d12_probe_vs_root.h"
@@ -466,17 +467,19 @@ static int compute_table(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
  * and a table {SRV t1, structured uint, B[i] = i + 100} written directly
  * into the shader-visible heap; agx_d3d12_probe_cs_srv.hlsl writes
  * A[i] + 2 B[i] = 5i + 200. */
-static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence) {
-    D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0, 0};
-    D3D12_ROOT_PARAMETER parameters[3] = {{D3D12_ROOT_PARAMETER_TYPE_UAV}, {D3D12_ROOT_PARAMETER_TYPE_SRV},
-                                          {D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}};
-    D3D12_ROOT_SIGNATURE_DESC root_desc = {3, parameters};
+static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, int high_slots) {
+    const char *step = high_slots ? "C16A" : "C5D";
+    D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, high_slots ? 126u : 1u, 0, 0};
+    D3D12_ROOT_PARAMETER parameters[4] = {{D3D12_ROOT_PARAMETER_TYPE_UAV}, {D3D12_ROOT_PARAMETER_TYPE_SRV},
+                                          {D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {high_slots ? 4u : 3u, parameters};
     D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
     D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
     ID3DBlob *blob = NULL, *errors = NULL;
     ID3D12RootSignature *root = NULL;
     ID3D12PipelineState *pso = NULL;
     ID3D12DescriptorHeap *heap = NULL;
+    ID3D12Resource *cb = high_slots ? committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ) : NULL;
     ID3D12Resource *uav = uav_buffer(device);
     ID3D12Resource *a = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
     ID3D12Resource *b = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -486,10 +489,12 @@ static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
     UINT *dwords = NULL;
     unsigned bad = 16384;
     UINT64 value = 0;
-    parameters[1].Descriptor.ShaderRegister = 0;
+    parameters[0].Descriptor.ShaderRegister = high_slots ? 7u : 0u;
+    parameters[1].Descriptor.ShaderRegister = high_slots ? 127u : 0u;
+    parameters[3].Descriptor.ShaderRegister = 13;
     parameters[2].DescriptorTable.NumDescriptorRanges = 1;
     parameters[2].DescriptorTable.pDescriptorRanges = &range;
-    HRESULT hr = uav && a && b && readback ? S_OK : E_FAIL;
+    HRESULT hr = uav && a && b && readback && (!high_slots || cb) ? S_OK : E_FAIL;
     if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(a, 0, NULL, (void **)&dwords);
     if (SUCCEEDED(hr)) {
         for (unsigned i = 0; i < 16384; ++i) dwords[i] = 3u * i;
@@ -499,6 +504,15 @@ static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
     if (SUCCEEDED(hr)) {
         for (unsigned i = 0; i < 16384; ++i) dwords[i] = i + 100u;
         ID3D12Resource_Unmap(b, 0, NULL);
+    }
+    if (SUCCEEDED(hr) && high_slots) {
+        hr = ID3D12Resource_Map(cb, 0, NULL, (void **)&dwords);
+        if (SUCCEEDED(hr)) {
+            dwords[0] = 7;
+            ID3D12Resource_Unmap(cb, 0, NULL);
+        }
+    }
+    if (SUCCEEDED(hr)) {
         hr = ID3D12Device_CreateDescriptorHeap(device, &heap_desc, &IID_ID3D12DescriptorHeap, (void **)&heap);
     }
     D3D12_GPU_DESCRIPTOR_HANDLE gpu_start = {0};
@@ -517,13 +531,13 @@ static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
         hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
                                               ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature,
                                               (void **)&root);
-    printf("C5D CreateRootSignature hr=0x%08lx\n", (unsigned long)hr);
+    printf("%s CreateRootSignature hr=0x%08lx\n", step, (unsigned long)hr);
     if (SUCCEEDED(hr)) {
         pso_desc.pRootSignature = root;
-        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_srv;
-        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_srv);
+        pso_desc.CS.pShaderBytecode = high_slots ? g_agx_d3d12_probe_cs_slots : g_agx_d3d12_probe_cs_srv;
+        pso_desc.CS.BytecodeLength = high_slots ? sizeof(g_agx_d3d12_probe_cs_slots) : sizeof(g_agx_d3d12_probe_cs_srv);
         hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
-        printf("C5D CreateComputePipelineState hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s CreateComputePipelineState hr=0x%08lx\n", step, (unsigned long)hr);
     }
     if (SUCCEEDED(hr))
         hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -542,18 +556,19 @@ static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
         ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 0, ID3D12Resource_GetGPUVirtualAddress(uav));
         ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(list, 1, ID3D12Resource_GetGPUVirtualAddress(a));
         ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 2, gpu_start);
+        if (high_slots) ID3D12GraphicsCommandList_SetComputeRootConstantBufferView(list, 3, ID3D12Resource_GetGPUVirtualAddress(cb));
         ID3D12GraphicsCommandList_Dispatch(list, 256, 1, 1);
         ID3D12GraphicsCommandList_ResourceBarrier(list, 1, &barrier);
         ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, uav, 0, 65536);
         hr = ID3D12GraphicsCommandList_Close(list);
-        printf("C5D record+close hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s record+close hr=0x%08lx\n", step, (unsigned long)hr);
     }
     if (SUCCEEDED(hr)) {
         ID3D12CommandList *lists[] = {(ID3D12CommandList *)list};
         ID3D12CommandQueue_ExecuteCommandLists(queue, 1, lists);
         hr = ID3D12CommandQueue_Signal(queue, fence, 7);
         for (int i = 0; i < 300 && (value = ID3D12Fence_GetCompletedValue(fence)) < 7; ++i) Sleep(10);
-        printf("C5D execute+signal hr=0x%08lx completed %llu\n", (unsigned long)hr, (unsigned long long)value);
+        printf("%s execute+signal hr=0x%08lx completed %llu\n", step, (unsigned long)hr, (unsigned long long)value);
     }
     if (SUCCEEDED(hr) && value == 7) {
         D3D12_RANGE all = {0, 65536};
@@ -561,12 +576,12 @@ static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
         hr = ID3D12Resource_Map(readback, 0, &all, (void **)&dwords);
         if (SUCCEEDED(hr) && dwords) {
             bad = 0;
-            for (unsigned i = 0; i < 16384; ++i) bad += dwords[i] != i * 5u + 200u;
-            printf("C5D readback bad=%u first=%u,%u last=%u\n", bad, dwords[0], dwords[1], dwords[16383]);
+            for (unsigned i = 0; i < 16384; ++i) bad += dwords[i] != i * 5u + 200u + (high_slots ? 7u : 0u);
+            printf("%s readback bad=%u first=%u,%u last=%u\n", step, bad, dwords[0], dwords[1], dwords[16383]);
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("AGX_D3D12_C5D: %s\n", SUCCEEDED(hr) && value == 7 && bad == 0 ? "PASS" : "FAIL");
+    printf("AGX_D3D12_%s: %s\n", step, SUCCEEDED(hr) && value == 7 && bad == 0 ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (pso) ID3D12PipelineState_Release(pso);
@@ -575,6 +590,7 @@ static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
     if (blob) ID3D10Blob_Release(blob);
     if (heap) ID3D12DescriptorHeap_Release(heap);
     if (readback) ID3D12Resource_Release(readback);
+    if (cb) ID3D12Resource_Release(cb);
     if (b) ID3D12Resource_Release(b);
     if (a) ID3D12Resource_Release(a);
     if (uav) ID3D12Resource_Release(uav);
@@ -2083,7 +2099,7 @@ static int queue_fence_signal(ID3D12Device *device) {
             if (SUCCEEDED(c4) && value == 2 && gpu_copy(device, queue, fence) == 0 &&
                 compute_dispatch(device, queue, fence) == 0 && compute_constants(device, queue, fence) == 0 &&
                 compute_table(device, queue, fence) == 0)
-                (void)compute_srv(device, queue, fence);
+                (void)compute_srv(device, queue, fence, 0);
             /* C6a is independent of the compute steps (it needs C4b only) */
             if (SUCCEEDED(c4) && value == 2) {
                 UINT64 done = ID3D12Fence_GetCompletedValue(fence);
@@ -2107,6 +2123,7 @@ static int step_c6d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT
 static int step_c11(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 3); }
 static int step_c13(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 4); }
 static int step_c14(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 5); }
+static int step_c16a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { (void)b; return compute_srv(d, q, f, 1); }
 static int step_c14nc(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 6); }
 static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step step) {
     ID3D12Device *device = NULL;
@@ -2157,6 +2174,7 @@ int main(void) {
                 (void)run_isolated(adapter, "C14", step_c14);
                 (void)run_isolated(adapter, "C14NC", step_c14nc);
                 (void)run_isolated(adapter, "C14B", compute_indirect);
+                (void)run_isolated(adapter, "C16A", step_c16a);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
             }
             IDXGIAdapter1_Release(adapter);

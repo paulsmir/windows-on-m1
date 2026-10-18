@@ -98,15 +98,15 @@ Architecture: keep the current register-to-slot identity map, with one shared
 Existing Gallium calls and DXBC frontend already support128. C++/C/WDK26100.
 Execution: inline using the established agx-d3d12-loop; no delegation needed.
 
-- [ ] Add compiled-root-bound regression in tests/test_d3d12_native_owner.py:
+- [x] Add compiled-root-bound regression in tests/test_d3d12_native_owner.py:
       extract the actual SRV bound and refusal predicate; t16/t126/t127 must
       be admitted and t128 refused; shared owner limit must match. Run RED.
-- [ ] Change kSrvSlots in d3d12/agx_d3d12_ddi.cpp and AGX_D3D12_SRV_SLOTS
+- [x] Change kSrvSlots in d3d12/agx_d3d12_ddi.cpp and AGX_D3D12_SRV_SLOTS
       in mesa/winsys/agx_d3d12_windows.h to128. Keep other limits. Run GREEN.
-- [ ] Retain C5D; add fresh-device C16A probe using root t127, table t126,
+- [x] Retain C5D; add fresh-device C16A probe using root t127, table t126,
       root u7 and root CBV b13, with 16384 exact output words. Compile the
       shader with fxc cs_5_0, build ARM64 probe. No SM5.1 code yet.
-- [ ] Run affected tests and builder syncheck3x rc0; full host suite once
+- [x] Run affected tests and builder syncheck3x rc0; full host suite once
       before commit, recording known unrelated failures without claiming GREEN.
       Read tandem review, commit implementation, append CHANGES with its hash.
 - [ ] Preregister EXP1379 (one driver factor SRV capacity), preserve exact
@@ -120,3 +120,7 @@ Ownership: UMD and owner initialize/replay slot records, Asahi owns NIR/GPU
 bindings, KMD owns residency/interrupts/recovery. Firmware and power are
 unchanged. Known EXP1361/1378 global scene-pool capacity failure remains a
 separate KMD issue and must be reported if it recurs, not hidden in this fix.
+
+C16A shader generated with fxc cs_5_0: root t127/table t126, root u7, root CBV b13 with bias7; output5*i+207 for16384 words. DDI and owner syntax3x rc0, probe ARM64 SHA256 98a330e1a36fcc65802be6c8059cab4e04d69f09c49e9355bc7b7da02bbdd58c. Targeted32testsPASS. Asahi set_sampler_views starts0 and loops the count, texture upload emits/nulls all indices through nr_bindful_textures; no sampler-limit16 assumption is used for sampler views.
+
+Full host suite1499 tests in165.841s:68failures/51errors/2skips, identical failure signatures to the pre-capacity1498-test baseline (new failures0, removed0). Relevant32tests PASS; syntax3x rc0, ARM64 probe BUILD_PASS. Logs .local/experiments/EXP1379-verification. Tandem historical OPEN items remain DEFER at the unrelated G3/firmware boundary as recorded in the C14 note; R85/R47 hash/profile gates and R48 single-launcher lock remain ACCEPT.
