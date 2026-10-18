@@ -1,3 +1,9 @@
+## EXP1381 C13 UMD crash isolated; rollback pending (2026-10-18T14:07Z)
+
+- D3D12 26PASS then C13freshdeviceS_OK -> UMD c0000005 RVA0x272530, exactmatchedPDB/dump. OwnerCreateBuffer dereferences owner=-1. CreateDevice leaves private storage/lazy owner/paging/heap fields uninitialized in both56fe3977 andaccepted1380; writer of poison notobservable inminidump. Minimalzeroing plusrealpoisonedstorage regression inprogress. C18A/B/C14etcNOT_REACHED; donotclaimC18PASS.
+- Harnessstillfinishingcorpus; guestSSH/DWM/exploreralive. KMD_POOL6workersPASS, new10foreignreclaims955->944/freed11x64KiB/request1MiB/largest18, fl11cs-a/xPASS. Preserveoriginaldump11168/crash-inventory.txt. WaitNEWEXP_DONE thenfactoryverifiedvisible rec1381h/recover.sh, no parallelguestcommands.
+- Queued1382/1383 inherituninitializeddevice andMUSTNOTlaunch. EXP1387reservedC18+deviceinitfixcheckpoint; excludeunvalidatedC19/C20/C21 fromsnapshot. 1384/1385nativequeryBUILD_ONLYPASS/nohardware. C21prototypefull1539 same119baseline failures; stillno3Dadmission pendingtruthfulswizzlecontract. C15host83TUsGREEN;1386isolatedWindowsconfigure exactgraph83TUs buthostgatefilenamecollisionstoppedbeforecompile;1388toolgatefixretryplanned.
+
 ## EXP1381 active (2026-10-18)
 
 - C18 SRVcomponentmapping8120126d/probe25276db2, pinnedsource56fe3977, probe1b2809d4; SYS0a4112f4/UMD7b2315f2/catalog4ff72eef. BEFORE6d51681b, allbuild/hash/stack gatesPASS. Singlefeature versusEXP1380; C17/KMD inheritedcontrols. Do not restart activeexperiment.

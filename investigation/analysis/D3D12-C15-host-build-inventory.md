@@ -192,3 +192,27 @@ Collect `out/`, `artifact-hashes.json`, all nine archives, manifests and notices
 do not install, link into the UMD or execute on GPU hardware. A successful Windows
 build would still leave runtime allocator/C ABI smoke, valid-DXIL conversion,
 SPIR-V/NIR/AGX compatibility and model admission unproven.
+
+### EXP1386 configure stop and prepared EXP1388 retry
+
+Parent recorded EXP1386 BUILD_ONLY BEFORE `45182574` and executed the isolated
+script. Configure succeeded, then the graph gate stopped **before compilation**:
+its filename wildcard `target-dxbc-spirv-*.json` matched both dxbc-spirv and
+unused dxbc-spirv-test. Read-only builder inspection confirmed their JSON names
+and source counts (88 and 32 source/header entries). This was a gate selection
+bug, not evidence of runtime graph drift. A separate exact-JSON-name comparison
+of all nine configured targets matched the reviewed 83 TUs. Configured flags
+retain /MD everywhere, C++14 for core/builder/decoder, C++17 for llvm-bc and
+ dxbc-spirv, and upstream MSVC flags. Captured evidence:
+`/tmp/c15-1386-configured-targets.json`; parent owns ACTUAL/ledger interpretation.
+
+Prepared retry root is `C:\Users\pauls\EXP1388-dxil-runtime-build-only`.
+Local bundle `/Users/pavel/public_windows/.local/c15-win-arm64-1388/EXP1388-dxil-runtime-build-only.zip`
+SHA-256 `0c416a3b0601ba6255e4dda639c17d9a3ff4e0032395b8c729cdabc29a641be3`.
+Corrected script SHA-256
+`49bb9cf29fd68affe8f35150642ed3fe91ec0f5a1e1a47a44db11c018ca2b462`.
+Source archive, reviewed manifest, tools and all remaining inputs retain their
+EXP1386 hashes. The only script differences are the fresh isolated root and
+exact JSON.name identity selection, retaining the same TU/hash gates. No flags,
+selected targets or source changed; failed EXP1386 remains untouched. The retry
+is prepared locally only; parent must record continuation BEFORE before execution.
