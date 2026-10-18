@@ -57105,3 +57105,68 @@ EXP1411 ACTUAL 2026-10-18T16:07:50Z: IDENTITY_GATE_FAIL aspreregisteredexactInfo
 EXP1412 SOURCE-IDENTITY BEFORE 2026-10-18T16:07:50Z: newprimaryevidence changesvalidationhypothesis: MicrosoftOpenValidate source https://github.com/microsoft/microsoft-pdb/blob/master/PDB/dbi/pdb.cpp lines762-815 requiresmatchingGUID/PDBInfoAge>=ImageAge/DBIAge==ImageAge(nonzero). Thus1411exactInfoAgegatewasstricterthanMicrosoftimplementation; mustreadDBIAgeBEFOREnamedsymboluse, notsimplyignoreage. LocalLLVMRawTypes.h DbiStreamHeader hasAgeatbyte8, matchingprimaryformat. ReadONLYimmutable1411downloadSHA bdbf007ee03a383b264a0bb50a3f96bf3d8818fae2562ad4dfc068b982543231 withboundscheckedoriginalMSFstreamreader intoNEW.local/c15-runtime-identity-1412; verifyGUID/InfoAgefromstream1 andDBIAgefromstream3 againstRSDS. No networkfallback/newPDBdownload/moduleexecution. RequireGUIDexact/InfoAge>=1/DBIAgeexact1; DBIAge0 deliberatelynotacceptedhere. OnlyafterPASS existingpinnedllvm-pdbutildump-publics-globals-section-map tocapturedfilesandboundedNAMEDR1adapteranalysis. Ifgatefailsstop; no forcedsymbolmismatchload orblanketagewaiver. Preserve1411receipts, recordallsource/tool/input/outputhashes; sourceprimaryOpenValidatepathdifferentfrominitialstrictgate explicitlyrecorded.
 
 EXP1404 BUILD ACTUAL 2026-10-18T16:08:45Z: PACKAGE1404_BUILD_PASS sourcea19a2ddae3bb0b89a09f4cfe48a69f8f399ce278/686filesintegrityPASS/nativeclosurelinkPASS/PDBS_SAVED. ARM64largeststack13824<=16384;acceptedWOWlargest6544. BuildreceiptSHAcb5cb856834fdc8b72c0f531c92fdbee3db9d1250ed0b1e3cd70e8a5b5232cad,all4artifacthashescoordinatorchecked undernative-build-evidence;sourcebuildlogs/PDBpreservedbeforefuturepackageRepack. Hostpreflightinitiallystoppedbeforeactionbecausebuildscriptdoesnotdownloadreceiptuntilnewexp; read-onlySCPcollectedoriginals, no buildretry. Repackage/sign/stage/fullhardwareBEFOREdonebynewexp-kmd1404beforeinstall. Nextsequentialbuild1407source3ae2c234783bb8a653fbda9f1f1d04d5136ff618perrecordedBEFORE.
+EXP1404 BEFORE 2026-10-18T16:10Z (PACKAGE1404: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD a19a2ddae3bb0b89a09f4cfe48a69f8f399ce278 (independent C19 fragment-center repair plus C20 typed buffer extents versus EXP1390; unchanged1391 47-step probe; FL11_0 opt-in; b_ndebug) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF b17fdb69, sys 1697f82b, UMD 4f79f4c5, catalog 652aa5eb, DriverVer 30.0.1404.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1404.sh 750bd5721b52e860 98a26d1fe06b810a 4664b53d99751d0a ; C: free 28.59 GB; recovery rec1404h/recover.sh; probe probe1404.sh (6fcb3f2494246a1f); then the standard benchmark (EXP1184 harness: playnoovl).
+WHY THIS HYPOTHESIS:
+1. EXP1390 exact cube probe returned C19A/B/C/D each64/4096 bad pixels, firstbad x21. Current wholecube/mip/array addressing gives the correct other4032pixels; source/evaluator isolate missing native fragment half-pixel arithmetic before Asahi late load_pixel_coord lowering.
+2. Existing rast.half_pixel_center and shader metadata are already set; they do not add the lost fraction. Only the D3D12 owner's fresh fragment NIR preparation changes. EXP1408 actual-owner+realhelper+Asahi coordinate evaluation passed pixel21 and preservedZW; CPU1405 is a separate completed C15 CPU-only prerequisite, not the coordinate test.
+ATOMIC CONTRACT: none -- separate steps C19A-D fragment-center repair and C20A/B typed buffer SRV extents; independent branches, fresh devices, own AGX_D3D12_<step> PASS/FAIL and receipts. This is explicitly TWO changes versus hardwareEXP1390, not a single-factor claim. C19 acts on fresh fragment shader NIR; C20 acts only on nontexture PIPE_BUFFER byte spans in bind_stage for compute shaders. No C21/C15, caps, shader model, KMD or firmware changes.
+WHY THIS HYPOTHESIS (C20): Existing actual-owner RED2->GREEN4 reproduces erroneous typed-span dword truncation: threeR8_UINT elements became0B; threeR16_UINT became4B. The fix retains exact typed bytes while untyped raw/structured controls keep their previous dword alignment. C20A/B separately check GetDimensions3, values17/83/197 and257/4099/60013,64-byte origin and untouched sentinels. It is independent of C19 fragment-coordinate translation; failed fresh-device steps do not suppress subsequent steps.
+WINDOWS CONTRACT: FULL GRAPHICS SV_Position at single-sample pixel centers is (x+.5,y+.5); exact C19 FXC/probe pixel oracle remains unchanged. No shader-side offset or expected-pixel relaxation.
+AGX/ASAHI CONTRACT: Actual Asahi late nir_lower_frag_coord_to_pixel_coord consumes integer pixel_coord, requiring explicit target center normalization before IO/backend lowering. Existing NIR lowering is used once on fresh D3D12 FS only, not generic GL/Vulkan/D3D11 paths or VS.
+TRANSLATION: Root-pinned immutable companion a19a2ddae3bb0b89a09f4cfe48a69f8f399ce278 equals22cf1fc5cec781a1f274d7ca9157a7868cf2078a driver snapshot (C19+C20+init) plus only the three-file C19 center helper/owner call invariant from helper679bbdce. verify-source1404.sh refuses UNPINNED/mismatched env/nonexact commit/any driver file differences outside exact sorted dxbc_to_nir.c/dxbc_to_nir.h/agx_d3d12_windows.cpp. No HEAD fallback. Implementation must retain one-time lowering and original compiler options. Probe source/binary unchanged from1391, now47steps; two hardware variables versus1390 remain explicitly separate.
+WHAT IS STILL UNKNOWN: Actual native shader propagation of the once-only correction and the C19 x21 transition on hardware. Offline mapping is already derived; no capability probe.
+Expected: All47AGX_D3D12 PASS lines, especiallyC19A/B/C/D all4096exactRGBA pixels bad0 instead of64; C20A/B exact three-element typed spans and oldC18/C14/C17 controls remainPASS. DedicatedKMD_POOL fresh pressure+pixels/fences/exitPASS.73SMOKEPASS+knownMSAA only; fl11cs-a/x/debugPASS; corpus64/4 nohang/pixeldiff; DWMfaults0; onlyintentionalLONGJOB recovery. Report GL/internalGL and distinctCS timedemo separately.
+Failure: Missing/newbadC19 or any oldcontrol regression, unexpectedTDR/bugcheck/guestloss. Collect evidence first; recover and use newID onhang.
+Prerequisites: EXP1390 completion/verdict and rec1390.log RECOVERY_DONE plus PackageAbsent, and parent-owned scratchpad/cpu1405.done containing exactlyEXP1405_CPU_GATE_PASS. Source guards enforce exact immutable pin and three-file companion; readiness marker never generated by these scripts.
+Recovery: Same normal GPU-visible inert8CPUguest, exactexperiment-local hashcheckedpackage. Current visible recovery FACTORYV2 required; sourceJSON Version2 is checked afterstage. Verifyfactorypinsagainbeforerecovery; rec1404h/recover.sh untilRECOVERY_DONE/PackageAbsent. No ordinaryhiddeninterposition or concurrentguestcommands duringcontroller.
+Evidence: .local/experiments/EXP1404-d3d12-fragcoord-center/evidence/EXP1404, stdout/UMD/poolbeforeafter/regressions, rec1404h. Source zip/manifest hashes generated and appended bynewexpBEFORE afterbuild; no prepared package is claimed built.
+Source baseline22cf1fc5cec781a1f274d7ca9157a7868cf2078a; candidate remains root-pinned companion, notHEAD.
+Build: bashscratchpad/build1404.sh reads source1404.rev ONLY; currently pinned to a19a2ddae3bb0b89a09f4cfe48a69f8f399ce278. Launchrun1404.sh onlyafterbuildgates/CPU1405parent-readiness/recoverygates; source is already immutable-pinned. Finalpackage/sign/stack/manifest/recoveryhashes mustbecompletebeforehardware.
+agx_d3d12_probe_e1404_arm64.exe SHA256 a56a31322d02278bcd9242e91617a1f37a34e30aea410c0b6b40a2d602d79674 (byte-identical1391;47steps)
+agx_d3d12_kmd_pool_probe_e1404_arm64.exe SHA256 55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3
+C19 HELPER INVARIANT: helper679bbdce defines dxbc_nir_lower_fragment_position in existing C translation unit, declares it in dxbc_to_nir.h and calls it only for freshly translated MESA_SHADER_FRAGMENT in D3D12 owner before create_fs_state. Helper wraps existing nir_lower_wpos_center exactly once; VS, generic DXBC translation, GL/Vulkan/D3D11 paths and original pixel oracle remain unchanged. No NIR builder/intrinsic header is imported into Windows owner C++; source-level helper is part of the same center correction, not another observable feature. EXP1408 numeric actual-owner/helper tests PASS; parent controls the existing CPU1405 readiness marker.
+IMMUTABLE SOURCE PIN: a19a2ddae3bb0b89a09f4cfe48a69f8f399ce278; baseline 22cf1fc5cec781a1f274d7ca9157a7868cf2078a. Source-companion-helper-proof.json records distinct per-candidate C/owner blobs and identical helper header; whole dxbc_to_nir.c blobs legitimately differ with their baseline, so do not require whole-C equality across candidates.
+PACKAGE_ARTIFACTS:
+b17fdb694a2c9dceb8598722814a799c5d6adc4610b376796f901ff3c4e7e29a  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/AppleAgxRenderAdmission.inf
+1697f82b39fbdbe32e809aba147adbb1866ec7b206d46898bc7e25a73f0a3d0d  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/AppleAgxRenderAdmission.sys
+4f79f4c5e11451a98e2191f32b82052f23af7be8e712e0503d0d256193a3d46d  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/AppleAgxRenderAdmissionUmd.dll
+652aa5eb9957b1cf262a0392fa5389318a94ef1524f1ba21a64a87060544fe35  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/AppleAgxRenderAdmissionUmd32.dll
+750bd5721b52e8600a13037fc85e9721fc0282b8fccdb22c19bdd21b44c21872  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/manifest.json
+98a26d1fe06b810a4cd39f94192aa7e097ae8c23d75c740d99874e629d6193dc  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/hardware-manifest.json
+864197b08d0cfc8e7fc57c91ac1b860539c9df6ce4c1bfb011f4390c26af2771  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/kmd-build-receipt.json
+4664b53d99751d0a026c68a43dc55ec9321aed6374e56e42d20c11b274fda445  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/full-owner1404.sh
+SOURCE_ARTIFACTS:
+65fe57a227382fa06326bb89bbbf512f9c9e4cfc1eab15fa88e07a541516cfec  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/source.zip
+d6de4224021003197c24c6be2b7d9d1b3f0df86392b54528fc2e00b2952022e8  /Users/pavel/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center",
+  "ExperimentId": "1404",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "38909f549c08ac3f0f88d1ce8737b4a2556c7441b91121723e27246503d2be10"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/evidence/rec1404h/recover.sh.legacy-hidden",
+      "Sha256": "a7916fc985f89fe26b31aed8753025490ce333c34c9d05aa5a768a2be250c794"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1404-d3d12-fragcoord-center/evidence/rec1404h/recover.sh",
+      "Sha256": "ba01c5a77ae070ea6483bce93a14e7a988e6a4326a47e475f57e28032dc0a513"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
