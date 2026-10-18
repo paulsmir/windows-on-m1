@@ -56898,3 +56898,51 @@ REC-EXP1381 ACTUAL 2026-10-18T14:21:13Z: RECOVERY_DONE GPUvisiblePackageAbsent, 
 
 EXP1389 BUILD-ONLY ACTUAL 2026-10-18T14:25:21Z: END-TO-END_COMPILER_ONLY_PASS. OriginalDXCcs6.0fixture ->reviewedhostCAPI ->980BSPIRV1.3/spirv-valVulkan1.1PASS ->actualMesaNIR/indexedSSBO/realpasses ->actualAGXpreprocess/backend68BbinarySHA256c269f1119bea13afc7355eb49958ba9074d11eb1a9766162e3fc02881af81025,10instructions/push16=4/workgroup64x1x1. OriginalCPUoracleexecutesactualindexedNIR128IDs:64stores exact3*x+7 at4*x,othersguarded; negativebinding-2. Explicitcompiler-onlynamedSSBO0_BASEpreambleparameter/noGPUVA/DRMshim/productionownerbindingclaim. OnlypreregisteredexistinghostToolsdyllibdelta; no newsource/dependencyinstall. All27artifacthashesreverified byparent; manifest.local/c15-sm6-8434b063/EXP1389-artifact-hashes.jsonSHA2564a0b5e6a669e1fab49e5a5593501411d402e7ef89f484dc86c1295e23f61144c. Windowsruntime/GPUexecution/SM6caps NOTPROVEN; separateproductionplan/conditions75632532.
 C15 review completion 2026-10-18T14:25:21Z: latestuserpriority afterEXP1381rollback fulfilled in75632532; requestedanalysis/D3D12-C15-dxil-license-review.md SHA2562086e8a097a90ace6377abc1b94c6c09a26c1b9b107aa93d0410487929b3574c, positiveconditions plus updatedintegrationplan/standaloneevidence. No externalcodecopy/productionlink/caps. ProcessCHANGES recordsresulting40-charactercommit; next1387hardwaremayproceedwithalreadypreregisteredinitfix, thenremainingcurrentminorcheckpoints/C15majorintegration perplan.
+EXP1387 BEFORE 2026-10-18T14:27Z (PACKAGE1387: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMDd5bfef7a (C18 unchanged plus device initialization e8e0b35a; exact1381 probe; FL11_0 opt-in; b_ndebug) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF b52d6e27, sys ac32d026, UMD c491c572, catalog 649d45d5, DriverVer 30.0.1387.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1387.sh 9bc81941b880c40d 7d392d9bb5d3e6db 52eab21cf11d7b57 ; C: free 28.96 GB; recovery rec1387h/recover.sh; probe probe1387.sh (b248b5435f6ce5f6); then the standard benchmark (EXP1184 harness: playnoovl).
+WHY THIS HYPOTHESIS:
+1. EXP1381 exact matched minidump/PE/PDB shows CPU read AV in OwnerCreateBuffer+0x28 with owner=-1, immediately after C13 fresh device and before C18; no GPU exception. Pinned CreateDevice does not initialize lazy owner, paging or heap fields.
+2. Actual CreateDevice/EnsureOwner regression on reused0xff/a5 blocks reproduced stale paging/owner state RED2; two-line zeroing GREEN33. CreateDevice/EnsureOwner/CreateHeap are identical in accepted1380 and failed1381, so the initialization defect predates C18; the poison writer itself is not observable in the minidump.
+ATOMIC CONTRACT: device private storage must be initialized before lazy owner/paging/heap use. Single changed behavior versus1381: complete CreateDevice zeroing. C18 source and probe are unchanged controls whose verdict remains pending; C19/C20/C21 excluded.
+WINDOWS CONTRACT: FULL GRAPHICS. Runtime allocates CalcPrivateDeviceSize bytes; the UMD initializes every private field before storing runtime callbacks/kernel/generation. Lazy native owner creation remains on first resource. No capability, profile, format, layout or shader change.
+AGX/ASAHI CONTRACT: use a successfully created native owner only; Screen/context/buffer lifetimes unchanged. KMD foreign-cache reclaim is inherited from validated1380. m1n1/Mu/power/RTKit/UAT/IRQ unchanged.
+TRANSLATION: zero sizeof(AgxD3d12Device) before setting its established inputs and generation; deterministic fresh state on reused runtime allocations. Normal integrated implementation e8e0b35a; package-only companion d5bfef7af7109ed15ac9b7a43fa8aff8b83e4381 derives exact56fe3977 tree plus only zeroing/test/note, retained refs/agx-experiments/EXP1387.
+WHAT IS STILL UNKNOWN: hardware C13 and following checkpoints with a fresh initialized device, and previously unreached C18 SRV channel mapping. Hardware verifies the designed mapping, not a guessed API rule.
+Expected: C13 then C14 counted/no-count drawn=counter512, C14B bad0, C16/C17 and C18A/B exact4096RGBA each, C7 present; all41D3D12 lines PASS. KMD_POOL independent inheritedcontrol requires fresh pressure receipt and workerpixels/fences/clean exits. Regression73SMOKEPASS+knownMSAA only, fl11cs-a/xPASS, noDWMfaults, corpus64/4zero hangs/pixeldiffs, onlyintentionalLONGJOBrecovery. GL/internalGL and separate CS timedemo reported independently.
+Failure: any CPU AV/missingstep/pixelbad, old-step regression, unexpectedTDR/bugcheck/guestloss; preserve exact receipts and dump. Do not infer C18 from earlier controls.
+Recovery: prerequisite EXP1381 verdict recorded and exactGPUvisible rec1381h RECOVERY_DONE/PackageAbsent before installation. Exact1387 package/hash only. Same normal visible inert8CPU guest, no retained package. Factory source manifest before hardware and verified before exact recover.sh; no parallel guestcommands during controller. Emergencyhidden artifact retained unused. Hang exactowner/recover and newID.
+Evidence: .local/experiments/EXP1387-d3d12-device-init-c18/{source-manifest.json,manifest.json,hardware-manifest.json,kmd-build-receipt.json}, evidence/EXP1387/tool-d3d12-on-{std.txt,umd.log}, KMDpressure before/after and allregressions; evidence/rec1387h. Build SOURCE_REV=d5bfef7af7109ed15ac9b7a43fa8aff8b83e4381 bashscratchpad/build1387.sh; launch bashscratchpad/run1387.sh afterverdict/recovery.
+
+Pinned source d5bfef7af7109ed15ac9b7a43fa8aff8b83e4381; archiveSHA256 70b7fb0ddcbc2c9c24ae657526ba5a4ba69e4c7f8de5665b1b1a94c2d865bdbe; source-manifestSHA256 f94ed1be97a38e5935607f9173204ae10a63715605522a659951813540a560e8. Packagecompanionref isrefs/agx-experiments/EXP1387, integratedfixe8e0b35a; branchintegration/ad04-windows-compiler containslaterC19/C20/offlineC21, all excludedfromthissnapshot. ReusedpinnedMuimage excludesdirtymu. CurrentexcludedworktreediffSHA256 25b2d618936719ba5e9b7aa5b55cea547c4a31a316eda35ecab136e26f077495.
+agx_d3d12_probe_e1387_arm64.exe SHA256 1b2809d42b11b519f9077a9cee38938f6cc1f7d6e8b9df6bcf8796550c9f1023
+agx_d3d12_kmd_pool_probe_e1387_arm64.exe SHA256 55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3
+Verification: exactpackagecompanionCreateDevice/EnsureOwner ASan3PASS plus33affectedinit/ABI/ownerPASS; previousC18compiler/descriptorgates unchanged40D3D12/13DXBC; allrequiredpackageBUILD/sign/provenance/stack13824-6544PASS. LaterC21full1561same119baselinefailures excludedfromsnapshot. C15userpriorityreview75632532/processledger ea9cc8b0 completedbeforethislaunch; noDXILcode/capsinpackage.
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1387-d3d12-device-init-c18",
+  "ExperimentId": "1387",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "38909f549c08ac3f0f88d1ce8737b4a2556c7441b91121723e27246503d2be10"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1387-d3d12-device-init-c18/evidence/rec1387h/recover.sh.legacy-hidden",
+      "Sha256": "96c06cab8f8346a04609f4a033e664836953d286491ac0a456e351ce35b19e02"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1387-d3d12-device-init-c18/evidence/rec1387h/recover.sh",
+      "Sha256": "90af97762d804dd22a5b0bbb8c85f547bb6eae7338aa492fa3faec02cac96c42"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
