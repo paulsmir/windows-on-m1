@@ -8,7 +8,10 @@ extern "C" {
 #endif
 /* Initial offline profile: one compute6.0 entry, static singleton CBVs and raw SRV/UAVs.
  * No DDI/owner integration and no guarantee of recoverable internal library OOM.
- * Caller thread must have no foreign dxil_spv allocator context. */
+ * Caller thread must have no foreign dxil_spv allocator context.
+ * Build requires the reviewed checked C++ facade and matching external composite
+ * dependency closure; direct/pristine C API linkage is not a supported fallback.
+ * Checked exception status is not a general internal-OOM recovery guarantee. */
 struct agx_dxil_owned_request {
    const void *input;
    size_t input_bytes;

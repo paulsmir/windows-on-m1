@@ -3,6 +3,7 @@
  * Source/ownership contract: D3D12-C15-owned-converter-contract.md. */
 #include "agx_dxil_owned.h"
 #include "dxil_spirv_c.h"
+#include "agx_dxil_checked.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -133,7 +134,8 @@ enum agx_dxil_owned_status agx_dxil_convert_owned(
    enum agx_dxil_parse_status framing=agx_dxil_parse(request->input,request->input_bytes,request->input_kind,&profile,&program);
    if (framing!=AGX_DXIL_PARSE_OK)
       return framing==AGX_DXIL_PARSE_UNSUPPORTED?AGX_DXIL_OWNED_UNSUPPORTED:AGX_DXIL_OWNED_INVALID;
-   unsigned major=0,minor=0,patch=0;dxil_spv_get_version(&major,&minor,&patch);
+   unsigned major=0,minor=0,patch=0;
+   if (agx_checked_version(&major,&minor,&patch)!=DXIL_SPV_SUCCESS) return AGX_DXIL_OWNED_REPORTED_ERROR;
    if (major!=2 || minor!=75 || patch!=0) return AGX_DXIL_OWNED_UNSUPPORTED;
    unsigned char *input=malloc(program.bitcode_bytes);
    if (!input) return AGX_DXIL_OWNED_PROJECT_OOM;
@@ -143,38 +145,49 @@ enum agx_dxil_owned_status agx_dxil_convert_owned(
    dxil_spv_parsed_blob blob=NULL;dxil_spv_converter converter=NULL;
    uint32_t *owned=NULL;size_t owned_bytes=0;unsigned workgroup[3]={0};
    enum agx_dxil_owned_status status=AGX_DXIL_OWNED_REPORTED_ERROR;
+   unsigned began_scope=0;
    in_progress=1;
-   /* begin itself has no recoverable OOM status. All cleanup below concerns
-    * normal returns/reported errors only, per the explicit dependency contract. */
-   dxil_spv_begin_thread_allocator_context();
-   if (dxil_spv_parse_dxil(input,program.bitcode_bytes,&blob)!=DXIL_SPV_SUCCESS) goto cleanup;
+   /* Checked C++ boundary contains exceptions; only end a scope whose begin succeeded.
+    * Every failure discards the job; destructors must be nonallocating/noexcept. */
+   if (agx_checked_begin()!=DXIL_SPV_SUCCESS) goto cleanup;
+   began_scope=1;
+   if (agx_checked_parse(input,program.bitcode_bytes,&blob)!=DXIL_SPV_SUCCESS) goto cleanup;
    unsigned entries=0;const char *name=NULL;
-   if (dxil_spv_parsed_blob_get_shader_stage(blob)!=DXIL_SPV_STAGE_COMPUTE ||
-       dxil_spv_parsed_blob_get_num_entry_points(blob,&entries)!=DXIL_SPV_SUCCESS || entries!=1 ||
-       dxil_spv_parsed_blob_get_entry_point_name(blob,0,&name)!=DXIL_SPV_SUCCESS || !name || strcmp(name,entry)) {
+   dxil_spv_shader_stage shader_stage=DXIL_SPV_STAGE_UNKNOWN;
+   if (agx_checked_stage(blob,&shader_stage)!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (shader_stage!=DXIL_SPV_STAGE_COMPUTE) {
       status=AGX_DXIL_OWNED_UNSUPPORTED;goto cleanup;
    }
-   if (dxil_spv_parsed_blob_scan_resources(blob,collect_srv,collect_sampler,collect_cbv,collect_uav,&job)!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (agx_checked_entry_count(blob,&entries)!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (entries!=1) {
+      status=AGX_DXIL_OWNED_UNSUPPORTED;goto cleanup;
+   }
+   if (agx_checked_entry_name(blob,0,&name)!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (!name || strcmp(name,entry)) {
+      status=AGX_DXIL_OWNED_UNSUPPORTED;goto cleanup;
+   }
+   if (agx_checked_scan(blob,collect_srv,collect_sampler,collect_cbv,collect_uav,&job)!=DXIL_SPV_SUCCESS) goto cleanup;
    if (!freeze_map(&job)) {status=AGX_DXIL_OWNED_UNSUPPORTED;goto cleanup;}
-   if (dxil_spv_create_converter(blob,&converter)!=DXIL_SPV_SUCCESS) goto cleanup;
-   dxil_spv_converter_set_entry_point(converter,entry);
-   dxil_spv_converter_set_srv_remapper(converter,remap_srv,&job);
-   dxil_spv_converter_set_sampler_remapper(converter,refuse_sampler,&job);
-   dxil_spv_converter_set_cbv_remapper(converter,remap_cbv,&job);
-   dxil_spv_converter_set_uav_remapper(converter,remap_uav,&job);
-   if (dxil_spv_converter_run(converter)!=DXIL_SPV_SUCCESS || job.rejected) goto cleanup;
+   if (agx_checked_create(blob,&converter)!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (agx_checked_entry(converter,entry)!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (agx_checked_srv(converter,remap_srv,&job)!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (agx_checked_sampler(converter,refuse_sampler,&job)!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (agx_checked_cbv(converter,remap_cbv,&job)!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (agx_checked_uav(converter,remap_uav,&job)!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (agx_checked_run(converter)!=DXIL_SPV_SUCCESS || job.rejected) goto cleanup;
    dxil_spv_compiled_spirv output={0};
-   if (dxil_spv_converter_get_compiled_spirv(converter,&output)!=DXIL_SPV_SUCCESS ||
+   if (agx_checked_spirv(converter,&output)!=DXIL_SPV_SUCCESS ||
        !output.data || output.size<20 || output.size%4) goto cleanup;
    uint32_t magic=0;memcpy(&magic,output.data,sizeof(magic));if (magic!=UINT32_C(0x07230203)) goto cleanup;
-   if (dxil_spv_converter_get_compute_workgroup_dimensions(converter,&workgroup[0],&workgroup[1],&workgroup[2])!=DXIL_SPV_SUCCESS) goto cleanup;
+   if (agx_checked_workgroup(converter,&workgroup[0],&workgroup[1],&workgroup[2])!=DXIL_SPV_SUCCESS) goto cleanup;
    owned=malloc(output.size);
    if (!owned) {status=AGX_DXIL_OWNED_PROJECT_OOM;goto cleanup;}
    memcpy(owned,output.data,output.size);owned_bytes=output.size;status=AGX_DXIL_OWNED_OK;
 cleanup:
-   if (converter) dxil_spv_converter_free(converter);
-   if (blob) dxil_spv_parsed_blob_free(blob);
-   dxil_spv_end_thread_allocator_context();in_progress=0;free(input);
+   if (converter && agx_checked_converter_free(converter)!=DXIL_SPV_SUCCESS) status=AGX_DXIL_OWNED_REPORTED_ERROR;
+   if (blob && agx_checked_blob_free(blob)!=DXIL_SPV_SUCCESS) status=AGX_DXIL_OWNED_REPORTED_ERROR;
+   if (began_scope && agx_checked_end()!=DXIL_SPV_SUCCESS) status=AGX_DXIL_OWNED_REPORTED_ERROR;
+   in_progress=0;free(input);
    if (status==AGX_DXIL_OWNED_OK) {
       result->spirv=owned;result->spirv_bytes=owned_bytes;result->bindings=job.map;
       memcpy(result->workgroup,workgroup,sizeof(workgroup));memcpy(result->entry,entry,sizeof(entry));
