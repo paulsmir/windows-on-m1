@@ -107,3 +107,36 @@ Builder pauls@192.168.1.24/key /Users/pavel/.ssh/windows_builder.
 USB L41/L43; no rawproxy withactiveowner. Checkbothplanes beforephysicalrequest.
 No assistant attribution. Ledgerbefore/actual everybuild/run/recovery; CHANGES
 fullcommit/statusimplemented unlesshardwareevidence; test_change_ledger.py.
+
+## 19:32Z continuation — root source now has uncommitted C23, active1424 unchanged
+
+- EXP1424 stillactive standardregressions; doNOTrestart/SSH/proxy. Scratchpad
+  newexp1424.log now aroundnirprofile tests. NeedTOOL_d3d12-on_END+NEWEXP_DONE
+  ->allevidence/normalrec1424h->ACTUAL/CHANGES. CS46.540fps/GL53.0 observed.
+- C23 EXP1426sourceprep: rootAPPLIEDonly293f910f+v2023c954b patches6files.
+  Sourcepins.local/c23-shared-gates/full/inputs.json; DDI350cb069/owner02d88f5c;
+  C15failedFillpublicationfixNOTapplied. Dirtymu preserved. Fullsuite26785
+  active .local/c23-shared-gates/full/full.log BEFOREb91f3f32. Known119baseline;
+  expect3newfixtureoldbind_stagearity failures (privateadaptationpending).
+- C23actualnativequery65534cases/458782mips REDallrefused->GREEN0fail/BO0device0.
+  .local/c23-texture1d-retry1/verdictb0e3a6bc; baselinecompilerSTOPrecorded.
+  FXC2PASS/actualDXBC812B866b3384 and1016B00c83bb7; headersb0f80a2a/3ad2a2f6.
+  NewUAVmetadata/checknecessary1Dvsnon1D; helper60PASS5f6706f1, v2unused1Dskip
+  sourceprepared/combined. Existingnon1Dpolicyunchanged; noCAPSdelta.
+- ActiveC23gates: kmd ONE10companion+actualNIRcommands under45e84000,
+  .local/c23-companion-prep/PREPd817d900/commands49287e92/22pins; freshrun.
+  sm51 ONEWindows3syntax+57stepprobeBUILD under034cd156,
+  .local/c23-windows-gates-prep/7b47d0fa/22ccwrapper, freshbuilderreceiptroot.
+  No executableson guest. C18 preparing1426templatesafterdurableFilltest.
+  C23probe=old54+C23A/B/C; prerequisite1424reviewedALL54PASS+RECOVERY_DONEAbsent.
+  If1424C21fails, prioritizeitsactualboundary, neverautolaunchC23.
+- C15confirmedfailedFillpublication CPUactual137checksRED6/GREEN0 underd95eb2d8,
+  afterone264->267actualheaderclosure repairSTOP. Root58artifacthashesverified
+  manifest54407ffe/verdictcc2ba3c7; ACTUALb0c4e618. Originalsmalldurableadoption
+  patchfc1f6fab in.local/c15-failed-table-publication-adoption UNAPPLIED; hold
+  untilC23sourcefreeze toavoidunregisteredhardwarevariable. No crossdevicefix.
+- EXP1425CPU_ONLYnominalPREP ready .local/c15-native-nominal-1425-prep.
+  ONLYAFTER1424RECOVERY_DONE/ownBEFORE: ZIPb20d9d18/manifestb94604ac/runner968c1364;
+  twofreshARM64callers onee7308831/mixed00747769 CPU-only30sdeadlines/CRTinventory/
+  exactPASS+map/SPV24e3dfcompare; noGPU/driverinstall/faults. Rootaloneguest.
+  No1425BEFORErecordedyet/no uploador run. DoesnotblocknextC23packagebuild.
