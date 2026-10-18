@@ -206,6 +206,8 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
     HRESULT hr = arg && arg->hDrvDevice.pDrvPrivate ? S_OK : E_INVALIDARG;
     if (SUCCEEDED(hr)) {
         auto *device = static_cast<AgxD3d12Device *>(arg->hDrvDevice.pDrvPrivate);
+        /* Runtime allocation may contain reused bytes; all lazy state is ours. */
+        memset(device, 0, sizeof(*device));
         device->runtime = arg->hRTDevice;
         device->callbacks = arg->p12UMCallbacks;
         device->kernel = arg->pKTCallbacks;
