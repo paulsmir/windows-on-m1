@@ -332,9 +332,27 @@ def _configured_source(path, source_root):
     _path(path)
     for prefix, component in [('subprojects/dxbc-spirv/', 'dxbc-spirv/'),
                               ('third_party/spirv-headers/', 'spirv-headers/')]:
-        if path.startswith(prefix):
+        if path.casefold().startswith(prefix.casefold()):
             return component + path[len(prefix):]
     return 'dxil-spirv/' + path
+
+
+def canonical_reviewed_input(lock, reported, source_root):
+    """Resolve MSVC's case-normalized spelling only within trusted locked inputs.
+
+    This does not relax archive/tree spelling or hash checks. The compiler path
+    must first be contained in its source root and pass the existing path/mount
+    validation; an unknown or ambiguous casefold identity is always refused.
+    """
+    _require(isinstance(reported, str) and source_root is not None, 'reported source path/root required')
+    prefix = str(source_root).replace('\\', '/').rstrip('/') + '/'
+    normalized = reported.replace('\\', '/')
+    _require(normalized.casefold().startswith(prefix.casefold()), 'reported input outside source root')
+    key = _configured_source(reported, source_root)
+    matches = [f['path'] for f in lock['files'] if f['path'].casefold() == key.casefold()]
+    _require(matches, f'unknown reviewed input: {key}')
+    _require(len(matches) == 1, f'ambiguous reviewed input: {key}')
+    return matches[0]
 
 
 def verify_declared_targets(lock, trees):

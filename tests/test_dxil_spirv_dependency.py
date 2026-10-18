@@ -200,6 +200,37 @@ class DependencyCache(unittest.TestCase):
         with self.assertRaisesRegex(dep.DependencyError, 'target source'):
             dep.verify_codemodel(self.lock, reply)
 
+    def test_actual_msvc_lowercase_dependency_paths_resolve_to_locked_spelling(self):
+        lock = dep.load_lock(SCRIPTS / 'dxil_spirv_dependency_lock.json')
+        source = r'C:\Users\pauls\EXP1394-dxil-runtime-build-only\control\.local\source'
+        cases = [
+            ('third_party/glslang-spirv/inreadableorder.cpp', 'dxil-spirv/third_party/glslang-spirv/InReadableOrder.cpp'),
+            ('third_party/glslang-spirv/logger.cpp', 'dxil-spirv/third_party/glslang-spirv/Logger.cpp'),
+            ('third_party/glslang-spirv/logger.h', 'dxil-spirv/third_party/glslang-spirv/Logger.h'),
+            ('third_party/glslang-spirv/spvbuilder.cpp', 'dxil-spirv/third_party/glslang-spirv/SpvBuilder.cpp'),
+            ('third_party/glslang-spirv/spvbuilder.h', 'dxil-spirv/third_party/glslang-spirv/SpvBuilder.h'),
+            ('third_party/glslang-spirv/spvir.h', 'dxil-spirv/third_party/glslang-spirv/spvIR.h'),
+            ('third_party/spirv-headers/include/spirv/unified1/glsl.std.450.h', 'spirv-headers/include/spirv/unified1/GLSL.std.450.h'),
+        ]
+        for reported, canonical in cases:
+            with self.subTest(reported=reported):
+                path = source.lower() + '\\' + reported.replace('/', '\\')
+                self.assertEqual(dep.canonical_reviewed_input(lock, path, source), canonical)
+
+    def test_compiler_case_resolution_refuses_unknown_ambiguous_and_escaping_paths(self):
+        lock = dep.load_lock(SCRIPTS / 'dxil_spirv_dependency_lock.json')
+        source = 'C:/isolated/source'
+        with self.assertRaisesRegex(dep.DependencyError, 'unknown reviewed input'):
+            dep.canonical_reviewed_input(lock, source + '/unreviewed.h', source)
+        for path in ('C:/isolated/source-evil/header.h', source + '/../header.h', source + '/a//header.h'):
+            with self.subTest(path=path), self.assertRaises(dep.DependencyError):
+                dep.canonical_reviewed_input(lock, path, source)
+        item = next(f for f in lock['files'] if f['path'].endswith('/SpvBuilder.h'))
+        alias = dict(item, path=item['path'].lower())
+        lock['files'].append(alias)
+        with self.assertRaisesRegex(dep.DependencyError, 'ambiguous reviewed input'):
+            dep.canonical_reviewed_input(lock, source + '/third_party/glslang-spirv/spvbuilder.h', source)
+
     def test_materialized_source_mounts_are_exact_and_build_outputs_stay_outside_cache(self):
         dep.stage_cache(self.lock, self.archives, self.cache)
         source = self.root / 'build-source'
