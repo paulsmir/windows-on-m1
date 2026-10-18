@@ -191,3 +191,63 @@ admitted representations and preserves all five bindings is the falsifiable
 1398 CPU gate. OOM production safety, semantic NIR execution, runtime/DDI shader
 form, R1/library companions and actual owner integration remain separate blockers.
 No hardware bit probe or current adapter edit belongs to this plan.
+
+## EXP1398 actual implementation/result
+
+Parent preregistered RED inbb637bef and GREEN in3fb3205d. Enforced source manifest
+before-red.json SHA256
+`72280a878ad826d374364ad87984f15dfc8095d51cd7fecdd62d97191d628036`
+passed all14 original-source hashes and37 external/tool/Mesa pins before any
+compiler launch. Actual scan yielded the expected5 metadata records; the actual
+freeze_map passed all120 permutations. The mixed converter test then produced
+`MIXED_INITIAL_STATUS=2 expected=0` and failed its success assertion. This was an
+actual functional RED against existing raw-UAV-only admission, not a missing-file
+or compiler-error RED. Raw logs/results remain preserved under red/.
+
+Only then was the original standalone adapter extended to collect/validate static
+CBV/rawSRV/rawUAV classes and remap frozen keys with UBO/TEXEL_BUFFER/SSBO
+representations respectively. No slot allocation occurs inside conversion
+callbacks. Shared lookup checks source ID, stage, shape, singleton count, counter
+and actual conversion alignment; unrecognized requests set sticky failure.
+Sampler/array/counter/bindless/resource-range extensions remain refused. TLS,
+owned output, existing capacity and reported-error cleanup contracts remain.
+
+Frozen GREEN implementation SHA256
+`ab629ba35774daac432c725179d967ffb6f2a75841ba182a3bfcdf0bdd69a711`;
+header SHA256 `cd6b6e04913afd847700fd771b5b4cf7b2e4190144931923408dca923dddf7e5`.
+The test expectations and actual freeze/permutation implementation were unchanged.
+Pinned JSON changed only to authorize the updated original adapter header;
+all37 dependency pins remained unchanged. Parent-approved GREEN manifest SHA256
+`035b3e3ab4590fdd143d1003da4235fee7fb82cb48da9f3792aa357490e489ec`.
+
+Both authorized host test commands passed:
+
+```
+C15_MIXED_MAP_PASS actual_scan_records=5 actual_freeze_permutations=120 source_ids_preserved=YES sticky_rejection=YES
+C15_MIXED_OWNED_PASS keys=5 same_reg_different_spaces=YES independent_kind_slots=YES after_TLS=YES refusal_then_valid=YES internal_OOM=UNPROVEN
+C15_MIXED_NIR_PASS cbv_ubo_slot=0 srv_txf_slots=0,1 uav_ssbo_slots=0,1 class_before_lowering=YES raw_srv_ssbo_alias=NO SEMANTIC_EXECUTION_UNPROVEN OWNER_INTEGRATION_UNPROVEN
+```
+
+Legacy1396 test also passed with unchanged test/runner in a NEW receipt root,
+`.local/c15-owned-1398/legacy1396`, preserving all original1396 receipts. It retained
+raw/container conversion, actual scan-false-success observation, negative remap,
+valid-again same-thread cleanup and owned output after TLS teardown.
+
+Durable receipts root `/Users/pavel/public_windows/.local/c15-owned-1398` contains
+approved source/dependency manifests, exact phase commands, every raw step output,
+objects/executables, SPIR-V/map and pre/post NIR dumps. Final
+`EXP1398-verdict.json` SHA256
+`f2905124209819d711bf8cbd7911e022550f6397181c4af47cce06766d186ca4`.
+
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+|green/mixed.spv|2152|`24e3df26411f940c71e4dc2322d38226cb3c1d50725e07d27b890aa9b2b307d4`|
+|green/map.json|240|`b2d13468feae64f3bd6f1901c8fadf5ab6a0a040ec865333d2db0cb20d575d40`|
+|green/pre.nir|7079|`beff1b3bd50c49d65162253d2b613bbfe90ca775693237adb2fdc8307ef777d9`|
+|green/post.nir|3848|`ee2c212cca1cd284b0eb8d11bd242e0eee1184ec76aca92af6b45cf19458708c`|
+
+This closes the finite5-key namespace/representation checkpoint, not semantic NIR
+execution, runtime owner binding, DDI/R1/library admission, internal OOM safety or
+GPU execution. Existing external Release libraries remain without complete
+sanitizer instrumentation. No external rebuild/fetch/new DXC/build-script/caps/
+guest/hardware/commit/ledger operation was performed by this lane.

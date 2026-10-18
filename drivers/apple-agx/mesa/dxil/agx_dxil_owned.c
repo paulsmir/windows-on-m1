@@ -18,8 +18,9 @@ static dxil_spv_bool collect(struct conversion_job *job, uint32_t kind,
 {
    /* Scan SUCCESS does not propagate callback rejection. Always finish scanning
     * with a sticky rejection flag, never allocating a slot in callback order. */
-   if (!b || kind != DXBC_BINDING_UAV || b->stage != DXIL_SPV_STAGE_COMPUTE ||
-       b->kind != DXIL_SPV_RESOURCE_KIND_RAW_BUFFER || b->range_size != 1 || counter ||
+   if (!b || kind > DXBC_BINDING_UAV || b->stage != DXIL_SPV_STAGE_COMPUTE ||
+       b->kind != (kind==DXBC_BINDING_CBV?DXIL_SPV_RESOURCE_KIND_CONSTANT_BUFFER:DXIL_SPV_RESOURCE_KIND_RAW_BUFFER) ||
+       b->range_size != 1 || counter ||
        job->map.count >= DXBC_BINDING_MAP_MAX) {
       job->rejected = 1;
       return DXIL_SPV_TRUE;
@@ -70,27 +71,45 @@ static int freeze_map(struct conversion_job *job)
    job->map.active=1;
    return 1;
 }
-static dxil_spv_bool remap_uav(void *u,const dxil_spv_uav_d3d_binding *binding,
+static const struct dxbc_binding *lookup(struct conversion_job *job,uint32_t kind,
+   const dxil_spv_d3d_binding *b,unsigned counter)
+{
+   const struct dxbc_binding *found=b?dxbc_binding_find(&job->map,kind,b->register_space,b->register_index):NULL;
+   if (job->rejected || !found || found->id!=b->resource_index || b->stage!=DXIL_SPV_STAGE_COMPUTE ||
+       b->kind!=(kind==DXBC_BINDING_CBV?DXIL_SPV_RESOURCE_KIND_CONSTANT_BUFFER:DXIL_SPV_RESOURCE_KIND_RAW_BUFFER) ||
+       b->range_size!=1 || counter || b->alignment!=(kind==DXBC_BINDING_CBV?0u:16u)) {
+      job->rejected=1;return NULL;
+   }
+   return found;
+}
+static dxil_spv_bool remap_uav(void *u,const dxil_spv_uav_d3d_binding *b,
    dxil_spv_uav_vulkan_binding *v)
 {
-   struct conversion_job *job=u;const dxil_spv_d3d_binding *b=&binding->d3d_binding;
    memset(v,0,sizeof(*v));
-   const struct dxbc_binding *found=dxbc_binding_find(&job->map,DXBC_BINDING_UAV,b->register_space,b->register_index);
-   if (job->rejected || !found || found->id!=b->resource_index || b->stage!=DXIL_SPV_STAGE_COMPUTE ||
-       b->kind!=DXIL_SPV_RESOURCE_KIND_RAW_BUFFER || b->range_size!=1 || binding->has_counter || b->alignment!=16) {
-      job->rejected=1;return DXIL_SPV_FALSE;
-   }
-   v->buffer_binding.set=DXBC_BINDING_UAV;
-   v->buffer_binding.binding=found->slot;
+   const struct dxbc_binding *found=lookup(u,DXBC_BINDING_UAV,&b->d3d_binding,b->has_counter);
+   if (!found)return DXIL_SPV_FALSE;
+   v->buffer_binding.set=DXBC_BINDING_UAV;v->buffer_binding.binding=found->slot;
    v->buffer_binding.descriptor_type=DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_SSBO;
    return DXIL_SPV_TRUE;
 }
-static dxil_spv_bool refuse_srv(void *u,const dxil_spv_d3d_binding *b,dxil_spv_srv_vulkan_binding *v)
-{ (void)b;memset(v,0,sizeof(*v));((struct conversion_job *)u)->rejected=1;return DXIL_SPV_FALSE; }
+static dxil_spv_bool remap_srv(void *u,const dxil_spv_d3d_binding *b,dxil_spv_srv_vulkan_binding *v)
+{
+   memset(v,0,sizeof(*v));const struct dxbc_binding *found=lookup(u,DXBC_BINDING_SRV,b,0);
+   if (!found)return DXIL_SPV_FALSE;
+   v->buffer_binding.set=DXBC_BINDING_SRV;v->buffer_binding.binding=found->slot;
+   v->buffer_binding.descriptor_type=DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_TEXEL_BUFFER;
+   return DXIL_SPV_TRUE;
+}
 static dxil_spv_bool refuse_sampler(void *u,const dxil_spv_d3d_binding *b,dxil_spv_vulkan_binding *v)
 { (void)b;memset(v,0,sizeof(*v));((struct conversion_job *)u)->rejected=1;return DXIL_SPV_FALSE; }
-static dxil_spv_bool refuse_cbv(void *u,const dxil_spv_d3d_binding *b,dxil_spv_cbv_vulkan_binding *v)
-{ (void)b;memset(v,0,sizeof(*v));((struct conversion_job *)u)->rejected=1;return DXIL_SPV_FALSE; }
+static dxil_spv_bool remap_cbv(void *u,const dxil_spv_d3d_binding *b,dxil_spv_cbv_vulkan_binding *v)
+{
+   memset(v,0,sizeof(*v));const struct dxbc_binding *found=lookup(u,DXBC_BINDING_CBV,b,0);
+   if (!found)return DXIL_SPV_FALSE;
+   v->vulkan.uniform_binding.set=DXBC_BINDING_CBV;v->vulkan.uniform_binding.binding=found->slot;
+   v->vulkan.uniform_binding.descriptor_type=DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_UBO;
+   return DXIL_SPV_TRUE;
+}
 
 void agx_dxil_owned_free(struct agx_dxil_owned_result *result)
 {
@@ -139,9 +158,9 @@ enum agx_dxil_owned_status agx_dxil_convert_owned(
    if (!freeze_map(&job)) {status=AGX_DXIL_OWNED_UNSUPPORTED;goto cleanup;}
    if (dxil_spv_create_converter(blob,&converter)!=DXIL_SPV_SUCCESS) goto cleanup;
    dxil_spv_converter_set_entry_point(converter,entry);
-   dxil_spv_converter_set_srv_remapper(converter,refuse_srv,&job);
+   dxil_spv_converter_set_srv_remapper(converter,remap_srv,&job);
    dxil_spv_converter_set_sampler_remapper(converter,refuse_sampler,&job);
-   dxil_spv_converter_set_cbv_remapper(converter,refuse_cbv,&job);
+   dxil_spv_converter_set_cbv_remapper(converter,remap_cbv,&job);
    dxil_spv_converter_set_uav_remapper(converter,remap_uav,&job);
    if (dxil_spv_converter_run(converter)!=DXIL_SPV_SUCCESS || job.rejected) goto cleanup;
    dxil_spv_compiled_spirv output={0};

@@ -410,3 +410,11 @@ Receipts: `/Users/pavel/public_windows/.local/c15-owned-1396/before-inputs.json`
 numbered stdout/stderr files, original objects/executable and
 `EXP1396-verdict.json`. SPIR-V was inspected from owned memory after teardown and
 then freed; no persistent SPIR-V file was emitted by this minimal fixture.
+
+The initial one-key restriction above is superseded ONLY for the standalone CPU
+adapter by EXP1398's finite mixed-binding checkpoint, documented in
+`D3D12-C15-mixed-bindings-1398-plan.md`. Five actual semantic keys and120 order
+permutations now pass, with actual NIR UBO0/texel-fetch0,1/SSBO0,1 representation
+preservation. This adds no DDI/owner admission and does not change the internal
+OOM blocker or claim semantic execution. Legacy1396 remains passing in separate
+1398 regression receipts; its original evidence was not overwritten.

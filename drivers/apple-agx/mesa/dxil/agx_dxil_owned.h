@@ -6,7 +6,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/* Initial offline profile: one compute6.0 entry, static singleton raw UAVs only.
+/* Initial offline profile: one compute6.0 entry, static singleton CBVs and raw SRV/UAVs.
  * No DDI/owner integration and no guarantee of recoverable internal library OOM.
  * Caller thread must have no foreign dxil_spv allocator context. */
 struct agx_dxil_owned_request {
