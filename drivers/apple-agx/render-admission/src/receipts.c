@@ -2376,6 +2376,18 @@ _Use_decl_annotations_ void AdmissionRecordG3PrivateProcesses(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordG3PrivatePressure(
+    ADMISSION_CONTEXT *Context, const ULONG *Values, ULONG Bytes) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Values == NULL || Bytes == 0u || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3PrivatePressure", Values, Bytes);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG3Reservation(
     ADMISSION_CONTEXT *Context, const ULONG *Values) {
   HANDLE key = NULL;

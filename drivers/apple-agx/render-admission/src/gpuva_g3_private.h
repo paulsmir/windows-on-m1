@@ -60,6 +60,7 @@ typedef struct _ADMISSION_G3_STATE {
   ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT];
   /* EXP1087 receipt-only, under Lock: ADMISSION_G3_PRIVATE_STAT_* counters. */
   ULONGLONG PrivateStats[16];
+  ULONG PrivatePressure[12]; /* successful foreign-cache reclaim, version 1 */
   /* EXP1114 receipt-only, under Lock: last per-process snapshot (QPC). */
   LONGLONG ProcessReceiptQpc;
   /* G2 HW2 receipt-only: private VA reservations made and refused, present

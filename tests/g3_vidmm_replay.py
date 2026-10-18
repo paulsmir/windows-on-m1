@@ -18,14 +18,14 @@ SHARED = ROOT / "drivers/apple-agx/shared"
 M1N1 = ROOT / "m1n1_windows/src"
 
 FUNCTIONS = {
-    "receipts.c": ["AdmissionRecordG3CopyQueryFailure", "AdmissionRecordG3LeafHistory", "AdmissionRecordG3CopyTransferFailure", "AdmissionRecordG3PrivateFailure", "AdmissionRecordG3PrivateProcesses"],
+    "receipts.c": ["AdmissionRecordG3CopyQueryFailure", "AdmissionRecordG3LeafHistory", "AdmissionRecordG3CopyTransferFailure", "AdmissionRecordG3PrivateFailure", "AdmissionRecordG3PrivateProcesses", "AdmissionRecordG3PrivatePressure"],
     "gpuva_g3_windows.c": [
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
         "AdmissionGpuvaG3BrokerTable", "AdmissionGpuvaG3MirrorTable",
         "AdmissionG3Fnv", "AdmissionG3UscVa", "AdmissionG3TraceUpload", "AdmissionG3VerifyUploads",
         "AdmissionG3CopyPte", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
-        "AdmissionG3PreparePrivateStorageObserved","AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtentObserved","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateCacheScene","AdmissionG3PrivateTrimCache","AdmissionG3PrivateCachedScene","AdmissionG3PrivateReuseScene","AdmissionG3PrivateEvictCached","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateSlotClear","AdmissionG3PrivateSlotPreempted","AdmissionG3PrivateSlotCancelled","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionG3CapturePrivateFailure","AdmissionG3GrowPrivateHeap","AdmissionG3ManagerWord","AdmissionG3SnapshotProcesses","AdmissionGpuvaG3PrivateEscape",
+        "AdmissionG3PreparePrivateStorageObserved","AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtentObserved","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateCacheScene","AdmissionG3PrivateTrimCache","AdmissionG3PrivateCachedScene","AdmissionG3PrivateReuseScene","AdmissionG3PrivateEvictCached","AdmissionG3PrivateEvictPressure","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateSlotClear","AdmissionG3PrivateSlotPreempted","AdmissionG3PrivateSlotCancelled","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionG3CapturePrivateFailure","AdmissionG3GrowPrivateHeap","AdmissionG3ManagerWord","AdmissionG3SnapshotProcesses","AdmissionGpuvaG3PrivateEscape",
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
         "AdmissionG3PresentArenaEnsure", "AdmissionGpuvaG3EnsurePresentArena",
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
@@ -101,7 +101,7 @@ def generate(revision=None, function_revisions=None):
             function_source = source
             if revision is not None and name in (
                     "AdmissionG3PreparePrivateStorageObserved", "AdmissionG3PrivateMapExtentObserved", "AdmissionG3CapturePrivateFailure",
-                    "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateCacheScene","AdmissionG3PrivateTrimCache","AdmissionG3PrivateCachedScene","AdmissionG3PrivateReuseScene","AdmissionG3PrivateEvictCached","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateSlotClear","AdmissionG3PrivateSlotPreempted","AdmissionG3PrivateSlotCancelled","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape", "AdmissionDdiEscape",
+                    "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateCacheScene","AdmissionG3PrivateTrimCache","AdmissionG3PrivateCachedScene","AdmissionG3PrivateReuseScene","AdmissionG3PrivateEvictCached","AdmissionG3PrivateEvictPressure","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateSlotClear","AdmissionG3PrivateSlotPreempted","AdmissionG3PrivateSlotCancelled","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape", "AdmissionDdiEscape",
                     "AdmissionGpuvaG3BrokerTable",
                     "AdmissionG3RecordTableEvent", "AdmissionG3PoolPagingRefs", "AdmissionG3PoolPlace",
                     "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
