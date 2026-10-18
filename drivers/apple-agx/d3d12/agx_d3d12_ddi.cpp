@@ -2429,6 +2429,12 @@ static VOID APIENTRY SetComputeRootUnorderedAccessView(D3D12DDI_HCOMMANDLIST han
                                                        D3D12DDI_GPU_VIRTUAL_ADDRESS va) {
     if (AgxD3d12CommandList *list = ListOf(handle)) SetRootBufferView(list, index, va, D3D12DDI_ROOT_PARAMETER_TYPE_UAV);
 }
+/* C13: graphics root UAVs (EXP1375: still AGX_REJECT, the C13/C14 probe
+ * lists removed the device when they set one) */
+static VOID APIENTRY SetGraphicsRootUnorderedAccessView(D3D12DDI_HCOMMANDLIST handle, UINT index,
+                                                        D3D12DDI_GPU_VIRTUAL_ADDRESS va) {
+    if (AgxD3d12CommandList *list = ListOf(handle)) SetRootBufferView(list, index, va, D3D12DDI_ROOT_PARAMETER_TYPE_UAV, true);
+}
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso) {
     if (pso->compiled != S_FALSE) return pso->compiled;
@@ -3201,7 +3207,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootShaderResourceView, SetComputeRootShaderResourceView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView, SetGraphicsRootShaderResourceView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView, SetComputeRootUnorderedAccessView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, SetGraphicsRootUnorderedAccessView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, AGX_IB_SETTER);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, AGX_VB_SETTER);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets, AGX_LIST_STATE(pfnSOSetTargets));

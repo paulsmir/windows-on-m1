@@ -264,6 +264,7 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnClearUnorderedAccessViewUint', 'pfnClearUnorderedAccessViewFloat', 'pfnDiscardResource', 'pfnSetMarker'}  # C10
         compute |= {'pfnBeginQuery', 'pfnEndQuery', 'pfnResolveQueryData'}  # C11
         compute |= {'pfnExecuteIndirect'}  # C14
+        compute |= {'pfnSetGraphicsRootUnorderedAccessView'}  # C13 (EXP1375)
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
@@ -689,6 +690,16 @@ class D3d12AbiGate(unittest.TestCase):
         q = q[:q.index('\n}\n')]
         self.assertIn('PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, s', q)
         self.assertIn('(heap->Type == 1 && (type != 2u || begin))', q)  # timestamps: EndQuery only
+
+    def test_graphics_root_setters_mirror_compute(self):
+        # EXP1375: C13 bound graphics UAVs but pfnSetGraphicsRootUnorderedAccessView
+        # stayed AGX_REJECT, removing the device; every implemented compute
+        # root setter needs its graphics twin
+        source = SOURCE.read_text()
+        for kind in ('32BitConstant', '32BitConstants', 'ConstantBufferView', 'ShaderResourceView',
+                     'UnorderedAccessView', 'DescriptorTable'):
+            self.assertIn('pfnSetComputeRoot%s, SetComputeRoot%s);' % (kind, kind), source)
+            self.assertIn('pfnSetGraphicsRoot%s, SetGraphicsRoot%s);' % (kind, kind), source)
 
     def test_command_slots_start_zeroed(self):
         # EXP1374: AppendCommand handed out reused/realloc'd slots unzeroed;

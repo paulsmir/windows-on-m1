@@ -70,3 +70,15 @@ C11C PASS = t0 != 0, t1 >= t0 and GetTimestampFrequency S_OK non-zero.
   (AdmissionGpuClockCalibrate, host-tested; node 0 / engine 0 only).
 - UNKNOWN: whether the 26100 runtime then reports the frequency to
   applications unchanged -- probe C11C.
+
+## EXP1375 result notes
+
+- GetTimestampFrequency 1e9 / GetClockCalibration S_OK through C11d;
+  statistics populated (IA 3/1, VS 3, C 1/1, PS 512); binary occlusion 1.
+- Asahi keeps one active occlusion query per context (agx_begin_query sets
+  ctx->occlusion_query): overlapping occlusion and binary-occlusion queries
+  leave the earlier one at 0 (the probe overlapped them; the counter read
+  0). The probe now runs them sequentially; overlapping occlusion queries
+  remain a known limitation of this translation.
+- Both timestamps took the CPU-fallback value at replay (t0 == t1): Gallium
+  timestamp queries do not yet carry the firmware batch end times.
