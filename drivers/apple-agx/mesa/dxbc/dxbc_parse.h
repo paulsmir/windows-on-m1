@@ -18,6 +18,7 @@
 #ifndef DXBC_PARSE_H
 #define DXBC_PARSE_H
 
+#include "dxbc_bindings.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -304,6 +305,15 @@ struct dxbc_error {
 enum dxbc_status dxbc_parse_program(const uint32_t *tokens, size_t dwords,
                                     struct dxbc_program *program,
                                     struct dxbc_error *error);
+
+/* Normalize owned SM5.1 singleton declarations and references to SM5.0
+ * operand shapes, assigning dense slots per kind.  Caller tokens/payloads
+ * remain untouched.  Failure clears map and preserves the program; legacy
+ * models return an inactive map without modification.  Call once, after
+ * parsing and before translating. */
+enum dxbc_status dxbc_prepare_static_bindings(struct dxbc_program *program,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   struct dxbc_error *error);
 
 void dxbc_program_free(struct dxbc_program *program);
 

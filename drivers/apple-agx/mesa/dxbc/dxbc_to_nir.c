@@ -2997,3 +2997,43 @@ translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_option
       dxbc_nir_finalize(nir);
    return nir;
 }
+
+struct nir_shader *
+dxbc_translate_tokens_bindings(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   struct dxbc_nir_error *error)
+{
+   struct dxbc_nir_error ignored;
+   struct dxbc_program program;
+   struct dxbc_error perr = {0};
+   enum dxbc_status status;
+   if (!error)
+      error = &ignored;
+   memset(error, 0, sizeof(*error));
+   if (map)
+      memset(map, 0, sizeof(*map));
+   if (!tokens || !options || !limits || !map) {
+      error->opcode = 0x10000u | DXBC_ERROR_OPERAND;
+      snprintf(error->message, sizeof(error->message), "invalid binding translation arguments");
+      return NULL;
+   }
+   status = dxbc_parse_program(tokens, tokens[1], &program, &perr);
+   if (status == DXBC_OK) {
+      status = dxbc_prepare_static_bindings(&program, limits, map, &perr);
+      if (status == DXBC_OK) {
+         nir_shader *nir = translate(&program, options, 0, 0, NULL, error);
+         dxbc_program_free(&program);
+         if (nir)
+            dxbc_nir_finalize(nir);
+         else
+            memset(map, 0, sizeof(*map));
+         return nir;
+      }
+      dxbc_program_free(&program);
+   }
+   snprintf(error->message, sizeof(error->message), "static binding parse status %d", status);
+   error->opcode = 0x10000u | (uint32_t)status;
+   error->offset = perr.offset;
+   return NULL;
+}

@@ -649,3 +649,177 @@ dxbc_container_find_chunk(const void *container, size_t bytes,
    }
    return false;
 }
+
+/* SM5.1 range IDs and logical registers are separate namespaces.  Only
+ * singleton, statically selected ranges can be flattened by this entry.
+ * Validate the complete program first so refusal leaves the owned IR intact. */
+static int
+binding_kind(unsigned type)
+{
+   switch (type) {
+   case DXBC_OPERAND_CONSTANT_BUFFER: return DXBC_BINDING_CBV;
+   case DXBC_OPERAND_RESOURCE: return DXBC_BINDING_SRV;
+   case DXBC_OPERAND_UNORDERED_ACCESS_VIEW: return DXBC_BINDING_UAV;
+   case DXBC_OPERAND_SAMPLER: return DXBC_BINDING_SAMPLER;
+   default: return -1;
+   }
+}
+
+static int
+binding_declaration(unsigned opcode, unsigned *payload)
+{
+   *payload = 1; /* final register-space DWORD */
+   switch (opcode) {
+   case DXBC_OP_DCL_CONSTANT_BUFFER: *payload = 2; return DXBC_BINDING_CBV;
+   case DXBC_OP_DCL_RESOURCE:
+   case DXBC_OP_DCL_RESOURCE_STRUCTURED: *payload = 2; return DXBC_BINDING_SRV;
+   case DXBC_OP_DCL_RESOURCE_RAW: return DXBC_BINDING_SRV;
+   case DXBC_OP_DCL_SAMPLER: return DXBC_BINDING_SAMPLER;
+   case DXBC_OP_DCL_UAV_TYPED:
+   case DXBC_OP_DCL_UAV_STRUCTURED: *payload = 2; return DXBC_BINDING_UAV;
+   case DXBC_OP_DCL_UAV_RAW: return DXBC_BINDING_UAV;
+   default: return -1;
+   }
+}
+
+static bool
+static_index(const struct dxbc_index *index)
+{
+   return index->representation == DXBC_INDEX_IMM32 &&
+          !index->relative && index->imm <= UINT32_MAX;
+}
+
+static const struct dxbc_binding *
+binding_id(const struct dxbc_binding_map *map, unsigned kind, uint32_t id)
+{
+   for (unsigned i = 0; i < map->count; ++i)
+      if (map->bindings[i].kind == kind && map->bindings[i].id == id)
+         return &map->bindings[i];
+   return NULL;
+}
+
+static bool
+binding_operand_valid(const struct dxbc_binding_map *map, const struct dxbc_operand *o)
+{
+   int kind = binding_kind(o->type);
+   if (kind < 0)
+      return true;
+   if (o->nonuniform || o->index_dimension != (kind == DXBC_BINDING_CBV ? 3 : 2) ||
+       !static_index(&o->index[0]) || !static_index(&o->index[1]))
+      return false;
+   const struct dxbc_binding *binding = binding_id(map, kind, (uint32_t)o->index[0].imm);
+   if (!binding || o->index[1].imm != binding->reg)
+      return false;
+   /* Only the vector offset inside the CB may be relative. */
+   if (kind == DXBC_BINDING_CBV &&
+       (o->index[2].imm > UINT32_MAX ||
+        (o->index[2].representation != DXBC_INDEX_IMM32 &&
+         o->index[2].representation != DXBC_INDEX_RELATIVE &&
+         o->index[2].representation != DXBC_INDEX_IMM32_PLUS_RELATIVE)))
+      return false;
+   return true;
+}
+
+static void
+normalize_binding_operand(const struct dxbc_binding_map *map, struct dxbc_operand *o)
+{
+   int kind = binding_kind(o->type);
+   if (kind < 0)
+      return;
+   const struct dxbc_binding *binding = binding_id(map, kind, (uint32_t)o->index[0].imm);
+   o->index[0].imm = binding->slot;
+   o->index[1] = o->index[2];
+   memset(&o->index[2], 0, sizeof(o->index[2]));
+   o->index_dimension = kind == DXBC_BINDING_CBV ? 2 : 1;
+   if (kind != DXBC_BINDING_CBV)
+      memset(&o->index[1], 0, sizeof(o->index[1]));
+}
+
+enum dxbc_status
+dxbc_prepare_static_bindings(struct dxbc_program *program,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   struct dxbc_error *error)
+{
+   struct dxbc_binding_map pending = {0};
+   uint32_t counts[DXBC_BINDING_KIND_COUNT] = {0};
+   enum dxbc_status status = DXBC_ERROR_OPERAND;
+   const struct dxbc_instruction *bad = NULL;
+   if (error)
+      memset(error, 0, sizeof(*error));
+   if (!map)
+      return DXBC_ERROR_OPERAND;
+   memset(map, 0, sizeof(*map));
+   if (!program || !limits)
+      goto fail;
+   if (program->major != 5 || program->minor != 1)
+      return DXBC_OK;
+   pending.active = 1;
+   for (unsigned i = 0; i < program->num_instructions; ++i) {
+      const struct dxbc_instruction *in = bad = &program->instructions[i];
+      unsigned payload;
+      int kind = binding_declaration(in->opcode, &payload);
+      if (kind < 0)
+         continue;
+      const struct dxbc_operand *o = &in->operands[0];
+      if (in->num_operands != 1 || binding_kind(o->type) != kind || o->nonuniform ||
+          o->index_dimension != 3 || in->num_payload != payload || !in->payload ||
+          !static_index(&o->index[0]) || !static_index(&o->index[1]) ||
+          !static_index(&o->index[2]) || o->index[1].imm != o->index[2].imm ||
+          o->index[2].imm == UINT32_MAX)
+         goto fail;
+      uint32_t id = (uint32_t)o->index[0].imm, reg = (uint32_t)o->index[1].imm;
+      uint32_t space = in->payload[payload - 1];
+      if (binding_id(&pending, kind, id) || dxbc_binding_find(&pending, kind, space, reg))
+         goto fail;
+      if (pending.count == DXBC_BINDING_MAP_MAX || counts[kind] >= limits[kind]) {
+         status = DXBC_ERROR_LIMIT;
+         goto fail;
+      }
+      pending.bindings[pending.count++] = (struct dxbc_binding){
+         (uint32_t)kind, id, space, reg, counts[kind]++};
+   }
+   for (unsigned i = 0; i < program->num_instructions; ++i) {
+      const struct dxbc_instruction *in = bad = &program->instructions[i];
+      unsigned payload;
+      if (binding_declaration(in->opcode, &payload) >= 0)
+         continue;
+      for (unsigned j = 0; j < in->num_operands; ++j)
+         if ((dxbc_opcode_is_declaration(in->opcode) && binding_kind(in->operands[j].type) >= 0) ||
+             !binding_operand_valid(&pending, &in->operands[j]))
+            goto fail;
+   }
+   for (unsigned i = 0; i < program->num_relative; ++i)
+      if (!binding_operand_valid(&pending, &program->relative[i]))
+         goto fail;
+   for (unsigned i = 0; i < program->num_instructions; ++i) {
+      struct dxbc_instruction *in = &program->instructions[i];
+      unsigned payload;
+      int kind = binding_declaration(in->opcode, &payload);
+      if (kind >= 0) {
+         struct dxbc_operand *o = &in->operands[0];
+         o->index[0].imm = binding_id(&pending, kind, (uint32_t)o->index[0].imm)->slot;
+         memset(&o->index[1], 0, 2 * sizeof(o->index[1]));
+         o->index_dimension = kind == DXBC_BINDING_CBV ? 2 : 1;
+         if (kind == DXBC_BINDING_CBV) {
+            o->index[1].imm = in->payload[0];
+            in->num_payload = 0;
+         } else {
+            --in->num_payload;
+         }
+      } else {
+         for (unsigned j = 0; j < in->num_operands; ++j)
+            normalize_binding_operand(&pending, &in->operands[j]);
+      }
+   }
+   for (unsigned i = 0; i < program->num_relative; ++i)
+      normalize_binding_operand(&pending, &program->relative[i]);
+   *map = pending;
+   return DXBC_OK;
+fail:
+   if (error) {
+      error->status = status;
+      error->offset = bad ? bad->offset : 0;
+      error->opcode = bad ? bad->opcode : 0;
+   }
+   return status;
+}

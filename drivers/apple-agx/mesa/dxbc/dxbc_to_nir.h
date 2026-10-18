@@ -73,6 +73,14 @@ dxbc_translate_tokens(const uint32_t *tokens,
                       const struct nir_shader_compiler_options *options,
                       struct dxbc_nir_error *error);
 
+/* D3D12 static SM5.1 namespaces.  SM4/5.0 retains identity bindings and
+ * returns an inactive map; every failure clears the map. */
+struct nir_shader *
+dxbc_translate_tokens_bindings(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   struct dxbc_nir_error *error);
+
 /* dxbc_translate_tokens for a hull shader with the pass-through registers
  * of its output signature (see dxbc_to_nir_hs). */
 struct nir_shader *
