@@ -1,0 +1,25 @@
+{
+  "origin": "Project-authored original HLSL and generated DXIL; no external implementation copied",
+  "source_sha256": "a3639f4285c36d0ccf38a10cba51aff9f6ff519bed33fe25b5e9b873643c5131",
+  "dxil_sha256": "b22b71c9856cd3f2514a98609331b9ee4ab2b5e83aa8086d148243c277d52de5",
+  "experiment": "EXP1397 BUILD_ONLY",
+  "command": "dxc -T cs_6_0 -E main -HV 2018 -O3 -Ges -Fo exp1397_spaces_cs60.dxil -Fc exp1397_spaces_cs60.asm exp1397_spaces_cs60.hlsl",
+  "tools": {
+    "root": "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64",
+    "version": "1.8.2502.11",
+    "pins": {
+      "dxc.exe": "7c6918a0e2d4e437629fa8549f5ce800970494780f363bbbe1e3d3034f435aee",
+      "dxcompiler.dll": "78b5e21a91707b4a567ef281a519c52a45b709561202f54c5ad79c5a315847ed",
+      "dxil.dll": "77e039c905030a641e53658a008b74e90635a5ea9b6b79eabd0f2003bdfca59a"
+    }
+  },
+  "result_manifest_sha256": "d7495858db6bc3aaceb56fa12c5380747fcebde134f529106472ba683a6e87e4",
+  "scope": "Validated DXC compile/reflection and independent CPU arithmetic only; no converter/NIR/Asahi/GPU execution",
+  "resource_keys": [
+    "CBV b0 space3",
+    "SRV t0 space2",
+    "SRV t0 space7",
+    "UAV u0 space1",
+    "UAV u0 space9"
+  ]
+}
