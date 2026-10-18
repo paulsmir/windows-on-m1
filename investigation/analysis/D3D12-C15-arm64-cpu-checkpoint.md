@@ -21,3 +21,16 @@ One shared explicit.NET ProcessStartInfo/Process function reads stdout/stderr
 asynchronously, captures nonNULL ExitCode beforeDispose and enforces30s timeout.
 The same function is checked with cmd.exe exits0and7 before the unchanged caller.
 All1400local/remote evidence is preserved; no retry uses its existing out folder.
+
+EXP1405 completed: CPU_ONLY_PASS. The actual shared capture function returned
+exact exits0and7 and both streams for its controls. The unchanged ARM64 caller
+returned exit0, C15_MIXED_OWNED_PASS, five namespace mappings and2152-byte owned
+SPIR-V after TLS cleanup; timeoutfalse/inputunchanged. Native interval
+2026-10-18T15:52:34.4960547Z--15:52:34.6734865Z. Pre/post Code28/noService/8CPU
+and BootUtc2026-10-18T15:39:26.6904720Z remained identical.
+
+Final evidence: /Users/pavel/public_windows/.local/c15-owned-cpu-1405/final-host-manifest.json
+SHA342e45f372a8b82e28fb7c79641ae3ffbeeb3dec2f5d322cda020f84456c2d9c.
+This proves the limited Windows ARM64 C API/CRT/TLS invocation and exit capture.
+It does not prove GPU/DDI/SM6 capabilities, internal allocation failure handling
+or general shader conformance. Native SPIR-V semantics are a separate EXP1406.
