@@ -8,13 +8,12 @@ Worktree `/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-comp
 - REC1390 controller toolsession75685 finished. No forcedhostreset/physicalaction/hiddenboot; exactoem5cleanupSSH0, twoorderedrestartsCode32->Code28. FactoryV2Host38909f54/helper7ab9f020/selectorbed44fab unchanged. Normal launcher EXP950/launch-normal2.sh owns currentrecovery guest; do not rawproxy whileowned.
 - Normal recovery staysGPUvisible/brokerdisabled; emergencyhidden385onlyifnormalunrecoverable. Full-ownerdriverexperiments inherit pinned m1n1 5b857603/Mu361a2134 from1390; exacthashes in hardware-manifest. No package retention.
 
-## Immediate next: EXP1404 package build active
+## Active EXP1404; EXP1407 built and gated
 
-- EXP1405 CPU_ONLY PASS: same immutable1402 EXE/fixture/21dist; actual sharedcapture controls exit0/7 and nativecaller exit0/map5/ownedSPV2152B/inputunchanged. SameBoot Code28/noService8CPU. Finalmanifest342e45f372a8b82e28fb7c79641ae3ffbeeb3dec2f5d322cda020f84456c2d9c.1400 NULL-exit failure preserved.
-- EXP1406 BEFORE630fe7b1: replay nativeSPV1a5bef14 through existing validator/1398structural/1401semantic binaries, no new compile or guest operation; CPU_ONLY_PASS: validator/class-slots/384words/346stores/3negatives correct;17receiptfiles verified manifest65e64adb. No nativeGPUproof.
-- C19 fixced15565 then opaquehelper679bbdce; EXP1408 actualowner+realChelper/72pairs/ZW/once/VSnegativePASS;30ABI-ownertestsPASS; all3Windowssyntaxrc0. HelperCmoduleownsinternallower, no internalNIRheaderinowner. Originalfailedsyntaxpreserved.
-- ACTIVEbuild1404 session6463/logscratchpadbuild1404.log: sourcea19a2ddae3bb0b89a09f4cfe48a69f8f399ce278 pinned/snapshot686filesintegrityPASS; fullARM64nativeclosure underway. NoGPUinstall/launchyet.1407source3ae2c234783bb8a653fbda9f1f1d04d5136ff618, buildonlyafter1404DONE/PDBsaved. Guards exact3filedelta versus22cf/30381; refs preservepreviouscompanions. CPU1405markerwritten. GuestboundedSSHechoupPASS, no recoveryactive.
-- Old1392HOLD remains; next hardware1404 C19+C20 separate fresh-device contracts, then1407C21 after accepted1404 and durable rollback.
+- EXP1404 RUNNING, do not restart. Sourcea19a2ddae3bb0b89a09f4cfe48a69f8f399ce278/686files/buildPASS/PDBs/ARM64stack13824. BEFORE633ef7cc; helper/sign/stage23hashes/factoryV2PASS. Rootrunwrapper session21493; scratchpadnewexp1404.log/chain1404.log/watchdog1404.log. Hardware regressions underway, D3D12C19/C20slot later. No active recovery. WaitTOOL_d3d12-on_END/NEWEXP_DONE, collect+normalvisibleexactrollbackrec1404h.
+- EXP1407 BUILD_DONE/PDBs/stack13824, source3ae2c234783bb8a653fbda9f1f1d04d5136ff618/693files, originalnative-build-evidenceall4hashesverified. DO NOTlaunch until1404all47PASS+acceptedmarker+durableRECOVERY_DONEPackageAbsent. Scriptsguarded; rootmustwriteacceptedmarkerexplicitly. No installedpackagecarryover.
+- EXP1405CPU_ONLY and1406nativeSPVsemanticPASS; cpu1405.donewritten. No CPUguestcommandsduringhardware.
+- C19helper679bbdce/EXP1408numeric72pairs/3Windowsrc0. C22PSOfixfc58a816 nowcommitted/durabletests: actualREDlostobjects/cachedfailureoverwrite thenGREEN6PASS,3WindowssyntaxPASS,full1581same119baseline. C22probe/packageNOTYETprepared; rootownsprobe afterdelegatepreparationfailedbeforeedits. FutureC22package differsfromacceptedC21onlyPSOfix, noC15productionadmission.
 
 ## C19 failure and causal repair next
 
