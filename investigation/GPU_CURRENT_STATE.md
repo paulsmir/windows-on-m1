@@ -9,7 +9,7 @@ source preparation only until explicit root BEFORE/approval. Preserve user dirty
 Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 `investigation/CLAUDE_WORKING_METHOD.md`. Consult only referenced ledger entries.
 
-## IMMEDIATE: EXP1466 fresh353 build RUNNING / parallel runtime prep
+## IMMEDIATE: EXP1468 Asahi/runtime BUILD RUNNING / actual DB pin corrected
 
 - EXP1466 COMPLETE/ROOT accepted CORE BUILD ONLY:353freshARM64objects/7archives,
   361rc0/170.5s commandspan/250actualTUsonecanonical551fc/nooldincludes.
@@ -28,7 +28,26 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
   EXP1467metadata296 readDONE295hash/1missinglibagx_shaders.h; rawstdoutSHA
   11124ab1c900bc8d7ab786cf7f5144c7d72bc1001ad2ea553add9d49949db038. .local/c15-runtime-metadata1467;
   session19737finished/ownreaderclosed. PID41676RECYCLEDneverreuseoldkill.
-  Missingheader must resolvefromactualpreparersource; buildphasepending.
+  Missingheader UNUSED pernative5453/runtime498: actualOWNER_GENERATED header/C
+  pinclosed. EXP1467STOPbeforecompiler0commands coreDBpin incorrectlystagedLF
+  insteadnativeCRLF. RawSTOP.local/c15-runtime1467-result; no core/source change.
+  ActualDBfetched.local/c15-runtime-db1468/compile_commands.json6867713B
+  91dede240314809bf2f934225bf7089f40ee51e8fe33a756e08336944c71667e.
+  ALL860semanticrecordsEQUAL; exactnativeJSONsaveCRLF reproducesrawbytes.
+  EXP1468BUILD ACTIVE session75495/BEFORE4c130675. Newroot
+  C:\Users\pauls\EXP1468-native-runtime-unsigned; .local/c15-runtime1468-result.
+  Prep .local/c15-runtime1468-prep runnerce40d5a6/metadata70e69816/approval
+  1f566c896979100d5e10651b4f11e5d04d6378683b02e1bc16cdf3a3db6aca64.
+  DO NOT restart; monitor05.stdout. Structuredrootproof onlypin+root/token
+  changes vs1467; oldDBpinRED/newactualpinGREEN.
+  Adds280pinnedsourcefiles tocoredest withoutrewritingexisting;
+  strictactualshowIncludes/toolpins/postmaterializedpins/3existingfrozenhelpers.
+  Compiler45+link thennativeprepare/runtime production44+remainingselectedTUs.
+  PackagewrapperSOURCE .local/c15-abi-package-build-prep now1468base, NOTexecuted.
+  kmd SOURCEwireplan a431d2fa conditionalWOWretention: rawNIRserializedshader_info
+  cannotcrosscacheidentity blindly; sharedGPUVA envelope carriescompiledBO/VA.
+  Cachefinalizer .local/c15-runtime-cache-finalization-v2-prep READY8be46169,
+  0f75a641 finalizer parameterizesactualsuccessfulroot, no1467successclaim.
   Runtimecachegate revisedsource .local/c15-runtime-cache-preprocess-switches-v2-prep
   READY2de2a51b/runnerede69040 (exactswitchcheck, forced/FIpreserved).
 - EXP1461native7rc0/8395pins/4actualTUs
