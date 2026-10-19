@@ -9,34 +9,60 @@ source preparation only until explicit root BEFORE/approval. Preserve user dirty
 Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 `investigation/CLAUDE_WORKING_METHOD.md`. Consult only referenced ledger entries.
 
-## IMMEDIATE: EXP1460 complete / private five-field owner prototype next
+## IMMEDIATE: ABI CPU GREEN + source code committed / fresh353 build prep
 
-- NO active builder/guest experiment. Sessions60991(1459build) and28579(1460CPU)
-  finished. EXP1459 actual2rc0/8388pins/AA64/imports; raw manifest2d9df633,
-  extendedEXE29184B086fd754; ACTUAL61ec3a54. Original1458 stale-self-pin STOP
-  preserved; root fixed fresh1459 with explicit native SELF/stage checks.
-- EXP1460 actualJ313 **5/5 defect confirmed**, ACTUAL5925f35d. HashDXBC2 reads-2;
-  RAW0/DXIL1/all5NONE controlsPASS; original4negative as1457. NativePID6856/
-  exit1/stderrEMPTY/no timeout/inputhashMATCH. Root reviewed all30lines/source,
-  bounded12rawsnapshots and legal offset line; sizeofshader_info440.
-  Measured bytes depth380:04, derivative360:02, stencilfront392:04/back392:20,
-  hashDXIL368:01/DXBC368:02; reset/NONE/hashRAWzero.
-- Raw `.local/c15-enum5-layout-cpu1460-result`; artifact manifest
-  `eb248dc95426c2bf41b32a3f498006628adbfb3e1ff17cfaf1c5b6e98598f75f`;
-  independent root-pristine-review.json SHA
-  `1489bb56aeb5364c2dadb486804d65d66a19eb37734578fdf47c7239aeb7f607`.
-  Wrapper REVIEW_REQUIRED/acceptedFalse stays unchanged; supplement confirms
-  observations only, not a fix/C++ compatibility.
-- Root authorized sm51 private ORIGINAL five-field unsigned-storage projector
-  + cross-C/C++/neighbor/rawlayout prototype, SOURCE ONLY until root1461 BEFORE.
-  Four-field prototype remains preserved; now fifth RED exists. Derive actual
-  C++ profile from stored860-entry actual compile DB, not guessed C++ flags.
-  No global reference/cache/header/package mutation or getter masks.
-- Next: review minimal five-field source/pins; preregister1461 build/projection,
-  then exact CPU GREEN/layout comparison. Rebuild every affected TU only after
-  ABI/source/cache gates; never mix patchedVTN with old NIR. Do not wait
-  indefinitely for agents or run C24 unchanged. User wants throughput/parallel
-  source preparation and immediate next justified experiment.
+- No active guest/builder execution now. EXP1461native7rc0/8395pins/4actualTUs
+  canonical551fc header; EXP1462 J313bothCPUsteps exit0/stderrEMPTY. Fivegetter
+  markersPASS;4569C/C++checks0fail/alllegalvalues/neighbors/disjointmasks; all12
+  rawsnapshots+selectedoffsetline BYTEEQUAL1460pristine; sizeof440/align8.
+  Artifact `.local/c15-enum5-cpu1462-result/artifact-hashes.json` SHA
+  `0a6b440b4e20f9a70c4db0a6f251c12780e4cfa13d22ba4b7c3d4d328fb4c561`;
+  root reviewd3b032536a7a9dd9ef64f8b0c23ba45e281c3ace27b0ae4429e7063692434250.
+  This is isolated primitive GREEN, not full production/cache/GPU adoption.
+- CURRENT_ROOT originalprojector+6C/C++fixtures+optin tests committed
+  **189c08a066d65d8e1772b5f50e156c4a07def9e0**. Optional --mesa-source on3builders,
+  COREBUILD/native/compiler source identity guards +testcaller publicarg repair
+  committed **e443319043fa4c5bcd40d351f9238e391c6476b1**; ledgers31c49280.
+  Actualcore BUILD/source-root.json must EXACT3keys mesa_source/mesa_build/
+  shader_info_sha256551fc, ONLYafterall353/7success/postpins. Rich provenance
+  separatecore-build-identity.json. Defaults unchanged; no oldlibrary mixing.
+- EXP1463 fullattempt1 140 failures from23new shared testloader literal-path
+  rewrite failures, allsamecause. Preserved. Caller nowuses --mesa-source and
+  actual --mesa-build; ALLassertions retained/29affectedtestsPASS.
+  full-attempt2 **1617/219.389s exact117baseline67fail50error18skip/noaddedremoved**,
+  13postpinsMATCH; logd08d1277aa792c8d30b7eec03987c345a90a050fb1373b07381adedb434a133d.
+  No whole-suiteGREEN. Sessions43406/81218finished.
+- Futureproduction source snapshot **5e64cc617884ac2767a978b72790e3ec5a5c2b55**,
+  baseacceptedC24b5fcb91c+EXACT4verifiedbuildhelper overlays. Internalref
+  refs/agx-source-snapshots/c24-unsigned-shader-info, archive
+  `.local/c15-abi-driver-source-snapshot/source.tar` SHA
+  `531ec778d1b0e24f4a4452ec0f1ec2e430b8811f186eae2490d9fad08db97523`.
+  Current unvalidated666publisher/DDI edits EXCLUDED. No branch/index reset;
+  userdirtyMu preserved. Future runtime/UMD --project uses THIS snapshot.
+- Fullcore SOURCE prep `.local/c15-full-core353-source-prep` has353compile/
+  7archive exact860DBgraph. Oldrun_core353/controller prototypes have stale
+  PENDING generator/schema blockers; DO NOT execute unfinalized files.
+  kmd AGENT now explicitly **followup_task** finalizing freshEXP1466 runnable
+  bundle. Allmetadata closed; source-only untilrootBEFORE/approval. Needfinal
+  actualSELF/stagemembers/hash crosscheck afterrootrebase.
+- IMPORTANT coordination: send_message to a completed agent DOES NOT start it.
+  Root previously delayed finalprep with queuedmessages; corrected via
+  followup_task. Checklist_agents and wake completed lanes explicitly. Never
+  wait indefinitely. sm51 followup now doing ONEsource-only actualcache-flag
+  proof; do not let that block core compilation (productioncache gate later).
+- Generation decision55807712 ROOTAPPROVED: SAME20immutablegeneratedinputs,
+  all353objects/7archivesFRESH;19rules/28primaryinputs/23PythonIO reviewed,
+  patchedheader notgeninput. No Meson/Mako/PyYAML execution/alias guesses.
+  EXP1464 fixed364metadata363hash/1MISSINGextensionlessmeson; actualexe exists.
+  Rootlocal360primarybytes allnativeMATCH; no referenceclean.
+  EXP1465 fixed8remaininggeneratedmetadata8/8/0.0816s/rc0/noorphan, including
+  nir_opt_algebraic.c55.56MB76280815. Raw in `.local/c15-core353-metadata1464`
+  and `.local/c15-core353-generated8-metadata1465`; sessions93567/4220finished.
+- Next: inspectfinalEXP1466controller/sourceMap/pins (actual platform bytes,
+  copiedgenerated20, onecanonicalheader551fc, no oldMesa/build includes),
+  rootBEFORE/approve and START353build immediately. Use sensible bounded
+  largeTU timeout/stage progress. No newanalysispass or C24repeat. Whilebuild
+  runs prepare44Asahi/runtime/UMD +freshpackageGPUregression pipeline.
 
 ## Latest proven boundary: actual CPU NIR semantics and enum defect
 
@@ -77,7 +103,7 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
   READY83214da5, original projector25df4f33 (exact SHA+unique anchors, MIT prefix,
   hash_type untouched, refuses existing output), actual-header C/C++ cross-TU
   fixturea1748475 with all legal values, neighbors/raw masks/layout. SOURCE ONLY;
-  no projection/compiler execution yet. Five-field scope now authorized after1460 RED; no projection/build executed yet.
+  no projection/compiler execution yet. Five-field candidate executed1461/1462 and GREEN within scope above.
 - Must prove C++ member-type compatibility and old/new packing/serialization,
   not just sizeof440. `nir_serialize.c` stores raw sizeof(shader_info). Rebuild
   ALL actual header-dependent NIR/compiler/Asahi/VTN/runtime/owner TUs from one
