@@ -10,6 +10,28 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
 ## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
+ACTIVE1562 stagePASS/HASHES_MATCH23/FactoryV2wrapper701a6cf67b423f549cb68c195d9f0e2fec7d7cae03a442d48a4c45c1504d65ae.
+PipelinegeneratedBEFOREcommit ad77b5ba. Newfull-ownerboot reachedCM_PROB_NONE,
+DWM1236/Explorer5252 alive, firstGLdrawgreen removed0. NoGPUverdict yet.
+18:23boundedSSHup; currentlyCSplaynoovl+segstats170s parallel (segstats output
+buffered, NOT guesthang). Newexp1562log mayquietduringCS; checknestedbenchlogs
+andboundedwatchdog, notblindreset. Unifiedsession70506/root-run1562.log active.
+Userinformednewbootactuallyoccurred. AwaitTOOL_d3d12-on_END+NEWEXP_DONE andall
+regressions, thenFactoryV2exact1560cleanupRECOVERY_DONE. C21EknownSKIPneverretry.
+
+ACTIVE GPU1562 DISPATCHED/EXP1562_START18:17:23Z. DO_NOT_RESTART.
+Unifiedhostsession70506 runs .local/preparation-1562/run1562.sh; Root approval
+e86813b687a92261817acb559d6b4b7cbf733c95/prepmanifest38152a9c. Logs
+.local/preparation-1562/root-run1562.log and scratchnewexp1562.log/watchdog1562.log/
+run1562.log. Sourcef424/signed1560packet237d0bf6/receiptf3e588b1 frozen, guards+
+priorrecovery+packagebaselineMATCHpassed, initialwatchdogSSHup. Stage/full-owner
+boot/regressions IN_PROGRESS, noverdict yet. Expected61nonEPASS+C21EknownSKIP,
+SMOKE73+knownMSAA, GL/corpus/DWM/CS. Pipeline willappendfullgeneratedBEFORE+
+commit afterstage; do NOTeditEXPERIMENTS until thatcommit. Monitor bounded.
+AfterTOOL_d3d12-on_END+NEWEXP_DONE collect/checkevidence thenexactFactoryV2
+evidence/rec1562h/recover.sh toRECOVERY_DONE; no manualprereboot/hiddenboot,
+no retryold1530recovery. Do not endturnwhileexperiment/recoveryactive.
+
 1561 FINAL_PACKET ROOT_ACCEPTED: .local/c15-final-package1560-signed1561.zip
 15011336B SHA237d0bf67f641f166aa0e55065f4a2287481dfa85afed29143e07dc518395641.
 Finalreceiptf3e588b1/signedreviewa3ea1625/receiptReview2eed0889. INFd9fad7e2,
