@@ -43,7 +43,11 @@ class RejectedDeviceError(unittest.TestCase):
                   block(source, 'struct AgxD3d12Shader {') + ';\n' +
                   block(source, 'static void StoreShader(') + '\n' +
                   block(source, 'static VOID APIENTRY CreateShader(') + '\n' +
-                  block(source, 'static VOID APIENTRY CreateComputeShader(') + '\n')
+                  block(source, 'static VOID APIENTRY CreateComputeShader(') + '\n' +
+                  block(source, 'template<class Desc, UINT Kind> struct AgxD3d12State {') + ';\n' +
+                  source[source.index('using BlendState ='):source.index('struct AgxD3d12ElementLayout {')] +
+                  block(source, 'struct AgxD3d12ElementLayout {') + ';\n' +
+                  block(source, 'static VOID APIENTRY CreateElementLayout(') + '\n')
         fixture = (ROOT / 'tests/d3d12_rejected_device_error_fixture.cpp').read_text()
         fixture = fixture.replace('/* ACTUAL_REJECTED */', rejected)
         fixture = fixture.replace('/* ACTUAL_DEVICE */', actual)

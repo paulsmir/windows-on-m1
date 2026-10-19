@@ -58,6 +58,19 @@ cover compute and graphics under reversed creation; the builder compiled
 both DDI profiles with the pinned WDK. State and element-layout invalid-arg
 routes remain separate follow-up work; no GPU or public SM6 claim follows.
 
+## State and element-layout follow-up (EXP1550)
+
+WDK 26100's state and element-layout create signatures likewise begin with
+`HDEVICE`. Their existing invalid-argument paths used last-created globals.
+The actual-source two-device RED observed invalid state on B delivered to A
+after B then A were created. Both current constructors now call the same
+device-scoped helper; independent fixture observations cover state B and
+element-layout A with opposite last-created devices. Existing `E_INVALIDARG`,
+valid-copy behavior and diagnostic records are unchanged. After this change,
+the only global `SetErrorCb` caller is the generic rejected non-DEVICE_CORE
+fallback; its list/queue handle ownership needs separate primary-source
+mapping. No GPU or public SM6 behavior was tested here.
+
 ## WHAT IS STILL UNKNOWN:
 
 This CPU check does not establish public acceptability of `E_NOTIMPL` for

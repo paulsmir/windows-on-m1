@@ -27,6 +27,14 @@ argument paths remain global and require separate source/test decision. This
 new paragraph supersedes the older line below saying the route is only in
 source-only preparation.
 
+EXP1550 closes those ordinary state/element invalid-argument callback routes:
+actual-source state RED B error delivered A after B,A create; both state B
+and element A isolation now target34GREEN, builder3rc0. Only non-DEVICE_CORE
+generic rejected fallback retains global SetErrorCb; list/queue HDEVICE
+ownership is a distinct source-first gate. Next C15 production blocker is
+coherent R1/0011 typed provider/root/lifetime/checked-compiler contract, not
+an SM6 capability probe. Normal J313 EXP1530 recovery remains unchanged.
+
 Worktree integration/ad04-windows-compiler, userdirtyMu preserved. Normal J313
 GPU-visible inert guest: one APPL0002 Code28, PackageAbsent, no AppleAgx service,
 SYS/UMD absent, 8 CPUs. EXP1530 RECOVERY_DONE with same normal profile;

@@ -25,6 +25,16 @@ struct D3D12DDI_HSHADER { void *pDrvPrivate; };
 struct D3D12DDI_HROOTSIGNATURE {};
 struct D3D12DDIARG_STAGE_IO_SIGNATURES {};
 using D3D12DDI_CREATE_SHADER_FLAGS = UINT;
+struct D3D12DDI_HBLENDSTATE { void *pDrvPrivate; };
+struct D3D12DDI_HELEMENTLAYOUT { void *pDrvPrivate; };
+struct D3D12DDI_BLEND_DESC { UINT value; };
+struct D3D12DDI_DEPTH_STENCIL_DESC { UINT value; };
+struct D3D12DDI_RASTERIZER_DESC { UINT value; };
+struct D3D12DDIARG_INPUT_ELEMENT_DESC { UINT value; };
+struct D3D12DDIARG_CREATEELEMENTLAYOUT {
+    const D3D12DDIARG_INPUT_ELEMENT_DESC *pVertexElements;
+    UINT NumElements;
+};
 struct D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 {};
 struct D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 {};
 struct D3D12DDI_DEVICE_FUNCS_CORE_0003 {
@@ -125,6 +135,19 @@ int main() {
     if (calls[0] != 0 || calls[1] != 1 || wrong_handle) {
         std::fprintf(stderr, "graphics-invalid A=%u B=%u wrong=%u\n", calls[0], calls[1], wrong_handle);
         return 8;
+    }
+    calls[0] = calls[1] = wrong_handle = 0;
+    BlendState::create(args[1].hDrvDevice, nullptr, D3D12DDI_HBLENDSTATE{});
+    if (calls[0] != 0 || calls[1] != 1 || wrong_handle) {
+        std::fprintf(stderr, "state-invalid A=%u B=%u wrong=%u\n", calls[0], calls[1], wrong_handle);
+        return 9;
+    }
+    calls[0] = calls[1] = wrong_handle = 0;
+    if (CreateDevice({}, &args[0]) != S_OK || CreateDevice({}, &args[1]) != S_OK) return 10;
+    CreateElementLayout(args[0].hDrvDevice, nullptr, {});
+    if (calls[0] != 1 || calls[1] != 0 || wrong_handle) {
+        std::fprintf(stderr, "element-invalid A=%u B=%u wrong=%u\n", calls[0], calls[1], wrong_handle);
+        return 11;
     }
     std::puts("DEVICE_ERROR_ROUTE_PASS");
     return 0;

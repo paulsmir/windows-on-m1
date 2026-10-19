@@ -480,9 +480,9 @@ static VOID APIENTRY DestroyShader(D3D12DDI_HDEVICE, D3D12DDI_HSHADER) {}
  * pipeline state translates them to AGX state (C6). */
 template<class Desc, UINT Kind> struct AgxD3d12State {
     static SIZE_T APIENTRY size(D3D12DDI_HDEVICE, const Desc *) { return sizeof(Desc); }
-    template<class Handle> static VOID APIENTRY create(D3D12DDI_HDEVICE, const Desc *desc, Handle handle) {
+    template<class Handle> static VOID APIENTRY create(D3D12DDI_HDEVICE device, const Desc *desc, Handle handle) {
         if (!desc || !handle.pDrvPrivate) {
-            if (callbacks && callbacks->pfnSetErrorCb) callbacks->pfnSetErrorCb(runtime_device, E_INVALIDARG);
+            ReportRejectedDeviceError(device, E_INVALIDARG);
             return;
         }
         memcpy(handle.pDrvPrivate, desc, sizeof(Desc));
@@ -502,11 +502,11 @@ static SIZE_T APIENTRY CalcPrivateElementLayoutSize(D3D12DDI_HDEVICE, const D3D1
     const UINT count = arg ? arg->NumElements : 0;
     return offsetof(AgxD3d12ElementLayout, element) + (count ? count : 1) * sizeof(D3D12DDIARG_INPUT_ELEMENT_DESC);
 }
-static VOID APIENTRY CreateElementLayout(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATEELEMENTLAYOUT *arg,
+static VOID APIENTRY CreateElementLayout(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATEELEMENTLAYOUT *arg,
                                          D3D12DDI_HELEMENTLAYOUT handle) {
     auto *layout = static_cast<AgxD3d12ElementLayout *>(handle.pDrvPrivate);
     if (!arg || !layout || (arg->NumElements && !arg->pVertexElements)) {
-        if (callbacks && callbacks->pfnSetErrorCb) callbacks->pfnSetErrorCb(runtime_device, E_INVALIDARG);
+        ReportRejectedDeviceError(device, E_INVALIDARG);
         return;
     }
     layout->elements = arg->NumElements;
