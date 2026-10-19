@@ -33,13 +33,22 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
  review515815b6f750c69d4bae5e0742951d5f1c8e9b79b4c4c2f26094b18b0dcc85e3.
  Fullhost1619tests225.108s EXACT117oldfailureentries/noaddedremoved/67fail50error20skip;
  NOTwhole-suiteGREEN, loge49897baeb68981e190cbf6533c9cdb25be29c247d33095c3a3a59650ae7bf6f.
-- NEXT sm51SOURCEONLY boundeddesign: actualWindowsownercompute-prepared entry in
- agx_d3d12_windows.{h,cpp} acceptsALREADYliveAGX_D3D12_OWNER/context+constAgxOwnedNir,
- invokesactualCPPwrapper/copiesbyvaluemetadata intoexistingAGX_D3D12_COMPUTE.
- Needsroot/source/device/context/refcontract andrequired17archive package linkclosure.
- No lazyEnsureOwner/DDI/caps/runtimepointerguess/diagnosticbypass/fakecompiler.
- ActualAsahicallbackBOcheckpoint requires CURRENTprojector earlyNULLfixruntime;
- historic1469archiveNOTpatched. Sourceplan first/rootreview beforecode/native/hardware.
+- NEXT ROOTacceptedownerplan f1e3bc54/READYef27ffb3, permanentnote9a0ac8fd
+ investigation/analysis/D3D12-C15-owner-compute-prepared.md; sm51SOURCEONLY implements
+ .local/c15-owner-compute-prepared1497-prep: explicitactualNIR Cstagequery+opaqueCPP,
+ portablehandoff-onlyprojectheader; liveOwnerScreenContext/preparedcomputeentry,
+ memberwiseempty/localpublication/HRESULTmapping, actualnative-onlyWDKfixtureifneeded.
+ No lazyEnsureOwner/DDI/caps/runtimepointerguess/fakecompiler/ownercreationclaim.
+- Native1469archivebada UNPATCHED.1496build STOPafterfullstatecompileRC0/canonicalheader,
+ 18old1469/projectheaders unknownregistry, post13292MATCH, archiveNOTRUN;
+ .local/c15-native-runtime-nir-consume1496-result/remote-output/receipts/actual-dependency-closure.json.
+ kmdSOURCEONLY preparesfollowup1498 (1497reservedowner), pin18fromaccepted1469OUTPUTmanifest
+ andactualbytes (NOToldresult.inputs where0/18), simulateallactualincludes beforelaunch.
+ Patcheda967source/153oldAA64objects/codeflagsunchanged. Neverrerun1496.
+ Rootoldarchiveparsed154bodyhashesAA64 proofb9f60970; corrected1496source/propscontract
+ build-onlyNOT_PACKAGE_QUALIFIED, fresharchive/pathSHA, explicitBASEmetadata,
+ normalpackageverifierMUSTrejectuntilcompletefreshsourceassembly/preparedResourceCppqualified.
+ Freshruntime1498required BEFORErealAsahicallback/BOcheckpoint; NOEXEonbuilder.
 - EarlierChelper2f8375cd CPU1491PASS199/79/384TWICE; actualnativefirstNULLrepair
  a905b660/validated73d2dec5/currentprojectord3da7de, exact2guards/actual1487RED6FAILGREEN8PASS.
 - Noactiveexperiment/builder/guestprocess; DONOTrerun1495/1493/1492/1494/recovery.
