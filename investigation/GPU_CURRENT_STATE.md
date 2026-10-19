@@ -8,85 +8,70 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## ACTIVE GPU EXP1519 — C25 probe-only, DO NOT restart
+## CURRENT GPU: EXP1519 COMPLETE / starting prepared EXP1522 NOW
 
-- Rootsession5986: bash.local/preparation-1519/run1519.sh; scratchpad
-  newexp1519.log/chain inside root-run1519.log/watchdog1519.log/run1519.log.
-  Start10:47:57Z; stagePASS/hash23; generatedfullBEFORE6bd949c0;
-  actualfullowner/run_uefi started/GLsmoke progressing. No verdict yet.
-- SAMEsignedpackage1506/source3d40/runtime1504 bytes asaccepted1510, freshly
-  installedafter1510RECOVERY_DONE. ONLY newC25sixPresent/oneResizeprobe;
-  60nonE expected +C21ESKIP total61logical, NEVERALL61PASS. CSenabled.
-- Probe1518BUILDaccepted: PE270336BAA64
-  07d7cb825e2b8909407ab6d868ee302747583e9f408716a6cb5392c499153410,
-  29source+12SDKtoolprepostMATCH/same4imports/knownunusedvolumewarning.
-  Rootreview.local/c25-probe-build1518-result/root-review1518.json
-  c190bafce130d93f61ac05efb009cea0d880e4f72acb89f1fa8ccae9b858add8; no PEexecutionbefore1519.
-  Sourceb915134a; ACTUAL/BEFORE+CHANGES24c1d7ba.
-- ActualFactoryV2 fivepinsMATCH; wrapper09cf4c0c5d01c93f00fc518c38ab6a758e1796ed3d16d98ee789f3219b0aaa80,
-  host10f7771d unchanged. .local/experiments/EXP1519-d3d12-present-resize/
-  evidence/rec1519h/recover.sh mustownorderednormalrollback afterevidence;
-  no manualprereboot/no packagecarryover. Do notrerun1510recovery.
-- Productionhook7sourcefiles COMMITTED74e0d7c4/defaultOFF, 9newverifier+5normalruntime
-  testsPASS; FULL1630tests SAME119failures/noaddedremoved/postpinsMATCH;
-  .local/c15-production-hook-host-review/full-result.json/logc502288f.
-  Sourceproposalwas e3a910cd; nextsamefinalcommit newnormalruntime qualification
-  templates.local/c15-production-runtime-next-prep/READY.json9963477e.
-  Rootmustfullreview/finalassembly baseline3d40+factory75+DDIonlyf338+hooks,
-  excludeinheritedpublisher666; completeZIP/manifest/commitnewidentity; no1504retrofit.
-  No newbuildIDreserved;1520possibleafterrootpreregistration. AgentsSOURCEONLY.
+- EXP1519Root5986/10698completed; RECOVERY_DONE PackageAbsent/noService8CPU
+  Code28 ordinaryGPUvisible. Same1506signedpackage/source3d40/runtime1504.
+  C25PASS6frames/1ResizeS_OK/bothindices/all26112pixelsbad0;60nonEPASS+
+  C21EknownSKIP. Original59controlsunchanged/C14Acounter512drawn512/3indirect
+  receiptsexact1510/C24ABC6subresources165texels padding0. 73SMOKE+onlyknown
+  MSAA-a000r;pool6workersforeignreclaim1/fl11ARM64WOWdebugPASS/corpus414each
+  createfail64/4/nohang/pixeldiff0/DWM0. GL52.7/internal59.6/CS46.057singlepoints.
+- Actualrecoveryno manualprereboot: firstzeroownerSTOPbeforewrites preserved;
+  existingguardedNO_HOST_OWNER(noANYlauncher+liveSSH) ->Start4/disarm ->normal
+  Code32Stopped->exactcleanupSSH0->normalCode28Absent/noService8CPU.
+  Before11:21:35.8155480Z/After11:23:44.5171950Z/durablemanifest56FBD526...
+  .local/experiments/EXP1519-d3d12-present-resize/evidence/rec1519h/recovery-final.log
+  0f4d16511cc90543c0891bd368f6b35ab92ab3e1e7e1a7344e57a7e19a35c9b7;
+  Rootverdictd96e41d044ea51713767737102f4c53a26825356b20c164c525a2ada7d26d642;
+  pre-recovery2241filemanifest472e9404/finalartifactsc8098d23. NEVERrerun1519recovery.
+- NEXT1522prepared.local/preparation-1522 bound1521C26PE49f94edd/rootreview9a27cf3f;
+  prior1519actualverdict+recoveryaccepted; rootBEFOREthiscommit thenapproval.
+  SolefactorC26SAMEclosedlisttwice/fencedvolatileCBV7->11, exact32768words;
+  all61nonEexpected+C21ESKIP total62logical/NEVERALL62. Samefresh1506package/
+  explicitversionoverride; CSenabled. No newC15packageinthishardwareexperiment.
+  DO NOT restartafterrootrunstarts; monitor scratchnewexp1522/watchdog1522,
+  .local/preparation-1522/root-run1522.log. RecoverynewFactoryV2orderednormal
+  exactcleanup beforefollowingexperiment. No hostownerassumption/fakePID.
 
-## Parallel BUILD1520 + C26 BUILD1521 accepted
+## Parallel C15 BUILD gates / native package1524 ACTIVE
 
-- Native1520session26566 COMPLETE all203RC0/199AA64/119canonical/25422deps;
-  result.local/c15-production-runtime1520-result/05.stdout boundedpoll.
-  BEFORE1fd2476d/approval0b3aef7379731cc39229a7f372a1a3b3085c93e7208143950b16869d14130633.
-  Source40e2055cfb0457d332320c358928f53e2912a0fb/customrefEXP1520-source,
-  .local/c15-production-legacy-assembly1520 ZIP1bb18d59137f1dbee4a4b8ed61e0b0980c5aba307f7fdef6f68e07996ee2d504/
-  manifeste02f4609535d1bef2b585d36d7de03790ece56b05fb0791e135e06f391427df6.
-  725files/exact12revieweddelta/normalverifierUNCHANGED/DDIf338 excludes666.
-  13058pins(commonold13057UNCHANGED+freshSELF);3normalstages/203commands expected.
-  Rootacceptedreview.local/c15-production-runtime1520-result/root-review1520.json;
-  archive4072240Befdca12938e5ab5a0e56f673551438fa54b8e66c13d3099bf974425ae5949dfc/
-  props46269730b7e33f9eaa60a171d6583f2d2d424fa910f7cc7990862f85a3e30e81;
-  154archivebodies/RSP154/2537hashes/normalverifierResourcef981PASS.
-  No PEexecution/package/GPUactions. Native8hookqualification separateNEXT.
-- C26native1521BUILDaccepted/rootreview.local/c26-probe-build1521-result/root-review1521.json;
-  PE273920B49f94edd50ca602f1828b59e3d1fc5a55e8729917c20da9456fd7bebdb76c120;
-  41prepostpins/same4imports/onlyknownunusedwarning/noPEexecution.
-  Source910a8ca7/d82c96ad; sameclosedlisttwice/fencedvolatileCBVreplacement7->11,
-  exact32768words; noReset/PSOchange, allresourcesalive/C21ESKIP.
-  kmdagentSOURCEpreparingconditionalPREPACKED1522 from1519, prior1519verdict+
-  recoveryPENDING untilactual, no launchwithoutrootnewBEFORE.
-- sm51agentSOURCEonlypreparingproductionnative8/normalUMDnextbundle; original1517
-  execution input_pins12767..12775 validPath/SHAauthoritiesmatchoriginalchecked9;
-  NO fabricatedderivedsameauthoritywitness. Finalnormal1520outputPENDINGuntilRoot.
-
-## Native1523 production UMD ACCEPTED — package next
-
-- Root14407completed10RC0/8helpers+22UMDobjectsAA64/all13956postpinsMATCH;
-  source40e725files/sourceverifiers/EVAL-before-builddefaultOFF+enabledexact8
-  PASS; helper738deps/fullUMD3242includesunknown0/opaqueowner shader_info0.
-  Actual17archives+8helpersONCE/no fixtureobjs/export/provider/coreoldAPI;
-  normalUMD0warnings/errors; actual13imports/exportsONLYOpenAdapter10_2+12.
-- DLL13220864Bffcc5c547a640da079f07fcc30408c8ded1e6c6b2df0568ff47f552a08e38cf7;
-  PDBb328db9e/map2338f43f; fullreview.local/c15-production-umd1523-result/root-review1523.json.
-  CRTsame5namedinitializersas1517primary6a023178/no newsideeffects; XIempty/
-  sole__dyn_tls_init/XDempty; normalDllMainretained. ARM64max13824/WOW6544/
-  noCRTassertPASSwithoutbypass. NOPEexecution/sign/package/GPUclaim.
-- Native1520cacheproof.local/c15-production-runtime1520-result/cache-object-equivalence1520.json
-  72fac0bc8c7b0482f1748c7160b109ce0f5942748cb0e7dc2750a1ea67aafeeb:
-  new883Be37e32ea vs1504qualified0de334b5 ALL879bytesexceptCOFFtimestamp
-  equal; actual1507preprocessbodyNOOPinit/store/retrieveNULL reusedhonestly.
-- sm51SOURCEpreparing .local/c15-package-after-1523-source-prep, normalfull
-  build-driver source40e/actualenableflags/newFRESH8objectoutput (1523output
-  reuseREFUSED); finalnoticesBEFOREbaselineCAT/signflow; nounsigned-onlyclaim.
-  Actual1523acceptancegiven/next1524RootIDnotyetpreregistered. Need rootFULLreview,
-  BEFORE,pins/nativefullKMDpackagebuild, notices/sign/post-CATfinalreceipt,
-  source/stack/hash gates beforeGPU. No publicSM6models/caps.
-- Prepared1522C26conditionalharness .local/preparation-1522/READY7bd3ebb7;
-  newprobe1521bound49f94edd/rootreview9a27cf3f; hardwareapproval/prior1519
-  actualverdict+RECOVERY_DONE STILLPENDING. Do not launchwhile1519active.
+- Hook74e0d7c4 defaultOFF/9new+5normaltestsPASS/full1630 SAME119oldfailures
+  noaddedremoved/postMATCH/logc502288f. DDIroute dae87ae3 qualifiedCPU1515
+  116checks; futurepackagesbaseline3d40+factory75+DDIonlyf338 excludes666publisher.
+- Complete725source40e2055cfb0457d332320c358928f53e2912a0fb/customrefEXP1520-source;
+  .local/c15-production-legacy-assembly1520 ZIP1bb18d59/manifeste02f4609.
+  Native1520COMPLETE203RC0/199AA64/119canonical/25422deps/154archivebodyMATCH/
+  RSP154/2537hashes/originalnormalverifierResourcef981PASS; normalruntime4072240B
+  efdca12938e5ab5a0e56f673551438fa54b8e66c13d3099bf974425ae5949dfc/
+  props46269730b7e33f9eaa60a171d6583f2d2d424fa910f7cc7990862f85a3e30e81.
+- Native1523COMPLETE10RC0/8helpers+22UMDobjectsAA64/post13956MATCH; source725/
+  EVALbeforeBuild/defaultmacro0/enabledexact1/exact8/realDDIstdcpp17ownerDefault;
+  actual17archives+8helpersONCE/no fixture/provider/coreoldAPI;738helperdeps/
+  3242UMDincludesunknown0/opaqueowner shader_info0; normalUMD0warnings/errors.
+  DLL13220864Bffcc5c547a640da079f07fcc30408c8ded1e6c6b2df0568ff47f552a08e38cf7;
+  imports13/exportsONLYOpenAdapter10_2+12/CRTsame5as1517primary6a023178/XIempty/
+  TLSsole__dyn_tls_init/XDempty/normalDllMainretained; stacksARM6413824/WOW6544/
+  noCRTassertPASS. NOPEload/sign/package/GPUclaim. Rootreviewde38b1cc local1523result.
+- Newcacheobject883Be37e32ea ALL879bytesexceptCOFFtimestamp match1504qualified
+  0de334b5; LOCALproof72fac0bc tiesactual1507NOOPinit/store/retrieveNULLbody,
+  no redundantpreprocess. Preservehonestproof/notnewPPclaim.
+- BUILD1524ACTIVE root47188 .local/c15-package1524-prep/controller.py;
+  result.local/c15-package1524-result. BEFORE6c21d515/approvalc0752e89.
+  FreshbuilderEXP1524-production-prepared-package-inputs ->...-build,
+  NEWobjects8=build/objects8 (NO1523objectreuse), finaldistbuild/distribution.
+  ACTUAL40e normalbuild-driver EnablePreparedNirOwner+immutable1523request5976a395;
+  fullKMD+UMD/version1524/normalprofile/retainedWOW61/88. 28qualifiednoticefiles
+  copiedBEFOREbaselineWDKCAT/signflow/recheckafter; NOTunsigned-onlyclaim,
+  NOTnoticeCATcoverage(INFdoesnotlistthem). 13988nativepins/37stagedfiles/
+  short-Filehash+PSparseBEFOREbuild/canonicalRoot. Producer4929d528/child6bb39ee2/
+  controllerc654b3fd/collector191c5a8a. Ownedchild900s+stacks120s/firstSTOPnewID.
+  Rootmustreviewactual8receipts/COFF/tlogs(readclosureCLclearedbyhook—notstdout
+  showIncludesclaim)/17linkarchives+8objectsONCE/sourcepostpins/sign/catalog/
+  version/imports/CRT/exports/allphysicalINF SYS UMD CAT+2PDB/stacks/notices.
+  StandaloneINF1235repack/CATsign/finalstandardreceipt ifneeded SEPARATEBEFORE.
+  sm51SOURCEpreparing.local/c15-package1524-post-source-prep, no remote/Git/tools.
+  No publicSM6/DDI/caps; no newpacketGPUuntilfinalsignedhashFREEZE.
 
 ## CPU1515 + native1517 COMPLETE — production hook SOURCE review next
 
