@@ -8,55 +8,62 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## IMMEDIATE: actual Windows owner CPU1502 qualified by LOCAL1505 / normal source assembly next
+## IMMEDIATE: SIGNED1506 packet +59probe READY; finalizePREPACKEDFactory and START stand
 
-- Implementation928f3c9e COMMITTED7production+4fixturefiles+plan. DefaultOFFmacro
-  APPLE_AGX_D3D12_PREPARED_NIR_OWNER guardsnewownerAPI/include/helper/declaration;
-  normalpackagegraph unchanged. Explicitnativefixture/fullownercompile set1.
-  ActualCstagequery/opaqueCPPforwarder checkscompute BEFOREconsumingVSFSCShelper;
-  memberwiseempty/nonemptyunchanged/publishlastcopiedmetadata/matchingexistingDestroy.
-- EXP1503 nativePASS9RC0/8AA64/13808postMATCH/1213actualdeps0unknown,
-  4canonical551fcTUs+4opaquecompiles(3depgroup/MSBuild2objects);9oldreuse1145deps.
-  Link16objects=9old7fresh,fullownerABIobjectABSENT/17archivesincl1500once.
-  PE14564352B12c1e154b9a4dca6a25ddb8af34698c6c00c8860497adabd9ceb5a2982edc514,
-  same14imports/fourphysicalDLLs1493; review1088d8209221e3cd70d6aff6f54668ce31d1837216ae4ec40f19558c4aff6838.
-- EXP1501 originalSTOP8compilesRC0/soleunknownu_format_gen.h; old1472authority124574B
- 3d659e51 andtwoactualownerincludes matched.1503ONLYheaderpin/freshroot; originalSTOPretained.
-- ActualCPU1502 J313PID8368exit0/notimeout/stderr0/nativePASS/41unchanged;
-  owner4PASS5,5,1,0 checks22,44,52,60;VSFSzeroALLcallbacks/eachCS3clones2deletes,
-  ordinaryNULL/reuse/nonemptyunchanged,199callback79bridge/20valid8NULL/689+32,
-  FSserialization/pairrollback/ref0/384wordsTHREE/FIVEnormalizations/both768Bgoldexact.
-  Host1502controllerSTOP TypeError MUSTpreserve (so.read_text str vs encodedmarkers).
-  Earlierpredicate-onlytest9dac/c0a suppliedbytes artificially/incomplete; correctionrecorded.
-- LOCAL1505 noSSH/no repeatCPU: actualproducer+consumerRED inverseTypeError,
-  singleproducerread_bytesGREENALLactual1502markers/counts;53localpins/41stage/
- 6nativeoutputhashes/capture/fourphysicalAA64DLLinventory/goldsverified.
-  `.local/c15-owner-compute-cpu1505-postonly/root-review1505.json`
-  b7f643683574282b3a3fcc4f768ad90478586ed969ba09fb8d1891bbfcbc9191.
-  ThisqualifiesactualonephysicalCPUprocess, NOToldcontrollerwholePASS.
-- Fullhost1619/219.588s EXACT117old67fail50error20skip/noaddedremoved/postMATCH,
-  log8e24928645ab4c7bff0b39a3e2c392cd478cb74d150b21e23fe10041e090df04.
-- Runtime1500explicitBUILD_ONLY archive4070242Bb6a5c5c59b1e799ba72e6d71fde25ae63fe94e148adaba61369cbae162581886,
- 154AA64bodies153old+fresh00895d8fcf8/sourcea967. Rootreviewe5beb91d.
- NormalpackageverifierRC1 missing source_commit REQUIRED; no retrofit1500metadata.
-- NEXT normalruntime1504 privatebundle kmdprepares, rootassemblyalreadyCOMMITTED:
- `.local/c15-runtime-package-assembly1504` sourcecommit3d40cdaf038b9a8a7fa8509ebc4d3dd4303a4b09,
- ref refs/agx-experiments/EXP1504-source;719files=698baseline+3overlays21unlinkedadds.
- RootALLgitblobs/archive/SHAverified/reviewc4ae059895a8bd501050f580e4926aaef19c9a0579090d0d1d36ec65cee4f3de.
- source.zip5b286c06c8df704b4f497ab501eca95bf214d80decb6c89f9ce2092a83131f95,
- source-manifestb4cedfe662a170e9035127447bad4d3dde23dcb0a3cb9b555797e7cd6a21fa24.
- PreservebaseDDI15f637/excludeCURRENTca856/666abec/vcxprojunchanged/ownerdefaultOFF.
- StillSOURCE_ONLY: freshnormal3stages fullcompiler+prepare+154runtimeclosure required,
- actualfreshResource.cpp83055Bf981/preparedresult/sourcecommit/sourceManifest/props
- +UNCHANGEDnormalverifierPASS beforepackageuse. NEVERretrofit1500 metadata.
- Canonical1466core conditionalreuse; no activebuilderyet/nootherhardwareoperation.
- sm51boundednextofficialDDIcomputePSOinput/privatecapacity/lifetimeadoptionplan SOURCEONLY;
- no repeatcapacityarchaeology/securityblockedUBFE. Rootalonechoosesnextrealcheckpoint.
-- RealAsahiconstructor/BO/GPU/DDI/caps/runtimepointercapacity/rootdevice/liveness/threads/fullOOM
- remainOPEN; actualownerCPUfixture isnot hardwareAsahioperation; upstreamNDEBUGvalidatorNOOP.
- Normal1471inertRECOVERY_DONE/Code28PackageAbsent/noService8CPUunchanged, noactiveexperiment
- andnoextraCPUrollbackneeded. RootaloneGit/builder/guest/launcher; preserveuserMu.
- Existingc18UBFEsecurityblockedtask NEVERretry/reroute. CSenabled.
+- ROOT PRIORITY standstart. No activeexperiment/guestpackage; finalFactoryprivateSOURCE kmdfinishes
+ basedactual1471harness+FactoryV2 b11wrapper/10fhost. DO NOTnewframework/analysiswait.
+ Sourceartifact3d40cdaf038b9a8a7fa8509ebc4d3dd4303a4b09/719files/defaultOFFpreparedowner/
+ BASEDDI15f637, currentpublisherca856/666abecEXCLUDED. Version30.0.1506.0.
+- SIGNED local `.local/c15-package1506-signed-review/files/driver`8actualfiles +notices13,
+ fullZIP`.local/c15-package1506-signed-review/signed-package1506.zip`
+ 9f904a80f96232648572635487dd9b5d202ce35c0e799db4db528346a783de90,
+ `files/signed-files.json`b0e7d753817e77a4ca423d2991f2d1eb9195bae3d967b02f0f274c7bf710c59b.
+ Rootsignedreview58455dd4c28cbd4eb7ab5e3de83d4f6a4daa064def917108ef231ef7b9f1ce0a.
+ SYS50d2ae7e0320ed136064778c263d2338444f8c596b5ffd6509018bbd56823b25,
+ UMD7147d9f29272670adfe679314278f14d903ff6e2a87f9242190d254579ba325d,
+ INF4420Bcfd902bc92e666a327f98231a0c2fa22524a4d35432af11566b332e1b10b9bcd,
+ CAT4015B3ed4b21faf31eb7015e0dc4f799f395d799368f53b221176e0eb78ae200b9ffe.
+ WOWd51ebf72/1625ffdeunchanged. CMSvalidE9BEleaf; builderUntrustedRootCAT/SYS/UMDembeddedNotSigned
+ catalogpackagedsamebaseline, no publictrustclaim. All21fileSHAverified.
+- 1506BUILD36.88sRC0/18baselinewarnings0errors/source719verifyBEFOREAFTER/versioncoherent;
+ rootrevieweb043b32. POSTpass13807pins/3236rawownerincludes275unique58aliases/ToArrayroundtrip,
+ ARM64UMD+SYSimportsexact1471; stack13824/WOW6544<16384. RootPOSTreviewc0eb3232,
+ POSTreceipt0e708485f325ef0cd6f792d1428f782d05bad1508e0e84f938852e1307cc2753.
+ Promotion8rows thenCATPID27904RC0/0.974s/immutablepost30pins allPASS.
+ `.local/c15-package1506-final-prep`genericphasecontroller used; nativeoriginals/POST immutable.
+- Probe1509 `.local/c15-probe59-build1509-result/remote/out/agx_d3d12_probe.exe`
+ AA64 265216B51f79dd932f744c10ff1fb62d922939b9b552b669691859ae141afc5fdc9fedd,
+ FINALrootreview397fe54af3f7e583d77b63d10a554afde41f434c67051b410b4a80989bd9db15.
+ Source93aa5dff ONLYC21E invocation→explicitSKIP; allother59unique-nonE checkpoints same1437/1471.
+ NOT59directcalls. Unusedvolume_samplewarningexpected; importsEXACT1437dxgi/d3d12/USER32/KERNEL32.
+ NoPEexecuted. ExistingUBFEsecurityblockedtask NEVERretry/reroute; excludeC21E/noALL60claim.
+- Runtime1504NORMAL originalverifier ACTUALbuilderPASS, fresh203toolsRC0/199AA64(45compiler154runtime),
+ 119canonical551fcTUs/25422deps/all154RSPfreshpaths+actualarchiveBODIESverified/2531outputhashes.
+ Runtime4071162B54437f3f28783e8b43201561a9155e3c702d97388f26fb69c4b1b658237e5c88,
+ result509be684/propsa41935fd/preparede6ff0196/Resourcef981/rawstate619bCRLFnormalizeda967.
+ Rootreviewab19c80f6b8e14ab9c08626fbc882b28f56c99e532cbcb0dfd5b92bbd25bf11f.
+ Actualcache1507singlepreprocessRC0/.503s/178deps0unknown/storeinitEMPTY/retrieveNULL;
+ cacheacceptance0c2f71393d76909484a56e5bba1a1816bdd1b34f8cd5484b51617329298521de.
+ SOURCE `.local/c15-runtime-package-assembly1504` sourceZIP5b286c06/sourceManifestb4cedfe6.
+- OwnerAPI928f3c9e COMMITTED, CPU1502actualPID8368PASS60ownerchecks/199+79/20valid8NULL/689+32/
+ FSserialization/ref0/384THREE/5normalizations/golds; HOST1502TypeErrorSTOP MUSTpreserve.
+ LOCAL1505rootwholeproducer+consumer RED(read_textstr vsencodedbytes)/singleproducerread_bytesGREEN,
+ all53pins41stage6outputs, NOguestrepeat; proofb7f64368. Earlierpredicate-only9dac/c0a incompletecorrectionrecorded.
+ Fullhost1619/219.588s EXACT117old67fail50error20skip/noaddedremoved/postMATCH log8e249286.
+- NEXT OFFLINE whileGPUruns: sm51PRIVATElegacyfactory/TUsplitproposal READY054ea957 at
+ `.local/c15-r0-legacy-prepared1507-prep` (folderSOURCE ONLY, NOTEXP1507; cache1507uniqueactualID).
+ PLAN2ec47a7a accepted narrowR0PSO-ownedcs/cs_dwords→genuineopaquelegacyfactory(forcedkind1stage5),
+ rootEMPTYUNSPECIFIEDtranslationonly/notcanonicalkey; commonCPP+privateclasssplitavoidunlinkedcore/provider;
+ oldOwnedPrepare/rangebodiesunchanged; callerCompileComputefunction-onlyguarded/sameSRW/cache/EnsureOwner,
+ existingCalc/CreateShader/VOIDpolicy/rootresolve/caps/publisher/layout unchanged. 14sources6production8tests,
+ no-core/provider14commandfixture/newbase18/wrapper19; patch9b73b5b4/baselineDDId962957d.
+ NOTadopted/compiled/executed yet. Do source-review/adopt/test/nativecompile while1506hardwareactive.
+ RealDXIL-DDIreadablespan/privatecapacity/VOIDpolicy remainsOPEN; no third equivalentcapacitysearch.
+- Normal1471RECOVERY_DONE/Code28PackageAbsent/noService8CPU remainscurrentthroughCPU1502, no GPUchanges since1471.
+ No rerun1471recovery, no physicaloperatorask whileSSHlive. New1506Factory must pinexactpackage, ordinaryGPU-visible
+ profile/inertrollback, FactoryV2host10fwrapperb11fullactualSHA, preserveimmutablehiddenEMERGENCYonly.
+ RootaloneGit/builder/sign/guest/launcher; preserveuserMu; CSenabled. NeverkilloldPID41676 (reused/obsolete).
+ Useroldbuilderreplyacknowledged: currentbuilderhealthy/203cmdsdone; no actiononstalePID.
 
 ## Latest completed CPU boundaries
 
