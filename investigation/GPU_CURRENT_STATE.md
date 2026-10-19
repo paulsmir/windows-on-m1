@@ -10,6 +10,19 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
 ## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
+Current next deterministic C15 prerequisite: DEVICE_CORE rejected-DDI errors
+used last-created globals and misrouted A/B/A as A0/B3 in an actual-source
+ASAN/UBSAN CPU RED. Candidate routes typed HDEVICE through the stored
+per-device callback/HRT; same test now A2/B1 in both creation orders and
+null-B isolation. EXP1546 builder WDK26100 syncheck all3rc0 and targeted
+34GREEN. EXP1547 full1637 has historical117FAIL/ERROR IDs plus one watchdog
+runner-confounded ITIMER_REAL test; EXP1548 same test unwrapped PASS. No J313
+package or guest state changed, no public SM6/DXIL/DDI/caps claim. Next: commit
+finite route and CHANGES status implemented; then source-first ordinary
+create-error/device association and provider/root-admission contract. This
+new paragraph supersedes the older line below saying the route is only in
+source-only preparation.
+
 Worktree integration/ad04-windows-compiler, userdirtyMu preserved. Normal J313
 GPU-visible inert guest: one APPL0002 Code28, PackageAbsent, no AppleAgx service,
 SYS/UMD absent, 8 CPUs. EXP1530 RECOVERY_DONE with same normal profile;

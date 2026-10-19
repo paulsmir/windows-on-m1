@@ -71,7 +71,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertEqual(source.count('Rejected<decltype'), 1)  # only AGX_REJECT
         stub = source[source.index('struct Rejected<R (APIENTRY *)(A...), Table, Offset>'):]
         self.assertLess(stub.index('AdmissionUmdDiagnostic("measure-d3d12-rejected"'),
-                        stub.index('pfnSetErrorCb(runtime_device'))
+                        stub.index('ReportRejectedDeviceError(std::get<0>'))
         # C1d (EXP1348): device initialisation calls these; they answer
         # without SetErrorCb and claim no optional capability.
         for member in ('pfnCheckFormatSupport', 'pfnCheckMultisampleQualityLevels', 'pfnQueryNodeMap'):

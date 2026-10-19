@@ -12,6 +12,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <cstddef>
 #include <climits>
 #include <cstring>
+#include <tuple>
 #include <type_traits>
 #include "agx_d3d12_view_mapping.h"
 extern "C" {
@@ -57,14 +58,22 @@ template<class T> struct TableOf;
 template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0003> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
 template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
 template<> struct TableOf<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D; };
+static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error);
 template<class T, UINT Table, UINT Offset> struct Rejected;
 template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENTRY *)(A...), Table, Offset> {
-    static R APIENTRY call(A...) {
+    static R APIENTRY call(A... args) {
+        ((void)args, ...);
         OutputDebugStringA("AGX D3D12 ABI gate: unimplemented DDI\n");
         const UINT receipt[] = {Table, Offset};
         AdmissionUmdDiagnostic("measure-d3d12-rejected", E_NOTIMPL, receipt, 2);
-        if (callbacks && callbacks->pfnSetErrorCb)
+        if constexpr (Table == D3D12DDI_TABLE_TYPE_DEVICE_CORE) {
+            static_assert(sizeof...(A) > 0 &&
+                          std::is_same_v<std::tuple_element_t<0, std::tuple<A...>>, D3D12DDI_HDEVICE>,
+                          "rejected DEVICE_CORE DDI must start with HDEVICE");
+            ReportRejectedDeviceError(std::get<0>(std::forward_as_tuple(args...)), E_NOTIMPL);
+        } else if (callbacks && callbacks->pfnSetErrorCb) {
             callbacks->pfnSetErrorCb(runtime_device, E_NOTIMPL);
+        }
         /* Command-list errors need the runtime list handle; no list is created here. */
         (void)(callbacks && callbacks->pfnSetCommandListErrorCb);
         if constexpr (std::is_same_v<R, HRESULT>) return E_NOTIMPL;
@@ -243,6 +252,11 @@ struct AgxD3d12Device {
     UINT heap_count;
     struct AgxD3d12Heap *heaps[4096];
 };
+static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error) {
+    auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
+    if (device && device->callbacks && device->callbacks->pfnSetErrorCb)
+        device->callbacks->pfnSetErrorCb(device->runtime, error);
+}
 static SIZE_T APIENTRY CalcPrivateDeviceSize(D3D12DDI_HADAPTER,
                                              const D3D12DDIARG_CALCPRIVATEDEVICESIZE *arg) {
     const UINT receipt[] = {arg ? arg->Interface : 0, arg ? arg->Version : 0};
