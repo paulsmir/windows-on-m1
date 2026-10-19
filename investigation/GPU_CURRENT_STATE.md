@@ -367,3 +367,18 @@ provenbinary+primaryspirv.h, noneaffectedmodes. Neverexecuteoutputlinkconsumer.
 NextEXP1452twoC+linkactualsemanticfixture bindsrealarchives/review. kmdprep
 ongoing/rootownsapproval. No active1451controller(session78720finished).
 Guestnormalinert1439; no newGPUpackage. Builderresourcesrecovered1450.
+
+## EXP1456 actual J313 CPU NIR-map semantics PASS
+
+1453nativeEXE62bc/24e3SPV/7original1397vectors ranonJ313underprocess-local
+Bypass, noGPUpackagechange. Exit0/stderrEMPTY/399activechecks/7refusals
+unchangedNIRmap/192lanes173active19tail384goldwords346stores, bothoutputs
+byteequalgoldonhost. SRVswap/seedloss/wrongslot346each/boundsunsupportedREFUSED.
+NativeNDEBUGpreserved/NIR_VALIDATE=NOOPexplicit, no backend/GPU/DDIcapsclaim.
+PhysicalCRTinventory/prepost10inputs+manifestMATCH; artifactmanifestfc27af67115b1b5185fa57965f693365362c12d8515452a56950db78de331b55.
+Root78434finished/CPU1456PASS. No guestrebootneeded/normalinert1439unchanged.
+GuestUTC01:49:03timestampsasis, hosttransporttimestampsseparate.
+EXP1455enumprobe native2rc0/8388pins/importAA64 buildcompletewith4expected
+bitfieldwarnings; rootreview/1457boundedCPUgetterpending. No blanketbenign
+warningclaim. Nextmaintarget afterenumrepresentation iscoherentunlinkedowner
+frontendbridge/lifetime/DDIadmissioncontract; no guessedcapbit/GPUrun.
