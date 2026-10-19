@@ -8,6 +8,16 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## IMMEDIATE UPDATE: EXP1506 HOST PREPARE STOP, no guest mutation
+
+- EXP1506 activation stopped at stale receipt INF hash before clone/guestwrites.
+  Local evidence empty; no stage-receipt/hardware-manifest/recovery exists.
+  Signed package bytes preserved, preCAT receipt0e708 retained immutable.
+  Root omitted accepted1473 finalization; fix separate receipt preserving raw
+  provenance and built SYS/UMD identity. NewID1510 reuses package30.0.1506.0
+  with explicit INF-derived version across factory scripts/manifests/cleanup.
+  Prior1471 recovered inert guest unchanged; bounded SSH up. No recovery rerun.
+
 ## IMMEDIATE: SIGNED1506 packet +59probe READY; finalizePREPACKEDFactory and START stand
 
 - ROOT PRIORITY standstart. No activeexperiment/guestpackage; finalFactoryprivateSOURCE kmdfinishes
