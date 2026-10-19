@@ -9,30 +9,34 @@ source preparation only until explicit root BEFORE/approval. Preserve user dirty
 Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 `investigation/CLAUDE_WORKING_METHOD.md`. Consult only referenced ledger entries.
 
-## IMMEDIATE: EXP1459 native build running — do not restart
+## IMMEDIATE: EXP1460 complete / private five-field owner prototype next
 
-- Root tool session **60991** runs frozen `.local/c15-enum5-layout-build1459-prep/controller.py`.
-  Approval `root-approval1459.json` SHA
-  `32829ea09d364caa7e9adf09a2f642f13c151cb61ed8875319139683c944e5fb`.
-  BEFORE commit `1bd72c0a`; fresh builder `C:\Users\pauls\EXP1459-enum5-layout-build-only`;
-  local result `/Volumes/pwdev/public_windows/.local/c15-enum5-layout-build1459-result`.
-- One original C compile + link, same65 flags/LLVM20/C11/MD/NDEBUG/8388 inputs.
-  Pristine actual shader_info header; NO storage fix applied. Probe d3909327
-  extends accepted1457 four-field probe with fifth hash_type getter, separate
-  per-field markers, NONE/RAW/DXIL controls, actual zero-reset raw byte snapshots
-  and legal non-bitfield offsets. No synthetic struct or getter masks.
-- EXP1458 stopped before compiler: stale runner self-pin9956/5cef instead actual
-  9960/55fe. Raw STOP preserved. Root built fresh1459, corrected self-pin after
-  rebasing, explicitly checked script bytes and all ZIP stage entries. No old
-  artifact mutated. All compile/dependency/AA64/import/hash/time gates remain.
-- kmd agent preparing SOURCE ONLY **EXP1460** CPU capture for actual1459 EXE,
-  fresh `C:\Users\pavel\EXP1460-enum5-layout-cpu`, hash pending. Use T helpers,
-  process-local ExecutionPolicy Bypass, raw120s Process capture, rc0/1 accepted
-  only as REVIEW_REQUIRED. Root must read/parse all extended output before any
-  defect verdict or five-field fix. No old six-line-only parser.
-- Next: wait60991 bounded; read raw diagnostics/manifest, accept exact CPU probe
-  build only, bind actual EXE into1460 metadata, root BEFORE/approval, run J313.
-  Do not wait indefinitely for agents. Do not rerun C24 unchanged.
+- NO active builder/guest experiment. Sessions60991(1459build) and28579(1460CPU)
+  finished. EXP1459 actual2rc0/8388pins/AA64/imports; raw manifest2d9df633,
+  extendedEXE29184B086fd754; ACTUAL61ec3a54. Original1458 stale-self-pin STOP
+  preserved; root fixed fresh1459 with explicit native SELF/stage checks.
+- EXP1460 actualJ313 **5/5 defect confirmed**, ACTUAL5925f35d. HashDXBC2 reads-2;
+  RAW0/DXIL1/all5NONE controlsPASS; original4negative as1457. NativePID6856/
+  exit1/stderrEMPTY/no timeout/inputhashMATCH. Root reviewed all30lines/source,
+  bounded12rawsnapshots and legal offset line; sizeofshader_info440.
+  Measured bytes depth380:04, derivative360:02, stencilfront392:04/back392:20,
+  hashDXIL368:01/DXBC368:02; reset/NONE/hashRAWzero.
+- Raw `.local/c15-enum5-layout-cpu1460-result`; artifact manifest
+  `eb248dc95426c2bf41b32a3f498006628adbfb3e1ff17cfaf1c5b6e98598f75f`;
+  independent root-pristine-review.json SHA
+  `1489bb56aeb5364c2dadb486804d65d66a19eb37734578fdf47c7239aeb7f607`.
+  Wrapper REVIEW_REQUIRED/acceptedFalse stays unchanged; supplement confirms
+  observations only, not a fix/C++ compatibility.
+- Root authorized sm51 private ORIGINAL five-field unsigned-storage projector
+  + cross-C/C++/neighbor/rawlayout prototype, SOURCE ONLY until root1461 BEFORE.
+  Four-field prototype remains preserved; now fifth RED exists. Derive actual
+  C++ profile from stored860-entry actual compile DB, not guessed C++ flags.
+  No global reference/cache/header/package mutation or getter masks.
+- Next: review minimal five-field source/pins; preregister1461 build/projection,
+  then exact CPU GREEN/layout comparison. Rebuild every affected TU only after
+  ABI/source/cache gates; never mix patchedVTN with old NIR. Do not wait
+  indefinitely for agents or run C24 unchanged. User wants throughput/parallel
+  source preparation and immediate next justified experiment.
 
 ## Latest proven boundary: actual CPU NIR semantics and enum defect
 
@@ -58,13 +62,12 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
   valid causal measurement, not transport failure; stderrEMPTY/hashMATCH.
 - Raw `.local/c15-enum-abi-cpu1457-result`, artifact manifest
   `cc81b97b4d9cb7001d17e1ec7cc24fe1f91152a071031108a25dd864d11f0b4d`.
-  Session96696 finished. No guest/GPU change. Fifth hash_type:2/DXBC2 is only
-  a source-supported risk until1460; do NOT claim fifth defect yet.
+  Session96696 finished. No guest/GPU change. Fifth hash_type:2/DXBC2 was subsequently confirmed by1460 above.
 
 ## Owner remedy / source-only status
 
 - Reviewed plan `investigation/analysis/D3D12-C15-native-enum-abi-remedy.md`,
-  commit01f1b667/process rowaf2eb664. Owner: shared Mesa CPU metadata storage
+  commit01f1b667/process rowaf2eb664;1460supplement5925f35d. Owner: shared Mesa CPU metadata storage
   under Windows compiler ABI, not WDK/KMD/firmware or a downstream getter mask.
 - Exact Mesa9aa1215f878b504f66159dd2ead4c7973142126e header23753B SHA
   `893b5a63f7dd0fbaf1d96953451fb073e35fd38acd8be60a51528e2f37204a09`
@@ -74,7 +77,7 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
   READY83214da5, original projector25df4f33 (exact SHA+unique anchors, MIT prefix,
   hash_type untouched, refuses existing output), actual-header C/C++ cross-TU
   fixturea1748475 with all legal values, neighbors/raw masks/layout. SOURCE ONLY;
-  no projection/compiler execution yet. Five-field scope awaits fifth RED.
+  no projection/compiler execution yet. Five-field scope now authorized after1460 RED; no projection/build executed yet.
 - Must prove C++ member-type compatibility and old/new packing/serialization,
   not just sizeof440. `nir_serialize.c` stores raw sizeof(shader_info). Rebuild
   ALL actual header-dependent NIR/compiler/Asahi/VTN/runtime/owner TUs from one
