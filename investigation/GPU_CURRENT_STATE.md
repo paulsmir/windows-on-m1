@@ -327,3 +327,13 @@ runnerfalseBUILD_COMPLETE/exit0. OutercontrollercorrectlySTOPcommands0;
 all14frozenfilesverified. No compiler ran. Underlyingcauseunknown/no traceback.
 Next1448sourceprep explicitfailureflag+type/repr/traceback/stage andprivate
 emptyexceptionregression;19source/flagsgraphunchanged. Preserveoldreceipts.
+
+## EXP1448 STOP / builder exhausted memory
+
+ZIPextractMemoryError beforecompiler, raw06stderrfulltraceback; nooutputsZIP.
+ReadonlybuilderOS00:02:20Z freevirtual141184KiB, physical941692KiB;
+PowerShellPID41676private103846612992B. No buildprocessesactive. PIDownership
+unknown; doNOTkillwithoutidentity/authorization. FirstCIMidentitySSHresetrc255.
+Nextboundedreadonlyidentityafterbackoff; nobuildretryuntilmemoryrecovers.
+1447emptyexceptionrelationshipUNPROVEN. ExplicitrunnerhandlingunitPASS.
+No guest/package/GPUmutation. CurrentnativefrontendstillNOTBUILT.
