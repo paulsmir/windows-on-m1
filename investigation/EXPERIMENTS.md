@@ -59468,3 +59468,5 @@ RECOVERY SOURCE:
   "Version": 2,
   "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
 }
+
+EXP1532 FIXTURE_PREREQUISITE_READ_ONLY BEFORE 2026-10-19T12:40:41.417153+00:00: next deterministic profile-agreement gate, independent of active1530. Exact bounded35s builder metadata read ONLY3knownSDK26100x64files dxc.exe/dxcompiler.dll/dxil.dll: Bytes+SHA256, compare expected7c6918a0/78b5e21a/77e039c9 from acceptedproducer. No recursiveinventory/processquery/compiler/guest. Current source Design .local/c15-dxil-profile-agreement-prep/DESIGN-READYb3426f6b; Microsoftpinned194bb contract verified versionpacking and SM6.0->1.0/6.1->1.1; no sourcecopy. Need nativeactualsizes before ownedfixturecompilepreflight, outputsunknown. Tools/source producercommandprep only; actualtwoDXCcalls require separatefullBEFORE after metadata/source reviews. Result .local/c15-profile-fixture1532-prep/tool-metadata.json; no binariesexecuted inthisquery. REVIEW R14 ACCEPT finiteknownfiles; historicalG4/firmwareOPEN DEFER outside CPUmetadata boundary.
