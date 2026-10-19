@@ -32,9 +32,14 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 - EXP1487confirmedRED6NIRFAILvsGREEN8PASS32checks; fix+durableregressiona905b660,
  validatedindex73d2dec5. CURRENTprojectord3da7de earlyconsume2guards.
  Module2a028b4b ownedPROGRAMnormalizedNIR actualCPU1486PASS79/384.
-- NEXT agent sm51SOURCEONLY opaqueC++wrapperproposal: insideactualAgxOwnedNir private
- result invokeChelper whileprepared/rootrefsheld, actualwrapperregression not reconstructed
- native aggregate. No winsys/DDI/caps/buildhook/lazyEnsureOwner. Rootread/designacceptnext.
+- NEXT ROOTACCEPTED opaqueC++wrapperdesign .local/c15-owned-nir-opaque-wrapper-source-plan
+ READY56af5ad7/design55cdffd2, all10CURRENT+3proposalpinMATCH/fullsource read.
+ sm51SOURCEONLY implementing .local/c15-owned-nir-wrapper1492-prep: twoexisting
+ modulefiles addsole noexcept forwarder(private native result), actualwrapperthunkregression
+ fivevalid-object callsx4cases=20 +separateNULLcases; preserve199/79/384oracles.
+ No extra refcount/liveness/thread claim; caller holds prepared/context/root through callback.
+ Native1493SOURCEscaffold kmdagent pending1492rootqualification, bounded incremental
+ objectreuse analysis only; no compile/remote/guest/Git. No winsys/DDI/caps/buildhook/lazyEnsureOwner.
  Acceptedplan76b091ed investigation/analysis/D3D12-C15-prepared-nir-pipe-handoff.md.
 - Noactiveexperiment/builder/guestprocess; DONOTrerun1491/1489/1490/1487/recovery.
  Normalinert1471RECOVERY_DONE/Code28PackageAbsentnoService8CPU unchanged throughCPU1491;
