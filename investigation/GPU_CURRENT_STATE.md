@@ -10,6 +10,20 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
 ## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
+1560 FULLPACKAGE_BUILD ROOT_ACCEPTED .local/c15-package1560-result/root-post-review1560.json
+SHAabea3e71bdf7080af7de9432dddeb0b402a16c70dae08dd9f6e69fd151554691.
+13991prepostMATCH/114outputhashes/8freshAA64+17archivesONCE/tlogs2461reads285unique
+UNKNOWN0/UMDmacro1C++17/importsexportsSAME1527/notice28MATCH/stackARM6413824WOW6544PASS.
+ActualSYSUMDversion30.0.1560.0, initialINFsameversion. SYS2843c61e/UMD49014599.
+NEXT1561finalINF1235DIRID12/WOW/CATsign freeze BEFOREwritten; prep
+.local/c15-package1561-repack-prep controller49bfa79b/owned088b520f/run2e6645a6.
+85inputrows,ONLYINF+CATmutable; allSYSUMDWOWPDBnoticestoolsimmutable;promotion38.
+RootapprovalBeforeCommit/stagemanifestfinalization+dispatchpending. Noactivebuild
+orGPUexperiment now. J313SSHup/USBuartproxyvisible; no newreboot/package since1530.
+Hardware1562priorreceiptready .local/preparation-1562/prerequisite-review1530.json
+SHA0b9c73ba7e2e0c10afa3a3da22f3c83e62db681a3d423c0e76b7f7cfd6c6840f;
+runharness/newfinalsignedpacket+liveguardstillpending. PRIORITYactualhardware.
+
 1559 EIGHT_BUILD_ONLY ROOT_ACCEPTED:8freshAA64/8rc0/300depsUNKNOWN0/exact
 predictedstderr; nativePID11408Exit0/controlsPID29404Exit0,3016Exit7.
 Review .local/c15-error-owner-prepared1559-result/root-review1559.json SHA
