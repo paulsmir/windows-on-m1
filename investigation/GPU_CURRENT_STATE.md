@@ -382,3 +382,17 @@ EXP1455enumprobe native2rc0/8388pins/importAA64 buildcompletewith4expected
 bitfieldwarnings; rootreview/1457boundedCPUgetterpending. No blanketbenign
 warningclaim. Nextmaintarget afterenumrepresentation iscoherentunlinkedowner
 frontendbridge/lifetime/DDIadmissioncontract; no guessedcapbit/GPUrun.
+
+## EXP1457 confirmed native enum bitfield defect / ownerfix next
+
+ActualJ313CPU volatileheaderprobe0d3f: depth/stencilfront/back4->-4,
+derivative2->-2; fullenumnegative/unsigned4294967292/4294967294;
+sizeofshader_info440/fullenum4, NONEPASS. rc1FAILfailed4validcausal
+measurement/stderrEMPTY/no timeout/hashMATCH. Rawmanifestcc81b97b4d9cb7001d17e1ec7cc24fe1f91152a071031108a25dd864d11f0b4d.
+Session96696finished/controllerDISCRIMINATOR_RECORDED/noactiveguestexperiment.
+No GPUpackagechange/guestreboot; normalinert1439stillcurrent.
+Strongcausaltarget compilerheaderenumstorageABI, notgettermask/capbits.
+sm51boundedSOURCEplanlicense+Cppcompat+ALLtransitiveTUrebuild; kmdSOURCE
+extendspristineprobe withfifthhash_type:2(DXBC2)andrawlayoutsnapshots BEFORE
+fix. Fifthfieldonlypotential/unmeasured; nofifthdefectclaim. Rootownsall
+trackedwrites/Git/guest/builderapproval. No newbuilduntilrootBEFORE.
