@@ -25,6 +25,12 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
   6ecc9fc2642e8ca294d41ec076b759fe0a71e18cc68ef6334e148b8a5b985dde;manifest
   3fa24bc6f0348f154376ad417f0f73ffb19193b929852b2a639df26b81ba9dc7.
   Reuse qualified native library/props inpackage, no duplicatecompile.
+  EXP1467metadata296 readDONE295hash/1missinglibagx_shaders.h; rawstdoutSHA
+  11124ab1c900bc8d7ab786cf7f5144c7d72bc1001ad2ea553add9d49949db038. .local/c15-runtime-metadata1467;
+  session19737finished/ownreaderclosed. PID41676RECYCLEDneverreuseoldkill.
+  Missingheader must resolvefromactualpreparersource; buildphasepending.
+  Runtimecachegate revisedsource .local/c15-runtime-cache-preprocess-switches-v2-prep
+  READY2de2a51b/runnerede69040 (exactswitchcheck, forced/FIpreserved).
 - EXP1461native7rc0/8395pins/4actualTUs
   canonical551fc header; EXP1462 J313bothCPUsteps exit0/stderrEMPTY. Fivegetter
   markersPASS;4569C/C++checks0fail/alllegalvalues/neighbors/disjointmasks; all12
