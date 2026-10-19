@@ -8,34 +8,44 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## ACTIVE NATIVE1517 — root session98465, DO NOT duplicate
+## CPU1515 + native1517 COMPLETE — production hook SOURCE review next
 
-- PrivatefullUMD+host BUILDONLY .local/c15-full-umd-native1517-prep/controller.py,
-  approval278d51cccb59511a8c6abfb80e9f95ff9050e39a6d7bd4c0b4c0fc34f4b82c38,
-  BEFORE17649e62. FinalREADYe4760824/runnera1ea18cc/controllerdeda4e9a/
-  execution0b2236ff/ZIP2e59545e;14518nativepins. ActualSourceGates/code/source/
-  flags17graph unchanged, soleSDK26100x64binFIRSTPATH +2actualtoolpins.
-  RootFINALcanonicalprepared/SELF/733ZIP/local/commonancestor1512pins checked.
-- Prior1516STOPcmd14ResourceCompileTRK0005rc.exe missing; normal1504verifier+
-  10freshcompiles+bothactualClCompileevalgates13RC0; fullDLL22C/C++objectscompiled
-  0warnings/post14516MATCH. NoDLLlink/host/PEexec. Source build-driver.ps1line165
-  exactnormalGpuvaG3SDKx64PATH omitted inharness; nowrestored +actualrc.exe55640B
-  43da1503c262c30894c851589bf0155f8365d77e63a5f7bc13982320e3a6b42d/
-  rcdll264536B9a11e4759adc48abe1fa9e3082ad7db4b53f4d6d77701c13729f4ffd47ae934c.
-  Preserve1516records/localresult/SDKfinitequery; no driver/code/ABI change.
-- Prior1514STOPpreflight.before/0commands: sourceproducer suffixSELF rewroteTWO
-  ancestorrecords. Bothlivebuilderfilesunchangedmatchpassed1512. Actualfinalize
-  1516/1517 nowFULLpath/equal1SELF/preservesother14515; realregistryRED2/GREEN
-  proofb3a01bff. NEVERmodifyoldbuilderfiles orremoveancestorchecks. Fullnotes
-  native-self-pin-scope.md. InitiallocalaliasRootScopeSTOP also preserved;
-  ALLfutureauthorizerprepared_rootsP.resolve canonicalVolumes (notUsersalias)!
-- CPU1515SOURCEharness PENDING actual1517PE/import/CRT/TLS/maprootacceptance;
-  binds1517—notfailed1514/1516—beforeANYguestload. No package. Physicaltargetnames
-  AgxC15PrivatePsoCpu1514.dll/Host1514.exe retainedintentionally underbuild1517.
-- Productionlegacyroute SOURCEplan97794f at .local/c15-production-legacy-package-integration-prep;
-  eightfreshobjects NOobserver/wrappers/exports/defaultOFF buildhook. CRITICALnew
-  packagewhole-sourcecommit requiresFRESHnormalruntime qualification; neverimport
-  historical1504props asnewsource orweakenverifier. CPU1515PASS stillmandatory.
+- Native1517all17RC0/33AA64=10freshNoCore22fullDLL1host/post14518/152hashes;
+  12actualclosures1455deps/unknown0/bothrealEVALgatesPASS/UMDhost0warnings.
+  Linkactual17externalarchivesONCE/noforbiddenCoreprovider/realOwnerCreate and
+  preparedCreate fromfullownerwrapper/factorycommon. DLL13227520B26d195664229f73f90f0102e94fcc44d665cd0fdffcec94286d2a25566dd3ef1;
+  host84480Ba110d0c7ffed7a21d37b5a61e135b3f0cfca444ce4d139ef978738233667ba4d.
+  Buildreview2bb876ba84e926d33e53112bbf84112776725f629d17830ed8b6407e9800a717.
+  Loadreview440031c12a35ee8bfa4ff0f238362e551c442a9cd9f18a92210d58551fd41b9b:
+  actual5CRTsourceinit_CPUprintfcache/LUT/string/vectors noGPU/device/threadOS
+  callbackcreation; normalDllMainVEH/SIGABRT/flushretained. SoleCRTtlscallback/
+  XDempty; installedMicrosofttlsdyn sourceff55. HostTLS0. ActualLoad1515below.
+- ActualCPU1515PID9616exit0/stderr0/33inputspostMATCH/localpostMATCH; DLLLoad/
+  4cases/FreeLibrary succeeded; 116checks31+27+31+27. PSOcopied431/66words after
+  shaderDestroy+eraseLIVEbacking (notfreed). CS50block8,8,1; CS51static64,1,1/
+  map1/3. Eachcallback1/clonefree1/delete1success0NULL/graphics0/GLSL2balanced;
+  cacheS_OKtwice orE_FAILtwice. No actualAsahiBO/GPU/DDIcaps/rootdevice/thread
+  lifetime/fullOOM proof. Normal1510inertCode28PackageAbsent remainscurrent.
+- GuardedactualCompileCompute DDI29line deltaCOMMITTED dae87ae3/defaultOFF;
+  functionbodybyteequalsactualcompiledf338. Target30GREEN/full1621in215.801s
+  SAME119failures(noaddedremoved;117baseline+2liveair.lockenvironment), postsource
+  MATCH/log549f32980742acab18c3f1c420cbd6afd2ae23cc0152244aed282600fda51396.
+  Futurepackageassembly MUSTexcludeinheritedunvalidatedpublisher666abec;
+  baseline15f+onlyd962givesf338 whilecurrentHEADfile94b7 retainsoldpublisher.
+- NEXTproduction8object/defaultOFFhook candidateSOURCE .local/c15-production-legacy-package-hook-proposal
+  READYe3a910cd (10files) / PLAN97794f rootread. RootMUSTfullreview/adopt/test real
+  provenance fixtures beforecommit/newfinalsnapshot. SourceMMnormalverifier
+  unchanged/newruntimewholecommitfreshqualificationrequired. No1504identityretrofit.
+- ParallelC25 SOURCEprobe .local/c25-present-resize-source-prep READY497db9a8;
+  meaningfulnewlifetimeboundaryC7singlePresent neverowner-aliveResize. Sixframes/
+  2backbufferindices/clearreadback BEFOREPresent/3frames64x64→releaseALLrefs→one
+  Resize96x48→3frames. ProbeONLY/no drivercapschange; original1509C21ESKIP retained.
+  ROOTsource+primaryreview BEFOREbuildercompile1518/hardware1519; untouchedsigned
+  1510package possiblefreshinstallwithsame1506version explicitFactoryoverride,
+  prior1510RECOVERY_DONE02c54. No newhardwarelaunched yet. AgentsSOURCEONLY.
+- Preserve1514preflightSTOPwrongSELF/1516RCtoolPATHSTOP. ExactfullpathSELF
+  finalizer/rootcanonicalP.resolve nowmandatory; SDK26100x64binprimarypath+RCtools
+  pinned. No pendingguest/builderprocess, sessions1517/1515 completed.
 
 ## CPU1513 COMPLETE — next private native1514 BUILD review NOW
 
