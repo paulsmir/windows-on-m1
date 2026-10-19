@@ -59405,3 +59405,66 @@ Final signed package ZIP 24e7c2748e8a7c51386e8c1466e7a1aea4d04f5bcce1ffafee0ecac
 Rootreviewfullchangedhelpers plus exactdiff against1522acceptedharness; newexp onlywholepaths/runIDs/explicit1527version/removedunusedrepackcopy; no broad numeric/hash replacement. clone derivesactualpriorINF1506andmanifest, new1527fromactualreceipt+INF. Allnewpackage/artifact inputs/source/previous1522 bound. Exact bash .local/preparation-1530/run1530.sh; local PREPACKEDstage first/prereq/chain; no build orsign; actual6/source/probe/recovery hashes appended by generated BEFORE priorfirstboot. PreparationmanifestSHA 6f6624b9c12cbb6c6d0bc7639af29a98690a309740e80db24475a1b42c64e68d; rootapprovalafterthiscommit. Same61checks+C21ESKIP/standardregressions/CSenabled. Preserved normal1522recovery/Code28Absent8CPU, no interposed hiddenboot/manualprereboot. UnknownGPUconsume legacy preparedNIR only; failurecriterionanynewreject/crash/wrongword/extraSMOKEorcorpusDWMfault, collectbeforeexactrecovery.
 
 EXP1530 BEFORE local approval completion: first read-only prereqs guard stopped at unfilled hardware1530.approved marker, before localstage/guest/builder/launcher. Set exact preregistered Root approval marker, refreshedmanifest SHA 9a111bca8a24b6bdb891c7d30fa86947712b6bf92d3c13ed1e42e70c7e1455f5; launchguard/codegates/priorFactoryV2pins allPASS. No artifact/source/hash changed. This supersedes only prior preparationmanifest digest, not signedpackage. Final root approval commit bound after this note; first hardware launch remains pending.
+EXP1530 BEFORE 2026-10-19T12:30Z (PACKAGE1530: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD 40e2055cfb0457d332320c358928f53e2912a0fb (legacy prepared Compute owning route explicitpackageflag; runtime1520efdca/source40e205; SAME accepted1521probe61nonE+C21ESKIP; no publicDXIL/SM6/caps/firmware change) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF 4e17065a, sys 8d9d0b7d, UMD 63a18dbe, catalog d8c730c4, DriverVer 30.0.1527.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1530.sh 5a44b5d032b1712f 17449d791552dbc7 4db0287a7671dd2c ; C: free 26.67 GB; recovery rec1530h/recover.sh; probe probe1530.sh (6b297755db87b125); then the standard benchmark (EXP1184 harness: playnoovl).
+PREPARED LEGACY COMPUTE OWNERSHIP ROUTE EXP1530; NEWsignedpackage30.0.1527.0/source40e205:
+WHY THIS HYPOTHESIS:
+1. AcceptedCPU1515 provesactualDDI/privatefullUMD PSOcopy/source-retirement/typedownerfixture successandNULLfailure withbalancedclones/GLSLrefs. ItdoesNOTcallactualAsahiGPUconstructor.
+2. Acceptednormalruntime1520/source40e205 andnative1523 closefullnormalprovenance/nativeCPUlink; package1527build/post13991 and1531CAT/CMS/finalreceipt accepted. Newpath eighthelperobjects+17archives preservescore551fc/publicABI; legacyCS5.0/5.1only.
+3. Oldsigned1506package/acceptedprobe1521 provecontrolbehavior; explicit -EnablePreparedNirOwner packageflag routesCompileCompute throughAgxOwnedNirPrepareLegacyCompute totypedOwnerCreatePrepared/matchingDestroy. ActualAsahiGPUconsume/newownedNIRlifetime remainsunverified; theseexistingoraclesdistinguishit withoutnewshader orpublicSM6admission.
+ATOMIC CONTRACT: none — one internalimplementationvariable: thecoherentCompileCompute preparedNIRhandoff+matchingDestroy, enabledonlybyexplicitpackageflag. Eighthelperobjects/seventeenarchiveclosure are link/ownershipprerequisites, notnew independentlyadvertisedDDIs/caps. No partiallink/shim/fallback.
+WINDOWS CONTRACT: unchangedexperimentalCORE0003/FL11_0/legacyCSmodel/profile/caps. No publicDXIL/SM6versionregistration/readability/capacity guarantee.
+AGX/ASAHI CONTRACT: actualNIRownershippassesclone intorealGalliumcreate_compute_state; earlyNULLconsumptionandGLSLrefbalance preserved; samecanonical551fc/runtime1520efdca.
+TRANSLATION: actualCompileCompute->AgxOwnedNirPrepareLegacyCompute->typedOwnerCreatePrepared andmatchingDestroy ONLYexplicitpackageflag. Sameaccepted1521C26probe49f94edd (61nonE+C21ESKIP,total62), no probe/shaderchange.
+WHAT IS STILL UNKNOWN: actualnativeAsahiGPUconstructor/launch/lifetimethroughownedlegacyNIR onthisproductionpath; CPUcallback/nativebuild successesdonotproveit. No newpublicSM6 orlifetimeclaim.
+PACKAGE: new1527sixsignedhashes/review/finalreceipt ACCEPTED, exact artifact manifest attached. BaselineINF1235DIRID12 mustreplace native13variant beforeCAT; RootmustverifyactualSourceSys/UMDmapping/version30.0.1527.0/catalogCMS/testsigner/imports/stacks/normal+compositenotices beforeactivation. No old1506artifactfallback.
+PRIOR:1522verdicta03596f4/61nonEPASS/regressionsunchanged/RECOVERY_DONEcf487925/PackageAbsent accepted24cf57f4. Expected61nonE PASS+C21ESKIP,total62; standardCS ENABLED playnoovl/RUN_PRESSURE1/SMOKE/GL/corpus/DWM/KMDpool5574controls unchanged. NeverALL62PASS.
+RECOVERY: ordinaryFactoryV2host10f/newrunwrapperdynamic/allfivehashes beforeboot; exactNEW1527package/service/hash removal; noGPUhiddenordinaryboot orfirmwarechange. PREPACKED only,no latebuild/repack/sign byharness.
+ROOT_REVIEWED_SIGNED1527_AND_PRIOR1522_RECOVERY; fullhardwareBEFORE appended afterstage beforefirstboot.
+
+Versionworkflow: explicitnewpackage30.0.1527.0/receiptPackageBuild1527; privateclone derivesoldversionfromactualpriorINF+matchingmanifest(1506), neverfrompriorrunID1522. Generatedstage/verify/cleanup/recovery scriptsmustuse1527. No signedbytes modified.
+
+Final signed package ZIP 24e7c2748e8a7c51386e8c1466e7a1aea4d04f5bcce1ffafee0ecac0fdfd68ca; final receipt 94345078a41576ec401fee0b6b672bfad5bb3cbe2a674c6afc660c60204e5dd4; source72540e/manifest e02f4609535d1bef2b585d36d7de03790ece56b05fb0791e135e06f391427df6. CMS mathematicalvalid1531/signerE9; builderUntrustedRoot recorded, gueststage trust+ALLcatalogmembers mustPASS beforeboot. Original built receipt4474 preserved, finalactual6 corrected inNEWdistribution, no mutation afterthisfreeze. Same28notices hashboundnotCATcovered. Source docs/primary contracts inspected in accepted1515/1520/1523/1527; defaultOFFhook74e pluslegacyfactory75/DDIonlyf338/source40e excludesunvalidated666publisher; no firmware/caps change. RelevanthosttargetsPASS/full1636 SAME119old failures(noaddedremoved), no whole-suiteGREENclaim. Postruntime/manualdebug object/tag state not capability. Recovery preserved normalGPUvisible baseline/factory source host10f; source hashes all5 must be recorded by generated BEFORE. REVIEW historicalG4/admission/firmwareOPEN DEFER outside legacyownership boundary.
+PACKAGE_ARTIFACTS:
+4e17065aaf81d1e54dc083419cd7f978064f97ecfaf2ec25245c666ff4167f07  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/AppleAgxRenderAdmission.inf
+8d9d0b7dd4ffe40c5fd86b4113ba80130a5b8e03341fded621dc0910aa128c09  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/AppleAgxRenderAdmission.sys
+63a18dbed8210113407cf06461013add9d2eb9a4603e88ce577464d856c39089  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/AppleAgxRenderAdmissionUmd.dll
+d8c730c43be0af8ad3a8837848f847c18c92020b9d716ca2066bee8e491fa748  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/AppleAgxRenderAdmissionUmd32.dll
+5a44b5d032b1712ff039d45c2ca93c95499a28e4a1298f3b2c1a27a7f8ec66e7  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/manifest.json
+17449d791552dbc7de5bbcf18f3d64ae021e78df6f11a4c3d00296d1b1e447dd  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/hardware-manifest.json
+94345078a41576ec401fee0b6b672bfad5bb3cbe2a674c6afc660c60204e5dd4  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/kmd-build-receipt.json
+4db0287a7671dd2c142064feb32d7f0b8bcfeaf28b923280e020382b1f37e62d  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/full-owner1530.sh
+SOURCE_ARTIFACTS:
+1bb18d59137f1dbee4a4b8ed61e0b0980c5aba307f7fdef6f68e07996ee2d504  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/source.zip
+e02f4609535d1bef2b585d36d7de03790ece56b05fb0791e135e06f391427df6  /Users/pavel/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute",
+  "ExperimentId": "1530",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "10f7771d1e34fe49f283ca32ae895d36b5664c8e761959e877ed820b6ec27f6f"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/evidence/rec1530h/recover.sh.legacy-hidden",
+      "Sha256": "7ae993627b2c8265ce55a966f32698fe468ca76ed2ce5a11a445fb730450aaa9"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1530-d3d12-legacy-prepared-compute/evidence/rec1530h/recover.sh",
+      "Sha256": "b222f73f1920338cd69a79f40dd99070df3076132878289c4fa94509ec8b70d1"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
