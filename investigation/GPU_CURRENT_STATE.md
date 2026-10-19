@@ -9,7 +9,7 @@ source preparation only until explicit root BEFORE/approval. Preserve user dirty
 Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 `investigation/CLAUDE_WORKING_METHOD.md`. Consult only referenced ledger entries.
 
-## IMMEDIATE: EXP1469 Asahi/runtime BUILD RUNNING / four actual dependency pins
+## IMMEDIATE: EXP1471 package build READY / 1469 native and1470 cache accepted
 
 - EXP1466 COMPLETE/ROOT accepted CORE BUILD ONLY:353freshARM64objects/7archives,
   361rc0/170.5s commandspan/250actualTUsonecanonical551fc/nooldincludes.
@@ -37,12 +37,20 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
   EXP1468STOPfirstactualTU aftercompile/BEFOREobserveracceptance: agx_builder.h
   unpinned; rawallincludesalsoexposeduatomicdrm_fourcc.h. ALL12276+280postMATCH.
   SourceMeson passaddsactualselectedlibagx.h/libpoly.h;1469finite4readALLHASHED.
-  EXP1469BUILD ACTIVE session44229/BEFORE34d05a96. Newroot
-  C:\Users\pauls\EXP1469-native-runtime-unsigned; .local/c15-runtime1469-result.
-  Prep .local/c15-runtime1469-prep runner1e7c888a/metadata0aaf460c/approval
-  a0ae44f2ddbab2a0ccb269a4301ff28593606f3960dc72d31c192e40d774c10d.
-  DO NOT restart; monitor05.stdout bounded. EXACT4knownheaderpins added
-  vs1468+freshroot/token; NOsource/flags/observerpolicychange;12280pins.
+  EXP1469COMPLETE203rc0/3stages/45compiler+link/2gens+154runtime+archive.
+  ROOTnativearchive154AA64memberhashesmatchall154objects;119headerTUs551fc.
+  ALL12280+280postpinsMATCH/2510outputhashes; rootreviewc71097c2.
+  Native_runtime.lib4070192Bbada08b8/props37d8c7bf/runtimeJSONdcb99414;
+  .local/c15-runtime1469-result, controller44229FINISHED.
+  EXP1470CACHEPASS: actualstore/initempty,retrieveNULL/178deps/post12854MATCH.
+  .local/c15-runtime-cache-preprocess-result/root-review1470.json73825c0f.
+  No PE/GPUclaims.
+  EXP1471PACKAGEBEFORE recordednow; stage .local/c15-package1471-prep.
+  Parentrootperformanceprojectiond1b8e367/child1b592e5d/controller51db8677.
+  13559inputpins/actual5+2tools+698project/allnativecacheclosed.
+  Native outputs C:\Users\pauls\EXP1471-arm64-shader-info-unsigned;
+  stage C:\Users\pauls\EXP1471-package-build-inputs.
+  Monitor .local/c15-package1471-result bounded; onceSTARTED doNOTrestart.
   Adds280pinnedsourcefiles tocoredest withoutrewritingexisting;
   strictactualshowIncludes/toolpins/postmaterializedpins/3existingfrozenhelpers.
   Compiler45+link thennativeprepare/runtime production44+remainingselectedTUs.
