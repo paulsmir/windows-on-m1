@@ -33,6 +33,16 @@ Need actualmaskedheadercs6.1 counterexample +narroworiginalcheckedmetadataquery;
 no caps/publicSM6/linkclaim, rootreviewthenmeaningfulRED/GREEN/build.
 NewC27descriptor-replaydelegation security-rejected in kmd agent turn; NEVERretry
 or routearound that task. Root reported rejection to user. EarlierC21E blockedalsoNEVERretry.
+EXP1532fixtureproducer COMPLETE session97762, source2861bab0; result
+.local/c15-profile-fixture1532-result/root-fixture-review1532.json acceptedONLYfixtures.
+BothDXCRC0/10prepostMATCH/stdoutstderrEMPTY;cs60f3934fcc EXACT1389;
+cs61b07c25e8673225b96f253aa77aea003b1c87330bc3012bb831c87e910277d8a4.
+ActualmoduleASM6.0/1.0 vs6.1/1.1. Oldadaptermaskedheader acceptance NOTTESTEDyet.
+C15design6e52a3e9/.local/c15-dxil-profile-agreement-prep/DESIGN-READYb3426f6b;
+sourcepatch11dc65dd readRoot but one errorpolicy correctionpending (externalOOM
+mustnotPROJECT_OOM). Sourceonly/no adoption/compile yet; agent sm51hostrecipepending.
+Rootreserved1533nativebuild/1534J313CPUafter1530recovery, NOTlaunched.
+1530GL52.8/CS47.067/DWM0/currentstandardregressions; TOOL_d3d12notyet reached.
 Historical paragraphs below superseded where inconsistent.
 
 ## Historical GPU: EXP1522 ACTIVE / EXP1519 RECOVERY_DONE
