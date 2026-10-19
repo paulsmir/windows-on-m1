@@ -10,6 +10,20 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
 ## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
+1559 EIGHT_BUILD_ONLY ROOT_ACCEPTED:8freshAA64/8rc0/300depsUNKNOWN0/exact
+predictedstderr; nativePID11408Exit0/controlsPID29404Exit0,3016Exit7.
+Review .local/c15-error-owner-prepared1559-result/root-review1559.json SHA
+1c44b24c2821f29815d2e45fb3f2ccb3771710071912aaeea3bb387ee7ba4c71.
+Userrightly flagged2.5hnoGPU; PRIORITYfullsignedpackage->J313 now; no more
+research/newCPUsubtasks untilGPUrun. NEXTfullBUILD1560BEFOREwritten at
+.local/c15-package1560-prep. Exactaccepted1527producerprofile rebase tosource
+f424/runtime1557/request1559b93;13991pins/922pathrebases/10intendedhashupdates,
+28notices unchanged. Freshcache1557non-timestamp879B matches1520/proofc244.
+Producer3499e600/childb24c9376/controller197689db; capturesONEactualfreshUMD
+tlogdir. NativeapprovalBeforeCommit/stagehashes/Rootapproval finalization+
+dispatchpending. Newfullpackage MUSTreviewactual8once+17archives/AA64/imports/
+stacks/signatures/CAT/notices/postpins beforeGPU. J3131530inertunchanged.
+
 BUILD1558 STOP preserved .local/c15-error-owner-prepared1558-result: first
 frontendcompiler0 but strictstderr hash rejected literalnew1557projectpaths;
 actual90dffd17 equalsaccepted1523stderr ONLYfullprefix16replacements. Same19
