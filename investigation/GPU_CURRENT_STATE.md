@@ -8,7 +8,21 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
+## CURRENT 2026-10-19 19:03Z — EXP1562 RECOVERY_DONE
+
+EXP1562 sourcef424/package30.0.1560.0 finished:61nonE PASS/0FAIL/C21EknownSKIP;
+C14A512/512; C24ABC/C25/C26PASS; pool/fl11/corpus/DWM no newfailure.
+GL53.1/internalGL59.6/CS45.232fps singlepoints. Full-owner start18:17Z,
+D3D12END18:44:42Z/NEWEXP_DONE. Exact FactoryV2 recovery finished normalboots
+18:57:35Z and18:59:09Z, Code28/PackageAbsent/noService/8CPU/RECOVERY_DONE.
+First exact-owner guard stopped0 BEFOREwrites; existing no-owner guardedmode
+then succeeded with all three conditions. InitialSTOP preserved, nohiddenboot.
+No active GPU/recovery process. Next source root identity actual1563RED ->35GREEN;
+final threefield receipt nativegate1566 pending; ROOTC/ROOTG candidate outsideGit.
+Do not rerun1562 or claim publicSM6/directerrorbranch GPU validation.
+Current source/test/doc changes uncommitted separatefrom1562 bookkeeping.
+
+## Prior state (superseded by EXP1562 verdict) — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
 ACTIVE1562 stagePASS/HASHES_MATCH23/FactoryV2wrapper701a6cf67b423f549cb68c195d9f0e2fec7d7cae03a442d48a4c45c1504d65ae.
 PipelinegeneratedBEFOREcommit ad77b5ba. Newfull-ownerboot reachedCM_PROB_NONE,
