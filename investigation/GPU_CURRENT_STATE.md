@@ -8,33 +8,30 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## IMMEDIATE: CPU1482 COMPLETE / adopt1483 module and close1484 native ownership
+## IMMEDIATE: EXP1484 build PASS / prepare CPU1487 RED-GREEN
 
-- EXP1482 actualCPU PASS, controller2953RC0/ownedPID8544exit0/notimeout/stderr0,
-11inputspostunchanged. 420checks/7structuralrefusals/384exactgoldwords/negative346each.
- RealMesa compute-base normalization removed1baseglobal ->0baseintrinsics; actualAsahi
- compiled740B/70instructions/workgroup64,1,1/push16=36/reserved16=16/ranges2:
- uniform0/table8/offset0/length8 anduniform8/table8/offset392/length8.
- AGXbinary701a993c2ce8aa0989789ebeaab00413c6d9de95f813bc2bd7041d94ea75c2bd.
- `.local/c15-backend-cpu1482-result/root-review1482.json`
-e19ac5be9cd5b4accc81ee743dce2623ad7e07711a6b863ba6b2e024d7221717;
- artifactmanifestcd567e0147e9b5e323c9f67c6398ef7ac5aaed1d9fb3e41979658e1e68a527a5/40files;
- ACTUAL47114561. NO GPU/BO execution or SM6/DDIcapadmission. DO NOTrerun1482/1477/1480.
-- Normalinert1471RECOVERY_DONE/PackageAbsent/noService/Code28/8CPUremainscurrent;
- CPU-onlychecksneedno rollback. No activehardwareexperimentrightnow; continueauthorizedwork.
-- Nextacceptedplan `investigation/analysis/D3D12-C15-owned-nir-adoption.md`9d8b2fb2
- rootreadFULLsource+pinseveryfileMATCH. kmdagentIMPLEMENTINGprivately
- `.local/c15-owned-nir-adoption1483-prep`: propercurrentmodule names+actualcompute-base
- normalization+opt-in CURRENT-source fixture/renderer. NoDDI/caps/productionbuildhook/
- EnsureOwner/Galliumcreate_state wiring. Allowedboundedlocalportable stagedproposaltests;
- no tracked/Git/native/guest/source-dependencyrebuild. Rootreview/adopt/currenttestnext.
-- sm51agent `.local/c15-nir-consume1484-prep`: SOURCEprojectionremedy+actualconstructor
- deterministicregressionPLANforinitialshaderallocationNULLconsumeNIRgap. Initialsource/testdesign
- only/no executionuntilrootreview/no broadfaultsweep. Needowningnativebranchconsumeconsistent;
- neverownerfree-on-NULL orfakecompilerbody. Rootreadactual1987/2167earlyNULLandlaterfree.
- ThisisordinaryNIRlifetimecontract, NOTblockedUBFE/C21Etask; do notretrythatsecurityblock.
-- Source1481qualifiedactual11720704BEXE3a91650f; actualbackendCPU fixesprivatefixture only;
- productnormalizerstillnextadoption. Inputmaps/SPV24e3/7gold/archives/flagsunchanged.
+- CURRENT owned PROGRAM->normalizedNIR module committed2a028b4b; portable79checks/384words,
+  full1618 exact117oldfailures/noaddedremoved; native1485 13RC0/12998post.
+- EXP1486 actual CURRENT CPU PASS PID5980exit0/stderr0/41inputsunchanged/79checks,
+  384goldwords/3negative346/twoCSnormalization markers. ACTUAL7b66f795;
+  rootreview695e5828c66bd9ded0c373a88697e548bb428e627f82965918881dc297c361e2.
+  Production DDI/caps/Gallium hook/BO/GPU remain unproved and disabled.
+- EXP1484 build PASS5commands/12764post/40hashes/2actualdeps canonical551fc,
+  exact2earlyconstructorNULLguards consumeNIR; source/license remainder unchanged.
+  BothAA64 1734656B; REDbf3da4e87fe5a46a78fb819d0c0527a1058cbd335fafd30e5e664a22d383cba6,
+  GREENc18cfb7fce56bc7effb1c57a28e5c727221bc20410d68b9bd82aedcfbbffb7de.
+  BothphysicalPEimportdirectories independentlyparsed same11DLLs; warnings reviewed.
+  Review.local/c15-nir-consume1484-build-result/root-review1484.json3b44cf45.
+- NextCPU1487 .local/c15-nir-consume-cpu1487-prep: rootreview/pins/parser/BEFORE thenrun
+  independentRED expectedexit1/sixNIRFAIL+2borrowPASS/32checks6fail;
+  GREENexpectedexit0/eightPASS/32checks0fail. Same invariant, actualNIR+ralloc destructor,
+  actualcomplete earlyconstructorbranches; continuationtrap only. No fullconstructor/GPU claim.
+- ProjectorfixstillPRIVATE finald3da7de (newhelper invoked AFTERproject_shader_failure,
+  oldhelperASTunchanged); durableproposal.local/c15-nir-consume1484-durable-prep.
+  After1487review adoptfix+realCregression/currentselector/doc, existingrelevanttests.
+- Normalinert1471RECOVERY_DONE/PackageAbsent/noService/Code28/8CPUunchanged;
+  CPU1486didnotmutateplatform, noGPUexperimentactive/no rollbackneeded.
+  Rootaloneguest/builder/Git. AgentsSOURCEonly. BlockedUBFE/C21Etaskneverreroute.
 
 ## Latest completed CPU boundaries
 
