@@ -8,7 +8,7 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT GPU: EXP1519 COMPLETE / starting prepared EXP1522 NOW
+## CURRENT GPU: EXP1522 ACTIVE / EXP1519 RECOVERY_DONE
 
 - EXP1519Root5986/10698completed; RECOVERY_DONE PackageAbsent/noService8CPU
   Code28 ordinaryGPUvisible. Same1506signedpackage/source3d40/runtime1504.
@@ -25,12 +25,16 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   0f4d16511cc90543c0891bd368f6b35ab92ab3e1e7e1a7344e57a7e19a35c9b7;
   Rootverdictd96e41d044ea51713767737102f4c53a26825356b20c164c525a2ada7d26d642;
   pre-recovery2241filemanifest472e9404/finalartifactsc8098d23. NEVERrerun1519recovery.
-- NEXT1522prepared.local/preparation-1522 bound1521C26PE49f94edd/rootreview9a27cf3f;
-  prior1519actualverdict+recoveryaccepted; rootBEFOREthiscommit thenapproval.
+- ACTIVE1522root26505/.local/preparation-1522/root-run1522.log; Start11:28:32Z;
+  stagePASS/hash23/generatedfullBEFORE27787d8d/FactoryV2wrapper3175058c.
+  Newprobe1521C26PE49f94edd/rootreview9a27cf3f; prior1519actualrecoveryaccepted.
+  LocalprelaunchguardcaughtglobalIDreplacementinRALLOClicensehash BEFOREany
+  stage/guest/launcher; originalpreserved, entirepackageartifactJSONrestored
+  BYTEIDENTICALaccepted1519; correctionf621a70c/newDRAFT5068172a/guardsPASS.
   SolefactorC26SAMEclosedlisttwice/fencedvolatileCBV7->11, exact32768words;
   all61nonEexpected+C21ESKIP total62logical/NEVERALL62. Samefresh1506package/
   explicitversionoverride; CSenabled. No newC15packageinthishardwareexperiment.
-  DO NOT restartafterrootrunstarts; monitor scratchnewexp1522/watchdog1522,
+  DO NOT restart; monitor scratchnewexp1522/watchdog1522,
   .local/preparation-1522/root-run1522.log. RecoverynewFactoryV2orderednormal
   exactcleanup beforefollowingexperiment. No hostownerassumption/fakePID.
 
@@ -56,22 +60,36 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 - Newcacheobject883Be37e32ea ALL879bytesexceptCOFFtimestamp match1504qualified
   0de334b5; LOCALproof72fac0bc tiesactual1507NOOPinit/store/retrieveNULLbody,
   no redundantpreprocess. Preservehonestproof/notnewPPclaim.
-- BUILD1524ACTIVE root47188 .local/c15-package1524-prep/controller.py;
-  result.local/c15-package1524-result. BEFORE6c21d515/approvalc0752e89.
-  FreshbuilderEXP1524-production-prepared-package-inputs ->...-build,
-  NEWobjects8=build/objects8 (NO1523objectreuse), finaldistbuild/distribution.
-  ACTUAL40e normalbuild-driver EnablePreparedNirOwner+immutable1523request5976a395;
-  fullKMD+UMD/version1524/normalprofile/retainedWOW61/88. 28qualifiednoticefiles
-  copiedBEFOREbaselineWDKCAT/signflow/recheckafter; NOTunsigned-onlyclaim,
-  NOTnoticeCATcoverage(INFdoesnotlistthem). 13988nativepins/37stagedfiles/
-  short-Filehash+PSparseBEFOREbuild/canonicalRoot. Producer4929d528/child6bb39ee2/
-  controllerc654b3fd/collector191c5a8a. Ownedchild900s+stacks120s/firstSTOPnewID.
-  Rootmustreviewactual8receipts/COFF/tlogs(readclosureCLclearedbyhook—notstdout
-  showIncludesclaim)/17linkarchives+8objectsONCE/sourcepostpins/sign/catalog/
-  version/imports/CRT/exports/allphysicalINF SYS UMD CAT+2PDB/stacks/notices.
-  StandaloneINF1235repack/CATsign/finalstandardreceipt ifneeded SEPARATEBEFORE.
-  sm51SOURCEpreparing.local/c15-package1524-post-source-prep, no remote/Git/tools.
-  No publicSM6/DDI/caps; no newpacketGPUuntilfinalsignedhashFREEZE.
+- BUILD1524STOPbeforeANYcompiler/CAT/sign: nativePSConvertFrom-Jsonline8
+  rejectsNoticeFilesrelative/Relative+bytes/Bytes+sha256/SHA256;28rows84aliases.
+  Original.local/c15-package1524-result/controller-result/raw04stderr retained;
+  no dest/build-verdict becauseproducerfailsBEFOREtry/finally; collector0files
+  accuratelyreportedmissingverdict, notransportretry. Allsource/noticebytesunchanged.
+- OWNERfix0b84ee9d/newhostchecker scripts/agx_powershell_json.py recursively
+  rejectsduplicatecasekeys; nativeNoticeFilesnowONLYSource,Relative,Bytes,SHA256
+  afteroldaliasvaluesMATCH; provenancehostnotice-files.json retainedseparate.
+  TargetRED3/GREEN6/actualmetadataRED84GREEN0; full1636 SAME119oldfailures/
+  noaddedremoved/sourcepostMATCH/log6ec21871. Index+1525BEFOREe932fc2e.
+- BUILD1525ACTIVEroot63765 .local/c15-package1525-prep/controller.py;
+  result.local/c15-package1525-result; approvalfef58c2477165a4f301197e7689ab8166fac13c6c505acebc7c0a04f2b33c07c.
+  FreshbuilderEXP1525-production-prepared-package-inputs ->...-build,
+  objects8=build/objects8 NEW/not1523reuse; distribution=build/distribution.
+  Exact40e normalbuild-driver flags/source/native1520/immutable1523request5976
+  SAME; onlyJSONownerrepair/newID/versionbookkeeping. HostcasegateAFTERpins
+  beforetransport/nativeStage37hash+syntax+actualJSONparse BEFOREproducer.
+  Producer c304babc96243835ca3b5200f1ebed5be09cec920efaeee72cc935ddd4a09a10;
+  controller5433dfb460085363eb266f18484002462a77d26463e98b9598098e0f081a4660.
+  28qualifiednoticefiles BEFOREbaselineWDKCAT/sign/recheckafter; NOTunsigned-only/
+  NOTnoticeCATcoverage.13988nativepins/Owned900sbuildchild/stacks120s/firstSTOPnewID.
+  Rootmustactual8receipt/COFF/tlogs(readclosureCLclearedbyhook, notstdoutclaim)/
+  17archives+8helpersONCE/version/sign/importCRTexports/physicalINF SYS UMD CAT+
+  2PDB/notices/postpins. SeparateINF1235repack/CATsign/finalreceipt onlyafteracceptance.
+  SOURCEpostbundle .local/c15-package1525-post-source-prep/READY8c1ff292;
+  PLAN/11filesfullRootreviewSTILLPENDING; signed/posthashesPENDING. Exactlywhole
+  path/token/expectedbuildfieldrebase, embedded64hexallUNCHANGED proof1732015c;
+  original1524postbundleimmutable. NO globalnumericID/hashreplacementever.
+  No publicSM6/caps/PEexecution/newpacketGPUuntilfinalsignedfreeze.
+
 
 ## CPU1515 + native1517 COMPLETE — production hook SOURCE review next
 
