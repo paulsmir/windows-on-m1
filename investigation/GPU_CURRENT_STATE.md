@@ -8,6 +8,31 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## ACTIVE NATIVE1516 — root session77965, DO NOT duplicate
+
+- Private fullUMD+host BUILDONLY .local/c15-full-umd-native1516-prep/controller.py,
+  approval3b31e8e8fa32ff0c8fd28822ea15ba590198006ee9ba3b80fa1c4602115efdaa,
+  BEFORE2820e269. 17commands/freshroot1516, targetDLL/host names1514 retained.
+  No PEexecution/guest/package/KMD/sign actions. Pollbounded/no final whileactive.
+- Prior1514STOPpreflight.before/0commands, artifacts preserved .local/c15-full-umd-native1514-result.
+  ACTUALbothhistoricalbuilderfilesunchangedmatchpassed1512; metadata suffixSELF
+  producer overwroteTWOancestorrecords. Fixedactualfinalize1516.py selectsnormalized
+  FULLpath/exact1SELF/preservesother14515. ActualregistryRED2/GREENproofb3a01bff;
+  Rootallcommon1512/1516historicalrecords identical. Do NOT modifybuilderoldfiles,
+  removeancestorchecks orreinterpret1514 asbuildPASS. Fullnotes native-self-pin-scope.md.
+- Final1516READY69daf1ba1f7764e642f2a58b0a0a058e60f5051d393ec8d86b9297c973dcac04;
+  runner083b0b97/controller518c72bc/execution477b8394/ZIPe7477c91/13localpins.
+  Initial1514localENTRYRootScopealiasSTOP wasbeforeANYSSH; canonicalauthorizer
+  explicitlyP.resolve preventsrepeat. Allfutureprepared_rootscanonicalVolumes!
+- CPU1515SOURCEharness kmdagent preparedPAUSED untilactual1516PE/import/CRT/TLS/
+  mapreview; bind1516—notfailed1514—beforeANYguestload. No driverpackage.
+- Productionlegacyroute SOURCEplan97794f at .local/c15-production-legacy-package-integration-prep;
+  eightfreshproductionobjects NOobserver/wrappers/exports; defaultOFF buildhook.
+  CRITICALwhole-sourcecommit coupling: newpackage source needsFRESHnormalruntime
+  pipeline qualification undernewassembly; neverimport1504historicalprops asnew
+  source orweakenoriginalverifier. PrivateCPUvariant canexplicitlyuse1504baseline.
+  CPU1515PASS stillmandatorybeforeproductionimplementation/hardware.
+
 ## CPU1513 COMPLETE — next private native1514 BUILD review NOW
 
 - ActualJ313PID2172exit0/no timeout/stderr0/34inputspostMATCH, local42postMATCH.
