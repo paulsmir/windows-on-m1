@@ -39,16 +39,19 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
  portablehandoff-onlyprojectheader; liveOwnerScreenContext/preparedcomputeentry,
  memberwiseempty/localpublication/HRESULTmapping, actualnative-onlyWDKfixtureifneeded.
  No lazyEnsureOwner/DDI/caps/runtimepointerguess/fakecompiler/ownercreationclaim.
-- Native1469archivebada UNPATCHED.1496build STOPafterfullstatecompileRC0/canonicalheader,
- 18old1469/projectheaders unknownregistry, post13292MATCH, archiveNOTRUN;
- .local/c15-native-runtime-nir-consume1496-result/remote-output/receipts/actual-dependency-closure.json.
- kmdSOURCEONLY preparesfollowup1498 (1497reservedowner), pin18fromaccepted1469OUTPUTmanifest
- andactualbytes (NOToldresult.inputs where0/18), simulateallactualincludes beforelaunch.
- Patcheda967source/153oldAA64objects/codeflagsunchanged. Neverrerun1496.
- Rootoldarchiveparsed154bodyhashesAA64 proofb9f60970; corrected1496source/propscontract
- build-onlyNOT_PACKAGE_QUALIFIED, fresharchive/pathSHA, explicitBASEmetadata,
- normalpackageverifierMUSTrejectuntilcompletefreshsourceassembly/preparedResourceCppqualified.
- Freshruntime1498required BEFORErealAsahicallback/BOcheckpoint; NOEXEonbuilder.
+- Native1469archivebada UNPATCHED.1496STOPcompileRC0 but18unknownheaders, fixed1498
+ via18exactbodypins fromaccepted1469OUTPUTmanifest+source3fa; 217actualincludesreplay0unknown.
+ 1498BOTH2commandsRC0/post13310MATCH/217actualdeps0unknown/canonical551fc butSTOP
+ ARCHIVE_BODY_OBJECT_MISMATCH008: stagedarchive.rsp accidentallystillpointsEXP1496
+ stateobject, whilecompile+declaredmember pointsEXP1498. Actualnewstate8c6e209d,
+ archivefde64601; .local/c15-native-runtime-nir-consume1498-result/remote-output preserved.
+ kmdSOURCEONLY prepares1500freshbundle, regenerateRSPfrom154declaredpaths+semantic
+ preflightALLordered154args (old1498RED/new1500GREEN) BEFOREtools; same2commands/a967/
+ 153oldAA64/18headers/profile, no codechange/no guardrelax/no1498rerun.
+ Rootoldarchive154bodyproofb9f60970; runtimebuild-onlyNOT_PACKAGE_QUALIFIED:
+ newarchivepathSHA/FreshNativeSource/BASE+overlaymetadata, normalpackageverifierrejects
+ untilfullfreshsourceassembly/preparedResourceCppqualification. No signedpackageclaim.
+ Native1498failedafterarchive, no qualifiedprops/result.1500willneedownrootBEFORE.
 - EarlierChelper2f8375cd CPU1491PASS199/79/384TWICE; actualnativefirstNULLrepair
  a905b660/validated73d2dec5/currentprojectord3da7de, exact2guards/actual1487RED6FAILGREEN8PASS.
 - Noactiveexperiment/builder/guestprocess; DONOTrerun1495/1493/1492/1494/recovery.
