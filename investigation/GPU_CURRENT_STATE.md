@@ -10,6 +10,19 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
 ## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
+BUILD1558 STOP preserved .local/c15-error-owner-prepared1558-result: first
+frontendcompiler0 but strictstderr hash rejected literalnew1557projectpaths;
+actual90dffd17 equalsaccepted1523stderr ONLYfullprefix16replacements. Same19
+warnings. Noobjectsaccepted. Separate nativePS Start-Process/Refresh exitNULL
+reportingbug; rawcollected/localpostMATCH. NEVERretry1558orrelaxdiagnostics.
+NEXT1559BEFOREwritten/prep .local/c15-error-owner-prepared1559-prep, request
+b93adebdba586ecc3b717c878055ddf814d80bf26c4e93277e9dc71e4a3aadfc.
+ONLY2stderrSHAleaves exactpredictionsfrontend16/map1prefix replacements,
+proof281702a9. Source/pins/archives/flags unchanged1558. NativePSf0f78184
+directProcess+asyncstreams/noRefresh actualexitcontrols0/7 BEFOREsame8build;
+controllerE0e90f77/collectorFE8295a6 freshstage/output1559. Rootapproval+
+dispatchpending. NoactiveGPUexperiment, J3131530recoveredinertunchanged.
+
 NEXT BUILD1558 BEFORE written, approved-dispatchpending. Fresh8COFF canonical
 builder fromactual1557project/sourcef424; requestECD7efb79af6abd738935cbefce87e0bc63bc376c7c41d8b6844734eb560f942
 at .local/c15-error-owner-prepared1558-prep.13954pins/17archives,888exactpath
