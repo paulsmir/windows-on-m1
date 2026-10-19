@@ -17,8 +17,22 @@ D3D12END18:44:42Z/NEWEXP_DONE. Exact FactoryV2 recovery finished normalboots
 18:57:35Z and18:59:09Z, Code28/PackageAbsent/noService/8CPU/RECOVERY_DONE.
 First exact-owner guard stopped0 BEFOREwrites; existing no-owner guardedmode
 then succeeded with all three conditions. InitialSTOP preserved, nohiddenboot.
-No active GPU/recovery process. Next source root identity actual1563RED ->35GREEN;
-final threefield receipt nativegate1566 pending; ROOTC/ROOTG candidate outsideGit.
+No active GPU/recovery process. EXP1562 verdict/ledger commit e1215b49.
+Root identity fix commit450c90128484f8e79a6d6d4a0a0dc0bf8db7d64f;
+probe ROOTC/ROOTG commit17629e9e, build1567AA64/41pinsMATCH/importsunchanged.
+Source1568a1e01c91048e64d0476c62505e662ee6a55c79d9 exact724unchanged;
+archive7387bfb6/manifest3602ae75. CURRENT ACTIVE BUILDER1569 session49677,
+.local/c15-root-identity-runtime1569-prep/controller-root.log; result05.stdout
+has203commandsRC0; postpins/collection/rootreviewPENDING. Never restart.
+Approval134e91565d2f1819cc1475d61ed2fb7911150dde44426d0c2628086148715860,
+beforecommit056d0bfe. Afterruntime finish run root-review-build1569.py then
+review-closure1569.py in prep. Prepared next generators .local/
+c15-root-identity-prepared1570-prep/prepare.py and
+c15-root-identity-package1571-prep/prepare.py; require actual preceding output.
+Plan1570fresh8 ->1571package ->1572sign ->1573GPU ROOTC/ROOTG+regressions.
+No pending new hardware launch yet; normalguest packageAbsent.
+ Next source root identity actual1563RED ->35GREEN;
+final threefield receipt nativegate1566 threeRC0; ROOTC/ROOTG candidate outsideGit.
 Do not rerun1562 or claim publicSM6/directerrorbranch GPU validation.
 Current source/test/doc changes uncommitted separatefrom1562 bookkeeping.
 
