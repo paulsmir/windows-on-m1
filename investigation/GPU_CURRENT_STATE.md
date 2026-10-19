@@ -9,8 +9,16 @@ source preparation only until explicit root BEFORE/approval. Preserve user dirty
 Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 `investigation/CLAUDE_WORKING_METHOD.md`. Consult only referenced ledger entries.
 
-## IMMEDIATE: GPU EXP1471 ACTIVE — DO NOT restart or end turn
+## IMMEDIATE: EXP1471 RECOVERY ACTIVE — DO NOT restart or end turn
 
+- NEWEXP_DONE observed04:42Z;59D3D12/73SMOKE/knownMSAA+UBFEbaseline unchanged,
+ pool6/foreignreclaim1/fl11a/x/debugPASS/corpus414each64/4/nohang/pixeldiff/DWM0.
+ GL51.2/internal59.5/CS45.388vs1439CS47.253 (single sample-3.95%, no causalperfclaim).
+ BEFORErecoveryc1756061 committed, FactoryV2sameb11f/10fPASS. Normalvisible
+ rec1471h/recover.sh RUNNING rootexec10326/logscratchpadrec1471.log.
+ ControllerALONEownsorderedreboots/exactpackagecleanup; NOmanualprereboot/guestcommands.
+ Boundedpoll untilRECOVERY_DONE, thenfinalevidencemanifest/ACTUAL/validatedCHANGEScommit.
+ CPU1477backend and1480bridge sourceprep inparallel; DO NOTguestexecuteuntilrollbackdone.
 - Hardware pipeline started04:11:32Z, root exec session25829. Activeprep
   `.local/preparation-1471`; run1471.sh ->chain1471/newexp/watchdog.
   HARDWARE BEFORE d8bbac7a; generatedstage/factorysupplement commitabf23b2b.
