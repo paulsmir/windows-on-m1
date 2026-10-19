@@ -337,3 +337,11 @@ unknown; doNOTkillwithoutidentity/authorization. FirstCIMidentitySSHresetrc255.
 Nextboundedreadonlyidentityafterbackoff; nobuildretryuntilmemoryrecovers.
 1447emptyexceptionrelationshipUNPROVEN. ExplicitrunnerhandlingunitPASS.
 No guest/package/GPUmutation. CurrentnativefrontendstillNOTBUILT.
+
+## EXP1449 readonly PS parse PASS
+
+ActualguestPS5.1.26100.9711 parsedruntime-reportingV2f6550a2c via
+ParseInput/verifiedsourcehash/errors0/tokens2155/rc0/empty stderr. Payloadand
+EXEneverexecuted; no guestfiles/GPU/package/servicechanges. Raw.local/c15-runtime-parse1449.
+SemanticCPUbuild/runtimeawaitacceptedVTN/SIMD; buildermemoryidentityblocked
+bySSHreset twice, userquestionpending. No activeexperiment/controller now.
