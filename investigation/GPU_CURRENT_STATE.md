@@ -36,6 +36,29 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   excludeinheritedpublisher666; completeZIP/manifest/commitnewidentity; no1504retrofit.
   No newbuildIDreserved;1520possibleafterrootpreregistration. AgentsSOURCEONLY.
 
+## Parallel BUILD1520 active / C26 BUILD1521 accepted
+
+- Native1520session26566 runs.local/c15-production-runtime1520-prep/controller.py;
+  result.local/c15-production-runtime1520-result/05.stdout boundedpoll.
+  BEFORE1fd2476d/approval0b3aef7379731cc39229a7f372a1a3b3085c93e7208143950b16869d14130633.
+  Source40e2055cfb0457d332320c358928f53e2912a0fb/customrefEXP1520-source,
+  .local/c15-production-legacy-assembly1520 ZIP1bb18d59137f1dbee4a4b8ed61e0b0980c5aba307f7fdef6f68e07996ee2d504/
+  manifeste02f4609535d1bef2b585d36d7de03790ece56b05fb0791e135e06f391427df6.
+  725files/exact12revieweddelta/normalverifierUNCHANGED/DDIf338 excludes666.
+  13058pins(commonold13057UNCHANGED+freshSELF);3normalstages/203commands expected.
+  Rootmustactualarchive/RSP/COFF/closure/diagnostics/Resourcef981 reviewaftercollect.
+  No PEexecution/package/GPUactions. Native8hookqualification separateNEXT.
+- C26native1521BUILDaccepted/rootreview.local/c26-probe-build1521-result/root-review1521.json;
+  PE273920B49f94edd50ca602f1828b59e3d1fc5a55e8729917c20da9456fd7bebdb76c120;
+  41prepostpins/same4imports/onlyknownunusedwarning/noPEexecution.
+  Source910a8ca7/d82c96ad; sameclosedlisttwice/fencedvolatileCBVreplacement7->11,
+  exact32768words; noReset/PSOchange, allresourcesalive/C21ESKIP.
+  kmdagentSOURCEpreparingconditionalPREPACKED1522 from1519, prior1519verdict+
+  recoveryPENDING untilactual, no launchwithoutrootnewBEFORE.
+- sm51agentSOURCEonlypreparingproductionnative8/normalUMDnextbundle; original1517
+  execution input_pins12767..12775 validPath/SHAauthoritiesmatchoriginalchecked9;
+  NO fabricatedderivedsameauthoritywitness. Finalnormal1520outputPENDINGuntilRoot.
+
 ## CPU1515 + native1517 COMPLETE — production hook SOURCE review next
 
 - Native1517all17RC0/33AA64=10freshNoCore22fullDLL1host/post14518/152hashes;
