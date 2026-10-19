@@ -17,9 +17,13 @@ per-device callback/HRT; same test now A2/B1 in both creation orders and
 null-B isolation. EXP1546 builder WDK26100 syncheck all3rc0 and targeted
 34GREEN. EXP1547 full1637 has historical117FAIL/ERROR IDs plus one watchdog
 runner-confounded ITIMER_REAL test; EXP1548 same test unwrapped PASS. No J313
-package or guest state changed, no public SM6/DXIL/DDI/caps claim. Next: commit
-finite route and CHANGES status implemented; then source-first ordinary
-create-error/device association and provider/root-admission contract. This
+package or guest state changed, no public SM6/DXIL/DDI/caps claim. Route
+committed as 7b4db8cc and indexed in CHANGES by 35a05c57. EXP1549 next
+finite source correction: invalid compute/graphics StoreShader used the same
+last-created globals. Actual-source RED A0/B1 for invalid A compute after
+A/B; per-device HDEVICE propagation now target34GREEN and builder3rc0 with
+unchanged E_INVALIDARG. No J313 state change. Ordinary state/element invalid
+argument paths remain global and require separate source/test decision. This
 new paragraph supersedes the older line below saying the route is only in
 source-only preparation.
 

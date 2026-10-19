@@ -8,6 +8,7 @@
 #include <type_traits>
 using UINT = unsigned; using UINT64 = uint64_t; using ULONG = unsigned;
 using LONG = int; using BOOL = int; using SIZE_T = size_t;
+using VOID = void;
 using HRESULT = int32_t; using D3DKMT_HANDLE = unsigned;
 #define APIENTRY
 #define SUCCEEDED(hr) ((hr) >= 0)
@@ -20,6 +21,10 @@ static constexpr UINT D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D = 2;
 struct D3D12DDI_HADAPTER {};
 struct D3D12DDI_HRTDEVICE { void *handle; };
 struct D3D12DDI_HDEVICE { void *pDrvPrivate; };
+struct D3D12DDI_HSHADER { void *pDrvPrivate; };
+struct D3D12DDI_HROOTSIGNATURE {};
+struct D3D12DDIARG_STAGE_IO_SIGNATURES {};
+using D3D12DDI_CREATE_SHADER_FLAGS = UINT;
 struct D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 {};
 struct D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 {};
 struct D3D12DDI_DEVICE_FUNCS_CORE_0003 {
@@ -62,14 +67,15 @@ static void Fill(D3D12DDI_DEVICE_FUNCS_CORE_0003 &f) {
     /* ACTUAL_TABLE_ASSIGNMENT */
 }
 static unsigned calls[2], wrong_handle;
+static HRESULT expected_status = E_NOTIMPL;
 static int runtime_tokens[2];
 static void callback_a(D3D12DDI_HRTDEVICE runtime, HRESULT hr) {
     ++calls[0];
-    if (runtime.handle != &runtime_tokens[0] || hr != E_NOTIMPL) ++wrong_handle;
+    if (runtime.handle != &runtime_tokens[0] || hr != expected_status) ++wrong_handle;
 }
 static void callback_b(D3D12DDI_HRTDEVICE runtime, HRESULT hr) {
     ++calls[1];
-    if (runtime.handle != &runtime_tokens[1] || hr != E_NOTIMPL) ++wrong_handle;
+    if (runtime.handle != &runtime_tokens[1] || hr != expected_status) ++wrong_handle;
 }
 int main() {
     D3D12DDI_DEVICE_FUNCS_CORE_0003 table{};
@@ -105,6 +111,21 @@ int main() {
     table.pfnGetImplicitPhysicalAdapterMask(args[0].hDrvDevice);
     table.pfnGetImplicitPhysicalAdapterMask(args[1].hDrvDevice);
     if (calls[0] != 1 || calls[1] || diagnostics != 2) return 5;
+    callback_tables[1].pfnSetErrorCb = callback_b;
+    expected_status = E_INVALIDARG;
+    calls[0] = calls[1] = wrong_handle = 0;
+    CreateComputeShader(args[0].hDrvDevice, nullptr, {}, {}, 0);
+    if (calls[0] != 1 || calls[1] != 0 || wrong_handle) {
+        std::fprintf(stderr, "compute-invalid A=%u B=%u wrong=%u\n", calls[0], calls[1], wrong_handle);
+        return 6;
+    }
+    calls[0] = calls[1] = wrong_handle = 0;
+    if (CreateDevice({}, &args[1]) != S_OK || CreateDevice({}, &args[0]) != S_OK) return 7;
+    CreateShader(args[1].hDrvDevice, nullptr, {}, {}, nullptr, 0);
+    if (calls[0] != 0 || calls[1] != 1 || wrong_handle) {
+        std::fprintf(stderr, "graphics-invalid A=%u B=%u wrong=%u\n", calls[0], calls[1], wrong_handle);
+        return 8;
+    }
     std::puts("DEVICE_ERROR_ROUTE_PASS");
     return 0;
 }

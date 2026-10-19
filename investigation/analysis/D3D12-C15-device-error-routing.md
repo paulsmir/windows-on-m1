@@ -45,6 +45,19 @@ command-queue fallback untouched because those handle types have different
 ownership. Existing ordinary create-error call sites using the globals are
 finite follow-up work; do not remove the globals in this change.
 
+## Shader creation follow-up (EXP1549)
+
+The pinned WDK defines both `PFND3D12DDI_CREATE_SHADER_0003` and
+`PFND3D12DDI_CREATE_COMPUTE_SHADER_0003` with `HDEVICE` first. Current
+`StoreShader` had dropped it and used the last-created globals for invalid
+code or private shader storage. A current-source ASAN/UBSAN RED after creating
+A then B observed invalid compute shader A sent to B. The same per-device
+helper now receives the existing `HDEVICE` from both typed entrypoints, with
+the original `E_INVALIDARG` and success copy unchanged. Two-device CPU cases
+cover compute and graphics under reversed creation; the builder compiled
+both DDI profiles with the pinned WDK. State and element-layout invalid-arg
+routes remain separate follow-up work; no GPU or public SM6 claim follows.
+
 ## WHAT IS STILL UNKNOWN:
 
 This CPU check does not establish public acceptability of `E_NOTIMPL` for

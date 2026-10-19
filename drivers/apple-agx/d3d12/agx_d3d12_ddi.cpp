@@ -450,10 +450,10 @@ static SIZE_T APIENTRY CalcPrivateShaderSize(D3D12DDI_HDEVICE, const UINT *code,
     const UINT dwords = code ? code[1] : 0;
     return offsetof(AgxD3d12Shader, tokens) + (dwords ? dwords : 1) * sizeof(UINT);
 }
-static void StoreShader(const UINT *code, D3D12DDI_HSHADER handle) {
+static void StoreShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HSHADER handle) {
     auto *shader = static_cast<AgxD3d12Shader *>(handle.pDrvPrivate);
     if (!code || !shader || code[1] < 2) {
-        if (callbacks && callbacks->pfnSetErrorCb) callbacks->pfnSetErrorCb(runtime_device, E_INVALIDARG);
+        ReportRejectedDeviceError(device, E_INVALIDARG);
         return;
     }
     shader->stage = code[0] >> 16;
@@ -462,14 +462,14 @@ static void StoreShader(const UINT *code, D3D12DDI_HSHADER handle) {
     const UINT receipt[] = {shader->stage, code[0] & 0xffffu, shader->dwords};
     AdmissionUmdDiagnostic("measure-d3d12-shader", S_OK, receipt, 3);
 }
-static VOID APIENTRY CreateShader(D3D12DDI_HDEVICE, const UINT *code, D3D12DDI_HROOTSIGNATURE,
+static VOID APIENTRY CreateShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HROOTSIGNATURE,
                                   D3D12DDI_HSHADER handle, const D3D12DDIARG_STAGE_IO_SIGNATURES *,
                                   D3D12DDI_CREATE_SHADER_FLAGS) {
-    StoreShader(code, handle);
+    StoreShader(device, code, handle);
 }
-static VOID APIENTRY CreateComputeShader(D3D12DDI_HDEVICE, const UINT *code, D3D12DDI_HROOTSIGNATURE,
+static VOID APIENTRY CreateComputeShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HROOTSIGNATURE,
                                          D3D12DDI_HSHADER handle, D3D12DDI_CREATE_SHADER_FLAGS) {
-    StoreShader(code, handle);
+    StoreShader(device, code, handle);
 }
 static VOID APIENTRY DestroyShader(D3D12DDI_HDEVICE, D3D12DDI_HSHADER) {}
 /* C1h (EXP1352): after its internal vertex shader (VS 4.0, 15 DWORDs) the

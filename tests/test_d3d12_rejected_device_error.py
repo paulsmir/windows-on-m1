@@ -39,7 +39,11 @@ class RejectedDeviceError(unittest.TestCase):
         rejected = source[source.index('template<class T> struct TableOf;'):source.index('\nstatic HRESULT APIENTRY GetVersions(')]
         actual = (block(source, 'struct AgxD3d12Device {') + ';\n' +
                   block(source, 'static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error) {') + '\n' +
-                  block(source, 'static HRESULT APIENTRY CreateDevice(') + '\n')
+                  block(source, 'static HRESULT APIENTRY CreateDevice(') + '\n' +
+                  block(source, 'struct AgxD3d12Shader {') + ';\n' +
+                  block(source, 'static void StoreShader(') + '\n' +
+                  block(source, 'static VOID APIENTRY CreateShader(') + '\n' +
+                  block(source, 'static VOID APIENTRY CreateComputeShader(') + '\n')
         fixture = (ROOT / 'tests/d3d12_rejected_device_error_fixture.cpp').read_text()
         fixture = fixture.replace('/* ACTUAL_REJECTED */', rejected)
         fixture = fixture.replace('/* ACTUAL_DEVICE */', actual)
