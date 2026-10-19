@@ -10,6 +10,19 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
 ## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
+NEXT BUILD1557 prepared ROOT-reviewed: source f42452fcf15e184a66df7b913851b1b21e3193b0
+refs/agx-experiments/EXP1556-source. Accepted40e725file snapshot + ONLY DDI
+owner fixes,724byteequal/CompileCompute+caps+openerbyteequal. Sourcezip015890e8/
+manifest9f6bf0b6/frozenreviewa92f9d3b at .local/c15-error-owner-assembly1556.
+CandidateactualsourceASANroute/canaryPASS. Prior unvalidated FillDDITable
+publisher remains excluded EXACTLYasaccepted1527 (solecandidate-vsHEADdiff).
+Freshnormalruntime REQUIREDeverynewmanifest, no old1520receiptretrofit.
+Prep .local/c15-error-owner-runtime1557-prep controllerad0626d0/runnerfe3b226d
+UNCHANGED,13058nativepinsallBytesSHAunchanged/onlySELFpathrebase;metadata3b5d60d9.
+BEFORE1557written; Rootapproval-beforecommit and dispatch pending. Expected
+203commands/3stages/199AA64/normalverifier andRootclosure review. NoPE/sign/
+package/guest/GPU. Preserve all oldrefs/artifacts; no retry on firstSTOP.
+
 EXP1554/1555 closes last COMMAND_QUEUE error fallback. Actual-source RED
 realCreateCommandQueue then SignalFenceA/B/A ->A0/B3; stored queue.device
 and typed firstHCOMMANDQUEUE now A2/B1/exactHRTDEVICE/nullB isolation.
