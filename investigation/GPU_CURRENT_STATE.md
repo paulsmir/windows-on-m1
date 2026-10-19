@@ -79,6 +79,26 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
   no remote/trackededitsfromagents. DoNOTredo license orsecurityblockedUBFE/c18.
   send_message completed agent doesnotwake; usefollowup_task ifneeded; boundedwaits.
 
+## Parallel C15 checkpoint after active1471 launch
+
+- EXP1474 build-only finished STOP: 2actualcompilesRC0/canonical551fc/includes120+184/no unknown;
+  linkRC1/0.176s/11undefined AgxWin32Native*/Reloc* symbols via BO/pipeline/capture;
+  all12767postMATCH/no PEexecution. Root23filehashesMATCH; reviewfb6b7a6529d4a4511e685795b4e218a9efb08bd43ed042a67bd9b7d44a511efe
+  `.local/c15-mapped-asahi-backend-build-result`; ACTUALe0926a30. OriginalSTOP retained.
+  sm51 source-only exact dependency closure1475 inprogress. PrimaryLLD20 resolves
+  undefined BEFOREmarkLive; /OPT:REF alone notproven remedy, no blindretry/shims.
+- Private owned PROGRAM->ownedNIR bridge SOURCEGREEN and rootreviewed, NOTproductionadopted:
+  `.local/c15-owned-nir-bridge-prep/READY.json17781974e55a8cdaf20a49d063e2c549702fb4eb43322367f0101f68a2286c23`;
+ 14compile/link/run16RC0/7110postMATCH/79newchecks/5accepted6refused/384exactwords.
+ Root105artifacthashesverified; realrun7RED uint16[3]->uint32[3]memcpywidthbug,
+ run8elementwisewidenGREEN/actualworkgroup64,1,1; oracleunchanged.
+ Actualprovider-createdCPUobjects -> currentcheckedconverter/legacyCSVSPSfrontends/map;
+ NIR/map/copiedroot independentafterborrowrelease/rootretirement/sourceoverwrite.
+ Runtime stderrempty/sole51Bduplicate-lc++linkwarningretained, notwholedepassanitized.
+ Designnote9fdaaa55/CHANGESb2362716. kmdagent source-only nativeWindowsgate1476 inprogress;
+ validliveCPUobject+explicitreadablecapacityprecondition, no fakeprovenance/SM6/DDIcapclaim.
+ No guestCPUexecutionuntil1471RECOVERY_DONE; rootalonebefore/builder/guest/Git.
+
 ## Latest proven boundary: actual CPU NIR semantics and enum defect
 
 **EXP1456 PASS**, ACTUAL `291acf93`, CHANGES `10622012`:
