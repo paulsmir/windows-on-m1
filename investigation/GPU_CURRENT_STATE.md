@@ -10,6 +10,17 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
 ## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
+EXP1551 closes rejected COMMAND_LIST error route through existing ListError:
+current-source CPU RED ExecuteBundle A/B/A ->deviceB3/listA0/listB0; GREEN
+listA2/listB1/exactHRTLIST/devicecallbacks0/nullB isolation. Existing core,
+shader/state cases target34GREEN; builder WDK3rc0. Full EXP1552 1637tests
+historical117FAIL/ERROR IDs plus5 sandbox localhost-bind errors; exact5
+localhost-enabled EXP1553 controlPASS. No inherited timer confound, no new
+code regression established, not wholeGREEN. Only COMMAND_QUEUE rejected
+fallback retains last-created globals. Actual queue has runtime/flags/context
+but no parent device; next source/test checkpoint must prove creation-owner
+association before replacing fallback. No J313/package change or publicSM6.
+
 Current next deterministic C15 prerequisite: DEVICE_CORE rejected-DDI errors
 used last-created globals and misrouted A/B/A as A0/B3 in an actual-source
 ASAN/UBSAN CPU RED. Candidate routes typed HDEVICE through the stored

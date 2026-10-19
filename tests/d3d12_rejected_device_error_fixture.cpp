@@ -21,6 +21,8 @@ static constexpr UINT D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D = 2;
 struct D3D12DDI_HADAPTER {};
 struct D3D12DDI_HRTDEVICE { void *handle; };
 struct D3D12DDI_HDEVICE { void *pDrvPrivate; };
+struct D3D12DDI_HCOMMANDLIST { void *pDrvPrivate; };
+struct D3D12DDI_HRTCOMMANDLIST { void *handle; };
 struct D3D12DDI_HSHADER { void *pDrvPrivate; };
 struct D3D12DDI_HROOTSIGNATURE {};
 struct D3D12DDIARG_STAGE_IO_SIGNATURES {};
@@ -35,7 +37,10 @@ struct D3D12DDIARG_CREATEELEMENTLAYOUT {
     const D3D12DDIARG_INPUT_ELEMENT_DESC *pVertexElements;
     UINT NumElements;
 };
-struct D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 {};
+struct D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 {
+    void *preceding_wdk_pointer_slots[15];
+    VOID (APIENTRY *pfnExecuteBundle)(D3D12DDI_HCOMMANDLIST, D3D12DDI_HCOMMANDLIST);
+};
 struct D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 {};
 struct D3D12DDI_DEVICE_FUNCS_CORE_0003 {
     void *preceding_wdk_pointer_slots[84];
@@ -45,7 +50,7 @@ static_assert(offsetof(D3D12DDI_DEVICE_FUNCS_CORE_0003,
                        pfnGetImplicitPhysicalAdapterMask) == 84 * sizeof(void *));
 struct D3D12DDI_CORELAYER_DEVICECALLBACKS_0003 {
     void (APIENTRY *pfnSetErrorCb)(D3D12DDI_HRTDEVICE, HRESULT);
-    void (APIENTRY *pfnSetCommandListErrorCb)();
+    void (APIENTRY *pfnSetCommandListErrorCb)(D3D12DDI_HRTCOMMANDLIST, HRESULT);
 };
 struct D3DDDI_DEVICECALLBACKS {};
 struct D3D12DDIARG_CREATEDEVICE_0003 {
@@ -60,6 +65,8 @@ static volatile LONG queue_generation;
 static const D3D12DDI_CORELAYER_DEVICECALLBACKS_0003 *callbacks;
 static D3D12DDI_HRTDEVICE runtime_device;
 static unsigned diagnostics;
+static UINT expected_table = D3D12DDI_TABLE_TYPE_DEVICE_CORE;
+static UINT expected_offset = 84 * sizeof(void *);
 static void OutputDebugStringA(const char *) {}
 static UINT GetCurrentProcessId() { return 17; }
 static LONG InterlockedIncrement(volatile LONG *value) { return ++*value; }
@@ -67,16 +74,33 @@ static void AdmissionUmdDiagnostic(const char *name, HRESULT status,
                                    const UINT *values, UINT count) {
     if (std::strcmp(name, "measure-d3d12-rejected")) return;
     if (status != E_NOTIMPL ||
-        count != 2 || !values || values[0] != D3D12DDI_TABLE_TYPE_DEVICE_CORE ||
-        values[1] != 84 * sizeof(void *)) std::abort();
+        count != 2 || !values || values[0] != expected_table ||
+        values[1] != expected_offset) std::abort();
     ++diagnostics;
 }
 /* ACTUAL_REJECTED */
+/* Only pointer fields and the runtime/device prefix are exercised below.
+ * These unused value-type stand-ins do not establish native list layout. */
+using D3D12DDI_GPU_VIRTUAL_ADDRESS = UINT64;
+using FLOAT = float;
+static constexpr UINT kRootArguments = 64, kVertexBuffers = 32;
+struct AgxD3d12PipelineState;
+struct AgxD3d12RootSignature;
+struct AgxD3d12Command;
+struct AgxD3d12Descriptor { UINT unused; };
+struct AgxD3d12VertexBuffer { UINT unused; };
+struct D3D12DDI_VIEWPORT { FLOAT unused; };
+struct RECT { LONG unused; };
 /* ACTUAL_DEVICE */
 static void Fill(D3D12DDI_DEVICE_FUNCS_CORE_0003 &f) {
     /* ACTUAL_TABLE_ASSIGNMENT */
 }
+static void FillList(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 &f) {
+    /* ACTUAL_LIST_ASSIGNMENT */
+}
 static unsigned calls[2], wrong_handle;
+static unsigned list_calls[2];
+static int list_tokens[2];
 static HRESULT expected_status = E_NOTIMPL;
 static int runtime_tokens[2];
 static void callback_a(D3D12DDI_HRTDEVICE runtime, HRESULT hr) {
@@ -86,6 +110,14 @@ static void callback_a(D3D12DDI_HRTDEVICE runtime, HRESULT hr) {
 static void callback_b(D3D12DDI_HRTDEVICE runtime, HRESULT hr) {
     ++calls[1];
     if (runtime.handle != &runtime_tokens[1] || hr != expected_status) ++wrong_handle;
+}
+static void list_callback_a(D3D12DDI_HRTCOMMANDLIST runtime, HRESULT hr) {
+    ++list_calls[0];
+    if (runtime.handle != &list_tokens[0] || hr != E_NOTIMPL) ++wrong_handle;
+}
+static void list_callback_b(D3D12DDI_HRTCOMMANDLIST runtime, HRESULT hr) {
+    ++list_calls[1];
+    if (runtime.handle != &list_tokens[1] || hr != E_NOTIMPL) ++wrong_handle;
 }
 int main() {
     D3D12DDI_DEVICE_FUNCS_CORE_0003 table{};
@@ -149,6 +181,32 @@ int main() {
         std::fprintf(stderr, "element-invalid A=%u B=%u wrong=%u\n", calls[0], calls[1], wrong_handle);
         return 11;
     }
-    std::puts("DEVICE_ERROR_ROUTE_PASS");
+    D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 lists{};
+    FillList(lists);
+    AgxD3d12CommandList owned_lists[2]{};
+    D3D12DDI_HCOMMANDLIST handles[2]{};
+    callback_tables[0].pfnSetCommandListErrorCb = list_callback_a;
+    callback_tables[1].pfnSetCommandListErrorCb = list_callback_b;
+    for (unsigned i = 0; i != 2; ++i) {
+        owned_lists[i].device = &devices[i];
+        owned_lists[i].runtime.handle = &list_tokens[i];
+        handles[i].pDrvPrivate = &owned_lists[i];
+    }
+    expected_status = E_NOTIMPL;
+    expected_table = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D;
+    expected_offset = 15 * sizeof(void *);
+    calls[0] = calls[1] = wrong_handle = diagnostics = 0;
+    for (unsigned i : {0u, 1u, 0u}) lists.pfnExecuteBundle(handles[i], handles[1-i]);
+    if (calls[0] || calls[1] || list_calls[0] != 2 || list_calls[1] != 1 || wrong_handle || diagnostics != 3) {
+        std::fprintf(stderr, "list-route deviceA=%u deviceB=%u listA=%u listB=%u wrong=%u receipts=%u\n",
+                     calls[0], calls[1], list_calls[0], list_calls[1], wrong_handle, diagnostics);
+        return 12;
+    }
+    callback_tables[1].pfnSetCommandListErrorCb = nullptr;
+    list_calls[0] = list_calls[1] = diagnostics = 0;
+    lists.pfnExecuteBundle(handles[0], handles[1]);
+    lists.pfnExecuteBundle(handles[1], handles[0]);
+    if (list_calls[0] != 1 || list_calls[1] || calls[0] || calls[1] || diagnostics != 2) return 13;
+    std::puts("DEVICE_AND_LIST_ERROR_ROUTE_PASS");
     return 0;
 }

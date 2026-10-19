@@ -71,6 +71,42 @@ the only global `SetErrorCb` caller is the generic rejected non-DEVICE_CORE
 fallback; its list/queue handle ownership needs separate primary-source
 mapping. No GPU or public SM6 behavior was tested here.
 
+## Command-list rejection follow-up (EXP1551)
+
+The actual list object already stores `device` and `runtime`; its existing
+`ListError` reports through that device's `pfnSetCommandListErrorCb` using the
+runtime list handle. The generic rejection instead used the last-created
+device's `SetErrorCb`. A current-source CPU RED for rejected `ExecuteBundle`
+on lists A/B/A observed three device-B callbacks and zero list callbacks.
+
+Pinned WDK 26100 defines `PFND3D12DDI_EXECUTE_BUNDLE` with the destination
+`HCOMMANDLIST` first (line 1767), and `PFND3D12DDI_SETCOMMANDLISTERROR_CB` with
+`HRTCOMMANDLIST, HRESULT` (line 2585). The
+[actual 0003 callback table](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d12umddi/ns-d3d12umddi-d3d12ddi_corelayer_devicecallbacks_0003)
+documents this as a runtime callback. The direct callback documentation was
+inaccessible in this pass, so the pinned header is the exact ABI authority.
+No new permissible-HRESULT policy is inferred from the callback's name.
+
+Rejected COMMAND_LIST thunks now preserve their first typed handle and call
+the existing `ListError` after the unchanged diagnostic. A compile-time type
+check requires `HCOMMANDLIST` first for all four actual rejected list members.
+The CPU test extracts the current list definition, thunk, existing error
+helper and exact table assignment. It supplies live original list/device
+records and callback observers; unused later list value types have host
+stand-ins, so this is not native Windows list-layout evidence. Current-source
+ASan/UBSan observations are A2/B1 list callbacks with exact HRTLIST values,
+no device callback, and null-B callback isolation. The actual WDK compiler
+checks all four real member signatures in both normal DDI build modes.
+
+The `ExecuteBundle` implementation remains rejected, and the error value is
+the existing `E_NOTIMPL`. No command is recorded or sent to Asahi, m1n1, Mu,
+KMD or GPU. Queue rejection still needs a separate owner mapping: the current
+queue private record stores its runtime queue and native context but no
+parent device. This change does not manufacture that association or establish
+post-destroy/reentrant callback lifetime. The next hardware checkpoint is
+required only once a complete versioned runtime contract is ready; this
+deterministic route itself needs no GPU-state experiment.
+
 ## WHAT IS STILL UNKNOWN:
 
 This CPU check does not establish public acceptability of `E_NOTIMPL` for

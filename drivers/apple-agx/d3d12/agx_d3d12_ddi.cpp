@@ -59,6 +59,7 @@ template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0003> { static constexpr UI
 template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
 template<> struct TableOf<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D; };
 static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error);
+static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error);
 template<class T, UINT Table, UINT Offset> struct Rejected;
 template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENTRY *)(A...), Table, Offset> {
     static R APIENTRY call(A... args) {
@@ -71,11 +72,14 @@ template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENT
                           std::is_same_v<std::tuple_element_t<0, std::tuple<A...>>, D3D12DDI_HDEVICE>,
                           "rejected DEVICE_CORE DDI must start with HDEVICE");
             ReportRejectedDeviceError(std::get<0>(std::forward_as_tuple(args...)), E_NOTIMPL);
+        } else if constexpr (Table == D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D) {
+            static_assert(sizeof...(A) > 0 &&
+                          std::is_same_v<std::tuple_element_t<0, std::tuple<A...>>, D3D12DDI_HCOMMANDLIST>,
+                          "rejected COMMAND_LIST DDI must start with HCOMMANDLIST");
+            ReportRejectedListError(std::get<0>(std::forward_as_tuple(args...)), E_NOTIMPL);
         } else if (callbacks && callbacks->pfnSetErrorCb) {
             callbacks->pfnSetErrorCb(runtime_device, E_NOTIMPL);
         }
-        /* Command-list errors need the runtime list handle; no list is created here. */
-        (void)(callbacks && callbacks->pfnSetCommandListErrorCb);
         if constexpr (std::is_same_v<R, HRESULT>) return E_NOTIMPL;
         else if constexpr (!std::is_void_v<R>) return R{};
     }
@@ -2092,6 +2096,9 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
 static void ListError(AgxD3d12CommandList *list, HRESULT error) {
     if (list && list->device && list->device->callbacks && list->device->callbacks->pfnSetCommandListErrorCb)
         list->device->callbacks->pfnSetCommandListErrorCb(list->runtime, error);
+}
+static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error) {
+    ListError(static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate), error);
 }
 /* C8a: the next command slot, growing the array by doubling; NULL (and a
  * list error) when the heap refuses. */

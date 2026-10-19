@@ -33,6 +33,10 @@ class RejectedDeviceError(unittest.TestCase):
         slots = re.findall(r'\b(pfn\w+)\s*;', table.group(1))
         self.assertEqual(len(slots), 89)
         self.assertEqual(slots.index('pfnGetImplicitPhysicalAdapterMask'), 84)
+        list_table = re.search(r'typedef struct D3D12DDI_COMMAND_LIST_FUNCS_3D_0003\s*\{(.*?)\}\s*D3D12DDI_COMMAND_LIST_FUNCS_3D_0003', wdk, re.S)
+        list_slots = re.findall(r'\b(pfn\w+)\s*;', list_table.group(1))
+        self.assertEqual(len(list_slots), 51)
+        self.assertEqual(list_slots.index('pfnExecuteBundle'), 15)
         source = SOURCE.read_text()
         selected = 'AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetImplicitPhysicalAdapterMask, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetImplicitPhysicalAdapterMask));'
         self.assertEqual(source.count(selected), 1)
@@ -48,10 +52,18 @@ class RejectedDeviceError(unittest.TestCase):
                   source[source.index('using BlendState ='):source.index('struct AgxD3d12ElementLayout {')] +
                   block(source, 'struct AgxD3d12ElementLayout {') + ';\n' +
                   block(source, 'static VOID APIENTRY CreateElementLayout(') + '\n')
+        actual += block(source, 'struct AgxD3d12CommandList {') + ';\n'
+        actual += block(source, 'static void ListError(') + '\n'
+        list_helper = 'static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error) {'
+        if list_helper in source:
+            actual += block(source, list_helper) + '\n'
+        selected_list = 'AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle));'
+        self.assertEqual(source.count(selected_list), 1)
         fixture = (ROOT / 'tests/d3d12_rejected_device_error_fixture.cpp').read_text()
         fixture = fixture.replace('/* ACTUAL_REJECTED */', rejected)
         fixture = fixture.replace('/* ACTUAL_DEVICE */', actual)
         fixture = fixture.replace('/* ACTUAL_TABLE_ASSIGNMENT */', selected)
+        fixture = fixture.replace('/* ACTUAL_LIST_ASSIGNMENT */', selected_list)
         with tempfile.TemporaryDirectory(prefix='d3d12-device-error-') as directory:
             cpp = Path(directory) / 'fixture.cpp'
             exe = Path(directory) / 'fixture'
