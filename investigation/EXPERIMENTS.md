@@ -58714,3 +58714,46 @@ EXP1490 SOFTWARE ACTUAL 2026-10-19T06:13:41.016709+00:00: CURRENT1testPASS18.531
 EXP1489 CURRENT NIR PIPE HANDOFF NATIVE BUILD ONLY BEFORE 2026-10-19T06:13:41.016709+00:00: WHY THIS HYPOTHESIS: source Gallium transfersNIR oncall;1487 actualearlyguards nowconsumeNIR;1490 CURRENT realclone/metadata/publication fixture passed199checks+old79/384words with sourceGLSLref retained. NativeWindowsABI and headerclosure ofthe newCcaller remainunknown. Singlevariable originalunlinked helper/realNIR fixturecallbackcomposition;17existingarchiveCPUclosure/flags/WDK unchanged from1485. ATOMIC CONTRACT: none --15buildcommands only, no bundledhardwarefeatures. WINDOWS CONTRACT: realWDK26100/MSVC14.44.35207 ARM64/MD C++17/EHsc, checkedfacadeC++14/EHsc-, clangLLVM20C. AGX/ASAHI CONTRACT: canonical551fcshader_info/fresh1466core7/1469runtime/reviewed1421checked9, same17archives; realNIRclone and actualpipeABI; runtime1469constructors NOTcalled and not assertedpatched. TRANSLATION: metadata beforeclone, consumeclone atfixturecallbackinvoke, publishlocalstate last. WHAT IS STILL UNKNOWN: nativecompile/link/imports/newCactualheaderclosure; actualCPU execution next1491, productionnativeAsahicreation requiresCURRENTprojectorrebuild and independentBOcontextcheckpoint. No sourcecaps/DDI/winsyslinkage/profile/default changes.
 33CURRENTsourcefiles byteequal/35ownednestedSELFstagepins independentlyrootchecked AFTERfinalrefresh includingportable1490renderer;15exactcommands14compile+link,180sownedchildren andboundedcontroller, noPEexecutiononbuilder.13004nativeinputpins, allactualNIRTUsmustcanonical551fc/no unknownincludes, AA64COFF+PE/importallowlist unchanged, rawwarningsretained/rootindependentreview. RootreadFULLcontroller5880B/runner10408B/bootstrap969B andallnewsource; inputreview96d93c0745148161998240c64c8533d439931df29cb9e493652de8892d45399c. Execution9a64cda232c2c98ec2f64f0bd3674b3b78cebaa266ce8423488f7ff0e3097e3d; ZIPcd79001f99fc927f98c0dcafbcf77ebfbddd1be899bf245c9fbe9bd3eb6a4108; runner97775e23/controller290e540a. Same reviewedMIToriginalmodules/acceptedMesa/core/checkedconverterlicenses and notices; noexternalimplementationbodycopied.
 Exactcommand python3 /Volumes/pwdev/public_windows/.local/c15-nir-handoff-native1489-prep/controller.py --approval /Volumes/pwdev/public_windows/.local/c15-nir-handoff-native1489-prep/root-approval1489.json --approval-sha ROOT_AFTER_THIS_COMMIT. Freshbuilder C:\Users\pauls\EXP1489-nir-handoff-build-only; host.local/c15-nir-handoff-native1489-result. SnapshotCURRENT33proof includes6newuntrackedfiles/old27unchanged1485; sourcequalification1490review pinnedlocalapproval. Gitcontrol5939dc3c/branchintegration/ad04-windows-compiler/worktreesame/m1n1Mu5b857603361a2134unchanged/userdirtyMu preserved. No guest/package/sign/service/reboot/GPUoperation; known1471normalinertRECOVERY_DONE/Code28PackageAbsentnoService8CPU preserved. Firstcompile/hash/dependency/import/timeout mismatch stops andcollects; no retryunder1489/no fakecompiler/header/shims. Fullhostoverlaps, no sourceedits. Next1491nativeCPUonlyafterrootPE/importreview andseparateBEFORE/parser.
+
+EXP1489 BUILD ONLY ACTUAL 2026-10-19T06:16:36.953614+00:00: PASS15commands/no timeout/13004postMATCH. Root93outputhashesMATCH/5actualcanonical551fcNIRTUs+9opaque/unknown0. ActualAA64PE14554624B351533d7533acc19e1f4a0103356a0a07f06776af1f749e62c052b3b1b483f13; independentlyparsed14imports exactly1485. OldC1..6 stderr identical1485 afterrootname substitution, new13unusedflags only/new14sameNIRheaderunused/misleading warnings; MSVC+linkstderr0. Rootreview.local/c15-nir-handoff-native1489-result/root-review1489.json SHA59c5489219eb2a7299e610cacd521ed552b792fa8982a0029d34321a045dbaa5; manifest7bbce08526f934a9eee66d2356d42996542277d0a880e0335d3ae7cd4636ebfe. NeverPEexecutiononbuilder/no guestorGPUoperation; currentmodule canbecommitted, CPU1491requiresnewBEFORE/parser.
+
+EXP1490 FULL HOST ACTUAL 2026-10-19T06:16:36.953614+00:00: correct ROOTcwd discover-s-tests 1619tests219.477s/67failures50errors20skips, EXACT117baselinefailureentries/noaddedremoved. Oneadditionaldefaultskip fromnewoptinprobe. Frozen9sourcepinsMATCH; log5624540a84a21a46fef69b7584c524d2d96904839cbd450354f5a2b82bbb0517 in.local/c15-nir-handoff-current1490-full-host. Whole-suiteNOTGREEN; actualoptin1testPASS18.531s/199callbackchecks and1489nativegate qualifyimplementation only, productionunlinked/defaultOFF.
+REVIEW R113: ACCEPT -- no package or armed ordinary boot.
+REVIEW R111: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R110: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R109: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R108: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R107: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R106: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R105: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R104: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R103: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R102: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R100: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R99: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R98: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R97: ACCEPT -- one finite actual clone ownership gate.
+REVIEW R96: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R95: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R94: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R91: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R90: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R88: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R86: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R85: ACCEPT -- exact current native and portable profiles frozen.
+REVIEW R74: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R71: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R69: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R65: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R64: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R63: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R57: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R55: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R54: ACCEPT -- native build and full host suite overlapped with next CPU preparation.
+REVIEW R49: ACCEPT -- retained original and root metadata survive consuming clone callbacks.
+REVIEW R48: ACCEPT -- no serial or launcher access.
+REVIEW R47: ACCEPT -- immutable source ZIP and exact PE recorded.
+REVIEW R45: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R40: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R37: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
+REVIEW R64: DEFER -- historical platform admission item outside unlinked CPU callback helper; corresponding contract unchanged.
