@@ -10,6 +10,25 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
 ## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
+1561 FINAL_PACKET ROOT_ACCEPTED: .local/c15-final-package1560-signed1561.zip
+15011336B SHA237d0bf67f641f166aa0e55065f4a2287481dfa85afed29143e07dc518395641.
+Finalreceiptf3e588b1/signedreviewa3ea1625/receiptReview2eed0889. INFd9fad7e2,
+CAT3149b535, SYS2843c61e/UMD49014599 immutable; version30.0.1560.0/DIRID12.
+CMSvalid/signerE9BE...; builderUnknownError exactuntrustedrootmessage, UMDcat-only,
+gueststageCATmembershipmandatoryBEFOREactivation. All85policy/28noticesPASS.
+NEXT GPU1562 BEFOREnowwritten .local/preparation-1562/before1562.txt;28file
+DRAFTmanifest/14controls syntax+ALL64hexpreserved. Sourcef424 ONLYerror-owner
+state correction vsaccepted40e; directerrorbranchesCPU-only, hardwarechecks
+newnativequeueCalcPrivate layout/ordinary61regressions, noSM6/capsprobe.
+LiveguestPASS Code28Absent/noService/noFiles/8CPU sameBoot15:15:38.3435750Z;
+pgrep noowner/USBm1n1uartproxy. Actualm1n1_windows clean5b857603, Mu361a2134
+userdirtySHA6ec31378 preserved. Prior1530factory+recoveryreview0b9c73ba.
+RootapprovalBeforeCommit pendingthenIMMEDIATEdispatch run1562.sh. Logpaths
+prep/root-run1562.log +scratchnewexp1562.log/watchdog1562.log/run1562.log;
+EXP1562-d3d12-error-owner-regression. Do not restartafterdispatch. Collect61
+nonEPASS+C21EknownSKIP/regressions thennormalFactoryV2recover1562exactpackage1560
+toRECOVERY_DONE. PriorityGPU, nofinalduringactiveexperiment.
+
 1560 FULLPACKAGE_BUILD ROOT_ACCEPTED .local/c15-package1560-result/root-post-review1560.json
 SHAabea3e71bdf7080af7de9432dddeb0b402a16c70dae08dd9f6e69fd151554691.
 13991prepostMATCH/114outputhashes/8freshAA64+17archivesONCE/tlogs2461reads285unique
