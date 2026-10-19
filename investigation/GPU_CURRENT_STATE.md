@@ -8,7 +8,24 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-19 — EXP1573 ACTIVE; EXP1562 RECOVERY_DONE
+## CURRENT 2026-10-19 23:38Z — EXP1573 RECOVERY_DONE; EXP1580 PACKAGE BUILD ACTIVE
+
+EXP1573 signed1571/sourcea1e01c91: ROOTC+ROOTG direct bound-state receipts
+and output PASS; 63unique nonE PASS/0FAIL/C21EknownSKIP, baseline missing0.
+73SMOKEPASS/knownMSAAFAIL, pool/fl11/corpus/DWM unchanged; CS47.026fps.
+FactoryV2 guarded no-host-owner recovery completed exact package removal,
+normalCode28/PackageAbsent/noService/8CPU/RECOVERY_DONE after boot23:37:26Z.
+Verdict evidence .local/experiments/EXP1573-d3d12-root-identity/root-verdict1573.json
+SHA5fde05f1241c646d2388262f477e5377505d4bc7e5479c99fd50ec7ad9ce8201.
+Original exact-owner guardSTOP preserved before fallback. No active guest experiment.
+Next independent source621ffcc4/e5802714 is per-device heap-registry SRW lock:
+actual TSan RED ->36GREEN, WDK3rc0, full1639 exact124knownIDs/no newfail.
+Runtime1578ROOTPASS; fresh8EXP1579ROOTPASS; fullpackage EXP1580 builder active
+session32430, .local/c15-heap-registry-package1580-prep/controller-root.log.
+After complete, root-review/tlog, sign1581, freeze, then new hardware BEFORE1582.
+Do not claim complete owner/context concurrency or publicSM6.
+
+## Prior state superseded by EXP1573 recovery
 
 1571fullpackageROOTPASS/1572finalsignature+CMSGREEN packet4fc1cf67,
 sourcea1e01c91/manifest3602ae75/receipt97b40ace, version30.0.1571.0.
@@ -30,7 +47,10 @@ Previous active1569/1570/1571/1572 notes below superseded by these verifiedresul
 NEXT independentmetadatafix e5802714: actualvalid heapregistry TSANrace RED ->36GREEN,
 1575native3RC0/full1576tests1639 exact124known IDs ADDED0. Snapshot1577source
 621ffcc4dcbbdb9c6bc664cb7201de14cb5dd0b5 ONLYDDI vsa1e; archive59685dda/
-manifest55efd511. Runtime1578 BEFOREwritten, dispatchpendingaftercommit.
+manifest55efd511. Runtime1578 ACTIVE unifiedsession67849, beforecommit726c80f2, approval
+c1b55521e4fc999dbd15e4db1217e41e30b7c3265c1f1419c837db647d0eb2f6.
+Do NOTrestart. .local/c15-heap-registry-runtime1578-prep/controller-root.log;
+result05.stdout runtime-closure91rc0 observed; finalpostpins/collectionPENDING.
 Preps .local/c15-heap-registry-runtime1578-prep; future1579/1580generatorsprepared.
 No metadata lock covers nativecallbacks; ownerpublication/context stillopen.
 Futurepackage activation MUST wait current1573verdict and exactrecovery.
