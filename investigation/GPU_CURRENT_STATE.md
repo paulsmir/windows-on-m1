@@ -41,15 +41,21 @@ actualprofilefixture PASS2612checks0failures; sourceprojection2636files
 .local/c15-profile-source1537/external only4reviewedMITexternaldeltas.
 OriginalProject3patch candidate outsideGit with taxonomy externalERROR=>REPORTED_ERROR;
 no trackedcode adoption/nativeWindows build/CPU execution yet.
-NEXT immediately Rootaccept1537host review and adapt frozen native1533 SOURCE recipe
-.local/c15-profile-native1533-prep/READY.json SHAa049279a. Its original
-prepare-payload-local.py expects acceptedhostreview status
-ROOT_ACCEPTED_DXIL_PROFILE_AGREEMENT_HOST_GREEN and 7file proposal; must
-create NEW privateproposal forheader3ffb (oldcandidate f813 invalid), preserve
-accepted Windows1421 base ZIP43e06eab, sourcefreeze91b, 83/9 closure,
-6project compiles and3ARM64 console links; build-only, noPEexecution.
-Then root1534 actualJ313CPU only after nativeacceptance/BEFORE; normal inert
-recovery alreadydone. No publicDXIL/SM6/caps/DDI claim from CPU milestone.
+Native1533 stagePASS then builderSTOP beforecompiler ModuleNotFound msvc_eh under-I;
+1541 bytepinned sibling importGREEN/fresh83+9compilePASS thenreadclosureSTOP:
+inventory values areSHAstrings, checker usedobjectfield. BothACTUAL preserved.
+EXP1542 fullnativeBUILD_ONLY ROOT_ACCEPTED: sourceZIPa6d2e12a/freeze055f,
+83selectedEHsTRUE/EHcFALSE/MD/AA64,9fresharchive,6projectAA64objects,
+3AA64CRT-only EXEs,29commandsRC0,0stderr,406compiledreads+89projectreads,
+source/SDKprepostMATCH, noPEexec/noGPU; profileEXE ffb725292b36dc09c4d43a8b67c08c53f3d9d40817aa7591edf9a2f2ea5321ec.
+Rootreview .local/c15-profile-native1542-result/root-native-review1542.json
+(actualSHA inEXP1542ledger); producer manifest retrievedEXACT underEXP1543 after
+controller local artifact-hashes filename collision, SHA3e965502... match.
+NEXT EXP1534 real J313 CPU-only three checks afterfreshBEFORE/live normal
+Code28PackageAbsent8CPU, hashboundEXEs+DXC fixtures+notices, noGPUdriver.
+Agent sm51 prepares SOURCEONLY harness. Then adopt original3projectfiles+
+meaningful tracked regression/dependency provenance once physicalCPU accepted;
+publicDXIL/SM6/caps/DDI admission stillOPEN.
 C21E/UBFE agent task security-blocked. NewC27descriptor replay delegation
 security-rejected; never retry or reroute. User informed. Daybreak model switch
 not supported by current chat tool, user informed; continue current model.
