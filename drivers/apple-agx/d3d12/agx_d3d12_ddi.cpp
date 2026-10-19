@@ -255,6 +255,7 @@ struct AgxD3d12Device {
     ULONG generation;
     /* C5: the owner heaps by GPU VA, so a root descriptor (a VA) resolves
      * to its buffer and offset */
+    SRWLOCK heap_lock;
     UINT heap_count;
     struct AgxD3d12Heap *heaps[4096];
 };
@@ -276,6 +277,7 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
         auto *device = static_cast<AgxD3d12Device *>(arg->hDrvDevice.pDrvPrivate);
         /* Runtime allocation may contain reused bytes; all lazy state is ours. */
         memset(device, 0, sizeof(*device));
+        InitializeSRWLock(&device->heap_lock);
         device->runtime = arg->hRTDevice;
         device->callbacks = arg->p12UMCallbacks;
         device->kernel = arg->pKTCallbacks;
@@ -867,25 +869,35 @@ static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device *device) {
 }
 #endif
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* Metadata only: never hold this lock across native/core callbacks. Returned
+ * heap pointers retain the caller's existing valid-resource lifetime contract. */
 static void RegisterHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+    AcquireSRWLockExclusive(&device->heap_lock);
     if (device->heap_count < ARRAYSIZE(device->heaps)) device->heaps[device->heap_count++] = heap;
+    ReleaseSRWLockExclusive(&device->heap_lock);
 }
 static void UnregisterHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+    AcquireSRWLockExclusive(&device->heap_lock);
     for (UINT i = 0; i < device->heap_count; ++i)
         if (device->heaps[i] == heap) {
             device->heaps[i] = device->heaps[--device->heap_count];
-            return;
+            break;
         }
+    ReleaseSRWLockExclusive(&device->heap_lock);
 }
 static AgxD3d12Heap *HeapAt(AgxD3d12Device *device, UINT64 va, UINT64 *offset) {
+    AgxD3d12Heap *result = nullptr;
+    AcquireSRWLockShared(&device->heap_lock);
     for (UINT i = 0; va && i < device->heap_count; ++i) {
         AgxD3d12Heap *heap = device->heaps[i];
         if (va >= heap->gpuva && va - heap->gpuva < heap->bytes) {
             *offset = va - heap->gpuva;
-            return heap;
+            result = heap;
+            break;
         }
     }
-    return nullptr;
+    ReleaseSRWLockShared(&device->heap_lock);
+    return result;
 }
 #endif
 static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {

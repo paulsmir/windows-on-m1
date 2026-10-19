@@ -3,6 +3,9 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+// Host stand-in for unused Windows private-state lock; native ABI gate is separate.
+struct SRWLOCK { uintptr_t value; };
+static void InitializeSRWLock(SRWLOCK *p) { p->value = 0; }
 using UINT=unsigned; using ULONG=unsigned; using BOOL=int; using LONG=int;
 using UINT64=uint64_t; using HRESULT=int32_t; using D3DKMT_HANDLE=unsigned;
 #define APIENTRY

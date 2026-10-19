@@ -6,6 +6,9 @@
 #include <initializer_list>
 #include <tuple>
 #include <type_traits>
+// Host stand-in for unused Windows private-state lock; native ABI gate is separate.
+struct SRWLOCK { uintptr_t value; };
+static void InitializeSRWLock(SRWLOCK *p) { p->value = 0; }
 using UINT = unsigned; using UINT64 = uint64_t; using ULONG = unsigned;
 using LONG = int; using BOOL = int; using SIZE_T = size_t;
 using VOID = void;
