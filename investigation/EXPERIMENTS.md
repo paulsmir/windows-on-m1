@@ -59258,3 +59258,39 @@ EXP1525 ACTUAL 2026-10-19T11:45:53.702536+00:00: NATIVEBUILD+STACKS PASS/WRAPPER
 EXP1526 POST_ONLY BEFORE 2026-10-19T11:45:53.703138+00:00: WHY THIS HYPOTHESIS:1525actualbuild+2stackRC0/sourcepostMATCH/physical6filesalreadycopied; solewrapperfailureincorrecttlogdirectory; actualbuildlog explicitlynamesnamespaceAppleAgx.B1D91C72 notplainARM64Release. Singlefactor COLLECTactualnormalprojectbuild-evaluatedpaths/actualsame1525artifacts; NOcompiler/runtimebuild/repack/sign/PE/GPUexecution. ATOMIC CONTRACT:none--postbuildcollectionrepair. WINDOWS CONTRACT: pinnedMSBuild -getProperty evaluation-only/currentactualReleaseARM64nativeGPUVAprops/PreparedOwner1/version1525/new8props source40e; noBuildtarget. AGX/ASAHI CONTRACT: unchangednormal1520runtime+new8/realUMD/KMDactual1525outputs; noAGXoperations. TRANSLATION: useactual1523evaluatedflagargvwithONLYPreparedProps/Receiptoutprefixchangedtoactual1525 andPackageBuild1525; queryIntDir,TLogLocation,MSBuildProjectDirectory,OutDir,TargetPath/PDB. ResolveactualreturnedrelativeTLogLocation againstprojectdirectory/explicitpathdomain; requireexists/finite<=64actualtlogs, copyONLYthose/readactualmap/physicalWOW fromknownactualPackageDir; preposthashallactual6DLLINFcatPDB+notices andsourceinputs. WHAT IS STILL UNKNOWN: actualresolvedtlogphysicalpaths/readclosure/link17helpers8/finalnormalCATsigner andnativeINFvsacceptedprofile; no guessedincludes/counts/hashfuture. No parserallowlistloosening/blanketgeneratedpathallow.
 Rootnative1525recordsimmutable/missingTLOGpostreceiptnotrewritten. Metadata.casefix0b84ee9d/hardware1522unrelatedactive26505. InitialINFsemanticcomparisonwithaccepted1506excludingcomments/version showsDIRID13+service%13% andNTarm64.10.0...22000 vsacceptedINF1235DIRID12/service%12%/NTarm64; do NOTcarryindependentinstallprofilefactorintonewNIRGPUrun. Expected laterseparatebaselineINF1235repack/sign afterpostacceptance (unlessprimaryproofestablishesequivalentacceptedcontract); no signingthispoststage. KMD18warningmessagesvs1506differONLYactualsource-rootpaths inC28213; normalizeEXACTknownrootpaths thencheckallmessagecounts, no suppressnewwarnings. Rootinputdata.local/c15-package1526-post-prep/built1525-physical-pins.json SHAb618e07559d0120a2ba9fa5a9b3b5e87ef6193e4999a3741a05a3fa932e4e99d/evaluation-argvSHA71c1aefbf1ea1fe4ebb5dccfb1b0f22a8f89900d58cc37de2d6f3cd80e034dd6. NativepostRootfreshC:\Users\pauls\EXP1526-production-package-post-only/local.local/c15-package1526-post-result; explicitknownfilepathsdomain no broadinventory. PinnednativePython/PowerShell/MSBuild/dumpbin/request/normalnativepipeline authorities same13988registrypins; actualtoolhashesmustmatchbeforeinvoke; eachchild<=90s/onlyownedPIDtimeout. Collectactualmap/PDB/staticPE/actualGetAuthenticodeSignature publicstatus+signerCertificate facts/readtlog/proofpaths/rawstdout/rc plusRootfetchedhashmanifest; preserveold99outputs. Sourceactual32helpersopaque/canonical/TLS/staticrequiredRootreviewbeforeanysignedacceptance. Exactcontroller/script/hash finalizedafterthispreregistration, Root40before+localpins approval argument; no artifactpromotion. Package1525artifacts futurefinalrepack/hashreceiptstillPENDING. REVIEW historicalOPENfirmware/G4notes DEFER notcurrentpostcollectionboundary.
 EXP1526 FINAL SOURCE FREEZE 2026-10-19T11:49:19.453713+00:00: post-only.py 6bd946c89cbb70129c24e8c5fa6bd4e5914675cfd886e586b606e4d84561a8e5/controller 2072c05eebe34b6ca890d15ef96da0767a249fc7f8ba42d37b46594254b9dd03;13989nativepins inclfreshSELF,6knownactualbuiltfilehashes/3extraactualfiles(map+WOW2); extraWOWphysicalhashesobservedandrecordedversusbaseline, noacceptanceassumed/nomismatchsuppression. Exact python3.local/c15-package1526-post-prep/controller.py --approval.root-approval1526.json --sha ROOT_FINAL_AFTER_THISCOMMIT; metadataROOT_APPROVED_POST_ONLY/before40 finalpins/localapproval afterthiscommit. Nativeeval+dumpbin+signaturefacts each<=90s/ownPIDcancellationonly; nativepostfirstSTOPcollect/newID; noBuildtarget/sign/repack/PEexecution. ExpectedactualTlogLocationunderactual40eprojectdir/finite<=64/name+hashcopy/physicalPDBmapbinarycopyhashes/allpostpins; original1525wrapperFailedpostSTOP retained. HostproofOnlyNativeRootReviewrequired/unknownreadsSTOP; nextbaselineINF1235repackseparateNEWbefore.
+
+EXP1526 POST ACTUAL / EXP1527 PRIMARY INPUT READ ACTUAL 2026-10-19T11:57:09.606182+00:00
+POST_ONLY collected four commands RC0, 11 actual tlogs, evaluated namespace,
+map, WOW2, PDB and unchanged known1525 binaries. No compile/sign/PE execution.
+Actual MSBuild IntDir/TLogLocation is under UMD/AppleAgx.B1D91C72/ARM64/Release,
+which proves the producer's plain ARM64/Release assumption wrong. Read tlog
+review has2457 records/281unique, actual owner+DDI groups,17archives+8helpers
+ONCE, zero fixture/provider objects and zero opaque shader_info occurrences.
+Acceptance STOP on exactly three previously unpinned reads: MSVC HostX86 ARM64
+1033/clui.dll, Windows Globalization/Sorting/SortDefault.nls and System32/tzres.dll.
+No directory allowlist or retrospective prehash is accepted. Fresh full1527
+qualification will pin all three before/after compilation; old1525 receipts
+remain unchanged. CAT+SYS signer is E9BE15BD2A184BFABA0C8035B3C620C58037A241,
+builder chain UntrustedRoot recorded; UMD embedded NotSigned. WOW2 bytes match
+d51ebf72/1625ffde. Initial native INF differs from acceptedINF1235 in DIRID13,
+service%13% and decoratedNTarm64 model. Repack to known INF1235 is a separate
+future action to keep NIR the sole runtime variable.
+
+Bookkeeping correction: a local Python append command failed with an indentation
+error before the intended primary-read entry; the shell lacked set-e, so the
+following bounded readonly three-file metadata query did run. No compiler,
+signing, guest or mutation action ran in that query. This ACTUAL records the
+omission rather than inventing a prior entry. Exact query/source/stdout/rc0 are
+preserved at .local/c15-package1527-primary-inputs. Future grouped operations
+must use set-e; the new native build still requires its complete BEFORE below.
+
+Primary actual results: all three files have Valid Microsoft signatures. CLUI
+616760B/86b1f4586eef5d14ce06fa33360bdd39ea22281e69eb2fa70193a47a77b27b4d,
+file19.44.35228.0/product14.44.35228.0/Microsoft Corporation. SortDefault.nls
+3385740B/5710c47f5c5c745854e11fc06c8d349cd61d084f5a90937396e88ab762298b67,
+Microsoft Windows catalog signature. tzres.dll12288B/
+1398cf1d866e49a8ba351e2a30a7803b50c8b595d17f776abe8d2ec4a9c6fb10,
+Windows10.0.26100.9711/Microsoft Corporation. Builder OS10.0.26200.0.
+These are newly observed host/compiler resources, not new driver sources or
+redistributed dependencies. Qualify exact hashes on the fresh build rather
+than approving the historical build with a widened posthoc registry.
