@@ -59079,3 +59079,62 @@ Prior1510 RECOVERY_DONE/PackageAbsent mustbeverified; ordinaryFactoryV2host10f77
 ROOT PROBE1518 acceptance: c190bafce130d93f61ac05efb009cea0d880e4f72acb89f1fa8ccae9b858add8; PE270336B 07d7cb825e2b8909407ab6d868ee302747583e9f408716a6cb5392c499153410; ROOT BEFORE committed before run1519.
 
 Preparation .local/preparation-1519 manifestSHA bd9bcefbd8f342934b0bd44dd4c5cb0f775003002dbf66e3dff40f8b9f92ac8a; actual1510script normalized1510->1519/prior1471->1510/name substitutions BYTEEQUAL newexperiment script; allchangedhelpersreviewed. Rootcontrol b915134a9b5c2fa4c8d4464f723efa3be8303bfd branchintegration/ad04-windows-compiler; driverSOURCE3d40cdaf038b9a8a7fa8509ebc4d3dd4303a4b09 preserved vs newprobe. m1n1Windows5b8576031eaae5958c5494d4f22f5a6c3a25d191/Mu361a2134b2f742f331f8d75ae5f60ad4f7f413f1 unchanged/userdirtyMu preserved. Exact bash .local/preparation-1519/run1519.sh afterRootapproval before40binding; PREPACKEDstage->preparestableguest->FactoryV2visible wrapper->generatedfullBEFOREcommit->fullowner/probe/standardregressions CS enabled. Artifact/manifest exacthashes plus5Factoryinputs generatedandcommitted byexistingnewexp BEFOREfirstlaunch; no oldreceiptmodification/re-sign. Baseline signedZIP9f904a80f96232648572635487dd9b5d202ce35c0e799db4db528346a783de90/finalreceipt28aecde1935cd7e42ac4c5c561b00b69e1dd854d7b2e48601dcfe34acc210d23; priorrecovery02c54cb849694fbd428f144b8646186d3f26ed5a69d549d32ceaac0e7394fc72. Evidence .local/experiments/EXP1519-d3d12-present-resize/evidence/EXP1519; recovery evidence/rec1519h/recover.sh ownedorderednormal exactpackagecleanup toCode28Absent, no manualprereboot. FailureC25hr/pixel/fence/index/framecount ornewregression=>collectowningreceipts, recover/no blindrerun; timeoutnewID. REVIEW R64 DEFER outsideprobe-onlypublicDXGIlifecycle.
+EXP1519 BEFORE 2026-10-19T10:48Z (PACKAGE1519: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD 3d40cdaf038b9a8a7fa8509ebc4d3dd4303a4b09 (probe-only C25 sixPresent and ResizeBuffers owner-live lifecycle; SAME signedpackage1506/runtime54437/source3d40 baseline;60nonE+C21E SKIP;no driver/caps/firmware changes) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF cfd902bc, sys 50d2ae7e, UMD 7147d9f2, catalog 3ed4b21f, DriverVer 30.0.1506.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1519.sh d594b63da3cc20c6 df1290f379e075c2 eb46c64c07ec6e98 ; C: free 27.03 GB; recovery rec1519h/recover.sh; probe probe1519.sh (633efcf96d250501); then the standard benchmark (EXP1184 harness: playnoovl).
+PROBE-ONLY C25 EXP1519, EXACT SAME SIGNED PACKAGE30.0.1506.0:
+WHY THIS HYPOTHESIS:
+1. C7A established onePresent followedby swapchain/device teardown; it neverrecreates backbuffers whileowner remainsalive.
+2. Actualowner DestroyPresentationTexture releasesruntimeallocation thenqueues PendingPresentations; collect depends onscreenunregistration andnewCreate retriescollection. ResizeBuffers exercises this distinctordering.
+3. PublicDXGI requires all direct/indirectoldbackbuffer refs released; C25 fences/retireslists/views/buffers beforeone resize, reads exactpixels BEFOREPresent, queriescurrentindex, thenrecreates views/resources. No invalidreference fault or APIcap probe.
+ATOMIC CONTRACT: none. Oneprobe-only independentlyobservablelifecycle step. Signed1506 earlyNULL-NIR consumption fix/runtime54437/source3d40 is ACCEPTED1510BASELINE, NOT newvariable.
+WINDOWS CONTRACT: publicflipdiscard two-buffer RGBA8; releaseallrefs aftercompletion beforeResizeBuffers; GetBuffer/recreateRTV afterward. No new WDDM/DDI/caps admission.
+AGX/ASAHI CONTRACT: existinglinearimport/flush/direct-map publication/deferredpresentationretirement unchanged.
+TRANSLATION: C25 3frames64x64 +1resize96x48 +3frames; exactper-pixelclear/readbackbeforePresent; realcurrentbufferindex bothbuffers; uniquerender/postPresentfences; releasealloldrefs; exactfence/footprintextentguards.
+WHAT IS STILL UNKNOWN: actualDXGI/kernelallocation unregister andnewbackbuffercreate ordering whileowner/device survives; C7Ateardown doesnotproveit. No predicteddriverbug, no visiblepixel/fullscreen/format/count/concurrency claim.
+Expected:60nonE PASS (59acceptedcontrols+C25) plus knownC21E SKIP; total61logicalsteps, NEVERALL61PASS. SixC25framerows andresizeHR/finalframes6,resizes1 mustpass.
+SameSMOKE/GL/internalGL/CS ENABLED playnoovl/corpus/DWM/KMDpool5574/RUN_PRESSURE1. PREPACKED only: no build/repack/sign aftersignedhash. WOW61/88 unchanged; signerE9BEtestroot/no publictrustclaim. Packagecorrectedreceipt28aec, signedreview58455/signedZIP9f904 immutable; all13normalnotices copied/hashed.
+Prior1510 RECOVERY_DONE/PackageAbsent mustbeverified; ordinaryFactoryV2host10f7771d unchanged. Newrunwrapper1519generateddynamic; hashallfiveactualfactoryinputs beforeboot, neverreuse oldrunwrapperhashasnew. No hiddennormalboot, firmware, power, recovery-code changes.
+ROOT PROBE1518 acceptance: c190bafce130d93f61ac05efb009cea0d880e4f72acb89f1fa8ccae9b858add8; PE270336B 07d7cb825e2b8909407ab6d868ee302747583e9f408716a6cb5392c499153410; ROOT BEFORE committed before run1519.
+PACKAGE_ARTIFACTS:
+cfd902bc92e666a327f98231a0c2fa22524a4d35432af11566b332e1b10b9bcd  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/AppleAgxRenderAdmission.inf
+50d2ae7e0320ed136064778c263d2338444f8c596b5ffd6509018bbd56823b25  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/AppleAgxRenderAdmission.sys
+7147d9f29272670adfe679314278f14d903ff6e2a87f9242190d254579ba325d  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/AppleAgxRenderAdmissionUmd.dll
+3ed4b21faf31eb7015e0dc4f799f395d799368f53b221176e0eb78ae200b9ffe  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/AppleAgxRenderAdmissionUmd32.dll
+d594b63da3cc20c697f75e7b602312e85e98053300d002ab3cef20a0d9edf2d7  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/manifest.json
+df1290f379e075c20866699990eac45aa0c71c6ccc9b2cf28aabafa43c376229  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/hardware-manifest.json
+28aecde1935cd7e42ac4c5c561b00b69e1dd854d7b2e48601dcfe34acc210d23  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/kmd-build-receipt.json
+eb46c64c07ec6e984b795595bda309831d1ddafa40317f66b66b17251706a344  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/full-owner1519.sh
+SOURCE_ARTIFACTS:
+5b286c06c8df704b4f497ab501eca95bf214d80decb6c89f9ce2092a83131f95  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/source.zip
+b4cedfe662a170e9035127447bad4d3dde23dcb0a3cb9b555797e7cd6a21fa24  /Users/pavel/public_windows/.local/experiments/EXP1519-d3d12-present-resize/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1519-d3d12-present-resize",
+  "ExperimentId": "1519",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "10f7771d1e34fe49f283ca32ae895d36b5664c8e761959e877ed820b6ec27f6f"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1519-d3d12-present-resize/evidence/rec1519h/recover.sh.legacy-hidden",
+      "Sha256": "403e0a05fd2ea25a81bd26786d52d162eca9c28c89b5b0e66dd94e8330bbb084"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1519-d3d12-present-resize/evidence/rec1519h/recover.sh",
+      "Sha256": "09cf4c0c5d01c93f00fc518c38ab6a758e1796ed3d16d98ee789f3219b0aaa80"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
