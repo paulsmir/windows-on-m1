@@ -8,26 +8,28 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## ACTIVE CPU1513 — root session11392, DO NOT duplicate
+## CPU1513 COMPLETE — next private native1514 BUILD review NOW
 
-- CPU1513 launched afteractual1510RECOVERY_DONE; BEFOREd65971f4. Rootcontroller
-  `.local/c15-legacy-no-core-cpu1513-prep/controller.py`, approvalSHA
-  01e9c36e616ba2e637e197d7e2a5433f79e2b966241e3699a7ec0bdab101edc3,
-  manifest3af0647e595df3115ef7d6fc4cb0300294ec420a751511ac80f9cf62693c82f0.
-  FreshguestEXP1513-legacy-no-core-cpu; expected45checks/refs10balanced/twoowner
-  CS22+44; all34inputs/pre-posthashes/4physicalDLLinventory/owned120s/rawbytes.
-  NO GPU/package/service/reboot action. Rootsoleguest/Git. Poll11392→collect/
-  ACTUAL+CHANGES. Recovered1510inert profile stayscurrent; no cleanupneededCPU.
-- Next FULL UMD1514 sourcebundle READYbd134359 at
+- ActualJ313PID2172exit0/no timeout/stderr0/34inputspostMATCH, local42postMATCH.
+  Native45checks/GLSL10acquired10released; twoactualtypedownerCS22/44PASS;
+  CS50+SM51factory/NIRserializedparity/maps/WG/nonempty/refusals qualified.
+  FourphysicalruntimeDLLsAA64 inventoried; no DLLcopied/package/service/firmware/
+  rebootmutation. Same1510inertCode28baselinecurrent. NoCPUrecoveryneeded.
+  `.local/c15-legacy-no-core-cpu1513-result/root-review1513.json`
+  0739761fef24c0d4dfad6046b603b5293a34199c527554b333231c452c125f99.
+  Implementation75d861c173f752cc5147d8579b47d0cbc9d25e70, noDDIrouteadopted.
+- NEXT FULLUMD1514sourcebundle READYbd134359 at
   `.local/c15-full-umd-native1514-prep`; execution74702490/ZIPd6e2b647/
   runner7a190c10/controller4cda661a/approval17870095. ROOTFULLREVIEW+BEFORE
   stillrequiredbeforebuilder. 17commands normal1504verifier+10FRESHobjects+
   2evaluations+DLLhostbuilds+2staticinventories; 17archives (normalpropsruntime+
-  core5, extraVTN/SIMD+translator9). SourceprivatefullUMD READY027f442a at
-  `.local/c15-full-umd-ddi-cpu-proposal`; exact3d40+15fDDIonlyd962=f338,
-  fivefactory75 files; actualPSO/CompileCompute/cache/EnsureOwner realfullgraph.
-  NOPEloadbeforeCRT/TLS/import/mapreview+separateCPU1515BEFORE. No package.
-  AgentsSOURCEONLY: kmdprepared1514; sm51preparedsource. No futurehardwarelaunched.
+  core5, extraVTN/SIMD+translator9). 732stagefiles/14516nativepins. Sourceprivate
+  fullUMD READY027f442a at `.local/c15-full-umd-ddi-cpu-proposal`; exact3d40+
+  15fDDIonlyd962=f338/fivefactory75; actualPSO/CompileCompute/cache/EnsureOwner
+  realfullgraph. No fakeowner/diag/resolver/private-layoutcopy. Testinputshader
+  retired+erasedLIVEbacking, NOTfreed. PrivateDEFonlyexport. ActualnormalDllMain
+  processhandlers retained/nottriggered. NOPEloadbeforeCRT/TLS/import/mapreview+
+  separateCPU1515BEFORE. No package. AgentsSOURCEONLYfinished, rootoperations.
 
 ## NEXT BUILD ACCEPTED: EXP1512
 
