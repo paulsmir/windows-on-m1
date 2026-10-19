@@ -8,6 +8,29 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## NEXT BUILD ACCEPTED: EXP1512, CPU1513 preparation in parallel
+
+- Source75d861c173f752cc5147d8579b47d0cbc9d25e70 factory/TUsplit committed,
+  noDDIroute. LOCAL1511host14/18/19PASS; full1621/119failures=117old+2liveair.lock
+  environment during1510; NOTfullGREEN. PostpinsMATCH. Factory43/GLSL10balanced,
+  old79/384words, wrapper199/20valid8NULL/689snapshot32NULL/384TWICE.
+- EXP1512 actual14RC0/13AA64/12linked/post13806/93hashes/unknown0. Rootreview
+  `.local/c15-legacy-no-core-native1512-result/root-review1512.json`
+  337c45bc5632fa0e321a0d7f2e939f4e2451aaf08a36172f1c893ec65c714bc8.
+  EXE14515712B89545cb7f5de855690b2431d54263dbfc76f962c4bc10fdfd3431e7143693d6f.
+  Runtime1500BUILD_ONLYb6a5c5c/props71b8 (same1503CPUlineage), NOTnormal1504;
+  originaldraft1504wording supersededcd9edclarification. 14DLLnames same1503,
+  MSVCP/KERNEL32descriptororder swapped. FullownerABIobj compiledNOTlinked.
+- CPU1513 harness kmdagent preparingSOURCEONLY; DO NOT stage/execute until1510
+  NEWEXP_DONE+RECOVERY_DONE/exactAbsent. Use correctedwholeproducerread_bytes
+  (1502hostTypeError preserved), 4actualCS50/CS51static/SM6/VS inputs, noGPU.
+- Next actualDDIgate plan `investigation/analysis/D3D12-C15-actual-pso-cpu-gate.md`;
+  sm51agent privatefullUMDtwoinclude-wrapperSOURCEproposal inprogress.
+  ActualCreatePSO/CompileCompute/cache/EnsureOwner+fullowner/logger graph;
+  no fake resolver/diag, no copiedprivateownerlayout, DllMain normalprocesssideeffects
+  retained, buildCRT/TLS/import reviewbeforeseparateCPUload. Normalruntime1504
+  mandatoryforprivatefullUMD; explicit1512BUILD_ONLYsupport separate.
+
 ## ACTIVE: EXP1510 started09:10:52Z, stage PASS, await hardware
 
 - Rootsession52034 runs `.local/preparation-1510/run1510.sh`; NEVER duplicate.
