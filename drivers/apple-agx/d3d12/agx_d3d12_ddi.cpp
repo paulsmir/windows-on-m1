@@ -24,6 +24,10 @@ extern "C" {
 int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
 }
 
+#if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
+#include "../mesa/dxil/agx_owned_nir_handoff.h"
+#endif
+
 /* the UMD trace logger (umd_runtime_device.c; C linkage through umd_internal.h) */
 extern "C" VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status, const UINT *Values, UINT Count);
 
@@ -2903,7 +2907,32 @@ static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso
         return result;
     }
     AGX_D3D12_OWNER *owner = EnsureOwner(device);
+#if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
+    pso->compiled = E_FAIL;
+    if (owner) {
+        const SIZE_T bytes = static_cast<SIZE_T>(pso->cs_dwords) * sizeof(UINT);
+        if (pso->cs_dwords < 2 || bytes / sizeof(UINT) != pso->cs_dwords) {
+            pso->compiled = E_INVALIDARG;
+        } else {
+            const uint32_t limits[4] = {AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS,
+                                       AGX_D3D12_UAV_SLOTS, AGX_D3D12_SAMPLER_SLOTS};
+            AgxOwnedNir *prepared = nullptr;
+            const auto status = AgxOwnedNirPrepareLegacyCompute(pso->cs, bytes, limits, &prepared);
+            switch (status) {
+            case AGX_OWNED_NIR_OK:
+                pso->compiled = AgxD3d12OwnerCreateComputePrepared(owner, prepared, &pso->compute);
+                break;
+            case AGX_OWNED_NIR_INVALID: pso->compiled = E_INVALIDARG; break;
+            case AGX_OWNED_NIR_UNSUPPORTED: pso->compiled = E_NOTIMPL; break;
+            case AGX_OWNED_NIR_PROJECT_OOM: pso->compiled = E_OUTOFMEMORY; break;
+            default: pso->compiled = E_FAIL; break;
+            }
+            AgxOwnedNirDestroy(&prepared);
+        }
+    }
+#else
     pso->compiled = owner ? AgxD3d12OwnerCreateCompute(owner, pso->cs, &pso->compute) : E_FAIL;
+#endif
     const HRESULT result = pso->compiled;
     ReleaseSRWLockExclusive(&pso->compile_lock);
     return result;
