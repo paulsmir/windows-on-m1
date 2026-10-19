@@ -9,7 +9,7 @@ source preparation only until explicit root BEFORE/approval. Preserve user dirty
 Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 `investigation/CLAUDE_WORKING_METHOD.md`. Consult only referenced ledger entries.
 
-## IMMEDIATE: EXP1471 package build READY / 1469 native and1470 cache accepted
+## IMMEDIATE: EXP1472 POST_ONLY review of successful1471 package build
 
 - EXP1466 COMPLETE/ROOT accepted CORE BUILD ONLY:353freshARM64objects/7archives,
   361rc0/170.5s commandspan/250actualTUsonecanonical551fc/nooldincludes.
@@ -45,12 +45,22 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
   EXP1470CACHEPASS: actualstore/initempty,retrieveNULL/178deps/post12854MATCH.
   .local/c15-runtime-cache-preprocess-result/root-review1470.json73825c0f.
   No PE/GPUclaims.
-  EXP1471PACKAGEBEFORE recordednow; stage .local/c15-package1471-prep.
-  Parentrootperformanceprojectiond1b8e367/child1b592e5d/controller51db8677.
-  13559inputpins/actual5+2tools+698project/allnativecacheclosed.
-  Native outputs C:\Users\pauls\EXP1471-arm64-shader-info-unsigned;
-  stage C:\Users\pauls\EXP1471-package-build-inputs.
-  Monitor .local/c15-package1471-result bounded; onceSTARTED doNOTrestart.
+  EXP1471actualMSBuildPASS37.55s/0errors/30.0.1471.0/source698PASS.
+  OriginalouterPOSTwrapperSTOP Argumenttypesmatch; no finalverdict.
+  Raw.local/c15-package1471-result/logSHA8ccdcf4f/ownedchildRC0record.
+  RootUMDscan3236notes/275unique/30aliases +1unknownu_format_gen.h.
+  OriginalSTOP preserved, DO NOT reruncompiler.
+  EXP1472metadata7DONE(all4products+2PDB+formatgenheaderHASHED).
+  POST_ONLY BEFORE now: .local/c15-package-post1472-prep/post-review.ps1
+  0c6bf218/source13573pins; normalizeeveryactualownerpath +ToArrayactual
+  CPUregressionsteps/2physicalstackchecks then6productcopies intoNEW
+  C:\Users\pauls\EXP1472-package-post-review. Separatepromotionpending.
+  Host .local/c15-package-post1472-result; monitor bounded onceSTARTED.
+  RepackSOURCE .local/preparation-1471-v3-drafts: NOTlaunched.
+  Exactprimaryrepackageff7277d6/INF88f3832c readDONE, CAT-onlysign/version
+  fromactualSYS; clearsallOutfiles so preserveoriginals beforeexplicitrepack.
+  Exact4signtool/stampinf/inf2cat/verifierhashread .local/c15-repack-tools-metadata1471
+  session23280 started. No guestinstall/hardware experimentstarted.
   Adds280pinnedsourcefiles tocoredest withoutrewritingexisting;
   strictactualshowIncludes/toolpins/postmaterializedpins/3existingfrozenhelpers.
   Compiler45+link thennativeprepare/runtime production44+remainingselectedTUs.
