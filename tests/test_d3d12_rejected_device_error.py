@@ -1,4 +1,4 @@
-"""Execute current D3D12 CreateDevice and rejected core DDI for two devices."""
+"""Execute current D3D12 device, list and queue error routes for two devices."""
 from pathlib import Path
 import hashlib
 import os
@@ -37,6 +37,10 @@ class RejectedDeviceError(unittest.TestCase):
         list_slots = re.findall(r'\b(pfn\w+)\s*;', list_table.group(1))
         self.assertEqual(len(list_slots), 51)
         self.assertEqual(list_slots.index('pfnExecuteBundle'), 15)
+        queue_table = re.search(r'typedef struct D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001\s*\{(.*?)\}\s*D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001', wdk, re.S)
+        queue_slots = re.findall(r'\b(pfn\w+)\s*;', queue_table.group(1))
+        self.assertEqual(len(queue_slots), 7)
+        self.assertEqual(queue_slots.index('pfnSignalFence'), 5)
         source = SOURCE.read_text()
         selected = 'AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetImplicitPhysicalAdapterMask, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetImplicitPhysicalAdapterMask));'
         self.assertEqual(source.count(selected), 1)
@@ -57,13 +61,23 @@ class RejectedDeviceError(unittest.TestCase):
         list_helper = 'static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error) {'
         if list_helper in source:
             actual += block(source, list_helper) + '\n'
+        actual += block(source, 'static AgxD3d12Device *DeviceOf(') + '\n'
+        actual += block(source, 'struct AgxD3d12CommandQueue {') + ';\n'
+        actual += block(source, 'static SIZE_T APIENTRY CalcPrivateCommandQueueSize(') + '\n'
+        actual += block(source, 'static HRESULT APIENTRY CreateCommandQueue(') + '\n'
+        queue_helper = 'static void ReportRejectedQueueError(D3D12DDI_HCOMMANDQUEUE handle, HRESULT error) {'
+        if queue_helper in source:
+            actual += block(source, queue_helper) + '\n'
         selected_list = 'AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle));'
         self.assertEqual(source.count(selected_list), 1)
+        selected_queue = 'AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnSignalFence, AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnSignalFence));'
+        self.assertEqual(source.count(selected_queue), 1)
         fixture = (ROOT / 'tests/d3d12_rejected_device_error_fixture.cpp').read_text()
         fixture = fixture.replace('/* ACTUAL_REJECTED */', rejected)
         fixture = fixture.replace('/* ACTUAL_DEVICE */', actual)
         fixture = fixture.replace('/* ACTUAL_TABLE_ASSIGNMENT */', selected)
         fixture = fixture.replace('/* ACTUAL_LIST_ASSIGNMENT */', selected_list)
+        fixture = fixture.replace('/* ACTUAL_QUEUE_ASSIGNMENT */', selected_queue)
         with tempfile.TemporaryDirectory(prefix='d3d12-device-error-') as directory:
             cpp = Path(directory) / 'fixture.cpp'
             exe = Path(directory) / 'fixture'

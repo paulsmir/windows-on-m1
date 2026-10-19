@@ -10,6 +10,17 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
 ## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
+EXP1554/1555 closes last COMMAND_QUEUE error fallback. Actual-source RED
+realCreateCommandQueue then SignalFenceA/B/A ->A0/B3; stored queue.device
+and typed firstHCOMMANDQUEUE now A2/B1/exactHRTDEVICE/nullB isolation.
+ActualCalcPrivate-sized malloc+16canary each intact; target34GREEN, WDK3rc0.
+First1554buildFAIL oldDestroyDevice reset C2065 preserved;1555fixPASS.
+No process-global last-created callback/HRTDEVICE remains. CPU-only, queue
+native runtime private-size/hardware regression still unproved. Next prepare
+exact accepted1527/source40e signed-package assembly plus finite owner-routing
+diff only; preserve accepted legacy prepared compile path and exclude inherited
+unvalidated C15publisher. Normal J3131530 Code28Absent8CPU unchanged.
+
 EXP1551 closes rejected COMMAND_LIST error route through existing ListError:
 current-source CPU RED ExecuteBundle A/B/A ->deviceB3/listA0/listB0; GREEN
 listA2/listB1/exactHRTLIST/devicecallbacks0/nullB isolation. Existing core,

@@ -107,6 +107,44 @@ post-destroy/reentrant callback lifetime. The next hardware checkpoint is
 required only once a complete versioned runtime contract is ready; this
 deterministic route itself needs no GPU-state experiment.
 
+## Queue rejection follow-up (EXP1554/1555)
+
+All four rejected queue DDIs in the actual WDK table begin with
+`HCOMMANDQUEUE`; `SignalFence` takes a readable fence-operation record and
+returns VOID. `CreateCommandQueue` already resolves its creating `HDEVICE`
+for the runtime context callback. The private queue retained only its runtime
+queue, flags and native context, so the generic refusal used last-created
+globals. A current-source RED after two actual `CreateCommandQueue` calls
+observed SignalFence A/B/A errors as A0/B3.
+
+The queue now stores that existing device association. Its rejected thunk
+requires the typed first `HCOMMANDQUEUE`, obtains the stored parent, and calls
+the existing per-device helper with the unchanged `E_NOTIMPL`. The
+`CalcPrivateCommandQueueSize` return uses the actual enlarged private type.
+The original context request/callback and successful creation behavior are
+unchanged. The owner pointer is borrowed under the runtime's existing legal
+child/device lifetime; this does not introduce a device reference count or
+permit queue use after destruction.
+
+The CPU regression calls the actual size and constructor functions, allocates
+exactly the returned private size plus a 16-byte canary, and checks both
+guards. A runtime-context observer supplies owned CPU tokens; it does not
+create or emulate a KMD context. It then invokes the actual assigned
+SignalFence rejection for A/B/A and checks A2/B1, exact HRTDEVICEs, exact
+queue-table/member receipts and null-B callback isolation. Previous device,
+shader, state, element and list observations remain in the same regression.
+Host structures are declaration overlays; native layout/signatures have the
+separate pinned-WDK compile gate. No GPU/SM6/SignalFence implementation claim
+follows from these CPU observations.
+
+After the final consumer was replaced, the obsolete global callback/HRTDEVICE
+declarations, CreateDevice assignments and DestroyDevice reset were removed.
+The first WDK attempt caught the leftover reset (EXP1554 C2065), preserved as
+FAIL. EXP1555 compiled all three normal modes with rc0 after its removal.
+Native queue-size runtime integration and hardware regression remain separate
+from this deterministic error-route result; public R1/SM6 admission still
+requires the complete typed provider/library/compiler contract.
+
 ## WHAT IS STILL UNKNOWN:
 
 This CPU check does not establish public acceptability of `E_NOTIMPL` for

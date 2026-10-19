@@ -48,8 +48,6 @@ struct AgxD3d12Adapter {
 static AgxD3d12Adapter adapter_object;
 static D3D12DDI_HRTTABLE list_table;
 static volatile LONG queue_generation; /* per-device Win32 generations */
-static const D3D12DDI_CORELAYER_DEVICECALLBACKS_0003 *callbacks;
-static D3D12DDI_HRTDEVICE runtime_device;
 
 /* EXP1347: the runtime destroyed the device after the caps with no traced
  * call; each fail-closed entry records its table (D3D12DDI_TABLE_TYPE) and
@@ -60,6 +58,7 @@ template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003> { static constexp
 template<> struct TableOf<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D; };
 static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error);
 static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error);
+static void ReportRejectedQueueError(D3D12DDI_HCOMMANDQUEUE handle, HRESULT error);
 template<class T, UINT Table, UINT Offset> struct Rejected;
 template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENTRY *)(A...), Table, Offset> {
     static R APIENTRY call(A... args) {
@@ -77,8 +76,11 @@ template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENT
                           std::is_same_v<std::tuple_element_t<0, std::tuple<A...>>, D3D12DDI_HCOMMANDLIST>,
                           "rejected COMMAND_LIST DDI must start with HCOMMANDLIST");
             ReportRejectedListError(std::get<0>(std::forward_as_tuple(args...)), E_NOTIMPL);
-        } else if (callbacks && callbacks->pfnSetErrorCb) {
-            callbacks->pfnSetErrorCb(runtime_device, E_NOTIMPL);
+        } else {
+            static_assert(Table == D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D && sizeof...(A) > 0 &&
+                          std::is_same_v<std::tuple_element_t<0, std::tuple<A...>>, D3D12DDI_HCOMMANDQUEUE>,
+                          "rejected COMMAND_QUEUE DDI must start with HCOMMANDQUEUE");
+            ReportRejectedQueueError(std::get<0>(std::forward_as_tuple(args...)), E_NOTIMPL);
         }
         if constexpr (std::is_same_v<R, HRESULT>) return E_NOTIMPL;
         else if constexpr (!std::is_void_v<R>) return R{};
@@ -279,8 +281,6 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
         device->kernel = arg->pKTCallbacks;
         device->generation = ((((GetCurrentProcessId() & 0xffffu) << 16) ^
                                static_cast<ULONG>(InterlockedIncrement(&queue_generation))) | 0x80000000u);
-        callbacks = arg->p12UMCallbacks;
-        runtime_device = arg->hRTDevice;
     }
     const UINT receipt[] = {arg ? arg->Interface : 0, arg ? arg->Version : 0,
                             arg ? static_cast<UINT>(arg->Flags) : 0};
@@ -298,7 +298,6 @@ static void APIENTRY DestroyDevice(D3D12DDI_HDEVICE handle) {
 #else
     (void)handle;
 #endif
-    callbacks = nullptr;
 }
 static HRESULT APIENTRY GetOptionalDDITables(D3D12DDI_HADAPTER, UINT32 *entries,
                                              D3D12DDI_TABLE_REQUEST *) {
@@ -1745,7 +1744,15 @@ struct AgxD3d12CommandQueue {
     D3D12DDI_HRTCOMMANDQUEUE runtime;
     UINT flags;
     HANDLE context;
+    AgxD3d12Device *device;
 };
+static void ReportRejectedQueueError(D3D12DDI_HCOMMANDQUEUE handle, HRESULT error) {
+    auto *queue = static_cast<AgxD3d12CommandQueue *>(handle.pDrvPrivate);
+    if (!queue) return;
+    D3D12DDI_HDEVICE device = {};
+    device.pDrvPrivate = queue->device;
+    ReportRejectedDeviceError(device, error);
+}
 static SIZE_T APIENTRY CalcPrivateCommandQueueSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATECOMMANDQUEUE_0001 *) {
     return sizeof(AgxD3d12CommandQueue);
 }
@@ -1754,6 +1761,7 @@ static HRESULT APIENTRY CreateCommandQueue(D3D12DDI_HDEVICE handle, const D3D12D
     auto *queue = arg ? static_cast<AgxD3d12CommandQueue *>(arg->hDrvCommandQueue.pDrvPrivate) : nullptr;
     if (!device || !queue || !device->callbacks || !device->callbacks->pfnCreateContextVirtualCb) return E_INVALIDARG;
     memset(queue, 0, sizeof(*queue));
+    queue->device = device;
     queue->runtime = arg->hRTCommandQueue;
     queue->flags = static_cast<UINT>(arg->QueueFlags);
     ADMISSION_WIN32_CONTEXT_CREATE contract = {};
