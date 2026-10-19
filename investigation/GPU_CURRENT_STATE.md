@@ -99,6 +99,32 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
  validliveCPUobject+explicitreadablecapacityprecondition, no fakeprovenance/SM6/DDIcapclaim.
  No guestCPUexecutionuntil1471RECOVERY_DONE; rootalonebefore/builder/guest/Git.
 
+## Latest1471 hardware observations / prepared CPU work
+
+-1471 TOOL_d3d12-on_END observed04:39Z:59uniqueownPASS exactlysameorderedstepverdicts1439,
+ C14Acountbuffer and3indirectreceiptpayloadsexactbaseline; C24ABC6subs/165texels/paddingbad0.
+ C21E remainsUNCOMPLETEDsame23Bubfe stderrSHA2acfccd5/no fix; baseline2deallocate-failure
+ receiptsalso2current. DWM0; kmdpool+fl11a/x/debug completed, BIG/pressure/corpusactive.
+ MUSTwaitNEWEXP_DONE thenregressionreview+normalrec1471h/recover.sh; DO NOTrestart.
+-1475STOP0compilers:rootupdatedtopSELFbutmissednestedinput_pinsrunnerSHA. Originalretained.
+ 1478freshsame7providerclosure/nested15stagechecker original1475RED/newGREEN; all10commandsRC0,
+ post12774MATCH/61outputhashes/9AA64/2positive551fcTU+7opaque. ActualstandalonebackendEXE
+11720704B eb7b062e2bf36dcfa6014b0649d8139bb0df1a075da694e5c173659fea0288d7.
+ Rootreview `.local/c15-backend-link-closure1478-result/root-review1478.json`
+531a5b66b8e9e232d847f863f797b3798b14e2f1290d99b5f0f50d15a1fea33e/ACTUALa0c8b880.
+ NoPEexecution. Root1477CPU template `.local/c15-backend-cpu1477-source-template` PENDING;
+ stagecontainsactualEXE+8referencefiles/newrawProcessPS; noapproval/BEFORE/guestcommands.
+ sm51preparingfiniteaccompanyingnotices; finalizeactualimports+notices/PSpaser/hashafterwards.
+-1476nativeownedNIRbridgeall13commandsRC0/post12997MATCH/12AA64/3canonical551fcTU+9opaque;
+ originalwrapperSTOPonlyMSVCP140missingC-onlyallowlistretained. SeparateLOCAL1479independent
+ PEstaticpostACCEPT14imports exactpriorallowlist+MSVCP140 (actual1421primaryprecedent).
+ Root82hashesverified/review33550ec814f5647e20c2fe8a79a8e4d5e52c837d1554d34a142ffd5bc59236f8
+ `.local/c15-owned-nir-static1479-review/root-review1479.json`; EXE14543360B
+773591dcd388d5c1b59a4427e60e251aafe18b159b5ff9ad2ea3941ed288f8cd at
+ `.local/c15-owned-nir-native1476-result/remote-output/out/owned-nir-bridge.exe`.
+ NoPEexecution/noDDI/capsadoption. kmdagentpreparingSOURCECPU1480 usingactualportable-generated
+ mixedPROGRAM/legacyCSVSPS+7goldvectors/notices. RootaloneBEFORE/guest; noexecuteuntil1471rollback.
+
 ## Latest proven boundary: actual CPU NIR semantics and enum defect
 
 **EXP1456 PASS**, ACTUAL `291acf93`, CHANGES `10622012`:
