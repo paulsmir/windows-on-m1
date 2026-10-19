@@ -1,7 +1,7 @@
 # C15 native frontend: selected graph and current build boundary
 
 Updated 2026-10-19 UTC. Classification: RENDER_ONLY compiler preparation.
-The Windows ARM64 frontend is **not yet accepted as built**. No output PE from
+EXP1451 established build closure **only for the exact nominal compute fixture**. No output PE from
 EXP1445–1448 executed, no package was installed, and no SM6 capability changed.
 
 ## Selected primary build contract
@@ -82,3 +82,14 @@ its actual imports, and preregister CPU-only execution on the inert guest. Its
 fixture checks remain active under NDEBUG and must explicitly report that native
 `nir_validate_shader` is a no-op. Asahi backend, runtime ownership and truthful
 DDI/model admission remain separate gates.
+
+EXP1451 completed all nineteen commands with rc=0, 8,414 unchanged inputs,
+sixteen actual compile dependency closures and independently checked AA64 objects
+and PE. Output manifest: `55dddf5b8fbe5d389e203de82e5bb8bbb6dfdaefcab55ff8ce6b6c6744fe6bfc`.
+The root supplement `31b249f50210bd89ec3de5f45ed4b35713e5a56c38525afaf0fa3ea12ca92bcf`
+accepts build closure for the exact `24e3df26` compute module only. Four enum
+bitfield truncation warnings in fragment depth/stencil and derivative-group modes
+remain admission limitations. Direct binary inspection and primary spirv.h show
+that this module uses only GLCompute and LocalSize(64,1,1). This qualification
+does not establish general shader correctness. The next gate is actual native
+NIR-map semantic execution using the newly hashed archives.

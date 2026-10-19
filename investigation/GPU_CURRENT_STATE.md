@@ -355,3 +355,15 @@ exacttasklist+taskkillONLYPID41676 succeeded. Postcleanup00:08:07Zfreephysical
 Previoususerrequestforbuilderinterventionnolongerneeded. Source1451fresh
 rebaseof1448preparing; nativefrontendnotyetaccepted. Prioritylaunchimmediate
 afterfrozenmanifest/BEFOREapproval, no newflags/sourceanalysis.
+
+## EXP1451 complete / nominal-compute-only build closure accepted
+
+19rc0 in40.9s;8414pins/16compileactualdeps/AA64objectsPE/12importsPASS.
+112filemanifest55dddf5b frozen;libvtn4810858B994b7cfe/SIMD6610B1465f0c0.
+ROOTsupplement31b249f50210bd89ec3de5f45ed4b35713e5a56c38525afaf0fa3ea12ca92bcf
+acceptsBUILD_CLOSURE_FOR_EXACT_NOMINAL_COMPUTE_FIXTURE_ONLY. FourFS/derivative
+signedenumbitfieldwarningsOPEN; target24e3moduleonlyGLCompute/LocalSize64,1,1
+provenbinary+primaryspirv.h, noneaffectedmodes. Neverexecuteoutputlinkconsumer.
+NextEXP1452twoC+linkactualsemanticfixture bindsrealarchives/review. kmdprep
+ongoing/rootownsapproval. No active1451controller(session78720finished).
+Guestnormalinert1439; no newGPUpackage. Builderresourcesrecovered1450.
