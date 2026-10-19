@@ -8,7 +8,28 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## NEXT BUILD ACCEPTED: EXP1512, CPU1513 preparation in parallel
+## ACTIVE CPU1513 — root session11392, DO NOT duplicate
+
+- CPU1513 launched afteractual1510RECOVERY_DONE; BEFOREd65971f4. Rootcontroller
+  `.local/c15-legacy-no-core-cpu1513-prep/controller.py`, approvalSHA
+  01e9c36e616ba2e637e197d7e2a5433f79e2b966241e3699a7ec0bdab101edc3,
+  manifest3af0647e595df3115ef7d6fc4cb0300294ec420a751511ac80f9cf62693c82f0.
+  FreshguestEXP1513-legacy-no-core-cpu; expected45checks/refs10balanced/twoowner
+  CS22+44; all34inputs/pre-posthashes/4physicalDLLinventory/owned120s/rawbytes.
+  NO GPU/package/service/reboot action. Rootsoleguest/Git. Poll11392→collect/
+  ACTUAL+CHANGES. Recovered1510inert profile stayscurrent; no cleanupneededCPU.
+- Next FULL UMD1514 sourcebundle READYbd134359 at
+  `.local/c15-full-umd-native1514-prep`; execution74702490/ZIPd6e2b647/
+  runner7a190c10/controller4cda661a/approval17870095. ROOTFULLREVIEW+BEFORE
+  stillrequiredbeforebuilder. 17commands normal1504verifier+10FRESHobjects+
+  2evaluations+DLLhostbuilds+2staticinventories; 17archives (normalpropsruntime+
+  core5, extraVTN/SIMD+translator9). SourceprivatefullUMD READY027f442a at
+  `.local/c15-full-umd-ddi-cpu-proposal`; exact3d40+15fDDIonlyd962=f338,
+  fivefactory75 files; actualPSO/CompileCompute/cache/EnsureOwner realfullgraph.
+  NOPEloadbeforeCRT/TLS/import/mapreview+separateCPU1515BEFORE. No package.
+  AgentsSOURCEONLY: kmdprepared1514; sm51preparedsource. No futurehardwarelaunched.
+
+## NEXT BUILD ACCEPTED: EXP1512
 
 - Source75d861c173f752cc5147d8579b47d0cbc9d25e70 factory/TUsplit committed,
   noDDIroute. LOCAL1511host14/18/19PASS; full1621/119failures=117old+2liveair.lock
@@ -31,87 +52,29 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   retained, buildCRT/TLS/import reviewbeforeseparateCPUload. Normalruntime1504
   mandatoryforprivatefullUMD; explicit1512BUILD_ONLYsupport separate.
 
-## ACTIVE: EXP1510 started09:10:52Z, stage PASS, await hardware
+## GPU EXP1510 COMPLETE — RECOVERY_DONE, Package Absent
 
-- Rootsession52034 runs `.local/preparation-1510/run1510.sh`; NEVER duplicate.
-  scratchpadnewexp1510.log/watchdog1510.log, evidenceEXP1510-arm64-nir-consume.
-  Same signedpackage30.0.1506.0/source3d40, correctedreceipt28aec (originalraw0e708
-  immutable). Explicitversion propagatedactualstage/cleanup/manifest/verify.
-  HASHES_MATCH23/STAGEPASS; generatedBEFORE9133db3c committed beforefullowner.
-  59nonE+C21ESKIP/CSenabled/pressure1/normalcontrols. Poll bounded/no final.
-  AfterNEWEXP_DONE collect→FactoryV2rec1510h/recover.sh→RECOVERY_DONE exactAbsent.
-  Actualgeneratedwrapper4e8ba25afa37587e45e035dfc46d48d38645179fc2f3903cfe672de7fe0ce29e;
-  host10f unchanged; generatedfullsources inledger. No manualprereboot.
-- Offline next: adopt legacyfactory/TUsplit fiveprod/eighttests ONLY; actualDDIroute
-  stayspending fullCompileCompute/CreatePSO/EnsureOwner realtypedfixture andnative
-  stronglink. Do not claim factory-onlytest provesDDIorSM6. Root soleGit/remote.
-
-## IMMEDIATE UPDATE: EXP1506 HOST PREPARE STOP, no guest mutation
-
-- EXP1506 activation stopped at stale receipt INF hash before clone/guestwrites.
-  Local evidence empty; no stage-receipt/hardware-manifest/recovery exists.
-  Signed package bytes preserved, preCAT receipt0e708 retained immutable.
-  Root omitted accepted1473 finalization; fix separate receipt preserving raw
-  provenance and built SYS/UMD identity. NewID1510 reuses package30.0.1506.0
-  with explicit INF-derived version across factory scripts/manifests/cleanup.
-  Prior1471 recovered inert guest unchanged; bounded SSH up. No recovery rerun.
-
-## IMMEDIATE: SIGNED1506 packet +59probe READY; finalizePREPACKEDFactory and START stand
-
-- ROOT PRIORITY standstart. No activeexperiment/guestpackage; finalFactoryprivateSOURCE kmdfinishes
- basedactual1471harness+FactoryV2 b11wrapper/10fhost. DO NOTnewframework/analysiswait.
- Sourceartifact3d40cdaf038b9a8a7fa8509ebc4d3dd4303a4b09/719files/defaultOFFpreparedowner/
- BASEDDI15f637, currentpublisherca856/666abecEXCLUDED. Version30.0.1506.0.
-- SIGNED local `.local/c15-package1506-signed-review/files/driver`8actualfiles +notices13,
- fullZIP`.local/c15-package1506-signed-review/signed-package1506.zip`
- 9f904a80f96232648572635487dd9b5d202ce35c0e799db4db528346a783de90,
- `files/signed-files.json`b0e7d753817e77a4ca423d2991f2d1eb9195bae3d967b02f0f274c7bf710c59b.
- Rootsignedreview58455dd4c28cbd4eb7ab5e3de83d4f6a4daa064def917108ef231ef7b9f1ce0a.
- SYS50d2ae7e0320ed136064778c263d2338444f8c596b5ffd6509018bbd56823b25,
- UMD7147d9f29272670adfe679314278f14d903ff6e2a87f9242190d254579ba325d,
- INF4420Bcfd902bc92e666a327f98231a0c2fa22524a4d35432af11566b332e1b10b9bcd,
- CAT4015B3ed4b21faf31eb7015e0dc4f799f395d799368f53b221176e0eb78ae200b9ffe.
- WOWd51ebf72/1625ffdeunchanged. CMSvalidE9BEleaf; builderUntrustedRootCAT/SYS/UMDembeddedNotSigned
- catalogpackagedsamebaseline, no publictrustclaim. All21fileSHAverified.
-- 1506BUILD36.88sRC0/18baselinewarnings0errors/source719verifyBEFOREAFTER/versioncoherent;
- rootrevieweb043b32. POSTpass13807pins/3236rawownerincludes275unique58aliases/ToArrayroundtrip,
- ARM64UMD+SYSimportsexact1471; stack13824/WOW6544<16384. RootPOSTreviewc0eb3232,
- POSTreceipt0e708485f325ef0cd6f792d1428f782d05bad1508e0e84f938852e1307cc2753.
- Promotion8rows thenCATPID27904RC0/0.974s/immutablepost30pins allPASS.
- `.local/c15-package1506-final-prep`genericphasecontroller used; nativeoriginals/POST immutable.
-- Probe1509 `.local/c15-probe59-build1509-result/remote/out/agx_d3d12_probe.exe`
- AA64 265216B51f79dd932f744c10ff1fb62d922939b9b552b669691859ae141afc5fdc9fedd,
- FINALrootreview397fe54af3f7e583d77b63d10a554afde41f434c67051b410b4a80989bd9db15.
- Source93aa5dff ONLYC21E invocation→explicitSKIP; allother59unique-nonE checkpoints same1437/1471.
- NOT59directcalls. Unusedvolume_samplewarningexpected; importsEXACT1437dxgi/d3d12/USER32/KERNEL32.
- NoPEexecuted. ExistingUBFEsecurityblockedtask NEVERretry/reroute; excludeC21E/noALL60claim.
-- Runtime1504NORMAL originalverifier ACTUALbuilderPASS, fresh203toolsRC0/199AA64(45compiler154runtime),
- 119canonical551fcTUs/25422deps/all154RSPfreshpaths+actualarchiveBODIESverified/2531outputhashes.
- Runtime4071162B54437f3f28783e8b43201561a9155e3c702d97388f26fb69c4b1b658237e5c88,
- result509be684/propsa41935fd/preparede6ff0196/Resourcef981/rawstate619bCRLFnormalizeda967.
- Rootreviewab19c80f6b8e14ab9c08626fbc882b28f56c99e532cbcb0dfd5b92bbd25bf11f.
- Actualcache1507singlepreprocessRC0/.503s/178deps0unknown/storeinitEMPTY/retrieveNULL;
- cacheacceptance0c2f71393d76909484a56e5bba1a1816bdd1b34f8cd5484b51617329298521de.
- SOURCE `.local/c15-runtime-package-assembly1504` sourceZIP5b286c06/sourceManifestb4cedfe6.
-- OwnerAPI928f3c9e COMMITTED, CPU1502actualPID8368PASS60ownerchecks/199+79/20valid8NULL/689+32/
- FSserialization/ref0/384THREE/5normalizations/golds; HOST1502TypeErrorSTOP MUSTpreserve.
- LOCAL1505rootwholeproducer+consumer RED(read_textstr vsencodedbytes)/singleproducerread_bytesGREEN,
- all53pins41stage6outputs, NOguestrepeat; proofb7f64368. Earlierpredicate-only9dac/c0a incompletecorrectionrecorded.
- Fullhost1619/219.588s EXACT117old67fail50error20skip/noaddedremoved/postMATCH log8e249286.
-- NEXT OFFLINE whileGPUruns: sm51PRIVATElegacyfactory/TUsplitproposal READY054ea957 at
- `.local/c15-r0-legacy-prepared1507-prep` (folderSOURCE ONLY, NOTEXP1507; cache1507uniqueactualID).
- PLAN2ec47a7a accepted narrowR0PSO-ownedcs/cs_dwords→genuineopaquelegacyfactory(forcedkind1stage5),
- rootEMPTYUNSPECIFIEDtranslationonly/notcanonicalkey; commonCPP+privateclasssplitavoidunlinkedcore/provider;
- oldOwnedPrepare/rangebodiesunchanged; callerCompileComputefunction-onlyguarded/sameSRW/cache/EnsureOwner,
- existingCalc/CreateShader/VOIDpolicy/rootresolve/caps/publisher/layout unchanged. 14sources6production8tests,
- no-core/provider14commandfixture/newbase18/wrapper19; patch9b73b5b4/baselineDDId962957d.
- NOTadopted/compiled/executed yet. Do source-review/adopt/test/nativecompile while1506hardwareactive.
- RealDXIL-DDIreadablespan/privatecapacity/VOIDpolicy remainsOPEN; no third equivalentcapacitysearch.
-- Normal1471RECOVERY_DONE/Code28PackageAbsent/noService8CPU remainscurrentthroughCPU1502, no GPUchanges since1471.
- No rerun1471recovery, no physicaloperatorask whileSSHlive. New1506Factory must pinexactpackage, ordinaryGPU-visible
- profile/inertrollback, FactoryV2host10fwrapperb11fullactualSHA, preserveimmutablehiddenEMERGENCYonly.
- RootaloneGit/builder/sign/guest/launcher; preserveuserMu; CSenabled. NeverkilloldPID41676 (reused/obsolete).
- Useroldbuilderreplyacknowledged: currentbuilderhealthy/203cmdsdone; no actiononstalePID.
+- ACTUALd65971f4, 59D3D12nonEPASS/noFAIL/C21ESKIP knownUNCOMPLETED. C14A
+  counter512/drawn512/threeExecuteIndirectreceipts; C24ABC6subresources165texels
+  padding0/C7PresentPASS. 73SMOKEPASS+knownMSAA-a000rFAIL, pool6workers/
+  foreignreclaim1/fl11a+x+debugPASS; corpus414each64and4createfail/hang0/pixeldiff0;
+  DWM0. GL51.5/internal59.6/CS46.493 singlepoints/no causalperfclaim.
+- Signedpackage30.0.1506.0/source3d40/runtime1504normal54437; owningearlyNULL
+  repair/a905 qualifiednormalpackage; no hardwareNULLinjection/SM6admission.
+  Original1506HOSTSTOP preserved; finalunsignedreceipt28aec fixedwithoutchanging
+  signedbytes. Factory1510explicitversionoverride actualscripts/cleanup verified.
+- Recovery59502 servicedisableStart4/disarmPASS→orderednormalCode32Stopped→exact
+  oem5/INFcfd/SYS50d2/UMD7147cleanupRC0→orderednormalCode28Absent/noService8CPU.
+  No ordinaryhidden/manualprereboot/operatoraction. Before09:43:48.5437810Z/
+  After09:45:45.9257170Z/durablemanifestEC6DEA55.
+  `.local/experiments/EXP1510-arm64-nir-consume/evidence/rec1510h/recovery-final.log`
+  02c54cb849694fbd428f144b8646186d3f26ed5a69d549d32ceaac0e7394fc72.
+  Rootverdictc7bddb2ee4c5bbe79b5a322a1ffcba0cfdbf7f0aaab8987b3e3a7acda24f7d6e;
+  finalartifacts2ed6176273c251eced2d8e4472f48bd0da5507f5cfaa78ad5ef03b432105c44a;
+  pre-recovery2123filemanifest3641f77f. PhysicalUSB/RDPnotindependentlytested.
+- BIG8textures512MiBverify0/pressure0texturesOOM8007000e removed0 samebaseline;
+  intentionalLONGJOBHANG887a0006 followedalivecorpus/desktop/SSH; no unexpected
+  Windowsstopobserved. Finalnormalinertguest is current baseline. NEVERrerun1510.
 
 ## Latest completed CPU boundaries
 
