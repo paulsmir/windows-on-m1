@@ -2723,10 +2723,25 @@ static VOID APIENTRY OmSetStencilRef(D3D12DDI_HCOMMANDLIST handle, UINT ref) {
     list->state |= AGX_LIST_BIT(pfnOmSetStencilRef);
     list->stencil_ref = ref;
 }
+static void ReportRedundantRoot(const AgxD3d12CommandList *list, UINT bank) {
+    const auto *va = bank ? list->graphics_root_va : list->compute_root_va;
+    const UINT *dwords = bank ? list->graphics_root_dwords : list->compute_root_dwords;
+    UINT receipt[] = {bank, 0u, 0u};
+    for (UINT i = 0; i < kRootArguments; ++i) {
+        receipt[1] += va[i] != 0;
+        receipt[2] += dwords[i] != 0;
+    }
+    AdmissionUmdDiagnostic("measure-d3d12-root-redundant", S_OK, receipt, 3);
+}
 static VOID APIENTRY SetGraphicsRootSignature(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HROOTSIGNATURE root) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
     if (!list) return;
-    list->graphics_root = static_cast<const AgxD3d12RootSignature *>(root.pDrvPrivate);
+    const auto *signature = static_cast<const AgxD3d12RootSignature *>(root.pDrvPrivate);
+    if (signature && list->graphics_root == signature) {
+        ReportRedundantRoot(list, 1u);
+        return;
+    }
+    list->graphics_root = signature;
     memset(list->graphics_root_va, 0, sizeof(list->graphics_root_va));
     memset(list->graphics_root_dwords, 0, sizeof(list->graphics_root_dwords));
 }
@@ -2821,7 +2836,8 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
 }
 #endif
 /* C5 (investigation/analysis/D3D12-C5-compute.md): compute state. Setting
- * a root signature resets the root arguments (D3D12 semantics). */
+ * a different root signature resets its arguments; redundant selection of
+ * the same live signature preserves them. Null retains the reset path. */
 static AgxD3d12CommandList *ListOf(D3D12DDI_HCOMMANDLIST handle) {
     return static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
 }
@@ -2834,7 +2850,12 @@ static VOID APIENTRY SetPipelineState(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HPI
 static VOID APIENTRY SetComputeRootSignature(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HROOTSIGNATURE root) {
     AgxD3d12CommandList *list = ListOf(handle);
     if (!list) return;
-    list->compute_root = static_cast<const AgxD3d12RootSignature *>(root.pDrvPrivate);
+    const auto *signature = static_cast<const AgxD3d12RootSignature *>(root.pDrvPrivate);
+    if (signature && list->compute_root == signature) {
+        ReportRedundantRoot(list, 0u);
+        return;
+    }
+    list->compute_root = signature;
     memset(list->compute_root_va, 0, sizeof(list->compute_root_va));
     memset(list->compute_root_dwords, 0, sizeof(list->compute_root_dwords));
 }
