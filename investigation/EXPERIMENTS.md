@@ -59185,3 +59185,62 @@ ROOT probe1521accepted PE49f94edd50ca602f1828b59e3d1fc5a55e8729917c20da9456fd7be
 Actual1519newexpscriptnormalized1519->1522/prior1510->1519/names BYTEEQUAL; Rootreviewallchangedhelpers/prerequisiteactuals. Preparation.local/preparation-1522 manifestSHAae011a489497e333ddee428e6820b81a333de532c6aaf04e239ed549b5a1aaee; priorevidenceRootverdictd96e41d0/recovery0f4d1651/factoryactual5pinMATCH allmandatoryguarded. Actual1521buildPE273920B49f94edd50ca602f1828b59e3d1fc5a55e8729917c20da9456fd7bebdb76c120/review9a27cf3fe5fbbb65e097391e5d5b2132278cdc8165c9f984985641b32ed166d8/41pinsbeforeafter/same4imports/C26source910a8ca7. Exact bash.local/preparation-1522/run1522.sh afterrootbefore40approval; newstablevisibleguestCode28Absent after1519rollback, freshlyinstallSAMEsignedpackage30.0.1506.0/source3d40/runtime54437/receipt28aec andexplicitpackageversionoverride, no build/repack/sign atactivation. SourceRoot/m1n1Windows5b857603/Mu361a2134 unchanged/userMu preserved/branchintegration/ad04-windows-compiler/rootcontrol6c21d515. SignedZIP9f904a80f96232648572635487dd9b5d202ce35c0e799db4db528346a783de90/finalreceipt28aecde1935cd7e42ac4c5c561b00b69e1dd854d7b2e48601dcfe34acc210d23; actualsource/manifest/INF/SYS/UMD/CAT/13noticeshashesvalidatedguard; generated5newFactorysourcehashes/newmanifest/newfullowner generated+committedfullBEFOREbeforefirstlaunch. Evidence.local/experiments/EXP1522-d3d12-volatile-cbv-replay/evidence/EXP1522; recoveryevidence/rec1522h/recover.sh sameorderednormal exactcleanup aftercollect/no packagecarryover. FailurecriterionC26fence/wordoracle/stalebinding/corruption ornewregression=>evidence/rootowninglayerverdict/recover; guesthangownedlauncher/recover/newID; no blindrerun. No previousPackageRetainedvariable. CSenabled/allnormalregressions. REVIEW R64 DEFER outsidepublicdescriptorreplay.
 
 EXP1522 LOCAL PRELAUNCH ACTUAL / METADATA CORRECTION BEFORE 2026-10-19T11:28:31.011919+00:00: Rootprereqslaunch_guardSTOPbeforeANYstage/SSH/guestinstall/launcher; no EXP1522hardware/buildran. Sourceharness unrestricted1519->1522 substitution corrupted ONE substringinsideimmutable RALLOC-COPYRIGHT SHA a95ed32104a04141fe9cf19e8c121519b0197061b6cc24085b7c2200a7b0e449 ->...121522... . Actuallicensebytesunchanged; accepted1519package-artifacts receipt exactlymatchesactualallfiles. Rootcomparedcomplete1519vs1522packageartifactJSON: ONLYthatonehash differed; restoredENTIREpackage-artifacts1522.json BYTEIDENTICALaccepted1519 (NO hash rewritefromunqualifiedsource/no signedbytechange). RealmetadataRED1/GREEN0 preservedrevision-before-exact-package-hashes/stop-and-repair.json SHAa505ad31d1f5a6e6df625e6ddc90e11a5c5552ffca58b7f71fefa6d92fa0481c. OriginalbadJSON/DRAFTmanifestpreserved; newDRAFT5068172ad50b80a1e61ebbcefe3a38c670195ede875fa3078930fc60b10c7371. AllhardwareBEFOREhypothesis/artifacts/newprobe49f94edd/prior1519recovery unchanged; repairprecedesFIRSThardwarelaunch same1522ID (notrerunafterhang). Immutablepackageartifactmanifests MUSTbecopiedbyteswithoutglobalIDsubstitution infuture; rebasepath/runmetadataonly. RefreshRootapprovaltoTHISbefore40/newmanifest, rerunprelaunchguards thenFIRSTrun1522.
+EXP1522 BEFORE 2026-10-19T11:29Z (PACKAGE1522: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD 3d40cdaf038b9a8a7fa8509ebc4d3dd4303a4b09 (probe-only C26 sameclosedlist replay with replaced volatileCBV afterfence; SAME signedpackage1506/runtime54437/source3d40 baseline;61nonE+C21E SKIP;no driver/caps/firmware changes) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF cfd902bc, sys 50d2ae7e, UMD 7147d9f2, catalog 3ed4b21f, DriverVer 30.0.1506.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1522.sh 7a4bc7e538d1db93 f90fbab58754cecb ff59bc18ec853f2e ; C: free 26.85 GB; recovery rec1522h/recover.sh; probe probe1522.sh (01aedc3c39022ca6); then the standard benchmark (EXP1184 harness: playnoovl).
+PROBE-ONLY C26 EXP1522, SAME SIGNED PACKAGE30.0.1506.0/source3d40:
+WHY THIS HYPOTHESIS:
+1. ExistingC5C records/closes/submitsonce; C6A resets/rerecords. No acceptedcontrol proves SAMEclosedlist replay with newlyreplaced shader-visibleCBV.
+2. ActualDDI preservesdescriptorlocations forroot1.0tables anddereferencesduringOwnerBindings/ReplayDispatch. Existingownerbind/unbindsconstantbuffers aroundeachlaunch; stalebinding/cache atsecondexecution wouldretainoldbuffer.
+3. C26 keepsbothCBVresources/heaps/list/allocator/PSO alive, fencesexactly before changingONEdescriptor; root1.0volatility explicitlypermitsthis. Oldshader/bodyunchanged, no unqualifiedproductionhook.
+ATOMIC CONTRACT: none. Oneindependentprobe-only lifecycle checkpoint, no driver/runtime/caps/firmware/signaturedelta.
+WINDOWS CONTRACT: root1.0volatileCBV maychange onlybetweencompletedexecutions; sameclosedlistreplay withliveallocator/resources. No resets/inflightupdates/1.1flags.
+AGX/ASAHI CONTRACT: existingOwnerBindings rereadsdescriptor, bind_stage setsactualconstantbuffer, OwnerDispatch launchesandunbinds. Samequalifiedpackage1506/runtime54437/source3d40 baseline.
+TRANSLATION: twoexecutionsofSAMElist; pass0CBVbufferA gives7*i+3; afterfenceoverwriteGPUCBVslot tolivebufferB gives11*i+3. RestoreUAVstatewithineachlist;32768totalexactwordcomparisons; AGX_D3D12_C26 ownPASSline/tworeplayreceipts. No newshader orpublicSM6/capchange.
+WHAT IS STILL UNKNOWN: actualruntime/native repeatedlist descriptor/cache rebinding betweencompleteexecutions; sourceintentcannotreplaceactualGPUreceipt. No predictedbug or generalmutableheap/multiqueue/OOM/lifetimeclaim.
+Expectedafteractual1519accepted:61nonE PASS (prior60inclC25 +newC26) +knownC21E SKIP, total62logicalsteps, NEVERALL62PASS. Actual1519 C25PASS/60nonEPASS/regressionsbaseline/RECOVERY_DONE/PackageAbsent verified.
+SameordinarySMOKE/GL/internalGL/CS ENABLED playnoovl/corpus/DWM/KMDpool5574/RUN_PRESSURE1. PREPACKED only/no latecompile/repack/sign. WOW61/88/signed6bytes/13notices/source719/receipt28aec unchanged; signerE9BEtestroot/no publictrustclaim.
+Recovery: requireactual1519Rootreviewedverdict/regressions/RECOVERY_DONEPackageAbsent beforeanynewactivation. FactoryV2host10f7771d/sourcepower unchanged; new1522wrapper generateddynamic, recordallfiveactualhashes beforeboot. No ordinaryGPU-hiddenboot.
+ROOT probe1521accepted PE49f94edd50ca602f1828b59e3d1fc5a55e8729917c20da9456fd7bebdb76c120/review9a27cf3f; prior1519rootverdict d96e41d044ea51713767737102f4c53a26825356b20c164c525a2ada7d26d642/recovery 0f4d16511cc90543c0891bd368f6b35ab92ab3e1e7e1a7344e57a7e19a35c9b7; ROOT BEFORE committedbeforeactivation.
+PACKAGE_ARTIFACTS:
+cfd902bc92e666a327f98231a0c2fa22524a4d35432af11566b332e1b10b9bcd  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/AppleAgxRenderAdmission.inf
+50d2ae7e0320ed136064778c263d2338444f8c596b5ffd6509018bbd56823b25  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/AppleAgxRenderAdmission.sys
+7147d9f29272670adfe679314278f14d903ff6e2a87f9242190d254579ba325d  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/AppleAgxRenderAdmissionUmd.dll
+3ed4b21faf31eb7015e0dc4f799f395d799368f53b221176e0eb78ae200b9ffe  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/AppleAgxRenderAdmissionUmd32.dll
+7a4bc7e538d1db93c6a02c698b7eb1c5321e6e344f4c38cedc57d41a5fcfb2e9  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/manifest.json
+f90fbab58754cecb55caa6be24542776e8a2349abb3dba2f4c630fcfff7eb870  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/hardware-manifest.json
+28aecde1935cd7e42ac4c5c561b00b69e1dd854d7b2e48601dcfe34acc210d23  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/kmd-build-receipt.json
+ff59bc18ec853f2e87f129ac3313d17a9ccabb2124dd58abf66a520bcdf74349  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/full-owner1522.sh
+SOURCE_ARTIFACTS:
+5b286c06c8df704b4f497ab501eca95bf214d80decb6c89f9ce2092a83131f95  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/source.zip
+b4cedfe662a170e9035127447bad4d3dde23dcb0a3cb9b555797e7cd6a21fa24  /Users/pavel/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay",
+  "ExperimentId": "1522",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "10f7771d1e34fe49f283ca32ae895d36b5664c8e761959e877ed820b6ec27f6f"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/evidence/rec1522h/recover.sh.legacy-hidden",
+      "Sha256": "d3b162d2954ccb47a075882786f1114df7c2da0f4a03229c5edb8ccabac6d506"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1522-d3d12-volatile-cbv-replay/evidence/rec1522h/recover.sh",
+      "Sha256": "3175058cae97bb7bd25f9f5fbe62ed177279999369d17146cf97a4c388d85666"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
