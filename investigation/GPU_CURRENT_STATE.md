@@ -9,131 +9,75 @@ source preparation only until explicit root BEFORE/approval. Preserve user dirty
 Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 `investigation/CLAUDE_WORKING_METHOD.md`. Consult only referenced ledger entries.
 
-## IMMEDIATE: EXP1472 accepted / hash promotion then CAT-only repack pending
+## IMMEDIATE: GPU EXP1471 ACTIVE — DO NOT restart or end turn
 
-- EXP1466 COMPLETE/ROOT accepted CORE BUILD ONLY:353freshARM64objects/7archives,
-  361rc0/170.5s commandspan/250actualTUsonecanonical551fc/nooldincludes.
-  Alloriginal8785+snapshot+generatedpostpinsMATCH; rawacceptedFalse retained.
-  `.local/c15-core353-build1466-result` rootreviewb6af9a29, artifactmanifest
-  e98691f0834852d064a2d16ee18ff8d8e341586e8a503e1e50f08b58c900c27a.
-  Controller92145finished; qualified core source-root.json EXACT3keys exists.
-  Native C:\Users\pauls\EXP1466-core353-unsigned\{mesa,build}.
-  Warnings retained/NOenum-bitfieldconversion warning; no runtime/GPU acceptance.
-  Next1467 reserved C:\Users\pauls\EXP1467-native-runtime-unsigned; kmdSOURCE
-  prepares44Asahi/runtime explicitfiniteextension; sm51SOURCE actualcachegate.
-  Frozen698file driver project sourceZip `.local/c15-abi-package-source`: SHA
-  6ecc9fc2642e8ca294d41ec076b759fe0a71e18cc68ef6334e148b8a5b985dde;manifest
-  3fa24bc6f0348f154376ad417f0f73ffb19193b929852b2a639df26b81ba9dc7.
-  Reuse qualified native library/props inpackage, no duplicatecompile.
-  EXP1467metadata296 readDONE295hash/1missinglibagx_shaders.h; rawstdoutSHA
-  11124ab1c900bc8d7ab786cf7f5144c7d72bc1001ad2ea553add9d49949db038. .local/c15-runtime-metadata1467;
-  session19737finished/ownreaderclosed. PID41676RECYCLEDneverreuseoldkill.
-  Missingheader UNUSED pernative5453/runtime498: actualOWNER_GENERATED header/C
-  pinclosed. EXP1467STOPbeforecompiler0commands coreDBpin incorrectlystagedLF
-  insteadnativeCRLF. RawSTOP.local/c15-runtime1467-result; no core/source change.
-  ActualDBfetched.local/c15-runtime-db1468/compile_commands.json6867713B
-  91dede240314809bf2f934225bf7089f40ee51e8fe33a756e08336944c71667e.
-  ALL860semanticrecordsEQUAL; exactnativeJSONsaveCRLF reproducesrawbytes.
-  EXP1468STOPfirstactualTU aftercompile/BEFOREobserveracceptance: agx_builder.h
-  unpinned; rawallincludesalsoexposeduatomicdrm_fourcc.h. ALL12276+280postMATCH.
-  SourceMeson passaddsactualselectedlibagx.h/libpoly.h;1469finite4readALLHASHED.
-  EXP1469COMPLETE203rc0/3stages/45compiler+link/2gens+154runtime+archive.
-  ROOTnativearchive154AA64memberhashesmatchall154objects;119headerTUs551fc.
-  ALL12280+280postpinsMATCH/2510outputhashes; rootreviewc71097c2.
-  Native_runtime.lib4070192Bbada08b8/props37d8c7bf/runtimeJSONdcb99414;
-  .local/c15-runtime1469-result, controller44229FINISHED.
-  EXP1470CACHEPASS: actualstore/initempty,retrieveNULL/178deps/post12854MATCH.
-  .local/c15-runtime-cache-preprocess-result/root-review1470.json73825c0f.
-  No PE/GPUclaims.
-  EXP1471actualMSBuildPASS37.55s/0errors/30.0.1471.0/source698PASS.
-  OriginalouterPOSTwrapperSTOP Argumenttypesmatch; no finalverdict.
-  Raw.local/c15-package1471-result/logSHA8ccdcf4f/ownedchildRC0record.
-  RootUMDscan3236notes/275unique/30aliases +1unknownu_format_gen.h.
-  OriginalSTOP preserved, DO NOT reruncompiler.
-  EXP1472metadata7DONE(all4products+2PDB+formatgenheaderHASHED).
-  POST_ONLY BEFORE now: .local/c15-package-post1472-prep/post-review.ps1
-  0c6bf218/source13573pins; normalizeeveryactualownerpath +ToArrayactual
-  CPUregressionsteps/2physicalstackchecks then6productcopies intoNEW
-  C:\Users\pauls\EXP1472-package-post-review. Separatepromotionpending.
-  POST1472DONE/ROOT9743a84a acceptedBUILD1471ONLY; 275uniqueownerheaders/
-  58actualaliases/GenericListRED->ToArrayGREEN/13573postMATCH.
-  ARM64stack13824/WOW6544PASS; physicalAA64SYS+UMD/copy6productsPASS.
-  Host .local/c15-package-post1472-result; controller65754FINISHED.
-  PromotionNOWpreregistered .local/c15-package-promotion1471 (8hashrows);
-  neveroverwriteDIFFERENTexisting1471file; preservesrawSTOPand1472copies.
-  RepackSOURCE .local/preparation-1471-v3-drafts: NOTlaunched.
-  Exactprimaryrepackageff7277d6/INF88f3832c readDONE, CAT-onlysign/version
-  fromactualSYS; clearsallOutfiles so preserveoriginals beforeexplicitrepack.
-  Exact4signtool/stampinf/inf2cat/verifierhashread .local/c15-repack-tools-metadata1471
-  session23280DONE4/4toolhashclosed; verifier9595EXACTfrozenrepohelper.
-  Repackff7277d6 signsCATonly, SYS/UMDunchanged; originalOutwillbecleared
-  afterdurablepreservation. No guestinstall/hardware experimentstarted.
-  Adds280pinnedsourcefiles tocoredest withoutrewritingexisting;
-  strictactualshowIncludes/toolpins/postmaterializedpins/3existingfrozenhelpers.
-  Compiler45+link thennativeprepare/runtime production44+remainingselectedTUs.
-  PackagewrapperSOURCE .local/c15-abi-package-build-prep now1469base, NOTexecuted.
-  kmd SOURCEwireplan a431d2fa conditionalWOWretention: rawNIRserializedshader_info
-  cannotcrosscacheidentity blindly; sharedGPUVA envelope carriescompiledBO/VA.
-  Cachefinalizer .local/c15-runtime-cache-finalization-v2-prep READY8be46169,
-  0f75a641 finalizer parameterizesactualsuccessfulroot, no1467successclaim.
-  Runtimecachegate revisedsource .local/c15-runtime-cache-preprocess-switches-v2-prep
-  READY2de2a51b/runnerede69040 (exactswitchcheck, forced/FIpreserved).
-- EXP1461native7rc0/8395pins/4actualTUs
-  canonical551fc header; EXP1462 J313bothCPUsteps exit0/stderrEMPTY. Fivegetter
-  markersPASS;4569C/C++checks0fail/alllegalvalues/neighbors/disjointmasks; all12
-  rawsnapshots+selectedoffsetline BYTEEQUAL1460pristine; sizeof440/align8.
-  Artifact `.local/c15-enum5-cpu1462-result/artifact-hashes.json` SHA
-  `0a6b440b4e20f9a70c4db0a6f251c12780e4cfa13d22ba4b7c3d4d328fb4c561`;
-  root reviewd3b032536a7a9dd9ef64f8b0c23ba45e281c3ace27b0ae4429e7063692434250.
-  This is isolated primitive GREEN, not full production/cache/GPU adoption.
-- CURRENT_ROOT originalprojector+6C/C++fixtures+optin tests committed
-  **189c08a066d65d8e1772b5f50e156c4a07def9e0**. Optional --mesa-source on3builders,
-  COREBUILD/native/compiler source identity guards +testcaller publicarg repair
-  committed **e443319043fa4c5bcd40d351f9238e391c6476b1**; ledgers31c49280.
-  Actualcore BUILD/source-root.json must EXACT3keys mesa_source/mesa_build/
-  shader_info_sha256551fc, ONLYafterall353/7success/postpins. Rich provenance
-  separatecore-build-identity.json. Defaults unchanged; no oldlibrary mixing.
-- EXP1463 fullattempt1 140 failures from23new shared testloader literal-path
-  rewrite failures, allsamecause. Preserved. Caller nowuses --mesa-source and
-  actual --mesa-build; ALLassertions retained/29affectedtestsPASS.
-  full-attempt2 **1617/219.389s exact117baseline67fail50error18skip/noaddedremoved**,
-  13postpinsMATCH; logd08d1277aa792c8d30b7eec03987c345a90a050fb1373b07381adedb434a133d.
-  No whole-suiteGREEN. Sessions43406/81218finished.
-- Futureproduction source snapshot **5e64cc617884ac2767a978b72790e3ec5a5c2b55**,
-  baseacceptedC24b5fcb91c+EXACT4verifiedbuildhelper overlays. Internalref
-  refs/agx-source-snapshots/c24-unsigned-shader-info, archive
-  `.local/c15-abi-driver-source-snapshot/source.tar` SHA
-  `531ec778d1b0e24f4a4452ec0f1ec2e430b8811f186eae2490d9fad08db97523`.
-  Current unvalidated666publisher/DDI edits EXCLUDED. No branch/index reset;
-  userdirtyMu preserved. Future runtime/UMD --project uses THIS snapshot.
-- Fullcore SOURCE prep `.local/c15-full-core353-source-prep` has353compile/
-  7archive exact860DBgraph. Oldrun_core353/controller prototypes have stale
-  PENDING generator/schema blockers; DO NOT execute unfinalized files.
-  kmd AGENT now explicitly **followup_task** finalizing freshEXP1466 runnable
-  bundle. Allmetadata closed; source-only untilrootBEFORE/approval. Needfinal
-  actualSELF/stagemembers/hash crosscheck afterrootrebase.
-- IMPORTANT coordination: send_message to a completed agent DOES NOT start it.
-  Root previously delayed finalprep with queuedmessages; corrected via
-  followup_task. Checklist_agents and wake completed lanes explicitly. Never
-  wait indefinitely. sm51 source cache proof bf89b145 is DONE: Windows build
-  860 actual commands noENABLE_SHADER_CACHE/sourceMeson excludesWindows.
-  Newruntime mustpreprocess actual agx_disk_cache.c command andcheck3bodies
-  empty/NULL withclearedCL/_CL_; runnable source gate prepared inparallel.
-  This is later runtime acceptance, not core compilation blocker.
-- Generation decision55807712 ROOTAPPROVED: SAME20immutablegeneratedinputs,
-  all353objects/7archivesFRESH;19rules/28primaryinputs/23PythonIO reviewed,
-  patchedheader notgeninput. No Meson/Mako/PyYAML execution/alias guesses.
-  EXP1464 fixed364metadata363hash/1MISSINGextensionlessmeson; actualexe exists.
-  Rootlocal360primarybytes allnativeMATCH; no referenceclean.
-  EXP1465 fixed8remaininggeneratedmetadata8/8/0.0816s/rc0/noorphan, including
-  nir_opt_algebraic.c55.56MB76280815. Raw in `.local/c15-core353-metadata1464`
-  and `.local/c15-core353-generated8-metadata1465`; sessions93567/4220finished.
-- Initial1466 review completed/BEFORE committed/build started; retain below gates.
-  Next: collect1466actualinclude/archive/results thenROOTreview (actual platform bytes,
-  copiedgenerated20, onecanonicalheader551fc, no oldMesa/build includes),
-  rootBEFORE/approve and START353build immediately. Use sensible bounded
-  largeTU timeout/stage progress. No newanalysispass or C24repeat. Whilebuild
-  runs prepare44Asahi/runtime/UMD +freshpackageGPUregression pipeline.
+- Hardware pipeline started04:11:32Z, root exec session25829. Activeprep
+  `.local/preparation-1471`; run1471.sh ->chain1471/newexp/watchdog.
+  HARDWARE BEFORE d8bbac7a; generatedstage/factorysupplement commitabf23b2b.
+  Allguards+prereqsPASS/PACKAGE matchesbaselineexceptARM64 rebuilt/version;
+  HASHES_MATCH23/ARTIFACTS_AND_STAGE_PASS; normalvisibleFactoryV2PASS.
+- Scratchpad `/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`:
+  launch1471.log, chain1471.log, newexp1471.log, run1471.log, watchdog1471.log.
+  Experiment `.local/experiments/EXP1471-arm64-shader-info-unsigned`.
+  Boundedpoll until TOOL_d3d12-on_END AND NEWEXP_DONE, then ownreceipts/regressions,
+  ordinaryorderedrecovery rec1471h/recover.sh ->RECOVERY_DONE. NO finalwhileactive.
+- Finalpackage30.0.1471.0: SYS6378e5a94ea8ad62b0984435803b36734e219c995cc18bfa43813e28d2483284;
+  ARM64UMD1b89add05698f74fadcbc2c07b7f9593397631d40565c4067c1e63c9b047dae0;
+  INF633ba99c1eb0aa195a6cd6d99affb7c29a4d35436ab37b9320f82d00c1cbbee1;
+  CATee258bb54a0abf555e554687b6dc5babba0e37e72c47e51b5a43ea036eeb9b2a;
+  WOWICDd51ebf72/WOWUMD1625ffde UNCHANGED. CATcryptoSigPASS/leafE9BE15BD2A184BFABA0C8035B3C620C58037A241;
+  certDER97145866...EXACTpriorpinned.cer. BuilderWinTrustselfsignedrootuntrusted
+  recorded; sameguesttestsigningprofile, no new publicrelease/trustclaim.
+- Recovery1471FactoryV2generated/sourceHostShell10f7771d1e34fe49f283ca32ae895d36b5664c8e761959e877ed820b6ec27f6f;
+  wrapperb11f90088e84924abaccd2c7d06a3124c6c00a932cbd799a010bb6022980b943.
+  NormalGPU-visible cleanup only, previous1439Absent/Code28; no manualprereboot,
+  no fakePID/foreignbroadkills/ordinaryhiddenboot. Bothcontrolplanesbeforephysicalask.
+- CandidateproductionSOURCE5e64cc617884ac2767a978b72790e3ec5a5c2b55/base1439b5fcb91c,
+  EXACT4helperoverlays/projector; DDI/winsys/KMD/C24/PBEbodyunchangedbaseline.
+  CurrentunvalidatedC15publisher666abec/caps EXCLUDED. Sourcezip6ecc9fc2642e8ca294d41ec076b759fe0a71e18cc68ef6334e148b8a5b985dde;
+  manifest3fa24bc6f0348f154376ad417f0f73ffb19193b929852b2a639df26b81ba9dc7/698files.
+- EXP1466 COMPLETEselected353freshcoreobjects/7archives/361rc0,250actual551fc
+  shader_infoTUs/no oldincludes;exactoriginal8785pins +snapshot/
+  generatedpostMATCH. `.local/c15-core353-build1466-result` rootreviewb6af9a29;
+  core C:\Users\pauls\EXP1466-core353-unsigned\{mesa,build}; guardreceiptEXACT3keys.
+- EXP1469 COMPLETE45compiler+link/2gens+154runtime+archive203rc0;119actual551fc
+  headerTUs/12280original+280materializedpostMATCH/2510collectedhashes,154AA64
+  archivebodyhashesmatchallobjects. Runtime4070192Bbada08b8/props37d8c7bf;
+  runtimeJSONdcb99414/rootreviewc71097c2/.local/c15-runtime1469-result.
+- EXP1470 actualcachePREPROCESSPASS store/initempty,retrieveNULL/178actualdeps/
+  12854postMATCH/semanticflagsoriginal/CL,_CL_absent; rootreview73825c0f
+  `.local/c15-runtime-cache-preprocess-result`. Native/sourcecoherence acceptedONLY,
+  no GPU outcome before1471actual.
+- BUILD1471actualMSBuildRC0/37.55s/0errors/30.0.1471/source698PASS butPOSTwrapper
+  STOP retained. EXP1472 POST_ONLY reviewsoriginalbuiltproducts/no recompile/sign:
+  3236includes/275canonicalunique/58aliases; actualGenericList@formRED/ToArrayGREEN;
+ 13573postMATCH/physicalAA64SYS+UMD/ARM64stack13824/WOW6544<16384PASS.
+  actualMSVCowner0shader_infoincludes (opaqueinterface), not fabricatedpositive.
+  `.local/c15-package-post1472-result/root-review1472.json9743a84a`; originalSTOP
+  `.local/c15-package1471-result` preserved. Hashpromotion8rows519782bc then
+  CAT-onlyrepackattempt1473DONE/ownedPID41488closed/14scalarPASS/1.05s/rc0.
+  Signedfinalfilesfrom `.local/preparation-1471-repack1473/repack1473-result`.
+  DoNOTrerunrepacks/hardware1471; thisisfirstGPUrunafter1439.
+- Private/source metadataSTOP history preserved:1467DBpin usedstagedLFd5a5
+  insteadactualnativeCRLF91dede/6867713; all860parsedrecordsEXACTsame, no coremutation.
+ 1468firstcompileactualshowIncludesunlisted2headers; primaryfinite4read1469closed.
+ 1471POSTrawpathaliases+GenericList finally bug;1472realCPUregressionsclosed.
+  Firstrepack1471NEVERsigned: JSONouter@nested14rows->onearray/pinfilterreturned
+ 14SHAarray;1473actualdiagnosticprovedplain14/scalar60c9actualPowerShellunchanged.
+  Newreadassignmentfixed/sourcefreshreceipts; originalfailuresNOTrewritten.
+- Hostcode originalprojector189c08a0 and3source-rootbuilders e4433190 committed.
+  Full1463attempt2 actual1617/219.389s EXACT117old67fail50error18skip/noaddedremoved/
+ 13postMATCH, NOTwhole-suiteGREEN. First140fail/23sharedtestcallerpathfailures
+  preservedthenpublic--mesa-source/--mesa-buildrepairwithoutweakenedassertions.
+  No morebroadrepeatunlessnewfailure/changejustifies.
+- Hardwareexpected59nonEownPASS/C14A/C24ABC; C21E separatebaselineUNCOMPLETED23B
+  ubfe/noALL60/no fixclaim. 73SMOKE+knownMSAA,GL~52/internal~59.5/CS~47,
+  corpus414each64/4/pool6+foreignreclaim1/DWM0. CS enabled. Evidencefirstthenrollback.
+- Parallel agents explicitlyfollowedupwhileGPUruns: sm51 SOURCE nextordinaryC15
+  actualNIR/rootmap -> AsahiCPUbackendfixture (notinterpreteronly), kmd SOURCE
+  truthfulSM6model/admissionownerintegrationdebts. Rootalonebuilder/guest/Git;
+  no remote/trackededitsfromagents. DoNOTredo license orsecurityblockedUBFE/c18.
+  send_message completed agent doesnotwake; usefollowup_task ifneeded; boundedwaits.
 
 ## Latest proven boundary: actual CPU NIR semantics and enum defect
 
