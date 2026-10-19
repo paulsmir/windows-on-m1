@@ -1,6 +1,7 @@
 #define COBJMACROS
 #include <windows.h>
 #include <dxgi1_2.h>
+#include <dxgi1_4.h>
 #include <d3d12.h>
 #include <stdio.h>
 #include <string.h>
@@ -3673,6 +3674,86 @@ static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step ste
     return failed;
 }
 
+/* Original C25: public DXGI flip/resize lifetime, no driver/capability change. */
+static int c25_present_resize(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    WNDCLASSW wc = {0}; HWND window = NULL; IDXGIFactory2 *factory = NULL;
+    IDXGISwapChain1 *swap1 = NULL; IDXGISwapChain3 *swap = NULL;
+    DXGI_SWAP_CHAIN_DESC1 desc = {0}; HRESULT hr = S_OK; UINT frames = 0, resizes = 0;
+    wc.lpfnWndProc = probe_window_proc; wc.hInstance = GetModuleHandleW(NULL); wc.lpszClassName = L"AgxD3d12C25";
+    RegisterClassW(&wc);
+    window = CreateWindowExW(0, wc.lpszClassName, L"AGX C25", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 120, 120, 192, 160, NULL, NULL, wc.hInstance, NULL);
+    hr = window ? CreateDXGIFactory1(&IID_IDXGIFactory2, (void **)&factory) : E_FAIL;
+    desc.Width = 64; desc.Height = 64; desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count = 1;
+    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; desc.BufferCount = 2; desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    if (SUCCEEDED(hr)) hr = IDXGIFactory2_CreateSwapChainForHwnd(factory, (IUnknown *)queue, window, &desc, NULL, NULL, &swap1);
+    if (SUCCEEDED(hr)) hr = IDXGISwapChain1_QueryInterface(swap1, &IID_IDXGISwapChain3, (void **)&swap);
+    for (UINT epoch = 0; epoch < 2 && SUCCEEDED(hr); ++epoch) {
+        const UINT w = epoch ? 96 : 64, h = epoch ? 48 : 64; UINT seen = 0;
+        if (epoch) {
+            /* Every prior command list/allocator/RTV/resource was released below,
+             * after render and post-Present queue fences completed. */
+            hr = IDXGISwapChain3_ResizeBuffers(swap, 2, w, h, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+            printf("C25 resize old_refs=0 prior_frames=%u size=%ux%u hr=0x%08lx\n", frames, w, h, (unsigned long)hr);
+            if (SUCCEEDED(hr)) ++resizes;
+        }
+        for (UINT f = 0; f < 3 && SUCCEEDED(hr); ++f) {
+            ID3D12Resource *buffer = NULL, *readback = NULL; ID3D12DescriptorHeap *heap = NULL;
+            ID3D12CommandAllocator *allocator = NULL; ID3D12GraphicsCommandList *list = NULL;
+            D3D12_DESCRIPTOR_HEAP_DESC hd = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
+            D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0}; D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp = {0};
+            D3D12_RESOURCE_DESC rd = {0}; UINT rows = 0, bad = 0; UINT64 row_bytes = 0, total = 0;
+            const UINT index = IDXGISwapChain3_GetCurrentBackBufferIndex(swap); const UINT channel = (epoch * 3 + f) % 3;
+            FLOAT color[4] = {0,0,0,1}; color[channel] = 1;
+            hr = IDXGISwapChain3_GetBuffer(swap, index, &IID_ID3D12Resource, (void **)&buffer);
+            if (SUCCEEDED(hr)) { ID3D12Resource_GetDesc(buffer, &rd); if (rd.Width != w || rd.Height != h || index > 1) hr = E_FAIL; }
+            if (SUCCEEDED(hr)) { ID3D12Device_GetCopyableFootprints(device, &rd, 0, 1, 0, &fp, &rows, &row_bytes, &total); if (rows != h || !rows || row_bytes != 4ull*w || !total || !fp.Footprint.RowPitch || fp.Footprint.RowPitch < row_bytes || fp.Offset > total || row_bytes > total-fp.Offset || (UINT64)(rows-1) > (total-fp.Offset-row_bytes)/fp.Footprint.RowPitch) hr = E_FAIL; }
+            if (SUCCEEDED(hr)) { readback = c21_buffer(device, D3D12_HEAP_TYPE_READBACK, total, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_COPY_DEST); if (!readback) hr = E_FAIL; }
+            if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &hd, &IID_ID3D12DescriptorHeap, (void **)&heap);
+            if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&allocator);
+            if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL, &IID_ID3D12GraphicsCommandList, (void **)&list);
+            if (SUCCEEDED(hr)) {
+                D3D12_TEXTURE_COPY_LOCATION src = {0}, dst = {0};
+                ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(heap, &rtv); ID3D12Device_CreateRenderTargetView(device, buffer, NULL, rtv);
+                transition(list, buffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+                ID3D12GraphicsCommandList_ClearRenderTargetView(list, rtv, color, 0, NULL);
+                transition(list, buffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+                src.pResource = buffer; src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                dst.pResource = readback; dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; dst.PlacedFootprint = fp;
+                ID3D12GraphicsCommandList_CopyTextureRegion(list, &dst, 0, 0, 0, &src, NULL);
+                transition(list, buffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PRESENT);
+                hr = run_list(queue, fence, list, base + 2*(epoch*3+f) + 1, "C25 clear-copy");
+                if (FAILED(hr)) { printf("AGX_D3D12_C25: FAIL work completion unproven\n"); fflush(stdout); ExitProcess(1); }
+            }
+            if (SUCCEEDED(hr)) {
+                unsigned char *bytes = NULL; D3D12_RANGE range = {0, (SIZE_T)total};
+                hr = ID3D12Resource_Map(readback, 0, &range, (void **)&bytes);
+                if (SUCCEEDED(hr) && !bytes) hr = E_FAIL;
+                if (SUCCEEDED(hr)) { for (UINT y=0;y<h;++y) for (UINT x=0;x<w;++x) for (UINT c=0;c<4;++c) bad += bytes[fp.Offset+(UINT64)y*fp.Footprint.RowPitch+4*x+c] != ((c==3||c==channel)?255:0); ID3D12Resource_Unmap(readback, 0, NULL); if (bad) hr=E_FAIL; }
+            }
+            if (SUCCEEDED(hr)) {
+                const HRESULT present_hr = IDXGISwapChain3_Present(swap, 0, 0);
+                const UINT64 target = base + 2*(epoch*3+f) + 2; UINT64 done = 0;
+                hr = ID3D12CommandQueue_Signal(queue, fence, target);
+                for (UINT wait=0;SUCCEEDED(hr)&&wait<300&&(done=ID3D12Fence_GetCompletedValue(fence))<target;++wait) Sleep(10);
+                if (FAILED(hr)||done!=target) { printf("AGX_D3D12_C25: FAIL post-present completion unproven\n"); fflush(stdout); ExitProcess(1); }
+                hr = present_hr;
+                if (SUCCEEDED(hr)) { seen |= 1u<<index; ++frames; }
+            }
+            printf("C25 epoch=%u frame=%u index=%u size=%ux%u rgba_channel=%u pixels=%u bad=%u hr=0x%08lx\n",epoch,f,index,w,h,channel,w*h,bad,(unsigned long)hr); fflush(stdout);
+            if (list) ID3D12GraphicsCommandList_Release(list);
+            if (allocator) ID3D12CommandAllocator_Release(allocator);
+            if (heap) ID3D12DescriptorHeap_Release(heap);
+            if (readback) ID3D12Resource_Release(readback);
+            if (buffer) ID3D12Resource_Release(buffer);
+        }
+        if (SUCCEEDED(hr)&&seen!=3) hr=E_FAIL;
+    }
+    printf("AGX_D3D12_C25: %s frames=%u resizes=%u hr=0x%08lx\n",SUCCEEDED(hr)&&frames==6&&resizes==1?"PASS":"FAIL",frames,resizes,(unsigned long)hr);
+    if (swap) IDXGISwapChain3_Release(swap); if (swap1) IDXGISwapChain1_Release(swap1);
+    if (factory) IDXGIFactory2_Release(factory); if (window) DestroyWindow(window);
+    return FAILED(hr)||frames!=6||resizes!=1;
+}
+
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     IDXGIFactory1 *factory = NULL;
@@ -3731,7 +3812,8 @@ int main(void) {
                 (void)run_isolated(adapter,"C24B",step_c24b);
                 (void)run_isolated(adapter,"C24C",step_c24c);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
-                (void)run_isolated(adapter, "C21E", volume_sample);
+                (void)run_isolated(adapter, "C25", c25_present_resize);
+                printf("AGX_D3D12_C21E: SKIP known UNCOMPLETED baseline; no new hypothesis\n");
             }
             IDXGIAdapter1_Release(adapter);
             IDXGIFactory1_Release(factory);
