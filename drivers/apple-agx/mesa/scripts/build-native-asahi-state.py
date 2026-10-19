@@ -514,6 +514,7 @@ parser.add_argument('--architecture', choices=('x64','arm64','x86'), default='x6
 parser.add_argument('--project',type=Path)
 # EXP1182: a Mesa build other than nir-<architecture> (e.g. b_ndebug=true).
 parser.add_argument('--mesa-build', type=Path)
+parser.add_argument('--mesa-source', type=Path, help='One complete pristine-derived Mesa source projection')
 args = parser.parse_args()
 if (args.native_batch_lifecycle or args.prepare_only) and not (args.windows_platform_declarations and args.project):
     parser.error('Native lifecycle/prepare requires --windows-platform-declarations and --project')
@@ -521,12 +522,17 @@ if args.gpuva and not args.native_batch_lifecycle:
     parser.error('GPUVA requires native batch lifecycle projection')
 out = args.output
 out.mkdir(exist_ok=False)
-mesa = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
+mesa = args.mesa_source or Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
 build = args.mesa_build or Path(r'C:\Users\pauls\AD04-fullcompiler-001') / ('nir-'+args.architecture)
 generated = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
 sdk = Path(r'C:\Program Files (x86)\Windows Kits\10')
 vc = Path(r'C:\VS2022Community\VC\Tools\MSVC\14.44.35207')
 llvm = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin')
+if args.mesa_source:
+    (out / 'source-root.json').write_text(json.dumps({
+        'mesa_source': str(mesa.resolve()), 'mesa_build': str(build.resolve()),
+        'shader_info_sha256': hashlib.sha256((mesa / 'src/compiler/shader_info.h').read_bytes()).hexdigest()
+    }, indent=2) + '\n')
 source = mesa / 'src/gallium/drivers/asahi/agx_state.c'
 digest = hashlib.sha256(source.read_bytes()).hexdigest()
 if digest != '5015b75863202a170f8d6015eb82a76a70ecd4b92204894fa3d1886b1baa94ba':

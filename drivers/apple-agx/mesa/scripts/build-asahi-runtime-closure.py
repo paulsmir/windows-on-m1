@@ -229,6 +229,7 @@ def write_props(path, architecture, native, library, dependencies, gpuva, proven
 
 
 def main():
+    global MESA
     parser = argparse.ArgumentParser()
     parser.add_argument('--project', required=True, type=Path)
     parser.add_argument('--architecture', choices=('x64', 'arm64', 'x86'), default='x64')
@@ -238,9 +239,13 @@ def main():
     parser.add_argument('--source-manifest', type=Path)
     # EXP1182: a Mesa build other than nir-<architecture> (e.g. b_ndebug=true).
     parser.add_argument('--mesa-build', type=Path)
+    parser.add_argument('--mesa-source', type=Path, help='One complete pristine-derived Mesa source projection')
     # The build-full-asahi.py evidence of that Mesa build (pinned library hashes).
     parser.add_argument('--compiler-evidence', type=Path)
     args = parser.parse_args()
+    MESA = args.mesa_source or MESA
+    if args.mesa_source and (args.mesa_build is None or args.compiler_evidence is None):
+        parser.error('--mesa-source requires explicit fresh --mesa-build and --compiler-evidence')
     if args.gpuva and args.source_manifest is None:
         parser.error('--gpuva requires --source-manifest')
     out = args.output
@@ -248,6 +253,14 @@ def main():
     native = args.native_source
     build = args.mesa_build or ROOT / ('nir-' + args.architecture)
     evidence = args.compiler_evidence or COMPILER_EVIDENCE[args.architecture]
+    if args.mesa_source:
+        source_identity = {
+            'mesa_source': str(MESA.resolve()), 'mesa_build': str(build.resolve()),
+            'shader_info_sha256': sha256(MESA / 'src/compiler/shader_info.h')}
+        for receipt in (build / 'source-root.json', native / 'source-root.json', evidence / 'source-root.json'):
+            if json.loads(receipt.read_text(encoding='utf-8-sig')) != source_identity:
+                raise RuntimeError('Mesa source/build/header identity mismatch: ' + str(receipt))
+        (out / 'source-root.json').write_text(json.dumps(source_identity, indent=2) + '\n')
     manifest = {'architecture': args.architecture, 'project': str(args.project),
                 'native_source': str(native), 'compiler_evidence': str(evidence),
                 'scope': 'Real native runtime/compiler archive; executable link and execution required',

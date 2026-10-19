@@ -21,7 +21,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--architecture', choices=('x64', 'arm64', 'x86'), default='x64')
 # EXP1182: a Mesa build other than nir-<architecture> (e.g. b_ndebug=true).
 parser.add_argument('--mesa-build', type=Path)
+parser.add_argument('--mesa-source', type=Path, help='One complete pristine-derived Mesa source projection')
 ARGS = parser.parse_args()
+MESA = ARGS.mesa_source or MESA
 ARCH = ARGS.architecture
 BUILD = ARGS.mesa_build or ROOT / ('nir-' + ARCH)
 GENERATED = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
@@ -29,6 +31,14 @@ CLANG = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin')
 INPUT = ROOT / 'asahi-input'
 OUT = ROOT / ('asahi-' + ARCH + '-' + uuid.uuid4().hex)
 OUT.mkdir()
+if ARGS.mesa_source:
+    source_identity = {
+        'mesa_source': str(MESA.resolve()), 'mesa_build': str(BUILD.resolve()),
+        'shader_info_sha256': hashlib.sha256((MESA / 'src/compiler/shader_info.h').read_bytes()).hexdigest()
+    }
+    if json.loads((BUILD / 'source-root.json').read_text(encoding='utf-8-sig')) != source_identity:
+        raise RuntimeError('Mesa core source/build/header identity mismatch')
+    (OUT / 'source-root.json').write_text(json.dumps(source_identity, indent=2) + '\n')
 records = []
 
 def digest(path):

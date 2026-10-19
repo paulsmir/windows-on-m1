@@ -43,15 +43,14 @@ def project(output):
     if not mesa or not libagx:
         return None
     text = SCRIPT.read_text()
-    text, n1 = re.subn(r"(?m)^mesa = Path\(r'C:.Users.pauls.AD04-d3d10-frontend-build.mesa'\)",
-                       lambda m: f"mesa = Path({str(mesa)!r})", text)
     text, n2 = re.subn(r"Path\(r.C:\\Users\\pauls\\AD04-umd-owner-004-generated\\src\\asahi\\lib\\libagx_shaders.h.\)",
                        lambda m: f"Path({str(libagx)!r})", text)
-    if n1 != 1 or n2 != 1:
+    if n2 != 1:
         raise AssertionError("projection reference paths moved")
     runner = Path(output).parent / "projection.py"
     runner.write_text(text)
     subprocess.run([sys.executable, str(runner), "--output", str(output),
+                    "--mesa-source", str(mesa), "--mesa-build", str(libagx.parents[3]),
                     "--windows-platform-declarations", "--native-batch-lifecycle", "--gpuva",
                     "--prepare-only", "--architecture", "arm64", "--project", str(ROOT)],
                    check=True, capture_output=True, timeout=300)
