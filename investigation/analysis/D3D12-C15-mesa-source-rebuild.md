@@ -57,3 +57,43 @@ Full native rebuild, actual owner dependencies, serialized/cache identity and a
 new signed-package GPU regression run remain pending. No architecture artifact is
 declared unaffected by its filename, and no old archive is admitted solely because
 an include path points at the projected header.
+
+
+EXP1466 completed the selected core closure: 353 fresh ARM64 objects and seven
+archives, 361 successful commands, 250 actual header consumers selecting the
+canonical projection. Root checked every collected artifact hash, exact command
+list, archive member counts and source identity. It accepted that build scope
+only. The raw output manifest is `d5205c4cb5dcf1299512fc87f00e537bd3f1c0e475a41bec67d4be0cd8440067`;
+the detailed review is `.local/c15-core353-build1466-result/root-review1466.json`.
+The next-stage database pin must identify the actual Windows-written database:
+6867713 bytes, SHA-256 `91dede240314809bf2f934225bf7089f40ee51e8fe33a756e08336944c71667e`.
+Its 860 parsed records match the staged database exactly; native JSON writing
+changes line endings. EXP1467's preflight refusal preserves the incorrect staged
+pin. EXP1468's first actual compiler invocation then exposed missing generated
+and platform header pins. The finite source-derived four-header read in EXP1469
+closed those identities without weakening the dependency policy.
+
+ARM64 adoption and retention of the accepted WOW stack have a concrete boundary.
+The frozen owner translates DXBC into process-local NIR before calling the local
+Gallium shader creation functions (`agx_d3d12_windows.cpp:273` and `:1112`).
+`agx_win32_gpuva_batch.c:698` builds a native command BO, and
+`umd_gpuva_windows.c:1354` submits native private data and GPU virtual ranges.
+The scalar versioned envelope in `apple_agx_g4_submit.h:84` and its KMD parser
+`gpuva_g3_windows.c:4128` carry native commands, addresses and attachment data.
+They do not marshal a `shader_info` compiler object on the inspected path.
+This permits conditional retention of the complete, internally consistent WOW
+closure while rebuilding every selected ARM64 participant. Exact WOW hashes and
+unchanged shared submission ABI remain package gates. No claim is made that the
+WOW binaries receive the ARM64 storage correction.
+
+Raw compiler serialization is a separate interface: Mesa `nir_serialize.c:2239`
+writes a by-value `shader_info` using `sizeof(info)`, and `:2301` reads that raw
+layout. The isolated raw snapshot comparison does not establish arbitrary cache
+compatibility. No serialized NIR or compiler-cache blob may be exchanged between
+these separately built closures without an explicit identity contract. Actual
+new-runtime preprocessing must demonstrate that disk-cache store/init bodies are
+empty and retrieval returns null, with the real compile flags and cleared
+inherited CL options. Historical WOW cache policy remains a baseline condition,
+not a new measurement. The bounded primary review is
+`.local/c15-wow-wire-boundary-source-plan/plan.md`, SHA-256
+`a431d2fa3caa293c2c55f9be5877e6d0c66c66bb7e5133e990d14e10606e8c69`.
