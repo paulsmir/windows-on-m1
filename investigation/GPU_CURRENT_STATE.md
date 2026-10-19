@@ -9,7 +9,7 @@ source preparation only until explicit root BEFORE/approval. Preserve user dirty
 Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 `investigation/CLAUDE_WORKING_METHOD.md`. Consult only referenced ledger entries.
 
-## IMMEDIATE: EXP1472 POST_ONLY review of successful1471 package build
+## IMMEDIATE: EXP1472 accepted / hash promotion then CAT-only repack pending
 
 - EXP1466 COMPLETE/ROOT accepted CORE BUILD ONLY:353freshARM64objects/7archives,
   361rc0/170.5s commandspan/250actualTUsonecanonical551fc/nooldincludes.
@@ -55,12 +55,19 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
   0c6bf218/source13573pins; normalizeeveryactualownerpath +ToArrayactual
   CPUregressionsteps/2physicalstackchecks then6productcopies intoNEW
   C:\Users\pauls\EXP1472-package-post-review. Separatepromotionpending.
-  Host .local/c15-package-post1472-result; monitor bounded onceSTARTED.
+  POST1472DONE/ROOT9743a84a acceptedBUILD1471ONLY; 275uniqueownerheaders/
+  58actualaliases/GenericListRED->ToArrayGREEN/13573postMATCH.
+  ARM64stack13824/WOW6544PASS; physicalAA64SYS+UMD/copy6productsPASS.
+  Host .local/c15-package-post1472-result; controller65754FINISHED.
+  PromotionNOWpreregistered .local/c15-package-promotion1471 (8hashrows);
+  neveroverwriteDIFFERENTexisting1471file; preservesrawSTOPand1472copies.
   RepackSOURCE .local/preparation-1471-v3-drafts: NOTlaunched.
   Exactprimaryrepackageff7277d6/INF88f3832c readDONE, CAT-onlysign/version
   fromactualSYS; clearsallOutfiles so preserveoriginals beforeexplicitrepack.
   Exact4signtool/stampinf/inf2cat/verifierhashread .local/c15-repack-tools-metadata1471
-  session23280 started. No guestinstall/hardware experimentstarted.
+  session23280DONE4/4toolhashclosed; verifier9595EXACTfrozenrepohelper.
+  Repackff7277d6 signsCATonly, SYS/UMDunchanged; originalOutwillbecleared
+  afterdurablepreservation. No guestinstall/hardware experimentstarted.
   Adds280pinnedsourcefiles tocoredest withoutrewritingexisting;
   strictactualshowIncludes/toolpins/postmaterializedpins/3existingfrozenhelpers.
   Compiler45+link thennativeprepare/runtime production44+remainingselectedTUs.
