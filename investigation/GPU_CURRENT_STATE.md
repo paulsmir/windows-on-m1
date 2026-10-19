@@ -8,33 +8,40 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## IMMEDIATE: CPU1487 CONFIRMED / CURRENT projectorfix adopted, host gates complete / commit and start1488
+## IMMEDIATE: native BUILD1489 ACTIVE / CURRENT clone helper software1490PASS
 
-- EXP1487 actualJ313 REDPID6548exit1/32checks6fails/sixNIRFAIL+2borrowPASS;
-  GREENPID564exit0/32checks0fails/eightPASS; stderr0/notimeout/15inputsunchanged.
-  Root34artifacthashesMATCH/review53e8130d295254c7c9410b6fd94ee1d50d1bab57003eb3affaa3adf7f7919c3c;
-  .local/c15-nir-consume-cpu1487-result, manifest11135bfabf8ba57959aa4a00d7f451908e4f64f6b77aaa793cc820a51e2b9b9a.
-  Actualselectedcomplete initialNULLbranches only; no fullconstructor/latefail/fullOOM/BO/GPU claim.
-- CURRENT projector nowd3da7de: exactly2NIRconditionalconsume guards, helpercallAFTER
-  project_shader_failure/oldhelperASTunchanged. DurableactualCfixture61da4cc3,
-  CURRENT-onlyselector0f37459f/doc added. Rootcurrentselector onpristine5015 PASS,
-  fullGREENf94f37eb;source/license remainderunchanged. Affected34testsPASS1.502s.
-  Hostcoverage1618 combined envfixed1583 plus rootcwd36 queuemodule replacing1importerror;
-  EXACT117baselineentries/noaddedremoved/67fail50error19skip, NOTwhole-suiteGREEN.
-  RawfirstwrongPYTHONPATH andsecondcwdimporterrorspreserved; no thirdfullrun.
-  .local/c15-nir-consume-current1487-full-host-envfixed/combined-result.json.
-  Commitfix+regression now, thenCHANGESexact40hash.
-- CURRENT ownedPROGRAM->normalizedNIR module2a028b4b actual1486PASS79checks/384words,
-  twoCSnormalizationmarkers/3negative346, no productionDDI/caps/buildhook/GPU.
-  1484native5RC0/post12764/40hashes/BOTHphysicalAA64PEimports11 qualified1487.
-- Next acceptedplan investigation/analysis/D3D12-C15-owned-nir-adoption.md:
-  separate unlinked callerclone/metadata/consume helper + realNIR callbackfixture,
-  retainpreparedoriginal/map/root, no lazyEnsureOwner/DDI/SM6cap publication.
-  Nextproposal .local/c15-nir-handoff1488-prep/READY.json ebf0325d; rootreview/testnext.
-  Native1489scaffold .local/c15-nir-handoff-native1489-prep SOURCEONLY/PENDINGsources.
-  Root alone adopts tracked/Git/guest/builder.
+- Activebuild session97260: python3 .local/c15-nir-handoff-native1489-prep/controller.py
+  rootapproval878145e3e0e99f9b97cfe21348ed6d46c20b4d822570c91849ef03a7ed9b4dba,
+  BEFOREb6af06a7; freshbuilderC:\Users\pauls\EXP1489-nir-handoff-build-only.
+ 15commands14compile+link/13004pins/33CURRENTfiles/35ownednestedpinsMATCH;
+ execution9a64cda232c2c98ec2f64f0bd3674b3b78cebaa266ce8423488f7ff0e3097e3d,
+ ZIPcd79001f99fc927f98c0dcafbcf77ebfbddd1be899bf245c9fbe9bd3eb6a4108.
+ .local/c15-nir-handoff-native1489-result; pollbounded, noPEexecutiononbuilder.
+- New6CURRENTuntrackedfiles agx_owned_nir_pipe.{h,c}, owned_nir_pipe_fixture.c,
+ owned_nir_pipe_driver.cpp, owned_nir_pipe_source.py,test_owned_nir_pipe.py.
+ Helper57c287c0/header2aa77b3b/fixture6feb18b2/driver50037bc2/renderer1ba64bab/test1c7f4362.
+ Unlinked/defaultOFF; clone borrowedNIR, gatheractualmetadata, callbackconsumesclone
+ evenNULL, outputpublishlast; noguessedfreeonNULL/no normalization repeats/noDDIhook.
+- SOFTWARE1490PASS18.531s/18commands/7117postMATCH/79bridge+199callbackchecks;
+ 4callbackmarkers(CS2VS1FS1), FSsource+clonesactualnir_serialize equal,
+ fixturepairrollback/ref0,384wordoracleTWICE/3negative346each/4CSnormalizationmarkers.
+ Rootreview.local/c15-nir-handoff-current1490/root-review1490.json
+ 62a54b686c3a8efe510e115acf344c6a6571f564b389e50a23dd227299f3ca14.
+ 1488STOP preserved14oldRC0/firstnewC missingrealGalliuminclude; rootfixedONLYportable
+ recipefromalready-pinnedp_context header. No modulechange/no shim/retryunder1488.
+- Fullhost ACTIVE session76627 script/tmp/full1490.py rootcwd discover-s-tests;
+ .local/c15-nir-handoff-current1490-full-host. Expect1619/117oldfailures+20skip,
+ neverclaimwhole-suiteGREEN. No sourceeditsuntilnative+fullhostfinish.
+- Agent sm51SOURCEONLY preparingCPU1491 .local/c15-nir-handoff-cpu1491-prep,
+ freshguestEXP1491-nir-handoff-cpu. EXE/importspending1489rootreview; parser/BEFORErequired.
+ Rootaloneguest/builder/Git, no productionAsahi constructor/BO/GPUclaim.
+- EXP1487confirmedRED6NIRFAILvsGREEN8PASS32checks; fix+durableregressioncommitted
+ a905b660/validatedCHANGES73d2dec5. Rootreview53e8130d295254c7c9410b6fd94ee1d50d1bab57003eb3affaa3adf7f7919c3c.
+ CURRENTprojectord3da7de earlyconsume2guards. Host1618combinedEXACT117oldfailures.
+- Module2a028b4b ownedPROGRAMnormalizedNIR actualCPU1486PASS79checks/384words;
+ acceptedhandoffplan76b091ed investigation/analysis/D3D12-C15-prepared-nir-pipe-handoff.md.
 - Normalinert1471RECOVERY_DONE/Code28PackageAbsentnoService8CPU unchanged byCPU1487;
-  no activeGPUexperiment/no rollbackneeded. SecurityblockedUBFE/C21Eneverreroute.
+ no activeGPUexperiment/no rollbackneeded. SecurityblockedUBFE/C21Eneverreroute.
 
 ## Latest completed CPU boundaries
 
