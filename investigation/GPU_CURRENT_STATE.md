@@ -8,7 +8,24 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-19 23:38Z — EXP1573 RECOVERY_DONE; EXP1580 PACKAGE BUILD ACTIVE
+## CURRENT 2026-10-19 23:44Z — EXP1582 SIGNED PACKAGE READY; EXP1573 RECOVERY_DONE
+
+EXP1573 root identity validated direct ROOTC/ROOTG receipts,63nonE PASS,
+exact recovery finished Code28/PackageAbsent/noService/8CPU. Normal guest boot
+23:37:26Z; its recovery-owned normal run_uefi PID79948 is alive and will end
+through the next ordered restart. No installed AppleAgx package.
+NEXT isolated heap-registry source621ffcc4/e5802714 has real TSan RED/36GREEN,
+WDK3rc0/fullhost1639 exact124known IDs, runtime1578 and fresh8-1579 PASS,
+full package1580 and signed1581 accepted. Final 30.0.1580.0 packet
+.local/c15-final-package1580-signed1581.zip SHAa4d5f2f79dbee5b2558b84ffafa67289175e5b7c0791d42e55bfbdcf11f8fb02;
+receipt3fe21b5d/source621ffcc4/manifest55efd511. EXP1582 full BEFORE
+.local/preparation-1582/before1582.txt SHAefa5a44e; 28-file prep manifest
+SHA81dcdee8. Root approval and dispatch pending after this ledger commit.
+Expected same63nonE+C21ESKIP, smoke73+knownMSAA, pool/fl11/corpus/DWM;
+normal FactoryV2 exact package1580 cleanup after run. No complete shared-owner
+context/concurrency or public SM6 claim.
+
+## Prior state superseded by signed EXP1582 package
 
 EXP1573 signed1571/sourcea1e01c91: ROOTC+ROOTG direct bound-state receipts
 and output PASS; 63unique nonE PASS/0FAIL/C21EknownSKIP, baseline missing0.
