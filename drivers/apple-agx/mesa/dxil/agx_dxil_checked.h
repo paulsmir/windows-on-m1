@@ -13,6 +13,7 @@ dxil_spv_result agx_checked_begin(void) AGX_DXIL_NOEXCEPT;
 dxil_spv_result agx_checked_end(void) AGX_DXIL_NOEXCEPT;
 dxil_spv_result agx_checked_parse(const void*,size_t,dxil_spv_parsed_blob*) AGX_DXIL_NOEXCEPT;
 dxil_spv_result agx_checked_blob_free(dxil_spv_parsed_blob) AGX_DXIL_NOEXCEPT;
+dxil_spv_result agx_checked_compute_profile(dxil_spv_parsed_blob,dxil_spv_compute_profile*) AGX_DXIL_NOEXCEPT;
 dxil_spv_result agx_checked_stage(dxil_spv_parsed_blob,dxil_spv_shader_stage*) AGX_DXIL_NOEXCEPT;
 dxil_spv_result agx_checked_entry_count(dxil_spv_parsed_blob,unsigned*) AGX_DXIL_NOEXCEPT;
 dxil_spv_result agx_checked_entry_name(dxil_spv_parsed_blob,unsigned,const char**) AGX_DXIL_NOEXCEPT;

@@ -10,7 +10,7 @@ class CheckedOwned(unittest.TestCase):
   a=json.loads(approved.read_text());self.assertEqual(a['schema'],1)
   before=os.environ['AGX_C15_CHECKED_AUTHORIZED_BEFORE'];self.assertTrue(before and not before.startswith('PENDING'));self.assertEqual(a['approved_before'],before)
   out=Path(target).resolve();self.assertEqual(str(out),a['receipt_root']);self.assertFalse(out.exists(),'fresh output required')
-  m,pins=expected_inputs();self.assertEqual(a['inputs'],pins);cs=commands(out);self.assertEqual(a['commands'],cs);self.assertEqual(len(cs),9)
+  m,pins=expected_inputs();self.assertEqual(a['inputs'],pins);cs=commands(out);self.assertEqual(a['commands'],cs);self.assertEqual(len(cs),12)
   def verify():
    actual={n:{'bytes':Path(n).stat().st_size,'sha256':sha(n)}for n in pins}
    if actual!=pins:raise RuntimeError('INPUT_PIN_DRIFT')
@@ -40,6 +40,11 @@ class CheckedOwned(unittest.TestCase):
     verify()
    if 'C15_OWNED_CONVERTER_PASS 'not in(out/'one-nominal.stdout').read_text():raise RuntimeError('ONE_ORACLE_MISSING')
    if 'C15_MIXED_OWNED_PASS keys=5 'not in(out/'mixed-nominal.stdout').read_text():raise RuntimeError('MIXED_ORACLE_MISSING')
+   profile=(out/'profile-nominal.stdout').read_text()
+   if 'AGX_DXIL_PROFILE_AGREEMENT PASS checks=2612 failures=0'not in profile:raise RuntimeError('PROFILE_ORACLE_MISSING')
+   if profile.count('AGX_DXIL_REAL_MODULE_PROFILE sm=6.0 dxil=1.0')!=2 or profile.count('AGX_DXIL_REAL_MODULE_PROFILE sm=6.1 dxil=1.1')!=2:raise RuntimeError('ACTUAL_MODULE_METADATA_DRIFT')
+   for label in ['cs61_masked_header_cs60 status=2 expected=2','cs60_header_dxil11 status=2 expected=2']:
+    if label not in profile:raise RuntimeError('HEADER_MODULE_MISMATCH_ACCEPTED '+label)
    for name,want in m['expected_mixed'].items():
     f=out/name
     if f.stat().st_size!=want['bytes']or sha(f)!=want['sha256']:raise RuntimeError('MIXED_ARTIFACT_NOT_ACCEPTED_BYTES '+name)
@@ -48,6 +53,6 @@ class CheckedOwned(unittest.TestCase):
    (out/'results.json').write_text(json.dumps(results,indent=2)+'\n');(out/'dependencies.json').write_text(json.dumps(dependencies,indent=2)+'\n')
    try:(out/'post-pins.json').write_text(json.dumps(verify(),indent=2)+'\n')
    except Exception as e:error=error or str(e)
-   (out/'verdict.json').write_text(json.dumps({'status':'STOP'if error else'PASS','before':before,'error':error,'scope':'actual CURRENT ROOT nominal checked adapter/composite; exact accepted diagnostics; no fault/fullOOM/native/DDI/caps/runtime-lifetime claim'},indent=2)+'\n')
+   (out/'verdict.json').write_text(json.dumps({'status':'STOP'if error else'PASS','before':before,'error':error,'scope':'actual CURRENT ROOT nominal and real-DXC profile agreement checked adapter; exact accepted diagnostics; no fault/fullOOM/publicSM6/DDI/caps/general lifetime claim'},indent=2)+'\n')
    (out/'artifact-hashes.json').write_text(json.dumps({p.name:{'bytes':p.stat().st_size,'sha256':sha(p)}for p in out.iterdir()if p.is_file()},indent=2)+'\n')
   self.assertIsNone(error,error)

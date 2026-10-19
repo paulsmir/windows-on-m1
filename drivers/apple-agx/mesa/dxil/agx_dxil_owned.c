@@ -134,6 +134,8 @@ enum agx_dxil_owned_status agx_dxil_convert_owned(
    enum agx_dxil_parse_status framing=agx_dxil_parse(request->input,request->input_bytes,request->input_kind,&profile,&program);
    if (framing!=AGX_DXIL_PARSE_OK)
       return framing==AGX_DXIL_PARSE_UNSUPPORTED?AGX_DXIL_OWNED_UNSUPPORTED:AGX_DXIL_OWNED_INVALID;
+   /* Selected admission profile, not generic framing: Microsoft SM6.0 -> DXIL1.0. */
+   if (program.dxil_version != UINT32_C(0x100)) return AGX_DXIL_OWNED_UNSUPPORTED;
    unsigned major=0,minor=0,patch=0;
    if (agx_checked_version(&major,&minor,&patch)!=DXIL_SPV_SUCCESS) return AGX_DXIL_OWNED_REPORTED_ERROR;
    if (major!=2 || minor!=75 || patch!=0) return AGX_DXIL_OWNED_UNSUPPORTED;
@@ -156,6 +158,18 @@ enum agx_dxil_owned_status agx_dxil_convert_owned(
    dxil_spv_shader_stage shader_stage=DXIL_SPV_STAGE_UNKNOWN;
    if (agx_checked_stage(blob,&shader_stage)!=DXIL_SPV_SUCCESS) goto cleanup;
    if (shader_stage!=DXIL_SPV_STAGE_COMPUTE) {
+      status=AGX_DXIL_OWNED_UNSUPPORTED;goto cleanup;
+   }
+   dxil_spv_compute_profile module_profile={0};
+   const dxil_spv_result profile_status=agx_checked_compute_profile(blob,&module_profile);
+   if (profile_status!=DXIL_SPV_SUCCESS) {
+      status=profile_status==DXIL_SPV_ERROR_UNSUPPORTED_FEATURE?AGX_DXIL_OWNED_UNSUPPORTED:
+         AGX_DXIL_OWNED_REPORTED_ERROR;
+      goto cleanup;
+   }
+   if (module_profile.shader_major!=program.shader_major || module_profile.shader_minor!=program.shader_minor ||
+       module_profile.shader_major!=6 || module_profile.shader_minor!=0 ||
+       module_profile.dxil_major!=1 || module_profile.dxil_minor!=0) {
       status=AGX_DXIL_OWNED_UNSUPPORTED;goto cleanup;
    }
    if (agx_checked_entry_count(blob,&entries)!=DXIL_SPV_SUCCESS) goto cleanup;

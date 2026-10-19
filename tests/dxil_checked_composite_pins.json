@@ -1,27 +1,27 @@
 {
   "schema": 1,
-  "scope": "CURRENT ROOT checked adapter, exact external composite; no production link",
+  "scope": "CURRENT ROOT actual DXIL module profile agreement; external licensed source remains outside Git; no public SM6/DDI/caps admission",
   "pristine_pin": "8434b0639fb2a48ce13aac08a420ecce5d23df0e",
   "composite_patch_sha256": "df3470cac9939a1acf0f0f11982970971d409476fe1a3141ccd8b7cae17bb863",
   "selected_upstream_TUs": 83,
   "selected_archives": 9,
-  "checked_exports": 19,
+  "checked_exports": 20,
   "exceptions_policy": {
     "host": "-fexceptions on all83selectedC++TUs and facade",
     "windows": "final /EHsc- on all83selectedC++TUs and facade, uniform/MD",
     "options": "CLI/nativeLLVM/tests OFF"
   },
-  "external_source": "/Users/pavel/public_windows/.local/c15-composite-ownership/source",
+  "external_source": "/Volumes/pwdev/public_windows/.local/c15-profile-source1537/external",
   "accepted_host_receipt": "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/artifact-hashes.json",
   "supplement1444": {
     "path": "/Users/pavel/public_windows/.local/c15-checked-adapter-adoption-prep/run2/continuation-result.json",
     "sha256": "709e3c53f467a9035b7731145ff656e186bd6acbca4cec51b7f032609cf2e5e5"
   },
   "project_expected": {
-    "drivers/apple-agx/mesa/dxil/agx_dxil_owned.c": "0edd46cdaf06855b523cb2925b85819b860b02558c22f40a3d358f0cc06e0d9f",
+    "drivers/apple-agx/mesa/dxil/agx_dxil_owned.c": "e03ee68567e57cb822475a51b45badeb9bf70a2219e471689606715bd54a146f",
     "drivers/apple-agx/mesa/dxil/agx_dxil_owned.h": "b53a87c84bd11603f084761602ac70f94ff6278ae69b8c6ef2c69ff1a1cf0d11",
-    "drivers/apple-agx/mesa/dxil/agx_dxil_checked.cpp": "c4074f2d5be880d30511200d2119263f8c9104994171c73d20641c4e9ddbbfea",
-    "drivers/apple-agx/mesa/dxil/agx_dxil_checked.h": "e413e69c9727b97b70c7a3839be5c29535662e6a7be6b75343187981c9143186"
+    "drivers/apple-agx/mesa/dxil/agx_dxil_checked.cpp": "aa10c0d0fdd5e564fa23471da5bb01142975ca5841b911d9f53340831bdc86cd",
+    "drivers/apple-agx/mesa/dxil/agx_dxil_checked.h": "f6b5a21a2ca5dc990508b2cd2647b9858f873768c8462582e74f5ffea6f74db5"
   },
   "external_pins": {
     "/Users/pavel/public_windows/.local/c15-composite-ownership/READY-manifest.json": {
@@ -80,42 +80,6 @@
       "bytes": 124676976,
       "sha256": "1590ac950a3d627817d09ade5cb60b2115f17a72182a3141e010b4bcc482a0c9"
     },
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/libdxil-spirv-c-static.a": {
-      "bytes": 1338064,
-      "sha256": "fac4f35ec70cad18550fcd47e1e7e2e244a452f52739e92b7c7921d706535479"
-    },
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/libdxil-converter.a": {
-      "bytes": 16948520,
-      "sha256": "87baced9772ec8900de988fafeb20b23ede62be4adb6df74f4ed889f3da96f86"
-    },
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/libspirv-module.a": {
-      "bytes": 2294056,
-      "sha256": "d12cc950f613b8b6ec5b90e815770d70d397c80fdaf04f67980146e9e318479b"
-    },
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/bc/libllvm-bc.a": {
-      "bytes": 4868240,
-      "sha256": "b90e541dd39765f3bb38b37f1b79ea0e79463c1bc5277621db9773dca54c035e"
-    },
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/third_party/libglslang-spirv-builder.a": {
-      "bytes": 1735624,
-      "sha256": "53261a88859dc05f98cde99c65b7cdf78edfea784c81efbe56e1ed0beca94aef"
-    },
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/third_party/libbc-decoder.a": {
-      "bytes": 376272,
-      "sha256": "0aa9f4b4a396bcf4eb269aeda96966ce8fdf4c3461c0b947ec52d549f5f5e1b2"
-    },
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/libdxil-utils.a": {
-      "bytes": 69760,
-      "sha256": "18fece0c2e2e4314e0098ac490df89ff1da62aac22920e0079ea04039161e96a"
-    },
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/libdxil-debug.a": {
-      "bytes": 2952,
-      "sha256": "bae07bfda9dffd0154ba33793f61fa9fdea2aa6466e4adf73d6e74925e2ada4a"
-    },
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/third_party/libdxbc-spirv.a": {
-      "bytes": 11264920,
-      "sha256": "49e1a3ed7c3020c7ccc93af879ac84e8a1ba6d40f158cff98bf47c517559895f"
-    },
     "/Users/pavel/public_windows/.local/c15-composite-ownership/source/dxil_spirv_c.h": {
       "bytes": 43568,
       "sha256": "4fbca14fe1de04b463cd8d8f6f449fc4e57490c5c900eaff9e6d6d65ea55303c"
@@ -167,6 +131,74 @@
     "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/mixed-map.json": {
       "bytes": 240,
       "sha256": "b2d13468feae64f3bd6f1901c8fadf5ab6a0a040ec865333d2db0cb20d575d40"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/libdxil-spirv-c-static.a": {
+      "bytes": 1350832,
+      "sha256": "e034e7316b0ecea748699c63a568fe8964189748071206736bedcc843d0b3993"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/libdxil-converter.a": {
+      "bytes": 16948664,
+      "sha256": "9b3d1ecedfab52afd91c4642f502d353cb83dbea521d8e81cbc98a31bd1a9af1"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/libspirv-module.a": {
+      "bytes": 2294120,
+      "sha256": "b1d3473f59d17208792bea695a2548777e0ae18e9df3242f7291845f447bbfe6"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/bc/libllvm-bc.a": {
+      "bytes": 4869504,
+      "sha256": "0000c38a7147a1a68b0136069f1358b9bfa1883180fb76aae45b30a77f064dd8"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/third_party/libglslang-spirv-builder.a": {
+      "bytes": 1735624,
+      "sha256": "5220fe072d58bf3d3197fc38eb60acf8c9eb115ce239da708fd72afe7e12dee4"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/third_party/libbc-decoder.a": {
+      "bytes": 376272,
+      "sha256": "d62bf7b2d35d51be969e88c7f4c1898d66980152c22ab549d4aa9361907411d5"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/libdxil-utils.a": {
+      "bytes": 69760,
+      "sha256": "6388319d3ab8ab1688210acb24045b043628d97b6cdc5c53795291f192c38420"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/libdxil-debug.a": {
+      "bytes": 2952,
+      "sha256": "07a0908b37e19de9772b1baa037c38f1441a67fa526ec826bd19b5750d97216e"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/third_party/libdxbc-spirv.a": {
+      "bytes": 11265208,
+      "sha256": "8f47560413db885bada6c3e5faca35b75071d59fb823f3727862d257e7a227a7"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-source1537/external/dxil_spirv_c.h": {
+      "bytes": 44032,
+      "sha256": "3ffb6bb8efcd67a5aa5bec9797d08fd459545818f8ea36b11c155da26578a53a"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-source1537/external/dxil_spirv_c.cpp": {
+      "bytes": 61146,
+      "sha256": "743f254f625091b13e2338c6954f10d3f8b5a8a903a948f86541da3c0947c56b"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-source1537/external/bc/metadata.hpp": {
+      "bytes": 3107,
+      "sha256": "584ac5cd2231908de8f5aa3b600a0ce4f18a50ed44fab0798d0ec947c9df0f44"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-source1537/external/bc/metadata.cpp": {
+      "bytes": 3097,
+      "sha256": "5c4171289a299a2f5ab82013b0076e27c9be15774ea9e5ef80b4d7a2aabe61df"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-dxil-profile-agreement-prep/root-projection1537.json": {
+      "bytes": 642757,
+      "sha256": "18622b405dd8f2a6d0f9653dc818e014898c4cae66148813c3817c3a6ffeda2e"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/root-green-review1537.json": {
+      "bytes": 2883,
+      "sha256": "02403d9d64f1c12e20ef763874f0d32d9fb4fcedb8c5f79fc75291b6e08f4d2d"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-native1542-result/root-native-review1542.json": {
+      "bytes": 3954,
+      "sha256": "54bd61e64f44b400a39fe5e091d85ed0a4877ed380540858a0293b825354f5cb"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-profile-cpu1534-result/root-review1534.json": {
+      "bytes": 2904,
+      "sha256": "51d6ae9ca4e844f9e2552fb5eb7776cb964b15ea09b03e21023757a4e3cad44f"
     }
   },
   "expected_stderr": {
@@ -191,17 +223,26 @@
   },
   "header_inventory": "/Users/pavel/public_windows/.local/c15-map-nir-lowering-attempt3-prep/header-inputs.json",
   "archives": [
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/libdxil-spirv-c-static.a",
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/libdxil-converter.a",
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/libspirv-module.a",
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/bc/libllvm-bc.a",
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/third_party/libglslang-spirv-builder.a",
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/third_party/libbc-decoder.a",
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/libdxil-utils.a",
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/libdxil-debug.a",
-    "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/build/third_party/libdxbc-spirv.a"
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/libdxil-spirv-c-static.a",
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/libdxil-converter.a",
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/libspirv-module.a",
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/bc/libllvm-bc.a",
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/third_party/libglslang-spirv-builder.a",
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/third_party/libbc-decoder.a",
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/libdxil-utils.a",
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/libdxil-debug.a",
+    "/Volumes/pwdev/public_windows/.local/c15-profile-host1537-green/build/third_party/libdxbc-spirv.a"
   ],
   "cc": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc",
   "cxx": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++",
-  "sdk": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk"
+  "sdk": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+  "profile_agreement": {
+    "cs61_dxil_sha256": "b07c25e8673225b96f253aa77aea003b1c87330bc3012bb831c87e910277d8a4",
+    "fixture_sha256": "e1eaabfa4441bd933342de7393a0bc0103ede3186dbd78885787fc69da6b86a4",
+    "external_header_sha256": "3ffb6bb8efcd67a5aa5bec9797d08fd459545818f8ea36b11c155da26578a53a",
+    "green_host_review_sha256": "02403d9d64f1c12e20ef763874f0d32d9fb4fcedb8c5f79fc75291b6e08f4d2d",
+    "native_build_review_sha256": "54bd61e64f44b400a39fe5e091d85ed0a4877ed380540858a0293b825354f5cb",
+    "physical_cpu_review_sha256": "51d6ae9ca4e844f9e2552fb5eb7776cb964b15ea09b03e21023757a4e3cad44f",
+    "public_caps_authorized": false
+  }
 }
