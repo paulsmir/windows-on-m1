@@ -49,3 +49,41 @@ After each rejectedjob, next validjob samecallerthread succeeds; outputempty che
 ## Sequence and scope estimate
 
 1532 begins with two boundedactualDXC outputs/data extraction, then Root-qualified hostold/new83graph/9libs and actualadapterfixture (no productionlink). Compilation scope is same83TUtargets+newqueryfacade and threeexistingprojectunits; no newthirdparty source/license graph. Source preparation is small4externalfile+3projectfile delta; initial portablefixture is oneoriginal Ccaller. Native1533 then compiles fresh83/9 with existing effectiveEH/CRT/header gates and original Ccaller link. CPU1534 only after1530RECOVERY_DONE/noPackage/normalinertguards and its own BEFORE, no GPU/D3D/driver APIs. Actual public DXILinput/DDIprivatecapacity/caps/rootprovider admission remains OPEN and is not re-investigated by this step. No hardwareprobe needed to distinguish metadataagreement; a deterministic CPUresult closes this boundary.
+
+## 2026-10-19 observed result and remaining boundary
+
+The old adapter was genuinely wrong: on two actual DXC modules, changing only
+PROGRAM header words let SM6.1 bitcode masquerade as compute6.0 and let a
+compute6.0 module carry a DXIL1.1 header. EXP1532 returned success and nonempty
+output for both; the same fixture reported four failed semantic checks. The
+fix reads `dx.shaderModel` and `dx.version` from the owned parsed module,
+requires compute6.0/DXIL1.0 agreement with the selected header, and refuses
+mismatches before scanning resources or creating the converter. The generic
+PROGRAM parser remains version-neutral.
+
+The modified external dependency is an original four-file MIT extension to the
+pinned 8434 source plus the accepted composite. Its full upstream MIT notice
+prefixes stayed byte-identical; the exact source projection is outside Git at
+`.local/c15-profile-source1537/external`, with its 2636-file hash manifest in
+`.local/c15-dxil-profile-agreement-prep/root-projection1537.json`. The original
+project-side wrapper and owned admission change is commit `ffb7733c`; the
+tracked regression uses real DXC cs6.0/cs6.1 input bytes. No third-party
+implementation body was copied into this repository.
+
+Host EXP1537 rebuilt 83 selected translation units and nine archives with zero
+unknown reads; the regression passed 2612 checks. Native EXP1542 built the same
+83/9 closure and three ARM64 CRT-only consoles with no PE execution on the
+builder. Physical J313 CPU EXP1534 then passed PROFILE, ONE and MIXED in three
+owned processes; the four getter observations were 6.0/1.0 twice and 6.1/1.1
+twice. Both mismatches were refused; nominal conversion after each refusal
+succeeded. The mixed SPIR-V SHA matched the earlier physical Windows EXP1425
+output. The guest retained the same boot, one inert APPL0002 Code28, no staged
+package or AppleAgx service and eight CPUs. Evidence:
+`.local/c15-profile-cpu1534-result/root-review1534.json`
+(`51d6ae9ca4e844f9e2552fb5eb7776cb964b15ea09b03e21023757a4e3cad44f`).
+
+This proves the selected private CPU profile boundary, not public SM6 support,
+DXIL shader execution on AGX, full error recovery or general converter capacity.
+The separate provider, root description, library lifetime, R1 registration,
+capability and production-link gates in the C15 plan remain open. Existing
+C21E and C27 work is security-blocked and is not part of this milestone.

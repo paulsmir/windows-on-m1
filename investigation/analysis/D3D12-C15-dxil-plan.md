@@ -273,3 +273,13 @@ typed adapters, library and compiler/owner contract are implemented and verified
 License decision and selected closure remain unchanged. Isolated original zero-native-cache six-callback foundation c18d74e3 and explicit same-device LibraryReference validator be917753 passed actual-module host59/81 checks and realWindows ARM64 object/ABI gates; they remain unlinked. See D3D12-C15-zero-native-cache-foundation.md and D3D12-C15-zero-cache-reference-validator.md.
 
 Positive exact-runtime table proof2590f409 closes the earlier table-family uncertainty for inspected D3D12Core26100.9549: ordinal2/3 uses list0003(408B) and queue0001(56B), with tableNum a list index, not version. See D3D12-C15-r1-command-tables.md. Actual typed Fill/canary/index0-1/HRTTABLE identity tests, per-device ownership/error routing/child teardown, typed ordinary R1 constructors and complete checked compiler exception/failure policy remain admission gates. No R1/SM6 advertisement or production DXIL linkage follows solely from the CPU proofs.
+
+## 2026-10-19 selected profile evidence
+
+The bounded compute6.0/DXIL1.0 header-to-module agreement check is implemented
+in `ffb7733c` and observed on J313 ARM64 CPU in EXP1534. Two actual mismatches
+that the old adapter accepted are now refused while existing one-key and
+five-key conversions pass. See `D3D12-C15-dxil-profile-agreement.md` and its
+hardware receipt. This narrows input admission only. The provider and complete
+R1/DDI, library, capacity, lifetime, exception and GPU execution gates above
+must still close before changing `SHADER_MODELS` or exposing SM6.

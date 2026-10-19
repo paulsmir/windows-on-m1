@@ -8,59 +8,41 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-19T15:16Z — EXP1530 RECOVERY_DONE; C15 host GREEN1537
+## CURRENT 2026-10-19 UTC — EXP1530 RECOVERY_DONE; C15 CPU boundary validated
 
-GPU-visible ordinary guest Code28 PackageAbsent/noService8CPU after EXACT1530
-cleanup. Do not rerun1530 or its recovery. Finalrec scratch rec1530.log SHA267ee9e1,
-preflight0a433bdd/durablemanifest3B1416E6 Before15:13:40 After15:15:38Z.
-Rootverdict .local/experiments/EXP1530-d3d12-legacy-prepared-compute/root-verdict1530.json
-SHA83f643dcf921c9764d5fcee80b52a47ba4cf559a40d7058246a73cd34f8c5181;
-finalfilemanifest6d73d728/2307files; pre-recoveryCDF2188A/2290files.
-Actual signed1527package ZIP24e7c274, finalreceipt94345078/source40e725/
-SYS8d9d,UMD63a1,INF4e17,CATd8c7/WOWd51+1625; explicitPreparedNirOwner flag.
-61nonE D3D12 steps PASS inclC14A/C24ABC/C25/C26; C21EknownUNCOMPLETEDSKIP.
-73SMOKEPASS+onlyknownMSAAa000rFAIL;poolPASS workers5 foreignreclaim1;
-fl11ARM64WOWdebugPASS; corpus414each createfail64/4 0hang/pixelDiff;
-DWM0; GL52.8/internal59.6/CS47.067 singlepoints. BIG8textures512MiB,
-PRESSURE0OOM8007000e, intentionalLONGJOBremoved887a0006 followedalivecorpus.
-No unexpectedWindowsstop observed. USBphysical/RDPnotindependentlytested.
-Ledger ACTUAL prepared, commit/CHANGES rows PENDING. Complete those immediately.
+Worktree integration/ad04-windows-compiler, userdirtyMu preserved. Normal J313
+GPU-visible inert guest: one APPL0002 Code28, PackageAbsent, no AppleAgx service,
+SYS/UMD absent, 8 CPUs. EXP1530 RECOVERY_DONE with same normal profile;
+rootverdict SHA83f643dcf921c9764d5fcee80b52a47ba4cf559a40d7058246a73cd34f8c5181.
+Do not rerun1530 recovery. New signed1527 package/source40e explicitly selected
+legacy prepared NIR owner route: all61nonE D3D12 PASS, C21E knownSKIP,
+73SMOKE PASS+onlyknownMSAAfail, pool5 foreignreclaim1, fl11/corpus/DWM0.
+GL52.8/internal59.6/CS47.067 singlepoints. Exactpackage cleaned after evidence.
 
-C15 next deterministic owning admission: PROGRAMheader6.0 can concealactualLLVM
-SM6.1 or DXIL1.1. PinnedMicrosoft194bb proves SM6.0/DXIL1.0,6.1/1.1.
-EXP1532 realDXC fixturescs60f3934fcc EXACT1389/cs61b07c25e8; oldadapter
-realRED confirmed: bothmaskedcs61 andwrongheaderDXILversion wronglystatus0,
-2580checks4failures; realcontrolsPASS. Sourceplan tracked d82390a0.
-InitialhostGREEN1532 guardSTOP all102 includingunselectedshared;1535 offline
-casefoldpathguardSTOP;1536 exact83/9freshbuild PASS but C++ facade RC1
-because newCAPIheader omitted stdint.h. Alloldreceipts preserved.
-EXP1537 owning CAPIheader3ffb6bb8 addsstdint.h; C/C++ standalone GREEN;
-full83TU+9fresh archives/68906readrecordsUNKNOWN0/8commandHOSTGREEN:
-.local/c15-profile-host1537-green/verdict.json SHA4bd90275 and
-actualprofilefixture PASS2612checks0failures; sourceprojection2636files
-.local/c15-profile-source1537/external only4reviewedMITexternaldeltas.
-OriginalProject3patch candidate outsideGit with taxonomy externalERROR=>REPORTED_ERROR;
-no trackedcode adoption/nativeWindows build/CPU execution yet.
-Native1533 stagePASS then builderSTOP beforecompiler ModuleNotFound msvc_eh under-I;
-1541 bytepinned sibling importGREEN/fresh83+9compilePASS thenreadclosureSTOP:
-inventory values areSHAstrings, checker usedobjectfield. BothACTUAL preserved.
-EXP1542 fullnativeBUILD_ONLY ROOT_ACCEPTED: sourceZIPa6d2e12a/freeze055f,
-83selectedEHsTRUE/EHcFALSE/MD/AA64,9fresharchive,6projectAA64objects,
-3AA64CRT-only EXEs,29commandsRC0,0stderr,406compiledreads+89projectreads,
-source/SDKprepostMATCH, noPEexec/noGPU; profileEXE ffb725292b36dc09c4d43a8b67c08c53f3d9d40817aa7591edf9a2f2ea5321ec.
-Rootreview .local/c15-profile-native1542-result/root-native-review1542.json
-(actualSHA inEXP1542ledger); producer manifest retrievedEXACT underEXP1543 after
-controller local artifact-hashes filename collision, SHA3e965502... match.
-NEXT EXP1534 real J313 CPU-only three checks afterfreshBEFORE/live normal
-Code28PackageAbsent8CPU, hashboundEXEs+DXC fixtures+notices, noGPUdriver.
-Agent sm51 prepares SOURCEONLY harness. Then adopt original3projectfiles+
-meaningful tracked regression/dependency provenance once physicalCPU accepted;
-publicDXIL/SM6/caps/DDI admission stillOPEN.
-C21E/UBFE agent task security-blocked. NewC27descriptor replay delegation
-security-rejected; never retry or reroute. User informed. Daybreak model switch
-not supported by current chat tool, user informed; continue current model.
-UserdirtyMu untouched. Root owns alltracked Git/builder/guest; boundedpolls.
-Historical paragraphs below superseded where inconsistent.
+C15: real EXP1532 oldadapter RED (SM6.1 bitcode masked cs6.0 header and cs6.0
+wrong DXIL1.1 header both wrongly accepted). EXP1537 host 83/9 rebuilt GREEN
+2612/0; existing one/mixed controls GREEN1540. Native EXP1542 83AA64/9fresh
+archives/6projectobjects/three CRT-only AA64EXEs BUILD_ONLY PASS. Physical
+J313 CPU EXP1534 three separate PROFILE/ONE/MIXED processes PASS and normal
+sameBoot Code28Absent8CPU after. Rootreview
+.local/c15-profile-cpu1534-result/root-review1534.json SHA
+51d6ae9ca4e844f9e2552fb5eb7776cb964b15ea09b03e21023757a4e3cad44f.
+Tracked original3project fix+realDXCcs61fixture/test commit ffb7733c;
+CHANGES validation row appended. Current trackedsource target test EXP1544 12commands
+GREEN; one full suite 1636 tests/117 preexisting FAIL+ERROR vsprior119,
+NO added testfailure IDs, NOT wholeGREEN. External MIT implementation body remains
+outsideGit at pinned .local/c15-profile-source1537/external; selectedAPI header
+SHA3ffb6bb8efcd67a5aa5bec9797d08fd459545818f8ea36b11c155da26578a53a.
+This is private CPU profile admission only: no production DXIL link, GPU SM6
+execution, public SHADER_MODELS/caps/DDI/library/exception/fullOOM claim.
+Next C15 causal target: complete coherent provider/root-description/R1 source
+contract after source-only selection; do not probe caps bits. Agent sm51 is
+preparing narrow design with current primary Microsoft/selected library source.
+Existing C21E/UBFE security-blocked; C27 delegation security-rejected.
+Never retry/reroute either blocked task. User asked Daybreak; current chat cannot
+switch model by tool and user was informed; continue on current model.
+Preserve normal visible guest and userdirtyMu. Historic paragraphs below
+superseded where inconsistent.
 
 ## Historical GPU: EXP1522 ACTIVE / EXP1519 RECOVERY_DONE
 
