@@ -9,16 +9,30 @@ source preparation only until explicit root BEFORE/approval. Preserve user dirty
 Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 `investigation/CLAUDE_WORKING_METHOD.md`. Consult only referenced ledger entries.
 
-## IMMEDIATE: EXP1471 RECOVERY ACTIVE — DO NOT restart or end turn
+## IMMEDIATE: EXP1471 COMPLETE / RECOVERY_DONE — prepare CPU1477 and1480
 
-- NEWEXP_DONE observed04:42Z;59D3D12/73SMOKE/knownMSAA+UBFEbaseline unchanged,
- pool6/foreignreclaim1/fl11a/x/debugPASS/corpus414each64/4/nohang/pixeldiff/DWM0.
- GL51.2/internal59.5/CS45.388vs1439CS47.253 (single sample-3.95%, no causalperfclaim).
- BEFORErecoveryc1756061 committed, FactoryV2sameb11f/10fPASS. Normalvisible
- rec1471h/recover.sh RUNNING rootexec10326/logscratchpadrec1471.log.
- ControllerALONEownsorderedreboots/exactpackagecleanup; NOmanualprereboot/guestcommands.
- Boundedpoll untilRECOVERY_DONE, thenfinalevidencemanifest/ACTUAL/validatedCHANGEScommit.
- CPU1477backend and1480bridge sourceprep inparallel; DO NOTguestexecuteuntilrollbackdone.
+- EXP1471 ACTUAL537fc602: CONFIRMED scopedARM64metadataABIadoption/functionalbaseline.
+ Final2252filesmanifestfa7c4da89b5c49999416569cfa3d0c4b651eeb2b488718dd21c973e9b1c9b432;
+ report542e19e3dd8c36b038781a372bcbe73e12e38162c22cfc2e7c5fc634b59b12ee.
+ RECOVERY_DONE/controller10326RC0/Code28/PackageAbsent/noService/8CPU. DO NOT rerun1471
+ orrecovery. Guestnormalinertready; CPU1477/1480needownBEFORE/hash/notices/approvalfirst.
+ Durablepreflight1f630ba17d1600e7ee235d93204ef6110d9915351672e19b368f85edaca718fb;
+ beforeboot04:44:13.6476590Z/after04:46:15.7333360Z/manifest55A71AB7/packageAbsent.
+ 59D3D12/73SMOKE/knownMSAA+UBFE unchanged/pool6foreign1/corpus414each64/4/DWM0.
+ GL51.2/internal59.5/CS45.388vs47.253 (-3.95%singlepoint/no causalperfclaim).
+ NextCPU1477stage `.local/c15-backend-cpu1477-source-template` PENDINGapproval,
+ actual11720704BbackendEXEeb7b062e; CPU1480source `.local/c15-owned-nir-cpu1480-prep`
+ READY022bf60618cd74d83bcb4a864ce78288d67ed9381fe4eab48b4cfda4d8d2506d,40stageinputs,
+ actual14543360BownedNIREXE773591dc; ROOTmustreviewfullnewcontroller/PS+notices.
+ RootclosedALL3noticeprovenances viaactualbuilder3hash+prefixread (`.local/c15-backend-notice1477-primary-read`):
+ lut.hIntel2025MIT/libagx.cppMesa3DContributorsMIT; generatedagx2_disasm lacksheader but
+ root LOCALgenerationfrompinnedMesa9aa gen-disasm.py/AGX2.xml/isa.py reproducedEXACT92694B
+ SHA d5e1e0d4; generatorsMIT Intel2016/Broadcom2016/Collabora2020/Valve2025.
+ InitiallocalgenerationSTOPmissingMako retained; temporarytoolsMako1.3.10/MarkupSafe3.0.2
+ installedOUTSIDErepo `/private/tmp/c15-notice-generation-tools-1477`, no runtimedependency.
+ generated-disasm-mako-proof.json+stdoutproof; originalREAD3PID42988RC0/stderrempty/full3SHA.
+ sm51finalizingfresh `.local/c15-backend-cpu1477-notices-final`; sourcePENDINGbundle preserved.
+ No guestcommandsuntilfinalownCPUbeforeapproved, no GPUpackage. Kmdagent1480prepdone/noexecution.
 - Hardware pipeline started04:11:32Z, root exec session25829. Activeprep
   `.local/preparation-1471`; run1471.sh ->chain1471/newexp/watchdog.
   HARDWARE BEFORE d8bbac7a; generatedstage/factorysupplement commitabf23b2b.
