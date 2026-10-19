@@ -51,3 +51,13 @@ enum agx_owned_nir_status agx_owned_program_nir_native_prepare(unsigned kind,uns
 fail:
  agx_dxil_owned_free(&converted);if(v.nir)ralloc_free(v.nir);glsl_type_singleton_decref();return status;
 }
+
+enum agx_owned_nir_stage agx_owned_program_nir_native_stage(const struct agx_owned_program_nir_native *v){
+ if(!v||!v->nir)return AGX_OWNED_NIR_STAGE_UNKNOWN;
+ switch(v->nir->info.stage){
+ case MESA_SHADER_VERTEX:return AGX_OWNED_NIR_STAGE_VERTEX;
+ case MESA_SHADER_FRAGMENT:return AGX_OWNED_NIR_STAGE_FRAGMENT;
+ case MESA_SHADER_COMPUTE:return AGX_OWNED_NIR_STAGE_COMPUTE;
+ default:return AGX_OWNED_NIR_STAGE_UNKNOWN;
+ }
+}

@@ -16,6 +16,9 @@ extern "C" {
 #endif
 
 typedef struct AGX_D3D12_OWNER AGX_D3D12_OWNER;
+#if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
+struct AgxOwnedNir;
+#endif
 
 typedef struct {
   void *Resource;            /* struct pipe_resource * */
@@ -60,6 +63,13 @@ typedef struct {
   uint8_t SrvDimensions[DXBC_RESOURCE_SLOTS]; /* C19: owned direct-slot requirements */
 } AGX_D3D12_COMPUTE;
 HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *Owner, const UINT *Tokens, AGX_D3D12_COMPUTE *Compute);
+#if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
+/* Unwired prepared-compute boundary. Live caller-serialized owner/screen/context
+ * and actual prepared object required. Memberwise-empty output; nonempty live
+ * output refused unchanged. Root/device compatibility remains caller-owned. */
+HRESULT AgxD3d12OwnerCreateComputePrepared(AGX_D3D12_OWNER *Owner,
+ const struct AgxOwnedNir *Prepared, AGX_D3D12_COMPUTE *Compute);
+#endif /* APPLE_AGX_D3D12_PREPARED_NIR_OWNER */
 void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *Owner, AGX_D3D12_COMPUTE *Compute);
 /* A raw/structured UAV bound at shader-buffer slot u#: Buffer NULL = unbound;
  * the view spans [Offset, Buffer->Bytes) (a D3D12 root descriptor has no

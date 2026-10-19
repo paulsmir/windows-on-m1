@@ -43,3 +43,7 @@ agx_owned_nir_pipe_status AgxOwnedNirCreatePipeState(
  agx_owned_nir_pipe_state *out) noexcept {
  return agx_owned_nir_create_pipe_state(value ? &value->native : nullptr,pipe,out);
 }
+
+agx_owned_nir_stage AgxOwnedNirStage(const AgxOwnedNir *value) noexcept {
+ return agx_owned_program_nir_native_stage(value ? &value->native : nullptr);
+}

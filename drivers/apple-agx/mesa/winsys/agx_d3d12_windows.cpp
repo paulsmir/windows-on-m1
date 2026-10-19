@@ -13,6 +13,9 @@ extern "C" {
 }
 #include "agx_win32_asahi_scene.h"
 #include "agx_d3d12_windows.h"
+#if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
+#include "../dxil/agx_owned_nir_handoff.h"
+#endif
 #include "agx_d3d12_view_mapping.h"
 #include "agx_win32_asahi_layout.h"
 #include "pipe/p_context.h"
@@ -305,6 +308,46 @@ extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT
   for (unsigned i = 0; i < 3; ++i) compute->Block[i] = block[i];
   return S_OK;
 }
+
+#if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
+static bool compute_prepared_empty(const AGX_D3D12_COMPUTE *v) {
+ if(v->State||v->Bindings.active||v->Bindings.count)return false;
+ for(unsigned i=0;i<3;i++)if(v->Block[i])return false;
+ for(unsigned i=0;i<DXBC_BINDING_MAP_MAX;i++){
+  const auto &b=v->Bindings.bindings[i];
+  if(b.kind||b.id||b.space||b.reg||b.slot)return false;
+ }
+ for(unsigned i=0;i<DXBC_RESOURCE_SLOTS;i++)if(v->SrvDimensions[i])return false;
+ for(unsigned i=0;i<DXBC_UAV_DIMENSION_SLOTS;i++)if(v->UavDimensions[i])return false;
+ return true;
+}
+extern "C" HRESULT AgxD3d12OwnerCreateComputePrepared(AGX_D3D12_OWNER *owner,
+ const AgxOwnedNir *prepared,AGX_D3D12_COMPUTE *compute) {
+ if(!compute||!compute_prepared_empty(compute))return E_INVALIDARG;
+ if(!owner||!owner->Screen||!owner->Context||!prepared)return E_INVALIDARG;
+ if(AgxOwnedNirStage(prepared)!=AGX_OWNED_NIR_STAGE_COMPUTE)return E_NOTIMPL;
+ struct agx_owned_nir_pipe_state state={};
+ switch(AgxOwnedNirCreatePipeState(prepared,owner->Context,&state)){
+ case AGX_OWNED_NIR_PIPE_INVALID:return E_INVALIDARG;
+ case AGX_OWNED_NIR_PIPE_UNSUPPORTED:return E_NOTIMPL;
+ case AGX_OWNED_NIR_PIPE_CLONE_FAILED:return E_OUTOFMEMORY;
+ case AGX_OWNED_NIR_PIPE_CREATE_FAILED:return E_FAIL;
+ case AGX_OWNED_NIR_PIPE_OK:break;
+ default:return E_FAIL;
+ }
+ const uint32_t *block=AgxOwnedNirWorkgroup(prepared);
+ if(!state.state||state.token_stage!=5||!block||!state.block[0]||!state.block[1]||!state.block[2]||
+    state.block[0]!=block[0]||state.block[1]!=block[1]||state.block[2]!=block[2]){
+  agx_owned_nir_delete_pipe_state(owner->Context,&state);return E_FAIL;
+ }
+ AGX_D3D12_COMPUTE local={};local.State=state.state;local.Bindings=state.bindings;
+ for(unsigned i=0;i<3;i++)local.Block[i]=state.block[i];
+ memcpy(local.SrvDimensions,state.srv_dimensions,sizeof(local.SrvDimensions));
+ memcpy(local.UavDimensions,state.uav_dimensions,sizeof(local.UavDimensions));
+ *compute=local;return S_OK;
+}
+
+#endif /* APPLE_AGX_D3D12_PREPARED_NIR_OWNER */
 
 extern "C" void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *owner, AGX_D3D12_COMPUTE *compute) {
   if (!owner || !owner->Context || !compute || !compute->State) return;

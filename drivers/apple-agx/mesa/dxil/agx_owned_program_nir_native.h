@@ -9,6 +9,10 @@ extern "C" {
 struct nir_shader;
 enum agx_owned_nir_status {AGX_OWNED_NIR_OK,AGX_OWNED_NIR_INVALID,AGX_OWNED_NIR_UNSUPPORTED,AGX_OWNED_NIR_CONVERSION_ERROR,AGX_OWNED_NIR_FRONTEND_ERROR,AGX_OWNED_NIR_PROJECT_OOM};
 struct agx_owned_program_nir_native {struct nir_shader *nir;struct dxbc_binding_map map;uint32_t workgroup[3];};
+/* Original project stage query; actual live NIR, no Windows admission. */
+enum agx_owned_nir_stage {AGX_OWNED_NIR_STAGE_UNKNOWN,AGX_OWNED_NIR_STAGE_VERTEX,AGX_OWNED_NIR_STAGE_FRAGMENT,AGX_OWNED_NIR_STAGE_COMPUTE};
+enum agx_owned_nir_stage agx_owned_program_nir_native_stage(const struct agx_owned_program_nir_native *);
+
 /* Internal caller supplies stable, readable, disjoint input/output, initially
  * empty out. kind1=legacy PROGRAM,2=DXIL PROGRAM; token stages0/1/5 only.
  * Success owns NIR plus one GLSL-type singleton reference; failure is all-zero.
