@@ -27,7 +27,12 @@ EXP1522complete24cf57f4 C26/all61nonEPASS/C14Acontrols/regressionsunchanged;
 recoverycf487925 normalCode28Absent/noService8CPU at12:05Z. Neverrerun1522recovery.
 Next monitor1530TOOL_d3d12-on_END+NEWEXP_DONE, receipts/regressions, exactnormal
 recovery rec1530h withguardedAGX_RECOVERY_ALLOW_NO_OWNER=1 conditionalowner/liveSSH.
-Parallel sm51 preparesSOURCEONLYnextC15contract; C21EsecurityblockedNEVERretry.
+Parallel sm51 SOURCEONLYnextC15: PROGRAM header/module shaderModel+dx.version
+agreement, actualpinnedCAPI lacks modelgetter, ownedadmission onlycheckscompute stage.
+Need actualmaskedheadercs6.1 counterexample +narroworiginalcheckedmetadataquery;
+no caps/publicSM6/linkclaim, rootreviewthenmeaningfulRED/GREEN/build.
+NewC27descriptor-replaydelegation security-rejected in kmd agent turn; NEVERretry
+or routearound that task. Root reported rejection to user. EarlierC21E blockedalsoNEVERretry.
 Historical paragraphs below superseded where inconsistent.
 
 ## Historical GPU: EXP1522 ACTIVE / EXP1519 RECOVERY_DONE
