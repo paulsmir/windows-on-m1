@@ -59808,3 +59808,77 @@ Expected: ROOTC/ROOTG eachPASS plus prior61nonEPASS, C14A512/512/C24ABC/C25/C26 
 Failure: any newstep/regressionword/pixel mismatch, unexpectedstop/hang, identity/hash/version discrepancy; deliberateLONGJOB887a0006/knownMSAA/C21ESKIP separate baseline. Evidence .local/experiments/EXP1573-d3d12-root-identity/evidence/EXP1573/tool-d3d12-on-std.txt and -umd.log plus alltool/corpus/CS/DWM/stage/boot/WER/dump logs, scratchnewexp1573.log/watchdog1573.log/run1573.log. Preserve currentWERpolicy.
 Recovery: collect evidence FIRST then FactoryV2 evidence/rec1573h/recover.sh exact1571package/devnode; disarmStart4 ->orderednormalCode32Stopped ->exactcleanup ->durablenormalCode28Absent/noService/8CPU/RECOVERY_DONE. No manualprereboot/hiddenboot unless normal visible recovery unrecoverable. Existing guarded no-host-owner mode only exact0/noANYlauncher/SSHup, nofakePID. On guesthang stoponlyownedlauncher thenrecovery; anyrepeat newID. Checkbothcontrolplanes before physicaloperatorrequest. Continue bounded monitoring until TOOL_d3d12-on_END/NEWEXP_DONE/recoveryDONE; nofinalduringactiveexperiment.
 Preparation manifest SHA256 36b7c869c0a70f7ac9ba14624e76437eabb685d14e9e0ade804e1ee97ac5b46f; final controlguard intentionalexpected63nonE/64logical/probe1567, prior1562still61. Exactnewexp/watchdog1573 paths verified; old1562logs preserved.
+EXP1573 BEFORE 2026-10-19T19:20Z (PACKAGE1573: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD a1e01c91048e64d0476c62505e662ee6a55c79d9 (same-root preserves bound arguments; runtime15696821/sourcea1e01c; ROOTC+ROOTG plus prior61nonE+C21ESKIP; no publicDXIL/SM6/caps/firmware change) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF 8a539494, sys 5d82ed0e, UMD c72dec3b, catalog db00d1d3, DriverVer 30.0.1571.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1573.sh eb19db35c6089906 accd69fb82448ef1 f918d70c41e8b51e ; C: free 26.05 GB; recovery rec1573h/recover.sh; probe probe1573.sh (4d53de90df1dab1c); then the standard benchmark (EXP1184 harness: playnoovl).
+EXP1573 BEFORE 2026-10-19T19:18:47Z
+Repository public_windows; branch integration/ad04-windows-compiler; root afa7e10b08c87ec18807ccd608725262453f46d3; isolated package source a1e01c91048e64d0476c62505e662ee6a55c79d9 refs/agx-experiments/EXP1568-source parent hardware1562acceptedf424. Driver dirtydiffSHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855; ledger bookkeeping separate. m1n1_windows5b8576031eaae5958c5494d4f22f5a6c3a25d191 clean; Mu361a2134b2f742f331f8d75ae5f60ad4f7f413f1 userdirty6ec31378e52cd3637a5217c6b839b797237fe5d4ca7bebe6057f1dd5a553a0c6 preserved.
+Hypothesis/single variable: redundant selection of the same live root-signature identity preserves already bound compute and graphics arguments. Actual Windows runtime may elide public calls; ROOTC and ROOTG output/receipts distinguish that from direct DDI forwarding.
+WHY THIS HYPOTHESIS:
+1. Official Microsoft using-a-root-signature semantics preserves bindings on redundant selection, but both old setters always memset their bank; actual-source1563 CPU RED reproduced loss, minimal guard GREEN.
+2. Native1566threeRC0 and actual finalpackage1571compile/17archive8helper link/stack/input closure passed; 724other driver files and compiler/caps/opener byteequal to1562hardwareacceptedf424. No new GPU protocol or capability.
+3. ROOTC repeats after nonzero table bind before dispatch; ROOTG repeats after constants+CBV before draw. Only hardware can establish runtime forwarding plus GPU word/pixel result. Diagnostic bank/nonzeroVA/nonzeroDWORD separates empty initialization from bound-state call.
+ATOMIC CONTRACT: none -- separate fresh-device steps ROOTC and ROOTG observe the compute and graphics banks of the same root-state preservation contract. Neither step depends on the other's outcome; record separate verdicts. Existing61nonE regression steps unchanged; C21E knownSKIP remains uncompleted and never retried.
+WINDOWS CONTRACT: RENDER_ONLY UMD root-argument state; official https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-a-root-signature; WDK26100 d3d12umddi.h SHAd338e00bbd079cfed42434b5bd8cb9c658238cfe22747fb7d3b7cff3a3cabc28 typed0003 setters/ClearRootArguments. Graphics/compute banks independent. Different/null path and explicitclear retain prior behavior.
+AGX/ASAHI CONTRACT: current recorded draw/dispatch consumes CPU root banks; equal root selection requires no new AGX call. Asahi runtime submission/UAT/IRQ/power/context/memory unchanged. Same m1n1/Mu owner/broker launch and exact visible recovery as1562. No external source copied or new firmware.
+TRANSLATION: equal nonnull private root pointer returns without clearing bank; three-value receipt records bank and count of nonzeroVA/DWORD. Changed/null clears only selected bank as before. Ordinary WDDM KMD/private pool source unchanged. GPU must return ROOTC two fenced16384word passes coefficients7/11 and ROOTG blue pixel oracle.
+WHAT IS STILL UNKNOWN: actual runtime duplicate-call elision/forwarding and GPU outputs with same-root-bound inputs under signed newUMD. PASS without nonempty bound-state receipt proves public API output only; no direct-driver-branch GPU claim. No bundles, SignalFence support, publicDXIL/SM6/caps claims.
+Build evidence: hostfocused31PASS/1565full1638 exact124known failures ADDED0;1566WDK3rc0;1569runtime203rc0/199AA64/25422depsUNKNOWN0/prepostpinsMATCH;1570fresh8RC0/300depsUNKNOWN0;1571fullpackage13991pinsMATCH/114outputs/2461readsUNKNOWN0/17archive8helperonce/28noticesmatch/importsexportsbaseline/STACK_FRAMES ARM6413824 WOW6544 PASS. Command profile build-driver Release GpuvaG3Qualification UmdAdmissionTrace NativeFrontend EnablePreparedNirOwner PackageBuild1571 GpuvaG1bPageProfile16. Final1572 same pinnedrepackage1235DIRID12/WOW61+88/testsigner E9BE15BD2A184BFABA0C8035B3C620C58037A241;85policyMATCH onlyINF+CATmutable/CMSvalid. Builder exactuntrustedtestroot is notpublictrust; UMDcatalog-only, guestCATmembershipmandatoryBEFOREarm.
+Frozen packet /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572.zip SHA256 4fc1cf6715709ed47e08956aaf0353d3bf806771577944c1c9ab58a8585281af; source.zipSHA7387bfb64d28978cb581f2037c8d48b4ac5e0ce495cda38951238558a5d610df manifest3602ae75b97666d5e9b56073c4eadcadd3d4ba4ef698b1d4130a1158876aa794. Finalreceipt97b40ace9571efb2864211e1bf44595778d8644808bfe3355cbd0e8efeca4645. Probe1567 source39e66603/freshARM64 exef45f180ce2a758786a53c321ace0f57da00ad2e5a859ce879e6e1417e483f1d8 with28unchangedshaderheaders, expected63nonEPASS plus knownC21ESKIP total64logical.
+Artifact AppleAgxRenderAdmission.inf: /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572/driver/AppleAgxRenderAdmission.inf SHA256 8a5394946db41e93b7a3541134944a591c690d5ea51b6c6d2fd06f07aaa93319
+Artifact AppleAgxRenderAdmission.sys: /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572/driver/AppleAgxRenderAdmission.sys SHA256 5d82ed0ee2857b0ea55dacc94b854d043b380a3872693f709e0e1a37c366fa2b
+Artifact AppleAgxRenderAdmissionUmd.dll: /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572/driver/AppleAgxRenderAdmissionUmd.dll SHA256 c72dec3b5083b92b241dab7292417dfb16d3e285d51e2fca58e04027d9328f03
+Artifact appleagxrenderadmission.cat: /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572/driver/appleagxrenderadmission.cat SHA256 db00d1d355ebccf13cd137c42327eae2e1691ae2882281f1a676a5c7d20da918
+Artifact AppleAgxOpenGL32.dll: /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572/driver/AppleAgxOpenGL32.dll SHA256 d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379
+Artifact AppleAgxRenderAdmissionUmd32.dll: /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572/driver/AppleAgxRenderAdmissionUmd32.dll SHA256 1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac
+Artifact kmd-build-receipt.json: /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572/driver/kmd-build-receipt.json SHA256 97b40ace9571efb2864211e1bf44595778d8644808bfe3355cbd0e8efeca4645
+Artifact arm64-build.log: /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572/driver/arm64-build.log SHA256 136f3ac06831ee5be3b6f74ad905d36ce01d354d196cfa1e4629956503b0ed0b
+Artifact source.zip: /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572/driver/source.zip SHA256 7387bfb64d28978cb581f2037c8d48b4ac5e0ce495cda38951238558a5d610df
+Artifact source-manifest.json: /Volumes/pwdev/public_windows/.local/c15-final-package1571-signed1572/driver/source-manifest.json SHA256 3602ae75b97666d5e9b56073c4eadcadd3d4ba4ef698b1d4130a1158876aa794
+Hardware artifacts: m1n1 /Users/pavel/public_windows/.local/experiments/m1n1-5b857603-tables4096/m1n1-5b857603-tables4096.macho SHA3e5e9f1faff2ebb70a3a7e1f9728659e7c0688e54a3f4ddde03b79952ca21caa; Mu /Users/pavel/public_windows/.local/experiments/M2F2C-mu-361a2134/firmware/J313_EFI-m2f2c.fd SHA1c7d87d6fd4321feee605b5f9440dab6a350bc7a3964fb2c62b34602f565f3e5. Normal full-owner IOMFB_FULL_OWNER/AGX_LOCAL_RESERVE_V2 contract unchanged; no ordinary boot with armedGPU.
+Install/launch: bash .local/preparation-1573/run1573.sh after ROOT manifest approval -> exactPREPACKED30.0.1571.0/hashverifiedstage/CATmembership ->FactoryV2 source pin ->full-owner boot ->standardprobe/playnoovl. New recovery factory source/wrapper hashes captured and ledgered BEFOREactivation. FreshreadonlyguestPASS oneAPPL0002Code28/PackageAbsent/noService/noFiles/8CPU BootUTC18:59:38.8120150Z (later than recovery transition receipt18:59:09; fresh durable final boot is this one). Host pgrepANYrun_uefi rc1/empty, USBuartproxy present; no newpackage between1562and1573.
+Expected: ROOTC/ROOTG eachPASS plus prior61nonEPASS, C14A512/512/C24ABC/C25/C26 unchanged; direct ROOTC bank0 receipt nonzeroVA, ROOTG bank1 nonzeroVA+DWORD or explicitruntimeelision-limited verdict. 73SMOKEPASS/onlyknownMSAA-a000rFAIL, KMDpool PASS/fl11ARM64WOWdebugPASS, corpus414each createfail64/4 hangs0/pixeldiff0/DWMfaults0. GL53.1/internalGL59.6/CS45.232 prior singlepoint references; CSenabledplaynoovl.
+Failure: any newstep/regressionword/pixel mismatch, unexpectedstop/hang, identity/hash/version discrepancy; deliberateLONGJOB887a0006/knownMSAA/C21ESKIP separate baseline. Evidence .local/experiments/EXP1573-d3d12-root-identity/evidence/EXP1573/tool-d3d12-on-std.txt and -umd.log plus alltool/corpus/CS/DWM/stage/boot/WER/dump logs, scratchnewexp1573.log/watchdog1573.log/run1573.log. Preserve currentWERpolicy.
+Recovery: collect evidence FIRST then FactoryV2 evidence/rec1573h/recover.sh exact1571package/devnode; disarmStart4 ->orderednormalCode32Stopped ->exactcleanup ->durablenormalCode28Absent/noService/8CPU/RECOVERY_DONE. No manualprereboot/hiddenboot unless normal visible recovery unrecoverable. Existing guarded no-host-owner mode only exact0/noANYlauncher/SSHup, nofakePID. On guesthang stoponlyownedlauncher thenrecovery; anyrepeat newID. Checkbothcontrolplanes before physicaloperatorrequest. Continue bounded monitoring until TOOL_d3d12-on_END/NEWEXP_DONE/recoveryDONE; nofinalduringactiveexperiment.
+PACKAGE_ARTIFACTS:
+8a5394946db41e93b7a3541134944a591c690d5ea51b6c6d2fd06f07aaa93319  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/AppleAgxRenderAdmission.inf
+5d82ed0ee2857b0ea55dacc94b854d043b380a3872693f709e0e1a37c366fa2b  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/AppleAgxRenderAdmission.sys
+c72dec3b5083b92b241dab7292417dfb16d3e285d51e2fca58e04027d9328f03  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/AppleAgxRenderAdmissionUmd.dll
+db00d1d355ebccf13cd137c42327eae2e1691ae2882281f1a676a5c7d20da918  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/AppleAgxRenderAdmissionUmd32.dll
+eb19db35c6089906dfe8c8c25528b4ad94e4315789dee8fc094ca4607a875a78  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/manifest.json
+accd69fb82448ef1cb0431113cb8f0a08a0ab3ae8230b99657d0e55c02dd1f3b  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/hardware-manifest.json
+97b40ace9571efb2864211e1bf44595778d8644808bfe3355cbd0e8efeca4645  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/kmd-build-receipt.json
+f918d70c41e8b51ec4bc359a273bf2474160f4305578b5025520cdd14f22a99c  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/full-owner1573.sh
+SOURCE_ARTIFACTS:
+7387bfb64d28978cb581f2037c8d48b4ac5e0ce495cda38951238558a5d610df  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/source.zip
+3602ae75b97666d5e9b56073c4eadcadd3d4ba4ef698b1d4130a1158876aa794  /Users/pavel/public_windows/.local/experiments/EXP1573-d3d12-root-identity/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1573-d3d12-root-identity",
+  "ExperimentId": "1573",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "10f7771d1e34fe49f283ca32ae895d36b5664c8e761959e877ed820b6ec27f6f"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1573-d3d12-root-identity/evidence/rec1573h/recover.sh.legacy-hidden",
+      "Sha256": "de898ff9d3804136cbe8ece2201d325b7375c4cb1923fd5f379d179872bcd2e9"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1573-d3d12-root-identity/evidence/rec1573h/recover.sh",
+      "Sha256": "85bb58631dd5e6ee97170a547f78d3df67c3647cccf4022236b1873a6320528b"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
