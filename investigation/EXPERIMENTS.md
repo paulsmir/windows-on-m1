@@ -58951,3 +58951,65 @@ Originalpackage1506driverdelta: owning Asahi constructor earlyNULL NIR consumpti
 
 Source3d40cdaf038b9a8a7fa8509ebc4d3dd4303a4b09/719files/ZIP5b286c06/sourceManifestb4cedfe6; exact sixsignedartifact hashes and original21fileZIP/review in1506CAT/HARDWAREBEFORE retained unchanged. Only corrected unsigned receipt28aecde1935cd7e42ac4c5c561b00b69e1dd854d7b2e48601dcfe34acc210d23 replaces raw0e708 forprepare; rawreceipt retainedwithBuiltArtifactSha256/OriginalReceiptSHA, rootfinalreviewb59587091d094a47d1c58323f37ead8a8e4fa401adacfbe4f2d1763ad86cdc54. No resign/rebuild. Rootfullreadprivateclone/manifests/prepare/newexpdiff/chain/guard/stage; clone/manifestsderiveexplicitversionAGX_PACKAGE_VERSION fromactualINF/PackageBuild1506 whileallrunpaths1510. Readonlyactualstage/cleanup/verifytransformproof3c0f3c5d1237befe87335bd8a2a2a47286628b163eb8c3daf9514dde203ed662. Rootfixedtwo staleprobe literals e1506→e1510 beforefreeze; bothsameprobe51f79/pool5574. FINALprepmanifest 79ef15d0f9cc6cb9947394fc20a18260552eb9cef749886b916c5ea03294ee23 rootinputreview 7780d5f0cb4ba2137c422ca1feed2b80340a21be207ae9946e70898a3be8b888. Allartifact/localpins andFIVEactualnestedFactorysourcefileshashchecked, bashsyntaxPASS.
 Exactcommand bash /Users/pavel/public_windows/.local/preparation-1510/run1510.sh afterRootstatusROOT_APPROVED_HARDWARE_1510/before40/finalmanifestSHA/marker. Newnewexp commitsgeneratedmanifest/fullowner/recoveryfullhashesBEFOREfirstfullowner/probe. Evidence.local/experiments/EXP1510-arm64-nir-consume/evidence/EXP1510; scratchpadnewexp1510.log/watchdog1510.log. CSenabled/pressure1/normalregressions59nonE+C21ESKIP; noALL60. Recoveryrec1510h/recover.sh unchangedFactoryV2 GPUvisible ordereddisable→Code32Stopped→exactpackagecleanup→Code28Absent; immutablehiddenEMERGENCYonly. No manualprereboot. Hang→exactownedlauncherstop/recover/newID; physicalaskonlyafterSSH+USB/ownercheck. CurrentSSHup/controlc28c7017/branchintegration/ad04-windows-compiler/workingcodecleanuserMu preserved/m1n1Windows5b857603/Mu361a2134 unchanged. Fullhost1619exact117existingfailures/target30GREEN plusnewreceipt1PASS; ledger2PASS. REVIEW R64 DEFER existingVAcontract outside currentpackaging/legacyNIR boundary. Whileactive no final/boundedpoll and nextlegacyfactorysourcework inparallel.
+EXP1510 BEFORE 2026-10-19T09:11Z (PACKAGE1510: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD 3d40cdaf038b9a8a7fa8509ebc4d3dd4303a4b09 (owning Asahi constructor earlyNULL NIR consumption fix; fresh normal runtime54437/source3d40; 59nonE+C21E SKIP knownUNCOMPLETED; defaultOFF C15 owner; no caps/DDI changes) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF cfd902bc, sys 50d2ae7e, UMD 7147d9f2, catalog 3ed4b21f, DriverVer 30.0.1506.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1510.sh fc56408ceca6f1a3 1fbee4f41acfb3f8 72ccfc2554ed73ee ; C: free 27.24 GB; recovery rec1510h/recover.sh; probe probe1510.sh (fc36f3e031e8ca43); then the standard benchmark (EXP1184 harness: playnoovl).
+HOST WORKFLOW REPAIR EXP1510, SAME SIGNED PACKAGE VERSION30.0.1506.0:
+EXP1506 stopped beforeclone/guestwrites because rawreceiptArtifactSha mismatched signedINF/CAT. Correctedreceipt28aec/Rootfinalizer7ed6; original1506STOP preserved. Privateclone/manifests explicitAGX_PACKAGE_VERSION30.0.1506.0 validate actualINFDriverVer+receiptPackageBuild1506; Experiment/outputpaths1510. No signeddriverbytes changed. Prior1471RECOVERY_DONE PackageAbsent remainsbaseline.
+WHY THIS HYPOTHESIS:
+1. Gallium consumes admitted NIR on callback entry; actual1487 RED leaked allsix early-NULL stages, GREEN consumedthem without touchingtwo borrowedcontrols.
+2. Normal1504 rebuilt203commands from719file source3d40, allfresh154runtimeobjects/normalverifierRC0; source driverdelta is onlytwo early-NIR-consumptionguards, defaultOFF unlinkedC15owner/caps/DDI15f637 unchanged.
+3. Signed1506 packet preserves accepted1471 WOW61/88 and recoveryprofile; probe1509 changesonlyC21EcalltoexplicitSKIP, so59nonE controls can verify no regression without retrying blockedwork.
+ATOMIC CONTRACT: none -- independent baseline controls; no SM6/model/caps upgrade.
+WINDOWS CONTRACT: unchanged experimental CORE0003/FL11_0 baseline; no new feature admission.
+AGX/ASAHI CONTRACT: native shader callbacks own cloned NIR even on initialNULL return; borrowed nonNIR payload unchanged.
+TRANSLATION: two source-owned early-free guards, normal fully rebuilt nativeclosure; package30.0.1506.0/source3d40cdaf038b9a8a7fa8509ebc4d3dd4303a4b09.
+WHAT IS STILL UNKNOWN: actualGPU baseline regressions after normal rebuilt ownership fix. C21E remains knownUNCOMPLETED/securityblocked, explicitlySKIP, no newhypothesis/retry/reroute.
+Expected:59nonE D3D12PASS +C21E SKIP; fullpriorSMOKE/GL/internalGL/CS/corpus/DWM/KMDpoolpressure controls; neverALL60PASS.
+Mode: PREPACKED only; CS ENABLED/playnoovl/RUN_PRESSURE=1; no latecompile/repack/sign. Runtime54437/cache0c2; test-signercertificateE9BE mathematicalCAT signaturevalid butUntrustedRoot recorded/no publictrustclaim.
+Recovery: unchangedFactoryV2 wrapperb11f90088e84924abaccd2c7d06a3124c6c00a932cbd799a010bb6022980b943/host10f7771d1e34fe49f283ca32ae895d36b5664c8e761959e877ed820b6ec27f6f; GPU-visible inertnormal/orderedservice-disable removal; prior1471RECOVERY_DONE PackageAbsent764cdb6f. No firmware/recovery/sourcepower changes.
+Signedreview58455dd4/filesmanifestb0e7d753/signedZIP9f904a80; actualprobe51f79dd932f744c10ff1fb62d922939b9b552b669691859ae141afc5fdc9fedd; pool55740036.
+
+Originalpackage1506driverdelta: owning Asahi constructor earlyNULL NIR consumption fix; fresh normal runtime54437/source3d40. Five-field unsigned storage is BASELINE1471, not a new1506variable. C21E SKIP knownUNCOMPLETED/no retry.
+PACKAGE_ARTIFACTS:
+cfd902bc92e666a327f98231a0c2fa22524a4d35432af11566b332e1b10b9bcd  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/AppleAgxRenderAdmission.inf
+50d2ae7e0320ed136064778c263d2338444f8c596b5ffd6509018bbd56823b25  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/AppleAgxRenderAdmission.sys
+7147d9f29272670adfe679314278f14d903ff6e2a87f9242190d254579ba325d  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/AppleAgxRenderAdmissionUmd.dll
+3ed4b21faf31eb7015e0dc4f799f395d799368f53b221176e0eb78ae200b9ffe  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/AppleAgxRenderAdmissionUmd32.dll
+fc56408ceca6f1a3bc8f3b917c0a460a27cf6da1db4cd636de8128ddb66e3241  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/manifest.json
+1fbee4f41acfb3f8964e8bc225bdeffc4355a9a1ab9c5173473021b739cb158d  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/hardware-manifest.json
+28aecde1935cd7e42ac4c5c561b00b69e1dd854d7b2e48601dcfe34acc210d23  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/kmd-build-receipt.json
+72ccfc2554ed73ee30e8cc5ccc38dafd2a46ef29769ee89aba174595c39cf321  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/full-owner1510.sh
+SOURCE_ARTIFACTS:
+5b286c06c8df704b4f497ab501eca95bf214d80decb6c89f9ce2092a83131f95  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/source.zip
+b4cedfe662a170e9035127447bad4d3dde23dcb0a3cb9b555797e7cd6a21fa24  /Users/pavel/public_windows/.local/experiments/EXP1510-arm64-nir-consume/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1510-arm64-nir-consume",
+  "ExperimentId": "1510",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "10f7771d1e34fe49f283ca32ae895d36b5664c8e761959e877ed820b6ec27f6f"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1510-arm64-nir-consume/evidence/rec1510h/recover.sh.legacy-hidden",
+      "Sha256": "592c41cdb3798457469a9d12c59d829071643485e4c35bae24209f43ea28f1e4"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1510-arm64-nir-consume/evidence/rec1510h/recover.sh",
+      "Sha256": "4e8ba25afa37587e45e035dfc46d48d38645179fc2f3903cfe672de7fe0ce29e"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
