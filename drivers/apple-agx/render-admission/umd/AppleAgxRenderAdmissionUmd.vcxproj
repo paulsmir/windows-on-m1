@@ -23,12 +23,16 @@
   <PropertyGroup>
     <EnableInf2cat>false</EnableInf2cat>
     <ApiValidator_Enable>false</ApiValidator_Enable>
+    <EnablePreparedNirOwner Condition="'$(EnablePreparedNirOwner)' == ''">false</EnablePreparedNirOwner>
     <EnableNativeFrontend Condition="'$(EnableNativeFrontend)' == ''">false</EnableNativeFrontend>
     <AppleAgxUmdAdmissionTraceDefinition Condition="'$(AppleAgxUmdAdmissionTrace)' == 'true'">APPLE_AGX_UMD_ADMISSION_TRACE=1;</AppleAgxUmdAdmissionTraceDefinition>
     <AppleAgxNativeFrontendDefinition Condition="'$(EnableNativeFrontend)' == 'true'">APPLE_AGX_UMD_NATIVE_FRONTEND=1;</AppleAgxNativeFrontendDefinition>
     <AppleAgxGpuvaDefinition Condition="'$(EnableGpuvaWinsys)' == 'true'">APPLE_AGX_GPUVA_WINSYS=1;</AppleAgxGpuvaDefinition>
     <AppleAgxFrameReceiptDefinition Condition="'$(EnableGpuvaWinsys)' == 'true'">APPLE_AGX_EXP907_FRAME_RECEIPT=1;</AppleAgxFrameReceiptDefinition>
   </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(EnablePreparedNirOwner)' == 'true'">
+    <ClCompile><PreprocessorDefinitions>APPLE_AGX_D3D12_PREPARED_NIR_OWNER=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup>
     <ResourceCompile>
       <PreprocessorDefinitions>APPLE_AGX_PACKAGE_DLL=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -118,5 +122,11 @@
     <None Include="AppleAgxRenderAdmissionUmd.def" />
   </ItemGroup>
   <Import Project="$(NativeRuntimeProps)" Condition="'$(EnableNativeFrontend)' == 'true'" />
+  <Import Project="$(PreparedNirOwnerProps)" Condition="'$(EnablePreparedNirOwner)' == 'true' and Exists('$(PreparedNirOwnerProps)')" />
+  <Target Name="ValidatePreparedNirOwner" BeforeTargets="PrepareForBuild" Condition="'$(EnablePreparedNirOwner)' == 'true'">
+    <Error Condition="'$(Platform)' != 'ARM64' or '$(Configuration)' != 'Release' or '$(EnableNativeFrontend)' != 'true' or '$(EnableGpuvaWinsys)' != 'true'" Text="Prepared owner requires Release ARM64 native GPUVA profile." />
+    <Error Condition="'$(PreparedNirOwnerProps)' == '' or !Exists('$(PreparedNirOwnerProps)') or '$(PreparedNirOwnerRequest)' == '' or '$(PreparedNirOwnerRequestSha256)' == '' or '$(PreparedNirOwnerReceipt)' == '' or '$(NativeProvenancePython)' == '' or '$(SourceManifestPath)' == ''" Text="Prepared owner requires explicit source-qualified request/receipt/props/verifier." />
+    <Exec Command="&quot;$(NativeProvenancePython)&quot; -I -S -B -X &quot;pycache_prefix=$([System.IO.Path]::GetDirectoryName('$(PreparedNirOwnerReceipt)'))\no-pyc-read&quot; &quot;$(MSBuildProjectDirectory)\..\scripts\verify-prepared-nir-owner-provenance.py&quot; --request &quot;$(PreparedNirOwnerRequest)&quot; --request-sha256 &quot;$(PreparedNirOwnerRequestSha256)&quot; --receipt &quot;$(PreparedNirOwnerReceipt)&quot; --props &quot;$(PreparedNirOwnerProps)&quot; --source-manifest &quot;$(SourceManifestPath)&quot; --native-props &quot;$(NativeRuntimeProps)&quot; --project-root &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot;" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

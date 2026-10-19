@@ -22,6 +22,10 @@ param(
     [string]$SourceManifestPath,
     [string]$NativeRuntimeProps,
     [string]$NativeProvenancePython,
+    [switch]$EnablePreparedNirOwner,
+    [string]$PreparedNirOwnerRequest,
+    [string]$PreparedNirOwnerRequestSha256,
+    [string]$PreparedNirOwnerOutput,
     [switch]$AllowAssertBuild,
     [string]$MesaSourceRoot = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
     [string]$MesaGeneratedRoot = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated',
@@ -172,6 +176,35 @@ if ($GpuvaG3Qualification) {
     $umdWdkProperties = $g4UmdProperties
     $umdCodeAnalysisValue = 'false'
 }
+$preparedProperties = @()
+if ($EnablePreparedNirOwner) {
+    if (-not $GpuvaG3Qualification -or -not $NativeFrontend -or $Configuration -ne 'Release' -or $Incremental) {
+        throw 'Prepared owner requires clean Release GPUVA native frontend build'
+    }
+    if ([string]::IsNullOrWhiteSpace($PreparedNirOwnerRequest) -or
+        [string]::IsNullOrWhiteSpace($PreparedNirOwnerRequestSha256) -or
+        [string]::IsNullOrWhiteSpace($PreparedNirOwnerOutput)) {
+        throw 'Prepared owner requires explicit request/hash/fresh output'
+    }
+    Remove-Item Env:CL -ErrorAction SilentlyContinue
+    Remove-Item Env:_CL_ -ErrorAction SilentlyContinue
+    $projectRoot = (Resolve-Path (Join-Path $root '..\..\..')).Path
+    $objectBuilder = Join-Path $projectRoot 'drivers\apple-agx\mesa\scripts\build-prepared-nir-owner.py'
+    & $NativeProvenancePython -I -S -B -X "pycache_prefix=$PreparedNirOwnerOutput\no-pyc-read" $objectBuilder --request $PreparedNirOwnerRequest `
+        --request-sha256 $PreparedNirOwnerRequestSha256 --out $PreparedNirOwnerOutput
+    if ($LASTEXITCODE -ne 0) { throw 'Prepared owner fresh object build failed' }
+    $preparedProps = Join-Path $PreparedNirOwnerOutput 'PreparedNirOwner.props'
+    $preparedReceipt = Join-Path $PreparedNirOwnerOutput 'result.json'
+    & $NativeProvenancePython -I -S -B -X "pycache_prefix=$PreparedNirOwnerOutput\no-pyc-read" (Join-Path $PSScriptRoot 'verify-prepared-nir-owner-provenance.py') `
+        --request $PreparedNirOwnerRequest --request-sha256 $PreparedNirOwnerRequestSha256 `
+        --receipt $preparedReceipt --props $preparedProps --source-manifest $SourceManifestPath `
+        --native-props $NativeRuntimeProps --project-root $projectRoot
+    if ($LASTEXITCODE -ne 0) { throw 'Prepared owner provenance rejected' }
+    $preparedProperties = @('/p:EnablePreparedNirOwner=true',
+        "/p:PreparedNirOwnerProps=$preparedProps", "/p:PreparedNirOwnerReceipt=$preparedReceipt",
+        "/p:PreparedNirOwnerRequest=$PreparedNirOwnerRequest", "/p:PreparedNirOwnerRequestSha256=$PreparedNirOwnerRequestSha256",
+        "/p:SourceManifestPath=$SourceManifestPath", "/p:NativeProvenancePython=$NativeProvenancePython")
+}
 $buildTarget = if ($Incremental) { '/t:Build' } else { '/t:Clean,Build' }
 & $msbuild $umdProject /m $buildTarget "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 "/p:RunCodeAnalysis=$umdCodeAnalysisValue" "/p:AppleAgxVersionBuild=$PackageBuild" `
@@ -180,7 +213,7 @@ $buildTarget = if ($Incremental) { '/t:Build' } else { '/t:Clean,Build' }
     "/p:EnableGpuvaWinsys=$gpuvaWinsysValue" `
     "/p:NativeRuntimeProps=$NativeRuntimeProps" `
     "/p:MesaSourceRoot=$MesaSourceRoot" "/p:MesaGeneratedRoot=$MesaGeneratedRoot" `
-    @umdWdkProperties
+    @preparedProperties @umdWdkProperties
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 UMD build failed with exit code $LASTEXITCODE"
 }
