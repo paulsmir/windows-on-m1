@@ -8,18 +8,32 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-19 — EXP1573 READY BEFORE APPROVAL; EXP1562 RECOVERY_DONE
+## CURRENT 2026-10-19 — EXP1573 ACTIVE; EXP1562 RECOVERY_DONE
 
 1571fullpackageROOTPASS/1572finalsignature+CMSGREEN packet4fc1cf67,
 sourcea1e01c91/manifest3602ae75/receipt97b40ace, version30.0.1571.0.
 Next1573 exact .local/preparation-1573/run1573.sh; BEFORE nowledgered,
 preparationmanifest SHA36b7c869c0a70f7ac9ba14624e76437eabb685d14e9e0ade804e1ee97ac5b46f.
-ROOT-APPROVAL.json after this BEFOREcommit, then IMMEDIATEdispatch.
+ROOT-APPROVAL.json source/manifestPASS beforecommit3b481ff6. Dispatched
+19:19:38Z unifiedsession4267/root-run1573.log. DO_NOT_RESTART.
+StagePASS/HASHES_MATCH23/factoryV2wrapper85bb5863; fullownerboot
+CM_PROB_NONE/DWM1224/Explorer5204/SSHup and displaylatches. CS47.026fps,
+GS/MRTongoing DWMfaults0; no finalGPUverdict. Scratchnewexp1573.log/watchdog1573.log.
+Pipeline appends generatedBEFORE/commit afterstage; do not editEXPERIMENTS untilthat.
+Await TOOL_d3d12-on_END+NEWEXP_DONE, allregressions then FactoryV2recover1573
+toRECOVERY_DONE. No finalduringactiveexperiment.
 Expected ROOTC/ROOTG plusprior61nonE =63PASS/C21EknownSKIP; runtimeelision
 limitsdirectbranchverdict unlessnonzeroVA/DWORDreceipts. KMD/firmware/caps same.
 FreshguestPASSCode28Absent/noService/noFiles8CPU boot18:59:38.8120150Z;
-pgrepANYrun_uefi rc1empty, USBrunninguartproxy. Noactivebuilder/recovery now.
+pgrepANYrun_uefi rc1empty, USBrunninguartproxy. Active1573hardwarepipeline only; no separatebuilder/recovery now.
 Previous active1569/1570/1571/1572 notes below superseded by these verifiedresults.
+NEXT independentmetadatafix e5802714: actualvalid heapregistry TSANrace RED ->36GREEN,
+1575native3RC0/full1576tests1639 exact124known IDs ADDED0. Snapshot1577source
+621ffcc4dcbbdb9c6bc664cb7201de14cb5dd0b5 ONLYDDI vsa1e; archive59685dda/
+manifest55efd511. Runtime1578 BEFOREwritten, dispatchpendingaftercommit.
+Preps .local/c15-heap-registry-runtime1578-prep; future1579/1580generatorsprepared.
+No metadata lock covers nativecallbacks; ownerpublication/context stillopen.
+Futurepackage activation MUST wait current1573verdict and exactrecovery.
 Do not installbeforeguard/rootapproval, nofakePID/hiddenboot/manualprereboot.
 
 ## EXP1562 RECOVERY_DONE (prior verdict)
