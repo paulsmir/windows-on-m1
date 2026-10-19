@@ -8,7 +8,19 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT GPU: EXP1522 ACTIVE / EXP1519 RECOVERY_DONE
+## CURRENT override 2026-10-19: EXP1522 RECOVERY_DONE; 1527 build accepted; 1531 CAT transport resume preregistered
+
+EXP1522 complete24cf57f4, C26 and all61nonE PASS, C21E knownSKIP; no regressions.
+Recovery cf4879253373acdd82bd46d74d9d888a49e3766b19e841dad5b52601c87aa718,
+normalCode28 PackageAbsent/noService8CPU; no rerun. 1527 fullbuild/post13991MATCH/
+actualtlogs0unknown accepted8edf4eb7/source40e, finalbaselineINF/CATpending.
+1528 STOP before payload: encoded9row command too long; no promotion/sign/guest.
+1531 split short stage checks resumes SAME1528uploaded immutable inputs; fresh
+result .local/c15-package1531-resume-result. No duplicate1528/controller44488done.
+1530 SOURCE harness ready .local/preparation-1530, PENDING final6/sign/receipt/rootBEFORE.
+Historical paragraphs below are superseded by this override where inconsistent.
+
+## Historical GPU: EXP1522 ACTIVE / EXP1519 RECOVERY_DONE
 
 - EXP1519Root5986/10698completed; RECOVERY_DONE PackageAbsent/noService8CPU
   Code28 ordinaryGPUvisible. Same1506signedpackage/source3d40/runtime1504.
