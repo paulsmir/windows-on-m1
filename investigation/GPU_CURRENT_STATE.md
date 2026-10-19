@@ -9,9 +9,23 @@ source preparation only until explicit root BEFORE/approval. Preserve user dirty
 Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 `investigation/CLAUDE_WORKING_METHOD.md`. Consult only referenced ledger entries.
 
-## IMMEDIATE: ABI CPU GREEN + source code committed / fresh353 build prep
+## IMMEDIATE: EXP1466 fresh353 build RUNNING / parallel runtime prep
 
-- No active guest/builder execution now. EXP1461native7rc0/8395pins/4actualTUs
+- EXP1466 COMPLETE/ROOT accepted CORE BUILD ONLY:353freshARM64objects/7archives,
+  361rc0/170.5s commandspan/250actualTUsonecanonical551fc/nooldincludes.
+  Alloriginal8785+snapshot+generatedpostpinsMATCH; rawacceptedFalse retained.
+  `.local/c15-core353-build1466-result` rootreviewb6af9a29, artifactmanifest
+  e98691f0834852d064a2d16ee18ff8d8e341586e8a503e1e50f08b58c900c27a.
+  Controller92145finished; qualified core source-root.json EXACT3keys exists.
+  Native C:\Users\pauls\EXP1466-core353-unsigned\{mesa,build}.
+  Warnings retained/NOenum-bitfieldconversion warning; no runtime/GPU acceptance.
+  Next1467 reserved C:\Users\pauls\EXP1467-native-runtime-unsigned; kmdSOURCE
+  prepares44Asahi/runtime explicitfiniteextension; sm51SOURCE actualcachegate.
+  Frozen698file driver project sourceZip `.local/c15-abi-package-source`: SHA
+  6ecc9fc2642e8ca294d41ec076b759fe0a71e18cc68ef6334e148b8a5b985dde;manifest
+  3fa24bc6f0348f154376ad417f0f73ffb19193b929852b2a639df26b81ba9dc7.
+  Reuse qualified native library/props inpackage, no duplicatecompile.
+- EXP1461native7rc0/8395pins/4actualTUs
   canonical551fc header; EXP1462 J313bothCPUsteps exit0/stderrEMPTY. Fivegetter
   markersPASS;4569C/C++checks0fail/alllegalvalues/neighbors/disjointmasks; all12
   rawsnapshots+selectedoffsetline BYTEEQUAL1460pristine; sizeof440/align8.
@@ -48,8 +62,11 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
 - IMPORTANT coordination: send_message to a completed agent DOES NOT start it.
   Root previously delayed finalprep with queuedmessages; corrected via
   followup_task. Checklist_agents and wake completed lanes explicitly. Never
-  wait indefinitely. sm51 followup now doing ONEsource-only actualcache-flag
-  proof; do not let that block core compilation (productioncache gate later).
+  wait indefinitely. sm51 source cache proof bf89b145 is DONE: Windows build
+  860 actual commands noENABLE_SHADER_CACHE/sourceMeson excludesWindows.
+  Newruntime mustpreprocess actual agx_disk_cache.c command andcheck3bodies
+  empty/NULL withclearedCL/_CL_; runnable source gate prepared inparallel.
+  This is later runtime acceptance, not core compilation blocker.
 - Generation decision55807712 ROOTAPPROVED: SAME20immutablegeneratedinputs,
   all353objects/7archivesFRESH;19rules/28primaryinputs/23PythonIO reviewed,
   patchedheader notgeninput. No Meson/Mako/PyYAML execution/alias guesses.
@@ -58,7 +75,8 @@ Read skill `~/.codex/skills/agx-d3d12-loop/SKILL.md`, AGENTS and
   EXP1465 fixed8remaininggeneratedmetadata8/8/0.0816s/rc0/noorphan, including
   nir_opt_algebraic.c55.56MB76280815. Raw in `.local/c15-core353-metadata1464`
   and `.local/c15-core353-generated8-metadata1465`; sessions93567/4220finished.
-- Next: inspectfinalEXP1466controller/sourceMap/pins (actual platform bytes,
+- Initial1466 review completed/BEFORE committed/build started; retain below gates.
+  Next: collect1466actualinclude/archive/results thenROOTreview (actual platform bytes,
   copiedgenerated20, onecanonicalheader551fc, no oldMesa/build includes),
   rootBEFORE/approve and START353build immediately. Use sensible bounded
   largeTU timeout/stage progress. No newanalysispass or C24repeat. Whilebuild
