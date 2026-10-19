@@ -8,25 +8,33 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## IMMEDIATE: CPU EXP1482 ACTIVE — DO NOT restart
+## IMMEDIATE: CPU1482 COMPLETE / adopt1483 module and close1484 native ownership
 
-- Root exec session2953 runs `.local/c15-backend-cpu1482-source-template/controller.py`.
- Actualapproval `root-approval1482.json` SHA
- f4655c8ba40177d2ac643c3767246cb7afe7ed1ab6386f8ee183f3cc74cda9ef;
- BEFOREcb25c987/parserlaunchc5b4ff39. Freshguest
- `C:\Users\pavel\EXP1482-mapped-asahi-backend-cpu`; host
- `.local/c15-backend-cpu1482-result`. Boundedpoll then read ACTUAL stdout/stderr,
- process/result/runtime inventory/gold arrays/NIR dumps/compiledbinary; no assumedPASS.
-- Actual1481EXE11720704B
- `3a91650f8b3f0c916bb2e0a926319f365574eaf4d70924675c050c8a38c2cfef`;
- sourcefixture mapped_backend.inc054384d8; only newactualMesa compute-base pass
- withbothbasefalse. Beforebaseglobal>0/afterbothbaseintrinsicsabsent assertions;
- alloriginalbackend/push/workgroup/nonempty checks retained. No newbackendopcode.
-- Exact11stageinputs same24e3SPV/7gold+MIT/BSL/Apache/Blake3CC0/commonnoticesZIP395244cf.
- PSb130d796/parser0errorsPID21908; manifestab2c900f/controller3e02a087;
- rawBaseStream120s ownedPID/10sdrain/strictstdouterr+inputposthash; noGPU/package/bootcommand.
-- Root current CPU1482 source/template ready; neverrerun1477/1480/1482 under sameID.
- If1482fails, source-first exactnewstderr and new causal checkpoint; do NOTguess opcode.
+- EXP1482 actualCPU PASS, controller2953RC0/ownedPID8544exit0/notimeout/stderr0,
+11inputspostunchanged. 420checks/7structuralrefusals/384exactgoldwords/negative346each.
+ RealMesa compute-base normalization removed1baseglobal ->0baseintrinsics; actualAsahi
+ compiled740B/70instructions/workgroup64,1,1/push16=36/reserved16=16/ranges2:
+ uniform0/table8/offset0/length8 anduniform8/table8/offset392/length8.
+ AGXbinary701a993c2ce8aa0989789ebeaab00413c6d9de95f813bc2bd7041d94ea75c2bd.
+ `.local/c15-backend-cpu1482-result/root-review1482.json`
+e19ac5be9cd5b4accc81ee743dce2623ad7e07711a6b863ba6b2e024d7221717;
+ artifactmanifestcd567e0147e9b5e323c9f67c6398ef7ac5aaed1d9fb3e41979658e1e68a527a5/40files;
+ ACTUAL47114561. NO GPU/BO execution or SM6/DDIcapadmission. DO NOTrerun1482/1477/1480.
+- Normalinert1471RECOVERY_DONE/PackageAbsent/noService/Code28/8CPUremainscurrent;
+ CPU-onlychecksneedno rollback. No activehardwareexperimentrightnow; continueauthorizedwork.
+- Nextacceptedplan `investigation/analysis/D3D12-C15-owned-nir-adoption.md`9d8b2fb2
+ rootreadFULLsource+pinseveryfileMATCH. kmdagentIMPLEMENTINGprivately
+ `.local/c15-owned-nir-adoption1483-prep`: propercurrentmodule names+actualcompute-base
+ normalization+opt-in CURRENT-source fixture/renderer. NoDDI/caps/productionbuildhook/
+ EnsureOwner/Galliumcreate_state wiring. Allowedboundedlocalportable stagedproposaltests;
+ no tracked/Git/native/guest/source-dependencyrebuild. Rootreview/adopt/currenttestnext.
+- sm51agent `.local/c15-nir-consume1484-prep`: SOURCEprojectionremedy+actualconstructor
+ deterministicregressionPLANforinitialshaderallocationNULLconsumeNIRgap. Initialsource/testdesign
+ only/no executionuntilrootreview/no broadfaultsweep. Needowningnativebranchconsumeconsistent;
+ neverownerfree-on-NULL orfakecompilerbody. Rootreadactual1987/2167earlyNULLandlaterfree.
+ ThisisordinaryNIRlifetimecontract, NOTblockedUBFE/C21Etask; do notretrythatsecurityblock.
+- Source1481qualifiedactual11720704BEXE3a91650f; actualbackendCPU fixesprivatefixture only;
+ productnormalizerstillnextadoption. Inputmaps/SPV24e3/7gold/archives/flagsunchanged.
 
 ## Latest completed CPU boundaries
 
