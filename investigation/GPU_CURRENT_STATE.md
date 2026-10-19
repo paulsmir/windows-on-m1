@@ -8,55 +8,40 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## IMMEDIATE: CPU1495 COMPLETE / next actual Windows owner compute-prepared source decision
+## IMMEDIATE: EXP1500 build-only archive ACCEPTED / actual Windows owner next
 
-- EXP1495 actualJ313 PID8824exit0/stderr0/notimeout/41postMATCH/localpinsMATCH.
- 20valid8NULLactualCPPwrapper/689fieldwiseNIR-map-workgroup-rootchecks/32NULLchecks;
- old199callback79bridgecontrols,4callback4normalizationmarkers,384wordsTWICE/negative346,
- FSsource+clones nir_serializeequal/pairrollback/ref0; both768Bactualgoldexact.
- .local/c15-owned-nir-wrapper-cpu1495-result/root-review1495.json 05cf0c0a941b365b5732c9644284e9337614a4c15e33ced7e02f37499d3df422.
- ActualopaqueCPPwrapper tofixturecallbacks ONLY; NOactualAsahiconstructor/BO/GPU/DDI/SM6claim.
- NativeNIRvalidatorNOOP/NDEBUG; nofullOOM/runtime/thread/liveness guarantee.
-- Implementationf43162cb: sole noexcept forwarder insideactualAgxOwnedNir privateCPP,
- headerdeclaresportableChelper result; callerholdsactualprepared/context/root throughcallback.
- Stronghelperlinkcompanion fixed: baseownedrecipe17commands includesrealhelperC/Gallium;
- derived18addsONLYfixtureC/noduplicatehelper. Current8filechanges nowCOMMITTED.
- cpp eb46a221/header10e9d52a/driverfb85a4c8/Cfixturef7918f30/base de43cc58/derived959e6de5.
-- Native1493PASS4commands/13017post/34outputhashes/35CURRENT/37nestedpins;
- 3newobjects(1canonical551fc+2opaque)+11reused1489AA64objects(4priorcanonical7opaque).
- Rootindependent1560observeddeps/unchangedsources/headers/nochangedwrapperheader proofb8132f01.
- AA64PE14557696Bc8d5573036bd15ee4a57d4ade653562c060f173b1d695467a43e7150562ae108,
- same14imports/rootreviewdbd8aa70790d4881e215428da0f9c89df1c6740d1b38e7d3b1fe00425ac07e56.
-- Portable1492PASS18/7117post/20valid8NULL/689+32/199+79/384TWICE,
- rootreview5839c40e137b38be62771b524089901414a276dadfe3c35e7ef5ccdbd9d33091.
- Separateoldbridge1494PASS17/7113post/79checks384words/346controls,
- review515815b6f750c69d4bae5e0742951d5f1c8e9b79b4c4c2f26094b18b0dcc85e3.
- Fullhost1619tests225.108s EXACT117oldfailureentries/noaddedremoved/67fail50error20skip;
- NOTwhole-suiteGREEN, loge49897baeb68981e190cbf6533c9cdb25be29c247d33095c3a3a59650ae7bf6f.
-- NEXT ROOTacceptedownerplan f1e3bc54/READYef27ffb3, permanentnote9a0ac8fd
- investigation/analysis/D3D12-C15-owner-compute-prepared.md; sm51SOURCEONLY implements
- .local/c15-owner-compute-prepared1497-prep: explicitactualNIR Cstagequery+opaqueCPP,
- portablehandoff-onlyprojectheader; liveOwnerScreenContext/preparedcomputeentry,
- memberwiseempty/localpublication/HRESULTmapping, actualnative-onlyWDKfixtureifneeded.
- No lazyEnsureOwner/DDI/caps/runtimepointerguess/fakecompiler/ownercreationclaim.
-- Native1469archivebada UNPATCHED.1496STOPcompileRC0 but18unknownheaders, fixed1498
- via18exactbodypins fromaccepted1469OUTPUTmanifest+source3fa; 217actualincludesreplay0unknown.
- 1498BOTH2commandsRC0/post13310MATCH/217actualdeps0unknown/canonical551fc butSTOP
- ARCHIVE_BODY_OBJECT_MISMATCH008: stagedarchive.rsp accidentallystillpointsEXP1496
- stateobject, whilecompile+declaredmember pointsEXP1498. Actualnewstate8c6e209d,
- archivefde64601; .local/c15-native-runtime-nir-consume1498-result/remote-output preserved.
- kmdSOURCEONLY prepares1500freshbundle, regenerateRSPfrom154declaredpaths+semantic
- preflightALLordered154args (old1498RED/new1500GREEN) BEFOREtools; same2commands/a967/
- 153oldAA64/18headers/profile, no codechange/no guardrelax/no1498rerun.
- Rootoldarchive154bodyproofb9f60970; runtimebuild-onlyNOT_PACKAGE_QUALIFIED:
- newarchivepathSHA/FreshNativeSource/BASE+overlaymetadata, normalpackageverifierrejects
- untilfullfreshsourceassembly/preparedResourceCppqualification. No signedpackageclaim.
- Native1498failedafterarchive, no qualifiedprops/result.1500willneedownrootBEFORE.
-- EarlierChelper2f8375cd CPU1491PASS199/79/384TWICE; actualnativefirstNULLrepair
- a905b660/validated73d2dec5/currentprojectord3da7de, exact2guards/actual1487RED6FAILGREEN8PASS.
-- Noactiveexperiment/builder/guestprocess; DONOTrerun1495/1493/1492/1494/recovery.
- Normalinert1471RECOVERY_DONE/Code28PackageAbsentnoService8CPU unchangedthrough1495;
- no extra rollbackneeded forCPUonly. RootaloneGit/guest/builder. BlockedUBFE/C21Eneverreroute.
+- Rootreview `.local/c15-native-runtime-nir-consume1500-result/root-review1500.json`
+  e5beb91dc1be099f9f89e17ff86a802e86510f00edc83d12e11b59a63f56d386.
+  Both commandsRC0/post13310MATCH/303outputs hashed/217actualdeps0unknown;
+  actual154AA64archivebodies=153old1469+freshstate95d8fcf8. Archive4070242B
+  b6a5c5c59b1e799ba72e6d71fde25ae63fe94e148adaba61369cbae162581886.
+  Fullsourcea967/canonical551fc; warnings exactly1498 normalizedroot/noerrors.
+  Extractedhelpera01ASTequalsCURRENTprojectord3da. XMLfreshpathSHA/BASE+overlay
+  accurate. ActualnormalpackageverifierRC1 missing source_commit REQUIRED:
+  BUILD_ONLY_NOT_PACKAGE_QUALIFIED, no preparedResource/fullsourceassembly proof.
+  No runtime/ARM64/GPU/packageexecution.1496/1498STOP preserved, no retries.
+- SOURCE1497 private11files READY59fff713/diffd7ea1cea awaitsrootadoption:
+  actualNIRstagequery/portableopaquehandoff/liveWindowsownercompute-prepared API,
+  exactsourceprefix/functionselector/nativeWDKfixture with availableVSFS callbacks
+  prove wrongstage refuses before ANY callback; no fakeWin32/DRM/compiler/BO.
+  Root found normalowner stronglinkcompanion: newentry referencesunlinkedbridge;
+  must keep explicitdefaultOFF buildguard until fullqualified productiongraph,
+  enableONLYnativefixture/fullownercompile. Existingcreate/destroy/dispatch unchanged.
+- EXP1499 exactMSBuild evaluationRC0 captured effectiveClCompilemetadata at
+  `.local/c15-owner-profile1499-evaluation/stdout.json`. ActualIntDir
+  AppleAgx.B1D91C72/ARM64/Release; oldguessedtlogabsence not authoritative.
+  DefaultC++standard/MD/W4/WX/sdl/actual6flags/Mesaexternalincludes; no targetran.
+  kmdprivate1501scaffold based metadata, rootaloneexecutes/Git/guest/builder.
+- CurrentopaqueCPPwrapper f43162cb CPU1495PASS PID8824/20valid8NULL/689+32checks,
+  199callback79bridge/384TWICE/FSserialization/pairrollback/ref0. Chelper2f8375cd
+  CPU1491PASS; nativeNIRconsumptiona905b660 CPU1487RED6leaksGREEN8PASS.
+  Actualfixturecallbacks only, NOTactualAsahi/BO/GPU/DDI/SM6/fullOOM/lifetime.
+- Fullhost1619tests67fail50error20skip EXACT117oldentries/noaddedremoved,
+  NOTwhole-suiteGREEN; e49897baeb68981e190cbf6533c9cdb25be29c247d33095c3a3a59650ae7bf6f.
+- Normal1471inertRECOVERY_DONE/Code28PackageAbsent/noService8CPU unchanged,
+  noactiveguest/GPUexperiment/noadditionalCPU/build-onlyrollback. PreserveuserMu.
+  Existingc18UBFEsecurityblockedtaskneverretry/reroute. CurrentC15publisher666abec
+  excludedfromaccepted1471GPUsource; no blindCURRENTpackage/caps publication.
 
 ## Latest completed CPU boundaries
 
