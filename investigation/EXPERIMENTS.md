@@ -58781,3 +58781,46 @@ EXP1494 SOFTWARE ACTUAL 2026-10-19T06:30:56.086209+00:00: CURRENT1testPASS19.723
 EXP1493 OPAQUE NIR WRAPPER INCREMENTAL NATIVE BUILD ONLY BEFORE 2026-10-19T06:30:56.086209+00:00: WHY THIS HYPOTHESIS: actual1491 nativeChelperqualified; CURRENT1492 portable provesactualprivate-result CPPwrapper20valid8NULL/689snapshots plus199/79/384TWICE, and1494old17bridgecontrolpasses; nativeWindows typednoexcept ABI remainsunknown. Singlefactor twoexistingmoduleforwarder changes plusdependentbridge-linkcompanion; helperandlibraryclosure unchanged. ATOMIC CONTRACT: none --4buildcommands only. WINDOWS CONTRACT: realWDK26100/MSVC14.44ARM64C++17/MD/EHsc, actualLLVM20C/MD; noDDI/caps/winsys/buildhook/default changes. AGX/ASAHI CONTRACT: canonical551fcNIRABI/realclone/metadatahelper unchanged; fixturecallbacksconsumingclones only, not actualAsahiconstructors/BO/GPU. TRANSLATION: privatevalue->native forwarder, no synthetic aggregate; same17archives/profile/flags, compileactualbridge+CPPdriver+Cfixture/link. WHAT IS STILL UNKNOWN: nativecompile/link/actualnewPEimports; CPU1495later afterreview, productionliveness/root/concurrency/typedDDI/caps remainseparate. OriginalMITsource/acceptedexternalnotices unchanged/no externalbodycopy.
 Incrementalreuse derivedfromactual1489showIncludes+MSVCJSON, notfilenames:11priorAA64objects pinnedbyremotehash/bytes andaccepted1489rootreview59c54892/manifest7bbce085. Rootindependentlyverifiedall11COFFmachines/currentunchangedsources/EVERY1560observeddependencyagainstoldacceptedpins/currentprojectheaderbytes; changedagx_owned_program_nir.h appearsONLYrecompiledbridge+CPPdriver. Reuseproofd55a04ec/rootreviewb8132f019a5d87e5e0dc822c7cb1db598224dec13aa85e2dbc90bc5d262e219f.4commands3compile+link,180sownedchildren;1newactualcanonicalNIRTU/2opaquenew,11reusedobjects include4priorcanonical/7opaque, donotlabelall14asnewlycompiled. Root35CURRENTsourcefiles+37nestedownedSELFpins+ZIPmemberbytesMATCH, inputrevieweb653538c04c81c45ca98dde0fb75a460c6fc4a3cb909b58c010287ee4bb52d1.13017nativepins; sameactual14importbaseline/allowlist, unknownheadersSTOP, rawdiagnosticsrootreview, noPEexecutiononbuilder.
 Finalexecution7082318867253a71dc61fe920c6ee4e4f526456ad5e6aa98a768ef8a692ff66c; ZIP491096ef865804b7ae493b04b5feff1c7ebedf63920daa4a343368830d541834; runner91651b4d/controllera4123ca6/bootstraprootrenamedonly. RootreadFULLdiffagainstaccepted1489 controller/runner/bootstrap: onlyfreshroot and15->4countsgateschanged, safetylogicidentical. ExistingproposalqualificationPENDINGlabel remainsimmutable; thisroot1492/1494ACTUAL+approval suppliesqualification. Exact python3 /Volumes/pwdev/public_windows/.local/c15-owned-nir-wrapper-native1493-prep/controller.py --approval /Volumes/pwdev/public_windows/.local/c15-owned-nir-wrapper-native1493-prep/root-approval1493.json --approval-sha ROOT_AFTER_THIS_COMMIT. Freshbuilder C:\Users\pauls\EXP1493-owned-nir-wrapper-build-only; host.local/c15-owned-nir-wrapper-native1493-result. Gitcontrolf4b84dab/branchsame/8uncommittedsourcechanges capturedexact35fileequality; m1n1Mu5b857603361a2134/userdirtyMu unchanged. No guest/package/service/sign/reboot/GPUoperation; normal1471inertretainedthrough1491/no recoveryneeded forbuild. Firsterror/hash/unknowninclude/import/timeout STOPcollects/newIDonly; no shims/fakecompiler/oldPE substitution. Fullhost1492overlap no sourceedits.
+
+EXP1493 BUILD ONLY ACTUAL 2026-10-19T06:34:09.172676+00:00: PASS4commands/3compiles+link/no timeout/post13017MATCH including11reusedobjectpins. Root34outputhashesMATCH;1newcanonical551fcCfixture/2newopaqueCPP/unknown0,11priorAA64objects from1489 remain independentlyproven1560dependencyrecords/currentunchangedsources/projectheaders. BothCPPstderr0/linkstderr0; Cfixture03two unusedflags andoldNIRheader misleading/unusedwarningsonly. ActualAA64PE14557696Bc8d5573036bd15ee4a57d4ade653562c060f173b1d695467a43e7150562ae108,14imports independentlyparsedexact1489/1485. Rootreview.local/c15-owned-nir-wrapper-native1493-result/root-review1493.json SHAdbd8aa70790d4881e215428da0f9c89df1c6740d1b38e7d3b1fe00425ac07e56; manifest38f795f750aa2dae1d11b20e7501a360e159c5d3402ae3dac5350070ffd2f370. No PEexecutiononbuilder/no guestorGPUchange.
+
+EXP1492 FULL HOST ACTUAL 2026-10-19T06:34:09.172676+00:00: ROOTcwd discover-s-tests 1619tests225.108s/67fail50error20skip EXACT117baselinefailureentries/noaddedremoved;13sourcepinsMATCH/loge49897baeb68981e190cbf6533c9cdb25be29c247d33095c3a3a59650ae7bf6f at.local/c15-owned-nir-wrapper1492-full-host. FullsuiteNOTGREEN. Togethercurrent1492wrapper18/1494old17portablegates and1493nativeABI qualifyimplementationcommit; actualJ313wrapperCPU1495requiresnewBEFORE/parser. NoDDI/caps/winsys/buildhook/default changes.
+REVIEW R113: ACCEPT -- no package/armed boot in unlinked wrapper checks.
+REVIEW R111: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R110: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R109: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R108: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R107: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R106: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R105: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R104: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R103: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R102: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R100: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R99: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R98: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R97: ACCEPT -- single finite wrapper/lifetime boundary with actual old-control regression.
+REVIEW R96: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R95: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R94: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R91: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R90: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R88: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R86: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R85: ACCEPT -- CURRENT source profiles and reused object identity explicitly qualified.
+REVIEW R74: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R71: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R69: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R65: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R64: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R63: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R57: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R55: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R54: ACCEPT -- portable controls fullhost and incremental native preparation overlapped.
+REVIEW R49: ACCEPT -- actual private prepared object forwarded while caller holds root/source.
+REVIEW R48: ACCEPT -- no serial or launcher access.
+REVIEW R47: ACCEPT -- BEFORE and actual exactPE/source/object hashes retained.
+REVIEW R45: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R40: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R37: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.
+REVIEW R64: DEFER -- historical platform admission item outside unlinked opaque wrapper; corresponding contract unchanged.

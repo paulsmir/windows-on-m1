@@ -20,7 +20,15 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <cstdio>
 #include <cstdlib>
 #include <type_traits>
-extern "C" void agx_owned_nir_pipe_fixture(nir_shader *,const dxbc_binding_map *,const uint32_t *,unsigned,const char *);
+using WrapperCreate=agx_owned_nir_pipe_status (*)(const void *,pipe_context *,agx_owned_nir_pipe_state *);
+extern "C" void agx_owned_nir_pipe_fixture(nir_shader *,const dxbc_binding_map *,const uint32_t *,unsigned,const char *,WrapperCreate,const void *);
+static unsigned wrapper_valid_calls,wrapper_null_calls,wrapper_snapshot_checks;
+static void wrapper_check(bool p,const char *why){++wrapper_snapshot_checks;if(!p){std::fprintf(stderr,"WRAPPER_SNAPSHOT_FAIL %s\n",why);std::abort();}}
+static_assert(std::is_same<decltype(&AgxOwnedNirCreatePipeState),agx_owned_nir_pipe_status (*)(const AgxOwnedNir *,pipe_context *,agx_owned_nir_pipe_state *) noexcept>::value,"actual wrapper typed noexcept signature");
+extern "C" agx_owned_nir_pipe_status actual_wrapper(const void *opaque,pipe_context *pipe,agx_owned_nir_pipe_state *out){
+ if(opaque)++wrapper_valid_calls;else ++wrapper_null_calls;
+ return AgxOwnedNirCreatePipeState(static_cast<const AgxOwnedNir *>(opaque),pipe,out);
+}
 extern "C" void agx_owned_nir_pipe_fixture_finish(void);
 static AgxCpuProvider *domain;static unsigned checks;
 static void need(bool p,const char *why){++checks;if(!p){std::fprintf(stderr,"FAIL %s\n",why);std::abort();}}
@@ -72,11 +80,19 @@ int main(int argc,char **argv){
   std::memset(storage.data(),0xdd,storage.size());
   need(!std::memcmp(AgxOwnedNirBindings(result),&map,sizeof(map)),"map independent from destroyed source object storage");
   rootcopy=AgxOwnedNirRoot(result);need(rootcopy.bytes==saved_root.size()&&!std::memcmp(rootcopy.data,saved_root.data(),rootcopy.bytes),"rootcopy independent from retired root/source object");
-  agx_owned_nir_pipe_fixture(AgxOwnedNirShader(result),AgxOwnedNirBindings(result),AgxOwnedNirWorkgroup(result),stage,n==0?argv[5]:nullptr);
+  auto *original_nir=AgxOwnedNirShader(result);const auto *before_wg=AgxOwnedNirWorkgroup(result);std::array<uint32_t,3> saved_wg{{before_wg[0],before_wg[1],before_wg[2]}};
+  agx_owned_nir_pipe_fixture(original_nir,AgxOwnedNirBindings(result),before_wg,stage,n==0?argv[5]:nullptr,actual_wrapper,result);
+  wrapper_check(AgxOwnedNirShader(result)==original_nir,"original NIR pointer retained");
+  const auto *after_wg=AgxOwnedNirWorkgroup(result);for(unsigned i=0;i<3;i++)wrapper_check(after_wg[i]==saved_wg[i],"actual private workgroup retained");
+  const auto *after_map=AgxOwnedNirBindings(result);wrapper_check(after_map->active==map.active&&after_map->count==map.count,"actual private map header retained");
+  for(unsigned i=0;i<DXBC_BINDING_MAP_MAX;i++){const auto &a=after_map->bindings[i];const auto &b=map.bindings[i];wrapper_check(a.kind==b.kind&&a.id==b.id&&a.space==b.space&&a.reg==b.reg&&a.slot==b.slot,"actual private map entries retained");}
+  const auto after_root=AgxOwnedNirRoot(result);wrapper_check(after_root.bytes==saved_root.size()&&!std::memcmp(after_root.data,saved_root.data(),after_root.bytes),"actual owned root retained through wrapper");
   rootcopy=AgxOwnedNirRoot(result);if(rootcopy.bytes!=saved_root.size()||std::memcmp(rootcopy.data,saved_root.data(),rootcopy.bytes))std::abort();
   AgxOwnedNirDestroy(&result);need(!result,"NIR/map/root destroyed without source pointers");
  }
  agx_owned_nir_pipe_fixture_finish();
+ wrapper_check(wrapper_valid_calls==20&&wrapper_null_calls==8,"source-expected five valid and two NULL wrapper calls per four actual objects");
+ std::printf("C15_NIR_OPAQUE_WRAPPER_PASS valid_calls=%u null_calls=%u snapshot_checks=%u ACTUAL_CPP_WRAPPER_NO_ASAHI_BO\n",wrapper_valid_calls,wrapper_null_calls,wrapper_snapshot_checks);
  need(AgxCpuRetireDevice(domain,device)==AgxCpuProviderStatus::Ok,"device retirement after all CPU objects");AgxCpuQuiesceTicket q{};need(AgxCpuBeginQuiesce(domain,device,&q)==AgxCpuProviderStatus::Ok,"explicit sink gate close");need(AgxCpuTryQuiesce(domain,&q)==AgxCpuProviderStatus::Ok,"client quiescence");need(AgxCpuProviderDestroy(&domain)==AgxCpuProviderStatus::Ok&&!domain,"actual provider destroyed");
  std::printf("C15_OWNED_NIR_BRIDGE_PASS checks=%u accepted=%u refused=%u legacy_CS_VS_PS=3 DXIL_mixed=1 owned_NIR_map_root=YES NO_DDI_NO_BACKEND_NO_GPU\n",checks,accepted,refused);
 }

@@ -1,4 +1,4 @@
-"""Original CURRENT-only opt-in clone/consume CPU recipes. No private fallback."""
+"""Original CURRENT-only opaque-wrapper CPU recipes. No private fallback."""
 from pathlib import Path
 import owned_program_nir_source as owned
 ROOT=Path(__file__).resolve().parents[1]
@@ -16,13 +16,13 @@ def commands(receipts,generated):
    i=c['argv'].index('-c');c['argv'][i+1]=str(ROOT/'tests/owned_nir_pipe_driver.cpp')
  base=next(c['argv']for c in cs if c['label']=='frontend');flags=base[1:base.index('-MD')]
  # The existing frontend did not include Gallium contexts. Use the one
- # already-pinned actual Mesa header root for these two additional C units.
+ # already-pinned actual Mesa header root for the additional fixture C unit (the helper is in the base recipe).
  _,external_pins=owned.checked.expected_inputs()
  contexts=[Path(n) for n in external_pins if n.endswith('/pipe/p_context.h')]
  if len(contexts)!=1:raise RuntimeError('EXACT_PINNED_GALLIUM_CONTEXT_HEADER_REQUIRED')
  flags=flags+['-I',str(contexts[0].parent.parent)]
  extra=[]
- for label,source in [('handoff',MODULE/'agx_owned_nir_pipe.c'),('handoff_fixture',ROOT/'tests/owned_nir_pipe_fixture.c')]:
+ for label,source in [('handoff_fixture',ROOT/'tests/owned_nir_pipe_fixture.c')]:
   extra.append({'label':label,'argv':[base[0],*flags,'-MD','-MF',str(out/(label+'.d')),'-c',str(source),'-o',str(out/(label+'.o'))]})
  link=next(c for c in cs if c['label']=='link');i=next(i for i,a in enumerate(link['argv'])if a.endswith('.o'))
  link['argv'][i:i]=[str(out/(c['label']+'.o'))for c in extra]

@@ -4,6 +4,7 @@
 #pragma once
 #include "../../d3d12/agx_d3d12_shader_owned_core.h"
 #include "agx_owned_program_nir_native.h"
+#include "agx_owned_nir_pipe.h"
 struct AgxOwnedNir;
 struct AgxOwnedNirRequest {const AgxShaderOwned *owned;SIZE_T readable_owned_bytes;const char *entry;size_t entry_bytes;uint32_t limits[4];};
 /* Caller provides a valid live CPU-owned object, stable accessible bytes and
@@ -24,3 +25,10 @@ nir_shader *AgxOwnedNirShader(AgxOwnedNir *) noexcept;
 const dxbc_binding_map *AgxOwnedNirBindings(const AgxOwnedNir *) noexcept;
 AgxShaderTrustedSpan AgxOwnedNirRoot(const AgxOwnedNir *) noexcept;
 const uint32_t *AgxOwnedNirWorkgroup(const AgxOwnedNir *) noexcept;
+
+/* Caller-serialized stable live prepared/context held through nonthrowing
+ * callback. No concurrent/reentrant destruction. Root retained/copied by the
+ * future caller; this forwarding entry adds no reference/thread/DDI policy.
+ * Same empty/nonempty-output rules and statuses as the C helper. */
+agx_owned_nir_pipe_status AgxOwnedNirCreatePipeState(
+ const AgxOwnedNir *,pipe_context *,agx_owned_nir_pipe_state *) noexcept;

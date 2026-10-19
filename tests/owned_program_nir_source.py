@@ -6,7 +6,7 @@ import dxil_checked_owned_source as checked
 import dxil_nir_map_source as nir_recipe
 ROOT=Path(__file__).resolve().parents[1]
 MODULE=ROOT/'drivers/apple-agx/mesa/dxil'
-NAMES=['drivers/apple-agx/mesa/dxil/'+n for n in ['agx_owned_program_nir.h','agx_owned_program_nir.cpp','agx_owned_program_nir_native.h','agx_owned_program_nir_native.c']]+['tests/'+n for n in ['d3d12_owned_program_nir_fixture.cpp','owned_program_nir_inspect.c','owned_program_nir_source.py','test_owned_program_nir.py']]
+NAMES=['drivers/apple-agx/mesa/dxil/'+n for n in ['agx_owned_program_nir.h','agx_owned_program_nir.cpp','agx_owned_program_nir_native.h','agx_owned_program_nir_native.c','agx_owned_nir_pipe.h','agx_owned_nir_pipe.c']]+['tests/'+n for n in ['d3d12_owned_program_nir_fixture.cpp','owned_program_nir_inspect.c','owned_program_nir_source.py','test_owned_program_nir.py']]
 LINK_STDERR=b"ld: warning: ignoring duplicate libraries: '-lc++'\n"
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def entry(p):p=Path(p);return {'bytes':p.stat().st_size,'sha256':sha(p)}
@@ -24,6 +24,12 @@ def commands(receipts,generated):
  def unit(name,source,flags,cpp=False):
   obj=out/(name+'.o');objects.append(str(obj));cs.append({'label':name,'argv':[external['cxx']if cpp else external['cc'],*flags,'-MD','-MF',str(out/(name+'.d')),'-c',str(source),'-o',str(obj)]})
  for name,source in [('frontend',MODULE/'agx_owned_program_nir_native.c'),('inspect',ROOT/'tests/owned_program_nir_inspect.c'),('map',dxil/'agx_dxil_nir_map.c'),('dxbc',dxbc/'dxbc_to_nir.c'),('parse',dxbc/'dxbc_parse.c')]:unit(name,source,cflags)
+ # The opaque wrapper has a strong helper reference; every bridge link must
+ # include the real clone/consume helper, even without callback-fixture calls.
+ _,external_pins=checked.expected_inputs()
+ contexts=[Path(n)for n in external_pins if n.endswith('/pipe/p_context.h')]
+ if len(contexts)!=1:raise RuntimeError('EXACT_PINNED_GALLIUM_CONTEXT_HEADER_REQUIRED')
+ unit('handoff',MODULE/'agx_owned_nir_pipe.c',cflags+['-I',str(contexts[0].parent.parent)])
  small=['-std=c11',*common,'-I',str(dxil),'-I',str(dxbc),'-I',external['external_source']]
  for name,source in [('program',dxil/'agx_dxil_program.c'),('legacy',dxbc/'agx_legacy_program_frame.c'),('owned',dxil/'agx_dxil_owned.c')]:unit(name,source,small)
  cpp=['-std=c++17',*common,'-fexceptions','-I',str(g/'host-sdk'),'-I',str(d3d),'-I',str(dxil),'-I',str(dxbc),'-I',str(MODULE)]

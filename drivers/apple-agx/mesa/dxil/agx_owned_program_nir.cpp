@@ -37,3 +37,9 @@ nir_shader *AgxOwnedNirShader(AgxOwnedNir *v) noexcept{return v?v->native.nir:nu
 const dxbc_binding_map *AgxOwnedNirBindings(const AgxOwnedNir *v) noexcept{return v?&v->native.map:nullptr;}
 AgxShaderTrustedSpan AgxOwnedNirRoot(const AgxOwnedNir *v) noexcept{return v?AgxShaderTrustedSpan{v->root.data(),v->root.size()}:AgxShaderTrustedSpan{};}
 const uint32_t *AgxOwnedNirWorkgroup(const AgxOwnedNir *v) noexcept{return v?v->native.workgroup:nullptr;}
+
+agx_owned_nir_pipe_status AgxOwnedNirCreatePipeState(
+ const AgxOwnedNir *value,pipe_context *pipe,
+ agx_owned_nir_pipe_state *out) noexcept {
+ return agx_owned_nir_create_pipe_state(value ? &value->native : nullptr,pipe,out);
+}

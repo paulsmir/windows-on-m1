@@ -37,7 +37,7 @@ class OwnedNirPipe(unittest.TestCase):
      if not set(actual)<=pins.keys():raise RuntimeError('UNPINNED_DEPENDENCY '+repr(sorted(set(actual)-pins.keys())))
     verify()
    so=(out/'run.stdout').read_text()
-   for line in ['C15_OWNED_NIR_BRIDGE_PASS checks=79 accepted=5 refused=6','C15_OWNED_NIR_NORMALIZATION_PASS base_global=0 base_workgroup=0','C15_NIR_SEMANTIC_PASS lanes=192 active=173 tail=19 compared_words=384','srv_swap_bad=346 seed_loss_bad=346 wrong_slot_bad=346','C15_NIR_PIPE_CALLBACK_PASS token_stage=5','C15_NIR_PIPE_CALLBACK_PASS token_stage=1','C15_NIR_PIPE_CALLBACK_PASS token_stage=0','C15_NIR_PIPE_FS_SERIALIZATION_PASS ORIGINAL_AND_TRANSFERRED_CLONES_UNCHANGED','C15_NIR_PIPE_FIXTURE_PAIR_ROLLBACK_PASS NO_PRODUCTION_GRAPHICS_CLAIM','C15_NIR_PIPE_CALLBACK_FINAL_PASS']:
+   for line in ['C15_OWNED_NIR_BRIDGE_PASS checks=79 accepted=5 refused=6','C15_OWNED_NIR_NORMALIZATION_PASS base_global=0 base_workgroup=0','C15_NIR_SEMANTIC_PASS lanes=192 active=173 tail=19 compared_words=384','srv_swap_bad=346 seed_loss_bad=346 wrong_slot_bad=346','C15_NIR_PIPE_CALLBACK_PASS token_stage=5','C15_NIR_PIPE_CALLBACK_PASS token_stage=1','C15_NIR_PIPE_CALLBACK_PASS token_stage=0','C15_NIR_PIPE_FS_SERIALIZATION_PASS ORIGINAL_AND_TRANSFERRED_CLONES_UNCHANGED','C15_NIR_PIPE_FIXTURE_PAIR_ROLLBACK_PASS NO_PRODUCTION_GRAPHICS_CLAIM','C15_NIR_PIPE_CALLBACK_FINAL_PASS checks=199 retained_refs=0','C15_NIR_OPAQUE_NULL_CASES_PASS','C15_NIR_OPAQUE_WRAPPER_PASS valid_calls=20 null_calls=8']:
     if line not in so:raise RuntimeError('ORACLE_MARKER_MISSING '+line)
    for n in ['1','9']:
     q=out/('actual_u0_space'+n+'.bin');gold=Path(cs[-1]['argv'][-1])/('expected_u0_space'+n+'.bin')

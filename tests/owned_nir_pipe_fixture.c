@@ -16,6 +16,9 @@ static unsigned expected_shared;
 static struct blob fs_expected;
 static struct agx_owned_program_nir_native retained_vs;
 static unsigned retained_refs;
+static unsigned wrapper_checks;
+static void wrapper_need(int p,const char *why){++wrapper_checks;if(!p){fprintf(stderr,"OPAQUE_WRAPPER_FAIL %s\n",why);abort();}}
+typedef enum agx_owned_nir_pipe_status (*wrapper_create)(const void *,struct pipe_context *,struct agx_owned_nir_pipe_state *);
 static void need(int p,const char *why){++checks;if(!p){fprintf(stderr,"NIR_PIPE_FAIL %s\n",why);abort();}}
 static void child_dead(void *p){(void)p;++clone_frees;}
 static void original_child_dead(void *p){(void)p;++original_frees;}
@@ -59,7 +62,8 @@ static int maps_equal(const struct dxbc_binding_map *a,const struct dxbc_binding
 }
 extern void agx_owned_program_nir_inspect(struct nir_shader *,unsigned,const char *);
 void agx_owned_nir_pipe_fixture(struct nir_shader *nir,const struct dxbc_binding_map *map,
- const uint32_t workgroup[3],unsigned token_stage,const char *vectors){
+ const uint32_t workgroup[3],unsigned token_stage,const char *vectors,
+ wrapper_create create,const void *opaque){
  original=nir;unsigned original_before=original_frees;
  if(token_stage==0){blob_init(&fs_expected);nir_serialize(&fs_expected,nir,false);need(!fs_expected.out_of_memory&&fs_expected.size,"FS original structural snapshot");}
  void *original_child=ralloc_size(nir,1);need(original_child!=NULL,"borrowed original observer child");ralloc_set_destructor(original_child,original_child_dead);
@@ -71,7 +75,9 @@ void agx_owned_nir_pipe_fixture(struct nir_shader *nir,const struct dxbc_binding
  agx_owned_program_nir_inspect(nir,token_stage,vectors);
  unsigned before=calls,free_before=clone_frees,delete_before=deletes;
  fail_callback=0;
- need(agx_owned_nir_create_pipe_state(&source,&p,&out)==AGX_OWNED_NIR_PIPE_OK,"nominal callback success");
+ wrapper_need(create(NULL,&p,&out)==AGX_OWNED_NIR_PIPE_INVALID,"NULL opaque object refuses empty output");
+ wrapper_need(zero(&out)&&calls==before,"NULL opaque empty refusal allzero/no callback");
+ need(create(opaque,&p,&out)==AGX_OWNED_NIR_PIPE_OK,"nominal callback success");
  need(out.state&&calls==before+1&&clone_frees==free_before+1,"callback consumed sole actual clone");
  need(seen_stage==token_stage&&out.token_stage==token_stage,"matching callback/stage publication");
  need(maps_equal(&out.bindings,map),"copied binding metadata publication");
@@ -80,22 +86,28 @@ void agx_owned_nir_pipe_fixture(struct nir_shader *nir,const struct dxbc_binding
  need(!memcmp(srv,out.srv_dimensions,sizeof(srv))&&!memcmp(uav,out.uav_dimensions,sizeof(uav)),"dimension snapshot publication");
  if(token_stage==5)for(unsigned i=0;i<3;i++)need(out.block[i]==workgroup[i],"block snapshot");
  void *live=out.state;struct dxbc_binding_map saved=out.bindings;
- need(agx_owned_nir_create_pipe_state(&source,&p,&out)==AGX_OWNED_NIR_PIPE_INVALID,"nonempty live result refuses");
+ struct agx_owned_nir_pipe_state live_snapshot=out;
+ wrapper_need(create(NULL,&p,&out)==AGX_OWNED_NIR_PIPE_INVALID,"NULL opaque object refuses nonempty output");
+ wrapper_need(out.state==live_snapshot.state&&out.token_stage==live_snapshot.token_stage&&out.shared_bytes==live_snapshot.shared_bytes&&maps_equal(&out.bindings,&live_snapshot.bindings)&&calls==before+1,"NULL opaque live state/core metadata unchanged");
+ for(unsigned i=0;i<3;i++)wrapper_need(out.block[i]==live_snapshot.block[i],"NULL opaque live block unchanged");
+ wrapper_need(!memcmp(out.srv_dimensions,live_snapshot.srv_dimensions,sizeof(out.srv_dimensions))&&!memcmp(out.uav_dimensions,live_snapshot.uav_dimensions,sizeof(out.uav_dimensions)),"NULL opaque live dimensions unchanged");
+ need(create(opaque,&p,&out)==AGX_OWNED_NIR_PIPE_INVALID,"nonempty live result refuses");
  need(out.state==live&&maps_equal(&out.bindings,&saved)&&calls==before+1,"nonempty live result unchanged");
  need(out.token_stage==token_stage&&!memcmp(srv,out.srv_dimensions,sizeof(srv))&&!memcmp(uav,out.uav_dimensions,sizeof(uav)),"nonempty metadata unchanged");
  if(token_stage==5){need(out.shared_bytes==expected_shared,"nonempty shared metadata unchanged");for(unsigned i=0;i<3;i++)need(out.block[i]==workgroup[i],"nonempty block metadata unchanged");}
  agx_owned_nir_delete_pipe_state(&p,&out);need(zero(&out)&&deletes==delete_before+1,"matching delete clears result");
  agx_owned_nir_delete_pipe_state(&p,&out);need(deletes==delete_before+1,"empty delete idempotent");
  fail_callback=1;
- need(agx_owned_nir_create_pipe_state(&source,&p,&out)==AGX_OWNED_NIR_PIPE_CREATE_FAILED,"ordinary callback-reported failure");
+ need(create(opaque,&p,&out)==AGX_OWNED_NIR_PIPE_CREATE_FAILED,"ordinary callback-reported failure");
  need(zero(&out)&&calls==before+2&&clone_frees==free_before+2,"failure consumes clone, publishes nothing");
  fail_callback=0;
- need(agx_owned_nir_create_pipe_state(&source,&p,&out)==AGX_OWNED_NIR_PIPE_OK,"valid subsequent ordinary call");agx_owned_nir_delete_pipe_state(&p,&out);
+ need(create(opaque,&p,&out)==AGX_OWNED_NIR_PIPE_OK,"valid subsequent ordinary call");agx_owned_nir_delete_pipe_state(&p,&out);
  need(original_frees==original_before&&maps_equal(&source.map,map),"original retained alive unchanged");
  agx_owned_program_nir_inspect(nir,token_stage,vectors);
  struct pipe_context missing=p;missing.delete_compute_state=NULL;missing.delete_vs_state=NULL;missing.delete_fs_state=NULL;before=calls;
- need(agx_owned_nir_create_pipe_state(&source,&missing,&out)==AGX_OWNED_NIR_PIPE_INVALID&&zero(&out)&&calls==before,"missing delete refuses before callback");
+ need(create(opaque,&missing,&out)==AGX_OWNED_NIR_PIPE_INVALID&&zero(&out)&&calls==before,"missing delete refuses before callback");
  need(agx_owned_nir_create_pipe_state(NULL,&p,&out)==AGX_OWNED_NIR_PIPE_INVALID&&zero(&out),"empty invalid source allzero");
+ /* Explicit mutable-native controls below qualify C helper only. */
  if(token_stage==5){source.workgroup[0]++;before=calls;need(agx_owned_nir_create_pipe_state(&source,&p,&out)==AGX_OWNED_NIR_PIPE_UNSUPPORTED&&zero(&out)&&calls==before,"metadata mismatch refuses before callback");source.workgroup[0]--;}
  struct nir_shader *unsupported=nir_shader_clone(NULL,nir);need(unsupported!=NULL,"ordinary test stage clone");unsupported->info.stage=MESA_SHADER_GEOMETRY;source.nir=unsupported;before=calls;
  need(agx_owned_nir_create_pipe_state(&source,&p,&out)==AGX_OWNED_NIR_PIPE_UNSUPPORTED&&zero(&out)&&calls==before,"unsupported stage refuses before callback");ralloc_free(unsupported);
@@ -125,4 +137,5 @@ void agx_owned_nir_pipe_fixture(struct nir_shader *nir,const struct dxbc_binding
 void agx_owned_nir_pipe_fixture_finish(void){
  need(!retained_vs.nir&&!retained_refs,"fixture-end retained clone and GLSL reference balanced");
  printf("C15_NIR_PIPE_CALLBACK_FINAL_PASS checks=%u retained_refs=0 NO_ASAHI_BO\n",checks);
+ printf("C15_NIR_OPAQUE_NULL_CASES_PASS checks=%u FIXTURE_CALLBACK_ONLY\n",wrapper_checks);
 }
