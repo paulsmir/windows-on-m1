@@ -8,30 +8,34 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## ACTIVE NATIVE1516 — root session77965, DO NOT duplicate
+## ACTIVE NATIVE1517 — root session98465, DO NOT duplicate
 
-- Private fullUMD+host BUILDONLY .local/c15-full-umd-native1516-prep/controller.py,
-  approval3b31e8e8fa32ff0c8fd28822ea15ba590198006ee9ba3b80fa1c4602115efdaa,
-  BEFORE2820e269. 17commands/freshroot1516, targetDLL/host names1514 retained.
-  No PEexecution/guest/package/KMD/sign actions. Pollbounded/no final whileactive.
-- Prior1514STOPpreflight.before/0commands, artifacts preserved .local/c15-full-umd-native1514-result.
-  ACTUALbothhistoricalbuilderfilesunchangedmatchpassed1512; metadata suffixSELF
-  producer overwroteTWOancestorrecords. Fixedactualfinalize1516.py selectsnormalized
-  FULLpath/exact1SELF/preservesother14515. ActualregistryRED2/GREENproofb3a01bff;
-  Rootallcommon1512/1516historicalrecords identical. Do NOT modifybuilderoldfiles,
-  removeancestorchecks orreinterpret1514 asbuildPASS. Fullnotes native-self-pin-scope.md.
-- Final1516READY69daf1ba1f7764e642f2a58b0a0a058e60f5051d393ec8d86b9297c973dcac04;
-  runner083b0b97/controller518c72bc/execution477b8394/ZIPe7477c91/13localpins.
-  Initial1514localENTRYRootScopealiasSTOP wasbeforeANYSSH; canonicalauthorizer
-  explicitlyP.resolve preventsrepeat. Allfutureprepared_rootscanonicalVolumes!
-- CPU1515SOURCEharness kmdagent preparedPAUSED untilactual1516PE/import/CRT/TLS/
-  mapreview; bind1516—notfailed1514—beforeANYguestload. No driverpackage.
+- PrivatefullUMD+host BUILDONLY .local/c15-full-umd-native1517-prep/controller.py,
+  approval278d51cccb59511a8c6abfb80e9f95ff9050e39a6d7bd4c0b4c0fc34f4b82c38,
+  BEFORE17649e62. FinalREADYe4760824/runnera1ea18cc/controllerdeda4e9a/
+  execution0b2236ff/ZIP2e59545e;14518nativepins. ActualSourceGates/code/source/
+  flags17graph unchanged, soleSDK26100x64binFIRSTPATH +2actualtoolpins.
+  RootFINALcanonicalprepared/SELF/733ZIP/local/commonancestor1512pins checked.
+- Prior1516STOPcmd14ResourceCompileTRK0005rc.exe missing; normal1504verifier+
+  10freshcompiles+bothactualClCompileevalgates13RC0; fullDLL22C/C++objectscompiled
+  0warnings/post14516MATCH. NoDLLlink/host/PEexec. Source build-driver.ps1line165
+  exactnormalGpuvaG3SDKx64PATH omitted inharness; nowrestored +actualrc.exe55640B
+  43da1503c262c30894c851589bf0155f8365d77e63a5f7bc13982320e3a6b42d/
+  rcdll264536B9a11e4759adc48abe1fa9e3082ad7db4b53f4d6d77701c13729f4ffd47ae934c.
+  Preserve1516records/localresult/SDKfinitequery; no driver/code/ABI change.
+- Prior1514STOPpreflight.before/0commands: sourceproducer suffixSELF rewroteTWO
+  ancestorrecords. Bothlivebuilderfilesunchangedmatchpassed1512. Actualfinalize
+  1516/1517 nowFULLpath/equal1SELF/preservesother14515; realregistryRED2/GREEN
+  proofb3a01bff. NEVERmodifyoldbuilderfiles orremoveancestorchecks. Fullnotes
+  native-self-pin-scope.md. InitiallocalaliasRootScopeSTOP also preserved;
+  ALLfutureauthorizerprepared_rootsP.resolve canonicalVolumes (notUsersalias)!
+- CPU1515SOURCEharness PENDING actual1517PE/import/CRT/TLS/maprootacceptance;
+  binds1517—notfailed1514/1516—beforeANYguestload. No package. Physicaltargetnames
+  AgxC15PrivatePsoCpu1514.dll/Host1514.exe retainedintentionally underbuild1517.
 - Productionlegacyroute SOURCEplan97794f at .local/c15-production-legacy-package-integration-prep;
-  eightfreshproductionobjects NOobserver/wrappers/exports; defaultOFF buildhook.
-  CRITICALwhole-sourcecommit coupling: newpackage source needsFRESHnormalruntime
-  pipeline qualification undernewassembly; neverimport1504historicalprops asnew
-  source orweakenoriginalverifier. PrivateCPUvariant canexplicitlyuse1504baseline.
-  CPU1515PASS stillmandatorybeforeproductionimplementation/hardware.
+  eightfreshobjects NOobserver/wrappers/exports/defaultOFF buildhook. CRITICALnew
+  packagewhole-sourcecommit requiresFRESHnormalruntime qualification; neverimport
+  historical1504props asnewsource orweakenverifier. CPU1515PASS stillmandatory.
 
 ## CPU1513 COMPLETE — next private native1514 BUILD review NOW
 
