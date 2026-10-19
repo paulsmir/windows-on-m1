@@ -10,7 +10,7 @@ class OwnedNirPipe(unittest.TestCase):
   approved=Path(os.environ['AGX_C15_NIR_PIPE_APPROVED_MANIFEST']);self.assertEqual(sha(approved),os.environ['AGX_C15_NIR_PIPE_APPROVED_SHA256'])
   a=json.loads(approved.read_text());before=os.environ['AGX_C15_NIR_PIPE_AUTHORIZED_BEFORE'];self.assertTrue(before and not before.startswith('PENDING'));self.assertEqual(a['approved_before'],before)
   out=Path(target).resolve();generated=Path(a['generated_root']);self.assertEqual(str(out),a['receipt_root']);self.assertFalse(out.exists(),'fresh receipt root required')
-  pins=expected_inputs(generated);self.assertEqual(a['inputs'],pins);cs=commands(out,generated);self.assertEqual(a['commands'],cs);self.assertEqual(len(cs),18)
+  pins=expected_inputs(generated);self.assertEqual(a['inputs'],pins);cs=commands(out,generated);self.assertEqual(a['commands'],cs);self.assertEqual(len(cs),19)
   def verify():
    for name,want in pins.items():
     if entry(name)!=want:raise RuntimeError('INPUT_DRIFT '+name)

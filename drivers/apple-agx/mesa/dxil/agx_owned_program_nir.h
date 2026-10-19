@@ -20,7 +20,6 @@ struct AgxOwnedNirRequest {const AgxShaderOwned *owned;SIZE_T readable_owned_byt
  * recoverable upstream allocation-failure guarantee. No borrowed storage survives return.
  * Output must initially be empty. Failure publishes NULL, no legacy fallback. */
 agx_owned_nir_status AgxOwnedNirPrepare(const AgxOwnedNirRequest *,AgxOwnedNir **) noexcept;
-void AgxOwnedNirDestroy(AgxOwnedNir **) noexcept;
 nir_shader *AgxOwnedNirShader(AgxOwnedNir *) noexcept;
 const dxbc_binding_map *AgxOwnedNirBindings(const AgxOwnedNir *) noexcept;
 AgxShaderTrustedSpan AgxOwnedNirRoot(const AgxOwnedNir *) noexcept;

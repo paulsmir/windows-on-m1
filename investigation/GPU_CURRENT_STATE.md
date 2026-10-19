@@ -8,6 +8,21 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## ACTIVE: EXP1510 started09:10:52Z, stage PASS, await hardware
+
+- Rootsession52034 runs `.local/preparation-1510/run1510.sh`; NEVER duplicate.
+  scratchpadnewexp1510.log/watchdog1510.log, evidenceEXP1510-arm64-nir-consume.
+  Same signedpackage30.0.1506.0/source3d40, correctedreceipt28aec (originalraw0e708
+  immutable). Explicitversion propagatedactualstage/cleanup/manifest/verify.
+  HASHES_MATCH23/STAGEPASS; generatedBEFORE9133db3c committed beforefullowner.
+  59nonE+C21ESKIP/CSenabled/pressure1/normalcontrols. Poll bounded/no final.
+  AfterNEWEXP_DONE collect→FactoryV2rec1510h/recover.sh→RECOVERY_DONE exactAbsent.
+  Actualgeneratedwrapper4e8ba25afa37587e45e035dfc46d48d38645179fc2f3903cfe672de7fe0ce29e;
+  host10f unchanged; generatedfullsources inledger. No manualprereboot.
+- Offline next: adopt legacyfactory/TUsplit fiveprod/eighttests ONLY; actualDDIroute
+  stayspending fullCompileCompute/CreatePSO/EnsureOwner realtypedfixture andnative
+  stronglink. Do not claim factory-onlytest provesDDIorSM6. Root soleGit/remote.
+
 ## IMMEDIATE UPDATE: EXP1506 HOST PREPARE STOP, no guest mutation
 
 - EXP1506 activation stopped at stale receipt INF hash before clone/guestwrites.

@@ -6,7 +6,7 @@ import dxil_checked_owned_source as checked
 import dxil_nir_map_source as nir_recipe
 ROOT=Path(__file__).resolve().parents[1]
 MODULE=ROOT/'drivers/apple-agx/mesa/dxil'
-NAMES=['drivers/apple-agx/mesa/dxil/'+n for n in ['agx_owned_program_nir.h','agx_owned_program_nir.cpp','agx_owned_program_nir_native.h','agx_owned_program_nir_native.c','agx_owned_nir_pipe.h','agx_owned_nir_pipe.c']]+['tests/'+n for n in ['d3d12_owned_program_nir_fixture.cpp','owned_program_nir_inspect.c','owned_program_nir_source.py','test_owned_program_nir.py']]
+NAMES=['drivers/apple-agx/mesa/dxil/'+n for n in ['agx_owned_program_nir.h','agx_owned_program_nir.cpp','agx_owned_program_nir_common.cpp','agx_owned_program_nir_private.h','agx_owned_nir_handoff.h','agx_owned_program_nir_native.h','agx_owned_program_nir_native.c','agx_owned_nir_pipe.h','agx_owned_nir_pipe.c']]+['tests/'+n for n in ['d3d12_owned_program_nir_fixture.cpp','owned_program_nir_inspect.c','owned_program_nir_source.py','test_owned_program_nir.py']]
 LINK_STDERR=b"ld: warning: ignoring duplicate libraries: '-lc++'\n"
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def entry(p):p=Path(p);return {'bytes':p.stat().st_size,'sha256':sha(p)}
@@ -33,7 +33,7 @@ def commands(receipts,generated):
  small=['-std=c11',*common,'-I',str(dxil),'-I',str(dxbc),'-I',external['external_source']]
  for name,source in [('program',dxil/'agx_dxil_program.c'),('legacy',dxbc/'agx_legacy_program_frame.c'),('owned',dxil/'agx_dxil_owned.c')]:unit(name,source,small)
  cpp=['-std=c++17',*common,'-fexceptions','-I',str(g/'host-sdk'),'-I',str(d3d),'-I',str(dxil),'-I',str(dxbc),'-I',str(MODULE)]
- for name,source in [('core',d3d/'agx_d3d12_shader_owned_core.cpp'),('library',d3d/'agx_d3d12_zero_cache_library.cpp'),('provider',d3d/'agx_shader_input_provider.cpp'),('bridge',MODULE/'agx_owned_program_nir.cpp'),('fixture',ROOT/'tests/d3d12_owned_program_nir_fixture.cpp')]:unit(name,source,cpp,True)
+ for name,source in [('core',d3d/'agx_d3d12_shader_owned_core.cpp'),('library',d3d/'agx_d3d12_zero_cache_library.cpp'),('provider',d3d/'agx_shader_input_provider.cpp'),('bridge',MODULE/'agx_owned_program_nir.cpp'),('common',MODULE/'agx_owned_program_nir_common.cpp'),('fixture',ROOT/'tests/d3d12_owned_program_nir_fixture.cpp')]:unit(name,source,cpp,True)
  unit('facade',dxil/'agx_dxil_checked.cpp',['-std=c++14',*common,'-fexceptions','-I',str(dxil),'-I',external['external_source']],True)
  link=nir_recipe.commands(out)[2];libs=link[link.index('-o')+2:]
  cs.append({'label':'link','argv':[external['cxx'],*common,'-fexceptions',*objects,*external['archives'],*libs,'-o',str(out/'owned-program-nir-fixture')]})
