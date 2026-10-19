@@ -36,9 +36,9 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   excludeinheritedpublisher666; completeZIP/manifest/commitnewidentity; no1504retrofit.
   No newbuildIDreserved;1520possibleafterrootpreregistration. AgentsSOURCEONLY.
 
-## Parallel BUILD1520 active / C26 BUILD1521 accepted
+## Parallel BUILD1520 + C26 BUILD1521 accepted
 
-- Native1520session26566 runs.local/c15-production-runtime1520-prep/controller.py;
+- Native1520session26566 COMPLETE all203RC0/199AA64/119canonical/25422deps;
   result.local/c15-production-runtime1520-result/05.stdout boundedpoll.
   BEFORE1fd2476d/approval0b3aef7379731cc39229a7f372a1a3b3085c93e7208143950b16869d14130633.
   Source40e2055cfb0457d332320c358928f53e2912a0fb/customrefEXP1520-source,
@@ -46,7 +46,10 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   manifeste02f4609535d1bef2b585d36d7de03790ece56b05fb0791e135e06f391427df6.
   725files/exact12revieweddelta/normalverifierUNCHANGED/DDIf338 excludes666.
   13058pins(commonold13057UNCHANGED+freshSELF);3normalstages/203commands expected.
-  Rootmustactualarchive/RSP/COFF/closure/diagnostics/Resourcef981 reviewaftercollect.
+  Rootacceptedreview.local/c15-production-runtime1520-result/root-review1520.json;
+  archive4072240Befdca12938e5ab5a0e56f673551438fa54b8e66c13d3099bf974425ae5949dfc/
+  props46269730b7e33f9eaa60a171d6583f2d2d424fa910f7cc7990862f85a3e30e81;
+  154archivebodies/RSP154/2537hashes/normalverifierResourcef981PASS.
   No PEexecution/package/GPUactions. Native8hookqualification separateNEXT.
 - C26native1521BUILDaccepted/rootreview.local/c26-probe-build1521-result/root-review1521.json;
   PE273920B49f94edd50ca602f1828b59e3d1fc5a55e8729917c20da9456fd7bebdb76c120;
