@@ -79,3 +79,17 @@ build-nir-libraries.ps1 currently builds five cached archives: nir/compiler/util
 4. Hardware is not needed to guess this CPU storage contract. Future package/hardware changes require their own parent-owned experiment, preserved recovery artifact and exact package manifest.
 
 Unknown until gate: fifth-field actual behavior; old/new packing and C/C++ equivalence; any external C++ enum-typed assignment compatibility; complete transitive rebuild set and serialization-cache invalidation path. Do not expand admission to FS/derivative modes until their end-to-end behavior is separately verified. This source plan does not claim a fix, build PASS or a safe compiler flag.
+
+## EXP1460 measured fifth field and pristine baseline
+
+The fifth risk is now observed: DXBC2 reads -2, full enum copy remains -2,
+and unsigned read is4294967294. RAW0/DXIL1 and all5NONE controls pass. All
+five per-field steps FAIL as predicted; native exit1/stderrEMPTY/hashMATCH.
+Root reviewed all30lines and actual source. Pristine raw object is440B;
+isolated stores occupy measured bytes depth380:04, derivative360:02,
+stencilfront392:04/back392:20, hashDXIL368:01/DXBC368:02. These are measured
+baseline data, not invented offsets or a proof of the projected layout.
+Artifact manifest eb248dc95426c2bf41b32a3f498006628adbfb3e1ff17cfaf1c5b6e98598f75f.
+Root authorizes a private five-field projection and real regression prototype;
+production adoption still requires C/C++ source/layout/neighbor/serialization
+and complete rebuild/cache identity gates. No fix has been validated yet.
