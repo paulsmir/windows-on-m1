@@ -8,8 +8,25 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## IMMEDIATE: EXP1500 build-only archive ACCEPTED / actual Windows owner next
+## IMMEDIATE: EXP1501 STOP missing one known header; new1503 / CPU1502 queued
 
+- CURRENT source11 guardedowner/stagequery/nativefixture files adopted UNCOMMITTED,
+  onlyrootEOFblankline trim versusprivateREADY21e2ef59; nativefullsourceproof323a657a.
+  Target30owner/ABIPASS; full1619/219.588s EXACT117oldentries/noaddedremoved/postMATCH,
+  log8e24928645ab4c7bff0b39a3e2c392cd478cb74d150b21e23fe10041e090df04.
+- EXP1501 COMPLETE STOP8commandsALLRC0/8AA64objects/noLINK. Fullactualowner+fixture
+  compiledactualMSBuilddefaultstd/EHsc/MD/W4WXsdl/O2/Qspectre/macro1; CLtlog5836B.
+  Strictactualinclude guard SOLEunknown b5/generated/src/util/format/u_format_gen.h.
+  Root59outputsverified/review9e693983ca600d9a70ed8b873fe7c14d3d56a07bd135f55c36640dc90ba85a3f.
+  Post13807MATCH/localpostMATCH. OriginalSTOPpreserved/no1501retry.
+- New1503 privatebundle kmdprepares samecode/profile/9commands, ONLYoneheaderpin+freshroot.
+  Accepted1472metadata124574B/3d659e5135249d5a0a116aa209015949912e22045bf4b13ea0ab41fd743c7dc4
+  andTWOactual1472ownerinclude records match/rootverified. All1501actualdeps replay0unknown
+  required. RootalonerunsBEFORE/approval. CPU1502template mustbindfutureaccepted1503PE.
+- Root1501all736ZIP/738nested/753local/13805nativepins verified, all9reusedAA64objects
+  from1145actualobserveddeps/source unchanged/review7b61be94; link16obj9old7fresh,
+  fullownerABIexcluded,17archive inclfresh1500once. Actual83MSBuildimportfiles measured,
+ 80installed/global+5Hostx86pin supplement; all raw/source authority outsideGit.
 - Rootreview `.local/c15-native-runtime-nir-consume1500-result/root-review1500.json`
   e5beb91dc1be099f9f89e17ff86a802e86510f00edc83d12e11b59a63f56d386.
   Both commandsRC0/post13310MATCH/303outputs hashed/217actualdeps0unknown;
