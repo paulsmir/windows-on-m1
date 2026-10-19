@@ -59655,3 +59655,77 @@ Evidence: scratchnewexp1562.log/watchdog1562.log/run1562.log; .local/experiments
 Recovery: collectevidence FIRST; exact evidence/rec1562h/recover.sh FactoryV2 normalGPU-visible disarm->Code32Stopped->exact1560package/devnode removal->orderednormalCode28/PackageAbsent/noService8CPU/RECOVERY_DONE. No rerun1530recovery, no retainedpackage betweenexperiments. Guesthang use ownedlauncher stop then recover under same documented profile; any rerun uses newID. Before physicaloperatorrequest check boundedSSH+USB+ownedlauncher yourself.
 All static source/sign/code gates above are actual. Dynamic stage/factory receipts must be appended before activation. Userpriority actualhardware; no new research untilrun starts.
 m1n1_windows actualHEAD5b8576031eaae5958c5494d4f22f5a6c3a25d191 dirtydiffSHAe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855; actualMuHEAD361a2134b2f742f331f8d75ae5f60ad4f7f413f1 dirtydiffSHA6ec31378e52cd3637a5217c6b839b797237fe5d4ca7bebe6057f1dd5a553a0c6 verifiedread-onlybeforelaunch.
+EXP1562 BEFORE 2026-10-19T18:18Z (PACKAGE1562: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD f42452fcf15e184a66df7b913851b1b21e3193b0 (error-owner routing/queue private-size regression; runtime15571938/sourcef42452; SAME accepted1521probe61nonE+C21ESKIP; no publicDXIL/SM6/caps/firmware change) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF d9fad7e2, sys 2843c61e, UMD 49014599, catalog 3149b535, DriverVer 30.0.1560.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1562.sh b99883343ee32b65 f4ded0ee49f6252a cfdb398fb8a2a5ac ; C: free 26.46 GB; recovery rec1562h/recover.sh; probe probe1562.sh (dc97fc0df069fa11); then the standard benchmark (EXP1184 harness: playnoovl).
+EXP1562 BEFORE 2026-10-19T18:13:56Z
+Repository public_windows; branch integration/ad04-windows-compiler; worktree /Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler. Branch root cdfa7a3de467adb3e94519677e4efaaeed81da95; build source f42452fcf15e184a66df7b913851b1b21e3193b0 at refs/agx-experiments/EXP1556-source (accepted40e + ONLY error-owner DDI delta; prior unvalidated FillDDITable publisher excluded exactly as1527). Driver dirty-diff SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (empty); ledger bookkeeping separate. m1n1 source5b8576031eaae5958c5494d4f22f5a6c3a25d191; Mu source361a2134b2f742f331f8d75ae5f60ad4f7f413f1/user-dirty Mu preserved SHA6ec31378e52cd3637a5217c6b839b797237fe5d4ca7bebe6057f1dd5a553a0c6, never used to rebuild firmware here.
+Hypothesis/single variable: replacing process-global last-created error identity by actual per-device/list/queue owner association, including runtime CalcPrivate-sized queue owner field, preserves native ordinary D3D12 creation and all accepted render/regression checkpoints. Direct rejected-error branches have CPU proof; this hardware verdict tests actual package/runtime queue layout and normal paths, not new GPU features or public SM6.
+WHY THIS HYPOTHESIS:
+1. Real current-source CPU RED A/B/A errors were delivered only to last device B; object/list/queue variants reproduced the same one global-state defect. Candidate route, actual CreateCommandQueue/CalcPrivate canaries and full WDK signatures now pass.
+2. EXP1530 accepted same legacy prepared compiler path and61nonE onhardware; new source has724otherfiles and CompileCompute/caps/opener byteequal. New full runtime1557/package1560/sign1561 binds actual f424source and same17archives+8fresh helpers with no unknown dependencies.
+3. Only remaining uncertainty is actual Windows private queue allocation/lifetime and regression behavior when loading the new signed package on J313; import/export/stack/source/CPU gates already passed.
+ATOMIC CONTRACT: none -- one underlying error-owner state correction; no coupled capability or scheduler fields and no independent feature bundle. Per-DDI direct refusal branches remain CPU-only evidence, not inferred GPU validation.
+WINDOWS CONTRACT: pinned WDK26100 d3d12umddi.h SHAd338e00bbd079cfed42434b5bd8cb9c658238cfe22747fb7d3b7cff3a3cabc28, unchanged0003 caps/negotiation, runtime allocates CalcPrivate sizes and supplies per-device/HRTLIST error callbacks. Classification RENDER_ONLY UMD contract; existing FULL GRAPHICS KMD unchanged source.
+AGX/ASAHI CONTRACT: accepted source40e legacy prepared compute owner/matching destroy, normal runtime provenance and Asahi operations unchanged. m1n1/Mu broker/UAT/IRQ/power/recovery profiles unchanged from1530; no guessed registers or init changes.
+TRANSLATION: typed DEVICE/COMMAND_LIST/QUEUE first handle resolves stored owner; queue stores creating device in sizeof-sized runtime allocation. Error HRESULT/diagnostic receipts preserved; list uses existing ListError callback. Hardware exercises ordinary existing61 steps including queue creation/destruction, no unsupported capability probing.
+WHAT IS STILL UNKNOWN: actualJ313 runtime new queue-private-size integration, ordinary GPU regression under newUMD, liveness/recovery. No direct runtime-invoked rejection oracle or publicDXIL/SM6 correctness is claimed.
+Build commands/evidence: EXP1557 canonical3stage normalruntime203rc0/199AA64; EXP1559 canonical8COFF accepted; EXP1560 canonical build-driver -Configuration Release -GpuvaG3Qualification -UmdAdmissionTrace -NativeFrontend -EnablePreparedNirOwner -PackageBuild1560 -GpuvaG1bPageProfile16 with actualsource-manifest; full rootreview abea3e71bdf7080af7de9432dddeb0b402a16c70dae08dd9f6e69fd151554691. EXP1561 same accepted1235 DIRID12 INF/WOW/CAT signing profile. No source/firmware rebuild after frozen package.
+Install/launch: bash /Volumes/pwdev/public_windows/.local/preparation-1562/run1562.sh, PREPACKED explicit version30.0.1560.0 and sameprobe1521; guest staging checks exact six artifact hashes/version andCATmembership before arm; full-owner boot uses existing armed+broker contract, never ordinary boot with armed GPU.
+Frozen packet /Volumes/pwdev/public_windows/.local/c15-final-package1560-signed1561.zip SHA237d0bf67f641f166aa0e55065f4a2287481dfa85afed29143e07dc518395641; source.zip SHA015890e8ce47f7dac78dc8c6d17725fd2648ab96587b790b2d19418cf90fd296; manifestSHA9f6bf0b6742577493c5f390e19237c183cc270ebff86091d0ce04f81f1feb723. Final receipt SHAf3e588b1ac6f650ce7eb935df5853c75a95f3bb95c432d360856350e44f5cc8e. Actual signed review a3ea1625c0a83f1e63493154b93d2ca834c1e52ddc23095ebaf09fed2c7425cf; CMS cryptographically valid/pinned test-signer E9BE15BD2A184BFABA0C8035B3C620C58037A241; builder test-root untrusted is not public trust; guest CAT membership mandatory BEFOREactivation.
+Artifact AppleAgxRenderAdmission.inf: /Volumes/pwdev/public_windows/.local/c15-final-package1560-signed1561/driver/AppleAgxRenderAdmission.inf SHA256 d9fad7e2dd846270dee1bf3e25fc65d322b3e05a4af18ab3919eba6ce74aac0c
+Artifact AppleAgxRenderAdmission.sys: /Volumes/pwdev/public_windows/.local/c15-final-package1560-signed1561/driver/AppleAgxRenderAdmission.sys SHA256 2843c61eeae65693cb0864ffca4707c4f2c952e895de318b1263f55103b41cd8
+Artifact AppleAgxRenderAdmissionUmd.dll: /Volumes/pwdev/public_windows/.local/c15-final-package1560-signed1561/driver/AppleAgxRenderAdmissionUmd.dll SHA256 490145997f0f99802c54eb678f303e43d99fcbb81c3e2c9b1b9a41de0bc83803
+Artifact appleagxrenderadmission.cat: /Volumes/pwdev/public_windows/.local/c15-final-package1560-signed1561/driver/appleagxrenderadmission.cat SHA256 3149b535ea601e45e5a878b271f9522e49bf00d2df5ac6841a2f3eb71b5ca940
+Artifact AppleAgxOpenGL32.dll: /Volumes/pwdev/public_windows/.local/c15-final-package1560-signed1561/driver/AppleAgxOpenGL32.dll SHA256 d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379
+Artifact AppleAgxRenderAdmissionUmd32.dll: /Volumes/pwdev/public_windows/.local/c15-final-package1560-signed1561/driver/AppleAgxRenderAdmissionUmd32.dll SHA256 1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac
+Hardware profile: m1n1 /Users/pavel/public_windows/.local/experiments/m1n1-5b857603-tables4096/m1n1-5b857603-tables4096.macho SHA3e5e9f1faff2ebb70a3a7e1f9728659e7c0688e54a3f4ddde03b79952ca21caa; Mu /Users/pavel/public_windows/.local/experiments/M2F2C-mu-361a2134/firmware/J313_EFI-m2f2c.fd SHA1c7d87d6fd4321feee605b5f9440dab6a350bc7a3964fb2c62b34602f565f3e5. Normal visible recovery remains1530 known-good, FactoryV2 hostSHA10f7771d1e34fe49f283ca32ae895d36b5664c8e761959e877ed820b6ec27f6f; new per-experiment wrapper/source hashes captured after prepare and BEFOREboot. Emergency hidden image only if normal visible guest unrecoverable.
+Fresh live preflight PASS: oneAPPL0002Code28/PackageAbsent/noService/noSYSUMD/8CPU, BootUTC2026-10-19T15:15:38.3435750Z; no launcher/recovery processes, USBm1n1uartproxy present. readonlyfacts .local/preparation-1562/inert-preflight.stdout SHAad80c3e27afc18577022bde914f62337a870ab1467744527a6415d3b22bf6d92; prior1530 acceptedrecovery and61PASS root83f643dcf921c9764d5fcee80b52a47ba4cf559a40d7058246a73cd34f8c5181.
+Expected checkpoint: stagehash/version/CAT/signature gates PASS, full-owner BOOT_READY,73SMOKE PASS plus ONLY knownMSAA-a000rFAIL, exactly61unique nonE D3D12PASS + C21E knownSKIP, C14A counter512/drawn512, C24ABC/C25/C26 unchanged, KMDpool PASS andfl11 ARM64/WOW/debugPASS, corpus414 each createfail64/4 hangs0/pixeldiff0, DWMfaults0. GL~52/internalGL~59.6/CSprevious47.067 singlepoint references only; CS enabled playnoovl (prior account hold expired).
+Failure criteria: anynewunexpected Windows stop/hang/SSHloss, PnP/package identity mismatch, newregression/word/pixel mismatch orduplicate/absentnonE step. Expected deliberate LONGJOB887a0006 and knownMSAA/C21Eskip remain separately recorded; noALL62PASS claim.
+Evidence: scratchnewexp1562.log/watchdog1562.log/run1562.log; .local/experiments/EXP1562-d3d12-error-owner-regression/evidence/EXP1562/tool-d3d12-on-std.txt and -umd.log, per-tool regressionlogs, full.log/full-chainload.log, stage/boot/factory/hash manifests, WER/dumps ifunexpectedstop; preserve current WER policy.
+Recovery: collectevidence FIRST; exact evidence/rec1562h/recover.sh FactoryV2 normalGPU-visible disarm->Code32Stopped->exact1560package/devnode removal->orderednormalCode28/PackageAbsent/noService8CPU/RECOVERY_DONE. No rerun1530recovery, no retainedpackage betweenexperiments. Guesthang use ownedlauncher stop then recover under same documented profile; any rerun uses newID. Before physicaloperatorrequest check boundedSSH+USB+ownedlauncher yourself.
+All static source/sign/code gates above are actual. Dynamic stage/factory receipts must be appended before activation. Userpriority actualhardware; no new research untilrun starts.
+m1n1_windows actualHEAD5b8576031eaae5958c5494d4f22f5a6c3a25d191 dirtydiffSHAe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855; actualMuHEAD361a2134b2f742f331f8d75ae5f60ad4f7f413f1 dirtydiffSHA6ec31378e52cd3637a5217c6b839b797237fe5d4ca7bebe6057f1dd5a553a0c6 verifiedread-onlybeforelaunch.
+PACKAGE_ARTIFACTS:
+d9fad7e2dd846270dee1bf3e25fc65d322b3e05a4af18ab3919eba6ce74aac0c  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/AppleAgxRenderAdmission.inf
+2843c61eeae65693cb0864ffca4707c4f2c952e895de318b1263f55103b41cd8  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/AppleAgxRenderAdmission.sys
+490145997f0f99802c54eb678f303e43d99fcbb81c3e2c9b1b9a41de0bc83803  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/AppleAgxRenderAdmissionUmd.dll
+3149b535ea601e45e5a878b271f9522e49bf00d2df5ac6841a2f3eb71b5ca940  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/AppleAgxRenderAdmissionUmd32.dll
+b99883343ee32b65b229a91c008979325d66298e54735acd6ab4427a705eb94d  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/manifest.json
+f4ded0ee49f6252a7861cf7d67320a0aea2a2de32009cb0fea879a7acffba925  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/hardware-manifest.json
+f3e588b1ac6f650ce7eb935df5853c75a95f3bb95c432d360856350e44f5cc8e  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/kmd-build-receipt.json
+cfdb398fb8a2a5acbe5df1c98924b8553ad2a1ae8d44d096212f97a4af12debf  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/full-owner1562.sh
+SOURCE_ARTIFACTS:
+015890e8ce47f7dac78dc8c6d17725fd2648ab96587b790b2d19418cf90fd296  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/source.zip
+9f6bf0b6742577493c5f390e19237c183cc270ebff86091d0ce04f81f1feb723  /Users/pavel/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression",
+  "ExperimentId": "1562",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "10f7771d1e34fe49f283ca32ae895d36b5664c8e761959e877ed820b6ec27f6f"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/evidence/rec1562h/recover.sh.legacy-hidden",
+      "Sha256": "67371593bb8183b66034d24ceeeefd01dbfaac55ad190fcd982030b4efea02c8"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1562-d3d12-error-owner-regression/evidence/rec1562h/recover.sh",
+      "Sha256": "701a6cf67b423f549cb68c195d9f0e2fec7d7cae03a442d48a4c45c1504d65ae"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
