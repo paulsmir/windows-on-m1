@@ -8,42 +8,43 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## IMMEDIATE: CPU1491 COMPLETE / next opaque prepared-NIR C++ wrapper source gate
+## IMMEDIATE: native1493 ACTIVE / opaque wrapper source adopted, portable1492+old1494PASS
 
-- EXP1491 actualJ313 PID4532exit0/stderr0/notimeout/41inputsunchanged/localpinsMATCH.
- 79bridge+199callbackchecks,CS2VS1FS1,4normalizationmarkers,384wordoracleTWICE/
- negative346each; FSactualserialization/pairrollback/ref0 PASS. Bothgold768Bexact.
- .local/c15-nir-handoff-cpu1491-result/root-review1491.json df6c6c3d78e4752aed503b727310f8e5690cbdc569f339418bb946d2c3c0f559.
- ActualNIR fixturecallbacks only; NOactualAsahiconstructor/backend/BO/GPU/DDI/SM6claim.
- NativeNIRvalidatorNOOP/upstreamNDEBUG, nofullOOM/runtime-lifetime guarantee.
-- Implementation2f8375cd properCURRENT agx_owned_nir_pipe.{h,c} +4test/recipefiles,
- unlinked/defaultOFF; clonesource, actualmetadata-beforeinvoke, consumeevenNULL,
- publishstateaftercallbacksuccess; no normalizationrepeats/no callerfreeonNULL.
- Helper57c287c0/header2aa77b3b/fixture6feb18b2/driver50037bc2/renderer1ba64bab/test1c7f4362.
-- Native1489PASS15commands/13004post/33CURRENT/35nestedpins/93outputhashes,
- 5actualcanonical551fcTUs+9opaque/unknown0. AA64PE14554624B351533d7533acc19e1f4a0103356a0a07f06776af1f749e62c052b3b1b483f13.
- Same14imports1485/rootreview59c5489219eb2a7299e610cacd521ed552b792fa8982a0029d34321a045dbaa5.
- Actualruntime1469constructors nevercalled; futureactualAsahicreation MUSTrebuildwithCURRENTprojector.
-- Portable1490PASS18commands/7117pins/199+79checks/384wordsTWICE;
- rootreview62a54b686c3a8efe510e115acf344c6a6571f564b389e50a23dd227299f3ca14.
- Fullhost1619tests219.477s EXACT117oldfailureentries/noaddedremoved/67fail50error20skip;
- NOTwhole-suiteGREEN, log5624540a84a21a46fef69b7584c524d2d96904839cbd450354f5a2b82bbb0517.
- 1488portableSTOP firstnewTUmissingGalliuminclude preserved;1490onlyrealpinnedinclude repaired.
-- EXP1487confirmedRED6NIRFAILvsGREEN8PASS32checks; fix+durableregressiona905b660,
- validatedindex73d2dec5. CURRENTprojectord3da7de earlyconsume2guards.
- Module2a028b4b ownedPROGRAMnormalizedNIR actualCPU1486PASS79/384.
-- NEXT ROOTACCEPTED opaqueC++wrapperdesign .local/c15-owned-nir-opaque-wrapper-source-plan
- READY56af5ad7/design55cdffd2, all10CURRENT+3proposalpinMATCH/fullsource read.
- sm51SOURCEONLY implementing .local/c15-owned-nir-wrapper1492-prep: twoexisting
- modulefiles addsole noexcept forwarder(private native result), actualwrapperthunkregression
- fivevalid-object callsx4cases=20 +separateNULLcases; preserve199/79/384oracles.
- No extra refcount/liveness/thread claim; caller holds prepared/context/root through callback.
- Native1493SOURCEscaffold kmdagent pending1492rootqualification, bounded incremental
- objectreuse analysis only; no compile/remote/guest/Git. No winsys/DDI/caps/buildhook/lazyEnsureOwner.
- Acceptedplan76b091ed investigation/analysis/D3D12-C15-prepared-nir-pipe-handoff.md.
-- Noactiveexperiment/builder/guestprocess; DONOTrerun1491/1489/1490/1487/recovery.
- Normalinert1471RECOVERY_DONE/Code28PackageAbsentnoService8CPU unchanged throughCPU1491;
- no extra rollbackneeded. RootaloneGit/guest/builder. BlockedUBFE/C21Eneverreroute.
+- ActiveBUILD1493 session57513, rootapprovalbfc437a4587212567e483199e2111c5248c320a78ceb6b4a0b50a2194b1225ef,
+ BEFOREf7a3f535, .local/c15-owned-nir-wrapper-native1493-prep/controller.py;
+ freshbuilderC:\Users\pauls\EXP1493-owned-nir-wrapper-build-only/result.local/c15-owned-nir-wrapper-native1493-result.
+ 4commands bridgeCPP+driverCPP+Cfixture/link,11prior1489AA64objects reused.
+ RootverifiedEACH1560observeddeps/unchangedsourcesandprojectheaders/nochangedwrapperheader,
+ reuseproofd55a04ec/rootreviewb8132f019a5d87e5e0dc822c7cb1db598224dec13aa85e2dbc90bc5d262e219f.
+ 35CURRENTsource/37nestedSELF/ZIPMATCH,13017pins; execution7082318867253a71dc61fe920c6ee4e4f526456ad5e6aa98a768ef8a692ff66c,
+ ZIP491096ef865804b7ae493b04b5feff1c7ebedf63920daa4a343368830d541834.
+ 1newcanonicalTU/2newopaque +4priorcanonical/7prioropaque reused, neverclaim14newcompiles.
+- CURRENT8trackedsourcefiles dirty/uncommitted: owned_program_nir.{h,cpp} soletyped
+ noexceptforwarder(value?&value->native:NULL); driver/Cfixture/derivedrecipe/test and
+ baseownedrecipe/test. ROOTcaughtstrongsymbolcompanion beforetests: oldbase MUSTlink
+ realChelper, base17commands/derived18addsONLYfixtureC/no duplicatehelperobject.
+ Modulecpp eb46a221/header10e9d52a/driverfb85a4c8/Cfixturef7918f30;
+ base de43cc58/derived959e6de5/testsba316a8f fd3e6e68. NoDDI/caps/winsys/buildhook.
+- Portable1492PASS18commands20.404s/7117post/20actualvalidwrapper8NULL/689snapshots32NULLchecks,
+ old199callback79bridgecontrols/384wordsTWICE/3negative346/FSserialization/pairrollback/ref0.
+ rootreview.local/c15-owned-nir-opaque-wrapper1492/root-review1492.json5839c40e137b38be62771b524089901414a276dadfe3c35e7ef5ccdbd9d33091.
+ Separateoldbridge1494PASS17commands19.723s/7113post/79checks/384words/346controls;
+ review515815b6f750c69d4bae5e0742951d5f1c8e9b79b4c4c2f26094b18b0dcc85e3.
+ No nativeCPPwrapper/J313 proof yet, callerholdsactualprepared/context/root/noextra refs/threadclaim.
+- Fullhost1492 ACTIVE69791 /tmp/full1492.py rootcwd discover-s-tests,
+ .local/c15-owned-nir-wrapper1492-full-host, baseline1619/117oldfailures20skip.
+ Source13pinsfrozen, no sourceedits until full/nativefinish. Needcommitimplementation+CHANGESaftergates.
+- Agent sm51SOURCEONLY preparesCPU1495 .local/c15-owned-nir-wrapper-cpu1495-prep,
+ freshguestEXP1495-owned-nir-wrapper-cpu. ExactPE/importsPENDING1493rootreview;
+ parser/BEFORE/1471proofbeforeANYSSH; same41inputs pluswrappermarkers20valid8NULL/689/32.
+- PriorChelper2f8375cd CPU1491actualPID4532exit0/41post/199+79/384TWICE,
+ rootreviewdf6c6c3d78e4752aed503b727310f8e5690cbdc569f339418bb946d2c3c0f559;
+ ACTUAL/validatedCHANGESb711b0ab. Native1489PASS15/13004/93hashes/AA64PE351533d7/14imports.
+- EXP1487nativefirstNULL consume fix a905b660/validated73d2dec5 CURRENTprojectord3da7de.
+ ActualAsahiconstructor/BO/GPU NOTcalled in theseCPUgates; futureactualcreation MUSTrebuild
+ runtimewithCURRENTprojector (old1469archiveisnotpatched). No newSM6/DDIcapclaim.
+- Normalinert1471RECOVERY_DONE/Code28PackageAbsentnoService8CPU unchanged through1491;
+ no additionalrollbackneeded forCPUonly. RootaloneGit/guest/builder. BlockedUBFE/C21Eneverreroute.
 
 ## Latest completed CPU boundaries
 
