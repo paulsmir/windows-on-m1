@@ -62,6 +62,32 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   execution input_pins12767..12775 validPath/SHAauthoritiesmatchoriginalchecked9;
   NO fabricatedderivedsameauthoritywitness. Finalnormal1520outputPENDINGuntilRoot.
 
+## Native1523 production UMD ACCEPTED — package next
+
+- Root14407completed10RC0/8helpers+22UMDobjectsAA64/all13956postpinsMATCH;
+  source40e725files/sourceverifiers/EVAL-before-builddefaultOFF+enabledexact8
+  PASS; helper738deps/fullUMD3242includesunknown0/opaqueowner shader_info0.
+  Actual17archives+8helpersONCE/no fixtureobjs/export/provider/coreoldAPI;
+  normalUMD0warnings/errors; actual13imports/exportsONLYOpenAdapter10_2+12.
+- DLL13220864Bffcc5c547a640da079f07fcc30408c8ded1e6c6b2df0568ff47f552a08e38cf7;
+  PDBb328db9e/map2338f43f; fullreview.local/c15-production-umd1523-result/root-review1523.json.
+  CRTsame5namedinitializersas1517primary6a023178/no newsideeffects; XIempty/
+  sole__dyn_tls_init/XDempty; normalDllMainretained. ARM64max13824/WOW6544/
+  noCRTassertPASSwithoutbypass. NOPEexecution/sign/package/GPUclaim.
+- Native1520cacheproof.local/c15-production-runtime1520-result/cache-object-equivalence1520.json
+  72fac0bc8c7b0482f1748c7160b109ce0f5942748cb0e7dc2750a1ea67aafeeb:
+  new883Be37e32ea vs1504qualified0de334b5 ALL879bytesexceptCOFFtimestamp
+  equal; actual1507preprocessbodyNOOPinit/store/retrieveNULL reusedhonestly.
+- sm51SOURCEpreparing .local/c15-package-after-1523-source-prep, normalfull
+  build-driver source40e/actualenableflags/newFRESH8objectoutput (1523output
+  reuseREFUSED); finalnoticesBEFOREbaselineCAT/signflow; nounsigned-onlyclaim.
+  Actual1523acceptancegiven/next1524RootIDnotyetpreregistered. Need rootFULLreview,
+  BEFORE,pins/nativefullKMDpackagebuild, notices/sign/post-CATfinalreceipt,
+  source/stack/hash gates beforeGPU. No publicSM6models/caps.
+- Prepared1522C26conditionalharness .local/preparation-1522/READY7bd3ebb7;
+  newprobe1521bound49f94edd/rootreview9a27cf3f; hardwareapproval/prior1519
+  actualverdict+RECOVERY_DONE STILLPENDING. Do not launchwhile1519active.
+
 ## CPU1515 + native1517 COMPLETE — production hook SOURCE review next
 
 - Native1517all17RC0/33AA64=10freshNoCore22fullDLL1host/post14518/152hashes;
