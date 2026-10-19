@@ -8,6 +8,34 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## ACTIVE GPU EXP1519 — C25 probe-only, DO NOT restart
+
+- Rootsession5986: bash.local/preparation-1519/run1519.sh; scratchpad
+  newexp1519.log/chain inside root-run1519.log/watchdog1519.log/run1519.log.
+  Start10:47:57Z; stagePASS/hash23; generatedfullBEFORE6bd949c0;
+  actualfullowner/run_uefi started/GLsmoke progressing. No verdict yet.
+- SAMEsignedpackage1506/source3d40/runtime1504 bytes asaccepted1510, freshly
+  installedafter1510RECOVERY_DONE. ONLY newC25sixPresent/oneResizeprobe;
+  60nonE expected +C21ESKIP total61logical, NEVERALL61PASS. CSenabled.
+- Probe1518BUILDaccepted: PE270336BAA64
+  07d7cb825e2b8909407ab6d868ee302747583e9f408716a6cb5392c499153410,
+  29source+12SDKtoolprepostMATCH/same4imports/knownunusedvolumewarning.
+  Rootreview.local/c25-probe-build1518-result/root-review1518.json
+  c190bafce130d93f61ac05efb009cea0d880e4f72acb89f1fa8ccae9b858add8; no PEexecutionbefore1519.
+  Sourceb915134a; ACTUAL/BEFORE+CHANGES24c1d7ba.
+- ActualFactoryV2 fivepinsMATCH; wrapper09cf4c0c5d01c93f00fc518c38ab6a758e1796ed3d16d98ee789f3219b0aaa80,
+  host10f7771d unchanged. .local/experiments/EXP1519-d3d12-present-resize/
+  evidence/rec1519h/recover.sh mustownorderednormalrollback afterevidence;
+  no manualprereboot/no packagecarryover. Do notrerun1510recovery.
+- Productionhook7sourcefiles COMMITTED74e0d7c4/defaultOFF, 9newverifier+5normalruntime
+  testsPASS; FULL1630tests SAME119failures/noaddedremoved/postpinsMATCH;
+  .local/c15-production-hook-host-review/full-result.json/logc502288f.
+  Sourceproposalwas e3a910cd; nextsamefinalcommit newnormalruntime qualification
+  templates.local/c15-production-runtime-next-prep/READY.json9963477e.
+  Rootmustfullreview/finalassembly baseline3d40+factory75+DDIonlyf338+hooks,
+  excludeinheritedpublisher666; completeZIP/manifest/commitnewidentity; no1504retrofit.
+  No newbuildIDreserved;1520possibleafterrootpreregistration. AgentsSOURCEONLY.
+
 ## CPU1515 + native1517 COMPLETE — production hook SOURCE review next
 
 - Native1517all17RC0/33AA64=10freshNoCore22fullDLL1host/post14518/152hashes;
