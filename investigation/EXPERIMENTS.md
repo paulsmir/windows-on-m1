@@ -58580,3 +58580,46 @@ TRANSLATION: all27 staged source files match CURRENT;20 existing project files m
 Repository /Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler; branch integration/ad04-windows-compiler; controlHEAD 8977472bbfeacde1cce3e5f81dda78da9b0c675f; tracked dirty diff SHA 0ab4eb51629e6396dd3622d12991511f48618818cf20d403cc67814bb3c4ac0f. Eight new files are untracked pending implementation gates. Their authoritative27-file snapshot is current-source-equality.json SHA151708d908f0ddcdd4194267cc17876808b0d1b4208abd9ac94442d88ffeb330, independently checked against CURRENT. User dirty Mu preserved; m1n1/Mu commits remain5b857603/361a2134. Immutable input ZIP3e379002d9b9db4385f2bc21bc59c3d55aac038b2bef423b0ab75e125c8f3c2a; execution43b8c9f90580d3526803de2c5f4225a8d45905a5e9311a57b0ff975af9184b01. All local pins,29 nested runner/bootstrap/source pins and27 ZIP source entries match final bytes. Runner762bcc01/controller4847ded6/bootstrapc6a73f0b. Same17 archives and actual14-DLL allowlist as1476/1479, including measured MSVCP140; no BO provider widening.
 Exact command: python3 /Volumes/pwdev/public_windows/.local/c15-owned-nir-current1485-prep/controller.py --approval /Volumes/pwdev/public_windows/.local/c15-owned-nir-current1485-prep/root-approval1485.json --approval-sha ROOT_AFTER_THIS_COMMIT. FRESH builder C:\Users\pauls\EXP1485-owned-nir-bridge-build-only; host .local/c15-owned-nir-current1485-result.12compiles+link13 commands, owned180s children, pinned MSVC/LLVM only, strict actual dependencies and canonical header checks, post12998pins, physical AA64/import checks, raw diagnostics and root output-hash review. Expected13RC0 and all pins matching. First unknown dependency/hash/rc/timeout stops; retain raw evidence, no blind retry or stubs. Never execute output PE on builder.
 The source ZIP is already immutable and independent of later Git bookkeeping. Full host testing is read-only and source files remain frozen. Known normal guest1471RECOVERY_DONE/Code28/PackageAbsent/noService/8CPU is unchanged. No guest, package, signing, reboot, recovery or GPU action in this build. Same reviewed external license graph and original MIT module code. Future1486 requires its own CPU BEFORE.
+
+
+EXP1483 CURRENT SOFTWARE ACTUAL 2026-10-19T05:27:50.691444+00:00: CURRENT portable1testPASS17.160s/all16commandsRC0/7111postMATCH/79checks/384words/346negative controls/bothCSnormalized. Fullhost suite1618tests218.312s/67failures50errors19skips: EXACT117prior1463entries/noaddedremoved;21postpinsMATCH/log96d4d6b4e598edb84196871e76da41882560eab3693abad68131f8b9c91905a7. Whole-suite is NOT GREEN. Original staged normalization functionalRED preserved. CURRENT source remains unlinked/defaultOFF for production; no caps/DDI/build hook.
+
+EXP1485 BUILD ONLY ACTUAL 2026-10-19T05:27:50.691843+00:00: native12compile+link13RC0/no timeout/post12998MATCH. Root83outputs rehashed;3actualcanonical551fcNIRTUs+9opaque, unknown dependencies0; physicalAA64PE14543872B917bf907066bd9d194e6738ee499116885532106ab71cb0fa4aa64fd21ab51e0. Same14actualDLLimports1479includingMSVCP140, no policy waiver; original C unusedflags/header/NIR_PASS warnings retained, allMSVCstdout/stderr andlinkstderrempty. Rootreview.local/c15-owned-nir-current1485-result/root-review1485.jsonSHA361df15f9a8202d87d5e3c0450562390e502579acd05ab57e31823998c447057/outputmanifest8ea633d946b8a0646179fe6b9b83de1a73f107a64e916c6653e7d49d97abcb9c. No PE execution, no package/guest/GPU change; CURRENT module implementation can now be committed, software-only until fresh1486 native CPU checkpoint.
+REVIEW R113: ACCEPT -- no armed ordinary boot; current module performs no package action.
+REVIEW R111: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R110: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R109: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R108: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R107: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R106: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R105: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R104: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R103: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R102: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R100: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R99: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R98: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R97: ACCEPT -- bounded current source decisions; no historical archaeology.
+REVIEW R96: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R95: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R94: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R91: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R90: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R88: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R86: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R85: ACCEPT -- artifact/source profile identity explicit.
+REVIEW R74: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R71: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R69: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R65: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R64: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R63: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R57: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R55: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R54: ACCEPT -- portable/full/native checks overlapped; next CPU prepared independently.
+REVIEW R49: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R48: ACCEPT -- no serial/launcher access in CPU module.
+REVIEW R47: ACCEPT -- immutable source ZIP and exact native/CPU hashes preregistered.
+REVIEW R45: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R40: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
+REVIEW R37: DEFER -- historical platform/admission item outside unlinked CPU module; no corresponding contract changed.
