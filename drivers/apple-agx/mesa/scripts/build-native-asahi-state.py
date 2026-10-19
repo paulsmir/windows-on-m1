@@ -26,6 +26,50 @@ def project_3d_pbe_base_depth(state):
                               '                              : view->u.tex.last_layer - layer + 1;', 1)
 
 
+def project_constructor_nir_consumption(state):
+    """Consume admitted NIR even when the first shader allocation fails.
+
+    Graphics TGSI tokens and non-NIR compute payloads remain borrowed here.
+    Scoped constructor prefixes prevent changing unrelated allocation guards.
+    The caller already pins the pristine agx_state.c source before projection.
+    """
+    graphics = '''static void *
+agx_create_shader_state(struct pipe_context *pctx,
+                        const struct pipe_shader_state *cso)
+{
+   struct agx_context *ctx = agx_context(pctx);
+   struct agx_uncompiled_shader *so =
+      rzalloc(NULL, struct agx_uncompiled_shader);
+   struct agx_device *dev = agx_device(pctx->screen);
+
+   if (!so)
+      return NULL;'''
+    compute = '''static void *
+agx_create_compute_state(struct pipe_context *pctx,
+                         const struct pipe_compute_state *cso)
+{
+   struct agx_context *ctx = agx_context(pctx);
+   struct agx_device *dev = agx_device(pctx->screen);
+   struct agx_uncompiled_shader *so =
+      rzalloc(NULL, struct agx_uncompiled_shader);
+
+   if (!so)
+      return NULL;'''
+    for old, release in (
+        (graphics, '      if (cso->type == PIPE_SHADER_IR_NIR)\n'
+                   '         ralloc_free(cso->ir.nir);\n'),
+        (compute, '      if (cso->ir_type == PIPE_SHADER_IR_NIR)\n'
+                  '         ralloc_free((void *)cso->prog);\n'),
+    ):
+        if state.count(old) != 1:
+            raise ValueError('Ambiguous constructor NIR ownership anchor')
+        new = old.replace('   if (!so)\n      return NULL;',
+                          '   if (!so) {\n' + release +
+                          '      return NULL;\n   }', 1)
+        state = state.replace(old, new, 1)
+    return state
+
+
 def project_shader_failure(state, shader, device):
     """Project checked executable allocation through shader/device creation.
 
@@ -5929,6 +5973,8 @@ agx_shader_initialize("""
                 'src/gallium/frontends/d3d10umd/Device.cpp')
             projected = project_shader_failure(*((out/path).read_text()
                                                 for path in shader_paths))
+            projected = (project_constructor_nir_consumption(projected[0]),
+                         projected[1], projected[2])
             for path, content in zip(shader_paths, projected):
                 target = out/path
                 target.write_text(content)

@@ -58655,3 +58655,48 @@ Parser first: freshbuilder C:\Users\pauls\EXP1487-PS-parse; exactPS e7a520f406e1
 Afterparser/rootapproval exactcommand: python3 /Volumes/pwdev/public_windows/.local/c15-nir-consume-cpu1487-prep/controller.py --approval /Volumes/pwdev/public_windows/.local/c15-nir-consume-cpu1487-prep/root-approval1487.json --approval-sha ROOT_AFTER_LAUNCH_SUPPLEMENT. Freshguest C:\Users\pavel\EXP1487-nir-consume-cpu; host.local/c15-nir-consume-cpu1487-result; each ownedprocess120s, rawcapture/AA64check/3physicalruntimeDLLinventories/persteppostinputs/globalpost/alwayscollect. Controllerbounded330s plus transports, source reviewedFULL byroot. Known1471normalinertRECOVERY_DONE/Code28PackageAbsentnoService8CPU preserved through1486; pinnedrecovery764cdb6f required BEFOREANYSSH. No platformmutation and no additional recovery required forCPUonly. Repositorysameworktree/branchintegration/ad04-windows-compiler/control5eecbc4c/implementation2a028b4b; m1n1/Mu5b857603/361a2134unchanged/userdirtyMu preserved. No new boot/stop/IRQ/timer/display/input/RDP behavior claimed; SSH/storage demonstrated byCPU transport only. Nextifconfirmed: adoptowningprojectorfix and durable actualCregression/selector intoCURRENT, existingrelevanttests, then nativeownerhandoff gate; blockedUBFE/C21E outside scope.
 
 EXP1487 PARSER ACTUAL / LAUNCH SUPPLEMENT 2026-10-19T05:57:54.966768+00:00: actualbuilderParserPID16604/ErrorCount0/sourcePSe7a520f4;3transportsRC0/rawstderr0/no body execution. RootreviewFULLcontroller/PS and exact15stage inputs/25localpinsMATCH after agent finalization; bothPE import inventories11/physicalruntime3. ApprovedmanifestSHA3342ef7b514ddd9c199fac05ddf112b87a9982c5edd57be9b32219c6e2df4945; PS/controller bytes unchanged e7a520f4/f1a70e8a. Actual1471recoveryreceipt764cdb6f pinned; no platformmutation since. Root approves fresh1487CPU launch after this commit.
+
+EXP1487 ACTUAL 2026-10-19T05:58:36.000772+00:00: CONFIRMED original earlyNULL NIR ownership defect, corrected privateprojection GREEN. REDPID6548exit1/32checks6fail/sixNIRownFAIL+2borrowPASS; GREENPID564exit0/32checks0fail/eightPASS; bothstderr0/notimeout/all15inputsunchanged/controllerRC0. Actualdestructorbeforecleanup0vs1 demonstrates ownerconsume contract; borrowedcontrols0 unchanged, finaldestructor1 everycase. Root34artifacthashesMATCH/reviewSHA53e8130d295254c7c9410b6fd94ee1d50d1bab57003eb3affaa3adf7f7919c3c/manifest11135bfabf8ba57959aa4a00d7f451908e4f64f6b77aaa793cc820a51e2b9b9a. Actual threephysicalruntimeDLLinventory preserved. Scope actualcomplete firstNULLbranches only; no fullconstructor/latefail/generalOOM/BO/GPU claim. Normal1471inert guest unchanged/no packageorbootoperation/no recoveryneeded. Correctionto launchsupplement:26localpins verified, not25. Next adopt CURRENT projectorfix+durableactualregression and run affected+fullhost baseline checks.
+
+EXP1487 CURRENT ADOPTION SOFTWARE GATES 2026-10-19T05:59:58.346738+00:00: owningprojector d3da7de adopted byteidentical1484candidate; actualCfixture61da andCURRENTselector/doc added. Currentselector pristine5015->f94f PASS/source-licenseexact2guards; affected34PASS1.502s. Fullhost in progress with exact1483baselinecomparison, implementationcommit waits for result.
+REVIEW R113: ACCEPT -- no package/armed boot in CPU1487 or projection adoption.
+REVIEW R111: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R110: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R109: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R108: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R107: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R106: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R105: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R104: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R103: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R102: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R100: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R99: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R98: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R97: ACCEPT -- bounded actualbranch ownership discriminator completed once.
+REVIEW R96: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R95: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R94: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R91: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R90: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R88: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R86: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R85: ACCEPT -- projection fixed in owning native layer and exact source qualified.
+REVIEW R74: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R71: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R69: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R65: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R64: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R63: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R57: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R55: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R54: ACCEPT -- next handoff source work overlaps current full-host verification.
+REVIEW R49: ACCEPT -- opaque prepared NIR remains owned; no accidental native transfer yet.
+REVIEW R48: ACCEPT -- no launcher or serial access in CPU-only test.
+REVIEW R47: ACCEPT -- BEFORE exactPE/source hashes retained; RED defect preserved.
+REVIEW R45: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R40: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R37: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+REVIEW R64: DEFER -- historical platform/admission item outside this finite native NIR ownership fix; no corresponding contract changed.
+
+EXP1487 CURRENT SOFTWARE ACTUAL 2026-10-19T06:07:04.644078+00:00: affected34PASS1.502s/CURRENTselector exactsourceguardsPASS. Firstfullhost invocation wrongPYTHONPATH retained1354tests/66fail72error19skip/logf891f2a7; not comparable. Envfixed1583tests202.619s/67fail50error19skip retained7ace21c11ca7f957ae72378a2f18de53751066d7019f4643180af8f8661f1cc1; its one queue-module importerror is cwd-relative config/j313-agx.json. Re-ran ONLY that complete36test module from ROOT:36tests0.011s/one original bundled-proxychild error/log95e8055f; combined coverage1583-1+36=1618tests, EXACT117baselinefailure entries/noaddedremoved. No thirdfullrun; bothrawbad-environment results preserved. Combinedreceipt.local/c15-nir-consume-current1487-full-host-envfixed/combined-result.json. ThreefrozenCURRENTsourcepinsMATCH. Whole-suite remains nonGREEN67fail50error19skip; currentfix has no new codefailures. No production caps/DDI/BO/GPU change. Next implement acceptedunlinkedhandoffplan76b091ed, sourceproposal1488READYebf0325d pendingrootreview/execution.

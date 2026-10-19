@@ -8,30 +8,33 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## IMMEDIATE: EXP1484 build PASS / prepare CPU1487 RED-GREEN
+## IMMEDIATE: CPU1487 CONFIRMED / CURRENT projectorfix adopted, host gates complete / commit and start1488
 
-- CURRENT owned PROGRAM->normalizedNIR module committed2a028b4b; portable79checks/384words,
-  full1618 exact117oldfailures/noaddedremoved; native1485 13RC0/12998post.
-- EXP1486 actual CURRENT CPU PASS PID5980exit0/stderr0/41inputsunchanged/79checks,
-  384goldwords/3negative346/twoCSnormalization markers. ACTUAL7b66f795;
-  rootreview695e5828c66bd9ded0c373a88697e548bb428e627f82965918881dc297c361e2.
-  Production DDI/caps/Gallium hook/BO/GPU remain unproved and disabled.
-- EXP1484 build PASS5commands/12764post/40hashes/2actualdeps canonical551fc,
-  exact2earlyconstructorNULLguards consumeNIR; source/license remainder unchanged.
-  BothAA64 1734656B; REDbf3da4e87fe5a46a78fb819d0c0527a1058cbd335fafd30e5e664a22d383cba6,
-  GREENc18cfb7fce56bc7effb1c57a28e5c727221bc20410d68b9bd82aedcfbbffb7de.
-  BothphysicalPEimportdirectories independentlyparsed same11DLLs; warnings reviewed.
-  Review.local/c15-nir-consume1484-build-result/root-review1484.json3b44cf45.
-- NextCPU1487 .local/c15-nir-consume-cpu1487-prep: rootreview/pins/parser/BEFORE thenrun
-  independentRED expectedexit1/sixNIRFAIL+2borrowPASS/32checks6fail;
-  GREENexpectedexit0/eightPASS/32checks0fail. Same invariant, actualNIR+ralloc destructor,
-  actualcomplete earlyconstructorbranches; continuationtrap only. No fullconstructor/GPU claim.
-- ProjectorfixstillPRIVATE finald3da7de (newhelper invoked AFTERproject_shader_failure,
-  oldhelperASTunchanged); durableproposal.local/c15-nir-consume1484-durable-prep.
-  After1487review adoptfix+realCregression/currentselector/doc, existingrelevanttests.
-- Normalinert1471RECOVERY_DONE/PackageAbsent/noService/Code28/8CPUunchanged;
-  CPU1486didnotmutateplatform, noGPUexperimentactive/no rollbackneeded.
-  Rootaloneguest/builder/Git. AgentsSOURCEonly. BlockedUBFE/C21Etaskneverreroute.
+- EXP1487 actualJ313 REDPID6548exit1/32checks6fails/sixNIRFAIL+2borrowPASS;
+  GREENPID564exit0/32checks0fails/eightPASS; stderr0/notimeout/15inputsunchanged.
+  Root34artifacthashesMATCH/review53e8130d295254c7c9410b6fd94ee1d50d1bab57003eb3affaa3adf7f7919c3c;
+  .local/c15-nir-consume-cpu1487-result, manifest11135bfabf8ba57959aa4a00d7f451908e4f64f6b77aaa793cc820a51e2b9b9a.
+  Actualselectedcomplete initialNULLbranches only; no fullconstructor/latefail/fullOOM/BO/GPU claim.
+- CURRENT projector nowd3da7de: exactly2NIRconditionalconsume guards, helpercallAFTER
+  project_shader_failure/oldhelperASTunchanged. DurableactualCfixture61da4cc3,
+  CURRENT-onlyselector0f37459f/doc added. Rootcurrentselector onpristine5015 PASS,
+  fullGREENf94f37eb;source/license remainderunchanged. Affected34testsPASS1.502s.
+  Hostcoverage1618 combined envfixed1583 plus rootcwd36 queuemodule replacing1importerror;
+  EXACT117baselineentries/noaddedremoved/67fail50error19skip, NOTwhole-suiteGREEN.
+  RawfirstwrongPYTHONPATH andsecondcwdimporterrorspreserved; no thirdfullrun.
+  .local/c15-nir-consume-current1487-full-host-envfixed/combined-result.json.
+  Commitfix+regression now, thenCHANGESexact40hash.
+- CURRENT ownedPROGRAM->normalizedNIR module2a028b4b actual1486PASS79checks/384words,
+  twoCSnormalizationmarkers/3negative346, no productionDDI/caps/buildhook/GPU.
+  1484native5RC0/post12764/40hashes/BOTHphysicalAA64PEimports11 qualified1487.
+- Next acceptedplan investigation/analysis/D3D12-C15-owned-nir-adoption.md:
+  separate unlinked callerclone/metadata/consume helper + realNIR callbackfixture,
+  retainpreparedoriginal/map/root, no lazyEnsureOwner/DDI/SM6cap publication.
+  Nextproposal .local/c15-nir-handoff1488-prep/READY.json ebf0325d; rootreview/testnext.
+  Native1489scaffold .local/c15-nir-handoff-native1489-prep SOURCEONLY/PENDINGsources.
+  Root alone adopts tracked/Git/guest/builder.
+- Normalinert1471RECOVERY_DONE/Code28PackageAbsentnoService8CPU unchanged byCPU1487;
+  no activeGPUexperiment/no rollbackneeded. SecurityblockedUBFE/C21Eneverreroute.
 
 ## Latest completed CPU boundaries
 
