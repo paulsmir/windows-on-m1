@@ -59294,3 +59294,67 @@ Windows10.0.26100.9711/Microsoft Corporation. Builder OS10.0.26200.0.
 These are newly observed host/compiler resources, not new driver sources or
 redistributed dependencies. Qualify exact hashes on the fresh build rather
 than approving the historical build with a widened posthoc registry.
+
+EXP1527 FRESH FULL PACKAGE BUILD BEFORE 2026-10-19T12:00:46.652365+00:00
+WHY THIS HYPOTHESIS:1525full8/UMD/KMD build and2stacks RC0, but wrapper tlog
+collection used wrong namespace. Actual1526evaluation locates11currenttlogs;
+read review finds exactly3host resources absent from old input registry. Exact
+current metadata proves Valid Microsoft signatures and versions/hashes above.
+New13991pre/post registry closes those3actualreads; collection uses the proven
+TLogLocation rather than a directory assumption. No old receipt is rewritten.
+Single build qualification factor: complete measured host-input authority plus
+actual collection path/freshness; driver code/compiler flags/source40e unchanged.
+ATOMIC CONTRACT: none--workflow observations for the same production owning route.
+WINDOWS CONTRACT: same actual40e normal build-driver Release ARM64 GPUVA_G3,
+NativeFrontend/PreparedNirOwner1/MD/SDKWDK26100/MSVC14.44/LLVM20/retainedWOW61+88;
+PackageBuild1527 bookkeeping. No public DXIL/SM6/model/caps/firmware changes.
+AGX/ASAHI CONTRACT: canonical551fc/core1466/normal1520runtimeefdca/Resourcef981,
+same8helpers/17archives/typed consumed-clone owner route alreadyCPUqualified1515.
+TRANSLATION: exact source725commit40e, immutable1523preparedrequest5976a395;
+NEW1527objects8/freshpackage/28canonicalnoticeviews. Outer producer pins all13991
+inputs before and after the entire build (including8helpers). Added ONLY exact
+CLUI86b1f458,SortDefault5710c47f,TZRES1398cf1d fullhash/size records. No blanket
+allowlist/generated-directory allowance. New post TLOG view must retain original
+request authority plus the3actualnewnativepre/post records, explicitly derived
+for review only, never replacing the actual prepared request digest.
+WHAT IS STILL UNKNOWN: actual13991postmatch/newfullartifacts/11freshactualtlogs,
+zero unknown reads with complete exact authority, actual newCAT/sign versions.
+No GPU behavior or PE load is inferred. Full hardware qualification remains later.
+
+Original1525FailedPOSTwrapper receipt remains immutable. Preserve old99files
+at1525build/physical+distribution+objects8 and old1526post/physical+11tlogcopies/
+map+WOW2 before reusing the live1520project output directories. Host collected
+copies/hash manifests remain independent. Do not overwrite old experiment roots.
+Newstage C:\Users\pauls\EXP1527-production-prepared-package-inputs;
+newbuild C:\Users\pauls\EXP1527-production-prepared-package-build;
+newobjects8=build\objects8/distribution=build\distribution. All path/token rebasing
+matches whole identifiers only; no substitution inside immutable hashes.
+ActualTLogDirectory authority is the1526evaluated fullproject namespace; source
+project GUID/files remain hash-bound40e. Require1..64actualtlogs and critical
+CL.read/CL.command/link.command LastWriteTimeUTC >= ownedbuild-start UTC, record
+freshness andcopyallbeforepost. No fixed fakeinclude count; actual read group
+owner/DDI/17archive+8helper closure checked after fetch. Unknown reads STOP.
+
+Same28byte-identical qualified notices copied BEFORE inheritedWDK CAT/sign and
+checked after; no notice CATcoverage claim. InitialnativeINF13 profile is build
+output only. Before GPU, separately restore acceptedINF1235 DIRID12/service%12%/
+NTarm64 profile and finalsign under existingE9BE authority so NIR is sole runtime
+factor. No standalone repackage/sign command in1527build phase. Full physicalINF
+SYS UMD CAT+2PDB/2stack/assert/source/native/prepared provenance must be actual.
+Build/KMD analysis diagnostics must match1506 after ONLY knownsource-root path
+normalization; preserve all18warnings, do not suppress newly observed messages.
+
+Rootsource .local/c15-package1527-prep/root-input-review1527.json;
+producera5f8176d2688771b0e2107c166f6a5b2963787af87dc6b1f1f9050e7fe8f4548,
+controller237ba2117507a4d24d4381aa077543653f803a829626a0b1547087af77bad791,
+collector737378150d39ab8676d34baec720be609dba16fc7b213dc7fce65f5f470eb475.
+Exact python3.local/c15-package1527-prep/controller.py --approval.root-approval1527.json
+--approval-sha ROOT_FINAL_AFTER_THIS_COMMIT. Rootcasechecker0b84/e932: target6PASS,
+full1636SAME119old failures/noaddedremoved/sourcepostMATCH. NativePSsyntax/hash+
+actualJSONparse beforeproducer; source725 andall13991pre/post pins mandatory.
+Nativechild900s/stack120s/onlyownedPIDtree cancellation/rawbytes, firstSTOPcollect
+newID. No foreign process kill/guestinstall/reboot/PEpayload/GPU access. Builder
+read of3newcurrentfiles recorded honestly aspost metadata, NOThistoricalprepins.
+CurrentGPU1522active26505; laststandardGSshadersteps PASS. No interruption or guest
+commands frombuilderjob. UserdirtyMu preserved/sourcefirmware unchanged.
+REVIEW historicalOPENWDDM/G4/firmware items DEFER outsidecurrentbuild-input boundary.
