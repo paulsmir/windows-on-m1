@@ -8,41 +8,52 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-19T12:31Z — EXP1530 ACTIVE; EXP1522 RECOVERY_DONE
+## CURRENT 2026-10-19T15:16Z — EXP1530 RECOVERY_DONE; C15 host GREEN1537
 
-Root1530 session15268/root-run .local/preparation-1530/root-run1530.log;
-scratch newexp1530.log/watchdog1530.log. Firststart12:29:32Z; STAGE_PASS/HASHES23/
-generated fullhardwareBEFORE commitfff756c8. No restart/duplicate/guestcommands.
-New signedpackage30.0.1527.0/source40e205725/runtime1520efdca/8freshhelpers+17archives;
-solefactor guarded actuallegacy CompileCompute->preparedNIR->typedowner matchingDestroy.
-SAMEacceptedprobe1521 49f94edd/61nonE+C21EknownSKIP,total62. CSenabled.
-1530FactoryV2 host10f/wrapperb222f73f/all5 recordedbeforeboot; ordinaryvisible recovery.
-Finalpacket .local/c15-final-package1527-signed1531 ZIP24e7c274; finalreceipt94345078.
-SYS8d9d/UMD63a1/INF4e17065a/CATd8c730c4/WOWd51+1625; baselineINF1235exceptversion.
-EXP1527 fullbuild/post13991MATCH/actualtlogs0unknown accepted8edf4eb7.
-EXP1528STOPbeforepayload cmdline length; originalreceipts immutable/no promotion.
-EXP1531resume completed ownedPID30284RC0/85inputpolicyMATCH/promotion38/28notices/
-CMSvalid sameE9. Originalseedreceipt4474 preserved, newactualfinalreceipt94345078.
-EXP1522complete24cf57f4 C26/all61nonEPASS/C14Acontrols/regressionsunchanged;
-recoverycf487925 normalCode28Absent/noService8CPU at12:05Z. Neverrerun1522recovery.
-Next monitor1530TOOL_d3d12-on_END+NEWEXP_DONE, receipts/regressions, exactnormal
-recovery rec1530h withguardedAGX_RECOVERY_ALLOW_NO_OWNER=1 conditionalowner/liveSSH.
-Parallel sm51 SOURCEONLYnextC15: PROGRAM header/module shaderModel+dx.version
-agreement, actualpinnedCAPI lacks modelgetter, ownedadmission onlycheckscompute stage.
-Need actualmaskedheadercs6.1 counterexample +narroworiginalcheckedmetadataquery;
-no caps/publicSM6/linkclaim, rootreviewthenmeaningfulRED/GREEN/build.
-NewC27descriptor-replaydelegation security-rejected in kmd agent turn; NEVERretry
-or routearound that task. Root reported rejection to user. EarlierC21E blockedalsoNEVERretry.
-EXP1532fixtureproducer COMPLETE session97762, source2861bab0; result
-.local/c15-profile-fixture1532-result/root-fixture-review1532.json acceptedONLYfixtures.
-BothDXCRC0/10prepostMATCH/stdoutstderrEMPTY;cs60f3934fcc EXACT1389;
-cs61b07c25e8673225b96f253aa77aea003b1c87330bc3012bb831c87e910277d8a4.
-ActualmoduleASM6.0/1.0 vs6.1/1.1. Oldadaptermaskedheader acceptance NOTTESTEDyet.
-C15design6e52a3e9/.local/c15-dxil-profile-agreement-prep/DESIGN-READYb3426f6b;
-sourcepatch11dc65dd readRoot but one errorpolicy correctionpending (externalOOM
-mustnotPROJECT_OOM). Sourceonly/no adoption/compile yet; agent sm51hostrecipepending.
-Rootreserved1533nativebuild/1534J313CPUafter1530recovery, NOTlaunched.
-1530GL52.8/CS47.067/DWM0/currentstandardregressions; TOOL_d3d12notyet reached.
+GPU-visible ordinary guest Code28 PackageAbsent/noService8CPU after EXACT1530
+cleanup. Do not rerun1530 or its recovery. Finalrec scratch rec1530.log SHA267ee9e1,
+preflight0a433bdd/durablemanifest3B1416E6 Before15:13:40 After15:15:38Z.
+Rootverdict .local/experiments/EXP1530-d3d12-legacy-prepared-compute/root-verdict1530.json
+SHA83f643dcf921c9764d5fcee80b52a47ba4cf559a40d7058246a73cd34f8c5181;
+finalfilemanifest6d73d728/2307files; pre-recoveryCDF2188A/2290files.
+Actual signed1527package ZIP24e7c274, finalreceipt94345078/source40e725/
+SYS8d9d,UMD63a1,INF4e17,CATd8c7/WOWd51+1625; explicitPreparedNirOwner flag.
+61nonE D3D12 steps PASS inclC14A/C24ABC/C25/C26; C21EknownUNCOMPLETEDSKIP.
+73SMOKEPASS+onlyknownMSAAa000rFAIL;poolPASS workers5 foreignreclaim1;
+fl11ARM64WOWdebugPASS; corpus414each createfail64/4 0hang/pixelDiff;
+DWM0; GL52.8/internal59.6/CS47.067 singlepoints. BIG8textures512MiB,
+PRESSURE0OOM8007000e, intentionalLONGJOBremoved887a0006 followedalivecorpus.
+No unexpectedWindowsstop observed. USBphysical/RDPnotindependentlytested.
+Ledger ACTUAL prepared, commit/CHANGES rows PENDING. Complete those immediately.
+
+C15 next deterministic owning admission: PROGRAMheader6.0 can concealactualLLVM
+SM6.1 or DXIL1.1. PinnedMicrosoft194bb proves SM6.0/DXIL1.0,6.1/1.1.
+EXP1532 realDXC fixturescs60f3934fcc EXACT1389/cs61b07c25e8; oldadapter
+realRED confirmed: bothmaskedcs61 andwrongheaderDXILversion wronglystatus0,
+2580checks4failures; realcontrolsPASS. Sourceplan tracked d82390a0.
+InitialhostGREEN1532 guardSTOP all102 includingunselectedshared;1535 offline
+casefoldpathguardSTOP;1536 exact83/9freshbuild PASS but C++ facade RC1
+because newCAPIheader omitted stdint.h. Alloldreceipts preserved.
+EXP1537 owning CAPIheader3ffb6bb8 addsstdint.h; C/C++ standalone GREEN;
+full83TU+9fresh archives/68906readrecordsUNKNOWN0/8commandHOSTGREEN:
+.local/c15-profile-host1537-green/verdict.json SHA4bd90275 and
+actualprofilefixture PASS2612checks0failures; sourceprojection2636files
+.local/c15-profile-source1537/external only4reviewedMITexternaldeltas.
+OriginalProject3patch candidate outsideGit with taxonomy externalERROR=>REPORTED_ERROR;
+no trackedcode adoption/nativeWindows build/CPU execution yet.
+NEXT immediately Rootaccept1537host review and adapt frozen native1533 SOURCE recipe
+.local/c15-profile-native1533-prep/READY.json SHAa049279a. Its original
+prepare-payload-local.py expects acceptedhostreview status
+ROOT_ACCEPTED_DXIL_PROFILE_AGREEMENT_HOST_GREEN and 7file proposal; must
+create NEW privateproposal forheader3ffb (oldcandidate f813 invalid), preserve
+accepted Windows1421 base ZIP43e06eab, sourcefreeze91b, 83/9 closure,
+6project compiles and3ARM64 console links; build-only, noPEexecution.
+Then root1534 actualJ313CPU only after nativeacceptance/BEFORE; normal inert
+recovery alreadydone. No publicDXIL/SM6/caps/DDI claim from CPU milestone.
+C21E/UBFE agent task security-blocked. NewC27descriptor replay delegation
+security-rejected; never retry or reroute. User informed. Daybreak model switch
+not supported by current chat tool, user informed; continue current model.
+UserdirtyMu untouched. Root owns alltracked Git/builder/guest; boundedpolls.
 Historical paragraphs below superseded where inconsistent.
 
 ## Historical GPU: EXP1522 ACTIVE / EXP1519 RECOVERY_DONE
