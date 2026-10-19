@@ -8,17 +8,27 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT override 2026-10-19: EXP1522 RECOVERY_DONE; 1527 build accepted; 1531 CAT transport resume preregistered
+## CURRENT 2026-10-19T12:31Z — EXP1530 ACTIVE; EXP1522 RECOVERY_DONE
 
-EXP1522 complete24cf57f4, C26 and all61nonE PASS, C21E knownSKIP; no regressions.
-Recovery cf4879253373acdd82bd46d74d9d888a49e3766b19e841dad5b52601c87aa718,
-normalCode28 PackageAbsent/noService8CPU; no rerun. 1527 fullbuild/post13991MATCH/
-actualtlogs0unknown accepted8edf4eb7/source40e, finalbaselineINF/CATpending.
-1528 STOP before payload: encoded9row command too long; no promotion/sign/guest.
-1531 split short stage checks resumes SAME1528uploaded immutable inputs; fresh
-result .local/c15-package1531-resume-result. No duplicate1528/controller44488done.
-1530 SOURCE harness ready .local/preparation-1530, PENDING final6/sign/receipt/rootBEFORE.
-Historical paragraphs below are superseded by this override where inconsistent.
+Root1530 session15268/root-run .local/preparation-1530/root-run1530.log;
+scratch newexp1530.log/watchdog1530.log. Firststart12:29:32Z; STAGE_PASS/HASHES23/
+generated fullhardwareBEFORE commitfff756c8. No restart/duplicate/guestcommands.
+New signedpackage30.0.1527.0/source40e205725/runtime1520efdca/8freshhelpers+17archives;
+solefactor guarded actuallegacy CompileCompute->preparedNIR->typedowner matchingDestroy.
+SAMEacceptedprobe1521 49f94edd/61nonE+C21EknownSKIP,total62. CSenabled.
+1530FactoryV2 host10f/wrapperb222f73f/all5 recordedbeforeboot; ordinaryvisible recovery.
+Finalpacket .local/c15-final-package1527-signed1531 ZIP24e7c274; finalreceipt94345078.
+SYS8d9d/UMD63a1/INF4e17065a/CATd8c730c4/WOWd51+1625; baselineINF1235exceptversion.
+EXP1527 fullbuild/post13991MATCH/actualtlogs0unknown accepted8edf4eb7.
+EXP1528STOPbeforepayload cmdline length; originalreceipts immutable/no promotion.
+EXP1531resume completed ownedPID30284RC0/85inputpolicyMATCH/promotion38/28notices/
+CMSvalid sameE9. Originalseedreceipt4474 preserved, newactualfinalreceipt94345078.
+EXP1522complete24cf57f4 C26/all61nonEPASS/C14Acontrols/regressionsunchanged;
+recoverycf487925 normalCode28Absent/noService8CPU at12:05Z. Neverrerun1522recovery.
+Next monitor1530TOOL_d3d12-on_END+NEWEXP_DONE, receipts/regressions, exactnormal
+recovery rec1530h withguardedAGX_RECOVERY_ALLOW_NO_OWNER=1 conditionalowner/liveSSH.
+Parallel sm51 preparesSOURCEONLYnextC15contract; C21EsecurityblockedNEVERretry.
+Historical paragraphs below superseded where inconsistent.
 
 ## Historical GPU: EXP1522 ACTIVE / EXP1519 RECOVERY_DONE
 
