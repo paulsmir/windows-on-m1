@@ -39,13 +39,19 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 - Runtime1500explicitBUILD_ONLY archive4070242Bb6a5c5c59b1e799ba72e6d71fde25ae63fe94e148adaba61369cbae162581886,
  154AA64bodies153old+fresh00895d8fcf8/sourcea967. Rootreviewe5beb91d.
  NormalpackageverifierRC1 missing source_commit REQUIRED; no retrofit1500metadata.
-- NEXT rootreadacceptedSOURCEpackageassemblyplan .local/c15-runtime-package-assembly-source-plan
- READYb4bdb475/PLAN239bdffe/assembly387b89ae/primary0f2a1b4b (rootfullPLANread).
- Exact5e64baseline698files/sourcearchive6ecc9/source-manifest3fa; overlayONLYcurrent
- projector+guardedownerh/cpp, explicit21originalunlinkedmodules. PRESERVEbaselineDDI15f637,
- EXCLUDECURRENTunvalidatedpublisherca856/666abec/caps. Freshcommittedsnapshot+normalprepare
- +fullnormalnativeclosurebuild/compiledfreshResource.cpp83055Bf981+unchangedverifierPASS.
- No completepackagequalifiedartifactexistsyet. Canonical1466core conditionalreuse.
+- NEXT normalruntime1504 privatebundle kmdprepares, rootassemblyalreadyCOMMITTED:
+ `.local/c15-runtime-package-assembly1504` sourcecommit3d40cdaf038b9a8a7fa8509ebc4d3dd4303a4b09,
+ ref refs/agx-experiments/EXP1504-source;719files=698baseline+3overlays21unlinkedadds.
+ RootALLgitblobs/archive/SHAverified/reviewc4ae059895a8bd501050f580e4926aaef19c9a0579090d0d1d36ec65cee4f3de.
+ source.zip5b286c06c8df704b4f497ab501eca95bf214d80decb6c89f9ce2092a83131f95,
+ source-manifestb4cedfe662a170e9035127447bad4d3dde23dcb0a3cb9b555797e7cd6a21fa24.
+ PreservebaseDDI15f637/excludeCURRENTca856/666abec/vcxprojunchanged/ownerdefaultOFF.
+ StillSOURCE_ONLY: freshnormal3stages fullcompiler+prepare+154runtimeclosure required,
+ actualfreshResource.cpp83055Bf981/preparedresult/sourcecommit/sourceManifest/props
+ +UNCHANGEDnormalverifierPASS beforepackageuse. NEVERretrofit1500 metadata.
+ Canonical1466core conditionalreuse; no activebuilderyet/nootherhardwareoperation.
+ sm51boundednextofficialDDIcomputePSOinput/privatecapacity/lifetimeadoptionplan SOURCEONLY;
+ no repeatcapacityarchaeology/securityblockedUBFE. Rootalonechoosesnextrealcheckpoint.
 - RealAsahiconstructor/BO/GPU/DDI/caps/runtimepointercapacity/rootdevice/liveness/threads/fullOOM
  remainOPEN; actualownerCPUfixture isnot hardwareAsahioperation; upstreamNDEBUGvalidatorNOOP.
  Normal1471inertRECOVERY_DONE/Code28PackageAbsent/noService8CPUunchanged, noactiveexperiment
