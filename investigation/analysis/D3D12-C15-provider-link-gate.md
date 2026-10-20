@@ -100,3 +100,21 @@ the project removes only its duplicate C ClCompile entries. The owned-core
 include directories and per-source `NOMINMAX` remain. This follows observed
 symbol ownership instead of accepting duplicate definitions or weakening the
 linker. A fresh project source snapshot and link gate must prove the change.
+
+## EXP1615/1620 native link verdict
+
+The corrected isolated source `02b79418` built the full ARM64 SYS and UMD
+with version 30.0.1615.0. Actual CL command/read groups contain the original
+zero-cache, owned-core and provider modules; the UMD link lists each object
+once. The prepared `program.obj` and `legacy.obj` provide the two parser
+definitions once, and no project parser object is present. All 3,147 actual
+read records are recognized after adding the exact hash-proven provider header
+to the data review's pin set. The produced UMD import set equals the accepted
+1527 baseline, exports only `OpenAdapter10_2` and `OpenAdapter12`, has no new
+warnings, and both ARM64/WOW stack checks pass. The final combined receipt is
+`.local/c15-provider-dedup-package1615-result/root-provider-link-review1620.json`.
+
+This establishes a native build/link contract for original CPU modules only.
+The current CORE_0003/SM5.1 callbacks do not invoke the provider. Typed R1
+adapters, owned pipeline recipe/library behavior, converter OOM handling,
+threading and actual GPU shader execution remain separate admission gates.

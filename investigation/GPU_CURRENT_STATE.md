@@ -8,7 +8,27 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 02:06Z — C15 PROVIDER PARSER DEDUP NATIVE GATE; EXP1594 RECOVERY_DONE
+## CURRENT 2026-10-20 02:19Z — C15 PROVIDER NATIVE LINK VERIFIED; EXP1594 RECOVERY_DONE
+
+Source02b79418 parentfd107ef1/one UMD project delta now has original
+zero-cache, owned-core and provider CPU modules in production ARM64 UMD.
+EXP1613 normal runtime203rc0, EXP1614 fresh8rc0. EXP1615 full SYS/UMD
+build rc0/stack ARM64+WOW PASS/version30.0.1615.0. EXP1618 exact tlog
+closure3147reads/343unique UNKNOWN0 after source-manifest-pin of one newly
+read provider header; zero-cache/owned-core/provider CL+link objects once,
+prepared program/legacy sole parser owners, no project parser duplicates.
+EXP1620 PE review confirms import set equal accepted1527, exports only
+OpenAdapter10_2/OpenAdapter12, warning delta empty. Combined build-only
+receipt .local/c15-provider-dedup-package1615-result/root-provider-link-review1620.json
+SHAd727ba6fcac93cb1b353a45cb7d82005aa27061d3b3817afc8f11f5217453ee5.
+Old reviewer STOPs EXP1616/1617/1619 preserved; native build not rerun.
+No signed package or J313 experiment because modules uncalled in current
+CORE_0003/SM5.1. Normal visible J313 Code28/PackageAbsent/noService/8CPU.
+Next source-first C15 target: complete typed R1 adapters and owned pipeline
+recipe/library behavior, with recoverable dxil-spirv internal OOM still an
+independent production blocker. Do not advertise SM6 or probe caps yet.
+
+## Prior state superseded by EXP1620 native link verdict
 
 EXP1609 source-bound runtime and EXP1610 fresh8 accepted for scoped NOMINMAX
 sourcefd107ef1. EXP1611 then compiled owned-core/provider/parsers with0warnings
