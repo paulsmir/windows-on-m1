@@ -27,9 +27,11 @@ J313 is current, no AppleAgx package staged/installed, no active GPU experiment.
 Preserve user-dirty Mu and security-blocked C21E/UBFE/C27 untouched. Main branch
 includes additional unqualified C25/C26/C27/R1 edits beyond isolated c498;
 EXP1765 validates owner publication only in the a6-compatible source.
-C15 CORE_0010/SM6 remains fail-closed. Next causal target: complete typed
-R1 shader error/lifetime and owned pipeline-library/compiler contracts offline
-before a new GPU package. One broader old rejected-device-error host fixture
+C15 CORE_0010/SM6 remains fail-closed. EXP1770/1771 added unlinked CPU-only
+pipeline-library envelope and table structural gates (34 targeted tests PASS),
+not a full importer. Next causal target: digest/compatibility/recipe-graph and
+transactional owned refs plus typed R1 shader error/lifetime and compiler
+contracts offline before a new GPU package. One broader old rejected-device-error host fixture
 still lacks provider/R1 aliases; no full-suite GREEN claim.
 
 ## Prior state superseded by EXP1765 hardware verdict and EXP1769 recovery
