@@ -404,3 +404,24 @@ component-table/payload/digest/compatibility validation in one bounded CPU
 import transaction before connecting this predicate to the zero-cache library.
 The exact nonzero LibraryReference elision/error rules and full R1/SM6 gates
 above remain unknown.
+
+## 2026-10-20 CPU table checkpoint (EXP1771)
+
+The next original helper `agx_d3d12_library_wire_tables.h` consumes the accepted
+envelope and a caller-provided bounded interval scratch array. It validates
+pipeline index order and recipe targets, component kind/schema, component
+ordering by the declared canonical tuple, reserved record bytes, payload
+bounds/overlap and all zero gaps through the end of the fixed arena. The helper
+allocates nothing, calls no runtime/driver/GPU callback, publishes no object and
+clears output on every refusal. Empty libraries need no scratch pointer. Its
+scratch-capacity refusal is a future import OOM gate, not an HRESULT mapping.
+
+The actual-header fixture was RED while the helper was absent, then GREEN under
+ASan/UBSan for valid empty/nonempty/gapped buffers and malformed references,
+range overlaps, out-of-range offsets, nonzero gaps/trailing bytes, wrong schema
+and wrong component order. The targeted D3D12 ABI/native-owner/ledger suite has
+34 PASS. What remains: compute and verify per-component/whole-arena digests,
+compatibility keys, actual component contents and a complete acyclic recipe
+graph; construct owned refs transactionally and reject failures without
+publishing. Neither this predicate nor EXP1770 justifies a library callback or
+R1/SM6 advertisement.
