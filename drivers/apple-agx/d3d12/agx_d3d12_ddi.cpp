@@ -15,6 +15,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <tuple>
 #include <type_traits>
 #include "agx_d3d12_view_mapping.h"
+#include "agx_d3d12_r1_blend_projection.h"
 extern "C" {
 #include "apple_agx_win32_device_info.h"
 #include "render_win32_transport.h"

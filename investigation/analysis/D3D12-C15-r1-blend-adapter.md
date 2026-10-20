@@ -54,3 +54,11 @@ destination canaries, NULL refusal and equal semantic state under different
 library metadata. This is not a Windows ABI claim: the next gate must compile
 against the actual WDK ARM64 and wire typed calc/create wrappers to the
 same-device zero-cache reference validator before any CORE_0010 table change.
+
+EXP1621 staged the actual DDI SHA7c1ff5b and projector header SHAe41c4a58
+with exact remote SHA verification, then ran the pinned WDK26100 ARM64
+`syncheck-d3d12.ps1`: native-owner DDI, NONE DDI and winsys all returned
+rc=0 without source diagnostics. This checks the actual Windows declarations
+and translation-unit inclusion, not runtime typed callback registration or
+hardware execution. Raw builder log SHA256
+`ddac7d6b56ae5ad6b0982f2191bba1037db051b79879fc66b6a51330c42730e1`.
