@@ -828,6 +828,52 @@ static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE handle, const D3D12
     PublishPsoIdentity(pso, device);
     return S_OK;
 }
+/* CPU-only R1 PSO adapter. The 0010 table is not advertised yet. */
+static D3D12DDIARG_CREATE_PIPELINE_STATE_0001 ProjectR1PipelineState(
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0010 *input, D3D12DDI_HPIPELINESTATE destination) {
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0001 result;
+    std::memset(&result, 0, sizeof(result));
+    result.hDrvPipelineState = destination;
+    result.hComputeShader = input->hComputeShader;
+    result.hVertexShader = input->hVertexShader;
+    result.hPixelShader = input->hPixelShader;
+    result.hDomainShader = input->hDomainShader;
+    result.hHullShader = input->hHullShader;
+    result.hGeometryShader = input->hGeometryShader;
+    result.hRootSignature = input->hRootSignature;
+    result.hBlendState = input->hBlendState;
+    result.SampleMask = input->SampleMask;
+    result.hRasterizerState = input->hRasterizerState;
+    result.hDepthStencilState = input->hDepthStencilState;
+    result.hElementLayout = input->hElementLayout;
+    result.IBStripCutValue = input->IBStripCutValue;
+    result.PrimitiveTopologyType = input->PrimitiveTopologyType;
+    result.NumRenderTargets = input->NumRenderTargets;
+    for (UINT i = 0; i < 8; ++i) result.RTVFormats[i] = input->RTVFormats[i];
+    result.DSVFormat = input->DSVFormat;
+    result.SampleDesc = input->SampleDesc;
+    result.NodeMask = input->NodeMask;
+    return result;
+}
+static SIZE_T APIENTRY CalcPrivatePipelineStateSize0010(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0010 *arg) {
+    if (!arg || FAILED(AgxD3d12ZeroCacheValidateLibraryReference(device, &arg->LibraryReference)))
+        return 0;
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 legacy = ProjectR1PipelineState(arg, {});
+    return CalcPrivatePipelineStateSize(device, &legacy);
+}
+static HRESULT APIENTRY CreatePipelineState0010(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0010 *arg, D3D12DDI_HPIPELINESTATE destination) {
+    if (!arg || !destination.pDrvPrivate) return E_INVALIDARG;
+    const HRESULT reference = AgxD3d12ZeroCacheValidateLibraryReference(device, &arg->LibraryReference);
+    if (FAILED(reference)) return reference;
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 legacy = ProjectR1PipelineState(arg, destination);
+    return CreatePipelineState(device, &legacy);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivatePipelineStateSize0010),
+                             PFND3D12DDI_CALC_PRIVATE_PIPELINE_STATE_SIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreatePipelineState0010),
+                             PFND3D12DDI_CREATE_PIPELINE_STATE_0010>);
 static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE, D3D12DDI_HPIPELINESTATE);
 /* C1i (EXP1353): after its internal pipeline state the runtime calls
  * pfnMakeResident; refused, the device is removed. No object this stage
