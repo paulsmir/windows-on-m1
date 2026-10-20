@@ -8,7 +8,29 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 01:21Z — EXP1594 RECOVERY_DONE; C15 IDENTITY NATIVE INTEGRATION VALIDATED
+## CURRENT 2026-10-20 01:36Z — C15 ZERO-CACHE NATIVE LINK VERIFIED; EXP1594 RECOVERY_DONE
+
+J313 normal visible Code28/PackageAbsent/noService/8CPU after exact EXP1594
+FactoryV2 recovery, boot01:20:23Z. No active GPU experiment or package.
+EXP1594 source57bd4432 hardware63nonE PASS/C21EknownSKIP,73smokePASS,
+pool/fl11/corpus/DWM unchanged; root-verdict SHAad4477ca5c2ced53dea0c78b67372559e9bea03168dcea0a16bd0f357d217a96.
+Original zero-native-cache CPP module now included by project commit30278dbd;
+isolated source14c38bfd parent57bd/onlyprojectXML changed,724otherfiles
+byteequal. Runtime1596 and fresh8-1597 accepted. Full UMD build1598 rc0;
+old conservative1525 tlog reviewer STOP on newly intended object preserved,
+new EXP1599 data review confirms actual CL read and singleton UMD link input
+agx_d3d12_zero_cache_library.obj,2661reads294uniqueUNKNOWN0,
+importsEqualbaseline/only2exports, warnings0/stackPASS. Link verdict
+.local/c15-zero-cache-link-package1598-result/root-zero-link-review1599.json
+SHA03050b07346747421bedb48dd82fb1962cde0e98101d5fefb742020ecdc9bed5.
+This is BUILD_ONLY: CORE_0003/SM5.1 unchanged, callbacks not published,
+no new hardware reason. Next C15 contract requires complete typed0010 adapters,
+owned pipeline recipes/serialization and recoverable dxil-spirv allocator OOM;
+selected upstream HEAD remains licensed pin8434b063. Do not probe caps,
+link unsafe DXIL production path or retry C21E/UBFE/C27 blocked work.
+Preserve userdirtyMu. Ledger/CHANGES commit pending.
+
+## Prior state superseded by native C15 link verdict
 
 EXP1594 signed1592/source57bd4432: exactly63unique nonE D3D12 PASS/0FAIL,
 C21EknownSKIP, baseline1582 missing0; ROOTC/ROOTG bound receipts,

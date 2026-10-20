@@ -1,5 +1,14 @@
 # C15 zero-cache module compile and link gate
 
+Native link verdict: EXP1598 compiled the module and linked the ARM64 UMD;
+EXP1599 confirmed the source in CL input/read tlogs and its object exactly once
+in the UMD link source group. The accepted UMD import set and two exports are
+unchanged; no new warnings or unknown compiler inputs occurred. The original
+EXP1525 reviewer stopped on its intentional old-profile forbidden-object guard;
+that STOP is retained, and the fresh EXP1599 reviewer altered only that exact
+guard while adding positive source/object checks. This remains a build-only
+result with no GPU run or R1 table publication.
+
 The original `agx_d3d12_zero_cache_library.cpp` already implements six typed
 early-R1 library callbacks and an explicit LibraryReference validator, with
 CPU and native object tests. The current accepted `00_03` driver does not
@@ -45,9 +54,9 @@ later production source manifest must pin the one project-file delta exactly.
 
 ## WHAT IS STILL UNKNOWN:
 
-The module's native project-level compile/link result and resulting imports are
-unknown. These are deterministic builder facts, so no diagnostic J313 run is
-justified to discover them. Even a successful link does not establish complete
+The module's native project-level compile/link result and imports are now
+measured by EXP1598/1599. A diagnostic J313 run is not justified for an uncalled
+module. A successful link does not establish complete
 R1 library semantics: typed0010 shader/state/PSO adapters, owned serialized
 recipe storage, actual runtime null-field ordering, device-child lifetime,
 native owner/context concurrency and the reviewed dxil-spirv internal OOM
