@@ -46,3 +46,15 @@ returned rc=0. Raw builder log SHA256
 `ddac7d6b56ae5ad6b0982f2191bba1037db051b79879fc66b6a51330c42730e1`.
 This is CPU/native syntax only; full production link and CORE_0010 publication
 remain separate.
+
+The isolated source `07a9d20e` changed only the new element-layout DDI hunk
+over accepted blend source. EXP1631 normal runtime and EXP1632 fresh eight
+helpers passed. EXP1633 compiled and linked full ARM64 SYS/UMD with no new
+warnings or linker errors. EXP1635 verified all 3,149 actual tlog reads after
+two exact source-manifest header pins, zero unknown paths, baseline-equal UMD
+imports, only `OpenAdapter10_2`/`OpenAdapter12` exports and both stack gates.
+The combined build-only receipt is
+`.local/c15-r1-element-package1633-result/root-r1-element-link-review1635.json`
+(SHA256 `db8cc18e6368e58350385b51296d7ed5057b91a5ca29746a84d13800aed4b05c`).
+No typed callback is registered in CORE_0003, and no package was installed or
+executed on J313.

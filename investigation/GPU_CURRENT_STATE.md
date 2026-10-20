@@ -8,7 +8,24 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 02:44Z — C15 R1 BLEND NATIVE LINK VERIFIED; EXP1594 RECOVERY_DONE
+## CURRENT 2026-10-20 02:58Z — C15 R1 BLEND + ELEMENT NATIVE LINKS VERIFIED; EXP1594 RECOVERY_DONE
+
+Isolated source07a9d20e parent accepted blend34cacd10 changes only the
+typed 0010 element-layout wrapper DDI hunk; 727 other archived files,
+current CORE_0003 table/caps and R1 blend code byteequal. EXP1631 runtime
+203rc0, EXP1632 fresh8rc0, EXP1633 full SYS/UMD build rc0/version
+30.0.1633.0/no new warnings/stackPASS. EXP1635 tlog3149reads/344unique
+UNKNOWN0 after exact provider/projector header pins; 17archives/eighthelpers
+once; PE imports equal accepted1527 and exports only two openers. Combined
+build-only receipt .local/c15-r1-element-package1633-result/root-r1-element-link-review1635.json
+SHAdb8cc18e6368e58350385b51296d7ed5057b91a5ca29746a84d13800aed4b05c.
+No signed install, PE execution or J313 run: typed blend and element
+callbacks unregistered in current CORE_0003/SM5.1. Next C15 target: typed
+depth/raster/shader/PSO groups, then coherent CORE_0010 table; independent
+dxil-spirv internal recoverable OOM blocker remains. Normal visible guest
+Code28/PackageAbsent/noService/8CPU. No GPU discriminator yet.
+
+## Prior state superseded by EXP1635 element native link verdict
 
 Isolated source34cacd10 parent accepted02b79418 changes only DDI typed
 blend wrappers plus new projector header; it retains accepted 0003
