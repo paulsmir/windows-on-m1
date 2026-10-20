@@ -42,3 +42,27 @@ footprint across the remaining selected owner paths and allocator/context/
 C facade, followed by exact 83-TU/nine-archive exception-enabled build and
 fault-injected same-thread next-job tests. No J313 hardware run can test this
 unlinked external CPU contract.
+
+The same scratch source was configured afresh under EXP1694 with a
+CMakeLists-only removal of selected-target `-fno-exceptions` and an explicit
+`-fexceptions` C++ policy. EXP1695 independently reviewed the actual build:
+102 configured C++ commands all carry `-fexceptions`, none carry
+`-fno-exceptions`; the selected target built nine static archives with 83
+object members (each archive also has one ar index), source pins unchanged,
+configure/build rc0. EXP1696 linked those archives to the original C API
+smoke caller and ran version2.75.0/begin/invalid parse/end normally.
+
+The valid EXP1389 raw-u0 DXIL fixture was then relinked against those nine
+candidate archives. EXP1697 stopped before linking on a wrong caller-object
+path; EXP1698 reached the correct, sanitizer-instrumented caller but stopped
+on missing ASan/UBSan link runtimes. EXP1699 changed only that link flag:
+link rc0, actual C API conversion rc0 returned the exact prior 980-byte
+SPIR-V SHA256
+`60a637dee089e454508547866ba4cd8ef703fce85c831abedfbabe40ceeefc12`;
+the negative remapper returned a reported refusal without creating an output
+file. Archive hashes matched after both runs. Raw result:
+`.local/c15-oom-graph1694/translate1699-result.json`. These are normal and
+reported-error paths, not injected allocation failures. The candidate is
+still incomplete for the raw grouped-type family, Block/Function/Module
+cleanup, allocator/context ownership and the C facade; no recoverable OOM,
+Windows /EHsc/PE or J313 claim follows.
