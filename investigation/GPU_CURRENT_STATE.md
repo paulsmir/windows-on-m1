@@ -8,7 +8,24 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 00:20Z — EXP1582 RECOVERY_DONE; HEAP REGISTRY NATIVE INTEGRATION VALIDATED
+## CURRENT 2026-10-20 00:33Z — EXP1582 RECOVERY_DONE; C15 LIVE IDENTITY CPU GATE COMPLETE
+
+Normal GPU-visible guest is Code28/PackageAbsent/noService/8CPU after exact
+EXP1582 recovery; no active GPU experiment. Accepted EXP1582 source621ffcc4
+passed63nonE/knownC21ESKIP, smoke73+knownMSAA, pool/fl11/corpus/DWM.
+Next C15 live Device/PSO identity adapter commit2566fd70: actual-source
+ASan/UBSan+TSan address-safe A/B live/retired/concurrent resolver test PASS,
+six PSO compute/graphics serial/parallel/failure modes PASS, WDK1586 3rc0,
+full1588 1640tests exact124known failure IDs ADDED0. Prior1585 declaration
+order STOP preserved; 1586 corrected. Source snapshot EXP1589 commit57bd4432
+parent621ffcc4, one DDI delta/724other files byteequal, archivefb31a39d,
+manifest7a22157a. Runtime1590 BEFORE written; builder dispatch pending after
+ledger commit. No pipeline library linkage, R1 table/caps, DXIL or public SM6.
+Further native package and normal GPU checkpoint must be preregistered exactly,
+then recover visible Code28. Owner publication/native context and converter OOM
+remain separate gates. Preserve userdirtyMu and blocked C21E/UBFE/C27 tasks.
+
+## Prior state superseded by C15 identity source gate
 
 EXP1582 source621ffcc4/signed30.0.1580.0: exactly63nonE D3D12 PASS/0FAIL,
 C21EknownSKIP, baseline1573 missing0; ROOTC/ROOTG direct bound receipts,
