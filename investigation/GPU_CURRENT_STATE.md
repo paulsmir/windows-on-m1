@@ -8,6 +8,25 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 20:27Z — SM5.x SAMPLE BUILT; J313 GAME-LIKE CHECKPOINT NEXT
+
+EXP1789 builder produced external Microsoft nBody SM5 x64 EXE SHA
+819d205641a1c0c6adbdaffea972cd0e1ff166d694a00dbdb80561f64e8d1df3.
+EXP1790 source21/project+package90 hashes passed before PE dump but its
+final audit consumed 10.697GB and was stopped as exact PID40520, no receipt.
+EXP1791 bounded output audit PASS: six named app/runtime files hashed;
+HLSL equals source commit68907e31 and WinPix/Agility DLLs equal pinned
+NuGet. Build log says zero warnings/errors; PE machine x64, D3DCompileFromFile,
+dxgi and delay-loaded d3d12. This is a game-like diagnostic, **not a real
+game or release proof**. Next prepare one J313 checkpoint with exact
+EXP1764/1765-qualified package, app-local runtime/SM5 shaders, module/UMD
+receipts, regressions and FactoryV2 recovery. No GPU package installed now;
+normal guest Code28/PackageAbsent/8CPU. Portal 2 Steam route stays stopped
+pending new account evidence. User-dirty Mu and security-blocked C21E/UBFE/C27
+unchanged.
+
+## Prior state superseded by EXP1791 builder acceptance
+
 ## CURRENT 2026-10-20 19:40Z — SM5.1 GAME ROUTE EXP1780 PRELAUNCH STOP; RECOVERY_DONE
 
 User first-release target is stable D3D12 SM5.1 plus games; DXIL/SM6 deferred.
