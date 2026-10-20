@@ -8,7 +8,26 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 00:33Z — EXP1582 RECOVERY_DONE; C15 LIVE IDENTITY CPU GATE COMPLETE
+## CURRENT 2026-10-20 00:44Z — EXP1594 SIGNED PACKET READY; EXP1582 RECOVERY_DONE
+
+J313 normal visible guest Code28/PackageAbsent/noService/8CPU boot00:19:02Z,
+USB m1n1 uartproxy present and normal recovery-owned launcher active. No GPU
+experiment active; ordered restart owns previous launcher for next run.
+Next C15 identity source57bd44323168c39397987c97db08adf0c122f50e
+parent hardware-qualified621ffcc4, only DDI delta/724other files byteequal;
+CPU ASan/UBSan+TSan live identity PASS, six real PSO host modes PASS,
+WDK3rc0/full1640 exact124known failure IDs/no added. Fresh runtime1590,
+eight1591, full1592 and signed1593 accepted. Final30.0.1592.0 packet
+.local/c15-final-package1592-signed1593.zip SHA0e19729a53bd27e53c8f9bddb8ae8bc0971fd853566cb967c95ce9ea52a6c8ff;
+receipt6120ea9c/sourcearchivefb31a39d/manifest7a22157a. EXP1594 full
+BEFORE .local/preparation-1594/before1594.txt SHA39f6bfaa; 28-file prep
+manifestSHA52b79b6c. Root approval and dispatch pending after ledger commit.
+Expected63nonE+C21ESKIP, smoke73+knownMSAA, pool/FL11/corpus/DWM;
+exactFactoryV2 rec1594h cleanup to RECOVERY_DONE. No R1/library/SM6 claim:
+zero-native-cache module remains unlinked and DXIL allocator OOM unresolved.
+Preserve userdirtyMu. Do not restart/stage except through hash guard.
+
+## Prior state superseded by signed EXP1594 plan
 
 Normal GPU-visible guest is Code28/PackageAbsent/noService/8CPU after exact
 EXP1582 recovery; no active GPU experiment. Accepted EXP1582 source621ffcc4
