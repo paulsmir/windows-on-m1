@@ -33,10 +33,21 @@ empty stderr; the guest continued to answer SSH. Raw receipt SHA-256
 independent review SHA-256
 `b972f4c49eba38f5f97d5dfeeb0cd82438c099f6b8143f4ce79092be25d7bbc6`.
 
-This proves only one-shot failures at observed matching backing requests in
-two fixture shapes. It does not establish persistent-failure cleanup,
+EXP1749 built a fresh persistent-hook EXE with the same reviewed native
+closure; EXP1750 then ran the same measured nine positions. In each child,
+the hook stayed armed through the failed job. Independent review found exactly
+one matching failure and attempts exactly equal to N, so cleanup did not
+request another matching 64-KiB backing block before returning. Each public
+failure was status 3 with a bytezero result; the next job on the same thread
+returned valid owned output. All nine children exited zero, stderr was empty,
+and SSH remained available. Exact receipt SHA-256
+`2869710b4bc1881cc8ca9347556299f1e4e6824137643a935f061c984eb5a10a`;
+review SHA-256
+`bd368d540120d587270b2a20d48bdb133b6f498ccb6bc5890b2cb8d88597d3cd`.
+
+This finite observed custom backing category now has one-shot and persistent
+Windows ARM64 `/MD` evidence for two fixture shapes. It does not establish
 unobserved allocations, arbitrary DXIL inputs, whole-library sanitizer
-coverage, typed CORE_0010 admission or AGX execution. One follow-up will hold
-the matching failure armed through the failed job and check whether cleanup
-attempts another backing allocation. After that finite discriminator, return
-to a distinct C15 contract gate.
+coverage, typed CORE_0010 admission or AGX execution. Return to a distinct
+C15 contract gate rather than repeating this allocation sweep without new
+source-site or fixture evidence.

@@ -8,6 +8,21 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 10:12Z — C15 WINDOWS PERSISTENT BACKING PASS; DISTINCT GATE NEXT
+
+EXP1749 fresh test-only ARM64 `/MD` persistent64KiB backing EXE root-reviewed;
+EXP1750 normal J313 CPU-only N1..4 one/N1..5 mixed nine children ALL PASS.
+Each one targeted failure, attempts exactly N while hook stayed armed through
+failed job, status3/bytezero result, next SAME-thread owned980/2152 keys1/5,
+exit0/stderr empty; SSH up. ReceiptSHA2869710b4bc1881cc8ca9347556299f1e4e6824137643a935f061c984eb5a10a,
+reviewSHAbd368d540120d587270b2a20d48bdb133b6f498ccb6bc5890b2cb8d88597d3cd.
+This covers only observed custom backing requests/two inputs, not universal
+OOM, unseen shapes, typed CORE_0010 or GPU. Return to distinct C15 contract
+gate. Last GPU-qualified source EXP1681, no AppleAgx package/active GPU run;
+owner publication race EXP1745 still awaits callback/lifetime policy.
+
+## Prior state superseded by persistent Windows backing check
+
 ## CURRENT 2026-10-20 10:07Z — C15 WINDOWS BACKING NTH PASS; PERSISTENT CHECK NEXT
 
 EXP1746 test-only Windows ARM64 `/MD` custom64KiB backing hook build AA64
