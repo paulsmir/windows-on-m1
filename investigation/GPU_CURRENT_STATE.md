@@ -8,6 +8,19 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 21:29Z — X64 UMD-NAME QUERY BUILT; CODE28 CONTROL NEXT
+
+EXP1797 rebuilt the existing D3DKMT UMD-name diagnostic source as x64 PE
+0x8664, EXE SHA96b038bd121950fffa825be5db02a1f3532bd898ac4f069a048708fcb3fe627f,
+builder rc0. EXP1796 stopped before link on PowerShell native stderr policy;
+four unchanged printf-format warnings retained in EXP1797. No J313 action.
+Next use this exact probe on normal Code28 guest, then under one exact signed
+package to measure x64 DXGI/KMT adapter and UMD-name selection before
+deciding how to supply an x64-compatible UMD. EXP1795 recovery remains
+RECOVERY_DONE Code28/PackageAbsent/8CPU; no package installed now.
+
+## Prior state superseded by EXP1797 diagnostic build acceptance
+
 ## CURRENT 2026-10-20 21:24Z — EXP1795 FIRST HRESULT PROVED; RECOVERY_DONE
 
 Exact EXP1764 package/full-owner Code0/8CPU plus EXP1794 x64 nBody fail-
