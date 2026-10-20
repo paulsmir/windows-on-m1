@@ -1375,11 +1375,33 @@ emit_alu(struct ctx *c, const struct dxbc_instruction *insn)
       r = nir_bcsel(b, nir_ilt_imm(b, msb, 0), nir_imm_int(b, -1), nir_isub_imm(b, 31, msb));
       break;
    }
-   case DXBC_OP_UBFE: r = nir_ubfe(b, SRC(3, U), SRC(2, U), SRC(1, U)); break;
-   case DXBC_OP_IBFE: r = nir_ibfe(b, SRC(3, I), SRC(2, U), SRC(1, U)); break;
-   case DXBC_OP_BFI:
-      r = nir_bfi(b, nir_bfm(b, SRC(1, U), SRC(2, U)), SRC(3, U), SRC(4, U));
+   /* EXP1821: Asahi neither lowers nor emits nir_op_ubfe/ibfe/bfm/bfi (no
+    * has_bfe/has_bfm/has_bfi; agx_compile "Unhandled ALU op"). These are the
+    * D3D11 functional-spec definitions in shifts and masks: width and offset
+    * are the low five bits, width 0 extracts 0, an extract reaching bit 31
+    * is a plain shift, and the insert mask is truncated to 32 bits. */
+   case DXBC_OP_UBFE:
+   case DXBC_OP_IBFE: {
+      nir_def *width = nir_iand_imm(b, SRC(1, U), 31), *offset = nir_iand_imm(b, SRC(2, U), 31);
+      nir_def *value = SRC(3, U), *end = nir_iadd(b, width, offset);
+      const unsigned n = value->num_components;
+      const bool sign = insn->opcode == DXBC_OP_IBFE;
+      nir_def *left = nir_ishl(b, value, nir_isub_imm(b, 32, end));
+      nir_def *right = nir_isub_imm(b, 32, width);
+      nir_def *inside = sign ? nir_ishr(b, left, right) : nir_ushr(b, left, right);
+      nir_def *tail = sign ? nir_ishr(b, value, offset) : nir_ushr(b, value, offset);
+      r = nir_bcsel(b, nir_ieq(b, width, nir_imm_zero(b, n, 32)), nir_imm_zero(b, n, 32),
+                    nir_bcsel(b, nir_ult(b, end, nir_replicate(b, nir_imm_int(b, 32), n)), inside, tail));
       break;
+   }
+   case DXBC_OP_BFI: {
+      nir_def *width = nir_iand_imm(b, SRC(1, U), 31), *offset = nir_iand_imm(b, SRC(2, U), 31);
+      const unsigned n = width->num_components;
+      nir_def *ones = nir_iadd_imm(b, nir_ishl(b, nir_replicate(b, nir_imm_int(b, 1), n), width), -1);
+      nir_def *mask = nir_ishl(b, ones, offset);
+      r = nir_ior(b, nir_iand(b, nir_ishl(b, SRC(3, U), offset), mask), nir_iand(b, SRC(4, U), nir_inot(b, mask)));
+      break;
+   }
    case DXBC_OP_BFREV: r = nir_bitfield_reverse(b, SRC(1, U)); break;
    case DXBC_OP_F32TOF16: {
       nir_def *v = SRC(1, F), *comp[4];

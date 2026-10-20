@@ -172,11 +172,18 @@ main(int argc, char **argv)
     * which Asahi's agx_nir_lower_vs_input_to_prolog turns into the
     * prolog export), bit per base */
    unsigned vs_input_bases = 0;
+   /* EXP1821: ALU ops the AGX backend neither lowers nor emits */
+   unsigned agx_unlowered_bitfield = 0;
    nir_foreach_function_impl(impl, nir) {
       nir_block *last = nir_impl_last_block(impl);
       nir_foreach_block(blk, impl)
          nir_foreach_instr(instr, blk) {
             ++instrs;
+            if (instr->type == nir_instr_type_alu) {
+               const nir_op op = nir_instr_as_alu(instr)->op;
+               if (op == nir_op_bfi || op == nir_op_bfm || op == nir_op_ubfe || op == nir_op_ibfe)
+                  ++agx_unlowered_bitfield;
+            }
             if (instr->type == nir_instr_type_deref &&
                 nir_deref_mode_is(nir_instr_as_deref(instr), nir_var_mem_shared))
                ++shared_derefs;
@@ -192,12 +199,12 @@ main(int argc, char **argv)
    }
    printf("TRANSLATED stage %s instructions %u inputs 0x%llx outputs 0x%llx textures %u "
           "ssbos %u images %u block %ux%ux%u shared %u shared-derefs %u early-output-stores %u "
-          "vs-input-bases 0x%x\n",
+          "vs-input-bases 0x%x agx-unlowered-bitfield %u\n",
           mesa_shader_stage_name(nir->info.stage), instrs,
           (unsigned long long)nir->info.inputs_read,
           (unsigned long long)nir->info.outputs_written, BITSET_LAST_BIT(nir->info.textures_used),
           ssbos, images, block[0], block[1], block[2], shared, shared_derefs, early_stores,
-          vs_input_bases);
+          vs_input_bases, agx_unlowered_bitfield);
    ralloc_free(nir);
    glsl_type_singleton_decref();
    dxbc_program_free(&program);

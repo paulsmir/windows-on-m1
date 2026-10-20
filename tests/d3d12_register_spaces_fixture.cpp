@@ -10,7 +10,7 @@ enum {D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE=0,D3D12DDI_ROOT_PARAMETER_TY
  D3D12DDI_ROOT_PARAMETER_TYPE_CBV=2,D3D12DDI_ROOT_PARAMETER_TYPE_SRV=3,D3D12DDI_ROOT_PARAMETER_TYPE_UAV=4};
 enum {D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV=0,D3D12DDI_DESCRIPTOR_RANGE_TYPE_UAV=1,
  D3D12DDI_DESCRIPTOR_RANGE_TYPE_CBV=2,D3D12DDI_DESCRIPTOR_RANGE_TYPE_SAMPLER=3};
-enum {D3D12DDI_SHADER_VISIBILITY_ALL=0,D3D12DDI_SHADER_VISIBILITY_VERTEX=1,D3D12DDI_SHADER_VISIBILITY_PIXEL=5};
+enum {D3D12DDI_SHADER_VISIBILITY_ALL=0,D3D12DDI_SHADER_VISIBILITY_VERTEX=1,D3D12DDI_SHADER_VISIBILITY_GEOMETRY=4,D3D12DDI_SHADER_VISIBILITY_PIXEL=5};
 enum {D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV=0,D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER=1};
 struct AgxD3d12Heap {void *cpu; UINT64 bytes;};
 struct AgxD3d12Descriptor {BYTE bytes[64];};
@@ -20,7 +20,7 @@ struct AgxD3d12Range {UINT type,count,base_register,space,offset;};
 struct AgxD3d12RootParameter {UINT type,shader_register,space,offset,dwords,visibility,first_range,ranges;};
 struct AgxD3d12RootSignature {UINT parameters,static_samplers; AgxD3d12RootParameter parameter[3];};
 struct FakePso {struct {dxbc_binding_map Bindings;} compute;
- struct {dxbc_binding_map VsBindings,PsBindings;} graphics; UINT vs_dwords=1,ps_dwords=1;};
+ struct {dxbc_binding_map VsBindings,PsBindings,GsBindings;} graphics; UINT vs_dwords=1,ps_dwords=1,gs_dwords=0;};
 struct AgxD3d12CommandList {void *device; FakePso *pso;};
 struct AgxD3d12Dispatch {
  AgxD3d12Heap *uav_heap[8]={},*cb_heap[14]={},*srv_heap[128]={};

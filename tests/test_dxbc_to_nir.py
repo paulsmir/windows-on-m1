@@ -236,6 +236,17 @@ class DxbcToNir(unittest.TestCase):
         self.assertTrue(result.stdout.startswith("REFUSED stream output 0 (register 4)"),
                         result.stdout + result.stderr[-3000:])
 
+    def test_sm5_bitfield_ops_reach_asahi_as_shifts_and_masks(self):
+        # EXP1821: nBody's cs_5_0 bfi reached agx_compile as nir_op_bfi/bfm
+        # ("Unhandled ALU op", illegal instruction in the UMD); Asahi lowers
+        # none of nir_op_ubfe/ibfe/bfm/bfi
+        asm = (FIXTURES / "cs50bits.asm").read_text()
+        for op in ("ubfe", "ibfe", "bfi"):
+            self.assertRegex(asm, rf"(?m)^{op} ")
+        result = self.run_fixture("cs50bits")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("agx-unlowered-bitfield 0", result.stdout)
+
     def test_vertex_inputs_read_their_own_attribute(self):
         # EXP1297: every translated vertex input reached Asahi with io base
         # 0 (no driver_location), and agx_nir_lower_vs_input_to_prolog
