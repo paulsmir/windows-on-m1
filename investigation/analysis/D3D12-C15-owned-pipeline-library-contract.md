@@ -444,3 +444,27 @@ identity/profile, backend failure and NULL inputs. The targeted D3D12 ABI,
 owner and ledger suite totals 35 PASS. This still does not validate component
 semantics, an acyclic recipe graph, runtime framing or transactional ownership.
 It is an offline CPU gate and makes no R1/SM6 capability claim.
+
+## 2026-10-20 Windows CNG callback checkpoint (EXP1773/1774)
+
+The original unlinked `agx_d3d12_library_wire_cng.h` opens a Windows user-mode
+SHA-256 algorithm handle, checks its fixed 32-byte output length, and hashes one
+or several spans with a fresh BCrypt hash object. Every path destroys the hash
+and the context closes the algorithm provider. Backend failure zeroes output and
+returns false to the CPU digest predicate; it never converts a failure into a
+valid digest. Microsoft documents the relevant
+[algorithm-provider lifetime](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptopenalgorithmprovider),
+[hash-object allocation and destruction](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptcreatehash),
+[multi-buffer HashData behavior](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcrypthashdata),
+and [32-byte fixed-output requirement](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptfinishhash).
+The pinned Windows SDK bcrypt.h was inspected; no Microsoft or external code was
+copied into this repository.
+
+EXP1773 built a fresh `/MD` ARM64 test EXE with pinned MSVC and Bcrypt.lib;
+root review confirmed AA64 and the bcrypt.dll imports. EXP1774 ran that exact
+hash-pinned EXE on J313 in the ordinary inert Code28/PackageAbsent/8CPU guest:
+SHA-256 of contiguous `abc` and scatter `a` + `bc` matched the known digest,
+invalid callback contexts were refused, exit0/stderr empty. The guest remained
+Code28/PackageAbsent/8CPU. The callback remains unlinked to the production UMD;
+this CPU test does not validate library import, recipe semantics, capabilities,
+DXIL execution or GPU rendering.
