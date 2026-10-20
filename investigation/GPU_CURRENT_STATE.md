@@ -8,7 +8,21 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 03:40Z — C15 R1 STATE/PSO LINKS + SHADER CPU BOUNDS; EXP1594 RECOVERY_DONE
+## CURRENT 2026-10-20 03:46Z — C15 R1 STATE/PSO LINKS + SHADER ROOT CPU BOUNDS; EXP1594 RECOVERY_DONE
+
+New uncalled checked root-private extent helper811d0931: explicit
+parameter/range/static-sampler/DWORD policy, NULL/overflow guards, host
+ASan/UBSan PROT_NONE checks14 PASS; EXP1653 pinned MSVC C3493 STOP preserved,
+EXP1654 corrected pinned WDK ARM64 three rc0. It is included but current
+CalcPrivateRootSignatureSize/CreateRootSignature do not use it; no provider
+Device/Root registration or lifetime claim. Next causal target is one
+deterministic actual-source test and owner-layer wiring of exact extent plus
+canonical root Register/Retire. That changes current 0003 root private
+lifecycle and must have separate production package/J313 recovery checkpoint
+after offline tests. Existing CORE_0003/SM5.1 remains, J313 normal visible
+Code28/PackageAbsent/noService/8CPU.
+
+## Prior state superseded by EXP1654 root extent CPU gate
 
 Accepted build-only PSO link EXP1650 remains below. New CPU shader
 prerequisites: uncalled bounded first-eight-byte PROGRAM span helper
