@@ -60,3 +60,19 @@ Perform one bounded native builder graph with exact source/tool/input hashes;
 preserve any failure and repair only the owning module or project under a new
 ID. Successful data-only review records source/object/link proof and keeps J313
 in its normal GPU-visible Code28/PackageAbsent/noService/8CPU recovery state.
+
+## EXP1603 source-closure correction
+
+The first production ARM64 compile stopped before linking. The frozen source
+manifest contained `agx_d3d12_shader_owned_core.cpp` but omitted the original
+tracked `agx_shader_input_provider.cpp` and its header; the branch workspace
+presence did not make them part of the isolated source ZIP. The owned-core
+translation unit includes `agx_dxil_program.h` and
+`agx_legacy_program_frame.h` from `mesa/dxil` and `mesa/dxbc`, whereas the UMD
+project supplied neither include directory. Its calls also require the
+original `agx_dxil_program.c` and `agx_legacy_program_frame.c` definitions
+in the native link. These are concrete source/project dependencies, not
+hardware findings. EXP1604 freezes the two missing provider files and fixes
+the project include/compile graph; all four original modules remain uncalled
+by CORE_0003. A new builder gate must verify the actual compiler and linker
+receipts. EXP1603 remains a failed build receipt and must not be relabelled.

@@ -59,10 +59,13 @@
     </ClCompile>
     <ClCompile Include="..\..\d3d12\agx_d3d12_shader_owned_core.cpp">
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>..\..\mesa\dxil;..\..\mesa\dxbc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="..\..\d3d12\agx_shader_input_provider.cpp">
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
+    <ClCompile Include="..\..\mesa\dxil\agx_dxil_program.c" />
+    <ClCompile Include="..\..\mesa\dxbc\agx_legacy_program_frame.c" />
     <ClCompile Include="src\umd_runtime_device.c">
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>
