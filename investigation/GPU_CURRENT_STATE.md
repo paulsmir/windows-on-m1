@@ -8,7 +8,23 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 02:19Z — C15 PROVIDER NATIVE LINK VERIFIED; EXP1594 RECOVERY_DONE
+## CURRENT 2026-10-20 02:31Z — C15 PROVIDER LINK + FIRST R1 BLEND CPU ADAPTER; EXP1594 RECOVERY_DONE
+
+Provider native link build-only receipt EXP1620 remains accepted (below).
+New unregistered typed R1 blend projector/header ee60b4ea and DDI
+calc/create wrappers c8fafeb0: actual-source host ASan/UBSan checks16+21
+PASS; EXP1621/1622 pinned Windows ARM64 WDK native-owner/NONE/winsys syntax
+3rc0 each. The wrappers validate same-device LibraryReference through the
+linked zero-cache module, retain all eight render-target semantics in current
+private state and report invalid VOID create without writing output. They are
+NOT assigned to CORE_0010, do not change GetVersions/GetCaps/SM5.1 and have
+no full production PE or GPU execution claim. Next C15 CPU target: typed
+element layout/depth/raster/shader/PSO groups and positive CORE_0010 table
+only after every required callback/lifetime path is coherent. DXIL internal
+recoverable OOM remains independent production blocker. J313 normal visible
+Code28/PackageAbsent/noService/8CPU; no reason for a GPU run yet.
+
+## Prior state superseded by EXP1622 typed blend CPU gate
 
 Source02b79418 parentfd107ef1/one UMD project delta now has original
 zero-cache, owned-core and provider CPU modules in production ARM64 UMD.
