@@ -76,3 +76,14 @@ hardware findings. EXP1604 freezes the two missing provider files and fixes
 the project include/compile graph; all four original modules remain uncalled
 by CORE_0003. A new builder gate must verify the actual compiler and linker
 receipts. EXP1603 remains a failed build receipt and must not be relabelled.
+
+## EXP1607 Windows header macro correction
+
+The corrected source snapshot reached the actual ARM64 compiler, which found
+`minwindef.h`'s function-like `max(a,b)` macro expanding in the provider's
+`std::numeric_limits<T>::max()` calls. The pinned Windows SDK wraps that macro
+in `#ifndef NOMINMAX`. The UMD project now defines `NOMINMAX=1` only for the
+two original C++ translation units that use `numeric_limits::max`; this keeps
+the original CPU modules and all other project compile flags unchanged.
+EXP1607 remains a failed `/WX` build receipt. A fresh source-bound native
+compile is required before any link or capability claim.
