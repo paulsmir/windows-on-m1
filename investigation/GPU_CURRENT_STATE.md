@@ -8,7 +8,22 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 01:36Z — C15 ZERO-CACHE NATIVE LINK VERIFIED; EXP1594 RECOVERY_DONE
+## CURRENT 2026-10-20 01:48Z — C15 PROVIDER LINK SOURCE CLOSURE; EXP1594 RECOVERY_DONE
+
+EXP1601 corrected-project first source28438fdd complete normal runtime203rc0,
+199AA64/25422deps UNKNOWN0; EXP1602 fresh eight helpers AA64/300deps PASS.
+EXP1603 full UMD build STOPPED before link on two actual C1083: missing
+`agx_dxil_program.h` include directory and provider CPP absent from isolated
+source snapshot. No guest action or package. Correction commit b2c12c1b adds
+mesa/dxil+dxbc include directories for owned-core and original parser C
+translation units to project; isolated source EXP1604 commit fd6b7f59 parent
+14c38bfd includes exact project delta and original provider CPP/H, 727 files
+with724 old source files byteequal. Next fresh normal-runtime EXP1605, eight
+helpers, then full native link. Do not reuse or relabel failed EXP1603. The
+modules remain uncalled under CORE_0003/SM5.1, so no J313 diagnostic run is
+justified. Normal visible J313 remains Code28/PackageAbsent/noService/8CPU.
+
+## Prior state superseded by EXP1603 C1083 and EXP1604 source correction
 
 J313 normal visible Code28/PackageAbsent/noService/8CPU after exact EXP1594
 FactoryV2 recovery, boot01:20:23Z. No active GPU experiment or package.
