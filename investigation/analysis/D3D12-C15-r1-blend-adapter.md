@@ -62,3 +62,26 @@ rc=0 without source diagnostics. This checks the actual Windows declarations
 and translation-unit inclusion, not runtime typed callback registration or
 hardware execution. Raw builder log SHA256
 `ddac7d6b56ae5ad6b0982f2191bba1037db051b79879fc66b6a51330c42730e1`.
+
+## Typed calc/create CPU checkpoint
+
+The actual DDI now has unregistered typed 0010 blend calc/create wrappers.
+Both validate the readable same-device `LibraryReference` through the accepted
+zero-cache module. Valid creates project the semantic fields into the existing
+private blend state; invalid VOID creates use the existing per-device error
+callback and leave destination storage untouched. The WDK function-pointer
+static assertions prevent accidentally assigning a 0003 signature.
+
+The actual-source renderer extracted those two wrapper bodies into a host
+fixture. Missing wrappers failed before implementation. Apple clang21
+ASan/UBSan then returned `R1_BLEND_WRAPPERS checks=21 failures=0`: ordinary
+and live-library state match, eight distinct targets survive, foreign-library,
+dead-device, NULL record and NULL destination paths do not publish state.
+The fixture's first GREEN attempt exposed an incorrect expected validator
+count in the fixture; only that expectation changed before final GREEN.
+EXP1622 staged the exact DDI, projector, zero-cache header and compiler
+script with matching remote SHA256; pinned Windows ARM64 native-owner DDI,
+NONE DDI and winsys syntax each returned rc=0. Raw builder log SHA256
+`ddac7d6b56ae5ad6b0982f2191bba1037db051b79879fc66b6a51330c42730e1`.
+These are CPU/ABI gates, not a production full-link or GPU result. The typed
+wrappers are not assigned to any table; CORE_0003/SM5.1 stay unchanged.

@@ -16,6 +16,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <type_traits>
 #include "agx_d3d12_view_mapping.h"
 #include "agx_d3d12_r1_blend_projection.h"
+#include "agx_d3d12_zero_cache_library.h"
 extern "C" {
 #include "apple_agx_win32_device_info.h"
 #include "render_win32_transport.h"
@@ -540,6 +541,36 @@ template<class Desc, UINT Kind> struct AgxD3d12State {
     template<class Handle> static VOID APIENTRY destroy(D3D12DDI_HDEVICE, Handle) {}
 };
 using BlendState = AgxD3d12State<D3D12DDI_BLEND_DESC, 1>;
+/* CPU-only R1 blend adapter. The 0010 table is not advertised yet. */
+static SIZE_T APIENTRY CalcPrivateBlendStateSize0010(D3D12DDI_HDEVICE device,
+                                                     const D3D12DDI_BLEND_DESC_0010 *desc) {
+    if (!desc || FAILED(AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference)))
+        return 0;
+    return sizeof(D3D12DDI_BLEND_DESC);
+}
+static VOID APIENTRY CreateBlendState0010(D3D12DDI_HDEVICE device,
+                                          const D3D12DDI_BLEND_DESC_0010 *desc,
+                                          D3D12DDI_HBLENDSTATE handle) {
+    if (!desc || !handle.pDrvPrivate) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    const HRESULT reference = AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference);
+    if (FAILED(reference)) {
+        ReportRejectedDeviceError(device, reference);
+        return;
+    }
+    D3D12DDI_BLEND_DESC projected;
+    if (!AgxD3d12ProjectR1Blend(desc, &projected)) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    BlendState::create(device, &projected, handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateBlendStateSize0010),
+                             PFND3D12DDI_CALCPRIVATEBLENDSTATESIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreateBlendState0010),
+                             PFND3D12DDI_CREATEBLENDSTATE_0010>);
 using DepthStencilState = AgxD3d12State<D3D12DDI_DEPTH_STENCIL_DESC, 2>;
 using RasterizerState = AgxD3d12State<D3D12DDI_RASTERIZER_DESC, 3>;
 struct AgxD3d12ElementLayout {
