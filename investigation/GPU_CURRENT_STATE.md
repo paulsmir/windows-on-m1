@@ -8,6 +8,43 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 07:08Z — C15 TWO HOST OOM CATEGORIES SWEPT; WINDOWS GATE NEXT
+
+Last J313 hardware-qualified source is EXP1681 a6d871ad old0003
+Device/Root provider: 63 unique non-E D3D12 PASS, exact FactoryV2
+recovery Code28/PackageAbsent/noService/8CPU. No new GPU package staged,
+no active hardware experiment. User-dirty Mu preserved. Branch uncalled
+Standard IO span and shader transaction helpers EXP1683/1686 host/WDK PASS;
+CORE_0010/SM6 still fail-closed.
+
+External pinned dxil-spirv8434 original source and project production code
+unchanged. Reviewed composite+profile clone with TEST-ONLY hook: EXP1711/12
+nine archives84 objects/103 C++ -fexceptions; EXP1713/15 current project
+checked+owned one/mixed/profile nominal12rc0,697 actual deps UNKNOWN0,
+mixed output exact. EXP1716 first64KiB backing fault status3/empty result,
+next same-thread valid. EXP1719/20 one-shot N1..3 one-key/N1..5 mixed custom
+backing failures all PASS; EXP1728/29 persistent matching64KiB failure all
+PASS. EXP1721/22 proved host ordinary new/new[] interposition at9/10 calls
+with selected compiler/LLVMBC/ChainAllocator metadata PCs; EXP1723/24
+one-shot N1..9/N1..10 all PASS. EXP1731 first persistent new PASS;
+EXP1732/33 per-child calibrated persistent N1..9/N1..10 all19 status3,
+bytezero result, no unmatched calls, next same-thread valid, rc0/stderr
+empty. Category limits and exact artifacts in
+`investigation/analysis/D3D12-C15-backing-sweep.md`,
+`D3D12-C15-persistent-backing-sweep.md` and
+`D3D12-C15-ordinary-new-sweep.md`.
+
+This is NOT universal recoverable OOM: unobserved source sites, huge/noTLS,
+other shader shapes, full-graph ASan/UBSan, Windows ARM64 /MD interposition
+and EH behavior, exact VOID shader error mapping, signed CORE_0010/caps and
+GPU execution remain open. Next causal target is a pinned Windows ARM64
+CPU-only TEST-OVERLAY build/runtime check for one targeted backing failure
+and ordinary-new symbol resolution, then broader reviewed fault coverage.
+Do not run J313 GPU merely to test an unlinked CPU dependency. Security-
+blocked C21E/UBFE/C27 untouched.
+
+## Prior state superseded by host allocation-category sweeps
+
 ## CURRENT 2026-10-20 06:37Z — C15 NARROW PARSE OOM PASS; BROAD OOM STILL OPEN
 
 Last J313 hardware-qualified source remains EXP1681 a6d871ad old0003
