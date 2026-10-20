@@ -4304,7 +4304,9 @@ int main(int argc, char **argv) {
         hr = IDXGIAdapter1_GetDesc1(adapter, &desc);
         if (SUCCEEDED(hr) && desc.VendorId == 0x4c505041) {
             int failed;
-            if (argc > 2 && !strcmp(argv[1], "teardown")) return teardown(adapter, argv[2]);
+            /* toolrun.ps1 passes its output file first: find "teardown <mode>" */
+            for (int a = 1; a + 1 < argc; ++a)
+                if (!strcmp(argv[a], "teardown")) return teardown(adapter, argv[a + 1]);
             hr = D3D12CreateDevice((IUnknown *)adapter, D3D_FEATURE_LEVEL_11_0,
                                    &IID_ID3D12Device, (void **)&device);
             printf("D3D12CreateDevice hr=0x%08lx\n", (unsigned long)hr);
