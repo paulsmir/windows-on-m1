@@ -8,7 +8,23 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 03:30Z — C15 R1 STATE + PSO NATIVE LINKS; EXP1594 RECOVERY_DONE
+## CURRENT 2026-10-20 03:40Z — C15 R1 STATE/PSO LINKS + SHADER CPU BOUNDS; EXP1594 RECOVERY_DONE
+
+Accepted build-only PSO link EXP1650 remains below. New CPU shader
+prerequisites: uncalled bounded first-eight-byte PROGRAM span helper
+71ebdfc4, host ASan/UBSan PROT_NONE checks9 PASS and EXP1651 WDK ARM64
+3rc0; uncalled canonical root encoder576f0ec7, host guard-page checks16 PASS
+and EXP1652 WDK ARM64 3rc0. Neither proves remaining shader body readability
+on arbitrary pointers or registers Device/Root with linked input provider.
+Current root private object does not record its allocation extent and
+DestroyRootSignature is a no-op; provider Root canonical snapshot/lifetime
+cannot be wired by passing empty/raw bytes. Next causal target: establish
+exact root storage extent and Device/Root registration/quiescence with a
+deterministic CPU lifecycle regression before typed shader callbacks.
+CORE_0003/SM5.1 unchanged, dxil-spirv internal recoverable OOM blocker
+unchanged, J313 normal visible Code28/PackageAbsent/noService/8CPU.
+
+## Prior state superseded by EXP1652 shader CPU prerequisites
 
 Isolated sourcebf2e8be5 parent accepted depth/rasterae3eb572 changes only
 typed 0010 PSO destination adapter: 727 other archived files and current
