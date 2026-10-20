@@ -8,6 +8,29 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 07:31Z — C15 WINDOWS /MD FIRST NEW FAULT PASS; NTH SWEEP NEXT
+
+Last GPU hardware-qualified source remains EXP1681 a6d871ad: 63 unique
+non-E D3D12 PASS, exact FactoryV2 normal visible Code28/PackageAbsent
+recovery. No GPU package staged/installed and no GPU experiment active.
+Preserve user-dirty Mu; security-blocked C21E/UBFE/C27 untouched. Branch
+Standard IO and internal shader transaction helpers remain uncalled;
+CORE_0010/SM6 fail-closed.
+
+Pinned external dxil-spirv composite + current owned converter Windows ARM64
+`/MD` test-only checkpoint: EXP1734 retained exact native inputs audit;
+EXP1735/36 AA64 EXE/root review; EXP1737 runner-only incomplete; EXP1738/39
+two nominal fixture jobs 980/2152B keys1/5 with14/15 observed scalar-new
+events; EXP1740/41 fresh fault EXE and J313 CPU-only first observed
+ordinary-new failure on both fixtures status3, bytezero failed result, next
+SAME-thread valid, exit0/stderr empty. J313 SSH remained up, no driver/package
+or reboot mutation. Exact receiptSHA2811f430166d42fb73ec70aef9aa52b05ec5241b292aa827d98a9ed92df1bab6.
+Details/limits: `investigation/analysis/D3D12-C15-windows-new-fault.md`.
+This does not prove broad OOM or GPU/SM6 admission. Next causal target is a
+finite Windows Nth observed-call sweep, then a distinct C15 integration gate.
+
+## Prior state superseded by Windows /MD first-site checkpoint
+
 ## CURRENT 2026-10-20 07:08Z — C15 TWO HOST OOM CATEGORIES SWEPT; WINDOWS GATE NEXT
 
 Last J313 hardware-qualified source is EXP1681 a6d871ad old0003
