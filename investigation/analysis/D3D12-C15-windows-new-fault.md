@@ -59,9 +59,18 @@ DXIL inputs. This is not general recoverable OOM: later observed allocation
 positions, unseen shapes, custom 64-KiB backing on Windows, array-new,
 unobserved CRT/EH paths and all GPU/DDI/caps behavior remain open.
 
-Next use one test-only EXE with per-child calibration to inject each observed
-Windows ordinary-new call position separately. Each child must require status
-3, a bytezero failed result and a successful next job in the same thread.
-Keep GPU hardware out of this CPU-only boundary; after this finite sweep,
-return to the next distinct C15 integration gate rather than repeating the
-same allocation hypothesis without new evidence.
+EXP1742 built a fresh test-only EXE that accepts a call ordinal, and EXP1743
+ran all 14 positions for the one-key input and all 15 for the mixed input as
+29 separate child processes. Every child had exactly one selected persistent
+ordinary-new failure at its Nth baseline-observed call, returned status 3
+with a bytezero failed result, then converted the input successfully in the
+same thread. All 29 exited 0 with empty stderr. The independent review is
+`.local/c15-windows-new1735/root-review1743.json` SHA-256
+`fea3ee35a93dfe48577db8e077d31654fbf03353263152c96bd37f9dea440487`.
+This finite observed category is now covered on Windows ARM64 `/MD`; it does
+not establish all allocations or general OOM recovery.
+
+Next return to a distinct C15 integration gate, such as exact typed
+`CORE_0010` error routing and complete input-readability/lifetime contracts.
+Keep GPU hardware out of an unlinked CPU dependency. Do not repeat this
+allocation sweep without new source-site or fixture evidence.

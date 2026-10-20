@@ -8,6 +8,23 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 07:38Z — C15 WINDOWS /MD OBSERVED NEW CATEGORY PASS; DISTINCT GATE NEXT
+
+EXP1742 fresh ARM64 `/MD` test-only Nth-fault EXE AA64/root-reviewed;
+EXP1743 J313 normal guest finite N1..14 one-key/N1..15 mixed 29 separate
+children ALL PASS: each one targeted ordinary-new failure, status3 and
+bytezero public result, next SAME-thread status0 owned980/2152 keys1/5,
+exit0/stderr empty; SSH stayed up. ReceiptSHA143505aa6c764786d079a74f7a58f4d9a92d4ba08fca28687711014c0aa3ff94,
+reviewSHAfea3ee35a93dfe48577db8e077d31654fbf03353263152c96bd37f9dea440487.
+Only two inputs and observed ordinary-new category; unseen allocations,
+external custom backing on Windows, new[], broad OOM, typed CORE_0010/SM6,
+owner/GPU remain open. Last GPU source still EXP1681; no GPU package or
+experiment active. Next distinct C15 gate: typed shader error routing and
+full input-readability/lifetime contract. Details in
+`investigation/analysis/D3D12-C15-windows-new-fault.md`.
+
+## Prior state superseded by finite Windows observed-category sweep
+
 ## CURRENT 2026-10-20 07:31Z — C15 WINDOWS /MD FIRST NEW FAULT PASS; NTH SWEEP NEXT
 
 Last GPU hardware-qualified source remains EXP1681 a6d871ad: 63 unique
