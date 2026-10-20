@@ -8,6 +8,32 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 18:57Z — EXP1765 OWNER ADMISSION J313 PASS; RECOVERY_DONE
+
+Last GPU-qualified D3D12 source is isolated c4980c7e6d2ced728a89a78e6e98f5ae3e789c4d,
+exactly EXP1681 a6d871ad plus one owner DDI file. EXP1764 signed package
+30.0.1764.0 root-reviewed; EXP1765 J313 full-owner run: 63/63 unique non-E
+D3D12 PASS, 43 owner receipts each before its successful CreateDevice receipt,
+no duplicate; D3D11/FL11/pool/corpus/DWM regressions baseline-equivalent.
+CS46.627fps, GL53.1fps, internal59.6fps; only known MSAA-a000r FAIL.
+Root verdict `.local/experiments/EXP1765-owner-admission/root-verdict1765.json`
+SHA9dbadf345dadeac3b9720f68920622c8f68cc92c3ac5d818757f5801087a7882.
+
+Visible recovery initially stopped fail-closed on two separate stale SYS paths;
+EXP1766 fixed exact DriverStore/ImagePath disable helper, EXP1767 fixed exact
+remover, EXP1768 deleted oem5.inf, and EXP1769 durable preflight PASS plus
+RECOVERY_DONE Code28/PackageAbsent/noService/8CPU. Normal GPU-visible inert
+J313 is current, no AppleAgx package staged/installed, no active GPU experiment.
+Preserve user-dirty Mu and security-blocked C21E/UBFE/C27 untouched. Main branch
+includes additional unqualified C25/C26/C27/R1 edits beyond isolated c498;
+EXP1765 validates owner publication only in the a6-compatible source.
+C15 CORE_0010/SM6 remains fail-closed. Next causal target: complete typed
+R1 shader error/lifetime and owned pipeline-library/compiler contracts offline
+before a new GPU package. One broader old rejected-device-error host fixture
+still lacks provider/R1 aliases; no full-suite GREEN claim.
+
+## Prior state superseded by EXP1765 hardware verdict and EXP1769 recovery
+
 ## CURRENT 2026-10-20 17:17Z — EAGER OWNER ADMISSION HOST/WDK PASS; GPU CHECK NEXT
 
 EXP1753 current DDI owner admission candidate: native owner constructed once
