@@ -34,6 +34,19 @@ inline bool AgxD3d12MeasureR1RootPrivate(const D3D12DDI_ROOT_SIGNATURE *root,
             if ((count && !parameter.DescriptorTable.pDescriptorRanges) ||
                 count > policy.max_ranges - ranges)
                 return false;
+            UINT next = 0;
+            for (UINT r = 0; r < count; ++r) {
+                const auto &range = parameter.DescriptorTable.pDescriptorRanges[r];
+                const UINT offset = range.OffsetInDescriptorsFromTableStart ==
+                    static_cast<UINT>(D3D12DDI_DESCRIPTOR_RANGE_OFFSET_APPEND)
+                    ? next : range.OffsetInDescriptorsFromTableStart;
+                if ((next == UINT_MAX && range.OffsetInDescriptorsFromTableStart ==
+                     static_cast<UINT>(D3D12DDI_DESCRIPTOR_RANGE_OFFSET_APPEND)) ||
+                    (range.NumDescriptors != UINT_MAX &&
+                     range.NumDescriptors > UINT_MAX - offset))
+                    return false;
+                next = range.NumDescriptors == UINT_MAX ? UINT_MAX : offset + range.NumDescriptors;
+            }
             ranges += count;
             cost = 1;
             break;
