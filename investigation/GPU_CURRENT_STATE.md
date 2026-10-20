@@ -8,6 +8,33 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 06:00Z — EXP1681 ROOT PROVIDER PASS, FACTORYV2 RECOVERY_DONE
+
+Hardware-qualified current0003 Device/Root provider lifecycle source
+`a6d871ad33416c94a3dc25bd0c22fff78b00fa8c` on EXP1663 source9b374daf.
+Signed build1671 EXP1678 exact packet run as EXP1681: 63 unique non-E
+D3D12 PASS/0FAIL, ROOTC/ROOTG/C14A PASS, C21E known SKIP; UMD root83/83
+hr0/device-create43/device-destroy34 and no root reject/OOM. AGX PASS status
+occurrences142/78 unique labels identical EXP1663, only known MSAA-a000r
+FAIL. KMD pool workers5 PASS, FL11 ARM64/WOW/debug PASS, GL51.7/internal59.6,
+CS46.666, corpus414 each/createfail64/4/hangs0/pixel_diff0, DWM faults0.
+Raw `.local/experiments/EXP1681-d3d12-root-provider/root-verdict1681.json`
+SHA `8293e8c8925c34d425f2b79d8c1c9535aa7fedae6017beb5f22b66884e023c87`.
+Exact FactoryV2 rollback RECOVERY_DONE. Current J313 normal GPU-visible
+inert one ACPI\APPL0002 Code28, PackageAbsent/noService/noFiles, 8CPU at
+boot2026-10-20T05:59:42.5326950Z. No active GPU experiment.
+
+Next causal target: C15 internal typed shader input adapter using the now
+qualified Root provider, with explicit PROGRAM/IO span and exact VOID-DDI
+error category. See `investigation/analysis/D3D12-C15-r1-shader-error-boundary.md`.
+Do not publish CORE_0010/SM6 or run J313 for a CPU-only unknown; dxil-spirv
+internal recoverable OOM is still separate. EXP1664 range-overflow correction
+is implemented on branch but deliberately excluded from the accepted EXP1681
+hardware source. Security-blocked C21E/UBFE/C27 stays untouched. Preserve
+user-dirty Mu.
+
+## Prior state superseded by EXP1681
+
 ## CURRENT 2026-10-20 04:55Z — EXP1663 ROOT CALC/CREATE PASS, FACTORYV2 RECOVERY_DONE
 
 Hardware-qualified old0003 root Calc/Create shared checked extent source
