@@ -1168,6 +1168,7 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   struct pipe_shader_state state = {};
   state.type = PIPE_SHADER_IR_NIR;
   state.ir.nir = nir;
+  if (stage == MESA_SHADER_GEOMETRY) return pipe->create_gs_state(pipe, &state); /* C27 */
   return stage == MESA_SHADER_VERTEX ? pipe->create_vs_state(pipe, &state) : pipe->create_fs_state(pipe, &state);
 }
 
@@ -1176,6 +1177,7 @@ extern "C" void AgxD3d12OwnerDestroyGraphics(AGX_D3D12_OWNER *owner, AGX_D3D12_G
   struct pipe_context *pipe = owner->Context;
   if (graphics->Vs) pipe->delete_vs_state(pipe, graphics->Vs);
   if (graphics->Fs) pipe->delete_fs_state(pipe, graphics->Fs);
+  if (graphics->Gs) pipe->delete_gs_state(pipe, graphics->Gs);
   if (graphics->Blend) pipe->delete_blend_state(pipe, graphics->Blend);
   if (graphics->DepthStencil) pipe->delete_depth_stencil_alpha_state(pipe, graphics->DepthStencil);
   if (graphics->Rasterizer) pipe->delete_rasterizer_state(pipe, graphics->Rasterizer);
@@ -1191,6 +1193,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   struct pipe_context *pipe = owner->Context;
   graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX, &graphics->VsBindings, graphics->VsSrvDimensions, graphics->VsUavDimensions);
   graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT, &graphics->PsBindings, graphics->PsSrvDimensions, graphics->PsUavDimensions) : NULL;
+  graphics->Gs = desc->Gs ? create_shader(pipe, desc->Gs, MESA_SHADER_GEOMETRY, &graphics->GsBindings, graphics->GsSrvDimensions, graphics->GsUavDimensions) : NULL;
   struct pipe_blend_state blend = {};
   blend.independent_blend_enable = desc->IndependentBlend ? 1 : 0;
   blend.alpha_to_coverage = desc->AlphaToCoverage ? 1 : 0;
@@ -1245,7 +1248,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   rast.point_line_tri_clip = 1;
   rast.line_width = 1.0f;
   graphics->Rasterizer = pipe->create_rasterizer_state(pipe, &rast);
-  HRESULT hr = graphics->Vs && (graphics->Fs || !desc->Ps) && graphics->Blend && graphics->DepthStencil &&
+  HRESULT hr = graphics->Vs && (graphics->Fs || !desc->Ps) && (graphics->Gs || !desc->Gs) && graphics->Blend && graphics->DepthStencil &&
                        graphics->Rasterizer ? S_OK : E_NOTIMPL;
   graphics->NumElements = desc->NumElements;
   for (unsigned i = 0; SUCCEEDED(hr) && i < desc->NumElements; ++i) {
@@ -1499,6 +1502,14 @@ static void release_samplers(struct pipe_context *pipe, void **vs, unsigned vs_c
 }
 
 
+/* C27: the geometry stage's draw samplers */
+static void release_geometry_samplers(struct pipe_context *pipe, void **gs, unsigned gs_count) {
+  void *none[AGX_D3D12_SAMPLER_SLOTS] = {};
+  if (gs_count) pipe->bind_sampler_states(pipe, MESA_SHADER_GEOMETRY, 0, gs_count, none);
+  for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS; ++i)
+    if (gs[i]) pipe->delete_sampler_state(pipe, gs[i]);
+}
+
 extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12_COMPUTE *compute,
                                          const AGX_D3D12_UAV uavs[AGX_D3D12_UAV_SLOTS],
                                          const AGX_D3D12_CBV cbvs[AGX_D3D12_CBV_SLOTS],
@@ -1660,6 +1671,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   pipe->set_framebuffer_state(pipe, &fb);
   pipe->bind_vs_state(pipe, graphics->Vs);
   pipe->bind_fs_state(pipe, graphics->Fs);
+  pipe->bind_gs_state(pipe, graphics->Gs); /* C27: NULL unbinds a previous draw's GS */
   pipe->bind_blend_state(pipe, graphics->Blend);
   pipe->bind_depth_stencil_alpha_state(pipe, graphics->DepthStencil);
   pipe->bind_rasterizer_state(pipe, graphics->Rasterizer);
@@ -1705,10 +1717,25 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   HRESULT hr = bind_stage(pipe, MESA_SHADER_VERTEX, draw->Vs.Cbvs, draw->Vs.Srvs, draw->Vs.Uavs, vs_views, &vs_view_count, draw->Pipeline->VsSrvDimensions, draw->Pipeline->VsUavDimensions);
   if (SUCCEEDED(hr))
     hr = bind_stage(pipe, MESA_SHADER_FRAGMENT, draw->Ps.Cbvs, draw->Ps.Srvs, draw->Ps.Uavs, ps_views, &ps_view_count, draw->Pipeline->PsSrvDimensions, draw->Pipeline->PsUavDimensions);
+  /* C27: the geometry stage's bindings and samplers */
+  struct pipe_sampler_view *gs_views[AGX_D3D12_SRV_SLOTS] = {};
+  void *gs_samplers[AGX_D3D12_SAMPLER_SLOTS] = {};
+  unsigned gs_view_count = 0, gs_sampler_count = 0;
+  if (graphics->Gs) {
+    for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS; ++i)
+      if (draw->Gs.Samplers[i].Valid && (gs_samplers[i] = create_sampler(pipe, &draw->Gs.Samplers[i]))) gs_sampler_count = i + 1;
+    if (gs_sampler_count) pipe->bind_sampler_states(pipe, MESA_SHADER_GEOMETRY, 0, gs_sampler_count, gs_samplers);
+    if (SUCCEEDED(hr))
+      hr = bind_stage(pipe, MESA_SHADER_GEOMETRY, draw->Gs.Cbvs, draw->Gs.Srvs, draw->Gs.Uavs, gs_views, &gs_view_count, graphics->GsSrvDimensions, graphics->GsUavDimensions);
+  }
   if (FAILED(hr)) {
     unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, AGX_D3D12_SRV_SLOTS);
     unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, AGX_D3D12_SRV_SLOTS);
     release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
+    if (graphics->Gs) {
+      unbind_stage(pipe, MESA_SHADER_GEOMETRY, gs_views, AGX_D3D12_SRV_SLOTS);
+      release_geometry_samplers(pipe, gs_samplers, gs_sampler_count);
+    }
     return hr;
   }
   struct pipe_draw_info info = {};
@@ -1726,6 +1753,10 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
       unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
       unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
       release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
+      if (graphics->Gs) {
+        unbind_stage(pipe, MESA_SHADER_GEOMETRY, gs_views, gs_view_count);
+        release_geometry_samplers(pipe, gs_samplers, gs_sampler_count);
+      }
       return E_INVALIDARG;
     }
     info.index_size = static_cast<uint16_t>(draw->IndexSize);
@@ -1748,6 +1779,10 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
       unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
       unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
       release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
+      if (graphics->Gs) {
+        unbind_stage(pipe, MESA_SHADER_GEOMETRY, gs_views, gs_view_count);
+        release_geometry_samplers(pipe, gs_samplers, gs_sampler_count);
+      }
       return E_INVALIDARG;
     }
     indirect.buffer = static_cast<struct pipe_resource *>(in->Buffer->Resource);
@@ -1764,6 +1799,10 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
   unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
   release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
+  if (graphics->Gs) {
+    unbind_stage(pipe, MESA_SHADER_GEOMETRY, gs_views, gs_view_count);
+    release_geometry_samplers(pipe, gs_samplers, gs_sampler_count);
+  }
   ++owner->PendingDraws;
   return S_OK;
 }

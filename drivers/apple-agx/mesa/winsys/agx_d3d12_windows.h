@@ -245,6 +245,7 @@ HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *Owner, const AGX_D3D12_B
 typedef struct {
   const UINT *Vs;
   const UINT *Ps; /* NULL = no pixel shader */
+  const UINT *Gs; /* C27: NULL = no geometry shader */
   int AlphaToCoverage, IndependentBlend;
   struct {
     int BlendEnable;
@@ -267,6 +268,7 @@ typedef struct {
 } AGX_D3D12_GRAPHICS_DESC;
 typedef struct {
   void *Vs, *Fs, *Blend, *DepthStencil, *Rasterizer;
+  void *Gs; /* C27 */
   unsigned NumElements;
   struct {
     unsigned Slot, Offset, Register, Divisor, Format; /* pipe format */
@@ -275,9 +277,10 @@ typedef struct {
    * from IASetVertexBuffers) */
   void *Velems;
   unsigned VelemsStrides[16];
-  struct dxbc_binding_map VsBindings, PsBindings;
-  uint8_t VsSrvDimensions[DXBC_RESOURCE_SLOTS], PsSrvDimensions[DXBC_RESOURCE_SLOTS];
-  uint8_t VsUavDimensions[DXBC_UAV_DIMENSION_SLOTS], PsUavDimensions[DXBC_UAV_DIMENSION_SLOTS];
+  struct dxbc_binding_map VsBindings, PsBindings, GsBindings;
+  uint8_t VsSrvDimensions[DXBC_RESOURCE_SLOTS], PsSrvDimensions[DXBC_RESOURCE_SLOTS], GsSrvDimensions[DXBC_RESOURCE_SLOTS];
+  uint8_t VsUavDimensions[DXBC_UAV_DIMENSION_SLOTS], PsUavDimensions[DXBC_UAV_DIMENSION_SLOTS],
+          GsUavDimensions[DXBC_UAV_DIMENSION_SLOTS];
 } AGX_D3D12_GRAPHICS;
 HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *Owner, const AGX_D3D12_GRAPHICS_DESC *Desc,
                                     AGX_D3D12_GRAPHICS *Graphics);
@@ -320,7 +323,7 @@ typedef struct {
     AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS];
     AGX_D3D12_SAMPLER Samplers[AGX_D3D12_SAMPLER_SLOTS]; /* C6e */
     AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS]; /* C13: graphics UAVs (u# in every stage) */
-  } Vs, Ps;
+  } Vs, Ps, Gs; /* C27: Gs only when the pipeline has a geometry shader */
   /* C14: indirect draws (Indirect.Buffer NULL = direct); an indexed indirect
    * draw needs IndexOffset 0 (Gallium takes the start index from the
    * arguments) */

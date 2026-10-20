@@ -240,7 +240,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertLess(execute.index('AgxD3d12OwnerCopy('), execute.index('AgxD3d12OwnerSubmitAndWait('))
         # C5: copies and dispatches replay in recording order through one loop
         self.assertLess(execute.index('ReplayDispatch(owner, command.dispatch)'), execute.index('AgxD3d12OwnerSubmitAndWait('))
-        self.assertLess(execute.index('ReplayDraw(owner, command.draw)'), execute.index('AgxD3d12OwnerSubmitAndWait('))
+        self.assertLess(execute.index('ReplayDraw(owner, command.draw,'), execute.index('AgxD3d12OwnerSubmitAndWait('))
         self.assertIn('command.kind == kCommandCopy', execute)
         # nothing can bind it yet: every command-list DDI stays fail-closed
         implemented = set(re.findall(r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, (\w+), (?!AGX_REJECT)', source))
@@ -453,7 +453,14 @@ class D3d12AbiGate(unittest.TestCase):
         # the draw's owner records live on the heap, not in the replay frame
         # (STACK_FRAMES gate, EXP1369 build: 12944 bytes before)
         self.assertIn('HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AgxD3d12DrawScratch))', replay)
-        self.assertIn('pso->desc.hGeometryShader.pDrvPrivate', draw)
+        # C27: tessellation stays refused; a GS draw records its bindings in
+        # the slot just before the draw, and replay hands them only to a
+        # GS pipeline's draw (a GS bound once must not reach later draws)
+        self.assertIn('pso->desc.hHullShader.pDrvPrivate || pso->desc.hDomainShader.pDrvPrivate ? 4u', draw)
+        self.assertLess(draw.index('gs_slot->kind = kCommandGsBind;'), draw.index('command.kind = kCommandDraw;'))
+        replay_loop = fn('static VOID APIENTRY ExecuteCommandLists(')
+        self.assertIn('command.draw.pso->gs_dwords ? gs_pending : nullptr', replay_loop)
+        self.assertIn('gs_pending = nullptr;', replay_loop)
         self.assertIn('"measure-d3d12-draw"', draw)
         self.assertIn('memcpy(draw.vb, list->vb, sizeof(draw.vb));', draw)
         self.assertIn('AgxD3d12OwnerDraw(', fn('static __declspec(noinline) HRESULT ReplayDraw('))
