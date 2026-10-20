@@ -22,6 +22,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "agx_d3d12_r1_shader_span.h"
 #include "agx_d3d12_zero_cache_library.h"
 #include "agx_shader_input_provider.h"
+#include "agx_d3d12_r1_io_span.h"
 extern "C" {
 #include "apple_agx_win32_device_info.h"
 #include "render_win32_transport.h"
