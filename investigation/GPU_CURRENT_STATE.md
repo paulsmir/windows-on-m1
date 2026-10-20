@@ -8,6 +8,25 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 17:17Z — EAGER OWNER ADMISSION HOST/WDK PASS; GPU CHECK NEXT
+
+EXP1753 current DDI owner admission candidate: native owner constructed once
+inside successful CreateDevice before runtime free-threaded resource creation;
+Interlocked cached publication/failure and in-flight guard reject synchronous
+constructor reentry without another owner. Actual-source host seven controls
+ASan/UBSan PASS; pinned WDK NativeOwner/None/winsys3rc0 for exact DDI
+SHA11f1fc2fd786175539deba234a52283371a100e297a17e08baa6bf23faa104dd.
+Offline receiptSHA7bf355bfe8086a34442bc1e453dae80c2e63e136f8515d7dca3d2febbc733d65.
+One broader pre-existing rejected-device-error fixture does not compile with
+newer provider/R1 types; no full-suite GREEN claim. No GPU package installed
+or active experiment yet. Next prepare one exact signed package, preregister
+WHY/ATOMIC/windows-AGX translation and run a J313 owner timing discriminator
+with full regressions and FactoryV2 recovery. Last GPU-qualified EXP1681.
+Preserve user-dirty Mu, security-blocked C21E/UBFE/C27 untouched. C15
+CORE_0010/SM6 remains fail-closed.
+
+## Prior state superseded by owner admission candidate
+
 ## CURRENT 2026-10-20 10:12Z — C15 WINDOWS PERSISTENT BACKING PASS; DISTINCT GATE NEXT
 
 EXP1749 fresh test-only ARM64 `/MD` persistent64KiB backing EXE root-reviewed;

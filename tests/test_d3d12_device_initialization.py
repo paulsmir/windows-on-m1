@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def block(source, marker):
     start = source.index(marker)
     pos = source.index('{', start)
+    while ';' in source[start:pos]:
+        start = source.index(marker, start + len(marker))
+        pos = source.index('{', start)
     depth = 1
     end = pos + 1
     while depth:
@@ -37,7 +40,9 @@ class DeviceInitialization(unittest.TestCase):
         cpp.write_text(fixture.replace('/* PRODUCTION_DEVICE */', actual))
         cls.exe = Path(cls.tmp.name) / 'device'
         build = subprocess.run([os.environ.get('CXX', 'clang++'), '-std=c++17',
-                                '-fsanitize=address,undefined', '-pthread', str(cpp), '-o', str(cls.exe)],
+                                '-fsanitize=address,undefined', '-pthread',
+                                '-DAPPLE_AGX_D3D12_NATIVE_OWNER=1',
+                                str(cpp), '-o', str(cls.exe)],
                                capture_output=True, text=True)
         if build.returncode:
             cls.tmp.cleanup()
@@ -51,7 +56,7 @@ class DeviceInitialization(unittest.TestCase):
         run = subprocess.run([str(self.exe), mode], capture_output=True, text=True, timeout=10)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
-    def test_poisoned_reused_device_gets_fresh_lazy_owner(self):
+    def test_poisoned_reused_device_gets_fresh_prepared_owner(self):
         self.run_case('success')
 
     def test_poisoned_reused_device_caches_owner_failure(self):
@@ -59,6 +64,12 @@ class DeviceInitialization(unittest.TestCase):
 
     def test_invalid_args_leave_storage_untouched(self):
         self.run_case('invalid')
+
+    def test_create_device_prewarms_one_native_owner(self):
+        self.run_case('prewarm')
+
+    def test_owner_constructor_reentry_does_not_create_second_owner(self):
+        self.run_case('reenter')
 
     def test_concurrent_owner_schedule_has_only_known_outcomes(self):
         run = subprocess.run([str(self.exe), 'race'], capture_output=True, text=True, timeout=10)
@@ -70,6 +81,5 @@ class DeviceInitialization(unittest.TestCase):
             self.assertIn('ACTUAL_OWNER_RACE calls=1', run.stdout)
             self.assertEqual(run.stderr, '')
 
-    @unittest.expectedFailure
     def test_concurrent_owner_publication_is_single(self):
         self.run_case('race')

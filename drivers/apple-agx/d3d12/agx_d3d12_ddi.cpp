@@ -255,10 +255,11 @@ struct AgxD3d12Device {
     /* C2: created with the first heap, so device creation is unchanged */
     D3DKMT_HANDLE paging_queue;
     volatile UINT64 *paging_fence;
-    /* C4b: the native Asahi owner (agx_d3d12_windows.cpp), created with the
-     * first heap; heaps are its buffer resources and lists copy through it. */
-    void *owner;
-    BOOL owner_failed;
+    /* C4b: the native Asahi owner (agx_d3d12_windows.cpp), admitted during
+     * CreateDevice; heaps are its buffer resources and lists copy through it. */
+    void *volatile owner;
+    volatile LONG owner_failed;
+    volatile LONG owner_initializing;
     /* EXP1365: the KMD binds one Win32 generation per kernel device, so the
      * owner's context and every queue context carry this one */
     ULONG generation;
@@ -321,6 +322,9 @@ static SIZE_T APIENTRY CalcPrivateDeviceSize(D3D12DDI_HADAPTER,
     AdmissionUmdDiagnostic("d3d12-device-size", S_OK, receipt, 2);
     return sizeof(AgxD3d12Device);
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device *device);
+#endif
 static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
                                      const D3D12DDIARG_CREATEDEVICE_0003 *arg) {
     HRESULT hr = arg && arg->hDrvDevice.pDrvPrivate ? S_OK : E_INVALIDARG;
@@ -346,6 +350,11 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
                      status == AgxCpuProviderStatus::Exhausted ? E_OUTOFMEMORY : E_INVALIDARG;
             } else {
                 PublishDeviceIdentity(device);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+                /* Complete the one-time native owner construction before the
+                 * runtime can issue free-threaded resource creates. */
+                (void)EnsureOwner(device);
+#endif
             }
         }
     }
@@ -1191,7 +1200,13 @@ static void OwnerError(void *context, HRESULT error) {
         device->callbacks->pfnSetErrorCb(device->runtime, error);
 }
 static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device *device) {
-    if (device->owner || device->owner_failed) return static_cast<AGX_D3D12_OWNER *>(device->owner);
+    auto *cached = static_cast<AGX_D3D12_OWNER *>(
+        InterlockedCompareExchangePointer(&device->owner, nullptr, nullptr));
+    if (cached || InterlockedCompareExchange(&device->owner_failed, 0, 0)) return cached;
+    /* CreateDevice performs this admission before publishing the device to
+     * callers. A synchronous callback reentry must not construct a second
+     * partially initialized owner or wait on its own constructor. */
+    if (InterlockedCompareExchange(&device->owner_initializing, 1, 0)) return nullptr;
     AGX_D3D12_OWNER_ARGS args = {};
     args.AdapterCallbacks = adapter_object.callbacks;
     args.RuntimeAdapter = adapter_object.runtime.handle;
@@ -1202,9 +1217,12 @@ static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device *device) {
     args.Generation = device->generation;
     AGX_D3D12_OWNER *owner = nullptr;
     const HRESULT hr = AgxD3d12OwnerCreate(&args, &owner);
-    device->owner = SUCCEEDED(hr) ? owner : nullptr;
-    device->owner_failed = FAILED(hr);
-    return static_cast<AGX_D3D12_OWNER *>(device->owner);
+    if (SUCCEEDED(hr) && owner)
+        (void)InterlockedExchangePointer(&device->owner, owner);
+    else
+        (void)InterlockedExchange(&device->owner_failed, 1);
+    (void)InterlockedExchange(&device->owner_initializing, 0);
+    return SUCCEEDED(hr) ? owner : nullptr;
 }
 #endif
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER

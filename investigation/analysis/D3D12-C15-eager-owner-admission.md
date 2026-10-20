@@ -85,3 +85,31 @@ probe with concurrent resource creation, compare D3D12/regressions to
 EXP1681, then use the ordinary GPU-visible FactoryV2 rollback to
 `RECOVERY_DONE`. Failure to reach owner creation, baseline regression or
 guest hang rejects the timing hypothesis; recover before a new ID.
+
+## EXP1753 offline candidate
+
+The current candidate calls `EnsureOwner` after provider registration and
+device-identity publication but before successful `CreateDevice` returns.
+The function uses Interlocked reads/publication for cached owner and failure
+state plus an in-flight flag. A synchronous constructor callback that reenters
+`EnsureOwner` returns no partial owner and cannot start a second constructor
+or wait on itself. After the outer constructor finishes, later free-threaded
+calls read the fully published owner or cached failure. `CreateDevice` keeps
+its existing HRESULT behavior on an owner failure; the next resource call
+still fails closed. This does not assert that a real runtime callback will
+legally reenter or that early screen construction succeeds on J313.
+
+The actual-source host fixture first failed because old `CreateDevice` did
+not publish an owner. After the timing change, a forced callback-reentry
+control failed because it started a second constructor; the Interlocked
+in-flight guard closed that defect. Seven current-source ASan/UBSan controls
+now pass, including poisoned storage, cached failure, two concurrent cached
+readers and forced synchronous reentry. The pinned WDK builder compiled
+NativeOwner DDI, None DDI and winsys with rc=0 for exact source SHA-256
+`11f1fc2fd786175539deba234a52283371a100e297a17e08baa6bf23faa104dd`.
+Raw host and builder output is pinned by
+`.local/c15-eager-owner1753/result1753.json` SHA-256
+`7bf355bfe8086a34442bc1e453dae80c2e63e136f8515d7dca3d2febbc733d65`.
+An unrelated broad host fixture for rejected-device errors still lacks newer
+provider/R1 stand-ins and fails at compilation; it is not a runtime result.
+No hardware claim follows from these offline gates.
