@@ -8,6 +8,20 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 20:32Z — SM5.x SAMPLE J313 RUNTIME PASS; GPU CHECK NEXT
+
+EXP1792 CPU-only normal Code28/PackageAbsent J313: exact x64 Microsoft nBody
+SM5 EXE PID4404 alive for six 5s samples, window titled D3D12 n-Body Gravity
+Simulation, loaded dxgi/d3dcompiler_47/d3d12/app-local D3D12Core, no WER or
+runner error. Owned PID stopped and task removed. Pre/post Code28/Staged0/
+noDriverInf/8CPU, SSH alive; no AppleAgx module or GPU package. This proves
+x64/Agility startup only, not adapter selection or rendering. Next one
+EXP1764-qualified exact-package GPU run with module/UMD/KMD/frame receipts
+and FactoryV2 recovery. Sample source skips software-flagged adapters but can
+retain last pointer; measure selected adapter. Real game acceptance still open.
+
+## Prior state superseded by EXP1792 runtime result
+
 ## CURRENT 2026-10-20 20:27Z — SM5.x SAMPLE BUILT; J313 GAME-LIKE CHECKPOINT NEXT
 
 EXP1789 builder produced external Microsoft nBody SM5 x64 EXE SHA
