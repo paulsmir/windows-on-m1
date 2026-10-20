@@ -8,6 +8,29 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 21:24Z — EXP1795 FIRST HRESULT PROVED; RECOVERY_DONE
+
+Exact EXP1764 package/full-owner Code0/8CPU plus EXP1794 x64 nBody fail-
+path receipt: first failure `D3D12CreateDevice(adapter, FL11_0)` at
+`D3D12nBodyGravity.cpp:109`, HRESULT 0x887A0004 DXGI_ERROR_UNSUPPORTED.
+WER again ucrtbase 0xc0000409/data7, no AppleAgx UMD listed at crash;
+no app frame/UMD trace. App runner did not write result JSON after failure;
+failure log and WER are durable. Same-package D3D12 probe 60 PASS/known
+C21E SKIP, all 61 statuses equal EXP1765, DWM fault log empty. FactoryV2
+exact rollback RECOVERY_DONE Code28/PackageAbsent/noService/8CPU; normal
+GPU-visible guest current. Evidence/root verdict under
+`.local/experiments/EXP1795-nbody-hr`.
+
+Strongest current hypothesis: x64 app cannot use current UMD package, which
+contains AA64 native and x86 WOW PE DLLs but no x64/Arm64EC UMD. Microsoft
+documents x64/Arm64EC processes cannot load ordinary Arm64 DLLs and Direct3D
+runtime loads UMD as DLL. Verify exact INF/runtime selection and x86 build
+closure before UMD/package owner fix; no KMD/firmware change. Native-WoA
+free Night Raid DX12 FL11_0 benchmark is independent, but real-game release
+criterion remains open. Preserve user-dirty Mu and security-blocked tasks.
+
+## Prior state superseded by EXP1795 verdict and recovery
+
 ## CURRENT 2026-10-20 21:07Z — EXP1794 HRESULT SAMPLE BUILT; GPU CHECK NEXT
 
 EXP1794 external Microsoft nBody x64 SM5 diagnostic EXE SHA
