@@ -107,6 +107,17 @@
     <ClCompile Include="..\..\mesa\winsys\agx_win32_native_device.c" />
     <ClCompile Include="..\..\mesa\winsys\agx_win32_reloc_capture.c" />
   </ItemGroup>
+  <!-- EXP1821: agx_d3d12_shader_owned_core.cpp calls the DXIL container
+       parser and the legacy program framer. The prepared NIR owner links
+       them as prepared objects; every other profile compiles them here. -->
+  <ItemGroup Condition="'$(EnablePreparedNirOwner)' != 'true'">
+    <ClCompile Include="..\..\mesa\dxil\agx_dxil_program.c">
+      <AdditionalIncludeDirectories>..\..\mesa\dxil;..\..\mesa\dxbc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="..\..\mesa\dxbc\agx_legacy_program_frame.c">
+      <AdditionalIncludeDirectories>..\..\mesa\dxil;..\..\mesa\dxbc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemGroup>
   <ItemGroup Condition="'$(EnableNativeFrontend)' == 'true' and '$(EnableGpuvaWinsys)' == 'true'">
     <ClCompile Include="src\umd_gpuva_windows.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
     <ClCompile Include="..\..\mesa\winsys\agx_win32_gpuva.c" />
