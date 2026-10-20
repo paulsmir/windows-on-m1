@@ -11,7 +11,8 @@ using UINT64=uint64_t; using HRESULT=int32_t; using D3DKMT_HANDLE=unsigned;
 #define APIENTRY
 #define SUCCEEDED(x) ((x)>=0)
 #define FAILED(x) ((x)<0)
-static constexpr HRESULT S_OK=0, E_INVALIDARG=static_cast<HRESULT>(0x80070057u);
+static constexpr HRESULT S_OK=0, E_INVALIDARG=static_cast<HRESULT>(0x80070057u),
+                         E_OUTOFMEMORY=static_cast<HRESULT>(0x8007000eu);
 struct D3D12DDI_HRTDEVICE { void *handle; };
 struct D3D12DDI_HADAPTER {};
 struct D3D12DDI_HDEVICE { void *pDrvPrivate; };
@@ -44,6 +45,21 @@ static AGX_D3D12_OWNER_ARGS captured;
 static HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *a,AGX_D3D12_OWNER **out) {
  ++owner_calls; captured=*a; *out=SUCCEEDED(owner_result)?&fresh_owner:nullptr; return owner_result;
 }
+/* Only the provider's CreateDevice registration contract is stubbed; the
+ * Device/CreateDevice/EnsureOwner code under test is extracted unchanged. */
+struct AgxCpuProvider {};
+struct AgxCpuDevice { uint64_t value; };
+enum class AgxCpuProviderStatus { Ok, ProjectOOM, Exhausted };
+static AgxCpuProvider test_provider;
+static unsigned provider_registrations;
+static AgxCpuProvider *AgxCpuProviderCreate() { return &test_provider; }
+static AgxCpuProviderStatus AgxCpuRegisterDevice(AgxCpuProvider *,D3D12DDI_HDEVICE,
+                                                 void *,void *,AgxCpuDevice *out) {
+ ++provider_registrations;out->value=provider_registrations;return AgxCpuProviderStatus::Ok;
+}
+static AgxCpuProviderStatus AgxCpuProviderDestroy(AgxCpuProvider **p) {
+ *p=nullptr;return AgxCpuProviderStatus::Ok;
+}
 struct AgxD3d12Device;
 static void PublishDeviceIdentity(AgxD3d12Device *) {}
 /* PRODUCTION_DEVICE */
@@ -68,6 +84,9 @@ int main(int argc,char **argv) {
   check(device.runtime.handle==a.hRTDevice.handle && device.callbacks==&um && device.kernel==&kt,"runtime callbacks lost");
   check(device.paging_queue==0 && device.paging_fence==nullptr,"stale paging state");
   check(device.owner==nullptr && !device.owner_failed,"stale lazy owner");
+  check(device.shader_provider==&test_provider &&
+        device.shader_provider_device.value==provider_registrations,
+        "stale shader provider registration");
   check(device.heap_count==0,"stale heap count");
   for(auto *heap:device.heaps)check(heap==nullptr,"stale heap pointer");
   check(device.generation!=0,"generation missing");

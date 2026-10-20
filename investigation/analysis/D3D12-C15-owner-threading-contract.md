@@ -267,6 +267,14 @@ The schedule does not depend on simultaneous publication writes. This is a
 confirmed UMD publication defect, though no J313 trace attributes a real
 failure to it.
 
+EXP1751 restored the older poisoned-private-device test harness after the
+production `CreateDevice` gained shader-provider registration. The source
+extractor is unchanged; its host fixture now supplies only the provider types
+and registration stubs needed to compile the current function, and asserts a
+fresh provider device token. Its success/failure/invalid controls pass under
+ASan/UBSan again. This repair does not change `EnsureOwner` or make the
+EXP1745 race test green.
+
 The earlier heap-registry observation is superseded: current source uses
 `heap_lock` around register, unregister and lookup. This counterexample
 isolates owner publication. Current `AgxD3d12OwnerCreate` synchronously calls
