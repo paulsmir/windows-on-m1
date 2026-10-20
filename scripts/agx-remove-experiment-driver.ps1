@@ -87,7 +87,9 @@ if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3010) { throw "delete-driver fail
 if (@(Get-WindowsDriver -Online -All | Where-Object OriginalFileName -match 'AppleAgxRenderAdmission\.inf$').Count -ne 0) {
     throw 'staged package remains'
 }
-foreach ($file in @($sys, $umd, 'C:\Windows\SysWOW64\AppleAgxRenderAdmissionUmd32.dll')) {
+# EXP1820: an ARM64X forwarder package also copies the ARM64 and x64 UMDs.
+foreach ($file in @($sys, $umd, 'C:\Windows\SysWOW64\AppleAgxRenderAdmissionUmd32.dll',
+        'C:\Windows\System32\AppleAgxRenderAdmissionUmdArm64.dll', 'C:\Windows\System32\AppleAgxRenderAdmissionUmdX64.dll')) {
     if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
 }
 if ($service) { & sc.exe delete AppleAgxAdmission | Out-Null }
