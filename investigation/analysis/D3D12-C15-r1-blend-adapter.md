@@ -85,3 +85,16 @@ NONE DDI and winsys syntax each returned rc=0. Raw builder log SHA256
 `ddac7d6b56ae5ad6b0982f2191bba1037db051b79879fc66b6a51330c42730e1`.
 These are CPU/ABI gates, not a production full-link or GPU result. The typed
 wrappers are not assigned to any table; CORE_0003/SM5.1 stay unchanged.
+
+The later isolated source `34cacd10` keeps the accepted provider package and
+0003 table/caps byteequal while adding only the projector header and typed
+wrappers. EXP1624 normal runtime and EXP1625 fresh eight helpers passed;
+EXP1626 compiled and linked the full ARM64 SYS/UMD with no new warnings or
+link errors. EXP1628 reviewed the actual 3,149 tlog reads with zero unknown
+inputs after proving exact source-manifest hashes for the two newly read
+headers. The UMD imports equal the accepted baseline, exports only the two
+adapter openers, and ARM64/WOW stack checks pass. The combined build-only
+receipt is `.local/c15-r1-blend-package1626-result/root-r1-blend-link-review1628.json`
+(SHA256 `0828b4d10aa2f71ae86986df377fd2b978c0e0816d608ddf90f354e2a5187d2e`).
+The accepted source was not signed/installed or executed on J313: no typed
+callback is reachable under the advertised CORE_0003 table.

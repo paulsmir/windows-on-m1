@@ -8,7 +8,23 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 02:31Z — C15 PROVIDER LINK + FIRST R1 BLEND CPU ADAPTER; EXP1594 RECOVERY_DONE
+## CURRENT 2026-10-20 02:44Z — C15 R1 BLEND NATIVE LINK VERIFIED; EXP1594 RECOVERY_DONE
+
+Isolated source34cacd10 parent accepted02b79418 changes only DDI typed
+blend wrappers plus new projector header; it retains accepted 0003
+FillDDITable/caps and726 other archived source files byteequal. EXP1624
+runtime203rc0, EXP1625 fresh8rc0, EXP1626 full SYS/UMD build rc0/version
+30.0.1626.0/no new warnings/stackPASS. EXP1628 actual tlog3149reads/344unique
+UNKNOWN0 after exact two-header source-manifest pins, 17archives/eighthelpers
+once; PE imports equal accepted1527 and exports only two openers. Combined
+build-only receipt .local/c15-r1-blend-package1626-result/root-r1-blend-link-review1628.json
+SHA0828b4d10aa2f71ae86986df377fd2b978c0e0816d608ddf90f354e2a5187d2e.
+No signed package, PE execution or J313 run: typed wrappers unregistered in
+current CORE_0003/SM5.1. Next typed R1 CPU state group is element layout,
+depth/raster/shader/PSO, then coherent CORE_0010 table; dxil-spirv internal
+recoverable OOM remains independent. Normal visible guest Code28/Absent/8CPU.
+
+## Prior state superseded by EXP1628 full native blend link verdict
 
 Provider native link build-only receipt EXP1620 remains accepted (below).
 New unregistered typed R1 blend projector/header ee60b4ea and DDI
