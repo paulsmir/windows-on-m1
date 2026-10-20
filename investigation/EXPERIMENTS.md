@@ -60516,3 +60516,5 @@ EXP1792 MICROSOFT_NBODY_SM5_CODE28_RUNTIME CPU_ONLY_J313 BEFORE 2026-10-20T20:28
 
 EXP1792 BEFORE ADDENDUM 2026-10-20T20:31:00Z: read-only admin Code28 preflight script .local/experiments/EXP1792-nbody-code28-runtime/preflight1792.ps1 SHA2cde1af4d7558f60899f2b697580228e0b9390e66d9ebc0033134b239679cd38 checks Problem28, staged0, no binding, CPU8, exact host J313-WIN before app execution. Interactive task arm script SHA80d24522179cd45d75c2bac05d770b4c2caf8558f93480333e0a3f0aa9663e53 copied unchanged from EXP1782 and uses the current interactive user. Both scripts staged to C:\Users\pavel\EXP1792. Gate must PASS; if not, do not launch app.
 
+EXP1792 BEFORE ADDENDUM 2026-10-20T20:32:00Z: exact staging command `bash .local/experiments/EXP1792-nbody-code28-runtime/stage1792.sh`; script SHA1acbbc26a7b5a53184b8b57f463ac05b7455e964af8898a422b1f70ad02c2351. It verifies all local app-manifest file sizes/hashes, creates only C:\Users\pavel\EXP1792\app\D3D12, then copies fixed manifest, runner/preflight/task scripts and seven license/app/runtime files; it does not install a driver or reboot.
+
