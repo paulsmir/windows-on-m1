@@ -8,6 +8,27 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 22:05Z — ARM64X DUAL LOADER J313 PASS; X64 UMD NEXT
+
+EXP1805 normal Code28/PackageAbsent J313 loaded the same EXP1803 ARM64X
+forwarder from x64 and ARM64 processes. x64 caller loaded only x64 marker
+backing, returned0x18006422; ARM64 caller loaded only ARM64 backing,
+returned0x18006412. Both exited0/`FORWARDER_ABI_PASS`, stderr empty; post
+Code28/Staged0/8CPU PASS. This proves the one-name dual-ABI loader path,
+using no-GPU marker DLLs. The forwarder is not a UMD yet.
+
+Next build actual x64 UMD from the exact qualified driver source and one
+x64 Mesa/NIR/Asahi closure. Current builder has configured `nir-x64` but
+its libgallium archive is missing; EXP1466 contains pinned current Mesa
+source overlay and ARM64 core archive identity. Audit source/build closure
+before compiling or linking, then test exports/PE/stack offline. After
+that combine native UMD, x64 UMD and ARM64X forwarder into a newly signed
+exact package, verify ARM64 and x64 D3D12 on J313, run regressions, recover.
+Normal GPU-visible guest remains Code28/PackageAbsent/8CPU; real-game
+acceptance and Night Raid still open. Preserve user-dirty Mu.
+
+## Prior state superseded by EXP1805 loader verdict
+
 ## CURRENT 2026-10-20 21:59Z — ARM64X FORWARDER BUILT; LOADER TEST NEXT
 
 EXP1803 builder-only pure forwarder: 13824B ARM64X PE SHA
