@@ -62,3 +62,20 @@ Root retirement cannot offer a safe shader input lease. No independent
 capability or AGX owner operation is bundled. EXP1664 range arithmetic will
 enter the next source package only as separately verified deterministic
 safety; its absence/presence must be explicit in the source diff and BEFORE.
+
+Offline implementation checkpoint (EXP1665/1666): current DDI now creates a
+per-Device CPU provider, registers the Device before address-identity
+publication, encodes current Root private bytes canonically into temporary
+storage, registers a provider-owned copy, retires Root on Destroy, and retires
+Device/provider on DestroyDevice. No typed shader DDI/table/caps change.
+Actual-source host extraction with provider call recorder and real canonical
+encoder passed Appleclang21 ASan/UBSan 25 checks, including canonical copy,
+invalid preflight no writes, valid explicit-after-unbounded, Root retirement
+and provider registration OOM with no published token. Existing provider
+implementation's own earlier caller-serialized/concurrent fixtures are
+separate evidence; this fixture does not prove Windows callback destruction
+order or full runtime concurrency. EXP1665 first WDK gate stopped C1083 because
+its syncheck directory lacked `agx_shader_input_provider.h`; EXP1666 staged
+that and its owned-core dependency, then WDK26100 native-owner/NONE/winsys
+syntax returned 3×rc0. Production source-bound link/tlog/import/stack/sign
+and J313 remain required before this becomes a hardware-qualified source.

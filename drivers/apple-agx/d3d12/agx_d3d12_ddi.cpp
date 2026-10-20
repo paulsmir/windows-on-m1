@@ -13,6 +13,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <cstdint>
 #include <climits>
 #include <cstring>
+#include <cstdlib>
 #include <limits>
 #include <tuple>
 #include <type_traits>
@@ -20,6 +21,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "agx_d3d12_r1_blend_projection.h"
 #include "agx_d3d12_r1_shader_span.h"
 #include "agx_d3d12_zero_cache_library.h"
+#include "agx_shader_input_provider.h"
 extern "C" {
 #include "apple_agx_win32_device_info.h"
 #include "render_win32_transport.h"
@@ -258,6 +260,8 @@ struct AgxD3d12Device {
     /* EXP1365: the KMD binds one Win32 generation per kernel device, so the
      * owner's context and every queue context carry this one */
     ULONG generation;
+    AgxCpuProvider *shader_provider;
+    AgxCpuDevice shader_provider_device;
     AgxD3d12Device *identity_next;
     /* C5: the owner heaps by GPU VA, so a root descriptor (a VA) resolves
      * to its buffer and offset */
@@ -328,7 +332,20 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
         device->kernel = arg->pKTCallbacks;
         device->generation = ((((GetCurrentProcessId() & 0xffffu) << 16) ^
                                static_cast<ULONG>(InterlockedIncrement(&queue_generation))) | 0x80000000u);
-        PublishDeviceIdentity(device);
+        device->shader_provider = AgxCpuProviderCreate();
+        if (!device->shader_provider) {
+            hr = E_OUTOFMEMORY;
+        } else {
+            const auto status = AgxCpuRegisterDevice(device->shader_provider,
+                arg->hDrvDevice, nullptr, nullptr, &device->shader_provider_device);
+            if (status != AgxCpuProviderStatus::Ok) {
+                (void)AgxCpuProviderDestroy(&device->shader_provider);
+                hr = status == AgxCpuProviderStatus::ProjectOOM ||
+                     status == AgxCpuProviderStatus::Exhausted ? E_OUTOFMEMORY : E_INVALIDARG;
+            } else {
+                PublishDeviceIdentity(device);
+            }
+        }
     }
     const UINT receipt[] = {arg ? arg->Interface : 0, arg ? arg->Version : 0,
                             arg ? static_cast<UINT>(arg->Flags) : 0};
@@ -339,6 +356,11 @@ static void APIENTRY DestroyDevice(D3D12DDI_HDEVICE handle) {
     AdmissionUmdDiagnostic("d3d12-destroy-device", S_OK, nullptr, 0);
     auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
     RetireDeviceIdentity(device);
+    if (device && device->shader_provider) {
+        if (device->shader_provider_device.value)
+            (void)AgxCpuRetireDevice(device->shader_provider, device->shader_provider_device);
+        (void)AgxCpuProviderDestroy(&device->shader_provider);
+    }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (device && device->owner) {
         (void)AgxD3d12OwnerDestroy(static_cast<AGX_D3D12_OWNER *>(device->owner));
@@ -404,6 +426,7 @@ struct AgxD3d12RootSignature {
     UINT flags;
     UINT dwords;
     UINT range_count;
+    AgxCpuRoot provider_root;
     AgxD3d12RootParameter parameter[1];
     /* followed by AgxD3d12Range[range_count] */
 };
@@ -432,18 +455,21 @@ static SIZE_T APIENTRY CalcPrivateRootSignatureSize(D3D12DDI_HDEVICE,
     return arg && AgxD3d12MeasureR1RootPrivate(arg->pRootSignature, kCurrentRootLayoutPolicy,
                                                  &bytes, &ranges) ? bytes : 0;
 }
-static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 *arg,
+static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE device_handle, const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 *arg,
                                             D3D12DDI_HROOTSIGNATURE handle) {
     auto *root = static_cast<AgxD3d12RootSignature *>(handle.pDrvPrivate);
+    auto *device = static_cast<AgxD3d12Device *>(device_handle.pDrvPrivate);
     SIZE_T bytes = 0;
     UINT measured_ranges = 0;
-    if (!root || !arg ||
+    if (!root || !device || !device->shader_provider ||
+        !device->shader_provider_device.value || !arg ||
         !AgxD3d12MeasureR1RootPrivate(arg->pRootSignature, kCurrentRootLayoutPolicy,
                                       &bytes, &measured_ranges))
         return E_INVALIDARG;
     /* Calc reserved the same checked extent; Create receives no capacity. */
     (void)bytes;
     (void)measured_ranges;
+    root->provider_root = {};
     const D3D12DDI_ROOT_SIGNATURE &desc = *arg->pRootSignature;
     root->parameters = desc.NumParameters;
     root->static_samplers = desc.NumStaticSamplers;
@@ -488,11 +514,36 @@ static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_
         memcpy(StaticSamplersOf(root), desc.pStaticSamplers, desc.NumStaticSamplers * sizeof(D3D12DDI_STATIC_SAMPLER));
     else
         root->static_samplers = 0;
+    SIZE_T canonical_bytes = 0;
+    if (!AgxD3d12MeasureRootCanonical(root, bytes, &canonical_bytes))
+        return E_INVALIDARG;
+    auto *canonical = static_cast<unsigned char *>(std::malloc(canonical_bytes));
+    if (!canonical) return E_OUTOFMEMORY;
+    SIZE_T written = 0;
+    const bool encoded = AgxD3d12EncodeRootCanonical(root, bytes, canonical,
+                                                       canonical_bytes, &written);
+    AgxCpuProviderStatus registered = AgxCpuProviderStatus::Invalid;
+    if (encoded && written == canonical_bytes)
+        registered = AgxCpuRegisterRoot(device->shader_provider,
+            device->shader_provider_device, handle, {canonical, written}, &root->provider_root);
+    std::free(canonical);
+    if (registered != AgxCpuProviderStatus::Ok)
+        return registered == AgxCpuProviderStatus::ProjectOOM ||
+               registered == AgxCpuProviderStatus::Exhausted ? E_OUTOFMEMORY : E_INVALIDARG;
     const UINT receipt[] = {root->parameters, root->static_samplers, root->flags, root->dwords};
     AdmissionUmdDiagnostic("measure-d3d12-root-signature", S_OK, receipt, 4);
     return S_OK;
 }
-static VOID APIENTRY DestroyRootSignature(D3D12DDI_HDEVICE, D3D12DDI_HROOTSIGNATURE) {}
+static VOID APIENTRY DestroyRootSignature(D3D12DDI_HDEVICE device_handle,
+                                          D3D12DDI_HROOTSIGNATURE handle) {
+    auto *device = static_cast<AgxD3d12Device *>(device_handle.pDrvPrivate);
+    auto *root = static_cast<AgxD3d12RootSignature *>(handle.pDrvPrivate);
+    if (device && device->shader_provider && root && root->provider_root.value) {
+        (void)AgxCpuRetireRoot(device->shader_provider, device->shader_provider_device,
+                               root->provider_root);
+        root->provider_root = {};
+    }
+}
 /* C1g (EXP1351): device initialisation creates a shader after its (empty)
  * root signature; a refused pfnCalcPrivateShaderSize removes the device.
  * The shader object keeps a copy of the D3D10+ tokenized program

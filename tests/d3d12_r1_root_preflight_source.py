@@ -13,6 +13,7 @@ FUNCTIONS = (
     'static UINT RootParameterDwords(',
     'static SIZE_T APIENTRY CalcPrivateRootSignatureSize(',
     'static HRESULT APIENTRY CreateRootSignature(',
+    'static VOID APIENTRY DestroyRootSignature(',
 )
 
 
