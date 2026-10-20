@@ -8,6 +8,31 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 21:46Z — EXP1800 X64 UMD NAME MAPPING; RECOVERY_DONE
+
+Exact signed package30.0.1764.0/oem5.inf full-owner Code0/8CPU. Same-source
+x64 and ARM64 KMT probes produced byte-identical UMD-name outputs: both see
+AGX LUID low0x4952f and `AppleAgxRenderAdmissionUmd.dll` for DX9/10/11/12.
+That named DLL is ordinary ARM64 PE0xAA64; only other UMD is x86 PE0x014c.
+The package supplies no x64/Arm64EC-compatible UMD. This rules out hidden
+AGX adapter or alternate x64 name as causes of EXP1795's x64
+`D3D12CreateDevice` DXGI_ERROR_UNSUPPORTED. Official Microsoft UMD/Arm64EC
+ABI makes the UMD/package mismatch the strongest owner-layer cause; direct
+loader error or successful compatible UMD still needed for final proof.
+Focused D3D12 probe 60 PASS/known C21E SKIP, DWM fault log empty; no fresh
+GL/corpus/CS. FactoryV2 exact recovery RECOVERY_DONE normal visible
+Code28/PackageAbsent/noService/8CPU. Evidence/root verdict under
+`.local/experiments/EXP1800-kmt-abi-pair`.
+
+Next design/build x64 UMD from current x64 Mesa closure plus an ARM64X
+forwarder or merged UMD that serves the one registered name to native ARM64
+and x64 callers. Microsoft documents `BuildAsX` and a pure forwarder. Inspect
+exports and linker/INF/source closures offline, test PE/imports and loader
+before any new signed package. KMD/firmware unchanged. Night Raid native-WoA
+DX12 FL11_0 benchmark remains separate, and first-release game proof open.
+
+## Prior state superseded by EXP1800 mapping and recovery
+
 ## CURRENT 2026-10-20 21:32Z — X64 CODE28 KMT CONTROL PASS; PACKAGE QUERY NEXT
 
 EXP1798 on normal J313 Code28/PackageAbsent/8CPU ran exact EXP1797 x64
