@@ -83,3 +83,23 @@ Raw builder log SHA256
 `ddac7d6b56ae5ad6b0982f2191bba1037db051b79879fc66b6a51330c42730e1`.
 This is a CPU/native-syntax gate only: the current private root does not yet
 record its allocation extent or register/retire an owned provider snapshot.
+
+An additional original CPU helper `agx_d3d12_r1_root_layout.h` now measures
+the existing private root extent from a caller-trusted WDK descriptor under an
+explicit parameter/range/sampler/DWORD policy. It rejects out-of-policy counts
+and NULL arrays before traversing them, unknown parameter types and checked
+arithmetic overflow, and clears outputs on failure. It is included but uncalled
+by the current DDI. Host Apple clang21 ASan/UBSan with a PROT_NONE parameter
+pointer returned `R1_ROOT_LAYOUT_PASS checks=14 failures=0`.
+
+EXP1653's first pinned Windows ARM64 syntax run failed only because MSVC
+requires a local `max` value to be explicitly captured by the helper lambda;
+the dependent diagnostics were not a WDK ABI verdict. Moving the max
+expression inside the lambda preserved the policy/arithmetic contract.
+EXP1654 staged exact corrected hashes and returned native-owner/NONE/winsys
+three rc=0; raw builder log SHA256
+`ddac7d6b56ae5ad6b0982f2191bba1037db051b79879fc66b6a51330c42730e1`.
+The DDI still does not use the helper in Calc/Create or retain an allocation
+extent in its root private object. Wiring it there changes current 0003
+behavior and needs its own regression, production package and J313 rollback
+checkpoint; no such hardware result is claimed by these CPU gates.
