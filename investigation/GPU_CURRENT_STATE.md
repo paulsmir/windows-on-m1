@@ -8,6 +8,38 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 06:37Z — C15 NARROW PARSE OOM PASS; BROAD OOM STILL OPEN
+
+Last J313 hardware-qualified source remains EXP1681 a6d871ad old0003
+Device/Root provider lifecycle: D3D12 63 unique non-E PASS and exact
+FactoryV2 visible recovery Code28/PackageAbsent/noService/8CPU. No active
+GPU experiment or AppleAgx package staged/installed. Preserve user-dirty Mu.
+Branch-only uncalled Standard IO span and internal shader transaction helpers
+EXP1683/1686 passed host/WDK; CORE_0010/SM6 still fail-closed.
+
+External pinned dxil-spirv8434 scratch (original upstream/repo sources
+unchanged): EXP1687/1689/1691/1692 isolated owner sites RED/GREEN, EXP1690
+Function early-registration RED, EXP1693 actual glslang TU rc0. EXP1694/95
+four-site exception-enabled graph compiled nine archives/83 objects with102
+C++ `-fexceptions` commands; EXP1699 normal 980-byte SPIR-V exact baseline.
+EXP1701/02 added allocator-A/test hook (nine archives/84 objects/103 flags);
+EXP1704 actual first64KiB backing failure escaped current C API as
+`std::bad_alloc` (hook1/blobNULL). EXP1705/06 added candidate LLVMContext
+and parse_dxil_blob RAII, same 84-object graph; EXP1707 original narrow
+`noexcept` C++ parse-only facade returned internal OOM -1001/blobNULL on
+hook1, then parsed valid input on the SAME thread after reset/end (rc0,
+caller ASan/UBSan stderr empty). All artifacts/limits in
+`investigation/analysis/D3D12-C15-narrow-parse-oom-facade.md`.
+
+This is NOT general recoverable converter OOM or Windows ARM64 evidence.
+Next causal target is one reviewed facade for the exact project-used C API
+subset, fail-at-N across parse/scan/create/setters/run/output, partial
+ownership/destructor proof and all selected Windows /EHsc TUs. No hardware
+run can distinguish an unlinked CPU dependency. The exact VOID CreateShader
+error category remains open. Security-blocked C21E/UBFE/C27 untouched.
+
+## Prior state superseded by narrow parse fault checkpoint
+
 ## CURRENT 2026-10-20 06:19Z — C15 CPU INPUT GATES + EXTERNAL OOM SITES; EXP1681 RECOVERY_DONE
 
 EXP1681 remains the last hardware-qualified source: a6d871ad old0003
