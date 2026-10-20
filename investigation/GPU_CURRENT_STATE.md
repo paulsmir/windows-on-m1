@@ -8,7 +8,7 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 06:45Z — C15 CPU INPUT GATES + EXTERNAL OOM SITES; EXP1681 RECOVERY_DONE
+## CURRENT 2026-10-20 06:19Z — C15 CPU INPUT GATES + EXTERNAL OOM SITES; EXP1681 RECOVERY_DONE
 
 EXP1681 remains the last hardware-qualified source: a6d871ad old0003
 Device/Root provider lifecycle, D3D12 63 unique non-E PASS and exact
