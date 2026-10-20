@@ -8,6 +8,23 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 10:07Z — C15 WINDOWS BACKING NTH PASS; PERSISTENT CHECK NEXT
+
+EXP1746 test-only Windows ARM64 `/MD` custom64KiB backing hook build AA64
+root-reviewed. EXP1747 normal J313 CPU-only baseline measured one4/mixed5
+matching allocations (different from host one3/mixed5), outputs owned980/2152.
+EXP1748 all Windows N1..4/N1..5 one-shot failures PASS: each status3,
+bytezero failed result, next SAME-thread status0 valid, exit0/stderr empty;
+guest SSH stayed up. ReceiptSHA8b1b05be5c185a1650e17b34f68b085c28bb9ff8050a46a0dcf611dbe19dfe38,
+reviewSHAb972f4c49eba38f5f97d5dfeeb0cd82438c099f6b8143f4ce79092be25d7bbc6.
+Details/limits `investigation/analysis/D3D12-C15-windows-backing-oom.md`.
+Next one persistent matching64KiB failure cleanup check, then distinct C15
+gate. Last GPU-qualified EXP1681; no AppleAgx package/active GPU experiment.
+EXP1745 owner double-publication defect remains confirmed but fix awaits
+callback reentry/lifetime contract. CORE_0010/SM6 stays fail-closed.
+
+## Prior state superseded by Windows backing fault sweep
+
 ## CURRENT 2026-10-20 07:52Z — C15 OWNER PUBLICATION RACE RED; CALLBACK CONTRACT NEXT
 
 EXP1745 extracted current actual Device/CreateDevice/EnsureOwner under
