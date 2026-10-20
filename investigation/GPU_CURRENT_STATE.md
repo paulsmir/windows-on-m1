@@ -8,6 +8,24 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 19:40Z — SM5.1 GAME ROUTE EXP1780 PRELAUNCH STOP; RECOVERY_DONE
+
+User first-release target is stable D3D12 SM5.1 plus games; DXIL/SM6 deferred.
+EXP1776/1777 inventory found no installed native D3D12 game. Portal 2,
+DX9 renderer and intro map plus OS x86 D3D9On12/D3D12Core were pinned in
+EXP1778/1779. EXP1780 reused exact EXP1765-qualified package1764 and booted
+Code0, but limited interactive task called admin-only Get-WindowsDriver and
+stopped before Steam/game (PortalPid null, no D3D12 route verdict). Root verdict
+`.local/experiments/EXP1780-portal2-d3d9on12/root-verdict1780.json`
+SHA6f6fd5901b9c2bed11a69539b57bb4bf6b3c991fd051b0724c629fd5add5a1e8.
+EXP1781 exact FactoryV2 rollback RECOVERY_DONE Code28/PackageAbsent/8CPU;
+new host proxy helper proved two stable transitions. No package/active game run.
+Next: new game ID with only limited-task preflight fixed, same package/game
+hashes, measure module and D3D12 UMD receipts before any playability claim.
+Preserve user-dirty Mu; C21E/UBFE/C27 remain security-blocked.
+
+## Prior state superseded by EXP1780/1781 game and recovery verdict
+
 ## CURRENT 2026-10-20 18:57Z — EXP1765 OWNER ADMISSION J313 PASS; RECOVERY_DONE
 
 Last GPU-qualified D3D12 source is isolated c4980c7e6d2ced728a89a78e6e98f5ae3e789c4d,
