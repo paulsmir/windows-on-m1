@@ -66,8 +66,6 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <PreprocessorDefinitions>NOMINMAX=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <ClCompile Include="..\..\mesa\dxil\agx_dxil_program.c" />
-    <ClCompile Include="..\..\mesa\dxbc\agx_legacy_program_frame.c" />
     <ClCompile Include="src\umd_runtime_device.c">
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>

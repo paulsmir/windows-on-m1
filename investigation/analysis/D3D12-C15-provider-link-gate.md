@@ -87,3 +87,16 @@ two original C++ translation units that use `numeric_limits::max`; this keeps
 the original CPU modules and all other project compile flags unchanged.
 EXP1607 remains a failed `/WX` build receipt. A fresh source-bound native
 compile is required before any link or capability claim.
+
+## EXP1611 duplicate parser owner correction
+
+The first compile after `NOMINMAX` reached the native linker. The accepted
+eight-object request compiles `agx_dxil_program.c` into `program.obj` and
+`agx_legacy_program_frame.c` into `legacy.obj`; the actual EXP1611 linker
+diagnostic reported `LNK2005` for `agx_dxil_parse` and
+`agx_legacy_frame_program` when the UMD project also compiled those same C
+files. The eight-object prepared owner already supplies both definitions, so
+the project removes only its duplicate C ClCompile entries. The owned-core
+include directories and per-source `NOMINMAX` remain. This follows observed
+symbol ownership instead of accepting duplicate definitions or weakening the
+linker. A fresh project source snapshot and link gate must prove the change.
