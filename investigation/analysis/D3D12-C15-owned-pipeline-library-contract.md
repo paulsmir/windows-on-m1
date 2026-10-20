@@ -425,3 +425,22 @@ compatibility keys, actual component contents and a complete acyclic recipe
 graph; construct owned refs transactionally and reject failures without
 publishing. Neither this predicate nor EXP1770 justifies a library callback or
 R1/SM6 advertisement.
+
+## 2026-10-20 CPU digest/identity checkpoint (EXP1772)
+
+`agx_d3d12_library_wire_digest.h` composes the structural predicates with a
+caller-supplied SHA-256 callback. It checks every component payload against its
+record digest, each pipeline recipe digest against the referenced component,
+and the whole 16 MiB arena with only the digest field treated as zero. It also
+requires exact caller-provided compiler, adapter, DDI, shader-model and semantic
+profile identities. It cannot accept a NULL digest backend or key. No input
+buffer is modified and no object is published. The host fixture uses system
+CommonCrypto solely to exercise the callback interface; a Windows CNG backend
+is not yet wired into the UMD.
+
+The actual-header test was RED while the helper was missing, then GREEN under
+ASan/UBSan for valid bytes, component/pipeline/whole-arena corruption, wrong
+identity/profile, backend failure and NULL inputs. The targeted D3D12 ABI,
+owner and ledger suite totals 35 PASS. This still does not validate component
+semantics, an acyclic recipe graph, runtime framing or transactional ownership.
+It is an offline CPU gate and makes no R1/SM6 capability claim.
