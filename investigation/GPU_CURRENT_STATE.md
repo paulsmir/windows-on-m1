@@ -8,6 +8,21 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 21:59Z — ARM64X FORWARDER BUILT; LOADER TEST NEXT
+
+EXP1803 builder-only pure forwarder: 13824B ARM64X PE SHA
+a1d08ff60b16c0b2d233130551ba338871ba266522ac1ed0c13985b79c865ba2,
+no import directory, native OpenAdapter10_2/OpenAdapter12 forwarded to an
+ARM64 backing name. Official pinned VS Arm64 environment resolved the CRT
+link boundary; EXP1801/1802 stopped on missing CRT or EC helpers and remain
+recorded. x64 forwarder view and Windows loader behavior are **not yet
+proven**. Next build architecture-distinct no-GPU backing stubs and x64/
+ARM64 LoadLibrary callers, then test them on normal Code28 guest without
+AppleAgx package. Actual x64 UMD closure/package build remains open.
+Normal J313 remains Code28/PackageAbsent/8CPU after EXP1800 recovery.
+
+## Prior state superseded by EXP1803 builder result
+
 ## CURRENT 2026-10-20 21:46Z — EXP1800 X64 UMD NAME MAPPING; RECOVERY_DONE
 
 Exact signed package30.0.1764.0/oem5.inf full-owner Code0/8CPU. Same-source
