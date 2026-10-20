@@ -95,3 +95,11 @@ real FillDDITable implementation with two different list table buffers/canaries,
 indices0/1 and independent runtime handles, plus queue index0. It must not select
 ABI from tableNum. That test/implementation needs its own approved source/command
 freeze; none was compiled or implemented during this pass.
+
+The current 0003 implementation names the fifth parameter `table_num` in
+source and logs it unchanged; this is a terminology correction only. It retains
+the first successful list HRTTABLE for the accepted 0003 path. The official
+[FillDDITable DDI](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d12umddi/nc-d3d12umddi-pfnd3d12ddi_fillddittable)
+identifies that UINT as the table index. A later 0011 source gate must provide
+per-instance HRTTABLE association and an actual list-selection contract before
+publishing R1; this name change does not pretend to implement it.

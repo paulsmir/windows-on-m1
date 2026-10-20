@@ -3988,10 +3988,11 @@ template<class T> static HRESULT FillTable(void *table, SIZE_T size, void (*fill
     return S_OK;
 }
 static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type, void *table,
-                                     SIZE_T size, UINT version, D3D12DDI_HRTTABLE rt_table) {
+                                     SIZE_T size, UINT table_num, D3D12DDI_HRTTABLE rt_table) {
     HRESULT hr = E_NOTIMPL;
-    /* C4a: a command list must name the runtime table its DDIs come from
-     * (pfnSetCommandListDDITableCb at creation); keep the first one. */
+    /* C4a/0003: a command list names the first successful runtime list table.
+     * table_num is an instance index, not a DDI version; R1's second table
+     * instance needs a separate selection/lifetime contract before admission. */
     switch (type) {
     case D3D12DDI_TABLE_TYPE_DEVICE_CORE:
         hr = FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0003>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0003);
@@ -4007,7 +4008,7 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
     }
     if (SUCCEEDED(hr) && type == D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D && !list_table.handle)
         list_table = rt_table;
-    const UINT receipt[] = {static_cast<UINT>(type), static_cast<UINT>(size), version};
+    const UINT receipt[] = {static_cast<UINT>(type), static_cast<UINT>(size), table_num};
     AdmissionUmdDiagnostic("d3d12-fill-table", hr, receipt, 3);
     return hr;
 }
