@@ -8,7 +8,21 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 01:58Z — C15 PROVIDER NOMINMAX NATIVE GATE; EXP1594 RECOVERY_DONE
+## CURRENT 2026-10-20 02:06Z — C15 PROVIDER PARSER DEDUP NATIVE GATE; EXP1594 RECOVERY_DONE
+
+EXP1609 source-bound runtime and EXP1610 fresh8 accepted for scoped NOMINMAX
+sourcefd107ef1. EXP1611 then compiled owned-core/provider/parsers with0warnings
+but linker STOPPED LNK2005: prepared program.obj/legacy.obj already define
+agx_dxil_parse/agx_legacy_frame_program, duplicated by project C objects.
+No valid UMD PE or guest run. Project correction fdd6900f removes only two
+parser C ClCompile entries, leaving provider/owned-core include paths and
+NOMINMAX; isolated EXP1612 source02b79418 one-project delta/726 other files
+byteequal. Next fresh runtime EXP1613, helpers, full UMD link. Previous
+EXP1603, EXP1607, EXP1611 failed receipts remain unchanged. J313 normal
+visible Code28/PackageAbsent/noService/8CPU, current CORE_0003/SM5.1.
+Do not run hardware for these compile-only facts.
+
+## Prior state superseded by EXP1611 linker duplicate-owner verdict
 
 Corrected provider source closure EXP1604 fd6b7f59, runtime1605 and fresh8
 helpers1606 passed, but full ARM64 UMD build EXP1607 STOPPED before link:
