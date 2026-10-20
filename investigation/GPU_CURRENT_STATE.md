@@ -28,10 +28,11 @@ Preserve user-dirty Mu and security-blocked C21E/UBFE/C27 untouched. Main branch
 includes additional unqualified C25/C26/C27/R1 edits beyond isolated c498;
 EXP1765 validates owner publication only in the a6-compatible source.
 C15 CORE_0010/SM6 remains fail-closed. EXP1770/1771 added unlinked CPU-only
-pipeline-library envelope and table structural gates (34 targeted tests PASS),
-not a full importer. Next causal target: digest/compatibility/recipe-graph and
-transactional owned refs plus typed R1 shader error/lifetime and compiler
-contracts offline before a new GPU package. One broader old rejected-device-error host fixture
+pipeline-library envelope/table structural gates and digest/identity predicate;
+EXP1774 proved the unlinked Windows CNG SHA-256 callback on J313 CPU with
+Code28/PackageAbsent/8CPU unchanged. These are not a full importer. Next causal
+target: component/recipe graph and transactional owned refs plus typed R1
+shader error/lifetime and compiler contracts offline before a new GPU package. One broader old rejected-device-error host fixture
 still lacks provider/R1 aliases; no full-suite GREEN claim.
 
 ## Prior state superseded by EXP1765 hardware verdict and EXP1769 recovery
