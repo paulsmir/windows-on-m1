@@ -55,3 +55,18 @@ RAII and delayed Module function-list publication under controlled failures,
 followed by a separate Builder adoption test. Only after those should the
 selected 83-TU/nine-archive graph be rebuilt with coherent exception flags
 and whole-job fail-at-N. No J313 run is justified for this CPU defect.
+
+EXP1691 local constructor candidate (external scratch only) keeps parameters
+under local `unique_ptr` ownership until all construction and Module mapping
+steps complete, reserves the raw member-pointer vector before release, and
+delays `Module::addFunction(this)` until then. In the same controlled
+second-parameter throw as EXP1690, Appleclang21 C++14 `-fexceptions`
+ASan/UBSan returned rc0 with `leaked=0 mapped=0 functions=0`; a normal
+2-parameter Function construction/destruction also passed and stderr was
+empty. Generated candidate hash and raw receipt are in
+`.local/c15-glslang-function-ownership1691/`. This is a site-extracted
+model, not a compiled patch to pinned glslang or proof of later Module map
+throws. Once any map is published, the candidate still relies on whole-job
+abort without dereferencing stale Module indices; actual destructor behavior
+and Builder's raw ownership interval remain separate gates. Do not present
+this as whole-converter OOM recovery.
