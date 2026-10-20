@@ -8,6 +8,22 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 22:19Z — X64 UMD OLD CLOSURE REJECTED; FRESH SOURCE NEXT
+
+EXP1808 old configured x64 Mesa graph built seven missing archives, diagnostic
+only. EXP1809 verified all 729 exact c498 driver files and tried x64 UMD
+compile against that old x64 Mesa/runtime closure. First C boundary failed:
+`umd_win32_screen.c:1281` needs `AGX_WIN32_SCREEN_OPERATIONS.GpuvaOps`, but
+old x64 dependency header lacks it; exact c498 header defines it. No x64
+DLL produced. Stop old-source comparisons after this complete offline pass;
+no include-order shim or old native_runtime link. Next build one fresh x64
+Mesa/NIR/Asahi closure from the EXP1466/1760 pinned source snapshot and
+generated headers, then retry UMD compile. ARM64X dual-loader contract from
+EXP1805 remains proven; J313 normal Code28/PackageAbsent/8CPU, no GPU
+package. Night Raid/real-game acceptance still open.
+
+## Prior state superseded by EXP1809 source-ABI verdict
+
 ## CURRENT 2026-10-20 22:05Z — ARM64X DUAL LOADER J313 PASS; X64 UMD NEXT
 
 EXP1805 normal Code28/PackageAbsent J313 loaded the same EXP1803 ARM64X
