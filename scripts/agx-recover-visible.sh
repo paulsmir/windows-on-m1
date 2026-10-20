@@ -59,7 +59,13 @@ wait_cycle() {
     sleep 3
   done
   sleep 5
-  (cd "$W" && perl -e 'alarm 30; exec @ARGV' /Users/pavel/public_windows/proxyenv/bin/python scripts/air-serial-guard.py --port /dev/cu.usbmodemC02HDNCCQ6L41 --port /dev/cu.usbmodemC02HDNCCQ6L43 -- /Users/pavel/public_windows/proxyenv/bin/python /Users/pavel/public_windows/.local/experiments/EXP909-render-local-view/proxy-nop.py) > "$R/proxy-ready.log" 2>&1
+  (cd "$W" && bash scripts/agx-recovery-proxy-ready.sh \
+    /dev/cu.usbmodemC02HDNCCQ6L41 /dev/cu.usbmodemC02HDNCCQ6L43 "$R/proxy-ready.log" \
+    perl -e 'alarm 30; exec @ARGV' /Users/pavel/public_windows/proxyenv/bin/python \
+    scripts/air-serial-guard.py --port /dev/cu.usbmodemC02HDNCCQ6L41 \
+    --port /dev/cu.usbmodemC02HDNCCQ6L43 -- \
+    /Users/pavel/public_windows/proxyenv/bin/python \
+    /Users/pavel/public_windows/.local/experiments/EXP909-render-local-view/proxy-nop.py)
 }
 launch_normal() {
   bash "$NORMAL" > "$R/normal-$1-launch.log" 2>&1 &
