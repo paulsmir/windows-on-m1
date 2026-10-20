@@ -8,6 +8,30 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 04:55Z — EXP1663 ROOT CALC/CREATE PASS, FACTORYV2 RECOVERY_DONE
+
+Hardware-qualified old0003 root Calc/Create shared checked extent source
+`9b374daf5bb08e4af541f198cf52dbe88206dd9b` on accepted EXP1594
+source `57bd44323168c39397987c97db08adf0c122f50e`. Signed build1659
+EXP1662 exact package run as EXP1663: 63 unique non-E D3D12 PASS/0FAIL,
+ROOTC/ROOTG/C14A PASS, C21E known SKIP; 142 AGX PASS occurrences/78
+unique labels match EXP1594, only known MSAA-a000r FAIL. KMD pool workers5
+PASS, FL11 ARM64/WOW/debug PASS, GL52.3/internal59.6, CS46.406,
+corpus414 each/createfail64/4/hangs0/pixel_diff0, DWM faults0. Raw
+`.local/experiments/EXP1663-d3d12-root-preflight/root-verdict1663.json`
+SHA `9be27baf90f7523c6ab0af953789366da030680e7f32535574e464536972bfc1`.
+Exact FactoryV2 rollback completed RECOVERY_DONE. Current J313 normal
+GPU-visible inert one ACPI\APPL0002 Code28, PackageAbsent/noService/noFiles,
+8CPU at boot 2026-10-20T04:54:38.7459360Z. Source root extent rejection
+is deterministic host-verified; J313 validated ordinary integration.
+No R1/SM6/provider DXIL callbacks registered. Next causal target C15
+canonical root snapshot with provider Register/Retire and lifetime, then typed
+shader path; first offline source/WDK tests, then separately isolated build
+and J313. Security-blocked C21E/UBFE/C27 stays untouched. Preserve user-dirty
+Mu. No active GPU experiment.
+
+## Prior state superseded by EXP1663
+
 ## CURRENT 2026-10-20 03:46Z — C15 R1 STATE/PSO LINKS + SHADER ROOT CPU BOUNDS; EXP1594 RECOVERY_DONE
 
 New uncalled checked root-private extent helper811d0931: explicit
