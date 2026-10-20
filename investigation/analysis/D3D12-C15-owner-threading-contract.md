@@ -249,3 +249,32 @@ chosen owner-state/gate behavior. No hardware run is justified to guess it.
 The general older Microsoft UMD threading page describing Direct3D9/DirectDraw
 single-device serialization is not applicable evidence for this negotiated
 D3D12 free-threaded contract. Keep that historical model separate.
+
+## EXP1745 actual-source double-publication counterexample
+
+The current `EnsureOwner` still reads `owner`/`owner_failed` before calling
+`AgxD3d12OwnerCreate` and publishes the result afterward without an owner
+state gate. A bounded test extracted the current `AgxD3d12Device`,
+`CreateDevice`, `OwnerError` and `EnsureOwner` verbatim. Its test-only
+constructor blocked thread A before publication, let B enter the same actual
+function, then released A and joined it before releasing B. Both original
+threads returned distinct owner pointers; the device retained only B's
+pointer. Constructor calls were 2, and the old success/failure/invalid
+initialization controls remained green. The ASan/UBSan result is
+`.local/c15-owner-race1745/result1745.json` SHA-256
+`57024cdff471b7bd892f46a38b0bf9391831435a26bef4bc1b534b0eb45ba5dd`.
+The schedule does not depend on simultaneous publication writes. This is a
+confirmed UMD publication defect, though no J313 trace attributes a real
+failure to it.
+
+The earlier heap-registry observation is superseded: current source uses
+`heap_lock` around register, unregister and lookup. This counterexample
+isolates owner publication. Current `AgxD3d12OwnerCreate` synchronously calls
+the adapter and kernel callbacks during setup; the inspected Microsoft
+threading and callback pages do not establish whether any can reenter a
+same-device DDI or wait for work that would. A mutex or wait gate around the
+whole constructor can therefore introduce a deadlock. A duplicate-constructor
+cleanup policy would also need proof that two partial native contexts can be
+created and retired safely. Keep the production fix pending an explicit
+callback/reentry and lifetime contract; do not hide this in KMD, firmware or
+the shader provider.

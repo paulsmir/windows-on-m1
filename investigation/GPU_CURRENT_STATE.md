@@ -8,6 +8,22 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 07:52Z — C15 OWNER PUBLICATION RACE RED; CALLBACK CONTRACT NEXT
+
+EXP1745 extracted current actual Device/CreateDevice/EnsureOwner under
+ASan/UBSan. Coordinated A-before-B publication produced two owner
+constructions, distinct returned owners and `device.owner==B` (RED rc1);
+success/failure/invalid baseline controls rc0. Raw resultSHA57024cdff471b7bd892f46a38b0bf9391831435a26bef4bc1b534b0eb45ba5dd.
+Confirmed UMD source-level duplicate/overwrite defect; J313 incidence
+unproven. Current heap registry already locked; old owner-threading note
+corrected. Owner construction makes outward adapter/kernel callbacks;
+same-device callback reentry/wait guarantees remain unresolved, so no
+blocking publication lock or package/hardware run yet. Next establish
+callback/reentry and lifetime policy, then tracked regression and owner-layer
+fix. Last GPU-qualified EXP1681; GPU package absent; CORE_0010/SM6 fail-closed.
+
+## Prior state superseded by owner publication counterexample
+
 ## CURRENT 2026-10-20 07:46Z — C15 INTERNAL R1 PREFLIGHT GREEN; TYPED RUNTIME GATE NEXT
 
 EXP1744 current-source deterministic RED on missing combined Standard
