@@ -19,8 +19,22 @@ $id = 'ACPI\APPL0002\0'
 $serviceName = 'AppleAgxAdmission'
 $deviceKey = 'HKLM:\SYSTEM\CurrentControlSet\Enum\ACPI\APPL0002\0\Device Parameters'
 $serviceKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission'
-$sys = Join-Path $env:windir 'System32\drivers\AppleAgxRenderAdmission.sys'
 $umd = Join-Path $env:windir 'System32\AppleAgxRenderAdmissionUmd.dll'
+
+function Resolve-ExactDriverStoreSysPath([string]$StoreInfPath, [string]$ImagePath, [string]$WindowsDir) {
+    # The INF uses ServiceBinary=%13%\AppleAgxRenderAdmission.sys. Resolve
+    # the actual bound package rather than assuming a System32\drivers copy.
+    if (!$StoreInfPath -or !$ImagePath -or !$WindowsDir) { throw 'driver path identity missing' }
+    $root = [IO.Path]::GetFullPath((Join-Path $WindowsDir 'System32\DriverStore\FileRepository')).TrimEnd('\') + '\'
+    $inf = [IO.Path]::GetFullPath($StoreInfPath)
+    if (!$inf.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { throw 'INF outside DriverStore root' }
+    $relative = $inf.Substring($root.Length)
+    if ($relative -notmatch '^[^\\]+\\appleagxrenderadmission\.inf$') { throw 'unexpected DriverStore INF path' }
+    $sysPath = Join-Path (Split-Path $inf -Parent) 'AppleAgxRenderAdmission.sys'
+    $expectedImage = '\SystemRoot' + $sysPath.Substring($WindowsDir.TrimEnd('\').Length)
+    if ($ImagePath -ine $expectedImage) { throw 'service ImagePath differs from exact staged SYS' }
+    return $sysPath
+}
 
 function Assert-Hash([string]$Path, [string]$Expected) {
     if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { throw "missing exact artifact: $Path" }
@@ -63,6 +77,7 @@ if ($staged.Count -ne 1 -or $staged[0].Driver -ne $ExpectedPublishedName -or
     $staged[0].OriginalFileName -notmatch 'AppleAgxRenderAdmission\.inf$') { throw 'staged package identity uncertain' }
 $infHash = Assert-Hash (Join-Path $env:windir "INF\$ExpectedPublishedName") $ExpectedInfSha256
 $storeInfHash = Assert-Hash $staged[0].OriginalFileName $ExpectedInfSha256
+$sys = Resolve-ExactDriverStoreSysPath $staged[0].OriginalFileName (Get-ItemProperty -LiteralPath $serviceKey -Name ImagePath).ImagePath $env:windir
 $sysHash = Assert-Hash $sys $ExpectedSysSha256
 $umdHash = Assert-Hash $umd $ExpectedUmdSha256
 $armsBefore = Assert-Disarmed
