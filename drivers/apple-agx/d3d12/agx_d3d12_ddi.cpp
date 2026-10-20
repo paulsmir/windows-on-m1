@@ -253,12 +253,52 @@ struct AgxD3d12Device {
     /* EXP1365: the KMD binds one Win32 generation per kernel device, so the
      * owner's context and every queue context carry this one */
     ULONG generation;
+    AgxD3d12Device *identity_next;
     /* C5: the owner heaps by GPU VA, so a root descriptor (a VA) resolves
      * to its buffer and offset */
     SRWLOCK heap_lock;
     UINT heap_count;
     struct AgxD3d12Heap *heaps[4096];
 };
+struct AgxD3d12PipelineState;
+static SRWLOCK identity_registry_lock = SRWLOCK_INIT;
+static AgxD3d12Device *live_identity_devices = nullptr;
+static AgxD3d12PipelineState *live_identity_psos = nullptr;
+
+/* Keep this lock around address-only metadata. No runtime or native callback
+ * executes under it. Runtime-private storage remains owned by the runtime. */
+static void PublishDeviceIdentity(AgxD3d12Device *device) {
+    AcquireSRWLockExclusive(&identity_registry_lock);
+    for (auto *current = live_identity_devices; current; current = current->identity_next)
+        if (current == device) {
+            ReleaseSRWLockExclusive(&identity_registry_lock);
+            return;
+        }
+    device->identity_next = live_identity_devices;
+    live_identity_devices = device;
+    ReleaseSRWLockExclusive(&identity_registry_lock);
+}
+static void RetireDeviceIdentity(AgxD3d12Device *device) {
+    AcquireSRWLockExclusive(&identity_registry_lock);
+    auto **entry = &live_identity_devices;
+    while (*entry && *entry != device) entry = &(*entry)->identity_next;
+    if (*entry) {
+        *entry = device->identity_next;
+        device->identity_next = nullptr;
+    }
+    ReleaseSRWLockExclusive(&identity_registry_lock);
+}
+extern "C" const void *AgxD3d12ZeroCacheResolveDevice(D3D12DDI_HDEVICE handle) {
+    const void *result = nullptr;
+    AcquireSRWLockShared(&identity_registry_lock);
+    for (auto *device = live_identity_devices; device; device = device->identity_next)
+        if (device == handle.pDrvPrivate) {
+            result = device;
+            break;
+        }
+    ReleaseSRWLockShared(&identity_registry_lock);
+    return result;
+}
 static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error) {
     auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
     if (device && device->callbacks && device->callbacks->pfnSetErrorCb)
@@ -283,6 +323,7 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
         device->kernel = arg->pKTCallbacks;
         device->generation = ((((GetCurrentProcessId() & 0xffffu) << 16) ^
                                static_cast<ULONG>(InterlockedIncrement(&queue_generation))) | 0x80000000u);
+        PublishDeviceIdentity(device);
     }
     const UINT receipt[] = {arg ? arg->Interface : 0, arg ? arg->Version : 0,
                             arg ? static_cast<UINT>(arg->Flags) : 0};
@@ -291,8 +332,9 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
 }
 static void APIENTRY DestroyDevice(D3D12DDI_HDEVICE handle) {
     AdmissionUmdDiagnostic("d3d12-destroy-device", S_OK, nullptr, 0);
-#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
+    RetireDeviceIdentity(device);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (device && device->owner) {
         (void)AgxD3d12OwnerDestroy(static_cast<AGX_D3D12_OWNER *>(device->owner));
         device->owner = nullptr;
@@ -533,6 +575,8 @@ static VOID APIENTRY DestroyElementLayout(D3D12DDI_HDEVICE, D3D12DDI_HELEMENTLAY
 static constexpr UINT kPipelineElements = 16;
 struct AgxD3d12PipelineState {
     D3D12DDIARG_CREATE_PIPELINE_STATE_0001 desc;
+    AgxD3d12Device *identity_owner;
+    AgxD3d12PipelineState *identity_next;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     /* Different recording threads may first use the same PSO concurrently. */
     SRWLOCK compile_lock;
@@ -548,6 +592,44 @@ struct AgxD3d12PipelineState {
     UINT cs_dwords, vs_dwords, ps_dwords;
     UINT cs[1]; /* the CS program, then the VS, then the PS */
 };
+static void PublishPsoIdentity(AgxD3d12PipelineState *pso, AgxD3d12Device *device) {
+    AcquireSRWLockExclusive(&identity_registry_lock);
+    for (auto *current = live_identity_psos; current; current = current->identity_next)
+        if (current == pso) {
+            ReleaseSRWLockExclusive(&identity_registry_lock);
+            return;
+        }
+    pso->identity_owner = device;
+    pso->identity_next = live_identity_psos;
+    live_identity_psos = pso;
+    ReleaseSRWLockExclusive(&identity_registry_lock);
+}
+static void RetirePsoIdentity(AgxD3d12PipelineState *pso) {
+    AcquireSRWLockExclusive(&identity_registry_lock);
+    auto **entry = &live_identity_psos;
+    while (*entry && *entry != pso) entry = &(*entry)->identity_next;
+    if (*entry) {
+        *entry = pso->identity_next;
+        pso->identity_owner = nullptr;
+        pso->identity_next = nullptr;
+    }
+    ReleaseSRWLockExclusive(&identity_registry_lock);
+}
+extern "C" const void *AgxD3d12ZeroCacheResolvePsoOwner(D3D12DDI_HPIPELINESTATE handle) {
+    const void *result = nullptr;
+    AcquireSRWLockShared(&identity_registry_lock);
+    for (auto *pso = live_identity_psos; pso; pso = pso->identity_next)
+        if (pso == handle.pDrvPrivate) {
+            for (auto *device = live_identity_devices; device; device = device->identity_next)
+                if (device == pso->identity_owner) {
+                    result = device;
+                    break;
+                }
+            break;
+        }
+    ReleaseSRWLockShared(&identity_registry_lock);
+    return result;
+}
 static const AgxD3d12Shader *ComputeShaderOf(const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
     return arg ? static_cast<const AgxD3d12Shader *>(arg->hComputeShader.pDrvPrivate) : nullptr;
 }
@@ -561,9 +643,10 @@ static SIZE_T APIENTRY CalcPrivatePipelineStateSize(D3D12DDI_HDEVICE, const D3D1
     const SIZE_T dwords = (cs ? cs->dwords : 0) + (vs ? vs->dwords : 0) + (ps ? ps->dwords : 0);
     return offsetof(AgxD3d12PipelineState, cs) + (dwords ? dwords : 1) * sizeof(UINT);
 }
-static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
+static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
+    auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
     auto *pso = arg ? static_cast<AgxD3d12PipelineState *>(arg->hDrvPipelineState.pDrvPrivate) : nullptr;
-    if (!pso) return E_INVALIDARG;
+    if (!device || !pso) return E_INVALIDARG;
     memset(pso, 0, offsetof(AgxD3d12PipelineState, cs));
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     InitializeSRWLock(&pso->compile_lock);
@@ -596,6 +679,7 @@ static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE, const D3D12DDIARG_
                             static_cast<UINT>(arg->RTVFormats[0]), static_cast<UINT>(arg->DSVFormat),
                             static_cast<UINT>(arg->PrimitiveTopologyType), arg->SampleDesc.Count};
     AdmissionUmdDiagnostic("measure-d3d12-pso", S_OK, receipt, 8);
+    PublishPsoIdentity(pso, device);
     return S_OK;
 }
 static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE, D3D12DDI_HPIPELINESTATE);
@@ -3001,9 +3085,10 @@ static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso
 }
 #endif
 static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINESTATE pso_handle) {
+    auto *pso = static_cast<AgxD3d12PipelineState *>(pso_handle.pDrvPrivate);
+    RetirePsoIdentity(pso);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12Device *device = DeviceOf(handle);
-    auto *pso = static_cast<AgxD3d12PipelineState *>(pso_handle.pDrvPrivate);
     if (device && device->owner && pso && pso->compiled == S_OK) {
         AgxD3d12OwnerDestroyCompute(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->compute);
         AgxD3d12OwnerDestroyGraphics(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->graphics);

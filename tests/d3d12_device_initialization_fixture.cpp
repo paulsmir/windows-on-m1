@@ -44,6 +44,8 @@ static AGX_D3D12_OWNER_ARGS captured;
 static HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *a,AGX_D3D12_OWNER **out) {
  ++owner_calls; captured=*a; *out=SUCCEEDED(owner_result)?&fresh_owner:nullptr; return owner_result;
 }
+struct AgxD3d12Device;
+static void PublishDeviceIdentity(AgxD3d12Device *) {}
 /* PRODUCTION_DEVICE */
 static void check(bool value,const char *why) { if(!value){ std::fprintf(stderr,"%s\n",why); std::exit(1); } }
 int main(int argc,char **argv) {

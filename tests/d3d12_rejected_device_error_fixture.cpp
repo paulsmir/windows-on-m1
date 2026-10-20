@@ -121,6 +121,8 @@ struct AgxD3d12Descriptor { UINT unused; };
 struct AgxD3d12VertexBuffer { UINT unused; };
 struct D3D12DDI_VIEWPORT { FLOAT unused; };
 struct RECT { LONG unused; };
+struct AgxD3d12Device;
+static void PublishDeviceIdentity(AgxD3d12Device *) {}
 /* ACTUAL_DEVICE */
 static void Fill(D3D12DDI_DEVICE_FUNCS_CORE_0003 &f) {
     /* ACTUAL_TABLE_ASSIGNMENT */

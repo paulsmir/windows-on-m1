@@ -49,6 +49,7 @@ def render(destination):
  limit=re.search(r'static constexpr UINT kPipelineElements\s*=\s*\d+\s*;',source)
  if not limit:raise ValueError('actual pipeline limit missing')
  actual=limit.group()+'\n'+functions['private_PSO']+';\n'
+ actual+='static void RetirePsoIdentity(AgxD3d12PipelineState *) {}\n'
  actual+='\n'.join(functions[n]for n in ['CompileCompute','CompileGraphics','DestroyPipelineState'])
  text=(HERE/'d3d12_pso_publication_fixture.cpp').read_text().replace('/* PINNED_WDK_TYPES */',records)
  text=text.replace('/* ACTUAL_OWNER_TYPES */',actual_records).replace('/* ACTUAL_PSO_FUNCTIONS */',actual)
