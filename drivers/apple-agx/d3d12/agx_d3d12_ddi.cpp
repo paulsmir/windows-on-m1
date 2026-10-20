@@ -424,21 +424,26 @@ static UINT RootParameterDwords(const D3D12DDI_ROOT_PARAMETER &p) {
     default: return 2; /* root CBV/SRV/UAV: a 64-bit GPU virtual address */
     }
 }
+static constexpr AgxR1RootLayoutPolicy kCurrentRootLayoutPolicy = {64u, UINT_MAX, 2032u, 64u};
 static SIZE_T APIENTRY CalcPrivateRootSignatureSize(D3D12DDI_HDEVICE,
                                                     const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 *arg) {
-    const UINT count = arg && arg->pRootSignature ? arg->pRootSignature->NumParameters : 0;
-    SIZE_T ranges = 0;
-    for (UINT i = 0; i < count; ++i)
-        if (arg->pRootSignature->pRootParameters[i].ParameterType == D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
-            ranges += arg->pRootSignature->pRootParameters[i].DescriptorTable.NumDescriptorRanges;
-    const SIZE_T samplers = arg && arg->pRootSignature ? arg->pRootSignature->NumStaticSamplers : 0;
-    return offsetof(AgxD3d12RootSignature, parameter) + (count ? count : 1) * sizeof(AgxD3d12RootParameter) +
-           ranges * sizeof(AgxD3d12Range) + samplers * sizeof(D3D12DDI_STATIC_SAMPLER);
+    SIZE_T bytes = 0;
+    UINT ranges = 0;
+    return arg && AgxD3d12MeasureR1RootPrivate(arg->pRootSignature, kCurrentRootLayoutPolicy,
+                                                 &bytes, &ranges) ? bytes : 0;
 }
 static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 *arg,
                                             D3D12DDI_HROOTSIGNATURE handle) {
     auto *root = static_cast<AgxD3d12RootSignature *>(handle.pDrvPrivate);
-    if (!arg || !arg->pRootSignature || !root) return E_INVALIDARG;
+    SIZE_T bytes = 0;
+    UINT measured_ranges = 0;
+    if (!root || !arg ||
+        !AgxD3d12MeasureR1RootPrivate(arg->pRootSignature, kCurrentRootLayoutPolicy,
+                                      &bytes, &measured_ranges))
+        return E_INVALIDARG;
+    /* Calc reserved the same checked extent; Create receives no capacity. */
+    (void)bytes;
+    (void)measured_ranges;
     const D3D12DDI_ROOT_SIGNATURE &desc = *arg->pRootSignature;
     root->parameters = desc.NumParameters;
     root->static_samplers = desc.NumStaticSamplers;

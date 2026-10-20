@@ -6,6 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = Path('/Volumes/pwdev/public_windows/.local/reference/wdk26100/d3d12umddi.h')
 SOURCE = ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp'
+ROOT_LAYOUT = ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_r1_root_layout.h'
 TABLES = ('D3D12DDI_ADAPTERFUNCS', 'D3D12DDI_DEVICE_FUNCS_CORE_0003',
           'D3D12DDI_COMMAND_LIST_FUNCS_3D_0003',
           'D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001')
@@ -106,7 +107,8 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('default: return 2;', cost)
         size = source[source.index('static SIZE_T APIENTRY CalcPrivateRootSignatureSize('):]
         size = size[:size.index('\n}\n')]
-        self.assertIn('NumParameters', size)
+        self.assertIn('AgxD3d12MeasureR1RootPrivate', size)
+        self.assertIn('root->NumParameters', ROOT_LAYOUT.read_text())
         # C1g (EXP1351): shader objects keep the tokenized program (length in
         # pShaderCode[1]); hull/domain and GS stream output stay refused.
         for member, fn in (('pfnCalcPrivateShaderSize', 'CalcPrivateShaderSize'),
@@ -337,7 +339,8 @@ class D3d12AbiGate(unittest.TestCase):
             start = source.index(name)
             return source[start:source.index('\n}\n', start)]
         size = fn('static SIZE_T APIENTRY CalcPrivateRootSignatureSize(')
-        self.assertIn('ranges * sizeof(AgxD3d12Range)', size)
+        self.assertIn('AgxD3d12MeasureR1RootPrivate', size)
+        self.assertIn('add(ranges, sizeof(AgxD3d12Range))', ROOT_LAYOUT.read_text())
         create = fn('static HRESULT APIENTRY CreateRootSignature(')
         self.assertIn('D3D12DDI_DESCRIPTOR_RANGE_OFFSET_APPEND', create)
         self.assertIn('? next : in.OffsetInDescriptorsFromTableStart', create)
@@ -494,7 +497,8 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('out->kind = kDescriptorSrvTexture;', srv)
         self.assertIn('resource->levels - v.MostDetailedMip', srv)
         self.assertIn('out->desc = *arg->pSamplerDesc;', fn('static VOID APIENTRY CreateSampler('))
-        self.assertIn('samplers * sizeof(D3D12DDI_STATIC_SAMPLER)', fn('static SIZE_T APIENTRY CalcPrivateRootSignatureSize('))
+        self.assertIn('AgxD3d12MeasureR1RootPrivate', fn('static SIZE_T APIENTRY CalcPrivateRootSignatureSize('))
+        self.assertIn('add(root->NumStaticSamplers, sizeof(D3D12DDI_STATIC_SAMPLER))', ROOT_LAYOUT.read_text())
         self.assertIn('memcpy(StaticSamplersOf(root), desc.pStaticSamplers', fn('static HRESULT APIENTRY CreateRootSignature('))
         resolve = fn('static UINT ResolveRoot(')
         self.assertIn('out->static_sampler[s.ShaderRegister] = &s;', resolve)
