@@ -8,6 +8,35 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 06:45Z — C15 CPU INPUT GATES + EXTERNAL OOM SITES; EXP1681 RECOVERY_DONE
+
+EXP1681 remains the last hardware-qualified source: a6d871ad old0003
+Device/Root provider lifecycle, D3D12 63 unique non-E PASS and exact
+FactoryV2 visible recovery Code28/PackageAbsent/noService/8CPU. No active
+hardware experiment, no staged AppleAgx package. Preserve user-dirty Mu.
+
+Branch CPU-only C15 after that run: EXP1682 WDK include-order STOP, EXP1683
+Standard IO pointer/count span host guard-page11 PASS/WDK3rc0; EXP1684
+one-use operation-token STOP, EXP1685 actual provider/owned-core DXIL+legacy
+transaction host90 PASS, EXP1686 WDK3rc0. These headers are uncalled in the
+accepted source. Typed CORE_0010/SM6 table remains fail-closed; exact VOID
+CreateShader error category and full PROGRAM/IO readability remain open.
+
+Pinned dxil-spirv8434 external OOM site checkpoints, no production patch:
+EXP1687 Builder::import RED42/GREEN0 local early unique_ptr; EXP1688 test-model
+compile STOP, EXP1689 groupedTypes makeVoidType three-site RED42/GREEN0
+local ownership/rollback; EXP1690 Function constructor second-parameter
+RED42, EXP1691 local RAII GREEN0; EXP1692 Builder raw Function adoption
+RED42/GREEN0 local. All are source-extracted model tests outside Git, not an
+exception-enabled 83-TU/nine-archive build. Next causal target is one coherent
+external whole-job allocation/ownership policy and fail-at-N sweep covering
+remaining grouped types, Module/Builder destructor safety, allocator/context,
+facade and Windows ARM64 unwind; do not claim recoverable OOM from these
+isolated sites. No J313 run can distinguish an unlinked CPU dependency defect.
+Security-blocked C21E/UBFE/C27 remains untouched.
+
+## Prior state superseded by C15 CPU/OOM checkpoints
+
 ## CURRENT 2026-10-20 06:00Z — EXP1681 ROOT PROVIDER PASS, FACTORYV2 RECOVERY_DONE
 
 Hardware-qualified current0003 Device/Root provider lifecycle source
