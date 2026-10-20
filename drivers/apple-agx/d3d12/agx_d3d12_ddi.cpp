@@ -594,6 +594,33 @@ static VOID APIENTRY CreateElementLayout(D3D12DDI_HDEVICE device, const D3D12DDI
     const UINT receipt[] = {4u, arg->NumElements};
     AdmissionUmdDiagnostic("measure-d3d12-state", S_OK, receipt, 2);
 }
+/* CPU-only R1 element-layout adapter. The 0010 table is not advertised yet. */
+static SIZE_T APIENTRY CalcPrivateElementLayoutSize0010(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATEELEMENTLAYOUT_0010 *arg) {
+    if (!arg || (arg->NumElements && !arg->pVertexElements) ||
+        FAILED(AgxD3d12ZeroCacheValidateLibraryReference(device, &arg->LibraryReference)))
+        return 0;
+    const D3D12DDIARG_CREATEELEMENTLAYOUT legacy = {arg->pVertexElements, arg->NumElements};
+    return CalcPrivateElementLayoutSize(device, &legacy);
+}
+static VOID APIENTRY CreateElementLayout0010(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATEELEMENTLAYOUT_0010 *arg, D3D12DDI_HELEMENTLAYOUT handle) {
+    if (!arg || !handle.pDrvPrivate || (arg->NumElements && !arg->pVertexElements)) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    const HRESULT reference = AgxD3d12ZeroCacheValidateLibraryReference(device, &arg->LibraryReference);
+    if (FAILED(reference)) {
+        ReportRejectedDeviceError(device, reference);
+        return;
+    }
+    const D3D12DDIARG_CREATEELEMENTLAYOUT legacy = {arg->pVertexElements, arg->NumElements};
+    CreateElementLayout(device, &legacy, handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateElementLayoutSize0010),
+                             PFND3D12DDI_CALCPRIVATEELEMENTLAYOUTSIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreateElementLayout0010),
+                             PFND3D12DDI_CREATEELEMENTLAYOUT_0010>);
 static VOID APIENTRY DestroyElementLayout(D3D12DDI_HDEVICE, D3D12DDI_HELEMENTLAYOUT) {}
 /* The pipeline state those objects feed (D3D12DDIARG_CREATE_PIPELINE_STATE_0001):
  * it keeps the creation arguments; graphics state translation is C6. C5: a
