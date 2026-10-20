@@ -8,6 +8,20 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 21:07Z — EXP1794 HRESULT SAMPLE BUILT; GPU CHECK NEXT
+
+EXP1794 external Microsoft nBody x64 SM5 diagnostic EXE SHA
+50ccd855939668c48d5fb9f92c1bbc72f864455aac91f19126ad25d4ee67fc85,
+PE x64, pinned source/project/dependencies, MSBuild0/0 warnings/errors. Only
+test-only DXSampleHelper fail-path receipt changed; HLSL and app-local DLLs
+equal EXP1791. On failure it writes HRESULT/file/line to an environment-
+selected path, then throws the same HrException. J313/GPU not touched by build.
+Next use exact artifact to discriminate first failed D3D12 call in a new
+preregistered J313 run, then consider driver vs sample/runtime ownership.
+Normal guest remains Code28/PackageAbsent/8CPU after EXP1793 recovery.
+
+## Prior state superseded by EXP1794 builder acceptance
+
 ## CURRENT 2026-10-20 21:02Z — EXP1793 APP EARLY CRASH; RECOVERY_DONE
 
 Exact EXP1764/1765 package30.0.1764.0/oem5.inf, same source c4980c7e,
