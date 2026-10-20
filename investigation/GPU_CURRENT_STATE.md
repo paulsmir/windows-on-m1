@@ -8,6 +8,21 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 07:46Z — C15 INTERNAL R1 PREFLIGHT GREEN; TYPED RUNTIME GATE NEXT
+
+EXP1744 current-source deterministic RED on missing combined Standard
+PROGRAM/IO preflight; GREEN actual provider host ASan/UBSan96 checks, opt-in
+65 pinned inputs and pinned WDK builder DDI NativeOwner/None + winsys3rc0.
+Internal caller-trusted helper rejects malformed declared PROGRAM/IO before
+provider lease/sink and leaves output clear; valid actual DXIL copies owned.
+It is uncalled from CORE_0010; no DDI/caps/GPU package/reboot change. Exact
+`investigation/analysis/D3D12-C15-r1-shader-error-boundary.md` updated.
+Still open: full PROGRAM body readability, Calc/Create pointer lifetime,
+exact CreateShader_0010 permitted callback error set, owner/GPU integration.
+Next source-first typed runtime gate, not GPU.
+
+## Prior state superseded by internal R1 preflight checkpoint
+
 ## CURRENT 2026-10-20 07:38Z — C15 WINDOWS /MD OBSERVED NEW CATEGORY PASS; DISTINCT GATE NEXT
 
 EXP1742 fresh ARM64 `/MD` test-only Nth-fault EXE AA64/root-reviewed;

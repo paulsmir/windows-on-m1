@@ -74,6 +74,37 @@ int main(int argc,char**argv){
       transaction_storage.size()-64,&transaction_layout,&transaction_owned);
   need(tx.status==P::Invalid&&!transaction_owned&&!transaction_layout.total,
        "transaction wrong root identity refused");
+  shader.hRootSignature={&ra};
+  const unsigned prior_failures=sa.calls;
+  UINT oversized_program[2]={0x00050060u,0xffffffffu};
+  shader.pShaderCode=oversized_program;
+  tx=AgxD3D12R1CopyStandardShaderPreflight(provider,a,ar,&shader,5,
+      sizeof(oversized_program),8,transaction_storage.data()+64,
+      transaction_storage.size()-64,&transaction_layout,&transaction_owned);
+  need(tx.status==P::Invalid&&!transaction_owned&&!transaction_layout.total&&
+       sa.calls==prior_failures,"oversized PROGRAM refused before provider");
+  shader.pShaderCode=reinterpret_cast<const UINT*>(dxil.data());
+  D3D12DDIARG_STAGE_IO_SIGNATURES bad_io{};
+  D3D12DDIARG_SIGNATURE_ENTRY signature{};
+  bad_io.NumInputSignatureEntries=9;bad_io.pInputSignatureDeprecated=&signature;
+  shader.IOSignatures.Standard=&bad_io;
+  tx=AgxD3D12R1CopyStandardShaderPreflight(provider,a,ar,&shader,5,
+      dxil.size(),8,transaction_storage.data()+64,
+      transaction_storage.size()-64,&transaction_layout,&transaction_owned);
+  need(tx.status==P::Invalid&&!transaction_owned&&!transaction_layout.total&&
+       sa.calls==prior_failures,"oversized Standard IO refused before provider");
+  bad_io.NumInputSignatureEntries=1;bad_io.pInputSignatureDeprecated=nullptr;
+  tx=AgxD3D12R1CopyStandardShaderPreflight(provider,a,ar,&shader,5,
+      dxil.size(),8,transaction_storage.data()+64,
+      transaction_storage.size()-64,&transaction_layout,&transaction_owned);
+  need(tx.status==P::Invalid&&!transaction_owned&&!transaction_layout.total&&
+       sa.calls==prior_failures,"missing Standard IO pointer refused before provider");
+  bad_io.pInputSignatureDeprecated=&signature;
+  tx=AgxD3D12R1CopyStandardShaderPreflight(provider,a,ar,&shader,5,
+      dxil.size(),8,transaction_storage.data()+64,
+      transaction_storage.size()-64,&transaction_layout,&transaction_owned);
+  need(tx.status==P::Ok&&tx.core_called&&transaction_owned&&
+       transaction_layout.input_count==1,"valid Standard shader copied after preflight");
  }
  auto input=dxil;D3D12DDIARG_CREATE_SHADER_0010 args{};args.hRootSignature={&ra};args.pShaderCode=reinterpret_cast<const UINT*>(input.data());
  auto acquire=[&](AgxCpuDevice d,AgxCpuRoot r,AgxCpuInputLease*out){return AgxCpuAcquireInput(provider,d,r,&args,5,{input.data(),input.size()},{nullptr,0},{nullptr,0},out);};

@@ -59,3 +59,24 @@ checkpoint is an actual-source CPU adapter regression with injected provider
 failures and no registered DDI; a separate Windows ABI and production-link
 check follows. A J313 run is justified only after a complete truthful
 CORE_0010 table and compiler/owner mapping exist.
+
+## EXP1744 internal Standard preflight checkpoint
+
+The actual-source fixture now calls an unregistered
+`AgxD3D12R1CopyStandardShaderPreflight` wrapper. It checks the first eight
+caller-trusted PROGRAM bytes against an explicit maximum and checks Standard
+IO counts, pointers and multiplication against an explicit entry limit before
+acquiring a provider lease. On these deterministic failures it returns
+`Invalid`, clears layout/publication and does not reach the device failure
+sink. A valid actual DXIL PROGRAM plus one Standard input entry still copies
+owned bytes through the existing separate Calculate/Copy operations.
+
+The new fixture failed first on the missing function (four undeclared calls),
+then the source-bound host ASan/UBSan provider fixture passed 96 checks with
+empty stderr. The pinned Windows ARM64 WDK syncheck compiled both DDI
+variants and winsys with rc=0; the builder's header SHA-256 matched the
+current source. This is a caller-trusted internal CPU preflight only. It
+cannot prove body readability, pointer lifetime across separate runtime
+Calc/Create calls, or permitted `pfnSetErrorCb` values. `CORE_0010` stays
+unregistered and SHADER_MODELS unchanged. The next source-first step must
+resolve those typed runtime premises before a hardware admission experiment.
