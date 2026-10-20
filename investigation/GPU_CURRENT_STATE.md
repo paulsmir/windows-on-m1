@@ -8,6 +8,18 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 21:32Z — X64 CODE28 KMT CONTROL PASS; PACKAGE QUERY NEXT
+
+EXP1798 on normal J313 Code28/PackageAbsent/8CPU ran exact EXP1797 x64
+KMT UMD-name query: pointer8, EnumAdapters2 two baseline WARP adapters,
+DX9/10/11/12 names `d3d10warp.dll`, AGX_KMT_UMDNAME DONE, exit0/stderr empty.
+Pre/post package absent gates PASS, no reboot. Legacy `IsWow64Process`
+printed0 and is not used as architecture proof; EXE PE is x64. Next one
+exact-package run queries UMD names from x64 and native ARM64 callers,
+then full FactoryV2 rollback. Current guest still Code28/PackageAbsent/8CPU.
+
+## Prior state superseded by EXP1798 control
+
 ## CURRENT 2026-10-20 21:29Z — X64 UMD-NAME QUERY BUILT; CODE28 CONTROL NEXT
 
 EXP1797 rebuilt the existing D3DKMT UMD-name diagnostic source as x64 PE
