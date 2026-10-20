@@ -10,8 +10,10 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(disable : 4201)
 #include <d3d12umddi.h>
 #include <cstddef>
+#include <cstdint>
 #include <climits>
 #include <cstring>
+#include <limits>
 #include <tuple>
 #include <type_traits>
 #include "agx_d3d12_view_mapping.h"
@@ -413,6 +415,7 @@ static AgxD3d12Range *RangesOf(const AgxD3d12RootSignature *root) {
 static D3D12DDI_STATIC_SAMPLER *StaticSamplersOf(const AgxD3d12RootSignature *root) {
     return reinterpret_cast<D3D12DDI_STATIC_SAMPLER *>(RangesOf(root) + root->range_count);
 }
+#include "agx_d3d12_r1_root_canonical.h"
 static UINT RootParameterDwords(const D3D12DDI_ROOT_PARAMETER &p) {
     switch (p.ParameterType) {
     case D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE: return 1;
