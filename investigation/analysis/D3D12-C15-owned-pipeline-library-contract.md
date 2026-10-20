@@ -468,3 +468,23 @@ invalid callback contexts were refused, exit0/stderr empty. The guest remained
 Code28/PackageAbsent/8CPU. The callback remains unlinked to the production UMD;
 this CPU test does not validate library import, recipe semantics, capabilities,
 DXIL execution or GPU rendering.
+
+## 2026-10-20 typed PSO scalar snapshot (EXP1775)
+
+The current PSO stores raw `D3D12DDIARG_CREATE_PIPELINE_STATE_0001 desc`
+including runtime handles, although it separately copies CS/VS/PS tokens and
+some state for ordinary lazy compilation. The pinned WDK26100 typed0010 PSO
+structure was inspected. An original unlinked 80-byte scalar snapshot now
+encodes only magic/version, an explicit eleven-handle *presence* bitmask,
+SampleMask, strip cut, topology, active RT count/formats, DSV format, sample
+count/quality and NodeMask in little-endian fields. It serializes no pointer,
+private handle value, C padding or `LibraryReference.PipelineIndex`. Inactive
+RTV slots are zero. Nonzero LibraryReference is refused because its elision
+semantics are still unknown; output/input overlap and invalid RT count are
+refused before any write. This is one leaf candidate, not an owned PSO recipe.
+
+The actual-header-shaped host fixture was RED while the header was absent,
+then GREEN under ASan/UBSan: distinct pointer values and padding yield equal
+bytes, while meaningful scalar changes differ and unsupported/short/overlap
+cases refuse. It does not establish the exact Windows ABI until a pinned WDK
+ARM64 compile, nor any runtime callback error/graph/import semantics.
