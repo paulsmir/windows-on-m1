@@ -8,6 +8,26 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-20 21:02Z — EXP1793 APP EARLY CRASH; RECOVERY_DONE
+
+Exact EXP1764/1765 package30.0.1764.0/oem5.inf, same source c4980c7e,
+full-owner Code0/8CPU. Microsoft nBody SM5 x64 PID10164 exited before first
+5s sample with 0xc0000409, WER ucrtbase.dll/data7. WER loaded dxgi/d3d12/
+app-local D3D12Core, no AppleAgx UMD at crash; no app UMD trace or screenshot.
+This does not identify the failed HRESULT or establish whether UMD was loaded
+earlier. Same-package D3D12 probe 60 PASS/known C21E SKIP, all 61 named
+statuses equal EXP1765, DWM fault log empty; no fresh GL/corpus/CS claim.
+FactoryV2 exact recovery RECOVERY_DONE Code28/PackageAbsent/noService/8CPU,
+normal GPU-visible guest current. Evidence/root verdict in
+`.local/experiments/EXP1793-nbody-gpu`. Next minimal discriminator: test-only
+instrumented external sample records selected DXGI adapter and first failing
+HRESULT/call without modifying driver. Free 3DMark Night Raid is an additional
+native DX12 FL11_0 Windows-on-Arm benchmark candidate; Portal 2 is DX9 and
+only an indirect D3D9On12 check. First release remains SM5.1 plus real games.
+Preserve user-dirty Mu and security-blocked C21E/UBFE/C27 unchanged.
+
+## Prior state superseded by EXP1793 verdict and recovery
+
 ## CURRENT 2026-10-20 20:32Z — SM5.x SAMPLE J313 RUNTIME PASS; GPU CHECK NEXT
 
 EXP1792 CPU-only normal Code28/PackageAbsent J313: exact x64 Microsoft nBody
