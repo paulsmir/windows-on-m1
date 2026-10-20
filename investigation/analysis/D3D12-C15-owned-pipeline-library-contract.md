@@ -381,3 +381,26 @@ Likewise the16MiB arena,1024entries and8192components are original CPU resource
 limits that may be revised before implementation; none is asserted by WDK or
 Microsoft documentation. No hardware experiment is proposed to discover any of
 these documented-interface questions by trial.
+
+## 2026-10-20 CPU envelope checkpoint (EXP1770)
+
+The original `agx_d3d12_library_wire_envelope.h` adds only the first structural
+check for the proposed 16 MiB private arena. Its scope is deliberately smaller
+than import: it checks magic/version/header/arena size, bounded table counts,
+8-byte offset alignment, subtraction-based table extents, table ordering and
+reserved header bytes. It returns offsets and counts only after all these checks
+pass and clears output on failure. It does not inspect entries, zero gaps,
+verify digests or compatibility keys, follow component references, own memory,
+or publish a library. No DDI callback, model/capability, package or GPU path
+uses it yet.
+
+The deterministic invariant is that malformed outer lengths never reach an
+entry reader or wrap an extent calculation. The new actual-header fixture tests
+empty and nonempty envelopes, NULL/truncated buffers, count limits, overlarge
+and misaligned offsets, table overlap and reserved bytes. The test was RED with
+a missing header, then GREEN under ASan/UBSan; the adjacent D3D12 ABI/native
+owner and ledger suite is also GREEN. Next implement the remaining checked
+component-table/payload/digest/compatibility validation in one bounded CPU
+import transaction before connecting this predicate to the zero-cache library.
+The exact nonzero LibraryReference elision/error rules and full R1/SM6 gates
+above remain unknown.
