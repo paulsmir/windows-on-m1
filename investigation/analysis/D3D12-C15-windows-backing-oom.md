@@ -51,3 +51,13 @@ unobserved allocations, arbitrary DXIL inputs, whole-library sanitizer
 coverage, typed CORE_0010 admission or AGX execution. Return to a distinct
 C15 contract gate rather than repeating this allocation sweep without new
 source-site or fixture evidence.
+
+The exact native allocator source has only two direct `malloc` calls:
+`ChainAllocator::Block::Block` backs ordinary 64-KiB blocks and larger
+`allocate_huge` blocks, while `allocate_in_thread` uses its direct allocation
+branch only without an active thread-local allocator. The Windows experiments
+above inject the observed 64-KiB subset of the first site. Neither pinned
+DXIL fixture observed a larger matching backing request, and the current
+owned-converter job enters the thread-local allocator context. There is no
+source-derived Nth position for a huge-block or no-TLS guest fault run yet;
+do not extrapolate the nine-case result to those branches.

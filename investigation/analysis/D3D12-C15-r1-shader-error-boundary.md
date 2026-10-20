@@ -80,3 +80,14 @@ cannot prove body readability, pointer lifetime across separate runtime
 Calc/Create calls, or permitted `pfnSetErrorCb` values. `CORE_0010` stays
 unregistered and SHADER_MODELS unchanged. The next source-first step must
 resolve those typed runtime premises before a hardware admission experiment.
+
+One bounded official-documentation pass after EXP1744 checked Microsoft's
+[CreateShader_0010 reference](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d12umddi/nc-d3d12umddi-pfnd3d12ddi_create_shader_0010)
+and [Handling Errors](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/handling-errors).
+The former publishes the `VOID` signature but no callback-specific allowed
+HRESULT list. The latter says the allowed set is DDI-specific and that an
+unlisted value is critical. The pinned WDK supplies no error-category
+annotation for this callback. This pass therefore did not justify mapping
+provider/parser failure to `E_INVALIDARG`, `E_FAIL` or `E_OUTOFMEMORY` in a
+registered table. Do not repeat an equivalent documentation search without
+a new primary source or measured runtime contract.

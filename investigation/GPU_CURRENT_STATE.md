@@ -20,6 +20,9 @@ This covers only observed custom backing requests/two inputs, not universal
 OOM, unseen shapes, typed CORE_0010 or GPU. Return to distinct C15 contract
 gate. Last GPU-qualified source EXP1681, no AppleAgx package/active GPU run;
 owner publication race EXP1745 still awaits callback/lifetime policy.
+EXP1751 restored the current actual CreateDevice poisoned-storage fixture;
+EXP1752 added a bounded durable expected failure plus separate outcome-shape
+check for that race.
 
 ## Prior state superseded by persistent Windows backing check
 
