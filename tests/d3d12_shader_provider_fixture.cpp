@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <d3d12umddi.h>
 #include "agx_shader_input_provider.h"
+#include "agx_d3d12_r1_shader_transaction.h"
 #include "agx_d3d12_zero_cache_library.h"
 #include <array>
 #include <vector>
@@ -50,6 +51,29 @@ int main(int argc,char**argv){
   std::vector<unsigned char> snapshot(bytes,bytes+layout.total);need(AgxCpuReleaseInput(provider,lease)==P::Ok,"release input lease");
   input.assign(input.size(),0xcc);std::memset(&signature,0xcc,sizeof(signature));need(!std::memcmp(bytes,snapshot.data(),snapshot.size()),"owned survives after release/mutation");
   need(AgxCpuReleaseInput(provider,lease)==P::Invalid,"stale lease ID refused without pointer read");sa.publication=nullptr;
+ }
+ {
+  D3D12DDIARG_CREATE_SHADER_0010 shader{};shader.hRootSignature={&ra};
+  shader.pShaderCode=reinterpret_cast<const UINT*>(dxil.data());
+  alignas(64)std::array<unsigned char,8192> transaction_storage{};
+  AgxShaderOwnedLayout transaction_layout{};AgxShaderOwned* transaction_owned=nullptr;
+  auto tx=AgxD3d12R1CopyShaderTransaction(provider,a,ar,&shader,5,
+      {dxil.data(),dxil.size()},{},{},transaction_storage.data()+64,
+      transaction_storage.size()-64,&transaction_layout,&transaction_owned);
+  need(tx.status==P::Ok&&tx.core_called&&transaction_owned&&transaction_layout.total>0,
+       "transaction actual owned copy");
+  transaction_owned=nullptr;
+  tx=AgxD3d12R1CopyShaderTransaction(provider,a,ar,&shader,5,
+      {dxil.data(),dxil.size()},{},{},transaction_storage.data()+64,
+      transaction_layout.total-1,&transaction_layout,&transaction_owned);
+  need(tx.status==P::CoreFailure&&tx.core_status==S::StorageInvalid&&
+       !transaction_owned&&!transaction_layout.total,"transaction short capacity cleanup");
+  shader.hRootSignature={&rb};
+  tx=AgxD3d12R1CopyShaderTransaction(provider,a,ar,&shader,5,
+      {dxil.data(),dxil.size()},{},{},transaction_storage.data()+64,
+      transaction_storage.size()-64,&transaction_layout,&transaction_owned);
+  need(tx.status==P::Invalid&&!transaction_owned&&!transaction_layout.total,
+       "transaction wrong root identity refused");
  }
  auto input=dxil;D3D12DDIARG_CREATE_SHADER_0010 args{};args.hRootSignature={&ra};args.pShaderCode=reinterpret_cast<const UINT*>(input.data());
  auto acquire=[&](AgxCpuDevice d,AgxCpuRoot r,AgxCpuInputLease*out){return AgxCpuAcquireInput(provider,d,r,&args,5,{input.data(),input.size()},{nullptr,0},{nullptr,0},out);};

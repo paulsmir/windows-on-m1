@@ -4,7 +4,7 @@ import json
 from d3d12_shader_owned_source import render as render_owned,source_inputs as owned_inputs,TOOL,TOOL_SHA,SDK,WDK,WDK_SHA,sha
 ROOT=Path(__file__).resolve().parents[1]
 def source_inputs():
- return list(dict.fromkeys(owned_inputs()+[ROOT/n for n in ['drivers/apple-agx/d3d12/agx_shader_input_provider.h','drivers/apple-agx/d3d12/agx_shader_input_provider.cpp','tests/d3d12_shader_provider_fixture.cpp','tests/d3d12_shader_provider_source.py','tests/test_d3d12_shader_provider.py']]))
+ return list(dict.fromkeys(owned_inputs()+[ROOT/n for n in ['drivers/apple-agx/d3d12/agx_shader_input_provider.h','drivers/apple-agx/d3d12/agx_shader_input_provider.cpp','drivers/apple-agx/d3d12/agx_d3d12_r1_shader_transaction.h','tests/d3d12_shader_provider_fixture.cpp','tests/d3d12_shader_provider_source.py','tests/test_d3d12_shader_provider.py']]))
 def commands(receipts,generated):
  r,g=Path(receipts).resolve(),Path(generated).resolve();d=ROOT/'drivers/apple-agx/d3d12';x=ROOT/'drivers/apple-agx/mesa/dxil';l=ROOT/'drivers/apple-agx/mesa/dxbc'
  flags=['-isysroot',str(SDK),'-fsanitize=address,undefined','-fno-omit-frame-pointer']

@@ -42,7 +42,7 @@ class ShaderProvider(unittest.TestCase):
     if timed or rc or (out/f'{n}.stderr').stat().st_size:raise RuntimeError('NONZERO_RC_STDERR_OR_TIMEOUT_STOP step='+str(n))
     pins()
     if n==4:
-     marker=(out/f'{n}.stdout').read_text();expected_marker='PASS provider caller-serialized checks=79 exact-core legacy+DXIL/ownedopaque-root/leases/generations/sinks/publishlast noDDIpolicy\n'
+     marker=(out/f'{n}.stdout').read_text();expected_marker='PASS provider caller-serialized checks=90 exact-core legacy+DXIL/ownedopaque-root/leases/generations/sinks/publishlast noDDIpolicy\n'
      if marker!=expected_marker:raise RuntimeError('ACTUAL_PROVIDER_79_MARKER_MISMATCH')
   except Exception as e:error=str(e)
   finally:
