@@ -8,7 +8,39 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 00:44Z — EXP1594 SIGNED PACKET READY; EXP1582 RECOVERY_DONE
+## CURRENT 2026-10-20 01:21Z — EXP1594 RECOVERY_DONE; C15 IDENTITY NATIVE INTEGRATION VALIDATED
+
+EXP1594 signed1592/source57bd4432: exactly63unique nonE D3D12 PASS/0FAIL,
+C21EknownSKIP, baseline1582 missing0; ROOTC/ROOTG bound receipts,
+C14A512/512, C24ABC/C25/C26 unchanged. 73SMOKEPASS+knownMSAAFAIL,
+KMDpool5workersforeign_reclaim1/FL11/corpus414each64/4createfail/DWM0.
+GL52.5/internalGL59.6/CS46.282fps single samples. FactoryV2 exact-owner
+recovery finished normal Code28/PackageAbsent/noService/8CPU/RECOVERY_DONE
+after boot2026-10-20T01:20:23Z; no hidden/fallback. Root verdict
+.local/experiments/EXP1594-d3d12-live-identity/root-verdict1594.json
+SHAad4477ca5c2ced53dea0c78b67372559e9bea03168dcea0a16bd0f357d217a96.
+Actual-source CPU ASan/UBSan/TSan proves live A/B/unknown/retired identities;
+GPU run proves native private layout and ordinary regressions. Zero-native-cache
+module is still unlinked: no R1 library execution/SM6 admission claim.
+Selected dxil-spirv upstream HEAD on2026-10-20 remained exact licensed pin
+8434b063; internal recoverable OOM blocker persists. Next causal target is
+coherent typed0010/R1 library/provider/allocator contract, using source-first
+offline gates; current0003/SM5.1 caps unchanged. No active GPU experiment.
+Keep J313 normal visible inert; preserve userdirtyMu and C21E/UBFE/C27 blocks.
+Ledger/verdict commit pending.
+
+## Prior state superseded by EXP1594 verdict
+
+EXP1594 dispatched00:45:27Z unified session76010/root-run1594.log,
+stageHASHES_MATCH23/ARTIFACTS_AND_STAGE_PASS/factoryV2 wrapper61acaddf,
+pipeline generated BEFORE commit c6930ccd. Full-owner Windows pinnedSSH up,
+first probe RESULT failures0; DWM/GL and complete regression still pending.
+DO_NOT_RESTART. Monitor scratch newexp1594.log/watchdog1594.log/run1594.log.
+After TOOL_d3d12-on_END+NEWEXP_DONE check63nonE+C21ESKIP and all regressions,
+collect evidence then exact rec1594h/recover.sh to RECOVERY_DONE. No final
+while experiment or recovery active.
+
+## Signed packet plan superseded by active EXP1594
 
 J313 normal visible guest Code28/PackageAbsent/noService/8CPU boot00:19:02Z,
 USB m1n1 uartproxy present and normal recovery-owned launcher active. No GPU
