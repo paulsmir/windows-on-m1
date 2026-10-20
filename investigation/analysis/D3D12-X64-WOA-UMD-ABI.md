@@ -1,9 +1,11 @@
 # D3D12 x64 applications on Windows on Arm: UMD ABI boundary
 
 Status 2026-10-20: EXP1800 confirmed the selected UMD name and the package's
-missing x64-compatible image. The correction is planned in the UMD/package
-layer; no new driver binary is accepted yet. The first-release target is
-SM5.1 with games. A native ARM64 benchmark cannot substitute for x64 games.
+missing x64-compatible image. EXP1803 built a no-code Arm64X forwarder, and
+EXP1805 proved on J313 that one filename loads the x64 and ARM64 marker
+backing DLLs in the corresponding processes. A real x64 UMD and signed
+package remain open. The first-release target is SM5.1 with games. A native
+ARM64 benchmark cannot substitute for x64 games.
 
 ## Primary sources and observed evidence
 
@@ -89,9 +91,11 @@ stays the normal GPU-visible FactoryV2 exact-package path.
    the x86 `UserModeDriverNameWow` and its package location.
 3. Before packaging, check x64/ARM64/Arm64X PE views, exact exports, imports,
    stack frames, source manifest, license notices and both architecture
-   dependency sets. Stage a loose forwarder/backing-DLL set in the normal
-   Code28 guest and prove x64 and ARM64 `LoadLibrary`/`GetProcAddress`
-   independently. These are loader checks, not GPU claims.
+   dependency sets. The loose no-GPU marker forwarder check is complete:
+   EXP1805 x64 returned `0x18006422` from only the x64 backing DLL, ARM64
+   returned `0x18006412` from only the ARM64 backing DLL, with both callers
+   exiting zero on the normal Code28 guest. Repeat import/export and runtime
+   checks with the real UMD binaries before signing.
 4. Add the three files to INF/CAT with exact names and hashes, package-sign
    once, then run one J313 D3D12 hardware checkpoint: both native probe and
    x64 app CreateDevice/UMD receipts, full regressions, and FactoryV2 exact
@@ -104,14 +108,14 @@ stays the normal GPU-visible FactoryV2 exact-package path.
   result.json, generated headers and archive hashes before linking.
 - Whether the existing UMD source compiles unchanged for x64 and whether the
   x64 backing DLL passes export/stack/import checks.
-- Whether the Windows loader accepts an Arm64X pure forwarder for the exact
-  `UserModeDriverName` path, and whether `OpenAdapter12` is reached from the
-  x64 app. A loose-DLL CPU-only load is the smallest prepackage discriminator.
+- Whether the real x64 UMD loads all matched x64 Mesa/runtime dependencies
+  and reaches `OpenAdapter12` from an x64 D3D12 app. EXP1805 proves only
+  forwarding to marker DLLs, not that DDI behavior.
 - Whether the x64 game-like workload exposes a *second* D3D12 contract gap
   after device creation. Keep SM6 fail-closed; Night Raid FL11_0 and a real
   game remain separate acceptance steps.
 
-The first implementation checkpoint is offline: one fresh x64 UMD with source
+The next implementation checkpoint is offline: one fresh x64 UMD with source
 and dependency receipts, no J313 mutation. If it fails, fix only the x64
-build closure. The first hardware checkpoint is a loose Arm64X loader test on
-normal Code28; only after that should a new signed package be installed.
+build closure. The Arm64X loader checkpoint is complete; only after the real
+x64 UMD passes offline gates should a new signed package be installed.
