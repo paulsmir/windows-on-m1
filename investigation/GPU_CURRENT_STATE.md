@@ -27,6 +27,13 @@ J313 is current, no AppleAgx package staged/installed, no active GPU experiment.
 Preserve user-dirty Mu and security-blocked C21E/UBFE/C27 untouched. Main branch
 includes additional unqualified C25/C26/C27/R1 edits beyond isolated c498;
 EXP1765 validates owner publication only in the a6-compatible source.
+USER READINESS DECISION 2026-10-20: first release targets stable D3D12 SM5.1
+with games; DXIL/SM6 is deferred. EXP1776/1777 found no installed native D3D12
+game, only Counter-Strike/Half-Life and Portal 2 plus Solitaire. EXP1778
+confirmed Portal 2 EXE and OS x86 D3D9On12/D3D12Core present, but routing to
+our D3D12 UMD is unproven. Next target is a Portal 2 D3D9On12 game-path
+checkpoint with exact EXP1764 package bytes, full rollback and module/UMD receipts.
+
 C15 CORE_0010/SM6 remains fail-closed. EXP1770/1771 added unlinked CPU-only
 pipeline-library envelope/table structural gates and digest/identity predicate;
 EXP1774 proved the unlinked Windows CNG SHA-256 callback on J313 CPU with
