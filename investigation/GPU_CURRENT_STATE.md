@@ -20,8 +20,13 @@ stopped before Steam/game (PortalPid null, no D3D12 route verdict). Root verdict
 SHA6f6fd5901b9c2bed11a69539b57bb4bf6b3c991fd051b0724c629fd5add5a1e8.
 EXP1781 exact FactoryV2 rollback RECOVERY_DONE Code28/PackageAbsent/8CPU;
 new host proxy helper proved two stable transitions. No package/active game run.
-Next: new game ID with only limited-task preflight fixed, same package/game
-hashes, measure module and D3D12 UMD receipts before any playability claim.
+EXP1782 fixed the privilege gate and created Portal2 PID6004, but the process
+exited before its first15s sample without WER/game log/UMD trace. Exact package
+recovered RECOVERY_DONE Code28/PackageAbsent/8CPU. EXP1783 bounded Steam log
+read showed no tracked AppID620, and EXP1784 Valve -applaunch620 on clean guest
+produced zero Portal2 processes in90s. Stop this route until Steam/account state
+changes. Next: pinned external D3D12 game-like engine workload for SM5.1 driver
+progress; do not call release ready without a real playable game.
 Preserve user-dirty Mu; C21E/UBFE/C27 remain security-blocked.
 
 ## Prior state superseded by EXP1780/1781 game and recovery verdict
