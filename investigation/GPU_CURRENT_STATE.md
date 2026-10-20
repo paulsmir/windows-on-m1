@@ -8,7 +8,23 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 03:14Z — C15 R1 BLEND/ELEMENT/DEPTH/RASTER NATIVE LINKS; EXP1594 RECOVERY_DONE
+## CURRENT 2026-10-20 03:30Z — C15 R1 STATE + PSO NATIVE LINKS; EXP1594 RECOVERY_DONE
+
+Isolated sourcebf2e8be5 parent accepted depth/rasterae3eb572 changes only
+typed 0010 PSO destination adapter: 727 other archived files and current
+CORE_0003 table/caps byteequal. EXP1646 runtime203rc0, EXP1647 fresh8rc0,
+EXP1648 full SYS/UMD build rc0/version30.0.1648.0/no new warnings/stackPASS.
+EXP1650 tlog3149reads/344unique UNKNOWN0 after exact two-header pins;
+imports equal accepted1527, exports two openers. Combined build-only receipt
+.local/c15-r1-pso-package1648-result/root-r1-pso-link-review1650.json
+SHAdf0cfa78b483a6fd08e83f1da05a33c160a3873c0eef27e22ea017c6da969141.
+No signed install, PE execution or J313 run: typed blend, element,
+depth/raster and PSO callbacks remain unregistered in CORE_0003/SM5.1.
+Next C15 target typed shader input/lifetime and coherent CORE_0010 table;
+dxil-spirv recoverable internal OOM remains independent production blocker.
+Normal visible guest Code28/PackageAbsent/noService/8CPU; no GPU discriminator.
+
+## Prior state superseded by EXP1650 PSO native link verdict
 
 Isolated sourceae3eb572 parent accepted element07a9d20e changes only
 typed 0010 depth/raster CPU wrappers; 727 other archive files, current

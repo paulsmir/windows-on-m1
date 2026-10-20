@@ -48,3 +48,15 @@ EXP1643 staged exact DDI/header/script hashes and pinned WDK26100 ARM64
 native-owner/NONE/winsys syntax returned rc0 for all three. Raw builder log
 SHA256 `ddac7d6b56ae5ad6b0982f2191bba1037db051b79879fc66b6a51330c42730e1`.
 Full production link and R1 table/lifetime admission remain separate.
+
+The isolated source `bf2e8be5` added only this PSO adapter over accepted
+depth/raster source. EXP1646 normal runtime and EXP1647 fresh eight helpers
+passed. EXP1648 compiled/linked full ARM64 SYS/UMD without new warnings or
+linker errors. EXP1650 reviewed all 3,149 actual tlog reads with zero unknown
+paths after exact frozen provider/projector header pins, baseline UMD imports,
+two adapter-open exports and both stack gates. Combined build-only receipt:
+`.local/c15-r1-pso-package1648-result/root-r1-pso-link-review1650.json`
+(SHA256 `df0cfa78b483a6fd08e83f1da05a33c160a3873c0eef27e22ea017c6da969141`).
+The callback remains unregistered in CORE_0003, and the package was not
+installed or executed on J313. The lifetime of referenced shader/root/state
+objects under every R1 library load path is not established by this adapter.
