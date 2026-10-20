@@ -275,6 +275,15 @@ fresh provider device token. Its success/failure/invalid controls pass under
 ASan/UBSan again. This repair does not change `EnsureOwner` or make the
 EXP1745 race test green.
 
+EXP1752 incorporated the synchronized EXP1745 race into that durable
+source-extracted fixture. A nondecorated test requires either the exact known
+two-owner/overwrite failure or a single-owner successful result, so a hang or
+different error cannot masquerade as the expected failure. The separate
+`expectedFailure` assertion requires single-owner publication and currently
+fails as expected. Three runs each produced five tests with exactly one
+expected failure. After the owner-layer fix, an unexpected success will force
+review and removal of the marker. The production owner code remains unchanged.
+
 The earlier heap-registry observation is superseded: current source uses
 `heap_lock` around register, unregister and lookup. This counterexample
 isolates owner publication. Current `AgxD3d12OwnerCreate` synchronously calls

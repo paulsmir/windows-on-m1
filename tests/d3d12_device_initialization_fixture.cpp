@@ -3,6 +3,10 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
 // Host stand-in for unused Windows private-state lock; native ABI gate is separate.
 struct SRWLOCK { uintptr_t value; };
 static void InitializeSRWLock(SRWLOCK *p) { p->value = 0; }
@@ -38,11 +42,22 @@ struct AGX_D3D12_OWNER_ARGS {
  void (*Error)(void *,HRESULT); void *ErrorContext; ULONG Generation;
 };
 static struct { const void *callbacks; struct {void *handle;} runtime; } adapter_object;
-static AGX_D3D12_OWNER fresh_owner;
+static AGX_D3D12_OWNER fresh_owner, race_owner_a{1}, race_owner_b{2};
 static unsigned owner_calls;
 static HRESULT owner_result=S_OK;
 static AGX_D3D12_OWNER_ARGS captured;
+static bool race_mode, release_first, release_second;
+static unsigned race_entries;
+static std::mutex race_mutex;
+static std::condition_variable race_cv;
 static HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *a,AGX_D3D12_OWNER **out) {
+ if(race_mode){
+  std::unique_lock<std::mutex> lock(race_mutex);
+  const unsigned slot=++race_entries;++owner_calls;race_cv.notify_all();
+  if(!race_cv.wait_for(lock,std::chrono::seconds(5),[&]{return slot==1?release_first:release_second;}))
+   return E_INVALIDARG;
+  *out=slot==1?&race_owner_a:&race_owner_b;return S_OK;
+ }
  ++owner_calls; captured=*a; *out=SUCCEEDED(owner_result)?&fresh_owner:nullptr; return owner_result;
 }
 /* Only the provider's CreateDevice registration contract is stubbed; the
@@ -77,6 +92,28 @@ int main(int argc,char **argv) {
   a.hDrvDevice.pDrvPrivate=nullptr;
   check(CreateDevice({},&a)==E_INVALIDARG,"null private storage accepted");
   check(std::memcmp(&device,&previous,sizeof device)==0,"invalid call mutated private storage"); return 0;
+ }
+ if(std::strcmp(argv[1],"race")==0){
+  std::memset(&device,0xa5,sizeof device);
+  check(CreateDevice({},&a)==S_OK,"race device creation");
+  race_mode=true;AGX_D3D12_OWNER *first=nullptr,*second=nullptr;
+  std::thread ta([&]{first=EnsureOwner(&device);});
+  {std::unique_lock<std::mutex> lock(race_mutex);
+   check(race_cv.wait_for(lock,std::chrono::seconds(2),[]{return race_entries>=1;}),
+         "first owner create entered");}
+  std::thread tb([&]{second=EnsureOwner(&device);});
+  bool second_entered=false;
+  {std::unique_lock<std::mutex> lock(race_mutex);
+   second_entered=race_cv.wait_for(lock,std::chrono::seconds(1),[]{return race_entries>=2;});
+   release_first=true;race_cv.notify_all();}
+  ta.join();
+  {std::lock_guard<std::mutex> lock(race_mutex);release_second=true;race_cv.notify_all();}
+  tb.join();
+  std::printf("ACTUAL_OWNER_RACE calls=%u second_entered=%u first=%p second=%p published=%p\n",
+              owner_calls,second_entered,first,second,device.owner);
+  check(owner_calls==1&&first==second&&device.owner==first,
+        "duplicate owner construction/publication");
+  return 0;
  }
  for(unsigned poison: {0xffu,0xa5u}) {
   std::memset(&device,poison,sizeof device);

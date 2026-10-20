@@ -37,7 +37,7 @@ class DeviceInitialization(unittest.TestCase):
         cpp.write_text(fixture.replace('/* PRODUCTION_DEVICE */', actual))
         cls.exe = Path(cls.tmp.name) / 'device'
         build = subprocess.run([os.environ.get('CXX', 'clang++'), '-std=c++17',
-                                '-fsanitize=address,undefined', str(cpp), '-o', str(cls.exe)],
+                                '-fsanitize=address,undefined', '-pthread', str(cpp), '-o', str(cls.exe)],
                                capture_output=True, text=True)
         if build.returncode:
             cls.tmp.cleanup()
@@ -48,7 +48,7 @@ class DeviceInitialization(unittest.TestCase):
         cls.tmp.cleanup()
 
     def run_case(self, mode):
-        run = subprocess.run([str(self.exe), mode], capture_output=True, text=True)
+        run = subprocess.run([str(self.exe), mode], capture_output=True, text=True, timeout=10)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
     def test_poisoned_reused_device_gets_fresh_lazy_owner(self):
@@ -59,3 +59,17 @@ class DeviceInitialization(unittest.TestCase):
 
     def test_invalid_args_leave_storage_untouched(self):
         self.run_case('invalid')
+
+    def test_concurrent_owner_schedule_has_only_known_outcomes(self):
+        run = subprocess.run([str(self.exe), 'race'], capture_output=True, text=True, timeout=10)
+        if run.returncode == 1:
+            self.assertIn('ACTUAL_OWNER_RACE calls=2 second_entered=1', run.stdout)
+            self.assertIn('duplicate owner construction/publication', run.stderr)
+        else:
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+            self.assertIn('ACTUAL_OWNER_RACE calls=1', run.stdout)
+            self.assertEqual(run.stderr, '')
+
+    @unittest.expectedFailure
+    def test_concurrent_owner_publication_is_single(self):
+        self.run_case('race')
