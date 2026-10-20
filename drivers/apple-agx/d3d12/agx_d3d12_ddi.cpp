@@ -573,6 +573,93 @@ static_assert(std::is_same_v<decltype(&CreateBlendState0010),
                              PFND3D12DDI_CREATEBLENDSTATE_0010>);
 using DepthStencilState = AgxD3d12State<D3D12DDI_DEPTH_STENCIL_DESC, 2>;
 using RasterizerState = AgxD3d12State<D3D12DDI_RASTERIZER_DESC, 3>;
+/* CPU-only independent R1 state projections; CORE_0010 is not advertised. */
+static D3D12DDI_DEPTH_STENCIL_DESC ProjectR1Depth(const D3D12DDI_DEPTH_STENCIL_DESC_0010 *input) {
+    D3D12DDI_DEPTH_STENCIL_DESC state;
+    std::memset(&state, 0, sizeof(state));
+    state.DepthEnable = input->DepthEnable;
+    state.DepthWriteMask = input->DepthWriteMask;
+    state.DepthFunc = input->DepthFunc;
+    state.StencilEnable = input->StencilEnable;
+    state.FrontEnable = input->FrontEnable;
+    state.BackEnable = input->BackEnable;
+    state.StencilReadMask = input->StencilReadMask;
+    state.StencilWriteMask = input->StencilWriteMask;
+    state.FrontFace.StencilFailOp = input->FrontFace.StencilFailOp;
+    state.FrontFace.StencilDepthFailOp = input->FrontFace.StencilDepthFailOp;
+    state.FrontFace.StencilPassOp = input->FrontFace.StencilPassOp;
+    state.FrontFace.StencilFunc = input->FrontFace.StencilFunc;
+    state.BackFace.StencilFailOp = input->BackFace.StencilFailOp;
+    state.BackFace.StencilDepthFailOp = input->BackFace.StencilDepthFailOp;
+    state.BackFace.StencilPassOp = input->BackFace.StencilPassOp;
+    state.BackFace.StencilFunc = input->BackFace.StencilFunc;
+    return state;
+}
+static SIZE_T APIENTRY CalcPrivateDepthStencilStateSize0010(D3D12DDI_HDEVICE device,
+    const D3D12DDI_DEPTH_STENCIL_DESC_0010 *desc) {
+    if (!desc || FAILED(AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference)))
+        return 0;
+    return sizeof(D3D12DDI_DEPTH_STENCIL_DESC);
+}
+static VOID APIENTRY CreateDepthStencilState0010(D3D12DDI_HDEVICE device,
+    const D3D12DDI_DEPTH_STENCIL_DESC_0010 *desc, D3D12DDI_HDEPTHSTENCILSTATE handle) {
+    if (!desc || !handle.pDrvPrivate) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    const HRESULT reference = AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference);
+    if (FAILED(reference)) {
+        ReportRejectedDeviceError(device, reference);
+        return;
+    }
+    const D3D12DDI_DEPTH_STENCIL_DESC state = ProjectR1Depth(desc);
+    DepthStencilState::create(device, &state, handle);
+}
+static D3D12DDI_RASTERIZER_DESC ProjectR1Raster(const D3D12DDI_RASTERIZER_DESC_0010 *input) {
+    D3D12DDI_RASTERIZER_DESC state;
+    std::memset(&state, 0, sizeof(state));
+    state.FillMode = input->FillMode;
+    state.CullMode = input->CullMode;
+    state.FrontCounterClockwise = input->FrontCounterClockwise;
+    state.DepthBias = input->DepthBias;
+    state.DepthBiasClamp = input->DepthBiasClamp;
+    state.SlopeScaledDepthBias = input->SlopeScaledDepthBias;
+    state.DepthClipEnable = input->DepthClipEnable;
+    state.ScissorEnable = input->ScissorEnable;
+    state.MultisampleEnable = input->MultisampleEnable;
+    state.AntialiasedLineEnable = input->AntialiasedLineEnable;
+    state.ForcedSampleCount = input->ForcedSampleCount;
+    state.ConservativeRasterizationMode = input->ConservativeRasterizationMode;
+    return state;
+}
+static SIZE_T APIENTRY CalcPrivateRasterizerStateSize0010(D3D12DDI_HDEVICE device,
+    const D3D12DDI_RASTERIZER_DESC_0010 *desc) {
+    if (!desc || FAILED(AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference)))
+        return 0;
+    return sizeof(D3D12DDI_RASTERIZER_DESC);
+}
+static VOID APIENTRY CreateRasterizerState0010(D3D12DDI_HDEVICE device,
+    const D3D12DDI_RASTERIZER_DESC_0010 *desc, D3D12DDI_HRASTERIZERSTATE handle) {
+    if (!desc || !handle.pDrvPrivate) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    const HRESULT reference = AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference);
+    if (FAILED(reference)) {
+        ReportRejectedDeviceError(device, reference);
+        return;
+    }
+    const D3D12DDI_RASTERIZER_DESC state = ProjectR1Raster(desc);
+    RasterizerState::create(device, &state, handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateDepthStencilStateSize0010),
+                             PFND3D12DDI_CALCPRIVATEDEPTHSTENCILSTATESIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreateDepthStencilState0010),
+                             PFND3D12DDI_CREATEDEPTHSTENCILSTATE_0010>);
+static_assert(std::is_same_v<decltype(&CalcPrivateRasterizerStateSize0010),
+                             PFND3D12DDI_CALCPRIVATERASTERIZERSTATESIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreateRasterizerState0010),
+                             PFND3D12DDI_CREATERASTERIZERSTATE_0010>);
 struct AgxD3d12ElementLayout {
     UINT elements;
     D3D12DDIARG_INPUT_ELEMENT_DESC element[1];
