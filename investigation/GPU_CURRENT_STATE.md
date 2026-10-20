@@ -8,7 +8,24 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-20 02:58Z — C15 R1 BLEND + ELEMENT NATIVE LINKS VERIFIED; EXP1594 RECOVERY_DONE
+## CURRENT 2026-10-20 03:14Z — C15 R1 BLEND/ELEMENT/DEPTH/RASTER NATIVE LINKS; EXP1594 RECOVERY_DONE
+
+Isolated sourceae3eb572 parent accepted element07a9d20e changes only
+typed 0010 depth/raster CPU wrappers; 727 other archive files, current
+CORE_0003 table/caps and prior R1 blend/element code byteequal. EXP1638
+runtime203rc0, EXP1639 fresh8rc0, EXP1640 full SYS/UMD build rc0/version
+30.0.1640.0/no new warnings/stackPASS. EXP1642 tlog3149reads/344unique
+UNKNOWN0 after exact two-header source pins; imports equal accepted1527,
+exports only two openers. Combined build-only receipt
+.local/c15-r1-depth-raster-package1640-result/root-r1-depth-raster-link-review1642.json
+SHA0e83c9cd36d341185edb421228c2b0c1bbcbc5ae865e38707b7b473f070c6707.
+No signed install, PE execution or J313 run: all new typed state callbacks
+remain unregistered under CORE_0003/SM5.1. Next C15 target typed shader and
+PSO/lifetime paths, then coherent CORE_0010 table; independent dxil-spirv
+internal recoverable OOM blocker remains. Normal visible guest
+Code28/PackageAbsent/noService/8CPU. No GPU discriminator yet.
+
+## Prior state superseded by EXP1642 depth/raster native link verdict
 
 Isolated source07a9d20e parent accepted blend34cacd10 changes only the
 typed 0010 element-layout wrapper DDI hunk; 727 other archived files,

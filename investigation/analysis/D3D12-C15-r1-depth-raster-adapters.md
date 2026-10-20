@@ -52,3 +52,14 @@ EXP1636 staged exact DDI/header/script hashes and pinned WDK26100 ARM64
 native-owner/NONE/winsys syntax returned rc0 for all three. Raw builder log
 SHA256 `ddac7d6b56ae5ad6b0982f2191bba1037db051b79879fc66b6a51330c42730e1`.
 Full production link and CORE_0010 publication remain separate.
+
+The isolated source `ae3eb572` changed only the depth/raster DDI hunk over
+accepted element source. EXP1638 normal runtime and EXP1639 fresh eight
+helpers passed. EXP1640 compiled/linked full ARM64 SYS/UMD without new
+warnings or linker errors. EXP1642 reviewed all 3,149 actual tlog reads with
+zero unknown paths after exact frozen provider/projector header pins, baseline
+UMD imports, two adapter-open exports and both stack gates. Combined build-only
+receipt: `.local/c15-r1-depth-raster-package1640-result/root-r1-depth-raster-link-review1642.json`
+(SHA256 `0e83c9cd36d341185edb421228c2b0c1bbcbc5ae865e38707b7b473f070c6707`).
+Neither typed state family is assigned to CORE_0010, and no package was
+installed or executed on J313.
