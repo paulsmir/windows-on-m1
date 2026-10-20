@@ -8,7 +8,40 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-19 23:44Z — EXP1582 SIGNED PACKAGE READY; EXP1573 RECOVERY_DONE
+## CURRENT 2026-10-20 00:20Z — EXP1582 RECOVERY_DONE; HEAP REGISTRY NATIVE INTEGRATION VALIDATED
+
+EXP1582 source621ffcc4/signed30.0.1580.0: exactly63nonE D3D12 PASS/0FAIL,
+C21EknownSKIP, baseline1573 missing0; ROOTC/ROOTG direct bound receipts,
+C14A512/512, C24ABC/C25/C26 unchanged. 73SMOKEPASS+knownMSAAFAIL,
+KMDpool5workersforeign_reclaim1/FL11/corpus414each64/4createfail/DWM0.
+GL52.2/internalGL59.6/CS46.259fps single samples. FactoryV2 exact-owner
+recovery completed clean normal Code28/PackageAbsent/noService/8CPU,
+RECOVERY_DONE after boot2026-10-20T00:19:02Z, no hidden/fallback.
+Root verdict .local/experiments/EXP1582-d3d12-heap-registry/root-verdict1582.json
+SHA3fee574387d1cc93de87c05a02ecc5a24dfd0782b5c1ed181a8e40c288709da9.
+Actual-source TSan RED/GREEN proves registry race correction; GPU run proves
+native private-device layout and ordinary regressions, not a forced concurrent
+runtime schedule or complete owner/context thread safety. No active GPU run.
+Next causal target C15 coherent provider/library/owner contract and safe DXIL
+allocator failure handling. Existing dxil-spirv pin8434b063 is licensed/reviewed
+but lacks internal recoverable OOM; current0003/caps SM5.1 remains. Source-first
+offline gate before another hardware experiment; do not probe caps or repeat
+security-blocked C21E/UBFE/C27 delegation. Preserve userdirtyMu and normal
+visible guest. Ledger/verdict commit pending.
+
+## Prior state superseded by EXP1582 verdict
+
+EXP1582 dispatched at23:44:03Z, unified session27195/root-run1582.log.
+Stage HASHES_MATCH23/ARTIFACTS_AND_STAGE_PASS, fresh FactoryV2 wrapper
+SHA6c9dca764388ed7591085cf2481f7e93fee46fd69a745da0595451419c2d7f6d;
+pipeline generated BEFORE commit f27a7fba. Normal recovery guest being
+restarted into full-owner profile, GPU result pending. Do not restart EXP1582.
+Monitor scratch newexp1582.log/watchdog1582.log/run1582.log with bounded waits.
+After TOOL_d3d12-on_END and NEWEXP_DONE verify63nonE/knownC21ESKIP and
+regressions, collect evidence, run exact rec1582h/recover.sh to RECOVERY_DONE.
+No final turn during active experiment or recovery.
+
+## Signed package plan superseded by EXP1582 active run
 
 EXP1573 root identity validated direct ROOTC/ROOTG receipts,63nonE PASS,
 exact recovery finished Code28/PackageAbsent/noService/8CPU. Normal guest boot
