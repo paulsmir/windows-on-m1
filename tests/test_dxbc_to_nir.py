@@ -189,6 +189,24 @@ class DxbcToNir(unittest.TestCase):
                 bad.append(f"{path.name}: rc {result.returncode} {result.stdout[:100]!r}")
         self.assertFalse(bad, "\n".join(bad))
 
+    def test_sample_rate_inputs_mark_sample_shading(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1840 MiniEngine
+        # ModelViewerPS ("dcl_input_ps linear sample") stopped Asahi on
+        # agx_compile.c "Sample shading should have been lowered": Asahi
+        # lowers sample intrinsics only for shaders marked
+        # info.fs.uses_sample_shading, which tgsi_to_nir/spirv_to_nir/the GLSL
+        # linker set for sample-qualified inputs and the sample id. D3D runs
+        # such a pixel shader per sample; plain inputs must stay per pixel.
+        def flag(name):
+            result = subprocess.run([str(self.binary), str(FIXTURES / f"{name}.dxbc"), "--print"],
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
+            self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", result.stdout)
+            return "uses_sample_shading: true" in result.stdout
+        self.assertTrue(flag("ps50sample"))
+        self.assertTrue(flag("ps50sampleid"))
+        self.assertFalse(flag("ps40"))
+
     def test_windows_dxbc_corpus_does_not_crash(self):
         corpus = local_tree("dxbc-corpus")
         if corpus is None:

@@ -789,7 +789,12 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
          break;
       case 8: value = nir_load_instance_id(b); break;
       case 9: value = nir_ineg(b, nir_b2i32(b, nir_load_front_face(b, 1))); break;
-      case 10: value = nir_load_sample_id(b); break;
+      case 10:
+         /* SV_SampleIndex runs the pixel shader per sample (tgsi_to_nir's
+          * SAMPLEID); Asahi lowers sample intrinsics only then */
+         value = nir_load_sample_id(b);
+         b->shader->info.fs.uses_sample_shading = true;
+         break;
       default:
          fail(c, insn, "input system value %u", name);
          return;
@@ -821,6 +826,7 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
                interp_mode((insn->token0 >> 11) & 0xfu, &centroid, &sample);
             c->inputs[reg]->data.centroid = centroid;
             c->inputs[reg]->data.sample = sample;
+            b->shader->info.fs.uses_sample_shading |= sample;
          }
       }
       return;
@@ -843,6 +849,9 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
          interp_mode((insn->token0 >> 11) & 0xfu, &centroid, &sample);
       c->inputs[reg]->data.centroid = centroid;
       c->inputs[reg]->data.sample = sample;
+      /* a sample-interpolated input runs the shader per sample (as the
+       * GLSL linker and spirv_to_nir mark it) */
+      c->b.shader->info.fs.uses_sample_shading |= sample;
    }
 }
 
