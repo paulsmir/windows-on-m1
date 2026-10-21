@@ -93,6 +93,10 @@ struct AGX_D3D12_PRESENTATION {
   ADMISSION_UMD_RESOURCE Resource;
   AGX_WIN32_SCREEN_BUFFER RenderBuffer;
   struct pipe_resource *RenderResource;
+  /* C40: a swapchain format the presentation path does not store (10-bit):
+   * the application renders this texture, PreparePresent converts it into
+   * RenderResource (NULL: RenderResource is the application's texture) */
+  struct pipe_resource *Converted;
   struct AGX_D3D12_PRESENTATION *Next;
 };
 
@@ -786,10 +790,29 @@ extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner
   memset(texture, 0, sizeof(*texture));
   *presentation = NULL;
   *allocation = 0;
+  /* C40 (D3D12-C40-10bit-swapchains.md): the admission UMD, KMD and DWM
+   * presentation contracts store BGRA8/RGBA8 only. A 10-bit swapchain
+   * buffer keeps an RGBA8 presentation allocation and renders into its own
+   * R10G10B10A2 texture, converted into it at each present. */
+  AGX_D3D12_BUFFER converted = {};
+  if (format == DXGI_FORMAT_R10G10B10A2_UNORM) {
+    const HRESULT made = AgxD3d12OwnerCreateTexture2D(owner, format, width, height, 1u, 1u,
+                                                      AGX_D3D12_BIND_RENDER_TARGET | (shader_resource ? AGX_D3D12_BIND_SAMPLER : 0u),
+                                                      4ull * width * height, &converted, 1u);
+    if (FAILED(made)) return made;
+    format = DXGI_FORMAT_R8G8B8A8_UNORM;
+  }
   (void)collect_presentations(owner);
   auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(
       HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(struct AGX_D3D12_PRESENTATION)));
-  if (!record) return E_OUTOFMEMORY;
+  if (!record) {
+    if (converted.Resource) {
+      struct pipe_resource *resource = static_cast<struct pipe_resource *>(converted.Resource);
+      AgxWin32AsahiResourceRelease(&resource);
+    }
+    return E_OUTOFMEMORY;
+  }
+  record->Converted = static_cast<struct pipe_resource *>(converted.Resource);
   D3D10DDI_MIPINFO mip = {width, height, 1u, width, height, 1u};
   D3D11DDIARG_CREATERESOURCE create = {};
   create.pMipInfoList = &mip;
@@ -835,11 +858,13 @@ extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner
   receipt("measure-d3d12-presentation", hr, static_cast<UINT>(format), width | (height << 16),
           record->Resource.KernelAllocation);
   if (FAILED(hr)) {
+    if (record->Converted) AgxWin32AsahiResourceRelease(&record->Converted);
     HeapFree(GetProcessHeap(), 0, record);
     return hr;
   }
-  texture->Resource = record->RenderResource;
-  texture->GpuVa = AgxWin32AsahiBufferGpuAddress(record->RenderResource);
+  struct pipe_resource *rendered = record->Converted ? record->Converted : record->RenderResource;
+  texture->Resource = rendered;
+  texture->GpuVa = AgxWin32AsahiBufferGpuAddress(rendered);
   texture->Bytes = record->Resource.DirectFlip.Allocation.Size;
   *presentation = record;
   *allocation = record->Resource.KernelAllocation;
@@ -855,6 +880,7 @@ extern "C" void AgxD3d12OwnerDestroyPresentationTexture(AGX_D3D12_OWNER *owner, 
   auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(presentation);
   if (!owner || !record) return;
   if (record->RenderResource) AgxWin32AsahiResourceRelease(&record->RenderResource);
+  if (record->Converted) AgxWin32AsahiResourceRelease(&record->Converted);
   if (owner->Context) owner->Context->flush(owner->Context, NULL, 0);
   D3D10DDI_HDEVICE device = {};
   D3D10DDI_HRESOURCE resource = {};
@@ -1075,6 +1101,20 @@ extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *pre
   auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(presentation);
   if (allocation) *allocation = 0;
   if (!owner || !owner->Context || !record || !allocation || !record->Resource.KernelAllocation) return E_INVALIDARG;
+  if (record->Converted && record->RenderResource) {
+    /* C40: the rendered 10-bit texture into the RGBA8 presentation storage */
+    struct pipe_blit_info blit = {};
+    blit.src.resource = record->Converted;
+    blit.src.format = record->Converted->format;
+    blit.dst.resource = record->RenderResource;
+    blit.dst.format = record->RenderResource->format;
+    blit.src.box.width = blit.dst.box.width = static_cast<int>(record->Converted->width0);
+    blit.src.box.height = blit.dst.box.height = static_cast<int>(record->Converted->height0);
+    blit.src.box.depth = blit.dst.box.depth = 1;
+    blit.mask = PIPE_MASK_RGBA;
+    blit.filter = PIPE_TEX_FILTER_NEAREST;
+    owner->Context->blit(owner->Context, &blit);
+  }
   HRESULT hr = AgxWin32AsahiContextFlushForPresent(owner->Context) ? S_OK : E_FAIL;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(hr) && record->RenderBuffer.Transport.Token &&

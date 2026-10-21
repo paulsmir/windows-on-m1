@@ -173,6 +173,22 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('memcmp(&owner->DrawFramebuffer, &fb, sizeof(fb))', draw)
         self.assertIn('owner->DrawFramebufferValid = true;', draw)
 
+    def test_10bit_swapchain_converts_before_the_present_flush(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? C40: a 10-bit
+        # swapchain buffer is rendered into its own texture and presented
+        # from RGBA8 storage (the presentation contract is 8-bit). A present
+        # that flushed before the conversion blit, or storage created in the
+        # application's format, would show stale or undecodable pixels.
+        text = OWNER.read_text()
+        prepare = body(text, 'extern "C" HRESULT AgxD3d12OwnerPreparePresent(')
+        self.assertLess(prepare.index('owner->Context->blit(owner->Context, &blit);'),
+                        prepare.index('AgxWin32AsahiContextFlushForPresent('))
+        create = body(text, 'extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(')
+        self.assertLess(create.index('format = DXGI_FORMAT_R8G8B8A8_UNORM;'), create.index('create.Format = format;'))
+        self.assertIn('record->Converted ? record->Converted : record->RenderResource', create)
+        destroy = body(text, 'extern "C" void AgxD3d12OwnerDestroyPresentationTexture(')
+        self.assertIn('AgxWin32AsahiResourceRelease(&record->Converted);', destroy)
+
     def test_indirect_draw_does_not_use_direct_counts_for_early_out(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
         # EXP1377: ExecuteIndirect records zero direct counts. The owner must

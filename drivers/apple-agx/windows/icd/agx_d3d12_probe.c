@@ -2406,7 +2406,10 @@ static int compute_indirect(ID3D12Device *device, ID3D12CommandQueue *queue, ID3
 static LRESULT CALLBACK probe_window_proc(HWND window, UINT message, WPARAM w, LPARAM l) {
     return DefWindowProcW(window, message, w, l);
 }
-static int swapchain_present(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+/* C40 (D3D12-C40-10bit-swapchains.md): with format R10G10B10A2 the back
+ * buffer is also read back after the clear: green is 0xC00FFC00 */
+static int swapchain_present_format(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base,
+                                    DXGI_FORMAT format, const char *step) {
     WNDCLASSW wc = {0};
     HWND window = NULL;
     IDXGIFactory2 *factory = NULL;
@@ -2414,6 +2417,8 @@ static int swapchain_present(ID3D12Device *device, ID3D12CommandQueue *queue, ID
     ID3D12Resource *buffer = NULL;
     ID3D12DescriptorHeap *rtv_heap = NULL;
     ID3D12CommandAllocator *allocator = NULL;
+    ID3D12Resource *readback = NULL;
+    UINT texel = 0;
     ID3D12GraphicsCommandList *list = NULL;
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
     DXGI_SWAP_CHAIN_DESC1 desc = {0};
@@ -2426,21 +2431,21 @@ static int swapchain_present(ID3D12Device *device, ID3D12CommandQueue *queue, ID
     window = CreateWindowExW(0, wc.lpszClassName, L"AGX D3D12 C7A", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 100, 100, 160, 160,
                              NULL, NULL, wc.hInstance, NULL);
     hr = window ? CreateDXGIFactory1(&IID_IDXGIFactory2, (void **)&factory) : E_FAIL;
-    printf("C7A window %p factory hr=0x%08lx\n", (void *)window, (unsigned long)hr);
+    printf("%s window %p factory hr=0x%08lx\n", step, (void *)window, (unsigned long)hr);
     desc.Width = 64;
     desc.Height = 64;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Format = format;
     desc.SampleDesc.Count = 1;
     desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     desc.BufferCount = 2;
     desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     if (SUCCEEDED(hr)) {
         hr = IDXGIFactory2_CreateSwapChainForHwnd(factory, (IUnknown *)queue, window, &desc, NULL, NULL, &swapchain);
-        printf("C7A CreateSwapChainForHwnd hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s CreateSwapChainForHwnd hr=0x%08lx\n", step, (unsigned long)hr);
     }
     if (SUCCEEDED(hr)) {
         hr = IDXGISwapChain1_GetBuffer(swapchain, 0, &IID_ID3D12Resource, (void **)&buffer);
-        printf("C7A GetBuffer hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s GetBuffer hr=0x%08lx\n", step, (unsigned long)hr);
     }
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &rtv_desc, &IID_ID3D12DescriptorHeap, (void **)&rtv_heap);
     if (SUCCEEDED(hr))
@@ -2455,29 +2460,63 @@ static int swapchain_present(ID3D12Device *device, ID3D12CommandQueue *queue, ID
         ID3D12Device_CreateRenderTargetView(device, buffer, NULL, rtv);
         transition(list, buffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
         ID3D12GraphicsCommandList_ClearRenderTargetView(list, rtv, green, 0, NULL);
+        if (format != DXGI_FORMAT_R8G8B8A8_UNORM &&
+            (readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST))) {
+            D3D12_TEXTURE_COPY_LOCATION tex_loc = {0}, buf_loc = {0};
+            tex_loc.pResource = buffer;
+            tex_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            buf_loc.pResource = readback;
+            buf_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            buf_loc.PlacedFootprint.Footprint.Format = format;
+            buf_loc.PlacedFootprint.Footprint.Width = 64;
+            buf_loc.PlacedFootprint.Footprint.Height = 64;
+            buf_loc.PlacedFootprint.Footprint.Depth = 1;
+            buf_loc.PlacedFootprint.Footprint.RowPitch = 256;
+            transition(list, buffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            ID3D12GraphicsCommandList_CopyTextureRegion(list, &buf_loc, 0, 0, 0, &tex_loc, NULL);
+            transition(list, buffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        }
         transition(list, buffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
         hr = run_list(queue, fence, list, base + 1, "C7A clear");
     }
+    if (SUCCEEDED(hr) && readback) {
+        const unsigned char *bytes = NULL;
+        D3D12_RANGE all = {0, 16384};
+        if (SUCCEEDED(ID3D12Resource_Map(readback, 0, &all, (void **)&bytes)) && bytes) {
+            memcpy(&texel, bytes + 32 * 256 + 32 * 4, sizeof(texel));
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+        printf("%s back buffer texel 0x%08x\n", step, texel);
+        if (texel != 0xC00FFC00u) hr = E_FAIL;
+    }
     if (SUCCEEDED(hr)) {
         hr = IDXGISwapChain1_Present(swapchain, 0, 0);
-        printf("C7A Present hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s Present hr=0x%08lx\n", step, (unsigned long)hr);
         if (SUCCEEDED(hr)) {
             hr = ID3D12CommandQueue_Signal(queue, fence, base + 2);
             UINT64 value = 0;
             for (int i = 0; i < 300 && (value = ID3D12Fence_GetCompletedValue(fence)) < base + 2; ++i) Sleep(10);
-            printf("C7A signal after present hr=0x%08lx completed %llu\n", (unsigned long)hr, (unsigned long long)value);
+            printf("%s signal after present hr=0x%08lx completed %llu\n", step, (unsigned long)hr, (unsigned long long)value);
             if (value < base + 2) hr = E_FAIL;
         }
     }
-    printf("AGX_D3D12_C7A: %s\n", SUCCEEDED(hr) ? "PASS" : "FAIL");
+    printf("AGX_D3D12_%s: %s\n", step, SUCCEEDED(hr) ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (rtv_heap) ID3D12DescriptorHeap_Release(rtv_heap);
+    if (readback) ID3D12Resource_Release(readback);
     if (buffer) ID3D12Resource_Release(buffer);
     if (swapchain) IDXGISwapChain1_Release(swapchain);
     if (factory) IDXGIFactory2_Release(factory);
     if (window) DestroyWindow(window);
     return FAILED(hr);
+}
+
+static int swapchain_present(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    return swapchain_present_format(device, queue, fence, base, DXGI_FORMAT_R8G8B8A8_UNORM, "C7A");
+}
+static int c40_swapchain_10bit(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    return swapchain_present_format(device, queue, fence, base, DXGI_FORMAT_R10G10B10A2_UNORM, "C40A");
 }
 
 /* C3a (D3D12-C3-queue-fences.md): a direct queue, a fence and one Signal;
@@ -5712,6 +5751,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C38A", c38_cached_pso);
                 (void)run_isolated(adapter, "C39A", c39_stream_output);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
+                (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
                 (void)run_isolated(adapter, "C26", c26_replay_table);
                 (void)run_isolated(adapter, "ROOTC", root_identity_compute);

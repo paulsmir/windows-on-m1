@@ -1711,7 +1711,9 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
                                  resource_arg->SampleDesc.Count == 1 && /* EXP1829 C32A: a 4x target became 1x */
                                  (resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
                                   resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
-                                  resource_arg->Format == DXGI_FORMAT_R8G8B8A8_UNORM);
+                                  resource_arg->Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+                                  /* C40: an RGBA8 presentation allocation converted at present */
+                                  resource_arg->Format == DXGI_FORMAT_R10G10B10A2_UNORM);
         UINT presentation_allocation = 0;
         HRESULT hr = !owner ? E_NOTIMPL
                    : presentable
