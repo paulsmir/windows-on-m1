@@ -319,6 +319,16 @@ void AgxWin32AsahiNullTextureDescriptor(void *out) {
   if(out) agx_set_null_texture((struct agx_texture_packed *)out);
 }
 unsigned AgxWin32AsahiTextureDescriptorBytes(void) { return AGX_TEXTURE_LENGTH; }
+/* D3D12 C47: resources a descriptor heap makes reachable become reads of
+ * the batch the next draw (or dispatch) uses, for residency and hazards */
+void AgxWin32AsahiBatchReadResources(struct pipe_context *pctx, struct pipe_resource *const *resources,
+    unsigned count, int compute) {
+  if(!pctx || !resources || !count) return;
+  struct agx_context *ctx=agx_context(pctx);
+  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  for(unsigned i=0;i<count;++i)
+    if(resources[i] && resources[i]->screen==pctx->screen) agx_batch_reads(batch,agx_resource(resources[i]));
+}
 /* D3D12 C46 receipt-only: the completion fence of the context's newest
  * accepted submission; fences increase with every submission. */
 APPLE_AGX_U64 AgxWin32AsahiContextNewestFence(struct pipe_context *ctx) {

@@ -6,6 +6,8 @@
 #include "dxbc_bindings.h"
 using UINT=uint32_t; using UINT64=uint64_t; using BYTE=unsigned char;
 static constexpr UINT kAnyStage=~0u,kRootArguments=64,kCbSlots=14,kSrvSlots=128,kUavSlots=8,kSamplerSlots=16;
+/* C47: heap ranges (production: 128-byte CBV/SRV/UAV descriptors) */
+static constexpr UINT kHeapRanges=8,kCbvSrvUavDescriptorBytes=64;
 enum {D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE=0,D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS=1,
  D3D12DDI_ROOT_PARAMETER_TYPE_CBV=2,D3D12DDI_ROOT_PARAMETER_TYPE_SRV=3,D3D12DDI_ROOT_PARAMETER_TYPE_UAV=4};
 enum {D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV=0,D3D12DDI_DESCRIPTOR_RANGE_TYPE_UAV=1,
@@ -24,6 +26,7 @@ struct FakePso {struct {dxbc_binding_map Bindings;} compute;
 struct AgxD3d12CommandList {void *device; FakePso *pso;};
 struct AgxD3d12Dispatch {
  AgxD3d12Heap *uav_heap[8]={},*cb_heap[14]={},*srv_heap[128]={};
+ AgxD3d12Heap *descriptors=nullptr; UINT heap_first[8]={}, heap_ranges=0; /* C47 */
  UINT64 uav_offset[8]={},cb_offset[14]={},srv_offset[128]={};
  UINT cb_constants[14]={},cb_count[14]={},root_dwords[64]={};
  const AgxD3d12Descriptor *uav_descriptor[8]={},*cb_descriptor[14]={},*srv_descriptor[128]={};
@@ -149,6 +152,30 @@ static void extended(const char *mode) {
   assert(!out.cb_heap[0] && out.cb_heap[1]==&heaps[1]);
   unset[0]=7;
   assert(ResolveRoot(&list,&root,unset,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out));
+ } else if(!std::strcmp(mode,"heap")) {
+  /* C47: a heap range resolves to the heap index of its first register's
+   * table entry, shares no slot namespace with the slot SRVs, needs a table
+   * covering it and refuses a second heap */
+  BYTE big[1024]={}; heaps[0].cpu=big; heaps[0].bytes=sizeof(big); heaps[1].cpu=big; heaps[1].bytes=sizeof(big);
+  root.parameters=2;
+  root.parameter[0]={D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,0,0,0,0,D3D12DDI_SHADER_VISIBILITY_PIXEL,0,1};
+  root.parameter[1]={D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,0,0,0,0,D3D12DDI_SHADER_VISIBILITY_PIXEL,1,1};
+  RangesOf(&root)[0]={D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV,UINT_MAX,0,1,5};
+  RangesOf(&root)[1]={D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV,1,0,0,9};
+  map.count=2;
+  map.bindings[0]={DXBC_BINDING_SRV,0,1,3,0,DXBC_BINDING_HEAP};
+  map.bindings[1]={DXBC_BINDING_SRV,1,0,0,0,0};
+  assert(!ResolveRoot(&list,&root,va,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out));
+  assert(out.descriptors==&heaps[0] && out.heap_ranges==1 && out.heap_first[0]==8);
+  assert(out.srv_descriptor[0]==reinterpret_cast<AgxD3d12Descriptor*>(big+9*64));
+  map.count=3; map.bindings[2]={DXBC_BINDING_SRV,2,2,0,1,DXBC_BINDING_HEAP};
+  root.parameters=3;
+  root.parameter[2]={D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,0,0,0,0,D3D12DDI_SHADER_VISIBILITY_PIXEL,1,1};
+  RangesOf(&root)[1].space=2;
+  assert(ResolveRoot(&list,&root,va,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out)); /* t0/space0 lost its table */
+  RangesOf(&root)[1].space=0; map.count=2;
+  root.parameters=2; RangesOf(&root)[0].space=4;
+  assert(ResolveRoot(&list,&root,va,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out)); /* no table covers the range */
  } else {assert(!"unknown test mode");}
 }
 int main(int argc,char **argv) {

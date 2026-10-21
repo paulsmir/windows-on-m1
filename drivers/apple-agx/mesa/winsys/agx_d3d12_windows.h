@@ -400,6 +400,24 @@ typedef struct {
     unsigned long long Offset, Size, FilledOffset;
   } So[4];
 } AGX_D3D12_DRAW;
+/* C47: a stage's descriptor-heap binding (heap ranges, dxbc_bindings.h): the
+ * shader-visible CBV/SRV/UAV heap (bound as constant buffer
+ * DXBC_HEAP_MIRROR_CB), each range's first heap index (.x of constant buffer
+ * DXBC_HEAP_TABLE_CB, vec4 per range) and the textures its descriptors read
+ * (batch reads: residency and hazards). Set for every stage before the Draw
+ * or Dispatch that uses it, which consumes it; records the caller keeps
+ * alive until that call returns. Heap NULL = none. */
+#define AGX_D3D12_HEAP_RANGES 8u
+enum { AGX_D3D12_HEAP_VS, AGX_D3D12_HEAP_PS, AGX_D3D12_HEAP_GS, AGX_D3D12_HEAP_HS, AGX_D3D12_HEAP_DS,
+       AGX_D3D12_HEAP_CS, AGX_D3D12_HEAP_STAGES };
+typedef struct {
+  const AGX_D3D12_BUFFER *Heap;
+  uint32_t First[AGX_D3D12_HEAP_RANGES][4];
+  unsigned Ranges;
+  const AGX_D3D12_BUFFER *Textures;
+  unsigned TextureCount;
+} AGX_D3D12_HEAP_BINDING;
+HRESULT AgxD3d12OwnerSetHeap(AGX_D3D12_OWNER *Owner, unsigned Stage, const AGX_D3D12_HEAP_BINDING *Binding);
 /* Records one draw; bindings that reference heaps are dropped by the next
  * AgxD3d12OwnerSubmitAndWait. */
 HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *Owner, const AGX_D3D12_DRAW *Draw);

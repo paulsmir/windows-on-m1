@@ -68,6 +68,8 @@ struct AGX_D3D12_OWNER {
   /* receipt-only (measure-d3d12-owner-fences): the newest submission fence
    * the previous submit reported */
   unsigned long long ReportedFence;
+  /* C47: the heap bindings the next draw or dispatch uses (AgxD3d12OwnerSetHeap) */
+  AGX_D3D12_HEAP_BINDING PendingHeaps[AGX_D3D12_HEAP_STAGES];
   /* EXP1829 (Multithreading's shadow pass): a PSO without a pixel shader
    * draws with this empty one -- Asahi always reads the bound FS */
   void *EmptyFs;
@@ -362,8 +364,9 @@ extern "C" HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUF
 /* C5: the D3D11 frontend's compute path (agx_d3d11_ddi.cpp
  * CreateComputeShader11/Dispatch11) on this owner's context. */
 /* C17: independent per-kind capacities; sampler views are not sampler states. */
+/* C47: SRV ranges beyond the slots (or unbounded) read the descriptor heap */
 static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
-  AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS, AGX_D3D12_UAV_SLOTS, AGX_D3D12_SAMPLER_SLOTS
+  AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS | DXBC_BINDING_HEAP_RANGES, AGX_D3D12_UAV_SLOTS, AGX_D3D12_SAMPLER_SLOTS
 };
 extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,
                                               AGX_D3D12_COMPUTE *compute) {
@@ -1763,6 +1766,60 @@ extern "C" unsigned long long AgxD3d12OwnerLayoutKey(AGX_D3D12_OWNER *owner, con
   OwnerLock lock(owner);
   return owner && buffer ? AgxWin32AsahiResourceLayoutKey(static_cast<struct pipe_resource *>(buffer->Resource)) : 0u;
 }
+extern "C" HRESULT AgxD3d12OwnerSetHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AGX_D3D12_HEAP_BINDING *binding) {
+  OwnerLock lock(owner);
+  if (!owner || stage >= AGX_D3D12_HEAP_STAGES) return E_INVALIDARG;
+  if (binding && binding->Heap && (!binding->Heap->Resource || binding->Ranges > AGX_D3D12_HEAP_RANGES ||
+                                   (binding->TextureCount && !binding->Textures)))
+    return E_INVALIDARG;
+  if (binding) owner->PendingHeaps[stage] = *binding;
+  else memset(&owner->PendingHeaps[stage], 0, sizeof(owner->PendingHeaps[stage]));
+  return S_OK;
+}
+static const mesa_shader_stage heap_stages[AGX_D3D12_HEAP_STAGES] = {
+  MESA_SHADER_VERTEX, MESA_SHADER_FRAGMENT, MESA_SHADER_GEOMETRY, MESA_SHADER_TESS_CTRL, MESA_SHADER_TESS_EVAL,
+  MESA_SHADER_COMPUTE};
+static_assert(AGX_D3D12_HEAP_RANGES == DXBC_HEAP_RANGE_MAX && AGX_D3D12_CBV_SLOTS <= DXBC_HEAP_TABLE_CB,
+              "heap ranges and their constant buffers (dxbc_bindings.h)");
+/* C47: the pending heaps of the graphics stages (or compute) become constant
+ * buffers 14/15 and reads of the batch the draw (dispatch) uses: call after
+ * the framebuffer and stage bindings, right before draw_vbo/launch_grid */
+static void bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
+  struct pipe_context *pipe = owner->Context;
+  const unsigned first = compute ? unsigned(AGX_D3D12_HEAP_CS) : 0u;
+  const unsigned end = compute ? unsigned(AGX_D3D12_HEAP_STAGES) : unsigned(AGX_D3D12_HEAP_CS);
+  for (unsigned s = first; s < end; ++s) {
+    const AGX_D3D12_HEAP_BINDING &h = owner->PendingHeaps[s];
+    if (!h.Heap) continue;
+    struct pipe_constant_buffer table = {};
+    table.user_buffer = h.First;
+    table.buffer_size = sizeof(h.First);
+    pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_TABLE_CB, &table);
+    struct pipe_constant_buffer heap = {};
+    heap.buffer = static_cast<struct pipe_resource *>(h.Heap->Resource);
+    heap.buffer_size = static_cast<unsigned>(h.Heap->Bytes < 65536ull ? h.Heap->Bytes : 65536ull);
+    pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_MIRROR_CB, &heap);
+    struct pipe_resource *resources[64];
+    for (unsigned i = 0; i < h.TextureCount;) {
+      unsigned n = 0;
+      for (; n < 64u && i < h.TextureCount; ++i)
+        resources[n++] = static_cast<struct pipe_resource *>(h.Textures[i].Resource);
+      AgxWin32AsahiBatchReadResources(pipe, resources, n, compute ? 1 : 0);
+    }
+  }
+}
+static void unbind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
+  struct pipe_context *pipe = owner->Context;
+  const unsigned first = compute ? unsigned(AGX_D3D12_HEAP_CS) : 0u;
+  const unsigned end = compute ? unsigned(AGX_D3D12_HEAP_STAGES) : unsigned(AGX_D3D12_HEAP_CS);
+  for (unsigned s = first; s < end; ++s) {
+    if (owner->PendingHeaps[s].Heap) {
+      pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_TABLE_CB, NULL);
+      pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_MIRROR_CB, NULL);
+    }
+    memset(&owner->PendingHeaps[s], 0, sizeof(owner->PendingHeaps[s]));
+  }
+}
 static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, const AGX_D3D12_CBV *cbvs,
                           const AGX_D3D12_SRV *srvs, const AGX_D3D12_UAV *uavs, struct pipe_sampler_view **views,
                           unsigned *view_count, const uint8_t *dimensions, const uint8_t *uav_dimensions,
@@ -1949,6 +2006,7 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   info.grid[0] = x;
   info.grid[1] = y;
   info.grid[2] = z;
+  bind_heaps(owner, true); /* C47 */
   if (indirect) {
     info.indirect = static_cast<struct pipe_resource *>(indirect->Buffer->Resource);
     for (unsigned i = 0; i < indirect->MaxCount; ++i) {
@@ -1958,6 +2016,7 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   } else {
     pipe->launch_grid(pipe, &info);
   }
+  unbind_heaps(owner, true);
   /* EXP1850 ModelViewer: memory_barrier after every launch flushed each
    * UAV-writing dispatch into its own submission (~70 a frame, ~40 ms).
    * Asahi orders the launches of one compute batch by a CDM barrier that
@@ -2257,9 +2316,11 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     const unsigned append[4] = {~0u, ~0u, ~0u, ~0u};
     pipe->set_stream_output_targets(pipe, so_count, so, append, mode);
   }
+  bind_heaps(owner, false); /* C47 */
   const LONGLONG bound = qpc_now();
   pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
   const LONGLONG drawn = qpc_now();
+  unbind_heaps(owner, false);
   if (so_count) {
     pipe->set_stream_output_targets(pipe, 0, NULL, NULL, mode);
     for (unsigned t = 0; t < so_count; ++t) {

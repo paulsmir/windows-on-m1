@@ -76,6 +76,14 @@ class StaticRegisterSpaces(unittest.TestCase):
         # and every draw was refused (reason 6).
         self.run_case('unset')
 
+    def test_heap_ranges_resolve_to_heap_indices(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47: a heap
+        # range must read the heap index of its first register's table
+        # entry (range offset + register delta), must not collide with a slot
+        # SRV of the same slot number, and must refuse when no table covers
+        # it.
+        self.run_case('heap')
+
     def run_case(self, name):
         result = subprocess.run([str(self.binary), name], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

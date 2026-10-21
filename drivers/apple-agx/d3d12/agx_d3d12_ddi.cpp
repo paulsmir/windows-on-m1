@@ -1886,6 +1886,7 @@ static D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY CheckResourceVirtualAddress(D3D12DD
 /* C47: a CBV/SRV/UAV descriptor is its CPU record (64 bytes) followed by its
  * heap form (AgxD3d12HeapForm), which shaders read through bindless handles */
 static constexpr UINT kCbvSrvUavDescriptorBytes = 128u;
+static constexpr UINT kHeapRanges = 8u; /* DXBC_HEAP_RANGE_MAX */
 static constexpr UINT kHeapFormOffset = 64u;
 static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
     if (type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) return kCbvSrvUavDescriptorBytes;
@@ -1957,6 +1958,7 @@ struct AgxD3d12HeapForm {
 static_assert(kHeapFormOffset + sizeof(AgxD3d12HeapForm) == kCbvSrvUavDescriptorBytes, "the heap form ends the descriptor");
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 static_assert(kCbvSrvUavDescriptorBytes == DXBC_HEAP_DESCRIPTOR_STRIDE && kHeapFormOffset == DXBC_HEAP_DESCRIPTOR_AGX_OFFSET &&
+                  kHeapRanges == DXBC_HEAP_RANGE_MAX && kHeapRanges == AGX_D3D12_HEAP_RANGES &&
                   sizeof(AgxD3d12HeapForm::texture) == AGX_D3D12_HEAP_TEXTURE_BYTES,
               "the translator's heap layout (dxbc_bindings.h)");
 #endif
@@ -2267,6 +2269,9 @@ static VOID APIENTRY CreateSampler(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_SA
     out->kind = kDescriptorSampler;
     out->desc = *arg->pSamplerDesc;
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static void PackHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view);
+#endif
 /* C47: a view written into a CBV/SRV/UAV heap also gets its heap form; a
  * texture SRV's shader dimension follows its D3D12 view (the DDI names no
  * array dimension: more than one layer of a 1D view, or more than one cube,
@@ -2285,7 +2290,17 @@ static void FillHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE
                     : DXBC_SRV_OTHER;
     AgxD3d12Device *device = DeviceOf(handle);
     AGX_D3D12_OWNER *owner = device ? EnsureOwner(device) : nullptr;
-    if (!owner) return;
+    if (owner) PackHeapForm(owner, view);
+#else
+    (void)handle;
+    (void)resource_dimension;
+#endif
+}
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C47: packs a texture SRV's heap form for its recorded dimension (also when
+ * the replay finds its texture re-laid out) */
+static void PackHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view) {
+    AgxD3d12HeapForm *form = HeapFormOf(view);
     /* the texture SRV as OwnerBindings hands it to the owner */
     AGX_D3D12_BUFFER buffer = HeapBuffer(view->heap);
     AGX_D3D12_SRV srv = {};
@@ -2299,13 +2314,10 @@ static void FillHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE
     srv.FirstLayer = view->first_layer;
     srv.Layers = view->layers;
     unsigned long long key = 0;
-    if (SUCCEEDED(AgxD3d12OwnerSrvDescriptor(owner, &srv, static_cast<uint8_t>(form->dimension), form->texture, &key)))
-        form->key = key;
-#else
-    (void)handle;
-    (void)resource_dimension;
-#endif
+    form->key = SUCCEEDED(AgxD3d12OwnerSrvDescriptor(owner, &srv, static_cast<uint8_t>(form->dimension), form->texture, &key))
+                    ? key : 0u;
 }
+#endif
 static VOID APIENTRY CreateShaderResourceViewInHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_RESOURCE_VIEW_0002 *arg,
                                                     D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
     CreateShaderResourceView(handle, arg, dest);
@@ -2575,6 +2587,11 @@ struct AgxD3d12Dispatch {
     const struct AgxD3d12SamplerDescriptor *sampler[kSamplerSlots];
     const D3D12DDI_STATIC_SAMPLER *static_sampler[kSamplerSlots];
     AgxD3d12Indirect indirect; /* C14 (dispatch commands only) */
+    /* C47: heap ranges -- the shader-visible CBV/SRV/UAV heap memory and the
+     * heap index of each range's first register */
+    AgxD3d12Heap *descriptors;
+    UINT heap_first[kHeapRanges];
+    UINT heap_ranges;
 };
 /* C6a: a recorded ClearRenderTargetView (the RTV read at record time) */
 static constexpr UINT kClearRects = 8;
@@ -4055,12 +4072,46 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
                               const struct dxbc_binding_map &map, AgxD3d12Dispatch *out) {
     if (map.count > DXBC_BINDING_MAP_MAX) return 5u;
     memcpy(out->root_dwords, dwords, kRootArguments * sizeof(UINT));
+    out->descriptors = nullptr;
+    out->heap_ranges = 0;
     for (UINT m = 0; m < map.count; ++m) {
         const struct dxbc_binding &binding = map.bindings[m];
         const UINT slot = binding.slot;
+        if (binding.flags & DXBC_BINDING_HEAP) {
+            /* C47: a heap range reads the shader-visible heap from the heap
+             * index of the table entry its first register names */
+            if (binding.kind != DXBC_BINDING_SRV || slot >= kHeapRanges) return 5u;
+            bool found = false;
+            for (UINT i = 0; root && i < root->parameters; ++i) {
+                const AgxD3d12RootParameter &p = root->parameter[i];
+                if (stage != kAnyStage && p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;
+                if (i >= kRootArguments) return 5u;
+                if (p.type != D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) continue;
+                const AgxD3d12Range *ranges = RangesOf(root) + p.first_range;
+                for (UINT r = 0; r < p.ranges; ++r) {
+                    const AgxD3d12Range &range = ranges[r];
+                    if (MappedRangeKind(range.type) != binding.kind || range.space != binding.space ||
+                        binding.reg < range.base_register) continue;
+                    const UINT delta = binding.reg - range.base_register;
+                    if (range.count != UINT_MAX && delta >= range.count) continue;
+                    if (found || range.offset == UINT_MAX) return 5u;
+                    UINT64 offset = 0;
+                    AgxD3d12Heap *heap = HeapAt(list->device, va[i], &offset);
+                    if (!heap || !heap->cpu || offset % kCbvSrvUavDescriptorBytes ||
+                        (out->descriptors && out->descriptors != heap)) return 6u;
+                    out->descriptors = heap;
+                    out->heap_first[slot] = static_cast<UINT>(offset / kCbvSrvUavDescriptorBytes) + range.offset + delta;
+                    if (slot >= out->heap_ranges) out->heap_ranges = slot + 1;
+                    found = true;
+                }
+            }
+            if (!found) return 6u;
+            continue;
+        }
         if (slot >= MappedSlotLimit(binding.kind)) return 5u;
         for (UINT prev = 0; prev < m; ++prev) {
             const struct dxbc_binding &other = map.bindings[prev];
+            if (other.flags & DXBC_BINDING_HEAP) continue;
             if (other.kind == binding.kind && (other.slot == slot ||
                 (other.space == binding.space && other.reg == binding.reg))) return 5u;
         }
@@ -4634,17 +4685,65 @@ static void OwnerIndirect(const AgxD3d12Indirect &in, AGX_D3D12_BUFFER *args, AG
         out->CountOffset = in.count_offset;
     }
 }
+/* C47: the textures one stage's heap ranges can reach (from the lowest range
+ * start to the heap's end) join its batch; a heap reaching more is refused */
+static constexpr UINT kHeapTextures = 4096;
+struct AgxD3d12HeapScratch {
+    AGX_D3D12_BUFFER heap;
+    AGX_D3D12_BUFFER textures[kHeapTextures];
+    AGX_D3D12_HEAP_BINDING binding;
+};
+static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch) {
+    if (!b || !b->descriptors || !b->heap_ranges) return AgxD3d12OwnerSetHeap(owner, stage, nullptr);
+    if (!*scratch) *scratch = static_cast<AgxD3d12HeapScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12HeapScratch)));
+    if (!*scratch) return E_OUTOFMEMORY;
+    AgxD3d12HeapScratch &h = **scratch;
+    memset(&h.binding, 0, sizeof(h.binding));
+    h.heap = HeapBuffer(b->descriptors);
+    h.binding.Heap = &h.heap;
+    h.binding.Ranges = b->heap_ranges;
+    h.binding.Textures = h.textures;
+    UINT lowest = UINT_MAX;
+    for (UINT r = 0; r < b->heap_ranges; ++r) {
+        h.binding.First[r][0] = b->heap_first[r];
+        if (b->heap_first[r] < lowest) lowest = b->heap_first[r];
+    }
+    const UINT count = static_cast<UINT>(b->descriptors->bytes / kCbvSrvUavDescriptorBytes);
+    for (UINT i = lowest; i < count; ++i) {
+        auto *view = reinterpret_cast<AgxD3d12Descriptor *>(static_cast<BYTE *>(b->descriptors->cpu) +
+                                                            static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes);
+        if (view->kind != kDescriptorSrvTexture || !view->heap) continue;
+        const AGX_D3D12_BUFFER texture = HeapBuffer(view->heap);
+        /* Asahi re-laid the texture out since it was packed (agx_upload_textures re-packs bound views too) */
+        if (HeapFormOf(view)->key != AgxD3d12OwnerLayoutKey(owner, &texture)) PackHeapForm(owner, view);
+        if (h.binding.TextureCount == kHeapTextures) {
+            const UINT receipt[] = {stage, i, count};
+            AdmissionUmdDiagnostic("reject-d3d12-heap-textures", E_OUTOFMEMORY, receipt, 3);
+            return E_OUTOFMEMORY;
+        }
+        h.textures[h.binding.TextureCount++] = texture;
+    }
+    return AgxD3d12OwnerSetHeap(owner, stage, &h.binding);
+}
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
     AgxD3d12OwnerBindings bind;
     OwnerBindings(dispatch, &bind);
+    AgxD3d12HeapScratch *heap = nullptr;
+    const HRESULT heap_hr = SetStageHeap(owner, AGX_D3D12_HEAP_CS, &dispatch, &heap);
+    if (FAILED(heap_hr)) {
+        if (heap) HeapFree(GetProcessHeap(), 0, heap);
+        return heap_hr;
+    }
     /* AgxD3d12OwnerDispatch reads every SRV slot */
     memset(bind.srvs + bind.srv_count, 0, (kSrvSlots - bind.srv_count) * sizeof(bind.srvs[0]));
     AGX_D3D12_BUFFER args = {}, count = {};
     AGX_D3D12_INDIRECT indirect;
     OwnerIndirect(dispatch.indirect, &args, &count, &indirect);
-    return AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, bind.uavs, bind.cbvs, bind.srvs, bind.samplers,
-                                 dispatch.groups[0], dispatch.groups[1], dispatch.groups[2],
-                                 indirect.Buffer ? &indirect : nullptr);
+    const HRESULT hr = AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, bind.uavs, bind.cbvs, bind.srvs, bind.samplers,
+                                             dispatch.groups[0], dispatch.groups[1], dispatch.groups[2],
+                                             indirect.Buffer ? &indirect : nullptr);
+    if (heap) HeapFree(GetProcessHeap(), 0, heap);
+    return hr;
 }
 struct AgxD3d12DrawScratch {
     AGX_D3D12_BUFFER rtv_textures[8], vb_buffers[kVertexBuffers], dsv_texture, index_buffer, indirect_args, indirect_count;
@@ -4652,13 +4751,21 @@ struct AgxD3d12DrawScratch {
     AGX_D3D12_DRAW draw;
     AgxD3d12OwnerBindings vs_bind, ps_bind, gs_bind, hs_bind, ds_bind;
     AgxD3d12OwnerBindings none; /* zeroed: a pipeline stage without recorded bindings */
+    AgxD3d12HeapScratch *heaps[AGX_D3D12_HEAP_CS]; /* C47: allocated by the first heap range */
 };
 /* EXP1838: one scratch per execution (EXP1837: a ~120 KB allocation per
  * replayed draw), zeroed once for its empty binding set */
 static AgxD3d12DrawScratch *NewDrawScratch() {
     auto *scratch = static_cast<AgxD3d12DrawScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12DrawScratch)));
     if (scratch) memset(&scratch->none, 0, sizeof(scratch->none));
+    if (scratch) memset(scratch->heaps, 0, sizeof(scratch->heaps));
     return scratch;
+}
+static void FreeDrawScratch(AgxD3d12DrawScratch *scratch) {
+    if (!scratch) return;
+    for (AgxD3d12HeapScratch *heap : scratch->heaps)
+        if (heap) HeapFree(GetProcessHeap(), 0, heap);
+    HeapFree(GetProcessHeap(), 0, scratch);
 }
 /* C27/C37: the bindings of a draw's optional stages (recorded slots) */
 struct AgxD3d12OptionalBinds {
@@ -4771,6 +4878,12 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     if (optional.ds) OwnerStageBindings(*optional.ds, &scratch->ds_bind, &draw.Ds);
     else StageBindings(scratch->none, &draw.Ds);
     OwnerIndirect(d.indirect, &scratch->indirect_args, &scratch->indirect_count, &draw.Indirect); /* C14 */
+    /* C47: every stage's heap binding (or none), consumed by the draw */
+    const AgxD3d12Dispatch *heaps[AGX_D3D12_HEAP_CS] = {&d.vs_bind, &d.ps_bind, optional.gs, optional.hs, optional.ds};
+    for (unsigned s = 0; s < AGX_D3D12_HEAP_CS; ++s) {
+        const HRESULT hr = SetStageHeap(owner, s, heaps[s], &scratch->heaps[s]);
+        if (FAILED(hr)) return hr;
+    }
     return AgxD3d12OwnerDraw(owner, &draw);
 }
 #endif
@@ -4872,7 +4985,7 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
         if (scratch && scratch->command) HeapFree(GetProcessHeap(), 0, scratch->command);
         if (scratch) HeapFree(GetProcessHeap(), 0, scratch);
         if (args) HeapFree(GetProcessHeap(), 0, args);
-        if (draw_scratch) HeapFree(GetProcessHeap(), 0, draw_scratch);
+        FreeDrawScratch(draw_scratch);
     }
     const UINT receipt[] = {signature.kind, signature.arguments, count, drawn, skipped, static_cast<UINT>(hr)};
     AdmissionUmdDiagnostic("measure-d3d12-indirect-expand", hr, receipt, 6);
@@ -4987,7 +5100,7 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     }
     QueryPerformanceCounter(&replayed);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-    if (draw_scratch) HeapFree(GetProcessHeap(), 0, draw_scratch);
+    FreeDrawScratch(draw_scratch);
     if (SUCCEEDED(hr) && device && device->owner)
         hr = AgxD3d12OwnerSubmitAndWait(static_cast<AGX_D3D12_OWNER *>(device->owner));
     if (FAILED(hr) && device && device->callbacks && device->callbacks->pfnSetErrorCb)
