@@ -106,6 +106,12 @@ void AgxWin32AsahiNullTextureDescriptor(void *Out);
 unsigned AgxWin32AsahiTextureDescriptorBytes(void);
 void AgxWin32AsahiBatchReadResources(struct pipe_context *, struct pipe_resource *const *Resources,
     unsigned Count, int Compute);
+void AgxWin32AsahiBatchWriteResources(struct pipe_context *, struct pipe_resource *const *Resources,
+    unsigned Count, int Compute);
+int AgxWin32AsahiImageDescriptors(struct pipe_context *, const struct pipe_image_view *, void *Texture,
+    void *Pbe, APPLE_AGX_U64 *Key);
+unsigned AgxWin32AsahiPbeDescriptorBytes(void);
+void AgxWin32AsahiNullPbeDescriptor(void *Out);
 void AgxWin32AsahiContextRetireDiagnostic(struct pipe_context *,
     APPLE_AGX_U32 State[12]);
 int AgxWin32AsahiContextDrawReceipt(struct pipe_context *);

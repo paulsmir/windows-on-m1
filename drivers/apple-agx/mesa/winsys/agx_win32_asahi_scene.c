@@ -319,6 +319,24 @@ void AgxWin32AsahiNullTextureDescriptor(void *out) {
   if(out) agx_set_null_texture((struct agx_texture_packed *)out);
 }
 unsigned AgxWin32AsahiTextureDescriptorBytes(void) { return AGX_TEXTURE_LENGTH; }
+/* D3D12 C47: an image's texture and PBE descriptors for a descriptor heap.
+ * Binding it (spare compute image slot) applies Asahi's legalisation --
+ * decompressing a written image -- before the descriptors are packed. */
+void agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image_view *view);
+int AgxWin32AsahiImageDescriptors(struct pipe_context *ctx, const struct pipe_image_view *view,
+    void *texture, void *pbe, APPLE_AGX_U64 *key) {
+  if(!ctx || !view || !view->resource || !texture || !pbe || !key || view->resource->screen!=ctx->screen) return 0;
+  const unsigned slot=PIPE_MAX_SHADER_IMAGES-1u;
+  ctx->set_shader_images(ctx,MESA_SHADER_COMPUTE,slot,1,0,view);
+  agx_win32_pack_image_view(texture,pbe,view);
+  ctx->set_shader_images(ctx,MESA_SHADER_COMPUTE,slot,0,1,NULL);
+  *key=AgxWin32AsahiResourceLayoutKey(view->resource);
+  return 1;
+}
+unsigned AgxWin32AsahiPbeDescriptorBytes(void) { return AGX_PBE_LENGTH; }
+void AgxWin32AsahiNullPbeDescriptor(void *out) {
+  if(out) agx_set_null_pbe((struct agx_pbe_packed *)out);
+}
 /* D3D12 C47: resources a descriptor heap makes reachable become reads of
  * the batch the next draw (or dispatch) uses, for residency and hazards */
 void AgxWin32AsahiBatchReadResources(struct pipe_context *pctx, struct pipe_resource *const *resources,
@@ -328,6 +346,24 @@ void AgxWin32AsahiBatchReadResources(struct pipe_context *pctx, struct pipe_reso
   struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
   for(unsigned i=0;i<count;++i)
     if(resources[i] && resources[i]->screen==pctx->screen) agx_batch_reads(batch,agx_resource(resources[i]));
+}
+/* D3D12 C47: resources a descriptor heap lets the draw (dispatch) write --
+ * invisible to Asahi's binding-based writer tracking -- are written by its
+ * batch, so later readers and writers flush it first */
+void AgxWin32AsahiBatchWriteResources(struct pipe_context *pctx, struct pipe_resource *const *resources,
+    unsigned count, int compute) {
+  if(!pctx || !resources || !count) return;
+  struct agx_context *ctx=agx_context(pctx);
+  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  for(unsigned i=0;i<count;++i) {
+    if(!resources[i] || resources[i]->screen!=pctx->screen) continue;
+    struct agx_resource *rsrc=agx_resource(resources[i]);
+    if(resources[i]->target==PIPE_BUFFER)
+      agx_batch_writes_range(batch,rsrc,0,resources[i]->width0);
+    else
+      for(unsigned level=0;level<=resources[i]->last_level;++level) agx_batch_writes(batch,rsrc,level);
+    batch->incoherent_writes=true;
+  }
 }
 /* D3D12 C46 receipt-only: the completion fence of the context's newest
  * accepted submission; fences increase with every submission. */

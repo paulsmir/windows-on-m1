@@ -5994,6 +5994,17 @@ agx_win32_pack_sampler_view(void *out, struct pipe_sampler_view *view)
    struct agx_sampler_view *so = (struct agx_sampler_view *)view;
    agx_pack_texture(out, so->rsrc, so->format, &so->base);
 }
+/* D3D12 C47: the texture and PBE descriptors agx_upload_textures emits for
+ * an image (agx_batch_upload_pbe does not use its batch) */
+void
+agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image_view *view)
+{
+   struct pipe_sampler_view sampler_view = util_image_to_sampler_view((struct pipe_image_view *)view);
+   if (target_is_cube(sampler_view.target))
+      sampler_view.target = PIPE_TEXTURE_2D_ARRAY;
+   agx_pack_texture(texture, agx_resource(view->resource), view->format, &sampler_view);
+   agx_batch_upload_pbe(NULL, pbe, (struct pipe_image_view *)view, false, false, false, false);
+}
 '''+pack_anchor)
         state_target.write_text(state_text)
         overlays['src/gallium/drivers/asahi/agx_state.c']['after_state_capture']=hashlib.sha256(state_target.read_bytes()).hexdigest()

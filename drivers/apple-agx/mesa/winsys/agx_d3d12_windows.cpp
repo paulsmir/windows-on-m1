@@ -366,7 +366,8 @@ extern "C" HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUF
 /* C17: independent per-kind capacities; sampler views are not sampler states. */
 /* C47: SRV ranges beyond the slots (or unbounded) read the descriptor heap */
 static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
-  AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS | DXBC_BINDING_HEAP_RANGES, AGX_D3D12_UAV_SLOTS, AGX_D3D12_SAMPLER_SLOTS
+  AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS | DXBC_BINDING_HEAP_RANGES, AGX_D3D12_UAV_SLOTS | DXBC_BINDING_HEAP_RANGES,
+  AGX_D3D12_SAMPLER_SLOTS
 };
 extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,
                                               AGX_D3D12_COMPUTE *compute) {
@@ -1677,6 +1678,35 @@ static bool uav_image(const AGX_D3D12_UAV *uav, struct pipe_image_view *image) {
   return true;
 }
 
+/* C47: the descriptor-heap form of a UAV: Asahi's texture and PBE
+ * descriptors of its image (typed views by their format, raw/structured
+ * buffers as R32_UINT buffer images) and the resource's layout key; an
+ * unusable UAV gets null descriptors and E_INVALIDARG. */
+extern "C" HRESULT AgxD3d12OwnerUavDescriptor(AGX_D3D12_OWNER *owner, const AGX_D3D12_UAV *uav, void *texture,
+                                              void *pbe, unsigned long long *key) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Context || !texture || !pbe || !key ||
+      AgxWin32AsahiTextureDescriptorBytes() != AGX_D3D12_HEAP_TEXTURE_BYTES ||
+      AgxWin32AsahiPbeDescriptorBytes() != AGX_D3D12_HEAP_TEXTURE_BYTES)
+    return E_INVALIDARG;
+  *key = 0;
+  AgxWin32AsahiNullTextureDescriptor(texture);
+  AgxWin32AsahiNullPbeDescriptor(pbe);
+  if (!uav || !uav->Buffer || !uav->Buffer->Resource) return S_OK;
+  AGX_D3D12_UAV view = *uav;
+  if (!view.Format && !view.Texture) view.Format = DXGI_FORMAT_R32_UINT; /* raw/structured */
+  struct pipe_image_view image;
+  if (!uav_image(&view, &image)) return E_INVALIDARG;
+  APPLE_AGX_U64 packed_key = 0;
+  if (!AgxWin32AsahiImageDescriptors(owner->Context, &image, texture, pbe, &packed_key)) {
+    AgxWin32AsahiNullTextureDescriptor(texture);
+    AgxWin32AsahiNullPbeDescriptor(pbe);
+    return E_OUTOFMEMORY;
+  }
+  *key = packed_key;
+  return S_OK;
+}
+
 /* C18: Asahi composes this view swizzle with the format's own swizzle.
  * PIPE_SWIZZLE_1 retains the image format's integer/float ONE semantics. */
 static bool srv_component_mapping(unsigned mapping, struct pipe_sampler_view *view) {
@@ -1770,7 +1800,8 @@ extern "C" HRESULT AgxD3d12OwnerSetHeap(AGX_D3D12_OWNER *owner, unsigned stage, 
   OwnerLock lock(owner);
   if (!owner || stage >= AGX_D3D12_HEAP_STAGES) return E_INVALIDARG;
   if (binding && binding->Heap && (!binding->Heap->Resource || binding->Ranges > AGX_D3D12_HEAP_RANGES ||
-                                   (binding->TextureCount && !binding->Textures)))
+                                   (binding->TextureCount && !binding->Textures) ||
+                                   (binding->WriteCount && !binding->Writes)))
     return E_INVALIDARG;
   if (binding) owner->PendingHeaps[stage] = *binding;
   else memset(&owner->PendingHeaps[stage], 0, sizeof(owner->PendingHeaps[stage]));
@@ -1805,6 +1836,12 @@ static void bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
       for (; n < 64u && i < h.TextureCount; ++i)
         resources[n++] = static_cast<struct pipe_resource *>(h.Textures[i].Resource);
       AgxWin32AsahiBatchReadResources(pipe, resources, n, compute ? 1 : 0);
+    }
+    for (unsigned i = 0; i < h.WriteCount;) {
+      unsigned n = 0;
+      for (; n < 64u && i < h.WriteCount; ++i)
+        resources[n++] = static_cast<struct pipe_resource *>(h.Writes[i].Resource);
+      AgxWin32AsahiBatchWriteResources(pipe, resources, n, compute ? 1 : 0);
     }
   }
 }

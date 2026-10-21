@@ -2271,6 +2271,10 @@ static VOID APIENTRY CreateSampler(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_SA
 }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 static void PackHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view);
+static void PackUavHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view);
+static bool UavDescriptorKind(UINT kind) {
+    return kind == kDescriptorUavBuffer || kind == kDescriptorUavTypedBuffer || kind == kDescriptorUavTexture;
+}
 #endif
 /* C47: a view written into a CBV/SRV/UAV heap also gets its heap form; a
  * texture SRV's shader dimension follows its D3D12 view (the DDI names no
@@ -2283,6 +2287,13 @@ static void FillHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE
     memset(form, 0, sizeof(*form));
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12NullTextureDescriptor(form->texture);
+    if (UavDescriptorKind(view->kind) && view->heap) {
+        /* C47: a UAV's texture and PBE descriptors */
+        AgxD3d12Device *device = DeviceOf(handle);
+        AGX_D3D12_OWNER *owner = device ? EnsureOwner(device) : nullptr;
+        if (owner) PackHeapForm(owner, view);
+        return;
+    }
     if (view->kind != kDescriptorSrvTexture || !view->heap) return;
     form->dimension = resource_dimension == D3D12DDI_RD_TEXTURE1D ? (view->layers > 1 ? DXBC_SRV_1D_ARRAY : DXBC_SRV_1D)
                     : resource_dimension == D3D12DDI_RD_TEXTURE3D ? DXBC_SRV_3D
@@ -2301,6 +2312,10 @@ static void FillHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE
  * the replay finds its texture re-laid out) */
 static void PackHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view) {
     AgxD3d12HeapForm *form = HeapFormOf(view);
+    if (UavDescriptorKind(view->kind)) {
+        PackUavHeapForm(owner, view);
+        return;
+    }
     /* the texture SRV as OwnerBindings hands it to the owner */
     AGX_D3D12_BUFFER buffer = HeapBuffer(view->heap);
     AGX_D3D12_SRV srv = {};
@@ -4080,7 +4095,7 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
         if (binding.flags & DXBC_BINDING_HEAP) {
             /* C47: a heap range reads the shader-visible heap from the heap
              * index of the table entry its first register names */
-            if (binding.kind != DXBC_BINDING_SRV || slot >= kHeapRanges) return 5u;
+            if ((binding.kind != DXBC_BINDING_SRV && binding.kind != DXBC_BINDING_UAV) || slot >= kHeapRanges) return 5u;
             bool found = false;
             for (UINT i = 0; root && i < root->parameters; ++i) {
                 const AgxD3d12RootParameter &p = root->parameter[i];
@@ -4578,6 +4593,16 @@ static bool DescriptorUav(const AgxD3d12Descriptor &view, AGX_D3D12_BUFFER *buff
     uav->Format = view.kind == kDescriptorUavTypedBuffer ? view.format : DXGI_FORMAT_UNKNOWN;
     return true;
 }
+/* C47: a UAV's heap form (texture and PBE descriptors of its image) */
+static void PackUavHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view) {
+    AgxD3d12HeapForm *form = HeapFormOf(view);
+    AGX_D3D12_BUFFER buffer = {};
+    AGX_D3D12_UAV uav = {};
+    unsigned long long key = 0;
+    form->key = DescriptorUav(*view, &buffer, &uav) &&
+                        SUCCEEDED(AgxD3d12OwnerUavDescriptor(owner, &uav, form->texture, form->pbe, &key))
+                    ? key : 0u;
+}
 static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
     /* EXP1839: only the SRV slots up to the last bound one are cleared and
      * handed on (EXP1838: two 14 KB clears per replayed draw, almost all
@@ -4691,6 +4716,7 @@ static constexpr UINT kHeapTextures = 4096;
 struct AgxD3d12HeapScratch {
     AGX_D3D12_BUFFER heap;
     AGX_D3D12_BUFFER textures[kHeapTextures];
+    AGX_D3D12_BUFFER writes[kHeapTextures];
     AGX_D3D12_HEAP_BINDING binding;
 };
 static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch) {
@@ -4703,6 +4729,7 @@ static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d
     h.binding.Heap = &h.heap;
     h.binding.Ranges = b->heap_ranges;
     h.binding.Textures = h.textures;
+    h.binding.Writes = h.writes;
     UINT lowest = UINT_MAX;
     for (UINT r = 0; r < b->heap_ranges; ++r) {
         h.binding.First[r][0] = b->heap_first[r];
@@ -4712,10 +4739,21 @@ static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d
     for (UINT i = lowest; i < count; ++i) {
         auto *view = reinterpret_cast<AgxD3d12Descriptor *>(static_cast<BYTE *>(b->descriptors->cpu) +
                                                             static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes);
-        if (view->kind != kDescriptorSrvTexture || !view->heap) continue;
+        const bool uav = UavDescriptorKind(view->kind);
+        if ((view->kind != kDescriptorSrvTexture && !uav) || !view->heap) continue;
         const AGX_D3D12_BUFFER texture = HeapBuffer(view->heap);
         /* Asahi re-laid the texture out since it was packed (agx_upload_textures re-packs bound views too) */
         if (HeapFormOf(view)->key != AgxD3d12OwnerLayoutKey(owner, &texture)) PackHeapForm(owner, view);
+        if (uav) {
+            /* C47: what heap UAVs write joins the batch as written */
+            if (h.binding.WriteCount == kHeapTextures) {
+                const UINT receipt[] = {stage, i, count};
+                AdmissionUmdDiagnostic("reject-d3d12-heap-textures", E_OUTOFMEMORY, receipt, 3);
+                return E_OUTOFMEMORY;
+            }
+            h.writes[h.binding.WriteCount++] = texture;
+            continue;
+        }
         if (h.binding.TextureCount == kHeapTextures) {
             const UINT receipt[] = {stage, i, count};
             AdmissionUmdDiagnostic("reject-d3d12-heap-textures", E_OUTOFMEMORY, receipt, 3);
