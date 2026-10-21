@@ -3655,7 +3655,12 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
                                                                 : D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
                     const UINT64 at = offset + (static_cast<UINT64>(range.offset) + delta) * stride;
                     const UINT64 bytes = sampler ? sizeof(AgxD3d12SamplerDescriptor) : sizeof(AgxD3d12Descriptor);
-                    if (at > heap->bytes || bytes > heap->bytes - at) return 6u;
+                    if (at > heap->bytes || bytes > heap->bytes - at) {
+                        /* C34: an unbounded range's tail past the heap stays unbound */
+                        if (!(binding.flags & DXBC_BINDING_OPTIONAL)) return 6u;
+                        matched = true;
+                        continue;
+                    }
                     if (sampler) {
                         out->sampler[slot] = reinterpret_cast<const AgxD3d12SamplerDescriptor *>(static_cast<const BYTE *>(heap->cpu) + at);
                     } else {
@@ -3697,7 +3702,7 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
                 matched = true;
             }
         }
-        if (!matched) return 6u;
+        if (!matched && !(binding.flags & DXBC_BINDING_OPTIONAL)) return 6u;
     }
     return 0u;
 }

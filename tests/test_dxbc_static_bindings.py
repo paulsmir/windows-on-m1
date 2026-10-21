@@ -50,7 +50,7 @@ class DxbcStaticBindings(unittest.TestCase):
             self.assertIn('store-slots=0,1 cbv-slot=0 NIR+Asahi', r.stdout)
 
             for name, mode in [('cs50', '--legacy'), ('vs40', '--legacy'),
-                               ('ps41', '--legacy'), ('ps51', '--refuse'),
+                               ('ps41', '--legacy'), ('ps51', '--ranges'),
                                ('cs51static', '--translate-fail')]:
                 with self.subTest(name=name):
                     r = subprocess.run([str(exe), str(FIXTURES / f'{name}.dxbc'), mode],

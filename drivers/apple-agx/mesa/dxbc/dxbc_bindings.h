@@ -16,8 +16,13 @@ enum dxbc_binding_kind {
 
 #define DXBC_BINDING_MAP_MAX 166
 
+/* C34: SM5.1 SRV and sampler ranges flatten to one binding per register in
+ * consecutive slots; the tail of an unbounded range (T[n:*]) is optional --
+ * replay leaves a register the root signature does not cover unbound. */
+#define DXBC_BINDING_OPTIONAL 1u
+
 struct dxbc_binding {
-   uint32_t kind, id, space, reg, slot;
+   uint32_t kind, id, space, reg, slot, flags;
 };
 
 struct dxbc_binding_map {

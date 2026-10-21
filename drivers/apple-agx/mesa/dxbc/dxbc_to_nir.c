@@ -101,6 +101,9 @@ struct ctx {
       bool declared;
       bool comparison;
    } samp[MAX_SAMPLERS];
+   /* C34: the register part of an SM5.1 resource/sampler range index, added
+    * to the texture instruction being built (texture_/sampler_offset) */
+   nir_def *dyn_texture, *dyn_sampler;
 
    /* shader model 5 memory: u# views, g# groupshared, raw/structured t# */
    struct {
@@ -236,6 +239,15 @@ static bool
 index_direct(const struct dxbc_index *index)
 {
    return !index->relative;
+}
+
+/* C34: the slots an SRV or sampler declaration covers -- index[1] of a
+ * normalized SM5.1 range declaration, one otherwise */
+static unsigned
+range_slots(const struct ctx *c, const struct dxbc_operand *o)
+{
+   return c->p->major == 5 && c->p->minor == 1 && o->index_dimension == 1 && o->index[1].imm > 1
+             ? (unsigned)o->index[1].imm : 1u;
 }
 
 static nir_def *
@@ -1015,19 +1027,33 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
          fail(c, insn, "sampler declaration");
          return;
       }
-      c->samp[o->index[0].imm].declared = true;
-      BITSET_SET(b->shader->info.samplers_used, (unsigned)o->index[0].imm);
-      c->samp[o->index[0].imm].comparison = ((insn->token0 >> 11) & 0xfu) == 1;
+      /* C34: an SM5.1 range covers index[1] consecutive slots */
+      for (unsigned k = 0, n = range_slots(c, o); k < n; ++k) {
+         if (o->index[0].imm + k >= MAX_SAMPLERS) {
+            fail(c, insn, "sampler range declaration");
+            return;
+         }
+         c->samp[o->index[0].imm + k].declared = true;
+         BITSET_SET(b->shader->info.samplers_used, (unsigned)o->index[0].imm + k);
+         c->samp[o->index[0].imm + k].comparison = ((insn->token0 >> 11) & 0xfu) == 1;
+      }
       return;
    case DXBC_OP_DCL_RESOURCE:
       if (!o || o->index[0].imm >= MAX_RESOURCES || !insn->num_payload) {
          fail(c, insn, "resource declaration");
          return;
       }
-      c->res[o->index[0].imm].declared = true;
-      BITSET_SET(b->shader->info.textures_used, (unsigned)o->index[0].imm);
-      c->res[o->index[0].imm].dim = (uint8_t)((insn->token0 >> 11) & 0x1fu);
-      c->res[o->index[0].imm].type = return_type(insn->payload[0]);
+      for (unsigned k = 0, n = range_slots(c, o); k < n; ++k) {
+         const unsigned t = (unsigned)o->index[0].imm + k;
+         if (t >= MAX_RESOURCES) {
+            fail(c, insn, "resource range declaration");
+            return;
+         }
+         c->res[t].declared = true;
+         BITSET_SET(b->shader->info.textures_used, t);
+         c->res[t].dim = (uint8_t)((insn->token0 >> 11) & 0x1fu);
+         c->res[t].type = return_type(insn->payload[0]);
+      }
       return;
    case DXBC_OP_DCL_INPUT:
    case DXBC_OP_DCL_INPUT_SGV:
@@ -1201,13 +1227,19 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
          return;
       }
       /* read as a 32-bit texel buffer view (one dword per texel) */
-      c->res[t].declared = true;
-      c->res[t].dim = DXBC_DIM_BUFFER;
-      c->res[t].type = nir_type_uint32;
-      c->res_kind[t] = structured ? MEM_STRUCTURED : MEM_RAW;
-      c->res_stride[t] = structured ? insn->payload[0] : 0;
-      BITSET_SET(b->shader->info.textures_used, t);
-      BITSET_SET(b->shader->info.textures_used_by_txf, t);
+      for (unsigned k = 0, n = range_slots(c, o); k < n; ++k, ++t) {
+         if (t >= MAX_RESOURCES) {
+            fail(c, insn, "buffer SRV range declaration");
+            return;
+         }
+         c->res[t].declared = true;
+         c->res[t].dim = DXBC_DIM_BUFFER;
+         c->res[t].type = nir_type_uint32;
+         c->res_kind[t] = structured ? MEM_STRUCTURED : MEM_RAW;
+         c->res_stride[t] = structured ? insn->payload[0] : 0;
+         BITSET_SET(b->shader->info.textures_used, t);
+         BITSET_SET(b->shader->info.textures_used_by_txf, t);
+      }
       return;
    }
    default:
@@ -1751,16 +1783,27 @@ tex_shape(unsigned dim, struct tex_shape *s)
    }
 }
 
+/* C34: the register part of an SM5.1 range index (the slot's immediate
+ * part is the texture/sampler index) */
+static nir_def *
+range_register(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_operand *o)
+{
+   if (index_direct(&o->index[0]))
+      return NULL;
+   return nir_channel(&c->b, read_src(c, insn, o->index[0].relative, nir_type_int32), 0);
+}
+
 static unsigned
 resource_index(struct ctx *c, const struct dxbc_instruction *insn,
                const struct dxbc_operand *o)
 {
    if (o->type != DXBC_OPERAND_RESOURCE || o->index_dimension != 1 ||
-       !index_direct(&o->index[0]) || o->index[0].imm >= MAX_RESOURCES ||
-       !c->res[o->index[0].imm].declared) {
+       o->index[0].imm >= MAX_RESOURCES || !c->res[o->index[0].imm].declared ||
+       (!index_direct(&o->index[0]) && c->dyn_texture)) {
       fail(c, insn, "resource operand");
       return 0;
    }
+   c->dyn_texture = range_register(c, insn, o);
    return (unsigned)o->index[0].imm;
 }
 
@@ -1769,10 +1812,11 @@ sampler_index(struct ctx *c, const struct dxbc_instruction *insn,
               const struct dxbc_operand *o)
 {
    if (o->type != DXBC_OPERAND_SAMPLER || o->index_dimension != 1 ||
-       !index_direct(&o->index[0]) || o->index[0].imm >= MAX_SAMPLERS) {
+       o->index[0].imm >= MAX_SAMPLERS || (!index_direct(&o->index[0]) && c->dyn_sampler)) {
       fail(c, insn, "sampler operand");
       return 0;
    }
+   c->dyn_sampler = range_register(c, insn, o);
    return (unsigned)o->index[0].imm;
 }
 
@@ -1780,7 +1824,8 @@ static nir_tex_instr *
 tex_begin(struct ctx *c, nir_texop op, unsigned t, unsigned s, bool sampler,
           unsigned num_srcs, const struct tex_shape *shape, nir_alu_type type)
 {
-   nir_tex_instr *tex = nir_tex_instr_create(c->b.shader, num_srcs);
+   /* C34: room for texture_offset/sampler_offset (tex_finish) */
+   nir_tex_instr *tex = nir_tex_instr_create(c->b.shader, num_srcs + 2);
    tex->op = op;
    tex->sampler_dim = shape->dim;
    tex->is_array = shape->array;
@@ -1795,6 +1840,13 @@ tex_begin(struct ctx *c, nir_texop op, unsigned t, unsigned s, bool sampler,
 static nir_def *
 tex_finish(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, unsigned components)
 {
+   /* C34: dynamically indexed SM5.1 ranges, in the two slots tex_begin
+    * reserved */
+   if (c->dyn_texture)
+      tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_texture_offset, c->dyn_texture);
+   if (c->dyn_sampler)
+      tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_sampler_offset, c->dyn_sampler);
+   c->dyn_texture = c->dyn_sampler = NULL;
    tex->num_srcs = num_srcs;
    nir_def_init(&tex->instr, &tex->def, components, 32);
    nir_builder_instr_insert(&c->b, &tex->instr);
@@ -2839,7 +2891,10 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
          fail(c, insn, "subroutines");
          break;
       }
+      c->dyn_texture = c->dyn_sampler = NULL;
       emit_instruction(c, i);
+      if (!c->failed && (c->dyn_texture || c->dyn_sampler))
+         fail(c, insn, "dynamically indexed resource outside a texture instruction");
    }
    if (!c->failed && c->cf_depth)
       fail(c, NULL, "unterminated control flow");
@@ -3066,34 +3121,53 @@ dxbc_translate_tokens_bindings(const uint32_t *tokens,
    return NULL;
 }
 
+/* C34: a dynamically indexed SM5.1 range (texture_offset) declares the
+ * consecutive used slots from its base; a static access of another
+ * dimension ends the run (static accesses are gathered first). */
+static uint8_t
+srv_dimension(const nir_tex_instr *tex)
+{
+   return tex->sampler_dim == GLSL_SAMPLER_DIM_1D ? (tex->is_array ? DXBC_SRV_1D_ARRAY : DXBC_SRV_1D) :
+          tex->sampler_dim == GLSL_SAMPLER_DIM_3D ? DXBC_SRV_3D :
+          tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE ? DXBC_SRV_OTHER :
+          tex->is_array ? DXBC_SRV_CUBE_ARRAY : DXBC_SRV_CUBE;
+}
+
 bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
                              uint8_t dimensions[DXBC_RESOURCE_SLOTS])
 {
    if (!dimensions) return false;
    memset(dimensions, 0, DXBC_RESOURCE_SLOTS);
    if (!nir) return false;
-   nir_foreach_function_impl(impl, nir) {
-      nir_foreach_block(block, impl) {
-         nir_foreach_instr(instr, block) {
-            if (instr->type != nir_instr_type_tex) continue;
-            const nir_tex_instr *tex = nir_instr_as_tex(instr);
-            if (tex->texture_index >= DXBC_RESOURCE_SLOTS) goto fail;
-            for (unsigned i = 0; i < tex->num_srcs; ++i) {
-               switch (tex->src[i].src_type) {
-               case nir_tex_src_texture_deref:
-               case nir_tex_src_texture_offset:
-               case nir_tex_src_texture_handle:
-                  goto fail;
-               default: break;
+   for (unsigned pass = 0; pass < 2; ++pass) {
+      nir_foreach_function_impl(impl, nir) {
+         nir_foreach_block(block, impl) {
+            nir_foreach_instr(instr, block) {
+               if (instr->type != nir_instr_type_tex) continue;
+               const nir_tex_instr *tex = nir_instr_as_tex(instr);
+               bool dynamic = false;
+               if (tex->texture_index >= DXBC_RESOURCE_SLOTS) goto fail;
+               for (unsigned i = 0; i < tex->num_srcs; ++i) {
+                  switch (tex->src[i].src_type) {
+                  case nir_tex_src_texture_deref:
+                  case nir_tex_src_texture_handle:
+                     goto fail;
+                  case nir_tex_src_texture_offset:
+                     dynamic = true;
+                     break;
+                  default: break;
+                  }
                }
+               if (dynamic != (pass == 1)) continue;
+               const uint8_t dimension = srv_dimension(tex);
+               uint8_t *slot = &dimensions[tex->texture_index];
+               if (*slot != DXBC_SRV_UNUSED && *slot != dimension) goto fail;
+               *slot = dimension;
+               for (unsigned t = tex->texture_index + 1; dynamic && t < DXBC_RESOURCE_SLOTS &&
+                    BITSET_TEST(nir->info.textures_used, t) &&
+                    (dimensions[t] == DXBC_SRV_UNUSED || dimensions[t] == dimension); ++t)
+                  dimensions[t] = dimension;
             }
-            uint8_t dimension = tex->sampler_dim == GLSL_SAMPLER_DIM_1D ? (tex->is_array ? DXBC_SRV_1D_ARRAY : DXBC_SRV_1D) :
-                                tex->sampler_dim == GLSL_SAMPLER_DIM_3D ? DXBC_SRV_3D :
-                                tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE ? DXBC_SRV_OTHER :
-                                tex->is_array ? DXBC_SRV_CUBE_ARRAY : DXBC_SRV_CUBE;
-            uint8_t *slot = &dimensions[tex->texture_index];
-            if (*slot != DXBC_SRV_UNUSED && *slot != dimension) goto fail;
-            *slot = dimension;
          }
       }
    }

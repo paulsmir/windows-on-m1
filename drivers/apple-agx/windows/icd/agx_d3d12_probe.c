@@ -3,6 +3,7 @@
 #include <dxgi1_2.h>
 #include <dxgi1_4.h>
 #include <d3d12.h>
+#include <d3d12sdklayers.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -12,6 +13,7 @@
 #include "agx_d3d12_probe_cs_tgsm_loop.h"
 #include "agx_d3d12_probe_cs_bc1_load.h"
 #include "agx_d3d12_probe_cs_append.h"
+#include "agx_d3d12_probe_cs_ranges.h"
 #include "agx_d3d12_probe_cs_texture1d_load.h"
 #include "agx_d3d12_probe_cs_texture1d_store.h"
 #include "agx_d3d12_probe_cs_texture1d_array_load.h"
@@ -4057,6 +4059,136 @@ static int step_c28a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
 static int step_c28b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c28_compute(d, q, f, b, 1); }
 static int step_c28c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c28_compute(d, q, f, b, 2); }
 
+/* C34 (EXP1826: DynamicIndexing's ps_5_1 g_txMats[] : register(t1) read
+ * as g_txMats[index]): four 1x1 RGBA8 textures in a descriptor table, read
+ * by a cs_5_1 loop over materials[i]; PASS = each word is its texture's
+ * colour; the shader's T0[0:*] registers past the root range's four stay
+ * unbound. Root UAV u0, root constant b0 = 4. */
+static int c34_ranges(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_HEAP_PROPERTIES heap_props = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC desc = {0};
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 4, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 4, 0, 0, 0}; /* bounded: binding tier 1 */
+    D3D12_ROOT_PARAMETER params[3] = {{D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}, {D3D12_ROOT_PARAMETER_TYPE_UAV},
+                                      {D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {3, params, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12DescriptorHeap *heap = NULL;
+    ID3D12Resource *textures[4] = {0};
+    ID3D12Resource *upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *uav = uav_buffer(device);
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    unsigned char *bytes = NULL;
+    UINT got[4] = {0}, bad = 4;
+    params[0].DescriptorTable.NumDescriptorRanges = 1;
+    params[0].DescriptorTable.pDescriptorRanges = &range;
+    params[1].Descriptor.ShaderRegister = 0;
+    params[2].Constants.ShaderRegister = 0;
+    params[2].Constants.Num32BitValues = 1;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = desc.Height = 1;
+    desc.DepthOrArraySize = desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    HRESULT hr = upload && uav && readback ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&bytes);
+    if (SUCCEEDED(hr)) {
+        for (UINT i = 0; i < 4; ++i) {
+            const unsigned char texel[4] = {(unsigned char)(10 + 40 * i), (unsigned char)(20 + 40 * i), (unsigned char)(30 + 40 * i), 255};
+            memcpy(bytes + 512 * i, texel, 4);
+        }
+        ID3D12Resource_Unmap(upload, 0, NULL);
+        for (UINT i = 0; SUCCEEDED(hr) && i < 4; ++i)
+            hr = ID3D12Device_CreateCommittedResource(device, &heap_props, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COPY_DEST,
+                                                      NULL, &IID_ID3D12Resource, (void **)&textures[i]);
+    }
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &heap_desc, &IID_ID3D12DescriptorHeap, (void **)&heap);
+    if (SUCCEEDED(hr)) {
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu;
+        const UINT inc = ID3D12Device_GetDescriptorHandleIncrementSize(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(heap, &cpu);
+        for (UINT i = 0; i < 4; ++i) {
+            D3D12_CPU_DESCRIPTOR_HANDLE at = {cpu.ptr + i * inc};
+            ID3D12Device_CreateShaderResourceView(device, textures[i], NULL, at);
+        }
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob), ID3D10Blob_GetBufferSize(blob),
+                                              &IID_ID3D12RootSignature, (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_ranges;
+        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_ranges);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+        printf("C34A CreateComputePipelineState hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        D3D12_GPU_DESCRIPTOR_HANDLE gpu;
+        D3D12_TEXTURE_COPY_LOCATION dst = {0}, src = {0};
+        src.pResource = upload;
+        src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        src.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        src.PlacedFootprint.Footprint.Width = src.PlacedFootprint.Footprint.Height = src.PlacedFootprint.Footprint.Depth = 1;
+        src.PlacedFootprint.Footprint.RowPitch = 256;
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        for (UINT i = 0; i < 4; ++i) {
+            dst.pResource = textures[i];
+            src.PlacedFootprint.Offset = 512 * i;
+            ID3D12GraphicsCommandList_CopyTextureRegion(list, &dst, 0, 0, 0, &src, NULL);
+            transition(list, textures[i], D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        }
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &heap);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(heap, &gpu);
+        ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 0, gpu);
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 1, ID3D12Resource_GetGPUVirtualAddress(uav));
+        ID3D12GraphicsCommandList_SetComputeRoot32BitConstant(list, 2, 4, 0);
+        ID3D12GraphicsCommandList_Dispatch(list, 1, 1, 1);
+        transition(list, uav, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, uav, 0, 16);
+        hr = run_list(queue, fence, list, base + 1, "C34A");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 16};
+        const UINT *out = NULL;
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&out);
+        if (SUCCEEDED(hr) && out) {
+            bad = 0;
+            for (UINT i = 0; i < 4; ++i) {
+                const UINT want = (10u + 40u * i) | ((20u + 40u * i) << 8) | ((30u + 40u * i) << 16) | 0xff000000u;
+                got[i] = out[i];
+                if (out[i] != want) ++bad;
+            }
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("C34A words=%08x,%08x,%08x,%08x bad=%u hr=0x%08lx\n", got[0], got[1], got[2], got[3], bad, (unsigned long)hr);
+    printf("AGX_D3D12_C34A: %s\n", SUCCEEDED(hr) && !bad ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (heap) ID3D12DescriptorHeap_Release(heap);
+    for (UINT i = 0; i < 4; ++i)
+        if (textures[i]) ID3D12Resource_Release(textures[i]);
+    if (readback) ID3D12Resource_Release(readback);
+    if (uav) ID3D12Resource_Release(uav);
+    if (upload) ID3D12Resource_Release(upload);
+    return !(SUCCEEDED(hr) && !bad);
+}
 /* C33 (EXP1826: the ExecuteIndirect sample's culling pass appends to a
  * structured UAV with a counter, which was refused): 128 threads, the even
  * ones Append their id through a table UAV whose counter is word 0 of a
@@ -4347,6 +4479,24 @@ static int step_c14(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT
 static int step_c17b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 7); }
 static int step_c16a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { (void)b; return compute_srv(d, q, f, 1); }
 static int step_c14nc(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 6); }
+/* EXP1826 (C31A): "warp STEP..." runs steps on WARP with the debug layer
+ * and prints its messages, separating API misuse in a probe step from
+ * driver behaviour before any hardware run. */
+static int g_warp;
+static void dump_debug_messages(ID3D12Device *device, const char *name) {
+    ID3D12InfoQueue *q = NULL;
+    if (FAILED(ID3D12Device_QueryInterface(device, &IID_ID3D12InfoQueue, (void **)&q))) return;
+    const UINT64 n = ID3D12InfoQueue_GetNumStoredMessages(q);
+    for (UINT64 m = 0; m < n; ++m) {
+        SIZE_T len = 0;
+        ID3D12InfoQueue_GetMessage(q, m, NULL, &len);
+        D3D12_MESSAGE *msg = (D3D12_MESSAGE *)malloc(len);
+        if (msg && SUCCEEDED(ID3D12InfoQueue_GetMessage(q, m, msg, &len)))
+            printf("%s DEBUG %d %d %s\n", name, (int)msg->Severity, (int)msg->ID, msg->pDescription);
+        free(msg);
+    }
+    ID3D12InfoQueue_Release(q);
+}
 static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step step) {
     ID3D12Device *device = NULL;
     ID3D12CommandQueue *queue = NULL;
@@ -4357,6 +4507,7 @@ static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step ste
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateFence(device, 0, D3D12_FENCE_FLAG_NONE, &IID_ID3D12Fence, (void **)&fence);
     printf("%s fresh device/queue/fence hr=0x%08lx\n", name, (unsigned long)hr);
     int failed = FAILED(hr) ? 1 : step(device, queue, fence, 0);
+    if (g_warp && device) dump_debug_messages(device, name);
     if (fence) ID3D12Fence_Release(fence);
     if (queue) ID3D12CommandQueue_Release(queue);
     if (device) ID3D12Device_Release(device);
@@ -4800,6 +4951,22 @@ int main(int argc, char **argv) {
     ID3D12Device *device = NULL;
     HRESULT hr = CreateDXGIFactory1(&IID_IDXGIFactory1, (void **)&factory);
     if (FAILED(hr)) { printf("CreateDXGIFactory1 hr=0x%08lx\n", (unsigned long)hr); return 1; }
+    for (int a = 1; a < argc; ++a) {
+        if (strcmp(argv[a], "warp")) continue;
+        static const struct { const char *name; probe_step step; } steps[] = {
+            {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
+            {"C33A", c33_append}, {"C34A", c34_ranges}};
+        ID3D12Debug *debug = NULL;
+        IDXGIFactory4 *factory4 = NULL;
+        if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
+        if (FAILED(IDXGIFactory1_QueryInterface(factory, &IID_IDXGIFactory4, (void **)&factory4)) ||
+            FAILED(IDXGIFactory4_EnumWarpAdapter(factory4, &IID_IDXGIAdapter1, (void **)&adapter))) { puts("WARP unavailable"); return 1; }
+        g_warp = 1;
+        for (int b = a + 1; b < argc; ++b)
+            for (unsigned i = 0; i < sizeof(steps) / sizeof(steps[0]); ++i)
+                if (!strcmp(argv[b], steps[i].name)) (void)run_isolated(adapter, steps[i].name, steps[i].step);
+        return 0;
+    }
     for (UINT i = 0; IDXGIFactory1_EnumAdapters1(factory, i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
         DXGI_ADAPTER_DESC1 desc;
         hr = IDXGIAdapter1_GetDesc1(adapter, &desc);
@@ -4861,6 +5028,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C31A", step_c31a);
                 (void)run_isolated(adapter, "C32A", step_c32a);
                 (void)run_isolated(adapter, "C33A", c33_append);
+                (void)run_isolated(adapter, "C34A", c34_ranges);
                 (void)run_isolated(adapter, "C27A", step_c27a);
                 (void)run_isolated(adapter, "C27B", step_c27b);
                 (void)run_isolated(adapter, "C7A", swapchain_present);

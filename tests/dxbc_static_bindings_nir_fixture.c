@@ -35,8 +35,13 @@ static void dimensions(void) {
    t[1]->texture_index=DXBC_RESOURCE_SLOTS;
    assert(!dxbc_nir_srv_dimensions(b.shader,dims));
    t[1]->texture_index=8;
+   /* C34: a dynamically indexed range declares its base slot and the used
+    * slots after it */
    nir_tex_instr_add_src(t[1],nir_tex_src_texture_offset,nir_imm_int(&b,0));
-   assert(!dxbc_nir_srv_dimensions(b.shader,dims));
+   BITSET_SET(b.shader->info.textures_used,9);BITSET_SET(b.shader->info.textures_used,10);
+   assert(dxbc_nir_srv_dimensions(b.shader,dims));
+   assert(dims[7]==DXBC_SRV_CUBE && dims[8]==DXBC_SRV_CUBE_ARRAY && dims[9]==DXBC_SRV_CUBE_ARRAY &&
+          dims[10]==DXBC_SRV_CUBE_ARRAY && dims[11]==DXBC_SRV_UNUSED);
    ralloc_free(b.shader);glsl_type_singleton_decref();puts("PASS cube dimension metadata");
 }
 int main(int argc, char **argv) {
@@ -65,6 +70,36 @@ int main(int argc, char **argv) {
    bool texture=argc==3 && !strcmp(argv[2],"--texture");
    bool cube=argc==3 && (!strcmp(argv[2],"--cube") || !strcmp(argv[2],"--cube-array"));
    bool cube_array=cube && !strcmp(argv[2],"--cube-array");
+   if(argc==3 && !strcmp(argv[2],"--ranges")) {
+      /* C34: ps51 declares S0[0:1] (space 2) and T0[0:7] (space 1) and samples
+       * T0[r0.y] with S0[r0.x], then loads T0[r1.x]: each register of a range
+       * gets a consecutive slot and the register becomes texture_offset /
+       * sampler_offset of the texture instruction */
+      nir_shader *mapped=dxbc_translate_tokens_bindings(chunk,&agx_nir_options,limits,&map,&e);
+      if(!mapped) {fprintf(stderr,"REFUSED %s\n",e.message);return 1;}
+      assert(map.active && map.count==11);
+      for(unsigned r=0;r<8;++r) {
+         const struct dxbc_binding *t=dxbc_binding_find(&map,DXBC_BINDING_SRV,1,r);
+         assert(t && t->slot==r && !t->flags);
+      }
+      for(unsigned r=0;r<2;++r) assert(dxbc_binding_find(&map,DXBC_BINDING_SAMPLER,2,r)->slot==r);
+      unsigned dynamic_textures=0,dynamic_samplers=0;
+      nir_foreach_function_impl(impl,mapped) nir_foreach_block(block,impl) nir_foreach_instr(ins,block) {
+         if(ins->type!=nir_instr_type_tex) continue;
+         nir_tex_instr *tex=nir_instr_as_tex(ins);
+         assert(tex->texture_index==0);
+         dynamic_textures+=nir_tex_instr_src_index(tex,nir_tex_src_texture_offset)>=0;
+         dynamic_samplers+=nir_tex_instr_src_index(tex,nir_tex_src_sampler_offset)>=0;
+      }
+      assert(dynamic_textures==2 && dynamic_samplers==1);
+      uint8_t dims[DXBC_RESOURCE_SLOTS];
+      assert(dxbc_nir_srv_dimensions(mapped,dims));
+      for(unsigned i=0;i<8;++i) assert(dims[i]==DXBC_SRV_OTHER);
+      assert(dims[8]==DXBC_SRV_UNUSED);
+      nir_validate_shader(mapped,"C34 ranges");
+      ralloc_free(old);ralloc_free(mapped);glsl_type_singleton_decref();free(saved);free(data);
+      puts("PASS C34 SM5.1 ranges");return 0;
+   }
    if(argc==3 && !pixel_uav && !texture && !cube) {
       nir_shader *mapped=dxbc_translate_tokens_bindings(chunk,&agx_nir_options,limits,&map,&e);
       if(!strcmp(argv[2],"--refuse") || !strcmp(argv[2],"--translate-fail")) {
