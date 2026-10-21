@@ -207,6 +207,29 @@ class DxbcToNir(unittest.TestCase):
         self.assertTrue(flag("ps50sampleid"))
         self.assertFalse(flag("ps40"))
 
+    def test_unbounded_srv_range_reads_the_descriptor_heap(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47 (Tier
+        # 2): an unbounded SM5.1 SRV range (T0[0:*], indexed up to 600 here)
+        # was squeezed into the 128 slots, where Asahi clamps the index. With
+        # heap ranges enabled it is one heap binding and every access reads
+        # its descriptor through a marked bindless handle: heap index =
+        # constant buffer 14 (vec4 per range).x + register, 48 bytes each;
+        # no texture slot is used. Without the flag the slot path is kept.
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "ps51heap.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        self.assertIn("BINDING kind 1 id 0 space 1 reg 0 slot 0 flags 2", heap.stdout)
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", heap.stdout)
+        self.assertRegex(heap.stdout, r"textures 0 ")
+        self.assertEqual(heap.stdout.count("@bindless_image_agx"), 2)
+        self.assertEqual(heap.stdout.count("(desc_set=54034)"), 2)
+        self.assertEqual(heap.stdout.count("(texture_handle)"), 2)
+        self.assertRegex(heap.stdout, r"@load_ubo \(%\d+ \(0xe\)")
+        self.assertNotIn("texture_offset", heap.stdout)
+        slots = subprocess.run([str(self.binary), str(FIXTURES / "ps51heap.dxbc"), "--d3d12"],
+                               capture_output=True, text=True, timeout=60)
+        self.assertRegex(slots.stdout, r"TRANSLATED .* textures 128 ")
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

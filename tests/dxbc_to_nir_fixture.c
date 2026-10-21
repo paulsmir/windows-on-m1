@@ -59,15 +59,18 @@ main(int argc, char **argv)
    struct dxbc_error perr;
    struct dxbc_nir_error terr;
    nir_shader *nir;
-   bool print = false, print_final = false, d3d12 = false;
+   bool print = false, print_final = false, d3d12 = false, heap = false;
    for (int a = 2; a < argc; ++a) {
       print |= !strcmp(argv[a], "--print");
       print_final |= !strcmp(argv[a], "--print-final");
       d3d12 |= !strcmp(argv[a], "--d3d12");
+      heap |= !strcmp(argv[a], "--d3d12-heap");
    }
    /* the D3D12 owner's entry: SM5.1 register spaces through a binding map
     * with the owner's per-kind capacities (agx_d3d12_windows.cpp) */
    static const uint32_t d3d12_limits[DXBC_BINDING_KIND_COUNT] = {14, 128, 8, 16};
+   /* C47: Tier 2 heap ranges for SRVs */
+   static const uint32_t heap_limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_HEAP_RANGES, 8, 16};
    struct dxbc_binding_map d3d12_map;
 
    if (argc < 2 || !(f = fopen(argv[1], "rb")))
@@ -139,12 +142,16 @@ main(int argc, char **argv)
       ralloc_free(nir);
       return 0;
    }
-   if (d3d12) {
+   if (d3d12 || heap) {
       uint32_t regs = 0, positions = 0;
       if (program.type == DXBC_PROGRAM_HULL)
          hull_passthrough(bytes, (size_t)size, &regs, &positions);
-      nir = dxbc_translate_tokens_bindings_hs(chunk, &agx_nir_options, d3d12_limits, &d3d12_map,
-                                              regs, positions, &terr);
+      nir = dxbc_translate_tokens_bindings_hs(chunk, &agx_nir_options, heap ? heap_limits : d3d12_limits,
+                                              &d3d12_map, regs, positions, &terr);
+      for (uint32_t i = 0; nir && heap && i < d3d12_map.count; ++i)
+         printf("BINDING kind %u id %u space %u reg %u slot %u flags %u\n", d3d12_map.bindings[i].kind,
+                d3d12_map.bindings[i].id, d3d12_map.bindings[i].space, d3d12_map.bindings[i].reg,
+                d3d12_map.bindings[i].slot, d3d12_map.bindings[i].flags);
    } else if (program.type == DXBC_PROGRAM_HULL) {
       /* the output signature (OSGN: count, 8, then 24-byte entries with
        * the system value at +8 and the register at +16) names the control

@@ -727,6 +727,11 @@ binding_operand_valid(const struct dxbc_binding_map *map, const struct dxbc_oper
    const struct dxbc_binding *binding = binding_id(map, kind, (uint32_t)o->index[0].imm);
    if (!binding)
       return false;
+   if (binding->flags & DXBC_BINDING_HEAP)
+      /* C47: any register at or above the range's first one */
+      return o->index[1].imm <= UINT32_MAX && o->index[1].imm >= binding->reg &&
+             (!o->index[1].relative || o->index[1].representation == DXBC_INDEX_RELATIVE ||
+              o->index[1].representation == DXBC_INDEX_IMM32_PLUS_RELATIVE);
    if (o->index[1].relative) {
       /* C34: base slot + (immediate - lower register) + register, never
        * below the range's first slot by construction of the immediate */
@@ -755,6 +760,17 @@ normalize_binding_operand(const struct dxbc_binding_map *map, struct dxbc_operan
    if (kind < 0)
       return;
    const struct dxbc_binding *binding = binding_id(map, kind, (uint32_t)o->index[0].imm);
+   if (binding->flags & DXBC_BINDING_HEAP) {
+      /* C47: two dimensions mark a heap range: [range][offset from its first
+       * register (+ the register)] */
+      o->index[0].imm = binding->slot;
+      o->index[0].representation = DXBC_INDEX_IMM32;
+      o->index[0].relative = NULL;
+      o->index[1].imm -= binding->reg;
+      memset(&o->index[2], 0, sizeof(o->index[2]));
+      o->index_dimension = 2;
+      return;
+   }
    if (o->index[1].relative) {
       /* C34: the slot is base + immediate - lower register + the register */
       o->index[0] = o->index[1];
@@ -783,6 +799,10 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
     * which share what the bounded ones leave of each kind's slots */
    uint32_t bounded[DXBC_BINDING_KIND_COUNT] = {0}, unbounded[DXBC_BINDING_KIND_COUNT] = {0};
    uint32_t share[DXBC_BINDING_KIND_COUNT] = {0}, total_bounded = 0, total_unbounded = 0;
+   /* C47: the slot capacities without the heap-range flag, and the heap
+    * ranges placed so far */
+   uint32_t lim[DXBC_BINDING_KIND_COUNT] = {0}, heap_ranges = 0;
+   bool heap = false;
    enum dxbc_status status = DXBC_ERROR_OPERAND;
    const struct dxbc_instruction *bad = NULL;
    if (error)
@@ -794,6 +814,10 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
       goto fail;
    if (program->major != 5 || program->minor != 1)
       return DXBC_OK;
+   for (unsigned k = 0; k < DXBC_BINDING_KIND_COUNT; ++k)
+      lim[k] = limits[k] & ~DXBC_BINDING_HEAP_RANGES;
+   heap = (limits[DXBC_BINDING_SRV] & DXBC_BINDING_HEAP_RANGES) != 0;
+   limits = lim;
    pending.active = 1;
    for (unsigned pass = 0; pass < 2; ++pass) {
       for (unsigned i = 0; i < program->num_instructions; ++i) {
@@ -811,6 +835,10 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
             goto fail;
          uint32_t id = (uint32_t)o->index[0].imm, reg = (uint32_t)o->index[1].imm;
          const bool open = o->index[2].imm == UINT32_MAX;
+         /* C47: typed SRV ranges may live in the heap */
+         const bool heap_kind = heap && in->opcode == DXBC_OP_DCL_RESOURCE;
+         if (pass == 0 && heap_kind && open)
+            continue; /* an unbounded one always does */
          if (pass == 0) {
             if (open)
                ++unbounded[kind], ++total_unbounded;
@@ -819,6 +847,16 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
             continue;
          }
          uint32_t space = in->payload[payload - 1];
+         if (heap_kind && (open || o->index[2].imm - reg + 1 > limits[kind] - counts[kind])) {
+            if (binding_id(&pending, kind, id) || heap_ranges == DXBC_HEAP_RANGE_MAX ||
+                pending.count == DXBC_BINDING_MAP_MAX) {
+               status = DXBC_ERROR_LIMIT;
+               goto fail;
+            }
+            pending.bindings[pending.count++] = (struct dxbc_binding){
+               (uint32_t)kind, id, space, reg, heap_ranges++, DXBC_BINDING_HEAP};
+            continue;
+         }
          const uint32_t count = open ? share[kind] : (uint32_t)(o->index[2].imm - reg + 1);
          if (binding_id(&pending, kind, id) || !count || reg > UINT32_MAX - count + 1)
             goto fail;
@@ -866,6 +904,15 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
       if (kind >= 0) {
          struct dxbc_operand *o = &in->operands[0];
          const struct dxbc_binding *first = binding_id(&pending, kind, (uint32_t)o->index[0].imm);
+         if (first->flags & DXBC_BINDING_HEAP) {
+            /* C47: [heap range][registers, UINT32_MAX when unbounded] */
+            o->index[1].imm = o->index[2].imm == UINT32_MAX ? UINT32_MAX : o->index[2].imm - first->reg + 1;
+            o->index[0].imm = first->slot;
+            memset(&o->index[2], 0, sizeof(o->index[2]));
+            o->index_dimension = 2;
+            --in->num_payload;
+            continue;
+         }
          uint32_t count = 0;
          for (unsigned b = 0; b < pending.count; ++b)
             count += pending.bindings[b].kind == (uint32_t)kind && pending.bindings[b].id == first->id;

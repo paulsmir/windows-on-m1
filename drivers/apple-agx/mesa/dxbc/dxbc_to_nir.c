@@ -96,7 +96,7 @@ struct ctx {
       bool declared;
       uint8_t dim;
       nir_alu_type type;
-   } res[MAX_RESOURCES];
+   } res[MAX_RESOURCES + DXBC_HEAP_RANGE_MAX]; /* C47: heap ranges follow the slots */
    struct {
       bool declared;
       bool comparison;
@@ -104,6 +104,10 @@ struct ctx {
    /* C34: the register part of an SM5.1 resource/sampler range index, added
     * to the texture instruction being built (texture_/sampler_offset) */
    nir_def *dyn_texture, *dyn_sampler;
+   /* C47: the heap range and the register offset in it of the texture
+    * instruction being built (a bindless handle in tex_finish) */
+   nir_def *heap_offset;
+   unsigned heap_range;
 
    /* shader model 5 memory: u# views, g# groupshared, raw/structured t# */
    struct {
@@ -1066,6 +1070,18 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
       }
       return;
    case DXBC_OP_DCL_RESOURCE:
+      if (o && o->index_dimension == 2) {
+         /* C47: a heap range (dxbc_prepare_static_bindings) */
+         if (o->index[0].imm >= DXBC_HEAP_RANGE_MAX || !insn->num_payload) {
+            fail(c, insn, "heap range declaration");
+            return;
+         }
+         const unsigned t = MAX_RESOURCES + (unsigned)o->index[0].imm;
+         c->res[t].declared = true;
+         c->res[t].dim = (uint8_t)((insn->token0 >> 11) & 0x1fu);
+         c->res[t].type = return_type(insn->payload[0]);
+         return;
+      }
       if (!o || o->index[0].imm >= MAX_RESOURCES || !insn->num_payload) {
          fail(c, insn, "resource declaration");
          return;
@@ -1828,6 +1844,18 @@ static unsigned
 resource_index(struct ctx *c, const struct dxbc_instruction *insn,
                const struct dxbc_operand *o)
 {
+   if (o->type == DXBC_OPERAND_RESOURCE && o->index_dimension == 2) {
+      /* C47: [heap range][register offset] */
+      const unsigned t = MAX_RESOURCES + (unsigned)o->index[0].imm;
+      if (o->index[0].imm >= DXBC_HEAP_RANGE_MAX || !c->res[t].declared || c->heap_offset ||
+          c->dyn_texture) {
+         fail(c, insn, "heap resource operand");
+         return 0;
+      }
+      c->heap_offset = index_value(c, insn, &o->index[1]);
+      c->heap_range = (unsigned)o->index[0].imm;
+      return t;
+   }
    if (o->type != DXBC_OPERAND_RESOURCE || o->index_dimension != 1 ||
        o->index[0].imm >= MAX_RESOURCES || !c->res[o->index[0].imm].declared ||
        (!index_direct(&o->index[0]) && c->dyn_texture)) {
@@ -1875,9 +1903,24 @@ tex_finish(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, unsigned compon
     * reserved */
    if (c->dyn_texture)
       tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_texture_offset, c->dyn_texture);
+   if (c->heap_offset) {
+      /* C47: heap index = the range's first heap index (constant buffer
+       * DXBC_HEAP_TABLE_CB, vec4 per range) + the register offset; the
+       * descriptor's byte offset in the heap mirror is a bindless handle
+       * the native state pairs with the mirror's address */
+      nir_def *first = nir_channel(&c->b, nir_load_ubo(&c->b, 4, 32, nir_imm_int(&c->b, DXBC_HEAP_TABLE_CB),
+                                                        nir_imm_int(&c->b, (int)(c->heap_range * 16u)),
+                                                        .align_mul = 16, .align_offset = 0,
+                                                        .range_base = 0, .range = ~0u), 0);
+      nir_def *index = nir_iadd(&c->b, first, c->heap_offset);
+      nir_def *handle = nir_bindless_image_agx(&c->b, nir_imul_imm(&c->b, index, DXBC_HEAP_DESCRIPTOR_STRIDE),
+                                               .desc_set = DXBC_HEAP_HANDLE_MARK);
+      tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_texture_handle, handle);
+      tex->texture_index = 0;
+   }
    if (c->dyn_sampler)
       tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_sampler_offset, c->dyn_sampler);
-   c->dyn_texture = c->dyn_sampler = NULL;
+   c->dyn_texture = c->dyn_sampler = c->heap_offset = NULL;
    tex->num_srcs = num_srcs;
    nir_def_init(&tex->instr, &tex->def, components, 32);
    nir_builder_instr_insert(&c->b, &tex->instr);
@@ -2963,9 +3006,9 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
          fail(c, insn, "subroutines");
          break;
       }
-      c->dyn_texture = c->dyn_sampler = NULL;
+      c->dyn_texture = c->dyn_sampler = c->heap_offset = NULL;
       emit_instruction(c, i);
-      if (!c->failed && (c->dyn_texture || c->dyn_sampler))
+      if (!c->failed && (c->dyn_texture || c->dyn_sampler || c->heap_offset))
          fail(c, insn, "dynamically indexed resource outside a texture instruction");
    }
    if (!c->failed && c->cf_depth)
@@ -3252,11 +3295,12 @@ bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
                if (instr->type != nir_instr_type_tex) continue;
                const nir_tex_instr *tex = nir_instr_as_tex(instr);
                bool dynamic = false;
+               /* C47: heap-range accesses use no slot */
+               if (nir_tex_instr_src_index(tex, nir_tex_src_texture_handle) >= 0) continue;
                if (tex->texture_index >= DXBC_RESOURCE_SLOTS) goto fail;
                for (unsigned i = 0; i < tex->num_srcs; ++i) {
                   switch (tex->src[i].src_type) {
                   case nir_tex_src_texture_deref:
-                  case nir_tex_src_texture_handle:
                      goto fail;
                   case nir_tex_src_texture_offset:
                      dynamic = true;

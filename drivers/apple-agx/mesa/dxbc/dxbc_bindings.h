@@ -21,6 +21,24 @@ enum dxbc_binding_kind {
  * replay leaves a register the root signature does not cover unbound. */
 #define DXBC_BINDING_OPTIONAL 1u
 
+/* C47 (Tier 2): a caller sets DXBC_BINDING_HEAP_RANGES in the SRV limit to
+ * place an SM5.1 typed SRV range that is unbounded or does not fit the free
+ * slots in the descriptor heap instead: one binding flagged
+ * DXBC_BINDING_HEAP, its slot the heap range index (< DXBC_HEAP_RANGE_MAX)
+ * and reg the range's first register. The shader reads the heap index of
+ * that first register from constant buffer DXBC_HEAP_TABLE_CB (vec4 per
+ * range, .x), adds the accessed register's offset, and takes the AGX
+ * descriptor at that index of the heap mirror (DXBC_HEAP_DESCRIPTOR_STRIDE
+ * bytes each; the mirror is bound as constant buffer DXBC_HEAP_MIRROR_CB)
+ * through a bindless handle marked DXBC_HEAP_HANDLE_MARK. */
+#define DXBC_BINDING_HEAP 2u
+#define DXBC_BINDING_HEAP_RANGES 0x80000000u
+#define DXBC_HEAP_RANGE_MAX 8u
+#define DXBC_HEAP_TABLE_CB 14u
+#define DXBC_HEAP_MIRROR_CB 15u
+#define DXBC_HEAP_DESCRIPTOR_STRIDE 48u
+#define DXBC_HEAP_HANDLE_MARK 0xd312u
+
 struct dxbc_binding {
    uint32_t kind, id, space, reg, slot, flags;
 };
