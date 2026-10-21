@@ -46,6 +46,8 @@
 #include "agx_d3d12_probe_cs_volume_load.h"
 #include "agx_d3d12_probe_cs_volume_store.h"
 #include "agx_d3d12_probe_ps_volume.h"
+#include "agx_d3d12_probe_cs_c41a.h"
+#include "agx_d3d12_probe_cs_c41b.h"
 
 /* C2 checkpoint (D3D12-C-implementation-plan.md): a committed upload buffer
  * and a Map/write/Unmap/Map/read round trip. Runs only after the device
@@ -2815,6 +2817,140 @@ static int compute_typed_extent(ID3D12Device *device, ID3D12CommandQueue *queue,
 
 static int step_c20a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return compute_typed_extent(d, q, f, b, 0); }
 static int step_c20b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return compute_typed_extent(d, q, f, b, 1); }
+
+/* C41 (EXP1839 MiniEngine): C41A runs a loop with continue/continuec (the
+ * translator once emitted NIR continues without a continue construct);
+ * C41B reads GetDimensions of a 37x19 RWTexture2D and a 5x7x3
+ * RWTexture2DArray (resinfo on u#: view sizes, uint and float). Root UAV u0
+ * receives the results; u1/u2 come from a descriptor table. */
+static ID3D12Resource *c41_uav_texture(ID3D12Device *device, UINT width, UINT height, UINT16 layers,
+                                       DXGI_FORMAT format) {
+    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC desc = {0};
+    ID3D12Resource *texture = NULL;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = width;
+    desc.Height = height;
+    desc.DepthOrArraySize = layers;
+    desc.MipLevels = 1;
+    desc.Format = format;
+    desc.SampleDesc.Count = 1;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    HRESULT hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &desc,
+                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL,
+                                                      &IID_ID3D12Resource, (void **)&texture);
+    printf("C41 texture %ux%ux%u format %u hr=0x%08lx\n", width, height, (unsigned)layers, (unsigned)format,
+        (unsigned long)hr);
+    return SUCCEEDED(hr) ? texture : NULL;
+}
+static int c41_compute(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base,
+                       int uavinfo) {
+    const char *step = uavinfo ? "C41B" : "C41A";
+    const UINT count = uavinfo ? 8u : 64u;
+    UINT expected[64] = {0};
+    D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 1, 0, 0};
+    D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_UAV}, {D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {uavinfo ? 2u : 1u, parameters};
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12DescriptorHeap *heap = NULL;
+    ID3D12Resource *output = uav_buffer(device), *readback = NULL, *plain = NULL, *array = NULL;
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu = {0};
+    UINT *words = NULL;
+    unsigned bad = count;
+    float fw = 37.0f, fh = 19.0f;
+    if (uavinfo) {
+        expected[0] = 37; expected[1] = 19; expected[2] = 5; expected[3] = 7; expected[4] = 3;
+        memcpy(&expected[5], &fw, 4); memcpy(&expected[6], &fh, 4);
+    } else {
+        for (UINT x = 0; x < 64; ++x)
+            for (UINT i = 0; i < 40; ++i)
+                if (i % 3 != x % 3) expected[x] += (i & 7) == 5 ? 1000u : i;
+    }
+    readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    if (uavinfo) {
+        plain = c41_uav_texture(device, 37, 19, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
+        array = c41_uav_texture(device, 5, 7, 3, DXGI_FORMAT_R32_UINT);
+    }
+    HRESULT hr = output && readback && (!uavinfo || (plain && array)) ? S_OK : E_FAIL;
+    parameters[0].Descriptor.ShaderRegister = 0;
+    parameters[1].DescriptorTable.NumDescriptorRanges = 1;
+    parameters[1].DescriptorTable.pDescriptorRanges = &range;
+    if (SUCCEEDED(hr) && uavinfo) {
+        hr = ID3D12Device_CreateDescriptorHeap(device, &heap_desc, &IID_ID3D12DescriptorHeap, (void **)&heap);
+        if (SUCCEEDED(hr)) {
+            D3D12_CPU_DESCRIPTOR_HANDLE cpu = {0};
+            D3D12_UNORDERED_ACCESS_VIEW_DESC view = {DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_UAV_DIMENSION_TEXTURE2D};
+            ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(heap, &cpu);
+            ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(heap, &gpu);
+            ID3D12Device_CreateUnorderedAccessView(device, plain, NULL, &view, cpu);
+            view.Format = DXGI_FORMAT_R32_UINT;
+            view.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+            view.Texture2DArray.ArraySize = 3;
+            cpu.ptr += ID3D12Device_GetDescriptorHandleIncrementSize(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            ID3D12Device_CreateUnorderedAccessView(device, array, NULL, &view, cpu);
+        }
+    }
+    if (SUCCEEDED(hr)) hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
+        ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature, (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = uavinfo ? (const void *)g_agx_d3d12_probe_cs_c41b : (const void *)g_agx_d3d12_probe_cs_c41a;
+        pso_desc.CS.BytecodeLength = uavinfo ? sizeof(g_agx_d3d12_probe_cs_c41b) : sizeof(g_agx_d3d12_probe_cs_c41a);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+    }
+    printf("%s resources/root/PSO hr=0x%08lx\n", step, (unsigned long)hr);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+        &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+        &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        D3D12_RESOURCE_BARRIER barrier = {D3D12_RESOURCE_BARRIER_TYPE_UAV};
+        barrier.UAV.pResource = output;
+        if (uavinfo) ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &heap);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 0, ID3D12Resource_GetGPUVirtualAddress(output));
+        if (uavinfo) ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 1, gpu);
+        ID3D12GraphicsCommandList_Dispatch(list, 1, 1, 1);
+        ID3D12GraphicsCommandList_ResourceBarrier(list, 1, &barrier);
+        transition(list, output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, output, 0, 65536);
+        hr = run_list(queue, fence, list, base + 1, step);
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 65536};
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&words);
+        if (SUCCEEDED(hr) && words) {
+            bad = 0;
+            for (UINT i = 0; i < count; ++i) bad += words[i] != expected[i];
+            printf("%s readback bad=%u actual=[%u,%u,%u,%u,%u,0x%08x,0x%08x,%u] expected=[%u,%u,%u,%u,%u,0x%08x,0x%08x,%u]\n",
+                step, bad, words[0], words[1], words[2], words[3], words[4], words[5], words[6], words[7],
+                expected[0], expected[1], expected[2], expected[3], expected[4], expected[5], expected[6], expected[7]);
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_%s: %s hr=0x%08lx\n", step, SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL", (unsigned long)hr);
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (blob) ID3D10Blob_Release(blob);
+    if (errors) ID3D10Blob_Release(errors);
+    if (heap) ID3D12DescriptorHeap_Release(heap);
+    if (array) ID3D12Resource_Release(array);
+    if (plain) ID3D12Resource_Release(plain);
+    if (readback) ID3D12Resource_Release(readback);
+    if (output) ID3D12Resource_Release(output);
+    return !(SUCCEEDED(hr) && bad == 0);
+}
+static int step_c41a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c41_compute(d, q, f, b, 0); }
+static int step_c41b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c41_compute(d, q, f, b, 1); }
 
 /* C21: volumes are mip subresources, never arrays of Z subresources.
  * Expected native allocation extents below were obtained from the actual
@@ -5667,7 +5803,8 @@ int main(int argc, char **argv) {
             {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
             {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures},
             {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c},
-            {"C38A", c38_cached_pso}, {"C39A", c39_stream_output}};
+            {"C38A", c38_cached_pso}, {"C39A", c39_stream_output},
+            {"C41A", step_c41a}, {"C41B", step_c41b}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -5750,6 +5887,8 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C37C", step_c37c);
                 (void)run_isolated(adapter, "C38A", c38_cached_pso);
                 (void)run_isolated(adapter, "C39A", c39_stream_output);
+                (void)run_isolated(adapter, "C41A", step_c41a);
+                (void)run_isolated(adapter, "C41B", step_c41b);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
