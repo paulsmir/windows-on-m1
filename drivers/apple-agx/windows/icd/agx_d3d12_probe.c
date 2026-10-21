@@ -50,6 +50,7 @@
 #include "agx_d3d12_probe_cs_c41b.h"
 #include "agx_d3d12_probe_cs_c42c.h"
 #include "agx_d3d12_probe_cs_c42d.h"
+#include "agx_d3d12_probe_cs_c42e.h"
 
 /* C2 checkpoint (D3D12-C-implementation-plan.md): a committed upload buffer
  * and a Map/write/Unmap/Map/read round trip. Runs only after the device
@@ -3834,6 +3835,120 @@ static int step_c42a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
 static int step_c42b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 1); }
 static int step_c42c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 2); }
 static int step_c42d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 3); }
+/* C42E: MiniEngine's CopyBackPostBufferCS -- an R32_UINT texture of packed
+ * R11G11B10 values (0x781a0380 = (0.5, 0.25, 1.0)) unpacked into an
+ * R11G11B10_FLOAT typed UAV with a float3 store, read back as texel bits. */
+static int step_c42e(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    const char *step = "C42E";
+    const UINT packed = 0x380u | (0x340u << 11) | (0x1e0u << 22);
+    D3D12_HEAP_PROPERTIES heap_props = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC desc = {0};
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp = {0};
+    D3D12_DESCRIPTOR_RANGE ranges[2] = {{D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0, 0}, {D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1, 0, 1}};
+    D3D12_ROOT_PARAMETER parameter = {D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {1, &parameter};
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3D12Resource *post = NULL, *scene = NULL;
+    ID3D12Resource *upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12DescriptorHeap *heap = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu = {0};
+    UINT *words = NULL;
+    unsigned bad = 256;
+    HRESULT hr = upload && readback ? S_OK : E_FAIL;
+    parameter.DescriptorTable.NumDescriptorRanges = 2;
+    parameter.DescriptorTable.pDescriptorRanges = ranges;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = 16; desc.Height = 16; desc.DepthOrArraySize = 1; desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_R32_UINT; desc.SampleDesc.Count = 1;
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommittedResource(device, &heap_props, D3D12_HEAP_FLAG_NONE, &desc,
+        D3D12_RESOURCE_STATE_COPY_DEST, NULL, &IID_ID3D12Resource, (void **)&post);
+    if (SUCCEEDED(hr)) ID3D12Device_GetCopyableFootprints(device, &desc, 0, 1, 0, &fp, NULL, NULL, NULL);
+    if (SUCCEEDED(hr)) {
+        desc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        hr = ID3D12Device_CreateCommittedResource(device, &heap_props, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL, &IID_ID3D12Resource, (void **)&scene);
+    }
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&words);
+    if (SUCCEEDED(hr) && words) {
+        for (UINT y = 0; y < 16; ++y)
+            for (UINT x = 0; x < 16; ++x) ((UINT *)((BYTE *)words + fp.Offset + y * fp.Footprint.RowPitch))[x] = packed;
+        ID3D12Resource_Unmap(upload, 0, NULL);
+    } else if (SUCCEEDED(hr)) hr = E_FAIL;
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &heap_desc, &IID_ID3D12DescriptorHeap, (void **)&heap);
+    if (SUCCEEDED(hr)) {
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu = {0};
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(heap, &cpu);
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(heap, &gpu);
+        ID3D12Device_CreateShaderResourceView(device, post, NULL, cpu);
+        cpu.ptr += ID3D12Device_GetDescriptorHandleIncrementSize(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        ID3D12Device_CreateUnorderedAccessView(device, scene, NULL, NULL, cpu);
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
+        ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature, (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_c42e;
+        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_c42e);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+    }
+    printf("%s resources/root/PSO hr=0x%08lx rowpitch=%u\n", step, (unsigned long)hr, (unsigned)fp.Footprint.RowPitch);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+        &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+        &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        D3D12_TEXTURE_COPY_LOCATION buffer_loc = {upload, D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
+        D3D12_TEXTURE_COPY_LOCATION tex_loc = {post, D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
+        buffer_loc.PlacedFootprint = fp;
+        ID3D12GraphicsCommandList_CopyTextureRegion(list, &tex_loc, 0, 0, 0, &buffer_loc, NULL);
+        transition(list, post, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &heap);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+        ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 0, gpu);
+        ID3D12GraphicsCommandList_Dispatch(list, 2, 2, 1);
+        transition(list, scene, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        buffer_loc.pResource = readback;
+        buffer_loc.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+        tex_loc.pResource = scene;
+        ID3D12GraphicsCommandList_CopyTextureRegion(list, &buffer_loc, 0, 0, 0, &tex_loc, NULL);
+        hr = run_list(queue, fence, list, base + 1, step);
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 65536};
+        words = NULL;
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&words);
+        if (SUCCEEDED(hr) && words) {
+            const UINT *texel = (const UINT *)((const BYTE *)words + fp.Offset + 8u * fp.Footprint.RowPitch) + 8;
+            bad = 0;
+            for (UINT y = 0; y < 16; ++y)
+                for (UINT x = 0; x < 16; ++x) bad += ((const UINT *)((const BYTE *)words + fp.Offset + y * fp.Footprint.RowPitch))[x] != packed;
+            printf("%s readback bad=%u texel(8,8)=0x%08x expected=0x%08x\n", step, bad, *texel, packed);
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_%s: %s hr=0x%08lx\n", step, SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL", (unsigned long)hr);
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (blob) ID3D10Blob_Release(blob);
+    if (errors) ID3D10Blob_Release(errors);
+    if (heap) ID3D12DescriptorHeap_Release(heap);
+    if (scene) ID3D12Resource_Release(scene);
+    if (post) ID3D12Resource_Release(post);
+    if (readback) ID3D12Resource_Release(readback);
+    if (upload) ID3D12Resource_Release(upload);
+    return !(SUCCEEDED(hr) && bad == 0);
+}
 /* C21E: graphics point sampling from all16 mip1 volume voxels. */
 static int volume_sample(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
     C21Volume v; ID3D12CommandAllocator *allocator = NULL; ID3D12GraphicsCommandList *list = NULL;
@@ -5986,7 +6101,7 @@ int main(int argc, char **argv) {
             {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c},
             {"C38A", c38_cached_pso}, {"C39A", c39_stream_output},
             {"C41A", step_c41a}, {"C41B", step_c41b},
-            {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}};
+            {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -6075,6 +6190,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C42B", step_c42b);
                 (void)run_isolated(adapter, "C42C", step_c42c);
                 (void)run_isolated(adapter, "C42D", step_c42d);
+                (void)run_isolated(adapter, "C42E", step_c42e);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);

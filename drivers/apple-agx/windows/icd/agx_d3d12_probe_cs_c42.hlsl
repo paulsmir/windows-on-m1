@@ -36,3 +36,15 @@ void cs_pack()
     uint p = Pack_R11G11B10_FLOAT(rgb);
     o.Store4(0, uint4(p, asuint(Unpack_R11G11B10_FLOAT(p))));
 }
+
+// C42E /E cs_copyback /Vn g_agx_d3d12_probe_cs_c42e -> agx_d3d12_probe_cs_c42e.h:
+//   MiniEngine CopyBackPostBufferCS: an R32_UINT packed post buffer unpacked
+//   into an R11G11B10_FLOAT typed UAV (float3 store)
+RWTexture2D<float3> scene_out : register(u1);
+Texture2D<uint> post : register(t1);
+
+[numthreads(8, 8, 1)]
+void cs_copyback(uint3 id : SV_DispatchThreadID)
+{
+    scene_out[id.xy] = Unpack_R11G11B10_FLOAT(post[id.xy]);
+}
