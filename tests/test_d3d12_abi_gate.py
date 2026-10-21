@@ -440,6 +440,27 @@ class D3d12AbiGate(unittest.TestCase):
                 continue
             self.assertEqual(m.group(2).strip(), 'OwnerLock lock(owner);', m.group(1))
 
+    def test_heaps_the_cpu_cannot_map_stay_unmapped(self):
+        # EXP1847 ModelViewer: every heap got a persistent CPU map, so the
+        # UMD treated each GPU-written DEFAULT buffer as CPU-visible and
+        # downloaded it after every submission (the 64 MB light grid, ~163 ms
+        # a frame). Only a heap whose CPU page property is not NOT_AVAILABLE
+        # is mapped, and Map refuses the others.
+        source = SOURCE.read_text()
+        create = source[source.index('static HRESULT CreateHeap('):]
+        create = create[:create.index('\n}\n')]
+        self.assertIn('heap->cpu_visible = arg.CPUPageProperty != D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE;', create)
+        self.assertIn('AgxD3d12OwnerCreateBuffer(owner, heap->bytes, heap->cpu_visible, &buffer)', create)
+        self.assertNotIn('heap->cpu_visible = TRUE', create)
+        map_heap = source[source.index('static HRESULT APIENTRY MapHeap('):]
+        map_heap = map_heap[:map_heap.index('\n}\n')]
+        self.assertLess(map_heap.index('heap->native && heap->cpu'), map_heap.index('!heap->cpu_visible'))
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        buffer = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCreateBuffer('):]
+        buffer = buffer[:buffer.index('\n}\n')]
+        self.assertIn('cpu_visible ? AgxWin32AsahiBufferWriteMap(owner->Context, resource) : NULL', buffer)
+        self.assertIn('AgxWin32AsahiBufferMarkValid(owner->Context, resource)', buffer)
+
     def test_c6b_draw(self):
         # C6b invariants: a pipeline keeps copies of its VS/PS programs and
         # state descriptions (the runtime may destroy the objects); RTVs are

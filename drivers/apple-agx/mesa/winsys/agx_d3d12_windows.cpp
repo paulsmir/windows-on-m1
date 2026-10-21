@@ -248,7 +248,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
   return S_OK;
 }
 
-extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned long long bytes,
+extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned long long bytes, BOOL cpu_visible,
                                              AGX_D3D12_BUFFER *buffer) {
   OwnerLock lock(owner);
   if (!owner || !owner->Screen || !owner->Context || !buffer || !bytes || bytes > 0xffffffffull)
@@ -269,9 +269,13 @@ extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned lo
    * resources (agx_resource_create), which typed buffer UAVs use. */
   struct pipe_resource *resource = owner->Screen->resource_create(owner->Screen, &templ);
   if (!resource) return E_OUTOFMEMORY;
-  void *cpu = AgxWin32AsahiBufferWriteMap(owner->Context, resource);
+  /* EXP1847 ModelViewer: a mapped buffer counts as CPU-visible, so the UMD
+   * downloaded every GPU write of it after each submission (its 64 MB light
+   * grid: ~163 ms a frame). A heap the CPU cannot map stays unmapped; a later
+   * Mesa map (ExecuteIndirect arguments) downloads it then. */
+  void *cpu = cpu_visible ? AgxWin32AsahiBufferWriteMap(owner->Context, resource) : NULL;
   unsigned long long va = AgxWin32AsahiBufferGpuAddress(resource);
-  if (!cpu || !va) {
+  if ((cpu_visible ? !cpu : !AgxWin32AsahiBufferMarkValid(owner->Context, resource)) || !va) {
     AgxWin32AsahiResourceRelease(&resource);
     return E_OUTOFMEMORY;
   }

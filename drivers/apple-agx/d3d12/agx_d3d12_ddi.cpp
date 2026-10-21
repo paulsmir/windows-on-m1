@@ -1488,12 +1488,11 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
      * kernel allocation below; copies refuse such heaps. */
     if (AGX_D3D12_OWNER *owner = arg.ByteSize && heap->bytes <= MAXUINT32 ? EnsureOwner(device) : nullptr) {
         AGX_D3D12_BUFFER buffer = {};
-        HRESULT native = AgxD3d12OwnerCreateBuffer(owner, heap->bytes, &buffer);
+        HRESULT native = AgxD3d12OwnerCreateBuffer(owner, heap->bytes, heap->cpu_visible, &buffer);
         if (SUCCEEDED(native)) {
             heap->native = buffer.Resource;
             heap->gpuva = buffer.GpuVa;
-            heap->cpu = buffer.Cpu;
-            heap->cpu_visible = TRUE; /* Asahi buffers are CPU mapped (UMA) */
+            heap->cpu = buffer.Cpu; /* NULL for a NOT_AVAILABLE heap: Map refuses it */
             heap->allocation = AgxD3d12OwnerBufferAllocation(owner, &buffer);
             RegisterHeap(device, heap);
         }

@@ -46,7 +46,9 @@ HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *Args, AGX_D3D12_OWNER **
 void AgxD3d12OwnerLock(AGX_D3D12_OWNER *Owner);
 void AgxD3d12OwnerUnlock(AGX_D3D12_OWNER *Owner);
 HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
-HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *Owner, unsigned long long Bytes,
+/* CpuVisible: the heap's CPU page property is not NOT_AVAILABLE; only such
+ * buffers get the persistent CPU mapping (Buffer->Cpu, NULL otherwise). */
+HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *Owner, unsigned long long Bytes, BOOL CpuVisible,
                                   AGX_D3D12_BUFFER *Buffer);
 void AgxD3d12OwnerDestroyBuffer(AGX_D3D12_OWNER *Owner, AGX_D3D12_BUFFER *Buffer);
 /* The D3DKMT allocation handle behind a buffer (0 when unknown). */

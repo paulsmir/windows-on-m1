@@ -212,15 +212,25 @@ void *AgxWin32AsahiBufferCurrentMap(struct pipe_context *ctx,
   struct agx_resource *rsrc=agx_resource(resource);
   return rsrc->bo ? rsrc->bo->_map : NULL;
 }
-void *AgxWin32AsahiBufferWriteMap(struct pipe_context *ctx,
+/* D3D12 heaps are zero-initialised and valid from creation: a later CPU
+ * write map of the range must synchronise with the GPU users. */
+int AgxWin32AsahiBufferMarkValid(struct pipe_context *ctx,
     struct pipe_resource *resource) {
   if(!ctx || !resource || resource->screen!=ctx->screen ||
-     resource->target!=PIPE_BUFFER || resource->width0>UINT32_MAX) return NULL;
+     resource->target!=PIPE_BUFFER || resource->width0>UINT32_MAX) return 0;
   struct agx_resource *rsrc=agx_resource(resource);
   if(!rsrc->bo) {
     fprintf(stderr,"NATIVE_BUFFER_WRITE_MAP: no-bo\n");
-    return NULL;
+    return 0;
   }
+  util_range_add(resource,&rsrc->valid_buffer_range,0,(unsigned)resource->width0);
+  BITSET_SET(rsrc->data_valid,0);
+  return 1;
+}
+void *AgxWin32AsahiBufferWriteMap(struct pipe_context *ctx,
+    struct pipe_resource *resource) {
+  if(!AgxWin32AsahiBufferMarkValid(ctx,resource)) return NULL;
+  struct agx_resource *rsrc=agx_resource(resource);
   void *map=agx_bo_map(rsrc->bo);
   if(!map) {
     AGX_WIN32_ASAHI_BACKEND *backend=agx_device(ctx->screen)->windows_private;
@@ -228,8 +238,6 @@ void *AgxWin32AsahiBufferWriteMap(struct pipe_context *ctx,
         backend?(unsigned)backend->Failed:~0u,rsrc->bo->refcnt,rsrc->bo->size);
     return NULL;
   }
-  util_range_add(resource,&rsrc->valid_buffer_range,0,(unsigned)resource->width0);
-  BITSET_SET(rsrc->data_valid,0);
   return map;
 }
 int AgxWin32AsahiBufferCopy(struct pipe_context *ctx,
