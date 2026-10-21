@@ -4782,9 +4782,23 @@ struct AgxD3d12HeapScratch {
     AGX_D3D12_HEAP_SAMPLER samplers[DXBC_HEAP_SAMPLER_MAP_MAX];
     AGX_D3D12_HEAP_BINDING binding;
 };
+/* EXP1854 receipt-only (measure-d3d12-heap-walk per execution): heap walks,
+ * descriptors walked, re-packed descriptors and their time (QPC ticks); the
+ * replay runs under the owner lock */
+static struct { UINT walks, walked, packs; LONGLONG ticks; } g_heap_walk;
+static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch);
 static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch) {
     if (!b || (!b->descriptors && !b->sampler_descriptors) || !b->heap_ranges)
         return AgxD3d12OwnerSetHeap(owner, stage, nullptr);
+    LARGE_INTEGER t0 = {}, t1 = {};
+    QueryPerformanceCounter(&t0);
+    const HRESULT hr = SetStageHeapWalk(owner, stage, b, scratch);
+    QueryPerformanceCounter(&t1);
+    ++g_heap_walk.walks;
+    g_heap_walk.ticks += t1.QuadPart - t0.QuadPart;
+    return hr;
+}
+static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch) {
     if (!*scratch) *scratch = static_cast<AgxD3d12HeapScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12HeapScratch)));
     if (!*scratch) return E_OUTOFMEMORY;
     AgxD3d12HeapScratch &h = **scratch;
@@ -4822,8 +4836,12 @@ static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d
         const bool uav = UavDescriptorKind(view->kind);
         if ((view->kind != kDescriptorSrvTexture && view->kind != kDescriptorSrvBuffer && !uav) || !view->heap) continue;
         const AGX_D3D12_BUFFER texture = HeapBuffer(view->heap);
+        ++g_heap_walk.walked;
         /* Asahi re-laid the texture out since it was packed (agx_upload_textures re-packs bound views too) */
-        if (HeapFormOf(view)->key != AgxD3d12OwnerLayoutKey(owner, &texture)) PackHeapForm(owner, view);
+        if (HeapFormOf(view)->key != AgxD3d12OwnerLayoutKey(owner, &texture)) {
+            PackHeapForm(owner, view);
+            ++g_heap_walk.packs;
+        }
         if (uav) {
             /* C47: what heap UAVs write joins the batch as written */
             if (h.binding.WriteCount == kHeapTextures) {
@@ -5234,6 +5252,14 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     const UINT receipt[] = {count, commands, static_cast<UINT>((replayed.QuadPart - start.QuadPart) * 1000000 / hz),
                             static_cast<UINT>((submitted.QuadPart - replayed.QuadPart) * 1000000 / hz)};
     AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 4);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (g_heap_walk.walks) {
+        const UINT walk[] = {g_heap_walk.walks, g_heap_walk.walked, g_heap_walk.packs,
+                             static_cast<UINT>(g_heap_walk.ticks * 1000000 / hz)};
+        AdmissionUmdDiagnostic("measure-d3d12-heap-walk", S_OK, walk, 4);
+        memset(&g_heap_walk, 0, sizeof(g_heap_walk));
+    }
+#endif
 }
 /* EXP1822: one replay and its submission run under the device owner's lock,
  * so lists executed from several threads (the nBody async compute thread
