@@ -60,6 +60,11 @@ struct AGX_D3D12_OWNER {
    * invalidate it; u_blitter restores it. */
   struct pipe_framebuffer_state DrawFramebuffer;
   bool DrawFramebufferValid;
+  /* receipt-only: QPC ticks of the draws' binding, draw_vbo and unbinding
+   * and of the submit's flush and retire, reported and reset per submit
+   * (measure-d3d12-owner-time) */
+  LONGLONG TimeBind, TimeDrawVbo, TimeUnbind;
+  UINT TimedDraws;
   /* EXP1829 (Multithreading's shadow pass): a PSO without a pixel shader
    * draws with this empty one -- Asahi always reads the bound FS */
   void *EmptyFs;
@@ -1853,8 +1858,24 @@ static enum mesa_prim primitive(unsigned topology) {
   }
 }
 
+static LONGLONG qpc_now() {
+  LARGE_INTEGER t;
+  QueryPerformanceCounter(&t);
+  return t.QuadPart;
+}
+static UINT qpc_us(LONGLONG ticks) {
+  static LONGLONG frequency;
+  if (!frequency) {
+    LARGE_INTEGER f;
+    QueryPerformanceFrequency(&f);
+    frequency = f.QuadPart ? f.QuadPart : 1;
+  }
+  return static_cast<UINT>(ticks * 1000000 / frequency);
+}
+
 extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *draw) {
   OwnerLock lock(owner);
+  const LONGLONG entered = qpc_now();
   if (!owner || !owner->Context || !draw || !draw->Pipeline || !draw->Pipeline->Vs || draw->NumRtvs > 8)
     return E_INVALIDARG;
   const enum mesa_prim mode = primitive(draw->Topology);
@@ -2106,7 +2127,9 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     const unsigned append[4] = {~0u, ~0u, ~0u, ~0u};
     pipe->set_stream_output_targets(pipe, so_count, so, append, mode);
   }
+  const LONGLONG bound = qpc_now();
   pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
+  const LONGLONG drawn = qpc_now();
   if (so_count) {
     pipe->set_stream_output_targets(pipe, 0, NULL, NULL, mode);
     for (unsigned t = 0; t < so_count; ++t) {
@@ -2127,6 +2150,10 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
   release_optional_stages(pipe, stages, false);
   ++owner->PendingDraws;
+  owner->TimeBind += bound - entered;
+  owner->TimeDrawVbo += drawn - bound;
+  owner->TimeUnbind += qpc_now() - drawn;
+  ++owner->TimedDraws;
   return S_OK;
 }
 
@@ -2143,8 +2170,15 @@ extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
   }
   const UINT copies = owner->PendingCopies | (owner->PendingDispatches << 16);
   owner->PendingCopies = owner->PendingDispatches = 0;
+  const LONGLONG flush_start = qpc_now();
   owner->Context->flush(owner->Context, NULL, 0);
+  const LONGLONG flushed = qpc_now();
   const int retired = AgxWin32AsahiContextRetire(owner->Context, 5000u);
+  const UINT times[] = {owner->TimedDraws, qpc_us(owner->TimeBind), qpc_us(owner->TimeDrawVbo), qpc_us(owner->TimeUnbind),
+                        qpc_us(flushed - flush_start), qpc_us(qpc_now() - flushed)};
+  AdmissionUmdDiagnostic("measure-d3d12-owner-time", S_OK, times, 6u);
+  owner->TimeBind = owner->TimeDrawVbo = owner->TimeUnbind = 0;
+  owner->TimedDraws = 0;
   const int faulted = AgxWin32AsahiContextFaulted(owner->Context);
   const HRESULT hr = retired && !faulted ? S_OK : DXGI_ERROR_DEVICE_HUNG;
   receipt("measure-d3d12-owner-submit", hr, copies, static_cast<UINT>(retired), static_cast<UINT>(faulted));
