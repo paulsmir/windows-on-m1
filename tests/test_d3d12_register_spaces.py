@@ -70,6 +70,12 @@ class StaticRegisterSpaces(unittest.TestCase):
     def test_ambiguous_sources_and_maps_refuse(self):
         self.run_case('ambiguity')
 
+    def test_unset_root_descriptors_do_not_refuse(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1835: the
+        # PipelineStateCache sample left a root CBV it does not read unset
+        # and every draw was refused (reason 6).
+        self.run_case('unset')
+
     def run_case(self, name):
         result = subprocess.run([str(self.binary), name], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

@@ -4069,6 +4069,10 @@ static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *
         const AgxD3d12RootParameter &p = root->parameter[i];
         if (stage != kAnyStage && p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;
         if (p.space || i >= kRootArguments) return 5u;
+        /* EXP1835: a root descriptor or table the application never set
+         * leaves its slots unbound; D3D12 requires only the arguments the
+         * shader reads, which identity (SM5.0) bindings cannot tell */
+        if (p.type != D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS && !va[i]) continue;
         if (p.type == D3D12DDI_ROOT_PARAMETER_TYPE_UAV) {
             if (p.shader_register >= kUavSlots) return 5u;
             if (!(out->uav_heap[p.shader_register] = HeapAt(list->device, va[i], &out->uav_offset[p.shader_register])))

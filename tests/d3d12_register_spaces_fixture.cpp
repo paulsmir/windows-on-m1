@@ -137,6 +137,18 @@ static void extended(const char *mode) {
   assert(ResolveRoot(&list,&root,va,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out));
   map.count=DXBC_BINDING_MAP_MAX+1;
   assert(ResolveRoot(&list,&root,va,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out));
+ } else if(!std::strcmp(mode,"unset")) {
+  /* SM5.0 (identity) bindings: a root CBV the application never set (VA 0)
+   * is not refused -- D3D12 requires only the arguments the shader reads
+   * (EXP1835 PipelineStateCache) -- while a set VA outside every heap is */
+  map.active=0; root.parameters=2;
+  root.parameter[0]={D3D12DDI_ROOT_PARAMETER_TYPE_CBV,0,0,0,2,D3D12DDI_SHADER_VISIBILITY_ALL,0,0};
+  root.parameter[1]={D3D12DDI_ROOT_PARAMETER_TYPE_CBV,1,0,2,2,D3D12DDI_SHADER_VISIBILITY_ALL,0,0};
+  UINT64 unset[64]={0,2};
+  assert(!ResolveRoot(&list,&root,unset,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out));
+  assert(!out.cb_heap[0] && out.cb_heap[1]==&heaps[1]);
+  unset[0]=7;
+  assert(ResolveRoot(&list,&root,unset,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out));
  } else {assert(!"unknown test mode");}
 }
 int main(int argc,char **argv) {
