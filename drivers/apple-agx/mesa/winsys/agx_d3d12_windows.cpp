@@ -65,6 +65,9 @@ struct AGX_D3D12_OWNER {
    * (measure-d3d12-owner-time) */
   LONGLONG TimeBind, TimeDrawVbo, TimeUnbind;
   UINT TimedDraws;
+  /* receipt-only (measure-d3d12-owner-fences): the newest submission fence
+   * the previous submit reported */
+  unsigned long long ReportedFence;
   /* EXP1829 (Multithreading's shadow pass): a PSO without a pixel shader
    * draws with this empty one -- Asahi always reads the bound FS */
   void *EmptyFs;
@@ -1896,12 +1899,15 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
     for (unsigned i = 0; i < indirect->MaxCount; ++i) {
       info.indirect_offset = static_cast<unsigned>(indirect->Offset + static_cast<unsigned long long>(indirect->Stride) * i);
       pipe->launch_grid(pipe, &info);
-      pipe->memory_barrier(pipe, PIPE_BARRIER_ALL);
     }
   } else {
     pipe->launch_grid(pipe, &info);
-    pipe->memory_barrier(pipe, PIPE_BARRIER_ALL);
   }
+  /* EXP1850 ModelViewer: memory_barrier after every launch flushed each
+   * UAV-writing dispatch into its own submission (~70 a frame, ~40 ms).
+   * Asahi orders the launches of one compute batch by a CDM barrier that
+   * flushes and invalidates the caches (agx_launch_internal), and flushes a
+   * resource's writer batch before another batch or a CPU map uses it. */
   unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count);
   if (state_count) {
     pipe->bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, none);
@@ -2246,6 +2252,10 @@ extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
   const UINT times[] = {owner->TimedDraws, qpc_us(owner->TimeBind), qpc_us(owner->TimeDrawVbo), qpc_us(owner->TimeUnbind),
                         qpc_us(flushed - flush_start), qpc_us(qpc_now() - flushed)};
   AdmissionUmdDiagnostic("measure-d3d12-owner-time", S_OK, times, 6u);
+  const unsigned long long fence = AgxWin32AsahiContextNewestFence(owner->Context);
+  const UINT fences[] = {static_cast<UINT>(fence - owner->ReportedFence), static_cast<UINT>(fence)};
+  AdmissionUmdDiagnostic("measure-d3d12-owner-fences", S_OK, fences, 2u);
+  owner->ReportedFence = fence;
   owner->TimeBind = owner->TimeDrawVbo = owner->TimeUnbind = 0;
   owner->TimedDraws = 0;
   const int faulted = AgxWin32AsahiContextFaulted(owner->Context);

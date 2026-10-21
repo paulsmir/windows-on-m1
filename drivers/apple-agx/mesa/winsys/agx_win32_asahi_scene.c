@@ -292,6 +292,11 @@ int AgxWin32AsahiResourceBusy(struct pipe_context *ctx,struct pipe_resource *res
   }
   return 0;
 }
+/* D3D12 C46 receipt-only: the completion fence of the context's newest
+ * accepted submission; fences increase with every submission. */
+APPLE_AGX_U64 AgxWin32AsahiContextNewestFence(struct pipe_context *ctx) {
+  return ctx ? AgxWin32AsahiNewestFence(agx_context(ctx)) : 0u;
+}
 void AgxWin32AsahiContextRetireDiagnostic(struct pipe_context *ctx,
     APPLE_AGX_U32 state[12]) {
   memset(state,0,12*sizeof(*state));

@@ -461,6 +461,17 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('cpu_visible ? AgxWin32AsahiBufferWriteMap(owner->Context, resource) : NULL', buffer)
         self.assertIn('AgxWin32AsahiBufferMarkValid(owner->Context, resource)', buffer)
 
+    def test_a_dispatch_does_not_force_a_submission(self):
+        # EXP1850 ModelViewer: memory_barrier(PIPE_BARRIER_ALL) after every
+        # launch flushed each UAV-writing dispatch into its own kernel
+        # submission (~70 a frame, ~40 ms of replay). Asahi's CDM barrier
+        # orders launches in a batch and its writer tracking orders batches.
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        dispatch = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerDispatch'):]
+        dispatch = dispatch[:dispatch.index('\n}\n')]
+        self.assertEqual(dispatch.count('pipe->launch_grid(pipe, &info);'), 2)
+        self.assertNotIn('pipe->memory_barrier(', dispatch)
+
     def test_c6b_draw(self):
         # C6b invariants: a pipeline keeps copies of its VS/PS programs and
         # state descriptions (the runtime may destroy the objects); RTVs are

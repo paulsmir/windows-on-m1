@@ -54,9 +54,10 @@ class NativeOwner(unittest.TestCase):
     def test_compute(self):
         # C5: the compute program goes through the repository's DXBC -> NIR
         # translator (as the D3D11 path does); a dispatch binds the UAVs as
-        # shader buffers, ends with a full barrier (D3D12 orders the next
-        # command after it) and drops the bindings so they never outlive a
-        # heap.
+        # shader buffers, launches and drops the bindings so they never
+        # outlive a heap. EXP1850: no memory_barrier -- Asahi orders the
+        # launches of a batch (CDM barrier) and the batches (writer tracking);
+        # the barrier made every dispatch its own submission.
         text = OWNER.read_text()
         create = body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateCompute(')
         self.assertIn('dxbc_translate_tokens_bindings(', create)
@@ -65,9 +66,10 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('->create_compute_state(', create)
         dispatch = body(text, 'extern "C" HRESULT AgxD3d12OwnerDispatch(')
         order = [dispatch.index(k) for k in ('bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count, compute->SrvDimensions, compute->UavDimensions)',
-                                             'bind_compute_state', 'launch_grid', 'memory_barrier(pipe, PIPE_BARRIER_ALL)',
+                                             'bind_compute_state', 'launch_grid',
                                              'unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count)')]
         self.assertEqual(order, sorted(order))
+        self.assertNotIn('pipe->memory_barrier(', dispatch)
         # C13: UAVs of every stage bind in bind_stage (buffers u#, typed
         # images u#) and unbind_stage drops both so no binding outlives a heap
         stage_b = body(text, 'static HRESULT bind_stage(')
