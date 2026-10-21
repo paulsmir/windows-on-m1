@@ -145,6 +145,17 @@ class DxbcToNir(unittest.TestCase):
         self.assertEqual(hull_out, domain_in)
         self.assertIn("VARYING_SLOT_POS", variables("hs50pos", "shader_in"))
 
+    def test_loop_continue_targets_a_continue_construct(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1839 MiniEngine
+        # ModelViewer: a compute shader with "continue" inside "loop" hit
+        # nir_handle_add_jump's assert(nir_loop_has_continue_construct):
+        # NIR's continue jumps to the loop's continue construct, which a
+        # plain nir_push_loop does not create (release builds link it to a
+        # bogus block). Every DXBC loop must carry one, as in tgsi_to_nir.
+        result = self.run_fixture("cs50continue")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_COMPUTE", result.stdout)
+
     def test_windows_dxbc_corpus_does_not_crash(self):
         corpus = local_tree("dxbc-corpus")
         if corpus is None:

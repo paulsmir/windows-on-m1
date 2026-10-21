@@ -1689,8 +1689,12 @@ emit_flow(struct ctx *c, unsigned index)
       }
       return true;
    case DXBC_OP_LOOP:
-      if ((e = cf_push(c, insn, CF_LOOP)))
+      /* a NIR continue jumps to the loop's continue construct (as in
+       * tgsi_to_nir); nir_lower_continue_constructs removes it later */
+      if ((e = cf_push(c, insn, CF_LOOP))) {
          e->loop = nir_push_loop(b);
+         nir_loop_add_continue_construct(e->loop);
+      }
       return true;
    case DXBC_OP_ENDLOOP:
       if ((e = cf_top(c, insn, CF_LOOP))) {
