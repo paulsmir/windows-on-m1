@@ -512,6 +512,18 @@ make_var(struct ctx *c, nir_variable_mode mode, const struct glsl_type *type,
    return var;
 }
 
+/* Control points link hull to domain shader by register (C37, EXP1834: an
+ * SV_Position control point stored at VARYING_SLOT_POS was read by the
+ * domain shader's plain "dcl_input vicp[n][r]" at VAR0 + r, so the patch
+ * collapsed): hull outputs and domain inputs use VAR0 + register whatever
+ * their system value. Only the vertex shader feeding the hull shader
+ * writes SV_Position at VARYING_SLOT_POS. */
+static int
+hs_cp_slot(unsigned reg)
+{
+   return VARYING_SLOT_VAR0 + (int)reg;
+}
+
 static int
 generic_slot(struct ctx *c, unsigned reg, bool input)
 {
@@ -727,8 +739,14 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
       if (c->stage == MESA_SHADER_TESS_CTRL && !c->cp_in)
          c->cp_in = c->gs_vertices_in;
       if (!c->inputs[reg]) {
-         int slot = (insn->opcode == DXBC_OP_DCL_INPUT_SIV && name == 1) ?
-            VARYING_SLOT_POS : generic_slot(c, reg, true);
+         /* C37: a hull shader reads the vertex shader's SV_Position (named
+          * by the declaration or by the caller's signature mask) at
+          * VARYING_SLOT_POS; a domain shader reads control points by
+          * register (hs_cp_slot) */
+         const bool position = (insn->opcode == DXBC_OP_DCL_INPUT_SIV && name == 1) ||
+            (c->stage == MESA_SHADER_TESS_CTRL && (c->passthrough_positions & (1u << reg)));
+         int slot = c->stage == MESA_SHADER_TESS_EVAL ? hs_cp_slot(reg) :
+            position ? VARYING_SLOT_POS : generic_slot(c, reg, true);
          c->inputs[reg] = make_var(c, nir_var_shader_in,
             glsl_array_type(glsl_vec4_type(), c->gs_vertices_in, 0), slot, "vin");
       }
@@ -908,7 +926,7 @@ declare_output(struct ctx *c, const struct dxbc_instruction *insn)
    if (c->stage == MESA_SHADER_TESS_CTRL) {
       /* control points: gl_out[invocation] */
       if (!(insn->opcode == DXBC_OP_DCL_OUTPUT || name == 0 || name == 1) ||
-          !hs_cp_output(c, reg, name == 1 ? VARYING_SLOT_POS : VARYING_SLOT_VAR0 + (int)reg)) {
+          !hs_cp_output(c, reg, hs_cp_slot(reg))) {
          fail(c, insn, "control point output");
          return;
       }
@@ -2630,9 +2648,8 @@ hs_passthrough_vars(struct ctx *c)
       int slot;
       if (!(c->passthrough_registers & (1u << reg)))
          continue;
-      slot = (c->passthrough_positions & (1u << reg)) ? VARYING_SLOT_POS :
-             VARYING_SLOT_VAR0 + (int)reg;
-      if (!hs_cp_input(c, reg, slot) || !hs_cp_output(c, reg, slot))
+      slot = (c->passthrough_positions & (1u << reg)) ? VARYING_SLOT_POS : hs_cp_slot(reg);
+      if (!hs_cp_input(c, reg, slot) || !hs_cp_output(c, reg, hs_cp_slot(reg)))
          fail(c, NULL, "pass-through control point register %u", reg);
       c->cp_out_mask[reg] = 0xfu;
    }

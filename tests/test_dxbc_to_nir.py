@@ -54,7 +54,10 @@ TRANSLATED = {"vs40": "MESA_SHADER_VERTEX", "ps40": "MESA_SHADER_FRAGMENT",
               "hs50": "MESA_SHADER_TESS_CTRL",
               # SM 5 hull without a control-point phase (pass-through by
               # the output signature), isolines
-              "hs50p": "MESA_SHADER_TESS_CTRL"}
+              "hs50p": "MESA_SHADER_TESS_CTRL",
+              # C37: a pass-through hull shader and a domain shader whose
+              # control points carry SV_Position
+              "hs50pos": "MESA_SHADER_TESS_CTRL", "ds50pos": "MESA_SHADER_TESS_EVAL"}
 # tessellation stages, class linkage / doubles / evaluation, SM 5.1 ranges
 REFUSED = ["ps50", "ps51"]
 # the shaders the D3D smoke tools compile at run time (tools/dxbc/extract-smoke-shaders.py)
@@ -122,6 +125,25 @@ class DxbcToNir(unittest.TestCase):
     def run_fixture(self, name):
         return subprocess.run([str(self.binary), str(FIXTURES / f"{name}.dxbc")],
                               capture_output=True, text=True, timeout=60)
+
+    def test_hull_and_domain_control_points_link_by_register(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1834 C37A: a
+        # pass-through hull shader stored its SV_Position control point at
+        # VARYING_SLOT_POS while the domain shader read the same register
+        # ("dcl_input vicp[3][0]", no system value) at VAR0, so every patch
+        # collapsed to the origin. Control point outputs and domain inputs
+        # must name the same locations; only the vertex shader's position
+        # reaches the hull shader at VARYING_SLOT_POS.
+        def variables(name, mode):
+            result = subprocess.run([str(self.binary), str(FIXTURES / f"{name}.dxbc"), "--print"],
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return sorted(re.findall(r"^decl_var %s INTERP_MODE_\w+ none vec4\[3\] \w+#?\d* \((VARYING_SLOT_\w+)" % mode,
+                                     result.stdout, re.M))
+        hull_out, domain_in = variables("hs50pos", "shader_out"), variables("ds50pos", "shader_in")
+        self.assertEqual(hull_out, ["VARYING_SLOT_VAR0", "VARYING_SLOT_VAR1"])
+        self.assertEqual(hull_out, domain_in)
+        self.assertIn("VARYING_SLOT_POS", variables("hs50pos", "shader_in"))
 
     def test_windows_dxbc_corpus_does_not_crash(self):
         corpus = local_tree("dxbc-corpus")

@@ -671,9 +671,9 @@ static VOID APIENTRY CreateComputeShader(D3D12DDI_HDEVICE device, const UINT *co
 }
 /* C37 (D3D12-C37-tessellation.md): hull and domain shaders keep their
  * program as the other stages do; a hull shader also keeps the registers of
- * its output (control point) signature and which of them hold SV_Position,
- * what a pass-through control point phase copies (the D3D11 frontend's
- * hs_passthrough). */
+ * its output (control point) signature, what a pass-through control point
+ * phase copies (the D3D11 frontend's hs_passthrough), and which registers
+ * of its input signature hold the vertex shader's SV_Position. */
 static SIZE_T APIENTRY CalcPrivateTessellationShaderSize(D3D12DDI_HDEVICE device, const UINT *code,
                                                          D3D12DDI_HROOTSIGNATURE root,
                                                          const D3D12DDIARG_TESSELLATION_IO_SIGNATURES *) {
@@ -684,13 +684,12 @@ static VOID APIENTRY CreateTessellationShader(D3D12DDI_HDEVICE device, const UIN
                                               D3D12DDI_CREATE_SHADER_FLAGS) {
     StoreShader(device, code, handle);
     auto *shader = static_cast<AgxD3d12Shader *>(handle.pDrvPrivate);
-    if (!shader || !code || code[1] < 2 || shader->stage != D3D11_SB_HULL_SHADER || !sig || !sig->pOutputSignature) return;
-    for (UINT i = 0; i < sig->NumOutputSignatureEntries; ++i) {
-        const UINT reg = sig->pOutputSignature[i].Register;
-        if (reg >= 32) continue;
-        shader->hs_registers |= 1u << reg;
-        if (sig->pOutputSignature[i].SystemValue == D3D10_SB_NAME_POSITION) shader->hs_positions |= 1u << reg;
-    }
+    if (!shader || !code || code[1] < 2 || shader->stage != D3D11_SB_HULL_SHADER || !sig) return;
+    for (UINT i = 0; sig->pOutputSignature && i < sig->NumOutputSignatureEntries; ++i)
+        if (sig->pOutputSignature[i].Register < 32) shader->hs_registers |= 1u << sig->pOutputSignature[i].Register;
+    for (UINT i = 0; sig->pInputSignature && i < sig->NumInputSignatureEntries; ++i)
+        if (sig->pInputSignature[i].Register < 32 && sig->pInputSignature[i].SystemValue == D3D10_SB_NAME_POSITION)
+            shader->hs_positions |= 1u << sig->pInputSignature[i].Register;
 }
 static VOID APIENTRY DestroyShader(D3D12DDI_HDEVICE, D3D12DDI_HSHADER) {}
 /* C1h (EXP1352): after its internal vertex shader (VS 4.0, 15 DWORDs) the
