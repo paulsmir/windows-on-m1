@@ -768,9 +768,11 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
      * scissor come from the calling list */
     const int bundled = mode == 9;
     /* C31 (EXP1825 ExecuteIndirect): mode 10 is mode 1 drawn by
-     * ExecuteIndirect through a root-CBV + root-constants + draw signature
-     * (stride 40, two records, count 1); the list binds a zero scale and
-     * green, so only the record's CBV and constants draw the blue triangle */
+     * ExecuteIndirect through a root-constants + root-CBV + draw signature
+     * (stride 40, two records, count 1; root parameters in increasing
+     * order, EXP1826: the runtime refuses others with debug message 743);
+     * the list binds a zero scale and green, so only the record's
+     * constants and CBV draw the blue triangle */
     const int expanded = mode == 10;
     int rooted = mode == 1 || redundant_root || bundled || expanded;
     /* C11 (D3D12-C11-queries.md): mode 3 draws the C6b triangle inside an
@@ -863,8 +865,8 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             const float blue[4] = {0.0f, 0.0f, 1.0f, 1.0f};
             const UINT draw[4] = {3, 1, 0, 0}, one = 1;
             for (UINT r = 0; r < 2; ++r) {
-                memcpy(bytes + 3072 + 40 * r, &cbv, 8);
-                memcpy(bytes + 3072 + 40 * r + 8, blue, 16);
+                memcpy(bytes + 3072 + 40 * r, blue, 16);
+                memcpy(bytes + 3072 + 40 * r + 16, &cbv, 8);
                 memcpy(bytes + 3072 + 40 * r + 24, draw, 16);
             }
             memcpy(bytes + 3200, &one, sizeof(one));
@@ -1001,14 +1003,14 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
                                                            vertices, 2048, indirect_no_count ? NULL : vertices,
                                                            indirect_no_count ? 0 : 2080);
         } else if (expanded) {
-            D3D12_INDIRECT_ARGUMENT_DESC args[3] = {{D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW},
-                                                    {D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT},
+            D3D12_INDIRECT_ARGUMENT_DESC args[3] = {{D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT},
+                                                    {D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW},
                                                     {D3D12_INDIRECT_ARGUMENT_TYPE_DRAW}};
             D3D12_COMMAND_SIGNATURE_DESC sd = {40, 3, args, 0};
-            args[0].ConstantBufferView.RootParameterIndex = 1;
-            args[1].Constant.RootParameterIndex = 0;
-            args[1].Constant.DestOffsetIn32BitValues = 0;
-            args[1].Constant.Num32BitValuesToSet = 4;
+            args[0].Constant.RootParameterIndex = 0;
+            args[0].Constant.DestOffsetIn32BitValues = 0;
+            args[0].Constant.Num32BitValuesToSet = 4;
+            args[1].ConstantBufferView.RootParameterIndex = 1;
             HRESULT sh = ID3D12Device_CreateCommandSignature(device, &sd, root, &IID_ID3D12CommandSignature, (void **)&signature);
             printf("C31A CreateCommandSignature hr=0x%08lx\n", (unsigned long)sh);
             if (SUCCEEDED(sh)) ID3D12GraphicsCommandList_ExecuteIndirect(list, signature, 2, vertices, 3072, vertices, 3200);
