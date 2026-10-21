@@ -209,6 +209,10 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     AdmissionUmdAsahiOwnerOperations(&owner->OwnerOperations);
     owner->Backend.ZlsAttachments = 1;
     owner->Backend.D3dRobustness = 1;
+    /* C32 (EXP1830): without this the winsys sets AGX_DBG_NOMSAA, the screen
+     * refuses multisampled formats and u_blitter's resolve hits
+     * UNREACHABLE("Unsupported blit") in agx_blit */
+    owner->Backend.Multisample = 1;
     owner->Screen = AgxWin32AsahiScreenCreateForWindows(&owner->Backend, &owner->Runtime.Screen,
                                                        &owner->OwnerOperations, &owner->Owner,
                                                        AdmissionUmdAsahiBatchOperations());
@@ -1122,6 +1126,14 @@ extern "C" HRESULT AgxD3d12OwnerResolve(AGX_D3D12_OWNER *owner, const AGX_D3D12_
       d->target == PIPE_BUFFER || dst_level > d->last_level || dst_layer >= d->array_size || src_layer >= s->array_size ||
       level_extent(d->width0, dst_level) != s->width0 || level_extent(d->height0, dst_level) != s->height0)
     return E_INVALIDARG;
+  /* the formats u_blitter needs (is_blit_generic_supported): agx_blit
+   * traps on an unsupported blit instead of failing */
+  struct pipe_screen *screen = owner->Context->screen;
+  if (!screen->is_format_supported(screen, view, d->target, d->nr_samples, d->nr_storage_samples, PIPE_BIND_RENDER_TARGET) ||
+      !screen->is_format_supported(screen, view, s->target, s->nr_samples, s->nr_storage_samples, PIPE_BIND_SAMPLER_VIEW)) {
+    receipt("measure-d3d12-resolve", E_NOTIMPL, s->nr_samples, s->width0 | (s->height0 << 16), static_cast<UINT>(view));
+    return E_NOTIMPL;
+  }
   struct pipe_blit_info blit = {};
   blit.dst.resource = d;
   blit.dst.level = dst_level;
