@@ -5,8 +5,11 @@
 #include <d3d12.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "agx_d3d12_probe_gs.h"
+#include "agx_d3d12_probe_cs_nbody.h"
+#include "agx_d3d12_probe_cs_tgsm_loop.h"
 #include "agx_d3d12_probe_cs_texture1d_load.h"
 #include "agx_d3d12_probe_cs_texture1d_store.h"
 #include "agx_d3d12_probe_cs_texture1d_array_load.h"
@@ -3837,6 +3840,136 @@ static int c27_geometry(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12F
 static int step_c27a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c27_geometry(d, q, f, b, 0); }
 static int step_c27b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c27_geometry(d, q, f, b, 1); }
 
+/* C28 (EXP1822: nBody's compute submission never retired, DEVICE_HUNG):
+ * mode 0 (C28A) a groupshared tile loop with two barriers and a root-CBV
+ * bound (exact sums); modes 1/2 (C28B/C28C) the sample's own nBodyGravityCS
+ * bytecode over 1 or 8 groups against a CPU reference, timed. Root CBV b0,
+ * root SRV t0 (the upload buffer), root UAV u0. */
+static int c28_compute(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int mode) {
+    const char *step = mode == 0 ? "C28A" : mode == 1 ? "C28B" : "C28C";
+    const UINT groups = mode == 0 ? 2u : mode == 1 ? 1u : 8u;
+    const UINT n = groups * (mode == 0 ? 64u : 128u);
+    D3D12_ROOT_PARAMETER params[3] = {{D3D12_ROOT_PARAMETER_TYPE_CBV}, {D3D12_ROOT_PARAMETER_TYPE_UAV}, {D3D12_ROOT_PARAMETER_TYPE_SRV}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {mode == 0 ? 2u : 3u, params, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12Resource *upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *uav = uav_buffer(device);
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    static float particles[8 * 128][8];
+    unsigned char *bytes = NULL;
+    unsigned bad = n;
+    double elapsed_ms = -1.0, worst = 0.0;
+    params[0].Descriptor.ShaderRegister = 0;
+    params[1].Descriptor.ShaderRegister = 0;
+    params[2].Descriptor.ShaderRegister = 0;
+    HRESULT hr = upload && uav && readback ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&bytes);
+    if (SUCCEEDED(hr)) {
+        if (mode == 0) {
+            const UINT param[4] = {0, 4, 0, 0};
+            memcpy(bytes, param, sizeof(param));
+        } else {
+            const UINT param[4] = {n, groups, 0, 0};
+            const float paramf[4] = {0.1f, 1.0f, 0.0f, 0.0f};
+            UINT seed = 12345u;
+            memcpy(bytes, param, sizeof(param));
+            memcpy(bytes + 16, paramf, sizeof(paramf));
+            for (UINT i = 0; i < n; ++i) {
+                for (UINT c = 0; c < 3; ++c) {
+                    seed = seed * 1664525u + 1013904223u;
+                    particles[i][c] = (float)(seed >> 8) / 16777216.0f * 2.0f - 1.0f;
+                }
+                particles[i][3] = 1.0f;
+                particles[i][4] = particles[i][5] = particles[i][6] = particles[i][7] = 0.0f;
+            }
+            memcpy(bytes + 1024, particles, n * 32u);
+        }
+        ID3D12Resource_Unmap(upload, 0, NULL);
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob), ID3D10Blob_GetBufferSize(blob),
+                                              &IID_ID3D12RootSignature, (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = mode == 0 ? (const void *)g_agx_d3d12_probe_cs_tgsm_loop : (const void *)g_agx_d3d12_probe_cs_nbody;
+        pso_desc.CS.BytecodeLength = mode == 0 ? sizeof(g_agx_d3d12_probe_cs_tgsm_loop) : sizeof(g_agx_d3d12_probe_cs_nbody);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+        printf("%s CreateComputePipelineState hr=0x%08lx\n", step, (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        LARGE_INTEGER t0, t1, f;
+        const D3D12_GPU_VIRTUAL_ADDRESS va = ID3D12Resource_GetGPUVirtualAddress(upload);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+        ID3D12GraphicsCommandList_SetComputeRootConstantBufferView(list, 0, va);
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 1, ID3D12Resource_GetGPUVirtualAddress(uav));
+        if (mode) ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(list, 2, va + 1024);
+        ID3D12GraphicsCommandList_Dispatch(list, groups, 1, 1);
+        transition(list, uav, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, uav, 0, 65536);
+        QueryPerformanceFrequency(&f);
+        QueryPerformanceCounter(&t0);
+        hr = run_list(queue, fence, list, base + 1, step);
+        QueryPerformanceCounter(&t1);
+        elapsed_ms = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)f.QuadPart;
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 65536};
+        const float *out = NULL;
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&out);
+        if (SUCCEEDED(hr) && out) {
+            bad = 0;
+            for (UINT i = 0; i < n; ++i) {
+                if (mode == 0) {
+                    if (((const UINT *)out)[i] != 32640u) ++bad;
+                    continue;
+                }
+                double ax = 0, ay = 0, az = 0;
+                for (UINT j = 0; j < n; ++j) {
+                    const double rx = (double)particles[j][0] - particles[i][0], ry = (double)particles[j][1] - particles[i][1],
+                                 rz = (double)particles[j][2] - particles[i][2];
+                    const double d2 = rx * rx + ry * ry + rz * rz + 0.00125 * 0.00125;
+                    const double inv = 1.0 / sqrt(d2), s3 = 66.73 * inv * inv * inv;
+                    ax += rx * s3; ay += ry * s3; az += rz * s3;
+                }
+                const double want[3] = {particles[i][0] + ax * 0.01, particles[i][1] + ay * 0.01, particles[i][2] + az * 0.01};
+                for (UINT c = 0; c < 3; ++c) {
+                    const double got = out[i * 8 + c], err = fabs(got - want[c]) / (1.0 + fabs(want[c]));
+                    if (err > worst) worst = err;
+                    if (!(err <= 1e-3)) { ++bad; break; }
+                }
+            }
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("%s groups=%u threads=%u elapsed_ms=%.1f bad=%u worst=%.3g hr=0x%08lx\n", step, groups, n, elapsed_ms, bad,
+           worst, (unsigned long)hr);
+    printf("AGX_D3D12_%s: %s\n", step, SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (readback) ID3D12Resource_Release(readback);
+    if (uav) ID3D12Resource_Release(uav);
+    if (upload) ID3D12Resource_Release(upload);
+    return !(SUCCEEDED(hr) && bad == 0);
+}
+static int step_c28a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c28_compute(d, q, f, b, 0); }
+static int step_c28b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c28_compute(d, q, f, b, 1); }
+static int step_c28c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c28_compute(d, q, f, b, 2); }
+
 typedef int (*probe_step)(ID3D12Device *, ID3D12CommandQueue *, ID3D12Fence *, UINT64);
 static int step_c6c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 1); }
 static int step_c6d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 2); }
@@ -4352,6 +4485,9 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter,"C24A",step_c24a);
                 (void)run_isolated(adapter,"C24B",step_c24b);
                 (void)run_isolated(adapter,"C24C",step_c24c);
+                (void)run_isolated(adapter, "C28A", step_c28a);
+                (void)run_isolated(adapter, "C28B", step_c28b);
+                (void)run_isolated(adapter, "C28C", step_c28c);
                 (void)run_isolated(adapter, "C27A", step_c27a);
                 (void)run_isolated(adapter, "C27B", step_c27b);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
