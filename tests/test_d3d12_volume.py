@@ -70,7 +70,7 @@ struct D3D12DDIARG_CREATE_UNORDERED_ACCESS_VIEW_0002 {
  struct {void *pDrvPrivate;} hDrvResource; DXGI_FORMAT Format;UINT ResourceDimension;
  D3D12DDIARG_TEX2D_UNORDERED_ACCESS_VIEW_0002 Tex2D;
  struct {UINT MipSlice,FirstW,WSize;} Tex3D;
- struct {UINT64 FirstElement;UINT NumElements,StructureByteStride,Flags;struct {void *pDrvPrivate;} hDrvCounterResource;} Buffer;
+ struct {UINT64 FirstElement;UINT NumElements,StructureByteStride,Flags;UINT64 CounterOffsetInBytes;struct {void *pDrvPrivate;} hDrvCounterResource;} Buffer;
 };
 #define D3D12DDI_BUFFER_UAV_FLAG_RAW 1
 struct D3D12DDIARG_CREATE_RENDER_TARGET_VIEW_0002 {
@@ -79,7 +79,7 @@ struct D3D12DDIARG_CREATE_RENDER_TARGET_VIEW_0002 {
  struct {UINT MipSlice,FirstW,WSize;} Tex3D;
 };
 '''
-        code=block(ddi,'struct AgxD3d12Descriptor {')+';\n'
+        code=block(ddi,'struct AgxD3d12Descriptor {')+';\n'+block(ddi,'static void SetUavCounter(')+'\n'
         if 'static bool VolumeViewRange(' in ddi:code+=block(ddi,'static bool VolumeViewRange(')+'\n'
         for name in ['CreateShaderResourceView','CreateUnorderedAccessView','CreateRenderTargetView']:
             code+=block(ddi,'static VOID APIENTRY '+name+'(')+'\n'

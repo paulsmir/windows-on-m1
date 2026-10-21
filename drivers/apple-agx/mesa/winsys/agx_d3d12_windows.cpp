@@ -1599,12 +1599,21 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
     *view_count = i + 1;
   }
   if (*view_count) pipe->set_sampler_views(pipe, stage, 0, *view_count, 0, views);
-  struct pipe_shader_buffer buffers[AGX_D3D12_UAV_SLOTS] = {};
+  /* C33: UAV buffers at 0..7, their append/consume counters at 8..15 */
+  static_assert(DXBC_NIR_UAV_COUNTER_SLOT == AGX_D3D12_UAV_SLOTS, "counter slots follow the UAV slots");
+  struct pipe_shader_buffer buffers[2 * AGX_D3D12_UAV_SLOTS] = {};
   struct pipe_image_view images[AGX_D3D12_UAV_SLOTS] = {};
   for (unsigned i = 0; i < AGX_D3D12_UAV_SLOTS; ++i) {
     const AGX_D3D12_BUFFER *buffer = uavs[i].Buffer;
     if (!buffer) continue;
     if (!buffer->Resource) return E_INVALIDARG;
+    if (const AGX_D3D12_BUFFER *counter = uavs[i].Counter) {
+      if (!counter->Resource || counter->Bytes > 0xffffffffull || uavs[i].CounterOffset > counter->Bytes - 4u)
+        return E_INVALIDARG;
+      buffers[DXBC_NIR_UAV_COUNTER_SLOT + i].buffer = static_cast<struct pipe_resource *>(counter->Resource);
+      buffers[DXBC_NIR_UAV_COUNTER_SLOT + i].buffer_offset = static_cast<unsigned>(uavs[i].CounterOffset);
+      buffers[DXBC_NIR_UAV_COUNTER_SLOT + i].buffer_size = 4u;
+    }
     if (uav_dimensions && uav_dimensions[i] == DXBC_UAV_UNUSED &&
         (static_cast<const struct pipe_resource *>(buffer->Resource)->target == PIPE_TEXTURE_1D ||
          static_cast<const struct pipe_resource *>(buffer->Resource)->target == PIPE_TEXTURE_1D_ARRAY)) continue;
@@ -1622,7 +1631,7 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
     const unsigned long long room = buffer->Bytes - uavs[i].Offset;
     buffers[i].buffer_size = static_cast<unsigned>(uavs[i].Bytes && uavs[i].Bytes < room ? uavs[i].Bytes : room);
   }
-  pipe->set_shader_buffers(pipe, stage, 0, AGX_D3D12_UAV_SLOTS, buffers, (1u << AGX_D3D12_UAV_SLOTS) - 1u);
+  pipe->set_shader_buffers(pipe, stage, 0, 2 * AGX_D3D12_UAV_SLOTS, buffers, (1u << (2 * AGX_D3D12_UAV_SLOTS)) - 1u);
   pipe->set_shader_images(pipe, stage, 0, AGX_D3D12_UAV_SLOTS, 0, images);
   return S_OK;
 }
@@ -1630,7 +1639,7 @@ static void unbind_stage(struct pipe_context *pipe, mesa_shader_stage stage, str
                          unsigned view_count) {
   for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i) pipe->set_constant_buffer(pipe, stage, i, NULL);
   /* the batch holds its resources; UAV bindings must not outlive the heaps */
-  pipe->set_shader_buffers(pipe, stage, 0, AGX_D3D12_UAV_SLOTS, NULL, 0);
+  pipe->set_shader_buffers(pipe, stage, 0, 2 * AGX_D3D12_UAV_SLOTS, NULL, 0);
   pipe->set_shader_images(pipe, stage, 0, 0, AGX_D3D12_UAV_SLOTS, NULL);
   if (!view_count) return;
   pipe->set_sampler_views(pipe, stage, 0, 0, view_count, NULL);

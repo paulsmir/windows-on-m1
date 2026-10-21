@@ -354,7 +354,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('view.kind != kDescriptorUavBuffer', source[source.index('static bool DescriptorUav('):])
         self.assertIn('view->kind == kDescriptorCbv', execute)
         uav = fn('static VOID APIENTRY CreateUnorderedAccessView(')
-        for reason in ('!= D3D12DDI_RD_BUFFER ? 4u', '!stride ? 5u', 'hDrvCounterResource.pDrvPrivate ? 7u',
+        for reason in ('!= D3D12DDI_RD_BUFFER ? 4u', '!stride ? 5u', 'arg->Buffer.CounterOffsetInBytes % 4u',  # C33: counters of structured UAVs
                        'bytes > resource->bytes - offset'):
             self.assertIn(reason, uav)
         self.assertIn('"measure-d3d12-uav"', uav)

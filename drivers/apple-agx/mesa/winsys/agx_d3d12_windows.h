@@ -88,6 +88,11 @@ typedef struct {
   DXGI_FORMAT Format;
   int Texture;
   unsigned Level, FirstLayer, Layers;
+  /* C33: a structured UAV's append/consume counter -- one 32-bit word at
+   * CounterOffset of Counter, shader-buffer slot DXBC_NIR_UAV_COUNTER_SLOT
+   * + u# (NULL = none) */
+  const AGX_D3D12_BUFFER *Counter;
+  unsigned long long CounterOffset;
 } AGX_D3D12_UAV;
 /* C5b: a constant buffer at UBO slot b#: a buffer view (Buffer, Offset,
  * Bytes (0 = to the end); up to 64 KiB, the D3D maximum, never past the

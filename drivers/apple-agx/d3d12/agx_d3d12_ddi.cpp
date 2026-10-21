@@ -1741,8 +1741,29 @@ struct AgxD3d12Descriptor {
     UINT layers;
     UINT levels; /* C6e: texture SRVs */
     UINT component_mapping; /* C18: encoded SRV fetch-result routing */
-    UINT cube; /* C19: cube-class SRV; arrayness belongs to the shader */
+    union {
+        UINT cube; /* C19: cube-class SRV; arrayness belongs to the shader */
+        UINT counter_offset; /* C33: a structured UAV's counter word (UavCounter) */
+    };
 };
+/* C33: a buffer UAV's counter heap lives in the bytes of the SRV-only levels
+ * and component_mapping, keeping descriptors 64 bytes */
+static_assert(offsetof(AgxD3d12Descriptor, component_mapping) == offsetof(AgxD3d12Descriptor, levels) + sizeof(UINT) &&
+                  sizeof(AgxD3d12Heap *) <= 2 * sizeof(UINT),
+              "the counter heap fits levels and component_mapping");
+static void SetUavCounter(AgxD3d12Descriptor *d, AgxD3d12Heap *heap, UINT offset) {
+    memcpy(reinterpret_cast<unsigned char *>(d) + offsetof(AgxD3d12Descriptor, levels), &heap, sizeof(heap));
+    d->counter_offset = offset;
+}
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static AgxD3d12Heap *UavCounter(const AgxD3d12Descriptor &d, UINT *offset) {
+    AgxD3d12Heap *heap = nullptr;
+    if (d.kind != kDescriptorUavBuffer) return nullptr;
+    memcpy(&heap, reinterpret_cast<const unsigned char *>(&d) + offsetof(AgxD3d12Descriptor, levels), sizeof(heap));
+    *offset = d.counter_offset;
+    return heap;
+}
+#endif
 /* C6e: a sampler descriptor */
 struct AgxD3d12SamplerDescriptor {
     UINT kind; /* kDescriptorSampler */
@@ -1840,10 +1861,16 @@ static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (typed) stride = AgxD3d12FormatBlockBytes(arg->Format);
 #endif
+    /* C33: a counter belongs to a structured UAV and is one aligned word of
+     * a buffer */
+    const auto *counter = arg ? static_cast<const AgxD3d12Resource *>(arg->Buffer.hDrvCounterResource.pDrvPrivate) : nullptr;
     UINT reason = !arg || !resource || !resource->heap ? 1u
                 : arg->ResourceDimension != D3D12DDI_RD_BUFFER ? 4u
                 : !stride ? 5u /* a typed format the owner cannot address */
-                : arg->Buffer.hDrvCounterResource.pDrvPrivate ? 7u
+                : counter && (raw || typed || !counter->heap || counter->type != D3D12DDI_RT_BUFFER ||
+                              arg->Buffer.CounterOffsetInBytes % 4u || counter->bytes < 4u ||
+                              arg->Buffer.CounterOffsetInBytes > counter->bytes - 4u ||
+                              counter->gpuva < counter->heap->gpuva) ? 7u
                 : 0u;
     const UINT64 offset = reason ? 0 : arg->Buffer.FirstElement * stride;
     const UINT64 bytes = reason ? 0 : static_cast<UINT64>(arg->Buffer.NumElements) * stride;
@@ -1857,6 +1884,9 @@ static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3
         out->offset = resource->gpuva - resource->heap->gpuva + offset;
         out->bytes = bytes;
         out->format = typed ? arg->Format : DXGI_FORMAT_UNKNOWN;
+        if (counter)
+            SetUavCounter(out, counter->heap,
+                          static_cast<UINT>(counter->gpuva - counter->heap->gpuva + arg->Buffer.CounterOffsetInBytes));
     }
     ViewReceipt("measure-d3d12-uav", reason, stride, arg ? arg->Buffer.NumElements : 0u);
 }
@@ -3999,6 +4029,7 @@ static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST, UINT, const D3D12DDI
  * descriptors (read now, at execution) of the right kind. */
 struct AgxD3d12OwnerBindings {
     AGX_D3D12_BUFFER uav_buffers[kUavSlots], cb_buffers[kCbSlots], srv_buffers[kSrvSlots];
+    AGX_D3D12_BUFFER counter_buffers[kUavSlots]; /* C33 */
     AGX_D3D12_UAV uavs[kUavSlots];
     AGX_D3D12_CBV cbvs[kCbSlots];
     AGX_D3D12_SRV srvs[kSrvSlots];
@@ -4044,7 +4075,14 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
     memset(o, 0, sizeof(*o));
     for (UINT u = 0; u < kUavSlots; ++u) {
         const AgxD3d12Descriptor *view = b.uav_descriptor[u];
-        if (view) (void)DescriptorUav(*view, &o->uav_buffers[u], &o->uavs[u]);
+        if (view && DescriptorUav(*view, &o->uav_buffers[u], &o->uavs[u])) {
+            UINT counter_offset = 0;
+            if (AgxD3d12Heap *counter = UavCounter(*view, &counter_offset)) {
+                o->counter_buffers[u] = HeapBuffer(counter);
+                o->uavs[u].Counter = &o->counter_buffers[u];
+                o->uavs[u].CounterOffset = counter_offset;
+            }
+        }
         if (!b.uav_heap[u]) continue;
         o->uav_buffers[u] = HeapBuffer(b.uav_heap[u]);
         o->uavs[u] = {&o->uav_buffers[u], b.uav_offset[u], 0};

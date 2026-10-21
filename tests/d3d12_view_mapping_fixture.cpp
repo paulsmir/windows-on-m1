@@ -41,7 +41,10 @@ struct D3D12DDIARG_CREATE_SHADER_RESOURCE_VIEW_0002 {
 };
 /* PRODUCTION_OWNER_SRV */
 struct AGX_D3D12_CBV {const AGX_D3D12_BUFFER *Buffer;UINT64 Offset;const void *Data;UINT Bytes;};
-struct AGX_D3D12_UAV {const AGX_D3D12_BUFFER *Buffer;UINT64 Offset,Bytes;DXGI_FORMAT Format;int Texture;UINT Level,FirstLayer,Layers;};
+struct AGX_D3D12_UAV {const AGX_D3D12_BUFFER *Buffer;UINT64 Offset,Bytes;DXGI_FORMAT Format;int Texture;UINT Level,FirstLayer,Layers;const AGX_D3D12_BUFFER *Counter;UINT64 CounterOffset;};
+#ifndef DXBC_NIR_UAV_COUNTER_SLOT
+#define DXBC_NIR_UAV_COUNTER_SLOT 8 /* C33: dxbc_to_nir.h */
+#endif
 struct AgxD3d12Descriptor;
 struct Bindings {const AgxD3d12Descriptor *srv_descriptor[128];AgxD3d12Heap *srv_heap[128];UINT64 srv_offset[128];};
 struct OwnerBindings {AGX_D3D12_BUFFER srv_buffers[128];AGX_D3D12_SRV srvs[128];};

@@ -11,6 +11,7 @@
 #include "agx_d3d12_probe_cs_nbody.h"
 #include "agx_d3d12_probe_cs_tgsm_loop.h"
 #include "agx_d3d12_probe_cs_bc1_load.h"
+#include "agx_d3d12_probe_cs_append.h"
 #include "agx_d3d12_probe_cs_texture1d_load.h"
 #include "agx_d3d12_probe_cs_texture1d_store.h"
 #include "agx_d3d12_probe_cs_texture1d_array_load.h"
@@ -4056,6 +4057,109 @@ static int step_c28a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
 static int step_c28b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c28_compute(d, q, f, b, 1); }
 static int step_c28c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c28_compute(d, q, f, b, 2); }
 
+/* C33 (EXP1826: the ExecuteIndirect sample's culling pass appends to a
+ * structured UAV with a counter, which was refused): 128 threads, the even
+ * ones Append their id through a table UAV whose counter is word 0 of a
+ * separate buffer, set to 5 by a copy first; PASS = counter 69 and slots
+ * 5..68 hold every even id 0..126 exactly once. */
+static int c33_append(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0, 0};
+    D3D12_ROOT_PARAMETER param = {D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {1, &param, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12DescriptorHeap *heap = NULL;
+    ID3D12Resource *upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *data = uav_buffer(device), *counter = uav_buffer(device);
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    unsigned char *bytes = NULL;
+    UINT count = 0, bad = 64;
+    param.DescriptorTable.NumDescriptorRanges = 1;
+    param.DescriptorTable.pDescriptorRanges = &range;
+    HRESULT hr = upload && data && counter && readback ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&bytes);
+    if (SUCCEEDED(hr)) {
+        const UINT five = 5;
+        memcpy(bytes, &five, sizeof(five));
+        ID3D12Resource_Unmap(upload, 0, NULL);
+        hr = ID3D12Device_CreateDescriptorHeap(device, &heap_desc, &IID_ID3D12DescriptorHeap, (void **)&heap);
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_UNORDERED_ACCESS_VIEW_DESC view = {DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_BUFFER};
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu;
+        view.Buffer.NumElements = 256;
+        view.Buffer.StructureByteStride = 4;
+        view.Buffer.CounterOffsetInBytes = 0;
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(heap, &cpu);
+        ID3D12Device_CreateUnorderedAccessView(device, data, counter, &view, cpu);
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob), ID3D10Blob_GetBufferSize(blob),
+                                              &IID_ID3D12RootSignature, (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_append;
+        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_append);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+        printf("C33A CreateComputePipelineState hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        D3D12_GPU_DESCRIPTOR_HANDLE gpu;
+        transition(list, counter, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, counter, 0, upload, 0, 4);
+        transition(list, counter, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &heap);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(heap, &gpu);
+        ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 0, gpu);
+        ID3D12GraphicsCommandList_Dispatch(list, 2, 1, 1);
+        transition(list, data, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        transition(list, counter, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, data, 0, 1024);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 4096, counter, 0, 4);
+        hr = run_list(queue, fence, list, base + 1, "C33A");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 8192};
+        const UINT *out = NULL;
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&out);
+        if (SUCCEEDED(hr) && out) {
+            unsigned char seen[128] = {0};
+            count = out[1024];
+            bad = 0;
+            for (UINT i = 5; i < 69; ++i) {
+                const UINT v = out[i];
+                if (v >= 128 || (v & 1u) || seen[v]++) ++bad;
+            }
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("C33A counter=%u (want 69) bad_slots=%u hr=0x%08lx\n", count, bad, (unsigned long)hr);
+    printf("AGX_D3D12_C33A: %s\n", SUCCEEDED(hr) && count == 69 && !bad ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (heap) ID3D12DescriptorHeap_Release(heap);
+    if (readback) ID3D12Resource_Release(readback);
+    if (counter) ID3D12Resource_Release(counter);
+    if (data) ID3D12Resource_Release(data);
+    if (upload) ID3D12Resource_Release(upload);
+    return !(SUCCEEDED(hr) && count == 69 && !bad);
+}
 /* C29 (EXP1825: Bundles, DynamicIndexing and Multithreading stop on their
  * first BC1 texture): a BC1_UNORM 8x8 texture with three mips uploaded
  * through the runtime's GetCopyableFootprints layout (the 2x2 mip has a
@@ -4756,6 +4860,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C30A", step_c30a);
                 (void)run_isolated(adapter, "C31A", step_c31a);
                 (void)run_isolated(adapter, "C32A", step_c32a);
+                (void)run_isolated(adapter, "C33A", c33_append);
                 (void)run_isolated(adapter, "C27A", step_c27a);
                 (void)run_isolated(adapter, "C27B", step_c27b);
                 (void)run_isolated(adapter, "C7A", swapchain_present);

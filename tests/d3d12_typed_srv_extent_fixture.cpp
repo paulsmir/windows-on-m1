@@ -19,7 +19,10 @@ static constexpr unsigned AGX_D3D12_CBV_SLOTS=14,AGX_D3D12_SRV_SLOTS=128,AGX_D3D
 enum {DXGI_FORMAT_UNKNOWN,DXGI_FORMAT_R8_UINT,DXGI_FORMAT_R16_UINT,DXGI_FORMAT_R32_UINT};
 struct AGX_D3D12_BUFFER {void *Resource;UINT64 GpuVa,Bytes;};
 struct AGX_D3D12_CBV {const AGX_D3D12_BUFFER *Buffer;UINT64 Offset;const void *Data;unsigned Bytes;};
-struct AGX_D3D12_UAV {const AGX_D3D12_BUFFER *Buffer;UINT64 Offset,Bytes;DXGI_FORMAT Format;int Texture;UINT Level,FirstLayer,Layers;};
+struct AGX_D3D12_UAV {const AGX_D3D12_BUFFER *Buffer;UINT64 Offset,Bytes;DXGI_FORMAT Format;int Texture;UINT Level,FirstLayer,Layers;const AGX_D3D12_BUFFER *Counter;UINT64 CounterOffset;};
+#ifndef DXBC_NIR_UAV_COUNTER_SLOT
+#define DXBC_NIR_UAV_COUNTER_SLOT 8 /* C33: dxbc_to_nir.h */
+#endif
 /* OWNER_SRV */
 static pipe_format FormatTranslate(DXGI_FORMAT f,int) {
  return f==DXGI_FORMAT_R8_UINT?PIPE_FORMAT_R8_UINT:f==DXGI_FORMAT_R16_UINT?PIPE_FORMAT_R16_UINT:

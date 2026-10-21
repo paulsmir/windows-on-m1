@@ -83,11 +83,11 @@ struct D3D12DDIARG_CREATE_UNORDERED_ACCESS_VIEW_0002{
  struct{UINT MipSlice,FirstArraySlice,ArraySize;}Tex1D;
  D3D12DDIARG_TEX2D_UNORDERED_ACCESS_VIEW_0002 Tex2D;
  struct{UINT MipSlice,FirstW,WSize;}Tex3D;
- struct{UINT64 FirstElement;UINT NumElements,StructureByteStride,Flags;struct{void*pDrvPrivate;}hDrvCounterResource;}Buffer;
+ struct{UINT64 FirstElement;UINT NumElements,StructureByteStride,Flags;UINT64 CounterOffsetInBytes;struct{void*pDrvPrivate;}hDrvCounterResource;}Buffer;
 };
 #define D3D12DDI_BUFFER_UAV_FLAG_RAW 1
 '''
-    s+=block(ddi,'struct AgxD3d12Descriptor {')+';\n'+block(ddi,'static bool VolumeViewRange(')+'\n'
+    s+=block(ddi,'struct AgxD3d12Descriptor {')+';\n'+block(ddi,'static void SetUavCounter(')+'\n'+block(ddi,'static bool VolumeViewRange(')+'\n'
     for m in ['static VOID APIENTRY CreateShaderResourceView(','static VOID APIENTRY CreateUnorderedAccessView(']:s+=block(ddi,m)+'\n'
     for m in ['static unsigned level_extent(unsigned extent, unsigned level) {','static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {','static bool uav_dimension_matches(','static bool uav_image(','static bool srv_component_mapping(','static HRESULT bind_stage(']:s+=block(owner,m)+'\n'
     return s+(ROOT/'tests/d3d12_texture1d_view_fixture.cpp').read_text()

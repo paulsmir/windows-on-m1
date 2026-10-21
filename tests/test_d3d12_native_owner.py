@@ -74,7 +74,7 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('uavs[i].Offset >= buffer->Bytes', stage_b)
         self.assertIn('pipe->set_shader_images(pipe, stage, 0, AGX_D3D12_UAV_SLOTS, 0, images);', stage_b)
         unbind = body(text, 'static void unbind_stage(')
-        self.assertIn('pipe->set_shader_buffers(pipe, stage, 0, AGX_D3D12_UAV_SLOTS, NULL, 0);', unbind)
+        self.assertIn('pipe->set_shader_buffers(pipe, stage, 0, 2 * AGX_D3D12_UAV_SLOTS, NULL, 0);', unbind)
         self.assertIn('pipe->set_shader_images(pipe, stage, 0, 0, AGX_D3D12_UAV_SLOTS, NULL);', unbind)
         draw_fn = body(text, 'extern "C" HRESULT AgxD3d12OwnerDraw(')
         self.assertIn('draw->Ps.Uavs, ps_views, &ps_view_count', draw_fn)
