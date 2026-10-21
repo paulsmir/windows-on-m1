@@ -399,21 +399,73 @@ static HRESULT APIENTRY GetOptionalDDITables(D3D12DDI_HADAPTER, UINT32 *entries,
 /* C1d (EXP1348): device initialisation calls these three device-core DDIs
  * after the architecture caps; a refused one reports E_NOTIMPL through
  * pfnSetErrorCb and creation fails. They answer only what this stage
- * implements: no optional format capability (D3D12DDI_FORMAT_SUPPORT_* are
- * the optional bits; no D3D12 resource exists before C2), single-sample
- * only, and one node. */
-static VOID APIENTRY CheckFormatSupport(D3D12DDI_HDEVICE, DXGI_FORMAT, UINT *support) {
-    if (support) *support = 0;
+ * implements (D3D12DDI_FORMAT_SUPPORT_* are the optional bits) and one node.
+ *
+ * C32 (EXP1827: 2x/4x levels reported with no format-support bit threw in
+ * D3D12Core!CDevice::LLOCompleteLayerConstruction): for each typeless
+ * format the runtime walks its cast set; a member without
+ * D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET must report 0 levels at
+ * every count above 1, a member with it the typeless format's levels, and
+ * the bit must agree across the set (the typeless format itself must not
+ * report it when D3D12 decides its multisample support). So multisampling
+ * is answered per cast set: the sets below (the AGX's 1x1-block colour and
+ * depth formats up to 64 bits per sample; not R10G10B10A2, whose set may
+ * hold the XR_BIAS display format) report 2x and 4x everywhere,
+ * their typed members the multisample bits, everything else nothing. */
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static bool MultisampleCastSet(DXGI_FORMAT format, bool *typeless) {
+    *typeless = false;
+    switch (format) {
+    case DXGI_FORMAT_R16G16B16A16_TYPELESS: case DXGI_FORMAT_R32G32_TYPELESS: case DXGI_FORMAT_R32G8X24_TYPELESS:
+    case DXGI_FORMAT_R8G8B8A8_TYPELESS: case DXGI_FORMAT_R16G16_TYPELESS:
+    case DXGI_FORMAT_R32_TYPELESS: case DXGI_FORMAT_R24G8_TYPELESS: case DXGI_FORMAT_R8G8_TYPELESS:
+    case DXGI_FORMAT_R16_TYPELESS: case DXGI_FORMAT_R8_TYPELESS: case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+    case DXGI_FORMAT_B8G8R8X8_TYPELESS:
+        *typeless = true;
+        return true;
+    case DXGI_FORMAT_R16G16B16A16_FLOAT: case DXGI_FORMAT_R16G16B16A16_UNORM: case DXGI_FORMAT_R16G16B16A16_UINT:
+    case DXGI_FORMAT_R16G16B16A16_SNORM: case DXGI_FORMAT_R16G16B16A16_SINT:
+    case DXGI_FORMAT_R32G32_FLOAT: case DXGI_FORMAT_R32G32_UINT: case DXGI_FORMAT_R32G32_SINT:
+    case DXGI_FORMAT_D32_FLOAT_S8X24_UINT: case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS: case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+    case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: case DXGI_FORMAT_R8G8B8A8_UINT:
+    case DXGI_FORMAT_R8G8B8A8_SNORM: case DXGI_FORMAT_R8G8B8A8_SINT:
+    case DXGI_FORMAT_R16G16_FLOAT: case DXGI_FORMAT_R16G16_UNORM: case DXGI_FORMAT_R16G16_UINT:
+    case DXGI_FORMAT_R16G16_SNORM: case DXGI_FORMAT_R16G16_SINT:
+    case DXGI_FORMAT_D32_FLOAT: case DXGI_FORMAT_R32_FLOAT: case DXGI_FORMAT_R32_UINT: case DXGI_FORMAT_R32_SINT:
+    case DXGI_FORMAT_D24_UNORM_S8_UINT: case DXGI_FORMAT_R24_UNORM_X8_TYPELESS: case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
+    case DXGI_FORMAT_R8G8_UNORM: case DXGI_FORMAT_R8G8_UINT: case DXGI_FORMAT_R8G8_SNORM: case DXGI_FORMAT_R8G8_SINT:
+    case DXGI_FORMAT_R16_FLOAT: case DXGI_FORMAT_D16_UNORM: case DXGI_FORMAT_R16_UNORM: case DXGI_FORMAT_R16_UINT:
+    case DXGI_FORMAT_R16_SNORM: case DXGI_FORMAT_R16_SINT:
+    case DXGI_FORMAT_R8_UNORM: case DXGI_FORMAT_R8_UINT: case DXGI_FORMAT_R8_SNORM: case DXGI_FORMAT_R8_SINT:
+    case DXGI_FORMAT_B8G8R8A8_UNORM: case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+    case DXGI_FORMAT_B8G8R8X8_UNORM: case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
+        return true;
+    default:
+        return false;
+    }
+}
+#endif
+static VOID APIENTRY CheckFormatSupport(D3D12DDI_HDEVICE, DXGI_FORMAT format, UINT *support) {
+    if (!support) return;
+    *support = 0;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    bool typeless = false;
+    if (MultisampleCastSet(format, &typeless) && !typeless)
+        *support = D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET | D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
+#else
+    (void)format;
+#endif
 }
 static VOID APIENTRY CheckMultisampleQualityLevels(D3D12DDI_HDEVICE, DXGI_FORMAT format, UINT samples,
                                                    D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS flags,
                                                    UINT *levels) {
     if (!levels) return;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-    /* C32: one quality level of 2x and 4x for the formats the AGX
-     * multisamples; no tiled multisampled resources */
+    /* C32: one quality level of 2x and 4x for every member of a
+     * multisampled cast set; no tiled multisampled resources */
+    bool typeless = false;
     *levels = samples == 1 ? 1u
-            : !flags && (samples == 2 || samples == 4) && AgxD3d12FormatMultisample(format, samples) ? 1u : 0u;
+            : !flags && (samples == 2 || samples == 4) && MultisampleCastSet(format, &typeless) ? 1u : 0u;
 #else
     (void)format;
     (void)flags;
@@ -1095,8 +1147,10 @@ static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *arg) {
     }
     /* C32: 2x/4x multisampled textures have one level */
     const UINT samples = arg ? arg->SampleDesc.Count : 0u;
+    bool typeless_set = false;
     if (!arg || arg->ResourceType != D3D12DDI_RT_TEXTURE2D || arg->SampleDesc.Quality ||
         (samples != 1 && ((samples != 2 && samples != 4) || arg->MipLevels != 1 ||
+                          !MultisampleCastSet(arg->Format, &typeless_set) ||
                           !AgxD3d12FormatMultisample(arg->Format, samples))) || !arg->Width ||
         arg->Width > 16384 || !arg->Height || arg->Height > 16384 || !arg->DepthOrArraySize || !arg->MipLevels ||
         arg->MipLevels > 15)
