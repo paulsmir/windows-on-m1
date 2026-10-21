@@ -1,0 +1,38 @@
+// D3D12 C42 probes (EXP1841 MiniEngine yellow scene): fxc /T cs_5_0 /O3
+// C42C /E cs_load /Vn g_agx_d3d12_probe_cs_c42c -> agx_d3d12_probe_cs_c42c.h:
+//   ld of an R11G11B10_FLOAT texture into a raw buffer
+// C42D /E cs_pack /Vn g_agx_d3d12_probe_cs_c42d -> agx_d3d12_probe_cs_c42d.h:
+//   MiniEngine's Pack/Unpack_R11G11B10_FLOAT (PixelPacking_R11G11B10.hlsli)
+RWByteAddressBuffer o : register(u0);
+Texture2D<float3> scene : register(t0);
+cbuffer c : register(b0) { float3 rgb; };
+
+[numthreads(1, 1, 1)]
+void cs_load()
+{
+    o.Store3(0, asuint(scene.Load(int3(8, 8, 0))));
+}
+
+uint Pack_R11G11B10_FLOAT(float3 v)
+{
+    v = min(v, asfloat(0x477C0000));
+    uint r = ((f32tof16(v.x) + 8) >> 4) & 0x000007FF;
+    uint g = ((f32tof16(v.y) + 8) << 7) & 0x003FF800;
+    uint b = ((f32tof16(v.z) + 16) << 17) & 0xFFC00000;
+    return r | g | b;
+}
+
+float3 Unpack_R11G11B10_FLOAT(uint p)
+{
+    float r = f16tof32((p << 4) & 0x7FF0);
+    float g = f16tof32((p >> 7) & 0x7FF0);
+    float b = f16tof32((p >> 17) & 0x7FE0);
+    return float3(r, g, b);
+}
+
+[numthreads(1, 1, 1)]
+void cs_pack()
+{
+    uint p = Pack_R11G11B10_FLOAT(rgb);
+    o.Store4(0, uint4(p, asuint(Unpack_R11G11B10_FLOAT(p))));
+}
