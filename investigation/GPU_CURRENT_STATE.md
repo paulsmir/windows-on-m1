@@ -8,7 +8,33 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-21 07:57Z -- FL11_0 PIPELINE COMPLETE; 17 MICROSOFT SAMPLES; MINIENGINE NEXT
+## CURRENT 2026-10-21 20:55Z -- MINIENGINE SPONZA CORRECT AT 13 Hz; GPU-BOUND; DXIL NEXT
+
+Accepted package 30.0.1852.0 from 5f0d0fdc (EXP1852, recovery rec1852h PASS).
+Proven on J313 (EXP1839-EXP1852):
+- Probes 97/97 on ARM64 and x64 (C41-C42N incl. R11G11B10 paths, gathers).
+- MiniEngine ModelViewer (x64, FXC SM5.1, variants in .local/miniengine-*;
+  guest copies C:\Users\pavel\EXP1838/1844-1848): correct colours since
+  EXP1849 (MSVC-ABI signed enum bit-fields in the Asahi compiler/linker keys:
+  AGX_GATHER_B read -3, GatherBlue = 0, TAA lost blue; fix a6798af8+).
+- Speed: 4 Hz -> 11 Hz (EXP1850: NOT_AVAILABLE heaps unmapped, no per-frame
+  64 MB light-grid download) -> 13 Hz (EXP1852: no memory_barrier per
+  dispatch + written-allocation bound 128; EXP1851 crashed on the old bound
+  of 16). Main list 9 submissions, replay ~11-12 ms; B now waits ~58 ms/frame
+  on the GPU (shading cost), F (constant PS) 39 ms/frame.
+- Receipts: measure-d3d12-execute {lists, cmds, replay us, submit us},
+  measure-d3d12-owner-time, measure-d3d12-owner-fences {submissions, fence},
+  reject-batch (winsys refusals, D3D12 owner hooks).
+Next causal targets:
+- DXIL / SM 6.x (investigation/analysis/D3D12-C44-dxil.md): dxil-spirv ->
+  spirv_to_nir; download/licence of dxil-spirv awaits the user's permission.
+- GPU cost of ModelViewer B shading (sample-rate PS, light-grid loops, DXBC
+  translation quality); MiniEngine GPU timers read per merged batch.
+- Steam/3DMark on the guest awaits the user's permission.
+
+## Prior state superseded by EXP1839-EXP1852
+
+### (was CURRENT) 2026-10-21 07:57Z -- FL11_0 PIPELINE COMPLETE; 17 MICROSOFT SAMPLES; MINIENGINE NEXT
 
 Proven on J313 (EXP1831-EXP1836; package 30.0.1836.0 from 1e9ac471):
 - Probes ARM64 and x64: 81 PASS each. New since 04:00Z: C32A 4x MSAA
