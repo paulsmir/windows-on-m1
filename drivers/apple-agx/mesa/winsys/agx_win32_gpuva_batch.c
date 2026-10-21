@@ -65,8 +65,10 @@ _Static_assert(offsetof(struct drm_asahi_cmd_compute,ts)==
 _Static_assert(offsetof(APPLE_AGX_G4_COMPUTE_ENVELOPE,Native)==
                sizeof(APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE), "compute envelope layout");
 /* The UMD bridge marks at most this many written allocations per submission
- * (D3DDDI_MAX_WRITTEN_PRIMARIES in umd_gpuva_windows.c submit). */
-#define AGX_G4_WRITTEN_LIMIT 16u
+ * (ADMISSION_UMD_WRITTEN_LIMIT in umd_gpuva_windows.c submit). EXP1851: 16
+ * (the WDK's written-primaries bound) refused a D3D12 compute batch with the
+ * frame's dispatches; only direct displayable slots count as primaries. */
+#define AGX_G4_WRITTEN_LIMIT 128u
 
 typedef struct {
   struct agx_bo *Command;

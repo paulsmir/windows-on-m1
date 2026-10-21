@@ -135,6 +135,17 @@ static void receipt(PCSTR stage, HRESULT status, UINT a, UINT b, UINT c) {
   AdmissionUmdDiagnostic(stage, status, values, 3u);
 }
 
+/* EXP1851: a refused batch faults the backend and Asahi's next BO allocation
+ * fails silently; report refusals as the D3D10 owner does (reject-batch
+ * {kind, site, detail0, detail1}; kind 4 = backend failure). */
+extern "C" void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site, unsigned detail0, unsigned detail1);
+extern "C" void (*AgxWin32BackendFailHook)(unsigned site);
+static void owner_batch_refusal(unsigned kind, unsigned site, unsigned detail0, unsigned detail1) {
+  const UINT values[] = {kind, site, detail0, detail1};
+  AdmissionUmdDiagnostic("reject-batch", E_FAIL, values, 4u);
+}
+static void owner_backend_fail(unsigned site) { owner_batch_refusal(4u, site, 0u, 0u); }
+
 static HRESULT destroy_kernel_context(AGX_D3D12_OWNER *owner) {
   if (!owner->KernelContext) return S_OK;
   D3DDDICB_DESTROYCONTEXT destroy = {};
@@ -240,6 +251,8 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
   if (SUCCEEDED(hr)) {
     owner->Context = AgxWin32AsahiContextCreate(owner->Screen, &owner->Owner);
     if (!owner->Context) hr = E_OUTOFMEMORY;
+    AgxWin32BatchRefusalHook = owner_batch_refusal;
+    AgxWin32BackendFailHook = owner_backend_fail;
   }
   receipt("measure-d3d12-owner", hr, owner->KernelContext != NULL ? 1u : 0u, owner->Screen != NULL ? 1u : 0u,
           owner->Context != NULL ? 1u : 0u);

@@ -1281,6 +1281,10 @@ static int finish_submission(ADMISSION_UMD_DEVICE *device,uint64_t internal,
   return 1;
 }
 
+/* Every GPU-written slot of a submission (mark_written); only the direct
+ * displayable ones become WrittenPrimaries, which D3DDDI_MAX_WRITTEN_PRIMARIES
+ * bounds below. Matches the winsys AGX_G4_WRITTEN_LIMIT (EXP1851). */
+#define ADMISSION_UMD_WRITTEN_LIMIT 128u
 static int submit(void *context, const uint64_t *written,
                   unsigned written_count, uint64_t va, uint32_t bytes,
                   const void *private_data, uint32_t private_bytes,
@@ -1296,7 +1300,7 @@ static int submit(void *context, const uint64_t *written,
       !device->KernelCallbacks->pfnSubmitCommandCb ||
       !device->KernelCallbacks->pfnSignalSynchronizationObjectFromGpu2Cb ||
       device->NextRenderFence > UINT64_MAX - 2 ||
-      written_count > D3DDDI_MAX_WRITTEN_PRIMARIES ||
+      written_count > ADMISSION_UMD_WRITTEN_LIMIT ||
       (written_count && !written)) return 0;
   AcquireSRWLockShared(&device->ScreenBufferLock);
   for (unsigned i = 0; i < written_count; ++i) {
