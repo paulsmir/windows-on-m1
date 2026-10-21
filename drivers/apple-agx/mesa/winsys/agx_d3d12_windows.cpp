@@ -1128,6 +1128,29 @@ extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *pre
 }
 
 /* C8b: texture-to-texture copies on the GPU */
+/* texture-to-texture region copies (D3D12 CopyTextureRegion between
+ * subresources): whole elements -- texels, or the BC1-BC7 4x4 blocks C29
+ * copies to and from buffers (EXP1838 MiniEngine: BC3 mip copies were
+ * refused, block_bytes knows texels only) -- of formats with the same
+ * element size and shape, inside both levels and layer ranges; origins on
+ * block boundaries, a partial block only at the source level's edge */
+static bool texture_region_copy_valid(const struct pipe_resource *d, unsigned dst_level, unsigned dst_layer, unsigned dst_x,
+                                      unsigned dst_y, const struct pipe_resource *s, unsigned src_level, unsigned src_layer,
+                                      unsigned src_x, unsigned src_y, unsigned width, unsigned height, unsigned layers) {
+  unsigned dbw = 0, dbh = 0, sbw = 0, sbh = 0;
+  if (d->target == PIPE_BUFFER || s->target == PIPE_BUFFER || dst_level > d->last_level || src_level > s->last_level)
+    return false;
+  const unsigned dbytes = texture_block(d->format, &dbw, &dbh), sbytes = texture_block(s->format, &sbw, &sbh);
+  if (!dbytes || dbytes != sbytes || dbw != sbw || dbh != sbh) return false;
+  const unsigned sw = level_extent(s->width0, src_level), sh = level_extent(s->height0, src_level);
+  if (dst_x + width > level_extent(d->width0, dst_level) || dst_y + height > level_extent(d->height0, dst_level) ||
+      src_x + width > sw || src_y + height > sh ||
+      dst_layer + layers > texture_layer_extent(d, dst_level) || src_layer + layers > texture_layer_extent(s, src_level))
+    return false;
+  if (dst_x % dbw || dst_y % dbh || src_x % sbw || src_y % sbh) return false;
+  return (width % sbw == 0 || src_x + width == sw) && (height % sbh == 0 || src_y + height == sh);
+}
+
 extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *dst, unsigned dst_level,
                                                   unsigned dst_layer, unsigned dst_x, unsigned dst_y,
                                                   const AGX_D3D12_BUFFER *src, unsigned src_level, unsigned src_layer,
@@ -1147,12 +1170,13 @@ extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const 
         dst_layer>texture_layer_extent(d,dst_level) || layers>texture_layer_extent(d,dst_level)-dst_layer ||
         src_layer>texture_layer_extent(s,src_level) || layers>texture_layer_extent(s,src_level)-src_layer) return E_INVALIDARG;
   }
-  if (d->target == PIPE_BUFFER || s->target == PIPE_BUFFER || dst_level > d->last_level || src_level > s->last_level ||
-      block_bytes(d->format) != block_bytes(s->format) || !block_bytes(d->format) ||
-      dst_x + width > level_extent(d->width0, dst_level) || dst_y + height > level_extent(d->height0, dst_level) ||
-      src_x + width > level_extent(s->width0, src_level) || src_y + height > level_extent(s->height0, src_level) ||
-      dst_layer + layers > texture_layer_extent(d,dst_level) || src_layer + layers > texture_layer_extent(s,src_level))
+  if (!texture_region_copy_valid(d, dst_level, dst_layer, dst_x, dst_y, s, src_level, src_layer, src_x, src_y, width,
+                                 height, layers)) {
+    receipt("measure-d3d12-texture-region-copy", E_INVALIDARG, static_cast<UINT>(d->format) | (static_cast<UINT>(s->format) << 16),
+            dst_level | (src_level << 8) | (static_cast<UINT>(d->last_level) << 16) | (static_cast<UINT>(s->last_level) << 24),
+            width | (height << 16));
     return E_INVALIDARG;
+  }
   struct pipe_box box = {};
   box.x = static_cast<int>(src_x);
   box.y = static_cast<int>(src_y);

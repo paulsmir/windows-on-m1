@@ -624,7 +624,7 @@ class D3d12AbiGate(unittest.TestCase):
         region = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion('):]
         region = region[:region.index('\n}\n')]
         self.assertIn('->resource_copy_region(', region)
-        self.assertIn('block_bytes(d->format) != block_bytes(s->format)', region)
+        self.assertIn('texture_region_copy_valid(d, dst_level, dst_layer, dst_x, dst_y, s, src_level', region)  # element-aware (test_d3d12_texture_region_copy)
 
     def test_c8c_placed_buffers(self):
         # C8c invariants: a placed buffer (no heap description) resolves
