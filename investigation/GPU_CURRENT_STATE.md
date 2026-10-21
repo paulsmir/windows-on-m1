@@ -8,6 +8,36 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-21 07:57Z -- FL11_0 PIPELINE COMPLETE; 17 MICROSOFT SAMPLES; MINIENGINE NEXT
+
+Proven on J313 (EXP1831-EXP1836; package 30.0.1836.0 from 1e9ac471):
+- Probes ARM64 and x64: 81 PASS each. New since 04:00Z: C32A 4x MSAA
+  resolve, C35A depth-only PSO, C36A placed 2D textures (own heap object),
+  C37A-C tessellation (HS/DS; hull/domain control points link by register,
+  dxbc_to_nir hs_cp_slot), C38A cached PSOs (pfnSerializeObject: hObject =
+  driver PSO pointer; CachedPSO -> pfnCreateDeserializedObject), C39A stream
+  output (runtime passes no program for a GS-less SO pipeline; capture from
+  the VS; filled size round-tripped through Asahi's target offset buffer).
+- Samples (68907e31), 20 s each, both ABIs: the 11 EXP1825 samples plus
+  SmallResources, Fullscreen, HDR (D2D/DWrite through D3D11On12),
+  DepthBoundsTest, Residency, PipelineStateCache (after f26cb83b: unset
+  SM5.0 root arguments do not refuse). ReservedResources shows its
+  tiled-unsupported message; HeterogeneousMultiadapter fails (expected).
+- Timing (EXP1836 measure-d3d12-execute): Multithreading ~2050 draws/frame,
+  replay ~64% of the frame (ARM64 7.9 + 13.8 ms, submit 6.3 + 6.3 ms).
+Running: EXP1837 replay overhead (scratch zeroing, framebuffer cache) +
+measure-d3d12-owner-time (bind/draw_vbo/unbind/flush/retire split).
+Next causal targets:
+- MiniEngine ModelViewer (x64 FXC SM5.1 build, agent-built on the builder):
+  CreateRootSignature E_INVALIDARG in the runtime -- g_CommonRS declares
+  u0-u9, tier 1 at FL 11_0 allows 8 UAV registers. Honest Tier 2 needs
+  heap-based bindless (SRV tables as large as the heap, 64 UAVs); do NOT
+  advertise Tier 2 before that (AGENTS capability rule). Test-only
+  adaptation: variant A (UAV range 8), B (+RGBA8 swapchain).
+- 10-bit (R10G10B10A2) swapchains: the presentation path is BGRA8/RGBA8
+  only (admission UMD, kernel allocation, Asahi linear import).
+- Async submission (submit+wait is ~36% of the frame).
+
 ## CURRENT 2026-10-21 04:00Z -- 10 OF 11 MICROSOFT D3D12 SAMPLES ON ARM64 + x64
 
 Proven on J313 (EXP1825-EXP1829; package 30.0.1829.0 from 6fb17957):
