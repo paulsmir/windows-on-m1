@@ -1909,7 +1909,11 @@ static VOID APIENTRY CreateConstantBufferView(D3D12DDI_HDEVICE handle, const D3D
     (void)handle;
     if (!reason) reason = 3u;
 #endif
-    ViewReceipt("measure-d3d12-cbv", reason, desc ? desc->SizeInBytes : 0u, 0u);
+    /* a null CBV is a valid descriptor: its receipt keeps reason 2 but is
+     * not a failure (EXP1834 HDR: 8760 null CBVs, each failure record
+     * forcing a synchronous trace write) */
+    const UINT receipt[] = {reason, desc ? desc->SizeInBytes : 0u, 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-cbv", reason && reason != 2u ? E_NOTIMPL : S_OK, receipt, 3);
 }
 /* Raw and structured buffer UAVs (the dxbc_to_nir shader-buffer binding);
  * typed buffers, textures and append/consume counters write a null
@@ -4651,6 +4655,12 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
 static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     UINT commands = 0;
     HRESULT hr = S_OK;
+    /* the receipt splits the execution into replay and submit+wait time
+     * (microseconds): the owner submits synchronously, so an application's
+     * ExecuteCommandLists time is both */
+    LARGE_INTEGER frequency = {}, start = {}, replayed = {}, submitted = {};
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12Device *device = nullptr;
 #endif
@@ -4746,14 +4756,18 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
         }
 #endif
     }
+    QueryPerformanceCounter(&replayed);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (SUCCEEDED(hr) && device && device->owner)
         hr = AgxD3d12OwnerSubmitAndWait(static_cast<AGX_D3D12_OWNER *>(device->owner));
     if (FAILED(hr) && device && device->callbacks && device->callbacks->pfnSetErrorCb)
         device->callbacks->pfnSetErrorCb(device->runtime, hr);
 #endif
-    const UINT receipt[] = {count, commands};
-    AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 2);
+    QueryPerformanceCounter(&submitted);
+    const LONGLONG hz = frequency.QuadPart ? frequency.QuadPart : 1;
+    const UINT receipt[] = {count, commands, static_cast<UINT>((replayed.QuadPart - start.QuadPart) * 1000000 / hz),
+                            static_cast<UINT>((submitted.QuadPart - replayed.QuadPart) * 1000000 / hz)};
+    AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 4);
 }
 /* EXP1822: one replay and its submission run under the device owner's lock,
  * so lists executed from several threads (the nBody async compute thread
