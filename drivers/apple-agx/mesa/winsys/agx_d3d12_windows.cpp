@@ -1692,6 +1692,48 @@ static bool srv_component_mapping(unsigned mapping, struct pipe_sampler_view *vi
 /* One stage's constant buffers, SRVs and (C13) UAVs: raw/structured UAVs
  * as shader buffers u#, typed UAVs as images u# (the dxbc_to_nir slots in
  * every stage); views are released and UAVs unbound by unbind_stage. */
+/* C47: the sampler-view template of a texture SRV for a shader dimension
+ * (the slot path takes the dimension from the compiled shader, a heap
+ * descriptor from its D3D12 view): 1, 0 to leave the view unbound (a
+ * 1D/3D/cube view no shader declaration reads), or -1 when invalid. The
+ * component mapping is already in templ. */
+static int srv_texture_template(const AGX_D3D12_SRV &srv, uint8_t dimension, struct pipe_resource **out,
+                                    struct pipe_sampler_view *templ) {
+  struct pipe_resource *texture = static_cast<struct pipe_resource *>(srv.Buffer->Resource);
+  const enum pipe_format format = FormatTranslate(srv.Format, FALSE);
+  if (!texture || format == PIPE_FORMAT_NONE || !srv.Levels || !srv.Layers ||
+      srv.FirstLevel > texture->last_level || srv.Levels - 1u > texture->last_level - srv.FirstLevel ||
+      srv.FirstLayer >= texture->array_size || srv.Layers > texture->array_size - srv.FirstLayer)
+    return -1;
+  templ->format = format;
+  templ->target = texture->target;
+  if(texture->target==PIPE_TEXTURE_1D || texture->target==PIPE_TEXTURE_1D_ARRAY) {
+    if(dimension==DXBC_SRV_UNUSED) return 0;
+    if(srv.Cube || (dimension!=DXBC_SRV_1D && dimension!=DXBC_SRV_1D_ARRAY) ||
+       (dimension==DXBC_SRV_1D && srv.Layers!=1)) return -1;
+    templ->target=dimension==DXBC_SRV_1D_ARRAY?PIPE_TEXTURE_1D_ARRAY:PIPE_TEXTURE_1D;
+  } else if(dimension==DXBC_SRV_1D || dimension==DXBC_SRV_1D_ARRAY) return -1;
+  if(texture->target==PIPE_TEXTURE_3D) {
+    if(dimension==DXBC_SRV_UNUSED) return 0;
+    if(dimension!=DXBC_SRV_3D || srv.Cube || srv.FirstLayer || srv.Layers!=1) return -1;
+  } else if(dimension==DXBC_SRV_3D) return -1;
+  if (srv.Cube) {
+    if (dimension == DXBC_SRV_UNUSED) return 0;
+    if ((texture->target != PIPE_TEXTURE_2D_ARRAY && texture->target != PIPE_TEXTURE_2D) ||
+        texture->width0 != texture->height0 || texture->nr_samples > 1 || srv.Layers % 6u ||
+        (dimension != DXBC_SRV_CUBE && dimension != DXBC_SRV_CUBE_ARRAY) ||
+        (dimension == DXBC_SRV_CUBE && srv.Layers != 6u)) return -1;
+    templ->target = dimension == DXBC_SRV_CUBE ? PIPE_TEXTURE_CUBE : PIPE_TEXTURE_CUBE_ARRAY;
+  } else if (dimension == DXBC_SRV_CUBE || dimension == DXBC_SRV_CUBE_ARRAY) {
+    return -1;
+  }
+  templ->u.tex.first_level = static_cast<uint8_t>(srv.FirstLevel);
+  templ->u.tex.last_level = static_cast<uint8_t>(srv.FirstLevel + srv.Levels - 1);
+  templ->u.tex.first_layer = static_cast<uint16_t>(srv.FirstLayer);
+  templ->u.tex.last_layer = static_cast<uint16_t>(srv.FirstLayer + srv.Layers - 1);
+  *out = texture;
+  return 1;
+}
 static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, const AGX_D3D12_CBV *cbvs,
                           const AGX_D3D12_SRV *srvs, const AGX_D3D12_UAV *uavs, struct pipe_sampler_view **views,
                           unsigned *view_count, const uint8_t *dimensions, const uint8_t *uav_dimensions,
@@ -1724,39 +1766,10 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
         srvs[i].ComponentMapping != AGX_D3D12_COMPONENT_MAPPING_IDENTITY) return E_INVALIDARG;
     if (srvs[i].Texture) {
       /* C6e: a texture view (gallium/frontends/d3d10umd CreateShaderResourceView) */
-      struct pipe_resource *texture = static_cast<struct pipe_resource *>(buffer->Resource);
-      const enum pipe_format format = FormatTranslate(srvs[i].Format, FALSE);
-      if (!texture || format == PIPE_FORMAT_NONE || !srvs[i].Levels || !srvs[i].Layers ||
-          srvs[i].FirstLevel > texture->last_level || srvs[i].Levels - 1u > texture->last_level - srvs[i].FirstLevel ||
-          srvs[i].FirstLayer >= texture->array_size || srvs[i].Layers > texture->array_size - srvs[i].FirstLayer)
-        return E_INVALIDARG;
-      templ.format = format;
-      templ.target = texture->target;
-      const uint8_t dimension = dimensions ? dimensions[i] : DXBC_SRV_UNUSED;
-      if(texture->target==PIPE_TEXTURE_1D || texture->target==PIPE_TEXTURE_1D_ARRAY) {
-        if(dimension==DXBC_SRV_UNUSED) continue;
-        if(srvs[i].Cube || (dimension!=DXBC_SRV_1D && dimension!=DXBC_SRV_1D_ARRAY) ||
-           (dimension==DXBC_SRV_1D && srvs[i].Layers!=1)) return E_INVALIDARG;
-        templ.target=dimension==DXBC_SRV_1D_ARRAY?PIPE_TEXTURE_1D_ARRAY:PIPE_TEXTURE_1D;
-      } else if(dimension==DXBC_SRV_1D || dimension==DXBC_SRV_1D_ARRAY) return E_INVALIDARG;
-      if(texture->target==PIPE_TEXTURE_3D) {
-        if(dimension==DXBC_SRV_UNUSED) continue;
-        if(dimension!=DXBC_SRV_3D || srvs[i].Cube || srvs[i].FirstLayer || srvs[i].Layers!=1) return E_INVALIDARG;
-      } else if(dimension==DXBC_SRV_3D) return E_INVALIDARG;
-      if (srvs[i].Cube) {
-        if (dimension == DXBC_SRV_UNUSED) continue;
-        if ((texture->target != PIPE_TEXTURE_2D_ARRAY && texture->target != PIPE_TEXTURE_2D) ||
-            texture->width0 != texture->height0 || texture->nr_samples > 1 || srvs[i].Layers % 6u ||
-            (dimension != DXBC_SRV_CUBE && dimension != DXBC_SRV_CUBE_ARRAY) ||
-            (dimension == DXBC_SRV_CUBE && srvs[i].Layers != 6u)) return E_INVALIDARG;
-        templ.target = dimension == DXBC_SRV_CUBE ? PIPE_TEXTURE_CUBE : PIPE_TEXTURE_CUBE_ARRAY;
-      } else if (dimension == DXBC_SRV_CUBE || dimension == DXBC_SRV_CUBE_ARRAY) {
-        return E_INVALIDARG;
-      }
-      templ.u.tex.first_level = static_cast<uint8_t>(srvs[i].FirstLevel);
-      templ.u.tex.last_level = static_cast<uint8_t>(srvs[i].FirstLevel + srvs[i].Levels - 1);
-      templ.u.tex.first_layer = static_cast<uint16_t>(srvs[i].FirstLayer);
-      templ.u.tex.last_layer = static_cast<uint16_t>(srvs[i].FirstLayer + srvs[i].Layers - 1);
+      struct pipe_resource *texture = NULL;
+      const int shaped = srv_texture_template(srvs[i], dimensions ? dimensions[i] : DXBC_SRV_UNUSED, &texture, &templ);
+      if (shaped < 0) return E_INVALIDARG;
+      if (!shaped) continue;
       views[i] = pipe->create_sampler_view(pipe, texture, &templ);
       if (!views[i]) return E_OUTOFMEMORY;
       *view_count = i + 1;

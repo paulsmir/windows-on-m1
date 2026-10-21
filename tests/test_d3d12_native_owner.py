@@ -155,7 +155,8 @@ class NativeOwner(unittest.TestCase):
         sampler = body(text, 'static void *create_sampler(')
         self.assertIn('state.compare_mode = PIPE_TEX_COMPARE_R_TO_TEXTURE;', sampler)
         stage = body(text, 'static HRESULT bind_stage(')
-        self.assertIn('templ.target = texture->target;', stage)
+        self.assertIn('srv_texture_template(srvs[i], dimensions ? dimensions[i] : DXBC_SRV_UNUSED, &texture, &templ)', stage)
+        self.assertIn('templ->target = texture->target;', body(text, 'static int srv_texture_template('))
 
     def test_draw_framebuffer_cache_is_invalidated_by_every_other_binding(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The draw skips an

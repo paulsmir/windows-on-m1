@@ -41,6 +41,7 @@ class ViewMapping(unittest.TestCase):
         if 'static bool srv_component_mapping(' in owner:
             code += block(owner, 'static bool srv_component_mapping(') + '\n'
         code += block(owner, 'static bool uav_dimension_matches(') + '\n'
+        code += block(owner, 'static int srv_texture_template(') + '\n'
         code += block(owner, 'static HRESULT bind_stage(') + '\n'
         metadata_arg = ', shader_dimensions, nullptr' if 'const uint8_t *uav_dimensions' in code else ', shader_dimensions' if 'const uint8_t *dimensions' in code else ''
         mesa_format = (local_tree('reference', 'mesa') / 'src/util/format/u_format.c').read_text()
