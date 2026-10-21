@@ -48,3 +48,19 @@ void cs_copyback(uint3 id : SV_DispatchThreadID)
 {
     scene_out[id.xy] = Unpack_R11G11B10_FLOAT(post[id.xy]);
 }
+
+// C42J /E cs_gather /Vn g_agx_d3d12_probe_cs_c42j -> agx_d3d12_probe_cs_c42j.h:
+//   MiniEngine TemporalBlendCS gathers the R11G11B10 scene colour channel by
+//   channel (gather4 ... s0.x / .y / .z)
+SamplerState gather_point : register(s0);
+
+[numthreads(1, 1, 1)]
+void cs_gather()
+{
+    const float2 uv = float2(0.5, 0.5);
+    float4 r = scene.GatherRed(gather_point, uv);
+    float4 g = scene.GatherGreen(gather_point, uv);
+    float4 b = scene.GatherBlue(gather_point, uv);
+    o.Store4(0, asuint(float4(r.x, g.x, b.x, r.w)));
+    o.Store4(16, asuint(float4(r.y, g.y, b.y, b.w)));
+}
