@@ -1,0 +1,92 @@
+# D3D12 C47: resource binding Tier 2 (bindless descriptor heaps)
+
+## Why
+
+GetCaps reports `D3D12DDI_RESOURCE_BINDING_TIER_1` (agx_d3d12_ddi.cpp). The
+runtime then refuses root signatures beyond Tier 1: MiniEngine's g_CommonRS
+(u0-u9 at FL 11_0) needed a test-only patch, and most D3D12 titles require
+Tier 2 or 3. The AGENTS capability rule forbids reporting Tier 2 before every
+Tier 2 limit is implemented.
+
+## WINDOWS CONTRACT (learn.microsoft.com, direct3d12/hardware-support)
+
+| Limit | Tier 1 | Tier 2 | Tier 3 |
+| --- | --- | --- | --- |
+| CBVs in all tables per stage | 14 | 14 | full heap |
+| SRVs in all tables per stage | 128 | full heap | full heap |
+| UAVs in all tables, all stages | 8 (FL 11_0) / 64 | 64 | full heap |
+| Samplers in all tables per stage | 16 | 2048 | 2048 |
+
+Tier 1 (all heaps) and Tier 2 (CBV and UAV heaps) require every descriptor a
+table covers to be populated when the shader runs; Tier 2 SRV and sampler
+tables need not be. Shader-visible CBV/SRV/UAV heaps hold up to 1,000,000
+descriptors, sampler heaps 2048. SM 5.1 shaders index register ranges
+dynamically (`T0[r0.x + n]`, unbounded ranges); WDK 26100
+`D3D12DDI_RESOURCE_BINDING_TIER_2 = 2` in `D3D12DDI_D3D12_OPTIONS_DATA`.
+
+## CURRENT TRANSLATION (Tier 1)
+
+Descriptor tables are resolved on the CPU at replay (`BindTable`,
+`OwnerBindings`) into Gallium slots: CBV 14, SRV 128 sampler views, UAV 8
+(shader buffers u#, counters at 8..15, typed UAVs as images), samplers 16.
+Dynamic SM 5.1 indexing inside those slots works (C34: `texture_offset`,
+Asahi's per-stage binding table, `agx_nir_lower_bindings`).
+
+## AGX/ASAHI CONTRACT
+
+- Texture/PBE descriptors are 24-byte records in memory; a bindless handle is
+  (uniform register holding a 64-bit table base, byte offset)
+  (`nir_bindless_image_agx`, `agx_translate_bindless_handle`); Asahi's
+  gallium driver uses it for its per-stage table (`texture_base`,
+  `agx_nir_lower_sysvals.c` `load_texture_handle`). A tex/image instruction
+  that already carries `nir_tex_src_texture_handle` is left as is
+  ("real bindless").
+- Samplers beyond the 16 sampler state registers use the batch's sampler heap
+  (`nir_tex_src_sampler_handle`, `uses_sampler_heap`).
+- Asahi lowers SSBOs to global memory with base/size uniforms; Gallium caps
+  shader buffers at 32 and images at 64 per stage.
+- Honeykrisp (Asahi Vulkan) implements descriptor indexing with the same
+  handle model (descriptor sets in memory, base in a uniform).
+
+## TRANSLATION (proposed)
+
+1. **Heap mirror (UMD).** Every shader-visible CBV/SRV/UAV heap owns a GPU
+   buffer of 24-byte AGX descriptors per D3D12 descriptor (texture descriptor
+   for SRVs; PBE descriptor plus texture descriptor for typed UAV images;
+   (address, size) for raw/structured buffers), written by Create*View into a
+   shader-visible heap and by CopyDescriptors(Simple). Sampler heaps mirror
+   AGX sampler descriptors. Descriptors are produced by Asahi itself
+   (`create_sampler_view`, image/PBE packing) through a winsys accessor, so
+   formats and swizzles match the slot path.
+2. **Heap base sysval (Asahi patch, build-native-asahi-state.py).** A
+   per-context `d3d12_heap_base[2]` in `agx_draw_uniforms`, set by a winsys
+   call when SetDescriptorHeaps replays, and a NIR load lowered to its
+   uniform register (as `texture_base`).
+3. **Shader translation (dxbc_to_nir).** A range declared beyond the slot
+   limits (or unbounded) translates its accesses into bindless handles
+   (heap base, (table start + index) * 24); the table start comes from the
+   root signature (a per-draw root value the owner uploads). Ranges inside
+   the Tier 1 limits keep the slot path.
+4. **Limits.** SRVs and samplers by heap; UAVs 64 through images (typed) and
+   global-memory buffers (raw/structured) by heap; CBVs stay 14 slots.
+5. **Caps.** Report Tier 2 only after 1-4 pass offline and on hardware.
+
+## WHAT IS STILL UNKNOWN
+
+- Whether the Asahi sampler heap can hold 2048 D3D12 samplers per batch, or
+  whether a second mirror plus heap offset is needed.
+- The 24-byte layout Asahi's `agx_texture_packed` uses for buffer textures
+  versus a raw buffer's (address, size) record (bounds checking for
+  robustness).
+- How null descriptors and unpopulated SRV entries must read (Tier 2:
+  unpopulated SRVs are allowed; reads of them are undefined but must not
+  fault -- use Asahi's null descriptor).
+
+## Checkpoints
+
+1. Offline: NIR of an SM 5.1 shader indexing `Texture2D t[] : register(t0)`
+   beyond 128 carries bindless handles from the heap base sysval.
+2. Offline: the heap mirror bytes equal Asahi's slot descriptors for the same
+   views (host fixture).
+3. Hardware: probe C47A (SRV index 1000 of a 2048-entry table), C47B (sampler
+   1500), C47C (UAV 40); then MiniEngine without the UAV-range patch.
