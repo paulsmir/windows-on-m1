@@ -37,9 +37,10 @@ enum dxbc_binding_kind {
 #define DXBC_HEAP_RANGE_MAX 8u
 #define DXBC_HEAP_TABLE_CB 14u
 #define DXBC_HEAP_MIRROR_CB 15u
-#define DXBC_HEAP_DESCRIPTOR_STRIDE 128u
+#define DXBC_HEAP_DESCRIPTOR_STRIDE 160u
 #define DXBC_HEAP_DESCRIPTOR_AGX_OFFSET 64u /* the AGX texture descriptor in each */
 #define DXBC_HEAP_DESCRIPTOR_PBE_DELTA 24u /* its PBE descriptor (typed and buffer UAVs) follows */
+#define DXBC_HEAP_DESCRIPTOR_COUNTER_DELTA 48u /* a structured UAV counter's PBE (R32_UINT word) */
 #define DXBC_HEAP_HANDLE_MARK 0xd312u
 /* C47: heap sampler ranges read their sampler from the batch's AGX sampler
  * heap: constant buffer DXBC_HEAP_TABLE_CB holds, after the vec4 per range

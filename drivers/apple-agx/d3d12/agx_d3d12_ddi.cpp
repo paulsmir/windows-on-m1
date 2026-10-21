@@ -1885,13 +1885,14 @@ static D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY CheckResourceVirtualAddress(D3D12DD
  * memory. The views written into them are not implemented yet. */
 /* C47: a CBV/SRV/UAV descriptor is its CPU record (64 bytes) followed by its
  * heap form (AgxD3d12HeapForm), which shaders read through bindless handles */
-static constexpr UINT kCbvSrvUavDescriptorBytes = 128u;
+static constexpr UINT kCbvSrvUavDescriptorBytes = 160u;
+static constexpr UINT kSamplerDescriptorBytes = 128u;
 static constexpr UINT kHeapRanges = 8u; /* DXBC_HEAP_RANGE_MAX */
 static constexpr UINT kHeapFormOffset = 64u;
 static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
     /* C47: sampler descriptors carry a heap form (AgxD3d12SamplerForm) too */
-    if (type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV || type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER)
-        return kCbvSrvUavDescriptorBytes;
+    if (type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) return kCbvSrvUavDescriptorBytes;
+    if (type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER) return kSamplerDescriptorBytes;
     return 64u; /* C6e: a sampler record (kind + D3D12DDI_SAMPLER_DESC) needs 56 bytes */
 }
 static UINT APIENTRY GetDescriptorSizeInBytes(D3D12DDI_HDEVICE, D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
@@ -1947,7 +1948,7 @@ struct AgxD3d12SamplerDescriptor {
 static_assert(sizeof(AgxD3d12SamplerDescriptor) <= kHeapFormOffset, "fits a sampler descriptor");
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 /* C47: a sampler descriptor's heap form behind its CPU record */
-static_assert(kHeapFormOffset + sizeof(AGX_D3D12_HEAP_SAMPLER) <= kCbvSrvUavDescriptorBytes, "the sampler heap form fits");
+static_assert(kHeapFormOffset + sizeof(AGX_D3D12_HEAP_SAMPLER) <= kSamplerDescriptorBytes, "the sampler heap form fits");
 static AGX_D3D12_HEAP_SAMPLER *SamplerFormOf(void *descriptor) {
     return reinterpret_cast<AGX_D3D12_HEAP_SAMPLER *>(static_cast<BYTE *>(descriptor) + kHeapFormOffset);
 }
@@ -1960,9 +1961,10 @@ static_assert(sizeof(AgxD3d12Descriptor) <= kHeapFormOffset, "fits a CBV/SRV/UAV
 struct AgxD3d12HeapForm {
     BYTE texture[24];
     BYTE pbe[24];
+    BYTE counter[24]; /* a structured UAV counter's PBE */
     UINT64 key;
     UINT dimension;
-    UINT reserved;
+    UINT reserved[3];
 };
 static_assert(kHeapFormOffset + sizeof(AgxD3d12HeapForm) == kCbvSrvUavDescriptorBytes, "the heap form ends the descriptor");
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
@@ -4647,9 +4649,18 @@ static void PackUavHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view) {
     AGX_D3D12_BUFFER buffer = {};
     AGX_D3D12_UAV uav = {};
     unsigned long long key = 0;
-    form->key = DescriptorUav(*view, &buffer, &uav) &&
-                        SUCCEEDED(AgxD3d12OwnerUavDescriptor(owner, &uav, form->texture, form->pbe, &key))
-                    ? key : 0u;
+    if (!DescriptorUav(*view, &buffer, &uav)) {
+        form->key = 0;
+        return;
+    }
+    UINT counter_offset = 0;
+    AGX_D3D12_BUFFER counter = {};
+    if (AgxD3d12Heap *heap = UavCounter(*view, &counter_offset)) {
+        counter = HeapBuffer(heap);
+        uav.Counter = &counter;
+        uav.CounterOffset = counter_offset;
+    }
+    form->key = SUCCEEDED(AgxD3d12OwnerUavDescriptor(owner, &uav, form->texture, form->pbe, form->counter, &key)) ? key : 0u;
 }
 static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
     /* EXP1839: only the SRV slots up to the last bound one are cleared and
@@ -4787,11 +4798,11 @@ static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d
     }
     if (b->sampler_descriptors && lowest_sampler != UINT_MAX) {
         /* C47: the sampler map covers the heap from the lowest sampler range */
-        const UINT samplers = static_cast<UINT>(b->sampler_descriptors->bytes / kCbvSrvUavDescriptorBytes);
+        const UINT samplers = static_cast<UINT>(b->sampler_descriptors->bytes / kSamplerDescriptorBytes);
         for (UINT r = 0; r < b->heap_ranges; ++r)
             if (b->heap_sampler_mask & (1u << r)) h.binding.First[r][1] = lowest_sampler;
         for (UINT i = lowest_sampler; i < samplers && h.binding.SamplerCount < DXBC_HEAP_SAMPLER_MAP_MAX; ++i) {
-            void *d = static_cast<BYTE *>(b->sampler_descriptors->cpu) + static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes;
+            void *d = static_cast<BYTE *>(b->sampler_descriptors->cpu) + static_cast<SIZE_T>(i) * kSamplerDescriptorBytes;
             const bool valid = reinterpret_cast<const AgxD3d12SamplerDescriptor *>(d)->kind == kDescriptorSampler;
             h.samplers[h.binding.SamplerCount] = *SamplerFormOf(d);
             if (!valid) h.samplers[h.binding.SamplerCount].Valid = 0;
@@ -4818,6 +4829,11 @@ static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d
                 return E_OUTOFMEMORY;
             }
             h.writes[h.binding.WriteCount++] = texture;
+            UINT counter_offset = 0;
+            if (AgxD3d12Heap *counter = UavCounter(*view, &counter_offset)) {
+                if (h.binding.WriteCount == kHeapTextures) return E_OUTOFMEMORY;
+                h.writes[h.binding.WriteCount++] = HeapBuffer(counter);
+            }
             continue;
         }
         if (h.binding.TextureCount == kHeapTextures) {

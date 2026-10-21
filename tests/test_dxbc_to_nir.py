@@ -291,6 +291,21 @@ class DxbcToNir(unittest.TestCase):
         for dword in ("0x1", "0x5", "0x3"):
             self.assertRegex(heap.stdout, r"\btxf %\d+ \(" + dword + r"\) \(coord\), %\d+ \(texture_handle\)")
 
+    def test_heap_append_buffer_counts_through_its_counter_descriptor(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47: an
+        # append buffer past the eight UAV slots (u8) is a heap UAV; its
+        # imm_atomic_alloc must hit the counter word through the counter's
+        # PBE descriptor in the heap form (handle = index * 160 + 64 + 48),
+        # not a counter SSBO slot.
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "cs51counterheap.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        self.assertIn("BINDING kind 2 id 8 space 0 reg 8 slot 0 flags 2", heap.stdout)
+        self.assertIn("load_const (0x00000070 = 112)", heap.stdout)
+        self.assertIn("load_const (0x000000a0 = 160)", heap.stdout)
+        self.assertRegex(heap.stdout, r"@bindless_image_atomic .*image_dim=Buf.*format=r32_uint.*atomic_op=iadd")
+        self.assertRegex(heap.stdout, r"TRANSLATED stage MESA_SHADER_COMPUTE .* ssbos 8 ")
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

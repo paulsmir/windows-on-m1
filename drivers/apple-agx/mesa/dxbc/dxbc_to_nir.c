@@ -1948,12 +1948,27 @@ heap_first(struct ctx *c, unsigned h)
 /* C47: the bindless handle of a heap descriptor's texture (or, pbe, its PBE)
  * descriptor; the native state pairs the marked handle with the heap */
 static nir_def *
-heap_handle(struct ctx *c, nir_def *index, bool pbe)
+heap_handle_at(struct ctx *c, nir_def *index, unsigned delta)
 {
    nir_def *bytes = nir_iadd_imm(&c->b, nir_imul_imm(&c->b, index, DXBC_HEAP_DESCRIPTOR_STRIDE),
-                                 DXBC_HEAP_DESCRIPTOR_AGX_OFFSET + (pbe ? DXBC_HEAP_DESCRIPTOR_PBE_DELTA : 0));
+                                 DXBC_HEAP_DESCRIPTOR_AGX_OFFSET + delta);
    return nir_bindless_image_agx(&c->b, bytes, .desc_set = DXBC_HEAP_HANDLE_MARK);
 }
+
+static nir_def *
+heap_handle(struct ctx *c, nir_def *index, bool pbe)
+{
+   return heap_handle_at(c, index, pbe ? DXBC_HEAP_DESCRIPTOR_PBE_DELTA : 0);
+}
+
+/* C47: the counter of a heap structured UAV (its R32_UINT word's PBE) */
+static nir_def *
+uav_heap_counter(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_operand *o)
+{
+   return heap_handle_at(c, nir_iadd(&c->b, heap_first(c, (unsigned)o->index[0].imm), index_value(c, insn, &o->index[1])),
+                         DXBC_HEAP_DESCRIPTOR_COUNTER_DELTA);
+}
+
 
 /* C47: a UAV operand's entry -- its slot, or MAX_UAVS + heap range for a heap
  * UAV ([range][register offset], dxbc_prepare_static_bindings) -- without
@@ -2747,9 +2762,22 @@ emit_counter(struct ctx *c, const struct dxbc_instruction *insn)
    unsigned u = (unsigned)uav->index[0].imm;
    bool alloc = insn->opcode == DXBC_OP_IMM_ATOMIC_ALLOC;
    nir_def *slot, *old;
-   if (uav->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || heap_operand(c, uav) || u >= MAX_UAVS ||
+   if (uav->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && heap_operand(c, uav)) {
+      /* C47: a heap UAV's counter word, an R32_UINT buffer image */
+      const unsigned entry = uav_entry(c, uav);
+      if (entry >= MAX_UAVS + DXBC_HEAP_RANGE_MAX || c->uav[entry].kind != MEM_STRUCTURED) {
+         fail(c, insn, "counter of a non-structured UAV");
+         return;
+      }
+      old = nir_bindless_image_atomic(b, 32, uav_heap_counter(c, insn, uav), nir_imm_ivec4(b, 0, 0, 0, 0),
+                                      nir_imm_int(b, 0), nir_imm_int(b, alloc ? 1 : -1),
+                                      .image_dim = GLSL_SAMPLER_DIM_BUF, .atomic_op = nir_atomic_op_iadd,
+                                      .format = PIPE_FORMAT_R32_UINT);
+      write_dst(c, insn, &insn->operands[0], replicate4(c, alloc ? old : nir_iadd_imm(b, old, -1)), false);
+      return;
+   }
+   if (uav->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || u >= MAX_UAVS ||
        c->uav[u].kind != MEM_STRUCTURED) {
-      /* C47: heap UAVs have no counter */
       fail(c, insn, "counter of a non-structured UAV");
       return;
    }

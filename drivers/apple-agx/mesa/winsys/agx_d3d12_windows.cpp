@@ -1685,16 +1685,31 @@ static bool uav_image(const AGX_D3D12_UAV *uav, struct pipe_image_view *image) {
  * buffers as R32_UINT buffer images) and the resource's layout key; an
  * unusable UAV gets null descriptors and E_INVALIDARG. */
 extern "C" HRESULT AgxD3d12OwnerUavDescriptor(AGX_D3D12_OWNER *owner, const AGX_D3D12_UAV *uav, void *texture,
-                                              void *pbe, unsigned long long *key) {
+                                              void *pbe, void *counter_pbe, unsigned long long *key) {
   OwnerLock lock(owner);
-  if (!owner || !owner->Context || !texture || !pbe || !key ||
+  if (!owner || !owner->Context || !texture || !pbe || !counter_pbe || !key ||
       AgxWin32AsahiTextureDescriptorBytes() != AGX_D3D12_HEAP_TEXTURE_BYTES ||
       AgxWin32AsahiPbeDescriptorBytes() != AGX_D3D12_HEAP_TEXTURE_BYTES)
     return E_INVALIDARG;
   *key = 0;
   AgxWin32AsahiNullTextureDescriptor(texture);
   AgxWin32AsahiNullPbeDescriptor(pbe);
+  AgxWin32AsahiNullPbeDescriptor(counter_pbe);
   if (!uav || !uav->Buffer || !uav->Buffer->Resource) return S_OK;
+  if (const AGX_D3D12_BUFFER *counter = uav->Counter) {
+    /* the counter word as an R32_UINT buffer image (imm_atomic_alloc/consume) */
+    AGX_D3D12_UAV word = {};
+    word.Buffer = counter;
+    word.Offset = uav->CounterOffset;
+    word.Bytes = 4;
+    word.Format = DXGI_FORMAT_R32_UINT;
+    struct pipe_image_view image;
+    unsigned char unused[AGX_D3D12_HEAP_TEXTURE_BYTES];
+    APPLE_AGX_U64 counter_key = 0;
+    if (!counter->Resource || !uav_image(&word, &image) ||
+        !AgxWin32AsahiImageDescriptors(owner->Context, &image, unused, counter_pbe, &counter_key))
+      return E_INVALIDARG;
+  }
   AGX_D3D12_UAV view = *uav;
   if (!view.Format && !view.Texture) view.Format = DXGI_FORMAT_R32_UINT; /* raw/structured */
   struct pipe_image_view image;
