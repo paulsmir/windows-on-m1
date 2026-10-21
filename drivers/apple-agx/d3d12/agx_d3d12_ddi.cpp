@@ -189,8 +189,15 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         });
         break;
     case D3D12DDICAPS_TYPE_MEMORY_ARCHITECTURE:
+        /* EXP1821: the x86/x64 D3D12Core refuses IOCoherent FALSE on UMA
+         * (CDevice::CacheHeapCaps: "UMA systems must set TRUE", 0x887A0020).
+         * AGX accesses to system memory are coherent with the CPU caches
+         * (Asahi maps DRM_ASAHI_GEM_WRITEBACK BOs CPU-cached and Mesa does no
+         * cache maintenance for them), and this driver maps every CPU-visible
+         * allocation write-combined, so the runtime never needs to flush.
+         * CacheCoherent stays FALSE: CPU mappings are not write-back. */
         hr = Answer<D3D12DDI_MEMORY_ARCHITECTURE_CAPS>(arg, [](auto &d) {
-            d.UMA = TRUE; d.IOCoherent = FALSE; d.CacheCoherent = FALSE;
+            d.UMA = TRUE; d.IOCoherent = TRUE; d.CacheCoherent = FALSE;
         });
         break;
     case D3D12DDICAPS_TYPE_SHADER:
