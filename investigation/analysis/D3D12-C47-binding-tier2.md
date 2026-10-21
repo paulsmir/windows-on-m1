@@ -85,6 +85,19 @@ and the native-state patch adds, in the sysval pass, a
 marked handle; the heap mirror is bound as constant buffer 15 (Asahi exposes
 16, D3D12 uses 14), so `ubo_base[15]` is the mirror's GPU address.
 
+## Heap layout (refined)
+
+Shader-visible CBV/SRV/UAV heaps are already GPU buffers of the owner (CPU
+mapped since C45) and CopyDescriptors copies whole descriptors. A descriptor
+grows from 64 to 128 bytes: the CPU record (<= 64 bytes) at +0, the packed
+AGX texture descriptor at +64 and the PBE descriptor at +88 (typed UAVs), a
+layout key at +112. The heap itself is the mirror (constant buffer 15 = the
+heap buffer); handle offset = index * 128 + 64. Asahi re-packs bound texture
+descriptors before every draw (`agx_upload_textures`: "the layout might have
+changed from under us": decompression, BO shadowing), so a heap descriptor
+records the resource's layout key when packed and the replay re-packs a
+descriptor whose resource key changed.
+
 ## Residency and hazards (consequences of bindless)
 
 - The winsys submits the BOs a batch references (bound views, framebuffer,
