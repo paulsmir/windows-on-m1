@@ -267,13 +267,12 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnClearUnorderedAccessViewUint', 'pfnClearUnorderedAccessViewFloat', 'pfnDiscardResource', 'pfnSetMarker'}  # C10
         compute |= {'pfnBeginQuery', 'pfnEndQuery', 'pfnResolveQueryData'}  # C11
         compute |= {'pfnExecuteIndirect'}  # C14
+        compute |= {'pfnExecuteBundle'}  # C30: the bundle call log (test_d3d12_bundles)
         compute |= {'pfnSetGraphicsRootUnorderedAccessView'}  # C13 (EXP1375)
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
-        for consumer in ('pfnExecuteBundle',):
-            self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
 
     def test_c5_compute_dispatch(self):
         # C5 (D3D12-C5-compute.md). Invariants: the pipeline keeps its own
@@ -725,8 +724,10 @@ class D3d12AbiGate(unittest.TestCase):
         source = SOURCE.read_text()
         for kind in ('32BitConstant', '32BitConstants', 'ConstantBufferView', 'ShaderResourceView',
                      'UnorderedAccessView', 'DescriptorTable'):
-            self.assertIn('pfnSetComputeRoot%s, SetComputeRoot%s);' % (kind, kind), source)
-            self.assertIn('pfnSetGraphicsRoot%s, SetGraphicsRoot%s);' % (kind, kind), source)
+            # C30: through the bundle call log (Bundled<> or the constants copy)
+            for bank, tail in (('Compute', 'false'), ('Graphics', 'true')):
+                self.assertRegex(source, r'pfnSet%sRoot%s, (Bundled<Set%sRoot%s>::call|BundledRootConstants<%s>)\);'
+                                 % (bank, kind, bank, kind, tail))
 
     def test_command_slots_start_zeroed(self):
         # EXP1374: AppendCommand handed out reused/realloc'd slots unzeroed;
@@ -749,7 +750,7 @@ class D3d12AbiGate(unittest.TestCase):
             return source[start:source.index('\n}\n', start)]
         create = fn('static HRESULT APIENTRY CreateCommandSignature(')
         self.assertIn('static const UINT bytes[4] = {0u, 16u, 20u, 12u};', create)
-        self.assertIn('arg->NumArgumentDescs == 1', create)
+        self.assertIn('if (!refusal && arg->ByteStride < offset) refusal = 5u;', create)  # C31: test_d3d12_command_signature
         ei = fn('static VOID APIENTRY ExecuteIndirect(')
         self.assertIn('a->gpuva - a->heap->gpuva + args.BaseAddress.UMD.Offset', ei)
         self.assertIn('c->gpuva - c->heap->gpuva + count.BaseAddress.UMD.Offset', ei)

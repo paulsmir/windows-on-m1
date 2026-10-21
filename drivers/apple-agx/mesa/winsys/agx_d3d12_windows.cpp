@@ -269,6 +269,27 @@ extern "C" UINT AgxD3d12OwnerBufferAllocation(AGX_D3D12_OWNER *owner, const AGX_
   return AdmissionUmdScreenKernelAllocation(&owner->Runtime, identity.Token);
 }
 
+extern "C" HRESULT AgxD3d12OwnerReadBuffer(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *buffer,
+                                           unsigned long long offset, unsigned bytes, void *data) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Context || !buffer || !buffer->Resource || !data || !bytes || offset > buffer->Bytes ||
+      bytes > buffer->Bytes - offset || buffer->Bytes > 0xffffffffull)
+    return E_INVALIDARG;
+  struct pipe_context *pipe = owner->Context;
+  struct pipe_transfer *transfer = NULL;
+  struct pipe_box box = {};
+  box.x = static_cast<int>(offset);
+  box.width = static_cast<int>(bytes);
+  box.height = 1;
+  box.depth = 1;
+  void *map = pipe->buffer_map(pipe, static_cast<struct pipe_resource *>(buffer->Resource), 0, PIPE_MAP_READ, &box,
+                               &transfer);
+  if (!map) return E_OUTOFMEMORY;
+  memcpy(data, map, bytes);
+  pipe->buffer_unmap(pipe, transfer);
+  return S_OK;
+}
+
 extern "C" HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *dst,
                                      unsigned long long dst_offset, const AGX_D3D12_BUFFER *src,
                                      unsigned long long src_offset, unsigned long long bytes) {

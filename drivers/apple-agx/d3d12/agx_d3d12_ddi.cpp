@@ -15,6 +15,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <cstring>
 #include <cstdlib>
 #include <limits>
+#include <new>
 #include <tuple>
 #include <type_traits>
 #include "agx_d3d12_view_mapping.h"
@@ -2363,7 +2364,14 @@ struct AgxD3d12TextureRegionCopy {
 };
 enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kCommandTextureCopy = 4, kCommandDraw = 5,
               kCommandClearDepth = 6, kCommandTextureRegionCopy = 7, kCommandClearUav = 8,
-              kCommandQuery = 9, kCommandGsBind = 10 /* C27: the GS bindings of the next draw */ };
+              kCommandQuery = 9, kCommandGsBind = 10 /* C27: the GS bindings of the next draw */,
+              kCommandIndirectExpand = 11 /* C31: ExecuteIndirect with root or IA arguments */ };
+/* C31: list->indirect_states[state] holds the list state and the command
+ * signature at the ExecuteIndirect call */
+struct AgxD3d12IndirectExpand {
+    UINT state;
+    AgxD3d12Indirect indirect;
+};
 struct AgxD3d12Command {
     UINT kind;
     union {
@@ -2376,6 +2384,7 @@ struct AgxD3d12Command {
         AgxD3d12TextureRegionCopy region_copy;
         AgxD3d12ClearUav clear_uav;
         AgxD3d12QueryCommand query;
+        AgxD3d12IndirectExpand indirect_expand;
     };
 };
 /* C8a: commands live in a growing process-heap array owned by the list
@@ -2412,6 +2421,14 @@ struct AgxD3d12CommandList {
     UINT index_size;
     AgxD3d12Command *command;
     UINT capacity;
+    /* C30: a bundle's call log (BundleAppend), replayed by ExecuteBundle */
+    unsigned char *bundle;
+    SIZE_T bundle_bytes, bundle_capacity;
+    /* C31: ExecuteIndirect state snapshots; replay = a scratch list of the
+     * queue's replay, which reports no runtime list errors */
+    struct AgxD3d12IndirectState *indirect_states;
+    UINT indirect_state_count, indirect_state_capacity;
+    UINT replay;
 };
 /* EXP1363: creating/resetting a list makes the runtime set its default
  * state (topology, viewports, scissors, blend factor, stencil ref, PSO,
@@ -2450,7 +2467,14 @@ static HRESULT APIENTRY CreateCommandList(D3D12DDI_HDEVICE handle, const D3D12DD
 }
 static VOID APIENTRY DestroyCommandList(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDLIST handle) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
-    if (!list || !list->command) return;
+    if (!list) return;
+    if (list->bundle) HeapFree(GetProcessHeap(), 0, list->bundle);
+    list->bundle = nullptr;
+    list->bundle_bytes = list->bundle_capacity = 0;
+    if (list->indirect_states) HeapFree(GetProcessHeap(), 0, list->indirect_states);
+    list->indirect_states = nullptr;
+    list->indirect_state_count = list->indirect_state_capacity = 0;
+    if (!list->command) return;
     HeapFree(GetProcessHeap(), 0, list->command);
     list->command = nullptr;
     list->capacity = list->commands = 0;
@@ -2463,6 +2487,8 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
     if (!list) return;
     list->closed = list->commands = 0;
+    list->bundle_bytes = 0;
+    list->indirect_state_count = 0;
     list->state = 0;
     list->pso = nullptr;
     list->compute_root = nullptr;
@@ -2488,7 +2514,7 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
  * device's native owner (libagx copy kernels) and waits for completion, so
  * the runtime's later queue signal follows finished work. */
 static void ListError(AgxD3d12CommandList *list, HRESULT error) {
-    if (list && list->device && list->device->callbacks && list->device->callbacks->pfnSetCommandListErrorCb)
+    if (list && !list->replay && list->device && list->device->callbacks && list->device->callbacks->pfnSetCommandListErrorCb)
         list->device->callbacks->pfnSetCommandListErrorCb(list->runtime, error);
 }
 static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error) {
@@ -2516,6 +2542,46 @@ static AgxD3d12Command *AppendCommand(AgxD3d12CommandList *list) {
     AgxD3d12Command *slot = &list->command[list->commands++];
     memset(slot, 0, sizeof(*slot));
     return slot;
+}
+/* C30 (EXP1825: HelloBundles and Bundles stop on ExecuteBundle): a bundle
+ * records its calls, not commands. ExecuteBundle replays them through the
+ * same DDIs into the calling list, so a bundle draw sees the caller's
+ * render targets, viewports, scissors, blend factor, stencil reference and
+ * root arguments, and the state the bundle sets stays set in the caller
+ * afterwards -- the D3D12 bundle inheritance contract. A record is the
+ * replay function and its arguments copied by value, 16-byte aligned. */
+typedef void (*AgxD3d12BundleReplay)(D3D12DDI_HCOMMANDLIST, const unsigned char *);
+struct AgxD3d12BundleCall {
+    AgxD3d12BundleReplay replay;
+    SIZE_T bytes; /* the whole record */
+};
+static constexpr SIZE_T kBundleHeader = (sizeof(AgxD3d12BundleCall) + 15u) & ~static_cast<SIZE_T>(15u);
+static bool IsBundle(const AgxD3d12CommandList *list) {
+    return list && list->type == static_cast<UINT>(D3D12DDI_COMMAND_LIST_TYPE_BUNDLE);
+}
+static unsigned char *BundleAppend(AgxD3d12CommandList *list, AgxD3d12BundleReplay replay, SIZE_T payload) {
+    if (payload > 0x10000u) {
+        ListError(list, E_INVALIDARG);
+        return nullptr;
+    }
+    const SIZE_T record = kBundleHeader + ((payload + 15u) & ~static_cast<SIZE_T>(15u));
+    if (list->bundle_capacity - list->bundle_bytes < record) {
+        SIZE_T capacity = list->bundle_capacity ? list->bundle_capacity : 4096u;
+        while (capacity - list->bundle_bytes < record) capacity *= 2u;
+        void *grown = list->bundle ? HeapReAlloc(GetProcessHeap(), 0, list->bundle, capacity)
+                                   : HeapAlloc(GetProcessHeap(), 0, capacity);
+        if (!grown) {
+            ListError(list, E_OUTOFMEMORY);
+            return nullptr;
+        }
+        list->bundle = static_cast<unsigned char *>(grown);
+        list->bundle_capacity = capacity;
+    }
+    unsigned char *at = list->bundle + list->bundle_bytes;
+    list->bundle_bytes += record;
+    AgxD3d12BundleCall call = {replay, record};
+    memcpy(at, &call, sizeof(call));
+    return at + kBundleHeader;
 }
 static VOID APIENTRY CopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_BUFFER_PLACEMENT dst,
                                       D3D12DDIARG_BUFFER_PLACEMENT src, UINT64 bytes) {
@@ -3729,9 +3795,27 @@ static VOID APIENTRY DrawIndexedInstanced(D3D12DDI_HCOMMANDLIST handle, UINT ind
 /* C14 (D3D12-C14-execute-indirect.md): command signatures of one Draw,
  * DrawIndexed or Dispatch argument -- the D3D12 argument records are the
  * Gallium indirect layouts; other argument types refuse. */
+/* C31 (EXP1825: the ExecuteIndirect sample's root-CBV + draw signature):
+ * up to seven root-constant, root-view, vertex- or index-buffer arguments
+ * before the final draw/dispatch, tightly packed in declaration order (D3D12
+ * command signature layout). Such a signature replays on the CPU: the
+ * argument and count buffers are read through synchronised maps when the
+ * list executes, and each record applies its arguments to a copy of the
+ * list state through the ordinary setters, then records and replays one
+ * draw or dispatch. */
+static constexpr UINT kSignatureArguments = 8;
+struct AgxD3d12SignatureArgument {
+    UINT type, param, dest, count, offset;
+};
 struct AgxD3d12CommandSignature {
     UINT kind; /* 0 refused, 1 draw, 2 draw indexed, 3 dispatch */
     UINT stride;
+    UINT arguments, record_bytes; /* C31: the final draw/dispatch included */
+    AgxD3d12SignatureArgument argument[kSignatureArguments];
+};
+struct AgxD3d12IndirectState {
+    AgxD3d12CommandList list;
+    AgxD3d12CommandSignature signature;
 };
 static SIZE_T APIENTRY CalcPrivateCommandSignatureSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 *) {
     return sizeof(AgxD3d12CommandSignature);
@@ -3741,18 +3825,54 @@ static HRESULT APIENTRY CreateCommandSignature(D3D12DDI_HDEVICE, const D3D12DDIA
     auto *signature = static_cast<AgxD3d12CommandSignature *>(handle.pDrvPrivate);
     if (!signature || !arg) return E_INVALIDARG;
     memset(signature, 0, sizeof(*signature));
-    const UINT type = arg->NumArgumentDescs == 1 && arg->pArgumentDescs ? static_cast<UINT>(arg->pArgumentDescs[0].Type) : ~0u;
+    const UINT n = arg->pArgumentDescs ? arg->NumArgumentDescs : 0u;
+    const UINT type = n ? static_cast<UINT>(arg->pArgumentDescs[n - 1].Type) : ~0u;
     const UINT kind = type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_DRAW ? 1u
                     : type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED ? 2u
                     : type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_DISPATCH ? 3u : 0u;
     static const UINT bytes[4] = {0u, 16u, 20u, 12u};
-    const HRESULT hr = kind && arg->ByteStride >= bytes[kind] ? S_OK : E_NOTIMPL;
+    UINT offset = 0, refusal = !kind || n > kSignatureArguments ? 1u : 0u;
+    for (UINT i = 0; !refusal && i < n; ++i) {
+        const D3D12DDI_INDIRECT_ARGUMENT_DESC &d = arg->pArgumentDescs[i];
+        AgxD3d12SignatureArgument &a = signature->argument[i];
+        a.type = static_cast<UINT>(d.Type);
+        a.offset = offset;
+        if (i == n - 1) {
+            offset += bytes[kind];
+        } else if (d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT) {
+            a.param = d.Constant.RootParameterIndex;
+            a.dest = d.Constant.DestOffsetIn32BitValues;
+            a.count = d.Constant.Num32BitValuesToSet;
+            if (!a.count || a.count > kRootArguments) refusal = 2u;
+            offset += 4u * a.count;
+        } else if (d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW ||
+                   d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW ||
+                   d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_UNORDERED_ACCESS_VIEW) {
+            a.param = d.ConstantBufferView.RootParameterIndex; /* the three views share the layout */
+            offset += 8u;
+        } else if (d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_VERTEX_BUFFER_VIEW) {
+            a.param = d.VertexBuffer.Slot;
+            if (a.param >= kVertexBuffers || kind == 3u) refusal = 3u;
+            offset += 16u;
+        } else if (d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_INDEX_BUFFER_VIEW) {
+            if (kind == 3u) refusal = 3u;
+            offset += 16u;
+        } else {
+            refusal = 4u; /* a second draw/dispatch, rays, mesh, incrementing constants */
+        }
+    }
+    if (!refusal && arg->ByteStride < offset) refusal = 5u;
+    const HRESULT hr = refusal ? E_NOTIMPL : S_OK;
     if (SUCCEEDED(hr)) {
         signature->kind = kind;
         signature->stride = arg->ByteStride;
+        signature->arguments = n;
+        signature->record_bytes = offset;
+    } else {
+        memset(signature, 0, sizeof(*signature));
     }
-    const UINT receipt[] = {arg->NumArgumentDescs, type, arg->ByteStride};
-    AdmissionUmdDiagnostic("measure-d3d12-command-signature", hr, receipt, 3);
+    const UINT receipt[] = {arg->NumArgumentDescs, type, arg->ByteStride, refusal};
+    AdmissionUmdDiagnostic("measure-d3d12-command-signature", hr, receipt, 4);
     return hr;
 }
 static VOID APIENTRY DestroyCommandSignature(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDSIGNATURE handle) {
@@ -3783,6 +3903,34 @@ static VOID APIENTRY ExecuteIndirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOM
     if (c) {
         indirect.count = c->heap;
         indirect.count_offset = c->gpuva - c->heap->gpuva + count.BaseAddress.UMD.Offset;
+    }
+    if (signature->arguments > 1) {
+        /* C31: the list state and signature at this call */
+        if (list->commands >= kListCommands) {
+            ListError(list, E_INVALIDARG);
+            return;
+        }
+        if (list->indirect_state_count == list->indirect_state_capacity) {
+            const UINT capacity = list->indirect_state_capacity ? list->indirect_state_capacity * 2u : 4u;
+            void *grown = list->indirect_states
+                              ? HeapReAlloc(GetProcessHeap(), 0, list->indirect_states, capacity * sizeof(AgxD3d12IndirectState))
+                              : HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(AgxD3d12IndirectState));
+            if (!grown) {
+                ListError(list, E_OUTOFMEMORY);
+                return;
+            }
+            list->indirect_states = static_cast<AgxD3d12IndirectState *>(grown);
+            list->indirect_state_capacity = capacity;
+        }
+        AgxD3d12IndirectState &state = list->indirect_states[list->indirect_state_count];
+        memcpy(&state.list, list, sizeof(*list));
+        state.signature = *signature;
+        AgxD3d12Command *slot = AppendCommand(list);
+        if (!slot) return;
+        slot->kind = kCommandIndirectExpand;
+        slot->indirect_expand.state = list->indirect_state_count++;
+        slot->indirect_expand.indirect = indirect;
+        return;
     }
     if (signature->kind == 3u)
         RecordDispatch(list, 0, 0, 0, &indirect);
@@ -4026,6 +4174,109 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     return hr;
 }
 #endif
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C31: one CPU-expanded ExecuteIndirect. The scratch list starts as the
+ * recorded state; records apply their arguments in order and each one's
+ * draw or dispatch is recorded on the scratch list and replayed at once. */
+static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12CommandList *list,
+                                    const AgxD3d12IndirectExpand &expand) {
+    if (expand.state >= list->indirect_state_count) return E_INVALIDARG;
+    const AgxD3d12IndirectState &state = list->indirect_states[expand.state];
+    const AgxD3d12CommandSignature &signature = state.signature;
+    const AgxD3d12Indirect &in = expand.indirect;
+    const bool graphics = signature.kind != 3u;
+    HRESULT hr = S_OK;
+    UINT count = in.max_count;
+    if (in.count) {
+        UINT limit = 0;
+        AGX_D3D12_BUFFER buffer = HeapBuffer(in.count);
+        hr = AgxD3d12OwnerReadBuffer(owner, &buffer, in.count_offset, sizeof(limit), &limit);
+        if (FAILED(hr)) return hr;
+        if (limit < count) count = limit;
+    }
+    UINT drawn = 0, skipped = 0;
+    if (count) {
+        const UINT64 bytes = static_cast<UINT64>(count - 1u) * signature.stride + signature.record_bytes;
+        if (bytes > (64ULL << 20)) return E_INVALIDARG;
+        auto *args = static_cast<unsigned char *>(HeapAlloc(GetProcessHeap(), 0, static_cast<SIZE_T>(bytes)));
+        auto *scratch = static_cast<AgxD3d12CommandList *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12CommandList)));
+        if (!args || !scratch) hr = E_OUTOFMEMORY;
+        if (SUCCEEDED(hr)) {
+            AGX_D3D12_BUFFER buffer = HeapBuffer(in.args);
+            hr = AgxD3d12OwnerReadBuffer(owner, &buffer, in.args_offset, static_cast<UINT>(bytes), args);
+        }
+        if (SUCCEEDED(hr)) {
+            memcpy(scratch, &state.list, sizeof(*scratch));
+            scratch->type = static_cast<UINT>(D3D12DDI_COMMAND_LIST_TYPE_DIRECT);
+            scratch->command = nullptr;
+            scratch->capacity = scratch->commands = 0;
+            scratch->bundle = nullptr;
+            scratch->bundle_bytes = scratch->bundle_capacity = 0;
+            scratch->indirect_states = nullptr;
+            scratch->indirect_state_count = scratch->indirect_state_capacity = 0;
+            scratch->replay = 1;
+        }
+        const D3D12DDI_HCOMMANDLIST handle = {scratch};
+        for (UINT i = 0; SUCCEEDED(hr) && i < count; ++i) {
+            const unsigned char *record = args + static_cast<SIZE_T>(i) * signature.stride;
+            scratch->commands = 0;
+            for (UINT a = 0; a + 1u < signature.arguments; ++a) {
+                const AgxD3d12SignatureArgument &arg = signature.argument[a];
+                const unsigned char *at = record + arg.offset;
+                UINT64 va = 0;
+                if (arg.type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT) {
+                    SetRoot32BitConstants(scratch, graphics, arg.param, arg.count, at, arg.dest);
+                    continue;
+                }
+                if (arg.type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_VERTEX_BUFFER_VIEW) {
+                    D3D12DDI_VERTEX_BUFFER_VIEW view;
+                    memcpy(&view, at, sizeof(view));
+                    AGX_VB_SETTER(handle, arg.param, 1, &view);
+                    continue;
+                }
+                if (arg.type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_INDEX_BUFFER_VIEW) {
+                    D3D12DDI_INDEX_BUFFER_VIEW view;
+                    memcpy(&view, at, sizeof(view));
+                    AGX_IB_SETTER(handle, &view);
+                    continue;
+                }
+                memcpy(&va, at, sizeof(va));
+                const UINT root_type = arg.type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW ? D3D12DDI_ROOT_PARAMETER_TYPE_CBV
+                                     : arg.type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW ? D3D12DDI_ROOT_PARAMETER_TYPE_SRV
+                                                                                                        : D3D12DDI_ROOT_PARAMETER_TYPE_UAV;
+                SetRootBufferView(scratch, arg.param, va, root_type, graphics);
+            }
+            const unsigned char *op = record + signature.argument[signature.arguments - 1u].offset;
+            UINT v[5] = {};
+            memcpy(v, op, signature.kind == 2u ? 20u : signature.kind == 1u ? 16u : 12u);
+            if (signature.kind == 3u) RecordDispatch(scratch, v[0], v[1], v[2], nullptr);
+            else if (signature.kind == 2u) RecordDraw(scratch, v[0], v[1], v[2], static_cast<INT>(v[3]), v[4], true);
+            else RecordDraw(scratch, v[0], v[1], v[2], 0, v[3], false);
+            if (!scratch->commands) ++skipped; /* an empty or refused record */
+            const AgxD3d12Dispatch *gs_pending = nullptr;
+            for (UINT c = 0; SUCCEEDED(hr) && c < scratch->commands; ++c) {
+                const AgxD3d12Command &command = scratch->command[c];
+                if (command.kind == kCommandGsBind) {
+                    gs_pending = &command.dispatch;
+                } else if (command.kind == kCommandDraw) {
+                    hr = ReplayDraw(owner, command.draw, command.draw.pso->gs_dwords ? gs_pending : nullptr);
+                    gs_pending = nullptr;
+                    ++drawn;
+                } else if (command.kind == kCommandDispatch) {
+                    hr = ReplayDispatch(owner, command.dispatch);
+                    ++drawn;
+                }
+            }
+        }
+        if (scratch && scratch->command) HeapFree(GetProcessHeap(), 0, scratch->command);
+        if (scratch) HeapFree(GetProcessHeap(), 0, scratch);
+        if (args) HeapFree(GetProcessHeap(), 0, args);
+    }
+    const UINT receipt[] = {signature.kind, signature.arguments, count, drawn, skipped, static_cast<UINT>(hr)};
+    AdmissionUmdDiagnostic("measure-d3d12-indirect-expand", hr, receipt, 6);
+    return hr;
+}
+#endif
 static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     UINT commands = 0;
     HRESULT hr = S_OK;
@@ -4071,6 +4322,8 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
                 hr = AgxD3d12OwnerClearDepthStencil(owner, &texture, clear.dsv.format, clear.dsv.level,
                                                     clear.dsv.first_layer, clear.dsv.layers, clear.flags, clear.depth,
                                                     clear.stencil, clear.rects ? clear.rect : nullptr, clear.rects);
+            } else if (command.kind == kCommandIndirectExpand) {
+                hr = ReplayIndirectExpand(owner, list, command.indirect_expand);
             } else if (command.kind == kCommandGsBind) {
                 gs_pending = &command.dispatch; /* C27: consumed by the next draw */
             } else if (command.kind == kCommandDraw) {
@@ -4251,12 +4504,157 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnRetrieveShaderComment, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnRetrieveShaderComment));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationHandle, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationHandle));
 }
+/* C30: the bundle-legal DDIs (ID3D12GraphicsCommandList bundle
+ * restrictions) record into a bundle and run directly on other lists. */
+template<auto Fn> struct Bundled;
+template<class... A, VOID (APIENTRY *Fn)(D3D12DDI_HCOMMANDLIST, A...)> struct Bundled<Fn> {
+    static_assert(((std::is_trivially_copyable_v<A> && !std::is_pointer_v<A>) && ...),
+                  "a bundled call copies its arguments by value");
+    using Args = std::tuple<A...>;
+    static void Replay(D3D12DDI_HCOMMANDLIST parent, const unsigned char *payload) {
+        std::apply([parent](A... a) { Fn(parent, a...); }, *reinterpret_cast<const Args *>(payload));
+    }
+    static VOID APIENTRY call(D3D12DDI_HCOMMANDLIST handle, A... a) {
+        auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+        if (!IsBundle(list)) {
+            Fn(handle, a...);
+            return;
+        }
+        if (unsigned char *payload = BundleAppend(list, Replay, sizeof(Args))) new (payload) Args(a...);
+    }
+};
+/* the pointer-argument DDIs copy what the pointer names */
+template<class T> static const T *BundleArray(const unsigned char *payload, UINT *count) {
+    memcpy(count, payload, sizeof(*count));
+    return reinterpret_cast<const T *>(payload + 16u);
+}
+template<class T> static unsigned char *BundleAppendArray(AgxD3d12CommandList *list, AgxD3d12BundleReplay replay,
+                                                          UINT head, UINT count, const T *items, SIZE_T extra = 0) {
+    unsigned char *payload = BundleAppend(list, replay, 16u + static_cast<SIZE_T>(count) * sizeof(T) + extra);
+    if (!payload) return nullptr;
+    memset(payload, 0, 16u);
+    memcpy(payload, &count, sizeof(count));
+    memcpy(payload + 4u, &head, sizeof(head));
+    if (count && items) memcpy(payload + 16u, items, static_cast<SIZE_T>(count) * sizeof(T));
+    return payload;
+}
+static VOID APIENTRY BundledVertexBuffers(D3D12DDI_HCOMMANDLIST handle, UINT start, UINT count,
+                                          const D3D12DDI_VERTEX_BUFFER_VIEW *views) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!IsBundle(list)) {
+        AGX_VB_SETTER(handle, start, count, views);
+        return;
+    }
+    if (count > kVertexBuffers) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    unsigned char *payload = BundleAppendArray(
+        list,
+        [](D3D12DDI_HCOMMANDLIST parent, const unsigned char *p) {
+            UINT n = 0, first = 0, present = 0;
+            const auto *v = BundleArray<D3D12DDI_VERTEX_BUFFER_VIEW>(p, &n);
+            memcpy(&first, p + 4u, sizeof(first));
+            memcpy(&present, p + 8u, sizeof(present));
+            AGX_VB_SETTER(parent, first, n, present ? v : nullptr);
+        },
+        start, count, views);
+    if (payload) {
+        const UINT present = views ? 1u : 0u;
+        memcpy(payload + 8u, &present, sizeof(present));
+    }
+}
+static VOID APIENTRY BundledIndexBuffer(D3D12DDI_HCOMMANDLIST handle, const D3D12DDI_INDEX_BUFFER_VIEW *view) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!IsBundle(list)) {
+        AGX_IB_SETTER(handle, view);
+        return;
+    }
+    BundleAppendArray(
+        list,
+        [](D3D12DDI_HCOMMANDLIST parent, const unsigned char *p) {
+            UINT n = 0;
+            const auto *v = BundleArray<D3D12DDI_INDEX_BUFFER_VIEW>(p, &n);
+            AGX_IB_SETTER(parent, n ? v : nullptr);
+        },
+        0u, view ? 1u : 0u, view);
+}
+static VOID APIENTRY BundledBlendFactor(D3D12DDI_HCOMMANDLIST handle, const FLOAT factor[4]) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!IsBundle(list)) {
+        OmSetBlendFactor(handle, factor);
+        return;
+    }
+    BundleAppendArray(
+        list,
+        [](D3D12DDI_HCOMMANDLIST parent, const unsigned char *p) {
+            UINT n = 0;
+            const FLOAT *v = BundleArray<FLOAT>(p, &n);
+            OmSetBlendFactor(parent, n ? v : nullptr);
+        },
+        0u, factor ? 4u : 0u, factor);
+}
+static VOID APIENTRY BundledDescriptorHeaps(D3D12DDI_HCOMMANDLIST handle, UINT count, D3D12DDI_HDESCRIPTORHEAP *heaps) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!IsBundle(list)) {
+        AGX_LIST_STATE(pfnSetDescriptorHeaps)(handle, count, heaps);
+        return;
+    }
+    BundleAppendArray(
+        list,
+        [](D3D12DDI_HCOMMANDLIST parent, const unsigned char *p) {
+            UINT n = 0;
+            const auto *v = BundleArray<D3D12DDI_HDESCRIPTORHEAP>(p, &n);
+            AGX_LIST_STATE(pfnSetDescriptorHeaps)(parent, n, const_cast<D3D12DDI_HDESCRIPTORHEAP *>(v));
+        },
+        0u, heaps ? count : 0u, heaps);
+}
+template<bool Graphics> static VOID APIENTRY BundledRootConstants(D3D12DDI_HCOMMANDLIST handle, UINT index, UINT count,
+                                                                  const void *data, UINT offset) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!IsBundle(list)) {
+        (Graphics ? SetGraphicsRoot32BitConstants : SetComputeRoot32BitConstants)(handle, index, count, data, offset);
+        return;
+    }
+    if (count > 64u || (count && !data)) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    unsigned char *payload = BundleAppendArray(
+        list,
+        [](D3D12DDI_HCOMMANDLIST parent, const unsigned char *p) {
+            UINT n = 0, root = 0, at = 0;
+            const UINT *v = BundleArray<UINT>(p, &n);
+            memcpy(&root, p + 4u, sizeof(root));
+            memcpy(&at, p + 8u, sizeof(at));
+            (Graphics ? SetGraphicsRoot32BitConstants : SetComputeRoot32BitConstants)(parent, root, n, v, at);
+        },
+        index, count, static_cast<const UINT *>(data));
+    if (payload) memcpy(payload + 8u, &offset, sizeof(offset));
+}
+static VOID APIENTRY ExecuteBundle(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDLIST bundle_handle) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    auto *bundle = static_cast<AgxD3d12CommandList *>(bundle_handle.pDrvPrivate);
+    if (!list) return;
+    const UINT refusal = !bundle || !IsBundle(bundle) ? 1u : IsBundle(list) ? 2u : !bundle->closed ? 3u : 0u;
+    UINT calls = 0;
+    for (SIZE_T at = 0; !refusal && at < bundle->bundle_bytes;) {
+        AgxD3d12BundleCall call;
+        memcpy(&call, bundle->bundle + at, sizeof(call));
+        call.replay(handle, bundle->bundle + at + kBundleHeader);
+        at += call.bytes;
+        ++calls;
+    }
+    const UINT receipt[] = {refusal, calls, list->commands};
+    AdmissionUmdDiagnostic("measure-d3d12-execute-bundle", refusal ? E_INVALIDARG : S_OK, receipt, 3);
+    if (refusal) ListError(list, E_INVALIDARG);
+}
 static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 &f) {
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCloseCommandList, CloseCommandList);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResetCommandList, ResetCommandList);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced, DrawInstanced);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced, DrawIndexedInstanced);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch, Dispatch);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced, Bundled<DrawInstanced>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced, Bundled<DrawIndexedInstanced>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch, Bundled<Dispatch>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint, ClearUnorderedAccessViewUint);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat, ClearUnorderedAccessViewFloat);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRenderTargetView, ClearRenderTargetView);
@@ -4267,8 +4665,8 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyBufferRegion, CopyBufferRegion);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect, ExecuteIndirect);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle, ExecuteBundle);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect, Bundled<ExecuteIndirect>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceBarrier, ResourceBarrier);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnPresent, Present);
@@ -4276,32 +4674,32 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnEndQuery, EndQuery);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResolveQueryData, ResolveQueryData);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPredication, AGX_LIST_STATE(pfnSetPredication));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIaSetTopology, IaSetTopology);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIaSetTopology, Bundled<IaSetTopology>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetViewports, RsSetViewports);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetScissorRects, RsSetScissorRects);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetBlendFactor, OmSetBlendFactor);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetStencilRef, OmSetStencilRef);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPipelineState, SetPipelineState);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetDescriptorHeaps, AGX_LIST_STATE(pfnSetDescriptorHeaps));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootSignature, SetComputeRootSignature);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootSignature, SetGraphicsRootSignature);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootDescriptorTable, SetComputeRootDescriptorTable);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootDescriptorTable, SetGraphicsRootDescriptorTable);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRoot32BitConstant, SetComputeRoot32BitConstant);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRoot32BitConstant, SetGraphicsRoot32BitConstant);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRoot32BitConstants, SetComputeRoot32BitConstants);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRoot32BitConstants, SetGraphicsRoot32BitConstants);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootConstantBufferView, SetComputeRootConstantBufferView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootConstantBufferView, SetGraphicsRootConstantBufferView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootShaderResourceView, SetComputeRootShaderResourceView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView, SetGraphicsRootShaderResourceView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView, SetComputeRootUnorderedAccessView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, SetGraphicsRootUnorderedAccessView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, AGX_IB_SETTER);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, AGX_VB_SETTER);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetBlendFactor, BundledBlendFactor);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetStencilRef, Bundled<OmSetStencilRef>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPipelineState, Bundled<SetPipelineState>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetDescriptorHeaps, BundledDescriptorHeaps);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootSignature, Bundled<SetComputeRootSignature>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootSignature, Bundled<SetGraphicsRootSignature>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootDescriptorTable, Bundled<SetComputeRootDescriptorTable>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootDescriptorTable, Bundled<SetGraphicsRootDescriptorTable>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRoot32BitConstant, Bundled<SetComputeRoot32BitConstant>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRoot32BitConstant, Bundled<SetGraphicsRoot32BitConstant>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRoot32BitConstants, BundledRootConstants<false>);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRoot32BitConstants, BundledRootConstants<true>);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootConstantBufferView, Bundled<SetComputeRootConstantBufferView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootConstantBufferView, Bundled<SetGraphicsRootConstantBufferView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootShaderResourceView, Bundled<SetComputeRootShaderResourceView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView, Bundled<SetGraphicsRootShaderResourceView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView, Bundled<SetComputeRootUnorderedAccessView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, Bundled<SetGraphicsRootUnorderedAccessView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, BundledIndexBuffer);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, BundledVertexBuffers);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets, AGX_LIST_STATE(pfnSOSetTargets));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOMSetRenderTargets, OMSetRenderTargets);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, SetMarker);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, Bundled<SetMarker>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments, ClearRootArguments);
 }
 static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 &f) {

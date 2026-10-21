@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-using UINT = unsigned; using UINT64 = uint64_t; using FLOAT = float;
+using UINT = unsigned; using UINT64 = uint64_t; using FLOAT = float; using SIZE_T = size_t;
 using LONG = int; using VOID = void; using HRESULT = int32_t;
 using D3D12DDI_GPU_VIRTUAL_ADDRESS = UINT64;
 #define APIENTRY
