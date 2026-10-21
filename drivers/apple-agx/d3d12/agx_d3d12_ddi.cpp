@@ -4549,17 +4549,28 @@ struct AgxD3d12DrawScratch {
     AGX_D3D12_BUFFER so_buffers[kSoTargets], so_filled[kSoTargets]; /* C39 */
     AGX_D3D12_DRAW draw;
     AgxD3d12OwnerBindings vs_bind, ps_bind, gs_bind, hs_bind, ds_bind;
+    AgxD3d12OwnerBindings none; /* zeroed: a pipeline stage without recorded bindings */
 };
+/* EXP1838: one scratch per execution (EXP1837: a ~120 KB allocation per
+ * replayed draw), zeroed once for its empty binding set */
+static AgxD3d12DrawScratch *NewDrawScratch() {
+    auto *scratch = static_cast<AgxD3d12DrawScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12DrawScratch)));
+    if (scratch) memset(&scratch->none, 0, sizeof(scratch->none));
+    return scratch;
+}
 /* C27/C37: the bindings of a draw's optional stages (recorded slots) */
 struct AgxD3d12OptionalBinds {
     const AgxD3d12Dispatch *gs, *hs, *ds;
 };
+static void StageBindings(const AgxD3d12OwnerBindings &bind, decltype(AGX_D3D12_DRAW::Gs) *out) {
+    out->Cbvs = bind.cbvs;
+    out->Srvs = bind.srvs;
+    out->Samplers = bind.samplers;
+    out->Uavs = bind.uavs;
+}
 static void OwnerStageBindings(const AgxD3d12Dispatch &recorded, AgxD3d12OwnerBindings *bind, decltype(AGX_D3D12_DRAW::Gs) *out) {
     OwnerBindings(recorded, bind);
-    memcpy(out->Cbvs, bind->cbvs, sizeof(out->Cbvs));
-    memcpy(out->Srvs, bind->srvs, sizeof(out->Srvs));
-    memcpy(out->Samplers, bind->samplers, sizeof(out->Samplers));
-    memcpy(out->Uavs, bind->uavs, sizeof(out->Uavs));
+    StageBindings(*bind, out);
 }
 /* a recorded optional-stage slot fills pending; true when it was one */
 static bool TakeOptionalBind(const AgxD3d12Command &command, AgxD3d12OptionalBinds *pending) {
@@ -4575,25 +4586,14 @@ static AgxD3d12OptionalBinds DrawOptionalBinds(const AgxD3d12Draw &draw, const A
     return {draw.pso->gs_dwords ? pending.gs : nullptr, draw.pso->hs_dwords ? pending.hs : nullptr,
             draw.pso->ds_dwords ? pending.ds : nullptr};
 }
-static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional) {
-    /* the draw's owner records (~120 KB: five stage blocks and five binding
-     * sets) live on the process heap. Only the draw's fields outside its
-     * stage blocks are zeroed (EXP1835 Multithreading: ~2050 draws a frame
-     * zeroed the whole scratch, ~250 MB a frame): the VS/PS blocks are
-     * overwritten below, an optional stage's block is filled or zeroed when
-     * the pipeline has the stage (the owner reads it only then), and
-     * OwnerBindings clears each binding set it fills. */
-    static_assert(offsetof(AGX_D3D12_DRAW, Vs) < offsetof(AGX_D3D12_DRAW, Ps) &&
-                      offsetof(AGX_D3D12_DRAW, Ds) < offsetof(AGX_D3D12_DRAW, Indirect) &&
-                      offsetof(AGX_D3D12_DRAW, Indirect) < offsetof(AGX_D3D12_DRAW, So),
-                  "stage blocks lie between the zeroed head and tail");
-    auto *scratch = static_cast<AgxD3d12DrawScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12DrawScratch)));
+static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional,
+                                                AgxD3d12DrawScratch *scratch) {
+    /* the draw's owner records live in the caller's scratch (NewDrawScratch) */
     if (!scratch) return E_OUTOFMEMORY;
     AGX_D3D12_BUFFER(&rtv_textures)[8] = scratch->rtv_textures;
     AGX_D3D12_BUFFER(&vb_buffers)[kVertexBuffers] = scratch->vb_buffers;
     AGX_D3D12_DRAW &draw = scratch->draw;
-    memset(&draw, 0, offsetof(AGX_D3D12_DRAW, Vs));
-    memset(&draw.Indirect, 0, sizeof(draw) - offsetof(AGX_D3D12_DRAW, Indirect));
+    memset(&draw, 0, sizeof(draw));
     draw.Pipeline = &d.pso->graphics;
     draw.NumRtvs = d.rtvs;
     for (UINT r = 0; r < d.rtvs; ++r) {
@@ -4659,24 +4659,16 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     AgxD3d12OwnerBindings &vs_bind = scratch->vs_bind, &ps_bind = scratch->ps_bind;
     OwnerBindings(d.vs_bind, &vs_bind);
     OwnerBindings(d.ps_bind, &ps_bind);
-    memcpy(draw.Vs.Cbvs, vs_bind.cbvs, sizeof(draw.Vs.Cbvs));
-    memcpy(draw.Vs.Srvs, vs_bind.srvs, sizeof(draw.Vs.Srvs));
-    memcpy(draw.Ps.Cbvs, ps_bind.cbvs, sizeof(draw.Ps.Cbvs));
-    memcpy(draw.Ps.Srvs, ps_bind.srvs, sizeof(draw.Ps.Srvs));
-    memcpy(draw.Vs.Samplers, vs_bind.samplers, sizeof(draw.Vs.Samplers));
-    memcpy(draw.Ps.Samplers, ps_bind.samplers, sizeof(draw.Ps.Samplers));
-    memcpy(draw.Vs.Uavs, vs_bind.uavs, sizeof(draw.Vs.Uavs)); /* C13 */
-    memcpy(draw.Ps.Uavs, ps_bind.uavs, sizeof(draw.Ps.Uavs));
+    StageBindings(vs_bind, &draw.Vs);
+    StageBindings(ps_bind, &draw.Ps); /* C13: graphics UAVs bind per stage too */
     if (optional.gs) OwnerStageBindings(*optional.gs, &scratch->gs_bind, &draw.Gs); /* C27 */
-    else if (d.pso->gs_dwords) memset(&draw.Gs, 0, sizeof(draw.Gs));
+    else StageBindings(scratch->none, &draw.Gs);
     if (optional.hs) OwnerStageBindings(*optional.hs, &scratch->hs_bind, &draw.Hs); /* C37 */
-    else if (d.pso->hs_dwords) memset(&draw.Hs, 0, sizeof(draw.Hs));
+    else StageBindings(scratch->none, &draw.Hs);
     if (optional.ds) OwnerStageBindings(*optional.ds, &scratch->ds_bind, &draw.Ds);
-    else if (d.pso->ds_dwords) memset(&draw.Ds, 0, sizeof(draw.Ds));
+    else StageBindings(scratch->none, &draw.Ds);
     OwnerIndirect(d.indirect, &scratch->indirect_args, &scratch->indirect_count, &draw.Indirect); /* C14 */
-    const HRESULT hr = AgxD3d12OwnerDraw(owner, &draw);
-    HeapFree(GetProcessHeap(), 0, scratch);
-    return hr;
+    return AgxD3d12OwnerDraw(owner, &draw);
 }
 #endif
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
@@ -4700,6 +4692,7 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
         if (limit < count) count = limit;
     }
     UINT drawn = 0, skipped = 0;
+    AgxD3d12DrawScratch *draw_scratch = nullptr; /* EXP1838: one per expansion */
     if (count) {
         const UINT64 bytes = static_cast<UINT64>(count - 1u) * signature.stride + signature.record_bytes;
         if (bytes > (64ULL << 20)) return E_INVALIDARG;
@@ -4763,7 +4756,8 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
                 const AgxD3d12Command &command = scratch->command[c];
                 if (TakeOptionalBind(command, &pending)) {
                 } else if (command.kind == kCommandDraw) {
-                    hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending));
+                    if (!draw_scratch) draw_scratch = NewDrawScratch();
+                    hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch);
                     pending = {};
                     ++drawn;
                 } else if (command.kind == kCommandDispatch) {
@@ -4775,6 +4769,7 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
         if (scratch && scratch->command) HeapFree(GetProcessHeap(), 0, scratch->command);
         if (scratch) HeapFree(GetProcessHeap(), 0, scratch);
         if (args) HeapFree(GetProcessHeap(), 0, args);
+        if (draw_scratch) HeapFree(GetProcessHeap(), 0, draw_scratch);
     }
     const UINT receipt[] = {signature.kind, signature.arguments, count, drawn, skipped, static_cast<UINT>(hr)};
     AdmissionUmdDiagnostic("measure-d3d12-indirect-expand", hr, receipt, 6);
@@ -4792,6 +4787,7 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     QueryPerformanceCounter(&start);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12Device *device = nullptr;
+    AgxD3d12DrawScratch *draw_scratch = nullptr; /* EXP1838: one per execution */
 #endif
     for (UINT i = 0; lists && i < count; ++i) {
         auto *list = static_cast<AgxD3d12CommandList *>(lists[i].pDrvPrivate);
@@ -4840,7 +4836,8 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
                 hr = AgxD3d12OwnerResolve(owner, &dst, r.dst_level, r.dst_layer, &src, r.src_layer, r.format);
             } else if (TakeOptionalBind(command, &pending)) { /* C27/C37: consumed by the next draw */
             } else if (command.kind == kCommandDraw) {
-                hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending));
+                if (!draw_scratch) draw_scratch = NewDrawScratch();
+                hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch);
                 pending = {};
             } else if (command.kind == kCommandQuery) {
                 const AgxD3d12QueryCommand &q = command.query;
@@ -4887,6 +4884,7 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     }
     QueryPerformanceCounter(&replayed);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (draw_scratch) HeapFree(GetProcessHeap(), 0, draw_scratch);
     if (SUCCEEDED(hr) && device && device->owner)
         hr = AgxD3d12OwnerSubmitAndWait(static_cast<AGX_D3D12_OWNER *>(device->owner));
     if (FAILED(hr) && device && device->callbacks && device->callbacks->pfnSetErrorCb)

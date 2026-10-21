@@ -366,12 +366,15 @@ typedef struct {
   unsigned IndexSize;
   int BaseVertex;
   unsigned RestartIndex;
-  /* C6c: per-stage constant buffers and buffer SRVs */
+  /* C6c: per-stage constant buffers and buffer SRVs: arrays of
+   * AGX_D3D12_CBV_SLOTS, _SRV_SLOTS, _SAMPLER_SLOTS (C6e) and _UAV_SLOTS
+   * (C13: graphics UAVs, u# in every stage) records the caller keeps alive
+   * for the call (EXP1838: referenced, not copied into the draw) */
   struct {
-    AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS];
-    AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS];
-    AGX_D3D12_SAMPLER Samplers[AGX_D3D12_SAMPLER_SLOTS]; /* C6e */
-    AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS]; /* C13: graphics UAVs (u# in every stage) */
+    const AGX_D3D12_CBV *Cbvs;
+    const AGX_D3D12_SRV *Srvs;
+    const AGX_D3D12_SAMPLER *Samplers;
+    const AGX_D3D12_UAV *Uavs;
   } Vs, Ps, Gs, Hs, Ds; /* C27: Gs only when the pipeline has a geometry shader; C37: Hs/Ds likewise */
   /* C14: indirect draws (Indirect.Buffer NULL = direct); an indexed indirect
    * draw needs IndexOffset 0 (Gallium takes the start index from the

@@ -471,7 +471,7 @@ class D3d12AbiGate(unittest.TestCase):
         resolve = fn('static UINT ResolveRoot(')
         self.assertIn('p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;', resolve)
         self.assertNotIn('graphics UAVs: not yet', resolve)  # C13: graphics UAVs bind per stage
-        self.assertIn('memcpy(draw.Ps.Uavs, ps_bind.uavs, sizeof(draw.Ps.Uavs));', source)
+        self.assertIn('StageBindings(ps_bind, &draw.Ps); /* C13: graphics UAVs bind per stage too */', source)
         sig = fn('static VOID APIENTRY SetGraphicsRootSignature(')
         self.assertIn('memset(list->graphics_root_va, 0', sig)
         replay = fn('static __declspec(noinline) HRESULT ReplayDraw(')
@@ -479,16 +479,17 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('OwnerBindings(d.ps_bind, &ps_bind);', replay)
         # the draw's owner records live on the heap, not in the replay frame
         # (STACK_FRAMES gate, EXP1369 build: 12944 bytes before)
-        self.assertIn('HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12DrawScratch))', replay)
-        # only the fields outside the stage blocks are zeroed; a pipeline's
-        # optional stage without recorded bindings gets a zeroed block
-        self.assertIn('memset(&draw, 0, offsetof(AGX_D3D12_DRAW, Vs));', replay)
-        self.assertIn('memset(&draw.Indirect, 0, sizeof(draw) - offsetof(AGX_D3D12_DRAW, Indirect));', replay)
+        # EXP1838: one scratch per execution, the stage blocks reference the
+        # binding sets; a pipeline stage without recorded bindings gets the
+        # zeroed set (the owner reads every stage the pipeline has)
+        self.assertIn('HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12DrawScratch))', source)
+        self.assertIn('memset(&scratch->none, 0, sizeof(scratch->none));', source)
+        self.assertNotIn('HeapAlloc', replay)
+        self.assertIn('memset(&draw, 0, sizeof(draw));', replay)
         for stage in ('Gs', 'Hs', 'Ds'):
-            self.assertIn('memset(&draw.%s, 0, sizeof(draw.%s));' % (stage, stage), replay)
-        for array in ('Cbvs', 'Srvs', 'Samplers', 'Uavs'):
-            self.assertIn('memcpy(draw.Vs.%s,' % array, replay)
-            self.assertIn('memcpy(draw.Ps.%s,' % array, replay)
+            self.assertIn('else StageBindings(scratch->none, &draw.%s);' % stage, replay)
+        for stage in ('vs', 'ps'):
+            self.assertIn('StageBindings(%s_bind, &draw.%s);' % (stage, stage.capitalize()), replay)
         # C27/C37: a GS, HS or DS draw records the stage's bindings in the
         # slots just before the draw, and replay hands them only to a draw
         # whose pipeline has the stage (a stage bound once must not reach
@@ -509,7 +510,7 @@ class D3d12AbiGate(unittest.TestCase):
         for stage in ('gs', 'hs', 'ds'):
             self.assertIn('draw.pso->%s_dwords ? pending.%s : nullptr' % (stage, stage), optional)
         replay_loop = fn('static void ReplayAndSubmit(')
-        self.assertIn('ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending));', replay_loop)
+        self.assertIn('ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch);', replay_loop)
         self.assertIn('pending = {};', replay_loop)
         self.assertIn('"measure-d3d12-draw"', draw)
         self.assertIn('memcpy(draw.vb, list->vb, sizeof(draw.vb));', draw)

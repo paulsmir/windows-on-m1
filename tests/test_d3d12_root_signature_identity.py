@@ -31,7 +31,7 @@ class RootSignatureIdentity(unittest.TestCase):
         self.assertEqual(len(members), 51)
         source = (ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp').read_text()
         constants = '\n'.join(re.search(r'static constexpr UINT ' + name + r' = [^;]+;', source).group(0)
-                              for name in ('kRootArguments', 'kVertexBuffers'))
+                              for name in ('kRootArguments', 'kVertexBuffers', 'kSoTargets'))
         actual = constants + '\n' + block(source, 'struct AgxD3d12CommandList {') + ';\n'
         for marker in ('static AgxD3d12CommandList *ListOf(',
                        'static void ReportRedundantRoot(',

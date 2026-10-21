@@ -24,6 +24,7 @@ struct AgxD3d12Command;
 struct AgxD3d12RootSignature { UINT opaque_identity; };
 struct AgxD3d12Descriptor { UINT unused; };
 struct AgxD3d12VertexBuffer { UINT unused; };
+struct AgxD3d12SoTarget { UINT unused; };
 struct D3D12DDI_VIEWPORT { FLOAT unused; };
 struct RECT { LONG unused; };
 static unsigned repeated[2];
