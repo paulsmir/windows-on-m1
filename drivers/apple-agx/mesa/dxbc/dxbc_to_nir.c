@@ -100,7 +100,7 @@ struct ctx {
    struct {
       bool declared;
       bool comparison;
-   } samp[MAX_SAMPLERS];
+   } samp[MAX_SAMPLERS + DXBC_HEAP_RANGE_MAX]; /* C47: heap sampler ranges follow the slots */
    /* C34: the register part of an SM5.1 resource/sampler range index, added
     * to the texture instruction being built (texture_/sampler_offset) */
    nir_def *dyn_texture, *dyn_sampler;
@@ -108,6 +108,9 @@ struct ctx {
     * instruction being built (a bindless handle in tex_finish) */
    nir_def *heap_offset;
    unsigned heap_range;
+   /* C47: likewise for a heap sampler range */
+   nir_def *sampler_heap_offset;
+   unsigned sampler_heap_range;
 
    /* shader model 5 memory: u# views, g# groupshared, raw/structured t# */
    struct {
@@ -1063,6 +1066,16 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
       b->shader->info.num_ubos = MAX2(b->shader->info.num_ubos, (uint8_t)(o->index[0].imm + 1));
       return;
    case DXBC_OP_DCL_SAMPLER:
+      if (o && heap_operand(c, o)) {
+         /* C47: a heap sampler range */
+         if (o->index[0].imm >= DXBC_HEAP_RANGE_MAX) {
+            fail(c, insn, "heap sampler declaration");
+            return;
+         }
+         c->samp[MAX_SAMPLERS + o->index[0].imm].declared = true;
+         c->samp[MAX_SAMPLERS + o->index[0].imm].comparison = ((insn->token0 >> 11) & 0xfu) == 1;
+         return;
+      }
       if (!o || o->index[0].imm >= MAX_SAMPLERS) {
          fail(c, insn, "sampler declaration");
          return;
@@ -1892,6 +1905,17 @@ static unsigned
 sampler_index(struct ctx *c, const struct dxbc_instruction *insn,
               const struct dxbc_operand *o)
 {
+   if (o->type == DXBC_OPERAND_SAMPLER && heap_operand(c, o)) {
+      /* C47: [heap sampler range][register offset] */
+      const unsigned s = MAX_SAMPLERS + (unsigned)o->index[0].imm;
+      if (o->index[0].imm >= DXBC_HEAP_RANGE_MAX || !c->samp[s].declared || c->sampler_heap_offset || c->dyn_sampler) {
+         fail(c, insn, "heap sampler operand");
+         return 0;
+      }
+      c->sampler_heap_offset = index_value(c, insn, &o->index[1]);
+      c->sampler_heap_range = (unsigned)o->index[0].imm;
+      return s;
+   }
    if (o->type != DXBC_OPERAND_SAMPLER || o->index_dimension != 1 ||
        o->index[0].imm >= MAX_SAMPLERS || (!index_direct(&o->index[0]) && c->dyn_sampler)) {
       fail(c, insn, "sampler operand");
@@ -1949,8 +1973,9 @@ static nir_tex_instr *
 tex_begin(struct ctx *c, nir_texop op, unsigned t, unsigned s, bool sampler,
           unsigned num_srcs, const struct tex_shape *shape, nir_alu_type type)
 {
-   /* C34: room for texture_offset/sampler_offset (tex_finish) */
-   nir_tex_instr *tex = nir_tex_instr_create(c->b.shader, num_srcs + 2);
+   /* C34: room for texture_offset/sampler_offset (tex_finish); C47: or
+    * texture/sampler handles and a sampler bias */
+   nir_tex_instr *tex = nir_tex_instr_create(c->b.shader, num_srcs + 3);
    tex->op = op;
    tex->sampler_dim = shape->dim;
    tex->is_array = shape->array;
@@ -1960,6 +1985,41 @@ tex_begin(struct ctx *c, nir_texop op, unsigned t, unsigned s, bool sampler,
    tex->coord_components = 0;
    (void)s;
    return tex;
+}
+
+/* C47: a heap sampler: its AGX sampler handle and MipLODBias from the map
+ * in DXBC_HEAP_TABLE_CB; the bias applies to implicit-LOD sampling (tex
+ * becomes txb, txb adds it) and to gradients (scaled by 2^bias) */
+static unsigned
+heap_sampler(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs)
+{
+   nir_builder *b = &c->b;
+   nir_def *range = nir_load_ubo(b, 4, 32, nir_imm_int(b, DXBC_HEAP_TABLE_CB),
+                                 nir_imm_int(b, (int)(c->sampler_heap_range * 16u)), .align_mul = 16,
+                                 .align_offset = 0, .range_base = 0, .range = ~0u);
+   nir_def *entry = nir_isub(b, nir_iadd(b, nir_channel(b, range, 0), c->sampler_heap_offset), nir_channel(b, range, 1));
+   nir_def *word = nir_load_ubo(b, 1, 32, nir_imm_int(b, DXBC_HEAP_TABLE_CB),
+                                nir_iadd_imm(b, nir_ishl_imm(b, entry, 2), DXBC_HEAP_SAMPLER_MAP_OFFSET),
+                                .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0u);
+   nir_def *bias = nir_f2f32(b, nir_u2u16(b, nir_ushr_imm(b, word, 16))); /* fp16 bits */
+   tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_sampler_handle, nir_u2u16(b, word));
+   tex->sampler_index = DXBC_HEAP_SAMPLER_INDEX;
+   if (tex->op == nir_texop_tex) {
+      tex->op = nir_texop_txb;
+      tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_bias, bias);
+   } else if (tex->op == nir_texop_txb) {
+      const int i = nir_tex_instr_src_index(tex, nir_tex_src_bias);
+      if (i >= 0) {
+         nir_def *sum = nir_fadd(b, tex->src[i].src.ssa, bias);
+         tex->src[i] = nir_tex_src_for_ssa(nir_tex_src_bias, sum);
+      }
+   } else if (tex->op == nir_texop_txd) {
+      nir_def *scale = nir_fexp2(b, bias);
+      for (unsigned i = 0; i < num_srcs; ++i)
+         if (tex->src[i].src_type == nir_tex_src_ddx || tex->src[i].src_type == nir_tex_src_ddy)
+            tex->src[i] = nir_tex_src_for_ssa(tex->src[i].src_type, nir_fmul(b, tex->src[i].src.ssa, scale));
+   }
+   return num_srcs;
 }
 
 static nir_def *
@@ -1980,7 +2040,9 @@ tex_finish(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, unsigned compon
    }
    if (c->dyn_sampler)
       tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_sampler_offset, c->dyn_sampler);
-   c->dyn_texture = c->dyn_sampler = c->heap_offset = NULL;
+   if (c->sampler_heap_offset)
+      num_srcs = heap_sampler(c, tex, num_srcs);
+   c->dyn_texture = c->dyn_sampler = c->heap_offset = c->sampler_heap_offset = NULL;
    tex->num_srcs = num_srcs;
    nir_def_init(&tex->instr, &tex->def, components, 32);
    nir_builder_instr_insert(&c->b, &tex->instr);
@@ -3142,9 +3204,9 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
          fail(c, insn, "subroutines");
          break;
       }
-      c->dyn_texture = c->dyn_sampler = c->heap_offset = NULL;
+      c->dyn_texture = c->dyn_sampler = c->heap_offset = c->sampler_heap_offset = NULL;
       emit_instruction(c, i);
-      if (!c->failed && (c->dyn_texture || c->dyn_sampler || c->heap_offset))
+      if (!c->failed && (c->dyn_texture || c->dyn_sampler || c->heap_offset || c->sampler_heap_offset))
          fail(c, insn, "dynamically indexed resource outside a texture instruction");
    }
    if (!c->failed && c->cf_depth)

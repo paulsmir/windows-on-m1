@@ -41,6 +41,16 @@ enum dxbc_binding_kind {
 #define DXBC_HEAP_DESCRIPTOR_AGX_OFFSET 64u /* the AGX texture descriptor in each */
 #define DXBC_HEAP_DESCRIPTOR_PBE_DELTA 24u /* its PBE descriptor (typed and buffer UAVs) follows */
 #define DXBC_HEAP_HANDLE_MARK 0xd312u
+/* C47: heap sampler ranges read their sampler from the batch's AGX sampler
+ * heap: constant buffer DXBC_HEAP_TABLE_CB holds, after the vec4 per range
+ * (.x first heap index, .y the D3D12 sampler-heap index of the map's first
+ * entry), one dword per sampler-heap entry from that index: the AGX sampler
+ * handle in bits 0-15 and the sampler's MipLODBias as fp16 in bits 16-31,
+ * which the shader applies (sampler index DXBC_HEAP_SAMPLER_INDEX keeps
+ * Asahi's own bias lowering at 0) */
+#define DXBC_HEAP_SAMPLER_MAP_OFFSET (16u * DXBC_HEAP_RANGE_MAX)
+#define DXBC_HEAP_SAMPLER_MAP_MAX 2048u
+#define DXBC_HEAP_SAMPLER_INDEX 31u
 
 struct dxbc_binding {
    uint32_t kind, id, space, reg, slot, flags;

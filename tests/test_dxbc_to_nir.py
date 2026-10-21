@@ -254,6 +254,26 @@ class DxbcToNir(unittest.TestCase):
                                capture_output=True, text=True, timeout=60)
         self.assertIn("REFUSED", slots.stdout)
 
+    def test_sampler_ranges_read_the_heap_sampler_map(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47 (Tier
+        # 2 allows 2048 samplers): an unbounded sampler range indexed to
+        # 1500 is a heap range. Each access takes its AGX sampler handle
+        # from the map in constant buffer 14 and applies the sampler's
+        # MipLODBias itself (Sample becomes txb, SampleBias adds it,
+        # SampleGrad scales the gradients, SampleLevel takes none) with
+        # sampler index 31 so Asahi's own bias lowering reads zero.
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "ps51samplerheap.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        self.assertIn("BINDING kind 3 id 0 space 1 reg 0 slot 0 flags 2", heap.stdout)
+        self.assertEqual(heap.stdout.count("(sampler_handle)"), 4)
+        self.assertEqual(heap.stdout.count("31 (sampler)"), 4)
+        self.assertEqual(len(re.findall(r"\btxb .*\(bias\)", heap.stdout)), 2)
+        self.assertIn("fexp2", heap.stdout)
+        txl = [line for line in heap.stdout.splitlines() if re.search(r"\btxl\b", line)]
+        self.assertEqual(len(txl), 1)
+        self.assertNotIn("(bias)", txl[0])
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

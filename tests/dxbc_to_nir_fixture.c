@@ -69,8 +69,8 @@ main(int argc, char **argv)
    /* the D3D12 owner's entry: SM5.1 register spaces through a binding map
     * with the owner's per-kind capacities (agx_d3d12_windows.cpp) */
    static const uint32_t d3d12_limits[DXBC_BINDING_KIND_COUNT] = {14, 128, 8, 16};
-   /* C47: Tier 2 heap ranges for SRVs and UAVs */
-   static const uint32_t heap_limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_HEAP_RANGES, 8 | DXBC_BINDING_HEAP_RANGES, 16};
+   /* C47: Tier 2 heap ranges for SRVs, UAVs and samplers */
+   static const uint32_t heap_limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_HEAP_RANGES, 8 | DXBC_BINDING_HEAP_RANGES, 16 | DXBC_BINDING_HEAP_RANGES};
    struct dxbc_binding_map d3d12_map;
 
    if (argc < 2 || !(f = fopen(argv[1], "rb")))
