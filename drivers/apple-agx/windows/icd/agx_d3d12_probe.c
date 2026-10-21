@@ -11,6 +11,8 @@
 #include "agx_d3d12_probe_gs.h"
 #include "agx_d3d12_probe_hs.h"
 #include "agx_d3d12_probe_ds.h"
+#include "agx_d3d12_probe_hs_const.h"
+#include "agx_d3d12_probe_ds_vcolor.h"
 #include "agx_d3d12_probe_cs_nbody.h"
 #include "agx_d3d12_probe_cs_tgsm_loop.h"
 #include "agx_d3d12_probe_cs_bc1_load.h"
@@ -3968,9 +3970,12 @@ static int step_c27b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
  * triangle must cover the centre in blue and leave the corners red (C37A).
  * C37B then draws a small green triangle in the top-left corner through a
  * pipeline without tessellation (TRIANGLELIST): a hull or domain shader left
- * bound from the previous draw would recolour or drop it. */
-static int c37_tessellation(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int then_plain) {
-    const char *step = then_plain ? "C37B" : "C37A";
+ * bound from the previous draw would recolour or drop it. C37C draws the
+ * patch with constant factors and control point 0's vertex colour (green):
+ * the same tessellation without root CBVs. */
+static int c37_tessellation(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int mode) {
+    const int then_plain = mode == 1, no_cbv = mode == 2;
+    const char *step = mode == 2 ? "C37C" : then_plain ? "C37B" : "C37A";
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0};
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
@@ -4062,10 +4067,10 @@ static int c37_tessellation(ID3D12Device *device, ID3D12CommandQueue *queue, ID3
         pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         pso_desc.SampleDesc.Count = 1;
         if (then_plain) hr = ID3D12Device_CreateGraphicsPipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&plain);
-        pso_desc.HS.pShaderBytecode = g_agx_d3d12_probe_hs;
-        pso_desc.HS.BytecodeLength = sizeof(g_agx_d3d12_probe_hs);
-        pso_desc.DS.pShaderBytecode = g_agx_d3d12_probe_ds;
-        pso_desc.DS.BytecodeLength = sizeof(g_agx_d3d12_probe_ds);
+        pso_desc.HS.pShaderBytecode = no_cbv ? g_agx_d3d12_probe_hs_const : g_agx_d3d12_probe_hs;
+        pso_desc.HS.BytecodeLength = no_cbv ? sizeof(g_agx_d3d12_probe_hs_const) : sizeof(g_agx_d3d12_probe_hs);
+        pso_desc.DS.pShaderBytecode = no_cbv ? g_agx_d3d12_probe_ds_vcolor : g_agx_d3d12_probe_ds;
+        pso_desc.DS.BytecodeLength = no_cbv ? sizeof(g_agx_d3d12_probe_ds_vcolor) : sizeof(g_agx_d3d12_probe_ds);
         pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
         if (SUCCEEDED(hr)) hr = ID3D12Device_CreateGraphicsPipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
         printf("%s CreateGraphicsPipelineState (HS+DS%s) hr=0x%08lx\n", step, then_plain ? " + plain" : "", (unsigned long)hr);
@@ -4128,16 +4133,18 @@ static int c37_tessellation(ID3D12Device *device, ID3D12CommandQueue *queue, ID3
             }
             const unsigned char *centre = bytes + 32 * 256 + 32 * 4, *top_left = bytes + 1 * 256 + 1 * 4;
             const unsigned char *bottom_right = bytes + 62 * 256 + 62 * 4, *top_right = bytes + 1 * 256 + 62 * 4;
-            centre_ok = centre[0] == 0 && centre[1] == 0 && centre[2] == 255;
+            centre_ok = centre[0] == 0 && centre[1] == (no_cbv ? 255 : 0) && centre[2] == (no_cbv ? 0 : 255);
             corners_ok = bottom_right[0] == 255 && bottom_right[2] == 0 && top_right[0] == 255 && top_right[2] == 0;
-            plain_ok = then_plain ? top_left[1] == 255 && top_left[2] == 0 && green >= 20u : top_left[0] == 255 && green == 0u;
+            plain_ok = then_plain ? top_left[1] == 255 && top_left[2] == 0 && green >= 20u
+                     : no_cbv ? top_left[0] == 255 && blue == 0u : top_left[0] == 255 && green == 0u;
             printf("%s readback blue=%u green=%u red=%u other=%u centre=%u,%u,%u top_left=%u,%u,%u\n", step, blue, green, red,
                    other, centre[0], centre[1], centre[2], top_left[0], top_left[1], top_left[2]);
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
     /* the patch covers 0.5 * 51.2 * 51.2 ~ 1311 pixels */
-    const int pass = SUCCEEDED(hr) && centre_ok && corners_ok && plain_ok && other == 0 && blue >= 1150u && blue <= 1450u;
+    const unsigned patch = no_cbv ? green : blue;
+    const int pass = SUCCEEDED(hr) && centre_ok && corners_ok && plain_ok && other == 0 && patch >= 1150u && patch <= 1450u;
     printf("AGX_D3D12_%s: %s\n", step, pass ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
@@ -4154,6 +4161,7 @@ static int c37_tessellation(ID3D12Device *device, ID3D12CommandQueue *queue, ID3
 }
 static int step_c37a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c37_tessellation(d, q, f, b, 0); }
 static int step_c37b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c37_tessellation(d, q, f, b, 1); }
+static int step_c37c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c37_tessellation(d, q, f, b, 2); }
 
 /* C28 (EXP1822: nBody's compute submission never retired, DEVICE_HUNG):
  * mode 0 (C28A) a groupshared tile loop with two barriers and a root-CBV
@@ -5263,7 +5271,7 @@ int main(int argc, char **argv) {
         static const struct { const char *name; probe_step step; } steps[] = {
             {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
             {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures},
-            {"C37A", step_c37a}, {"C37B", step_c37b}};
+            {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -5343,6 +5351,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C27B", step_c27b);
                 (void)run_isolated(adapter, "C37A", step_c37a);
                 (void)run_isolated(adapter, "C37B", step_c37b);
+                (void)run_isolated(adapter, "C37C", step_c37c);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
                 (void)run_isolated(adapter, "C26", c26_replay_table);
