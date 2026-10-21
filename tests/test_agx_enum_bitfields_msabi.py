@@ -134,7 +134,10 @@ class AgxEnumBitfieldsMsAbi(unittest.TestCase):
     def test_the_closure_compiles_against_the_projection(self):
         text = SCRIPT.read_text()
         self.assertIn("prepare_unsigned_bitfield_header(", text)
-        self.assertIn("includes.insert(1, bitfield_include)", text)
+        # EXP1849: the projection directory holds the compiler evidence's
+        # headers, which differ from the native projection; putting it on the
+        # global include path broke native units (agx_batch.c)
+        self.assertNotIn("includes.insert(1, bitfield_include)", text)
 
 
 if __name__ == "__main__":

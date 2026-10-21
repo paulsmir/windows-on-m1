@@ -513,7 +513,9 @@ def main():
                     OWNER_GENERATED / 'src/asahi/lib', MESA / 'src/asahi/isa',
                     MESA / 'src/poly', MESA / 'src/poly/nir']
         includes.insert(0, opcode_include)
-        includes.insert(1, bitfield_include)
+        # the compiler units include the projected agx_compiler.h beside them; native
+        # units keep their own projected headers (no global include, EXP1849)
+        del bitfield_include
         manifest['compiler'] = {'path': str(CLANG / 'clang-cl.exe'),
                                 'sha256': record(CLANG / 'clang-cl.exe', kind='toolchain'),
                                 'c_flags': c_flags, 'cpp_flags': cpp_flags,
