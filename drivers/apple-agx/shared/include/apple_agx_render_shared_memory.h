@@ -65,6 +65,10 @@ typedef struct _APPLE_AGX_RENDER_COMPUTE_INPUT {
   /* Nonzero: the job records GPU timestamps (Asahi drm_asahi_cmd_compute
    * ts); Output->TimestampCpuAddress names the block. */
   APPLE_AGX_U32 Timestamps;
+  /* 0/0, or the batch's sampler heap (drm_asahi_cmd_compute sampler_heap,
+   * sampler_count): APPLE_AGX_G13_COMPUTE_WORK_INPUT SamplerHeap/Count. */
+  APPLE_AGX_U64 SamplerHeap;
+  APPLE_AGX_U32 SamplerCount;
 } APPLE_AGX_RENDER_COMPUTE_INPUT;
 
 typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {

@@ -43,6 +43,12 @@ typedef struct _APPLE_AGX_G13_COMPUTE_WORK_INPUT {
    * BLOCK_BYTES) the work's timestamp_pointers (0x2b8/0x2c0) and
    * user_timestamp_pointers (0x2c8/0x2d0) name. */
   APPLE_AGX_BACKEND_U64 TimestampGpuAddress;
+  /* 0/0, or the batch's sampler heap (bindless samplers: Asahi
+   * drm_asahi_cmd_compute sampler_heap/sampler_count, 16-byte entries),
+   * which queue/compute.rs passes as EncoderParams sampler_array (0x274),
+   * sampler_count (0x27c) and sampler_max = count + 1 (0x280). */
+  APPLE_AGX_BACKEND_U64 SamplerHeap;
+  APPLE_AGX_BACKEND_U32 SamplerCount;
 } APPLE_AGX_G13_COMPUTE_WORK_INPUT;
 
 typedef struct _APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT {

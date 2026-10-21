@@ -624,6 +624,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   work.HelperProgram=Input->HelperProgram;
   work.HelperArgument=Input->HelperArgument;
   work.HelperConfig=Input->HelperConfig;
+  work.SamplerHeap=Input->SamplerHeap;work.SamplerCount=Input->SamplerCount;
   if(!AppleAgxG13ComputeWorkBuild(&work,
       sidecar+APPLE_AGX_COMPUTE_WORK_OFFSET)) return APPLE_AGX_FALSE;
   /* Asahi queue/mod.rs run(): the threshold rises by the job's one

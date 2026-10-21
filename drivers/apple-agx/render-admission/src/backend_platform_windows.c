@@ -2478,6 +2478,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
     input.HelperProgram = envelope->Compute.Helper.Binary;
     input.HelperArgument = envelope->Compute.Helper.Data;
     input.HelperConfig = envelope->Compute.Helper.Cfg;
+    /* C47 (EXP1854 C47B): the batch's sampler heap (bindless samplers),
+     * validated with its access by AppleAgxG4ValidateCompute */
+    input.SamplerHeap = envelope->Compute.SamplerHeap;
+    input.SamplerCount = envelope->Compute.SamplerCount;
     /* GPU timestamps: every envelope compute job records its firmware
      * start/end (EXP1341: a D3D TIMESTAMP may attach to the batch only
      * after a barrier flush submitted it, so no request reaches the KMD). */
