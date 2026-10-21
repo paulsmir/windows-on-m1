@@ -4576,12 +4576,24 @@ static AgxD3d12OptionalBinds DrawOptionalBinds(const AgxD3d12Draw &draw, const A
             draw.pso->ds_dwords ? pending.ds : nullptr};
 }
 static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional) {
-    /* the draw's owner records (~10 KB) live on the process heap */
-    auto *scratch = static_cast<AgxD3d12DrawScratch *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AgxD3d12DrawScratch)));
+    /* the draw's owner records (~120 KB: five stage blocks and five binding
+     * sets) live on the process heap. Only the draw's fields outside its
+     * stage blocks are zeroed (EXP1835 Multithreading: ~2050 draws a frame
+     * zeroed the whole scratch, ~250 MB a frame): the VS/PS blocks are
+     * overwritten below, an optional stage's block is filled or zeroed when
+     * the pipeline has the stage (the owner reads it only then), and
+     * OwnerBindings clears each binding set it fills. */
+    static_assert(offsetof(AGX_D3D12_DRAW, Vs) < offsetof(AGX_D3D12_DRAW, Ps) &&
+                      offsetof(AGX_D3D12_DRAW, Ds) < offsetof(AGX_D3D12_DRAW, Indirect) &&
+                      offsetof(AGX_D3D12_DRAW, Indirect) < offsetof(AGX_D3D12_DRAW, So),
+                  "stage blocks lie between the zeroed head and tail");
+    auto *scratch = static_cast<AgxD3d12DrawScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12DrawScratch)));
     if (!scratch) return E_OUTOFMEMORY;
     AGX_D3D12_BUFFER(&rtv_textures)[8] = scratch->rtv_textures;
     AGX_D3D12_BUFFER(&vb_buffers)[kVertexBuffers] = scratch->vb_buffers;
     AGX_D3D12_DRAW &draw = scratch->draw;
+    memset(&draw, 0, offsetof(AGX_D3D12_DRAW, Vs));
+    memset(&draw.Indirect, 0, sizeof(draw) - offsetof(AGX_D3D12_DRAW, Indirect));
     draw.Pipeline = &d.pso->graphics;
     draw.NumRtvs = d.rtvs;
     for (UINT r = 0; r < d.rtvs; ++r) {
@@ -4656,8 +4668,11 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     memcpy(draw.Vs.Uavs, vs_bind.uavs, sizeof(draw.Vs.Uavs)); /* C13 */
     memcpy(draw.Ps.Uavs, ps_bind.uavs, sizeof(draw.Ps.Uavs));
     if (optional.gs) OwnerStageBindings(*optional.gs, &scratch->gs_bind, &draw.Gs); /* C27 */
+    else if (d.pso->gs_dwords) memset(&draw.Gs, 0, sizeof(draw.Gs));
     if (optional.hs) OwnerStageBindings(*optional.hs, &scratch->hs_bind, &draw.Hs); /* C37 */
+    else if (d.pso->hs_dwords) memset(&draw.Hs, 0, sizeof(draw.Hs));
     if (optional.ds) OwnerStageBindings(*optional.ds, &scratch->ds_bind, &draw.Ds);
+    else if (d.pso->ds_dwords) memset(&draw.Ds, 0, sizeof(draw.Ds));
     OwnerIndirect(d.indirect, &scratch->indirect_args, &scratch->indirect_count, &draw.Indirect); /* C14 */
     const HRESULT hr = AgxD3d12OwnerDraw(owner, &draw);
     HeapFree(GetProcessHeap(), 0, scratch);

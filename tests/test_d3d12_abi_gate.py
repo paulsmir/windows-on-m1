@@ -479,7 +479,16 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('OwnerBindings(d.ps_bind, &ps_bind);', replay)
         # the draw's owner records live on the heap, not in the replay frame
         # (STACK_FRAMES gate, EXP1369 build: 12944 bytes before)
-        self.assertIn('HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AgxD3d12DrawScratch))', replay)
+        self.assertIn('HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12DrawScratch))', replay)
+        # only the fields outside the stage blocks are zeroed; a pipeline's
+        # optional stage without recorded bindings gets a zeroed block
+        self.assertIn('memset(&draw, 0, offsetof(AGX_D3D12_DRAW, Vs));', replay)
+        self.assertIn('memset(&draw.Indirect, 0, sizeof(draw) - offsetof(AGX_D3D12_DRAW, Indirect));', replay)
+        for stage in ('Gs', 'Hs', 'Ds'):
+            self.assertIn('memset(&draw.%s, 0, sizeof(draw.%s));' % (stage, stage), replay)
+        for array in ('Cbvs', 'Srvs', 'Samplers', 'Uavs'):
+            self.assertIn('memcpy(draw.Vs.%s,' % array, replay)
+            self.assertIn('memcpy(draw.Ps.%s,' % array, replay)
         # C27/C37: a GS, HS or DS draw records the stage's bindings in the
         # slots just before the draw, and replay hands them only to a draw
         # whose pipeline has the stage (a stage bound once must not reach
