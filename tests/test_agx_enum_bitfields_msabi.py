@@ -80,7 +80,7 @@ class AgxEnumBitfieldsMsAbi(unittest.TestCase):
             projected = (include / "agx_compiler.h").read_text()
             self.assertEqual(overflowing(projected, self.maxima), [])
             self.assertEqual(units, [include / "agx_pack.c"])
-            self.assertEqual(provenance["fields"], 5)
+            self.assertEqual(provenance["fields"], ["size", "type", "dim", "gather", "interpolation"])
             self.assertEqual(len(FIELD.findall(projected)), 0)
 
     def test_native_projection_unsigns_every_overflowing_linker_field(self):
@@ -100,6 +100,21 @@ class AgxEnumBitfieldsMsAbi(unittest.TestCase):
             m = FIELD.match(line)
             if m and (m.group(1), m.group(2), int(m.group(3))) in fields:
                 self.assertIn("('" + line + "'", native, line)
+
+    def test_projection_accepts_the_partly_unsigned_compiler_evidence(self):
+        # the pinned compiler evidence (EXP1466 core353) already declares size
+        # and type unsigned; dim, gather and interpolation are still enums
+        text = self.header.replace("enum agx_size size       : 2;", "unsigned size       : 2;").replace(
+            "enum agx_index_type type : 3;", "unsigned type : 3;")
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "evidence"
+            home.mkdir()
+            (home / "agx_compiler.h").write_text(text)
+            unit = home / "agx_pack.c"
+            unit.write_text('#include "agx_compiler.h"\n')
+            _, include, provenance = self.closure.prepare_unsigned_bitfield_header([unit], Path(tmp) / "out")
+            self.assertEqual(provenance["fields"], ["dim", "gather", "interpolation"])
+            self.assertEqual(overflowing((include / "agx_compiler.h").read_text(), self.maxima), [])
 
     @unittest.skipIf(shutil.which("clang") is None, "clang not available")
     def test_msvc_abi_reads_the_enum_field_back_negative(self):

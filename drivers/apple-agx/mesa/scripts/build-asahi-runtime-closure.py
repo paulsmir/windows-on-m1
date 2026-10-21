@@ -190,13 +190,15 @@ def prepare_parallel_copy_source(source, out):
 
 
 # EXP1848: enum bit-fields of agx_compiler.h whose enumerators exceed the
-# signed range of the field width.
+# signed range of the field width (enum, field, width). The pinned compiler
+# evidence already declares size and type unsigned (EXP1466 core353); dim,
+# gather and interpolation remained enums.
 SIGNED_ENUM_BITFIELDS = (
-    ('enum agx_size size       : 2;', 'unsigned size            : 2; /* enum agx_size */'),
-    ('enum agx_index_type type : 3;', 'unsigned type            : 3; /* enum agx_index_type */'),
-    ('enum agx_dim dim       : 4;', 'unsigned dim           : 4; /* enum agx_dim */'),
-    ('enum agx_gather gather : 3;', 'unsigned gather        : 3; /* enum agx_gather */'),
-    ('enum agx_interpolation interpolation : 2;', 'unsigned interpolation : 2; /* enum agx_interpolation */'),
+    ('agx_size', 'size', 2),
+    ('agx_index_type', 'type', 3),
+    ('agx_dim', 'dim', 4),
+    ('agx_gather', 'gather', 3),
+    ('agx_interpolation', 'interpolation', 2),
 )
 
 
@@ -217,10 +219,20 @@ def prepare_unsigned_bitfield_header(units, out):
     if any(o.read_bytes() != baseline.read_bytes() for o in originals[1:]):
         raise RuntimeError('Diverging agx_compiler.h copies: ' + ', '.join(map(str, originals)))
     text = baseline.read_bytes().decode()
-    for old, new in SIGNED_ENUM_BITFIELDS:
-        if text.count(old) != 1:
-            raise RuntimeError('Ambiguous enum bit-field anchor: ' + old)
-        text = text.replace(old, new)
+    replaced = []
+    for enum, field, width in SIGNED_ENUM_BITFIELDS:
+        pattern = re.compile(r'enum %s(\s+)%s(\s*):(\s*)%d;' % (enum, field, width))
+        matches = pattern.findall(text)
+        if len(matches) > 1:
+            raise RuntimeError('Ambiguous enum bit-field anchor: enum %s %s' % (enum, field))
+        if matches:
+            text = pattern.sub(lambda m: 'unsigned %s%s:%s%d; /* enum %s */' % (
+                field, m.group(2), m.group(3), width, enum), text)
+            replaced.append(field)
+    leftover = [f for e, f, w in SIGNED_ENUM_BITFIELDS
+                if re.search(r'enum %s\s+%s\s*:\s*%d;' % (e, f, w), text)]
+    if leftover or not re.search(r'unsigned gather\s*:\s*3;', text):
+        raise RuntimeError('Signed enum bit-fields remain: ' + ', '.join(leftover or ['gather']))
     destination = out / 'compiler-evidence'
     destination.mkdir(parents=True, exist_ok=True)
     for header in sorted(baseline.parent.glob('*.h')):
@@ -239,7 +251,7 @@ def prepare_unsigned_bitfield_header(units, out):
         else:
             relocated.append(unit)
     provenance = {'baseline': str(baseline), 'before_sha256': sha256(baseline),
-                  'after_sha256': sha256(projected), 'fields': len(SIGNED_ENUM_BITFIELDS),
+                  'after_sha256': sha256(projected), 'fields': replaced,
                   'relocated': sorted(str(p) for p, q in zip(relocated, units) if p != q)}
     return relocated, destination, provenance
 
