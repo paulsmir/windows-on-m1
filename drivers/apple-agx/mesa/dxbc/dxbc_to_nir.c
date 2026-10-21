@@ -2989,6 +2989,18 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
    for (unsigned i = 0; i < MAX_RESOURCES; ++i)
       if (c->res[i].declared)
          nir->info.num_textures = i + 1;
+   /* EXP1841: Asahi clamps bindless image indices (every image query) to
+    * info.num_images - 1, which nir_shader_gather_info recounts from the
+    * image variables; slots without a typed UAV (raw/structured UAVs, gaps)
+    * get placeholders so the count spans the highest typed slot */
+   for (unsigned u = 0; u < BITSET_LAST_BIT(nir->info.images_used) && u < MAX_UAVS; ++u) {
+      if (c->uav[u].image)
+         continue;
+      nir_variable *gap = nir_variable_create(nir, nir_var_image,
+         glsl_image_type(GLSL_SAMPLER_DIM_2D, false, GLSL_TYPE_FLOAT), "u_unused");
+      gap->data.binding = u;
+      gap->data.image.format = PIPE_FORMAT_NONE;
+   }
    free(c);
    return nir;
 }

@@ -168,6 +168,11 @@ main(int argc, char **argv)
    /* the frontend's finalization (tgsi_to_nir's sequence) */
    dxbc_nir_finalize(nir);
    nir_validate_shader(nir, "finalize");
+   /* agx_nir_lower_bindings (before agx_preprocess_nir) clamps bindless image
+    * indices to info.num_images - 1, which nir_shader_gather_info recounts
+    * from the image variables */
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+   unsigned gathered_images = nir->info.num_images, image_span = BITSET_LAST_BIT(nir->info.images_used);
 
    /* agx_shader_initialize: I/O lowering, then agx_preprocess_nir */
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
@@ -217,12 +222,12 @@ main(int argc, char **argv)
    }
    printf("TRANSLATED stage %s instructions %u inputs 0x%llx outputs 0x%llx textures %u "
           "ssbos %u images %u block %ux%ux%u shared %u shared-derefs %u early-output-stores %u "
-          "vs-input-bases 0x%x agx-unlowered-bitfield %u\n",
+          "vs-input-bases 0x%x agx-unlowered-bitfield %u gathered-images %u image-span %u\n",
           mesa_shader_stage_name(nir->info.stage), instrs,
           (unsigned long long)nir->info.inputs_read,
           (unsigned long long)nir->info.outputs_written, BITSET_LAST_BIT(nir->info.textures_used),
           ssbos, images, block[0], block[1], block[2], shared, shared_derefs, early_stores,
-          vs_input_bases, agx_unlowered_bitfield);
+          vs_input_bases, agx_unlowered_bitfield, gathered_images, image_span);
    ralloc_free(nir);
    glsl_type_singleton_decref();
    dxbc_program_free(&program);

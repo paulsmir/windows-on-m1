@@ -207,6 +207,21 @@ class DxbcToNir(unittest.TestCase):
         self.assertTrue(flag("ps50sampleid"))
         self.assertFalse(flag("ps40"))
 
+    def test_image_count_spans_the_typed_uav_slots(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
+        # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned
+        # u1's size on hardware. Asahi lowers image queries to bindless
+        # handles clamped to info.num_images - 1, and nir_shader_gather_info
+        # recounts num_images from the image variables (2 here), so the
+        # clamp sent u2 to u1. The image variables must span every slot up
+        # to the highest typed UAV.
+        result = self.run_fixture("cs50uavgap")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
+        m = re.search(r"gathered-images (\d+) image-span (\d+)", result.stdout)
+        self.assertIsNotNone(m, result.stdout)
+        self.assertEqual(m.group(2), "3")
+        self.assertEqual(m.group(1), m.group(2))
+
     def test_windows_dxbc_corpus_does_not_crash(self):
         corpus = local_tree("dxbc-corpus")
         if corpus is None:
