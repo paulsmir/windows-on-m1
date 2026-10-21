@@ -3661,6 +3661,130 @@ static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE handle, D3D12DDI_HPIP
     (void)pso_handle;
 #endif
 }
+/* C38 (D3D12-C38-pso-serialization.md; EXP1834: D3D12PipelineStateCache's
+ * GetCachedBlob reached the refused pfnSerializeObject and the device was
+ * removed): a pipeline state serializes to a position-independent blob of
+ * what it keeps after creation -- the strip cut, sample mask and count,
+ * the state descriptions, the element layout, and its programs -- and a
+ * deserialized pipeline state is rebuilt from that blob alone and compiles
+ * at its first use, as a created one. The runtime wraps the blob with its
+ * own adapter and driver-version header. */
+static constexpr UINT kPsoBlobMagic = 0x50584741u; /* "AGXP" */
+static constexpr UINT kPsoBlobVersion = 1u;
+struct AgxD3d12PsoBlob {
+    UINT magic, version, bytes;
+    UINT ib_strip_cut, sample_mask, sample_count, sample_quality;
+    D3D12DDI_BLEND_DESC blend;
+    D3D12DDI_RASTERIZER_DESC rasterizer;
+    D3D12DDI_DEPTH_STENCIL_DESC depth_stencil;
+    UINT elements;
+    D3D12DDIARG_INPUT_ELEMENT_DESC element[kPipelineElements];
+    UINT cs_dwords, vs_dwords, ps_dwords, gs_dwords, hs_dwords, ds_dwords, hs_registers, hs_positions;
+    UINT tokens[1];
+};
+static UINT64 PsoDwords(const AgxD3d12PipelineState *pso) {
+    return static_cast<UINT64>(pso->cs_dwords) + pso->vs_dwords + pso->ps_dwords + pso->gs_dwords + pso->hs_dwords +
+           pso->ds_dwords;
+}
+static bool LivePso(const void *handle) {
+    bool live = false;
+    AcquireSRWLockShared(&identity_registry_lock);
+    for (auto *pso = live_identity_psos; pso && !live; pso = pso->identity_next) live = pso == handle;
+    ReleaseSRWLockShared(&identity_registry_lock);
+    return live;
+}
+/* the blob's own size when it is a well-formed blob of this version, else 0 */
+static SIZE_T PsoBlobBytes(SIZE_T size, const UINT *data) {
+    const auto *blob = reinterpret_cast<const AgxD3d12PsoBlob *>(data);
+    if (!blob || size < offsetof(AgxD3d12PsoBlob, tokens) || blob->magic != kPsoBlobMagic ||
+        blob->version != kPsoBlobVersion || blob->bytes != size || blob->elements > kPipelineElements + 1u)
+        return 0;
+    const UINT64 dwords = static_cast<UINT64>(blob->cs_dwords) + blob->vs_dwords + blob->ps_dwords + blob->gs_dwords +
+                          blob->hs_dwords + blob->ds_dwords;
+    return offsetof(AgxD3d12PsoBlob, tokens) + dwords * sizeof(UINT) == size ? size : 0;
+}
+static HRESULT APIENTRY SerializeObject(D3D12DDI_HDEVICE, D3D12DDI_HANDLETYPE type, HANDLE object, SIZE_T *size,
+                                        const UINT **data) {
+    auto *pso = static_cast<const AgxD3d12PipelineState *>(object);
+    const bool valid = type == D3D12DDI_HT_PIPELINE_STATE && pso && size && data && LivePso(pso);
+    const UINT64 bytes = valid ? offsetof(AgxD3d12PsoBlob, tokens) + PsoDwords(pso) * sizeof(UINT) : 0;
+    auto *blob = valid ? static_cast<AgxD3d12PsoBlob *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, static_cast<SIZE_T>(bytes)))
+                       : nullptr;
+    const HRESULT hr = !valid ? E_INVALIDARG : blob ? S_OK : E_OUTOFMEMORY;
+    const UINT receipt[] = {static_cast<UINT>(type), valid ? 1u : 0u, static_cast<UINT>(bytes)};
+    AdmissionUmdDiagnostic("measure-d3d12-serialize", hr, receipt, 3);
+    if (FAILED(hr)) return hr;
+    blob->magic = kPsoBlobMagic;
+    blob->version = kPsoBlobVersion;
+    blob->bytes = static_cast<UINT>(bytes);
+    blob->ib_strip_cut = static_cast<UINT>(pso->desc.IBStripCutValue);
+    blob->sample_mask = pso->desc.SampleMask;
+    blob->sample_count = pso->desc.SampleDesc.Count;
+    blob->sample_quality = pso->desc.SampleDesc.Quality;
+    blob->blend = pso->blend;
+    blob->rasterizer = pso->rasterizer;
+    blob->depth_stencil = pso->depth_stencil;
+    blob->elements = pso->elements;
+    memcpy(blob->element, pso->element, sizeof(blob->element));
+    blob->cs_dwords = pso->cs_dwords;
+    blob->vs_dwords = pso->vs_dwords;
+    blob->ps_dwords = pso->ps_dwords;
+    blob->gs_dwords = pso->gs_dwords;
+    blob->hs_dwords = pso->hs_dwords;
+    blob->ds_dwords = pso->ds_dwords;
+    blob->hs_registers = pso->hs_registers;
+    blob->hs_positions = pso->hs_positions;
+    memcpy(blob->tokens, pso->cs, static_cast<SIZE_T>(PsoDwords(pso)) * sizeof(UINT));
+    *size = static_cast<SIZE_T>(bytes);
+    *data = reinterpret_cast<const UINT *>(blob);
+    return S_OK;
+}
+static VOID APIENTRY DestroyObjectSerialization(D3D12DDI_HDEVICE, SIZE_T, const UINT *data) {
+    if (data) HeapFree(GetProcessHeap(), 0, const_cast<UINT *>(data));
+}
+static SIZE_T APIENTRY CalcPrivateDeserializedObjectSize(D3D12DDI_HDEVICE, D3D12DDI_HANDLETYPE type, SIZE_T size,
+                                                         const UINT *data) {
+    const SIZE_T bytes = type == D3D12DDI_HT_PIPELINE_STATE ? PsoBlobBytes(size, data) : 0;
+    if (!bytes) return sizeof(AgxD3d12PipelineState); /* CreateDeserializedObject refuses the blob */
+    const SIZE_T dwords = (bytes - offsetof(AgxD3d12PsoBlob, tokens)) / sizeof(UINT);
+    return offsetof(AgxD3d12PipelineState, cs) + (dwords ? dwords : 1) * sizeof(UINT);
+}
+static HRESULT APIENTRY CreateDeserializedObject(D3D12DDI_HDEVICE handle, D3D12DDI_HANDLETYPE type, SIZE_T size,
+                                                 const UINT *data, VOID *object, VOID *) {
+    auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
+    auto *pso = static_cast<AgxD3d12PipelineState *>(object);
+    const bool valid = device && pso && type == D3D12DDI_HT_PIPELINE_STATE && PsoBlobBytes(size, data);
+    const UINT receipt[] = {static_cast<UINT>(type), valid ? 1u : 0u, static_cast<UINT>(size)};
+    AdmissionUmdDiagnostic("measure-d3d12-deserialize", valid ? S_OK : E_INVALIDARG, receipt, 3);
+    if (!valid) return E_INVALIDARG;
+    const auto *blob = reinterpret_cast<const AgxD3d12PsoBlob *>(data);
+    memset(pso, 0, offsetof(AgxD3d12PipelineState, cs));
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    InitializeSRWLock(&pso->compile_lock);
+#endif
+    pso->desc.hDrvPipelineState.pDrvPrivate = pso;
+    pso->desc.IBStripCutValue = static_cast<D3D12DDI_INDEX_BUFFER_STRIP_CUT_VALUE>(blob->ib_strip_cut);
+    pso->desc.SampleMask = blob->sample_mask;
+    pso->desc.SampleDesc.Count = blob->sample_count;
+    pso->desc.SampleDesc.Quality = blob->sample_quality;
+    pso->compiled = S_FALSE;
+    pso->blend = blob->blend;
+    pso->rasterizer = blob->rasterizer;
+    pso->depth_stencil = blob->depth_stencil;
+    pso->elements = blob->elements;
+    memcpy(pso->element, blob->element, sizeof(pso->element));
+    pso->cs_dwords = blob->cs_dwords;
+    pso->vs_dwords = blob->vs_dwords;
+    pso->ps_dwords = blob->ps_dwords;
+    pso->gs_dwords = blob->gs_dwords;
+    pso->hs_dwords = blob->hs_dwords;
+    pso->ds_dwords = blob->ds_dwords;
+    pso->hs_registers = blob->hs_registers;
+    pso->hs_positions = blob->hs_positions;
+    memcpy(pso->cs, blob->tokens, static_cast<SIZE_T>(PsoDwords(pso)) * sizeof(UINT));
+    PublishPsoIdentity(pso, device);
+    return S_OK;
+}
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 /* C5c: a table's CBV/UAV ranges become slots b#/u# pointing at their
  * descriptors in the shader-visible heap (an owner heap, resolved by the
@@ -4721,10 +4845,10 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRootSignatureSize, CalcPrivateRootSignatureSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRootSignature, CreateRootSignature);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRootSignature, DestroyRootSignature);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnSerializeObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnSerializeObject));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyObjectSerialization, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyObjectSerialization));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDeserializedObjectSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDeserializedObjectSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDeserializedObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDeserializedObject));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnSerializeObject, SerializeObject); /* C38 */
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyObjectSerialization, DestroyObjectSerialization);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDeserializedObjectSize, CalcPrivateDeserializedObjectSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDeserializedObject, CreateDeserializedObject);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMapHeap, MapHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnUnmapHeap, UnmapHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateHeapAndResourceSizes, CalcPrivateHeapAndResourceSizes);
