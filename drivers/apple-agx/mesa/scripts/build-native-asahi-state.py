@@ -5980,6 +5980,21 @@ agx_shader_initialize("""
                   ctx->stage[MESA_SHADER_TESS_CTRL].shader->tess.ccw));''')
         state_text=state_text.replace(winding_params,
             '''      params.ccw = !(tes->tess.ccw || tcs->tess.ccw);''')
+        # D3D12 C47: a descriptor heap holds the texture descriptor
+        # agx_upload_textures would emit for a view (agx_pack_texture is
+        # static); the owner packs it when a view enters a heap.
+        pack_anchor='\nvoid\nagx_init_state_functions(struct pipe_context *ctx)\n'
+        if state_text.count(pack_anchor)!=1:
+            raise SystemExit('Ambiguous texture packing anchor')
+        state_text=state_text.replace(pack_anchor,'''
+/* D3D12 C47: the texture descriptor agx_upload_textures emits for view */
+void
+agx_win32_pack_sampler_view(void *out, struct pipe_sampler_view *view)
+{
+   struct agx_sampler_view *so = (struct agx_sampler_view *)view;
+   agx_pack_texture(out, so->rsrc, so->format, &so->base);
+}
+'''+pack_anchor)
         state_target.write_text(state_text)
         overlays['src/gallium/drivers/asahi/agx_state.c']['after_state_capture']=hashlib.sha256(state_target.read_bytes()).hexdigest()
         # EXP844/845: StartMenuExperienceHost and Explorer faulted in

@@ -28,15 +28,17 @@ enum dxbc_binding_kind {
  * and reg the range's first register. The shader reads the heap index of
  * that first register from constant buffer DXBC_HEAP_TABLE_CB (vec4 per
  * range, .x), adds the accessed register's offset, and takes the AGX
- * descriptor at that index of the heap mirror (DXBC_HEAP_DESCRIPTOR_STRIDE
- * bytes each; the mirror is bound as constant buffer DXBC_HEAP_MIRROR_CB)
+ * descriptor at that index of the shader-visible heap (DXBC_HEAP_DESCRIPTOR_STRIDE
+ * bytes each, the AGX texture descriptor DXBC_HEAP_DESCRIPTOR_AGX_OFFSET into
+ * it; the heap is bound as constant buffer DXBC_HEAP_MIRROR_CB)
  * through a bindless handle marked DXBC_HEAP_HANDLE_MARK. */
 #define DXBC_BINDING_HEAP 2u
 #define DXBC_BINDING_HEAP_RANGES 0x80000000u
 #define DXBC_HEAP_RANGE_MAX 8u
 #define DXBC_HEAP_TABLE_CB 14u
 #define DXBC_HEAP_MIRROR_CB 15u
-#define DXBC_HEAP_DESCRIPTOR_STRIDE 48u
+#define DXBC_HEAP_DESCRIPTOR_STRIDE 128u
+#define DXBC_HEAP_DESCRIPTOR_AGX_OFFSET 64u /* the AGX texture descriptor in each */
 #define DXBC_HEAP_HANDLE_MARK 0xd312u
 
 struct dxbc_binding {

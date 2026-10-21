@@ -1883,7 +1883,12 @@ static D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY CheckResourceVirtualAddress(D3D12DD
  * one CPU-visible C2a heap (16 MiB class bound) kept locked, so a CPU
  * handle is its pointer and a GPU handle its VA; other heaps are process
  * memory. The views written into them are not implemented yet. */
-static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE) {
+/* C47: a CBV/SRV/UAV descriptor is its CPU record (64 bytes) followed by its
+ * heap form (AgxD3d12HeapForm), which shaders read through bindless handles */
+static constexpr UINT kCbvSrvUavDescriptorBytes = 128u;
+static constexpr UINT kHeapFormOffset = 64u;
+static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
+    if (type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) return kCbvSrvUavDescriptorBytes;
     return 64u; /* C6e: a sampler record (kind + D3D12DDI_SAMPLER_DESC) needs 56 bytes */
 }
 static UINT APIENTRY GetDescriptorSizeInBytes(D3D12DDI_HDEVICE, D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
@@ -1937,7 +1942,27 @@ struct AgxD3d12SamplerDescriptor {
     D3D12DDI_SAMPLER_DESC desc;
 };
 static_assert(sizeof(AgxD3d12SamplerDescriptor) <= 64, "fits a sampler descriptor");
-static_assert(sizeof(AgxD3d12Descriptor) <= 64, "fits a CBV/SRV/UAV descriptor");
+static_assert(sizeof(AgxD3d12Descriptor) <= kHeapFormOffset, "fits a CBV/SRV/UAV descriptor");
+/* C47: the heap form: Asahi's packed texture descriptor of the view (null
+ * for anything but a texture SRV), room for a PBE descriptor (typed UAVs),
+ * the layout key the texture had when packed and the view's shader dimension
+ * (DXBC_SRV_*) */
+struct AgxD3d12HeapForm {
+    BYTE texture[24];
+    BYTE pbe[24];
+    UINT64 key;
+    UINT dimension;
+    UINT reserved;
+};
+static_assert(kHeapFormOffset + sizeof(AgxD3d12HeapForm) == kCbvSrvUavDescriptorBytes, "the heap form ends the descriptor");
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static_assert(kCbvSrvUavDescriptorBytes == DXBC_HEAP_DESCRIPTOR_STRIDE && kHeapFormOffset == DXBC_HEAP_DESCRIPTOR_AGX_OFFSET &&
+                  sizeof(AgxD3d12HeapForm::texture) == AGX_D3D12_HEAP_TEXTURE_BYTES,
+              "the translator's heap layout (dxbc_bindings.h)");
+#endif
+static AgxD3d12HeapForm *HeapFormOf(void *descriptor) {
+    return reinterpret_cast<AgxD3d12HeapForm *>(static_cast<BYTE *>(descriptor) + kHeapFormOffset);
+}
 static void ViewReceipt(PCSTR stage, UINT reason, UINT a, UINT b) {
     const UINT receipt[] = {reason, a, b};
     AdmissionUmdDiagnostic(stage, reason ? E_NOTIMPL : S_OK, receipt, 3);
@@ -2242,6 +2267,61 @@ static VOID APIENTRY CreateSampler(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_SA
     out->kind = kDescriptorSampler;
     out->desc = *arg->pSamplerDesc;
 }
+/* C47: a view written into a CBV/SRV/UAV heap also gets its heap form; a
+ * texture SRV's shader dimension follows its D3D12 view (the DDI names no
+ * array dimension: more than one layer of a 1D view, or more than one cube,
+ * is an array) */
+static void FillHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest, UINT resource_dimension) {
+    auto *view = reinterpret_cast<AgxD3d12Descriptor *>(dest.ptr);
+    if (!view) return;
+    AgxD3d12HeapForm *form = HeapFormOf(view);
+    memset(form, 0, sizeof(*form));
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AgxD3d12NullTextureDescriptor(form->texture);
+    if (view->kind != kDescriptorSrvTexture || !view->heap) return;
+    form->dimension = resource_dimension == D3D12DDI_RD_TEXTURE1D ? (view->layers > 1 ? DXBC_SRV_1D_ARRAY : DXBC_SRV_1D)
+                    : resource_dimension == D3D12DDI_RD_TEXTURE3D ? DXBC_SRV_3D
+                    : resource_dimension == D3D12DDI_RD_TEXTURECUBE ? (view->layers > 6u ? DXBC_SRV_CUBE_ARRAY : DXBC_SRV_CUBE)
+                    : DXBC_SRV_OTHER;
+    AgxD3d12Device *device = DeviceOf(handle);
+    AGX_D3D12_OWNER *owner = device ? EnsureOwner(device) : nullptr;
+    if (!owner) return;
+    /* the texture SRV as OwnerBindings hands it to the owner */
+    AGX_D3D12_BUFFER buffer = HeapBuffer(view->heap);
+    AGX_D3D12_SRV srv = {};
+    srv.Buffer = &buffer;
+    srv.Texture = 1;
+    srv.Cube = view->cube;
+    srv.ComponentMapping = view->component_mapping;
+    srv.Format = view->format;
+    srv.FirstLevel = view->level;
+    srv.Levels = view->levels;
+    srv.FirstLayer = view->first_layer;
+    srv.Layers = view->layers;
+    unsigned long long key = 0;
+    if (SUCCEEDED(AgxD3d12OwnerSrvDescriptor(owner, &srv, static_cast<uint8_t>(form->dimension), form->texture, &key)))
+        form->key = key;
+#else
+    (void)handle;
+    (void)resource_dimension;
+#endif
+}
+static VOID APIENTRY CreateShaderResourceViewInHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_RESOURCE_VIEW_0002 *arg,
+                                                    D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    CreateShaderResourceView(handle, arg, dest);
+    FillHeapForm(handle, dest, arg ? static_cast<UINT>(arg->ResourceDimension) : 0u);
+}
+static VOID APIENTRY CreateConstantBufferViewInHeap(D3D12DDI_HDEVICE handle, const D3D12DDI_CONSTANT_BUFFER_VIEW_DESC *desc,
+                                                    D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    CreateConstantBufferView(handle, desc, dest);
+    FillHeapForm(handle, dest, 0u);
+}
+static VOID APIENTRY CreateUnorderedAccessViewInHeap(D3D12DDI_HDEVICE handle,
+                                                     const D3D12DDIARG_CREATE_UNORDERED_ACCESS_VIEW_0002 *arg,
+                                                     D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    CreateUnorderedAccessView(handle, arg, dest);
+    FillHeapForm(handle, dest, 0u);
+}
 /* Descriptors are CPU records, so copies are byte copies of whole
  * descriptors of the heap type's size. */
 static VOID APIENTRY CopyDescriptorsSimple(D3D12DDI_HDEVICE, UINT count, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest,
@@ -2304,6 +2384,12 @@ static HRESULT APIENTRY CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D1
         heap->cpu = VirtualAlloc(nullptr, static_cast<SIZE_T>(bytes), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
         if (!heap->cpu) hr = E_OUTOFMEMORY;
     }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* C47: unpopulated entries read as Asahi's null texture */
+    if (SUCCEEDED(hr) && heap->cpu && arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)
+        for (UINT i = 0; i < heap->descriptors; ++i)
+            AgxD3d12NullTextureDescriptor(HeapFormOf(static_cast<BYTE *>(heap->cpu) + static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes)->texture);
+#endif
     const UINT receipt[] = {heap->type, heap->descriptors, static_cast<UINT>(arg->Flags), heap->gpuva != 0};
     AdmissionUmdDiagnostic("measure-d3d12-descriptor-heap", hr, receipt, 4);
     return hr;
@@ -4994,10 +5080,10 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetDescriptorSizeInBytes, GetDescriptorSizeInBytes);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetCPUDescriptorHandleForHeapStart, GetCPUDescriptorHandleForHeapStart);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetGPUDescriptorHandleForHeapStart, GetGPUDescriptorHandleForHeapStart);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView, CreateShaderResourceView);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateConstantBufferView, CreateConstantBufferView);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView, CreateShaderResourceViewInHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateConstantBufferView, CreateConstantBufferViewInHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSampler);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateUnorderedAccessView, CreateUnorderedAccessView);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateUnorderedAccessView, CreateUnorderedAccessViewInHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRenderTargetView, CreateRenderTargetView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView, CreateDepthStencilView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRootSignatureSize, CalcPrivateRootSignatureSize);

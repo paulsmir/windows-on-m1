@@ -377,9 +377,13 @@ class D3d12AbiGate(unittest.TestCase):
             self.assertIn(reason, srv)
         self.assertIn('"measure-d3d12-srv"', srv)
         self.assertIn('view->kind == kDescriptorSrvBuffer', execute)
-        for member in ('pfnCreateConstantBufferView', 'pfnCreateUnorderedAccessView', 'pfnCopyDescriptors',
-                       'pfnCopyDescriptorsSimple', 'pfnCreateShaderResourceView'):
+        for member in ('pfnCopyDescriptors', 'pfnCopyDescriptorsSimple'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        # C47: views written into CBV/SRV/UAV heaps also carry their heap form
+        for member in ('pfnCreateConstantBufferView', 'pfnCreateUnorderedAccessView', 'pfnCreateShaderResourceView'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %sInHeap);' % (member, member[3:]), source)
+            wrapper = fn('static VOID APIENTRY %sInHeap(' % member[3:])
+            self.assertLess(wrapper.index('%s(handle, ' % member[3:]), wrapper.index('FillHeapForm(handle, dest, '))
 
     def test_c6a_textures(self):
         # C6a invariants (D3D12-C6-graphics.md): only single-sample 2D

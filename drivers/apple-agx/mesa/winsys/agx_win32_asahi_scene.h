@@ -98,6 +98,12 @@ void AgxWin32AsahiContextDiagnostic(struct pipe_context *,
  * submitted << 9 and fence (8 values), then any_faults, backend Failed,
  * held | terminal << 1 | last refused line << 8, held render fence. */
 APPLE_AGX_U64 AgxWin32AsahiContextNewestFence(struct pipe_context *);
+/* D3D12 C47: a texture view's packed descriptor for a descriptor heap */
+APPLE_AGX_U64 AgxWin32AsahiResourceLayoutKey(struct pipe_resource *);
+int AgxWin32AsahiTextureDescriptor(struct pipe_context *, struct pipe_resource *,
+    const struct pipe_sampler_view *, void *Out, APPLE_AGX_U64 *Key);
+void AgxWin32AsahiNullTextureDescriptor(void *Out);
+unsigned AgxWin32AsahiTextureDescriptorBytes(void);
 void AgxWin32AsahiContextRetireDiagnostic(struct pipe_context *,
     APPLE_AGX_U32 State[12]);
 int AgxWin32AsahiContextDrawReceipt(struct pipe_context *);

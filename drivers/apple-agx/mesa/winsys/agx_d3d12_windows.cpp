@@ -1734,6 +1734,35 @@ static int srv_texture_template(const AGX_D3D12_SRV &srv, uint8_t dimension, str
   *out = texture;
   return 1;
 }
+/* C47: the descriptor-heap form of an SRV: Asahi's packed texture
+ * descriptor of the view a texture SRV of this dimension binds, and the
+ * texture's layout key. Other SRVs (and invalid ones, E_INVALIDARG) get
+ * Asahi's null texture descriptor and key 0. */
+extern "C" HRESULT AgxD3d12OwnerSrvDescriptor(AGX_D3D12_OWNER *owner, const AGX_D3D12_SRV *srv, uint8_t dimension,
+                                              void *out, unsigned long long *key) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Context || !out || !key || AgxWin32AsahiTextureDescriptorBytes() != AGX_D3D12_HEAP_TEXTURE_BYTES)
+    return E_INVALIDARG;
+  *key = 0;
+  AgxWin32AsahiNullTextureDescriptor(out);
+  if (!srv || !srv->Buffer || !srv->Texture) return S_OK;
+  struct pipe_sampler_view templ = {};
+  struct pipe_resource *texture = NULL;
+  if (!srv_component_mapping(srv->ComponentMapping, &templ) || srv_texture_template(*srv, dimension, &texture, &templ) <= 0)
+    return E_INVALIDARG;
+  APPLE_AGX_U64 packed_key = 0;
+  if (!AgxWin32AsahiTextureDescriptor(owner->Context, texture, &templ, out, &packed_key)) {
+    AgxWin32AsahiNullTextureDescriptor(out);
+    return E_OUTOFMEMORY;
+  }
+  *key = packed_key;
+  return S_OK;
+}
+extern "C" void AgxD3d12NullTextureDescriptor(void *out) { AgxWin32AsahiNullTextureDescriptor(out); }
+extern "C" unsigned long long AgxD3d12OwnerLayoutKey(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *buffer) {
+  OwnerLock lock(owner);
+  return owner && buffer ? AgxWin32AsahiResourceLayoutKey(static_cast<struct pipe_resource *>(buffer->Resource)) : 0u;
+}
 static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, const AGX_D3D12_CBV *cbvs,
                           const AGX_D3D12_SRV *srvs, const AGX_D3D12_UAV *uavs, struct pipe_sampler_view **views,
                           unsigned *view_count, const uint8_t *dimensions, const uint8_t *uav_dimensions,

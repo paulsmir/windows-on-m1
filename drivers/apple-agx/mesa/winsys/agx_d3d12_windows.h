@@ -122,6 +122,16 @@ typedef struct {
   unsigned ComponentMapping; /* C18: encoded WDK SRV component mapping */
   unsigned Cube; /* C19: cube-class view; actual arrayness from compiled shader */
 } AGX_D3D12_SRV;
+/* C47: the packed AGX texture descriptor (AGX_D3D12_HEAP_TEXTURE_BYTES) of
+ * an SRV in a descriptor heap for the view's shader dimension (DXBC_SRV_*),
+ * and the layout key the replay compares (AgxD3d12OwnerLayoutKey) to re-pack
+ * a descriptor whose texture Asahi re-laid out. */
+#define AGX_D3D12_HEAP_TEXTURE_BYTES 24u
+HRESULT AgxD3d12OwnerSrvDescriptor(AGX_D3D12_OWNER *Owner, const AGX_D3D12_SRV *Srv, uint8_t Dimension, void *Out,
+                                   unsigned long long *Key);
+unsigned long long AgxD3d12OwnerLayoutKey(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Buffer);
+/* Asahi's null texture descriptor (reads 0): unpopulated heap entries */
+void AgxD3d12NullTextureDescriptor(void *Out);
 /* C6e: a sampler s# in the D3D10/11/12 DDI encoding (filter bits, address
  * modes 1..5, comparison 1..8) */
 #define AGX_D3D12_SAMPLER_SLOTS 16

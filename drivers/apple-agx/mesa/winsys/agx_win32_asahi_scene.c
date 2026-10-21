@@ -292,6 +292,33 @@ int AgxWin32AsahiResourceBusy(struct pipe_context *ctx,struct pipe_resource *res
   }
   return 0;
 }
+/* D3D12 C47: the descriptor-heap form of a texture view: Asahi's packed
+ * texture descriptor (AGX_TEXTURE_LENGTH bytes, agx_win32_pack_sampler_view
+ * in the native state) and the resource's layout key, which changes when
+ * Asahi replaces the BO or changes its tiling/compression (a heap
+ * descriptor is re-packed then). */
+void agx_win32_pack_sampler_view(void *out, struct pipe_sampler_view *view);
+APPLE_AGX_U64 AgxWin32AsahiResourceLayoutKey(struct pipe_resource *resource) {
+  if(!resource) return 0u;
+  struct agx_resource *rsrc=agx_resource(resource);
+  if(!rsrc->bo || !rsrc->bo->va) return 0u;
+  return rsrc->bo->va->addr ^ ((APPLE_AGX_U64)rsrc->layout.tiling<<56) ^
+         ((APPLE_AGX_U64)rsrc->layout.compressed<<62);
+}
+int AgxWin32AsahiTextureDescriptor(struct pipe_context *ctx, struct pipe_resource *resource,
+    const struct pipe_sampler_view *templ, void *out, APPLE_AGX_U64 *key) {
+  if(!ctx || !resource || !templ || !out || !key || resource->screen!=ctx->screen) return 0;
+  struct pipe_sampler_view *view=ctx->create_sampler_view(ctx,resource,templ);
+  if(!view) return 0;
+  agx_win32_pack_sampler_view(out,view);
+  *key=AgxWin32AsahiResourceLayoutKey(resource);
+  pipe_sampler_view_reference(&view,NULL);
+  return 1;
+}
+void AgxWin32AsahiNullTextureDescriptor(void *out) {
+  if(out) agx_set_null_texture((struct agx_texture_packed *)out);
+}
+unsigned AgxWin32AsahiTextureDescriptorBytes(void) { return AGX_TEXTURE_LENGTH; }
 /* D3D12 C46 receipt-only: the completion fence of the context's newest
  * accepted submission; fences increase with every submission. */
 APPLE_AGX_U64 AgxWin32AsahiContextNewestFence(struct pipe_context *ctx) {

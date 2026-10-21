@@ -1913,8 +1913,9 @@ tex_finish(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, unsigned compon
                                                         .align_mul = 16, .align_offset = 0,
                                                         .range_base = 0, .range = ~0u), 0);
       nir_def *index = nir_iadd(&c->b, first, c->heap_offset);
-      nir_def *handle = nir_bindless_image_agx(&c->b, nir_imul_imm(&c->b, index, DXBC_HEAP_DESCRIPTOR_STRIDE),
-                                               .desc_set = DXBC_HEAP_HANDLE_MARK);
+      nir_def *bytes = nir_iadd_imm(&c->b, nir_imul_imm(&c->b, index, DXBC_HEAP_DESCRIPTOR_STRIDE),
+                                    DXBC_HEAP_DESCRIPTOR_AGX_OFFSET);
+      nir_def *handle = nir_bindless_image_agx(&c->b, bytes, .desc_set = DXBC_HEAP_HANDLE_MARK);
       tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_texture_handle, handle);
       tex->texture_index = 0;
    }
