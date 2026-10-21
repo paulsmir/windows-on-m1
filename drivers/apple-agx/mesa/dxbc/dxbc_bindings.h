@@ -14,7 +14,9 @@ enum dxbc_binding_kind {
    DXBC_BINDING_KIND_COUNT = 4,
 };
 
-#define DXBC_BINDING_MAP_MAX 166
+/* the slots (14 CBVs, 128 SRVs, 8 UAVs, 16 samplers) and the heap ranges
+ * (DXBC_HEAP_RANGE_MAX) */
+#define DXBC_BINDING_MAP_MAX (166 + 64)
 
 /* C34: SM5.1 SRV and sampler ranges flatten to one binding per register in
  * consecutive slots; the tail of an unbounded range (T[n:*]) is optional --
@@ -34,7 +36,9 @@ enum dxbc_binding_kind {
  * through a bindless handle marked DXBC_HEAP_HANDLE_MARK. */
 #define DXBC_BINDING_HEAP 2u
 #define DXBC_BINDING_HEAP_RANGES 0x80000000u
-#define DXBC_HEAP_RANGE_MAX 8u
+/* Tier 2: 64 UAVs per pipeline, which a shader may declare one register at
+ * a time: 8 in slots, 56 heap ranges */
+#define DXBC_HEAP_RANGE_MAX 64u
 #define DXBC_HEAP_TABLE_CB 14u
 #define DXBC_HEAP_MIRROR_CB 15u
 #define DXBC_HEAP_DESCRIPTOR_STRIDE 160u

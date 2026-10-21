@@ -306,6 +306,19 @@ class DxbcToNir(unittest.TestCase):
         self.assertRegex(heap.stdout, r"@bindless_image_atomic .*image_dim=Buf.*format=r32_uint.*atomic_op=iadd")
         self.assertRegex(heap.stdout, r"TRANSLATED stage MESA_SHADER_COMPUTE .* ssbos 8 ")
 
+    def test_tier2_shader_with_64_separate_uavs_translates(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? C47 reports
+        # resource binding tier 2 (64 UAVs per pipeline). A shader may declare
+        # them one register at a time; past the 8 slots each declaration
+        # becomes its own heap range, so the heap ranges must cover 56 of them
+        # (DXBC_HEAP_RANGE_MAX was 8: u16+ refused, PSO creation failed).
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "cs51uav64.dxbc"), "--d3d12-heap"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        self.assertIn("BINDING kind 2 id 7 space 0 reg 7 slot 7 flags 0", heap.stdout)
+        self.assertIn("BINDING kind 2 id 63 space 0 reg 63 slot 55 flags 2", heap.stdout)
+        self.assertIn("TRANSLATED stage MESA_SHADER_COMPUTE", heap.stdout)
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

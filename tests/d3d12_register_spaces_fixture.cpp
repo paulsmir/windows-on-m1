@@ -7,7 +7,7 @@
 using UINT=uint32_t; using UINT64=uint64_t; using BYTE=unsigned char;
 static constexpr UINT kAnyStage=~0u,kRootArguments=64,kCbSlots=14,kSrvSlots=128,kUavSlots=8,kSamplerSlots=16;
 /* C47: heap ranges (production: 128-byte CBV/SRV/UAV descriptors) */
-static constexpr UINT kHeapRanges=8,kCbvSrvUavDescriptorBytes=64;
+static constexpr UINT kHeapRanges=64,kCbvSrvUavDescriptorBytes=64;
 enum {D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE=0,D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS=1,
  D3D12DDI_ROOT_PARAMETER_TYPE_CBV=2,D3D12DDI_ROOT_PARAMETER_TYPE_SRV=3,D3D12DDI_ROOT_PARAMETER_TYPE_UAV=4};
 enum {D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV=0,D3D12DDI_DESCRIPTOR_RANGE_TYPE_UAV=1,
@@ -26,8 +26,8 @@ struct FakePso {struct {dxbc_binding_map Bindings;} compute;
 struct AgxD3d12CommandList {void *device; FakePso *pso;};
 struct AgxD3d12Dispatch {
  AgxD3d12Heap *uav_heap[8]={},*cb_heap[14]={},*srv_heap[128]={};
- AgxD3d12Heap *descriptors=nullptr; UINT heap_first[8]={}, heap_ranges=0; /* C47 */
- AgxD3d12Heap *sampler_descriptors=nullptr; UINT heap_sampler_mask=0;
+ AgxD3d12Heap *descriptors=nullptr; UINT heap_first[64]={}, heap_ranges=0; /* C47 */
+ AgxD3d12Heap *sampler_descriptors=nullptr; UINT64 heap_sampler_mask=0;
  UINT64 uav_offset[8]={},cb_offset[14]={},srv_offset[128]={};
  UINT cb_constants[14]={},cb_count[14]={},root_dwords[64]={};
  const AgxD3d12Descriptor *uav_descriptor[8]={},*cb_descriptor[14]={},*srv_descriptor[128]={};

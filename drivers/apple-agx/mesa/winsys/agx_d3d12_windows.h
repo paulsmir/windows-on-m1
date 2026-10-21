@@ -410,7 +410,7 @@ typedef struct {
  * (batch reads: residency and hazards). Set for every stage before the Draw
  * or Dispatch that uses it, which consumes it; records the caller keeps
  * alive until that call returns. Heap NULL = none. */
-#define AGX_D3D12_HEAP_RANGES 8u
+#define AGX_D3D12_HEAP_RANGES 64u
 enum { AGX_D3D12_HEAP_VS, AGX_D3D12_HEAP_PS, AGX_D3D12_HEAP_GS, AGX_D3D12_HEAP_HS, AGX_D3D12_HEAP_DS,
        AGX_D3D12_HEAP_CS, AGX_D3D12_HEAP_STAGES };
 typedef struct {

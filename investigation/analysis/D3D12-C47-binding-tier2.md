@@ -129,3 +129,16 @@ descriptor whose resource key changed.
    views (host fixture).
 3. Hardware: probe C47A (SRV index 1000 of a 2048-entry table), C47B (sampler
    1500), C47C (UAV 40); then MiniEngine without the UAV-range patch.
+
+## Caps (implemented)
+
+GetCaps reports `D3D12DDI_RESOURCE_BINDING_TIER_2` once every Tier 2 limit
+has a path: SRV and sampler tables over the heap (heap ranges, sampler map of
+2048 entries), 64 UAVs (8 slots plus heap UAVs, counters through their
+counter PBE) and 14 CBV slots. A shader may declare its UAVs one register at
+a time, each past the slots a heap range of its own, so a shader holds up to
+`DXBC_HEAP_RANGE_MAX` = 64 heap ranges (was 8: a 17th separate UAV was
+refused), `heap_sampler_mask` is 64 bits wide and `DXBC_BINDING_MAP_MAX`
+covers the 166 slots plus the ranges (fixture cs51uav64).
+Hardware checkpoint: probe C47B (SRV 300 of a 512-entry table, sampler 20 of
+32, 12 UAVs with u8-u11 in the heap, an append counter).

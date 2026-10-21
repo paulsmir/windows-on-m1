@@ -57,8 +57,10 @@ class D3d12AbiGate(unittest.TestCase):
                           'D3D12DDICAPS_TYPE_GPUVA_CAPS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT',
                           'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT1',
                           'D3D12DDICAPS_TYPE_SWIZZLE_PATTERN'})
-        # nothing optional is claimed (plan minimum: tier 1, no optional features)
-        for claim in ('D3D12DDI_RESOURCE_BINDING_TIER_2', 'D3D12DDI_RESOURCE_HEAP_TIER_2',
+        # nothing optional is claimed beyond resource binding tier 2 (C47: heap
+        # ranges for SRVs, UAVs and samplers)
+        self.assertIn('d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;', caps)
+        for claim in ('D3D12DDI_RESOURCE_BINDING_TIER_3', 'D3D12DDI_RESOURCE_HEAP_TIER_2',
                       'Doubles = TRUE', 'ROVs = TRUE', 'OutputMergerLogicOp = TRUE',
                       'D3D12DDI_TILED_RESOURCES_TIER_1', 'D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1'):
             self.assertNotIn(claim, caps)

@@ -180,7 +180,10 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
      * renderer (Asahi); no coherence is claimed. */
     case D3D12DDICAPS_TYPE_D3D12_OPTIONS:
         hr = Answer<D3D12DDI_D3D12_OPTIONS_DATA_0003>(arg, [](auto &d) {
-            d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_1;
+            /* C47 (D3D12-C47-binding-tier2.md): SRV tables over the full heap,
+             * 64 UAVs (counters included) and 2048 samplers per stage through
+             * the descriptor heap; 14 CBVs per stage */
+            d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;
             d.ConservativeRasterizationTier = D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED;
             d.TiledResourcesTier = D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
             d.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
@@ -1887,7 +1890,7 @@ static D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY CheckResourceVirtualAddress(D3D12DD
  * heap form (AgxD3d12HeapForm), which shaders read through bindless handles */
 static constexpr UINT kCbvSrvUavDescriptorBytes = 160u;
 static constexpr UINT kSamplerDescriptorBytes = 128u;
-static constexpr UINT kHeapRanges = 8u; /* DXBC_HEAP_RANGE_MAX */
+static constexpr UINT kHeapRanges = 64u; /* DXBC_HEAP_RANGE_MAX */
 static constexpr UINT kHeapFormOffset = 64u;
 static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
     /* C47: sampler descriptors carry a heap form (AgxD3d12SamplerForm) too */
@@ -2636,7 +2639,7 @@ struct AgxD3d12Dispatch {
     UINT heap_first[kHeapRanges];
     UINT heap_ranges;
     AgxD3d12Heap *sampler_descriptors; /* C47: the shader-visible sampler heap of heap sampler ranges */
-    UINT heap_sampler_mask;            /* the heap ranges that are sampler ranges */
+    UINT64 heap_sampler_mask;          /* the heap ranges that are sampler ranges */
 };
 /* C6a: a recorded ClearRenderTargetView (the RTV read at record time) */
 static constexpr UINT kClearRects = 8;
@@ -4150,7 +4153,7 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
                     AgxD3d12Heap *&bound = sampler ? out->sampler_descriptors : out->descriptors;
                     if (!heap || !heap->cpu || offset % stride || (bound && bound != heap)) return 6u;
                     bound = heap;
-                    if (sampler) out->heap_sampler_mask |= 1u << slot;
+                    if (sampler) out->heap_sampler_mask |= 1ull << slot;
                     out->heap_first[slot] = static_cast<UINT>(offset / stride) + range.offset + delta;
                     if (slot >= out->heap_ranges) out->heap_ranges = slot + 1;
                     found = true;
@@ -4793,14 +4796,14 @@ static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d
     UINT lowest = UINT_MAX, lowest_sampler = UINT_MAX;
     for (UINT r = 0; r < b->heap_ranges; ++r) {
         h.binding.First[r][0] = b->heap_first[r];
-        UINT &low = b->heap_sampler_mask & (1u << r) ? lowest_sampler : lowest;
+        UINT &low = b->heap_sampler_mask & (1ull << r) ? lowest_sampler : lowest;
         if (b->heap_first[r] < low) low = b->heap_first[r];
     }
     if (b->sampler_descriptors && lowest_sampler != UINT_MAX) {
         /* C47: the sampler map covers the heap from the lowest sampler range */
         const UINT samplers = static_cast<UINT>(b->sampler_descriptors->bytes / kSamplerDescriptorBytes);
         for (UINT r = 0; r < b->heap_ranges; ++r)
-            if (b->heap_sampler_mask & (1u << r)) h.binding.First[r][1] = lowest_sampler;
+            if (b->heap_sampler_mask & (1ull << r)) h.binding.First[r][1] = lowest_sampler;
         for (UINT i = lowest_sampler; i < samplers && h.binding.SamplerCount < DXBC_HEAP_SAMPLER_MAP_MAX; ++i) {
             void *d = static_cast<BYTE *>(b->sampler_descriptors->cpu) + static_cast<SIZE_T>(i) * kSamplerDescriptorBytes;
             const bool valid = reinterpret_cast<const AgxD3d12SamplerDescriptor *>(d)->kind == kDescriptorSampler;
