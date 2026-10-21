@@ -1088,6 +1088,9 @@ struct AgxD3d12Resource {
     UINT64 volume_depth_stride;
     D3D12DDI_TEXTURE_LAYOUT volume_layout;
     UINT8 volume_transition;
+    /* C36 (EXP1832): a placed texture's heap object -- the runtime passes a
+     * placed resource without one */
+    AgxD3d12Heap own_heap;
 };
 #ifndef APPLE_AGX_D3D12_NATIVE_OWNER
 static UINT AgxD3d12FormatBlockBytes(DXGI_FORMAT) { return 0; } /* textures need the native owner */
@@ -1597,10 +1600,11 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
      * The placed resource's heap object owns that texture. */
     const bool placed = !heap_arg && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D &&
                         resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate;
-    if ((heap_arg || placed) && heap && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D) {
+    AgxD3d12Heap *const texture_heap = heap ? heap : placed && resource ? &resource->own_heap : nullptr;
+    if ((heap_arg || placed) && texture_heap && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D) {
         const UINT64 bytes = TextureBytes(resource_arg);
         AGX_D3D12_OWNER *owner = bytes ? EnsureOwner(device) : nullptr;
-        memset(heap, 0, sizeof(*heap));
+        memset(texture_heap, 0, sizeof(*texture_heap));
         memset(resource, 0, sizeof(*resource));
         AGX_D3D12_BUFFER texture = {};
         const UINT bind = ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET) ? AGX_D3D12_BIND_RENDER_TARGET : 0u) |
@@ -1622,18 +1626,18 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
                          ? AgxD3d12OwnerCreatePresentationTexture(owner, resource_arg->Format,
                                                                   static_cast<UINT>(resource_arg->Width), resource_arg->Height,
                                                                   (bind & AGX_D3D12_BIND_SAMPLER) != 0,
-                                                                  runtime_resource.handle, &texture, &heap->presentation,
+                                                                  runtime_resource.handle, &texture, &texture_heap->presentation,
                                                                   &presentation_allocation)
                          : AgxD3d12OwnerCreateTexture2D(owner, resource_arg->Format, static_cast<UINT>(resource_arg->Width),
                                                         resource_arg->Height, resource_arg->DepthOrArraySize,
                                                         resource_arg->MipLevels, bind, bytes, &texture,
                                                         resource_arg->SampleDesc.Count);
         if (SUCCEEDED(hr)) {
-            heap->native = texture.Resource;
-            heap->gpuva = texture.GpuVa;
-            heap->bytes = bytes;
-            heap->allocation = presentable ? presentation_allocation : AgxD3d12OwnerBufferAllocation(owner, &texture);
-            resource->heap = heap;
+            texture_heap->native = texture.Resource;
+            texture_heap->gpuva = texture.GpuVa;
+            texture_heap->bytes = bytes;
+            texture_heap->allocation = presentable ? presentation_allocation : AgxD3d12OwnerBufferAllocation(owner, &texture);
+            resource->heap = texture_heap;
             resource->bytes = bytes;
             resource->type = D3D12DDI_RT_TEXTURE2D;
             resource->format = resource_arg->Format;
@@ -1685,7 +1689,11 @@ static VOID APIENTRY DestroyHeapAndResource(D3D12DDI_HDEVICE handle, D3D12DDI_HH
                                             D3D12DDI_HRESOURCE resource_handle) {
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
-    if (resource_handle.pDrvPrivate) memset(resource_handle.pDrvPrivate, 0, sizeof(AgxD3d12Resource));
+    auto *resource = static_cast<AgxD3d12Resource *>(resource_handle.pDrvPrivate);
+    /* C36: a placed texture releases the heap object it holds itself */
+    if (device && !heap && resource && resource->heap == &resource->own_heap && resource->own_heap.allocation)
+        ReleaseHeap(device, &resource->own_heap);
+    if (resource) memset(resource, 0, sizeof(AgxD3d12Resource));
     if (device && heap && heap->allocation && !heap->alias) ReleaseHeap(device, heap);
 }
 static HRESULT APIENTRY MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle, VOID **data) {
