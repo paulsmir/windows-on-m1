@@ -3680,7 +3680,12 @@ static int volume_rtv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
  * shader through an SRV; C42D runs MiniEngine's Pack/Unpack_R11G11B10_FLOAT
  * ALU on root constants. Every value is exact in the format. */
 static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int mode) {
-    static const char *steps[8] = {"C42A", "C42B", "C42C", "C42D", "C42G", "C42H", "C42J", "C42K"};
+    static const char *steps[10] = {"C42A", "C42B", "C42C", "C42D", "C42G", "C42H", "C42J", "C42K", "C42M", "C42N"};
+    /* C42M/C42N: the C42J gathers from RGBA8 and RGBA16F targets (scope of the
+     * EXP1847 R11G11B10 GatherBlue zero); only the blue lanes compare */
+    const DXGI_FORMAT target_format = mode == 8 ? DXGI_FORMAT_R8G8B8A8_UNORM : mode == 9 ? DXGI_FORMAT_R16G16B16A16_FLOAT
+                                                                         : DXGI_FORMAT_R11G11B10_FLOAT;
+    const int gather = mode == 6 || mode >= 8;
     /* C42G/C42H: the draw of C42B through a sample-frequency PS ("linear sample"
      * input, float3 output), C42H with a second R16G16B16A16_FLOAT target */
     const int draws = mode == 1 || mode == 2 || mode >= 4, copies = mode < 2 || mode == 4 || mode == 5,
@@ -3708,7 +3713,7 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0};
     D3D12_GPU_DESCRIPTOR_HANDLE srv_gpu = {0};
     UINT *words = NULL;
-    unsigned bad = 4, count = mode == 7 ? 6u : mode == 6 ? 8u : mode == 3 ? 4u : mode == 2 ? 3u : 1u;
+    unsigned bad = 4, count = mode == 7 ? 6u : gather ? 8u : mode == 3 ? 4u : mode == 2 ? 3u : 1u;
     const UINT16 normal_expected[3] = {0x3c00, 0x3400, 0x3800}; /* (1.0, 0.25, 0.5) */
     HRESULT hr = readback ? S_OK : E_FAIL;
     if (mode == 0) expected[0] = clear_bits;
@@ -3717,7 +3722,7 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         const float g[6] = {0.5f, 0.25f, 1.0f, 0.5f, 0.25f, 1.0f};
         memcpy(expected, g, sizeof(g));
     }
-    else if (mode == 6) {
+    else if (gather) {
         const float g[8] = {0.5f, 0.25f, 1.0f, 0.5f, 0.5f, 0.25f, 1.0f, 1.0f};
         memcpy(expected, g, sizeof(g));
     }
@@ -3725,10 +3730,10 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     else if (mode == 2) { memcpy(&expected[0], &half_f, 4); memcpy(&expected[1], &quarter_f, 4); memcpy(&expected[2], &one_f, 4); }
     else { expected[0] = clear_bits; memcpy(&expected[1], &quarter_f, 4); memcpy(&expected[2], &half_f, 4); memcpy(&expected[3], &three_q, 4); }
     if (SUCCEEDED(hr) && mode != 3) {
-        D3D12_CLEAR_VALUE clear = {DXGI_FORMAT_R11G11B10_FLOAT, {0.25f, 0.5f, 0.75f, 1.0f}};
+        D3D12_CLEAR_VALUE clear = {target_format, {0.25f, 0.5f, 0.75f, 1.0f}};
         tex_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
         tex_desc.Width = 16; tex_desc.Height = 16; tex_desc.DepthOrArraySize = 1; tex_desc.MipLevels = 1;
-        tex_desc.Format = DXGI_FORMAT_R11G11B10_FLOAT; tex_desc.SampleDesc.Count = 1;
+        tex_desc.Format = target_format; tex_desc.SampleDesc.Count = 1;
         tex_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         hr = ID3D12Device_CreateCommittedResource(device, &heap_props, D3D12_HEAP_FLAG_NONE, &tex_desc,
             D3D12_RESOURCE_STATE_RENDER_TARGET, &clear, &IID_ID3D12Resource, (void **)&texture);
@@ -3766,7 +3771,7 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature, (void **)&groot);
         if (blob) { ID3D10Blob_Release(blob); blob = NULL; }
         if (SUCCEEDED(hr)) {
-            const DXGI_FORMAT formats[2] = {DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT};
+            const DXGI_FORMAT formats[2] = {target_format, DXGI_FORMAT_R16G16B16A16_FLOAT};
             const void *ps = mode == 4 ? (const void *)g_agx_d3d12_probe_ps_c42g : mode == 5 ? (const void *)g_agx_d3d12_probe_ps_c42h
                                                                                          : (const void *)g_agx_d3d12_probe_ps;
             const SIZE_T ps_bytes = mode == 4 ? sizeof(g_agx_d3d12_probe_ps_c42g) : mode == 5 ? sizeof(g_agx_d3d12_probe_ps_c42h)
@@ -3785,7 +3790,7 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         samplers[1] = point;
         samplers[1].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
         samplers[1].ShaderRegister = 1;
-        D3D12_ROOT_SIGNATURE_DESC root_desc = {2, parameters, mode == 7 ? 2u : mode == 6 ? 1u : 0u, samplers};
+        D3D12_ROOT_SIGNATURE_DESC root_desc = {2, parameters, mode == 7 ? 2u : gather ? 1u : 0u, samplers};
         D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
         if (table) { parameters[1].DescriptorTable.NumDescriptorRanges = 1; parameters[1].DescriptorTable.pDescriptorRanges = &range; }
         else { parameters[1].Constants.ShaderRegister = 0; parameters[1].Constants.Num32BitValues = 3; }
@@ -3805,10 +3810,10 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature, (void **)&croot);
         if (SUCCEEDED(hr)) {
             pso_desc.pRootSignature = croot;
-            pso_desc.CS.pShaderBytecode = mode == 2 ? (const void *)g_agx_d3d12_probe_cs_c42c : mode == 6 ? (const void *)g_agx_d3d12_probe_cs_c42j
+            pso_desc.CS.pShaderBytecode = mode == 2 ? (const void *)g_agx_d3d12_probe_cs_c42c : gather ? (const void *)g_agx_d3d12_probe_cs_c42j
                                                                                     : mode == 7 ? (const void *)g_agx_d3d12_probe_cs_c42k
                                                                                     : (const void *)g_agx_d3d12_probe_cs_c42d;
-            pso_desc.CS.BytecodeLength = mode == 2 ? sizeof(g_agx_d3d12_probe_cs_c42c) : mode == 6 ? sizeof(g_agx_d3d12_probe_cs_c42j)
+            pso_desc.CS.BytecodeLength = mode == 2 ? sizeof(g_agx_d3d12_probe_cs_c42c) : gather ? sizeof(g_agx_d3d12_probe_cs_c42j)
                                                                                     : mode == 7 ? sizeof(g_agx_d3d12_probe_cs_c42k)
                                                                                     : sizeof(g_agx_d3d12_probe_cs_c42d);
             hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&cpso);
@@ -3875,7 +3880,8 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         if (SUCCEEDED(hr) && words) {
             const UINT *texel = copies ? (const UINT *)((const BYTE *)words + fp.Offset + 8u * fp.Footprint.RowPitch + 8u * 4u) : words;
             bad = 0;
-            for (UINT i = 0; i < count; ++i) bad += texel[i] != expected[i];
+            for (UINT i = 0; i < count; ++i)
+                if (mode < 8 || i == 2 || i == 6) bad += texel[i] != expected[i];
             if (normal) {
                 const UINT16 *n = (const UINT16 *)((const BYTE *)words + fp1.Offset + 8u * fp1.Footprint.RowPitch + 8u * 8u);
                 for (UINT i = 0; i < 3; ++i) bad += n[i] != normal_expected[i];
@@ -3916,6 +3922,8 @@ static int step_c42g(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
 static int step_c42h(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 5); }
 static int step_c42j(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 6); }
 static int step_c42k(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 7); }
+static int step_c42m(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 8); }
+static int step_c42n(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 9); }
 /* C42E: MiniEngine's CopyBackPostBufferCS -- an R32_UINT texture of packed
  * R11G11B10 values (0x781a0380 = (0.5, 0.25, 1.0)) unpacked into an
  * R11G11B10_FLOAT typed UAV with a float3 store, read back as texel bits. */
@@ -6216,7 +6224,8 @@ int main(int argc, char **argv) {
             {"C38A", c38_cached_pso}, {"C39A", c39_stream_output},
             {"C41A", step_c41a}, {"C41B", step_c41b},
             {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
-            {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l}};
+            {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
+            {"C42M", step_c42m}, {"C42N", step_c42n}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -6312,6 +6321,8 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C42J", step_c42j);
                 (void)run_isolated(adapter, "C42K", step_c42k);
                 (void)run_isolated(adapter, "C42L", step_c42l);
+                (void)run_isolated(adapter, "C42M", step_c42m);
+                (void)run_isolated(adapter, "C42N", step_c42n);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
