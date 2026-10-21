@@ -1674,7 +1674,8 @@ static bool srv_component_mapping(unsigned mapping, struct pipe_sampler_view *vi
  * every stage); views are released and UAVs unbound by unbind_stage. */
 static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, const AGX_D3D12_CBV *cbvs,
                           const AGX_D3D12_SRV *srvs, const AGX_D3D12_UAV *uavs, struct pipe_sampler_view **views,
-                          unsigned *view_count, const uint8_t *dimensions, const uint8_t *uav_dimensions) {
+                          unsigned *view_count, const uint8_t *dimensions, const uint8_t *uav_dimensions,
+                          unsigned srv_count = AGX_D3D12_SRV_SLOTS) {
   *view_count = 0;
   for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i) {
     struct pipe_constant_buffer cb = {};
@@ -1692,7 +1693,7 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
     }
     pipe->set_constant_buffer(pipe, stage, i, cb.buffer || cb.user_buffer ? &cb : NULL);
   }
-  for (unsigned i = 0; i < AGX_D3D12_SRV_SLOTS; ++i) {
+  for (unsigned i = 0; i < srv_count && i < AGX_D3D12_SRV_SLOTS; ++i) {
     const AGX_D3D12_BUFFER *buffer = srvs[i].Buffer;
     if (!buffer) continue;
     struct pipe_sampler_view templ = {};
@@ -2075,9 +2076,9 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   if (ps_sampler_count) pipe->bind_sampler_states(pipe, MESA_SHADER_FRAGMENT, 0, ps_sampler_count, ps_samplers);
   struct pipe_sampler_view *vs_views[AGX_D3D12_SRV_SLOTS] = {}, *ps_views[AGX_D3D12_SRV_SLOTS] = {};
   unsigned vs_view_count = 0, ps_view_count = 0;
-  HRESULT hr = bind_stage(pipe, MESA_SHADER_VERTEX, draw->Vs.Cbvs, draw->Vs.Srvs, draw->Vs.Uavs, vs_views, &vs_view_count, draw->Pipeline->VsSrvDimensions, draw->Pipeline->VsUavDimensions);
+  HRESULT hr = bind_stage(pipe, MESA_SHADER_VERTEX, draw->Vs.Cbvs, draw->Vs.Srvs, draw->Vs.Uavs, vs_views, &vs_view_count, draw->Pipeline->VsSrvDimensions, draw->Pipeline->VsUavDimensions, draw->Vs.SrvCount);
   if (SUCCEEDED(hr))
-    hr = bind_stage(pipe, MESA_SHADER_FRAGMENT, draw->Ps.Cbvs, draw->Ps.Srvs, draw->Ps.Uavs, ps_views, &ps_view_count, draw->Pipeline->PsSrvDimensions, draw->Pipeline->PsUavDimensions);
+    hr = bind_stage(pipe, MESA_SHADER_FRAGMENT, draw->Ps.Cbvs, draw->Ps.Srvs, draw->Ps.Uavs, ps_views, &ps_view_count, draw->Pipeline->PsSrvDimensions, draw->Pipeline->PsUavDimensions, draw->Ps.SrvCount);
   /* C27/C37: the optional stages' bindings and samplers */
   const struct {
     mesa_shader_stage stage;
@@ -2104,7 +2105,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     if (o.sampler_count) pipe->bind_sampler_states(pipe, o.stage, 0, o.sampler_count, o.samplers);
     if (SUCCEEDED(hr))
       hr = bind_stage(pipe, o.stage, optional[s].bind->Cbvs, optional[s].bind->Srvs, optional[s].bind->Uavs, o.views,
-                      &o.view_count, optional[s].srv_dimensions, optional[s].uav_dimensions);
+                      &o.view_count, optional[s].srv_dimensions, optional[s].uav_dimensions, optional[s].bind->SrvCount);
   }
   if (FAILED(hr)) {
     unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, AGX_D3D12_SRV_SLOTS);

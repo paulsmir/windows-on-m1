@@ -34,10 +34,10 @@ class ViewMapping(unittest.TestCase):
         if not build:
             raise unittest.SkipTest('host Mesa headers not available')
         ddi, owner = DDI.read_text(), OWNER.read_text()
-        replay = block(ddi[ddi.index('static void OwnerBindings('):], 'for (UINT s = 0; s < kSrvSlots; ++s)')
+        replay = block(ddi[ddi.index('static void OwnerBindings('):], 'for (UINT s = 0; s < srv_count; ++s)')
         code = block(ddi, 'struct AgxD3d12Descriptor {') + ';\n'
         code += block(ddi, 'static VOID APIENTRY CreateShaderResourceView(') + '\n'
-        code += 'static void Replay(const Bindings &b, OwnerBindings *o) {\n' + replay + '\n}\n'
+        code += 'static void Replay(const Bindings &b, OwnerBindings *o) {\nconst UINT srv_count = kSrvSlots;\n' + replay + '\n}\n'
         if 'static bool srv_component_mapping(' in owner:
             code += block(owner, 'static bool srv_component_mapping(') + '\n'
         code += block(owner, 'static bool uav_dimension_matches(') + '\n'

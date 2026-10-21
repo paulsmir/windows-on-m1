@@ -4402,8 +4402,9 @@ struct AgxD3d12OwnerBindings {
     AGX_D3D12_BUFFER counter_buffers[kUavSlots]; /* C33 */
     AGX_D3D12_UAV uavs[kUavSlots];
     AGX_D3D12_CBV cbvs[kCbSlots];
-    AGX_D3D12_SRV srvs[kSrvSlots];
+    AGX_D3D12_SRV srvs[kSrvSlots]; /* EXP1839: only srvs[0, srv_count) are written */
     AGX_D3D12_SAMPLER samplers[kSamplerSlots];
+    UINT srv_count;
 };
 /* C6e: the static border colours of D3D12DDI_STATIC_BORDER_COLOR */
 static void OwnerSampler(const D3D12DDI_SAMPLER_DESC &d, AGX_D3D12_SAMPLER *s) {
@@ -4442,7 +4443,19 @@ static bool DescriptorUav(const AgxD3d12Descriptor &view, AGX_D3D12_BUFFER *buff
     return true;
 }
 static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
-    memset(o, 0, sizeof(*o));
+    /* EXP1839: only the SRV slots up to the last bound one are cleared and
+     * handed on (EXP1838: two 14 KB clears per replayed draw, almost all
+     * of it the 128-slot SRV table); srv_buffers are read through srvs */
+    UINT srv_count = kSrvSlots;
+    while (srv_count && !b.srv_descriptor[srv_count - 1] && !b.srv_heap[srv_count - 1]) --srv_count;
+    memset(o->uav_buffers, 0, sizeof(o->uav_buffers));
+    memset(o->cb_buffers, 0, sizeof(o->cb_buffers));
+    memset(o->counter_buffers, 0, sizeof(o->counter_buffers));
+    memset(o->uavs, 0, sizeof(o->uavs));
+    memset(o->cbvs, 0, sizeof(o->cbvs));
+    memset(o->srvs, 0, srv_count * sizeof(o->srvs[0]));
+    memset(o->samplers, 0, sizeof(o->samplers));
+    o->srv_count = srv_count;
     for (UINT u = 0; u < kUavSlots; ++u) {
         const AgxD3d12Descriptor *view = b.uav_descriptor[u];
         if (view && DescriptorUav(*view, &o->uav_buffers[u], &o->uavs[u])) {
@@ -4473,7 +4486,7 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
             o->cbvs[c].Bytes = (b.cb_count[c] * sizeof(UINT) + 15u) & ~15u;
         }
     }
-    for (UINT s = 0; s < kSrvSlots; ++s) {
+    for (UINT s = 0; s < srv_count; ++s) {
         const AgxD3d12Descriptor *view = b.srv_descriptor[s];
         if (view && view->kind == kDescriptorSrvBuffer && view->heap) {
             o->srv_buffers[s] = HeapBuffer(view->heap);
@@ -4539,6 +4552,8 @@ static void OwnerIndirect(const AgxD3d12Indirect &in, AGX_D3D12_BUFFER *args, AG
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
     AgxD3d12OwnerBindings bind;
     OwnerBindings(dispatch, &bind);
+    /* AgxD3d12OwnerDispatch reads every SRV slot */
+    memset(bind.srvs + bind.srv_count, 0, (kSrvSlots - bind.srv_count) * sizeof(bind.srvs[0]));
     AGX_D3D12_BUFFER args = {}, count = {};
     AGX_D3D12_INDIRECT indirect;
     OwnerIndirect(dispatch.indirect, &args, &count, &indirect);
@@ -4567,6 +4582,7 @@ struct AgxD3d12OptionalBinds {
 static void StageBindings(const AgxD3d12OwnerBindings &bind, decltype(AGX_D3D12_DRAW::Gs) *out) {
     out->Cbvs = bind.cbvs;
     out->Srvs = bind.srvs;
+    out->SrvCount = bind.srv_count;
     out->Samplers = bind.samplers;
     out->Uavs = bind.uavs;
 }

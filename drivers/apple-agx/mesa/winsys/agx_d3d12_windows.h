@@ -375,6 +375,7 @@ typedef struct {
     const AGX_D3D12_SRV *Srvs;
     const AGX_D3D12_SAMPLER *Samplers;
     const AGX_D3D12_UAV *Uavs;
+    unsigned SrvCount; /* Srvs[0, SrvCount) are read; later slots are unbound */
   } Vs, Ps, Gs, Hs, Ds; /* C27: Gs only when the pipeline has a geometry shader; C37: Hs/Ds likewise */
   /* C14: indirect draws (Indirect.Buffer NULL = direct); an indexed indirect
    * draw needs IndexOffset 0 (Gallium takes the start index from the
