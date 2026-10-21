@@ -407,7 +407,12 @@ static HRESULT APIENTRY GetOptionalDDITables(D3D12DDI_HADAPTER, UINT32 *entries,
  * D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET must report 0 levels at
  * every count above 1, a member with it the typeless format's levels, and
  * the bit must agree across the set (the typeless format itself must not
- * report it when D3D12 decides its multisample support). So multisampling
+ * report it when D3D12 decides its multisample support). EXP1828: a format
+ * D3D12 never multisample-renders (CD3D11FormatHelper::
+ * MultisampleRenderTargetSupport -1: the typeless ones and the depth view
+ * formats R24_UNORM_X8_TYPELESS, X24_TYPELESS_G8_UINT,
+ * R32_FLOAT_X8X24_TYPELESS, X32_TYPELESS_G8X24_UINT) must not report the
+ * bit either, so those view formats report nothing. So multisampling
  * is answered per cast set: the sets below (the AGX's 1x1-block colour and
  * depth formats up to 64 bits per sample; not R10G10B10A2, whose set may
  * hold the XR_BIAS display format) report 2x and 4x everywhere,
@@ -426,13 +431,13 @@ static bool MultisampleCastSet(DXGI_FORMAT format, bool *typeless) {
     case DXGI_FORMAT_R16G16B16A16_FLOAT: case DXGI_FORMAT_R16G16B16A16_UNORM: case DXGI_FORMAT_R16G16B16A16_UINT:
     case DXGI_FORMAT_R16G16B16A16_SNORM: case DXGI_FORMAT_R16G16B16A16_SINT:
     case DXGI_FORMAT_R32G32_FLOAT: case DXGI_FORMAT_R32G32_UINT: case DXGI_FORMAT_R32G32_SINT:
-    case DXGI_FORMAT_D32_FLOAT_S8X24_UINT: case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS: case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+    case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
     case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: case DXGI_FORMAT_R8G8B8A8_UINT:
     case DXGI_FORMAT_R8G8B8A8_SNORM: case DXGI_FORMAT_R8G8B8A8_SINT:
     case DXGI_FORMAT_R16G16_FLOAT: case DXGI_FORMAT_R16G16_UNORM: case DXGI_FORMAT_R16G16_UINT:
     case DXGI_FORMAT_R16G16_SNORM: case DXGI_FORMAT_R16G16_SINT:
     case DXGI_FORMAT_D32_FLOAT: case DXGI_FORMAT_R32_FLOAT: case DXGI_FORMAT_R32_UINT: case DXGI_FORMAT_R32_SINT:
-    case DXGI_FORMAT_D24_UNORM_S8_UINT: case DXGI_FORMAT_R24_UNORM_X8_TYPELESS: case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
+    case DXGI_FORMAT_D24_UNORM_S8_UINT:
     case DXGI_FORMAT_R8G8_UNORM: case DXGI_FORMAT_R8G8_UINT: case DXGI_FORMAT_R8G8_SNORM: case DXGI_FORMAT_R8G8_SINT:
     case DXGI_FORMAT_R16_FLOAT: case DXGI_FORMAT_D16_UNORM: case DXGI_FORMAT_R16_UNORM: case DXGI_FORMAT_R16_UINT:
     case DXGI_FORMAT_R16_SNORM: case DXGI_FORMAT_R16_SINT:

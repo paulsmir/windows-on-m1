@@ -20,6 +20,7 @@ WDK=ROOT/'.local/reference/wdk26100/d3d12umddi.h'
 EXTRA={'R32G8X24':['D32_FLOAT_S8X24_UINT','R32_FLOAT_X8X24_TYPELESS','X32_TYPELESS_G8X24_UINT'],
        'R24G8':['D24_UNORM_S8_UINT','R24_UNORM_X8_TYPELESS','X24_TYPELESS_G8_UINT'],
        'R32':['D32_FLOAT'],'R16':['D16_UNORM'],'R10G10B10A2':['R10G10B10_XR_BIAS_A2_UNORM']}
+VIEW=['R32_FLOAT_X8X24_TYPELESS','X32_TYPELESS_G8X24_UINT','R24_UNORM_X8_TYPELESS','X24_TYPELESS_G8_UINT']
 def cast_sets():
     names=re.findall(r'\bDXGI_FORMAT_(\w+)\s*=\s*\d+',DXGI.read_text())
     sets={}
@@ -49,6 +50,7 @@ using UINT=unsigned;
 struct D3D12DDI_HDEVICE{void*p;};using D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS=unsigned;
 /* ACTUAL */
 struct Set{DXGI_FORMAT typeless;std::vector<DXGI_FORMAT> members;};
+static bool view_format(DXGI_FORMAT f){return %s;}
 static const Set sets[]={
 %s};
 int main(){
@@ -60,7 +62,10 @@ int main(){
   int bit=-1;
   for(DXGI_FORMAT m:set.members){
    UINT ms=0;CheckFormatSupport({},m,&ms);const int has=(ms&D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET)!=0;
-   if(bit<0)bit=has;else if(bit!=has){printf("set %%d: bit disagrees at %%d\\n",set.typeless,m);++bad;}
+   /* EXP1828: MultisampleRenderTargetSupport is -1 for the view formats
+    * (TYPELESS in the name); they must not report the bit */
+   if(view_format(m)){if(has){printf("view format %%d reports the bit\\n",m);++bad;}}
+   else if(bit<0)bit=has;else if(bit!=has){printf("set %%d: bit disagrees at %%d\\n",set.typeless,m);++bad;}
    for(UINT n=2;n<32;++n){UINT l=0;CheckMultisampleQualityLevels({},m,n,0,&l);
     if(has?l!=parent[n]:l!=0){printf("set %%d member %%d count %%u levels %%u parent %%u bit %%d\\n",set.typeless,m,n,l,parent[n],has);++bad;}}
   }
@@ -69,7 +74,7 @@ int main(){
  printf("sets=%%zu multisampled=%%u bad=%%u\\n",sizeof(sets)/sizeof(sets[0]),ms_sets,bad);
  return bad||ms_sets<8;
 }
-'''%(DXGI,defines,table)
+'''%(DXGI,defines,'||'.join('f==DXGI_FORMAT_'+v for v in VIEW),table)
         actual='\n'.join([block(s,'static bool MultisampleCastSet('),block(s,'static VOID APIENTRY CheckFormatSupport('),
                           block(s,'static VOID APIENTRY CheckMultisampleQualityLevels(')])
         actual=actual.replace('AgxD3d12FormatMultisample','/*unused*/AgxD3d12FormatMultisample')
