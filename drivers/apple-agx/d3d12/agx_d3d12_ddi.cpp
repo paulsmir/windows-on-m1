@@ -2303,6 +2303,14 @@ static void FillHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE
         if (owner) PackHeapForm(owner, view);
         return;
     }
+    if (view->kind == kDescriptorSrvBuffer && view->heap) {
+        /* C47: a buffer SRV's texture-buffer descriptor */
+        form->dimension = DXBC_SRV_OTHER;
+        AgxD3d12Device *device = DeviceOf(handle);
+        AGX_D3D12_OWNER *owner = device ? EnsureOwner(device) : nullptr;
+        if (owner) PackHeapForm(owner, view);
+        return;
+    }
     if (view->kind != kDescriptorSrvTexture || !view->heap) return;
     form->dimension = resource_dimension == D3D12DDI_RD_TEXTURE1D ? (view->layers > 1 ? DXBC_SRV_1D_ARRAY : DXBC_SRV_1D)
                     : resource_dimension == D3D12DDI_RD_TEXTURE3D ? DXBC_SRV_3D
@@ -2325,10 +2333,19 @@ static void PackHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view) {
         PackUavHeapForm(owner, view);
         return;
     }
-    /* the texture SRV as OwnerBindings hands it to the owner */
+    /* the SRV as OwnerBindings hands it to the owner */
     AGX_D3D12_BUFFER buffer = HeapBuffer(view->heap);
     AGX_D3D12_SRV srv = {};
     srv.Buffer = &buffer;
+    if (view->kind == kDescriptorSrvBuffer) {
+        srv.Offset = view->offset;
+        srv.Bytes = view->bytes;
+        srv.ComponentMapping = view->component_mapping;
+        srv.Format = view->format;
+        unsigned long long key = 0;
+        form->key = SUCCEEDED(AgxD3d12OwnerSrvDescriptor(owner, &srv, DXBC_SRV_OTHER, form->texture, &key)) ? key : 0u;
+        return;
+    }
     srv.Texture = 1;
     srv.Cube = view->cube;
     srv.ComponentMapping = view->component_mapping;
@@ -4789,7 +4806,7 @@ static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d
         auto *view = reinterpret_cast<AgxD3d12Descriptor *>(static_cast<BYTE *>(b->descriptors->cpu) +
                                                             static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes);
         const bool uav = UavDescriptorKind(view->kind);
-        if ((view->kind != kDescriptorSrvTexture && !uav) || !view->heap) continue;
+        if ((view->kind != kDescriptorSrvTexture && view->kind != kDescriptorSrvBuffer && !uav) || !view->heap) continue;
         const AGX_D3D12_BUFFER texture = HeapBuffer(view->heap);
         /* Asahi re-laid the texture out since it was packed (agx_upload_textures re-packs bound views too) */
         if (HeapFormOf(view)->key != AgxD3d12OwnerLayoutKey(owner, &texture)) PackHeapForm(owner, view);

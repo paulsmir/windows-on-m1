@@ -124,8 +124,8 @@ struct ctx {
       nir_variable *var;     /* uint array */
       uint32_t stride;       /* 0: raw */
    } tgsm[MAX_TGSM];
-   uint8_t res_kind[MAX_RESOURCES];
-   uint32_t res_stride[MAX_RESOURCES];
+   uint8_t res_kind[MAX_RESOURCES + DXBC_HEAP_RANGE_MAX];
+   uint32_t res_stride[MAX_RESOURCES + DXBC_HEAP_RANGE_MAX];
    unsigned gs_stream;    /* the stream later output declarations belong to */
 
    /* tessellation: patch constants vpc# (inputs of the domain shader), each
@@ -1299,9 +1299,19 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
    case DXBC_OP_DCL_RESOURCE_STRUCTURED: {
       unsigned t = o ? (unsigned)o->index[0].imm : MAX_RESOURCES;
       bool structured = insn->opcode == DXBC_OP_DCL_RESOURCE_STRUCTURED;
-      if (t >= MAX_RESOURCES || (structured && (!insn->num_payload || !insn->payload[0] ||
-                                                (insn->payload[0] & 3)))) {
+      const bool heap = o && heap_operand(c, o); /* C47: an R32_UINT buffer texture in the heap */
+      if (t >= (heap ? DXBC_HEAP_RANGE_MAX : MAX_RESOURCES) ||
+          (structured && (!insn->num_payload || !insn->payload[0] || (insn->payload[0] & 3)))) {
          fail(c, insn, "buffer SRV declaration");
+         return;
+      }
+      if (heap) {
+         t += MAX_RESOURCES;
+         c->res[t].declared = true;
+         c->res[t].dim = DXBC_DIM_BUFFER;
+         c->res[t].type = nir_type_uint32;
+         c->res_kind[t] = structured ? MEM_STRUCTURED : MEM_RAW;
+         c->res_stride[t] = structured ? insn->payload[0] : 0;
          return;
       }
       /* read as a 32-bit texel buffer view (one dword per texel) */
@@ -2419,7 +2429,10 @@ mem_address(struct ctx *c, const struct dxbc_instruction *insn,
       stride = c->tgsm[index].stride;
       break;
    case DXBC_OPERAND_RESOURCE:
-      if (index >= MAX_RESOURCES || c->res_kind[index] < MEM_RAW) {
+      if (heap_operand(c, target))
+         index = target->index[0].imm < DXBC_HEAP_RANGE_MAX ? MAX_RESOURCES + (unsigned)target->index[0].imm
+                                                              : MAX_RESOURCES + DXBC_HEAP_RANGE_MAX;
+      if (index >= MAX_RESOURCES + DXBC_HEAP_RANGE_MAX || c->res_kind[index] < MEM_RAW) {
          fail(c, insn, "buffer SRV t%u", index);
          return nir_imm_int(&c->b, 0);
       }
@@ -2459,8 +2472,15 @@ mem_load(struct ctx *c, const struct dxbc_instruction *insn,
    if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW)
       return nir_load_ssbo(b, n, 32, nir_imm_int(b, (int)index), byte_address,
                            .align_mul = 4, .align_offset = 0);
+   const bool heap = target->type == DXBC_OPERAND_RESOURCE && heap_operand(c, target);
+   if (heap)
+      index = MAX_RESOURCES + (unsigned)target->index[0].imm; /* C47: mem_address validated it */
    for (unsigned i = 0; i < n; ++i) {
       nir_def *dword = nir_iadd_imm(b, mem_dword_index(c, byte_address), i);
+      if (heap) {
+         c->heap_offset = index_value(c, insn, &target->index[1]);
+         c->heap_range = (unsigned)target->index[0].imm;
+      }
       if (target->type == DXBC_OPERAND_THREAD_GROUP_SHARED_MEMORY) {
          comp[i] = nir_load_deref(b, nir_build_deref_array(b,
             nir_build_deref_var(b, c->tgsm[index].var), dword));
@@ -2775,10 +2795,18 @@ emit_bufinfo(struct ctx *c, const struct dxbc_instruction *insn)
          : nir_get_ssbo_size(b, 32, nir_imm_int(b, (int)index));
       if (c->uav[index].kind == MEM_STRUCTURED)
          count = nir_udiv_imm(b, count, c->uav[index].stride);
-   } else if (o->type == DXBC_OPERAND_RESOURCE && index < MAX_RESOURCES &&
-              c->res[index].declared && c->res[index].dim == DXBC_DIM_BUFFER) {
+   } else if (o->type == DXBC_OPERAND_RESOURCE &&
+              (heap_operand(c, o) ? o->index[0].imm < DXBC_HEAP_RANGE_MAX : index < MAX_RESOURCES) &&
+              c->res[heap_operand(c, o) ? MAX_RESOURCES + (unsigned)o->index[0].imm : index].declared &&
+              c->res[heap_operand(c, o) ? MAX_RESOURCES + (unsigned)o->index[0].imm : index].dim == DXBC_DIM_BUFFER) {
       struct tex_shape shape;
       nir_tex_instr *tex;
+      if (heap_operand(c, o)) {
+         /* C47: a heap buffer SRV */
+         index = MAX_RESOURCES + (unsigned)o->index[0].imm;
+         c->heap_offset = index_value(c, insn, &o->index[1]);
+         c->heap_range = (unsigned)o->index[0].imm;
+      }
       tex_shape(DXBC_DIM_BUFFER, &shape);
       tex = tex_begin(c, nir_texop_txs, index, 0, false, 1, &shape, nir_type_uint32);
       tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_int(b, 0));

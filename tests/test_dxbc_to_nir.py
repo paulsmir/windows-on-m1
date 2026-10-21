@@ -274,6 +274,23 @@ class DxbcToNir(unittest.TestCase):
         self.assertEqual(len(txl), 1)
         self.assertNotIn("(bias)", txl[0])
 
+    def test_buffer_srv_ranges_read_the_descriptor_heap(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47: Tier
+        # 2 SRV tables span the heap for every SRV kind. Unbounded raw,
+        # structured and typed buffer SRV ranges are heap ranges; their
+        # loads and size queries are buffer txf/txs through heap handles at
+        # the right dword (raw Load(4) -> 1, structured [2].y of stride 8 ->
+        # 5, typed [3] -> 3) and use no texture slot.
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "cs51srvbufheap.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        for space, slot in ((1, 0), (2, 1), (3, 2)):
+            self.assertIn("BINDING kind 1 id %d space %d reg 0 slot %d flags 2" % (slot, space, slot), heap.stdout)
+        self.assertRegex(heap.stdout, r"TRANSLATED stage MESA_SHADER_COMPUTE .* textures 0 ")
+        self.assertEqual(len(re.findall(r"\btxs .*\(texture_handle\)", heap.stdout)), 2)
+        for dword in ("0x1", "0x5", "0x3"):
+            self.assertRegex(heap.stdout, r"\btxf %\d+ \(" + dword + r"\) \(coord\), %\d+ \(texture_handle\)")
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

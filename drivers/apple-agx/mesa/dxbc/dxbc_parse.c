@@ -838,7 +838,7 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
          uint32_t id = (uint32_t)o->index[0].imm, reg = (uint32_t)o->index[1].imm;
          const bool open = o->index[2].imm == UINT32_MAX;
          /* C47: typed SRV ranges and UAVs may live in the heap */
-         const bool heap_kind = (heap && in->opcode == DXBC_OP_DCL_RESOURCE) ||
+         const bool heap_kind = (heap && kind == DXBC_BINDING_SRV) ||
                                 (heap_uav && kind == DXBC_BINDING_UAV) ||
                                 (heap_sampler && kind == DXBC_BINDING_SAMPLER);
          if (pass == 0 && heap_kind && open)

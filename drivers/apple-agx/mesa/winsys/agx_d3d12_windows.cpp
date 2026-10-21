@@ -1798,11 +1798,25 @@ extern "C" HRESULT AgxD3d12OwnerSrvDescriptor(AGX_D3D12_OWNER *owner, const AGX_
     return E_INVALIDARG;
   *key = 0;
   AgxWin32AsahiNullTextureDescriptor(out);
-  if (!srv || !srv->Buffer || !srv->Texture) return S_OK;
+  if (!srv || !srv->Buffer || !srv->Buffer->Resource) return S_OK;
   struct pipe_sampler_view templ = {};
   struct pipe_resource *texture = NULL;
-  if (!srv_component_mapping(srv->ComponentMapping, &templ) || srv_texture_template(*srv, dimension, &texture, &templ) <= 0)
-    return E_INVALIDARG;
+  if (!srv_component_mapping(srv->ComponentMapping, &templ)) return E_INVALIDARG;
+  if (srv->Texture) {
+    if (srv_texture_template(*srv, dimension, &texture, &templ) <= 0) return E_INVALIDARG;
+  } else {
+    /* a buffer SRV as bind_stage binds it: typed texels of its format, raw
+     * and structured buffers as R32_UINT dwords */
+    texture = static_cast<struct pipe_resource *>(srv->Buffer->Resource);
+    if (srv->Offset >= srv->Buffer->Bytes || srv->Buffer->Bytes > 0xffffffffull) return E_INVALIDARG;
+    const unsigned long long room = srv->Buffer->Bytes - srv->Offset;
+    templ.format = srv->Format ? FormatTranslate(srv->Format, FALSE) : PIPE_FORMAT_R32_UINT;
+    if (templ.format == PIPE_FORMAT_NONE) return E_INVALIDARG;
+    templ.target = PIPE_BUFFER;
+    templ.u.buf.offset = static_cast<unsigned>(srv->Offset);
+    templ.u.buf.size = static_cast<unsigned>(srv->Bytes && srv->Bytes < room ? srv->Bytes : room);
+    if (!srv->Format) templ.u.buf.size &= ~3u;
+  }
   APPLE_AGX_U64 packed_key = 0;
   if (!AgxWin32AsahiTextureDescriptor(owner->Context, texture, &templ, out, &packed_key)) {
     AgxWin32AsahiNullTextureDescriptor(out);
