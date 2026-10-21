@@ -8,6 +8,30 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-21 04:00Z -- 10 OF 11 MICROSOFT D3D12 SAMPLES ON ARM64 + x64
+
+Proven on J313 (EXP1825-EXP1829; package 30.0.1829.0 from 6fb17957):
+- Probes ARM64 and x64: 73 PASS / C21E SKIP each (C29A BC1-BC7 textures,
+  C30A bundles, C31A root-argument ExecuteIndirect, C33A UAV counters, C34A
+  SM5.1 ranges with dynamic indices).
+- Microsoft samples (68907e31) run 20 s and close cleanly on both ABIs:
+  HelloWindow/Triangle/Texture/ConstBuffers/FrameBuffering/Bundles,
+  Bundles (BC1 city, 60 fps), DynamicIndexing (120 materials, ARM64 ~49 fps,
+  x64 ~23 fps), ExecuteIndirect (GPU culling + counters), PredicationQueries.
+- Device-initialisation rule (EXP1827/1828, cdb on D3D12Core): per typeless
+  cast set, MULTISAMPLE_RENDERTARGET and 2x/4x levels must agree, and
+  members with MultisampleRenderTargetSupport -1 (typeless, depth view
+  formats, BC, XR_BIAS) report neither -- test_d3d12_multisample_caps.
+Tooling: probe "warp STEP..." runs new steps on WARP with the debug layer
+on the builder (catches probe API misuse before hardware); cdb on the guest
+(C:\Users\pavel\dbg, -cf command files) for app crashes and runtime throws.
+Pending (EXP1830): C32A 4x MSAA after 44951eb0 (MS targets were taken by
+the single-sampled presentation path); Multithreading after d46292c1
+(empty FS for PS-less PSOs; Asahi read a NULL FS).
+Open: owner submits synchronously on its own context; per-draw sampler-view
+creation (121 views per DynamicIndexing draw); x86 D3D12 UMD; MS depth SRVs
+(view formats report no levels).
+
 ## CURRENT 2026-10-21 01:05Z -- D3D12 ARM64 + x64 RUN A REAL APP (nBody); CLAUDE AGAIN
 
 Codex delegation ended 2026-10-21 (user stopped it); Claude drives the bench
