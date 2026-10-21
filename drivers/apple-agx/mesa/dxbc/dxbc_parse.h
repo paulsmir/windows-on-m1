@@ -280,6 +280,9 @@ struct dxbc_program {
    /* every relative-index operand, owned by the program */
    unsigned num_relative;
    struct dxbc_operand *relative;
+   /* C47: heap ranges dxbc_prepare_static_bindings placed; their operands
+    * are two-dimensional [range][register offset] */
+   uint32_t heap_ranges;
 };
 
 enum dxbc_status {

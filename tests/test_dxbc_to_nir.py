@@ -230,6 +230,30 @@ class DxbcToNir(unittest.TestCase):
                                capture_output=True, text=True, timeout=60)
         self.assertRegex(slots.stdout, r"TRANSLATED .* textures 128 ")
 
+    def test_uavs_past_the_slots_read_the_descriptor_heap(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47 (Tier
+        # 2 allows 64 UAVs): twelve UAVs exceed the eight slots. With heap
+        # ranges the first eight keep their image slots; u8 (typed texture),
+        # u9 (typed buffer) and the raw u10/u11 are heap bindings whose
+        # accesses use bindless handles -- the texture descriptor for reads
+        # and sizes, the PBE descriptor (+24) for writes and atomics -- and
+        # raw buffers become R32_UINT buffer images, so no SSBO slot is used.
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "cs51uavheap.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        for reg, slot in ((8, 0), (9, 1), (10, 2), (11, 3)):
+            self.assertIn("BINDING kind 2 id %d space 0 reg %d slot %d flags 2" % (reg, reg, slot), heap.stdout)
+        for reg in range(8):
+            self.assertIn("BINDING kind 2 id %d space 0 reg %d slot %d flags 0" % (reg, reg, reg), heap.stdout)
+        self.assertRegex(heap.stdout, r"TRANSLATED stage MESA_SHADER_COMPUTE .* ssbos 0 images 8 ")
+        self.assertNotRegex(heap.stdout, r"@(load|store)_ssbo|@ssbo_atomic|@get_ssbo_size")
+        self.assertIn("@bindless_image_atomic", heap.stdout)
+        self.assertIn("@bindless_image_size", heap.stdout)
+        self.assertRegex(heap.stdout, r"@bindless_image_store .*image_dim=Buf.*format=r32_uint")
+        slots = subprocess.run([str(self.binary), str(FIXTURES / "cs51uavheap.dxbc"), "--d3d12"],
+                               capture_output=True, text=True, timeout=60)
+        self.assertIn("REFUSED", slots.stdout)
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

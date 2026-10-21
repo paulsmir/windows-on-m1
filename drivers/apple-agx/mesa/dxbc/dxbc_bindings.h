@@ -39,6 +39,7 @@ enum dxbc_binding_kind {
 #define DXBC_HEAP_MIRROR_CB 15u
 #define DXBC_HEAP_DESCRIPTOR_STRIDE 128u
 #define DXBC_HEAP_DESCRIPTOR_AGX_OFFSET 64u /* the AGX texture descriptor in each */
+#define DXBC_HEAP_DESCRIPTOR_PBE_DELTA 24u /* its PBE descriptor (typed and buffer UAVs) follows */
 #define DXBC_HEAP_HANDLE_MARK 0xd312u
 
 struct dxbc_binding {

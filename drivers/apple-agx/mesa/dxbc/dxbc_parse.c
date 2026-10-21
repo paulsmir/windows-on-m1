@@ -802,7 +802,7 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
    /* C47: the slot capacities without the heap-range flag, and the heap
     * ranges placed so far */
    uint32_t lim[DXBC_BINDING_KIND_COUNT] = {0}, heap_ranges = 0;
-   bool heap = false;
+   bool heap = false, heap_uav = false;
    enum dxbc_status status = DXBC_ERROR_OPERAND;
    const struct dxbc_instruction *bad = NULL;
    if (error)
@@ -817,6 +817,7 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
    for (unsigned k = 0; k < DXBC_BINDING_KIND_COUNT; ++k)
       lim[k] = limits[k] & ~DXBC_BINDING_HEAP_RANGES;
    heap = (limits[DXBC_BINDING_SRV] & DXBC_BINDING_HEAP_RANGES) != 0;
+   heap_uav = (limits[DXBC_BINDING_UAV] & DXBC_BINDING_HEAP_RANGES) != 0;
    limits = lim;
    pending.active = 1;
    for (unsigned pass = 0; pass < 2; ++pass) {
@@ -835,8 +836,9 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
             goto fail;
          uint32_t id = (uint32_t)o->index[0].imm, reg = (uint32_t)o->index[1].imm;
          const bool open = o->index[2].imm == UINT32_MAX;
-         /* C47: typed SRV ranges may live in the heap */
-         const bool heap_kind = heap && in->opcode == DXBC_OP_DCL_RESOURCE;
+         /* C47: typed SRV ranges and UAVs may live in the heap */
+         const bool heap_kind = (heap && in->opcode == DXBC_OP_DCL_RESOURCE) ||
+                                (heap_uav && kind == DXBC_BINDING_UAV);
          if (pass == 0 && heap_kind && open)
             continue; /* an unbounded one always does */
          if (pass == 0) {
@@ -934,6 +936,7 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
    }
    for (unsigned i = 0; i < program->num_relative; ++i)
       normalize_binding_operand(&pending, &program->relative[i]);
+   program->heap_ranges = heap_ranges;
    *map = pending;
    return DXBC_OK;
 fail:

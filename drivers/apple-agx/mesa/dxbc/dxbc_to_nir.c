@@ -116,7 +116,7 @@ struct ctx {
       nir_variable *image;   /* MEM_TYPED */
       uint8_t dim;
       nir_alu_type type;
-   } uav[MAX_UAVS];
+   } uav[MAX_UAVS + DXBC_HEAP_RANGE_MAX]; /* C47: heap UAVs follow the slots */
    struct {
       nir_variable *var;     /* uint array */
       uint32_t stride;       /* 0: raw */
@@ -243,6 +243,15 @@ static bool
 index_direct(const struct dxbc_index *index)
 {
    return !index->relative;
+}
+
+/* C47: an operand of a heap range (only a program whose bindings placed
+ * heap ranges has them; SM5.1 operands outside the binding path keep their
+ * two-dimensional form) */
+static bool
+heap_operand(const struct ctx *c, const struct dxbc_operand *o)
+{
+   return c->p->heap_ranges && o->index_dimension == 2;
 }
 
 /* C34: the slots an SRV or sampler declaration covers -- index[1] of a
@@ -1070,7 +1079,7 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
       }
       return;
    case DXBC_OP_DCL_RESOURCE:
-      if (o && o->index_dimension == 2) {
+      if (o && heap_operand(c, o)) {
          /* C47: a heap range (dxbc_prepare_static_bindings) */
          if (o->index[0].imm >= DXBC_HEAP_RANGE_MAX || !insn->num_payload) {
             fail(c, insn, "heap range declaration");
@@ -1228,7 +1237,16 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
       unsigned u = o ? (unsigned)o->index[0].imm : MAX_UAVS;
       struct tex_shape shape;
       nir_alu_type type;
-      if (u >= MAX_UAVS || !insn->num_payload ||
+      const bool heap = o && heap_operand(c, o); /* C47 */
+      if (heap && u < DXBC_HEAP_RANGE_MAX && insn->num_payload &&
+          tex_shape((insn->token0 >> 11) & 0x1fu, &shape) && shape.dim != GLSL_SAMPLER_DIM_MS &&
+          shape.dim != GLSL_SAMPLER_DIM_CUBE) {
+         c->uav[MAX_UAVS + u].kind = MEM_TYPED;
+         c->uav[MAX_UAVS + u].dim = (uint8_t)((insn->token0 >> 11) & 0x1fu);
+         c->uav[MAX_UAVS + u].type = return_type(insn->payload[0]);
+         return;
+      }
+      if (heap || u >= MAX_UAVS || !insn->num_payload ||
           !tex_shape((insn->token0 >> 11) & 0x1fu, &shape) || shape.dim == GLSL_SAMPLER_DIM_MS ||
           shape.dim == GLSL_SAMPLER_DIM_CUBE) {
          fail(c, insn, "typed UAV declaration");
@@ -1250,14 +1268,18 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
    case DXBC_OP_DCL_UAV_STRUCTURED: {
       unsigned u = o ? (unsigned)o->index[0].imm : MAX_UAVS;
       bool structured = insn->opcode == DXBC_OP_DCL_UAV_STRUCTURED;
-      if (u >= MAX_UAVS || (structured && (!insn->num_payload || !insn->payload[0] ||
-                                           (insn->payload[0] & 3)))) {
+      const bool heap = o && heap_operand(c, o); /* C47: a buffer image in the heap */
+      if (u >= (heap ? DXBC_HEAP_RANGE_MAX : MAX_UAVS) ||
+          (structured && (!insn->num_payload || !insn->payload[0] || (insn->payload[0] & 3)))) {
          fail(c, insn, "buffer UAV declaration");
          return;
       }
+      if (heap)
+         u += MAX_UAVS;
       c->uav[u].kind = structured ? MEM_STRUCTURED : MEM_RAW;
       c->uav[u].stride = structured ? insn->payload[0] : 0;
-      b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos, (uint8_t)(u + 1));
+      if (!heap)
+         b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos, (uint8_t)(u + 1));
       return;
    }
    case DXBC_OP_DCL_RESOURCE_RAW:
@@ -1844,7 +1866,7 @@ static unsigned
 resource_index(struct ctx *c, const struct dxbc_instruction *insn,
                const struct dxbc_operand *o)
 {
-   if (o->type == DXBC_OPERAND_RESOURCE && o->index_dimension == 2) {
+   if (o->type == DXBC_OPERAND_RESOURCE && heap_operand(c, o)) {
       /* C47: [heap range][register offset] */
       const unsigned t = MAX_RESOURCES + (unsigned)o->index[0].imm;
       if (o->index[0].imm >= DXBC_HEAP_RANGE_MAX || !c->res[t].declared || c->heap_offset ||
@@ -1879,6 +1901,50 @@ sampler_index(struct ctx *c, const struct dxbc_instruction *insn,
    return (unsigned)o->index[0].imm;
 }
 
+/* C47: the heap index of heap range h's first register (constant buffer
+ * DXBC_HEAP_TABLE_CB, vec4 per range) */
+static nir_def *
+heap_first(struct ctx *c, unsigned h)
+{
+   return nir_channel(&c->b, nir_load_ubo(&c->b, 4, 32, nir_imm_int(&c->b, DXBC_HEAP_TABLE_CB),
+                                          nir_imm_int(&c->b, (int)(h * 16u)), .align_mul = 16,
+                                          .align_offset = 0, .range_base = 0, .range = ~0u), 0);
+}
+
+/* C47: the bindless handle of a heap descriptor's texture (or, pbe, its PBE)
+ * descriptor; the native state pairs the marked handle with the heap */
+static nir_def *
+heap_handle(struct ctx *c, nir_def *index, bool pbe)
+{
+   nir_def *bytes = nir_iadd_imm(&c->b, nir_imul_imm(&c->b, index, DXBC_HEAP_DESCRIPTOR_STRIDE),
+                                 DXBC_HEAP_DESCRIPTOR_AGX_OFFSET + (pbe ? DXBC_HEAP_DESCRIPTOR_PBE_DELTA : 0));
+   return nir_bindless_image_agx(&c->b, bytes, .desc_set = DXBC_HEAP_HANDLE_MARK);
+}
+
+/* C47: a UAV operand's entry -- its slot, or MAX_UAVS + heap range for a heap
+ * UAV ([range][register offset], dxbc_prepare_static_bindings) -- without
+ * emitting code; MAX_UAVS + DXBC_HEAP_RANGE_MAX when malformed */
+static unsigned
+uav_entry(const struct ctx *c, const struct dxbc_operand *o)
+{
+   const unsigned none = MAX_UAVS + DXBC_HEAP_RANGE_MAX;
+   if (o->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || !index_direct(&o->index[0]))
+      return none;
+   if (heap_operand(c, o))
+      return o->index[0].imm < DXBC_HEAP_RANGE_MAX && c->uav[MAX_UAVS + o->index[0].imm].kind
+                ? MAX_UAVS + (unsigned)o->index[0].imm : none;
+   return o->index[0].imm < MAX_UAVS ? (unsigned)o->index[0].imm : none;
+}
+
+/* C47: a heap UAV's descriptor handle (texture for reads and size queries,
+ * PBE for writes and atomics) */
+static nir_def *
+uav_heap_handle(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_operand *o, bool pbe)
+{
+   return heap_handle(c, nir_iadd(&c->b, heap_first(c, (unsigned)o->index[0].imm), index_value(c, insn, &o->index[1])),
+                      pbe);
+}
+
 static nir_tex_instr *
 tex_begin(struct ctx *c, nir_texop op, unsigned t, unsigned s, bool sampler,
           unsigned num_srcs, const struct tex_shape *shape, nir_alu_type type)
@@ -1908,14 +1974,7 @@ tex_finish(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, unsigned compon
        * DXBC_HEAP_TABLE_CB, vec4 per range) + the register offset; the
        * descriptor's byte offset in the heap mirror is a bindless handle
        * the native state pairs with the mirror's address */
-      nir_def *first = nir_channel(&c->b, nir_load_ubo(&c->b, 4, 32, nir_imm_int(&c->b, DXBC_HEAP_TABLE_CB),
-                                                        nir_imm_int(&c->b, (int)(c->heap_range * 16u)),
-                                                        .align_mul = 16, .align_offset = 0,
-                                                        .range_base = 0, .range = ~0u), 0);
-      nir_def *index = nir_iadd(&c->b, first, c->heap_offset);
-      nir_def *bytes = nir_iadd_imm(&c->b, nir_imul_imm(&c->b, index, DXBC_HEAP_DESCRIPTOR_STRIDE),
-                                    DXBC_HEAP_DESCRIPTOR_AGX_OFFSET);
-      nir_def *handle = nir_bindless_image_agx(&c->b, bytes, .desc_set = DXBC_HEAP_HANDLE_MARK);
+      nir_def *handle = heap_handle(c, nir_iadd(&c->b, heap_first(c, c->heap_range), c->heap_offset), false);
       tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_texture_handle, handle);
       tex->texture_index = 0;
    }
@@ -2046,7 +2105,7 @@ emit_ld(struct ctx *c, const struct dxbc_instruction *insn)
 }
 
 static nir_def *uav_image(struct ctx *c, const struct dxbc_instruction *insn,
-                          const struct dxbc_operand *o, struct tex_shape *shape);
+                          const struct dxbc_operand *o, struct tex_shape *shape, bool pbe, bool *bindless);
 
 /* resinfo's return type: float, rcpfloat (dimensions only) or uint */
 static nir_def *
@@ -2074,15 +2133,18 @@ emit_resinfo_uav(struct ctx *c, const struct dxbc_instruction *insn, unsigned mo
    nir_builder *b = &c->b;
    const struct dxbc_operand *uav = &insn->operands[2];
    struct tex_shape shape;
-   nir_def *image = uav_image(c, insn, uav, &shape), *size, *in_range, *comp[4];
+   bool bindless;
+   nir_def *image = uav_image(c, insn, uav, &shape, false, &bindless), *size, *in_range, *comp[4];
    if (!image)
       return;
    if (shape.dim == GLSL_SAMPLER_DIM_BUF) {
       fail(c, insn, "resinfo on a buffer UAV");
       return;
    }
-   size = nir_image_size(b, shape.coords, 32, image, nir_imm_int(b, 0),
-                         .image_dim = shape.dim, .image_array = shape.array);
+   size = bindless ? nir_bindless_image_size(b, shape.coords, 32, image, nir_imm_int(b, 0),
+                                             .image_dim = shape.dim, .image_array = shape.array)
+                   : nir_image_size(b, shape.coords, 32, image, nir_imm_int(b, 0),
+                                    .image_dim = shape.dim, .image_array = shape.array);
    in_range = nir_ieq_imm(b, nir_channel(b, SRC(1, U), 0), 0);
    for (unsigned i = 0; i < 3; ++i)
       comp[i] = i < shape.coords ? nir_bcsel(b, in_range, nir_channel(b, size, i), nir_imm_int(b, 0))
@@ -2280,7 +2342,8 @@ mem_address(struct ctx *c, const struct dxbc_instruction *insn,
    unsigned index = (unsigned)target->index[0].imm;
    switch (target->type) {
    case DXBC_OPERAND_UNORDERED_ACCESS_VIEW:
-      if (index >= MAX_UAVS || c->uav[index].kind < MEM_RAW) {
+      index = uav_entry(c, target);
+      if (index >= MAX_UAVS + DXBC_HEAP_RANGE_MAX || c->uav[index].kind < MEM_RAW) {
          fail(c, insn, "buffer UAV u%u", index);
          return nir_imm_int(&c->b, 0);
       }
@@ -2319,6 +2382,18 @@ mem_load(struct ctx *c, const struct dxbc_instruction *insn,
    nir_def *comp[4];
    if (c->failed)
       return nir_imm_zero(b, n, 32);
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && heap_operand(c, target)) {
+      /* C47: a heap buffer UAV is an R32_UINT buffer image */
+      nir_def *handle = uav_heap_handle(c, insn, target, false);
+      for (unsigned i = 0; i < n; ++i) {
+         nir_def *coord = nir_vec4(b, nir_iadd_imm(b, mem_dword_index(c, byte_address), i), nir_imm_int(b, 0),
+                                   nir_imm_int(b, 0), nir_imm_int(b, 0));
+         comp[i] = nir_channel(b, nir_bindless_image_load(b, 4, 32, handle, coord, nir_imm_int(b, 0), nir_imm_int(b, 0),
+                                                          .image_dim = GLSL_SAMPLER_DIM_BUF, .dest_type = nir_type_uint32,
+                                                          .format = PIPE_FORMAT_R32_UINT), 0);
+      }
+      return nir_vec(b, comp, n);
+   }
    if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW)
       return nir_load_ssbo(b, n, 32, nir_imm_int(b, (int)index), byte_address,
                            .align_mul = 4, .align_offset = 0);
@@ -2349,6 +2424,19 @@ mem_store(struct ctx *c, const struct dxbc_instruction *insn,
    unsigned index = (unsigned)target->index[0].imm;
    if (c->failed)
       return;
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && heap_operand(c, target)) {
+      /* C47: a heap buffer UAV is an R32_UINT buffer image */
+      nir_def *handle = uav_heap_handle(c, insn, target, true);
+      for (unsigned i = 0; i < n; ++i) {
+         nir_def *coord = nir_vec4(b, nir_iadd_imm(b, mem_dword_index(c, byte_address), i), nir_imm_int(b, 0),
+                                   nir_imm_int(b, 0), nir_imm_int(b, 0));
+         nir_def *texel = nir_vec4(b, nir_channel(b, value, i), nir_imm_int(b, 0), nir_imm_int(b, 0), nir_imm_int(b, 0));
+         nir_bindless_image_store(b, handle, coord, nir_imm_int(b, 0), texel, nir_imm_int(b, 0),
+                                  .image_dim = GLSL_SAMPLER_DIM_BUF, .src_type = nir_type_uint32,
+                                  .format = PIPE_FORMAT_R32_UINT);
+      }
+      return;
+   }
    if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW) {
       nir_store_ssbo(b, nir_trim_vector(b, value, n), nir_imm_int(b, (int)index), byte_address,
                      .write_mask = BITFIELD_MASK(n), .align_mul = 4, .align_offset = 0);
@@ -2407,17 +2495,23 @@ emit_mem_store(struct ctx *c, const struct dxbc_instruction *insn)
    mem_store(c, insn, dst, mem_address(c, insn, dst, address), value, n);
 }
 
+/* the image of a typed UAV operand: its slot, or (C47, *bindless) a heap
+ * descriptor handle -- the PBE one when pbe (writes and atomics) */
 static nir_def *
 uav_image(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_operand *o,
-          struct tex_shape *shape)
+          struct tex_shape *shape, bool pbe, bool *bindless)
 {
-   unsigned u = (unsigned)o->index[0].imm;
-   if (o->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || o->index_dimension != 1 ||
-       !index_direct(&o->index[0]) || u >= MAX_UAVS || c->uav[u].kind != MEM_TYPED) {
+   unsigned u = uav_entry(c, o);
+   *bindless = false;
+   if (u >= MAX_UAVS + DXBC_HEAP_RANGE_MAX || c->uav[u].kind != MEM_TYPED) {
       fail(c, insn, "typed UAV operand");
       return NULL;
    }
    tex_shape(c->uav[u].dim, shape);
+   if (u >= MAX_UAVS) {
+      *bindless = true;
+      return uav_heap_handle(c, insn, o, pbe);
+   }
    /* EXP1304: the image's slot, not a deref: Asahi's binding lowering
     * (agx_nir_lower_bindings) takes the indexed image_* intrinsics only,
     * and an image_deref_* reached the backend ("Unhandled intrinsic"). */
@@ -2429,14 +2523,18 @@ emit_typed_load(struct ctx *c, const struct dxbc_instruction *insn)
 {
    struct tex_shape shape;
    const struct dxbc_operand *uav = &insn->operands[2];
-   nir_def *image = uav_image(c, insn, uav, &shape);
+   bool bindless;
+   nir_def *image = uav_image(c, insn, uav, &shape, false, &bindless);
    nir_def *v;
    if (!image)
       return;
-   v = nir_image_load(&c->b, 4, 32, image, SRC(1, U), nir_imm_int(&c->b, 0),
+   const nir_alu_type type = c->uav[uav_entry(c, uav)].type;
+   v = bindless ? nir_bindless_image_load(&c->b, 4, 32, image, SRC(1, U), nir_imm_int(&c->b, 0), nir_imm_int(&c->b, 0),
+                                          .image_dim = shape.dim, .image_array = shape.array, .dest_type = type)
+                : nir_image_load(&c->b, 4, 32, image, SRC(1, U), nir_imm_int(&c->b, 0),
                             nir_imm_int(&c->b, 0), .image_dim = shape.dim,
                             .image_array = shape.array,
-                            .dest_type = c->uav[uav->index[0].imm].type);
+                            .dest_type = type);
    write_dst(c, insn, &insn->operands[0], swizzle4(c, v, uav), insn->saturate);
 }
 
@@ -2445,13 +2543,19 @@ emit_typed_store(struct ctx *c, const struct dxbc_instruction *insn)
 {
    struct tex_shape shape;
    const struct dxbc_operand *uav = &insn->operands[0];
-   nir_def *image = uav_image(c, insn, uav, &shape);
+   bool bindless;
+   nir_def *image = uav_image(c, insn, uav, &shape, true, &bindless);
    if (!image)
       return;
-   nir_image_store(&c->b, image, SRC(1, U), nir_imm_int(&c->b, 0), SRC(2, U),
+   const nir_alu_type type = c->uav[uav_entry(c, uav)].type;
+   if (bindless)
+      nir_bindless_image_store(&c->b, image, SRC(1, U), nir_imm_int(&c->b, 0), SRC(2, U), nir_imm_int(&c->b, 0),
+                               .image_dim = shape.dim, .image_array = shape.array, .src_type = type);
+   else
+      nir_image_store(&c->b, image, SRC(1, U), nir_imm_int(&c->b, 0), SRC(2, U),
                          nir_imm_int(&c->b, 0), .image_dim = shape.dim,
                          .image_array = shape.array,
-                         .src_type = c->uav[uav->index[0].imm].type);
+                         .src_type = type);
 }
 
 static nir_atomic_op
@@ -2491,12 +2595,24 @@ emit_atomic(struct ctx *c, const struct dxbc_instruction *insn)
    } else {
       data = nir_channel(b, SRC(first + 2, U), 0);
    }
-   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS &&
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW)
+      index = uav_entry(c, target);
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS + DXBC_HEAP_RANGE_MAX &&
        c->uav[index].kind == MEM_TYPED) {
       struct tex_shape shape;
-      nir_def *image = uav_image(c, insn, target, &shape);
+      bool bindless;
+      nir_def *image = uav_image(c, insn, target, &shape, true, &bindless);
       if (!image)
          return;
+      if (bindless)
+         result = swap ?
+            nir_bindless_image_atomic_swap(b, 32, image, address, nir_imm_int(b, 0), compare, data,
+                                           .image_dim = shape.dim, .image_array = shape.array,
+                                           .atomic_op = op, .format = PIPE_FORMAT_R32_UINT) :
+            nir_bindless_image_atomic(b, 32, image, address, nir_imm_int(b, 0), data,
+                                      .image_dim = shape.dim, .image_array = shape.array,
+                                      .atomic_op = op, .format = PIPE_FORMAT_R32_UINT);
+      else
       result = swap ?
          nir_image_atomic_swap(b, 32, image, address, nir_imm_int(b, 0), compare, data,
                                      .image_dim = shape.dim, .image_array = shape.array,
@@ -2508,7 +2624,19 @@ emit_atomic(struct ctx *c, const struct dxbc_instruction *insn)
       nir_def *byte_address = mem_address(c, insn, target, address);
       if (c->failed)
          return;
-      if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW) {
+      if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && heap_operand(c, target)) {
+         /* C47: a heap buffer UAV is an R32_UINT buffer image */
+         nir_def *image = uav_heap_handle(c, insn, target, true);
+         nir_def *coord = nir_vec4(b, mem_dword_index(c, byte_address), nir_imm_int(b, 0), nir_imm_int(b, 0),
+                                   nir_imm_int(b, 0));
+         result = swap ?
+            nir_bindless_image_atomic_swap(b, 32, image, coord, nir_imm_int(b, 0), compare, data,
+                                           .image_dim = GLSL_SAMPLER_DIM_BUF, .atomic_op = op,
+                                           .format = PIPE_FORMAT_R32_UINT) :
+            nir_bindless_image_atomic(b, 32, image, coord, nir_imm_int(b, 0), data,
+                                      .image_dim = GLSL_SAMPLER_DIM_BUF, .atomic_op = op,
+                                      .format = PIPE_FORMAT_R32_UINT);
+      } else if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW) {
          nir_def *slot = nir_imm_int(b, (int)index);
          result = swap ? nir_ssbo_atomic_swap(b, 32, slot, byte_address, compare, data, .atomic_op = op) :
                          nir_ssbo_atomic(b, 32, slot, byte_address, data, .atomic_op = op);
@@ -2537,8 +2665,9 @@ emit_counter(struct ctx *c, const struct dxbc_instruction *insn)
    unsigned u = (unsigned)uav->index[0].imm;
    bool alloc = insn->opcode == DXBC_OP_IMM_ATOMIC_ALLOC;
    nir_def *slot, *old;
-   if (uav->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || u >= MAX_UAVS ||
+   if (uav->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || heap_operand(c, uav) || u >= MAX_UAVS ||
        c->uav[u].kind != MEM_STRUCTURED) {
+      /* C47: heap UAVs have no counter */
       fail(c, insn, "counter of a non-structured UAV");
       return;
    }
@@ -2573,9 +2702,15 @@ emit_bufinfo(struct ctx *c, const struct dxbc_instruction *insn)
    const struct dxbc_operand *o = &insn->operands[1];
    unsigned index = (unsigned)o->index[0].imm;
    nir_def *count = NULL;
-   if (o->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS &&
+   if (o->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW)
+      index = uav_entry(c, o);
+   if (o->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS + DXBC_HEAP_RANGE_MAX &&
        c->uav[index].kind >= MEM_RAW) {
-      count = nir_get_ssbo_size(b, 32, nir_imm_int(b, (int)index));
+      /* C47: a heap buffer UAV's R32_UINT texels are its dwords */
+      count = index >= MAX_UAVS
+         ? nir_imul_imm(b, nir_bindless_image_size(b, 1, 32, uav_heap_handle(c, insn, o, false), nir_imm_int(b, 0),
+                                                   .image_dim = GLSL_SAMPLER_DIM_BUF), 4)
+         : nir_get_ssbo_size(b, 32, nir_imm_int(b, (int)index));
       if (c->uav[index].kind == MEM_STRUCTURED)
          count = nir_udiv_imm(b, count, c->uav[index].stride);
    } else if (o->type == DXBC_OPERAND_RESOURCE && index < MAX_RESOURCES &&
@@ -3360,6 +3495,12 @@ bool dxbc_nir_uav_dimensions(const struct nir_shader *nir,
             case nir_intrinsic_ssbo_atomic_swap:
             case nir_intrinsic_get_ssbo_size:
                break;
+            case nir_intrinsic_bindless_image_load:
+            case nir_intrinsic_bindless_image_store:
+            case nir_intrinsic_bindless_image_atomic:
+            case nir_intrinsic_bindless_image_atomic_swap:
+            case nir_intrinsic_bindless_image_size:
+               continue; /* C47: heap UAVs use no slot */
             default:
                /* Deref/bindless/unhandled image forms cannot establish a
                 * direct slot; do not silently label them unused. */
