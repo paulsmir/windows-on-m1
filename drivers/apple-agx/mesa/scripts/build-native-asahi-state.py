@@ -5481,6 +5481,22 @@ AgxD3d10ResourceWithinRequiredLimits(
         'ab8db337b1c95bec23aebcbf92521a98f862a4fb7b23a0f2828e20ffd336eecc',[
         ('   uint range_B = d.index_buffer_range_B;',
          '   uint32_t range_B = d.index_buffer_range_B;')])
+    # D3D12 C47 (dxbc_bindings.h DXBC_HEAP_HANDLE_MARK, DXBC_HEAP_MIRROR_CB):
+    # the DXBC translator marks descriptor-heap handles; pair each with the
+    # heap mirror's address (constant buffer 15) the way load_texture_handle
+    # pairs its handles with texture_base (step 4 fills the uniform of the
+    # bindless_image_agx that directly follows the marked sysval load).
+    change('src/gallium/drivers/asahi/agx_nir_lower_sysvals.c',
+        '9fdce3f3623e0a58b83debe7527ab621976f896ba6f68f9bf88653c8c86c4499',[
+        ('   case nir_intrinsic_load_texture_handle_agx:\n      return load_texture_handle(b, intr, &s->texture_base);\n',
+         '   case nir_intrinsic_load_texture_handle_agx:\n      return load_texture_handle(b, intr, &s->texture_base);\n'
+         '   case nir_intrinsic_bindless_image_agx:\n'
+         '      /* D3D12 C47: a descriptor-heap handle (DXBC_HEAP_HANDLE_MARK) */\n'
+         '      if (nir_intrinsic_desc_set(intr) != 0xd312u)\n'
+         '         return NULL;\n'
+         '      nir_load_sysval_agx(b, 1, 64, .desc_set = stage_table(b),\n'
+         '                          .binding = (uintptr_t)&s->ubo_base[15], .flags = ~0);\n'
+         '      return nir_bindless_image_agx(b, intr->src[0].ssa);\n')])
     if args.project:
         change('src/asahi/lib/pool.c',
             '1420e8cbc883bad80bc014a285a922fffe47da92597f1671c6ebe8f4df8ab4ed',[
