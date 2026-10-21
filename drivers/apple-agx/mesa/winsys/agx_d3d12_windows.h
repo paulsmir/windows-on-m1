@@ -266,6 +266,17 @@ HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *Owner, const AGX_D3D12_B
  * D3D10/11/12 DDI numeric values (D3D12DDI_BLEND_* == D3D10_DDI_BLEND_*,
  * comparison/stencil/cull/fill likewise); Vs/Ps are tokenized programs. */
 #define AGX_D3D12_MAX_ELEMENTS 16
+/* C39: a pipeline's stream-output declaration as the DDI passes it
+ * (D3D12DDIARG_STREAM_OUTPUT_DECLARATION_ENTRY: Register 0xffffffff is a
+ * hole; Mask is xyzw in its 4 LSBs). Rasterized 0xffffffff: no stream is
+ * rasterized. Strides in bytes per output slot (NumStrides of them). */
+#define AGX_D3D12_SO_ENTRIES 64
+typedef struct AGX_D3D12_SO_DECL {
+  unsigned Entries, Rasterized, NumStrides, Strides[4];
+  struct {
+    unsigned Stream, Slot, Register, Mask;
+  } Entry[AGX_D3D12_SO_ENTRIES];
+} AGX_D3D12_SO_DECL;
 typedef struct {
   const UINT *Vs;
   const UINT *Ps; /* NULL = no pixel shader */
@@ -275,6 +286,9 @@ typedef struct {
    * pass-through control point phase copies */
   const UINT *Hs, *Ds;
   unsigned HsPassthroughRegisters, HsPassthroughPositions;
+  /* C39: stream output of the geometry shader (or, without one, of the
+   * vertex shader); NULL = none */
+  const struct AGX_D3D12_SO_DECL *So;
   int AlphaToCoverage, IndependentBlend;
   struct {
     int BlendEnable;
@@ -300,6 +314,7 @@ typedef struct {
   void *Vs, *Fs, *Blend, *DepthStencil, *Rasterizer;
   void *Gs; /* C27 */
   void *Hs, *Ds; /* C37: TCS and TES */
+  int Xfb; /* C39: the last vertex stage captures stream output */
   unsigned SampleMask; /* C32 */
   unsigned NumElements;
   struct {
@@ -362,6 +377,12 @@ typedef struct {
    * draw needs IndexOffset 0 (Gallium takes the start index from the
    * arguments) */
   AGX_D3D12_INDIRECT Indirect;
+  /* C39: stream-output targets (Buffer NULL = unbound slot); the filled
+   * size (bytes written from Offset) lives at Filled + FilledOffset */
+  struct {
+    const AGX_D3D12_BUFFER *Buffer, *Filled;
+    unsigned long long Offset, Size, FilledOffset;
+  } So[4];
 } AGX_D3D12_DRAW;
 /* Records one draw; bindings that reference heaps are dropped by the next
  * AgxD3d12OwnerSubmitAndWait. */

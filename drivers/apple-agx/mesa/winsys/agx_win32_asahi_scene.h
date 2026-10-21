@@ -101,6 +101,9 @@ void AgxWin32AsahiContextRetireDiagnostic(struct pipe_context *,
 int AgxWin32AsahiContextDrawReceipt(struct pipe_context *);
 int AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
     struct pipe_stream_output_target *,APPLE_AGX_U32);
+/* C39: the 4-byte buffer holding a stream-output target's write offset
+ * (bytes from its buffer_offset), which the GPU advances as it appends. */
+struct pipe_resource *AgxWin32AsahiStreamOutputOffset(struct pipe_stream_output_target *);
 int AgxWin32AsahiContextFaulted(struct pipe_context *);
 int AgxWin32AsahiContextFlushForPresent(struct pipe_context *);
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *);

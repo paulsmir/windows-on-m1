@@ -1314,12 +1314,14 @@ static unsigned stencil_op(unsigned op) {
 static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_shader_stage stage,
                            struct dxbc_binding_map *bindings, uint8_t dimensions[DXBC_RESOURCE_SLOTS],
                            uint8_t uav_dimensions[DXBC_UAV_DIMENSION_SLOTS], uint32_t passthrough_registers = 0,
-                           uint32_t passthrough_positions = 0) {
+                           uint32_t passthrough_positions = 0, const struct dxbc_nir_xfb *xfb = NULL) {
   struct dxbc_nir_error error = {};
   /* C37: a hull shader also takes its output signature's pass-through
-   * registers (the D3D11 frontend's create_tessellation_shader) */
-  struct nir_shader *nir = dxbc_translate_tokens_bindings_hs(tokens, pipe->screen->nir_options[stage], owner_binding_limits,
-                                                             bindings, passthrough_registers, passthrough_positions, &error);
+   * registers (the D3D11 frontend's create_tessellation_shader); C39: the
+   * last vertex stage of a stream-output pipeline captures its outputs */
+  struct nir_shader *nir = dxbc_translate_tokens_bindings_xfb(tokens, pipe->screen->nir_options[stage], owner_binding_limits,
+                                                              bindings, passthrough_registers, passthrough_positions, xfb,
+                                                              &error);
   receipt("measure-d3d12-graphics-shader", nir ? S_OK : E_NOTIMPL, static_cast<UINT>(stage), error.opcode, error.offset);
   if (!nir) return NULL;
   if (!dxbc_nir_srv_dimensions(nir, dimensions) || !dxbc_nir_uav_dimensions(nir, uav_dimensions)) {
@@ -1338,6 +1340,43 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   if (stage == MESA_SHADER_TESS_CTRL) return pipe->create_tcs_state(pipe, &state); /* C37 */
   if (stage == MESA_SHADER_TESS_EVAL) return pipe->create_tes_state(pipe, &state);
   return stage == MESA_SHADER_VERTEX ? pipe->create_vs_state(pipe, &state) : pipe->create_fs_state(pipe, &state);
+}
+
+/* C39: the D3D10 frontend's CreateGeometryShaderWithStreamOutput rules
+ * (Mesa d3d10umd Shader.cpp): each entry's mask names a component run, a
+ * hole (register 0xffffffff) only advances its slot, offsets accumulate
+ * per slot; the DDI's byte strides win where given. Stream 0 only, and the
+ * rasterized stream is 0 or none (the translator captures stream 0). */
+static bool so_xfb(const AGX_D3D12_SO_DECL *decl, struct dxbc_nir_xfb *xfb) {
+  memset(xfb, 0, sizeof(*xfb));
+  unsigned total[4] = {};
+  if (decl->Entries > AGX_D3D12_SO_ENTRIES || decl->Entries > DXBC_NIR_MAX_XFB_OUTPUTS || decl->NumStrides > 4 ||
+      (decl->Rasterized != 0 && decl->Rasterized != 0xffffffffu))
+    return false;
+  for (unsigned i = 0; i < decl->Entries; ++i) {
+    const auto &e = decl->Entry[i];
+    const unsigned mask = e.Mask & 0xfu;
+    unsigned start = 0, count = 0;
+    while (mask && !(mask & (1u << start))) ++start;
+    while (start + count < 4 && (mask & (1u << (start + count)))) ++count;
+    if (e.Stream || e.Slot >= 4 || (mask && ((1u << count) - 1u) << start != mask)) return false;
+    if (e.Register != 0xffffffffu) {
+      if (!count) return false;
+      struct dxbc_nir_xfb_output *o = &xfb->outputs[xfb->num_outputs++];
+      o->reg = e.Register;
+      o->start_component = static_cast<uint8_t>(start);
+      o->num_components = static_cast<uint8_t>(count);
+      o->buffer = static_cast<uint8_t>(e.Slot);
+      o->dst_offset = total[e.Slot];
+    }
+    total[e.Slot] += count;
+  }
+  for (unsigned b = 0; b < 4; ++b) {
+    if (b < decl->NumStrides && decl->Strides[b] % 4u) return false;
+    xfb->stride[b] = b < decl->NumStrides && decl->Strides[b] ? decl->Strides[b] / 4u : total[b];
+    if (xfb->stride[b] < total[b]) return false;
+  }
+  return xfb->num_outputs != 0;
 }
 
 extern "C" void AgxD3d12OwnerDestroyGraphics(AGX_D3D12_OWNER *owner, AGX_D3D12_GRAPHICS *graphics) {
@@ -1363,9 +1402,18 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
     return E_INVALIDARG;
   memset(graphics, 0, sizeof(*graphics));
   struct pipe_context *pipe = owner->Context;
-  graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX, &graphics->VsBindings, graphics->VsSrvDimensions, graphics->VsUavDimensions);
+  /* C39: stream output from the geometry shader, else the vertex shader
+   * (a pipeline with a hull/domain shader refuses it at draw recording) */
+  struct dxbc_nir_xfb xfb;
+  const bool so = desc->So && so_xfb(desc->So, &xfb);
+  if (desc->So && !so) return E_NOTIMPL;
+  const struct dxbc_nir_xfb *vs_xfb = so && !desc->Gs ? &xfb : NULL, *gs_xfb = so && desc->Gs ? &xfb : NULL;
+  graphics->Xfb = so;
+  graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX, &graphics->VsBindings, graphics->VsSrvDimensions,
+                               graphics->VsUavDimensions, 0, 0, vs_xfb);
   graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT, &graphics->PsBindings, graphics->PsSrvDimensions, graphics->PsUavDimensions) : NULL;
-  graphics->Gs = desc->Gs ? create_shader(pipe, desc->Gs, MESA_SHADER_GEOMETRY, &graphics->GsBindings, graphics->GsSrvDimensions, graphics->GsUavDimensions) : NULL;
+  graphics->Gs = desc->Gs ? create_shader(pipe, desc->Gs, MESA_SHADER_GEOMETRY, &graphics->GsBindings, graphics->GsSrvDimensions,
+                                          graphics->GsUavDimensions, 0, 0, gs_xfb) : NULL;
   graphics->Hs = desc->Hs ? create_shader(pipe, desc->Hs, MESA_SHADER_TESS_CTRL, &graphics->HsBindings, graphics->HsSrvDimensions,
                                           graphics->HsUavDimensions, desc->HsPassthroughRegisters, desc->HsPassthroughPositions) : NULL;
   graphics->Ds = desc->Ds ? create_shader(pipe, desc->Ds, MESA_SHADER_TESS_EVAL, &graphics->DsBindings, graphics->DsSrvDimensions, graphics->DsUavDimensions) : NULL;
@@ -1425,6 +1473,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   /* C32: multisampled rasterization follows the PSO sample count (D3D12
    * MultisampleEnable selects only the line algorithm) */
   rast.multisample = desc->SampleCount > 1 ? 1 : 0;
+  rast.rasterizer_discard = so && desc->So->Rasterized == 0xffffffffu ? 1 : 0; /* C39: D3D12_SO_NO_RASTERIZED_STREAM */
   graphics->SampleMask = desc->SampleMask;
   graphics->Rasterizer = pipe->create_rasterizer_state(pipe, &rast);
   HRESULT hr = graphics->Vs && (graphics->Fs || !desc->Ps) && (graphics->Gs || !desc->Gs) && (graphics->Hs || !desc->Hs) &&
@@ -2017,7 +2066,49 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
       indirect.indirect_draw_count_offset = static_cast<unsigned>(in->CountOffset);
     }
   }
+  /* C39: stream-output targets at the views' buffer ranges; the D3D12
+   * filled size (bytes written from BufferLocation) is the target's append
+   * offset: copied in before the draw and back out after it, on the GPU in
+   * submission order */
+  struct pipe_stream_output_target *so[4] = {};
+  unsigned so_count = 0;
+  for (unsigned t = 0; graphics->Xfb && t < 4; ++t) {
+    const auto &v = draw->So[t];
+    if (!v.Buffer || !v.Buffer->Resource || !v.Filled || !v.Filled->Resource || v.Offset > v.Buffer->Bytes ||
+        v.Size > v.Buffer->Bytes - v.Offset || v.Buffer->Bytes > 0xffffffffull || v.FilledOffset > 0x7ffffffbull ||
+        v.FilledOffset + 4u > v.Filled->Bytes)
+      continue;
+    so[t] = pipe->create_stream_output_target(pipe, static_cast<struct pipe_resource *>(v.Buffer->Resource),
+                                              static_cast<unsigned>(v.Offset), static_cast<unsigned>(v.Size));
+    struct pipe_resource *offset = so[t] ? AgxWin32AsahiStreamOutputOffset(so[t]) : NULL;
+    if (offset) {
+      struct pipe_box box = {}; /* R8_UNORM buffers: bytes */
+      box.x = static_cast<int>(v.FilledOffset);
+      box.width = 4;
+      box.height = box.depth = 1;
+      pipe->resource_copy_region(pipe, offset, 0, 0, 0, 0, static_cast<struct pipe_resource *>(v.Filled->Resource), 0, &box);
+    }
+    so_count = t + 1;
+  }
+  if (so_count) {
+    const unsigned append[4] = {~0u, ~0u, ~0u, ~0u};
+    pipe->set_stream_output_targets(pipe, so_count, so, append, mode);
+  }
   pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
+  if (so_count) {
+    pipe->set_stream_output_targets(pipe, 0, NULL, NULL, mode);
+    for (unsigned t = 0; t < so_count; ++t) {
+      if (!so[t]) continue;
+      if (struct pipe_resource *offset = AgxWin32AsahiStreamOutputOffset(so[t])) {
+        struct pipe_box box = {};
+        box.width = 4;
+        box.height = box.depth = 1;
+        pipe->resource_copy_region(pipe, static_cast<struct pipe_resource *>(draw->So[t].Filled->Resource), 0,
+                                   static_cast<unsigned>(draw->So[t].FilledOffset), 0, 0, offset, 0, &box);
+      }
+      pipe->stream_output_target_destroy(pipe, so[t]);
+    }
+  }
   /* the batch holds what the draw read; drop the stage bindings */
   unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
   unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);

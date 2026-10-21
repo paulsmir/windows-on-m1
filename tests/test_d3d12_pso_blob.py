@@ -65,7 +65,8 @@ int main() {
 class PsoBlob(unittest.TestCase):
     def test_blob_validation(self):
         ddi = DDI.read_text()
-        code = ddi[ddi.index('static constexpr UINT kPsoBlobMagic'):ddi.index('struct AgxD3d12PsoBlob {')]
+        code = 'static constexpr UINT kSoEntries = 64;\n' + block(ddi, 'struct AgxD3d12StreamOutput {') + ';\n'
+        code += ddi[ddi.index('static constexpr UINT kPsoBlobMagic'):ddi.index('struct AgxD3d12PsoBlob {')]
         code += block(ddi, 'struct AgxD3d12PsoBlob {') + ';\n'
         code += block(ddi, 'static SIZE_T PsoBlobBytes(') + '\n'
         compiler = shutil.which('clang++') or shutil.which('c++')

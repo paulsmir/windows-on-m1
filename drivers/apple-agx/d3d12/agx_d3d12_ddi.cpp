@@ -636,9 +636,18 @@ static VOID APIENTRY DestroyRootSignature(D3D12DDI_HDEVICE device_handle,
  * (pShaderCode[0] = program type and version, pShaderCode[1] = length in
  * DWORDs); compilation to AGX (DXBC -> NIR -> libagx) happens when a
  * pipeline state is created (C5). */
+/* C39 (D3D12-C39-stream-output.md): a stream-output declaration as
+ * pfnCreateGeometryShaderWithStreamOutput passes it (entries over
+ * kSoEntries or strides over 4 keep entries = UINT_MAX: refused at compile) */
+static constexpr UINT kSoEntries = 64;
+struct AgxD3d12StreamOutput {
+    UINT declared, entries, rasterized, num_strides, strides[4];
+    struct { UINT stream, slot, reg, mask; } entry[kSoEntries];
+};
 struct AgxD3d12Shader {
     UINT stage; /* the stage the runtime created it for (D3D10_SB program type) */
     UINT hs_registers, hs_positions; /* C37: a hull shader's pass-through registers */
+    AgxD3d12StreamOutput so; /* C39 */
     UINT dwords;
     UINT tokens[1];
 };
@@ -655,6 +664,7 @@ static void StoreShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HSHA
     }
     shader->stage = code[0] >> 16;
     shader->hs_registers = shader->hs_positions = 0;
+    shader->so.declared = 0;
     shader->dwords = code[1];
     memcpy(shader->tokens, code, code[1] * sizeof(UINT));
     const UINT receipt[] = {shader->stage, code[0] & 0xffffu, shader->dwords};
@@ -690,6 +700,45 @@ static VOID APIENTRY CreateTessellationShader(D3D12DDI_HDEVICE device, const UIN
     for (UINT i = 0; sig->pInputSignature && i < sig->NumInputSignatureEntries; ++i)
         if (sig->pInputSignature[i].Register < 32 && sig->pInputSignature[i].SystemValue == D3D10_SB_NAME_POSITION)
             shader->hs_positions |= 1u << sig->pInputSignature[i].Register;
+}
+/* C39: a geometry shader with stream output -- or, with the vertex
+ * shader's program or none, the stream output of a pipeline without a
+ * geometry shader -- keeps its program and its declaration */
+static SIZE_T APIENTRY CalcPrivateGeometryShaderWithStreamOutput(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT *arg,
+    const D3D12DDIARG_STAGE_IO_SIGNATURES *) {
+    return CalcPrivateShaderSize(device, arg ? arg->pShaderCode : nullptr, {}, nullptr);
+}
+static VOID APIENTRY CreateGeometryShaderWithStreamOutput(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT *arg, D3D12DDI_HSHADER handle,
+    const D3D12DDIARG_STAGE_IO_SIGNATURES *, D3D12DDI_CREATE_SHADER_FLAGS) {
+    auto *shader = static_cast<AgxD3d12Shader *>(handle.pDrvPrivate);
+    if (!arg || !shader) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    if (arg->pShaderCode) {
+        StoreShader(device, arg->pShaderCode, handle);
+    } else {
+        shader->stage = UINT_MAX;
+        shader->hs_registers = shader->hs_positions = 0;
+        shader->dwords = 0;
+    }
+    AgxD3d12StreamOutput &so = shader->so;
+    memset(&so, 0, sizeof(so));
+    so.declared = 1;
+    so.rasterized = arg->RasterizedStream;
+    const bool fits = arg->NumEntries <= kSoEntries && arg->NumStrides <= 4 && (!arg->NumEntries || arg->pOutputStreamDecl) &&
+                      (!arg->NumStrides || arg->BufferStridesInBytes);
+    so.entries = fits ? arg->NumEntries : UINT_MAX;
+    so.num_strides = fits ? arg->NumStrides : 0u;
+    for (UINT i = 0; fits && i < arg->NumEntries; ++i)
+        so.entry[i] = {arg->pOutputStreamDecl[i].Stream, arg->pOutputStreamDecl[i].OutputSlot,
+                       arg->pOutputStreamDecl[i].RegisterIndex, arg->pOutputStreamDecl[i].RegisterMask};
+    for (UINT i = 0; fits && i < arg->NumStrides; ++i) so.strides[i] = arg->BufferStridesInBytes[i];
+    const UINT receipt[] = {arg->pShaderCode ? shader->stage : UINT_MAX, arg->NumEntries, arg->NumStrides,
+                            arg->RasterizedStream, fits ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-so-shader", fits ? S_OK : E_NOTIMPL, receipt, 5);
 }
 static VOID APIENTRY DestroyShader(D3D12DDI_HDEVICE, D3D12DDI_HSHADER) {}
 /* C1h (EXP1352): after its internal vertex shader (VS 4.0, 15 DWORDs) the
@@ -908,6 +957,7 @@ struct AgxD3d12PipelineState {
     D3D12DDIARG_INPUT_ELEMENT_DESC element[kPipelineElements];
     UINT cs_dwords, vs_dwords, ps_dwords, gs_dwords;
     UINT hs_dwords, ds_dwords, hs_registers, hs_positions; /* C37 */
+    AgxD3d12StreamOutput so; /* C39: declared = the pipeline captures stream output */
     UINT cs[1]; /* the CS program, then the VS, the PS, the GS (C27), the HS and the DS (C37) */
 };
 static void PublishPsoIdentity(AgxD3d12PipelineState *pso, AgxD3d12Device *device) {
@@ -987,11 +1037,14 @@ static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE handle, const D3D12
         pso->ps_dwords = ps->dwords;
         memcpy(pso->cs + pso->cs_dwords + pso->vs_dwords, ps->tokens, ps->dwords * sizeof(UINT));
     }
-    /* C27: a geometry shader (pfnCreateGeometryShaderWithStreamOutput stays
-     * fail-closed, so this is a GS without stream output) */
+    /* C27: a geometry shader; C39: with stream output, whose object holds
+     * the vertex shader's program or none when the pipeline has no GS */
     if (const AgxD3d12Shader *gs = ShaderOf(arg->hGeometryShader)) {
-        pso->gs_dwords = gs->dwords;
-        memcpy(pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords, gs->tokens, gs->dwords * sizeof(UINT));
+        if (gs->so.declared) pso->so = gs->so;
+        if (gs->dwords && gs->stage == D3D10_SB_GEOMETRY_SHADER) {
+            pso->gs_dwords = gs->dwords;
+            memcpy(pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords, gs->tokens, gs->dwords * sizeof(UINT));
+        }
     }
     UINT *tess = pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords + pso->gs_dwords;
     if (const AgxD3d12Shader *hs = ShaderOf(arg->hHullShader)) { /* C37 */
@@ -2462,6 +2515,12 @@ struct AgxD3d12VertexBuffer {
     UINT64 offset;
     UINT stride;
 };
+/* C39: a stream-output view: the target range and its filled-size location */
+static constexpr UINT kSoTargets = 4;
+struct AgxD3d12SoTarget {
+    AgxD3d12Heap *heap, *filled;
+    UINT64 offset, size, filled_offset;
+};
 struct AgxD3d12Draw {
     AgxD3d12PipelineState *pso;
     /* C6c: the VS and PS root bindings (AgxD3d12Dispatch slot records) */
@@ -2482,6 +2541,7 @@ struct AgxD3d12Draw {
     UINT index_size;
     INT base_vertex;
     AgxD3d12Indirect indirect; /* C14 */
+    AgxD3d12SoTarget so[kSoTargets]; /* C39 */
 };
 /* C6f: a recorded ClearDepthStencilView */
 struct AgxD3d12ClearDepth {
@@ -2584,6 +2644,7 @@ struct AgxD3d12CommandList {
     RECT scissor;
     UINT topology;
     AgxD3d12VertexBuffer vb[kVertexBuffers];
+    AgxD3d12SoTarget so[kSoTargets]; /* C39 */
     FLOAT blend_factor[4];
     UINT stencil_ref;
     /* C6d: the index buffer view */
@@ -2674,6 +2735,7 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     memset(&list->scissor, 0, sizeof(list->scissor));
     list->topology = 0;
     memset(list->vb, 0, sizeof(list->vb));
+    memset(list->so, 0, sizeof(list->so));
     memset(list->blend_factor, 0, sizeof(list->blend_factor));
     list->stencil_ref = 0;
     list->index_heap = nullptr;
@@ -3312,9 +3374,11 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 #define AGX_VB_SETTER IASetVertexBuffers
 #define AGX_IB_SETTER IASetIndexBuffer
+#define AGX_SO_SETTER SoSetTargets
 #else
 #define AGX_VB_SETTER AGX_LIST_STATE(pfnIASetVertexBuffers)
 #define AGX_IB_SETTER AGX_LIST_STATE(pfnIASetIndexBuffer)
+#define AGX_SO_SETTER AGX_LIST_STATE(pfnSOSetTargets)
 #endif
 #define AGX_LIST_BIT(M) (1ULL << ((offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, M) / sizeof(void *)) & 63u))
 static VOID APIENTRY OMSetRenderTargets(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDI_CPU_DESCRIPTOR_HANDLE *rtvs,
@@ -3416,6 +3480,26 @@ static VOID APIENTRY IASetVertexBuffers(D3D12DDI_HCOMMANDLIST handle, UINT start
         if (!vb.heap) ListError(list, E_INVALIDARG);
     }
 }
+/* C39: stream-output views; a zero BufferLocation unbinds the slot */
+static VOID APIENTRY SoSetTargets(D3D12DDI_HCOMMANDLIST handle, UINT start, UINT count,
+                                  const D3D12DDI_STREAM_OUTPUT_BUFFER_VIEW *views) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!list) return;
+    list->state |= AGX_LIST_BIT(pfnSOSetTargets);
+    for (UINT i = 0; i < count && start + i < kSoTargets; ++i) {
+        AgxD3d12SoTarget &t = list->so[start + i];
+        t = {};
+        if (!views || !views[i].BufferLocation) continue;
+        t.heap = HeapAt(list->device, views[i].BufferLocation, &t.offset);
+        t.filled = views[i].BufferFilledSizeLocation
+                       ? HeapAt(list->device, views[i].BufferFilledSizeLocation, &t.filled_offset) : nullptr;
+        t.size = views[i].SizeInBytes;
+        if (!t.heap || !t.filled) {
+            t = {};
+            ListError(list, E_INVALIDARG);
+        }
+    }
+}
 /* C6d: R16_UINT/R32_UINT index buffers; a null view unbinds */
 static VOID APIENTRY IASetIndexBuffer(D3D12DDI_HCOMMANDLIST handle, const D3D12DDI_INDEX_BUFFER_VIEW *view) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
@@ -3447,6 +3531,16 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
     desc.Ds = pso->ds_dwords ? tess + pso->hs_dwords : nullptr;
     desc.HsPassthroughRegisters = pso->hs_registers;
     desc.HsPassthroughPositions = pso->hs_positions;
+    AGX_D3D12_SO_DECL so = {}; /* C39 */
+    if (pso->so.declared) {
+        so.Entries = pso->so.entries;
+        so.Rasterized = pso->so.rasterized;
+        so.NumStrides = pso->so.num_strides;
+        for (UINT i = 0; i < 4; ++i) so.Strides[i] = pso->so.strides[i];
+        for (UINT i = 0; i < kSoEntries && i < pso->so.entries; ++i)
+            so.Entry[i] = {pso->so.entry[i].stream, pso->so.entry[i].slot, pso->so.entry[i].reg, pso->so.entry[i].mask};
+        desc.So = &so;
+    }
     desc.AlphaToCoverage = pso->blend.AlphaToCoverageEnable;
     desc.IndependentBlend = pso->blend.IndependentBlendEnable;
     for (UINT i = 0; i < 8; ++i) {
@@ -3674,7 +3768,7 @@ static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE handle, D3D12DDI_HPIP
  * at its first use, as a created one. The runtime wraps the blob with its
  * own adapter and driver-version header. */
 static constexpr UINT kPsoBlobMagic = 0x50584741u; /* "AGXP" */
-static constexpr UINT kPsoBlobVersion = 1u;
+static constexpr UINT kPsoBlobVersion = 2u; /* 2: C39 stream output */
 struct AgxD3d12PsoBlob {
     UINT magic, version, bytes;
     UINT ib_strip_cut, sample_mask, sample_count, sample_quality;
@@ -3683,6 +3777,7 @@ struct AgxD3d12PsoBlob {
     D3D12DDI_DEPTH_STENCIL_DESC depth_stencil;
     UINT elements;
     D3D12DDIARG_INPUT_ELEMENT_DESC element[kPipelineElements];
+    AgxD3d12StreamOutput so;
     UINT cs_dwords, vs_dwords, ps_dwords, gs_dwords, hs_dwords, ds_dwords, hs_registers, hs_positions;
     UINT tokens[1];
 };
@@ -3730,6 +3825,7 @@ static HRESULT APIENTRY SerializeObject(D3D12DDI_HDEVICE, D3D12DDI_HANDLETYPE ty
     blob->depth_stencil = pso->depth_stencil;
     blob->elements = pso->elements;
     memcpy(blob->element, pso->element, sizeof(blob->element));
+    blob->so = pso->so;
     blob->cs_dwords = pso->cs_dwords;
     blob->vs_dwords = pso->vs_dwords;
     blob->ps_dwords = pso->ps_dwords;
@@ -3777,6 +3873,7 @@ static HRESULT APIENTRY CreateDeserializedObject(D3D12DDI_HDEVICE handle, D3D12D
     pso->depth_stencil = blob->depth_stencil;
     pso->elements = blob->elements;
     memcpy(pso->element, blob->element, sizeof(pso->element));
+    pso->so = blob->so;
     pso->cs_dwords = blob->cs_dwords;
     pso->vs_dwords = blob->vs_dwords;
     pso->ps_dwords = blob->ps_dwords;
@@ -4059,6 +4156,7 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
     UINT refusal = !pso || !pso->vs_dwords ? 1u
                  : !pso->hs_dwords != !pso->ds_dwords ? 4u
                  : (list->topology >= 33u && list->topology <= 64u) != (pso->hs_dwords != 0) ? 9u /* C37: patches <=> HS+DS */
+                 : pso->so.declared && pso->hs_dwords ? 10u /* C39: stream output after tessellation */
                  : (!list->rtvs || !list->rtv[0].heap) && list->dsv.kind != kDescriptorDsv ? 5u
                  : indexed && !list->index_heap ? 6u
                  : indirect && indexed && list->index_offset ? 8u /* C14: Gallium takes the start index from the arguments */
@@ -4107,6 +4205,7 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
     draw.scissor = list->scissor;
     draw.topology = list->topology;
     memcpy(draw.vb, list->vb, sizeof(draw.vb));
+    if (pso->so.declared) memcpy(draw.so, list->so, sizeof(draw.so)); /* C39 */
     memcpy(draw.blend_factor, list->blend_factor, sizeof(draw.blend_factor));
     draw.stencil_ref = list->stencil_ref;
     draw.vertices = vertices;
@@ -4443,6 +4542,7 @@ static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const
 }
 struct AgxD3d12DrawScratch {
     AGX_D3D12_BUFFER rtv_textures[8], vb_buffers[kVertexBuffers], dsv_texture, index_buffer, indirect_args, indirect_count;
+    AGX_D3D12_BUFFER so_buffers[kSoTargets], so_filled[kSoTargets]; /* C39 */
     AGX_D3D12_DRAW draw;
     AgxD3d12OwnerBindings vs_bind, ps_bind, gs_bind, hs_bind, ds_bind;
 };
@@ -4514,6 +4614,16 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
         draw.Vb[v].Stride = d.vb[v].stride;
     }
     memcpy(draw.BlendFactor, d.blend_factor, sizeof(draw.BlendFactor));
+    for (UINT t = 0; t < kSoTargets; ++t) { /* C39 */
+        if (!d.so[t].heap || !d.so[t].filled) continue;
+        scratch->so_buffers[t] = HeapBuffer(d.so[t].heap);
+        scratch->so_filled[t] = HeapBuffer(d.so[t].filled);
+        draw.So[t].Buffer = &scratch->so_buffers[t];
+        draw.So[t].Filled = &scratch->so_filled[t];
+        draw.So[t].Offset = d.so[t].offset;
+        draw.So[t].Size = d.so[t].size;
+        draw.So[t].FilledOffset = d.so[t].filled_offset;
+    }
     draw.StencilRef = d.stencil_ref;
     draw.VertexCount = d.vertices;
     draw.InstanceCount = d.instances;
@@ -4822,8 +4932,8 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreatePixelShader, CreateShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShader, CreateShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateComputeShader, CreateComputeShader);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateGeometryShaderWithStreamOutput, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateGeometryShaderWithStreamOutput));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShaderWithStreamOutput, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShaderWithStreamOutput));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateGeometryShaderWithStreamOutput, CalcPrivateGeometryShaderWithStreamOutput); /* C39 */
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShaderWithStreamOutput, CreateGeometryShaderWithStreamOutput);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateTessellationShaderSize, CalcPrivateTessellationShaderSize); /* C37 */
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader, CreateTessellationShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader, CreateTessellationShader);
@@ -5085,7 +5195,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, Bundled<SetGraphicsRootUnorderedAccessView>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, BundledIndexBuffer);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, BundledVertexBuffers);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets, AGX_LIST_STATE(pfnSOSetTargets));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets, AGX_SO_SETTER); /* C39 */
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOMSetRenderTargets, OMSetRenderTargets);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, Bundled<SetMarker>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments, ClearRootArguments);

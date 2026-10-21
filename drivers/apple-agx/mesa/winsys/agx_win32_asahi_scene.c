@@ -376,6 +376,9 @@ int AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
   util_range_add(&offset->base,&offset->valid_buffer_range,0,sizeof(value));
   return 1;
 }
+struct pipe_resource *AgxWin32AsahiStreamOutputOffset(struct pipe_stream_output_target *base) {
+  return base?agx_so_target(base)->offset:NULL;
+}
 int AgxWin32AsahiContextFaulted(struct pipe_context *ctx) {
   return !ctx || agx_context(ctx)->any_faults;
 }

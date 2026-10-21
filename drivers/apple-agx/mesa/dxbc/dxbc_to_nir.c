@@ -3114,6 +3114,17 @@ dxbc_translate_tokens_bindings_hs(const uint32_t *tokens,
    uint32_t passthrough_registers, uint32_t passthrough_positions,
    struct dxbc_nir_error *error)
 {
+   return dxbc_translate_tokens_bindings_xfb(tokens, options, limits, map, passthrough_registers,
+                                             passthrough_positions, NULL, error);
+}
+
+struct nir_shader *
+dxbc_translate_tokens_bindings_xfb(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   uint32_t passthrough_registers, uint32_t passthrough_positions,
+   const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error)
+{
    struct dxbc_nir_error ignored;
    struct dxbc_program program;
    struct dxbc_error perr = {0};
@@ -3133,7 +3144,7 @@ dxbc_translate_tokens_bindings_hs(const uint32_t *tokens,
       status = dxbc_prepare_static_bindings(&program, limits, map, &perr);
       if (status == DXBC_OK) {
          nir_shader *nir = translate(&program, options, passthrough_registers,
-                                     passthrough_positions, NULL, error);
+                                     passthrough_positions, xfb, error);
          dxbc_program_free(&program);
          if (nir)
             dxbc_nir_finalize(nir);

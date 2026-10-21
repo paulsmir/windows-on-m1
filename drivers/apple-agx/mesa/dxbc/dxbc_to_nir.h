@@ -131,6 +131,15 @@ dxbc_translate_tokens_xfb(const uint32_t *tokens,
                           const struct dxbc_nir_xfb *xfb,
                           struct dxbc_nir_error *error);
 
+/* C39: dxbc_translate_tokens_bindings_hs that also captures stream output as
+ * dxbc_translate_tokens_xfb does (xfb NULL captures nothing). */
+struct nir_shader *
+dxbc_translate_tokens_bindings_xfb(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   uint32_t passthrough_registers, uint32_t passthrough_positions,
+   const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error);
+
 /* Capture immutable direct-slot cube requirements before shader creation
  * consumes NIR.  False for dynamic/ambiguous bindings; output is cleared. */
 bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,

@@ -122,8 +122,10 @@ class D3d12AbiGate(unittest.TestCase):
                            ('pfnCreateHullShader', 'CreateTessellationShader'), ('pfnCreateDomainShader', 'CreateTessellationShader'),
                            ('pfnCreateComputeShader', 'CreateComputeShader'), ('pfnDestroyShader', 'DestroyShader')):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, fn), source)
-        for member in ('pfnCreateGeometryShaderWithStreamOutput',):
-            self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
+        # C39: stream output keeps its declaration with the program
+        for member, fn in (('pfnCalcPrivateGeometryShaderWithStreamOutput', 'CalcPrivateGeometryShaderWithStreamOutput'),
+                           ('pfnCreateGeometryShaderWithStreamOutput', 'CreateGeometryShaderWithStreamOutput')):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, fn), source)
         self.assertIn('memcpy(shader->tokens, code, code[1] * sizeof(UINT));', source)
         self.assertIn('(dwords ? dwords : 1) * sizeof(UINT)', source)
         # C1h (EXP1352): the four state objects a graphics pipeline state
@@ -252,7 +254,7 @@ class D3d12AbiGate(unittest.TestCase):
         implemented = set(re.findall(r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, (\w+), (?!AGX_REJECT)', source))
         # EXP1363: the runtime's default-state setters are accepted (recorded
         # as received state); every state consumer stays fail-closed.
-        setters = {'pfnSetPredication', 'pfnSetDescriptorHeaps', 'pfnSOSetTargets'}
+        setters = {'pfnSetPredication', 'pfnSetDescriptorHeaps'}
         compute = {'pfnSetPipelineState', 'pfnSetComputeRootSignature', 'pfnSetComputeRootUnorderedAccessView',
                    'pfnDispatch', 'pfnClearRootArguments', 'pfnSetComputeRoot32BitConstant',
                    'pfnSetComputeRoot32BitConstants', 'pfnSetComputeRootConstantBufferView',
@@ -276,6 +278,7 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnExecuteBundle'}  # C30: the bundle call log (test_d3d12_bundles)
         compute |= {'pfnResourceResolveSubresource'}  # C32: multisample resolve
         compute |= {'pfnSetGraphicsRootUnorderedAccessView'}  # C13 (EXP1375)
+        compute |= {'pfnSOSetTargets'}  # C39: stream-output views
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
