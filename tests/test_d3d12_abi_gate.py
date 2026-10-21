@@ -619,7 +619,7 @@ class D3d12AbiGate(unittest.TestCase):
         bindings = fn('static void OwnerBindings(')
         self.assertIn('view->kind == kDescriptorSrvTexture', bindings)
         self.assertIn('{0, 0, 0, 0}, {0, 0, 0, 1}, {1, 1, 1, 1}, {0, 0, 0, 1}, {1, 1, 1, 1}', bindings)
-        self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSampler);', source)
+        self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSamplerInHeap);', source) # C47
 
     def test_c6f_depth(self):
         # C6f invariants: depth textures carry the depth-stencil bind (typeless

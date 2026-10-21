@@ -1889,7 +1889,9 @@ static constexpr UINT kCbvSrvUavDescriptorBytes = 128u;
 static constexpr UINT kHeapRanges = 8u; /* DXBC_HEAP_RANGE_MAX */
 static constexpr UINT kHeapFormOffset = 64u;
 static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
-    if (type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) return kCbvSrvUavDescriptorBytes;
+    /* C47: sampler descriptors carry a heap form (AgxD3d12SamplerForm) too */
+    if (type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV || type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER)
+        return kCbvSrvUavDescriptorBytes;
     return 64u; /* C6e: a sampler record (kind + D3D12DDI_SAMPLER_DESC) needs 56 bytes */
 }
 static UINT APIENTRY GetDescriptorSizeInBytes(D3D12DDI_HDEVICE, D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
@@ -1942,7 +1944,14 @@ struct AgxD3d12SamplerDescriptor {
     UINT kind; /* kDescriptorSampler */
     D3D12DDI_SAMPLER_DESC desc;
 };
-static_assert(sizeof(AgxD3d12SamplerDescriptor) <= 64, "fits a sampler descriptor");
+static_assert(sizeof(AgxD3d12SamplerDescriptor) <= kHeapFormOffset, "fits a sampler descriptor");
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C47: a sampler descriptor's heap form behind its CPU record */
+static_assert(kHeapFormOffset + sizeof(AGX_D3D12_HEAP_SAMPLER) <= kCbvSrvUavDescriptorBytes, "the sampler heap form fits");
+static AGX_D3D12_HEAP_SAMPLER *SamplerFormOf(void *descriptor) {
+    return reinterpret_cast<AGX_D3D12_HEAP_SAMPLER *>(static_cast<BYTE *>(descriptor) + kHeapFormOffset);
+}
+#endif
 static_assert(sizeof(AgxD3d12Descriptor) <= kHeapFormOffset, "fits a CBV/SRV/UAV descriptor");
 /* C47: the heap form: Asahi's packed texture descriptor of the view (null
  * for anything but a texture SRV), room for a PBE descriptor (typed UAVs),
@@ -2607,6 +2616,8 @@ struct AgxD3d12Dispatch {
     AgxD3d12Heap *descriptors;
     UINT heap_first[kHeapRanges];
     UINT heap_ranges;
+    AgxD3d12Heap *sampler_descriptors; /* C47: the shader-visible sampler heap of heap sampler ranges */
+    UINT heap_sampler_mask;            /* the heap ranges that are sampler ranges */
 };
 /* C6a: a recorded ClearRenderTargetView (the RTV read at record time) */
 static constexpr UINT kClearRects = 8;
@@ -4088,14 +4099,19 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
     if (map.count > DXBC_BINDING_MAP_MAX) return 5u;
     memcpy(out->root_dwords, dwords, kRootArguments * sizeof(UINT));
     out->descriptors = nullptr;
+    out->sampler_descriptors = nullptr;
     out->heap_ranges = 0;
+    out->heap_sampler_mask = 0;
     for (UINT m = 0; m < map.count; ++m) {
         const struct dxbc_binding &binding = map.bindings[m];
         const UINT slot = binding.slot;
         if (binding.flags & DXBC_BINDING_HEAP) {
             /* C47: a heap range reads the shader-visible heap from the heap
              * index of the table entry its first register names */
-            if ((binding.kind != DXBC_BINDING_SRV && binding.kind != DXBC_BINDING_UAV) || slot >= kHeapRanges) return 5u;
+            if (binding.kind == DXBC_BINDING_CBV || slot >= kHeapRanges) return 5u;
+            const bool sampler = binding.kind == DXBC_BINDING_SAMPLER;
+            const UINT stride = DescriptorBytes(sampler ? D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER
+                                                        : D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
             bool found = false;
             for (UINT i = 0; root && i < root->parameters; ++i) {
                 const AgxD3d12RootParameter &p = root->parameter[i];
@@ -4112,10 +4128,11 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
                     if (found || range.offset == UINT_MAX) return 5u;
                     UINT64 offset = 0;
                     AgxD3d12Heap *heap = HeapAt(list->device, va[i], &offset);
-                    if (!heap || !heap->cpu || offset % kCbvSrvUavDescriptorBytes ||
-                        (out->descriptors && out->descriptors != heap)) return 6u;
-                    out->descriptors = heap;
-                    out->heap_first[slot] = static_cast<UINT>(offset / kCbvSrvUavDescriptorBytes) + range.offset + delta;
+                    AgxD3d12Heap *&bound = sampler ? out->sampler_descriptors : out->descriptors;
+                    if (!heap || !heap->cpu || offset % stride || (bound && bound != heap)) return 6u;
+                    bound = heap;
+                    if (sampler) out->heap_sampler_mask |= 1u << slot;
+                    out->heap_first[slot] = static_cast<UINT>(offset / stride) + range.offset + delta;
                     if (slot >= out->heap_ranges) out->heap_ranges = slot + 1;
                     found = true;
                 }
@@ -4571,6 +4588,20 @@ static void OwnerSampler(const D3D12DDI_SAMPLER_DESC &d, AGX_D3D12_SAMPLER *s) {
     s->MaxLod = d.MaxLOD;
     memcpy(s->BorderColor, d.BorderColor, sizeof(s->BorderColor));
 }
+/* C47: a sampler written into a sampler heap also gets its heap form (the
+ * packed AGX sampler shaders take from the batch's sampler heap) */
+static void FillSamplerForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    auto *out = reinterpret_cast<AgxD3d12SamplerDescriptor *>(dest.ptr);
+    if (!out) return;
+    AGX_D3D12_HEAP_SAMPLER *form = SamplerFormOf(out);
+    memset(form, 0, sizeof(*form));
+    AgxD3d12Device *device = DeviceOf(handle);
+    AGX_D3D12_OWNER *owner = device && out->kind == kDescriptorSampler ? EnsureOwner(device) : nullptr;
+    if (!owner) return;
+    AGX_D3D12_SAMPLER sampler = {};
+    OwnerSampler(out->desc, &sampler);
+    if (FAILED(AgxD3d12OwnerSamplerDescriptor(owner, &sampler, form))) memset(form, 0, sizeof(*form));
+}
 /* C9/C10: the owner UAV of a UAV descriptor -- raw/structured or typed
  * buffer range, or (image u#) a texture level and slice range */
 static bool DescriptorUav(const AgxD3d12Descriptor &view, AGX_D3D12_BUFFER *buffer, AGX_D3D12_UAV *uav) {
@@ -4717,24 +4748,42 @@ struct AgxD3d12HeapScratch {
     AGX_D3D12_BUFFER heap;
     AGX_D3D12_BUFFER textures[kHeapTextures];
     AGX_D3D12_BUFFER writes[kHeapTextures];
+    AGX_D3D12_HEAP_SAMPLER samplers[DXBC_HEAP_SAMPLER_MAP_MAX];
     AGX_D3D12_HEAP_BINDING binding;
 };
 static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch) {
-    if (!b || !b->descriptors || !b->heap_ranges) return AgxD3d12OwnerSetHeap(owner, stage, nullptr);
+    if (!b || (!b->descriptors && !b->sampler_descriptors) || !b->heap_ranges)
+        return AgxD3d12OwnerSetHeap(owner, stage, nullptr);
     if (!*scratch) *scratch = static_cast<AgxD3d12HeapScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12HeapScratch)));
     if (!*scratch) return E_OUTOFMEMORY;
     AgxD3d12HeapScratch &h = **scratch;
     memset(&h.binding, 0, sizeof(h.binding));
-    h.heap = HeapBuffer(b->descriptors);
-    h.binding.Heap = &h.heap;
     h.binding.Ranges = b->heap_ranges;
     h.binding.Textures = h.textures;
     h.binding.Writes = h.writes;
-    UINT lowest = UINT_MAX;
+    h.binding.Samplers = h.samplers;
+    UINT lowest = UINT_MAX, lowest_sampler = UINT_MAX;
     for (UINT r = 0; r < b->heap_ranges; ++r) {
         h.binding.First[r][0] = b->heap_first[r];
-        if (b->heap_first[r] < lowest) lowest = b->heap_first[r];
+        UINT &low = b->heap_sampler_mask & (1u << r) ? lowest_sampler : lowest;
+        if (b->heap_first[r] < low) low = b->heap_first[r];
     }
+    if (b->sampler_descriptors && lowest_sampler != UINT_MAX) {
+        /* C47: the sampler map covers the heap from the lowest sampler range */
+        const UINT samplers = static_cast<UINT>(b->sampler_descriptors->bytes / kCbvSrvUavDescriptorBytes);
+        for (UINT r = 0; r < b->heap_ranges; ++r)
+            if (b->heap_sampler_mask & (1u << r)) h.binding.First[r][1] = lowest_sampler;
+        for (UINT i = lowest_sampler; i < samplers && h.binding.SamplerCount < DXBC_HEAP_SAMPLER_MAP_MAX; ++i) {
+            void *d = static_cast<BYTE *>(b->sampler_descriptors->cpu) + static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes;
+            const bool valid = reinterpret_cast<const AgxD3d12SamplerDescriptor *>(d)->kind == kDescriptorSampler;
+            h.samplers[h.binding.SamplerCount] = *SamplerFormOf(d);
+            if (!valid) h.samplers[h.binding.SamplerCount].Valid = 0;
+            ++h.binding.SamplerCount;
+        }
+    }
+    if (!b->descriptors) return AgxD3d12OwnerSetHeap(owner, stage, &h.binding);
+    h.heap = HeapBuffer(b->descriptors);
+    h.binding.Heap = &h.heap;
     const UINT count = static_cast<UINT>(b->descriptors->bytes / kCbvSrvUavDescriptorBytes);
     for (UINT i = lowest; i < count; ++i) {
         auto *view = reinterpret_cast<AgxD3d12Descriptor *>(static_cast<BYTE *>(b->descriptors->cpu) +
@@ -5182,6 +5231,13 @@ static void FillD3D12DDI_ADAPTERFUNCS(D3D12DDI_ADAPTERFUNCS &f) {
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnFillDDITable, FillDDITable);
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnDestroyDevice, DestroyDevice);
 }
+static VOID APIENTRY CreateSamplerInHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SAMPLER *arg,
+                                         D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    CreateSampler(handle, arg, dest);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    FillSamplerForm(handle, dest); /* C47 */
+#endif
+}
 static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 &f) {
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckFormatSupport, CheckFormatSupport);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckMultisampleQualityLevels, CheckMultisampleQualityLevels);
@@ -5233,7 +5289,7 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetGPUDescriptorHandleForHeapStart, GetGPUDescriptorHandleForHeapStart);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView, CreateShaderResourceViewInHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateConstantBufferView, CreateConstantBufferViewInHeap);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSampler);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSamplerInHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateUnorderedAccessView, CreateUnorderedAccessViewInHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRenderTargetView, CreateRenderTargetView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView, CreateDepthStencilView);

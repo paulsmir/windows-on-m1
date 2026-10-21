@@ -421,7 +421,22 @@ typedef struct {
   unsigned TextureCount;
   const AGX_D3D12_BUFFER *Writes; /* resources its UAV descriptors let the shader write */
   unsigned WriteCount;
+  /* heap sampler ranges: the sampler-heap entries from the lowest range
+   * start (First[range][1]), each becoming one dword of the map after
+   * First in constant buffer DXBC_HEAP_TABLE_CB */
+  const struct AGX_D3D12_HEAP_SAMPLER *Samplers;
+  unsigned SamplerCount;
 } AGX_D3D12_HEAP_BINDING;
+/* C47: a sampler-heap entry's heap form (AgxD3d12OwnerSamplerDescriptor) */
+typedef struct AGX_D3D12_HEAP_SAMPLER {
+  uint8_t Packed[8];
+  uint16_t Bias;  /* MipLODBias, fp16 */
+  uint16_t Valid;
+} AGX_D3D12_HEAP_SAMPLER;
+/* C47: a sampler's heap form; S_FALSE when it needs a custom border colour,
+ * which the heap path reads as transparent black */
+HRESULT AgxD3d12OwnerSamplerDescriptor(AGX_D3D12_OWNER *Owner, const AGX_D3D12_SAMPLER *Sampler,
+                                       AGX_D3D12_HEAP_SAMPLER *Out);
 HRESULT AgxD3d12OwnerSetHeap(AGX_D3D12_OWNER *Owner, unsigned Stage, const AGX_D3D12_HEAP_BINDING *Binding);
 /* Records one draw; bindings that reference heaps are dropped by the next
  * AgxD3d12OwnerSubmitAndWait. */

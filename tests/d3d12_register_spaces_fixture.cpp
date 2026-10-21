@@ -27,6 +27,7 @@ struct AgxD3d12CommandList {void *device; FakePso *pso;};
 struct AgxD3d12Dispatch {
  AgxD3d12Heap *uav_heap[8]={},*cb_heap[14]={},*srv_heap[128]={};
  AgxD3d12Heap *descriptors=nullptr; UINT heap_first[8]={}, heap_ranges=0; /* C47 */
+ AgxD3d12Heap *sampler_descriptors=nullptr; UINT heap_sampler_mask=0;
  UINT64 uav_offset[8]={},cb_offset[14]={},srv_offset[128]={};
  UINT cb_constants[14]={},cb_count[14]={},root_dwords[64]={};
  const AgxD3d12Descriptor *uav_descriptor[8]={},*cb_descriptor[14]={},*srv_descriptor[128]={};

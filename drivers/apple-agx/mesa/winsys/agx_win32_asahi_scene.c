@@ -334,6 +334,44 @@ int AgxWin32AsahiImageDescriptors(struct pipe_context *ctx, const struct pipe_im
   return 1;
 }
 unsigned AgxWin32AsahiPbeDescriptorBytes(void) { return AGX_PBE_LENGTH; }
+/* D3D12 C47: a sampler CSO's heap form: the AGX sampler without custom
+ * border (the form Asahi's sampler heap takes, agx_uniforms.c), its LOD
+ * bias as fp16 and whether it needs a custom border colour */
+unsigned AgxWin32AsahiSamplerDescriptorBytes(void) { return AGX_SAMPLER_LENGTH; }
+int AgxWin32AsahiSamplerDescriptor(void *cso, void *out, APPLE_AGX_U16 *bias, int *custom_border) {
+  struct agx_sampler_state *so=cso;
+  if(!so || !out || !bias || !custom_border) return 0;
+  memcpy(out,&so->desc_without_custom_border,AGX_SAMPLER_LENGTH);
+  *bias=so->lod_bias_as_fp16;
+  *custom_border=so->uses_custom_border;
+  return 1;
+}
+/* D3D12 C47: heap samplers enter the sampler heap of the batch the next draw
+ * (dispatch) uses, deduplicated; handles are 28 + heap index (agx_uniforms.c).
+ * A batch whose heap cannot take them all is flushed first. */
+int AgxWin32AsahiBatchSamplerHandles(struct pipe_context *pctx, int compute, const void *packed,
+    unsigned stride, unsigned count, APPLE_AGX_U16 *handles) {
+  if(!pctx || !count) return 1;
+  if(!packed || !handles || count>AGX_SAMPLER_HEAP_SIZE) return 0;
+  struct agx_context *ctx=agx_context(pctx);
+  struct agx_device *dev=agx_device(pctx->screen);
+  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  if(batch->sampler_heap.count+count>AGX_SAMPLER_HEAP_SIZE) {
+    agx_flush_batch_for_reason(ctx,batch,"D3D12 heap samplers");
+    batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  }
+  for(unsigned i=0;i<count;++i) {
+    const struct agx_sampler_packed *sampler=(const struct agx_sampler_packed *)((const char *)packed+(size_t)i*stride);
+    const struct agx_sampler_packed *heap=batch->sampler_heap.bo ? agx_bo_map(batch->sampler_heap.bo) : NULL;
+    unsigned index=batch->sampler_heap.count;
+    for(unsigned j=0;heap && j<batch->sampler_heap.count;++j)
+      if(!memcmp(&heap[j],sampler,sizeof(*sampler))) { index=j; break; }
+    if(index==batch->sampler_heap.count)
+      index=agx_sampler_heap_add(dev,&batch->sampler_heap,(struct agx_sampler_packed *)sampler);
+    handles[i]=(APPLE_AGX_U16)(28u+index);
+  }
+  return 1;
+}
 void AgxWin32AsahiNullPbeDescriptor(void *out) {
   if(out) agx_set_null_pbe((struct agx_pbe_packed *)out);
 }

@@ -68,8 +68,10 @@ struct AGX_D3D12_OWNER {
   /* receipt-only (measure-d3d12-owner-fences): the newest submission fence
    * the previous submit reported */
   unsigned long long ReportedFence;
-  /* C47: the heap bindings the next draw or dispatch uses (AgxD3d12OwnerSetHeap) */
+  /* C47: the heap bindings the next draw or dispatch uses (AgxD3d12OwnerSetHeap)
+   * and their constant buffer DXBC_HEAP_TABLE_CB (range table + sampler map) */
   AGX_D3D12_HEAP_BINDING PendingHeaps[AGX_D3D12_HEAP_STAGES];
+  uint32_t HeapTables[AGX_D3D12_HEAP_STAGES][4 * AGX_D3D12_HEAP_RANGES + DXBC_HEAP_SAMPLER_MAP_MAX];
   /* EXP1829 (Multithreading's shadow pass): a PSO without a pixel shader
    * draws with this empty one -- Asahi always reads the bound FS */
   void *EmptyFs;
@@ -367,7 +369,7 @@ extern "C" HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUF
 /* C47: SRV ranges beyond the slots (or unbounded) read the descriptor heap */
 static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
   AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS | DXBC_BINDING_HEAP_RANGES, AGX_D3D12_UAV_SLOTS | DXBC_BINDING_HEAP_RANGES,
-  AGX_D3D12_SAMPLER_SLOTS
+  AGX_D3D12_SAMPLER_SLOTS | DXBC_BINDING_HEAP_RANGES
 };
 extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,
                                               AGX_D3D12_COMPUTE *compute) {
@@ -1707,6 +1709,24 @@ extern "C" HRESULT AgxD3d12OwnerUavDescriptor(AGX_D3D12_OWNER *owner, const AGX_
   return S_OK;
 }
 
+extern "C" HRESULT AgxD3d12OwnerSamplerDescriptor(AGX_D3D12_OWNER *owner, const AGX_D3D12_SAMPLER *sampler,
+                                                  AGX_D3D12_HEAP_SAMPLER *out) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Context || !sampler || !out || AgxWin32AsahiSamplerDescriptorBytes() != sizeof(out->Packed))
+    return E_INVALIDARG;
+  memset(out, 0, sizeof(*out));
+  void *state = sampler->Valid ? create_sampler(owner->Context, sampler) : NULL;
+  if (!state) return E_INVALIDARG;
+  APPLE_AGX_U16 bias = 0;
+  int custom = 0;
+  const int packed = AgxWin32AsahiSamplerDescriptor(state, out->Packed, &bias, &custom);
+  owner->Context->delete_sampler_state(owner->Context, state);
+  if (!packed) return E_FAIL;
+  out->Bias = bias;
+  out->Valid = 1;
+  return custom ? S_FALSE : S_OK;
+}
+
 /* C18: Asahi composes this view swizzle with the format's own swizzle.
  * PIPE_SWIZZLE_1 retains the image format's integer/float ONE semantics. */
 static bool srv_component_mapping(unsigned mapping, struct pipe_sampler_view *view) {
@@ -1799,9 +1819,9 @@ extern "C" unsigned long long AgxD3d12OwnerLayoutKey(AGX_D3D12_OWNER *owner, con
 extern "C" HRESULT AgxD3d12OwnerSetHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AGX_D3D12_HEAP_BINDING *binding) {
   OwnerLock lock(owner);
   if (!owner || stage >= AGX_D3D12_HEAP_STAGES) return E_INVALIDARG;
-  if (binding && binding->Heap && (!binding->Heap->Resource || binding->Ranges > AGX_D3D12_HEAP_RANGES ||
-                                   (binding->TextureCount && !binding->Textures) ||
-                                   (binding->WriteCount && !binding->Writes)))
+  if (binding && ((binding->Heap && !binding->Heap->Resource) || binding->Ranges > AGX_D3D12_HEAP_RANGES ||
+                  (binding->TextureCount && !binding->Textures) || (binding->WriteCount && !binding->Writes) ||
+                  (binding->SamplerCount && !binding->Samplers) || binding->SamplerCount > DXBC_HEAP_SAMPLER_MAP_MAX))
     return E_INVALIDARG;
   if (binding) owner->PendingHeaps[stage] = *binding;
   else memset(&owner->PendingHeaps[stage], 0, sizeof(owner->PendingHeaps[stage]));
@@ -1810,7 +1830,9 @@ extern "C" HRESULT AgxD3d12OwnerSetHeap(AGX_D3D12_OWNER *owner, unsigned stage, 
 static const mesa_shader_stage heap_stages[AGX_D3D12_HEAP_STAGES] = {
   MESA_SHADER_VERTEX, MESA_SHADER_FRAGMENT, MESA_SHADER_GEOMETRY, MESA_SHADER_TESS_CTRL, MESA_SHADER_TESS_EVAL,
   MESA_SHADER_COMPUTE};
-static_assert(AGX_D3D12_HEAP_RANGES == DXBC_HEAP_RANGE_MAX && AGX_D3D12_CBV_SLOTS <= DXBC_HEAP_TABLE_CB,
+static_assert(AGX_D3D12_HEAP_RANGES == DXBC_HEAP_RANGE_MAX && AGX_D3D12_CBV_SLOTS <= DXBC_HEAP_TABLE_CB &&
+                  sizeof(AGX_D3D12_HEAP_BINDING::First) == DXBC_HEAP_SAMPLER_MAP_OFFSET &&
+                  AGX_D3D12_SAMPLER_SLOTS <= DXBC_HEAP_SAMPLER_INDEX,
               "heap ranges and their constant buffers (dxbc_bindings.h)");
 /* C47: the pending heaps of the graphics stages (or compute) become constant
  * buffers 14/15 and reads of the batch the draw (dispatch) uses: call after
@@ -1821,15 +1843,33 @@ static void bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
   const unsigned end = compute ? unsigned(AGX_D3D12_HEAP_STAGES) : unsigned(AGX_D3D12_HEAP_CS);
   for (unsigned s = first; s < end; ++s) {
     const AGX_D3D12_HEAP_BINDING &h = owner->PendingHeaps[s];
-    if (!h.Heap) continue;
+    if (!h.Heap && !h.SamplerCount) continue;
+    /* the samplers first: entering them may flush the batch the reads and
+     * writes below join */
+    uint32_t *words = owner->HeapTables[s];
+    memcpy(words, h.First, sizeof(h.First));
+    unsigned bytes = sizeof(h.First);
+    if (h.SamplerCount) {
+      APPLE_AGX_U16 handles[DXBC_HEAP_SAMPLER_MAP_MAX];
+      if (!AgxWin32AsahiBatchSamplerHandles(pipe, compute ? 1 : 0, h.Samplers, sizeof(h.Samplers[0]), h.SamplerCount, handles)) {
+        const UINT receipt[] = {s, h.SamplerCount};
+        AdmissionUmdDiagnostic("reject-d3d12-heap-samplers", E_OUTOFMEMORY, receipt, 2);
+        memset(handles, 0, h.SamplerCount * sizeof(handles[0]));
+      }
+      for (unsigned i = 0; i < h.SamplerCount; ++i)
+        words[4 * AGX_D3D12_HEAP_RANGES + i] = h.Samplers[i].Valid ? handles[i] | (uint32_t(h.Samplers[i].Bias) << 16) : 0u;
+      bytes += 4u * h.SamplerCount;
+    }
     struct pipe_constant_buffer table = {};
-    table.user_buffer = h.First;
-    table.buffer_size = sizeof(h.First);
+    table.user_buffer = words;
+    table.buffer_size = bytes;
     pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_TABLE_CB, &table);
-    struct pipe_constant_buffer heap = {};
-    heap.buffer = static_cast<struct pipe_resource *>(h.Heap->Resource);
-    heap.buffer_size = static_cast<unsigned>(h.Heap->Bytes < 65536ull ? h.Heap->Bytes : 65536ull);
-    pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_MIRROR_CB, &heap);
+    if (h.Heap) {
+      struct pipe_constant_buffer heap = {};
+      heap.buffer = static_cast<struct pipe_resource *>(h.Heap->Resource);
+      heap.buffer_size = static_cast<unsigned>(h.Heap->Bytes < 65536ull ? h.Heap->Bytes : 65536ull);
+      pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_MIRROR_CB, &heap);
+    }
     struct pipe_resource *resources[64];
     for (unsigned i = 0; i < h.TextureCount;) {
       unsigned n = 0;
@@ -1850,7 +1890,7 @@ static void unbind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
   const unsigned first = compute ? unsigned(AGX_D3D12_HEAP_CS) : 0u;
   const unsigned end = compute ? unsigned(AGX_D3D12_HEAP_STAGES) : unsigned(AGX_D3D12_HEAP_CS);
   for (unsigned s = first; s < end; ++s) {
-    if (owner->PendingHeaps[s].Heap) {
+    if (owner->PendingHeaps[s].Heap || owner->PendingHeaps[s].SamplerCount) {
       pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_TABLE_CB, NULL);
       pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_MIRROR_CB, NULL);
     }
