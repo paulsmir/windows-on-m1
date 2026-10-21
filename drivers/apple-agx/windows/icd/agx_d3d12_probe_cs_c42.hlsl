@@ -64,3 +64,18 @@ void cs_gather()
     o.Store4(0, asuint(float4(r.x, g.x, b.x, r.w)));
     o.Store4(16, asuint(float4(r.y, g.y, b.y, b.w)));
 }
+
+// C42K /E cs_sample /Vn g_agx_d3d12_probe_cs_c42k -> agx_d3d12_probe_cs_c42k.h:
+//   MiniEngine ScaleAndCompositeSDRPS / ToneMapCS read R11G11B10 through
+//   sample_l with a bilinear sampler (point sampler beside it)
+SamplerState sample_linear : register(s1);
+
+[numthreads(1, 1, 1)]
+void cs_sample()
+{
+    const float2 uv = float2(0.53, 0.47);
+    float3 p = scene.SampleLevel(gather_point, uv, 0);
+    float3 l = scene.SampleLevel(sample_linear, uv, 0);
+    o.Store4(0, asuint(float4(p, l.x)));
+    o.Store4(16, asuint(float4(l.yz, 0, 0)));
+}

@@ -52,6 +52,7 @@
 #include "agx_d3d12_probe_cs_c42d.h"
 #include "agx_d3d12_probe_cs_c42e.h"
 #include "agx_d3d12_probe_cs_c42j.h"
+#include "agx_d3d12_probe_cs_c42k.h"
 #include "agx_d3d12_probe_ps_c42g.h"
 #include "agx_d3d12_probe_ps_c42h.h"
 
@@ -3679,11 +3680,12 @@ static int volume_rtv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
  * shader through an SRV; C42D runs MiniEngine's Pack/Unpack_R11G11B10_FLOAT
  * ALU on root constants. Every value is exact in the format. */
 static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int mode) {
-    static const char *steps[7] = {"C42A", "C42B", "C42C", "C42D", "C42G", "C42H", "C42J"};
+    static const char *steps[8] = {"C42A", "C42B", "C42C", "C42D", "C42G", "C42H", "C42J", "C42K"};
     /* C42G/C42H: the draw of C42B through a sample-frequency PS ("linear sample"
      * input, float3 output), C42H with a second R16G16B16A16_FLOAT target */
     const int draws = mode == 1 || mode == 2 || mode >= 4, copies = mode < 2 || mode == 4 || mode == 5,
-              computes = mode == 2 || mode == 3 || mode == 6; /* C42J: C42C through GatherRed/Green/Blue */
+              computes = mode == 2 || mode == 3 || mode >= 6; /* C42J: C42C through GatherRed/Green/Blue; C42K: SampleLevel */
+    const int table = mode == 2 || mode >= 6;
     const char *step = steps[mode];
     const UINT clear_bits = 0x340u | (0x380u << 11) | (0x1d0u << 22), draw_bits = 0x380u | (0x340u << 11) | (0x1e0u << 22);
     const float half_f = 0.5f, quarter_f = 0.25f, one_f = 1.0f, three_q = 0.75f;
@@ -3706,10 +3708,15 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0};
     D3D12_GPU_DESCRIPTOR_HANDLE srv_gpu = {0};
     UINT *words = NULL;
-    unsigned bad = 4, count = mode == 6 ? 8u : mode == 3 ? 4u : mode == 2 ? 3u : 1u;
+    unsigned bad = 4, count = mode == 7 ? 6u : mode == 6 ? 8u : mode == 3 ? 4u : mode == 2 ? 3u : 1u;
     const UINT16 normal_expected[3] = {0x3c00, 0x3400, 0x3800}; /* (1.0, 0.25, 0.5) */
     HRESULT hr = readback ? S_OK : E_FAIL;
     if (mode == 0) expected[0] = clear_bits;
+    else if (mode == 7) {
+        /* point and bilinear samples of the uniform (0.5, 0.25, 1.0) target */
+        const float g[6] = {0.5f, 0.25f, 1.0f, 0.5f, 0.25f, 1.0f};
+        memcpy(expected, g, sizeof(g));
+    }
     else if (mode == 6) {
         const float g[8] = {0.5f, 0.25f, 1.0f, 0.5f, 0.5f, 0.25f, 1.0f, 1.0f};
         memcpy(expected, g, sizeof(g));
@@ -3769,17 +3776,22 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     }
     if (SUCCEEDED(hr) && computes) {
         D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, 0};
-        D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_UAV}, {mode == 2 || mode == 6 ? D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE : D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}};
+        D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_UAV}, {table ? D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE : D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}};
         D3D12_STATIC_SAMPLER_DESC point = {D3D12_FILTER_MIN_MAG_MIP_POINT, D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
             D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP, 0, 1, D3D12_COMPARISON_FUNC_NEVER,
             D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK, 0, D3D12_FLOAT32_MAX, 0, 0, D3D12_SHADER_VISIBILITY_ALL};
-        D3D12_ROOT_SIGNATURE_DESC root_desc = {2, parameters, mode == 6 ? 1u : 0u, &point};
+        D3D12_STATIC_SAMPLER_DESC samplers[2];
+        samplers[0] = point;
+        samplers[1] = point;
+        samplers[1].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+        samplers[1].ShaderRegister = 1;
+        D3D12_ROOT_SIGNATURE_DESC root_desc = {2, parameters, mode == 7 ? 2u : mode == 6 ? 1u : 0u, samplers};
         D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
-        if (mode == 2 || mode == 6) { parameters[1].DescriptorTable.NumDescriptorRanges = 1; parameters[1].DescriptorTable.pDescriptorRanges = &range; }
+        if (table) { parameters[1].DescriptorTable.NumDescriptorRanges = 1; parameters[1].DescriptorTable.pDescriptorRanges = &range; }
         else { parameters[1].Constants.ShaderRegister = 0; parameters[1].Constants.Num32BitValues = 3; }
         output = uav_buffer(device);
         if (!output) hr = E_FAIL;
-        if (SUCCEEDED(hr) && (mode == 2 || mode == 6)) {
+        if (SUCCEEDED(hr) && table) {
             hr = ID3D12Device_CreateDescriptorHeap(device, &srv_desc, &IID_ID3D12DescriptorHeap, (void **)&srv_heap);
             if (SUCCEEDED(hr)) {
                 D3D12_CPU_DESCRIPTOR_HANDLE cpu = {0};
@@ -3794,8 +3806,10 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         if (SUCCEEDED(hr)) {
             pso_desc.pRootSignature = croot;
             pso_desc.CS.pShaderBytecode = mode == 2 ? (const void *)g_agx_d3d12_probe_cs_c42c : mode == 6 ? (const void *)g_agx_d3d12_probe_cs_c42j
+                                                                                    : mode == 7 ? (const void *)g_agx_d3d12_probe_cs_c42k
                                                                                     : (const void *)g_agx_d3d12_probe_cs_c42d;
             pso_desc.CS.BytecodeLength = mode == 2 ? sizeof(g_agx_d3d12_probe_cs_c42c) : mode == 6 ? sizeof(g_agx_d3d12_probe_cs_c42j)
+                                                                                    : mode == 7 ? sizeof(g_agx_d3d12_probe_cs_c42k)
                                                                                     : sizeof(g_agx_d3d12_probe_cs_c42d);
             hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&cpso);
         }
@@ -3841,12 +3855,12 @@ static int c42_r11g11b10(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             D3D12_RESOURCE_BARRIER barrier = {D3D12_RESOURCE_BARRIER_TYPE_UAV};
             const float constants[3] = {0.25f, 0.5f, 0.75f};
             barrier.UAV.pResource = output;
-            if (mode == 2 || mode == 6) transition(list, texture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            if (table) transition(list, texture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             ID3D12GraphicsCommandList_SetPipelineState(list, cpso);
-            if (mode == 2 || mode == 6) ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &srv_heap);
+            if (table) ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &srv_heap);
             ID3D12GraphicsCommandList_SetComputeRootSignature(list, croot);
             ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 0, ID3D12Resource_GetGPUVirtualAddress(output));
-            if (mode == 2 || mode == 6) ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 1, srv_gpu);
+            if (table) ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 1, srv_gpu);
             else ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list, 1, 3, constants, 0);
             ID3D12GraphicsCommandList_Dispatch(list, 1, 1, 1);
             ID3D12GraphicsCommandList_ResourceBarrier(list, 1, &barrier);
@@ -3901,11 +3915,14 @@ static int step_c42d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
 static int step_c42g(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 4); }
 static int step_c42h(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 5); }
 static int step_c42j(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 6); }
+static int step_c42k(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_r11g11b10(d, q, f, b, 7); }
 /* C42E: MiniEngine's CopyBackPostBufferCS -- an R32_UINT texture of packed
  * R11G11B10 values (0x781a0380 = (0.5, 0.25, 1.0)) unpacked into an
  * R11G11B10_FLOAT typed UAV with a float3 store, read back as texel bits. */
-static int step_c42e(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
-    const char *step = "C42E";
+static int c42_copyback(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int render_target) {
+    /* C42L: the scene colour buffer of MiniEngine is a render target and a UAV:
+     * cleared through an RTV (black) before the typed UAV copy-back */
+    const char *step = render_target ? "C42L" : "C42E";
     const UINT packed = 0x380u | (0x340u << 11) | (0x1e0u << 22);
     D3D12_HEAP_PROPERTIES heap_props = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0};
@@ -3918,7 +3935,8 @@ static int step_c42e(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
     ID3D12Resource *post = NULL, *scene = NULL;
     ID3D12Resource *upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
     ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
-    ID3D12DescriptorHeap *heap = NULL;
+    ID3D12DescriptorHeap *heap = NULL, *rtv_heap = NULL;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0};
     ID3D12RootSignature *root = NULL;
     ID3D12PipelineState *pso = NULL;
     ID3DBlob *blob = NULL, *errors = NULL;
@@ -3937,10 +3955,13 @@ static int step_c42e(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
         D3D12_RESOURCE_STATE_COPY_DEST, NULL, &IID_ID3D12Resource, (void **)&post);
     if (SUCCEEDED(hr)) ID3D12Device_GetCopyableFootprints(device, &desc, 0, 1, 0, &fp, NULL, NULL, NULL);
     if (SUCCEEDED(hr)) {
+        D3D12_CLEAR_VALUE clear = {DXGI_FORMAT_R11G11B10_FLOAT, {0, 0, 0, 0}};
         desc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
-        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS |
+                     (render_target ? D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET : D3D12_RESOURCE_FLAG_NONE);
         hr = ID3D12Device_CreateCommittedResource(device, &heap_props, D3D12_HEAP_FLAG_NONE, &desc,
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL, &IID_ID3D12Resource, (void **)&scene);
+            render_target ? D3D12_RESOURCE_STATE_RENDER_TARGET : D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            render_target ? &clear : NULL, &IID_ID3D12Resource, (void **)&scene);
     }
     if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&words);
     if (SUCCEEDED(hr) && words) {
@@ -3948,6 +3969,14 @@ static int step_c42e(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
             for (UINT x = 0; x < 16; ++x) ((UINT *)((BYTE *)words + fp.Offset + y * fp.Footprint.RowPitch))[x] = packed;
         ID3D12Resource_Unmap(upload, 0, NULL);
     } else if (SUCCEEDED(hr)) hr = E_FAIL;
+    if (SUCCEEDED(hr) && render_target) {
+        D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
+        hr = ID3D12Device_CreateDescriptorHeap(device, &rtv_desc, &IID_ID3D12DescriptorHeap, (void **)&rtv_heap);
+        if (SUCCEEDED(hr)) {
+            ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(rtv_heap, &rtv);
+            ID3D12Device_CreateRenderTargetView(device, scene, NULL, rtv);
+        }
+    }
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &heap_desc, &IID_ID3D12DescriptorHeap, (void **)&heap);
     if (SUCCEEDED(hr)) {
         D3D12_CPU_DESCRIPTOR_HANDLE cpu = {0};
@@ -3977,6 +4006,11 @@ static int step_c42e(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
         buffer_loc.PlacedFootprint = fp;
         ID3D12GraphicsCommandList_CopyTextureRegion(list, &tex_loc, 0, 0, 0, &buffer_loc, NULL);
         transition(list, post, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        if (render_target) {
+            const FLOAT black[4] = {0, 0, 0, 0};
+            ID3D12GraphicsCommandList_ClearRenderTargetView(list, rtv, black, 0, NULL);
+            transition(list, scene, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
         ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &heap);
         ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
         ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 0, gpu);
@@ -4009,12 +4043,15 @@ static int step_c42e(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
     if (blob) ID3D10Blob_Release(blob);
     if (errors) ID3D10Blob_Release(errors);
     if (heap) ID3D12DescriptorHeap_Release(heap);
+    if (rtv_heap) ID3D12DescriptorHeap_Release(rtv_heap);
     if (scene) ID3D12Resource_Release(scene);
     if (post) ID3D12Resource_Release(post);
     if (readback) ID3D12Resource_Release(readback);
     if (upload) ID3D12Resource_Release(upload);
     return !(SUCCEEDED(hr) && bad == 0);
 }
+static int step_c42e(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_copyback(d, q, f, b, 0); }
+static int step_c42l(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c42_copyback(d, q, f, b, 1); }
 /* C21E: graphics point sampling from all16 mip1 volume voxels. */
 static int volume_sample(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
     C21Volume v; ID3D12CommandAllocator *allocator = NULL; ID3D12GraphicsCommandList *list = NULL;
@@ -6179,7 +6216,7 @@ int main(int argc, char **argv) {
             {"C38A", c38_cached_pso}, {"C39A", c39_stream_output},
             {"C41A", step_c41a}, {"C41B", step_c41b},
             {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
-            {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}};
+            {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -6273,6 +6310,8 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C42G", step_c42g);
                 (void)run_isolated(adapter, "C42H", step_c42h);
                 (void)run_isolated(adapter, "C42J", step_c42j);
+                (void)run_isolated(adapter, "C42K", step_c42k);
+                (void)run_isolated(adapter, "C42L", step_c42l);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
