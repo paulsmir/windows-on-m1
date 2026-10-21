@@ -1639,12 +1639,23 @@ static int draw_cube(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
  * cleared to 1.0, a near green triangle (z 0.25) drawn first, then a far
  * blue full-target quad (z 0.75) with DepthFunc LESS; PASS = centre green
  * (the far quad fails there), a point outside the triangle blue. */
+static int draw_depth_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int depth_only);
+static int draw_depth(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_depth_impl(d, q, f, b, 0); }
+static int step_c35a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_depth_impl(d, q, f, b, 1); }
 static int draw_textured(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_textured_impl(d, q, f, b, 0); }
 static int step_c17c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_textured_impl(d, q, f, b, 1); }
 static int step_c18a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_textured_impl(d, q, f, b, 2); }
 static int step_c18b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_textured_impl(d, q, f, b, 3); }
 
-static int draw_depth(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+/* C35 (EXP1829: Multithreading's shadow pass draws with PS = NULL and
+ * crashed in Asahi's draw, which always reads the bound FS): depth_only
+ * draws the near triangle with a second PSO that has no pixel shader and no
+ * render target, then the far blue quad with the normal one; PASS (C35A) =
+ * centre red (the clear; the quad fails the depth the triangle wrote),
+ * corner blue. */
+static int draw_depth_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int depth_only) {
+    const char *step = depth_only ? "C35A" : "C6F";
+    ID3D12PipelineState *depth_pso = NULL;
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0}, depth_desc = {0};
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
@@ -1742,7 +1753,16 @@ static int draw_depth(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
         pso_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
         pso_desc.SampleDesc.Count = 1;
         hr = ID3D12Device_CreateGraphicsPipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
-        printf("C6F CreateGraphicsPipelineState hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s CreateGraphicsPipelineState hr=0x%08lx\n", step, (unsigned long)hr);
+        if (SUCCEEDED(hr) && depth_only) {
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC depth_desc_pso = pso_desc;
+            depth_desc_pso.PS.pShaderBytecode = NULL;
+            depth_desc_pso.PS.BytecodeLength = 0;
+            depth_desc_pso.NumRenderTargets = 0;
+            depth_desc_pso.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
+            hr = ID3D12Device_CreateGraphicsPipelineState(device, &depth_desc_pso, &IID_ID3D12PipelineState, (void **)&depth_pso);
+            printf("C35A depth-only CreateGraphicsPipelineState hr=0x%08lx\n", (unsigned long)hr);
+        }
     }
     if (SUCCEEDED(hr))
         hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -1776,7 +1796,15 @@ static int draw_depth(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
         ID3D12GraphicsCommandList_RSSetScissorRects(list, 1, &scissor);
         ID3D12GraphicsCommandList_IASetVertexBuffers(list, 0, 1, &vbv);
         ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        if (depth_only) {
+            ID3D12GraphicsCommandList_OMSetRenderTargets(list, 0, NULL, FALSE, &dsv);
+            ID3D12GraphicsCommandList_SetPipelineState(list, depth_pso);
+        }
         ID3D12GraphicsCommandList_DrawInstanced(list, 3, 1, 0, 0);
+        if (depth_only) {
+            ID3D12GraphicsCommandList_OMSetRenderTargets(list, 1, &rtv, FALSE, &dsv);
+            ID3D12GraphicsCommandList_SetPipelineState(list, pso);
+        }
         ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
         ID3D12GraphicsCommandList_DrawInstanced(list, 4, 1, 3, 0);
         transition(list, target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -1788,12 +1816,14 @@ static int draw_depth(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
         hr = ID3D12Resource_Map(readback, 0, &all, (void **)&bytes);
         if (SUCCEEDED(hr) && bytes) {
             const unsigned char *centre = bytes + 32 * 256 + 32 * 4, *corner = bytes + 4 * 256 + 4 * 4;
-            ok = centre[0] == 0 && centre[1] == 255 && centre[2] == 0 && corner[0] == 0 && corner[1] == 0 && corner[2] == 255;
-            printf("C6F centre=%u,%u,%u corner=%u,%u,%u\n", centre[0], centre[1], centre[2], corner[0], corner[1], corner[2]);
+            ok = centre[0] == (depth_only ? 255 : 0) && centre[1] == (depth_only ? 0 : 255) && centre[2] == 0 &&
+                 corner[0] == 0 && corner[1] == 0 && corner[2] == 255;
+            printf("%s centre=%u,%u,%u corner=%u,%u,%u\n", step, centre[0], centre[1], centre[2], corner[0], corner[1], corner[2]);
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("AGX_D3D12_C6F: %s\n", SUCCEEDED(hr) && ok ? "PASS" : "FAIL");
+    printf("AGX_D3D12_%s: %s\n", step, SUCCEEDED(hr) && ok ? "PASS" : "FAIL");
+    if (depth_pso) ID3D12PipelineState_Release(depth_pso);
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (pso) ID3D12PipelineState_Release(pso);
@@ -4955,7 +4985,7 @@ int main(int argc, char **argv) {
         if (strcmp(argv[a], "warp")) continue;
         static const struct { const char *name; probe_step step; } steps[] = {
             {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
-            {"C33A", c33_append}, {"C34A", c34_ranges}};
+            {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -5029,6 +5059,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C32A", step_c32a);
                 (void)run_isolated(adapter, "C33A", c33_append);
                 (void)run_isolated(adapter, "C34A", c34_ranges);
+                (void)run_isolated(adapter, "C35A", step_c35a);
                 (void)run_isolated(adapter, "C27A", step_c27a);
                 (void)run_isolated(adapter, "C27B", step_c27b);
                 (void)run_isolated(adapter, "C7A", swapchain_present);

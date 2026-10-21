@@ -24,6 +24,7 @@ extern "C" {
 #include "../dxbc/dxbc_to_nir.h"
 #include "util/format/u_format.h"
 #include "util/u_surface.h"
+#include "util/u_simple_shaders.h"
 
 /* The D3D10 frontend's DXGI -> pipe format table (gallium/frontends/d3d10umd
  * Format.cpp, linked in the native runtime archive). */
@@ -52,6 +53,9 @@ struct AGX_D3D12_OWNER {
   UINT PendingCopies;
   UINT PendingDispatches;
   UINT PendingDraws; /* C6b: draws whose framebuffer/vertex bindings the submit drops */
+  /* EXP1829 (Multithreading's shadow pass): a PSO without a pixel shader
+   * draws with this empty one -- Asahi always reads the bound FS */
+  void *EmptyFs;
   struct AGX_D3D12_PRESENTATION *PendingPresentations; /* C7b: released, kernel allocation still registered */
   /* EXP1822: D3D12 queues and lists are used from several threads (nBody's
    * async compute thread next to its render thread). The pipe_context is not
@@ -131,6 +135,11 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
     (void)collect_presentations(owner);
   }
   owner->Backend.Closing = 1;
+  if (owner->Context && owner->EmptyFs) {
+    owner->Context->bind_fs_state(owner->Context, NULL);
+    owner->Context->delete_fs_state(owner->Context, owner->EmptyFs);
+    owner->EmptyFs = NULL;
+  }
   if (owner->Context) {
     if (!AgxWin32AsahiContextDestroy(owner->Context)) return HRESULT_FROM_WIN32(ERROR_BUSY);
     owner->Context = NULL;
@@ -1828,7 +1837,9 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   }
   pipe->set_framebuffer_state(pipe, &fb);
   pipe->bind_vs_state(pipe, graphics->Vs);
-  pipe->bind_fs_state(pipe, graphics->Fs);
+  if (!graphics->Fs && !owner->EmptyFs) owner->EmptyFs = util_make_empty_fragment_shader(pipe);
+  if (!graphics->Fs && !owner->EmptyFs) return E_OUTOFMEMORY;
+  pipe->bind_fs_state(pipe, graphics->Fs ? graphics->Fs : owner->EmptyFs);
   pipe->bind_gs_state(pipe, graphics->Gs); /* C27: NULL unbinds a previous draw's GS */
   pipe->bind_blend_state(pipe, graphics->Blend);
   pipe->bind_depth_stencil_alpha_state(pipe, graphics->DepthStencil);
