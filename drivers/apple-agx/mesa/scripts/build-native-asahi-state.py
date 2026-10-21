@@ -3312,10 +3312,19 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    }
    default:break;
    }
+   /* C40 (EXP1841/EXP1843): a D3D12 R10G10B10A2 swapchain buffer is presented
+    * from 8-bit RGBA storage; DWM opens it (bind flags SRV|RT, no PRESENT),
+    * keeps the swapchain's format and views it as R10G10B10A2, which reads
+    * the storage (reject-d3d10-srv {28, 24, 3, presentation, 0x28, 1}) */
+   const bool windowsPresentedStorage=windowsResource && windowsResource->presentation &&
+      pCreateSRView->ResourceDimension==D3D10DDIRESOURCE_TEXTURE2D &&
+      pCreateSRView->Format==DXGI_FORMAT_R10G10B10A2_UNORM &&
+      (windowsResource->Format==DXGI_FORMAT_R8G8B8A8_UNORM ||
+       windowsResource->Format==DXGI_FORMAT_B8G8R8A8_UNORM);
    if(!windowsDevice||!windowsResource||windowsResource->owner_device!=windowsDevice||
       (!windowsResource->presentation&&
        !(windowsResource->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE))||
-      (pCreateSRView->ResourceDimension!=D3D10DDIRESOURCE_BUFFER &&
+      (pCreateSRView->ResourceDimension!=D3D10DDIRESOURCE_BUFFER && !windowsPresentedStorage &&
        !AgxD3d10FormatViewCompatible(windowsResource->Format,
            pCreateSRView->Format,FALSE,
            windowsResource->presentation &&
@@ -3329,11 +3338,6 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
       AgxD3d10WindowsDiagnostic("reject-d3d10-srv",E_NOTIMPL,refused,6u);
       SetError(hDevice,E_NOTIMPL);return;
    }
-   /* C40: DWM's R10G10B10A2 view of an 8-bit presented buffer reads the storage */
-   const bool windowsPresentedStorage=windowsResource->presentation &&
-      (windowsResource->bind_flags & D3D10_DDI_BIND_PRESENT) &&
-      pCreateSRView->Format==DXGI_FORMAT_R10G10B10A2_UNORM &&
-      windowsResource->Format!=DXGI_FORMAT_R10G10B10A2_UNORM;
    struct pipe_context *pipe = CastPipeContext(hDevice);
    ShaderResourceView *pSRView = CastShaderResourceView(hShaderResourceView);
    struct pipe_resource *resource;
@@ -3848,12 +3852,6 @@ extern "C" BOOL AgxD3d10FormatViewCompatible(
          resource = DXGI_FORMAT_R8G8B8A8_TYPELESS;
    }
    if (resource == view) return FormatTranslate(view, depth) != PIPE_FORMAT_NONE;
-   /* C40 (EXP1841): a D3D12 R10G10B10A2 swapchain buffer is presented from
-    * 8-bit RGBA storage; DWM's runtime keeps the swapchain's format and views
-    * the buffer as R10G10B10A2, which reads the storage (CreateShaderResourceView) */
-   if (backbuffer && !depth && view == DXGI_FORMAT_R10G10B10A2_UNORM &&
-       (resource == DXGI_FORMAT_R8G8B8A8_TYPELESS || resource == DXGI_FORMAT_B8G8R8A8_TYPELESS))
-      return TRUE;
    /* D3D-G10a: a typeless resource admits a view in any format of its DXGI
     * cast family (the winsys cast-family table, which also decides the
     * multisample reporting); a fully typed resource only its own format. */
