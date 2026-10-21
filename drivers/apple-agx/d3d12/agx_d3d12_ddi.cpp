@@ -405,10 +405,20 @@ static HRESULT APIENTRY GetOptionalDDITables(D3D12DDI_HADAPTER, UINT32 *entries,
 static VOID APIENTRY CheckFormatSupport(D3D12DDI_HDEVICE, DXGI_FORMAT, UINT *support) {
     if (support) *support = 0;
 }
-static VOID APIENTRY CheckMultisampleQualityLevels(D3D12DDI_HDEVICE, DXGI_FORMAT, UINT samples,
-                                                   D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS,
+static VOID APIENTRY CheckMultisampleQualityLevels(D3D12DDI_HDEVICE, DXGI_FORMAT format, UINT samples,
+                                                   D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS flags,
                                                    UINT *levels) {
-    if (levels) *levels = samples == 1 ? 1u : 0u;
+    if (!levels) return;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* C32: one quality level of 2x and 4x for the formats the AGX
+     * multisamples; no tiled multisampled resources */
+    *levels = samples == 1 ? 1u
+            : !flags && (samples == 2 || samples == 4) && AgxD3d12FormatMultisample(format, samples) ? 1u : 0u;
+#else
+    (void)format;
+    (void)flags;
+    *levels = samples == 1 ? 1u : 0u;
+#endif
 }
 static VOID APIENTRY QueryNodeMap(D3D12DDI_HDEVICE, UINT adapters, UINT *map) {
     for (UINT i = 0; map && i < adapters; ++i) map[i] = 0; /* physical adapter i -> node 0 */
@@ -1083,7 +1093,11 @@ static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *arg) {
     if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE3D) {
         AGX_D3D12_VOLUME_LAYOUT layout={};return VolumeLayoutInfo(arg,&layout,nullptr,nullptr)?layout.Bytes:0;
     }
-    if (!arg || arg->ResourceType != D3D12DDI_RT_TEXTURE2D || arg->SampleDesc.Count != 1 || !arg->Width ||
+    /* C32: 2x/4x multisampled textures have one level */
+    const UINT samples = arg ? arg->SampleDesc.Count : 0u;
+    if (!arg || arg->ResourceType != D3D12DDI_RT_TEXTURE2D || arg->SampleDesc.Quality ||
+        (samples != 1 && ((samples != 2 && samples != 4) || arg->MipLevels != 1 ||
+                          !AgxD3d12FormatMultisample(arg->Format, samples))) || !arg->Width ||
         arg->Width > 16384 || !arg->Height || arg->Height > 16384 || !arg->DepthOrArraySize || !arg->MipLevels ||
         arg->MipLevels > 15)
         return 0;
@@ -1097,7 +1111,7 @@ static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *arg) {
         const UINT64 h = (((arg->Height >> level ? arg->Height >> level : 1) + bh - 1) / bh + 15) & ~15ULL;
         bytes += w * h * block;
     }
-    bytes *= arg->DepthOrArraySize;
+    bytes *= static_cast<UINT64>(arg->DepthOrArraySize) * samples;
     return (bytes + 0xffffULL) & ~0xffffULL;
 #else
     (void)arg;
@@ -1547,7 +1561,8 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
                                                                   &presentation_allocation)
                          : AgxD3d12OwnerCreateTexture2D(owner, resource_arg->Format, static_cast<UINT>(resource_arg->Width),
                                                         resource_arg->Height, resource_arg->DepthOrArraySize,
-                                                        resource_arg->MipLevels, bind, bytes, &texture);
+                                                        resource_arg->MipLevels, bind, bytes, &texture,
+                                                        resource_arg->SampleDesc.Count);
         if (SUCCEEDED(hr)) {
             heap->native = texture.Resource;
             heap->gpuva = texture.GpuVa;
@@ -2365,7 +2380,14 @@ struct AgxD3d12TextureRegionCopy {
 enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kCommandTextureCopy = 4, kCommandDraw = 5,
               kCommandClearDepth = 6, kCommandTextureRegionCopy = 7, kCommandClearUav = 8,
               kCommandQuery = 9, kCommandGsBind = 10 /* C27: the GS bindings of the next draw */,
-              kCommandIndirectExpand = 11 /* C31: ExecuteIndirect with root or IA arguments */ };
+              kCommandIndirectExpand = 11 /* C31: ExecuteIndirect with root or IA arguments */,
+              kCommandResolve = 12 /* C32: ResolveSubresource */ };
+/* C32: a recorded ResolveSubresource (subresources decoded at record time) */
+struct AgxD3d12Resolve {
+    AgxD3d12Heap *dst, *src;
+    UINT dst_level, dst_layer, src_layer;
+    DXGI_FORMAT format;
+};
 /* C31: list->indirect_states[state] holds the list state and the command
  * signature at the ExecuteIndirect call */
 struct AgxD3d12IndirectExpand {
@@ -2385,6 +2407,7 @@ struct AgxD3d12Command {
         AgxD3d12ClearUav clear_uav;
         AgxD3d12QueryCommand query;
         AgxD3d12IndirectExpand indirect_expand;
+        AgxD3d12Resolve resolve;
     };
 };
 /* C8a: commands live in a growing process-heap array owned by the list
@@ -2633,6 +2656,35 @@ static VOID APIENTRY ClearRenderTargetView(D3D12DDI_HCOMMANDLIST handle, D3D12DD
 }
 /* C8b: CopyResource -- whole buffers (the smaller size) or whole 2D
  * textures (every common mip and layer) */
+/* C32: ResolveSubresource of a multisampled 2D subresource into a
+ * single-sampled one of the same size; the owner checks sample counts. */
+static VOID APIENTRY ResolveSubresource(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE dst_handle, UINT dst_sub,
+                                        D3D12DDI_HRESOURCE src_handle, UINT src_sub, DXGI_FORMAT format) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!list) return;
+    auto *d = static_cast<AgxD3d12Resource *>(dst_handle.pDrvPrivate);
+    auto *s = static_cast<AgxD3d12Resource *>(src_handle.pDrvPrivate);
+    const UINT refusal = !d || !s || !d->heap || !s->heap || !d->heap->native || !s->heap->native ? 1u
+                       : d->type != D3D12DDI_RT_TEXTURE2D || s->type != D3D12DDI_RT_TEXTURE2D ? 4u
+                       : dst_sub >= d->levels * d->layers || src_sub >= s->levels * s->layers ? 5u
+                       : list->commands >= kListCommands ? 3u : 0u;
+    const UINT receipt[] = {refusal, dst_sub, src_sub, static_cast<UINT>(format)};
+    AdmissionUmdDiagnostic("measure-d3d12-resolve-record", refusal ? E_INVALIDARG : S_OK, receipt, 4);
+    if (refusal) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    slot->kind = kCommandResolve;
+    AgxD3d12Resolve &r = slot->resolve;
+    r.dst = d->heap;
+    r.src = s->heap;
+    r.dst_level = dst_sub % d->levels;
+    r.dst_layer = dst_sub / d->levels;
+    r.src_layer = src_sub / s->levels;
+    r.format = format;
+}
 static VOID APIENTRY ResourceCopy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE dst_handle, D3D12DDI_HRESOURCE src_handle) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
     if (!list) return;
@@ -3256,6 +3308,7 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
         desc.Rt[i].WriteMask = rt.RenderTargetWriteMask;
     }
     desc.SampleMask = pso->desc.SampleMask;
+    desc.SampleCount = pso->desc.SampleDesc.Count; /* C32 */
     desc.FillMode = pso->rasterizer.FillMode;
     desc.CullMode = pso->rasterizer.CullMode;
     desc.FrontCounterClockwise = pso->rasterizer.FrontCounterClockwise;
@@ -4324,6 +4377,10 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
                                                     clear.stencil, clear.rects ? clear.rect : nullptr, clear.rects);
             } else if (command.kind == kCommandIndirectExpand) {
                 hr = ReplayIndirectExpand(owner, list, command.indirect_expand);
+            } else if (command.kind == kCommandResolve) {
+                const AgxD3d12Resolve &r = command.resolve;
+                AGX_D3D12_BUFFER dst = HeapBuffer(r.dst), src = HeapBuffer(r.src);
+                hr = AgxD3d12OwnerResolve(owner, &dst, r.dst_level, r.dst_layer, &src, r.src_layer, r.format);
             } else if (command.kind == kCommandGsBind) {
                 gs_pending = &command.dispatch; /* C27: consumed by the next draw */
             } else if (command.kind == kCommandDraw) {
@@ -4664,7 +4721,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy, ResourceCopy);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyBufferRegion, CopyBufferRegion);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource, ResolveSubresource);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle, ExecuteBundle);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect, Bundled<ExecuteIndirect>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceBarrier, ResourceBarrier);

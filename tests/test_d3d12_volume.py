@@ -18,7 +18,7 @@ class VolumeQuery(unittest.TestCase):
         owner=OWNER.read_text();ddi=DDI.read_text()
         funcs=block(owner,'static unsigned block_bytes(')+'\n'
         funcs+=block(owner,'extern "C" unsigned AgxD3d12FormatBlockBytes(')+'\n'
-        funcs+=block(owner,'static unsigned texture_block(')+'\n'+block(owner,'extern "C" unsigned AgxD3d12FormatBlock(')+'\n'
+        funcs+=block(owner,'static unsigned texture_block(')+'\n'+block(owner,'extern "C" unsigned AgxD3d12FormatBlock(')+'\n'+block(owner,'extern "C" int AgxD3d12FormatMultisample(')+'\n'
         for name in ['static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D(']:
             if name in owner:funcs+=block(owner,name)+'\n'
         record='typedef struct {unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];} AGX_D3D12_VOLUME_LAYOUT;'

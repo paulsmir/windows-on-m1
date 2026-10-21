@@ -165,7 +165,15 @@ HRESULT AgxD3d12OwnerReadBuffer(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *
  * is NULL, Bytes the caller's allocation size. */
 HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width, unsigned Height,
                                      unsigned Layers, unsigned Levels, unsigned Bind, unsigned long long Bytes,
-                                     AGX_D3D12_BUFFER *Texture);
+                                     AGX_D3D12_BUFFER *Texture, unsigned Samples);
+/* C32: whether a format has 2x/4x multisampled textures (the AGX's sample
+ * counts, agx_is_format_supported): colour and depth formats of 1x1 texel
+ * blocks */
+int AgxD3d12FormatMultisample(DXGI_FORMAT Format, unsigned Samples);
+/* C32: ResolveSubresource -- the average of a multisampled level's samples
+ * into a single-sampled level of the same size (a Gallium resolve blit) */
+HRESULT AgxD3d12OwnerResolve(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Dst, unsigned DstLevel, unsigned DstLayer,
+                             const AGX_D3D12_BUFFER *Src, unsigned SrcLayer, DXGI_FORMAT Format);
 /* C21 LIMITED: POT square1..32,depth1..2048,levels1/2,R32_UINT/RGBA8.
  * Pure allocation query; no owner/Screen/device creation.
  * Actual creation uses the same uncompressed one-BO modifier and64KiB size. */
@@ -263,6 +271,7 @@ typedef struct {
     unsigned Src, Dst, Op, SrcAlpha, DstAlpha, OpAlpha, WriteMask;
   } Rt[8];
   unsigned SampleMask;
+  unsigned SampleCount; /* C32: the PSO's SampleDesc.Count */
   unsigned FillMode, CullMode;
   int FrontCounterClockwise, DepthBias, DepthClipEnable;
   float DepthBiasClamp, SlopeScaledDepthBias;
@@ -280,6 +289,7 @@ typedef struct {
 typedef struct {
   void *Vs, *Fs, *Blend, *DepthStencil, *Rasterizer;
   void *Gs; /* C27 */
+  unsigned SampleMask; /* C32 */
   unsigned NumElements;
   struct {
     unsigned Slot, Offset, Register, Divisor, Format; /* pipe format */

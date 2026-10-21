@@ -444,14 +444,22 @@ extern "C" unsigned AgxD3d12FormatBlock(DXGI_FORMAT format, unsigned *width, uns
   return bytes;
 }
 
+extern "C" int AgxD3d12FormatMultisample(DXGI_FORMAT format, unsigned samples) {
+  if (samples != 2 && samples != 4) return samples == 1;
+  enum pipe_format physical = FormatTranslate(format, FALSE);
+  if (physical == PIPE_FORMAT_NONE) physical = FormatTranslate(format, TRUE);
+  return block_bytes(physical) != 0;
+}
+
 extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FORMAT format, unsigned width,
                                                 unsigned height, unsigned layers, unsigned levels, unsigned bind,
-                                                unsigned long long bytes, AGX_D3D12_BUFFER *texture) {
+                                                unsigned long long bytes, AGX_D3D12_BUFFER *texture, unsigned samples) {
   OwnerLock lock(owner);
   unsigned bw = 0, bh = 0;
   if (!owner || !owner->Screen || !texture || !width || !height || !layers || !levels || levels > 16 ||
       !AgxD3d12FormatBlock(format, &bw, &bh) ||
-      (bw > 1 && (bind & (AGX_D3D12_BIND_RENDER_TARGET | AGX_D3D12_BIND_DEPTH_STENCIL))))
+      (bw > 1 && (bind & (AGX_D3D12_BIND_RENDER_TARGET | AGX_D3D12_BIND_DEPTH_STENCIL))) ||
+      (samples > 1 && (levels != 1 || bw > 1 || !AgxD3d12FormatMultisample(format, samples))))
     return E_INVALIDARG;
   memset(texture, 0, sizeof(*texture));
   struct pipe_resource templ = {};
@@ -462,6 +470,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
   templ.depth0 = 1;
   templ.array_size = static_cast<uint16_t>(layers);
   templ.last_level = static_cast<uint8_t>(levels - 1);
+  if (samples > 1) templ.nr_samples = templ.nr_storage_samples = static_cast<uint8_t>(samples); /* C32 */
   templ.usage = PIPE_USAGE_DEFAULT;
   templ.bind = ((bind & AGX_D3D12_BIND_RENDER_TARGET) ? PIPE_BIND_RENDER_TARGET : 0) |
                ((bind & AGX_D3D12_BIND_SAMPLER) ? PIPE_BIND_SAMPLER_VIEW : 0) |
@@ -1090,6 +1099,42 @@ extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const 
   return S_OK;
 }
 
+/* C32: a whole-level resolve blit; Gallium averages colour samples */
+extern "C" HRESULT AgxD3d12OwnerResolve(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *dst, unsigned dst_level,
+                                        unsigned dst_layer, const AGX_D3D12_BUFFER *src, unsigned src_layer,
+                                        DXGI_FORMAT format) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Context || !dst || !dst->Resource || !src || !src->Resource) return E_INVALIDARG;
+  struct pipe_resource *d = static_cast<struct pipe_resource *>(dst->Resource);
+  struct pipe_resource *s = static_cast<struct pipe_resource *>(src->Resource);
+  const enum pipe_format view = FormatTranslate(format, FALSE);
+  const struct util_format_description *desc = view != PIPE_FORMAT_NONE ? util_format_description(view) : NULL;
+  if (!desc || desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS || s->nr_samples <= 1 || d->nr_samples > 1 ||
+      d->target == PIPE_BUFFER || dst_level > d->last_level || dst_layer >= d->array_size || src_layer >= s->array_size ||
+      level_extent(d->width0, dst_level) != s->width0 || level_extent(d->height0, dst_level) != s->height0)
+    return E_INVALIDARG;
+  struct pipe_blit_info blit = {};
+  blit.dst.resource = d;
+  blit.dst.level = dst_level;
+  blit.dst.format = view;
+  blit.dst.box.x = blit.dst.box.y = 0;
+  blit.dst.box.z = static_cast<int16_t>(dst_layer);
+  blit.dst.box.width = static_cast<int>(s->width0);
+  blit.dst.box.height = static_cast<int>(s->height0);
+  blit.dst.box.depth = 1;
+  blit.src.resource = s;
+  blit.src.level = 0;
+  blit.src.format = view;
+  blit.src.box = blit.dst.box;
+  blit.src.box.z = static_cast<int16_t>(src_layer);
+  blit.mask = PIPE_MASK_RGBA;
+  blit.filter = PIPE_TEX_FILTER_NEAREST;
+  owner->Context->blit(owner->Context, &blit);
+  ++owner->PendingCopies;
+  receipt("measure-d3d12-resolve", S_OK, s->nr_samples, s->width0 | (s->height0 << 16), static_cast<UINT>(view));
+  return S_OK;
+}
+
 /* C6f: the D3D10 frontend's ClearDepthStencilView (OutputMerger.cpp) */
 extern "C" HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *texture,
                                                   DXGI_FORMAT view_format, unsigned level, unsigned first_layer,
@@ -1131,7 +1176,7 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
   struct pipe_resource *buffer = static_cast<struct pipe_resource *>(copy->Buffer->Resource);
   unsigned bw = 0, bh = 0;
   const unsigned block = texture_block(texture->format, &bw, &bh);
-  if (!block) return E_INVALIDARG;
+  if (!block || texture->nr_samples > 1) return E_INVALIDARG; /* C32: samples are not CPU-addressable */
   /* buffer rows are block rows; a box may cover a level's partial edge
    * block (block-aligned footprints of small mips) */
   const unsigned rows = (copy->Height + bh - 1) / bh;
@@ -1345,6 +1390,10 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   rast.point_size = 1.0f;
   rast.point_line_tri_clip = 1;
   rast.line_width = 1.0f;
+  /* C32: multisampled rasterization follows the PSO sample count (D3D12
+   * MultisampleEnable selects only the line algorithm) */
+  rast.multisample = desc->SampleCount > 1 ? 1 : 0;
+  graphics->SampleMask = desc->SampleMask;
   graphics->Rasterizer = pipe->create_rasterizer_state(pipe, &rast);
   HRESULT hr = graphics->Vs && (graphics->Fs || !desc->Ps) && (graphics->Gs || !desc->Gs) && graphics->Blend && graphics->DepthStencil &&
                        graphics->Rasterizer ? S_OK : E_NOTIMPL;
@@ -1802,7 +1851,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   struct pipe_stencil_ref ref = {};
   ref.ref_value[0] = ref.ref_value[1] = static_cast<uint8_t>(draw->StencilRef);
   pipe->set_stencil_ref(pipe, ref);
-  pipe->set_sample_mask(pipe, ~0u);
+  pipe->set_sample_mask(pipe, graphics->SampleMask); /* C32 */
   /* C6e: sampler states of each stage for this draw */
   void *vs_samplers[AGX_D3D12_SAMPLER_SLOTS] = {}, *ps_samplers[AGX_D3D12_SAMPLER_SLOTS] = {};
   unsigned vs_sampler_count = 0, ps_sampler_count = 0;

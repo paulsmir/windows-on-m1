@@ -268,6 +268,7 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnBeginQuery', 'pfnEndQuery', 'pfnResolveQueryData'}  # C11
         compute |= {'pfnExecuteIndirect'}  # C14
         compute |= {'pfnExecuteBundle'}  # C30: the bundle call log (test_d3d12_bundles)
+        compute |= {'pfnResourceResolveSubresource'}  # C32: multisample resolve
         compute |= {'pfnSetGraphicsRootUnorderedAccessView'}  # C13 (EXP1375)
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
@@ -384,7 +385,7 @@ class D3d12AbiGate(unittest.TestCase):
             start = source.index(name)
             return source[start:source.index('\n}\n', start)]
         size = fn('static UINT64 TextureBytes(')
-        for guard in ('arg->ResourceType != D3D12DDI_RT_TEXTURE2D', 'arg->SampleDesc.Count != 1',
+        for guard in ('arg->ResourceType != D3D12DDI_RT_TEXTURE2D', '(samples != 1 && ((samples != 2 && samples != 4) || arg->MipLevels != 1',
                       'AgxD3d12FormatBlock(arg->Format, &bw, &bh)'):
             self.assertIn(guard, size)
         info = fn('static VOID APIENTRY CheckResourceAllocationInfo(')
