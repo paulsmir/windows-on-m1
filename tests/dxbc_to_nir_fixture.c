@@ -59,9 +59,10 @@ main(int argc, char **argv)
    struct dxbc_error perr;
    struct dxbc_nir_error terr;
    nir_shader *nir;
-   bool print = false, d3d12 = false;
+   bool print = false, print_final = false, d3d12 = false;
    for (int a = 2; a < argc; ++a) {
       print |= !strcmp(argv[a], "--print");
+      print_final |= !strcmp(argv[a], "--print-final");
       d3d12 |= !strcmp(argv[a], "--d3d12");
    }
    /* the D3D12 owner's entry: SM5.1 register spaces through a binding map
@@ -184,6 +185,8 @@ main(int argc, char **argv)
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
    agx_preprocess_nir(nir);
    nir_validate_shader(nir, "agx_preprocess_nir");
+   if (print_final)
+      nir_print_shader(nir, stdout);
 
    /* the block size Dispatch launches, the groupshared bytes the AGX
     * backend allocates, and groupshared accesses left as derefs (the

@@ -189,6 +189,61 @@ def prepare_parallel_copy_source(source, out):
                          'selected': str(destination), 'after_sha256': sha256(destination)}
 
 
+# EXP1848: enum bit-fields of agx_compiler.h whose enumerators exceed the
+# signed range of the field width.
+SIGNED_ENUM_BITFIELDS = (
+    ('enum agx_size size       : 2;', 'unsigned size            : 2; /* enum agx_size */'),
+    ('enum agx_index_type type : 3;', 'unsigned type            : 3; /* enum agx_index_type */'),
+    ('enum agx_dim dim       : 4;', 'unsigned dim           : 4; /* enum agx_dim */'),
+    ('enum agx_gather gather : 3;', 'unsigned gather        : 3; /* enum agx_gather */'),
+    ('enum agx_interpolation interpolation : 2;', 'unsigned interpolation : 2; /* enum agx_interpolation */'),
+)
+
+
+def prepare_unsigned_bitfield_header(units, out):
+    """EXP1848: clang-cl follows the MSVC ABI, where an enum bit-field is a
+    signed int: AGX_GATHER_B (0b101) in agx_instr's 3-bit gather field reads
+    back as -3, so agx_pack's (I->gather << 23) also set bits 26-31 and every
+    GatherBlue/GatherAlpha returned zero (C42J/C42M/C42N on RGB10/RGBA8/
+    RGBA16F); AGX_SIZE_64, AGX_INDEX_REGISTER/UNDEF and AGX_DIM_2D_MS_ARRAY
+    are truncated the same way. Project agx_compiler.h with unsigned bit-fields
+    (same width and storage unit, so the struct layout is unchanged) and
+    compile every compiler unit beside the projection."""
+    homes = {p.parent for p in units if (p.parent / 'agx_compiler.h').exists()}
+    originals = sorted({(home / 'agx_compiler.h') for home in homes})
+    if not originals:
+        raise RuntimeError('agx_compiler.h not found beside the compiler units')
+    baseline = originals[0]
+    if any(o.read_bytes() != baseline.read_bytes() for o in originals[1:]):
+        raise RuntimeError('Diverging agx_compiler.h copies: ' + ', '.join(map(str, originals)))
+    text = baseline.read_bytes().decode()
+    for old, new in SIGNED_ENUM_BITFIELDS:
+        if text.count(old) != 1:
+            raise RuntimeError('Ambiguous enum bit-field anchor: ' + old)
+        text = text.replace(old, new)
+    destination = out / 'compiler-evidence'
+    destination.mkdir(parents=True, exist_ok=True)
+    for header in sorted(baseline.parent.glob('*.h')):
+        target = destination / header.name
+        if not target.exists():
+            shutil.copy2(header, target)
+    projected = destination / 'agx_compiler.h'
+    projected.write_bytes(text.encode())
+    relocated = []
+    for unit in units:
+        if unit.parent in homes and unit.parent != destination:
+            target = destination / unit.name
+            if not target.exists():
+                shutil.copy2(unit, target)
+            relocated.append(target)
+        else:
+            relocated.append(unit)
+    provenance = {'baseline': str(baseline), 'before_sha256': sha256(baseline),
+                  'after_sha256': sha256(projected), 'fields': len(SIGNED_ENUM_BITFIELDS),
+                  'relocated': sorted(str(p) for p, q in zip(relocated, units) if p != q)}
+    return relocated, destination, provenance
+
+
 def compile_command(compiler, flags, includes, source, obj):
     command = [compiler, *flags, *('/I' + str(p) for p in includes),
                '/c', source, '/Fo' + str(obj)]
@@ -377,6 +432,9 @@ def main():
             table_matches[0], out)
         manifest['compiler_opcode_flags_transform'] = opcode_transform
         compiler_units = [selected_table if p == table_matches[0] else p for p in compiler_units]
+        compiler_units, bitfield_include, bitfield_transform = prepare_unsigned_bitfield_header(
+            compiler_units, out)
+        manifest['compiler_unsigned_bitfield_transform'] = bitfield_transform
         libraries = []
         for relative in LIBRARIES:
             library = build / relative
@@ -443,6 +501,7 @@ def main():
                     OWNER_GENERATED / 'src/asahi/lib', MESA / 'src/asahi/isa',
                     MESA / 'src/poly', MESA / 'src/poly/nir']
         includes.insert(0, opcode_include)
+        includes.insert(1, bitfield_include)
         manifest['compiler'] = {'path': str(CLANG / 'clang-cl.exe'),
                                 'sha256': record(CLANG / 'clang-cl.exe', kind='toolchain'),
                                 'c_flags': c_flags, 'cpp_flags': cpp_flags,

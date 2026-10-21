@@ -5462,8 +5462,21 @@ AgxD3d10ResourceWithinRequiredLimits(
     # Match that layout without weakening the native assertion or bool semantics.
     adapted=original.replace('struct agx_fs_epilog_link_info {',
         'struct __attribute__((aligned(4))) agx_fs_epilog_link_info {').replace('   unsigned ', '   uint8_t ')
+    # EXP1848: clang-cl reads enum bit-fields as signed ints (MSVC ABI), so
+    # PIPE_BLEND_MAX (4) in 3 bits, PIPE_BLENDFACTOR_ZERO and the INV_* factors
+    # (>= 0x10, the invert bit) in 5 bits
+    # and PIPE_BLEND_OVERLAP_CONJOINT (2) in 2 bits read back negative; the
+    # same widths as unsigned bit-fields keep the 4-byte layout.
+    blend_bitfields=[(old_field,new_field) for old_field,new_field in (
+        ('   enum pipe_blend_func rgb_func          : 3;','   unsigned rgb_func                      : 3; /* enum pipe_blend_func */'),
+        ('   enum pipe_blendfactor rgb_src_factor   : 5;','   unsigned rgb_src_factor                : 5; /* enum pipe_blendfactor */'),
+        ('   enum pipe_blendfactor rgb_dst_factor   : 5;','   unsigned rgb_dst_factor                : 5; /* enum pipe_blendfactor */'),
+        ('   enum pipe_blend_func alpha_func        : 3;','   unsigned alpha_func                    : 3; /* enum pipe_blend_func */'),
+        ('   enum pipe_blendfactor alpha_src_factor : 5;','   unsigned alpha_src_factor              : 5; /* enum pipe_blendfactor */'),
+        ('   enum pipe_blendfactor alpha_dst_factor : 5;','   unsigned alpha_dst_factor              : 5; /* enum pipe_blendfactor */'),
+        ('   enum pipe_blend_overlap_mode overlap : 2;','   unsigned overlap                     : 2; /* enum pipe_blend_overlap_mode */'))]
     change('src/asahi/lib/agx_linker.h',
-        'bd469422d642fdbd136c978446426446d85b80070378e16fece842287136c6ff',[(original,adapted)])
+        'bd469422d642fdbd136c978446426446d85b80070378e16fece842287136c6ff',[(original,adapted),*blend_bitfields])
     change('src/asahi/libagx/libagx_dgc.h',
         'ab8db337b1c95bec23aebcbf92521a98f862a4fb7b23a0f2828e20ffd336eecc',[
         ('   uint range_B = d.index_buffer_range_B;',
