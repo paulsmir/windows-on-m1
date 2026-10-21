@@ -1992,17 +1992,69 @@ emit_ld(struct ctx *c, const struct dxbc_instruction *insn)
              insn->saturate);
 }
 
+static nir_def *uav_image(struct ctx *c, const struct dxbc_instruction *insn,
+                          const struct dxbc_operand *o, struct tex_shape *shape);
+
+/* resinfo's return type: float, rcpfloat (dimensions only) or uint */
+static nir_def *
+resinfo_convert(struct ctx *c, nir_def *value, unsigned mode)
+{
+   nir_builder *b = &c->b;
+   if (mode != 2) {
+      nir_def *f = nir_u2f32(b, value);
+      if (mode == 1) {
+         nir_def *r[4];
+         for (unsigned i = 0; i < 4; ++i)
+            r[i] = i < 3 ? nir_frcp(b, nir_channel(b, f, i)) : nir_channel(b, f, i);
+         f = nir_vec(b, r, 4);
+      }
+      value = f;
+   }
+   return value;
+}
+
+/* resinfo on a typed UAV texture: the view's single mip level, so the
+ * mip count is 1 and any other srcMipLevel reads as unbound (zero sizes) */
+static void
+emit_resinfo_uav(struct ctx *c, const struct dxbc_instruction *insn, unsigned mode)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *uav = &insn->operands[2];
+   struct tex_shape shape;
+   nir_def *image = uav_image(c, insn, uav, &shape), *size, *in_range, *comp[4];
+   if (!image)
+      return;
+   if (shape.dim == GLSL_SAMPLER_DIM_BUF) {
+      fail(c, insn, "resinfo on a buffer UAV");
+      return;
+   }
+   size = nir_image_size(b, shape.coords, 32, image, nir_imm_int(b, 0),
+                         .image_dim = shape.dim, .image_array = shape.array);
+   in_range = nir_ieq_imm(b, nir_channel(b, SRC(1, U), 0), 0);
+   for (unsigned i = 0; i < 3; ++i)
+      comp[i] = i < shape.coords ? nir_bcsel(b, in_range, nir_channel(b, size, i), nir_imm_int(b, 0))
+                                 : nir_imm_int(b, 0);
+   comp[3] = nir_imm_int(b, 1);
+   write_dst(c, insn, &insn->operands[0],
+             swizzle4(c, resinfo_convert(c, nir_vec(b, comp, 4), mode), uav), insn->saturate);
+}
+
 static void
 emit_resinfo(struct ctx *c, const struct dxbc_instruction *insn)
 {
    nir_builder *b = &c->b;
    const struct dxbc_operand *res = &insn->operands[2];
-   unsigned t = resource_index(c, insn, res), mode = (insn->token0 >> 11) & 3u;
+   unsigned t, mode = (insn->token0 >> 11) & 3u;
    struct tex_shape shape;
    nir_tex_instr *tex;
    nir_def *lod, *size, *levels, *comp[4], *value;
    unsigned dims;
 
+   if (res->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW) {
+      emit_resinfo_uav(c, insn, mode);
+      return;
+   }
+   t = resource_index(c, insn, res);
    if (c->failed || !tex_shape(c->res[t].dim, &shape)) {
       fail(c, insn, "resinfo resource dimension");
       return;
@@ -2019,17 +2071,7 @@ emit_resinfo(struct ctx *c, const struct dxbc_instruction *insn)
    for (unsigned i = 0; i < 3; ++i)
       comp[i] = i < dims ? nir_channel(b, size, i) : nir_imm_int(b, 0);
    comp[3] = levels;
-   value = nir_vec(b, comp, 4);
-   if (mode != 2) { /* float or rcpfloat (dimensions only) */
-      nir_def *f = nir_u2f32(b, value);
-      if (mode == 1) {
-         nir_def *r[4];
-         for (unsigned i = 0; i < 4; ++i)
-            r[i] = i < 3 ? nir_frcp(b, nir_channel(b, f, i)) : nir_channel(b, f, i);
-         f = nir_vec(b, r, 4);
-      }
-      value = f;
-   }
+   value = resinfo_convert(c, nir_vec(b, comp, 4), mode);
    write_dst(c, insn, &insn->operands[0], resource_swizzle(c, value, res), insn->saturate);
 }
 

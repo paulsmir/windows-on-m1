@@ -24,6 +24,29 @@ type_size_vec4(const struct glsl_type *type, bool bindless)
    return (unsigned)glsl_count_attribute_slots(type, false);
 }
 
+static void
+hull_passthrough(const void *bytes, size_t size, uint32_t *regs, uint32_t *positions)
+{
+   const void *sig;
+   uint32_t sig_bytes;
+   if (dxbc_container_find_chunk(bytes, size, DXBC_FOURCC('O', 'S', 'G', 'N'), &sig,
+                                 &sig_bytes) && sig_bytes >= 8) {
+      const uint8_t *s = sig;
+      uint32_t count;
+      memcpy(&count, s, 4);
+      for (uint32_t i = 0; i < count && 8 + 24 * (i + 1) <= sig_bytes; ++i) {
+         uint32_t sv, reg;
+         memcpy(&sv, s + 8 + 24 * i + 8, 4);
+         memcpy(&reg, s + 8 + 24 * i + 16, 4);
+         if (reg < 32) {
+            *regs |= 1u << reg;
+            if (sv == 1)
+               *positions |= 1u << reg;
+         }
+      }
+   }
+}
+
 int
 main(int argc, char **argv)
 {
@@ -37,6 +60,11 @@ main(int argc, char **argv)
    struct dxbc_nir_error terr;
    nir_shader *nir;
    bool print = argc > 2 && !strcmp(argv[2], "--print");
+   /* the D3D12 owner's entry: SM5.1 register spaces through a binding map
+    * with the owner's per-kind capacities (agx_d3d12_windows.cpp) */
+   bool d3d12 = argc > 2 && !strcmp(argv[2], "--d3d12");
+   static const uint32_t d3d12_limits[DXBC_BINDING_KIND_COUNT] = {14, 128, 8, 16};
+   struct dxbc_binding_map d3d12_map;
 
    if (argc < 2 || !(f = fopen(argv[1], "rb")))
       return 2;
@@ -107,29 +135,19 @@ main(int argc, char **argv)
       ralloc_free(nir);
       return 0;
    }
-   if (program.type == DXBC_PROGRAM_HULL) {
+   if (d3d12) {
+      uint32_t regs = 0, positions = 0;
+      if (program.type == DXBC_PROGRAM_HULL)
+         hull_passthrough(bytes, (size_t)size, &regs, &positions);
+      nir = dxbc_translate_tokens_bindings_hs(chunk, &agx_nir_options, d3d12_limits, &d3d12_map,
+                                              regs, positions, &terr);
+   } else if (program.type == DXBC_PROGRAM_HULL) {
       /* the output signature (OSGN: count, 8, then 24-byte entries with
        * the system value at +8 and the register at +16) names the control
        * point registers a pass-through phase copies, as the runtime's
        * D3D11DDIARG_TESSELLATION_IO_SIGNATURES do for the UMD */
-      const void *sig;
-      uint32_t sig_bytes, regs = 0, positions = 0;
-      if (dxbc_container_find_chunk(bytes, (size_t)size, DXBC_FOURCC('O', 'S', 'G', 'N'), &sig,
-                                    &sig_bytes) && sig_bytes >= 8) {
-         const uint8_t *s = sig;
-         uint32_t count;
-         memcpy(&count, s, 4);
-         for (uint32_t i = 0; i < count && 8 + 24 * (i + 1) <= sig_bytes; ++i) {
-            uint32_t sv, reg;
-            memcpy(&sv, s + 8 + 24 * i + 8, 4);
-            memcpy(&reg, s + 8 + 24 * i + 16, 4);
-            if (reg < 32) {
-               regs |= 1u << reg;
-               if (sv == 1)
-                  positions |= 1u << reg;
-            }
-         }
-      }
+      uint32_t regs = 0, positions = 0;
+      hull_passthrough(bytes, (size_t)size, &regs, &positions);
       nir = dxbc_to_nir_hs(&program, &agx_nir_options, regs, positions, &terr);
    } else {
       nir = dxbc_to_nir(&program, &agx_nir_options, &terr);

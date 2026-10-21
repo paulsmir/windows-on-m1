@@ -156,6 +156,39 @@ class DxbcToNir(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
         self.assertIn("TRANSLATED stage MESA_SHADER_COMPUTE", result.stdout)
 
+    def test_typed_uav_resinfo_queries_the_view(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? MiniEngine's
+        # DebugDrawHistogramCS (GetDimensions on a RWTexture2D, resinfo on
+        # u#) was refused ("resource operand"), failing its pipeline. A UAV
+        # resinfo must query the bound view (image_size of its dimension,
+        # layers for arrays) and report one mip level.
+        result = subprocess.run([str(self.binary), str(FIXTURES / "cs50uavinfo.dxbc"), "--print"],
+                                capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_COMPUTE", result.stdout)
+        sizes = re.findall(r"32x(\d) +%\d+ = @image_size .*image_dim=2D, image_array=(\w+)", result.stdout)
+        self.assertEqual(sorted(sizes), [("2", "false"), ("2", "false"), ("3", "true")])
+
+    def test_miniengine_sm51_shaders_translate_through_the_d3d12_bindings(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1839: MiniEngine
+        # stopped on a translator assertion (loop continue) only on
+        # hardware. Every FXC SM5.1 shader of the pinned MiniEngine build
+        # (68907e31, extracted locally) must translate through the D3D12
+        # owner's binding path and Asahi's preprocessing without a crash
+        # or refusal.
+        corpus = local_tree("miniengine-dxbc")
+        if corpus is None:
+            self.skipTest("MiniEngine DXBC corpus not available")
+        files = sorted(corpus.glob("*.dxbc"))
+        self.assertTrue(files)
+        bad = []
+        for path in files:
+            result = subprocess.run([str(self.binary), str(path), "--d3d12"],
+                                    capture_output=True, text=True, timeout=60)
+            if result.returncode != 0 or not result.stdout.startswith("TRANSLATED "):
+                bad.append(f"{path.name}: rc {result.returncode} {result.stdout[:100]!r}")
+        self.assertFalse(bad, "\n".join(bad))
+
     def test_windows_dxbc_corpus_does_not_crash(self):
         corpus = local_tree("dxbc-corpus")
         if corpus is None:
