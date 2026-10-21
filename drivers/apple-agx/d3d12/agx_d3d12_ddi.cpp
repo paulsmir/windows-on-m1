@@ -1605,6 +1605,7 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
          * RGBA8, one mip, layer and sample, linear) */
         const bool presentable = (bind & AGX_D3D12_BIND_RENDER_TARGET) && runtime_resource.handle &&
                                  resource_arg->MipLevels == 1 && resource_arg->DepthOrArraySize == 1 &&
+                                 resource_arg->SampleDesc.Count == 1 && /* EXP1829 C32A: a 4x target became 1x */
                                  (resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
                                   resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
                                   resource_arg->Format == DXGI_FORMAT_R8G8B8A8_UNORM);
