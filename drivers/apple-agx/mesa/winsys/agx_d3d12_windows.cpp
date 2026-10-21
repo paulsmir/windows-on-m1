@@ -53,6 +53,13 @@ struct AGX_D3D12_OWNER {
   UINT PendingCopies;
   UINT PendingDispatches;
   UINT PendingDraws; /* C6b: draws whose framebuffer/vertex bindings the submit drops */
+  /* the framebuffer the last draw bound: Asahi's set_framebuffer_state
+   * leaves the batch and dirties every state, so an unchanged framebuffer
+   * is not set again (EXP1835 Multithreading: ~2050 draws a frame each
+   * re-emitted all state). Clears and the submit bind their own and
+   * invalidate it; u_blitter restores it. */
+  struct pipe_framebuffer_state DrawFramebuffer;
+  bool DrawFramebufferValid;
   /* EXP1829 (Multithreading's shadow pass): a PSO without a pixel shader
    * draws with this empty one -- Asahi always reads the bound FS */
   void *EmptyFs;
@@ -717,6 +724,7 @@ static void clear_view_layers(AGX_D3D12_OWNER *owner, const struct pipe_surface 
       fb.cbufs[0] = slice;
     }
     pipe->set_framebuffer_state(pipe, &fb);
+    owner->DrawFramebufferValid = false;
     if (!rect_count) {
       pipe->clear(pipe, buffers, 0xf, 0xff, NULL, color, z, stencil);
       continue;
@@ -1927,7 +1935,11 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     buffers[s].buffer.resource = static_cast<struct pipe_resource *>(buffer->Resource);
     buffers[s].buffer_offset = static_cast<unsigned>(draw->Vb[s].Offset);
   }
-  pipe->set_framebuffer_state(pipe, &fb);
+  if (!owner->DrawFramebufferValid || memcmp(&owner->DrawFramebuffer, &fb, sizeof(fb))) {
+    pipe->set_framebuffer_state(pipe, &fb);
+    owner->DrawFramebuffer = fb;
+    owner->DrawFramebufferValid = true;
+  }
   pipe->bind_vs_state(pipe, graphics->Vs);
   if (!graphics->Fs && !owner->EmptyFs) owner->EmptyFs = util_make_empty_fragment_shader(pipe);
   if (!graphics->Fs && !owner->EmptyFs) return E_OUTOFMEMORY;
@@ -2125,6 +2137,7 @@ extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
     /* drop the draw bindings so they never outlive the heaps */
     struct pipe_framebuffer_state empty = {};
     owner->Context->set_framebuffer_state(owner->Context, &empty);
+    owner->DrawFramebufferValid = false;
     owner->Context->set_vertex_buffers(owner->Context, 0, NULL);
     owner->PendingDraws = 0;
   }

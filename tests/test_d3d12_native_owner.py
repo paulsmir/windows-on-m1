@@ -155,6 +155,24 @@ class NativeOwner(unittest.TestCase):
         stage = body(text, 'static HRESULT bind_stage(')
         self.assertIn('templ.target = texture->target;', stage)
 
+    def test_draw_framebuffer_cache_is_invalidated_by_every_other_binding(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The draw skips an
+        # unchanged set_framebuffer_state (Asahi dirties all state on it).
+        # Any other owner path that binds a framebuffer (clears, the
+        # submit's empty one) must invalidate the cache, or the next draw
+        # renders into the clear's or an empty framebuffer.
+        text = OWNER.read_text()
+        calls = [m.start() for m in re.finditer(r'set_framebuffer_state\(', text)]
+        draw = body(text, 'extern "C" HRESULT AgxD3d12OwnerDraw(')
+        draw_at = text.index(draw)
+        for at in calls:
+            if draw_at <= at < draw_at + len(draw):
+                continue
+            following = text[at:at + 200]
+            self.assertIn('DrawFramebufferValid = false;', following, text[at - 80:at + 120])
+        self.assertIn('memcmp(&owner->DrawFramebuffer, &fb, sizeof(fb))', draw)
+        self.assertIn('owner->DrawFramebufferValid = true;', draw)
+
     def test_indirect_draw_does_not_use_direct_counts_for_early_out(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
         # EXP1377: ExecuteIndirect records zero direct counts. The owner must
