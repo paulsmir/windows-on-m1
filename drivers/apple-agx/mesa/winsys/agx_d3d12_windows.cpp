@@ -53,7 +53,23 @@ struct AGX_D3D12_OWNER {
   UINT PendingDispatches;
   UINT PendingDraws; /* C6b: draws whose framebuffer/vertex bindings the submit drops */
   struct AGX_D3D12_PRESENTATION *PendingPresentations; /* C7b: released, kernel allocation still registered */
+  /* EXP1822: D3D12 queues and lists are used from several threads (nBody's
+   * async compute thread next to its render thread). The pipe_context is not
+   * thread-safe, so every entry point holds this recursive lock, and
+   * ExecuteCommandLists holds it across a whole replay and submission. */
+  CRITICAL_SECTION Lock;
 };
+namespace {
+struct OwnerLock {
+  AGX_D3D12_OWNER *owner;
+  explicit OwnerLock(AGX_D3D12_OWNER *o) : owner(o) { if (owner) EnterCriticalSection(&owner->Lock); }
+  ~OwnerLock() { if (owner) LeaveCriticalSection(&owner->Lock); }
+  OwnerLock(const OwnerLock &) = delete;
+  OwnerLock &operator=(const OwnerLock &) = delete;
+};
+} // namespace
+extern "C" void AgxD3d12OwnerLock(AGX_D3D12_OWNER *owner) { if (owner) EnterCriticalSection(&owner->Lock); }
+extern "C" void AgxD3d12OwnerUnlock(AGX_D3D12_OWNER *owner) { if (owner) LeaveCriticalSection(&owner->Lock); }
 
 /* C7b: a presentation texture (agx_d3d10_windows.cpp
  * AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE) */
@@ -131,6 +147,7 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   }
   hr = destroy_kernel_context(owner);
   if (FAILED(hr)) return hr;
+  DeleteCriticalSection(&owner->Lock);
   HeapFree(GetProcessHeap(), 0, owner);
   return S_OK;
 }
@@ -142,6 +159,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
   *out = NULL;
   auto *owner = static_cast<AGX_D3D12_OWNER *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AGX_D3D12_OWNER)));
   if (!owner) return E_OUTOFMEMORY;
+  InitializeCriticalSection(&owner->Lock);
   owner->Kernel = static_cast<const D3DDDI_DEVICECALLBACKS *>(args->KernelCallbacks);
   owner->RuntimeDevice = args->RuntimeDevice;
   owner->Error = args->Error;
@@ -203,6 +221,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
 
 extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned long long bytes,
                                              AGX_D3D12_BUFFER *buffer) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Screen || !owner->Context || !buffer || !bytes || bytes > 0xffffffffull)
     return E_INVALIDARG;
   memset(buffer, 0, sizeof(*buffer));
@@ -235,6 +254,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned lo
 }
 
 extern "C" void AgxD3d12OwnerDestroyBuffer(AGX_D3D12_OWNER *owner, AGX_D3D12_BUFFER *buffer) {
+  OwnerLock lock(owner);
   if (!owner || !buffer || !buffer->Resource) return;
   struct pipe_resource *resource = static_cast<struct pipe_resource *>(buffer->Resource);
   AgxWin32AsahiResourceRelease(&resource);
@@ -242,6 +262,7 @@ extern "C" void AgxD3d12OwnerDestroyBuffer(AGX_D3D12_OWNER *owner, AGX_D3D12_BUF
 }
 
 extern "C" UINT AgxD3d12OwnerBufferAllocation(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *buffer) {
+  OwnerLock lock(owner);
   if (!owner || !buffer || !buffer->Resource) return 0;
   AGX_WIN32_RELOC_ALLOCATION identity = {};
   if (!AgxWin32AsahiResourceIdentity(static_cast<struct pipe_resource *>(buffer->Resource), &identity)) return 0;
@@ -251,6 +272,7 @@ extern "C" UINT AgxD3d12OwnerBufferAllocation(AGX_D3D12_OWNER *owner, const AGX_
 extern "C" HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *dst,
                                      unsigned long long dst_offset, const AGX_D3D12_BUFFER *src,
                                      unsigned long long src_offset, unsigned long long bytes) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !dst || !src || !dst->Resource || !src->Resource || !bytes ||
       dst_offset > dst->Bytes || bytes > dst->Bytes - dst_offset || src_offset > src->Bytes ||
       bytes > src->Bytes - src_offset || dst->Bytes > 0x7fffffffull || src->Bytes > 0x7fffffffull)
@@ -275,6 +297,7 @@ static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
 };
 extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,
                                               AGX_D3D12_COMPUTE *compute) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !tokens || !compute) return E_INVALIDARG;
   memset(compute, 0, sizeof(*compute));
   struct pipe_context *pipe = owner->Context;
@@ -323,6 +346,7 @@ static bool compute_prepared_empty(const AGX_D3D12_COMPUTE *v) {
 }
 extern "C" HRESULT AgxD3d12OwnerCreateComputePrepared(AGX_D3D12_OWNER *owner,
  const AgxOwnedNir *prepared,AGX_D3D12_COMPUTE *compute) {
+  OwnerLock lock(owner);
  if(!compute||!compute_prepared_empty(compute))return E_INVALIDARG;
  if(!owner||!owner->Screen||!owner->Context||!prepared)return E_INVALIDARG;
  if(AgxOwnedNirStage(prepared)!=AGX_OWNED_NIR_STAGE_COMPUTE)return E_NOTIMPL;
@@ -350,6 +374,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateComputePrepared(AGX_D3D12_OWNER *owner,
 #endif /* APPLE_AGX_D3D12_PREPARED_NIR_OWNER */
 
 extern "C" void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *owner, AGX_D3D12_COMPUTE *compute) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !compute || !compute->State) return;
   owner->Context->delete_compute_state(owner->Context, compute->State);
   memset(compute, 0, sizeof(*compute));
@@ -376,6 +401,7 @@ extern "C" unsigned AgxD3d12FormatBlockBytes(DXGI_FORMAT format) {
 extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FORMAT format, unsigned width,
                                                 unsigned height, unsigned layers, unsigned levels, unsigned bind,
                                                 unsigned long long bytes, AGX_D3D12_BUFFER *texture) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Screen || !texture || !width || !height || !layers || !levels || levels > 16 ||
       !AgxD3d12FormatBlockBytes(format))
     return E_INVALIDARG;
@@ -541,6 +567,7 @@ extern "C" HRESULT AgxD3d12QueryTexture1DArrayLayout(DXGI_FORMAT format,unsigned
 }
 extern "C" HRESULT AgxD3d12OwnerCreateTexture1DArray(AGX_D3D12_OWNER *owner,DXGI_FORMAT format,
     unsigned width,unsigned layers,unsigned levels,unsigned bind,unsigned long long bytes,AGX_D3D12_BUFFER *texture) {
+  OwnerLock lock(owner);
   if(!texture)return E_INVALIDARG;memset(texture,0,sizeof(*texture));
   AGX_D3D12_VOLUME_LAYOUT checked={};struct pipe_resource templ={};AGX_WIN32_ASAHI_RESOURCE_LAYOUT layout={};
   if(!owner || !owner->Screen || FAILED(AgxD3d12QueryTexture1DArrayLayout(format,width,layers,levels,bind,&checked)) ||
@@ -555,6 +582,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture1DArray(AGX_D3D12_OWNER *owner,DXGI
 
 extern "C" HRESULT AgxD3d12OwnerCreateTexture1D(AGX_D3D12_OWNER *owner,DXGI_FORMAT format,unsigned width,
     unsigned levels,unsigned bind,unsigned long long bytes,AGX_D3D12_BUFFER *texture) {
+  OwnerLock lock(owner);
   if(!texture)return E_INVALIDARG;memset(texture,0,sizeof(*texture));
   AGX_D3D12_VOLUME_LAYOUT checked={};struct pipe_resource templ={};AGX_WIN32_ASAHI_RESOURCE_LAYOUT layout={};
   if(!owner || !owner->Screen || FAILED(AgxD3d12QueryTexture1DLayout(format,width,levels,bind,&checked)) ||
@@ -571,6 +599,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture1D(AGX_D3D12_OWNER *owner,DXGI_FORM
 extern "C" HRESULT AgxD3d12OwnerCreateTexture3D(AGX_D3D12_OWNER *owner,DXGI_FORMAT format,
     unsigned width,unsigned height,unsigned depth,unsigned levels,unsigned bind,
     unsigned long long bytes,AGX_D3D12_BUFFER *texture) {
+  OwnerLock lock(owner);
   if(!owner || !owner->Screen || !texture) return E_INVALIDARG;
   memset(texture,0,sizeof(*texture));
   struct pipe_resource templ={};AGX_WIN32_ASAHI_RESOURCE_LAYOUT layout={};
@@ -642,6 +671,7 @@ extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const 
                                                   DXGI_FORMAT view_format, unsigned level, unsigned first_layer,
                                                   unsigned layers, const float color[4], const RECT *rects,
                                                   unsigned rect_count) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !texture || !texture->Resource || !color || !layers) return E_INVALIDARG;
   struct pipe_resource *resource = static_cast<struct pipe_resource *>(texture->Resource);
   const enum pipe_format format = FormatTranslate(view_format, FALSE);
@@ -667,6 +697,7 @@ extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const 
 extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner, DXGI_FORMAT format, unsigned width,
                                                           unsigned height, int shader_resource, HANDLE runtime_resource,
                                                           AGX_D3D12_BUFFER *texture, void **presentation, UINT *allocation) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Screen || !owner->Context || !runtime_resource || !texture || !presentation || !allocation)
     return E_INVALIDARG;
   memset(texture, 0, sizeof(*texture));
@@ -737,6 +768,7 @@ extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner
  * the screen stops tracking the allocation (agx_d3d10_windows.cpp
  * AgxD3d10WindowsPresentationDestroy). */
 extern "C" void AgxD3d12OwnerDestroyPresentationTexture(AGX_D3D12_OWNER *owner, void *presentation) {
+  OwnerLock lock(owner);
   auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(presentation);
   if (!owner || !record) return;
   if (record->RenderResource) AgxWin32AsahiResourceRelease(&record->RenderResource);
@@ -781,6 +813,7 @@ static bool clear_pixel(enum pipe_format format, const void *values, int is_floa
 
 extern "C" HRESULT AgxD3d12OwnerClearUav(AGX_D3D12_OWNER *owner, const AGX_D3D12_UAV *uav, const void *values,
                                          int is_float, const RECT *rects, unsigned rect_count) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !uav || !uav->Buffer || !uav->Buffer->Resource || !values || (rect_count && !rects))
     return E_INVALIDARG;
   struct pipe_context *pipe = owner->Context;
@@ -868,6 +901,7 @@ static const unsigned kQueryStatistics = 11; /* D3D12_QUERY_DATA_PIPELINE_STATIS
 
 extern "C" HRESULT AgxD3d12OwnerCreateQueryHeap(AGX_D3D12_OWNER *owner, unsigned type, unsigned count,
                                                 AGX_D3D12_QUERY_HEAP **heap) {
+  OwnerLock lock(owner);
   if (heap) *heap = NULL;
   if (!owner || !owner->Context || !heap || !count || type > 2u || count > (1u << 20)) return E_INVALIDARG;
   const unsigned slots = type == 0 ? 2u : type == 1 ? 1u : kQueryStatistics;
@@ -882,6 +916,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateQueryHeap(AGX_D3D12_OWNER *owner, unsigned
 }
 
 extern "C" void AgxD3d12OwnerDestroyQueryHeap(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HEAP *heap) {
+  OwnerLock lock(owner);
   if (!heap) return;
   for (unsigned i = 0; owner && owner->Context && i < heap->Count * heap->Slots; ++i)
     if (heap->Query[i]) owner->Context->destroy_query(owner->Context, heap->Query[i]);
@@ -898,6 +933,7 @@ static struct pipe_query *heap_query(struct pipe_context *pipe, AGX_D3D12_QUERY_
 
 extern "C" HRESULT AgxD3d12OwnerQuery(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HEAP *heap, unsigned type, unsigned index,
                                       int begin) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !heap || index >= heap->Count) return E_INVALIDARG;
   struct pipe_context *pipe = owner->Context;
   /* D3D12_QUERY_TYPE: 0 occlusion, 1 binary occlusion, 2 timestamp (end
@@ -922,6 +958,7 @@ extern "C" HRESULT AgxD3d12OwnerQuery(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HE
 extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HEAP *heap, unsigned type,
                                                unsigned start, unsigned count, const AGX_D3D12_BUFFER *dst,
                                                unsigned long long offset) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !heap || !dst || !dst->Resource || start > heap->Count ||
       count > heap->Count - start)
     return E_INVALIDARG;
@@ -951,6 +988,7 @@ extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12
  * the owner context must be flushed and the direct map published first
  * (AgxD3d10WindowsPresentationSubmitSurfaces before AdmissionUmdSubmitPresent) */
 extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *presentation, UINT *allocation) {
+  OwnerLock lock(owner);
   auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(presentation);
   if (allocation) *allocation = 0;
   if (!owner || !owner->Context || !record || !allocation || !record->Resource.KernelAllocation) return E_INVALIDARG;
@@ -972,6 +1010,7 @@ extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const 
                                                   const AGX_D3D12_BUFFER *src, unsigned src_level, unsigned src_layer,
                                                   unsigned src_x, unsigned src_y, unsigned width, unsigned height,
                                                   unsigned layers) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !dst || !dst->Resource || !src || !src->Resource || !width || !height || !layers)
     return E_INVALIDARG;
   struct pipe_resource *d = static_cast<struct pipe_resource *>(dst->Resource);
@@ -1008,6 +1047,7 @@ extern "C" HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *owner, const 
                                                   DXGI_FORMAT view_format, unsigned level, unsigned first_layer,
                                                   unsigned layers, unsigned flags, float depth, unsigned stencil,
                                                   const RECT *rects, unsigned rect_count) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !texture || !texture->Resource || !layers || !(flags & 3u)) return E_INVALIDARG;
   struct pipe_resource *resource = static_cast<struct pipe_resource *>(texture->Resource);
   const enum pipe_format format = FormatTranslate(view_format, TRUE);
@@ -1034,6 +1074,7 @@ extern "C" HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *owner, const 
 /* Maps the texture box and the buffer range; the maps synchronise with work
  * already recorded on the context, so the copy keeps replay order. */
 extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COPY *copy) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !copy || !copy->Texture || !copy->Texture->Resource || !copy->Buffer ||
       !copy->Buffer->Resource || !copy->Width || !copy->Height || !copy->Depth)
     return E_INVALIDARG;
@@ -1173,6 +1214,7 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
 }
 
 extern "C" void AgxD3d12OwnerDestroyGraphics(AGX_D3D12_OWNER *owner, AGX_D3D12_GRAPHICS *graphics) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !graphics) return;
   struct pipe_context *pipe = owner->Context;
   if (graphics->Vs) pipe->delete_vs_state(pipe, graphics->Vs);
@@ -1187,6 +1229,7 @@ extern "C" void AgxD3d12OwnerDestroyGraphics(AGX_D3D12_OWNER *owner, AGX_D3D12_G
 
 extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX_D3D12_GRAPHICS_DESC *desc,
                                                AGX_D3D12_GRAPHICS *graphics) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !desc || !desc->Vs || !graphics || desc->NumElements > AGX_D3D12_MAX_ELEMENTS)
     return E_INVALIDARG;
   memset(graphics, 0, sizeof(*graphics));
@@ -1516,6 +1559,7 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
                                          const AGX_D3D12_SRV srvs[AGX_D3D12_SRV_SLOTS],
                                          const AGX_D3D12_SAMPLER samplers[AGX_D3D12_SAMPLER_SLOTS], unsigned x,
                                          unsigned y, unsigned z, const AGX_D3D12_INDIRECT *indirect) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !compute || !compute->State || !uavs || !cbvs || !srvs || !samplers ||
       (!indirect && (!x || !y || !z)))
     return E_INVALIDARG;
@@ -1590,6 +1634,7 @@ static enum mesa_prim primitive(unsigned topology) {
 }
 
 extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *draw) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context || !draw || !draw->Pipeline || !draw->Pipeline->Vs || draw->NumRtvs > 8)
     return E_INVALIDARG;
   const enum mesa_prim mode = primitive(draw->Topology);
@@ -1808,6 +1853,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
 }
 
 extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
+  OwnerLock lock(owner);
   if (!owner || !owner->Context) return E_INVALIDARG;
   if (owner->PendingDraws) {
     /* drop the draw bindings so they never outlive the heaps */

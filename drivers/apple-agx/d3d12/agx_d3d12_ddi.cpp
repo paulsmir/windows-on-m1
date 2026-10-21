@@ -4019,7 +4019,7 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     return hr;
 }
 #endif
-static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     UINT commands = 0;
     HRESULT hr = S_OK;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
@@ -4120,6 +4120,22 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
 #endif
     const UINT receipt[] = {count, commands};
     AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 2);
+}
+/* EXP1822: one replay and its submission run under the device owner's lock,
+ * so lists executed from several threads (the nBody async compute thread
+ * and its render thread) never interleave on the one pipe_context. */
+static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AGX_D3D12_OWNER *owner = nullptr;
+    for (UINT i = 0; lists && i < count && !owner; ++i)
+        if (const auto *list = static_cast<const AgxD3d12CommandList *>(lists[i].pDrvPrivate))
+            owner = list->device ? static_cast<AGX_D3D12_OWNER *>(list->device->owner) : nullptr;
+    AgxD3d12OwnerLock(owner);
+    ReplayAndSubmit(count, lists);
+    AgxD3d12OwnerUnlock(owner);
+#else
+    ReplayAndSubmit(count, lists);
+#endif
 }
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);

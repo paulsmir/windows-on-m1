@@ -235,7 +235,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('bytes > d->bytes - dst_offset', copy)
         self.assertIn('bytes > r->bytes - src_offset', copy)
         self.assertIn('list->commands >= kListCommands', copy)
-        execute = source[source.index('static VOID APIENTRY ExecuteCommandLists('):]
+        execute = source[source.index('static void ReplayAndSubmit('):]
         execute = execute[:execute.index('\n}\n')]
         self.assertLess(execute.index('AgxD3d12OwnerCopy('), execute.index('AgxD3d12OwnerSubmitAndWait('))
         # C5: copies and dispatches replay in recording order through one loop
@@ -407,11 +407,26 @@ class D3d12AbiGate(unittest.TestCase):
         side = fn('static bool CopySide(')
         self.assertIn('D3D12DDI_RL_SELECT_SUBRESOURCE', side)
         self.assertIn('D3D12DDI_RL_PLACED_PHYSICAL_SUBRESOURCE_PITCHED', side)
-        execute = fn('static VOID APIENTRY ExecuteCommandLists(')
+        execute = fn('static void ReplayAndSubmit(')
         self.assertIn('AgxD3d12OwnerClearRenderTarget(', execute)
         self.assertIn('AgxD3d12OwnerCopyTexture(', execute)
         # buffers carry their type so a footprint side is never a texture
         self.assertIn('resource->type = D3D12DDI_RT_BUFFER;', create)
+
+    def test_replay_holds_the_owner_lock(self):
+        # EXP1822: nBody executes lists from an async compute thread and its
+        # render thread at once; the owner's pipe_context is not thread-safe
+        source = SOURCE.read_text()
+        execute = source[source.index('static VOID APIENTRY ExecuteCommandLists('):]
+        execute = execute[:execute.index('\n}\n')]
+        self.assertLess(execute.index('AgxD3d12OwnerLock(owner);'), execute.index('ReplayAndSubmit(count, lists);'))
+        self.assertLess(execute.index('ReplayAndSubmit(count, lists);'), execute.index('AgxD3d12OwnerUnlock(owner);'))
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        import re
+        for m in re.finditer(r'extern "C" [^\n(]*\bAgxD3d12Owner(\w+)\(AGX_D3D12_OWNER \*owner[^{;]*\{\n(.*)\n', owner):
+            if m.group(1) in ('Destroy', 'Lock', 'Unlock'):
+                continue
+            self.assertEqual(m.group(2).strip(), 'OwnerLock lock(owner);', m.group(1))
 
     def test_c6b_draw(self):
         # C6b invariants: a pipeline keeps copies of its VS/PS programs and
@@ -458,7 +473,7 @@ class D3d12AbiGate(unittest.TestCase):
         # GS pipeline's draw (a GS bound once must not reach later draws)
         self.assertIn('pso->desc.hHullShader.pDrvPrivate || pso->desc.hDomainShader.pDrvPrivate ? 4u', draw)
         self.assertLess(draw.index('gs_slot->kind = kCommandGsBind;'), draw.index('command.kind = kCommandDraw;'))
-        replay_loop = fn('static VOID APIENTRY ExecuteCommandLists(')
+        replay_loop = fn('static void ReplayAndSubmit(')
         self.assertIn('command.draw.pso->gs_dwords ? gs_pending : nullptr', replay_loop)
         self.assertIn('gs_pending = nullptr;', replay_loop)
         self.assertIn('"measure-d3d12-draw"', draw)
@@ -568,7 +583,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('(d->type == D3D12DDI_RT_TEXTURE2D) != (s->type == D3D12DDI_RT_TEXTURE2D) ? 4u', rc)
         self.assertIn('rc.whole_levels = s->levels < d->levels ? s->levels : d->levels;', rc)
         self.assertIn('d->bytes < s->bytes ? d->bytes : s->bytes', rc)
-        self.assertIn('AgxD3d12OwnerCopyTextureRegion(', fn('static VOID APIENTRY ExecuteCommandLists('))
+        self.assertIn('AgxD3d12OwnerCopyTextureRegion(', fn('static void ReplayAndSubmit('))
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         region = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion('):]
         region = region[:region.index('\n}\n')]

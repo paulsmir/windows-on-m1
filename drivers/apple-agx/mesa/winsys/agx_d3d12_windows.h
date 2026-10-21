@@ -42,6 +42,9 @@ typedef struct {
 } AGX_D3D12_OWNER_ARGS;
 
 HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *Args, AGX_D3D12_OWNER **Owner);
+/* EXP1822: the owner's recursive lock (ExecuteCommandLists holds it across a replay). */
+void AgxD3d12OwnerLock(AGX_D3D12_OWNER *Owner);
+void AgxD3d12OwnerUnlock(AGX_D3D12_OWNER *Owner);
 HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
 HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *Owner, unsigned long long Bytes,
                                   AGX_D3D12_BUFFER *Buffer);
