@@ -4089,6 +4089,87 @@ static int step_c28a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
 static int step_c28b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c28_compute(d, q, f, b, 1); }
 static int step_c28c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c28_compute(d, q, f, b, 2); }
 
+/* C36 (engines sub-allocate textures from heaps): two 64x64 RGBA8 render
+ * targets placed at 0 and 64 KiB of one RT/DS heap (resource heap tier 1),
+ * cleared red and green, both read back; PASS = each its own colour. */
+static int c36_placed_textures(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_HEAP_DESC heap_desc = {131072, {D3D12_HEAP_TYPE_DEFAULT}, 0, D3D12_HEAP_FLAG_ALLOW_ONLY_RT_DS_TEXTURES};
+    D3D12_RESOURCE_DESC desc = {0};
+    D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
+    ID3D12Heap *heap = NULL;
+    ID3D12Resource *textures[2] = {0};
+    ID3D12DescriptorHeap *rtv_heap = NULL;
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    UINT bad = 2;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = desc.Height = 64;
+    desc.DepthOrArraySize = desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    HRESULT hr = readback ? ID3D12Device_CreateHeap(device, &heap_desc, &IID_ID3D12Heap, (void **)&heap) : E_FAIL;
+    printf("C36A CreateHeap hr=0x%08lx\n", (unsigned long)hr);
+    for (UINT i = 0; SUCCEEDED(hr) && i < 2; ++i) {
+        hr = ID3D12Device_CreatePlacedResource(device, heap, 65536ull * i, &desc, D3D12_RESOURCE_STATE_RENDER_TARGET, NULL,
+                                               &IID_ID3D12Resource, (void **)&textures[i]);
+        printf("C36A CreatePlacedResource %u hr=0x%08lx\n", i, (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &rtv_desc, &IID_ID3D12DescriptorHeap, (void **)&rtv_heap);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        const FLOAT colours[2][4] = {{1, 0, 0, 1}, {0, 1, 0, 1}};
+        const UINT inc = ID3D12Device_GetDescriptorHandleIncrementSize(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv;
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(rtv_heap, &rtv);
+        for (UINT i = 0; i < 2; ++i) {
+            D3D12_CPU_DESCRIPTOR_HANDLE at = {rtv.ptr + i * inc};
+            D3D12_TEXTURE_COPY_LOCATION src = {0}, dst = {0};
+            ID3D12Device_CreateRenderTargetView(device, textures[i], NULL, at);
+            ID3D12GraphicsCommandList_ClearRenderTargetView(list, at, colours[i], 0, NULL);
+            transition(list, textures[i], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            src.pResource = textures[i];
+            src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            dst.pResource = readback;
+            dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            dst.PlacedFootprint.Offset = 16384ull * i;
+            dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            dst.PlacedFootprint.Footprint.Width = dst.PlacedFootprint.Footprint.Height = 64;
+            dst.PlacedFootprint.Footprint.Depth = 1;
+            dst.PlacedFootprint.Footprint.RowPitch = 256;
+            ID3D12GraphicsCommandList_CopyTextureRegion(list, &dst, 0, 0, 0, &src, NULL);
+        }
+        hr = run_list(queue, fence, list, base + 1, "C36A");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 32768};
+        const unsigned char *out = NULL;
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&out);
+        if (SUCCEEDED(hr) && out) {
+            bad = 0;
+            for (UINT i = 0; i < 2; ++i) {
+                const unsigned char *px = out + 16384 * i + 32 * 256 + 32 * 4;
+                printf("C36A texture %u centre=%u,%u,%u,%u\n", i, px[0], px[1], px[2], px[3]);
+                if (px[0] != (i ? 0 : 255) || px[1] != (i ? 255 : 0) || px[2] != 0 || px[3] != 255) ++bad;
+            }
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C36A: %s\n", SUCCEEDED(hr) && !bad ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (rtv_heap) ID3D12DescriptorHeap_Release(rtv_heap);
+    for (UINT i = 0; i < 2; ++i)
+        if (textures[i]) ID3D12Resource_Release(textures[i]);
+    if (heap) ID3D12Heap_Release(heap);
+    if (readback) ID3D12Resource_Release(readback);
+    return !(SUCCEEDED(hr) && !bad);
+}
 /* C34 (EXP1826: DynamicIndexing's ps_5_1 g_txMats[] : register(t1) read
  * as g_txMats[index]): four 1x1 RGBA8 textures in a descriptor table, read
  * by a cs_5_1 loop over materials[i]; PASS = each word is its texture's
@@ -4985,7 +5066,7 @@ int main(int argc, char **argv) {
         if (strcmp(argv[a], "warp")) continue;
         static const struct { const char *name; probe_step step; } steps[] = {
             {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
-            {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}};
+            {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -5060,6 +5141,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C33A", c33_append);
                 (void)run_isolated(adapter, "C34A", c34_ranges);
                 (void)run_isolated(adapter, "C35A", step_c35a);
+                (void)run_isolated(adapter, "C36A", c36_placed_textures);
                 (void)run_isolated(adapter, "C27A", step_c27a);
                 (void)run_isolated(adapter, "C27B", step_c27b);
                 (void)run_isolated(adapter, "C7A", swapchain_present);

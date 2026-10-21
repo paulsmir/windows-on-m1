@@ -1589,8 +1589,15 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         return CreateLineResource(device,heap_arg,heap,resource_arg,resource);
     if(resource_arg && resource_arg->ResourceType==D3D12DDI_RT_TEXTURE3D)
         return CreateVolumeResource(device,heap_arg,heap,resource_arg,resource);
-    /* C6a: a committed 2D texture is one owner texture */
-    if (heap_arg && heap && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D) {
+    /* C6a: a committed 2D texture is one owner texture. C36: so is a placed
+     * one (no heap description; ReuseBufferGPUVA names the parent heap):
+     * the owner keeps textures in their own twiddled BOs, so it does not
+     * share the parent's memory -- D3D12 leaves an aliased resource's
+     * content undefined until it is cleared, copied or discarded anyway.
+     * The placed resource's heap object owns that texture. */
+    const bool placed = !heap_arg && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D &&
+                        resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate;
+    if ((heap_arg || placed) && heap && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D) {
         const UINT64 bytes = TextureBytes(resource_arg);
         AGX_D3D12_OWNER *owner = bytes ? EnsureOwner(device) : nullptr;
         memset(heap, 0, sizeof(*heap));
@@ -1603,7 +1610,7 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
          * buffers among them) gets a kernel allocation of the runtime
          * resource -- the D3D10/11 presentation-resource contract (BGRA8 or
          * RGBA8, one mip, layer and sample, linear) */
-        const bool presentable = (bind & AGX_D3D12_BIND_RENDER_TARGET) && runtime_resource.handle &&
+        const bool presentable = !placed && (bind & AGX_D3D12_BIND_RENDER_TARGET) && runtime_resource.handle &&
                                  resource_arg->MipLevels == 1 && resource_arg->DepthOrArraySize == 1 &&
                                  resource_arg->SampleDesc.Count == 1 && /* EXP1829 C32A: a 4x target became 1x */
                                  (resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
@@ -1636,7 +1643,8 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
             resource->levels = resource_arg->MipLevels;
         }
         const UINT receipt[] = {static_cast<UINT>(resource_arg->Format), static_cast<UINT>(resource_arg->Width),
-                                resource_arg->Height, static_cast<UINT>(bytes >> 16), bind | (presentable ? 0x100u : 0u)};
+                                resource_arg->Height, static_cast<UINT>(bytes >> 16),
+                                bind | (presentable ? 0x100u : 0u) | (placed ? 0x200u : 0u)};
         AdmissionUmdDiagnostic("measure-d3d12-committed-texture", hr, receipt, 5);
         return hr;
     }
