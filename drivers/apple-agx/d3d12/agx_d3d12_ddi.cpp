@@ -638,6 +638,7 @@ static VOID APIENTRY DestroyRootSignature(D3D12DDI_HDEVICE device_handle,
  * pipeline state is created (C5). */
 struct AgxD3d12Shader {
     UINT stage; /* the stage the runtime created it for (D3D10_SB program type) */
+    UINT hs_registers, hs_positions; /* C37: a hull shader's pass-through registers */
     UINT dwords;
     UINT tokens[1];
 };
@@ -653,6 +654,7 @@ static void StoreShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HSHA
         return;
     }
     shader->stage = code[0] >> 16;
+    shader->hs_registers = shader->hs_positions = 0;
     shader->dwords = code[1];
     memcpy(shader->tokens, code, code[1] * sizeof(UINT));
     const UINT receipt[] = {shader->stage, code[0] & 0xffffu, shader->dwords};
@@ -666,6 +668,29 @@ static VOID APIENTRY CreateShader(D3D12DDI_HDEVICE device, const UINT *code, D3D
 static VOID APIENTRY CreateComputeShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HROOTSIGNATURE,
                                          D3D12DDI_HSHADER handle, D3D12DDI_CREATE_SHADER_FLAGS) {
     StoreShader(device, code, handle);
+}
+/* C37 (D3D12-C37-tessellation.md): hull and domain shaders keep their
+ * program as the other stages do; a hull shader also keeps the registers of
+ * its output (control point) signature and which of them hold SV_Position,
+ * what a pass-through control point phase copies (the D3D11 frontend's
+ * hs_passthrough). */
+static SIZE_T APIENTRY CalcPrivateTessellationShaderSize(D3D12DDI_HDEVICE device, const UINT *code,
+                                                         D3D12DDI_HROOTSIGNATURE root,
+                                                         const D3D12DDIARG_TESSELLATION_IO_SIGNATURES *) {
+    return CalcPrivateShaderSize(device, code, root, nullptr);
+}
+static VOID APIENTRY CreateTessellationShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HROOTSIGNATURE,
+                                              D3D12DDI_HSHADER handle, const D3D12DDIARG_TESSELLATION_IO_SIGNATURES *sig,
+                                              D3D12DDI_CREATE_SHADER_FLAGS) {
+    StoreShader(device, code, handle);
+    auto *shader = static_cast<AgxD3d12Shader *>(handle.pDrvPrivate);
+    if (!shader || !code || code[1] < 2 || shader->stage != D3D11_SB_HULL_SHADER || !sig || !sig->pOutputSignature) return;
+    for (UINT i = 0; i < sig->NumOutputSignatureEntries; ++i) {
+        const UINT reg = sig->pOutputSignature[i].Register;
+        if (reg >= 32) continue;
+        shader->hs_registers |= 1u << reg;
+        if (sig->pOutputSignature[i].SystemValue == D3D10_SB_NAME_POSITION) shader->hs_positions |= 1u << reg;
+    }
 }
 static VOID APIENTRY DestroyShader(D3D12DDI_HDEVICE, D3D12DDI_HSHADER) {}
 /* C1h (EXP1352): after its internal vertex shader (VS 4.0, 15 DWORDs) the
@@ -883,7 +908,8 @@ struct AgxD3d12PipelineState {
     UINT elements;
     D3D12DDIARG_INPUT_ELEMENT_DESC element[kPipelineElements];
     UINT cs_dwords, vs_dwords, ps_dwords, gs_dwords;
-    UINT cs[1]; /* the CS program, then the VS, then the PS, then the GS (C27) */
+    UINT hs_dwords, ds_dwords, hs_registers, hs_positions; /* C37 */
+    UINT cs[1]; /* the CS program, then the VS, the PS, the GS (C27), the HS and the DS (C37) */
 };
 static void PublishPsoIdentity(AgxD3d12PipelineState *pso, AgxD3d12Device *device) {
     AcquireSRWLockExclusive(&identity_registry_lock);
@@ -934,7 +960,10 @@ static SIZE_T APIENTRY CalcPrivatePipelineStateSize(D3D12DDI_HDEVICE, const D3D1
     const AgxD3d12Shader *vs = arg ? ShaderOf(arg->hVertexShader) : nullptr;
     const AgxD3d12Shader *ps = arg ? ShaderOf(arg->hPixelShader) : nullptr;
     const AgxD3d12Shader *gs = arg ? ShaderOf(arg->hGeometryShader) : nullptr;
-    const SIZE_T dwords = (cs ? cs->dwords : 0) + (vs ? vs->dwords : 0) + (ps ? ps->dwords : 0) + (gs ? gs->dwords : 0);
+    const AgxD3d12Shader *hs = arg ? ShaderOf(arg->hHullShader) : nullptr;
+    const AgxD3d12Shader *ds = arg ? ShaderOf(arg->hDomainShader) : nullptr;
+    const SIZE_T dwords = (cs ? cs->dwords : 0) + (vs ? vs->dwords : 0) + (ps ? ps->dwords : 0) + (gs ? gs->dwords : 0) +
+                          (hs ? hs->dwords : 0) + (ds ? ds->dwords : 0);
     return offsetof(AgxD3d12PipelineState, cs) + (dwords ? dwords : 1) * sizeof(UINT);
 }
 static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
@@ -964,6 +993,17 @@ static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE handle, const D3D12
     if (const AgxD3d12Shader *gs = ShaderOf(arg->hGeometryShader)) {
         pso->gs_dwords = gs->dwords;
         memcpy(pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords, gs->tokens, gs->dwords * sizeof(UINT));
+    }
+    UINT *tess = pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords + pso->gs_dwords;
+    if (const AgxD3d12Shader *hs = ShaderOf(arg->hHullShader)) { /* C37 */
+        pso->hs_dwords = hs->dwords;
+        pso->hs_registers = hs->hs_registers;
+        pso->hs_positions = hs->hs_positions;
+        memcpy(tess, hs->tokens, hs->dwords * sizeof(UINT));
+    }
+    if (const AgxD3d12Shader *ds = ShaderOf(arg->hDomainShader)) {
+        pso->ds_dwords = ds->dwords;
+        memcpy(tess + pso->hs_dwords, ds->tokens, ds->dwords * sizeof(UINT));
     }
     if (arg->hBlendState.pDrvPrivate) memcpy(&pso->blend, arg->hBlendState.pDrvPrivate, sizeof(pso->blend));
     if (arg->hRasterizerState.pDrvPrivate) memcpy(&pso->rasterizer, arg->hRasterizerState.pDrvPrivate, sizeof(pso->rasterizer));
@@ -2485,7 +2525,8 @@ enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kComman
               kCommandClearDepth = 6, kCommandTextureRegionCopy = 7, kCommandClearUav = 8,
               kCommandQuery = 9, kCommandGsBind = 10 /* C27: the GS bindings of the next draw */,
               kCommandIndirectExpand = 11 /* C31: ExecuteIndirect with root or IA arguments */,
-              kCommandResolve = 12 /* C32: ResolveSubresource */ };
+              kCommandResolve = 12 /* C32: ResolveSubresource */,
+              kCommandHsBind = 13, kCommandDsBind = 14 /* C37: the HS and DS bindings of the next draw */ };
 /* C32: a recorded ResolveSubresource (subresources decoded at record time) */
 struct AgxD3d12Resolve {
     AgxD3d12Heap *dst, *src;
@@ -3398,6 +3439,11 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
     desc.Vs = pso->vs_dwords ? pso->cs + pso->cs_dwords : nullptr;
     desc.Ps = pso->ps_dwords ? pso->cs + pso->cs_dwords + pso->vs_dwords : nullptr;
     desc.Gs = pso->gs_dwords ? pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords : nullptr;
+    const UINT *tess = pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords + pso->gs_dwords; /* C37 */
+    desc.Hs = pso->hs_dwords ? tess : nullptr;
+    desc.Ds = pso->ds_dwords ? tess + pso->hs_dwords : nullptr;
+    desc.HsPassthroughRegisters = pso->hs_registers;
+    desc.HsPassthroughPositions = pso->hs_positions;
     desc.AlphaToCoverage = pso->blend.AlphaToCoverageEnable;
     desc.IndependentBlend = pso->blend.IndependentBlendEnable;
     for (UINT i = 0; i < 8; ++i) {
@@ -3785,9 +3831,13 @@ static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *
     if (list && list->pso) {
         if (stage == D3D12DDI_SHADER_VISIBILITY_PIXEL && !list->pso->ps_dwords) return 0u;
         if (stage == D3D12DDI_SHADER_VISIBILITY_GEOMETRY && !list->pso->gs_dwords) return 0u;
+        if (stage == D3D12DDI_SHADER_VISIBILITY_HULL && !list->pso->hs_dwords) return 0u; /* C37 */
+        if (stage == D3D12DDI_SHADER_VISIBILITY_DOMAIN && !list->pso->ds_dwords) return 0u;
         const struct dxbc_binding_map *map = stage == kAnyStage ? &list->pso->compute.Bindings
             : stage == D3D12DDI_SHADER_VISIBILITY_VERTEX ? &list->pso->graphics.VsBindings
             : stage == D3D12DDI_SHADER_VISIBILITY_GEOMETRY ? &list->pso->graphics.GsBindings
+            : stage == D3D12DDI_SHADER_VISIBILITY_HULL ? &list->pso->graphics.HsBindings
+            : stage == D3D12DDI_SHADER_VISIBILITY_DOMAIN ? &list->pso->graphics.DsBindings
                                                        : &list->pso->graphics.PsBindings;
         if (map->active) return ResolveMappedRoot(list, root, va, dwords, stage, *map, out);
     }
@@ -3872,20 +3922,21 @@ static VOID APIENTRY Dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT
 /* C6b: DrawInstanced snapshots the graphics state; C6c resolves the
  * graphics root signature for the VS and the PS (C27: and the GS, recorded
  * as a kCommandGsBind slot just before the draw so draws without a GS keep
- * their slot size). Tessellation stages refuse with receipt
- * measure-d3d12-draw {reason}. */
+ * their slot size; C37: the HS and DS likewise). A refusal names its
+ * reason in receipt measure-d3d12-draw {reason}. */
 static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances, UINT start_vertex, INT base_vertex,
                        UINT start_instance, bool indexed, const AgxD3d12Indirect *indirect = nullptr) {
     if (!list || (!indirect && (!vertices || !instances))) return;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12PipelineState *pso = list->pso;
     UINT refusal = !pso || !pso->vs_dwords ? 1u
-                 : pso->desc.hHullShader.pDrvPrivate || pso->desc.hDomainShader.pDrvPrivate ? 4u
+                 : !pso->hs_dwords != !pso->ds_dwords ? 4u
+                 : (list->topology >= 33u && list->topology <= 64u) != (pso->hs_dwords != 0) ? 9u /* C37: patches <=> HS+DS */
                  : (!list->rtvs || !list->rtv[0].heap) && list->dsv.kind != kDescriptorDsv ? 5u
                  : indexed && !list->index_heap ? 6u
                  : indirect && indexed && list->index_offset ? 8u /* C14: Gallium takes the start index from the arguments */
-                 : list->commands + (pso->gs_dwords ? 1u : 0u) >= kListCommands ? 3u : 0u;
-    AgxD3d12Dispatch vs_bind = {}, ps_bind = {}, gs_bind = {};
+                 : list->commands + (pso->gs_dwords ? 1u : 0u) + (pso->hs_dwords ? 2u : 0u) >= kListCommands ? 3u : 0u;
+    AgxD3d12Dispatch vs_bind = {}, ps_bind = {}, gs_bind = {}, hs_bind = {}, ds_bind = {};
     if (!refusal && FAILED(CompileGraphics(list->device, pso))) refusal = 7u;
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                                         D3D12DDI_SHADER_VISIBILITY_VERTEX, &vs_bind);
@@ -3894,6 +3945,12 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
     if (!refusal && pso->gs_dwords)
         refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                               D3D12DDI_SHADER_VISIBILITY_GEOMETRY, &gs_bind);
+    if (!refusal && pso->hs_dwords)
+        refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
+                              D3D12DDI_SHADER_VISIBILITY_HULL, &hs_bind);
+    if (!refusal && pso->ds_dwords)
+        refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
+                              D3D12DDI_SHADER_VISIBILITY_DOMAIN, &ds_bind);
     const UINT receipt[] = {refusal, vertices, instances, list->rtvs, list->topology, indexed ? list->index_size : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-draw", refusal ? E_NOTIMPL : S_OK, receipt, 6);
     if (refusal) {
@@ -3905,6 +3962,16 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
         if (!gs_slot) return;
         gs_slot->kind = kCommandGsBind;
         gs_slot->dispatch = gs_bind;
+    }
+    if (pso->hs_dwords) {
+        AgxD3d12Command *hs_slot = AppendCommand(list);
+        if (!hs_slot) return;
+        hs_slot->kind = kCommandHsBind;
+        hs_slot->dispatch = hs_bind;
+        AgxD3d12Command *ds_slot = AppendCommand(list);
+        if (!ds_slot) return;
+        ds_slot->kind = kCommandDsBind;
+        ds_slot->dispatch = ds_bind;
     }
     AgxD3d12Command *slot = AppendCommand(list);
     if (!slot) return;
@@ -4258,9 +4325,34 @@ static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const
 struct AgxD3d12DrawScratch {
     AGX_D3D12_BUFFER rtv_textures[8], vb_buffers[kVertexBuffers], dsv_texture, index_buffer, indirect_args, indirect_count;
     AGX_D3D12_DRAW draw;
-    AgxD3d12OwnerBindings vs_bind, ps_bind, gs_bind;
+    AgxD3d12OwnerBindings vs_bind, ps_bind, gs_bind, hs_bind, ds_bind;
 };
-static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12Dispatch *gs) {
+/* C27/C37: the bindings of a draw's optional stages (recorded slots) */
+struct AgxD3d12OptionalBinds {
+    const AgxD3d12Dispatch *gs, *hs, *ds;
+};
+static void OwnerStageBindings(const AgxD3d12Dispatch &recorded, AgxD3d12OwnerBindings *bind, decltype(AGX_D3D12_DRAW::Gs) *out) {
+    OwnerBindings(recorded, bind);
+    memcpy(out->Cbvs, bind->cbvs, sizeof(out->Cbvs));
+    memcpy(out->Srvs, bind->srvs, sizeof(out->Srvs));
+    memcpy(out->Samplers, bind->samplers, sizeof(out->Samplers));
+    memcpy(out->Uavs, bind->uavs, sizeof(out->Uavs));
+}
+/* a recorded optional-stage slot fills pending; true when it was one */
+static bool TakeOptionalBind(const AgxD3d12Command &command, AgxD3d12OptionalBinds *pending) {
+    const AgxD3d12Dispatch **slot = command.kind == kCommandGsBind ? &pending->gs
+                                  : command.kind == kCommandHsBind ? &pending->hs
+                                  : command.kind == kCommandDsBind ? &pending->ds : nullptr;
+    if (slot) *slot = &command.dispatch;
+    return slot != nullptr;
+}
+/* only the stages the draw's pipeline has (a stage bound once must not
+ * reach later draws) */
+static AgxD3d12OptionalBinds DrawOptionalBinds(const AgxD3d12Draw &draw, const AgxD3d12OptionalBinds &pending) {
+    return {draw.pso->gs_dwords ? pending.gs : nullptr, draw.pso->hs_dwords ? pending.hs : nullptr,
+            draw.pso->ds_dwords ? pending.ds : nullptr};
+}
+static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional) {
     /* the draw's owner records (~10 KB) live on the process heap */
     auto *scratch = static_cast<AgxD3d12DrawScratch *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AgxD3d12DrawScratch)));
     if (!scratch) return E_OUTOFMEMORY;
@@ -4330,14 +4422,9 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     memcpy(draw.Ps.Samplers, ps_bind.samplers, sizeof(draw.Ps.Samplers));
     memcpy(draw.Vs.Uavs, vs_bind.uavs, sizeof(draw.Vs.Uavs)); /* C13 */
     memcpy(draw.Ps.Uavs, ps_bind.uavs, sizeof(draw.Ps.Uavs));
-    if (gs) { /* C27 */
-        AgxD3d12OwnerBindings &gs_bind = scratch->gs_bind;
-        OwnerBindings(*gs, &gs_bind);
-        memcpy(draw.Gs.Cbvs, gs_bind.cbvs, sizeof(draw.Gs.Cbvs));
-        memcpy(draw.Gs.Srvs, gs_bind.srvs, sizeof(draw.Gs.Srvs));
-        memcpy(draw.Gs.Samplers, gs_bind.samplers, sizeof(draw.Gs.Samplers));
-        memcpy(draw.Gs.Uavs, gs_bind.uavs, sizeof(draw.Gs.Uavs));
-    }
+    if (optional.gs) OwnerStageBindings(*optional.gs, &scratch->gs_bind, &draw.Gs); /* C27 */
+    if (optional.hs) OwnerStageBindings(*optional.hs, &scratch->hs_bind, &draw.Hs); /* C37 */
+    if (optional.ds) OwnerStageBindings(*optional.ds, &scratch->ds_bind, &draw.Ds);
     OwnerIndirect(d.indirect, &scratch->indirect_args, &scratch->indirect_count, &draw.Indirect); /* C14 */
     const HRESULT hr = AgxD3d12OwnerDraw(owner, &draw);
     HeapFree(GetProcessHeap(), 0, scratch);
@@ -4423,14 +4510,13 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
             else if (signature.kind == 2u) RecordDraw(scratch, v[0], v[1], v[2], static_cast<INT>(v[3]), v[4], true);
             else RecordDraw(scratch, v[0], v[1], v[2], 0, v[3], false);
             if (!scratch->commands) ++skipped; /* an empty or refused record */
-            const AgxD3d12Dispatch *gs_pending = nullptr;
+            AgxD3d12OptionalBinds pending = {};
             for (UINT c = 0; SUCCEEDED(hr) && c < scratch->commands; ++c) {
                 const AgxD3d12Command &command = scratch->command[c];
-                if (command.kind == kCommandGsBind) {
-                    gs_pending = &command.dispatch;
+                if (TakeOptionalBind(command, &pending)) {
                 } else if (command.kind == kCommandDraw) {
-                    hr = ReplayDraw(owner, command.draw, command.draw.pso->gs_dwords ? gs_pending : nullptr);
-                    gs_pending = nullptr;
+                    hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending));
+                    pending = {};
                     ++drawn;
                 } else if (command.kind == kCommandDispatch) {
                     hr = ReplayDispatch(owner, command.dispatch);
@@ -4458,7 +4544,7 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
         if (!list) continue;
         commands += list->commands;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-        const AgxD3d12Dispatch *gs_pending = nullptr;
+        AgxD3d12OptionalBinds pending = {}; /* C27/C37 */
         for (UINT c = 0; SUCCEEDED(hr) && c < list->commands; ++c) {
             const AgxD3d12Command &command = list->command[c];
             device = list->device;
@@ -4498,11 +4584,10 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
                 const AgxD3d12Resolve &r = command.resolve;
                 AGX_D3D12_BUFFER dst = HeapBuffer(r.dst), src = HeapBuffer(r.src);
                 hr = AgxD3d12OwnerResolve(owner, &dst, r.dst_level, r.dst_layer, &src, r.src_layer, r.format);
-            } else if (command.kind == kCommandGsBind) {
-                gs_pending = &command.dispatch; /* C27: consumed by the next draw */
+            } else if (TakeOptionalBind(command, &pending)) { /* C27/C37: consumed by the next draw */
             } else if (command.kind == kCommandDraw) {
-                hr = ReplayDraw(owner, command.draw, command.draw.pso->gs_dwords ? gs_pending : nullptr);
-                gs_pending = nullptr;
+                hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending));
+                pending = {};
             } else if (command.kind == kCommandQuery) {
                 const AgxD3d12QueryCommand &q = command.query;
                 auto *queries = static_cast<AGX_D3D12_QUERY_HEAP *>(q.heap->owner);
@@ -4610,9 +4695,9 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateComputeShader, CreateComputeShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateGeometryShaderWithStreamOutput, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateGeometryShaderWithStreamOutput));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShaderWithStreamOutput, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShaderWithStreamOutput));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateTessellationShaderSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateTessellationShaderSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateTessellationShaderSize, CalcPrivateTessellationShaderSize); /* C37 */
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader, CreateTessellationShader);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader, CreateTessellationShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyShader, DestroyShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandQueueSize, CalcPrivateCommandQueueSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandQueue, CreateCommandQueue);

@@ -87,6 +87,15 @@ dxbc_translate_tokens_bindings(const uint32_t *tokens,
    const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
    struct dxbc_nir_error *error);
 
+/* C37: dxbc_translate_tokens_bindings for a hull shader with the
+ * pass-through registers of its output signature (other stages pass 0). */
+struct nir_shader *
+dxbc_translate_tokens_bindings_hs(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   uint32_t passthrough_registers, uint32_t passthrough_positions,
+   struct dxbc_nir_error *error);
+
 /* dxbc_translate_tokens for a hull shader with the pass-through registers
  * of its output signature (see dxbc_to_nir_hs). */
 struct nir_shader *

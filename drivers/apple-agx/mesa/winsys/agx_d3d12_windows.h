@@ -270,6 +270,11 @@ typedef struct {
   const UINT *Vs;
   const UINT *Ps; /* NULL = no pixel shader */
   const UINT *Gs; /* C27: NULL = no geometry shader */
+  /* C37: hull and domain shaders (both or neither); the hull shader's
+   * output-signature registers (and which hold SV_Position) that a
+   * pass-through control point phase copies */
+  const UINT *Hs, *Ds;
+  unsigned HsPassthroughRegisters, HsPassthroughPositions;
   int AlphaToCoverage, IndependentBlend;
   struct {
     int BlendEnable;
@@ -294,6 +299,7 @@ typedef struct {
 typedef struct {
   void *Vs, *Fs, *Blend, *DepthStencil, *Rasterizer;
   void *Gs; /* C27 */
+  void *Hs, *Ds; /* C37: TCS and TES */
   unsigned SampleMask; /* C32 */
   unsigned NumElements;
   struct {
@@ -303,10 +309,12 @@ typedef struct {
    * from IASetVertexBuffers) */
   void *Velems;
   unsigned VelemsStrides[16];
-  struct dxbc_binding_map VsBindings, PsBindings, GsBindings;
-  uint8_t VsSrvDimensions[DXBC_RESOURCE_SLOTS], PsSrvDimensions[DXBC_RESOURCE_SLOTS], GsSrvDimensions[DXBC_RESOURCE_SLOTS];
+  struct dxbc_binding_map VsBindings, PsBindings, GsBindings, HsBindings, DsBindings;
+  uint8_t VsSrvDimensions[DXBC_RESOURCE_SLOTS], PsSrvDimensions[DXBC_RESOURCE_SLOTS], GsSrvDimensions[DXBC_RESOURCE_SLOTS],
+          HsSrvDimensions[DXBC_RESOURCE_SLOTS], DsSrvDimensions[DXBC_RESOURCE_SLOTS];
   uint8_t VsUavDimensions[DXBC_UAV_DIMENSION_SLOTS], PsUavDimensions[DXBC_UAV_DIMENSION_SLOTS],
-          GsUavDimensions[DXBC_UAV_DIMENSION_SLOTS];
+          GsUavDimensions[DXBC_UAV_DIMENSION_SLOTS], HsUavDimensions[DXBC_UAV_DIMENSION_SLOTS],
+          DsUavDimensions[DXBC_UAV_DIMENSION_SLOTS];
 } AGX_D3D12_GRAPHICS;
 HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *Owner, const AGX_D3D12_GRAPHICS_DESC *Desc,
                                     AGX_D3D12_GRAPHICS *Graphics);
@@ -327,7 +335,7 @@ typedef struct {
   } Dsv;
   float Viewport[6]; /* TopLeftX, TopLeftY, Width, Height, MinDepth, MaxDepth */
   RECT Scissor;
-  unsigned Topology; /* D3D_PRIMITIVE_TOPOLOGY */
+  unsigned Topology; /* D3D_PRIMITIVE_TOPOLOGY (C37: 33..64 = 1..32 control point patch lists) */
   struct {
     const AGX_D3D12_BUFFER *Buffer; /* NULL = unbound */
     unsigned long long Offset;
@@ -349,7 +357,7 @@ typedef struct {
     AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS];
     AGX_D3D12_SAMPLER Samplers[AGX_D3D12_SAMPLER_SLOTS]; /* C6e */
     AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS]; /* C13: graphics UAVs (u# in every stage) */
-  } Vs, Ps, Gs; /* C27: Gs only when the pipeline has a geometry shader */
+  } Vs, Ps, Gs, Hs, Ds; /* C27: Gs only when the pipeline has a geometry shader; C37: Hs/Ds likewise */
   /* C14: indirect draws (Indirect.Buffer NULL = direct); an indexed indirect
    * draw needs IndexOffset 0 (Gallium takes the start index from the
    * arguments) */

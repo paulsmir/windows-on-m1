@@ -134,7 +134,7 @@ class NativeOwner(unittest.TestCase):
         create = body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateGraphics(')
         self.assertIn('rast.scissor = 1;', create)
         self.assertIn('rast.clip_halfz = 1;', create)
-        self.assertIn('dxbc_translate_tokens_bindings(', body(text, 'static void *create_shader('))
+        self.assertIn('dxbc_translate_tokens_bindings_hs(', body(text, 'static void *create_shader('))
         self.assertIn('&graphics->VsBindings', create)
         self.assertIn('&graphics->PsBindings', create)
         draw = body(text, 'extern "C" HRESULT AgxD3d12OwnerDraw(')

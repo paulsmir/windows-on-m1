@@ -112,13 +112,17 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('AgxD3d12MeasureR1RootPrivate', size)
         self.assertIn('root->NumParameters', ROOT_LAYOUT.read_text())
         # C1g (EXP1351): shader objects keep the tokenized program (length in
-        # pShaderCode[1]); hull/domain and GS stream output stay refused.
+        # pShaderCode[1]); GS stream output stays refused (C37: hull and
+        # domain shaders are stored, a hull shader with its pass-through
+        # registers).
         for member, fn in (('pfnCalcPrivateShaderSize', 'CalcPrivateShaderSize'),
                            ('pfnCreateVertexShader', 'CreateShader'), ('pfnCreatePixelShader', 'CreateShader'),
                            ('pfnCreateGeometryShader', 'CreateShader'),
+                           ('pfnCalcPrivateTessellationShaderSize', 'CalcPrivateTessellationShaderSize'),
+                           ('pfnCreateHullShader', 'CreateTessellationShader'), ('pfnCreateDomainShader', 'CreateTessellationShader'),
                            ('pfnCreateComputeShader', 'CreateComputeShader'), ('pfnDestroyShader', 'DestroyShader')):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, fn), source)
-        for member in ('pfnCreateHullShader', 'pfnCreateDomainShader', 'pfnCreateGeometryShaderWithStreamOutput'):
+        for member in ('pfnCreateGeometryShaderWithStreamOutput',):
             self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
         self.assertIn('memcpy(shader->tokens, code, code[1] * sizeof(UINT));', source)
         self.assertIn('(dwords ? dwords : 1) * sizeof(UINT)', source)
@@ -473,14 +477,21 @@ class D3d12AbiGate(unittest.TestCase):
         # the draw's owner records live on the heap, not in the replay frame
         # (STACK_FRAMES gate, EXP1369 build: 12944 bytes before)
         self.assertIn('HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AgxD3d12DrawScratch))', replay)
-        # C27: tessellation stays refused; a GS draw records its bindings in
-        # the slot just before the draw, and replay hands them only to a
-        # GS pipeline's draw (a GS bound once must not reach later draws)
-        self.assertIn('pso->desc.hHullShader.pDrvPrivate || pso->desc.hDomainShader.pDrvPrivate ? 4u', draw)
-        self.assertLess(draw.index('gs_slot->kind = kCommandGsBind;'), draw.index('command.kind = kCommandDraw;'))
+        # C27/C37: a GS, HS or DS draw records the stage's bindings in the
+        # slots just before the draw, and replay hands them only to a draw
+        # whose pipeline has the stage (a stage bound once must not reach
+        # later draws); HS and DS come together, and patch topologies draw
+        # exactly with them
+        self.assertIn('!pso->hs_dwords != !pso->ds_dwords ? 4u', draw)
+        self.assertIn('(list->topology >= 33u && list->topology <= 64u) != (pso->hs_dwords != 0) ? 9u', draw)
+        for kind in ('gs_slot->kind = kCommandGsBind;', 'hs_slot->kind = kCommandHsBind;', 'ds_slot->kind = kCommandDsBind;'):
+            self.assertLess(draw.index(kind), draw.index('command.kind = kCommandDraw;'))
+        optional = fn('static AgxD3d12OptionalBinds DrawOptionalBinds(')
+        for stage in ('gs', 'hs', 'ds'):
+            self.assertIn('draw.pso->%s_dwords ? pending.%s : nullptr' % (stage, stage), optional)
         replay_loop = fn('static void ReplayAndSubmit(')
-        self.assertIn('command.draw.pso->gs_dwords ? gs_pending : nullptr', replay_loop)
-        self.assertIn('gs_pending = nullptr;', replay_loop)
+        self.assertIn('ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending));', replay_loop)
+        self.assertIn('pending = {};', replay_loop)
         self.assertIn('"measure-d3d12-draw"', draw)
         self.assertIn('memcpy(draw.vb, list->vb, sizeof(draw.vb));', draw)
         self.assertIn('AgxD3d12OwnerDraw(', fn('static __declspec(noinline) HRESULT ReplayDraw('))
