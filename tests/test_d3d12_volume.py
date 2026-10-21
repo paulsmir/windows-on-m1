@@ -18,6 +18,7 @@ class VolumeQuery(unittest.TestCase):
         owner=OWNER.read_text();ddi=DDI.read_text()
         funcs=block(owner,'static unsigned block_bytes(')+'\n'
         funcs+=block(owner,'extern "C" unsigned AgxD3d12FormatBlockBytes(')+'\n'
+        funcs+=block(owner,'static unsigned texture_block(')+'\n'+block(owner,'extern "C" unsigned AgxD3d12FormatBlock(')+'\n'
         for name in ['static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D(']:
             if name in owner:funcs+=block(owner,name)+'\n'
         record='typedef struct {unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];} AGX_D3D12_VOLUME_LAYOUT;'
@@ -38,6 +39,7 @@ class VolumeCopy(unittest.TestCase):
         if not build or not mesa:self.skipTest('host Mesa unavailable')
         owner=OWNER.read_text()
         funcs=block(owner,'static unsigned block_bytes(')+'\n'+block(owner,'static unsigned level_extent(unsigned extent, unsigned level) {')+'\n'
+        funcs+=block(owner,'static unsigned texture_block(')+'\n'
         if 'static unsigned texture_layer_extent(' in owner:funcs+=block(owner,'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {')+'\n'
         funcs+=block(owner,'extern "C" HRESULT AgxD3d12OwnerCopyTexture(')
         header=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.h').read_text()
@@ -83,7 +85,7 @@ struct D3D12DDIARG_CREATE_RENDER_TARGET_VIEW_0002 {
             code+=block(ddi,'static VOID APIENTRY '+name+'(')+'\n'
         owner=OWNER.read_text()
         prefix=prefix.replace('static bool uav_image(const AGX_D3D12_UAV *,pipe_image_view *) {return false;}', '')
-        prefix+='\nusing LONG=int;struct RECT {LONG left,top,right,bottom;};struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingDraws;};\n'
+        prefix+='\nusing LONG=int;struct RECT {LONG left,top,right,bottom;};struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingDraws;};\nstruct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}}; /* the owner lock (EXP1824) is not a fixture boundary */\n'
         code+='\n'+block(owner,'static unsigned level_extent(unsigned extent, unsigned level) {')
         code+='\n'+block(owner,'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {')
         for marker in ['static bool uav_dimension_matches(', 'static bool uav_image(', 'static bool srv_component_mapping(', 'static HRESULT bind_stage(',

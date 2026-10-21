@@ -150,6 +150,10 @@ HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *Owner, const AGX_D3D12_COMPUTE *C
  * one texel block of a DXGI format the owner can create (uncompressed,
  * 1x1 blocks), 0 otherwise. */
 unsigned AgxD3d12FormatBlockBytes(DXGI_FORMAT Format);
+/* C29: bytes of one texture element of a format CreateTexture2D accepts --
+ * a 1x1 texel or a BC1-BC7 4x4 block (sampler-only) -- with its *Width x
+ * *Height in texels; 0 otherwise. */
+unsigned AgxD3d12FormatBlock(DXGI_FORMAT Format, unsigned *Width, unsigned *Height);
 #define AGX_D3D12_BIND_RENDER_TARGET 0x1u
 #define AGX_D3D12_BIND_SAMPLER 0x2u
 #define AGX_D3D12_BIND_DEPTH_STENCIL 0x4u /* C6f: also translates typeless formats as depth */

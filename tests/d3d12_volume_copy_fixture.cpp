@@ -12,12 +12,18 @@ using UINT=unsigned;using HRESULT=int;
 #define SUCCEEDED(x) ((x)>=0)
 struct AGX_D3D12_BUFFER {void *Resource;unsigned long long GpuVa,Bytes;};
 struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingCopies;};
+struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}}; /* the owner lock (EXP1824) is not a fixture boundary */
 /* ACTUAL_COPY_RECORD */
 static unsigned char volume[2][2048],buffer_bytes[8192];
 static pipe_transfer tex_transfer,buf_transfer;
 static unsigned maps=0;
+/* C29: a BC1 map is a staging copy of whole 4x4 blocks (agx_transfer_map
+ * stride = blocks across the box * 8) */
+static bool bc_mode;static pipe_box bc_box;static unsigned char bc_blocks[3][256];
 static void *map_texture(pipe_context *,pipe_resource *,unsigned level,unsigned,const pipe_box *box,pipe_transfer **t) {
- ++maps;tex_transfer={};tex_transfer.stride=64;tex_transfer.layer_stride=512;*t=&tex_transfer;
+ ++maps;tex_transfer={};*t=&tex_transfer;
+ if(bc_mode){bc_box=*box;tex_transfer.stride=(box->width+3)/4*8;tex_transfer.layer_stride=tex_transfer.stride*((box->height+3)/4);return bc_blocks[level];}
+ tex_transfer.stride=64;tex_transfer.layer_stride=512;
  return volume[level]+box->z*512+box->y*64+box->x*4;
 }
 static void *map_buffer(pipe_context *,pipe_resource *,unsigned,unsigned,const pipe_box *box,pipe_transfer **t) {
@@ -56,5 +62,23 @@ int main() {
  unsigned before=maps;c.Layer=2;assert(AgxD3d12OwnerCopyTexture(&owner,&c)==E_INVALIDARG && maps==before);
  c.Layer=1;c.X=0xffffffffu;assert(AgxD3d12OwnerCopyTexture(&owner,&c)==E_INVALIDARG && maps==before);
  c.X=0;c.Offset=sizeof(buffer_bytes)-1;assert(AgxD3d12OwnerCopyTexture(&owner,&c)==E_INVALIDARG && maps==before);
- puts("PASS volume real-copy pitches/mip bounds/untouched planes");
+ // C29: BC1 8x8 with three mips -- block rows at the footprint pitch, and a
+ // 4x4 block footprint into the 2x2 mip maps only the mip's own extent.
+ pipe_resource bc={};bc.target=PIPE_TEXTURE_2D;bc.format=PIPE_FORMAT_DXT1_RGBA;bc.width0=bc.height0=8;bc.depth0=1;bc.array_size=1;bc.last_level=2;
+ AGX_D3D12_BUFFER bctex={&bc,0,65536};bc_mode=true;
+ for(unsigned i=0;i<sizeof(buffer_bytes);++i)buffer_bytes[i]=static_cast<unsigned char>(i*7+3);
+ AGX_D3D12_TEXTURE_COPY b={};b.Texture=&bctex;b.Buffer=&buffer;b.Width=b.Height=8;b.Depth=1;b.Pitch=256;
+ assert(AgxD3d12OwnerCopyTexture(&owner,&b)==S_OK && bc_box.width==8 && bc_box.height==8);
+ assert(!std::memcmp(bc_blocks[0],buffer_bytes,16) && !std::memcmp(bc_blocks[0]+16,buffer_bytes+256,16));
+ b.Level=2;b.Width=b.Height=4;b.Offset=1024;
+ assert(AgxD3d12OwnerCopyTexture(&owner,&b)==S_OK && bc_box.width==2 && bc_box.height==2);
+ assert(!std::memcmp(bc_blocks[2],buffer_bytes+1024,8));
+ std::memset(buffer_bytes,0x5a,sizeof(buffer_bytes));b.Level=0;b.Width=b.Height=8;b.Offset=512;b.ToBuffer=1;
+ assert(AgxD3d12OwnerCopyTexture(&owner,&b)==S_OK && !std::memcmp(buffer_bytes+512,bc_blocks[0],16) &&
+        !std::memcmp(buffer_bytes+768,bc_blocks[0]+16,16) && buffer_bytes[528]==0x5a && buffer_bytes[784]==0x5a);
+ before=maps;b.ToBuffer=0;b.X=2;b.Width=4;assert(AgxD3d12OwnerCopyTexture(&owner,&b)==E_INVALIDARG && maps==before);
+ b.X=0;b.Width=12;assert(AgxD3d12OwnerCopyTexture(&owner,&b)==E_INVALIDARG && maps==before);
+ b.Width=8;b.Pitch=8;assert(AgxD3d12OwnerCopyTexture(&owner,&b)==E_INVALIDARG && maps==before);
+ bc_mode=false;
+ puts("PASS volume real-copy pitches/mip bounds/untouched planes; C29 BC1 block rows/edge mip/refusals");
 }

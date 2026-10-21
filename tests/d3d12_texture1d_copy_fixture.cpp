@@ -15,5 +15,15 @@ int main(){
  }
  auto same=tex;l={};CopyTextureRegion(h,&tex,tl,1,0,0,&same,tl,&box);assert(!l.error&&l.commands==1&&l.recorded.kind==kCommandTextureRegionCopy&&l.recorded.region_copy.layers==1);
  t.type=D3D12DDI_RT_TEXTURE2D;l={};CopyTextureRegion(h,&tex,tl,0,0,0,&same,tl,nullptr);/* legacy2D remains separate */
- puts("PASS C23 actualDDI1D copy selectedmip/NPOT/pitches/nonzeroorigins and10refusals");
+ // C29: a BC1 (71) 2D texture: buffer offsets count block rows and 8-byte blocks
+ AgxD3d12Resource bt={&th,0x10000,65536,D3D12DDI_RT_TEXTURE2D,71,8,8,1,3};
+ D3D12DDIARG_BUFFER_PLACEMENT btex={};btex.BaseAddress.UMD.hResource.pDrvPrivate=&bt;
+ D3D12DDIARG_PHYSICAL_SUBRESOURCE_PITCHED_LAYOUT bfp={71,8,8,1,256,512};auto bfl=bl;bfl.pLayout=&bfp;
+ D3D12DDI_BOX quarter={4,4,0,8,8,1};
+ l={};CopyTextureRegion(h,&buf,bfl,4,4,0,&btex,tl,&quarter);
+ assert(!l.error&&l.commands==1&&l.recorded.texture_copy.to_buffer&&l.recorded.texture_copy.offset==512+256+8&&l.recorded.texture_copy.x==4&&l.recorded.texture_copy.y==4);
+ l={};CopyTextureRegion(h,&btex,tl,0,0,0,&buf,bfl,&quarter);
+ assert(!l.error&&l.commands==1&&!l.recorded.texture_copy.to_buffer&&l.recorded.texture_copy.offset==512+256+8&&l.recorded.texture_copy.width==4);
+ l={};CopyTextureRegion(h,&buf,bfl,2,0,0,&btex,tl,&quarter);assert(l.error&&!l.commands);
+ puts("PASS C23 actualDDI1D copy selectedmip/NPOT/pitches/nonzeroorigins and10refusals; C29 BC1 block offsets");
 }

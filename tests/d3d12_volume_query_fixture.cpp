@@ -32,6 +32,7 @@ enum {D3D12DDI_RT_TEXTURE2D=3,D3D12DDI_RT_TEXTURE3D=4,D3D12DDI_RT_TEXTURE1D=2};
 static constexpr UINT64 kHeapPage=0x10000;
 struct AGX_D3D12_BUFFER {void *Resource;UINT64 GpuVa,Bytes;};
 struct AGX_D3D12_OWNER {pipe_screen *Screen;};
+struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}}; /* the owner lock (EXP1824) is not a fixture boundary */
 struct D3D12DDIARG_CREATERESOURCE_0003 {unsigned ResourceType;struct {UINT Count,Quality;} SampleDesc;UINT64 Width;UINT Height,DepthOrArraySize,MipLevels;DXGI_FORMAT Format;unsigned Flags,Layout;};
 static pipe_format FormatTranslate(DXGI_FORMAT format,int) {return format==28?PIPE_FORMAT_R8G8B8A8_UNORM:PIPE_FORMAT_R32_UINT;}
 static UINT query_calls=0,create_calls=0;

@@ -33,7 +33,7 @@ def query_base():
     for n in ['D3D12DDICAPS_TYPE','D3D12DDI_SWIZZLE_PATTERN','D3D12DDI_SWIZZLE_BIT_ENTRY','D3D12DDI_SWIZZLE_PATTERN_DESC_0003','D3D12DDI_TEXTURE_LAYOUT_CAPS','D3D12DDI_TEXTURE_LAYOUT_CAPS_0001','D3D12DDIARG_GETCAPS','D3D12DDI_RESOURCE_ALLOCATION_INFO','D3D12DDI_SUBRESOURCE_INFO','D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS']:
         s+=declaration(n)+'\n'
     s+='#include "windows_swizzle_reference.h"\n'
-    for m in ['static unsigned block_bytes(','extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture1d_array_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DArrayLayout(']:s+=block(owner,m)+'\n'
+    for m in ['static unsigned block_bytes(','extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static unsigned texture_block(', 'extern "C" unsigned AgxD3d12FormatBlock(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture1d_array_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DArrayLayout(']:s+=block(owner,m)+'\n'
     wdk=(ROOT/'.local/reference/wdk26100/d3d12umddi.h').read_text()
     for name in ('D3D12_REQ_SUBRESOURCES','D3D12_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION','D3D12_REQ_TEXTURE1D_U_DIMENSION'):
         match=re.search(r'const UINT '+name+r'\s*=.*?;',wdk)

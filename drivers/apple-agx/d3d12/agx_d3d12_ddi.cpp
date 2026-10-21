@@ -1023,6 +1023,7 @@ struct AgxD3d12Resource {
 };
 #ifndef APPLE_AGX_D3D12_NATIVE_OWNER
 static UINT AgxD3d12FormatBlockBytes(DXGI_FORMAT) { return 0; } /* textures need the native owner */
+static UINT AgxD3d12FormatBlock(DXGI_FORMAT, unsigned *, unsigned *) { return 0; }
 #endif
 /* C6a: the allocation size of a committed 2D texture: an upper bound of
  * the owner's layout (whole 16x16 tiles of each level, a 64 KiB granule);
@@ -1085,12 +1086,14 @@ static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *arg) {
         arg->Width > 16384 || !arg->Height || arg->Height > 16384 || !arg->DepthOrArraySize || !arg->MipLevels ||
         arg->MipLevels > 15)
         return 0;
-    const UINT block = AgxD3d12FormatBlockBytes(arg->Format);
+    /* C29: BC1-BC7 count whole 4x4 blocks */
+    unsigned bw = 0, bh = 0;
+    const UINT block = AgxD3d12FormatBlock(arg->Format, &bw, &bh);
     if (!block) return 0;
     UINT64 bytes = 0;
     for (UINT level = 0; level < arg->MipLevels; ++level) {
-        const UINT64 w = ((arg->Width >> level ? arg->Width >> level : 1) + 15) & ~15ULL;
-        const UINT64 h = ((arg->Height >> level ? arg->Height >> level : 1) + 15) & ~15ULL;
+        const UINT64 w = (((arg->Width >> level ? arg->Width >> level : 1) + bw - 1) / bw + 15) & ~15ULL;
+        const UINT64 h = (((arg->Height >> level ? arg->Height >> level : 1) + bh - 1) / bh + 15) & ~15ULL;
         bytes += w * h * block;
     }
     bytes *= arg->DepthOrArraySize;
@@ -2974,7 +2977,10 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
     if (!refusal) {
         const bool to_buffer = dst.footprint != nullptr;
         const AgxD3d12CopySide &texture = to_buffer ? src : dst, &buffer = to_buffer ? dst : src;
-        const UINT block = AgxD3d12FormatBlockBytes(texture.resource->format);
+        /* C29: buffer offsets count block rows and blocks (BC1-BC7) */
+        unsigned bw = 0, bh = 0;
+        const UINT block = AgxD3d12FormatBlock(texture.resource->format, &bw, &bh);
+        if (!bw) bw = bh = 1;
         const UINT sub = static_cast<UINT>(texture.offset);
         copy.texture = texture.resource->heap;
         copy.level = sub % texture.resource->levels;
@@ -3007,19 +3013,20 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
             copy.x = bx;
             copy.y = by;
             copy.offset = buffer.resource->gpuva - buffer.resource->heap->gpuva + buffer.offset +
-                          static_cast<UINT64>(dst_z) * copy.slice_pitch + static_cast<UINT64>(dst_y) * copy.pitch +
-                          static_cast<UINT64>(dst_x) * block;
+                          static_cast<UINT64>(dst_z) * copy.slice_pitch + static_cast<UINT64>(dst_y / bh) * copy.pitch +
+                          static_cast<UINT64>(dst_x / bw) * block;
             copy.layer += bz;
         } else {
             copy.x = dst_x;
             copy.y = dst_y;
             copy.layer += dst_z;
             copy.offset = buffer.resource->gpuva - buffer.resource->heap->gpuva + buffer.offset +
-                          static_cast<UINT64>(bz) * copy.slice_pitch + static_cast<UINT64>(by) * copy.pitch +
-                          static_cast<UINT64>(bx) * block;
+                          static_cast<UINT64>(bz) * copy.slice_pitch + static_cast<UINT64>(by / bh) * copy.pitch +
+                          static_cast<UINT64>(bx / bw) * block;
         }
         if (!block || (buffer.footprint->Format != texture.resource->format &&
-                       AgxD3d12FormatBlockBytes(buffer.footprint->Format) != block) ||
+                       (bw > 1 || AgxD3d12FormatBlockBytes(buffer.footprint->Format) != block)) ||
+            dst_x % bw || dst_y % bh || bx % bw || by % bh ||
             copy.layer >= texture.resource->layers || !w || !h || !d)
             refusal = 5u;
     }

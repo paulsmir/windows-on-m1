@@ -49,6 +49,7 @@ static AGX_D3D12_BUFFER HeapBuffer(AgxD3d12Heap *h) {return {h->native,h->gpuva,
 static UINT last_reason;
 static void ViewReceipt(const char *,UINT reason,UINT,UINT) {last_reason=reason;}
 static UINT AgxD3d12FormatBlockBytes(DXGI_FORMAT) {return 4;}
+static UINT AgxD3d12FormatBlock(DXGI_FORMAT,unsigned *w,unsigned *h) {*w=*h=1;return 4;}
 static pipe_format FormatTranslate(DXGI_FORMAT f,int) {return f==DXGI_FORMAT_R32_UINT?PIPE_FORMAT_R32_UINT:f==DXGI_FORMAT_R32_SINT?PIPE_FORMAT_R32_SINT:PIPE_FORMAT_R8G8B8A8_UNORM;}
 static bool uav_image(const AGX_D3D12_UAV *,pipe_image_view *) {return false;}
 /* PRODUCTION_VIEW_MAPPING */

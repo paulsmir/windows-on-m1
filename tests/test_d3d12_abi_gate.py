@@ -386,7 +386,7 @@ class D3d12AbiGate(unittest.TestCase):
             return source[start:source.index('\n}\n', start)]
         size = fn('static UINT64 TextureBytes(')
         for guard in ('arg->ResourceType != D3D12DDI_RT_TEXTURE2D', 'arg->SampleDesc.Count != 1',
-                      'AgxD3d12FormatBlockBytes(arg->Format)'):
+                      'AgxD3d12FormatBlock(arg->Format, &bw, &bh)'):
             self.assertIn(guard, size)
         info = fn('static VOID APIENTRY CheckResourceAllocationInfo(')
         self.assertIn('info->ResourceDataSize = ~0ULL;', info)

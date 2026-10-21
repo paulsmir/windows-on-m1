@@ -398,12 +398,39 @@ extern "C" unsigned AgxD3d12FormatBlockBytes(DXGI_FORMAT format) {
   return block_bytes(FormatTranslate(format, FALSE));
 }
 
+/* C29: a texture's element: a 1x1 texel or a BC1-BC7 4x4 block (S3TC,
+ * RGTC and BPTC, which ail lays out twiddled and the AGX samples natively;
+ * the texture map detiles whole blocks, agx_pipe.c/ail tiling.cc). */
+static unsigned texture_block(enum pipe_format format, unsigned *bw, unsigned *bh) {
+  const struct util_format_description *desc = format != PIPE_FORMAT_NONE ? util_format_description(format) : NULL;
+  if (!desc || desc->block.bits % 8 || desc->block.depth != 1) return 0;
+  if (desc->block.width == 1 && desc->block.height == 1) {
+    *bw = *bh = 1;
+    return desc->block.bits / 8;
+  }
+  if ((desc->layout != UTIL_FORMAT_LAYOUT_S3TC && desc->layout != UTIL_FORMAT_LAYOUT_RGTC &&
+       desc->layout != UTIL_FORMAT_LAYOUT_BPTC) || desc->block.width != 4 || desc->block.height != 4)
+    return 0;
+  *bw = *bh = 4;
+  return desc->block.bits / 8;
+}
+
+extern "C" unsigned AgxD3d12FormatBlock(DXGI_FORMAT format, unsigned *width, unsigned *height) {
+  unsigned bw = 0, bh = 0;
+  const unsigned bytes = texture_block(FormatTranslate(format, FALSE), &bw, &bh);
+  if (width) *width = bw;
+  if (height) *height = bh;
+  return bytes;
+}
+
 extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FORMAT format, unsigned width,
                                                 unsigned height, unsigned layers, unsigned levels, unsigned bind,
                                                 unsigned long long bytes, AGX_D3D12_BUFFER *texture) {
   OwnerLock lock(owner);
+  unsigned bw = 0, bh = 0;
   if (!owner || !owner->Screen || !texture || !width || !height || !layers || !levels || levels > 16 ||
-      !AgxD3d12FormatBlockBytes(format))
+      !AgxD3d12FormatBlock(format, &bw, &bh) ||
+      (bw > 1 && (bind & (AGX_D3D12_BIND_RENDER_TARGET | AGX_D3D12_BIND_DEPTH_STENCIL))))
     return E_INVALIDARG;
   memset(texture, 0, sizeof(*texture));
   struct pipe_resource templ = {};
@@ -1081,28 +1108,35 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
   struct pipe_context *pipe = owner->Context;
   struct pipe_resource *texture = static_cast<struct pipe_resource *>(copy->Texture->Resource);
   struct pipe_resource *buffer = static_cast<struct pipe_resource *>(copy->Buffer->Resource);
-  const unsigned block = block_bytes(texture->format);
-  const unsigned long long row = static_cast<unsigned long long>(copy->Width) * block;
+  unsigned bw = 0, bh = 0;
+  const unsigned block = texture_block(texture->format, &bw, &bh);
+  if (!block) return E_INVALIDARG;
+  /* buffer rows are block rows; a box may cover a level's partial edge
+   * block (block-aligned footprints of small mips) */
+  const unsigned rows = (copy->Height + bh - 1) / bh;
+  const unsigned long long row = static_cast<unsigned long long>((copy->Width + bw - 1) / bw) * block;
+  const unsigned level_w = level_extent(texture->width0, copy->Level), level_h = level_extent(texture->height0, copy->Level);
+  const unsigned span_w = (level_w + bw - 1) / bw * bw, span_h = (level_h + bh - 1) / bh * bh;
   if(texture->target==PIPE_TEXTURE_3D && (copy->Level>texture->last_level ||
       copy->X>level_extent(texture->width0,copy->Level) || copy->Width>level_extent(texture->width0,copy->Level)-copy->X ||
       copy->Y>level_extent(texture->height0,copy->Level) || copy->Height>level_extent(texture->height0,copy->Level)-copy->Y)) return E_INVALIDARG;
   const unsigned layers=texture_layer_extent(texture,copy->Level);
-  if (!block || copy->Level > texture->last_level ||
-      copy->X + copy->Width > level_extent(texture->width0, copy->Level) ||
-      copy->Y + copy->Height > level_extent(texture->height0, copy->Level) || copy->Layer >= layers ||
+  if (copy->Level > texture->last_level || copy->X % bw || copy->Y % bh ||
+      copy->X > span_w || copy->Width > span_w - copy->X || copy->Y > span_h || copy->Height > span_h - copy->Y ||
+      copy->X >= level_w || copy->Y >= level_h || copy->Layer >= layers ||
       copy->Depth > layers - copy->Layer || copy->Pitch < row ||
-      (copy->Depth > 1 && copy->SlicePitch < static_cast<unsigned long long>(copy->Pitch) * copy->Height))
+      (copy->Depth > 1 && copy->SlicePitch < static_cast<unsigned long long>(copy->Pitch) * rows))
     return E_INVALIDARG;
   const unsigned long long span = static_cast<unsigned long long>(copy->Depth - 1) * copy->SlicePitch +
-                                  static_cast<unsigned long long>(copy->Height - 1) * copy->Pitch + row;
+                                  static_cast<unsigned long long>(rows - 1) * copy->Pitch + row;
   if (copy->Offset > copy->Buffer->Bytes || span > copy->Buffer->Bytes - copy->Offset || copy->Buffer->Bytes > 0xffffffffull)
     return E_INVALIDARG;
   struct pipe_box tbox = {};
   tbox.x = static_cast<int>(copy->X);
   tbox.y = static_cast<int>(copy->Y);
   tbox.z = static_cast<int16_t>(copy->Layer);
-  tbox.width = static_cast<int>(copy->Width);
-  tbox.height = static_cast<int>(copy->Height);
+  tbox.width = static_cast<int>(copy->Width < level_w - copy->X ? copy->Width : level_w - copy->X);
+  tbox.height = static_cast<int>(copy->Height < level_h - copy->Y ? copy->Height : level_h - copy->Y);
   tbox.depth = static_cast<int16_t>(copy->Depth);
   struct pipe_box bbox = {};
   bbox.x = static_cast<int>(copy->Offset);
@@ -1117,7 +1151,7 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
                     : NULL;
   HRESULT hr = tmap && bmap ? S_OK : E_OUTOFMEMORY;
   for (unsigned z = 0; SUCCEEDED(hr) && z < copy->Depth; ++z)
-    for (unsigned y = 0; y < copy->Height; ++y) {
+    for (unsigned y = 0; y < rows; ++y) {
       unsigned char *t = static_cast<unsigned char *>(tmap) + z * ttransfer->layer_stride + y * ttransfer->stride;
       unsigned char *b = static_cast<unsigned char *>(bmap) + static_cast<size_t>(z) * copy->SlicePitch +
                          static_cast<size_t>(y) * copy->Pitch;

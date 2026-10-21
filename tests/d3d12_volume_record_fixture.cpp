@@ -25,6 +25,7 @@ static AgxD3d12Command *AppendCommand(AgxD3d12CommandList *l){++l->commands;l->r
 static void ListError(AgxD3d12CommandList *l,int error){l->error=error;}
 static void AdmissionUmdDiagnostic(const char *,int,const UINT *,UINT) {}
 static UINT AgxD3d12FormatBlockBytes(UINT) {return 4;}
+static UINT AgxD3d12FormatBlock(UINT f,unsigned *w,unsigned *h) {const bool bc=f==71u;*w=*h=bc?4u:1u;return bc?8u:4u;}
 /* ACTUAL_RECORDING */
 int main() {
  AgxD3d12Heap th={reinterpret_cast<void *>(1),0x10000,131072},bh={reinterpret_cast<void *>(2),0x30000,65536};
