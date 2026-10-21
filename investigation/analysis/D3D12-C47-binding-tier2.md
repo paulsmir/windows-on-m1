@@ -71,6 +71,32 @@ Asahi's per-stage binding table, `agx_nir_lower_bindings`).
    global-memory buffers (raw/structured) by heap; CBVs stay 14 slots.
 5. **Caps.** Report Tier 2 only after 1-4 pass offline and on hardware.
 
+## Handle emission (offline study of Asahi)
+
+`agx_nir_lower_sysvals` step 4 writes the uniform register of a
+`load_sysval_agx(.flags = ~0)` into the `bindless_image_agx` that *immediately
+follows* it; Asahi emits that pair itself inside the pass
+(`load_texture_handle`). Emitting the pair from the translator is fragile
+(passes before the sysval lowering may separate them), and
+`load_texture_handle_agx` has no index to select a table. Proposed: the
+translator emits `nir_bindless_image_agx(offset, .desc_set = AGX_D3D12_HEAP_MARK)`
+and the native-state patch adds, in the sysval pass, a
+`load_sysval_agx(stage table, &ubo_base[15], .flags = ~0)` directly before each
+marked handle; the heap mirror is bound as constant buffer 15 (Asahi exposes
+16, D3D12 uses 14), so `ubo_base[15]` is the mirror's GPU address.
+
+## Residency and hazards (consequences of bindless)
+
+- The winsys submits the BOs a batch references (bound views, framebuffer,
+  pools). Resources reached only through the heap mirror are not in that
+  list: every resource with a descriptor in a bound shader-visible heap must
+  join the submission's residency set (or all D3D12 heaps stay resident, the
+  D3D12 default until Evict).
+- Asahi's writer tracking (which C46/EXP1852 relies on to order batches) sees
+  only bound SSBOs/images. Bindless UAV writes are invisible to it, so
+  ResourceBarrier (UAV and transition barriers), today a no-op, must become a
+  real ordering point for heap-accessed resources (flush the writing batch).
+
 ## WHAT IS STILL UNKNOWN
 
 - Whether the Asahi sampler heap can hold 2048 D3D12 samplers per batch, or
