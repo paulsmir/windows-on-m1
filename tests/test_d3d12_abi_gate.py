@@ -484,8 +484,15 @@ class D3d12AbiGate(unittest.TestCase):
         # exactly with them
         self.assertIn('!pso->hs_dwords != !pso->ds_dwords ? 4u', draw)
         self.assertIn('(list->topology >= 33u && list->topology <= 64u) != (pso->hs_dwords != 0) ? 9u', draw)
-        for kind in ('gs_slot->kind = kCommandGsBind;', 'hs_slot->kind = kCommandHsBind;', 'ds_slot->kind = kCommandDsBind;'):
-            self.assertLess(draw.index(kind), draw.index('command.kind = kCommandDraw;'))
+        for stage in ('{pso ? pso->gs_dwords : 0u, kCommandGsBind, D3D12DDI_SHADER_VISIBILITY_GEOMETRY}',
+                      '{pso ? pso->hs_dwords : 0u, kCommandHsBind, D3D12DDI_SHADER_VISIBILITY_HULL}',
+                      '{pso ? pso->ds_dwords : 0u, kCommandDsBind, D3D12DDI_SHADER_VISIBILITY_DOMAIN}'):
+            self.assertIn(stage, draw)
+        self.assertLess(draw.index('bind_slot->kind = stage.kind;'), draw.index('command.kind = kCommandDraw;'))
+        # the stages resolve into their slots (STACK_FRAMES, EXP1834 build);
+        # a refused draw leaves no binding slots behind
+        self.assertIn('stage.visibility, &bind_slot->dispatch);', draw)
+        self.assertLess(draw.index('list->commands = first_slot;'), draw.index('command.kind = kCommandDraw;'))
         optional = fn('static AgxD3d12OptionalBinds DrawOptionalBinds(')
         for stage in ('gs', 'hs', 'ds'):
             self.assertIn('draw.pso->%s_dwords ? pending.%s : nullptr' % (stage, stage), optional)

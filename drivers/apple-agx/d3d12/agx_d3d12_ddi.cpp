@@ -3936,42 +3936,34 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
                  : indexed && !list->index_heap ? 6u
                  : indirect && indexed && list->index_offset ? 8u /* C14: Gallium takes the start index from the arguments */
                  : list->commands + (pso->gs_dwords ? 1u : 0u) + (pso->hs_dwords ? 2u : 0u) >= kListCommands ? 3u : 0u;
-    AgxD3d12Dispatch vs_bind = {}, ps_bind = {}, gs_bind = {}, hs_bind = {}, ds_bind = {};
+    AgxD3d12Dispatch vs_bind = {}, ps_bind = {};
     if (!refusal && FAILED(CompileGraphics(list->device, pso))) refusal = 7u;
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                                         D3D12DDI_SHADER_VISIBILITY_VERTEX, &vs_bind);
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                                         D3D12DDI_SHADER_VISIBILITY_PIXEL, &ps_bind);
-    if (!refusal && pso->gs_dwords)
+    /* C27/C37: the optional stages resolve straight into their slots (five
+     * AgxD3d12Dispatch records would take the frame past STACK_FRAMES,
+     * EXP1834 build: 21552 bytes); a refusal drops the slots again */
+    const UINT first_slot = list->commands;
+    const struct { UINT dwords, kind, visibility; } optional[] = {
+        {pso ? pso->gs_dwords : 0u, kCommandGsBind, D3D12DDI_SHADER_VISIBILITY_GEOMETRY},
+        {pso ? pso->hs_dwords : 0u, kCommandHsBind, D3D12DDI_SHADER_VISIBILITY_HULL},
+        {pso ? pso->ds_dwords : 0u, kCommandDsBind, D3D12DDI_SHADER_VISIBILITY_DOMAIN}};
+    for (const auto &stage : optional) {
+        if (refusal || !stage.dwords) continue;
+        AgxD3d12Command *bind_slot = AppendCommand(list);
+        if (!bind_slot) return;
+        bind_slot->kind = stage.kind;
         refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
-                              D3D12DDI_SHADER_VISIBILITY_GEOMETRY, &gs_bind);
-    if (!refusal && pso->hs_dwords)
-        refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
-                              D3D12DDI_SHADER_VISIBILITY_HULL, &hs_bind);
-    if (!refusal && pso->ds_dwords)
-        refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
-                              D3D12DDI_SHADER_VISIBILITY_DOMAIN, &ds_bind);
+                              stage.visibility, &bind_slot->dispatch);
+    }
     const UINT receipt[] = {refusal, vertices, instances, list->rtvs, list->topology, indexed ? list->index_size : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-draw", refusal ? E_NOTIMPL : S_OK, receipt, 6);
     if (refusal) {
+        list->commands = first_slot;
         ListError(list, refusal == 3u ? E_INVALIDARG : E_NOTIMPL);
         return;
-    }
-    if (pso->gs_dwords) {
-        AgxD3d12Command *gs_slot = AppendCommand(list);
-        if (!gs_slot) return;
-        gs_slot->kind = kCommandGsBind;
-        gs_slot->dispatch = gs_bind;
-    }
-    if (pso->hs_dwords) {
-        AgxD3d12Command *hs_slot = AppendCommand(list);
-        if (!hs_slot) return;
-        hs_slot->kind = kCommandHsBind;
-        hs_slot->dispatch = hs_bind;
-        AgxD3d12Command *ds_slot = AppendCommand(list);
-        if (!ds_slot) return;
-        ds_slot->kind = kCommandDsBind;
-        ds_slot->dispatch = ds_bind;
     }
     AgxD3d12Command *slot = AppendCommand(list);
     if (!slot) return;
