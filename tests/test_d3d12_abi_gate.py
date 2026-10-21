@@ -77,7 +77,9 @@ class D3d12AbiGate(unittest.TestCase):
         # without SetErrorCb and claim no optional capability.
         for member in ('pfnCheckFormatSupport', 'pfnCheckMultisampleQualityLevels', 'pfnQueryNodeMap'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
-        self.assertIn('if (support) *support = 0;', source)
+        # C32: only the multisample bits of the multisampled cast sets
+        # (test_d3d12_multisample_caps checks the D3D12Core cast-set rule)
+        self.assertIn('*support = D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET | D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;', source)
         self.assertIn('*levels = samples == 1 ? 1u : 0u;', source)
         self.assertIn('map[i] = 0;', source)
         # C1e (EXP1349 + d3d12core 26100 row-major validation): SubCaps[0]

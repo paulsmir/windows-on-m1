@@ -1147,10 +1147,8 @@ static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *arg) {
     }
     /* C32: 2x/4x multisampled textures have one level */
     const UINT samples = arg ? arg->SampleDesc.Count : 0u;
-    bool typeless_set = false;
     if (!arg || arg->ResourceType != D3D12DDI_RT_TEXTURE2D || arg->SampleDesc.Quality ||
         (samples != 1 && ((samples != 2 && samples != 4) || arg->MipLevels != 1 ||
-                          !MultisampleCastSet(arg->Format, &typeless_set) ||
                           !AgxD3d12FormatMultisample(arg->Format, samples))) || !arg->Width ||
         arg->Width > 16384 || !arg->Height || arg->Height > 16384 || !arg->DepthOrArraySize || !arg->MipLevels ||
         arg->MipLevels > 15)
