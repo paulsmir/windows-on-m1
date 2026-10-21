@@ -8,6 +8,39 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-21 01:05Z -- D3D12 ARM64 + x64 RUN A REAL APP (nBody); CLAUDE AGAIN
+
+Codex delegation ended 2026-10-21 (user stopped it); Claude drives the bench
+with the scratchpad prepare.sh/run-probe.sh flow (EXP numbers = hardware runs).
+Build recipe: builder run182x.ps1 (package_source.py snapshot -> ARM64 native
+runtime from that source -> build-driver.ps1 WITHOUT the prepared NIR owner
+(classic owner compute on both ABIs; fe68ed22 links it) -> x64 native runtime +
+build-umd-x64.ps1 -> umd/forwarder ARM64X -> INF variant -> repackage-driver.ps1
+-X64Umd -Arm64xForwarder). Package = forwarder AppleAgxRenderAdmissionUmd.dll +
+UmdArm64 + UmdX64 in System32 (020285b4); cleanup removes all three.
+
+Proven on J313 (EXP1820-EXP1824, package 30.0.1824.0 from 463cf860):
+- ARM64 probe 68 PASS / C21E SKIP and the same probe built for x64: 68 PASS.
+- C27 geometry shaders (C27A/B), C28 groupshared barrier loops + nBody CS.
+- Microsoft D3D12nBodyGravity (async compute thread + GS particles) runs
+  60 s on ARM64 (~49 fps, 7625 dispatches) and x64 (~45 fps), particles
+  move, WM_CLOSE exits cleanly. D3D11 x86 smoke + ARM64 GS gsa/soa PASS.
+Fixed causes: GS fail-closed (c6195e13); DXBC ubfe/ibfe/bfi -> shifts/masks
+(c076be8f, agx_compile "Unhandled ALU op"); IOCoherent TRUE (5b7f6abe, x64
+D3D12Core CacheHeapCaps); owner recursive lock + ExecuteCommandLists critical
+section (463cf860, two threads raced one pipe_context -> compute never retired).
+Test harness: nbody-run ConvertTo-Json of Get-Content strings grew PowerShell
+to GBs (fixed; explained every missing result*.json since EXP1795).
+Open: owner submits on its own KMD context, not the queue's, so cross-queue
+GPU waits do not order owner work (ordering rests on synchronous replay);
+EXP1820 whole-machine reset unexplained (removal/kill/teardown ruled out);
+DWM dwmcore 0xc00001ad once ~1 min after some full-owner boots (pre-existing);
+Night Raid DLC vanished from 3DMark (download interrupted by reboots) -- ask
+the user to reinstall; next real apps: 3DMark GUI (x64 D3D11), Night Raid
+(ARM64 D3D12), Portal 2 (x86 D3D9On12 -> needs a WOW64 D3D12 UMD).
+
+## Prior state superseded by the EXP1824 nBody result
+
 ## CURRENT 2026-10-20 22:19Z — X64 UMD OLD CLOSURE REJECTED; FRESH SOURCE NEXT
 
 EXP1808 old configured x64 Mesa graph built seven missing archives, diagnostic
