@@ -59,10 +59,13 @@ main(int argc, char **argv)
    struct dxbc_error perr;
    struct dxbc_nir_error terr;
    nir_shader *nir;
-   bool print = argc > 2 && !strcmp(argv[2], "--print");
+   bool print = false, d3d12 = false;
+   for (int a = 2; a < argc; ++a) {
+      print |= !strcmp(argv[a], "--print");
+      d3d12 |= !strcmp(argv[a], "--d3d12");
+   }
    /* the D3D12 owner's entry: SM5.1 register spaces through a binding map
     * with the owner's per-kind capacities (agx_d3d12_windows.cpp) */
-   bool d3d12 = argc > 2 && !strcmp(argv[2], "--d3d12");
    static const uint32_t d3d12_limits[DXBC_BINDING_KIND_COUNT] = {14, 128, 8, 16};
    struct dxbc_binding_map d3d12_map;
 

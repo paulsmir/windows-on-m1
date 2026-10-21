@@ -5445,7 +5445,8 @@ static UINT c29_expand(UINT16 c) {
     const UINT r = (c >> 11) & 31u, g = (c >> 5) & 63u, b = c & 31u;
     return ((r << 3) | (r >> 2)) | (((g << 2) | (g >> 4)) << 8) | (((b << 3) | (b >> 2)) << 16) | 0xff000000u;
 }
-static int c29_bc1(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+static int c29_bc1_format(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base,
+                          DXGI_FORMAT format, const char *step) {
     static const UINT16 colours[6][2] = {{0xF800, 0x07E0}, {0xFFFF, 0x001F}, {0x07E0, 0x001F},
                                          {0xFFFF, 0x0000}, {0xF81F, 0x07E0}, {0xFFE0, 0x001F}};
     static const UINT block_base[3] = {0, 4, 5}, blocks_across[3] = {2, 1, 1};
@@ -5479,12 +5480,12 @@ static int c29_bc1(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     desc.Height = 8;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 3;
-    desc.Format = DXGI_FORMAT_BC1_UNORM;
+    desc.Format = format;
     desc.SampleDesc.Count = 1;
     HRESULT hr = upload && uav && readback ? S_OK : E_FAIL;
     if (SUCCEEDED(hr)) {
         ID3D12Device_GetCopyableFootprints(device, &desc, 0, 3, 0, layouts, rows, row_bytes, &total);
-        printf("C29A footprints total=%llu mip2=%ux%u pitch=%u rows=%u row_bytes=%llu\n", (unsigned long long)total,
+        printf("%s footprints total=%llu mip2=%ux%u pitch=%u rows=%u row_bytes=%llu\n", step, (unsigned long long)total,
                layouts[2].Footprint.Width, layouts[2].Footprint.Height, layouts[2].Footprint.RowPitch, rows[2],
                (unsigned long long)row_bytes[2]);
         if (!total || total > 32768u) hr = E_FAIL;
@@ -5504,7 +5505,7 @@ static int c29_bc1(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         ID3D12Resource_Unmap(upload, 0, NULL);
         hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COPY_DEST,
                                                   NULL, &IID_ID3D12Resource, (void **)&texture);
-        printf("C29A CreateCommittedResource BC1 hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s CreateCommittedResource BC1 hr=0x%08lx\n", step, (unsigned long)hr);
     }
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &srv_heap_desc, &IID_ID3D12DescriptorHeap, (void **)&srv_heap);
     if (SUCCEEDED(hr)) {
@@ -5521,7 +5522,7 @@ static int c29_bc1(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_bc1_load;
         pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_bc1_load);
         hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
-        printf("C29A CreateComputePipelineState hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s CreateComputePipelineState hr=0x%08lx\n", step, (unsigned long)hr);
     }
     if (SUCCEEDED(hr))
         hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&allocator);
@@ -5555,7 +5556,7 @@ static int c29_bc1(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         buf_loc.PlacedFootprint = layouts[0];
         buf_loc.PlacedFootprint.Offset = 32768;
         ID3D12GraphicsCommandList_CopyTextureRegion(list, &buf_loc, 0, 0, 0, &tex_loc, NULL);
-        hr = run_list(queue, fence, list, base + 1, "C29A");
+        hr = run_list(queue, fence, list, base + 1, step);
     }
     if (SUCCEEDED(hr)) {
         D3D12_RANGE all = {0, 65536};
@@ -5588,13 +5589,13 @@ static int c29_bc1(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
                     memcpy(want + 4, &indices, 4);
                     if (memcmp(out + 32768 + by * layouts[0].Footprint.RowPitch + bx * 8u, want, 8)) ++bad_blocks;
                 }
-            printf("C29A texels=84 bad=%u first_bad=%u got=%08x want=%08x readback_blocks=4 bad=%u\n", bad_texels,
+            printf("%s texels=84 bad=%u first_bad=%u got=%08x want=%08x readback_blocks=4 bad=%u\n", step, bad_texels,
                    first_bad, got_bad, want_bad, bad_blocks);
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("C29A hr=0x%08lx\n", (unsigned long)hr);
-    printf("AGX_D3D12_C29A: %s\n", SUCCEEDED(hr) && !bad_texels && !bad_blocks ? "PASS" : "FAIL");
+    printf("%s hr=0x%08lx\n", step, (unsigned long)hr);
+    printf("AGX_D3D12_%s: %s\n", step, SUCCEEDED(hr) && !bad_texels && !bad_blocks ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (pso) ID3D12PipelineState_Release(pso);
@@ -5607,6 +5608,16 @@ static int c29_bc1(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     if (uav) ID3D12Resource_Release(uav);
     if (upload) ID3D12Resource_Release(upload);
     return !(SUCCEEDED(hr) && !bad_texels && !bad_blocks);
+}
+
+static int c29_bc1(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    return c29_bc1_format(device, queue, fence, base, DXGI_FORMAT_BC1_UNORM, "C29A");
+}
+/* C42F (EXP1842 MiniEngine yellow): the engine's diffuse textures are
+ * BC1_UNORM_SRGB; endpoint-only blocks of 0/full channels decode to the same
+ * values in sRGB and linear, so C29A's expectations hold. */
+static int step_c42f(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    return c29_bc1_format(device, queue, fence, base, DXGI_FORMAT_BC1_UNORM_SRGB, "C42F");
 }
 
 typedef int (*probe_step)(ID3D12Device *, ID3D12CommandQueue *, ID3D12Fence *, UINT64);
@@ -6101,7 +6112,7 @@ int main(int argc, char **argv) {
             {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c},
             {"C38A", c38_cached_pso}, {"C39A", c39_stream_output},
             {"C41A", step_c41a}, {"C41B", step_c41b},
-            {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}};
+            {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -6191,6 +6202,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C42C", step_c42c);
                 (void)run_isolated(adapter, "C42D", step_c42d);
                 (void)run_isolated(adapter, "C42E", step_c42e);
+                (void)run_isolated(adapter, "C42F", step_c42f);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
