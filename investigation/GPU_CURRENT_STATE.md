@@ -8,7 +8,30 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-22 08:30Z -- SM 6.0 + WAVE OPS ARE THE DEFAULT D3D12 PROFILE
+## CURRENT 2026-10-22 10:40Z -- TYPED UAV LOADS VALIDATED; INTERFACES 0033/0042/0071 IN HARDWARE TEST
+
+Last validated package 30.0.1868.0 from 634d1535 (EXP1868, rec1868h PASS).
+- Default unchanged: R1 build 2 (0012), SM 6.0, wave ops; probes 104/105
+  (C50A needs the 0033 opt-in). TypedUAVLoadAdditionalFormats validated in
+  both frontends (C49A; EXP1867 DXBC, EXP1868 DXIL after 17cbad44:
+  dxil-spirv typed_uav_read_without_format, else every read typed UAV was
+  R32). ModelViewer stage-1 pixel 0x74d932e6 is the baseline
+  (CORRECTION-EXP1867: 0x5cd732e6 there was the typed-load defect).
+- Interfaces, all opt-in via APPLE_AGX_D3D12_DDI=0033|0042|0071 (SM 6.1 /
+  6.2 / 6.3-6.5; D3D12-C50-interface-0033.md, D3D12-C51-interface-plan.md):
+  tables project onto the R1/0003 entries (test_d3d12_interface_0033 derives
+  the retyped members from the WDK header). EXP1868 (0033): R3 negotiated,
+  then the runtime required the extended-features table (type 8, dc21562d)
+  and the owner found a NULL kernel callback (6aed4bc1: receipt
+  d3d12-kernel-callbacks + bridge to the 0022 core-layer allocate). EXP1869
+  runs 0033/0042/0071 profiles.
+- Gate: syncheck-d3d12-opt.ps1 (/O2) besides /Zs (C4701 broke one build).
+Next: make the highest validated interface the default; then tiled
+resources tier 2 for FL 12_0 (design study running), real games.
+
+## Prior state superseded by EXP1867-EXP1868
+
+### (was CURRENT) 2026-10-22 08:30Z -- SM 6.0 + WAVE OPS ARE THE DEFAULT D3D12 PROFILE
 
 Last validated package 30.0.1866.0 from f1b256e7 (EXP1866, rec1866h PASS).
 - Default: R1 build 2 (0012), SM 6.0, wave ops; APPLE_AGX_D3D12_SM6=0 keeps
