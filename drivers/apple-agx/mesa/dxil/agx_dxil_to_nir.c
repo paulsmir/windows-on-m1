@@ -816,6 +816,15 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       const dxil_spv_option_ssbo_alignment alignment = {{DXIL_SPV_OPTION_SSBO_ALIGNMENT}, 4};
       r = agx_checked_option(converter, &alignment.base);
    }
+   if (r == DXIL_SPV_SUCCESS) {
+      /* EXP1867: without this dxil-spirv declares every read typed UAV R32
+       * (Vulkan's read-with-format rule), so an RGBA16F or RGBA8 load
+       * returned one channel. Asahi loads storage images formatted
+       * (PIPE_CAP image_load_formatted); atomics keep their R32 format. */
+      const dxil_spv_option_typed_uav_read_without_format typed = {{DXIL_SPV_OPTION_TYPED_UAV_READ_WITHOUT_FORMAT},
+                                                                   DXIL_SPV_TRUE};
+      r = agx_checked_option(converter, &typed.base);
+   }
    if (r == DXIL_SPV_SUCCESS)
       r = agx_checked_run(converter);
    dxil_spv_compiled_spirv spirv = {0};

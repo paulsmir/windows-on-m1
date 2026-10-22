@@ -209,6 +209,17 @@ class DxilToNir(unittest.TestCase):
         for op in ("@quad_swap_horizontal", "@quad_swap_vertical", "@quad_swap_diagonal", "@quad_broadcast"):
             self.assertIn(op, ps)
 
+    def test_typed_uav_loads_keep_the_resource_format(self):
+        # EXP1867: C49A's runtime-converted shader (dxilconv) loaded RGBA16F
+        # and RGBA8 UAVs as one channel: dxil-spirv declared every read typed
+        # UAV R32 (r32_float/r32_uint). Loads are formatless, as the DXBC
+        # frontend's that passed on J313.
+        self.parity("conv_c49_cs")
+        final = self.final("conv_c49_cs")
+        formats = re.findall(r"@image_load \(.*format=(\w+)", final)
+        self.assertEqual(len(formats), 4)
+        self.assertEqual(set(formats), {"none"})
+
     def test_runtime_converted_passthrough_hull_shader_translates(self):
         # EXP1858: under R1 the runtime converts DXBC to DXIL (dxilconv); a
         # hull shader without a control point phase names no entry function
