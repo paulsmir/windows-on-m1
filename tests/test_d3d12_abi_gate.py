@@ -56,7 +56,8 @@ class D3d12AbiGate(unittest.TestCase):
                           'D3D12DDICAPS_TYPE_SHADER', 'D3D12DDICAPS_TYPE_ARCHITECTURE_INFO',
                           'D3D12DDICAPS_TYPE_GPUVA_CAPS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT',
                           'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT1',
-                          'D3D12DDICAPS_TYPE_SWIZZLE_PATTERN', 'D3D12DDICAPS_TYPE_0011_SHADER_MODELS'})
+                          'D3D12DDICAPS_TYPE_SWIZZLE_PATTERN', 'D3D12DDICAPS_TYPE_0011_SHADER_MODELS',
+                      'D3D12DDICAPS_TYPE_0050_HARDWARE_SCHEDULING_CAPS'})
         # C44: SM 6.0 and the R1 interface by default since EXP1865;
         # APPLE_AGX_D3D12_SM6=0 is the only way back to 0003/SM 5.1
         gate = source[source.index('static bool ShaderModel6Enabled() {'):]
@@ -67,7 +68,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('if (ShaderModel6Enabled() &&', models)
         versions = source[source.index('static HRESULT APIENTRY GetVersions('):]
         versions = versions[:versions.index('\n}\n')]
-        self.assertIn('const UINT offered = InterfaceOptIn() == D3D12DDI_SUPPORTED_0042   ? 5u', versions)
+        self.assertIn('const UINT offered = InterfaceOptIn() == D3D12DDI_SUPPORTED_0071   ? 6u', versions)
         self.assertIn('versions[n++] = D3D12DDI_SUPPORTED_0012;', versions)
         # C48: the wave caps (0012) only in the same SM6 processes
         shader = caps[caps.index('case D3D12DDICAPS_TYPE_SHADER:'):]

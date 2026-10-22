@@ -71,9 +71,11 @@ template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0003> { static constexpr UI
 template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0010> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
 template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0033> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
 template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0040> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
+template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0070> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
 template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
 template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
 template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0040> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
+template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0062> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
 template<> struct TableOf<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D; };
 static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error);
 static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error);
@@ -124,14 +126,16 @@ static bool ShaderModel6Enabled() {
 }
 /* C50 (D3D12-C50-interface-0033.md): SM 6.1 is D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033,
  * so it needs R3 build 3 (0033); C51 (D3D12-C51-interface-plan.md): SM 6.2 is
- * _0042, R4 build 2. APPLE_AGX_D3D12_DDI=0033 or 0042 offers that interface to
- * an SM6 process until hardware validates its tables. */
+ * _0042, R4 build 2; SM 6.3-6.5 are _0054/_0062/_0071 (R7 build 1).
+ * APPLE_AGX_D3D12_DDI=0033, 0042 or 0071 offers that interface to an SM6
+ * process until hardware validates its tables. */
 static UINT64 InterfaceOptIn() {
     static const UINT64 offered = [] {
         char value[5] = {};
         if (!ShaderModel6Enabled() || GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) != 4)
             return UINT64{0};
-        return !memcmp(value, "0042", 4)   ? D3D12DDI_SUPPORTED_0042
+        return !memcmp(value, "0071", 4)   ? D3D12DDI_SUPPORTED_0071
+               : !memcmp(value, "0042", 4) ? D3D12DDI_SUPPORTED_0042
                : !memcmp(value, "0033", 4) ? D3D12DDI_SUPPORTED_0033
                                            : UINT64{0};
     }();
@@ -139,10 +143,12 @@ static UINT64 InterfaceOptIn() {
 }
 static bool Negotiated0033() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0033; }
 static bool Negotiated0042() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0042; }
+static bool Negotiated0071() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0071; }
 /* C48: R1 build 2 (0012) adds the wave caps (D3D12DDI_SHADER_CAPS_0012) and
  * one device entry, pfnGetDebugAllocationInfo; SM6 processes negotiate it. */
 static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *versions) {
-    const UINT offered = InterfaceOptIn() == D3D12DDI_SUPPORTED_0042   ? 5u
+    const UINT offered = InterfaceOptIn() == D3D12DDI_SUPPORTED_0071   ? 6u
+                         : InterfaceOptIn() == D3D12DDI_SUPPORTED_0042 ? 5u
                          : InterfaceOptIn() == D3D12DDI_SUPPORTED_0033 ? 4u
                          : ShaderModel6Enabled()                       ? 3u
                                                                        : 1u;
@@ -152,7 +158,8 @@ static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *ve
     if (!versions) { *count = offered; return S_OK; }
     if (*count < offered) { *count = offered; return E_INVALIDARG; }
     UINT n = 0;
-    if (offered == 5u) versions[n++] = D3D12DDI_SUPPORTED_0042;
+    if (offered == 6u) versions[n++] = D3D12DDI_SUPPORTED_0071;
+    if (offered >= 5u) versions[n++] = D3D12DDI_SUPPORTED_0042;
     if (offered >= 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;
     if (offered >= 3u) {
         versions[n++] = D3D12DDI_SUPPORTED_0012;
@@ -236,12 +243,18 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         if (ShaderModel6Enabled() && arg->DataSize >= sizeof(D3D12DDI_D3D12_SHADER_MODELS_DATA_0011)) {
             /* C50: SM 6.1 at 0033: SV_ViewID lowers to view 0 (ViewInstancingTier
              * NOT_SUPPORTED, View Instancing spec), barycentrics stay unsupported;
-             * C51: SM 6.2 at 0042 (native 16-bit ops stay unsupported) */
+             * C51: SM 6.2 at 0042 (native 16-bit ops stay unsupported); C52:
+             * SM 6.3-6.5 at 0071 (their core intrinsics -- packed dot products,
+             * wave match and multi-prefix -- lower through dxil-spirv; DXR,
+             * mesh shaders, VRS and sampler feedback stay unsupported) */
             static const D3D12DDI_SHADER_MODEL models[] = {D3D12DDI_SHADER_MODEL_5_1_RELEASE_0011,
                                                            D3D12DDI_SHADER_MODEL_6_0_RELEASE_0011,
                                                            D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033,
-                                                           D3D12DDI_SHADER_MODEL_6_2_RELEASE_0042};
-            const UINT offered = Negotiated0042() ? 4u : Negotiated0033() ? 3u : 2u;
+                                                           D3D12DDI_SHADER_MODEL_6_2_RELEASE_0042,
+                                                           D3D12DDI_SHADER_MODEL_6_3_RELEASE_0054,
+                                                           D3D12DDI_SHADER_MODEL_6_4_RELEASE_0062,
+                                                           D3D12DDI_SHADER_MODEL_6_5_RELEASE_0071};
+            const UINT offered = Negotiated0071() ? 7u : Negotiated0042() ? 4u : Negotiated0033() ? 3u : 2u;
             auto *data = static_cast<D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 *>(arg->pData);
             if (!data->pNumShaderModelsSupported) {
                 hr = E_INVALIDARG;
@@ -274,6 +287,10 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
             d.OutputMergerLogicOp = FALSE;
             d.ResourceHeapTier = D3D12DDI_RESOURCE_HEAP_TIER_1;
         });
+        break;
+    /* C52: 0050+ runtimes may ask for scheduling groups; 0 = none */
+    case D3D12DDICAPS_TYPE_0050_HARDWARE_SCHEDULING_CAPS:
+        hr = Answer<D3D12DDICAPS_HARDWARE_SCHEDULING_CAPS_0050>(arg, [](auto &d) { d.ComputeQueuesPer3DQueue = 0; });
         break;
     case D3D12DDICAPS_TYPE_MEMORY_ARCHITECTURE:
         /* EXP1821: the x86/x64 D3D12Core refuses IOCoherent FALSE on UMA
@@ -6456,6 +6473,101 @@ static_assert(std::is_same_v<decltype(&CommandRecorderSetCommandPoolAsTarget0040
 static_assert(std::is_same_v<decltype(&CalcPrivateCommandListSize0040), PFND3D12DDI_CALC_PRIVATE_COMMAND_LIST_SIZE_0040>);
 static_assert(std::is_same_v<decltype(&CreateCommandList0040), PFND3D12DDI_CREATE_COMMAND_LIST_0040>);
 static_assert(std::is_same_v<decltype(&ResetCommandList0040), PFND3D12DDI_RESETCOMMANDLIST_0040>);
+/* C52 (0071, CORE_0070/3D_0062): queues gain a scheduling group, presents
+ * report allocations and contexts separately, and the meta-command,
+ * raytracing, background-processing and shading-rate entries appear. None
+ * of those features is offered (scheduling caps 0, RaytracingTier and
+ * VariableShadingRateTier 0, no meta commands), so they answer empty or
+ * accept only their defaults. */
+static SIZE_T APIENTRY CalcPrivateCommandQueueSize0050(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATECOMMANDQUEUE_0050 *) {
+    return CalcPrivateCommandQueueSize0023(device, nullptr);
+}
+static HRESULT APIENTRY CreateCommandQueue0050(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATECOMMANDQUEUE_0050 *arg,
+                                               D3D12DDI_HCOMMANDQUEUE queue, D3D12DDI_HRTCOMMANDQUEUE runtime) {
+    if (!arg || arg->SchedulingGroup.pDrvPrivate) return E_INVALIDARG;
+    D3D12DDIARG_CREATECOMMANDQUEUE_0023 legacy = {};
+    legacy.QueueFlags = arg->QueueFlags;
+    legacy.NodeMask = arg->NodeMask;
+    legacy.QueueCreationFlags = arg->QueueCreationFlags;
+    return CreateCommandQueue0023(device, &legacy, queue, runtime);
+}
+static HRESULT APIENTRY EnumerateMetaCommands0052(D3D12DDI_HDEVICE, UINT *count, D3D12DDIARG_META_COMMAND_DESC *) {
+    if (!count) return E_INVALIDARG;
+    *count = 0;
+    return S_OK;
+}
+static VOID APIENTRY GetMetaCommandRequiredParameterInfo0052(D3D12DDI_HMETACOMMAND_0052, D3D12DDI_META_COMMAND_PARAMETER_STAGE,
+                                                             UINT, D3D12DDIARG_META_COMMAND_REQUIRED_PARAMETER_INFO *info) {
+    if (info) memset(info, 0, sizeof(*info));
+}
+static void APIENTRY GetRaytracingAccelerationStructurePrebuildInfo0054(
+    D3D12DDI_HDEVICE, const D3D12DDI_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS_0054 *,
+    D3D12DDI_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO_0054 *info) {
+    if (info) memset(info, 0, sizeof(*info));
+}
+static D3D12DDI_DRIVER_MATCHING_IDENTIFIER_STATUS APIENTRY CheckDriverMatchingIdentifier0054(
+    D3D12DDI_HDEVICE, D3D12DDI_SERIALIZED_DATA_TYPE, const D3D12DDI_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER_0054 *) {
+    return D3D12DDI_DRIVER_MATCHING_IDENTIFIER_UNSUPPORTED_TYPE;
+}
+/* state objects are never created (CreateStateObject is fail-closed) */
+static void *APIENTRY GetShaderIdentifier0054(D3D12DDI_HSTATEOBJECT_0054, LPCWSTR) { return nullptr; }
+static UINT APIENTRY GetShaderStackSize0054(D3D12DDI_HSTATEOBJECT_0054, LPCWSTR) { return 0; }
+static UINT APIENTRY GetPipelineStackSize0054(D3D12DDI_HSTATEOBJECT_0054) { return 0; }
+static void APIENTRY SetPipelineStackSize0054(D3D12DDI_HSTATEOBJECT_0054, UINT) {}
+static void APIENTRY SetBackgroundProcessingMode0063(D3D12DDI_HDEVICE, D3D12DDI_BACKGROUND_PROCESSING_MODE_0062,
+                                                     D3D12DDI_MEASUREMENTS_ACTION_0062, BOOL *further) {
+    if (further) *further = FALSE;
+}
+/* _0051 keeps each allocation pair in slot 0 of the broadcast arrays and the
+ * context in a separate output; this driver presents through its queue's
+ * context, so a runtime asking only for hardware queues is refused */
+static VOID APIENTRY Present0051(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEUE queue,
+                                 const D3D12DDIARG_PRESENT_0001 *arg, D3D12DDI_PRESENT_0051 *out,
+                                 D3D12DDI_PRESENT_CONTEXTS_0051 *contexts, D3D12DDI_PRESENT_HWQUEUES_0051 *queues) {
+    if (out) memset(out, 0, sizeof(*out));
+    if (contexts) memset(contexts, 0, sizeof(*contexts));
+    if (queues) memset(queues, 0, sizeof(*queues));
+    D3D12DDI_PRESENT_0003 legacy;
+    Present(handle, queue, arg, out && contexts ? &legacy : nullptr);
+    if (!out || !contexts) return;
+    out->BroadcastSrcAllocation[0] = legacy.hSrcAllocation;
+    out->BroadcastDstAllocation[0] = legacy.hDstAllocation;
+    for (UINT i = 0; i < legacy.BroadcastContextCount && i < D3DDDI_MAX_BROADCAST_CONTEXT; ++i) {
+        out->BroadcastSrcAllocation[i + 1] = legacy.BroadcastSrcAllocation[i];
+        out->BroadcastDstAllocation[i + 1] = legacy.BroadcastDstAllocation[i];
+        contexts->BroadcastContext[i] = legacy.BroadcastContext[i];
+    }
+    out->AddedGpuWork = legacy.AddedGpuWork;
+    out->BackBufferMultiplicity = legacy.BackBufferMultiplicity;
+    contexts->hContext = legacy.hContext;
+    contexts->BroadcastContextCount = legacy.BroadcastContextCount;
+}
+static VOID APIENTRY RSSetShadingRate0062(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_SHADING_RATE_0062 rate,
+                                          const D3D12DDI_SHADING_RATE_COMBINER_0062 *combiners) {
+    if (rate != D3D12DDI_SHADING_RATE_0062_1X1 ||
+        (combiners && (combiners[0] != D3D12DDI_SHADING_RATE_COMBINER_0062_PASSTHROUGH ||
+                       combiners[1] != D3D12DDI_SHADING_RATE_COMBINER_0062_PASSTHROUGH)))
+        ReportRejectedListError(handle, E_INVALIDARG);
+}
+static VOID APIENTRY RSSetShadingRateImage0062(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE image) {
+    if (image.pDrvPrivate) ReportRejectedListError(handle, E_INVALIDARG);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateCommandQueueSize0050), PFND3D12DDI_CALCPRIVATECOMMANDQUEUESIZE_0050>);
+static_assert(std::is_same_v<decltype(&CreateCommandQueue0050), PFND3D12DDI_CREATECOMMANDQUEUE_0050>);
+static_assert(std::is_same_v<decltype(&EnumerateMetaCommands0052), PFND3D12DDI_ENUMERATE_META_COMMANDS_0052>);
+static_assert(std::is_same_v<decltype(&GetMetaCommandRequiredParameterInfo0052),
+                             PFND3D12DDI_GET_META_COMMAND_REQUIRED_PARAMETER_INFO_0052>);
+static_assert(std::is_same_v<decltype(&GetRaytracingAccelerationStructurePrebuildInfo0054),
+                             PFND3D12DDI_GET_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO_0054>);
+static_assert(std::is_same_v<decltype(&CheckDriverMatchingIdentifier0054), PFND3D12DDI_CHECK_DRIVER_MATCHING_IDENTIFIER_0054>);
+static_assert(std::is_same_v<decltype(&GetShaderIdentifier0054), PFND3D12DDI_GET_SHADER_IDENTIFIER_0054>);
+static_assert(std::is_same_v<decltype(&GetShaderStackSize0054), PFND3D12DDI_GET_SHADER_STACK_SIZE_0054>);
+static_assert(std::is_same_v<decltype(&GetPipelineStackSize0054), PFND3D12DDI_GET_PIPELINE_STACK_SIZE_0054>);
+static_assert(std::is_same_v<decltype(&SetPipelineStackSize0054), PFND3D12DDI_SET_PIPELINE_STACK_SIZE_0054>);
+static_assert(std::is_same_v<decltype(&SetBackgroundProcessingMode0063), PFND3D12DDI_SET_BACKGROUND_PROCESSING_MODE_0063>);
+static_assert(std::is_same_v<decltype(&Present0051), PFND3D12DDI_PRESENT_0051>);
+static_assert(std::is_same_v<decltype(&RSSetShadingRate0062), PFND3D12DDI_RS_SET_SHADING_RATE_0062>);
+static_assert(std::is_same_v<decltype(&RSSetShadingRateImage0062), PFND3D12DDI_RS_SET_SHADING_RATE_IMAGE_0062>);
 /* C50: 3D_0033 = 3D_0003 with two retyped members and seven appended */
 static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033 &f) {
     static_assert(offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnAtomicCopyBufferRegion) ==
@@ -6476,6 +6588,22 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0040(D3D12DDI_COMMAND_LIST_FUNCS_
     static_assert(sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0040) == sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033));
     FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033(reinterpret_cast<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033 &>(f));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0040, pfnResetCommandList, ResetCommandList0040);
+}
+/* C52: 3D_0062 = 3D_0040 with the 0051 present and nine appended entries */
+static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0062(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062 &f) {
+    static_assert(offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnInitializeMetaCommand) ==
+                  sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0040));
+    FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0040(reinterpret_cast<D3D12DDI_COMMAND_LIST_FUNCS_3D_0040 &>(f));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnPresent, Present0051);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnInitializeMetaCommand, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnInitializeMetaCommand));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnExecuteMetaCommand, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnExecuteMetaCommand));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnBuildRaytracingAccelerationStructure, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnBuildRaytracingAccelerationStructure));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnEmitRaytracingAccelerationStructurePostbuildInfo, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnEmitRaytracingAccelerationStructurePostbuildInfo));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnCopyRaytracingAccelerationStructure, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnCopyRaytracingAccelerationStructure));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnSetPipelineState1, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnSetPipelineState1));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnDispatchRays, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnDispatchRays));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnRSSetShadingRate, RSSetShadingRate0062);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnRSSetShadingRateImage, RSSetShadingRateImage0062);
 }
 static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 &f) {
     AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnExecuteCommandLists, ExecuteCommandLists);
@@ -6558,6 +6686,37 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0040(D3D12DDI_DEVICE_FUNCS_CORE_0040 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnDestroyCommandRecorder, DestroyCommandRecorder0040);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCommandRecorderSetCommandPoolAsTarget, CommandRecorderSetCommandPoolAsTarget0040);
 }
+/* C52: CORE_0070 = CORE_0040 with the 0050 queue and 0043 opened-resource
+ * entries retyped and twenty entries appended */
+static void FillD3D12DDI_DEVICE_FUNCS_CORE_0070(D3D12DDI_DEVICE_FUNCS_CORE_0070 &f) {
+    static_assert(offsetof(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateSchedulingGroupSize) ==
+                  sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0040));
+    FillD3D12DDI_DEVICE_FUNCS_CORE_0040(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0040 &>(f));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateCommandQueueSize, CalcPrivateCommandQueueSize0050);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateCommandQueue, CreateCommandQueue0050);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateOpenedHeapAndResourceSizes, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateOpenedHeapAndResourceSizes));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnOpenHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnOpenHeapAndResource));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateSchedulingGroupSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateSchedulingGroupSize));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateSchedulingGroup, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateSchedulingGroup));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroySchedulingGroup, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroySchedulingGroup));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnEnumerateMetaCommands, EnumerateMetaCommands0052);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnEnumerateMetaCommandParameters, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnEnumerateMetaCommandParameters));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateMetaCommandSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateMetaCommandSize));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateMetaCommand, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateMetaCommand));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroyMetaCommand, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroyMetaCommand));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnGetMetaCommandRequiredParameterInfo, GetMetaCommandRequiredParameterInfo0052);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateStateObjectSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateStateObjectSize));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateStateObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateStateObject));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroyStateObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroyStateObject));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnGetRaytracingAccelerationStructurePrebuildInfo, GetRaytracingAccelerationStructurePrebuildInfo0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCheckDriverMatchingIdentifier, CheckDriverMatchingIdentifier0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnGetShaderIdentifier, GetShaderIdentifier0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnGetShaderStackSize, GetShaderStackSize0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnGetPipelineStackSize, GetPipelineStackSize0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnSetPipelineStackSize, SetPipelineStackSize0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnSetBackgroundProcessingMode, SetBackgroundProcessingMode0063);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnAddToStateObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnAddToStateObject));
+}
 template<class T> static HRESULT FillTable(void *table, SIZE_T size, void (*fill)(T &)) {
     if (!table || size < sizeof(T)) return E_INVALIDARG;
     memset(table, 0, size);
@@ -6575,7 +6734,9 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
         /* C44: the runtime sizes the table of the interface it negotiated
          * (GetVersions): R1 (0011) takes CORE_0010, 0012 CORE_0012; C50:
          * CORE_0033 has CORE_0012's size, the negotiated version decides */
-        hr = Negotiated0042()
+        hr = Negotiated0071()
+                 ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0070>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0070)
+             : Negotiated0042()
                  ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0040>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0040)
              : Negotiated0033()
                  ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0033>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0033)
@@ -6586,7 +6747,9 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
                  : FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0003>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0003);
         break;
     case D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D:
-        hr = Negotiated0042()
+        hr = Negotiated0071()
+                 ? FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0062>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0062)
+             : Negotiated0042()
                  ? FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0040>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0040)
              : Negotiated0033()
                  ? FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033)
