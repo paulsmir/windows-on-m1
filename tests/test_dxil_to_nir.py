@@ -52,7 +52,7 @@ class DxilToNir(unittest.TestCase):
                         "-o", str(cls.dxil), *libs, *dlibs, *dlibs, *link, "-lc++",
                         "-L/opt/homebrew/lib", "-lSPIRV-Tools-shared"], check=True, capture_output=True)
         subprocess.run(["clang", *common, str(ROOT / "tests/dxbc_to_nir_fixture.c"), str(DXBC / "dxbc_to_nir.c"),
-                        str(DXBC / "dxbc_parse.c"), "-o", str(cls.dxbc), *libs, *link,
+                        str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_tir_gs.c"), "-o", str(cls.dxbc), *libs, *link,
                         "-L/opt/homebrew/lib", "-lSPIRV-Tools-shared"], check=True, capture_output=True)
 
     @classmethod
