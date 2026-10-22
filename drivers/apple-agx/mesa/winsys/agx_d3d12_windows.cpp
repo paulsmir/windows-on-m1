@@ -2662,6 +2662,16 @@ static UINT qpc_us(LONGLONG ticks) {
   return static_cast<UINT>(ticks * 1000000 / frequency);
 }
 
+/* UAV-only rendering (EXP1889 C60A): with neither an RTV nor a DSV the pass
+ * rasterizes within the viewport; Gallium sizes such a framebuffer by
+ * width/height (ARB_framebuffer_no_attachments, as the D3D10 frontend's
+ * AgxD3d10NoAttachmentSize): the viewport's far edge rounded up, within the
+ * D3D12 16384-pixel render window. */
+static unsigned no_attachment_extent(float origin, float size) {
+  const float edge = ceilf(origin + size);
+  return edge >= 16384.0f ? 16384u : edge >= 1.0f ? static_cast<unsigned>(edge) : 1u;
+}
+
 extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *draw) {
   OwnerLock lock(owner);
   const LONGLONG entered = qpc_now();
@@ -2709,6 +2719,11 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     const unsigned w = level_extent(texture->width0, draw->Dsv.Level), h = level_extent(texture->height0, draw->Dsv.Level);
     width = width && width < w ? width : w;
     height = height && height < h ? height : h;
+  }
+  if (!draw->NumRtvs && !draw->Dsv.Texture) {
+    width = no_attachment_extent(draw->Viewport[0], draw->Viewport[2]);
+    height = no_attachment_extent(draw->Viewport[1], draw->Viewport[3]);
+    fb.samples = 1;
   }
   if (!width || !height) return E_INVALIDARG;
   fb.width = width;

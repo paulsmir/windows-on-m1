@@ -5401,7 +5401,7 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
                  : !pso->hs_dwords != !pso->ds_dwords ? 4u
                  : (list->topology >= 33u && list->topology <= 64u) != (pso->hs_dwords != 0) ? 9u /* C37: patches <=> HS+DS */
                  : pso->so.declared && pso->hs_dwords ? 10u /* C39: stream output after tessellation */
-                 : (!list->rtvs || !list->rtv[0].heap) && list->dsv.kind != kDescriptorDsv ? 5u
+                 : list->rtvs && !list->rtv[0].heap && list->dsv.kind != kDescriptorDsv ? 5u /* EXP1889: 0 RTVs = UAV-only */
                  : indexed && !list->index_heap ? 6u
                  : indirect && indexed && list->index_offset ? 8u /* C14: Gallium takes the start index from the arguments */
                  : list->commands + (pso->gs_dwords ? 1u : 0u) + (pso->hs_dwords ? 2u : 0u) >= kListCommands ? 3u : 0u;

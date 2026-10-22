@@ -234,6 +234,38 @@ int main() {
             result = subprocess.run([str(exe)], capture_output=True)
             self.assertEqual(result.returncode, 0, 'indirect draw skipped because direct counts are zero')
 
+    def test_uav_only_draw_rasterizes_within_the_viewport(self):
+        # EXP1889 C60A: a draw with neither an RTV nor a DSV (UAV-only
+        # rendering, legal D3D12) was refused at recording (reason 5) and the
+        # owner had no framebuffer size for it. The size is the viewport's
+        # far corner, rounded up, within the 16384 render window.
+        ddi = (ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp').read_text()
+        record = body(ddi, 'static void RecordDraw(')
+        self.assertIn(': list->rtvs && !list->rtv[0].heap && list->dsv.kind != kDescriptorDsv ? 5u', record)
+        owner = OWNER.read_text()
+        helper = body(owner, 'static unsigned no_attachment_extent(')
+        draw = body(owner, 'extern "C" HRESULT AgxD3d12OwnerDraw(')
+        self.assertIn('if (!draw->NumRtvs && !draw->Dsv.Texture) {', draw)
+        self.assertIn('width = no_attachment_extent(draw->Viewport[0], draw->Viewport[2]);', draw)
+        self.assertIn('height = no_attachment_extent(draw->Viewport[1], draw->Viewport[3]);', draw)
+        source = '#include <math.h>\n' + helper + r"""
+int main() {
+    if (no_attachment_extent(0.0f, 64.0f) != 64u) return 1;
+    if (no_attachment_extent(0.5f, 63.75f) != 65u) return 2;   /* far edge 64.25 -> 65 */
+    if (no_attachment_extent(-8.0f, 4.0f) != 1u) return 3;     /* off-screen: at least one pixel */
+    if (no_attachment_extent(0.0f, 1e9f) != 16384u) return 4;  /* D3D12_REQ_RENDER_TO_BUFFER_WINDOW_WIDTH */
+    if (no_attachment_extent(0.0f, 0.0f / 0.0f) != 1u) return 5;
+    return 0;
+}
+"""
+        compiler = shutil.which('clang++') or shutil.which('c++')
+        self.assertIsNotNone(compiler)
+        with tempfile.TemporaryDirectory() as tmp:
+            cpp, exe = Path(tmp) / 'extent.cpp', Path(tmp) / 'extent'
+            cpp.write_text(source)
+            subprocess.run([compiler, '-std=c++11', str(cpp), '-o', str(exe)], check=True, capture_output=True)
+            self.assertEqual(subprocess.run([str(exe)]).returncode, 0)
+
     def test_tier1_srv_upper_bound_is_usable(self):
         # EXP1378 follow-up: legal root SRV t127 was refused with reason5.
         # Execute the real ResolveRoot bound predicate, not a second planner.
