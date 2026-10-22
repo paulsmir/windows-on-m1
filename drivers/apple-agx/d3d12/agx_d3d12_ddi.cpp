@@ -114,8 +114,10 @@ template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENT
 #define AGX_ASSIGN(T, M, F) (f).M = &F
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 #define AGX_TILED_QUEUE(M, F) F
+#define AGX_TILED_DEVICE(T, M, F) F
 #else
 #define AGX_TILED_QUEUE(M, F) AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, M)
+#define AGX_TILED_DEVICE(T, M, F) AGX_REJECT(T, M)
 #endif
 
 /* C44: SM 6 needs the R1 interface (0011): the 0003 runtime never asks
@@ -1646,6 +1648,9 @@ struct AgxD3d12Heap {
      * CopyTileMappings reads; the owner keeps the GPU mappings themselves */
     struct AgxD3d12TileMapping { AgxD3d12Heap *heap; UINT tile; } *tiles;
     UINT tile_count;
+    /* C53 T2D: a reserved Texture2D's tiling (tiles[] in its resource tile
+     * order); nullptr for buffers */
+    struct AGX_TILE_GEOMETRY *geometry;
 };
 struct AgxD3d12Resource {
     AgxD3d12Heap *heap;
@@ -1954,6 +1959,7 @@ static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
                 if (device->heaps[i]->tiles[t].heap == heap) device->heaps[i]->tiles[t] = {};
         ReleaseSRWLockExclusive(&device->heap_lock);
         free(heap->tiles);
+        free(heap->geometry);
         AGX_D3D12_BUFFER buffer = HeapBuffer(heap);
         AgxD3d12OwnerDestroyBuffer(static_cast<AGX_D3D12_OWNER *>(device->owner), &buffer);
         memset(heap, 0, sizeof(*heap));
@@ -2175,6 +2181,69 @@ static HRESULT CreateReservedBuffer(AgxD3d12Device *device, AgxD3d12Heap *heap,
     return hr;
 }
 #endif
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C53 T2D (D3D12-C53-tiled-textures.md): a reserved Texture2D (array) of
+ * D3D12DDI_TL_64KB_TILE_UNDEFINED_SWIZZLE layout, every tile unmapped; its
+ * heap records the tiling (AGX_TILE_GEOMETRY) and a tile snapshot as
+ * reserved buffers do. */
+static HRESULT CreateReservedTexture(AgxD3d12Device *device, AgxD3d12Heap *heap,
+                                     const D3D12DDIARG_CREATERESOURCE_0003 *arg, AgxD3d12Resource *resource) {
+    AGX_D3D12_OWNER *owner = EnsureOwner(device);
+    AGX_D3D12_BUFFER texture = {};
+    AGX_D3D12_RESERVED_TILING tiling = {};
+    memset(heap, 0, sizeof(*heap));
+    memset(resource, 0, sizeof(*resource));
+    const UINT bind = ((arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET) ? AGX_D3D12_BIND_RENDER_TARGET : 0u) |
+                      ((arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE) ? AGX_D3D12_BIND_SAMPLER : 0u);
+    HRESULT hr = !owner || arg->SampleDesc.Count > 1 || !arg->MipLevels || arg->MipLevels > AGX_TILE_MAX_LEVELS ||
+                         (arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) || arg->Width > 0xffffffffull
+                     ? E_INVALIDARG
+                     : AgxD3d12OwnerCreateReservedTexture2D(owner, arg->Format, static_cast<UINT>(arg->Width), arg->Height,
+                                                            arg->DepthOrArraySize, arg->MipLevels, bind, &texture,
+                                                            &tiling);
+    AGX_TILE_GEOMETRY *geometry = SUCCEEDED(hr) ? static_cast<AGX_TILE_GEOMETRY *>(calloc(1, sizeof(AGX_TILE_GEOMETRY)))
+                                                : nullptr;
+    if (geometry) {
+        geometry->MipLevels = arg->MipLevels;
+        geometry->ArraySize = arg->DepthOrArraySize;
+        geometry->StandardMips = tiling.StandardMips;
+        geometry->PackedTiles = tiling.PackedTiles;
+        memcpy(geometry->TilesX, tiling.TilesX, sizeof(geometry->TilesX));
+        memcpy(geometry->TilesY, tiling.TilesY, sizeof(geometry->TilesY));
+    }
+    const UINT tiles = geometry ? AgxTileResourceTiles(geometry) : 0u;
+    AgxD3d12Heap::AgxD3d12TileMapping *snapshot = tiles ? static_cast<AgxD3d12Heap::AgxD3d12TileMapping *>(
+        calloc(tiles, sizeof(AgxD3d12Heap::AgxD3d12TileMapping))) : nullptr;
+    if (SUCCEEDED(hr) && !snapshot) {
+        AgxD3d12OwnerDestroyBuffer(owner, &texture);
+        free(geometry);
+        geometry = nullptr;
+        hr = tiles ? E_OUTOFMEMORY : E_INVALIDARG;
+    }
+    if (SUCCEEDED(hr)) {
+        heap->native = texture.Resource;
+        heap->gpuva = texture.GpuVa;
+        heap->bytes = static_cast<UINT64>(tiles) * 0x10000ull;
+        heap->allocation = AgxD3d12OwnerBufferAllocation(owner, &texture);
+        heap->tiles = snapshot;
+        heap->tile_count = tiles;
+        heap->geometry = geometry;
+        RegisterHeap(device, heap);
+        resource->heap = heap;
+        resource->bytes = heap->bytes;
+        resource->type = D3D12DDI_RT_TEXTURE2D;
+        resource->format = arg->Format;
+        resource->width = static_cast<UINT>(arg->Width);
+        resource->height = arg->Height;
+        resource->layers = arg->DepthOrArraySize;
+        resource->levels = arg->MipLevels;
+    }
+    const UINT receipt[] = {static_cast<UINT>(arg->Format), static_cast<UINT>(arg->Width), arg->Height,
+                            arg->DepthOrArraySize | (static_cast<UINT>(arg->MipLevels) << 16), tiles};
+    AdmissionUmdDiagnostic("measure-d3d12-reserved-texture2d", hr, receipt, 5);
+    return hr;
+}
+#endif
 static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATEHEAP_0001 *heap_arg,
                                               D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE runtime_resource,
                                               const D3D12DDIARG_CREATERESOURCE_0003 *resource_arg,
@@ -2196,6 +2265,11 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     if (!heap_arg && heap && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_BUFFER &&
         !resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate)
         return CreateReservedBuffer(device, heap, resource_arg, resource);
+    /* C53 T2D: a reserved Texture2D, likewise */
+    if (!heap_arg && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D &&
+        resource_arg->Layout == D3D12DDI_TL_64KB_TILE_UNDEFINED_SWIZZLE &&
+        !resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate)
+        return CreateReservedTexture(device, heap ? heap : &resource->own_heap, resource_arg, resource);
 #endif
     if (!heap_arg && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_BUFFER) {
         const auto *base = static_cast<const AgxD3d12Resource *>(resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate);
@@ -3144,6 +3218,24 @@ static int EmitTileRun(void *context, const AGX_TILE_RUN *run) {
     const AGX_D3D12_BUFFER reserved = HeapBuffer(e->reserved);
     const AGX_D3D12_BUFFER backing = e->heap ? HeapBuffer(e->heap) : AGX_D3D12_BUFFER{};
     const bool null = run->Kind == AGX_TILE_RANGE_NULL, reuse = run->Kind == AGX_TILE_RANGE_REUSE;
+    if (e->reserved->geometry) {
+        /* C53 T2D: a texture tile at a time (its pages are not contiguous) */
+        for (UINT t = 0; t < run->Tiles; ++t) {
+            const UINT heap_tile = null ? 0u : reuse ? run->HeapTile : run->HeapTile + t;
+            unsigned slice = 0, mip = 0, x = 0, y = 0;
+            int packed = 0;
+            if (!AgxTileLocate(e->reserved->geometry, run->ResourceTile + t, &slice, &mip, &x, &y, &packed)) {
+                e->hr = E_INVALIDARG;
+                return 0;
+            }
+            e->hr = AgxD3d12OwnerMapReservedTextureTile(e->owner, &reserved, slice, packed ? TRUE : FALSE, mip, x, y,
+                                                        null ? nullptr : &backing, heap_tile);
+            if (FAILED(e->hr)) return 0;
+            e->reserved->tiles[run->ResourceTile + t] = null ? AgxD3d12Heap::AgxD3d12TileMapping{}
+                                                             : AgxD3d12Heap::AgxD3d12TileMapping{e->heap, heap_tile};
+        }
+        return 1;
+    }
     for (UINT t = 0; t < run->Tiles;) {
         const UINT n = reuse ? 1u : run->Tiles; /* a shared tile maps one resource tile at a time */
         const UINT heap_tile = reuse ? run->HeapTile : run->HeapTile + t;
@@ -3182,9 +3274,12 @@ static VOID APIENTRY UpdateTileMappings(D3D12DDI_HCOMMANDQUEUE handle, D3D12DDI_
     if (SUCCEEDED(hr)) {
         AgxTileEmit emit = {owner, reserved, heap, S_OK};
         AgxD3d12OwnerLock(owner);
-        const int walked = AgxTileMappingWalk(reserved->tile_count, regions, coord, size, ranges, kind, heap_starts, counts,
-                                              heap ? static_cast<unsigned>(heap->bytes / 0x10000ull) : 0u, EmitTileRun,
-                                              &emit);
+        const unsigned heap_tiles = heap ? static_cast<unsigned>(heap->bytes / 0x10000ull) : 0u;
+        const int walked = reserved->geometry
+            ? AgxTileMappingWalkGeometry(reserved->geometry, regions, coord, size, ranges, kind, heap_starts, counts,
+                                         heap_tiles, EmitTileRun, &emit)
+            : AgxTileMappingWalk(reserved->tile_count, regions, coord, size, ranges, kind, heap_starts, counts, heap_tiles,
+                                 EmitTileRun, &emit);
         AgxD3d12OwnerUnlock(owner);
         hr = walked ? S_OK : FAILED(emit.hr) ? emit.hr : E_INVALIDARG;
     }
@@ -3194,6 +3289,13 @@ static VOID APIENTRY UpdateTileMappings(D3D12DDI_HCOMMANDQUEUE handle, D3D12DDI_
     const UINT receipt[] = {regions, ranges, reserved ? reserved->tile_count : 0u, heap ? 1u : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-update-tiles", hr, receipt, 4);
     if (FAILED(hr)) ReportRejectedQueueError(handle, hr);
+}
+/* The tiling of a reserved resource: its texture geometry, or one row of
+ * 64 KiB tiles for a buffer. */
+static AGX_TILE_GEOMETRY ReservedGeometry(const AgxD3d12Heap *heap) {
+    if (heap->geometry) return *heap->geometry;
+    AGX_TILE_GEOMETRY buffer = {1u, 1u, 1u, 0u, {heap->tile_count}, {1u}};
+    return buffer;
 }
 static VOID APIENTRY CopyTileMappings(D3D12DDI_HCOMMANDQUEUE handle, D3D12DDI_HRESOURCE dst_handle,
                                       const D3D12DDI_TILED_RESOURCE_COORDINATE *dst_start, D3D12DDI_HRESOURCE src_handle,
@@ -3206,35 +3308,64 @@ static VOID APIENTRY CopyTileMappings(D3D12DDI_HCOMMANDQUEUE handle, D3D12DDI_HR
     AGX_D3D12_OWNER *owner = device ? static_cast<AGX_D3D12_OWNER *>(device->owner) : nullptr;
     AgxD3d12Heap *dst = dst_resource ? dst_resource->heap : nullptr, *src = src_resource ? src_resource->heap : nullptr;
     const UINT tiles = size ? size->NumTiles : 0u;
-    HRESULT hr = owner && dst && src && dst->tiles && src->tiles && dst_start && src_start && tiles &&
-                 !dst_start->Y && !dst_start->Z && !dst_start->Subresource && !src_start->Y && !src_start->Z &&
-                 !src_start->Subresource && (!size->UseBox || (size->Width == tiles && size->Height == 1 && size->Depth == 1)) &&
-                 dst_start->X <= dst->tile_count && tiles <= dst->tile_count - dst_start->X &&
-                 src_start->X <= src->tile_count && tiles <= src->tile_count - src_start->X ? S_OK : E_INVALIDARG;
-    /* the source snapshot first: the ranges may overlap (one resource) */
+    HRESULT hr = owner && dst && src && dst->tiles && src->tiles && dst_start && src_start && tiles ? S_OK : E_INVALIDARG;
+    /* C53 T2D: both regions walk their own resource's tile order (a box is
+     * rows of its start's standard mip) */
+    const AGX_TILE_GEOMETRY dst_geometry = SUCCEEDED(hr) ? ReservedGeometry(dst) : AGX_TILE_GEOMETRY{};
+    const AGX_TILE_GEOMETRY src_geometry = SUCCEEDED(hr) ? ReservedGeometry(src) : AGX_TILE_GEOMETRY{};
+    const AGX_TILE_COORD dst_at = dst_start ? AGX_TILE_COORD{dst_start->X, dst_start->Y, dst_start->Z, dst_start->Subresource}
+                                            : AGX_TILE_COORD{};
+    const AGX_TILE_COORD src_at = src_start ? AGX_TILE_COORD{src_start->X, src_start->Y, src_start->Z, src_start->Subresource}
+                                            : AGX_TILE_COORD{};
+    const AGX_TILE_REGION region = size ? AGX_TILE_REGION{size->NumTiles, size->UseBox ? 1u : 0u, size->Width, size->Height,
+                                                          size->Depth}
+                                        : AGX_TILE_REGION{};
+    /* the source snapshot first, with the destination indices: the regions
+     * may overlap (one resource) */
     AgxD3d12Heap::AgxD3d12TileMapping *snapshot = SUCCEEDED(hr) ? static_cast<AgxD3d12Heap::AgxD3d12TileMapping *>(
         calloc(tiles, sizeof(AgxD3d12Heap::AgxD3d12TileMapping))) : nullptr;
-    if (SUCCEEDED(hr) && !snapshot) hr = E_OUTOFMEMORY;
+    UINT *targets = SUCCEEDED(hr) ? static_cast<UINT *>(calloc(tiles, sizeof(UINT))) : nullptr;
+    if (SUCCEEDED(hr) && (!snapshot || !targets)) hr = E_OUTOFMEMORY;
+    for (UINT k = 0; SUCCEEDED(hr) && k < tiles; ++k) {
+        unsigned long long s = 0, d = 0;
+        if (!AgxTileRegionTile(&src_geometry, &src_at, &region, k, &s) ||
+            !AgxTileRegionTile(&dst_geometry, &dst_at, &region, k, &d) || s >= src->tile_count || d >= dst->tile_count) {
+            hr = E_INVALIDARG;
+            break;
+        }
+        snapshot[k] = src->tiles[s];
+        targets[k] = static_cast<UINT>(d);
+    }
     if (SUCCEEDED(hr)) {
-        memcpy(snapshot, src->tiles + src_start->X, tiles * sizeof(*snapshot));
         AgxD3d12OwnerLock(owner);
-        for (UINT t = 0; SUCCEEDED(hr) && t < tiles;) {
+        for (UINT k = 0; SUCCEEDED(hr) && k < tiles;) {
+            /* runs of consecutive destination tiles onto consecutive heap tiles */
             UINT n = 1;
-            while (t + n < tiles && snapshot[t + n].heap == snapshot[t].heap &&
-                   (!snapshot[t].heap || snapshot[t + n].tile == snapshot[t].tile + n)) ++n;
-            AgxTileEmit emit = {owner, dst, snapshot[t].heap, S_OK};
-            const AGX_TILE_RUN run = {dst_start->X + t, n,
-                                      static_cast<unsigned>(snapshot[t].heap ? AGX_TILE_RANGE_HEAP : AGX_TILE_RANGE_NULL),
-                                      snapshot[t].tile};
+            while (k + n < tiles && targets[k + n] == targets[k] + n && snapshot[k + n].heap == snapshot[k].heap &&
+                   (!snapshot[k].heap || snapshot[k + n].tile == snapshot[k].tile + n)) ++n;
+            AgxTileEmit emit = {owner, dst, snapshot[k].heap, S_OK};
+            const AGX_TILE_RUN run = {targets[k], n,
+                                      static_cast<unsigned>(snapshot[k].heap ? AGX_TILE_RANGE_HEAP : AGX_TILE_RANGE_NULL),
+                                      snapshot[k].tile};
             hr = EmitTileRun(&emit, &run) ? S_OK : emit.hr;
-            t += n;
+            k += n;
         }
         AgxD3d12OwnerUnlock(owner);
     }
     free(snapshot);
+    free(targets);
     const UINT receipt[] = {tiles, dst_start ? dst_start->X : 0u, src_start ? src_start->X : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-copy-tile-mappings", hr, receipt, 3);
     if (FAILED(hr)) ReportRejectedQueueError(handle, hr);
+}
+/* C53 T2D: D3D12_PACKED_MIP_INFO's NumPackedMips and NumTilesForPackedMips
+ * (per array slice) of a reserved texture; 0 and 0 for anything else */
+static VOID APIENTRY GetMipPacking(D3D12DDI_HDEVICE, D3D12DDI_HRESOURCE resource_handle, UINT *packed_mips,
+                                   UINT *packed_tiles) {
+    const auto *resource = static_cast<const AgxD3d12Resource *>(resource_handle.pDrvPrivate);
+    const AGX_TILE_GEOMETRY *geometry = resource && resource->heap ? resource->heap->geometry : nullptr;
+    if (packed_mips) *packed_mips = geometry ? geometry->MipLevels - geometry->StandardMips : 0u;
+    if (packed_tiles) *packed_tiles = geometry ? geometry->PackedTiles : 0u;
 }
 #endif
 static SIZE_T APIENTRY CalcPrivateCommandQueueSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATECOMMANDQUEUE_0001 *) {
@@ -6061,7 +6192,7 @@ static VOID APIENTRY CreateSamplerInHeap(D3D12DDI_HDEVICE handle, const D3D12DDI
 static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 &f) {
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckFormatSupport, CheckFormatSupport);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckMultisampleQualityLevels, CheckMultisampleQualityLevels);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking, AGX_TILED_DEVICE(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking, GetMipPacking));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateElementLayoutSize, CalcPrivateElementLayoutSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateElementLayout, CreateElementLayout);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyElementLayout, DestroyElementLayout);
@@ -6551,7 +6682,7 @@ static_assert(std::is_same_v<decltype(&SetViewInstanceMask), PFND3D12DDI_SETVIEW
 static void FillD3D12DDI_DEVICE_FUNCS_CORE_0010(D3D12DDI_DEVICE_FUNCS_CORE_0010 &f) {
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckFormatSupport, CheckFormatSupport);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckMultisampleQualityLevels, CheckMultisampleQualityLevels);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetMipPacking, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetMipPacking));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetMipPacking, AGX_TILED_DEVICE(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetMipPacking, GetMipPacking));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateElementLayoutSize, CalcPrivateElementLayoutSize0010);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateElementLayout, CreateElementLayout0010);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyElementLayout, DestroyElementLayout);

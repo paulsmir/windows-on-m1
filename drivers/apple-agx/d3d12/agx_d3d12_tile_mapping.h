@@ -43,7 +43,7 @@ typedef struct {
 
 /* A 2D resource in standard tiles. Subresource = mip + slice * MipLevels;
  * mips StandardMips.. are packed into PackedTiles tiles per slice. */
-typedef struct {
+typedef struct AGX_TILE_GEOMETRY {
   unsigned MipLevels, ArraySize, StandardMips, PackedTiles;
   unsigned TilesX[AGX_TILE_MAX_LEVELS], TilesY[AGX_TILE_MAX_LEVELS];
 } AGX_TILE_GEOMETRY;
