@@ -33,6 +33,7 @@ struct D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 {UINT *pNumShaderModelsSupported;D
 static bool ShaderModel6Enabled(){return false;}
 static int RovEnabled(){return 0;}
 static int ConservativeRasterEnabled(){return 0;}
+static int ProfileLevel(){return kProfileLevel;}
 static int TiledEnabled(){return 0;}
 static bool Negotiated0033(){return false;}
 static bool Negotiated0042(){return false;}

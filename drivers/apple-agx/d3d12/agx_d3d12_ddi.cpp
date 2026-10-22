@@ -258,6 +258,14 @@ static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *ve
 /* C1: the pipeline level the development profile admits (D3D12 drivers
  * start at FL 11_0; the C8 baseline gates admission outside the profile). */
 static const D3D12DDI_3DPIPELINELEVEL kProfileLevel = D3D12DDI_3DPIPELINELEVEL_11_0;
+/* FL 11_1 (D3D12-FL-program.md): logic ops (C57), 64 UAVs (C47 tier 2) and
+ * forced sample counts (C60A); reported only with APPLE_AGX_D3D12_FL111=1
+ * until C60A passes on hardware. */
+static D3D12DDI_3DPIPELINELEVEL ProfileLevel() {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1 && value[0] == '1'
+               ? D3D12DDI_3DPIPELINELEVEL_11_1 : kProfileLevel;
+}
 /* Answers a caps type with T, its remaining bytes zero (a larger, newer
  * structure keeps every later field at its "not supported" zero). */
 template<class T, class F> static HRESULT Answer(const D3D12DDIARG_GETCAPS *arg, F fill) {
@@ -349,12 +357,12 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
          * the output field is written. */
         if (arg->DataSize >= sizeof(D3D12DDI_3DPIPELINESUPPORT1_DATA_0081)) {
             static_cast<D3D12DDI_3DPIPELINESUPPORT1_DATA_0081 *>(arg->pData)
-                ->MaximumDriverSupportedFeatureLevel = kProfileLevel;
+                ->MaximumDriverSupportedFeatureLevel = ProfileLevel();
             hr = S_OK;
         }
         break;
     case D3D12DDICAPS_TYPE_3DPIPELINESUPPORT:
-        hr = Answer<D3D12DDI_3DPIPELINELEVEL>(arg, [](auto &d) { d = kProfileLevel; });
+        hr = Answer<D3D12DDI_3DPIPELINELEVEL>(arg, [](auto &d) { d = ProfileLevel(); });
         break;
     /* C44: SM 5.1 and 6.0 (DXIL through agx_dxil_to_nir) under R1 */
     case D3D12DDICAPS_TYPE_0011_SHADER_MODELS:

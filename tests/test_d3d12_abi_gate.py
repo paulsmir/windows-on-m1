@@ -48,6 +48,12 @@ class D3d12AbiGate(unittest.TestCase):
         # OpenAdapter12) answers only the 3D pipeline caps with FL 11_0.
         self.assertEqual(source.count('D3D12DDI_3DPIPELINELEVEL_11_0'), 1)
         self.assertIn('static const D3D12DDI_3DPIPELINELEVEL kProfileLevel = D3D12DDI_3DPIPELINELEVEL_11_0;', source)
+        # FL 11_1 only behind APPLE_AGX_D3D12_FL111=1 until C60A passes
+        level = source[source.index('static D3D12DDI_3DPIPELINELEVEL ProfileLevel() {'):]
+        level = level[:level.index('\n}\n')]
+        self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1', level)
+        self.assertIn('? D3D12DDI_3DPIPELINELEVEL_11_1 : kProfileLevel;', level)
+        self.assertNotIn('= kProfileLevel;', source[source.index('static HRESULT APIENTRY GetCaps('):])
         caps = source[source.index('static HRESULT APIENTRY GetCaps('):]
         caps = caps[:caps.index('\n}\n')]
         self.assertEqual(set(re.findall(r'case (D3D12DDICAPS_TYPE_\w+)', caps)),
