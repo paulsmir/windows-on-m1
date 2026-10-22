@@ -220,6 +220,15 @@ class DxilToNir(unittest.TestCase):
         self.assertEqual(len(formats), 4)
         self.assertEqual(set(formats), {"none"})
 
+    def test_view_id_reads_view_zero(self):
+        # C50: SM 6.1 with ViewInstancingTier NOT_SUPPORTED: SV_ViewID must
+        # read 0 (View Instancing spec); dxil-spirv without multiview emits
+        # the constant, so no view-index intrinsic reaches the AGX backend
+        # (Asahi's Gallium driver has no load_view_index handler).
+        final = self.final("view_ps")
+        self.assertNotIn("view_index", final)
+        self.assertRegex(final, r"vec4 %\d+, %\d+, %\d+ \(0x0\), %\d+ \(0x3f800000\)")
+
     def test_runtime_converted_passthrough_hull_shader_translates(self):
         # EXP1858: under R1 the runtime converts DXBC to DXIL (dxilconv); a
         # hull shader without a control point phase names no entry function

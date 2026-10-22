@@ -54,6 +54,10 @@ struct AgxD3d12Adapter {
     /* C2: the KMD buffer classes (the D3D10 adapter's query, umd_runtime_device.c) */
     AGX_WIN32_DEVICE_INFO info;
     BOOL info_valid;
+    /* C50: the interface the runtime negotiated (CalcPrivateDeviceSize
+     * Interface/Version, D3D12DDI_SUPPORTED_* form): CORE_0012 and CORE_0033
+     * have the same size, so FillDDITable selects tables by it. */
+    UINT64 negotiated;
 };
 static AgxD3d12Adapter adapter_object;
 static D3D12DDI_HRTTABLE list_table;
@@ -65,7 +69,9 @@ static volatile LONG queue_generation; /* per-device Win32 generations */
 template<class T> struct TableOf;
 template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0003> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
 template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0010> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
+template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0033> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
 template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
+template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
 template<> struct TableOf<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D; };
 static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error);
 static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error);
@@ -114,17 +120,30 @@ static bool ShaderModel6Enabled() {
     }();
     return enabled;
 }
+/* C50 (D3D12-C50-interface-0033.md): SM 6.1 is D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033,
+ * so it needs R3 build 3 (0033); APPLE_AGX_D3D12_DDI=0033 offers it to an SM6
+ * process until hardware validates the 0033 tables. */
+static bool Interface0033Enabled() {
+    static const bool enabled = [] {
+        char value[5] = {};
+        return ShaderModel6Enabled() && GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) == 4 &&
+               !memcmp(value, "0033", 4);
+    }();
+    return enabled;
+}
+static bool Negotiated0033() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0033; }
 /* C48: R1 build 2 (0012) adds the wave caps (D3D12DDI_SHADER_CAPS_0012) and
  * one device entry, pfnGetDebugAllocationInfo; SM6 processes negotiate it. */
 static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *versions) {
-    const UINT offered = ShaderModel6Enabled() ? 3u : 1u;
+    const UINT offered = Interface0033Enabled() ? 4u : ShaderModel6Enabled() ? 3u : 1u;
     const UINT receipt[] = {count ? *count : 0, versions != nullptr, offered};
     AdmissionUmdDiagnostic("d3d12-versions", count ? S_OK : E_INVALIDARG, receipt, 3);
     if (!count) return E_INVALIDARG;
     if (!versions) { *count = offered; return S_OK; }
     if (*count < offered) { *count = offered; return E_INVALIDARG; }
     UINT n = 0;
-    if (offered == 3u) {
+    if (offered == 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;
+    if (offered >= 3u) {
         versions[n++] = D3D12DDI_SUPPORTED_0012;
         versions[n++] = D3D12DDI_SUPPORTED_0011;
     }
@@ -204,17 +223,20 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
     /* C44: SM 5.1 and 6.0 (DXIL through agx_dxil_to_nir) under R1 */
     case D3D12DDICAPS_TYPE_0011_SHADER_MODELS:
         if (ShaderModel6Enabled() && arg->DataSize >= sizeof(D3D12DDI_D3D12_SHADER_MODELS_DATA_0011)) {
+            /* C50: SM 6.1 at 0033: SV_ViewID lowers to view 0 (ViewInstancingTier
+             * NOT_SUPPORTED, View Instancing spec), barycentrics stay unsupported */
             static const D3D12DDI_SHADER_MODEL models[] = {D3D12DDI_SHADER_MODEL_5_1_RELEASE_0011,
-                                                           D3D12DDI_SHADER_MODEL_6_0_RELEASE_0011};
+                                                           D3D12DDI_SHADER_MODEL_6_0_RELEASE_0011,
+                                                           D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033};
+            const UINT offered = Negotiated0033() ? 3u : 2u;
             auto *data = static_cast<D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 *>(arg->pData);
             if (!data->pNumShaderModelsSupported) {
                 hr = E_INVALIDARG;
             } else if (!data->pShaderModelsSupported) {
-                *data->pNumShaderModelsSupported = ARRAYSIZE(models);
+                *data->pNumShaderModelsSupported = offered;
                 hr = S_OK;
             } else {
-                const UINT n = *data->pNumShaderModelsSupported < ARRAYSIZE(models) ? *data->pNumShaderModelsSupported
-                                                                                      : ARRAYSIZE(models);
+                const UINT n = *data->pNumShaderModelsSupported < offered ? *data->pNumShaderModelsSupported : offered;
                 memcpy(data->pShaderModelsSupported, models, n * sizeof(models[0]));
                 *data->pNumShaderModelsSupported = n;
                 hr = S_OK;
@@ -403,6 +425,7 @@ static SIZE_T APIENTRY CalcPrivateDeviceSize(D3D12DDI_HADAPTER,
                                              const D3D12DDIARG_CALCPRIVATEDEVICESIZE *arg) {
     const UINT receipt[] = {arg ? arg->Interface : 0, arg ? arg->Version : 0};
     AdmissionUmdDiagnostic("d3d12-device-size", S_OK, receipt, 2);
+    if (arg) adapter_object.negotiated = (static_cast<UINT64>(arg->Interface) << 32) | arg->Version;
     return sizeof(AgxD3d12Device);
 }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
@@ -5718,6 +5741,356 @@ static HRESULT APIENTRY ReceiptSerializeLibrary(D3D12DDI_HDEVICE device, D3D12DD
     AdmissionUmdDiagnostic("measure-d3d12-library", hr, receipt, 3);
     return hr;
 }
+/* C50 (R3 build 3, D3D12-C50-interface-0033.md): CORE_0033 has CORE_0012's
+ * members with newer argument types. Each adapter projects the 0033 argument
+ * onto the validated R1/0003 entry; a field without a 0003 equivalent is
+ * refused unless it holds the value the 0003 runtime implied. */
+static D3D12DDIARG_CREATE_SHADER_0010 ProjectR3Shader(const D3D12DDIARG_CREATE_SHADER_0026 &arg) {
+    /* _0026 adds a mesh-signature union member and ShaderCodeHash (the
+     * shader-cache hash; no cache session is offered) */
+    D3D12DDIARG_CREATE_SHADER_0010 legacy = {};
+    static_assert(sizeof(legacy.IOSignatures) == sizeof(arg.IOSignatures));
+    legacy.hRootSignature = arg.hRootSignature;
+    legacy.pShaderCode = arg.pShaderCode;
+    memcpy(&legacy.IOSignatures, &arg.IOSignatures, sizeof(legacy.IOSignatures));
+    legacy.Flags = arg.Flags;
+    legacy.LibraryReference = arg.LibraryReference;
+    return legacy;
+}
+static SIZE_T APIENTRY CalcPrivateShaderSize0026(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0026 *arg) {
+    if (!arg) return CalcPrivateShaderSize0010(device, nullptr);
+    const D3D12DDIARG_CREATE_SHADER_0010 legacy = ProjectR3Shader(*arg);
+    return CalcPrivateShaderSize0010(device, &legacy);
+}
+static VOID APIENTRY CreateShader0026(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0026 *arg,
+                                      D3D12DDI_HSHADER handle) {
+    if (!arg) return CreateShader0010(device, nullptr, handle);
+    const D3D12DDIARG_CREATE_SHADER_0010 legacy = ProjectR3Shader(*arg);
+    CreateShader0010(device, &legacy, handle);
+}
+static VOID APIENTRY CreateComputeShader0026(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0026 *arg,
+                                             D3D12DDI_HSHADER handle) {
+    if (!arg) return CreateComputeShader0010(device, nullptr, handle);
+    const D3D12DDIARG_CREATE_SHADER_0010 legacy = ProjectR3Shader(*arg);
+    CreateComputeShader0010(device, &legacy, handle);
+}
+static VOID APIENTRY CreateTessellationShader0026(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0026 *arg,
+                                                  D3D12DDI_HSHADER handle) {
+    if (!arg) return CreateTessellationShader0010(device, nullptr, handle);
+    const D3D12DDIARG_CREATE_SHADER_0010 legacy = ProjectR3Shader(*arg);
+    CreateTessellationShader0010(device, &legacy, handle);
+}
+/* the embedded _0026 shader moves every stream-output field: projected, not cast */
+static D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 ProjectR3StreamOutput(
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 &arg) {
+    D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 legacy = {};
+    legacy.CreateShader = ProjectR3Shader(arg.CreateShader);
+    legacy.pOutputStreamDecl = arg.pOutputStreamDecl;
+    legacy.NumEntries = arg.NumEntries;
+    legacy.BufferStridesInBytes = arg.BufferStridesInBytes;
+    legacy.NumStrides = arg.NumStrides;
+    legacy.RasterizedStream = arg.RasterizedStream;
+    return legacy;
+}
+static SIZE_T APIENTRY CalcPrivateGeometryShaderWithStreamOutput0026(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 *arg) {
+    if (!arg) return CalcPrivateGeometryShaderWithStreamOutput0010(device, nullptr);
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 legacy = ProjectR3StreamOutput(*arg);
+    return CalcPrivateGeometryShaderWithStreamOutput0010(device, &legacy);
+}
+static VOID APIENTRY CreateGeometryShaderWithStreamOutput0026(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 *arg, D3D12DDI_HSHADER handle) {
+    if (!arg) return CreateGeometryShaderWithStreamOutput0010(device, nullptr, handle);
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 legacy = ProjectR3StreamOutput(*arg);
+    CreateGeometryShaderWithStreamOutput0010(device, &legacy, handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateShaderSize0026), PFND3D12DDI_CALC_PRIVATE_SHADER_SIZE_0026>);
+static_assert(std::is_same_v<decltype(&CreateShader0026), PFND3D12DDI_CREATE_SHADER_0026>);
+static_assert(std::is_same_v<decltype(&CalcPrivateGeometryShaderWithStreamOutput0026),
+                             PFND3D12DDI_CALC_PRIVATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026>);
+static_assert(std::is_same_v<decltype(&CreateGeometryShaderWithStreamOutput0026),
+                             PFND3D12DDI_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026>);
+/* _0025 = _0010 + DepthBoundsTestEnable; DepthBoundsTestSupported is FALSE */
+static bool ProjectR3Depth(const D3D12DDI_DEPTH_STENCIL_DESC_0025 *desc, D3D12DDI_DEPTH_STENCIL_DESC_0010 *legacy) {
+    static_assert(offsetof(D3D12DDI_DEPTH_STENCIL_DESC_0025, LibraryReference) ==
+                  offsetof(D3D12DDI_DEPTH_STENCIL_DESC_0010, LibraryReference));
+    static_assert(offsetof(D3D12DDI_DEPTH_STENCIL_DESC_0025, DepthBoundsTestEnable) >=
+                  sizeof(D3D12DDI_DEPTH_STENCIL_DESC_0010));
+    if (!desc || desc->DepthBoundsTestEnable) return false;
+    memcpy(legacy, desc, sizeof(*legacy));
+    return true;
+}
+static SIZE_T APIENTRY CalcPrivateDepthStencilStateSize0025(D3D12DDI_HDEVICE device,
+    const D3D12DDI_DEPTH_STENCIL_DESC_0025 *desc) {
+    D3D12DDI_DEPTH_STENCIL_DESC_0010 legacy;
+    return ProjectR3Depth(desc, &legacy) ? CalcPrivateDepthStencilStateSize0010(device, &legacy) : 0;
+}
+static VOID APIENTRY CreateDepthStencilState0025(D3D12DDI_HDEVICE device,
+    const D3D12DDI_DEPTH_STENCIL_DESC_0025 *desc, D3D12DDI_HDEPTHSTENCILSTATE handle) {
+    D3D12DDI_DEPTH_STENCIL_DESC_0010 legacy;
+    if (!ProjectR3Depth(desc, &legacy)) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    CreateDepthStencilState0010(device, &legacy, handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateDepthStencilStateSize0025),
+                             PFND3D12DDI_CALCPRIVATEDEPTHSTENCILSTATESIZE_0025>);
+static_assert(std::is_same_v<decltype(&CreateDepthStencilState0025), PFND3D12DDI_CREATEDEPTHSTENCILSTATE_0025>);
+/* _0033 = _0010 + ViewInstancingDesc. ViewInstancingTier is NOT_SUPPORTED:
+ * the View Instancing spec still requires PSOs declaring 0 or 1 instance
+ * (SV_ViewID reads 0); masking and other locations are refused. */
+static bool ProjectR3PipelineState(const D3D12DDIARG_CREATE_PIPELINE_STATE_0033 *arg,
+                                   D3D12DDIARG_CREATE_PIPELINE_STATE_0010 *legacy) {
+    static_assert(offsetof(D3D12DDIARG_CREATE_PIPELINE_STATE_0033, LibraryReference) ==
+                  offsetof(D3D12DDIARG_CREATE_PIPELINE_STATE_0010, LibraryReference));
+    static_assert(offsetof(D3D12DDIARG_CREATE_PIPELINE_STATE_0033, ViewInstancingDesc) >=
+                  sizeof(D3D12DDIARG_CREATE_PIPELINE_STATE_0010));
+    if (!arg) return false;
+    const D3D12DDI_VIEW_INSTANCING_DESC &view = arg->ViewInstancingDesc;
+    if (view.ViewInstanceCount > 1 || view.Flags != D3D12DDI_VIEW_INSTANCING_FLAG_NONE ||
+        (view.ViewInstanceCount == 1 && (!view.pViewInstanceLocations ||
+                                         view.pViewInstanceLocations[0].ViewportArrayIndex ||
+                                         view.pViewInstanceLocations[0].RenderTargetArrayIndex)))
+        return false;
+    memcpy(legacy, arg, sizeof(*legacy));
+    return true;
+}
+static SIZE_T APIENTRY CalcPrivatePipelineStateSize0033(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0033 *arg) {
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0010 legacy;
+    return ProjectR3PipelineState(arg, &legacy) ? CalcPrivatePipelineStateSize0010(device, &legacy) : 0;
+}
+static HRESULT APIENTRY CreatePipelineState0033(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0033 *arg, D3D12DDI_HPIPELINESTATE destination,
+    D3D12DDI_HRTPIPELINESTATE) {
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0010 legacy;
+    if (!ProjectR3PipelineState(arg, &legacy)) return E_INVALIDARG;
+    return CreatePipelineState0010(device, &legacy, destination);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivatePipelineStateSize0033),
+                             PFND3D12DDI_CALC_PRIVATE_PIPELINE_STATE_SIZE_0033>);
+static_assert(std::is_same_v<decltype(&CreatePipelineState0033), PFND3D12DDI_CREATE_PIPELINE_STATE_0033>);
+/* Root signature 1.1 (_0013): its range and root-descriptor flags only relax
+ * 1.0's rules (1.0: volatile descriptors, CBV/SRV data static while set at
+ * execute, UAV data volatile); this driver reads descriptors and data when
+ * ExecuteCommandLists replays the list, so the 1.0 projection keeps every
+ * 1.1 promise. The projection lives in one heap block freed after the call. */
+struct AgxD3d12RootProjection {
+    D3D12DDI_ROOT_SIGNATURE desc;
+    D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 arg;
+    void *storage;
+};
+static bool ProjectRoot11(const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *in, AgxD3d12RootProjection *out) {
+    memset(out, 0, sizeof(*out));
+    if (!in || in->Version != D3D12DDI_ROOT_SIGNATURE_VERSION_1_1 || !in->pRootSignature_1_1) return false;
+    const D3D12DDI_ROOT_SIGNATURE_0013 &root = *in->pRootSignature_1_1;
+    if (root.NumParameters > kCurrentRootLayoutPolicy.max_parameters || (root.NumParameters && !root.pRootParameters))
+        return false;
+    UINT64 ranges = 0;
+    for (UINT i = 0; i < root.NumParameters; ++i) {
+        const D3D12DDI_ROOT_PARAMETER_0013 &p = root.pRootParameters[i];
+        if (p.ParameterType != D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) continue;
+        if (p.DescriptorTable.NumDescriptorRanges && !p.DescriptorTable.pDescriptorRanges) return false;
+        ranges += p.DescriptorTable.NumDescriptorRanges;
+    }
+    const UINT64 parameter_bytes = UINT64{root.NumParameters} * sizeof(D3D12DDI_ROOT_PARAMETER);
+    if (ranges > (UINT64{UINT_MAX} - parameter_bytes) / sizeof(D3D12DDI_DESCRIPTOR_RANGE)) return false;
+    const SIZE_T bytes = static_cast<SIZE_T>(parameter_bytes + ranges * sizeof(D3D12DDI_DESCRIPTOR_RANGE));
+    auto *storage = bytes ? static_cast<unsigned char *>(HeapAlloc(GetProcessHeap(), 0, bytes)) : nullptr;
+    if (bytes && !storage) return false;
+    auto *parameters = reinterpret_cast<D3D12DDI_ROOT_PARAMETER *>(storage);
+    auto *range = reinterpret_cast<D3D12DDI_DESCRIPTOR_RANGE *>(storage + parameter_bytes);
+    static_assert(sizeof(D3D12DDI_ROOT_PARAMETER) % alignof(D3D12DDI_DESCRIPTOR_RANGE) == 0);
+    for (UINT i = 0; i < root.NumParameters; ++i) {
+        const D3D12DDI_ROOT_PARAMETER_0013 &p = root.pRootParameters[i];
+        D3D12DDI_ROOT_PARAMETER &q = parameters[i];
+        memset(&q, 0, sizeof(q));
+        q.ParameterType = p.ParameterType;
+        q.ShaderVisibility = p.ShaderVisibility;
+        switch (p.ParameterType) {
+        case D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE:
+            q.DescriptorTable.NumDescriptorRanges = p.DescriptorTable.NumDescriptorRanges;
+            q.DescriptorTable.pDescriptorRanges = range;
+            for (UINT r = 0; r < p.DescriptorTable.NumDescriptorRanges; ++r, ++range) {
+                const D3D12DDI_DESCRIPTOR_RANGE_0013 &d = p.DescriptorTable.pDescriptorRanges[r];
+                range->RangeType = d.RangeType;
+                range->NumDescriptors = d.NumDescriptors;
+                range->BaseShaderRegister = d.BaseShaderRegister;
+                range->RegisterSpace = d.RegisterSpace;
+                range->OffsetInDescriptorsFromTableStart = d.OffsetInDescriptorsFromTableStart;
+            }
+            break;
+        case D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS:
+            q.Constants = p.Constants;
+            break;
+        default:
+            q.Descriptor.ShaderRegister = p.Descriptor.ShaderRegister;
+            q.Descriptor.RegisterSpace = p.Descriptor.RegisterSpace;
+            break;
+        }
+    }
+    out->desc.NumParameters = root.NumParameters;
+    out->desc.pRootParameters = parameters;
+    out->desc.NumStaticSamplers = root.NumStaticSamplers;
+    out->desc.pStaticSamplers = root.pStaticSamplers;
+    out->desc.Flags = root.Flags;
+    out->arg.pRootSignature = &out->desc;
+    out->arg.NodeMask = in->NodeMask;
+    out->storage = storage;
+    return true;
+}
+static void ReleaseRoot11(AgxD3d12RootProjection *projection) {
+    if (projection->storage) HeapFree(GetProcessHeap(), 0, projection->storage);
+    projection->storage = nullptr;
+}
+static SIZE_T APIENTRY CalcPrivateRootSignatureSize0013(D3D12DDI_HDEVICE device,
+                                                        const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *arg) {
+    AgxD3d12RootProjection projection;
+    if (!ProjectRoot11(arg, &projection)) return 0;
+    const SIZE_T bytes = CalcPrivateRootSignatureSize(device, &projection.arg);
+    ReleaseRoot11(&projection);
+    return bytes;
+}
+static HRESULT APIENTRY CreateRootSignature0013(D3D12DDI_HDEVICE device,
+                                                const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *arg,
+                                                D3D12DDI_HROOTSIGNATURE handle) {
+    AgxD3d12RootProjection projection;
+    if (!ProjectRoot11(arg, &projection)) return E_INVALIDARG;
+    const HRESULT hr = CreateRootSignature(device, &projection.arg, handle);
+    ReleaseRoot11(&projection);
+    return hr;
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateRootSignatureSize0013),
+                             PFND3D12DDI_CALC_PRIVATE_ROOT_SIGNATURE_SIZE_0013>);
+static_assert(std::is_same_v<decltype(&CreateRootSignature0013), PFND3D12DDI_CREATE_ROOT_SIGNATURE_0013>);
+/* _0023 moves the queue handles to parameters and adds QueueCreationFlags
+ * (global realtime priority is not offered: caps type 1062 unanswered) */
+static SIZE_T APIENTRY CalcPrivateCommandQueueSize0023(D3D12DDI_HDEVICE device,
+                                                       const D3D12DDIARG_CREATECOMMANDQUEUE_0023 *) {
+    return CalcPrivateCommandQueueSize(device, nullptr);
+}
+static HRESULT APIENTRY CreateCommandQueue0023(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATECOMMANDQUEUE_0023 *arg,
+                                               D3D12DDI_HCOMMANDQUEUE queue, D3D12DDI_HRTCOMMANDQUEUE runtime) {
+    if (!arg || arg->QueueCreationFlags != D3D12DDI_COMMAND_QUEUE_CREATION_FLAG_NONE) return E_INVALIDARG;
+    D3D12DDIARG_CREATECOMMANDQUEUE_0001 legacy = {};
+    legacy.hDrvCommandQueue = queue;
+    legacy.hRTCommandQueue = runtime;
+    legacy.QueueFlags = arg->QueueFlags;
+    legacy.NodeMask = arg->NodeMask;
+    return CreateCommandQueue(device, &legacy);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateCommandQueueSize0023), PFND3D12DDI_CALCPRIVATECOMMANDQUEUESIZE_0023>);
+static_assert(std::is_same_v<decltype(&CreateCommandQueue0023), PFND3D12DDI_CREATECOMMANDQUEUE_0023>);
+/* 0022+ runtimes name UAV resources (D3D12DDI_RESOURCE_FLAG_0022_UNORDERED_ACCESS);
+ * the 0003 runtime passed them without the bit, which is the contract these
+ * entries validated, so the projection clears it. No protected session is
+ * offered (caps type 1057 unanswered). */
+static D3D12DDIARG_CREATERESOURCE_0003 ProjectR3Resource(const D3D12DDIARG_CREATERESOURCE_0003 &arg) {
+    D3D12DDIARG_CREATERESOURCE_0003 legacy = arg;
+    legacy.Flags &= ~D3D12DDI_RESOURCE_FLAG_0022_UNORDERED_ACCESS;
+    return legacy;
+}
+static D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY CalcPrivateHeapAndResourceSizes0030(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATEHEAP_0001 *heap, const D3D12DDIARG_CREATERESOURCE_0003 *resource,
+    D3D12DDI_HPROTECTEDRESOURCESESSION_0030) {
+    if (!resource) return CalcPrivateHeapAndResourceSizes(device, heap, nullptr);
+    const D3D12DDIARG_CREATERESOURCE_0003 legacy = ProjectR3Resource(*resource);
+    return CalcPrivateHeapAndResourceSizes(device, heap, &legacy);
+}
+static HRESULT APIENTRY CreateHeapAndResource0030(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATEHEAP_0001 *heap,
+                                                  D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE runtime_resource,
+                                                  const D3D12DDIARG_CREATERESOURCE_0003 *resource,
+                                                  const D3D12DDI_CLEAR_VALUES *clear,
+                                                  D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session,
+                                                  D3D12DDI_HRESOURCE resource_handle) {
+    if (session.pDrvPrivate) return E_INVALIDARG;
+    if (!resource) return CreateHeapAndResource(device, heap, heap_handle, runtime_resource, nullptr, clear, resource_handle);
+    const D3D12DDIARG_CREATERESOURCE_0003 legacy = ProjectR3Resource(*resource);
+    return CreateHeapAndResource(device, heap, heap_handle, runtime_resource, &legacy, clear, resource_handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateHeapAndResourceSizes0030),
+                             PFND3D12DDI_CALCPRIVATEHEAPANDRESOURCESIZES_0030>);
+static_assert(std::is_same_v<decltype(&CreateHeapAndResource0030), PFND3D12DDI_CREATEHEAPANDRESOURCE_0030>);
+/* _0022 allocation info: 32-bit alignments and one swizzle transition per
+ * pattern slot. Every slot repeats the single 0003 transition (the C21
+ * registry has two patterns per layout; 0xff = no transition). */
+static void ProjectR3AllocationInfo(const D3D12DDI_RESOURCE_ALLOCATION_INFO &in, D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 *out) {
+    memset(out, 0, sizeof(*out));
+    out->ResourceDataSize = in.ResourceDataSize;
+    out->AdditionalDataHeaderSize = in.AdditionalDataHeaderSize;
+    out->AdditionalDataSize = in.AdditionalDataSize;
+    out->ResourceDataAlignment = static_cast<UINT32>(in.ResourceDataAlignment);
+    out->AdditionalDataHeaderAlignment = static_cast<UINT32>(in.AdditionalDataHeaderAlignment);
+    out->AdditionalDataAlignment = static_cast<UINT32>(in.AdditionalDataAlignment);
+    out->Layout = in.Layout;
+    for (UINT8 &transition : out->MipLevelSwizzleTransition) transition = in.MipLevelSwizzleTransition;
+}
+static VOID APIENTRY CheckResourceAllocationInfo0022(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATERESOURCE_0003 *arg,
+                                                     D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS flags, UINT32 alignment,
+                                                     UINT mask, D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 *info) {
+    if (!info) return;
+    D3D12DDI_RESOURCE_ALLOCATION_INFO legacy_info;
+    if (arg) {
+        const D3D12DDIARG_CREATERESOURCE_0003 legacy = ProjectR3Resource(*arg);
+        CheckResourceAllocationInfo(device, &legacy, flags, alignment, mask, &legacy_info);
+    } else {
+        CheckResourceAllocationInfo(device, nullptr, flags, alignment, mask, &legacy_info);
+    }
+    ProjectR3AllocationInfo(legacy_info, info);
+}
+static VOID APIENTRY CheckExistingResourceAllocationInfo0022(D3D12DDI_HDEVICE device, D3D12DDI_HRESOURCE handle,
+                                                             D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 *info) {
+    if (!info) return;
+    D3D12DDI_RESOURCE_ALLOCATION_INFO legacy_info;
+    CheckExistingResourceAllocationInfo(device, handle, &legacy_info, nullptr);
+    ProjectR3AllocationInfo(legacy_info, info);
+}
+static_assert(std::is_same_v<decltype(&CheckResourceAllocationInfo0022), PFND3D12DDI_CHECKRESOURCEALLOCATIONINFO_0022>);
+static_assert(std::is_same_v<decltype(&CheckExistingResourceAllocationInfo0022),
+                             PFND3D12DDI_CHECKEXISITINGRESOURCEALLOCATIONINFO_0022>);
+/* C50: the 0033 command-list entries. ResourceBarrier_0022 replaces the
+ * aliasing member with ranged barriers; like every barrier here it needs no
+ * AGX work. Present_0028 adds a sync-interval override, never requested. */
+static VOID APIENTRY ResourceBarrier0022(D3D12DDI_HCOMMANDLIST, UINT, const D3D12DDIARG_RESOURCE_BARRIER_0022 *) {}
+static VOID APIENTRY Present0028(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEUE queue,
+                                 const D3D12DDIARG_PRESENT_0001 *arg, D3D12DDI_PRESENT_0028 *out) {
+    D3D12DDI_PRESENT_0003 legacy;
+    Present(handle, queue, arg, out ? &legacy : nullptr);
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    out->hSrcAllocation = legacy.hSrcAllocation;
+    out->hDstAllocation = legacy.hDstAllocation;
+    out->hContext = legacy.hContext;
+    out->BroadcastContextCount = legacy.BroadcastContextCount;
+    memcpy(out->BroadcastContext, legacy.BroadcastContext, sizeof(out->BroadcastContext));
+    memcpy(out->BroadcastSrcAllocation, legacy.BroadcastSrcAllocation, sizeof(out->BroadcastSrcAllocation));
+    memcpy(out->BroadcastDstAllocation, legacy.BroadcastDstAllocation, sizeof(out->BroadcastDstAllocation));
+    out->AddedGpuWork = legacy.AddedGpuWork;
+    out->BackBufferMultiplicity = legacy.BackBufferMultiplicity;
+}
+/* The added list state DDIs accept only the value their absent capability
+ * implies (DepthBoundsTestSupported, ProgrammableSamplePositionsTier and
+ * protected sessions are 0): the defaults a list reset may set. */
+static VOID APIENTRY OMSetDepthBounds(D3D12DDI_HCOMMANDLIST handle, FLOAT min, FLOAT max) {
+    if (min != 0.0f || max != 1.0f) ReportRejectedListError(handle, E_INVALIDARG);
+}
+static VOID APIENTRY SetSamplePositions(D3D12DDI_HCOMMANDLIST handle, UINT samples, UINT pixels,
+                                        D3D12DDI_SAMPLE_POSITION *) {
+    if (samples || pixels) ReportRejectedListError(handle, E_INVALIDARG);
+}
+static VOID APIENTRY SetProtectedResourceSession(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session) {
+    if (session.pDrvPrivate) ReportRejectedListError(handle, E_INVALIDARG);
+}
+/* the mask only applies to PSOs that enable view-instance masking, which
+ * CreatePipelineState0033 refuses */
+static VOID APIENTRY SetViewInstanceMask(D3D12DDI_HCOMMANDLIST, UINT) {}
+static_assert(std::is_same_v<decltype(&ResourceBarrier0022), PFND3D12DDI_RESOURCEBARRIER_0022>);
+static_assert(std::is_same_v<decltype(&Present0028), PFND3D12DDI_PRESENT_0028>);
+static_assert(std::is_same_v<decltype(&OMSetDepthBounds), PFND3D12DDI_OM_SETDEPTHBOUNDS_0025>);
+static_assert(std::is_same_v<decltype(&SetSamplePositions), PFND3D12DDI_SETSAMPLEPOSITIONS_0027>);
+static_assert(std::is_same_v<decltype(&SetProtectedResourceSession), PFND3D12DDI_SETPROTECTEDRESOURCESESSION_0030>);
+static_assert(std::is_same_v<decltype(&SetViewInstanceMask), PFND3D12DDI_SETVIEWINSTANCEMASK_0033>);
 static void FillD3D12DDI_DEVICE_FUNCS_CORE_0010(D3D12DDI_DEVICE_FUNCS_CORE_0010 &f) {
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckFormatSupport, CheckFormatSupport);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckMultisampleQualityLevels, CheckMultisampleQualityLevels);
@@ -6010,6 +6383,21 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, Bundled<SetMarker>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments, ClearRootArguments);
 }
+/* C50: 3D_0033 = 3D_0003 with two retyped members and seven appended */
+static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033 &f) {
+    static_assert(offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnAtomicCopyBufferRegion) ==
+                  sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003));
+    FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(reinterpret_cast<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 &>(f));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnResourceBarrier, ResourceBarrier0022);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnPresent, Present0028);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnAtomicCopyBufferRegion, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnAtomicCopyBufferRegion));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnOMSetDepthBounds, OMSetDepthBounds);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnSetSamplePositions, SetSamplePositions);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnResourceResolveSubresourceRegion, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnResourceResolveSubresourceRegion));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnSetProtectedResourceSession, SetProtectedResourceSession);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnWriteBufferImmediate, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnWriteBufferImmediate));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnSetViewInstanceMask, SetViewInstanceMask);
+}
 static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 &f) {
     AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnExecuteCommandLists, ExecuteCommandLists);
     f.pfnUnused = nullptr;
@@ -6036,6 +6424,44 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0012(D3D12DDI_DEVICE_FUNCS_CORE_0012 
     FillD3D12DDI_DEVICE_FUNCS_CORE_0010(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0010 &>(f));
     f.pfnGetDebugAllocationInfo = GetDebugAllocationInfo;
 }
+/* C50: _0014 adds the allocation's offset and size; none is described */
+static VOID APIENTRY GetDebugAllocationInfo0014(D3D12DDI_HDEVICE, D3D12DDI_HANDLE_AND_TYPE, UINT *num_va,
+                                                D3D12DDI_DEBUG_VIRTUAL_ADDRESS_ALLOCATION_INFO_0012 *,
+                                                UINT *num_kmt, D3D12DDI_DEBUG_KMT_ALLOCATION_INFO_0014 *) {
+    if (num_va) *num_va = 0;
+    if (num_kmt) *num_kmt = 0;
+}
+static_assert(std::is_same_v<decltype(&GetDebugAllocationInfo0014), PFND3D12DDI_GET_DEBUG_ALLOCATION_INFO_0014>);
+/* C50: CORE_0033 has CORE_0012's members in the same order; the members whose
+ * PFN type changed are reassigned (test_d3d12_interface_0033 derives the set
+ * from the WDK header). */
+static void FillD3D12DDI_DEVICE_FUNCS_CORE_0033(D3D12DDI_DEVICE_FUNCS_CORE_0033 &f) {
+    static_assert(sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0033) == sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0012));
+    FillD3D12DDI_DEVICE_FUNCS_CORE_0012(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0012 &>(f));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateDepthStencilStateSize, CalcPrivateDepthStencilStateSize0025);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateDepthStencilState, CreateDepthStencilState0025);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateShaderSize, CalcPrivateShaderSize0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateVertexShader, CreateShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreatePixelShader, CreateShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateGeometryShader, CreateShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateComputeShader, CreateComputeShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateGeometryShaderWithStreamOutput, CalcPrivateGeometryShaderWithStreamOutput0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateGeometryShaderWithStreamOutput, CreateGeometryShaderWithStreamOutput0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateTessellationShaderSize, CalcPrivateShaderSize0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateHullShader, CreateTessellationShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateDomainShader, CreateTessellationShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateCommandQueueSize, CalcPrivateCommandQueueSize0023);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateCommandQueue, CreateCommandQueue0023);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivatePipelineStateSize, CalcPrivatePipelineStateSize0033);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreatePipelineState, CreatePipelineState0033);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateRootSignatureSize, CalcPrivateRootSignatureSize0013);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateRootSignature, CreateRootSignature0013);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateHeapAndResourceSizes, CalcPrivateHeapAndResourceSizes0030);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateHeapAndResource, CreateHeapAndResource0030);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCheckResourceAllocationInfo, CheckResourceAllocationInfo0022);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCheckExistingResourceAllocationInfo, CheckExistingResourceAllocationInfo0022);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnGetDebugAllocationInfo, GetDebugAllocationInfo0014);
+}
 template<class T> static HRESULT FillTable(void *table, SIZE_T size, void (*fill)(T &)) {
     if (!table || size < sizeof(T)) return E_INVALIDARG;
     memset(table, 0, size);
@@ -6051,15 +6477,20 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
     switch (type) {
     case D3D12DDI_TABLE_TYPE_DEVICE_CORE:
         /* C44: the runtime sizes the table of the interface it negotiated
-         * (GetVersions): R1 (0011) takes CORE_0010, 0012 CORE_0012 */
-        hr = size >= sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0012)
+         * (GetVersions): R1 (0011) takes CORE_0010, 0012 CORE_0012; C50:
+         * CORE_0033 has CORE_0012's size, the negotiated version decides */
+        hr = Negotiated0033()
+                 ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0033>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0033)
+             : size >= sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0012)
                  ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0012>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0012)
              : size >= sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0010)
                  ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0010>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0010)
                  : FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0003>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0003);
         break;
     case D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D:
-        hr = FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003);
+        hr = Negotiated0033()
+                 ? FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033)
+                 : FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003);
         break;
     case D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D:
         hr = FillTable<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001>(table, size, FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001);
@@ -6085,6 +6516,7 @@ extern "C" HRESULT APIENTRY OpenAdapter12(D3D12DDIARG_OPENADAPTER *arg) {
     adapter_object.runtime = arg->hRTAdapter;
     adapter_object.callbacks = arg->pAdapterCallbacks;
     adapter_object.info_valid = FALSE;
+    adapter_object.negotiated = 0;
     if (arg->pAdapterCallbacks && arg->pAdapterCallbacks->pfnQueryAdapterInfoCb) {
         D3DDDICB_QUERYADAPTERINFO query = {};
         query.pPrivateDriverData = &adapter_object.info;
