@@ -95,7 +95,7 @@ class D3d12Interface0033(unittest.TestCase):
         new = [m for _, m in typed_members(self.header, 'D3D12DDI_DEVICE_FUNCS_CORE_0075')]
         self.assertEqual(old[:115], new[:115])
 
-    def test_new_interfaces_only_in_the_opt_in_profile(self):
+    def test_interface_0076_is_the_sm6_default_with_opt_outs(self):
         versions = self.source[self.source.index('static HRESULT APIENTRY GetVersions('):]
         versions = versions[:versions.index('\n}\n')]
         self.assertIn(': InterfaceOptIn() == D3D12DDI_SUPPORTED_0076 ? 6u', versions)
@@ -104,7 +104,13 @@ class D3d12Interface0033(unittest.TestCase):
         self.assertIn('if (offered >= 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;', versions)
         self.assertIn('const UINT offered = Negotiated0076() ? 7u : Negotiated0042() ? 4u : Negotiated0033() ? 3u : 2u;',
                       self.source)
-        self.assertIn('if (!ShaderModel6Enabled() || GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI"', self.source)
+        # C55 (EXP1872): an SM6 process negotiates 0076 unless APPLE_AGX_D3D12_DDI
+        # names 0012 (R1 build 2), 0033 or 0042; APPLE_AGX_D3D12_SM6=0 keeps 0003
+        opt = self.source[self.source.index('static UINT64 InterfaceOptIn() {'):]
+        opt = opt[:opt.index('\n}\n')]
+        self.assertIn('if (!ShaderModel6Enabled()) return UINT64{0};', opt)
+        self.assertIn('!= 4) return D3D12DDI_SUPPORTED_0076;', opt)
+        self.assertIn(': !memcmp(value, "0012", 4) ? UINT64{0}', opt)
 
     def test_extended_features_table_is_filled_from_r2(self):
         # EXP1868: the 0033 runtime filled the core and list tables, then

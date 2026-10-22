@@ -168,16 +168,22 @@ static const UINT64 kScanVersions[] = {
     D3D12DDI_SUPPORTED_0062, D3D12DDI_SUPPORTED_0061, D3D12DDI_SUPPORTED_0060, D3D12DDI_SUPPORTED_0054,
     D3D12DDI_SUPPORTED_0053, D3D12DDI_SUPPORTED_0052, D3D12DDI_SUPPORTED_0051, D3D12DDI_SUPPORTED_0050,
     D3D12DDI_SUPPORTED_0043};
+/* C55: validated on J313 (EXP1871/EXP1872: probes 105/107 at 0033, 106/107
+ * at 0042, 107/107 at 0076 on ARM64 and x64; samples and MiniEngine through
+ * 0042), interface 0076 with SM 6.5 is the default of an SM6 process;
+ * APPLE_AGX_D3D12_DDI=0012 keeps R1 build 2 (SM 6.0), 0033/0042 the
+ * intermediate interfaces, APPLE_AGX_D3D12_SM6=0 the 0003 interface. */
 static UINT64 InterfaceOptIn() {
     static const UINT64 offered = [] {
         char value[5] = {};
-        if (!ShaderModel6Enabled() || GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) != 4)
-            return UINT64{0};
+        if (!ShaderModel6Enabled()) return UINT64{0};
+        if (GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) != 4) return D3D12DDI_SUPPORTED_0076;
         return !memcmp(value, "scan", 4) || ScanBound() ? kInterfaceScan
                : !memcmp(value, "0076", 4) ? D3D12DDI_SUPPORTED_0076
                : !memcmp(value, "0042", 4) ? D3D12DDI_SUPPORTED_0042
                : !memcmp(value, "0033", 4) ? D3D12DDI_SUPPORTED_0033
-                                           : UINT64{0};
+               : !memcmp(value, "0012", 4) ? UINT64{0}
+                                           : D3D12DDI_SUPPORTED_0076;
     }();
     return offered;
 }
