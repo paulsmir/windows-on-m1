@@ -53,7 +53,7 @@ FRONTEND_C = ('ShaderParse.c','ShaderTGSI.c')
 # the frontend uses behind APPLE_AGX_D3D_SHADER_NIR.
 DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c')
 # D3D12 C44: the DXIL frontend (drivers/apple-agx/mesa/dxil) of the 64-bit D3D12
-# UMDs, Mesa's spirv_to_nir (libvtn of the same NIR build configuration) and
+# UMDs, Mesa's spirv_to_nir (libvtn of the --mesa-build that provides libnir) and
 # the dxil-spirv C library (8434b063, D3D12-C15-dxil-license-review.md; built
 # /MD with the EXP1388 configuration, c44-build-dxspv.ps1).
 # (agx_dxil_program.c is compiled by the UMD project itself)
@@ -64,8 +64,6 @@ DXIL_SPIRV_BUILD = {'x64': Path(r'C:\Users\pauls\c44-dxspv-x64\build'),
 DXIL_SPIRV_LIBRARIES = ('dxil-spirv-c-static.lib', 'dxil-converter.lib', 'spirv-module.lib',
                         'bc/llvm-bc.lib', 'third_party/bc-decoder.lib', 'third_party/dxbc-spirv.lib',
                         'third_party/glslang-spirv-builder.lib', 'dxil-utils.lib', 'dxil-debug.lib')
-VTN_BUILD = {'x64': Path(r'C:\Users\pauls\AD04-fullcompiler-001\nir-x64'),
-             'arm64': Path(r'C:\Users\pauls\AD04-fullcompiler-001\nir-arm64')}
 # D3D-H2a: the D3D11 DDI table over the D3D10 frontend (drivers/apple-agx/mesa/d3d11).
 D3D11_CPP = ('agx_d3d11_ddi.cpp', 'agx_wddm2_ddi.cpp')
 # Actual Gallium helpers required by native context/resource/state construction.
@@ -477,7 +475,10 @@ def main():
             libraries.append(library)
         dxil = args.architecture in DXIL_SPIRV_BUILD
         if dxil:
-            for library in ([VTN_BUILD[args.architecture] / 'src/compiler/spirv/libvtn.a'] +
+            # libvtn of the same Mesa build as libnir (EXP1857: the nir-arm64
+            # cache's assertion-enabled libvtn left nir_validate_* unresolved
+            # against the NDEBUG libnir)
+            for library in ([build / 'src/compiler/spirv/libvtn.a'] +
                             [DXIL_SPIRV_BUILD[args.architecture] / name for name in DXIL_SPIRV_LIBRARIES]):
                 actual = record(library, kind='c44-dxil-library')
                 manifest['libraries'].append({'path': str(library), 'sha256': actual})
