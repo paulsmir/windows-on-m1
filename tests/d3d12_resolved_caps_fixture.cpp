@@ -24,6 +24,12 @@ struct D3D12DDI_MEMORY_ARCHITECTURE_CAPS {int UMA,IOCoherent,CacheCoherent;};
 struct D3D12DDI_SHADER_CAPS_0003 {int MinPrecision,Doubles,ShaderSpecifiedStencilRef,TypedUAVLoadAdditionalFormats,ROVs;};
 struct D3D12DDI_ARCHITECTURE_INFO_DATA {int TileBasedDeferredRenderer;};
 struct D3D12DDI_GPUVA_CAPS_0004 {int MaxGPUVirtualAddressBitsPerResource;};
+enum D3D12DDI_SHADER_MODEL {D3D12DDI_SHADER_MODEL_5_1_RELEASE_0011=0x50015,D3D12DDI_SHADER_MODEL_6_0_RELEASE_0011=0x60005};
+struct D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 {UINT *pNumShaderModelsSupported;D3D12DDI_SHADER_MODEL *pShaderModelsSupported;};
+static bool ShaderModel6Enabled(){return false;}
+#ifndef ARRAYSIZE
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
+#endif
 static void AdmissionUmdDiagnostic(const char *,HRESULT,const UINT *,UINT){}
 /* ACTUAL_CAPS */
 int main(){

@@ -56,7 +56,16 @@ class D3d12AbiGate(unittest.TestCase):
                           'D3D12DDICAPS_TYPE_SHADER', 'D3D12DDICAPS_TYPE_ARCHITECTURE_INFO',
                           'D3D12DDICAPS_TYPE_GPUVA_CAPS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT',
                           'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT1',
-                          'D3D12DDICAPS_TYPE_SWIZZLE_PATTERN'})
+                          'D3D12DDICAPS_TYPE_SWIZZLE_PATTERN', 'D3D12DDICAPS_TYPE_0011_SHADER_MODELS'})
+        # C44: SM 6.0 and the R1 interface only for APPLE_AGX_D3D12_SM6=1
+        # processes until the DXIL path is hardware-validated
+        models = caps[caps.index('case D3D12DDICAPS_TYPE_0011_SHADER_MODELS:'):]
+        models = models[:models.index('break;')]
+        self.assertIn('if (ShaderModel6Enabled() &&', models)
+        versions = source[source.index('static HRESULT APIENTRY GetVersions('):]
+        versions = versions[:versions.index('\n}\n')]
+        self.assertIn('const UINT offered = ShaderModel6Enabled() ? 2u : 1u;', versions)
+        self.assertIn('if (offered == 2u) versions[n++] = D3D12DDI_SUPPORTED_0011;', versions)
         # nothing optional is claimed beyond resource binding tier 2 (C47: heap
         # ranges for SRVs, UAVs and samplers)
         self.assertIn('d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;', caps)
