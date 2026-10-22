@@ -359,6 +359,95 @@ extern "C" HRESULT AgxD3d12OwnerMapReservedTiles(AGX_D3D12_OWNER *owner, const A
   return mapped ? S_OK : E_FAIL;
 }
 
+/* C53 HW2 (D3D12-C53-tiled-textures.md; run by the HW1 self-test): a
+ * reserved 256x256 RGBA8 texture with 3 mips -- mip 0 is 2x2 standard tiles,
+ * mip 1 one, mip 2 packed -- over a 6-tile heap:
+ *   mip 0 (0,0) -> heap 0, (1,0) -> heap 1, (0,1) -> heap 2, (1,1) -> heap 0
+ *   (an alias of (0,0)), mip 1 -> heap 3, the packed tile -> heap 4.
+ * Known texels go in through CopyTexture (GPU writes through the 16 KiB page
+ * maps) except into (1,1); a read back must return them, (1,1) must read
+ * (0,0)'s texels, heap tiles 0-4 must hold data and heap tile 5 none. Then
+ * (1,1) is remapped onto heap 5 and must read zero. Receipt
+ * measure-d3d12-reserved-texture-selftest {stage, bad, first bad texel}. */
+static uint32_t selftest_texel(unsigned x, unsigned y, unsigned level) {
+  return 0xff000000u | (level << 16) | ((y & 0xffu) << 8) | (x & 0xffu);
+}
+static HRESULT ReservedTextureSelfTest(AGX_D3D12_OWNER *owner) {
+  const unsigned long long tile = 0x10000ull;
+  const unsigned size = 256, pitch = size * 4;
+  AGX_D3D12_BUFFER heap = {}, texture = {}, staging = {};
+  AGX_D3D12_RESERVED_TILING tiling = {};
+  UINT stage = 0, bad = 0, first_bad = ~0u;
+  HRESULT hr = AgxD3d12OwnerCreateBuffer(owner, 6 * tile, TRUE, &heap);
+  if (SUCCEEDED(hr)) {
+    stage = 1;
+    memset(heap.Cpu, 0, static_cast<size_t>(6 * tile));
+    hr = AgxD3d12OwnerCreateReservedTexture2D(owner, DXGI_FORMAT_R8G8B8A8_UNORM, size, size, 1, 3,
+                                              AGX_D3D12_BIND_SAMPLER | AGX_D3D12_BIND_RENDER_TARGET, &texture, &tiling);
+  }
+  if (SUCCEEDED(hr) && (tiling.StandardMips != 2 || tiling.TilesX[0] != 2 || tiling.TilesY[0] != 2 ||
+                        tiling.TilesX[1] != 1 || tiling.PackedTiles != 1)) hr = E_UNEXPECTED;
+  if (SUCCEEDED(hr)) { stage = 2; hr = AgxD3d12OwnerCreateBuffer(owner, static_cast<unsigned long long>(pitch) * size, TRUE, &staging); }
+  if (SUCCEEDED(hr)) {
+    stage = 3;
+    const struct { unsigned mip, x, y, heap; BOOL packed; } map[] = {
+        {0, 0, 0, 0, FALSE}, {0, 1, 0, 1, FALSE}, {0, 0, 1, 2, FALSE}, {0, 1, 1, 0, FALSE},
+        {1, 0, 0, 3, FALSE}, {2, 0, 0, 4, TRUE}};
+    for (unsigned i = 0; SUCCEEDED(hr) && i < sizeof(map) / sizeof(map[0]); ++i)
+      hr = AgxD3d12OwnerMapReservedTextureTile(owner, &texture, 0, map[i].packed, map[i].mip, map[i].x, map[i].y,
+                                               &heap, map[i].heap);
+  }
+  /* uploads: mip 0 without its (1,1) tile, mips 1 and 2 whole */
+  const struct { unsigned level, x, y, w, h; } up[] = {
+      {0, 0, 0, 256, 128}, {0, 0, 128, 128, 128}, {1, 0, 0, 128, 128}, {2, 0, 0, 64, 64}};
+  for (unsigned i = 0; SUCCEEDED(hr) && i < sizeof(up) / sizeof(up[0]); ++i) {
+    stage = 4;
+    uint32_t *words = static_cast<uint32_t *>(staging.Cpu);
+    for (unsigned y = 0; y < up[i].h; ++y)
+      for (unsigned x = 0; x < up[i].w; ++x) words[y * size + x] = selftest_texel(up[i].x + x, up[i].y + y, up[i].level);
+    AGX_D3D12_TEXTURE_COPY copy = {&texture, up[i].level, 0, up[i].x, up[i].y, up[i].w, up[i].h, 1, &staging, 0, pitch, 0, 0};
+    hr = AgxD3d12OwnerCopyTexture(owner, &copy);
+  }
+  for (unsigned pass = 0; SUCCEEDED(hr) && pass < 2; ++pass) {
+    stage = 5 + pass;
+    if (pass) hr = AgxD3d12OwnerMapReservedTextureTile(owner, &texture, 0, FALSE, 0, 1, 1, &heap, 5);
+    for (unsigned level = 0; SUCCEEDED(hr) && level < 3; ++level) {
+      const unsigned extent = size >> level;
+      AGX_D3D12_TEXTURE_COPY copy = {&texture, level, 0, 0, 0, extent, extent, 1, &staging, 0, pitch, 0, 1};
+      memset(staging.Cpu, 0xee, static_cast<size_t>(pitch) * size);
+      hr = AgxD3d12OwnerCopyTexture(owner, &copy);
+      const uint32_t *words = static_cast<const uint32_t *>(staging.Cpu);
+      for (unsigned y = 0; SUCCEEDED(hr) && y < extent; y += 3)
+        for (unsigned x = 0; x < extent; x += 5) {
+          /* (1,1) of mip 0 reads (0,0) through the alias, then zero (heap 5) */
+          const bool alias = level == 0 && x >= 128 && y >= 128;
+          const uint32_t expect = !alias ? selftest_texel(x, y, level) : pass ? 0u : selftest_texel(x - 128, y - 128, 0);
+          if (words[y * size + x] != expect) {
+            if (!bad) first_bad = (level << 24) | (y << 12) | x;
+            ++bad;
+          }
+        }
+    }
+    if (SUCCEEDED(hr) && bad) hr = E_FAIL;
+  }
+  if (SUCCEEDED(hr)) {
+    /* the texels live in the heap: tiles 0-4 written, tile 5 untouched */
+    stage = 7;
+    const uint32_t *words = static_cast<const uint32_t *>(heap.Cpu);
+    for (unsigned t = 0; t < 6; ++t) {
+      unsigned nonzero = 0;
+      for (unsigned i = 0; i < tile / 4; i += 61) nonzero += words[t * (tile / 4) + i] != 0;
+      if ((t < 5) != (nonzero != 0)) { ++bad; if (first_bad == ~0u) first_bad = 0x80000000u | t; }
+    }
+    if (bad) hr = E_FAIL;
+  }
+  if (texture.Resource) AgxD3d12OwnerDestroyBuffer(owner, &texture);
+  if (heap.Resource) AgxD3d12OwnerDestroyBuffer(owner, &heap);
+  if (staging.Resource) AgxD3d12OwnerDestroyBuffer(owner, &staging);
+  receipt("measure-d3d12-reserved-texture-selftest", hr, stage, bad, first_bad);
+  return hr;
+}
+
 extern "C" HRESULT AgxD3d12OwnerReservedSelfTest(AGX_D3D12_OWNER *owner) {
   OwnerLock lock(owner);
   const unsigned long long tile = 0x10000ull;
@@ -397,6 +486,7 @@ extern "C" HRESULT AgxD3d12OwnerReservedSelfTest(AGX_D3D12_OWNER *owner) {
   if (heap.Resource) AgxD3d12OwnerDestroyBuffer(owner, &heap);
   if (readback.Resource) AgxD3d12OwnerDestroyBuffer(owner, &readback);
   receipt("measure-d3d12-reserved-selftest", hr, stage, bad, 0u);
+  (void)ReservedTextureSelfTest(owner);
   return hr;
 }
 
