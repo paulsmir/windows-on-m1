@@ -21,11 +21,13 @@ extern "C" dxil_spv_result agx_checked_parse(const void*p,size_t n,dxil_spv_pars
  dxil_spv_result r=checked([&]{return dxil_spv_parse_dxil(p,n,out);});if(r!=DXIL_SPV_SUCCESS)*out=nullptr;return r;
 }
 extern "C" dxil_spv_result agx_checked_blob_free(dxil_spv_parsed_blob p) noexcept {return checked([&]{dxil_spv_parsed_blob_free(p);return DXIL_SPV_SUCCESS;});}
+#ifdef AGX_DXIL_SPV_COMPUTE_PROFILE
 extern "C" dxil_spv_result agx_checked_compute_profile(dxil_spv_parsed_blob p,dxil_spv_compute_profile*out) noexcept {
  if(!out)return DXIL_SPV_ERROR_INVALID_ARGUMENT;*out={};if(!p)return DXIL_SPV_ERROR_INVALID_ARGUMENT;
  const auto r=checked([&]{return dxil_spv_parsed_blob_get_compute_profile(p,out);});
  if(r!=DXIL_SPV_SUCCESS)*out={};return r;
 }
+#endif
 extern "C" dxil_spv_result agx_checked_stage(dxil_spv_parsed_blob p,dxil_spv_shader_stage*out) noexcept {
  if(!out)return DXIL_SPV_ERROR_INVALID_ARGUMENT;*out=DXIL_SPV_STAGE_UNKNOWN;if(!p)return DXIL_SPV_ERROR_INVALID_ARGUMENT;
  dxil_spv_result r=checked([&]{*out=dxil_spv_parsed_blob_get_shader_stage(p);return DXIL_SPV_SUCCESS;});if(r!=DXIL_SPV_SUCCESS)*out=DXIL_SPV_STAGE_UNKNOWN;return r;
@@ -60,3 +62,11 @@ extern "C" dxil_spv_result agx_checked_workgroup(dxil_spv_converter p,unsigned*x
  if(x)*x=0;if(y)*y=0;if(z)*z=0;if(!p||!x||!y||!z)return DXIL_SPV_ERROR_INVALID_ARGUMENT;
  dxil_spv_result r=checked([&]{return dxil_spv_converter_get_compute_workgroup_dimensions(p,x,y,z);});if(r!=DXIL_SPV_SUCCESS){*x=*y=*z=0;}return r;
 }
+extern "C" dxil_spv_result agx_checked_parse_blob(const void*p,size_t n,dxil_spv_parsed_blob*out) noexcept {
+ if(!out)return DXIL_SPV_ERROR_INVALID_ARGUMENT;*out=nullptr;
+ dxil_spv_result r=checked([&]{return dxil_spv_parse_dxil_blob(p,n,out);});if(r!=DXIL_SPV_SUCCESS)*out=nullptr;return r;
+}
+extern "C" dxil_spv_result agx_checked_stage_input(dxil_spv_converter p,dxil_spv_shader_stage_io_remapper_cb f,void*u) noexcept {if(!p)return DXIL_SPV_ERROR_INVALID_ARGUMENT;return checked([&]{dxil_spv_converter_set_stage_input_remapper(p,f,u);return DXIL_SPV_SUCCESS;});}
+extern "C" dxil_spv_result agx_checked_stage_output(dxil_spv_converter p,dxil_spv_shader_stage_io_remapper_cb f,void*u) noexcept {if(!p)return DXIL_SPV_ERROR_INVALID_ARGUMENT;return checked([&]{dxil_spv_converter_set_stage_output_remapper(p,f,u);return DXIL_SPV_SUCCESS;});}
+extern "C" dxil_spv_result agx_checked_vertex_input(dxil_spv_converter p,dxil_spv_vertex_input_remapper_cb f,void*u) noexcept {if(!p)return DXIL_SPV_ERROR_INVALID_ARGUMENT;return checked([&]{dxil_spv_converter_set_vertex_input_remapper(p,f,u);return DXIL_SPV_SUCCESS;});}
+extern "C" dxil_spv_result agx_checked_option(dxil_spv_converter p,const dxil_spv_option_base*o) noexcept {if(!p||!o)return DXIL_SPV_ERROR_INVALID_ARGUMENT;return checked([&]{return dxil_spv_converter_add_option(p,o);});}
