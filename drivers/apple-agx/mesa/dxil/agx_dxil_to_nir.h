@@ -45,8 +45,8 @@ int agx_dxil_is_container(const void *data, size_t bytes);
 int agx_dxil_is_program(const void *data, size_t bytes);
 
 /* Translates the single entry point of a container or program part. limits are the slot
- * capacities per DXBC_BINDING_* kind (the DXBC_BINDING_HEAP_RANGES flag is
- * ignored: heap ranges are not translated yet and refuse with UNSUPPORTED).
+ * capacities per DXBC_BINDING_* kind; DXBC_BINDING_HEAP_RANGES lets that kind's
+ * unbounded or oversized ranges read the descriptor heap (C47).
  * On success result->nir is owned by the caller (ralloc). */
 enum agx_dxil_nir_status agx_dxil_to_nir(const void *data, size_t bytes,
                                          const uint32_t limits[DXBC_BINDING_KIND_COUNT],

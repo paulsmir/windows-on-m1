@@ -23,8 +23,10 @@ struct declaration {
    unsigned heap; /* C47: a heap range (slot = its heap range index) */
 };
 
-/* C47 heap ranges reach the SPIR-V at binding HEAP_BINDING + heap range */
+/* C47 heap ranges reach the SPIR-V at binding HEAP_BINDING + heap range, a
+ * heap structured UAV's counter at HEAP_COUNTER_BINDING + heap range */
 #define HEAP_BINDING 0x1000u
+#define HEAP_COUNTER_BINDING 0x2000u
 
 struct job {
    struct declaration decl[DXBC_BINDING_MAP_MAX];
@@ -149,11 +151,12 @@ freeze(struct job *job)
    for (unsigned i = 0; i < job->decls; ++i) {
       struct declaration *d = &job->decl[i];
       const uint32_t limit = job->limits[d->kind] & ~DXBC_BINDING_HEAP_RANGES;
-      /* C47 (DXBC frontend rule): an unbounded SRV/sampler range, or one
-       * the free slots cannot take, reads the descriptor heap */
-      const bool heap_kind = (job->limits[d->kind] & DXBC_BINDING_HEAP_RANGES) &&
-                             (d->kind == DXBC_BINDING_SRV || d->kind == DXBC_BINDING_SAMPLER);
-      if (heap_kind && (d->range == UINT32_MAX || d->range > limit - counts[d->kind])) {
+      /* C47 (DXBC frontend rule): an unbounded SRV/sampler/UAV range, a
+       * UAV range (no dynamic index into slots), or one the free slots
+       * cannot take, reads the descriptor heap */
+      const bool heap_kind = (job->limits[d->kind] & DXBC_BINDING_HEAP_RANGES) && d->kind != DXBC_BINDING_CBV;
+      if (heap_kind && (d->range == UINT32_MAX || (d->kind == DXBC_BINDING_UAV && d->range > 1) ||
+                        d->range > limit - counts[d->kind])) {
          d->heap = 1;
          continue;
       }
@@ -175,7 +178,7 @@ freeze(struct job *job)
    }
    /* heap range indices in the DXBC frontend's declaration order (FXC
     * declares samplers before resources), (space, register) within a kind */
-   static const uint32_t heap_order[] = {DXBC_BINDING_SAMPLER, DXBC_BINDING_SRV};
+   static const uint32_t heap_order[] = {DXBC_BINDING_SAMPLER, DXBC_BINDING_SRV, DXBC_BINDING_UAV};
    unsigned ranges = 0;
    for (unsigned k = 0; k < ARRAY_SIZE(heap_order); ++k) {
       for (unsigned i = 0; i < job->decls; ++i) {
@@ -251,6 +254,20 @@ remap_uav(void *u, const dxil_spv_uav_d3d_binding *b, dxil_spv_uav_vulkan_bindin
    if (!d)
       return DXIL_SPV_FALSE;
    v->buffer_binding.set = SET_UAV;
+   if (d->heap) {
+      /* C47: heap UAVs are images -- raw and structured ones R32_UINT texel
+       * buffers, as the DXBC frontend's heap UAVs -- and a counter the
+       * R32_UINT word of the heap form's counter PBE */
+      v->buffer_binding.binding = HEAP_BINDING + d->slot;
+      v->buffer_binding.descriptor_type =
+         raw_buffer(b->d3d_binding.kind) ? DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_TEXEL_BUFFER : DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_IDENTITY;
+      if (b->has_counter) {
+         v->counter_binding.set = SET_UAV;
+         v->counter_binding.binding = HEAP_COUNTER_BINDING + d->slot;
+         v->counter_binding.descriptor_type = DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_TEXEL_BUFFER;
+      }
+      return DXIL_SPV_TRUE;
+   }
    v->buffer_binding.binding = d->slot;
    v->buffer_binding.descriptor_type =
       raw_buffer(b->d3d_binding.kind) ? DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_SSBO : DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_IDENTITY;
@@ -345,6 +362,8 @@ lower_buffer_slot(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    return true;
 }
 
+static nir_def *heap_range(nir_builder *b, unsigned range);
+
 /* image_deref_* -> the indexed image_* intrinsics on the UAV image slot (the
  * DXBC frontend never emits image_deref_*, EXP1304) */
 static bool
@@ -369,6 +388,28 @@ lower_image_slot(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       return false;
    }
    b->cursor = nir_before_instr(&intr->instr);
+   /* typed loads/stores take the format of the view (the DXBC frontend's
+    * format NONE); dxil-spirv names R32 formats for typed UAV loads */
+   const bool atomic = intr->intrinsic == nir_intrinsic_image_deref_atomic ||
+                       intr->intrinsic == nir_intrinsic_image_deref_atomic_swap;
+   if (var->data.binding >= HEAP_BINDING) {
+      /* C47: the heap form's texture descriptor reads and sizes, its PBE
+       * writes and atomics (Asahi's image convention), a counter's word
+       * through the counter PBE */
+      const bool counter = var->data.binding >= HEAP_COUNTER_BINDING;
+      const unsigned range = var->data.binding - (counter ? HEAP_COUNTER_BINDING : HEAP_BINDING);
+      nir_def *element = deref->deref_type == nir_deref_type_array ? nir_u2u32(b, deref->arr.index.ssa) : nir_imm_int(b, 0);
+      nir_def *heap = nir_iadd(b, nir_channel(b, heap_range(b, range), 0), element);
+      const bool read = intr->intrinsic == nir_intrinsic_image_deref_load || intr->intrinsic == nir_intrinsic_image_deref_size ||
+                        intr->intrinsic == nir_intrinsic_image_deref_samples;
+      const unsigned delta = counter ? DXBC_HEAP_DESCRIPTOR_COUNTER_DELTA : read ? 0u : DXBC_HEAP_DESCRIPTOR_PBE_DELTA;
+      nir_def *bytes = nir_iadd_imm(b, nir_imul_imm(b, heap, DXBC_HEAP_DESCRIPTOR_STRIDE), DXBC_HEAP_DESCRIPTOR_AGX_OFFSET + delta);
+      nir_rewrite_image_intrinsic(intr, nir_bindless_image_agx(b, bytes, .desc_set = DXBC_HEAP_HANDLE_MARK),
+                                  nir_image_intrinsic_type_bindless);
+      if (!atomic)
+         nir_intrinsic_set_format(intr, PIPE_FORMAT_NONE);
+      return true;
+   }
    nir_def *index = nir_imm_int(b, var->data.binding);
    if (deref->deref_type == nir_deref_type_array)
       index = nir_iadd(b, index, nir_u2u32(b, deref->arr.index.ssa));
@@ -485,7 +526,8 @@ record_slots(nir_shader *nir)
       }
    }
    nir_foreach_variable_with_modes(var, nir, nir_var_image)
-      set_range(nir->info.images_used, BITSET_SIZE(nir->info.images_used), var);
+      if (var->data.binding < HEAP_BINDING)
+         set_range(nir->info.images_used, BITSET_SIZE(nir->info.images_used), var);
 }
 
 /* num_ssbos spans every shader-buffer slot the code names (counters at

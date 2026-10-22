@@ -127,6 +127,19 @@ class DxilToNir(unittest.TestCase):
         self.assertEqual(r.stdout.count("@bindless_image_agx"), 4)
         self.assertIn("sampler_handle", r.stdout)
 
+    def test_unbounded_uav_ranges_read_the_heap(self):
+        # Typed and raw UAV ranges become heap ranges after the sampler and
+        # SRV ranges; typed accesses carry no format so the descriptor's
+        # format applies (the DXBC frontend's typed UAV contract).
+        self.parity("heap_cs")
+        r = subprocess.run([str(self.dxil), str(FIXTURES / "heap_cs.dxil"), "--print-final"], capture_output=True,
+                           text=True, timeout=120)
+        self.assertEqual(r.stdout.count("@bindless_image_agx"), 5)
+        self.assertEqual(r.stdout.count("@bindless_image_atomic"), 1)
+        for line in r.stdout.splitlines():
+            if "image_dim=2D" in line:
+                self.assertIn("format=none", line)
+
     def test_register_range_takes_consecutive_slots(self):
         self.parity("par_range_ps")
 
