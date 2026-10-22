@@ -12,6 +12,7 @@
 #include "agx_d3d12_probe_hs.h"
 #include "agx_d3d12_probe_ds.h"
 #include "agx_d3d12_probe_hs_const.h"
+#include "agx_d3d12_probe_hs_const_ccw.h"
 #include "agx_d3d12_probe_ds_vcolor.h"
 #include "agx_d3d12_probe_cs_nbody.h"
 #include "agx_d3d12_probe_cs_tgsm_loop.h"
@@ -4585,10 +4586,13 @@ static int step_c27b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
  * pipeline without tessellation (TRIANGLELIST): a hull or domain shader left
  * bound from the previous draw would recolour or drop it. C37C draws the
  * patch with constant factors and control point 0's vertex colour (green):
- * the same tessellation without root CBVs. */
+ * the same tessellation without root CBVs. C37D and C37E draw C37C's
+ * patch -- clockwise on screen, front-facing by default -- with back-face
+ * culling: C37D's triangle_cw output keeps the patch (centre green), C37E's
+ * triangle_ccw output faces away and culls (centre red). */
 static int c37_tessellation(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int mode) {
-    const int then_plain = mode == 1, no_cbv = mode == 2;
-    const char *step = mode == 2 ? "C37C" : then_plain ? "C37B" : "C37A";
+    const int then_plain = mode == 1, no_cbv = mode >= 2, culled = mode == 4;
+    const char *step = mode == 4 ? "C37E" : mode == 3 ? "C37D" : mode == 2 ? "C37C" : then_plain ? "C37B" : "C37A";
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0};
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
@@ -4665,7 +4669,7 @@ static int c37_tessellation(ID3D12Device *device, ID3D12CommandQueue *queue, ID3
         pso_desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
         pso_desc.SampleMask = 0xffffffffu;
         pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        pso_desc.RasterizerState.CullMode = mode >= 3 ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_NONE;
         pso_desc.RasterizerState.DepthClipEnable = TRUE;
         pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         pso_desc.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
@@ -4680,8 +4684,9 @@ static int c37_tessellation(ID3D12Device *device, ID3D12CommandQueue *queue, ID3
         pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         pso_desc.SampleDesc.Count = 1;
         if (then_plain) hr = ID3D12Device_CreateGraphicsPipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&plain);
-        pso_desc.HS.pShaderBytecode = no_cbv ? g_agx_d3d12_probe_hs_const : g_agx_d3d12_probe_hs;
-        pso_desc.HS.BytecodeLength = no_cbv ? sizeof(g_agx_d3d12_probe_hs_const) : sizeof(g_agx_d3d12_probe_hs);
+        pso_desc.HS.pShaderBytecode = culled ? g_agx_d3d12_probe_hs_const_ccw : no_cbv ? g_agx_d3d12_probe_hs_const : g_agx_d3d12_probe_hs;
+        pso_desc.HS.BytecodeLength = culled ? sizeof(g_agx_d3d12_probe_hs_const_ccw)
+                                   : no_cbv ? sizeof(g_agx_d3d12_probe_hs_const) : sizeof(g_agx_d3d12_probe_hs);
         pso_desc.DS.pShaderBytecode = no_cbv ? g_agx_d3d12_probe_ds_vcolor : g_agx_d3d12_probe_ds;
         pso_desc.DS.BytecodeLength = no_cbv ? sizeof(g_agx_d3d12_probe_ds_vcolor) : sizeof(g_agx_d3d12_probe_ds);
         pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
@@ -4757,7 +4762,8 @@ static int c37_tessellation(ID3D12Device *device, ID3D12CommandQueue *queue, ID3
     }
     /* the patch covers 0.5 * 51.2 * 51.2 ~ 1311 pixels */
     const unsigned patch = no_cbv ? green : blue;
-    const int pass = SUCCEEDED(hr) && centre_ok && corners_ok && plain_ok && other == 0 && patch >= 1150u && patch <= 1450u;
+    const int pass = culled ? SUCCEEDED(hr) && corners_ok && plain_ok && other == 0 && green == 0u && red == 4096u
+                            : SUCCEEDED(hr) && centre_ok && corners_ok && plain_ok && other == 0 && patch >= 1150u && patch <= 1450u;
     printf("AGX_D3D12_%s: %s\n", step, pass ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
@@ -4775,6 +4781,8 @@ static int c37_tessellation(ID3D12Device *device, ID3D12CommandQueue *queue, ID3
 static int step_c37a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c37_tessellation(d, q, f, b, 0); }
 static int step_c37b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c37_tessellation(d, q, f, b, 1); }
 static int step_c37c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c37_tessellation(d, q, f, b, 2); }
+static int step_c37d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c37_tessellation(d, q, f, b, 3); }
+static int step_c37e(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c37_tessellation(d, q, f, b, 4); }
 
 /* C39 (D3D12-C39-stream-output.md): the vertex shader's SV_Position and
  * COLOR captured to a stream-output buffer (stride 32) by two draws of the
@@ -6442,7 +6450,7 @@ int main(int argc, char **argv) {
         static const struct { const char *name; probe_step step; } steps[] = {
             {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
             {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures},
-            {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c},
+            {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c}, {"C37D", step_c37d}, {"C37E", step_c37e},
             {"C38A", c38_cached_pso}, {"C39A", c39_stream_output},
             {"C41A", step_c41a}, {"C41B", step_c41b},
             {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},

@@ -69,3 +69,16 @@ CP ds_vcolor(PC pc, float3 uvw : SV_DomainLocation, const OutputPatch<CP, 3> p)
     o.color = p[0].color;
     return o;
 }
+
+// C37D/C37E: the C37C patch with back-face culling; C37E's hull shader
+// declares triangle_ccw, so its tessellated triangles face away and cull.
+// fxc /T hs_5_0 /E hs_const_ccw /Vn g_agx_d3d12_probe_hs_const_ccw -> agx_d3d12_probe_hs_const_ccw.h
+[domain("tri")]
+[partitioning("integer")]
+[outputtopology("triangle_ccw")]
+[outputcontrolpoints(3)]
+[patchconstantfunc("hs_patch_const")]
+CP hs_const_ccw(InputPatch<CP, 3> p, uint i : SV_OutputControlPointID)
+{
+    return p[i];
+}
