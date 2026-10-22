@@ -3537,7 +3537,8 @@ dxbc_translate_tokens_bindings_xfb(const uint32_t *tokens,
 
 /* C34: a dynamically indexed SM5.1 range (texture_offset) declares the
  * consecutive used slots from its base; a static access of another
- * dimension ends the run (static accesses are gathered first). */
+ * dimension or the base of another dynamic range ends the run (static
+ * accesses and dynamic bases are gathered first). */
 static uint8_t
 srv_dimension(const nir_tex_instr *tex)
 {
@@ -3553,6 +3554,7 @@ bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
    if (!dimensions) return false;
    memset(dimensions, 0, DXBC_RESOURCE_SLOTS);
    if (!nir) return false;
+   BITSET_DECLARE(dynamic_bases, DXBC_RESOURCE_SLOTS) = {0};
    for (unsigned pass = 0; pass < 2; ++pass) {
       nir_foreach_function_impl(impl, nir) {
          nir_foreach_block(block, impl) {
@@ -3573,13 +3575,14 @@ bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
                   default: break;
                   }
                }
+               if (dynamic && pass == 0) BITSET_SET(dynamic_bases, tex->texture_index);
                if (dynamic != (pass == 1)) continue;
                const uint8_t dimension = srv_dimension(tex);
                uint8_t *slot = &dimensions[tex->texture_index];
                if (*slot != DXBC_SRV_UNUSED && *slot != dimension) goto fail;
                *slot = dimension;
                for (unsigned t = tex->texture_index + 1; dynamic && t < DXBC_RESOURCE_SLOTS &&
-                    BITSET_TEST(nir->info.textures_used, t) &&
+                    BITSET_TEST(nir->info.textures_used, t) && !BITSET_TEST(dynamic_bases, t) &&
                     (dimensions[t] == DXBC_SRV_UNUSED || dimensions[t] == dimension); ++t)
                   dimensions[t] = dimension;
             }

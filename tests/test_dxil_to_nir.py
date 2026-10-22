@@ -128,6 +128,17 @@ class DxilToNir(unittest.TestCase):
         self.assertEqual(r.stdout.count("@bindless_image_agx"), 4)
         self.assertIn("sampler_handle", r.stdout)
 
+    def test_dynamic_srv_range_ends_at_the_next_dynamic_range(self):
+        # Night Raid GT2 (EXP1879G): a dynamically indexed Cube range filled
+        # every used slot after its base, ran into the following dynamic 2D
+        # range and refused the pixel shader (owner reason 2, SRV dimensions).
+        self.parity("dynrange_ps")
+        r = subprocess.run([str(self.dxil), str(FIXTURES / "dynrange_ps.dxil")], capture_output=True, text=True,
+                           timeout=120)
+        line = re.search(r"^DIMENSIONS (.*)$", r.stdout, re.M).group(1)
+        expected = "srv 1 uav 1 t0=1 " + " ".join(f"t{i}=2" for i in range(1, 13)) + " t13=1 t14=1 t15=1"
+        self.assertEqual(line, expected)
+
     def test_unbounded_uav_ranges_read_the_heap(self):
         # Typed and raw UAV ranges become heap ranges after the sampler and
         # SRV ranges; typed accesses carry no format so the descriptor's
