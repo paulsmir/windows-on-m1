@@ -758,7 +758,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('d->type != D3D12DDI_RT_BUFFER', copy)
         self.assertIn('"measure-d3d12-placed"', create)
         self.assertIn('resource->bytes = heap->bytes;', create)
-        self.assertIn('heap->allocation && !heap->alias', fn('static VOID APIENTRY DestroyHeapAndResource('))
+        self.assertIn('(heap->allocation || heap->tiles) && !heap->alias', fn('static VOID APIENTRY DestroyHeapAndResource('))
 
     def test_c7b_presentation_textures(self):
         # C7b invariants (EXP1370: dxgi.dll CreateProxiesAndActivateFlip
