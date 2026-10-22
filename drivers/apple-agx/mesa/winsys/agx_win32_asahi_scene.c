@@ -382,6 +382,10 @@ void AgxWin32AsahiBatchReadResources(struct pipe_context *pctx, struct pipe_reso
   if(!pctx || !resources || !count) return;
   struct agx_context *ctx=agx_context(pctx);
   struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  /* EXP1855: Asahi tracks a batch's resources only after its state is
+   * initialised (agx_batch_writes_internal asserts batch->initialized; the
+   * draw/launch paths call agx_batch_init_state first). It is idempotent. */
+  agx_batch_init_state(batch);
   for(unsigned i=0;i<count;++i)
     if(resources[i] && resources[i]->screen==pctx->screen) agx_batch_reads(batch,agx_resource(resources[i]));
 }
@@ -393,6 +397,7 @@ void AgxWin32AsahiBatchWriteResources(struct pipe_context *pctx, struct pipe_res
   if(!pctx || !resources || !count) return;
   struct agx_context *ctx=agx_context(pctx);
   struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  agx_batch_init_state(batch); /* as AgxWin32AsahiBatchReadResources */
   for(unsigned i=0;i<count;++i) {
     if(!resources[i] || resources[i]->screen!=pctx->screen) continue;
     struct agx_resource *rsrc=agx_resource(resources[i]);
