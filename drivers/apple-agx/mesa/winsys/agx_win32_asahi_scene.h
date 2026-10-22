@@ -95,6 +95,18 @@ APPLE_AGX_U64 AgxWin32AsahiBufferGpuAddress(struct pipe_resource *);
 struct pipe_resource *AgxWin32AsahiCreateReservedBuffer(struct pipe_screen *, APPLE_AGX_U64 Bytes);
 int AgxWin32AsahiMapReservedTiles(struct pipe_resource *Reserved, unsigned FirstTile, unsigned Tiles,
                                   struct pipe_resource *Backing, unsigned BackingTile);
+/* C53 T2D: a reserved Texture2D (array) of Template (NULL if it cannot be
+ * reserved), its D3D12 tiling (standard mips, standard tiles per mip, packed
+ * tiles per layer), and the bind of one tile -- standard tile (X, Y) of Mip,
+ * or packed tile X -- of Layer onto 64 KiB tile HeapTile of a buffer
+ * resource (NULL: unmapped). */
+struct pipe_resource *AgxWin32AsahiCreateReservedTexture(struct pipe_screen *,
+                                                         const struct pipe_resource *Template);
+int AgxWin32AsahiReservedTextureTiling(struct pipe_resource *Reserved, unsigned *StandardMips,
+                                       unsigned *TilesX, unsigned *TilesY, unsigned *PackedTiles);
+int AgxWin32AsahiMapReservedTextureTile(struct pipe_resource *Reserved, unsigned Layer, int Packed,
+                                        unsigned Mip, unsigned X, unsigned Y,
+                                        struct pipe_resource *Heap, unsigned HeapTile);
 #endif
 int AgxWin32AsahiBufferMarkValid(struct pipe_context *, struct pipe_resource *);
 void *AgxWin32AsahiBufferWriteMap(struct pipe_context *, struct pipe_resource *);

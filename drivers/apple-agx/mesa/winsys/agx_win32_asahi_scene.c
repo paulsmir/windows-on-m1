@@ -5,6 +5,9 @@
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
 #include "agx_win32_asahi_bo.h"
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "agx_win32_sparse.h"
+#endif
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -303,6 +306,52 @@ int AgxWin32AsahiMapReservedTiles(struct pipe_resource *reserved,unsigned first,
      (backing && (backing->target!=PIPE_BUFFER || backing->screen!=reserved->screen))) return 0;
   return AgxWin32AsahiMapVirtualTiles(agx_resource(reserved)->bo,first,count,
                                       backing?agx_resource(backing)->bo:NULL,backing_tile);
+}
+/* C53 T2D (D3D12-C53-tiled-textures.md): a reserved Texture2D (array),
+ * created by Asahi with the plain GPU-tiled modifier (no compression) while
+ * the winsys makes its image BO a virtual BO, then given its Sparse Block
+ * table. Refused where agx_win32_sparse cannot tile the layout. */
+struct pipe_resource *AgxWin32AsahiCreateReservedTexture(struct pipe_screen *screen,
+                                                         const struct pipe_resource *templ) {
+  static const uint64_t tiled=DRM_FORMAT_MOD_APPLE_GPU_TILED;
+  unsigned standard,packed,tiles_x[AIL_MAX_MIP_LEVELS],tiles_y[AIL_MAX_MIP_LEVELS];
+  if(!screen || !templ || !screen->resource_create_with_modifiers ||
+     (templ->target!=PIPE_TEXTURE_2D && templ->target!=PIPE_TEXTURE_2D_ARRAY) ||
+     templ->nr_samples>1 || templ->depth0!=1) return NULL;
+  struct agx_device *device=agx_device(screen);
+  if(!AgxWin32AsahiArmVirtual(device)) return NULL;
+  struct pipe_resource *resource=screen->resource_create_with_modifiers(screen,templ,&tiled,1);
+  AgxWin32AsahiDisarmVirtual(device);
+  if(!resource) return NULL;
+  struct agx_resource *rsrc=agx_resource(resource);
+  if(!AgxWin32AsahiIsVirtual(rsrc->bo) ||
+     !AgxWin32SparseTiling(&rsrc->layout,&standard,tiles_x,tiles_y,&packed) ||
+     rsrc->layout.sparse_table_size_B>SIZE_MAX ||
+     !AgxWin32AsahiAttachSparseTable(rsrc->bo,(size_t)rsrc->layout.sparse_table_size_B)) {
+    AgxWin32AsahiResourceRelease(&resource);
+    return NULL;
+  }
+  return resource;
+}
+int AgxWin32AsahiReservedTextureTiling(struct pipe_resource *reserved,unsigned *standard_mips,
+                                       unsigned *tiles_x,unsigned *tiles_y,unsigned *packed_tiles) {
+  if(!reserved || reserved->target==PIPE_BUFFER ||
+     !AgxWin32AsahiSparseTableVa(agx_resource(reserved)->bo)) return 0;
+  return AgxWin32SparseTiling(&agx_resource(reserved)->layout,standard_mips,tiles_x,tiles_y,
+                              packed_tiles);
+}
+int AgxWin32AsahiMapReservedTextureTile(struct pipe_resource *reserved,unsigned layer,int packed,
+                                        unsigned mip,unsigned x,unsigned y,
+                                        struct pipe_resource *heap,unsigned heap_tile) {
+  AGX_WIN32_SPARSE_PAGES pages;
+  if(!reserved || reserved->target==PIPE_BUFFER ||
+     !AgxWin32AsahiSparseTableVa(agx_resource(reserved)->bo) ||
+     (heap && (heap->target!=PIPE_BUFFER || heap->screen!=reserved->screen))) return 0;
+  const struct ail_layout *layout=&agx_resource(reserved)->layout;
+  if(!(packed ? AgxWin32SparsePackedTile(layout,layer,x,&pages) :
+                AgxWin32SparseStandardTile(layout,layer,mip,x,y,&pages))) return 0;
+  return AgxWin32AsahiMapVirtualTilePages(agx_resource(reserved)->bo,&pages,
+                                          heap?agx_resource(heap)->bo:NULL,heap_tile);
 }
 #endif
 
