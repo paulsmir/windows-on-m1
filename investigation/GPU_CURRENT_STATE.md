@@ -8,7 +8,32 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-22 10:40Z -- TYPED UAV LOADS VALIDATED; INTERFACES 0033/0042/0071 IN HARDWARE TEST
+## CURRENT 2026-10-22 12:50Z -- D3D12 DEFAULT IS INTERFACE 0076 WITH SM 6.5
+
+Last validated package 30.0.1873.0 from 3f84931e (EXP1873, rec1873h PASS).
+- Default (SM6 processes): R7 build 6 (0076), SM 5.1-6.5. Probes 107/107 on
+  ARM64 and x64 (C50A SV_ViewID, C51A denorm, C52A dot4add/WaveMatch/
+  WaveMultiPrefix); 19 samples (2 need tiled resources / two adapters) and
+  MiniEngine ModelViewer pixel-identical (0x74d932e6). Opt-outs:
+  APPLE_AGX_D3D12_DDI=0012|0033|0042, APPLE_AGX_D3D12_SM6=0 (0003).
+- Interface ladder (D3D12-C50/C51 notes, test_d3d12_interface_0033 derives
+  every retyped member from the WDK header): R2+ runtimes need the
+  extended-features table, the 0022 core-layer allocate/deallocate (owner
+  bridge), caps 1062/1059/1057/1069/1071/1072 "none" and the 0022 texture
+  layout caps. The runtime accepts 0033, 0042, 0054, 0065, 0076, 0099 but
+  never 0071 (APPLE_AGX_D3D12_DDI=scan|sNNN measure it).
+- SM 6.6 is blocked: AGX has no 64-bit atomics (Asahi/Honeykrisp).
+- FL 12_0 needs tiled resources tier 2 and min/max filtering
+  (D3D12-C53-tiled-resources-study.md; min/max is not in AGX hardware).
+  Capabilities may not be advertised before their DDIs exist, so tiled
+  work starts offline (no measurement profile).
+Next: tiled resources tier 1 (buffers, then 2D), real D3D12 applications
+(no FL 11_0 game/benchmark is installed on the guest: 3DMark has only Solar
+Bay and the sampler-feedback test; Portal 2 is D3D9).
+
+## Prior state superseded by EXP1869-EXP1873
+
+### (was CURRENT) 2026-10-22 10:40Z -- TYPED UAV LOADS VALIDATED; INTERFACES 0033/0042/0071 IN HARDWARE TEST
 
 Last validated package 30.0.1868.0 from 634d1535 (EXP1868, rec1868h PASS).
 - Default unchanged: R1 build 2 (0012), SM 6.0, wave ops; probes 104/105
