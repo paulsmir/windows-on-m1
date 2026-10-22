@@ -8,5 +8,5 @@
 set -e
 . "$(dirname "$0")/../lib.sh"
 O=$1; N=$2
-builder "cmd /c \"if exist $AGX_BUILDER_HOME\\$N (echo NEW_DIR_EXISTS & exit 1) else (robocopy $AGX_BUILDER_HOME\\$O $AGX_BUILDER_HOME\\$N kmd-build-receipt.json build.stdout & robocopy $AGX_BUILDER_HOME\\$O\\package $AGX_BUILDER_HOME\\$N /E >NUL & echo COPIED)\"" | tr -d '\r' | tail -1
-builder "cmd /c \"copy /y $AGX_BUILDER_HOME\\$N\\build.stdout $AGX_BUILDER_HOME\\$N\\arm64-build.log >NUL & dir /b $AGX_BUILDER_HOME\\$N\"" | tr -d '\r'
+builder "cmd /c \"if exist $BH_WIN\\$N (echo NEW_DIR_EXISTS & exit 1) else (robocopy $BH_WIN\\$O $BH_WIN\\$N kmd-build-receipt.json build.stdout & robocopy $BH_WIN\\$O\\package $BH_WIN\\$N /E >NUL & echo COPIED)\"" | tr -d '\r' | tail -1
+builder "cmd /c \"copy /y $BH_WIN\\$N\\build.stdout $BH_WIN\\$N\\arm64-build.log >NUL & dir /b $BH_WIN\\$N\"" | tr -d '\r'
