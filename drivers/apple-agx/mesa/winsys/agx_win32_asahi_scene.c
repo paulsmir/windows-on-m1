@@ -268,6 +268,44 @@ int AgxWin32AsahiBufferCopy(struct pipe_context *ctx,
 /* D3D12 C4b: the GPU virtual address of a buffer resource (Asahi's own
  * mapping, agx_map_gpu), which D3D12 reports as the resource's address and
  * records in copies; 0 for anything but a buffer with storage. */
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* C53 B1: a buffer resource whose BO is a virtual (reserved) BO of Bytes:
+ * created as a one-tile buffer, then given the virtual BO. Tiles map the
+ * device scratch BO until AgxWin32AsahiMapReservedTiles maps backing
+ * buffer tiles (64 KiB, from the backing resource's start). */
+struct pipe_resource *AgxWin32AsahiCreateReservedBuffer(struct pipe_screen *screen,
+                                                        APPLE_AGX_U64 bytes) {
+  struct pipe_resource templ;
+  if(!screen || !bytes || bytes>UINT32_MAX) return NULL;
+  memset(&templ,0,sizeof(templ));
+  templ.target=PIPE_BUFFER;
+  templ.format=PIPE_FORMAT_R8_UNORM;
+  templ.width0=0x10000u;
+  templ.height0=templ.depth0=templ.array_size=1;
+  templ.usage=PIPE_USAGE_DEFAULT;
+  templ.bind=PIPE_BIND_VERTEX_BUFFER|PIPE_BIND_INDEX_BUFFER|PIPE_BIND_CONSTANT_BUFFER|
+             PIPE_BIND_SHADER_BUFFER|PIPE_BIND_SAMPLER_VIEW;
+  struct pipe_resource *resource=screen->resource_create(screen,&templ);
+  if(!resource) return NULL;
+  struct agx_device *device=agx_device(screen);
+  struct agx_bo *virt=AgxWin32AsahiCreateVirtualBo(device,(size_t)bytes,"Reserved buffer");
+  if(!virt) { AgxWin32AsahiResourceRelease(&resource); return NULL; }
+  struct agx_resource *rsrc=agx_resource(resource);
+  agx_bo_unreference(device,rsrc->bo);
+  rsrc->bo=virt;
+  resource->width0=(unsigned)bytes;
+  rsrc->layout.size_B=bytes;
+  return resource;
+}
+int AgxWin32AsahiMapReservedTiles(struct pipe_resource *reserved,unsigned first,unsigned count,
+                                  struct pipe_resource *backing,unsigned backing_tile) {
+  if(!reserved || reserved->target!=PIPE_BUFFER ||
+     (backing && (backing->target!=PIPE_BUFFER || backing->screen!=reserved->screen))) return 0;
+  return AgxWin32AsahiMapVirtualTiles(agx_resource(reserved)->bo,first,count,
+                                      backing?agx_resource(backing)->bo:NULL,backing_tile);
+}
+#endif
+
 APPLE_AGX_U64 AgxWin32AsahiBufferGpuAddress(struct pipe_resource *resource) {
   if(!resource || resource->target!=PIPE_BUFFER) return 0;
   struct agx_resource *native=agx_resource(resource);

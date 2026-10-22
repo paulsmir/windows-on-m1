@@ -320,6 +320,86 @@ extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned lo
   return S_OK;
 }
 
+extern "C" HRESULT AgxD3d12OwnerCreateReservedBuffer(AGX_D3D12_OWNER *owner, unsigned long long bytes,
+                                                     AGX_D3D12_BUFFER *buffer) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Screen || !owner->Context || !buffer || !bytes || bytes > 0xffffffffull ||
+      (bytes & 0xffffull))
+    return E_INVALIDARG;
+  memset(buffer, 0, sizeof(*buffer));
+  struct pipe_resource *resource = AgxWin32AsahiCreateReservedBuffer(owner->Screen, bytes);
+  if (!resource) return E_OUTOFMEMORY;
+  /* GPU-only content: never downloaded, the tiles' heaps own the data */
+  unsigned long long va = AgxWin32AsahiBufferGpuAddress(resource);
+  if (!va || !AgxWin32AsahiBufferMarkValid(owner->Context, resource)) {
+    AgxWin32AsahiResourceRelease(&resource);
+    return E_OUTOFMEMORY;
+  }
+  buffer->Resource = resource;
+  buffer->GpuVa = va;
+  buffer->Bytes = bytes;
+  return S_OK;
+}
+
+extern "C" HRESULT AgxD3d12OwnerMapReservedTiles(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *reserved,
+                                                 unsigned first_tile, unsigned tiles,
+                                                 const AGX_D3D12_BUFFER *backing, unsigned backing_tile) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Context || !reserved || !reserved->Resource || !tiles ||
+      (backing && !backing->Resource))
+    return E_INVALIDARG;
+  /* recorded, unsubmitted work names the old tiles: submit it first */
+  if (owner->PendingDraws || owner->PendingCopies || owner->PendingDispatches) {
+    const HRESULT flushed = AgxD3d12OwnerSubmitAndWait(owner);
+    if (FAILED(flushed)) return flushed;
+  }
+  const int mapped = AgxWin32AsahiMapReservedTiles(static_cast<struct pipe_resource *>(reserved->Resource), first_tile,
+                                                   tiles, backing ? static_cast<struct pipe_resource *>(backing->Resource)
+                                                                  : NULL, backing_tile);
+  return mapped ? S_OK : E_FAIL;
+}
+
+extern "C" HRESULT AgxD3d12OwnerReservedSelfTest(AGX_D3D12_OWNER *owner) {
+  OwnerLock lock(owner);
+  const unsigned long long tile = 0x10000ull;
+  AGX_D3D12_BUFFER heap = {}, reserved = {}, readback = {};
+  UINT stage = 0, bad = 0;
+  HRESULT hr = AgxD3d12OwnerCreateBuffer(owner, 4 * tile, TRUE, &heap);
+  if (SUCCEEDED(hr)) { stage = 1; hr = AgxD3d12OwnerCreateReservedBuffer(owner, 4 * tile, &reserved); }
+  if (SUCCEEDED(hr)) { stage = 2; hr = AgxD3d12OwnerCreateBuffer(owner, 4 * tile, TRUE, &readback); }
+  if (SUCCEEDED(hr)) {
+    /* heap tile k holds the 32-bit words 0xA0000000 | k << 16 | index */
+    stage = 3;
+    uint32_t *words = static_cast<uint32_t *>(heap.Cpu);
+    for (unsigned k = 0; k < 4; ++k)
+      for (unsigned i = 0; i < tile / 4; ++i) words[k * (tile / 4) + i] = 0xa0000000u | (k << 16) | (i & 0xffffu);
+    /* reserved tile 0 -> heap tile 2, tile 1 unmapped, tile 2 -> heap tile 0 */
+    hr = AgxD3d12OwnerMapReservedTiles(owner, &reserved, 0, 1, &heap, 2);
+    if (SUCCEEDED(hr)) hr = AgxD3d12OwnerMapReservedTiles(owner, &reserved, 2, 1, &heap, 0);
+  }
+  for (unsigned pass = 0; SUCCEEDED(hr) && pass < 2; ++pass) {
+    stage = 4 + pass;
+    if (pass) hr = AgxD3d12OwnerMapReservedTiles(owner, &reserved, 1, 1, &heap, 1); /* remap tile 1 */
+    if (SUCCEEDED(hr)) hr = AgxD3d12OwnerCopy(owner, &readback, 0, &reserved, 0, 3 * tile);
+    if (SUCCEEDED(hr)) hr = AgxD3d12OwnerSubmitAndWait(owner);
+    if (SUCCEEDED(hr)) {
+      const uint32_t *out = static_cast<const uint32_t *>(readback.Cpu);
+      const unsigned expect[3] = {2u, pass ? 1u : 0xffffu, 0u};
+      for (unsigned t = 0; t < 3; ++t) {
+        if (expect[t] == 0xffffu) continue; /* the scratch page: undefined contents */
+        for (unsigned i = 0; i < tile / 4; i += 257)
+          bad += out[t * (tile / 4) + i] != (0xa0000000u | (expect[t] << 16) | (i & 0xffffu));
+      }
+      if (bad) hr = E_FAIL;
+    }
+  }
+  if (reserved.Resource) AgxD3d12OwnerDestroyBuffer(owner, &reserved);
+  if (heap.Resource) AgxD3d12OwnerDestroyBuffer(owner, &heap);
+  if (readback.Resource) AgxD3d12OwnerDestroyBuffer(owner, &readback);
+  receipt("measure-d3d12-reserved-selftest", hr, stage, bad, 0u);
+  return hr;
+}
+
 extern "C" void AgxD3d12OwnerDestroyBuffer(AGX_D3D12_OWNER *owner, AGX_D3D12_BUFFER *buffer) {
   OwnerLock lock(owner);
   if (!owner || !buffer || !buffer->Resource) return;

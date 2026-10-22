@@ -102,6 +102,11 @@ static AgxCpuProviderStatus AgxCpuProviderDestroy(AgxCpuProvider **p) {
  *p=nullptr;return AgxCpuProviderStatus::Ok;
 }
 static void PublishDeviceIdentity(AgxD3d12Device *) {}
+/* C53 HW1: the self-test runs only with APPLE_AGX_D3D12_RESERVED_SELFTEST=1;
+ * this environment has none, so CreateDevice must never call it. */
+static unsigned selftest_calls;
+static unsigned long GetEnvironmentVariableA(const char *, char *, unsigned long) { return 0; }
+static HRESULT AgxD3d12OwnerReservedSelfTest(AGX_D3D12_OWNER *) { ++selftest_calls; return S_OK; }
 /* PRODUCTION_DEVICE */
 static void check(bool value,const char *why) { if(!value){ std::fprintf(stderr,"%s\n",why); std::exit(1); } }
 int main(int argc,char **argv) {
@@ -126,6 +131,7 @@ int main(int argc,char **argv) {
         "CreateDevice did not publish one native owner");
   check(EnsureOwner(&device)==&fresh_owner&&owner_calls==before+1,
         "post-CreateDevice owner was not cached");
+  check(selftest_calls==0,"reserved self-test ran without its opt-in");
   return 0;
  }
  if(std::strcmp(argv[1],"reenter")==0){

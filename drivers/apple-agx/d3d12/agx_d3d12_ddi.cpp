@@ -722,7 +722,13 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
                 /* Complete the one-time native owner construction before the
                  * runtime can issue free-threaded resource creates. */
-                (void)EnsureOwner(device);
+                AGX_D3D12_OWNER *owner = EnsureOwner(device);
+                /* C53 HW1: off-by-default reserved-buffer self-test; receipts
+                 * only, the caps are unchanged (D3D12-C53-tiled-buffers-plan.md) */
+                char selftest[2] = {};
+                if (owner && GetEnvironmentVariableA("APPLE_AGX_D3D12_RESERVED_SELFTEST", selftest,
+                                                     sizeof(selftest)) == 1 && selftest[0] == '1')
+                    (void)AgxD3d12OwnerReservedSelfTest(owner);
 #endif
             }
         }

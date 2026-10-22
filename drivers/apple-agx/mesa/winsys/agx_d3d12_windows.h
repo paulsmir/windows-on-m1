@@ -51,6 +51,21 @@ HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
 HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *Owner, unsigned long long Bytes, BOOL CpuVisible,
                                   AGX_D3D12_BUFFER *Buffer);
 void AgxD3d12OwnerDestroyBuffer(AGX_D3D12_OWNER *Owner, AGX_D3D12_BUFFER *Buffer);
+/* C53 B1 (D3D12-C53-tiled-buffers-plan.md): a reserved buffer of 64 KiB
+ * tiles, no CPU mapping; every tile starts unmapped (the scratch page).
+ * MapReservedTiles maps Tiles tiles from FirstTile onto Backing's tiles
+ * from BackingTile (Backing NULL: unmapped again); it first retires the
+ * submissions that use the reserved buffer. Destroy with DestroyBuffer. */
+HRESULT AgxD3d12OwnerCreateReservedBuffer(AGX_D3D12_OWNER *Owner, unsigned long long Bytes,
+                                          AGX_D3D12_BUFFER *Buffer);
+HRESULT AgxD3d12OwnerMapReservedTiles(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Reserved,
+                                      unsigned FirstTile, unsigned Tiles, const AGX_D3D12_BUFFER *Backing,
+                                      unsigned BackingTile);
+/* C53 HW1 (APPLE_AGX_D3D12_RESERVED_SELFTEST=1 at CreateDevice): maps a
+ * reserved buffer's tiles onto a heap, copies it into a readback buffer and
+ * checks the tile contents, then remaps and checks again. S_OK on a match;
+ * receipt measure-d3d12-reserved-selftest. */
+HRESULT AgxD3d12OwnerReservedSelfTest(AGX_D3D12_OWNER *Owner);
 /* The D3DKMT allocation handle behind a buffer (0 when unknown). */
 UINT AgxD3d12OwnerBufferAllocation(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Buffer);
 /* Records one GPU copy; byte ranges must lie inside both buffers. */
