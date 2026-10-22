@@ -113,7 +113,7 @@ class DxbcToNir(unittest.TestCase):
         subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Werror=implicit-function-declaration",
                         *host_flags(build), "-I", str(build / "src/asahi"), "-I", str(mesa / "src/asahi"),
                         "-I", str(DXBC), str(ROOT / "tests/dxbc_to_nir_fixture.c"),
-                        str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"),
+                        str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_tir_gs.c"),
                         "-o", str(cls.binary), *map(str, libs),
                         "-L/opt/homebrew/opt/zstd/lib", "-lzstd", "-lz", "-lpthread"],
                        check=True, capture_output=True)
@@ -380,6 +380,21 @@ class DxbcToNir(unittest.TestCase):
             self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", again.stdout, again.stdout + again.stderr[-2000:])
         plain = self.run_fixture("ps50tir")
         self.assertTrue(plain.stdout.startswith("REFUSED "), plain.stdout)
+
+    def test_tir_expansion_gs_links_the_vertex_shader_to_the_variant(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The expansion GS
+        # sits between the application's vertex shader and the pixel shader
+        # variant: it must consume every vertex output the variant reads
+        # (with the variant's interpolation), always the position, and pass
+        # the AGX lowering as a geometry shader emitting one triangle.
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-gs",
+                              str(FIXTURES / "vs50tir.dxbc"), "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout[-3000:] + out.stderr[-3000:])
+        self.assertIn("TIR_GS varyings 2 primitive-id 0 vertices-out 3", out.stdout)
+        self.assertRegex(out.stdout, r"decl_var shader_out INTERP_MODE_SMOOTH none vec4 tir_out(#\d+)? \(VARYING_SLOT_VAR1")
+        self.assertEqual(len(re.findall(r"decl_var shader_out INTERP_MODE_FLAT none ivec4 tir_edge", out.stdout)), 4)
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
 
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:

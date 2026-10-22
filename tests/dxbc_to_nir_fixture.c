@@ -11,6 +11,7 @@
 
 #include "dxbc_parse.h"
 #include "dxbc_to_nir.h"
+#include "dxbc_tir_gs.h"
 
 #include "nir.h"
 #include "nir_builder.h"
@@ -61,6 +62,7 @@ main(int argc, char **argv)
    nir_shader *nir;
    bool print = false, print_final = false, d3d12 = false, heap = false, uav64 = false;
    unsigned tir = 0;
+   const char *tir_gs = NULL;
    for (int a = 2; a < argc; ++a) {
       print |= !strcmp(argv[a], "--print");
       print_final |= !strcmp(argv[a], "--print-final");
@@ -69,6 +71,8 @@ main(int argc, char **argv)
       uav64 |= !strcmp(argv[a], "--d3d11-uav64");
       if (!strcmp(argv[a], "--tir") && a + 1 < argc)
          tir = (unsigned)atoi(argv[a + 1]);
+      if (!strcmp(argv[a], "--tir-gs") && a + 1 < argc)
+         tir_gs = argv[a + 1];
    }
    /* the D3D12 owner's entry: SM5.1 register spaces through a binding map
     * with the owner's per-kind capacities (agx_d3d12_windows.cpp) */
@@ -150,6 +154,52 @@ main(int argc, char **argv)
       /* the D3D10/11 UMD's FL 11_1 forced-sample-count pixel shader variant */
       struct dxbc_nir_uav_slots slots;
       nir = dxbc_translate_tokens_tir(chunk, &agx_nir_options, &slots, tir, &terr);
+      if (nir && tir_gs) {
+         /* the expansion GS between a vertex shader and this variant */
+         FILE *vf = fopen(tir_gs, "rb");
+         long vsize;
+         void *vbytes;
+         const void *vchunk;
+         uint32_t vchunk_bytes;
+         struct dxbc_nir_uav_slots vslots;
+         struct dxbc_tir_gs_key key;
+         if (!vf)
+            return 2;
+         fseek(vf, 0, SEEK_END);
+         vsize = ftell(vf);
+         fseek(vf, 0, SEEK_SET);
+         vbytes = malloc((size_t)vsize);
+         if (!vbytes || fread(vbytes, 1, (size_t)vsize, vf) != (size_t)vsize)
+            return 2;
+         fclose(vf);
+         if (!dxbc_container_find_chunk(vbytes, (size_t)vsize, DXBC_FOURCC('S', 'H', 'E', 'X'), &vchunk,
+                                        &vchunk_bytes) &&
+             !dxbc_container_find_chunk(vbytes, (size_t)vsize, DXBC_FOURCC('S', 'H', 'D', 'R'), &vchunk,
+                                        &vchunk_bytes))
+            return 2;
+         nir_shader *vs = dxbc_translate_tokens_uav64(vchunk, &agx_nir_options, 0, 0, &vslots, &terr);
+         if (!vs || !dxbc_tir_gs_key_from(vs, nir, &key)) {
+            printf("TIR_GS_KEY_REFUSED\n");
+            return 1;
+         }
+         nir_shader *gs = dxbc_tir_gs(&agx_nir_options, &key);
+         if (!gs) {
+            printf("TIR_GS_REFUSED\n");
+            return 1;
+         }
+         if (print)
+            nir_print_shader(gs, stdout);
+         dxbc_nir_finalize(gs);
+         NIR_PASS(_, gs, nir_lower_io, nir_var_shader_in | nir_var_shader_out, type_size_vec4,
+                  nir_lower_io_lower_64bit_to_32);
+         nir_shader_gather_info(gs, nir_shader_get_entrypoint(gs));
+         agx_preprocess_nir(gs);
+         nir_validate_shader(gs, "tir gs agx_preprocess_nir");
+         printf("TIR_GS varyings %u primitive-id %u vertices-out %u\n", key.count, key.primitive_id,
+                gs->info.gs.vertices_out);
+         ralloc_free(gs);
+         ralloc_free(vs);
+      }
    } else if (uav64) {
       /* the D3D10/11 UMD's D3D11.1 entry: 64 UAV registers, compacted
        * shader buffers (agx_d3d11_ddi.cpp) */
