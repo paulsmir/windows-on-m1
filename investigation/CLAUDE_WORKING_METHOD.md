@@ -132,3 +132,20 @@ host source hashes idempotently. If preparation stops after stage, only resume
 before first hardware launch after verifying all package hashes, manifest, same
 boot event, Code28, no live binding and expected arm; never repeat installation
 blindly. Preserve stopped logs and preregister the continuation.
+
+Process review 2026-10-23 (EXP1887/EXP1888):
+- Commit code only through the scratchpad `gated-commit.sh` (BASELINE_OK);
+  `test | tail && git commit` let a broken test_dxil_to_nir in. A new source
+  file a fixture links goes into every suite that builds that fixture.
+- `prepare.sh` copies the experiment's `guest/` helpers (hash check, DXGI
+  modes probe, sample wrappers) and prints GUEST_HELPERS_STAGED; EXP1887
+  ran without them (empty hash gate, no DXGI modes).
+- Two sessions share this worktree: baseline failures in files the other
+  session has uncommitted are not regressions of the change at hand; run the
+  suites of the touched layer (D3D10/11: test_d3d10*/test_d3d11*/
+  test_wddm2*/test_dxbc*/test_dxil_to_nir) and tell the other session.
+- The X86B closure is the first full compile of D3D10/11 UMD C++; check
+  pinned-Mesa Gallium signatures (set_constant_buffer has no
+  take_ownership here) before packaging.
+- Asahi advertises PIPE_MAX_SHADER_IMAGES (64) but keeps image_mask in
+  32 bits: never bind image slots above 31.
