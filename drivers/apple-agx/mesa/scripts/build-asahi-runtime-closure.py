@@ -44,7 +44,8 @@ BRIDGES = ('agx_win32_asahi_bo.c', 'agx_win32_asahi_capture.c',
            'agx_win32_asahi_runtime_test.c')
 GPUVA_BRIDGES = tuple(name for name in BRIDGES if name not in (
     'agx_win32_asahi_batch.c', 'agx_win32_asahi_runtime_test.c')) + (
-    'agx_win32_gpuva.c', 'agx_win32_gpuva_batch.c')
+    'agx_win32_gpuva.c', 'agx_win32_gpuva_batch.c',
+    'agx_win32_sparse.c')  # C53 T2D: reserved-texture pages (agx_win32_asahi_bo.c)
 FRONTEND_CPP = ('Adapter.cpp','Debug.cpp','Device.cpp','Draw.cpp','DxgiFns.cpp',
                 'Format.cpp','InputAssembly.cpp','OutputMerger.cpp','Query.cpp',
                 'Rasterizer.cpp','Resource.cpp','Shader.cpp','ShaderDump.cpp')

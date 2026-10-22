@@ -31,7 +31,12 @@ struct windows_bo {
   struct agx_bo Base; AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva;
   int Virtual; AGX_WIN32_GPUVA_BO Reserved; struct windows_bo **Pages; unsigned PageCount;
   struct { struct windows_bo *Bo; unsigned Pages; } *Backings; unsigned BackingCount;
+  struct windows_bo *SparseTable; uint32_t Words[64];
 };
+typedef struct { unsigned Count; uint64_t Offset[4]; unsigned HeapPage[4]; unsigned TableIndex[4]; }
+    AGX_WIN32_SPARSE_PAGES;
+static void *agx_bo_map(struct agx_bo *bo) { return ((struct windows_bo *)bo)->Words; }
+static uint32_t AgxWin32SparseBlock(uint64_t va, int enabled) { return enabled ? (uint32_t)(va >> 14) | 0xc0000000u : 0u; }
 struct AGX_WIN32_ASAHI_BACKEND {
   int Failed; unsigned VirtualBackingRefs; void *Native; struct windows_bo *Scratch;
   int Gpuva; int MapOk; unsigned Maps; uint64_t LastBytes;
@@ -105,6 +110,26 @@ int main(void) {
   assert(pages_of(&v, &b) == 1 && pages_of(&v, &scratch) == 159 && b.Base.refcnt == 2 && v.Pages[5] == &b);
   assert(!AgxWin32AsahiMapVirtualPages(&v.Base, 5, 1, &b.Base, 32) && pages_of(&v, &b) == 1);
   assert(AgxWin32AsahiMapVirtualPages(&v.Base, 5, 1, NULL, 0) && b.Base.refcnt == 1 && !pages_of(&v, &b));
+  /* C53 T2D: a texture tile's 4 pages, two rows of 2 (heap pages 0,1 and
+   * 2,3 consecutive): two maps; Sparse Blocks name the heap's pages */
+  struct windows_bo table = heap(90, 1); table.Gpuva.Bytes = sizeof(table.Words);
+  v.SparseTable = &table;
+  AGX_WIN32_SPARSE_PAGES tp = {4, {32 * 0x4000ull, 33 * 0x4000ull, 40 * 0x4000ull, 41 * 0x4000ull},
+                                {0, 1, 2, 3}, {32, 33, 40, 41}};
+  a.Gpuva.Va = 0x80000000ull;
+  g.Maps = 0;
+  assert(AgxWin32AsahiMapVirtualTilePages(&v.Base, &tp, &a.Base, 2) && g.Maps == 2 && g.LastBytes == 0x8000);
+  assert(v.Pages[32] == &a && v.Pages[41] == &a && pages_of(&v, &a) == 4 && a.Base.refcnt == 2);
+  assert(table.Words[32] == AgxWin32SparseBlock(0x80000000ull + 2 * 0x10000ull, 1) &&
+         table.Words[41] == AgxWin32SparseBlock(0x80000000ull + 2 * 0x10000ull + 3 * 0x4000ull, 1));
+  /* NULL: scratch pages and disabled blocks */
+  assert(AgxWin32AsahiMapVirtualTilePages(&v.Base, &tp, NULL, 0) && !table.Words[32] && !table.Words[40]);
+  assert(a.Base.refcnt == 1 && v.Pages[33] == &scratch);
+  /* a table index past the table or a page past the range is refused, unchanged */
+  tp.TableIndex[3] = 64;
+  assert(!AgxWin32AsahiMapVirtualTilePages(&v.Base, &tp, &a.Base, 2) && a.Base.refcnt == 1);
+  tp.TableIndex[3] = 41; tp.Offset[3] = 160 * 0x4000ull;
+  assert(!AgxWin32AsahiMapVirtualTilePages(&v.Base, &tp, &a.Base, 2) && a.Base.refcnt == 1);
   free(v.Pages); free(v.Backings);
   puts("c53 virtual backings: PASS");
   return 0;
@@ -117,7 +142,7 @@ class C53VirtualBackings(unittest.TestCase):
         source = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_asahi_bo.c').read_text()
         funcs = '\n'.join(body(source, name) for name in
                           ('map_scratch', 'backing_add', 'backing_drop', 'AgxWin32AsahiMapVirtualPages',
-                           'AgxWin32AsahiMapVirtualTiles'))
+                           'AgxWin32AsahiMapVirtualTiles', 'AgxWin32AsahiMapVirtualTilePages'))
         with tempfile.TemporaryDirectory(prefix='c53-backings-') as tmp:
             src = Path(tmp) / 'backings.c'
             exe = Path(tmp) / 'backings'

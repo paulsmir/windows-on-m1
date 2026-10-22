@@ -1,5 +1,8 @@
 #include "agx_device.h"
 #include "agx_win32_asahi_bo.h"
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "agx_win32_sparse.h"
+#endif
 
 void (*AgxWin32BackendFailHook)(unsigned site);
 #ifdef APPLE_AGX_GPUVA_WINSYS
@@ -39,6 +42,9 @@ struct windows_bo {
   unsigned PageCount;
   struct { struct windows_bo *Bo; unsigned Pages; } *Backings;
   unsigned BackingCount;
+  /* C53 T2D: a reserved texture's zeroed Sparse Block table (one
+   * reference), which its texture descriptors point at */
+  struct windows_bo *SparseTable;
 #endif
 };
 static void native_map(struct agx_device *,struct agx_bo *,void *);
@@ -342,6 +348,11 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
     if(!(flags&AGX_BO_READONLY)) access|=AppleAgxWin32BufferGpuWrite;
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  /* C53 T2D: the image BO of a reserved texture under construction */
+  if(b->NextVirtual) {
+    b->NextVirtual=0;
+    return AgxWin32AsahiCreateVirtualBo(native,bytes,label);
+  }
   if((bo=cache_take(b,bytes,(unsigned)flags,cls))) {
     AgxWin32PerfNote("BO cache hit");
     bo->Base.refcnt=1; bo->Base.label=label;
@@ -573,6 +584,10 @@ static void virtual_release(struct windows_bo *bo) {
   }
   free(bo->Backings);
   bo->Backings=NULL;
+  if(bo->SparseTable) {
+    agx_bo_unreference(b->Native,&bo->SparseTable->Base);
+    bo->SparseTable=NULL;
+  }
   free(bo->Pages);
   bo->Pages=NULL;
   bo->PageCount=0;
@@ -682,6 +697,76 @@ struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *base,unsigned index) {
 }
 int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *bo) {
   return b && bo && b->TileScratch==bo;
+}
+
+/* C53 T2D (D3D12-C53-tiled-textures.md) */
+int AgxWin32AsahiArmVirtual(struct agx_device *native) {
+  AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
+  if(!b || b->Native!=native || b->Failed || !b->GpuvaReady || b->NextVirtual) return 0;
+  b->NextVirtual=1;
+  return 1;
+}
+void AgxWin32AsahiDisarmVirtual(struct agx_device *native) {
+  AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
+  if(b && b->Native==native) b->NextVirtual=0;
+}
+int AgxWin32AsahiIsVirtual(struct agx_bo *base) {
+  const struct windows_bo *bo=(const struct windows_bo *)base;
+  return bo && bo->Virtual;
+}
+int AgxWin32AsahiAttachSparseTable(struct agx_bo *base,size_t bytes) {
+  struct windows_bo *bo=(struct windows_bo *)base;
+  AGX_WIN32_ASAHI_BACKEND *b=bo?bo->Backend:NULL;
+  struct agx_bo *table;
+  void *map;
+  if(!b || !bo->Virtual || bo->SparseTable || !bytes || b->Failed) return 0;
+  if(!(table=agx_bo_create(b->Native,bytes,0,0,"Sparse table"))) return 0;
+  if(!(map=agx_bo_map(table))) { agx_bo_unreference(b->Native,table); return 0; }
+  /* every page starts unmapped: reads 0, non-resident */
+  memset(map,0,bytes);
+  bo->SparseTable=(struct windows_bo *)table;
+  return 1;
+}
+APPLE_AGX_U64 AgxWin32AsahiSparseTableVa(struct agx_bo *base) {
+  const struct windows_bo *bo=(const struct windows_bo *)base;
+  return bo && bo->Virtual && bo->SparseTable && bo->SparseTable->Gpuva.Bound ?
+      bo->SparseTable->Gpuva.Va : 0u;
+}
+struct agx_bo *AgxWin32AsahiVirtualTable(struct agx_bo *base) {
+  const struct windows_bo *bo=(const struct windows_bo *)base;
+  return bo && bo->Virtual && bo->SparseTable ? &bo->SparseTable->Base : NULL;
+}
+/* One reserved-texture tile: its pages (agx_win32_sparse.h) map heap tile
+ * BackingTile (NULL: the tile scratch), runs of consecutive pages in one map,
+ * then their Sparse Blocks point at the heap pages (0 for NULL). The blocks
+ * name the heap's own pages, so texture reads do not depend on the image VA
+ * (render-target and image writes use the image VA). */
+int AgxWin32AsahiMapVirtualTilePages(struct agx_bo *base,const AGX_WIN32_SPARSE_PAGES *pages,
+                                     struct agx_bo *backing_base,unsigned backing_tile) {
+  struct windows_bo *bo=(struct windows_bo *)base;
+  struct windows_bo *backing=(struct windows_bo *)backing_base;
+  uint32_t *table;
+  const unsigned per=AGX_WIN32_TILE/AGX_WIN32_PAGE;
+  if(!bo || !bo->Virtual || !bo->SparseTable || !pages || !pages->Count || pages->Count>per ||
+     backing_tile>UINT32_MAX/per ||
+     !(table=(uint32_t *)agx_bo_map(&bo->SparseTable->Base))) return 0;
+  for(unsigned i=0;i<pages->Count;++i)
+    if((pages->Offset[i]%AGX_WIN32_PAGE) || pages->Offset[i]/AGX_WIN32_PAGE>=bo->PageCount ||
+       pages->HeapPage[i]>=per ||
+       (uint64_t)pages->TableIndex[i]*4u>=bo->SparseTable->Gpuva.Bytes) return 0;
+  for(unsigned i=0;i<pages->Count;) {
+    unsigned n=1;
+    while(i+n<pages->Count && pages->Offset[i+n]==pages->Offset[i]+(uint64_t)n*AGX_WIN32_PAGE &&
+          pages->HeapPage[i+n]==pages->HeapPage[i]+n) ++n;
+    if(!AgxWin32AsahiMapVirtualPages(base,(unsigned)(pages->Offset[i]/AGX_WIN32_PAGE),n,backing_base,
+                                     backing_tile*per+pages->HeapPage[i])) return 0;
+    i+=n;
+  }
+  for(unsigned i=0;i<pages->Count;++i)
+    table[pages->TableIndex[i]]=backing ?
+        AgxWin32SparseBlock(backing->Gpuva.Va+(uint64_t)backing_tile*AGX_WIN32_TILE+
+                            (uint64_t)pages->HeapPage[i]*AGX_WIN32_PAGE,1) : 0u;
+  return 1;
 }
 #endif
 static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed) {

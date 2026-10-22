@@ -47,6 +47,14 @@ int AgxWin32SparsePackedTile(const struct ail_layout *Layout, unsigned Layer, un
  * unmapped page, which reads 0 and reports non-resident. */
 uint32_t AgxWin32SparseBlock(uint64_t PageVa, int Enabled);
 
+/* agx_win32_asahi_bo.c (G4 GPUVA winsys): binds one tile's Pages of a
+ * reserved texture's virtual BO onto heap tile BackingTile (NULL: the tile
+ * scratch), consecutive pages in one map, then writes their Sparse Blocks
+ * (the heap's own page VAs; 0 for NULL). 0 if refused. */
+struct agx_bo;
+int AgxWin32AsahiMapVirtualTilePages(struct agx_bo *Virtual, const AGX_WIN32_SPARSE_PAGES *Pages,
+                                     struct agx_bo *Backing, unsigned BackingTile);
+
 #ifdef __cplusplus
 }
 #endif

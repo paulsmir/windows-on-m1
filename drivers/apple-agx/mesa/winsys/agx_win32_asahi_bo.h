@@ -80,6 +80,9 @@ typedef struct {
   APPLE_AGX_U32 VirtualBackingRefs;
   /* C53 B4: the scratch BO unmapped tiles map (created on first use). */
   struct agx_bo *TileScratch;
+  /* C53 T2D: the next agx_bo_create makes a virtual BO (a reserved
+   * texture's image; AgxWin32AsahiArmVirtual) */
+  int NextVirtual;
   /* EXP996: released native BOs kept bound, mapped and resident for reuse
    * (Mesa's own BO cache is replaced by agx_bo_create below). */
   void *Cache[AGX_WIN32_BO_CACHE_LIMIT];
@@ -163,6 +166,18 @@ int AgxWin32AsahiMapVirtualPages(struct agx_bo *Virtual, unsigned FirstPage,
 unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *);
 struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *, unsigned Index);
 int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *);
+/* C53 T2D (D3D12-C53-tiled-textures.md): a reserved texture. Arm makes the
+ * next agx_bo_create (the resource's image BO) a virtual BO; Disarm clears
+ * an unused arm. AttachSparseTable gives a virtual BO its zeroed Sparse
+ * Block table of Bytes (held by submissions naming it: VirtualTable), whose
+ * VA the texture descriptor points at (SparseTableVa, 0 for other BOs).
+ * AgxWin32AsahiMapVirtualTilePages (agx_win32_sparse.h) binds one tile. */
+int AgxWin32AsahiArmVirtual(struct agx_device *);
+void AgxWin32AsahiDisarmVirtual(struct agx_device *);
+int AgxWin32AsahiIsVirtual(struct agx_bo *);
+int AgxWin32AsahiAttachSparseTable(struct agx_bo *Virtual, size_t Bytes);
+APPLE_AGX_U64 AgxWin32AsahiSparseTableVa(struct agx_bo *);
+struct agx_bo *AgxWin32AsahiVirtualTable(struct agx_bo *);
 /* EXP1207: winsys creation flag beside enum agx_bo_flags. The BO's CPU map
  * (agx_bo_map) is a cached shadow of the allocation; nothing reaches the
  * allocation the GPU reads until AgxWin32AsahiShadowPublish copies the

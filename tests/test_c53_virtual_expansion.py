@@ -26,13 +26,14 @@ TEST = r'''
 #include <string.h>
 typedef struct { uint64_t Allocation, Va, Bytes; unsigned Bound; } AGX_WIN32_GPUVA_BO;
 typedef struct { struct agx_bo *TileScratch; } AGX_WIN32_ASAHI_BACKEND;
-struct agx_bo { AGX_WIN32_GPUVA_BO View; unsigned Backings; struct agx_bo *Backing[8]; };
+struct agx_bo { AGX_WIN32_GPUVA_BO View; unsigned Backings; struct agx_bo *Backing[8]; struct agx_bo *Table; };
 #define AGX_G4_WRITTEN_LIMIT 4u
 static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(AGX_WIN32_ASAHI_BACKEND *b, struct agx_bo *bo) {
   (void)b; return bo && bo->View.Bound ? &bo->View : NULL; }
 static unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *bo) { return bo ? bo->Backings : 0; }
 static struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *bo, unsigned i) { return bo->Backing[i]; }
 static int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *b, struct agx_bo *bo) { return b->TileScratch == bo; }
+static struct agx_bo *AgxWin32AsahiVirtualTable(struct agx_bo *bo) { return bo ? bo->Table : NULL; }
 @@FUNCS@@
 static struct agx_bo bo(uint64_t allocation) { struct agx_bo b; memset(&b, 0, sizeof(b));
   b.View.Allocation = allocation; b.View.Bound = 1; return b; }
@@ -48,6 +49,11 @@ int main(void) {
          refs[4]->Allocation == 30);
   /* naming it again, or a backing directly, adds nothing */
   assert(add_bo(&b, refs, &count, 8, &anchor) && add_bo(&b, refs, &count, 8, &heap_b) && count == 5);
+  /* C53 T2D: a reserved texture also holds its Sparse Block table */
+  struct agx_bo tex = bo(70), table = bo(80);
+  tex.Backings = 1; tex.Backing[0] = &heap_a; tex.Table = &table;
+  assert(add_bo(&b, refs, &count, 8, &tex) && count == 7 && refs[5]->Allocation == 70 &&
+         refs[6]->Allocation == 80);
   /* the limit refuses the expansion too */
   count = 0;
   assert(!add_bo(&b, refs, &count, 3, &anchor));

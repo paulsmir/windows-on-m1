@@ -139,6 +139,7 @@ static uint64_t agx_map_gpu(struct agx_resource *r) { return r->bo->va->addr; }
 static unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *bo) { (void)bo; return 0; } /* C53 B1/B4: no virtual BOs here */
 static struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *bo, unsigned i) { (void)bo; (void)i; return NULL; }
 static int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *b, struct agx_bo *bo) { (void)b; (void)bo; return 0; }
+static struct agx_bo *AgxWin32AsahiVirtualTable(struct agx_bo *bo) { (void)bo; return NULL; }
 static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
     AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *bo) {
   (void)b;return bo && bo->refs ? &bo->view : NULL;

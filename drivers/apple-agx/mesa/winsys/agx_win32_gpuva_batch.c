@@ -450,7 +450,8 @@ static int add_bo(AGX_WIN32_ASAHI_BACKEND *b,
    * distinct one, the tile scratch included) */
   for(unsigned i=0,n=AgxWin32AsahiVirtualBackingCount(bo);i<n;++i)
     if(!add_bo(b,refs,count,limit,AgxWin32AsahiVirtualBacking(bo,i))) return 0;
-  return 1;
+  /* C53 T2D: and its Sparse Block table, which texture reads go through */
+  return add_bo(b,refs,count,limit,AgxWin32AsahiVirtualTable(bo));
 }
 
 /* A BO the batch writes, for the UMD's CPU-copy refresh; a virtual BO
