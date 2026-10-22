@@ -446,11 +446,10 @@ static int add_bo(AGX_WIN32_ASAHI_BACKEND *b,
     if(refs[i]->Allocation==view->Allocation) return 1;
   if(*count==limit) return 0;
   refs[(*count)++]=view;
-  /* C53 B1: a virtual BO's tiles read and write its backing BOs */
-  for(unsigned t=0,n=AgxWin32AsahiVirtualTileCount(bo);t<n;++t) {
-    struct agx_bo *tile=AgxWin32AsahiVirtualTile(bo,t);
-    if(tile && !add_bo(b,refs,count,limit,tile)) return 0;
-  }
+  /* C53 B1: a virtual BO's tiles read and write its backing BOs (B4: each
+   * distinct one, the tile scratch included) */
+  for(unsigned i=0,n=AgxWin32AsahiVirtualBackingCount(bo);i<n;++i)
+    if(!add_bo(b,refs,count,limit,AgxWin32AsahiVirtualBacking(bo,i))) return 0;
   return 1;
 }
 
@@ -467,9 +466,10 @@ static int add_written(AGX_WIN32_ASAHI_BACKEND *b,const AGX_WIN32_GPUVA_BO **wri
     if(*written_count==AGX_G4_WRITTEN_LIMIT) return 0;
     written[(*written_count)++]=mapped;
   }
-  for(unsigned t=0,n=AgxWin32AsahiVirtualTileCount(bo);t<n;++t) {
-    struct agx_bo *tile=AgxWin32AsahiVirtualTile(bo,t);
-    if(tile && !add_written(b,written,written_count,tile)) return 0;
+  for(unsigned i=0,n=AgxWin32AsahiVirtualBackingCount(bo);i<n;++i) {
+    struct agx_bo *backing=AgxWin32AsahiVirtualBacking(bo,i);
+    if(!AgxWin32AsahiIsTileScratch(b,backing) && !add_written(b,written,written_count,backing))
+      return 0;
   }
   return 1;
 }
@@ -694,8 +694,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
   pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
   limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+fixed_refs;
-  if(b->VirtualTileRefs>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
-  limit+=b->VirtualTileRefs; /* C53 B1 */
+  if(b->VirtualBackingRefs>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
+  limit+=b->VirtualBackingRefs; /* C53 B1 */
   if(pool_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pool_count;
   if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
@@ -900,8 +900,8 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
   pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
   limit=batch->bo_list.bit_count+fixed_refs;
-  if(b->VirtualTileRefs>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
-  limit+=b->VirtualTileRefs; /* C53 B1 */
+  if(b->VirtualBackingRefs>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
+  limit+=b->VirtualBackingRefs; /* C53 B1 */
   if(pool_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pool_count;
   if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }

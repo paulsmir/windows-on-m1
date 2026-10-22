@@ -6,7 +6,9 @@ resident for a submission that lists it, so a batch that reads or writes the
 reserved range must list every distinct backing BO besides the anchor, and a
 batch that writes it must mark those backing BOs written (the UMD refreshes
 their CPU copies). Unmapped (scratch) tiles add nothing; duplicates are listed
-once; the reference limit still refuses.
+once; the reference limit still refuses. C53 B4: the expansion walks the
+virtual BO's distinct backings (the tile scratch among them, which a
+submission must hold too but never marks written).
 """
 from pathlib import Path
 import os
@@ -23,31 +25,33 @@ TEST = r'''
 #include <stdio.h>
 #include <string.h>
 typedef struct { uint64_t Allocation, Va, Bytes; unsigned Bound; } AGX_WIN32_GPUVA_BO;
-typedef struct { int Unused; } AGX_WIN32_ASAHI_BACKEND;
-struct agx_bo { AGX_WIN32_GPUVA_BO View; unsigned Tiles; struct agx_bo *Tile[8]; };
+typedef struct { struct agx_bo *TileScratch; } AGX_WIN32_ASAHI_BACKEND;
+struct agx_bo { AGX_WIN32_GPUVA_BO View; unsigned Backings; struct agx_bo *Backing[8]; };
 #define AGX_G4_WRITTEN_LIMIT 4u
 static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(AGX_WIN32_ASAHI_BACKEND *b, struct agx_bo *bo) {
   (void)b; return bo && bo->View.Bound ? &bo->View : NULL; }
-static unsigned AgxWin32AsahiVirtualTileCount(struct agx_bo *bo) { return bo ? bo->Tiles : 0; }
-static struct agx_bo *AgxWin32AsahiVirtualTile(struct agx_bo *bo, unsigned t) { return bo->Tile[t]; }
+static unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *bo) { return bo ? bo->Backings : 0; }
+static struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *bo, unsigned i) { return bo->Backing[i]; }
+static int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *b, struct agx_bo *bo) { return b->TileScratch == bo; }
 @@FUNCS@@
 static struct agx_bo bo(uint64_t allocation) { struct agx_bo b; memset(&b, 0, sizeof(b));
   b.View.Allocation = allocation; b.View.Bound = 1; return b; }
 int main(void) {
-  AGX_WIN32_ASAHI_BACKEND b = {0};
-  struct agx_bo anchor = bo(10), heap_a = bo(20), heap_b = bo(30), plain = bo(40);
-  /* tiles: A, scratch, B, A, scratch */
-  anchor.Tiles = 5; anchor.Tile[0] = &heap_a; anchor.Tile[2] = &heap_b; anchor.Tile[3] = &heap_a;
+  struct agx_bo anchor = bo(10), heap_a = bo(20), heap_b = bo(30), plain = bo(40), scratch = bo(60);
+  AGX_WIN32_ASAHI_BACKEND b = {&scratch};
+  /* tiles A, scratch, B, A, scratch: distinct backings A, scratch, B */
+  anchor.Backings = 3; anchor.Backing[0] = &heap_a; anchor.Backing[1] = &scratch; anchor.Backing[2] = &heap_b;
   const AGX_WIN32_GPUVA_BO *refs[8]; unsigned count = 0;
   assert(add_bo(&b, refs, &count, 8, &plain) && count == 1);
-  assert(add_bo(&b, refs, &count, 8, &anchor) && count == 4);
-  assert(refs[1]->Allocation == 10 && refs[2]->Allocation == 20 && refs[3]->Allocation == 30);
+  assert(add_bo(&b, refs, &count, 8, &anchor) && count == 5);
+  assert(refs[1]->Allocation == 10 && refs[2]->Allocation == 20 && refs[3]->Allocation == 60 &&
+         refs[4]->Allocation == 30);
   /* naming it again, or a backing directly, adds nothing */
-  assert(add_bo(&b, refs, &count, 8, &anchor) && add_bo(&b, refs, &count, 8, &heap_b) && count == 4);
+  assert(add_bo(&b, refs, &count, 8, &anchor) && add_bo(&b, refs, &count, 8, &heap_b) && count == 5);
   /* the limit refuses the expansion too */
   count = 0;
-  assert(!add_bo(&b, refs, &count, 2, &anchor));
-  /* a written reserved buffer marks its backing BOs written */
+  assert(!add_bo(&b, refs, &count, 3, &anchor));
+  /* a written reserved buffer marks its backing BOs written, not the scratch */
   const AGX_WIN32_GPUVA_BO *written[AGX_G4_WRITTEN_LIMIT]; unsigned n = 0;
   assert(add_written(&b, written, &n, &anchor) && n == 3);
   assert(written[0]->Allocation == 10 && written[1]->Allocation == 20 && written[2]->Allocation == 30);

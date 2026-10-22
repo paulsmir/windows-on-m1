@@ -90,7 +90,7 @@ typedef struct {
   int GpuvaReady, Failed;
   uint64_t NewestFence;
   uint64_t TimestampFrequency, TimestampOffset;
-  APPLE_AGX_U32 VirtualTileRefs; /* C53 B1 */
+  APPLE_AGX_U32 VirtualBackingRefs; /* C53 B1/B4 */
 } AGX_WIN32_ASAHI_BACKEND;
 #define AGX_WIN32_ASAHI_FAIL(b, site) ((b)->Failed = (int)(site))
 static struct agx_screen screen;
@@ -118,8 +118,9 @@ static struct agx_bo *agx_bo_create(struct agx_device *d, size_t size, unsigned 
   return ++creates == refuse_create_at ? NULL : make_bo(size);
 }
 static void agx_bo_unreference(struct agx_device *d, struct agx_bo *bo) { (void)d; --bo->refs; }
-static unsigned AgxWin32AsahiVirtualTileCount(struct agx_bo *bo) { (void)bo; return 0; } /* C53 B1: no virtual BOs here */
-static struct agx_bo *AgxWin32AsahiVirtualTile(struct agx_bo *bo, unsigned tile) { (void)bo; (void)tile; return NULL; }
+static unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *bo) { (void)bo; return 0; } /* C53 B1/B4: no virtual BOs here */
+static struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *bo, unsigned i) { (void)bo; (void)i; return NULL; }
+static int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *b, struct agx_bo *bo) { (void)b; (void)bo; return 0; }
 static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(AGX_WIN32_ASAHI_BACKEND *b, struct agx_bo *bo) {
   (void)b; return bo ? &bo->view : NULL;
 }
