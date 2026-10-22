@@ -1,6 +1,6 @@
 #!/bin/bash
 # Prepare and stage a hardware experiment from the previous one.
-# usage: prepare.sh <prev num> <prev dir> <num> <dir> "<purpose>"
+# usage: [AGX_M1N1=<macho>] prepare.sh <prev num> <prev dir> <num> <dir> "<purpose>"
 #
 # Needs the builder directory <dir> (builder.sh build or copy). Steps: fetch and
 # verify the package against its build receipt; clone the launch, stage and
@@ -28,6 +28,14 @@ guest_put "$N/boot$X.ps1" "EXP$X" >/dev/null 2>&1
 guest "powershell -NoProfile -ExecutionPolicy Bypass -File $GH_WIN\\EXP$X\\boot$X.ps1" | tr -d '\r' | tail -1 > "$N/evidence/boot-identity.json"
 cat "$N/evidence/boot-identity.json"
 python3 "$HERE/write_manifests.py" "$P" "$PD" "$X" "$D" "$PUR"
+# AGX_M1N1=<macho>: launch this experiment with another m1n1 than the previous one
+# (full-owner, manifest and hardware manifest; the hardware manifest is re-hashed below).
+if [ -n "${AGX_M1N1:-}" ]; then
+  [ -f "$AGX_M1N1" ] || { echo "AGX_M1N1 missing: $AGX_M1N1"; exit 1; }
+  OLD_M1N1=$(python3 -c "import json;print(json.load(open('$N/manifest.json'))['M1n1'])")
+  sed -i '' "s#$OLD_M1N1#$AGX_M1N1#g" "$N/full-owner$X.sh" "$N/manifest.json" "$N/hardware-manifest.json"
+  echo "M1N1 $OLD_M1N1 -> $AGX_M1N1 $(shasum -a 256 "$AGX_M1N1" | cut -c1-16)"
+fi
 cd "$N"
 for f in manifest.json stage$X.ps1 ordered-restart$X.ps1 watch-dwm.ps1 pinned.cer package/* cleanup$X/*; do
   d=$(dirname "$f"); [ "$d" = . ] && d=
