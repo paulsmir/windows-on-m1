@@ -52,6 +52,19 @@ FRONTEND_C = ('ShaderParse.c','ShaderTGSI.c')
 # D3D-H3: the DXBC parser and DXBC -> NIR translator (drivers/apple-agx/mesa/dxbc)
 # the frontend uses behind APPLE_AGX_D3D_SHADER_NIR.
 DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c')
+# D3D12 C44: the DXIL frontend (drivers/apple-agx/mesa/dxil) of the 64-bit D3D12
+# UMDs, Mesa's spirv_to_nir (libvtn of the same NIR build configuration) and
+# the dxil-spirv C library (8434b063, D3D12-C15-dxil-license-review.md; built
+# /MD with the EXP1388 configuration, c44-build-dxspv.ps1).
+DXIL_UNITS = ('agx_dxil_to_nir.c', 'agx_dxil_program.c', 'agx_dxil_checked.cpp')
+DXIL_SPIRV_SOURCE = Path(r'C:\Users\pauls\EXP1388-dxil-runtime-build-only\source')
+DXIL_SPIRV_BUILD = {'x64': Path(r'C:\Users\pauls\c44-dxspv-x64\build'),
+                    'arm64': Path(r'C:\Users\pauls\c44-dxspv-arm64\build')}
+DXIL_SPIRV_LIBRARIES = ('dxil-spirv-c-static.lib', 'dxil-converter.lib', 'spirv-module.lib',
+                        'bc/llvm-bc.lib', 'third_party/bc-decoder.lib', 'third_party/dxbc-spirv.lib',
+                        'third_party/glslang-spirv-builder.lib', 'dxil-utils.lib', 'dxil-debug.lib')
+VTN_BUILD = {'x64': Path(r'C:\Users\pauls\AD04-fullcompiler-001\nir-x64'),
+             'arm64': Path(r'C:\Users\pauls\AD04-fullcompiler-001\nir-arm64')}
 # D3D-H2a: the D3D11 DDI table over the D3D10 frontend (drivers/apple-agx/mesa/d3d11).
 D3D11_CPP = ('agx_d3d11_ddi.cpp', 'agx_wddm2_ddi.cpp')
 # Actual Gallium helpers required by native context/resource/state construction.
@@ -456,6 +469,13 @@ def main():
             actual = record(library, expected, 'compiler-library')
             manifest['libraries'].append({'path': str(library), 'sha256': actual})
             libraries.append(library)
+        dxil = args.architecture in DXIL_SPIRV_BUILD
+        if dxil:
+            for library in ([VTN_BUILD[args.architecture] / 'src/compiler/spirv/libvtn.a'] +
+                            [DXIL_SPIRV_BUILD[args.architecture] / name for name in DXIL_SPIRV_LIBRARIES]):
+                actual = record(library, kind='c44-dxil-library')
+                manifest['libraries'].append({'path': str(library), 'sha256': actual})
+                libraries.append(library)
 
         command_file = build / 'compile_commands.json'
         record(command_file, kind='pinned-build-commands')
@@ -567,6 +587,8 @@ def main():
         runtime += [native / 'src/gallium/frontends/d3d10umd' / name
                     for name in FRONTEND_CPP + FRONTEND_C]
         runtime += [args.project / 'drivers/apple-agx/mesa/dxbc' / name for name in DXBC_C]
+        if dxil:
+            runtime += [args.project / 'drivers/apple-agx/mesa/dxil' / name for name in DXIL_UNITS]
         runtime += [args.project / 'drivers/apple-agx/mesa/d3d11' / name for name in D3D11_CPP]
         generated_c = OWNER_GENERATED / 'src/asahi/lib/libagx_shaders.c'
         record(generated_c, kind='native-generated-source')
@@ -629,8 +651,13 @@ def main():
             # the D3D11 table shares the frontend's headers and must see them alike
             if 'frontends/d3d10umd' in source.as_posix() or 'mesa/d3d11/' in source.as_posix():
                 exports.append('/DADMISSION_UMD_PIPE_FACTORY_TEST=1')
+            unit_includes = includes
+            if 'mesa/dxil/' in source.as_posix():
+                # dxil_spirv_c.h, the frontend's own headers and nir_spirv.h's directory
+                unit_includes = includes + [args.project / 'drivers/apple-agx/mesa/dxil', DXIL_SPIRV_SOURCE,
+                                            MESA / 'src/compiler/spirv']
             command, command_hash = compile_command(CLANG / 'clang-cl.exe',
-                [*flags, *exports], includes, source, obj)
+                [*flags, *exports], unit_includes, source, obj)
             if command_hash != source_hash:
                 raise RuntimeError('Compiler source changed during command construction: ' + str(source))
             run(name, command)

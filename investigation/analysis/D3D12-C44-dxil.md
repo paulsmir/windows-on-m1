@@ -120,3 +120,26 @@ so the root-signature resolution stays unchanged.
 3. DDI: DXIL containers in StoreShader/CreateShader and PSO paths; report SM
    6.0 through D3D12DDICAPS_TYPE_0011_SHADER_MODELS only after offline parity
    and hardware probes (cs/vs/ps 6.0, waves).
+
+## Finding: SM 6 needs the R1 DDI interface (2026-10-22)
+
+The samples' traces (EXP1855 HelloTriangle) show the runtime asks the 0003
+driver caps types 1000-1010 and 1069-1074 only; D3D12DDICAPS_TYPE_0011_
+SHADER_MODELS (1012) is never queried while GetVersions offers
+D3D12DDI_SUPPORTED_0003 alone, so the runtime keeps applications at SM 5.1
+and never hands DXIL to the driver. SM 6.0 therefore needs the R1 interface
+(D3D12DDI_SUPPORTED_0011). D3D12DDI_DEVICE_FUNCS_CORE_0010 differs from
+CORE_0003 in 20 signatures (element layout, blend/depth/rasterizer states
+-- adapters already exist, CPU-only --, every CreateShader as
+PFND3D12DDI_CREATE_SHADER_0010, the stream-output GS, CalcPrivate/Create
+PipelineState_0010), adds six pipeline-library entries and drops the four
+object-serialization entries; the other tables' versions under 0011 still
+need the same audit.
+
+## Build integration (2026-10-22)
+
+`build-asahi-runtime-closure.py` adds, for the ARM64 and x64 UMDs only,
+`agx_dxil_to_nir.c`, `agx_dxil_program.c` and `agx_dxil_checked.cpp` to the
+native runtime archive and links libvtn (`nir-<arch>` build of the same
+configuration) and the nine dxil-spirv libraries (`c44-build-dxspv.ps1`,
+EXP1388 configuration, /MD) with their hashes in the closure manifest.
