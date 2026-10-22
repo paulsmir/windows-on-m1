@@ -73,6 +73,53 @@ int AgxWin32GpuvaUnbind(AGX_WIN32_GPUVA_SPACE *space,
   return 1;
 }
 
+int AgxWin32GpuvaReserveRange(AGX_WIN32_GPUVA_SPACE *space, uint64_t bytes,
+                              uint64_t *va) {
+  uint64_t reserved = 0;
+  if (!space || !va || space->Terminal || !bytes ||
+      (bytes & (AGX_GPUVA_PAGE - 1)) ||
+      bytes > AGX_GPUVA_LIMIT - AGX_GPUVA_PAGE) return 0;
+  if (!space->Ops.Reserve(space->Context, bytes, AGX_GPUVA_PAGE,
+                          AGX_GPUVA_LIMIT, &reserved)) return 0;
+  if (reserved < AGX_GPUVA_PAGE || (reserved & (AGX_GPUVA_PAGE - 1)) ||
+      reserved >= AGX_GPUVA_LIMIT || bytes > AGX_GPUVA_LIMIT - reserved) {
+    if (reserved && !space->Ops.Free(space->Context, reserved, bytes))
+      space->Terminal = 1;
+    return 0;
+  }
+  *va = reserved;
+  return 1;
+}
+
+int AgxWin32GpuvaMapRange(AGX_WIN32_GPUVA_SPACE *space, uint64_t va,
+                          uint64_t allocation, uint64_t offset, uint64_t bytes,
+                          unsigned protection) {
+  uint64_t fence = 0;
+  int mapped;
+  if (!space || !space->Ops.MapAt || space->Terminal || !allocation ||
+      (protection & ~(AGX_GPUVA_MAP_WRITE | AGX_GPUVA_MAP_EXECUTE)) ||
+      !bytes || ((va | offset | bytes) & (AGX_GPUVA_PAGE - 1)) ||
+      va < AGX_GPUVA_PAGE || va >= AGX_GPUVA_LIMIT ||
+      bytes > AGX_GPUVA_LIMIT - va) return 0;
+  mapped = space->Ops.MapAt(space->Context, allocation, va, offset >> 12,
+                            bytes >> 12, protection, &fence);
+  /* An accepted mapping with uncertain ownership, or a pending update
+   * without a fence to wait on, leaves the page tables unknown. */
+  if (mapped == 3 || (mapped == 2 && !fence) ||
+      (mapped && fence && !space->Ops.WaitPaging(space->Context, fence))) {
+    space->Terminal = 1;
+    return 0;
+  }
+  return mapped != 0;
+}
+
+int AgxWin32GpuvaFreeRange(AGX_WIN32_GPUVA_SPACE *space, uint64_t va,
+                           uint64_t bytes) {
+  if (!space || space->Terminal || space->Held || space->OlderCount || !va ||
+      !bytes || ((va | bytes) & (AGX_GPUVA_PAGE - 1))) return 0;
+  return space->Ops.Free(space->Context, va, bytes) != 0;
+}
+
 /* Diagnostic only: record which check refused, never changes the result. */
 static int gpuva_refuse(AGX_WIN32_GPUVA_SPACE *space, unsigned line) {
   if (space) space->LastFailure = line;

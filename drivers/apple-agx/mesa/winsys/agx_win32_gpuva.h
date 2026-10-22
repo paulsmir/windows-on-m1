@@ -38,6 +38,10 @@ typedef struct {
    * QPC, for calibration); 0 when the KMD holds none. */
   int (*GpuTimestamps)(void *, uint64_t, uint64_t *, uint64_t *, uint64_t *,
                        uint64_t *);
+  /* C53 B0 (optional): Map at an allocation offset (in 4 KiB pages) into a
+   * reserved range; an alias, never the allocation's canonical VA. Same
+   * results as Map. */
+  int (*MapAt)(void *, uint64_t, uint64_t, uint64_t, uint64_t, unsigned, uint64_t *);
 } AGX_WIN32_GPUVA_OPS;
 
 typedef struct {
@@ -78,6 +82,14 @@ int AgxWin32GpuvaBind(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *,
                       uint64_t Allocation, uint64_t Bytes, int LowVa,
                       unsigned Protection);
 int AgxWin32GpuvaUnbind(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *);
+/* C53 B0 (D3D12-C53-tiled-buffers-plan.md): a reserved range of 64 KiB tiles
+ * with no backing; tiles are then mapped at allocation offsets. Every
+ * address, offset and size is 64 KiB aligned. Free refuses while any
+ * submission is in flight, as Unbind does. */
+int AgxWin32GpuvaReserveRange(AGX_WIN32_GPUVA_SPACE *, uint64_t Bytes, uint64_t *Va);
+int AgxWin32GpuvaMapRange(AGX_WIN32_GPUVA_SPACE *, uint64_t Va, uint64_t Allocation,
+                          uint64_t Offset, uint64_t Bytes, unsigned Protection);
+int AgxWin32GpuvaFreeRange(AGX_WIN32_GPUVA_SPACE *, uint64_t Va, uint64_t Bytes);
 int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *,
                         const AGX_WIN32_GPUVA_BO *const *, unsigned Count,
                         const AGX_WIN32_GPUVA_BO *Command, uint32_t CommandBytes,
