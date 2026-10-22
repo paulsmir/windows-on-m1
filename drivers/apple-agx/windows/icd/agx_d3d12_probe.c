@@ -26,6 +26,8 @@
 #include "agx_d3d12_probe_vs_dxil.h"
 #include "agx_d3d12_probe_ps_dxil.h"
 #include "agx_d3d12_probe_ps_c57.h"
+#include "agx_d3d12_probe_vs_c59.h"
+#include "agx_d3d12_probe_ps_c59.h"
 #include "agx_d3d12_probe_ps_view_dxil.h"
 #include "agx_d3d12_probe_cs_cb_dxil62.h"
 #include "agx_d3d12_probe_cs_sm65_dxil.h"
@@ -6302,6 +6304,118 @@ static int step_c57a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
     if (readback) ID3D12Resource_Release(readback);
     return FAILED(hr) || bad != 0;
 }
+/* C59A (12_1 ROVs, D3D12-FL-program.md "ROV path"): 32 viewport-covering
+ * triangles in one draw read-modify-write each pixel of a rasterizer-ordered
+ * byte-address buffer, v = v * 5 + SV_PrimitiveID from 0; only primitive
+ * order gives sum(i * 5^(31 - i)). ROVsSupported is reported only with
+ * APPLE_AGX_D3D12_ROV=1 (SKIP otherwise). */
+static int step_c59a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
+    D3D12_ROOT_PARAMETER parameter = {D3D12_ROOT_PARAMETER_TYPE_UAV};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {1, &parameter};
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3D12Resource *order = uav_buffer(device);
+    ID3D12Resource *zeros = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    unsigned want = 0, bad = 4096, first = 0;
+    HRESULT hr = ID3D12Device_CheckFeatureSupport(device, D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options));
+    printf("C59A ROVsSupported %d hr=0x%08lx\n", options.ROVsSupported, (unsigned long)hr);
+    if (SUCCEEDED(hr) && !options.ROVsSupported) {
+        printf("AGX_D3D12_C59A: SKIP (ROVsSupported 0)\n");
+        if (order) ID3D12Resource_Release(order);
+        if (zeros) ID3D12Resource_Release(zeros);
+        if (readback) ID3D12Resource_Release(readback);
+        return 0;
+    }
+    for (unsigned i = 0; i < 32; ++i) want = want * 5u + i;
+    if (SUCCEEDED(hr) && (!order || !zeros || !readback)) hr = E_FAIL;
+    if (SUCCEEDED(hr)) {
+        void *mapped = NULL;
+        hr = ID3D12Resource_Map(zeros, 0, NULL, &mapped);
+        if (SUCCEEDED(hr) && !mapped) hr = E_FAIL;
+        if (SUCCEEDED(hr)) {
+            memset(mapped, 0, 65536);
+            ID3D12Resource_Unmap(zeros, 0, NULL);
+        }
+    }
+    if (SUCCEEDED(hr)) {
+        parameter.Descriptor.ShaderRegister = 1;
+        parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob), ID3D10Blob_GetBufferSize(blob),
+                                              &IID_ID3D12RootSignature, (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.VS.pShaderBytecode = g_agx_d3d12_probe_vs_c59;
+        pso_desc.VS.BytecodeLength = sizeof(g_agx_d3d12_probe_vs_c59);
+        pso_desc.PS.pShaderBytecode = g_agx_d3d12_probe_ps_c59;
+        pso_desc.PS.BytecodeLength = sizeof(g_agx_d3d12_probe_ps_c59);
+        pso_desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        pso_desc.SampleMask = ~0u;
+        pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+        pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        pso_desc.RasterizerState.DepthClipEnable = TRUE;
+        pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        pso_desc.NumRenderTargets = 0;
+        pso_desc.SampleDesc.Count = 1;
+        hr = ID3D12Device_CreateGraphicsPipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+        printf("C59A CreateGraphicsPipelineState hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        D3D12_VIEWPORT viewport = {0, 0, 64, 64, 0, 1};
+        D3D12_RECT scissor = {0, 0, 64, 64};
+        transition(list, order, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, order, 0, zeros, 0, 16384);
+        transition(list, order, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        ID3D12GraphicsCommandList_SetGraphicsRootSignature(list, root);
+        ID3D12GraphicsCommandList_SetGraphicsRootUnorderedAccessView(list, 0, ID3D12Resource_GetGPUVirtualAddress(order));
+        ID3D12GraphicsCommandList_OMSetRenderTargets(list, 0, NULL, FALSE, NULL);
+        ID3D12GraphicsCommandList_RSSetViewports(list, 1, &viewport);
+        ID3D12GraphicsCommandList_RSSetScissorRects(list, 1, &scissor);
+        ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        ID3D12GraphicsCommandList_DrawInstanced(list, 96, 1, 0, 0);
+        transition(list, order, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, order, 0, 16384);
+        hr = run_list(queue, fence, list, base + 1, "C59A rov");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 16384};
+        unsigned *words = NULL;
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&words);
+        if (SUCCEEDED(hr) && words) {
+            bad = 0;
+            first = words[0];
+            for (unsigned i = 0; i < 4096; ++i) bad += words[i] != want;
+            printf("C59A rov readback bad=%u first=0x%08x want=0x%08x\n", bad, first, want);
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C59A: %s\n", SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (blob) ID3D10Blob_Release(blob);
+    if (errors) ID3D10Blob_Release(errors);
+    if (readback) ID3D12Resource_Release(readback);
+    if (zeros) ID3D12Resource_Release(zeros);
+    if (order) ID3D12Resource_Release(order);
+    return FAILED(hr) || bad != 0;
+}
 /* C53A (EXP1875): D3D9On12 renders a D3D9 X8R8G8B8 back buffer as a committed
  * DXGI_FORMAT_B8G8R8X8_UNORM render target, and its first batch (clear, copy
  * to a readback buffer) faulted the GPU; the same clear and copy in that
@@ -6920,7 +7034,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
     {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
     {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}, {"C57A", step_c57a}, {"C58A", step_c58a}};
+    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}, {"C57A", step_c57a}, {"C58A", step_c58a}, {"C59A", step_c59a}};
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
@@ -7050,6 +7164,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C53A", step_c53a);
                 (void)run_isolated(adapter, "C57A", step_c57a);
                 (void)run_isolated(adapter, "C58A", step_c58a);
+                (void)run_isolated(adapter, "C59A", step_c59a);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
