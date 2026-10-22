@@ -116,6 +116,29 @@ static inline int AgxTileLocate(const AGX_TILE_GEOMETRY *G, unsigned long long I
   return 1;
 }
 
+/* The resource tile index of tile K of a region (CopyTileMappings): K
+ * tiles in resource order from Start without a box, row-major in Start's
+ * standard mip with one (Size NULL: one tile). 0 if K or the region lies
+ * outside the resource, or the box is malformed (as the walk refuses it). */
+static inline int AgxTileRegionTile(const AGX_TILE_GEOMETRY *G, const AGX_TILE_COORD *Start,
+                                    const AGX_TILE_REGION *Size, unsigned K, unsigned long long *Index) {
+  const unsigned resource_tiles = AgxTileResourceTiles(G);
+  const unsigned tiles = Size ? Size->NumTiles : 1u;
+  unsigned long long first;
+  if (!resource_tiles || !Index || K >= tiles || !AgxTileIndex(G, Start, &first)) return 0;
+  if (Size && Size->UseBox) {
+    const unsigned mip = Start->Subresource % G->MipLevels;
+    if (mip >= G->StandardMips || Size->Depth != 1 || !Size->Width || !Size->Height ||
+        Size->Width > G->TilesX[mip] - Start->X || Size->Height > G->TilesY[mip] - Start->Y ||
+        (unsigned long long)Size->Width * Size->Height != tiles) return 0;
+    *Index = first + (unsigned long long)(K / Size->Width) * G->TilesX[mip] + K % Size->Width;
+    return 1;
+  }
+  if (tiles > resource_tiles - first) return 0;
+  *Index = first + K;
+  return 1;
+}
+
 /* Calls Emit for each run; returns 0 (nothing more emitted) on a malformed
  * request: unequal totals, a region outside the resource, a box outside its
  * standard mip or on a packed mip or deeper than 1, a box whose NumTiles is

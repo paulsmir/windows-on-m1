@@ -115,6 +115,12 @@ int main(void) {
   AGX_TILE_GEOMETRY broken = {5, 1, 3, 0, {4, 2, 1}, {4, 2, 1}};
   assert(!AgxTileResourceTiles(&broken) &&
          !AgxTileMappingWalkGeometry(&broken, 1, NULL, NULL, 1, &null_flag, NULL, NULL, 0, emit, 0));
+  /* C53 T2D: tile k of a region (CopyTileMappings) */
+  unsigned long long rt = 0;
+  assert(AgxTileRegionTile(&tex, &b11, &box22, 0, &rt) && rt == 5 && AgxTileRegionTile(&tex, &b11, &box22, 3, &rt) && rt == 10);
+  assert(!AgxTileRegionTile(&tex, &b11, &box22, 4, &rt) && !AgxTileRegionTile(&tex, &b11, &wide, 0, &rt));
+  assert(AgxTileRegionTile(&tex, &c33, &three_tiles, 2, &rt) && rt == 17);
+  assert(AgxTileRegionTile(&tex, &s1p, NULL, 0, &rt) && rt == 43 && !AgxTileRegionTile(&tex, &s1p, &past, 0, &rt));
   puts("tile mapping walk: PASS");
   return 0;
 }
