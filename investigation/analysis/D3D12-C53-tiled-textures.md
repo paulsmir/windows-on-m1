@@ -182,6 +182,17 @@ TRANSLATION:
    FORMAT_SUPPORT tiled bits for the supported formats, and GetMipPacking.
 
 WHAT IS STILL UNKNOWN:
+- 16 KiB-granular mapping. Writes do not use the table:
+  - the PBE takes sparse mode only for twiddled layouts (asahi.rst), and
+    Honeykrisp sparse images are GPU-tiled;
+  - so render-target writes, image stores and copies reach the image VA.
+
+  The image VA must therefore map heap pages at 16 KiB granularity: four
+  `MapAt` of 16 KiB per standard tile, at the twiddled-block VAs. The winsys
+  accepts only 64 KiB today (`AGX_GPUVA_PAGE` in agx_win32_gpuva.c). The KMD
+  leaf path takes 4 KiB logical PTEs, grouped by 4 into one 16 KiB UAT page.
+  Whether VidMm maps 16 KiB-aligned runs of a 64 KiB-aligned heap here is
+  hardware behaviour: HW2 maps one standard tile as 4 separate pages.
 - Whether the texture unit tolerates a sparse descriptor with levels in the
   mip tail when the table entries of those pages are enabled. Honeykrisp
   never builds that view; it switches to a plain descriptor for a base level
