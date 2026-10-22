@@ -115,6 +115,18 @@ class DxilToNir(unittest.TestCase):
                 break
         self.assertEqual(self.translate(self.dxil, part), self.translate(self.dxil, FIXTURES / "par_cs.dxil"))
 
+    def test_unbounded_and_oversized_ranges_read_the_heap(self):
+        # C47 for DXIL: unbounded SRV/sampler ranges and one larger than the
+        # free slots become heap ranges numbered as the DXBC frontend numbers
+        # them (samplers first), read through marked bindless handles and the
+        # sampler map in cb14 -- the root-signature resolver fills heap_first
+        # by those numbers.
+        self.parity("heap_ps")
+        r = subprocess.run([str(self.dxil), str(FIXTURES / "heap_ps.dxil"), "--print-final"], capture_output=True,
+                           text=True, timeout=120)
+        self.assertEqual(r.stdout.count("@bindless_image_agx"), 4)
+        self.assertIn("sampler_handle", r.stdout)
+
     def test_register_range_takes_consecutive_slots(self):
         self.parity("par_range_ps")
 

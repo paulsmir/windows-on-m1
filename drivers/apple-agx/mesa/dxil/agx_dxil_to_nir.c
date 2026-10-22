@@ -20,7 +20,11 @@ enum { SET_CBV = DXBC_BINDING_CBV, SET_SRV = DXBC_BINDING_SRV, SET_UAV = DXBC_BI
 struct declaration {
    uint32_t kind, id, space, reg, range, resource_kind, slot;
    unsigned counter;
+   unsigned heap; /* C47: a heap range (slot = its heap range index) */
 };
+
+/* C47 heap ranges reach the SPIR-V at binding HEAP_BINDING + heap range */
+#define HEAP_BINDING 0x1000u
 
 struct job {
    struct declaration decl[DXBC_BINDING_MAP_MAX];
@@ -63,9 +67,8 @@ collect(struct job *job, uint32_t kind, const dxil_spv_d3d_binding *b, unsigned 
 {
    if (!b)
       return;
-   if (b->range_size == UINT32_MAX || !b->range_size) {
-      /* C47 heap ranges are not translated for DXIL yet */
-      refuse(job, AGX_DXIL_NIR_UNSUPPORTED, "unbounded register range", b);
+   if (!b->range_size) {
+      refuse(job, AGX_DXIL_NIR_INVALID, "empty register range", b);
       return;
    }
    if (b->kind == DXIL_SPV_RESOURCE_KIND_RT_ACCELERATION_STRUCTURE ||
@@ -84,7 +87,7 @@ collect(struct job *job, uint32_t kind, const dxil_spv_d3d_binding *b, unsigned 
       return;
    }
    job->decl[job->decls++] = (struct declaration){kind, b->resource_index, b->register_space, b->register_index,
-                                                  b->range_size, (uint32_t)b->kind, 0, counter};
+                                                  b->range_size, (uint32_t)b->kind, 0, counter, 0};
 }
 
 static dxil_spv_bool
@@ -146,6 +149,19 @@ freeze(struct job *job)
    for (unsigned i = 0; i < job->decls; ++i) {
       struct declaration *d = &job->decl[i];
       const uint32_t limit = job->limits[d->kind] & ~DXBC_BINDING_HEAP_RANGES;
+      /* C47 (DXBC frontend rule): an unbounded SRV/sampler range, or one
+       * the free slots cannot take, reads the descriptor heap */
+      const bool heap_kind = (job->limits[d->kind] & DXBC_BINDING_HEAP_RANGES) &&
+                             (d->kind == DXBC_BINDING_SRV || d->kind == DXBC_BINDING_SAMPLER);
+      if (heap_kind && (d->range == UINT32_MAX || d->range > limit - counts[d->kind])) {
+         d->heap = 1;
+         continue;
+      }
+      if (d->range == UINT32_MAX) {
+         const dxil_spv_d3d_binding b = {DXIL_SPV_STAGE_UNKNOWN, d->resource_kind, d->id, d->space, d->reg, d->range, 0};
+         refuse(job, AGX_DXIL_NIR_UNSUPPORTED, "unbounded register range outside the heap", &b);
+         return;
+      }
       if (d->range > limit - counts[d->kind] || d->range > DXBC_BINDING_MAP_MAX - job->map.count ||
           (d->counter && (d->range != 1 || counts[d->kind] >= DXBC_NIR_MAX_UAVS))) {
          const dxil_spv_d3d_binding b = {DXIL_SPV_STAGE_UNKNOWN, d->resource_kind, d->id, d->space, d->reg, d->range, 0};
@@ -156,6 +172,25 @@ freeze(struct job *job)
       for (uint32_t k = 0; k < d->range; ++k)
          job->map.bindings[job->map.count++] =
             (struct dxbc_binding){d->kind, d->id, d->space, d->reg + k, counts[d->kind]++, 0u};
+   }
+   /* heap range indices in the DXBC frontend's declaration order (FXC
+    * declares samplers before resources), (space, register) within a kind */
+   static const uint32_t heap_order[] = {DXBC_BINDING_SAMPLER, DXBC_BINDING_SRV};
+   unsigned ranges = 0;
+   for (unsigned k = 0; k < ARRAY_SIZE(heap_order); ++k) {
+      for (unsigned i = 0; i < job->decls; ++i) {
+         struct declaration *d = &job->decl[i];
+         if (!d->heap || d->kind != heap_order[k])
+            continue;
+         if (ranges == DXBC_HEAP_RANGE_MAX || job->map.count == DXBC_BINDING_MAP_MAX) {
+            const dxil_spv_d3d_binding b = {DXIL_SPV_STAGE_UNKNOWN, d->resource_kind, d->id, d->space, d->reg, d->range, 0};
+            refuse(job, AGX_DXIL_NIR_LIMIT, "heap ranges exhausted", &b);
+            return;
+         }
+         d->slot = ranges++;
+         job->map.bindings[job->map.count++] =
+            (struct dxbc_binding){d->kind, d->id, d->space, d->reg, d->slot, DXBC_BINDING_HEAP};
+      }
    }
    job->map.active = 1;
 }
@@ -179,7 +214,7 @@ remap_srv(void *u, const dxil_spv_d3d_binding *b, dxil_spv_srv_vulkan_binding *v
    if (!d)
       return DXIL_SPV_FALSE;
    v->buffer_binding.set = SET_SRV;
-   v->buffer_binding.binding = d->slot;
+   v->buffer_binding.binding = d->heap ? HEAP_BINDING + d->slot : d->slot;
    /* the owner binds raw and structured SRVs as R32_UINT buffer views */
    v->buffer_binding.descriptor_type =
       raw_buffer(b->kind) ? DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_TEXEL_BUFFER : DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_IDENTITY;
@@ -193,7 +228,7 @@ remap_sampler(void *u, const dxil_spv_d3d_binding *b, dxil_spv_vulkan_binding *v
    if (!d)
       return DXIL_SPV_FALSE;
    v->set = SET_SAMPLER;
-   v->binding = d->slot;
+   v->binding = d->heap ? HEAP_BINDING + d->slot : d->slot;
    return DXIL_SPV_TRUE;
 }
 static dxil_spv_bool
@@ -343,6 +378,77 @@ lower_image_slot(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    return true;
 }
 
+/* C47 heap ranges, as the DXBC frontend reads them (dxbc_bindings.h): the
+ * range's vec4 in DXBC_HEAP_TABLE_CB (.x heap index of its first register,
+ * .y the sampler-map base), the heap descriptor's marked bindless handle */
+static nir_def *
+heap_range(nir_builder *b, unsigned range)
+{
+   return nir_load_ubo(b, 4, 32, nir_imm_int(b, DXBC_HEAP_TABLE_CB), nir_imm_int(b, (int)(range * 16u)),
+                       .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0u);
+}
+
+/* the heap variable a texture/sampler deref names: its heap range and the
+ * array index (0 for a single descriptor); false for a slot variable */
+static bool
+heap_deref(nir_builder *b, nir_deref_instr *deref, unsigned *range, nir_def **index)
+{
+   nir_variable *var = deref ? nir_deref_instr_get_variable(deref) : NULL;
+   if (!var || var->data.binding < HEAP_BINDING)
+      return false;
+   *range = var->data.binding - HEAP_BINDING;
+   *index = deref->deref_type == nir_deref_type_array ? nir_u2u32(b, deref->arr.index.ssa) : nir_imm_int(b, 0);
+   return true;
+}
+
+static bool
+lower_heap_tex(nir_builder *b, nir_tex_instr *tex, void *data)
+{
+   (void)data;
+   b->cursor = nir_before_instr(&tex->instr);
+   bool progress = false;
+   unsigned range;
+   nir_def *index;
+   const int t = nir_tex_instr_src_index(tex, nir_tex_src_texture_deref);
+   if (t >= 0 && heap_deref(b, nir_src_as_deref(tex->src[t].src), &range, &index)) {
+      nir_def *heap = nir_iadd(b, nir_channel(b, heap_range(b, range), 0), index);
+      nir_def *bytes = nir_iadd_imm(b, nir_imul_imm(b, heap, DXBC_HEAP_DESCRIPTOR_STRIDE), DXBC_HEAP_DESCRIPTOR_AGX_OFFSET);
+      nir_tex_instr_remove_src(tex, t);
+      nir_tex_instr_add_src(tex, nir_tex_src_texture_handle, nir_bindless_image_agx(b, bytes, .desc_set = DXBC_HEAP_HANDLE_MARK));
+      tex->texture_index = 0;
+      progress = true;
+   }
+   const int sidx = nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
+   if (sidx >= 0 && heap_deref(b, nir_src_as_deref(tex->src[sidx].src), &range, &index)) {
+      /* the map entry's AGX sampler handle (bits 0-15) and MipLODBias (fp16,
+       * bits 16-31), which the shader applies as the DXBC frontend does */
+      nir_def *r = heap_range(b, range);
+      nir_def *entry = nir_isub(b, nir_iadd(b, nir_channel(b, r, 0), index), nir_channel(b, r, 1));
+      nir_def *word = nir_load_ubo(b, 1, 32, nir_imm_int(b, DXBC_HEAP_TABLE_CB),
+                                   nir_iadd_imm(b, nir_ishl_imm(b, entry, 2), DXBC_HEAP_SAMPLER_MAP_OFFSET),
+                                   .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0u);
+      nir_def *bias = nir_f2f32(b, nir_u2u16(b, nir_ushr_imm(b, word, 16)));
+      nir_tex_instr_remove_src(tex, sidx);
+      nir_tex_instr_add_src(tex, nir_tex_src_sampler_handle, nir_u2u16(b, word));
+      tex->sampler_index = DXBC_HEAP_SAMPLER_INDEX;
+      if (tex->op == nir_texop_tex) {
+         tex->op = nir_texop_txb;
+         nir_tex_instr_add_src(tex, nir_tex_src_bias, bias);
+      } else if (tex->op == nir_texop_txb) {
+         const int i = nir_tex_instr_src_index(tex, nir_tex_src_bias);
+         nir_def *sum = nir_fadd(b, tex->src[i].src.ssa, bias);
+         nir_src_rewrite(&tex->src[i].src, sum);
+      } else if (tex->op == nir_texop_txd) {
+         nir_def *scale = nir_fexp2(b, bias);
+         for (unsigned i = 0; i < tex->num_srcs; ++i)
+            if (tex->src[i].src_type == nir_tex_src_ddx || tex->src[i].src_type == nir_tex_src_ddy)
+               nir_src_rewrite(&tex->src[i].src, nir_fmul(b, tex->src[i].src.ssa, scale));
+      }
+      progress = true;
+   }
+   return progress;
+}
+
 /* the slots a variable's (array of) descriptors spans */
 static void
 set_range(BITSET_WORD *set, unsigned bits, const nir_variable *var)
@@ -367,12 +473,12 @@ record_slots(nir_shader *nir)
                nir_deref_instr *sampler = nir_get_tex_deref(tex, nir_tex_src_sampler_deref);
                nir_variable *tv = texture ? nir_deref_instr_get_variable(texture) : NULL;
                nir_variable *sv = sampler ? nir_deref_instr_get_variable(sampler) : NULL;
-               if (tv) {
+               if (tv && tv->data.binding < HEAP_BINDING) {
                   set_range(nir->info.textures_used, BITSET_SIZE(nir->info.textures_used), tv);
                   if (tex->op == nir_texop_txf || tex->op == nir_texop_txf_ms)
                      set_range(nir->info.textures_used_by_txf, BITSET_SIZE(nir->info.textures_used_by_txf), tv);
                }
-               if (sv)
+               if (sv && sv->data.binding < HEAP_BINDING)
                   set_range(nir->info.samplers_used, BITSET_SIZE(nir->info.samplers_used), sv);
             }
          }
@@ -441,6 +547,14 @@ static const struct spirv_capabilities caps = {
    .GroupNonUniformShuffleRelative = true, .GroupNonUniformClustered = true,
    .GroupNonUniformQuad = true, .StorageBuffer16BitAccess = true,
    .UniformAndStorageBuffer16BitAccess = true, .ShaderViewportIndex = true, .ShaderLayer = true,
+   /* register ranges: slots or (C47) the descriptor heap; vertex IDs */
+   .DrawParameters = true, .RuntimeDescriptorArray = true, .ShaderNonUniform = true,
+   .UniformBufferArrayDynamicIndexing = true, .SampledImageArrayDynamicIndexing = true,
+   .StorageBufferArrayDynamicIndexing = true, .StorageImageArrayDynamicIndexing = true,
+   .UniformTexelBufferArrayDynamicIndexing = true, .StorageTexelBufferArrayDynamicIndexing = true,
+   .UniformBufferArrayNonUniformIndexing = true, .SampledImageArrayNonUniformIndexing = true,
+   .StorageBufferArrayNonUniformIndexing = true, .StorageImageArrayNonUniformIndexing = true,
+   .UniformTexelBufferArrayNonUniformIndexing = true, .StorageTexelBufferArrayNonUniformIndexing = true,
 };
 
 static enum agx_dxil_nir_status
@@ -623,6 +737,7 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       nir = NULL;
       goto done;
    }
+   NIR_PASS(_, nir, nir_shader_tex_pass, lower_heap_tex, nir_metadata_control_flow, NULL);
    record_slots(nir);
    NIR_PASS(_, nir, nir_lower_samplers);
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ubo | nir_var_mem_ssbo, nir_address_format_32bit_index_offset);

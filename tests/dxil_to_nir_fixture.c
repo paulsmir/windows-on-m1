@@ -39,7 +39,8 @@ main(int argc, char **argv)
 
    glsl_type_singleton_init_or_ref();
    /* the owner's capacities (agx_d3d12_windows.cpp) */
-   static const uint32_t limits[DXBC_BINDING_KIND_COUNT] = {14, 128, 8, 16};
+   static const uint32_t limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_HEAP_RANGES, 8 | DXBC_BINDING_HEAP_RANGES,
+                                                           16 | DXBC_BINDING_HEAP_RANGES};
    struct agx_dxil_nir_result r;
    const enum agx_dxil_nir_status status = agx_dxil_to_nir(bytes, (size_t)size, limits, &agx_nir_options, &r);
    if (status != AGX_DXIL_NIR_OK) {
