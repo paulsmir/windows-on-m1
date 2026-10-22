@@ -293,6 +293,13 @@ struct pipe_resource *AgxWin32AsahiCreateReservedBuffer(struct pipe_screen *scre
   struct agx_device *device=agx_device(screen);
   struct agx_bo *virt=AgxWin32AsahiCreateVirtualBo(device,(size_t)bytes,"Reserved buffer");
   if(!virt) { AgxWin32AsahiResourceRelease(&resource); return NULL; }
+  /* C53 Tier 2: reads through the read-only shadow return 0 for unmapped
+   * tiles (the shadow VA is what texel-buffer views read) */
+  if(!AgxWin32AsahiAttachReadShadow(virt)) {
+    agx_bo_unreference(device,virt);
+    AgxWin32AsahiResourceRelease(&resource);
+    return NULL;
+  }
   struct agx_resource *rsrc=agx_resource(resource);
   agx_bo_unreference(device,rsrc->bo);
   rsrc->bo=virt;

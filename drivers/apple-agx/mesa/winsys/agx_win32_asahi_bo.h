@@ -80,6 +80,8 @@ typedef struct {
   APPLE_AGX_U32 VirtualBackingRefs;
   /* C53 B4: the scratch BO unmapped tiles map (created on first use). */
   struct agx_bo *TileScratch;
+  /* C53 Tier 2: the zeroed BO read-only shadows map for unmapped tiles */
+  struct agx_bo *TileZero;
   /* C53 T2D: the next agx_bo_create makes a virtual BO (a reserved
    * texture's image; AgxWin32AsahiArmVirtual) */
   int NextVirtual;
@@ -161,8 +163,8 @@ int AgxWin32AsahiMapVirtualPages(struct agx_bo *Virtual, unsigned FirstPage,
                                  unsigned Pages, struct agx_bo *Backing,
                                  unsigned BackingPage);
 /* C53 B4: the distinct BOs a virtual BO's tiles map, the tile scratch
- * included (0 for an ordinary BO); IsTileScratch tells the scratch apart
- * (never CPU-read, so never marked written). */
+ * included (0 for an ordinary BO); IsTileScratch tells the scratch and the
+ * shadow zero BO apart (never CPU-read, so never marked written). */
 unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *);
 struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *, unsigned Index);
 int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *);
@@ -177,6 +179,10 @@ void AgxWin32AsahiDisarmVirtual(struct agx_device *);
 int AgxWin32AsahiIsVirtual(struct agx_bo *);
 int AgxWin32AsahiAttachSparseTable(struct agx_bo *Virtual, size_t Bytes);
 APPLE_AGX_U64 AgxWin32AsahiSparseTableVa(struct agx_bo *);
+/* C53 Tier 2: a reserved buffer's read-only shadow, whose unmapped tiles
+ * read 0 (attach at creation); ReadShadowVa is its VA, 0 without one. */
+int AgxWin32AsahiAttachReadShadow(struct agx_bo *Virtual);
+APPLE_AGX_U64 AgxWin32AsahiReadShadowVa(struct agx_bo *);
 struct agx_bo *AgxWin32AsahiVirtualTable(struct agx_bo *);
 /* EXP1207: winsys creation flag beside enum agx_bo_flags. The BO's CPU map
  * (agx_bo_map) is a cached shadow of the allocation; nothing reaches the

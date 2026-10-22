@@ -31,14 +31,14 @@ struct windows_bo {
   struct agx_bo Base; AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva;
   int Virtual; AGX_WIN32_GPUVA_BO Reserved; struct windows_bo **Pages; unsigned PageCount;
   struct { struct windows_bo *Bo; unsigned Pages; } *Backings; unsigned BackingCount;
-  struct windows_bo *SparseTable; uint32_t Words[64];
+  struct windows_bo *SparseTable; uint32_t Words[64]; AGX_WIN32_GPUVA_BO ReadShadow;
 };
 typedef struct { unsigned Count; uint64_t Offset[4]; unsigned HeapPage[4]; unsigned TableIndex[4]; }
     AGX_WIN32_SPARSE_PAGES;
 static void *agx_bo_map(struct agx_bo *bo) { return ((struct windows_bo *)bo)->Words; }
 static uint32_t AgxWin32SparseBlock(uint64_t va, int enabled) { return enabled ? (uint32_t)(va >> 14) | 0xc0000000u : 0u; }
 struct AGX_WIN32_ASAHI_BACKEND {
-  int Failed; unsigned VirtualBackingRefs; void *Native; struct windows_bo *Scratch;
+  int Failed; unsigned VirtualBackingRefs; void *Native; struct windows_bo *Scratch, *Zero;
   int Gpuva; int MapOk; unsigned Maps; uint64_t LastBytes;
 };
 static AGX_WIN32_ASAHI_BACKEND g;
@@ -51,12 +51,17 @@ static AGX_WIN32_ASAHI_BACKEND g;
 static void agx_bo_reference(struct agx_bo *bo) { ++bo->refcnt; }
 static void agx_bo_unreference(void *dev, struct agx_bo *bo) { (void)dev; --bo->refcnt; }
 static struct windows_bo *virtual_scratch(AGX_WIN32_ASAHI_BACKEND *b) { return b->Scratch; }
+static struct windows_bo *virtual_zero(AGX_WIN32_ASAHI_BACKEND *b) { return b->Zero; }
 static int virtual_retire(AGX_WIN32_ASAHI_BACKEND *b, struct windows_bo *bo) { (void)b; (void)bo; return 1; }
+static unsigned read_only_maps;
+static uint64_t last_va, last_allocation;
 static int AgxWin32GpuvaMapRange(int *space, uint64_t va, uint64_t allocation, uint64_t offset,
                                  uint64_t bytes, unsigned protection) {
-  (void)space; (void)va; (void)allocation; (void)offset; (void)protection;
+  (void)space; (void)offset;
   if (!g.MapOk) return 0;
-  ++g.Maps; g.LastBytes = bytes; return 1;
+  ++g.Maps; g.LastBytes = bytes; last_va = va; last_allocation = allocation;
+  read_only_maps += !(protection & AGX_GPUVA_MAP_WRITE);
+  return 1;
 }
 @@FUNCS@@
 static struct windows_bo heap(uint64_t allocation, uint64_t tiles) {
@@ -131,6 +136,26 @@ int main(void) {
   tp.TableIndex[3] = 41; tp.Offset[3] = 160 * 0x4000ull;
   assert(!AgxWin32AsahiMapVirtualTilePages(&v.Base, &tp, &a.Base, 2) && a.Base.refcnt == 1);
   free(v.Pages); free(v.Backings);
+  /* C53 Tier 2: a buffer with a read-only shadow maps both ranges; the
+   * shadow's unmapped pages hold the zero BO, counted like the scratch */
+  struct windows_bo zero = heap(70, 16), s = heap(11, 1);
+  g.Zero = &zero; g.MapOk = 1;
+  s.Virtual = 1; s.PageCount = 8; s.Reserved.Va = 0x2000000; s.Reserved.Bound = 1;
+  s.ReadShadow.Va = 0x3000000; s.ReadShadow.Bound = 1;
+  s.Pages = calloc(s.PageCount, sizeof(*s.Pages));
+  for (unsigned q = 0; q < s.PageCount; ++q) s.Pages[q] = &scratch;
+  assert(backing_add(&g, &s, &scratch, 8) && backing_add(&g, &s, &zero, 8));
+  g.Maps = 0; read_only_maps = 0;
+  assert(AgxWin32AsahiMapVirtualTiles(&s.Base, 1, 1, &a.Base, 1) && g.Maps == 2 && read_only_maps == 1);
+  assert(last_va == 0x3000000 + 0x10000 && last_allocation == 20);
+  assert(pages_of(&s, &a) == 8 && pages_of(&s, &scratch) == 4 && pages_of(&s, &zero) == 4 && a.Base.refcnt == 2);
+  /* back to unmapped: the shadow reads the zero BO again */
+  assert(AgxWin32AsahiMapVirtualTiles(&s.Base, 1, 1, NULL, 0) && last_allocation == 70 && read_only_maps == 2);
+  assert(!pages_of(&s, &a) && pages_of(&s, &zero) == 8 && a.Base.refcnt == 1);
+  /* a refused shadow map undoes both counts */
+  g.MapOk = 0;
+  assert(!AgxWin32AsahiMapVirtualTiles(&s.Base, 0, 1, &b.Base, 0) && !pages_of(&s, &b) && b.Base.refcnt == 1);
+  free(s.Pages); free(s.Backings);
   puts("c53 virtual backings: PASS");
   return 0;
 }
@@ -141,7 +166,7 @@ class C53VirtualBackings(unittest.TestCase):
     def test_backing_references_follow_the_tiles(self):
         source = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_asahi_bo.c').read_text()
         funcs = '\n'.join(body(source, name) for name in
-                          ('map_scratch', 'backing_add', 'backing_drop', 'AgxWin32AsahiMapVirtualPages',
+                          ('map_scratch_as', 'map_scratch', 'backing_add', 'backing_drop', 'AgxWin32AsahiMapVirtualPages',
                            'AgxWin32AsahiMapVirtualTiles', 'AgxWin32AsahiMapVirtualTilePages'))
         with tempfile.TemporaryDirectory(prefix='c53-backings-') as tmp:
             src = Path(tmp) / 'backings.c'

@@ -45,6 +45,10 @@ struct windows_bo {
   /* C53 T2D: a reserved texture's zeroed Sparse Block table (one
    * reference), which its texture descriptors point at */
   struct windows_bo *SparseTable;
+  /* C53 Tier 2: a reserved buffer's read-only shadow range (Honeykrisp's
+   * sparse_ro_offset half): its pages map the same backing read-only, and
+   * the tile zero BO where the main range maps the tile scratch */
+  AGX_WIN32_GPUVA_BO ReadShadow;
 #endif
 };
 static void native_map(struct agx_device *,struct agx_bo *,void *);
@@ -527,16 +531,35 @@ static struct windows_bo *virtual_scratch(AGX_WIN32_ASAHI_BACKEND *b) {
   return scratch && scratch->Backend==b && scratch->Gpuva.Bound && !scratch->Virtual &&
          scratch->Gpuva.Bytes>=AGX_WIN32_TILE_SCRATCH_TILES*AGX_WIN32_TILE ? scratch : NULL;
 }
-static int map_scratch(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *scratch,uint64_t va,
-                       unsigned pages) {
+/* C53 Tier 2: the zeroed BO a shadow's unmapped pages read (created on
+ * first use, the tile scratch's size) */
+static struct windows_bo *virtual_zero(AGX_WIN32_ASAHI_BACKEND *b) {
+  struct windows_bo *zero=(struct windows_bo *)b->TileZero;
+  if(!zero && b->Native) {
+    struct agx_bo *base=agx_bo_create(b->Native,AGX_WIN32_TILE_SCRATCH_TILES*AGX_WIN32_TILE,0,0,"Tile zero");
+    void *map=base?agx_bo_map(base):NULL;
+    if(base && !map) { agx_bo_unreference(b->Native,base); base=NULL; }
+    if(map) memset(map,0,AGX_WIN32_TILE_SCRATCH_TILES*AGX_WIN32_TILE);
+    b->TileZero=base;
+    zero=(struct windows_bo *)base;
+  }
+  return zero && zero->Backend==b && zero->Gpuva.Bound && !zero->Virtual &&
+         zero->Gpuva.Bytes>=AGX_WIN32_TILE_SCRATCH_TILES*AGX_WIN32_TILE ? zero : NULL;
+}
+static int map_scratch_as(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *scratch,uint64_t va,
+                          unsigned pages,unsigned protection) {
   while(pages) {
     const unsigned n=pages<AGX_WIN32_SCRATCH_PAGES?pages:AGX_WIN32_SCRATCH_PAGES;
     if(!AgxWin32GpuvaMapRange(&b->Gpuva,va,scratch->Gpuva.Allocation,0,
-                              (uint64_t)n*AGX_WIN32_PAGE,AGX_GPUVA_MAP_WRITE)) return 0;
+                              (uint64_t)n*AGX_WIN32_PAGE,protection)) return 0;
     va+=(uint64_t)n*AGX_WIN32_PAGE;
     pages-=n;
   }
   return 1;
+}
+static int map_scratch(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *scratch,uint64_t va,
+                       unsigned pages) {
+  return map_scratch_as(b,scratch,va,pages,AGX_GPUVA_MAP_WRITE);
 }
 /* The distinct BOs a virtual BO's tiles map (the tile scratch included),
  * each with its tile count and one reference: what a submission naming the
@@ -605,6 +628,18 @@ static void virtual_release(struct windows_bo *bo) {
     }
     memset(&bo->Reserved,0,sizeof(bo->Reserved));
   }
+  if(bo->ReadShadow.Bound) {
+    if(!virtual_retire(b,bo) ||
+       !AgxWin32GpuvaFreeRange(&b->Gpuva,bo->ReadShadow.Va,bo->ReadShadow.Bytes)) {
+      if(b->PendingVaCount<sizeof(b->PendingVa)/sizeof(b->PendingVa[0])) {
+        b->PendingVa[b->PendingVaCount]=bo->ReadShadow;
+        b->PendingVa[b->PendingVaCount++].Bytes+=AGX_WIN32_GPUVA_RANGE_GUARD;
+      } else {
+        AGX_WIN32_ASAHI_FAIL(b, 1u);
+      }
+    }
+    memset(&bo->ReadShadow,0,sizeof(bo->ReadShadow));
+  }
   bo->Virtual=0;
   bo->Coordinate.addr=bo->Gpuva.Va;
   bo->Coordinate.size_B=bo->Gpuva.Bytes;
@@ -650,33 +685,47 @@ int AgxWin32AsahiMapVirtualPages(struct agx_bo *base,unsigned first,unsigned cou
   struct windows_bo *bo=(struct windows_bo *)base;
   struct windows_bo *backing=(struct windows_bo *)backing_base;
   AGX_WIN32_ASAHI_BACKEND *b=bo?bo->Backend:NULL;
-  struct windows_bo *scratch,*target;
+  struct windows_bo *scratch,*target,*zero=NULL,*shadow_target=NULL;
   if(!b || !bo->Virtual || b->Failed || !count || first>bo->PageCount ||
      count>bo->PageCount-first || !(scratch=virtual_scratch(b))) return 0;
   if(backing && (backing->Backend!=b || backing->Virtual || !backing->Gpuva.Bound ||
                  backing_base->refcnt<=0 ||
                  (uint64_t)backing_page+count>backing->Gpuva.Bytes/AGX_WIN32_PAGE)) return 0;
+  /* C53 Tier 2: the read-only shadow follows, onto the zero BO for NULL */
+  const int shadow=bo->ReadShadow.Bound;
+  if(shadow && !(zero=virtual_zero(b))) return 0;
   target=backing?backing:scratch;
   if(!virtual_retire(b,bo)) { AGX_WIN32_ASAHI_FAIL(b, 1u); return 0; }
   /* counted before the map so the reference never lapses on a remap onto
    * the same BO */
   if(!backing_add(b,bo,target,count)) return 0;
-  const uint64_t va=bo->Reserved.Va+(uint64_t)first*AGX_WIN32_PAGE;
-  const int mapped=backing ?
-      AgxWin32GpuvaMapRange(&b->Gpuva,va,backing->Gpuva.Allocation,
+  if(shadow) {
+    shadow_target=backing?backing:zero;
+    if(!backing_add(b,bo,shadow_target,count)) { backing_drop(b,bo,target,count); return 0; }
+  }
+  const uint64_t offset=(uint64_t)first*AGX_WIN32_PAGE;
+  int mapped=backing ?
+      AgxWin32GpuvaMapRange(&b->Gpuva,bo->Reserved.Va+offset,backing->Gpuva.Allocation,
                             (uint64_t)backing_page*AGX_WIN32_PAGE,
                             (uint64_t)count*AGX_WIN32_PAGE,AGX_GPUVA_MAP_WRITE) :
-      map_scratch(b,scratch,va,count);
+      map_scratch(b,scratch,bo->Reserved.Va+offset,count);
+  if(mapped && shadow)
+    mapped=backing ?
+        AgxWin32GpuvaMapRange(&b->Gpuva,bo->ReadShadow.Va+offset,backing->Gpuva.Allocation,
+                              (uint64_t)backing_page*AGX_WIN32_PAGE,(uint64_t)count*AGX_WIN32_PAGE,0u) :
+        map_scratch_as(b,zero,bo->ReadShadow.Va+offset,count,0u);
   if(!mapped) {
     /* a refused map leaves the old pages; after a partly mapped scratch run
      * some pages read scratch while their old references stay held (safe) */
     backing_drop(b,bo,target,count);
+    if(shadow) backing_drop(b,bo,shadow_target,count);
     return 0;
   }
   for(unsigned p=first;p<first+count;++p) {
     struct windows_bo *old=bo->Pages[p];
     bo->Pages[p]=target;
     backing_drop(b,bo,old,1u);
+    if(shadow) backing_drop(b,bo,old==scratch?zero:old,1u);
   }
   return 1;
 }
@@ -696,7 +745,8 @@ struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *base,unsigned index) {
   return bo && bo->Virtual && index<bo->BackingCount ? &bo->Backings[index].Bo->Base : NULL;
 }
 int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *bo) {
-  return b && bo && b->TileScratch==bo;
+  /* the zero BO of read-only shadows is never written by the GPU either */
+  return b && bo && (b->TileScratch==bo || b->TileZero==bo);
 }
 
 /* C53 T2D (D3D12-C53-tiled-textures.md) */
@@ -726,6 +776,30 @@ int AgxWin32AsahiAttachSparseTable(struct agx_bo *base,size_t bytes) {
   memset(map,0,bytes);
   bo->SparseTable=(struct windows_bo *)table;
   return 1;
+}
+/* C53 Tier 2: a reserved buffer's read-only shadow (Honeykrisp's
+ * sparse_ro_offset half): a second range whose pages map the same backing
+ * read-only and the tile zero BO where the buffer maps the tile scratch, so
+ * reads through it return 0 for unmapped tiles. Attached while every page
+ * is still unmapped (at creation). */
+int AgxWin32AsahiAttachReadShadow(struct agx_bo *base) {
+  struct windows_bo *bo=(struct windows_bo *)base;
+  AGX_WIN32_ASAHI_BACKEND *b=bo?bo->Backend:NULL;
+  struct windows_bo *zero,*scratch;
+  uint64_t va=0;
+  if(!b || !bo->Virtual || bo->ReadShadow.Bound || bo->SparseTable || b->Failed ||
+     !(scratch=virtual_scratch(b)) || !(zero=virtual_zero(b)) ||
+     bo->BackingCount!=1 || bo->Backings[0].Bo!=scratch) return 0;
+  if(!AgxWin32GpuvaReserveRange(&b->Gpuva,bo->Reserved.Bytes,&va)) return 0;
+  bo->ReadShadow.Allocation=bo->Gpuva.Allocation;
+  bo->ReadShadow.Va=va; bo->ReadShadow.Bytes=bo->Reserved.Bytes; bo->ReadShadow.Bound=1;
+  if(!backing_add(b,bo,zero,bo->PageCount)) return 0;
+  /* a failed map leaves the shadow bound; virtual_release frees it */
+  return map_scratch_as(b,zero,va,bo->PageCount,0u);
+}
+APPLE_AGX_U64 AgxWin32AsahiReadShadowVa(struct agx_bo *base) {
+  const struct windows_bo *bo=(const struct windows_bo *)base;
+  return bo && bo->Virtual && bo->ReadShadow.Bound ? bo->ReadShadow.Va : 0u;
 }
 APPLE_AGX_U64 AgxWin32AsahiSparseTableVa(struct agx_bo *base) {
   const struct windows_bo *bo=(const struct windows_bo *)base;
@@ -862,6 +936,7 @@ int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *b) {
 #ifdef APPLE_AGX_GPUVA_WINSYS
   /* before the cache flush: a released tile scratch may enter the cache */
   if(b->TileScratch) { agx_bo_unreference(b->Native,b->TileScratch); b->TileScratch=NULL; }
+  if(b->TileZero) { agx_bo_unreference(b->Native,b->TileZero); b->TileZero=NULL; }
   cache_flush(b);
 #endif
   if(!AgxWin32AsahiCollect(b)) return 0;
