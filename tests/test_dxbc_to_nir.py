@@ -355,6 +355,32 @@ class DxbcToNir(unittest.TestCase):
         legacy = self.run_fixture("cs50uav64")
         self.assertTrue(legacy.stdout.startswith("REFUSED "), legacy.stdout)
 
+    def test_forced_sample_count_variant_computes_its_own_coverage(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? FL 11_1 forced
+        # sample counts (TIR, UAV-only rendering) exceed AGX's 4 samples: the
+        # pixel shader variant must take the coverage of the forced pattern
+        # from the expansion GS's flat edge varyings (VARYING_SLOT_TEX0..3,
+        # dxbc_tir.h) and never the hardware sample mask, and answer the
+        # rasterizer's sample count and positions that the plain shader
+        # cannot (it refuses sampleinfo/samplepos of the rasterizer).
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
+        self.assertEqual(len(re.findall(r"decl_var shader_in INTERP_MODE_FLAT none ivec4 tir_edge(?:#\d+)? \(VARYING_SLOT_TEX[0-3]",
+                                        out.stdout)), 4, out.stdout[:4000])
+        self.assertNotIn("load_sample_mask_in", out.stdout)
+        self.assertIn("demote_if", out.stdout)
+        self.assertNotIn("interp_deref_at_centroid", out.stdout)
+        self.assertNotIn("interp_deref_at_sample", out.stdout)
+        self.assertIn("load_const (0x00000010 = 16)", out.stdout)  # sampleinfo: 16
+        for n in ("4", "8"):
+            again = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", n],
+                                   capture_output=True, text=True, timeout=60)
+            self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", again.stdout, again.stdout + again.stderr[-2000:])
+        plain = self.run_fixture("ps50tir")
+        self.assertTrue(plain.stdout.startswith("REFUSED "), plain.stdout)
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

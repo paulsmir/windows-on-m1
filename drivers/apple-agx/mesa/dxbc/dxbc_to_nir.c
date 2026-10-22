@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: MIT
  */
 #include "dxbc_to_nir.h"
+#include "dxbc_tir.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -157,6 +158,12 @@ struct ctx {
    /* UAV registers u0..uav_slots-1; counters at shader buffer counter_base + u#
     * (D3D11.1 mode: 64 and 64, compacted by compact_uav_buffers) */
    unsigned uav_slots, counter_base;
+   /* FL 11_1 (dxbc_tir.h): a pixel shader variant's forced sample count (0:
+    * off), its covered-sample mask, the offset centroid inputs are evaluated
+    * at, and the registers declared centroid */
+   unsigned forced_samples;
+   nir_def *forced_mask, *forced_centroid;
+   bool forced_centroid_reg[MAX_REGS];
    uint32_t passthrough_positions;   /* of which these hold SV_Position */
 
    struct cf_entry cf[MAX_CF];
@@ -327,6 +334,10 @@ load_input(struct ctx *c, const struct dxbc_instruction *insn,
       fail(c, insn, "undeclared input v%u", reg);
       return zero4(c);
    }
+   /* FL 11_1: centroid of the forced pattern */
+   if (c->forced_centroid_reg[reg])
+      return nir_interp_deref_at_offset(&c->b, 4, 32, &nir_build_deref_var(&c->b, c->inputs[reg])->def,
+                                        c->forced_centroid);
    return nir_load_var(&c->b, c->inputs[reg]);
 }
 
@@ -390,7 +401,8 @@ load_file(struct ctx *c, const struct dxbc_instruction *insn,
    case DXBC_OPERAND_INPUT_THREAD_ID_IN_GROUP_FLATTENED:
       return replicate4(c, nir_load_local_invocation_index(b));
    case DXBC_OPERAND_INPUT_COVERAGE_MASK:
-      return replicate4(c, nir_load_sample_mask_in(b));
+      /* FL 11_1: the coverage of the forced sample pattern */
+      return replicate4(c, c->forced_mask ? c->forced_mask : nir_load_sample_mask_in(b));
    case DXBC_OPERAND_INPUT_GS_INSTANCE_ID:
       return replicate4(c, nir_load_invocation_id(b));
    case DXBC_OPERAND_INPUT_CONTROL_POINT:
@@ -846,7 +858,8 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
             bool centroid, sample;
             c->inputs[reg]->data.interpolation =
                interp_mode((insn->token0 >> 11) & 0xfu, &centroid, &sample);
-            c->inputs[reg]->data.centroid = centroid;
+            c->inputs[reg]->data.centroid = centroid && !c->forced_samples;
+            c->forced_centroid_reg[reg] = centroid && c->forced_samples;
             c->inputs[reg]->data.sample = sample;
             b->shader->info.fs.uses_sample_shading |= sample;
          }
@@ -869,7 +882,9 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
       bool centroid, sample;
       c->inputs[reg]->data.interpolation =
          interp_mode((insn->token0 >> 11) & 0xfu, &centroid, &sample);
-      c->inputs[reg]->data.centroid = centroid;
+      /* FL 11_1: a forced pattern's centroid is an offset (load_input) */
+      c->inputs[reg]->data.centroid = centroid && !c->forced_samples;
+      c->forced_centroid_reg[reg] = centroid && c->forced_samples;
       c->inputs[reg]->data.sample = sample;
       /* a sample-interpolated input runs the shader per sample (as the
        * GLSL linker and spirv_to_nir mark it) */
@@ -2365,6 +2380,69 @@ resource_samples(struct ctx *c, const struct dxbc_instruction *insn,
    return tex_finish(c, tex, 0, 1);
 }
 
+/* FL 11_1: sample 'index' of the forced pattern, in pixels from the centre
+ * (0 past the count) */
+static nir_def *
+tir_sample_offset(struct ctx *c, nir_def *index)
+{
+   nir_builder *b = &c->b;
+   const int8_t (*pattern)[2] = dxbc_tir_pattern(c->forced_samples);
+   nir_def *x = nir_imm_float(b, 0), *y = nir_imm_float(b, 0);
+   for (unsigned s = 0; pattern && s < c->forced_samples; ++s) {
+      nir_def *hit = nir_ieq_imm(b, index, s);
+      x = nir_bcsel(b, hit, nir_imm_float(b, pattern[s][0] / 16.0f), x);
+      y = nir_bcsel(b, hit, nir_imm_float(b, pattern[s][1] / 16.0f), y);
+   }
+   return nir_vec2(b, x, y);
+}
+
+/* FL 11_1 forced sample count (dxbc_tir.h): at the pixel shader's entry,
+ * the covered samples of the forced pattern from the original triangle's
+ * edges, exactly in D3D's 16.8 fixed point (E at the pixel centre in 64
+ * bits, the per-sample steps in 32); an uncovered pixel (the expansion
+ * GS's conservative margin) is no candidate and does not run. Centroid is
+ * the centre when every sample is covered, else the lowest covered one. */
+static void
+tir_coverage(struct ctx *c)
+{
+   nir_builder *b = &c->b;
+   const int8_t (*pattern)[2] = dxbc_tir_pattern(c->forced_samples);
+   nir_def *edge[DXBC_TIR_EDGE_SLOTS], *a[3], *bb[3], *centre[3], *mask = nir_imm_int(b, 0);
+   for (unsigned i = 0; i < DXBC_TIR_EDGE_SLOTS; ++i) {
+      nir_variable *var = make_var(c, nir_var_shader_in, glsl_ivec4_type(), VARYING_SLOT_TEX0 + i,
+                                   "tir_edge");
+      var->data.interpolation = INTERP_MODE_FLAT;
+      edge[i] = nir_load_var(b, var);
+   }
+   nir_def *fc = nir_load_frag_coord(b);
+   nir_def *cx = nir_iadd_imm(b, nir_imul_imm(b, nir_f2i32(b, nir_ffloor(b, nir_channel(b, fc, 0))),
+                                              DXBC_TIR_SUBPIXEL), DXBC_TIR_SUBPIXEL / 2);
+   nir_def *cy = nir_iadd_imm(b, nir_imul_imm(b, nir_f2i32(b, nir_ffloor(b, nir_channel(b, fc, 1))),
+                                              DXBC_TIR_SUBPIXEL), DXBC_TIR_SUBPIXEL / 2);
+   for (unsigned e = 0; e < 3; ++e) {
+      a[e] = nir_channel(b, edge[e], 2);
+      bb[e] = nir_channel(b, edge[e], 3);
+      centre[e] = nir_iadd(b,
+         nir_iadd(b, nir_imul(b, nir_i2i64(b, a[e]), nir_i2i64(b, nir_isub(b, cx, nir_channel(b, edge[e], 0)))),
+                     nir_imul(b, nir_i2i64(b, bb[e]), nir_i2i64(b, nir_isub(b, cy, nir_channel(b, edge[e], 1))))),
+         nir_i2i64(b, nir_channel(b, edge[3], e)));
+   }
+   for (unsigned s = 0; s < c->forced_samples; ++s) {
+      nir_def *inside = nir_imm_true(b);
+      for (unsigned e = 0; e < 3; ++e) {
+         /* |A|, |B| < 2^23 and |offset| <= 128: the step fits 32 bits */
+         nir_def *step = nir_iadd(b, nir_imul_imm(b, a[e], pattern[s][0] * (DXBC_TIR_SUBPIXEL / 16)),
+                                  nir_imul_imm(b, bb[e], pattern[s][1] * (DXBC_TIR_SUBPIXEL / 16)));
+         inside = nir_iand(b, inside, nir_ige_imm(b, nir_iadd(b, centre[e], nir_i2i64(b, step)), 0));
+      }
+      mask = nir_ior(b, mask, nir_bcsel(b, inside, nir_imm_int(b, 1 << s), nir_imm_int(b, 0)));
+   }
+   nir_demote_if(b, nir_ieq_imm(b, mask, 0));
+   c->forced_mask = mask;
+   nir_def *full = nir_ieq_imm(b, mask, (int)((1u << c->forced_samples) - 1u));
+   c->forced_centroid = nir_bcsel(b, full, nir_imm_vec2(b, 0, 0), tir_sample_offset(c, nir_find_lsb(b, mask)));
+}
+
 /* sampleinfo: the sample count, as float or (_uint) integer, in x */
 static void
 emit_sampleinfo(struct ctx *c, const struct dxbc_instruction *insn)
@@ -2372,11 +2450,13 @@ emit_sampleinfo(struct ctx *c, const struct dxbc_instruction *insn)
    nir_builder *b = &c->b;
    const struct dxbc_operand *res = &insn->operands[1];
    nir_def *count, *comp[4];
-   if (res->type == DXBC_OPERAND_RASTERIZER) {
+   if (res->type == DXBC_OPERAND_RASTERIZER && !c->forced_samples) {
       fail(c, insn, "sampleinfo of the rasterizer");
       return;
    }
-   count = resource_samples(c, insn, res);
+   /* FL 11_1: the rasterizer's count is the forced one */
+   count = res->type == DXBC_OPERAND_RASTERIZER ? nir_imm_int(b, (int)c->forced_samples) :
+                                                  resource_samples(c, insn, res);
    if (((insn->token0 >> 11) & 3u) != 1)
       count = nir_u2f32(b, count);
    comp[0] = count;
@@ -2395,12 +2475,21 @@ emit_samplepos(struct ctx *c, const struct dxbc_instruction *insn)
    static const int8_t pos4[4][2] = { { -2, -6 }, { 6, -2 }, { -6, 2 }, { 2, 6 } };
    const struct dxbc_operand *res = &insn->operands[1];
    nir_def *count, *index, *x = nir_imm_float(b, 0), *y = nir_imm_float(b, 0), *comp[4];
-   if (res->type == DXBC_OPERAND_RASTERIZER) {
+   if (res->type == DXBC_OPERAND_RASTERIZER && !c->forced_samples) {
       fail(c, insn, "samplepos of the rasterizer");
       return;
    }
-   count = resource_samples(c, insn, res);
    index = nir_channel(b, SRC(2, U), 0);
+   if (res->type == DXBC_OPERAND_RASTERIZER) {
+      /* FL 11_1: the forced pattern */
+      nir_def *offset = tir_sample_offset(c, index);
+      comp[0] = nir_channel(b, offset, 0);
+      comp[1] = nir_channel(b, offset, 1);
+      comp[2] = comp[3] = nir_imm_float(b, 0);
+      write_dst(c, insn, &insn->operands[0], swizzle4(c, nir_vec(b, comp, 4), res), insn->saturate);
+      return;
+   }
+   count = resource_samples(c, insn, res);
    for (unsigned i = 0; i < 2; ++i) {
       nir_def *hit = nir_iand(b, nir_ieq_imm(b, count, 2), nir_ieq_imm(b, index, i));
       x = nir_bcsel(b, hit, nir_imm_float(b, pos2[i][0] / 16.0f), x);
@@ -2879,10 +2968,15 @@ emit_eval(struct ctx *c, const struct dxbc_instruction *insn)
    deref = nir_build_deref_var(b, c->inputs[reg]);
    switch (insn->opcode) {
    case DXBC_OP_EVAL_SAMPLE_INDEX:
-      v = nir_interp_deref_at_sample(b, 4, 32, &deref->def, nir_channel(b, SRC(2, U), 0));
+      /* FL 11_1: pull-model evaluation uses the forced pattern */
+      v = c->forced_samples ?
+          nir_interp_deref_at_offset(b, 4, 32, &deref->def,
+                                     tir_sample_offset(c, nir_channel(b, SRC(2, U), 0))) :
+          nir_interp_deref_at_sample(b, 4, 32, &deref->def, nir_channel(b, SRC(2, U), 0));
       break;
    case DXBC_OP_EVAL_CENTROID:
-      v = nir_interp_deref_at_centroid(b, 4, 32, &deref->def);
+      v = c->forced_samples ? nir_interp_deref_at_offset(b, 4, 32, &deref->def, c->forced_centroid) :
+                              nir_interp_deref_at_centroid(b, 4, 32, &deref->def);
       break;
    default: {
       nir_def *offset = nir_i2f32(b, nir_trim_vector(b, SRC(2, I), 2));
@@ -3274,7 +3368,7 @@ static struct nir_shader *
 translate(const struct dxbc_program *program, const struct nir_shader_compiler_options *options,
           uint32_t passthrough_registers, uint32_t passthrough_positions,
           const struct dxbc_nir_xfb *xfb, struct dxbc_nir_uav_slots *uav64,
-          struct dxbc_nir_error *error)
+          unsigned forced_samples, struct dxbc_nir_error *error)
 {
    static struct dxbc_nir_error ignored;
    struct ctx *c;
@@ -3303,6 +3397,7 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
    c->passthrough_registers = passthrough_registers;
    c->passthrough_positions = passthrough_positions;
    c->uav_slots = c->counter_base = uav64 ? DXBC_NIR_UAV11_SLOTS : DXBC_NIR_MAX_UAVS;
+   c->forced_samples = stage == MESA_SHADER_FRAGMENT && dxbc_tir_pattern(forced_samples) ? forced_samples : 0;
    c->stage = stage;
    c->b = nir_builder_init_simple_shader(stage, options, "dxbc");
    nir = c->b.shader;
@@ -3321,6 +3416,8 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
       nir->info.gs.invocations = 1;
       nir->info.gs.active_stream_mask = 1;
    }
+   if (c->forced_samples)
+      tir_coverage(c);
 
    if (stage == MESA_SHADER_TESS_CTRL)
       c->main_impl = c->b.impl;
@@ -3402,7 +3499,7 @@ dxbc_to_nir(const struct dxbc_program *program,
             const struct nir_shader_compiler_options *options,
             struct dxbc_nir_error *error)
 {
-   return translate(program, options, 0, 0, NULL, NULL, error);
+   return translate(program, options, 0, 0, NULL, NULL, 0, error);
 }
 
 struct nir_shader *
@@ -3411,7 +3508,7 @@ dxbc_to_nir_hs(const struct dxbc_program *program,
                uint32_t passthrough_registers, uint32_t passthrough_positions,
                struct dxbc_nir_error *error)
 {
-   return translate(program, options, passthrough_registers, passthrough_positions, NULL, NULL, error);
+   return translate(program, options, passthrough_registers, passthrough_positions, NULL, NULL, 0, error);
 }
 
 void
@@ -3497,7 +3594,7 @@ static struct nir_shader *
 translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_options *options,
                  uint32_t passthrough_registers, uint32_t passthrough_positions,
                  const struct dxbc_nir_xfb *xfb, struct dxbc_nir_uav_slots *uav64,
-                 struct dxbc_nir_error *error);
+                 unsigned forced_samples, struct dxbc_nir_error *error);
 
 struct nir_shader *
 dxbc_translate_tokens_hs(const uint32_t *tokens,
@@ -3506,7 +3603,7 @@ dxbc_translate_tokens_hs(const uint32_t *tokens,
                          struct dxbc_nir_error *error)
 {
    return translate_tokens(tokens, options, passthrough_registers, passthrough_positions,
-                           NULL, NULL, error);
+                           NULL, NULL, 0, error);
 }
 
 struct nir_shader *
@@ -3524,7 +3621,30 @@ dxbc_translate_tokens_uav64(const uint32_t *tokens,
       return NULL;
    }
    return translate_tokens(tokens, options, passthrough_registers, passthrough_positions,
-                           NULL, slots, error);
+                           NULL, slots, 0, error);
+}
+
+struct nir_shader *
+dxbc_translate_tokens_tir(const uint32_t *tokens,
+                          const struct nir_shader_compiler_options *options,
+                          struct dxbc_nir_uav_slots *slots, unsigned forced_samples,
+                          struct dxbc_nir_error *error)
+{
+   static struct dxbc_nir_error ignored;
+   if (!slots || !dxbc_tir_pattern(forced_samples)) {
+      if (!error)
+         error = &ignored;
+      memset(error, 0, sizeof(*error));
+      snprintf(error->message, sizeof(error->message), "forced sample count %u", forced_samples);
+      return NULL;
+   }
+   struct nir_shader *nir = translate_tokens(tokens, options, 0, 0, NULL, slots, forced_samples, error);
+   if (nir && nir->info.stage != MESA_SHADER_FRAGMENT) {
+      ralloc_free(nir);
+      snprintf(error->message, sizeof(error->message), "forced sample count outside a pixel shader");
+      return NULL;
+   }
+   return nir;
 }
 
 struct nir_shader *
@@ -3541,14 +3661,14 @@ dxbc_translate_tokens_xfb(const uint32_t *tokens,
       snprintf(error->message, sizeof(error->message), "no stream output");
       return NULL;
    }
-   return translate_tokens(tokens, options, 0, 0, xfb, NULL, error);
+   return translate_tokens(tokens, options, 0, 0, xfb, NULL, 0, error);
 }
 
 static struct nir_shader *
 translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_options *options,
                  uint32_t passthrough_registers, uint32_t passthrough_positions,
                  const struct dxbc_nir_xfb *xfb, struct dxbc_nir_uav_slots *uav64,
-                 struct dxbc_nir_error *error)
+                 unsigned forced_samples, struct dxbc_nir_error *error)
 {
    static struct dxbc_nir_error ignored;
    struct dxbc_program program;
@@ -3570,7 +3690,8 @@ translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_option
       error->offset = perr.offset;
       return NULL;
    }
-   nir = translate(&program, options, passthrough_registers, passthrough_positions, xfb, uav64, error);
+   nir = translate(&program, options, passthrough_registers, passthrough_positions, xfb, uav64,
+                   forced_samples, error);
    dxbc_program_free(&program);
    if (nir)
       dxbc_nir_finalize(nir);
@@ -3623,7 +3744,7 @@ dxbc_translate_tokens_bindings_xfb(const uint32_t *tokens,
       status = dxbc_prepare_static_bindings(&program, limits, map, &perr);
       if (status == DXBC_OK) {
          nir_shader *nir = translate(&program, options, passthrough_registers,
-                                     passthrough_positions, xfb, NULL, error);
+                                     passthrough_positions, xfb, NULL, 0, error);
          dxbc_program_free(&program);
          if (nir)
             dxbc_nir_finalize(nir);

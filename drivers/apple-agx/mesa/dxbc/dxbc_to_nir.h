@@ -120,6 +120,17 @@ dxbc_translate_tokens_uav64(const uint32_t *tokens,
                             uint32_t passthrough_registers, uint32_t passthrough_positions,
                             struct dxbc_nir_uav_slots *slots, struct dxbc_nir_error *error);
 
+/* FL 11_1: the pixel shader variant for a forced sample count of 4, 8 or 16
+ * (dxbc_tir.h; investigation/analysis/D3D11-FL111-TIR.md), with the
+ * D3D11.1 UAV registers: coverage of the forced pattern from the expansion
+ * GS's edge varyings, SV_Coverage, sampleinfo/samplepos of the rasterizer,
+ * centroid and pull-model evaluation on that pattern. */
+struct nir_shader *
+dxbc_translate_tokens_tir(const uint32_t *tokens,
+                          const struct nir_shader_compiler_options *options,
+                          struct dxbc_nir_uav_slots *slots, unsigned forced_samples,
+                          struct dxbc_nir_error *error);
+
 /* dxbc_translate_tokens for a hull shader with the pass-through registers
  * of its output signature (see dxbc_to_nir_hs). */
 struct nir_shader *
