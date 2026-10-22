@@ -126,9 +126,16 @@ class NativeOwner(unittest.TestCase):
         # view as a one-layer framebuffer and use pipe->clear
         self.assertNotIn('->clear_render_target(', text)
         self.assertNotIn('->clear_depth_stencil(', text)
-        layers = body(text, 'static void clear_view_layers(')
+        layers = body(text, 'static bool clear_view_layers(')
         self.assertLess(layers.index('pipe->set_framebuffer_state(pipe, &fb);'), layers.index('pipe->clear(pipe, buffers'))
         self.assertIn('++owner->PendingDraws;', layers)
+        # EXP1882: the Windows agx_clear faults the context on a scissor; a
+        # whole-surface rect clears unscissored, a partial one is refused
+        self.assertNotIn('pipe_scissor_state', layers)
+        self.assertIn('AdmissionUmdDiagnostic("measure-d3d12-clear-rect", E_NOTIMPL', layers)
+        # C57: integer views take the FLOAT[4] clear color converted (Asahi
+        # reads pipe_color_union.ui/.i for them)
+        self.assertIn('const int integer = clear_integer_kind(view_format);', clear)
 
     def test_graphics(self):
         # C6b: VS/PS through the repository's translator; D3D12 always

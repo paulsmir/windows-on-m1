@@ -85,11 +85,11 @@ struct D3D12DDIARG_CREATE_RENDER_TARGET_VIEW_0002 {
             code+=block(ddi,'static VOID APIENTRY '+name+'(')+'\n'
         owner=OWNER.read_text()
         prefix=prefix.replace('static bool uav_image(const AGX_D3D12_UAV *,pipe_image_view *) {return false;}', '')
-        prefix+='\nusing LONG=int;struct RECT {LONG left,top,right,bottom;};struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingDraws;bool DrawFramebufferValid;};\nstruct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}}; /* the owner lock (EXP1824) is not a fixture boundary */\n'
+        prefix+='\nusing LONG=int;struct RECT {LONG left,top,right,bottom;};struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingDraws;bool DrawFramebufferValid;};\nstruct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}}; /* the owner lock (EXP1824) is not a fixture boundary */\n#define AdmissionUmdDiagnostic(...) ((void)0)\n#ifndef E_NOTIMPL\n#define E_NOTIMPL ((HRESULT)0x80004001L)\n#endif\nstatic int clear_integer_kind(DXGI_FORMAT) { return 0; } /* volume views clear float formats only */\n'
         code+='\n'+block(owner,'static unsigned level_extent(unsigned extent, unsigned level) {')
         code+='\n'+block(owner,'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {')
         for marker in ['static bool uav_dimension_matches(', 'static bool uav_image(', 'static bool srv_component_mapping(', 'static int srv_texture_template(', 'static HRESULT bind_stage(',
-                       'static void clear_view_layers(', 'extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(']:
+                       'static bool clear_view_layers(', 'extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(']:
             code+='\n'+block(owner,marker)
         source=prefix+code+(ROOT/'tests/d3d12_volume_views_fixture.cpp').read_text()
         with tempfile.TemporaryDirectory(prefix='d3d12-volume-views-') as tmp:

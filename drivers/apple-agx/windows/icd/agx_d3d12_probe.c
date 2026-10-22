@@ -6152,6 +6152,12 @@ static int step_c51a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
     }
     return compute_constants_code(d, q, f, g_agx_d3d12_probe_cs_cb_dxil62, sizeof(g_agx_d3d12_probe_cs_cb_dxil62), "C51A", 0u);
 }
+/* C58A (EXP1882): D3D9On12 clears with one rect covering the back buffer; the
+ * Windows agx_clear refuses scissored clears, so a whole-surface rect must
+ * clear without one. */
+static int c53_clear(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int rect);
+static int step_c53a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c53_clear(d, q, f, b, 0); }
+static int step_c58a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c53_clear(d, q, f, b, 1); }
 /* C57A: an XOR logic op (OutputMergerLogicOp) on an R8G8B8A8_UINT render
  * target cleared to 0x33: the constant 0x0f,0xf0,0x55,0xaa draws 0x3c,0xc3,0x66,0x99. */
 static int step_c57a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
@@ -6300,7 +6306,7 @@ static int step_c57a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
  * DXGI_FORMAT_B8G8R8X8_UNORM render target, and its first batch (clear, copy
  * to a readback buffer) faulted the GPU; the same clear and copy in that
  * format. Bytes B,G,R = 191,128,64; the X byte is undefined. */
-static int step_c53a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+static int c53_clear(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int rect) {
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0};
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
@@ -6349,10 +6355,11 @@ static int step_c53a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
         buf_loc.PlacedFootprint.Footprint.Height = 64;
         buf_loc.PlacedFootprint.Footprint.Depth = 1;
         buf_loc.PlacedFootprint.Footprint.RowPitch = 256;
-        ID3D12GraphicsCommandList_ClearRenderTargetView(list, rtv, color, 0, NULL);
+        const D3D12_RECT whole = {0, 0, 64, 64};
+        ID3D12GraphicsCommandList_ClearRenderTargetView(list, rtv, color, rect ? 1 : 0, rect ? &whole : NULL);
         transition(list, texture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
         ID3D12GraphicsCommandList_CopyTextureRegion(list, &buf_loc, 0, 0, 0, &tex_loc, NULL);
-        hr = run_list(queue, fence, list, base + 1, "C53A clear");
+        hr = run_list(queue, fence, list, base + 1, rect ? "C58A clear" : "C53A clear");
     }
     if (SUCCEEDED(hr)) {
         D3D12_RANGE all = {0, 16384};
@@ -6361,11 +6368,11 @@ static int step_c53a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
             bad = 0;
             for (unsigned i = 0; i < 4096; ++i)
                 bad += bytes[4 * i] != 191 || bytes[4 * i + 1] != 128 || bytes[4 * i + 2] != 64;
-            printf("C53A clear readback bad=%u first=%u,%u,%u,%u\n", bad, bytes[0], bytes[1], bytes[2], bytes[3]);
+            printf("%s clear readback bad=%u first=%u,%u,%u,%u\n", rect ? "C58A" : "C53A", bad, bytes[0], bytes[1], bytes[2], bytes[3]);
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("AGX_D3D12_C53A: %s\n", SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
+    printf("AGX_D3D12_%s: %s\n", rect ? "C58A" : "C53A", SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (rtv_heap) ID3D12DescriptorHeap_Release(rtv_heap);
@@ -6913,7 +6920,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
     {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
     {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}, {"C57A", step_c57a}};
+    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}, {"C57A", step_c57a}, {"C58A", step_c58a}};
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
@@ -7042,6 +7049,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C52A", step_c52a);
                 (void)run_isolated(adapter, "C53A", step_c53a);
                 (void)run_isolated(adapter, "C57A", step_c57a);
+                (void)run_isolated(adapter, "C58A", step_c58a);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);

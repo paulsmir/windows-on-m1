@@ -792,13 +792,31 @@ static unsigned texture_layer_extent(const struct pipe_resource *resource,unsign
  * C6a clear called a NULL entry); like the D3D10 frontend overlay
  * (build-native-asahi-state.py ClearRenderTargetView, D3D-G10a) the view is
  * bound as a one-layer framebuffer per layer and cleared with pipe->clear,
- * D3D rects as the scissor. The submit drops the framebuffer binding. */
-static void clear_view_layers(AGX_D3D12_OWNER *owner, const struct pipe_surface &surface, bool depth, unsigned buffers,
+ * D3D rects as the scissor. The submit drops the framebuffer binding.
+ * EXP1882: the Windows agx_clear refuses a scissor (upstream asserts
+ * clear_scissored is unsupported) and faults the context -- D3D9On12's
+ * first Clear did that. A rect covering the whole surface clears without a
+ * scissor; a partial rect is refused (returns false) before pipe->clear. */
+static bool clear_view_layers(AGX_D3D12_OWNER *owner, const struct pipe_surface &surface, bool depth, unsigned buffers,
                               const union pipe_color_union *color, double z, unsigned stencil, const RECT *rects,
                               unsigned rect_count) {
   struct pipe_context *pipe = owner->Context;
   struct pipe_resource *resource = surface.texture;
   const unsigned width = level_extent(resource->width0, surface.level), height = level_extent(resource->height0, surface.level);
+  bool whole = !rect_count;
+  for (unsigned i = 0; i < rect_count; ++i) {
+    const RECT &r = rects[i];
+    if (r.left <= 0 && r.top <= 0 && r.right >= static_cast<LONG>(width) && r.bottom >= static_cast<LONG>(height))
+      whole = true;
+    else if (r.right > r.left && r.bottom > r.top && r.left < static_cast<LONG>(width) && r.top < static_cast<LONG>(height) &&
+             r.right > 0 && r.bottom > 0) {
+      const UINT receipt[] = {i, rect_count, static_cast<UINT>(r.left), static_cast<UINT>(r.top),
+                              static_cast<UINT>(r.right), static_cast<UINT>(r.bottom), width, height};
+      AdmissionUmdDiagnostic("measure-d3d12-clear-rect", E_NOTIMPL, receipt, 8u);
+      return false;
+    }
+  }
+  if (!whole) return true; /* every rect empty or outside: nothing to clear */
   for (unsigned layer = surface.first_layer; layer <= surface.last_layer; ++layer) {
     struct pipe_framebuffer_state fb = {};
     struct pipe_surface slice = surface;
@@ -814,24 +832,27 @@ static void clear_view_layers(AGX_D3D12_OWNER *owner, const struct pipe_surface 
     }
     pipe->set_framebuffer_state(pipe, &fb);
     owner->DrawFramebufferValid = false;
-    if (!rect_count) {
-      pipe->clear(pipe, buffers, 0xf, 0xff, NULL, color, z, stencil);
-      continue;
-    }
-    for (unsigned i = 0; i < rect_count; ++i) {
-      const LONG left = rects[i].left < 0 ? 0 : rects[i].left, top = rects[i].top < 0 ? 0 : rects[i].top;
-      const LONG right = rects[i].right > static_cast<LONG>(width) ? static_cast<LONG>(width) : rects[i].right;
-      const LONG bottom = rects[i].bottom > static_cast<LONG>(height) ? static_cast<LONG>(height) : rects[i].bottom;
-      if (right <= left || bottom <= top) continue;
-      struct pipe_scissor_state scissor = {};
-      scissor.minx = static_cast<uint16_t>(left);
-      scissor.miny = static_cast<uint16_t>(top);
-      scissor.maxx = static_cast<uint16_t>(right);
-      scissor.maxy = static_cast<uint16_t>(bottom);
-      pipe->clear(pipe, buffers, 0xf, 0xff, &scissor, color, z, stencil);
-    }
+    pipe->clear(pipe, buffers, 0xf, 0xff, NULL, color, z, stencil);
   }
   ++owner->PendingDraws; /* the submit unbinds the framebuffer */
+  return true;
+}
+
+/* 1 = unsigned, -1 = signed integer color formats, 0 = float/normalized */
+static int clear_integer_kind(DXGI_FORMAT format) {
+  switch (format) {
+  case DXGI_FORMAT_R32G32B32A32_UINT: case DXGI_FORMAT_R32G32B32_UINT: case DXGI_FORMAT_R16G16B16A16_UINT:
+  case DXGI_FORMAT_R32G32_UINT: case DXGI_FORMAT_R10G10B10A2_UINT: case DXGI_FORMAT_R8G8B8A8_UINT:
+  case DXGI_FORMAT_R16G16_UINT: case DXGI_FORMAT_R32_UINT: case DXGI_FORMAT_R8G8_UINT: case DXGI_FORMAT_R16_UINT:
+  case DXGI_FORMAT_R8_UINT:
+    return 1;
+  case DXGI_FORMAT_R32G32B32A32_SINT: case DXGI_FORMAT_R32G32B32_SINT: case DXGI_FORMAT_R16G16B16A16_SINT:
+  case DXGI_FORMAT_R32G32_SINT: case DXGI_FORMAT_R8G8B8A8_SINT: case DXGI_FORMAT_R16G16_SINT:
+  case DXGI_FORMAT_R32_SINT: case DXGI_FORMAT_R8G8_SINT: case DXGI_FORMAT_R16_SINT: case DXGI_FORMAT_R8_SINT:
+    return -1;
+  default:
+    return 0;
+  }
 }
 
 extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *texture,
@@ -853,10 +874,21 @@ extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const 
   surface.first_layer = static_cast<uint16_t>(first_layer);
   surface.last_layer = static_cast<uint16_t>(first_layer + layers - 1);
   surface.texture = resource;
+  /* C57 (EXP1882): Asahi clears integer targets from pipe_color_union.ui/.i;
+   * D3D converts the FLOAT[4] clear color to the integer type (truncation,
+   * NaN to 0, saturation to the type's range; the format width clamps next). */
+  const int integer = clear_integer_kind(view_format);
   union pipe_color_union value = {};
-  for (unsigned i = 0; i < 4; ++i) value.f[i] = color[i];
-  clear_view_layers(owner, surface, false, PIPE_CLEAR_COLOR0, &value, 0.0, 0, rects, rect_count);
-  return S_OK;
+  for (unsigned i = 0; i < 4; ++i) {
+    const float f = color[i];
+    if (integer > 0)
+      value.ui[i] = !(f > 0.0f) ? 0u : f >= 4294967295.0f ? 0xffffffffu : static_cast<uint32_t>(f);
+    else if (integer < 0)
+      value.i[i] = !(f == f) ? 0 : f <= -2147483648.0f ? INT32_MIN : f >= 2147483647.0f ? INT32_MAX : static_cast<int32_t>(f);
+    else
+      value.f[i] = f;
+  }
+  return clear_view_layers(owner, surface, false, PIPE_CLEAR_COLOR0, &value, 0.0, 0, rects, rect_count) ? S_OK : E_NOTIMPL;
 }
 
 /* C7b: the D3D10 frontend's presentation resources for D3D12 swapchain
@@ -1338,8 +1370,7 @@ extern "C" HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *owner, const 
   surface.last_layer = static_cast<uint16_t>(first_layer + layers - 1);
   surface.texture = resource;
   union pipe_color_union none = {};
-  clear_view_layers(owner, surface, true, buffers, &none, z, stencil, rects, rect_count);
-  return S_OK;
+  return clear_view_layers(owner, surface, true, buffers, &none, z, stencil, rects, rect_count) ? S_OK : E_NOTIMPL;
 }
 
 /* Maps the texture box and the buffer range; the maps synchronise with work
