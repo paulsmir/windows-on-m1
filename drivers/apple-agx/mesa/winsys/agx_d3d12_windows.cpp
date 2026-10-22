@@ -1478,6 +1478,12 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
    * acquire the half-pixel center exactly once before native preprocessing. */
   if (stage == MESA_SHADER_FRAGMENT)
     dxbc_nir_lower_fragment_position(nir);
+  /* receipt-only (EXP1858 C37D/C37E: tessellated winding inverted against
+   * D3D for both output topologies): the tessellation info Asahi reads */
+  if (stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_TESS_EVAL)
+    receipt("measure-d3d12-tess-info", S_OK, static_cast<UINT>(stage),
+            (nir->info.tess.ccw ? 1u : 0u) | (nir->info.tess.point_mode ? 2u : 0u),
+            static_cast<UINT>(nir->info.tess._primitive_mode) | (static_cast<UINT>(nir->info.tess.spacing) << 8));
   struct pipe_shader_state state = {};
   state.type = PIPE_SHADER_IR_NIR;
   state.ir.nir = nir;
