@@ -8,7 +8,31 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-21 20:55Z -- MINIENGINE SPONZA CORRECT AT 13 Hz; GPU-BOUND; DXIL NEXT
+## CURRENT 2026-10-22 02:10Z -- RESOURCE BINDING TIER 2 VALIDATED; DXIL/SM6 ADMISSION IN PROGRESS
+
+Last validated package 30.0.1856.0 from 0f7bf15a (EXP1856, rec1856h PASS).
+Proven on J313 (EXP1853-EXP1856):
+- Tier 2 (C47, D3D12-C47-binding-tier2.md): SRV/UAV/sampler/counter heap
+  ranges through bindless handles (heap form at index*160+64, cb14 range
+  table + sampler map, cb15 heap); probe C47B 16/16 words both ABIs;
+  MiniEngine ModelViewerI runs its own tier-2 g_CommonRS unpatched.
+- KMD: RunCompute EncoderParams carry the batch sampler heap (95d86d62).
+- agx_batch_init_state before heap tracking (05fbd40c); descriptor heaps
+  walked in a cached shadow, heap forms mirrored to the WC GPU buffer
+  (c375b538): DynamicIndexing 1218/1205 presents ARM64/x64.
+- x64 UMD is assertion-enabled: a "hang" of an x64 probe is usually an
+  assert message box; probe tool dumps on timeout (comsvcs MiniDump).
+Active (C44, D3D12-C44-dxil.md): agx_dxil_to_nir (dxil-spirv 8434 + libvtn)
+in both 64-bit UMDs; SM 6 needs the R1 interface (0003 runtime never asks
+SHADER_MODELS); R1 CORE_0010 + SM 6.0 offered only to APPLE_AGX_D3D12_SM6=1
+processes. EXP1857: R1 device creation works, the runtime itself creates
+SM 6 shaders; DXIL compute aborted on load_base_global_invocation_id (fixed
+30ed91c2). Next: EXP1858 with the fix; then GS/HS/DS and heap ranges in the
+DXIL path, wave ops (SHADER_CAPS_0012 / interface 0012), SM 6 by default.
+
+## Prior state superseded by EXP1853-EXP1856
+
+### (was CURRENT) 2026-10-21 20:55Z -- MINIENGINE SPONZA CORRECT AT 13 Hz; GPU-BOUND; DXIL NEXT
 
 Accepted package 30.0.1852.0 from 5f0d0fdc (EXP1852, recovery rec1852h PASS).
 Proven on J313 (EXP1839-EXP1852):
