@@ -6587,6 +6587,22 @@ static int step_c61a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
     }
     return c60_coverage(d, q, f, b, 1);
 }
+/* C62A: the reported maximum feature level follows APPLE_AGX_D3D12_FL111
+ * (11_1 with it, 11_0 without), through the runtime's FEATURE_LEVELS query. */
+static int step_c62a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
+    static const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_12_0,
+                                               D3D_FEATURE_LEVEL_12_1};
+    D3D12_FEATURE_DATA_FEATURE_LEVELS data = {4, levels};
+    char value[2] = {0};
+    const int fl111 = GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1 && value[0] == '1';
+    const D3D_FEATURE_LEVEL expected = fl111 ? D3D_FEATURE_LEVEL_11_1 : D3D_FEATURE_LEVEL_11_0;
+    HRESULT hr = ID3D12Device_CheckFeatureSupport(d, D3D12_FEATURE_FEATURE_LEVELS, &data, sizeof(data));
+    (void)q; (void)f; (void)b;
+    printf("C62A MaxSupportedFeatureLevel 0x%x expected 0x%x hr=0x%08lx\n", (unsigned)data.MaxSupportedFeatureLevel,
+           (unsigned)expected, (unsigned long)hr);
+    printf("AGX_D3D12_C62A: %s\n", SUCCEEDED(hr) && data.MaxSupportedFeatureLevel == expected ? "PASS" : "FAIL");
+    return SUCCEEDED(hr) && data.MaxSupportedFeatureLevel == expected ? 0 : 1;
+}
 /* C53A (EXP1875): D3D9On12 renders a D3D9 X8R8G8B8 back buffer as a committed
  * DXGI_FORMAT_B8G8R8X8_UNORM render target, and its first batch (clear, copy
  * to a readback buffer) faulted the GPU; the same clear and copy in that
@@ -7205,7 +7221,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
     {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
     {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}, {"C57A", step_c57a}, {"C58A", step_c58a}, {"C59A", step_c59a}, {"C60A", step_c60a}, {"C61A", step_c61a}};
+    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}, {"C57A", step_c57a}, {"C58A", step_c58a}, {"C59A", step_c59a}, {"C60A", step_c60a}, {"C61A", step_c61a}, {"C62A", step_c62a}};
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
@@ -7338,6 +7354,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C59A", step_c59a);
                 (void)run_isolated(adapter, "C60A", step_c60a);
                 (void)run_isolated(adapter, "C61A", step_c61a);
+                (void)run_isolated(adapter, "C62A", step_c62a);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
