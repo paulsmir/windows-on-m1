@@ -168,3 +168,21 @@ factors and patch constants. Differences that remain:
   shader is tessellated with clockwise winding on both paths. Owner fix
   pending (copy the HS winding into the DS at pipeline creation).
 - Stream output from a DXIL GS still refuses (translate_shader).
+
+## The R1 runtime converts every DXBC shader (EXP1858)
+
+Under R1 the D3D12 runtime hands an SM 6 driver every FXC shader as DXIL produced
+by its DXBC converter (dxilconv.dll): measure-d3d12-graphics-shader receipts of
+the SM6 probe and sample runs carry the DXIL status (0x10000) for every stage, so
+the SM6 profile runs all existing applications through the DXIL frontend. Three
+dxilconv-only forms failed and are fixed with fixtures from the system
+dxilconv.dll (tests/fixtures/dxil/c44/dxbc2dxil.cpp, conv-probe/):
+
+- a hull shader without a control point phase names no entry function
+  (5612c9d5: let dxil-spirv build its pass-through function);
+- stream output reaches the DXIL frontend (de5b61b9: agx_dxil_nir_xfb with the
+  SV_Position registers of the output signature);
+- dx.op UDiv with two outputs made dxil-spirv 8434b063 type its helper with the
+  result struct (invalid SPIR-V, vtn assertion, dead ARM64 process in C41A):
+  patches/dxil-spirv-0001-dxbc-udiv-operand-type.patch, applied to the builder
+  source (c49-dxspv-source.ps1, c49-build-dxspv.ps1) and the host test build.

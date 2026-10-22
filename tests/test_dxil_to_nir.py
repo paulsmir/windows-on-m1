@@ -236,6 +236,26 @@ class DxilToNir(unittest.TestCase):
         self.assertTrue(self.xfb("conv_vs", "0;0.0.4.0.0,1.0.4.0.4;8").startswith("XFB REFUSED"))
         self.assertTrue(self.xfb("conv_vs", "1;0.0.4.0.0,2.0.4.0.4;8").startswith("XFB REFUSED"))
 
+    def test_every_runtime_converted_probe_shader_translates(self):
+        # EXP1858: an R1 device gets every DXBC shader as dxilconv DXIL. C41A's
+        # udiv (dx.op UDiv with two outputs, which DXC never emits) made
+        # dxil-spirv type its helper with the result struct: invalid SPIR-V,
+        # an assertion in spirv_to_nir (vtn_handle_function_call) and a dead
+        # process on the guest (patches/dxil-spirv-0001-dxbc-udiv-operand-type).
+        known = set()
+        for tree in ("src/asahi", "src/gallium/drivers/asahi", "src/poly"):
+            for source in (self.mesa / tree).rglob("*.[ch]"):
+                known.update(re.findall(r"nir_intrinsic_([a-z0-9_]+)", source.read_text(errors="replace")))
+        shaders = sorted((FIXTURES.parent / "conv-probe").glob("*.dxil"))
+        self.assertGreaterEqual(len(shaders), 49)
+        for shader in shaders:
+            r = subprocess.run([str(self.dxil), str(shader), "--print-final"], capture_output=True, text=True,
+                               timeout=120)
+            self.assertEqual(r.returncode, 0, f"{shader.name}: {r.stderr[-1500:]}")
+            self.assertIn("TRANSLATED", r.stdout, shader.name)
+            unhandled = set(re.findall(r"@([a-z0-9_]+)", r.stdout)) - known - self.LOWERED_OUTSIDE_ASAHI
+            self.assertEqual(unhandled, set(), shader.name)
+
     def test_register_range_takes_consecutive_slots(self):
         self.parity("par_range_ps")
 

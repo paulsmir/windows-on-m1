@@ -1,0 +1,13 @@
+--- a/opcodes/dxil/dxil_arithmetic.cpp
++++ b/opcodes/dxil/dxil_arithmetic.cpp
+@@ -572,7 +572,9 @@
+ 	spv::Id id0 = impl.get_id_for_value(instruction->getOperand(1));
+ 	spv::Id id1 = impl.get_id_for_value(instruction->getOperand(2));
+ 
+-	spv::Id type_id = impl.get_type_id(instruction->getType());
++	// The call returns dx.types.twoi32 {quotient, remainder}; the helpers
++	// divide the operands' type.
++	spv::Id type_id = impl.get_type_id(instruction->getOperand(1)->getType());
+ 	spv::Id quot_id = impl.spirv_module.get_helper_call_id(HelperCall::UDiv, type_id);
+ 	spv::Id rem_id = impl.spirv_module.get_helper_call_id(HelperCall::UMod, type_id);
+ 
