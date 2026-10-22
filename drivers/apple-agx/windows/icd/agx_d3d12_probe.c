@@ -6025,6 +6025,17 @@ static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step ste
     if (fence) ID3D12Fence_Release(fence);
     if (queue) ID3D12CommandQueue_Release(queue);
     if (device) ID3D12Device_Release(device);
+    /* EXP1859: the x64 SM6 run died of heap corruption (0xc0000374) after
+     * C38A; name the first step after which a process heap fails validation */
+    {
+        HANDLE heaps[64];
+        const DWORD count = GetProcessHeaps(64, heaps);
+        for (DWORD i = 0; i < count && i < 64; ++i)
+            if (!HeapValidate(heaps[i], 0, NULL)) {
+                printf("PROBE_HEAP_CORRUPT after %s heap %lu\n", name, (unsigned long)i);
+                break;
+            }
+    }
     return failed;
 }
 
@@ -6481,10 +6492,19 @@ static LONG WINAPI crash_dump(EXCEPTION_POINTERS *ep) {
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
+/* the first access violation, also one a runtime frame would catch: its
+ * dump shows the faulting stack before any later corruption */
+static LONG WINAPI first_access_violation(EXCEPTION_POINTERS *ep) {
+    static volatile LONG seen;
+    if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && !InterlockedExchange(&seen, 1))
+        crash_dump(ep);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
+    AddVectoredExceptionHandler(1, first_access_violation);
     IDXGIFactory1 *factory = NULL;
     IDXGIAdapter1 *adapter = NULL;
     ID3D12Device *device = NULL;
