@@ -46,7 +46,7 @@ class DxilToNir(unittest.TestCase):
         libs = [str(build / p) for p in MESA_LIBS]
         dlibs = [str(p) for p in sorted(archives.glob("*.a"))]
         link = ["-L/opt/homebrew/opt/zstd/lib", "-lzstd", "-lz", "-lpthread"]
-        subprocess.run(["clang", *common, str(ROOT / "tests/dxil_to_nir_fixture.c"), str(DXIL / "agx_dxil_to_nir.c"),
+        subprocess.run(["clang", *common, str(ROOT / "tests/dxil_to_nir_fixture.c"), str(DXIL / "agx_dxil_to_nir.c"), str(DXIL / "agx_dxil_program.c"),
                         str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"), str(tmp / "checked.o"),
                         "-o", str(cls.dxil), *libs, *dlibs, *dlibs, *link, "-lc++",
                         "-L/opt/homebrew/lib", "-lSPIRV-Tools-shared"], check=True, capture_output=True)
@@ -89,6 +89,20 @@ class DxilToNir(unittest.TestCase):
 
     def test_pixel_targets_depth_and_comparison_match(self):
         self.parity("par_ps")
+
+    def test_program_part_translates_like_its_container(self):
+        # The D3D12 runtime hands CreateShader the DXIL program part (version
+        # token, size, "DXIL", bitcode), not the container.
+        data = (FIXTURES / "par_cs.dxil").read_bytes()
+        count = int.from_bytes(data[28:32], "little")
+        for i in range(count):
+            offset = int.from_bytes(data[32 + 4 * i:36 + 4 * i], "little")
+            if data[offset:offset + 4] == b"DXIL":
+                size = int.from_bytes(data[offset + 4:offset + 8], "little")
+                part = Path(self.tmp.name) / "par_cs.program"
+                part.write_bytes(data[offset + 8:offset + 8 + size])
+                break
+        self.assertEqual(self.translate(self.dxil, part), self.translate(self.dxil, FIXTURES / "par_cs.dxil"))
 
     def test_register_range_takes_consecutive_slots(self):
         self.parity("par_range_ps")

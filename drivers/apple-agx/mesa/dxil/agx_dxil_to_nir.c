@@ -3,6 +3,7 @@
  * conventions (agx_dxil_to_nir.h). SPDX-License-Identifier: MIT */
 #include "agx_dxil_to_nir.h"
 #include "agx_dxil_checked.h"
+#include "agx_dxil_program.h"
 #include "../dxbc/dxbc_to_nir.h"
 #include "nir.h"
 #include "nir_builder.h"
@@ -248,6 +249,18 @@ agx_dxil_is_container(const void *data, size_t bytes)
    return 0;
 }
 
+/* the program the D3D12 runtime hands CreateShader (a DXIL program part:
+ * version token, size in dwords, "DXIL" and the bitcode header), or a whole
+ * container; any SM 6.x model, every graphics/compute kind */
+static const struct agx_dxil_profile any_sm6 = {0x3f, 0x60, 0x6f};
+
+int
+agx_dxil_is_program(const void *data, size_t bytes)
+{
+   struct agx_dxil_program program;
+   return agx_dxil_parse(data, bytes, AGX_DXIL_INPUT_PROGRAM, &any_sm6, &program) == AGX_DXIL_PARSE_OK;
+}
+
 static mesa_shader_stage
 nir_stage(dxil_spv_shader_stage stage)
 {
@@ -469,9 +482,14 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
    if (!result)
       return AGX_DXIL_NIR_INVALID;
    memset(result, 0, sizeof(*result));
-   if (!data || !limits || !options || !agx_dxil_is_container(data, bytes)) {
-      snprintf(result->error, sizeof(result->error), "not a DXIL container");
-      return AGX_DXIL_NIR_INVALID;
+   struct agx_dxil_program program;
+   const enum agx_dxil_parse_status framing =
+      !data || !limits || !options ? AGX_DXIL_PARSE_INVALID
+      : agx_dxil_parse(data, bytes, agx_dxil_is_container(data, bytes) ? AGX_DXIL_INPUT_CONTAINER : AGX_DXIL_INPUT_PROGRAM,
+                       &any_sm6, &program);
+   if (framing != AGX_DXIL_PARSE_OK) {
+      snprintf(result->error, sizeof(result->error), "not a DXIL program or container (%d)", (int)framing);
+      return framing == AGX_DXIL_PARSE_UNSUPPORTED ? AGX_DXIL_NIR_UNSUPPORTED : AGX_DXIL_NIR_INVALID;
    }
    struct job *job = calloc(1, sizeof(*job));
    if (!job)
@@ -483,7 +501,9 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
    nir_shader *nir = NULL;
    enum agx_dxil_nir_status status = AGX_DXIL_NIR_FAILED;
    int began = agx_checked_begin() == DXIL_SPV_SUCCESS;
-   dxil_spv_result r = began ? agx_checked_parse_blob(data, bytes, &blob) : DXIL_SPV_ERROR_GENERIC;
+   /* the bitcode alone: the signatures live in its metadata */
+   dxil_spv_result r = began ? agx_checked_parse((const uint8_t *)data + program.bitcode_offset, program.bitcode_bytes, &blob)
+                             : DXIL_SPV_ERROR_GENERIC;
    dxil_spv_shader_stage dxil_stage = DXIL_SPV_STAGE_UNKNOWN;
    unsigned entries = 0;
    const char *name = NULL;

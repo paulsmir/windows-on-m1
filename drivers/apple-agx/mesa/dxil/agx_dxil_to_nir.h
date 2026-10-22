@@ -40,8 +40,11 @@ struct agx_dxil_nir_result {
 
 /* True when a DXBC container carries a DXIL program part (DXIL or ILDB). */
 int agx_dxil_is_container(const void *data, size_t bytes);
+/* True for a DXIL program part (the form D3D12 CreateShader DDIs carry:
+ * the version token, the size in dwords, then "DXIL" and its bitcode). */
+int agx_dxil_is_program(const void *data, size_t bytes);
 
-/* Translates the container's single entry point. limits are the slot
+/* Translates the single entry point of a container or program part. limits are the slot
  * capacities per DXBC_BINDING_* kind (the DXBC_BINDING_HEAP_RANGES flag is
  * ignored: heap ranges are not translated yet and refuse with UNSUPPORTED).
  * On success result->nir is owned by the caller (ralloc). */
