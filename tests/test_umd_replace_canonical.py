@@ -41,6 +41,7 @@ typedef unsigned long long ULONGLONG; typedef uint64_t APPLE_AGX_U64; typedef un
 #define TRUE 1
 #define FALSE 0
 #define S_OK 0
+#define S_FALSE 1
 #define E_PENDING ((HRESULT)0x8000000Au)
 #define E_FAIL ((HRESULT)0x80004005u)
 #define SUCCEEDED(h) ((h)>=0)
@@ -50,6 +51,9 @@ enum { AppleAgxWin32BufferGpuWrite = 4u };
 enum { AgxWin32BufferClassShader = 3u };
 typedef int SRWLOCK;
 static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclusive(SRWLOCK*){}
+static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
+enum { AGX_GPUVA_MAP_WRITE = 1u, AGX_GPUVA_MAP_EXECUTE = 2u };
+struct ADMISSION_UMD_VA_ALIAS { unsigned long long Token, Va, OffsetPages, Pages; unsigned Protection; };
 struct D3DDDI_MAKERESIDENT { D3DKMT_HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE *AllocationList; const UINT *PriorityList; ULONGLONG PagingFenceValue; };
 struct PROT { UINT Write:1; UINT Execute:1; };
 struct D3DDDI_MAPGPUVIRTUALADDRESS { D3DKMT_HANDLE hPagingQueue; ULONGLONG BaseAddress; D3DKMT_HANDLE hAllocation; ULONGLONG OffsetInPages, SizeInPages; PROT Protection; ULONGLONG VirtualAddress, PagingFenceValue; };
@@ -59,14 +63,18 @@ struct SLOT { uint64_t Token; BOOL SystemDirect,Direct,Borrowed,Resident; UINT C
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct HANDLE_ { void *handle; };
 struct CB { HRESULT (*pfnMakeResidentCb)(void*, D3DDDI_MAKERESIDENT*); HRESULT (*pfnMapGpuVirtualAddressCb)(void*, D3DDDI_MAPGPUVIRTUALADDRESS*); };
-struct ADMISSION_UMD_DEVICE { SRWLOCK ScreenBufferLock; CB *KernelCallbacks; HANDLE_ RuntimeDevice; D3DKMT_HANDLE PagingQueue; };
+struct ADMISSION_UMD_DEVICE { SRWLOCK ScreenBufferLock; CB *KernelCallbacks; HANDLE_ RuntimeDevice; D3DKMT_HANDLE PagingQueue;
+  ADMISSION_UMD_VA_ALIAS VaAliases[40]; UINT VaAliasCount; };
 static std::string order; static HRESULT new_hr=S_OK, make_hr=E_PENDING; static uint64_t map_va_out_delta;
 static D3DKMT_HANDLE freed[4]; static int nfreed;
 static HRESULT AdmissionUmdScreenNewCanonical(ADMISSION_UMD_DEVICE*, APPLE_AGX_U32, APPLE_AGX_U32, APPLE_AGX_U64 b, D3DKMT_HANDLE *a){
   order+="N"; assert(b); if(new_hr<0) return new_hr; *a=0x99; return S_OK; }
 static HRESULT AdmissionUmdScreenFreeAllocation(ADMISSION_UMD_DEVICE*, D3DKMT_HANDLE a){ order+="F"; freed[nfreed++]=a; return S_OK; }
 static HRESULT make(void*, D3DDDI_MAKERESIDENT *r){ order+="R"; assert(r->NumAllocations==1 && r->AllocationList[0]==0x99); r->PagingFenceValue=9; return make_hr; }
+static ULONGLONG alias_offsets; static UINT alias_maps; static HRESULT alias_hr=E_PENDING;
 static HRESULT map(void*, D3DDDI_MAPGPUVIRTUALADDRESS *m){ order+="M"; assert(m->hAllocation==0x99);
+  if(m->BaseAddress>=0x8000000){ ++alias_maps; alias_offsets+=m->OffsetInPages; m->VirtualAddress=m->BaseAddress;
+    m->PagingFenceValue=10; return alias_hr; }
   m->VirtualAddress=m->BaseAddress+map_va_out_delta; m->PagingFenceValue=10; return E_PENDING; }
 static int wait_paging(ADMISSION_UMD_DEVICE*, uint64_t f){ order+="W"; return f==9 || f==10; }
 static int wait_paging_at(ADMISSION_UMD_DEVICE *d, uint64_t f, UINT, uint64_t){ return wait_paging(d,f); }
@@ -109,6 +117,18 @@ int main(){
   /* Direct and borrowed slots are never replaced. */
   s=fresh_slot(); s.Direct=1; order.clear(); assert(replace_canonical(&d,&s)==0 && order.empty());
   s=fresh_slot(); s.Borrowed=1; assert(replace_canonical(&d,&s)==0 && order.empty());
+  /* C53 B0: the slot's tile aliases (17 here, more than one snapshot chunk) follow it
+   * to the fresh allocation at their offsets; another slot's alias stays */
+  s=fresh_slot(); order.clear(); nfreed=0; d.VaAliasCount=0;
+  for(UINT i=0;i<17;++i) d.VaAliases[d.VaAliasCount++]={7,0x8000000+i*0x10000ull,i*16ull,16,1};
+  d.VaAliases[d.VaAliasCount++]={8,0x9000000,0,16,1};
+  alias_maps=0; alias_offsets=0;
+  assert(replace_canonical(&d,&s)==1 && alias_maps==17 && alias_offsets==16ull*(16*17/2));
+  assert(nfreed==1 && freed[0]==0x40 && s.KernelAllocation==0x99);
+  /* an alias that cannot move keeps the old allocation alive */
+  s=fresh_slot(); order.clear(); nfreed=0; alias_hr=E_FAIL;
+  assert(replace_canonical(&d,&s)==1 && nfreed==0 && s.KernelAllocation==0x99);
+  alias_hr=E_PENDING;
   puts("EXP1011 replace canonical: PASS");
 }
 '''
@@ -117,7 +137,7 @@ int main(){
 class ReplaceCanonical(unittest.TestCase):
     def test_replace_order_and_rollback(self):
         text = SRC.read_text()
-        funcs = '\n'.join(function(text, n) for n in ('map_canonical_as', 'replace_canonical'))
+        funcs = '\n'.join(function(text, n) for n in ('map_canonical_as', 'map_aliases_as', 'replace_canonical'))
         self.assertIn('replace_canonical', funcs, 'canonical replacement is missing')
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'replay.cpp'; exe = Path(tmp) / 'replay'

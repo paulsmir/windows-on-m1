@@ -1,6 +1,8 @@
 #ifndef APPLE_AGX_UMD_INTERNAL_H
 #define APPLE_AGX_UMD_INTERNAL_H
 
+#include "umd_va_alias.h"
+#define ADMISSION_UMD_VA_ALIAS_LIMIT 1024u
 #include "umd_staging_sync.h"
 #include "direct_flip_contract.h"
 #include "render_win32_transport.h"
@@ -213,6 +215,12 @@ typedef struct _ADMISSION_UMD_DEVICE {
   BOOL DrawTerminal;
   /* EXP1043 diagnostic: slot of the last map_va, for paging-wait attribution. */
   APPLE_AGX_U64 PagingWaitToken;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* C53 B0: tile aliases of slot allocations in reserved GPU VA ranges
+   * (umd_va_alias.h), under ScreenBufferLock. */
+  ADMISSION_UMD_VA_ALIAS VaAliases[ADMISSION_UMD_VA_ALIAS_LIMIT];
+  UINT VaAliasCount;
+#endif
   volatile LONG RenderCbSequence;
   APPLE_AGX_U32 NativeBackendCount;
   void *NativeBatchTransaction;

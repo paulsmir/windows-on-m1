@@ -145,7 +145,7 @@ class AsyncRenderCompletion(unittest.TestCase):
                         submit.index('finish_submission('))
         after = submit[submit.index('finish_submission('):]
         self.assertIn('slot->CopyHeld=FALSE;slot->LastUseFence=*fence;', after)
-        self.assertIn('private_escape, query_render};', text)
+        self.assertIn('private_escape, query_render,\n      gpu_timestamps, map_va_at};', text)
 
 
 if __name__ == '__main__':

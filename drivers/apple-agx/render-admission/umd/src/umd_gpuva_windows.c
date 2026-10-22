@@ -429,6 +429,57 @@ static int map_va(void *context, uint64_t token, uint64_t va,
   return hr == E_PENDING ? 2 : 1;
 }
 
+/* C53 B0: a tile alias of a slot allocation at an allocation offset in a
+ * reserved range. The slot's canonical VA is not touched; the alias is
+ * recorded (room checked before the map) so that free_va drops it and
+ * replace_canonical maps it again onto the fresh allocation. */
+static int map_va_at(void *context, uint64_t token, uint64_t va,
+                     uint64_t offset_pages, uint64_t pages, unsigned protection,
+                     uint64_t *fence) {
+  ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
+  D3DDDI_MAPGPUVIRTUALADDRESS request = {};
+  if (!device || !fence || !pages || !device->PagingQueue ||
+      !device->KernelCallbacks ||
+      !device->KernelCallbacks->pfnMapGpuVirtualAddressCb) return 0;
+  request.hAllocation = allocation_handle(device, token);
+  if (!request.hAllocation) return 0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const int room = AdmissionUmdVaAliasRoom(device->VaAliases, device->VaAliasCount,
+                                           ADMISSION_UMD_VA_ALIAS_LIMIT, va,
+                                           pages * ADMISSION_UMD_VA_ALIAS_PAGE);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (!room) return 0;
+  resident_before_map(device, token, request.hAllocation);
+  request.hPagingQueue = device->PagingQueue;
+  request.BaseAddress = va;
+  request.OffsetInPages = offset_pages;
+  request.SizeInPages = pages;
+  request.Protection.Write = (protection & AGX_GPUVA_MAP_WRITE) != 0;
+  request.Protection.Execute = (protection & AGX_GPUVA_MAP_EXECUTE) != 0;
+  HRESULT hr = device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
+      device->RuntimeDevice.handle, &request);
+  {
+    UINT values[5] = {(UINT)offset_pages, (UINT)pages,
+                      request.VirtualAddress == va,
+                      request.PagingFenceValue != 0u, device->VaAliasCount};
+    AdmissionUmdDiagnostic("g4-native-map-va-at-cb", hr, values,
+                           ARRAYSIZE(values));
+  }
+  va_record(device,7u,token,request.hAllocation,va,pages<<12,hr);
+  device->PagingWaitToken = token;
+  if (FAILED(hr) && hr != E_PENDING) return 0;
+  if (request.VirtualAddress != va) return 3;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  ADMISSION_UMD_VA_ALIAS alias = {token, va, offset_pages, pages, protection};
+  const int recorded = AdmissionUmdVaAliasAdd(device->VaAliases, &device->VaAliasCount,
+                                              ADMISSION_UMD_VA_ALIAS_LIMIT, &alias);
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  /* checked above under the same single-threaded GPUVA serialization */
+  if (!recorded) return 3;
+  *fence = request.PagingFenceValue;
+  return hr == E_PENDING ? 2 : 1;
+}
+
 static int free_va(void *context, uint64_t va, uint64_t bytes) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
   D3DDDICB_FREEGPUVIRTUALADDRESS request = {};
@@ -439,6 +490,14 @@ static int free_va(void *context, uint64_t va, uint64_t bytes) {
   HRESULT hr = device->KernelCallbacks->pfnFreeGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
   va_record(device,3u,0,0,va,bytes,hr);
+  if (SUCCEEDED(hr) && device->VaAliasCount) {
+    /* C53 B0: a freed range keeps no alias (a cut never needs more room
+     * than the whole-range removal frees: the range starts at a mapping) */
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    (void)AdmissionUmdVaAliasCut(device->VaAliases, &device->VaAliasCount,
+                                 ADMISSION_UMD_VA_ALIAS_LIMIT, va, bytes);
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  }
   return SUCCEEDED(hr);
 }
 
@@ -798,6 +857,46 @@ static int map_canonical_as(ADMISSION_UMD_DEVICE *device,
   return ok;
 }
 
+/* C53 B0: the slot's tile aliases onto a fresh allocation at their offsets
+ * (replace_canonical); 0 if any remap failed. */
+static int map_aliases_as(ADMISSION_UMD_DEVICE *device,
+                          const ADMISSION_UMD_SCREEN_BUFFER *slot,
+                          D3DKMT_HANDLE allocation) {
+  ADMISSION_UMD_VA_ALIAS aliases[16];
+  UINT count=0, index, moved=0;
+  int ok=1;
+  for(;;) {
+    /* a snapshot in chunks: the table is only changed by this thread */
+    AcquireSRWLockShared(&device->ScreenBufferLock);
+    count=0;
+    for(index=moved;index<device->VaAliasCount && count<ARRAYSIZE(aliases);++index)
+      if(device->VaAliases[index].Token==slot->Token) aliases[count++]=device->VaAliases[index];
+    const UINT scanned=index;
+    ReleaseSRWLockShared(&device->ScreenBufferLock);
+    for(index=0;index<count;++index) {
+      D3DDDI_MAPGPUVIRTUALADDRESS request={};
+      request.hPagingQueue=device->PagingQueue;
+      request.BaseAddress=aliases[index].Va;
+      request.hAllocation=allocation;
+      request.OffsetInPages=aliases[index].OffsetPages;
+      request.SizeInPages=aliases[index].Pages;
+      request.Protection.Write=(aliases[index].Protection & AGX_GPUVA_MAP_WRITE)!=0;
+      request.Protection.Execute=(aliases[index].Protection & AGX_GPUVA_MAP_EXECUTE)!=0;
+      HRESULT hr=device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
+          device->RuntimeDevice.handle,&request);
+      va_record(device,7u,slot->Token,allocation,request.BaseAddress,request.SizeInPages<<12,hr);
+      ok&=(SUCCEEDED(hr) || hr==E_PENDING) && request.VirtualAddress==aliases[index].Va &&
+          (hr!=E_PENDING || (request.PagingFenceValue &&
+                             wait_paging_at(device,request.PagingFenceValue,3u,slot->Token)));
+    }
+    if(scanned>=device->VaAliasCount) break;
+    moved=scanned;
+  }
+  UINT values[2]={(UINT)ok,device->VaAliasCount};
+  AdmissionUmdDiagnostic("measure-remap-aliases",ok?S_OK:E_FAIL,values,ARRAYSIZE(values));
+  return ok;
+}
+
 /* EXP1011: the no-op residency is a property of one VidMm allocation (EXP1009
  * trace; ~1 % of fresh allocations): neither re-requesting residency nor
  * re-mapping repairs it. Give the slot a fresh canonical allocation at the
@@ -821,13 +920,16 @@ static int replace_canonical(ADMISSION_UMD_DEVICE *device,
                            wait_paging_at(device,request.PagingFenceValue,4u,slot->Token)));
   }
   if(ok) ok=map_canonical_as(device,slot,fresh);
+  int aliases_moved=1;
+  if(ok) aliases_moved=map_aliases_as(device,slot,fresh);
   if(ok) {
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
     slot->KernelAllocation=fresh;slot->Resident=TRUE;
     AdmissionUmdStagingInvalidate(&slot->Sync);
     AdmissionUmdStagingChunksInvalidate(&slot->Chunks);
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
-    HRESULT freed=AdmissionUmdScreenFreeAllocation(device,old);
+    /* C53 B0: an alias still on the old allocation keeps it alive */
+    HRESULT freed=aliases_moved ? AdmissionUmdScreenFreeAllocation(device,old) : S_FALSE;
     AdmissionUmdVaRecordDeallocate(device,slot->Token,old,slot->CanonicalGpuVa,freed);
   } else if(fresh) {
     (void)AdmissionUmdScreenFreeAllocation(device,fresh);
@@ -1531,7 +1633,7 @@ const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void) {
   static const AGX_WIN32_GPUVA_OPS operations = {
       reserve_va, map_va, free_va, make_resident, wait_paging,
       submit, wait_render, evict, private_escape, query_render,
-      gpu_timestamps};
+      gpu_timestamps, map_va_at};
   return &operations;
 }
 #endif
