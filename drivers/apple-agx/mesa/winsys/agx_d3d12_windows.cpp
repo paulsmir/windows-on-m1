@@ -442,10 +442,36 @@ static HRESULT ReservedTextureSelfTest(AGX_D3D12_OWNER *owner) {
     }
     if (bad) hr = E_FAIL;
   }
+  receipt("measure-d3d12-reserved-texture-selftest", hr, stage, bad, first_bad);
+  /* C53 HW3 (Tier 2, measurement only): (1,1) unmapped, texels written to
+   * it land in the tile scratch; a read through the sparse descriptor
+   * (153fd2ab) returns 0, a read through the image VA returns the scratch.
+   * Receipt measure-d3d12-reserved-tier2-selftest {zero texels, nonzero
+   * texels, heap tiles changed}. */
+  if (SUCCEEDED(hr)) {
+    UINT zero = 0, nonzero = 0, heap_changed = 0;
+    uint32_t before[6] = {};
+    const uint32_t *heap_words = static_cast<const uint32_t *>(heap.Cpu);
+    for (unsigned t = 0; t < 6; ++t) before[t] = heap_words[t * (tile / 4) + 4097];
+    HRESULT probe = AgxD3d12OwnerMapReservedTextureTile(owner, &texture, 0, FALSE, 0, 1, 1, nullptr, 0);
+    uint32_t *words = static_cast<uint32_t *>(staging.Cpu);
+    for (unsigned y = 0; SUCCEEDED(probe) && y < 128; ++y)
+      for (unsigned x = 0; x < 128; ++x) words[y * size + x] = 0xdeadbeefu;
+    AGX_D3D12_TEXTURE_COPY in = {&texture, 0, 0, 128, 128, 128, 128, 1, &staging, 0, pitch, 0, 0};
+    if (SUCCEEDED(probe)) probe = AgxD3d12OwnerCopyTexture(owner, &in);
+    AGX_D3D12_TEXTURE_COPY out = {&texture, 0, 0, 128, 128, 128, 128, 1, &staging, 0, pitch, 0, 1};
+    if (SUCCEEDED(probe)) {
+      memset(staging.Cpu, 0xee, static_cast<size_t>(pitch) * size);
+      probe = AgxD3d12OwnerCopyTexture(owner, &out);
+    }
+    for (unsigned y = 0; SUCCEEDED(probe) && y < 128; y += 3)
+      for (unsigned x = 0; x < 128; x += 5) (words[y * size + x] ? nonzero : zero) += 1;
+    for (unsigned t = 0; SUCCEEDED(probe) && t < 6; ++t) heap_changed += heap_words[t * (tile / 4) + 4097] != before[t];
+    receipt("measure-d3d12-reserved-tier2-selftest", probe, zero, nonzero, heap_changed);
+  }
   if (texture.Resource) AgxD3d12OwnerDestroyBuffer(owner, &texture);
   if (heap.Resource) AgxD3d12OwnerDestroyBuffer(owner, &heap);
   if (staging.Resource) AgxD3d12OwnerDestroyBuffer(owner, &staging);
-  receipt("measure-d3d12-reserved-texture-selftest", hr, stage, bad, first_bad);
   return hr;
 }
 
