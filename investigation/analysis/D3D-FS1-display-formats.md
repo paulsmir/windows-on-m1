@@ -89,8 +89,7 @@ Asahi `drivers/gpu/drm/apple/plane.c` `drm_format_to_dcp`:
 1. Whether DXGI actually commits an A8B8G8R8 mode for an R8G8B8A8 fullscreen flip
    swap chain on Windows 11 26100, or keeps the A8R8G8B8 desktop mode and
    composes. Either way the mode list must contain the format.
-2. The DCP `RGBA` fourcc constant: confirm it in Asahi `iomfb.h` before encoding it
-   in m1n1.
+2. (resolved) DCP `RGBA` = fourcc('A','B','G','R') = 0x52474241 (Asahi iomfb_plane.h).
 3. Whether DWM tolerates two source formats in the cofunctional set
    (EnumVidPnCofuncModality pivots).
 
