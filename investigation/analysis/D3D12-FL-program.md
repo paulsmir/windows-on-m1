@@ -46,6 +46,22 @@ Sources: Mesa Asahi (`gallium/drivers/asahi`, `asahi/vulkan` Honeykrisp).
   It has no 3D or multisampled sparse. The implementation is in `hk_image.c`
   (sparse layout), `hk_queue.c` (binds) and `hk_device_memory.c`. The page
   size is 16 KiB; a D3D tile is 64 KiB, that is 4 pages.
+- **Native sparse textures** (Mesa `docs/drivers/asahi.rst`, "Sparse page tables"):
+  - A texture or PBE descriptor in sparse mode points at a sparse page table,
+    not at the image.
+  - The table is an array of folios. Each folio is 256 4-byte "Sparse Block"
+    entries mapping image pages to GPU VAs, plus 256 counters: 2 KiB per
+    4 MiB. There is one folio set per layer.
+  - It maps pages to pages and inherits the image tiling.
+  - `ail_layout.sparse_table_size_B` and `sparse_folios_per_layer` give the
+    sizes; `ail_page_to_sparse_index_el` gives the index.
+  - Texture tile mappings are therefore plain memory writes into a per-resource
+    table, from the CPU or a compute kernel. They need no UAT or GPUVA change
+    per tile.
+  - Reserved *buffers* still need GPUVA remapping: Honeykrisp uses VM binds.
+    Here that means the WDDM GPUVA callbacks the UMD already uses
+    (`umd_gpuva_windows.c`: Reserve/Map), plus a zero page for unmapped
+    ranges.
 
 ## TRANSLATION / plan (one checkpoint per step)
 
@@ -70,8 +86,14 @@ Sources: Mesa Asahi (`gallium/drivers/asahi`, `asahi/vulkan` Honeykrisp).
    - Reserved resources: GPUVA without backing, `UpdateTileMappings` and
      `CopyTileMappings`, all through the WDDM GPUVA update callbacks the KMD
      already serves for committed and placed resources.
-   - Texture tiles use the standard 2D block shape, following Honeykrisp's
-     sparse layout.
+   - Textures: a reserved texture is a sparse-mode descriptor over a
+     per-resource sparse page table (ail sizes). UpdateTileMappings and
+     CopyTileMappings write Sparse Block entries for the 4 pages of each
+     64 KiB tile: CPU writes for queue-time updates, ordered on the queue.
+   - Texture tiles use the standard 2D block shape (Honeykrisp
+     `sparseResidencyStandard2DBlockShape`).
+   - Buffers: GPUVA ranges remapped through the WDDM GPUVA callbacks;
+     unmapped ranges point at a zero page.
    - Tier 2: reads of unmapped tiles return 0, and
      `CheckAccessFullyMapped` / residency feedback through `sparse_residency`
      NIR.
