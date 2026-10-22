@@ -18,7 +18,8 @@ select_recovery_owner() {
     printf '%s\n' "$selected"
     return 0
   fi
-  if [ "${AGX_RECOVERY_ALLOW_NO_OWNER:-0}" != 1 ] || [ "$status" -ne 3 ] ||
+  if { [ "${AGX_RECOVERY_ALLOW_NO_OWNER:-0}" != 1 ] && [ "${AGX_RECOVERY_ALLOW_AT_PROXY:-0}" != 1 ]; } ||
+     [ "$status" -ne 3 ] ||
      [ "$selected" != 'EXACT_OWNER_REFUSED: expected exactly one owner; found 0' ]; then
     printf '%s\n' "$selected" >&2
     return 3
@@ -32,11 +33,25 @@ select_recovery_owner() {
   status=0
   guest=$(ssh_bounded 'echo up') || status=$?
   guest=${guest//$'\r'/}
-  if [ "$status" -ne 0 ] || [ "$guest" != up ]; then
-    printf 'NO_HOST_OWNER_REFUSED live_windows_ssh_status=%s\n' "$status" >&2
-    return 3
+  if [ "$status" -eq 0 ] && [ "$guest" = up ]; then
+    if [ "${AGX_RECOVERY_ALLOW_NO_OWNER:-0}" != 1 ]; then
+      printf 'AT_PROXY_REFUSED windows_ssh_up\n' >&2
+      return 3
+    fi
+    printf '%s\n' NO_HOST_OWNER
+    return 0
   fi
-  printf '%s\n' NO_HOST_OWNER
+  # EXP1876G: a guest bugcheck/PSCI reset returns the air to Running proxy and
+  # ends run_uefi; the experiment profile is booted again to own the recovery.
+  if [ "${AGX_RECOVERY_ALLOW_AT_PROXY:-0}" = 1 ] && proxy_endpoints_present; then
+    printf '%s\n' AT_PROXY
+    return 0
+  fi
+  printf 'NO_HOST_OWNER_REFUSED live_windows_ssh_status=%s\n' "$status" >&2
+  return 3
+}
+proxy_endpoints_present() {
+  [ -e /dev/cu.usbmodemC02HDNCCQ6L41 ] && [ -e /dev/cu.usbmodemC02HDNCCQ6L43 ]
 }
 wait_cycle() {
   local owner=$1 end=$(( $(date +%s) + 180 ))
@@ -81,6 +96,19 @@ launch_normal() {
 }
 # Select only this experiment's contract owner. Never terminate other launchers.
 owners=$(select_recovery_owner) || { echo EXACT_OWNER_NOT_FOUND; exit 3; }
+if [ "$owners" = AT_PROXY ]; then
+  # Boot the installed experiment profile again; its launcher owns the rest.
+  printf '%s\n' AT_PROXY | tee "$R/visible-at-proxy.txt"
+  bash "$N/full-owner$X.sh" > "$R/at-proxy-owner-launch.log" 2>&1 &
+  owners=$!
+  end=$(( $(date +%s) + 420 ))
+  until ssh_bounded 'echo up' >/dev/null 2>&1; do
+    kill -0 "$owners" 2>/dev/null || { echo AT_PROXY_OWNER_EXITED; exit 3; }
+    [ "$(date +%s)" -lt "$end" ] || { echo AT_PROXY_SSH_NOT_UP; exit 3; }
+    sleep 10
+  done
+  echo AT_PROXY_OWNER_UP "$owners"
+fi
 if [ "$owners" = NO_HOST_OWNER ]; then
   printf '%s\n' NO_HOST_OWNER | tee "$R/visible-no-host-owner.txt"
 else
