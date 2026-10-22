@@ -36,11 +36,24 @@ old = {n: sha(S / 'package' / n) for n in PACKAGE}
 new = {n: sha(D / 'package' / n) for n in PACKAGE}
 
 
+def driver_version(inf):
+    """DriverVer of a package INF (its version need not equal the experiment
+    number when a previous package is reinstalled unchanged)."""
+    import re
+    text = inf.read_bytes().decode('utf-16' if inf.read_bytes()[:2] in (b'\xff\xfe', b'\xfe\xff') else 'utf-8', 'replace')
+    m = re.search(r'^\s*DriverVer\s*=\s*[^,]+,\s*([0-9.]+)', text, re.M | re.I)
+    return m.group(1) if m else None
+
+
+old_version = driver_version(S / 'package' / 'AppleAgxRenderAdmission.inf') or '30.0.%s.0' % so
+new_version = driver_version(D / 'package' / 'AppleAgxRenderAdmission.inf') or '30.0.%s.0' % no
+
+
 def sub(t):
     t = t.replace(sd, nd).replace('EXP' + so, 'EXP' + no).replace('cleanup' + so, 'cleanup' + no)
     for a in ['boot', 'stage', 'ordered-restart', 'verify-launch', 'full-owner']:
         t = t.replace(a + so, a + no)
-    t = t.replace('30.0.%s.0' % so, '30.0.%s.0' % no)
+    t = t.replace(old_version, new_version)
     for n in PACKAGE:
         t = t.replace(old[n], new[n]).replace(old[n].upper(), new[n].upper())
     return t
@@ -59,6 +72,6 @@ dur = json.loads((D / ('cleanup' + no) / 'durability.json').read_text())
 dur['Scripts'] = {k: sha(D / ('cleanup' + no) / k.split('\\')[-1]) for k in dur['Scripts']}
 (D / ('cleanup' + no) / 'durability.json').write_text(json.dumps(dur, indent=2))
 left = subprocess.run(
-    f"grep -rln 'EXP{so}\\|cleanup{so}\\|30.0.{so}.0' {D}/*.ps1 {D}/*.sh {D}/*.py {D}/cleanup{no}",
+    f"grep -rln 'EXP{so}\\|cleanup{so}\\|{old_version}' {D}/*.ps1 {D}/*.sh {D}/*.py {D}/cleanup{no}",
     shell=True, capture_output=True, text=True).stdout
 print('leftovers:', left or 'none', {n: new[n][:8] for n in PACKAGE})
