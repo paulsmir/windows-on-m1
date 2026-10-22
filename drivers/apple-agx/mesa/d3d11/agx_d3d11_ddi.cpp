@@ -1107,7 +1107,7 @@ struct AgxTirScope {
       struct pipe_constant_buffer cb = {};
       cb.buffer_size = sizeof(vp);
       cb.user_buffer = vp;
-      d->pipe->set_constant_buffer(d->pipe, MESA_SHADER_GEOMETRY, DXBC_TIR_GS_CB, false, &cb);
+      d->pipe->set_constant_buffer(d->pipe, MESA_SHADER_GEOMETRY, DXBC_TIR_GS_CB, &cb);
       d->pipe->bind_gs_state(d->pipe, v->gs);
       d->pipe->bind_fs_state(d->pipe, v->fs);
       device = d;
@@ -1119,7 +1119,7 @@ struct AgxTirScope {
          return;
       device->pipe->bind_fs_state(device->pipe, ps->handle);
       device->pipe->bind_gs_state(device->pipe, NULL);
-      device->pipe->set_constant_buffer(device->pipe, MESA_SHADER_GEOMETRY, DXBC_TIR_GS_CB, false, NULL);
+      device->pipe->set_constant_buffer(device->pipe, MESA_SHADER_GEOMETRY, DXBC_TIR_GS_CB, NULL);
    }
 };
 
