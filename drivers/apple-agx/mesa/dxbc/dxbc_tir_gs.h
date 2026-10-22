@@ -43,6 +43,20 @@ struct dxbc_tir_gs_key {
 bool dxbc_tir_gs_key_from(const struct nir_shader *last, const struct nir_shader *ps,
                           struct dxbc_tir_gs_key *key);
 
+/* The pixel shader prologue at b's cursor (a fragment shader): the edge
+ * varyings, the covered-sample mask of the forced pattern (16.8 fixed
+ * point, E at the centre in 64 bits), a demote for an uncovered pixel, and
+ * the centroid offset (the centre when every sample is covered, else the
+ * lowest covered sample). */
+struct nir_builder;
+struct nir_def;
+void dxbc_tir_coverage(struct nir_builder *b, unsigned samples, struct nir_def **mask,
+                       struct nir_def **centroid);
+
+/* Sample 'index' of the forced pattern, in pixels from the centre (0 past
+ * the count). */
+struct nir_def *dxbc_tir_sample_offset(struct nir_builder *b, unsigned samples, struct nir_def *index);
+
 /* The expansion GS for a key (NULL without a position). */
 struct nir_shader *dxbc_tir_gs(const struct nir_shader_compiler_options *options,
                                const struct dxbc_tir_gs_key *key);

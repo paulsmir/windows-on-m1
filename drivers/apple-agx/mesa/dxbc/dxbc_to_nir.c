@@ -6,6 +6,7 @@
  */
 #include "dxbc_to_nir.h"
 #include "dxbc_tir.h"
+#include "dxbc_tir_gs.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -2381,15 +2382,13 @@ resource_samples(struct ctx *c, const struct dxbc_instruction *insn,
    return tex_finish(c, tex, 0, 1);
 }
 
-/* FL 11_1: sample 'index' of the forced pattern, in pixels from the centre
- * (0 past the count) */
-static nir_def *
-tir_sample_offset(struct ctx *c, nir_def *index)
+/* FL 11_1 forced sample count, shared with the D3D12 path (dxbc_tir_gs.h) */
+nir_def *
+dxbc_tir_sample_offset(nir_builder *b, unsigned samples, nir_def *index)
 {
-   nir_builder *b = &c->b;
-   const int8_t (*pattern)[2] = dxbc_tir_pattern(c->forced_samples);
+   const int8_t (*pattern)[2] = dxbc_tir_pattern(samples);
    nir_def *x = nir_imm_float(b, 0), *y = nir_imm_float(b, 0);
-   for (unsigned s = 0; pattern && s < c->forced_samples; ++s) {
+   for (unsigned s = 0; pattern && s < samples; ++s) {
       nir_def *hit = nir_ieq_imm(b, index, s);
       x = nir_bcsel(b, hit, nir_imm_float(b, pattern[s][0] / 16.0f), x);
       y = nir_bcsel(b, hit, nir_imm_float(b, pattern[s][1] / 16.0f), y);
@@ -2397,21 +2396,14 @@ tir_sample_offset(struct ctx *c, nir_def *index)
    return nir_vec2(b, x, y);
 }
 
-/* FL 11_1 forced sample count (dxbc_tir.h): at the pixel shader's entry,
- * the covered samples of the forced pattern from the original triangle's
- * edges, exactly in D3D's 16.8 fixed point (E at the pixel centre in 64
- * bits, the per-sample steps in 32); an uncovered pixel (the expansion
- * GS's conservative margin) is no candidate and does not run. Centroid is
- * the centre when every sample is covered, else the lowest covered one. */
-static void
-tir_coverage(struct ctx *c)
+void
+dxbc_tir_coverage(nir_builder *b, unsigned samples, nir_def **mask_out, nir_def **centroid_out)
 {
-   nir_builder *b = &c->b;
-   const int8_t (*pattern)[2] = dxbc_tir_pattern(c->forced_samples);
+   const int8_t (*pattern)[2] = dxbc_tir_pattern(samples);
    nir_def *edge[DXBC_TIR_EDGE_SLOTS], *a[3], *bb[3], *centre[3], *mask = nir_imm_int(b, 0);
    for (unsigned i = 0; i < DXBC_TIR_EDGE_SLOTS; ++i) {
-      nir_variable *var = make_var(c, nir_var_shader_in, glsl_ivec4_type(), VARYING_SLOT_TEX0 + i,
-                                   "tir_edge");
+      nir_variable *var = nir_variable_create(b->shader, nir_var_shader_in, glsl_ivec4_type(), "tir_edge");
+      var->data.location = VARYING_SLOT_TEX0 + i;
       var->data.interpolation = INTERP_MODE_FLAT;
       edge[i] = nir_load_var(b, var);
    }
@@ -2428,7 +2420,7 @@ tir_coverage(struct ctx *c)
                      nir_imul(b, nir_i2i64(b, bb[e]), nir_i2i64(b, nir_isub(b, cy, nir_channel(b, edge[e], 1))))),
          nir_i2i64(b, nir_channel(b, edge[3], e)));
    }
-   for (unsigned s = 0; s < c->forced_samples; ++s) {
+   for (unsigned s = 0; pattern && s < samples; ++s) {
       nir_def *inside = nir_imm_true(b);
       for (unsigned e = 0; e < 3; ++e) {
          /* |A|, |B| < 2^23 and |offset| <= 128: the step fits 32 bits */
@@ -2439,9 +2431,23 @@ tir_coverage(struct ctx *c)
       mask = nir_ior(b, mask, nir_bcsel(b, inside, nir_imm_int(b, 1 << s), nir_imm_int(b, 0)));
    }
    nir_demote_if(b, nir_ieq_imm(b, mask, 0));
-   c->forced_mask = mask;
-   nir_def *full = nir_ieq_imm(b, mask, (int)((1u << c->forced_samples) - 1u));
-   c->forced_centroid = nir_bcsel(b, full, nir_imm_vec2(b, 0, 0), tir_sample_offset(c, nir_find_lsb(b, mask)));
+   nir_def *full = nir_ieq_imm(b, mask, (int)((1u << samples) - 1u));
+   *mask_out = mask;
+   *centroid_out = nir_bcsel(b, full, nir_imm_vec2(b, 0, 0), dxbc_tir_sample_offset(b, samples, nir_find_lsb(b, mask)));
+}
+
+/* FL 11_1: sample 'index' of the forced pattern */
+static nir_def *
+tir_sample_offset(struct ctx *c, nir_def *index)
+{
+   return dxbc_tir_sample_offset(&c->b, c->forced_samples, index);
+}
+
+/* FL 11_1 forced sample count: the coverage prologue (dxbc_tir_coverage) */
+static void
+tir_coverage(struct ctx *c)
+{
+   dxbc_tir_coverage(&c->b, c->forced_samples, &c->forced_mask, &c->forced_centroid);
 }
 
 /* sampleinfo: the sample count, as float or (_uint) integer, in x */
