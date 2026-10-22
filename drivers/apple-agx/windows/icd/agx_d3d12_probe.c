@@ -28,6 +28,9 @@
 #include "agx_d3d12_probe_ps_c57.h"
 #include "agx_d3d12_probe_vs_c59.h"
 #include "agx_d3d12_probe_ps_c59.h"
+#include "agx_d3d12_probe_vs_c60.h"
+#include "agx_d3d12_probe_ps_c60.h"
+#include "dxbc_tir.h"
 #include "agx_d3d12_probe_ps_view_dxil.h"
 #include "agx_d3d12_probe_cs_cb_dxil62.h"
 #include "agx_d3d12_probe_cs_sm65_dxil.h"
@@ -6416,6 +6419,153 @@ static int step_c59a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
     if (order) ID3D12Resource_Release(order);
     return FAILED(hr) || bad != 0;
 }
+/* C60A (FL 11_0 UAV-only rendering with ForcedSampleCount 8, D3D11-FL111-TIR.md):
+ * six triangles (an edge-sharing quad, a sliver, a sub-pixel triangle) add
+ * countbits(SV_Coverage) per pixel into a UAV, which must equal the
+ * reference coverage of the D3D standard 8x pattern and the top-left rule
+ * (dxbc_tir.h). */
+static int step_c60a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    static const float tris[][6] = {
+        {4.0f, 4.0f, 28.0f, 4.0f, 28.0f, 20.0f}, {4.0f, 4.0f, 28.0f, 20.0f, 4.0f, 20.0f},
+        {32.25f, 2.5f, 60.0f, 3.125f, 33.0f, 4.0f},
+        {40.3125f, 30.6875f, 40.875f, 30.5f, 40.5f, 31.25f},
+        {8.5625f, 40.6875f, 30.4375f, 40.6875f, 8.5625f, 60.5f},
+        {50.0f, 40.0f, 44.0f, 60.0f, 62.0f, 52.0f}};
+    enum { TRIS = sizeof(tris) / sizeof(tris[0]), SAMPLES = 8 };
+    D3D12_ROOT_PARAMETER parameter = {D3D12_ROOT_PARAMETER_TYPE_UAV};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {1, &parameter};
+    D3D12_INPUT_ELEMENT_DESC element = {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0,
+                                        D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0};
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3D12Resource *counts = uav_buffer(device);
+    ID3D12Resource *upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *vertices = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    static unsigned want[64 * 64];
+    unsigned bad = 4096, total = 0;
+    HRESULT hr = counts && upload && vertices && readback ? S_OK : E_FAIL;
+    memset(want, 0, sizeof(want));
+    if (SUCCEEDED(hr)) {
+        float *v = NULL;
+        void *z = NULL;
+        hr = ID3D12Resource_Map(vertices, 0, NULL, (void **)&v);
+        if (SUCCEEDED(hr) && v) {
+            for (unsigned i = 0; i < TRIS; ++i) {
+                int32_t x[3], y[3];
+                struct dxbc_tir_edges e;
+                for (unsigned k = 0; k < 3; ++k) {
+                    v[i * 6 + k * 2] = tris[i][k * 2] / 32.0f - 1.0f;
+                    v[i * 6 + k * 2 + 1] = 1.0f - tris[i][k * 2 + 1] / 32.0f;
+                    x[k] = (int32_t)(tris[i][k * 2] * 256.0f);
+                    y[k] = (int32_t)(tris[i][k * 2 + 1] * 256.0f);
+                }
+                if (!dxbc_tir_setup(x, y, &e)) continue;
+                for (int py = 0; py < 64; ++py)
+                    for (int px = 0; px < 64; ++px) {
+                        unsigned m = dxbc_tir_mask(&e, px, py, SAMPLES), n = 0;
+                        for (; m; m &= m - 1) ++n;
+                        want[py * 64 + px] += n;
+                        total += n;
+                    }
+            }
+            ID3D12Resource_Unmap(vertices, 0, NULL);
+        } else if (SUCCEEDED(hr)) hr = E_FAIL;
+        if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, &z);
+        if (SUCCEEDED(hr) && z) {
+            memset(z, 0, 65536);
+            ID3D12Resource_Unmap(upload, 0, NULL);
+        } else if (SUCCEEDED(hr)) hr = E_FAIL;
+    }
+    if (SUCCEEDED(hr)) {
+        parameter.Descriptor.ShaderRegister = 0;
+        parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        root_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob), ID3D10Blob_GetBufferSize(blob),
+                                              &IID_ID3D12RootSignature, (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.VS.pShaderBytecode = g_agx_d3d12_probe_vs_c60;
+        pso_desc.VS.BytecodeLength = sizeof(g_agx_d3d12_probe_vs_c60);
+        pso_desc.PS.pShaderBytecode = g_agx_d3d12_probe_ps_c60;
+        pso_desc.PS.BytecodeLength = sizeof(g_agx_d3d12_probe_ps_c60);
+        pso_desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        pso_desc.SampleMask = ~0u;
+        pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+        pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        pso_desc.RasterizerState.DepthClipEnable = TRUE;
+        pso_desc.RasterizerState.ForcedSampleCount = SAMPLES;
+        pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        pso_desc.InputLayout.pInputElementDescs = &element;
+        pso_desc.InputLayout.NumElements = 1;
+        pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        pso_desc.NumRenderTargets = 0;
+        pso_desc.SampleDesc.Count = 1;
+        hr = ID3D12Device_CreateGraphicsPipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+        printf("C60A CreateGraphicsPipelineState (ForcedSampleCount %d) hr=0x%08lx\n", SAMPLES, (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        D3D12_VIEWPORT viewport = {0, 0, 64, 64, 0, 1};
+        D3D12_RECT scissor = {0, 0, 64, 64};
+        D3D12_VERTEX_BUFFER_VIEW vbv = {ID3D12Resource_GetGPUVirtualAddress(vertices), (UINT)(TRIS * 24), 8};
+        transition(list, counts, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, counts, 0, upload, 0, 16384);
+        transition(list, counts, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        ID3D12GraphicsCommandList_SetGraphicsRootSignature(list, root);
+        ID3D12GraphicsCommandList_SetGraphicsRootUnorderedAccessView(list, 0, ID3D12Resource_GetGPUVirtualAddress(counts));
+        ID3D12GraphicsCommandList_OMSetRenderTargets(list, 0, NULL, FALSE, NULL);
+        ID3D12GraphicsCommandList_RSSetViewports(list, 1, &viewport);
+        ID3D12GraphicsCommandList_RSSetScissorRects(list, 1, &scissor);
+        ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        ID3D12GraphicsCommandList_IASetVertexBuffers(list, 0, 1, &vbv);
+        ID3D12GraphicsCommandList_DrawInstanced(list, (UINT)(TRIS * 3), 1, 0, 0);
+        transition(list, counts, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, counts, 0, 16384);
+        hr = run_list(queue, fence, list, base + 1, "C60A tir");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 16384};
+        unsigned *words = NULL, got = 0, shown = 0;
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&words);
+        if (SUCCEEDED(hr) && words) {
+            bad = 0;
+            for (unsigned i = 0; i < 4096; ++i) {
+                got += words[i];
+                if (words[i] != want[i]) {
+                    if (shown++ < 6) printf("C60A pixel %u,%u got %u want %u\n", i % 64, i / 64, words[i], want[i]);
+                    ++bad;
+                }
+            }
+            printf("C60A covered samples got %u want %u bad=%u\n", got, total, bad);
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C60A: %s\n", SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (blob) ID3D10Blob_Release(blob);
+    if (errors) ID3D10Blob_Release(errors);
+    if (readback) ID3D12Resource_Release(readback);
+    if (vertices) ID3D12Resource_Release(vertices);
+    if (upload) ID3D12Resource_Release(upload);
+    if (counts) ID3D12Resource_Release(counts);
+    return FAILED(hr) || bad != 0;
+}
 /* C53A (EXP1875): D3D9On12 renders a D3D9 X8R8G8B8 back buffer as a committed
  * DXGI_FORMAT_B8G8R8X8_UNORM render target, and its first batch (clear, copy
  * to a readback buffer) faulted the GPU; the same clear and copy in that
@@ -7034,7 +7184,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
     {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
     {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}, {"C57A", step_c57a}, {"C58A", step_c58a}, {"C59A", step_c59a}};
+    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}, {"C57A", step_c57a}, {"C58A", step_c58a}, {"C59A", step_c59a}, {"C60A", step_c60a}};
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
@@ -7165,6 +7315,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C57A", step_c57a);
                 (void)run_isolated(adapter, "C58A", step_c58a);
                 (void)run_isolated(adapter, "C59A", step_c59a);
+                (void)run_isolated(adapter, "C60A", step_c60a);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
