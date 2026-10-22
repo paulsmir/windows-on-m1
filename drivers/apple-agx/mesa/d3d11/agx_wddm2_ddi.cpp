@@ -14,8 +14,9 @@
  * the 11.0 entries, and 18 are new.  The 11.1 runtime reports constant-buffer
  * offsets, ClearView, no-overwrite constant-buffer maps and copy flags to
  * applications without asking the driver, so those are implemented; tiled
- * resources, markers, hardware protection, texture layouts and logic ops
- * have caps the driver reports as absent, and their entries fail closed.
+ * resources, markers, hardware protection and texture layouts have caps
+ * the driver reports as absent, and their entries fail closed; logic ops are
+ * implemented (CreateBlendState1).
  *
  * SPDX-License-Identifier: MIT
  */
@@ -214,11 +215,7 @@ blend10_1(D3D10DDI_HDEVICE hDevice, const D3D11_1_DDI_BLEND_DESC *in, D3D10_1_DD
    out->IndependentBlendEnable = in->IndependentBlendEnable;
    for (UINT i = 0; i < D3D10_DDI_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) {
       const D3D11_1_DDI_RENDER_TARGET_BLEND_DESC &rt = in->RenderTarget[i];
-      /* D3D11_1DDICAPS_D3D11_OPTIONS reports no output-merger logic ops */
-      if (rt.LogicOpEnable) {
-         refuse(hDevice, "reject-wddm2-logicop", E_NOTIMPL, i);
-         return false;
-      }
+      /* logic ops are lowered by CreateBlendState1 (logic_op) */
       out->RenderTarget[i].BlendEnable = rt.BlendEnable;
       out->RenderTarget[i].SrcBlend = rt.SrcBlend;
       out->RenderTarget[i].DestBlend = rt.DestBlend;
@@ -239,13 +236,61 @@ CalcPrivateBlendStateSize1(D3D10DDI_HDEVICE hDevice, const D3D11_1_DDI_BLEND_DES
    return base11.pfnCalcPrivateBlendStateSize(hDevice, &blend);
 }
 
+/* D3D11.1 output-merger logic ops (D3D11_1DDICAPS_D3D11_OPTIONS
+ * OutputMergerLogicOp). D3D11_1_DDI_LOGIC_OP has the order of D3D12_LOGIC_OP
+ * (C57). Gallium has one logic op for every render target, so targets that
+ * disagree (independent blend) are refused, and a target may not blend and
+ * use a logic op at once (the runtime refuses that too). Returns the
+ * PIPE_LOGICOP, -1 without logic ops, -2 for a refused state. */
+static int
+logic_op(D3D10DDI_HDEVICE hDevice, const D3D11_1_DDI_BLEND_DESC *in)
+{
+   static const unsigned char logic_ops[16] = {
+      PIPE_LOGICOP_CLEAR, PIPE_LOGICOP_SET, PIPE_LOGICOP_COPY, PIPE_LOGICOP_COPY_INVERTED,
+      PIPE_LOGICOP_NOOP, PIPE_LOGICOP_INVERT, PIPE_LOGICOP_AND, PIPE_LOGICOP_NAND,
+      PIPE_LOGICOP_OR, PIPE_LOGICOP_NOR, PIPE_LOGICOP_XOR, PIPE_LOGICOP_EQUIV,
+      PIPE_LOGICOP_AND_REVERSE, PIPE_LOGICOP_AND_INVERTED, PIPE_LOGICOP_OR_REVERSE,
+      PIPE_LOGICOP_OR_INVERTED};
+   const UINT targets = in->IndependentBlendEnable ? D3D10_DDI_SIMULTANEOUS_RENDER_TARGET_COUNT : 1u;
+   int op = -1;
+   for (UINT i = 0; i < targets; ++i) {
+      const D3D11_1_DDI_RENDER_TARGET_BLEND_DESC &rt = in->RenderTarget[i];
+      const int mine = rt.LogicOpEnable ? (int)rt.LogicOp : -1;
+      if ((rt.LogicOpEnable && (rt.BlendEnable || (UINT)rt.LogicOp >= 16u)) ||
+          (i && mine != op)) {
+         refuse(hDevice, "reject-wddm2-logicop", E_INVALIDARG, i);
+         return -2;
+      }
+      op = mine;
+   }
+   return op < 0 ? -1 : logic_ops[op];
+}
+
 void APIENTRY
 CreateBlendState1(D3D10DDI_HDEVICE hDevice, const D3D11_1_DDI_BLEND_DESC *desc,
                   D3D10DDI_HBLENDSTATE hState, D3D10DDI_HRTBLENDSTATE hRTState)
 {
    D3D10_1_DDI_BLEND_DESC blend = {};
-   if (blend10_1(hDevice, desc, &blend))
+   if (!blend10_1(hDevice, desc, &blend))
+      return;
+   const int op = logic_op(hDevice, desc);
+   if (op == -2)
+      return;
+   if (op == -1) {
       base11.pfnCreateBlendState(hDevice, &blend, hState, hRTState);
+      return;
+   }
+   /* no target blends: only the write masks and alpha-to-coverage remain */
+   struct pipe_context *pipe = CastDevice(hDevice)->pipe;
+   struct pipe_blend_state state = {};
+   state.alpha_to_coverage = desc->AlphaToCoverageEnable;
+   state.independent_blend_enable = desc->IndependentBlendEnable;
+   state.logicop_enable = 1;
+   state.logicop_func = (unsigned)op;
+   for (UINT i = 0; i < MIN2(PIPE_MAX_COLOR_BUFS, D3D10_DDI_SIMULTANEOUS_RENDER_TARGET_COUNT); ++i)
+      state.rt[i].colormask =
+         desc->RenderTarget[desc->IndependentBlendEnable ? i : 0u].RenderTargetWriteMask;
+   CastBlendState(hState)->handle = pipe->create_blend_state(pipe, &state);
 }
 
 bool

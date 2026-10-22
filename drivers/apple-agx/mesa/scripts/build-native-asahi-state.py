@@ -1113,7 +1113,8 @@ SupportedDDIInterfaceVersions[] = {
    case D3D11_1DDICAPS_D3D11_OPTIONS:
       if (pData->DataSize != sizeof(D3D11_1DDI_D3D11_OPTIONS_DATA))
          return E_INVALIDARG;
-      ((D3D11_1DDI_D3D11_OPTIONS_DATA *)pData->pData)->OutputMergerLogicOp = FALSE;
+      /* logic ops: agx_wddm2_ddi.cpp CreateBlendState1 */
+      ((D3D11_1DDI_D3D11_OPTIONS_DATA *)pData->pData)->OutputMergerLogicOp = TRUE;
       ((D3D11_1DDI_D3D11_OPTIONS_DATA *)pData->pData)->AssignDebugBinarySupport = FALSE;
       return S_OK;
    case D3D11_1DDICAPS_ARCHITECTURE_INFO:
