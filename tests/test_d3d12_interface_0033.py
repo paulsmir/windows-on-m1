@@ -78,14 +78,31 @@ class D3d12Interface0033(unittest.TestCase):
         self.assertEqual(set(assigned), expected)
         self.assertEqual(len(assigned), len(expected))
 
+    def test_every_retyped_or_added_0075_member_is_assigned(self):
+        # C54: CORE_0075 reuses the CORE_0070 fill (an entry is inserted
+        # before AddToStateObject, so both slots are reassigned) and 3D_0074
+        # the 3D_0062 fill
+        expected = self.changed('D3D12DDI_DEVICE_FUNCS_CORE_0070', 'D3D12DDI_DEVICE_FUNCS_CORE_0075')
+        self.assertEqual(len(expected), 11)
+        assigned = self.reassigned('D3D12DDI_DEVICE_FUNCS_CORE_0075')
+        self.assertEqual(set(assigned), expected)
+        self.assertEqual(len(assigned), len(expected))
+        expected = self.changed('D3D12DDI_COMMAND_LIST_FUNCS_3D_0062', 'D3D12DDI_COMMAND_LIST_FUNCS_3D_0074')
+        self.assertEqual(expected, {'pfnDispatchMesh'})
+        self.assertEqual(self.reassigned('D3D12DDI_COMMAND_LIST_FUNCS_3D_0074'), ['pfnDispatchMesh'])
+        # the members before the inserted entry keep their CORE_0070 positions
+        old = [m for _, m in typed_members(self.header, 'D3D12DDI_DEVICE_FUNCS_CORE_0070')]
+        new = [m for _, m in typed_members(self.header, 'D3D12DDI_DEVICE_FUNCS_CORE_0075')]
+        self.assertEqual(old[:115], new[:115])
+
     def test_new_interfaces_only_in_the_opt_in_profile(self):
         versions = self.source[self.source.index('static HRESULT APIENTRY GetVersions('):]
         versions = versions[:versions.index('\n}\n')]
-        self.assertIn(': InterfaceOptIn() == D3D12DDI_SUPPORTED_0071 ? 6u', versions)
-        self.assertIn('if (offered == 6u) versions[n++] = D3D12DDI_SUPPORTED_0071;', versions)
+        self.assertIn(': InterfaceOptIn() == D3D12DDI_SUPPORTED_0076 ? 6u', versions)
+        self.assertIn('if (offered == 6u) versions[n++] = D3D12DDI_SUPPORTED_0076;', versions)
         self.assertIn('if (offered >= 5u) versions[n++] = D3D12DDI_SUPPORTED_0042;', versions)
         self.assertIn('if (offered >= 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;', versions)
-        self.assertIn('const UINT offered = Negotiated0071() ? 7u : Negotiated0042() ? 4u : Negotiated0033() ? 3u : 2u;',
+        self.assertIn('const UINT offered = Negotiated0076() ? 7u : Negotiated0042() ? 4u : Negotiated0033() ? 3u : 2u;',
                       self.source)
         self.assertIn('if (!ShaderModel6Enabled() || GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI"', self.source)
 
@@ -121,7 +138,7 @@ class D3d12Interface0033(unittest.TestCase):
         # tables here may fill one (a CORE_0012 fill of a larger table would
         # hand the runtime wrongly typed entries)
         fill = self.source[self.source.index('static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type'):]
-        self.assertIn('const bool tabled = !NegotiatedR2() || Negotiated0033() || Negotiated0042() || Negotiated0071();', fill)
+        self.assertIn('const bool tabled = !NegotiatedR2() || Negotiated0033() || Negotiated0042() || Negotiated0076();', fill)
         self.assertIn('switch (tabled ? type : static_cast<D3D12DDI_TABLE_TYPE>(~0u)) {', fill)
 
     def test_scan_bound_numbers_every_wdk_build(self):
@@ -146,8 +163,8 @@ class D3d12Interface0033(unittest.TestCase):
         self.assertIn('adapter_object.negotiated = (static_cast<UINT64>(arg->Interface) << 32) | arg->Version;',
                       self.source)
         fill = self.source[self.source.index('static HRESULT APIENTRY FillDDITable('):]
-        for table in ('DEVICE_FUNCS_CORE_0070', 'COMMAND_LIST_FUNCS_3D_0062'):
-            self.assertIn('hr = Negotiated0071()\n                 ? FillTable<D3D12DDI_%s>' % table, fill)
+        for table in ('DEVICE_FUNCS_CORE_0075', 'COMMAND_LIST_FUNCS_3D_0074'):
+            self.assertIn('hr = Negotiated0076()\n                 ? FillTable<D3D12DDI_%s>' % table, fill)
         for table in ('DEVICE_FUNCS_CORE_0040', 'COMMAND_LIST_FUNCS_3D_0040'):
             self.assertIn(': Negotiated0042()\n                 ? FillTable<D3D12DDI_%s>' % table, fill)
         for table in ('DEVICE_FUNCS_CORE_0033', 'COMMAND_LIST_FUNCS_3D_0033'):

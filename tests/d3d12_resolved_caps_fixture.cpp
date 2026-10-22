@@ -33,7 +33,8 @@ struct D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 {UINT *pNumShaderModelsSupported;D
 static bool ShaderModel6Enabled(){return false;}
 static bool Negotiated0033(){return false;}
 static bool Negotiated0042(){return false;}
-static bool Negotiated0071(){return false;}
+static bool Negotiated0076(){return false;}
+struct D3D12DDI_PROTECTED_RESOURCE_SESSION_TYPE_COUNT_DATA_0074 {UINT NodeIndex;UINT Count;};
 static bool r2=false;
 static bool NegotiatedR2(){return r2;}
 enum D3D12DDI_COMMAND_QUEUE_FLAGS {D3D12DDI_COMMAND_QUEUE_FLAG_NONE=0};

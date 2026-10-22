@@ -65,7 +65,8 @@ class D3d12AbiGate(unittest.TestCase):
                       'D3D12DDICAPS_TYPE_EXECUTECOMMANDLISTS_PARALLELISM',
                       'D3D12DDICAPS_TYPE_0073_SUPPORT_BATCHED_MARKERS',
                       # EXP1870: the R2+ forms of the C21 layout registry
-                      'D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT', 'D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN'})
+                      'D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT', 'D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN',
+                      'D3D12DDICAPS_TYPE_0074_PROTECTED_RESOURCE_SESSION_TYPE_COUNT'})
         # C44: SM 6.0 and the R1 interface by default since EXP1865;
         # APPLE_AGX_D3D12_SM6=0 is the only way back to 0003/SM 5.1
         gate = source[source.index('static bool ShaderModel6Enabled() {'):]
@@ -76,7 +77,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('if (ShaderModel6Enabled() &&', models)
         versions = source[source.index('static HRESULT APIENTRY GetVersions('):]
         versions = versions[:versions.index('\n}\n')]
-        self.assertIn(': InterfaceOptIn() == D3D12DDI_SUPPORTED_0071 ? 6u', versions)
+        self.assertIn(': InterfaceOptIn() == D3D12DDI_SUPPORTED_0076 ? 6u', versions)
         self.assertIn('versions[n++] = D3D12DDI_SUPPORTED_0012;', versions)
         # C48: the wave caps (0012) only in the same SM6 processes
         shader = caps[caps.index('case D3D12DDICAPS_TYPE_SHADER:'):]
