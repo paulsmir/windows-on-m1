@@ -603,6 +603,16 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
    NIR_PASS(_, nir, nir_opt_copy_prop);
    NIR_PASS(_, nir, nir_opt_dce);
 
+   /* Vulkan builtins carry a dispatch base (GlobalInvocationId = global id +
+    * load_base_global_invocation_id, WorkgroupId likewise): D3D has none,
+    * and the AGX backend handles neither intrinsic (EXP1857: "Unhandled
+    * intrinsic load_base_global_invocation_id") */
+   {
+      const nir_lower_compute_system_values_options no_base = {0};
+      NIR_PASS(_, nir, nir_lower_system_values);
+      NIR_PASS(_, nir, nir_lower_compute_system_values, &no_base);
+   }
+
    /* descriptors -> Gallium slots */
    bool bad = !tex_sets_valid(nir);
    NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_buffer_slot, nir_metadata_control_flow, &bad);

@@ -79,6 +79,17 @@ class DxilToNir(unittest.TestCase):
             self.assertEqual(dxil_bindings, dxbc_bindings, name)
         return dxil
 
+    def test_no_vulkan_dispatch_base_reaches_the_backend(self):
+        # EXP1857: spirv_to_nir lowers GlobalInvocationId to the global id
+        # plus load_base_global_invocation_id (a Vulkan dispatch base); the
+        # AGX backend aborts on it ("Unhandled intrinsic").
+        r = subprocess.run([str(self.dxil), str(FIXTURES / "par_cs.dxil"), "--print-final"], capture_output=True,
+                           text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        self.assertIn("TRANSLATED", r.stdout)
+        for intrinsic in ("load_base_global_invocation_id", "load_base_workgroup_id"):
+            self.assertNotIn(intrinsic, r.stdout)
+
     def test_compute_resource_classes_match_the_dxbc_slots(self):
         cs = self.parity("par_cs")
         self.assertEqual(cs["block"], "8x8x1")
