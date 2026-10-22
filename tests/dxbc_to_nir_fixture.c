@@ -59,12 +59,13 @@ main(int argc, char **argv)
    struct dxbc_error perr;
    struct dxbc_nir_error terr;
    nir_shader *nir;
-   bool print = false, print_final = false, d3d12 = false, heap = false;
+   bool print = false, print_final = false, d3d12 = false, heap = false, uav64 = false;
    for (int a = 2; a < argc; ++a) {
       print |= !strcmp(argv[a], "--print");
       print_final |= !strcmp(argv[a], "--print-final");
       d3d12 |= !strcmp(argv[a], "--d3d12");
       heap |= !strcmp(argv[a], "--d3d12-heap");
+      uav64 |= !strcmp(argv[a], "--d3d11-uav64");
    }
    /* the D3D12 owner's entry: SM5.1 register spaces through a binding map
     * with the owner's per-kind capacities (agx_d3d12_windows.cpp) */
@@ -142,7 +143,25 @@ main(int argc, char **argv)
       ralloc_free(nir);
       return 0;
    }
-   if (d3d12 || heap) {
+   if (uav64) {
+      /* the D3D10/11 UMD's D3D11.1 entry: 64 UAV registers, compacted
+       * shader buffers (agx_d3d11_ddi.cpp) */
+      struct dxbc_nir_uav_slots slots;
+      uint32_t regs = 0, positions = 0;
+      if (program.type == DXBC_PROGRAM_HULL)
+         hull_passthrough(bytes, (size_t)size, &regs, &positions);
+      nir = dxbc_translate_tokens_uav64(chunk, &agx_nir_options, regs, positions, &slots, &terr);
+      for (unsigned u = 0; nir && u < DXBC_NIR_UAV11_SLOTS; ++u) {
+         if (slots.buffer[u] != DXBC_NIR_UAV_UNUSED)
+            printf("UAV64 u%u buffer %u\n", u, slots.buffer[u]);
+         if (slots.counter[u] != DXBC_NIR_UAV_UNUSED)
+            printf("UAV64 u%u counter %u\n", u, slots.counter[u]);
+         if (slots.typed >> u & 1)
+            printf("UAV64 u%u image %u\n", u, u);
+      }
+      if (nir)
+         printf("UAV64 buffers %u\n", slots.buffers);
+   } else if (d3d12 || heap) {
       uint32_t regs = 0, positions = 0;
       if (program.type == DXBC_PROGRAM_HULL)
          hull_passthrough(bytes, (size_t)size, &regs, &positions);

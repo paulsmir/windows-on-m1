@@ -120,8 +120,8 @@ AgxWddm2_0DdiEnabled(void)
    (D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS | D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED)
 /* D3D11_REQ_MULTI_ELEMENT_STRUCTURE_SIZE_IN_BYTES */
 #define AGX_D3D11_MAX_STRUCTURE_STRIDE 2048u
-/* D3D11_PS_CS_UAV_REGISTER_COUNT (D3D11.0 DDI); the translator's u# range */
-#define AGX_D3D11_UAV_SLOTS DXBC_NIR_MAX_UAVS
+/* D3D11_1_UAV_SLOT_COUNT (FL 11_1): the translator's D3D11.1 u# range */
+#define AGX_D3D11_UAV_SLOTS DXBC_NIR_UAV11_SLOTS
 
 static void
 refuse(D3D10DDI_HDEVICE hDevice, const char *what, UINT a, UINT b)
@@ -450,10 +450,10 @@ CreateGeometryShaderWithStreamOutput11(
 /* ------------------------------------------------------------------ */
 /* D3D-H2b: compute (cs_4_x) and buffer unordered-access views        */
 
-/* An unordered-access view (dxbc_to_nir.h binding conventions): a raw or
- * structured buffer view is shader buffer u#, a typed view (buffer or
- * texture) image u#, an append/consume or counter view's hidden counter
- * (one 32-bit word) shader buffer AGX_D3D11_UAV_SLOTS + u#. */
+/* An unordered-access view: a typed view (buffer or texture) is image u#; a
+ * raw or structured buffer view and an append/consume or counter view's
+ * hidden counter (one 32-bit word) are the shader buffers the bound shader's
+ * UAV map names (dxbc_nir_uav_slots; apply_uavs). */
 struct AgxUnorderedAccessView {
    Device *owner_device;
    Resource *owner_resource;
@@ -589,11 +589,17 @@ CreateUnorderedAccessView11(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATEUN
 }
 
 static void APIENTRY
-DestroyUnorderedAccessView11(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW hView)
+DestroyUnorderedAccessView11(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW hView)
 {
    AgxUnorderedAccessView *view = CastUnorderedAccessView(hView);
+   Device *device = CastDevice(hDevice);
    if (!view)
       return;
+   /* the runtime unbinds first; never keep a pointer to a dead view */
+   for (unsigned p = 0; device && p < 2; ++p)
+      for (unsigned u = 0; u < AGX_D3D11_UAV_SLOTS; ++u)
+         if (device->agx_uavs[p][u] == view)
+            device->agx_uavs[p][u] = NULL;
    pipe_resource_reference(&view->buffer.buffer, NULL);
    pipe_resource_reference(&view->image.resource, NULL);
    pipe_resource_reference(&view->counter, NULL);
@@ -601,48 +607,103 @@ DestroyUnorderedAccessView11(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW hVi
    view->owner_resource = NULL;
 }
 
-/* Binds slots [first, first + count) of a stage: views[i - start] for the
+/* FL 11_1: binds a stage's UAVs from its pipeline's views (graphics: every
+ * graphics stage, D3D11.1; compute) through the bound shader's map -- typed
+ * views at image u#, buffer views and counters at the shader buffers the map
+ * names. A shader without a map (the TGSI path) has u0..u7 at their own
+ * slots and counters at DXBC_NIR_UAV_COUNTER_SLOT + u#. */
+static void
+apply_uavs(Device *device, mesa_shader_stage stage)
+{
+   struct pipe_shader_buffer buffers[PIPE_MAX_SHADER_BUFFERS] = {};
+   struct pipe_image_view images[AGX_D3D11_UAV_SLOTS] = {};
+   const Shader *shader = static_cast<const Shader *>(device->agx_stage_shader[stage]);
+   const struct dxbc_nir_uav_slots *map =
+      shader ? static_cast<const struct dxbc_nir_uav_slots *>(shader->agx_uav64) : NULL;
+   void *const *views = device->agx_uavs[stage == MESA_SHADER_COMPUTE];
+   bool any = false;
+   for (unsigned u = 0; u < AGX_D3D11_UAV_SLOTS && !any; ++u)
+      any = views[u] != NULL;
+   /* a shader bind without views on either side changes nothing (DWM) */
+   if (!any && !(device->agx_uav_stages & (1u << stage)))
+      return;
+   device->agx_uav_stages = any ? device->agx_uav_stages | (1u << stage) :
+                                  device->agx_uav_stages & ~(1u << stage);
+   for (unsigned u = 0; u < AGX_D3D11_UAV_SLOTS; ++u) {
+      const AgxUnorderedAccessView *view = static_cast<const AgxUnorderedAccessView *>(views[u]);
+      if (!view)
+         continue;
+      if (view->typed) {
+         images[u] = view->image;
+         continue;
+      }
+      const unsigned buffer = map ? map->buffer[u] : u < DXBC_NIR_MAX_UAVS ? u : DXBC_NIR_UAV_UNUSED;
+      const unsigned counter = map ? map->counter[u] :
+         u < DXBC_NIR_MAX_UAVS ? DXBC_NIR_UAV_COUNTER_SLOT + u : DXBC_NIR_UAV_UNUSED;
+      if (buffer < PIPE_MAX_SHADER_BUFFERS)
+         buffers[buffer] = view->buffer;
+      if (counter < PIPE_MAX_SHADER_BUFFERS && view->counter) {
+         buffers[counter].buffer = view->counter;
+         buffers[counter].buffer_size = 4;
+      }
+   }
+   device->pipe->set_shader_buffers(device->pipe, stage, 0, PIPE_MAX_SHADER_BUFFERS, buffers,
+                                    BITFIELD_MASK(PIPE_MAX_SHADER_BUFFERS));
+   device->pipe->set_shader_images(device->pipe, stage, 0, AGX_D3D11_UAV_SLOTS, 0, images);
+}
+
+/* The stages a pipeline's UAVs reach (D3D11.1: every graphics stage). */
+static void
+apply_pipeline_uavs(Device *device, bool compute)
+{
+   static const mesa_shader_stage graphics[] = {MESA_SHADER_VERTEX, MESA_SHADER_TESS_CTRL,
+                                                MESA_SHADER_TESS_EVAL, MESA_SHADER_GEOMETRY,
+                                                MESA_SHADER_FRAGMENT};
+   if (compute) {
+      apply_uavs(device, MESA_SHADER_COMPUTE);
+      return;
+   }
+   for (mesa_shader_stage stage : graphics)
+      apply_uavs(device, stage);
+}
+
+/* A stage's shader changed: its map places the pipeline's views. */
+static void
+note_stage_shader(Device *device, mesa_shader_stage stage, Shader *shader)
+{
+   device->agx_stage_shader[stage] = shader;
+   apply_uavs(device, stage);
+}
+
+/* Binds slots [first, first + count) of a pipeline: views[i - start] for the
  * slots in [start, start + n), nothing for the others; an initial count other
  * than ~0 sets a counter view's hidden counter. */
 static bool
-bind_uavs(Device *device, mesa_shader_stage stage, UINT first, UINT count, UINT start, UINT n,
+bind_uavs(Device *device, bool compute, UINT first, UINT count, UINT start, UINT n,
           const D3D11DDI_HUNORDEREDACCESSVIEW *views, const UINT *initial_counts)
 {
-   struct pipe_shader_buffer buffers[AGX_D3D11_UAV_SLOTS] = {};
-   struct pipe_shader_buffer counters[AGX_D3D11_UAV_SLOTS] = {};
-   struct pipe_image_view images[AGX_D3D11_UAV_SLOTS] = {};
    struct pipe_context *pipe = device->pipe;
    if (first > AGX_D3D11_UAV_SLOTS || count > AGX_D3D11_UAV_SLOTS - first ||
        start < first || n > count - (start - first) || (n && !views))
       return false;
    for (UINT i = 0; i < n; ++i) {
       AgxUnorderedAccessView *view = CastUnorderedAccessView(views[i]);
-      UINT slot = start - first + i;
-      if (!view)
-         continue;
-      if (view->owner_device != device || (!view->typed && !view->buffer.buffer))
+      if (view && (view->owner_device != device || (!view->typed && !view->buffer.buffer)))
          return false;
-      if (view->typed) {
-         images[slot] = view->image;
-      } else {
-         buffers[slot] = view->buffer;
-         if (view->counter) {
-            counters[slot].buffer = view->counter;
-            counters[slot].buffer_size = 4;
-            if (initial_counts && initial_counts[i] != ~0u) {
-               pipe->buffer_subdata(pipe, view->counter, PIPE_MAP_WRITE, 0, 4, &initial_counts[i]);
-               counter_trace("measure-uav-counter-initial", pipe, view->counter, slot,
-                             initial_counts[i]);
-            }
-         }
+   }
+   for (UINT slot = first; slot < first + count; ++slot)
+      device->agx_uavs[compute][slot] = NULL;
+   for (UINT i = 0; i < n; ++i) {
+      AgxUnorderedAccessView *view = CastUnorderedAccessView(views[i]);
+      device->agx_uavs[compute][start + i] = view;
+      if (view && view->counter && initial_counts && initial_counts[i] != ~0u) {
+         pipe->buffer_subdata(pipe, view->counter, PIPE_MAP_WRITE, 0, 4, &initial_counts[i]);
+         counter_trace("measure-uav-counter-initial", pipe, view->counter, start + i,
+                       initial_counts[i]);
       }
    }
-   if (!count)
-      return true;
-   pipe->set_shader_buffers(pipe, stage, first, count, buffers, BITFIELD_MASK(count));
-   pipe->set_shader_buffers(pipe, stage, AGX_D3D11_UAV_SLOTS + first, count, counters,
-                            BITFIELD_MASK(count));
-   pipe->set_shader_images(pipe, stage, first, count, 0, images);
+   if (count)
+      apply_pipeline_uavs(device, compute);
    return true;
 }
 
@@ -651,7 +712,7 @@ CsSetUnorderedAccessViews11(D3D10DDI_HDEVICE hDevice, UINT start, UINT n,
                             const D3D11DDI_HUNORDEREDACCESSVIEW *views, const UINT *initial_counts)
 {
    Device *device = CastDevice(hDevice);
-   if (!device || !bind_uavs(device, MESA_SHADER_COMPUTE, start, n, start, n, views, initial_counts))
+   if (!device || !bind_uavs(device, true, start, n, start, n, views, initial_counts))
       refuse(hDevice, "reject-d3d11-cs-uav", start, n);
 }
 
@@ -785,17 +846,35 @@ SetRenderTargets11(D3D10DDI_HDEVICE hDevice, const D3D10DDI_HRENDERTARGETVIEW *p
                    const D3D11DDI_HUNORDEREDACCESSVIEW *phUAVs, const UINT *pInitialCounts,
                    UINT UAVStartSlot, UINT NumUAVs, UINT UAVRangeStart, UINT UAVRangeSize)
 {
-   /* D3D-H5: pixel-stage UAVs share the slot space with the render targets
-    * (UAVStartSlot >= NumRTVs); the range updated includes unbinds */
+   /* D3D-H5: graphics UAVs share the slot space with the render targets
+    * (UAVStartSlot >= NumRTVs); the range updated includes unbinds. FL 11_1:
+    * every graphics stage sees them. */
    SetRenderTargets(hDevice, phRTVs, NumRTVs, ClearSlots, hDSV);
    Device *device = CastDevice(hDevice);
    UINT first = MIN2(UAVRangeStart, UAVStartSlot);
    UINT end = MAX2(UAVRangeStart + UAVRangeSize, UAVStartSlot + NumUAVs);
    if (!NumUAVs && !UAVRangeSize)
       return;
-   if (!device || !bind_uavs(device, MESA_SHADER_FRAGMENT, first, end - first, UAVStartSlot,
+   if (!device || !bind_uavs(device, false, first, end - first, UAVStartSlot,
                              NumUAVs, phUAVs, pInitialCounts))
       refuse(hDevice, "reject-d3d11-pixel-uav", UAVStartSlot, NumUAVs);
+}
+
+/* FL 11_1: translates with the D3D11.1 UAV registers and keeps the map in
+ * the shader (DestroyShader frees it). */
+static struct nir_shader *
+translate_uav64(Shader *shader, const UINT *code, const struct nir_shader_compiler_options *options,
+                uint32_t registers, uint32_t positions, struct dxbc_nir_error *error)
+{
+   struct dxbc_nir_uav_slots *slots =
+      static_cast<struct dxbc_nir_uav_slots *>(malloc(sizeof(struct dxbc_nir_uav_slots)));
+   struct nir_shader *nir =
+      slots ? dxbc_translate_tokens_uav64(code, options, registers, positions, slots, error) : NULL;
+   if (nir)
+      shader->agx_uav64 = slots;
+   else
+      free(slots);
+   return nir;
 }
 
 static void APIENTRY
@@ -812,8 +891,8 @@ CreateComputeShader11(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_HSHAD
    }
    struct pipe_context *pipe = device->pipe;
    struct dxbc_nir_error error = {};
-   struct nir_shader *nir = dxbc_translate_tokens(code, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
-                                                  &error);
+   struct nir_shader *nir = translate_uav64(shader, code, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
+                                            0, 0, &error);
    UINT values[4] = {(UINT)MESA_SHADER_COMPUTE, nir ? 1u : 0u, error.opcode, error.offset};
    AgxD3d10WindowsDiagnostic("measure-shader-nir", nir ? S_OK : E_NOTIMPL, values, 4u);
    if (!nir) {
@@ -847,6 +926,7 @@ CsSetShader11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader)
    device->pipe->bind_compute_state(device->pipe, shader ? shader->handle : NULL);
    for (unsigned i = 0; i < 3; ++i)
       device->agx_cs_block[i] = shader ? shader->agx_block[i] : 0u;
+   note_stage_shader(device, MESA_SHADER_COMPUTE, shader);
 }
 
 /* D3D11 orders a Dispatch's unordered-access writes before every later
@@ -1008,8 +1088,8 @@ create_tessellation_shader(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_
    struct dxbc_nir_error error = {};
    if (stage == MESA_SHADER_TESS_CTRL)
       hs_passthrough(sig, &registers, &positions);
-   struct nir_shader *nir = dxbc_translate_tokens_hs(code, pipe->screen->nir_options[stage],
-                                                     registers, positions, &error);
+   struct nir_shader *nir = translate_uav64(shader, code, pipe->screen->nir_options[stage],
+                                            registers, positions, &error);
    UINT values[4] = {(UINT)stage, nir ? 1u : 0u, error.opcode, error.offset};
    AgxD3d10WindowsDiagnostic("measure-shader-nir", nir ? S_OK : E_NOTIMPL, values, 4u);
    if (!nir) {
@@ -1052,6 +1132,7 @@ bind_tessellation_shader(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader, mes
       device->pipe->bind_tcs_state(device->pipe, shader ? shader->handle : NULL);
    else
       device->pipe->bind_tes_state(device->pipe, shader ? shader->handle : NULL);
+   note_stage_shader(device, stage, shader);
 }
 
 static void APIENTRY
@@ -1108,6 +1189,31 @@ SetShaderWithIfacesNone(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader, UINT
       refuse(hDevice, "reject-d3d11-stage-shader", n, 1);
 }
 
+/* FL 11_1: the frontend binds VS, GS and PS; their UAV maps follow. */
+#define AGX_D3D11_SET_SHADER(name, frontend, stage)                                \
+   static void APIENTRY name(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader)   \
+   {                                                                               \
+      frontend(hDevice, hShader);                                                  \
+      if (Device *device = CastDevice(hDevice))                                    \
+         note_stage_shader(device, stage, CastShader(hShader));                    \
+   }
+AGX_D3D11_SET_SHADER(VsSetShader11, VsSetShader, MESA_SHADER_VERTEX)
+AGX_D3D11_SET_SHADER(GsSetShader11, GsSetShader, MESA_SHADER_GEOMETRY)
+AGX_D3D11_SET_SHADER(PsSetShader11, PsSetShader, MESA_SHADER_FRAGMENT)
+
+static PFND3D10DDI_DESTROYSHADER destroy_shader_10;
+
+/* the runtime unbinds first; never keep a pointer to a dead shader */
+static void APIENTRY
+DestroyShader11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader)
+{
+   if (Device *device = CastDevice(hDevice))
+      for (void *&bound : device->agx_stage_shader)
+         if (bound == hShader.pDrvPrivate)
+            bound = NULL;
+   destroy_shader_10(hDevice, hShader);
+}
+
 #define AGX_D3D11_WITH_IFACES(name, plain)                                         \
    static void APIENTRY name(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader,   \
                              UINT n, const UINT *ids, const D3D11DDIARG_POINTERDATA *data) \
@@ -1119,9 +1225,9 @@ SetShaderWithIfacesNone(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader, UINT
       }                                                                            \
       plain(hDevice, hShader);                                                     \
    }
-AGX_D3D11_WITH_IFACES(VsSetShaderWithIfaces11, VsSetShader)
-AGX_D3D11_WITH_IFACES(GsSetShaderWithIfaces11, GsSetShader)
-AGX_D3D11_WITH_IFACES(PsSetShaderWithIfaces11, PsSetShader)
+AGX_D3D11_WITH_IFACES(VsSetShaderWithIfaces11, VsSetShader11)
+AGX_D3D11_WITH_IFACES(GsSetShaderWithIfaces11, GsSetShader11)
+AGX_D3D11_WITH_IFACES(PsSetShaderWithIfaces11, PsSetShader11)
 AGX_D3D11_WITH_IFACES(CsSetShaderWithIfaces11, CsSetShader11)
 AGX_D3D11_WITH_IFACES(HsSetShaderWithIfaces11, HsSetShader11)
 AGX_D3D11_WITH_IFACES(DsSetShaderWithIfaces11, DsSetShader11)
@@ -1177,9 +1283,9 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnDefaultConstantBufferUpdateSubresourceUP = base->pfnDefaultConstantBufferUpdateSubresourceUP;
    f->pfnVsSetConstantBuffers = base->pfnVsSetConstantBuffers;
    f->pfnPsSetShaderResources = base->pfnPsSetShaderResources;
-   f->pfnPsSetShader = base->pfnPsSetShader;
+   f->pfnPsSetShader = PsSetShader11; /* FL 11_1: UAV maps */
    f->pfnPsSetSamplers = base->pfnPsSetSamplers;
-   f->pfnVsSetShader = base->pfnVsSetShader;
+   f->pfnVsSetShader = VsSetShader11;
    f->pfnDrawIndexed = base->pfnDrawIndexed;
    f->pfnDraw = base->pfnDraw;
    f->pfnDynamicIABufferMapNoOverwrite = base->pfnDynamicIABufferMapNoOverwrite;
@@ -1196,7 +1302,7 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnDynamicResourceMapDiscard = base->pfnDynamicResourceMapDiscard;
    f->pfnDynamicResourceUnmap = base->pfnDynamicResourceUnmap;
    f->pfnGsSetConstantBuffers = base->pfnGsSetConstantBuffers;
-   f->pfnGsSetShader = base->pfnGsSetShader;
+   f->pfnGsSetShader = GsSetShader11;
    ia_set_topology_10 = base->pfnIaSetTopology;
    f->pfnIaSetTopology = IaSetTopology11;
    f->pfnStagingResourceMap = base->pfnStagingResourceMap;
@@ -1251,7 +1357,8 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnCreateVertexShader = base->pfnCreateVertexShader;
    f->pfnCreateGeometryShader = base->pfnCreateGeometryShader;
    f->pfnCreatePixelShader = base->pfnCreatePixelShader;
-   f->pfnDestroyShader = base->pfnDestroyShader;
+   destroy_shader_10 = base->pfnDestroyShader;
+   f->pfnDestroyShader = DestroyShader11;
    f->pfnCalcPrivateSamplerSize = base->pfnCalcPrivateSamplerSize;
    f->pfnCreateSampler = base->pfnCreateSampler;
    f->pfnDestroySampler = base->pfnDestroySampler;

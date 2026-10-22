@@ -21,7 +21,10 @@
 #define MAX_RESOURCES 128
 #define MAX_SAMPLERS 16
 #define MAX_CF 64
-#define MAX_UAVS DXBC_NIR_MAX_UAVS
+/* UAV entries: the slots (c->uav_slots of them: 8, or 64 in D3D11.1 mode),
+ * then the C47 heap ranges from MAX_UAVS */
+#define MAX_UAVS DXBC_NIR_UAV11_SLOTS
+#define UAV11_SHADER_BUFFERS 32u /* Gallium PIPE_MAX_SHADER_BUFFERS */
 #define MAX_TGSM 32
 #define MAX_PHASES 64
 
@@ -151,6 +154,9 @@ struct ctx {
    uint8_t cp_out_mask[MAX_REGS];
    unsigned cp_in;                   /* input control point count */
    uint32_t passthrough_registers;   /* a pass-through phase copies these */
+   /* UAV registers u0..uav_slots-1; counters at shader buffer counter_base + u#
+    * (D3D11.1 mode: 64 and 64, compacted by compact_uav_buffers) */
+   unsigned uav_slots, counter_base;
    uint32_t passthrough_positions;   /* of which these hold SV_Position */
 
    struct cf_entry cf[MAX_CF];
@@ -1263,7 +1269,7 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
          c->uav[MAX_UAVS + u].type = return_type(insn->payload[0]);
          return;
       }
-      if (heap || u >= MAX_UAVS || !insn->num_payload ||
+      if (heap || u >= c->uav_slots || !insn->num_payload ||
           !tex_shape((insn->token0 >> 11) & 0x1fu, &shape) || shape.dim == GLSL_SAMPLER_DIM_MS ||
           shape.dim == GLSL_SAMPLER_DIM_CUBE) {
          fail(c, insn, "typed UAV declaration");
@@ -1286,7 +1292,7 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
       unsigned u = o ? (unsigned)o->index[0].imm : MAX_UAVS;
       bool structured = insn->opcode == DXBC_OP_DCL_UAV_STRUCTURED;
       const bool heap = o && heap_operand(c, o); /* C47: a buffer image in the heap */
-      if (u >= (heap ? DXBC_HEAP_RANGE_MAX : MAX_UAVS) ||
+      if (u >= (heap ? DXBC_HEAP_RANGE_MAX : c->uav_slots) ||
           (structured && (!insn->num_payload || !insn->payload[0] || (insn->payload[0] & 3)))) {
          fail(c, insn, "buffer UAV declaration");
          return;
@@ -1986,7 +1992,7 @@ uav_entry(const struct ctx *c, const struct dxbc_operand *o)
    if (heap_operand(c, o))
       return o->index[0].imm < DXBC_HEAP_RANGE_MAX && c->uav[MAX_UAVS + o->index[0].imm].kind
                 ? MAX_UAVS + (unsigned)o->index[0].imm : none;
-   return o->index[0].imm < MAX_UAVS ? (unsigned)o->index[0].imm : none;
+   return o->index[0].imm < c->uav_slots ? (unsigned)o->index[0].imm : none;
 }
 
 /* C47: a heap UAV's descriptor handle (texture for reads and size queries,
@@ -2756,7 +2762,7 @@ emit_atomic(struct ctx *c, const struct dxbc_instruction *insn)
 }
 
 /* imm_atomic_alloc / imm_atomic_consume: the UAV's hidden counter
- * (DXBC_NIR_UAV_COUNTER_SLOT + u#); alloc returns the old count, consume the
+ * (shader buffer counter_base + u#); alloc returns the old count, consume the
  * new one */
 static void
 emit_counter(struct ctx *c, const struct dxbc_instruction *insn)
@@ -2780,14 +2786,13 @@ emit_counter(struct ctx *c, const struct dxbc_instruction *insn)
       write_dst(c, insn, &insn->operands[0], replicate4(c, alloc ? old : nir_iadd_imm(b, old, -1)), false);
       return;
    }
-   if (uav->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || u >= MAX_UAVS ||
+   if (uav->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || u >= c->uav_slots ||
        c->uav[u].kind != MEM_STRUCTURED) {
       fail(c, insn, "counter of a non-structured UAV");
       return;
    }
-   slot = nir_imm_int(b, DXBC_NIR_UAV_COUNTER_SLOT + (int)u);
-   b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos,
-                                    (uint8_t)(DXBC_NIR_UAV_COUNTER_SLOT + u + 1));
+   slot = nir_imm_int(b, (int)(c->counter_base + u));
+   b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos, (uint8_t)(c->counter_base + u + 1));
    old = nir_ssbo_atomic(b, 32, slot, nir_imm_int(b, 0), nir_imm_int(b, alloc ? 1 : -1),
                          .atomic_op = nir_atomic_op_iadd);
    write_dst(c, insn, &insn->operands[0], replicate4(c, alloc ? old : nir_iadd_imm(b, old, -1)),
@@ -3195,10 +3200,81 @@ dxbc_nir_tess_info(const struct nir_shader *nir)
           ((uint32_t)nir->info.tess._primitive_mode << 8) | ((uint32_t)nir->info.tess.spacing << 16);
 }
 
+/* D3D11.1 mode: buffer UAV u# (shader buffer u#) and its counter (shader
+ * buffer DXBC_NIR_UAV11_SLOTS + u#) move to consecutive shader buffers --
+ * the buffer views in register order, then the counters -- since Gallium has
+ * 32 (PIPE_MAX_SHADER_BUFFERS) for 64 registers. SM 5.0 indexes UAVs by
+ * immediates only, so every index is constant. Typed views keep image u#. */
+static bool
+compact_uav_buffers(const struct ctx *c, nir_shader *nir, struct dxbc_nir_uav_slots *slots)
+{
+   uint8_t remap[2 * DXBC_NIR_UAV11_SLOTS];
+   unsigned next = 0;
+   memset(slots, 0, sizeof(*slots));
+   memset(slots->buffer, DXBC_NIR_UAV_UNUSED, sizeof(slots->buffer));
+   memset(slots->counter, DXBC_NIR_UAV_UNUSED, sizeof(slots->counter));
+   memset(remap, DXBC_NIR_UAV_UNUSED, sizeof(remap));
+   for (unsigned u = 0; u < DXBC_NIR_UAV11_SLOTS; ++u) {
+      if (c->uav[u].kind == MEM_TYPED)
+         slots->typed |= 1ull << u;
+      else if (c->uav[u].kind >= MEM_RAW)
+         remap[u] = slots->buffer[u] = (uint8_t)next++;
+   }
+   /* counters: the structured views an alloc/consume names */
+   nir_foreach_function_impl(impl, nir)
+      nir_foreach_block(block, impl)
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic ||
+                nir_instr_as_intrinsic(instr)->intrinsic != nir_intrinsic_ssbo_atomic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            if (!nir_src_is_const(intr->src[0]))
+               return false;
+            unsigned slot = nir_src_as_uint(intr->src[0]);
+            if (slot >= DXBC_NIR_UAV11_SLOTS && slot < 2 * DXBC_NIR_UAV11_SLOTS)
+               slots->counter[slot - DXBC_NIR_UAV11_SLOTS] = 0;
+         }
+   for (unsigned u = 0; u < DXBC_NIR_UAV11_SLOTS; ++u)
+      if (slots->counter[u] != DXBC_NIR_UAV_UNUSED)
+         remap[DXBC_NIR_UAV11_SLOTS + u] = slots->counter[u] = (uint8_t)next++;
+   if (next > UAV11_SHADER_BUFFERS)
+      return false;
+   nir_foreach_function_impl(impl, nir) {
+      nir_builder b = nir_builder_create(impl);
+      nir_foreach_block(block, impl)
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            unsigned source;
+            switch (intr->intrinsic) {
+            case nir_intrinsic_store_ssbo: source = 1; break;
+            case nir_intrinsic_load_ssbo:
+            case nir_intrinsic_ssbo_atomic:
+            case nir_intrinsic_ssbo_atomic_swap:
+            case nir_intrinsic_get_ssbo_size: source = 0; break;
+            default: continue;
+            }
+            if (!nir_src_is_const(intr->src[source]))
+               return false;
+            const unsigned slot = nir_src_as_uint(intr->src[source]);
+            if (slot >= ARRAY_SIZE(remap) || remap[slot] == DXBC_NIR_UAV_UNUSED)
+               return false;
+            b.cursor = nir_before_instr(instr);
+            nir_src_rewrite(&intr->src[source], nir_imm_int(&b, remap[slot]));
+         }
+      nir_progress(true, impl, nir_metadata_control_flow);
+   }
+   nir->info.num_ssbos = (uint8_t)next;
+   slots->buffers = next;
+   return true;
+}
+
 static struct nir_shader *
 translate(const struct dxbc_program *program, const struct nir_shader_compiler_options *options,
           uint32_t passthrough_registers, uint32_t passthrough_positions,
-          const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error)
+          const struct dxbc_nir_xfb *xfb, struct dxbc_nir_uav_slots *uav64,
+          struct dxbc_nir_error *error)
 {
    static struct dxbc_nir_error ignored;
    struct ctx *c;
@@ -3226,6 +3302,7 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
    c->error = error;
    c->passthrough_registers = passthrough_registers;
    c->passthrough_positions = passthrough_positions;
+   c->uav_slots = c->counter_base = uav64 ? DXBC_NIR_UAV11_SLOTS : DXBC_NIR_MAX_UAVS;
    c->stage = stage;
    c->b = nir_builder_init_simple_shader(stage, options, "dxbc");
    nir = c->b.shader;
@@ -3301,13 +3378,20 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
     * info.num_images - 1, which nir_shader_gather_info recounts from the
     * image variables; slots without a typed UAV (raw/structured UAVs, gaps)
     * get placeholders so the count spans the highest typed slot */
-   for (unsigned u = 0; u < BITSET_LAST_BIT(nir->info.images_used) && u < MAX_UAVS; ++u) {
+   for (unsigned u = 0; u < BITSET_LAST_BIT(nir->info.images_used) && u < c->uav_slots; ++u) {
       if (c->uav[u].image)
          continue;
       nir_variable *gap = nir_variable_create(nir, nir_var_image,
          glsl_image_type(GLSL_SAMPLER_DIM_2D, false, GLSL_TYPE_FLOAT), "u_unused");
       gap->data.binding = u;
       gap->data.image.format = PIPE_FORMAT_NONE;
+   }
+   if (uav64 && !compact_uav_buffers(c, nir, uav64)) {
+      snprintf(error->message, sizeof(error->message), "more than %u buffer UAVs and counters",
+               UAV11_SHADER_BUFFERS);
+      ralloc_free(nir);
+      free(c);
+      return NULL;
    }
    free(c);
    return nir;
@@ -3318,7 +3402,7 @@ dxbc_to_nir(const struct dxbc_program *program,
             const struct nir_shader_compiler_options *options,
             struct dxbc_nir_error *error)
 {
-   return translate(program, options, 0, 0, NULL, error);
+   return translate(program, options, 0, 0, NULL, NULL, error);
 }
 
 struct nir_shader *
@@ -3327,7 +3411,7 @@ dxbc_to_nir_hs(const struct dxbc_program *program,
                uint32_t passthrough_registers, uint32_t passthrough_positions,
                struct dxbc_nir_error *error)
 {
-   return translate(program, options, passthrough_registers, passthrough_positions, NULL, error);
+   return translate(program, options, passthrough_registers, passthrough_positions, NULL, NULL, error);
 }
 
 void
@@ -3412,7 +3496,8 @@ dxbc_translate_tokens(const uint32_t *tokens,
 static struct nir_shader *
 translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_options *options,
                  uint32_t passthrough_registers, uint32_t passthrough_positions,
-                 const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error);
+                 const struct dxbc_nir_xfb *xfb, struct dxbc_nir_uav_slots *uav64,
+                 struct dxbc_nir_error *error);
 
 struct nir_shader *
 dxbc_translate_tokens_hs(const uint32_t *tokens,
@@ -3421,7 +3506,25 @@ dxbc_translate_tokens_hs(const uint32_t *tokens,
                          struct dxbc_nir_error *error)
 {
    return translate_tokens(tokens, options, passthrough_registers, passthrough_positions,
-                           NULL, error);
+                           NULL, NULL, error);
+}
+
+struct nir_shader *
+dxbc_translate_tokens_uav64(const uint32_t *tokens,
+                            const struct nir_shader_compiler_options *options,
+                            uint32_t passthrough_registers, uint32_t passthrough_positions,
+                            struct dxbc_nir_uav_slots *slots, struct dxbc_nir_error *error)
+{
+   static struct dxbc_nir_error ignored;
+   if (!slots) {
+      if (!error)
+         error = &ignored;
+      memset(error, 0, sizeof(*error));
+      snprintf(error->message, sizeof(error->message), "no UAV slot map");
+      return NULL;
+   }
+   return translate_tokens(tokens, options, passthrough_registers, passthrough_positions,
+                           NULL, slots, error);
 }
 
 struct nir_shader *
@@ -3438,13 +3541,14 @@ dxbc_translate_tokens_xfb(const uint32_t *tokens,
       snprintf(error->message, sizeof(error->message), "no stream output");
       return NULL;
    }
-   return translate_tokens(tokens, options, 0, 0, xfb, error);
+   return translate_tokens(tokens, options, 0, 0, xfb, NULL, error);
 }
 
 static struct nir_shader *
 translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_options *options,
                  uint32_t passthrough_registers, uint32_t passthrough_positions,
-                 const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error)
+                 const struct dxbc_nir_xfb *xfb, struct dxbc_nir_uav_slots *uav64,
+                 struct dxbc_nir_error *error)
 {
    static struct dxbc_nir_error ignored;
    struct dxbc_program program;
@@ -3466,7 +3570,7 @@ translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_option
       error->offset = perr.offset;
       return NULL;
    }
-   nir = translate(&program, options, passthrough_registers, passthrough_positions, xfb, error);
+   nir = translate(&program, options, passthrough_registers, passthrough_positions, xfb, uav64, error);
    dxbc_program_free(&program);
    if (nir)
       dxbc_nir_finalize(nir);
@@ -3519,7 +3623,7 @@ dxbc_translate_tokens_bindings_xfb(const uint32_t *tokens,
       status = dxbc_prepare_static_bindings(&program, limits, map, &perr);
       if (status == DXBC_OK) {
          nir_shader *nir = translate(&program, options, passthrough_registers,
-                                     passthrough_positions, xfb, error);
+                                     passthrough_positions, xfb, NULL, error);
          dxbc_program_free(&program);
          if (nir)
             dxbc_nir_finalize(nir);

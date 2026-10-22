@@ -1236,6 +1236,9 @@ struct AgxDdiTimer {
    /* D3D-H5: an SM 5 vertex shader's tokens (it has no TGSI record), the
     * source of its stream-output variant. */
    UINT *agx_code;
+   /* FL 11_1: a translated shader's UAV register map (struct
+    * dxbc_nir_uav_slots, malloc'd; NULL: u0..u7 at their own slots). */
+   void *agx_uav64;
 };
 
 /* D3D-H5: a vertex or geometry shader state with stream output from the
@@ -1263,6 +1266,12 @@ void *AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
    uint64_t agx_shader_serial;
    /* D3D-H2b: the bound compute shader's thread-group size (0: none). */
    UINT agx_cs_block[3];
+   /* FL 11_1 (agx_d3d11_ddi.cpp apply_uavs): the bound UAVs of the graphics
+    * [0] and compute [1] pipelines, D3D11_1_UAV_SLOT_COUNT each, and the
+    * shader bound at each stage, whose UAV map places them. */
+   void *agx_uavs[2][64];
+   void *agx_stage_shader[6];
+   UINT agx_uav_stages;   /* stages whose UAV bindings are not empty */
    /* D3D-G11: right/bottom pixel extent of the bound viewports. */
    UINT agx_viewport_extent[2];'''),
         ('''static inline void
@@ -2951,6 +2960,9 @@ UnsupportedDxgi''')
       free(pShader->agx_code);
       pShader->agx_code = NULL;
    }
+   /* FL 11_1: the UAV register map */
+   free(pShader->agx_uav64);
+   pShader->agx_uav64 = NULL;
    if (pShader->handle) {
       switch (pShader->type) {
       case MESA_SHADER_FRAGMENT:'''),
@@ -3430,20 +3442,24 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
 ''','''   pShader->type = MESA_SHADER_VERTEX;
    pShader->output_resolved = true;
    /* EXP1291: the runtime hands over uninitialized private memory, and
-    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader
+    * (and DestroyShader frees the FL 11_1 UAV map). */
    pShader->agx_serial = 0;
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
+   pShader->agx_uav64 = NULL;
 '''),
         ('''   pShader->type = MESA_SHADER_GEOMETRY;
    pShader->output_resolved = true;
 ''','''   pShader->type = MESA_SHADER_GEOMETRY;
    pShader->output_resolved = true;
    /* EXP1291: the runtime hands over uninitialized private memory, and
-    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader
+    * (and DestroyShader frees the FL 11_1 UAV map). */
    pShader->agx_serial = 0;
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
+   pShader->agx_uav64 = NULL;
 '''),
         ('''   bool all_slot_zero = true;
 
@@ -3452,20 +3468,24 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
 
    pShader->type = MESA_SHADER_GEOMETRY;
    /* EXP1291: the runtime hands over uninitialized private memory, and
-    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader
+    * (and DestroyShader frees the FL 11_1 UAV map). */
    pShader->agx_serial = 0;
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
+   pShader->agx_uav64 = NULL;
 '''),
         ('''   pShader->type = MESA_SHADER_FRAGMENT;
    pShader->output_resolved = true;
 ''','''   pShader->type = MESA_SHADER_FRAGMENT;
    pShader->output_resolved = true;
    /* EXP1291: the runtime hands over uninitialized private memory, and
-    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader
+    * (and DestroyShader frees the FL 11_1 UAV map). */
    pShader->agx_serial = 0;
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
+   pShader->agx_uav64 = NULL;
 '''),
         ('''#include "util/u_gen_mipmap.h"
 #include "drm-uapi/drm_fourcc.h"
@@ -3537,10 +3557,19 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
    if (code && !state.stream_output.num_outputs &&
        (translator || AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_NIR"))) {
       struct dxbc_nir_error error = {};
-      struct nir_shader *nir = dxbc_translate_tokens(code,
-         pipe->screen->nir_options[shader->type], &error);
+      /* FL 11_1: UAV registers u0..u63, placed by the shader's map */
+      struct dxbc_nir_uav_slots *slots =
+         (struct dxbc_nir_uav_slots *)malloc(sizeof(struct dxbc_nir_uav_slots));
+      struct nir_shader *nir = slots ? dxbc_translate_tokens_uav64(code,
+         pipe->screen->nir_options[shader->type], 0, 0, slots, &error) : NULL;
       UINT values[4] = {(UINT)shader->type, nir ? 1u : 0u, error.opcode, error.offset};
       AgxD3d10WindowsDiagnostic("measure-shader-nir", nir ? S_OK : E_NOTIMPL, values, 4u);
+      if (nir) {
+         free(shader->agx_uav64);
+         shader->agx_uav64 = slots;
+      } else {
+         free(slots);
+      }
       if (nir) {
          state.type = PIPE_SHADER_IR_NIR;
          state.tokens = NULL;

@@ -334,6 +334,27 @@ class DxbcToNir(unittest.TestCase):
         self.assertIn("@bindless_image_store", heap.stdout)
         self.assertIn("@bindless_image_atomic", heap.stdout)
 
+    def test_d3d11_1_uav_registers_compact_into_shader_buffers(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Feature level 11_1
+        # gives every stage UAV registers u0..u63, but Gallium has 32 shader
+        # buffers: buffer views at their register (u63) or counters at
+        # 64 + u# could never be bound. In D3D11.1 mode buffer views compact
+        # in register order, counters follow, typed views keep image u#, and
+        # every SSBO index in the NIR is rewritten to the compact slot.
+        out = subprocess.run([str(self.binary), str(FIXTURES / "cs50uav64.dxbc"), "--d3d11-uav64", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr[-3000:])
+        for line in ("UAV64 u0 buffer 0", "UAV64 u9 image 9", "UAV64 u40 buffer 1", "UAV64 u40 counter 3",
+                     "UAV64 u62 image 62", "UAV64 u63 buffer 2", "UAV64 buffers 4"):
+            self.assertIn(line, out.stdout)
+        self.assertRegex(out.stdout, r"TRANSLATED stage MESA_SHADER_COMPUTE .* ssbos 4 images 63 ")
+        indices = {int(v, 16) for v in re.findall(
+            r"(?:load_ssbo|store_ssbo|ssbo_atomic|get_ssbo_size)[^\n]*?\(%\d+ \(0x([0-9a-f]+)\)", out.stdout)}
+        self.assertTrue(indices and all(i < 4 for i in indices), sorted(indices))
+        # the D3D11.0 entry keeps u0..u7 and refuses the shader
+        legacy = self.run_fixture("cs50uav64")
+        self.assertTrue(legacy.stdout.startswith("REFUSED "), legacy.stdout)
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

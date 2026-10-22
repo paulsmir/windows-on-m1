@@ -32,9 +32,24 @@ struct nir_shader_compiler_options;
  * dword per texel.
  * UAV registers are u0..u7 (D3D11_PS_CS_UAV_REGISTER_COUNT, the D3D11.0
  * DDI), so buffers and counters fill shader-buffer slots 0..15 of Gallium's
- * 32.  The 64 slots of the D3D11.1 DDI need per-shader slot compaction. */
+ * 32.  The 64 slots of the D3D11.1 DDI use dxbc_translate_tokens_uav64. */
 #define DXBC_NIR_MAX_UAVS 8
 #define DXBC_NIR_UAV_COUNTER_SLOT DXBC_NIR_MAX_UAVS
+
+/* D3D11.1 (feature level 11_1): UAV registers u0..u63
+ * (D3D11_1_UAV_SLOT_COUNT). A typed view u# stays image slot #
+ * (PIPE_MAX_SHADER_IMAGES 64); buffer views and their counters move to
+ * consecutive shader buffers, buffer views in register order first:
+ * buffer[u#] and counter[u#] name the slot, DXBC_NIR_UAV_UNUSED where the
+ * shader has none. A shader needing more than PIPE_MAX_SHADER_BUFFERS (32)
+ * is refused. */
+#define DXBC_NIR_UAV11_SLOTS 64
+#define DXBC_NIR_UAV_UNUSED 0xffu
+struct dxbc_nir_uav_slots {
+   uint8_t buffer[DXBC_NIR_UAV11_SLOTS], counter[DXBC_NIR_UAV11_SLOTS];
+   uint64_t typed;     /* typed views: bit u# */
+   uint32_t buffers;   /* shader buffers used */
+};
 
 struct dxbc_nir_error {
    char message[160];
@@ -95,6 +110,15 @@ dxbc_translate_tokens_bindings_hs(const uint32_t *tokens,
    const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
    uint32_t passthrough_registers, uint32_t passthrough_positions,
    struct dxbc_nir_error *error);
+
+/* dxbc_translate_tokens with the D3D11.1 UAV registers (see
+ * dxbc_nir_uav_slots); hull shaders pass their pass-through registers,
+ * other stages 0. */
+struct nir_shader *
+dxbc_translate_tokens_uav64(const uint32_t *tokens,
+                            const struct nir_shader_compiler_options *options,
+                            uint32_t passthrough_registers, uint32_t passthrough_positions,
+                            struct dxbc_nir_uav_slots *slots, struct dxbc_nir_error *error);
 
 /* dxbc_translate_tokens for a hull shader with the pass-through registers
  * of its output signature (see dxbc_to_nir_hs). */
