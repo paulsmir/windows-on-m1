@@ -349,6 +349,8 @@ typedef struct {
   unsigned LogicOp;
   unsigned SampleMask;
   unsigned SampleCount; /* C32: the PSO's SampleDesc.Count */
+  /* FL 11_1: RasterizerState.ForcedSampleCount (TIR, UAV-only rendering) */
+  unsigned ForcedSampleCount;
   unsigned FillMode, CullMode;
   int FrontCounterClockwise, DepthBias, DepthClipEnable;
   float DepthBiasClamp, SlopeScaledDepthBias;
@@ -369,6 +371,9 @@ typedef struct {
   void *Hs, *Ds; /* C37: TCS and TES */
   int Xfb; /* C39: the last vertex stage captures stream output */
   unsigned SampleMask; /* C32 */
+  /* FL 11_1: the forced sample count the TIR variant (Gs = the expansion
+   * GS, Fs = the coverage variant) implements; 0 without */
+  unsigned TirSamples;
   unsigned NumElements;
   struct {
     unsigned Slot, Offset, Register, Divisor, Format; /* pipe format */

@@ -22,6 +22,7 @@ extern "C" {
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
 #include "../dxbc/dxbc_to_nir.h"
+#include "../dxbc/dxbc_tir_gs.h"
 #ifdef APPLE_AGX_D3D12_DXIL
 #include "../dxil/agx_dxil_to_nir.h"
 #endif
@@ -1807,7 +1808,8 @@ static void dump_failed_shader(const UINT *tokens, mesa_shader_stage stage, UINT
 static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_shader_stage stage,
                            struct dxbc_binding_map *bindings, uint8_t dimensions[DXBC_RESOURCE_SLOTS],
                            uint8_t uav_dimensions[DXBC_UAV_DIMENSION_SLOTS], uint32_t passthrough_registers = 0,
-                           uint32_t passthrough_positions = 0, const struct dxbc_nir_xfb *xfb = NULL) {
+                           uint32_t passthrough_positions = 0, const struct dxbc_nir_xfb *xfb = NULL,
+                           unsigned tir_samples = 0, struct nir_shader **tir_clone = NULL) {
   struct dxbc_nir_error error = {};
   /* C37: a hull shader also takes its output signature's pass-through
    * registers (the D3D11 frontend's create_tessellation_shader); C39: the
@@ -1830,10 +1832,20 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
     memset(bindings, 0, sizeof(*bindings));
     return NULL;
   }
+  /* FL 11_1: the forced-sample-count variant (dxbc_tir_lower_fs) */
+  if (stage == MESA_SHADER_FRAGMENT && tir_samples && !dxbc_tir_lower_fs(nir, tir_samples)) {
+    receipt("measure-d3d12-graphics-shader-slots", E_NOTIMPL, static_cast<UINT>(stage), 5u, tir_samples);
+    ralloc_free(nir);
+    memset(bindings, 0, sizeof(*bindings));
+    return NULL;
+  }
   /* Asahi consumes integer pixel_coord. This fresh D3D fragment NIR must
    * acquire the half-pixel center exactly once before native preprocessing. */
   if (stage == MESA_SHADER_FRAGMENT)
     dxbc_nir_lower_fragment_position(nir);
+  /* FL 11_1: the TIR expansion GS keys on the vertex and pixel shaders' I/O */
+  if (tir_clone)
+    *tir_clone = nir_shader_clone(NULL, nir);
   /* receipt-only (EXP1858 C37D/C37E: tessellated winding inverted against
    * D3D for both output topologies): the tessellation info Asahi reads */
   if (stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_TESS_EVAL)
@@ -1920,11 +1932,38 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   if (desc->So && !so) return E_NOTIMPL;
   const struct dxbc_nir_xfb *vs_xfb = so && !desc->Gs ? &xfb : NULL, *gs_xfb = so && desc->Gs ? &xfb : NULL;
   graphics->Xfb = so;
+  /* FL 11_1 forced sample count (D3D11-FL111-TIR.md): a pixel shader
+   * variant behind the expansion GS; not yet with a GS, tessellation or
+   * stream output (plain 1x rasterization with a receipt) */
+  const bool tir = desc->ForcedSampleCount >= 4u && desc->Ps && !desc->Gs && !desc->Hs && !desc->Ds && !so;
+  if (desc->ForcedSampleCount > 1u && !tir)
+    receipt("reject-d3d12-tir", E_NOTIMPL, desc->ForcedSampleCount, (desc->Gs ? 1u : 0u) | (desc->Hs ? 2u : 0u) | (so ? 4u : 0u));
+  struct nir_shader *vs_io = NULL, *fs_io = NULL;
   graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX, &graphics->VsBindings, graphics->VsSrvDimensions,
-                               graphics->VsUavDimensions, 0, 0, vs_xfb);
-  graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT, &graphics->PsBindings, graphics->PsSrvDimensions, graphics->PsUavDimensions) : NULL;
-  graphics->Gs = desc->Gs ? create_shader(pipe, desc->Gs, MESA_SHADER_GEOMETRY, &graphics->GsBindings, graphics->GsSrvDimensions,
-                                          graphics->GsUavDimensions, 0, 0, gs_xfb) : NULL;
+                               graphics->VsUavDimensions, 0, 0, vs_xfb, 0, tir ? &vs_io : NULL);
+  graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT, &graphics->PsBindings, graphics->PsSrvDimensions,
+                                          graphics->PsUavDimensions, 0, 0, NULL, tir ? desc->ForcedSampleCount : 0u,
+                                          tir ? &fs_io : NULL) : NULL;
+  if (tir) {
+    struct dxbc_tir_gs_key key;
+    struct nir_shader *gs = vs_io && fs_io && dxbc_tir_gs_key_from(vs_io, fs_io, &key)
+                                ? dxbc_tir_gs(pipe->screen->nir_options[MESA_SHADER_GEOMETRY], &key) : NULL;
+    ralloc_free(vs_io);
+    ralloc_free(fs_io);
+    if (gs) {
+      dxbc_nir_finalize(gs);
+      struct pipe_shader_state state = {};
+      state.type = PIPE_SHADER_IR_NIR;
+      state.ir.nir = gs;
+      graphics->Gs = pipe->create_gs_state(pipe, &state);
+    }
+    graphics->TirSamples = graphics->Gs ? desc->ForcedSampleCount : 0u;
+    receipt("measure-d3d12-tir", graphics->Gs ? S_OK : E_NOTIMPL, desc->ForcedSampleCount, graphics->Fs ? 1u : 0u,
+            graphics->Gs ? 1u : 0u);
+  }
+  if (!tir)
+    graphics->Gs = desc->Gs ? create_shader(pipe, desc->Gs, MESA_SHADER_GEOMETRY, &graphics->GsBindings, graphics->GsSrvDimensions,
+                                            graphics->GsUavDimensions, 0, 0, gs_xfb) : NULL;
   graphics->Hs = desc->Hs ? create_shader(pipe, desc->Hs, MESA_SHADER_TESS_CTRL, &graphics->HsBindings, graphics->HsSrvDimensions,
                                           graphics->HsUavDimensions, desc->HsPassthroughRegisters, desc->HsPassthroughPositions) : NULL;
   graphics->Ds = desc->Ds ? create_shader(pipe, desc->Ds, MESA_SHADER_TESS_EVAL, &graphics->DsBindings, graphics->DsSrvDimensions, graphics->DsUavDimensions) : NULL;
@@ -1998,6 +2037,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   graphics->SampleMask = desc->SampleMask;
   graphics->Rasterizer = pipe->create_rasterizer_state(pipe, &rast);
   HRESULT hr = graphics->Vs && (graphics->Fs || !desc->Ps) && (graphics->Gs || !desc->Gs) && (graphics->Hs || !desc->Hs) &&
+                       (!tir || graphics->TirSamples) &&
                        (graphics->Ds || !desc->Ds) && !desc->Hs == !desc->Ds && graphics->Blend && graphics->DepthStencil &&
                        graphics->Rasterizer ? S_OK : E_NOTIMPL;
   graphics->NumElements = desc->NumElements;
@@ -2754,6 +2794,15 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     if (SUCCEEDED(hr))
       hr = bind_stage(pipe, o.stage, optional[s].bind->Cbvs, optional[s].bind->Srvs, optional[s].bind->Uavs, o.views,
                       &o.view_count, optional[s].srv_dimensions, optional[s].uav_dimensions, optional[s].bind->SrvCount);
+  }
+  /* FL 11_1: viewport 0 for the TIR expansion GS (after the GS stage's
+   * own constant buffers): viewport = ndc * scale + offset */
+  if (SUCCEEDED(hr) && graphics->TirSamples) {
+    const float vp[4] = {hw, -hh, hw + draw->Viewport[0], hh + draw->Viewport[1]};
+    struct pipe_constant_buffer cb = {};
+    cb.buffer_size = sizeof(vp);
+    cb.user_buffer = vp;
+    pipe->set_constant_buffer(pipe, MESA_SHADER_GEOMETRY, DXBC_TIR_GS_CB, &cb);
   }
   if (FAILED(hr)) {
     unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, AGX_D3D12_SRV_SLOTS);

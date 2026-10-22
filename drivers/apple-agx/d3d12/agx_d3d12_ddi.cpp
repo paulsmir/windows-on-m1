@@ -4738,6 +4738,7 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
     desc.SampleCount = pso->desc.SampleDesc.Count; /* C32 */
     desc.FillMode = pso->rasterizer.FillMode;
     desc.CullMode = pso->rasterizer.CullMode;
+    desc.ForcedSampleCount = pso->rasterizer.ForcedSampleCount; /* FL 11_1: TIR */
     desc.FrontCounterClockwise = pso->rasterizer.FrontCounterClockwise;
     desc.DepthBias = pso->rasterizer.DepthBias;
     desc.DepthBiasClamp = pso->rasterizer.DepthBiasClamp;
