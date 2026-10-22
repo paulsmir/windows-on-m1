@@ -5629,6 +5629,52 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
 /* C44: the R1 device table (interface 0011): the 0003 table's entries with
  * the 0010 state, shader and pipeline-state adapters, without the object
  * serialization entries, plus the pipeline-library entries */
+/* Receipt-only (EXP1862/1863: a CachedPSO creation under R1 ends in a
+ * D3D12 heap_failure_invalid_argument freeing the runtime's temporary
+ * CLibrary): the runtime's pipeline-library calls, their initial-data size,
+ * the private storage address and the result, forwarded unchanged. */
+static UINT LibraryAddress(D3D12DDI_HPIPELINELIBRARY handle) {
+    return static_cast<UINT>(reinterpret_cast<UINT_PTR>(handle.pDrvPrivate));
+}
+static SIZE_T APIENTRY ReceiptCalcPrivatePipelineLibrarySize(D3D12DDI_HDEVICE device,
+                                                            const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *args) {
+    const SIZE_T size = AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(device, args);
+    const UINT receipt[] = {1u, args ? static_cast<UINT>(args->InitialDataSize) : ~0u, static_cast<UINT>(size)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", S_OK, receipt, 3);
+    return size;
+}
+static HRESULT APIENTRY ReceiptCreatePipelineLibrary(D3D12DDI_HDEVICE device,
+                                                     const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *args,
+                                                     D3D12DDI_HPIPELINELIBRARY handle) {
+    const HRESULT hr = AgxD3d12ZeroCacheCreatePipelineLibrary(device, args, handle);
+    const UINT receipt[] = {2u, args ? static_cast<UINT>(args->InitialDataSize) : ~0u, LibraryAddress(handle)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", hr, receipt, 3);
+    return hr;
+}
+static VOID APIENTRY ReceiptDestroyPipelineLibrary(D3D12DDI_HDEVICE device, D3D12DDI_HPIPELINELIBRARY handle) {
+    const UINT receipt[] = {3u, 0u, LibraryAddress(handle)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", S_OK, receipt, 3);
+    AgxD3d12ZeroCacheDestroyPipelineLibrary(device, handle);
+}
+static HRESULT APIENTRY ReceiptAddPipelineStateToLibrary(D3D12DDI_HDEVICE device, D3D12DDI_HPIPELINELIBRARY handle,
+                                                         D3D12DDI_HPIPELINESTATE pipeline, UINT index) {
+    const HRESULT hr = AgxD3d12ZeroCacheAddPipelineStateToLibrary(device, handle, pipeline, index);
+    const UINT receipt[] = {4u, index, LibraryAddress(handle)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", hr, receipt, 3);
+    return hr;
+}
+static SIZE_T APIENTRY ReceiptCalcSerializedLibrarySize(D3D12DDI_HDEVICE device, D3D12DDI_HPIPELINELIBRARY handle) {
+    const SIZE_T size = AgxD3d12ZeroCacheCalcSerializedLibrarySize(device, handle);
+    const UINT receipt[] = {5u, static_cast<UINT>(size), LibraryAddress(handle)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", S_OK, receipt, 3);
+    return size;
+}
+static HRESULT APIENTRY ReceiptSerializeLibrary(D3D12DDI_HDEVICE device, D3D12DDI_HPIPELINELIBRARY handle, VOID *output) {
+    const HRESULT hr = AgxD3d12ZeroCacheSerializeLibrary(device, handle, output);
+    const UINT receipt[] = {6u, 0u, LibraryAddress(handle)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", hr, receipt, 3);
+    return hr;
+}
 static void FillD3D12DDI_DEVICE_FUNCS_CORE_0010(D3D12DDI_DEVICE_FUNCS_CORE_0010 &f) {
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckFormatSupport, CheckFormatSupport);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckMultisampleQualityLevels, CheckMultisampleQualityLevels);
@@ -5716,12 +5762,12 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0010(D3D12DDI_DEVICE_FUNCS_CORE_0010 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnRetrieveShaderComment, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnRetrieveShaderComment));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckResourceAllocationHandle, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckResourceAllocationHandle));
     /* R1 pipeline libraries: the zero-cache library (agx_d3d12_zero_cache_library.cpp) */
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivatePipelineLibrarySize, AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreatePipelineLibrary, AgxD3d12ZeroCacheCreatePipelineLibrary);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyPipelineLibrary, AgxD3d12ZeroCacheDestroyPipelineLibrary);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnAddPipelineStateToLibrary, AgxD3d12ZeroCacheAddPipelineStateToLibrary);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcSerializedLibrarySize, AgxD3d12ZeroCacheCalcSerializedLibrarySize);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnSerializeLibrary, AgxD3d12ZeroCacheSerializeLibrary);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivatePipelineLibrarySize, ReceiptCalcPrivatePipelineLibrarySize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreatePipelineLibrary, ReceiptCreatePipelineLibrary);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyPipelineLibrary, ReceiptDestroyPipelineLibrary);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnAddPipelineStateToLibrary, ReceiptAddPipelineStateToLibrary);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcSerializedLibrarySize, ReceiptCalcSerializedLibrarySize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnSerializeLibrary, ReceiptSerializeLibrary);
 }
 /* C30: the bundle-legal DDIs (ID3D12GraphicsCommandList bundle
  * restrictions) record into a bundle and run directly on other lists. */
