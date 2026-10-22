@@ -98,9 +98,17 @@ class D3d12AbiGate(unittest.TestCase):
         # ranges for SRVs, UAVs and samplers)
         self.assertIn('d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;', caps)
         for claim in ('D3D12DDI_RESOURCE_BINDING_TIER_3', 'D3D12DDI_RESOURCE_HEAP_TIER_2',
-                      'Doubles = TRUE', 'ROVs = TRUE',
-                      'D3D12DDI_TILED_RESOURCES_TIER_1', 'D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1'):
+                      'Doubles = TRUE', 'ROVs = TRUE', 'D3D12DDI_TILED_RESOURCES_TIER_2',
+                      'D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1'):
             self.assertNotIn(claim, caps)
+        # C53: Tier 1 and the TILED format bit only behind APPLE_AGX_D3D12_TILED=1
+        self.assertEqual(caps.count('D3D12DDI_TILED_RESOURCES_TIER_1'), 1)
+        self.assertIn('d.TiledResourcesTier = TiledEnabled() ? D3D12DDI_TILED_RESOURCES_TIER_1', caps)
+        tiled = source[source.index('static BOOL TiledEnabled() {'):]
+        tiled = tiled[:tiled.index('\n}\n')]
+        self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && value[0] == \'1\'', tiled)
+        self.assertEqual(source.count('D3D12DDI_FORMAT_SUPPORT_TILED'), 1)
+        self.assertIn('if (TiledEnabled() && TiledFormat(format)) *support |= D3D12DDI_FORMAT_SUPPORT_TILED;', source)
         # C57: OutputMergerLogicOp only with the logic op carried to Gallium
         # (one op for every render target; a disagreeing PSO is refused)
         self.assertIn('d.OutputMergerLogicOp = TRUE; /* C57 */', caps)

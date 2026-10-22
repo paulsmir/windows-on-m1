@@ -135,6 +135,14 @@ static BOOL RovEnabled() {
     return GetEnvironmentVariableA("APPLE_AGX_D3D12_ROV", value, sizeof(value)) == 1 && value[0] == '1';
 }
 
+/* C53 (D3D12-C53-tiled-textures.md): Tiled Resources Tier 1 and the TILED
+ * format bit are reported only in a process with APPLE_AGX_D3D12_TILED=1
+ * until reserved buffers and textures are validated on hardware (HW1, HW2). */
+static BOOL TiledEnabled() {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && value[0] == '1';
+}
+
 static bool ShaderModel6Enabled() {
     static const bool enabled = [] {
         char value[2] = {};
@@ -383,7 +391,8 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
              * the descriptor heap; 14 CBVs per stage */
             d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;
             d.ConservativeRasterizationTier = D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED;
-            d.TiledResourcesTier = D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
+            d.TiledResourcesTier = TiledEnabled() ? D3D12DDI_TILED_RESOURCES_TIER_1 /* C53 */
+                                                  : D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
             d.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
             d.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation = FALSE;
             d.OutputMergerLogicOp = TRUE; /* C57 */
@@ -864,6 +873,27 @@ static bool TypedUavLoadFormat(DXGI_FORMAT format) {
     }
 }
 #endif
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C53: formats a reserved Texture2D takes (agx_win32_sparse: elements of 1,
+ * 2, 4, 8 or 16 bytes, 1x1 texels or BC 4x4 blocks), except the depth
+ * family: reserved depth/stencil resources are refused. */
+static bool TiledFormat(DXGI_FORMAT format) {
+    switch (format) {
+    case DXGI_FORMAT_R32G8X24_TYPELESS: case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+    case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS: case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+    case DXGI_FORMAT_R32_TYPELESS: case DXGI_FORMAT_D32_FLOAT:
+    case DXGI_FORMAT_R24G8_TYPELESS: case DXGI_FORMAT_D24_UNORM_S8_UINT:
+    case DXGI_FORMAT_R24_UNORM_X8_TYPELESS: case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
+    case DXGI_FORMAT_R16_TYPELESS: case DXGI_FORMAT_D16_UNORM:
+        return false;
+    default:
+        break;
+    }
+    unsigned bw = 0, bh = 0;
+    const unsigned block = AgxD3d12FormatBlock(format, &bw, &bh);
+    return block == 1 || block == 2 || block == 4 || block == 8 || block == 16;
+}
+#endif
 static VOID APIENTRY CheckFormatSupport(D3D12DDI_HDEVICE, DXGI_FORMAT format, UINT *support) {
     if (!support) return;
     *support = 0;
@@ -872,6 +902,7 @@ static VOID APIENTRY CheckFormatSupport(D3D12DDI_HDEVICE, DXGI_FORMAT format, UI
     if (MultisampleCastSet(format, &typeless) && !typeless)
         *support = D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET | D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
     if (TypedUavLoadFormat(format)) *support |= D3D12DDI_FORMAT_SUPPORT_UAV_READS;
+    if (TiledEnabled() && TiledFormat(format)) *support |= D3D12DDI_FORMAT_SUPPORT_TILED; /* C53 */
 #else
     (void)format;
 #endif

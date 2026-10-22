@@ -35,7 +35,7 @@ def cast_sets():
 class MultisampleCaps(unittest.TestCase):
     def test_actual_caps_follow_the_cast_set_rule(self):
         s=DDI.read_text()
-        defines='\n'.join(re.findall(r'#define D3D12DDI_FORMAT_SUPPORT_(?:MULTISAMPLE_\w+|UAV_READS)\s+0x[0-9A-Fa-f]+',WDK.read_text()))
+        defines='\n'.join(re.findall(r'#define D3D12DDI_FORMAT_SUPPORT_(?:MULTISAMPLE_\w+|UAV_READS|TILED)\s+0x[0-9A-Fa-f]+',WDK.read_text()))
         sets=cast_sets()
         self.assertIn('DXGI_FORMAT_R8G8B8A8_TYPELESS',['DXGI_FORMAT_'+k for k in sets])
         table=''.join('{DXGI_FORMAT_%s,{%s}},\n'%(t,','.join('DXGI_FORMAT_'+m for m in ms)) for t,ms in sets.items())
@@ -48,6 +48,9 @@ using UINT=unsigned;
 #include "%s"
 %s
 struct D3D12DDI_HDEVICE{void*p;};using D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS=unsigned;
+/* C53: the TILED bit stays off without APPLE_AGX_D3D12_TILED=1 */
+static bool TiledEnabled(){return false;}
+static bool TiledFormat(DXGI_FORMAT){return false;}
 /* ACTUAL */
 struct Set{DXGI_FORMAT typeless;std::vector<DXGI_FORMAT> members;};
 static bool view_format(DXGI_FORMAT f){return %s;}
