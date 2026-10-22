@@ -319,6 +319,21 @@ class DxbcToNir(unittest.TestCase):
         self.assertIn("BINDING kind 2 id 63 space 0 reg 63 slot 55 flags 2", heap.stdout)
         self.assertIn("TRANSLATED stage MESA_SHADER_COMPUTE", heap.stdout)
 
+    def test_dynamically_indexed_uav_ranges_read_the_heap(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Tier 2 lets SM 5.1
+        # shaders index UAV arrays (RWTexture2D u[] : register(u0, space1))
+        # dynamically; the binding parser refused every UAV declaration
+        # spanning several registers. Shader-buffer and image slots take no
+        # dynamic index, so such ranges become heap ranges (bindless image
+        # load/store/atomics through the heap form).
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "cs51uavrange.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        self.assertIn("BINDING kind 2 id 0 space 1 reg 0 slot 0 flags 2", heap.stdout)
+        self.assertIn("BINDING kind 2 id 1 space 2 reg 0 slot 1 flags 2", heap.stdout)
+        self.assertIn("@bindless_image_store", heap.stdout)
+        self.assertIn("@bindless_image_atomic", heap.stdout)
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

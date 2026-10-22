@@ -833,7 +833,8 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
              o->index_dimension != 3 || in->num_payload != payload || !in->payload ||
              !static_index(&o->index[0]) || !static_index(&o->index[1]) ||
              !static_index(&o->index[2]) || o->index[2].imm < o->index[1].imm ||
-             (!binding_dynamic_kind(kind) && o->index[1].imm != o->index[2].imm))
+             (!binding_dynamic_kind(kind) && !(heap_uav && kind == DXBC_BINDING_UAV) &&
+              o->index[1].imm != o->index[2].imm))
             goto fail;
          uint32_t id = (uint32_t)o->index[0].imm, reg = (uint32_t)o->index[1].imm;
          const bool open = o->index[2].imm == UINT32_MAX;
@@ -841,7 +842,10 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
          const bool heap_kind = (heap && kind == DXBC_BINDING_SRV) ||
                                 (heap_uav && kind == DXBC_BINDING_UAV) ||
                                 (heap_sampler && kind == DXBC_BINDING_SAMPLER);
-         if (pass == 0 && heap_kind && open)
+         /* C47: a UAV range (several registers, indexed dynamically) reads
+          * the heap too -- shader-buffer and image slots take no dynamic index */
+         const bool uav_range = kind == DXBC_BINDING_UAV && o->index[2].imm != o->index[1].imm;
+         if (pass == 0 && heap_kind && (open || uav_range))
             continue; /* an unbounded one always does */
          if (pass == 0) {
             if (open)
@@ -851,7 +855,7 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
             continue;
          }
          uint32_t space = in->payload[payload - 1];
-         if (heap_kind && (open || o->index[2].imm - reg + 1 > limits[kind] - counts[kind])) {
+         if (heap_kind && (open || uav_range || o->index[2].imm - reg + 1 > limits[kind] - counts[kind])) {
             if (binding_id(&pending, kind, id) || heap_ranges == DXBC_HEAP_RANGE_MAX ||
                 pending.count == DXBC_BINDING_MAP_MAX) {
                status = DXBC_ERROR_LIMIT;
