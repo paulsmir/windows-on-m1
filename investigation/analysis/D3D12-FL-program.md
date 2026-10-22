@@ -117,24 +117,8 @@ Sources: Mesa Asahi (`gallium/drivers/asahi`, `asahi/vulkan` Honeykrisp).
 
 ## WHAT IS STILL UNKNOWN
 
-- ~~The exact level GravityMark requests~~ RESOLVED 2026-10-22 (static
-  disassembly of GravityMark 1.89 `bin/Tellusim_arm64.dll`, llvm-objdump):
-  - D3D12: `D3D12CreateDevice(adapter, 0xc100 = D3D_FEATURE_LEVEL_12_1, ...)`
-    at 0x180ee863c and 0x180eec2d4 (the "can't create %u adapter" path).
-  - D3D11: `D3D11CreateDevice` with one level, 0xb100 = 11_1 (0x180f2b724).
-  - So GravityMark D3D12 needs 12_1 = 12_0 + ROVs + conservative
-    rasterization Tier 1; GravityMark D3D11 needs only 11_1.
-  - AGX: ROVs map onto the hardware pixel ordering (Asahi compiler lowers
-    `nir_intrinsic_begin_invocation_interlock` to `wait_pix`); no hardware
-    conservative rasterization (Honeykrisp exposes none), so CR Tier 1 needs
-    the same geometry expansion + exact in-shader coverage as TIR 8x/16x.
-- D3D11 11_1 gaps (agx_d3d11_ddi.cpp / agx_wddm2_ddi.cpp): logic ops
-  (`reject-wddm2-logicop`), 64 UAV slots and UAVs in every stage
-  (`AGX_D3D11_UAV_SLOTS` = `DXBC_NIR_MAX_UAVS` = 8; Gallium has 32 shader
-  buffers, 64 images), ForcedSampleCount > 1 (`reject-wddm2-rasterizer`).
-- Whether the D3D11 path, our D3D10/11 UMD, needs its own 11_1 work.
-  D3D11.1 logic ops are refused today: `reject-wddm2-logicop` in
-  `agx_wddm2_ddi.cpp`.
+- RESOLVED: the levels GravityMark requests (section below): D3D12 12_1,
+  D3D11 11_1. The D3D11 11_1 work is done and validated (EXP1888).
 - How much of Honeykrisp's sparse image layout maps onto the WDDM GPUVA tile
   callbacks without UAT changes in the KMD.
 
