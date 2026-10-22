@@ -6151,6 +6151,83 @@ static int step_c51a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
     }
     return compute_constants_code(d, q, f, g_agx_d3d12_probe_cs_cb_dxil62, sizeof(g_agx_d3d12_probe_cs_cb_dxil62), "C51A", 0u);
 }
+/* C53A (EXP1875): D3D9On12 renders a D3D9 X8R8G8B8 back buffer as a committed
+ * DXGI_FORMAT_B8G8R8X8_UNORM render target, and its first batch (clear, copy
+ * to a readback buffer) faulted the GPU; the same clear and copy in that
+ * format. Bytes B,G,R = 191,128,64; the X byte is undefined. */
+static int step_c53a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC desc = {0};
+    D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
+    ID3D12Resource *texture = NULL;
+    ID3D12DescriptorHeap *rtv_heap = NULL;
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0};
+    D3D12_TEXTURE_COPY_LOCATION tex_loc = {0}, buf_loc = {0};
+    unsigned char *bytes = NULL;
+    unsigned bad = 4096;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = 64;
+    desc.Height = 64;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_B8G8R8X8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    HRESULT hr = readback ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &desc,
+                                                  D3D12_RESOURCE_STATE_RENDER_TARGET, NULL, &IID_ID3D12Resource,
+                                                  (void **)&texture);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateDescriptorHeap(device, &rtv_desc, &IID_ID3D12DescriptorHeap, (void **)&rtv_heap);
+    if (SUCCEEDED(hr)) {
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(rtv_heap, &rtv);
+        ID3D12Device_CreateRenderTargetView(device, texture, NULL, rtv);
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    printf("C53A B8G8R8X8 texture + RTV + list hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) {
+        const FLOAT color[4] = {0.25f, 0.5f, 0.75f, 1.0f};
+        tex_loc.pResource = texture;
+        tex_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        buf_loc.pResource = readback;
+        buf_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        buf_loc.PlacedFootprint.Footprint.Format = DXGI_FORMAT_B8G8R8X8_UNORM;
+        buf_loc.PlacedFootprint.Footprint.Width = 64;
+        buf_loc.PlacedFootprint.Footprint.Height = 64;
+        buf_loc.PlacedFootprint.Footprint.Depth = 1;
+        buf_loc.PlacedFootprint.Footprint.RowPitch = 256;
+        ID3D12GraphicsCommandList_ClearRenderTargetView(list, rtv, color, 0, NULL);
+        transition(list, texture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyTextureRegion(list, &buf_loc, 0, 0, 0, &tex_loc, NULL);
+        hr = run_list(queue, fence, list, base + 1, "C53A clear");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 16384};
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&bytes);
+        if (SUCCEEDED(hr) && bytes) {
+            bad = 0;
+            for (unsigned i = 0; i < 4096; ++i)
+                bad += bytes[4 * i] != 191 || bytes[4 * i + 1] != 128 || bytes[4 * i + 2] != 64;
+            printf("C53A clear readback bad=%u first=%u,%u,%u,%u\n", bad, bytes[0], bytes[1], bytes[2], bytes[3]);
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C53A: %s\n", SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (rtv_heap) ID3D12DescriptorHeap_Release(rtv_heap);
+    if (texture) ID3D12Resource_Release(texture);
+    if (readback) ID3D12Resource_Release(readback);
+    return FAILED(hr) || bad != 0;
+}
 /* C52A (interface 0071): HighestShaderModel 6.5 and the core SM 6.4/6.5
  * intrinsics (agx_d3d12_probe_cs_sm65_dxil.hlsl: packed dot products, wave
  * match and multi-prefix sum/count/product); every dword 0x3f. */
@@ -6691,7 +6768,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
     {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
     {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}};
+    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}};
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
@@ -6818,6 +6895,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C50A", step_c50a);
                 (void)run_isolated(adapter, "C51A", step_c51a);
                 (void)run_isolated(adapter, "C52A", step_c52a);
+                (void)run_isolated(adapter, "C53A", step_c53a);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
