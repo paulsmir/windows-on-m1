@@ -6047,7 +6047,14 @@ agx_shader_initialize("""
         if state_text.count(sparse_anchor)!=1:
             raise SystemExit('Ambiguous texture address anchor')
         state_text=state_text.replace(sparse_anchor,sparse_anchor+'''#ifdef APPLE_AGX_GPUVA_WINSYS
-      if (state->target != PIPE_BUFFER) {
+      /* sampled through the table only with APPLE_AGX_D3D12_SPARSE_DESC=1
+       * until a probe validates the Sparse Block reads (else the image VA) */
+      static int sparse_desc = -1;
+      if (sparse_desc < 0) {
+         const char *value = getenv("APPLE_AGX_D3D12_SPARSE_DESC");
+         sparse_desc = value && value[0] == '1' && !value[1];
+      }
+      if (sparse_desc && state->target != PIPE_BUFFER) {
          const APPLE_AGX_U64 table = AgxWin32AsahiSparseTableVa(rsrc->bo);
          if (table) {
             cfg.mode = AGX_IMAGE_MODE_SPARSE;
