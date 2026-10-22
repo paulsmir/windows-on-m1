@@ -1217,7 +1217,11 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
          return;
       }
       b->shader->info.tess.point_mode = p == 1;
-      b->shader->info.tess.ccw = p == 4;
+      /* GL's tessellation domain has a lower-left origin, D3D's an upper-left
+       * one: a D3D triangle_cw (3) output is GL ccw (Mesa d3d12_compiler.cpp
+       * inverts the same way). EXP1858-1860: with ccw = triangle_ccw both
+       * windings culled opposite to WARP under back-face culling. */
+      b->shader->info.tess.ccw = p == 3;
       return;
    }
    case DXBC_OP_DCL_HS_MAX_TESSFACTOR:

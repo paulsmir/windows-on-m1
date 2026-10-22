@@ -843,6 +843,11 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
          if (var->data.location >= VERT_ATTRIB_GENERIC0)
             var->data.driver_location = var->data.location - VERT_ATTRIB_GENERIC0;
 
+   /* a D3D triangle_cw hull shader (SPIR-V VertexOrderCw) is GL ccw, as in
+    * the DXBC frontend (DCL_TESS_OUTPUT_PRIMITIVE) */
+   if (result->stage == MESA_SHADER_TESS_CTRL && !nir->info.tess.point_mode &&
+       nir->info.tess._primitive_mode != TESS_PRIMITIVE_ISOLINES)
+      nir->info.tess.ccw = !nir->info.tess.ccw;
    nir->info.float_controls_execution_mode = 0;
    NIR_PASS(_, nir, nir_shader_alu_pass, strip_preserve, nir_metadata_all, NULL);
 

@@ -216,6 +216,16 @@ class DxilToNir(unittest.TestCase):
         self.parity("conv_hs", ignore=("inputs",))
         self.parity("conv_ds", ignore=("inputs",))
         self.assertIn("store_per_vertex_output", self.final("conv_hs"))
+        # EXP1858-1860: a D3D triangle_cw hull shader is GL ccw (upper-left
+        # versus lower-left domain origin); both frontends agree
+        dxbc = subprocess.run([str(self.dxbc), str(FIXTURES / "conv_hs.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=120).stdout
+        self.assertRegex(self.final("conv_hs"), r"(?m)^ccw: true")
+        self.assertRegex(dxbc, r"(?m)^ccw: true")
+        ccw = subprocess.run([str(self.dxil), str(FIXTURES.parent / "conv-probe" / "hs_const_ccw.dxil"), "--print-final"],
+                             capture_output=True, text=True, timeout=120).stdout
+        self.assertIn("TRANSLATED", ccw)
+        self.assertNotRegex(ccw, r"(?m)^ccw: true")
 
     def xfb(self, name, decl):
         r = subprocess.run([str(self.dxil), str(FIXTURES / f"{name}.dxil"), f"--xfb={decl}"], capture_output=True,
