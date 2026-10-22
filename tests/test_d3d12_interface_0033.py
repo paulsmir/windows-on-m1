@@ -53,13 +53,26 @@ class D3d12Interface0033(unittest.TestCase):
         self.assertEqual(set(assigned), expected)
         self.assertEqual(len(assigned), len(expected))
 
-    def test_0033_and_sm61_only_in_the_opt_in_profile(self):
+    def test_every_retyped_or_added_0040_member_is_assigned(self):
+        # C51: CORE_0040 reuses the CORE_0033 fill (prefix cast) and 3D_0040
+        # the 3D_0033 fill; the pool/list/recorder members must be reassigned
+        expected = self.changed('D3D12DDI_DEVICE_FUNCS_CORE_0033', 'D3D12DDI_DEVICE_FUNCS_CORE_0040')
+        self.assertEqual(len(expected), 10)
+        assigned = self.reassigned('D3D12DDI_DEVICE_FUNCS_CORE_0040')
+        self.assertEqual(set(assigned), expected)
+        self.assertEqual(len(assigned), len(expected))
+        expected = self.changed('D3D12DDI_COMMAND_LIST_FUNCS_3D_0033', 'D3D12DDI_COMMAND_LIST_FUNCS_3D_0040')
+        self.assertEqual(expected, {'pfnResetCommandList'})
+        self.assertEqual(self.reassigned('D3D12DDI_COMMAND_LIST_FUNCS_3D_0040'), ['pfnResetCommandList'])
+
+    def test_new_interfaces_only_in_the_opt_in_profile(self):
         versions = self.source[self.source.index('static HRESULT APIENTRY GetVersions('):]
         versions = versions[:versions.index('\n}\n')]
-        self.assertIn('Interface0033Enabled() ? 4u', versions)
-        self.assertIn('if (offered == 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;', versions)
-        self.assertIn('const UINT offered = Negotiated0033() ? 3u : 2u;', self.source)
-        self.assertIn('ShaderModel6Enabled() && GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI"', self.source)
+        self.assertIn('InterfaceOptIn() == D3D12DDI_SUPPORTED_0042   ? 5u', versions)
+        self.assertIn('if (offered == 5u) versions[n++] = D3D12DDI_SUPPORTED_0042;', versions)
+        self.assertIn('if (offered >= 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;', versions)
+        self.assertIn('const UINT offered = Negotiated0042() ? 4u : Negotiated0033() ? 3u : 2u;', self.source)
+        self.assertIn('if (!ShaderModel6Enabled() || GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI"', self.source)
 
     def test_tables_follow_the_negotiated_interface(self):
         # CORE_0012 and CORE_0033 have one size: the table is chosen by the
@@ -67,8 +80,10 @@ class D3d12Interface0033(unittest.TestCase):
         self.assertIn('adapter_object.negotiated = (static_cast<UINT64>(arg->Interface) << 32) | arg->Version;',
                       self.source)
         fill = self.source[self.source.index('static HRESULT APIENTRY FillDDITable('):]
-        self.assertIn('hr = Negotiated0033()\n                 ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0033>', fill)
-        self.assertIn('hr = Negotiated0033()\n                 ? FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033>', fill)
+        for table in ('DEVICE_FUNCS_CORE_0040', 'COMMAND_LIST_FUNCS_3D_0040'):
+            self.assertIn('hr = Negotiated0042()\n                 ? FillTable<D3D12DDI_%s>' % table, fill)
+        for table in ('DEVICE_FUNCS_CORE_0033', 'COMMAND_LIST_FUNCS_3D_0033'):
+            self.assertIn(': Negotiated0033()\n                 ? FillTable<D3D12DDI_%s>' % table, fill)
 
 
 if __name__ == '__main__':

@@ -27,10 +27,11 @@ struct AGX_WIN32_DEVICE_INFO {UINT CoresPerCluster,CoreMask;};
 static struct {AGX_WIN32_DEVICE_INFO info;int info_valid;} adapter_object;
 struct D3D12DDI_ARCHITECTURE_INFO_DATA {int TileBasedDeferredRenderer;};
 struct D3D12DDI_GPUVA_CAPS_0004 {int MaxGPUVirtualAddressBitsPerResource;};
-enum D3D12DDI_SHADER_MODEL {D3D12DDI_SHADER_MODEL_5_1_RELEASE_0011=0x50015,D3D12DDI_SHADER_MODEL_6_0_RELEASE_0011=0x60005,D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033=0x60015};
+enum D3D12DDI_SHADER_MODEL {D3D12DDI_SHADER_MODEL_5_1_RELEASE_0011=0x50015,D3D12DDI_SHADER_MODEL_6_0_RELEASE_0011=0x60005,D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033=0x60015,D3D12DDI_SHADER_MODEL_6_2_RELEASE_0042=0x60025};
 struct D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 {UINT *pNumShaderModelsSupported;D3D12DDI_SHADER_MODEL *pShaderModelsSupported;};
 static bool ShaderModel6Enabled(){return false;}
 static bool Negotiated0033(){return false;}
+static bool Negotiated0042(){return false;}
 static constexpr int kTypedUavLoads = 1;
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))

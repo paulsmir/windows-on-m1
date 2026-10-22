@@ -70,8 +70,10 @@ template<class T> struct TableOf;
 template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0003> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
 template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0010> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
 template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0033> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
+template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0040> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
 template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
 template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
+template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0040> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
 template<> struct TableOf<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D; };
 static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error);
 static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error);
@@ -121,28 +123,37 @@ static bool ShaderModel6Enabled() {
     return enabled;
 }
 /* C50 (D3D12-C50-interface-0033.md): SM 6.1 is D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033,
- * so it needs R3 build 3 (0033); APPLE_AGX_D3D12_DDI=0033 offers it to an SM6
- * process until hardware validates the 0033 tables. */
-static bool Interface0033Enabled() {
-    static const bool enabled = [] {
+ * so it needs R3 build 3 (0033); C51 (D3D12-C51-interface-plan.md): SM 6.2 is
+ * _0042, R4 build 2. APPLE_AGX_D3D12_DDI=0033 or 0042 offers that interface to
+ * an SM6 process until hardware validates its tables. */
+static UINT64 InterfaceOptIn() {
+    static const UINT64 offered = [] {
         char value[5] = {};
-        return ShaderModel6Enabled() && GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) == 4 &&
-               !memcmp(value, "0033", 4);
+        if (!ShaderModel6Enabled() || GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) != 4)
+            return UINT64{0};
+        return !memcmp(value, "0042", 4)   ? D3D12DDI_SUPPORTED_0042
+               : !memcmp(value, "0033", 4) ? D3D12DDI_SUPPORTED_0033
+                                           : UINT64{0};
     }();
-    return enabled;
+    return offered;
 }
 static bool Negotiated0033() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0033; }
+static bool Negotiated0042() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0042; }
 /* C48: R1 build 2 (0012) adds the wave caps (D3D12DDI_SHADER_CAPS_0012) and
  * one device entry, pfnGetDebugAllocationInfo; SM6 processes negotiate it. */
 static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *versions) {
-    const UINT offered = Interface0033Enabled() ? 4u : ShaderModel6Enabled() ? 3u : 1u;
+    const UINT offered = InterfaceOptIn() == D3D12DDI_SUPPORTED_0042   ? 5u
+                         : InterfaceOptIn() == D3D12DDI_SUPPORTED_0033 ? 4u
+                         : ShaderModel6Enabled()                       ? 3u
+                                                                       : 1u;
     const UINT receipt[] = {count ? *count : 0, versions != nullptr, offered};
     AdmissionUmdDiagnostic("d3d12-versions", count ? S_OK : E_INVALIDARG, receipt, 3);
     if (!count) return E_INVALIDARG;
     if (!versions) { *count = offered; return S_OK; }
     if (*count < offered) { *count = offered; return E_INVALIDARG; }
     UINT n = 0;
-    if (offered == 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;
+    if (offered == 5u) versions[n++] = D3D12DDI_SUPPORTED_0042;
+    if (offered >= 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;
     if (offered >= 3u) {
         versions[n++] = D3D12DDI_SUPPORTED_0012;
         versions[n++] = D3D12DDI_SUPPORTED_0011;
@@ -224,11 +235,13 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
     case D3D12DDICAPS_TYPE_0011_SHADER_MODELS:
         if (ShaderModel6Enabled() && arg->DataSize >= sizeof(D3D12DDI_D3D12_SHADER_MODELS_DATA_0011)) {
             /* C50: SM 6.1 at 0033: SV_ViewID lowers to view 0 (ViewInstancingTier
-             * NOT_SUPPORTED, View Instancing spec), barycentrics stay unsupported */
+             * NOT_SUPPORTED, View Instancing spec), barycentrics stay unsupported;
+             * C51: SM 6.2 at 0042 (native 16-bit ops stay unsupported) */
             static const D3D12DDI_SHADER_MODEL models[] = {D3D12DDI_SHADER_MODEL_5_1_RELEASE_0011,
                                                            D3D12DDI_SHADER_MODEL_6_0_RELEASE_0011,
-                                                           D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033};
-            const UINT offered = Negotiated0033() ? 3u : 2u;
+                                                           D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033,
+                                                           D3D12DDI_SHADER_MODEL_6_2_RELEASE_0042};
+            const UINT offered = Negotiated0042() ? 4u : Negotiated0033() ? 3u : 2u;
             auto *data = static_cast<D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 *>(arg->pData);
             if (!data->pNumShaderModelsSupported) {
                 hr = E_INVALIDARG;
@@ -6383,6 +6396,66 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, Bundled<SetMarker>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments, ClearRootArguments);
 }
+/* C51 (0042, CORE_0040/3D_0040): command allocators become pools and
+ * recorders, and lists are created without an allocator. A list records into
+ * its own heap buffers (C4), so pools and recorders hold nothing. */
+static SIZE_T APIENTRY CalcPrivateCommandPoolSize0040(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_POOL_0040 *) {
+    return sizeof(UINT);
+}
+static HRESULT APIENTRY CreateCommandPool0040(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_POOL_0040 *arg,
+                                              D3D12DDI_HCOMMANDPOOL_0040 pool) {
+    if (!arg || !pool.pDrvPrivate || arg->PoolFlags != D3D12DDI_COMMAND_POOL_FLAG_NONE) return E_INVALIDARG;
+    *static_cast<UINT *>(pool.pDrvPrivate) = 0;
+    return S_OK;
+}
+static VOID APIENTRY DestroyCommandPool0040(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDPOOL_0040) {}
+static VOID APIENTRY ResetCommandPool0040(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDPOOL_0040) {}
+static SIZE_T APIENTRY CalcPrivateCommandRecorderSize0040(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_RECORDER_0040 *) {
+    return sizeof(UINT);
+}
+static HRESULT APIENTRY CreateCommandRecorder0040(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_RECORDER_0040 *arg,
+                                                  D3D12DDI_HCOMMANDRECORDER_0040 recorder) {
+    if (!arg || !recorder.pDrvPrivate || arg->RecorderFlags != D3D12DDI_COMMAND_RECORDER_FLAG_NONE) return E_INVALIDARG;
+    *static_cast<UINT *>(recorder.pDrvPrivate) = 0;
+    return S_OK;
+}
+static VOID APIENTRY DestroyCommandRecorder0040(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDRECORDER_0040) {}
+static VOID APIENTRY CommandRecorderSetCommandPoolAsTarget0040(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDRECORDER_0040,
+                                                              D3D12DDI_HCOMMANDPOOL_0040) {}
+static SIZE_T APIENTRY CalcPrivateCommandListSize0040(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_COMMAND_LIST_0040 *) {
+    return CalcPrivateCommandListSize(device, nullptr);
+}
+static HRESULT APIENTRY CreateCommandList0040(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_COMMAND_LIST_0040 *arg,
+                                              D3D12DDI_HCOMMANDLIST list, D3D12DDI_HRTCOMMANDLIST runtime) {
+    if (!arg) return E_INVALIDARG;
+    D3D12DDIARG_CREATE_COMMAND_LIST_0001 legacy = {};
+    legacy.hDrvCommandList = list;
+    legacy.hRTCommandList = runtime;
+    legacy.Type = arg->Type;
+    legacy.QueueFlags = arg->QueueFlags;
+    legacy.ID = arg->ID;
+    legacy.CommandListFlags = arg->CommandListFlags;
+    legacy.NodeMask = arg->NodeMask;
+    return CreateCommandList(device, &legacy);
+}
+/* the 0040 reset names a recorder instead of an allocator and slot; the
+ * reset reads neither */
+static VOID APIENTRY ResetCommandList0040(D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_RESETCOMMANDLIST_0040 *) {
+    ResetCommandList(handle, nullptr);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateCommandPoolSize0040), PFND3D12DDI_CALC_PRIVATE_COMMAND_POOL_SIZE_0040>);
+static_assert(std::is_same_v<decltype(&CreateCommandPool0040), PFND3D12DDI_CREATE_COMMAND_POOL_0040>);
+static_assert(std::is_same_v<decltype(&DestroyCommandPool0040), PFND3D12DDI_DESTROY_COMMAND_POOL_0040>);
+static_assert(std::is_same_v<decltype(&ResetCommandPool0040), PFND3D12DDI_RESET_COMMAND_POOL_0040>);
+static_assert(std::is_same_v<decltype(&CalcPrivateCommandRecorderSize0040),
+                             PFND3D12DDI_CALC_PRIVATE_COMMAND_RECORDER_SIZE_0040>);
+static_assert(std::is_same_v<decltype(&CreateCommandRecorder0040), PFND3D12DDI_CREATE_COMMAND_RECORDER_0040>);
+static_assert(std::is_same_v<decltype(&DestroyCommandRecorder0040), PFND3D12DDI_DESTROY_COMMAND_RECORDER_0040>);
+static_assert(std::is_same_v<decltype(&CommandRecorderSetCommandPoolAsTarget0040),
+                             PFND3D12DDI_COMMAND_RECORDER_SET_COMMAND_POOL_AS_TARGET_0040>);
+static_assert(std::is_same_v<decltype(&CalcPrivateCommandListSize0040), PFND3D12DDI_CALC_PRIVATE_COMMAND_LIST_SIZE_0040>);
+static_assert(std::is_same_v<decltype(&CreateCommandList0040), PFND3D12DDI_CREATE_COMMAND_LIST_0040>);
+static_assert(std::is_same_v<decltype(&ResetCommandList0040), PFND3D12DDI_RESETCOMMANDLIST_0040>);
 /* C50: 3D_0033 = 3D_0003 with two retyped members and seven appended */
 static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033 &f) {
     static_assert(offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnAtomicCopyBufferRegion) ==
@@ -6397,6 +6470,12 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnSetProtectedResourceSession, SetProtectedResourceSession);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnWriteBufferImmediate, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnWriteBufferImmediate));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnSetViewInstanceMask, SetViewInstanceMask);
+}
+/* C51: 3D_0040 = 3D_0033 with the recorder reset */
+static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0040(D3D12DDI_COMMAND_LIST_FUNCS_3D_0040 &f) {
+    static_assert(sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0040) == sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033));
+    FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033(reinterpret_cast<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033 &>(f));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0040, pfnResetCommandList, ResetCommandList0040);
 }
 static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 &f) {
     AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnExecuteCommandLists, ExecuteCommandLists);
@@ -6462,6 +6541,23 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0033(D3D12DDI_DEVICE_FUNCS_CORE_0033 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCheckExistingResourceAllocationInfo, CheckExistingResourceAllocationInfo0022);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnGetDebugAllocationInfo, GetDebugAllocationInfo0014);
 }
+/* C51: CORE_0040 = CORE_0033 with the pool and list creation retyped and
+ * the recorder appended */
+static void FillD3D12DDI_DEVICE_FUNCS_CORE_0040(D3D12DDI_DEVICE_FUNCS_CORE_0040 &f) {
+    static_assert(offsetof(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCalcPrivateCommandRecorderSize) ==
+                  sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0033));
+    FillD3D12DDI_DEVICE_FUNCS_CORE_0033(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0033 &>(f));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCalcPrivateCommandPoolSize, CalcPrivateCommandPoolSize0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCreateCommandPool, CreateCommandPool0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnDestroyCommandPool, DestroyCommandPool0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnResetCommandPool, ResetCommandPool0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCalcPrivateCommandListSize, CalcPrivateCommandListSize0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCreateCommandList, CreateCommandList0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCalcPrivateCommandRecorderSize, CalcPrivateCommandRecorderSize0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCreateCommandRecorder, CreateCommandRecorder0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnDestroyCommandRecorder, DestroyCommandRecorder0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCommandRecorderSetCommandPoolAsTarget, CommandRecorderSetCommandPoolAsTarget0040);
+}
 template<class T> static HRESULT FillTable(void *table, SIZE_T size, void (*fill)(T &)) {
     if (!table || size < sizeof(T)) return E_INVALIDARG;
     memset(table, 0, size);
@@ -6479,7 +6575,9 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
         /* C44: the runtime sizes the table of the interface it negotiated
          * (GetVersions): R1 (0011) takes CORE_0010, 0012 CORE_0012; C50:
          * CORE_0033 has CORE_0012's size, the negotiated version decides */
-        hr = Negotiated0033()
+        hr = Negotiated0042()
+                 ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0040>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0040)
+             : Negotiated0033()
                  ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0033>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0033)
              : size >= sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0012)
                  ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0012>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0012)
@@ -6488,7 +6586,9 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
                  : FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0003>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0003);
         break;
     case D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D:
-        hr = Negotiated0033()
+        hr = Negotiated0042()
+                 ? FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0040>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0040)
+             : Negotiated0033()
                  ? FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033)
                  : FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003);
         break;
