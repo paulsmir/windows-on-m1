@@ -111,15 +111,20 @@ static bool ShaderModel6Enabled() {
     }();
     return enabled;
 }
+/* C48: R1 build 2 (0012) adds the wave caps (D3D12DDI_SHADER_CAPS_0012) and
+ * one device entry, pfnGetDebugAllocationInfo; SM6 processes negotiate it. */
 static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *versions) {
-    const UINT offered = ShaderModel6Enabled() ? 2u : 1u;
+    const UINT offered = ShaderModel6Enabled() ? 3u : 1u;
     const UINT receipt[] = {count ? *count : 0, versions != nullptr, offered};
     AdmissionUmdDiagnostic("d3d12-versions", count ? S_OK : E_INVALIDARG, receipt, 3);
     if (!count) return E_INVALIDARG;
     if (!versions) { *count = offered; return S_OK; }
     if (*count < offered) { *count = offered; return E_INVALIDARG; }
     UINT n = 0;
-    if (offered == 2u) versions[n++] = D3D12DDI_SUPPORTED_0011;
+    if (offered == 3u) {
+        versions[n++] = D3D12DDI_SUPPORTED_0012;
+        versions[n++] = D3D12DDI_SUPPORTED_0011;
+    }
     versions[n++] = D3D12DDI_SUPPORTED_0003;
     *count = n;
     return S_OK;
@@ -240,6 +245,23 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         });
         break;
     case D3D12DDICAPS_TYPE_SHADER:
+        /* C48: under 0012 the wave caps: AGX runs 32-wide SIMD groups (Asahi
+         * subgroup size 32), every SM 6.0 wave/quad intrinsic lowers to AGX
+         * subgroup operations (test_dxil_to_nir); 128 lanes per core (Apple
+         * M1 GPU: 128 ALUs per core) times the present cores (EXP1317:
+         * CoreMask 0xfe, seven) */
+        if (ShaderModel6Enabled() && arg->DataSize >= sizeof(D3D12DDI_SHADER_CAPS_0012)) {
+            hr = Answer<D3D12DDI_SHADER_CAPS_0012>(arg, [](auto &d) {
+                d.MinPrecision = D3D12DDI_SHADER_MIN_PRECISION_NONE;
+                d.WaveOps = TRUE;
+                d.WaveLaneCountMin = d.WaveLaneCountMax = 32;
+                const AGX_WIN32_DEVICE_INFO &info = adapter_object.info;
+                UINT cores = info.CoreMask ? 0u : info.CoresPerCluster;
+                for (UINT mask = info.CoreMask; mask; mask &= mask - 1u) ++cores;
+                d.TotalLaneCount = adapter_object.info_valid ? 128u * cores : 0u;
+            });
+            break;
+        }
         hr = Answer<D3D12DDI_SHADER_CAPS_0003>(arg, [](auto &d) {
             d.MinPrecision = D3D12DDI_SHADER_MIN_PRECISION_NONE;
             d.Doubles = FALSE; d.ShaderSpecifiedStencilRef = FALSE;
@@ -5902,6 +5924,21 @@ static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FU
 }
 /* C1: the core tables the runtime requests for the negotiated 0003 device,
  * every entry fail-closed; other tables are refused. */
+/* C48: CORE_0012 is CORE_0010 plus pfnGetDebugAllocationInfo. The debug
+ * layer's object-to-allocation map: no allocation is described (resources
+ * are owner allocations without D3DKMT handles of their own). */
+static VOID APIENTRY GetDebugAllocationInfo(D3D12DDI_HDEVICE, D3D12DDI_HANDLE_AND_TYPE, UINT *num_va,
+                                            D3D12DDI_DEBUG_VIRTUAL_ADDRESS_ALLOCATION_INFO_0012 *,
+                                            UINT *num_kmt, D3D12DDI_DEBUG_KMT_ALLOCATION_INFO_0012 *) {
+    if (num_va) *num_va = 0;
+    if (num_kmt) *num_kmt = 0;
+}
+static void FillD3D12DDI_DEVICE_FUNCS_CORE_0012(D3D12DDI_DEVICE_FUNCS_CORE_0012 &f) {
+    static_assert(offsetof(D3D12DDI_DEVICE_FUNCS_CORE_0012, pfnGetDebugAllocationInfo) ==
+                  sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0010));
+    FillD3D12DDI_DEVICE_FUNCS_CORE_0010(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0010 &>(f));
+    f.pfnGetDebugAllocationInfo = GetDebugAllocationInfo;
+}
 template<class T> static HRESULT FillTable(void *table, SIZE_T size, void (*fill)(T &)) {
     if (!table || size < sizeof(T)) return E_INVALIDARG;
     memset(table, 0, size);
@@ -5917,8 +5954,10 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
     switch (type) {
     case D3D12DDI_TABLE_TYPE_DEVICE_CORE:
         /* C44: the runtime sizes the table of the interface it negotiated
-         * (GetVersions): R1 (0011) takes CORE_0010 */
-        hr = size >= sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0010)
+         * (GetVersions): R1 (0011) takes CORE_0010, 0012 CORE_0012 */
+        hr = size >= sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0012)
+                 ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0012>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0012)
+             : size >= sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0010)
                  ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0010>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0010)
                  : FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0003>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0003);
         break;

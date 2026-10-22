@@ -22,6 +22,9 @@ struct D3D12DDI_3DPIPELINESUPPORT1_DATA_0081 {int HighestRuntimeSupportedFeature
 struct D3D12DDI_D3D12_OPTIONS_DATA_0003 {int ResourceBindingTier,ConservativeRasterizationTier,TiledResourcesTier,CrossNodeSharingTier,VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation,OutputMergerLogicOp,ResourceHeapTier;};
 struct D3D12DDI_MEMORY_ARCHITECTURE_CAPS {int UMA,IOCoherent,CacheCoherent;};
 struct D3D12DDI_SHADER_CAPS_0003 {int MinPrecision,Doubles,ShaderSpecifiedStencilRef,TypedUAVLoadAdditionalFormats,ROVs;};
+struct D3D12DDI_SHADER_CAPS_0012 {int MinPrecision,Doubles,ShaderSpecifiedStencilRef,TypedUAVLoadAdditionalFormats,ROVs,WaveOps;UINT WaveLaneCountMin,WaveLaneCountMax,TotalLaneCount;};
+struct AGX_WIN32_DEVICE_INFO {UINT CoresPerCluster,CoreMask;};
+static struct {AGX_WIN32_DEVICE_INFO info;int info_valid;} adapter_object;
 struct D3D12DDI_ARCHITECTURE_INFO_DATA {int TileBasedDeferredRenderer;};
 struct D3D12DDI_GPUVA_CAPS_0004 {int MaxGPUVirtualAddressBitsPerResource;};
 enum D3D12DDI_SHADER_MODEL {D3D12DDI_SHADER_MODEL_5_1_RELEASE_0011=0x50015,D3D12DDI_SHADER_MODEL_6_0_RELEASE_0011=0x60005};
