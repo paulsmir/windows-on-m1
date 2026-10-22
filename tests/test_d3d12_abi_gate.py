@@ -57,7 +57,13 @@ class D3d12AbiGate(unittest.TestCase):
                           'D3D12DDICAPS_TYPE_GPUVA_CAPS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT',
                           'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT1',
                           'D3D12DDICAPS_TYPE_SWIZZLE_PATTERN', 'D3D12DDICAPS_TYPE_0011_SHADER_MODELS',
-                      'D3D12DDICAPS_TYPE_0050_HARDWARE_SCHEDULING_CAPS'})
+                      'D3D12DDICAPS_TYPE_0050_HARDWARE_SCHEDULING_CAPS',
+                      # EXP1869: R2+ caps answered with their "not supported" values
+                      'D3D12DDICAPS_TYPE_0023_UMD_BASED_COMMAND_QUEUE_PRIORITY',
+                      'D3D12DDICAPS_TYPE_0022_CPU_PAGE_TABLE_FALSE_POSITIVES',
+                      'D3D12DDICAPS_TYPE_0030_PROTECTED_RESOURCE_SESSION_SUPPORT',
+                      'D3D12DDICAPS_TYPE_EXECUTECOMMANDLISTS_PARALLELISM',
+                      'D3D12DDICAPS_TYPE_0073_SUPPORT_BATCHED_MARKERS'})
         # C44: SM 6.0 and the R1 interface by default since EXP1865;
         # APPLE_AGX_D3D12_SM6=0 is the only way back to 0003/SM 5.1
         gate = source[source.index('static bool ShaderModel6Enabled() {'):]

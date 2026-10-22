@@ -144,6 +144,7 @@ static UINT64 InterfaceOptIn() {
 static bool Negotiated0033() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0033; }
 static bool Negotiated0042() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0042; }
 static bool Negotiated0071() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0071; }
+static bool NegotiatedR2() { return adapter_object.negotiated >= D3D12DDI_SUPPORTED_0021; }
 /* C48: R1 build 2 (0012) adds the wave caps (D3D12DDI_SHADER_CAPS_0012) and
  * one device entry, pfnGetDebugAllocationInfo; SM6 processes negotiate it. */
 static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *versions) {
@@ -287,6 +288,33 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
             d.OutputMergerLogicOp = FALSE;
             d.ResourceHeapTier = D3D12DDI_RESOURCE_HEAP_TIER_1;
         });
+        break;
+    /* EXP1869: an R2+ runtime failed device creation on the unanswered
+     * UMD-based queue priority caps (1062) after the tables; the R2+ caps
+     * whose "not supported" value is defined answer it (R1 runtimes keep
+     * the validated E_NOTIMPL) */
+    case D3D12DDICAPS_TYPE_0023_UMD_BASED_COMMAND_QUEUE_PRIORITY:
+        if (NegotiatedR2())
+            hr = Answer<D3D12DDICAPS_UMD_BASED_COMMAND_QUEUE_PRIORITY_DATA_0023>(
+                arg, [](auto &d) { d.SupportedQueueFlagsForGlobalRealtimeQueues = D3D12DDI_COMMAND_QUEUE_FLAG_NONE; });
+        break;
+    case D3D12DDICAPS_TYPE_0022_CPU_PAGE_TABLE_FALSE_POSITIVES:
+        if (NegotiatedR2())
+            hr = Answer<D3D12DDI_COMMAND_QUEUE_FLAGS>(arg, [](auto &d) { d = D3D12DDI_COMMAND_QUEUE_FLAG_NONE; });
+        break;
+    case D3D12DDICAPS_TYPE_0030_PROTECTED_RESOURCE_SESSION_SUPPORT:
+        /* NodeIndex is the input: only Support is written */
+        if (NegotiatedR2() &&
+            arg->DataSize >= sizeof(D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_DATA_0030)) {
+            static_cast<D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_DATA_0030 *>(arg->pData)->Support =
+                D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_FLAG_0030_NONE;
+            hr = S_OK;
+        }
+        break;
+    case D3D12DDICAPS_TYPE_EXECUTECOMMANDLISTS_PARALLELISM:
+    case D3D12DDICAPS_TYPE_0073_SUPPORT_BATCHED_MARKERS:
+        if (NegotiatedR2())
+            hr = Answer<BOOL>(arg, [](auto &d) { d = FALSE; });
         break;
     /* C52: 0050+ runtimes may ask for scheduling groups; 0 = none */
     case D3D12DDICAPS_TYPE_0050_HARDWARE_SCHEDULING_CAPS:
@@ -6892,7 +6920,7 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
         break;
     case D3D12DDI_TABLE_TYPE_0020_EXTENDED_FEATURES:
         /* R2+ (0021 has the callbacks member); the R1 runtime never asks */
-        if (adapter_object.negotiated >= D3D12DDI_SUPPORTED_0021)
+        if (NegotiatedR2())
             hr = FillTable<D3D12DDI_EXTENDED_FEATURES_FUNCS_0021>(table, size, FillD3D12DDI_EXTENDED_FEATURES_FUNCS_0021);
         break;
     default:

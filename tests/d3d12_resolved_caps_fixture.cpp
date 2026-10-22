@@ -34,6 +34,11 @@ static bool ShaderModel6Enabled(){return false;}
 static bool Negotiated0033(){return false;}
 static bool Negotiated0042(){return false;}
 static bool Negotiated0071(){return false;}
+static bool NegotiatedR2(){return false;}
+enum D3D12DDI_COMMAND_QUEUE_FLAGS {D3D12DDI_COMMAND_QUEUE_FLAG_NONE=0};
+struct D3D12DDICAPS_UMD_BASED_COMMAND_QUEUE_PRIORITY_DATA_0023 {D3D12DDI_COMMAND_QUEUE_FLAGS SupportedQueueFlagsForGlobalRealtimeQueues;};
+enum D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_FLAGS_0030 {D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_FLAG_0030_NONE=0};
+struct D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_DATA_0030 {UINT NodeIndex;D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_FLAGS_0030 Support;};
 static constexpr int kTypedUavLoads = 1;
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))

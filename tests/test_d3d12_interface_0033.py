@@ -96,11 +96,25 @@ class D3d12Interface0033(unittest.TestCase):
         fill = self.source[self.source.index('static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type'):]
         fill = fill[:fill.index('\n}\n')]
         self.assertIn('case D3D12DDI_TABLE_TYPE_0020_EXTENDED_FEATURES:', fill)
-        self.assertIn('if (adapter_object.negotiated >= D3D12DDI_SUPPORTED_0021)', fill)
+        self.assertIn('if (NegotiatedR2())', fill)
         self.assertIn('FillTable<D3D12DDI_EXTENDED_FEATURES_FUNCS_0021>', fill)
         body = fill_body(self.source, 'D3D12DDI_EXTENDED_FEATURES_FUNCS_0021')
         expected = {m for _, m in typed_members(self.header, 'D3D12DDI_EXTENDED_FEATURES_FUNCS_0021')}
         self.assertEqual(set(re.findall(r'f\.(pfn\w+) =', body)), expected)
+
+    def test_r2_caps_answer_only_r2_runtimes(self):
+        # EXP1869: the 0033 runtime destroyed the device on an unanswered
+        # 1062 (UMD-based queue priority) after the tables; R1 runtimes keep
+        # the E_NOTIMPL they were validated with (EXP1866: 1069/1071 refused)
+        caps = self.source[self.source.index('static HRESULT APIENTRY GetCaps('):]
+        caps = caps[:caps.index('\n}\n')]
+        for case in ('0023_UMD_BASED_COMMAND_QUEUE_PRIORITY', '0022_CPU_PAGE_TABLE_FALSE_POSITIVES',
+                     '0030_PROTECTED_RESOURCE_SESSION_SUPPORT', 'EXECUTECOMMANDLISTS_PARALLELISM'):
+            body = caps[caps.index('case D3D12DDICAPS_TYPE_%s:' % case):]
+            body = body[:body.index('break;')]
+            self.assertIn('NegotiatedR2()', body, case)
+        self.assertIn('static bool NegotiatedR2() { return adapter_object.negotiated >= D3D12DDI_SUPPORTED_0021; }',
+                      self.source)
 
     def test_tables_follow_the_negotiated_interface(self):
         # CORE_0012 and CORE_0033 have one size: the table is chosen by the
