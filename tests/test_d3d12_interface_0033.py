@@ -89,6 +89,19 @@ class D3d12Interface0033(unittest.TestCase):
                       self.source)
         self.assertIn('if (!ShaderModel6Enabled() || GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI"', self.source)
 
+    def test_extended_features_table_is_filled_from_r2(self):
+        # EXP1868: the 0033 runtime filled the core and list tables, then
+        # asked for table type 8 (EXTENDED_FEATURES, 0x20 bytes) and failed
+        # D3D12CreateDevice (E_NOTIMPL) when it was refused.
+        fill = self.source[self.source.index('static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type'):]
+        fill = fill[:fill.index('\n}\n')]
+        self.assertIn('case D3D12DDI_TABLE_TYPE_0020_EXTENDED_FEATURES:', fill)
+        self.assertIn('if (adapter_object.negotiated >= D3D12DDI_SUPPORTED_0021)', fill)
+        self.assertIn('FillTable<D3D12DDI_EXTENDED_FEATURES_FUNCS_0021>', fill)
+        body = fill_body(self.source, 'D3D12DDI_EXTENDED_FEATURES_FUNCS_0021')
+        expected = {m for _, m in typed_members(self.header, 'D3D12DDI_EXTENDED_FEATURES_FUNCS_0021')}
+        self.assertEqual(set(re.findall(r'f\.(pfn\w+) =', body)), expected)
+
     def test_tables_follow_the_negotiated_interface(self):
         # CORE_0012 and CORE_0033 have one size: the table is chosen by the
         # version CalcPrivateDeviceSize received, not by the size.

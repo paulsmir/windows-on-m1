@@ -6717,6 +6717,37 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0070(D3D12DDI_DEVICE_FUNCS_CORE_0070 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnSetBackgroundProcessingMode, SetBackgroundProcessingMode0063);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnAddToStateObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnAddToStateObject));
 }
+/* EXP1868: after the 0033 core and list tables the runtime asked for
+ * D3D12DDI_TABLE_TYPE_0020_EXTENDED_FEATURES (0x20 bytes, the _0021 table)
+ * although GetOptionalDDITables lists nothing, and failed device creation
+ * when it was refused. No extended feature (video, shader caching, content
+ * protection, render passes, downlevel support) is offered. */
+static HRESULT APIENTRY GetSupportedExtendedFeatures0020(D3D12DDI_HDEVICE, UINT32 *count, D3D12DDI_FEATURE_0020 *) {
+    if (!count) return E_INVALIDARG;
+    *count = 0;
+    return S_OK;
+}
+static HRESULT APIENTRY GetSupportedExtendedFeatureVersions0020(D3D12DDI_HDEVICE, D3D12DDI_FEATURE_0020, UINT32 *count,
+                                                                UINT32 *) {
+    if (count) *count = 0;
+    return E_INVALIDARG;
+}
+static HRESULT APIENTRY EnableExtendedFeature0020(D3D12DDI_HDEVICE, D3D12DDI_FEATURE_0020, UINT32) { return E_INVALIDARG; }
+/* callbacks belong to enabled features; none is enabled, nothing is kept */
+static HRESULT APIENTRY SetExtendedFeatureCallbacks0021(D3D12DDI_HDEVICE, D3D12DDI_TABLE_TYPE, const void *, SIZE_T) {
+    return S_OK;
+}
+static void FillD3D12DDI_EXTENDED_FEATURES_FUNCS_0021(D3D12DDI_EXTENDED_FEATURES_FUNCS_0021 &f) {
+    f.pfnGetSupportedExtendedFeatures = GetSupportedExtendedFeatures0020;
+    f.pfnGetSupportedExtendedFeatureVersions = GetSupportedExtendedFeatureVersions0020;
+    f.pfnEnableExtendedFeature = EnableExtendedFeature0020;
+    f.pfnSetExtendedFeatureCallbacks = SetExtendedFeatureCallbacks0021;
+}
+static_assert(std::is_same_v<decltype(&GetSupportedExtendedFeatures0020), PFND3D12DDI_GET_SUPPORTED_EXTENDED_FEATURES_0020>);
+static_assert(std::is_same_v<decltype(&GetSupportedExtendedFeatureVersions0020),
+                             PFND3D12DDI_GET_SUPPORTED_EXTENDED_FEATURE_VERSIONS_0020>);
+static_assert(std::is_same_v<decltype(&EnableExtendedFeature0020), PFND3D12DDI_ENABLE_EXTENDED_FEATURE_0020>);
+static_assert(std::is_same_v<decltype(&SetExtendedFeatureCallbacks0021), PFND3D12DDI_SET_EXTENDED_FEATURE_CALLBACKS_0021>);
 template<class T> static HRESULT FillTable(void *table, SIZE_T size, void (*fill)(T &)) {
     if (!table || size < sizeof(T)) return E_INVALIDARG;
     memset(table, 0, size);
@@ -6757,6 +6788,11 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
         break;
     case D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D:
         hr = FillTable<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001>(table, size, FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001);
+        break;
+    case D3D12DDI_TABLE_TYPE_0020_EXTENDED_FEATURES:
+        /* R2+ (0021 has the callbacks member); the R1 runtime never asks */
+        if (adapter_object.negotiated >= D3D12DDI_SUPPORTED_0021)
+            hr = FillTable<D3D12DDI_EXTENDED_FEATURES_FUNCS_0021>(table, size, FillD3D12DDI_EXTENDED_FEATURES_FUNCS_0021);
         break;
     default:
         break;
