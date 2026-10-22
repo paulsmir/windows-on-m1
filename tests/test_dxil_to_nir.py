@@ -35,6 +35,7 @@ class DxilToNir(unittest.TestCase):
         archives = local_tree("dxil-work", "build-dxil-spirv")
         if not build or not mesa or not spirv or not archives or not (build / MESA_LIBS[3]).exists():
             raise unittest.SkipTest("host Mesa/libvtn or dxil-spirv build not available")
+        cls.mesa = mesa
         cls.tmp = tempfile.TemporaryDirectory(prefix="dxil-to-nir-")
         tmp = Path(cls.tmp.name)
         cls.dxil, cls.dxbc = tmp / "dxil_to_nir_fixture", tmp / "dxbc_to_nir_fixture"
@@ -179,6 +180,34 @@ class DxilToNir(unittest.TestCase):
         field = lambda text, key: re.search(rf"^{key}: (\S+)", text, re.M).group(1)
         self.assertEqual(field(hs, "patch_outputs_written"), field(ds, "patch_inputs_read"))
         self.assertEqual(field(hs, "tcs_vertices_out"), "3")
+
+    # intrinsics that reach the AGX backend only after a pass outside Asahi's
+    # sources: the tess coordinate (nir_lower_tess_coord_z in
+    # poly_nir_lower_tes), the fragment position (the owner's
+    # dxbc_nir_lower_fragment_position before create_fs_state)
+    LOWERED_OUTSIDE_ASAHI = {"load_tess_coord", "load_frag_coord"}
+
+    def test_every_final_intrinsic_has_an_asahi_handler(self):
+        # EXP1857: load_base_global_invocation_id passed every offline check
+        # and aborted the AGX backend on the guest ("Unhandled intrinsic");
+        # no Asahi source (compiler, lib, poly, Gallium driver) names it.
+        known = set()
+        for tree in ("src/asahi", "src/gallium/drivers/asahi", "src/poly"):
+            for source in (self.mesa / tree).rglob("*.[ch]"):
+                known.update(re.findall(r"nir_intrinsic_([a-z0-9_]+)", source.read_text(errors="replace")))
+        self.assertIn("ballot", known)
+        for fixture in sorted(FIXTURES.glob("*.dxil")):
+            final = self.final(fixture.stem)
+            unhandled = set(re.findall(r"@([a-z0-9_]+)", final)) - known - self.LOWERED_OUTSIDE_ASAHI
+            self.assertEqual(unhandled, set(), fixture.name)
+
+    def test_wave_intrinsics_lower_to_agx_subgroup_operations(self):
+        # C48: every SM 6.0 wave and quad intrinsic (32-wide waves)
+        cs, ps = self.final("wave_cs"), self.final("wave_ps")
+        for op in ("@ballot", "@reduce", "@exclusive_scan", "@read_invocation", "@load_subgroup_invocation"):
+            self.assertIn(op, cs)
+        for op in ("@quad_swap_horizontal", "@quad_swap_vertical", "@quad_swap_diagonal", "@quad_broadcast"):
+            self.assertIn(op, ps)
 
     def test_register_range_takes_consecutive_slots(self):
         self.parity("par_range_ps")
