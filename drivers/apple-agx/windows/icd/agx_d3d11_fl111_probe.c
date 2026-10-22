@@ -6,6 +6,10 @@
  * 0x0f,0xf0,0x55,0xaa draws 0x3c,0xc3,0x66,0x99 with XOR and
  * 0xcf,0xfc,0xdd,0xee with OR_REVERSE (s | ~d), which catches a reordered
  * operation table.
+ * D11UAVCOMPACT: a cs_5_0 dispatch with raw u1, append u3, typed u5 and raw
+ * u7, which the D3D11.1 translator binds through the shader's UAV map
+ * (compacted shader buffers 0..3, image 5): every view must hold its
+ * thread's value, the append buffer 0..63 in any order, the counter 64.
  * Usage: agx_d3d11_fl111_probe.exe */
 #define COBJMACROS
 #define INITGUID
@@ -17,6 +21,7 @@
 
 #include "agx_d3d11_fl111_vs.h"
 #include "agx_d3d11_fl111_ps_logic.h"
+#include "agx_d3d11_fl111_cs_compact.h"
 
 static IDXGIAdapter1 *hardware_adapter(void) {
   IDXGIFactory1 *factory = NULL;
@@ -156,9 +161,150 @@ out:
   return SUCCEEDED(hr) && !bad ? 0 : 1;
 }
 
+static ID3D11Buffer *buffer(ID3D11Device1 *device, UINT bytes, UINT bind, UINT misc, UINT stride,
+                            D3D11_USAGE usage, UINT cpu) {
+  D3D11_BUFFER_DESC bd;
+  ID3D11Buffer *b = NULL;
+  memset(&bd, 0, sizeof(bd));
+  bd.ByteWidth = bytes; bd.Usage = usage; bd.BindFlags = bind; bd.CPUAccessFlags = cpu;
+  bd.MiscFlags = misc; bd.StructureByteStride = stride;
+  return SUCCEEDED(ID3D11Device1_CreateBuffer(device, &bd, NULL, &b)) ? b : NULL;
+}
+
+/* Copies a resource to its staging twin and maps it (NULL on failure). */
+static const unsigned *read_back(ID3D11DeviceContext *ctx, ID3D11Resource *src, ID3D11Resource *staging,
+                                 UINT *pitch) {
+  D3D11_MAPPED_SUBRESOURCE map;
+  ID3D11DeviceContext_CopyResource(ctx, staging, src);
+  if (FAILED(ID3D11DeviceContext_Map(ctx, staging, 0, D3D11_MAP_READ, 0, &map))) return NULL;
+  if (pitch) *pitch = map.RowPitch;
+  return (const unsigned *)map.pData;
+}
+
+static int step_uav_compact(void) {
+  ID3D11Device1 *device = NULL;
+  ID3D11DeviceContext *ctx = NULL;
+  D3D_FEATURE_LEVEL level = 0;
+  ID3D11Buffer *raw1 = NULL, *app3 = NULL, *raw7 = NULL, *count = NULL;
+  ID3D11Buffer *s_raw1 = NULL, *s_app3 = NULL, *s_raw7 = NULL, *s_count = NULL;
+  ID3D11Texture2D *tex5 = NULL, *s_tex5 = NULL;
+  ID3D11UnorderedAccessView *uavs[8] = {0};
+  ID3D11ComputeShader *cs = NULL;
+  unsigned bad = 1, counter = 0, sum = 0, mask_lo = 0, mask_hi = 0;
+  HRESULT hr = create_device(&device, &ctx, &level);
+  printf("D11UAVCOMPACT device 0x%08lx level 0x%x\n", (unsigned long)hr, (unsigned)level);
+  if (SUCCEEDED(hr)) {
+    raw1 = buffer(device, 256, D3D11_BIND_UNORDERED_ACCESS, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS, 0,
+                  D3D11_USAGE_DEFAULT, 0);
+    raw7 = buffer(device, 16, D3D11_BIND_UNORDERED_ACCESS, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS, 0,
+                  D3D11_USAGE_DEFAULT, 0);
+    app3 = buffer(device, 256, D3D11_BIND_UNORDERED_ACCESS, D3D11_RESOURCE_MISC_BUFFER_STRUCTURED, 4,
+                  D3D11_USAGE_DEFAULT, 0);
+    count = buffer(device, 16, 0, 0, 0, D3D11_USAGE_DEFAULT, 0);
+    s_raw1 = buffer(device, 256, 0, 0, 0, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_READ);
+    s_raw7 = buffer(device, 16, 0, 0, 0, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_READ);
+    s_app3 = buffer(device, 256, 0, 0, 0, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_READ);
+    s_count = buffer(device, 16, 0, 0, 0, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_READ);
+    if (!raw1 || !raw7 || !app3 || !count || !s_raw1 || !s_raw7 || !s_app3 || !s_count) hr = E_OUTOFMEMORY;
+  }
+  if (SUCCEEDED(hr)) {
+    D3D11_TEXTURE2D_DESC td;
+    memset(&td, 0, sizeof(td));
+    td.Width = 8; td.Height = 8; td.MipLevels = 1; td.ArraySize = 1; td.Format = DXGI_FORMAT_R32_UINT;
+    td.SampleDesc.Count = 1; td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+    hr = ID3D11Device1_CreateTexture2D(device, &td, NULL, &tex5);
+    td.Usage = D3D11_USAGE_STAGING; td.BindFlags = 0; td.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    if (SUCCEEDED(hr)) hr = ID3D11Device1_CreateTexture2D(device, &td, NULL, &s_tex5);
+  }
+  if (SUCCEEDED(hr)) {
+    D3D11_UNORDERED_ACCESS_VIEW_DESC ud;
+    memset(&ud, 0, sizeof(ud));
+    ud.ViewDimension = D3D11_UAV_DIMENSION_BUFFER; ud.Format = DXGI_FORMAT_R32_TYPELESS;
+    ud.Buffer.NumElements = 64; ud.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+    hr = ID3D11Device1_CreateUnorderedAccessView(device, (ID3D11Resource *)raw1, &ud, &uavs[1]);
+    ud.Buffer.NumElements = 4;
+    if (SUCCEEDED(hr)) hr = ID3D11Device1_CreateUnorderedAccessView(device, (ID3D11Resource *)raw7, &ud, &uavs[7]);
+    ud.Format = DXGI_FORMAT_UNKNOWN; ud.Buffer.NumElements = 64; ud.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_APPEND;
+    if (SUCCEEDED(hr)) hr = ID3D11Device1_CreateUnorderedAccessView(device, (ID3D11Resource *)app3, &ud, &uavs[3]);
+    if (SUCCEEDED(hr)) hr = ID3D11Device1_CreateUnorderedAccessView(device, (ID3D11Resource *)tex5, NULL, &uavs[5]);
+    if (SUCCEEDED(hr)) hr = ID3D11Device1_CreateComputeShader(device, g_agx_d3d11_fl111_cs_compact,
+                                                              sizeof(g_agx_d3d11_fl111_cs_compact), NULL, &cs);
+    if (SUCCEEDED(hr)) {
+      const UINT clear[4] = {0, 0, 0, 0};
+      UINT initial[8];
+      for (UINT i = 0; i < 8; ++i) initial[i] = ~0u;
+      initial[3] = 0;
+      ID3D11DeviceContext_ClearUnorderedAccessViewUint(ctx, uavs[7], clear);
+      ID3D11DeviceContext_CSSetShader(ctx, cs, NULL, 0);
+      ID3D11DeviceContext_CSSetUnorderedAccessViews(ctx, 0, 8, uavs, initial);
+      ID3D11DeviceContext_Dispatch(ctx, 1, 1, 1);
+      ID3D11DeviceContext_CopyStructureCount(ctx, count, 0, uavs[3]);
+    }
+    printf("D11UAVCOMPACT views+dispatch 0x%08lx\n", (unsigned long)hr);
+  }
+  if (SUCCEEDED(hr)) {
+    const unsigned *v;
+    UINT pitch = 0;
+    bad = 0;
+    if ((v = read_back(ctx, (ID3D11Resource *)raw1, (ID3D11Resource *)s_raw1, NULL))) {
+      for (unsigned i = 0; i < 64; ++i) if (v[i] != i + 100) ++bad;
+      printf("D11UAVCOMPACT raw1[0,63] %u,%u\n", v[0], v[63]);
+      ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)s_raw1, 0);
+    } else ++bad;
+    if ((v = read_back(ctx, (ID3D11Resource *)tex5, (ID3D11Resource *)s_tex5, &pitch))) {
+      for (unsigned y = 0; y < 8; ++y)
+        for (unsigned x = 0; x < 8; ++x)
+          if (((const unsigned *)((const char *)v + y * pitch))[x] != (y * 8 + x) * 3) ++bad;
+      printf("D11UAVCOMPACT tex5[7,7] %u\n", ((const unsigned *)((const char *)v + 7 * pitch))[7]);
+      ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)s_tex5, 0);
+    } else ++bad;
+    if ((v = read_back(ctx, (ID3D11Resource *)raw7, (ID3D11Resource *)s_raw7, NULL))) {
+      if (v[0] != 64) ++bad;
+      printf("D11UAVCOMPACT raw7[0] %u\n", v[0]);
+      ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)s_raw7, 0);
+    } else ++bad;
+    if ((v = read_back(ctx, (ID3D11Resource *)count, (ID3D11Resource *)s_count, NULL))) {
+      counter = v[0];
+      ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)s_count, 0);
+    }
+    if (counter != 64) ++bad;
+    /* the appended values: each of 0..63 exactly once, in any order */
+    if ((v = read_back(ctx, (ID3D11Resource *)app3, (ID3D11Resource *)s_app3, NULL))) {
+      for (unsigned i = 0; i < 64; ++i) {
+        sum += v[i];
+        if (v[i] < 32) mask_lo |= 1u << v[i];
+        else if (v[i] < 64) mask_hi |= 1u << (v[i] - 32);
+      }
+      ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)s_app3, 0);
+    }
+    if (mask_lo != ~0u || mask_hi != ~0u) ++bad;
+    printf("D11UAVCOMPACT counter %u append-sum %u masks %08x,%08x (want 64, 2016, all)\n", counter, sum,
+           mask_lo, mask_hi);
+    hr = ID3D11Device1_GetDeviceRemovedReason(device);
+  }
+  printf("AGX_D3D11_D11UAVCOMPACT: %s hr=0x%08lx bad=%u\n", SUCCEEDED(hr) && !bad ? "PASS" : "FAIL",
+         (unsigned long)hr, bad);
+  for (UINT i = 0; i < 8; ++i) if (uavs[i]) ID3D11UnorderedAccessView_Release(uavs[i]);
+  if (cs) ID3D11ComputeShader_Release(cs);
+  if (tex5) ID3D11Texture2D_Release(tex5);
+  if (s_tex5) ID3D11Texture2D_Release(s_tex5);
+  if (raw1) ID3D11Buffer_Release(raw1);
+  if (raw7) ID3D11Buffer_Release(raw7);
+  if (app3) ID3D11Buffer_Release(app3);
+  if (count) ID3D11Buffer_Release(count);
+  if (s_raw1) ID3D11Buffer_Release(s_raw1);
+  if (s_raw7) ID3D11Buffer_Release(s_raw7);
+  if (s_app3) ID3D11Buffer_Release(s_app3);
+  if (s_count) ID3D11Buffer_Release(s_count);
+  if (ctx) ID3D11DeviceContext_Release(ctx);
+  if (device) ID3D11Device1_Release(device);
+  return SUCCEEDED(hr) && !bad ? 0 : 1;
+}
+
 int main(void) {
   int failures = 0;
   failures += step_logic();
+  failures += step_uav_compact();
   printf("AGX_D3D11_FL111_PROBE_DONE failures=%d\n", failures);
   return failures ? 1 : 0;
 }
