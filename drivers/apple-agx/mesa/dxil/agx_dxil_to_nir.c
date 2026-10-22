@@ -651,6 +651,22 @@ spirv_nir(const uint32_t *words, size_t count, mesa_shader_stage stage, const ch
    return spirv_to_nir(words, count, NULL, stage, entry, &spirv, options);
 }
 
+/* EXP1859: dxilconv declares SignedZeroInfNanPreserve, so spirv_to_nir marks
+ * every float instruction preserve:sz,inf,nan; Asahi's agx_nir_lower_fminmax
+ * turns fmin/fmax into fmin_agx/fmax_agx, which do not take those flags
+ * (NIR validation failure, abort in the assertion-enabled x64 UMD: HDR,
+ * ModelViewer). The DXBC frontend sets none: drop them as well. */
+static bool
+strip_preserve(nir_builder *b, nir_alu_instr *alu, void *data)
+{
+   (void)b;
+   (void)data;
+   if (!(alu->fp_math_ctrl & nir_fp_preserve_sz_inf_nan))
+      return false;
+   alu->fp_math_ctrl &= ~nir_fp_preserve_sz_inf_nan;
+   return true;
+}
+
 /* the components of 'location' some stream-0 output variable covers */
 static unsigned
 output_components(nir_shader *nir, int location)
@@ -826,6 +842,9 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       nir_foreach_shader_in_variable(var, nir)
          if (var->data.location >= VERT_ATTRIB_GENERIC0)
             var->data.driver_location = var->data.location - VERT_ATTRIB_GENERIC0;
+
+   nir->info.float_controls_execution_mode = 0;
+   NIR_PASS(_, nir, nir_shader_alu_pass, strip_preserve, nir_metadata_all, NULL);
 
    /* vk_spirv_to_nir's tail (src/vulkan/runtime/vk_nir.c) */
    NIR_PASS(_, nir, nir_lower_variable_initializers, nir_var_function_temp);

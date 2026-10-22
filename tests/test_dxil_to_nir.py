@@ -253,6 +253,10 @@ class DxilToNir(unittest.TestCase):
                                timeout=120)
             self.assertEqual(r.returncode, 0, f"{shader.name}: {r.stderr[-1500:]}")
             self.assertIn("TRANSLATED", r.stdout, shader.name)
+            # EXP1859: dxilconv's SignedZeroInfNanPreserve marked fmax, and
+            # Asahi's fmax_agx fails validation with the flag (x64 HDR abort)
+            self.assertNotIn("preserve:", r.stdout, shader.name)
+            self.assertNotIn("float_controls_execution_mode", r.stdout, shader.name)
             unhandled = set(re.findall(r"@([a-z0-9_]+)", r.stdout)) - known - self.LOWERED_OUTSIDE_ASAHI
             self.assertEqual(unhandled, set(), shader.name)
 
