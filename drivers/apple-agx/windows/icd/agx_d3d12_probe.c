@@ -27,6 +27,7 @@
 #include "agx_d3d12_probe_ps_dxil.h"
 #include "agx_d3d12_probe_ps_view_dxil.h"
 #include "agx_d3d12_probe_cs_cb_dxil62.h"
+#include "agx_d3d12_probe_cs_sm65_dxil.h"
 #include "agx_d3d12_probe_cs_texture1d_load.h"
 #include "agx_d3d12_probe_cs_texture1d_store.h"
 #include "agx_d3d12_probe_cs_texture1d_array_load.h"
@@ -6150,6 +6151,20 @@ static int step_c51a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
     }
     return compute_constants_code(d, q, f, g_agx_d3d12_probe_cs_cb_dxil62, sizeof(g_agx_d3d12_probe_cs_cb_dxil62), "C51A", 0u);
 }
+/* C52A (interface 0071): HighestShaderModel 6.5 and the core SM 6.4/6.5
+ * intrinsics (agx_d3d12_probe_cs_sm65_dxil.hlsl: packed dot products, wave
+ * match and multi-prefix sum/count/product); every dword 0x3f. */
+static int step_c52a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
+    D3D12_FEATURE_DATA_SHADER_MODEL model = {D3D_SHADER_MODEL_6_5};
+    const HRESULT hr = ID3D12Device_CheckFeatureSupport(d, D3D12_FEATURE_SHADER_MODEL, &model, sizeof(model));
+    (void)b;
+    printf("C52A HighestShaderModel 0x%x hr=0x%08lx\n", (unsigned)model.HighestShaderModel, (unsigned long)hr);
+    if (FAILED(hr) || model.HighestShaderModel < D3D_SHADER_MODEL_6_5) {
+        printf("AGX_D3D12_C52A: FAIL\n");
+        return 1;
+    }
+    return compute_constants_code(d, q, f, g_agx_d3d12_probe_cs_sm65_dxil, sizeof(g_agx_d3d12_probe_cs_sm65_dxil), "C52A", 0x3fu);
+}
 static int step_c6d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 2); }
 static int step_c11(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 3); }
 static int step_c13(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 4); }
@@ -6676,7 +6691,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
     {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
     {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}};
+    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}};
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
@@ -6802,6 +6817,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C49A", c49_typed_uav_loads);
                 (void)run_isolated(adapter, "C50A", step_c50a);
                 (void)run_isolated(adapter, "C51A", step_c51a);
+                (void)run_isolated(adapter, "C52A", step_c52a);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
