@@ -4398,6 +4398,107 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
     command.kind = kCommandTextureCopy;
     command.texture_copy = copy;
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C53 T2D: CopyTiles (Microsoft ID3D12GraphicsCommandList::CopyTiles): the
+ * region's 64 KiB tiles, in region order, to or from consecutive 64 KiB of
+ * the buffer -- a buffer tile's bytes as they are, a standard texture tile's
+ * texels row by row at the full tile's pitch (a partial tile leaves the
+ * rest of its 64 KiB alone). Recorded as one buffer or texture copy per
+ * tile (consecutive buffer tiles as one). Packed tiles are left out: copies
+ * of packed mips through CopyTiles are undefined. Exactly one direction
+ * flag is required (the documentation names no default). */
+static bool StandardTileElements(UINT block_bytes, UINT *w_el, UINT *h_el) {
+    switch (block_bytes) {
+    case 1: *w_el = 256; *h_el = 256; return true;
+    case 2: *w_el = 256; *h_el = 128; return true;
+    case 4: *w_el = 128; *h_el = 128; return true;
+    case 8: *w_el = 128; *h_el = 64; return true;
+    case 16: *w_el = 64; *h_el = 64; return true;
+    default: return false;
+    }
+}
+static VOID APIENTRY CopyTiles(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE tiled_handle,
+                               const D3D12DDI_TILED_RESOURCE_COORDINATE *start, const D3D12DDI_TILE_REGION_SIZE *size,
+                               D3D12DDI_HRESOURCE buffer_handle, UINT64 buffer_offset, D3D12DDI_TILE_COPY_FLAGS flags) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    auto *tiled = static_cast<AgxD3d12Resource *>(tiled_handle.pDrvPrivate);
+    auto *buffer = static_cast<AgxD3d12Resource *>(buffer_handle.pDrvPrivate);
+    if (!list) return;
+    const bool in = (flags & D3D12DDI_TILE_COPY_FLAG_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE) != 0;
+    const bool out = (flags & D3D12DDI_TILE_COPY_FLAG_SWIZZLED_TILED_RESOURCE_TO_LINEAR_BUFFER) != 0;
+    const UINT tiles = size ? size->NumTiles : 0u;
+    AgxD3d12Heap *reserved = tiled ? tiled->heap : nullptr;
+    const UINT64 tile = 0x10000ull;
+    UINT refusal = !tiled || !reserved || !reserved->tiles || !reserved->native || !buffer || !buffer->heap ||
+                           !buffer->heap->native || buffer->type != D3D12DDI_RT_BUFFER || !start || !tiles ? 1u
+                 : in == out ? 2u
+                 : buffer_offset > buffer->bytes || static_cast<UINT64>(tiles) * tile > buffer->bytes - buffer_offset ? 3u
+                 : list->commands + tiles > kListCommands ? 4u : 0u;
+    UINT w_el = 0, h_el = 0, bw = 1, bh = 1, block = 0;
+    if (!refusal && reserved->geometry) {
+        block = AgxD3d12FormatBlock(tiled->format, &bw, &bh);
+        if (!bw) bw = bh = 1;
+        if (!StandardTileElements(block, &w_el, &h_el)) refusal = 5u;
+    }
+    const AGX_TILE_GEOMETRY geometry = !refusal ? ReservedGeometry(reserved) : AGX_TILE_GEOMETRY{};
+    const AGX_TILE_COORD at = start ? AGX_TILE_COORD{start->X, start->Y, start->Z, start->Subresource} : AGX_TILE_COORD{};
+    const AGX_TILE_REGION region = size ? AGX_TILE_REGION{size->NumTiles, size->UseBox ? 1u : 0u, size->Width,
+                                                          size->Height, size->Depth}
+                                        : AGX_TILE_REGION{};
+    const UINT64 buffer_base = buffer && buffer->heap ? buffer->gpuva - buffer->heap->gpuva + buffer_offset : 0u;
+    UINT recorded = 0;
+    for (UINT k = 0; !refusal && k < tiles;) {
+        unsigned long long index = 0;
+        if (!AgxTileRegionTile(&geometry, &at, &region, k, &index)) { refusal = 6u; break; }
+        if (!reserved->geometry) {
+            /* buffer tiles: runs of consecutive resource tiles in one copy */
+            UINT n = 1;
+            unsigned long long next = 0;
+            while (k + n < tiles && AgxTileRegionTile(&geometry, &at, &region, k + n, &next) && next == index + n) ++n;
+            AgxD3d12Command *slot = AppendCommand(list);
+            if (!slot) return;
+            slot->kind = kCommandCopy;
+            const UINT64 at_tile = index * tile, at_buffer = buffer_base + static_cast<UINT64>(k) * tile;
+            slot->copy = in ? AgxD3d12Copy{reserved, at_tile, buffer->heap, at_buffer, n * tile}
+                            : AgxD3d12Copy{buffer->heap, at_buffer, reserved, at_tile, n * tile};
+            ++recorded;
+            k += n;
+            continue;
+        }
+        unsigned slice = 0, mip = 0, x = 0, y = 0;
+        int packed = 0;
+        if (!AgxTileLocate(&geometry, index, &slice, &mip, &x, &y, &packed)) { refusal = 6u; break; }
+        if (!packed) {
+            const UINT level_w = tiled->width >> mip ? tiled->width >> mip : 1u;
+            const UINT level_h = tiled->height >> mip ? tiled->height >> mip : 1u;
+            const UINT px = x * w_el * bw, py = y * h_el * bh;
+            AgxD3d12TextureCopy copy = {};
+            copy.texture = reserved;
+            copy.level = mip;
+            copy.layer = slice;
+            copy.x = px;
+            copy.y = py;
+            copy.width = w_el * bw < level_w - px ? w_el * bw : level_w - px;
+            copy.height = h_el * bh < level_h - py ? h_el * bh : level_h - py;
+            copy.depth = 1;
+            copy.buffer = buffer->heap;
+            copy.offset = buffer_base + static_cast<UINT64>(k) * tile;
+            copy.pitch = w_el * block;
+            copy.slice_pitch = 0;
+            copy.to_buffer = out;
+            AgxD3d12Command *slot = AppendCommand(list);
+            if (!slot) return;
+            slot->kind = kCommandTextureCopy;
+            slot->texture_copy = copy;
+            ++recorded;
+        }
+        ++k;
+    }
+    const UINT receipt[] = {refusal, tiles, recorded, out ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-copy-tiles", refusal ? E_INVALIDARG : S_OK, receipt, 4);
+    if (refusal) ListError(list, E_INVALIDARG);
+}
+#endif
 /* C6b: graphics state setters (each also records its default-state bit) */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 #define AGX_VB_SETTER IASetVertexBuffers
@@ -6939,7 +7040,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDiscardResource, DiscardResource);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTextureRegion, CopyTextureRegion);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy, ResourceCopy);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, AGX_TILED_DEVICE(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, CopyTiles));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyBufferRegion, CopyBufferRegion);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource, ResolveSubresource);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle, ExecuteBundle);

@@ -326,6 +326,7 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnResourceResolveSubresource'}  # C32: multisample resolve
         compute |= {'pfnSetGraphicsRootUnorderedAccessView'}  # C13 (EXP1375)
         compute |= {'pfnSOSetTargets'}  # C39: stream-output views
+        compute |= {'pfnCopyTiles'}  # C53 T2D (AGX_TILED_DEVICE: rejected without the native owner)
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
