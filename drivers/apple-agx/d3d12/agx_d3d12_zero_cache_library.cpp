@@ -63,8 +63,12 @@ HRESULT APIENTRY AgxD3d12ZeroCacheValidateLibraryReference(
 SIZE_T APIENTRY AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(
     D3D12DDI_HDEVICE device,
     const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *args) {
-    return AgxD3d12ZeroCacheResolveDevice(device) && args &&
-           args->InitialDataSize == 0 ? sizeof(Library) : 0;
+    /* EXP1864: a CachedPSO creation sizes the runtime's temporary library
+     * with the whole cached blob (InitialDataSize 0xe4e) and creates it with
+     * InitialDataSize 0 in storage of this size; 0 here let Create write the
+     * Library past it (D3D12 heap_failure_invalid_argument). The storage is
+     * one Library whatever the initial data, which stays unread. */
+    return AgxD3d12ZeroCacheResolveDevice(device) && args ? sizeof(Library) : 0;
 }
 
 HRESULT APIENTRY AgxD3d12ZeroCacheCreatePipelineLibrary(

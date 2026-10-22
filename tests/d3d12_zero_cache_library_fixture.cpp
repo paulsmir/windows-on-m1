@@ -71,7 +71,10 @@ int main() {
     const SIZE_T size = AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(a, &empty);
     require(size > 0 && size <= 384, "fixed private header fits supplied storage");
     require(AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(a, &guarded) == size, "zero guarded initial data unread");
-    require(AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(a, &nonzero) == 0, "nonzero native payload unsupported");
+    /* EXP1864: a CachedPSO creation sizes the runtime's temporary library with
+     * the whole cached blob (InitialDataSize 0xe4e) and then creates it with
+     * InitialDataSize 0; a zero size let Create write past the storage */
+    require(AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(a, &nonzero) == size, "nonzero initial data still sizes the Library, unread");
     require(AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(a, nullptr) == 0, "null create descriptor");
     require(AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(invalid, &empty) == 0, "invalid device private size");
     require(AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(unknown, &empty) == 0, "unknown device address unread");
