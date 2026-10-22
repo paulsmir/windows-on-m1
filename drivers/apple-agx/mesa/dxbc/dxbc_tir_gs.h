@@ -63,6 +63,10 @@ struct nir_def *dxbc_tir_sample_offset(struct nir_builder *b, unsigned samples, 
  * on the forced pattern. false for another stage or count. */
 bool dxbc_tir_lower_fs(struct nir_shader *nir, unsigned samples);
 
+/* A copy of a shader (nir_shader_clone) for callers without NIR headers:
+ * the TIR key reads a stage's I/O after the original went to the driver. */
+struct nir_shader *dxbc_tir_clone(const struct nir_shader *nir);
+
 /* The expansion GS for a key (NULL without a position). */
 struct nir_shader *dxbc_tir_gs(const struct nir_shader_compiler_options *options,
                                const struct dxbc_tir_gs_key *key);

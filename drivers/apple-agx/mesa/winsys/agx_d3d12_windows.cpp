@@ -1845,7 +1845,7 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
     dxbc_nir_lower_fragment_position(nir);
   /* FL 11_1: the TIR expansion GS keys on the vertex and pixel shaders' I/O */
   if (tir_clone)
-    *tir_clone = nir_shader_clone(NULL, nir);
+    *tir_clone = dxbc_tir_clone(nir);
   /* receipt-only (EXP1858 C37D/C37E: tessellated winding inverted against
    * D3D for both output topologies): the tessellation info Asahi reads */
   if (stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_TESS_EVAL)
@@ -1937,7 +1937,8 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
    * stream output (plain 1x rasterization with a receipt) */
   const bool tir = desc->ForcedSampleCount >= 4u && desc->Ps && !desc->Gs && !desc->Hs && !desc->Ds && !so;
   if (desc->ForcedSampleCount > 1u && !tir)
-    receipt("reject-d3d12-tir", E_NOTIMPL, desc->ForcedSampleCount, (desc->Gs ? 1u : 0u) | (desc->Hs ? 2u : 0u) | (so ? 4u : 0u));
+    receipt("reject-d3d12-tir", E_NOTIMPL, desc->ForcedSampleCount,
+            (desc->Gs ? 1u : 0u) | (desc->Hs ? 2u : 0u) | (so ? 4u : 0u), 0u);
   struct nir_shader *vs_io = NULL, *fs_io = NULL;
   graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX, &graphics->VsBindings, graphics->VsSrvDimensions,
                                graphics->VsUavDimensions, 0, 0, vs_xfb, 0, tir ? &vs_io : NULL);

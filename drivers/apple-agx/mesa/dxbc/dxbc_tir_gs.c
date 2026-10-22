@@ -38,6 +38,12 @@ cross2(nir_builder *b, nir_def *ax, nir_def *ay, nir_def *bx, nir_def *by)
    return nir_fsub(b, nir_fmul(b, ax, by), nir_fmul(b, ay, bx));
 }
 
+struct nir_shader *
+dxbc_tir_clone(const struct nir_shader *nir)
+{
+   return nir ? nir_shader_clone(NULL, nir) : NULL;
+}
+
 bool
 dxbc_tir_gs_key_from(const struct nir_shader *last, const struct nir_shader *ps,
                      struct dxbc_tir_gs_key *key)
