@@ -7,6 +7,7 @@
 #include "../dxbc/dxbc_to_nir.h"
 #include "nir.h"
 #include "nir_builder.h"
+#include "nir_xfb_info.h"
 #include "compiler/spirv/nir_spirv.h"
 #include "compiler/spirv/spirv_info.h"
 #include <stdio.h>
@@ -629,6 +630,73 @@ spirv_nir(const uint32_t *words, size_t count, mesa_shader_stage stage, const ch
       .group_non_uniform_subgroup_size = 32,
    };
    return spirv_to_nir(words, count, NULL, stage, entry, &spirv, options);
+}
+
+/* the components of 'location' some stream-0 output variable covers */
+static unsigned
+output_components(nir_shader *nir, int location)
+{
+   unsigned covered = 0;
+   nir_foreach_shader_out_variable(var, nir) {
+      const struct glsl_type *type = var->type;
+      unsigned rows = 1;
+      if (glsl_type_is_array(type)) {
+         rows = glsl_get_length(type);
+         type = glsl_get_array_element(type);
+      }
+      if (var->data.stream != 0 || !glsl_type_is_vector_or_scalar(type) || glsl_type_is_64bit(type) ||
+          location < var->data.location || location >= var->data.location + (int)rows)
+         continue;
+      covered |= ((1u << glsl_get_vector_elements(type)) - 1u) << var->data.location_frac;
+   }
+   return covered & 0xfu;
+}
+
+int
+agx_dxil_nir_xfb(struct nir_shader *nir, const struct dxbc_nir_xfb *xfb)
+{
+   if (!nir || !xfb || !xfb->num_outputs || xfb->num_outputs > DXBC_NIR_MAX_XFB_OUTPUTS ||
+       (nir->info.stage != MESA_SHADER_VERTEX && nir->info.stage != MESA_SHADER_GEOMETRY))
+      return 0;
+   nir_xfb_info *info = rzalloc_size(nir, nir_xfb_info_size(xfb->num_outputs));
+   if (!info)
+      return 0;
+   for (unsigned i = 0; i < xfb->num_outputs; ++i) {
+      const struct dxbc_nir_xfb_output *o = &xfb->outputs[i];
+      const unsigned want = o->num_components && o->num_components <= 4 ?
+         ((1u << o->num_components) - 1u) << o->start_component : 0u;
+      if (!want || o->start_component + o->num_components > 4 || o->stream || o->reg >= 32 ||
+          o->buffer >= DXBC_NIR_MAX_XFB_BUFFERS) {
+         ralloc_free(info);
+         return 0;
+      }
+      const int location = (xfb->position_registers & (1u << o->reg)) ? VARYING_SLOT_POS
+                                                                        : VARYING_SLOT_VAR0 + (int)o->reg;
+      if ((output_components(nir, location) & want) != want) {
+         ralloc_free(info);
+         return 0;
+      }
+      nir_xfb_output_info *out = &info->outputs[i];
+      out->buffer = o->buffer;
+      out->offset = o->dst_offset * 4u;
+      out->location = (uint8_t)location;
+      out->component_offset = o->start_component;
+      out->component_mask = (uint8_t)want;
+      info->buffers_written |= (uint8_t)BITFIELD_BIT(o->buffer);
+      info->buffers[o->buffer].varying_count++;
+   }
+   info->streams_written = BITFIELD_BIT(0);
+   for (unsigned buffer = 0; buffer < DXBC_NIR_MAX_XFB_BUFFERS; ++buffer) {
+      info->buffer_to_stream[buffer] = 0;
+      if (info->buffers_written & BITFIELD_BIT(buffer)) {
+         info->buffers[buffer].stride = (uint16_t)(xfb->stride[buffer] * 4u);
+         nir->info.xfb_stride[buffer] = (uint8_t)xfb->stride[buffer];
+      }
+   }
+   info->output_count = (uint16_t)xfb->num_outputs;
+   nir->xfb_info = info;
+   nir->info.has_transform_feedback_varyings = true;
+   return 1;
 }
 
 enum agx_dxil_nir_status

@@ -288,6 +288,7 @@ HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *Owner, const AGX_D3D12_B
 #define AGX_D3D12_SO_ENTRIES 64
 typedef struct AGX_D3D12_SO_DECL {
   unsigned Entries, Rasterized, NumStrides, Strides[4];
+  unsigned PositionRegisters; /* output-signature registers holding SV_Position */
   struct {
     unsigned Stream, Slot, Register, Mask;
   } Entry[AGX_D3D12_SO_ENTRIES];

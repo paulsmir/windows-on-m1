@@ -1,0 +1,4 @@
+conv_hs / conv_ds: hs_const and ds_vcolor of drivers/apple-agx/windows/icd/agx_d3d12_probe_tess.hlsl,
+fxc hs_5_0/ds_5_0 (.dxbc), then IDxbcConverter::Convert of the Windows 26100 system dxilconv.dll
+(dxbc2dxil.cpp; the converter the D3D12 runtime applies to DXBC shaders of an R1 device, EXP1858).
+conv_vs: vs_main of drivers/apple-agx/windows/icd/agx_d3d12_probe_tri.hlsl (C39A's stream-output vertex shader), same conversion.

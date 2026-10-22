@@ -376,7 +376,8 @@ static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
 };
 /* C44: a stored shader is DXBC tokens or (SM 6) a DXIL program part with
  * the same version/size header; both translate to the same NIR conventions
- * and binding map. DXIL takes no stream output yet; a DXIL hull shader
+ * and binding map. DXIL stream output is built on the translated NIR
+ * (agx_dxil_nir_xfb, the R1 runtime converts every DXBC shader); a DXIL hull shader
  * always has its control point function, so the pass-through registers
  * (a DXBC hull shader without a control point phase) do not apply. */
 static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage stage,
@@ -387,9 +388,13 @@ static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage
   if (tokens && tokens[1] >= 6 && tokens[1] < 0x4000000u &&
       agx_dxil_is_program(tokens, static_cast<size_t>(tokens[1]) * 4u)) {
     struct agx_dxil_nir_result dxil = {};
-    const enum agx_dxil_nir_status status =
-        xfb ? AGX_DXIL_NIR_UNSUPPORTED
-        : agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, owner_binding_limits, options, &dxil);
+    enum agx_dxil_nir_status status =
+        agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, owner_binding_limits, options, &dxil);
+    if (status == AGX_DXIL_NIR_OK && xfb && !agx_dxil_nir_xfb(dxil.nir, xfb)) {
+      ralloc_free(dxil.nir);
+      dxil.nir = NULL;
+      status = AGX_DXIL_NIR_UNSUPPORTED;
+    }
     if (status == AGX_DXIL_NIR_OK && dxil.stage != stage) {
       ralloc_free(dxil.nir);
       dxil.nir = NULL;
@@ -1489,6 +1494,7 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
  * rasterized stream is 0 or none (the translator captures stream 0). */
 static bool so_xfb(const AGX_D3D12_SO_DECL *decl, struct dxbc_nir_xfb *xfb) {
   memset(xfb, 0, sizeof(*xfb));
+  xfb->position_registers = decl->PositionRegisters;
   unsigned total[4] = {};
   if (decl->Entries > AGX_D3D12_SO_ENTRIES || decl->Entries > DXBC_NIR_MAX_XFB_OUTPUTS || decl->NumStrides > 4 ||
       (decl->Rasterized != 0 && decl->Rasterized != 0xffffffffu))

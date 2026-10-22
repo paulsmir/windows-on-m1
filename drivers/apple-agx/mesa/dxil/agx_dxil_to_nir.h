@@ -21,6 +21,7 @@ extern "C" {
 
 struct nir_shader;
 struct nir_shader_compiler_options;
+struct dxbc_nir_xfb;
 
 enum agx_dxil_nir_status {
    AGX_DXIL_NIR_OK = 0,
@@ -52,6 +53,13 @@ enum agx_dxil_nir_status agx_dxil_to_nir(const void *data, size_t bytes,
                                          const uint32_t limits[DXBC_BINDING_KIND_COUNT],
                                          const struct nir_shader_compiler_options *options,
                                          struct agx_dxil_nir_result *result);
+
+/* C39 for DXIL: nir_xfb_info for a translated vertex or geometry shader
+ * from the D3D stream-output declaration, as the DXBC translator builds it
+ * (stream 0; register r captured from VARYING_SLOT_POS when the output
+ * signature names SV_Position there, else from VAR0 + r, where the frontend
+ * places signature rows). False when an entry has no covering output. */
+int agx_dxil_nir_xfb(struct nir_shader *nir, const struct dxbc_nir_xfb *xfb);
 
 #ifdef __cplusplus
 }

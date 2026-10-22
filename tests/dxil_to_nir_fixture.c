@@ -2,7 +2,9 @@
  * D3D12 owner's slot limits, then run what the owner and Asahi do with a
  * DXBC translation: the SRV/UAV dimension scans, Asahi's I/O lowering and
  * agx_preprocess_nir, validating after each step.
- * usage: dxil_to_nir_fixture <object.dxil> [--print-final] */
+ * usage: dxil_to_nir_fixture <object.dxil> [--print-final]
+ *        [--xfb=<position registers>;<reg>.<start>.<count>.<buffer>.<dword offset>,...;<stride dwords>]
+ * (--xfb: agx_dxil_nir_xfb with that stream-output declaration, XFB line) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +13,7 @@
 #include "dxbc_to_nir.h"
 
 #include "nir.h"
+#include "nir_xfb_info.h"
 #include "asahi/compiler/agx_compile.h"
 
 static unsigned
@@ -24,8 +27,12 @@ int
 main(int argc, char **argv)
 {
    bool print_final = false;
-   for (int a = 2; a < argc; ++a)
+   const char *xfb_arg = NULL;
+   for (int a = 2; a < argc; ++a) {
       print_final |= !strcmp(argv[a], "--print-final");
+      if (!strncmp(argv[a], "--xfb=", 6))
+         xfb_arg = argv[a] + 6;
+   }
    FILE *f = argc > 1 ? fopen(argv[1], "rb") : NULL;
    if (!f)
       return 2;
@@ -48,6 +55,34 @@ main(int argc, char **argv)
       return 0;
    }
    nir_shader *nir = r.nir;
+   if (xfb_arg) {
+      static struct dxbc_nir_xfb xfb;
+      const char *p = xfb_arg;
+      char *end;
+      memset(&xfb, 0, sizeof(xfb));
+      xfb.position_registers = (uint32_t)strtoul(p, &end, 0);
+      p = end;
+      while (*p == ';' || *p == ',') {
+         struct dxbc_nir_xfb_output *o = &xfb.outputs[xfb.num_outputs];
+         unsigned v[5];
+         if (sscanf(p + 1, "%u.%u.%u.%u.%u", &v[0], &v[1], &v[2], &v[3], &v[4]) != 5)
+            break;
+         o->reg = v[0], o->start_component = (uint8_t)v[1], o->num_components = (uint8_t)v[2];
+         o->buffer = (uint8_t)v[3], o->dst_offset = v[4];
+         ++xfb.num_outputs;
+         p = strpbrk(p + 1, ",;");
+         if (!p || *p == ';')
+            break;
+      }
+      if (p && *p == ';')
+         xfb.stride[0] = (uint32_t)strtoul(p + 1, NULL, 0);
+      const int ok = agx_dxil_nir_xfb(nir, &xfb);
+      printf("XFB %s outputs %u", ok ? "OK" : "REFUSED", xfb.num_outputs);
+      for (unsigned i = 0; ok && i < nir->xfb_info->output_count; ++i)
+         printf(" loc%u.%x+%u", nir->xfb_info->outputs[i].location, nir->xfb_info->outputs[i].component_mask,
+                nir->xfb_info->outputs[i].offset);
+      printf(ok ? " stride %u\n" : "\n", ok ? nir->xfb_info->buffers[0].stride : 0u);
+   }
    for (uint32_t i = 0; i < r.bindings.count; ++i)
       printf("BINDING kind %u id %u space %u reg %u slot %u flags %u\n", r.bindings.bindings[i].kind,
              r.bindings.bindings[i].id, r.bindings.bindings[i].space, r.bindings.bindings[i].reg,

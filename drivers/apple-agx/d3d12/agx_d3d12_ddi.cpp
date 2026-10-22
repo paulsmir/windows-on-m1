@@ -707,6 +707,7 @@ static constexpr UINT kSoEntries = 64;
 struct AgxD3d12StreamOutput {
     UINT declared, entries, rasterized, num_strides, strides[4];
     struct { UINT stream, slot, reg, mask; } entry[kSoEntries];
+    UINT position_registers; /* output-signature registers holding SV_Position (DXIL capture) */
 };
 struct AgxD3d12Shader {
     UINT stage; /* the stage the runtime created it for (D3D10_SB program type) */
@@ -775,7 +776,7 @@ static SIZE_T APIENTRY CalcPrivateGeometryShaderWithStreamOutput(
 }
 static VOID APIENTRY CreateGeometryShaderWithStreamOutput(
     D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT *arg, D3D12DDI_HSHADER handle,
-    const D3D12DDIARG_STAGE_IO_SIGNATURES *, D3D12DDI_CREATE_SHADER_FLAGS) {
+    const D3D12DDIARG_STAGE_IO_SIGNATURES *signatures, D3D12DDI_CREATE_SHADER_FLAGS) {
     auto *shader = static_cast<AgxD3d12Shader *>(handle.pDrvPrivate);
     if (!arg || !shader) {
         ReportRejectedDeviceError(device, E_INVALIDARG);
@@ -800,6 +801,12 @@ static VOID APIENTRY CreateGeometryShaderWithStreamOutput(
         so.entry[i] = {arg->pOutputStreamDecl[i].Stream, arg->pOutputStreamDecl[i].OutputSlot,
                        arg->pOutputStreamDecl[i].RegisterIndex, arg->pOutputStreamDecl[i].RegisterMask};
     for (UINT i = 0; fits && i < arg->NumStrides; ++i) so.strides[i] = arg->BufferStridesInBytes[i];
+    /* the R1 runtime hands the shader over as DXIL, whose SV_Position output
+     * is a builtin rather than a signature row: the signature names it */
+    for (UINT i = 0; signatures && signatures->pOutputSignature && i < signatures->NumOutputSignatureEntries; ++i)
+        if (signatures->pOutputSignature[i].SystemValue == D3D10_SB_NAME_POSITION &&
+            signatures->pOutputSignature[i].Register < 32)
+            so.position_registers |= 1u << signatures->pOutputSignature[i].Register;
     const UINT receipt[] = {arg->pShaderCode ? shader->stage : UINT_MAX, arg->NumEntries, arg->NumStrides,
                             arg->RasterizedStream, fits ? 1u : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-so-shader", fits ? S_OK : E_NOTIMPL, receipt, 5);
@@ -3914,6 +3921,7 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
         so.Entries = pso->so.entries;
         so.Rasterized = pso->so.rasterized;
         so.NumStrides = pso->so.num_strides;
+        so.PositionRegisters = pso->so.position_registers;
         for (UINT i = 0; i < 4; ++i) so.Strides[i] = pso->so.strides[i];
         for (UINT i = 0; i < kSoEntries && i < pso->so.entries; ++i)
             so.Entry[i] = {pso->so.entry[i].stream, pso->so.entry[i].slot, pso->so.entry[i].reg, pso->so.entry[i].mask};

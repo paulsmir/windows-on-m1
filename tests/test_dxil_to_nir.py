@@ -217,6 +217,25 @@ class DxilToNir(unittest.TestCase):
         self.parity("conv_ds", ignore=("inputs",))
         self.assertIn("store_per_vertex_output", self.final("conv_hs"))
 
+    def xfb(self, name, decl):
+        r = subprocess.run([str(self.dxil), str(FIXTURES / f"{name}.dxil"), f"--xfb={decl}"], capture_output=True,
+                           text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        return re.search(r"^XFB .*$", r.stdout, re.M).group(0)
+
+    def test_runtime_converted_stream_output_captures_signature_registers(self):
+        # EXP1858 C39A: the R1 runtime converts the DXBC vertex shader to
+        # DXIL, so its stream output (SV_Position register 0, COLOR register 1,
+        # stride 32) must be built on the DXIL translation; SV_Position is a
+        # builtin there and only the output signature names its register.
+        self.parity("conv_vs", ignore=("inputs",))
+        self.assertEqual(self.xfb("conv_vs", "1;0.0.4.0.0,1.0.4.0.4;8"),
+                         "XFB OK outputs 2 loc0.f+0 loc33.f+16 stride 32")
+        self.assertEqual(self.xfb("conv_vs", "1;1.2.2.0.0;2"), "XFB OK outputs 1 loc33.c+0 stride 8")
+        # without the signature's position register, or an output nothing writes
+        self.assertTrue(self.xfb("conv_vs", "0;0.0.4.0.0,1.0.4.0.4;8").startswith("XFB REFUSED"))
+        self.assertTrue(self.xfb("conv_vs", "1;0.0.4.0.0,2.0.4.0.4;8").startswith("XFB REFUSED"))
+
     def test_register_range_takes_consecutive_slots(self):
         self.parity("par_range_ps")
 

@@ -118,6 +118,9 @@ struct dxbc_nir_xfb {
    uint32_t num_outputs;
    struct dxbc_nir_xfb_output outputs[DXBC_NIR_MAX_XFB_OUTPUTS];
    uint32_t stride[DXBC_NIR_MAX_XFB_BUFFERS];   /* dwords */
+   /* the output-signature registers holding SV_Position (DXIL capture,
+    * agx_dxil_nir_xfb; the DXBC translator reads its own declarations) */
+   uint32_t position_registers;
 };
 
 /* dxbc_translate_tokens for a vertex or geometry shader whose outputs are
