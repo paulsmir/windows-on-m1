@@ -478,6 +478,7 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
             hr = Answer<D3D12DDI_SHADER_CAPS_0012>(arg, [](auto &d) {
                 d.MinPrecision = D3D12DDI_SHADER_MIN_PRECISION_NONE;
                 d.TypedUAVLoadAdditionalFormats = kTypedUavLoads;
+                d.ROVs = RovEnabled(); /* EXP1889: SM 6 processes take this answer */
                 d.WaveOps = TRUE;
                 d.WaveLaneCountMin = d.WaveLaneCountMax = 32;
                 const AGX_WIN32_DEVICE_INFO &info = adapter_object.info;

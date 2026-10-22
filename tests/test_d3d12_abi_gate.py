@@ -109,7 +109,8 @@ class D3d12AbiGate(unittest.TestCase):
             self.assertNotIn(claim, caps)
         # 12_1: ROVs and conservative rasterization Tier 1 only behind their
         # opt-ins until the hardware probes (C59A, C61A) pass
-        self.assertIn('d.ROVs = RovEnabled();', caps)
+        # EXP1889: both shader-caps answers (0003 and the SM 6 0012 one)
+        self.assertEqual(caps.count('d.ROVs = RovEnabled();'), 2)
         self.assertEqual(caps.count('D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1'), 1)
         self.assertIn('d.ConservativeRasterizationTier = ConservativeRasterEnabled() ? D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1',
                       caps)
