@@ -70,8 +70,9 @@ Asahi `drivers/gpu/drm/apple/plane.c` `drm_format_to_dcp`:
 - The HV scanout broker and power-MMIO request accept 1 or 2.
 
 **m1n1 `dcp_iomfb_present.c`**
-- `surface->format` is `BGRA` (0x42475241) or `RGBA` per request.
-- The RGBA fourcc value must be checked against Asahi `iomfb.h` (fetch pending:
+- `surface->format` is `BGRA` (0x42475241) or `RGBA` (0x52474241) per request:
+  Asahi `iomfb_plane.h` defines `DCP_FORMAT_BGRA fourcc_code('A','R','G','B')` (the existing m1n1
+  value) and `DCP_FORMAT_RGBA fourcc_code('A','B','G','R')`.
   HTTP 429 on `iomfb_template.c`/`iomfb.h`).
 
 **KMD allocation and present checks**
