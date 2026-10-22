@@ -19,6 +19,9 @@
 #include "agx_d3d12_probe_cs_append.h"
 #include "agx_d3d12_probe_cs_ranges.h"
 #include "agx_d3d12_probe_cs_c47b.h"
+#include "agx_d3d12_probe_cs_cb_dxil.h"
+#include "agx_d3d12_probe_vs_dxil.h"
+#include "agx_d3d12_probe_ps_dxil.h"
 #include "agx_d3d12_probe_cs_texture1d_load.h"
 #include "agx_d3d12_probe_cs_texture1d_store.h"
 #include "agx_d3d12_probe_cs_texture1d_array_load.h"
@@ -284,7 +287,8 @@ static int compute_dispatch(ID3D12Device *device, ID3D12CommandQueue *queue, ID3
  * (SetComputeRoot32BitConstant)} and a root CBV b0 on an UPLOAD buffer
  * whose extra.y = 1000; agx_d3d12_probe_cs_cb.hlsl writes dword i =
  * 5i + 11 + 1000. */
-static int compute_constants(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence) {
+static int compute_constants_code(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, const void *code,
+                                  SIZE_T code_bytes, const char *tag) {
     D3D12_ROOT_PARAMETER parameters[3] = {{D3D12_ROOT_PARAMETER_TYPE_UAV}, {D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS},
                                           {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {3, parameters};
@@ -313,13 +317,13 @@ static int compute_constants(ID3D12Device *device, ID3D12CommandQueue *queue, ID
         hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
                                               ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature,
                                               (void **)&root);
-    printf("C5B CreateRootSignature hr=0x%08lx\n", (unsigned long)hr);
+    printf("%s CreateRootSignature hr=0x%08lx\n", tag, (unsigned long)hr);
     if (SUCCEEDED(hr)) {
         pso_desc.pRootSignature = root;
-        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_cb;
-        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_cb);
+        pso_desc.CS.pShaderBytecode = code;
+        pso_desc.CS.BytecodeLength = code_bytes;
         hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
-        printf("C5B CreateComputePipelineState hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s CreateComputePipelineState hr=0x%08lx\n", tag, (unsigned long)hr);
     }
     if (SUCCEEDED(hr))
         hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -343,14 +347,14 @@ static int compute_constants(ID3D12Device *device, ID3D12CommandQueue *queue, ID
         ID3D12GraphicsCommandList_ResourceBarrier(list, 1, &barrier);
         ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, uav, 0, 65536);
         hr = ID3D12GraphicsCommandList_Close(list);
-        printf("C5B record+close hr=0x%08lx\n", (unsigned long)hr);
+        printf("%s record+close hr=0x%08lx\n", tag, (unsigned long)hr);
     }
     if (SUCCEEDED(hr)) {
         ID3D12CommandList *lists[] = {(ID3D12CommandList *)list};
         ID3D12CommandQueue_ExecuteCommandLists(queue, 1, lists);
         hr = ID3D12CommandQueue_Signal(queue, fence, 5);
         for (int i = 0; i < 300 && (value = ID3D12Fence_GetCompletedValue(fence)) < 5; ++i) Sleep(10);
-        printf("C5B execute+signal hr=0x%08lx completed %llu\n", (unsigned long)hr, (unsigned long long)value);
+        printf("%s execute+signal hr=0x%08lx completed %llu\n", tag, (unsigned long)hr, (unsigned long long)value);
     }
     if (SUCCEEDED(hr) && value == 5) {
         D3D12_RANGE all = {0, 65536};
@@ -359,11 +363,11 @@ static int compute_constants(ID3D12Device *device, ID3D12CommandQueue *queue, ID
         if (SUCCEEDED(hr) && dwords) {
             bad = 0;
             for (unsigned i = 0; i < 16384; ++i) bad += dwords[i] != i * 5u + 1011u;
-            printf("C5B readback bad=%u first=%u,%u last=%u\n", bad, dwords[0], dwords[1], dwords[16383]);
+            printf("%s readback bad=%u first=%u,%u last=%u\n", tag, bad, dwords[0], dwords[1], dwords[16383]);
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("AGX_D3D12_C5B: %s\n", SUCCEEDED(hr) && value == 5 && bad == 0 ? "PASS" : "FAIL");
+    printf("AGX_D3D12_%s: %s\n", tag, SUCCEEDED(hr) && value == 5 && bad == 0 ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (pso) ID3D12PipelineState_Release(pso);
@@ -374,6 +378,27 @@ static int compute_constants(ID3D12Device *device, ID3D12CommandQueue *queue, ID
     if (cbv) ID3D12Resource_Release(cbv);
     if (uav) ID3D12Resource_Release(uav);
     return !(SUCCEEDED(hr) && bad == 0);
+}
+static int compute_constants(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence) {
+    return compute_constants_code(device, queue, fence, g_agx_d3d12_probe_cs_cb, sizeof(g_agx_d3d12_probe_cs_cb), "C5B");
+}
+/* C44A (D3D12-C44-dxil.md): C5B's program compiled by DXC as cs_6_0 -- the
+ * DXIL frontend (dxil-spirv, spirv_to_nir) under the R1 interface the
+ * driver offers APPLE_AGX_D3D12_SM6=1 processes; same root signature and
+ * expected words (5i + 1011). */
+static int shader_model_6(ID3D12Device *device, const char *tag) {
+    D3D12_FEATURE_DATA_SHADER_MODEL model = {D3D_SHADER_MODEL_6_0};
+    const HRESULT hr = ID3D12Device_CheckFeatureSupport(device, D3D12_FEATURE_SHADER_MODEL, &model, sizeof(model));
+    printf("%s HighestShaderModel 0x%x hr=0x%08lx\n", tag, (unsigned)model.HighestShaderModel, (unsigned long)hr);
+    return SUCCEEDED(hr) && model.HighestShaderModel >= D3D_SHADER_MODEL_6_0;
+}
+static int step_c44a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
+    (void)b;
+    if (!shader_model_6(d, "C44A")) {
+        printf("AGX_D3D12_C44A: FAIL\n");
+        return 1;
+    }
+    return compute_constants_code(d, q, f, g_agx_d3d12_probe_cs_cb_dxil, sizeof(g_agx_d3d12_probe_cs_cb_dxil), "C44A");
 }
 
 /* C5c (D3D12-C5-compute.md): a descriptor table {UAV u0 (raw view), CBV
@@ -794,6 +819,8 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     /* C32: mode 11 is mode 0 on a 4x multisampled target resolved into a
      * single-sampled texture: interior pixels exact, edge pixels blended */
     const int msaa = mode == 11;
+    /* C44B: mode 12 is mode 0 with the same VS/PS compiled by DXC (SM 6.0) */
+    const int dxil = mode == 12;
     int rooted = mode == 1 || redundant_root || bundled || expanded;
     /* C11 (D3D12-C11-queries.md): mode 3 draws the C6b triangle inside an
      * occlusion, a binary-occlusion and a pipeline-statistics query between
@@ -825,7 +852,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {rooted ? 2u : counted ? 1u : 0u, rooted ? parameters : counted ? &uav_parameter : NULL, 0, NULL,
                                            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
-    const char *step = msaa ? "C32A" : expanded ? "C31A" : bundled ? "C30A" : redundant_root ? "ROOTG" : spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
+    const char *step = dxil ? "C44B" : msaa ? "C32A" : expanded ? "C31A" : bundled ? "C30A" : redundant_root ? "ROOTG" : spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
     const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted ? 0 : 255),
                                    (unsigned char)(rooted ? 255 : 0)};
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
@@ -925,11 +952,14 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     printf("%s texture/RTV/root hr=0x%08lx\n", step, (unsigned long)hr);
     if (SUCCEEDED(hr)) {
         pso_desc.pRootSignature = root;
-        pso_desc.VS.pShaderBytecode = rooted ? g_agx_d3d12_probe_vs_root : g_agx_d3d12_probe_vs;
-        pso_desc.VS.BytecodeLength = rooted ? sizeof(g_agx_d3d12_probe_vs_root) : sizeof(g_agx_d3d12_probe_vs);
-        pso_desc.PS.pShaderBytecode = rooted ? g_agx_d3d12_probe_ps_root : spaced ? g_agx_d3d12_probe_ps_spaces : counted ? g_agx_d3d12_probe_ps_uav : g_agx_d3d12_probe_ps;
+        pso_desc.VS.pShaderBytecode = rooted ? g_agx_d3d12_probe_vs_root : dxil ? g_agx_d3d12_probe_vs_dxil : g_agx_d3d12_probe_vs;
+        pso_desc.VS.BytecodeLength = rooted ? sizeof(g_agx_d3d12_probe_vs_root) : dxil ? sizeof(g_agx_d3d12_probe_vs_dxil)
+                                                                                       : sizeof(g_agx_d3d12_probe_vs);
+        pso_desc.PS.pShaderBytecode = rooted ? g_agx_d3d12_probe_ps_root : spaced ? g_agx_d3d12_probe_ps_spaces : counted ? g_agx_d3d12_probe_ps_uav
+                                    : dxil ? g_agx_d3d12_probe_ps_dxil : g_agx_d3d12_probe_ps;
         pso_desc.PS.BytecodeLength = rooted ? sizeof(g_agx_d3d12_probe_ps_root)
-                                   : spaced ? sizeof(g_agx_d3d12_probe_ps_spaces) : counted ? sizeof(g_agx_d3d12_probe_ps_uav) : sizeof(g_agx_d3d12_probe_ps);
+                                   : spaced ? sizeof(g_agx_d3d12_probe_ps_spaces) : counted ? sizeof(g_agx_d3d12_probe_ps_uav)
+                                   : dxil ? sizeof(g_agx_d3d12_probe_ps_dxil) : sizeof(g_agx_d3d12_probe_ps);
         pso_desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
         pso_desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
         pso_desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
@@ -5921,6 +5951,13 @@ static int step_c6c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT
 static int step_c30a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 9); }
 static int step_c31a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 10); }
 static int step_c32a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 11); }
+static int step_c44b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
+    if (!shader_model_6(d, "C44B")) {
+        printf("AGX_D3D12_C44B: FAIL\n");
+        return 1;
+    }
+    return draw_triangle(d, q, f, b, 12);
+}
 static int step_c6d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 2); }
 static int step_c11(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 3); }
 static int step_c13(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 4); }
@@ -6410,7 +6447,8 @@ int main(int argc, char **argv) {
             {"C41A", step_c41a}, {"C41B", step_c41b},
             {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
             {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
-            {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2}};
+            {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
+            {"C44A", step_c44a}, {"C44B", step_c44b}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -6509,6 +6547,8 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C42M", step_c42m);
                 (void)run_isolated(adapter, "C42N", step_c42n);
                 (void)run_isolated(adapter, "C47B", c47_binding_tier2);
+                (void)run_isolated(adapter, "C44A", step_c44a);
+                (void)run_isolated(adapter, "C44B", step_c44b);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
