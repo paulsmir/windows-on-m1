@@ -1457,6 +1457,26 @@ static unsigned stencil_op(unsigned op) {
   default: return PIPE_STENCIL_OP_KEEP;
   }
 }
+/* EXP1878G: a real application's PSO failed with no receipt naming the
+ * cause. APPLE_AGX_D3D12_SHADER_DUMP_DIR set: a shader whose translation or
+ * slot gathering fails is written there as <fnv64>-s<stage>-r<reason>.bin
+ * (the DXBC/DXIL container as the runtime passed it) for offline replay. */
+static void dump_failed_shader(const UINT *tokens, mesa_shader_stage stage, UINT reason) {
+  char dir[MAX_PATH];
+  const DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D12_SHADER_DUMP_DIR", dir, sizeof(dir));
+  if (!tokens || length == 0 || length >= sizeof(dir) - 48 || tokens[1] < 2 || tokens[1] >= 0x4000000u) return;
+  const size_t bytes = static_cast<size_t>(tokens[1]) * 4u;
+  unsigned long long hash = 0xcbf29ce484222325ull;
+  for (size_t i = 0; i < bytes; ++i) hash = (hash ^ reinterpret_cast<const unsigned char *>(tokens)[i]) * 0x100000001b3ull;
+  char path[MAX_PATH];
+  wsprintfA(path, "%s\\%08x%08x-s%u-r%u.bin", dir, static_cast<UINT>(hash >> 32), static_cast<UINT>(hash),
+            static_cast<UINT>(stage), reason);
+  HANDLE file = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) return;
+  DWORD written = 0;
+  (void)WriteFile(file, tokens, static_cast<DWORD>(bytes), &written, NULL);
+  CloseHandle(file);
+}
 static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_shader_stage stage,
                            struct dxbc_binding_map *bindings, uint8_t dimensions[DXBC_RESOURCE_SLOTS],
                            uint8_t uav_dimensions[DXBC_UAV_DIMENSION_SLOTS], uint32_t passthrough_registers = 0,
@@ -1468,8 +1488,17 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   struct nir_shader *nir = translate_shader(tokens, stage, pipe->screen->nir_options[stage], bindings, passthrough_registers,
                                             passthrough_positions, xfb, &error);
   receipt("measure-d3d12-graphics-shader", nir ? S_OK : E_NOTIMPL, static_cast<UINT>(stage), error.opcode, error.offset);
-  if (!nir) return NULL;
-  if (!dxbc_nir_srv_dimensions(nir, dimensions) || !dxbc_nir_uav_dimensions(nir, uav_dimensions)) {
+  if (!nir) {
+    dump_failed_shader(tokens, stage, 1u);
+    return NULL;
+  }
+  /* EXP1878G: name the slot-gathering refusal (2 SRV, 3 UAV dimensions) */
+  const bool srv_ok = dxbc_nir_srv_dimensions(nir, dimensions);
+  const bool uav_ok = srv_ok && dxbc_nir_uav_dimensions(nir, uav_dimensions);
+  if (!srv_ok || !uav_ok) {
+    const UINT reason = srv_ok ? 3u : 2u;
+    receipt("measure-d3d12-graphics-shader-slots", E_NOTIMPL, static_cast<UINT>(stage), reason, 0u);
+    dump_failed_shader(tokens, stage, reason);
     ralloc_free(nir);
     memset(bindings, 0, sizeof(*bindings));
     return NULL;
@@ -1488,7 +1517,12 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   if (stage == MESA_SHADER_GEOMETRY) return pipe->create_gs_state(pipe, &state); /* C27 */
   if (stage == MESA_SHADER_TESS_CTRL) return pipe->create_tcs_state(pipe, &state); /* C37 */
   if (stage == MESA_SHADER_TESS_EVAL) return pipe->create_tes_state(pipe, &state);
-  return stage == MESA_SHADER_VERTEX ? pipe->create_vs_state(pipe, &state) : pipe->create_fs_state(pipe, &state);
+  void *cso = stage == MESA_SHADER_VERTEX ? pipe->create_vs_state(pipe, &state) : pipe->create_fs_state(pipe, &state);
+  if (!cso) {
+    receipt("measure-d3d12-graphics-shader-slots", E_NOTIMPL, static_cast<UINT>(stage), 4u, 0u);
+    dump_failed_shader(tokens, stage, 4u);
+  }
+  return cso;
 }
 
 /* C39: the D3D10 frontend's CreateGeometryShaderWithStreamOutput rules
