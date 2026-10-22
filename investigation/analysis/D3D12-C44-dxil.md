@@ -143,3 +143,28 @@ need the same audit.
 native runtime archive and links libvtn (`nir-<arch>` build of the same
 configuration) and the nine dxil-spirv libraries (`c44-build-dxspv.ps1`,
 EXP1388 configuration, /MD) with their hashes in the closure manifest.
+
+## Geometry, hull and domain shaders (2026-10-22)
+
+dxil-spirv + spirv_to_nir produce the DXBC frontend's layout for these
+stages without extra lowering (fixtures `par_gs`, `par_hs`, `par_ds`):
+GS array inputs at the signature rows, emit/cut on stream 0 and the same
+primitive/vertex-count/invocation info; HS control points at VAR0 + row
+(SV_Position included, the C37/EXP1834 contract), the control point
+function in every invocation, a barrier, then invocation 0 writing the tess
+factors and patch constants. Differences that remain:
+
+- Generic patch constants sit at PATCH0 + signature row, and DXC places
+  them after fixed tess-factor rows (row 6 where FXC uses register 4). HS
+  and DS of one DXIL pipeline agree; a pipeline mixing a DXBC hull shader
+  with a DXIL domain shader (or the reverse) would not link. Unknown
+  whether the runtime admits such a mix.
+- The DS reads tess factors as inputs (VARYING_SLOT_TESS_LEVEL_*), the DXBC
+  frontend as system values; Asahi takes both (`glsl_tess_levels_as_inputs`,
+  `poly_nir_lower_tes`).
+- Both frontends set the output topology's winding (`info.tess.ccw`) on the
+  hull shader only, while Asahi reads it from the TES alone
+  (`agx_state.c`: `params.ccw = !tes->tess.ccw`), so a `triangle_ccw` hull
+  shader is tessellated with clockwise winding on both paths. Owner fix
+  pending (copy the HS winding into the DS at pipeline creation).
+- Stream output from a DXIL GS still refuses (translate_shader).

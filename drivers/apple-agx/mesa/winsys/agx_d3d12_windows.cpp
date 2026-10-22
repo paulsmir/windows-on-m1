@@ -376,7 +376,9 @@ static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
 };
 /* C44: a stored shader is DXBC tokens or (SM 6) a DXIL program part with
  * the same version/size header; both translate to the same NIR conventions
- * and binding map. DXIL takes no stream output or hull pass-through yet. */
+ * and binding map. DXIL takes no stream output yet; a DXIL hull shader
+ * always has its control point function, so the pass-through registers
+ * (a DXBC hull shader without a control point phase) do not apply. */
 static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage stage,
                                            const nir_shader_compiler_options *options, struct dxbc_binding_map *bindings,
                                            uint32_t passthrough_registers, uint32_t passthrough_positions,
@@ -386,7 +388,7 @@ static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage
       agx_dxil_is_program(tokens, static_cast<size_t>(tokens[1]) * 4u)) {
     struct agx_dxil_nir_result dxil = {};
     const enum agx_dxil_nir_status status =
-        xfb || passthrough_registers ? AGX_DXIL_NIR_UNSUPPORTED
+        xfb ? AGX_DXIL_NIR_UNSUPPORTED
         : agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, owner_binding_limits, options, &dxil);
     if (status == AGX_DXIL_NIR_OK && dxil.stage != stage) {
       ralloc_free(dxil.nir);

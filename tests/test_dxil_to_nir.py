@@ -140,6 +140,46 @@ class DxilToNir(unittest.TestCase):
             if "image_dim=2D" in line:
                 self.assertIn("format=none", line)
 
+    def test_geometry_shader_matches_the_dxbc_layout(self):
+        # Array inputs at the signature registers, emit/cut per stream 0 and
+        # the same primitive declarations the owner's GS path reads.
+        self.parity("par_gs")
+        header = {}
+        for kind, path, extra in (("dxil", self.dxil, ()), ("dxbc", self.dxbc, ("--d3d12-heap",))):
+            r = subprocess.run([str(path), str(FIXTURES / f"par_gs.{kind}"), *extra, "--print-final"],
+                               capture_output=True, text=True, timeout=120)
+            self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+            header[kind] = [line for line in r.stdout.splitlines()
+                            if line.split(":")[0] in ("output_primitive", "input_primitive", "vertices_out",
+                                                      "invocations", "vertices_in", "uses_end_primitive",
+                                                      "active_stream_mask")]
+            header[kind + "_emits"] = r.stdout.count("@emit_vertex (stream_id=0)")
+        self.assertEqual(len(header["dxil"]), 7, header)
+        self.assertEqual(header["dxil"], header["dxbc"])
+        self.assertEqual(header["dxil_emits"], header["dxbc_emits"])
+
+    def final(self, name):
+        r = subprocess.run([str(self.dxil), str(FIXTURES / f"{name}.dxil"), "--print-final"], capture_output=True,
+                           text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        self.assertIn("TRANSLATED", r.stdout)
+        return r.stdout
+
+    def test_hull_and_domain_shaders_link_by_register(self):
+        # Control points link hull to domain shader at VAR0 + register, also
+        # SV_Position (C37/EXP1834); the domain shader reads the tess factors
+        # as inputs (Asahi's glsl_tess_levels_as_inputs, poly_nir_lower_tes),
+        # the DXBC frontend as system values, hence its narrower input mask.
+        self.parity("par_hs")
+        self.parity("par_ds", ignore=("inputs",))
+        hs, ds = self.final("par_hs"), self.final("par_ds")
+        self.assertIn("store_per_vertex_output", hs)
+        self.assertNotRegex(hs, r"store_per_vertex_output .*VARYING_SLOT_POS")
+        self.assertNotRegex(ds, r"load_per_vertex_input .*VARYING_SLOT_POS")
+        field = lambda text, key: re.search(rf"^{key}: (\S+)", text, re.M).group(1)
+        self.assertEqual(field(hs, "patch_outputs_written"), field(ds, "patch_inputs_read"))
+        self.assertEqual(field(hs, "tcs_vertices_out"), "3")
+
     def test_register_range_takes_consecutive_slots(self):
         self.parity("par_range_ps")
 

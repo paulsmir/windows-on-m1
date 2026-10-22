@@ -675,9 +675,7 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       goto done;
    }
    result->stage = nir_stage(dxil_stage);
-   if (entries != 1 || !name || result->stage == MESA_SHADER_NONE ||
-       result->stage == MESA_SHADER_TESS_CTRL || result->stage == MESA_SHADER_TESS_EVAL ||
-       result->stage == MESA_SHADER_GEOMETRY) {
+   if (entries != 1 || !name || result->stage == MESA_SHADER_NONE) {
       status = AGX_DXIL_NIR_UNSUPPORTED;
       snprintf(result->error, sizeof(result->error), "stage %d, %u entry points", (int)dxil_stage, entries);
       goto done;
