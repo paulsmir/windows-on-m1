@@ -8,7 +8,38 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-22 12:50Z -- D3D12 DEFAULT IS INTERFACE 0076 WITH SM 6.5
+## CURRENT 2026-10-22 21:00Z -- REAL WORKLOADS: NIGHT RAID GT1, D3D9On12, FULLSCREEN RGBA
+
+Last validated package 30.0.1885.0 from 4e141c27 (EXP1885, m1n1 21c3648d RGBA).
+
+**Validated**
+- Night Raid GT1 renders (EXP1876G).
+- GT2's refused pixel shader is fixed: a dynamic SRV range overran the next
+  range (40a70224, offline-proven from the EXP1879G dump). GT2 still needs a
+  hardware rerun.
+- D3D9 renders through D3D9On12 on the WOW64 Umd32, which is the Portal 2
+  path (EXP1883). The fault was a scissored pipe->clear for a whole-surface
+  rect; integer clear colours are now converted (ff88ebed).
+- Logic ops: C57, OutputMergerLogicOp (EXP1883).
+- Fullscreen R8G8B8A8 (D3D-FS1):
+  - A8B8G8R8 source modes need distinct mode Ids (4e141c27).
+  - DXGI keeps the A8R8G8B8 desktop mode and presents through it
+    (EXP1885F).
+
+**Open**
+- GravityMark refuses feature level 11_0 on D3D12 and on D3D11 (EXP1881G).
+  Plan: investigation/analysis/D3D12-FL-program.md (11_1, then 12_0 with
+  tiled resources on AGX's native sparse page tables). See also
+  D3D12-C53-tiled-resources-study.md.
+- Night Raid GT2 with async compute once hit 0x101 (EXP1876G). It is not
+  reproduced by CPU or GPU+CPU load.
+
+**Process**
+- Steam launches on the guest kick the user's CS2 session: ask first.
+- The WOW64 Umd32 must be rebuilt per package (X86B recipe).
+- Run syncheck through $S/syncheck-d3d12-run.sh only.
+
+## (was CURRENT) 2026-10-22 12:50Z -- D3D12 DEFAULT IS INTERFACE 0076 WITH SM 6.5
 
 Last validated package 30.0.1873.0 from 3f84931e (EXP1873, rec1873h PASS).
 - Default (SM6 processes): R7 build 6 (0076), SM 5.1-6.5. Probes 107/107 on
