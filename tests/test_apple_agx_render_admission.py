@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -317,6 +318,14 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("D3DDDIFMT_A8R8G8B8", display)
         # D3D-FS1: the A8B8G8R8 source mode exists only behind the RGBA scanout capability
         self.assertIn("AdmissionScanoutFormatSupported(context, D3DDDIFMT_A8B8G8R8)", display)
+        # EXP1884: the VidPN manager gives every new source/target mode a
+        # unique Id; zeroing a fresh mode duplicated Id 0 for the second
+        # source mode (STATUS_GRAPHICS_MODE_ID_MUST_BE_UNIQUE) and the VidPN
+        # was never committed. Every zeroed new mode keeps its Id.
+        zeroed = re.findall(r"(\w+) = (\w+)->Id;\s*RtlZeroMemory\((\w+), sizeof\(\*\3\)\);\s*\3->Id = \1;", display)
+        self.assertEqual(display.count("RtlZeroMemory(sourceMode, sizeof(*sourceMode));"), 2)
+        self.assertEqual([z for z in zeroed if z[1] == z[2] == 'sourceMode'], [('sourceModeId', 'sourceMode', 'sourceMode')] * 2)
+        self.assertNotIn("RtlZeroMemory(targetMode", display)
         self.assertIn("Format.Graphics.Stride = 10240", display)
         self.assertIn("D3DKMDT_VPPS_IDENTITY", display)
         self.assertIn("D3DKMDT_VPPR_IDENTITY", display)

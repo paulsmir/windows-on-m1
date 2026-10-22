@@ -258,6 +258,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
   CONST D3DKMDT_VIDPN_SOURCE_MODE *pinnedSourceMode = NULL;
   CONST D3DKMDT_VIDPN_TARGET_MODE *pinnedTargetMode = NULL;
   D3DKMDT_VIDPN_SOURCE_MODE *sourceMode = NULL;
+  D3DKMDT_VIDEO_PRESENT_SOURCE_MODE_ID sourceModeId = 0;
   D3DKMDT_VIDPN_TARGET_MODE *targetMode = NULL;
   D3DKMDT_HVIDPNTOPOLOGY topology = 0;
   D3DKMDT_HVIDPNSOURCEMODESET sourceSet = 0;
@@ -315,7 +316,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
     status = sourceSetInterface->pfnCreateNewModeInfo(sourceSet, &sourceMode);
     if (!NT_SUCCESS(status))
       goto Exit;
+    /* EXP1884: the manager assigns each new mode a unique Id; zeroing it
+     * made the second source mode a duplicate (pfnAddMode
+     * STATUS_GRAPHICS_MODE_ID_MUST_BE_UNIQUE) and no VidPN was committed. */
+    sourceModeId = sourceMode->Id;
     RtlZeroMemory(sourceMode, sizeof(*sourceMode));
+    sourceMode->Id = sourceModeId;
     sourceMode->Type = D3DKMDT_RMT_GRAPHICS;
     sourceMode->Format.Graphics.PrimSurfSize.cx = 2560;
     sourceMode->Format.Graphics.PrimSurfSize.cy = 1600;
@@ -335,7 +341,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
       status = sourceSetInterface->pfnCreateNewModeInfo(sourceSet, &sourceMode);
       if (!NT_SUCCESS(status))
         goto Exit;
+      sourceModeId = sourceMode->Id;
       RtlZeroMemory(sourceMode, sizeof(*sourceMode));
+      sourceMode->Id = sourceModeId;
       sourceMode->Type = D3DKMDT_RMT_GRAPHICS;
       sourceMode->Format.Graphics.PrimSurfSize.cx = 2560;
       sourceMode->Format.Graphics.PrimSurfSize.cy = 1600;
