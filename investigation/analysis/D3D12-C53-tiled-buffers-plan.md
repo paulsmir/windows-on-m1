@@ -116,3 +116,27 @@ Hardware checkpoints:
 - Per-tile NULL map cost.
 - Staging for CPU-visible heaps.
 - The reserved call-shape encoding.
+
+## B1 decision (2026-10-22)
+
+**Status.** B0 is implemented and compiles in the package build (B0CHECK):
+winsys MapRange/ReserveRange/FreeRange (6e3a258b) and the UMD
+map_va_at/alias table (abeab9bf).
+
+**Problem.** Mesa's batch `bo_list` is a bitset indexed by BO handle, and
+handles are the owner's transport tokens. A virtual BO therefore needs a real
+token.
+
+**Decision.** A reserved buffer is a windows_bo with a 64 KiB *anchor*
+allocation, created as any general BO:
+- The anchor provides the token, the handle and Associate/handle_map.
+- `Coordinate.addr` is the reserved range's VA, not the anchor's VA.
+- The BO keeps `Virtual` and a `Backings` array with one reference per
+  distinct backing BO.
+- `add_bo` adds the anchor and expands the backings. The written list marks
+  the backings.
+- `AgxWin32AsahiGpuvaBo` keeps its address check by comparing the reserved
+  VA for virtual BOs.
+
+**Rejected.** A token allocator without an allocation would need new owner
+operations across the UMD screen for no gain.
