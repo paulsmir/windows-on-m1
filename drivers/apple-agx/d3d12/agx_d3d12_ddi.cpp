@@ -7137,8 +7137,17 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
 } // namespace
 extern "C" HRESULT APIENTRY OpenAdapter12(D3D12DDIARG_OPENADAPTER *arg) {
     char enabled[2] = {};
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* C56: validated on J313 (EXP1873: probes 107/107, the 19 samples and
+     * MiniEngine at interface 0076), D3D12 serves every process with the
+     * native owner; APPLE_AGX_D3D12=0 opts a process out */
+    if (GetEnvironmentVariableA("APPLE_AGX_D3D12", enabled, sizeof(enabled)) == 1 && enabled[0] == '0')
+        return E_NOTIMPL;
+#else
+    /* without the native owner nothing executes: only an opted-in process */
     if (GetEnvironmentVariableA("APPLE_AGX_D3D12", enabled, sizeof(enabled)) != 1 || enabled[0] != '1')
         return E_NOTIMPL;
+#endif
     const UINT receipt[] = {arg != nullptr, arg && arg->pAdapterFuncs != nullptr,
                             arg && arg->pAdapterCallbacks != nullptr};
     AdmissionUmdDiagnostic("d3d12-open-adapter", arg && arg->pAdapterFuncs ? S_OK : E_INVALIDARG, receipt, 3);

@@ -163,6 +163,18 @@ class D3d12Interface0033(unittest.TestCase):
             number = build if build >= 90 else minor + build
             self.assertEqual(number, int(name), name)
 
+    def test_d3d12_admission_default_needs_the_native_owner(self):
+        # C56: with the native owner every process gets D3D12 unless
+        # APPLE_AGX_D3D12=0; a build without it (e.g. a WOW64 UMD compiled
+        # from this file without the owner) would admit devices that execute
+        # nothing, so it keeps the APPLE_AGX_D3D12=1 opt-in
+        opener = self.source[self.source.index('extern "C" HRESULT APIENTRY OpenAdapter12('):]
+        opener = opener[:opener.index('FillD3D12DDI_ADAPTERFUNCS')]
+        owner = opener[opener.index('#ifdef APPLE_AGX_D3D12_NATIVE_OWNER'):opener.index('#else')]
+        other = opener[opener.index('#else'):opener.index('#endif')]
+        self.assertIn("== 1 && enabled[0] == '0')\n        return E_NOTIMPL;", owner)
+        self.assertIn("!= 1 || enabled[0] != '1')\n        return E_NOTIMPL;", other)
+
     def test_tables_follow_the_negotiated_interface(self):
         # CORE_0012 and CORE_0033 have one size: the table is chosen by the
         # version CalcPrivateDeviceSize received, not by the size.
