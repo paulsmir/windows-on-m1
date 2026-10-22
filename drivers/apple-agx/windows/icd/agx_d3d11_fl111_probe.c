@@ -14,7 +14,9 @@
  * ForcedSampleCount 16 and 8 of thin, sub-pixel and edge-sharing triangles;
  * the pixel shader adds countbits(SV_Coverage) per pixel, which must equal
  * the reference coverage of the D3D standard patterns and the top-left rule
- * (dxbc_tir.h, the contract the expansion GS and pixel shader implement).
+ * (dxbc_tir.h, the contract the expansion GS and pixel shader implement);
+ * then the same draw as TIR into a single-sample R32_FLOAT render target with
+ * ONE + ONE blending, which must hold the same counts.
  * Usage: agx_d3d11_fl111_probe.exe */
 #define COBJMACROS
 #define INITGUID
@@ -29,6 +31,7 @@
 #include "agx_d3d11_fl111_cs_compact.h"
 #include "agx_d3d11_fl111_vs_tir.h"
 #include "agx_d3d11_fl111_ps_tir.h"
+#include "agx_d3d11_fl111_ps_tirrt.h"
 #include "dxbc_tir.h"
 
 static IDXGIAdapter1 *hardware_adapter(void) {
@@ -320,13 +323,16 @@ static const float tir_tris[][6] = {
   {50.0f, 40.0f, 44.0f, 60.0f, 62.0f, 52.0f}};
 #define TIR_TRIS (sizeof(tir_tris) / sizeof(tir_tris[0]))
 
-static unsigned tir_draw(ID3D11Device1 *device, ID3D11DeviceContext *ctx, UINT samples, HRESULT *status) {
+static unsigned tir_draw(ID3D11Device1 *device, ID3D11DeviceContext *ctx, UINT samples, BOOL rt, HRESULT *status) {
   ID3D11Buffer *vb = NULL, *counts = NULL, *staging = NULL;
   ID3D11UnorderedAccessView *uav = NULL;
   ID3D11VertexShader *vs = NULL;
   ID3D11PixelShader *ps = NULL;
   ID3D11InputLayout *layout = NULL;
   ID3D11RasterizerState1 *rs = NULL;
+  ID3D11Texture2D *target = NULL, *target_staging = NULL;
+  ID3D11RenderTargetView *rtv = NULL;
+  ID3D11BlendState *blend = NULL;
   float verts[TIR_TRIS * 6];
   unsigned want[64 * 64], bad = 4096, total = 0;
   D3D11_VIEWPORT vp = {0, 0, 64, 64, 0, 1};
@@ -372,8 +378,28 @@ static unsigned tir_draw(ID3D11Device1 *device, ID3D11DeviceContext *ctx, UINT s
   }
   if (SUCCEEDED(hr)) hr = ID3D11Device1_CreateVertexShader(device, g_agx_d3d11_fl111_vs_tir, sizeof(g_agx_d3d11_fl111_vs_tir),
                                                            NULL, &vs);
-  if (SUCCEEDED(hr)) hr = ID3D11Device1_CreatePixelShader(device, g_agx_d3d11_fl111_ps_tir, sizeof(g_agx_d3d11_fl111_ps_tir),
-                                                          NULL, &ps);
+  if (SUCCEEDED(hr))
+    hr = rt ? ID3D11Device1_CreatePixelShader(device, g_agx_d3d11_fl111_ps_tirrt, sizeof(g_agx_d3d11_fl111_ps_tirrt), NULL, &ps)
+            : ID3D11Device1_CreatePixelShader(device, g_agx_d3d11_fl111_ps_tir, sizeof(g_agx_d3d11_fl111_ps_tir), NULL, &ps);
+  if (SUCCEEDED(hr) && rt) {
+    D3D11_TEXTURE2D_DESC td;
+    D3D11_BLEND_DESC bd;
+    memset(&td, 0, sizeof(td));
+    td.Width = 64; td.Height = 64; td.MipLevels = 1; td.ArraySize = 1; td.Format = DXGI_FORMAT_R32_FLOAT;
+    td.SampleDesc.Count = 1; td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET;
+    hr = ID3D11Device1_CreateTexture2D(device, &td, NULL, &target);
+    td.Usage = D3D11_USAGE_STAGING; td.BindFlags = 0; td.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    if (SUCCEEDED(hr)) hr = ID3D11Device1_CreateTexture2D(device, &td, NULL, &target_staging);
+    if (SUCCEEDED(hr)) hr = ID3D11Device1_CreateRenderTargetView(device, (ID3D11Resource *)target, NULL, &rtv);
+    memset(&bd, 0, sizeof(bd));
+    bd.RenderTarget[0].BlendEnable = TRUE;
+    bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+    bd.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+    bd.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    if (SUCCEEDED(hr)) hr = ID3D11Device1_CreateBlendState(device, &bd, &blend);
+  }
   if (SUCCEEDED(hr)) {
     const D3D11_INPUT_ELEMENT_DESC el = {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0};
     hr = ID3D11Device1_CreateInputLayout(device, &el, 1, g_agx_d3d11_fl111_vs_tir, sizeof(g_agx_d3d11_fl111_vs_tir),
@@ -389,8 +415,15 @@ static unsigned tir_draw(ID3D11Device1 *device, ID3D11DeviceContext *ctx, UINT s
   }
   if (SUCCEEDED(hr)) {
     const UINT clear[4] = {0, 0, 0, 0}, stride = 8, offset = 0;
+    const FLOAT zero[4] = {0, 0, 0, 0};
     ID3D11DeviceContext_ClearUnorderedAccessViewUint(ctx, uav, clear);
-    ID3D11DeviceContext_OMSetRenderTargetsAndUnorderedAccessViews(ctx, 0, NULL, NULL, 0, 1, &uav, NULL);
+    if (rt) {
+      ID3D11DeviceContext_ClearRenderTargetView(ctx, rtv, zero);
+      ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, NULL);
+      ID3D11DeviceContext_OMSetBlendState(ctx, blend, NULL, 0xffffffffu);
+    } else {
+      ID3D11DeviceContext_OMSetRenderTargetsAndUnorderedAccessViews(ctx, 0, NULL, NULL, 0, 1, &uav, NULL);
+    }
     ID3D11DeviceContext_RSSetState(ctx, (ID3D11RasterizerState *)rs);
     ID3D11DeviceContext_RSSetViewports(ctx, 1, &vp);
     ID3D11DeviceContext_IASetInputLayout(ctx, layout);
@@ -400,23 +433,32 @@ static unsigned tir_draw(ID3D11Device1 *device, ID3D11DeviceContext *ctx, UINT s
     ID3D11DeviceContext_PSSetShader(ctx, ps, NULL, 0);
     ID3D11DeviceContext_Draw(ctx, (UINT)(TIR_TRIS * 3), 0);
     {
-      const unsigned *v = read_back(ctx, (ID3D11Resource *)counts, (ID3D11Resource *)staging, NULL);
+      UINT pitch = 0;
+      ID3D11Resource *src = rt ? (ID3D11Resource *)target : (ID3D11Resource *)counts;
+      ID3D11Resource *dst = rt ? (ID3D11Resource *)target_staging : (ID3D11Resource *)staging;
+      const unsigned *v = read_back(ctx, src, dst, &pitch);
       if (v) {
         unsigned got = 0, shown = 0;
         bad = 0;
         for (unsigned i = 0; i < 64 * 64; ++i) {
-          got += v[i];
-          if (v[i] != want[i]) {
-            if (shown++ < 6) printf("D11TIR %u pixel %u,%u got %u want %u\n", samples, i % 64, i / 64, v[i], want[i]);
+          const unsigned value = rt ? (unsigned)((const float *)((const char *)v + (i / 64) * pitch))[i % 64] : v[i];
+          got += value;
+          if (value != want[i]) {
+            if (shown++ < 6)
+              printf("D11TIR %u%s pixel %u,%u got %u want %u\n", samples, rt ? " rt" : "", i % 64, i / 64, value, want[i]);
             ++bad;
           }
         }
-        printf("D11TIR %u covered samples got %u want %u\n", samples, got, total);
-        ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)staging, 0);
+        printf("D11TIR %u%s covered samples got %u want %u\n", samples, rt ? " rt" : "", got, total);
+        ID3D11DeviceContext_Unmap(ctx, dst, 0);
       } else hr = E_FAIL;
     }
   }
   ID3D11DeviceContext_ClearState(ctx);
+  if (blend) ID3D11BlendState_Release(blend);
+  if (rtv) ID3D11RenderTargetView_Release(rtv);
+  if (target_staging) ID3D11Texture2D_Release(target_staging);
+  if (target) ID3D11Texture2D_Release(target);
   if (rs) ID3D11RasterizerState1_Release(rs);
   if (layout) ID3D11InputLayout_Release(layout);
   if (ps) ID3D11PixelShader_Release(ps);
@@ -442,8 +484,9 @@ static int step_tir(void) {
     ID3D11Device1_Release(device);
     return 0;
   }
-  if (SUCCEEDED(hr)) bad = tir_draw(device, ctx, 16, &hr);
-  if (SUCCEEDED(hr)) bad += tir_draw(device, ctx, 8, &hr);
+  if (SUCCEEDED(hr)) bad = tir_draw(device, ctx, 16, FALSE, &hr);
+  if (SUCCEEDED(hr)) bad += tir_draw(device, ctx, 8, FALSE, &hr);
+  if (SUCCEEDED(hr)) bad += tir_draw(device, ctx, 16, TRUE, &hr);
   if (SUCCEEDED(hr)) hr = ID3D11Device1_GetDeviceRemovedReason(device);
   printf("AGX_D3D11_D11TIR: %s hr=0x%08lx bad=%u\n", SUCCEEDED(hr) && !bad ? "PASS" : "FAIL", (unsigned long)hr, bad);
   if (ctx) ID3D11DeviceContext_Release(ctx);
