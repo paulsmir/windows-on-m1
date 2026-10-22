@@ -3,7 +3,7 @@
 # registered as UserModeDriverNameWow). A 32-bit D3D9 application on J313
 # runs through D3D9On12 on this DLL's OpenAdapter12; build-umd-x86.ps1 links
 # the owner-less D3D12 entry. Same sources and definitions as the x64 UMD
-# (build-umd-x64.ps1, the EXP1874 package recipe), compiled with the x86 Asahi
+# (build-umd-x64.ps1), compiled with the x86 Asahi
 # runtime closure's compiler flags (its result.json) and linked against the x86
 # Mesa archives of the same projected source. Prints COMPILE_PASS, LINK_PASS <sha256>.
 param(
