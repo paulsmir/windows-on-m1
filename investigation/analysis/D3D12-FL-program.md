@@ -204,3 +204,17 @@ Order (shortest route to a GravityMark run first):
   `wait_pix` cannot stall. Test: a probe with overlapping UAV-only ROV
   draws that each do `rov[p] = rov[p] * 5 + i`, which is deterministic only
   in primitive order.
+
+## Shared TIR machinery for D3D12 (2026-10-23)
+
+- `dxbc_tir_gs` (expansion GS), `dxbc_tir_coverage` (pixel prologue) and
+  `dxbc_tir_lower_fs` (the variant of any fragment NIR that still holds its
+  input variables) serve both D3D11 (DXBC translator) and D3D12 (DXIL).
+- **D3D12 11_1:** PSOs with `RasterizerState.ForcedSampleCount` 4/8/16 take
+  the GS + `dxbc_tir_lower_fs` variant in the owner
+  (`agx_d3d12_windows.cpp` graphics pipeline creation).
+- **D3D12 12_1 conservative rasterization Tier 1:** the expansion GS alone,
+  with no coverage demote. The pixel is a candidate when the primitive
+  touches it; the 1/64-pixel margin is within the Tier 1 uncertainty of 1/2
+  pixel. Coverage input is full. No inner coverage (that is Tier 3).
+  Post-snap degenerates are culled, which Tier 1 permits.
