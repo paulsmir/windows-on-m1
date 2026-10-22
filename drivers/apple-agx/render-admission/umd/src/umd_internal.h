@@ -2,7 +2,7 @@
 #define APPLE_AGX_UMD_INTERNAL_H
 
 #include "umd_va_alias.h"
-#define ADMISSION_UMD_VA_ALIAS_LIMIT 1024u
+#define ADMISSION_UMD_VA_ALIAS_INITIAL 1024u
 #include "umd_staging_sync.h"
 #include "direct_flip_contract.h"
 #include "render_win32_transport.h"
@@ -217,9 +217,12 @@ typedef struct _ADMISSION_UMD_DEVICE {
   APPLE_AGX_U64 PagingWaitToken;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   /* C53 B0: tile aliases of slot allocations in reserved GPU VA ranges
-   * (umd_va_alias.h), under ScreenBufferLock. */
-  ADMISSION_UMD_VA_ALIAS VaAliases[ADMISSION_UMD_VA_ALIAS_LIMIT];
+   * (umd_va_alias.h), under ScreenBufferLock. C53 B4: a process-heap array
+   * that grows on demand (a fixed 1024 entries capped reserved resources at
+   * about 1000 tiles); freed with the device. */
+  ADMISSION_UMD_VA_ALIAS *VaAliases;
   UINT VaAliasCount;
+  UINT VaAliasCapacity;
 #endif
   volatile LONG RenderCbSequence;
   APPLE_AGX_U32 NativeBackendCount;

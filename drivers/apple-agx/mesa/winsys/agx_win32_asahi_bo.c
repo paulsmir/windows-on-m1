@@ -523,10 +523,13 @@ static void virtual_release(struct windows_bo *bo) {
     /* the range is freed once no submission is in flight (EXP979) */
     if(!virtual_retire(b,bo) ||
        !AgxWin32GpuvaFreeRange(&b->Gpuva,bo->Reserved.Va,bo->Reserved.Bytes)) {
-      if(b->PendingVaCount<sizeof(b->PendingVa)/sizeof(b->PendingVa[0]))
-        b->PendingVa[b->PendingVaCount++]=bo->Reserved;
-      else
+      if(b->PendingVaCount<sizeof(b->PendingVa)/sizeof(b->PendingVa[0])) {
+        /* Unbind frees exactly Bytes: include the range's guard tile */
+        b->PendingVa[b->PendingVaCount]=bo->Reserved;
+        b->PendingVa[b->PendingVaCount++].Bytes+=AGX_WIN32_GPUVA_RANGE_GUARD;
+      } else {
         AGX_WIN32_ASAHI_FAIL(b, 1u);
+      }
     }
     memset(&bo->Reserved,0,sizeof(bo->Reserved));
   }

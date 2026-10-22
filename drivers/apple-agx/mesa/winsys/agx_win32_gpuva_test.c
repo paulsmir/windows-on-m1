@@ -220,7 +220,7 @@ static void uncertain_residency_never_submits_or_frees(void) {
 
 /* C53 B0: reserved ranges and tile maps at allocation offsets */
 typedef struct {
-  uint64_t reserve_va, freed_va, freed_bytes, map_va, map_allocation;
+  uint64_t reserve_va, reserved_bytes, freed_va, freed_bytes, map_va, map_allocation;
   uint64_t map_offset_pages, map_pages, fence;
   unsigned reserves, maps, frees, waits, result;
   unsigned protection;
@@ -229,7 +229,8 @@ static int range_reserve(void *ctx, uint64_t bytes, uint64_t minimum,
                          uint64_t maximum, uint64_t *va) {
   RANGE *r = ctx;
   r->reserves++;
-  (void)bytes; (void)minimum; (void)maximum;
+  r->reserved_bytes = bytes;
+  (void)minimum; (void)maximum;
   *va = r->reserve_va;
   return 1;
 }
@@ -274,6 +275,8 @@ static void reserved_ranges_map_tiles_at_offsets(void) {
   assert(r.frees == 1 && r.freed_va == 0x48000 && !space.Terminal);
   r.reserve_va = 0x400000;
   assert(AgxWin32GpuvaReserveRange(&space, 0x40000, &va) && va == 0x400000);
+  /* C53 B4: one guard tile follows the range */
+  assert(r.reserved_bytes == 0x50000);
   /* without MapAt nothing is mapped */
   assert(!AgxWin32GpuvaMapRange(&space, va + 0x10000, 17, 0x20000, 0x10000,
                                 AGX_GPUVA_MAP_WRITE) && !r.maps);
@@ -296,7 +299,7 @@ static void reserved_ranges_map_tiles_at_offsets(void) {
   assert(!AgxWin32GpuvaFreeRange(&space, va, 0x40000) && r.frees == 1);
   space.OlderCount = 0;
   assert(AgxWin32GpuvaFreeRange(&space, va, 0x40000) && r.freed_va == va &&
-         r.freed_bytes == 0x40000);
+         r.freed_bytes == 0x50000);
   /* uncertain ownership or a pending map without a fence is terminal */
   r.result = 3;
   assert(!AgxWin32GpuvaMapRange(&space, va, 17, 0, 0x10000, 0) && space.Terminal);

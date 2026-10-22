@@ -429,6 +429,29 @@ static int map_va(void *context, uint64_t token, uint64_t va,
   return hr == E_PENDING ? 2 : 1;
 }
 
+/* C53 B4: grows the alias table (doubling) to at least need entries; under
+ * the exclusive ScreenBufferLock. 0 if it cannot grow. */
+static int alias_reserve(ADMISSION_UMD_DEVICE *device, unsigned need) {
+  unsigned capacity = device->VaAliasCapacity ? device->VaAliasCapacity
+                                              : ADMISSION_UMD_VA_ALIAS_INITIAL;
+  void *grown;
+  if (!need) return 0;
+  if (need <= device->VaAliasCapacity) return 1;
+  while (capacity < need) {
+    if (capacity > 0x7fffffffu ||
+        capacity > (((SIZE_T)-1) / sizeof(*device->VaAliases)) / 2u) return 0;
+    capacity *= 2u;
+  }
+  grown = device->VaAliases ?
+      HeapReAlloc(GetProcessHeap(), 0, device->VaAliases,
+                  (SIZE_T)capacity * sizeof(*device->VaAliases)) :
+      HeapAlloc(GetProcessHeap(), 0, (SIZE_T)capacity * sizeof(*device->VaAliases));
+  if (!grown) return 0;
+  device->VaAliases = (ADMISSION_UMD_VA_ALIAS *)grown;
+  device->VaAliasCapacity = capacity;
+  return 1;
+}
+
 /* C53 B0: a tile alias of a slot allocation at an allocation offset in a
  * reserved range. The slot's canonical VA is not touched; the alias is
  * recorded (room checked before the map) so that free_va drops it and
@@ -443,11 +466,10 @@ static int map_va_at(void *context, uint64_t token, uint64_t va,
       !device->KernelCallbacks->pfnMapGpuVirtualAddressCb) return 0;
   request.hAllocation = allocation_handle(device, token);
   if (!request.hAllocation) return 0;
-  AcquireSRWLockShared(&device->ScreenBufferLock);
-  const int room = AdmissionUmdVaAliasRoom(device->VaAliases, device->VaAliasCount,
-                                           ADMISSION_UMD_VA_ALIAS_LIMIT, va,
-                                           pages * ADMISSION_UMD_VA_ALIAS_PAGE);
-  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  const int room = alias_reserve(device, AdmissionUmdVaAliasNeed(
+      device->VaAliases, device->VaAliasCount, va, pages * ADMISSION_UMD_VA_ALIAS_PAGE));
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   if (!room) return 0;
   resident_before_map(device, token, request.hAllocation);
   request.hPagingQueue = device->PagingQueue;
@@ -472,7 +494,7 @@ static int map_va_at(void *context, uint64_t token, uint64_t va,
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   ADMISSION_UMD_VA_ALIAS alias = {token, va, offset_pages, pages, protection};
   const int recorded = AdmissionUmdVaAliasAdd(device->VaAliases, &device->VaAliasCount,
-                                              ADMISSION_UMD_VA_ALIAS_LIMIT, &alias);
+                                              device->VaAliasCapacity, &alias);
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   /* checked above under the same single-threaded GPUVA serialization */
   if (!recorded) return 3;
@@ -495,7 +517,7 @@ static int free_va(void *context, uint64_t va, uint64_t bytes) {
      * than the whole-range removal frees: the range starts at a mapping) */
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
     (void)AdmissionUmdVaAliasCut(device->VaAliases, &device->VaAliasCount,
-                                 ADMISSION_UMD_VA_ALIAS_LIMIT, va, bytes);
+                                 device->VaAliasCapacity, va, bytes);
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   }
   return SUCCEEDED(hr);

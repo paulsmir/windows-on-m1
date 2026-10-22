@@ -78,7 +78,8 @@ int AgxWin32GpuvaReserveRange(AGX_WIN32_GPUVA_SPACE *space, uint64_t bytes,
   uint64_t reserved = 0;
   if (!space || !va || space->Terminal || !bytes ||
       (bytes & (AGX_GPUVA_PAGE - 1)) ||
-      bytes > AGX_GPUVA_LIMIT - AGX_GPUVA_PAGE) return 0;
+      bytes > AGX_GPUVA_LIMIT - AGX_GPUVA_PAGE - AGX_WIN32_GPUVA_RANGE_GUARD) return 0;
+  bytes += AGX_WIN32_GPUVA_RANGE_GUARD;
   if (!space->Ops.Reserve(space->Context, bytes, AGX_GPUVA_PAGE,
                           AGX_GPUVA_LIMIT, &reserved)) return 0;
   if (reserved < AGX_GPUVA_PAGE || (reserved & (AGX_GPUVA_PAGE - 1)) ||
@@ -116,8 +117,9 @@ int AgxWin32GpuvaMapRange(AGX_WIN32_GPUVA_SPACE *space, uint64_t va,
 int AgxWin32GpuvaFreeRange(AGX_WIN32_GPUVA_SPACE *space, uint64_t va,
                            uint64_t bytes) {
   if (!space || space->Terminal || space->Held || space->OlderCount || !va ||
-      !bytes || ((va | bytes) & (AGX_GPUVA_PAGE - 1))) return 0;
-  return space->Ops.Free(space->Context, va, bytes) != 0;
+      !bytes || ((va | bytes) & (AGX_GPUVA_PAGE - 1)) ||
+      bytes > AGX_GPUVA_LIMIT - AGX_GPUVA_PAGE - AGX_WIN32_GPUVA_RANGE_GUARD) return 0;
+  return space->Ops.Free(space->Context, va, bytes + AGX_WIN32_GPUVA_RANGE_GUARD) != 0;
 }
 
 /* Diagnostic only: record which check refused, never changes the result. */

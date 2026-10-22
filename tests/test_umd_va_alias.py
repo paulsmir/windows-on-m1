@@ -7,7 +7,9 @@ allocation at the right allocation offset, or the reserved range keeps
 pointing at a freed allocation. The alias table must track every map and
 free exactly: a partial unmap trims or splits an alias and advances its
 offset; a remap replaces the old alias; running out of entries refuses before
-anything changes (the mapping is not made unrecorded).
+anything changes (the mapping is not made unrecorded). C53 B4: the caller
+grows the table to Need first, and contiguous maps of one allocation merge
+(a merge with a wrong offset would remap tiles onto the wrong heap pages).
 """
 from pathlib import Path
 import os
@@ -34,7 +36,7 @@ static const ADMISSION_UMD_VA_ALIAS *at(const ADMISSION_UMD_VA_ALIAS *t, unsigne
   return 0;
 }
 int main(void) {
-  ADMISSION_UMD_VA_ALIAS t[4];
+  ADMISSION_UMD_VA_ALIAS t[8];
   unsigned n = 0;
   const unsigned long long base = 0x400000;
   /* tiles 0..7 of the range onto tiles 10..17 of token 5 */
@@ -62,6 +64,36 @@ int main(void) {
   /* an exact remap of the whole alias needs no extra entry */
   a = alias(9, base, 3, 8);
   assert(AdmissionUmdVaAliasAdd(t, &n, 1, &a) && n == 1 && t[0].Token == 9 && t[0].OffsetPages == 3 * P);
+  /* C53 B4: Need counts the entries after an add (inside replaced, split +1) */
+  n = 0;
+  a = alias(5, base, 0, 8);
+  assert(AdmissionUmdVaAliasAdd(t, &n, 4, &a) && n == 1);
+  assert(AdmissionUmdVaAliasNeed(t, n, base + T, T) == 3);
+  assert(AdmissionUmdVaAliasNeed(t, n, base, 8 * T) == 1);
+  assert(AdmissionUmdVaAliasNeed(t, n, base, 0) == 0);
+  assert(AdmissionUmdVaAliasCut(t, &n, 4, base, 8 * T) && n == 0);
+  /* C53 B4: tiles mapped onto consecutive heap tiles merge into one alias,
+   * on either side and across a gap that is filled last */
+  a = alias(5, base, 10, 1);
+  assert(AdmissionUmdVaAliasAdd(t, &n, 4, &a) && n == 1);
+  a = alias(5, base + T, 11, 1);
+  assert(AdmissionUmdVaAliasAdd(t, &n, 4, &a) && n == 1 && t[0].Pages == 2 * P);
+  a = alias(5, base + 3 * T, 13, 1);
+  assert(AdmissionUmdVaAliasAdd(t, &n, 4, &a) && n == 2);
+  a = alias(5, base + 2 * T, 12, 1);
+  assert(AdmissionUmdVaAliasAdd(t, &n, 4, &a) && n == 1);
+  assert(t[0].Va == base && t[0].OffsetPages == 10 * P && t[0].Pages == 4 * P);
+  /* no merge across a different allocation offset, token or protection */
+  a = alias(5, base + 4 * T, 20, 1);
+  assert(AdmissionUmdVaAliasAdd(t, &n, 4, &a) && n == 2);
+  a = alias(6, base + 5 * T, 21, 1);
+  assert(AdmissionUmdVaAliasAdd(t, &n, 4, &a) && n == 3);
+  a = alias(5, base - T, 9, 1); a.Protection = 0u;
+  assert(AdmissionUmdVaAliasAdd(t, &n, 4, &a) && n == 4);
+  /* a cut inside the merged alias splits it with the right offsets */
+  assert(AdmissionUmdVaAliasCut(t, &n, 5, base + T, T) && n == 5);
+  assert(at(t, n, base)->Pages == P && at(t, n, base + 2 * T)->OffsetPages == 12 * P &&
+         at(t, n, base + 2 * T)->Pages == 2 * P);
   puts("umd_va_alias: PASS");
   return 0;
 }

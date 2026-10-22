@@ -768,6 +768,9 @@ HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device,
   device->KernelContextQuiesced=FALSE;
   if (FAILED(terminalError))
     AdmissionUmdSetError(device, terminalError);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (device->VaAliases) HeapFree(GetProcessHeap(), 0, device->VaAliases);
+#endif
   ZeroMemory(device, sizeof(*device));
   *consumed = TRUE;
   return terminalError;
