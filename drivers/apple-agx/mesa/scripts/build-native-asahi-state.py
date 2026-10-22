@@ -6037,6 +6037,26 @@ agx_shader_initialize("""
         # D3D12 C47: a descriptor heap holds the texture descriptor
         # agx_upload_textures would emit for a view (agx_pack_texture is
         # static); the owner packs it when a view enters a heap.
+        # C53 T2D (D3D12-C53-tiled-textures.md): a reserved Texture2D's
+        # descriptors sample through its Sparse Block table in Sparse mode
+        # (Honeykrisp hk_image_view.c); AgxWin32AsahiSparseTableVa is 0 for
+        # every other BO, so other textures are packed as before.
+        sparse_anchor='      cfg.address = agx_map_texture_gpu(rsrc, first_layer);\n'
+        if state_text.count(sparse_anchor)!=1:
+            raise SystemExit('Ambiguous texture address anchor')
+        state_text=state_text.replace(sparse_anchor,sparse_anchor+'''#ifdef APPLE_AGX_GPUVA_WINSYS
+      if (state->target != PIPE_BUFFER) {
+         const APPLE_AGX_U64 table = AgxWin32AsahiSparseTableVa(rsrc->bo);
+         if (table) {
+            cfg.mode = AGX_IMAGE_MODE_SPARSE;
+            cfg.address = table + ail_page_to_sparse_index_el(&rsrc->layout, first_layer, 0) *
+                                     AIL_SPARSE_ELSIZE_B;
+         }
+      }
+#endif
+''')
+        if '#include "agx_win32_asahi_bo.h"' not in state_text:
+            state_text=state_text.replace('#include "agx_state.h"','#include "agx_state.h"\n#include "agx_win32_asahi_bo.h"',1)
         pack_anchor='\nvoid\nagx_init_state_functions(struct pipe_context *ctx)\n'
         if state_text.count(pack_anchor)!=1:
             raise SystemExit('Ambiguous texture packing anchor')
