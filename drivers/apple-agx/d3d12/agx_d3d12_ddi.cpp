@@ -131,9 +131,29 @@ static bool ShaderModel6Enabled() {
  * process until hardware validates its tables. */
 /* EXP1869: offered {0071, 0042, ...} the runtime negotiated 0042.
  * APPLE_AGX_D3D12_DDI=scan offers every WDK build from 0099 down to 0043
- * so d3d12-device-size names the highest one the runtime accepts; a
- * negotiated interface without tables here fails closed (FillDDITable). */
+ * so d3d12-device-size names the highest one the runtime accepts (EXP1870:
+ * 0099); sNNN offers only the builds at or below NNN. A negotiated
+ * interface without tables here fails closed (FillDDITable). */
 static constexpr UINT64 kInterfaceScan = ~0ULL;
+static UINT ScanBound() {
+    static const UINT bound = [] {
+        char value[5] = {};
+        if (GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) != 4 || value[0] != 's') return 0u;
+        UINT n = 0;
+        for (UINT i = 1; i < 4; ++i) {
+            if (value[i] < '0' || value[i] > '9') return 0u;
+            n = n * 10 + static_cast<UINT>(value[i] - '0');
+        }
+        return n;
+    }();
+    return bound;
+}
+/* a D3D12DDI_SUPPORTED_00NN value's NN: interface minor + build, the build
+ * itself from 0090 (D3D12DDI_BUILD_VERSION_0090 is 90) */
+static UINT InterfaceNumber(UINT64 version) {
+    const UINT build = static_cast<UINT>((version >> 16) & 0xffffu);
+    return build >= 90u ? build : static_cast<UINT>((version >> 32) & 0xffffu) + build;
+}
 static const UINT64 kScanVersions[] = {
     D3D12DDI_SUPPORTED_0099, D3D12DDI_SUPPORTED_0098, D3D12DDI_SUPPORTED_0097, D3D12DDI_SUPPORTED_0096,
     D3D12DDI_SUPPORTED_0095, D3D12DDI_SUPPORTED_0094, D3D12DDI_SUPPORTED_0093, D3D12DDI_SUPPORTED_0092,
@@ -150,7 +170,7 @@ static UINT64 InterfaceOptIn() {
         char value[5] = {};
         if (!ShaderModel6Enabled() || GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) != 4)
             return UINT64{0};
-        return !memcmp(value, "scan", 4)   ? kInterfaceScan
+        return !memcmp(value, "scan", 4) || ScanBound() ? kInterfaceScan
                : !memcmp(value, "0071", 4) ? D3D12DDI_SUPPORTED_0071
                : !memcmp(value, "0042", 4) ? D3D12DDI_SUPPORTED_0042
                : !memcmp(value, "0033", 4) ? D3D12DDI_SUPPORTED_0033
@@ -165,7 +185,11 @@ static bool NegotiatedR2() { return adapter_object.negotiated >= D3D12DDI_SUPPOR
 /* C48: R1 build 2 (0012) adds the wave caps (D3D12DDI_SHADER_CAPS_0012) and
  * one device entry, pfnGetDebugAllocationInfo; SM6 processes negotiate it. */
 static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *versions) {
-    const UINT scanned = InterfaceOptIn() == kInterfaceScan ? static_cast<UINT>(ARRAYSIZE(kScanVersions)) : 0u;
+    UINT scanned = 0;
+    UINT64 scan[ARRAYSIZE(kScanVersions)] = {};
+    if (InterfaceOptIn() == kInterfaceScan)
+        for (UINT64 v : kScanVersions)
+            if (!ScanBound() || InterfaceNumber(v) <= ScanBound()) scan[scanned++] = v;
     const UINT offered = scanned                                       ? scanned + 5u
                          : InterfaceOptIn() == D3D12DDI_SUPPORTED_0071 ? 6u
                          : InterfaceOptIn() == D3D12DDI_SUPPORTED_0042 ? 5u
@@ -178,7 +202,7 @@ static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *ve
     if (!versions) { *count = offered; return S_OK; }
     if (*count < offered) { *count = offered; return E_INVALIDARG; }
     UINT n = 0;
-    for (UINT i = 0; i < scanned; ++i) versions[n++] = kScanVersions[i];
+    for (UINT i = 0; i < scanned; ++i) versions[n++] = scan[i];
     if (offered == 6u) versions[n++] = D3D12DDI_SUPPORTED_0071;
     if (offered >= 5u) versions[n++] = D3D12DDI_SUPPORTED_0042;
     if (offered >= 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;

@@ -124,6 +124,22 @@ class D3d12Interface0033(unittest.TestCase):
         self.assertIn('const bool tabled = !NegotiatedR2() || Negotiated0033() || Negotiated0042() || Negotiated0071();', fill)
         self.assertIn('switch (tabled ? type : static_cast<D3D12DDI_TABLE_TYPE>(~0u)) {', fill)
 
+    def test_scan_bound_numbers_every_wdk_build(self):
+        # sNNN keeps the builds numbered <= NNN: InterfaceNumber must give
+        # every D3D12DDI_SUPPORTED_00NN its NN (absolute builds from 0090)
+        import re as _re
+        minors = {int(m.group(1)): int(m.group(2)) for m in
+                  _re.finditer(r'#define D3D12DDI_MINOR_VERSION_R(\d+) (\d+)', self.header)}
+        builds = {m.group(1): int(m.group(2)) for m in
+                  _re.finditer(r'#define D3D12DDI_BUILD_VERSION_(\d{4}) (\d+)', self.header)}
+        body = self.source[self.source.index('static UINT InterfaceNumber('):]
+        self.assertIn('return build >= 90u ? build : static_cast<UINT>((version >> 32) & 0xffffu) + build;', body)
+        for name in ('0043', '0054', '0065', '0071', '0076', '0081', '0089', '0090', '0099'):
+            release = _re.search(r'#define D3D12DDI_SUPPORTED_%s .*D3D12DDI_INTERFACE_VERSION_R(\d+)' % name, self.header)
+            minor, build = minors[int(release.group(1))], builds[name]
+            number = build if build >= 90 else minor + build
+            self.assertEqual(number, int(name), name)
+
     def test_tables_follow_the_negotiated_interface(self):
         # CORE_0012 and CORE_0033 have one size: the table is chosen by the
         # version CalcPrivateDeviceSize received, not by the size.
