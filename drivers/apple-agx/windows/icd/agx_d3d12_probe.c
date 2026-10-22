@@ -22,6 +22,7 @@
 #include "agx_d3d12_probe_cs_c47b.h"
 #include "agx_d3d12_probe_cs_cb_dxil.h"
 #include "agx_d3d12_probe_cs_wave_dxil.h"
+#include "agx_d3d12_probe_cs_c49.h"
 #include "agx_d3d12_probe_vs_dxil.h"
 #include "agx_d3d12_probe_ps_dxil.h"
 #include "agx_d3d12_probe_cs_texture1d_load.h"
@@ -1967,6 +1968,130 @@ static int placed_buffer(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     if (placed) ID3D12Resource_Release(placed);
     if (heap) ID3D12Heap_Release(heap);
     if (readback) ID3D12Resource_Release(readback);
+    return !(SUCCEEDED(hr) && bad == 0);
+}
+
+/* C49A (typed UAV loads, TypedUAVLoadAdditionalFormats): phase 0 stores known
+ * values into 4x4 RGBA16F, RGBA8_UNORM, R16_FLOAT and R8_UINT texture UAVs,
+ * phase 1 (after a UAV barrier) loads them back (agx_d3d12_probe_cs_c49.hlsl);
+ * every one of the 16 dwords must be 0xf. The runtime refuses the PSO when
+ * the cap is not reported. */
+static int c49_typed_uav_loads(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    static const DXGI_FORMAT formats[4] = {DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R8G8B8A8_UNORM,
+                                           DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R8_UINT};
+    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 5, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 5, 0, 0, 0};
+    D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}, {D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {2, parameters, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12DescriptorHeap *views = NULL;
+    ID3D12Resource *textures[4] = {NULL, NULL, NULL, NULL};
+    ID3D12Resource *outv = uav_buffer(device);
+    ID3D12Resource *back = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu_start = {0};
+    UINT *words = NULL, bad = 16, first = 0;
+    HRESULT hr = ID3D12Device_CheckFeatureSupport(device, D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options));
+    printf("C49A TypedUAVLoadAdditionalFormats %d hr=0x%08lx\n", (int)options.TypedUAVLoadAdditionalFormats, (unsigned long)hr);
+    for (unsigned i = 0; i < 4 && SUCCEEDED(hr); ++i) {
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT support = {formats[i]};
+        D3D12_RESOURCE_DESC desc = {D3D12_RESOURCE_DIMENSION_TEXTURE2D};
+        ID3D12Device_CheckFeatureSupport(device, D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support));
+        printf("C49A format %u support2 0x%08x typed-load %d\n", (unsigned)formats[i], (unsigned)support.Support2,
+               (support.Support2 & D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0);
+        desc.Width = 4;
+        desc.Height = 4;
+        desc.DepthOrArraySize = 1;
+        desc.MipLevels = 1;
+        desc.Format = formats[i];
+        desc.SampleDesc.Count = 1;
+        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &desc,
+                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL, &IID_ID3D12Resource,
+                                                  (void **)&textures[i]);
+    }
+    if (SUCCEEDED(hr) && !(outv && back)) hr = E_FAIL;
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &heap_desc, &IID_ID3D12DescriptorHeap, (void **)&views);
+    if (SUCCEEDED(hr)) {
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu;
+        D3D12_UNORDERED_ACCESS_VIEW_DESC out_desc = {DXGI_FORMAT_R32_UINT, D3D12_UAV_DIMENSION_BUFFER};
+        const UINT step = ID3D12Device_GetDescriptorHandleIncrementSize(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        out_desc.Buffer.NumElements = 16;
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(views, &cpu);
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(views, &gpu_start);
+        ID3D12Device_CreateUnorderedAccessView(device, outv, NULL, &out_desc, cpu);
+        for (unsigned i = 0; i < 4; ++i) {
+            cpu.ptr += step;
+            ID3D12Device_CreateUnorderedAccessView(device, textures[i], NULL, NULL, cpu);
+        }
+        parameters[0].DescriptorTable.NumDescriptorRanges = 1;
+        parameters[0].DescriptorTable.pDescriptorRanges = &range;
+        parameters[1].Constants.ShaderRegister = 0;
+        parameters[1].Constants.Num32BitValues = 1;
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
+                                              ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature,
+                                              (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_c49;
+        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_c49);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+        printf("C49A CreateComputePipelineState hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        D3D12_RESOURCE_BARRIER uav = {D3D12_RESOURCE_BARRIER_TYPE_UAV};
+        UINT phase = 0;
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &views);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+        ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 0, gpu_start);
+        ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list, 1, 1, &phase, 0);
+        ID3D12GraphicsCommandList_Dispatch(list, 1, 1, 1);
+        ID3D12GraphicsCommandList_ResourceBarrier(list, 1, &uav);
+        phase = 1;
+        ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list, 1, 1, &phase, 0);
+        ID3D12GraphicsCommandList_Dispatch(list, 1, 1, 1);
+        transition(list, outv, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, back, 0, outv, 0, 64);
+        hr = run_list(queue, fence, list, base + 1, "C49A dispatch");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 64};
+        hr = ID3D12Resource_Map(back, 0, &all, (void **)&words);
+        if (SUCCEEDED(hr) && words) {
+            bad = 0;
+            first = words[0];
+            for (unsigned i = 0; i < 16; ++i) bad += words[i] != 0xfu;
+            printf("C49A readback bad=%u first=0x%x last=0x%x\n", bad, first, words[15]);
+            ID3D12Resource_Unmap(back, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C49A: %s\n", SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (views) ID3D12DescriptorHeap_Release(views);
+    for (unsigned i = 0; i < 4; ++i)
+        if (textures[i]) ID3D12Resource_Release(textures[i]);
+    if (back) ID3D12Resource_Release(back);
+    if (outv) ID3D12Resource_Release(outv);
     return !(SUCCEEDED(hr) && bad == 0);
 }
 
@@ -6512,7 +6637,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
     {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
     {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}};
+    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}};
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
@@ -6635,6 +6760,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C44A", step_c44a);
                 (void)run_isolated(adapter, "C44B", step_c44b);
                 (void)run_isolated(adapter, "C48A", step_c48a);
+                (void)run_isolated(adapter, "C49A", c49_typed_uav_loads);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
