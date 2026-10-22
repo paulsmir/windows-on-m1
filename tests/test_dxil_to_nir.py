@@ -209,6 +209,14 @@ class DxilToNir(unittest.TestCase):
         for op in ("@quad_swap_horizontal", "@quad_swap_vertical", "@quad_swap_diagonal", "@quad_broadcast"):
             self.assertIn(op, ps)
 
+    def test_runtime_converted_passthrough_hull_shader_translates(self):
+        # EXP1858: under R1 the runtime converts DXBC to DXIL (dxilconv); a
+        # hull shader without a control point phase names no entry function
+        # and was refused ("0 entry points"), removing the device at the draw.
+        self.parity("conv_hs", ignore=("inputs",))
+        self.parity("conv_ds", ignore=("inputs",))
+        self.assertIn("store_per_vertex_output", self.final("conv_hs"))
+
     def test_register_range_takes_consecutive_slots(self):
         self.parity("par_range_ps")
 

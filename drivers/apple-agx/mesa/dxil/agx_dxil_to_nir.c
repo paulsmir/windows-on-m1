@@ -675,7 +675,12 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       goto done;
    }
    result->stage = nir_stage(dxil_stage);
-   if (entries != 1 || !name || result->stage == MESA_SHADER_NONE) {
+   /* EXP1858: the runtime's DXBC -> DXIL conversion (dxilconv) of a hull
+    * shader without a control point phase names no entry function;
+    * dxil-spirv then takes the module's only entry point and builds the
+    * pass-through control point function itself */
+   const bool passthrough_hull = dxil_stage == DXIL_SPV_STAGE_HULL && entries == 0;
+   if ((!passthrough_hull && (entries != 1 || !name)) || result->stage == MESA_SHADER_NONE) {
       status = AGX_DXIL_NIR_UNSUPPORTED;
       snprintf(result->error, sizeof(result->error), "stage %d, %u entry points", (int)dxil_stage, entries);
       goto done;
@@ -687,7 +692,7 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       goto done;
    }
    r = agx_checked_create(blob, &converter);
-   if (r == DXIL_SPV_SUCCESS)
+   if (r == DXIL_SPV_SUCCESS && name)
       r = agx_checked_entry(converter, name);
    if (r == DXIL_SPV_SUCCESS)
       r = agx_checked_srv(converter, remap_srv, job);
