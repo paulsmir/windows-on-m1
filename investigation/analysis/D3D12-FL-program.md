@@ -184,3 +184,23 @@ Order (shortest route to a GravityMark run first):
 2. **D3D12 12_0**: C53 tiled resources Tier 1, then Tier 2.
 3. **D3D12 12_1**: ROV through interlock, then conservative rasterization
    Tier 1 with the shared emulation.
+
+## ROV path (12_1), source survey 2026-10-23
+
+- **DXIL.** dxil-spirv converts ROV shaders on its own (`dxil_converter.cpp`
+  `declares_rov` -> `build_rov_main`, `FragmentShaderPixelInterlockEXT`,
+  `PixelInterlockOrderedEXT`). Our `spirv_to_nir` capability table
+  (`agx_dxil_to_nir.c` `caps`) lacks `FragmentShaderPixelInterlockEXT`, so
+  it must be added.
+- **AGX.** `agx_compile.c` implements only
+  `nir_intrinsic_begin_invocation_interlock` (`wait_pix 0xC`); Asahi itself
+  emits only "begin" (`agx_nir_lower_tilebuffer.c`), and the ordered section
+  ends with the shader. So `end_invocation_interlock` is removed before the
+  AGX compile, which holds the section to the end and stays correct.
+- **DXBC (SM 5.1 ROV declarations).** The translator does the same: one
+  begin before the first ROV access and none at the end.
+- **UNKNOWN (hardware):** whether a fragment that writes no tile buffer
+  releases its pixel slot at the end of the shader, so that a later
+  `wait_pix` cannot stall. Test: a probe with overlapping UAV-only ROV
+  draws that each do `rov[p] = rov[p] * 5 + i`, which is deterministic only
+  in primitive order.
