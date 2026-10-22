@@ -609,14 +609,15 @@ DestroyUnorderedAccessView11(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESS
 
 /* FL 11_1: binds a stage's UAVs from its pipeline's views (graphics: every
  * graphics stage, D3D11.1; compute) through the bound shader's map -- typed
- * views at image u#, buffer views and counters at the shader buffers the map
- * names. A shader without a map (the TGSI path) has u0..u7 at their own
- * slots and counters at DXBC_NIR_UAV_COUNTER_SLOT + u#. */
+ * views at the images, buffer views and counters at the shader buffers the
+ * map names. Asahi binds 32 images (its 32-bit image_mask: EXP1887 found
+ * slot u + 32 unbinding slot u). A shader without a map (the TGSI path) has
+ * u0..u7 at their own slots and counters at DXBC_NIR_UAV_COUNTER_SLOT + u#. */
 static void
 apply_uavs(Device *device, mesa_shader_stage stage)
 {
    struct pipe_shader_buffer buffers[PIPE_MAX_SHADER_BUFFERS] = {};
-   struct pipe_image_view images[AGX_D3D11_UAV_SLOTS] = {};
+   struct pipe_image_view images[DXBC_NIR_UAV11_IMAGES] = {};
    const Shader *shader = static_cast<const Shader *>(device->agx_stage_shader[stage]);
    const struct dxbc_nir_uav_slots *map =
       shader ? static_cast<const struct dxbc_nir_uav_slots *>(shader->agx_uav64) : NULL;
@@ -634,7 +635,9 @@ apply_uavs(Device *device, mesa_shader_stage stage)
       if (!view)
          continue;
       if (view->typed) {
-         images[u] = view->image;
+         const unsigned image = map ? map->image[u] : u < DXBC_NIR_MAX_UAVS ? u : DXBC_NIR_UAV_UNUSED;
+         if (image < DXBC_NIR_UAV11_IMAGES)
+            images[image] = view->image;
          continue;
       }
       const unsigned buffer = map ? map->buffer[u] : u < DXBC_NIR_MAX_UAVS ? u : DXBC_NIR_UAV_UNUSED;
@@ -649,7 +652,7 @@ apply_uavs(Device *device, mesa_shader_stage stage)
    }
    device->pipe->set_shader_buffers(device->pipe, stage, 0, PIPE_MAX_SHADER_BUFFERS, buffers,
                                     BITFIELD_MASK(PIPE_MAX_SHADER_BUFFERS));
-   device->pipe->set_shader_images(device->pipe, stage, 0, AGX_D3D11_UAV_SLOTS, 0, images);
+   device->pipe->set_shader_images(device->pipe, stage, 0, DXBC_NIR_UAV11_IMAGES, 0, images);
 }
 
 /* The stages a pipeline's UAVs reach (D3D11.1: every graphics stage). */

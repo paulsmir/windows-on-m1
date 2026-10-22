@@ -214,7 +214,7 @@ main(int argc, char **argv)
          if (slots.counter[u] != DXBC_NIR_UAV_UNUSED)
             printf("UAV64 u%u counter %u\n", u, slots.counter[u]);
          if (slots.typed >> u & 1)
-            printf("UAV64 u%u image %u\n", u, u);
+            printf("UAV64 u%u image %u\n", u, slots.image[u]);
       }
       if (nir)
          printf("UAV64 buffers %u\n", slots.buffers);

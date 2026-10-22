@@ -26,6 +26,7 @@
  * then the C47 heap ranges from MAX_UAVS */
 #define MAX_UAVS DXBC_NIR_UAV11_SLOTS
 #define UAV11_SHADER_BUFFERS 32u /* Gallium PIPE_MAX_SHADER_BUFFERS */
+#define UAV11_IMAGES 32u         /* Asahi's 32-bit image_mask (EXP1887) */
 #define MAX_TGSM 32
 #define MAX_PHASES 64
 
@@ -3297,23 +3298,30 @@ dxbc_nir_tess_info(const struct nir_shader *nir)
 /* D3D11.1 mode: buffer UAV u# (shader buffer u#) and its counter (shader
  * buffer DXBC_NIR_UAV11_SLOTS + u#) move to consecutive shader buffers --
  * the buffer views in register order, then the counters -- since Gallium has
- * 32 (PIPE_MAX_SHADER_BUFFERS) for 64 registers. SM 5.0 indexes UAVs by
- * immediates only, so every index is constant. Typed views keep image u#. */
+ * 32 (PIPE_MAX_SHADER_BUFFERS) for 64 registers; typed views (image u#) move
+ * to consecutive images likewise: Asahi binds 32 (its 32-bit image_mask,
+ * EXP1887, although it reports PIPE_MAX_SHADER_IMAGES). SM 5.0 indexes UAVs
+ * by immediates only, so every index is constant. */
 static bool
 compact_uav_buffers(const struct ctx *c, nir_shader *nir, struct dxbc_nir_uav_slots *slots)
 {
    uint8_t remap[2 * DXBC_NIR_UAV11_SLOTS];
-   unsigned next = 0;
+   unsigned next = 0, images = 0;
    memset(slots, 0, sizeof(*slots));
    memset(slots->buffer, DXBC_NIR_UAV_UNUSED, sizeof(slots->buffer));
    memset(slots->counter, DXBC_NIR_UAV_UNUSED, sizeof(slots->counter));
+   memset(slots->image, DXBC_NIR_UAV_UNUSED, sizeof(slots->image));
    memset(remap, DXBC_NIR_UAV_UNUSED, sizeof(remap));
    for (unsigned u = 0; u < DXBC_NIR_UAV11_SLOTS; ++u) {
-      if (c->uav[u].kind == MEM_TYPED)
+      if (c->uav[u].kind == MEM_TYPED) {
          slots->typed |= 1ull << u;
-      else if (c->uav[u].kind >= MEM_RAW)
+         slots->image[u] = (uint8_t)images++;
+      } else if (c->uav[u].kind >= MEM_RAW) {
          remap[u] = slots->buffer[u] = (uint8_t)next++;
+      }
    }
+   if (images > UAV11_IMAGES)
+      return false;
    /* counters: the structured views an alloc/consume names */
    nir_foreach_function_impl(impl, nir)
       nir_foreach_block(block, impl)
@@ -3341,26 +3349,48 @@ compact_uav_buffers(const struct ctx *c, nir_shader *nir, struct dxbc_nir_uav_sl
                continue;
             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
             unsigned source;
+            bool image = false;
             switch (intr->intrinsic) {
             case nir_intrinsic_store_ssbo: source = 1; break;
             case nir_intrinsic_load_ssbo:
             case nir_intrinsic_ssbo_atomic:
             case nir_intrinsic_ssbo_atomic_swap:
             case nir_intrinsic_get_ssbo_size: source = 0; break;
+            case nir_intrinsic_image_load:
+            case nir_intrinsic_image_sparse_load:
+            case nir_intrinsic_image_store:
+            case nir_intrinsic_image_atomic:
+            case nir_intrinsic_image_atomic_swap:
+            case nir_intrinsic_image_size:
+            case nir_intrinsic_image_levels:
+            case nir_intrinsic_image_samples: source = 0; image = true; break;
             default: continue;
             }
             if (!nir_src_is_const(intr->src[source]))
                return false;
             const unsigned slot = nir_src_as_uint(intr->src[source]);
-            if (slot >= ARRAY_SIZE(remap) || remap[slot] == DXBC_NIR_UAV_UNUSED)
+            const unsigned to = image ? (slot < DXBC_NIR_UAV11_SLOTS ? slots->image[slot] : DXBC_NIR_UAV_UNUSED) :
+                                slot < ARRAY_SIZE(remap) ? remap[slot] : DXBC_NIR_UAV_UNUSED;
+            if (to == DXBC_NIR_UAV_UNUSED)
                return false;
             b.cursor = nir_before_instr(instr);
-            nir_src_rewrite(&intr->src[source], nir_imm_int(&b, remap[slot]));
+            nir_src_rewrite(&intr->src[source], nir_imm_int(&b, (int)to));
          }
       nir_progress(true, impl, nir_metadata_control_flow);
    }
+   /* the image variables (Asahi recounts num_images from them) */
+   BITSET_ZERO(nir->info.images_used);
+   nir_foreach_variable_with_modes(var, nir, nir_var_image) {
+      const unsigned u = var->data.binding;
+      if (u >= DXBC_NIR_UAV11_SLOTS || slots->image[u] == DXBC_NIR_UAV_UNUSED)
+         return false;
+      var->data.binding = slots->image[u];
+      BITSET_SET(nir->info.images_used, slots->image[u]);
+   }
+   nir->info.num_images = (uint8_t)images;
    nir->info.num_ssbos = (uint8_t)next;
    slots->buffers = next;
+   slots->images = images;
    return true;
 }
 
@@ -3475,7 +3505,7 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
     * info.num_images - 1, which nir_shader_gather_info recounts from the
     * image variables; slots without a typed UAV (raw/structured UAVs, gaps)
     * get placeholders so the count spans the highest typed slot */
-   for (unsigned u = 0; u < BITSET_LAST_BIT(nir->info.images_used) && u < c->uav_slots; ++u) {
+   for (unsigned u = 0; !uav64 && u < BITSET_LAST_BIT(nir->info.images_used) && u < c->uav_slots; ++u) {
       if (c->uav[u].image)
          continue;
       nir_variable *gap = nir_variable_create(nir, nir_var_image,

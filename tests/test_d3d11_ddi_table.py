@@ -171,9 +171,11 @@ class D3d11DdiTable(unittest.TestCase):
         fill = MODULE.read_text()
         self.assertIn("#define AGX_D3D11_UAV_SLOTS DXBC_NIR_UAV11_SLOTS", fill)
         apply = function_body(fill, "apply_uavs")
-        for needle in ("images[u] = view->image;", "map ? map->buffer[u]", "map ? map->counter[u]",
-                       "DXBC_NIR_UAV_COUNTER_SLOT + u", "buffers[buffer] = view->buffer;",
-                       "set_shader_images(device->pipe, stage, 0, AGX_D3D11_UAV_SLOTS, 0, images)"):
+        # EXP1887: Asahi binds 32 images (32-bit image_mask); slot u + 32
+        # unbound slot u, so typed views compact into images 0..31 too
+        for needle in ("images[image] = view->image;", "map ? map->image[u]", "map ? map->buffer[u]",
+                       "map ? map->counter[u]", "DXBC_NIR_UAV_COUNTER_SLOT + u", "buffers[buffer] = view->buffer;",
+                       "set_shader_images(device->pipe, stage, 0, DXBC_NIR_UAV11_IMAGES, 0, images)"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, apply)
         self.assertIn("bind_uavs(device, false", function_body(fill, "SetRenderTargets11"))

@@ -37,19 +37,21 @@ struct nir_shader_compiler_options;
 #define DXBC_NIR_UAV_COUNTER_SLOT DXBC_NIR_MAX_UAVS
 
 /* D3D11.1 (feature level 11_1): UAV registers u0..u63
- * (D3D11_1_UAV_SLOT_COUNT). A typed view u# stays image slot #
- * (PIPE_MAX_SHADER_IMAGES 64); buffer views and their counters move to
- * consecutive shader buffers, buffer views in register order first:
- * buffer[u#] and counter[u#] name the slot, DXBC_NIR_UAV_UNUSED where the
- * shader has none. A shader needing more than PIPE_MAX_SHADER_BUFFERS (32)
- * is refused. */
+ * (D3D11_1_UAV_SLOT_COUNT). Typed views move to consecutive images in
+ * register order (image[u#]; Asahi binds 32 images, EXP1887); buffer views
+ * and their counters move to consecutive shader buffers, buffer views in
+ * register order first: buffer[u#] and counter[u#] name the slot,
+ * DXBC_NIR_UAV_UNUSED where the shader has none. A shader needing more than
+ * 32 shader buffers or 32 images is refused. */
 #define DXBC_NIR_UAV11_SLOTS 64
 #define DXBC_NIR_UAV_UNUSED 0xffu
 struct dxbc_nir_uav_slots {
-   uint8_t buffer[DXBC_NIR_UAV11_SLOTS], counter[DXBC_NIR_UAV11_SLOTS];
+   uint8_t buffer[DXBC_NIR_UAV11_SLOTS], counter[DXBC_NIR_UAV11_SLOTS], image[DXBC_NIR_UAV11_SLOTS];
    uint64_t typed;     /* typed views: bit u# */
    uint32_t buffers;   /* shader buffers used */
+   uint32_t images;    /* images used */
 };
+#define DXBC_NIR_UAV11_IMAGES 32u
 
 struct dxbc_nir_error {
    char message[160];
