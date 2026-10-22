@@ -2436,6 +2436,63 @@ dxbc_tir_coverage(nir_builder *b, unsigned samples, nir_def **mask_out, nir_def 
    *centroid_out = nir_bcsel(b, full, nir_imm_vec2(b, 0, 0), dxbc_tir_sample_offset(b, samples, nir_find_lsb(b, mask)));
 }
 
+/* Conservative rasterization (D3D12 Tier 1) of any fragment shader behind
+ * the expansion GS: a pixel runs when the original triangle touches its
+ * square (dxbc_tir_touched: each edge at the outermost corner, bounding
+ * boxes), so the GS's vertex extension at sharp angles adds no pixel;
+ * SV_Coverage is the full single sample. */
+bool
+dxbc_cr_lower_fs(nir_shader *nir)
+{
+   if (nir->info.stage != MESA_SHADER_FRAGMENT)
+      return false;
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_builder bb = nir_builder_at(nir_before_impl(impl));
+   nir_builder *b = &bb;
+   nir_def *edge[DXBC_TIR_EDGE_SLOTS];
+   for (unsigned i = 0; i < DXBC_TIR_EDGE_SLOTS; ++i) {
+      nir_variable *var = nir_variable_create(nir, nir_var_shader_in, glsl_ivec4_type(), "tir_edge");
+      var->data.location = VARYING_SLOT_TEX0 + i;
+      var->data.interpolation = INTERP_MODE_FLAT;
+      edge[i] = nir_load_var(b, var);
+   }
+   nir_def *fc = nir_load_frag_coord(b);
+   const int half = DXBC_TIR_SUBPIXEL / 2;
+   nir_def *cx = nir_iadd_imm(b, nir_imul_imm(b, nir_f2i32(b, nir_ffloor(b, nir_channel(b, fc, 0))), DXBC_TIR_SUBPIXEL), half);
+   nir_def *cy = nir_iadd_imm(b, nir_imul_imm(b, nir_f2i32(b, nir_ffloor(b, nir_channel(b, fc, 1))), DXBC_TIR_SUBPIXEL), half);
+   nir_def *touched = nir_imm_true(b);
+   nir_def *minx = NULL, *maxx = NULL, *miny = NULL, *maxy = NULL;
+   for (unsigned e = 0; e < 3; ++e) {
+      nir_def *x = nir_channel(b, edge[e], 0), *y = nir_channel(b, edge[e], 1);
+      nir_def *a = nir_channel(b, edge[e], 2), *bv = nir_channel(b, edge[e], 3);
+      nir_def *centre = nir_iadd(b, nir_imul(b, nir_i2i64(b, a), nir_i2i64(b, nir_isub(b, cx, x))),
+                                 nir_imul(b, nir_i2i64(b, bv), nir_i2i64(b, nir_isub(b, cy, y))));
+      nir_def *reach = nir_imul_imm(b, nir_i2i64(b, nir_iadd(b, nir_iabs(b, a), nir_iabs(b, bv))), half);
+      touched = nir_iand(b, touched, nir_ige_imm(b, nir_iadd(b, centre, reach), 0));
+      minx = minx ? nir_imin(b, minx, x) : x;
+      maxx = maxx ? nir_imax(b, maxx, x) : x;
+      miny = miny ? nir_imin(b, miny, y) : y;
+      maxy = maxy ? nir_imax(b, maxy, y) : y;
+   }
+   touched = nir_iand(b, touched, nir_iand(b, nir_ilt(b, minx, nir_iadd_imm(b, cx, half)),
+                                               nir_ilt(b, nir_iadd_imm(b, cx, -half), maxx)));
+   touched = nir_iand(b, touched, nir_iand(b, nir_ilt(b, miny, nir_iadd_imm(b, cy, half)),
+                                               nir_ilt(b, nir_iadd_imm(b, cy, -half), maxy)));
+   nir_demote_if(b, nir_inot(b, touched));
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type == nir_instr_type_intrinsic &&
+             nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_sample_mask_in) {
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            b->cursor = nir_before_instr(instr);
+            nir_def_replace(&intr->def, nir_imm_int(b, 1));
+         }
+      }
+   }
+   nir_progress(true, impl, nir_metadata_none);
+   return true;
+}
+
 /* The forced-sample-count variant of any fragment shader still holding its
  * input variables (the DXIL path; dxbc_tir_gs.h): the coverage prologue,
  * SV_Coverage from the forced pattern, centroid and pull-model evaluation on

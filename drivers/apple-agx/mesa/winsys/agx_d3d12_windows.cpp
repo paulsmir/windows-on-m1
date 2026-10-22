@@ -1858,8 +1858,10 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
     memset(bindings, 0, sizeof(*bindings));
     return NULL;
   }
-  /* FL 11_1: the forced-sample-count variant (dxbc_tir_lower_fs) */
-  if (stage == MESA_SHADER_FRAGMENT && tir_samples && !dxbc_tir_lower_fs(nir, tir_samples)) {
+  /* FL 11_1: the forced-sample-count variant (dxbc_tir_lower_fs); 1 is
+   * conservative rasterization (dxbc_cr_lower_fs) */
+  if (stage == MESA_SHADER_FRAGMENT && tir_samples &&
+      !(tir_samples == 1u ? dxbc_cr_lower_fs(nir) : dxbc_tir_lower_fs(nir, tir_samples))) {
     receipt("measure-d3d12-graphics-shader-slots", E_NOTIMPL, static_cast<UINT>(stage), 5u, tir_samples);
     ralloc_free(nir);
     memset(bindings, 0, sizeof(*bindings));
@@ -1961,15 +1963,21 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   /* FL 11_1 forced sample count (D3D11-FL111-TIR.md): a pixel shader
    * variant behind the expansion GS; not yet with a GS, tessellation or
    * stream output (plain 1x rasterization with a receipt) */
-  const bool tir = desc->ForcedSampleCount >= 4u && desc->Ps && !desc->Gs && !desc->Hs && !desc->Ds && !so;
-  if (desc->ForcedSampleCount > 1u && !tir)
+  const bool expandable = desc->Ps && !desc->Gs && !desc->Hs && !desc->Ds && !so;
+  const bool forced = desc->ForcedSampleCount >= 4u && expandable;
+  /* 12_1 conservative rasterization Tier 1: the same GS, a touched-pixel
+   * variant; not together with a forced sample count */
+  const bool conservative = desc->ConservativeRaster && expandable && !forced;
+  const bool tir = forced || conservative;
+  if ((desc->ForcedSampleCount > 1u && !forced) || (desc->ConservativeRaster && !conservative))
     receipt("reject-d3d12-tir", E_NOTIMPL, desc->ForcedSampleCount,
-            (desc->Gs ? 1u : 0u) | (desc->Hs ? 2u : 0u) | (so ? 4u : 0u), 0u);
+            (desc->Gs ? 1u : 0u) | (desc->Hs ? 2u : 0u) | (so ? 4u : 0u) | (desc->ConservativeRaster ? 8u : 0u), 0u);
   struct nir_shader *vs_io = NULL, *fs_io = NULL;
   graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX, &graphics->VsBindings, graphics->VsSrvDimensions,
                                graphics->VsUavDimensions, 0, 0, vs_xfb, 0, tir ? &vs_io : NULL);
   graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT, &graphics->PsBindings, graphics->PsSrvDimensions,
-                                          graphics->PsUavDimensions, 0, 0, NULL, tir ? desc->ForcedSampleCount : 0u,
+                                          graphics->PsUavDimensions, 0, 0, NULL,
+                                          forced ? desc->ForcedSampleCount : conservative ? 1u : 0u,
                                           tir ? &fs_io : NULL) : NULL;
   if (tir) {
     struct dxbc_tir_gs_key key;
@@ -1984,9 +1992,10 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
       state.ir.nir = gs;
       graphics->Gs = pipe->create_gs_state(pipe, &state);
     }
-    graphics->TirSamples = graphics->Gs ? desc->ForcedSampleCount : 0u;
+    graphics->TirSamples = graphics->Gs && forced ? desc->ForcedSampleCount : 0u;
+    graphics->Conservative = graphics->Gs && conservative;
     receipt("measure-d3d12-tir", graphics->Gs ? S_OK : E_NOTIMPL, desc->ForcedSampleCount, graphics->Fs ? 1u : 0u,
-            graphics->Gs ? 1u : 0u);
+            (graphics->Gs ? 1u : 0u) | (conservative ? 2u : 0u));
   }
   if (!tir)
     graphics->Gs = desc->Gs ? create_shader(pipe, desc->Gs, MESA_SHADER_GEOMETRY, &graphics->GsBindings, graphics->GsSrvDimensions,
@@ -2064,7 +2073,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   graphics->SampleMask = desc->SampleMask;
   graphics->Rasterizer = pipe->create_rasterizer_state(pipe, &rast);
   HRESULT hr = graphics->Vs && (graphics->Fs || !desc->Ps) && (graphics->Gs || !desc->Gs) && (graphics->Hs || !desc->Hs) &&
-                       (!tir || graphics->TirSamples) &&
+                       (!tir || graphics->TirSamples || graphics->Conservative) &&
                        (graphics->Ds || !desc->Ds) && !desc->Hs == !desc->Ds && graphics->Blend && graphics->DepthStencil &&
                        graphics->Rasterizer ? S_OK : E_NOTIMPL;
   graphics->NumElements = desc->NumElements;
@@ -2824,7 +2833,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   }
   /* FL 11_1: viewport 0 for the TIR expansion GS (after the GS stage's
    * own constant buffers): viewport = ndc * scale + offset */
-  if (SUCCEEDED(hr) && graphics->TirSamples) {
+  if (SUCCEEDED(hr) && (graphics->TirSamples || graphics->Conservative)) {
     const float vp[4] = {hw, -hh, hw + draw->Viewport[0], hh + draw->Viewport[1]};
     struct pipe_constant_buffer cb = {};
     cb.buffer_size = sizeof(vp);

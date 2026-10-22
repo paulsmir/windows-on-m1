@@ -155,8 +155,11 @@ dxbc_tir_gs(const struct nir_shader_compiler_options *options, const struct dxbc
       edge[e] = nir_vec4(b, ox[e], oy[e], nir_ineg(b, dy), dx);
    }
    edge[3] = nir_vec4(b, bias[0], bias[1], bias[2], nir_imm_int(b, 0));
+   /* unexpanded (w <= 0): edge functions 0 cover every sample, and a
+    * bounding box over the whole plane keeps every pixel conservative */
    nir_def *all = nir_imm_ivec4(b, 0, 0, 0, 0);
-   nir_def *unexpanded[DXBC_TIR_EDGE_SLOTS] = {all, all, all, all};
+   nir_def *unexpanded[DXBC_TIR_EDGE_SLOTS] = {nir_imm_ivec4(b, -(1 << 30), -(1 << 30), 0, 0),
+                                               nir_imm_ivec4(b, 1 << 30, 1 << 30, 0, 0), all, all};
 
    /* expanded oriented vertices: each the intersection of its two edges
     * moved outward by h = (1/2 + margin) (|dx| + |dy|) in edge-function units */

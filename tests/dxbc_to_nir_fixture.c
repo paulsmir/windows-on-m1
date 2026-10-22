@@ -156,7 +156,7 @@ main(int argc, char **argv)
       /* the generic pass (the D3D12 path's DXIL shaders) on a plain shader */
       struct dxbc_nir_uav_slots slots;
       nir = dxbc_translate_tokens_uav64(chunk, &agx_nir_options, 0, 0, &slots, &terr);
-      if (nir && !dxbc_tir_lower_fs(nir, tir_pass)) {
+      if (nir && !(tir_pass == 1 ? dxbc_cr_lower_fs(nir) : dxbc_tir_lower_fs(nir, tir_pass))) {
          printf("TIR_PASS_REFUSED\n");
          return 1;
       }

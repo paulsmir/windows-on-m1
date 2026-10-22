@@ -402,6 +402,21 @@ class DxbcToNir(unittest.TestCase):
         self.assertEqual(len(re.findall(r"tir_edge(?:#\d+)? \(VARYING_SLOT_TEX", out.stdout)), 4)
         self.assertNotRegex(out.stdout, r"decl_var shader_in INTERP_MODE_\w+ centroid")
 
+    def test_conservative_pass_tests_the_touched_square(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 conservative
+        # rasterization Tier 1 runs every pixel the triangle touches and no
+        # pixel further than 1/2 px: the expansion GS overshoots at sharp
+        # angles, so the pixel shader must demote untouched pixels
+        # (dxbc_tir_touched) and see a full single-sample coverage.
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tirpass.dxbc"), "--tir-pass", "1", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout[-3000:] + out.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
+        self.assertNotIn("load_sample_mask_in", out.stdout)
+        self.assertIn("demote_if", out.stdout)
+        self.assertIn("iabs", out.stdout)
+        self.assertEqual(len(re.findall(r"tir_edge(?:#\d+)? \(VARYING_SLOT_TEX", out.stdout)), 4)
+
     def test_tir_expansion_gs_links_the_vertex_shader_to_the_variant(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The expansion GS
         # sits between the application's vertex shader and the pixel shader

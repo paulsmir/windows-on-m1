@@ -99,8 +99,18 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;', caps)
         for claim in ('D3D12DDI_RESOURCE_BINDING_TIER_3', 'D3D12DDI_RESOURCE_HEAP_TIER_2',
                       'Doubles = TRUE', 'ROVs = TRUE', 'D3D12DDI_TILED_RESOURCES_TIER_2',
-                      'D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1'):
+                      'D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_2'):
             self.assertNotIn(claim, caps)
+        # 12_1: ROVs and conservative rasterization Tier 1 only behind their
+        # opt-ins until the hardware probes (C59A, C61A) pass
+        self.assertIn('d.ROVs = RovEnabled();', caps)
+        self.assertEqual(caps.count('D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1'), 1)
+        self.assertIn('d.ConservativeRasterizationTier = ConservativeRasterEnabled() ? D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1',
+                      caps)
+        for name, env in (('RovEnabled', 'APPLE_AGX_D3D12_ROV'), ('ConservativeRasterEnabled', 'APPLE_AGX_D3D12_CR')):
+            body = source[source.index('static BOOL %s() {' % name):]
+            body = body[:body.index('\n}\n')]
+            self.assertIn('GetEnvironmentVariableA("%s", value, sizeof(value)) == 1 && value[0] == \'1\'' % env, body)
         # C53: Tier 1 and the TILED format bit only behind APPLE_AGX_D3D12_TILED=1
         self.assertEqual(caps.count('D3D12DDI_TILED_RESOURCES_TIER_1'), 1)
         self.assertIn('d.TiledResourcesTier = TiledEnabled() ? D3D12DDI_TILED_RESOURCES_TIER_1', caps)

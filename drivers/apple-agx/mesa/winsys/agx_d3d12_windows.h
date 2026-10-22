@@ -351,6 +351,8 @@ typedef struct {
   unsigned SampleCount; /* C32: the PSO's SampleDesc.Count */
   /* FL 11_1: RasterizerState.ForcedSampleCount (TIR, UAV-only rendering) */
   unsigned ForcedSampleCount;
+  /* 12_1: RasterizerState.ConservativeRasterizationMode ON (Tier 1) */
+  int ConservativeRaster;
   unsigned FillMode, CullMode;
   int FrontCounterClockwise, DepthBias, DepthClipEnable;
   float DepthBiasClamp, SlopeScaledDepthBias;
@@ -374,6 +376,9 @@ typedef struct {
   /* FL 11_1: the forced sample count the TIR variant (Gs = the expansion
    * GS, Fs = the coverage variant) implements; 0 without */
   unsigned TirSamples;
+  /* 12_1: conservative rasterization (Gs = the expansion GS, Fs = the
+   * touched-pixel variant) */
+  int Conservative;
   unsigned NumElements;
   struct {
     unsigned Slot, Offset, Register, Divisor, Format; /* pipe format */

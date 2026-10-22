@@ -95,4 +95,30 @@ dxbc_tir_mask(const struct dxbc_tir_edges *e, int32_t px, int32_t py, unsigned s
    return mask;
 }
 
+/* Reference for conservative rasterization (D3D12 Tier 1): whether the
+ * primitive touches pixel (px, py) -- the separating-axis test of the
+ * triangle against the pixel square: every edge function at the square's
+ * outermost corner (centre + half a pixel along each axis) is >= 0, and the
+ * bounding boxes overlap. Exact, inside the Tier 1 1/2-pixel uncertainty. */
+static inline int
+dxbc_tir_touched(const struct dxbc_tir_edges *e, int32_t px, int32_t py)
+{
+   const int32_t cx = px * DXBC_TIR_SUBPIXEL + DXBC_TIR_SUBPIXEL / 2;
+   const int32_t cy = py * DXBC_TIR_SUBPIXEL + DXBC_TIR_SUBPIXEL / 2;
+   int32_t minx = e->x[0], maxx = e->x[0], miny = e->y[0], maxy = e->y[0];
+   for (unsigned i = 0; i < 3; ++i) {
+      const int64_t centre = (int64_t)e->a[i] * (cx - e->x[i]) + (int64_t)e->b[i] * (cy - e->y[i]);
+      const int64_t reach = (int64_t)((e->a[i] < 0 ? -e->a[i] : e->a[i]) + (e->b[i] < 0 ? -e->b[i] : e->b[i])) *
+                            (DXBC_TIR_SUBPIXEL / 2);
+      if (centre + reach < 0)
+         return 0;
+      minx = e->x[i] < minx ? e->x[i] : minx;
+      maxx = e->x[i] > maxx ? e->x[i] : maxx;
+      miny = e->y[i] < miny ? e->y[i] : miny;
+      maxy = e->y[i] > maxy ? e->y[i] : maxy;
+   }
+   return minx < cx + DXBC_TIR_SUBPIXEL / 2 && maxx > cx - DXBC_TIR_SUBPIXEL / 2 &&
+          miny < cy + DXBC_TIR_SUBPIXEL / 2 && maxy > cy - DXBC_TIR_SUBPIXEL / 2;
+}
+
 #endif /* DXBC_TIR_H */

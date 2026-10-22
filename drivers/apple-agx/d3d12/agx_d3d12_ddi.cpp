@@ -130,6 +130,14 @@ template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENT
 /* 12_1 ROVs (D3D12-FL-program.md "ROV path"): DXIL ROV shaders take AGX's
  * pixel interlock; the cap is reported only in a process with
  * APPLE_AGX_D3D12_ROV=1 until a probe shows the ordering on hardware. */
+/* 12_1 conservative rasterization Tier 1 (the TIR expansion GS with a
+ * touched-pixel pixel shader); reported only with APPLE_AGX_D3D12_CR=1
+ * until probe C61A passes on hardware. */
+static BOOL ConservativeRasterEnabled() {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_CR", value, sizeof(value)) == 1 && value[0] == '1';
+}
+
 static BOOL RovEnabled() {
     char value[2] = {};
     return GetEnvironmentVariableA("APPLE_AGX_D3D12_ROV", value, sizeof(value)) == 1 && value[0] == '1';
@@ -390,7 +398,8 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
              * 64 UAVs (counters included) and 2048 samplers per stage through
              * the descriptor heap; 14 CBVs per stage */
             d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;
-            d.ConservativeRasterizationTier = D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED;
+            d.ConservativeRasterizationTier = ConservativeRasterEnabled() ? D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1
+                                                                          : D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED;
             d.TiledResourcesTier = TiledEnabled() ? D3D12DDI_TILED_RESOURCES_TIER_1 /* C53 */
                                                   : D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
             d.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
@@ -4739,6 +4748,7 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
     desc.FillMode = pso->rasterizer.FillMode;
     desc.CullMode = pso->rasterizer.CullMode;
     desc.ForcedSampleCount = pso->rasterizer.ForcedSampleCount; /* FL 11_1: TIR */
+    desc.ConservativeRaster = pso->rasterizer.ConservativeRasterizationMode == D3D12DDI_CONSERVATIVE_RASTERIZATION_MODE_ON;
     desc.FrontCounterClockwise = pso->rasterizer.FrontCounterClockwise;
     desc.DepthBias = pso->rasterizer.DepthBias;
     desc.DepthBiasClamp = pso->rasterizer.DepthBiasClamp;

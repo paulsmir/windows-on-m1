@@ -21,6 +21,7 @@ TEST = r'''
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 static unsigned tri(const int32_t *x, const int32_t *y, int px, int py, unsigned n) {
   struct dxbc_tir_edges e;
   return dxbc_tir_setup(x, y, &e) ? dxbc_tir_mask(&e, px, py, n) : 0u; }
@@ -66,6 +67,41 @@ int main(void) {
   { int32_t x[3] = {0, 256, 512}, y[3] = {0, 256, 512}; assert(tri(x, y, 0, 0, 16) == 0); }
   { int32_t x[3] = {-4096, 8192, -4096}, y[3] = {-4096, -4096, 8192}; assert(tri(x, y, 0, 0, 16) == 0xffff);
     assert(tri(x, y, 0, 0, 8) == 0xff); assert(tri(x, y, 0, 0, 4) == 0xf); }
+  /* conservative rasterization: touched == the square meets the closed
+   * triangle (polygon clip in doubles), and touched >= any 16x coverage */
+  for (int iter = 0; iter < 3000; ++iter) {
+    int32_t x[3], y[3];
+    for (int k = 0; k < 3; ++k) { x[k] = rand() % (24 * 256); y[k] = rand() % (24 * 256); }
+    struct dxbc_tir_edges e;
+    if (!dxbc_tir_setup(x, y, &e)) continue;
+    for (int py = 0; py < 24; ++py)
+      for (int px = 0; px < 24; ++px) {
+        double poly[16][2], next[16][2]; int n = 4, m;
+        double sx0 = px * 256.0, sy0 = py * 256.0;
+        poly[0][0] = sx0; poly[0][1] = sy0; poly[1][0] = sx0 + 256; poly[1][1] = sy0;
+        poly[2][0] = sx0 + 256; poly[2][1] = sy0 + 256; poly[3][0] = sx0; poly[3][1] = sy0 + 256;
+        for (int i = 0; i < 3 && n; ++i) {
+          m = 0;
+          for (int k = 0; k < n; ++k) {
+            const double *pa = poly[k], *pb = poly[(k + 1) % n];
+            double ea = (double)e.a[i] * (pa[0] - e.x[i]) + (double)e.b[i] * (pa[1] - e.y[i]);
+            double eb = (double)e.a[i] * (pb[0] - e.x[i]) + (double)e.b[i] * (pb[1] - e.y[i]);
+            if (ea >= 0) { next[m][0] = pa[0]; next[m][1] = pa[1]; ++m; }
+            if ((ea >= 0) != (eb >= 0)) { double s = ea / (ea - eb);
+              next[m][0] = pa[0] + s * (pb[0] - pa[0]); next[m][1] = pa[1] + s * (pb[1] - pa[1]); ++m; }
+          }
+          n = m; memcpy(poly, next, sizeof(poly));
+        }
+        int meets = n > 0, touched = dxbc_tir_touched(&e, px, py);
+        if (dxbc_tir_mask(&e, px, py, 16) && !touched) { printf("FAIL covered but not touched %d,%d\n", px, py); return 1; }
+        if (meets != touched) {
+          /* the open/closed boundary of a square edge exactly on the triangle is either way */
+          int border = 0;
+          for (int k = 0; k < 3; ++k) border |= x[k] % 256 == 0 || y[k] % 256 == 0;
+          if (!border) { printf("FAIL touched %d meets %d at %d,%d\n", touched, meets, px, py); return 1; }
+        }
+      }
+  }
   puts("tir reference: PASS");
   return 0;
 }

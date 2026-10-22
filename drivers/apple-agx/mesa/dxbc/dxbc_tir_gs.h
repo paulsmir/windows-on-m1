@@ -67,6 +67,11 @@ bool dxbc_tir_lower_fs(struct nir_shader *nir, unsigned samples);
  * the TIR key reads a stage's I/O after the original went to the driver. */
 struct nir_shader *dxbc_tir_clone(const struct nir_shader *nir);
 
+/* The conservative-rasterization (D3D12 Tier 1) variant of a fragment
+ * shader behind the expansion GS: it runs where the original triangle
+ * touches the pixel (dxbc_tir_touched), SV_Coverage the full sample. */
+bool dxbc_cr_lower_fs(struct nir_shader *nir);
+
 /* The expansion GS for a key (NULL without a position). */
 struct nir_shader *dxbc_tir_gs(const struct nir_shader_compiler_options *options,
                                const struct dxbc_tir_gs_key *key);
