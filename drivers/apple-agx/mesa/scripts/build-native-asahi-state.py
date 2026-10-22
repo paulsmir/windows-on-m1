@@ -4413,8 +4413,10 @@ AgxD3d10ResourceWithinRequiredLimits(
 
    switch (resource->ResourceDimension) {
    case D3D10DDIRESOURCE_BUFFER:
+      /* EXP1888G: a buffer's width is bytes, bounded by the resource size;
+       * D3D10_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP (2^27) counts the
+       * elements of a view (GravityMark's 210 MB storage buffer was refused) */
       return resource->MipLevels == 1 && array == 1 && height == 1 && depth == 1 &&
-         width <= (1ULL << D3D10_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP) &&
          width <= (uint64_t)AGX_D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES * 1024u * 1024u;
    case D3D10DDIRESOURCE_TEXTURE1D:
       if (width > AGX_D3D11_REQ_TEXTURE1D_U_DIMENSION || height != 1 || depth != 1 ||

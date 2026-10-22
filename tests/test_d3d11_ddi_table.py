@@ -251,6 +251,8 @@ class D3d11DdiTable(unittest.TestCase):
             limits = function_body(resource, "AgxD3d10ResourceWithinRequiredLimits")
             self.assertNotIn("D3D10_REQ_TEXTURE", limits)
             self.assertNotIn("D3D10_REQ_MIP_LEVELS", limits)
+            # EXP1888G: buffer widths are bytes (resource size), not view elements
+            self.assertNotIn("TEXEL_COUNT", limits)
             for define, value in (("AGX_D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION", "16384u"),
                                   ("AGX_D3D11_REQ_TEXTURECUBE_DIMENSION", "16384u"),
                                   ("AGX_D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION", "2048u"),
