@@ -61,7 +61,7 @@ main(int argc, char **argv)
    struct dxbc_nir_error terr;
    nir_shader *nir;
    bool print = false, print_final = false, d3d12 = false, heap = false, uav64 = false;
-   unsigned tir = 0;
+   unsigned tir = 0, tir_pass = 0;
    const char *tir_gs = NULL;
    for (int a = 2; a < argc; ++a) {
       print |= !strcmp(argv[a], "--print");
@@ -71,6 +71,8 @@ main(int argc, char **argv)
       uav64 |= !strcmp(argv[a], "--d3d11-uav64");
       if (!strcmp(argv[a], "--tir") && a + 1 < argc)
          tir = (unsigned)atoi(argv[a + 1]);
+      if (!strcmp(argv[a], "--tir-pass") && a + 1 < argc)
+         tir_pass = (unsigned)atoi(argv[a + 1]);
       if (!strcmp(argv[a], "--tir-gs") && a + 1 < argc)
          tir_gs = argv[a + 1];
    }
@@ -150,7 +152,15 @@ main(int argc, char **argv)
       ralloc_free(nir);
       return 0;
    }
-   if (tir) {
+   if (tir_pass) {
+      /* the generic pass (the D3D12 path's DXIL shaders) on a plain shader */
+      struct dxbc_nir_uav_slots slots;
+      nir = dxbc_translate_tokens_uav64(chunk, &agx_nir_options, 0, 0, &slots, &terr);
+      if (nir && !dxbc_tir_lower_fs(nir, tir_pass)) {
+         printf("TIR_PASS_REFUSED\n");
+         return 1;
+      }
+   } else if (tir) {
       /* the D3D10/11 UMD's FL 11_1 forced-sample-count pixel shader variant */
       struct dxbc_nir_uav_slots slots;
       nir = dxbc_translate_tokens_tir(chunk, &agx_nir_options, &slots, tir, &terr);

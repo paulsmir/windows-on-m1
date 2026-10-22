@@ -57,6 +57,12 @@ void dxbc_tir_coverage(struct nir_builder *b, unsigned samples, struct nir_def *
  * the count). */
 struct nir_def *dxbc_tir_sample_offset(struct nir_builder *b, unsigned samples, struct nir_def *index);
 
+/* The forced-sample-count variant of a fragment shader that still holds its
+ * input variables (the DXIL path): the coverage prologue, SV_Coverage
+ * (load_sample_mask_in), centroid inputs and interp_deref_at_sample/centroid
+ * on the forced pattern. false for another stage or count. */
+bool dxbc_tir_lower_fs(struct nir_shader *nir, unsigned samples);
+
 /* The expansion GS for a key (NULL without a position). */
 struct nir_shader *dxbc_tir_gs(const struct nir_shader_compiler_options *options,
                                const struct dxbc_tir_gs_key *key);

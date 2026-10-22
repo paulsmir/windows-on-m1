@@ -386,6 +386,22 @@ class DxbcToNir(unittest.TestCase):
         plain = self.run_fixture("ps50tir")
         self.assertTrue(plain.stdout.startswith("REFUSED "), plain.stdout)
 
+    def test_generic_tir_pass_matches_the_translator_variant(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The D3D12 path's
+        # pixel shaders (DXIL) get the forced-sample-count variant from
+        # dxbc_tir_lower_fs instead of the translator: SV_Coverage, centroid
+        # inputs and EvaluateAttributeAtSample must leave the hardware sample
+        # mask, centroid and sample interpolation (AGX rasterizes 1x there).
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tirpass.dxbc"), "--tir-pass", "16", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout[-3000:] + out.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
+        for gone in ("load_sample_mask_in", "interp_deref_at_sample", "interp_deref_at_centroid"):
+            self.assertNotIn(gone, out.stdout)
+        self.assertIn("interp_deref_at_offset", out.stdout)
+        self.assertEqual(len(re.findall(r"tir_edge(?:#\d+)? \(VARYING_SLOT_TEX", out.stdout)), 4)
+        self.assertNotRegex(out.stdout, r"decl_var shader_in INTERP_MODE_\w+ centroid")
+
     def test_tir_expansion_gs_links_the_vertex_shader_to_the_variant(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The expansion GS
         # sits between the application's vertex shader and the pixel shader

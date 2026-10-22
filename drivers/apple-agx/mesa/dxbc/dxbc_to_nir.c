@@ -2436,6 +2436,60 @@ dxbc_tir_coverage(nir_builder *b, unsigned samples, nir_def **mask_out, nir_def 
    *centroid_out = nir_bcsel(b, full, nir_imm_vec2(b, 0, 0), dxbc_tir_sample_offset(b, samples, nir_find_lsb(b, mask)));
 }
 
+/* The forced-sample-count variant of any fragment shader still holding its
+ * input variables (the DXIL path; dxbc_tir_gs.h): the coverage prologue,
+ * SV_Coverage from the forced pattern, centroid and pull-model evaluation on
+ * that pattern. */
+bool
+dxbc_tir_lower_fs(nir_shader *nir, unsigned samples)
+{
+   if (nir->info.stage != MESA_SHADER_FRAGMENT || !dxbc_tir_pattern(samples))
+      return false;
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_builder b = nir_builder_at(nir_before_impl(impl));
+   nir_def *mask, *centroid;
+   dxbc_tir_coverage(&b, samples, &mask, &centroid);
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         nir_def *value = NULL;
+         b.cursor = nir_before_instr(instr);
+         switch (intr->intrinsic) {
+         case nir_intrinsic_load_sample_mask_in:
+            value = mask;
+            break;
+         case nir_intrinsic_interp_deref_at_sample:
+            value = nir_interp_deref_at_offset(&b, intr->def.num_components, intr->def.bit_size,
+                                               intr->src[0].ssa,
+                                               dxbc_tir_sample_offset(&b, samples, intr->src[1].ssa));
+            break;
+         case nir_intrinsic_interp_deref_at_centroid:
+            value = nir_interp_deref_at_offset(&b, intr->def.num_components, intr->def.bit_size,
+                                               intr->src[0].ssa, centroid);
+            break;
+         case nir_intrinsic_load_deref: {
+            nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+            nir_variable *var = nir_deref_instr_get_variable(deref);
+            if (!var || var->data.mode != nir_var_shader_in || !var->data.centroid)
+               continue;
+            value = nir_interp_deref_at_offset(&b, intr->def.num_components, intr->def.bit_size,
+                                               &deref->def, centroid);
+            break;
+         }
+         default:
+            continue;
+         }
+         nir_def_replace(&intr->def, value);
+      }
+   }
+   nir_foreach_variable_with_modes(var, nir, nir_var_shader_in)
+      var->data.centroid = false;
+   nir_progress(true, impl, nir_metadata_none);
+   return true;
+}
+
 /* FL 11_1: sample 'index' of the forced pattern */
 static nir_def *
 tir_sample_offset(struct ctx *c, nir_def *index)
