@@ -6458,8 +6458,33 @@ static int teardown(IDXGIAdapter1 *adapter, const char *mode) {
     return 7;
 }
 
+/* EXP1858: an access violation inside D3D12Core.dll (x64 C38A under R1)
+ * killed the process without a dump; with AGX_PROBE_CRASH_DUMP set an
+ * unhandled exception writes a minidump there (dbghelp loaded on demand). */
+typedef BOOL (WINAPI *MiniDumpWriteDumpFn)(HANDLE, DWORD, HANDLE, int, void *, void *, void *);
+static LONG WINAPI crash_dump(EXCEPTION_POINTERS *ep) {
+    char path[MAX_PATH];
+    struct { DWORD thread; EXCEPTION_POINTERS *pointers; BOOL client; } info = {GetCurrentThreadId(), ep, FALSE};
+    const DWORD n = GetEnvironmentVariableA("AGX_PROBE_CRASH_DUMP", path, sizeof(path));
+    HMODULE dbghelp = n && n < sizeof(path) ? LoadLibraryA("dbghelp.dll") : NULL;
+    MiniDumpWriteDumpFn write = dbghelp ? (MiniDumpWriteDumpFn)(void *)GetProcAddress(dbghelp, "MiniDumpWriteDump") : NULL;
+    printf("PROBE_CRASH 0x%08lx at %p\n", (unsigned long)ep->ExceptionRecord->ExceptionCode,
+           ep->ExceptionRecord->ExceptionAddress);
+    if (write) {
+        HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (f != INVALID_HANDLE_VALUE) {
+            /* MiniDumpWithDataSegs | WithIndirectlyReferencedMemory | WithThreadInfo */
+            const BOOL ok = write(GetCurrentProcess(), GetCurrentProcessId(), f, 0x1 | 0x40 | 0x1000, &info, NULL, NULL);
+            CloseHandle(f);
+            printf("PROBE_CRASH_DUMP %s %d\n", path, ok);
+        }
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
+    SetUnhandledExceptionFilter(crash_dump);
     IDXGIFactory1 *factory = NULL;
     IDXGIAdapter1 *adapter = NULL;
     ID3D12Device *device = NULL;
