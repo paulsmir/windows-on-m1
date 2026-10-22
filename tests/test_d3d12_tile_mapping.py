@@ -6,7 +6,10 @@ walks resource regions and tile ranges together with several defaults
 region/range boundary maps a resource tile to the wrong heap tile: silent
 corruption of a reserved buffer. The cases are the four examples of
 ID3D12CommandQueue::UpdateTileMappings (Microsoft Learn) laid out along X,
-plus the malformed requests that must map nothing.
+plus the malformed requests that must map nothing. C53 T2D: texture tile
+order (per slice: standard mips row by row, then the shared packed tiles),
+boxes as rows inside one standard mip, and the reverse lookup the bind uses
+-- an off-by-one there binds the wrong 16 KiB pages of a reserved texture.
 """
 from pathlib import Path
 import os
@@ -63,6 +66,55 @@ int main(void) {
   AGX_TILE_REGION tall = {6, 1, 3, 2, 1};
   n = 0; assert(!AgxTileMappingWalk(40, 1, &at1, &tall, 1, &null_flag, NULL, NULL, 0, emit, 0) && n == 0);
   n = 0; assert(!AgxTileMappingWalk(40, 1, &at1, &six, 1, NULL, NULL, NULL, 0, emit, 0) && n == 0); /* heap run, no heap */
+  /* C53 T2D: a 512x512 32 bpp Texture2D array of 2 slices, 5 mips: standard
+   * tiles 4x4, 2x2, 1x1, then mips 3-4 packed into 1 tile per slice */
+  AGX_TILE_GEOMETRY tex = {5, 2, 3, 1, {4, 2, 1}, {4, 2, 1}};
+  unsigned long long ix = 0;
+  assert(AgxTileSliceTiles(&tex) == 22 && AgxTileResourceTiles(&tex) == 44);
+  AGX_TILE_COORD c0 = {1, 2, 0, 0}, c1 = {1, 1, 0, 1}, cp3 = {0, 0, 0, 3}, cp4 = {0, 0, 0, 4};
+  AGX_TILE_COORD s1 = {0, 0, 0, 5}, s1p = {0, 0, 0, 9};
+  assert(AgxTileIndex(&tex, &c0, &ix) && ix == 9);
+  assert(AgxTileIndex(&tex, &c1, &ix) && ix == 19);
+  /* every packed mip of a slice names the same tiles */
+  assert(AgxTileIndex(&tex, &cp3, &ix) && ix == 21 && AgxTileIndex(&tex, &cp4, &ix) && ix == 21);
+  assert(AgxTileIndex(&tex, &s1, &ix) && ix == 22 && AgxTileIndex(&tex, &s1p, &ix) && ix == 43);
+  AGX_TILE_COORD bad[4] = {{4, 0, 0, 0}, {1, 0, 0, 3}, {0, 0, 0, 10}, {0, 0, 1, 0}};
+  for (unsigned i = 0; i < 4; ++i) assert(!AgxTileIndex(&tex, &bad[i], &ix));
+  unsigned sl, mp, tx, ty; int pk;
+  assert(AgxTileLocate(&tex, 9, &sl, &mp, &tx, &ty, &pk) && sl == 0 && mp == 0 && tx == 1 && ty == 2 && !pk);
+  assert(AgxTileLocate(&tex, 19, &sl, &mp, &tx, &ty, &pk) && mp == 1 && tx == 1 && ty == 1 && !pk);
+  assert(AgxTileLocate(&tex, 21, &sl, &mp, &tx, &ty, &pk) && sl == 0 && pk && tx == 0);
+  assert(AgxTileLocate(&tex, 43, &sl, &mp, &tx, &ty, &pk) && sl == 1 && pk);
+  assert(!AgxTileLocate(&tex, 44, &sl, &mp, &tx, &ty, &pk));
+  /* a 2x2 box at (1,1) of mip 0: one run per row, heap tiles in box order */
+  AGX_TILE_COORD b11 = {1, 1, 0, 0}; AGX_TILE_REGION box22 = {4, 1, 2, 2, 1}; unsigned zero = 0;
+  n = 0; assert(AgxTileMappingWalkGeometry(&tex, 1, &b11, &box22, 1, NULL, &zero, NULL, 8, emit, 0));
+  assert(n == 2 && run_is(0, 5, 2, 0, 0) && run_is(1, 9, 2, 0, 2));
+  /* a range ending inside a row splits the run there */
+  AGX_TILE_COORD b00 = {0, 0, 0, 0}; AGX_TILE_REGION box32 = {6, 1, 3, 2, 1};
+  unsigned two_starts[2] = {0, 6}, two_counts[2] = {2, 4};
+  n = 0; assert(AgxTileMappingWalkGeometry(&tex, 1, &b00, &box32, 2, NULL, two_starts, two_counts, 16, emit, 0));
+  assert(n == 3 && run_is(0, 0, 2, 0, 0) && run_is(1, 2, 1, 0, 6) && run_is(2, 4, 3, 0, 7));
+  /* without a box, NumTiles tiles in resource order, across mips */
+  AGX_TILE_COORD c33 = {3, 3, 0, 0}; AGX_TILE_REGION three_tiles = {3, 0, 0, 0, 0};
+  n = 0; assert(AgxTileMappingWalkGeometry(&tex, 1, &c33, &three_tiles, 1, &null_flag, NULL, NULL, 0, emit, 0));
+  assert(n == 1 && run_is(0, 15, 3, AGX_TILE_RANGE_NULL, 0));
+  /* the packed tile of slice 1 */
+  AGX_TILE_REGION one = {1, 0, 0, 0, 0}; unsigned heap7 = 7;
+  n = 0; assert(AgxTileMappingWalkGeometry(&tex, 1, &s1p, &one, 1, NULL, &heap7, NULL, 8, emit, 0));
+  assert(n == 1 && run_is(0, 43, 1, 0, 7));
+  /* malformed boxes: on a packed mip, deeper than 1, outside the mip, a
+   * NumTiles that is not Width x Height; an inconsistent geometry */
+  AGX_TILE_REGION boxp = {1, 1, 1, 1, 1}, deep = {2, 1, 1, 1, 2}, wide = {4, 1, 4, 1, 1}, odd = {3, 1, 2, 2, 1};
+  n = 0; assert(!AgxTileMappingWalkGeometry(&tex, 1, &cp3, &boxp, 1, &null_flag, NULL, NULL, 0, emit, 0) && !n);
+  assert(!AgxTileMappingWalkGeometry(&tex, 1, &b00, &deep, 1, &null_flag, NULL, NULL, 0, emit, 0) && !n);
+  assert(!AgxTileMappingWalkGeometry(&tex, 1, &b11, &wide, 1, &null_flag, NULL, NULL, 0, emit, 0) && !n);
+  assert(!AgxTileMappingWalkGeometry(&tex, 1, &b00, &odd, 1, &null_flag, NULL, NULL, 0, emit, 0) && !n);
+  AGX_TILE_REGION past = {2, 0, 0, 0, 0};
+  assert(!AgxTileMappingWalkGeometry(&tex, 1, &s1p, &past, 1, &null_flag, NULL, NULL, 0, emit, 0) && !n);
+  AGX_TILE_GEOMETRY broken = {5, 1, 3, 0, {4, 2, 1}, {4, 2, 1}};
+  assert(!AgxTileResourceTiles(&broken) &&
+         !AgxTileMappingWalkGeometry(&broken, 1, NULL, NULL, 1, &null_flag, NULL, NULL, 0, emit, 0));
   puts("tile mapping walk: PASS");
   return 0;
 }
