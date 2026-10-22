@@ -125,3 +125,50 @@ Sources: Mesa Asahi (`gallium/drivers/asahi`, `asahi/vulkan` Honeykrisp).
   `agx_wddm2_ddi.cpp`.
 - How much of Honeykrisp's sparse image layout maps onto the WDDM GPUVA tile
   callbacks without UAT changes in the KMD.
+
+## RESOLVED 2026-10-22: the levels GravityMark requests
+
+Source: static disassembly of GravityMark 1.89 `bin/Tellusim_arm64.dll`
+(guest `C:\Program Files\GravityMark\bin`, llvm-objdump; no execution).
+- D3D12: both calls to `D3D12CreateDevice` (0x180ee863c, 0x180eec2d4) pass
+  `mov w1, #0xc100`, that is `D3D_FEATURE_LEVEL_12_1`. A failure logs
+  "D3D12::getAdapter(): can't create %u adapter", the message of EXP1881G.
+  `ID3D12Device6` is also required, which the runtime provides.
+- D3D11: `D3D11CreateDevice` (0x180f2b760) receives a one-element level array
+  {0xb100}, that is `D3D_FEATURE_LEVEL_11_1` only.
+
+12_1 is 12_0 plus rasterizer-ordered views and conservative rasterization
+Tier 1. The AGX facts for those two (sources: Asahi compiler, Honeykrisp):
+- **ROV.** `agx_compile.c` lowers `nir_intrinsic_begin_invocation_interlock`
+  to `wait_pix 0xC`. This is the hardware pixel ordering that blending
+  already uses. ROV loads and stores become an interlocked critical section;
+  no hardware gap.
+- **Conservative rasterization.** No AGX hardware support (Honeykrisp
+  `extendedDynamicState3ConservativeRasterizationMode = false`, no
+  `VK_EXT_conservative_rasterization`). The emulation is shared with step 2
+  (ForcedSampleCount/TIR):
+  - Expand each triangle in clip space. Each new vertex is an affine
+    combination of the original three, applied to position and to every
+    varying, so the perspective-correct attribute planes are unchanged.
+  - Rasterize the expanded triangle at 1x.
+  - In the pixel shader, evaluate the original edge functions, passed as
+    flat data, at the D3D standard sample positions. This gives exact 8x/16x
+    coverage, `SV_Coverage`, `SV_InnerCoverage` and the discard.
+- The D3D standard 16x positions are 1/16-pixel units in [-8, 7]. These are
+  the units of Honeykrisp's `sampleLocationSubPixelBits = 4` and range
+  [0, 0.9375]: the same grid.
+
+Order (shortest route to a GravityMark run first):
+1. **D3D11 FL 11_1** (GravityMark D3D11), in the D3D10/11 UMD:
+   - logic ops (`reject-wddm2-logicop`), same mapping as C57;
+   - 64 UAV slots and UAVs at every stage: today 8 (`DXBC_NIR_MAX_UAVS`,
+     `AGX_D3D11_UAV_SLOTS`). Raw views as shader buffers plus counters
+     exceed `PIPE_MAX_SHADER_BUFFERS` 32, so 64 slots need raw UAVs as
+     R32 buffer images (`PIPE_MAX_SHADER_IMAGES` 64) or the C47 heap path;
+   - ForcedSampleCount up to 16 and TIR (`reject-wddm2-rasterizer`), with
+     the coverage emulation above;
+   - then the caps: `3DPIPELINELEVEL_11_1` and
+     `D3D11_OPTIONS.OutputMergerLogicOp`.
+2. **D3D12 12_0**: C53 tiled resources Tier 1, then Tier 2.
+3. **D3D12 12_1**: ROV through interlock, then conservative rasterization
+   Tier 1 with the shared emulation.
