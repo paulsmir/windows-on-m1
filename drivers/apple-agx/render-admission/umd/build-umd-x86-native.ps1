@@ -82,7 +82,9 @@ $libs = @('src\gallium\auxiliary\libgallium.a', 'src\compiler\nir\libnir.a', 'sr
 if ($dxil) { $libs += @($result.libraries | ForEach-Object { $_.path } | Where-Object { $_ -match 'c4[49]-dxspv-' }) } # c49: the patched dxil-spirv (EXP1858)
 'DXIL ' + $dxil + ' libraries ' + $libs.Count
 $dll = Join-Path $Out 'AppleAgxRenderAdmissionUmd32.dll'
-$link = @('/nologo', '/DLL', '/machine:x86', '/DEBUG', "/PDB:$Out\AppleAgxRenderAdmissionUmd32.pdb",
+# /OPT:REF as the ARM64 native-frontend link (OptimizeReferences): /DEBUG alone keeps
+# unreferenced dxbc-spirv code whose frames (30748 B) fail STACK_FRAMES (EXP1875 attempt 3)
+$link = @('/nologo', '/DLL', '/machine:x86', '/DEBUG', '/OPT:REF', "/PDB:$Out\AppleAgxRenderAdmissionUmd32.pdb",
   "/DEF:$agx\render-admission\umd\AppleAgxRenderAdmissionUmd.def", "/IMPLIB:$Out\AppleAgxRenderAdmissionUmd32.lib",
   "/OUT:$dll", $res) + $objects + @((Join-Path $Closure 'native_runtime.lib')) + $libs +
   @('ws2_32.lib', 'synchronization.lib', 'kernel32.lib', 'user32.lib', 'gdi32.lib', 'advapi32.lib',
