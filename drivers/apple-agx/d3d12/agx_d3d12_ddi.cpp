@@ -127,6 +127,14 @@ template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENT
  * interface, the runtime converting DXBC to DXIL), R1 build 2 with SM 6.0
  * and wave operations is the default; APPLE_AGX_D3D12_SM6=0 keeps a process
  * at the 0003 interface and SM 5.1. */
+/* 12_1 ROVs (D3D12-FL-program.md "ROV path"): DXIL ROV shaders take AGX's
+ * pixel interlock; the cap is reported only in a process with
+ * APPLE_AGX_D3D12_ROV=1 until a probe shows the ordering on hardware. */
+static BOOL RovEnabled() {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_ROV", value, sizeof(value)) == 1 && value[0] == '1';
+}
+
 static bool ShaderModel6Enabled() {
     static const bool enabled = [] {
         char value[2] = {};
@@ -456,7 +464,7 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         hr = Answer<D3D12DDI_SHADER_CAPS_0003>(arg, [](auto &d) {
             d.MinPrecision = D3D12DDI_SHADER_MIN_PRECISION_NONE;
             d.Doubles = FALSE; d.ShaderSpecifiedStencilRef = FALSE;
-            d.TypedUAVLoadAdditionalFormats = kTypedUavLoads; d.ROVs = FALSE;
+            d.TypedUAVLoadAdditionalFormats = kTypedUavLoads; d.ROVs = RovEnabled();
         });
         break;
     case D3D12DDICAPS_TYPE_ARCHITECTURE_INFO:
