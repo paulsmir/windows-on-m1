@@ -384,7 +384,7 @@ static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage
 #ifdef APPLE_AGX_D3D12_DXIL
   if (tokens && tokens[1] >= 6 && tokens[1] < 0x4000000u &&
       agx_dxil_is_program(tokens, static_cast<size_t>(tokens[1]) * 4u)) {
-    struct agx_dxil_nir_result dxil;
+    struct agx_dxil_nir_result dxil = {};
     const enum agx_dxil_nir_status status =
         xfb || passthrough_registers ? AGX_DXIL_NIR_UNSUPPORTED
         : agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, owner_binding_limits, options, &dxil);
