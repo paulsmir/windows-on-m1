@@ -152,6 +152,16 @@ static void owner_batch_refusal(unsigned kind, unsigned site, unsigned detail0, 
   AdmissionUmdDiagnostic("reject-batch", E_FAIL, values, 4u);
 }
 static void owner_backend_fail(unsigned site) { owner_batch_refusal(4u, site, 0u, 0u); }
+/* EXP1875: a D3D9On12 batch reported faulted without a submission and
+ * nothing named the Asahi site that marked the context (kind << 16 | line). */
+extern "C" void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context, unsigned flags, unsigned draws);
+static void owner_first_fault(unsigned site, uintptr_t context, unsigned flags, unsigned draws) {
+  static volatile LONG records;
+  const LONG count = InterlockedIncrement(&records);
+  if (count > 64) return;
+  const UINT values[] = {site, flags, draws, static_cast<UINT>(context), static_cast<UINT>(count)};
+  AdmissionUmdDiagnostic("measure-d3d12-first-fault", E_FAIL, values, 5u);
+}
 
 static HRESULT destroy_kernel_context(AGX_D3D12_OWNER *owner) {
   if (!owner->KernelContext) return S_OK;
@@ -260,6 +270,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     if (!owner->Context) hr = E_OUTOFMEMORY;
     AgxWin32BatchRefusalHook = owner_batch_refusal;
     AgxWin32BackendFailHook = owner_backend_fail;
+    AgxWin32FirstFaultHook = owner_first_fault;
   }
   receipt("measure-d3d12-owner", hr, owner->KernelContext != NULL ? 1u : 0u, owner->Screen != NULL ? 1u : 0u,
           owner->Context != NULL ? 1u : 0u);
