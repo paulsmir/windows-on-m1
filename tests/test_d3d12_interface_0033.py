@@ -81,7 +81,7 @@ class D3d12Interface0033(unittest.TestCase):
     def test_new_interfaces_only_in_the_opt_in_profile(self):
         versions = self.source[self.source.index('static HRESULT APIENTRY GetVersions('):]
         versions = versions[:versions.index('\n}\n')]
-        self.assertIn('InterfaceOptIn() == D3D12DDI_SUPPORTED_0071   ? 6u', versions)
+        self.assertIn(': InterfaceOptIn() == D3D12DDI_SUPPORTED_0071 ? 6u', versions)
         self.assertIn('if (offered == 6u) versions[n++] = D3D12DDI_SUPPORTED_0071;', versions)
         self.assertIn('if (offered >= 5u) versions[n++] = D3D12DDI_SUPPORTED_0042;', versions)
         self.assertIn('if (offered >= 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;', versions)
@@ -115,6 +115,14 @@ class D3d12Interface0033(unittest.TestCase):
             self.assertIn('NegotiatedR2()', body, case)
         self.assertIn('static bool NegotiatedR2() { return adapter_object.negotiated >= D3D12DDI_SUPPORTED_0021; }',
                       self.source)
+
+    def test_untabled_r2_interface_fails_closed(self):
+        # the scan profile may negotiate any WDK build; only interfaces with
+        # tables here may fill one (a CORE_0012 fill of a larger table would
+        # hand the runtime wrongly typed entries)
+        fill = self.source[self.source.index('static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type'):]
+        self.assertIn('const bool tabled = !NegotiatedR2() || Negotiated0033() || Negotiated0042() || Negotiated0071();', fill)
+        self.assertIn('switch (tabled ? type : static_cast<D3D12DDI_TABLE_TYPE>(~0u)) {', fill)
 
     def test_tables_follow_the_negotiated_interface(self):
         # CORE_0012 and CORE_0033 have one size: the table is chosen by the

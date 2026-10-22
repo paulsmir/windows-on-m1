@@ -74,7 +74,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('if (ShaderModel6Enabled() &&', models)
         versions = source[source.index('static HRESULT APIENTRY GetVersions('):]
         versions = versions[:versions.index('\n}\n')]
-        self.assertIn('const UINT offered = InterfaceOptIn() == D3D12DDI_SUPPORTED_0071   ? 6u', versions)
+        self.assertIn(': InterfaceOptIn() == D3D12DDI_SUPPORTED_0071 ? 6u', versions)
         self.assertIn('versions[n++] = D3D12DDI_SUPPORTED_0012;', versions)
         # C48: the wave caps (0012) only in the same SM6 processes
         shader = caps[caps.index('case D3D12DDICAPS_TYPE_SHADER:'):]

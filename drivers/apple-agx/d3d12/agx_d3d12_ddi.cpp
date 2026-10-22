@@ -129,12 +129,29 @@ static bool ShaderModel6Enabled() {
  * _0042, R4 build 2; SM 6.3-6.5 are _0054/_0062/_0071 (R7 build 1).
  * APPLE_AGX_D3D12_DDI=0033, 0042 or 0071 offers that interface to an SM6
  * process until hardware validates its tables. */
+/* EXP1869: offered {0071, 0042, ...} the runtime negotiated 0042.
+ * APPLE_AGX_D3D12_DDI=scan offers every WDK build from 0099 down to 0043
+ * so d3d12-device-size names the highest one the runtime accepts; a
+ * negotiated interface without tables here fails closed (FillDDITable). */
+static constexpr UINT64 kInterfaceScan = ~0ULL;
+static const UINT64 kScanVersions[] = {
+    D3D12DDI_SUPPORTED_0099, D3D12DDI_SUPPORTED_0098, D3D12DDI_SUPPORTED_0097, D3D12DDI_SUPPORTED_0096,
+    D3D12DDI_SUPPORTED_0095, D3D12DDI_SUPPORTED_0094, D3D12DDI_SUPPORTED_0093, D3D12DDI_SUPPORTED_0092,
+    D3D12DDI_SUPPORTED_0091, D3D12DDI_SUPPORTED_0090, D3D12DDI_SUPPORTED_0089, D3D12DDI_SUPPORTED_0088,
+    D3D12DDI_SUPPORTED_0086, D3D12DDI_SUPPORTED_0084, D3D12DDI_SUPPORTED_0083, D3D12DDI_SUPPORTED_0082,
+    D3D12DDI_SUPPORTED_0081, D3D12DDI_SUPPORTED_0080, D3D12DDI_SUPPORTED_0076, D3D12DDI_SUPPORTED_0075,
+    D3D12DDI_SUPPORTED_0074, D3D12DDI_SUPPORTED_0073, D3D12DDI_SUPPORTED_0072, D3D12DDI_SUPPORTED_0071,
+    D3D12DDI_SUPPORTED_0070, D3D12DDI_SUPPORTED_0065, D3D12DDI_SUPPORTED_0064, D3D12DDI_SUPPORTED_0063,
+    D3D12DDI_SUPPORTED_0062, D3D12DDI_SUPPORTED_0061, D3D12DDI_SUPPORTED_0060, D3D12DDI_SUPPORTED_0054,
+    D3D12DDI_SUPPORTED_0053, D3D12DDI_SUPPORTED_0052, D3D12DDI_SUPPORTED_0051, D3D12DDI_SUPPORTED_0050,
+    D3D12DDI_SUPPORTED_0043};
 static UINT64 InterfaceOptIn() {
     static const UINT64 offered = [] {
         char value[5] = {};
         if (!ShaderModel6Enabled() || GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) != 4)
             return UINT64{0};
-        return !memcmp(value, "0071", 4)   ? D3D12DDI_SUPPORTED_0071
+        return !memcmp(value, "scan", 4)   ? kInterfaceScan
+               : !memcmp(value, "0071", 4) ? D3D12DDI_SUPPORTED_0071
                : !memcmp(value, "0042", 4) ? D3D12DDI_SUPPORTED_0042
                : !memcmp(value, "0033", 4) ? D3D12DDI_SUPPORTED_0033
                                            : UINT64{0};
@@ -148,7 +165,9 @@ static bool NegotiatedR2() { return adapter_object.negotiated >= D3D12DDI_SUPPOR
 /* C48: R1 build 2 (0012) adds the wave caps (D3D12DDI_SHADER_CAPS_0012) and
  * one device entry, pfnGetDebugAllocationInfo; SM6 processes negotiate it. */
 static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *versions) {
-    const UINT offered = InterfaceOptIn() == D3D12DDI_SUPPORTED_0071   ? 6u
+    const UINT scanned = InterfaceOptIn() == kInterfaceScan ? static_cast<UINT>(ARRAYSIZE(kScanVersions)) : 0u;
+    const UINT offered = scanned                                       ? scanned + 5u
+                         : InterfaceOptIn() == D3D12DDI_SUPPORTED_0071 ? 6u
                          : InterfaceOptIn() == D3D12DDI_SUPPORTED_0042 ? 5u
                          : InterfaceOptIn() == D3D12DDI_SUPPORTED_0033 ? 4u
                          : ShaderModel6Enabled()                       ? 3u
@@ -159,6 +178,7 @@ static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *ve
     if (!versions) { *count = offered; return S_OK; }
     if (*count < offered) { *count = offered; return E_INVALIDARG; }
     UINT n = 0;
+    for (UINT i = 0; i < scanned; ++i) versions[n++] = kScanVersions[i];
     if (offered == 6u) versions[n++] = D3D12DDI_SUPPORTED_0071;
     if (offered >= 5u) versions[n++] = D3D12DDI_SUPPORTED_0042;
     if (offered >= 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;
@@ -6886,10 +6906,11 @@ template<class T> static HRESULT FillTable(void *table, SIZE_T size, void (*fill
 static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type, void *table,
                                      SIZE_T size, UINT table_num, D3D12DDI_HRTTABLE rt_table) {
     HRESULT hr = E_NOTIMPL;
+    const bool tabled = !NegotiatedR2() || Negotiated0033() || Negotiated0042() || Negotiated0071();
     /* C4a/0003: a command list names the first successful runtime list table.
      * table_num is an instance index, not a DDI version; R1's second table
      * instance needs a separate selection/lifetime contract before admission. */
-    switch (type) {
+    switch (tabled ? type : static_cast<D3D12DDI_TABLE_TYPE>(~0u)) {
     case D3D12DDI_TABLE_TYPE_DEVICE_CORE:
         /* C44: the runtime sizes the table of the interface it negotiated
          * (GetVersions): R1 (0011) takes CORE_0010, 0012 CORE_0012; C50:
