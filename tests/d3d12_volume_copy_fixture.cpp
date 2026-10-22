@@ -14,6 +14,9 @@ struct AGX_D3D12_BUFFER {void *Resource;unsigned long long GpuVa,Bytes;};
 struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingCopies;};
 struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}}; /* the owner lock (EXP1824) is not a fixture boundary */
 /* ACTUAL_COPY_RECORD */
+/* C53 T2D: no reserved textures here (their staging path: the HW2 self-test) */
+static bool reserved_texture(pipe_resource *) { return false; }
+static HRESULT copy_reserved_texture(AGX_D3D12_OWNER *, const AGX_D3D12_TEXTURE_COPY *) { return E_INVALIDARG; }
 static unsigned char volume[2][2048],buffer_bytes[8192];
 static pipe_transfer tex_transfer,buf_transfer;
 static unsigned maps=0;

@@ -1509,6 +1509,13 @@ extern "C" HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *owner, const 
 
 /* Maps the texture box and the buffer range; the maps synchronise with work
  * already recorded on the context, so the copy keeps replay order. */
+static bool reserved_texture(struct pipe_resource *texture) {
+  AGX_D3D12_RESERVED_TILING tiling = {};
+  return texture->target != PIPE_BUFFER &&
+         AgxWin32AsahiReservedTextureTiling(texture, &tiling.StandardMips, tiling.TilesX, tiling.TilesY,
+                                            &tiling.PackedTiles);
+}
+
 /* C53 T2D: a reserved texture has no CPU mapping. Its region goes through a
  * committed texture of the region's size: GPU copy out, CPU copy, or CPU
  * copy, GPU copy in; each submitted and waited for before the staging
@@ -1569,13 +1576,7 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
     return E_INVALIDARG;
   struct pipe_context *pipe = owner->Context;
   struct pipe_resource *texture = static_cast<struct pipe_resource *>(copy->Texture->Resource);
-  {
-    AGX_D3D12_RESERVED_TILING tiling = {};
-    if (texture->target != PIPE_BUFFER &&
-        AgxWin32AsahiReservedTextureTiling(texture, &tiling.StandardMips, tiling.TilesX, tiling.TilesY,
-                                           &tiling.PackedTiles))
-      return copy_reserved_texture(owner, copy);
-  }
+  if (reserved_texture(texture)) return copy_reserved_texture(owner, copy);
   struct pipe_resource *buffer = static_cast<struct pipe_resource *>(copy->Buffer->Resource);
   unsigned bw = 0, bh = 0;
   const unsigned block = texture_block(texture->format, &bw, &bh);
