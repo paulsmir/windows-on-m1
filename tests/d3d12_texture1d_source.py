@@ -30,7 +30,7 @@ def query_base():
     s=s.replace('/* VOLUME_LAYOUT_RECORD */',header[header.rfind('typedef struct {',0,end):end])
     if 'D3D12DDI_RT_TEXTURE1D' not in s:s+='\nenum{D3D12DDI_RT_TEXTURE1D=2};\n'
     s+='\nusing BOOL=int;using UINT16=unsigned short;using UINT32=unsigned;\n'
-    for n in ['D3D12DDICAPS_TYPE','D3D12DDI_SWIZZLE_PATTERN','D3D12DDI_SWIZZLE_BIT_ENTRY','D3D12DDI_SWIZZLE_PATTERN_DESC_0003','D3D12DDI_TEXTURE_LAYOUT_CAPS','D3D12DDI_TEXTURE_LAYOUT_CAPS_0001','D3D12DDIARG_GETCAPS','D3D12DDI_RESOURCE_ALLOCATION_INFO','D3D12DDI_SUBRESOURCE_INFO','D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS']:
+    for n in ['D3D12DDICAPS_TYPE','D3D12DDI_SWIZZLE_PATTERN','D3D12DDI_SWIZZLE_BIT_ENTRY','D3D12DDI_SWIZZLE_PATTERN_DESC_0003','D3D12DDI_SWIZZLE_PATTERN_FLAGS','D3D12DDI_SWIZZLE_PATTERN_DESC_0022','D3D12DDI_TEXTURE_LAYOUT_CAPS_0026','D3D12DDI_TEXTURE_LAYOUT_CAPS','D3D12DDI_TEXTURE_LAYOUT_CAPS_0001','D3D12DDIARG_GETCAPS','D3D12DDI_RESOURCE_ALLOCATION_INFO','D3D12DDI_SUBRESOURCE_INFO','D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS']:
         s+=declaration(n)+'\n'
     s+='#include "windows_swizzle_reference.h"\n'
     for m in ['static unsigned block_bytes(','extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static unsigned texture_block(', 'extern "C" unsigned AgxD3d12FormatBlock(', 'extern "C" int AgxD3d12FormatMultisample(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture1d_array_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DArrayLayout(']:s+=block(owner,m)+'\n'

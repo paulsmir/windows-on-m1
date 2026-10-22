@@ -222,16 +222,48 @@ static HRESULT VolumeLayoutCaps(const D3D12DDIARG_GETCAPS *arg) {
             static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+(index<5?index+1:5u))};
         memcpy(arg->pData,patterns,sizeof(patterns));return S_OK;
     }
+    /* the interleave bits of pattern index (four-byte texels, 32>>index square) */
+    const auto interleave=[](UINT index,D3D12DDI_SWIZZLE_BIT_ENTRY *bits) {
+        UINT n=0;
+        for(UINT b=0;b<2;++b) {auto &v=bits[n++];v.Valid=1;v.SourceBitIndex=static_cast<UINT8>(b);}
+        for(UINT b=0;b<5-index;++b) {
+            auto &x=bits[n++];x.Valid=1;x.SourceBitIndex=static_cast<UINT8>(b+2);
+            auto &y=bits[n++];y.Valid=1;y.ChannelIndex=1;y.SourceBitIndex=static_cast<UINT8>(b);
+        }
+    };
     if(arg->Type==D3D12DDICAPS_TYPE_SWIZZLE_PATTERN) {
         if(!arg->pInfo || arg->DataSize!=sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0003)) return E_INVALIDARG;
         UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));if(index>=6)return E_INVALIDARG;
         D3D12DDI_SWIZZLE_PATTERN_DESC_0003 pattern={};
-        UINT n=0;
-        for(UINT b=0;b<2;++b) {auto &v=pattern.InterleavePatternSourceBits[n++];v.Valid=1;v.SourceBitIndex=static_cast<UINT8>(b);}
-        for(UINT b=0;b<5-index;++b) {
-            auto &x=pattern.InterleavePatternSourceBits[n++];x.Valid=1;x.SourceBitIndex=static_cast<UINT8>(b+2);
-            auto &y=pattern.InterleavePatternSourceBits[n++];y.Valid=1;y.ChannelIndex=1;y.SourceBitIndex=static_cast<UINT8>(b);
+        interleave(index,pattern.InterleavePatternSourceBits);
+        memcpy(arg->pData,&pattern,sizeof(pattern));return S_OK;
+    }
+    /* EXP1870: R2+ runtimes ask the 0022 forms (1060/1061) instead. The same
+     * registry: caps _0026 (no standard swizzle, no row-major textures,
+     * parameterized patterns), per layout six patterns per plane slot (the
+     * 0022 MipLevelSwizzleTransition[5] segments; 0003's two patterns, the
+     * second kept for every later segment; transitions stay 0xff), and the
+     * 0022 descriptor with the 0003 interleave and no XOR terms. */
+    if(arg->Type==D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT) {
+        if(!arg->pInfo) {
+            if(arg->DataSize!=sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS_0026)) return E_INVALIDARG;
+            memset(arg->pData,0,arg->DataSize);
+            auto *caps=static_cast<D3D12DDI_TEXTURE_LAYOUT_CAPS_0026 *>(arg->pData);
+            caps->DeviceDependentLayoutCount=6;caps->DeviceDependentSwizzleCount=6;
+            return S_OK;
         }
+        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));
+        if(index>=6 || arg->DataSize!=18*sizeof(D3D12DDI_SWIZZLE_PATTERN)) return E_INVALIDARG;
+        D3D12DDI_SWIZZLE_PATTERN patterns[18];
+        for(UINT i=0;i<18;++i)
+            patterns[i]=static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+(i%6==0?index:(index<5?index+1:5u)));
+        memcpy(arg->pData,patterns,sizeof(patterns));return S_OK;
+    }
+    if(arg->Type==D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN) {
+        if(!arg->pInfo || arg->DataSize!=sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0022)) return E_INVALIDARG;
+        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));if(index>=6)return E_INVALIDARG;
+        D3D12DDI_SWIZZLE_PATTERN_DESC_0022 pattern={};
+        interleave(index,pattern.InterleavePatternSourceBits);
         memcpy(arg->pData,&pattern,sizeof(pattern));return S_OK;
     }
 #else
@@ -400,6 +432,18 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         break;
     case D3D12DDICAPS_TYPE_SWIZZLE_PATTERN:
         hr=VolumeLayoutCaps(arg);break;
+    /* EXP1870: the R2+ forms of the two cases above */
+    case D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT:
+        if (!NegotiatedR2()) break;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        hr=VolumeLayoutCaps(arg);
+#else
+        hr=arg->pInfo ? E_INVALIDARG : Answer<D3D12DDI_TEXTURE_LAYOUT_CAPS_0026>(arg, [](auto &) {});
+#endif
+        break;
+    case D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN:
+        if (NegotiatedR2()) hr=VolumeLayoutCaps(arg);
+        break;
     case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT1:
         /* <=2patterns: stay in the documented legacy mode. */
         break;

@@ -63,7 +63,9 @@ class D3d12AbiGate(unittest.TestCase):
                       'D3D12DDICAPS_TYPE_0022_CPU_PAGE_TABLE_FALSE_POSITIVES',
                       'D3D12DDICAPS_TYPE_0030_PROTECTED_RESOURCE_SESSION_SUPPORT',
                       'D3D12DDICAPS_TYPE_EXECUTECOMMANDLISTS_PARALLELISM',
-                      'D3D12DDICAPS_TYPE_0073_SUPPORT_BATCHED_MARKERS'})
+                      'D3D12DDICAPS_TYPE_0073_SUPPORT_BATCHED_MARKERS',
+                      # EXP1870: the R2+ forms of the C21 layout registry
+                      'D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT', 'D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN'})
         # C44: SM 6.0 and the R1 interface by default since EXP1865;
         # APPLE_AGX_D3D12_SM6=0 is the only way back to 0003/SM 5.1
         gate = source[source.index('static bool ShaderModel6Enabled() {'):]

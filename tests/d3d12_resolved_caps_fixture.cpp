@@ -34,7 +34,8 @@ static bool ShaderModel6Enabled(){return false;}
 static bool Negotiated0033(){return false;}
 static bool Negotiated0042(){return false;}
 static bool Negotiated0071(){return false;}
-static bool NegotiatedR2(){return false;}
+static bool r2=false;
+static bool NegotiatedR2(){return r2;}
 enum D3D12DDI_COMMAND_QUEUE_FLAGS {D3D12DDI_COMMAND_QUEUE_FLAG_NONE=0};
 struct D3D12DDICAPS_UMD_BASED_COMMAND_QUEUE_PRIORITY_DATA_0023 {D3D12DDI_COMMAND_QUEUE_FLAGS SupportedQueueFlagsForGlobalRealtimeQueues;};
 enum D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_FLAGS_0030 {D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_FLAG_0030_NONE=0};
@@ -50,11 +51,11 @@ int main(){
  static_assert(sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0003)==100);
  static_assert(sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0004)==104);
  static_assert(sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS_0001)==16);
- struct {unsigned pre;unsigned char data[104];unsigned post;} out;
+ struct {unsigned pre;unsigned char data[256];unsigned post;} out;
  auto query=[&](D3D12DDICAPS_TYPE type,void *index,unsigned size){
   memset(&out,0xa5,sizeof(out));D3D12DDIARG_GETCAPS q={type,index,out.data,size};
   HRESULT hr=GetCaps({},&q);assert(out.pre==0xa5a5a5a5&&out.post==0xa5a5a5a5);
-  for(unsigned n=size;n<104;n++)assert(out.data[n]==0xa5);return hr;
+  for(unsigned n=size;n<256;n++)assert(out.data[n]==0xa5);return hr;
  };
  for(unsigned size: {12u,16u}){
   assert(query(D3D12DDICAPS_TYPE_TEXTURE_LAYOUT,nullptr,size)==S_OK);
@@ -90,5 +91,32 @@ int main(){
  assert(query(D3D12DDICAPS_TYPE_TEXTURE_LAYOUT,nullptr,8)==E_INVALIDARG);
  D3D12DDIARG_GETCAPS q={D3D12DDICAPS_TYPE_TEXTURE_LAYOUT,nullptr,nullptr,16};assert(GetCaps({},&q)==E_NOTIMPL);
  assert(GetCaps({},nullptr)==E_NOTIMPL);
+ // EXP1870: R1 runtimes keep E_NOTIMPL for the 0022 forms; R2+ runtimes get
+ // the same registry (caps _0026, 3x6 patterns, the 0003 interleave bits)
+ assert(query(D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT,nullptr,20)==E_NOTIMPL);
+ r2=true;
+ static_assert(sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS_0026)==20);
+ assert(query(D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT,nullptr,20)==S_OK);
+ {auto *c=reinterpret_cast<D3D12DDI_TEXTURE_LAYOUT_CAPS_0026 *>(out.data);
+  assert(c->DeviceDependentLayoutCount==6&&c->DeviceDependentSwizzleCount==6&&!c->Supports64KStandardSwizzle&&
+         !c->SupportsRowMajorTexture&&!c->IndexableSwizzlePatterns);}
+ assert(query(D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT,nullptr,16)==E_INVALIDARG);
+ for(UINT i=0;i<6;i++){
+  assert(query(D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT,&i,72)==S_OK);
+  UINT ids[18];memcpy(ids,out.data,72);
+  for(UINT k=0;k<18;k++)assert(ids[k]==(k%6==0?0x100+i:0x100+(i<5?i+1:5)));
+  assert(query(D3D12DDICAPS_TYPE_SWIZZLE_PATTERN,&i,100)==S_OK);
+  D3D12DDI_SWIZZLE_PATTERN_DESC_0003 legacy;memcpy(&legacy,out.data,100);
+  assert(query(D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN,&i,sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0022))==S_OK);
+  D3D12DDI_SWIZZLE_PATTERN_DESC_0022 p;memcpy(&p,out.data,sizeof(p));
+  assert(!memcmp(p.InterleavePatternSourceBits,legacy.InterleavePatternSourceBits,32));
+  for(unsigned n=0;n<32;n++)assert(!p.InterleavePatternXORSourceBits[n].Valid&&!p.InterleavePatternXOR2SourceBits[n].Valid&&
+      !p.InterleavePatternXOR3SourceBits[n].Valid&&!p.InterleavePatternXOR4SourceBits[n].Valid&&
+      !p.PostambleXORSourceBits[n].Valid&&!p.PostambleXOR2SourceBits[n].Valid);
+  assert(!p.PostambleXORImmediate&&p.Flags==D3D12DDI_SWIZZLE_PATTERN_FLAGS_NONE);
+ }
+ assert(query(D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT,&bad,72)==E_INVALIDARG);
+ assert(query(D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN,&bad,sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0022))==E_INVALIDARG);
+ r2=false;
  puts("PASS exact WDK100/104 ABI immutable registry/GetCaps buffer canaries/legacy mode");
 }
