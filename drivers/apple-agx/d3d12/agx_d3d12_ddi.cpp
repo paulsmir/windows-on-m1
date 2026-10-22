@@ -6829,10 +6829,14 @@ static HRESULT APIENTRY CreatePipelineState0075(D3D12DDI_HDEVICE device,
 static bool ProjectR7Resource(const D3D12DDIARG_CREATERESOURCE_0075 &arg, D3D12DDIARG_CREATERESOURCE_0003 *legacy) {
     static_assert(offsetof(D3D12DDIARG_CREATERESOURCE_0075, pRowMajorLayout) ==
                   offsetof(D3D12DDIARG_CREATERESOURCE_0003, pRowMajorLayout));
-    static_assert(offsetof(D3D12DDIARG_CREATERESOURCE_0075, SamplerFeedbackMipRegion) >= sizeof(D3D12DDIARG_CREATERESOURCE_0003));
+    /* x86: the mip region sits in _0003's tail padding, so only the members
+     * up to pRowMajorLayout are copied */
+    constexpr size_t members = offsetof(D3D12DDIARG_CREATERESOURCE_0003, pRowMajorLayout) + sizeof(arg.pRowMajorLayout);
+    static_assert(offsetof(D3D12DDIARG_CREATERESOURCE_0075, SamplerFeedbackMipRegion) >= members);
     if (arg.SamplerFeedbackMipRegion.Width || arg.SamplerFeedbackMipRegion.Height || arg.SamplerFeedbackMipRegion.Depth)
         return false;
-    memcpy(legacy, &arg, sizeof(*legacy));
+    *legacy = {};
+    memcpy(legacy, &arg, members);
     return true;
 }
 static D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY CalcPrivateHeapAndResourceSizes0075(
