@@ -74,6 +74,16 @@ class D3d12AbiGate(unittest.TestCase):
         shader = shader[:shader.index('Answer<D3D12DDI_SHADER_CAPS_0003>')]
         self.assertIn('if (ShaderModel6Enabled() && arg->DataSize >= sizeof(D3D12DDI_SHADER_CAPS_0012))', shader)
         self.assertEqual(caps.count('WaveOps = TRUE'), 1)
+        # C49: TypedUAVLoadAdditionalFormats obliges UAV_READS on the whole
+        # required set (D3D12 typed UAV loads); CheckFormatSupport must cover it
+        self.assertIn('static constexpr BOOL kTypedUavLoads = TRUE; /* C49 */', source)
+        typed = source[source.index('static bool TypedUavLoadFormat('):]
+        typed = typed[:typed.index('/* optional */')]
+        for fmt in ('R32G32B32A32_FLOAT', 'R32G32B32A32_UINT', 'R32G32B32A32_SINT', 'R16G16B16A16_FLOAT',
+                    'R16G16B16A16_UINT', 'R16G16B16A16_SINT', 'R8G8B8A8_UNORM', 'R8G8B8A8_UINT', 'R8G8B8A8_SINT',
+                    'R16_FLOAT', 'R16_UINT', 'R16_SINT', 'R8_UNORM', 'R8_UINT', 'R8_SINT'):
+            self.assertIn(f'case DXGI_FORMAT_{fmt}:', typed, fmt)
+        self.assertIn('if (TypedUavLoadFormat(format)) *support |= D3D12DDI_FORMAT_SUPPORT_UAV_READS;', source)
         # nothing optional is claimed beyond resource binding tier 2 (C47: heap
         # ranges for SRVs, UAVs and samplers)
         self.assertIn('d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;', caps)

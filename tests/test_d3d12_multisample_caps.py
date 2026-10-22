@@ -35,7 +35,7 @@ def cast_sets():
 class MultisampleCaps(unittest.TestCase):
     def test_actual_caps_follow_the_cast_set_rule(self):
         s=DDI.read_text()
-        defines='\n'.join(re.findall(r'#define D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_\w+\s+0x[0-9A-Fa-f]+',WDK.read_text()))
+        defines='\n'.join(re.findall(r'#define D3D12DDI_FORMAT_SUPPORT_(?:MULTISAMPLE_\w+|UAV_READS)\s+0x[0-9A-Fa-f]+',WDK.read_text()))
         sets=cast_sets()
         self.assertIn('DXGI_FORMAT_R8G8B8A8_TYPELESS',['DXGI_FORMAT_'+k for k in sets])
         table=''.join('{DXGI_FORMAT_%s,{%s}},\n'%(t,','.join('DXGI_FORMAT_'+m for m in ms)) for t,ms in sets.items())
@@ -75,7 +75,7 @@ int main(){
  return bad||ms_sets<8;
 }
 '''%(DXGI,defines,'||'.join('f==DXGI_FORMAT_'+v for v in VIEW),table)
-        actual='\n'.join([block(s,'static bool MultisampleCastSet('),block(s,'static VOID APIENTRY CheckFormatSupport('),
+        actual='\n'.join([block(s,'static bool MultisampleCastSet('),block(s,'static bool TypedUavLoadFormat('),block(s,'static VOID APIENTRY CheckFormatSupport('),
                           block(s,'static VOID APIENTRY CheckMultisampleQualityLevels(')])
         actual=actual.replace('AgxD3d12FormatMultisample','/*unused*/AgxD3d12FormatMultisample')
         src=src.replace('/* ACTUAL */',actual)

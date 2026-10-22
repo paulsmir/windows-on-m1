@@ -181,6 +181,11 @@ static HRESULT VolumeLayoutCaps(const D3D12DDIARG_GETCAPS *arg) {
 #endif
     return E_NOTIMPL;
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static constexpr BOOL kTypedUavLoads = TRUE; /* C49 */
+#else
+static constexpr BOOL kTypedUavLoads = FALSE;
+#endif
 static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *arg) {
     HRESULT hr = E_NOTIMPL;
     if (arg && arg->pData) switch (arg->Type) {
@@ -248,6 +253,8 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         });
         break;
     case D3D12DDICAPS_TYPE_SHADER:
+        /* C49: typed UAV loads of the TypedUavLoadFormat set (CheckFormatSupport
+         * reports UAV_READS for them) with the native owner */
         /* C48: under 0012 the wave caps: AGX runs 32-wide SIMD groups (Asahi
          * subgroup size 32), every SM 6.0 wave/quad intrinsic lowers to AGX
          * subgroup operations (test_dxil_to_nir); 128 lanes per core (Apple
@@ -256,6 +263,7 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         if (ShaderModel6Enabled() && arg->DataSize >= sizeof(D3D12DDI_SHADER_CAPS_0012)) {
             hr = Answer<D3D12DDI_SHADER_CAPS_0012>(arg, [](auto &d) {
                 d.MinPrecision = D3D12DDI_SHADER_MIN_PRECISION_NONE;
+                d.TypedUAVLoadAdditionalFormats = kTypedUavLoads;
                 d.WaveOps = TRUE;
                 d.WaveLaneCountMin = d.WaveLaneCountMax = 32;
                 const AGX_WIN32_DEVICE_INFO &info = adapter_object.info;
@@ -268,7 +276,7 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         hr = Answer<D3D12DDI_SHADER_CAPS_0003>(arg, [](auto &d) {
             d.MinPrecision = D3D12DDI_SHADER_MIN_PRECISION_NONE;
             d.Doubles = FALSE; d.ShaderSpecifiedStencilRef = FALSE;
-            d.TypedUAVLoadAdditionalFormats = FALSE; d.ROVs = FALSE;
+            d.TypedUAVLoadAdditionalFormats = kTypedUavLoads; d.ROVs = FALSE;
         });
         break;
     case D3D12DDICAPS_TYPE_ARCHITECTURE_INFO:
@@ -517,6 +525,37 @@ static bool MultisampleCastSet(DXGI_FORMAT format, bool *typeless) {
     }
 }
 #endif
+/* C49: typed UAV loads beyond R32 (TypedUAVLoadAdditionalFormats): the set
+ * D3D12 requires together with the cap (RGBA32/16/8, R16, R8 float/uint/
+ * sint/unorm) and the optional formats Asahi takes as shader images
+ * (agx_is_format_supported: every valid pixel format but emulated RGB32 and
+ * alpha/luminance). Typed UAVs carry no format in the shader (the DXBC and
+ * DXIL frontends emit PIPE_FORMAT_NONE), Asahi loads them by the view's
+ * format (image_load_formatted). */
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static bool TypedUavLoadFormat(DXGI_FORMAT format) {
+    switch (format) {
+    case DXGI_FORMAT_R32G32B32A32_FLOAT: case DXGI_FORMAT_R32G32B32A32_UINT: case DXGI_FORMAT_R32G32B32A32_SINT:
+    case DXGI_FORMAT_R16G16B16A16_FLOAT: case DXGI_FORMAT_R16G16B16A16_UINT: case DXGI_FORMAT_R16G16B16A16_SINT:
+    case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UINT: case DXGI_FORMAT_R8G8B8A8_SINT:
+    case DXGI_FORMAT_R16_FLOAT: case DXGI_FORMAT_R16_UINT: case DXGI_FORMAT_R16_SINT:
+    case DXGI_FORMAT_R8_UNORM: case DXGI_FORMAT_R8_UINT: case DXGI_FORMAT_R8_SINT:
+    case DXGI_FORMAT_R32_FLOAT: case DXGI_FORMAT_R32_UINT: case DXGI_FORMAT_R32_SINT:
+    /* optional */
+    case DXGI_FORMAT_R16G16B16A16_UNORM: case DXGI_FORMAT_R16G16B16A16_SNORM:
+    case DXGI_FORMAT_R32G32_FLOAT: case DXGI_FORMAT_R32G32_UINT: case DXGI_FORMAT_R32G32_SINT:
+    case DXGI_FORMAT_R10G10B10A2_UNORM: case DXGI_FORMAT_R10G10B10A2_UINT: case DXGI_FORMAT_R11G11B10_FLOAT:
+    case DXGI_FORMAT_R8G8B8A8_SNORM:
+    case DXGI_FORMAT_R16G16_FLOAT: case DXGI_FORMAT_R16G16_UNORM: case DXGI_FORMAT_R16G16_UINT:
+    case DXGI_FORMAT_R16G16_SNORM: case DXGI_FORMAT_R16G16_SINT:
+    case DXGI_FORMAT_R8G8_UNORM: case DXGI_FORMAT_R8G8_UINT: case DXGI_FORMAT_R8G8_SNORM: case DXGI_FORMAT_R8G8_SINT:
+    case DXGI_FORMAT_R16_UNORM: case DXGI_FORMAT_R16_SNORM: case DXGI_FORMAT_R8_SNORM:
+        return true;
+    default:
+        return false;
+    }
+}
+#endif
 static VOID APIENTRY CheckFormatSupport(D3D12DDI_HDEVICE, DXGI_FORMAT format, UINT *support) {
     if (!support) return;
     *support = 0;
@@ -524,6 +563,7 @@ static VOID APIENTRY CheckFormatSupport(D3D12DDI_HDEVICE, DXGI_FORMAT format, UI
     bool typeless = false;
     if (MultisampleCastSet(format, &typeless) && !typeless)
         *support = D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET | D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
+    if (TypedUavLoadFormat(format)) *support |= D3D12DDI_FORMAT_SUPPORT_UAV_READS;
 #else
     (void)format;
 #endif
