@@ -22,6 +22,9 @@ extern "C" {
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
 #include "../dxbc/dxbc_to_nir.h"
+#ifdef APPLE_AGX_D3D12_DXIL
+#include "../dxil/agx_dxil_to_nir.h"
+#endif
 #include "util/format/u_format.h"
 #include "util/u_surface.h"
 #include "util/u_simple_shaders.h"
@@ -371,6 +374,39 @@ static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
   AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS | DXBC_BINDING_HEAP_RANGES, AGX_D3D12_UAV_SLOTS | DXBC_BINDING_HEAP_RANGES,
   AGX_D3D12_SAMPLER_SLOTS | DXBC_BINDING_HEAP_RANGES
 };
+/* C44: a stored shader is DXBC tokens or (SM 6) a DXIL program part with
+ * the same version/size header; both translate to the same NIR conventions
+ * and binding map. DXIL takes no stream output or hull pass-through yet. */
+static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage stage,
+                                           const nir_shader_compiler_options *options, struct dxbc_binding_map *bindings,
+                                           uint32_t passthrough_registers, uint32_t passthrough_positions,
+                                           const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error) {
+#ifdef APPLE_AGX_D3D12_DXIL
+  if (tokens && tokens[1] >= 6 && tokens[1] < 0x4000000u &&
+      agx_dxil_is_program(tokens, static_cast<size_t>(tokens[1]) * 4u)) {
+    struct agx_dxil_nir_result dxil;
+    const enum agx_dxil_nir_status status =
+        xfb || passthrough_registers ? AGX_DXIL_NIR_UNSUPPORTED
+        : agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, owner_binding_limits, options, &dxil);
+    if (status == AGX_DXIL_NIR_OK && dxil.stage != stage) {
+      ralloc_free(dxil.nir);
+      dxil.nir = NULL;
+    }
+    /* receipt-only: the DXIL status (opcode slot) and stage (offset slot) */
+    error->opcode = 0x10000u | static_cast<uint32_t>(status);
+    error->offset = static_cast<uint32_t>(dxil.stage);
+    if (status != AGX_DXIL_NIR_OK || !dxil.nir) {
+      memset(bindings, 0, sizeof(*bindings));
+      return NULL;
+    }
+    *bindings = dxil.bindings;
+    return dxil.nir;
+  }
+#endif
+  (void)stage;
+  return dxbc_translate_tokens_bindings_xfb(tokens, options, owner_binding_limits, bindings, passthrough_registers,
+                                            passthrough_positions, xfb, error);
+}
 extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,
                                               AGX_D3D12_COMPUTE *compute) {
   OwnerLock lock(owner);
@@ -378,8 +414,8 @@ extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT
   memset(compute, 0, sizeof(*compute));
   struct pipe_context *pipe = owner->Context;
   struct dxbc_nir_error error = {};
-  struct nir_shader *nir = dxbc_translate_tokens_bindings(tokens, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
-      owner_binding_limits, &compute->Bindings, &error);
+  struct nir_shader *nir = translate_shader(tokens, MESA_SHADER_COMPUTE, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
+                                            &compute->Bindings, 0u, 0u, NULL, &error);
   if (!nir) {
     receipt("measure-d3d12-compute", E_NOTIMPL, 0u, error.opcode, error.offset);
     return E_NOTIMPL;
@@ -1422,9 +1458,8 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   /* C37: a hull shader also takes its output signature's pass-through
    * registers (the D3D11 frontend's create_tessellation_shader); C39: the
    * last vertex stage of a stream-output pipeline captures its outputs */
-  struct nir_shader *nir = dxbc_translate_tokens_bindings_xfb(tokens, pipe->screen->nir_options[stage], owner_binding_limits,
-                                                              bindings, passthrough_registers, passthrough_positions, xfb,
-                                                              &error);
+  struct nir_shader *nir = translate_shader(tokens, stage, pipe->screen->nir_options[stage], bindings, passthrough_registers,
+                                            passthrough_positions, xfb, &error);
   receipt("measure-d3d12-graphics-shader", nir ? S_OK : E_NOTIMPL, static_cast<UINT>(stage), error.opcode, error.offset);
   if (!nir) return NULL;
   if (!dxbc_nir_srv_dimensions(nir, dimensions) || !dxbc_nir_uav_dimensions(nir, uav_dimensions)) {

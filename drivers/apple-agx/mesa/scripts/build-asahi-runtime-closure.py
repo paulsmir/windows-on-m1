@@ -56,7 +56,8 @@ DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c')
 # UMDs, Mesa's spirv_to_nir (libvtn of the same NIR build configuration) and
 # the dxil-spirv C library (8434b063, D3D12-C15-dxil-license-review.md; built
 # /MD with the EXP1388 configuration, c44-build-dxspv.ps1).
-DXIL_UNITS = ('agx_dxil_to_nir.c', 'agx_dxil_program.c', 'agx_dxil_checked.cpp')
+# (agx_dxil_program.c is compiled by the UMD project itself)
+DXIL_UNITS = ('agx_dxil_to_nir.c', 'agx_dxil_checked.cpp')
 DXIL_SPIRV_SOURCE = Path(r'C:\Users\pauls\EXP1388-dxil-runtime-build-only\source')
 DXIL_SPIRV_BUILD = {'x64': Path(r'C:\Users\pauls\c44-dxspv-x64\build'),
                     'arm64': Path(r'C:\Users\pauls\c44-dxspv-arm64\build')}
@@ -279,7 +280,7 @@ def archive_response(objects):
     return '\n'.join(subprocess.list2cmdline([str(p)]) for p in objects) + '\n'
 
 
-def write_props(path, architecture, native, library, dependencies, gpuva, provenance=None):
+def write_props(path, architecture, native, library, dependencies, gpuva, provenance=None, dxil=False):
     namespace = 'http://schemas.microsoft.com/developer/msbuild/2003'
     ET.register_namespace('', namespace)
     tag = lambda name: '{' + namespace + '}' + name
@@ -291,7 +292,12 @@ def write_props(path, architecture, native, library, dependencies, gpuva, proven
                        'NativeRuntimeLibrary': str(library),
                        **(provenance or {})}.items():
         ET.SubElement(group, tag(key)).text = value
-    link = ET.SubElement(ET.SubElement(project, tag('ItemDefinitionGroup')), tag('Link'))
+    definitions = ET.SubElement(project, tag('ItemDefinitionGroup'))
+    if dxil:
+        # C44: the runtime carries the DXIL frontend (agx_dxil_to_nir)
+        ET.SubElement(ET.SubElement(definitions, tag('ClCompile')), tag('PreprocessorDefinitions')).text = \
+            'APPLE_AGX_D3D12_DXIL=1;%(PreprocessorDefinitions)'
+    link = ET.SubElement(definitions, tag('Link'))
     ET.SubElement(link, tag('AdditionalDependencies')).text = ';'.join(
         [str(library), *map(str, dependencies), 'synchronization.lib',
          'advapi32.lib', 'user32.lib', '%(AdditionalDependencies)'])
@@ -673,7 +679,7 @@ def main():
             provenance = {'NativeRuntimeSourceCommit': manifest['source_commit'],
                           'NativeRuntimeSourceManifestSha256': manifest['source_manifest_sha256'],
                           'NativeRuntimeLibrarySha256': manifest['library']['sha256']}
-        write_props(out / 'NativeRuntime.props', args.architecture, native, library, libraries, args.gpuva, provenance)
+        write_props(out / 'NativeRuntime.props', args.architecture, native, library, libraries, args.gpuva, provenance, dxil)
         manifest['props'] = {'path': str(out / 'NativeRuntime.props'), 'sha256': sha256(out / 'NativeRuntime.props')}
         manifest['executable_link'] = 'NOT_RUN'
         manifest['exit'] = 0

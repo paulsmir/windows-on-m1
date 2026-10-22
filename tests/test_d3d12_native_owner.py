@@ -60,8 +60,12 @@ class NativeOwner(unittest.TestCase):
         # the barrier made every dispatch its own submission.
         text = OWNER.read_text()
         create = body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateCompute(')
-        self.assertIn('dxbc_translate_tokens_bindings(', create)
-        self.assertIn('owner_binding_limits, &compute->Bindings, &error)', create)
+        # C44: DXBC tokens or a DXIL program part, one translation entry
+        self.assertIn('translate_shader(tokens, MESA_SHADER_COMPUTE,', create)
+        self.assertIn('&compute->Bindings, 0u, 0u, NULL, &error)', create)
+        translate = body(text, 'static struct nir_shader *translate_shader(')
+        self.assertIn('return dxbc_translate_tokens_bindings_xfb(tokens, options, owner_binding_limits, bindings,', translate)
+        self.assertIn('agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, owner_binding_limits, options, &dxil)', translate)
         self.assertIn('dxbc_nir_compute_info(', create)
         self.assertIn('->create_compute_state(', create)
         dispatch = body(text, 'extern "C" HRESULT AgxD3d12OwnerDispatch(')
@@ -136,7 +140,7 @@ class NativeOwner(unittest.TestCase):
         create = body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateGraphics(')
         self.assertIn('rast.scissor = 1;', create)
         self.assertIn('rast.clip_halfz = 1;', create)
-        self.assertIn('dxbc_translate_tokens_bindings_xfb(', body(text, 'static void *create_shader('))
+        self.assertIn('translate_shader(tokens, stage,', body(text, 'static void *create_shader('))
         self.assertIn('&graphics->VsBindings', create)
         self.assertIn('&graphics->PsBindings', create)
         draw = body(text, 'extern "C" HRESULT AgxD3d12OwnerDraw(')
