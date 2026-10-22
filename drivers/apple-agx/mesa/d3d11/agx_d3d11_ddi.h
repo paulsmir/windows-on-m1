@@ -22,8 +22,8 @@ BOOL AgxD3d11ComputeEnabled(void);
 BOOL AgxD3d11Fl11Enabled(void);
 
 /* FL 11_1 (D3D12-FL-program.md, D3D11-FL111-TIR.md): report feature level
- * 11_1 only in a process with APPLE_AGX_D3D11_FL111=1 until logic ops, the
- * 64 UAV registers and the forced sample count pass on hardware. */
+ * 11_1 (logic ops, 64 UAV registers, forced sample counts; validated by
+ * EXP1888) unless APPLE_AGX_D3D11_FL111=0. */
 BOOL AgxD3d11Fl111Enabled(void);
 
 /* D3D-H2b: the compute stage's common-shader setters (Shader.cpp). */

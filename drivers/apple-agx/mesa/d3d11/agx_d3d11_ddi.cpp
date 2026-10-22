@@ -106,7 +106,9 @@ AgxD3d11Fl111Enabled(void)
 {
    char value[4];
    DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D11_FL111", value, sizeof(value));
-   return AgxD3d11Fl11Enabled() && length == 1 && value[0] == '1';
+   /* EXP1888: logic ops, the 64 UAV registers and TIR 16x/8x pass on J313;
+    * APPLE_AGX_D3D11_FL111=0 keeps a process at 11_0 */
+   return AgxD3d11Fl11Enabled() && !(length == 1 && value[0] == '0');
 }
 
 /* D3D-H7: the WDDM 2.0 table goes with the FL 11_0 switch (EXP1299: the
