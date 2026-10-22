@@ -201,6 +201,25 @@ HRESULT AgxD3d12OwnerReadBuffer(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *
 HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width, unsigned Height,
                                      unsigned Layers, unsigned Levels, unsigned Bind, unsigned long long Bytes,
                                      AGX_D3D12_BUFFER *Texture, unsigned Samples);
+/* C53 T2D (D3D12-C53-tiled-textures.md): a reserved Texture2D (array when
+ * Layers > 1) whose tiles all start unmapped, with its D3D12 tiling
+ * (StandardMips, standard tiles per mip, packed tiles per layer);
+ * E_NOTIMPL for a format or layout that cannot be reserved.
+ * MapReservedTextureTile maps standard tile (X, Y) of Mip -- or, Packed,
+ * packed tile X -- of Layer onto 64 KiB tile BackingTile of a buffer
+ * (Backing NULL: unmapped); recorded work is submitted first. Copies
+ * between a reserved texture and a buffer (CopyTexture) go through a
+ * committed staging texture and a GPU copy. Destroy with DestroyBuffer. */
+typedef struct {
+  unsigned StandardMips, PackedTiles;
+  unsigned TilesX[16], TilesY[16];
+} AGX_D3D12_RESERVED_TILING;
+HRESULT AgxD3d12OwnerCreateReservedTexture2D(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width,
+                                             unsigned Height, unsigned Layers, unsigned Levels, unsigned Bind,
+                                             AGX_D3D12_BUFFER *Texture, AGX_D3D12_RESERVED_TILING *Tiling);
+HRESULT AgxD3d12OwnerMapReservedTextureTile(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Reserved,
+                                            unsigned Layer, BOOL Packed, unsigned Mip, unsigned X, unsigned Y,
+                                            const AGX_D3D12_BUFFER *Backing, unsigned BackingTile);
 /* C32: whether a format has 2x/4x multisampled textures (the AGX's sample
  * counts, agx_is_format_supported): colour and depth formats of 1x1 texel
  * blocks */

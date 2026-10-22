@@ -677,6 +677,60 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
   return S_OK;
 }
 
+extern "C" HRESULT AgxD3d12OwnerCreateReservedTexture2D(AGX_D3D12_OWNER *owner, DXGI_FORMAT format, unsigned width,
+                                                        unsigned height, unsigned layers, unsigned levels,
+                                                        unsigned bind, AGX_D3D12_BUFFER *texture,
+                                                        AGX_D3D12_RESERVED_TILING *tiling) {
+  OwnerLock lock(owner);
+  unsigned bw = 0, bh = 0;
+  if (!owner || !owner->Screen || !texture || !tiling || !width || !height || !layers || !levels || levels > 16 ||
+      height > 0xffffu || layers > 0xffffu || !AgxD3d12FormatBlock(format, &bw, &bh) ||
+      (bind & AGX_D3D12_BIND_DEPTH_STENCIL) || (bw > 1 && (bind & AGX_D3D12_BIND_RENDER_TARGET)))
+    return E_INVALIDARG;
+  memset(texture, 0, sizeof(*texture));
+  memset(tiling, 0, sizeof(*tiling));
+  struct pipe_resource templ = {};
+  templ.target = layers > 1 ? PIPE_TEXTURE_2D_ARRAY : PIPE_TEXTURE_2D;
+  templ.format = FormatTranslate(format, FALSE);
+  templ.width0 = width;
+  templ.height0 = static_cast<uint16_t>(height);
+  templ.depth0 = 1;
+  templ.array_size = static_cast<uint16_t>(layers);
+  templ.last_level = static_cast<uint8_t>(levels - 1);
+  templ.usage = PIPE_USAGE_DEFAULT;
+  templ.bind = ((bind & AGX_D3D12_BIND_RENDER_TARGET) ? PIPE_BIND_RENDER_TARGET : 0) |
+               ((bind & AGX_D3D12_BIND_SAMPLER) ? PIPE_BIND_SAMPLER_VIEW : 0);
+  struct pipe_resource *resource = templ.format != PIPE_FORMAT_NONE ?
+      AgxWin32AsahiCreateReservedTexture(owner->Screen, &templ) : NULL;
+  if (resource && !AgxWin32AsahiReservedTextureTiling(resource, &tiling->StandardMips, tiling->TilesX,
+                                                      tiling->TilesY, &tiling->PackedTiles))
+    AgxWin32AsahiResourceRelease(&resource);
+  receipt("measure-d3d12-reserved-texture", resource ? S_OK : E_NOTIMPL, static_cast<UINT>(templ.format),
+          width | (height << 16), layers | (levels << 16));
+  if (!resource) return E_NOTIMPL;
+  texture->Resource = resource;
+  texture->GpuVa = AgxWin32AsahiBufferGpuAddress(resource);
+  return S_OK;
+}
+
+extern "C" HRESULT AgxD3d12OwnerMapReservedTextureTile(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *reserved,
+                                                       unsigned layer, BOOL packed, unsigned mip, unsigned x,
+                                                       unsigned y, const AGX_D3D12_BUFFER *backing,
+                                                       unsigned backing_tile) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Context || !reserved || !reserved->Resource || (backing && !backing->Resource))
+    return E_INVALIDARG;
+  /* recorded, unsubmitted work names the old tiles: submit it first */
+  if (owner->PendingDraws || owner->PendingCopies || owner->PendingDispatches) {
+    const HRESULT flushed = AgxD3d12OwnerSubmitAndWait(owner);
+    if (FAILED(flushed)) return flushed;
+  }
+  const int mapped = AgxWin32AsahiMapReservedTextureTile(
+      static_cast<struct pipe_resource *>(reserved->Resource), layer, packed ? 1 : 0, mip, x, y,
+      backing ? static_cast<struct pipe_resource *>(backing->Resource) : NULL, backing_tile);
+  return mapped ? S_OK : E_FAIL;
+}
+
 /* C21 LIMITED volume contract. Same pure template/query for allocation-info
  * and actual creation; never construct a screen/context just to obtain size. */
 static bool texture3d_template(DXGI_FORMAT format, unsigned width, unsigned height,
@@ -1455,6 +1509,59 @@ extern "C" HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *owner, const 
 
 /* Maps the texture box and the buffer range; the maps synchronise with work
  * already recorded on the context, so the copy keeps replay order. */
+/* C53 T2D: a reserved texture has no CPU mapping. Its region goes through a
+ * committed texture of the region's size: GPU copy out, CPU copy, or CPU
+ * copy, GPU copy in; each submitted and waited for before the staging
+ * texture is released. */
+static HRESULT copy_reserved_texture(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COPY *copy) {
+  struct pipe_context *pipe = owner->Context;
+  struct pipe_resource *texture = static_cast<struct pipe_resource *>(copy->Texture->Resource);
+  if (copy->Level > texture->last_level || copy->Layer >= texture->array_size ||
+      copy->Depth > texture->array_size - copy->Layer)
+    return E_INVALIDARG;
+  const unsigned level_w = level_extent(texture->width0, copy->Level), level_h = level_extent(texture->height0, copy->Level);
+  if (copy->X >= level_w || copy->Y >= level_h) return E_INVALIDARG;
+  struct pipe_resource templ = {};
+  templ.target = copy->Depth > 1 ? PIPE_TEXTURE_2D_ARRAY : PIPE_TEXTURE_2D;
+  templ.format = texture->format;
+  templ.width0 = copy->Width < level_w - copy->X ? copy->Width : level_w - copy->X;
+  templ.height0 = static_cast<uint16_t>(copy->Height < level_h - copy->Y ? copy->Height : level_h - copy->Y);
+  templ.depth0 = 1;
+  templ.array_size = static_cast<uint16_t>(copy->Depth);
+  templ.usage = PIPE_USAGE_DEFAULT;
+  templ.bind = PIPE_BIND_SAMPLER_VIEW;
+  struct pipe_resource *staging = owner->Screen->resource_create(owner->Screen, &templ);
+  if (!staging) return E_OUTOFMEMORY;
+  AGX_D3D12_BUFFER staged = {};
+  staged.Resource = staging;
+  AGX_D3D12_TEXTURE_COPY cpu = *copy;
+  cpu.Texture = &staged;
+  cpu.Level = cpu.Layer = cpu.X = cpu.Y = 0;
+  struct pipe_box box = {};
+  box.width = static_cast<int>(templ.width0);
+  box.height = static_cast<int>(templ.height0);
+  box.depth = static_cast<int16_t>(copy->Depth);
+  HRESULT hr = S_OK;
+  if (copy->ToBuffer) {
+    box.x = static_cast<int>(copy->X);
+    box.y = static_cast<int>(copy->Y);
+    box.z = static_cast<int16_t>(copy->Layer);
+    pipe->resource_copy_region(pipe, staging, 0, 0, 0, 0, texture, copy->Level, &box);
+    ++owner->PendingCopies;
+    hr = AgxD3d12OwnerSubmitAndWait(owner);
+    if (SUCCEEDED(hr)) hr = AgxD3d12OwnerCopyTexture(owner, &cpu);
+  } else {
+    hr = AgxD3d12OwnerCopyTexture(owner, &cpu);
+    if (SUCCEEDED(hr)) {
+      pipe->resource_copy_region(pipe, texture, copy->Level, copy->X, copy->Y, copy->Layer, staging, 0, &box);
+      ++owner->PendingCopies;
+      hr = AgxD3d12OwnerSubmitAndWait(owner);
+    }
+  }
+  AgxWin32AsahiResourceRelease(&staging);
+  return hr;
+}
+
 extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COPY *copy) {
   OwnerLock lock(owner);
   if (!owner || !owner->Context || !copy || !copy->Texture || !copy->Texture->Resource || !copy->Buffer ||
@@ -1462,6 +1569,13 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
     return E_INVALIDARG;
   struct pipe_context *pipe = owner->Context;
   struct pipe_resource *texture = static_cast<struct pipe_resource *>(copy->Texture->Resource);
+  {
+    AGX_D3D12_RESERVED_TILING tiling = {};
+    if (texture->target != PIPE_BUFFER &&
+        AgxWin32AsahiReservedTextureTiling(texture, &tiling.StandardMips, tiling.TilesX, tiling.TilesY,
+                                           &tiling.PackedTiles))
+      return copy_reserved_texture(owner, copy);
+  }
   struct pipe_resource *buffer = static_cast<struct pipe_resource *>(copy->Buffer->Resource);
   unsigned bw = 0, bh = 0;
   const unsigned block = texture_block(texture->format, &bw, &bh);
