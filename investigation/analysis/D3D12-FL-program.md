@@ -94,6 +94,19 @@ Sources: Mesa Asahi (`gallium/drivers/asahi`, `asahi/vulkan` Honeykrisp).
      `sparseResidencyStandard2DBlockShape`).
    - Buffers: GPUVA ranges remapped through the WDDM GPUVA callbacks;
      unmapped ranges point at a zero page.
+   - Honeykrisp's split (hk_image.c, hk_queue.c), the model to follow:
+     - A sparse image reserves a 64 KiB-aligned VA range bound to scratch
+       pages, so writes (PBE, image stores, lowered atomics) to unmapped tiles
+       are discarded.
+     - Reads go through the texture unit's sparse map, a separate zeroed BO of
+       `sparse_table_size_B`. Unmapped tiles therefore read 0 and report
+       non-resident (`Image Mode` Sparse; `Sparse block` {Address shr 14,
+       Enabled bit 31}, genxml cmdbuf.xml).
+     - A bind updates both: VA -> memory, and the sparse-map entries for its
+       pages.
+     - For D3D12: UpdateTileMappings maps the tile's 4 pages through the
+       GPUVA map callback (unmapped tiles: one shared scratch allocation
+       mapped at each page) and writes the 4 Sparse Block entries.
    - Tier 2: reads of unmapped tiles return 0, and
      `CheckAccessFullyMapped` / residency feedback through `sparse_residency`
      NIR.
