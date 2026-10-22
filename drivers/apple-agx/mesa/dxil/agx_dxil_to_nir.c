@@ -595,6 +595,17 @@ tex_sets_valid(nir_shader *nir)
    return true;
 }
 
+static bool
+drop_interlock_end(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   (void)b;
+   (void)data;
+   if (intr->intrinsic != nir_intrinsic_end_invocation_interlock)
+      return false;
+   nir_instr_remove(&intr->instr);
+   return true;
+}
+
 static const struct spirv_capabilities caps = {
    .Shader = true, .Matrix = true, .Geometry = true, .Tessellation = true,
    .Float16 = true, .Int16 = true, .Int64 = true, .Int8 = true,
@@ -617,6 +628,9 @@ static const struct spirv_capabilities caps = {
    .UniformBufferArrayNonUniformIndexing = true, .SampledImageArrayNonUniformIndexing = true,
    .StorageBufferArrayNonUniformIndexing = true, .StorageImageArrayNonUniformIndexing = true,
    .UniformTexelBufferArrayNonUniformIndexing = true, .StorageTexelBufferArrayNonUniformIndexing = true,
+   /* ROV (12_1): dxil-spirv's PixelInterlockOrderedEXT critical section
+    * (D3D12-FL-program.md "ROV path"); ROVsSupported stays off until probed */
+   .FragmentShaderPixelInterlockEXT = true,
 };
 
 static enum agx_dxil_nir_status
@@ -876,6 +890,9 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       NIR_PASS(_, nir, nir_lower_terminate_to_demote);
       NIR_PASS(_, nir, nir_lower_halt_to_return);
       NIR_PASS(_, nir, nir_lower_returns);
+      /* AGX orders pixels from wait_pix (begin) to the end of the shader and
+       * compiles no end_invocation_interlock: the section lasts to the end */
+      NIR_PASS(_, nir, nir_shader_intrinsics_pass, drop_interlock_end, nir_metadata_control_flow, NULL);
    }
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
    NIR_PASS(_, nir, nir_lower_vars_to_ssa);

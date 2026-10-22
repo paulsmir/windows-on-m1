@@ -212,6 +212,17 @@ class DxilToNir(unittest.TestCase):
             unhandled = set(re.findall(r"@([a-z0-9_]+)", final)) - known - self.LOWERED_OUTSIDE_ASAHI
             self.assertEqual(unhandled, set(), fixture.name)
 
+    def test_rasterizer_ordered_views_take_the_pixel_interlock(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? 12_1 ROVs: without
+        # FragmentShaderPixelInterlockEXT spirv_to_nir refuses dxil-spirv's
+        # ROV module, and AGX compiles begin_invocation_interlock (wait_pix)
+        # but no end_invocation_interlock (Asahi holds the section to the end
+        # of the shader), so an end reaching the backend aborts it.
+        final = self.final("rov_ps")
+        self.assertIn("pixel_interlock_ordered: true", final)
+        self.assertEqual(final.count("@begin_invocation_interlock"), 1)
+        self.assertNotIn("end_invocation_interlock", final)
+
     def test_wave_intrinsics_lower_to_agx_subgroup_operations(self):
         # C48: every SM 6.0 wave and quad intrinsic (32-wide waves)
         cs, ps = self.final("wave_cs"), self.final("wave_ps")
