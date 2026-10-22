@@ -282,6 +282,10 @@ struct AgxD3d12Device {
     SRWLOCK heap_lock;
     UINT heap_count;
     struct AgxD3d12Heap *heaps[4096];
+    /* EXP1855: the shader-visible CBV/SRV/UAV descriptor heaps whose
+     * shadows a CPU descriptor handle may point into (heap_lock) */
+    UINT mirrored_count;
+    struct AgxD3d12Heap *mirrored[64];
 };
 struct AgxD3d12PipelineState;
 static SRWLOCK identity_registry_lock = SRWLOCK_INIT;
@@ -1169,6 +1173,11 @@ struct AgxD3d12Heap {
     BOOL cpu_visible;
     UINT locks;
     void *cpu;
+    /* EXP1855: a shader-visible descriptor heap's cpu is a cached shadow of
+     * its descriptors (the replay reads them every draw; the GPU buffer is
+     * write-combined); mirror is the buffer's own mapping, which receives
+     * the heap forms the shaders read (MirrorHeapForms) */
+    unsigned char *mirror;
 };
 struct AgxD3d12Resource {
     AgxD3d12Heap *heap;
@@ -1436,6 +1445,22 @@ static AgxD3d12Heap *HeapAt(AgxD3d12Device *device, UINT64 va, UINT64 *offset) {
         AgxD3d12Heap *heap = device->heaps[i];
         if (va >= heap->gpuva && va - heap->gpuva < heap->bytes) {
             *offset = va - heap->gpuva;
+            result = heap;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&device->heap_lock);
+    return result;
+}
+/* EXP1855: the mirrored descriptor heap whose shadow holds a CPU handle */
+static AgxD3d12Heap *MirroredHeapAt(AgxD3d12Device *device, const void *cpu) {
+    AgxD3d12Heap *result = nullptr;
+    if (!device || !cpu) return nullptr;
+    AcquireSRWLockShared(&device->heap_lock);
+    for (UINT i = 0; i < device->mirrored_count; ++i) {
+        AgxD3d12Heap *heap = device->mirrored[i];
+        const BYTE *base = static_cast<const BYTE *>(heap->cpu);
+        if (static_cast<const BYTE *>(cpu) >= base && static_cast<UINT64>(static_cast<const BYTE *>(cpu) - base) < heap->bytes) {
             result = heap;
             break;
         }
@@ -1979,6 +2004,21 @@ static_assert(kCbvSrvUavDescriptorBytes == DXBC_HEAP_DESCRIPTOR_STRIDE && kHeapF
 static AgxD3d12HeapForm *HeapFormOf(void *descriptor) {
     return reinterpret_cast<AgxD3d12HeapForm *>(static_cast<BYTE *>(descriptor) + kHeapFormOffset);
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* EXP1855: copies the heap forms of count descriptors from a heap's shadow
+ * (first is in it) to the GPU buffer the shaders read */
+static void MirrorHeapForms(const AgxD3d12Heap *heap, const void *first, UINT count) {
+    if (!heap || !heap->mirror || !heap->cpu || !first || !count) return;
+    const SIZE_T offset = static_cast<SIZE_T>(static_cast<const BYTE *>(first) - static_cast<const BYTE *>(heap->cpu));
+    if (static_cast<const BYTE *>(first) < static_cast<const BYTE *>(heap->cpu) || offset % kCbvSrvUavDescriptorBytes ||
+        offset + static_cast<UINT64>(count) * kCbvSrvUavDescriptorBytes > heap->bytes)
+        return;
+    for (UINT i = 0; i < count; ++i) {
+        const SIZE_T at = offset + static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes + kHeapFormOffset;
+        memcpy(heap->mirror + at, static_cast<const BYTE *>(heap->cpu) + at, sizeof(AgxD3d12HeapForm));
+    }
+}
+#endif
 static void ViewReceipt(PCSTR stage, UINT reason, UINT a, UINT b) {
     const UINT receipt[] = {reason, a, b};
     AdmissionUmdDiagnostic(stage, reason ? E_NOTIMPL : S_OK, receipt, 3);
@@ -2294,7 +2334,15 @@ static bool UavDescriptorKind(UINT kind) {
  * texture SRV's shader dimension follows its D3D12 view (the DDI names no
  * array dimension: more than one layer of a 1D view, or more than one cube,
  * is an array) */
+static void PackViewHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest, UINT resource_dimension);
 static void FillHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest, UINT resource_dimension) {
+    PackViewHeapForm(handle, dest, resource_dimension);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    MirrorHeapForms(MirroredHeapAt(DeviceOf(handle), reinterpret_cast<const void *>(dest.ptr)),
+                    reinterpret_cast<const void *>(dest.ptr), 1u);
+#endif
+}
+static void PackViewHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest, UINT resource_dimension) {
     auto *view = reinterpret_cast<AgxD3d12Descriptor *>(dest.ptr);
     if (!view) return;
     AgxD3d12HeapForm *form = HeapFormOf(view);
@@ -2382,13 +2430,20 @@ static VOID APIENTRY CreateUnorderedAccessViewInHeap(D3D12DDI_HDEVICE handle,
 }
 /* Descriptors are CPU records, so copies are byte copies of whole
  * descriptors of the heap type's size. */
-static VOID APIENTRY CopyDescriptorsSimple(D3D12DDI_HDEVICE, UINT count, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest,
+static VOID APIENTRY CopyDescriptorsSimple(D3D12DDI_HDEVICE handle, UINT count, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest,
                                            D3D12DDI_CPU_DESCRIPTOR_HANDLE src, D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
     if (count && dest.ptr && src.ptr)
         memmove(reinterpret_cast<void *>(dest.ptr), reinterpret_cast<const void *>(src.ptr),
                 static_cast<SIZE_T>(count) * DescriptorBytes(type));
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (count && dest.ptr && src.ptr && type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)
+        MirrorHeapForms(MirroredHeapAt(DeviceOf(handle), reinterpret_cast<const void *>(dest.ptr)),
+                        reinterpret_cast<const void *>(dest.ptr), count);
+#else
+    (void)handle;
+#endif
 }
-static VOID APIENTRY CopyDescriptors(D3D12DDI_HDEVICE, UINT dest_ranges, const D3D12DDI_CPU_DESCRIPTOR_HANDLE *dest_starts,
+static VOID APIENTRY CopyDescriptors(D3D12DDI_HDEVICE handle, UINT dest_ranges, const D3D12DDI_CPU_DESCRIPTOR_HANDLE *dest_starts,
                                      const UINT *dest_sizes, UINT src_ranges,
                                      const D3D12DDI_CPU_DESCRIPTOR_HANDLE *src_starts, const UINT *src_sizes,
                                      D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
@@ -2403,6 +2458,15 @@ static VOID APIENTRY CopyDescriptors(D3D12DDI_HDEVICE, UINT dest_ranges, const D
         ++dpos;
         ++spos;
     }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* EXP1855: shader-visible destinations publish their heap forms */
+    AgxD3d12Device *device = DeviceOf(handle);
+    for (UINT r = 0; type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && dest_starts && r < dest_ranges; ++r)
+        MirrorHeapForms(MirroredHeapAt(device, reinterpret_cast<const void *>(dest_starts[r].ptr)),
+                        reinterpret_cast<const void *>(dest_starts[r].ptr), dest_sizes ? dest_sizes[r] : 1u);
+#else
+    (void)handle;
+#endif
 }
 struct AgxD3d12DescriptorHeap {
     AgxD3d12Heap memory; /* shader-visible heaps */
@@ -2437,6 +2501,22 @@ static HRESULT APIENTRY CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D1
             hr = MapHeap(handle, memory_handle, &heap->cpu);
             if (FAILED(hr)) ReleaseHeap(device, &heap->memory);
         }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        /* EXP1855 (DynamicIndexing: 7 ms per frame walking descriptors in
+         * write-combined memory): CPU handles name a cached shadow; the GPU
+         * buffer receives the heap forms (MirrorHeapForms) */
+        if (SUCCEEDED(hr) && heap->memory.native) {
+            void *shadow = VirtualAlloc(nullptr, static_cast<SIZE_T>(heap->memory.bytes), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+            if (!shadow) {
+                ReleaseHeap(device, &heap->memory);
+                heap->cpu = nullptr;
+                hr = E_OUTOFMEMORY;
+            } else {
+                heap->memory.mirror = static_cast<unsigned char *>(heap->cpu);
+                heap->memory.cpu = heap->cpu = shadow;
+            }
+        }
+#endif
         heap->gpuva = SUCCEEDED(hr) ? heap->memory.gpuva : 0;
     } else {
         heap->cpu = VirtualAlloc(nullptr, static_cast<SIZE_T>(bytes), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
@@ -2447,6 +2527,23 @@ static HRESULT APIENTRY CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D1
     if (SUCCEEDED(hr) && heap->cpu && arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)
         for (UINT i = 0; i < heap->descriptors; ++i)
             AgxD3d12NullTextureDescriptor(HeapFormOf(static_cast<BYTE *>(heap->cpu) + static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes)->texture);
+    if (SUCCEEDED(hr) && heap->memory.mirror) {
+        if (arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
+            memcpy(heap->memory.mirror, heap->cpu, static_cast<SIZE_T>(heap->memory.bytes));
+            AcquireSRWLockExclusive(&device->heap_lock);
+            if (device->mirrored_count < ARRAYSIZE(device->mirrored)) device->mirrored[device->mirrored_count++] = &heap->memory;
+            else hr = E_OUTOFMEMORY;
+            ReleaseSRWLockExclusive(&device->heap_lock);
+        }
+        if (FAILED(hr)) {
+            VirtualFree(heap->memory.cpu, 0, MEM_RELEASE);
+            heap->memory.cpu = heap->memory.mirror;
+            heap->memory.mirror = nullptr;
+            ReleaseHeap(device, &heap->memory);
+            heap->cpu = nullptr;
+            heap->gpuva = 0;
+        }
+    }
 #endif
     const UINT receipt[] = {heap->type, heap->descriptors, static_cast<UINT>(arg->Flags), heap->gpuva != 0};
     AdmissionUmdDiagnostic("measure-d3d12-descriptor-heap", hr, receipt, 4);
@@ -2456,6 +2553,20 @@ static VOID APIENTRY DestroyDescriptorHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HDE
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12DescriptorHeap *>(heap_handle.pDrvPrivate);
     if (!device || !heap) return;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (heap->memory.mirror) {
+        AcquireSRWLockExclusive(&device->heap_lock);
+        for (UINT i = 0; i < device->mirrored_count; ++i)
+            if (device->mirrored[i] == &heap->memory) {
+                device->mirrored[i] = device->mirrored[--device->mirrored_count];
+                break;
+            }
+        ReleaseSRWLockExclusive(&device->heap_lock);
+        VirtualFree(heap->memory.cpu, 0, MEM_RELEASE);
+        heap->memory.cpu = heap->memory.mirror; /* the buffer's own mapping */
+        heap->memory.mirror = nullptr;
+    }
+#endif
     if (heap->memory.allocation) ReleaseHeap(device, &heap->memory);
     else if (heap->cpu) VirtualFree(heap->cpu, 0, MEM_RELEASE);
     memset(heap, 0, sizeof(*heap));
@@ -4840,6 +4951,7 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
         /* Asahi re-laid the texture out since it was packed (agx_upload_textures re-packs bound views too) */
         if (HeapFormOf(view)->key != AgxD3d12OwnerLayoutKey(owner, &texture)) {
             PackHeapForm(owner, view);
+            MirrorHeapForms(b->descriptors, view, 1u);
             ++g_heap_walk.packs;
         }
         if (uav) {
