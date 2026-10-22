@@ -98,9 +98,17 @@ class D3d12AbiGate(unittest.TestCase):
         # ranges for SRVs, UAVs and samplers)
         self.assertIn('d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;', caps)
         for claim in ('D3D12DDI_RESOURCE_BINDING_TIER_3', 'D3D12DDI_RESOURCE_HEAP_TIER_2',
-                      'Doubles = TRUE', 'ROVs = TRUE', 'OutputMergerLogicOp = TRUE',
+                      'Doubles = TRUE', 'ROVs = TRUE',
                       'D3D12DDI_TILED_RESOURCES_TIER_1', 'D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1'):
             self.assertNotIn(claim, caps)
+        # C57: OutputMergerLogicOp only with the logic op carried to Gallium
+        # (one op for every render target; a disagreeing PSO is refused)
+        self.assertIn('d.OutputMergerLogicOp = TRUE; /* C57 */', caps)
+        self.assertIn('desc.LogicOp = rt.LogicOp;', source)
+        self.assertIn('AdmissionUmdDiagnostic("measure-d3d12-logic-op", E_NOTIMPL', source)
+        winsys = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        self.assertIn('blend.logicop_func = logic_ops[desc->LogicOp];', winsys)
+
         opener = source[source.index('extern "C" HRESULT APIENTRY OpenAdapter12('):]
         self.assertLess(opener.index('APPLE_AGX_D3D12'), opener.index('FillD3D12DDI_ADAPTERFUNCS'))
         self.assertIn('return E_NOTIMPL;', source)
@@ -322,6 +330,31 @@ class D3d12AbiGate(unittest.TestCase):
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
+
+    def test_logic_op_table_matches_the_wdk_truth_tables(self):
+        # C57: logic_ops[] maps D3D12DDI_LOGIC_OP (WDK order, formula in its
+        # comment) to enum pipe_logicop, whose value is the truth table with
+        # bit (s << 1 | d). A swapped entry draws wrong pixels silently.
+        wdk = HEADER.read_text(encoding='utf-8-sig')
+        body = wdk[wdk.index('D3D12DDI_LOGIC_OP_CLEAR = 0'):wdk.index('} D3D12DDI_LOGIC_OP;')]
+        formulas = re.findall(r'D3D12DDI_LOGIC_OP_(\w+)(?: = 0)?,\s*// (.+)', body)
+        self.assertEqual(len(formulas), 16)
+        blend = HEADER.parents[1] / 'mesa/src/util/blend.h'
+        if not blend.exists():
+            self.skipTest('Mesa reference not available')
+        text = blend.read_text()
+        pipe = re.findall(r'PIPE_LOGICOP_(\w+),', text[text.index('enum pipe_logicop {'):])[:16]
+        winsys = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        table = winsys[winsys.index('logic_ops[16] = {'):]
+        table = re.findall(r'PIPE_LOGICOP_(\w+)', table[:table.index('};')])
+        self.assertEqual(len(table), 16)
+        for (name, formula), mapped in zip(formulas, table):
+            truth = 0
+            for s_bit in (0, 1):
+                for d_bit in (0, 1):
+                    expr = formula.strip().replace('s', str(s_bit)).replace('d', str(d_bit))
+                    truth |= (eval(expr) & 1) << (s_bit << 1 | d_bit)
+            self.assertEqual(pipe.index(mapped), truth, f'{name} ({formula}) -> {mapped}')
 
     def test_c5_compute_dispatch(self):
         # C5 (D3D12-C5-compute.md). Invariants: the pipeline keeps its own

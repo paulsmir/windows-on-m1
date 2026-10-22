@@ -310,6 +310,9 @@ typedef struct {
     int BlendEnable;
     unsigned Src, Dst, Op, SrcAlpha, DstAlpha, OpAlpha, WriteMask;
   } Rt[8];
+  /* C57: one D3D12DDI_LOGIC_OP for every render target (OutputMergerLogicOp) */
+  int LogicOpEnable;
+  unsigned LogicOp;
   unsigned SampleMask;
   unsigned SampleCount; /* C32: the PSO's SampleDesc.Count */
   unsigned FillMode, CullMode;

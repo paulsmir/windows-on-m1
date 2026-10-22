@@ -370,7 +370,7 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
             d.TiledResourcesTier = D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
             d.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
             d.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation = FALSE;
-            d.OutputMergerLogicOp = FALSE;
+            d.OutputMergerLogicOp = TRUE; /* C57 */
             d.ResourceHeapTier = D3D12DDI_RESOURCE_HEAP_TIER_1;
         });
         break;
@@ -4268,6 +4268,25 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
         desc.Rt[i].DstAlpha = rt.DestBlendAlpha;
         desc.Rt[i].OpAlpha = rt.BlendOpAlpha;
         desc.Rt[i].WriteMask = rt.RenderTargetWriteMask;
+    }
+    /* C57: Gallium applies one logic op to every render target, so the PSO's
+     * render targets must agree (an independent mix is refused). */
+    bool logic_agrees = true;
+    for (UINT i = 0; i < pso->desc.NumRenderTargets && i < 8; ++i) {
+        const D3D12DDI_RENDER_TARGET_BLEND_DESC &rt = pso->blend.RenderTarget[pso->blend.IndependentBlendEnable ? i : 0];
+        if (!i) {
+            desc.LogicOpEnable = rt.LogicOpEnable;
+            desc.LogicOp = rt.LogicOp;
+        } else if (!rt.LogicOpEnable != !desc.LogicOpEnable || (rt.LogicOpEnable && rt.LogicOp != desc.LogicOp)) {
+            logic_agrees = false;
+        }
+    }
+    if (!logic_agrees) {
+        const UINT receipt[] = {pso->desc.NumRenderTargets, static_cast<UINT>(desc.LogicOpEnable), desc.LogicOp};
+        AdmissionUmdDiagnostic("measure-d3d12-logic-op", E_NOTIMPL, receipt, 3);
+        pso->compiled = E_NOTIMPL;
+        ReleaseSRWLockExclusive(&pso->compile_lock);
+        return E_NOTIMPL;
     }
     desc.SampleMask = pso->desc.SampleMask;
     desc.SampleCount = pso->desc.SampleDesc.Count; /* C32 */

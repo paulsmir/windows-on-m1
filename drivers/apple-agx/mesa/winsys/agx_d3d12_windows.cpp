@@ -1628,6 +1628,16 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
     blend.rt[i].alpha_src_factor = a_minmax ? PIPE_BLENDFACTOR_ONE : blend_factor(desc->Rt[s].SrcAlpha);
     blend.rt[i].alpha_dst_factor = a_minmax ? PIPE_BLENDFACTOR_ONE : blend_factor(desc->Rt[s].DstAlpha);
   }
+  /* C57: D3D12DDI_LOGIC_OP order -> PIPE_LOGICOP (same truth tables) */
+  static const unsigned char logic_ops[16] = {
+      PIPE_LOGICOP_CLEAR, PIPE_LOGICOP_SET, PIPE_LOGICOP_COPY, PIPE_LOGICOP_COPY_INVERTED,
+      PIPE_LOGICOP_NOOP, PIPE_LOGICOP_INVERT, PIPE_LOGICOP_AND, PIPE_LOGICOP_NAND,
+      PIPE_LOGICOP_OR, PIPE_LOGICOP_NOR, PIPE_LOGICOP_XOR, PIPE_LOGICOP_EQUIV,
+      PIPE_LOGICOP_AND_REVERSE, PIPE_LOGICOP_AND_INVERTED, PIPE_LOGICOP_OR_REVERSE, PIPE_LOGICOP_OR_INVERTED};
+  if (desc->LogicOpEnable && desc->LogicOp < 16) {
+    blend.logicop_enable = 1;
+    blend.logicop_func = logic_ops[desc->LogicOp];
+  }
   graphics->Blend = pipe->create_blend_state(pipe, &blend);
   struct pipe_depth_stencil_alpha_state dsa = {};
   dsa.depth_enabled = desc->DepthEnable ? 1 : 0;
