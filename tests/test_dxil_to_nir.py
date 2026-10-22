@@ -256,6 +256,27 @@ class DxilToNir(unittest.TestCase):
             unhandled = set(re.findall(r"@([a-z0-9_]+)", r.stdout)) - known - self.LOWERED_OUTSIDE_ASAHI
             self.assertEqual(unhandled, set(), shader.name)
 
+    def test_indexed_tess_factor_stores_keep_their_components(self):
+        # EXP1859: dxilconv writes SV_TessFactor in a loop (fork phase over
+        # an index range); Asahi's options let indexed compact stores through,
+        # nir_lower_io then counted the index in slots (outer[1] landed at
+        # TESS_LEVEL_INNER) and the converted pipelines drew nothing.
+        def levels(text):
+            return sorted(re.findall(r"@store_output .*?base=(\d+), range=\d+, wrmask=x, component=(\d), "
+                                     r"src_type=float32, io location=VARYING_SLOT_(TESS_LEVEL_\w+)", text))
+        dxbc = subprocess.run([str(self.dxbc), str(FIXTURES / "conv_hs.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=120).stdout
+        self.assertEqual(levels(self.final("conv_hs")), levels(dxbc))
+        self.assertEqual(len(levels(dxbc)), 4)
+
+    def test_image_count_spans_every_used_image_slot(self):
+        # EXP1859 C41B: a raw UAV at u0 left the DXIL translation one image
+        # variable short; Asahi clamps image indices to num_images - 1, so
+        # u2's GetDimensions read u1 (the DXBC frontend's EXP1841 rule).
+        for shader in sorted((FIXTURES.parent / "conv-probe").glob("*.dxil")) + sorted(FIXTURES.glob("*.dxil")):
+            _, info = self.translate(self.dxil, shader)
+            self.assertGreaterEqual(int(info["images"]), int(info["image-span"]), shader.name)
+
     def test_register_range_takes_consecutive_slots(self):
         self.parity("par_range_ps")
 

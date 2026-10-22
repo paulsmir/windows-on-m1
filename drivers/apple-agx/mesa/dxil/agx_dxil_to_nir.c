@@ -8,6 +8,7 @@
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_xfb_info.h"
+#include "util/set.h"
 #include "compiler/spirv/nir_spirv.h"
 #include "compiler/spirv/spirv_info.h"
 #include <stdio.h>
@@ -529,6 +530,24 @@ record_slots(nir_shader *nir)
    nir_foreach_variable_with_modes(var, nir, nir_var_image)
       if (var->data.binding < HEAP_BINDING)
          set_range(nir->info.images_used, BITSET_SIZE(nir->info.images_used), var);
+   /* EXP1859 C41B: Asahi clamps image indices to info.num_images - 1, which
+    * nir_shader_gather_info counts from the image variables; a slot without
+    * a typed UAV below the highest one (a raw UAV at u0) gets a placeholder,
+    * as in the DXBC frontend (EXP1841) */
+   const unsigned span = BITSET_LAST_BIT(nir->info.images_used);
+   for (unsigned u = 0; u < span; ++u) {
+      bool covered = false;
+      nir_foreach_variable_with_modes(var, nir, nir_var_image) {
+         const unsigned count = glsl_type_is_array(var->type) ? glsl_get_aoa_size(var->type) : 1;
+         covered |= var->data.binding < HEAP_BINDING && u >= var->data.binding && u < var->data.binding + count;
+      }
+      if (covered)
+         continue;
+      nir_variable *gap = nir_variable_create(nir, nir_var_image,
+                                              glsl_image_type(GLSL_SAMPLER_DIM_2D, false, GLSL_TYPE_FLOAT), "u_unused");
+      gap->data.binding = u;
+      gap->data.image.format = PIPE_FORMAT_NONE;
+   }
 }
 
 /* num_ssbos spans every shader-buffer slot the code names (counters at
@@ -861,6 +880,31 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
 
    /* the DXBC frontend's tail: outputs at the end, shared memory, opt loop */
    dxbc_nir_finalize(nir);
+   /* EXP1859: dxilconv turns a fork phase over an index range (dcl_indexrange
+    * o0.x 3) into a loop writing SV_TessFactor by a dynamic index; the
+    * tessellation levels are compact patch arrays the DXBC frontend writes
+    * with constant indices only, so lower just their indirect derefs (the
+    * per-vertex arrays keep their invocation index); after the frontend's
+    * tail, where copy propagation has produced the indexed stores */
+   if (result->stage == MESA_SHADER_TESS_CTRL || result->stage == MESA_SHADER_TESS_EVAL) {
+      struct set *levels = _mesa_pointer_set_create(NULL);
+      nir_foreach_variable_with_modes(var, nir, nir_var_shader_in | nir_var_shader_out)
+         if (var->data.location == VARYING_SLOT_TESS_LEVEL_OUTER || var->data.location == VARYING_SLOT_TESS_LEVEL_INNER)
+            _mesa_set_add(levels, var);
+      if (levels->entries) {
+         /* the pass skips compact arrays a stage's options call indirectly
+          * addressable (Asahi's); indexed compact stores then reach
+          * nir_lower_io as slot offsets (outer[1] at TESS_LEVEL_INNER) */
+         const nir_shader_compiler_options *agx = nir->options;
+         nir_shader_compiler_options direct = *agx;
+         direct.support_indirect_inputs &= ~BITFIELD_BIT(result->stage);
+         direct.support_indirect_outputs &= ~BITFIELD_BIT(result->stage);
+         nir->options = &direct;
+         NIR_PASS(_, nir, nir_lower_indirect_var_derefs_to_if_else_trees, levels);
+         nir->options = agx;
+      }
+      _mesa_set_destroy(levels, NULL);
+   }
    if (!count_ssbos(nir)) {
       status = AGX_DXIL_NIR_UNSUPPORTED;
       snprintf(result->error, sizeof(result->error), "dynamically indexed shader buffer");

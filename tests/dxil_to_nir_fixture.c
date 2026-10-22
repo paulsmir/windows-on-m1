@@ -26,10 +26,11 @@ type_size_vec4(const struct glsl_type *type, bool bindless)
 int
 main(int argc, char **argv)
 {
-   bool print_final = false;
+   bool print_final = false, print_raw = false;
    const char *xfb_arg = NULL;
    for (int a = 2; a < argc; ++a) {
       print_final |= !strcmp(argv[a], "--print-final");
+      print_raw |= !strcmp(argv[a], "--print-raw"); /* the frontend's NIR */
       if (!strncmp(argv[a], "--xfb=", 6))
          xfb_arg = argv[a] + 6;
    }
@@ -55,6 +56,8 @@ main(int argc, char **argv)
       return 0;
    }
    nir_shader *nir = r.nir;
+   if (print_raw)
+      nir_print_shader(nir, stdout);
    if (xfb_arg) {
       static struct dxbc_nir_xfb xfb;
       const char *p = xfb_arg;
@@ -105,8 +108,8 @@ main(int argc, char **argv)
           nir->info.workgroup_size[0], nir->info.workgroup_size[1], nir->info.workgroup_size[2], nir->info.shared_size,
           (unsigned long long)nir->info.inputs_read, (unsigned long long)nir->info.outputs_written);
    nir_foreach_variable_with_modes(v, nir, nir_var_shader_in | nir_var_shader_out)
-      printf("IO %s %s location %d component %u\n", v->data.mode == nir_var_shader_in ? "in" : "out", v->name,
-             v->data.location, v->data.location_frac);
+      printf("IO %s %s location %d component %u%s\n", v->data.mode == nir_var_shader_in ? "in" : "out", v->name,
+             v->data.location, v->data.location_frac, v->data.compact ? " compact" : "");
 
    const unsigned ssbos = nir->info.num_ssbos, images = nir->info.num_images;
    const unsigned gathered_images = nir->info.num_images, image_span = BITSET_LAST_BIT(nir->info.images_used);
