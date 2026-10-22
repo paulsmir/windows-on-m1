@@ -160,7 +160,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPointerShape(
   return STATUS_NOT_SUPPORTED;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiIsSupportedVidPn(
+/* EXP1880 receipt-only: VidPN construction never reached CommitVidPn once
+ * an A8B8G8R8 source mode was offered; kinds 5 (cofunctional modality) and 6
+ * (IsSupportedVidPn) record where dxgkrnl stops. */
+static VOID AdmissionDisplayRingRecord(ADMISSION_CONTEXT *Context, ULONG Kind,
+    ULONG Flags, ULONG Detail, ULONGLONG Address, ULONGLONG Allocation);
+
+static NTSTATUS AdmissionIsSupportedVidPnImpl(
     CONST HANDLE MiniportDeviceContext,
     DXGKARG_ISSUPPORTEDVIDPN *IsSupportedVidPn) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
@@ -214,6 +220,20 @@ Exit:
     topologyInterface->pfnReleasePathInfo(topology, nextPath);
   if (path != NULL)
     topologyInterface->pfnReleasePathInfo(topology, path);
+  return status;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiIsSupportedVidPn(
+    CONST HANDLE MiniportDeviceContext,
+    DXGKARG_ISSUPPORTEDVIDPN *IsSupportedVidPn) {
+  NTSTATUS status =
+      AdmissionIsSupportedVidPnImpl(MiniportDeviceContext, IsSupportedVidPn);
+  if (MiniportDeviceContext != NULL && IsSupportedVidPn != NULL)
+    AdmissionDisplayRingRecord((ADMISSION_CONTEXT *)MiniportDeviceContext, 6u,
+                               IsSupportedVidPn->IsVidPnSupported ? 1u : 0u,
+                               (ULONG)status,
+                               (ULONGLONG)(ULONG_PTR)IsSupportedVidPn->hDesiredVidPn,
+                               0ULL);
   return status;
 }
 
@@ -417,6 +437,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
     status = STATUS_GRAPHICS_VIDPN_TOPOLOGY_NOT_SUPPORTED;
 
 Exit:
+  if (context != NULL && EnumCofuncModality != NULL)
+    AdmissionDisplayRingRecord(context, 5u,
+        (ULONG)EnumCofuncModality->EnumPivotType |
+            ((pinnedSourceMode != NULL ? 1u : 0u) << 8) |
+            ((pinnedTargetMode != NULL ? 1u : 0u) << 9) |
+            ((path != NULL ? 1u : 0u) << 10),
+        (ULONG)status,
+        pinnedSourceMode != NULL
+            ? (ULONGLONG)pinnedSourceMode->Format.Graphics.PixelFormat : 0ULL,
+        0ULL);
   if (sourceMode != NULL && sourceSetInterface != NULL && sourceSet != 0)
     sourceSetInterface->pfnReleaseModeInfo(sourceSet, sourceMode);
   if (targetMode != NULL && targetSetInterface != NULL && targetSet != 0)
