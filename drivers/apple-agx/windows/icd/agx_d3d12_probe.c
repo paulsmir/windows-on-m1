@@ -6501,6 +6501,18 @@ static LONG WINAPI first_access_violation(EXCEPTION_POINTERS *ep) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+/* the steps WARP ("warp <steps>") and the AGX adapter ("only <steps>",
+ * EXP1862: one step under the guest debugger) run by name */
+static const struct { const char *name; probe_step step; } named_steps[] = {
+    {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
+    {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures},
+    {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c}, {"C37D", step_c37d}, {"C37E", step_c37e},
+    {"C38A", c38_cached_pso}, {"C39A", c39_stream_output},
+    {"C41A", step_c41a}, {"C41B", step_c41b},
+    {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
+    {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
+    {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
+    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}};
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
@@ -6512,16 +6524,6 @@ int main(int argc, char **argv) {
     if (FAILED(hr)) { printf("CreateDXGIFactory1 hr=0x%08lx\n", (unsigned long)hr); return 1; }
     for (int a = 1; a < argc; ++a) {
         if (strcmp(argv[a], "warp")) continue;
-        static const struct { const char *name; probe_step step; } steps[] = {
-            {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
-            {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures},
-            {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c}, {"C37D", step_c37d}, {"C37E", step_c37e},
-            {"C38A", c38_cached_pso}, {"C39A", c39_stream_output},
-            {"C41A", step_c41a}, {"C41B", step_c41b},
-            {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
-            {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
-            {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-            {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -6529,8 +6531,8 @@ int main(int argc, char **argv) {
             FAILED(IDXGIFactory4_EnumWarpAdapter(factory4, &IID_IDXGIAdapter1, (void **)&adapter))) { puts("WARP unavailable"); return 1; }
         g_warp = 1;
         for (int b = a + 1; b < argc; ++b)
-            for (unsigned i = 0; i < sizeof(steps) / sizeof(steps[0]); ++i)
-                if (!strcmp(argv[b], steps[i].name)) (void)run_isolated(adapter, steps[i].name, steps[i].step);
+            for (unsigned i = 0; i < sizeof(named_steps) / sizeof(named_steps[0]); ++i)
+                if (!strcmp(argv[b], named_steps[i].name)) (void)run_isolated(adapter, named_steps[i].name, named_steps[i].step);
         return 0;
     }
     for (UINT i = 0; IDXGIFactory1_EnumAdapters1(factory, i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
@@ -6541,6 +6543,14 @@ int main(int argc, char **argv) {
             /* toolrun.ps1 passes its output file first: find "teardown <mode>" */
             for (int a = 1; a + 1 < argc; ++a)
                 if (!strcmp(argv[a], "teardown")) return teardown(adapter, argv[a + 1]);
+            for (int a = 1; a < argc; ++a) {
+                if (strcmp(argv[a], "only")) continue;
+                for (int b = a + 1; b < argc; ++b)
+                    for (unsigned i = 0; i < sizeof(named_steps) / sizeof(named_steps[0]); ++i)
+                        if (!strcmp(argv[b], named_steps[i].name))
+                            (void)run_isolated(adapter, named_steps[i].name, named_steps[i].step);
+                return 0;
+            }
             hr = D3D12CreateDevice((IUnknown *)adapter, D3D_FEATURE_LEVEL_11_0,
                                    &IID_ID3D12Device, (void **)&device);
             printf("D3D12CreateDevice hr=0x%08lx\n", (unsigned long)hr);
