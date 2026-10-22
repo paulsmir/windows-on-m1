@@ -5953,12 +5953,12 @@ static bool ProjectR3Depth(const D3D12DDI_DEPTH_STENCIL_DESC_0025 *desc, D3D12DD
 }
 static SIZE_T APIENTRY CalcPrivateDepthStencilStateSize0025(D3D12DDI_HDEVICE device,
     const D3D12DDI_DEPTH_STENCIL_DESC_0025 *desc) {
-    D3D12DDI_DEPTH_STENCIL_DESC_0010 legacy;
+    D3D12DDI_DEPTH_STENCIL_DESC_0010 legacy = {};
     return ProjectR3Depth(desc, &legacy) ? CalcPrivateDepthStencilStateSize0010(device, &legacy) : 0;
 }
 static VOID APIENTRY CreateDepthStencilState0025(D3D12DDI_HDEVICE device,
     const D3D12DDI_DEPTH_STENCIL_DESC_0025 *desc, D3D12DDI_HDEPTHSTENCILSTATE handle) {
-    D3D12DDI_DEPTH_STENCIL_DESC_0010 legacy;
+    D3D12DDI_DEPTH_STENCIL_DESC_0010 legacy = {};
     if (!ProjectR3Depth(desc, &legacy)) {
         ReportRejectedDeviceError(device, E_INVALIDARG);
         return;
@@ -5989,13 +5989,13 @@ static bool ProjectR3PipelineState(const D3D12DDIARG_CREATE_PIPELINE_STATE_0033 
 }
 static SIZE_T APIENTRY CalcPrivatePipelineStateSize0033(D3D12DDI_HDEVICE device,
     const D3D12DDIARG_CREATE_PIPELINE_STATE_0033 *arg) {
-    D3D12DDIARG_CREATE_PIPELINE_STATE_0010 legacy;
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0010 legacy = {};
     return ProjectR3PipelineState(arg, &legacy) ? CalcPrivatePipelineStateSize0010(device, &legacy) : 0;
 }
 static HRESULT APIENTRY CreatePipelineState0033(D3D12DDI_HDEVICE device,
     const D3D12DDIARG_CREATE_PIPELINE_STATE_0033 *arg, D3D12DDI_HPIPELINESTATE destination,
     D3D12DDI_HRTPIPELINESTATE) {
-    D3D12DDIARG_CREATE_PIPELINE_STATE_0010 legacy;
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0010 legacy = {};
     if (!ProjectR3PipelineState(arg, &legacy)) return E_INVALIDARG;
     return CreatePipelineState0010(device, &legacy, destination);
 }
@@ -6077,7 +6077,7 @@ static void ReleaseRoot11(AgxD3d12RootProjection *projection) {
 }
 static SIZE_T APIENTRY CalcPrivateRootSignatureSize0013(D3D12DDI_HDEVICE device,
                                                         const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *arg) {
-    AgxD3d12RootProjection projection;
+    AgxD3d12RootProjection projection = {};
     if (!ProjectRoot11(arg, &projection)) return 0;
     const SIZE_T bytes = CalcPrivateRootSignatureSize(device, &projection.arg);
     ReleaseRoot11(&projection);
@@ -6086,7 +6086,7 @@ static SIZE_T APIENTRY CalcPrivateRootSignatureSize0013(D3D12DDI_HDEVICE device,
 static HRESULT APIENTRY CreateRootSignature0013(D3D12DDI_HDEVICE device,
                                                 const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *arg,
                                                 D3D12DDI_HROOTSIGNATURE handle) {
-    AgxD3d12RootProjection projection;
+    AgxD3d12RootProjection projection = {};
     if (!ProjectRoot11(arg, &projection)) return E_INVALIDARG;
     const HRESULT hr = CreateRootSignature(device, &projection.arg, handle);
     ReleaseRoot11(&projection);
@@ -6161,7 +6161,7 @@ static VOID APIENTRY CheckResourceAllocationInfo0022(D3D12DDI_HDEVICE device, co
                                                      D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS flags, UINT32 alignment,
                                                      UINT mask, D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 *info) {
     if (!info) return;
-    D3D12DDI_RESOURCE_ALLOCATION_INFO legacy_info;
+    D3D12DDI_RESOURCE_ALLOCATION_INFO legacy_info = {};
     if (arg) {
         const D3D12DDIARG_CREATERESOURCE_0003 legacy = ProjectR3Resource(*arg);
         CheckResourceAllocationInfo(device, &legacy, flags, alignment, mask, &legacy_info);
@@ -6173,7 +6173,7 @@ static VOID APIENTRY CheckResourceAllocationInfo0022(D3D12DDI_HDEVICE device, co
 static VOID APIENTRY CheckExistingResourceAllocationInfo0022(D3D12DDI_HDEVICE device, D3D12DDI_HRESOURCE handle,
                                                              D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 *info) {
     if (!info) return;
-    D3D12DDI_RESOURCE_ALLOCATION_INFO legacy_info;
+    D3D12DDI_RESOURCE_ALLOCATION_INFO legacy_info = {};
     CheckExistingResourceAllocationInfo(device, handle, &legacy_info, nullptr);
     ProjectR3AllocationInfo(legacy_info, info);
 }
@@ -6186,7 +6186,7 @@ static_assert(std::is_same_v<decltype(&CheckExistingResourceAllocationInfo0022),
 static VOID APIENTRY ResourceBarrier0022(D3D12DDI_HCOMMANDLIST, UINT, const D3D12DDIARG_RESOURCE_BARRIER_0022 *) {}
 static VOID APIENTRY Present0028(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEUE queue,
                                  const D3D12DDIARG_PRESENT_0001 *arg, D3D12DDI_PRESENT_0028 *out) {
-    D3D12DDI_PRESENT_0003 legacy;
+    D3D12DDI_PRESENT_0003 legacy = {};
     Present(handle, queue, arg, out ? &legacy : nullptr);
     if (!out) return;
     memset(out, 0, sizeof(*out));
@@ -6628,7 +6628,7 @@ static VOID APIENTRY Present0051(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMAND
     if (out) memset(out, 0, sizeof(*out));
     if (contexts) memset(contexts, 0, sizeof(*contexts));
     if (queues) memset(queues, 0, sizeof(*queues));
-    D3D12DDI_PRESENT_0003 legacy;
+    D3D12DDI_PRESENT_0003 legacy = {};
     Present(handle, queue, arg, out && contexts ? &legacy : nullptr);
     if (!out || !contexts) return;
     out->BroadcastSrcAllocation[0] = legacy.hSrcAllocation;
