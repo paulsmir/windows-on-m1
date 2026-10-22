@@ -79,9 +79,17 @@ has a MIN and a MAX variant.
    hand-encoded instruction, or a NIR tg4 with a `lod` source if Asahi
    lowers it. If not, the lowering uses `txf` with emulated addressing
    (border colour from the sampler).
-2. Where the heap sampler dword is read today: the C47 lowering, which is
-   owned by the D3D11/frontend session. The reduction bits must ride in
-   that dword or next to it.
+2. ~~Where the heap sampler dword is read~~ RESOLVED from source:
+   - Both frontends read the map word at `DXBC_HEAP_SAMPLER_MAP_OFFSET` of
+     `DXBC_HEAP_TABLE_CB` (dxbc_to_nir.c `heap_sampler`, agx_dxil_to_nir.c
+     heap deref lowering): bits 0-15 are the AGX sampler handle and bits
+     16-31 the fp16 MipLODBias.
+   - A D3D12 sampler heap holds at most 2048 samplers, so handles fit in
+     11 bits, and bits 14-15 of the handle field can carry the reduction
+     mode (0 standard or comparison, 2 minimum, 3 maximum).
+   - Both frontends then mask the handle (`word & 0x3fff`) and pass the
+     reduction bits to the lowering. These are the frontend session's
+     files: one hunk each.
 3. How closely anisotropic MIN/MAX agrees with WARP on the D3D12 conformance
    images.
 
