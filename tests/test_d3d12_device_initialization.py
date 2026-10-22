@@ -31,6 +31,9 @@ class DeviceInitialization(unittest.TestCase):
     def setUpClass(cls):
         source = (ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp').read_text()
         actual = block(source, 'struct AgxD3d12Device {') + ';\n'
+        # C50: the R2+ allocation bridge is outside this contract
+        actual += ('static const D3DDDI_DEVICECALLBACKS *AdmitKernelCallbacks(AgxD3d12Device *, '
+                   'const D3D12DDIARG_CREATEDEVICE_0003 *arg) { return arg->pKTCallbacks; }\n')
         for marker in ('static HRESULT APIENTRY CreateDevice(',
                        'static void OwnerError(', 'static AGX_D3D12_OWNER *EnsureOwner('):
             actual += block(source, marker) + '\n'

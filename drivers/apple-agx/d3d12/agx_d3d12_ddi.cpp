@@ -406,6 +406,10 @@ struct AgxD3d12Device {
      * shadows a CPU descriptor handle may point into (heap_lock) */
     UINT mirrored_count;
     struct AgxD3d12Heap *mirrored[64];
+    /* EXP1868: the kernel callbacks the owner uses, with the allocation
+     * entries an R2+ runtime leaves empty bridged to its core-layer
+     * pfnAllocateCb/pfnDeallocateCb (KernelAllocationBridge) */
+    D3DDDI_DEVICECALLBACKS kernel_bridge;
 };
 struct AgxD3d12PipelineState;
 static SRWLOCK identity_registry_lock = SRWLOCK_INIT;
@@ -434,6 +438,103 @@ static void RetireDeviceIdentity(AgxD3d12Device *device) {
         device->identity_next = nullptr;
     }
     ReleaseSRWLockExclusive(&identity_registry_lock);
+}
+/* EXP1868: under interface 0033 the owner refused the kernel callbacks
+ * (AdmissionUmdRuntimeDeviceInitializeForQueue E_INVALIDARG before its
+ * first paging queue). From 0022 the runtime offers allocation through
+ * D3D12DDI_CORELAYER_DEVICECALLBACKS_0022 (pfnAllocateCb/pfnDeallocateCb,
+ * D3D12DDICB_ALLOCATE_0022); the bridge serves the owner's D3DDDICB_ALLOCATE
+ * (D3DDDI_ALLOCATIONINFO) and D3DDDICB_DEALLOCATE calls through them. */
+static const D3D12DDI_CORELAYER_DEVICECALLBACKS_0022 *CoreLayer0022Of(HANDLE runtime) {
+    const D3D12DDI_CORELAYER_DEVICECALLBACKS_0022 *result = nullptr;
+    AcquireSRWLockShared(&identity_registry_lock);
+    for (auto *device = live_identity_devices; device; device = device->identity_next)
+        if (device->runtime.handle == runtime) {
+            result = reinterpret_cast<const D3D12DDI_CORELAYER_DEVICECALLBACKS_0022 *>(device->callbacks);
+            break;
+        }
+    ReleaseSRWLockShared(&identity_registry_lock);
+    return result;
+}
+static HRESULT APIENTRY BridgeAllocateCb(HANDLE runtime, D3DDDICB_ALLOCATE *arg) {
+    const auto *core = CoreLayer0022Of(runtime);
+    if (!core || !core->pfnAllocateCb || !arg || (arg->NumAllocations && !arg->pAllocationInfo) ||
+        arg->NumAllocations > 16)
+        return E_INVALIDARG;
+    D3D12DDI_ALLOCATION_INFO_0022 info[16] = {};
+    for (UINT i = 0; i < arg->NumAllocations; ++i) {
+        const D3DDDI_ALLOCATIONINFO &in = arg->pAllocationInfo[i];
+        info[i].pSystemMem = in.pSystemMem;
+        info[i].pPrivateDriverData = in.pPrivateDriverData;
+        info[i].PrivateDriverDataSize = in.PrivateDriverDataSize;
+        info[i].VidPnSourceId = in.VidPnSourceId;
+        info[i].Flags = static_cast<D3D12DDI_ALLOCATION_INFO_FLAGS_0022>(
+            (in.Flags.Primary ? D3D12DDI_ALLOCATION_INFO_FLAGS_0022_PRIMARY : 0) |
+            (in.Flags.Stereo ? D3D12DDI_ALLOCATION_INFO_FLAGS_0022_STEREO : 0));
+    }
+    D3D12DDICB_ALLOCATE_0022 allocate = {};
+    allocate.pPrivateDriverData = arg->pPrivateDriverData;
+    allocate.PrivateDriverDataSize = arg->PrivateDriverDataSize;
+    allocate.hResource = arg->hResource;
+    allocate.NumAllocations = arg->NumAllocations;
+    allocate.pAllocationInfo = info;
+    D3D12DDI_HRTDEVICE device = {};
+    device.handle = runtime;
+    const HRESULT hr = core->pfnAllocateCb(device, &allocate);
+    if (SUCCEEDED(hr)) {
+        arg->hKMResource = allocate.hKMResource;
+        for (UINT i = 0; i < arg->NumAllocations; ++i) arg->pAllocationInfo[i].hAllocation = info[i].hAllocation;
+    }
+    return hr;
+}
+static HRESULT APIENTRY BridgeDeallocateCb(HANDLE runtime, const D3DDDICB_DEALLOCATE *arg) {
+    const auto *core = CoreLayer0022Of(runtime);
+    if (!core || !core->pfnDeallocateCb || !arg) return E_INVALIDARG;
+    D3D12DDICB_DEALLOCATE_0022 deallocate = {};
+    deallocate.hResource = arg->hResource;
+    deallocate.NumAllocations = arg->NumAllocations;
+    deallocate.HandleList = arg->HandleList;
+    D3D12DDI_HRTDEVICE device = {};
+    device.handle = runtime;
+    return core->pfnDeallocateCb(device, &deallocate);
+}
+static_assert(std::is_same_v<decltype(&BridgeAllocateCb), PFND3DDDI_ALLOCATECB>);
+static_assert(std::is_same_v<decltype(&BridgeDeallocateCb), PFND3DDDI_DEALLOCATECB>);
+/* the owner's kernel callback set (AdmissionUmdRuntimeDeviceInitializeForQueue):
+ * bit i set = entry i absent, receipted at CreateDevice */
+static UINT KernelCallbackGaps(const D3DDDI_DEVICECALLBACKS *k) {
+    if (!k) return ~0u;
+    const void *entries[] = {
+        reinterpret_cast<const void *>(k->pfnAllocateCb), reinterpret_cast<const void *>(k->pfnDeallocateCb),
+        reinterpret_cast<const void *>(k->pfnLockCb), reinterpret_cast<const void *>(k->pfnUnlockCb),
+        reinterpret_cast<const void *>(k->pfnSignalSynchronizationObject2Cb),
+        reinterpret_cast<const void *>(k->pfnMakeResidentCb), reinterpret_cast<const void *>(k->pfnEvictCb),
+        reinterpret_cast<const void *>(k->pfnWaitForSynchronizationObjectFromCpuCb),
+        reinterpret_cast<const void *>(k->pfnCreatePagingQueueCb), reinterpret_cast<const void *>(k->pfnDestroyPagingQueueCb),
+        reinterpret_cast<const void *>(k->pfnCreateSynchronizationObject2Cb),
+        reinterpret_cast<const void *>(k->pfnDestroySynchronizationObjectCb),
+        reinterpret_cast<const void *>(k->pfnReserveGpuVirtualAddressCb),
+        reinterpret_cast<const void *>(k->pfnMapGpuVirtualAddressCb),
+        reinterpret_cast<const void *>(k->pfnFreeGpuVirtualAddressCb), reinterpret_cast<const void *>(k->pfnSubmitCommandCb),
+        reinterpret_cast<const void *>(k->pfnSignalSynchronizationObjectFromGpu2Cb),
+        reinterpret_cast<const void *>(k->pfnCreateContextVirtualCb), reinterpret_cast<const void *>(k->pfnDestroyContextCb)};
+    UINT gaps = 0;
+    for (UINT i = 0; i < ARRAYSIZE(entries); ++i)
+        if (!entries[i]) gaps |= 1u << i;
+    return gaps;
+}
+static const D3DDDI_DEVICECALLBACKS *AdmitKernelCallbacks(AgxD3d12Device *device, const D3D12DDIARG_CREATEDEVICE_0003 *arg) {
+    const UINT gaps = KernelCallbackGaps(arg->pKTCallbacks);
+    const auto *core = reinterpret_cast<const D3D12DDI_CORELAYER_DEVICECALLBACKS_0022 *>(arg->p12UMCallbacks);
+    const bool r2 = adapter_object.negotiated >= D3D12DDI_SUPPORTED_0022 && core;
+    const UINT receipt[] = {gaps, r2 ? 1u : 0u, r2 && core->pfnAllocateCb ? 1u : 0u, r2 && core->pfnDeallocateCb ? 1u : 0u};
+    AdmissionUmdDiagnostic("d3d12-kernel-callbacks", S_OK, receipt, 4);
+    if (!arg->pKTCallbacks || !(gaps & 3u) || !r2 || !core->pfnAllocateCb || !core->pfnDeallocateCb)
+        return arg->pKTCallbacks;
+    device->kernel_bridge = *arg->pKTCallbacks;
+    if (!device->kernel_bridge.pfnAllocateCb) device->kernel_bridge.pfnAllocateCb = BridgeAllocateCb;
+    if (!device->kernel_bridge.pfnDeallocateCb) device->kernel_bridge.pfnDeallocateCb = BridgeDeallocateCb;
+    return &device->kernel_bridge;
 }
 extern "C" const void *AgxD3d12ZeroCacheResolveDevice(D3D12DDI_HDEVICE handle) {
     const void *result = nullptr;
@@ -471,7 +572,7 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
         InitializeSRWLock(&device->heap_lock);
         device->runtime = arg->hRTDevice;
         device->callbacks = arg->p12UMCallbacks;
-        device->kernel = arg->pKTCallbacks;
+        device->kernel = AdmitKernelCallbacks(device, arg);
         device->generation = ((((GetCurrentProcessId() & 0xffffu) << 16) ^
                                static_cast<ULONG>(InterlockedIncrement(&queue_generation))) | 0x80000000u);
         device->shader_provider = AgxCpuProviderCreate();
