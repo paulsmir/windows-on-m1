@@ -30,6 +30,7 @@
 #include "agx_d3d12_probe_ps_c59.h"
 #include "agx_d3d12_probe_vs_c60.h"
 #include "agx_d3d12_probe_ps_c60.h"
+#include "agx_d3d12_probe_ps_c61.h"
 #include "dxbc_tir.h"
 #include "agx_d3d12_probe_ps_view_dxil.h"
 #include "agx_d3d12_probe_cs_cb_dxil62.h"
@@ -6424,7 +6425,7 @@ static int step_c59a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
  * countbits(SV_Coverage) per pixel into a UAV, which must equal the
  * reference coverage of the D3D standard 8x pattern and the top-left rule
  * (dxbc_tir.h). */
-static int step_c60a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+static int c60_coverage(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int conservative) {
     static const float tris[][6] = {
         {4.0f, 4.0f, 28.0f, 4.0f, 28.0f, 20.0f}, {4.0f, 4.0f, 28.0f, 20.0f, 4.0f, 20.0f},
         {32.25f, 2.5f, 60.0f, 3.125f, 33.0f, 4.0f},
@@ -6432,6 +6433,7 @@ static int step_c60a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
         {8.5625f, 40.6875f, 30.4375f, 40.6875f, 8.5625f, 60.5f},
         {50.0f, 40.0f, 44.0f, 60.0f, 62.0f, 52.0f}};
     enum { TRIS = sizeof(tris) / sizeof(tris[0]), SAMPLES = 8 };
+    const char *step = conservative ? "C61A" : "C60A";
     D3D12_ROOT_PARAMETER parameter = {D3D12_ROOT_PARAMETER_TYPE_UAV};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {1, &parameter};
     D3D12_INPUT_ELEMENT_DESC element = {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0,
@@ -6469,6 +6471,8 @@ static int step_c60a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
                     for (int px = 0; px < 64; ++px) {
                         unsigned m = dxbc_tir_mask(&e, px, py, SAMPLES), n = 0;
                         for (; m; m &= m - 1) ++n;
+                        /* C61A: one invocation per touched pixel */
+                        if (conservative) n = (unsigned)dxbc_tir_touched(&e, px, py);
                         want[py * 64 + px] += n;
                         total += n;
                     }
@@ -6494,14 +6498,16 @@ static int step_c60a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
         pso_desc.pRootSignature = root;
         pso_desc.VS.pShaderBytecode = g_agx_d3d12_probe_vs_c60;
         pso_desc.VS.BytecodeLength = sizeof(g_agx_d3d12_probe_vs_c60);
-        pso_desc.PS.pShaderBytecode = g_agx_d3d12_probe_ps_c60;
-        pso_desc.PS.BytecodeLength = sizeof(g_agx_d3d12_probe_ps_c60);
+        pso_desc.PS.pShaderBytecode = conservative ? g_agx_d3d12_probe_ps_c61 : g_agx_d3d12_probe_ps_c60;
+        pso_desc.PS.BytecodeLength = conservative ? sizeof(g_agx_d3d12_probe_ps_c61) : sizeof(g_agx_d3d12_probe_ps_c60);
         pso_desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
         pso_desc.SampleMask = ~0u;
         pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
         pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
         pso_desc.RasterizerState.DepthClipEnable = TRUE;
-        pso_desc.RasterizerState.ForcedSampleCount = SAMPLES;
+        pso_desc.RasterizerState.ForcedSampleCount = conservative ? 0 : SAMPLES;
+        pso_desc.RasterizerState.ConservativeRaster =
+            conservative ? D3D12_CONSERVATIVE_RASTERIZATION_MODE_ON : D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
         pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         pso_desc.InputLayout.pInputElementDescs = &element;
         pso_desc.InputLayout.NumElements = 1;
@@ -6509,7 +6515,7 @@ static int step_c60a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
         pso_desc.NumRenderTargets = 0;
         pso_desc.SampleDesc.Count = 1;
         hr = ID3D12Device_CreateGraphicsPipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
-        printf("C60A CreateGraphicsPipelineState (ForcedSampleCount %d) hr=0x%08lx\n", SAMPLES, (unsigned long)hr);
+        printf("%s CreateGraphicsPipelineState (%s) hr=0x%08lx\n", step, conservative ? "conservative" : "ForcedSampleCount 8", (unsigned long)hr);
     }
     if (SUCCEEDED(hr))
         hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -6534,7 +6540,7 @@ static int step_c60a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
         ID3D12GraphicsCommandList_DrawInstanced(list, (UINT)(TRIS * 3), 1, 0, 0);
         transition(list, counts, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
         ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, counts, 0, 16384);
-        hr = run_list(queue, fence, list, base + 1, "C60A tir");
+        hr = run_list(queue, fence, list, base + 1, step);
     }
     if (SUCCEEDED(hr)) {
         D3D12_RANGE all = {0, 16384};
@@ -6545,15 +6551,15 @@ static int step_c60a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
             for (unsigned i = 0; i < 4096; ++i) {
                 got += words[i];
                 if (words[i] != want[i]) {
-                    if (shown++ < 6) printf("C60A pixel %u,%u got %u want %u\n", i % 64, i / 64, words[i], want[i]);
+                    if (shown++ < 6) printf("%s pixel %u,%u got %u want %u\n", step, i % 64, i / 64, words[i], want[i]);
                     ++bad;
                 }
             }
-            printf("C60A covered samples got %u want %u bad=%u\n", got, total, bad);
+            printf("%s counts got %u want %u bad=%u\n", step, got, total, bad);
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("AGX_D3D12_C60A: %s\n", SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
+    printf("AGX_D3D12_%s: %s\n", step, SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (pso) ID3D12PipelineState_Release(pso);
@@ -6565,6 +6571,21 @@ static int step_c60a(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fenc
     if (upload) ID3D12Resource_Release(upload);
     if (counts) ID3D12Resource_Release(counts);
     return FAILED(hr) || bad != 0;
+}
+static int step_c60a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return c60_coverage(d, q, f, b, 0); }
+/* C61A (12_1 conservative rasterization Tier 1, ConservativeRasterizationTier
+ * reported only with APPLE_AGX_D3D12_CR=1; SKIP otherwise): the C60A triangles
+ * with ConservativeRaster ON; one invocation per pixel each triangle touches
+ * (dxbc_tir_touched), none elsewhere. */
+static int step_c61a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
+    D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
+    HRESULT hr = ID3D12Device_CheckFeatureSupport(d, D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options));
+    printf("C61A ConservativeRasterizationTier %d hr=0x%08lx\n", (int)options.ConservativeRasterizationTier, (unsigned long)hr);
+    if (FAILED(hr) || options.ConservativeRasterizationTier < D3D12_CONSERVATIVE_RASTERIZATION_TIER_1) {
+        printf("AGX_D3D12_C61A: SKIP (tier 0)\n");
+        return 0;
+    }
+    return c60_coverage(d, q, f, b, 1);
 }
 /* C53A (EXP1875): D3D9On12 renders a D3D9 X8R8G8B8 back buffer as a committed
  * DXGI_FORMAT_B8G8R8X8_UNORM render target, and its first batch (clear, copy
@@ -7184,7 +7205,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
     {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
     {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}, {"C57A", step_c57a}, {"C58A", step_c58a}, {"C59A", step_c59a}, {"C60A", step_c60a}};
+    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}, {"C51A", step_c51a}, {"C52A", step_c52a}, {"C53A", step_c53a}, {"C57A", step_c57a}, {"C58A", step_c58a}, {"C59A", step_c59a}, {"C60A", step_c60a}, {"C61A", step_c61a}};
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
@@ -7316,6 +7337,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C58A", step_c58a);
                 (void)run_isolated(adapter, "C59A", step_c59a);
                 (void)run_isolated(adapter, "C60A", step_c60a);
+                (void)run_isolated(adapter, "C61A", step_c61a);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
