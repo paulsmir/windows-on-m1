@@ -78,3 +78,15 @@ that the probe order changes the typing and charmap pacing.
   (Wom1SubmitPath1135), `display_ring.py` (Wom1DisplayRing1131),
   `private_procs.py` (Wom1G3PrivateProcs), `soak_summary.py` (a soak's
   evidence directory), `g4_phases.py` (UMD trace `measure-g4-phase` lines).
+
+## Real applications (EXP1876G)
+
+- `guest/realapp/game-run.ps1 -Dir <guest dir> -TraceDir <dir> -Tag <t> -ProcName <p> (-Exe <path> | -SteamApp <id>)`:
+  launch, liveness/working set/screenshot ticks, CloseMainWindow, Application Error/Hang events, `game-<tag>.json`.
+- `guest/realapp/trace-env-on.ps1 -TraceFile <path> [-SteamApp <id>]` / `trace-env-off.ps1`: user-level
+  `APPLE_AGX_UMD_TRACE_FILE` for processes Steam/3DMark start (Steam is restarted to inherit it); always remove after.
+- `experiment/guest-ui.sh shot OUT | click X Y | wheel X Y DELTA`: DPI-aware screenshots and mouse input in the
+  interactive session (physical 2560x1600 coordinates; screenshots are downscaled to 1600 px, multiply by 1.6).
+- 3DMark must be started through Steam (`steam.exe -applaunch 223850`); its workloads take a JSON `--in` that the UI
+  generates. Night Raid: Benchmarks > Night Raid > Custom run, "Enable window mode" until the KMD offers display modes
+  beyond A8R8G8B8.
