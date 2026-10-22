@@ -21,6 +21,7 @@
 #include "agx_d3d12_probe_cs_ranges.h"
 #include "agx_d3d12_probe_cs_c47b.h"
 #include "agx_d3d12_probe_cs_cb_dxil.h"
+#include "agx_d3d12_probe_cs_wave_dxil.h"
 #include "agx_d3d12_probe_vs_dxil.h"
 #include "agx_d3d12_probe_ps_dxil.h"
 #include "agx_d3d12_probe_cs_texture1d_load.h"
@@ -287,9 +288,10 @@ static int compute_dispatch(ID3D12Device *device, ID3D12CommandQueue *queue, ID3
  * constants b1 {scale = 5 (SetComputeRoot32BitConstants), bias = 11
  * (SetComputeRoot32BitConstant)} and a root CBV b0 on an UPLOAD buffer
  * whose extra.y = 1000; agx_d3d12_probe_cs_cb.hlsl writes dword i =
- * 5i + 11 + 1000. */
+ * 5i + 11 + 1000; a non-zero 'every' expects that word in every dword
+ * instead (C48A). */
 static int compute_constants_code(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, const void *code,
-                                  SIZE_T code_bytes, const char *tag) {
+                                  SIZE_T code_bytes, const char *tag, UINT every) {
     D3D12_ROOT_PARAMETER parameters[3] = {{D3D12_ROOT_PARAMETER_TYPE_UAV}, {D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS},
                                           {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {3, parameters};
@@ -363,7 +365,7 @@ static int compute_constants_code(ID3D12Device *device, ID3D12CommandQueue *queu
         hr = ID3D12Resource_Map(readback, 0, &all, (void **)&dwords);
         if (SUCCEEDED(hr) && dwords) {
             bad = 0;
-            for (unsigned i = 0; i < 16384; ++i) bad += dwords[i] != i * 5u + 1011u;
+            for (unsigned i = 0; i < 16384; ++i) bad += dwords[i] != (every ? every : i * 5u + 1011u);
             printf("%s readback bad=%u first=%u,%u last=%u\n", tag, bad, dwords[0], dwords[1], dwords[16383]);
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
@@ -381,7 +383,7 @@ static int compute_constants_code(ID3D12Device *device, ID3D12CommandQueue *queu
     return !(SUCCEEDED(hr) && bad == 0);
 }
 static int compute_constants(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence) {
-    return compute_constants_code(device, queue, fence, g_agx_d3d12_probe_cs_cb, sizeof(g_agx_d3d12_probe_cs_cb), "C5B");
+    return compute_constants_code(device, queue, fence, g_agx_d3d12_probe_cs_cb, sizeof(g_agx_d3d12_probe_cs_cb), "C5B", 0u);
 }
 /* C44A (D3D12-C44-dxil.md): C5B's program compiled by DXC as cs_6_0 -- the
  * DXIL frontend (dxil-spirv, spirv_to_nir) under the R1 interface the
@@ -399,7 +401,25 @@ static int step_c44a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
         printf("AGX_D3D12_C44A: FAIL\n");
         return 1;
     }
-    return compute_constants_code(d, q, f, g_agx_d3d12_probe_cs_cb_dxil, sizeof(g_agx_d3d12_probe_cs_cb_dxil), "C44A");
+    return compute_constants_code(d, q, f, g_agx_d3d12_probe_cs_cb_dxil, sizeof(g_agx_d3d12_probe_cs_cb_dxil), "C44A", 0u);
+}
+/* C48A (D3D12 wave operations): the driver reports WaveOps with one wave
+ * size (OPTIONS1, interface 0012; AGX: 32) and agx_d3d12_probe_cs_wave_dxil.hlsl's
+ * fourteen wave checks hold in every thread (every dword 0x3fff; WARP's
+ * 4-lane waves fail only the 32-lane check, 0x3ffe). */
+static int step_c48a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
+    D3D12_FEATURE_DATA_D3D12_OPTIONS1 options = {0};
+    const HRESULT hr = ID3D12Device_CheckFeatureSupport(d, D3D12_FEATURE_D3D12_OPTIONS1, &options, sizeof(options));
+    (void)b;
+    printf("C48A WaveOps %d lanes %u..%u total %u hr=0x%08lx\n", (int)options.WaveOps, options.WaveLaneCountMin,
+           options.WaveLaneCountMax, options.TotalLaneCount, (unsigned long)hr);
+    if (!shader_model_6(d, "C48A") || FAILED(hr) || !options.WaveOps ||
+        options.WaveLaneCountMin != options.WaveLaneCountMax) {
+        printf("AGX_D3D12_C48A: FAIL\n");
+        return 1;
+    }
+    return compute_constants_code(d, q, f, g_agx_d3d12_probe_cs_wave_dxil, sizeof(g_agx_d3d12_probe_cs_wave_dxil), "C48A",
+                                  options.WaveLaneCountMin == 32 ? 0x3fffu : 0x3ffeu);
 }
 
 /* C5c (D3D12-C5-compute.md): a descriptor table {UAV u0 (raw view), CBV
@@ -6456,7 +6476,7 @@ int main(int argc, char **argv) {
             {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
             {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
             {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-            {"C44A", step_c44a}, {"C44B", step_c44b}};
+            {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}};
         ID3D12Debug *debug = NULL;
         IDXGIFactory4 *factory4 = NULL;
         if (SUCCEEDED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) ID3D12Debug_EnableDebugLayer(debug);
@@ -6537,6 +6557,8 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C37A", step_c37a);
                 (void)run_isolated(adapter, "C37B", step_c37b);
                 (void)run_isolated(adapter, "C37C", step_c37c);
+                (void)run_isolated(adapter, "C37D", step_c37d);
+                (void)run_isolated(adapter, "C37E", step_c37e);
                 (void)run_isolated(adapter, "C38A", c38_cached_pso);
                 (void)run_isolated(adapter, "C39A", c39_stream_output);
                 (void)run_isolated(adapter, "C41A", step_c41a);
@@ -6557,6 +6579,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C47B", c47_binding_tier2);
                 (void)run_isolated(adapter, "C44A", step_c44a);
                 (void)run_isolated(adapter, "C44B", step_c44b);
+                (void)run_isolated(adapter, "C48A", step_c48a);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
