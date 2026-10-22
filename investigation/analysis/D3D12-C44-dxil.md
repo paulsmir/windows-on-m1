@@ -65,3 +65,58 @@ so the root-signature resolution stays unchanged.
    preprocessing, binding map equal to the DXBC fixture of the same HLSL.
 2. Hardware: probe steps compiled with DXC -T *_6_0 (compute, graphics,
    wave intrinsics) with the SHADER_MODELS cap reporting 6.0.
+
+## Current state (2026-10-22 review)
+
+- `mesa/dxil/agx_dxil_owned.c` already converts SM 6.0 compute DXIL through the
+  dxil-spirv C API (2.75.0, lock `mesa/scripts/dxil_spirv_dependency_lock.json`,
+  licence review `D3D12-C15-dxil-license-review.md`: YES with notice
+  conditions); `agx_dxil_nir_map.c` maps its Vulkan buffer indices to the
+  binding-map slots. Both are compute/raw-buffer only and linked only by the
+  optional prepared-NIR-owner build; the shipped UMD reports no SHADER_MODELS
+  cap and StoreShader accepts DXBC tokens only.
+- Mesa's `spirv_to_nir` (libvtn) is not part of the native runtime closure
+  (`build-asahi-runtime-closure.py` LIBRARIES); the host Mesa build has
+  `src/compiler/spirv/libvtn.a` and `.local/dxil-work` has host dxil-spirv
+  archives, so the frontend can be developed against host fixtures first.
+
+## Frontend parity checklist (what the owner consumes from dxbc_to_nir)
+
+- Entry: `dxbc_translate_tokens_bindings_xfb` -> NIR + `dxbc_binding_map`
+  (dense slots per kind in declaration order; ranges one slot per register;
+  limits {14, 128|HEAP, 8|HEAP, 16|HEAP}); then `dxbc_nir_srv_dimensions`,
+  `dxbc_nir_uav_dimensions` (scan the NIR), `dxbc_nir_compute_info`, and for
+  fragment shaders `dxbc_nir_lower_fragment_position`.
+- CBV: `load_ubo(imm slot)`; cb14/cb15 reserved for heap tables.
+- SRV texture: `nir_tex_instr` with `texture_index`/`sampler_index` (no
+  derefs); typed buffer SRV `txf` DIM_BUF; raw/structured SRV one `txf` per
+  dword on an R32_UINT buffer view (coord = byte address >> 2).
+- UAV: typed -> `nir_var_image` (binding u) + indexed `image_*` (never
+  `image_deref_*`), placeholder images up to the highest typed slot; raw and
+  structured -> `load/store_ssbo`, `ssbo_atomic` with imm u; append/consume
+  counters at SSBO `DXBC_NIR_UAV_COUNTER_SLOT + u`.
+- Dynamic ranges: `texture_offset`/`sampler_offset`; heap ranges (C47):
+  `bindless_image_agx(index*160+64[+24|+48], desc_set 0xd312)` from cb14.
+- I/O: VS inputs `VERT_ATTRIB_GENERIC0 + input register`; varyings
+  `VARYING_SLOT_VAR0 + register` both sides; SV_Position POS; PS outputs
+  `FRAG_RESULT_DATA0 + register`; system values as intrinsics
+  (vertex_id_zero_base, instance_id, front_face, sample_id, primitive_id...).
+- Finalisation (`dxbc_nir_finalize`): returns/vars_to_ssa/system values, outputs
+  to temporaries (non-CS/HS), shared memory explicit IO (CS), opt loop,
+  gather_info; no nir_lower_io/nir_lower_samplers (Asahi's create_*_state does
+  them).
+
+## Plan
+
+1. Host frontend `mesa/dxil/agx_dxil_to_nir.c`: dxil-spirv with remapper
+   callbacks building the same binding map (set = kind, binding = slot;
+   counters, typed/raw classes), stage I/O remapped to register locations,
+   spirv_to_nir (Vulkan environment, subgroup size 32), then a lowering pass to
+   the checklist above (Vulkan indices -> slots, image/texture derefs ->
+   indexed forms) and the same finalisation. Host fixtures (DXC on the
+   builder) compared against the DXBC translation of the same HLSL.
+2. Windows: build libvtn and dxil-spirv into the native runtime closure for
+   ARM64 and x64 UMDs; THIRD-PARTY-NOTICES in the package.
+3. DDI: DXIL containers in StoreShader/CreateShader and PSO paths; report SM
+   6.0 through D3D12DDICAPS_TYPE_0011_SHADER_MODELS only after offline parity
+   and hardware probes (cs/vs/ps 6.0, waves).
