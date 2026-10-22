@@ -4277,7 +4277,7 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
         if (!i) {
             desc.LogicOpEnable = rt.LogicOpEnable;
             desc.LogicOp = rt.LogicOp;
-        } else if (!rt.LogicOpEnable != !desc.LogicOpEnable || (rt.LogicOpEnable && rt.LogicOp != desc.LogicOp)) {
+        } else if (!rt.LogicOpEnable != !desc.LogicOpEnable || (rt.LogicOpEnable && static_cast<unsigned>(rt.LogicOp) != desc.LogicOp)) {
             logic_agrees = false;
         }
     }
