@@ -8,7 +8,33 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-22 02:10Z -- RESOURCE BINDING TIER 2 VALIDATED; DXIL/SM6 ADMISSION IN PROGRESS
+## CURRENT 2026-10-22T05:59Z -- SM 6.0 + WAVE OPS VALIDATED ON ARM64 (SM6 PROFILE); TESS WINDING FIXED
+
+Last validated package 30.0.1861.0 from 6f692bac (EXP1861, rec1861h PASS).
+Proven on J313 (EXP1857-EXP1861), profile APPLE_AGX_D3D12_SM6=1:
+- R1 build 2 (0012): CORE_0012, SHADER_MODELS {5.1, 6.0}, SHADER_CAPS_0012
+  WaveOps, 32-lane waves, 896 lanes (7 cores x 128).
+- The R1 runtime converts every DXBC shader to DXIL (dxilconv); every
+  stage reaches agx_dxil_to_nir. Probes ARM64 103/103 (C44A compute, C44B
+  graphics, C48A waves 0x3fff, C39A stream output, C37 tessellation, C41
+  loops/UAV sizes); 17/19 samples as the default profile; MiniEngine
+  ModelViewerI6 pixel-identical to the DXBC run (x64).
+- Fixes behind it: dispatch base (30ed91c2), heap ranges, GS/HS/DS,
+  pass-through HS, DXIL xfb, dxil-spirv two-output udiv patch (c49 libs,
+  patches/), indexed tess factors + image placeholders (5e8aa33b), float
+  control preserve flags (0993ebe3).
+- Tessellation winding: D3D triangle_cw = GL ccw in both frontends
+  (139a7509, C37D/C37E as WARP); the Asahi path reading the HS winding is
+  not located.
+Offline guards: test_dxil_to_nir (49 dxilconv probe shaders, Asahi-handler
+check for every final intrinsic, image span, tess factors).
+Open: x64 SM6 probe dies of heap corruption (0xc0000374) inside C38A's
+CachedPSO step (ARM64 silent) -- next: run it under the guest's ARM64 cdb.
+Then: SM6 by default (removes APPLE_AGX_D3D12_SM6 gate), SM 6.1+.
+
+## Prior state superseded by EXP1857-EXP1861
+
+### (was CURRENT) 2026-10-22 02:10Z -- RESOURCE BINDING TIER 2 VALIDATED; DXIL/SM6 ADMISSION IN PROGRESS
 
 Last validated package 30.0.1856.0 from 0f7bf15a (EXP1856, rec1856h PASS).
 Proven on J313 (EXP1853-EXP1856):
