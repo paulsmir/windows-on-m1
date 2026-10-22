@@ -207,3 +207,86 @@ Checkpoints:
 - HW2: self-test of a reserved 512x512 RGBA8 texture with 3 mips (tiles
   mapped out of order, one NULL, packed tail), sampled to a readback buffer;
   expect heap patterns and 0 from the NULL tile.
+
+## Status 2026-10-23 (offline, this session)
+
+Done, host-tested and syncheck-clean on the builder (session syncheck
+`C:\Users\pauls\syncheck-t2d`: clang-cl `/Zs` of the GPUVA winsys bridges
+against the EXP1886 projected tree; MSVC `/Zs`, `/O2` and x86 of the DDI,
+owner and UMD GPUVA files):
+
+| Commit | What |
+|---|---|
+| 16ebca72 | B4: growable, merging UMD alias table; one guard tile per reserved range |
+| a56e0343 | B4: 1 MiB tile-scratch runs; per-backing virtual-BO references |
+| 52be6299, 64cc5e0b | tile walk over texture geometry; tile k of a region |
+| 09a63473 | agx_win32_sparse: page plan and Sparse Blocks on the real ail layout |
+| ffcb2726 | 16 KiB page maps of reserved ranges |
+| f96e9d71, ff5d8011 | reserved-texture virtual BO and Sparse Block table; scene create/bind |
+| 52d9c41b | owner reserved-texture API; CopyTexture through a committed staging texture |
+| 9e43fe85 | DDI: reserved Texture2D, texture Update/CopyTileMappings, GetMipPacking |
+| 529d55e7 | CopyTiles |
+| 786f1afd | HW2 self-test |
+| ecab12ac | Tier 1 and the TILED bit behind `APPLE_AGX_D3D12_TILED=1` |
+
+Decision: Tier 1 needs no Gallium descriptor overlay. Texture reads go
+through the image VA, which maps the heap pages (16 KiB). Tier 1 leaves
+reads of NULL tiles undefined, and those read the tile scratch. The sparse
+descriptor (Sparse Block table) is needed only for Tier 2 zero reads and
+residency.
+
+EXP1887 (from 629dad58, B4 included) showed no regressions in the
+submission path.
+
+## Tier 2 (FL 12_0) contract
+
+WINDOWS CONTRACT (Microsoft Learn "D3D12_TILED_RESOURCES_TIER"):
+- Reads of NULL-mapped tiles return 0, and writes to them are discarded.
+  This holds for buffers and textures, through SRVs, UAVs, copies and
+  CopyTiles.
+- A mip of at least one standard tile in size is never packed (already
+  true).
+- Shader LOD clamp and status operations: `Sample(..., clamp, status)` and
+  `CheckAccessFullyMapped`.
+- FL 12_0 also requires min/max reduction filtering (FL table) with Tier 2.
+
+AGX/ASAHI CONTRACT (Honeykrisp):
+- **Textures.** A sparse-mode texture descriptor reads through the Sparse
+  Block table: a disabled block reads 0 and reports non-resident. Writes
+  (PBE, image stores) go to the image VA, where NULL pages map the scratch
+  page, so they are discarded.
+- **Buffers** (`agx_device.h` sparse_ro_offset; `hk_bind_scratch`,
+  `hk_queue.c`):
+  - Every buffer is mapped twice. The bottom half of the VA space is
+    read-write, with NULL pages on scratch. The top half
+    (`+ sparse_ro_offset`) is read-only, with NULL pages on the zero BO.
+  - Loads use the top-half address and stores the bottom-half one, so NULL
+    reads return 0 and NULL writes land in scratch.
+- **Residency.** `sparse_residency` NIR (texture ops with residency code)
+  maps onto the hardware's non-resident report of a sparse descriptor.
+
+TRANSLATION:
+1. Sparse texture descriptor: the `agx_pack_texture` overlay (requested
+   from the session that owns `build-native-asahi-state.py`), using
+   `AgxWin32AsahiSparseTableVa`.
+2. Read-only shadow for reserved buffers only:
+   - Each reserved range gets a second reservation (the shadow) whose tiles
+     map the heap read-only, or a zero allocation for NULL.
+   - Buffer SRV descriptors and root SRVs of a reserved buffer take the
+     shadow VA.
+   - UAV reads of a reserved buffer through the RW address still read
+     scratch for NULL tiles. That is the remaining gap: it needs loads
+     routed to the shadow in the NIR lowering (Honeykrisp routes all loads),
+     which is per-shader work. Plan it after the SRV path and measure
+     whether applications read NULL tiles through UAVs.
+3. `CheckAccessFullyMapped` and status: DXIL/DXBC residency codes onto NIR
+   `sparse_residency`, for textures only (buffer residency is reported as
+   resident).
+4. Min/max filters: shader emulation (FL program step 4).
+
+WHAT IS STILL UNKNOWN:
+- Whether VidMm maps read-only views of an allocation
+  (`D3DDDI_MAPGPUVIRTUALADDRESS` Protection.Write = 0) on this KMD: the KMD
+  leaf path honours `pte->ReadOnly`.
+- How the AGX treats a write to a read-only page (fault or drop); the
+  shadow is never written by construction.
