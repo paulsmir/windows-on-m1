@@ -62,7 +62,9 @@ DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c')
 DXIL_UNITS = ('agx_dxil_to_nir.c', 'agx_dxil_checked.cpp')
 DXIL_SPIRV_SOURCE = Path(r'C:\Users\pauls\c49-dxspv-source')
 DXIL_SPIRV_BUILD = {'x64': Path(r'C:\Users\pauls\c49-dxspv-x64\build'),
-                    'arm64': Path(r'C:\Users\pauls\c49-dxspv-arm64\build')}
+                    'arm64': Path(r'C:\Users\pauls\c49-dxspv-arm64\build'),
+                    # EXP1874B: the WOW64 D3D12 UMD (D3D9On12), the same c49 source
+                    'x86': Path(r'C:\Users\pauls\c49-dxspv-x86\build')}
 DXIL_SPIRV_LIBRARIES = ('dxil-spirv-c-static.lib', 'dxil-converter.lib', 'spirv-module.lib',
                         'bc/llvm-bc.lib', 'third_party/bc-decoder.lib', 'third_party/dxbc-spirv.lib',
                         'third_party/glslang-spirv-builder.lib', 'dxil-utils.lib', 'dxil-debug.lib')
