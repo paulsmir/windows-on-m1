@@ -53,7 +53,7 @@ typedef struct { uint64_t *Held; unsigned HeldCount; AGX_WIN32_GPUVA_SET Older[3
 typedef struct { int Failed, Closing; AGX_WIN32_GPUVA_SPACE Gpuva;
   void *Cache[AGX_WIN32_BO_CACHE_LIMIT]; APPLE_AGX_U32 CacheCount; APPLE_AGX_U64 CacheBytes; } AGX_WIN32_ASAHI_BACKEND;
 struct windows_bo { struct agx_bo Base; struct { struct { unsigned ClassId; } Buffer; } Backing;
-  AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva; int Imported, Cached; };
+  AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva; int Imported, Cached, Virtual; /* C53 B1 */ };
 static int disposed, refuse;
 static void AgxWin32PerfNote(const char *fmt, ...) { (void)fmt; }
 static int dispose(struct windows_bo *bo) { (void)bo; if(refuse) return 0; ++disposed; return 1; }

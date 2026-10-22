@@ -7,3 +7,4 @@ test_g4_usc_window_replay.G4UscWindowReplay.test_native_coordinates_match_mapped
 test_umd_system_direct_limit.SystemDirectLimit.test_threshold_within_kmd_class_limit  # pre-existing on 2026-10-22
 test_g4_r105_open_normalization.R105OpenNormalization.test_r105_request_parses_to_the_ordinary_description  # pre-existing on 2026-10-22
 test_g3_private_request_policy  # import error, pre-existing on 2026-10-22
+test_apple_agx_win32_screen.AppleAgxWin32ScreenTests.test_device_query_classed_buffers_and_reset_are_fail_closed  # pre-existing on 2026-10-22

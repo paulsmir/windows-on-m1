@@ -71,6 +71,7 @@ typedef struct {
   unsigned GpuvaReady, Failed;
   int ZlsAttachments;
   uint64_t NewestFence;
+  APPLE_AGX_U32 VirtualTileRefs; /* C53 B1 */
 } AGX_WIN32_ASAHI_BACKEND;
 struct agx_screen { struct agx_bo *rodata; };
 /* EXP1069: Asahi's per-device zero and scratch pages (agx_open_device). */
@@ -135,6 +136,8 @@ static struct agx_batch *agx_writer_get(struct agx_context *c,unsigned h) {
   (void)c;(void)h;return NULL;
 }
 static uint64_t agx_map_gpu(struct agx_resource *r) { return r->bo->va->addr; }
+static unsigned AgxWin32AsahiVirtualTileCount(struct agx_bo *bo) { (void)bo; return 0; } /* C53 B1: no virtual BOs here */
+static struct agx_bo *AgxWin32AsahiVirtualTile(struct agx_bo *bo, unsigned tile) { (void)bo; (void)tile; return NULL; }
 static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
     AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *bo) {
   (void)b;return bo && bo->refs ? &bo->view : NULL;

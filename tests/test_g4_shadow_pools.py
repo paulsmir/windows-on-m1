@@ -72,7 +72,7 @@ struct agx_bo { unsigned flags; size_t size; void *_map; int refcnt; };
 typedef struct { int Failed; struct { void *Screen; } Buffers; int Gpuva; } AGX_WIN32_ASAHI_BACKEND;
 typedef struct { void *CpuAddress; } AGX_WIN32_NATIVE_BO;
 struct windows_bo { struct agx_bo Base; AGX_WIN32_NATIVE_BO Backing; AGX_WIN32_ASAHI_BACKEND *Backend;
-  struct { uint64_t Allocation; } Gpuva; void *Shadow; };
+  struct { uint64_t Allocation; } Gpuva; void *Shadow; int Virtual; /* C53 B1 */ };
 #define AGX_WIN32_ASAHI_FAIL(b, site) ((b)->Failed = (int)(site))
 static unsigned char device_view[4][0x4000];
 static unsigned maps;

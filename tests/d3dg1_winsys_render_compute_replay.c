@@ -77,6 +77,7 @@ typedef struct {
   int ZlsAttachments;
   uint64_t NewestFence;
   uint64_t TimestampFrequency, TimestampOffset;
+  APPLE_AGX_U32 VirtualTileRefs; /* C53 B1 */
 } AGX_WIN32_ASAHI_BACKEND;
 struct agx_screen { struct agx_bo *rodata; };
 struct agx_device { struct agx_bo *zero_bo, *scratch_bo; };
@@ -149,6 +150,8 @@ static int agx_batch_is_compute(const struct agx_batch *b) { return b->compute; 
 static struct agx_batch *agx_writer_get(struct agx_context *c, unsigned h) {
   (void)c; return h < 16u ? writer_of[h] : NULL;
 }
+static unsigned AgxWin32AsahiVirtualTileCount(struct agx_bo *bo) { (void)bo; return 0; } /* C53 B1: no virtual BOs here */
+static struct agx_bo *AgxWin32AsahiVirtualTile(struct agx_bo *bo, unsigned tile) { (void)bo; (void)tile; return NULL; }
 static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
     AGX_WIN32_ASAHI_BACKEND *b, struct agx_bo *bo) {
   (void)b; return bo && bo->refs ? &bo->view : NULL;

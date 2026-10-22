@@ -46,7 +46,7 @@ typedef struct { int unused; } AGX_WIN32_NATIVE_BO;
 struct agx_device { void *windows_private; };
 struct agx_bo { int refcnt; void *_map; unsigned flags; size_t size; };
 struct windows_bo { struct agx_bo Base; AGX_WIN32_NATIVE_BO Backing; AGX_WIN32_ASAHI_BACKEND *Backend;
-  AGX_WIN32_GPUVA_BO Gpuva; void *Shadow; };
+  AGX_WIN32_GPUVA_BO Gpuva; void *Shadow;  int Virtual; /* C53 B1 */ };
 /* EXP1207: these BOs carry no shadow flag. */
 #define AGX_WIN32_BO_SHADOW (1u << 30)
 static void *shadow_alloc(size_t bytes) { return malloc(bytes); }

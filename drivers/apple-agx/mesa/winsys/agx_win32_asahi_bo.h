@@ -75,6 +75,9 @@ typedef struct {
    * reservation could not be freed yet (submission in flight). */
   AGX_WIN32_GPUVA_BO PendingVa[64];
   APPLE_AGX_U32 PendingVaCount;
+  /* C53 B1: tiles of live virtual BOs mapped onto backing BOs -- an upper
+   * bound on the references a submission adds by expanding them. */
+  APPLE_AGX_U32 VirtualTileRefs;
   /* EXP996: released native BOs kept bound, mapped and resident for reuse
    * (Mesa's own BO cache is replaced by agx_bo_create below). */
   void *Cache[AGX_WIN32_BO_CACHE_LIMIT];
@@ -135,6 +138,20 @@ struct agx_bo *AgxWin32AsahiImportBo(
 #ifdef APPLE_AGX_GPUVA_WINSYS
 const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
     AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *);
+/* C53 B1 (D3D12-C53-tiled-buffers-plan.md): a reserved buffer of 64 KiB
+ * tiles. Its handle, residency and in-flight tracking come from its own
+ * 64 KiB anchor allocation; its VA is a reserved range whose tiles map the
+ * device scratch BO until MapVirtualTiles maps backing BO tiles (NULL
+ * backing: scratch again). A remap first retires the submissions naming it.
+ * Submissions naming it also hold its backing BOs. It has no CPU map. */
+struct agx_bo *AgxWin32AsahiCreateVirtualBo(struct agx_device *, size_t Bytes,
+                                            const char *Label);
+int AgxWin32AsahiMapVirtualTiles(struct agx_bo *Virtual, unsigned FirstTile,
+                                 unsigned Tiles, struct agx_bo *Backing,
+                                 unsigned BackingTile);
+/* 0 for an ordinary BO; the backing BO of a tile, NULL for scratch. */
+unsigned AgxWin32AsahiVirtualTileCount(struct agx_bo *);
+struct agx_bo *AgxWin32AsahiVirtualTile(struct agx_bo *, unsigned Tile);
 /* EXP1207: winsys creation flag beside enum agx_bo_flags. The BO's CPU map
  * (agx_bo_map) is a cached shadow of the allocation; nothing reaches the
  * allocation the GPU reads until AgxWin32AsahiShadowPublish copies the

@@ -90,6 +90,7 @@ typedef struct {
   int GpuvaReady, Failed;
   uint64_t NewestFence;
   uint64_t TimestampFrequency, TimestampOffset;
+  APPLE_AGX_U32 VirtualTileRefs; /* C53 B1 */
 } AGX_WIN32_ASAHI_BACKEND;
 #define AGX_WIN32_ASAHI_FAIL(b, site) ((b)->Failed = (int)(site))
 static struct agx_screen screen;
@@ -117,6 +118,8 @@ static struct agx_bo *agx_bo_create(struct agx_device *d, size_t size, unsigned 
   return ++creates == refuse_create_at ? NULL : make_bo(size);
 }
 static void agx_bo_unreference(struct agx_device *d, struct agx_bo *bo) { (void)d; --bo->refs; }
+static unsigned AgxWin32AsahiVirtualTileCount(struct agx_bo *bo) { (void)bo; return 0; } /* C53 B1: no virtual BOs here */
+static struct agx_bo *AgxWin32AsahiVirtualTile(struct agx_bo *bo, unsigned tile) { (void)bo; (void)tile; return NULL; }
 static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(AGX_WIN32_ASAHI_BACKEND *b, struct agx_bo *bo) {
   (void)b; return bo ? &bo->view : NULL;
 }
@@ -263,7 +266,7 @@ class WinsysComputeEnvelope(unittest.TestCase):
         start = source.index("typedef struct {\n  struct agx_bo *Command;")
         capsule_type = source[start:source.index("} AGX_G4_BATCH;", start) + len("} AGX_G4_BATCH;")]
         functions = capsule_type + "\n" + "\n".join(body(source, name) for name in (
-            "backend", "capsule", "batch_refuse", "compute_only", "render_compute", "add_bo", "pool_extent",
+            "backend", "capsule", "batch_refuse", "compute_only", "render_compute", "add_bo", "add_written", "pool_extent",
             "publish_shadows", "strip_timestamps",
             "AgxWin32AsahiBatchComputeEnter",
             "AgxWin32AsahiBatchComputeLeave", "AgxWin32AsahiBatchComputeFinalize",

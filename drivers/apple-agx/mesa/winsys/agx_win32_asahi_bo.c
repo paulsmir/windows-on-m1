@@ -27,6 +27,14 @@ struct windows_bo {
   /* EXP1207: the cached CPU map of an AGX_WIN32_BO_SHADOW BO (Base._map);
    * Backing.CpuAddress stays the allocation's write-combined view. */
   void *Shadow;
+  /* C53 B1: a reserved (virtual) buffer. Coordinate is the reserved range;
+   * the BO's own allocation is a 64 KiB anchor for its handle, residency
+   * and in-flight tracking. Tiles[t] is the backing BO of 64 KiB tile t
+   * (one reference each), NULL while it maps the device scratch BO. */
+  int Virtual;
+  AGX_WIN32_GPUVA_BO Reserved;
+  struct windows_bo **Tiles;
+  unsigned TileCount;
 #endif
 };
 static void native_map(struct agx_device *,struct agx_bo *,void *);
@@ -188,8 +196,14 @@ int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *b, struct agx_device *native,
   return 1;
 }
 
+#ifdef APPLE_AGX_GPUVA_WINSYS
+static void virtual_release(struct windows_bo *bo);
+#endif
 static int dispose(struct windows_bo *bo) {
   AGX_WIN32_ASAHI_BACKEND *b=bo->Backend;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(bo->Virtual) virtual_release(bo);
+#endif
   if(bo->Backing.CpuAddress) {
     if(AgxWin32NativeBoUnmap(b->Buffers.Screen,&bo->Backing)!=AgxWin32NativeBoSuccess)
       return 0;
@@ -258,7 +272,7 @@ static void cache_evict_oldest(AGX_WIN32_ASAHI_BACKEND *b) {
  * released entries instead, as Mesa's agx_bo_cache does. */
 static int cache_put(struct windows_bo *bo) {
   AGX_WIN32_ASAHI_BACKEND *b=bo->Backend;
-  if(bo->Imported || bo->Cached || !bo->Gpuva.Bound || b->Failed || b->Closing ||
+  if(bo->Imported || bo->Cached || bo->Virtual || !bo->Gpuva.Bound || b->Failed || b->Closing ||
      bo->Base.size>AGX_WIN32_BO_CACHE_BYTES) return 0;
   while(b->CacheCount && (b->CacheCount>=AGX_WIN32_BO_CACHE_LIMIT ||
         bo->Base.size>AGX_WIN32_BO_CACHE_BYTES-b->CacheBytes))
@@ -474,10 +488,129 @@ const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
     AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base) {
   struct windows_bo *bo=(struct windows_bo *)base;
   if(!b || !base || bo->Backend!=b || base->dev!=b->Native ||
-     !bo->Gpuva.Bound || base->refcnt<=0 ||
-     base->va!=&bo->Coordinate || base->va->addr!=bo->Gpuva.Va)
+     !bo->Gpuva.Bound || base->refcnt<=0 || base->va!=&bo->Coordinate ||
+     base->va->addr!=(bo->Virtual ? bo->Reserved.Va : bo->Gpuva.Va))
     return NULL;
   return &bo->Gpuva;
+}
+
+/* C53 B1 (D3D12-C53-tiled-buffers-plan.md, "B1 decision") */
+#define AGX_WIN32_TILE 0x10000u
+static struct windows_bo *virtual_scratch(AGX_WIN32_ASAHI_BACKEND *b) {
+  struct windows_bo *scratch=b->Native?(struct windows_bo *)b->Native->scratch_bo:NULL;
+  return scratch && scratch->Backend==b && scratch->Gpuva.Bound && !scratch->Virtual &&
+         scratch->Gpuva.Bytes>=AGX_WIN32_TILE ? scratch : NULL;
+}
+/* Submissions naming the anchor still read the old tiles: retire them
+ * first, as a CPU map does (EXP1082). */
+static int virtual_retire(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *bo) {
+  uint64_t fence=AgxWin32GpuvaHoldingFence(&b->Gpuva,bo->Gpuva.Allocation);
+  return !fence || AgxWin32GpuvaRetire(&b->Gpuva,fence);
+}
+static void virtual_release(struct windows_bo *bo) {
+  AGX_WIN32_ASAHI_BACKEND *b=bo->Backend;
+  for(unsigned t=0;t<bo->TileCount;++t)
+    if(bo->Tiles && bo->Tiles[t]) {
+      struct windows_bo *backing=bo->Tiles[t];
+      bo->Tiles[t]=NULL;
+      --b->VirtualTileRefs;
+      agx_bo_unreference(b->Native,&backing->Base);
+    }
+  free(bo->Tiles);
+  bo->Tiles=NULL;
+  bo->TileCount=0;
+  if(bo->Reserved.Bound) {
+    /* the range is freed once no submission is in flight (EXP979) */
+    if(!virtual_retire(b,bo) ||
+       !AgxWin32GpuvaFreeRange(&b->Gpuva,bo->Reserved.Va,bo->Reserved.Bytes)) {
+      if(b->PendingVaCount<sizeof(b->PendingVa)/sizeof(b->PendingVa[0]))
+        b->PendingVa[b->PendingVaCount++]=bo->Reserved;
+      else
+        AGX_WIN32_ASAHI_FAIL(b, 1u);
+    }
+    memset(&bo->Reserved,0,sizeof(bo->Reserved));
+  }
+  bo->Virtual=0;
+  bo->Coordinate.addr=bo->Gpuva.Va;
+  bo->Coordinate.size_B=bo->Gpuva.Bytes;
+  bo->Base.size=bo->Gpuva.Bytes;
+}
+
+struct agx_bo *AgxWin32AsahiCreateVirtualBo(struct agx_device *native,size_t bytes,const char *label) {
+  AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
+  struct windows_bo *scratch,*bo;
+  struct agx_bo *base;
+  uint64_t va=0;
+  if(!b || b->Native!=native || b->Failed || !b->GpuvaReady || !bytes ||
+     bytes>SIZE_MAX-(AGX_WIN32_TILE-1)) return NULL;
+  bytes=(bytes+AGX_WIN32_TILE-1)&~(size_t)(AGX_WIN32_TILE-1);
+  if(bytes/AGX_WIN32_TILE>UINT32_MAX || !(scratch=virtual_scratch(b))) return NULL;
+  if(!(base=agx_bo_create(native,AGX_WIN32_TILE,0,0,label))) return NULL;
+  bo=(struct windows_bo *)base;
+  bo->Tiles=calloc(bytes/AGX_WIN32_TILE,sizeof(*bo->Tiles));
+  if(!bo->Tiles || !AgxWin32GpuvaReserveRange(&b->Gpuva,bytes,&va)) {
+    free(bo->Tiles); bo->Tiles=NULL;
+    agx_bo_unreference(native,base);
+    return NULL;
+  }
+  bo->Virtual=1;
+  bo->TileCount=(unsigned)(bytes/AGX_WIN32_TILE);
+  bo->Reserved.Allocation=bo->Gpuva.Allocation;
+  bo->Reserved.Va=va; bo->Reserved.Bytes=bytes; bo->Reserved.Bound=1;
+  /* every tile starts on the scratch BO: reads see its contents, writes go
+   * nowhere a real resource lives (plan: NULL tiles map scratch) */
+  for(unsigned t=0;t<bo->TileCount;++t)
+    if(!AgxWin32GpuvaMapRange(&b->Gpuva,va+(uint64_t)t*AGX_WIN32_TILE,
+                              scratch->Gpuva.Allocation,0,AGX_WIN32_TILE,AGX_GPUVA_MAP_WRITE)) {
+      agx_bo_unreference(native,base);
+      return NULL;
+    }
+  bo->Coordinate.addr=va;
+  bo->Coordinate.size_B=bytes;
+  base->size=bytes;
+  return base;
+}
+
+int AgxWin32AsahiMapVirtualTiles(struct agx_bo *base,unsigned first,unsigned count,
+                                 struct agx_bo *backing_base,unsigned backing_tile) {
+  struct windows_bo *bo=(struct windows_bo *)base;
+  struct windows_bo *backing=(struct windows_bo *)backing_base;
+  AGX_WIN32_ASAHI_BACKEND *b=bo?bo->Backend:NULL;
+  struct windows_bo *scratch;
+  if(!b || !bo->Virtual || b->Failed || !count || first>bo->TileCount ||
+     count>bo->TileCount-first || !(scratch=virtual_scratch(b))) return 0;
+  if(backing && (backing->Backend!=b || backing->Virtual || !backing->Gpuva.Bound ||
+                 backing_base->refcnt<=0 ||
+                 (uint64_t)backing_tile+count>backing->Gpuva.Bytes/AGX_WIN32_TILE)) return 0;
+  if(!virtual_retire(b,bo)) { AGX_WIN32_ASAHI_FAIL(b, 1u); return 0; }
+  const uint64_t va=bo->Reserved.Va+(uint64_t)first*AGX_WIN32_TILE;
+  int mapped=1;
+  if(backing) {
+    mapped=AgxWin32GpuvaMapRange(&b->Gpuva,va,backing->Gpuva.Allocation,
+                                 (uint64_t)backing_tile*AGX_WIN32_TILE,
+                                 (uint64_t)count*AGX_WIN32_TILE,AGX_GPUVA_MAP_WRITE);
+  } else {
+    for(unsigned t=0;mapped && t<count;++t)
+      mapped=AgxWin32GpuvaMapRange(&b->Gpuva,va+(uint64_t)t*AGX_WIN32_TILE,
+                                   scratch->Gpuva.Allocation,0,AGX_WIN32_TILE,AGX_GPUVA_MAP_WRITE);
+  }
+  if(!mapped) return 0;
+  for(unsigned t=first;t<first+count;++t) {
+    struct windows_bo *old=bo->Tiles[t];
+    if(backing) { agx_bo_reference(backing_base); ++b->VirtualTileRefs; }
+    bo->Tiles[t]=backing;
+    if(old) { --b->VirtualTileRefs; agx_bo_unreference(b->Native,&old->Base); }
+  }
+  return 1;
+}
+
+unsigned AgxWin32AsahiVirtualTileCount(struct agx_bo *base) {
+  const struct windows_bo *bo=(const struct windows_bo *)base;
+  return bo && bo->Virtual ? bo->TileCount : 0u;
+}
+struct agx_bo *AgxWin32AsahiVirtualTile(struct agx_bo *base,unsigned tile) {
+  const struct windows_bo *bo=(const struct windows_bo *)base;
+  return bo && bo->Virtual && tile<bo->TileCount && bo->Tiles[tile] ? &bo->Tiles[tile]->Base : NULL;
 }
 #endif
 static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed) {
@@ -485,6 +618,9 @@ static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed
   void *address=NULL;
   AGX_WIN32_ASAHI_BACKEND *b=native->windows_private;
   if(!b || b!=bo->Backend || fixed || b->Failed || base->refcnt<=0) return;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(bo->Virtual) return; /* C53 B1: no CPU map of a reserved range yet */
+#endif
 #ifdef APPLE_AGX_GPUVA_WINSYS
   /* EXP1082: a submission now returns once queued, so the one in flight may
    * still hold this BO's slot, which refuses a CPU map (DWM's backend failed

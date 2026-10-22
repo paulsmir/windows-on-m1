@@ -446,6 +446,31 @@ static int add_bo(AGX_WIN32_ASAHI_BACKEND *b,
     if(refs[i]->Allocation==view->Allocation) return 1;
   if(*count==limit) return 0;
   refs[(*count)++]=view;
+  /* C53 B1: a virtual BO's tiles read and write its backing BOs */
+  for(unsigned t=0,n=AgxWin32AsahiVirtualTileCount(bo);t<n;++t) {
+    struct agx_bo *tile=AgxWin32AsahiVirtualTile(bo,t);
+    if(tile && !add_bo(b,refs,count,limit,tile)) return 0;
+  }
+  return 1;
+}
+
+/* A BO the batch writes, for the UMD's CPU-copy refresh; a virtual BO
+ * (C53 B1) marks its backing BOs. */
+static int add_written(AGX_WIN32_ASAHI_BACKEND *b,const AGX_WIN32_GPUVA_BO **written,
+                       unsigned *written_count,struct agx_bo *bo) {
+  const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,bo);
+  unsigned duplicate=0;
+  if(!mapped) return 0;
+  for(unsigned j=0;j<*written_count;++j)
+    if(written[j]==mapped) duplicate=1;
+  if(!duplicate) {
+    if(*written_count==AGX_G4_WRITTEN_LIMIT) return 0;
+    written[(*written_count)++]=mapped;
+  }
+  for(unsigned t=0,n=AgxWin32AsahiVirtualTileCount(bo);t<n;++t) {
+    struct agx_bo *tile=AgxWin32AsahiVirtualTile(bo,t);
+    if(tile && !add_written(b,written,written_count,tile)) return 0;
+  }
   return 1;
 }
 
@@ -669,6 +694,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
   pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
   limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+fixed_refs;
+  if(b->VirtualTileRefs>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
+  limit+=b->VirtualTileRefs; /* C53 B1 */
   if(pool_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pool_count;
   if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
@@ -802,15 +829,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      * writer of, as for a G2 compute batch, so the UMD refreshes their CPU
      * copies after the job. */
     if(compute && agx_writer_get(batch->ctx,(unsigned)handle)==batch) {
-      const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,referenced);
-      unsigned duplicate=0;
-      if(!mapped) { fail_site=__LINE__; goto fail; }
-      for(unsigned j=0;j<written_count;++j)
-        if(written[j]==mapped) duplicate=1;
-      if(!duplicate) {
-        if(written_count==AGX_G4_WRITTEN_LIMIT) { fail_site=__LINE__; goto fail; }
-        written[written_count++]=mapped;
-      }
+      if(!add_written(b,written,&written_count,referenced)) { fail_site=__LINE__; goto fail; }
     }
   }
   util_dynarray_foreach(&batch->pool.bos,struct agx_bo *,bo) {
@@ -881,6 +900,8 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
   pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
   limit=batch->bo_list.bit_count+fixed_refs;
+  if(b->VirtualTileRefs>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
+  limit+=b->VirtualTileRefs; /* C53 B1 */
   if(pool_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pool_count;
   if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
@@ -918,15 +939,7 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
     if(!referenced || !add_bo(b,refs,&count,limit,referenced))
       { fail_site=__LINE__; goto fail; }
     if(agx_writer_get(batch->ctx,(unsigned)handle)==batch) {
-      const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,referenced);
-      unsigned duplicate=0;
-      if(!mapped) { fail_site=__LINE__; goto fail; }
-      for(unsigned j=0;j<written_count;++j)
-        if(written[j]==mapped) duplicate=1;
-      if(!duplicate) {
-        if(written_count==AGX_G4_WRITTEN_LIMIT) { fail_site=__LINE__; goto fail; }
-        written[written_count++]=mapped;
-      }
+      if(!add_written(b,written,&written_count,referenced)) { fail_site=__LINE__; goto fail; }
     }
   }
   util_dynarray_foreach(&batch->pool.bos,struct agx_bo *,bo) {

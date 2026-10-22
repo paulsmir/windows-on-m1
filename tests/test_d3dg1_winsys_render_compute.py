@@ -29,7 +29,7 @@ class D3dG1WinsysRenderCompute(unittest.TestCase):
                  "gpuva_color_format_supported", "gpuva_color_formats_supported", "gpuva_color_class", "compute_only",
                  "render_compute", "AgxWin32AsahiBatchComputeEnter",
                  "AgxWin32AsahiBatchComputeLeave", "AgxWin32AsahiBatchComputeFinalize",
-                 "add_bo", "append_native", "append_attachments", "prepare_process_buffers",
+                 "add_bo", "add_written", "append_native", "append_attachments", "prepare_process_buffers",
                  "pool_extent", "publish_shadows", "strip_timestamps",
                  "ticks_to_ns", "write_timestamps", "AgxWin32AsahiBatchFinish",
                  "release_lease", "AgxWin32AsahiBatchPoll", "AgxWin32AsahiBatchTimestamps",
