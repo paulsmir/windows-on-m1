@@ -163,6 +163,7 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutInitialize(
   Client->PoolBytes = 0ULL;
   Client->Qualified = APPLE_AGX_SCANOUT_FALSE;
   Client->PresentPending = APPLE_AGX_SCANOUT_FALSE;
+  Client->PresentFormat = APPLE_AGX_SCANOUT_FORMAT_BGRA8888;
   return AppleAgxScanoutOk;
 }
 
@@ -253,7 +254,7 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutPresentApplied(
       !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_STRIDE,
                               APPLE_AGX_SCANOUT_J313_STRIDE) ||
       !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_FORMAT,
-                              APPLE_AGX_SCANOUT_FORMAT_BGRA8888) ||
+                              Client->PresentFormat) ||
       !AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_REQUEST_SEQUENCE,
                               sequence) ||
       !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_COMMAND,
@@ -299,7 +300,7 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQueuePresent(
       !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_STRIDE,
                               APPLE_AGX_SCANOUT_J313_STRIDE) ||
       !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_FORMAT,
-                              APPLE_AGX_SCANOUT_FORMAT_BGRA8888) ||
+                              Client->PresentFormat) ||
       !AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_REQUEST_SEQUENCE,
                               sequence) ||
       !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_COMMAND,

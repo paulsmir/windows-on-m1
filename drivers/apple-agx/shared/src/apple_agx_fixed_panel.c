@@ -101,8 +101,11 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelCommit(
   if (Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
       Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
       Stride != APPLE_AGX_SCANOUT_J313_STRIDE ||
-      Format != APPLE_AGX_SCANOUT_FORMAT_BGRA8888)
+      (Format != APPLE_AGX_SCANOUT_FORMAT_BGRA8888 &&
+       (Format != APPLE_AGX_SCANOUT_FORMAT_RGBA8888 ||
+        (Panel->Scanout.Capabilities & APPLE_AGX_SCANOUT_CAP_RGBA8888) == 0u)))
     return AppleAgxFixedPanelInvalidMode;
+  Panel->Scanout.PresentFormat = Format;
   Panel->Committed = APPLE_AGX_SCANOUT_TRUE;
   return AppleAgxFixedPanelOk;
 }

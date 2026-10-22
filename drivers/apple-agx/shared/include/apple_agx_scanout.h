@@ -23,6 +23,8 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
 #define APPLE_AGX_SCANOUT_CAP_REPEATED_PRESENT (1u << 4u)
 #define APPLE_AGX_SCANOUT_CAP_LATCHED_RECEIPT (1u << 5u)
 #define APPLE_AGX_SCANOUT_CAP_LATCHED_IRQ (1u << 6u)
+/* D3D-FS1: the broker scans out RGBA8888 (DCP 'RGBA') as well as BGRA8888 */
+#define APPLE_AGX_SCANOUT_CAP_RGBA8888 (1u << 7u)
 #define APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES                              \
   (APPLE_AGX_SCANOUT_CAP_FIXED_J313 | APPLE_AGX_SCANOUT_CAP_BGRA8888 |       \
    APPLE_AGX_SCANOUT_CAP_REGISTERED_POOL |                                   \
@@ -41,6 +43,7 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
 #define APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE 0x3b800000ULL
 #define APPLE_AGX_SCANOUT_ALIGNMENT 0x10000ULL
 #define APPLE_AGX_SCANOUT_FORMAT_BGRA8888 1u
+#define APPLE_AGX_SCANOUT_FORMAT_RGBA8888 2u
 #define APPLE_AGX_SCANOUT_IRQ_LATCHED (1u << 0u)
 #define APPLE_AGX_SCANOUT_IRQ_ERROR (1u << 1u)
 #define APPLE_AGX_SCANOUT_IRQ_MASK                                             \
@@ -151,6 +154,8 @@ typedef struct _APPLE_AGX_SCANOUT_CLIENT {
   APPLE_AGX_SCANOUT_U64 PoolBytes;
   APPLE_AGX_SCANOUT_BOOL Qualified;
   APPLE_AGX_SCANOUT_BOOL PresentPending;
+  /* D3D-FS1: format each present carries (the committed mode's) */
+  APPLE_AGX_SCANOUT_U32 PresentFormat;
 } APPLE_AGX_SCANOUT_CLIENT;
 
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutInitialize(

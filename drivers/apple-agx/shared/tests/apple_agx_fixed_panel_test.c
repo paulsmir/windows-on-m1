@@ -27,6 +27,7 @@ typedef struct _FAKE_BROKER {
   APPLE_AGX_SCANOUT_U64 ActiveOffset;
   APPLE_AGX_SCANOUT_U64 NowMs;
   APPLE_AGX_SCANOUT_U32 CommandWrites;
+  APPLE_AGX_SCANOUT_U32 Format;
   FAKE_RESPONSE Response;
 } FAKE_BROKER;
 
@@ -99,10 +100,13 @@ static APPLE_AGX_SCANOUT_BOOL write32(void *Context,
                       : APPLE_AGX_SCANOUT_STATE_PENDING;
     return APPLE_AGX_SCANOUT_TRUE;
   }
+  if (reg(Offset) == APPLE_AGX_SCANOUT_REG_FORMAT) {
+    fake->Format = Value;
+    return APPLE_AGX_SCANOUT_TRUE;
+  }
   if (reg(Offset) == APPLE_AGX_SCANOUT_REG_WIDTH ||
       reg(Offset) == APPLE_AGX_SCANOUT_REG_HEIGHT ||
-      reg(Offset) == APPLE_AGX_SCANOUT_REG_STRIDE ||
-      reg(Offset) == APPLE_AGX_SCANOUT_REG_FORMAT)
+      reg(Offset) == APPLE_AGX_SCANOUT_REG_STRIDE)
     return APPLE_AGX_SCANOUT_TRUE;
   return APPLE_AGX_SCANOUT_FALSE;
 }
@@ -412,6 +416,41 @@ static void test_queue_present_while_hidden_is_deferred_until_visible(void) {
   assert(fake.SurfaceOffset == 0x3670000ULL);
 }
 
+/* D3D-FS1: an RGBA8888 mode needs the broker's RGBA capability, and each
+ * present then carries the committed format; BGRA stays the default. */
+static void test_rgba_commit_needs_capability_and_sets_present_format(void) {
+  FAKE_BROKER fake;
+  APPLE_AGX_FIXED_PANEL panel;
+  APPLE_AGX_SCANOUT_U32 swap = 0u;
+  memset(&fake, 0, sizeof(fake));
+  panel = make_panel(&fake);
+  fake.Response = FakeRegister;
+  assert(AppleAgxFixedPanelStart(&panel, 20ULL) == AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u, 10240u,
+                                  APPLE_AGX_SCANOUT_FORMAT_RGBA8888) ==
+         AppleAgxFixedPanelInvalidMode);
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u, 10240u,
+                                  3u) == AppleAgxFixedPanelInvalidMode);
+
+  memset(&fake, 0, sizeof(fake));
+  fake.Capabilities = APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES |
+                      APPLE_AGX_SCANOUT_CAP_RGBA8888;
+  panel = make_panel(&fake);
+  fake.Response = FakeRegister;
+  assert(AppleAgxFixedPanelStart(&panel, 20ULL) == AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u, 10240u,
+                                  APPLE_AGX_SCANOUT_FORMAT_RGBA8888) ==
+         AppleAgxFixedPanelOk);
+  fake.Response = FakePresent;
+  assert(AppleAgxFixedPanelPresent(&panel, 2u, 0x1000000ULL,
+                                   40ULL, &swap) == AppleAgxFixedPanelOk);
+  assert(fake.Format == APPLE_AGX_SCANOUT_FORMAT_RGBA8888);
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u, 10240u,
+                                  APPLE_AGX_SCANOUT_FORMAT_BGRA8888) ==
+         AppleAgxFixedPanelOk);
+  assert(panel.Scanout.PresentFormat == APPLE_AGX_SCANOUT_FORMAT_BGRA8888);
+}
+
 int main(void) {
   test_start_registers_exact_pool();
   test_commit_accepts_only_fixed_mode_and_topology();
@@ -423,5 +462,6 @@ int main(void) {
   test_v2_queue_present_does_not_poll_or_consume_v1_handoff();
   test_queue_present_accepts_primary_beyond_former_window();
   test_queue_present_while_hidden_is_deferred_until_visible();
+  test_rgba_commit_needs_capability_and_sets_present_format();
   return 0;
 }
