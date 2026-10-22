@@ -57,8 +57,11 @@ class D3d12AbiGate(unittest.TestCase):
                           'D3D12DDICAPS_TYPE_GPUVA_CAPS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT',
                           'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT1',
                           'D3D12DDICAPS_TYPE_SWIZZLE_PATTERN', 'D3D12DDICAPS_TYPE_0011_SHADER_MODELS'})
-        # C44: SM 6.0 and the R1 interface only for APPLE_AGX_D3D12_SM6=1
-        # processes until the DXIL path is hardware-validated
+        # C44: SM 6.0 and the R1 interface by default since EXP1865;
+        # APPLE_AGX_D3D12_SM6=0 is the only way back to 0003/SM 5.1
+        gate = source[source.index('static bool ShaderModel6Enabled() {'):]
+        gate = gate[:gate.index('\n}\n')]
+        self.assertIn("return !(GetEnvironmentVariableA(\"APPLE_AGX_D3D12_SM6\", value, sizeof(value)) == 1 && value[0] == '0');", gate)
         models = caps[caps.index('case D3D12DDICAPS_TYPE_0011_SHADER_MODELS:'):]
         models = models[:models.index('break;')]
         self.assertIn('if (ShaderModel6Enabled() &&', models)

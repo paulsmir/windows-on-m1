@@ -102,12 +102,15 @@ template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENT
 
 /* C44: SM 6 needs the R1 interface (0011): the 0003 runtime never asks
  * D3D12DDICAPS_TYPE_0011_SHADER_MODELS and keeps applications at SM 5.1.
- * Until the DXIL path is hardware-validated, R1 and SM 6.0 are offered only
- * to processes that set APPLE_AGX_D3D12_SM6=1 (probe and sample runs). */
+ * Validated on J313 in APPLE_AGX_D3D12_SM6=1 processes (EXP1859-EXP1865:
+ * probes 103/103 on ARM64 and x64, samples and MiniEngine as the 0003
+ * interface, the runtime converting DXBC to DXIL), R1 build 2 with SM 6.0
+ * and wave operations is the default; APPLE_AGX_D3D12_SM6=0 keeps a process
+ * at the 0003 interface and SM 5.1. */
 static bool ShaderModel6Enabled() {
     static const bool enabled = [] {
         char value[2] = {};
-        return GetEnvironmentVariableA("APPLE_AGX_D3D12_SM6", value, sizeof(value)) == 1 && value[0] == '1';
+        return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_SM6", value, sizeof(value)) == 1 && value[0] == '0');
     }();
     return enabled;
 }
