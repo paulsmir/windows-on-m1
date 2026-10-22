@@ -25,6 +25,7 @@
 #include "agx_d3d12_probe_cs_c49.h"
 #include "agx_d3d12_probe_vs_dxil.h"
 #include "agx_d3d12_probe_ps_dxil.h"
+#include "agx_d3d12_probe_ps_view_dxil.h"
 #include "agx_d3d12_probe_cs_texture1d_load.h"
 #include "agx_d3d12_probe_cs_texture1d_store.h"
 #include "agx_d3d12_probe_cs_texture1d_array_load.h"
@@ -841,8 +842,10 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     /* C32: mode 11 is mode 0 on a 4x multisampled target resolved into a
      * single-sampled texture: interior pixels exact, edge pixels blended */
     const int msaa = mode == 11;
-    /* C44B: mode 12 is mode 0 with the same VS/PS compiled by DXC (SM 6.0) */
-    const int dxil = mode == 12;
+    /* C44B: mode 12 is mode 0 with the same VS/PS compiled by DXC (SM 6.0);
+     * C50A: mode 13 is mode 12 with the SM 6.1 SV_ViewID pixel shader */
+    const int viewed = mode == 13;
+    const int dxil = mode == 12 || viewed;
     int rooted = mode == 1 || redundant_root || bundled || expanded;
     /* C11 (D3D12-C11-queries.md): mode 3 draws the C6b triangle inside an
      * occlusion, a binary-occlusion and a pipeline-statistics query between
@@ -874,7 +877,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {rooted ? 2u : counted ? 1u : 0u, rooted ? parameters : counted ? &uav_parameter : NULL, 0, NULL,
                                            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
-    const char *step = dxil ? "C44B" : msaa ? "C32A" : expanded ? "C31A" : bundled ? "C30A" : redundant_root ? "ROOTG" : spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
+    const char *step = viewed ? "C50A" : dxil ? "C44B" : msaa ? "C32A" : expanded ? "C31A" : bundled ? "C30A" : redundant_root ? "ROOTG" : spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
     const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted ? 0 : 255),
                                    (unsigned char)(rooted ? 255 : 0)};
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
@@ -978,9 +981,10 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         pso_desc.VS.BytecodeLength = rooted ? sizeof(g_agx_d3d12_probe_vs_root) : dxil ? sizeof(g_agx_d3d12_probe_vs_dxil)
                                                                                        : sizeof(g_agx_d3d12_probe_vs);
         pso_desc.PS.pShaderBytecode = rooted ? g_agx_d3d12_probe_ps_root : spaced ? g_agx_d3d12_probe_ps_spaces : counted ? g_agx_d3d12_probe_ps_uav
-                                    : dxil ? g_agx_d3d12_probe_ps_dxil : g_agx_d3d12_probe_ps;
+                                    : viewed ? g_agx_d3d12_probe_ps_view_dxil : dxil ? g_agx_d3d12_probe_ps_dxil : g_agx_d3d12_probe_ps;
         pso_desc.PS.BytecodeLength = rooted ? sizeof(g_agx_d3d12_probe_ps_root)
                                    : spaced ? sizeof(g_agx_d3d12_probe_ps_spaces) : counted ? sizeof(g_agx_d3d12_probe_ps_uav)
+                                   : viewed ? sizeof(g_agx_d3d12_probe_ps_view_dxil)
                                    : dxil ? sizeof(g_agx_d3d12_probe_ps_dxil) : sizeof(g_agx_d3d12_probe_ps);
         pso_desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
         pso_desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
@@ -6111,6 +6115,23 @@ static int step_c44b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
     }
     return draw_triangle(d, q, f, b, 12);
 }
+/* C50A (interface 0033, D3D12-C50-interface-0033.md): HighestShaderModel 6.1
+ * and an SV_ViewID pixel shader in a PSO without view instancing: view 0,
+ * so the triangle is green (ViewInstancingTier stays NOT_SUPPORTED). */
+static int step_c50a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
+    D3D12_FEATURE_DATA_SHADER_MODEL model = {D3D_SHADER_MODEL_6_1};
+    D3D12_FEATURE_DATA_D3D12_OPTIONS3 options = {0};
+    const HRESULT hr = ID3D12Device_CheckFeatureSupport(d, D3D12_FEATURE_SHADER_MODEL, &model, sizeof(model));
+    const HRESULT ho = ID3D12Device_CheckFeatureSupport(d, D3D12_FEATURE_D3D12_OPTIONS3, &options, sizeof(options));
+    printf("C50A HighestShaderModel 0x%x hr=0x%08lx ViewInstancingTier %d Barycentrics %d hr=0x%08lx\n",
+           (unsigned)model.HighestShaderModel, (unsigned long)hr, (int)options.ViewInstancingTier,
+           (int)options.BarycentricsSupported, (unsigned long)ho);
+    if (FAILED(hr) || model.HighestShaderModel < D3D_SHADER_MODEL_6_1) {
+        printf("AGX_D3D12_C50A: FAIL\n");
+        return 1;
+    }
+    return draw_triangle(d, q, f, b, 13);
+}
 static int step_c6d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 2); }
 static int step_c11(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 3); }
 static int step_c13(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 4); }
@@ -6637,7 +6658,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"C42A", step_c42a}, {"C42B", step_c42b}, {"C42C", step_c42c}, {"C42D", step_c42d}, {"C42E", step_c42e}, {"C42F", step_c42f},
     {"C42G", step_c42g}, {"C42H", step_c42h}, {"C42J", step_c42j}, {"C42K", step_c42k}, {"C42L", step_c42l},
     {"C42M", step_c42m}, {"C42N", step_c42n}, {"C47B", c47_binding_tier2},
-    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}};
+    {"C44A", step_c44a}, {"C44B", step_c44b}, {"C48A", step_c48a}, {"C49A", c49_typed_uav_loads}, {"C50A", step_c50a}};
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
@@ -6761,6 +6782,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C44B", step_c44b);
                 (void)run_isolated(adapter, "C48A", step_c48a);
                 (void)run_isolated(adapter, "C49A", c49_typed_uav_loads);
+                (void)run_isolated(adapter, "C50A", step_c50a);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
