@@ -8,7 +8,22 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-22T05:59Z -- SM 6.0 + WAVE OPS VALIDATED ON ARM64 (SM6 PROFILE); TESS WINDING FIXED
+## CURRENT 2026-10-22 08:30Z -- SM 6.0 + WAVE OPS ARE THE DEFAULT D3D12 PROFILE
+
+Last validated package 30.0.1866.0 from f1b256e7 (EXP1866, rec1866h PASS).
+- Default: R1 build 2 (0012), SM 6.0, wave ops; APPLE_AGX_D3D12_SM6=0 keeps
+  0003/SM 5.1. Probes 103/103 on ARM64 and x64; 17/19 samples (the other
+  two: tiled resources not advertised, two adapters needed); MiniEngine
+  pixel-identical to the DXBC path.
+- EXP1862-1865: R1 CachedPSO heap corruption was ours -- the zero-cache
+  library answered size 0 for nonzero initial data and Create wrote past
+  it (2e74d659); found with cdb on the guest (dbgrun.ps1, run-dbg.sh).
+Next: SM 6.1+ (SV_ViewID, barycentrics, 16-bit), tiled resources, real
+games; the Asahi path reading the HS winding is still unlocated.
+
+## Prior state superseded by EXP1862-EXP1866
+
+### (was CURRENT) 2026-10-22T05:59Z -- SM 6.0 + WAVE OPS VALIDATED ON ARM64 (SM6 PROFILE); TESS WINDING FIXED
 
 Last validated package 30.0.1861.0 from 6f692bac (EXP1861, rec1861h PASS).
 Proven on J313 (EXP1857-EXP1861), profile APPLE_AGX_D3D12_SM6=1:
