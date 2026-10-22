@@ -82,7 +82,8 @@ class AppleAgxRenderScanoutTests(unittest.TestCase):
             self.assertNotIn(symbol, interrupt)
         self.assertIn("AppleAgxFixedPanelQueuePresent(", enqueue)
         self.assertIn("ADMISSION_ALLOCATION_OBJECT_MAGIC", enqueue)
-        self.assertIn("D3DDDIFMT_A8R8G8B8", enqueue)
+        # D3D-FS1: the flipped primary must be in the committed mode format
+        self.assertIn("Context->CommittedFormat", enqueue)
         self.assertIn("AppleAgxScanoutConsumeInterrupt(", interrupt)
         self.assertIn("DXGK_INTERRUPT_CRTC_VSYNC", interrupt)
 
@@ -102,7 +103,7 @@ class AppleAgxRenderScanoutTests(unittest.TestCase):
         present = function_body(callbacks, "AdmissionDdiPresent")
 
         self.assertIn("pDmaBuffer != NULL", present)
-        self.assertIn("D3DDDIFMT_A8R8G8B8", present)
+        self.assertIn("adapter->CommittedFormat", present)
         self.assertIn("ADMISSION_OPEN_ALLOCATION_MAGIC", present)
         self.assertIn("return STATUS_SUCCESS", present)
 

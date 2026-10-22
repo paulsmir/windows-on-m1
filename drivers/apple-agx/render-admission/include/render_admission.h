@@ -1945,6 +1945,10 @@ NTSTATUS AdmissionDynamicRenderBuild(
     _Out_ ULONGLONG *AllocationBytes);
 NTSTATUS AdmissionScanoutStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutStop(_Inout_ ADMISSION_CONTEXT *Context);
+/* D3D-FS1: TRUE for A8R8G8B8, and for A8B8G8R8 when the hypervisor scans
+ * out RGBA8888 (APPLE_AGX_SCANOUT_CAP_RGBA8888). */
+BOOLEAN AdmissionScanoutFormatSupported(_In_ ADMISSION_CONTEXT *Context,
+                                        _In_ D3DDDIFORMAT Format);
 NTSTATUS AdmissionScanoutCommit(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Width, _In_ ULONG Height, _In_ ULONG Stride,

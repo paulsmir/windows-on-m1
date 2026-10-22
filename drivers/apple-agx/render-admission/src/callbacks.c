@@ -275,7 +275,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
       description->Width != 2560u || description->Height != 1600u ||
       description->Pitch != 10240u || description->BytesPerPixel != 4u ||
       description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
-      description->Format != (UINT)D3DDDIFMT_A8R8G8B8) {
+      adapter == NULL ||
+      description->Format != (UINT)adapter->CommittedFormat) {
     AdmissionRecordPresent(device, Present, 3u,
                             STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)

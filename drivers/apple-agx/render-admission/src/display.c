@@ -309,6 +309,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
     if (!NT_SUCCESS(status))
       goto Exit;
     sourceMode = NULL;
+    /* D3D-FS1: DXGI lists R8G8B8A8 display modes only from an A8B8G8R8
+     * source mode; offered when the hypervisor scans out RGBA8888. */
+    if (AdmissionScanoutFormatSupported(context, D3DDDIFMT_A8B8G8R8)) {
+      status = sourceSetInterface->pfnCreateNewModeInfo(sourceSet, &sourceMode);
+      if (!NT_SUCCESS(status))
+        goto Exit;
+      RtlZeroMemory(sourceMode, sizeof(*sourceMode));
+      sourceMode->Type = D3DKMDT_RMT_GRAPHICS;
+      sourceMode->Format.Graphics.PrimSurfSize.cx = 2560;
+      sourceMode->Format.Graphics.PrimSurfSize.cy = 1600;
+      sourceMode->Format.Graphics.VisibleRegionSize =
+          sourceMode->Format.Graphics.PrimSurfSize;
+      sourceMode->Format.Graphics.Stride = 10240;
+      sourceMode->Format.Graphics.PixelFormat = D3DDDIFMT_A8B8G8R8;
+      sourceMode->Format.Graphics.ColorBasis = D3DKMDT_CB_SCRGB;
+      sourceMode->Format.Graphics.PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
+      status = sourceSetInterface->pfnAddMode(sourceSet, sourceMode);
+      if (!NT_SUCCESS(status))
+        goto Exit;
+      sourceMode = NULL;
+    }
     status = vidPnInterface->pfnAssignSourceModeSet(
         EnumCofuncModality->hConstrainingVidPn, path->VidPnSourceId,
         sourceSet);
@@ -557,8 +578,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
       pinnedSourceMode->Format.Graphics.PrimSurfSize.cx != 2560 ||
       pinnedSourceMode->Format.Graphics.PrimSurfSize.cy != 1600 ||
       pinnedSourceMode->Format.Graphics.Stride != 10240 ||
-      pinnedSourceMode->Format.Graphics.PixelFormat !=
-          D3DDDIFMT_A8R8G8B8 ||
+      !AdmissionScanoutFormatSupported(
+          context, pinnedSourceMode->Format.Graphics.PixelFormat) ||
       pinnedSourceMode->Format.Graphics.PixelValueAccessMode !=
           D3DKMDT_PVAM_DIRECT) {
     status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
@@ -581,7 +602,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
   context->CommittedWidth = 2560;
   context->CommittedHeight = 1600;
   context->CommittedStride = 10240;
-  context->CommittedFormat = D3DDDIFMT_A8R8G8B8;
+  context->CommittedFormat = pinnedSourceMode->Format.Graphics.PixelFormat;
   context->DisplayActive = TRUE;
   status = STATUS_SUCCESS;
 
@@ -795,7 +816,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
       SetVidPnSourceAddress->VidPnSourceId == 0 &&
       context->CommittedWidth == 2560 && context->CommittedHeight == 1600 &&
       context->CommittedStride == 10240 &&
-      context->CommittedFormat == D3DDDIFMT_A8R8G8B8) {
+      AdmissionScanoutFormatSupported(context, context->CommittedFormat)) {
     if (receipt != NULL)
       receipt->QueueCalled = 1u;
     status = AdmissionScanoutQueuePresent(context, SetVidPnSourceAddress);

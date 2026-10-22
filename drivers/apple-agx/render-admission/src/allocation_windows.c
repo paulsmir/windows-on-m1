@@ -283,7 +283,8 @@ static NTSTATUS AdmissionGetStandardAllocationDriverDataImpl(
     if (primary == NULL || primary->VidPnSourceId != 0u ||
         primary->Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
         primary->Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
-        primary->Format != D3DDDIFMT_A8R8G8B8 ||
+        !AdmissionScanoutFormatSupported((ADMISSION_CONTEXT *)Adapter,
+                                         primary->Format) ||
         !AdmissionAllocationDescribe(
             primary->Width, primary->Height, 4u,
             (UINT)D3DKMDT_GDISURFACE_TEXTURE, (UINT)primary->Format,
@@ -292,7 +293,9 @@ static NTSTATUS AdmissionGetStandardAllocationDriverDataImpl(
   } else if (StandardAllocation->StandardAllocationType ==
              D3DKMDT_STANDARDALLOCATION_SHADOWSURFACE) {
     shadow = StandardAllocation->pCreateShadowSurfaceData;
-    if (shadow == NULL || shadow->Format != D3DDDIFMT_A8R8G8B8 ||
+    if (shadow == NULL ||
+        !AdmissionScanoutFormatSupported((ADMISSION_CONTEXT *)Adapter,
+                                         shadow->Format) ||
         !AdmissionAllocationDescribe(
             shadow->Width, shadow->Height, 4u,
             (UINT)D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE,
@@ -436,7 +439,8 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   if (resourceData != NULL &&
       (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u &&
        (description->CpuVisible != 0u ||
-       description->Format != (UINT)D3DDDIFMT_A8R8G8B8 ||
+       !AdmissionScanoutFormatSupported(context,
+                                        (D3DDDIFORMAT)description->Format) ||
        description->Type != (UINT)D3DKMDT_GDISURFACE_TEXTURE))
     return STATUS_INVALID_PARAMETER;
   allocation = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*allocation),

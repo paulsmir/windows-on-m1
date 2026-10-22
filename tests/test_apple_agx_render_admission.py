@@ -76,7 +76,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("Present->pDmaBuffer != NULL", present)
         self.assertIn("(Present->Flags.Value & ~0x8u) != 0x4u", present)
         self.assertIn("ADMISSION_OPEN_ALLOCATION_MAGIC", present)
-        self.assertIn("D3DDDIFMT_A8R8G8B8", present)
+        self.assertIn("adapter->CommittedFormat", present)
         self.assertIn("return STATUS_SUCCESS", present)
 
     def test_render_core_legacy_callback_group_is_complete_but_inert(self):
@@ -315,6 +315,8 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("VidPnTargetId != 0", display)
         self.assertIn("D3DKMDT_RMT_GRAPHICS", display)
         self.assertIn("D3DDDIFMT_A8R8G8B8", display)
+        # D3D-FS1: the A8B8G8R8 source mode exists only behind the RGBA scanout capability
+        self.assertIn("AdmissionScanoutFormatSupported(context, D3DDDIFMT_A8B8G8R8)", display)
         self.assertIn("Format.Graphics.Stride = 10240", display)
         self.assertIn("D3DKMDT_VPPS_IDENTITY", display)
         self.assertIn("D3DKMDT_VPPR_IDENTITY", display)

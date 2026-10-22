@@ -865,6 +865,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueryQualification(
 }
 #endif
 
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutFormatSupported(
+    ADMISSION_CONTEXT *Context, D3DDDIFORMAT Format) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  if (Format == D3DDDIFMT_A8R8G8B8)
+    return TRUE;
+  return Format == D3DDDIFMT_A8B8G8R8 && runtime != NULL &&
+         (runtime->Panel.Scanout.Capabilities &
+          APPLE_AGX_SCANOUT_CAP_RGBA8888) != 0u;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutCommit(
     ADMISSION_CONTEXT *Context, ULONG Width, ULONG Height, ULONG Stride,
     D3DDDIFORMAT Format) {
@@ -875,7 +885,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutCommit(
              &runtime->Panel, 0u, 0u, Width, Height, Stride,
              Format == D3DDDIFMT_A8R8G8B8
                  ? APPLE_AGX_SCANOUT_FORMAT_BGRA8888
-                 : 0u) == AppleAgxFixedPanelOk
+                 : Format == D3DDDIFMT_A8B8G8R8
+                       ? APPLE_AGX_SCANOUT_FORMAT_RGBA8888
+                       : 0u) == AppleAgxFixedPanelOk
              ? STATUS_SUCCESS
              : STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
 }
@@ -1001,7 +1013,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
       description->Pitch != APPLE_AGX_SCANOUT_J313_STRIDE ||
       description->BytesPerPixel != 4u ||
       description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
-      description->Format != (UINT)D3DDDIFMT_A8R8G8B8)
+      description->Format != (UINT)Context->CommittedFormat)
     return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &window)) ||
       window.GuestIpaAddress != runtime->Panel.PoolIpa)
