@@ -21,6 +21,11 @@ BOOL AgxD3d11ComputeEnabled(void);
  * keeps a process on 10_0. */
 BOOL AgxD3d11Fl11Enabled(void);
 
+/* FL 11_1 (D3D12-FL-program.md, D3D11-FL111-TIR.md): report feature level
+ * 11_1 only in a process with APPLE_AGX_D3D11_FL111=1 until logic ops, the
+ * 64 UAV registers and the forced sample count pass on hardware. */
+BOOL AgxD3d11Fl111Enabled(void);
+
 /* D3D-H2b: the compute stage's common-shader setters (Shader.cpp). */
 void APIENTRY CsSetShaderResources(D3D10DDI_HDEVICE, UINT, UINT,
                                    const D3D10DDI_HSHADERRESOURCEVIEW *);

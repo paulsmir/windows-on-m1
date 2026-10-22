@@ -297,13 +297,15 @@ bool
 rasterizer10(D3D10DDI_HDEVICE hDevice, const D3DWDDM2_0DDI_RASTERIZER_DESC *in,
              D3D10_DDI_RASTERIZER_DESC *out)
 {
-   /* No target-independent rasterization (forced counts above 1) and no
-    * conservative rasterization tier are reported. EXP1324: a forced count
-    * of 1 rasterizes single-sampled without depth (D3D11_RASTERIZER_DESC1)
-    * -- what single-sampled and attachment-less renders do; the FL 11_0
-    * desktop creates such states and recreated its devices without end
-    * while they were refused. */
-   if (!in || in->ForcedSampleCount > 1u ||
+   /* No conservative rasterization tier is reported. EXP1324: a forced
+    * count of 1 rasterizes single-sampled without depth
+    * (D3D11_RASTERIZER_DESC1) -- what single-sampled and attachment-less
+    * renders do; the FL 11_0 desktop creates such states and recreated its
+    * devices without end while they were refused. FL 11_1: 4, 8 and 16 run
+    * the TIR variants (agx_d3d11_ddi.cpp AgxTirScope); the D3D11.3 spec
+    * allows 0, 1, 4, 8 and 16. */
+   if (!in || (in->ForcedSampleCount > 1u && in->ForcedSampleCount != 4u &&
+               in->ForcedSampleCount != 8u && in->ForcedSampleCount != 16u) ||
        in->ConservativeRasterizationMode != D3DWDDM2_0DDI_CONSERVATIVE_RASTERIZATION_OFF) {
       refuse(hDevice, "reject-wddm2-rasterizer", E_NOTIMPL, in ? in->ForcedSampleCount : 0u);
       return false;
@@ -335,8 +337,12 @@ CreateRasterizerStateWDDM2_0(D3D10DDI_HDEVICE hDevice, const D3DWDDM2_0DDI_RASTE
                              D3D10DDI_HRASTERIZERSTATE hState, D3D10DDI_HRTRASTERIZERSTATE hRTState)
 {
    D3D10_DDI_RASTERIZER_DESC rs = {};
-   if (rasterizer10(hDevice, desc, &rs))
-      base11.pfnCreateRasterizerState(hDevice, &rs, hState, hRTState);
+   if (!rasterizer10(hDevice, desc, &rs))
+      return;
+   base11.pfnCreateRasterizerState(hDevice, &rs, hState, hRTState);
+   /* FL 11_1: the forced count the draws' TIR variants use */
+   if (RasterizerState *state = static_cast<RasterizerState *>(hState.pDrvPrivate))
+      state->agx_forced_samples = desc->ForcedSampleCount > 1u ? desc->ForcedSampleCount : 0u;
 }
 
 /* ----- 11.1 shader signatures (entries gain component type, precision

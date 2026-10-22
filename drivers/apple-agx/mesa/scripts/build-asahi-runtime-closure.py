@@ -52,7 +52,7 @@ FRONTEND_CPP = ('Adapter.cpp','Debug.cpp','Device.cpp','Draw.cpp','DxgiFns.cpp',
 FRONTEND_C = ('ShaderParse.c','ShaderTGSI.c')
 # D3D-H3: the DXBC parser and DXBC -> NIR translator (drivers/apple-agx/mesa/dxbc)
 # the frontend uses behind APPLE_AGX_D3D_SHADER_NIR.
-DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c')
+DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c','dxbc_tir_gs.c')
 # D3D12 C44: the DXIL frontend (drivers/apple-agx/mesa/dxil) of the 64-bit D3D12
 # UMDs, Mesa's spirv_to_nir (libvtn of the --mesa-build that provides libnir) and
 # the dxil-spirv C library (8434b063, D3D12-C15-dxil-license-review.md; built

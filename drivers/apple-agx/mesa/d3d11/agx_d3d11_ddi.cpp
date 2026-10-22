@@ -40,6 +40,7 @@
 
 #include "agx_d3d11_ddi.h"
 #include "dxbc_to_nir.h"
+#include "dxbc_tir_gs.h"
 
 /* Draw.cpp (projection): the frontend's draw-time state resolution */
 void AgxD3d11ResolveState(Device *pDevice);
@@ -98,6 +99,14 @@ AgxD3d11Fl11Enabled(void)
    char value[4];
    DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D11_FL11", value, sizeof(value));
    return AgxD3d11DdiEnabled() && !(length == 1 && value[0] == '0');
+}
+
+BOOL
+AgxD3d11Fl111Enabled(void)
+{
+   char value[4];
+   DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D11_FL111", value, sizeof(value));
+   return AgxD3d11Fl11Enabled() && length == 1 && value[0] == '1';
 }
 
 /* D3D-H7: the WDDM 2.0 table goes with the FL 11_0 switch (EXP1299: the
@@ -969,9 +978,256 @@ indirect_args(Device *device, D3D10DDI_HRESOURCE hArgs, UINT offset, UINT bytes)
    return args;
 }
 
+/* ------------------------------------------------------------------ */
+/* FL 11_1 forced sample count (investigation/analysis/D3D11-FL111-TIR.md)
+ *
+ * A triangle draw whose rasterizer state forces 4, 8 or 16 samples (TIR and
+ * UAV-only rendering) runs in one pass with the bound pixel shader's
+ * variant (dxbc_translate_tokens_tir) behind the expansion GS (dxbc_tir_gs),
+ * made once per vertex shader (serial) and sample count from the stages'
+ * tokens. Not covered yet, drawn as plain 1x rasterization with a
+ * reject-d3d11-tir receipt: application geometry or tessellation shaders,
+ * stream output, non-triangle topologies, shaders without tokens. */
+#define AGX_TIR_VARIANTS 8u
+struct AgxTirVariant {
+   uint64_t vs_serial;
+   UINT samples;
+   void *fs, *gs;
+};
+struct AgxTirCache {
+   UINT count;
+   AgxTirVariant v[AGX_TIR_VARIANTS];
+};
+
+static void
+tir_release(struct pipe_context *pipe, Shader *ps)
+{
+   AgxTirCache *cache = static_cast<AgxTirCache *>(ps->agx_tir);
+   for (UINT i = 0; cache && i < cache->count; ++i) {
+      if (cache->v[i].fs)
+         pipe->delete_fs_state(pipe, cache->v[i].fs);
+      if (cache->v[i].gs)
+         pipe->delete_gs_state(pipe, cache->v[i].gs);
+   }
+   free(cache);
+   ps->agx_tir = NULL;
+}
+
+static void
+tir_refuse(D3D10DDI_HDEVICE hDevice, Device *device, UINT why, UINT detail)
+{
+   if (!device->agx_tir_refused)
+      refuse(hDevice, "reject-d3d11-tir", why, detail);
+   device->agx_tir_refused = TRUE;
+}
+
+static const AgxTirVariant *
+tir_variant(Device *device, Shader *vs, Shader *ps, UINT samples)
+{
+   AgxTirCache *cache = static_cast<AgxTirCache *>(ps->agx_tir);
+   for (UINT i = 0; cache && i < cache->count; ++i)
+      if (cache->v[i].vs_serial == vs->agx_serial && cache->v[i].samples == samples)
+         return &cache->v[i];
+   if (!cache && !(cache = static_cast<AgxTirCache *>(calloc(1, sizeof(AgxTirCache)))))
+      return NULL;
+   ps->agx_tir = cache;
+   struct pipe_context *pipe = device->pipe;
+   struct dxbc_nir_uav_slots slots, vs_slots;
+   struct dxbc_nir_error error = {};
+   struct dxbc_tir_gs_key key;
+   struct nir_shader *fs = dxbc_translate_tokens_tir(ps->agx_code, pipe->screen->nir_options[MESA_SHADER_FRAGMENT],
+                                                     &slots, samples, &error);
+   struct nir_shader *vsn = fs ? dxbc_translate_tokens_uav64(vs->agx_code,
+      pipe->screen->nir_options[MESA_SHADER_VERTEX], 0, 0, &vs_slots, &error) : NULL;
+   const bool keyed = vsn && dxbc_tir_gs_key_from(vsn, fs, &key);
+   ralloc_free(vsn);
+   struct nir_shader *gs = keyed ? dxbc_tir_gs(pipe->screen->nir_options[MESA_SHADER_GEOMETRY], &key) : NULL;
+   UINT values[4] = {samples, fs ? 1u : 0u, keyed ? key.count : 0u, gs ? 1u : 0u};
+   AgxD3d10WindowsDiagnostic("measure-d3d11-tir-variant", gs ? S_OK : E_NOTIMPL, values, 4u);
+   if (!gs) {
+      ralloc_free(fs);
+      return NULL;
+   }
+   dxbc_nir_finalize(gs);
+   struct pipe_shader_state state = {};
+   state.type = PIPE_SHADER_IR_NIR;
+   state.ir.nir = fs;
+   void *fs_handle = pipe->create_fs_state(pipe, &state);
+   state.ir.nir = gs;
+   void *gs_handle = pipe->create_gs_state(pipe, &state);
+   if (!fs_handle || !gs_handle) {
+      if (fs_handle)
+         pipe->delete_fs_state(pipe, fs_handle);
+      if (gs_handle)
+         pipe->delete_gs_state(pipe, gs_handle);
+      return NULL;
+   }
+   AgxTirVariant *v = &cache->v[cache->count < AGX_TIR_VARIANTS ? cache->count++ : AGX_TIR_VARIANTS - 1u];
+   if (v->fs)
+      pipe->delete_fs_state(pipe, v->fs);
+   if (v->gs)
+      pipe->delete_gs_state(pipe, v->gs);
+   *v = {vs->agx_serial, samples, fs_handle, gs_handle};
+   return v;
+}
+
+/* Binds a draw's TIR variant for the scope of the draw. */
+struct AgxTirScope {
+   Device *device = NULL;
+   Shader *ps = NULL;
+   explicit AgxTirScope(D3D10DDI_HDEVICE hDevice)
+   {
+      Device *d = CastDevice(hDevice);
+      if (!d || d->agx_forced_samples < 4u)
+         return;
+      Shader *vs = static_cast<Shader *>(d->agx_stage_shader[MESA_SHADER_VERTEX]);
+      Shader *fs = static_cast<Shader *>(d->agx_stage_shader[MESA_SHADER_FRAGMENT]);
+      if (d->primitive != MESA_PRIM_TRIANGLES && d->primitive != MESA_PRIM_TRIANGLE_STRIP) {
+         tir_refuse(hDevice, d, 1u, (UINT)d->primitive);
+         return;
+      }
+      if (d->agx_stage_shader[MESA_SHADER_GEOMETRY] || d->agx_stage_shader[MESA_SHADER_TESS_CTRL] ||
+          d->agx_stage_shader[MESA_SHADER_TESS_EVAL] || d->bound_empty_gs) {
+         tir_refuse(hDevice, d, 2u, 0u);
+         return;
+      }
+      if (!vs || !fs || !vs->agx_code || !fs->agx_code || !fs->handle) {
+         tir_refuse(hDevice, d, 3u, 0u);
+         return;
+      }
+      const AgxTirVariant *v = tir_variant(d, vs, fs, d->agx_forced_samples);
+      if (!v) {
+         tir_refuse(hDevice, d, 4u, d->agx_forced_samples);
+         return;
+      }
+      /* viewport 0: viewport = ndc * scale + offset (D3D: y down) */
+      const float vp[4] = {d->agx_viewport0[2] * 0.5f, d->agx_viewport0[3] * -0.5f,
+                           d->agx_viewport0[0] + d->agx_viewport0[2] * 0.5f,
+                           d->agx_viewport0[1] + d->agx_viewport0[3] * 0.5f};
+      struct pipe_constant_buffer cb = {};
+      cb.buffer_size = sizeof(vp);
+      cb.user_buffer = vp;
+      d->pipe->set_constant_buffer(d->pipe, MESA_SHADER_GEOMETRY, DXBC_TIR_GS_CB, false, &cb);
+      d->pipe->bind_gs_state(d->pipe, v->gs);
+      d->pipe->bind_fs_state(d->pipe, v->fs);
+      device = d;
+      ps = fs;
+   }
+   ~AgxTirScope()
+   {
+      if (!device)
+         return;
+      device->pipe->bind_fs_state(device->pipe, ps->handle);
+      device->pipe->bind_gs_state(device->pipe, NULL);
+      device->pipe->set_constant_buffer(device->pipe, MESA_SHADER_GEOMETRY, DXBC_TIR_GS_CB, false, NULL);
+   }
+};
+
+static PFND3D10DDI_DRAW draw_10;
+static PFND3D10DDI_DRAWINDEXED draw_indexed_10;
+static PFND3D10DDI_DRAWINSTANCED draw_instanced_10;
+static PFND3D10DDI_DRAWINDEXEDINSTANCED draw_indexed_instanced_10;
+static PFND3D10DDI_DRAWAUTO draw_auto_10;
+
+static void APIENTRY
+Draw11(D3D10DDI_HDEVICE hDevice, UINT count, UINT start)
+{
+   AgxTirScope tir(hDevice);
+   draw_10(hDevice, count, start);
+}
+
+static void APIENTRY
+DrawIndexed11(D3D10DDI_HDEVICE hDevice, UINT count, UINT start, INT base)
+{
+   AgxTirScope tir(hDevice);
+   draw_indexed_10(hDevice, count, start, base);
+}
+
+static void APIENTRY
+DrawInstanced11(D3D10DDI_HDEVICE hDevice, UINT count, UINT instances, UINT start, UINT first)
+{
+   AgxTirScope tir(hDevice);
+   draw_instanced_10(hDevice, count, instances, start, first);
+}
+
+static void APIENTRY
+DrawIndexedInstanced11(D3D10DDI_HDEVICE hDevice, UINT count, UINT instances, UINT start, INT base,
+                       UINT first)
+{
+   AgxTirScope tir(hDevice);
+   draw_indexed_instanced_10(hDevice, count, instances, start, base, first);
+}
+
+static void APIENTRY
+DrawAuto11(D3D10DDI_HDEVICE hDevice)
+{
+   AgxTirScope tir(hDevice);
+   draw_auto_10(hDevice);
+}
+
+static PFND3D10DDI_SETRASTERIZERSTATE set_rasterizer_state_10;
+static PFND3D10DDI_SETVIEWPORTS set_viewports_10;
+
+static void APIENTRY
+SetRasterizerState11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRASTERIZERSTATE hState)
+{
+   set_rasterizer_state_10(hDevice, hState);
+   if (Device *device = CastDevice(hDevice)) {
+      const RasterizerState *state = static_cast<const RasterizerState *>(hState.pDrvPrivate);
+      device->agx_forced_samples = state ? state->agx_forced_samples : 0u;
+   }
+}
+
+static void APIENTRY
+SetViewports11(D3D10DDI_HDEVICE hDevice, UINT count, UINT clear, const D3D10_DDI_VIEWPORT *viewports)
+{
+   set_viewports_10(hDevice, count, clear, viewports);
+   Device *device = CastDevice(hDevice);
+   if (device && count && viewports) {
+      device->agx_viewport0[0] = viewports[0].TopLeftX;
+      device->agx_viewport0[1] = viewports[0].TopLeftY;
+      device->agx_viewport0[2] = viewports[0].Width;
+      device->agx_viewport0[3] = viewports[0].Height;
+   }
+}
+
+/* FL 11_1: the tokens of a vertex or pixel shader, the source of its TIR
+ * variants (an SM 5 vertex shader keeps them already, D3D-H5) */
+static PFND3D10DDI_CREATEVERTEXSHADER create_vertex_shader_10;
+static PFND3D10DDI_CREATEPIXELSHADER create_pixel_shader_10;
+
+static UINT *
+copy_tokens(const UINT *code)
+{
+   UINT *copy = code ? static_cast<UINT *>(malloc((size_t)code[1] * sizeof(UINT))) : NULL;
+   if (copy)
+      memcpy(copy, code, (size_t)code[1] * sizeof(UINT));
+   return copy;
+}
+
+static void APIENTRY
+CreateVertexShader11(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_HSHADER hShader,
+                     D3D10DDI_HRTSHADER hRTShader, const D3D10DDIARG_STAGE_IO_SIGNATURES *sig)
+{
+   create_vertex_shader_10(hDevice, code, hShader, hRTShader, sig);
+   Shader *shader = CastShader(hShader);
+   if (shader && shader->handle && !shader->agx_code)
+      shader->agx_code = copy_tokens(code); /* the frontend frees a VS's tokens */
+}
+
+static void APIENTRY
+CreatePixelShader11(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_HSHADER hShader,
+                    D3D10DDI_HRTSHADER hRTShader, const D3D10DDIARG_STAGE_IO_SIGNATURES *sig)
+{
+   create_pixel_shader_10(hDevice, code, hShader, hRTShader, sig);
+   if (Shader *shader = CastShader(hShader))
+      shader->agx_code = shader->handle ? copy_tokens(code) : NULL; /* DestroyShader11 frees */
+}
+
 static void
 draw_indirect(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE hArgs, UINT offset, bool indexed)
 {
+   AgxTirScope tir(hDevice);
    Device *device = CastDevice(hDevice);
    Resource *args = indirect_args(device, hArgs, offset, indexed ? 20u : 16u);
    struct pipe_resource *indices = NULL;
@@ -1210,10 +1466,17 @@ static PFND3D10DDI_DESTROYSHADER destroy_shader_10;
 static void APIENTRY
 DestroyShader11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader)
 {
-   if (Device *device = CastDevice(hDevice))
+   Device *device = CastDevice(hDevice);
+   Shader *shader = CastShader(hShader);
+   if (device)
       for (void *&bound : device->agx_stage_shader)
          if (bound == hShader.pDrvPrivate)
             bound = NULL;
+   if (device && shader && shader->type == MESA_SHADER_FRAGMENT) {
+      tir_release(device->pipe, shader);
+      free(shader->agx_code);
+      shader->agx_code = NULL;
+   }
    destroy_shader_10(hDevice, hShader);
 }
 
@@ -1289,8 +1552,10 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnPsSetShader = PsSetShader11; /* FL 11_1: UAV maps */
    f->pfnPsSetSamplers = base->pfnPsSetSamplers;
    f->pfnVsSetShader = VsSetShader11;
-   f->pfnDrawIndexed = base->pfnDrawIndexed;
-   f->pfnDraw = base->pfnDraw;
+   draw_indexed_10 = base->pfnDrawIndexed;
+   f->pfnDrawIndexed = DrawIndexed11; /* FL 11_1 TIR */
+   draw_10 = base->pfnDraw;
+   f->pfnDraw = Draw11;
    f->pfnDynamicIABufferMapNoOverwrite = base->pfnDynamicIABufferMapNoOverwrite;
    f->pfnDynamicIABufferUnmap = base->pfnDynamicIABufferUnmap;
    f->pfnDynamicConstantBufferMapDiscard = base->pfnDynamicConstantBufferMapDiscard;
@@ -1300,8 +1565,10 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnIaSetInputLayout = base->pfnIaSetInputLayout;
    f->pfnIaSetVertexBuffers = base->pfnIaSetVertexBuffers;
    f->pfnIaSetIndexBuffer = base->pfnIaSetIndexBuffer;
-   f->pfnDrawIndexedInstanced = base->pfnDrawIndexedInstanced;
-   f->pfnDrawInstanced = base->pfnDrawInstanced;
+   draw_indexed_instanced_10 = base->pfnDrawIndexedInstanced;
+   f->pfnDrawIndexedInstanced = DrawIndexedInstanced11;
+   draw_instanced_10 = base->pfnDrawInstanced;
+   f->pfnDrawInstanced = DrawInstanced11;
    f->pfnDynamicResourceMapDiscard = base->pfnDynamicResourceMapDiscard;
    f->pfnDynamicResourceUnmap = base->pfnDynamicResourceUnmap;
    f->pfnGsSetConstantBuffers = base->pfnGsSetConstantBuffers;
@@ -1318,14 +1585,17 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnResourceReadAfterWriteHazard = base->pfnResourceReadAfterWriteHazard;
    f->pfnSetBlendState = base->pfnSetBlendState;
    f->pfnSetDepthStencilState = base->pfnSetDepthStencilState;
-   f->pfnSetRasterizerState = base->pfnSetRasterizerState;
+   set_rasterizer_state_10 = base->pfnSetRasterizerState;
+   f->pfnSetRasterizerState = SetRasterizerState11;
    f->pfnQueryEnd = base->pfnQueryEnd;
    f->pfnQueryBegin = base->pfnQueryBegin;
    f->pfnResourceCopyRegion = base->pfnResourceCopyRegion;
    f->pfnResourceUpdateSubresourceUP = base->pfnResourceUpdateSubresourceUP;
    f->pfnSoSetTargets = base->pfnSoSetTargets;
-   f->pfnDrawAuto = base->pfnDrawAuto;
-   f->pfnSetViewports = base->pfnSetViewports;
+   draw_auto_10 = base->pfnDrawAuto;
+   f->pfnDrawAuto = DrawAuto11;
+   set_viewports_10 = base->pfnSetViewports;
+   f->pfnSetViewports = SetViewports11;
    f->pfnSetScissorRects = base->pfnSetScissorRects;
    f->pfnClearRenderTargetView = base->pfnClearRenderTargetView;
    f->pfnClearDepthStencilView = base->pfnClearDepthStencilView;
@@ -1357,9 +1627,11 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnCreateRasterizerState = base->pfnCreateRasterizerState;
    f->pfnDestroyRasterizerState = base->pfnDestroyRasterizerState;
    f->pfnCalcPrivateShaderSize = base->pfnCalcPrivateShaderSize;
-   f->pfnCreateVertexShader = base->pfnCreateVertexShader;
+   create_vertex_shader_10 = base->pfnCreateVertexShader;
+   f->pfnCreateVertexShader = CreateVertexShader11;
    f->pfnCreateGeometryShader = base->pfnCreateGeometryShader;
-   f->pfnCreatePixelShader = base->pfnCreatePixelShader;
+   create_pixel_shader_10 = base->pfnCreatePixelShader;
+   f->pfnCreatePixelShader = CreatePixelShader11;
    destroy_shader_10 = base->pfnDestroyShader;
    f->pfnDestroyShader = DestroyShader11;
    f->pfnCalcPrivateSamplerSize = base->pfnCalcPrivateSamplerSize;

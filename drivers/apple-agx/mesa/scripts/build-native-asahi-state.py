@@ -1106,7 +1106,10 @@ SupportedDDIInterfaceVersions[] = {
             D3D11DDI_3DPIPELINELEVEL_10_0) |
          (AgxD3d11Fl11Enabled() ?
           (D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_10_1) |
-           D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_11_0)) : 0u);
+           D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_11_0)) : 0u) |
+         /* FL 11_1: logic ops, UAV registers u0..u63, forced sample counts */
+         (AgxD3d11Fl111Enabled() ?
+          D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11_1DDI_3DPIPELINELEVEL_11_1) : 0u);
       return S_OK;
    /* D3D-H7: the 11.1 to WDDM 2.0 caps (agx_wddm2_ddi.cpp implements or
     * fails closed each entry these caps leave reachable) */
@@ -1239,6 +1242,9 @@ struct AgxDdiTimer {
    /* FL 11_1: a translated shader's UAV register map (struct
     * dxbc_nir_uav_slots, malloc'd; NULL: u0..u7 at their own slots). */
    void *agx_uav64;
+   /* FL 11_1 forced sample count (agx_d3d11_ddi.cpp): a pixel shader's
+    * variants behind the expansion GS, released by DestroyShader11. */
+   void *agx_tir;
 };
 
 /* D3D-H5: a vertex or geometry shader state with stream output from the
@@ -1246,6 +1252,15 @@ struct AgxDdiTimer {
 void *AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
                              const UINT *code,
                              const struct pipe_stream_output_info *so);'''),
+        ('''struct RasterizerState
+{
+   void *handle;
+};''','''struct RasterizerState
+{
+   void *handle;
+   /* FL 11_1: ForcedSampleCount 4, 8 or 16 (0: not forced) */
+   UINT agx_forced_samples;
+};'''),
         ('struct pipe_screen *screen;',
          'AGX_D3D10_WINDOWS_ADAPTER *windows;'),
         ('struct pipe_context *pipe;','''struct pipe_context *pipe;
@@ -1272,6 +1287,11 @@ void *AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
    void *agx_uavs[2][64];
    void *agx_stage_shader[6];
    UINT agx_uav_stages;   /* stages whose UAV bindings are not empty */
+   /* FL 11_1 forced sample count: the bound rasterizer's count (0: off),
+    * viewport 0 {x, y, width, height}, a refusal receipt already sent */
+   UINT agx_forced_samples;
+   float agx_viewport0[4];
+   BOOL agx_tir_refused;
    /* D3D-G11: right/bottom pixel extent of the bound viewports. */
    UINT agx_viewport_extent[2];'''),
         ('''static inline void
@@ -3448,6 +3468,7 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
    pShader->agx_uav64 = NULL;
+   pShader->agx_tir = NULL;
 '''),
         ('''   pShader->type = MESA_SHADER_GEOMETRY;
    pShader->output_resolved = true;
@@ -3460,6 +3481,7 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
    pShader->agx_uav64 = NULL;
+   pShader->agx_tir = NULL;
 '''),
         ('''   bool all_slot_zero = true;
 
@@ -3474,6 +3496,7 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
    pShader->agx_uav64 = NULL;
+   pShader->agx_tir = NULL;
 '''),
         ('''   pShader->type = MESA_SHADER_FRAGMENT;
    pShader->output_resolved = true;
@@ -3486,6 +3509,7 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
    pShader->agx_uav64 = NULL;
+   pShader->agx_tir = NULL;
 '''),
         ('''#include "util/u_gen_mipmap.h"
 #include "drm-uapi/drm_fourcc.h"
