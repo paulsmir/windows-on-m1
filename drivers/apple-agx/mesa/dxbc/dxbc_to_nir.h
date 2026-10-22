@@ -143,6 +143,10 @@ dxbc_translate_tokens_bindings_xfb(const uint32_t *tokens,
    uint32_t passthrough_registers, uint32_t passthrough_positions,
    const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error);
 
+/* The tessellation info Asahi reads from a hull or domain shader:
+ * ccw | point_mode << 1 | domain << 8 | spacing << 16 (receipts). */
+uint32_t dxbc_nir_tess_info(const struct nir_shader *nir);
+
 /* Capture immutable direct-slot cube requirements before shader creation
  * consumes NIR.  False for dynamic/ambiguous bindings; output is cleared. */
 bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,

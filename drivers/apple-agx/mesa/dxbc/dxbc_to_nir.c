@@ -3184,6 +3184,13 @@ build_xfb(struct ctx *c, const struct dxbc_nir_xfb *xfb)
    return true;
 }
 
+uint32_t
+dxbc_nir_tess_info(const struct nir_shader *nir)
+{
+   return (nir->info.tess.ccw ? 1u : 0u) | (nir->info.tess.point_mode ? 2u : 0u) |
+          ((uint32_t)nir->info.tess._primitive_mode << 8) | ((uint32_t)nir->info.tess.spacing << 16);
+}
+
 static struct nir_shader *
 translate(const struct dxbc_program *program, const struct nir_shader_compiler_options *options,
           uint32_t passthrough_registers, uint32_t passthrough_positions,
