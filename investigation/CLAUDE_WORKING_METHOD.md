@@ -33,8 +33,12 @@ newest EXPERIMENTS.md entries, then what Codex did since (git log, CHANGES.csv).
 7. Probe step in drivers/apple-agx/windows/icd/agx_d3d12_probe.c, run on a
    fresh device via run_isolated, own AGX_D3D12_<step>: PASS/FAIL lines.
    Shaders: fxc on builder (`"C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\fxc.exe" /T cs_5_0 ...`),
-   convert .h to LF. Build probe: scp probe.c + headers to builder home,
-   `powershell -File C:\Users\pauls\build-d3d12probe-arm64.ps1` -> BUILD_PASS sha.
+   DXIL shaders: the SDK dxc (`...\10.0.26100.0\x64\dxc.exe -T ps_6_0 -E main -Vn g_<name> -Fh`).
+   Build probe: `bash $S/build-d3d12probe.sh NNNN` -- copies the CURRENT
+   probe.c, probe headers and dxbc_tir.h into a fresh builder dir, builds
+   arm64/x64/x86 and fetches agx_d3d12_probe_eNNNN_<arch>.exe hash-checked.
+   (The old per-arch scripts compiled stale copies and silently lost includes.)
+   zsh: always write `"${B}:path"` -- `"$B:a..."` applies the :a modifier.
 8. Commit code (no attribution trailers), then CHANGES.csv row via python
    csv writer (CRLF, 40-char commit, UTC stamps from `date -u`, status
    implemented/validated/rejected), gate commits on `grep -q '^OK'`.
