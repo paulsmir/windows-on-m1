@@ -19,7 +19,7 @@ if len(sys.argv) > 2:
         if m: freq = int(m.group(1))
         m = re.match(r'(open|close) (\S+) qpc (\d+)', line)
         if m: marks.append((int(m.group(3)), m.group(1) + ' ' + m.group(2)))
-names = {1: 'VISIBLE', 2: 'COMMITVIDPN', 3: 'SETADDR', 4: 'MPO3'}
+names = {1: 'VISIBLE', 2: 'COMMITVIDPN', 3: 'SETADDR', 4: 'MPO3', 5: 'COFUNC', 6: 'ISSUPPORTED'}
 t0 = ents[0][0] if ents else 0
 rows = [(q, f'{names.get(k, k):11} flags={f:#x} detail={d:#x} gap={g/1000:.1f}ms addr={a:#x} alloc={al:#x}') for q, a, al, k, f, d, g in ents]
 rows += [(q, '---- ' + s) for q, s in marks]
