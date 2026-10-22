@@ -152,6 +152,11 @@ struct agx_bo *AgxWin32AsahiCreateVirtualBo(struct agx_device *, size_t Bytes,
 int AgxWin32AsahiMapVirtualTiles(struct agx_bo *Virtual, unsigned FirstTile,
                                  unsigned Tiles, struct agx_bo *Backing,
                                  unsigned BackingTile);
+/* C53 T2D: the same in 16 KiB AGX pages (a reserved texture's hardware
+ * tiles); MapVirtualTiles maps 4 pages per tile. */
+int AgxWin32AsahiMapVirtualPages(struct agx_bo *Virtual, unsigned FirstPage,
+                                 unsigned Pages, struct agx_bo *Backing,
+                                 unsigned BackingPage);
 /* C53 B4: the distinct BOs a virtual BO's tiles map, the tile scratch
  * included (0 for an ordinary BO); IsTileScratch tells the scratch apart
  * (never CPU-read, so never marked written). */

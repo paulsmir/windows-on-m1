@@ -291,6 +291,11 @@ static void reserved_ranges_map_tiles_at_offsets(void) {
          r.protection == AGX_GPUVA_MAP_WRITE && r.waits == 1);
   /* unaligned offsets never reach the callback */
   assert(!AgxWin32GpuvaMapRange(&space, va, 17, 0x1000, 0x10000, 0) && r.maps == 1);
+  assert(!AgxWin32GpuvaMapRange(&space, va + 0x2000, 17, 0, 0x4000, 0) && r.maps == 1);
+  /* C53 T2D: one 16 KiB page onto page 3 of the allocation */
+  r.result = 1;
+  assert(AgxWin32GpuvaMapRange(&space, va + 0x4000, 17, 0xc000, 0x4000, 0));
+  assert(r.maps == 2 && r.map_va == 0x404000 && r.map_offset_pages == 0xc && r.map_pages == 4);
   /* refused map: not terminal */
   r.result = 0;
   assert(!AgxWin32GpuvaMapRange(&space, va, 17, 0, 0x10000, 0) && !space.Terminal);

@@ -83,13 +83,16 @@ int AgxWin32GpuvaBind(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *,
                       unsigned Protection);
 int AgxWin32GpuvaUnbind(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *);
 /* C53 B0 (D3D12-C53-tiled-buffers-plan.md): a reserved range of 64 KiB tiles
- * with no backing; tiles are then mapped at allocation offsets. Every
- * address, offset and size is 64 KiB aligned. Free refuses while any
+ * with no backing; tiles are then mapped at allocation offsets. A range and
+ * its size are 64 KiB aligned; a map is AGX_WIN32_GPUVA_MAP_PAGE aligned. Free refuses while any
  * submission is in flight, as Unbind does. C53 B4: each reservation carries
  * one never-mapped 64 KiB guard tile after its Bytes (reserved and freed with
  * it), so no tile mapping, and no merged UMD alias, continues into the next
  * reservation. */
 #define AGX_WIN32_GPUVA_RANGE_GUARD 0x10000ull
+/* C53 T2D: MapRange maps whole AGX pages (16 KiB): a reserved texture binds
+ * its hardware tiles one page each. Ranges stay 64 KiB tiles. */
+#define AGX_WIN32_GPUVA_MAP_PAGE 0x4000ull
 int AgxWin32GpuvaReserveRange(AGX_WIN32_GPUVA_SPACE *, uint64_t Bytes, uint64_t *Va);
 int AgxWin32GpuvaMapRange(AGX_WIN32_GPUVA_SPACE *, uint64_t Va, uint64_t Allocation,
                           uint64_t Offset, uint64_t Bytes, unsigned Protection);

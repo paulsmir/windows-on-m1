@@ -99,7 +99,7 @@ int AgxWin32GpuvaMapRange(AGX_WIN32_GPUVA_SPACE *space, uint64_t va,
   int mapped;
   if (!space || !space->Ops.MapAt || space->Terminal || !allocation ||
       (protection & ~(AGX_GPUVA_MAP_WRITE | AGX_GPUVA_MAP_EXECUTE)) ||
-      !bytes || ((va | offset | bytes) & (AGX_GPUVA_PAGE - 1)) ||
+      !bytes || ((va | offset | bytes) & (AGX_WIN32_GPUVA_MAP_PAGE - 1)) ||
       va < AGX_GPUVA_PAGE || va >= AGX_GPUVA_LIMIT ||
       bytes > AGX_GPUVA_LIMIT - va) return 0;
   mapped = space->Ops.MapAt(space->Context, allocation, va, offset >> 12,

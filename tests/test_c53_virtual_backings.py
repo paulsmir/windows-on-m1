@@ -29,8 +29,8 @@ struct agx_bo { int refcnt; };
 typedef struct AGX_WIN32_ASAHI_BACKEND AGX_WIN32_ASAHI_BACKEND;
 struct windows_bo {
   struct agx_bo Base; AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva;
-  int Virtual; AGX_WIN32_GPUVA_BO Reserved; struct windows_bo **Tiles; unsigned TileCount;
-  struct { struct windows_bo *Bo; unsigned Tiles; } *Backings; unsigned BackingCount;
+  int Virtual; AGX_WIN32_GPUVA_BO Reserved; struct windows_bo **Pages; unsigned PageCount;
+  struct { struct windows_bo *Bo; unsigned Pages; } *Backings; unsigned BackingCount;
 };
 struct AGX_WIN32_ASAHI_BACKEND {
   int Failed; unsigned VirtualBackingRefs; void *Native; struct windows_bo *Scratch;
@@ -38,7 +38,9 @@ struct AGX_WIN32_ASAHI_BACKEND {
 };
 static AGX_WIN32_ASAHI_BACKEND g;
 #define AGX_WIN32_TILE 0x10000u
+#define AGX_WIN32_PAGE 0x4000u
 #define AGX_WIN32_TILE_SCRATCH_TILES 16u
+#define AGX_WIN32_SCRATCH_PAGES (AGX_WIN32_TILE_SCRATCH_TILES * (AGX_WIN32_TILE / AGX_WIN32_PAGE))
 #define AGX_GPUVA_MAP_WRITE 1u
 #define AGX_WIN32_ASAHI_FAIL(b, x) ((b)->Failed = (int)(x))
 static void agx_bo_reference(struct agx_bo *bo) { ++bo->refcnt; }
@@ -57,26 +59,27 @@ static struct windows_bo heap(uint64_t allocation, uint64_t tiles) {
   h.Base.refcnt = 1; h.Backend = &g; h.Gpuva.Allocation = allocation; h.Gpuva.Bound = 1;
   h.Gpuva.Bytes = tiles * AGX_WIN32_TILE; return h;
 }
-static unsigned tiles_of(struct windows_bo *v, struct windows_bo *b) {
-  for (unsigned i = 0; i < v->BackingCount; ++i) if (v->Backings[i].Bo == b) return v->Backings[i].Tiles;
+static unsigned pages_of(struct windows_bo *v, struct windows_bo *b) {
+  for (unsigned i = 0; i < v->BackingCount; ++i) if (v->Backings[i].Bo == b) return v->Backings[i].Pages;
   return 0;
 }
+#define tiles_of(v, b) (pages_of(v, b) / 4u)
 int main(void) {
   struct windows_bo scratch = heap(60, 16), a = heap(20, 8), b = heap(30, 8);
   struct windows_bo v = heap(10, 1);
   g.Scratch = &scratch; g.MapOk = 1;
-  v.Virtual = 1; v.TileCount = 40; v.Reserved.Va = 0x1000000; v.Reserved.Bound = 1;
-  v.Tiles = calloc(v.TileCount, sizeof(*v.Tiles));
-  for (unsigned t = 0; t < v.TileCount; ++t) v.Tiles[t] = &scratch;
-  /* creation: one scratch entry for every tile, mapped in runs of 16 */
-  assert(backing_add(&g, &v, &scratch, v.TileCount) && map_scratch(&g, &scratch, v.Reserved.Va, 40));
+  v.Virtual = 1; v.PageCount = 160; v.Reserved.Va = 0x1000000; v.Reserved.Bound = 1;
+  v.Pages = calloc(v.PageCount, sizeof(*v.Pages));
+  for (unsigned q = 0; q < v.PageCount; ++q) v.Pages[q] = &scratch;
+  /* creation: one scratch entry for every page, mapped in runs of 16 tiles */
+  assert(backing_add(&g, &v, &scratch, v.PageCount) && map_scratch(&g, &scratch, v.Reserved.Va, 160));
   assert(g.Maps == 3 && g.LastBytes == 8 * AGX_WIN32_TILE);
   assert(scratch.Base.refcnt == 2 && g.VirtualBackingRefs == 1 && tiles_of(&v, &scratch) == 40);
   /* tiles 1-2 onto heap A: one reference for A, counts move */
   g.Maps = 0;
   assert(AgxWin32AsahiMapVirtualTiles(&v.Base, 1, 2, &a.Base, 0) && g.Maps == 1);
   assert(a.Base.refcnt == 2 && g.VirtualBackingRefs == 2);
-  assert(tiles_of(&v, &a) == 2 && tiles_of(&v, &scratch) == 38 && v.Tiles[2] == &a);
+  assert(tiles_of(&v, &a) == 2 && tiles_of(&v, &scratch) == 38 && v.Pages[8] == &a);
   /* remap tile 2 onto another tile of A: A's reference never lapses */
   assert(AgxWin32AsahiMapVirtualTiles(&v.Base, 2, 1, &a.Base, 5));
   assert(a.Base.refcnt == 2 && tiles_of(&v, &a) == 2 && g.VirtualBackingRefs == 2);
@@ -84,7 +87,7 @@ int main(void) {
   g.MapOk = 0;
   assert(!AgxWin32AsahiMapVirtualTiles(&v.Base, 0, 4, &b.Base, 0));
   assert(b.Base.refcnt == 1 && tiles_of(&v, &b) == 0 && tiles_of(&v, &a) == 2 &&
-         v.Tiles[0] == &scratch && g.VirtualBackingRefs == 2);
+         v.Pages[0] == &scratch && g.VirtualBackingRefs == 2);
   g.MapOk = 1;
   /* ranges outside the resource or the heap are refused before any change */
   assert(!AgxWin32AsahiMapVirtualTiles(&v.Base, 39, 2, NULL, 0));
@@ -97,7 +100,12 @@ int main(void) {
   assert(AgxWin32AsahiMapVirtualTiles(&v.Base, 0, 40, NULL, 0) && g.Maps == 3);
   assert(b.Base.refcnt == 1 && g.VirtualBackingRefs == 1 && tiles_of(&v, &scratch) == 40 &&
          scratch.Base.refcnt == 2 && v.BackingCount == 1);
-  free(v.Tiles); free(v.Backings);
+  /* C53 T2D: one 16 KiB page onto page 3 of heap B, then back to scratch */
+  assert(AgxWin32AsahiMapVirtualPages(&v.Base, 5, 1, &b.Base, 3) && g.LastBytes == 0x4000);
+  assert(pages_of(&v, &b) == 1 && pages_of(&v, &scratch) == 159 && b.Base.refcnt == 2 && v.Pages[5] == &b);
+  assert(!AgxWin32AsahiMapVirtualPages(&v.Base, 5, 1, &b.Base, 32) && pages_of(&v, &b) == 1);
+  assert(AgxWin32AsahiMapVirtualPages(&v.Base, 5, 1, NULL, 0) && b.Base.refcnt == 1 && !pages_of(&v, &b));
+  free(v.Pages); free(v.Backings);
   puts("c53 virtual backings: PASS");
   return 0;
 }
@@ -108,7 +116,8 @@ class C53VirtualBackings(unittest.TestCase):
     def test_backing_references_follow_the_tiles(self):
         source = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_asahi_bo.c').read_text()
         funcs = '\n'.join(body(source, name) for name in
-                          ('map_scratch', 'backing_add', 'backing_drop', 'AgxWin32AsahiMapVirtualTiles'))
+                          ('map_scratch', 'backing_add', 'backing_drop', 'AgxWin32AsahiMapVirtualPages',
+                           'AgxWin32AsahiMapVirtualTiles'))
         with tempfile.TemporaryDirectory(prefix='c53-backings-') as tmp:
             src = Path(tmp) / 'backings.c'
             exe = Path(tmp) / 'backings'

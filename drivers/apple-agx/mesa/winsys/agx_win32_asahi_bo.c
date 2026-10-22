@@ -29,14 +29,15 @@ struct windows_bo {
   void *Shadow;
   /* C53 B1: a reserved (virtual) buffer. Coordinate is the reserved range;
    * the BO's own allocation is a 64 KiB anchor for its handle, residency
-   * and in-flight tracking. Tiles[t] is the BO 64 KiB tile t maps (the tile
-   * scratch while unmapped); C53 B4: Backings lists each distinct one with
-   * its tile count and holds the references. */
+   * and in-flight tracking. Pages[p] is the BO 16 KiB page p maps (the tile
+   * scratch while unmapped; C53 T2D: pages, so that a reserved texture binds
+   * its hardware tiles one page each); C53 B4: Backings lists each distinct
+   * one with its page count and holds the references. */
   int Virtual;
   AGX_WIN32_GPUVA_BO Reserved;
-  struct windows_bo **Tiles;
-  unsigned TileCount;
-  struct { struct windows_bo *Bo; unsigned Tiles; } *Backings;
+  struct windows_bo **Pages;
+  unsigned PageCount;
+  struct { struct windows_bo *Bo; unsigned Pages; } *Backings;
   unsigned BackingCount;
 #endif
 };
@@ -502,7 +503,9 @@ const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
  * scratch BO, in runs of up to AGX_WIN32_TILE_SCRATCH_TILES tiles per map
  * (one map and one UMD alias per run, not per tile). */
 #define AGX_WIN32_TILE 0x10000u
+#define AGX_WIN32_PAGE 0x4000u
 #define AGX_WIN32_TILE_SCRATCH_TILES 16u
+#define AGX_WIN32_SCRATCH_PAGES (AGX_WIN32_TILE_SCRATCH_TILES * (AGX_WIN32_TILE / AGX_WIN32_PAGE))
 static struct windows_bo *virtual_scratch(AGX_WIN32_ASAHI_BACKEND *b) {
   struct windows_bo *scratch=(struct windows_bo *)b->TileScratch;
   if(!scratch && b->Native) {
@@ -514,13 +517,13 @@ static struct windows_bo *virtual_scratch(AGX_WIN32_ASAHI_BACKEND *b) {
          scratch->Gpuva.Bytes>=AGX_WIN32_TILE_SCRATCH_TILES*AGX_WIN32_TILE ? scratch : NULL;
 }
 static int map_scratch(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *scratch,uint64_t va,
-                       unsigned tiles) {
-  while(tiles) {
-    const unsigned n=tiles<AGX_WIN32_TILE_SCRATCH_TILES?tiles:AGX_WIN32_TILE_SCRATCH_TILES;
+                       unsigned pages) {
+  while(pages) {
+    const unsigned n=pages<AGX_WIN32_SCRATCH_PAGES?pages:AGX_WIN32_SCRATCH_PAGES;
     if(!AgxWin32GpuvaMapRange(&b->Gpuva,va,scratch->Gpuva.Allocation,0,
-                              (uint64_t)n*AGX_WIN32_TILE,AGX_GPUVA_MAP_WRITE)) return 0;
-    va+=(uint64_t)n*AGX_WIN32_TILE;
-    tiles-=n;
+                              (uint64_t)n*AGX_WIN32_PAGE,AGX_GPUVA_MAP_WRITE)) return 0;
+    va+=(uint64_t)n*AGX_WIN32_PAGE;
+    pages-=n;
   }
   return 1;
 }
@@ -528,29 +531,29 @@ static int map_scratch(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *scratch,uin
  * each with its tile count and one reference: what a submission naming the
  * virtual BO holds (C53 B4: the expansion no longer walks every tile). */
 static int backing_add(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *bo,
-                       struct windows_bo *backing,unsigned tiles) {
+                       struct windows_bo *backing,unsigned pages) {
   void *grown;
   for(unsigned i=0;i<bo->BackingCount;++i)
-    if(bo->Backings[i].Bo==backing) { bo->Backings[i].Tiles+=tiles; return 1; }
+    if(bo->Backings[i].Bo==backing) { bo->Backings[i].Pages+=pages; return 1; }
   grown=realloc(bo->Backings,(bo->BackingCount+1u)*sizeof(*bo->Backings));
   if(!grown) return 0;
   bo->Backings=grown;
   agx_bo_reference(&backing->Base);
   bo->Backings[bo->BackingCount].Bo=backing;
-  bo->Backings[bo->BackingCount++].Tiles=tiles;
+  bo->Backings[bo->BackingCount++].Pages=pages;
   ++b->VirtualBackingRefs;
   return 1;
 }
 static void backing_drop(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *bo,
-                         struct windows_bo *backing,unsigned tiles) {
+                         struct windows_bo *backing,unsigned pages) {
   for(unsigned i=0;i<bo->BackingCount;++i) {
     if(bo->Backings[i].Bo!=backing) continue;
-    if(bo->Backings[i].Tiles<=tiles) {
+    if(bo->Backings[i].Pages<=pages) {
       bo->Backings[i]=bo->Backings[--bo->BackingCount];
       --b->VirtualBackingRefs;
       agx_bo_unreference(b->Native,&backing->Base);
     } else {
-      bo->Backings[i].Tiles-=tiles;
+      bo->Backings[i].Pages-=pages;
     }
     return;
   }
@@ -570,9 +573,9 @@ static void virtual_release(struct windows_bo *bo) {
   }
   free(bo->Backings);
   bo->Backings=NULL;
-  free(bo->Tiles);
-  bo->Tiles=NULL;
-  bo->TileCount=0;
+  free(bo->Pages);
+  bo->Pages=NULL;
+  bo->PageCount=0;
   if(bo->Reserved.Bound) {
     /* the range is freed once no submission is in flight (EXP979) */
     if(!virtual_retire(b,bo) ||
@@ -601,23 +604,23 @@ struct agx_bo *AgxWin32AsahiCreateVirtualBo(struct agx_device *native,size_t byt
   if(!b || b->Native!=native || b->Failed || !b->GpuvaReady || !bytes ||
      bytes>SIZE_MAX-(AGX_WIN32_TILE-1)) return NULL;
   bytes=(bytes+AGX_WIN32_TILE-1)&~(size_t)(AGX_WIN32_TILE-1);
-  if(bytes/AGX_WIN32_TILE>UINT32_MAX || !(scratch=virtual_scratch(b))) return NULL;
+  if(bytes/AGX_WIN32_PAGE>UINT32_MAX || !(scratch=virtual_scratch(b))) return NULL;
   if(!(base=agx_bo_create(native,AGX_WIN32_TILE,0,0,label))) return NULL;
   bo=(struct windows_bo *)base;
-  bo->Tiles=calloc(bytes/AGX_WIN32_TILE,sizeof(*bo->Tiles));
-  if(!bo->Tiles || !AgxWin32GpuvaReserveRange(&b->Gpuva,bytes,&va)) {
-    free(bo->Tiles); bo->Tiles=NULL;
+  bo->Pages=calloc(bytes/AGX_WIN32_PAGE,sizeof(*bo->Pages));
+  if(!bo->Pages || !AgxWin32GpuvaReserveRange(&b->Gpuva,bytes,&va)) {
+    free(bo->Pages); bo->Pages=NULL;
     agx_bo_unreference(native,base);
     return NULL;
   }
   bo->Virtual=1;
-  bo->TileCount=(unsigned)(bytes/AGX_WIN32_TILE);
+  bo->PageCount=(unsigned)(bytes/AGX_WIN32_PAGE);
   bo->Reserved.Allocation=bo->Gpuva.Allocation;
   bo->Reserved.Va=va; bo->Reserved.Bytes=bytes; bo->Reserved.Bound=1;
   /* every tile starts on the tile scratch: reads see its contents, writes go
    * nowhere a real resource lives (plan: NULL tiles map scratch) */
-  for(unsigned t=0;t<bo->TileCount;++t) bo->Tiles[t]=scratch;
-  if(!backing_add(b,bo,scratch,bo->TileCount) || !map_scratch(b,scratch,va,bo->TileCount)) {
+  for(unsigned p=0;p<bo->PageCount;++p) bo->Pages[p]=scratch;
+  if(!backing_add(b,bo,scratch,bo->PageCount) || !map_scratch(b,scratch,va,bo->PageCount)) {
     agx_bo_unreference(native,base);
     return NULL;
   }
@@ -627,40 +630,46 @@ struct agx_bo *AgxWin32AsahiCreateVirtualBo(struct agx_device *native,size_t byt
   return base;
 }
 
-int AgxWin32AsahiMapVirtualTiles(struct agx_bo *base,unsigned first,unsigned count,
-                                 struct agx_bo *backing_base,unsigned backing_tile) {
+int AgxWin32AsahiMapVirtualPages(struct agx_bo *base,unsigned first,unsigned count,
+                                 struct agx_bo *backing_base,unsigned backing_page) {
   struct windows_bo *bo=(struct windows_bo *)base;
   struct windows_bo *backing=(struct windows_bo *)backing_base;
   AGX_WIN32_ASAHI_BACKEND *b=bo?bo->Backend:NULL;
   struct windows_bo *scratch,*target;
-  if(!b || !bo->Virtual || b->Failed || !count || first>bo->TileCount ||
-     count>bo->TileCount-first || !(scratch=virtual_scratch(b))) return 0;
+  if(!b || !bo->Virtual || b->Failed || !count || first>bo->PageCount ||
+     count>bo->PageCount-first || !(scratch=virtual_scratch(b))) return 0;
   if(backing && (backing->Backend!=b || backing->Virtual || !backing->Gpuva.Bound ||
                  backing_base->refcnt<=0 ||
-                 (uint64_t)backing_tile+count>backing->Gpuva.Bytes/AGX_WIN32_TILE)) return 0;
+                 (uint64_t)backing_page+count>backing->Gpuva.Bytes/AGX_WIN32_PAGE)) return 0;
   target=backing?backing:scratch;
   if(!virtual_retire(b,bo)) { AGX_WIN32_ASAHI_FAIL(b, 1u); return 0; }
   /* counted before the map so the reference never lapses on a remap onto
    * the same BO */
   if(!backing_add(b,bo,target,count)) return 0;
-  const uint64_t va=bo->Reserved.Va+(uint64_t)first*AGX_WIN32_TILE;
+  const uint64_t va=bo->Reserved.Va+(uint64_t)first*AGX_WIN32_PAGE;
   const int mapped=backing ?
       AgxWin32GpuvaMapRange(&b->Gpuva,va,backing->Gpuva.Allocation,
-                            (uint64_t)backing_tile*AGX_WIN32_TILE,
-                            (uint64_t)count*AGX_WIN32_TILE,AGX_GPUVA_MAP_WRITE) :
+                            (uint64_t)backing_page*AGX_WIN32_PAGE,
+                            (uint64_t)count*AGX_WIN32_PAGE,AGX_GPUVA_MAP_WRITE) :
       map_scratch(b,scratch,va,count);
   if(!mapped) {
-    /* a refused map leaves the old tiles; after a partly mapped scratch run
-     * some tiles read scratch while their old references stay held (safe) */
+    /* a refused map leaves the old pages; after a partly mapped scratch run
+     * some pages read scratch while their old references stay held (safe) */
     backing_drop(b,bo,target,count);
     return 0;
   }
-  for(unsigned t=first;t<first+count;++t) {
-    struct windows_bo *old=bo->Tiles[t];
-    bo->Tiles[t]=target;
+  for(unsigned p=first;p<first+count;++p) {
+    struct windows_bo *old=bo->Pages[p];
+    bo->Pages[p]=target;
     backing_drop(b,bo,old,1u);
   }
   return 1;
+}
+int AgxWin32AsahiMapVirtualTiles(struct agx_bo *base,unsigned first,unsigned count,
+                                 struct agx_bo *backing_base,unsigned backing_tile) {
+  const unsigned per=AGX_WIN32_TILE/AGX_WIN32_PAGE;
+  if(first>UINT32_MAX/per || count>UINT32_MAX/per || backing_tile>UINT32_MAX/per) return 0;
+  return AgxWin32AsahiMapVirtualPages(base,first*per,count*per,backing_base,backing_tile*per);
 }
 
 unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *base) {
