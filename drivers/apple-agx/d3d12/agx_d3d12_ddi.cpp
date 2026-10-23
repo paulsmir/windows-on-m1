@@ -259,12 +259,14 @@ static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *ve
  * start at FL 11_0; the C8 baseline gates admission outside the profile). */
 static const D3D12DDI_3DPIPELINELEVEL kProfileLevel = D3D12DDI_3DPIPELINELEVEL_11_0;
 /* FL 11_1 (D3D12-FL-program.md): logic ops (C57), 64 UAVs (C47 tier 2) and
- * forced sample counts (C60A); reported only with APPLE_AGX_D3D12_FL111=1
- * until C60A passes on hardware. */
+ * forced sample counts (C60A), validated at 11_1 on hardware (EXP1890:
+ * C62A, C57A, C60A); the default since then, APPLE_AGX_D3D12_FL111=0 keeps a
+ * process at 11_0. The runtime reports ROVs and conservative rasterization
+ * only at 11_1 and above (EXP1891). */
 static D3D12DDI_3DPIPELINELEVEL ProfileLevel() {
     char value[2] = {};
-    return GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1 && value[0] == '1'
-               ? D3D12DDI_3DPIPELINELEVEL_11_1 : kProfileLevel;
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1 && value[0] == '0'
+               ? kProfileLevel : D3D12DDI_3DPIPELINELEVEL_11_1;
 }
 /* Answers a caps type with T, its remaining bytes zero (a larger, newer
  * structure keeps every later field at its "not supported" zero). */
