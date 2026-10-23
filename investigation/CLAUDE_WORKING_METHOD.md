@@ -184,3 +184,16 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   `AGX_RECOVERY_ALLOW_AT_PROXY=1 recover.sh`.
 - A hung guest: two `kill -INT <run_uefi>` HV WATCHDOG snapshots ~25 s apart
   before any recovery (per-CPU pc/spsr/LRs; the vGIC evidence).
+
+## Real-app TDR triage and UI driving (2026-10-23, EXP1899N)
+
+- After a real application ends with DEVICE_REMOVED and the UMD trace shows no refusal, read the KMD before anything else. Run `bash $S/kmd-receipts.sh <evidence> <tag>`. It dumps every APPL0002 Device Parameters value and decodes:
+  - `Wom1GpuReset`: engine/adapter reset, SchedulerFaulted file tag and line, packet and fence state;
+  - `Wom1PreemptRefusal`: the scheduler at the first refused boundary preemption.
+- EXP1899N GT2 was found this way: TDR after `scheduler_windows.c:399`.
+- Run it before recovery, because recovery removes the package and its values.
+- Drive 3DMark and other UIs with `$S/guest-ui.sh shot|click|wheel|ps`:
+  - physical 2560x1600 coordinates = screenshot coordinates x 1.6;
+  - it uses `C:\Users\pavel\realapp` helpers, since guest pruning removed the EXP1876 copies.
+- Both scripts are backed up in `.local/scratchpad-tools-backup`.
+- 3DMark resets Custom-run toggles between sessions, so check every toggle on a screenshot before RUN CUSTOM.
