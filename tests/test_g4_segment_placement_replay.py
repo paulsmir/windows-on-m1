@@ -73,6 +73,14 @@ static void AdmissionPresentResourceRefreshRate(const ADMISSION_PRESENT_RESOURCE
   (void)data; *numerator = 0; *denominator = 1;
 }
 typedef struct { int Memory; void *PhysicalDeviceObject; } ADMISSION_CONTEXT;
+/* Scanout capability is an OS/backend boundary, unrelated to BO placement.
+ * This fixture exposes only the original BGRA scanout format. */
+typedef unsigned D3DDDIFORMAT;
+static int AdmissionScanoutFormatSupported(ADMISSION_CONTEXT *context,
+                                         D3DDDIFORMAT format) {
+  (void)context;
+  return format == D3DDDIFMT_A8R8G8B8;
+}
 typedef struct { unsigned Value, SegmentId0, SegmentId1; } SEGMENT_HINT;
 /* M2-f2: production asks pool_windows.c whether segment 3 is mapped. */
 typedef struct { void *CpuAddress; uint64_t GuestIpaAddress, GpuVirtualAddress,
