@@ -160,3 +160,49 @@ WHY THIS HYPOTHESIS:
 - Recovery: the EXP's rec<N>h/recover.sh (`AGX_RECOVERY_ALLOW_AT_PROXY=1` after a
   reset). Previous m1n1 `.local/experiments/m1n1-21c3648d-rgba/m1n1-g2-abi6-iomfb-owner.macho`
   (`a66610f7…`).
+
+## EXP1894 (db990f95): boot livelock, and the follow-up fix 062ea6bd
+
+Evidence: `.local/experiments/EXP1894-vgic-rp-gm/evidence/EXP1894/full-boot-hang-snapshots.log`.
+On CPUs 2, 4, 5, 6 and 7:
+- LR0 = SGI0 ACTIVE (0x10) and LR1 = vtimer 18 PENDING (0x20).
+- HCR_EL2.VI = 0 and DAIF is masked.
+- The PCs sit on the IRQ entry path, not in a spin loop. With kernel base
+  0xfffff8023b400000 they map to:
+  - RVA 0x63f914, after `mrs MDSCR_EL1` in the exception prologue;
+  - RVA 0x505540, after `mrs PMCCNTR_EL0` in interrupt trace logging;
+  - RVA 0x4acda4, after `mrs ICC_IAR1_EL1`.
+
+CPU0 spins at RVA 0x25a5b8 on a per-PRCB flag (waiting for the IPI targets). CPUs 1
+and 3 are in the idle WFI (RVA 0x4811a8).
+
+So the vCPUs kept taking IRQ exceptions while VI was clear. The only other source is
+the hardware virtual CPU interface, enabled by ICH_VMCR.VENG1 = 1:
+- it signals any Pending LR under VPMR;
+- its ICH_AP1R is always empty because IAR and EOIR are emulated.
+
+The emulated IAR now correctly refused the timer behind the ACTIVE SGI and returned
+spurious, so Windows re-entered at once. That livelock left the IPI handler unable to
+finish. Before aca9fd5d the emulated IAR accepted whatever the hardware signalled, so
+the disagreement was invisible. The 2026-07 comment that the M1 interface "does not
+signal on its own" is contradicted by this run.
+
+Fix 062ea6bd keeps VMCR.VENG0/VENG1 clear, so the virtual IRQ comes only from
+HCR_EL2.VI via `hv_vgic3_update_vi()` (PMR plus running priority), and update_vi no
+longer gates on VENG1, which was always 1. Regression:
+`test_hardware_cpu_interface_cannot_signal_behind_running_priority` is RED on db990f95
+and GREEN on 062ea6bd.
+
+Artifact: `.local/experiments/m1n1-062ea6bd-vgic-rp-vi/m1n1-g2-abi6-iomfb-owner.macho`,
+SHA-256 `9e87ee7393c735d7ed5cbc1515d8a2eb2a9b293b006e764cfb1af23fff154cc7`
+(config a01c4ca9).
+
+WHAT IS STILL UNKNOWN:
+1. Whether Apple's interface honours VENG1 = 0 (architecturally it must).
+2. Whether some LR transition relied on the hardware signal because it does not call
+   update_vi (every LR writer found does call it).
+3. The residual GICD-disabled delivery risk above.
+
+Discriminator: boot to SSH first. The failure criterion is a boot hang or a watchdog
+snapshot with VI = 0 while a vCPU is on the IRQ entry path. Then run GravityMark as
+planned for EXP1894.

@@ -95,6 +95,24 @@ class VgicIrqQueueContractTest(unittest.TestCase):
 
         self.assertIn(".priority = hv_vgic3_get_priority(vintid),", queued)
 
+    def test_hardware_cpu_interface_cannot_signal_behind_running_priority(self):
+        # EXP1894: with VMCR.VENG1 set the Apple virtual CPU interface signalled a
+        # Pending timer LR that the emulated running priority (an ACTIVE SGI) blocks;
+        # the emulated IAR answered spurious and five vCPUs re-entered the IRQ
+        # vector forever.  Only HCR_EL2.VI, computed by update_vi, may signal.
+        vgic = HV_VGIC.read_text()
+        enable = function_body(vgic, "int hv_vgicv3_enable_virtual_interrupts(void)")
+        writes = re.findall(r"msr\(ICH_VMCR_EL2,\s*([^;]*)\);", enable)
+        self.assertTrue(writes)
+        for value in writes:
+            self.assertNotIn("BIT(0)", value)
+            self.assertNotIn("BIT(1)", value)
+        self.assertIn("msr(ICH_VMCR_EL2, 0xFFUL << 24);", enable)
+
+        update = function_body(vgic, "void hv_vgic3_update_vi(void)")
+        self.assertNotIn("BIT(1)", update)
+        self.assertIn("hv_vgic_diag_priority_deliverable(", update)
+
     def test_sgi_queue_console_trace_requires_explicit_hot_path_tracing(self):
         exc = HV_EXC.read_text()
         queue = function_body(exc, "static void hv_vgic3_queue_sgi(int cpu, u32 intid)")
