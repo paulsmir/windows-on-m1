@@ -143,4 +143,10 @@ The documented hardware alternatives are:
 
 Next discriminator (cheap, no driver change): a desktop screenshot with the D3D9 windowed probe on AGX. It shows whether the GDI-blt fallback makes the window content visible after all, which would make OCCLUDED only a status-reporting difference.
 
-Priority: this path concerns legacy windowed blt-model D3D9/D3D10 apps only. Games and benchmarks run in flip model or fullscreen, so this track stays behind the D3D11/D3D12 game work.
+Priority correction: windowed blt-model presents are not only legacy D3D9. They also cover:
+- DXGI `DISCARD`/`SEQUENTIAL` swap chains in D3D10 and D3D11 games;
+- D3D9On12 (Portal 2 is invisible in windowed mode).
+
+So this is a production blocker for windowed games; only fullscreen and flip-model apps avoid it.
+
+Strongest next discriminator: C67 (`DriverSupportsCddDwmInterop`) again, this time with the DxgKrnl ETW capture. EXP1903 rejected C67 only on missing `Wom1G2PresentDdi` and the invalid front pixel; it did not show whether dxgkrnl then creates the CDD shared redirection texture (event 287 "CreateShared" `Texture`) on AGX, or where that path stops.
