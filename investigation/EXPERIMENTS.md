@@ -61412,3 +61412,22 @@ EXP1912 ACTUAL 2026-10-23T15:41:42Z:
   - 2k: D3D12 out of memory at 20 s (Df32 4096x4096 texture);
   - G4_SUBMIT_FAILURE Parse/Unmapped total 3 (receipt v3 provenance in EXP1914).
 - C80 (fork): no regression in the D3D12 samples or ModelViewer (1261 presents).
+
+EXP1913 HARDWARE BEFORE 2026-10-23T15:45:34Z:
+- Package 30.0.1913.0 from 3f2cd88e (rebuilt; the 5060e769 build EXP1913-direct-shared-superseded was never installed) = EXP1912 04418fda plus:
+  - Codex T3: 3022508c C77 D3D12 shared linear committed texture open, 4a08a5b7 probe step C76A;
+  - Codex T2b (12 commits): typed GenerateMips across targets, typed buffer RTVs and clears, ClearView fixes, cube SRV bounds, empty instanced draws;
+  - Codex T6b: df8af8e0 CPU buffer reads fail cleanly after a map failure; 03a993cb unmapped SystemDirect buffers are evictable, CPU maps restore residency, and C75 (direct up to the class limit) is restored.
+- Probe probe1913.sh = probe1912 without the C76 ETW step, with D3D12 probe e1913 (arm64 9b6f20fa, x64 433ac72b, x86 5d40b141; +AGX_D3D12_C76A).
+- ATOMIC CONTRACT: none -- separate lines (T2b: the GravityMark D3D11 line and D3D11 smoke):
+  - C77: AGX_D3D12_C76A on 3 ABIs;
+  - T6b/C75: XFER and the GravityMark D3D12/D3D11 crash/removal lines, plus PRESSURE and DWM.
+- WHY THIS HYPOTHESIS:
+  (1) EXP1909 C75: XFER 0 but untrimmable direct BOs -> residency OOM -> map failure -> crash (Codex T6 analysis);
+  (2) EXP1910/EXP1911: crash in a failed buffer map read UmdArm64+0xaed1c;
+  (3) shared open was fail-closed (AGX_REJECT).
+- WHAT IS STILL UNKNOWN: whether evicting unmapped direct BOs keeps GravityMark within memory; the DWM c00001ad memory exhaustion seen in EXP1911 (Codex T8).
+- Expected: e1913 119/0 x3 including C76A; XFER for GravityMark near 0; no UmdArm64 crash; DWM alive.
+- Failure criteria: regressions, DWM crash, new removals, hang.
+- Hashes: sys c6453bb01813, UmdArm64 3104be6278cc, UmdX64 02af5840e185, Umd32 d1e33542f640; manifest bb5e2b5a20ec, hardware-manifest 4ff15a76eb1f; probe1913.sh f493a63f964c (PROBE_LINT_OK); visible recovery rec1913h 94f2575d6ae9be87; m1n1 0d3a75b3.
+- Recovery rec1913h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1913-direct-shared-t2b/run1913.sh.
