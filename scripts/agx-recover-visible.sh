@@ -129,7 +129,7 @@ cmd+=f" -ReceiptPath 'C:\\Users\\pavel\\EXP{x}\\cleanup{x}\\visible-disable.json
 (r/'disable-visible.ps1').write_text(cmd)
 PY
 for f in "$W/scripts/agx-recovery-disable-service.ps1" "$R/disable-visible.ps1" "$R/cleanup-visible.ps1"; do
-  "$T/airscp" "$f" "pavel@192.168.1.37:C:/Users/pavel/EXP$X/cleanup$X/" >/dev/null
+  perl -e 'alarm 60; exec @ARGV' "$T/airscp" "$f" "pavel@192.168.1.37:C:/Users/pavel/EXP$X/cleanup$X/" >/dev/null || { echo VISIBLE_COPY_FAILED "$f"; exit 3; }
 done
 ssh_long "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\disable-visible.ps1" | tee "$R/visible-disable-output.txt"
 grep -q 'AGX_RECOVERY_DISABLE_SERVICE: PASS' "$R/visible-disable-output.txt"

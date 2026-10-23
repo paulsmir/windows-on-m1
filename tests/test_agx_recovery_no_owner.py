@@ -42,6 +42,16 @@ proxy_endpoints_present() { printf 'endpoints\n' >> "$TRACE"; return "$ENDPOINTS
             result=subprocess.run(['/bin/bash','-c',stubs+matches[0]+'\nselect_recovery_owner\n'],env=env,capture_output=True,text=True,timeout=5)
             return result,trace.read_text().splitlines() if trace.exists() else []
 
+    def test_guest_copies_are_bounded(self):
+        # EXP1890: the owner was alive when recovery started, the guest was
+        # hung, and an unbounded airscp to it blocked recovery for 11 minutes.
+        script=(ROOT/'scripts/agx-recover-visible.sh').read_text()
+        copies=[l for l in script.splitlines() if 'airscp' in l and not l.lstrip().startswith('#')]
+        self.assertTrue(copies)
+        for line in copies:
+            self.assertIn("perl -e 'alarm ", line)
+            self.assertIn('VISIBLE_COPY_FAILED', line)
+
     def test_owned_success_default_unchanged(self):
         result,trace=self.call(selector='owned')
         self.assertEqual(result.returncode,0);self.assertEqual(result.stdout,'4242\n');self.assertEqual(trace,['selector'])
