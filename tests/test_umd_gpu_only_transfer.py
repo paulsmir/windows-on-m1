@@ -164,6 +164,41 @@ int main(void) {
             r=subprocess.run([str(exe)],capture_output=True,text=True)
             self.assertEqual(r.returncode,0,r.stdout+r.stderr)
 
+    def test_depth_staging_round_trip_and_cleanup(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? GPU-only Z16/Z32 must stage through R16/R32, preserve array/mip boxes and bytes in both directions, synchronize reads and clean up failed staging without mapping the depth BO, including uncompressed mip tails."""
+        from test_dxbc_to_nir import ROOT, local_tree, host_flags
+        from test_native_resource_layout import function
+        mesa=local_tree('reference','mesa')
+        build=local_tree('accelerated-desktop-ad03','mesa-build')
+        self.assertIsNotNone(mesa, 'Pinned Mesa is required')
+        self.assertIsNotNone(build, 'Pinned host AIL is required')
+        with tempfile.TemporaryDirectory(prefix='t7h-depth-') as tmp:
+            out=project(Path(tmp)/'out');self.assertIsNotNone(out)
+            pipe=(out/'src/gallium/drivers/asahi/agx_pipe.c').read_text()
+            declarations=[]
+            for name,ret in (('agx_staging_format','enum pipe_format'),
+                             ('agx_alloc_staging','struct agx_resource *'),
+                             ('agx_blit_from_staging','void'),
+                             ('agx_blit_to_staging','void'),
+                             ('agx_transfer_map','void *'),
+                             ('agx_transfer_unmap','void')):
+                declarations.append('static '+ret+'\n'+function(pipe,name))
+            fixture=(ROOT/'tests/umd_gpu_only_depth_fixture.c').read_text()
+            source=fixture.replace('/* ACTUAL_TRANSFER_SOURCE */','\n'.join(declarations))
+            # Keep the pinned source notice on the extracted Mesa functions.
+            source=pipe[:pipe.index('*/')+2]+'\n'+source
+            src,exe=Path(tmp)/'depth.c',Path(tmp)/'depth';src.write_text(source)
+            libs=[build/p for p in ('src/asahi/layout/libasahi_layout.a','src/util/libmesa_util.a',
+                 'src/util/libmesa_util_simd.a','src/c11/impl/libmesa_util_c11.a','src/util/blake3/libblake3.a')]
+            b=subprocess.run(['clang','-std=c11','-fsanitize=address,undefined',*host_flags(build),
+                '-I',str(mesa/'src'),'-I',str(mesa/'src/gallium/include'),
+                '-I',str(mesa/'src/gallium/auxiliary'),str(src),'-o',str(exe),*map(str,libs),
+                '-L/opt/homebrew/opt/zstd/lib','-lzstd','-lz','-lpthread'],capture_output=True,text=True)
+            self.assertEqual(b.returncode,0,b.stderr)
+            r=subprocess.run([str(exe)],capture_output=True,text=True)
+            self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+            self.assertIn('gpu-only Z16/Z32 depth staging: PASS',r.stdout)
+
     def test_resource_intent_reaches_bo_flags(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Losing UNMAPPABLE between the owner resource template and agx_bo_create silently restores CPU-visible aperture backing."""
         with tempfile.TemporaryDirectory(prefix='t7h-resource-') as tmp:

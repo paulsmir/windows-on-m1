@@ -969,13 +969,24 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
   if (samples > 1) templ.nr_samples = templ.nr_storage_samples = static_cast<uint8_t>(samples); /* C32 */
   templ.usage = PIPE_USAGE_DEFAULT;
   /* Only opt in when ordinary staging blits can round-trip the format.
-   * BC, non-renderable formats (e.g. RGB9E5), depth and MSAA keep their
-   * existing CPU fallback/resolve paths. */
+   * Asahi stages single-plane depth through its color interchange format,
+   * including uncompressed mip tails (UNMAPPABLE forces staging). Combined
+   * depth/stencil, BC, non-renderable formats and MSAA keep existing paths. */
   if ((bind & AGX_D3D12_BIND_GPU_ONLY) && bw == 1 && bh == 1 && samples <= 1 &&
-      !(bind & AGX_D3D12_BIND_DEPTH_STENCIL) && owner->Screen->is_format_supported &&
-      owner->Screen->is_format_supported(owner->Screen, templ.format, PIPE_TEXTURE_2D,
+      owner->Screen->is_format_supported) {
+    enum pipe_format staging_format = templ.format;
+    if (bind & AGX_D3D12_BIND_DEPTH_STENCIL) {
+      switch (templ.format) {
+      case PIPE_FORMAT_Z16_UNORM: staging_format = PIPE_FORMAT_R16_UNORM; break;
+      case PIPE_FORMAT_Z32_FLOAT: staging_format = PIPE_FORMAT_R32_FLOAT; break;
+      default: staging_format = PIPE_FORMAT_NONE; break;
+      }
+    }
+    if (staging_format != PIPE_FORMAT_NONE &&
+        owner->Screen->is_format_supported(owner->Screen, staging_format, PIPE_TEXTURE_2D,
           1, 1, PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW))
-    templ.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
+      templ.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
+  }
   templ.bind = ((bind & AGX_D3D12_BIND_RENDER_TARGET) ? PIPE_BIND_RENDER_TARGET : 0) |
                ((bind & AGX_D3D12_BIND_SAMPLER) ? PIPE_BIND_SAMPLER_VIEW : 0) |
                ((bind & AGX_D3D12_BIND_DEPTH_STENCIL) ? PIPE_BIND_DEPTH_STENCIL : 0);
