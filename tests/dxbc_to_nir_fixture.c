@@ -63,6 +63,7 @@ main(int argc, char **argv)
    bool print = false, print_final = false, d3d12 = false, heap = false, uav64 = false;
    unsigned tir = 0, tir_pass = 0;
    const char *tir_gs = NULL;
+   bool tir_wrap = false;
    for (int a = 2; a < argc; ++a) {
       print |= !strcmp(argv[a], "--print");
       print_final |= !strcmp(argv[a], "--print-final");
@@ -75,6 +76,11 @@ main(int argc, char **argv)
          tir_pass = (unsigned)atoi(argv[a + 1]);
       if (!strcmp(argv[a], "--tir-gs") && a + 1 < argc)
          tir_gs = argv[a + 1];
+      if (!strcmp(argv[a], "--tir-wrap-gs") && a + 1 < argc) {
+         /* C61C: the given application GS wraps itself */
+         tir_gs = argv[a + 1];
+         tir_wrap = true;
+      }
    }
    /* the D3D12 owner's entry: SM5.1 register spaces through a binding map
     * with the owner's per-kind capacities (agx_d3d12_windows.cpp) */
@@ -192,9 +198,9 @@ main(int argc, char **argv)
             printf("TIR_GS_KEY_REFUSED\n");
             return 1;
          }
-         nir_shader *gs = dxbc_tir_gs(&agx_nir_options, &key);
+         nir_shader *gs = tir_wrap ? (dxbc_tir_wrap_gs(vs, &key) ? vs : NULL) : dxbc_tir_gs(&agx_nir_options, &key);
          if (!gs) {
-            printf("TIR_GS_REFUSED\n");
+            printf(tir_wrap ? "TIR_WRAP_GS_REFUSED\n" : "TIR_GS_REFUSED\n");
             return 1;
          }
          if (print)
@@ -205,9 +211,10 @@ main(int argc, char **argv)
          nir_shader_gather_info(gs, nir_shader_get_entrypoint(gs));
          agx_preprocess_nir(gs);
          nir_validate_shader(gs, "tir gs agx_preprocess_nir");
-         printf("TIR_GS varyings %u primitive-id %u vertices-out %u\n", key.count, key.primitive_id,
-                gs->info.gs.vertices_out);
-         ralloc_free(gs);
+         printf("%s varyings %u primitive-id %u vertices-out %u\n", tir_wrap ? "TIR_WRAP_GS" : "TIR_GS", key.count,
+                key.primitive_id, gs->info.gs.vertices_out);
+         if (gs != vs)
+            ralloc_free(gs);
          ralloc_free(vs);
       }
    } else if (uav64) {

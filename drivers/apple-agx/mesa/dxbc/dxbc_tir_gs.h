@@ -73,6 +73,11 @@ struct nir_shader *dxbc_tir_clone(const struct nir_shader *nir);
  * touches the pixel (dxbc_tir_touched), SV_Coverage the full sample. */
 bool dxbc_cr_lower_fs(struct nir_shader *nir);
 
+/* C61C: rewrite a finalized application geometry shader (triangle-strip
+ * output, one stream) to emit the expanded triangles itself; the key from
+ * dxbc_tir_gs_key_from(gs, ps). false leaves it unusable for the variant. */
+bool dxbc_tir_wrap_gs(struct nir_shader *gs, const struct dxbc_tir_gs_key *key);
+
 /* The expansion GS for a key (NULL without a position). */
 struct nir_shader *dxbc_tir_gs(const struct nir_shader_compiler_options *options,
                                const struct dxbc_tir_gs_key *key);

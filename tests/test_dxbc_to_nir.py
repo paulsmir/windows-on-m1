@@ -464,6 +464,22 @@ class DxbcToNir(unittest.TestCase):
                               str(FIXTURES / "ds50iso.dxbc")], capture_output=True, text=True, timeout=60)
         self.assertIn("TIR_GS_KEY_REFUSED", iso.stdout)
 
+    def test_application_gs_wraps_into_the_expansion(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? C61C: with an
+        # application GS (conservative voxelization's usual pipeline) the
+        # expansion runs inside that GS: every strip triangle it emits must
+        # leave as an expanded triangle with the four edge varyings (three
+        # vertices per emitted vertex at most), and a GS that does not output
+        # triangles (gs50: point streams) must be refused, not mis-expanded.
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-wrap-gs",
+                              str(FIXTURES / "gs50strip.dxbc"), "--print"], capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout[-3000:] + out.stderr[-3000:])
+        self.assertIn("TIR_WRAP_GS varyings 2 primitive-id 0 vertices-out 12", out.stdout)
+        self.assertEqual(len(re.findall(r"decl_var shader_out INTERP_MODE_FLAT none ivec4 tir_edge", out.stdout)), 4)
+        points = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-wrap-gs",
+                                 str(FIXTURES / "gs50.dxbc")], capture_output=True, text=True, timeout=60)
+        self.assertNotIn("TIR_WRAP_GS varyings", points.stdout)
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

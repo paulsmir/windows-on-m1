@@ -87,54 +87,21 @@ dxbc_tir_gs_key_from(const struct nir_shader *last, const struct nir_shader *ps,
    return position;
 }
 
-struct nir_shader *
-dxbc_tir_gs(const struct nir_shader_compiler_options *options, const struct dxbc_tir_gs_key *key)
+/* One expanded triangle of the vertices vals[v][0..2] (key order; pos
+ * the position's index), flat varyings from flat[v]: the conservative
+ * triangle's three vertices with the original edges, then end_primitive.
+ * Shared by the expansion GS and the wrapped application GS. */
+static void
+emit_expanded(nir_builder *b, const struct dxbc_tir_gs_key *key, int pos, nir_def *vals[][3], nir_def *const flat[],
+              nir_variable *const out[], nir_variable *const edge_out[], nir_variable *primitive_out,
+              nir_def *primitive_id)
 {
-   nir_builder builder = nir_builder_init_simple_shader(MESA_SHADER_GEOMETRY, options, "dxbc_tir_gs");
-   nir_builder *b = &builder;
-   nir_shader *nir = b->shader;
-   nir_variable *in[DXBC_TIR_MAX_VARYINGS], *out[DXBC_TIR_MAX_VARYINGS], *edge_out[DXBC_TIR_EDGE_SLOTS];
-   nir_variable *primitive_out = NULL;
-   int pos = -1;
-
-   nir->info.separate_shader = true;
-   nir->info.internal = false;
-   nir->info.gs.input_primitive = MESA_PRIM_TRIANGLES;
-   nir->info.gs.vertices_in = 3;
-   nir->info.gs.output_primitive = MESA_PRIM_TRIANGLE_STRIP;
-   nir->info.gs.vertices_out = 3;
-   nir->info.gs.invocations = 1;
-   nir->info.gs.active_stream_mask = 1;
-
-   for (unsigned i = 0; i < key->count; ++i) {
-      const struct glsl_type *type = glsl_vector_type(GLSL_TYPE_FLOAT, key->v[i].components);
-      in[i] = nir_variable_create(nir, nir_var_shader_in, glsl_array_type(type, 3, 0), "tir_in");
-      in[i]->data.location = key->v[i].slot;
-      out[i] = nir_variable_create(nir, nir_var_shader_out, type, "tir_out");
-      out[i]->data.location = key->v[i].slot;
-      out[i]->data.interpolation = key->v[i].interp;
-      if (key->v[i].slot == VARYING_SLOT_POS)
-         pos = (int)i;
-   }
-   if (pos < 0)
-      return NULL;
-   for (unsigned i = 0; i < DXBC_TIR_EDGE_SLOTS; ++i) {
-      edge_out[i] = nir_variable_create(nir, nir_var_shader_out, glsl_ivec4_type(), "tir_edge");
-      edge_out[i]->data.location = VARYING_SLOT_TEX0 + i;
-      edge_out[i]->data.interpolation = INTERP_MODE_FLAT;
-   }
-   if (key->primitive_id) {
-      primitive_out = nir_variable_create(nir, nir_var_shader_out, glsl_uint_type(), "tir_primid");
-      primitive_out->data.location = VARYING_SLOT_PRIMITIVE_ID;
-      primitive_out->data.interpolation = INTERP_MODE_FLAT;
-   }
-
    nir_def *p[3], *w[3], *sx[3], *sy[3], *ix[3], *iy[3];
    nir_def *vp = nir_load_ubo(b, 4, 32, nir_imm_int(b, DXBC_TIR_GS_CB), nir_imm_int(b, 0),
                               .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0u);
    nir_def *ok = nir_imm_true(b);
    for (unsigned k = 0; k < 3; ++k) {
-      p[k] = nir_load_array_var_imm(b, in[pos], k);
+      p[k] = vals[pos][k];
       w[k] = nir_channel(b, p[k], 3);
       ok = nir_iand(b, ok, nir_fgt_imm(b, w[k], DXBC_TIR_MIN_W));
       nir_def *rw = nir_frcp(b, w[k]);
@@ -185,7 +152,6 @@ dxbc_tir_gs(const struct nir_shader_compiler_options *options, const struct dxbc
 
    nir_def *rden = nir_frcp(b, cross2(b, nir_fsub(b, sx[1], sx[0]), nir_fsub(b, sy[1], sy[0]),
                                       nir_fsub(b, sx[2], sx[0]), nir_fsub(b, sy[2], sy[0])));
-   nir_def *primitive_id = key->primitive_id ? nir_load_primitive_id(b) : NULL;
 
    nir_push_if(b, nir_ine_imm(b, area, 0));
    {
@@ -215,17 +181,17 @@ dxbc_tir_gs(const struct nir_shader_compiler_options *options, const struct dxbc
                /* unexpanded: the original position exactly */
                value = nir_bcsel(b, ok, value, p[k]);
             } else if (key->v[v].interp == INTERP_MODE_FLAT) {
-               value = nir_load_array_var_imm(b, in[v], 0);
+               value = flat[v];
             } else {
                const bool linear = key->v[v].interp == INTERP_MODE_NOPERSPECTIVE;
                value = NULL;
                for (unsigned i = 0; i < 3; ++i) {
-                  nir_def *term = nir_fmul(b, nir_load_array_var_imm(b, in[v], i), linear ? l[i] : pl[i]);
+                  nir_def *term = nir_fmul(b, vals[v][i], linear ? l[i] : pl[i]);
                   value = value ? nir_fadd(b, value, term) : term;
                }
                if (!linear)
                   value = nir_fmul(b, value, wn);
-               value = nir_bcsel(b, ok, value, nir_load_array_var_imm(b, in[v], k));
+               value = nir_bcsel(b, ok, value, vals[v][k]);
             }
             nir_store_var(b, out[v], value, nir_component_mask(key->v[v].components));
          }
@@ -239,6 +205,171 @@ dxbc_tir_gs(const struct nir_shader_compiler_options *options, const struct dxbc
    }
    nir_pop_if(b, NULL);
 
+}
+
+struct nir_shader *
+dxbc_tir_gs(const struct nir_shader_compiler_options *options, const struct dxbc_tir_gs_key *key)
+{
+   nir_builder builder = nir_builder_init_simple_shader(MESA_SHADER_GEOMETRY, options, "dxbc_tir_gs");
+   nir_builder *b = &builder;
+   nir_shader *nir = b->shader;
+   nir_variable *in[DXBC_TIR_MAX_VARYINGS], *out[DXBC_TIR_MAX_VARYINGS], *edge_out[DXBC_TIR_EDGE_SLOTS];
+   nir_variable *primitive_out = NULL;
+   int pos = -1;
+
+   nir->info.separate_shader = true;
+   nir->info.internal = false;
+   nir->info.gs.input_primitive = MESA_PRIM_TRIANGLES;
+   nir->info.gs.vertices_in = 3;
+   nir->info.gs.output_primitive = MESA_PRIM_TRIANGLE_STRIP;
+   nir->info.gs.vertices_out = 3;
+   nir->info.gs.invocations = 1;
+   nir->info.gs.active_stream_mask = 1;
+
+   for (unsigned i = 0; i < key->count; ++i) {
+      const struct glsl_type *type = glsl_vector_type(GLSL_TYPE_FLOAT, key->v[i].components);
+      in[i] = nir_variable_create(nir, nir_var_shader_in, glsl_array_type(type, 3, 0), "tir_in");
+      in[i]->data.location = key->v[i].slot;
+      out[i] = nir_variable_create(nir, nir_var_shader_out, type, "tir_out");
+      out[i]->data.location = key->v[i].slot;
+      out[i]->data.interpolation = key->v[i].interp;
+      if (key->v[i].slot == VARYING_SLOT_POS)
+         pos = (int)i;
+   }
+   if (pos < 0)
+      return NULL;
+   for (unsigned i = 0; i < DXBC_TIR_EDGE_SLOTS; ++i) {
+      edge_out[i] = nir_variable_create(nir, nir_var_shader_out, glsl_ivec4_type(), "tir_edge");
+      edge_out[i]->data.location = VARYING_SLOT_TEX0 + i;
+      edge_out[i]->data.interpolation = INTERP_MODE_FLAT;
+   }
+   if (key->primitive_id) {
+      primitive_out = nir_variable_create(nir, nir_var_shader_out, glsl_uint_type(), "tir_primid");
+      primitive_out->data.location = VARYING_SLOT_PRIMITIVE_ID;
+      primitive_out->data.interpolation = INTERP_MODE_FLAT;
+   }
+
+   nir_def *vals[DXBC_TIR_MAX_VARYINGS][3], *flat[DXBC_TIR_MAX_VARYINGS];
+   for (unsigned v = 0; v < key->count; ++v) {
+      for (unsigned k = 0; k < 3; ++k)
+         vals[v][k] = nir_load_array_var_imm(b, in[v], k);
+      flat[v] = vals[v][0];
+   }
+   emit_expanded(b, key, pos, vals, flat, out, edge_out, primitive_out,
+                 key->primitive_id ? nir_load_primitive_id(b) : NULL);
+
    nir_validate_shader(nir, "dxbc_tir_gs");
    return nir;
+}
+
+/* C61C: the application's geometry shader (finalized: its outputs are
+ * written right before each emit) feeds the pixel shader variant itself.
+ * Every store to a key output goes to a temporary; each emit shifts the
+ * temporaries into a three-vertex window and, from the third vertex of a
+ * strip on, emits the expanded triangle of the window (odd strip triangles
+ * in D3D's swapped order, flat varyings from the triangle's first vertex);
+ * end_primitive restarts the strip. Outputs the pixel shader does not read
+ * are dropped. */
+bool
+dxbc_tir_wrap_gs(struct nir_shader *gs, const struct dxbc_tir_gs_key *key)
+{
+   if (gs->info.stage != MESA_SHADER_GEOMETRY || gs->info.gs.output_primitive != MESA_PRIM_TRIANGLE_STRIP ||
+       gs->info.gs.active_stream_mask > 1u || !key->count || 3u * gs->info.gs.vertices_out > 1024u)
+      return false;
+   nir_function_impl *impl = nir_shader_get_entrypoint(gs);
+   nir_variable *out[DXBC_TIR_MAX_VARYINGS] = {0}, *cur[DXBC_TIR_MAX_VARYINGS], *win[DXBC_TIR_MAX_VARYINGS][3];
+   nir_variable *edge_out[DXBC_TIR_EDGE_SLOTS], *primitive_out = NULL;
+   int pos = -1;
+   for (unsigned v = 0; v < key->count; ++v) {
+      nir_foreach_variable_with_modes(var, gs, nir_var_shader_out)
+         if ((unsigned)var->data.location == key->v[v].slot && !var->data.location_frac)
+            out[v] = var;
+      if (!out[v])
+         return false;
+      out[v]->data.interpolation = key->v[v].interp;
+      cur[v] = nir_local_variable_create(impl, out[v]->type, "tir_cur");
+      for (unsigned k = 0; k < 3; ++k)
+         win[v][k] = nir_local_variable_create(impl, out[v]->type, "tir_win");
+      if (key->v[v].slot == VARYING_SLOT_POS)
+         pos = (int)v;
+   }
+   if (pos < 0)
+      return false;
+   nir_foreach_variable_with_modes(var, gs, nir_var_shader_out)
+      if ((var->data.location >= VARYING_SLOT_TEX0 && var->data.location < VARYING_SLOT_TEX0 + DXBC_TIR_EDGE_SLOTS) ||
+          (key->primitive_id && var->data.location == VARYING_SLOT_PRIMITIVE_ID))
+         return false;
+   for (unsigned i = 0; i < DXBC_TIR_EDGE_SLOTS; ++i) {
+      edge_out[i] = nir_variable_create(gs, nir_var_shader_out, glsl_ivec4_type(), "tir_edge");
+      edge_out[i]->data.location = VARYING_SLOT_TEX0 + i;
+      edge_out[i]->data.interpolation = INTERP_MODE_FLAT;
+   }
+   if (key->primitive_id) {
+      primitive_out = nir_variable_create(gs, nir_var_shader_out, glsl_uint_type(), "tir_primid");
+      primitive_out->data.location = VARYING_SLOT_PRIMITIVE_ID;
+      primitive_out->data.interpolation = INTERP_MODE_FLAT;
+   }
+   nir_variable *count = nir_local_variable_create(impl, glsl_uint_type(), "tir_count");
+   nir_builder builder = nir_builder_at(nir_before_impl(impl));
+   nir_builder *b = &builder;
+   nir_store_var(b, count, nir_imm_int(b, 0), 1);
+
+   nir_foreach_block_safe(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         if (intr->intrinsic == nir_intrinsic_store_deref) {
+            nir_variable *var = nir_intrinsic_get_var(intr, 0);
+            if (!var || var->data.mode != nir_var_shader_out || nir_src_as_deref(intr->src[0])->deref_type != nir_deref_type_var)
+               continue;
+            int v = -1;
+            for (unsigned i = 0; i < key->count; ++i)
+               if (out[i] == var)
+                  v = (int)i;
+            b->cursor = nir_before_instr(instr);
+            if (v >= 0)
+               nir_store_var(b, cur[v], intr->src[1].ssa, nir_intrinsic_write_mask(intr));
+            nir_instr_remove(instr);
+         } else if (intr->intrinsic == nir_intrinsic_emit_vertex) {
+            b->cursor = nir_before_instr(instr);
+            for (unsigned v = 0; v < key->count; ++v) {
+               const unsigned mask = nir_component_mask(key->v[v].components);
+               nir_store_var(b, win[v][0], nir_load_var(b, win[v][1]), mask);
+               nir_store_var(b, win[v][1], nir_load_var(b, win[v][2]), mask);
+               nir_store_var(b, win[v][2], nir_load_var(b, cur[v]), mask);
+            }
+            nir_def *n = nir_iadd_imm(b, nir_load_var(b, count), 1);
+            nir_store_var(b, count, n, 1);
+            nir_push_if(b, nir_uge_imm(b, n, 3));
+            {
+               /* n = 4, 6, ...: the strip's second, fourth, ... triangle */
+               nir_def *odd = nir_ieq_imm(b, nir_iand_imm(b, n, 1), 0);
+               nir_def *vals[DXBC_TIR_MAX_VARYINGS][3], *flat[DXBC_TIR_MAX_VARYINGS];
+               for (unsigned v = 0; v < key->count; ++v) {
+                  nir_def *a = nir_load_var(b, win[v][0]), *c = nir_load_var(b, win[v][1]);
+                  vals[v][0] = nir_bcsel(b, odd, c, a);
+                  vals[v][1] = nir_bcsel(b, odd, a, c);
+                  vals[v][2] = nir_load_var(b, win[v][2]);
+                  flat[v] = a;
+               }
+               emit_expanded(b, key, pos, vals, flat, out, edge_out, primitive_out,
+                             key->primitive_id ? nir_load_primitive_id(b) : NULL);
+            }
+            nir_pop_if(b, NULL);
+            nir_instr_remove(instr);
+         } else if (intr->intrinsic == nir_intrinsic_end_primitive) {
+            b->cursor = nir_before_instr(instr);
+            nir_store_var(b, count, nir_imm_int(b, 0), 1);
+            nir_instr_remove(instr);
+         }
+      }
+   }
+   gs->info.gs.vertices_out *= 3u;
+   nir_progress(true, impl, nir_metadata_none);
+   NIR_PASS(_, gs, nir_lower_vars_to_ssa);
+   NIR_PASS(_, gs, nir_opt_dce);
+   nir_shader_gather_info(gs, impl);
+   nir_validate_shader(gs, "dxbc_tir_wrap_gs");
+   return true;
 }
