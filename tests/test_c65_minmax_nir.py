@@ -25,15 +25,20 @@ TEST = r'''
 static const nir_shader_compiler_options options = {0};
 
 static nir_tex_instr *sample(nir_builder *b, nir_texop op, enum glsl_sampler_dim dim, bool array, bool shadow) {
-   const unsigned coords = (dim == GLSL_SAMPLER_DIM_3D ? 3 : 2) + (array ? 1 : 0);
-   nir_tex_instr *t = nir_tex_instr_create(b->shader, op == nir_texop_txl ? 4 : 3);
+   const unsigned coords = (dim == GLSL_SAMPLER_DIM_3D || dim == GLSL_SAMPLER_DIM_CUBE ? 3 : 2) + (array ? 1 : 0);
+   nir_tex_instr *t = nir_tex_instr_create(b->shader, op == nir_texop_txl ? 4 : op == nir_texop_txd ? 5 : 3);
    t->op = op; t->sampler_dim = dim; t->is_array = array; t->is_shadow = shadow;
    t->coord_components = coords; t->dest_type = nir_type_float32;
-   nir_def *c[3] = {nir_imm_float(b, 0.3f), nir_imm_float(b, 0.6f), nir_imm_float(b, 1.0f)};
+   nir_def *c[4] = {nir_imm_float(b, 0.3f), nir_imm_float(b, 0.6f), nir_imm_float(b, 1.0f), nir_imm_float(b, 2.0f)};
    t->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord, nir_vec(b, c, coords));
    t->src[1] = nir_tex_src_for_ssa(nir_tex_src_texture_handle, nir_imm_int(b, 1));
    t->src[2] = nir_tex_src_for_ssa(nir_tex_src_sampler_handle, nir_imm_intN_t(b, 2, 16));
    if (op == nir_texop_txl) t->src[3] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_float(b, 1.5f));
+   if (op == nir_texop_txd) {
+      const unsigned d = dim == GLSL_SAMPLER_DIM_2D ? 2 : 3;
+      t->src[3] = nir_tex_src_for_ssa(nir_tex_src_ddx, nir_vec(b, c, d));
+      t->src[4] = nir_tex_src_for_ssa(nir_tex_src_ddy, nir_vec(b, c, d));
+   }
    nir_def_init(&t->instr, &t->def, 4, 32);
    nir_builder_instr_insert(b, &t->instr);
    return t;
@@ -48,12 +53,12 @@ static unsigned count_tex(nir_shader *s, nir_texop op) {
    return n;
 }
 
-static void check(nir_texop op, bool array) {
+static void check_dim(nir_texop op, enum glsl_sampler_dim dim, bool array) {
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, &options, "minmax");
    /* the map word is read before the sample, as the frontends do */
    nir_def *word = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 0), .range = 4);
    nir_def *bits = nir_iand_imm(&b, nir_ushr_imm(&b, word, 11), 31);
-   nir_tex_instr *t = sample(&b, op, GLSL_SAMPLER_DIM_2D, array, false);
+   nir_tex_instr *t = sample(&b, op, dim, array, false);
    nir_def *use = nir_fneg(&b, &t->def);
    nir_def *phi = dxbc_minmax_wrap(&b, t, bits);
    assert(phi && nir_def_instr(phi)->type == nir_instr_type_phi);
@@ -62,18 +67,22 @@ static void check(nir_texop op, bool array) {
    nir_instr *user = nir_def_instr(use);
    nir_def *src = nir_instr_as_alu(user)->src[0].src.ssa;
    assert(nir_def_instr(src)->type == nir_instr_type_phi);
-   /* two levels x (4 texels + the point sample), one size per level, the
-    * level count, and (implicit LOD) one lod query */
-   assert(count_tex(b.shader, nir_texop_txl) == 10u + (op == nir_texop_txl ? 1u : 0u));
-   assert(count_tex(b.shader, nir_texop_txs) == 2u);
+   /* two levels x (4 texels -- 8 for a volume -- + the point sample), one
+    * size per level (and one for gradients), the level count, and
+    * (implicit LOD) one lod query */
+   const unsigned texels = dim == GLSL_SAMPLER_DIM_3D ? 8u : 4u;
+   assert(count_tex(b.shader, nir_texop_txl) == 2u * (texels + 1u) + (op == nir_texop_txl ? 1u : 0u));
+   assert(count_tex(b.shader, nir_texop_txs) == 2u + (op == nir_texop_txd ? 1u : 0u));
    assert(count_tex(b.shader, nir_texop_query_levels) == 1u);
    assert(count_tex(b.shader, nir_texop_lod) == (op == nir_texop_tex ? 1u : 0u));
    ralloc_free(b.shader);
 }
 
-static void refused(enum glsl_sampler_dim dim, bool shadow) {
+static void check(nir_texop op, bool array) { check_dim(op, GLSL_SAMPLER_DIM_2D, array); }
+
+static void refused_op(nir_texop op, enum glsl_sampler_dim dim, bool shadow) {
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, &options, "minmax");
-   nir_tex_instr *t = sample(&b, nir_texop_tex, dim, false, shadow);
+   nir_tex_instr *t = sample(&b, op, dim, false, shadow);
    assert(!dxbc_minmax_wrap(&b, t, nir_imm_int(&b, 2)));
    assert(count_tex(b.shader, nir_texop_txl) == 0u);
    ralloc_free(b.shader);
@@ -89,6 +98,8 @@ static nir_tex_instr *slot_sample(nir_builder *b, unsigned slot) {
    nir_builder_instr_insert(b, &t->instr);
    return t;
 }
+
+static void refused(enum glsl_sampler_dim dim, bool shadow) { refused_op(nir_texop_tex, dim, shadow); }
 
 static void slots(void) {
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, &options, "minmax-slots");
@@ -117,8 +128,15 @@ int main(void) {
    check(nir_texop_tex, false);
    check(nir_texop_txl, false);
    check(nir_texop_tex, true);
-   refused(GLSL_SAMPLER_DIM_3D, false);
+   check(nir_texop_txd, false);
+   /* volumes (2x2x2) and cubes (2x2 on the selected face) */
+   check_dim(nir_texop_tex, GLSL_SAMPLER_DIM_3D, false);
+   check_dim(nir_texop_txd, GLSL_SAMPLER_DIM_3D, false);
+   check_dim(nir_texop_tex, GLSL_SAMPLER_DIM_CUBE, false);
+   check_dim(nir_texop_txl, GLSL_SAMPLER_DIM_CUBE, true);
    refused(GLSL_SAMPLER_DIM_2D, true);
+   refused(GLSL_SAMPLER_DIM_1D, false);
+   refused_op(nir_texop_txd, GLSL_SAMPLER_DIM_CUBE, false);
    /* the map-word bits of D3D12 filters */
    assert(dxbc_minmax_bits(0x155) == (2u | 4u | 8u | 16u)); /* MINIMUM_MIN_MAG_MIP_LINEAR */
    assert(dxbc_minmax_bits(0x180) == 3u);                   /* MAXIMUM_MIN_MAG_MIP_POINT */

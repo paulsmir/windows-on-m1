@@ -334,5 +334,5 @@ tiles, shader status (SparseResidency), min/max filters (C65).
   - raw/structured/typed UAV accesses to NULL tiles (UAVs are not sparse
     descriptors);
   - buffer feedback through raw SSBO loads reports resident (DXBC path);
-  - min/max on cube and 3D textures filters normally (`dxbc_minmax_wrap`
-    takes 2D and 2D arrays only).
+  - (closed by C65C: min/max on cube and 3D textures; SampleGrad on cubes
+    and 1D textures still filter normally).

@@ -183,3 +183,15 @@ min/max samplers, is not advertised, so the default loses no contract.
   still filters normally.
 - Checkpoint: C65A has three modes (heap table, one-sampler table, static
   sampler), all PASS on WARP.
+
+## C65C: volumes and cubes
+
+- Volumes use a 2x2x2 footprint per level (8 explicit-LOD texel samples).
+- Cubes use a 2x2 footprint in (s, t) on the face the direction selects (D3D
+  face table, `cube_face`). Each texel centre is turned back into a direction
+  (`coord_of`), so a texel one past an edge lands on the adjacent face, which
+  approximates seamless filtering (corners are approximate). SampleGrad on a
+  cube is left alone.
+- Checkpoint: C65A modes VOLUME and CUBE (one-sampler table; cube points
+  inside their faces) PASS on WARP against the CPU reference, which uses the
+  same face table.
