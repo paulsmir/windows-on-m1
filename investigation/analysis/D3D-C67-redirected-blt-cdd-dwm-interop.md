@@ -124,3 +124,23 @@ The same capture with the visible-recovery profile (Microsoft Basic Display):
 So dxgkrnl normally holds a destination (DWM's redirection surface for the window) and turns the blt into a present-history token that DWM consumes. Under AGX there is no destination. The next step is to find which object provides it: the redirection surface is created by DWM for legacy (GDI/blt) windows. Compare DWM's CreateAllocation/OpenResource events for that hWnd between the two captures.
 
 The probe's front-buffer pixel (0x0c0c0c) is the same on both drivers, so it does not show composition.
+
+### Sequence comparison (probe process, up to the first present)
+
+- **Basic Display.** The probe process gets a `CddStandardAllocation` (event 287) with:
+  - "CreateShared", 160x160, format 21, type `TextureCpuVisible`, pitch 640;
+  - this is the window's redirection surface, the later Blt destination 0x40000900.
+
+  The Blt then runs as event 166 Blit / 167 BlitRect, a render command buffer, a 215 `PM_REDIRECTED_BLT` token, and 184 with status 0.
+- **AGX.** No 287 in any process. Right before the 184 OCCLUDED there is event 104 `PerformanceWarning` = `DXGK_PERFORMANCE_GDI_BLT`, so dxgkrnl takes its GDI-blt fallback.
+- **Device client type.** The probe's device client is `DXGDEVICECLIENT_LEGACYUSER` on Basic and `DXGDEVICECLIENT_USER` on AGX.
+
+Microsoft documents `D3DKMDT_GDISURFACE_TEXTURE_CPUVISIBLE` as "Reserved for system use. Do not use this value in your driver", and `DXGK_PRESENTATIONCAPS.SupportSoftwareDeviceBitmaps` as reserved (must be zero). The Basic path is therefore the system software-device-bitmap path. It does not transfer to a hardware KMD: do not advertise it.
+
+The documented hardware alternatives are:
+- GDI hardware acceleration (`SupportKernelModeCommandBuffer`, which needs a cache-coherent aperture and `DxgkDdiRenderKm`);
+- CDD-DWM interop (C67, measured insufficient alone).
+
+Next discriminator (cheap, no driver change): a desktop screenshot with the D3D9 windowed probe on AGX. It shows whether the GDI-blt fallback makes the window content visible after all, which would make OCCLUDED only a status-reporting difference.
+
+Priority: this path concerns legacy windowed blt-model D3D9/D3D10 apps only. Games and benchmarks run in flip model or fullscreen, so this track stays behind the D3D11/D3D12 game work.
