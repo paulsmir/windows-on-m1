@@ -245,3 +245,8 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   - `scratchpad/evidence-compress.sh 3 50` gzips evidence files over 50 MiB in all but the newest 3 experiments (lossless; archives untouched). chain-next runs it before every launch.
   - Never delete the guest-archive or guest-trace-archive directories without the user.
 - A failed launch after staging: do not re-stage, which refuses with "old staged package remains". Verify with `verify-launch<N>.py`, run only the recovery section of prepare.sh, then rerun launch-exp.sh; it falls back to verify-launch when prepare prints no PASS.
+- Guest UI chains (Night Raid, Steam): every interactive step must verify its own precondition and abort cleanly. nr-c82.sh therefore:
+  - preflights argument passing through arm-interactive with argtest.ps1 (EXP1914: quoted -Arguments never reached the script);
+  - aborts with env cleanup when 3DMark does not appear, instead of clicking a desktop without it.
+
+  New guest helpers get one dry run (argtest style) before they join a chain.
