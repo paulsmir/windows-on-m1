@@ -80,3 +80,19 @@ One variable: the cap bit.
   status 0; the desktop is unchanged.
 - **Fail-safe:** a black or garbled desktop → rec<N>h (visible recovery).
   The present receipts then name the refused Blt.
+
+## Result (EXP1903, 2026-10-23)
+
+With `DriverSupportsCddDwmInterop = 1`:
+- the desktop was unchanged and there were no DWM faults;
+- the D3D9 MSAA_PRESENT window centre still read the desktop (0x0c0c0c);
+- the KMD wrote no `Wom1G2PresentDdi`, so no redirected Blt reached
+  `DxgkDdiPresent`.
+
+The cap is not sufficient and is reverted, because no capability is
+advertised without a validated effect.
+
+Next discriminator: the DxgKrnl ETW trace (`EXP801DxgBoot` autologger) of
+one D3D9 windowed present. It shows how dxgkrnl services the redirected
+Blt for this driver: a present history token, a CPU copy from a lockable
+source, a staging surface, or a refusal.
