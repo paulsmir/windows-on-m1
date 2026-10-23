@@ -234,3 +234,10 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   - flags commits that touch `known_failures.txt` or the ledgers, or carry attribution (T4 tried to hide fresh-worktree failures in known_failures);
   - trial-cherry-picks the clean commits into `.worktrees/codex-review-<pid>`, which must sit under `.worktrees/` because the tests resolve `../../.local/reference`, and runs the baseline there.
   - Only the two fresh-worktree environment failures are tolerated (texture1d fxc pin, m1n1 broker replay). Merge only after REVIEW_OK.
+- Bench throughput: `scratchpad/chain-next.sh <cur> <curDir> <next> <nextDir> <before.txt>`. It:
+  1. waits for `^RUN_DONE`;
+  2. saves `exp-summary.sh` output to `summary<cur>.txt` while the guest still has the package and its events;
+  3. runs `rec<cur>h/recover.sh` directly;
+  4. calls `launch-exp.sh`: fetch, prepare, visible recovery, BEFORE with measured hashes, commit, start.
+
+  Write the next BEFORE text and probe while the current run is in progress; the bench then never waits for a turn. Record the ACTUAL of `<cur>` from `summary<cur>.txt`.
