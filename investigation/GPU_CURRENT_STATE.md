@@ -8,7 +8,25 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-23 08:10Z -- NIGHT RAID GT1 SCORES; GT2 BLOCKED BY KMD PREEMPTION
+## CURRENT 2026-10-23 12:00Z -- NIGHT RAID COMPLETE (1379); D3D12 FL 12_1; m1n1 0d3a75b3
+
+The experiment m1n1 is 0d3a75b3 (vGIC running priority + IPRIORITYR fix; boot- and load-stable EXP1905/1906). Lastgood is 21c3648d; prepare.sh writes the lastgood pair.
+
+**Validated**
+- Night Raid GT1+GT2 complete: graphics score 1379 (6.48/6.77 fps at 1080p windowed; EXP1906N). This needed:
+  - 188d73e2: a refused scene no longer wedges the GPU;
+  - 37123151: transient/1x1 ZLS.
+- D3D12 FL 12_1 by default (C68, EXP1904); ROV=0 or CR=0 gives 12_0, FL12=0 gives 11_1.
+- Tiled Tier 2 by default, min/max, general Texture3D (the fork, EXP1902-1904).
+- Portal 2 renders through D3D9On12 at ~60 presents/s (C66, EXP1901G), but the window is invisible: the legacy redirected-blt gap. C67 cap rejected; next is the DxgKrnl ETW discriminator (dxg-etw.ps1).
+- C69 D3D11 typed UAV caps: GravityMark D3D11 now creates its kernels (EXP1906).
+
+**In the next package (EXP1907)**
+- C70: compressed-texture uploads through one cached staging. Fixes GravityMark D3D12's E_OUTOFMEMORY at ~20 s.
+- C71: D3D11 GENERATE_MIPS render targets with UAV. Fixes GravityMark D3D11's device removal at 41 s.
+- The fork's C21H BC volume fix.
+
+## (was CURRENT) 2026-10-23 08:10Z -- NIGHT RAID GT1 SCORES; GT2 BLOCKED BY KMD PREEMPTION
 
 Last installed package 30.0.1899.0 from a479e796 (EXP1899, m1n1 21c3648d).
 Regression on that package: 118/0.
