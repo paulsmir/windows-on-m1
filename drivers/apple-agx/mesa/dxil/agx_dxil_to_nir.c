@@ -858,6 +858,16 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       goto done;
    }
 
+   /* EXP1892B: a pixel shader's SV_PrimitiveID is the flat
+    * VARYING_SLOT_PRIMITIVE_ID input, which Asahi links to the hardware
+    * primitive ID (agx_link_varyings_vs_fs) or a GS output, as the DXBC
+    * frontend declares it; agx_compile implements load_primitive_id only for
+    * tessellation evaluation (C59B logged garbage). */
+   if (result->stage == MESA_SHADER_FRAGMENT) {
+      const nir_lower_sysvals_to_varyings_options sysvals = {.primitive_id = true};
+      NIR_PASS(_, nir, nir_lower_sysvals_to_varyings, &sysvals);
+   }
+
    /* a vertex input reads the vertex element at its D3D input register (its
     * io base, which Asahi's vertex prolog maps to an attribute), as the DXBC
     * frontend sets it (EXP1297: without it every input read attribute 0) */

@@ -223,6 +223,17 @@ class DxilToNir(unittest.TestCase):
         self.assertEqual(final.count("@begin_invocation_interlock"), 1)
         self.assertNotIn("end_invocation_interlock", final)
 
+    def test_pixel_shader_primitive_id_is_a_flat_varying(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1892B: a DXIL
+        # pixel shader's SV_PrimitiveID reached Asahi as load_primitive_id,
+        # which agx_compile implements only for tessellation evaluation (the
+        # vertex ID register), so C59B logged float garbage as primitive IDs.
+        # Asahi links VARYING_SLOT_PRIMITIVE_ID inputs to the hardware's
+        # primitive ID (agx_link_varyings_vs_fs), as the DXBC path declares it.
+        final = self.final("rov_primid_ps")
+        self.assertNotIn("load_primitive_id", final)
+        self.assertRegex(final, r"load_input .*io location=VARYING_SLOT_PRIMITIVE_ID|PRIMITIVE_ID")
+
     def test_wave_intrinsics_lower_to_agx_subgroup_operations(self):
         # C48: every SM 6.0 wave and quad intrinsic (32-wide waves)
         cs, ps = self.final("wave_cs"), self.final("wave_ps")
