@@ -61255,3 +61255,31 @@ EXP1908 C67B_C72_C73 HARDWARE BEFORE 2026-10-23T13:05:14Z:
   - GravityMark D3D12 past 16 s;
   - PRESSURE refuses later and the guest stays alive.
 - Failure criteria: regressions, desktop damage from C67b, PRESSURE starvation (GUEST_STARVED_DURING_PRESSURE), hang. Recovery rec1908h (run directly). Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1908-cdd-copy-floor/run1908.sh.
+
+EXP1908 ACTUAL 2026-10-23T13:36:12Z: run1908.sh RC 0, RUN_DONE; m1n1 0d3a75b3 stable.
+- Regressions:
+  - SAMPLE_HASHES bad 0;
+  - e1904 118/0 on ARM64, x64 and x86; FL111 PASS; D3D9 6/6; D3D11 smoke PASS;
+  - samples and ModelViewerI alive, no WER;
+  - KMD: GpuReset/PreemptRefusal/BindRefusal none; DWM faults 0.
+- Tiled: T2VOL all PASS, including C21H BC1/BC3: the fork's 02303d30 is CONFIRMED.
+- C72 CONFIRMED: GravityMark D3D11 got past the BC7 copy, the scene loaded (Ready in 23.5 s) and the 1280x720 benchmark started.
+  - It was removed at 64.8 s by reject-seterror IaSetIndexBuffer E_NOTIMPL. The index-buffer bind mask predates EXP1297 (buffer UAV = SHADER_BUFFER). Fix C74 4c4a6c84.
+- C73 CONFIRMED in part:
+  - GravityMark D3D12 10k/2k got Ready in 18.9 s and started the benchmark; removal moved from 15-16 s to 36.5-37.5 s;
+  - pool peak 2679 MiB of 2688, floor refusals 1;
+  - the new removal is G4_SUBMIT_FAILURE branch 9 (Parse), result 3 (Unmapped): compute stream (kind 5, ordinal 3) VA 0x11aa2c0000 read, not in the process graph, 2 failures;
+  - before it, measure-trim evicted 128 MiB and 178 MiB slots (MakeResident E_OUTOFMEMORY, then E_PENDING). Hypothesis: a trimmed slot is used by a later compute submission without residency. Open; it is re-measured after C75.
+- PRESSURE (C73): 3392 MiB locked, the first 32 MiB texture was refused at 390 MiB available (0x8007000e, device not removed), the readback was verified, and memory was released to 3762 MiB. dwm/explorer alive, no starvation, no GPU reset.
+- C67b REJECTED: DXG_ETW inside the interactive task captured 0 events (logman needs elevation). The manual rerun EXP1908E (dxg-etw-run.sh: logman from SSH, probe e1908 with APPLE_AGX_D3D9_HOLD_MS=15000) showed:
+  - 612 RedirectedBlt presents, all 0xC01E0006 with destination 0x0;
+  - 0 CDD standard allocations, 0 history tokens;
+  - DXGK_PERFORMANCE_GDI_BLT x612;
+  - desktop screenshot during the hold: no magenta, and the visible strip of the probe client is black.
+  The front-buffer pixels of the plain run (0x8facc2/0x8ca8bd) are window/desktop colours, not the probe's. The cap is reverted.
+- Performance (agx_sampler 33453ba2, first use, GravityMark D3D11 at 32 s):
+  - the render thread spent 1378 of 2000 samples in NtGdiDdDDIEscape, and the AppleAgx UMD had 182 of 7737 samples;
+  - GPU Engine 3D utilization of the app was 0.5%;
+  - measure-xfer: GravityMark downloads 89 MiB and 221 MiB buffers through 64 KiB copy escapes; EXP1899N Night Raid did 25 MiB x416 and 64 MiB x72 uploads.
+  - Cause: the UMD SystemDirect limit (16 MiB) predates EXP1269's segment-sized General class. Fix C75 c86c13c9.
+- Next: EXP1909 = C74 + C75 (+ C67b revert).
