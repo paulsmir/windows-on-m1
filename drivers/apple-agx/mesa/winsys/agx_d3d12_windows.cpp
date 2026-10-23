@@ -1860,9 +1860,10 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
   const unsigned long long row = static_cast<unsigned long long>((copy->Width + bw - 1) / bw) * block;
   const unsigned level_w = level_extent(texture->width0, copy->Level), level_h = level_extent(texture->height0, copy->Level);
   const unsigned span_w = (level_w + bw - 1) / bw * bw, span_h = (level_h + bh - 1) / bh * bh;
+  /* C21H (EXP1907): a BC volume's small mip copies through a block-aligned
+   * footprint, so the volume bounds count whole blocks (span_w/span_h) */
   if(texture->target==PIPE_TEXTURE_3D && (copy->Level>texture->last_level ||
-      copy->X>level_extent(texture->width0,copy->Level) || copy->Width>level_extent(texture->width0,copy->Level)-copy->X ||
-      copy->Y>level_extent(texture->height0,copy->Level) || copy->Height>level_extent(texture->height0,copy->Level)-copy->Y)) return E_INVALIDARG;
+      copy->X>span_w || copy->Width>span_w-copy->X || copy->Y>span_h || copy->Height>span_h-copy->Y)) return E_INVALIDARG;
   const unsigned layers=texture_layer_extent(texture,copy->Level);
   if (copy->Level > texture->last_level || copy->X % bw || copy->Y % bh ||
       copy->X > span_w || copy->Width > span_w - copy->X || copy->Y > span_h || copy->Height > span_h - copy->Y ||

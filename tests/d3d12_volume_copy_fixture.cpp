@@ -81,6 +81,11 @@ int main() {
  b.Level=2;b.Width=b.Height=4;b.Offset=1024;
  assert(AgxD3d12OwnerCopyTexture(&owner,&b)==S_OK && bc_box.width==2 && bc_box.height==2);
  assert(!std::memcmp(bc_blocks[2],buffer_bytes+1024,8));
+ /* C21H (EXP1907): the same 4x4 footprint into a BC1 Texture3D's 2x2 mip
+  * (the volume bounds count whole blocks too) */
+ bc.target=PIPE_TEXTURE_3D;bc.depth0=4;
+ assert(AgxD3d12OwnerCopyTexture(&owner,&b)==S_OK && bc_box.width==2 && bc_box.height==2);
+ bc.target=PIPE_TEXTURE_2D;bc.depth0=1;
  std::memset(buffer_bytes,0x5a,sizeof(buffer_bytes));b.Level=0;b.Width=b.Height=8;b.Offset=512;b.ToBuffer=1;
  assert(AgxD3d12OwnerCopyTexture(&owner,&b)==S_OK && !std::memcmp(buffer_bytes+512,bc_blocks[0],16) &&
         !std::memcmp(buffer_bytes+768,bc_blocks[0]+16,16) && buffer_bytes[528]==0x5a && buffer_bytes[784]==0x5a);
