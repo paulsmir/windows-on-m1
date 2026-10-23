@@ -22,6 +22,12 @@ struct nir_shader_compiler_options;
  * x = ndc.x * scale.x + offset.x (D3D: scale.y = -height / 2). No D3D11
  * constant buffer slot (0..13) uses it. */
 #define DXBC_TIR_GS_CB 15u
+/* C61C: a wrapped application GS that reads descriptor heap ranges has
+ * constant buffer 15 as its heap mirror; its viewport rides at this byte
+ * offset of the heap table, constant buffer 14 (dxbc_bindings.h: after the
+ * 64 range vec4s and the 2048-entry sampler map) */
+#define DXBC_TIR_GS_HEAP_TABLE_CB 14u
+#define DXBC_TIR_GS_HEAP_VIEWPORT_BYTES ((4u * 64u + 2048u) * 4u)
 
 #define DXBC_TIR_MAX_VARYINGS 40u
 
@@ -76,7 +82,7 @@ bool dxbc_cr_lower_fs(struct nir_shader *nir);
 /* C61C: rewrite a finalized application geometry shader (triangle-strip
  * output, one stream) to emit the expanded triangles itself; the key from
  * dxbc_tir_gs_key_from(gs, ps). false leaves it unusable for the variant. */
-bool dxbc_tir_wrap_gs(struct nir_shader *gs, const struct dxbc_tir_gs_key *key);
+bool dxbc_tir_wrap_gs(struct nir_shader *gs, const struct dxbc_tir_gs_key *key, bool heap_viewport);
 
 /* The expansion GS for a key (NULL without a position). */
 struct nir_shader *dxbc_tir_gs(const struct nir_shader_compiler_options *options,

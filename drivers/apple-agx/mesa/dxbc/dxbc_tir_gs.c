@@ -94,10 +94,10 @@ dxbc_tir_gs_key_from(const struct nir_shader *last, const struct nir_shader *ps,
 static void
 emit_expanded(nir_builder *b, const struct dxbc_tir_gs_key *key, int pos, nir_def *vals[][3], nir_def *const flat[],
               nir_variable *const out[], nir_variable *const edge_out[], nir_variable *primitive_out,
-              nir_def *primitive_id)
+              nir_def *primitive_id, unsigned vp_cb, unsigned vp_offset)
 {
    nir_def *p[3], *w[3], *sx[3], *sy[3], *ix[3], *iy[3];
-   nir_def *vp = nir_load_ubo(b, 4, 32, nir_imm_int(b, DXBC_TIR_GS_CB), nir_imm_int(b, 0),
+   nir_def *vp = nir_load_ubo(b, 4, 32, nir_imm_int(b, vp_cb), nir_imm_int(b, vp_offset),
                               .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0u);
    nir_def *ok = nir_imm_true(b);
    for (unsigned k = 0; k < 3; ++k) {
@@ -256,7 +256,7 @@ dxbc_tir_gs(const struct nir_shader_compiler_options *options, const struct dxbc
       flat[v] = vals[v][0];
    }
    emit_expanded(b, key, pos, vals, flat, out, edge_out, primitive_out,
-                 key->primitive_id ? nir_load_primitive_id(b) : NULL);
+                 key->primitive_id ? nir_load_primitive_id(b) : NULL, DXBC_TIR_GS_CB, 0);
 
    nir_validate_shader(nir, "dxbc_tir_gs");
    return nir;
@@ -269,9 +269,10 @@ dxbc_tir_gs(const struct nir_shader_compiler_options *options, const struct dxbc
  * strip on, emits the expanded triangle of the window (odd strip triangles
  * in D3D's swapped order, flat varyings from the triangle's first vertex);
  * end_primitive restarts the strip. Outputs the pixel shader does not read
- * are dropped. */
+ * are dropped. heap_viewport: the GS reads heap ranges, so the viewport
+ * comes from the heap table (DXBC_TIR_GS_HEAP_VIEWPORT_BYTES). */
 bool
-dxbc_tir_wrap_gs(struct nir_shader *gs, const struct dxbc_tir_gs_key *key)
+dxbc_tir_wrap_gs(struct nir_shader *gs, const struct dxbc_tir_gs_key *key, bool heap_viewport)
 {
    if (gs->info.stage != MESA_SHADER_GEOMETRY || gs->info.gs.output_primitive != MESA_PRIM_TRIANGLE_STRIP ||
        gs->info.gs.active_stream_mask > 1u || !key->count || 3u * gs->info.gs.vertices_out > 1024u)
@@ -354,7 +355,9 @@ dxbc_tir_wrap_gs(struct nir_shader *gs, const struct dxbc_tir_gs_key *key)
                   flat[v] = a;
                }
                emit_expanded(b, key, pos, vals, flat, out, edge_out, primitive_out,
-                             key->primitive_id ? nir_load_primitive_id(b) : NULL);
+                             key->primitive_id ? nir_load_primitive_id(b) : NULL,
+                             heap_viewport ? DXBC_TIR_GS_HEAP_TABLE_CB : DXBC_TIR_GS_CB,
+                             heap_viewport ? DXBC_TIR_GS_HEAP_VIEWPORT_BYTES : 0u);
             }
             nir_pop_if(b, NULL);
             nir_instr_remove(instr);

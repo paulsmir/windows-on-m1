@@ -63,7 +63,7 @@ main(int argc, char **argv)
    bool print = false, print_final = false, d3d12 = false, heap = false, uav64 = false;
    unsigned tir = 0, tir_pass = 0;
    const char *tir_gs = NULL;
-   bool tir_wrap = false;
+   bool tir_wrap = false, tir_wrap_heap = false;
    for (int a = 2; a < argc; ++a) {
       print |= !strcmp(argv[a], "--print");
       print_final |= !strcmp(argv[a], "--print-final");
@@ -76,6 +76,8 @@ main(int argc, char **argv)
          tir_pass = (unsigned)atoi(argv[a + 1]);
       if (!strcmp(argv[a], "--tir-gs") && a + 1 < argc)
          tir_gs = argv[a + 1];
+      if (!strcmp(argv[a], "--tir-wrap-heap"))
+         tir_wrap_heap = true; /* the GS reads heap ranges: viewport from the heap table */
       if (!strcmp(argv[a], "--tir-wrap-gs") && a + 1 < argc) {
          /* C61C: the given application GS wraps itself */
          tir_gs = argv[a + 1];
@@ -198,7 +200,8 @@ main(int argc, char **argv)
             printf("TIR_GS_KEY_REFUSED\n");
             return 1;
          }
-         nir_shader *gs = tir_wrap ? (dxbc_tir_wrap_gs(vs, &key) ? vs : NULL) : dxbc_tir_gs(&agx_nir_options, &key);
+         nir_shader *gs = tir_wrap ? (dxbc_tir_wrap_gs(vs, &key, tir_wrap_heap) ? vs : NULL)
+                                   : dxbc_tir_gs(&agx_nir_options, &key);
          if (!gs) {
             printf(tir_wrap ? "TIR_WRAP_GS_REFUSED\n" : "TIR_GS_REFUSED\n");
             return 1;

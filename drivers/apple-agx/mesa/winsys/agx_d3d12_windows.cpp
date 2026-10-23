@@ -75,7 +75,10 @@ struct AGX_D3D12_OWNER {
   /* C47: the heap bindings the next draw or dispatch uses (AgxD3d12OwnerSetHeap)
    * and their constant buffer DXBC_HEAP_TABLE_CB (range table + sampler map) */
   AGX_D3D12_HEAP_BINDING PendingHeaps[AGX_D3D12_HEAP_STAGES];
-  uint32_t HeapTables[AGX_D3D12_HEAP_STAGES][4 * AGX_D3D12_HEAP_RANGES + DXBC_HEAP_SAMPLER_MAP_MAX];
+  /* C61C: + the TIR/CR viewport of a wrapped GS that reads heap ranges */
+  uint32_t HeapTables[AGX_D3D12_HEAP_STAGES][4 * AGX_D3D12_HEAP_RANGES + DXBC_HEAP_SAMPLER_MAP_MAX + 4];
+  float TirViewport[4];
+  bool TirViewportValid;
   /* EXP1829 (Multithreading's shadow pass): a PSO without a pixel shader
    * draws with this empty one -- Asahi always reads the bound FS */
   void *EmptyFs;
@@ -1885,15 +1888,15 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
     *tir_clone = dxbc_tir_clone(nir);
   /* C61C: an application GS before a forced-sample-count or conservative
    * pixel shader variant emits the expanded triangles itself; one that
-   * reads descriptor heap ranges is refused (constant buffer 15, the
-   * expansion's viewport, is then its heap mirror) */
+   * reads descriptor heap ranges takes the viewport from its heap table
+   * (constant buffer 15 is then its heap mirror; bind_heaps appends it) */
   if (stage == MESA_SHADER_GEOMETRY && tir_wrap_ps) {
     bool heap = false;
     for (uint32_t i = 0; i < bindings->count && i < DXBC_BINDING_MAP_MAX; ++i)
       heap = heap || (bindings->bindings[i].flags & DXBC_BINDING_HEAP) != 0;
     struct dxbc_tir_gs_key key;
-    if (heap || !dxbc_tir_gs_key_from(nir, tir_wrap_ps, &key) || !dxbc_tir_wrap_gs(nir, &key)) {
-      receipt("reject-d3d12-tir", E_NOTIMPL, 0u, heap ? 16u : 32u, 0u);
+    if (!dxbc_tir_gs_key_from(nir, tir_wrap_ps, &key) || !dxbc_tir_wrap_gs(nir, &key, heap)) {
+      receipt("reject-d3d12-tir", E_NOTIMPL, 0u, heap ? 48u : 32u, 0u);
       ralloc_free(nir);
       memset(bindings, 0, sizeof(*bindings));
       return NULL;
@@ -2388,6 +2391,9 @@ extern "C" HRESULT AgxD3d12OwnerSetHeap(AGX_D3D12_OWNER *owner, unsigned stage, 
 static const mesa_shader_stage heap_stages[AGX_D3D12_HEAP_STAGES] = {
   MESA_SHADER_VERTEX, MESA_SHADER_FRAGMENT, MESA_SHADER_GEOMETRY, MESA_SHADER_TESS_CTRL, MESA_SHADER_TESS_EVAL,
   MESA_SHADER_COMPUTE};
+static_assert(DXBC_TIR_GS_HEAP_TABLE_CB == DXBC_HEAP_TABLE_CB &&
+                  DXBC_TIR_GS_HEAP_VIEWPORT_BYTES == 4u * (4u * AGX_D3D12_HEAP_RANGES + DXBC_HEAP_SAMPLER_MAP_MAX),
+              "the wrapped GS's heap-table viewport (dxbc_tir_gs.h)");
 static_assert(AGX_D3D12_HEAP_RANGES == DXBC_HEAP_RANGE_MAX && AGX_D3D12_CBV_SLOTS <= DXBC_HEAP_TABLE_CB &&
                   sizeof(AGX_D3D12_HEAP_BINDING::First) == DXBC_HEAP_SAMPLER_MAP_OFFSET &&
                   AGX_D3D12_SAMPLER_SLOTS <= DXBC_HEAP_SAMPLER_INDEX,
@@ -2417,6 +2423,11 @@ static void bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
       for (unsigned i = 0; i < h.SamplerCount; ++i)
         words[4 * AGX_D3D12_HEAP_RANGES + i] = h.Samplers[i].Valid ? handles[i] | (uint32_t(h.Samplers[i].Bias) << 16) : 0u;
       bytes += 4u * h.SamplerCount;
+    }
+    if (heap_stages[s] == MESA_SHADER_GEOMETRY && owner->TirViewportValid) {
+      /* C61C: a wrapped GS reading heap ranges reads the viewport here */
+      memcpy(words + DXBC_TIR_GS_HEAP_VIEWPORT_BYTES / 4u, owner->TirViewport, sizeof(owner->TirViewport));
+      bytes = DXBC_TIR_GS_HEAP_VIEWPORT_BYTES + sizeof(owner->TirViewport);
     }
     struct pipe_constant_buffer table = {};
     table.user_buffer = words;
@@ -2885,8 +2896,10 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   }
   /* FL 11_1: viewport 0 for the TIR expansion GS (after the GS stage's
    * own constant buffers): viewport = ndc * scale + offset */
-  if (SUCCEEDED(hr) && (graphics->TirSamples || graphics->Conservative)) {
+  owner->TirViewportValid = SUCCEEDED(hr) && (graphics->TirSamples || graphics->Conservative);
+  if (owner->TirViewportValid) {
     const float vp[4] = {hw, -hh, hw + draw->Viewport[0], hh + draw->Viewport[1]};
+    memcpy(owner->TirViewport, vp, sizeof(vp));
     struct pipe_constant_buffer cb = {};
     cb.buffer_size = sizeof(vp);
     cb.user_buffer = vp;

@@ -479,6 +479,17 @@ class DxbcToNir(unittest.TestCase):
         points = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-wrap-gs",
                                  str(FIXTURES / "gs50.dxbc")], capture_output=True, text=True, timeout=60)
         self.assertNotIn("TIR_WRAP_GS varyings", points.stdout)
+        # a GS reading heap ranges has constant buffer 15 as its heap mirror:
+        # the viewport then comes from the heap table (cb 14, byte 9216)
+        self.assertIn("load_ubo (%", out.stdout)
+        plain = re.findall(r"load_const \(0x0000000f = .*\)", out.stdout)
+        self.assertTrue(plain, "cb 15 for a GS without heap ranges")
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-wrap-heap",
+                               "--tir-wrap-gs", str(FIXTURES / "gs50strip.dxbc"), "--print"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout[-3000:] + heap.stderr[-3000:])
+        self.assertIn("load_const (0x00002400 = 9216", heap.stdout)
+        self.assertRegex(heap.stdout, r"load_const \(0x0000000e = 14")
 
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
