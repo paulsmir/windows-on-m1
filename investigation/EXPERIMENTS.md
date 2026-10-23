@@ -61587,3 +61587,15 @@ EXP1918U2 2026-10-23T19:40:30Z:
   - GPU VA bind (map plus paging): 4.8 s, with one 7 MiB bind at 1.3 s;
   - UMD association: 0.3 ms.
   - Load time is KMD-side (~4 ms/MiB); a separate optimisation item.
+
+EXP1918U3-U5 2026-10-23T20:40:44Z (UMD hot-swaps on the installed EXP1918 package, no reboot; T7f unknown #1):
+- EXP1918U3: UMDQ-1918q3 (T7g 7890ee81, sha256 aba88198...). GravityMark D3D12 2k Ready 14.6 s, killed at the 90 s timeout after removal; 0 measure-bo-cpu-access rows. The reason 2/3 snapshot and destruction rows never reach the trace because the process is killed.
+- EXP1918U4: UMDQ-1918q4 (sha256 e88423b2...) was built from HEAD without the intended change (gated-commit refusal hidden by a pipe); Ready 15.6 s, 0 rows. Wasted run; no verdict.
+- EXP1918U5: UMDQ-1918q5 (d2426e1f, reason-4 live rows for >64 MiB slots, sha256 d8e1612f...). GravityMark D3D12 2k removed at 21.7 s, G4 Unmapped.
+  - 6 live rows = 3 slots x 2 events; each slot is 128 MiB, flags 0x22f (Mapped, LockedBase, OwnerPointers, ActiveLocks, SystemDirect, NativeBo), Maps 1, Locks 1, HeapMaps 1.
+  - Slot VAs: 0x1162ca0000, 0x116ecb0000, 0x117bcd0000 (CPU-visible D3D12 heaps, persistent pointers).
+  - KMD Wom1G4SubmitFailure v3: kind 3, Va 0x1192ad0000, access 135266304 bytes (129 MiB), write 1.
+  - The failing Va lies outside all three mapped ranges (the last ends at 0x1183cd0000), and no >64 MiB slot containing it had any CPU-access event.
+- Verdict for T7f unknown #1: the refused GravityMark allocation was not CPU-mapped or locked through any UMD path T7g instruments. The T7f restricted class (zero CPU lease) covers it.
+  - Residual gap: an access that bypasses the screen slot table is not observable here.
+- Next: T7f implementation steps 1-2 (offline contract replay, CPU-lease tracking) through Codex; then the KMD shadow under a short-profile reboot.
