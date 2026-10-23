@@ -61188,3 +61188,20 @@ EXP1906N NIGHT_RAID ACTUAL 2026-10-23T12:06:23Z: Night Raid Custom GT1+GT2 (1920
 EXP1906E DXGKRNL_ETW_REDIRECTED_BLT ACTUAL 2026-10-23T12:08:50Z: measurement on the installed EXP1906 package, no change. logman Microsoft-Windows-DxgKrnl (all keywords) was started from SSH; the D3D9 probe e1900 ran in the interactive session (arm-interactive), then the trace was stopped. dxg.etl 31 MB, dxg.csv 266k events. The probe's 6 kernel presents (event 184, "Blt | RedirectedBlt", hWnd 0xA02EA) all returned 0xC01E0006 STATUS_GRAPHICS_PRESENT_OCCLUDED, with no present-history token and no KMD refusal (no G1b failures). DWM's flip-model presents were normal. Verdict: the legacy redirected-blt gap is upstream of every DDI -- dxgkrnl sees no DX redirection target for the window. Next: the same capture under Microsoft Basic Display (recovery profile) for the reference sequence. Evidence evidence/EXP1906E. Design note D3D-C67 updated.
 
 EXP1906E-basic DXGKRNL_ETW_REFERENCE ACTUAL 2026-10-23T12:16:06Z: reference capture, no driver change. Guest in the visible-recovery profile (Microsoft Basic Display / Basic Render, no AppleAgx package) after rec1906h RECOVERY_DONE; the same logman DxgKrnl capture around the same D3D9 probe e1900 (interactive session). Probe PID 0x2A9C: 6 events 184 "Blt | RedirectedBlt" with status 0, source allocation 0x40000740 and destination allocation 0x40000900; 6 events 215 D3DKMT_PM_REDIRECTED_BLT present-history tokens. AGX (EXP1906E): status 0xC01E0006 PRESENT_OCCLUDED, destination 0x0, no 215 token. Verdict: on Basic Display dxgkrnl has a DWM redirection surface for the blt window; on AGX it has none, so the missing step is the creation/binding of the DX redirection surface (DWM via our UMD/KMD), before any present DDI. Side finding: the probe's GetFrontBufferData pixel reads 0x0c0c0c under Basic Render too, so it is not a composition indicator. Evidence .local/experiments/EXP1906-zls-c69/evidence/EXP1906E-basic/dxg.csv (main checkout).
+
+EXP1907 C70_C71_C21H HARDWARE BEFORE 2026-10-23T12:18:34Z:
+- Package 30.0.1907.0 from ac3c23f4 = EXP1906 ff194dc8 + 940562af C70 (compressed-texture D3D12 uploads through one cached linear staging texture) + 703679a9 C71 (D3D11 autogen render target with UAV bind, reject-d3d11-render-target receipt) + the fork's ff983790 C21H small-mip fix.
+- Build: EXP1907_PACKAGE_BUILD_PASS, STACK_FRAMES PASS (x86 largest 14208). sys cea665ba54e8, Umd bc26f71824bf, UmdArm64 f3db7f88b013, UmdX64 12e6171c5f42, Umd32 b1b194b60e20. manifest ff80eeefd1db, hardware-manifest b05c94b6887c.
+- Gates: HASHES_MATCH 25, stage PASS, visible recovery PASS (rec1907h wrapper fa610bfb17682b16), LASTGOOD_READY 21c3648d e7402ca8980c.
+- m1n1 0d3a75b3 b97cf8834c3f8e87 (stable EXP1905/1906).
+- Probe probe1907.sh 1e5ee5a640b9 (PROBE_LINT_OK): same sequence as EXP1906 (regression e1904 at 12_1, tiled probe with volume, D3D9, GravityMark D3D11 10k, D3D12 10k and 2k, KMD receipts).
+- ATOMIC CONTRACT: none -- C70 has the GravityMark D3D12 line plus measure-d3d12-staged-upload receipts, C71 has the GravityMark D3D11 line plus reject receipts, C21H has the volume lines.
+- WHY THIS HYPOTHESIS:
+  (1) EXP1906 GravityMark D3D12 E_OUTOFMEMORY at ~20 s while the pool held compressed-texture upload copies;
+  (2) EXP1906 GravityMark D3D11 device removed at 41 s after an autogen render-target refusal (RT|SRV|UAV bind);
+  (3) the fork's ff983790 names the C21H small-mip failure.
+- WINDOWS CONTRACT: D3D12 CopyTextureRegion into a compressed (twiddled) texture; D3D11 GenerateMips on a resource bound RT|SRV(|UAV).
+- AGX/ASAHI CONTRACT: compressed textures are not CPU-mappable linearly; upload via a linear staging resource and resource_copy_region.
+- WHAT IS STILL UNKNOWN: whether GravityMark D3D12's memory pressure is only upload copies; GravityMark D3D11's next stage.
+- Expected: regression 118/0 x3; C21H PASS; GravityMark D3D12 past 20 s with staged-upload receipts; D3D11 past 41 s without reject receipts.
+- Failure criteria: regressions, hang (snapshots), new device removal. Recovery rec1907h. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1907-upload-autogen/run1907.sh.
