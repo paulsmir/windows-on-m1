@@ -197,3 +197,12 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   - it uses `C:\Users\pavel\realapp` helpers, since guest pruning removed the EXP1876 copies.
 - Both scripts are backed up in `.local/scratchpad-tools-backup`.
 - 3DMark resets Custom-run toggles between sessions, so check every toggle on a screenshot before RUN CUSTOM.
+- New experiment directory:
+  - `prepare.sh` now calls `$S/clone-exp-scripts.sh <prevN> <prevDir> <N> <dir>`.
+  - It carries `guest/` (renumbered `hashcheck<N>.ps1` and `sample-run<N>.ps1`), `run<N>.sh` and, only when absent, `probe<N>.sh`.
+  - So edit `probe<N>.sh` before `prepare.sh` runs, and your edits are kept.
+- Querying guest logs: PowerShell regexes with `|` break inside the airssh/cmd quoting. Use the realapp helpers instead:
+  - `tgrep.ps1 -File -Pattern -Last`;
+  - `tq.ps1 -Pid2` (per-process refusals, and the lines before the first throw);
+  - `appevents.ps1 -Minutes` (WER and Application Error).
+- `guest-ui.sh shot` deletes the old picture and reports SHOT_FAILED (and resets the tasks with `ui-reset.ps1`) rather than returning a stale frame.
