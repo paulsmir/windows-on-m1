@@ -79,6 +79,9 @@ struct AGX_D3D12_OWNER {
   /* EXP1829 (Multithreading's shadow pass): a PSO without a pixel shader
    * draws with this empty one -- Asahi always reads the bound FS */
   void *EmptyFs;
+  /* EXP1891B: a PSO without an input layout draws with this empty vertex
+   * elements state -- Asahi's agx_update_vs always reads the bound one */
+  void *EmptyVelems;
   struct AGX_D3D12_PRESENTATION *PendingPresentations; /* C7b: released, kernel allocation still registered */
   /* EXP1822: D3D12 queues and lists are used from several threads (nBody's
    * async compute thread next to its render thread). The pipe_context is not
@@ -187,6 +190,11 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
     owner->Context->bind_fs_state(owner->Context, NULL);
     owner->Context->delete_fs_state(owner->Context, owner->EmptyFs);
     owner->EmptyFs = NULL;
+  }
+  if (owner->Context && owner->EmptyVelems) {
+    owner->Context->bind_vertex_elements_state(owner->Context, NULL);
+    owner->Context->delete_vertex_elements_state(owner->Context, owner->EmptyVelems);
+    owner->EmptyVelems = NULL;
   }
   if (owner->Context) {
     if (!AgxWin32AsahiContextDestroy(owner->Context)) return HRESULT_FROM_WIN32(ERROR_BUSY);
@@ -2776,7 +2784,9 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   pipe->bind_blend_state(pipe, graphics->Blend);
   pipe->bind_depth_stencil_alpha_state(pipe, graphics->DepthStencil);
   pipe->bind_rasterizer_state(pipe, graphics->Rasterizer);
-  if (count) pipe->bind_vertex_elements_state(pipe, graphics->Velems);
+  if (!count && !owner->EmptyVelems) owner->EmptyVelems = pipe->create_vertex_elements_state(pipe, 0, NULL);
+  if (!count && !owner->EmptyVelems) return E_OUTOFMEMORY;
+  pipe->bind_vertex_elements_state(pipe, count ? graphics->Velems : owner->EmptyVelems);
   pipe->set_vertex_buffers(pipe, vb_count, buffers);
   struct pipe_viewport_state viewport = {};
   const float hw = draw->Viewport[2] / 2.0f, hh = draw->Viewport[3] / 2.0f;

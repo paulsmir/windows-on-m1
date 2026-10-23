@@ -234,6 +234,21 @@ int main() {
             result = subprocess.run([str(exe)], capture_output=True)
             self.assertEqual(result.returncode, 0, 'indirect draw skipped because direct counts are zero')
 
+    def test_draw_without_input_layout_binds_empty_vertex_elements(self):
+        # EXP1891B C59A: a PSO without an input layout (SV_VertexID quad) as
+        # the context's first draw crashed in Asahi agx_update_vs, which
+        # copies ctx->attributes->key unconditionally; the owner bound the
+        # vertex elements only for count > 0 (and left a previous draw's
+        # elements bound otherwise).
+        owner = OWNER.read_text()
+        draw = body(owner, 'extern "C" HRESULT AgxD3d12OwnerDraw(')
+        self.assertIn('if (!count && !owner->EmptyVelems) owner->EmptyVelems = pipe->create_vertex_elements_state(pipe, 0, NULL);', draw)
+        self.assertIn('pipe->bind_vertex_elements_state(pipe, count ? graphics->Velems : owner->EmptyVelems);', draw)
+        self.assertNotIn('if (count) pipe->bind_vertex_elements_state', draw)
+        destroy = owner[owner.index('owner->Backend.Closing = 1;'):]
+        destroy = destroy[:destroy.index('AgxWin32AsahiContextDestroy')]
+        self.assertIn('owner->Context->delete_vertex_elements_state(owner->Context, owner->EmptyVelems);', destroy)
+
     def test_uav_only_draw_rasterizes_within_the_viewport(self):
         # EXP1889 C60A: a draw with neither an RTV nor a DSV (UAV-only
         # rendering, legal D3D12) was refused at recording (reason 5) and the
