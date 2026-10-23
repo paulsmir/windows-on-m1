@@ -127,9 +127,10 @@ template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENT
  * interface, the runtime converting DXBC to DXIL), R1 build 2 with SM 6.0
  * and wave operations is the default; APPLE_AGX_D3D12_SM6=0 keeps a process
  * at the 0003 interface and SM 5.1. */
-/* 12_1 ROVs (D3D12-FL-program.md "ROV path"): DXIL ROV shaders take AGX's
- * pixel interlock; the cap is reported only in a process with
- * APPLE_AGX_D3D12_ROV=1 until a probe shows the ordering on hardware. */
+/* 12_1 ROVs (D3D12-FL-program.md "ROV path"): DXIL and DXBC ROV shaders
+ * take AGX's pixel interlock; ordering validated on hardware (EXP1893:
+ * C59A, C59B), reported by default since then (the runtime shows it at FL
+ * >= 11_1); APPLE_AGX_D3D12_ROV=0 opts a process out. */
 /* 12_1 conservative rasterization Tier 1 (the TIR expansion GS with a
  * touched-pixel pixel shader); reported only with APPLE_AGX_D3D12_CR=1
  * until probe C61A passes on hardware. */
@@ -140,7 +141,7 @@ static BOOL ConservativeRasterEnabled() {
 
 static BOOL RovEnabled() {
     char value[2] = {};
-    return GetEnvironmentVariableA("APPLE_AGX_D3D12_ROV", value, sizeof(value)) == 1 && value[0] == '1';
+    return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_ROV", value, sizeof(value)) == 1 && value[0] == '0');
 }
 
 /* C53 (D3D12-C53-tiled-textures.md): Tiled Resources Tier 1 and the TILED
