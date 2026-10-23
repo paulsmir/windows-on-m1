@@ -41,10 +41,6 @@
 #define ADMISSION_UMD_SLOT_CACHE_SIZE 8192u
 #define ADMISSION_UMD_SLOT_HASH(Key) \
   ((UINT)((((APPLE_AGX_U64)(Key)) * 0x9E3779B97F4A7C15ULL) >> 51))
-/* EXP1025: unshared buffers up to this size are direct (no staging).
- * EXP1111: up to the KMD's 16 MiB class-allocation limit; larger mapped
- * buffers paid a copy escape per 64 KiB on every CPU/GPU hand-off (EXP1110). */
-#define ADMISSION_UMD_SYSTEM_DIRECT_BYTES 0x1000000ULL
 #define ADMISSION_UMD_SCREEN_FENCE_LIMIT 64u
 #define ADMISSION_UMD_SOURCE_HOLD_LIMIT 64u
 

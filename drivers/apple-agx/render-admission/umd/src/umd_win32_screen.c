@@ -567,9 +567,14 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   description.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
   stagingDescription = description.Allocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  /* EXP1025/EXP1027: small unshared buffers are one CPU-visible class
-   * allocation the GPU maps directly (the KMD keeps it in the local segment). */
-  systemDirect = !BorrowedStaging && Bytes <= ADMISSION_UMD_SYSTEM_DIRECT_BYTES;
+  /* EXP1025/EXP1027: unshared buffers are one CPU-visible class allocation
+   * the GPU maps directly (the KMD keeps it in the local segment).
+   * C75 (EXP1908): up to the class limit the KMD reports, which is the
+   * segment-3 size since EXP1269. The former 16 MiB constant was that limit
+   * in EXP1111; above it, D3D12 upload heaps (Night Raid: 25 MiB x 416,
+   * 64 MiB x 72 uploads) and GravityMark's 89/221 MiB buffers paid one copy
+   * escape per 64 KiB on every CPU/GPU hand-off. */
+  systemDirect = !BorrowedStaging && Bytes <= classInfo->MaximumBytes;
   if (!systemDirect) {
     description.Version = ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL;
     description.Allocation.Type = ADMISSION_WIN32_ALLOCATION_GPU_LOCAL;

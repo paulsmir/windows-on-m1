@@ -4,7 +4,6 @@ test_g4_primary_import_alignment.G4PrimaryImportAlignment.test_primary_import_re
 test_g4_segment_placement_replay.G4SegmentPlacementReplay.test_g1b_16kb_profile_keeps_the_exp836_admitted_shape  # pre-existing on 2026-10-22
 test_g4_segment_placement_replay.G4SegmentPlacementReplay.test_gpu_readable_g4_class_stays_in_local_segment  # pre-existing on 2026-10-22
 test_g4_usc_window_replay.G4UscWindowReplay.test_native_coordinates_match_mapped_usc_window  # needs generated usc_functions.inc
-test_umd_system_direct_limit.SystemDirectLimit.test_threshold_within_kmd_class_limit  # pre-existing on 2026-10-22
 test_g4_r105_open_normalization.R105OpenNormalization.test_r105_request_parses_to_the_ordinary_description  # pre-existing on 2026-10-22
 test_g3_private_request_policy  # import error, pre-existing on 2026-10-22
 test_apple_agx_win32_screen.AppleAgxWin32ScreenTests.test_device_query_classed_buffers_and_reset_are_fail_closed  # pre-existing on 2026-10-22
