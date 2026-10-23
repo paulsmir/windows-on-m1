@@ -110,3 +110,17 @@ Captured with logman (Microsoft-Windows-DxgKrnl, all keywords) around the D3D9 p
 So the redirected blt reaches dxgkrnl, but dxgkrnl drops it as occluded before any DDI, because the window has no DX redirection target from DWM.
 
 Next discriminator: the same capture in the GPU-hidden/visible-recovery profile (Microsoft Basic Display, where blt-model windows are composed). It gives the expected event sequence for a working redirected blt; the first event that differs names the missing step on our side.
+
+## Basic Display reference (EXP1906E-basic, 2026-10-23)
+
+The same capture with the visible-recovery profile (Microsoft Basic Display):
+
+| | Basic Display | AppleAgx (EXP1906E) |
+|---|---|---|
+| event 184 status | 0 | 0xC01E0006 OCCLUDED |
+| destination allocation | 0x40000900 | 0x0 |
+| event 215 PM_REDIRECTED_BLT token | 6 | 0 |
+
+So dxgkrnl normally holds a destination (DWM's redirection surface for the window) and turns the blt into a present-history token that DWM consumes. Under AGX there is no destination. The next step is to find which object provides it: the redirection surface is created by DWM for legacy (GDI/blt) windows. Compare DWM's CreateAllocation/OpenResource events for that hWnd between the two captures.
+
+The probe's front-buffer pixel (0x0c0c0c) is the same on both drivers, so it does not show composition.
