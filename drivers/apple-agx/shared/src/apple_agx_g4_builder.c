@@ -135,20 +135,26 @@ static APPLE_AGX_BOOL g4_zls_valid(const APPLE_AGX_G4_NATIVE_RENDER *Render) {
       (Render->IspZlsPixels >> 30) == 0u;
 }
 
-APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
+/* EXP1903N: Night Raid GT2's scene failed here (BindFailure 23); *Refused
+ * names the first failing predicate, in the order checked below. */
+APPLE_AGX_BOOL AppleAgxG4BindNativeObjectsEx(
     const APPLE_AGX_G4_SUBMIT_VIEW *View,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
-    APPLE_AGX_U32 ObjectCount) {
+    APPLE_AGX_U32 ObjectCount, APPLE_AGX_U32 *Refused) {
   APPLE_AGX_G4_NATIVE_RENDER render;
   APPLE_AGX_G4_ATTACHMENT color;
   APPLE_AGX_U64 minimum;
+  APPLE_AGX_U32 refused = 0u;
+#define G4_REFUSE(n, expression) if (!refused && (expression)) refused = (n)
   if (View == 0 || Objects == 0 || View->Render == 0 ||
       View->RenderBytes != sizeof(render) || View->Attachments == 0 ||
       View->AttachmentCount == 0u ||
       View->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
       !AppleAgxG4ColorClassValid(View->ColorFormat) ||
-      ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
+      ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT) {
+    if (Refused != 0) *Refused = 1u;
     return APPLE_AGX_FALSE;
+  }
   memcpy(&render, View->Render, sizeof(render));
   memcpy(&color, View->Attachments, sizeof(color));
   /* A multisampled colour target holds every sample. D3D-G7: a depth-only
@@ -160,33 +166,43 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
   minimum = View->ColorFormat == APPLE_AGX_G4_COLOR_NONE ? 1u :
       (APPLE_AGX_U64)render.WidthPx * render.HeightPx *
       AppleAgxG4ColorBytes(View->ColorFormat) * render.Samples;
-  if (View->ColorFormat == APPLE_AGX_G4_COLOR_NONE && g4_has_zls(&render) &&
+  G4_REFUSE(2u, View->ColorFormat == APPLE_AGX_G4_COLOR_NONE && g4_has_zls(&render) &&
       (!render.Depth.Base || render.Depth.Base < color.Pointer ||
-       render.Depth.Base - color.Pointer >= color.Size))
-    return APPLE_AGX_FALSE;
+       render.Depth.Base - color.Pointer >= color.Size));
   /* EXP1287: only a render without colour has a zero-byte sample. */
-  if (!render.SampleSizeBytes && View->ColorFormat != APPLE_AGX_G4_COLOR_NONE)
-    return APPLE_AGX_FALSE;
-  if (!render.WidthPx || !render.HeightPx || !minimum ||
-      render.Layers != 1u || !g4_samples_valid(render.Samples) ||
-      !AppleAgxG4TileBufferValid(render.SampleSizeBytes, render.Samples,
-          render.UtileWidthPx, render.UtileHeightPx) ||
-      (render.Flags & (1u << 2)) == 0u ||
-      (render.Flags & ~((1u << 0) | (1u << 1) | (1u << 2) | (1u << 18))) != 0u ||
-      /* A vertex-stage scratch render runs the vertex helper program. */
-      ((render.Flags & (1u << 0)) != 0u && render.VertexHelper.Binary == 0u) ||
-      !render.VdmCtrlStreamBase || !render.IspScissorBase ||
-      !render.IspDbiasBase || (render.IspOclQryBase & 7ULL) ||
-      !g4_zls_valid(&render) || color.Pad || color.Flags ||
-      color.Pointer < 0x10000ULL || color.Size < minimum ||
-      color.Size > 0xffffffffULL)
-    return APPLE_AGX_FALSE;
+  G4_REFUSE(3u, !render.SampleSizeBytes && View->ColorFormat != APPLE_AGX_G4_COLOR_NONE);
+  G4_REFUSE(4u, !render.WidthPx || !render.HeightPx || !minimum);
+  G4_REFUSE(5u, render.Layers != 1u);
+  G4_REFUSE(6u, !g4_samples_valid(render.Samples));
+  G4_REFUSE(7u, !AppleAgxG4TileBufferValid(render.SampleSizeBytes, render.Samples,
+          render.UtileWidthPx, render.UtileHeightPx));
+  G4_REFUSE(8u, (render.Flags & (1u << 2)) == 0u);
+  G4_REFUSE(9u, (render.Flags & ~((1u << 0) | (1u << 1) | (1u << 2) | (1u << 18))) != 0u);
+  /* A vertex-stage scratch render runs the vertex helper program. */
+  G4_REFUSE(10u, (render.Flags & (1u << 0)) != 0u && render.VertexHelper.Binary == 0u);
+  G4_REFUSE(11u, !render.VdmCtrlStreamBase || !render.IspScissorBase ||
+      !render.IspDbiasBase || (render.IspOclQryBase & 7ULL));
+  G4_REFUSE(12u, !g4_zls_valid(&render));
+  G4_REFUSE(13u, color.Pad || color.Flags);
+  G4_REFUSE(14u, color.Pointer < 0x10000ULL);
+  G4_REFUSE(15u, color.Size < minimum);
+  G4_REFUSE(16u, color.Size > 0xffffffffULL);
+#undef G4_REFUSE
+  if (Refused != 0) *Refused = refused;
+  if (refused) return APPLE_AGX_FALSE;
   Objects[37].GpuVa = render.VdmCtrlStreamBase;
   Objects[38].GpuVa = render.IspScissorBase;
   Objects[39].GpuVa = render.IspDbiasBase;
   Objects[40].GpuVa = color.Pointer;
   Objects[63].GpuVa = render.SamplerHeap;
   return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
+    const APPLE_AGX_G4_SUBMIT_VIEW *View,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount) {
+  return AppleAgxG4BindNativeObjectsEx(View, Objects, ObjectCount, 0);
 }
 
 static void g4_put16(unsigned char *p, APPLE_AGX_U32 value) {
@@ -476,7 +492,7 @@ APPLE_AGX_BOOL AppleAgxG4BuildTa3dEx(
     APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
     APPLE_AGX_U32 ObjectCount, APPLE_AGX_U32 *FailedStep) {
   APPLE_AGX_G4_NATIVE_RENDER render;
-  APPLE_AGX_U32 step = 1u;
+  APPLE_AGX_U32 step = 1u, predicate = 0u;
   if (FailedStep != 0) *FailedStep = 0u;
   if (View == 0 || View->Render == 0 ||
       View->RenderBytes != sizeof(render) || Arena == 0 ||
@@ -486,7 +502,10 @@ APPLE_AGX_BOOL AppleAgxG4BuildTa3dEx(
   if (!AppleAgxG4BindProcessObjects(&render, View->Process,
           Objects, ObjectCount)) goto Refused;
   ++step;
-  if (!AppleAgxG4BindNativeObjects(View, Objects, ObjectCount)) goto Refused;
+  if (!AppleAgxG4BindNativeObjectsEx(View, Objects, ObjectCount, &predicate)) {
+    step = 300u + predicate;
+    goto Refused;
+  }
   ++step;
   if (!g4_patch_buffer_manager(&render, View->Process, View->HeapBlocks,
           Objects)) goto Refused;

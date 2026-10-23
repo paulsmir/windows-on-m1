@@ -225,9 +225,14 @@ int main(void) {
           bare.Render.Samples = 1u;
           {
             APPLE_AGX_G4_SUBMIT_VIEW colour = zview;
+            unsigned refused = 0u;
             colour.Render = (const unsigned char *)&bare.Render;
             assert(!AppleAgxG4BindNativeObjects(&colour, objects,
                 APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+            /* EXP1903N: the receipt names the predicate (3 zero sample) */
+            assert(!AppleAgxG4BindNativeObjectsEx(&colour, objects,
+                APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &refused) &&
+                refused == 3u);
           }
           bare = zls;
           depth_only.Render = zview.Render;
@@ -235,6 +240,12 @@ int main(void) {
           depth_only.Attachments = &zls.Attachment[0];
           assert(!AppleAgxG4BindNativeObjects(&depth_only, objects,
               APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+          {
+            unsigned refused = 0u;
+            assert(!AppleAgxG4BindNativeObjectsEx(&depth_only, objects,
+                APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &refused) &&
+                refused == 2u);
+          }
           /* D3D-G11: a render without colour and depth/stencil binds its
            * attachment 0 (the device scratch page) as the sink. */
           bare.Render.Depth.Base = 0ULL;

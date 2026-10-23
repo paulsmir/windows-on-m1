@@ -48,8 +48,9 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
    * rematerializing the 6 MiB arena. */
   APPLE_AGX_BOOL Pristine;
   /* EXP1902N: why the last G4 render bind was refused (1 Prepare,
-   * 20 + AppleAgxG4BuildTa3dEx step, 3 scene relocations, 4 header); 0
-   * after a bind. */
+   * 20 + AppleAgxG4BuildTa3dEx step -- 320 + predicate for the native
+   * objects step (AppleAgxG4BindNativeObjectsEx) --, 3 scene relocations,
+   * 4 header); 0 after a bind. */
   APPLE_AGX_U32 BindFailure;
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
