@@ -61645,3 +61645,18 @@ EXP1919 ADDENDUM (dump) 2026-10-23T22:37:35Z:
   - a TDR on the idle desktop after the GravityMark runs, whose KMD reset returned a hardware error, as in the EXP1026 class;
   - the GPU/firmware stayed wedged after the two GravityMark firmware timeouts.
 - Separate defect: TDR recovery after a firmware timeout is not survivable. GravityMark D3D12 is now bounded by the firmware timeout/hang, not by G4 placement.
+
+EXP1920 HARDWARE BEFORE 2026-10-23T22:44:46Z:
+- Package 30.0.1920.0 from 242c10d9 = EXP1919 db67ef1a + fork C86 9a52b51c (GPU-only 2D texture uploads/readbacks through the owner's cached C70 upload / C80 download stagings) + ledgers/tools.
+- Short profile: GravityMark D3D12 10k and 2k (90 s timeout). gm-run.ps1 now closes GravityMark after "device removed", so the UMD trace tail is flushed (EXP1919 lost it to a kill).
+- Single driver variable: C86. The GPU-only placement (T7h) is unchanged.
+- WHY THIS HYPOTHESIS: (1) EXP1919: the last receipts before the hang were bursts of measure-d3d12-texture-copy into GPU-only textures, each creating a new Asahi staging BO under a ~5x slower AllocateCb; (2) both firmware timeouts (fences 0x194a, 0x240d) arrived 2 ms after a submit in that phase; (3) C86 removes the per-copy BO creation and staging blits, so the timeout either moves or disappears, and the flushed trace names the submission.
+- WINDOWS CONTRACT: unchanged from EXP1919 (CpuVisible=0 GPU-only allocations, segment 3 only).
+- AGX/ASAHI CONTRACT: uploads use GPU copies from a CPU-visible staging BO; the cached staging is reused across copies with writer synchronisation (C70/C80).
+- TRANSLATION: CopyTextureRegion into an UNMAPPABLE texture -> owner UploadStaging write -> GPU copy, instead of an Asahi per-map staging BO + blit.
+- WHAT IS STILL UNKNOWN: what the firmware timeout is (no FAULT_INFO); whether the hang follows a specific copy/blit submission; TDR recovery after such a timeout is not survivable (EXP1919 post-run 0x116) -- a hang may end in a bugcheck again.
+- Expected: no G4 Unmapped; either GravityMark D3D12 completes, or the flushed trace and GPU_FAULT_EVENT fences identify the timed-out submission.
+- Failure criteria: GPU_FAULT_EVENT timeout again with no locating trace; new refusals; bugcheck during the run.
+- Recovery: rec1920h; at proxy use AGX_RECOVERY_ALLOW_AT_PROXY=1.
+- Hashes: sys 89b385f777fe, UmdArm64 1976eb8ebead, UmdX64 d05f039bf6f2, Umd32 05033abbf45a; manifest 451b039935db, hardware-manifest 4a31b95e5989; probe1920.sh 4a5c420438d7 (PROBE_LINT_OK); visible recovery rec1920h 04ccd16aa6a9fae0; m1n1 0d3a75b3.
+- Recovery rec1920h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1920-c86-staging/run1920.sh.
