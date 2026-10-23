@@ -8,7 +8,16 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-23 18:30Z -- CODEX OFFLINE + CHAINED BENCH; GRAVITYMARK D3D11 COMPLETES; PERF = COPY ESCAPES + CPU RETIRE
+## CURRENT 2026-10-23 21:30Z -- GRAVITYMARK D3D12 ONLY (user focus); ACTIVE HYPOTHESIS T7h
+
+- Installed: EXP1918 package 30.0.1918.0 (b57cd075) with the UMDQ-1918q5 UMD hot-swapped (d8e1612f...). Restore with `umd-hotswap.sh restore`, then run recovery rec1918h/recover.sh directly.
+- Fast loop: `umd-quick.sh` -> `umd-hotswap.sh` -> `gm-quick.sh` (~6 min, UMD only). KMD changes use the short profile with a reboot.
+- PROVEN (EXP1918U5, 68a97a70; `tools/agx_gm_alloc_join.py`): the G4 Parse/Unmapped refusal (Va 0x1192ad0000, 129 MiB) hits a committed resource/owner BO, not a heap. The BO was never CPU-mapped; only three 128 MiB WRITE_COMBINE upload heaps are mapped. T7f unknown #1 is closed.
+- ROOT CAUSE (source): `agx_win32_asahi_bo.c:356-360` makes every General BO CpuRead|CpuWrite (Win32Flags 0xf), including GPU-only resources, so under pool pressure VidMm may place them on scattered 4 KiB aperture pages.
+- Tried and rejected: CpuVisible=1 without the aperture (EXP1027, T7c/EXP1917 -> E_INVALIDARG). The segment pool cannot grow: 2688 MiB is the Windows 50%-of-RAM limit, and the peak reserve was 2953 MiB.
+- ACTIVE HYPOTHESIS T7h (Codex, `.local/handoff/codex/t7h-gpu-only-local`): GPU-only BOs (committed DEFAULT textures, NOT_AVAILABLE heaps) are created with CpuVisible=0 and a native-leaf-segment-only placement, so VidMm evicts them instead of using the aperture. The next hardware run is its KMD package with the short profile. The T7f shadow stays the fallback.
+
+## (was CURRENT) 2026-10-23 18:30Z -- CODEX OFFLINE + CHAINED BENCH; GRAVITYMARK D3D11 COMPLETES; PERF = COPY ESCAPES + CPU RETIRE
 
 Workflow (see CLAUDE_WORKING_METHOD "Offline work through Codex"):
 - Codex gpt-6-astra runs offline tasks from `.local/handoff/codex/<task>/TASK.md` (scratchpad `codex-run.sh`). Each branch is merged only after `codex-review.sh` prints REVIEW_OK.
