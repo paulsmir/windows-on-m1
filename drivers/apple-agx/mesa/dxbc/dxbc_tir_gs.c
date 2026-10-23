@@ -50,6 +50,11 @@ dxbc_tir_gs_key_from(const struct nir_shader *last, const struct nir_shader *ps,
 {
    memset(key, 0, sizeof(*key));
    bool position = false;
+   /* C61B: a domain shader feeds the GS only when its domain produces
+    * triangles (not isolines or point mode) */
+   if (last->info.stage == MESA_SHADER_TESS_EVAL &&
+       (last->info.tess._primitive_mode == TESS_PRIMITIVE_ISOLINES || last->info.tess.point_mode))
+      return false;
    nir_foreach_variable_with_modes(var, (nir_shader *)last, nir_var_shader_out) {
       const struct glsl_type *type = var->type;
       if (!glsl_type_is_vector_or_scalar(type) || glsl_get_base_type(type) != GLSL_TYPE_FLOAT ||

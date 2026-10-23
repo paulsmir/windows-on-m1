@@ -450,6 +450,20 @@ class DxbcToNir(unittest.TestCase):
         self.assertEqual(len(re.findall(r"decl_var shader_out INTERP_MODE_FLAT none ivec4 tir_edge", out.stdout)), 4)
         self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
 
+    def test_tir_expansion_gs_takes_a_triangle_domain_shader_only(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? C61B: in a
+        # tessellated pipeline the expansion GS (triangles in, triangles out)
+        # follows the domain shader; an isoline domain emits lines, which the
+        # GS cannot take, so the key must refuse it (plain rasterization with
+        # a receipt) instead of building a GS for the wrong primitive.
+        tri = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-gs",
+                              str(FIXTURES / "ds50pos.dxbc")], capture_output=True, text=True, timeout=60)
+        self.assertEqual(tri.returncode, 0, tri.stdout[-3000:] + tri.stderr[-3000:])
+        self.assertIn("TIR_GS varyings 2 primitive-id 0 vertices-out 3", tri.stdout)
+        iso = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-gs",
+                              str(FIXTURES / "ds50iso.dxbc")], capture_output=True, text=True, timeout=60)
+        self.assertIn("TIR_GS_KEY_REFUSED", iso.stdout)
+
     def test_image_count_spans_the_typed_uav_slots(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
         # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned

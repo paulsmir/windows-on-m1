@@ -1969,9 +1969,10 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   const struct dxbc_nir_xfb *vs_xfb = so && !desc->Gs ? &xfb : NULL, *gs_xfb = so && desc->Gs ? &xfb : NULL;
   graphics->Xfb = so;
   /* FL 11_1 forced sample count (D3D11-FL111-TIR.md): a pixel shader
-   * variant behind the expansion GS; not yet with a GS, tessellation or
-   * stream output (plain 1x rasterization with a receipt) */
-  const bool expandable = desc->Ps && !desc->Gs && !desc->Hs && !desc->Ds && !so;
+   * variant behind the expansion GS, fed by the vertex shader or (C61B) the
+   * domain shader; not yet with an application GS or stream output (plain
+   * 1x rasterization with a receipt) */
+  const bool expandable = desc->Ps && !desc->Gs && !desc->Hs == !desc->Ds && !so;
   const bool forced = desc->ForcedSampleCount >= 4u && expandable;
   /* 12_1 conservative rasterization Tier 1: the same GS, a touched-pixel
    * variant; not together with a forced sample count */
@@ -1980,18 +1981,26 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   if ((desc->ForcedSampleCount > 1u && !forced) || (desc->ConservativeRaster && !conservative))
     receipt("reject-d3d12-tir", E_NOTIMPL, desc->ForcedSampleCount,
             (desc->Gs ? 1u : 0u) | (desc->Hs ? 2u : 0u) | (so ? 4u : 0u) | (desc->ConservativeRaster ? 8u : 0u), 0u);
-  struct nir_shader *vs_io = NULL, *fs_io = NULL;
+  struct nir_shader *vs_io = NULL, *ds_io = NULL, *fs_io = NULL;
   graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX, &graphics->VsBindings, graphics->VsSrvDimensions,
-                               graphics->VsUavDimensions, 0, 0, vs_xfb, 0, tir ? &vs_io : NULL);
+                               graphics->VsUavDimensions, 0, 0, vs_xfb, 0, tir && !desc->Ds ? &vs_io : NULL);
+  graphics->Hs = desc->Hs ? create_shader(pipe, desc->Hs, MESA_SHADER_TESS_CTRL, &graphics->HsBindings, graphics->HsSrvDimensions,
+                                          graphics->HsUavDimensions, desc->HsPassthroughRegisters, desc->HsPassthroughPositions) : NULL;
+  graphics->Ds = desc->Ds ? create_shader(pipe, desc->Ds, MESA_SHADER_TESS_EVAL, &graphics->DsBindings, graphics->DsSrvDimensions,
+                                          graphics->DsUavDimensions, 0, 0, NULL, 0, tir ? &ds_io : NULL) : NULL;
   graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT, &graphics->PsBindings, graphics->PsSrvDimensions,
                                           graphics->PsUavDimensions, 0, 0, NULL,
                                           forced ? desc->ForcedSampleCount : conservative ? 1u : 0u,
                                           tir ? &fs_io : NULL) : NULL;
   if (tir) {
     struct dxbc_tir_gs_key key;
-    struct nir_shader *gs = vs_io && fs_io && dxbc_tir_gs_key_from(vs_io, fs_io, &key)
+    /* C61B: a tessellated pipeline feeds the GS from the domain shader; its
+     * domain must produce triangles (isolines and point mode do not) */
+    struct nir_shader *last = desc->Ds ? ds_io : vs_io;
+    struct nir_shader *gs = last && fs_io && dxbc_tir_gs_key_from(last, fs_io, &key)
                                 ? dxbc_tir_gs(pipe->screen->nir_options[MESA_SHADER_GEOMETRY], &key) : NULL;
     ralloc_free(vs_io);
+    ralloc_free(ds_io);
     ralloc_free(fs_io);
     if (gs) {
       dxbc_nir_finalize(gs);
@@ -2003,14 +2012,12 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
     graphics->TirSamples = graphics->Gs && forced ? desc->ForcedSampleCount : 0u;
     graphics->Conservative = graphics->Gs && conservative;
     receipt("measure-d3d12-tir", graphics->Gs ? S_OK : E_NOTIMPL, desc->ForcedSampleCount, graphics->Fs ? 1u : 0u,
-            (graphics->Gs ? 1u : 0u) | (conservative ? 2u : 0u));
+            (graphics->Gs ? 1u : 0u) | (conservative ? 2u : 0u) | (desc->Ds ? 4u : 0u));
   }
   if (!tir)
     graphics->Gs = desc->Gs ? create_shader(pipe, desc->Gs, MESA_SHADER_GEOMETRY, &graphics->GsBindings, graphics->GsSrvDimensions,
                                             graphics->GsUavDimensions, 0, 0, gs_xfb) : NULL;
-  graphics->Hs = desc->Hs ? create_shader(pipe, desc->Hs, MESA_SHADER_TESS_CTRL, &graphics->HsBindings, graphics->HsSrvDimensions,
-                                          graphics->HsUavDimensions, desc->HsPassthroughRegisters, desc->HsPassthroughPositions) : NULL;
-  graphics->Ds = desc->Ds ? create_shader(pipe, desc->Ds, MESA_SHADER_TESS_EVAL, &graphics->DsBindings, graphics->DsSrvDimensions, graphics->DsUavDimensions) : NULL;
+
   struct pipe_blend_state blend = {};
   blend.independent_blend_enable = desc->IndependentBlend ? 1 : 0;
   blend.alpha_to_coverage = desc->AlphaToCoverage ? 1 : 0;

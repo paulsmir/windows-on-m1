@@ -37,9 +37,10 @@ struct dxbc_tir_gs_key {
    bool primitive_id;     /* the pixel shader reads SV_PrimitiveID */
 };
 
-/* The key for the last vertex stage's outputs feeding the pixel shader
- * variant's inputs (interpolation from the pixel shader): false when an
- * output is not a plain float vector or there is no position. */
+/* The key for the last vertex stage's outputs (vertex or domain shader)
+ * feeding the pixel shader variant's inputs (interpolation from the pixel
+ * shader): false when an output is not a plain float vector, there is no
+ * position, or a domain shader does not produce triangles. */
 bool dxbc_tir_gs_key_from(const struct nir_shader *last, const struct nir_shader *ps,
                           struct dxbc_tir_gs_key *key);
 
