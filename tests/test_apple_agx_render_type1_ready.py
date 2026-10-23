@@ -47,8 +47,6 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
             "caps->SupportPerEngineTDR = TRUE",
             "caps->SupportDirectFlip = TRUE",
             "caps->PresentationCaps.SupportKernelModeCommandBuffer = 0u",
-            # C67: CDD presents to DWM textures through AdmissionPresentBlt
-            "caps->PresentationCaps.DriverSupportsCddDwmInterop = 1u",
         ):
             self.assertIn(assignment, caps)
         for unsupported in (

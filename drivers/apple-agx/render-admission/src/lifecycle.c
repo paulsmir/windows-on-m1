@@ -754,15 +754,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
          * aperture is not declared cache-coherent.  Keep CDD GDI command
          * buffers disabled until both requirements are met. */
         caps->PresentationCaps.SupportKernelModeCommandBuffer = 0u;
-        /* C67 (D3D-C67-redirected-blt-cdd-dwm-interop.md): without GDI
-         * acceleration, CDD presents to UMD-created DWM textures only when
-         * this is set; EXP1231-D2/EXP1901G: no redirected (blt-model) present
-         * reached DxgkDdiPresent, so D3D9 windowed, DXGI blt and GL
-         * redirection were never composed. AdmissionPresentBlt performs the
-         * Blt (patch-list and GPU-VA contexts). C67b re-enables it for one
-         * DxgKrnl ETW measurement: on Basic Display the redirected Blt
-         * destination is a CDD "CreateShared" standard allocation. */
-        caps->PresentationCaps.DriverSupportsCddDwmInterop = 1u;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
         if (context->GpuvaG3State != NULL) {
           APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
