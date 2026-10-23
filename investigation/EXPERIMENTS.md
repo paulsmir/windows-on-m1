@@ -61462,3 +61462,23 @@ EXP1914 PREPARE NOTE 2026-10-23T16:41:23Z:
   - Re-staging refused ("old staged package remains": the same package was already staged).
   - The missing recovery section of prepare.sh (rec1914h, servicing guard, clone-exp-scripts) was run on its own, followed by visible recovery and BEFORE through launch-exp.sh.
 - Space recovered without deletion: gzip of 7 evidence files (4 EXP1830-1833 UMD logs, 2 MEMORY.DMP, 1 ETL), 4.9 -> 7.5 GiB free.
+
+EXP1915 HARDWARE BEFORE 2026-10-23T17:22:43Z:
+- Package 30.0.1915.0 from bb4547be = EXP1914 5614bdae plus:
+  - the fork's c943004b (its "C83", ledger id C84): D3D12 owner CopyTextureRegion between BC and 64/128-bit integer formats, checked per axis in blocks;
+  - Codex T9 C83 ab8e3282: APPLE_AGX_D3D12_GPU_WAIT=1 opt-in queue GPU wait. Default off, so no behaviour change without the variable;
+  - Codex T3b a9a9a3cb (probe only);
+  - Codex T4 sampler tools (not packaged).
+- Probe probe1915.sh = probe1914 with D3D12 probe e1915 (arm64 b67a5078, x64 21232dce, x86 46ad863a; C76A opens in a child process).
+- ATOMIC CONTRACT: none -- separate lines:
+  - C84: GravityMark D3D12 past 25 s with measure-d3d12-reinterpret-copy hr=0;
+  - C77/T3b: AGX_D3D12_C76A on 3 ABIs;
+  - C83: default off, regression only.
+- WHY THIS HYPOTHESIS:
+  (1) EXP1913 GravityMark D3D12 removal at measure-d3d12-texture-region-copy E_INVALIDARG for R32G32B32A32_UINT->BC6H_UF16;
+  (2) EXP1913 C76A never reached the open DDIs (D3D12 device singleton).
+- WHAT IS STILL UNKNOWN: GravityMark D3D12's next stage; whether the C77 open works across processes.
+- Expected: e1915 119/0 x3; GravityMark D3D12 past 25 s; regressions as EXP1914.
+- Failure criteria: regressions, DWM crash, hang.
+- Hashes: sys 4d6634b8e4f7, UmdArm64 d6cf835a163a, UmdX64 5929895e7e69, Umd32 a0be92f8bbae; manifest 5dd0c2eb2c0d, hardware-manifest 5e37306ef8b4; probe1915.sh 398dac19ea02 (PROBE_LINT_OK); visible recovery rec1915h 4c37d811f595478c; m1n1 0d3a75b3.
+- Recovery rec1915h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1915-reinterpret-gpuwait/run1915.sh.
