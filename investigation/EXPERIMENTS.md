@@ -61599,3 +61599,18 @@ EXP1918U3-U5 2026-10-23T20:40:44Z (UMD hot-swaps on the installed EXP1918 packag
 - Verdict for T7f unknown #1: the refused GravityMark allocation was not CPU-mapped or locked through any UMD path T7g instruments. The T7f restricted class (zero CPU lease) covers it.
   - Residual gap: an access that bypasses the screen slot table is not observable here.
 - Next: T7f implementation steps 1-2 (offline contract replay, CPU-lease tracking) through Codex; then the KMD shadow under a short-profile reboot.
+
+EXP1919 HARDWARE BEFORE 2026-10-23T21:43:12Z:
+- Package 30.0.1919.0 from db67ef1a = EXP1918 b57cd075 + T7g receipts (d2426e1f) + Codex T7h/T7h2 (cfd70d1b, 79e67264, 3b4cd6bb) + ledgers/tools.
+- Short profile (user GravityMark focus): package state, GravityMark D3D12 10k and 2k with 90 s timeout, KMD receipts (probe1918 profile).
+- Single variable: GPU-only placement. NOT_AVAILABLE heaps, committed DEFAULT color textures and single-plane Z32F/Z16 depth textures request CpuVisible=0 and segment 3 only (EvictionSegmentSet=0). The CPU-visible General shape is unchanged.
+- WHY THIS HYPOTHESIS: (1) EXP1918U5 + agx_gm_alloc_join.py: the refused G4 range (Va 0x1192ad0000, 0x8100000) is a committed resource that was never CPU-mapped; (2) its size equals Asahi ail Z32F 4096x4096x2-layer depth (data 0x8000000 + metadata 0x100000; GravityMark's own error names "2D Df32 4096x4096 l2"); (3) agx_win32_asahi_bo.c gave every General BO CpuRead|CpuWrite, so VidMm may place it on scattered 4 KiB aperture pages; CpuVisible=1 without the aperture was refused (EXP1027, EXP1917), CpuVisible=0 native-only was never tried.
+- WINDOWS CONTRACT: DXGK_ALLOCATIONINFO with FlagsWddm2.CpuVisible=0; Supported{Read,Write}SegmentSet = segment 3 (mask 4), PreferredSegment 3, EvictionSegmentSet=0 (direct paging transfer). LockCb requires CpuVisible, so the UMD never locks these allocations.
+- AGX/ASAHI CONTRACT: the UAT maps 16 KiB granules only (pgtable.rs); segment 3 pool backing is 16 KiB-contiguous. Asahi's CPU transfers of these resources go through linear staging and GPU blits (agx_pipe.c staging paths); a direct map fails closed (measure-gpu-only-map).
+- TRANSLATION: D3D12 CPUPageProperty NOT_AVAILABLE / committed DEFAULT -> AGX_WIN32_BO_GPU_ONLY -> Win32 request 0x20 (LOCAL, CpuVisible=0) -> KMD native-only segment set.
+- WHAT IS STILL UNKNOWN: whether dxgkrnl admits a CpuVisible=0 General allocation restricted to segment 3 (AllocateCb E_INVALIDARG would repeat the EXP1027 class); whether VidMm can fit GravityMark's working set into segment 3 by eviction alone (MakeResident E_OUTOFMEMORY or a new removal); staging blit correctness on hardware.
+- Expected: boot CM_PROB_NONE; GravityMark D3D12 2k gets past ~22 s with no G4 Parse/Unmapped; no measure-gpu-only-map refusals.
+- Failure criteria: g4-native-allocate-cb E_INVALIDARG for GPU-only requests; device removal with G4 Unmapped still on a GPU-only range (agx_gm_alloc_join.py); new GPU reset or DWM fault.
+- Recovery: visible recovery rec1919h (installed by launch-exp), run directly on any hang.
+- Hashes: sys 1f47579e7a76, UmdArm64 24d1afdf39a8, UmdX64 018c9cbceb92, Umd32 cb3d14513355; manifest aae1be9743c1, hardware-manifest 7a21b79a4dc0; probe1919.sh 80d15f4d123a (PROBE_LINT_OK); visible recovery rec1919h cff11dd5f70d996a; m1n1 0d3a75b3.
+- Recovery rec1919h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1919-gpu-only/run1919.sh.
