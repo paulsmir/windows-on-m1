@@ -150,3 +150,18 @@ min/max samplers, is not advertised, so the default loses no contract.
   translated from the same tokens on first use.
 - WHAT IS STILL UNKNOWN: nothing offline. The C65A run on J313 tells whether
   txs/query_levels/texel-centre txl on heap handles match D3D values on AGX.
+
+## C65V: the min/max variant (heap samplers)
+
+- Owner: `AGX_D3D12_SHADER_MINMAX` (`AGX_D3D12_GRAPHICS_DESC::Flags`,
+  `AgxD3d12OwnerCreateComputeFlags`) sets a scoped thread_local
+  (`ShaderMinmaxScope`), which `shader_binding_limits()` turns into
+  `DXBC_BINDING_MINMAX`. The `APPLE_AGX_D3D12_MINMAX` env gate of C65G is gone.
+- DDI: the PSO keeps its owner description (`owner_desc`, `owner_so`).
+  `MinmaxVariant` compiles the variant once, under `compile_lock`, on the first
+  replay whose heap walk (`SetStageHeapWalk`) finds a sampler-map entry with
+  reduction 2 or 3. It keeps the variant only if every binding map and
+  SRV/UAV dimension equals the plain compile's. Receipt:
+  `measure-d3d12-minmax-variant {compute, same}`.
+- Slot and static samplers still filter normally. Next step: their
+  reduction bits as compile-time constants of a variant key.

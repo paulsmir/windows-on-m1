@@ -83,6 +83,12 @@ typedef struct {
   uint8_t SrvDimensions[DXBC_RESOURCE_SLOTS]; /* C19: owned direct-slot requirements */
 } AGX_D3D12_COMPUTE;
 HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *Owner, const UINT *Tokens, AGX_D3D12_COMPUTE *Compute);
+/* C65V: AGX_D3D12_SHADER_MINMAX translates heap samples with the min/max
+ * reduction emulation (DXBC_BINDING_MINMAX): the variant a PSO uses only
+ * while a MINIMUM/MAXIMUM sampler is bound; the binding maps are the same */
+#define AGX_D3D12_SHADER_MINMAX 1u
+HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *Owner, const UINT *Tokens, unsigned Flags,
+                                        AGX_D3D12_COMPUTE *Compute);
 #if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
 /* Unwired prepared-compute boundary. Live caller-serialized owner/screen/context
  * and actual prepared object required. Memberwise-empty output; nonempty live
@@ -366,6 +372,7 @@ typedef struct {
     unsigned Slot, Offset, Register, PerInstance, StepRate;
     DXGI_FORMAT Format;
   } Element[AGX_D3D12_MAX_ELEMENTS];
+  unsigned Flags; /* C65V: AGX_D3D12_SHADER_MINMAX */
 } AGX_D3D12_GRAPHICS_DESC;
 typedef struct {
   void *Vs, *Fs, *Blend, *DepthStencil, *Rasterizer;

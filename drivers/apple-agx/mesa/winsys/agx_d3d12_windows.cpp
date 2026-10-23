@@ -595,19 +595,24 @@ static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
   AGX_D3D12_SAMPLER_SLOTS | DXBC_BINDING_HEAP_RANGES
 };
 /* C65: min/max reduction emulation for heap samplers (DXBC_BINDING_MINMAX)
- * only with APPLE_AGX_D3D12_MINMAX=1: it costs every heap sample its code
- * and registers, and Tier 2 (which permits min/max samplers) is not
- * advertised yet */
+ * costs every heap sample its code and registers, so only a PSO's min/max
+ * variant (C65V, AGX_D3D12_SHADER_MINMAX) has it: the creating call sets
+ * the flag for its own translations (the owner lock serializes an owner,
+ * the thread keeps owners apart) */
+static thread_local bool t_shader_minmax;
+struct ShaderMinmaxScope {
+  bool saved;
+  explicit ShaderMinmaxScope(unsigned flags) : saved(t_shader_minmax) { t_shader_minmax = (flags & AGX_D3D12_SHADER_MINMAX) != 0; }
+  ~ShaderMinmaxScope() { t_shader_minmax = saved; }
+  ShaderMinmaxScope(const ShaderMinmaxScope &) = delete;
+  ShaderMinmaxScope &operator=(const ShaderMinmaxScope &) = delete;
+};
 static const uint32_t *shader_binding_limits() {
   static const uint32_t minmax_limits[DXBC_BINDING_KIND_COUNT] = {
     AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS | DXBC_BINDING_HEAP_RANGES, AGX_D3D12_UAV_SLOTS | DXBC_BINDING_HEAP_RANGES,
     AGX_D3D12_SAMPLER_SLOTS | DXBC_BINDING_HEAP_RANGES | DXBC_BINDING_MINMAX
   };
-  static const bool minmax = [] {
-    char value[4] = {};
-    return GetEnvironmentVariableA("APPLE_AGX_D3D12_MINMAX", value, sizeof(value)) == 1 && value[0] == '1';
-  }();
-  return minmax ? minmax_limits : owner_binding_limits;
+  return t_shader_minmax ? minmax_limits : owner_binding_limits;
 }
 /* C44: a stored shader is DXBC tokens or (SM 6) a DXIL program part with
  * the same version/size header; both translate to the same NIR conventions
@@ -652,6 +657,12 @@ static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage
 extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,
                                               AGX_D3D12_COMPUTE *compute) {
   OwnerLock lock(owner);
+  return AgxD3d12OwnerCreateComputeFlags(owner, tokens, 0u, compute);
+}
+extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *owner, const UINT *tokens, unsigned flags,
+                                                   AGX_D3D12_COMPUTE *compute) {
+  OwnerLock lock(owner);
+  ShaderMinmaxScope minmax(flags);
   if (!owner || !owner->Context || !tokens || !compute) return E_INVALIDARG;
   memset(compute, 0, sizeof(*compute));
   struct pipe_context *pipe = owner->Context;
@@ -1997,6 +2008,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   OwnerLock lock(owner);
   if (!owner || !owner->Context || !desc || !desc->Vs || !graphics || desc->NumElements > AGX_D3D12_MAX_ELEMENTS)
     return E_INVALIDARG;
+  ShaderMinmaxScope minmax(desc->Flags);
   memset(graphics, 0, sizeof(*graphics));
   struct pipe_context *pipe = owner->Context;
   /* C39: stream output from the geometry shader, else the vertex shader

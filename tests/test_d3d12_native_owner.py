@@ -59,20 +59,25 @@ class NativeOwner(unittest.TestCase):
         # launches of a batch (CDM barrier) and the batches (writer tracking);
         # the barrier made every dispatch its own submission.
         text = OWNER.read_text()
-        create = body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateCompute(')
+        # C65V: the plain entry is the flags entry without AGX_D3D12_SHADER_MINMAX
+        self.assertIn('return AgxD3d12OwnerCreateComputeFlags(owner, tokens, 0u, compute);',
+                      body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateCompute('))
+        create = body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(')
         # C44: DXBC tokens or a DXIL program part, one translation entry
         self.assertIn('translate_shader(tokens, MESA_SHADER_COMPUTE,', create)
         self.assertIn('&compute->Bindings, 0u, 0u, NULL, &error)', create)
         translate = body(text, 'static struct nir_shader *translate_shader(')
         self.assertIn('return dxbc_translate_tokens_bindings_xfb(tokens, options, shader_binding_limits(), bindings,', translate)
         self.assertIn('agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, shader_binding_limits(), options, &dxil)', translate)
-        # C65G: min/max emulation only on request; the default limits carry
+        # C65G/C65V: min/max emulation only for a PSO's min/max variant (the
+        # creating call's AGX_D3D12_SHADER_MINMAX); the default limits carry
         # no DXBC_BINDING_MINMAX
         limits = body(text, 'static const uint32_t *shader_binding_limits(')
-        self.assertIn('"APPLE_AGX_D3D12_MINMAX"', limits)
-        self.assertIn('return minmax ? minmax_limits : owner_binding_limits;', limits)
+        self.assertIn('return t_shader_minmax ? minmax_limits : owner_binding_limits;', limits)
         defaults = text.split('static const uint32_t owner_binding_limits[', 1)[1].split('};', 1)[0]
         self.assertNotIn('DXBC_BINDING_MINMAX', defaults)
+        self.assertIn('ShaderMinmaxScope minmax(flags);', body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags('))
+        self.assertIn('ShaderMinmaxScope minmax(desc->Flags);', body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateGraphics('))
         self.assertIn('dxbc_nir_compute_info(', create)
         self.assertIn('->create_compute_state(', create)
         dispatch = body(text, 'extern "C" HRESULT AgxD3d12OwnerDispatch(')
@@ -316,6 +321,26 @@ int main() {
             subprocess.run([compiler, str(cpp), '-o', str(exe)], check=True, capture_output=True)
             result = subprocess.run([str(exe)], capture_output=True)
             self.assertEqual(result.returncode, 0, 'Tier1 root SRV t16..t127 must be usable')
+
+    def test_minmax_variant_only_for_bound_minmax_samplers(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? C65V: the heap
+        # walk must read the reduction where AgxD3d12OwnerSamplerDescriptor
+        # packs it (Valid bits 8-9), or a MINIMUM/MAXIMUM sampler silently
+        # filters normally; the variant must keep the plain compile's slots
+        # (root bindings were resolved against them) and a draw without
+        # such a sampler must keep the plain pipeline.
+        owner = OWNER.read_text()
+        self.assertIn('out->Valid = static_cast<uint16_t>(1u | (dxbc_minmax_bits(sampler->Filter) << 8));', owner)
+        ddi = (ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp').read_text()
+        walk = body(ddi, 'static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,\n                                bool *minmax) {')
+        self.assertIn('if (((h.samplers[h.binding.SamplerCount].Valid >> 8) & 3u) >= 2u) *minmax = true;', walk)
+        variant = body(ddi, 'static void *MinmaxVariant(')
+        self.assertIn('same = SUCCEEDED(hr) && SameGraphicsSlots(pso->minmax_graphics, pso->graphics);', variant)
+        self.assertIn('desc.Flags = AGX_D3D12_SHADER_MINMAX;', variant)
+        draw = body(ddi, 'static __declspec(noinline) HRESULT ReplayDraw(')
+        self.assertIn('if (minmax)\n        if (void *variant = MinmaxVariant(owner, d.pso, false))', draw)
+        dispatch = body(ddi, 'static __declspec(noinline) HRESULT ReplayDispatch(')
+        self.assertIn('const void *variant = minmax ? MinmaxVariant(owner, dispatch.pso, true) : nullptr;', dispatch)
 
     def test_teardown_order(self):
         text = OWNER.read_text()
