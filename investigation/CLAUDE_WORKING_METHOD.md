@@ -250,3 +250,6 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   - aborts with env cleanup when 3DMark does not appear, instead of clicking a desktop without it.
 
   New guest helpers get one dry run (argtest style) before they join a chain.
+- Protected invariants: `.local/handoff/codex/protected-invariants.txt` lists hardware-validated source lines (file | exact line | experiment).
+  - codex-review flags a commit that removes such a line without re-adding it. T7b lesson: green tests, but the commit disabled the validated C75c path.
+  - Add a row whenever a hardware experiment validates a behavioural line. Use the exact full line: a substring survives a weakening rewrite.
