@@ -574,7 +574,10 @@ extern "C" HRESULT AgxD3d12OwnerReadBuffer(AGX_D3D12_OWNER *owner, const AGX_D3D
   box.depth = 1;
   void *map = pipe->buffer_map(pipe, static_cast<struct pipe_resource *>(buffer->Resource), 0, PIPE_MAP_READ, &box,
                                &transfer);
-  if (!map) return E_OUTOFMEMORY;
+  if (!map || !transfer) {
+    if (transfer) pipe->buffer_unmap(pipe, transfer);
+    return DXGI_ERROR_DEVICE_HUNG;
+  }
   memcpy(data, map, bytes);
   pipe->buffer_unmap(pipe, transfer);
   return S_OK;
@@ -1925,12 +1928,12 @@ static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COP
   struct pipe_transfer *stransfer = NULL, *btransfer = NULL;
   void *smap = pipe->texture_map(pipe, staging, 0, PIPE_MAP_WRITE, &sbox, &stransfer);
   void *bmap = smap ? pipe->buffer_map(pipe, buffer, 0, PIPE_MAP_READ, &bbox, &btransfer) : NULL;
-  HRESULT hr = smap && bmap ? S_OK : E_OUTOFMEMORY;
+  HRESULT hr = smap && stransfer && bmap && btransfer ? S_OK : DXGI_ERROR_DEVICE_HUNG;
   for (unsigned y = 0; SUCCEEDED(hr) && y < rows; ++y)
     memcpy(static_cast<unsigned char *>(smap) + static_cast<size_t>(y) * stransfer->stride,
            static_cast<unsigned char *>(bmap) + static_cast<size_t>(y) * copy->Pitch, static_cast<size_t>(row));
-  if (bmap) pipe->buffer_unmap(pipe, btransfer);
-  if (smap) pipe->texture_unmap(pipe, stransfer);
+  if (btransfer) pipe->buffer_unmap(pipe, btransfer);
+  if (stransfer) pipe->texture_unmap(pipe, stransfer);
   if (SUCCEEDED(hr)) {
     pipe->resource_copy_region(pipe, texture, copy->Level, tbox.x, tbox.y, tbox.z, staging, 0, &sbox);
     ++owner->PendingCopies;
@@ -1976,12 +1979,12 @@ static HRESULT staged_download(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_C
   struct pipe_transfer *stransfer = NULL, *btransfer = NULL;
   void *smap = pipe->texture_map(pipe, staging, 0, PIPE_MAP_READ, &sbox, &stransfer);
   void *bmap = smap ? pipe->buffer_map(pipe, buffer, 0, PIPE_MAP_WRITE, &bbox, &btransfer) : NULL;
-  HRESULT hr = smap && bmap ? S_OK : E_OUTOFMEMORY;
+  HRESULT hr = smap && stransfer && bmap && btransfer ? S_OK : DXGI_ERROR_DEVICE_HUNG;
   for (unsigned y = 0; SUCCEEDED(hr) && y < rows; ++y)
     memcpy(static_cast<unsigned char *>(bmap) + static_cast<size_t>(y) * copy->Pitch,
            static_cast<unsigned char *>(smap) + static_cast<size_t>(y) * stransfer->stride, static_cast<size_t>(row));
-  if (bmap) pipe->buffer_unmap(pipe, btransfer);
-  if (smap) pipe->texture_unmap(pipe, stransfer);
+  if (btransfer) pipe->buffer_unmap(pipe, btransfer);
+  if (stransfer) pipe->texture_unmap(pipe, stransfer);
   receipt("measure-d3d12-staged-download", hr, copy->Width | (copy->Height << 16), copy->Level,
           staging->width0 | (staging->height0 << 16));
   return hr;
@@ -2042,7 +2045,7 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
   void *bmap = tmap ? pipe->buffer_map(pipe, buffer, 0, copy->ToBuffer ? PIPE_MAP_WRITE : PIPE_MAP_READ, &bbox,
                                        &btransfer)
                     : NULL;
-  HRESULT hr = tmap && bmap ? S_OK : E_OUTOFMEMORY;
+  HRESULT hr = tmap && ttransfer && bmap && btransfer ? S_OK : DXGI_ERROR_DEVICE_HUNG;
   for (unsigned z = 0; SUCCEEDED(hr) && z < copy->Depth; ++z)
     for (unsigned y = 0; y < rows; ++y) {
       unsigned char *t = static_cast<unsigned char *>(tmap) + z * ttransfer->layer_stride + y * ttransfer->stride;
@@ -2051,8 +2054,8 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
       if (copy->ToBuffer) memcpy(b, t, static_cast<size_t>(row));
       else memcpy(t, b, static_cast<size_t>(row));
     }
-  if (bmap) pipe->buffer_unmap(pipe, btransfer);
-  if (tmap) pipe->texture_unmap(pipe, ttransfer);
+  if (btransfer) pipe->buffer_unmap(pipe, btransfer);
+  if (ttransfer) pipe->texture_unmap(pipe, ttransfer);
   receipt("measure-d3d12-texture-copy", hr, copy->ToBuffer ? 1u : 0u, copy->Width | (copy->Height << 16),
           copy->Pitch);
   return hr;

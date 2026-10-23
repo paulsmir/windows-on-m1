@@ -10,6 +10,7 @@ using UINT=unsigned;using HRESULT=int;
 #define S_OK 0
 #define E_INVALIDARG (-1)
 #define E_OUTOFMEMORY (-2)
+#define DXGI_ERROR_DEVICE_HUNG ((HRESULT)0x887a0006u)
 #define SUCCEEDED(x) ((x)>=0)
 struct AGX_D3D12_BUFFER {void *Resource;unsigned long long GpuVa,Bytes;};
 struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingCopies;pipe_screen *Screen;pipe_resource *DownloadStaging;};
@@ -26,7 +27,7 @@ static HRESULT staged_upload(AGX_D3D12_OWNER *, const AGX_D3D12_TEXTURE_COPY *, 
                              unsigned long long) { return E_INVALIDARG; }
 static unsigned char volume[2][2048],buffer_bytes[8192];
 static pipe_transfer tex_transfer,buf_transfer;
-static unsigned maps=0;
+static unsigned maps=0, unmaps=0, map_failure=0;
 /* C29: a BC1 map is a staging copy of whole 4x4 blocks (agx_transfer_map
  * stride = blocks across the box * 8) */
 static bool bc_mode;static pipe_box bc_box;static unsigned char bc_blocks[3][256];
@@ -43,7 +44,8 @@ static void copy_region(pipe_context *,pipe_resource *dst,unsigned level,unsigne
  for(int y=0;y<box->height;++y)std::memcpy(staging_px+(dy+y)*1024+dx*4,present_px+(box->y+y)*32+box->x*4,box->width*4);
 }
 static void *map_texture(pipe_context *,pipe_resource *res,unsigned level,unsigned,const pipe_box *box,pipe_transfer **t) {
- ++maps;tex_transfer={};*t=&tex_transfer;
+ ++maps;tex_transfer={};*t=map_failure==2?nullptr:&tex_transfer;
+ if(map_failure==1)return nullptr;
  if(res==&staging_res){tex_transfer.stride=1024;return staging_px+box->y*1024+box->x*4;}
  if(res->bind & PIPE_BIND_SHARED){++shared_maps;tex_transfer.stride=32;return present_px+box->y*32+box->x*4;}
  if(bc_mode){bc_box=*box;tex_transfer.stride=(box->width+3)/4*8;tex_transfer.layer_stride=tex_transfer.stride*((box->height+3)/4);return bc_blocks[level];}
@@ -51,9 +53,9 @@ static void *map_texture(pipe_context *,pipe_resource *res,unsigned level,unsign
  return volume[level]+box->z*512+box->y*64+box->x*4;
 }
 static void *map_buffer(pipe_context *,pipe_resource *,unsigned,unsigned,const pipe_box *box,pipe_transfer **t) {
- *t=&buf_transfer;return buffer_bytes+box->x;
+ *t=map_failure==4?nullptr:&buf_transfer;return map_failure==3?nullptr:buffer_bytes+box->x;
 }
-static void unmap(pipe_context *,pipe_transfer *) {}
+static void unmap(pipe_context *,pipe_transfer *t) { assert(t);++unmaps; }
 static void receipt(const char *,HRESULT,UINT,UINT,UINT) {}
 /* ACTUAL_OWNER_COPY */
 int main() {
@@ -109,6 +111,17 @@ int main() {
  b.X=0;b.Width=12;assert(AgxD3d12OwnerCopyTexture(&owner,&b)==E_INVALIDARG && maps==before);
  b.Width=8;b.Pitch=8;assert(AgxD3d12OwnerCopyTexture(&owner,&b)==E_INVALIDARG && maps==before);
  bc_mode=false;
+ // WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Failed read/write maps
+ // must not copy bytes, dereference a missing transfer, or report success.
+ c.X=0;c.Offset=64;
+ for(map_failure=1;map_failure<=4;++map_failure) {
+   unsigned char saved[sizeof(volume)];std::memcpy(saved,volume,sizeof(volume));
+   unmaps=0;
+   assert(AgxD3d12OwnerCopyTexture(&owner,&c)==DXGI_ERROR_DEVICE_HUNG);
+   assert(!std::memcmp(saved,volume,sizeof(volume)));
+   assert(unmaps==(map_failure==3?2u:1u));
+ }
+ map_failure=0;
  // C80: a 5x3 readback of an 8x4 BGRA presentation surface at (2,1)
  pipe_screen screen={};screen.resource_create=create_staging;owner.Screen=&screen;pipe.resource_copy_region=copy_region;
  pipe_resource pres={};pres.target=PIPE_TEXTURE_2D;pres.format=PIPE_FORMAT_B8G8R8A8_UNORM;pres.width0=8;pres.height0=4;
@@ -131,5 +144,15 @@ int main() {
  /* a larger box than the cached staging makes a new one */
  r.X=0;r.Y=0;r.Width=8;r.Height=4;assert(AgxD3d12OwnerCopyTexture(&owner,&r)==S_OK && !shared_maps);
  assert(!std::memcmp(buffer_bytes+512+3*256,present_px+3*32,32));
+ // WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? C80 staging readback
+ // must preserve the failed-map contract without mapping the shared surface.
+ for(map_failure=1;map_failure<=4;++map_failure) {
+   unsigned char saved[sizeof(buffer_bytes)];std::memcpy(saved,buffer_bytes,sizeof(buffer_bytes));
+   unmaps=0;
+   assert(AgxD3d12OwnerCopyTexture(&owner,&r)==DXGI_ERROR_DEVICE_HUNG);
+   assert(!std::memcmp(saved,buffer_bytes,sizeof(buffer_bytes)) && !shared_maps);
+   assert(unmaps==(map_failure==3?2u:1u));
+ }
+ map_failure=0;
  puts("PASS volume real-copy pitches/mip bounds/untouched planes; C29 BC1 block rows/edge mip/refusals; C80 presentation readback via GPU staging");
 }

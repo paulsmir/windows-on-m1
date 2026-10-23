@@ -5400,7 +5400,7 @@ AgxD3d10ResourceWithinRequiredLimits(
                                &box,&resource->transfers[SubResource]) :
       device->pipe->texture_map(device->pipe,resource->resource,level,usage,
                                 &box,&resource->transfers[SubResource]);
-   if (!map || !resource->transfers[SubResource]) { SetError(hDevice,E_FAIL); return; }
+   if (!map || !resource->transfers[SubResource]) { SetError(hDevice,DXGI_ERROR_DEVICE_HUNG); return; }
    pMappedSubResource->pData=map;
    if (dynamicBuffer) resource->active_buffer_map=map;
    pMappedSubResource->RowPitch=resource->transfers[SubResource]->stride;
@@ -6463,6 +6463,55 @@ agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image_view
             pipe_target.write_text(pipe_text.replace(cleanup, 'cleanup:\n' + cleanup, 1))
             overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
                 'after_texture_map_failure'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
+            # T6b / EXP1910: util_draw_indirect trusts a non-NULL transfer.
+            # A failed map must publish neither a pointer nor a transfer, and
+            # must latch the context fault before any CPU reader can continue.
+            pipe_text = pipe_target.read_text()
+            map_start = pipe_text.index('\nagx_transfer_map(')
+            map_end = pipe_text.index('\nstatic void\nagx_transfer_unmap(', map_start)
+            map_text = pipe_text[map_start:map_end]
+            replacements = (
+                ('   /* Can\'t map tiled/compressed directly */',
+                 '   *out_transfer = NULL;\n\n   /* Can\'t map tiled/compressed directly */'),
+                ('   struct agx_transfer *transfer = CALLOC_STRUCT(agx_transfer);',
+                 '   struct agx_transfer *transfer = CALLOC_STRUCT(agx_transfer);\n'
+                 '   if (!transfer) {\n'
+                 '      AgxWin32AsahiMarkContextFault(ctx, (2u << 16) | __LINE__);\n'
+                 '      return NULL;\n   }'),
+                ('      if (!staging) {',
+                 '      if (!staging) {\n'
+                 '         AgxWin32AsahiMarkContextFault(ctx, (2u << 16) | __LINE__);'),
+                ('      return agx_bo_map(staging->bo);',
+                 '      void *map = agx_bo_map(staging->bo);\n'
+                 '      if (!map) goto map_failed;\n      return map;'),
+                ('      transfer->map = calloc(transfer->base.layer_stride, box->depth);',
+                 '      transfer->map = calloc(transfer->base.layer_stride, box->depth);\n'
+                 '      if (!transfer->map) goto map_failed;'),
+                ('            uint8_t *map = agx_map_texture_cpu(rsrc, level, box->z + z);',
+                 '            uint8_t *map = agx_map_texture_cpu(rsrc, level, box->z + z);\n'
+                 '            if (!map) goto map_failed;'),
+                ('      /* Be conservative for direct writes */',
+                 '      uint8_t *map = agx_bo_map(rsrc->bo);\n'
+                 '      if (!map) goto map_failed;\n\n'
+                 '      /* Be conservative for direct writes */'),
+                ('      return ((uint8_t *)agx_bo_map(rsrc->bo)) + offset;\n   }\n}',
+                 '      return map + offset;\n   }\n'
+                 'map_failed:\n'
+                 '   AgxWin32AsahiMarkContextFault(ctx, (2u << 16) | __LINE__);\n'
+                 '   *out_transfer = NULL;\n'
+                 '   free(transfer->map);\n'
+                 '   pipe_resource_reference(&transfer->staging.rsrc, NULL);\n'
+                 '   pipe_resource_reference(&transfer->base.resource, NULL);\n'
+                 '   FREE(transfer);\n'
+                 '   return NULL;\n}'),
+            )
+            for old, new in replacements:
+                if map_text.count(old) != 1:
+                    raise SystemExit('Ambiguous transfer map failure anchor: ' + old)
+                map_text = map_text.replace(old, new, 1)
+            pipe_target.write_text(pipe_text[:map_start] + map_text + pipe_text[map_end:])
+            overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
+                'after_buffer_map_failure'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
             # C21: one reviewed native layout policy serves creation and a
             # no-BO query. The query does not admit any resource dimension.
             reviewed_layout_sources = {
