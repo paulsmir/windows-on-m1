@@ -37,7 +37,7 @@ allocations. The new request must carry CpuVisible=0, not repeat that shape.
 Paths below are under `drivers/apple-agx/` unless `.local/reference` is explicit.
 Asahi UAT uses 16 KiB pages (`.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/pgtable.rs:39`).
 Mesa's size/alignment rounding cannot make scattered Windows PFNs contiguous.
-The current winsys grants CPU read/write to every General BO
+At base commit `68a97a70ba696c19e0a39a1926412ada33cb73cf`, the winsys grants CPU read/write to every General BO
 (`mesa/winsys/agx_win32_asahi_bo.c:356`). C45 only avoided eager mapping
 (`mesa/winsys/agx_d3d12_windows.cpp:432`); it did not change this backing contract.
 
@@ -80,7 +80,7 @@ Committed DEFAULT 2D textures opt in explicitly from the DDI; default 1D/3D
 constructors require NOT_AVAILABLE already. Keep BC (including volumes), formats without RT+sampler support (for example RGB9E5),
 depth, MSAA and presentation imports CPU-visible. Texture eligibility follows API CPU intent and the staging format capability,
 not a trace-derived size/content/bind combination. Current 1D/1D-array constructors
-only admit R32_UINT, which has the required staging format; the 1D-array staging
+only admit R32_UINT and R8G8B8A8_UNORM, both supported staging formats; the 1D-array staging
 target is converted to 2D_ARRAY and sized by the transfer box depth.
 CPU-visible General, shader and encoder allocations remain unchanged.
 
@@ -172,3 +172,54 @@ R148 (canonical GPU-local allocation versus CPU staging), EXP936 (direct
 borrowed primary identity), and EXP853 (4 KiB scatter cannot form 16 KiB leaves).
 No primary/shared import is reclassified. The supplied EXP1917 result and
 EXP1918U5 trace remain the current hardware evidence; no old result is rewritten.
+
+
+### CPU-map callsite index
+
+Pinned Mesa paths are relative to `.local/reference/mesa/src/`. These are the
+raw map callsites behind the reachability inventory, including internal-only
+BOs that must retain CPU access:
+
+- `asahi/lib/agx_device.h:206`: cached agx_bo_map_placed pointer provider;
+  `asahi/lib/agx_bo.c:396`: upstream eager mapping (replaced Windows BO owner).
+- `gallium/drivers/asahi/agx_pipe.c:697`, `:983`, `:1026` and
+  `agx_state.h:960`: resource shadow, staging map, linear map, texture map.
+- `gallium/auxiliary/util/u_draw.c:145`, `:165`, `:214`, `:233`: indirect
+  count/argument reads; D3D12's CPU expansion also calls OwnerReadBuffer at
+  `drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp:6400` and `:6414`.
+- `gallium/drivers/asahi/agx_state.c:1487`, `:2788`: shader upload and sampler
+  heap; `agx_disk_cache.c:106`, `:111`: shader binary upload/read;
+  `asahi/lib/agx_linker.c:125`: linked shader code.
+- `gallium/drivers/asahi/agx_query.c:106`, `:170`: query BOs;
+  `agx_batch.c:84`, `:169`: internal batch storage/timestamps;
+  `agx_pipe.c:1521`, `:2510`: command stream offsets and texel-fetch sampler.
+- `asahi/lib/pool.c:75`, `agx_scratch.c:116`, `agx_device.c:354`, `:703`,
+  `:717`: internal pools, scratch and debug/printf BOs. None receives the
+  application resource's UNMAPPABLE flag.
+- `drivers/apple-agx/mesa/winsys/agx_win32_asahi_bo.c` sparse tile-zero/scratch
+  and page-table maps remain separate constructors. Resource raw CPU copies
+  in `agx_win32_asahi_scene.c:246` have only D3D10/11 callers in the projection
+  (`build-native-asahi-state.py:5158`, `:5258`), which do not opt in.
+- `drivers/apple-agx/render-admission/umd/src/umd_gpuva_windows.c:797`, `:1027`
+  contain temporary staging locks; SystemDirect bypass at `:1191` excludes
+  GPU-only canonical slots from those copy escapes. Authoritative map refusal
+  is in `umd_win32_screen.c:1020`; the protected SystemDirect expression is
+  unchanged at `:642`.
+
+
+## Final offline verification
+
+The committed implementation passed 82 focused tests (20 modules). The required
+baseline on that implementation, including all 12 new regressions, returned:
+
+```text
+ran 413 tests in 175 modules; 6 failing, 6 known, 0 NEW, 0 FIXED
+BASELINE_OK
+```
+
+The six failures are unchanged known-baseline entries; none was added or hidden.
+The real-broker replay separately reports its existing uninitialized-m1n1 skip.
+Three extracted-code mutations (map guard, LOCAL plumbing, staging write offset)
+were caught. All four protected invariants and `git diff --check` pass. The final
+review found no remaining source blocker after the format/array fixes. Full
+Windows compilation, GPU content/coherency and VidMm acceptance remain unknown.
