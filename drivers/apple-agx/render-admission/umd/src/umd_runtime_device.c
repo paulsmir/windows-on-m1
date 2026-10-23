@@ -34,6 +34,10 @@ static ULONG AdmissionUmdNextGeneration(VOID) {
 static INIT_ONCE AdmissionUmdTraceOnce = INIT_ONCE_STATIC_INIT;
 static WCHAR AdmissionUmdTracePath[MAX_PATH];
 static BOOL AdmissionUmdTraceRefusalsOnly;
+/* EXP1920: a hung GravityMark thread never appended again, so the buffered
+ * tail (the hang point) was lost when the process was killed. Opt-in
+ * APPLE_AGX_UMD_TRACE_SYNC=1 writes every line at once (diagnostic runs). */
+static BOOL AdmissionUmdTraceSync;
 
 static BOOL CALLBACK AdmissionUmdTraceLoad(PINIT_ONCE Once, PVOID Parameter,
                                            PVOID *Context) {
@@ -44,6 +48,9 @@ static BOOL CALLBACK AdmissionUmdTraceLoad(PINIT_ONCE Once, PVOID Parameter,
   UNREFERENCED_PARAMETER(Context);
   AdmissionUmdTraceRefusalsOnly =
       GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY", only, 2) == 1u &&
+      only[0] == L'1';
+  AdmissionUmdTraceSync =
+      GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_SYNC", only, 2) == 1u &&
       only[0] == L'1';
   length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE",
       AdmissionUmdTracePath, ARRAYSIZE(AdmissionUmdTracePath));
@@ -192,7 +199,7 @@ static VOID AdmissionUmdTraceAppend(const char *Line, DWORD Bytes,
   if (AdmissionUmdTraceUsed == 0u) AdmissionUmdTraceOldestQpc = Qpc;
   memcpy(AdmissionUmdTraceBuffer + AdmissionUmdTraceUsed, Line, Bytes);
   AdmissionUmdTraceUsed += Bytes;
-  if (Urgent || Qpc - AdmissionUmdTraceOldestQpc >=
+  if (Urgent || AdmissionUmdTraceSync || Qpc - AdmissionUmdTraceOldestQpc >=
                     frequency.QuadPart * ADMISSION_UMD_TRACE_FLUSH_MS / 1000)
     AdmissionUmdTraceWriteLocked();
   ReleaseSRWLockExclusive(&AdmissionUmdTraceLock);
