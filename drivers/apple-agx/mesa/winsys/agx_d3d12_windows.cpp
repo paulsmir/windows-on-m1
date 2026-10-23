@@ -933,7 +933,9 @@ static bool texture3d_template(DXGI_FORMAT format, unsigned width, unsigned heig
   if(levels>max_levels) return false;
   const enum pipe_format physical=FormatTranslate(format,FALSE);
   const struct util_format_description *desc=physical!=PIPE_FORMAT_NONE ? util_format_description(physical):NULL;
-  const unsigned element=desc ? block_bytes(physical) : 0u;
+  /* C21H: a 1x1 texel or a BC1-BC7 4x4 block (texture_block) */
+  unsigned bw=0,bh=0;
+  const unsigned element=desc ? texture_block(physical,&bw,&bh) : 0u;
   if(!desc || !element || element>16 || (element&(element-1)) || desc->colorspace==UTIL_FORMAT_COLORSPACE_ZS) return false;
   // Native screen-free query owns backend target/format/usage validation.
   memset(templ,0,sizeof(*templ));
@@ -969,7 +971,8 @@ extern "C" HRESULT AgxD3d12QueryTexture3DLayout(DXGI_FORMAT format,unsigned widt
       !layout.LayerStrideBytes || layout.RequestedLevels!=levels || layout.AllocatedLevels<levels ||
       layout.AllocatedLevels>16 || layout.SizeBytes!=layout.LayerStrideBytes*depth ||
       layout.Tiling!=1u /* AIL_TILING_GPU */) return E_NOTIMPL;
-  const unsigned element=block_bytes(templ.format);
+  unsigned bw=0,bh=0;
+  const unsigned element=texture_block(templ.format,&bw,&bh);
   for(unsigned m=0;m<levels;++m) {
     /* every level lies inside its layer: the registry's addresses (proved
      * against ail by test_d3d12_volume_registry) stay within the layer */
@@ -981,7 +984,7 @@ extern "C" HRESULT AgxD3d12QueryTexture3DLayout(DXGI_FORMAT format,unsigned widt
   for(unsigned m=0;m<levels;++m) {
     result->MipOffsets[m]=layout.LevelOffsets[m];
     result->TileWidth[m]=layout.TileWidthEl[m];result->TileHeight[m]=layout.TileHeightEl[m];
-    result->StrideEl[m]=layout.StrideEl[m];result->HeightEl[m]=(height>>m)?height>>m:1u;
+    result->StrideEl[m]=layout.StrideEl[m];result->HeightEl[m]=(((height>>m)?height>>m:1u)+bh-1)/bh; /* block rows */
   }
   return S_OK;
 }

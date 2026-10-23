@@ -508,7 +508,10 @@ agx_uncompressed_query_format_valid(const struct pipe_resource *templ)
        (unsigned)templ->target >= PIPE_MAX_TEXTURE_TYPES || templ->nr_samples > 1 || templ->nr_storage_samples > 1)
       return false;
    const struct util_format_description *desc = util_format_description(templ->format);
-   if (!desc || desc->block.width != 1 || desc->block.height != 1 || desc->block.depth != 1 ||
+   /* C21H: block-compressed formats (BC1-BC7, 4x4 blocks) lay out GPU-tiled
+    * in blocks (ail_initialize_gpu_tiled's compressed rounding) */
+   if (!desc || desc->block.depth != 1 ||
+       ((desc->block.width != 1 || desc->block.height != 1) && !util_format_is_compressed(templ->format)) ||
        desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS)
       return false;
    /* Execute the native target/format/usage policy. Single sampling avoids

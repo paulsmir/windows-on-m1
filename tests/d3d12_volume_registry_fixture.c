@@ -15,13 +15,19 @@ static const unsigned sides[] = {1, 2, 3, 4, 5, 7, 8, 15, 16, 17, 31, 32, 33, 48
 
 static unsigned long long texels, resources, admitted6, admitted2, square_refused;
 
-static int check_volume(unsigned e, unsigned w, unsigned h, unsigned d, unsigned levels, unsigned max_slots) {
+/* C21H: block-compressed volumes (BC1: 8-byte, BC7: 16-byte 4x4 blocks);
+ * element coordinates are blocks */
+static const enum pipe_format compressed[2] = {PIPE_FORMAT_DXT1_RGBA, PIPE_FORMAT_BPTC_RGBA_UNORM};
+
+static int check_format(enum pipe_format format, unsigned e, unsigned w, unsigned h, unsigned d, unsigned levels,
+                        unsigned max_slots) {
    struct ail_layout a = {.width_px = w, .height_px = h, .depth_px = d, .sample_count_sa = 1, .levels = levels,
-                          .mipmapped_z = true, .tiling = AIL_TILING_GPU, .format = formats[e], .renderable = true};
+                          .mipmapped_z = true, .tiling = AIL_TILING_GPU, .format = format, .renderable = true};
    ail_make_miptree(&a);
    AGX_VOLUME_LEVEL lv[AGX_VOLUME_MAX_LEVELS];
    for (unsigned l = 0; l < levels; ++l)
-      lv[l] = (AGX_VOLUME_LEVEL){a.tilesize_el[l].width_el, a.tilesize_el[l].height_el, a.stride_el[l], mini(h, l)};
+      lv[l] = (AGX_VOLUME_LEVEL){a.tilesize_el[l].width_el, a.tilesize_el[l].height_el, a.stride_el[l],
+                                 util_format_get_nblocksy(format, mini(h, l))};
    AGX_VOLUME_SELECTION sel;
    if (!agx_volume_select(e, levels, lv, max_slots, &sel)) return 0;
    /* the transitions match the slot of every level */
@@ -31,7 +37,8 @@ static int check_volume(unsigned e, unsigned w, unsigned h, unsigned d, unsigned
       assert(agx_volume_layout_slot(sel.Layout, slot) == sel.Pattern[l]);
    }
    for (unsigned l = 0; l < levels; ++l) {
-      const unsigned lw = mini(w, l), lh = mini(h, l), ld = mini(d, l);
+      const unsigned lw = util_format_get_nblocksx(format, mini(w, l)), lh = util_format_get_nblocksy(format, mini(h, l)),
+                     ld = mini(d, l);
       const uint64_t row = agx_volume_row_stride(sel.Pattern[l], &lv[l]);
       const unsigned step = lw * lh > 4096 ? 7 : 1;
       const unsigned bs = 1u << e;
@@ -56,7 +63,32 @@ static int check_volume(unsigned e, unsigned w, unsigned h, unsigned d, unsigned
    return 1;
 }
 
+static int check_volume(unsigned e, unsigned w, unsigned h, unsigned d, unsigned levels, unsigned max_slots) {
+   return check_format(formats[e], e, w, h, d, levels, max_slots);
+}
+
+static unsigned long long bc_resources, bc_admitted6, bc_square_refused;
+
 int main(void) {
+   for (unsigned f = 0; f < 2; ++f)
+      for (unsigned wi = 0; wi < sizeof(sides) / sizeof(sides[0]); ++wi)
+         for (unsigned hi = 0; hi < sizeof(sides) / sizeof(sides[0]); ++hi)
+            for (unsigned d = 1; d <= 9; d += 4) {
+               const unsigned w = sides[wi], h = sides[hi];
+               unsigned full = 1;
+               for (unsigned m = mx(mx(w, h), d); m > 1; m >>= 1) ++full;
+               for (unsigned levels = 1; levels <= full; ++levels) {
+                  ++bc_resources;
+                  const int six = check_format(compressed[f], f ? 4 : 3, w, h, d, levels, 6);
+                  bc_admitted6 += six;
+                  if (w == h && !check_format(compressed[f], f ? 4 : 3, w, h, d, levels, 2)) {
+                     if (bc_square_refused < 4) printf("BC_SQUARE_REFUSED f=%u %ux%ux%u levels %u\n", f, w, h, d, levels);
+                     ++bc_square_refused;
+                  }
+               }
+            }
+   printf("BC_VOLUME_REGISTRY resources=%llu admitted6=%llu square_refused2=%llu\n", bc_resources, bc_admitted6,
+          bc_square_refused);
    for (unsigned e = 0; e < AGX_VOLUME_ELEMENT_SIZES; ++e)
       for (unsigned wi = 0; wi < sizeof(sides) / sizeof(sides[0]); ++wi)
          for (unsigned hi = 0; hi < sizeof(sides) / sizeof(sides[0]); ++hi)

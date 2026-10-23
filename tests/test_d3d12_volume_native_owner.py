@@ -57,7 +57,7 @@ def actual_owner_source():
     header=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.h').read_text()
     end=header.index('} AGX_D3D12_VOLUME_LAYOUT;')+len('} AGX_D3D12_VOLUME_LAYOUT;')
     prefix=prefix.replace('/* VOLUME_LAYOUT_RECORD */',header[header.rfind('typedef struct {',0,end):end])
-    funcs='\n'.join(block(owner,m) for m in ['static unsigned block_bytes(',
+    funcs='\n'.join(block(owner,m) for m in ['static unsigned block_bytes(', 'static unsigned texture_block(',
         'static bool texture3d_template(', 'static bool texture3d_layout(',
         'extern "C" HRESULT AgxD3d12QueryTexture3DLayout('])
     return prefix+'\n'+funcs+'\n'+(ROOT/'tests/d3d12_volume_native_owner_fixture.cpp').read_text()

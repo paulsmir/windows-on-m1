@@ -42,7 +42,11 @@ class VolumeRegistry(unittest.TestCase):
             resources, six, two = map(int, m.groups())
             # most of the grid fits the six-slot 0022 interface
             self.assertGreater(six, resources * 9 // 10)
-            print(r.stdout.strip().splitlines()[-1])
+            # C21H: block-compressed (BC1, BC7) volumes, element coordinates in blocks
+            bc = re.search(r'BC_VOLUME_REGISTRY resources=(\d+) admitted6=(\d+) square_refused2=(\d+)', r.stdout)
+            self.assertTrue(bc, r.stdout[-2000:])
+            self.assertGreater(int(bc.group(2)), int(bc.group(1)) * 9 // 10)
+            print('\n'.join(r.stdout.strip().splitlines()[-2:]))
 
 
 if __name__ == '__main__':

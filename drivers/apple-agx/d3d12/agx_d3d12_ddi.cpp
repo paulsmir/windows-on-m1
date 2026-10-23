@@ -4379,7 +4379,9 @@ static void CopyVolumeTextureRegion(AgxD3d12CommandList *list,
       b.resource->type!=D3D12DDI_RT_BUFFER || t.offset>=t.resource->levels ||
       b.footprint->Format!=t.resource->format || !b.footprint->PhysicalWidth ||
       !b.footprint->PhysicalHeight || !b.footprint->PhysicalDepth) {fail();return;}
-  const UINT level=static_cast<UINT>(t.offset),block=AgxD3d12FormatBlockBytes(t.resource->format);
+  /* C21H: a 1x1 texel or a BC1-BC7 4x4 block; pitches count block rows */
+  unsigned bw=0,bh=0;
+  const UINT level=static_cast<UINT>(t.offset),block=AgxD3d12FormatBlock(t.resource->format,&bw,&bh);
   const UINT tw=extent(t.resource->width,level),th=extent(t.resource->height,level),td=extent(t.resource->layers,level);
   const UINT fw=b.footprint->PhysicalWidth,fh=b.footprint->PhysicalHeight,fd=b.footprint->PhysicalDepth;
   const UINT sx=box?static_cast<UINT>(box->Left):0u,sy=box?static_cast<UINT>(box->Top):0u,sz=box?static_cast<UINT>(box->Front):0u;
@@ -4389,13 +4391,14 @@ static void CopyVolumeTextureRegion(AgxD3d12CommandList *list,
   const UINT tx=to_buffer?sx:dst_x,ty=to_buffer?sy:dst_y,tz=to_buffer?sz:dst_z;
   const UINT bx=to_buffer?dst_x:sx,by=to_buffer?dst_y:sy,bz=to_buffer?dst_z:sz;
   const UINT pitch=b.footprint->Pitch,slice=b.footprint->SlicePitch;
-  if(!block || !w || !h || !d || tx>tw || w>tw-tx || ty>th || h>th-ty || tz>td || d>td-tz ||
-      bx>fw || w>fw-bx || by>fh || h>fh-by || bz>fd || d>fd-bz ||
-      pitch<static_cast<UINT64>(fw)*block || (fd>1 && slice<static_cast<UINT64>(pitch)*fh) ||
+  if(!block || !bw || !bh || !w || !h || !d || tx>tw || w>tw-tx || ty>th || h>th-ty || tz>td || d>td-tz ||
+      bx>fw || w>fw-bx || by>fh || h>fh-by || bz>fd || d>fd-bz || tx%bw || ty%bh || bx%bw || by%bh ||
+      pitch<static_cast<UINT64>((fw+bw-1)/bw)*block || (fd>1 && slice<static_cast<UINT64>(pitch)*((fh+bh-1)/bh)) ||
       b.resource->gpuva<b.resource->heap->gpuva) {fail();return;}
   const UINT64 base=b.resource->gpuva-b.resource->heap->gpuva;
-  const UINT64 point=static_cast<UINT64>(bz)*slice+static_cast<UINT64>(by)*pitch+static_cast<UINT64>(bx)*block;
-  const UINT64 span=static_cast<UINT64>(d-1)*slice+static_cast<UINT64>(h-1)*pitch+static_cast<UINT64>(w)*block;
+  const UINT64 point=static_cast<UINT64>(bz)*slice+static_cast<UINT64>(by/bh)*pitch+static_cast<UINT64>(bx/bw)*block;
+  const UINT64 span=static_cast<UINT64>(d-1)*slice+static_cast<UINT64>((h+bh-1)/bh-1)*pitch+
+                    static_cast<UINT64>((w+bw-1)/bw)*block;
   if(b.offset>b.resource->bytes || point>b.resource->bytes-b.offset || span>b.resource->bytes-b.offset-point ||
       base>b.resource->heap->bytes || b.offset>b.resource->heap->bytes-base ||
       point>b.resource->heap->bytes-base-b.offset || span>b.resource->heap->bytes-base-b.offset-point) {fail();return;}
