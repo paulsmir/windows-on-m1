@@ -999,7 +999,11 @@ int main(int argc, char **argv) {
     hr = ID3D12Device_CheckFeatureSupport(c.device, D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options));
     printf("C53B TiledResourcesTier=%d hr=0x%08lx\n", (int)options.TiledResourcesTier, (unsigned long)hr);
     /* C65A first: min/max filtering does not need reserved resources */
-    if (argc > 1 && !strcmp(argv[1], "minmax")) {
+    /* the guest's toolrun.ps1 passes its output path first (EXP1901): the
+     * mode is any argument */
+    int minmax_mode = 0;
+    for (int i = 1; i < argc; ++i) minmax_mode |= !strcmp(argv[i], "minmax");
+    if (minmax_mode) {
         /* each mode on its own pipeline; the list is flushed per step */
         int ok = 1;
         for (int mode = 0; mode < 3; ++mode) ok &= minmax_step(&c, options.TiledResourcesTier, mode);
