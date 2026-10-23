@@ -23,12 +23,14 @@ typedef struct _ADMISSION_UMD_TRIM_SLOT {
 /* A slot may lose its residency reference only when nothing can reach its
  * canonical allocation before the slot is made resident again: no submission
  * holds it (being built or in flight), no CPU map, shared owner or source
- * hold, no presentation use, and it is GPU-local. A CPU-visible class BO made
- * resident again under pressure can land in 4 KiB system pages the UAT
- * cannot map (M2-f8), so SystemDirect slots keep their reference. */
+ * hold, and no presentation use. SystemDirect is eligible between CPU locks:
+ * CPU map reserves Transition through MakeResident, the paging wait and Lock;
+ * Mapped then pins the allocation until Unlock succeeds. GPU submissions
+ * restore residency under their submission holds. Placement still belongs to
+ * VidMm; the KMD must reject any unsupported aperture backing (M2-f8). */
 static inline int AdmissionUmdTrimEligible(const ADMISSION_UMD_TRIM_SLOT *s) {
   return s->Active && s->Resident && !s->Transition && !s->CopyHeld &&
-         !s->Mapped && !s->Direct && !s->SystemDirect && !s->Borrowed &&
+         !s->Mapped && !s->Direct && !s->Borrowed &&
          !s->KmtResidencyHeld && !s->SubmissionHolds && !s->SourceHolds &&
          s->KernelAllocation && s->Bytes;
 }

@@ -6,9 +6,11 @@ agx_win32_gpuva.c line 156, device removed), although Microsoft
 (PFND3DDDI_MAKERESIDENTCB) requires the driver to evict NumBytesToTrim bytes of
 its residency list and retry until nothing more can be trimmed.
 
-Invariants: only idle GPU-local slots lose their residency reference (never a
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+Invariants: only idle GPU-local or SystemDirect slots lose their residency reference (never a
 slot a submission, CPU map, shared owner or presentation still uses, never a
-CPU-visible SystemDirect BO, M2-f8); least recently used first; enough bytes to
+CPU-mapped SystemDirect BO); least recently used first; enough bytes to
 cover the request, at least one slot; nothing when nothing is eligible.
 """
 from pathlib import Path
@@ -40,11 +42,22 @@ int main(void) {
   for (unsigned i = 0; i < 12; ++i) s[i] = idle(32u << 20, 100u + i);
   s[0].Active = 0;          s[1].Resident = 0;     s[2].Transition = 1;
   s[3].CopyHeld = 1;        s[4].Mapped = 1;       s[5].Direct = 1;
-  s[6].SystemDirect = 1;    s[7].Borrowed = 1;     s[8].KmtResidencyHeld = 1;
+  s[6].Bytes = 0;    s[7].Borrowed = 1;     s[8].KmtResidencyHeld = 1;
   s[9].SubmissionHolds = 1; s[10].SourceHolds = 1; s[11].KernelAllocation = 0;
   for (unsigned i = 0; i < 12; ++i) assert(!AdmissionUmdTrimEligible(&s[i]));
   covered = 7;
   assert(AdmissionUmdTrimChoose(s, 12, 1u << 20, chosen, &covered) == 0 && covered == 0);
+  /* SystemDirect is evictable only between CPU locks / ownership holds. */
+  s[0] = idle(64ull << 20, 1); s[0].SystemDirect = 1;
+  assert(AdmissionUmdTrimChoose(s, 1, 32ull << 20, chosen, &covered) == 1);
+  assert(chosen[0] == 0 && covered == (64ull << 20));
+  int *blocked[] = { &s[0].Mapped, &s[0].Transition, &s[0].CopyHeld,
+                    &s[0].Direct, &s[0].Borrowed, &s[0].KmtResidencyHeld };
+  for (unsigned i=0; i<sizeof(blocked)/sizeof(blocked[0]); ++i) {
+    *blocked[i]=1; assert(!AdmissionUmdTrimEligible(&s[0])); *blocked[i]=0;
+  }
+  s[0].SubmissionHolds=1; assert(!AdmissionUmdTrimEligible(&s[0]));
+  s[0].SubmissionHolds=0;s[0].SourceHolds=1;assert(!AdmissionUmdTrimEligible(&s[0]));
   /* Least recently used first; ties keep slot order; stop once covered. */
   for (unsigned i = 0; i < 6; ++i) s[i] = idle(16u << 20, 0);
   s[0].LastUseFence = 50; s[1].LastUseFence = 10; s[2].LastUseFence = 30;

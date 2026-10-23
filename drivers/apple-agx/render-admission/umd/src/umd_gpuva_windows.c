@@ -257,7 +257,7 @@ static int wait_paging_at(ADMISSION_UMD_DEVICE *device, uint64_t fence,
                           UINT site, uint64_t token);
 
 /* M2-f11 (EXP1271): drop the persistent residency reference (EXP978) of idle
- * GPU-local slots, least recently used first, until Want bytes are covered
+ * GPU-local or unmapped SystemDirect slots, least recently used first, until Want bytes are covered
  * (umd_residency_trim.h). Returns the bytes dropped and their slot count. */
 static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
                                 UINT *trimmed) {
@@ -1272,14 +1272,36 @@ static int restore_residency(ADMISSION_UMD_DEVICE *device, uint64_t token) {
   D3DDDI_MAKERESIDENT request={};
   HRESULT hr=residency_request(device,&request,&handle,1u,&priority);
   va_record(device,6u,token,handle,0,request.PagingFenceValue,hr);
-  if((FAILED(hr) && hr!=E_PENDING) || (hr==E_PENDING && !request.PagingFenceValue))
-    return 0;
+  if((FAILED(hr) && hr!=E_PENDING) || request.NumAllocations!=1u) return 0;
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   slot=find_slot(device,token);
   if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
-  return hr!=E_PENDING ||
+  if(hr==E_PENDING && !request.PagingFenceValue) return 0;
+  return !request.PagingFenceValue ||
       wait_paging_at(device,request.PagingFenceValue,6u,token);
+}
+
+/* T6b: called only after ScreenMapBuffer reserves Transition, and before
+ * LockCb. Keep that reservation through paging and pointer publication so
+ * trim cannot drop the new reference between MakeResident and Mapped. */
+int AdmissionUmdGpuvaRestoreCpuMapResidency(ADMISSION_UMD_DEVICE *device,
+                                           uint64_t token) {
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  bool valid=slot && slot->SystemDirect && slot->Transition && !slot->Mapped &&
+      !slot->CopyHeld && !slot->SubmissionHolds && !slot->SourceHolds &&
+      !device->DrawTerminal && !device->ScreenClosing;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if(!valid) return 0;
+  if(restore_residency(device,token)) return 1;
+  /* An accepted reference may have an unfinished paging fence. Never let a
+   * later map observe Resident and skip that failed wait. Teardown retains
+   * the reference for its ordinary Evict/deallocation path. */
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  device->DrawTerminal=TRUE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  return 0;
 }
 
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,uint64_t token) {

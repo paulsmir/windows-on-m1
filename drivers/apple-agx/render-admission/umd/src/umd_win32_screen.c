@@ -567,9 +567,11 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   description.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
   stagingDescription = description.Allocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  /* EXP1025/EXP1027: small unshared buffers are one CPU-visible class
-   * allocation the GPU maps directly (the KMD keeps it in the local segment). */
-  systemDirect = !BorrowedStaging && Bytes <= ADMISSION_UMD_SYSTEM_DIRECT_BYTES;
+  /* C75/T6b: one CPU/GPU allocation up to the reported class limit.
+   * Idle SystemDirect slots can now release their residency references;
+   * CPU maps restore residency and finish paging before taking the lock.
+   * Persistent maps remain pinned until their matching Unlock succeeds. */
+  systemDirect = !BorrowedStaging && Bytes <= classInfo->MaximumBytes;
   if (!systemDirect) {
     description.Version = ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL;
     description.Allocation.Type = ADMISSION_WIN32_ALLOCATION_GPU_LOCAL;
@@ -955,7 +957,11 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
   }
   buffer = AdmissionUmdScreenFind(device, Token);
   if (buffer == NULL || !buffer->KernelAllocation || buffer->Mapped || buffer->Transition ||
-      buffer->SubmissionHolds || Bytes == 0ULL ||
+      buffer->SubmissionHolds || buffer->SourceHolds ||
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      buffer->CopyHeld ||
+#endif
+      Bytes == 0ULL ||
       Offset > buffer->Bytes || Bytes > buffer->Bytes - Offset ||
       (Access & buffer->Flags) != Access) {
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
@@ -966,8 +972,19 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
     D3DKMT_HANDLE allocation = AdmissionUmdScreenCpuAllocation(buffer);
 #ifdef APPLE_AGX_GPUVA_WINSYS
     BYTE *privateStaging = buffer->PrivateStaging;
+    BOOL systemDirect = buffer->SystemDirect;
 #endif
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    if (systemDirect && !AdmissionUmdGpuvaRestoreCpuMapResidency(device, Token)) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      buffer = AdmissionUmdScreenFind(device, Token);
+      if (buffer != NULL) buffer->Transition = FALSE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      device->LastScreenError = DXGI_ERROR_DEVICE_HUNG;
+      return 0;
+    }
+#endif
     ZeroMemory(&lock, sizeof(lock));
     lock.hAllocation = allocation;
     lock.Flags.LockEntire = 1u;

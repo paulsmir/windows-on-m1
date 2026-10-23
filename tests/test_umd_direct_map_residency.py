@@ -1,0 +1,123 @@
+"""WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+An evicted SystemDirect BO must restore residency and finish paging before
+LockCb / pointer publication. Transition must exclude trim/submission until
+Mapped takes over; a persistent map must remain pinned. Execute production
+map, restore, trim, submission and unmap bodies with controlled WDK callbacks.
+"""
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+from test_umd_persistent_residency import BODY, ROOT, SRC
+from test_umd_deallocated_slot_no_evict import function
+
+EXTRA = r'''
+typedef uint64_t APPLE_AGX_U64;
+typedef unsigned APPLE_AGX_U32;
+typedef unsigned char BYTE;
+typedef void *PVOID;
+enum { AppleAgxWin32BufferCpuRead=1, AppleAgxWin32BufferCpuWrite=2 };
+#define APPLE_AGX_GPUVA_WINSYS 1
+#define DXGI_ERROR_DEVICE_HUNG ((HRESULT)0x887a0006u)
+static unsigned locks,unlocks,waits;
+static bool fail_wait,fail_lock,fail_unlock;
+static unsigned expected_waits;
+static unsigned data[8];
+static ADMISSION_UMD_DEVICE *current;
+static void try_trim();
+static HRESULT lock_cb(HANDLE,D3DDDICB_LOCK *r) {
+ ++locks;auto &s=current->ScreenBuffers[0];
+ assert(s.Resident && s.Transition && !s.Mapped && "Lock before protected residency");
+ assert(waits==expected_waits && "Lock before paging completion");
+ try_trim();r->pData=fail_lock?NULL:data;return fail_lock?E_FAIL:S_OK;
+}
+static HRESULT unlock_cb(HANDLE,D3DDDICB_UNLOCK *r) {
+ ++unlocks;assert(r->NumAllocations==1);try_trim();return fail_unlock?E_FAIL:S_OK;
+}
+static int wait_paging_at(ADMISSION_UMD_DEVICE *d,uint64_t f,UINT,uint64_t t) {
+ assert(d==current && f==7 && t==10);++waits;try_trim();return !fail_wait;
+}
+static int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *,uint64_t) { return 1; }
+static int AdmissionUmdGpuvaPrepareDirectMap(ADMISSION_UMD_DEVICE *,uint64_t) { return 1; }
+static int AdmissionUmdGpuvaFinishDirectMap(ADMISSION_UMD_DEVICE *,uint64_t) { return 1; }
+static void AdmissionUmdStagingInvalidate(int *) {}
+@@PRODUCTION@@
+static void try_trim() {
+ UINT trimmed=99;assert(trim_residency(current,1,&trimmed)==0 && !trimmed);
+ uint64_t token=10,fence=0;
+ if(current->ScreenBuffers[0].Transition)
+   assert(make_resident(current,&token,1,&fence)==0);
+}
+int main() {
+ CB cb={mk,ev,lock_cb,unlock_cb};
+ for(unsigned scenario=0;scenario<12;++scenario) {
+   ADMISSION_UMD_DEVICE d={};d.Magic=ADMISSION_UMD_DEVICE_MAGIC;
+   d.PagingQueue=(HANDLE)1;d.KernelCallbacks=&cb;current=&d;
+   auto &s=d.ScreenBuffers[0];s.Active=TRUE;s.Token=10;s.KernelAllocation=0x100;
+   s.SystemDirect=TRUE;s.Bytes=64ull<<20;s.Flags=3;s.CanonicalGpuVa=0x10000;
+   residency_status=scenario==7 || scenario==9 || scenario==10?S_OK:E_PENDING;
+   returned_fence=scenario==8 || scenario==10?0:7;
+   accepted_count=scenario==9?0:1;
+   if(scenario==11)s.Resident=TRUE;
+   expected_waits=scenario==10 || scenario==11?0:1;
+   locks=unlocks=waits=made=evicted=0;fail_wait=scenario==1;fail_lock=scenario==2;
+   fail_unlock=scenario==3;refusals=scenario==4?100:0;
+   if(scenario==5)s.SourceHolds=1;
+   if(scenario==6)s.SubmissionHolds=1;
+   void *address=NULL;
+   int ok=AdmissionUmdScreenMapBuffer(&d,10,4,4,1,&address);
+   if(scenario==0 || scenario==3 || scenario==7 || scenario==10 || scenario==11) {
+     assert(ok && address==data+1 && s.Mapped && !s.Transition && s.Resident);
+     assert(made==(scenario==11?0u:1u) && locks==1 && waits==expected_waits);
+     try_trim();assert(evicted==0);
+     assert(AdmissionUmdScreenUnmapBuffer(&d,10)==!fail_unlock);
+     if(fail_unlock) { assert(s.Mapped);try_trim();fail_unlock=false;assert(AdmissionUmdScreenUnmapBuffer(&d,10)); }
+     UINT trimmed=0;assert(trim_residency(&d,1,&trimmed)==s.Bytes && trimmed==1);
+     assert(!s.Resident && !s.Mapped && !s.Transition);
+     /* A second map restores once more, with another paging wait. */
+     expected_waits=1;residency_status=E_PENDING;returned_fence=7;
+     waits=0;assert(AdmissionUmdScreenMapBuffer(&d,10,0,4,2,&address));
+     assert(made==(scenario==11?1u:2u) && waits==1 && address==data);
+     assert(AdmissionUmdScreenUnmapBuffer(&d,10));
+   } else {
+     assert(!ok && !address && !s.Mapped && !s.Transition);
+     assert(locks==(scenario==2));
+     if(scenario==1 || scenario==8) {
+       assert(d.DrawTerminal && s.Resident);
+       fail_wait=false;assert(!AdmissionUmdScreenMapBuffer(&d,10,0,4,1,&address));
+       assert(locks==0 && made==1); /* never bypass a failed paging wait */
+     }
+     if(scenario==5 || scenario==6)assert(made==0);
+     if(scenario==9)assert(d.DrawTerminal && !s.Resident);
+   }
+ }
+ puts("direct CPU map residency: PASS");
+}
+'''
+
+class DirectMapResidency(unittest.TestCase):
+    def test_restore_wait_lock_and_persistent_map_exclusion(self):
+        prefix = BODY[:BODY.index('@@FUNCS@@')]
+        prefix = prefix.replace('static HRESULT mk(', 'static HRESULT residency_status=E_PENDING;\nstatic ULONGLONG returned_fence=7;\nstatic UINT accepted_count=1;\nstatic HRESULT mk(')
+        prefix = prefix.replace('r->PagingFenceValue=7;return E_PENDING;', 'r->NumAllocations=accepted_count;r->PagingFenceValue=returned_fence;return residency_status;')
+        prefix = prefix.replace('uint64_t CanonicalGpuVa,Bytes,LastUseFence;',
+                                'uint64_t CanonicalGpuVa,Bytes,LastUseFence; void *LockedBase; UINT LockedAccess,MapEpoch,Flags; int Sync;')
+        prefix = prefix.replace('struct CB {', '''struct D3DDDICB_LOCK { D3DKMT_HANDLE hAllocation; struct { UINT LockEntire,ReadOnly,WriteOnly; } Flags; void *pData; };
+struct D3DDDICB_UNLOCK { UINT NumAllocations; D3DKMT_HANDLE *phAllocations; };
+struct CB {''')
+        prefix = prefix.replace('HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*);',
+                                'HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); HRESULT(*pfnLockCb)(HANDLE,D3DDDICB_LOCK*); HRESULT(*pfnUnlockCb)(HANDLE,D3DDDICB_UNLOCK*);')
+        prefix = prefix.replace('UINT Magic; SLOT ScreenBuffers', 'HRESULT LastScreenError; UINT Magic; SLOT ScreenBuffers')
+        gpu = SRC.read_text()
+        screen = (SRC.parent/'umd_win32_screen.c').read_text()
+        funcs = '\n'.join(function(gpu,n) for n in ('find_slot','release_copies','allocation_handle','translate_handles','evict','trim_residency','residency_request','make_resident','restore_residency'))
+        funcs += '\n' + function(gpu,'AdmissionUmdGpuvaRestoreCpuMapResidency',required=False)
+        funcs += '\n' + '\n'.join(function(screen,n) for n in ('AdmissionUmdScreenCpuAllocation','AdmissionUmdScreenFind','AdmissionUmdScreenMapBuffer','AdmissionUmdScreenUnmapBuffer'))
+        with tempfile.TemporaryDirectory(prefix='t6b-residency-') as tmp:
+            src,exe=Path(tmp)/'test.cpp',Path(tmp)/'test'
+            src.write_text(prefix+EXTRA.replace('@@PRODUCTION@@',funcs))
+            built=subprocess.run(['clang++','-std=c++17','-Wall','-Wno-unused-function','-fsanitize=address,undefined','-I',str(ROOT/'drivers/apple-agx/render-admission/umd/include'),str(src),'-o',str(exe)],capture_output=True,text=True)
+            self.assertEqual(built.returncode,0,built.stdout+built.stderr)
+            run=subprocess.run([str(exe)],capture_output=True,text=True)
+            self.assertEqual(run.returncode,0,run.stdout+run.stderr)
