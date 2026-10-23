@@ -177,6 +177,7 @@ Process review 2026-10-23 (EXP1887/EXP1888):
 - prepare.sh takes `AGX_M1N1=<macho>`; the at-proxy recovery reboots the
   experiment profile, i.e. the same m1n1. If that m1n1 cannot boot Windows
   (EXP1894), recovery hangs at AT_PROXY_SSH_NOT_UP.
+- prepare.sh with `AGX_M1N1` now writes the lastgood pair itself (`mk-lastgood.sh`, default lastgood m1n1 21c3648d, override `AGX_M1N1_LASTGOOD`); `probe-lint.sh <probe>` checks every referenced scratchpad binary exists (a renumbering once produced nonexistent probe names).
 - Before such a run, keep `full-owner<N>.sh.lastgood` + a manifest copy
   naming the last good m1n1; on a boot failure SIGTERM run_uefi (snapshot +
   Air reboot), swap them in (update the full-owner hash in
