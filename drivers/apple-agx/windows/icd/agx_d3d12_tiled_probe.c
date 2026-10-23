@@ -15,6 +15,8 @@
 #include "agx_d3d12_tiled_probe_minmax_cs.h"
 #include "agx_d3d12_tiled_probe_minmax_slot_cs.h"
 #include "agx_d3d12_tiled_probe_feedback_cs.h"
+#include "agx_d3d12_tiled_probe_uav_null_write_cs.h"
+#include "agx_d3d12_tiled_probe_uav_null_read_cs.h"
 #include "agx_d3d12_tiled_probe_minmax_volume_cs.h"
 #include "agx_d3d12_tiled_probe_minmax_cube_cs.h"
 #include <math.h>
@@ -502,6 +504,110 @@ static int feedback_step(Ctx *c, D3D12_TILED_RESOURCES_TIER tier) {
     return SUCCEEDED(hr) && !bad;
 }
 
+/* C53T UAV_NULL: Tier 2 typed UAV accesses of a NULL tile. A reserved
+ * R32_UINT 256x128 UAV texture, tile 0 mapped and tile 1 NULL: one dispatch
+ * stores 0xabcd at both tile centres, a second loads them back with a
+ * status. Expected (0xabcd, mapped) and (0 -- the write discarded, the read
+ * zero --, not mapped). */
+static int uav_null_step(Ctx *c, D3D12_TILED_RESOURCES_TIER tier) {
+    if (tier < D3D12_TILED_RESOURCES_TIER_2) {
+        puts("AGX_D3D12_C53B_UAV_NULL: SKIP tier 1 (set APPLE_AGX_D3D12_TILED=2)");
+        return 1;
+    }
+    D3D12_RESOURCE_DESC td = {D3D12_RESOURCE_DIMENSION_TEXTURE2D, 0, 256, 128, 1, 1, DXGI_FORMAT_R32_UINT, {1, 0},
+                              D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS};
+    ID3D12Resource *tex = NULL, *out = NULL, *rb = NULL;
+    ID3D12Heap *heap = NULL;
+    ID3D12DescriptorHeap *views = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *write = NULL, *read = NULL;
+    ID3DBlob *blob = NULL;
+    HRESULT hr = ID3D12Device_CreateReservedResource(c->device, &td, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL,
+                                                     &IID_ID3D12Resource, (void **)&tex);
+    D3D12_HEAP_DESC hd = {TILE, {D3D12_HEAP_TYPE_DEFAULT}, 0, D3D12_HEAP_FLAG_DENY_BUFFERS | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES};
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateHeap(c->device, &hd, &IID_ID3D12Heap, (void **)&heap);
+    D3D12_TILED_RESOURCE_COORDINATE start = {0, 0, 0, 0};
+    D3D12_TILE_REGION_SIZE size = {1, FALSE, 0, 0, 0};
+    UINT heap_start = 0, count = 1;
+    if (SUCCEEDED(hr))
+        ID3D12CommandQueue_UpdateTileMappings(c->queue, tex, 1, &start, &size, heap, 1, NULL, &heap_start, &count,
+                                              D3D12_TILE_MAPPING_FLAG_NONE);
+    rb = SUCCEEDED(hr) ? buffer(c, D3D12_HEAP_TYPE_READBACK, 16, D3D12_RESOURCE_STATE_COPY_DEST) : NULL;
+    if (rb) {
+        D3D12_HEAP_PROPERTIES def = {D3D12_HEAP_TYPE_DEFAULT};
+        D3D12_RESOURCE_DESC od = {D3D12_RESOURCE_DIMENSION_BUFFER, 0, 16, 1, 1, 1, DXGI_FORMAT_UNKNOWN, {1, 0},
+                                  D3D12_TEXTURE_LAYOUT_ROW_MAJOR, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS};
+        hr = ID3D12Device_CreateCommittedResource(c->device, &def, D3D12_HEAP_FLAG_NONE, &od,
+                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL, &IID_ID3D12Resource,
+                                                  (void **)&out);
+    } else if (SUCCEEDED(hr)) {
+        hr = E_OUTOFMEMORY;
+    }
+    D3D12_DESCRIPTOR_HEAP_DESC vd = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(c->device, &vd, &IID_ID3D12DescriptorHeap, (void **)&views);
+    if (SUCCEEDED(hr)) {
+        D3D12_CPU_DESCRIPTOR_HANDLE vh;
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(views, &vh);
+        D3D12_UNORDERED_ACCESS_VIEW_DESC uav = {DXGI_FORMAT_R32_UINT, D3D12_UAV_DIMENSION_TEXTURE2D};
+        ID3D12Device_CreateUnorderedAccessView(c->device, tex, NULL, &uav, vh);
+    }
+    D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0, 0};
+    D3D12_ROOT_PARAMETER params[2] = {{D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}, {D3D12_ROOT_PARAMETER_TYPE_UAV}};
+    params[0].DescriptorTable.NumDescriptorRanges = 1;
+    params[0].DescriptorTable.pDescriptorRanges = &range;
+    params[1].Descriptor.ShaderRegister = 1;
+    D3D12_ROOT_SIGNATURE_DESC rd = {2, params, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    if (SUCCEEDED(hr)) hr = D3D12SerializeRootSignature(&rd, D3D_ROOT_SIGNATURE_VERSION_1, &blob, NULL);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(c->device, 0, ID3D10Blob_GetBufferPointer(blob),
+                                              ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature, (void **)&root);
+    D3D12_COMPUTE_PIPELINE_STATE_DESC wd = {root, {g_uav_null_write_cs, sizeof(g_uav_null_write_cs)}};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC rdsc = {root, {g_uav_null_read_cs, sizeof(g_uav_null_read_cs)}};
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateComputePipelineState(c->device, &wd, &IID_ID3D12PipelineState, (void **)&write);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateComputePipelineState(c->device, &rdsc, &IID_ID3D12PipelineState, (void **)&read);
+    if (SUCCEEDED(hr)) {
+        D3D12_GPU_DESCRIPTOR_HANDLE vg;
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(views, &vg);
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(c->list, 1, &views);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(c->list, root);
+        ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(c->list, 0, vg);
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(c->list, 1, ID3D12Resource_GetGPUVirtualAddress(out));
+        ID3D12GraphicsCommandList_SetPipelineState(c->list, write);
+        ID3D12GraphicsCommandList_Dispatch(c->list, 1, 1, 1);
+        D3D12_RESOURCE_BARRIER uavb = {D3D12_RESOURCE_BARRIER_TYPE_UAV};
+        uavb.UAV.pResource = tex;
+        ID3D12GraphicsCommandList_ResourceBarrier(c->list, 1, &uavb);
+        ID3D12GraphicsCommandList_SetPipelineState(c->list, read);
+        ID3D12GraphicsCommandList_Dispatch(c->list, 1, 1, 1);
+        barrier(c, out, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(c->list, rb, 0, out, 0, 16);
+        hr = ctx_flush(c);
+    }
+    UINT got[4] = {0};
+    UINT32 *words = NULL;
+    D3D12_RANGE whole = {0, 16}, none = {0, 0};
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(rb, 0, &whole, (void **)&words);
+    if (SUCCEEDED(hr)) {
+        memcpy(got, words, sizeof(got));
+        ID3D12Resource_Unmap(rb, 0, &none);
+    }
+    const UINT bad = (got[0] != 0xabcdu) + (got[1] != 1u) + (got[2] != 0u) + (got[3] != 0u);
+    printf("C53B uav null tier=%d mapped (0x%x, %u) null (0x%x, %u)\n", (int)tier, got[0], got[1], got[2], got[3]);
+    result("UAV_NULL", SUCCEEDED(hr) && !bad, hr, bad);
+    if (read) ID3D12PipelineState_Release(read);
+    if (write) ID3D12PipelineState_Release(write);
+    if (root) ID3D12RootSignature_Release(root);
+    if (blob) ID3D10Blob_Release(blob);
+    if (views) ID3D12DescriptorHeap_Release(views);
+    if (rb) ID3D12Resource_Release(rb);
+    if (out) ID3D12Resource_Release(out);
+    if (heap) ID3D12Heap_Release(heap);
+    if (tex) ID3D12Resource_Release(tex);
+    return SUCCEEDED(hr) && !bad;
+}
+
 /* C65A volume/cube: a 4x4x4 volume or a 4x4 cube (2 mips) through a
  * one-sampler table, against the CPU min/max reference (D3D cube face
  * selection; the cube points stay inside their faces) */
@@ -909,6 +1015,7 @@ int main(int argc, char **argv) {
     const int buffers = buffer_steps(&c);
     const int null_read = null_read_step(&c, options.TiledResourcesTier);
     const int feedback = feedback_step(&c, options.TiledResourcesTier);
-    printf("AGX_D3D12_C53B: %s\n", textures && buffers && null_read && feedback ? "PASS" : "FAIL");
+    const int uav_null = uav_null_step(&c, options.TiledResourcesTier);
+    printf("AGX_D3D12_C53B: %s\n", textures && buffers && null_read && feedback && uav_null ? "PASS" : "FAIL");
     return 0;
 }
