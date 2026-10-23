@@ -53,4 +53,7 @@ int main(){pipe_context p={draw};Device d={nullptr,0,MESA_PRIM_COUNT,&p,nullptr,
     def test_indexed_instanced_zero_does_not_use_index_or_topology(self):
         self.check('DrawIndexedInstanced','IndexCountPerInstance')
 
+    def test_instanced_zero_does_not_use_topology(self):
+        self.check('DrawInstanced','VertexCountPerInstance')
+
 if __name__=='__main__': unittest.main()

@@ -4209,13 +4209,13 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    AgxD3d10NoTargetReceipt(pDevice,3u,IndexCountPerInstance);
    pDevice->pipe->draw_vbo(pDevice->pipe,&info,0,NULL,&draw,1);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawInstanced','''   Device *pDevice=CastDevice(hDevice);
+   if(pDevice && (!InstanceCount || !VertexCountPerInstance)) return;
    if(!pDevice || pDevice->primitive>=MESA_PRIM_COUNT) {
       SetError(hDevice,E_NOTIMPL);return;
    }
    /* D3D-G10c: adjacency topologies are drawn natively; Asahi feeds them
     * to the bound geometry shader or a passthrough one (agx_state.c
     * agx_needs_passthrough_gs). The graph-capture era refused them. */
-   if(!InstanceCount || !VertexCountPerInstance) return;
    if(AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
       HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
       if(FAILED(status)) {SetError(hDevice,status);return;}
