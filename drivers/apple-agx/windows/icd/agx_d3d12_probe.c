@@ -729,6 +729,14 @@ static void transition(ID3D12GraphicsCommandList *list, ID3D12Resource *resource
  * Events transfer CPU ownership only after run_list proves GPU completion. */
 static int g_warp;
 static HANDLE c76_shared, c76_ready, c76_go, c76_done, c76_parent;
+/* The presentation receipt is from an internal helper also used by D3D12;
+ * it does not identify the runtime DDI. Keep all three boundaries distinct. */
+static unsigned c76_open_receipt_kind(const char *line) {
+    if (!strncmp(line, "d3d12-open-heap-resource ", sizeof("d3d12-open-heap-resource ") - 1)) return 1;
+    if (!strncmp(line, "measure-d3d12-shared-import ", sizeof("measure-d3d12-shared-import ") - 1)) return 2;
+    if (!strncmp(line, "presentation-open ", sizeof("presentation-open ") - 1)) return 3;
+    return 0;
+}
 static HRESULT c76_wait(HANDLE event, HANDLE peer, const char *stage) {
     HANDLE handles[2] = {event, peer};
     DWORD result = WaitForMultipleObjects(2, handles, FALSE, 15000);
@@ -934,7 +942,7 @@ cleanup:
     if (done) CloseHandle(done);
     if (parent) CloseHandle(parent);
     if (child_exited) {
-        char line[1024]; unsigned open_receipts = 0, presentation_receipts = 0;
+        char line[1024]; unsigned open_receipts = 0, import_receipts = 0, presentation_receipts = 0;
         FILE *file = NULL;
         (void)_wfopen_s(&file, log_path, L"r");
         if (file) { while (fgets(line, sizeof(line), file)) fputs(line, stdout); fclose(file); }
@@ -942,13 +950,16 @@ cleanup:
         (void)_wfopen_s(&file, trace_path, L"r");
         if (file) {
             while (fgets(line, sizeof(line), file)) {
-                if (!strncmp(line, "d3d12-open-", 11) && strncmp(line, "d3d12-open-adapter ", 18)) { ++open_receipts; fputs(line, stdout); }
-                if (!strncmp(line, "presentation-open ", 18)) { ++presentation_receipts; fputs(line, stdout); }
+                const unsigned kind = c76_open_receipt_kind(line);
+                if (kind == 1) ++open_receipts;
+                if (kind == 2) ++import_receipts;
+                if (kind == 3) ++presentation_receipts;
+                if (kind) fputs(line, stdout);
             }
             fclose(file);
         }
-        printf("C76A umd_open=%s d3d12-open-receipts=%u presentation-open-receipts=%u kmd_open=UNVERIFIED (collect KMD trace)\n",
-            open_receipts || presentation_receipts ? "OBSERVED" : "UNVERIFIED", open_receipts, presentation_receipts);
+        printf("C76A umd_open=%s d3d12-open-receipts=%u shared-import-receipts=%u presentation-helper-receipts=%u kmd_open=UNVERIFIED (collect KMD trace)\n",
+            open_receipts || import_receipts ? "OBSERVED" : "UNVERIFIED", open_receipts, import_receipts, presentation_receipts);
     } else printf("C76A umd_open=UNVERIFIED kmd_open=UNVERIFIED child did not exit normally\n");
     printf("AGX_D3D12_C76A: %s route=child-process hr=0x%08lx passes=%u child_exit=%lu\n",
            SUCCEEDED(hr) && passes == 2 && child_exited && exit_code == 0 ? "PASS" : "FAIL", (unsigned long)hr, passes, exit_code);

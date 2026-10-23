@@ -184,3 +184,31 @@ int main(void) {
             src=Path(tmp)/'child.c';exe=Path(tmp)/'child';src.write_text(shim+body+main)
             subprocess.run(['clang','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',str(src),'-o',str(exe)],check=True)
             subprocess.run([str(exe)],check=True,stdout=subprocess.DEVNULL,timeout=15)
+
+    def test_open_receipts_distinguish_ddi_import_and_internal_helper(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        C76A ignored measure-d3d12-shared-import and counted presentation-open
+        as a runtime route. Execute the probe classifier on real receipt names;
+        adapter creation and unrelated or truncated lines must not count.
+        """
+        source=PROBE.read_text()
+        self.assertIn('static unsigned c76_open_receipt_kind(', source,
+                      'probe cannot distinguish the D3D12 DDI from its internal helper')
+        start=source.index('static unsigned c76_open_receipt_kind(')
+        helper=source[start:source.index('\n}',start)+2]
+        code='#include <assert.h>\n#include <string.h>\n'+helper+r'''
+int main(void) {
+ assert(c76_open_receipt_kind("d3d12-open-heap-resource hr=0x00000000") == 1);
+ assert(c76_open_receipt_kind("measure-d3d12-shared-import hr=0x00000000") == 2);
+ assert(c76_open_receipt_kind("presentation-open hr=0x00000000") == 3);
+ assert(!c76_open_receipt_kind("d3d12-open-adapter hr=0x00000000"));
+ assert(!c76_open_receipt_kind("d3d12-open-heap-resource"));
+ assert(!c76_open_receipt_kind("presentation-open-other hr=0x00000000"));
+ assert(!c76_open_receipt_kind("measure-d3d12-presentation hr=0x00000000"));
+ assert(!c76_open_receipt_kind(""));
+}
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            src=Path(tmp)/'receipts.c';exe=Path(tmp)/'receipts';src.write_text(code)
+            subprocess.run(['clang','-std=c11','-Wall','-Wextra','-Werror',str(src),'-o',str(exe)],check=True)
+            subprocess.run([str(exe)],check=True)

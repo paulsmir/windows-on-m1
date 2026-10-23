@@ -142,7 +142,12 @@ using HRESULT=int; using VOID=void; using D3DKMT_HANDLE=unsigned;
 constexpr UINT64 kHeapPage=65536;
 constexpr unsigned D3D12DDI_TL_ROW_MAJOR=1;
 struct D3D12DDI_RESOURCE_ALLOCATION_INFO {UINT64 ResourceDataAlignment,AdditionalDataHeaderAlignment,AdditionalDataAlignment,ResourceDataSize;unsigned Layout,MipLevelSwizzleTransition;};
-void AdmissionUmdDiagnostic(const char*,int,const unsigned*,unsigned) {}
+unsigned open_receipts,receipt_allocation,receipt_format,receipt_pitch;
+void AdmissionUmdDiagnostic(const char *name,int,const unsigned *values,unsigned n) {
+ if(!strcmp(name,"d3d12-open-heap-resource")) {
+  assert(n==5);++open_receipts;receipt_allocation=values[0];receipt_format=values[1];receipt_pitch=values[4];
+ }
+}
 constexpr HRESULT S_OK=0,E_FAIL=-1;
 constexpr unsigned D3D12DDI_RT_TEXTURE1D=2,D3D12DDI_RT_TEXTURE2D=3,D3D12DDI_RT_TEXTURE3D=4;
 constexpr unsigned AGX_VOLUME_MAX_SLOTS=6;
@@ -204,11 +209,13 @@ int main() {
   D3D12DDI_RESOURCE_ALLOCATION_INFO published={};D3DKMT_HANDLE handle=0;
   CheckExistingResourceAllocationInfo({&device},{&resource},&published,&handle);
   assert(published.ResourceDataSize==expected && handle==29);
+  assert(open_receipts==imports && receipt_allocation==29 && receipt_format==format && receipt_pitch==desc.Pitch);
   assert(resource.format==format && resource.width==width && resource.height==height && resource.layers==1 && resource.levels==1);
   assert(OpenHeapAndResource({&device},&arg,{nullptr},{&device},{&resource})==S_OK);
   assert(resource.heap==&resource.own_heap && resource.own_heap.bytes==expected);
   fail_import=true; const auto before=imports;
   assert(OpenHeapAndResource({&device},&arg,{&heap},{&device},{&resource})==E_FAIL);
+  assert(open_receipts==imports);
   assert(imports==before+1 && !heap.native && !heap.presentation && !heap.allocation);
   fail_import=false;
  }

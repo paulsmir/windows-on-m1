@@ -2575,6 +2575,9 @@ static HRESULT APIENTRY OpenHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12
         HRESULT hr = AgxD3d12OwnerOpenSharedTexture(owner, arg->hKMResource.handle, info.hAllocation,
             info.pPrivateDriverData, info.PrivateDriverDataSize, arg->pPrivateDriverData, arg->PrivateDriverDataSize,
             runtime_resource.handle, &texture, &heap->presentation);
+        const UINT receipt[] = {info.hAllocation, description.Format, description.Width, description.Height,
+                                description.Pitch};
+        AdmissionUmdDiagnostic("d3d12-open-heap-resource", hr, receipt, 5);
         if (FAILED(hr)) return hr;
         heap->native = texture.Resource;
         heap->gpuva = texture.GpuVa;
