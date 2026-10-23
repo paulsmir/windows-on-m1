@@ -1038,6 +1038,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   if(success) step=3u;
   /* EXP999: skip chunks whose content equals the canonical copy. */
   bool chunked=AdmissionUmdStagingChunked(slot->Bytes,APPLE_AGX_G3_COPY_CAPACITY)!=0;
+  ULONGLONG moved=0u;
   if(success) for(uint64_t offset=0;offset<slot->Bytes;) {
     UINT count=(UINT)((slot->Bytes-offset)>APPLE_AGX_G3_COPY_CAPACITY ?
         APPLE_AGX_G3_COPY_CAPACITY : slot->Bytes-offset);
@@ -1059,6 +1060,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
           AdmissionUmdStagingHash(address+offset,count) : chunk_hash);
     if(transfer_count) ++*transfer_count;
     if(transfer_bytes) *transfer_bytes+=count;
+    moved+=count;
     offset+=count;
   }
   if(success && chunked) AdmissionUmdStagingChunksValidate(&slot->Chunks);
@@ -1076,9 +1078,11 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
       UINT word; CopyMemory(&word,address+at,sizeof(word));
       ++samples; if(word) ++nonzero;
     }
-    UINT values[8]={(UINT)download,(UINT)slot->Token,(UINT)slot->Bytes,nonzero,samples,
+    /* the last value: bytes that crossed (current chunks are skipped) */
+    UINT values[9]={(UINT)download,(UINT)slot->Token,(UINT)slot->Bytes,nonzero,samples,
         slot->ClassId,(UINT)temporary | ((UINT)slot->Mapped<<1) |
-        ((UINT)slot->Borrowed<<2) | ((UINT)slot->Direct<<3),(UINT)slot->KernelAllocation};
+        ((UINT)slot->Borrowed<<2) | ((UINT)slot->Direct<<3),(UINT)slot->KernelAllocation,
+        (UINT)moved};
     AdmissionUmdDiagnostic("measure-xfer",S_OK,values,ARRAYSIZE(values));
   }
   /* Borrowed/imported storage must be unlocked before publication. Native
