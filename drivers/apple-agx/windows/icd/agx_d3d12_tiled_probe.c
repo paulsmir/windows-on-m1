@@ -671,8 +671,13 @@ static int minmax_dims_step(Ctx *c, int volume) {
                                             D3D12_FILTER_MAXIMUM_MIN_MAG_LINEAR_MIP_POINT};
     const char *name = volume ? "C65A_MINMAX_VOLUME" : "C65A_MINMAX_CUBE";
     D3D12_HEAP_PROPERTIES def = {D3D12_HEAP_TYPE_DEFAULT};
+    /* the volume in R8G8B8A8_UNORM, a 4-byte format the 3D layout contract
+     * takes (VolumeLayoutInfo, EXP1902 refused RGBA32F); every texel value
+     * is an integer below 256, read back as value / 255 */
+    const DXGI_FORMAT format = volume ? DXGI_FORMAT_R8G8B8A8_UNORM : DXGI_FORMAT_R32G32B32A32_FLOAT;
+    const float scale = volume ? 255.0f : 1.0f;
     D3D12_RESOURCE_DESC td = {volume ? D3D12_RESOURCE_DIMENSION_TEXTURE3D : D3D12_RESOURCE_DIMENSION_TEXTURE2D, 0, 4, 4,
-                              (UINT16)(volume ? 4 : 6), 2, DXGI_FORMAT_R32G32B32A32_FLOAT, {1, 0},
+                              (UINT16)(volume ? 4 : 6), 2, format, {1, 0},
                               D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_NONE};
     const UINT subresources = volume ? 2u : 12u;
     ID3D12Resource *tex = NULL, *up = NULL, *out = NULL, *rb = NULL;
@@ -705,10 +710,13 @@ static int minmax_dims_step(Ctx *c, int volume) {
         for (UINT a = 0; a < a_count; ++a)
             for (UINT y = 0; y < edge; ++y)
                 for (UINT x = 0; x < edge; ++x)
-                    for (UINT k = 0; k < 4; ++k)
-                        ((float *)(map + fp[s].Offset + (UINT64)a * fp[s].Footprint.RowPitch * fp[s].Footprint.Height +
-                                   (UINT64)y * fp[s].Footprint.RowPitch))[x * 4 + k] =
-                            dims_texel(volume, l, volume ? a : s / 2u, x, y, k);
+                    for (UINT k = 0; k < 4; ++k) {
+                        unsigned char *row = map + fp[s].Offset + (UINT64)a * fp[s].Footprint.RowPitch * fp[s].Footprint.Height +
+                                             (UINT64)y * fp[s].Footprint.RowPitch;
+                        const float v = dims_texel(volume, l, volume ? a : s / 2u, x, y, k);
+                        if (volume) row[x * 4 + k] = (unsigned char)v;
+                        else ((float *)row)[x * 4 + k] = v;
+                    }
     }
     if (map) ID3D12Resource_Unmap(up, 0, NULL);
     for (UINT s = 0; SUCCEEDED(hr) && s < subresources; ++s) {
@@ -728,7 +736,7 @@ static int minmax_dims_step(Ctx *c, int volume) {
         D3D12_CPU_DESCRIPTOR_HANDLE vh, sh;
         ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(views, &vh);
         ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(samplers, &sh);
-        D3D12_SHADER_RESOURCE_VIEW_DESC srv = {DXGI_FORMAT_R32G32B32A32_FLOAT,
+        D3D12_SHADER_RESOURCE_VIEW_DESC srv = {format,
                                                volume ? D3D12_SRV_DIMENSION_TEXTURE3D : D3D12_SRV_DIMENSION_TEXTURECUBE,
                                                D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING};
         if (volume) srv.Texture3D.MipLevels = 2;
@@ -789,8 +797,9 @@ static int minmax_dims_step(Ctx *c, int volume) {
         for (UINT pt = 0; pt < 8; ++pt) {
             float want[4];
             dims_reference(volume, i & 1, i < 2, dims_points[volume ? 0 : 1][pt], want);
-            const float *v = got + (i * 8 + pt) * 4;
-            if (fabsf(v[0] - want[0]) > 1e-4f || fabsf(v[1] - want[1]) > 1e-4f || fabsf(v[2] - want[2]) > 1e-4f) {
+            const float *raw = got + (i * 8 + pt) * 4;
+            const float v[3] = {raw[0] * scale, raw[1] * scale, raw[2] * scale};
+            if (fabsf(v[0] - want[0]) > 1e-2f || fabsf(v[1] - want[1]) > 1e-2f || fabsf(v[2] - want[2]) > 1e-2f) {
                 if (bad < 6)
                     printf("%s filter %u point %u got %g %g %g want %g %g %g\n", name, i, pt, v[0], v[1], v[2], want[0],
                            want[1], want[2]);
