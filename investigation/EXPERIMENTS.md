@@ -61533,3 +61533,18 @@ EXP1916 ACTUAL 2026-10-23T19:04:04Z:
 - Night Raid A/B (after1916.sh) both aborted cleanly after 8 min. 3DMark.exe ran but its only window was the splash "Initializing..." (screenshot evidence/EXP1916NA/nr-abort.png); the SSH-side MainWindowTitle stayed empty.
   - 3DMark reached the menu in EXP1906N; something since then (driver change, SystemInfo scan or the trace variable) blocks its initialization.
   - Open item, deprioritised by the user's GravityMark focus (2026-10-23). The Steam launches stayed within the approval; no other session was kicked.
+
+EXP1917 HARDWARE BEFORE 2026-10-23T19:05:03Z:
+- Package 30.0.1917.0 from 82499464 = EXP1916 c354948b + Codex T3c (b9bb6389 shared uploads published through GPU staging, d0c9b046 receipts) + T7b test fix + Codex T7c d2dccbf6 (General-class BOs eligible only for segment 3, or segment 2 without the pool; the aperture is excluded; SystemDirect unchanged).
+- Probe probe1917.sh: SHORT profile on the user's request (2026-10-23 'focus on GravityMark'): package state, GravityMark D3D12 10k and 2k (90 s timeout), KMD receipts. The full set (probe1917.full.sh, D3D12 probe e1917 (arm64 5fc59d46, x64 d5e5b930, x86 8254ecd2; C76A counts the real shared-import receipts).
+- ATOMIC CONTRACT: none -- separate lines:
+  - T7c: boot/DWM/samples first (Windows admission of memory-only CPU-visible shapes), then GravityMark D3D12 without G4 Parse/Unmapped;
+  - T3c: not measured in this short profile (full set later).
+- WHY THIS HYPOTHESIS:
+  (1) EXP1915 v3 receipt: a 129 MiB CPU-visible General BO on scattered 4 KiB aperture pages had no published 16 KiB leaf;
+  (2) EXP1915 C76A 4274 mismatches, reproduced offline exactly (upload left in the CPU shadow).
+- WHAT IS STILL UNKNOWN: whether Windows/VidMm admits and locks memory-only CPU-visible General BOs (EXP1027/EXP1266 rejected earlier shapes); behaviour under GravityMark memory pressure without the aperture.
+- Expected: desktop normal (boot + DWM); GravityMark D3D12 without G4 refusal (E_OUTOFMEMORY or trimming instead); GravityMark D3D11 15 FPS unchanged.
+- Failure criteria: boot/DWM failure, regressions, new removals, hang. Recovery rec1917h (visible).
+- Hashes: sys 354d06e65869, UmdArm64 9c09e549d4bb, UmdX64 4e0adc4abf8c, Umd32 08d7d2cd22f8; manifest 5d00068ec50e, hardware-manifest 698e318bbf94; probe1917.sh b0f8ae18995b (PROBE_LINT_OK); visible recovery rec1917h 69bdc17a7a4b0efe; m1n1 0d3a75b3.
+- Recovery rec1917h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1917-native-placement/run1917.sh.
