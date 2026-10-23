@@ -61149,3 +61149,24 @@ EXP1905 M1N1_VGIC_PRIORITY_GRAVITYMARK HARDWARE ACTUAL 2026-10-23T11:03:37Z: RC 
   - The app fills the segment, and the driver-internal staging for a texture upload (Asahi texture_map of a twiddled texture) no longer fits.
 - VERDICT: m1n1 0d3a75b3 boot/run-stable (CONFIRMED for this load; the earlier GravityMark hangs came about 60 s into scene creation, which neither run reached this time, so the 0x101 evidence stays partial). Two driver gaps named: C69 D3D11 UAV format caps; a D3D12 memory budget versus internal staging.
 - Next: EXP1906 on m1n1 0d3a75b3, with GravityMark D3D12 at 10000 and 2000 asteroids (memory discriminator).
+
+EXP1906 C69_ZLS_C21H HARDWARE BEFORE 2026-10-23T11:15:51Z:
+- Package 30.0.1906.0 from ff194dc8 = EXP1904 44a8f15f + 26c0f3ca C69 (D3D11 typed UAV store/load caps) + 37123151 (transient/1x1 ZLS accepted) + the fork's c7ab7193 C21H (BC Texture3D).
+- Build: EXP1906_PACKAGE_BUILD_PASS. sys 84413da0b72c, Umd 352ef89988f2, UmdArm64 d85fce68d519, UmdX64 a4baff3e4fe0, Umd32 be8c84423a00.
+- Gates: HASHES_MATCH 25, stage PASS, visible recovery PASS (rec1906h). The 3dd316cd build (without C69) was superseded before install.
+- m1n1 0d3a75b3 (EXP1905 boot-stable; the experiment m1n1 from now on; lastgood 21c3648d launcher + manifest prepared). Guest hash lists restored (bad 0 expected).
+- Probe probe1906.sh 0fb4c025cc5a (PROBE_LINT_OK):
+  - regression e1904 at 12_1, FL12=0;
+  - tiled probe 617d44cc (default, minmax, volume with C21H);
+  - D3D9, then GravityMark D3D11 10k, D3D12 10k and D3D12 2k asteroids (memory discriminator);
+  - KMD receipts.
+- Then by hand: Night Raid GT1+GT2 (ZLS fix).
+- ATOMIC CONTRACT: none -- C69 has the GravityMark D3D11 line, ZLS has Night Raid GT2, C21H has the volume lines.
+- WHY THIS HYPOTHESIS:
+  (1) EXP1905 GravityMark D3D11 E_INVALIDARG at a typed RG32F UAV load, with no UAV format bits reported;
+  (2) EXP1904N GT2 BindFailure 332 (g4_zls_valid) against Asahi's zero ZLS control for a transient depth;
+  (3) EXP1905 D3D12 out of memory with the app's heaps at 1.86 GiB of a 2.6 GiB segment.
+- WINDOWS CONTRACT: D3D11 per-format UAV_READS defines TypedUAVLoadAdditionalFormats.
+- WHAT IS STILL UNKNOWN: GravityMark D3D11's next stage; whether D3D12 memory scales with asteroids.
+- Expected: regression 118/0 x3; C21H PASS; GravityMark D3D11 past renderer creation; D3D12 2k completes if memory-bound; GT2 renders or names the next step.
+- Failure criteria: regressions, hang (snapshots; vGIC evidence). Recovery rec1906h. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1906-zls-c69/run1906.sh.
