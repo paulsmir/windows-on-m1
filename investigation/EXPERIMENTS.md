@@ -61443,3 +61443,15 @@ EXP1913 ACTUAL 2026-10-23T16:28:13Z:
   - New first refusal: measure-d3d12-texture-region-copy hr=E_INVALIDARG {001000c7, 07090000, 00800080}, then measure-d3d12-execute E_INVALIDARG. This is the owner texture-region copy path: handed to the fork session.
   - make-resident trims succeed (E_PENDING with trimmed slots).
 - C77 (Codex T3, shared open): AGX_D3D12_C76A FAIL hr=0x887a0036 on all ABIs at "distinct device ... second=NULL". The probe cannot create a second distinct D3D12 device on one adapter (D3D12 returns the singleton device), so the open path was never exercised. Probe defect, verdict INCONCLUSIVE; handed back to Codex (T3b: open from a D3D11 device or a second process).
+
+EXP1914 HARDWARE BEFORE 2026-10-23T16:41:07Z:
+- Package 30.0.1914.0 from 5614bdae (rebuilt twice; EXP1914-dwm-headroom and EXP1914-headroom-t7 superseded, never installed) = EXP1913 3f2cd88e + Codex T7 a3a02f9b (receipt-only Wom1G4SubmitFailure v3 allocation provenance) + C76 revert a67bfe0e + Codex T8: b5f421b1 AdmissionPoolMayGrow = HighMemoryCondition && !LowMemoryCondition (fail closed without High); under pressure, reclaim held granules and empty slabs at once (no ReleaseDelay/SpareLimit). 75c6d580 design note M2-f7c.
+- Probe probe1914.sh = probe1913 (e1913 D3D12 probe, GravityMark with XFER, PRESSURE).
+- ATOMIC CONTRACT: none -- one driver variable (the pool growth gate plus its pressure reclaim, one policy per M2-f7c).
+- WHY THIS HYPOTHESIS: EXP1911 dwm.exe c00001ad STATUS_FATAL_MEMORY_EXHAUSTION with the pool at 2688/2688 MiB under the C73 low floor; EXP1907 showed the high floor alone refusing early, so the pressure reclaim returns the held 200-280 MiB.
+- WINDOWS CONTRACT: Standard Event Objects (High/LowMemoryCondition); CreateAllocation returns STATUS_NO_MEMORY.
+- WHAT IS STILL UNKNOWN: how far GravityMark D3D12 gets with the stricter gate after reclaim (compare with EXP1913); whether DWM survives.
+- Expected: regressions as EXP1913; no DWM crash during GravityMark; PRESSURE alive; GravityMark may hit OOM earlier (E_OUTOFMEMORY, not removal or crash).
+- Failure criteria: DWM crash, guest starvation, regressions, hang.
+- Hashes: sys 7564d6eb256d, UmdArm64 4db453dc7dcf, UmdX64 a56b6052d277, Umd32 ba66269c1ee9; manifest c8cc38ddc8a6, hardware-manifest d1b0647f5719; probe1914.sh d7fc4b848bbe (PROBE_LINT_OK); visible recovery rec1914h 6288b9a3b51f6f40; m1n1 0d3a75b3.
+- Recovery rec1914h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1914-headroom-t7b/run1914.sh.
