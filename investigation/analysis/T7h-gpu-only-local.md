@@ -48,7 +48,7 @@ CPU-map inventory (reachable means internal access, not a legal API MapHeap):
 | agx_bo_map / native_map | Reachable final pointer provider. Refuse explicit GPU-only BOs before locking or returning a pointer, emit measure-gpu-only-map. Cache keys include flags. |
 | AgxWin32AsahiBufferWriteMap | Eager owner map is unreachable for NOT_AVAILABLE (C45). Direct unexpected calls return NULL through the same BO guard. |
 | buffer transfer_map | Reachable: ExecuteIndirect, predication/argument reads and buffer sides of texture copies. Use a CPU-visible staging buffer, GPU resource_copy_region and writer synchronization. |
-| texture transfer_map / agx_map_texture_cpu | Reachable: readback, upload, software copy fallback. Eligible uncompressed textures use the existing staging-blit path for both directions. BC, unsupported staging formats, depth and MSAA textures remain CPU-visible: their CPU-copy/resolve paths cannot be replaced by an arbitrary render-target blit. |
+| texture transfer_map / agx_map_texture_cpu | Reachable: readback, upload, software copy fallback. Eligible color and single-plane Z16/Z32 depth textures use the existing staging-blit path for both directions. BC, unsupported staging formats, combined depth/stencil and MSAA textures remain CPU-visible; see the T7h2 audit below. |
 | agx_shadow CPU memcpy | Reachable through transfer preparation normally. Prohibit shadowing GPU-only BOs; staged transfers already bypass CPU synchronization/shadowing. |
 | clears and GenerateMips | GPU clears/blits do not map target storage; transfer-based CPU fallback uses the same staging path. The generated D3D11 frontend never opts in. |
 | tile zero/scratch, sparse tables | Unreachable as opted-in resources: separate BO constructors, deliberately CPU-visible for initialization. A reserved virtual resource is not itself opted in. Physical NOT_AVAILABLE tile heaps can be. |
@@ -78,7 +78,7 @@ back. This requires matched UMD/KMD, not UMD hot-swap.
 NOT_AVAILABLE CreateHeap already passes cpu_visible=false to CreateBuffer.
 Committed DEFAULT 2D textures opt in explicitly from the DDI; default 1D/3D
 constructors require NOT_AVAILABLE already. Keep BC (including volumes), formats without RT+sampler support (for example RGB9E5),
-depth, MSAA and presentation imports CPU-visible. Texture eligibility follows API CPU intent and the staging format capability,
+combined depth/stencil, MSAA and presentation imports CPU-visible. T7h2 adds Z16/Z32 via their color staging formats (see below). Texture eligibility follows API CPU intent and the staging format capability,
 not a trace-derived size/content/bind combination. Current 1D/1D-array constructors
 only admit R32_UINT and R8G8B8A8_UNORM, both supported staging formats; the 1D-array staging
 target is converted to 2D_ARRAY and sized by the transfer box depth.
@@ -118,8 +118,9 @@ CPU-visible cache reuse; failed staging allocation/map and resource cleanup.
 
 Windows acceptance, actual VidMm pressure/eviction behavior, MakeResident OOM
 propagation, Windows compilation, runtime staging coherency/performance, and
-whether the refused GravityMark range belongs to an opted-in resource remain
-hardware/build questions. Host replay cannot establish these. CPU-visible
+the exact VA/lifetime identity of the refused GravityMark resource remain
+hardware/build questions. T7h2 covers the Z32F layout implicated by the supplied
+review. Host replay cannot establish hardware success. CPU-visible
 resources can still fall back to scattered aperture backing; this candidate
 does not claim to repair that separate class.
 
@@ -223,3 +224,134 @@ Three extracted-code mutations (map guard, LOCAL plumbing, staging write offset)
 were caught. All four protected invariants and `git diff --check` pass. The final
 review found no remaining source blocker after the format/array fixes. Full
 Windows compilation, GPU content/coherency and VidMm acceptance remain unknown.
+
+## T7h2 follow-up: committed depth (supersedes the blanket depth exclusion)
+
+The supplied review identifies the only 128 MiB committed texture as depth,
+not color. The first candidate's depth exclusion therefore misses the strongest
+candidate for the refused BO. This follow-up changes only UMD eligibility; the
+explicit GPU-only request, KMD placement and CPU-visible controls stay intact.
+
+### Source evidence and design
+
+Pinned `mesa/src/` paths below are under `.local/reference`.
+
+- `asahi/layout/layout.c:269` adds eight metadata bytes per 16x16 tile per
+  layer. Running the real host `ail_make_miptree` for Z32F 4096x4096, **two
+  array layers, one mip** gives data `0x8000000`, metadata `0x100000`, total
+  `0x8100000`. One layer/one mip gives `0x4080000`; one layer/two mips gives
+  `0x5602b80`; two layers/two mips gives `0xac05700`. Thus the size agrees
+  exactly with two layers, not with interpreting `l2` as two mip levels.
+  This corroborates the supplied receipt; it is not an allocation admission rule
+  or proof of resource identity without a VA/lifetime join.
+- `gallium/drivers/asahi/agx_pipe.c:803` maps physical Z32F to R32F and Z16
+  to R16_UNORM for staging. `:830`, `:871`, `:891` construct linear color
+  staging and symmetric GPU blits using the **physical layout format**.
+  `:933`, `:978`, `:983`, `:1039` read by blitting/synchronizing staging,
+  map only its BO, and write back by blitting and flushing staging readers.
+- Unmodified Mesa CPU-detiles uncompressed depth at `:986`/`:1000` and
+  CPU-retiles at `:1044`/`:1050`. Small base levels, small mip tails,
+  `AGX_DBG_NOCOMPRESS` and incompatible binds can disable compression
+  (`agx_pipe.c:401`, `asahi/layout/layout.h:353`, `:444`). Depth bind
+  forbids linear (`agx_pipe.c:342`). T7h's existing UNMAPPABLE projection
+  forces staging independently of compression and blocks shadow memcpy
+  (`build-native-asahi-state.py:379`, `:412`); therefore the opt-in must
+  cover the uncompressed tails too, without relying on a compression query.
+- `agx_blit.c:40`, `:522` handle effective depth/color formats and legalize
+  compression before compute/util_blitter GPU work. Texture copy's CPU fallback
+  (`:674`) calls the normal transfer interface, so it reaches staging too.
+  `agx_pipe.c:1170` copies the resource template on decompression, retaining
+  UNMAPPABLE. ClearDepthStencil in the owner uses GPU clears, not CPU storage
+  (`agx_d3d12_windows.cpp:2026`). Readback and upload use texture_map or C70's
+  separate cached CPU-visible staging (`:2116`, `:2129`, `:2271`). Direct
+  agx_bo_map/BufferWriteMap remain forbidden by the existing winsys guard.
+- `gallium/frontends/d3d10umd/Format.cpp:96`, `:114`, `:188`, `:192`
+  translate D32/D16 and R32/R16_TYPELESS with depth intent to Z32F/Z16.
+  The owner passes depth intent before eligibility (`agx_d3d12_windows.cpp:963`).
+- Combined Z24S8 and Z32S8X24 are **not interleaved in their GPU BO**:
+  `u_transfer_helper.c:199` lowers them to Z32F plus a separate S8 resource;
+  Asahi enables SEPARATE_Z32S8, SEPARATE_STENCIL and Z24_IN_Z32F
+  (`agx_pipe.c:2494`). The helper CPU packs/unpacks between mapped staging
+  planes and its own allocation (`u_transfer_helper.c:421`, `:528`). The
+  second-plane map at `:437` is not checked for NULL before pack routines.
+  These formats, Z24X8 and stencil-only remain CPU-visible in this candidate:
+  enabling them requires multi-plane conversion/failure-cleanup coverage,
+  beyond the single-plane regression that covers the observed Z32F resource.
+  This is a conservative scope decision, not a claim that staging Z/S is
+  impossible. Their current compressed transfers already use staging.
+
+Reachability for committed single-plane DEFAULT depth: API CPU map is disallowed;
+internal texture copies/readback/upload can reach transfer_map, but stage through
+R16/R32. Clears/draws use GPU addresses. Indirect reads are buffer-only. Internal
+shader/query/tile/scratch BOs and D3D11 staging are separate allocations. No raw
+CPU-map caller in Asahi accesses an application depth BO outside transfer/shadow
+(the callsite index above applies). Shared/presentation, BC and MSAA retain
+existing paths. Combined stencil conversion is deliberately outside the opt-in.
+
+Windows CpuVisible=0/LockCb and native-only placement contracts above are
+unchanged; no new Windows interface, firmware, m1n1, DMA or interrupt behavior
+is introduced. This is offline source work; no live state or other worktree was
+accessed. The worktree-local `.local/tandem/REVIEW.md` is absent; the task's
+T7h2 review is accepted and is the evidence driving this correction.
+
+### Implementation plan (inline, authorized by TASK.md)
+
+The supplied task defines the approved scope:
+
+1. Extend `tests/test_d3d12_gpu_only.py` with failing Z16/Z32 eligibility cases,
+   negative combined/stencil/MSAA/BC/CPU-access/placed cases, and capability
+   refusal for each staging format. The existing DDI and owner bodies run.
+2. In `AgxD3d12OwnerCreateTexture2D`, select the proven color staging format
+   for Z16/Z32 before the existing render-target/sampler capability check.
+   Keep every other depth format excluded. No size or bind-combination shortcut.
+3. In `tests/test_umd_gpu_only_transfer.py`, execute projected transfer
+   map/unmap, actual staging constructor/format and both blit helpers, with
+   controlled allocation/scheduling callbacks and a bounded GPU-copy oracle. Verify bytes,
+   subresource boxes, read synchronization, write flush, no direct BO map,
+   compressed/uncompressed paths, and allocation/map failure cleanup.
+4. Run targeted tests and the complete baseline to BASELINE_OK, check protected
+   invariants/diff, commit this independent correction, then write REPORT.md.
+   Integration owns experiment/change ledgers under the handoff rule.
+
+### Unknowns and hardware checkpoint
+
+Host execution cannot prove GPU depth/color bit preservation, cache coherence,
+Windows acceptance or pressure behavior. Run a matched KMD/UMD package with a
+reboot (not hot-swap), first a Z32F two-layer DEFAULT upload/clear/readback and
+Z16 control including a small uncompressed mip, then GravityMark D3D12 2k/10k
+short profiles beyond ~22 s. Require native-only placement, no required-path
+measure-gpu-only-map, no G4 Unmapped/removal, and correct contents. Distinguish
+AllocateCb E_INVALIDARG from allocation OOM/MakeResident E_OUTOFMEMORY. Preserve
+and hash known-good recovery artifacts, collect receipts before exact-package
+cleanup, and return to the normal GPU-visible Code28 recovery; immutable
+GPU-hidden recovery remains emergency-only. No hardware work is performed here.
+
+
+### T7h2 verification and review
+
+The eligibility regression failed before the fix on the first Z16 positive
+case, then passed with the format translation. The eight focused modules ran
+59 tests successfully. The full required baseline on the final code/tests was:
+
+```text
+ran 414 tests in 175 modules; 6 failing, 6 known, 0 NEW, 0 FIXED
+BASELINE_OK
+```
+
+The new transfer fixture uses actual Mesa types/format helpers, AIL layouts,
+and projected staging/map/unmap bodies. Controlled callbacks replace allocation,
+scheduling and GPU execution; they are not a hardware format-conversion test.
+All three extracted-source mutations were caught: dropping forced staging,
+using R16 for Z32 staging, and losing the writeback layer. No production source
+was modified during mutation checks. Protected invariants and diff checks pass.
+
+Independent read-only review found no blocking issue. Its optional separate
+READ-only/WRITE-only depth success cases remain future coverage: this fixture
+covers READ|WRITE, and the existing transfer test already covers the separate
+usage branches for buffers. Combined Z/S stays excluded. The real broker replay
+skips because m1n1_windows is uninitialized. Known baseline entries are unchanged.
+
+The shared tandem review was rechecked before the implementation commit; its
+SHA-256 remains 753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5.
+Per-OPEN-item dispositions remain as recorded in the handoff's
+`T7h2-review-dispositions.md`; no historical hardware hypothesis is reopened.
