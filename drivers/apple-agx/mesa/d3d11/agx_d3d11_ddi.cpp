@@ -876,8 +876,31 @@ AgxD3d11ClearUavView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW hVi
          box.depth = view->image.u.tex.last_layer - view->image.u.tex.first_layer + 1;
          if (pipe->clear_texture)
             pipe->clear_texture(pipe, res, level, &box, pixel);
-         else
-            u_default_clear_texture(pipe, res, level, &box, pixel);
+         else {
+            /* The default clear unpacks/re-packs through res->format. A
+             * typeless resource may use UNORM32 storage with a FLOAT view;
+             * that round trip loses bits. Transfer the packed view bytes. */
+            if (util_format_get_blocksize(res->format) != element ||
+                util_format_get_blockwidth(res->format) != 1 ||
+                util_format_get_blockheight(res->format) != 1 ||
+                !pipe->texture_map || !pipe->texture_unmap)
+               return false;
+            struct pipe_transfer *transfer = NULL;
+            uint8_t *dst = (uint8_t *)pipe->texture_map(pipe, res, level, PIPE_MAP_WRITE,
+                                                        &box, &transfer);
+            if (!dst || !transfer) {
+               if (transfer) pipe->texture_unmap(pipe, transfer);
+               return false;
+            }
+            for (int z = 0; z < box.depth; ++z)
+               for (int y = 0; y < box.height; ++y) {
+                  uint8_t *row = dst + (size_t)z * transfer->layer_stride +
+                                 (size_t)y * transfer->stride;
+                  for (int x = 0; x < box.width; ++x)
+                     memcpy(row + (size_t)x * element, pixel, element);
+               }
+            pipe->texture_unmap(pipe, transfer);
+         }
       }
    }
    return true;
