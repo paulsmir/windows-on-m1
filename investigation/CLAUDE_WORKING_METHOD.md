@@ -74,7 +74,10 @@ Scratchpad: /private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-
   (AGX_D3D12_* lines) and tool-d3d12-on-umd.log receipts.
 - After NEWEXP_DONE: check regressions (73 SMOKE PASS + known MSAA-a000r
   FAIL, GL ~52 fps, bench ~59.6 fps, corpus createfail 64/4, DWM faults 0),
-  `airssh 'shutdown /r /t 3'`, run evidence/recNNNNh/recover.sh to RECOVERY_DONE.
+  run evidence/recNNNNh/recover.sh directly to RECOVERY_DONE: it orders the
+  restart itself. Never `shutdown /r` first: the reset returns the air to
+  Running proxy, run_uefi exits, and recover.sh loses the owner (EXP1879,
+  again EXP1907 2026-10-23); from proxy use AGX_RECOVERY_ALLOW_AT_PROXY=1.
 - Record EXPNNNN ACTUAL (UTC) + CHANGES rows (validated with hardware
   result); never edit old results -- append corrections.
 - Guest hang (GUEST_WATCHDOG_ABORT / no SSH): stop the monitor, kill the
