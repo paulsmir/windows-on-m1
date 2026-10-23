@@ -262,3 +262,4 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   2. `umd-hotswap.sh <dll>` replaces System32 and DriverStore AppleAgxRenderAdmissionUmdArm64.dll; the original is kept as .orig, and `umd-hotswap.sh restore` puts it back.
   3. `gm-quick.sh <tag> [asteroids] [api]` runs one GravityMark with a 90 s timeout.
 - Each hot-swap run is recorded as EXP<baseN>U<k> in EXPERIMENTS.md (UMD sha256, commit, result). The final package of an accepted UMD still goes through the normal build and full set.
+- Every Codex brief gets `scratchpad/brief-context.sh <task-dir> <keywords>`. It appends the design notes and CHANGES rows that already cover the topic. T7c lesson: the brief did not cite M2-vidmm-64k-decision.md or EXP1027/EXP1266, and the guessed placement fix failed on hardware within 2 s.
