@@ -61080,3 +61080,9 @@ EXP1903 pipeline ACTUAL / EXP1903N NIGHT_RAID_GT2 BEFORE 2026-10-23T09:36:52Z: R
 - ModelViewer I: alive 12/12, 1173 presents, exit 0, then one WER, AV 0xC0000005 in ModelViewerI.exe+0x23b0b after the swapchain buffers were destroyed (teardown). The UMD trace (223931 lines) has no driver refusal. Not seen in EXP1899-EXP1902; watched in EXP1904.
 - KMD receipts: no GpuReset, PreemptRefusal, G4SubmitFailure or BindRefusal.
 EXP1903N: Night Raid GT2 (window, async off) on this package, carrying the backend-image Ready fix 188d73e2. Expected: GT2's refused scene stays local, the desktop survives (no DWM crash loop), and Wom1G4BindRefusal v2 names BindFailure (the builder step), or GT2 completes.
+
+EXP1903N NIGHT_RAID_GT2 ACTUAL 2026-10-23T09:55:53Z: GT2 09:41:51Z-09:43:14Z, then IDXGISwapChain::Present 0x887A0005 again. The wedge is gone:
+- Wom1G4SubmitFailure: total 1 (was 1577-12337);
+- Wom1G4BindRefusal v2: Ready=1, BindFailure 23 = AppleAgxG4BuildTa3dEx step 3, AppleAgxG4BindNativeObjects;
+- no app events in the next 8 minutes (no DWM crash loop); the desktop screenshot was taken normally.
+188d73e2 CONFIRMED: a refused GT2 scene no longer kills the GPU for every process. GT2's own scene is still refused at native-object binding. The failing predicate is now receipted (BindNativeObjectsEx, BindFailure 320 + predicate) for the next run (EXP1904, rebuilt again with this commit).
