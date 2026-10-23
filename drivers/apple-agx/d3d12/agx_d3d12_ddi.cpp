@@ -132,11 +132,13 @@ template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENT
  * C59A, C59B), reported by default since then (the runtime shows it at FL
  * >= 11_1); APPLE_AGX_D3D12_ROV=0 opts a process out. */
 /* 12_1 conservative rasterization Tier 1 (the TIR expansion GS with a
- * touched-pixel pixel shader); reported only with APPLE_AGX_D3D12_CR=1
- * until probe C61A passes on hardware. */
+ * touched-pixel pixel shader, behind the vertex or domain shader or inside
+ * the application's GS): validated on hardware (C61A EXP1891B, C61B EXP1895,
+ * C61C EXP1896) and reported by default; APPLE_AGX_D3D12_CR=0 opts a
+ * process out. Stream output with CR keeps plain rasterization (receipt). */
 static BOOL ConservativeRasterEnabled() {
     char value[2] = {};
-    return GetEnvironmentVariableA("APPLE_AGX_D3D12_CR", value, sizeof(value)) == 1 && value[0] == '1';
+    return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_CR", value, sizeof(value)) == 1 && value[0] == '0');
 }
 
 static BOOL RovEnabled() {

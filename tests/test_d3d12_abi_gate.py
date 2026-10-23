@@ -116,14 +116,16 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertEqual(caps.count('D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1'), 1)
         self.assertIn('d.ConservativeRasterizationTier = ConservativeRasterEnabled() ? D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1',
                       caps)
-        # ROVs by default since EXP1893 (C59A/C59B), APPLE_AGX_D3D12_ROV=0 opts
-        # out; CR stays opt-in (no GS/tessellation/stream-output path yet)
-        for name, env, value in (('RovEnabled', 'APPLE_AGX_D3D12_ROV', '0'), ('ConservativeRasterEnabled', 'APPLE_AGX_D3D12_CR', '1')):
+        # ROVs by default since EXP1893 (C59A/C59B) and conservative
+        # rasterization since EXP1895/1896 (C61A-C61C; every pipeline with
+        # triangles: VS, tessellation, application GS); =0 opts a process out
+        for name, env, value in (('RovEnabled', 'APPLE_AGX_D3D12_ROV', '0'), ('ConservativeRasterEnabled', 'APPLE_AGX_D3D12_CR', '0')):
             body = source[source.index('static BOOL %s() {' % name):]
             body = body[:body.index('\n}\n')]
             self.assertIn('GetEnvironmentVariableA("%s", value, sizeof(value)) == 1 && value[0] == \'%s\'' % (env, value), body)
-        rov = source[source.index('static BOOL RovEnabled() {'):]
-        self.assertIn("return !(GetEnvironmentVariableA", rov[:rov.index('\n}\n')])
+        for name in ('RovEnabled', 'ConservativeRasterEnabled'):
+            body = source[source.index('static BOOL %s() {' % name):]
+            self.assertIn("return !(GetEnvironmentVariableA", body[:body.index('\n}\n')])
         # C53: Tier 1 and the TILED format bit only behind APPLE_AGX_D3D12_TILED=1
         self.assertEqual(caps.count('D3D12DDI_TILED_RESOURCES_TIER_1'), 1)
         self.assertIn('d.TiledResourcesTier = TiledEnabled() ? D3D12DDI_TILED_RESOURCES_TIER_1', caps)
