@@ -61136,3 +61136,16 @@ EXP1905 M1N1_VGIC_PRIORITY_GRAVITYMARK HARDWARE BEFORE 2026-10-23T10:43:57Z:
 - Recovery: rec1905h (at-proxy allowed) or the lastgood swap. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1905-m1n1-gm12/run1905.sh.
 
 CORRECTION (process, 2026-10-23T10:48:24Z) to the SAMPLE_HASHES lines of EXP1901-EXP1905: "bad 1" (EXP1901-EXP1904) and "bad 10" (EXP1905) are not guest file changes. Cloning the guest helpers renumbered every file in guest/ (sed s/<prev>/<N>/), including the pinned *-hashes.txt data, so a pinned SHA-256 containing the experiment number was altered. Check: hashcheck-list.ps1 named the 10 files; e.g. ModelViewerI vcruntime140.dll on the guest has d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066 while the cloned list had ...1905.... clone-exp-scripts.sh now renumbers *.ps1 only. The EXP1905 guest lists are restored from EXP1899 (bad 0). No sample binary changed.
+
+EXP1905 M1N1_VGIC_PRIORITY_GRAVITYMARK HARDWARE ACTUAL 2026-10-23T11:03:37Z: RC 0, RUN_DONE.
+- m1n1 0d3a75b3: Windows booted on the first attempt (lastgood not needed). Through the whole run (boot, DXGI modes, probes, D3D11 smoke, samples, ModelViewer, both GravityMark runs) the guest stayed reachable: no hang, no 0x101, no snapshot needed.
+- Regression: e1904 118/0 on ARM64, x64 and x86; D3D11 smoke PASS; samples and ModelViewer I alive, no WER. KMD receipts clean.
+- SAMPLE_HASHES bad 10: the cloning defect, see the CORRECTION above.
+- GravityMark D3D11 1280x720: exit after 20 s with "D3D11Shader::compile(): can't create Compute shader OCCLUDER_SCALE_SHADER (OCCLUDER_FORMAT=rg32f)" -- D3D11::error invalid arg, before the scene. Cause: the D3D11 CheckFormatSupport list (EXP1284, build-native-asahi-state.py) reports no UAV bits (no D3D11_1DDI_FORMAT_SUPPORT_UAV_WRITES, no D3DWDDM2_0DDI_FORMAT_SUPPORT_UAV_READS), so the runtime refuses a compute shader that needs typed UAV loads. Next: C69.
+- GravityMark D3D12 1280x720 (FL 12_1, first D3D12 GravityMark device): ran 26 s, then device removed at present.
+  - Sequence: reject-screen-create {174 active, class 1, 2 MiB, LastScreenError E_OUTOFMEMORY}, then measure-d3d12-texture-copy 512x512 E_OUTOFMEMORY, then execute E_OUTOFMEMORY.
+  - Wom1M2PoolDemand v7: segment 2.6 GiB, peak 0x91c0 granules = 2.28 GiB, ReserveFailures 1.
+  - The app's heaps total 1856 MiB in 80 heaps; committed textures 235 MiB; placed textures 11 MiB (no double-backing).
+  - The app fills the segment, and the driver-internal staging for a texture upload (Asahi texture_map of a twiddled texture) no longer fits.
+- VERDICT: m1n1 0d3a75b3 boot/run-stable (CONFIRMED for this load; the earlier GravityMark hangs came about 60 s into scene creation, which neither run reached this time, so the 0x101 evidence stays partial). Two driver gaps named: C69 D3D11 UAV format caps; a D3D12 memory budget versus internal staging.
+- Next: EXP1906 on m1n1 0d3a75b3, with GravityMark D3D12 at 10000 and 2000 asteroids (memory discriminator).
