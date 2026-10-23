@@ -206,3 +206,38 @@ WHAT IS STILL UNKNOWN:
 Discriminator: boot to SSH first. The failure criterion is a boot hang or a watchdog
 snapshot with VI = 0 while a vCPU is on the IRQ entry path. Then run GravityMark as
 planned for EXP1894.
+
+## EXP1898 (062ea6bd): CPU0 blocked by vINTID 889 ACTIVE at priority 0x00; fix 0d3a75b3
+
+Evidence: `.local/experiments/EXP1898-vgic-vi-gm/evidence/EXP1898/full-hang-snapshots.log`.
+The boot succeeded, which confirms 062ea6bd. Then CPU0 hung with:
+- lr2 = vINTID 889 (HV synthetic scanout, `HV_AGX_SCANOUT_GUEST_VINTID`) ACTIVE at
+  priority 0x00, acknowledged about 248 s before the snapshot and never EOIed;
+- the timer, SGI0 and xHCI pending behind it;
+- kernel code with IRQs masked (RVA 0x2c38f0 and 0x51a9fc, kernel base
+  0xfffff802b5200000).
+
+Windows programs priority = (15 - IRQL) << 4, the same formula as its PMR setter at
+0x4af1c0. That is consistent with SGI0 0x10 and the vtimer 0x20 in the LRs. In the
+EXP1889 line table 889 is connected at vector 0x900 = IRQL 9, so its priority should
+be 0x60, not 0x00. Two m1n1 defects explain the mismatch:
+1. `hv_vgic3_get_priority_cpu` read SPIs at (intid-32)/4, while GICD_IPRIORITYR<n> is
+   stored at n = intid/4.
+2. The GICD write stored the access value into the whole word, but Windows writes one
+   byte per INTID (strb at 0x4af168). The GICR handlers clobbered the word on a lane-0
+   byte write.
+
+So 889 read the lane-0 byte of INTID 857 = 0x00 (NVMe read 0x80 instead of 0x70, xHCI
+0x80 instead of 0x50). At 0x00 it preempted ISRs at a higher IRQL, was deferred
+without EOI, and then blocked every interrupt on CPU0.
+
+Fix 0d3a75b3 merges accesses by byte lane and indexes SPIs from INTID 0. Helpers:
+`hv_vgic_diag_priority_word_write/read` and `hv_vgic_diag_spi_priority`. Tests:
+hv_vgic_diag_test RED->GREEN, and `test_lr_priority_reads_the_byte_the_guest_programmed`
+(root 98664810).
+
+Artifact: `.local/experiments/m1n1-0d3a75b3-vgic-prio/m1n1-g2-abi6-iomfb-owner.macho`,
+SHA-256 `b97cf8834c3f8e8728b796bf211ef8d21f020db2a427415616b5ad54d05baf49`.
+
+Checkpoint: any watchdog snapshot must show LR priorities of NVMe 0x70, xHCI 857 0x50,
+865 0x40, 889 0x60 and vtimer 0x20. Any other value means the priority path is still wrong.
