@@ -61177,3 +61177,10 @@ EXP1906 pipeline ACTUAL / EXP1906N NIGHT_RAID BEFORE 2026-10-23T11:43:40Z: RC 0,
 - GravityMark D3D11: C69 CONFIRMED -- the compute kernels are now created. The run went on to 41 s, then D3D11Texture::create failed for "2D RGf32 512x256 m10 Target Surface Mipmaps Zero" with device removed (reject-seterror CreateResource line 747 E_NOTIMPL). The app then hung until the 240 s timeout.
 - GravityMark D3D12 10k and 2k: both removed at 20 s and 15 s with the same reject-screen-create (174 active, class 1, 2 MiB, E_OUTOFMEMORY), and the pool peaked at 2.27 GiB again (ReserveFailures 2). The app sizes its heaps to the budget, not the scene, so asteroids are not the variable. The driver-internal staging churn per compressed-texture upload is the failing allocation: fix C70 940562af (one cached staging texture + GPU copy), for the next package.
 EXP1906N: Night Raid Custom GT1+GT2 (window, async off) on this package (the ZLS fix 37123151).
+
+EXP1906N NIGHT_RAID ACTUAL 2026-10-23T12:06:23Z: Night Raid Custom GT1+GT2 (1920x1080 window, async off, no UMD trace) on the EXP1906 package (m1n1 0d3a75b3).
+- GT1 11:49:29Z-11:51:01Z, GT2 11:51:01Z-11:52:29Z, "Benchmark completed", result 3DMark-NightRaidCustom-0-20261023135229.
+- NightRaidCustomGraphicsScore 1379 (GraphicsTest1 6.48 fps, GraphicsTest2 6.77 fps). This is the first complete 3DMark graphics score on J313.
+- KMD receipts: no GpuReset, PreemptRefusal, G4SubmitFailure or BindRefusal.
+- 37123151 (transient/1x1 ZLS) CONFIRMED: GT2 renders to the end. The EXP1899N-EXP1904N GT2 chain (backend-image wedge 188d73e2, then the ZLS predicate) is closed.
+- Next for performance: about 6.5 fps at 1080p; profile GT1/GT2 (owner-time receipts) after the correctness backlog (C70 D3D12 uploads, C71 D3D11 autogen, redirected blt).
