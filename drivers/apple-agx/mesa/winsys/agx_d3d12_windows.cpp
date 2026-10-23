@@ -71,6 +71,10 @@ struct AGX_D3D12_OWNER {
    * (measure-d3d12-owner-time) */
   LONGLONG TimeBind, TimeDrawVbo, TimeUnbind;
   UINT TimedDraws;
+  /* C82 receipt-only: draw_vbo ticks of the indirect draws, the longest
+   * single draw_vbo and the draws whose draw_vbo took at least 1 ms */
+  LONGLONG TimeDrawVboIndirect, MaxDrawVbo;
+  UINT SlowDraws;
   /* receipt-only (measure-d3d12-owner-fences): the newest submission fence
    * the previous submit reported */
   unsigned long long ReportedFence;
@@ -172,6 +176,49 @@ static void owner_batch_refusal(unsigned kind, unsigned site, unsigned detail0, 
   AdmissionUmdDiagnostic("reject-batch", E_FAIL, values, 4u);
 }
 static void owner_backend_fail(unsigned site) { owner_batch_refusal(4u, site, 0u, 0u); }
+/* C82 (EXP1899N Night Raid: ~50-80 ms of draw_vbo per frame in ~540
+ * GBuffer draws, 1.2 us per draw elsewhere): the Asahi perf_debug reasons
+ * (variant compiles, flush and sync causes) reach AgxWin32PerfNote on
+ * Windows, but only the D3D10 owner listened. The same receipt as
+ * agx_d3d10_windows.cpp AgxD3d10PerfNote: per-process counts, digits folded
+ * to '#'; every 512 messages one "measure-perf-reason" line per changed
+ * entry {serial, new count, total, presents, text[0..23]}. */
+extern "C" void (*AgxWin32PerfHook)(const char *message);
+static SRWLOCK owner_perf_lock = SRWLOCK_INIT;
+static struct { UINT Hash, Count, Reported; char Text[24]; } owner_perf_table[48];
+static UINT owner_perf_total, owner_perf_serial, owner_perf_lines;
+static volatile LONG owner_presents;
+static void owner_perf_note(const char *message) {
+  char text[24] = {0};
+  UINT hash = 2166136261u, index;
+  for (UINT i = 0; message && message[i] && message[i] != '\n' && i < 63u; ++i) {
+    const char c = message[i] >= '0' && message[i] <= '9' ? '#' : message[i];
+    hash = (hash ^ static_cast<unsigned char>(c)) * 16777619u;
+    if (i < sizeof(text)) text[i] = c;
+  }
+  AcquireSRWLockExclusive(&owner_perf_lock);
+  for (index = 0; index + 1u < ARRAYSIZE(owner_perf_table); ++index)
+    if (!owner_perf_table[index].Count || owner_perf_table[index].Hash == hash) break;
+  if (!owner_perf_table[index].Count) {
+    static const char other[24] = "(other)";
+    owner_perf_table[index].Hash = hash;
+    memcpy(owner_perf_table[index].Text, index + 1u < ARRAYSIZE(owner_perf_table) ? text : other, sizeof(text));
+  }
+  ++owner_perf_table[index].Count;
+  if ((++owner_perf_total & 511u) == 0u && owner_perf_lines < 4096u) {
+    ++owner_perf_serial;
+    for (UINT i = 0; i < ARRAYSIZE(owner_perf_table) && owner_perf_table[i].Count; ++i) {
+      if (owner_perf_table[i].Count == owner_perf_table[i].Reported) continue;
+      UINT values[10] = {owner_perf_serial, owner_perf_table[i].Count - owner_perf_table[i].Reported, owner_perf_total,
+                         static_cast<UINT>(owner_presents)};
+      memcpy(&values[4], owner_perf_table[i].Text, sizeof(owner_perf_table[i].Text));
+      owner_perf_table[i].Reported = owner_perf_table[i].Count;
+      ++owner_perf_lines;
+      AdmissionUmdDiagnostic("measure-perf-reason", S_OK, values, ARRAYSIZE(values));
+    }
+  }
+  ReleaseSRWLockExclusive(&owner_perf_lock);
+}
 /* EXP1875: a D3D9On12 batch reported faulted without a submission and
  * nothing named the Asahi site that marked the context (kind << 16 | line). */
 extern "C" void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context, unsigned flags, unsigned draws);
@@ -298,6 +345,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     AgxWin32BatchRefusalHook = owner_batch_refusal;
     AgxWin32BackendFailHook = owner_backend_fail;
     AgxWin32FirstFaultHook = owner_first_fault;
+    AgxWin32PerfHook = owner_perf_note;
   }
   receipt("measure-d3d12-owner", hr, owner->KernelContext != NULL ? 1u : 0u, owner->Screen != NULL ? 1u : 0u,
           owner->Context != NULL ? 1u : 0u);
@@ -1662,6 +1710,7 @@ extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *pre
     blit.filter = PIPE_TEX_FILTER_NEAREST;
     owner->Context->blit(owner->Context, &blit);
   }
+  InterlockedIncrement(&owner_presents);
   HRESULT hr = AgxWin32AsahiContextFlushForPresent(owner->Context) ? S_OK : E_FAIL;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(hr) && record->RenderBuffer.Transport.Token &&
@@ -3333,6 +3382,9 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   ++owner->PendingDraws;
   owner->TimeBind += bound - entered;
   owner->TimeDrawVbo += drawn - bound;
+  if (in->Buffer) owner->TimeDrawVboIndirect += drawn - bound;
+  if (drawn - bound > owner->MaxDrawVbo) owner->MaxDrawVbo = drawn - bound;
+  if (qpc_us(drawn - bound) >= 1000u) ++owner->SlowDraws;
   owner->TimeUnbind += qpc_now() - drawn;
   ++owner->TimedDraws;
   return S_OK;
@@ -3356,14 +3408,17 @@ extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
   const LONGLONG flushed = qpc_now();
   const int retired = AgxWin32AsahiContextRetire(owner->Context, 5000u);
   const UINT times[] = {owner->TimedDraws, qpc_us(owner->TimeBind), qpc_us(owner->TimeDrawVbo), qpc_us(owner->TimeUnbind),
-                        qpc_us(flushed - flush_start), qpc_us(qpc_now() - flushed)};
-  AdmissionUmdDiagnostic("measure-d3d12-owner-time", S_OK, times, 6u);
+                        qpc_us(flushed - flush_start), qpc_us(qpc_now() - flushed),
+                        qpc_us(owner->TimeDrawVboIndirect), qpc_us(owner->MaxDrawVbo), owner->SlowDraws};
+  AdmissionUmdDiagnostic("measure-d3d12-owner-time", S_OK, times, 9u);
   const unsigned long long fence = AgxWin32AsahiContextNewestFence(owner->Context);
   const UINT fences[] = {static_cast<UINT>(fence - owner->ReportedFence), static_cast<UINT>(fence)};
   AdmissionUmdDiagnostic("measure-d3d12-owner-fences", S_OK, fences, 2u);
   owner->ReportedFence = fence;
   owner->TimeBind = owner->TimeDrawVbo = owner->TimeUnbind = 0;
   owner->TimedDraws = 0;
+  owner->TimeDrawVboIndirect = owner->MaxDrawVbo = 0;
+  owner->SlowDraws = 0;
   const int faulted = AgxWin32AsahiContextFaulted(owner->Context);
   const HRESULT hr = retired && !faulted ? S_OK : DXGI_ERROR_DEVICE_HUNG;
   receipt("measure-d3d12-owner-submit", hr, copies, static_cast<UINT>(retired), static_cast<UINT>(faulted));
