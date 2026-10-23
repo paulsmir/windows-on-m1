@@ -61224,3 +61224,34 @@ EXP1907 ROLLBACK 2026-10-23T13:03:29Z:
 - The AT_PROXY instance then stopped at its own cleanup receipt ("visible-disable.json already exists").
 - Read-only verification: APPL0002 CM_PROB_FAILED_INSTALL, 0 AppleAgx driver packages, no service, 8 CPUs, dwm and explorer alive.
 - Process fix b245afd8: CLAUDE_WORKING_METHOD no longer says to shut down before recovery.
+
+EXP1908 C67B_C72_C73 HARDWARE BEFORE 2026-10-23T13:05:14Z:
+- Package 30.0.1908.0 from a5039f82 = EXP1907 ac3c23f4 + c354ff88 C67b (DriverSupportsCddDwmInterop) + be370175 C72 (D3D11 BC sub-block copies) + 09f217a4 C73 (segment-3 floor on LowMemoryCondition).
+- Build: EXP1908_PACKAGE_BUILD_PASS, STACK_FRAMES PASS. sys b330f2066cca, Umd 5a83407fa2e2, UmdArm64 21854b1f944d, UmdX64 4702f0f31bde, Umd32 d066ef05c516. manifest 9a8fbf42389f, hardware-manifest 838f3e68a191.
+- Gates: stage PASS, visible recovery PASS (rec1908h wrapper 86e626413687de39), lastgood 21c3648d d6216b074d7b; m1n1 0d3a75b3 b97cf8834c3f8e87.
+- Probe probe1908.sh 0b70ce63143e (PROBE_LINT_OK) = probe1907 plus:
+  - DXG_ETW: DxgKrnl capture around the D3D9 probe, decoded by dxg-blt-verdict.py;
+  - PRESSURE: agx_mempressure 384 MiB left, 32 MiB targets up to 2560 MiB; guest/DWM liveness and the POOL receipt.
+- ATOMIC CONTRACT: none -- separate steps:
+  - C67b: DXG_ETW line and the desktop;
+  - C72: GravityMark D3D11 line;
+  - C73: GravityMark D3D12 lines and PRESSURE.
+- WHY THIS HYPOTHESIS:
+  (1) EXP1906E-basic: the redirected-blt destination is a CDD CreateShared standard allocation, and AGX has none. C67's EXP1903 rejection had no ETW.
+  (2) EXP1907 reject-resource-copy-region on a BC7 2x2 level with a 4x4 box.
+  (3) EXP1907 ReserveFailures 2 with NewSlabFailures 0 at 2335 MiB, pagefile 243 MiB/6 GiB; EXP1308: the high event clears near 740 MiB available.
+- WINDOWS CONTRACT:
+  - DriverSupportsCddDwmInterop: CDD presents to UMD-created DWM textures.
+  - D3D validates compressed copy boxes against block-aligned sizes.
+  - LowMemoryCondition marks low free memory.
+- WHAT IS STILL UNKNOWN:
+  - whether dxgkrnl creates the CDD texture with C67b;
+  - GravityMark D3D11's next stage;
+  - whether the guest stays responsive under PRESSURE with the lower floor.
+- Expected:
+  - regressions as EXP1907;
+  - DXG_ETW shows a 287 Texture allocation or names the next missing step;
+  - GravityMark D3D11 past 26 s;
+  - GravityMark D3D12 past 16 s;
+  - PRESSURE refuses later and the guest stays alive.
+- Failure criteria: regressions, desktop damage from C67b, PRESSURE starvation (GUEST_STARVED_DURING_PRESSURE), hang. Recovery rec1908h (run directly). Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1908-cdd-copy-floor/run1908.sh.
