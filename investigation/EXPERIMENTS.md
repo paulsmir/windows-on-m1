@@ -61635,3 +61635,13 @@ EXP1919 ACTUAL 2026-10-23T22:32:46Z:
 - Next:
   1. bugcheck dump analysis (cdb);
   2. package T7h + fork C86 (owner-cached staging for GPU-only textures) with the flushed-trace gm-run, to locate the hang/timeout submission.
+
+EXP1919 ADDENDUM (dump) 2026-10-23T22:37:35Z:
+- Recovery: rec1919h with AGX_RECOVERY_ALLOW_AT_PROXY=1 reported RECOVERY_DONE (visible, inert, package absent, 8 CPUs).
+- Post-run crash minidump: C:\Windows\Minidump\102326-14296-01.dmp (sha256 9111fdd0a6bc99c7...); evidence/dump/cdb-analyze.txt.
+  - Bugcheck 0x116 VIDEO_TDR_FAILURE: P1 ffffa704bcd29010, P2 fffff800993298c0, P3 0xC0000483 STATUS_DEVICE_HARDWARE_ERROR, P4 3.
+  - Location: AppleAgxRenderAdmission+0x398c0; process System.
+- Reading:
+  - a TDR on the idle desktop after the GravityMark runs, whose KMD reset returned a hardware error, as in the EXP1026 class;
+  - the GPU/firmware stayed wedged after the two GravityMark firmware timeouts.
+- Separate defect: TDR recovery after a firmware timeout is not survivable. GravityMark D3D12 is now bounded by the firmware timeout/hang, not by G4 placement.
