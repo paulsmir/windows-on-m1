@@ -2523,6 +2523,10 @@ _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
           KEY_SET_VALUE, &key)))
     return;
   WriteBinary(key, L"Wom1G4SubmitFailure", &snapshot, sizeof(snapshot));
+  /* EXP1901N: the backend image at the first Bind refusal */
+  if (InterlockedCompareExchange(&Context->G4BindRefusalClaim, 0, 0) == 2)
+    WriteBinary(key, L"Wom1G4BindRefusal", &Context->G4BindRefusal,
+                sizeof(Context->G4BindRefusal));
   (void)ZwFlushKey(key);
   ZwClose(key);
 }

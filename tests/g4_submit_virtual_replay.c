@@ -483,6 +483,11 @@ static void AdmissionG3VerifyUploads(ADMISSION_CONTEXT *adapter,
   (void)adapter; (void)state; (void)process;
 }
 #endif
+/* EXP1901N receipt-only Bind-refusal snapshot: no scheduling effect */
+static unsigned g4BindRefusals;
+static void AdmissionG4RecordBindRefusal(ADMISSION_CONTEXT *adapter, ULONG kind, ULONG fence) {
+  (void)adapter; (void)kind; (void)fence; ++g4BindRefusals;
+}
 #include "g4_submit_virtual_functions.inc"
 
 typedef struct {

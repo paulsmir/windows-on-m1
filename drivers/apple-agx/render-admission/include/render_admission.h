@@ -672,6 +672,17 @@ typedef struct _ADMISSION_CONTEXT {
   APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;
   volatile LONG G4SubmitFailureClaim;
   volatile LONG G4SubmitFailureCount;
+  /* EXP1901N receipt-only (Wom1G4BindRefusal, published with
+   * Wom1G4SubmitFailure): the backend image when a prepared job first could
+   * not bind it (1577 Bind refusals, then the desktop stayed black). */
+  volatile LONG G4BindRefusalClaim;
+  struct _ADMISSION_G4_BIND_REFUSAL {
+    ULONG Version, Bytes, Kind, Fence, EntryMs;
+    ULONG Ready, BoundFence, JobFence, JobReady, NativeBound, G4Native;
+    ULONG G4Compute, PresentCompute;
+    ULONG CompletedFence, LastSubmittedFence, ActiveFence, PreemptionPhase;
+    ULONG PacketState, PacketFence, DispatchedFence, RenderWorkerScheduled;
+  } G4BindRefusal;
   struct _ADMISSION_G4_SUBMIT_FAILURE {
     ULONG Version, Bytes, Branch, Status, DownstreamStatus;
     ULONGLONG DmaBufferVirtualAddress;

@@ -65,6 +65,44 @@ static NTSTATUS AdmissionG4SubmitRejectDetail(
   return status;
 }
 
+/* EXP1901N receipt-only: the first prepared job whose backend-image bind
+ * failed (1 compute, 2 present, 3 render). Read without the scheduler lock:
+ * the bind itself runs outside it. */
+static VOID AdmissionG4RecordBindRefusal(ADMISSION_CONTEXT *adapter,
+    ULONG kind, ULONG fence) {
+  struct _ADMISSION_G4_BIND_REFUSAL *r;
+  const ADMISSION_BACKEND_IMAGE *image;
+  if (adapter == NULL ||
+      InterlockedCompareExchange(&adapter->G4BindRefusalClaim, 1, 0) != 0)
+    return;
+  r = &adapter->G4BindRefusal;
+  image = &adapter->BackendImage;
+  RtlZeroMemory(r, sizeof(*r));
+  r->Version = 1u;
+  r->Bytes = sizeof(*r);
+  r->Kind = kind;
+  r->Fence = fence;
+  r->EntryMs = (ULONG)(KeQueryInterruptTime() / 10000ull);
+  r->Ready = (ULONG)image->Ready;
+  r->BoundFence = image->BoundFence;
+  r->JobFence = image->JobFence;
+  r->JobReady = (ULONG)image->JobReady;
+  r->NativeBound = (ULONG)image->NativeBound;
+  r->G4Native = (ULONG)image->G4Native;
+  r->G4Compute = (ULONG)image->G4Compute;
+  r->PresentCompute = (ULONG)image->PresentCompute;
+  r->CompletedFence = adapter->Scheduler.CompletedFence;
+  r->LastSubmittedFence = adapter->Scheduler.LastSubmittedFence;
+  r->ActiveFence = adapter->Scheduler.ActiveFence;
+  r->PreemptionPhase = (ULONG)adapter->Scheduler.PreemptionPhase;
+  r->PacketState = (ULONG)AdmissionRenderPacketState(&adapter->RenderPacket);
+  r->PacketFence = adapter->RenderPacket.Description.Fence;
+  r->DispatchedFence = adapter->DispatchedFence;
+  r->RenderWorkerScheduled = AdmissionPlatformRenderWorkerScheduled(adapter) ? 1u : 0u;
+  KeMemoryBarrier();
+  InterlockedExchange(&adapter->G4BindRefusalClaim, 2);
+}
+
 static NTSTATUS AdmissionG4SubmitReject(
     ADMISSION_CONTEXT *adapter, const ADMISSION_RENDER_CONTEXT *context,
     const DXGKARG_SUBMITCOMMANDVIRTUAL *args, ULONG branch,
@@ -3774,7 +3812,10 @@ static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
   if (!AdmissionBackendImageBindG4Compute(&adapter->BackendImage,
-          args->SubmissionFenceId, &envelope)) goto Rollback;
+          args->SubmissionFenceId, &envelope)) {
+    AdmissionG4RecordBindRefusal(adapter, 1u, args->SubmissionFenceId);
+    goto Rollback;
+  }
   context->GpuvaG3MappingGeneration = mapping_generation;
   context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
@@ -3955,7 +3996,10 @@ static NTSTATUS AdmissionG3SubmitPresentComputeInner(ADMISSION_CONTEXT *adapter,
   if (!prepared) ADMISSION_PRESENT_CPU(8u);
   /* From here the fence is this job's: a failure is a rejected submit. */
   if (!AdmissionBackendImageBindPresentCompute(&adapter->BackendImage,
-          args->SubmissionFenceId, &present)) goto Rollback;
+          args->SubmissionFenceId, &present)) {
+    AdmissionG4RecordBindRefusal(adapter, 2u, args->SubmissionFenceId);
+    goto Rollback;
+  }
   context->GpuvaG3MappingGeneration = mapping_generation;
   context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
@@ -4299,7 +4343,10 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   }
   if (!AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
           &packet, (PVOID)(ULONG_PTR)packet.DestinationCpuToken,
-          &view, &binding)) goto Rollback;
+          &view, &binding)) {
+    AdmissionG4RecordBindRefusal(adapter, 3u, args->SubmissionFenceId);
+    goto Rollback;
+  }
   context->GpuvaG3MappingGeneration = mapping_generation;
   context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
