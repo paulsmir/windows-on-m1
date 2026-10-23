@@ -425,12 +425,14 @@ class DxbcToNir(unittest.TestCase):
         # rasterization Tier 1 runs every pixel the triangle touches and no
         # pixel further than 1/2 px: the expansion GS overshoots at sharp
         # angles, so the pixel shader must demote untouched pixels
-        # (dxbc_tir_touched) and see a full single-sample coverage.
+        # (dxbc_tir_touched); SV_Coverage stays the hardware's (the GS
+        # expands by a whole pixel, so every sample of a touched pixel is
+        # covered: all n bits on an n-sample target, SampleMask applied).
         out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tirpass.dxbc"), "--tir-pass", "1", "--print"],
                              capture_output=True, text=True, timeout=60)
         self.assertEqual(out.returncode, 0, out.stdout[-3000:] + out.stderr[-3000:])
         self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
-        self.assertNotIn("load_sample_mask_in", out.stdout)
+        self.assertIn("load_sample_mask_in", out.stdout)
         self.assertIn("demote_if", out.stdout)
         self.assertIn("iabs", out.stdout)
         self.assertEqual(len(re.findall(r"tir_edge(?:#\d+)? \(VARYING_SLOT_TEX", out.stdout)), 4)

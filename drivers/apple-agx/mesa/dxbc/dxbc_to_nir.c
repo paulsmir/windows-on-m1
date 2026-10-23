@@ -2497,16 +2497,9 @@ dxbc_cr_lower_fs(nir_shader *nir)
    touched = nir_iand(b, touched, nir_iand(b, nir_ilt(b, miny, nir_iadd_imm(b, cy, half)),
                                                nir_ilt(b, nir_iadd_imm(b, cy, -half), maxy)));
    nir_demote_if(b, nir_inot(b, touched));
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
-         if (instr->type == nir_instr_type_intrinsic &&
-             nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_sample_mask_in) {
-            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-            b->cursor = nir_before_instr(instr);
-            nir_def_replace(&intr->def, nir_imm_int(b, 1));
-         }
-      }
-   }
+   /* SV_Coverage stays the hardware's: the GS expands by a whole pixel
+    * (dxbc_tir_gs_key.full_pixel), so a touched pixel has every sample
+    * covered, with the SampleMask applied as without conservative mode */
    nir_progress(true, impl, nir_metadata_none);
    return true;
 }

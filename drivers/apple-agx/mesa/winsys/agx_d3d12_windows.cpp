@@ -1895,7 +1895,9 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
     for (uint32_t i = 0; i < bindings->count && i < DXBC_BINDING_MAP_MAX; ++i)
       heap = heap || (bindings->bindings[i].flags & DXBC_BINDING_HEAP) != 0;
     struct dxbc_tir_gs_key key;
-    if (!dxbc_tir_gs_key_from(nir, tir_wrap_ps, &key) || !dxbc_tir_wrap_gs(nir, &key, heap)) {
+    const bool keyed = dxbc_tir_gs_key_from(nir, tir_wrap_ps, &key);
+    key.full_pixel = tir_samples == 1u; /* conservative rasterization */
+    if (!keyed || !dxbc_tir_wrap_gs(nir, &key, heap)) {
       receipt("reject-d3d12-tir", E_NOTIMPL, 0u, heap ? 48u : 32u, 0u);
       ralloc_free(nir);
       memset(bindings, 0, sizeof(*bindings));
@@ -2017,11 +2019,12 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
     /* C61B: a tessellated pipeline feeds the GS from the domain shader; its
      * domain must produce triangles (isolines and point mode do not) */
     struct nir_shader *last = desc->Ds ? ds_io : vs_io;
-    struct nir_shader *gs = !desc->Gs && last && fs_io && dxbc_tir_gs_key_from(last, fs_io, &key)
-                                ? dxbc_tir_gs(pipe->screen->nir_options[MESA_SHADER_GEOMETRY], &key) : NULL;
+    const bool keyed = !desc->Gs && last && fs_io && dxbc_tir_gs_key_from(last, fs_io, &key);
+    key.full_pixel = conservative;
+    struct nir_shader *gs = keyed ? dxbc_tir_gs(pipe->screen->nir_options[MESA_SHADER_GEOMETRY], &key) : NULL;
     if (desc->Gs && fs_io)
       graphics->Gs = create_shader(pipe, desc->Gs, MESA_SHADER_GEOMETRY, &graphics->GsBindings, graphics->GsSrvDimensions,
-                                   graphics->GsUavDimensions, 0, 0, NULL, 0, NULL, fs_io);
+                                   graphics->GsUavDimensions, 0, 0, NULL, conservative ? 1u : 0u, NULL, fs_io);
     ralloc_free(vs_io);
     ralloc_free(ds_io);
     ralloc_free(fs_io);

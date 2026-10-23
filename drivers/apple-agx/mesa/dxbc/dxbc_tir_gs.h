@@ -41,6 +41,11 @@ struct dxbc_tir_gs_key {
    unsigned count;
    struct dxbc_tir_varying v[DXBC_TIR_MAX_VARYINGS];
    bool primitive_id;     /* the pixel shader reads SV_PrimitiveID */
+   /* conservative rasterization: every edge moves out by one pixel (not
+    * half) so the whole square of each touched pixel is inside and the
+    * hardware covers all its samples (D3D12: all samples of a
+    * conservatively rasterized pixel are covered); set by the caller */
+   bool full_pixel;
 };
 
 /* The key for the last vertex stage's outputs (vertex or domain shader)

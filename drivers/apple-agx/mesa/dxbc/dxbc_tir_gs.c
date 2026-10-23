@@ -97,6 +97,7 @@ emit_expanded(nir_builder *b, const struct dxbc_tir_gs_key *key, int pos, nir_de
               nir_def *primitive_id, unsigned vp_cb, unsigned vp_offset)
 {
    nir_def *p[3], *w[3], *sx[3], *sy[3], *ix[3], *iy[3];
+   const float reach = (key->full_pixel ? 1.0f : 0.5f) + DXBC_TIR_MARGIN;
    nir_def *vp = nir_load_ubo(b, 4, 32, nir_imm_int(b, vp_cb), nir_imm_int(b, vp_offset),
                               .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0u);
    nir_def *ok = nir_imm_true(b);
@@ -140,8 +141,8 @@ emit_expanded(nir_builder *b, const struct dxbc_tir_gs_key *key, int pos, nir_de
       const unsigned ia = (j + 2) % 3, ib = j; /* the edges into and out of u_j */
       nir_def *dxa = nir_fsub(b, fx[j], fx[ia]), *dya = nir_fsub(b, fy[j], fy[ia]);
       nir_def *dxb = nir_fsub(b, fx[(j + 1) % 3], fx[j]), *dyb = nir_fsub(b, fy[(j + 1) % 3], fy[j]);
-      nir_def *ha = nir_fmul_imm(b, nir_fadd(b, nir_fabs(b, dxa), nir_fabs(b, dya)), 0.5f + DXBC_TIR_MARGIN);
-      nir_def *hb = nir_fmul_imm(b, nir_fadd(b, nir_fabs(b, dxb), nir_fabs(b, dyb)), 0.5f + DXBC_TIR_MARGIN);
+      nir_def *ha = nir_fmul_imm(b, nir_fadd(b, nir_fabs(b, dxa), nir_fabs(b, dya)), reach);
+      nir_def *hb = nir_fmul_imm(b, nir_fadd(b, nir_fabs(b, dxb), nir_fabs(b, dyb)), reach);
       nir_def *rdet = nir_frcp(b, cross2(b, dxa, dya, dxb, dyb));
       qx[j] = nir_fadd(b, fx[j], nir_fmul(b, nir_fsub(b, nir_fmul(b, dxa, hb), nir_fmul(b, ha, dxb)), rdet));
       qy[j] = nir_fadd(b, fy[j], nir_fmul(b, nir_fsub(b, nir_fmul(b, dya, hb), nir_fmul(b, ha, dyb)), rdet));
