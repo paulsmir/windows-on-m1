@@ -61170,3 +61170,10 @@ EXP1906 C69_ZLS_C21H HARDWARE BEFORE 2026-10-23T11:15:51Z:
 - WHAT IS STILL UNKNOWN: GravityMark D3D11's next stage; whether D3D12 memory scales with asteroids.
 - Expected: regression 118/0 x3; C21H PASS; GravityMark D3D11 past renderer creation; D3D12 2k completes if memory-bound; GT2 renders or names the next step.
 - Failure criteria: regressions, hang (snapshots; vGIC evidence). Recovery rec1906h. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1906-zls-c69/run1906.sh.
+
+EXP1906 pipeline ACTUAL / EXP1906N NIGHT_RAID BEFORE 2026-10-23T11:43:40Z: RC 0, RUN_DONE, m1n1 0d3a75b3 again stable for the whole run (GravityMark D3D11 alone ran 240 s).
+- SAMPLE_HASHES 1055 bad 0 (the cloning fix holds). e1904 118/0 on ARM64, x64 and x86. Samples and ModelViewer alive, no WER. KMD receipts clean.
+- T2VOL: AGX_D3D12_C21G FAIL (C21H BC1/BC3 0x887a0005; the fork fixed it in ff983790).
+- GravityMark D3D11: C69 CONFIRMED -- the compute kernels are now created. The run went on to 41 s, then D3D11Texture::create failed for "2D RGf32 512x256 m10 Target Surface Mipmaps Zero" with device removed (reject-seterror CreateResource line 747 E_NOTIMPL). The app then hung until the 240 s timeout.
+- GravityMark D3D12 10k and 2k: both removed at 20 s and 15 s with the same reject-screen-create (174 active, class 1, 2 MiB, E_OUTOFMEMORY), and the pool peaked at 2.27 GiB again (ReserveFailures 2). The app sizes its heaps to the budget, not the scene, so asteroids are not the variable. The driver-internal staging churn per compressed-texture upload is the failing allocation: fix C70 940562af (one cached staging texture + GPU copy), for the next package.
+EXP1906N: Night Raid Custom GT1+GT2 (window, async off) on this package (the ZLS fix 37123151).
