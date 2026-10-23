@@ -4678,7 +4678,9 @@ AgxD3d10ResourceWithinRequiredLimits(
       pCreateResource->SampleDesc.Quality == 0 &&
       (!pCreateResource->pInitialDataUP || pCreateResource->pInitialDataUP[0].pSysMem) &&
       (!wantsConstant || (pCreateResource->BindFlags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
-        resourceMip[0].TexelWidth <= 65536 && !(resourceMip[0].TexelWidth & 15))) &&
+        /* D3D11.1 allows storage larger than the 64-KiB shader window.
+         * The common resource-limit guard bounds the allocation. */
+        !(resourceMip[0].TexelWidth & 15))) &&
       AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,&resourceGeneration);
    bool validBufferUsage = bufferShape &&
       ((pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
