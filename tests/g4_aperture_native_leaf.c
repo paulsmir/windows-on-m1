@@ -165,7 +165,37 @@ int main(void) {
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
   assert(process.Graph.Mappings==0 && process.Graph.Leaf.AuxIpa==0);
   assert(process.Graph.Publications==7);
+
+  /* T7f: adjacency alone is insufficient: a contiguous quartet starting
+   * one Windows page into a native page must not publish a rounded alias. */
+  for (UINT i=0;i<4;++i) { ptes[i].Valid=1; ptes[i].PageAddress=0x30001+i; }
+  assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
+  assert(process.Graph.Leaf.AuxIpa==0 && process.Graph.Mappings==4);
+  for (UINT i=0;i<4;++i)
+    assert(shadow.LogicalPtes[i].GuestIpa==ptes[i].PageAddress*0x1000ULL);
+  memset(ptes,0,sizeof(ptes));
+  assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
+  assert(process.Graph.Mappings==0);
   free(shadow.LogicalPtes); free(shadow.ResidentPtes);
+
+  /* CPU-only paging VAs must remain usable for copying scattered system
+   * backing without acquiring GPU grants or activating a GPU shadow. */
+  memset(&shadow,0,sizeof(shadow)); memset(&process,0,sizeof(process));
+  shadow.BrokerIpa=0x90000000; process.TableShadows=&shadow;
+  process.State=&state; process.CpuOnlyMappings=1;
+  for (UINT i=0;i<4;++i) { ptes[i].Valid=1; ptes[i].PageAddress=0x40001+9*i; }
+  assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
+  assert(!process.Graph.Leaf.AuxIpa && !process.Graph.Mappings);
+  assert(!process.Graph.Publications && !shadow.ResidentPtes);
+  for (UINT i=0;i<4;++i) {
+    assert(shadow.LogicalPtes[i].GuestIpa==ptes[i].PageAddress*0x1000ULL);
+    assert(shadow.LogicalPtes[i].Allocation==(ULONGLONG)(ULONG_PTR)&adapter);
+  }
+  memset(ptes,0,sizeof(ptes));
+  assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
+  for (UINT i=0;i<4;++i) assert(!shadow.LogicalPtes[i].Flags);
+  assert(!process.Graph.Mappings && !process.Graph.Publications);
+  free(shadow.LogicalPtes);
   puts("T7d native-leaf safety: PASS; scattered GPU residency remains unsupported");
   return 0;
 }
