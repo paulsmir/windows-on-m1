@@ -159,3 +159,15 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   take_ownership here) before packaging.
 - Asahi advertises PIPE_MAX_SHADER_IMAGES (64) but keeps image_mask in
   32 bits: never bind image slots above 31.
+
+## UMD crash triage without a PDB (ARM64)
+
+- The probe prints `PROBE_CRASH_MODULE <dll>+<offset> data <address>`;
+  in-process MiniDumpWriteDump fails (ERROR_NOACCESS) on the guest.
+- Disassemble the packaged DLL at ImageBase+offset (`llvm-objdump -d
+  --start-address`), take 16 bytes of the faulting instructions and search
+  them in the build's objects (`$S/findbytes.ps1` on the builder:
+  `C:\Users\pauls\<EXP>\native-arm64\objects`), then `llvm-objdump -dr`
+  the hit object: the enclosing symbol is the function. EXP1891B found
+  Asahi agx_update_vs this way in minutes.
+- The x64 UMD has a PDB (umd-x64); reproduce on x64 when a stack is needed.
