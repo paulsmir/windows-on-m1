@@ -20,6 +20,7 @@
 #include "agx_d3d12_tiled_probe_minmax_volume_cs.h"
 #include "agx_d3d12_tiled_probe_minmax_cube_cs.h"
 #include "agx_d3d12_tiled_probe_volume_cs.h"
+#include "agx_d3d12_tiled_probe_volume_uav_cs.h"
 #include <math.h>
 
 #define TILE 65536u
@@ -821,7 +822,9 @@ static int minmax_dims_step(Ctx *c, int volume) {
     return SUCCEEDED(hr) && !bad;
 }
 
-/* C21G volume: a Texture3D of the given format, dimensions and mip count is
+/* C21G volume (uav: mip 0 is written by a compute shader through a typed
+ * UAV instead of uploaded, channels 0-2 compared): a Texture3D of the given
+ * format, dimensions and mip count is
  * uploaded (every subresource), and 64 texels of every mip are loaded back
  * through a shader; the values are small integers, exact in R8_UNORM (/255),
  * half and float */
@@ -835,13 +838,16 @@ static unsigned short half_of(float f) { /* exact for the integers above */
     const unsigned mant = (unsigned)((m * 2.0f - 1.0f) * 1024.0f + 0.5f);
     return (unsigned short)(((unsigned)(e - 1 + 15) << 10) | mant);
 }
-static int volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT mips, const char *name) {
+static int volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT mips, const char *name, int uav) {
     const UINT channels = format == DXGI_FORMAT_R8_UNORM ? 1u : 4u;
     const UINT elem = format == DXGI_FORMAT_R32G32B32A32_FLOAT ? 16u : format == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8u
                     : format == DXGI_FORMAT_R8G8B8A8_UNORM ? 4u : 1u;
     D3D12_HEAP_PROPERTIES def = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC td = {D3D12_RESOURCE_DIMENSION_TEXTURE3D, 0, w, h, (UINT16)d, (UINT16)mips, format, {1, 0},
-                              D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_NONE};
+                              D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                              uav ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE};
+    ID3D12RootSignature *wroot = NULL;
+    ID3D12PipelineState *wpso = NULL;
     ID3D12Resource *tex = NULL, *up = NULL, *out = NULL, *rb = NULL;
     ID3D12DescriptorHeap *views = NULL;
     ID3D12RootSignature *root = NULL;
@@ -851,8 +857,9 @@ static int volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT 
     UINT64 total = 0;
     const UINT64 out_bytes = (UINT64)mips * 64u * 16u;
     HRESULT hr = mips <= 12 ? ID3D12Device_CreateCommittedResource(c->device, &def, D3D12_HEAP_FLAG_NONE, &td,
-                                                                  D3D12_RESOURCE_STATE_COPY_DEST, NULL, &IID_ID3D12Resource,
-                                                                  (void **)&tex)
+                                                                  uav ? D3D12_RESOURCE_STATE_UNORDERED_ACCESS
+                                                                      : D3D12_RESOURCE_STATE_COPY_DEST,
+                                                                  NULL, &IID_ID3D12Resource, (void **)&tex)
                             : E_INVALIDARG;
     if (SUCCEEDED(hr)) ID3D12Device_GetCopyableFootprints(c->device, &td, 0, mips, 0, fp, NULL, NULL, &total);
     up = SUCCEEDED(hr) ? buffer(c, D3D12_HEAP_TYPE_UPLOAD, total, D3D12_RESOURCE_STATE_GENERIC_READ) : NULL;
@@ -884,15 +891,14 @@ static int volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT 
             }
     }
     if (map) ID3D12Resource_Unmap(up, 0, NULL);
-    for (UINT m = 0; SUCCEEDED(hr) && m < mips; ++m) {
+    for (UINT m = 0; SUCCEEDED(hr) && !uav && m < mips; ++m) {
         D3D12_TEXTURE_COPY_LOCATION dst = {tex, D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
         D3D12_TEXTURE_COPY_LOCATION src = {up, D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
         dst.SubresourceIndex = m;
         src.PlacedFootprint = fp[m];
         ID3D12GraphicsCommandList_CopyTextureRegion(c->list, &dst, 0, 0, 0, &src, NULL);
     }
-    if (SUCCEEDED(hr)) barrier(c, tex, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    D3D12_DESCRIPTOR_HEAP_DESC vd = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    D3D12_DESCRIPTOR_HEAP_DESC vd = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(c->device, &vd, &IID_ID3D12DescriptorHeap, (void **)&views);
     if (SUCCEEDED(hr)) {
         D3D12_CPU_DESCRIPTOR_HANDLE vh;
@@ -900,7 +906,44 @@ static int volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT 
         D3D12_SHADER_RESOURCE_VIEW_DESC srv = {format, D3D12_SRV_DIMENSION_TEXTURE3D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING};
         srv.Texture3D.MipLevels = mips;
         ID3D12Device_CreateShaderResourceView(c->device, tex, &srv, vh);
+        if (uav) {
+            D3D12_UNORDERED_ACCESS_VIEW_DESC u = {format, D3D12_UAV_DIMENSION_TEXTURE3D};
+            u.Texture3D.WSize = d;
+            D3D12_CPU_DESCRIPTOR_HANDLE at = {vh.ptr + ID3D12Device_GetDescriptorHandleIncrementSize(
+                                                           c->device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)};
+            ID3D12Device_CreateUnorderedAccessView(c->device, tex, NULL, &u, at);
+        }
     }
+    if (uav) {
+        /* the writer: a UAV table u0 */
+        D3D12_DESCRIPTOR_RANGE wr = {D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0, 0};
+        D3D12_ROOT_PARAMETER wp = {D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE};
+        wp.DescriptorTable.NumDescriptorRanges = 1;
+        wp.DescriptorTable.pDescriptorRanges = &wr;
+        D3D12_ROOT_SIGNATURE_DESC wd = {1, &wp, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+        ID3DBlob *wblob = NULL;
+        if (SUCCEEDED(hr)) hr = D3D12SerializeRootSignature(&wd, D3D_ROOT_SIGNATURE_VERSION_1, &wblob, NULL);
+        if (SUCCEEDED(hr))
+            hr = ID3D12Device_CreateRootSignature(c->device, 0, ID3D10Blob_GetBufferPointer(wblob),
+                                                  ID3D10Blob_GetBufferSize(wblob), &IID_ID3D12RootSignature, (void **)&wroot);
+        if (wblob) ID3D10Blob_Release(wblob);
+        D3D12_COMPUTE_PIPELINE_STATE_DESC wpd = {wroot, {g_volume_uav_probe_cs, sizeof(g_volume_uav_probe_cs)}};
+        if (SUCCEEDED(hr))
+            hr = ID3D12Device_CreateComputePipelineState(c->device, &wpd, &IID_ID3D12PipelineState, (void **)&wpso);
+        if (SUCCEEDED(hr)) {
+            D3D12_GPU_DESCRIPTOR_HANDLE vg;
+            ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(views, &vg);
+            vg.ptr += ID3D12Device_GetDescriptorHandleIncrementSize(c->device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            ID3D12GraphicsCommandList_SetDescriptorHeaps(c->list, 1, &views);
+            ID3D12GraphicsCommandList_SetComputeRootSignature(c->list, wroot);
+            ID3D12GraphicsCommandList_SetPipelineState(c->list, wpso);
+            ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(c->list, 0, vg);
+            ID3D12GraphicsCommandList_Dispatch(c->list, w / 4, h / 4, d / 4);
+        }
+    }
+    if (SUCCEEDED(hr))
+        barrier(c, tex, uav ? D3D12_RESOURCE_STATE_UNORDERED_ACCESS : D3D12_RESOURCE_STATE_COPY_DEST,
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, 0};
     D3D12_ROOT_PARAMETER params[3] = {{D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}, {D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS},
                                       {D3D12_ROOT_PARAMETER_TYPE_UAV}};
@@ -943,7 +986,7 @@ static int volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT 
         for (UINT id = 0; id < 64; ++id) {
             const UINT x = (id * 7u) % mw, y = (id * 13u) % mh, z = (id * 5u) % md;
             const float *v = got + ((UINT64)m * 64u + id) * 4u;
-            for (UINT k = 0; k < channels; ++k)
+            for (UINT k = 0; k < (uav ? 3u : channels); ++k)
                 if (fabsf(v[k] * scale - volume_value(k, m, x, y, z)) > 0.01f) {
                     if (bad < 6)
                         printf("%s mip %u (%u,%u,%u) c%u got %g want %g\n", name, m, x, y, z, k, v[k] * scale,
@@ -957,6 +1000,8 @@ static int volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT 
     result(name, SUCCEEDED(hr) && !bad, hr, bad);
     if (pso) ID3D12PipelineState_Release(pso);
     if (root) ID3D12RootSignature_Release(root);
+    if (wpso) ID3D12PipelineState_Release(wpso);
+    if (wroot) ID3D12RootSignature_Release(wroot);
     if (blob) ID3D10Blob_Release(blob);
     if (views) ID3D12DescriptorHeap_Release(views);
     if (rb) ID3D12Resource_Release(rb);
@@ -1163,11 +1208,12 @@ int main(int argc, char **argv) {
     }
     if (volume_mode) {
         /* C21G: the general Texture3D layouts (any tier) */
-        int ok = volume_step(&c, DXGI_FORMAT_R32G32B32A32_FLOAT, 64, 64, 64, 7, "C21G_VOLUME_RGBA32F");
-        ok &= volume_step(&c, DXGI_FORMAT_R16G16B16A16_FLOAT, 64, 64, 64, 7, "C21G_VOLUME_RGBA16F");
-        ok &= volume_step(&c, DXGI_FORMAT_R8_UNORM, 64, 64, 32, 7, "C21G_VOLUME_R8");
-        ok &= volume_step(&c, DXGI_FORMAT_R16G16B16A16_FLOAT, 160, 90, 16, 1, "C21G_VOLUME_FROXEL");
-        ok &= volume_step(&c, DXGI_FORMAT_R8G8B8A8_UNORM, 33, 17, 5, 6, "C21G_VOLUME_NPOT");
+        int ok = volume_step(&c, DXGI_FORMAT_R32G32B32A32_FLOAT, 64, 64, 64, 7, "C21G_VOLUME_RGBA32F", 0);
+        ok &= volume_step(&c, DXGI_FORMAT_R16G16B16A16_FLOAT, 64, 64, 64, 7, "C21G_VOLUME_RGBA16F", 0);
+        ok &= volume_step(&c, DXGI_FORMAT_R8_UNORM, 64, 64, 32, 7, "C21G_VOLUME_R8", 0);
+        ok &= volume_step(&c, DXGI_FORMAT_R16G16B16A16_FLOAT, 160, 90, 16, 1, "C21G_VOLUME_FROXEL", 0);
+        ok &= volume_step(&c, DXGI_FORMAT_R16G16B16A16_FLOAT, 64, 32, 16, 1, "C21G_VOLUME_UAV", 1);
+        ok &= volume_step(&c, DXGI_FORMAT_R8G8B8A8_UNORM, 33, 17, 5, 6, "C21G_VOLUME_NPOT", 0);
         printf("AGX_D3D12_C21G: %s\n", ok ? "PASS" : "FAIL");
         return ok ? 0 : 1;
     }
