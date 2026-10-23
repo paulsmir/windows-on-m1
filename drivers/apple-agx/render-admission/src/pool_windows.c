@@ -385,6 +385,32 @@ static ULONGLONG AdmissionPoolNowMs(VOID) {
   return KeQueryInterruptTime() / 10000ULL;
 }
 
+/* M2-f7c: locked system pages need headroom before Windows reaches its low
+ * threshold. HighMemoryCondition is the documented permission for aggressive
+ * allocation; a missing high event fails closed. LowMemory is an extra veto.
+ * Only reservation growth uses this gate, never already-admitted paging. */
+static int AdmissionPoolMayGrow(void *Opaque) {
+  ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+  return pool->HighMemory != NULL && KeReadStateEvent(pool->HighMemory) != 0 &&
+         (pool->LowMemory == NULL || KeReadStateEvent(pool->LowMemory) == 0);
+}
+
+/* Called with the pool mutex held. Pressure bypasses only the idle delay
+ * and empty-slab cache: Reclaim still enforces owner/pin/paging/sequence and
+ * broker-unmap safety, and slab trimming still preserves promised backing. */
+static VOID AdmissionPoolReclaimLocked(ADMISSION_POOL_RUNTIME *Pool) {
+  if (AdmissionPoolMayGrow(Pool)) {
+    (void)AdmissionPoolDemandReclaimAged(&Pool->Demand, AdmissionPoolNowMs());
+  } else {
+    ULONGLONG spare = Pool->Slabs.SpareLimit;
+    Pool->Slabs.SpareLimit = 0ULL;
+    (void)AdmissionPoolDemandReclaim(&Pool->Demand);
+    /* Also trim already-empty slabs, including when there were no candidates. */
+    AdmissionPoolSlabUnreserve(&Pool->Slabs, 0ULL);
+    Pool->Slabs.SpareLimit = spare;
+  }
+}
+
 _Use_decl_annotations_ ADMISSION_POOL_DEMAND *AdmissionMemoryPoolLock(
     ADMISSION_CONTEXT *Context) {
   ADMISSION_POOL_RUNTIME *pool;
@@ -481,7 +507,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolExecuted(
   ADMISSION_POOL_DEMAND *demand = AdmissionMemoryPoolLock(Context);
   if (demand == NULL) return;
   AdmissionPoolDemandExecuted(demand, Seq);
-  (void)AdmissionPoolDemandReclaimAged(demand, AdmissionPoolNowMs());
+  AdmissionPoolReclaimLocked((ADMISSION_POOL_RUNTIME *)Context->PoolDemand);
   AdmissionMemoryPoolUnlock(Context);
 }
 
@@ -504,6 +530,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
   reserved = AdmissionPoolSlabReserve(&pool->Slabs,
       (Bytes + ADMISSION_POOL_DEMAND_GRANULE - 1ULL) /
           ADMISSION_POOL_DEMAND_GRANULE) ? TRUE : FALSE;
+  /* First let this reservation reuse held pages; then return only surplus. */
+  if (!AdmissionPoolMayGrow(pool)) AdmissionPoolReclaimLocked(pool);
   AdmissionMemoryPoolUnlock(Context);
   return reserved;
 }
@@ -522,7 +550,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnreserve(
 _Use_decl_annotations_ VOID AdmissionMemoryPoolReclaim(ADMISSION_CONTEXT *Context) {
   ADMISSION_POOL_DEMAND *demand = AdmissionMemoryPoolLock(Context);
   if (demand == NULL) return;
-  (void)AdmissionPoolDemandReclaimAged(demand, AdmissionPoolNowMs());
+  AdmissionPoolReclaimLocked((ADMISSION_POOL_RUNTIME *)Context->PoolDemand);
   AdmissionMemoryPoolUnlock(Context);
 }
 
@@ -625,26 +653,6 @@ static ULONGLONG AdmissionPoolRamBytes(VOID) {
     total += (ULONGLONG)ranges[i].NumberOfBytes.QuadPart;
   ExFreePool(ranges);
   return total;
-}
-
-/* M2-f7 (EXP1304/EXP1305: the guest starved with 2 GiB of render targets
- * and RAM locked to 384 MiB available; EXP1305's tool saw 12 MiB available
- * and its first E_OUTOFMEMORY at 32 MiB, i.e. at about the low-memory
- * threshold): a reservation takes a new slab from Windows only while free
- * physical memory is above the system's high-memory threshold, so
- * CreateAllocation reports STATUS_NO_MEMORY while Windows still has room to
- * run (Microsoft: Standard Event Objects). Without that event the
- * low-memory event is the gate; without either, no gate. */
-/* M2-f7b (EXP1907, GravityMark D3D12): the high threshold kept about 740 MiB
- * of this 6 GiB guest from the GPU (EXP1308 MEMSTATE) and refused a 2 MiB
- * internal buffer with the pagefile at 243 MiB of 6 GiB, removing the
- * device. Growth now stops only while LowMemoryCondition is set, Windows'
- * signal that free memory is low after its own trimming; the high event is
- * the fallback when the low one cannot be opened. */
-static int AdmissionPoolMayGrow(void *Opaque) {
-  ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
-  if (pool->LowMemory != NULL) return KeReadStateEvent(pool->LowMemory) == 0;
-  return pool->HighMemory == NULL || KeReadStateEvent(pool->HighMemory) != 0;
 }
 
 static PKEVENT AdmissionPoolOpenEvent(PCWSTR Name) {
