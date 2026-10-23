@@ -61660,3 +61660,21 @@ EXP1920 HARDWARE BEFORE 2026-10-23T22:44:46Z:
 - Recovery: rec1920h; at proxy use AGX_RECOVERY_ALLOW_AT_PROXY=1.
 - Hashes: sys 89b385f777fe, UmdArm64 1976eb8ebead, UmdX64 d05f039bf6f2, Umd32 05033abbf45a; manifest 451b039935db, hardware-manifest 4a31b95e5989; probe1920.sh 4a5c420438d7 (PROBE_LINT_OK); visible recovery rec1920h 04ccd16aa6a9fae0; m1n1 0d3a75b3.
 - Recovery rec1920h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1920-c86-staging/run1920.sh.
+
+EXP1920 ACTUAL 2026-10-23T22:57:02Z:
+- Package 30.0.1920.0 (242c10d9 = T7h + fork C86); short profile.
+- GravityMark D3D12 10k: Ready, then the device was removed at 55.0 s (EXP1919: 43.2 s).
+  - gm-run "REMOVED KILLED": CloseMainWindow did not end the hung process within 15 s.
+  - The UMD trace ends again in a measure-d3d12-texture-copy burst (mip uploads): the hung thread never appended again, so the buffered tail was lost.
+- Then the guest went down during the run (GUEST_DOWN_DURING_GRAVITYMARK); 2k did not run. Hypervisor log: NVMe guest reset (dump write), then PSCI SYSTEM_RESET (full-crash.log).
+- Minidump 102426-14171-01.dmp (sha256 ed71e1d80a714c34...), evidence/dump/cdb-analyze.txt: 0x116 VIDEO_TDR_FAILURE, P3 0xC0000483, AppleAgxRenderAdmission+0x398c0 -- the same failure as EXP1919, now during the run.
+- KMD receipts were lost: the visible recovery cleanup erased Device Parameters before collection (0 values afterwards).
+- Recovery: rec1920h with AGX_RECOVERY_ALLOW_AT_PROXY=1 reported RECOVERY_DONE.
+- Verdict:
+  - C86 does not remove the hang (it is not the cause);
+  - the GravityMark D3D12 hang -> TDR -> failed reset -> 0x116 chain is reproducible.
+- Tooling after this run:
+  - UMD APPLE_AGX_UMD_TRACE_SYNC=1 (a8cf4104), set by gm-run.ps1;
+  - agx-recover-visible.sh snapshots the KMD receipts before the first mutation (d3162a9b);
+  - Codex T10 Wom1GpuReset v3 failing-stage receipts (423b9aa1).
+- Next: EXP1921 = these diagnostics only, to locate the hung submission and the failing reset gate.
