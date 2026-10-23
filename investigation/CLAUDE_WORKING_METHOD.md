@@ -171,3 +171,16 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   the hit object: the enclosing symbol is the function. EXP1891B found
   Asahi agx_update_vs this way in minutes.
 - The x64 UMD has a PDB (umd-x64); reproduce on x64 when a stack is needed.
+
+## Experiments whose variable is the m1n1
+
+- prepare.sh takes `AGX_M1N1=<macho>`; the at-proxy recovery reboots the
+  experiment profile, i.e. the same m1n1. If that m1n1 cannot boot Windows
+  (EXP1894), recovery hangs at AT_PROXY_SSH_NOT_UP.
+- Before such a run, keep `full-owner<N>.sh.lastgood` + a manifest copy
+  naming the last good m1n1; on a boot failure SIGTERM run_uefi (snapshot +
+  Air reboot), swap them in (update the full-owner hash in
+  hardware-manifest.json, `verify-launch<N>.py` must pass) and run
+  `AGX_RECOVERY_ALLOW_AT_PROXY=1 recover.sh`.
+- A hung guest: two `kill -INT <run_uefi>` HV WATCHDOG snapshots ~25 s apart
+  before any recovery (per-CPU pc/spsr/LRs; the vGIC evidence).
