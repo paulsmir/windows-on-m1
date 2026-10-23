@@ -41,7 +41,8 @@ int main(){pipe_context p={nullptr,nullptr,nullptr,clear};Device d={&p,nullptr,{
  std::fill(bytes,bytes+64,0xdeadbeefu);ClearView(&d,1,&v,color,rects,6);
  assert(!error && calls==3);
  for(unsigned i=0;i<64;++i){bool changed=i==7||(i>=9&&i<12)||(i>=17&&i<20);assert(bytes[i]==(changed?123u:0xdeadbeefu));}
- ClearView(&d,1,&v,color,nullptr,0);assert(whole==1);
+ predicate=false;ClearView(&d,1,&v,color,nullptr,0);assert(whole==0 && calls==4);
+ for(unsigned i=7;i<20;++i)assert(bytes[i]==123u);
 }
 ''')
 

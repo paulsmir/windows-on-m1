@@ -693,12 +693,13 @@ ClearView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HANDLETYPE type, VOID *hView, const
    }
    if (type == D3D10DDI_HT_RENDERTARGETVIEW) {
       D3D10DDI_HRENDERTARGETVIEW rtv = {hView};
-      if (!nRects) {
+      Device *device = CastDevice(hDevice);
+      struct pipe_surface *surface = &CastRenderTargetView(rtv)->surface;
+      bool buffer = surface->texture && surface->texture->target == PIPE_BUFFER;
+      if (!nRects && !buffer) {
          base11.pfnClearRenderTargetView(hDevice, rtv, (FLOAT *)color);
          return;
       }
-      Device *device = CastDevice(hDevice);
-      struct pipe_surface *surface = &CastRenderTargetView(rtv)->surface;
       union pipe_color_union value;
       const bool integer = util_format_is_pure_integer(surface->format);
       const bool sint = util_format_is_pure_sint(surface->format);
@@ -711,6 +712,13 @@ ClearView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HANDLETYPE type, VOID *hView, const
                          c >= 2147483647.0f ? INT32_MAX : (int)c;
          else
             value.ui[i] = !(c > 0.0f) ? 0u : c >= 4294967295.0f ? UINT32_MAX : (unsigned)c;
+      }
+      if (buffer && !nRects) {
+         RenderTargetView *view = CastRenderTargetView(rtv);
+         /* ClearView is unconditional, unlike ClearRenderTargetView. */
+         if (!AgxD3d11ClearBufferRtv(device, view, &value, 0, view->buffer_num_elements))
+            refuse(hDevice, "reject-wddm2-clearview", E_FAIL, (UINT)type);
+         return;
       }
       for (UINT i = 0; rects && i < nRects; ++i) {
          const D3D10_DDI_RECT &r = rects[i];
