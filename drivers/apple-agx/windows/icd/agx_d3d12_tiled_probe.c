@@ -1021,12 +1021,15 @@ static float bc_channel(unsigned short c, UINT k) {
     const unsigned r = c >> 11, g = (c >> 5) & 63u, b = c & 31u;
     return k == 0 ? (float)((r << 3) | (r >> 2)) : k == 1 ? (float)((g << 2) | (g >> 4)) : k == 2 ? (float)((b << 3) | (b >> 2)) : 255.0f;
 }
-static int bc_volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT mips, const char *name) {
+/* region: the uploaded volume is copied mip by mip into a second one with
+ * texture-to-texture CopyTextureRegion and block-aligned boxes (a 2x2 or
+ * 1x1 mip copies with a 4x4 box; 51e4b51b), which is then read */
+static int bc_volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT mips, const char *name, int region) {
     const UINT block = format == DXGI_FORMAT_BC1_UNORM ? 8u : 16u;
     D3D12_HEAP_PROPERTIES def = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC td = {D3D12_RESOURCE_DIMENSION_TEXTURE3D, 0, w, h, (UINT16)d, (UINT16)mips, format, {1, 0},
                               D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_NONE};
-    ID3D12Resource *tex = NULL, *up = NULL, *out = NULL, *rb = NULL;
+    ID3D12Resource *tex = NULL, *up = NULL, *out = NULL, *rb = NULL, *copy = NULL;
     ID3D12DescriptorHeap *views = NULL;
     ID3D12RootSignature *root = NULL;
     ID3D12PipelineState *pso = NULL;
@@ -1077,6 +1080,25 @@ static int bc_volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UI
         dst.SubresourceIndex = m;
         src.PlacedFootprint = fp[m];
         ID3D12GraphicsCommandList_CopyTextureRegion(c->list, &dst, 0, 0, 0, &src, NULL);
+    }
+    if (SUCCEEDED(hr) && region) {
+        hr = ID3D12Device_CreateCommittedResource(c->device, &def, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_COPY_DEST,
+                                                  NULL, &IID_ID3D12Resource, (void **)&copy);
+        if (SUCCEEDED(hr)) {
+            barrier(c, tex, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            for (UINT m = 0; m < mips; ++m) {
+                D3D12_TEXTURE_COPY_LOCATION dst = {copy, D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
+                D3D12_TEXTURE_COPY_LOCATION src = {tex, D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
+                dst.SubresourceIndex = src.SubresourceIndex = m;
+                const UINT mw = w >> m ? w >> m : 1u, mh = h >> m ? h >> m : 1u, md = d >> m ? d >> m : 1u;
+                const D3D12_BOX box = {0, 0, 0, (mw + 3u) & ~3u, (mh + 3u) & ~3u, md};
+                ID3D12GraphicsCommandList_CopyTextureRegion(c->list, &dst, 0, 0, 0, &src, &box);
+            }
+            /* read the copy */
+            ID3D12Resource *t2 = tex;
+            tex = copy;
+            copy = t2;
+        }
     }
     if (SUCCEEDED(hr)) barrier(c, tex, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     D3D12_DESCRIPTOR_HEAP_DESC vd = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
@@ -1150,6 +1172,7 @@ static int bc_volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UI
     if (out) ID3D12Resource_Release(out);
     if (up) ID3D12Resource_Release(up);
     if (tex) ID3D12Resource_Release(tex);
+    if (copy) ID3D12Resource_Release(copy);
     return SUCCEEDED(hr) && !bad;
 }
 
@@ -1356,8 +1379,9 @@ int main(int argc, char **argv) {
         ok &= volume_step(&c, DXGI_FORMAT_R16G16B16A16_FLOAT, 160, 90, 16, 1, "C21G_VOLUME_FROXEL", 0);
         ok &= volume_step(&c, DXGI_FORMAT_R16G16B16A16_FLOAT, 64, 32, 16, 1, "C21G_VOLUME_UAV", 1);
         ok &= volume_step(&c, DXGI_FORMAT_R8G8B8A8_UNORM, 33, 17, 5, 6, "C21G_VOLUME_NPOT", 0);
-        ok &= bc_volume_step(&c, DXGI_FORMAT_BC1_UNORM, 64, 64, 16, 7, "C21H_VOLUME_BC1");
-        ok &= bc_volume_step(&c, DXGI_FORMAT_BC3_UNORM, 64, 32, 8, 7, "C21H_VOLUME_BC3");
+        ok &= bc_volume_step(&c, DXGI_FORMAT_BC1_UNORM, 64, 64, 16, 7, "C21H_VOLUME_BC1", 0);
+        ok &= bc_volume_step(&c, DXGI_FORMAT_BC3_UNORM, 64, 32, 8, 7, "C21H_VOLUME_BC3", 0);
+        ok &= bc_volume_step(&c, DXGI_FORMAT_BC1_UNORM, 16, 16, 4, 5, "C21H_REGION_BC1", 1);
         printf("AGX_D3D12_C21G: %s\n", ok ? "PASS" : "FAIL");
         return ok ? 0 : 1;
     }
