@@ -41,6 +41,7 @@ class VolumeCopy(unittest.TestCase):
         funcs=block(owner,'static unsigned block_bytes(')+'\n'+block(owner,'static unsigned level_extent(unsigned extent, unsigned level) {')+'\n'
         funcs+=block(owner,'static unsigned texture_block(')+'\n'
         if 'static unsigned texture_layer_extent(' in owner:funcs+=block(owner,'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {')+'\n'
+        if 'static HRESULT staged_download(' in owner:funcs+=block(owner,'static HRESULT staged_download(')+'\n'
         funcs+=block(owner,'extern "C" HRESULT AgxD3d12OwnerCopyTexture(')
         header=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.h').read_text()
         end=header.index('} AGX_D3D12_TEXTURE_COPY;')+len('} AGX_D3D12_TEXTURE_COPY;')

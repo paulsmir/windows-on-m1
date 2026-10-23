@@ -367,6 +367,15 @@ int main() {
         self.assertLess(destroy.index('AgxWin32AsahiResourceRelease(&owner->UploadStaging)'),
                         destroy.index('AgxWin32AsahiContextDestroy(owner->Context)'))
 
+    def test_c80_presentation_readback_staging_released_before_context(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The C80 readback
+        # staging is a Mesa resource of the owner's screen; released after
+        # the context and screen it would touch a destroyed screen.
+        text = OWNER.read_text()
+        destroy = body(text, 'extern "C" HRESULT AgxD3d12OwnerDestroy(')
+        self.assertLess(destroy.index('AgxWin32AsahiResourceRelease(&owner->DownloadStaging)'),
+                        destroy.index('AgxWin32AsahiContextDestroy(owner->Context)'))
+
     def test_teardown_order(self):
         text = OWNER.read_text()
         destroy = body(text, 'extern "C" HRESULT AgxD3d12OwnerDestroy(')

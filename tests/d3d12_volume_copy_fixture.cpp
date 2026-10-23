@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include "pipe/p_context.h"
+#include "pipe/p_screen.h"
 #include "pipe/p_state.h"
 #include "util/format/u_format.h"
 using UINT=unsigned;using HRESULT=int;
@@ -11,7 +12,8 @@ using UINT=unsigned;using HRESULT=int;
 #define E_OUTOFMEMORY (-2)
 #define SUCCEEDED(x) ((x)>=0)
 struct AGX_D3D12_BUFFER {void *Resource;unsigned long long GpuVa,Bytes;};
-struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingCopies;};
+struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingCopies;pipe_screen *Screen;pipe_resource *DownloadStaging;};
+static void AgxWin32AsahiResourceRelease(pipe_resource **resource) {*resource=nullptr;}
 struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}}; /* the owner lock (EXP1824) is not a fixture boundary */
 /* ACTUAL_COPY_RECORD */
 /* C53 T2D: no reserved textures here (their staging path: the HW2 self-test) */
@@ -28,8 +30,22 @@ static unsigned maps=0;
 /* C29: a BC1 map is a staging copy of whole 4x4 blocks (agx_transfer_map
  * stride = blocks across the box * 8) */
 static bool bc_mode;static pipe_box bc_box;static unsigned char bc_blocks[3][256];
-static void *map_texture(pipe_context *,pipe_resource *,unsigned level,unsigned,const pipe_box *box,pipe_transfer **t) {
+/* C80 (EXP1899N): an imported presentation surface (PIPE_BIND_SHARED) is
+ * read back through a GPU copy into the owner's linear staging; a CPU map
+ * of the surface itself is counted (each one downloaded the whole surface) */
+static pipe_resource staging_res;static unsigned char present_px[4*32],staging_px[8*1024];
+static unsigned shared_maps=0,staging_creates=0,staging_copies=0;
+static pipe_resource *create_staging(pipe_screen *,const pipe_resource *templ) {++staging_creates;staging_res=*templ;return &staging_res;}
+static void copy_region(pipe_context *,pipe_resource *dst,unsigned level,unsigned dx,unsigned dy,unsigned dz,
+                        pipe_resource *src,unsigned src_level,const pipe_box *box) {
+ assert(dst==&staging_res && !level && !dz && !src_level && (src->bind & PIPE_BIND_SHARED) && box->depth==1);
+ ++staging_copies;
+ for(int y=0;y<box->height;++y)std::memcpy(staging_px+(dy+y)*1024+dx*4,present_px+(box->y+y)*32+box->x*4,box->width*4);
+}
+static void *map_texture(pipe_context *,pipe_resource *res,unsigned level,unsigned,const pipe_box *box,pipe_transfer **t) {
  ++maps;tex_transfer={};*t=&tex_transfer;
+ if(res==&staging_res){tex_transfer.stride=1024;return staging_px+box->y*1024+box->x*4;}
+ if(res->bind & PIPE_BIND_SHARED){++shared_maps;tex_transfer.stride=32;return present_px+box->y*32+box->x*4;}
  if(bc_mode){bc_box=*box;tex_transfer.stride=(box->width+3)/4*8;tex_transfer.layer_stride=tex_transfer.stride*((box->height+3)/4);return bc_blocks[level];}
  tex_transfer.stride=64;tex_transfer.layer_stride=512;
  return volume[level]+box->z*512+box->y*64+box->x*4;
@@ -93,5 +109,27 @@ int main() {
  b.X=0;b.Width=12;assert(AgxD3d12OwnerCopyTexture(&owner,&b)==E_INVALIDARG && maps==before);
  b.Width=8;b.Pitch=8;assert(AgxD3d12OwnerCopyTexture(&owner,&b)==E_INVALIDARG && maps==before);
  bc_mode=false;
- puts("PASS volume real-copy pitches/mip bounds/untouched planes; C29 BC1 block rows/edge mip/refusals");
+ // C80: a 5x3 readback of an 8x4 BGRA presentation surface at (2,1)
+ pipe_screen screen={};screen.resource_create=create_staging;owner.Screen=&screen;pipe.resource_copy_region=copy_region;
+ pipe_resource pres={};pres.target=PIPE_TEXTURE_2D;pres.format=PIPE_FORMAT_B8G8R8A8_UNORM;pres.width0=8;pres.height0=4;
+ pres.depth0=1;pres.array_size=1;pres.bind=PIPE_BIND_RENDER_TARGET|PIPE_BIND_SAMPLER_VIEW|PIPE_BIND_SHARED;
+ AGX_D3D12_BUFFER prestex={&pres,0,sizeof(present_px)};
+ for(unsigned i=0;i<sizeof(present_px);++i)present_px[i]=static_cast<unsigned char>(i*13+1);
+ std::memset(buffer_bytes,0x5a,sizeof(buffer_bytes));
+ AGX_D3D12_TEXTURE_COPY r={};r.Texture=&prestex;r.Buffer=&buffer;r.ToBuffer=1;r.X=2;r.Y=1;r.Width=5;r.Height=3;r.Depth=1;
+ r.Pitch=256;r.Offset=512;
+ for(unsigned pass=0;pass<2;++pass) {
+  assert(AgxD3d12OwnerCopyTexture(&owner,&r)==S_OK);
+  std::printf("presentation readback pass %u shared_maps=%u staging_copies=%u creates=%u\n",pass,shared_maps,staging_copies,staging_creates);
+  std::fflush(stdout);
+  assert(!shared_maps && staging_copies==pass+1 && staging_creates==1);
+  for(unsigned y=0;y<3;++y) {
+   assert(!std::memcmp(buffer_bytes+512+y*256,present_px+(1+y)*32+8,20));
+   assert(buffer_bytes[512+y*256-1]==0x5a && buffer_bytes[512+y*256+20]==0x5a);
+  }
+ }
+ /* a larger box than the cached staging makes a new one */
+ r.X=0;r.Y=0;r.Width=8;r.Height=4;assert(AgxD3d12OwnerCopyTexture(&owner,&r)==S_OK && !shared_maps);
+ assert(!std::memcmp(buffer_bytes+512+3*256,present_px+3*32,32));
+ puts("PASS volume real-copy pitches/mip bounds/untouched planes; C29 BC1 block rows/edge mip/refusals; C80 presentation readback via GPU staging");
 }
