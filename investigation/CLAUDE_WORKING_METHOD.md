@@ -48,6 +48,12 @@ newest EXPERIMENTS.md entries, then what Codex did since (git log, CHANGES.csv).
 Scratchpad: /private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad
 (backups: .local/scratchpad-tools-backup, tools/agx-lab).
 
+- Package pipeline (current): `bash $S/mkexp.sh <prevN> <prevDir> <N> <dir> X86B<k> X86B<k+1>`
+  snapshots HEAD (package_source.py), derives run<N>.ps1/x86b<k+1>.ps1 with
+  the new pins, uploads and starts chain<N>.sh (x86 Umd32 then package);
+  then `bash $S/fetch-package.sh <dir>` -> FETCH_PASS, then prepare.sh,
+  agx-install-visible-recovery.py, BEFORE, run<N>.sh. Copy probe<N>.sh and
+  guest/ (rename *<prev>* files, sed EXP<prev> in .ps1 only) before prepare.
 - buildNNNN.sh  (sed from previous: EXP dir name + number) -> mkicd snapshot of
   HEAD + build-kmd on builder; wait BUILDNNNN_DONE, require
   "PACKAGENNNN BUILD PASS" and both STACK_FRAMES PASS. No commits of code
