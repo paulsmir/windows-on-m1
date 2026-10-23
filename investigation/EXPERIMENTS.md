@@ -61217,3 +61217,10 @@ EXP1907 ACTUAL 2026-10-23T12:49:22Z: run1907.sh RC 0, RUN_DONE. m1n1 0d3a75b3 st
 - C71: no reject-d3d11-render-target receipt. GravityMark D3D11 now runs to 26 s (EXP1906: 41 s with a different failure). It is removed by reject-resource-copy-region 98 98 2 7 2 2 2 2 6 70 4 4: BC7 128x128 level 6 (2x2) copied with the block-aligned 4x4 box. Fix C72 be370175.
 - Manual: GravityMark D3D12 thread sample: 110% of one process, threads at 71% and 38%. Not single-thread saturated during loading; inconclusive for performance. WPR CPU sampling is not supported on this guest (0x80070032).
 - Verdicts: C70 confirmed (upload path); C71 superseded by the next blocker (no refusal); C21H rejected (fork); C67b/C72/C73 go to EXP1908.
+
+EXP1907 ROLLBACK 2026-10-23T13:03:29Z:
+- A manual `shutdown /r` before rec1907h returned the air to Running proxy (run_uefi exited); the first recover.sh failed with a connection reset.
+- Recovered with AGX_RECOVERY_ALLOW_AT_PROXY=1 rec1907h/recover.sh, which booted the owner. A concurrently queued plain recover.sh (the earlier SSH waiter, not cancelled) then completed the ordinary cleanup: VISIBLE_CODE32_SERVICE_STOPPED, PROXY_READY_PASS, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
+- The AT_PROXY instance then stopped at its own cleanup receipt ("visible-disable.json already exists").
+- Read-only verification: APPL0002 CM_PROB_FAILED_INSTALL, 0 AppleAgx driver packages, no service, 8 CPUs, dwm and explorer alive.
+- Process fix b245afd8: CLAUDE_WORKING_METHOD no longer says to shut down before recovery.
