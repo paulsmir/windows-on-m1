@@ -128,6 +128,23 @@ int main(void) {
 
 
 class TileMappingWalk(unittest.TestCase):
+    def test_reserved_resources_need_no_runtime_heap(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1899: through
+        # CreateReservedResource the runtime calls CreateHeapAndResource with
+        # neither a heap description nor a heap handle (receipt
+        # measure-d3d12-create-heap-resource flags 2). The reserved-buffer
+        # branch required a heap handle, fell through to the placed-buffer
+        # path (measure-d3d12-placed reason 1) and the device was removed
+        # (0x887a0005). Reserved buffers and textures must both keep their
+        # tile state in the resource's own heap when the runtime gives none.
+        ddi = (ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp').read_text()
+        create = ddi[ddi.index('static HRESULT APIENTRY CreateHeapAndResource('):]
+        create = create[:create.index('\n}\n')]
+        self.assertIn('return CreateReservedBuffer(device, heap ? heap : &resource->own_heap, resource_arg, resource);', create)
+        self.assertIn('return CreateReservedTexture(device, heap ? heap : &resource->own_heap, resource_arg, resource);', create)
+        reserved = create[create.index('/* C53 B3 [H]'):create.index('return CreateReservedBuffer(')]
+        self.assertNotIn('&& heap &&', reserved)
+
     def test_update_tile_mappings_walk(self):
         with tempfile.TemporaryDirectory(prefix='tile-mapping-') as tmp:
             src = Path(tmp) / 'walk.c'

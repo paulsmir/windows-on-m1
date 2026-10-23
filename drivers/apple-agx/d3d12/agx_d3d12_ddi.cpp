@@ -2339,11 +2339,12 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
      * encoding this assumes; receipt measure-d3d12-placed records it). */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     /* C53 B3 [H]: a reserved buffer -- no heap description and no parent
-     * resource (receipt measure-d3d12-reserved). Unreachable until the tier
-     * flip: the runtime refuses CreateReservedResource at tier 0. */
-    if (!heap_arg && heap && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_BUFFER &&
+     * resource (receipt measure-d3d12-reserved). EXP1899: through
+     * CreateReservedResource the runtime passes no heap handle either, so the
+     * tile state lives in the resource's own heap, as for reserved textures. */
+    if (!heap_arg && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_BUFFER &&
         !resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate)
-        return CreateReservedBuffer(device, heap, resource_arg, resource);
+        return CreateReservedBuffer(device, heap ? heap : &resource->own_heap, resource_arg, resource);
     /* C53 T2D: a reserved Texture2D, likewise */
     if (!heap_arg && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D &&
         resource_arg->Layout == D3D12DDI_TL_64KB_TILE_UNDEFINED_SWIZZLE &&
