@@ -8,7 +8,35 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-22 21:00Z -- REAL WORKLOADS: NIGHT RAID GT1, D3D9On12, FULLSCREEN RGBA
+## CURRENT 2026-10-23 08:10Z -- NIGHT RAID GT1 SCORES; GT2 BLOCKED BY KMD PREEMPTION
+
+Last installed package 30.0.1899.0 from a479e796 (EXP1899, m1n1 21c3648d).
+Regression on that package: 118/0.
+
+**Validated**
+- Night Raid Custom GT1 completes and is scored: 6.90 fps at 1920x1080
+  windowed with the UMD trace on (EXP1899N).
+
+**Blocked**
+- GT2 fails with 0x887A0005 (EXP1899N). The UMD is clean. The KMD's
+  Wom1GpuReset shows a VidSch engine reset after DxgkDdiPreemptCommand
+  could not begin a boundary preemption (scheduler_windows.c:399): a queued
+  render packet with fences 0x65e2/0x65e3 was never dispatched, and no job
+  was on the firmware.
+- After that, DWM crash-looped (0x8898008D) and the desktop stayed black.
+- NEXT CAUSAL TARGET: which BeginBoundaryPreemption condition fails. The
+  receipt-only Wom1PreemptRefusal (9d102cd5) records it, in EXP1901.
+  Rerun GT2 with async compute off.
+
+**Fixed, awaiting hardware**
+- Portal 2 (D3D9On12) presents a 4x back buffer. The presentable rule
+  excluded MSAA, so present failed with reason 2 and the device was removed
+  (EXP1899G). Fix: C66 f7e6947b, a resolve into the 1x presentation
+  allocation, as in C40. Probe: AGX_D3D9_*_MSAA_PRESENT.
+- C53 reserved buffers without a heap handle (c848b78f, the fork). Tier 2
+  checkpoint: rerun in EXP1901.
+
+## (was CURRENT) 2026-10-22 21:00Z -- REAL WORKLOADS: NIGHT RAID GT1, D3D9On12, FULLSCREEN RGBA
 
 Last validated package 30.0.1885.0 from 4e141c27 (EXP1885, m1n1 21c3648d RGBA).
 
