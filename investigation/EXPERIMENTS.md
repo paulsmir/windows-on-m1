@@ -61556,3 +61556,14 @@ EXP1917 ACTUAL 2026-10-23T19:12:33Z:
   - With the aperture excluded, VidMm refuses the CPU-visible General allocation shape. This is the EXP1027/EXP1266 risk named in the T7c report.
   - WER 1-2 (app error path). Reverted.
 - Next: EXP1918 = HEAD without T7c, as the base package for UMD hot-swap iterations. The G4 Parse/Unmapped root cause (scattered 4 KiB aperture pages under a General BO) needs a KMD paging/leaf solution that keeps the aperture admissible (Codex T7d).
+
+EXP1918 HARDWARE BEFORE 2026-10-23T19:21:36Z:
+- Package 30.0.1918.0 from b57cd075 = EXP1917 82499464 - Codex T7c (revert) + ledgers. So: EXP1916 c354948b + Codex T3c (shared upload publish, receipts) + T7b test fix.
+- Probe probe1918.sh: short profile (package state, GravityMark D3D12 10k and 2k with 90 s timeout, KMD receipts).
+- ATOMIC CONTRACT: none -- T3c is the only driver delta against EXP1916; GravityMark D3D12 is expected as in EXP1916 (removal at ~22-25 s, G4 Unmapped).
+- WHY THIS HYPOTHESIS: a T7c-free installed package is needed to iterate UMD fixes without reboots (user 2026-10-23).
+- WHAT IS STILL UNKNOWN: T3c effect on GravityMark (none expected).
+- Expected: boot normal; GravityMark D3D12 as in EXP1916. The package stays installed afterwards for UMD hot-swaps (EXP1918U<k>).
+- Failure criteria: boot/DWM failure, hang.
+- Hashes: sys 170ce84448f0, UmdArm64 9d518c355b8f, UmdX64 9807eec25e90, Umd32 3e7355a4d52f; manifest 2010696516b0, hardware-manifest 9c98a61f940a; probe1918.sh d2dc98434a8f (PROBE_LINT_OK); visible recovery rec1918h 0c0d7a4155964011; m1n1 0d3a75b3.
+- Recovery rec1918h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1918-gm-base/run1918.sh.
