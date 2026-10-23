@@ -16,6 +16,7 @@ class ClearViewBuffer(unittest.TestCase):
     def test_actual_clearview_rectangles_clip_to_elements(self):
         prefix = PREFIX[:PREFIX.index('static void clear(')]
         compile_run(prefix + r'''
+using LONG=int;
 #define D3D10DDI_HT_RENDERTARGETVIEW 1
 #define D3D11DDI_HT_UNORDEREDACCESSVIEW 2
 #define E_INVALIDARG -3
@@ -35,7 +36,7 @@ static void full(Device*,D3D10DDI_HRENDERTARGETVIEW,float*){++whole;}
 static void uav(Device*,D3D11DDI_HUNORDEREDACCESSVIEW,const float*){assert(false);}
 struct {decltype(&full)pfnClearRenderTargetView;decltype(&uav)pfnClearUnorderedAccessViewFloat;}base11={full,uav};
 ''' + 'bool AgxD3d11ClearBufferRtv(Device *device, RenderTargetView *view, const pipe_color_union *color, UINT first, UINT count)\n' + body(projected('OutputMerger.cpp'),'AgxD3d11ClearBufferRtv') + '\nvoid ClearView(Device*hDevice,unsigned type,RenderTargetView*hView,const float color[4],const D3D10_DDI_RECT*rects,UINT nRects)\n' + body(WDDM.read_text(),'ClearView') + r'''
-int main(){pipe_context p={nullptr,nullptr,nullptr,clear};Device d={&p,nullptr,{}};pipe_resource r={PIPE_BUFFER,1};
+int main(){(void)base11;pipe_context p={nullptr,nullptr,nullptr,clear};Device d={&p,nullptr,{}};pipe_resource r={PIPE_BUFFER,1};
  RenderTargetView v={{&r,R32UI,0,0},7,13};float color[4]={123,0,0,0};
  D3D10_DDI_RECT rects[]={{2,0,5,1},{10,0,20,1},{-4,0,1,1},{2,1,5,2},{4,0,4,1},{20,0,30,1}};
  std::fill(bytes,bytes+64,0xdeadbeefu);ClearView(&d,1,&v,color,rects,6);

@@ -696,10 +696,6 @@ ClearView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HANDLETYPE type, VOID *hView, const
       Device *device = CastDevice(hDevice);
       struct pipe_surface *surface = &CastRenderTargetView(rtv)->surface;
       bool buffer = surface->texture && surface->texture->target == PIPE_BUFFER;
-      if (!nRects && !buffer) {
-         base11.pfnClearRenderTargetView(hDevice, rtv, (FLOAT *)color);
-         return;
-      }
       union pipe_color_union value;
       const bool integer = util_format_is_pure_integer(surface->format);
       const bool sint = util_format_is_pure_sint(surface->format);
@@ -719,6 +715,13 @@ ClearView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HANDLETYPE type, VOID *hView, const
          if (!AgxD3d11ClearBufferRtv(device, view, &value, 0, view->buffer_num_elements))
             refuse(hDevice, "reject-wddm2-clearview", E_FAIL, (UINT)type);
          return;
+      }
+      D3D10_DDI_RECT full = {};
+      if (!nRects) {
+         full.right = (LONG)pipe_surface_width(surface);
+         full.bottom = (LONG)pipe_surface_height(surface);
+         rects = &full;
+         nRects = 1;
       }
       for (UINT i = 0; rects && i < nRects; ++i) {
          const D3D10_DDI_RECT &r = rects[i];
@@ -742,11 +745,17 @@ ClearView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HANDLETYPE type, VOID *hView, const
          }
          /* EXP1330: Asahi has no clear_render_target (dwm and D2D called
           * address 0 here at FL 11_0) */
-         if (!AgxD3d10WindowsClearRenderTargetRect(device->pipe, surface, &value,
-                                                   r.left, r.top, r.right - r.left,
-                                                   r.bottom - r.top)) {
-            refuse(hDevice, "reject-wddm2-clearview", E_FAIL, (UINT)type);
-            return;
+         /* Whole and rectangular ClearView ignore predication. Explicit
+          * slices also work when the native blitter cannot layer a clear. */
+         for (unsigned layer = surface->first_layer; layer <= surface->last_layer; ++layer) {
+            struct pipe_surface slice = *surface;
+            slice.first_layer = slice.last_layer = layer;
+            if (!AgxD3d10WindowsClearRenderTargetRect(device->pipe, &slice, &value,
+                                                    r.left, r.top, r.right - r.left,
+                                                    r.bottom - r.top)) {
+               refuse(hDevice, "reject-wddm2-clearview", E_FAIL, (UINT)type);
+               return;
+            }
          }
       }
       return;

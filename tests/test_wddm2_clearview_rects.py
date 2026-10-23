@@ -7,7 +7,7 @@ pipe->clear_render_target for each rectangle, and Asahi implements no
 clear_render_target (and no scissored clears). The rectangles are cleared
 through the winsys blitter helper, once per non-empty rectangle, with the
 colour converted for the view's format; a helper failure is refused, the
-whole-view clear keeps the ClearRenderTargetView path, and typed UAVs
+whole-view clears use the unconditional blitter path, and typed UAVs
 route through their view-aware helper. Runs the real ClearView against stubs.
 """
 from pathlib import Path
@@ -39,7 +39,9 @@ enum pipe_format { FMT_UNORM, FMT_UINT, FMT_SINT };
 union pipe_color_union { float f[4]; int i[4]; unsigned ui[4]; };
 enum { PIPE_BUFFER };
 struct pipe_resource { unsigned target; };
-struct pipe_surface { pipe_format format; pipe_resource *texture; };
+struct pipe_surface { pipe_format format; pipe_resource *texture; unsigned first_layer,last_layer; };
+static unsigned pipe_surface_width(pipe_surface*){return 64;}
+static unsigned pipe_surface_height(pipe_surface*){return 32;}
 struct pipe_context { void (*clear_render_target)(pipe_context *, pipe_surface *, const pipe_color_union *,
   unsigned, unsigned, unsigned, unsigned, bool); };
 struct Device { pipe_context *pipe; };
@@ -56,7 +58,7 @@ struct Rect { unsigned x, y, w, h; pipe_color_union c; };
 static std::vector<Rect> cleared; static bool helperFails;
 static int AgxD3d10WindowsClearRenderTargetRect(pipe_context *p, pipe_surface *s, const pipe_color_union *c,
     UINT x, UINT y, UINT w, UINT h) {
-  assert(p && s && c); if (helperFails) return 0; cleared.push_back({x, y, w, h, *c}); return 1; }
+  assert(p && s && c && s->first_layer==s->last_layer); if (helperFails) return 0; cleared.push_back({x, y, w, h, *c}); return 1; }
 static void wholeRtv(D3D10DDI_HDEVICE, D3D10DDI_HRENDERTARGETVIEW, FLOAT *) { ++wholeClears; }
 static void wholeUav(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW, const FLOAT *) { ++uavClears; }
 static struct { void (*pfnClearRenderTargetView)(D3D10DDI_HDEVICE, D3D10DDI_HRENDERTARGETVIEW, FLOAT *);
@@ -65,6 +67,7 @@ static struct { void (*pfnClearRenderTargetView)(D3D10DDI_HDEVICE, D3D10DDI_HREN
 static bool AgxD3d11ClearUavView(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW, const FLOAT*, const D3D10_DDI_RECT*, UINT){++uavClears;return true;}
 @@FUNCTION@@
 int main() {
+  (void)base11;
   pipe_context pipe = {nullptr};  /* Asahi: no clear_render_target */
   Device dev = {&pipe}; D3D10DDI_HDEVICE h = {&dev};
   RenderTargetView rtv = {{FMT_UNORM}};
@@ -83,9 +86,12 @@ int main() {
   cleared.clear(); ClearView(h, D3D10DDI_HT_RENDERTARGETVIEW, &irtv, ic, rects, 1);
   assert(cleared[0].c.i[0] == 3 && cleared[0].c.i[1] == -1 && cleared[0].c.i[2] == INT32_MAX &&
          cleared[0].c.i[3] == 0);
-  /* The whole view keeps ClearRenderTargetView. */
+  /* Whole ClearView is unconditional; each selected slice gets its full extent. */
+  cleared.clear();rtv.surface.first_layer=2;rtv.surface.last_layer=4;
   ClearView(h, D3D10DDI_HT_RENDERTARGETVIEW, &rtv, color, nullptr, 0);
-  assert(wholeClears == 1);
+  assert(wholeClears == 0 && cleared.size()==3);
+  for(const auto &r:cleared) assert(r.x==0 && r.y==0 && r.w==64 && r.h==32);
+  rtv.surface.first_layer=rtv.surface.last_layer=0;
   /* A helper failure is refused. */
   helperFails = true; ClearView(h, D3D10DDI_HT_RENDERTARGETVIEW, &rtv, color, rects, 1);
   assert(refusals == 1); helperFails = false;
