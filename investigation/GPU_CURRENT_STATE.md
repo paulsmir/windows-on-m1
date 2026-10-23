@@ -31,8 +31,14 @@ Last validated package 30.0.1885.0 from 4e141c27 (EXP1885, m1n1 21c3648d RGBA).
   Plan: investigation/analysis/D3D12-FL-program.md (11_1, then 12_0 with
   tiled resources on AGX's native sparse page tables). See also
   D3D12-C53-tiled-resources-study.md.
-- Night Raid GT2 with async compute once hit 0x101 (EXP1876G). It is not
-  reproduced by CPU or GPU+CPU load.
+- CLOCK_WATCHDOG_TIMEOUT 0x101 under app load: Night Raid GT2 (EXP1876G)
+  and GravityMark D3D11 scene generation (EXP1889). Both times several CPUs
+  ran CPU-bound user code and one secondary missed its clock interrupts. No
+  AppleAgx frame was on a CPU. Owner: the m1n1 HV virtual timer. Synthetic
+  CPU or GPU+CPU load does not reproduce it (EXP1877/1878).
+- D3D11 FL 11_1 is the default (EXP1889). D3D12 11_1, ROV and CR are behind
+  APPLE_AGX_D3D12_FL111/ROV/CR. UAV-only D3D12 draws were refused (fixed in
+  cafff89c).
 
 **Process**
 - Steam launches on the guest kick the user's CS2 session: ask first.
