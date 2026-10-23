@@ -220,3 +220,51 @@ int main() {
                 str(src),'-o',str(exe)],capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
             subprocess.run([str(exe)],check=True,timeout=30)
+
+    def test_shared_linear_upload_publishes_decoded_backing(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        C77 returned success while CopyTexture wrote only a cached Direct CPU
+        shadow. Execute production copy translation and wire decode with two
+        resource views of one allocation. A shared upload must record GPU work,
+        preserve decoded pitch/format and publish both writes without BO teardown.
+        Gallium storage callbacks stand in for hardware; this is not a GPU test.
+        """
+        from test_d3d12_view_mapping import block
+        from test_dxbc_to_nir import local_tree, host_flags
+        build=local_tree('accelerated-desktop-ad03','mesa-build')
+        mesa=local_tree('reference','mesa')
+        if not build or not mesa:
+            self.skipTest('host Mesa unavailable')
+        owner=(AGX/'mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        signatures=['static unsigned block_bytes(',
+                    'static unsigned level_extent(unsigned extent, unsigned level) {',
+                    'static unsigned texture_block(',
+                    'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {',
+                    'static HRESULT staged_upload(', 'static HRESULT staged_download(',
+                    'extern "C" HRESULT AgxD3d12OwnerCopyTexture(']
+        funcs='\n'.join(block(owner, signature) for signature in signatures)
+        header=(AGX/'mesa/winsys/agx_d3d12_windows.h').read_text()
+        end=header.index('} AGX_D3D12_TEXTURE_COPY;')+len('} AGX_D3D12_TEXTURE_COPY;')
+        record=header[header.rfind('typedef struct {',0,end):end]
+        source=(ROOT/'tests/d3d12_shared_content_fixture.cpp').read_text().replace(
+            '/* ACTUAL_COPY_RECORD */',record).replace('/* ACTUAL_OWNER_COPY */',funcs)
+        umd=(AGX/'render-admission/umd/src/umd.c').read_text()
+        start=umd.index('  ZeroMemory(&resourceData, sizeof(resourceData));')
+        source=source.replace('/* ACTUAL_DESCRIBE */',block(umd,'static BOOLEAN AdmissionUmdDescribePrimary('))
+        source=source.replace('/* ACTUAL_SERIALIZE */',umd[start:umd.index('  allocationInfo.VidPnSourceId',start)])
+        with tempfile.TemporaryDirectory(prefix='shared-content-') as tmp:
+            src=Path(tmp)/'copy.cpp';exe=Path(tmp)/'copy';obj=Path(tmp)/'allocation.o'
+            src.write_text(source)
+            subprocess.run(['clang','-std=c11','-fsanitize=address,undefined',
+                '-I'+str(AGX/'render-admission/include'),'-c',str(AGX/'render-admission/src/render_allocation.c'),
+                '-o',str(obj)],check=True)
+            libs=[build/p for p in ['src/util/libmesa_util.a','src/util/libmesa_util_simd.a',
+                                   'src/c11/impl/libmesa_util_c11.a','src/util/blake3/libblake3.a']]
+            result=subprocess.run(['clang++','-std=c++17','-fsanitize=address,undefined',*host_flags(build),
+                '-I'+str(mesa/'src/gallium/include'),'-I'+str(AGX/'d3d12'),
+                '-I'+str(AGX/'render-admission/umd/include'),'-I'+str(AGX/'render-admission/include'),str(src),str(obj),
+                '-o',str(exe),*map(str,libs),'-L/opt/homebrew/opt/zstd/lib','-lzstd','-lz','-lpthread'],
+                capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            result=subprocess.run([str(exe)],capture_output=True,text=True,timeout=30)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)

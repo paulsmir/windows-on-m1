@@ -2055,7 +2055,7 @@ static bool compressed_texture(AGX_D3D12_OWNER *owner, struct pipe_resource *tex
          (layout.Flags & AGX_WIN32_ASAHI_LAYOUT_COMPRESSED) != 0u;
 }
 
-/* C70: buffer -> compressed texture through the owner's cached linear
+/* C70/C77: buffer -> compressed or shared texture through the owner's cached linear
  * staging texture: CPU copy into the staging map (linear: no allocation),
  * then a GPU copy into the level. The staging map waits for the previous
  * upload's GPU read; the region copy is recorded in replay order. */
@@ -2193,7 +2193,14 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
   bbox.width = static_cast<int>(span);
   bbox.height = 1;
   bbox.depth = 1;
-  if (!copy->ToBuffer && copy->Depth == 1 && compressed_texture(owner, texture))
+  /* C77: a linear shared allocation's native BO map is a cached Direct
+   * shadow. Gallium texture_unmap does not release that BO map, so an
+   * otherwise CPU-only Execute can signal completion before publishing it.
+   * Record a GPU copy into the shared allocation, covered by the normal
+   * owner flush and queue fence (also preserves partial-copy neighbours). */
+  if (!copy->ToBuffer && copy->Depth == 1 &&
+      (compressed_texture(owner, texture) ||
+       (texture->target == PIPE_TEXTURE_2D && (texture->bind & PIPE_BIND_SHARED))))
     return staged_upload(owner, copy, texture, buffer, tbox, bbox, rows, row);
   if (copy->ToBuffer && copy->Depth == 1 && texture->target == PIPE_TEXTURE_2D && (texture->bind & PIPE_BIND_SHARED))
     return staged_download(owner, copy, texture, buffer, tbox, bbox, rows, row);
