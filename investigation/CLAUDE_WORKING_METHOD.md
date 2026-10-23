@@ -206,3 +206,9 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   - `tq.ps1 -Pid2` (per-process refusals, and the lines before the first throw);
   - `appevents.ps1 -Minutes` (WER and Application Error).
 - `guest-ui.sh shot` deletes the old picture and reports SHOT_FAILED (and resets the tasks with `ui-reset.ps1`) rather than returning a stale frame.
+- The worktree is shared with the tiled/min-max session, which may have unfinished hunks in the same files. To commit only your change:
+  1. Tag it with a unique comment marker (e.g. `C68 (`).
+  2. `bash $S/own-hunks.sh /tmp/x.patch "<marker>" <files>` extracts only those hunks.
+  3. `bash $S/clean-syncheck.sh /tmp/x.patch` compiles git HEAD plus exactly those hunks; the plain syncheck copies the working tree and fails on the other session's hunks.
+  4. `git apply --cached /tmp/x.patch` puts only those hunks in the index, then commit from the index.
+  5. Tell the other session which hunk of the shared file you committed.
