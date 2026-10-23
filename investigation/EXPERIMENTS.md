@@ -61110,3 +61110,13 @@ EXP1904 FL12_VOLUME_PREDICATE HARDWARE BEFORE 2026-10-23T10:04:36Z:
 - WHAT IS STILL UNKNOWN: whether the runtime accepts 12_1 creation with our caps; GT2's predicate.
 - Expected: regression 118/0 x3 with C62A 12_1; FL12OFF C62A PASS at 11_1; C21G PASS; GT2 receipt names the predicate.
 - Failure criteria: device creation failures at 12_x, regressions, hang. Recovery evidence/rec1904h/recover.sh. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1904-fl12-pred/run1904.sh.
+
+EXP1904 pipeline ACTUAL / EXP1904N GT2 BEFORE 2026-10-23T10:18:36Z: RC 0, RUN_DONE.
+- Probes e1904 118/0 on ARM64, x64 and x86, with C62A MaxSupportedFeatureLevel 0xc100 (12_1) by default.
+- The ROV=0 and CR=0 runs report 0xc000 (12_0); FL12=0 reports 0xb100 (11_1).
+- Every probe device was created at the default 12_1. C68 CONFIRMED: D3D12 is FL 12_1 by default.
+- Tiled probe 971c0aef: C53B PASS, C65A 5/5 PASS, AGX_D3D12_C21G: PASS (faa55b50 C21G CONFIRMED).
+- D3D11 smoke PASS. Samples and ModelViewer I alive with no WER (the EXP1903 ModelViewer AV did not recur).
+- D3D9 MSAA_PRESENT PASS; the front pixel 0x8facc2 is wallpaper, so the blt-model window is still not composed (C67 gap).
+- KMD receipts clean.
+EXP1904N: Night Raid GT2 (window, async off) for Wom1G4BindRefusal BindFailure = 320 + predicate.
