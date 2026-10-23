@@ -1011,6 +1011,148 @@ static int volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT 
     return SUCCEEDED(hr) && !bad;
 }
 
+/* C21H: a BC1 (8-byte) or BC3 (16-byte) volume of solid 4x4 blocks
+ * (color0 == color1, indices 0; BC3 alpha 255), every mip uploaded and 64
+ * texels per mip loaded back: each texel is its block's color0 */
+static unsigned short bc_color(UINT m, UINT bx, UINT by, UINT z) {
+    return (unsigned short)(((bx * 5u + m * 3u) % 32u) << 11 | ((by * 7u + z * 3u) % 64u) << 5 | ((bx + by + z + m) % 32u));
+}
+static float bc_channel(unsigned short c, UINT k) {
+    const unsigned r = c >> 11, g = (c >> 5) & 63u, b = c & 31u;
+    return k == 0 ? (float)((r << 3) | (r >> 2)) : k == 1 ? (float)((g << 2) | (g >> 4)) : k == 2 ? (float)((b << 3) | (b >> 2)) : 255.0f;
+}
+static int bc_volume_step(Ctx *c, DXGI_FORMAT format, UINT w, UINT h, UINT d, UINT mips, const char *name) {
+    const UINT block = format == DXGI_FORMAT_BC1_UNORM ? 8u : 16u;
+    D3D12_HEAP_PROPERTIES def = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC td = {D3D12_RESOURCE_DIMENSION_TEXTURE3D, 0, w, h, (UINT16)d, (UINT16)mips, format, {1, 0},
+                              D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_NONE};
+    ID3D12Resource *tex = NULL, *up = NULL, *out = NULL, *rb = NULL;
+    ID3D12DescriptorHeap *views = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3DBlob *blob = NULL;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp[12];
+    UINT rows[12];
+    UINT64 total = 0;
+    const UINT64 out_bytes = (UINT64)mips * 64u * 16u;
+    HRESULT hr = mips <= 12 ? ID3D12Device_CreateCommittedResource(c->device, &def, D3D12_HEAP_FLAG_NONE, &td,
+                                                                  D3D12_RESOURCE_STATE_COPY_DEST, NULL, &IID_ID3D12Resource,
+                                                                  (void **)&tex)
+                            : E_INVALIDARG;
+    if (SUCCEEDED(hr)) ID3D12Device_GetCopyableFootprints(c->device, &td, 0, mips, 0, fp, rows, NULL, &total);
+    up = SUCCEEDED(hr) ? buffer(c, D3D12_HEAP_TYPE_UPLOAD, total, D3D12_RESOURCE_STATE_GENERIC_READ) : NULL;
+    rb = up ? buffer(c, D3D12_HEAP_TYPE_READBACK, out_bytes, D3D12_RESOURCE_STATE_COPY_DEST) : NULL;
+    if (rb) {
+        D3D12_RESOURCE_DESC od = {D3D12_RESOURCE_DIMENSION_BUFFER, 0, out_bytes, 1, 1, 1, DXGI_FORMAT_UNKNOWN, {1, 0},
+                                  D3D12_TEXTURE_LAYOUT_ROW_MAJOR, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS};
+        hr = ID3D12Device_CreateCommittedResource(c->device, &def, D3D12_HEAP_FLAG_NONE, &od,
+                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL, &IID_ID3D12Resource,
+                                                  (void **)&out);
+    } else if (SUCCEEDED(hr)) {
+        hr = E_OUTOFMEMORY;
+    }
+    unsigned char *map = NULL;
+    D3D12_RANGE none = {0, 0};
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(up, 0, &none, (void **)&map);
+    for (UINT m = 0; SUCCEEDED(hr) && m < mips; ++m) {
+        const UINT md = d >> m ? d >> m : 1u, bxs = ((w >> m ? w >> m : 1u) + 3u) / 4u;
+        for (UINT z = 0; z < md; ++z)
+            for (UINT by = 0; by < rows[m]; ++by) {
+                unsigned char *row = map + fp[m].Offset + ((UINT64)z * rows[m] + by) * fp[m].Footprint.RowPitch;
+                for (UINT bx = 0; bx < bxs; ++bx) {
+                    unsigned char *b = row + (UINT64)bx * block;
+                    memset(b, 0, block);
+                    unsigned char *color = b;
+                    if (block == 16) { b[0] = b[1] = 255; color = b + 8; } /* BC3 alpha 255, indices 0 */
+                    const unsigned short c565 = bc_color(m, bx, by, z);
+                    color[0] = color[2] = (unsigned char)c565;
+                    color[1] = color[3] = (unsigned char)(c565 >> 8);
+                }
+            }
+    }
+    if (map) ID3D12Resource_Unmap(up, 0, NULL);
+    for (UINT m = 0; SUCCEEDED(hr) && m < mips; ++m) {
+        D3D12_TEXTURE_COPY_LOCATION dst = {tex, D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
+        D3D12_TEXTURE_COPY_LOCATION src = {up, D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
+        dst.SubresourceIndex = m;
+        src.PlacedFootprint = fp[m];
+        ID3D12GraphicsCommandList_CopyTextureRegion(c->list, &dst, 0, 0, 0, &src, NULL);
+    }
+    if (SUCCEEDED(hr)) barrier(c, tex, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    D3D12_DESCRIPTOR_HEAP_DESC vd = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(c->device, &vd, &IID_ID3D12DescriptorHeap, (void **)&views);
+    if (SUCCEEDED(hr)) {
+        D3D12_CPU_DESCRIPTOR_HANDLE vh;
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(views, &vh);
+        D3D12_SHADER_RESOURCE_VIEW_DESC srv = {format, D3D12_SRV_DIMENSION_TEXTURE3D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING};
+        srv.Texture3D.MipLevels = mips;
+        ID3D12Device_CreateShaderResourceView(c->device, tex, &srv, vh);
+    }
+    D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, 0};
+    D3D12_ROOT_PARAMETER params[3] = {{D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}, {D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS},
+                                      {D3D12_ROOT_PARAMETER_TYPE_UAV}};
+    params[0].DescriptorTable.NumDescriptorRanges = 1;
+    params[0].DescriptorTable.pDescriptorRanges = &range;
+    params[1].Constants.Num32BitValues = 4;
+    D3D12_ROOT_SIGNATURE_DESC rd = {3, params, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    if (SUCCEEDED(hr)) hr = D3D12SerializeRootSignature(&rd, D3D_ROOT_SIGNATURE_VERSION_1, &blob, NULL);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(c->device, 0, ID3D10Blob_GetBufferPointer(blob),
+                                              ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature, (void **)&root);
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pd = {root, {g_volume_probe_cs, sizeof(g_volume_probe_cs)}};
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateComputePipelineState(c->device, &pd, &IID_ID3D12PipelineState, (void **)&pso);
+    if (SUCCEEDED(hr)) {
+        D3D12_GPU_DESCRIPTOR_HANDLE vg;
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(views, &vg);
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(c->list, 1, &views);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(c->list, root);
+        ID3D12GraphicsCommandList_SetPipelineState(c->list, pso);
+        ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(c->list, 0, vg);
+        for (UINT m = 0; m < mips; ++m) {
+            const UINT dims[4] = {m, w >> m ? w >> m : 1u, h >> m ? h >> m : 1u, d >> m ? d >> m : 1u};
+            ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(c->list, 1, 4, dims, 0);
+            ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(c->list, 2,
+                                                                        ID3D12Resource_GetGPUVirtualAddress(out) + (UINT64)m * 64u * 16u);
+            ID3D12GraphicsCommandList_Dispatch(c->list, 1, 1, 1);
+        }
+        barrier(c, out, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(c->list, rb, 0, out, 0, out_bytes);
+        hr = ctx_flush(c);
+    }
+    UINT bad = 0;
+    float *got = NULL;
+    D3D12_RANGE whole = {0, (SIZE_T)out_bytes};
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(rb, 0, &whole, (void **)&got);
+    for (UINT m = 0; SUCCEEDED(hr) && m < mips; ++m) {
+        const UINT mw = w >> m ? w >> m : 1u, mh = h >> m ? h >> m : 1u, md = d >> m ? d >> m : 1u;
+        for (UINT id = 0; id < 64; ++id) {
+            const UINT x = (id * 7u) % mw, y = (id * 13u) % mh, z = (id * 5u) % md;
+            const unsigned short c565 = bc_color(m, x / 4u, y / 4u, z);
+            const float *v = got + ((UINT64)m * 64u + id) * 4u;
+            for (UINT k = 0; k < 4; ++k)
+                if (fabsf(v[k] * 255.0f - bc_channel(c565, k)) > 1.01f) {
+                    if (bad < 6)
+                        printf("%s mip %u (%u,%u,%u) c%u got %g want %g\n", name, m, x, y, z, k, v[k] * 255.0f,
+                               bc_channel(c565, k));
+                    ++bad;
+                }
+        }
+    }
+    if (got) ID3D12Resource_Unmap(rb, 0, &none);
+    printf("%s %ux%ux%u mips %u\n", name, w, h, d, mips);
+    result(name, SUCCEEDED(hr) && !bad, hr, bad);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (blob) ID3D10Blob_Release(blob);
+    if (views) ID3D12DescriptorHeap_Release(views);
+    if (rb) ID3D12Resource_Release(rb);
+    if (out) ID3D12Resource_Release(out);
+    if (up) ID3D12Resource_Release(up);
+    if (tex) ID3D12Resource_Release(tex);
+    return SUCCEEDED(hr) && !bad;
+}
+
 /* mode 0: heap samplers (unbounded table); 1: a one-sampler table (slot);
  * 2: a static sampler (slot, filter 0 only) */
 static int minmax_step(Ctx *c, D3D12_TILED_RESOURCES_TIER tier, int mode) {
@@ -1214,6 +1356,8 @@ int main(int argc, char **argv) {
         ok &= volume_step(&c, DXGI_FORMAT_R16G16B16A16_FLOAT, 160, 90, 16, 1, "C21G_VOLUME_FROXEL", 0);
         ok &= volume_step(&c, DXGI_FORMAT_R16G16B16A16_FLOAT, 64, 32, 16, 1, "C21G_VOLUME_UAV", 1);
         ok &= volume_step(&c, DXGI_FORMAT_R8G8B8A8_UNORM, 33, 17, 5, 6, "C21G_VOLUME_NPOT", 0);
+        ok &= bc_volume_step(&c, DXGI_FORMAT_BC1_UNORM, 64, 64, 16, 7, "C21H_VOLUME_BC1");
+        ok &= bc_volume_step(&c, DXGI_FORMAT_BC3_UNORM, 64, 32, 8, 7, "C21H_VOLUME_BC3");
         printf("AGX_D3D12_C21G: %s\n", ok ? "PASS" : "FAIL");
         return ok ? 0 : 1;
     }
