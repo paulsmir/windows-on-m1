@@ -38,11 +38,12 @@ Last validated package 30.0.1885.0 from 4e141c27 (EXP1885, m1n1 21c3648d RGBA).
   signal on that CPU. The fix is in its own session ("Fix m1n1 vGIC stale
   active LR"). No GravityMark run until that fix.
 - D3D11 FL 11_1 is the default (EXP1889).
-- D3D12: 11_1 validated (EXP1890) and the default since 4e3b7111 (EXP1892
-  pending). The runtime shows ROV/CR only at >= 11_1 (EXP1891). CR Tier 1
-  passed (C61A, EXP1891B) and stays behind APPLE_AGX_D3D12_CR=1. ROV is
-  behind APPLE_AGX_D3D12_ROV=1; the C59A crash was a missing empty vertex
-  elements state (e44481be).
+- D3D12 by default (EXP1897, probes 118/118 on three ABIs): FL 11_1, ROVs,
+  CR Tier 1 (VS, tessellation, application GS, MSAA); =0 variables opt out.
+  12_0 waits on tiled Tier 2 + min/max (C53/C65 session).
+- EXP1894: the first vGIC running-priority m1n1 (db990f95) hung Windows boot
+  (SGI 0 ACTIVE prio 0x10 on 5 CPUs). Snapshots went to the vGIC session;
+  m1n1 stays 21c3648d.
 - D3D9: the "<>" D3D9-slot marker routes Direct3DCreate9 through D3D9On12
   (EXP1891: DEFAULT and fixed-function draws PASS).
 
