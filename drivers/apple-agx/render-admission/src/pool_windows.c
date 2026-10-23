@@ -635,10 +635,16 @@ static ULONGLONG AdmissionPoolRamBytes(VOID) {
  * CreateAllocation reports STATUS_NO_MEMORY while Windows still has room to
  * run (Microsoft: Standard Event Objects). Without that event the
  * low-memory event is the gate; without either, no gate. */
+/* M2-f7b (EXP1907, GravityMark D3D12): the high threshold kept about 740 MiB
+ * of this 6 GiB guest from the GPU (EXP1308 MEMSTATE) and refused a 2 MiB
+ * internal buffer with the pagefile at 243 MiB of 6 GiB, removing the
+ * device. Growth now stops only while LowMemoryCondition is set, Windows'
+ * signal that free memory is low after its own trimming; the high event is
+ * the fallback when the low one cannot be opened. */
 static int AdmissionPoolMayGrow(void *Opaque) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
-  if (pool->HighMemory != NULL) return KeReadStateEvent(pool->HighMemory) != 0;
-  return pool->LowMemory == NULL || KeReadStateEvent(pool->LowMemory) == 0;
+  if (pool->LowMemory != NULL) return KeReadStateEvent(pool->LowMemory) == 0;
+  return pool->HighMemory == NULL || KeReadStateEvent(pool->HighMemory) != 0;
 }
 
 static PKEVENT AdmissionPoolOpenEvent(PCWSTR Name) {

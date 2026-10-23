@@ -62,3 +62,29 @@ then GREEN.
   E_OUTOFMEMORY at creation. The receipt shows ReserveFailures >= 1 with NewSlabFailures 0. SSH,
   DWM and explorer stay alive, LONGJOB and the corpus run afterwards, and no device is removed.
 - Recovery: the experiment's recXXXXh/recover.sh (hidden-profile rollback).
+
+## M2-f7b: the floor follows LowMemoryCondition (2026-10-23)
+
+Evidence:
+- EXP1907, GravityMark D3D12 (2k and 10k asteroids) removed the device at about 15 s:
+  - `reject-screen-create` (177 active, class 1, 2 MiB, `pfnAllocateCb` 0x8007000e), then `measure-d3d12-execute` E_OUTOFMEMORY;
+  - `Wom1M2PoolDemand`: ReserveFailures 2 with NewSlabFailures 0, i.e. floor refusals;
+  - PeakReserved 2335 MiB of a 2688 MiB segment.
+- At that point the guest pagefile held 243 MiB of 6 GiB. Free+zero pages were 2-50 MiB and standby was 190-380 MiB (sysmem sample).
+- EXP1308 MEMSTATE: HighMemoryCondition clears at about 740 MiB available on this guest.
+
+The floor therefore refused the GPU while Windows had not started trimming working sets.
+
+WINDOWS CONTRACT:
+- LowMemoryCondition is set while free memory is below a system-defined amount (Standard Event Objects).
+- A real UMA VidMm driver has no such gate: resident allocations fail only when pages cannot be locked.
+
+TRANSLATION:
+- `AdmissionPoolMayGrow` returns `!LowMemoryCondition`; HighMemoryCondition is only the fallback.
+- The slab policy is unchanged (no new test: the policy is hardware behaviour, and `render_pool_slab_test` covers the MayGrow contract).
+
+WHAT IS STILL UNKNOWN: whether the guest stays responsive under the PRESSURE tool (RAM locked) with the lower floor; EXP1304/EXP1305 starved at the no-gate point.
+
+Checkpoint (EXP1908):
+- GravityMark D3D12 2k/10k past 16 s, with FloorRefusals 0 or a later refusal;
+- `agx_mempressure` PRESSURE: guest, SSH and DWM alive, first refusal at a lower available-memory level.
