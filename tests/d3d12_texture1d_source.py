@@ -33,6 +33,7 @@ def query_base():
     for n in ['D3D12DDICAPS_TYPE','D3D12DDI_SWIZZLE_PATTERN','D3D12DDI_SWIZZLE_BIT_ENTRY','D3D12DDI_SWIZZLE_PATTERN_DESC_0003','D3D12DDI_SWIZZLE_PATTERN_FLAGS','D3D12DDI_SWIZZLE_PATTERN_DESC_0022','D3D12DDI_TEXTURE_LAYOUT_CAPS_0026','D3D12DDI_TEXTURE_LAYOUT_CAPS','D3D12DDI_TEXTURE_LAYOUT_CAPS_0001','D3D12DDIARG_GETCAPS','D3D12DDI_RESOURCE_ALLOCATION_INFO','D3D12DDI_SUBRESOURCE_INFO','D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS']:
         s+=declaration(n)+'\n'
     s+='#include "windows_swizzle_reference.h"\n'
+    s+='#include "%s"\n' % (ROOT/'drivers/apple-agx/d3d12/agx_d3d12_volume_registry.h')
     for m in ['static unsigned block_bytes(','extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static unsigned texture_block(', 'extern "C" unsigned AgxD3d12FormatBlock(', 'extern "C" int AgxD3d12FormatMultisample(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture1d_array_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DArrayLayout(']:s+=block(owner,m)+'\n'
     wdk=(ROOT/'.local/reference/wdk26100/d3d12umddi.h').read_text()
     for name in ('D3D12_REQ_SUBRESOURCES','D3D12_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION','D3D12_REQ_TEXTURE1D_U_DIMENSION'):
@@ -42,7 +43,7 @@ def query_base():
     for m in ['static bool VolumeLayoutInfo(','static bool LineLayoutInfo(','static UINT64 TextureBytes(','static HRESULT VolumeLayoutCaps(']:s+=block(ddi,m)+'\n'
     s+='\nstruct D3D12DDI_HDEVICE{void*pDrvPrivate;};struct D3D12DDI_HRESOURCE{void*pDrvPrivate;};using D3DKMT_HANDLE=unsigned;enum{D3D12DDI_RT_BUFFER=1};static constexpr UINT64 kVaMinimum=0x10000ULL,kVaLimit=1ULL<<39;\nstatic void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}\n'
     s+=block(ddi,'struct AgxD3d12Heap {')+';\n'+block(ddi,'struct AgxD3d12Resource {')+';\n'
-    for m in ['static VOID APIENTRY CheckResourceAllocationInfo(','static VOID APIENTRY CheckSubresourceInfo(','static VOID APIENTRY CheckExistingResourceAllocationInfo(']:s+=block(ddi,m)+'\n'
+    for m in ['static UINT64 VolumeAllocationQuery(','static VOID APIENTRY CheckResourceAllocationInfo(','static VOID APIENTRY CheckSubresourceInfo(','static VOID APIENTRY CheckExistingResourceAllocationInfo(']:s+=block(ddi,m)+'\n'
     return s
 
 def query_source():

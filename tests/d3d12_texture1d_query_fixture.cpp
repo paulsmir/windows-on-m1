@@ -4,7 +4,7 @@ extern "C" unsigned c21_native_bo_calls(void);
 extern "C" unsigned c21_native_device_calls(void);
 extern "C" unsigned c23_native_shape(const pipe_resource*,const AGX_WIN32_ASAHI_RESOURCE_LAYOUT*);
 int main() {
- UINT index=5;D3D12DDI_SWIZZLE_PATTERN_DESC_0003 packed={};
+ UINT index=0x17;D3D12DDI_SWIZZLE_PATTERN_DESC_0003 packed={}; /* C21G: the 4-byte 1x1 pattern */
  D3D12DDIARG_GETCAPS caps={D3D12DDICAPS_TYPE_SWIZZLE_PATTERN,&index,&packed,sizeof(packed)};
  assert(VolumeLayoutCaps(&caps)==S_OK && !packed.StackDepthSlices);
  WinSwizzle0004 pattern={};WinSwizzleAddressing addr={};addr.block_bits=addr.byte_bits=addr.channel_bits[0]=2;
@@ -33,14 +33,14 @@ int main() {
    arg.MipLevels=levels;arg.SampleDesc.Count=1;arg.Format=format;arg.Flags=16;
    const UINT64 got=TextureBytes(&arg);D3D12DDI_RESOURCE_ALLOCATION_INFO allocation_info={};
    CheckResourceAllocationInfo({},&arg,static_cast<D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS>(0),65536,1,&allocation_info);
-   bool ok=got==expected && allocation_info.ResourceDataSize==expected && allocation_info.ResourceDataAlignment==65536 && allocation_info.Layout==0x105;
+   bool ok=got==expected && allocation_info.ResourceDataSize==expected && allocation_info.ResourceDataAlignment==65536 && allocation_info.Layout==0x117;
 #ifdef C23_CANDIDATE
    assert(allocation_info.MipLevelSwizzleTransition==0xff);
 #endif
 #ifdef C23_CANDIDATE
    AGX_D3D12_VOLUME_LAYOUT owner={};assert(AgxD3d12QueryTexture1DLayout(format,width,levels,2,&owner)==S_OK);
    assert(owner.Bytes==expected&&owner.NativeBytes==raw.SizeBytes&&owner.DepthStride==raw.LayerStrideBytes);
-   D3D12DDI_TEXTURE_LAYOUT resolved=0;assert(LineLayoutInfo(&arg,&owner,&resolved)&&resolved==0x105);
+   D3D12DDI_TEXTURE_LAYOUT resolved=0;assert(LineLayoutInfo(&arg,&owner,&resolved)&&resolved==0x117);
    for(unsigned l=0;l<levels;l++)assert(owner.MipOffsets[l]==raw.LevelOffsets[l]);
    AgxD3d12Heap heap={};heap.bytes=expected;heap.allocation=123;AgxD3d12Resource resource={};resource.heap=&heap;resource.bytes=expected;resource.type=D3D12DDI_RT_TEXTURE1D;
    resource.width=width;resource.height=resource.layers=1;resource.levels=levels;resource.volume_layout=resolved;resource.volume_transition=0xff;
@@ -49,7 +49,7 @@ int main() {
     assert(info.Offset==raw.LevelOffsets[l]&&info.RowStride==4ull*(width>>l?width>>l:1u)&&info.DepthStride==raw.LayerStrideBytes);}
    D3D12DDI_SUBRESOURCE_INFO invalid={};CheckSubresourceInfo({}, {&resource},levels,&invalid);assert(!invalid.Offset&&!invalid.RowStride&&!invalid.DepthStride);
    D3D12DDI_RESOURCE_ALLOCATION_INFO reflected={};D3DKMT_HANDLE allocation=0;CheckExistingResourceAllocationInfo({}, {&resource},&reflected,&allocation);
-   assert(reflected.ResourceDataSize==expected&&reflected.Layout==0x105&&reflected.MipLevelSwizzleTransition==0xff&&allocation==123);
+   assert(reflected.ResourceDataSize==expected&&reflected.Layout==0x117&&reflected.MipLevelSwizzleTransition==0xff&&allocation==123);
 #endif
    for(unsigned l=0;l<levels;l++) {
     unsigned w=width>>l;if(!w)w=1;addr.row_stride=4ull*w;addr.base=raw.LevelOffsets[l];addr.depth_stride=raw.LayerStrideBytes;
@@ -65,6 +65,6 @@ int main() {
   }
  }
  assert(c21_native_bo_calls()==0 && c21_native_device_calls()==0);
- printf("TEXTURE1D_QUERY cases=%u requested_mips=%u failed=%u BO=0 device=0 packed_pattern=0x105 NPOT=YES\n",cases,mips,failed);
+ printf("TEXTURE1D_QUERY cases=%u requested_mips=%u failed=%u BO=0 device=0 packed_pattern=0x117 NPOT=YES\n",cases,mips,failed);
  return failed?1:0;
 }

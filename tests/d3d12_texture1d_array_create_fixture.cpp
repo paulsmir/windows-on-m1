@@ -9,7 +9,7 @@ int main(){
   arg.MipLevels=levels;arg.SampleDesc.Count=1;arg.Format=format;arg.Flags=16;
   D3D12DDI_RESOURCE_ALLOCATION_INFO a={};unsigned before=ensure_calls,bo=c21_native_bo_calls(),dev=c21_native_device_calls();
   CheckResourceAllocationInfo({},&arg,static_cast<D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS>(0),65536,1,&a);
-  assert(a.ResourceDataSize!=~0ull&&a.Layout==0x105&&a.ResourceDataAlignment==65536&&before==ensure_calls);
+  assert(a.ResourceDataSize!=~0ull&&a.Layout==0x117&&a.ResourceDataAlignment==65536&&before==ensure_calls);
   assert(c21_native_bo_calls()==bo&&c21_native_device_calls()==dev);
   D3D12DDIARG_CREATEHEAP_0001 h={};h.CPUPageProperty=D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
   AgxD3d12Heap heap={};AgxD3d12Resource resource={};

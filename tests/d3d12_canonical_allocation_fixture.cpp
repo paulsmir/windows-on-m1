@@ -20,8 +20,11 @@ struct DXGI_SAMPLE_DESC {UINT Count,Quality;};
 struct AGX_D3D12_VOLUME_LAYOUT {UINT64 Bytes,NativeBytes,DepthStride,MipOffsets[16];};
 static constexpr UINT64 kHeapPage=65536,kVaMinimum=65536,kVaLimit=1ull<<39;
 static void AdmissionUmdDiagnostic(const char *,HRESULT,const UINT *,UINT){}
-static bool LineLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *,AGX_D3D12_VOLUME_LAYOUT *o,D3D12DDI_TEXTURE_LAYOUT *l){o->Bytes=65536;*l=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x105);return true;}
-static bool VolumeLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *a,AGX_D3D12_VOLUME_LAYOUT *o,D3D12DDI_TEXTURE_LAYOUT *l,UINT8 *t,UINT *r,HRESULT *s){o->Bytes=a->Width==32?65536:131072;*l=static_cast<D3D12DDI_TEXTURE_LAYOUT>(a->Width==32?0x100:0x103);*t=1;*r=0;*s=0;return true;}
+static bool LineLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *,AGX_D3D12_VOLUME_LAYOUT *o,D3D12DDI_TEXTURE_LAYOUT *l){o->Bytes=65536;*l=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x117);return true;}
+/* C21G: VolumeAllocationQuery's selection, stubbed (two exact square slots) */
+#define AGX_VOLUME_MAX_SLOTS 6u
+#define AGX_VOLUME_NO_TRANSITION 0xffu
+static bool VolumeLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *a,AGX_D3D12_VOLUME_LAYOUT *o,D3D12DDI_TEXTURE_LAYOUT *l,UINT8 *t,UINT,UINT64 *,UINT *r,HRESULT *s){o->Bytes=a->Width==32?65536:131072;*l=static_cast<D3D12DDI_TEXTURE_LAYOUT>(a->Width==32?0x112:0x115);std::memset(t,0xff,5);t[0]=1;*r=0;*s=0;return true;}
 static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *a){return a&&a->ResourceType==D3D12DDI_RT_TEXTURE2D?65536:0;}
 /* ACTUAL_FUNCTIONS */
 static unsigned checks,failures;

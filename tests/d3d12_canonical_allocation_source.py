@@ -19,5 +19,5 @@ def render(ddi,wdk,fixture):
   if not m:raise ValueError(name)
   decls.append(m.group())
  functions='\n'.join(block(source,n)+';' for n in ['struct AgxD3d12Heap {','struct AgxD3d12Resource {'])+'\n'
- functions+='\n'.join(block(source,n) for n in ['static VOID APIENTRY CheckResourceAllocationInfo(', 'static VOID APIENTRY CheckExistingResourceAllocationInfo('])
+ functions+='\n'.join(block(source,n) for n in ['static UINT64 VolumeAllocationQuery(', 'static VOID APIENTRY CheckResourceAllocationInfo(', 'static VOID APIENTRY CheckExistingResourceAllocationInfo('])
  return fixture.read_text().replace('HAS_LINE_BRANCH',str(int('if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE1D)' in source))).replace('/* PINNED_WDK */','\n'.join(decls)).replace('/* ACTUAL_FUNCTIONS */',functions)

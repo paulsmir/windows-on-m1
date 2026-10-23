@@ -9,8 +9,10 @@
  * exactly, and layout i has the pattern slots [i, i + 1, ...]. A resource
  * picks the layout of its first level's shape and advances one slot per
  * shape change (an unused shape is an empty slot: equal transitions).
- * A level that is one square tile no larger than the current shape keeps the
- * current slot: its Morton order is the low bits of the larger interleave.
+ * Exact shapes are used while they fit the slots (the C21 layouts keep their
+ * values); otherwise a level that is one square tile no larger than the
+ * current shape keeps the current slot: its Morton order is the low bits of
+ * the larger interleave.
  * Pure C, no Windows or Mesa headers: the DDI and the host oracle test
  * (tests/test_d3d12_volume_registry.py, against AIL) include it. */
 #ifndef AGX_D3D12_VOLUME_REGISTRY_H
@@ -97,6 +99,16 @@ typedef struct {
    uint8_t Channel, SourceBit;
 } AGX_VOLUME_BIT;
 
+/* (no compound literals: the DDI includes this header as C++) */
+static inline AGX_VOLUME_BIT
+agx_volume_bit(unsigned channel, unsigned source)
+{
+   AGX_VOLUME_BIT bit;
+   bit.Channel = (uint8_t)channel;
+   bit.SourceBit = (uint8_t)source;
+   return bit;
+}
+
 /* the interleave bits of a pattern, lowest address bit first (at most 32);
  * returns the count, 0 for an unknown pattern */
 static inline unsigned
@@ -110,10 +122,10 @@ agx_volume_pattern_bits(unsigned pattern, AGX_VOLUME_BIT bits[32])
    while ((1u << xbits) < shape.Width) ++xbits;
    while ((1u << ybits) < shape.Height) ++ybits;
    for (unsigned b = 0; b < e; ++b)
-      bits[n++] = (AGX_VOLUME_BIT){0, (uint8_t)b};
+      bits[n++] = agx_volume_bit(0, b);
    for (unsigned b = 0; b < xbits || b < ybits; ++b) {
-      if (b < xbits) bits[n++] = (AGX_VOLUME_BIT){0, (uint8_t)(e + b)};
-      if (b < ybits) bits[n++] = (AGX_VOLUME_BIT){1, (uint8_t)b};
+      if (b < xbits) bits[n++] = agx_volume_bit(0, e + b);
+      if (b < ybits) bits[n++] = agx_volume_bit(1, b);
    }
    return n;
 }
@@ -145,12 +157,11 @@ agx_volume_shape_of(unsigned e, uint32_t w, uint32_t h, unsigned *i)
    return 0;
 }
 
-/* the layout and transitions of a resource with element size 1 << e and
- * `levels` requested levels, within `max_slots` pattern slots (2: the 0003
- * interface, 6: 0022); 0 when it cannot be described */
+/* one selection pass: `prefix` merges single square tiles into the current
+ * slot */
 static inline int
-agx_volume_select(unsigned e, unsigned levels, const AGX_VOLUME_LEVEL *level, unsigned max_slots,
-                  AGX_VOLUME_SELECTION *out)
+agx_volume_select_pass(unsigned e, unsigned levels, const AGX_VOLUME_LEVEL *level, unsigned max_slots, int prefix,
+                       AGX_VOLUME_SELECTION *out)
 {
    unsigned first = 0, cur = 0, slot = 0;
    if (!out || !level || !levels || levels > AGX_VOLUME_MAX_LEVELS || !max_slots ||
@@ -169,7 +180,7 @@ agx_volume_select(unsigned e, unsigned levels, const AGX_VOLUME_LEVEL *level, un
       const int single = lv->TileWidth && lv->TileHeight && lv->StrideEl <= lv->TileWidth &&
                          lv->HeightEl <= lv->TileHeight;
       unsigned exact = 0;
-      if (single && lv->TileWidth == lv->TileHeight && lv->TileWidth <= limit) {
+      if (prefix && single && lv->TileWidth == lv->TileHeight && lv->TileWidth <= limit) {
          out->Pattern[l] = agx_volume_pattern_index(e, cur);
          continue; /* the square-prefix rule */
       }
@@ -185,6 +196,18 @@ agx_volume_select(unsigned e, unsigned levels, const AGX_VOLUME_LEVEL *level, un
    out->Layout = agx_volume_pattern_index(e, first);
    out->SlotsUsed = slot + 1u;
    return 1;
+}
+
+/* the layout and transitions of a resource with element size 1 << e and
+ * `levels` requested levels, within `max_slots` pattern slots (2: the 0003
+ * interface, 6: 0022): exact shapes when they fit, else the square-prefix
+ * merge; 0 when it cannot be described */
+static inline int
+agx_volume_select(unsigned e, unsigned levels, const AGX_VOLUME_LEVEL *level, unsigned max_slots,
+                  AGX_VOLUME_SELECTION *out)
+{
+   return agx_volume_select_pass(e, levels, level, max_slots, 0, out) ||
+          agx_volume_select_pass(e, levels, level, max_slots, 1, out);
 }
 
 /* a level's bytes per row of blocks: tiles per row times the slot shape's

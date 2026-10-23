@@ -482,6 +482,11 @@ agx_resource_layout_query(struct pipe_screen *screen,
    memcpy(result->LevelOffsets, layout->level_offsets_B, sizeof(result->LevelOffsets));
    memcpy(result->CompressedLevelOffsets, layout->level_offsets_compressed_B,
           sizeof(result->CompressedLevelOffsets));
+   for (unsigned l = 0; l < AGX_WIN32_ASAHI_LAYOUT_LEVELS; ++l) {
+      result->TileWidthEl[l] = layout->tilesize_el[l].width_el;
+      result->TileHeightEl[l] = layout->tilesize_el[l].height_el;
+      result->StrideEl[l] = layout->stride_el[l];
+   }
    return 1;
 }
 

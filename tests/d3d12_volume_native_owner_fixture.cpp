@@ -22,9 +22,16 @@ int main() {
   failed+=!ok;
  }
  AGX_D3D12_VOLUME_LAYOUT bad={};
- assert(AgxD3d12QueryTexture3DLayout(42,64,64,8,2,2,&bad)==E_NOTIMPL&&!bad.Bytes);
- assert(AgxD3d12QueryTexture3DLayout(42,4,8,8,2,2,&bad)==E_NOTIMPL&&!bad.Bytes);
+ /* C21G: larger and non-square volumes pass the native query with their
+  * per-level tiles (the registry's input); depth-stencil binds and sides
+  * beyond D3D12's 2048 stay refused */
+ AGX_D3D12_VOLUME_LAYOUT good={};
+ assert(AgxD3d12QueryTexture3DLayout(42,64,64,8,2,2,&good)==S_OK&&good.Bytes&&good.ElementLog2==2&&
+        good.TileWidth[0]==64&&good.TileHeight[0]==64&&good.TileWidth[1]==32&&good.StrideEl[1]==32&&good.HeightEl[1]==32);
+ assert(AgxD3d12QueryTexture3DLayout(42,4,8,8,2,2,&good)==S_OK&&good.Bytes&&good.TileWidth[0]==4&&good.TileHeight[0]==4&&
+        good.StrideEl[0]==4&&good.HeightEl[0]==8);
  assert(AgxD3d12QueryTexture3DLayout(42,4,4,8,2,4,&bad)==E_NOTIMPL&&!bad.Bytes);
+ assert(AgxD3d12QueryTexture3DLayout(42,4096,4,8,1,2,&bad)==E_NOTIMPL&&!bad.Bytes);
  assert(c21_native_bo_calls()==0 && c21_native_device_calls()==0);
  printf("NATIVE_OWNER checks=5 failed=%u BO=0 device=0 no_actual_sparse_template=YES\n",failed);
  return failed?1:0;

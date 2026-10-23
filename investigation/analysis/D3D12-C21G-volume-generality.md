@@ -69,7 +69,10 @@ up to 2048 and full mip chains (LUTs, fog/froxel grids, noise volumes).
      shape: two slots in 0003, six in 0022. Layout and pattern IDs are dense
      from 0x100. Counts are identical in both forms.
 2. Per resource, from the real AIL layout (the native query, extended with
-   per-level tile sizes and strides):
+   per-level tile sizes and strides). Exact shapes are tried first: every
+   C21 resource keeps its exact two-pattern layout and transition, under the
+   new IDs. Only when exact shapes do not fit the slots does a second pass
+   apply the square-prefix merge:
    - a level that is one single square tile whose side fits the current
      slot's shape keeps the current slot. Its Morton order is the low bits of
      the larger interleave, so every texel address is exact (the square-prefix
@@ -102,3 +105,19 @@ info and compared with AIL's `ail_get_twiddled_block_B` + within-tile
   Checkpoint: a probe step that uploads RGBA16F/RGBA32F/R8 volumes (64^3 with
   full mips, and a non-square single-mip 160x90x16), reads each mip back
   through a shader, and compares with WARP.
+
+## Implementation (2026-10-23)
+
+- Registry and oracle: 6305b84d.
+- Wiring:
+  - DDI: VolumeLayoutCaps, VolumeLayoutInfo, VolumeAllocationQuery (2 slots
+    for 0003, 6 for 0022), CheckExistingResourceAllocationInfo0022 (the
+    stored five transitions), CheckSubresourceInfo (the stored row stride);
+    1D moves to the registry's 4-byte 1x1 pattern (0x117).
+  - Owner: texture3d_template admits formats of 1 to 16 bytes, sides up to
+    2048 and 12 levels; the query carries the per-level tiles.
+  - Native query: TileWidthEl, TileHeightEl, StrideEl.
+- The parent's C21/C23/C24 fixtures follow the new IDs and domain; their
+  fake native queries now use the linked AIL.
+- Gate: BASELINE_OK, builder syncheck OK.
+- Checkpoint pending: the volume probe step (WARP reference) and a J313 run.

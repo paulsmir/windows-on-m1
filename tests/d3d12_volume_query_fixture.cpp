@@ -38,9 +38,16 @@ static pipe_format FormatTranslate(DXGI_FORMAT format,int) {return format==28?PI
 static UINT query_calls=0,create_calls=0;
 static pipe_resource queried,created;
 static int query_ok=1;
+/* C21G: the linked AIL layout (as test_d3d12_resolved_volume), with the
+ * per-level tiles and strides the registry selects from */
 extern "C" int AgxWin32AsahiQueryUncompressedResourceLayout(const pipe_resource *t,AGX_WIN32_ASAHI_RESOURCE_LAYOUT *r) {
  ++query_calls;queried=*t;std::memset(r,0,sizeof(*r));if(!query_ok)return 0;
- r->LevelOffsets[1]=128;r->LevelOffsets[2]=256;r->LevelOffsets[3]=384;r->LayerStrideBytes=16384;r->SizeBytes=16384ull*t->depth0;r->AllocatedLevels=4;r->Modifier=0x1234;r->RequestedLevels=t->last_level+1;r->Flags=AGX_WIN32_ASAHI_LAYOUT_MIPMAPPED_Z;
+ ail_layout a={};a.width_px=t->width0;a.height_px=t->height0;a.depth_px=t->depth0;a.sample_count_sa=1;a.levels=t->last_level+1;
+ a.mipmapped_z=true;a.tiling=AIL_TILING_GPU;a.format=t->format;a.renderable=true;ail_make_miptree(&a);
+ r->SizeBytes=a.size_B;r->LayerStrideBytes=a.layer_stride_B;r->AllocatedLevels=a.levels;r->Modifier=0x1234;r->RequestedLevels=t->last_level+1;
+ r->Flags=AGX_WIN32_ASAHI_LAYOUT_MIPMAPPED_Z;r->Tiling=a.tiling;
+ for(unsigned i=0;i<=a.levels && i<16;i++)r->LevelOffsets[i]=a.level_offsets_B[i];
+ for(unsigned i=0;i<a.levels;i++){r->TileWidthEl[i]=a.tilesize_el[i].width_el;r->TileHeightEl[i]=a.tilesize_el[i].height_el;r->StrideEl[i]=a.stride_el[i];}
  return 1;
 }
 static void receipt(const char *,HRESULT,UINT,UINT,UINT) {}
@@ -62,8 +69,13 @@ int main() {
  assert(queried.target==PIPE_TEXTURE_3D && queried.width0==4 && queried.height0==4 && queried.depth0==8 && queried.array_size==1 && queried.last_level==1);
  assert(!(queried.bind&PIPE_BIND_SHADER_IMAGE));
  unsigned calls=query_calls;
- for(unsigned bad=0;bad<9;bad++) {auto v=r;switch(bad){case 0:v.Width=64;break;case 1:v.Height=8;break;case 2:v.DepthOrArraySize=0;break;case 3:v.MipLevels=3;break;case 4:v.SampleDesc.Count=2;break;case 5:v.Layout=1;break;case 6:v.Format=99;break;case 7:v.Width=v.Height=3;break;case 8:v.Flags=2;break;} assert(!TextureBytes(&v));}
+ /* C21G: outside D3D12's Texture3D domain, refused before the native query */
+ for(unsigned bad=0;bad<6;bad++) {auto v=r;switch(bad){case 0:v.Width=4096;break;case 1:v.Height=0;break;case 2:v.DepthOrArraySize=0;break;case 3:v.MipLevels=13;break;case 4:v.SampleDesc.Count=2;break;case 5:v.Flags=2;break;} assert(!TextureBytes(&v));}
  assert(calls==query_calls);
+ /* a resolved layout other than the registry's selection: refused after the query */
+ {auto v=r;v.Layout=1;assert(!TextureBytes(&v) && query_calls==calls+1);}
+ /* C21G: larger, non-square, non-POT volumes and longer chains are admitted */
+ for(unsigned good=0;good<4;good++) {auto v=r;switch(good){case 0:v.Width=v.Height=64;break;case 1:v.Height=8;break;case 2:v.MipLevels=3;break;case 3:v.Width=v.Height=3;break;} assert(TextureBytes(&v));}
  AGX_D3D12_VOLUME_LAYOUT layout={};assert(AgxD3d12QueryTexture3DLayout(42,4,4,8,2,0,&layout)==S_OK);
  assert(layout.Bytes==0x20000 && layout.NativeBytes==0x20000 && layout.DepthStride==16384 && layout.MipOffsets[1]==128);
  query_ok=0;assert(AgxD3d12QueryTexture3DLayout(42,4,4,8,2,0,&layout)==E_NOTIMPL && !layout.Bytes);query_ok=1;

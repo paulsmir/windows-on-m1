@@ -27,3 +27,12 @@ def line_query_dependencies(owner):
         'static bool texture1d_array_template(',
         'extern "C" HRESULT AgxD3d12QueryTexture1DArrayLayout(')]
     return '\n'.join(constants+functions)+'\n'
+
+
+def volume_record():
+    """C21G: the actual AGX_D3D12_VOLUME_LAYOUT record and the layout registry
+    (agx_d3d12_volume_registry.h) that VolumeLayoutInfo selects from."""
+    header=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.h').read_text()
+    end=header.index('} AGX_D3D12_VOLUME_LAYOUT;')+len('} AGX_D3D12_VOLUME_LAYOUT;')
+    registry=ROOT/'drivers/apple-agx/d3d12/agx_d3d12_volume_registry.h'
+    return '#include "%s"\n' % registry+header[header.rfind('typedef struct {',0,end):end]

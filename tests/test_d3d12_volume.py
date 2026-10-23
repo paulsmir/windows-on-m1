@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 from test_d3d12_view_mapping import block
-from d3d12_volume_fixture_dependencies import line_query_dependencies
+from d3d12_volume_fixture_dependencies import line_query_dependencies, volume_record
 from test_dxbc_to_nir import local_tree,host_flags
 ROOT=Path(__file__).resolve().parents[1]
 OWNER=ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp'
@@ -21,7 +21,7 @@ class VolumeQuery(unittest.TestCase):
         funcs+=block(owner,'static unsigned texture_block(')+'\n'+block(owner,'extern "C" unsigned AgxD3d12FormatBlock(')+'\n'+block(owner,'extern "C" int AgxD3d12FormatMultisample(')+'\n'
         for name in ['static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D(']:
             if name in owner:funcs+=block(owner,name)+'\n'
-        record='typedef struct {unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];} AGX_D3D12_VOLUME_LAYOUT;'
+        record=volume_record()
         funcs+=line_query_dependencies(owner)
         funcs+=block(ddi,'static bool VolumeLayoutInfo(')+'\n'+block(ddi,'static bool LineLayoutInfo(')+'\n'
         source=(ROOT/'tests/d3d12_volume_query_fixture.cpp').read_text().replace('/* VOLUME_LAYOUT_RECORD */',record).replace('/* ACTUAL_QUERY */',funcs).replace('/* ACTUAL_TEXTURE_BYTES */',block(ddi,'static UINT64 TextureBytes('))

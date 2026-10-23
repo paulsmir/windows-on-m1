@@ -24,6 +24,8 @@ int main() {
  AgxD3d12Heap heap={};heap.bytes=0x20000;heap.allocation=7;heap.volume=1;
  AgxD3d12Resource resource={};resource.heap=&heap;resource.type=D3D12DDI_RT_TEXTURE3D;resource.levels=2;resource.width=4;resource.volume_depth_stride=16384;resource.volume_layout=0x103;resource.volume_transition=1;
  resource.volume_offsets[0]=0;resource.volume_offsets[1]=128;
+ /* C21G: CreateVolumeResource stores the registry row strides (exact 4x4 and 2x2 patterns) */
+ resource.volume_row_strides[0]=64;resource.volume_row_strides[1]=16;
  D3D12DDI_HRESOURCE h={&resource};D3D12DDI_SUBRESOURCE_INFO info={};
  CheckSubresourceInfo({},h,1,&info);assert(info.Offset==128 && info.RowStride==16 && info.DepthStride==16384);
  CheckSubresourceInfo({},h,2,&info);assert(!info.Offset && !info.RowStride && !info.DepthStride);

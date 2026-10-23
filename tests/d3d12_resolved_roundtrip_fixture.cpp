@@ -20,7 +20,10 @@ int main(){
   r.Width=r.Height=side;r.DepthOrArraySize=8;r.MipLevels=levels;r.Format=fmt;
   unsigned before=ensure_calls;D3D12DDI_RESOURCE_ALLOCATION_INFO alloc={};
   CheckResourceAllocationInfo({},&r,0,0,0,&alloc);
-  assert(alloc.ResourceDataSize!=~0ull && alloc.Layout>=0x100 && alloc.Layout<=0x105 && ensure_calls==before);
+  /* C21G: the 4-byte square shape s of the registry (4-byte shapes 64..1
+   * start at index 17), exact patterns as the C21 registry had them */
+  UINT expected=0x111u+6u;for(UINT s=1;s<side;s*=2)--expected;
+  assert(alloc.ResourceDataSize!=~0ull && alloc.Layout==expected && ensure_calls==before);
   assert(alloc.MipLevelSwizzleTransition==((levels>1&&side>1)?1:255));
   assert(alloc.AdditionalDataHeaderSize==0 && alloc.AdditionalDataSize==0);
   assert(alloc.AdditionalDataHeaderAlignment==1 && alloc.AdditionalDataAlignment==1);
@@ -41,7 +44,7 @@ int main(){
   before=ensure_calls;
   for(UINT fault=0;fault<9;fault++){
    auto v=r;auto hh=h;
-   switch(fault){case 0:v.Layout=D3D12DDI_TL_ROW_MAJOR;break;case 1:v.Layout=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x106);break;case 2:v.Height=33;break;case 3:v.MipLevels=3;break;case 4:v.Format=99;break;case 5:v.Flags=2;break;case 6:hh.CPUPageProperty=D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE;break;case 7:hh.ByteSize=1;break;case 8:hh.Alignment=4096;break;}
+   switch(fault){case 0:v.Layout=D3D12DDI_TL_ROW_MAJOR;break;case 1:v.Layout=static_cast<D3D12DDI_TEXTURE_LAYOUT>(expected+1);break;case 2:v.Height=4096;break;case 3:v.MipLevels=13;break;case 4:v.DepthOrArraySize=0;break;case 5:v.Flags=2;break;case 6:hh.CPUPageProperty=D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE;break;case 7:hh.ByteSize=1;break;case 8:hh.Alignment=4096;break;}
    assert(CreateVolumeResource(&device,&hh,&heap,&v,&resource)==E_NOTIMPL&&ensure_calls==before);
   }
   for(UINT restriction: {1u,4096u,32768u,65537u}){

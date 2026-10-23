@@ -2,7 +2,7 @@
 from pathlib import Path
 import os,subprocess,tempfile,unittest,re
 from test_d3d12_view_mapping import block
-from d3d12_volume_fixture_dependencies import line_query_dependencies
+from d3d12_volume_fixture_dependencies import line_query_dependencies, volume_record
 from test_dxbc_to_nir import local_tree,host_flags
 ROOT=Path(__file__).resolve().parents[1]
 DDI=ROOT/'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp'
@@ -18,7 +18,7 @@ class ResolvedVolume(unittest.TestCase):
   funcs+='\n'+line_query_dependencies(owner)
   funcs+='\n'+block(ddi,'static bool LineLayoutInfo(')
   funcs+='\n'+block(ddi,'static bool VolumeLayoutInfo(')
-  record='typedef struct {unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];} AGX_D3D12_VOLUME_LAYOUT;'
+  record=volume_record()
   source=source.replace('/* VOLUME_LAYOUT_RECORD */',record).replace('/* ACTUAL_QUERY */',funcs).replace('/* ACTUAL_TEXTURE_BYTES */',block(ddi,'static UINT64 TextureBytes('))
   source+='''int main(){ D3D12DDIARG_CREATERESOURCE_0003 r={};r.ResourceType=D3D12DDI_RT_TEXTURE3D;r.SampleDesc.Count=1;r.Width=r.Height=4;r.DepthOrArraySize=8;r.MipLevels=2;r.Format=42;assert(TextureBytes(&r)==0x20000);assert(query_calls==1&&!create_calls); }'''
   with tempfile.TemporaryDirectory() as t:
@@ -38,7 +38,7 @@ class ResolvedVolume(unittest.TestCase):
    self.assertIsNotNone(found,name);declarations.append(found.group())
   ddi=DDI.read_text()
   functions='\n'.join(block(ddi,x) for x in ['template<class T, class F> static HRESULT Answer(', 'static HRESULT VolumeLayoutCaps(', 'static HRESULT APIENTRY GetCaps('])
-  source=(ROOT/'tests/d3d12_resolved_caps_fixture.cpp').read_text().replace('/* PINNED_WDK */','\n'.join(declarations)).replace('/* ACTUAL_CAPS */',functions)
+  source=(ROOT/'tests/d3d12_resolved_caps_fixture.cpp').read_text().replace('/* PINNED_WDK */','\n'.join(declarations)+'\n'+volume_record().split('\n')[0]).replace('/* ACTUAL_CAPS */',functions)
   with tempfile.TemporaryDirectory() as t:
    p=Path(t)/'caps.cpp';p.write_text(source);exe=Path(t)/'test'
    r=subprocess.run(['clang++','-std=c++17','-include','initializer_list','-fsanitize=address,undefined',str(p),'-o',str(exe)],capture_output=True,text=True)
@@ -56,7 +56,7 @@ class ResolvedVolume(unittest.TestCase):
   prefix=prefix.replace('using D3D12DDI_TEXTURE_LAYOUT=unsigned;','').replace('#define D3D12DDI_TL_UNDEFINED 0','').replace('unsigned Flags,Layout;','unsigned Flags;D3D12DDI_TEXTURE_LAYOUT Layout;').replace('enum {D3D12DDI_RT_TEXTURE2D=3,','enum {D3D12DDI_RT_BUFFER=1,D3D12DDI_RT_TEXTURE2D=3,')
   if 'D3D12DDI_RT_TEXTURE1D=' not in prefix:prefix=prefix.replace('D3D12DDI_RT_TEXTURE2D=3,','D3D12DDI_RT_TEXTURE1D=2,D3D12DDI_RT_TEXTURE2D=3,')
   prefix='using UINT32=unsigned;using UINT16=unsigned short;\n'+prefix
-  record='typedef struct {unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];} AGX_D3D12_VOLUME_LAYOUT;'
+  record=volume_record()
   def declaration(name):
    r=re.search(r'typedef (?:struct|enum) '+name+r'\s*\{.*?\}\s*'+name+r'\s*;',h,re.S);self.assertIsNotNone(r,name);return r.group()
   prefix=prefix.replace('/* VOLUME_LAYOUT_RECORD */',declaration('D3D12DDI_TEXTURE_LAYOUT')+'\n'+record)
@@ -66,14 +66,16 @@ class ResolvedVolume(unittest.TestCase):
    ++query_calls;queried=*t;memset(r,0,sizeof(*r));if(!query_ok)return 0;
    ail_layout a={};a.width_px=t->width0;a.height_px=t->height0;a.depth_px=t->depth0;a.sample_count_sa=1;a.levels=t->last_level+1;a.mipmapped_z=true;a.tiling=AIL_TILING_GPU;a.format=t->format;a.renderable=true;ail_make_miptree(&a);
    r->SizeBytes=a.size_B;r->LayerStrideBytes=a.layer_stride_B;r->SparseTableSizeBytes=a.sparse_table_size_B;r->RequestedLevels=t->last_level+1;r->AllocatedLevels=a.levels;r->Modifier=0x1234;
-   for(unsigned i=0;i<a.levels;i++)r->LevelOffsets[i]=a.level_offsets_B[i];return 1;
+   for(unsigned i=0;i<=a.levels && i<16;i++)r->LevelOffsets[i]=a.level_offsets_B[i];
+   r->Tiling=a.tiling;for(unsigned i=0;i<a.levels;i++){r->TileWidthEl[i]=a.tilesize_el[i].width_el;r->TileHeightEl[i]=a.tilesize_el[i].height_el;r->StrideEl[i]=a.stride_el[i];}
+   return 1;
   }
   '''+prefix[end:]
   prefix=prefix.replace('/* ACTUAL_QUERY */',funcs).replace('/* ACTUAL_TEXTURE_BYTES */',block(ddi,'static UINT64 TextureBytes('))
   names=['D3D12DDI_RESOURCE_ALLOCATION_INFO','D3D12DDI_SUBRESOURCE_INFO','D3D12DDI_MEMORY_POOL','D3D12DDI_CPU_PAGE_PROPERTY','D3D12DDI_HEAP_FLAGS','D3D12DDIARG_CREATEHEAP_0001']
   fixture=(ROOT/'tests/d3d12_resolved_roundtrip_fixture.cpp').read_text().replace('/* PINNED_ALLOCATION_ABI */','\n'.join(declaration(n) for n in names))
   functions=block(ddi,'struct AgxD3d12Heap {')+';\n'+block(ddi,'struct AgxD3d12Resource {')+';\n'
-  functions+='\n'.join(block(ddi,x) for x in ['static VOID APIENTRY CheckResourceAllocationInfo(', 'static HRESULT CreateVolumeResource(', 'static VOID APIENTRY CheckExistingResourceAllocationInfo(', 'static VOID APIENTRY CheckSubresourceInfo('])
+  functions+='\n'.join(block(ddi,x) for x in ['static UINT64 VolumeAllocationQuery(', 'static VOID APIENTRY CheckResourceAllocationInfo(', 'static HRESULT CreateVolumeResource(', 'static VOID APIENTRY CheckExistingResourceAllocationInfo(', 'static VOID APIENTRY CheckSubresourceInfo('])
   source=prefix+fixture.replace('/* ACTUAL_RESOURCE_FUNCTIONS */',functions)
   with tempfile.TemporaryDirectory() as t:
    p=Path(t)/'roundtrip.cpp';p.write_text(source);exe=Path(t)/'test'

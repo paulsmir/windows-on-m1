@@ -32,6 +32,7 @@ extern "C" {
 #include "agx_d3d12_windows.h"
 #include "agx_d3d12_tile_mapping.h"
 #include "../mesa/dxbc/dxbc_minmax_bits.h"
+#include "agx_d3d12_volume_registry.h"
 #endif
 /* agx_win32_screen.c (compiled into this UMD) */
 int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
@@ -297,69 +298,67 @@ template<class T, class F> static HRESULT Answer(const D3D12DDIARG_GETCAPS *arg,
     fill(*static_cast<T *>(arg->pData));
     return S_OK;
 }
-/* C21: immutable legacy two-slot registry. See resolved-layout-contract note.
- * IDs are descending native square sizes32..1; only four-byte texels admitted. */
+/* C21G (D3D12-C21G-volume-generality.md): the Texture3D layout registry
+ * (agx_d3d12_volume_registry.h): one exact pattern per AGX tile shape and
+ * element size, pattern and layout IDs 0x100 + index; layout i has the slots
+ * [i, i + 1, ...] (two in 0003, six per plane in 0022). */
 static HRESULT VolumeLayoutCaps(const D3D12DDIARG_GETCAPS *arg) {
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if(!arg || !arg->pData) return E_INVALIDARG;
+    const auto VolumeInterleave=[](UINT pattern,D3D12DDI_SWIZZLE_BIT_ENTRY *bits) {
+        AGX_VOLUME_BIT entries[32];
+        const unsigned n=agx_volume_pattern_bits(pattern,entries);
+        for(unsigned k=0;k<n;++k) {
+            bits[k].Valid=1;bits[k].ChannelIndex=entries[k].Channel;bits[k].SourceBitIndex=entries[k].SourceBit;
+        }
+    };
     if(arg->Type==D3D12DDICAPS_TYPE_TEXTURE_LAYOUT) {
         if(!arg->pInfo) {
             if(arg->DataSize!=sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS) &&
                arg->DataSize!=sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS_0001)) return E_INVALIDARG;
             memset(arg->pData,0,arg->DataSize);
             auto *caps=static_cast<D3D12DDI_TEXTURE_LAYOUT_CAPS *>(arg->pData);
-            caps->DeviceDependentLayoutCount=6;caps->DeviceDependentSwizzleCount=6;
+            caps->DeviceDependentLayoutCount=AGX_VOLUME_PATTERNS;caps->DeviceDependentSwizzleCount=AGX_VOLUME_PATTERNS;
             return S_OK;
         }
         UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));
-        if(index>=6 || arg->DataSize!=2*sizeof(D3D12DDI_SWIZZLE_PATTERN)) return E_INVALIDARG;
+        if(index>=AGX_VOLUME_PATTERNS || arg->DataSize!=2*sizeof(D3D12DDI_SWIZZLE_PATTERN)) return E_INVALIDARG;
         const D3D12DDI_SWIZZLE_PATTERN patterns[2]={
-            static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+index),
-            static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+(index<5?index+1:5u))};
+            static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+agx_volume_layout_slot(index,0)),
+            static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+agx_volume_layout_slot(index,1))};
         memcpy(arg->pData,patterns,sizeof(patterns));return S_OK;
     }
-    /* the interleave bits of pattern index (four-byte texels, 32>>index square) */
-    const auto interleave=[](UINT index,D3D12DDI_SWIZZLE_BIT_ENTRY *bits) {
-        UINT n=0;
-        for(UINT b=0;b<2;++b) {auto &v=bits[n++];v.Valid=1;v.SourceBitIndex=static_cast<UINT8>(b);}
-        for(UINT b=0;b<5-index;++b) {
-            auto &x=bits[n++];x.Valid=1;x.SourceBitIndex=static_cast<UINT8>(b+2);
-            auto &y=bits[n++];y.Valid=1;y.ChannelIndex=1;y.SourceBitIndex=static_cast<UINT8>(b);
-        }
-    };
     if(arg->Type==D3D12DDICAPS_TYPE_SWIZZLE_PATTERN) {
         if(!arg->pInfo || arg->DataSize!=sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0003)) return E_INVALIDARG;
-        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));if(index>=6)return E_INVALIDARG;
+        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));if(index>=AGX_VOLUME_PATTERNS)return E_INVALIDARG;
         D3D12DDI_SWIZZLE_PATTERN_DESC_0003 pattern={};
-        interleave(index,pattern.InterleavePatternSourceBits);
+        VolumeInterleave(index,pattern.InterleavePatternSourceBits);
         memcpy(arg->pData,&pattern,sizeof(pattern));return S_OK;
     }
-    /* EXP1870: R2+ runtimes ask the 0022 forms (1060/1061) instead. The same
-     * registry: caps _0026 (no standard swizzle, no row-major textures,
-     * parameterized patterns), per layout six patterns per plane slot (the
-     * 0022 MipLevelSwizzleTransition[5] segments; 0003's two patterns, the
-     * second kept for every later segment; transitions stay 0xff), and the
-     * 0022 descriptor with the 0003 interleave and no XOR terms. */
+    /* EXP1870: R2+ runtimes ask the 0022 forms (1060/1061) instead: caps
+     * _0026 (no standard swizzle, no row-major textures), six pattern slots
+     * per plane (the 0022 MipLevelSwizzleTransition[5] segments) and the
+     * 0022 descriptor with the same interleave and no XOR terms. */
     if(arg->Type==D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT) {
         if(!arg->pInfo) {
             if(arg->DataSize!=sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS_0026)) return E_INVALIDARG;
             memset(arg->pData,0,arg->DataSize);
             auto *caps=static_cast<D3D12DDI_TEXTURE_LAYOUT_CAPS_0026 *>(arg->pData);
-            caps->DeviceDependentLayoutCount=6;caps->DeviceDependentSwizzleCount=6;
+            caps->DeviceDependentLayoutCount=AGX_VOLUME_PATTERNS;caps->DeviceDependentSwizzleCount=AGX_VOLUME_PATTERNS;
             return S_OK;
         }
         UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));
-        if(index>=6 || arg->DataSize!=18*sizeof(D3D12DDI_SWIZZLE_PATTERN)) return E_INVALIDARG;
+        if(index>=AGX_VOLUME_PATTERNS || arg->DataSize!=18*sizeof(D3D12DDI_SWIZZLE_PATTERN)) return E_INVALIDARG;
         D3D12DDI_SWIZZLE_PATTERN patterns[18];
         for(UINT i=0;i<18;++i)
-            patterns[i]=static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+(i%6==0?index:(index<5?index+1:5u)));
+            patterns[i]=static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+agx_volume_layout_slot(index,i%6));
         memcpy(arg->pData,patterns,sizeof(patterns));return S_OK;
     }
     if(arg->Type==D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN) {
         if(!arg->pInfo || arg->DataSize!=sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0022)) return E_INVALIDARG;
-        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));if(index>=6)return E_INVALIDARG;
+        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));if(index>=AGX_VOLUME_PATTERNS)return E_INVALIDARG;
         D3D12DDI_SWIZZLE_PATTERN_DESC_0022 pattern={};
-        interleave(index,pattern.InterleavePatternSourceBits);
+        VolumeInterleave(index,pattern.InterleavePatternSourceBits);
         memcpy(arg->pData,&pattern,sizeof(pattern));return S_OK;
     }
 #else
@@ -1755,6 +1754,8 @@ struct AgxD3d12Resource {
     UINT64 volume_depth_stride;
     D3D12DDI_TEXTURE_LAYOUT volume_layout;
     UINT8 volume_transition;
+    UINT8 volume_transitions[5]; /* C21G: the 0022 transitions, [0] = volume_transition */
+    UINT64 volume_row_strides[16]; /* C21G: bytes per row of blocks, per level */
     /* C36 (EXP1832): a placed texture's heap object -- the runtime passes a
      * placed resource without one */
     AgxD3d12Heap own_heap;
@@ -1767,13 +1768,13 @@ static UINT AgxD3d12FormatBlock(DXGI_FORMAT, unsigned *, unsigned *) { return 0;
  * the owner's layout (whole 16x16 tiles of each level, a 64 KiB granule);
  * 0 = not a texture this device creates (format, samples, dimension). */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-/* Existing0x105 registry entry is the4BPP1x1 block pattern; every1D mip uses it. */
+/* every 1D mip uses the registry's 4-byte 1x1 pattern (C21G) */
 static bool LineLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *arg,AGX_D3D12_VOLUME_LAYOUT *layout,
                            D3D12DDI_TEXTURE_LAYOUT *resolved) {
  if(!arg || !layout || arg->ResourceType!=D3D12DDI_RT_TEXTURE1D || arg->Height!=1 || (!arg->DepthOrArraySize || arg->DepthOrArraySize>D3D12_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION) ||
     arg->SampleDesc.Count!=1 || arg->SampleDesc.Quality ||
     (arg->Flags&~D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE))return false;
- const auto selected=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x105u);
+ const auto selected=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x100u+agx_volume_pattern_index(2,agx_volume_shape_count(2)-1));
  if(arg->Layout!=D3D12DDI_TL_UNDEFINED && arg->Layout!=selected)return false;
  const UINT bind=(arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u;
  if(arg->Width>D3D12_REQ_TEXTURE1D_U_DIMENSION || !arg->MipLevels ||
@@ -1782,23 +1783,21 @@ static bool LineLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *arg,AGX_D3D12_
  if(resolved)*resolved=selected;return true;
 }
 
+/* C21G: a Texture3D's native layout, its registry layout and transitions
+ * within `slots` pattern slots (2: the 0003 interface, 6: 0022), and each
+ * level's row stride */
 static bool VolumeLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *arg,AGX_D3D12_VOLUME_LAYOUT *layout,
-                             D3D12DDI_TEXTURE_LAYOUT *resolved,UINT8 *transition,
-                             UINT *reason=nullptr,HRESULT *queryStatus=nullptr) {
+                             D3D12DDI_TEXTURE_LAYOUT *resolved,UINT8 *transitions /* [5] */,UINT slots,
+                             UINT64 *row_strides /* [16] */=nullptr,UINT *reason=nullptr,HRESULT *queryStatus=nullptr) {
     /* Diagnostic-only: 0 success, 1 input domain, 2 incoming layout,
-     * 3 native query refusal; HRESULT 1 means query was not called. */
+     * 3 native query refusal, 4 the registry cannot describe it; HRESULT 1
+     * means query was not called. */
     if(reason)*reason=1u;
     if(queryStatus)*queryStatus=static_cast<HRESULT>(1);
     if(!arg || !layout || arg->ResourceType!=D3D12DDI_RT_TEXTURE3D || arg->SampleDesc.Count!=1 ||
-       arg->SampleDesc.Quality || !arg->Width || arg->Width>32 || arg->Height!=arg->Width ||
-       (arg->Width&(arg->Width-1)) || !arg->DepthOrArraySize || arg->DepthOrArraySize>2048 ||
-       !arg->MipLevels || arg->MipLevels>2 ||
-       (arg->Format!=DXGI_FORMAT_R32_UINT && arg->Format!=DXGI_FORMAT_R8G8B8A8_UNORM) ||
+       arg->SampleDesc.Quality || !arg->Width || arg->Width>2048 || !arg->Height || arg->Height>2048 ||
+       !arg->DepthOrArraySize || arg->DepthOrArraySize>2048 || !arg->MipLevels || arg->MipLevels>12 ||
        (arg->Flags&~(D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET|D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE))) return false;
-    UINT index=0;for(UINT side=32;side>arg->Width;side>>=1) ++index;
-    const auto selected=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x100u+index);
-    if(reason)*reason=2u;
-    if(arg->Layout!=D3D12DDI_TL_UNDEFINED && arg->Layout!=selected) return false;
     const UINT bind=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?AGX_D3D12_BIND_RENDER_TARGET:0u)|
                     ((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u);
     if(reason)*reason=3u;
@@ -1806,9 +1805,20 @@ static bool VolumeLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *arg,AGX_D3D1
         arg->DepthOrArraySize,arg->MipLevels,bind,layout);
     if(queryStatus)*queryStatus=status;
     if(FAILED(status)) return false;
+    AGX_VOLUME_LEVEL levels[AGX_VOLUME_MAX_LEVELS];
+    for(UINT m=0;m<arg->MipLevels;++m)
+        levels[m]={layout->TileWidth[m],layout->TileHeight[m],layout->StrideEl[m],layout->HeightEl[m]};
+    AGX_VOLUME_SELECTION selection={};
+    if(reason)*reason=4u;
+    if(!agx_volume_select(layout->ElementLog2,arg->MipLevels,levels,slots,&selection)) return false;
+    const auto selected=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x100u+selection.Layout);
+    if(reason)*reason=2u;
+    if(arg->Layout!=D3D12DDI_TL_UNDEFINED && arg->Layout!=selected) return false;
     if(reason)*reason=0u;
     if(resolved)*resolved=selected;
-    if(transition)*transition=(arg->MipLevels>1 && arg->Width>1)?1u:0xffu;
+    if(transitions) memcpy(transitions,selection.Transitions,sizeof(selection.Transitions));
+    if(row_strides)
+        for(UINT m=0;m<16;++m) row_strides[m]=m<arg->MipLevels ? agx_volume_row_stride(selection.Pattern[m],&levels[m]) : 0;
     return true;
 }
 #endif
@@ -1818,7 +1828,7 @@ static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *arg) {
         AGX_D3D12_VOLUME_LAYOUT layout={};return LineLayoutInfo(arg,&layout,nullptr)?layout.Bytes:0;
     }
     if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE3D) {
-        AGX_D3D12_VOLUME_LAYOUT layout={};return VolumeLayoutInfo(arg,&layout,nullptr,nullptr)?layout.Bytes:0;
+        AGX_D3D12_VOLUME_LAYOUT layout={};return VolumeLayoutInfo(arg,&layout,nullptr,nullptr,AGX_VOLUME_MAX_SLOTS)?layout.Bytes:0;
     }
     /* C32: 2x/4x multisampled textures have one level */
     const UINT samples = arg ? arg->SampleDesc.Count : 0u;
@@ -1848,6 +1858,35 @@ static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *arg) {
 static AgxD3d12Device *DeviceOf(D3D12DDI_HDEVICE handle) {
     return static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C21G: a Texture3D allocation query within `slots` pattern slots (2: 0003,
+ * 6: 0022): the size (~0 when refused), the resolved layout (UNDEFINED when
+ * refused) and the transitions; receipts measure-d3d12-volume-query-* */
+static UINT64 VolumeAllocationQuery(const D3D12DDIARG_CREATERESOURCE_0003 *arg,UINT64 alignmentRestriction,UINT slots,
+                                    D3D12DDI_TEXTURE_LAYOUT *resolved,UINT8 *transitions /* [5] */) {
+    AGX_D3D12_VOLUME_LAYOUT layout={};
+    memset(transitions,AGX_VOLUME_NO_TRANSITION,AGX_VOLUME_MAX_SLOTS-1);
+    const UINT input[] = {static_cast<UINT>(arg->ResourceType),static_cast<UINT>(arg->Width),
+        static_cast<UINT>(arg->Width>>32),arg->Height,arg->DepthOrArraySize,arg->MipLevels,
+        static_cast<UINT>(arg->Format),arg->SampleDesc.Count,arg->SampleDesc.Quality,
+        static_cast<UINT>(arg->Layout),static_cast<UINT>(arg->Flags),
+        static_cast<UINT>(alignmentRestriction),static_cast<UINT>(alignmentRestriction>>32)};
+    AdmissionUmdDiagnostic("measure-d3d12-volume-query-input",S_OK,input,13);
+    UINT reason=5u; /* alignment restriction rejected, native query not called */
+    HRESULT queryStatus=static_cast<HRESULT>(1);
+    UINT64 size=~0ULL;
+    if((!alignmentRestriction || (!(alignmentRestriction&(alignmentRestriction-1)) && alignmentRestriction>=kHeapPage)) &&
+       VolumeLayoutInfo(arg,&layout,resolved,transitions,slots,nullptr,&reason,&queryStatus)) size=layout.Bytes;
+    else *resolved=D3D12DDI_TL_UNDEFINED;
+    const UINT output[] = {reason,static_cast<UINT>(size),static_cast<UINT>(size>>32),slots,
+        static_cast<UINT>(*resolved),transitions[0],transitions[1],static_cast<UINT>(layout.NativeBytes),
+        static_cast<UINT>(layout.NativeBytes>>32),static_cast<UINT>(layout.DepthStride),
+        static_cast<UINT>(layout.DepthStride>>32),static_cast<UINT>(layout.MipOffsets[0]),
+        static_cast<UINT>(layout.MipOffsets[1])};
+    AdmissionUmdDiagnostic("measure-d3d12-volume-query-output",queryStatus,output,13);
+    return size;
+}
+#endif
 static VOID APIENTRY CheckResourceAllocationInfo(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATERESOURCE_0003 *arg,
                                                  D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS, UINT64 alignmentRestriction, UINT,
                                                  D3D12DDI_RESOURCE_ALLOCATION_INFO *info) {
@@ -1867,26 +1906,9 @@ static VOID APIENTRY CheckResourceAllocationInfo(D3D12DDI_HDEVICE, const D3D12DD
         return;
     }
     if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE3D) {
-        AGX_D3D12_VOLUME_LAYOUT layout={};
-        const UINT input[] = {static_cast<UINT>(arg->ResourceType),static_cast<UINT>(arg->Width),
-            static_cast<UINT>(arg->Width>>32),arg->Height,arg->DepthOrArraySize,arg->MipLevels,
-            static_cast<UINT>(arg->Format),arg->SampleDesc.Count,arg->SampleDesc.Quality,
-            static_cast<UINT>(arg->Layout),static_cast<UINT>(arg->Flags),
-            static_cast<UINT>(alignmentRestriction),static_cast<UINT>(alignmentRestriction>>32)};
-        AdmissionUmdDiagnostic("measure-d3d12-volume-query-input",S_OK,input,13);
-        UINT reason=4u; /* alignment restriction rejected, native query not called */
-        HRESULT queryStatus=static_cast<HRESULT>(1);
-        if((!alignmentRestriction || (!(alignmentRestriction&(alignmentRestriction-1)) && alignmentRestriction>=kHeapPage)) &&
-           VolumeLayoutInfo(arg,&layout,&info->Layout,&info->MipLevelSwizzleTransition,&reason,&queryStatus)) info->ResourceDataSize=layout.Bytes;
-        else {info->Layout=D3D12DDI_TL_UNDEFINED;info->ResourceDataSize=~0ULL;}
-        const UINT output[] = {reason,static_cast<UINT>(info->ResourceDataSize),
-            static_cast<UINT>(info->ResourceDataSize>>32),static_cast<UINT>(info->ResourceDataAlignment),
-            static_cast<UINT>(info->ResourceDataAlignment>>32),static_cast<UINT>(info->Layout),
-            info->MipLevelSwizzleTransition,static_cast<UINT>(layout.NativeBytes),
-            static_cast<UINT>(layout.NativeBytes>>32),static_cast<UINT>(layout.DepthStride),
-            static_cast<UINT>(layout.DepthStride>>32),static_cast<UINT>(layout.MipOffsets[0]),
-            static_cast<UINT>(layout.MipOffsets[1])};
-        AdmissionUmdDiagnostic("measure-d3d12-volume-query-output",queryStatus,output,13);
+        UINT8 transitions[AGX_VOLUME_MAX_SLOTS-1];
+        info->ResourceDataSize=VolumeAllocationQuery(arg,alignmentRestriction,2u,&info->Layout,transitions);
+        info->MipLevelSwizzleTransition=transitions[0];
         return;
     }
 #else
@@ -2216,8 +2238,10 @@ static HRESULT CreateVolumeResource(AgxD3d12Device *device,const D3D12DDIARG_CRE
        (heap_arg->Flags && heap_arg->Flags!=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?
             D3D12DDI_HEAP_FLAG_RT_DS_TEXTURES:D3D12DDI_HEAP_FLAG_NON_RT_DS_TEXTURES)) ||
        (heap_arg->Alignment && heap_arg->Alignment!=kHeapPage)) return E_NOTIMPL;
-    AGX_D3D12_VOLUME_LAYOUT layout={};D3D12DDI_TEXTURE_LAYOUT resolved={};UINT8 transition=0;
-    if(arg->Layout==D3D12DDI_TL_UNDEFINED || !VolumeLayoutInfo(arg,&layout,&resolved,&transition) ||
+    AGX_D3D12_VOLUME_LAYOUT layout={};D3D12DDI_TEXTURE_LAYOUT resolved={};
+    UINT8 transitions[AGX_VOLUME_MAX_SLOTS-1];UINT64 row_strides[16]={};
+    if(arg->Layout==D3D12DDI_TL_UNDEFINED ||
+       !VolumeLayoutInfo(arg,&layout,&resolved,transitions,AGX_VOLUME_MAX_SLOTS,row_strides) ||
        (heap_arg->ByteSize && heap_arg->ByteSize!=~0ULL && heap_arg->ByteSize<layout.Bytes)) return E_NOTIMPL;
     AGX_D3D12_OWNER *owner=EnsureOwner(device);if(!owner)return E_FAIL;
     const UINT bind=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?AGX_D3D12_BIND_RENDER_TARGET:0u)|
@@ -2233,7 +2257,9 @@ static HRESULT CreateVolumeResource(AgxD3d12Device *device,const D3D12DDIARG_CRE
     resource->format=arg->Format;resource->width=static_cast<UINT>(arg->Width);resource->height=arg->Height;
     resource->layers=arg->DepthOrArraySize;resource->levels=arg->MipLevels;
     memcpy(resource->volume_offsets,layout.MipOffsets,sizeof(resource->volume_offsets));
-    resource->volume_depth_stride=layout.DepthStride;resource->volume_layout=resolved;resource->volume_transition=transition;
+    resource->volume_depth_stride=layout.DepthStride;resource->volume_layout=resolved;resource->volume_transition=transitions[0];
+    memcpy(resource->volume_transitions,transitions,sizeof(resource->volume_transitions));
+    memcpy(resource->volume_row_strides,row_strides,sizeof(resource->volume_row_strides));
     return S_OK;
 }
 #endif
@@ -2576,10 +2602,10 @@ static VOID APIENTRY CheckSubresourceInfo(D3D12DDI_HDEVICE, D3D12DDI_HRESOURCE h
             info->RowStride=4ull*(resource->width>>mip?resource->width>>mip:1u);info->DepthStride=resource->volume_depth_stride;
         }
     } else if(resource && resource->type==D3D12DDI_RT_TEXTURE3D) {
-        if(subresource<resource->levels) {
-            const UINT side=(resource->width>>subresource)?resource->width>>subresource:1u;
+        if(subresource<resource->levels && subresource<16) {
+            /* C21G: the row stride of the level's registry pattern */
             info->Offset=resource->volume_offsets[subresource];
-            info->RowStride=4ull*side*side;info->DepthStride=resource->volume_depth_stride;
+            info->RowStride=resource->volume_row_strides[subresource];info->DepthStride=resource->volume_depth_stride;
         }
     } else {
         if (resource && subresource == 0) info->RowStride = info->DepthStride = resource->bytes;
@@ -6942,9 +6968,16 @@ static VOID APIENTRY CheckResourceAllocationInfo0022(D3D12DDI_HDEVICE device, co
     if (arg) {
         const D3D12DDIARG_CREATERESOURCE_0003 legacy = ProjectR3Resource(*arg);
         CheckResourceAllocationInfo(device, &legacy, flags, alignment, mask, &legacy_info);
-    } else {
-        CheckResourceAllocationInfo(device, nullptr, flags, alignment, mask, &legacy_info);
+        ProjectR3AllocationInfo(legacy_info, info);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        /* C21G: the 0022 interface's six pattern slots and five transitions */
+        if (legacy.ResourceType == D3D12DDI_RT_TEXTURE3D)
+            info->ResourceDataSize = VolumeAllocationQuery(&legacy, alignment, AGX_VOLUME_MAX_SLOTS, &info->Layout,
+                                                           info->MipLevelSwizzleTransition);
+#endif
+        return;
     }
+    CheckResourceAllocationInfo(device, nullptr, flags, alignment, mask, &legacy_info);
     ProjectR3AllocationInfo(legacy_info, info);
 }
 static VOID APIENTRY CheckExistingResourceAllocationInfo0022(D3D12DDI_HDEVICE device, D3D12DDI_HRESOURCE handle,
@@ -6953,6 +6986,12 @@ static VOID APIENTRY CheckExistingResourceAllocationInfo0022(D3D12DDI_HDEVICE de
     D3D12DDI_RESOURCE_ALLOCATION_INFO legacy_info = {};
     CheckExistingResourceAllocationInfo(device, handle, &legacy_info, nullptr);
     ProjectR3AllocationInfo(legacy_info, info);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* C21G: a volume's five transitions as its creation selected them */
+    const auto *resource = static_cast<const AgxD3d12Resource *>(handle.pDrvPrivate);
+    if (resource && resource->type == D3D12DDI_RT_TEXTURE3D)
+        memcpy(info->MipLevelSwizzleTransition, resource->volume_transitions, sizeof(resource->volume_transitions));
+#endif
 }
 static_assert(std::is_same_v<decltype(&CheckResourceAllocationInfo0022), PFND3D12DDI_CHECKRESOURCEALLOCATIONINFO_0022>);
 static_assert(std::is_same_v<decltype(&CheckExistingResourceAllocationInfo0022),

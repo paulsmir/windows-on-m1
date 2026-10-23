@@ -241,6 +241,11 @@ HRESULT AgxD3d12OwnerResolve(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Dst
  * Actual creation uses the same uncompressed one-BO modifier and64KiB size. */
 typedef struct {
     unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];
+    /* C21G (Texture3D only): log2 of the element bytes and each requested
+     * level's tile, stride and height in elements, which the DDI's layout
+     * registry (agx_d3d12_volume_registry.h) describes */
+    unsigned ElementLog2;
+    unsigned TileWidth[16], TileHeight[16], StrideEl[16], HeightEl[16];
 } AGX_D3D12_VOLUME_LAYOUT;
 /* C23: same pointer-free native extent/mip record, ordinary nonarray Texture1D. */
 HRESULT AgxD3d12QueryTexture1DArrayLayout(DXGI_FORMAT Format,unsigned Width,unsigned Layers,unsigned Levels,unsigned Bind,AGX_D3D12_VOLUME_LAYOUT *Layout);

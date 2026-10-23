@@ -21,6 +21,10 @@ typedef struct {
    uint64_t LevelOffsets[AGX_WIN32_ASAHI_LAYOUT_LEVELS];
    uint64_t CompressedLevelOffsets[AGX_WIN32_ASAHI_LAYOUT_LEVELS];
    uint32_t RequestedLevels, AllocatedLevels, Tiling, Flags, EffectiveBind;
+   /* C21G: each level's tile (ail tilesize_el) and stride_el, which the
+    * D3D12 Texture3D layout registry selects patterns and row strides from */
+   uint32_t TileWidthEl[AGX_WIN32_ASAHI_LAYOUT_LEVELS], TileHeightEl[AGX_WIN32_ASAHI_LAYOUT_LEVELS];
+   uint32_t StrideEl[AGX_WIN32_ASAHI_LAYOUT_LEVELS];
 } AGX_WIN32_ASAHI_RESOURCE_LAYOUT;
 /* The template must satisfy the native constructor's format/dimension
  * preconditions.  This is a layout query, not resource/capability admission.

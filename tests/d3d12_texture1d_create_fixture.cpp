@@ -4,7 +4,7 @@ int main(){
   if(width==1&&requested==2)continue;
   D3D12DDIARG_CREATERESOURCE_0003 arg={};arg.ResourceType=D3D12DDI_RT_TEXTURE1D;arg.Width=width;arg.Height=arg.DepthOrArraySize=1;arg.MipLevels=requested;arg.SampleDesc.Count=1;arg.Format=format;arg.Flags=16;
   D3D12DDI_RESOURCE_ALLOCATION_INFO a={};unsigned before=ensure_calls;
-  CheckResourceAllocationInfo({},&arg,static_cast<D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS>(0),65536,1,&a);assert(a.ResourceDataSize!=~0ull&&a.Layout==0x105&&before==ensure_calls);
+  CheckResourceAllocationInfo({},&arg,static_cast<D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS>(0),65536,1,&a);assert(a.ResourceDataSize!=~0ull&&a.Layout==0x117&&before==ensure_calls);
   D3D12DDIARG_CREATEHEAP_0001 h={};h.CPUPageProperty=D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
   AgxD3d12Heap heap={};AgxD3d12Resource resource={};
   assert(CreateLineResource(&device,&h,&heap,&arg,&resource)==E_NOTIMPL&&ensure_calls==before);
