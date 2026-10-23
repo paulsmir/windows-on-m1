@@ -61071,3 +61071,12 @@ EXP1903 READY_FIX_CDD_DWM_TIER2_DEFAULT HARDWARE BEFORE 2026-10-23T09:23:01Z:
 - WINDOWS CONTRACT: DXGK_PRESENTATIONCAPS, DxgkDdiPresent Blt.
 - WHAT IS STILL UNKNOWN: which traffic C67 changes (CDD GDI presents too?) and whether the desktop stays intact. Expected: desktop normal; regression 118/0; Tier 2 PASS; front pixel 0xff00ff, or Blt receipts naming the next refusal; GT2 refused without a wedge.
 - Failure criteria: black or garbled desktop (C67), regressions, hang. Recovery evidence/rec1903h/recover.sh. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1903-cdd-ready/run1903.sh.
+
+EXP1903 pipeline ACTUAL / EXP1903N NIGHT_RAID_GT2 BEFORE 2026-10-23T09:36:52Z: RC 0, RUN_DONE.
+- Desktop normal with C67, no DWM faults.
+- Probes e1897 118/0 on ARM64, x64 and x86. D3D11 smoke PASS. Samples alive, 1102-1216 presents, no WER.
+- Tier 2 by default, without the variable: all C53B steps PASS; C65A MINMAX, SLOT, STATIC, VOLUME (RGBA8 probe faa5000e) and CUBE PASS. da58c1b5 CONFIRMED.
+- D3D9 MSAA_PRESENT PASS, but the front-buffer centre is still 0x0c0c0c, and the KMD wrote no Wom1G2PresentDdi. C67 (DriverSupportsCddDwmInterop) REJECTED as sufficient: no redirected Blt reaches DxgkDdiPresent with it either. It is reverted (no advertised capability without a validated effect).
+- ModelViewer I: alive 12/12, 1173 presents, exit 0, then one WER, AV 0xC0000005 in ModelViewerI.exe+0x23b0b after the swapchain buffers were destroyed (teardown). The UMD trace (223931 lines) has no driver refusal. Not seen in EXP1899-EXP1902; watched in EXP1904.
+- KMD receipts: no GpuReset, PreemptRefusal, G4SubmitFailure or BindRefusal.
+EXP1903N: Night Raid GT2 (window, async off) on this package, carrying the backend-image Ready fix 188d73e2. Expected: GT2's refused scene stays local, the desktop survives (no DWM crash loop), and Wom1G4BindRefusal v2 names BindFailure (the builder step), or GT2 completes.
