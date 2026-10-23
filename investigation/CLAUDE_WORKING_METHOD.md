@@ -219,3 +219,13 @@ Process review 2026-10-23 (EXP1887/EXP1888):
 - When commits land after mkexp and before install, run `bash $S/rebuild-exp.sh <prevN> <prevDir> <N> <oldDir> <newDir> <prevX86B> <newX86B>`.
   - It stops the chain, moves the old directory to `-superseded`, carries `probe<N>.sh`, sets the logs aside, prints the driver commits it adds, and reruns mkexp.
   - In the BEFORE entry, note the superseded build as "never installed".
+
+## Offline work through Codex (2026-10-23)
+
+- Briefs live in `.local/handoff/codex/README.md` and `<task>/TASK.md`. Each task gets its own worktree, `.worktrees/codex-<task>`, on branch `codex/<task>`.
+- Launch one Codex per task in the background: `scratchpad/codex-run.sh <task>`.
+  - It runs `codex exec -m gpt-6-astra -c model_reasoning_effort=high -s workspace-write`.
+  - It overrides `writable_roots` with canonical `/Volumes/pwdev` paths: the user's config lists `/Users/pavel/public_windows/.local`, a symlink, and Codex refuses every command with it.
+  - Never edit `~/.codex/config.toml`.
+- At every experiment boundary, check `scratchpad/codex-status.sh` (REPORT.md, commits ahead). Then review each branch diff, rebase or cherry-pick it onto the integration branch, run `run_against_baseline.py` (BASELINE_OK), add the CHANGES rows, and validate on hardware.
+- Pipeline waiters: use `scratchpad/wait-log.sh <log> '^NAME '`. It refuses unanchored patterns: EXP1907's `PROBE_DONE` matched `AGX_D3D11_FL111_PROBE_DONE`.
