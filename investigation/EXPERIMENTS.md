@@ -61122,3 +61122,15 @@ EXP1904 pipeline ACTUAL / EXP1904N GT2 BEFORE 2026-10-23T10:18:36Z: RC 0, RUN_DO
 EXP1904N: Night Raid GT2 (window, async off) for Wom1G4BindRefusal BindFailure = 320 + predicate.
 
 EXP1904N NIGHT_RAID_GT2 ACTUAL 2026-10-23T10:37:32Z: GT2 10:23:34Z-10:24:59Z, Present 0x887A0005. Wom1G4SubmitFailure: total 1. Wom1G4BindRefusal v2: Ready=1, BindFailure 332 = BuildTa3d step 3, BindNativeObjects predicate 12 = g4_zls_valid. The desktop survived (188d73e2 holds again). Cause from Asahi source: the validator demanded a nonzero ZLS control and nonzero ISP_ZLS_PIXELS for any attached depth/stencil, but agx_pack_zls_control packs a transient 32F depth (no load/store) to 0, and a 1x1 render's ZLS pixels are 0. Fix 37123151: an exact ZLS-pixels check against the render size, any control word; RED/GREEN; BASELINE_OK. Verdict: GT2's refusal cause CONFIRMED (receipt) and fixed offline; it goes to hardware in EXP1906 (EXP1905 is the m1n1-only run). Recovery rec1904h before EXP1905.
+
+EXP1905 M1N1_VGIC_PRIORITY_GRAVITYMARK HARDWARE BEFORE 2026-10-23T10:43:57Z:
+- Single variable: m1n1. The EXP1904 driver package is unchanged (44a8f15f, same binaries: sys ecb277a32379, Umd 73aa1dd95825).
+- m1n1 0d3a75b3 (vGIC session: aca9fd5d running-priority preemption, db990f95, 062ea6bd VI-only delivery, 0d3a75b3 IPRIORITYR byte lanes / SPI index), macho .local/experiments/m1n1-0d3a75b3-vgic-prio, SHA b97cf8834c3f8e87, config a01c4ca9.
+- full-owner1905.sh 6b3bfda546f9. Lastgood launcher with m1n1 21c3648d: full-owner1905.sh.lastgood b3b88cbabaff + hardware-manifest.json.lastgood (swap on a boot failure, then AGX_RECOVERY_ALLOW_AT_PROXY=1 recover.sh).
+- HASHES_MATCH 25, stage PASS, visible recovery PASS (rec1905h).
+- Probe probe1905.sh 58fb9da8aa37 (PROBE_LINT_OK): boot, the EXP1904 regression (e1904, 12_1), then GravityMark 1.89 D3D11 1280x720 and GravityMark D3D12 1280x720 (now possible at FL 12_1). A guest loss takes two HV WATCHDOG snapshots.
+- WHY THIS HYPOTHESIS: EXP1898 hung with vINTID 889 ACTIVE at priority 0x00. The vGIC session traced it to two IPRIORITYR defects (SPI index, byte-lane writes) that gave the scanout INTID priority 0 under the new running-priority enforcement. 0d3a75b3 fixes both; RED/GREEN in m1n1 tests.
+- Checks: in any snapshot the LR priorities must be NVMe 0x70, 857 0x50, 865 0x40, 889 0x60, vtimer 0x20.
+- Expected: boot; regression as EXP1904; GravityMark D3D11 and D3D12 complete without 0x101 or a hang.
+- Failure criteria: boot hang (lastgood swap), hang or 0x101 (snapshots).
+- Recovery: rec1905h (at-proxy allowed) or the lastgood swap. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1905-m1n1-gm12/run1905.sh.
