@@ -3002,6 +3002,10 @@ _Use_decl_annotations_ void AdmissionRecordGpuReset(ADMISSION_CONTEXT *Context) 
     return;
   WriteBinary(key, L"Wom1GpuReset", &Context->GpuReset,
               sizeof(Context->GpuReset));
+  /* EXP1899N: the refused preemption that led to the reset, when one did */
+  if (InterlockedCompareExchange(&Context->PreemptRefusalClaim, 0, 0) == 2)
+    WriteBinary(key, L"Wom1PreemptRefusal", &Context->PreemptRefusal,
+                sizeof(Context->PreemptRefusal));
   (void)ZwFlushKey(key);
   ZwClose(key);
 }

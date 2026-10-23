@@ -68,7 +68,8 @@ typedef struct {void *DeviceHandle;NTSTATUS (*DxgkCbSynchronizeExecution)(void*,
  void (*DxgkCbNotifyInterrupt)(void*,DXGKARGCB_NOTIFY_INTERRUPT_DATA*);BOOLEAN (*DxgkCbQueueDpc)(void*);} INTERFACE;
 typedef struct {int PagingLock,SchedulerLock,InterfaceValid;volatile LONG SchedulerInitialized,SchedulerFaulted,SchedulerDpcPending;
  volatile LONG PagingPending,PagingDpcPending,PagingDpcsActive;unsigned DispatchedFence,CpuQueueHead,CpuQueueCount;
- int BackendImage;PACKET RenderPacket;INTERFACE Interface;APPLE_AGX_SCHEDULER Scheduler;} ADMISSION_CONTEXT;
+ int BackendImage;PACKET RenderPacket;INTERFACE Interface;APPLE_AGX_SCHEDULER Scheduler;
+ ULONG PreemptBeganMs,PreemptBeganFence;volatile LONG PreemptRefusals;} ADMISSION_CONTEXT;
 typedef struct {ADMISSION_CONTEXT *Context;APPLE_AGX_PREEMPTION Preemption;} ADMISSION_PREEMPTION_NOTIFICATION;
 static ADMISSION_CONTEXT *current;
 static int locks,injectAfterUnlock,injectInsideNotify,interrupts,dpcs,dispatches,syncFails;
@@ -89,6 +90,11 @@ static void KeReleaseSpinLockFromDpcLevel(int *p){
  }
 }
 static int AdmissionPlatformRenderWorkerScheduled(ADMISSION_CONTEXT *a){(void)a;return 0;}
+static unsigned long long KeQueryInterruptTime(void){return 0ull;}
+/* EXP1899N receipt-only snapshot: counted, never a scheduler decision */
+static void AdmissionSchedulerRecordPreemptRefusalLocked(ADMISSION_CONTEXT *a,const DXGKARG_PREEMPTCOMMAND *c,
+ unsigned cutoff,unsigned active,unsigned queued){(void)c;(void)cutoff;(void)active;(void)queued;
+ assert(locks==2);++a->PreemptRefusals;}
 static int AdmissionRenderPacketState(PACKET *p){return p->State;}
 static int AdmissionRenderPacketDiscardQueued(PACKET *p,unsigned f){(void)p;(void)f;assert(0);return 0;}
 static int AdmissionBackendImageReleaseSubmission(int *b,unsigned f){(void)b;(void)f;assert(0);return 0;}

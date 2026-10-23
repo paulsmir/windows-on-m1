@@ -797,6 +797,24 @@ typedef struct _ADMISSION_CONTEXT {
   /* G4-r3 (EXP1296): Wom1GpuReset; written by the reset thread only
    * (first-level synchronization). */
   ADMISSION_GPU_RESET_RECEIPT GpuReset;
+  /* EXP1899N receipt-only (Wom1PreemptRefusal, published with Wom1GpuReset):
+   * the scheduler at the first DxgkDdiPreemptCommand whose boundary
+   * preemption could not begin (scheduler_windows.c), and the last one that
+   * began. Written under the scheduler lock. */
+  volatile LONG PreemptRefusalClaim;
+  volatile LONG PreemptRefusals;
+  ULONG PreemptBeganMs, PreemptBeganFence;
+  struct _ADMISSION_PREEMPT_REFUSAL {
+    ULONG Version, Bytes, Refusals;
+    ULONG EntryMs, PreemptionFence, CutoffFence, ActiveFence, QueuedFence;
+    ULONG CompletedFence, LastSubmittedFence, SchedulerQueuedFence, QueueCount;
+    ULONG SchedulerActiveFence, PendingPreemptionFence, PreemptionCutoffFence;
+    ULONG PreemptionActiveFence, PreemptionLastCompletedFence;
+    ULONG PreemptionPending, Phase, Responsive;
+    ULONG DispatchedFence, PacketState, PagingPending, PagingDpcPending;
+    ULONG PagingDpcsActive, SchedulerDpcPending, RenderWorkerScheduled;
+    ULONG BeganMs, BeganFence;
+  } PreemptRefusal;
   /* G4-r3 TDR drill (ADMISSION_TDR_DRILL): armed by escape for one process. */
   BOOLEAN TdrDrillAllowed;
   volatile LONG TdrDrillPid, TdrDrillJobs, TdrDrillFence;

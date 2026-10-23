@@ -335,6 +335,52 @@ static VOID AdmissionCpuQueueReleaseContextsLocked(ADMISSION_CONTEXT *Context) {
   }
 }
 
+/* EXP1899N receipt-only: the first refused boundary preemption (VidSch then
+ * waits for a preemption that never completes and resets the engine). Under
+ * the scheduler lock; AdmissionRecordGpuReset publishes it. */
+static VOID AdmissionSchedulerRecordPreemptRefusalLocked(
+    ADMISSION_CONTEXT *Context, const DXGKARG_PREEMPTCOMMAND *PreemptCommand,
+    UINT CutoffFence, UINT ActiveFence, UINT QueuedFence) {
+  struct _ADMISSION_PREEMPT_REFUSAL *r = &Context->PreemptRefusal;
+  const APPLE_AGX_SCHEDULER *s = &Context->Scheduler;
+  LONG refusals = InterlockedIncrement(&Context->PreemptRefusals);
+  if (InterlockedCompareExchange(&Context->PreemptRefusalClaim, 1, 0) != 0) {
+    r->Refusals = (ULONG)refusals;
+    return;
+  }
+  RtlZeroMemory(r, sizeof(*r));
+  r->Version = 1u;
+  r->Bytes = sizeof(*r);
+  r->Refusals = (ULONG)refusals;
+  r->EntryMs = (ULONG)(KeQueryInterruptTime() / 10000ull);
+  r->PreemptionFence = PreemptCommand->PreemptionFenceId;
+  r->CutoffFence = CutoffFence;
+  r->ActiveFence = ActiveFence;
+  r->QueuedFence = QueuedFence;
+  r->CompletedFence = s->CompletedFence;
+  r->LastSubmittedFence = s->LastSubmittedFence;
+  r->SchedulerQueuedFence = s->QueuedFence;
+  r->QueueCount = s->QueueCount;
+  r->SchedulerActiveFence = s->ActiveFence;
+  r->PendingPreemptionFence = s->PendingPreemptionFence;
+  r->PreemptionCutoffFence = s->PreemptionCutoffFence;
+  r->PreemptionActiveFence = s->PreemptionActiveFence;
+  r->PreemptionLastCompletedFence = s->PreemptionLastCompletedFence;
+  r->PreemptionPending = (ULONG)s->PreemptionPending;
+  r->Phase = (ULONG)s->PreemptionPhase;
+  r->Responsive = (ULONG)s->Responsive;
+  r->DispatchedFence = Context->DispatchedFence;
+  r->PacketState = (ULONG)AdmissionRenderPacketState(&Context->RenderPacket);
+  r->PagingPending = (ULONG)InterlockedCompareExchange(&Context->PagingPending, 0, 0);
+  r->PagingDpcPending = (ULONG)InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0);
+  r->PagingDpcsActive = (ULONG)InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0);
+  r->SchedulerDpcPending = (ULONG)InterlockedCompareExchange(&Context->SchedulerDpcPending, 0, 0);
+  r->RenderWorkerScheduled = AdmissionPlatformRenderWorkerScheduled(Context) ? 1u : 0u;
+  r->BeganMs = Context->PreemptBeganMs;
+  r->BeganFence = Context->PreemptBeganFence;
+  InterlockedExchange(&Context->PreemptRefusalClaim, 2);
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
     HANDLE Adapter, const DXGKARG_PREEMPTCOMMAND *PreemptCommand) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -397,10 +443,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
           PreemptCommand->EngineOrdinal, PreemptCommand->PreemptionFenceId,
           cutoffFence, activeFence)) {
     InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
+    AdmissionSchedulerRecordPreemptRefusalLocked(context, PreemptCommand,
+        cutoffFence, activeFence, queuedFence);
     KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
     KeReleaseSpinLockFromDpcLevel(&context->PagingLock);
     return STATUS_SUCCESS;
   }
+  context->PreemptBeganMs = (ULONG)(KeQueryInterruptTime() / 10000ull);
+  context->PreemptBeganFence = PreemptCommand->PreemptionFenceId;
   AdmissionCpuQueueReleaseContextsLocked(context);
   context->CpuQueueHead = context->CpuQueueCount = 0u;
   if (activeFence == 0u && queuedFence != 0u && context->DispatchedFence == queuedFence)
