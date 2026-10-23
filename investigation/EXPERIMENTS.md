@@ -61455,3 +61455,10 @@ EXP1914 HARDWARE BEFORE 2026-10-23T16:41:07Z:
 - Failure criteria: DWM crash, guest starvation, regressions, hang.
 - Hashes: sys 7564d6eb256d, UmdArm64 4db453dc7dcf, UmdX64 a56b6052d277, Umd32 ba66269c1ee9; manifest c8cc38ddc8a6, hardware-manifest d1b0647f5719; probe1914.sh d7fc4b848bbe (PROBE_LINT_OK); visible recovery rec1914h 6288b9a3b51f6f40; m1n1 0d3a75b3.
 - Recovery rec1914h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1914-headroom-t7b/run1914.sh.
+
+EXP1914 PREPARE NOTE 2026-10-23T16:41:23Z:
+- The first launch stopped at verify-launch1914.py: host volume free 4.9 GiB, below the 5 GiB gate.
+  - The package had already been staged on the guest. The stage receipt matched (Version 30.0.1914.0, Problem 28, Arm 1); a later direct verify printed EXP1914_ARTIFACTS_AND_STAGE_PASS.
+  - Re-staging refused ("old staged package remains": the same package was already staged).
+  - The missing recovery section of prepare.sh (rec1914h, servicing guard, clone-exp-scripts) was run on its own, followed by visible recovery and BEFORE through launch-exp.sh.
+- Space recovered without deletion: gzip of 7 evidence files (4 EXP1830-1833 UMD logs, 2 MEMORY.DMP, 1 ETL), 4.9 -> 7.5 GiB free.
