@@ -41,6 +41,11 @@ int main() {
     /* the 2x2 and 1x1 levels: a partial block at the level's edge */
     assert(texture_region_copy_valid(&bc3, 5, 0, 0, 0, &bc3, 5, 0, 0, 0, 2, 2, 1));
     assert(texture_region_copy_valid(&bc3, 6, 0, 0, 0, &bc3, 6, 0, 0, 0, 1, 1, 1));
+    /* the runtime's block-aligned box of those levels (D3D validates BC copy
+     * boxes against the block-aligned level size; EXP1907 C72 in D3D11) */
+    assert(texture_region_copy_valid(&bc3, 5, 0, 0, 0, &bc3, 5, 0, 0, 0, 4, 4, 1));
+    assert(texture_region_copy_valid(&bc3, 6, 0, 0, 0, &bc3, 6, 0, 0, 0, 4, 4, 1));
+    assert(!texture_region_copy_valid(&bc3, 5, 0, 0, 0, &bc3, 5, 0, 0, 0, 8, 4, 1));
     /* unaligned origins and partial blocks inside the level */
     assert(!texture_region_copy_valid(&bc3, 0, 0, 2, 0, &bc3, 0, 0, 0, 0, 8, 8, 1));
     assert(!texture_region_copy_valid(&bc3, 0, 0, 0, 0, &bc3, 0, 0, 4, 2, 8, 8, 1));

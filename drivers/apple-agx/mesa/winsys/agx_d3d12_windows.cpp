@@ -1607,12 +1607,26 @@ static bool texture_region_copy_valid(const struct pipe_resource *d, unsigned ds
   const unsigned dbytes = texture_block(d->format, &dbw, &dbh), sbytes = texture_block(s->format, &sbw, &sbh);
   if (!dbytes || dbytes != sbytes || dbw != sbw || dbh != sbh) return false;
   const unsigned sw = level_extent(s->width0, src_level), sh = level_extent(s->height0, src_level);
-  if (dst_x + width > level_extent(d->width0, dst_level) || dst_y + height > level_extent(d->height0, dst_level) ||
-      src_x + width > sw || src_y + height > sh ||
+  /* D3D validates a BC copy box against the block-aligned level size (a 2x2
+   * level copies with a 4x4 box; C72, C21H): bounds count whole blocks */
+  auto blocks = [](unsigned v, unsigned b) { return (v + b - 1) / b * b; };
+  if (dst_x + width > blocks(level_extent(d->width0, dst_level), dbw) ||
+      dst_y + height > blocks(level_extent(d->height0, dst_level), dbh) ||
+      src_x + width > blocks(sw, sbw) || src_y + height > blocks(sh, sbh) ||
       dst_layer + layers > texture_layer_extent(d, dst_level) || src_layer + layers > texture_layer_extent(s, src_level))
     return false;
   if (dst_x % dbw || dst_y % dbh || src_x % sbw || src_y % sbh) return false;
   return (width % sbw == 0 || src_x + width == sw) && (height % sbh == 0 || src_y + height == sh);
+}
+/* the copy box clamped to both levels' texel extents (a block-aligned box of
+ * a sub-block level covers only the level's texels) */
+static unsigned region_copy_extent(unsigned extent, const struct pipe_resource *d, unsigned dst_level, unsigned dst_xy,
+                                   const struct pipe_resource *s, unsigned src_level, unsigned src_xy, int vertical) {
+  const unsigned de = level_extent(vertical ? d->height0 : d->width0, dst_level);
+  const unsigned se = level_extent(vertical ? s->height0 : s->width0, src_level);
+  if (dst_xy < de && extent > de - dst_xy) extent = de - dst_xy;
+  if (src_xy < se && extent > se - src_xy) extent = se - src_xy;
+  return extent;
 }
 
 extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *dst, unsigned dst_level,
@@ -1626,11 +1640,15 @@ extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const 
   struct pipe_resource *d = static_cast<struct pipe_resource *>(dst->Resource);
   struct pipe_resource *s = static_cast<struct pipe_resource *>(src->Resource);
   if(d->target==PIPE_TEXTURE_3D || s->target==PIPE_TEXTURE_3D) {
+    /* C21H: the volume bounds count whole blocks, as texture_region_copy_valid does */
+    unsigned vbw=1,vbh=1;
+    if(!texture_block(d->format,&vbw,&vbh) || !vbw || !vbh) vbw=vbh=1;
+    auto blocks=[](unsigned v,unsigned b){return (v+b-1)/b*b;};
+    const unsigned dw=blocks(level_extent(d->width0,dst_level),vbw),dh=blocks(level_extent(d->height0,dst_level),vbh);
+    const unsigned sw=blocks(level_extent(s->width0,src_level),vbw),sh=blocks(level_extent(s->height0,src_level),vbh);
     if(d->target!=PIPE_TEXTURE_3D || s->target!=PIPE_TEXTURE_3D || dst_level>d->last_level || src_level>s->last_level ||
-        dst_x>level_extent(d->width0,dst_level) || width>level_extent(d->width0,dst_level)-dst_x ||
-        dst_y>level_extent(d->height0,dst_level) || height>level_extent(d->height0,dst_level)-dst_y ||
-        src_x>level_extent(s->width0,src_level) || width>level_extent(s->width0,src_level)-src_x ||
-        src_y>level_extent(s->height0,src_level) || height>level_extent(s->height0,src_level)-src_y ||
+        dst_x>dw || width>dw-dst_x || dst_y>dh || height>dh-dst_y ||
+        src_x>sw || width>sw-src_x || src_y>sh || height>sh-src_y ||
         dst_layer>texture_layer_extent(d,dst_level) || layers>texture_layer_extent(d,dst_level)-dst_layer ||
         src_layer>texture_layer_extent(s,src_level) || layers>texture_layer_extent(s,src_level)-src_layer) return E_INVALIDARG;
   }
@@ -1645,8 +1663,8 @@ extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const 
   box.x = static_cast<int>(src_x);
   box.y = static_cast<int>(src_y);
   box.z = static_cast<int16_t>(src_layer);
-  box.width = static_cast<int>(width);
-  box.height = static_cast<int>(height);
+  box.width = static_cast<int>(region_copy_extent(width, d, dst_level, dst_x, s, src_level, src_x, 0));
+  box.height = static_cast<int>(region_copy_extent(height, d, dst_level, dst_y, s, src_level, src_y, 1));
   box.depth = static_cast<int16_t>(layers);
   owner->Context->resource_copy_region(owner->Context, d, dst_level, dst_x, dst_y, dst_layer, s, src_level, &box);
   ++owner->PendingCopies;
