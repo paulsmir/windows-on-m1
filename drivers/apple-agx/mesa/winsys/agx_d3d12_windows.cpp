@@ -259,6 +259,11 @@ static void owner_perf_flush() {
  * us} of each BO creation of at least 10 ms (agx_win32_asahi_bo.c) */
 extern "C" void (*AgxWin32BoTimeHook)(unsigned mib, unsigned cls, unsigned create_us, unsigned bind_us,
                                       unsigned associate_us);
+extern "C" void (*AgxWin32GpuOnlyMapHook)(unsigned token, unsigned flags);
+static void owner_gpu_only_map(unsigned token, unsigned flags) {
+  const UINT values[] = {token, 0u, flags};
+  AdmissionUmdDiagnostic("measure-gpu-only-map", E_INVALIDARG, values, 3u);
+}
 static void owner_bo_time(unsigned mib, unsigned cls, unsigned create_us, unsigned bind_us, unsigned associate_us) {
   const UINT values[] = {mib, cls, create_us, bind_us, associate_us};
   AdmissionUmdDiagnostic("measure-bo-create", S_OK, values, 5u);
@@ -393,6 +398,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     AgxWin32FirstFaultHook = owner_first_fault;
     AgxWin32PerfHook = owner_perf_note;
     AgxWin32BoTimeHook = owner_bo_time;
+    AgxWin32GpuOnlyMapHook = owner_gpu_only_map;
   }
   receipt("measure-d3d12-owner", hr, owner->KernelContext != NULL ? 1u : 0u, owner->Screen != NULL ? 1u : 0u,
           owner->Context != NULL ? 1u : 0u);
@@ -418,6 +424,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned lo
   templ.depth0 = 1;
   templ.array_size = 1;
   templ.usage = PIPE_USAGE_STAGING;
+  if (!cpu_visible) templ.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
   templ.bind = PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_INDEX_BUFFER | PIPE_BIND_CONSTANT_BUFFER |
                PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SAMPLER_VIEW;
   /* EXP1373: an explicit PIPE_BIND_SHADER_IMAGE made resource_create fail
@@ -428,7 +435,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned lo
   /* EXP1847 ModelViewer: a mapped buffer counts as CPU-visible, so the UMD
    * downloaded every GPU write of it after each submission (its 64 MB light
    * grid: ~163 ms a frame). A heap the CPU cannot map stays unmapped; a later
-   * Mesa map (ExecuteIndirect arguments) downloads it then. */
+   * Mesa map (ExecuteIndirect arguments) copies through CPU-visible staging. */
   void *cpu = cpu_visible ? AgxWin32AsahiBufferWriteMap(owner->Context, resource) : NULL;
   unsigned long long va = AgxWin32AsahiBufferGpuAddress(resource);
   if ((cpu_visible ? !cpu : !AgxWin32AsahiBufferMarkValid(owner->Context, resource)) || !va) {
@@ -961,6 +968,14 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
   templ.last_level = static_cast<uint8_t>(levels - 1);
   if (samples > 1) templ.nr_samples = templ.nr_storage_samples = static_cast<uint8_t>(samples); /* C32 */
   templ.usage = PIPE_USAGE_DEFAULT;
+  /* Only opt in when ordinary staging blits can round-trip the format.
+   * BC, non-renderable formats (e.g. RGB9E5), depth and MSAA keep their
+   * existing CPU fallback/resolve paths. */
+  if ((bind & AGX_D3D12_BIND_GPU_ONLY) && bw == 1 && bh == 1 && samples <= 1 &&
+      !(bind & AGX_D3D12_BIND_DEPTH_STENCIL) && owner->Screen->is_format_supported &&
+      owner->Screen->is_format_supported(owner->Screen, templ.format, PIPE_TEXTURE_2D,
+          1, 1, PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW))
+    templ.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
   templ.bind = ((bind & AGX_D3D12_BIND_RENDER_TARGET) ? PIPE_BIND_RENDER_TARGET : 0) |
                ((bind & AGX_D3D12_BIND_SAMPLER) ? PIPE_BIND_SAMPLER_VIEW : 0) |
                ((bind & AGX_D3D12_BIND_DEPTH_STENCIL) ? PIPE_BIND_DEPTH_STENCIL : 0);
@@ -1187,6 +1202,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture1DArray(AGX_D3D12_OWNER *owner,DXGI
      !AgxWin32AsahiQueryUncompressedResourceLayout(&templ,&layout))return E_NOTIMPL;
   if(!owner->Screen->is_format_supported || !owner->Screen->resource_create_with_modifiers ||
      !owner->Screen->is_format_supported(owner->Screen,templ.format,templ.target,1,1,templ.bind))return E_NOTIMPL;
+  templ.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
   struct pipe_resource *resource=owner->Screen->resource_create_with_modifiers(owner->Screen,&templ,&layout.Modifier,1);
   if(!resource)return E_OUTOFMEMORY;
   texture->Resource=resource;texture->GpuVa=AgxWin32AsahiBufferGpuAddress(resource);texture->Bytes=bytes;return S_OK;
@@ -1202,6 +1218,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture1D(AGX_D3D12_OWNER *owner,DXGI_FORM
      !AgxWin32AsahiQueryUncompressedResourceLayout(&templ,&layout))return E_NOTIMPL;
   if(!owner->Screen->is_format_supported || !owner->Screen->resource_create_with_modifiers ||
      !owner->Screen->is_format_supported(owner->Screen,templ.format,templ.target,1,1,templ.bind))return E_NOTIMPL;
+  templ.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
   struct pipe_resource *resource=owner->Screen->resource_create_with_modifiers(owner->Screen,&templ,&layout.Modifier,1);
   if(!resource)return E_OUTOFMEMORY;
   const unsigned long long va=AgxWin32AsahiBufferGpuAddress(resource);
@@ -1219,6 +1236,11 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture3D(AGX_D3D12_OWNER *owner,DXGI_FORM
   if(!texture3d_layout(format,width,height,depth,levels,bind,&templ,&layout,&actual) || actual!=bytes ||
       !owner->Screen->is_format_supported || !owner->Screen->resource_create_with_modifiers ||
       !owner->Screen->is_format_supported(owner->Screen,templ.format,templ.target,1,1,templ.bind)) return E_NOTIMPL;
+  unsigned bw = 0, bh = 0;
+  if (AgxD3d12FormatBlock(format, &bw, &bh) && bw == 1 && bh == 1 &&
+      owner->Screen->is_format_supported(owner->Screen, templ.format, PIPE_TEXTURE_2D,
+          1, 1, PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW))
+    templ.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
   struct pipe_resource *resource=owner->Screen->resource_create_with_modifiers(owner->Screen,&templ,&layout.Modifier,1);
   if(!resource) return E_OUTOFMEMORY;
   texture->Resource=resource;texture->GpuVa=AgxWin32AsahiBufferGpuAddress(resource);texture->Bytes=actual;

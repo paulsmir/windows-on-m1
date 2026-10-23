@@ -206,6 +206,7 @@ HRESULT AgxD3d12OwnerReadBuffer(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *
                                 unsigned Bytes, void *Data);
 #define AGX_D3D12_BIND_RENDER_TARGET 0x1u
 #define AGX_D3D12_BIND_SAMPLER 0x2u
+#define AGX_D3D12_BIND_GPU_ONLY 0x8u /* explicit DEFAULT/NOT_AVAILABLE resource intent */
 #define AGX_D3D12_BIND_DEPTH_STENCIL 0x4u /* C6f: also translates typeless formats as depth */
 /* A 2D texture (array when Layers > 1) of the owner's screen; Texture->Cpu
  * is NULL, Bytes the caller's allocation size. */

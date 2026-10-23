@@ -367,6 +367,65 @@ agx_update_shader(''')
    pipe->bind_vs_state''')
     return state, shader, device
 
+def project_gpu_only_resources(pipe):
+    """T7h: per-resource GPU-only storage, with ordinary GPU staging copies.
+
+    These are edits to the pinned, notice-bearing Mesa output, not a copied
+    implementation. Never propagate UNMAPPABLE into the staging resource.
+    """
+    changes = (
+        ('   uint32_t create_flags = 0;', '''   uint32_t create_flags = 0;
+   if (templ->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE)
+      create_flags |= AGX_WIN32_BO_GPU_ONLY;'''),
+        ('   if (dev->debug & AGX_DBG_NOSHADOW)', '''   if ((flags & AGX_WIN32_BO_GPU_ONLY) || (dev->debug & AGX_DBG_NOSHADOW))'''),
+        ('   tmpl.usage = PIPE_USAGE_STAGING;', '''   tmpl.usage = PIPE_USAGE_STAGING;
+   tmpl.flags &= ~PIPE_RESOURCE_FLAG_UNMAPPABLE;'''),
+        ('   switch (tmpl.target) {\n   case PIPE_TEXTURE_2D_ARRAY:',
+         '   switch (tmpl.target) {\n   case PIPE_TEXTURE_1D_ARRAY:\n   case PIPE_TEXTURE_2D_ARRAY:'),
+        ('''   tmpl.bind =
+      PIPE_BIND_LINEAR | PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;''', '''   tmpl.bind = tmpl.target == PIPE_BUFFER ? PIPE_BIND_SHADER_BUFFER :
+      PIPE_BIND_LINEAR | PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;'''),
+        ('''   struct pipe_resource *dst = trans->base.resource;
+   struct pipe_blit_info blit = {0};''', '''   struct pipe_resource *dst = trans->base.resource;
+   if (dst->target == PIPE_BUFFER) {
+      pctx->resource_copy_region(pctx, dst, 0, trans->base.box.x, 0, 0,
+                                 trans->staging.rsrc, 0, &trans->staging.box);
+      return;
+   }
+   struct pipe_blit_info blit = {0};'''),
+        ('''   struct pipe_resource *src = trans->base.resource;
+   struct pipe_blit_info blit = {0};''', '''   struct pipe_resource *src = trans->base.resource;
+   if (src->target == PIPE_BUFFER) {
+      pctx->resource_copy_region(pctx, trans->staging.rsrc, 0, 0, 0, 0,
+                                 src, 0, &trans->base.box);
+      return;
+   }
+   struct pipe_blit_info blit = {0};'''),
+        ('''   /* Can't map tiled/compressed directly */''', '''   /* GPU-only storage can only be transferred through staging. */
+   if ((resource->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE) &&
+       (usage & (PIPE_MAP_DIRECTLY | PIPE_MAP_PERSISTENT | PIPE_MAP_COHERENT))) {
+      *out_transfer = NULL;
+      return NULL;
+   }
+
+   /* Can't map tiled/compressed directly */'''),
+        ('''   bool staging_blit = ail_is_level_logically_compressed(&rsrc->layout, level);''', '''   bool staging_blit = (resource->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE) ||
+                       ail_is_level_logically_compressed(&rsrc->layout, level);'''),
+        ('''   if (staging_blit) {
+      /* Should never happen for buffers, and it's not safe */
+      assert(resource->target != PIPE_BUFFER);
+''', '''   if (staging_blit) {
+      /* Buffers use resource_copy_region; textures use the existing blit. */
+'''),
+        ('''   if (trans->staging.rsrc && (transfer->usage & PIPE_MAP_WRITE)) {
+      assert(prsrc->target != PIPE_BUFFER);''', '''   if (trans->staging.rsrc && (transfer->usage & PIPE_MAP_WRITE)) {'''),
+    )
+    for old, new in changes:
+        if pipe.count(old) != 1:
+            raise ValueError('Ambiguous GPU-only resource anchor: ' + old)
+        pipe = pipe.replace(old, new, 1)
+    return pipe
+
 def project_resource_layout(pipe):
     """Share the pinned native pre-BO prefix with an original no-BO query.
 
@@ -6581,6 +6640,10 @@ agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image_view
             pipe_target.write_text(pipe_text[:map_start] + map_text + pipe_text[map_end:])
             overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
                 'after_buffer_map_failure'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
+            if args.gpuva:
+                pipe_target.write_text(project_gpu_only_resources(pipe_target.read_text()))
+                overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
+                    'after_gpu_only_staging'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
             # C21: one reviewed native layout policy serves creation and a
             # no-BO query. The query does not admit any resource dimension.
             reviewed_layout_sources = {

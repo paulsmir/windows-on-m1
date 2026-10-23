@@ -20,8 +20,8 @@ HARNESS = r'''
 #include <stdio.h>
 enum { PIPE_BUFFER=1, PIPE_MAP_READ=1, PIPE_MAP_WRITE=2, PIPE_MAP_DIRECTLY=4,
        PIPE_MAP_PERSISTENT=8, PIPE_MAP_COHERENT=16, PIPE_MAP_DISCARD_WHOLE_RESOURCE=32,
-       DRM_FORMAT_MOD_LINEAR=0 };
-struct pipe_resource { int target, refs; };
+       PIPE_RESOURCE_FLAG_UNMAPPABLE=256, DRM_FORMAT_MOD_LINEAR=0 };
+struct pipe_resource { int target, refs; unsigned flags; };
 struct pipe_box { int x,y,z,width,height,depth; };
 struct pipe_transfer { struct pipe_resource *resource; unsigned level,usage,stride,layer_stride; struct pipe_box box; };
 struct agx_transfer { struct pipe_transfer base; struct { struct pipe_resource *rsrc; struct pipe_box box; } staging; void *map; };

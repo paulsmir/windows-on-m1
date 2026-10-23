@@ -26,7 +26,7 @@ static UINT64 agx_map_gpu(struct agx_resource *r){++map_calls;return r->bo->gpu;
  prefix=prefix.replace(fake,boundary+actual)
  prefix=prefix.replace('static void AgxWin32AsahiResourceRelease(pipe_resource **r) {*r=nullptr;}','static void AgxWin32AsahiResourceRelease(pipe_resource **r) {++release_calls;*r=nullptr;}')
  prefix=prefix.replace('return &created_resource;','return fail_create?nullptr:&created_resource;')
- funcs='\n'.join(block(owner,n) for n in ['static unsigned block_bytes(', 'static unsigned texture_block(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture1D(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D('])
+ funcs='\n'.join(block(owner,n) for n in ['static unsigned block_bytes(', 'static unsigned texture_block(', 'extern "C" unsigned AgxD3d12FormatBlock(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture1D(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D('])
  record='typedef struct {unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];} AGX_D3D12_VOLUME_LAYOUT;'
  return prefix.replace('/* VOLUME_LAYOUT_RECORD */',record).replace('/* ACTUAL_QUERY */',funcs).replace('/* ACTUAL_TEXTURE_BYTES */','')+(oracle or root/'tests/d3d12_texture_creation_fixture.cpp').read_text()
 class TextureCreation(unittest.TestCase):
