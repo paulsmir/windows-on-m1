@@ -85,6 +85,16 @@ class VgicIrqQueueContractTest(unittest.TestCase):
             r"(?s:.*?)aic_set_mask\(route->hw_irq, false\)",
         )
 
+    def test_queued_hardware_irq_keeps_the_guest_programmed_priority(self):
+        # Running-priority preemption makes the LR priority part of Windows' IRQL
+        # contract: a queued line injected above its programmed priority would nest
+        # inside ISRs at its own IRQL, where Windows defers it without an EOI.
+        exc = HV_EXC.read_text()
+        irq = function_body(exc, "void hv_exc_irq(struct exc_info *ctx)")
+        queued = irq.split("virq_t pending = {", 1)[1].split("};", 1)[0]
+
+        self.assertIn(".priority = hv_vgic3_get_priority(vintid),", queued)
+
     def test_sgi_queue_console_trace_requires_explicit_hot_path_tracing(self):
         exc = HV_EXC.read_text()
         queue = function_body(exc, "static void hv_vgic3_queue_sgi(int cpu, u32 intid)")
