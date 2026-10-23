@@ -149,10 +149,16 @@ static BOOL RovEnabled() {
 
 /* C53 (D3D12-C53-tiled-textures.md): Tiled Resources Tier 1 and the TILED
  * format bit are reported only in a process with APPLE_AGX_D3D12_TILED=1
- * until reserved buffers and textures are validated on hardware (HW1, HW2). */
+ * until reserved buffers and textures are validated on hardware (HW1, HW2);
+ * APPLE_AGX_D3D12_TILED=2 reports Tier 2 (C53T feedback, C65 min/max) for
+ * its hardware checkpoint. */
 static BOOL TiledEnabled() {
     char value[2] = {};
-    return GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && value[0] == '1';
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && (value[0] == '1' || value[0] == '2');
+}
+static BOOL TiledTier2() {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && value[0] == '2';
 }
 
 static bool ShaderModel6Enabled() {
@@ -414,8 +420,9 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
             d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;
             d.ConservativeRasterizationTier = ConservativeRasterEnabled() ? D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1
                                                                           : D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED;
-            d.TiledResourcesTier = TiledEnabled() ? D3D12DDI_TILED_RESOURCES_TIER_1 /* C53 */
-                                                  : D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
+            d.TiledResourcesTier = TiledTier2()     ? D3D12DDI_TILED_RESOURCES_TIER_2 /* C53T */
+                                   : TiledEnabled() ? D3D12DDI_TILED_RESOURCES_TIER_1 /* C53 */
+                                                    : D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
             d.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
             d.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation = FALSE;
             d.OutputMergerLogicOp = TRUE; /* C57 */

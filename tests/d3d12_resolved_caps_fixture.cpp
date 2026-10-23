@@ -16,7 +16,7 @@ struct D3D12DDI_HADAPTER {void *pDrvPrivate;};
 // declarations above are extracted unmodified from the pinned WDK.
 using D3D12DDI_3DPIPELINELEVEL=int;
 static const int kProfileLevel=1,D3D12DDI_RESOURCE_BINDING_TIER_1=1,D3D12DDI_RESOURCE_BINDING_TIER_2=2,D3D12DDI_RESOURCE_HEAP_TIER_1=1,
- D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED=0,D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1=1,D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED=0,D3D12DDI_TILED_RESOURCES_TIER_1=1,
+ D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED=0,D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1=1,D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED=0,D3D12DDI_TILED_RESOURCES_TIER_1=1,D3D12DDI_TILED_RESOURCES_TIER_2=2,
  D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED=0,D3D12DDI_SHADER_MIN_PRECISION_NONE=0;
 struct D3D12DDI_3DPIPELINESUPPORT1_DATA_0081 {int HighestRuntimeSupportedFeatureLevel,MaximumDriverSupportedFeatureLevel;};
 struct D3D12DDI_D3D12_OPTIONS_DATA_0003 {int ResourceBindingTier,ConservativeRasterizationTier,TiledResourcesTier,CrossNodeSharingTier,VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation,OutputMergerLogicOp,ResourceHeapTier;};
@@ -35,6 +35,7 @@ static int RovEnabled(){return 0;}
 static int ConservativeRasterEnabled(){return 0;}
 static int ProfileLevel(){return kProfileLevel;}
 static int TiledEnabled(){return 0;}
+static int TiledTier2(){return 0;}
 static bool Negotiated0033(){return false;}
 static bool Negotiated0042(){return false;}
 static bool Negotiated0076(){return false;}

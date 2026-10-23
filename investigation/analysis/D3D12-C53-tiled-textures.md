@@ -314,3 +314,25 @@ Sparse Blocks are seen by the next read, and a sparse descriptor spanning the
 AGX mip tail samples correctly. Remaining for Tier 2: buffer SRV reads via
 the read-only shadow (overlay PIPE_BUFFER half), UAV reads of NULL buffer
 tiles, shader status (SparseResidency), min/max filters (C65).
+
+## Tier 2 checkpoint gate (2026-10-23)
+
+- C53T (222cbed2) adds shader feedback:
+  - DXBC `_s` opcodes become `is_sparse` accesses with a status;
+    `check_access_fully_mapped` becomes `is_sparse_texels_resident`;
+  - a `_cl` clamp becomes `min_lod`;
+  - DXIL declares SparseResidency.
+- C65 min/max filtering covers heap, slot and static samplers (C65V/C65S).
+- `APPLE_AGX_D3D12_TILED=2` reports Tier 2 (`TiledTier2`), for the hardware
+  checkpoint only. The default stays Tier 0.
+- Probe: `agx_d3d12_tiled_probe` step FEEDBACK. A reserved R32_UINT 256x128
+  texture has tile 0 mapped and tile 1 NULL. Load-with-status must return
+  (0x1234, mapped) and (0, not mapped). PASS on WARP. On AGX it relies on a
+  NULL tile's Sparse Block entry 0 (`AgxWin32SparseBlock(…, 0)`) reading as
+  non-resident, the Honeykrisp model.
+- Known gaps before Tier 2 can become the default:
+  - raw/structured/typed UAV accesses to NULL tiles (UAVs are not sparse
+    descriptors);
+  - buffer feedback through raw SSBO loads reports resident (DXBC path);
+  - min/max on cube and 3D textures filters normally (`dxbc_minmax_wrap`
+    takes 2D and 2D arrays only).
