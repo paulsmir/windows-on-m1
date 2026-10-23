@@ -212,3 +212,6 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   3. `bash $S/clean-syncheck.sh /tmp/x.patch` compiles git HEAD plus exactly those hunks; the plain syncheck copies the working tree and fails on the other session's hunks.
   4. `git apply --cached /tmp/x.patch` puts only those hunks in the index, then commit from the index.
   5. Tell the other session which hunk of the shared file you committed.
+- When commits land after mkexp and before install, run `bash $S/rebuild-exp.sh <prevN> <prevDir> <N> <oldDir> <newDir> <prevX86B> <newX86B>`.
+  - It stops the chain, moves the old directory to `-superseded`, carries `probe<N>.sh`, sets the logs aside, prints the driver commits it adds, and reruns mkexp.
+  - In the BEFORE entry, note the superseded build as "never installed".
