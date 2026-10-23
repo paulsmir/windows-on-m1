@@ -61678,3 +61678,19 @@ EXP1920 ACTUAL 2026-10-23T22:57:02Z:
   - agx-recover-visible.sh snapshots the KMD receipts before the first mutation (d3162a9b);
   - Codex T10 Wom1GpuReset v3 failing-stage receipts (423b9aa1).
 - Next: EXP1921 = these diagnostics only, to locate the hung submission and the failing reset gate.
+
+EXP1921 HARDWARE BEFORE 2026-10-23T23:02:39Z:
+- Package 30.0.1921.0 from 29446c11 = EXP1920 242c10d9 + Codex T10 Wom1GpuReset v3 stage receipts (423b9aa1) + opt-in UMD APPLE_AGX_UMD_TRACE_SYNC (a8cf4104) + ledgers.
+- Recovery now snapshots the KMD receipts before cleanup (d3162a9b, agx-recover-visible.sh, worktree side).
+- Short profile: GravityMark D3D12 10k and 2k. gm-run.ps1 sets APPLE_AGX_UMD_TRACE_SYNC=1.
+- ATOMIC CONTRACT: none -- receipt and trace instrumentation only, default-off or receipt-only; no behavioural change from EXP1920.
+- WHY THIS HYPOTHESIS: (1) EXP1919 and EXP1920 both hung after mip-upload bursts and ended in 0x116 at AppleAgxRenderAdmission+0x398c0 (reset returned 0xC0000483); (2) both lost the decisive evidence: the buffered UMD tail (hung thread) and the KMD receipts (erased by cleanup); (3) T10 shows that Asahi treats a firmware Timeout as a Fault when FAULT_INFO is valid, and that our resume differs (timeout counter/slot, pending stamps). Locating the hung submission and the reset gate selects between them.
+- WINDOWS CONTRACT: TDR -> DxgkDdiResetFromTimeout/ResetEngine must quiesce and complete or abort fences; 0x116 P3 0xC0000483 means our reset reported a hardware error.
+- AGX/ASAHI CONTRACT: firmware Timeout events (channels.rs type 4); Asahi reads FAULT_INFO on a timeout and marks pending work by stamps (gpu.rs:1006/1422).
+- TRANSLATION: none changed.
+- WHAT IS STILL UNKNOWN: which submission (copy/blit/draw) times out; which reset gate fails (Quiesce, Private, PacketActive); whether the timeout hides an MMU fault (FAULT_INFO read stays off in this run, a separate variable).
+- Expected: the hang and a bugcheck are likely again. Success = a synchronous UMD trace up to the hung call, plus Wom1GpuReset v3 Stage in kmd-receipts-pre-disable.txt (or in probe-end receipts if the guest survives).
+- Failure criteria: the trace still ends before the replay/submit call, or no reset receipt survives.
+- Recovery: rec1921h; at proxy use AGX_RECOVERY_ALLOW_AT_PROXY=1 (snapshot runs automatically).
+- Hashes: sys 57e04ea4de07, UmdArm64 36feb01f10d2, UmdX64 771c86b91d2d, Umd32 22568b0f4bbe; manifest a2957cb93fc7, hardware-manifest 19448fc053f6; probe1921.sh 8338318e5568 (PROBE_LINT_OK); visible recovery rec1921h 16352dc960da0f75; m1n1 0d3a75b3.
+- Recovery rec1921h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1921-hang-locate/run1921.sh.
