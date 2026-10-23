@@ -241,3 +241,7 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   4. calls `launch-exp.sh`: fetch, prepare, visible recovery, BEFORE with measured hashes, commit, start.
 
   Write the next BEFORE text and probe while the current run is in progress; the bench then never waits for a turn. Record the ACTUAL of `<cur>` from `summary<cur>.txt`.
+- Disk: the pwdev volume is 300 GiB and verify-launch needs 5 GiB free.
+  - `scratchpad/evidence-compress.sh 3 50` gzips evidence files over 50 MiB in all but the newest 3 experiments (lossless; archives untouched). chain-next runs it before every launch.
+  - Never delete the guest-archive or guest-trace-archive directories without the user.
+- A failed launch after staging: do not re-stage, which refuses with "old staged package remains". Verify with `verify-launch<N>.py`, run only the recovery section of prepare.sh, then rerun launch-exp.sh; it falls back to verify-launch when prepare prints no PASS.
