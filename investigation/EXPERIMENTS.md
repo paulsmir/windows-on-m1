@@ -61567,3 +61567,14 @@ EXP1918 HARDWARE BEFORE 2026-10-23T19:21:36Z:
 - Failure criteria: boot/DWM failure, hang.
 - Hashes: sys 170ce84448f0, UmdArm64 9d518c355b8f, UmdX64 9807eec25e90, Umd32 3e7355a4d52f; manifest 2010696516b0, hardware-manifest 9c98a61f940a; probe1918.sh d2dc98434a8f (PROBE_LINT_OK); visible recovery rec1918h 0c0d7a4155964011; m1n1 0d3a75b3.
 - Recovery rec1918h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1918-gm-base/run1918.sh.
+
+EXP1918 ACTUAL + EXP1918U1 2026-10-23T19:33:45Z:
+- EXP1918 (short profile, base package b57cd075 without T7c): boot CM_PROB_NONE; no GPU reset.
+  - GravityMark D3D12 10k was removed at 51.5 s (EXP1916: 25.5 s); 2k at 25.1 s.
+  - G4 Parse/Unmapped total 1; pool peak 2682/2688, floor refusals 0.
+- EXP1918U1: first UMD hot-swap on the installed EXP1918 package, no reboot.
+  - umd-quick.sh UMDQ-1918q1 built the ARM64 UMD from HEAD 4aeb8dd4 in 2 min 53 s (sha256 39f33f95...).
+  - hotswap.ps1 replaced System32 and the DriverStore AppleAgxRenderAdmissionUmdArm64.dll: DWM keeps the loaded copy, so the old file was renamed and the new one copied in; originals are kept in realapp\hot\orig.
+  - GravityMark D3D12 2k on the swapped UMD: Ready 14.5 s, removed at 22.5 s, G4 total 2.
+  - Same behaviour as the base, as expected (no UMD change relevant to the failure). Whole iteration: about 6 min.
+- Fast-loop tooling validated: umd-quick.sh, umd-hotswap.sh/hotswap.ps1, gm-quick.sh.
