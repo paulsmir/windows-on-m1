@@ -47,6 +47,11 @@ class Texture1D(unittest.TestCase):
 
 class Texture1DShaders(unittest.TestCase):
     def test_actual_fxc_dimensions_load_store_through_asahi(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        The pinned FXC bytes must still compile through NIR and Asahi after
+        Git normalizes generated header line endings on a clean checkout.
+        """
         b=local_tree('accelerated-desktop-ad03','mesa-build');m=local_tree('reference','mesa')
         sdk=Path('/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk')
         if not b or not m or not sdk.is_dir():self.skipTest('pinned host Mesa/SDK unavailable')
@@ -57,7 +62,10 @@ class Texture1DShaders(unittest.TestCase):
             o=Path(temp);exe=o/'nir';argv=['/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang','-std=c11','-isysroot',str(sdk),'-Werror=implicit-function-declaration',*host_flags(b),'-I',str(b/'src/asahi'),'-I',str(m/'src/asahi'),'-I',str(dx),str(ROOT/'tests/d3d12_texture1d_shader_fixture.c'),str(dx/'dxbc_to_nir.c'),str(dx/'dxbc_parse.c'),str(dx/'dxbc_minmax.c'),'-o',str(exe),*map(str,libs),'-L/opt/homebrew/opt/zstd/lib','-lzstd','-lz','-lpthread']
             z=subprocess.run(argv,capture_output=True,text=True);self.assertEqual(z.returncode,0,z.stdout+z.stderr)
             for kind,mode,header_hash,hlsl_hash in pins:
-                h=ROOT/f'drivers/apple-agx/windows/icd/agx_d3d12_probe_cs_texture1d_{kind}.h';data=h.read_bytes();self.assertEqual(hashlib.sha256(data).hexdigest(),header_hash)
+                h=ROOT/f'drivers/apple-agx/windows/icd/agx_d3d12_probe_cs_texture1d_{kind}.h';data=h.read_bytes()
+                # FXC emitted CRLF; Git stores these text headers as LF.
+                pinned_text=data.replace(b'\r\n',b'\n').replace(b'\n',b'\r\n')
+                self.assertEqual(hashlib.sha256(pinned_text).hexdigest(),header_hash)
                 source=ROOT/f'tests/fixtures/dxbc/c23_texture1d_{kind}.hlsl';self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(),hlsl_hash)
                 a=data.decode().split('const BYTE',1)[1].split('{',1)[1].split('}',1)[0];blob=bytes(map(int,re.findall(r'\d+',a)));self.assertEqual(blob[:4],b'DXBC');p=o/(kind+'.dxbc');p.write_bytes(blob)
                 z=subprocess.run([str(exe),str(p),mode],capture_output=True,text=True,timeout=60);self.assertEqual(z.returncode,0,z.stdout+z.stderr);self.assertIn('PASS C23'+mode,z.stdout);self.assertIn('NIR+Asahi',z.stdout)
