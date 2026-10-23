@@ -273,7 +273,7 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
       (SIZE_T)n*sizeof(D3DKMT_HANDLE));
   auto *tokens=(uint64_t *)HeapAlloc(GetProcessHeap(),0,(SIZE_T)n*sizeof(uint64_t));
   if(view && chosen && handles && tokens) {
-    AcquireSRWLockShared(&device->ScreenBufferLock);
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
     for(UINT i=0;i<n;++i) {
       const auto *slot=&device->ScreenBuffers[i];
       auto *v=&view[i];
@@ -290,8 +290,12 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
     for(UINT i=0;i<count;++i) {
       handles[i]=device->ScreenBuffers[chosen[i]].KernelAllocation;
       tokens[i]=device->ScreenBuffers[chosen[i]].Token;
+      /* Reserve under the selection lock: otherwise make_resident can take
+       * a submission hold and skip its callback while Resident is still
+       * TRUE, just before this trim drops that residency reference. */
+      device->ScreenBuffers[chosen[i]].Transition=TRUE;
     }
-    ReleaseSRWLockShared(&device->ScreenBufferLock);
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   }
   if(count) {
     D3DDDICB_EVICT evict={};
@@ -299,14 +303,16 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
     evict.Flags.EvictOnlyIfNecessary=1u;
     evict.NumAllocations=count;evict.AllocationList=handles;
     hr=device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle,&evict);
-    if(SUCCEEDED(hr)) {
-      AcquireSRWLockExclusive(&device->ScreenBufferLock);
-      for(UINT i=0;i<count;++i) {
-        auto *slot=&device->ScreenBuffers[chosen[i]];
-        if(slot->Token==tokens[i] && slot->KernelAllocation==handles[i])
-          slot->Resident=FALSE;
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    for(UINT i=0;i<count;++i) {
+      auto *slot=&device->ScreenBuffers[chosen[i]];
+      if(slot->Token==tokens[i] && slot->KernelAllocation==handles[i]) {
+        if(SUCCEEDED(hr)) slot->Resident=FALSE;
+        slot->Transition=FALSE;
       }
-      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    }
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    if(SUCCEEDED(hr)) {
       for(UINT i=0;i<count;++i)
         va_record(device,8u,tokens[i],handles[i],0,view[chosen[i]].Bytes,hr);
     }

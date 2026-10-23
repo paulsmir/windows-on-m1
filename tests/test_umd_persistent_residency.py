@@ -60,8 +60,10 @@ static void* GetProcessHeap(){return nullptr;}
 static void* HeapAlloc(void*,unsigned,size_t n){return calloc(1,n);}
 static void HeapFree(void*,unsigned,void*p){free(p);}
 typedef int SRWLOCK;
-static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclusive(SRWLOCK*){}
-static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
+static void AcquireSRWLockExclusive(SRWLOCK*l){assert(*l==0);*l=-1;}
+static void ReleaseSRWLockExclusive(SRWLOCK*l){assert(*l==-1);*l=0;}
+static void AcquireSRWLockShared(SRWLOCK*l){assert(*l>=0);++*l;}
+static void ReleaseSRWLockShared(SRWLOCK*l){assert(*l>0);--*l;}
 #include "umd_residency_trim.h"
 struct D3DDDI_MAKERESIDENT { HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; const UINT*PriorityList; ULONGLONG PagingFenceValue; ULONGLONG NumBytesToTrim; };
 struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,Mapped,Resident,Borrowed,KmtResidencyHeld; UINT SourceHolds,SubmissionHolds;
@@ -73,8 +75,10 @@ static HRESULT mk(HANDLE,D3DDDI_MAKERESIDENT*r){++made;
   if(refusals){--refusals;r->NumBytesToTrim=16u<<20;return E_OUTOFMEMORY;}
   made_handles+=r->NumAllocations;r->PagingFenceValue=7;return E_PENDING;}
 struct D3DDDICB_EVICT { struct { UINT EvictOnlyIfNecessary; } Flags; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; ULONGLONG NumBytesToTrim; };
-static HRESULT ev(HANDLE,const D3DDDICB_EVICT*e){++evicted;assert(e->Flags.EvictOnlyIfNecessary);
-  last_evicted_count=e->NumAllocations;for(UINT i=0;i<e->NumAllocations;++i)last_evicted[i]=e->AllocationList[i];return S_OK;}
+static void (*before_evict)();
+static HRESULT evict_result=S_OK;
+static HRESULT ev(HANDLE,const D3DDDICB_EVICT*e){if(before_evict)before_evict();++evicted;assert(e->Flags.EvictOnlyIfNecessary);
+  last_evicted_count=e->NumAllocations;for(UINT i=0;i<e->NumAllocations;++i)last_evicted[i]=e->AllocationList[i];return evict_result;}
 static void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
 struct CB { HRESULT(*pfnMakeResidentCb)(HANDLE,D3DDDI_MAKERESIDENT*); HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); };
 struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
@@ -124,15 +128,73 @@ int main(){
 '''
 
 
+TRIM_RACE = r"""
+static ADMISSION_UMD_DEVICE *racing_device;
+static void submit_during_evict() {
+  uint64_t token=10, fence=0;
+  assert(racing_device->ScreenBufferLock==0);
+  /* Schedule a second caller after trim's selection lock is released but
+   * before EvictCb returns. Execute the production submission admission. */
+  assert(make_resident(racing_device,&token,1,&fence)==0 &&
+         "trim selected a slot that a concurrent submission can still hold");
+  assert(!racing_device->ScreenBuffers[0].SubmissionHolds);
+  UINT count=99;
+  assert(trim_residency(racing_device,1,&count)==0 && count==0);
+}
+int main() {
+  CB cb={mk,ev}; ADMISSION_UMD_DEVICE d={};
+  d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.PagingQueue=(HANDLE)1;
+  d.KernelCallbacks=&cb; racing_device=&d;
+  SLOT &s=d.ScreenBuffers[0];
+  s.Active=TRUE; s.Resident=TRUE; s.Token=10; s.KernelAllocation=0x100;
+  s.StagingAllocation=0x200; s.CanonicalGpuVa=0x10000; s.Bytes=32u<<20;
+  uint64_t token=10, fence=0;
+  UINT count=0;
+  /* The other ordering: a submission holds the slot before selection. */
+  assert(make_resident(&d,&token,1,&fence)==1);
+  assert(trim_residency(&d,1,&count)==0 && count==0);
+  assert(evict(&d,&token,1));
+  before_evict=submit_during_evict;
+  /* A refused eviction releases the reservation without losing residency. */
+  evict_result=E_FAIL;
+  assert(trim_residency(&d,1,&count)==0 && count==0);
+  assert(s.Resident && !s.Transition && !s.SubmissionHolds);
+  assert(make_resident(&d,&token,1,&fence)==1 && made==0);
+  assert(evict(&d,&token,1));
+  /* A successful eviction releases the reservation with Resident cleared. */
+  evict_result=S_OK;
+  assert(trim_residency(&d,1,&count)==(32ull<<20) && count==1);
+  assert(!s.Resident && !s.Transition && !s.SubmissionHolds);
+  assert(make_resident(&d,&token,1,&fence)==2 && fence==7 && made==1);
+  assert(s.Resident && s.SubmissionHolds==1 && s.CopyHeld);
+  assert(evict(&d,&token,1));
+  assert(evicted==2);
+  puts("trim reservation interleaving: PASS");
+}
+"""
+
+
 class PersistentResidency(unittest.TestCase):
+    def test_trim_reserves_slots_until_evict_finishes(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        A trim candidate must not acquire a submission hold between selection
+        and EvictCb completion; failure must release the reservation, and a
+        later submission must restore a successfully trimmed slot.
+        """
+        self.run_replay(BODY[:BODY.index('int main(){')] + TRIM_RACE,
+                        'trim reservation interleaving: PASS')
+
     def test_slots_stay_resident_across_submits(self):
+        self.run_replay(BODY, 'EXP978 persistent residency: PASS')
+
+    def run_replay(self, template, success):
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in
                           ('find_slot', 'release_copies', 'allocation_handle',
                            'translate_handles', 'evict', 'trim_residency',
                            'residency_request', 'make_resident'))
         funcs = funcs.replace('auto *slot', 'SLOT *slot')
-        body = BODY.replace('@@FUNCS@@', funcs)
+        body = template.replace('@@FUNCS@@', funcs)
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'replay.cpp'; exe = Path(tmp) / 'replay'
             src.write_text(body)
@@ -144,7 +206,7 @@ class PersistentResidency(unittest.TestCase):
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             ran = subprocess.run([str(exe)], text=True, capture_output=True)
             self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
-            self.assertIn('EXP978 persistent residency: PASS', ran.stdout)
+            self.assertIn(success, ran.stdout)
 
 
 if __name__ == '__main__':
