@@ -23,12 +23,14 @@ static bool reserved_texture(pipe_resource *) { return false; }
 static HRESULT copy_reserved_texture(AGX_D3D12_OWNER *, const AGX_D3D12_TEXTURE_COPY *) { return E_INVALIDARG; }
 /* C70: the fixture's textures are never compressed, so uploads keep the map path */
 static bool compressed_texture(AGX_D3D12_OWNER *, struct pipe_resource *) { return false; }
+/* C86: the owner's cached upload staging (C70), counted here */
+static unsigned staged_uploads=0;
 static HRESULT staged_upload(AGX_D3D12_OWNER *, const AGX_D3D12_TEXTURE_COPY *, struct pipe_resource *,
                              struct pipe_resource *, const struct pipe_box &, const struct pipe_box &, unsigned,
-                             unsigned long long) { return E_INVALIDARG; }
+                             unsigned long long) { ++staged_uploads; return S_OK; }
 static unsigned char volume[2][2048],buffer_bytes[8192];
 static pipe_transfer tex_transfer,buf_transfer;
-static unsigned maps=0, unmaps=0, map_failure=0;
+static unsigned maps=0, unmaps=0, map_failure=0, unmappable_maps=0;
 /* C29: a BC1 map is a staging copy of whole 4x4 blocks (agx_transfer_map
  * stride = blocks across the box * 8) */
 static bool bc_mode;static pipe_box bc_box;static unsigned char bc_blocks[3][256];
@@ -40,12 +42,14 @@ static unsigned shared_maps=0,staging_creates=0,staging_copies=0;
 static pipe_resource *create_staging(pipe_screen *,const pipe_resource *templ) {++staging_creates;staging_res=*templ;return &staging_res;}
 static void copy_region(pipe_context *,pipe_resource *dst,unsigned level,unsigned dx,unsigned dy,unsigned dz,
                         pipe_resource *src,unsigned src_level,const pipe_box *box) {
- assert(dst==&staging_res && !level && !dz && !src_level && (src->bind & PIPE_BIND_SHARED) && box->depth==1);
+ assert(dst==&staging_res && !level && !dz && !src_level && box->depth==1 &&
+        ((src->bind & PIPE_BIND_SHARED) || (src->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE)));
  ++staging_copies;
  for(int y=0;y<box->height;++y)std::memcpy(staging_px+(dy+y)*1024+dx*4,present_px+(box->y+y)*32+box->x*4,box->width*4);
 }
 static void *map_texture(pipe_context *,pipe_resource *res,unsigned level,unsigned,const pipe_box *box,pipe_transfer **t) {
  ++maps;tex_transfer={};*t=map_failure==2?nullptr:&tex_transfer;
+ if(res->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE)++unmappable_maps; /* C86: Asahi's per-map staging */
  if(map_failure==1)return nullptr;
  if(res==&staging_res){tex_transfer.stride=1024;return staging_px+box->y*1024+box->x*4;}
  if(res->bind & PIPE_BIND_SHARED){++shared_maps;tex_transfer.stride=32;return present_px+box->y*32+box->x*4;}
@@ -155,5 +159,23 @@ int main() {
    assert(unmaps==(map_failure==3?2u:1u));
  }
  map_failure=0;
- puts("PASS volume real-copy pitches/mip bounds/untouched planes; C29 BC1 block rows/edge mip/refusals; C80 presentation readback via GPU staging");
+ // C86 (EXP1919 T7h): a GPU-only (UNMAPPABLE) 2D texture is never CPU-mapped:
+ // each map made Asahi create a staging BO. Readbacks take the C80 staging,
+ // uploads the owner's cached upload staging (C70).
+ pipe_resource gpu=pres;gpu.bind=PIPE_BIND_RENDER_TARGET|PIPE_BIND_SAMPLER_VIEW;gpu.flags=PIPE_RESOURCE_FLAG_UNMAPPABLE;
+ AGX_D3D12_BUFFER gputex={&gpu,0,sizeof(present_px)};
+ std::memset(buffer_bytes,0x5a,sizeof(buffer_bytes));
+ AGX_D3D12_TEXTURE_COPY g=r;g.Texture=&gputex;g.X=2;g.Y=1;g.Width=5;g.Height=3;g.ToBuffer=1;
+ const unsigned copies_before=staging_copies;
+ assert(AgxD3d12OwnerCopyTexture(&owner,&g)==S_OK);
+ std::printf("gpu-only readback unmappable_maps=%u staging_copies=%u\n",unmappable_maps,staging_copies-copies_before);std::fflush(stdout);
+ assert(!unmappable_maps && staging_copies==copies_before+1);
+ for(unsigned y=0;y<3;++y) assert(!std::memcmp(buffer_bytes+512+y*256,present_px+(1+y)*32+8,20));
+ g.ToBuffer=0;
+ assert(AgxD3d12OwnerCopyTexture(&owner,&g)==S_OK);
+ std::printf("gpu-only upload unmappable_maps=%u staged_uploads=%u\n",unmappable_maps,staged_uploads);std::fflush(stdout);
+ assert(!unmappable_maps && staged_uploads==1);
+ /* an ordinary (mappable) 2D texture keeps the map path */
+ gpu.flags=0;assert(AgxD3d12OwnerCopyTexture(&owner,&g)==S_OK && staged_uploads==1);
+ puts("PASS volume real-copy pitches/mip bounds/untouched planes; C29 BC1 block rows/edge mip/refusals; C80 presentation readback via GPU staging; C86 GPU-only staging");
 }

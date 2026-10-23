@@ -2267,11 +2267,15 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
    * otherwise CPU-only Execute can signal completion before publishing it.
    * Record a GPU copy into the shared allocation, covered by the normal
    * owner flush and queue fence (also preserves partial-copy neighbours). */
-  if (!copy->ToBuffer && copy->Depth == 1 &&
-      (compressed_texture(owner, texture) ||
-       (texture->target == PIPE_TEXTURE_2D && (texture->bind & PIPE_BIND_SHARED))))
+  /* C86 (EXP1919, T7h GPU-only placement): an UNMAPPABLE texture maps only
+   * through an Asahi staging resource created per map, a new BO per
+   * CopyTextureRegion (the C70 class); 2D ones take the owner's cached
+   * stagings like shared allocations do */
+  const bool staged_2d = texture->target == PIPE_TEXTURE_2D &&
+                         ((texture->bind & PIPE_BIND_SHARED) || (texture->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE));
+  if (!copy->ToBuffer && copy->Depth == 1 && (compressed_texture(owner, texture) || staged_2d))
     return staged_upload(owner, copy, texture, buffer, tbox, bbox, rows, row);
-  if (copy->ToBuffer && copy->Depth == 1 && texture->target == PIPE_TEXTURE_2D && (texture->bind & PIPE_BIND_SHARED))
+  if (copy->ToBuffer && copy->Depth == 1 && staged_2d)
     return staged_download(owner, copy, texture, buffer, tbox, bbox, rows, row);
   struct pipe_transfer *ttransfer = NULL, *btransfer = NULL;
   void *tmap = pipe->texture_map(pipe, texture, copy->Level, copy->ToBuffer ? PIPE_MAP_READ : PIPE_MAP_WRITE, &tbox,
