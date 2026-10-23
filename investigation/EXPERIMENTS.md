@@ -61508,3 +61508,19 @@ EXP1915 ACTUAL 2026-10-23T18:04:45Z:
   - Real defect: wrong content or layout on a cross-process open. Codex T3c.
 - C83 (opt-in GPU wait, default off): no regression.
 - Night Raid A/B (after1915.sh) aborted cleanly twice (NR_ABORT_NO_3DMARK, env cleaned). The Steam log shows 3DMark.exe launched at 17:50:35Z and ran until the B attempt stopped it, but no window titled exactly "3DMark" appeared within 4 min. Steam launched twice under the user's approval, with no KickingOtherSession. The script now waits 8 min, logs window titles and takes a screenshot on abort. Retry on EXP1916.
+
+EXP1916 HARDWARE BEFORE 2026-10-23T18:13:35Z:
+- Package 30.0.1916.0 from c354948b = EXP1915 bb4547be + the fork's 36063e4b C82b (receipt-only: 40-character flush reasons, perf reports every 64 presents and at owner destruction) + ledger commits.
+- Probe probe1916.sh = probe1915 (regression set). Then, by after1916.sh on the installed package:
+  - Night Raid Custom GT1+GT2, A: default;
+  - Night Raid B: APPLE_AGX_D3D12_GPU_WAIT=1 (C83);
+  - user-level UMD trace and C82 verdict for each run (user approval "Запускай").
+- ATOMIC CONTRACT: none -- C82b is receipt-only; Night Raid A versus B differs in one environment variable (C83).
+- WHY THIS HYPOTHESIS:
+  (1) the fork's C82 analysis: Night Raid frame 146 ms = 68 ms draw_vbo + 53 ms CPU retire;
+  (2) C83 removes the CPU retire by a GPU queue wait (ceiling about 134 -> 81 ms).
+- WHAT IS STILL UNKNOWN: the per-draw cause (variant churn / intra-pass sync / uploads); whether the GPU wait is correct on hardware.
+- Expected: regressions as EXP1915; the NR A verdict line; NR B frame time below A, with no device removal.
+- Failure criteria: regressions, NR B removal or corruption, hang.
+- Hashes: sys e008e196c326, UmdArm64 0e4bc75a3e50, UmdX64 e03bdc28c81e, Umd32 10b9c9481164; manifest 157028ac21be, hardware-manifest f7d684e9f037; probe1916.sh ddeb3615a128 (PROBE_LINT_OK); visible recovery rec1916h d9e24c534f2b38b4; m1n1 0d3a75b3.
+- Recovery rec1916h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1916-nr-c82b/run1916.sh.
