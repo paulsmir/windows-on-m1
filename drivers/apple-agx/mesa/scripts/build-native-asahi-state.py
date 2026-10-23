@@ -3823,16 +3823,28 @@ AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
    struct pipe_resource *texture=srv->texture;
    unsigned first=srv->u.tex.first_level,last=srv->u.tex.last_level;
    if(first==last) return;
-   bool bgr=srv->format==PIPE_FORMAT_B8G8R8A8_UNORM ||
-      srv->format==PIPE_FORMAT_B8G8R8A8_SRGB || srv->format==PIPE_FORMAT_B8G8R8X8_UNORM ||
-      srv->format==PIPE_FORMAT_B8G8R8X8_SRGB;
    bool target=texture->target==PIPE_TEXTURE_1D || texture->target==PIPE_TEXTURE_1D_ARRAY ||
       texture->target==PIPE_TEXTURE_2D || texture->target==PIPE_TEXTURE_2D_ARRAY ||
-      texture->target==PIPE_TEXTURE_3D || texture->target==PIPE_TEXTURE_CUBE;
-   if(!bgr || !target ||
+      texture->target==PIPE_TEXTURE_3D || texture->target==PIPE_TEXTURE_CUBE ||
+      texture->target==PIPE_TEXTURE_CUBE_ARRAY;
+   /* Filter in the SRV's typed format (including sRGB), but stage bytes in
+    * the resource's storage format. Do not infer renderability from size. */
+   struct pipe_screen *screen=device->pipe->screen;
+   unsigned element=util_format_get_blocksize(texture->format);
+   if(!target || !element ||
+      util_format_is_pure_integer(srv->format) || util_format_is_depth_or_stencil(srv->format) ||
+      util_format_get_blockwidth(texture->format)!=1 ||
+      util_format_get_blockheight(texture->format)!=1 ||
       texture->nr_samples>1 || first>last || last>texture->last_level ||
+      (texture->target!=PIPE_TEXTURE_3D &&
+       (srv->u.tex.first_layer>srv->u.tex.last_layer || srv->u.tex.last_layer>=texture->array_size)) ||
       !(view->owner_resource->bind_flags&D3D10_DDI_BIND_RENDER_TARGET) ||
-      !device->pipe->screen->resource_create_with_modifiers) {
+      !screen->resource_create_with_modifiers || !screen->is_format_supported ||
+      !screen->is_format_supported(screen,srv->format,texture->target,
+         texture->nr_samples,texture->nr_storage_samples,
+         PIPE_BIND_SAMPLER_VIEW|PIPE_BIND_RENDER_TARGET)) {
+      const UINT refused[4]={(UINT)srv->format,(UINT)texture->target,first,last};
+      AgxD3d10WindowsDiagnostic("reject-d3d11-genmips",E_NOTIMPL,refused,4u);
       SetError(hDevice,E_NOTIMPL);return;
    }
    for(unsigned level=first+1;level<=last;++level) {
@@ -3857,11 +3869,11 @@ AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
       struct pipe_transfer *read=NULL,*write=NULL;
       void *src=device->pipe->texture_map(device->pipe,texture,level-1,PIPE_MAP_READ,&box,&read);
       void *dst=device->pipe->texture_map(device->pipe,source,0,PIPE_MAP_WRITE,&box,&write);
-      bool mapped=src&&dst&&read&&write&&read->stride>=info.width0*4&&write->stride>=info.width0*4;
+      bool mapped=src&&dst&&read&&write&&read->stride>=info.width0*element&&write->stride>=info.width0*element;
       if(mapped) for(unsigned layer=0;layer<(unsigned)box.depth;++layer)
          for(unsigned row=0;row<info.height0;++row)
             memcpy((uint8_t *)dst+layer*write->layer_stride+row*write->stride,
-                   (const uint8_t *)src+layer*read->layer_stride+row*read->stride,info.width0*4);
+                   (const uint8_t *)src+layer*read->layer_stride+row*read->stride,info.width0*element);
       if(write) pipe_texture_unmap(device->pipe,write);
       if(read) pipe_texture_unmap(device->pipe,read);
       if(!mapped) {
