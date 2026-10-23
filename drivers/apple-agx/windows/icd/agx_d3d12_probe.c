@@ -7190,13 +7190,26 @@ static LONG WINAPI crash_dump(EXCEPTION_POINTERS *ep) {
     MiniDumpWriteDumpFn write = dbghelp ? (MiniDumpWriteDumpFn)(void *)GetProcAddress(dbghelp, "MiniDumpWriteDump") : NULL;
     printf("PROBE_CRASH 0x%08lx at %p\n", (unsigned long)ep->ExceptionRecord->ExceptionCode,
            ep->ExceptionRecord->ExceptionAddress);
+    {
+        /* EXP1891: the dump came out empty; the faulting module and offset
+         * (and an access violation's data address) still locate the fault */
+        HMODULE module = NULL;
+        char name[MAX_PATH] = "?";
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCSTR)ep->ExceptionRecord->ExceptionAddress, &module))
+            GetModuleFileNameA(module, name, sizeof(name));
+        printf("PROBE_CRASH_MODULE %s+0x%llx data 0x%llx\n", name,
+               (unsigned long long)((const char *)ep->ExceptionRecord->ExceptionAddress - (const char *)module),
+               ep->ExceptionRecord->NumberParameters > 1
+                   ? (unsigned long long)ep->ExceptionRecord->ExceptionInformation[1] : 0ull);
+    }
     if (write) {
         HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         if (f != INVALID_HANDLE_VALUE) {
             /* MiniDumpWithDataSegs | WithIndirectlyReferencedMemory | WithThreadInfo */
             const BOOL ok = write(GetCurrentProcess(), GetCurrentProcessId(), f, 0x1 | 0x40 | 0x1000, &info, NULL, NULL);
             CloseHandle(f);
-            printf("PROBE_CRASH_DUMP %s %d\n", path, ok);
+            printf("PROBE_CRASH_DUMP %s %d error %lu\n", path, ok, ok ? 0ul : (unsigned long)GetLastError());
         }
     }
     return EXCEPTION_CONTINUE_SEARCH;
