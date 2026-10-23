@@ -1762,6 +1762,89 @@ static unsigned region_copy_extent(unsigned extent, const struct pipe_resource *
   return extent;
 }
 
+/* C83 (EXP1913 GravityMark D3D12: its GPU BC6H encoder copies an
+ * R32G32B32A32_UINT texture into a BC6H one, refused above and the device
+ * removed): CopyTextureRegion between a BC format and an uncompressed format
+ * of its block size (8 or 16 bytes) reinterprets one texel as one 4x4 block;
+ * the runtime has validated the pair. The source box is in source texels,
+ * the destination offset in destination texels. Each axis is validated in
+ * blocks as the D3D11 path does (build-native-asahi-state.py
+ * AgxD3d10CopyBlockAxis) and each mapped box is clipped to its own level, so
+ * the 1x1/2x2 tails of a BC chain keep whole blocks. */
+static bool reinterpret_copy_axis(unsigned src_size, unsigned dst_size, unsigned src_block, unsigned dst_block,
+                                  unsigned first, unsigned extent, unsigned dst_offset, unsigned *src_extent,
+                                  unsigned *dst_extent, unsigned *blocks) {
+  const unsigned long long last = static_cast<unsigned long long>(first) + extent;
+  if (!extent || first >= src_size || dst_offset >= dst_size || first % src_block || dst_offset % dst_block) return false;
+  const unsigned long long src_aligned = (src_size + src_block - 1ull) / src_block * src_block;
+  const unsigned long long dst_blocks = (dst_size + dst_block - 1ull) / dst_block;
+  if (last > src_aligned || (last % src_block && last != src_size)) return false;
+  const unsigned long long n = (extent + src_block - 1ull) / src_block;
+  if (n > dst_blocks - dst_offset / dst_block) return false;
+  *src_extent = static_cast<unsigned>((last < src_size ? last : src_size) - first);
+  const unsigned long long texels = n * dst_block;
+  *dst_extent = texels < dst_size - dst_offset ? static_cast<unsigned>(texels) : dst_size - dst_offset;
+  *blocks = static_cast<unsigned>(n);
+  return true;
+}
+static bool reinterpret_copy_boxes(const struct pipe_resource *d, unsigned dst_level, unsigned dst_layer, unsigned dst_x,
+                                   unsigned dst_y, const struct pipe_resource *s, unsigned src_level, unsigned src_layer,
+                                   unsigned src_x, unsigned src_y, unsigned width, unsigned height, unsigned layers,
+                                   struct pipe_box *dbox, struct pipe_box *sbox, unsigned *rows, unsigned long long *row) {
+  unsigned dbw = 0, dbh = 0, sbw = 0, sbh = 0;
+  if (d->target == PIPE_BUFFER || s->target == PIPE_BUFFER || d->target == PIPE_TEXTURE_3D || s->target == PIPE_TEXTURE_3D ||
+      d->nr_samples > 1 || s->nr_samples > 1 || dst_level > d->last_level || src_level > s->last_level || !layers)
+    return false;
+  const unsigned dbytes = texture_block(d->format, &dbw, &dbh), sbytes = texture_block(s->format, &sbw, &sbh);
+  /* exactly one side a 4x4 block, the other a texel of the block's size */
+  if (!dbytes || dbytes != sbytes || (dbytes != 8u && dbytes != 16u) || (dbw == 1u) == (sbw == 1u)) return false;
+  const unsigned dlayers = texture_layer_extent(d, dst_level), slayers = texture_layer_extent(s, src_level);
+  if (dst_layer > dlayers || layers > dlayers - dst_layer || src_layer > slayers || layers > slayers - src_layer)
+    return false;
+  unsigned sw = 0, dw = 0, nx = 0, sh = 0, dh = 0, ny = 0;
+  if (!reinterpret_copy_axis(level_extent(s->width0, src_level), level_extent(d->width0, dst_level), sbw, dbw, src_x, width,
+                             dst_x, &sw, &dw, &nx) ||
+      !reinterpret_copy_axis(level_extent(s->height0, src_level), level_extent(d->height0, dst_level), sbh, dbh, src_y,
+                             height, dst_y, &sh, &dh, &ny))
+    return false;
+  *sbox = {};
+  sbox->x = static_cast<int>(src_x);
+  sbox->y = static_cast<int>(src_y);
+  sbox->z = static_cast<int16_t>(src_layer);
+  sbox->width = static_cast<int>(sw);
+  sbox->height = static_cast<int>(sh);
+  sbox->depth = static_cast<int16_t>(layers);
+  *dbox = *sbox;
+  dbox->x = static_cast<int>(dst_x);
+  dbox->y = static_cast<int>(dst_y);
+  dbox->z = static_cast<int16_t>(dst_layer);
+  dbox->width = static_cast<int>(dw);
+  dbox->height = static_cast<int>(dh);
+  *rows = ny;
+  *row = static_cast<unsigned long long>(nx) * dbytes;
+  return true;
+}
+/* Asahi resource_copy_region takes its CPU fallback for differing formats,
+ * whose utility truncates the tails; copy the block rows through both maps
+ * (Asahi texture_map owns synchronization and tiling), as the D3D11 path does. */
+static HRESULT copy_reinterpret_blocks(struct pipe_context *pipe, struct pipe_resource *d, unsigned dst_level,
+                                       const struct pipe_box &dbox, struct pipe_resource *s, unsigned src_level,
+                                       const struct pipe_box &sbox, unsigned rows, unsigned long long row) {
+  struct pipe_transfer *read = NULL, *write = NULL;
+  void *from = pipe->texture_map(pipe, s, src_level, PIPE_MAP_READ, &sbox, &read);
+  void *to = from ? pipe->texture_map(pipe, d, dst_level, PIPE_MAP_WRITE, &dbox, &write) : NULL;
+  HRESULT hr = from && to ? S_OK : E_OUTOFMEMORY;
+  for (int z = 0; SUCCEEDED(hr) && z < sbox.depth; ++z)
+    for (unsigned y = 0; y < rows; ++y)
+      memcpy(static_cast<unsigned char *>(to) + static_cast<size_t>(z) * write->layer_stride + static_cast<size_t>(y) * write->stride,
+             static_cast<const unsigned char *>(from) + static_cast<size_t>(z) * read->layer_stride +
+                 static_cast<size_t>(y) * read->stride,
+             static_cast<size_t>(row));
+  if (to) pipe->texture_unmap(pipe, write);
+  if (from) pipe->texture_unmap(pipe, read);
+  return hr;
+}
+
 extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *dst, unsigned dst_level,
                                                   unsigned dst_layer, unsigned dst_x, unsigned dst_y,
                                                   const AGX_D3D12_BUFFER *src, unsigned src_level, unsigned src_layer,
@@ -1784,6 +1867,17 @@ extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const 
         src_x>sw || width>sw-src_x || src_y>sh || height>sh-src_y ||
         dst_layer>texture_layer_extent(d,dst_level) || layers>texture_layer_extent(d,dst_level)-dst_layer ||
         src_layer>texture_layer_extent(s,src_level) || layers>texture_layer_extent(s,src_level)-src_layer) return E_INVALIDARG;
+  }
+  struct pipe_box reinterpret_dst = {}, reinterpret_src = {};
+  unsigned reinterpret_rows = 0;
+  unsigned long long reinterpret_row = 0;
+  if (reinterpret_copy_boxes(d, dst_level, dst_layer, dst_x, dst_y, s, src_level, src_layer, src_x, src_y, width, height,
+                             layers, &reinterpret_dst, &reinterpret_src, &reinterpret_rows, &reinterpret_row)) {
+    const HRESULT hr = copy_reinterpret_blocks(owner->Context, d, dst_level, reinterpret_dst, s, src_level, reinterpret_src,
+                                               reinterpret_rows, reinterpret_row);
+    receipt("measure-d3d12-reinterpret-copy", hr, static_cast<UINT>(d->format) | (static_cast<UINT>(s->format) << 16),
+            dst_level | (src_level << 8), width | (height << 16));
+    return hr;
   }
   if (!texture_region_copy_valid(d, dst_level, dst_layer, dst_x, dst_y, s, src_level, src_layer, src_x, src_y, width,
                                  height, layers)) {
