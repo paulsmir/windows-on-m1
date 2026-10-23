@@ -61548,3 +61548,11 @@ EXP1917 HARDWARE BEFORE 2026-10-23T19:05:03Z:
 - Failure criteria: boot/DWM failure, regressions, new removals, hang. Recovery rec1917h (visible).
 - Hashes: sys 354d06e65869, UmdArm64 9c09e549d4bb, UmdX64 4e0adc4abf8c, Umd32 08d7d2cd22f8; manifest 5d00068ec50e, hardware-manifest 698e318bbf94; probe1917.sh b0f8ae18995b (PROBE_LINT_OK); visible recovery rec1917h 69bdc17a7a4b0efe; m1n1 0d3a75b3.
 - Recovery rec1917h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1917-native-placement/run1917.sh.
+
+EXP1917 ACTUAL 2026-10-23T19:12:33Z:
+- Short profile (user GravityMark focus). Boot Problem CM_PROB_NONE, desktop up; no GPU reset.
+- Codex T7c REJECTED: GravityMark D3D12 10k/2k were removed at 2.7/1.2 s ("D3D12Adapter::Query::create(): can't create buffer").
+  - The UMD trace shows g4-native-allocate-cb E_INVALIDARG for a 64 KiB General class-1 buffer, then reject-screen-create (LastScreenError 0x80070057).
+  - With the aperture excluded, VidMm refuses the CPU-visible General allocation shape. This is the EXP1027/EXP1266 risk named in the T7c report.
+  - WER 1-2 (app error path). Reverted.
+- Next: EXP1918 = HEAD without T7c, as the base package for UMD hot-swap iterations. The G4 Parse/Unmapped root cause (scattered 4 KiB aperture pages under a General BO) needs a KMD paging/leaf solution that keeps the aperture admissible (Codex T7d).
