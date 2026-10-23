@@ -17,6 +17,7 @@
 #include <d3d9.h>
 #include <d3d9on12.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 static HWND make_window(void) {
     WNDCLASSA wc = {0};
@@ -100,6 +101,23 @@ static int msaa_present(const char *tag, IDirect3D9 *d3d, HWND window) {
         if (SUCCEEDED(hr)) hr = IDirect3DDevice9_Present(device, NULL, NULL, NULL, NULL);
         printf("%s msaa present %u hr=0x%08lx\n", tag, frame, (unsigned long)hr);
         Sleep(50);
+    }
+    {
+        /* APPLE_AGX_D3D9_HOLD_MS: keep presenting magenta so a desktop
+         * screenshot can show whether the window is composed (the front-buffer
+         * pixel reads the same on Basic Display and AGX, EXP1906E-basic). */
+        char hold_text[16] = {0};
+        DWORD hold = GetEnvironmentVariableA("APPLE_AGX_D3D9_HOLD_MS", hold_text, sizeof(hold_text)) ? strtoul(hold_text, NULL, 10) : 0;
+        DWORD start = GetTickCount(), held = 0;
+        while (SUCCEEDED(hr) && hold && GetTickCount() - start < hold) {
+            MSG msg;
+            while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) DispatchMessageA(&msg);
+            hr = IDirect3DDevice9_Clear(device, 0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(255, 0, 255), 1.0f, 0);
+            if (SUCCEEDED(hr)) hr = IDirect3DDevice9_Present(device, NULL, NULL, NULL, NULL);
+            ++held;
+            Sleep(16);
+        }
+        if (hold) printf("%s msaa hold %lu ms presents %lu hr=0x%08lx\n", tag, (unsigned long)hold, (unsigned long)held, (unsigned long)hr);
     }
     if (SUCCEEDED(hr)) hr = IDirect3DDevice9_TestCooperativeLevel(device);
     printf("%s msaa cooperative hr=0x%08lx\n", tag, (unsigned long)hr);
