@@ -4,7 +4,7 @@
 #include <string.h>
 
 #define G ADMISSION_POOL_DEMAND_GRANULE
-#define COUNT 64u /* 4 MiB segment */
+#define COUNT 4096u /* 256 MiB segment, including multi-run placements */
 
 static unsigned char mapped[COUNT], busy[COUNT], broken[COUNT];
 static unsigned commits, commit_calls, releases, fail_commit_call;
@@ -97,6 +97,40 @@ static void test_invalid_placements(void)
     assert(a.Bytes == 0 && mapped_count() == 0);
     /* The last granule is placeable. */
     assert(AdmissionPoolDemandPlace(&pool, &a, (COUNT - 1) * G, G) == AdmissionPoolPlaced);
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * C75b: a large placement must own and commit its entire range, including
+ * the tail past 16 MiB and past one bounded commit run. Reclaim must not
+ * remove that CPU-accessible tail while the allocation owns it. */
+static void test_large_placement_backs_the_tail(void)
+{
+    static const unsigned counts[] = {257u, 400u, 1024u, 1025u};
+    for (unsigned c = 0; c < sizeof(counts) / sizeof(counts[0]); ++c) {
+        ADMISSION_POOL_PLACEMENT a = {0, 0};
+        unsigned n = counts[c];
+        reset();
+        pool.MaxRun = 1024u;
+        assert(AdmissionPoolDemandPlace(&pool, &a, 7 * G, n * G) == AdmissionPoolPlaced);
+        assert(commits == n && commit_calls == (n == 1025u ? 2u : 1u));
+        for (unsigned i = 7; i < 7 + n; ++i)
+            assert(mapped[i] && granules[i].Owner == &a);
+        assert(!mapped[6] && !mapped[7 + n]);
+        assert(AdmissionPoolDemandReclaim(&pool) == 0);
+        assert(mapped[7 + n - 1]);
+        AdmissionPoolDemandUnplace(&pool, &a);
+        assert(AdmissionPoolDemandReclaim(&pool) == n && mapped_count() == 0);
+    }
+    /* A failure in the second run never advertises a partial placement. */
+    {
+        ADMISSION_POOL_PLACEMENT a = {0, 0};
+        reset();
+        pool.MaxRun = 1024u;
+        fail_commit_call = 2u;
+        assert(AdmissionPoolDemandPlace(&pool, &a, 7 * G, 1025 * G) == AdmissionPoolPlaceNoMemory);
+        assert(a.Bytes == 0 && mapped_count() == 1024 && !mapped[1031]);
+        assert(AdmissionPoolDemandReclaim(&pool) == 1024 && mapped_count() == 0);
+    }
 }
 
 static void test_commit_failure_owns_nothing(void)
@@ -342,6 +376,7 @@ static void test_segment_size(void)
 
 int main(void)
 {
+    test_large_placement_backs_the_tail();
     test_place_commits_once_and_destroy_releases();
     test_invalid_placements();
     test_commit_failure_owns_nothing();
