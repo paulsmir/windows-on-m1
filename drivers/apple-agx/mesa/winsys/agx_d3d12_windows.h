@@ -311,6 +311,12 @@ HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *Owner, DXGI_FORM
                                                unsigned Height, int ShaderResource, unsigned Samples,
                                                unsigned long long Bytes, HANDLE RuntimeResource,
                                                AGX_D3D12_BUFFER *Texture, void **Presentation, UINT *Allocation);
+/* C76: handles have already been opened by the runtime on this device.
+ * The returned record uses DestroyPresentationTexture's runtime lifetime. */
+HRESULT AgxD3d12OwnerOpenSharedTexture(AGX_D3D12_OWNER *Owner, UINT KernelResource, UINT Allocation,
+                                      const void *AllocationData, UINT AllocationDataBytes,
+                                      const void *ResourceData, UINT ResourceDataBytes, HANDLE RuntimeResource,
+                                      AGX_D3D12_BUFFER *Texture, void **Presentation);
 void AgxD3d12OwnerDestroyPresentationTexture(AGX_D3D12_OWNER *Owner, void *Presentation);
 /* C7c: makes a presentation texture's rendering visible to the kernel
  * present (agx_d3d10_windows.cpp AgxD3d10WindowsPresentationSubmitSurfaces:

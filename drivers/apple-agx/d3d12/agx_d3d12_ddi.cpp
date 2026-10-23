@@ -19,6 +19,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <tuple>
 #include <type_traits>
 #include "agx_d3d12_view_mapping.h"
+#include "agx_d3d12_shared_open.h"
 #include "agx_d3d12_r1_blend_projection.h"
 #include "agx_d3d12_r1_shader_span.h"
 #include "agx_d3d12_zero_cache_library.h"
@@ -2370,6 +2371,9 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     HeapAndResourceReceipt("measure-d3d12-create-heap-resource", heap_arg, resource_arg,
                            (heap ? 1u : 0u) | (resource ? 2u : 0u));
     if (!device) return E_INVALIDARG;
+    if (resource_arg && (resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_CROSS_ADAPTER))
+        return AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHeapAndResource)(
+            handle, heap_arg, heap_handle, runtime_resource, resource_arg, nullptr, resource_handle);
     (void)runtime_resource; /* C7b: used by the native owner's presentation textures */
     /* C8c: a placed buffer -- no heap description; ReuseBufferGPUVA names
      * the resource of an existing heap and the byte offset in it (the
@@ -2521,6 +2525,76 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     }
     return hr;
 }
+/* C76: runtime-opened handles and the existing D3D11 linear wire format. */
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static bool DecodeOpenedTexture(const D3D12DDIARG_OPENHEAP_0003 *arg, AgxD3d12SharedDescription *description) {
+    return arg && arg->NumAllocations == 1 && arg->pOpenAllocationInfo && arg->hKMResource.handle &&
+           arg->pOpenAllocationInfo[0].hAllocation &&
+           AgxD3d12DecodeShared(arg->pPrivateDriverData, arg->PrivateDriverDataSize,
+               arg->pOpenAllocationInfo[0].pPrivateDriverData, arg->pOpenAllocationInfo[0].PrivateDriverDataSize,
+               description);
+}
+#endif
+static D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY CalcPrivateOpenedHeapAndResourceSizes(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_OPENHEAP_0003 *arg) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AgxD3d12SharedDescription description = {};
+    if (DecodeOpenedTexture(arg, &description)) return {sizeof(AgxD3d12Heap), sizeof(AgxD3d12Resource)};
+#endif
+    return AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes)(device, arg);
+}
+static HRESULT APIENTRY OpenHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_OPENHEAP_0003 *arg,
+                                             D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE runtime_resource,
+                                             D3D12DDI_HRESOURCE resource_handle) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AgxD3d12SharedDescription description = {};
+    auto *device = DeviceOf(handle);
+    auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+    auto *resource = static_cast<AgxD3d12Resource *>(resource_handle.pDrvPrivate);
+    if (device && resource && runtime_resource.handle && DecodeOpenedTexture(arg, &description)) {
+        memset(resource, 0, sizeof(*resource));
+        if (!heap) heap = &resource->own_heap;
+        memset(heap, 0, sizeof(*heap));
+        /* Preserve the creator's DDI accounting; the owner's imported BO
+         * still uses the smaller serialized linear storage extent. */
+        D3D12DDIARG_CREATERESOURCE_0003 created = {};
+        created.ResourceType = D3D12DDI_RT_TEXTURE2D;
+        created.Format = static_cast<DXGI_FORMAT>(description.Format);
+        created.Width = description.Width;
+        created.Height = description.Height;
+        created.DepthOrArraySize = created.MipLevels = 1;
+        created.SampleDesc.Count = 1;
+        const UINT64 bytes = TextureBytes(&created);
+        if (!bytes) return E_FAIL;
+        AGX_D3D12_OWNER *owner = EnsureOwner(device);
+        if (!owner) return E_FAIL;
+        const auto &info = arg->pOpenAllocationInfo[0];
+        AGX_D3D12_BUFFER texture = {};
+        HRESULT hr = AgxD3d12OwnerOpenSharedTexture(owner, arg->hKMResource.handle, info.hAllocation,
+            info.pPrivateDriverData, info.PrivateDriverDataSize, arg->pPrivateDriverData, arg->PrivateDriverDataSize,
+            runtime_resource.handle, &texture, &heap->presentation);
+        if (FAILED(hr)) return hr;
+        heap->native = texture.Resource;
+        heap->gpuva = texture.GpuVa;
+        heap->bytes = bytes;
+        heap->allocation = info.hAllocation;
+        resource->heap = heap;
+        resource->gpuva = heap->gpuva;
+        resource->bytes = bytes;
+        resource->type = D3D12DDI_RT_TEXTURE2D;
+        resource->format = static_cast<DXGI_FORMAT>(description.Format);
+        resource->width = description.Width;
+        resource->height = description.Height;
+        resource->layers = resource->levels = 1;
+        return S_OK;
+    }
+#endif
+    return AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource)(
+        handle, arg, heap_handle, runtime_resource, resource_handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateOpenedHeapAndResourceSizes), PFND3D12DDI_CALCPRIVATEOPENEDHEAPANDRESOURCESIZES_0003>);
+static_assert(std::is_same_v<decltype(&OpenHeapAndResource), PFND3D12DDI_OPENHEAPANDRESOURCE_0003>);
+
 static VOID APIENTRY DestroyHeapAndResource(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle,
                                             D3D12DDI_HRESOURCE resource_handle) {
     AgxD3d12Device *device = DeviceOf(handle);
@@ -6614,8 +6688,8 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyHeapAndResource, DestroyHeapAndResource);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMakeResident, MakeResident);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnEvict, Evict);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes, CalcPrivateOpenedHeapAndResourceSizes);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource, OpenHeapAndResource);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCopyDescriptors, CopyDescriptors);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCopyDescriptorsSimple, CopyDescriptorsSimple);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateQueryHeapSize, CalcPrivateQueryHeapSize);
@@ -7113,8 +7187,8 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0010(D3D12DDI_DEVICE_FUNCS_CORE_0010 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyHeapAndResource, DestroyHeapAndResource);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnMakeResident, MakeResident);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnEvict, Evict);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateOpenedHeapAndResourceSizes, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateOpenedHeapAndResourceSizes));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnOpenHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnOpenHeapAndResource));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateOpenedHeapAndResourceSizes, CalcPrivateOpenedHeapAndResourceSizes);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnOpenHeapAndResource, OpenHeapAndResource);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCopyDescriptors, CopyDescriptors);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCopyDescriptorsSimple, CopyDescriptorsSimple);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateQueryHeapSize, CalcPrivateQueryHeapSize);
@@ -7698,14 +7772,29 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0040(D3D12DDI_DEVICE_FUNCS_CORE_0040 
 }
 /* C52: CORE_0070 = CORE_0040 with the 0050 queue and 0043 opened-resource
  * entries retyped and twenty entries appended */
+static D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY CalcPrivateOpenedHeapAndResourceSizes0043(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_OPENHEAP_0003 *arg, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session) {
+    if (session.pDrvPrivate)
+        return AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateOpenedHeapAndResourceSizes)(device, arg, session);
+    return CalcPrivateOpenedHeapAndResourceSizes(device, arg);
+}
+static HRESULT APIENTRY OpenHeapAndResource0043(D3D12DDI_HDEVICE device, const D3D12DDIARG_OPENHEAP_0003 *arg,
+    D3D12DDI_HHEAP heap, D3D12DDI_HRTRESOURCE runtime, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session,
+    D3D12DDI_HRESOURCE resource) {
+    if (session.pDrvPrivate)
+        return AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnOpenHeapAndResource)(device, arg, heap, runtime, session, resource);
+    return OpenHeapAndResource(device, arg, heap, runtime, resource);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateOpenedHeapAndResourceSizes0043), PFND3D12DDI_CALCPRIVATEOPENEDHEAPANDRESOURCESIZES_0043>);
+static_assert(std::is_same_v<decltype(&OpenHeapAndResource0043), PFND3D12DDI_OPENHEAPANDRESOURCE_0043>);
 static void FillD3D12DDI_DEVICE_FUNCS_CORE_0070(D3D12DDI_DEVICE_FUNCS_CORE_0070 &f) {
     static_assert(offsetof(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateSchedulingGroupSize) ==
                   sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0040));
     FillD3D12DDI_DEVICE_FUNCS_CORE_0040(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0040 &>(f));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateCommandQueueSize, CalcPrivateCommandQueueSize0050);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateCommandQueue, CreateCommandQueue0050);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateOpenedHeapAndResourceSizes, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateOpenedHeapAndResourceSizes));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnOpenHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnOpenHeapAndResource));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateOpenedHeapAndResourceSizes, CalcPrivateOpenedHeapAndResourceSizes0043);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnOpenHeapAndResource, OpenHeapAndResource0043);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateSchedulingGroupSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateSchedulingGroupSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateSchedulingGroup, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateSchedulingGroup));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroySchedulingGroup, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroySchedulingGroup));

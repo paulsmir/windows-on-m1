@@ -270,6 +270,11 @@ VOID APIENTRY AdmissionUmdOpenResource(
     const D3D10DDIARG_OPENRESOURCE *OpenResource,
     D3D10DDI_HRESOURCE ResourceHandle,
     D3D10DDI_HRTRESOURCE RuntimeResource);
+/* Internal creation variant: extra wire flags, never a runtime DDI. */
+VOID AdmissionUmdCreateResourceWithMetadata(
+    D3D10DDI_HDEVICE DeviceHandle, const D3D11DDIARG_CREATERESOURCE *CreateResource,
+    D3D10DDI_HRESOURCE ResourceHandle, D3D10DDI_HRTRESOURCE RuntimeResource,
+    UINT MetadataFlags);
 VOID APIENTRY AdmissionUmdCreateResource(
     D3D10DDI_HDEVICE DeviceHandle,
     const D3D11DDIARG_CREATERESOURCE *CreateResource,

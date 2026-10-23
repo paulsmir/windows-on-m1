@@ -13,6 +13,7 @@ extern "C" {
 }
 #include "agx_win32_asahi_scene.h"
 #include "agx_d3d12_windows.h"
+#include "../../d3d12/agx_d3d12_shared_open.h"
 #if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
 #include "../dxil/agx_owned_nir_handoff.h"
 #endif
@@ -1298,7 +1299,10 @@ extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner
   device.pDrvPrivate = &owner->Runtime;
   resource.pDrvPrivate = &record->Resource;
   runtime.handle = runtime_resource;
-  AdmissionUmdCreateResource(device, &create, resource, runtime);
+  if (record->Converted)
+    AdmissionUmdCreateResourceWithMetadata(device, &create, resource, runtime, ADMISSION_PRESENT_RESOURCE_CONVERTED);
+  else
+    AdmissionUmdCreateResource(device, &create, resource, runtime);
   HRESULT hr = record->Resource.Magic == ADMISSION_UMD_RESOURCE_MAGIC && record->Resource.Retirement
                    ? S_OK : (FAILED(owner->Runtime.LastScreenError) ? owner->Runtime.LastScreenError : E_INVALIDARG);
   if (SUCCEEDED(hr)) {
@@ -1336,6 +1340,77 @@ extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner
   texture->Bytes = record->Resource.DirectFlip.Allocation.Size;
   *presentation = record;
   *allocation = record->Resource.KernelAllocation;
+  return S_OK;
+}
+
+/* C76: import the runtime-opened allocation, never allocate substitute storage.
+ * AdmissionUmdScreenAdoptAllocation establishes this device's GPUVA mapping. */
+extern "C" HRESULT AgxD3d12OwnerOpenSharedTexture(AGX_D3D12_OWNER *owner, UINT kernel_resource, UINT allocation,
+                                                 const void *allocation_data, UINT allocation_bytes,
+                                                 const void *resource_data, UINT resource_bytes, HANDLE runtime_resource,
+                                                 AGX_D3D12_BUFFER *texture, void **presentation) {
+  OwnerLock lock(owner);
+  AgxD3d12SharedDescription decoded = {};
+  if (!owner || !owner->Screen || !texture || !presentation || !runtime_resource || !allocation ||
+      !kernel_resource || !AgxD3d12DecodeShared(resource_data, resource_bytes, allocation_data, allocation_bytes, &decoded))
+    return E_INVALIDARG;
+  memset(texture, 0, sizeof(*texture));
+  *presentation = NULL;
+  (void)collect_presentations(owner);
+  auto *record = static_cast<AGX_D3D12_PRESENTATION *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AGX_D3D12_PRESENTATION)));
+  if (!record) return E_OUTOFMEMORY;
+  /* Aligned copies also protect the legacy D3D10 decoder's typed accesses. */
+  ADMISSION_ALLOCATION_DESCRIPTION allocation_copy;
+  ADMISSION_PRESENT_RESOURCE_DATA resource_copy;
+  memcpy(&allocation_copy, allocation_data, sizeof(allocation_copy));
+  memcpy(&resource_copy, resource_data, sizeof(resource_copy));
+  D3DDDI_OPENALLOCATIONINFO info = {};
+  info.hAllocation = allocation;
+  info.pPrivateDriverData = &allocation_copy;
+  info.PrivateDriverDataSize = sizeof(allocation_copy);
+  D3D10DDIARG_OPENRESOURCE open = {};
+  open.NumAllocations = 1;
+  open.pOpenAllocationInfo = &info;
+  open.hKMResource.handle = kernel_resource;
+  open.pPrivateDriverData = &resource_copy;
+  open.PrivateDriverDataSize = sizeof(resource_copy);
+  D3D10DDI_HDEVICE device = {};
+  D3D10DDI_HRESOURCE resource = {};
+  D3D10DDI_HRTRESOURCE runtime = {};
+  device.pDrvPrivate = &owner->Runtime;
+  resource.pDrvPrivate = &record->Resource;
+  runtime.handle = runtime_resource;
+  AdmissionUmdOpenResource(device, &open, resource, runtime);
+  HRESULT hr = record->Resource.Magic == ADMISSION_UMD_RESOURCE_MAGIC && record->Resource.Retirement
+                   ? S_OK : E_INVALIDARG;
+  if (SUCCEEDED(hr)) {
+    const UINT access = AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+                        AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite;
+    hr = AdmissionUmdScreenAdoptAllocation(&owner->Runtime, allocation, decoded.Bytes, 0x10000ull,
+                                            AgxWin32BufferClassGeneral, access, record->Resource.WrittenPrimary,
+                                            allocation_copy.CpuVisible == 0u, &record->RenderBuffer);
+    if (SUCCEEDED(hr)) {
+      const auto linear = decoded.Format == DXGI_FORMAT_R8G8B8A8_UNORM
+                              ? AgxWin32AsahiLinearFormatRgba8Unorm : AgxWin32AsahiLinearFormatBgra8Unorm;
+      record->RenderResource = AgxWin32AsahiImportLinearColor32(owner->Screen, &record->RenderBuffer,
+          decoded.Width, decoded.Height, decoded.Pitch, decoded.Bytes, linear);
+      if (!record->RenderResource) {
+        (void)AgxWin32ScreenDestroyBuffer(&owner->Runtime.Screen, &record->RenderBuffer);
+        memset(&record->RenderBuffer, 0, sizeof(record->RenderBuffer));
+        hr = E_FAIL;
+      }
+    }
+    if (FAILED(hr)) AdmissionUmdDestroyResource(device, resource);
+  }
+  receipt("measure-d3d12-shared-import", hr, allocation, decoded.Width, decoded.Height);
+  if (FAILED(hr)) {
+    HeapFree(GetProcessHeap(), 0, record);
+    return hr;
+  }
+  texture->Resource = record->RenderResource;
+  texture->GpuVa = AgxWin32AsahiBufferGpuAddress(record->RenderResource);
+  texture->Bytes = decoded.Bytes;
+  *presentation = record;
   return S_OK;
 }
 

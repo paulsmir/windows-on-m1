@@ -735,6 +735,13 @@ VOID APIENTRY AdmissionUmdCreateResource(
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRESOURCE ResourceHandle,
     D3D10DDI_HRTRESOURCE RuntimeResource) {
+  AdmissionUmdCreateResourceWithMetadata(DeviceHandle, CreateResource, ResourceHandle, RuntimeResource, 0u);
+}
+
+VOID AdmissionUmdCreateResourceWithMetadata(
+    D3D10DDI_HDEVICE DeviceHandle, const D3D11DDIARG_CREATERESOURCE *CreateResource,
+    D3D10DDI_HRESOURCE ResourceHandle, D3D10DDI_HRTRESOURCE RuntimeResource,
+    UINT MetadataFlags) {
   ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
   ADMISSION_UMD_RESOURCE *resource =
       (ADMISSION_UMD_RESOURCE *)ResourceHandle.pDrvPrivate;
@@ -785,6 +792,7 @@ VOID APIENTRY AdmissionUmdCreateResource(
        (CreateResource->MiscFlags &
         D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u)
       ? ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY : 0u;
+  resourceData.Flags |= MetadataFlags;
   if (CreateResource->pPrimaryDesc != NULL &&
       CreateResource->pPrimaryDesc->ModeDesc.RefreshRate.Denominator != 0u) {
     resourceData.RefreshNumerator =
