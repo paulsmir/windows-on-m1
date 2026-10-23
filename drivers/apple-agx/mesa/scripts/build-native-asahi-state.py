@@ -2057,6 +2057,28 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
    }
    pipe_resource_reference(&pRTView->surface.texture, NULL);
 }'''),
+        ('''void APIENTRY
+ClearRenderTargetView(''','''/* Buffer RTV bounds are kept outside pipe_surface: its layer fields are
+ * 16-bit texture coordinates, not a buffer element address. */
+bool
+AgxD3d11ClearBufferRtv(Device *device, RenderTargetView *view,
+                     const union pipe_color_union *color, UINT first, UINT count)
+{
+   struct pipe_resource *buffer=view->surface.texture;
+   unsigned element=util_format_get_blocksize(view->surface.format);
+   if(!device || !buffer || buffer->target!=PIPE_BUFFER || !element || element>16 ||
+      first>view->buffer_num_elements || count>view->buffer_num_elements-first ||
+      !device->pipe->clear_buffer) return false;
+   if(!count) return true;
+   uint8_t pixel[16]={};
+   util_format_pack_rgba(view->surface.format,pixel,color,1);
+   device->pipe->clear_buffer(device->pipe,buffer,
+      (view->buffer_first_element+first)*element,count*element,pixel,element);
+   return true;
+}
+
+void APIENTRY
+ClearRenderTargetView('''),
         ('''   pipe->clear_render_target(pipe,
                              surface,
                              &clear_color,
@@ -2064,6 +2086,12 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
                              pipe_surface_width(surface),
                              pipe_surface_height(surface),
                              true);''','''   Device *traceDevice = CastDevice(hDevice);
+   if(surface && surface->texture && surface->texture->target==PIPE_BUFFER) {
+      RenderTargetView *view=CastRenderTargetView(hRenderTargetView);
+      if(!AgxD3d11ClearBufferRtv(traceDevice,view,&clear_color,0,view->buffer_num_elements))
+         SetError(hDevice,E_NOTIMPL);
+      return;
+   }
    if (traceDevice) AgxD3d10WindowsDiagnosticState(traceDevice->windows, "clear-before");
    if (pipe->clear_render_target) {
       pipe->clear_render_target(pipe,
