@@ -61722,3 +61722,24 @@ EXP1922 HARDWARE BEFORE 2026-10-23T23:21:15Z:
 - Hashes: sys 8a172cd7ffdc, UmdArm64 36f66090db76, UmdX64 61d40ec90821, Umd32 ee7935cb8309; manifest b78982e17627, hardware-manifest 87c08929fb5c; probe1922.sh b00c42297506 (PROBE_LINT_OK); visible recovery rec1922h cc9cd31df4706f91; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1922h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1922-faultinfo/run1922.sh.
+
+EXP1922 ACTUAL 2026-10-23T23:32:24Z:
+- Same driver source as EXP1921 + device switch Wom1GpuFaultInfoRead=1 (set and verified by launch-exp AGX_DEVICE_SWITCHES).
+- GravityMark D3D12 10k: device removed at 55.7 s (REMOVED KILLED).
+- 2k: the guest went down during the run (PSCI reset, full-crash.log).
+- Recovery from proxy reported RECOVERY_DONE. The new pre-disable snapshot preserved the KMD receipts (rec1922h/kmd-receipts-pre-disable.txt, 188 values).
+- FAULT_INFO read was safe: no abort at the read.
+- **The firmware timeouts are MMU faults:**
+  - pid 8528 (10k), fence 0x181c: FAULT_INFO 0x119e720d5f82e011 = valid, unmapped, read, level 0, unit DCMP(7), VM slot 1, address 0x119e720d40.
+  - pid 8716 (2k), fence 0x24c8: 0x11ac13509f822011 = unmapped read, DCMP(1), VM slot 1, address 0x11ac135080.
+- The 10k address is in no D3D12 heap (between 0x11854b0000+128 MiB and 0x11a85d0000): a committed resource/owner BO read by the decompressor, most likely a compressed texture.
+- Wom1GpuReset v3 (T10): 3 resets (ResetEngine x2, ResetFromTimeout), all status 0xC0000483 at stage **quiesce**; deadline expiries 1, longest job 3061 ms. The GPU does not quiesce after the MMU fault: this is the 0x116 mechanism.
+- Verdict:
+  - CONFIRMED that the GravityMark D3D12 first-frame timeout is a DCMP unmapped read (MMU fault), not a genuine hang;
+  - CONFIRMED that the TDR failure is a quiesce failure.
+- Fork analysis of EXP1921: execute #47 is the first frame with C84 BC6H reinterpret copies, and its window contains a trim (19 allocations, 51.5 MiB) with make-resident E_PENDING.
+- Next: Codex T11 (user request: solve with astra), root cause and fix of the unmapped committed resource. Candidates:
+  - a trim plus E_PENDING not waited before the submit;
+  - the allocation missing from the residency list;
+  - the mapping missing the compression-metadata tail;
+  - C84 temporaries.
