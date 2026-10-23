@@ -376,6 +376,7 @@ lower_image_slot(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    bool *bad = data;
    switch (intr->intrinsic) {
    case nir_intrinsic_image_deref_load:
+   case nir_intrinsic_image_deref_sparse_load: /* C53T (EXP1901): with status */
    case nir_intrinsic_image_deref_store:
    case nir_intrinsic_image_deref_atomic:
    case nir_intrinsic_image_deref_atomic_swap:
@@ -404,7 +405,8 @@ lower_image_slot(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       const unsigned range = var->data.binding - (counter ? HEAP_COUNTER_BINDING : HEAP_BINDING);
       nir_def *element = deref->deref_type == nir_deref_type_array ? nir_u2u32(b, deref->arr.index.ssa) : nir_imm_int(b, 0);
       nir_def *heap = nir_iadd(b, nir_channel(b, heap_range(b, range), 0), element);
-      const bool read = intr->intrinsic == nir_intrinsic_image_deref_load || intr->intrinsic == nir_intrinsic_image_deref_size ||
+      const bool read = intr->intrinsic == nir_intrinsic_image_deref_load ||
+                        intr->intrinsic == nir_intrinsic_image_deref_sparse_load || intr->intrinsic == nir_intrinsic_image_deref_size ||
                         intr->intrinsic == nir_intrinsic_image_deref_samples;
       const unsigned delta = counter ? DXBC_HEAP_DESCRIPTOR_COUNTER_DELTA : read ? 0u : DXBC_HEAP_DESCRIPTOR_PBE_DELTA;
       nir_def *bytes = nir_iadd_imm(b, nir_imul_imm(b, heap, DXBC_HEAP_DESCRIPTOR_STRIDE), DXBC_HEAP_DESCRIPTOR_AGX_OFFSET + delta);

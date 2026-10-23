@@ -146,6 +146,21 @@ class DxilToNir(unittest.TestCase):
         self.assertEqual(sum("(min_lod)" in line for line in sparse), 3)
         self.assertGreaterEqual(len(re.findall(r"@is_sparse_texels_resident", r.stdout)), 8)
 
+    def test_feedback_uav_load_reaches_its_slot(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1901: a typed UAV
+        # load with status (ld_uav_typed_s, converted by dxilconv) arrives as
+        # image_deref_sparse_load. lower_image_slot left it in deref form, so
+        # dxbc_nir_uav_dimensions refused the shader and CreateComputePipeline
+        # failed (dispatch refusal 7, device removed). The fixture is
+        # drivers/apple-agx/windows/icd/agx_d3d12_tiled_probe_uav_null_cs.hlsl
+        # (fxc cs_5_0, the read form) converted by dxbc2dxil.cpp.
+        r = subprocess.run([str(self.dxil), str(FIXTURES / "feedback_uav_cs.dxil"), "--print-final"], capture_output=True,
+                           text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("image_deref_sparse_load", r.stdout)
+        self.assertRegex(r.stdout, r"= @image_sparse_load \(%\d+ \(0x0\)")
+        self.assertIn("DIMENSIONS srv 1 uav 1", r.stdout)
+
     def test_dynamic_srv_range_ends_at_the_next_dynamic_range(self):
         # Night Raid GT2 (EXP1879G): a dynamically indexed Cube range filled
         # every used slot after its base, ran into the following dynamic 2D

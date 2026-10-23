@@ -4128,6 +4128,7 @@ bool dxbc_nir_uav_dimensions(const struct nir_shader *nir,
             case nir_intrinsic_get_ssbo_size:
                break;
             case nir_intrinsic_bindless_image_load:
+            case nir_intrinsic_bindless_image_sparse_load:
             case nir_intrinsic_bindless_image_store:
             case nir_intrinsic_bindless_image_atomic:
             case nir_intrinsic_bindless_image_atomic_swap:
