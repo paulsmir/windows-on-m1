@@ -128,6 +128,10 @@ cmd+=' '.join(f"-{k} '{v}'" for k,v in args.items())
 cmd+=f" -ReceiptPath 'C:\\Users\\pavel\\EXP{x}\\cleanup{x}\\visible-disable.json'\n"
 (r/'disable-visible.ps1').write_text(cmd)
 PY
+# EXP1920: the crash-time KMD receipts (Wom1GpuReset/Wom1GpuFault, Device Parameters) were erased by the cleanup
+# before anyone read them. Snapshot them read-only before the first mutation; a failed snapshot never blocks recovery.
+ssh_bounded 'powershell -NoProfile -Command "$k=Get-Item \"HKLM:\SYSTEM\CurrentControlSet\Enum\ACPI\APPL0002\0\Device Parameters\" -EA 0; if($k){ $k.GetValueNames() | % { $v=$k.GetValue($_); if($v -is [byte[]]){ \"$_ \" + ((($v) | % { $_.ToString(\"x2\") }) -join \"\") } else { \"$_ = $v\" } } }"' 2>/dev/null | tr -d '\r' > "$R/kmd-receipts-pre-disable.txt" || true
+echo "PRE_DISABLE_RECEIPTS $(wc -l < "$R/kmd-receipts-pre-disable.txt" | tr -d ' ') values"
 for f in "$W/scripts/agx-recovery-disable-service.ps1" "$R/disable-visible.ps1" "$R/cleanup-visible.ps1"; do
   perl -e 'alarm 60; exec @ARGV' "$T/airscp" "$f" "pavel@192.168.1.37:C:/Users/pavel/EXP$X/cleanup$X/" >/dev/null || { echo VISIBLE_COPY_FAILED "$f"; exit 3; }
 done
