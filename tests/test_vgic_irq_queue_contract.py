@@ -113,6 +113,25 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertNotIn("BIT(1)", update)
         self.assertIn("hv_vgic_diag_priority_deliverable(", update)
 
+    def test_lr_priority_reads_the_byte_the_guest_programmed(self):
+        # EXP1898: SPI priorities were read at (intid - 32) / 4 while the
+        # distributor stores IPRIORITYR<n> at n = intid / 4, and byte writes landed
+        # in lane 0.  vINTID 889 (IRQL 9, 0x60) carried 0x00 and, once ACTIVE,
+        # blocked every interrupt on CPU0 under running-priority preemption.
+        vgic = HV_VGIC.read_text()
+        get = function_body(vgic, "u8 hv_vgic3_get_priority_cpu(u64 intd, int cpu)")
+        self.assertNotIn("intd - 32", get)
+        self.assertIn("hv_vgic_diag_spi_priority(distributor->gicd_interrupt_priority_regs, intd)", get)
+
+        dist_write = function_body(vgic, "static bool handle_vgic_dist_access(")
+        self.assertNotIn("gicd_interrupt_priority_regs[reg_num] = *val;", dist_write)
+        self.assertIn("hv_vgic_diag_priority_word_write(distributor->gicd_interrupt_priority_regs",
+                      dist_write)
+        redist = function_body(vgic, "static bool handle_vgic_redist_access(")
+        self.assertNotIn("ipriority_reg[reg_num] = *val;", redist)
+        self.assertEqual(redist.count("hv_vgic_diag_priority_word_write("), 2)
+        self.assertEqual(redist.count("hv_vgic_diag_priority_word_read("), 2)
+
     def test_sgi_queue_console_trace_requires_explicit_hot_path_tracing(self):
         exc = HV_EXC.read_text()
         queue = function_body(exc, "static void hv_vgic3_queue_sgi(int cpu, u32 intid)")
