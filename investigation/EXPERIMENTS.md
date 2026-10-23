@@ -61134,3 +61134,5 @@ EXP1905 M1N1_VGIC_PRIORITY_GRAVITYMARK HARDWARE BEFORE 2026-10-23T10:43:57Z:
 - Expected: boot; regression as EXP1904; GravityMark D3D11 and D3D12 complete without 0x101 or a hang.
 - Failure criteria: boot hang (lastgood swap), hang or 0x101 (snapshots).
 - Recovery: rec1905h (at-proxy allowed) or the lastgood swap. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1905-m1n1-gm12/run1905.sh.
+
+CORRECTION (process, 2026-10-23T10:48:24Z) to the SAMPLE_HASHES lines of EXP1901-EXP1905: "bad 1" (EXP1901-EXP1904) and "bad 10" (EXP1905) are not guest file changes. Cloning the guest helpers renumbered every file in guest/ (sed s/<prev>/<N>/), including the pinned *-hashes.txt data, so a pinned SHA-256 containing the experiment number was altered. Check: hashcheck-list.ps1 named the 10 files; e.g. ModelViewerI vcruntime140.dll on the guest has d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066 while the cloned list had ...1905.... clone-exp-scripts.sh now renumbers *.ps1 only. The EXP1905 guest lists are restored from EXP1899 (bad 0). No sample binary changed.
