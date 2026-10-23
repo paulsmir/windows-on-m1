@@ -61057,3 +61057,17 @@ EXP1902N NIGHT_RAID_GT2 ACTUAL 2026-10-23T09:14:31Z: GT2 started 08:59Z (window,
 - Wom1G4SubmitFailure: branch 11 (Bind), 5646 refusals;
 - Wom1G4BindRefusal v1: Kind 3 (render), fence 0x1b3b2, Ready=0, BoundFence/JobFence/G4Native/G4Compute/PresentCompute/NativeBound all 0, CompletedFence = LastSubmitted 0x1b3b1, phase Idle, packet Prepared.
 ROOT CAUSE CONFIRMED: the backend image lost Ready. AdmissionBackendImageBindG4Submission cleared Ready when the builder refused a scene (TA/3D build, relocations, header), and no path set it again, so one refused GT2 scene refused every later GPU-VA job, DWM's included. Fix 188d73e2: a refused scene refuses only that job; the image is re-Prepared from the template at the next bind; BindFailure records the AppleAgxG4BuildTa3dEx step. RED/GREEN host test; BASELINE_OK. GT2's own scene will still be refused until the failing builder step (now receipted) is supported. The EXP1903 package is rebuilt with this fix. Recovery rec1902h.
+
+EXP1903 READY_FIX_CDD_DWM_TIER2_DEFAULT HARDWARE BEFORE 2026-10-23T09:23:01Z:
+- Package 30.0.1903.0 from fb85982c = EXP1902 4e723139 + 188d73e2 (a refused G4 render scene no longer clears the backend image's Ready; BindFailure step receipt) + 6d7cf81d C67 DriverSupportsCddDwmInterop + the fork's da58c1b5 Tiled Tier 2 by default and faa5000e probe volume fix. C68 FL 12_x is NOT in this package.
+- Build: EXP1903_PACKAGE_BUILD_PASS. sys b2e1f26dc6ec, Umd d40b3f3cbdd7, UmdArm64 b8874e74d9a0, UmdX64 6c9a87529920, Umd32 7d275e9524ad.
+- Gates: HASHES_MATCH 25, stage PASS, visible recovery PASS (rec1903h). An earlier EXP1903 build from 56d7c98c (without 188d73e2) was superseded before install (directory EXP1903-cdd-dwm-superseded). m1n1 21c3648d.
+- Probe probe1903.sh 42e460d91d76: regression e1897, tiled probe bb60c130 without TILED (default Tier 2) plus minmax, D3D9 e1900 MSAA_PRESENT (front pixel), DWM faults, KMD receipts. Then by hand: Night Raid GT2 (window, async off) and Portal 2 windowed.
+- ATOMIC CONTRACT: none. Separate observables:
+  - Ready fix: GT2 refuses only its own scene. The desktop survives, and Wom1G4BindRefusal v2 names BindFailure.
+  - C67: the redirected blt window is composed (D3D9 front pixel 0xff00ff, the Portal 2 window visible; Wom1G2PresentDdi Blt calls).
+  - Tier 2 default: C53B and C65A without the variable.
+- WHY THIS HYPOTHESIS: (1) EXP1902N Wom1G4BindRefusal Ready=0, and the Ready-clearing path is confirmed by a RED host test; (2) EXP1231-D2/EXP1901G: no redirected blt ever reached the KMD, and DriverSupportsCddDwmInterop is the only documented cap for presents to DWM textures without GDI acceleration; (3) EXP1902 validated Tier 2 under the variable.
+- WINDOWS CONTRACT: DXGK_PRESENTATIONCAPS, DxgkDdiPresent Blt.
+- WHAT IS STILL UNKNOWN: which traffic C67 changes (CDD GDI presents too?) and whether the desktop stays intact. Expected: desktop normal; regression 118/0; Tier 2 PASS; front pixel 0xff00ff, or Blt receipts naming the next refusal; GT2 refused without a wedge.
+- Failure criteria: black or garbled desktop (C67), regressions, hang. Recovery evidence/rec1903h/recover.sh. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1903-cdd-ready/run1903.sh.
