@@ -141,6 +141,9 @@ class StagingWriteWatch(unittest.TestCase):
             from test_umd_deallocated_slot_no_evict import function as extract
             screen = (SRC.parent/'umd_win32_screen.c').read_text()
             event = extract(screen, 'AdmissionUmdScreenCpuAccessEvent')
+            # EXP1918U3 live rows: the receipt itself is covered by test_umd_cpu_access
+            event = ('static void AdmissionUmdScreenCpuAccessReceipt(ADMISSION_UMD_DEVICE *, '
+                     'const ADMISSION_UMD_SCREEN_BUFFER *, HRESULT, UINT) {}\n') + event
             src.write_text(BODY.replace('@@FUNCS@@', funcs).replace('@@EVENT@@', event))
             built = subprocess.run(['clang++', '-std=c++17', '-Wall', '-Wextra', '-Wno-unused-function',
                                     '-Wno-missing-field-initializers', '-I', str(INC),

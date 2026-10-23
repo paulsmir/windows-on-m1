@@ -78,7 +78,9 @@ static std::vector<std::array<UINT,16>> rows;
 static unsigned flushed;
 static void AdmissionUmdDiagnostic(const char *stage,HRESULT,const UINT *v,UINT n) {
   assert(strcmp(stage,"measure-bo-cpu-access")==0 && n==16);
-  std::array<UINT,16> row; memcpy(row.data(),v,sizeof(row)); rows.push_back(row);
+  std::array<UINT,16> row; memcpy(row.data(),v,sizeof(row));
+  if(((row[0]>>8)&0xffu)==4u) return; /* reason 4: live rows (EXP1918U3), not part of the snapshot contract */
+  rows.push_back(row);
 }
 static void AdmissionUmdDiagnosticFlush() { ++flushed; }
 static void AdmissionUmdStagingInvalidate(int *) {}

@@ -82,8 +82,16 @@ VOID AdmissionUmdScreenCpuAccessEvent(ADMISSION_UMD_DEVICE *Device,
   if (!Device) return;
   AcquireSRWLockExclusive(&Device->ScreenBufferLock);
   ADMISSION_UMD_SCREEN_BUFFER *buffer = AdmissionUmdScreenFind(Device, Token);
-  if (buffer && buffer->Bytes > (16ULL << 20))
+  if (buffer && buffer->Bytes > (16ULL << 20)) {
     AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, Event);
+    /* EXP1918U3: GravityMark is killed at its timeout after the removal, so
+     * the snapshot (reason 2/3) and destruction rows never reach the trace.
+     * Reason 4: one live row per CPU-access event of a >64 MiB slot, bounded
+     * per process; the last row per token is the state at the failure. */
+    static unsigned live; /* updated under ScreenBufferLock (exclusive) */
+    if (buffer->Bytes > (64ULL << 20) && live < 512u && ++live)
+      AdmissionUmdScreenCpuAccessReceipt(Device, buffer, 0, 4u);
+  }
   ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
 }
 
