@@ -754,6 +754,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
          * aperture is not declared cache-coherent.  Keep CDD GDI command
          * buffers disabled until both requirements are met. */
         caps->PresentationCaps.SupportKernelModeCommandBuffer = 0u;
+        /* C76 (T5-redirected-blt-research.md): declare the absent cache-
+         * coherent aperture truthfully; G3 paging refuses CacheCoherent PTEs
+         * (gpuva_g3_paging_windows.c) and no segment sets CacheCoherent.
+         * EXP1906E/EXP1908E: windowed redirected Blts are dropped as
+         * PRESENT_OCCLUDED with no destination; checkpoint: DxgKrnl ETW. */
+        caps->PresentationCaps.NoCacheCoherentApertureMemory = 1u;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
         if (context->GpuvaG3State != NULL) {
           APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
