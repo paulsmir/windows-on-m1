@@ -722,6 +722,136 @@ static void transition(ID3D12GraphicsCommandList *list, ID3D12Resource *resource
     barrier.Transition.StateAfter = after;
     ID3D12GraphicsCommandList_ResourceBarrier(list, 1, &barrier);
 }
+/* C76A: a real second device (CreateDevice's process singleton would hide
+ * import bugs), two fenced writes observed through the other allocation view. */
+static int c76_shared_open(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    ID3D12DeviceFactory *factory = NULL;
+    IDXGIFactory4 *dxgi = NULL;
+    IDXGIAdapter1 *adapter = NULL;
+    ID3D12Device *other = NULL;
+    ID3D12CommandQueue *other_queue = NULL;
+    ID3D12Fence *other_fence = NULL;
+    ID3D12Resource *created = NULL, *opened = NULL, *upload = NULL, *readback = NULL;
+    ID3D12CommandAllocator *allocators[2] = {NULL, NULL};
+    ID3D12GraphicsCommandList *lists[2] = {NULL, NULL};
+    HANDLE shared = NULL;
+    unsigned passes = 0;
+    LUID luid;
+    ID3D12Device_GetAdapterLuid(device, &luid);
+    typedef HRESULT (WINAPI *get_interface_fn)(REFCLSID, REFIID, void **);
+    HMODULE d3d = GetModuleHandleA("d3d12.dll");
+    get_interface_fn get_interface = d3d ? (get_interface_fn)(void *)GetProcAddress(d3d, "D3D12GetInterface") : NULL;
+    HRESULT hr = get_interface ? get_interface(&CLSID_D3D12DeviceFactory, &IID_ID3D12DeviceFactory, (void **)&factory) : E_NOINTERFACE;
+    if (SUCCEEDED(hr)) hr = ID3D12DeviceFactory_InitializeFromGlobalState(factory);
+    if (SUCCEEDED(hr)) hr = ID3D12DeviceFactory_SetFlags(factory, D3D12_DEVICE_FACTORY_FLAG_DISALLOW_STORING_NEW_DEVICE_AS_SINGLETON);
+    if (SUCCEEDED(hr)) hr = CreateDXGIFactory1(&IID_IDXGIFactory4, (void **)&dxgi);
+    if (SUCCEEDED(hr)) hr = IDXGIFactory4_EnumAdapterByLuid(dxgi, luid, &IID_IDXGIAdapter1, (void **)&adapter);
+    if (SUCCEEDED(hr)) hr = ID3D12DeviceFactory_CreateDevice(factory, (IUnknown *)adapter, D3D_FEATURE_LEVEL_11_0,
+                                                            &IID_ID3D12Device, (void **)&other);
+    if (SUCCEEDED(hr) && other == device) hr = E_FAIL;
+    printf("C76A distinct device hr=0x%08lx first=%p second=%p\n", (unsigned long)hr, (void *)device, (void *)other);
+    D3D12_COMMAND_QUEUE_DESC qdesc = {D3D12_COMMAND_LIST_TYPE_DIRECT};
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandQueue(other, &qdesc, &IID_ID3D12CommandQueue, (void **)&other_queue);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateFence(other, 0, D3D12_FENCE_FLAG_NONE, &IID_ID3D12Fence, (void **)&other_fence);
+    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC desc = {0};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = 37; desc.Height = 29; desc.DepthOrArraySize = desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count = 1;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_SHARED, &desc,
+        D3D12_RESOURCE_STATE_COMMON, NULL, &IID_ID3D12Resource, (void **)&created);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateSharedHandle(device, (ID3D12DeviceChild *)created, NULL, GENERIC_ALL, NULL, &shared);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_OpenSharedHandle(other, shared, &IID_ID3D12Resource, (void **)&opened);
+    printf("C76A create+share+open hr=0x%08lx\n", (unsigned long)hr);
+    if (shared) { CloseHandle(shared); shared = NULL; }
+    if (SUCCEEDED(hr)) {
+        D3D12_RESOURCE_DESC actual;
+        ID3D12Resource_GetDesc(opened, &actual);
+        if (actual.Dimension != desc.Dimension || actual.Width != desc.Width || actual.Height != desc.Height ||
+            actual.Format != desc.Format || actual.MipLevels != 1 || actual.DepthOrArraySize != 1 ||
+            actual.SampleDesc.Count != 1 || actual.Flags != desc.Flags) hr = E_FAIL;
+    }
+    if (SUCCEEDED(hr)) {
+        upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+        readback = committed_buffer(other, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+        if (!upload || !readback) hr = E_FAIL;
+    }
+    for (unsigned i = 0; SUCCEEDED(hr) && i < 2; ++i) {
+        ID3D12Device *d = i ? other : device;
+        hr = ID3D12Device_CreateCommandAllocator(d, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&allocators[i]);
+        if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(d, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocators[i], NULL,
+                                                              &IID_ID3D12GraphicsCommandList, (void **)&lists[i]);
+    }
+    D3D12_TEXTURE_COPY_LOCATION source = {0}, target = {0};
+    source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    source.PlacedFootprint.Footprint.Format = desc.Format;
+    source.PlacedFootprint.Footprint.Width = 37; source.PlacedFootprint.Footprint.Height = 29;
+    source.PlacedFootprint.Footprint.Depth = 1; source.PlacedFootprint.Footprint.RowPitch = 256;
+    target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    for (unsigned pass = 0; SUCCEEDED(hr) && pass < 2; ++pass) {
+        unsigned char *bytes = NULL;
+        hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&bytes);
+        if (SUCCEEDED(hr) && !bytes) hr = E_FAIL;
+        if (SUCCEEDED(hr)) {
+            for (unsigned y = 0; y < 29; ++y) for (unsigned x = 0; x < 37 * 4; ++x)
+                bytes[y * 256 + x] = (unsigned char)(x * 7 + y * 11 + pass * 83);
+            ID3D12Resource_Unmap(upload, 0, NULL);
+            if (pass) for (unsigned i = 0; SUCCEEDED(hr) && i < 2; ++i) {
+                hr = ID3D12CommandAllocator_Reset(allocators[i]);
+                if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(lists[i], allocators[i], NULL);
+            }
+        }
+        if (SUCCEEDED(hr)) {
+            source.pResource = upload; target.pResource = created;
+            transition(lists[0], created, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+            ID3D12GraphicsCommandList_CopyTextureRegion(lists[0], &target, 0, 0, 0, &source, NULL);
+            transition(lists[0], created, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+            hr = run_list(queue, fence, lists[0], base + pass + 1, "C76A producer");
+            if (FAILED(hr)) { printf("AGX_D3D12_C76A: FAIL producer completion unproven\n"); fflush(stdout); ExitProcess(1); }
+        }
+        if (SUCCEEDED(hr)) {
+            /* The second read must survive the creator resource and NT handle. */
+            if (pass) { ID3D12Resource_Release(created); created = NULL; }
+            source.pResource = readback; target.pResource = opened;
+            transition(lists[1], opened, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            ID3D12GraphicsCommandList_CopyTextureRegion(lists[1], &source, 0, 0, 0, &target, NULL);
+            transition(lists[1], opened, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+            hr = run_list(other_queue, other_fence, lists[1], pass + 1, "C76A consumer");
+            if (FAILED(hr)) { printf("AGX_D3D12_C76A: FAIL consumer completion unproven\n"); fflush(stdout); ExitProcess(1); }
+        }
+        if (SUCCEEDED(hr)) {
+            D3D12_RANGE range = {0, 29 * 256};
+            hr = ID3D12Resource_Map(readback, 0, &range, (void **)&bytes);
+            if (SUCCEEDED(hr) && !bytes) hr = E_FAIL;
+            if (SUCCEEDED(hr)) {
+                unsigned bad = 0;
+                for (unsigned y = 0; y < 29; ++y) for (unsigned x = 0; x < 37 * 4; ++x)
+                    bad += bytes[y * 256 + x] != (unsigned char)(x * 7 + y * 11 + pass * 83);
+                ID3D12Resource_Unmap(readback, 0, NULL);
+                printf("C76A pass=%u mismatches=%u\n", pass, bad);
+                if (bad) hr = E_FAIL; else ++passes;
+            }
+        }
+    }
+    printf("AGX_D3D12_C76A: %s hr=0x%08lx passes=%u\n", SUCCEEDED(hr) && passes == 2 ? "PASS" : "FAIL", (unsigned long)hr, passes);
+    for (unsigned i = 0; i < 2; ++i) {
+        if (lists[i]) ID3D12GraphicsCommandList_Release(lists[i]);
+        if (allocators[i]) ID3D12CommandAllocator_Release(allocators[i]);
+    }
+    if (readback) ID3D12Resource_Release(readback);
+    if (upload) ID3D12Resource_Release(upload);
+    if (opened) ID3D12Resource_Release(opened);
+    if (created) ID3D12Resource_Release(created);
+    if (other_fence) ID3D12Fence_Release(other_fence);
+    if (other_queue) ID3D12CommandQueue_Release(other_queue);
+    if (other) ID3D12Device_Release(other);
+    if (adapter) IDXGIAdapter1_Release(adapter);
+    if (dxgi) IDXGIFactory4_Release(dxgi);
+    if (factory) ID3D12DeviceFactory_Release(factory);
+    return !(SUCCEEDED(hr) && passes == 2);
+}
+
 static int texture_clear_copy(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0};
@@ -7348,6 +7478,7 @@ static LONG WINAPI first_access_violation(EXCEPTION_POINTERS *ep) {
 /* the steps WARP ("warp <steps>") and the AGX adapter ("only <steps>",
  * EXP1862: one step under the guest debugger) run by name */
 static const struct { const char *name; probe_step step; } named_steps[] = {
+    {"C76A", c76_shared_open},
     {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
     {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures},
     {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c}, {"C37D", step_c37d}, {"C37E", step_c37e},
@@ -7494,6 +7625,7 @@ int main(int argc, char **argv) {
                 (void)run_isolated(adapter, "C61C", step_c61c);
                 (void)run_isolated(adapter, "C61D", step_c61d);
                 (void)run_isolated(adapter, "C62A", step_c62a);
+                (void)run_isolated(adapter, "C76A", c76_shared_open);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
                 (void)run_isolated(adapter, "C40A", c40_swapchain_10bit);
                 (void)run_isolated(adapter, "C25", c25_present_resize);
