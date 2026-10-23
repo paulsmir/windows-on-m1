@@ -61344,3 +61344,17 @@ CORRECTION to EXP1909 (C75 verdict), 2026-10-23T14:34:13Z: C75 was rejected beca
 Next: EXP1911 = current HEAD (Codex T1 trim reservation 019b817c, T4 sampler tools), with GravityMark D3D12 as the T1 discriminator.
 
 CORRECTION to EXP1910 ACTUAL (shell quoting dropped text): in "the code then executes  and compares", the missing instruction is "ldr w8, [x0]" at UmdArm64+0xaed1c, the faulting load from the pointer that the map call returned.
+
+EXP1911 HARDWARE BEFORE 2026-10-23T14:42:46Z:
+- Package 30.0.1911.0 from 93f27273 = EXP1910 7acfaf65 + Codex T1 019b817c (UMD trim_residency marks chosen slots Transition until EvictCb returns) + T4 sampler/resolver tools (not packaged) + ledger commits.
+- Probe probe1911.sh = probe1910 (tiled a2520269, GravityMark D3D11/D3D12 10k/2k with XFER, PRESSURE).
+- ATOMIC CONTRACT: none -- one driver variable (T1); the remaining lines are regression lines.
+- WHY THIS HYPOTHESIS:
+  (1) EXP1908 and EXP1910 GravityMark D3D12: G4 Parse/Unmapped on a compute helper VA after measure-trim evictions;
+  (2) Codex T1 reproduced offline a race in which make_resident skips residency for a slot that trim has chosen but not yet evicted (test_umd_persistent_residency RED->GREEN).
+- WINDOWS CONTRACT: PFND3DDDI_EVICTCB/MAKERESIDENTCB; an evicted allocation must be made resident before a submission references it.
+- WHAT IS STILL UNKNOWN: whether this race causes the EXP1908/EXP1910 Unmapped failures; the EXP1910 crash in a CPU read of a mapped buffer (UmdArm64+0xaed1c, Codex T6).
+- Expected: regressions as EXP1910; GravityMark D3D12 10k past 36 s with no G4_SUBMIT_FAILURE, or the failure unchanged (T1 race not the cause).
+- Failure criteria: regressions, new submit refusals (Transition contention), hang.
+- Hashes: sys b3f49cfe3724, UmdArm64 c4910ade39d3, UmdX64 1ec6d1f288bf, Umd32 685fe4fa8034; manifest 32cd510903d1, hardware-manifest 1d3a973e0152; probe1911.sh 447e878cdcbe (PROBE_LINT_OK); visible recovery rec1911h 5889c8aab5ab3fe6; m1n1 0d3a75b3.
+- Recovery rec1911h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1911-trim-reserve/run1911.sh.
