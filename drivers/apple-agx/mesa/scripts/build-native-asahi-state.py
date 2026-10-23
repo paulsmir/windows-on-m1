@@ -5545,8 +5545,14 @@ AgxD3d10ResourceWithinRequiredLimits(
       resource->owner_device == pDevice && resource->resource &&
       resource->resource->target == PIPE_BUFFER &&
       (resource->resource->bind & PIPE_BIND_INDEX_BUFFER) &&
+      /* C74 (EXP1908, GravityMark D3D11): D3D11 index buffers may also be
+       * vertex, shader-resource, unordered-access (compute-written indices)
+       * or stream-output buffers; buffer UAVs are SHADER_BUFFER since
+       * EXP1297, so the old INDEX|SHADER_IMAGE mask refused them. */
       !(resource->resource->bind &
-        ~(PIPE_BIND_INDEX_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
+        ~(PIPE_BIND_INDEX_BUFFER | PIPE_BIND_VERTEX_BUFFER |
+          PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_BUFFER |
+          PIPE_BIND_SHADER_IMAGE | PIPE_BIND_STREAM_OUTPUT)) &&
       resource->resource->width0 == resource->logical_bytes &&
       AgxD3d10WindowsIdentity(pDevice->windows,&owner,&generation) &&
       resource->owner_cookie == owner &&
