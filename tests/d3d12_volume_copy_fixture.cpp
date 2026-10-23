@@ -17,6 +17,11 @@ struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}}; /* the owner lock (
 /* C53 T2D: no reserved textures here (their staging path: the HW2 self-test) */
 static bool reserved_texture(pipe_resource *) { return false; }
 static HRESULT copy_reserved_texture(AGX_D3D12_OWNER *, const AGX_D3D12_TEXTURE_COPY *) { return E_INVALIDARG; }
+/* C70: the fixture's textures are never compressed, so uploads keep the map path */
+static bool compressed_texture(AGX_D3D12_OWNER *, struct pipe_resource *) { return false; }
+static HRESULT staged_upload(AGX_D3D12_OWNER *, const AGX_D3D12_TEXTURE_COPY *, struct pipe_resource *,
+                             struct pipe_resource *, const struct pipe_box &, const struct pipe_box &, unsigned,
+                             unsigned long long) { return E_INVALIDARG; }
 static unsigned char volume[2][2048],buffer_bytes[8192];
 static pipe_transfer tex_transfer,buf_transfer;
 static unsigned maps=0;

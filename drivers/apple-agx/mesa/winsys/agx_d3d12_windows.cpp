@@ -87,6 +87,13 @@ struct AGX_D3D12_OWNER {
    * elements state -- Asahi's agx_update_vs always reads the bound one */
   void *EmptyVelems;
   struct AGX_D3D12_PRESENTATION *PendingPresentations; /* C7b: released, kernel allocation still registered */
+  /* C70 (EXP1905/1906 GravityMark D3D12): the linear texture every upload
+   * into a compressed texture stages through. Asahi's texture_map made a
+   * new staging texture per map; hundreds of mip uploads in a burst held
+   * hundreds of MiB (released granules stay committed for the release
+   * delay) and failed at E_OUTOFMEMORY once the app's heaps filled the
+   * segment. Reused while the format matches and it is large enough. */
+  struct pipe_resource *UploadStaging;
   /* EXP1822: D3D12 queues and lists are used from several threads (nBody's
    * async compute thread next to its render thread). The pipe_context is not
    * thread-safe, so every entry point holds this recursive lock, and
@@ -190,6 +197,7 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
     (void)collect_presentations(owner);
   }
   owner->Backend.Closing = 1;
+  if (owner->UploadStaging) AgxWin32AsahiResourceRelease(&owner->UploadStaging);
   if (owner->Context && owner->EmptyFs) {
     owner->Context->bind_fs_state(owner->Context, NULL);
     owner->Context->delete_fs_state(owner->Context, owner->EmptyFs);
@@ -1779,6 +1787,61 @@ static HRESULT copy_reserved_texture(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEX
   return hr;
 }
 
+/* C70: whether Asahi keeps this texture losslessly compressed -- a CPU map
+ * of it allocates a staging texture (agx_transfer_map staging_blit) */
+static bool compressed_texture(AGX_D3D12_OWNER *owner, struct pipe_resource *texture) {
+  AGX_WIN32_ASAHI_RESOURCE_LAYOUT layout = {};
+  return texture->target != PIPE_BUFFER && texture->nr_samples <= 1 &&
+         AgxWin32AsahiQueryResourceLayout(owner->Screen, texture, NULL, 0, &layout) &&
+         (layout.Flags & AGX_WIN32_ASAHI_LAYOUT_COMPRESSED) != 0u;
+}
+
+/* C70: buffer -> compressed texture through the owner's cached linear
+ * staging texture: CPU copy into the staging map (linear: no allocation),
+ * then a GPU copy into the level. The staging map waits for the previous
+ * upload's GPU read; the region copy is recorded in replay order. */
+static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COPY *copy, struct pipe_resource *texture,
+                             struct pipe_resource *buffer, const struct pipe_box &tbox, const struct pipe_box &bbox,
+                             unsigned rows, unsigned long long row) {
+  struct pipe_context *pipe = owner->Context;
+  struct pipe_resource *staging = owner->UploadStaging;
+  if (staging && (staging->format != texture->format || staging->width0 < static_cast<unsigned>(tbox.width) ||
+                  staging->height0 < static_cast<unsigned>(tbox.height)))
+    AgxWin32AsahiResourceRelease(&owner->UploadStaging);
+  if (!owner->UploadStaging) {
+    struct pipe_resource templ = {};
+    templ.target = PIPE_TEXTURE_2D;
+    templ.format = texture->format;
+    templ.width0 = static_cast<unsigned>(tbox.width) > 256u ? static_cast<unsigned>(tbox.width) : 256u;
+    templ.height0 = static_cast<uint16_t>(tbox.height > 256 ? tbox.height : 256);
+    templ.depth0 = 1;
+    templ.array_size = 1;
+    templ.usage = PIPE_USAGE_STAGING; /* linear: mapped without a staging blit of its own */
+    templ.bind = PIPE_BIND_SAMPLER_VIEW;
+    owner->UploadStaging = owner->Screen->resource_create(owner->Screen, &templ);
+    if (!owner->UploadStaging) return E_OUTOFMEMORY;
+  }
+  staging = owner->UploadStaging;
+  struct pipe_box sbox = tbox;
+  sbox.x = sbox.y = sbox.z = 0;
+  struct pipe_transfer *stransfer = NULL, *btransfer = NULL;
+  void *smap = pipe->texture_map(pipe, staging, 0, PIPE_MAP_WRITE, &sbox, &stransfer);
+  void *bmap = smap ? pipe->buffer_map(pipe, buffer, 0, PIPE_MAP_READ, &bbox, &btransfer) : NULL;
+  HRESULT hr = smap && bmap ? S_OK : E_OUTOFMEMORY;
+  for (unsigned y = 0; SUCCEEDED(hr) && y < rows; ++y)
+    memcpy(static_cast<unsigned char *>(smap) + static_cast<size_t>(y) * stransfer->stride,
+           static_cast<unsigned char *>(bmap) + static_cast<size_t>(y) * copy->Pitch, static_cast<size_t>(row));
+  if (bmap) pipe->buffer_unmap(pipe, btransfer);
+  if (smap) pipe->texture_unmap(pipe, stransfer);
+  if (SUCCEEDED(hr)) {
+    pipe->resource_copy_region(pipe, texture, copy->Level, tbox.x, tbox.y, tbox.z, staging, 0, &sbox);
+    ++owner->PendingCopies;
+  }
+  receipt("measure-d3d12-staged-upload", hr, copy->Width | (copy->Height << 16), copy->Level,
+          staging->width0 | (staging->height0 << 16));
+  return hr;
+}
+
 extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COPY *copy) {
   OwnerLock lock(owner);
   if (!owner || !owner->Context || !copy || !copy->Texture || !copy->Texture->Resource || !copy->Buffer ||
@@ -1823,6 +1886,8 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
   bbox.width = static_cast<int>(span);
   bbox.height = 1;
   bbox.depth = 1;
+  if (!copy->ToBuffer && copy->Depth == 1 && compressed_texture(owner, texture))
+    return staged_upload(owner, copy, texture, buffer, tbox, bbox, rows, row);
   struct pipe_transfer *ttransfer = NULL, *btransfer = NULL;
   void *tmap = pipe->texture_map(pipe, texture, copy->Level, copy->ToBuffer ? PIPE_MAP_READ : PIPE_MAP_WRITE, &tbox,
                                  &ttransfer);

@@ -347,6 +347,26 @@ int main() {
         self.assertIn('wrap_slot_minmax(nir, stage);', owner)
         self.assertIn('wrap_slot_minmax(nir, MESA_SHADER_COMPUTE);', owner)
 
+    def test_c70_compressed_uploads_reuse_one_staging(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1905/1906:
+        # every buffer->texture upload into a losslessly compressed texture
+        # mapped it, and Asahi made a staging texture per map; a mip-upload
+        # burst held hundreds of MiB and failed at E_OUTOFMEMORY once the
+        # app's heaps filled the segment. Compressed 2D uploads must stage
+        # through the owner's one cached texture (and release it).
+        text = OWNER.read_text()
+        copy = body(text, 'extern "C" HRESULT AgxD3d12OwnerCopyTexture(')
+        self.assertLess(copy.index('compressed_texture(owner, texture)'),
+                        copy.index('pipe->texture_map(pipe, texture, copy->Level'))
+        staged = body(text, 'static HRESULT staged_upload(')
+        self.assertIn('owner->UploadStaging', staged)
+        self.assertIn('templ.usage = PIPE_USAGE_STAGING;', staged)
+        self.assertIn('pipe->resource_copy_region(pipe, texture, copy->Level', staged)
+        self.assertNotIn('pipe->texture_map(pipe, texture,', staged)
+        destroy = body(text, 'extern "C" HRESULT AgxD3d12OwnerDestroy(')
+        self.assertLess(destroy.index('AgxWin32AsahiResourceRelease(&owner->UploadStaging)'),
+                        destroy.index('AgxWin32AsahiContextDestroy(owner->Context)'))
+
     def test_teardown_order(self):
         text = OWNER.read_text()
         destroy = body(text, 'extern "C" HRESULT AgxD3d12OwnerDestroy(')
