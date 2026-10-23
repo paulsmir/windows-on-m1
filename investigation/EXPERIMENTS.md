@@ -61283,3 +61283,21 @@ EXP1908 ACTUAL 2026-10-23T13:36:12Z: run1908.sh RC 0, RUN_DONE; m1n1 0d3a75b3 st
   - measure-xfer: GravityMark downloads 89 MiB and 221 MiB buffers through 64 KiB copy escapes; EXP1899N Night Raid did 25 MiB x416 and 64 MiB x72 uploads.
   - Cause: the UMD SystemDirect limit (16 MiB) predates EXP1269's segment-sized General class. Fix C75 c86c13c9.
 - Next: EXP1909 = C74 + C75 (+ C67b revert).
+
+EXP1909 C74_C75 HARDWARE BEFORE 2026-10-23T13:45:02Z:
+- Package 30.0.1909.0 from 5ff402eb = EXP1908 a5039f82 − C67b (revert b7954edf) + 4c4a6c84 C74 (D3D11 index buffers with VB/SRV/UAV/SO binds) + c86c13c9 C75 (unshared buffers direct up to the KMD class limit).
+- Build: EXP1909_PACKAGE_BUILD_PASS. sys 73256b70cd8f, Umd d63742b951d9, UmdArm64 af17831100e1, UmdX64 b8a1e1b524d5, Umd32 efb7f1784fd1. manifest 8b3a046ea0be, hardware-manifest 29c9dacbb49c.
+- Gates: stage PASS, visible recovery PASS (rec1909h 58c19d84a6ddc98e), lastgood 21c3648d f57d4551e922; m1n1 0d3a75b3.
+- Probe probe1909.sh d6783b2cec96 (PROBE_LINT_OK) = probe1908 without the in-task ETW, plus XFER_* lines per GravityMark run (xfer-sum.py; EXP1908 baseline: D3D11 down 81 transfers / 11207 MiB, up 11 / 1067 MiB; D3D12 up 53 / 3078 MiB). PRESSURE kept (C75 changes memory placement).
+- ATOMIC CONTRACT: none -- separate lines:
+  - C74: GravityMark D3D11 past 64 s, no IaSetIndexBuffer reject;
+  - C75: XFER counts, all regressions (DWM and samples use direct buffers), PRESSURE.
+- WHY THIS HYPOTHESIS:
+  (1) EXP1908 reject-seterror IaSetIndexBuffer after the benchmark started;
+  (2) EXP1908 agx_sampler: 69% of the render thread in NtGdiDdDDIEscape, GPU 3D utilization 0.5%, 12 GiB through 64 KiB copy escapes;
+  (3) the UMD 16 MiB direct limit is the pre-EXP1269 KMD class limit (now 2688 MiB).
+- WINDOWS CONTRACT: CPU-visible allocations may be mapped by CPU and GPU (Lock persists); the KMD admits General BOs up to the segment.
+- AGX/ASAHI CONTRACT: Asahi BOs are CPU-visible UMA memory.
+- WHAT IS STILL UNKNOWN: whether >16 MiB direct allocations behave like the validated <=16 MiB ones (Lock, residency/trim, PRESSURE); GravityMark D3D12's Unmapped compute-stream failure after C75.
+- Expected: regressions as EXP1908; XFER for GravityMark near 0 for buffers; GravityMark D3D11 past 64 s; no new refusals.
+- Failure criteria: regressions, DWM faults, device removals in samples, hang. Recovery rec1909h (run directly). Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1909-ib-direct/run1909.sh.
