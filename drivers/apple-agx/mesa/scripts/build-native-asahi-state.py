@@ -3065,6 +3065,7 @@ AgxSetConstantBuffersRange(mesa_shader_stage shader_type, D3D10DDI_HDEVICE hDevi
        shader_type == MESA_SHADER_TESS_CTRL || shader_type == MESA_SHADER_TESS_EVAL) &&
       (NumBuffers == 0 || phBuffers) && StartBuffer <= slots &&
       NumBuffers <= slots - StartBuffer &&
+      ((!firstConstant) == (!numConstants)) &&
       AgxD3d10WindowsIdentity(pDevice->windows, &owner, &generation);
    for (UINT i = 0; valid && i < NumBuffers; ++i) {
       Resource *resource = CastResource(phBuffers[i]);
@@ -3077,13 +3078,12 @@ AgxSetConstantBuffersRange(mesa_shader_stage shader_type, D3D10DDI_HDEVICE hDevi
          !(resource->resource->bind &
            ~(PIPE_BIND_CONSTANT_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
          resource->logical_bytes >= 16 &&
-         (firstConstant || resource->logical_bytes <= 65536) &&
          (resource->logical_bytes & 15) == 0 &&
          resource->resource->width0 == resource->logical_bytes;
    }
    for (UINT i = 0; valid && firstConstant && numConstants && i < NumBuffers; ++i)
       valid = (firstConstant[i] & 15u) == 0 && (numConstants[i] & 15u) == 0 &&
-              numConstants[i] >= 16u && numConstants[i] <= 4096u;
+              numConstants[i] <= 4096u;
    if (!valid) {
       SetError(hDevice, E_NOTIMPL);
       return;
@@ -3096,20 +3096,22 @@ AgxSetConstantBuffersRange(mesa_shader_stage shader_type, D3D10DDI_HDEVICE hDevi
          continue;
       }
       /* D3D11.1: the window starts at a multiple of 16 constants and
-       * holds 16..4096 of them (the runtime validates both); reads past
+       * holds 0..4096 of them (the runtime validates both); reads past
        * the buffer's end return 0 (robust context), so the bound size is
        * clipped to the buffer and an empty window unbinds the slot. */
-      UINT offset = firstConstant ? firstConstant[i] * 16u : 0u;
+      /* An out-of-buffer window returns zero even when its byte offset
+       * does not fit UINT. Compare before narrowing to Gallium's offset. */
+      uint64_t offset = firstConstant ? (uint64_t)firstConstant[i] * 16u : 0u;
       UINT window = numConstants ? numConstants[i] * 16u : 65536u;
-      if (offset >= resource->logical_bytes) {
+      if (!window || offset >= resource->logical_bytes) {
          pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
                                              StartBuffer + i, NULL);
          continue;
       }
       struct pipe_constant_buffer cb = {};
       cb.buffer = resource->resource;
-      cb.buffer_offset = offset;
-      cb.buffer_size = MIN2(window, resource->logical_bytes - offset);
+      cb.buffer_offset = (UINT)offset;
+      cb.buffer_size = MIN2(window, resource->logical_bytes - (UINT)offset);
       pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
                                           StartBuffer + i, &cb);
    }
