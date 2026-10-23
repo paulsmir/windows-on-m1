@@ -4461,6 +4461,25 @@ AgxD3d10CopyBlocks(struct pipe_context *pipe,
    return S_OK;
 }
 
+/* Whole-resource reinterpretation preserves the block grid at every mip,
+ * including tails. Check all levels before starting any transfers. */
+static bool
+AgxD3d10WholeBlockCopy(const struct pipe_resource *src, const struct pipe_resource *dst)
+{
+   unsigned sw = util_format_get_blockwidth(src->format);
+   unsigned sh = util_format_get_blockheight(src->format);
+   unsigned dw = util_format_get_blockwidth(dst->format);
+   unsigned dh = util_format_get_blockheight(dst->format);
+   for (unsigned level = 0; level <= src->last_level; ++level) {
+      if ((u_minify(src->width0, level) + sw - 1) / sw !=
+          (u_minify(dst->width0, level) + dw - 1) / dw ||
+          (u_minify(src->height0, level) + sh - 1) / sh !=
+          (u_minify(dst->height0, level) + dh - 1) / dh)
+         return false;
+   }
+   return true;
+}
+
 static enum pipe_format
 AgxD3d10CopyRawFormat(const Resource *source, const Resource *destination,
                       const struct pipe_resource *src, const struct pipe_resource *dst)
@@ -5015,14 +5034,18 @@ AgxD3d10ResourceWithinRequiredLimits(
       AgxD3d10CopyRawFormat(source, destination, src, dst) : PIPE_FORMAT_NONE;
    bool compressed = dst && src && src->format == dst->format &&
       util_format_is_compressed(src->format);
-   if (!dst || !src || (raw==PIPE_FORMAT_NONE && !compressed) ||
+   bool blockCopy = dst && src &&
+      AgxD3d10BlockCopyCompatible(source->Format, destination->Format) &&
+      util_format_get_blocksize(src->format) == util_format_get_blocksize(dst->format);
+   if (!dst || !src || (raw==PIPE_FORMAT_NONE && !compressed && !blockCopy) ||
        dst->target!=src->target || dst->target==PIPE_BUFFER ||
-       dst->width0!=src->width0 || dst->height0!=src->height0 ||
+       (blockCopy ? !AgxD3d10WholeBlockCopy(src, dst) :
+        (dst->width0!=src->width0 || dst->height0!=src->height0)) ||
        dst->depth0!=src->depth0 || dst->array_size!=src->array_size ||
        dst->last_level!=src->last_level ||
        /* D3D-G10b: multisampled resources copy at their sample count. */
        MAX2(dst->nr_samples,1)!=MAX2(src->nr_samples,1) ||
-       (compressed && src->nr_samples>1)) {
+       ((compressed || blockCopy) && src->nr_samples>1)) {
       UINT values[14]={(UINT)source->Format,(UINT)destination->Format,
          src?(UINT)src->target:~0u,dst?(UINT)dst->target:~0u,
          src?src->width0:0u,src?src->height0:0u,dst?dst->width0:0u,dst?dst->height0:0u,
@@ -5042,6 +5065,19 @@ AgxD3d10ResourceWithinRequiredLimits(
       unsigned layers=dst->target==PIPE_TEXTURE_3D ? 1u : dst->array_size;
       for (unsigned layer=0; layer<layers; ++layer) {
          for (unsigned level=0; level<=dst->last_level; ++level) {
+            if (blockCopy) {
+               struct pipe_box srcBox, dstBox;
+               u_box_3d(0,0,src->target==PIPE_TEXTURE_3D ? 0 : (int)layer,
+                  u_minify(src->width0,level),u_minify(src->height0,level),
+                  src->target==PIPE_TEXTURE_3D ? u_minify(src->depth0,level) : 1,&srcBox);
+               u_box_3d(0,0,dst->target==PIPE_TEXTURE_3D ? 0 : (int)layer,
+                  u_minify(dst->width0,level),u_minify(dst->height0,level),
+                  dst->target==PIPE_TEXTURE_3D ? u_minify(dst->depth0,level) : 1,&dstBox);
+               HRESULT status = AgxD3d10CopyBlocks(device->pipe,dst,level,&dstBox,
+                                                  src,level,&srcBox);
+               if (FAILED(status)) { SetError(hDevice, status); return; }
+               continue;
+            }
             if (compressed) {
                struct pipe_box box;
                u_box_3d(0,0,dst->target==PIPE_TEXTURE_3D ? 0 : (int)layer,
