@@ -37,6 +37,7 @@ BODY = r'''
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include "umd_va_alias.h"
 typedef int HRESULT; typedef unsigned UINT; typedef unsigned D3DKMT_HANDLE; typedef int BOOL;
 typedef unsigned long long ULONGLONG;
 #define TRUE 1
@@ -63,7 +64,8 @@ struct SLOT { uint64_t Token; BOOL Active,Transition,Resident; D3DKMT_HANDLE Ker
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct HANDLE_ { void *handle; };
 struct CB { HRESULT (*pfnMakeResidentCb)(void*, D3DDDI_MAKERESIDENT*); HRESULT (*pfnMapGpuVirtualAddressCb)(void*, D3DDDI_MAPGPUVIRTUALADDRESS*); };
-struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[4]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; HANDLE_ RuntimeDevice; D3DKMT_HANDLE PagingQueue; BOOL ScreenClosing; uint64_t PagingWaitToken; };
+struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[4]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; HANDLE_ RuntimeDevice; D3DKMT_HANDLE PagingQueue; BOOL ScreenClosing,DrawTerminal; uint64_t PagingWaitToken; ADMISSION_UMD_VA_ALIAS VaAliases[4]; UINT VaAliasCount, VaAliasCapacity; };
+static int alias_reserve(ADMISSION_UMD_DEVICE *d, unsigned need) { d->VaAliasCapacity=4; return need<=4; }
 static std::string order; static HRESULT make_hr=E_PENDING;
 static HRESULT make(void*, D3DDDI_MAKERESIDENT *r){ order+="R"; r->PagingFenceValue=9; return make_hr; }
 static HRESULT map(void*, D3DDDI_MAPGPUVIRTUALADDRESS *m){ order+="M"; m->VirtualAddress=m->BaseAddress; m->PagingFenceValue=10; return E_PENDING; }
@@ -98,16 +100,61 @@ int main(){
 
 
 class ResidentBeforeMap(unittest.TestCase):
+    def test_accepted_residency_must_complete_before_mapping(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        A failed/missing paging fence must not become a Resident fast path:
+        neither canonical nor alias mapping may proceed or retry GPU use.
+        A successful request carrying a fence must also wait for it.
+        """
+        body = BODY[:BODY.index('int main()')]
+        body = body.replace('static HRESULT make_hr=E_PENDING;',
+            'static HRESULT make_hr=E_PENDING; static uint64_t returned_fence=9; static bool fail_wait=false;')
+        body = body.replace('r->PagingFenceValue=9;', 'r->PagingFenceValue=returned_fence;')
+        body = body.replace('return f==9 || f==10;', 'return !fail_wait && (f==9 || f==10);')
+        body += r'''
+int main() {
+  for (unsigned alias=0; alias<2; ++alias)
+  for (unsigned scenario=0; scenario<5; ++scenario) {
+    CB cb={make,map}; ADMISSION_UMD_DEVICE d={};
+    d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.KernelCallbacks=&cb; d.PagingQueue=3;
+    d.ScreenBuffers[0]={7,1,0,0,0x40,0};
+    make_hr=scenario>=2 ? S_OK : E_PENDING;
+    returned_fence=scenario==1 || scenario==4 ? 0 : 9;
+    fail_wait=scenario==0 || scenario==2;
+    order.clear(); uint64_t fence=0;
+    const int result=alias ? map_va_at(&d,7,0x100000,16,16,AGX_GPUVA_MAP_WRITE,&fence)
+                           : map_va(&d,7,0x100000,16,AGX_GPUVA_MAP_WRITE,&fence);
+    if(scenario<3) {
+      assert(result==3 && "accepted residency without completion must retain uncertain state");
+      assert(order==(scenario==1 ? "R":"RW") && "must not map after paging failure");
+      assert(d.DrawTerminal && d.ScreenBuffers[0].Resident);
+      assert(!d.ScreenBuffers[0].CanonicalGpuVa && !d.VaAliasCount && !fence);
+      order.clear();
+      assert(!map_va(&d,7,0x100000,16,0,&fence) && order.empty());
+      assert(!map_va_at(&d,7,0x200000,0,16,0,&fence) && order.empty());
+    } else {
+      assert(result==2 && !d.DrawTerminal && d.ScreenBuffers[0].Resident);
+      assert(order==(scenario==3 ? "RWM":"RM"));
+    }
+  }
+  puts("EXP1004 resident before map: PASS");
+}
+'''
+        self.run_replay(body)
+
     def test_map_after_residency(self):
+        self.run_replay(BODY)
+
+    def run_replay(self, body):
         text = SRC.read_text()
-        funcs = '\n'.join(function(text, n) for n in ('find_slot', 'allocation_handle', 'resident_before_map', 'map_va'))
+        funcs = '\n'.join(function(text, n) for n in ('find_slot', 'allocation_handle', 'resident_before_map', 'map_va', 'map_va_at'))
         self.assertIn('resident_before_map', funcs, 'resident-before-map is missing')
         funcs = funcs.replace('auto *slot', 'SLOT *slot')
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'replay.cpp'; exe = Path(tmp) / 'replay'
-            src.write_text(BODY.replace('@@FUNCS@@', funcs))
+            src.write_text(body.replace('@@FUNCS@@', funcs))
             built = subprocess.run(['clang++', '-std=c++17', '-Wall', '-Wno-unused-function',
-                                    '-fsanitize=address,undefined', str(src), '-o', str(exe)],
+                                    '-fsanitize=address,undefined', '-I', str(SRC.parent), str(src), '-o', str(exe)],
                                    text=True, capture_output=True)
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             ran = subprocess.run([str(exe)], text=True, capture_output=True)

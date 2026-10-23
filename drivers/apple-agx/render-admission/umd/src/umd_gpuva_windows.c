@@ -390,20 +390,30 @@ static void resident_before_map(ADMISSION_UMD_DEVICE *device, uint64_t token,
   slot=find_slot(device,token);
   if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
-  if(hr==E_PENDING && request.PagingFenceValue)
-    (void)wait_paging_at(device,request.PagingFenceValue,2u,token);
+  /* Resident owns the accepted reference, not proof that paging finished.
+   * Keep it for teardown, but never let a failed/missing fence turn into the
+   * Resident fast path on a later map or submission. The callback contract
+   * also requires waiting a nonzero fence returned with S_OK. */
+  if((hr==E_PENDING && !request.PagingFenceValue) ||
+     (request.PagingFenceValue &&
+      !wait_paging_at(device,request.PagingFenceValue,2u,token))) {
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    device->DrawTerminal=TRUE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  }
 }
 
 static int map_va(void *context, uint64_t token, uint64_t va,
                   uint64_t pages, unsigned protection, uint64_t *fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
   D3DDDI_MAPGPUVIRTUALADDRESS request = {};
-  if (!device || !fence || !device->PagingQueue ||
+  if (!device || !fence || device->DrawTerminal || !device->PagingQueue ||
       !device->KernelCallbacks ||
       !device->KernelCallbacks->pfnMapGpuVirtualAddressCb) return 0;
   request.hAllocation = allocation_handle(device, token);
   if (!request.hAllocation) return 0;
   resident_before_map(device, token, request.hAllocation);
+  if (device->DrawTerminal) return 3; /* Accepted residency is uncertain. */
   request.hPagingQueue = device->PagingQueue;
   request.BaseAddress = va;
   request.OffsetInPages = 0;
@@ -467,7 +477,7 @@ static int map_va_at(void *context, uint64_t token, uint64_t va,
                      uint64_t *fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
   D3DDDI_MAPGPUVIRTUALADDRESS request = {};
-  if (!device || !fence || !pages || !device->PagingQueue ||
+  if (!device || !fence || !pages || device->DrawTerminal || !device->PagingQueue ||
       !device->KernelCallbacks ||
       !device->KernelCallbacks->pfnMapGpuVirtualAddressCb) return 0;
   request.hAllocation = allocation_handle(device, token);
@@ -478,6 +488,7 @@ static int map_va_at(void *context, uint64_t token, uint64_t va,
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   if (!room) return 0;
   resident_before_map(device, token, request.hAllocation);
+  if (device->DrawTerminal) return 3; /* Accepted residency is uncertain. */
   request.hPagingQueue = device->PagingQueue;
   request.BaseAddress = va;
   request.OffsetInPages = offset_pages;
