@@ -61301,3 +61301,13 @@ EXP1909 C74_C75 HARDWARE BEFORE 2026-10-23T13:45:02Z:
 - WHAT IS STILL UNKNOWN: whether >16 MiB direct allocations behave like the validated <=16 MiB ones (Lock, residency/trim, PRESSURE); GravityMark D3D12's Unmapped compute-stream failure after C75.
 - Expected: regressions as EXP1908; XFER for GravityMark near 0 for buffers; GravityMark D3D11 past 64 s; no new refusals.
 - Failure criteria: regressions, DWM faults, device removals in samples, hang. Recovery rec1909h (run directly). Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1909-ib-direct/run1909.sh.
+
+EXP1909 ACTUAL 2026-10-23T14:03:16Z: run1909.sh RC 0, RUN_DONE, m1n1 0d3a75b3 stable.
+- Regressions: SAMPLE_HASHES bad 0; e1904 118/0 on ARM64, x64 and x86; T2VOL PASS; D3D9 6/6; D3D11 smoke PASS; 4 samples and ModelViewerI alive (presents unchanged, about 1100-1180); KMD GpuReset/G4SubmitFailure none; DWM faults 0. PRESSURE: refused at 386 MiB available, guest alive.
+- C75: copy escapes eliminated. XFER is 0/0 MiB for GravityMark D3D11, D3D12 10k and D3D12 2k (EXP1908: up to 11.2 GiB down and 3 GiB up).
+  - Both GravityMark D3D12 runs crashed at 27-29 s (WER, Application Error 1000): AppleAgxRenderAdmissionUmdArm64.DLL 30.0.1909.0 c0000005 at RVA 0x5d998.
+  - Disassembly: a 16-byte store loop with Morton masks 0x55555555/0xaaaaaaaa, i.e. CPU tiling into a mapped texture allocation.
+  - Hypothesis: a direct (CPU-visible) allocation above 16 MiB is not CPU-accessible over its whole range; the demand pool commits on placement and maps the window in 16 MiB steps.
+  - Verdict: C75 REJECTED as is (crash). Reverted. Offline analysis handed to Codex T6.
+- C74 not reached: GravityMark D3D11 was removed earlier, at 26 s, by a new legal copy that is refused: reject-resource-copy-region 3 0x5f 4 8 128x128 -> 512x512 (R32G32B32A32_UINT Cube -> BC6H_UF16 CubeArray, uncompressed-to-BC block copy). Handed to Codex T2 P0. Tellusim crashed afterwards (c0000005 in Tellusim_arm64.dll, application error path).
+- Process: Codex offline tasks T1-T5 written to .local/handoff/codex (user request 2026-10-23).
