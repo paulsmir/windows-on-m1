@@ -96,3 +96,17 @@ Next discriminator: the DxgKrnl ETW trace (`EXP801DxgBoot` autologger) of
 one D3D9 windowed present. It shows how dxgkrnl services the redirected
 Blt for this driver: a present history token, a CPU copy from a lockable
 source, a staging surface, or a refusal.
+
+## DxgKrnl ETW (EXP1906E, 2026-10-23, package 30.0.1906.0, no C67)
+
+Captured with logman (Microsoft-Windows-DxgKrnl, all keywords) around the D3D9 probe (MSAA_PRESENT, windowed, shown) and decoded with tracerpt. Evidence: `.local/experiments/EXP1906-zls-c69/evidence/EXP1906E/dxg.csv`.
+
+- The probe process (PID 0x72C) issued 6 kernel presents, event 184, with:
+  - flags "Blt | RedirectedBlt", hWnd 0xA02EA, source allocation 0x40001200;
+  - status 0xC01E0006 = STATUS_GRAPHICS_PRESENT_OCCLUDED ("nothing to present due to desktop occlusion").
+- No present-history token (event 171/215) was created for that process. DWM's own presents are REDIRECTED_COMPOSITION / REDIRECTED_FLIP (flip models), and they work.
+- No KMD refusal: there were no Wom1G1bFailure (GetStandardAllocationDriverData) receipts.
+
+So the redirected blt reaches dxgkrnl, but dxgkrnl drops it as occluded before any DDI, because the window has no DX redirection target from DWM.
+
+Next discriminator: the same capture in the GPU-hidden/visible-recovery profile (Microsoft Basic Display, where blt-model windows are composed). It gives the expected event sequence for a working redirected blt; the first event that differs names the missing step on our side.
