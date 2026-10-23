@@ -494,28 +494,22 @@ static NTSTATUS AdmissionCreateAllocationImpl(
     info->SupportedReadSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
     info->SupportedWriteSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
   }
-  /* EXP1027/EXP1028: a CPU-visible Mesa class allocation is a UMD direct
-   * buffer used by both the GPU and the CPU. It keeps the admitted EXP836
-   * shape (CPU-visible set, local preferred): dxgkrnl refuses a local-only
-   * CPU-visible class allocation (EXP1027: AllocateCb E_INVALIDARG). The local
-   * segment is 16 KiB-contiguous and fully UAT-mapped; EXP1026 showed aperture
-   * system backing hangs the GPU, so the preference is what places them. */
-  /* M2-f2: with the KMD-populated pool (segment 3, Windows memory taken at
-   * start, 16 KiB-contiguous by construction) these BOs live there; the
-   * aperture stays the fallback a CPU-visible set keeps (EXP1027), and the
-   * local segment is left out so VidMm never moves a BO between two memory
-   * segments (no memory-to-memory transfer exists). The aperture cannot
-   * leave the sets: dxgmms2 refuses a CPU-visible allocation without one
-   * (EXP1027, EXP1266). At segment-3 exhaustion VidMm makes such a BO
-   * resident in 4 KiB system pages the UAT cannot map, whether or not the
-   * aperture is preferred and whatever its size (EXP1265-D, EXP1267,
-   * EXP1268), and the submission using it is refused. Segment-3 capacity is
-   * the mitigation (M2-f6). */
-  /* M2-f10 (EXP1270): a CPU-invisible class BO (the D3D UMD's canonical copy
-   * of a resource above 16 MiB) is VA-only as well and lives in segment 3
-   * alone. Segment 2 is the fixed firmware reserve; 4 x 64 MiB targets
-   * exhausted it. Without an aperture in its set VidMm evicts it to system
-   * memory (paging TRANSFER) instead of making it resident there. */
+  /* T7c (EXP1915): General BOs are GPU-accessed through native 16 KiB
+   * leaves even when CPU-visible. Aperture eligibility lets VidMm make
+   * them resident on scattered 4 KiB system pages, which cannot publish a
+   * native leaf. Keep only a memory segment: segment 2 without the pool,
+   * segment 3 with it. EvictionSegmentSet=0 below still permits paging out
+   * to system storage; it does not make that storage GPU-resident.
+   * CpuVisible stays set for direct CPU locks (no UMD staging/copy fallback).
+   * EXP1027/EXP1266 rejected earlier memory-only CPU-visible shapes; Windows
+   * admission of this General policy must be checked before a workload.
+   * Other native classes retain their existing CPU-visible fallback. */
+  if (classId == AgxWin32BufferClassGeneral) {
+    info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
+    info->SupportedWriteSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
+  }
+  /* M2-f10: CPU-invisible class BOs also live in segment 3 alone. Keep
+   * a single memory segment in the set, as before. */
   if (classId != 0u && AdmissionMemoryPoolView(context, &pool)) {
     /* M2-f5: the pages this allocation may occupy in segment 3 are taken
      * from Windows now, so its later placement (UpdatePageTable, also from
@@ -531,7 +525,8 @@ static NTSTATUS AdmissionCreateAllocationImpl(
     info->PreferredSegment.Value = 0u;
     info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_POOL_SEGMENT;
     info->SupportedReadSegmentSet = ADMISSION_POOL_SEGMENT_SET;
-    if (description->CpuVisible != 0u) {
+    if (description->CpuVisible != 0u &&
+        classId != AgxWin32BufferClassGeneral) {
       info->PreferredSegment.SegmentId1 = ADMISSION_MEMORY_APERTURE_SEGMENT;
       info->SupportedReadSegmentSet |= ADMISSION_APERTURE_SEGMENT_SET;
     }
