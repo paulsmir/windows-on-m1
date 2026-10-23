@@ -1471,6 +1471,9 @@ struct Query
    D3D10DDI_HRTRENDERTARGETVIEW hRTRenderTargetView;
    Resource *owner_resource;
    RenderTargetView *next_presentation;
+   /* Gallium surfaces describe textures; keep buffer ranges in elements. */
+   UINT buffer_first_element;
+   UINT buffer_num_elements;
 };''')])
     change('src/gallium/frontends/d3d10umd/Device.cpp',
         'dcf950aec993d40743671e1f208655e151158a9b4647bc3581dcd134962086aa',[
@@ -1995,6 +1998,29 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
 
    Device *windowsDevice=CastDevice(hDevice);
    Resource *windowsResource=CastResource(pCreateRenderTargetView->hDrvResource);
+   if(pCreateRenderTargetView->ResourceDimension==D3D10DDIRESOURCE_BUFFER) {
+      struct pipe_resource *buffer=windowsResource?windowsResource->resource:NULL;
+      enum pipe_format format=FormatTranslate(pCreateRenderTargetView->Format,false);
+      unsigned element=util_format_get_blocksize(format);
+      UINT first=pCreateRenderTargetView->Buffer.FirstElement;
+      UINT count=pCreateRenderTargetView->Buffer.NumElements;
+      UINT64 offset=(UINT64)first*element,bytes=(UINT64)count*element;
+      if(!windowsDevice || !windowsResource || windowsResource->owner_device!=windowsDevice ||
+         !(windowsResource->bind_flags&D3D10_DDI_BIND_RENDER_TARGET) ||
+         windowsResource->Format!=DXGI_FORMAT_UNKNOWN || !buffer || buffer->target!=PIPE_BUFFER ||
+         format==PIPE_FORMAT_NONE || !element || element>16 || !count ||
+         offset>windowsResource->logical_bytes || bytes>windowsResource->logical_bytes-offset ||
+         !windowsDevice->pipe->screen->is_format_supported(windowsDevice->pipe->screen,
+            format,PIPE_BUFFER,1,1,PIPE_BIND_RENDER_TARGET)) {
+         SetError(hDevice,E_NOTIMPL);return;
+      }
+      RenderTargetView *view=CastRenderTargetView(hRenderTargetView);
+      memset(view,0,sizeof(*view));
+      view->surface.format=format;
+      pipe_resource_reference(&view->surface.texture,buffer);
+      view->buffer_first_element=first;view->buffer_num_elements=count;
+      return;
+   }
    if(!windowsDevice||!windowsResource||windowsResource->owner_device!=windowsDevice||
       (!windowsResource->presentation&&
        !(windowsResource->bind_flags&D3D10_DDI_BIND_RENDER_TARGET))||
@@ -2014,6 +2040,7 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
 }''','''   pRTView->surface = desc;
    pRTView->owner_resource=NULL;
    pRTView->next_presentation=NULL;
+   pRTView->buffer_first_element=pRTView->buffer_num_elements=0;
    if(windowsResource->presentation && desc.texture) {
       pRTView->owner_resource=windowsResource;
       pRTView->next_presentation=windowsResource->first_presentation_rtv;
