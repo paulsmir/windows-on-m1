@@ -6271,6 +6271,37 @@ agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image_view
             overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
                 'after_staging_failure'] = hashlib.sha256(
                     pipe_target.read_bytes()).hexdigest()
+            # C75b: residency OOM latches the Windows backend failure, after
+            # which a fresh BO map can return NULL. Preserve that failure
+            # across mip/layer offset calculation and stop CPU writeback
+            # before ail_tile; transfer_unmap has no error return, so latch
+            # the context fault and run its ordinary cleanup instead.
+            state_target = out/'src/gallium/drivers/asahi/agx_state.h'
+            state_text = state_target.read_text()
+            texture_map = '''   return ((uint8_t *)agx_bo_map(rsrc->bo)) +
+          ail_get_layer_level_B(&rsrc->layout, z, level);'''
+            if state_text.count(texture_map) != 1:
+                raise SystemExit('Ambiguous texture CPU map anchor')
+            state_target.write_text(state_text.replace(texture_map, '''   uint8_t *map = agx_bo_map(rsrc->bo);
+   return map ? map + ail_get_layer_level_B(&rsrc->layout, z, level) : NULL;''', 1))
+            overlays.setdefault('src/gallium/drivers/asahi/agx_state.h', {})[
+                'after_texture_map_failure'] = hashlib.sha256(state_target.read_bytes()).hexdigest()
+            tile_map = '''            agx_map_texture_cpu(rsrc, transfer->level, transfer->box.z + z);
+         uint8_t *src'''
+            if pipe_text.count(tile_map) != 1:
+                raise SystemExit('Ambiguous texture writeback anchor')
+            pipe_text = pipe_text.replace(tile_map, '''            agx_map_texture_cpu(rsrc, transfer->level, transfer->box.z + z);
+         if (!map) {
+            AgxWin32AsahiMarkContextFault(agx_context(pctx), (2u << 16) | __LINE__);
+            goto cleanup;
+         }
+         uint8_t *src''', 1)
+            cleanup = '   /* Free the transfer */\n   free(trans->map);'
+            if pipe_text.count(cleanup) != 1:
+                raise SystemExit('Ambiguous texture transfer cleanup anchor')
+            pipe_target.write_text(pipe_text.replace(cleanup, 'cleanup:\n' + cleanup, 1))
+            overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
+                'after_texture_map_failure'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
             # C21: one reviewed native layout policy serves creation and a
             # no-BO query. The query does not admit any resource dimension.
             reviewed_layout_sources = {
