@@ -65,10 +65,12 @@ MAP_PRELUDE = r'''
 #include <stdlib.h>
 #include <string.h>
 #define APPLE_AGX_GPUVA_WINSYS 1
+#define AGX_WIN32_BO_GPU_ONLY (1u << 29)
+static void (*AgxWin32GpuOnlyMapHook)(unsigned,unsigned);
 @@FLAG@@
 enum { AgxWin32NativeBoSuccess = 0, AppleAgxWin32BufferCpuWrite = 2 };
 struct agx_device { void *windows_private; };
-struct agx_bo { unsigned flags; size_t size; void *_map; int refcnt; };
+struct agx_bo { unsigned flags,handle; size_t size; void *_map; int refcnt; };
 typedef struct { int Failed; struct { void *Screen; } Buffers; int Gpuva; } AGX_WIN32_ASAHI_BACKEND;
 typedef struct { void *CpuAddress; } AGX_WIN32_NATIVE_BO;
 struct windows_bo { struct agx_bo Base; AGX_WIN32_NATIVE_BO Backing; AGX_WIN32_ASAHI_BACKEND *Backend;

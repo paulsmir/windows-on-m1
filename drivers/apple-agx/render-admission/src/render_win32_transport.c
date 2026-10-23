@@ -9,7 +9,8 @@
   ((APPLE_AGX_U32)AppleAgxWin32BufferCpuRead |                              \
    (APPLE_AGX_U32)AppleAgxWin32BufferCpuWrite |                             \
    (APPLE_AGX_U32)AppleAgxWin32BufferGpuRead |                              \
-   (APPLE_AGX_U32)AppleAgxWin32BufferGpuWrite)
+   (APPLE_AGX_U32)AppleAgxWin32BufferGpuWrite |                            \
+   (APPLE_AGX_U32)AppleAgxWin32BufferGpuOnly)
 
 APPLE_AGX_BOOL AdmissionWin32AllocationUsesGpuVa(APPLE_AGX_U32 ClassId) {
   return ClassId >= AgxWin32BufferClassGeneral &&
@@ -57,8 +58,13 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidateEx(
         (create->Flags & ~ADMISSION_WIN32_BUFFER_ACCESS_MASK) != 0u)
       return AdmissionWin32TransportClass;
     if (create->ClassId == AgxWin32BufferClassGeneral) {
-      if ((create->Flags & (AppleAgxWin32BufferCpuRead |
-                            AppleAgxWin32BufferCpuWrite)) == 0u ||
+      const APPLE_AGX_U32 cpu = create->Flags &
+          (AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite);
+      const APPLE_AGX_BOOL gpuOnly =
+          (create->Flags & AppleAgxWin32BufferGpuOnly) != 0u;
+      if ((gpuOnly && (cpu != 0u ||
+                       create->Version != ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL)) ||
+          (!gpuOnly && cpu == 0u) ||
           (create->Flags & (AppleAgxWin32BufferGpuRead |
                             AppleAgxWin32BufferGpuWrite)) == 0u)
         return AdmissionWin32TransportAccess;

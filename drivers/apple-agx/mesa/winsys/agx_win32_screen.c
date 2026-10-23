@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-#define SCREEN_ALLOWED_FLAGS 0x1fu
+#define SCREEN_ALLOWED_FLAGS 0x3fu
 
 static int power_of_two(APPLE_AGX_U64 value) {
   return value != 0ULL && (value & (value - 1ULL)) == 0ULL;

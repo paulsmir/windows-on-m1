@@ -24,6 +24,8 @@ typedef enum _AGX_WIN32_BUFFER_FLAGS {
   AppleAgxWin32BufferGpuRead = 0x4u,
   AppleAgxWin32BufferGpuWrite = 0x8u,
   AppleAgxWin32BufferShareable = 0x10u,
+  /* T7h: General GPU-only backing; incompatible with CPU/shareable access. */
+  AppleAgxWin32BufferGpuOnly = 0x20u,
 } AGX_WIN32_BUFFER_FLAGS;
 
 typedef struct _AGX_WIN32_BUFFER_CLASS_INFO {

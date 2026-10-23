@@ -640,7 +640,14 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
    * CPU maps restore residency and finish paging before taking the lock.
    * Persistent maps remain pinned until their matching Unlock succeeds. */
   systemDirect = !BorrowedStaging && Bytes <= classInfo->MaximumBytes;
-  if (!systemDirect) {
+  if (Flags & AppleAgxWin32BufferGpuOnly) {
+    if (ClassId != AgxWin32BufferClassGeneral || BorrowedStaging ||
+        (Flags & (AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+                  AppleAgxWin32BufferShareable)) != 0u ||
+        !(Flags & (AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite)))
+      return 0;
+  }
+  if (!systemDirect || (Flags & AppleAgxWin32BufferGpuOnly)) {
     description.Version = ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL;
     description.Allocation.Type = ADMISSION_WIN32_ALLOCATION_GPU_LOCAL;
     description.Allocation.CpuVisible = 0u;
@@ -1010,6 +1017,17 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       device->KernelCallbacks->pfnLockCb == NULL)
     return 0;
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  buffer = AdmissionUmdScreenFind(device, Token);
+  BOOL gpuOnly = buffer && (buffer->Flags & AppleAgxWin32BufferGpuOnly);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (gpuOnly) {
+    UINT values[3] = {(UINT)Token, (UINT)(Token >> 32), Access};
+    *Address = NULL;
+    device->LastScreenError = E_INVALIDARG;
+    AdmissionUmdDiagnostic("measure-gpu-only-map", E_INVALIDARG, values, ARRAYSIZE(values));
+    return 0;
+  }
   /* EXP995: a private slot defers its post-submission download until the
    * first CPU map; complete it before the staging becomes CPU-visible. */
   if (!AdmissionUmdGpuvaPrepareCpuMap(device, Token) ||

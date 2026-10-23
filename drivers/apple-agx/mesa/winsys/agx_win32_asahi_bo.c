@@ -5,6 +5,7 @@
 #endif
 
 void (*AgxWin32BackendFailHook)(unsigned site);
+void (*AgxWin32GpuOnlyMapHook)(unsigned token, unsigned flags);
 #ifdef APPLE_AGX_GPUVA_WINSYS
 extern void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
 #include "util/os_time.h"
@@ -332,7 +333,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
                             enum agx_bo_flags flags,const char *label) {
   const unsigned allowed=AGX_BO_LOW_VA|AGX_BO_EXEC|AGX_BO_WRITEBACK|AGX_BO_READONLY
 #ifdef APPLE_AGX_GPUVA_WINSYS
-      |AGX_WIN32_BO_SHADOW
+      |AGX_WIN32_BO_SHADOW|AGX_WIN32_BO_GPU_ONLY
 #endif
       ;
   AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
@@ -356,9 +357,14 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   access=AppleAgxWin32BufferCpuWrite|AppleAgxWin32BufferGpuRead;
   if(cls==AgxWin32BufferClassGeneral) {
     access|=AppleAgxWin32BufferCpuRead;
+    if (flags & AGX_WIN32_BO_GPU_ONLY)
+      access = AppleAgxWin32BufferGpuOnly | AppleAgxWin32BufferGpuRead;
     if(!(flags&AGX_BO_READONLY)) access|=AppleAgxWin32BufferGpuWrite;
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  if ((flags & AGX_WIN32_BO_GPU_ONLY) &&
+      ((flags & (AGX_BO_LOW_VA | AGX_BO_EXEC | AGX_WIN32_BO_SHADOW)) ||
+       b->EncoderAllocationIntent || b->NextVirtual)) return NULL;
   /* C53 T2D: the image BO of a reserved texture under construction */
   if(b->NextVirtual) {
     b->NextVirtual=0;
@@ -872,6 +878,11 @@ static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed
   AGX_WIN32_ASAHI_BACKEND *b=native->windows_private;
   if(!b || b!=bo->Backend || fixed || b->Failed || base->refcnt<=0) return;
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  if ((unsigned)base->flags & AGX_WIN32_BO_GPU_ONLY) {
+    if (AgxWin32GpuOnlyMapHook)
+      AgxWin32GpuOnlyMapHook(base->handle, (unsigned)base->flags);
+    return;
+  }
   if(bo->Virtual) return; /* C53 B1: no CPU map of a reserved range yet */
 #endif
 #ifdef APPLE_AGX_GPUVA_WINSYS

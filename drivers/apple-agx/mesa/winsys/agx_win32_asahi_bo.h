@@ -12,6 +12,8 @@
  * batches at once and their pool slabs overflowed 16 entries; DWM then
  * re-created ~42 BOs/s, each a MakeResident + map paging-fence wait (phase 2:
  * 9.4 s of a 60 s window drag, 2880/512/256/64 KiB BOs). */
+#define AGX_WIN32_BO_GPU_ONLY (1u << 29)
+
 #define AGX_WIN32_BO_CACHE_LIMIT 128u
 #define AGX_WIN32_BO_CACHE_BYTES (64ull << 20)
 

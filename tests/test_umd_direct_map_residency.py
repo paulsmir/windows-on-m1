@@ -17,8 +17,9 @@ typedef uint64_t APPLE_AGX_U64;
 typedef unsigned APPLE_AGX_U32;
 typedef unsigned char BYTE;
 typedef void *PVOID;
-enum { AppleAgxWin32BufferCpuRead=1, AppleAgxWin32BufferCpuWrite=2 };
+enum { AppleAgxWin32BufferCpuRead=1, AppleAgxWin32BufferCpuWrite=2, AppleAgxWin32BufferGpuOnly=32 };
 #define APPLE_AGX_GPUVA_WINSYS 1
+#define E_INVALIDARG ((HRESULT)0x80070057u)
 #define DXGI_ERROR_DEVICE_HUNG ((HRESULT)0x887a0006u)
 static unsigned locks,unlocks,waits;
 static bool fail_wait,fail_lock,fail_unlock,null_lock;
@@ -103,6 +104,11 @@ int main() {
  assert(AdmissionUmdScreenMapBuffer(&d,10,0,4,2,&address) && address==data);
  assert(s.CpuAccess.Maps==1 && !s.CpuAccess.Locks && !s.CpuAccess.ActiveLocks && !locks);
  assert(AdmissionUmdScreenUnmapBuffer(&d,10) && !unlocks && !s.Mapped);
+ /* T7h: the authoritative slot refuses a GPU-only CPU-map request. */
+ s.Flags=0x2c;address=(void *)1;locks=unlocks=waits=0;
+ assert(!AdmissionUmdScreenMapBuffer(&d,10,0,4,2,&address));
+ assert(!address && !locks && !unlocks && !waits && !s.Mapped && !s.Transition);
+ assert(d.LastScreenError==E_INVALIDARG);
  puts("direct CPU map residency: PASS");
 }
 '''

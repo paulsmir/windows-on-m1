@@ -538,6 +538,23 @@ static NTSTATUS AdmissionCreateAllocationImpl(
     info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
   }
 #endif
+  /* T7h: only the explicit GPU-only request excludes aperture residency.
+   * The validator requires General, LOCAL and CpuVisible=0. Without a pool,
+   * segment 2 is the native-leaf firmware reserve. CPU-visible policy above
+   * remains the EXP1028/C75c shape. */
+  if ((flags & AppleAgxWin32BufferGpuOnly) != 0u) {
+    info->PreferredSegment.Value = 0u;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    info->PreferredSegment.SegmentId0 = allocation->PoolReserved != 0u
+        ? ADMISSION_MEMORY_POOL_SEGMENT : ADMISSION_MEMORY_LOCAL_SEGMENT;
+    info->SupportedReadSegmentSet = allocation->PoolReserved != 0u
+        ? ADMISSION_POOL_SEGMENT_SET : ADMISSION_LOCAL_SEGMENT_SET;
+#else
+    info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_LOCAL_SEGMENT;
+    info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
+#endif
+    info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
+  }
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;
