@@ -202,3 +202,20 @@ Order (shortest route to a GravityMark run first):
   touches it; the 1/64-pixel margin is within the Tier 1 uncertainty of 1/2
   pixel. Coverage input is full. No inner coverage (that is Tier 3).
   Post-snap degenerates are culled, which Tier 1 permits.
+
+## Status 2026-10-23 (EXP1890-EXP1897)
+
+- 11_1: the default (4e3b7111; validated EXP1892: logic ops C57A, UAV-only
+  forced sample count C60A, C62A level).
+- 12_1 additions, both reported by default (=0 opts out):
+  - ROVs (fd80d191; validated EXP1893/1895: C59A ordered RMW, C59B order
+    log; DXBC SM 5.1 ROV 81d7e28a offline). The runtime shows ROVs and CR
+    only at FL >= 11_1 (EXP1891).
+  - Conservative rasterization Tier 1 (859cb625; C61A VS, C61B
+    tessellation EXP1895, C61C application GS EXP1896, C61D 4x target
+    EXP1897). Stream output with CR keeps plain rasterization (receipt).
+- Bugs found on the way: SM 6 shader caps without ROVs (8b4da89a), UAV-only
+  draws refused (cafff89c), no vertex elements for draws without an input
+  layout (e44481be), DXIL pixel-shader SV_PrimitiveID garbage (4fb8b881).
+- Remaining for 12_0 (and therefore 12_1 and GravityMark D3D12): tiled
+  resources Tier 2 and min/max filtering (C53/C65, the parallel session).
