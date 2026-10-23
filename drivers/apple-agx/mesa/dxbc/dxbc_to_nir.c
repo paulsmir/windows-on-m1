@@ -2122,8 +2122,8 @@ tex_finish(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, unsigned compon
    tex->num_srcs = num_srcs;
    nir_def_init(&tex->instr, &tex->def, components, 32);
    nir_builder_instr_insert(&c->b, &tex->instr);
-   /* C65: a heap sampler's min/max reduction */
-   nir_def *reduced = minmax ? dxbc_minmax_wrap(&c->b, tex, minmax) : NULL;
+   /* C65: a heap sampler's min/max reduction, when the caller asked for it */
+   nir_def *reduced = minmax && c->p->minmax ? dxbc_minmax_wrap(&c->b, tex, minmax) : NULL;
    return reduced ? reduced : &tex->def;
 }
 

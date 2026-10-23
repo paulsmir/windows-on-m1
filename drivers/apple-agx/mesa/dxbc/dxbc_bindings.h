@@ -36,6 +36,13 @@ enum dxbc_binding_kind {
  * through a bindless handle marked DXBC_HEAP_HANDLE_MARK. */
 #define DXBC_BINDING_HEAP 2u
 #define DXBC_BINDING_HEAP_RANGES 0x80000000u
+/* C65: a caller sets DXBC_BINDING_MINMAX in the sampler limit to emulate
+ * min/max reduction filtering for heap samplers (dxbc_minmax.h); without it
+ * a heap sample keeps the standard filter and no emulation code (the
+ * emulation is ~120 NIR instructions per sample, and its temporaries count
+ * towards the whole shader's register allocation) */
+#define DXBC_BINDING_MINMAX 0x40000000u
+#define DXBC_BINDING_LIMIT_FLAGS (DXBC_BINDING_HEAP_RANGES | DXBC_BINDING_MINMAX)
 /* Tier 2: 64 UAVs per pipeline, which a shader may declare one register at
  * a time: 8 in slots, 56 heap ranges */
 #define DXBC_HEAP_RANGE_MAX 64u

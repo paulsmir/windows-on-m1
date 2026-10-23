@@ -272,11 +272,16 @@ class DxbcToNir(unittest.TestCase):
         self.assertIn("fexp2", heap.stdout)
         txl = [line for line in heap.stdout.splitlines() if re.search(r"\btxl\b", line)]
         self.assertTrue(txl and all("(bias)" not in line for line in txl))
-        # C65: each of the 4 heap samples masks its handle (bits 0-10) and
-        # gets the min/max emulation branch (one level-count query each;
-        # its explicit-LOD texel samples are the other txl)
+        # C65: each of the 4 heap samples masks its handle (bits 0-10); the
+        # min/max emulation branch (one level-count query each; its
+        # explicit-LOD texel samples are the other txl) only when the owner
+        # asks for it (DXBC_BINDING_MINMAX), so ordinary shaders carry none
         self.assertEqual(len(re.findall(r"= iand .*\(0x7ff\)", heap.stdout)), 4)
-        self.assertEqual(len(re.findall(r"\bquery_levels\b", heap.stdout)), 4)
+        self.assertEqual(len(re.findall(r"\bquery_levels\b", heap.stdout)), 0)
+        minmax = subprocess.run([str(self.binary), str(FIXTURES / "ps51samplerheap.dxbc"), "--d3d12-heap", "--d3d12-minmax",
+                                 "--print-final"], capture_output=True, text=True, timeout=60)
+        self.assertEqual(minmax.returncode, 0, minmax.stdout + minmax.stderr)
+        self.assertEqual(len(re.findall(r"\bquery_levels\b", minmax.stdout)), 4)
 
     def test_buffer_srv_ranges_read_the_descriptor_heap(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47: Tier

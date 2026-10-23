@@ -812,10 +812,11 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
    memset(map, 0, sizeof(*map));
    if (!program || !limits)
       goto fail;
+   program->minmax = (limits[DXBC_BINDING_SAMPLER] & DXBC_BINDING_MINMAX) != 0;
    if (program->major != 5 || program->minor != 1)
       return DXBC_OK;
    for (unsigned k = 0; k < DXBC_BINDING_KIND_COUNT; ++k)
-      lim[k] = limits[k] & ~DXBC_BINDING_HEAP_RANGES;
+      lim[k] = limits[k] & ~DXBC_BINDING_LIMIT_FLAGS;
    heap = (limits[DXBC_BINDING_SRV] & DXBC_BINDING_HEAP_RANGES) != 0;
    heap_uav = (limits[DXBC_BINDING_UAV] & DXBC_BINDING_HEAP_RANGES) != 0;
    heap_sampler = (limits[DXBC_BINDING_SAMPLER] & DXBC_BINDING_HEAP_RANGES) != 0;

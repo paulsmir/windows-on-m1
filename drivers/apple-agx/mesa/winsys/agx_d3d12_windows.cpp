@@ -594,6 +594,21 @@ static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
   AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS | DXBC_BINDING_HEAP_RANGES, AGX_D3D12_UAV_SLOTS | DXBC_BINDING_HEAP_RANGES,
   AGX_D3D12_SAMPLER_SLOTS | DXBC_BINDING_HEAP_RANGES
 };
+/* C65: min/max reduction emulation for heap samplers (DXBC_BINDING_MINMAX)
+ * only with APPLE_AGX_D3D12_MINMAX=1: it costs every heap sample its code
+ * and registers, and Tier 2 (which permits min/max samplers) is not
+ * advertised yet */
+static const uint32_t *shader_binding_limits() {
+  static const uint32_t minmax_limits[DXBC_BINDING_KIND_COUNT] = {
+    AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS | DXBC_BINDING_HEAP_RANGES, AGX_D3D12_UAV_SLOTS | DXBC_BINDING_HEAP_RANGES,
+    AGX_D3D12_SAMPLER_SLOTS | DXBC_BINDING_HEAP_RANGES | DXBC_BINDING_MINMAX
+  };
+  static const bool minmax = [] {
+    char value[4] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_MINMAX", value, sizeof(value)) == 1 && value[0] == '1';
+  }();
+  return minmax ? minmax_limits : owner_binding_limits;
+}
 /* C44: a stored shader is DXBC tokens or (SM 6) a DXIL program part with
  * the same version/size header; both translate to the same NIR conventions
  * and binding map. DXIL stream output is built on the translated NIR
@@ -609,7 +624,7 @@ static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage
       agx_dxil_is_program(tokens, static_cast<size_t>(tokens[1]) * 4u)) {
     struct agx_dxil_nir_result dxil = {};
     enum agx_dxil_nir_status status =
-        agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, owner_binding_limits, options, &dxil);
+        agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, shader_binding_limits(), options, &dxil);
     if (status == AGX_DXIL_NIR_OK && xfb && !agx_dxil_nir_xfb(dxil.nir, xfb)) {
       ralloc_free(dxil.nir);
       dxil.nir = NULL;
@@ -631,7 +646,7 @@ static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage
   }
 #endif
   (void)stage;
-  return dxbc_translate_tokens_bindings_xfb(tokens, options, owner_binding_limits, bindings, passthrough_registers,
+  return dxbc_translate_tokens_bindings_xfb(tokens, options, shader_binding_limits(), bindings, passthrough_registers,
                                             passthrough_positions, xfb, error);
 }
 extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,

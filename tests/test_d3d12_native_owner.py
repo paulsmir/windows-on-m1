@@ -64,8 +64,15 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('translate_shader(tokens, MESA_SHADER_COMPUTE,', create)
         self.assertIn('&compute->Bindings, 0u, 0u, NULL, &error)', create)
         translate = body(text, 'static struct nir_shader *translate_shader(')
-        self.assertIn('return dxbc_translate_tokens_bindings_xfb(tokens, options, owner_binding_limits, bindings,', translate)
-        self.assertIn('agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, owner_binding_limits, options, &dxil)', translate)
+        self.assertIn('return dxbc_translate_tokens_bindings_xfb(tokens, options, shader_binding_limits(), bindings,', translate)
+        self.assertIn('agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, shader_binding_limits(), options, &dxil)', translate)
+        # C65G: min/max emulation only on request; the default limits carry
+        # no DXBC_BINDING_MINMAX
+        limits = body(text, 'static const uint32_t *shader_binding_limits(')
+        self.assertIn('"APPLE_AGX_D3D12_MINMAX"', limits)
+        self.assertIn('return minmax ? minmax_limits : owner_binding_limits;', limits)
+        defaults = text.split('static const uint32_t owner_binding_limits[', 1)[1].split('};', 1)[0]
+        self.assertNotIn('DXBC_BINDING_MINMAX', defaults)
         self.assertIn('dxbc_nir_compute_info(', create)
         self.assertIn('->create_compute_state(', create)
         dispatch = body(text, 'extern "C" HRESULT AgxD3d12OwnerDispatch(')

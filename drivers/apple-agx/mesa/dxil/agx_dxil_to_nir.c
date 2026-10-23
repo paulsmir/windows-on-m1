@@ -154,7 +154,7 @@ freeze(struct job *job)
    memset(&job->map, 0, sizeof(job->map));
    for (unsigned i = 0; i < job->decls; ++i) {
       struct declaration *d = &job->decl[i];
-      const uint32_t limit = job->limits[d->kind] & ~DXBC_BINDING_HEAP_RANGES;
+      const uint32_t limit = job->limits[d->kind] & ~DXBC_BINDING_LIMIT_FLAGS;
       /* C47 (DXBC frontend rule): an unbounded SRV/sampler/UAV range, a
        * UAV range (no dynamic index into slots), or one the free slots
        * cannot take, reads the descriptor heap */
@@ -946,6 +946,9 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       struct util_dynarray wraps;
       util_dynarray_init(&wraps, NULL);
       NIR_PASS(_, nir, nir_shader_tex_pass, lower_heap_tex, nir_metadata_control_flow, &wraps);
+      /* C65: min/max reduction only when the caller asked for it */
+      if (!(job->limits[DXBC_BINDING_SAMPLER] & DXBC_BINDING_MINMAX))
+         util_dynarray_clear(&wraps);
       util_dynarray_foreach(&wraps, struct minmax_wrap, w) {
          nir_builder wb = nir_builder_at(nir_after_instr(&w->tex->instr));
          if (dxbc_minmax_wrap(&wb, w->tex, w->minmax))

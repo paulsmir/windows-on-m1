@@ -96,3 +96,57 @@ has a MIN and a MAX variant.
 Checkpoint: a probe step C65A that samples a 4x4 texture with known texels
 through MINIMUM and MAXIMUM point, linear and trilinear samplers. It
 compares against the CPU reference, including zero-weight edges.
+
+## Status 2026-10-23
+
+- Lowering `dxbc_minmax.c` (c3fb25d2), heap-sampler wiring in both frontends
+  (1089c2aa), API probe step C65A (31dfc197): PASS on WARP, J313 pending
+  (handoff `.local/handoff/C53-HW2-for-EXP1889.md`).
+- Map word as implemented: handle bits 0-10, reduction bits 11-12, min/mag/mip
+  linear bits 13-15, fp16 MipLODBias bits 16-31 (`dxbc_minmax_bits.h`).
+  Item 2 above is superseded by this layout. Item 1 is moot: the lowering
+  uses one explicit-LOD `txl` per texel at its centre, not gather.
+
+## Cost and gating (C65G)
+
+Measured on host libnir (scratch harness around `test_c65_minmax_nir`,
+after algebraic/CSE/DCE): one wrapped 2D sample grows from 16 to 129-136
+NIR instructions (2D array: 163), including 11 extra texture instructions.
+1089c2aa put this on every heap sample: every SM 5.1 unbounded and SM 6
+heap sampler, whether or not a min/max sampler is ever bound. The
+temporaries in the never-taken branch also count towards the shader's
+register allocation, which on AGX lowers occupancy for the whole shader.
+
+Honeykrisp's answer to the same hardware gap (`00-hk-defaults.conf`,
+`hk_fake_minmax`): advertise min/max for vkd3d, sample with the standard
+filter, and accept the conformance failure. It is a reference, not this
+driver's contract: the wrap remains the exact path.
+
+Decision: the frontends emit the wrap only when the sampler binding limit
+carries `DXBC_BINDING_MINMAX`. The owner sets it only with
+`APPLE_AGX_D3D12_MINMAX=1` (`shader_binding_limits`). Tier 2, which permits
+min/max samplers, is not advertised, so the default loses no contract.
+
+## Next: a min/max shader variant (needed before the Tier 2 flip)
+
+- The owner compiles a second CSO with `DXBC_BINDING_MINMAX` lazily. It
+  selects that CSO for a draw or dispatch when a bound sampler has reduction
+  2 or 3:
+  - heap map entries: `bind_heaps` already walks them;
+  - slot samplers: known at bind time.
+  Shaders that never meet a min/max sampler keep their code size, register
+  count and compile time.
+- Slot and static samplers in the variant: their 5 bits are compile-time
+  constants of the variant key (16 slots x 5 bits). A run-time constant
+  buffer read would need `DXBC_HEAP_TABLE_CB` to be bound for every
+  slot-sampled stage. Asahi does not bounds-check UBO loads
+  (`agx_nir_lower_sysvals.c` `load_ubo` is base + offset; `ubo_base` is only
+  refreshed for bound buffers in `agx_set_cbuf_uniforms`), so an unbound
+  table would fault.
+- RESOLVED from source: the PSO keeps every stage's bytecode
+  (`AgxD3d12PipelineState::cs`, agx_d3d12_ddi.cpp copies vs/ps/gs/hs/ds
+  after cs). It already compiles lazily under `compile_lock`
+  (`pso->compiled`), so a min/max variant can be a second compiled object
+  translated from the same tokens on first use.
+- WHAT IS STILL UNKNOWN: nothing offline. The C65A run on J313 tells whether
+  txs/query_levels/texel-centre txl on heap handles match D3D values on AGX.

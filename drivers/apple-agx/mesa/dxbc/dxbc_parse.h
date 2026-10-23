@@ -283,6 +283,8 @@ struct dxbc_program {
    /* C47: heap ranges dxbc_prepare_static_bindings placed; their operands
     * are two-dimensional [range][register offset] */
    uint32_t heap_ranges;
+   /* C65: the sampler limit asked for min/max emulation (DXBC_BINDING_MINMAX) */
+   uint32_t minmax;
 };
 
 enum dxbc_status {
