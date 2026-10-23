@@ -525,7 +525,13 @@ class D3d12AbiGate(unittest.TestCase):
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         p = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture('):]
         p = p[:p.index('\n}\n')]
-        self.assertIn('if (format == DXGI_FORMAT_R10G10B10A2_UNORM || samples > 1u) {', p)
+        self.assertIn('if (format == DXGI_FORMAT_R10G10B10A2_UNORM || bgrx || samples > 1u) {', p)
+        # C66b (EXP1901): a B8G8R8X8 back buffer (D3D9On12 X8R8G8B8) is
+        # presentable but stored as BGRA8, the only 8-bit BGR storage the
+        # presentation contract (umd.c AdmissionUmdDescribePrimary) accepts
+        self.assertIn('resource_arg->Format == DXGI_FORMAT_B8G8R8X8_UNORM ||', create)
+        self.assertLess(p.index('else if (format == DXGI_FORMAT_B8G8R8X8_UNORM) format = DXGI_FORMAT_B8G8R8A8_UNORM;'),
+                        p.index('create.Format = format;'))
         self.assertIn('bytes, &converted, samples);', p)
         clear = fn('static VOID APIENTRY ClearRenderTargetView(')
         self.assertIn('command.clear.rtv = *rtv;', clear)

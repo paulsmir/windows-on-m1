@@ -2412,6 +2412,9 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
                                  resource_arg->MipLevels == 1 && resource_arg->DepthOrArraySize == 1 &&
                                  (resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
                                   resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
+                                  /* C66b: D3D9On12's X8R8G8B8 back buffers, converted at present */
+                                  resource_arg->Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
+                                  resource_arg->Format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB ||
                                   resource_arg->Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
                                   /* C40: an RGBA8 presentation allocation converted at present */
                                   resource_arg->Format == DXGI_FORMAT_R10G10B10A2_UNORM);

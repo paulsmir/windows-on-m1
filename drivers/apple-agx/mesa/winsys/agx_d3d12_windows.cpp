@@ -1231,13 +1231,19 @@ extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner
   /* C66 (D3D12-C66-msaa-blt-present.md): likewise a multisampled render
    * target keeps a single-sampled presentation allocation and renders into
    * its own multisampled texture, resolved into it at each present. */
+  /* C66b (EXP1901): D3D9On12 presents an X8R8G8B8 back buffer as
+   * B8G8R8X8, which the presentation contract does not store; it renders
+   * into its own B8G8R8X8 texture, blitted into BGRA8 storage (alpha 1). */
+  const bool bgrx = format == DXGI_FORMAT_B8G8R8X8_UNORM || format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB;
   AGX_D3D12_BUFFER converted = {};
-  if (format == DXGI_FORMAT_R10G10B10A2_UNORM || samples > 1u) {
+  if (format == DXGI_FORMAT_R10G10B10A2_UNORM || bgrx || samples > 1u) {
     const HRESULT made = AgxD3d12OwnerCreateTexture2D(owner, format, width, height, 1u, 1u,
                                                       AGX_D3D12_BIND_RENDER_TARGET | (shader_resource ? AGX_D3D12_BIND_SAMPLER : 0u),
                                                       bytes, &converted, samples);
     if (FAILED(made)) return made;
     if (format == DXGI_FORMAT_R10G10B10A2_UNORM) format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    else if (format == DXGI_FORMAT_B8G8R8X8_UNORM) format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    else if (format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB) format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
   }
   (void)collect_presentations(owner);
   auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(
@@ -1540,7 +1546,7 @@ extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *pre
   if (!owner || !owner->Context || !record || !allocation || !record->Resource.KernelAllocation) return E_INVALIDARG;
   if (record->Converted && record->RenderResource) {
     /* C40: the rendered 10-bit texture into the RGBA8 presentation storage;
-     * C66: the multisampled one resolved into it */
+     * C66: the multisampled one resolved into it; C66b: BGRX into BGRA */
     struct pipe_blit_info blit = {};
     blit.src.resource = record->Converted;
     blit.src.format = record->Converted->format;
