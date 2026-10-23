@@ -6588,13 +6588,14 @@ static int step_c61a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
     return c60_coverage(d, q, f, b, 1);
 }
 /* C62A: the reported maximum feature level follows APPLE_AGX_D3D12_FL111
- * (11_1 with it, 11_0 without), through the runtime's FEATURE_LEVELS query. */
+ * (11_1 by default, 11_0 with the variable 0), through the runtime's
+ * FEATURE_LEVELS query. */
 static int step_c62a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
     static const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_12_0,
                                                D3D_FEATURE_LEVEL_12_1};
     D3D12_FEATURE_DATA_FEATURE_LEVELS data = {4, levels};
     char value[2] = {0};
-    const int fl111 = GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1 && value[0] == '1';
+    const int fl111 = !(GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1 && value[0] == '0');
     const D3D_FEATURE_LEVEL expected = fl111 ? D3D_FEATURE_LEVEL_11_1 : D3D_FEATURE_LEVEL_11_0;
     HRESULT hr = ID3D12Device_CheckFeatureSupport(d, D3D12_FEATURE_FEATURE_LEVELS, &data, sizeof(data));
     (void)q; (void)f; (void)b;
