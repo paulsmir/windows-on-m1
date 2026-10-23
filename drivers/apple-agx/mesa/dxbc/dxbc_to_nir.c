@@ -118,6 +118,11 @@ struct ctx {
    /* C47: likewise for a heap sampler range */
    nir_def *sampler_heap_offset;
    unsigned sampler_heap_range;
+   /* C53T (Tier 2 feedback, the _s opcodes): the texture instruction being
+    * built returns its residency code (is_sparse) into feedback_code; a
+    * _cl opcode's clamp is its min_lod */
+   bool feedback;
+   nir_def *feedback_code, *min_lod;
 
    /* shader model 5 memory: u# views, g# groupshared, raw/structured t# */
    struct {
@@ -2045,8 +2050,8 @@ tex_begin(struct ctx *c, nir_texop op, unsigned t, unsigned s, bool sampler,
           unsigned num_srcs, const struct tex_shape *shape, nir_alu_type type)
 {
    /* C34: room for texture_offset/sampler_offset (tex_finish); C47: or
-    * texture/sampler handles and a sampler bias */
-   nir_tex_instr *tex = nir_tex_instr_create(c->b.shader, num_srcs + 3);
+    * texture/sampler handles and a sampler bias; C53T: and a min_lod */
+   nir_tex_instr *tex = nir_tex_instr_create(c->b.shader, num_srcs + 4);
    tex->op = op;
    tex->sampler_dim = shape->dim;
    tex->is_array = shape->array;
@@ -2118,10 +2123,27 @@ tex_finish(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, unsigned compon
    nir_def *minmax = NULL;
    if (c->sampler_heap_offset)
       num_srcs = heap_sampler(c, tex, num_srcs, &minmax);
-   c->dyn_texture = c->dyn_sampler = c->heap_offset = c->sampler_heap_offset = NULL;
+   if (c->min_lod) {
+      /* C53T: the _cl clamp. AGX takes a min_lod with implicit LOD and
+       * gradients; an explicit LOD is clamped here */
+      const int l = nir_tex_instr_src_index(tex, nir_tex_src_lod);
+      if (tex->op == nir_texop_txl && l >= 0)
+         tex->src[l] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_fmax(&c->b, tex->src[l].src.ssa, c->min_lod));
+      else if (tex->op == nir_texop_tex || tex->op == nir_texop_txb || tex->op == nir_texop_txd)
+         tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_min_lod, c->min_lod);
+   }
+   /* C53T: the residency code follows the result */
+   const bool sparse = c->feedback && tex->op != nir_texop_txs && tex->op != nir_texop_query_levels &&
+                       tex->op != nir_texop_lod;
+   tex->is_sparse = sparse;
+   c->dyn_texture = c->dyn_sampler = c->heap_offset = c->sampler_heap_offset = c->min_lod = NULL;
    tex->num_srcs = num_srcs;
-   nir_def_init(&tex->instr, &tex->def, components, 32);
+   nir_def_init(&tex->instr, &tex->def, components + (sparse ? 1 : 0), 32);
    nir_builder_instr_insert(&c->b, &tex->instr);
+   if (sparse) {
+      c->feedback_code = nir_channel(&c->b, &tex->def, components);
+      return nir_trim_vector(&c->b, &tex->def, components);
+   }
    /* C65: a heap sampler's min/max reduction, when the caller asked for it */
    nir_def *reduced = minmax && c->p->minmax ? dxbc_minmax_wrap(&c->b, tex, minmax) : NULL;
    return reduced ? reduced : &tex->def;
@@ -2362,6 +2384,83 @@ emit_gather(struct ctx *c, const struct dxbc_instruction *insn)
       tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_offset, offset_src(c, insn, 2));
    write_dst(c, insn, &insn->operands[0], resource_swizzle(c, tex_finish(c, tex, n, 4), res),
              insn->saturate);
+}
+
+static void emit_mem_load(struct ctx *c, const struct dxbc_instruction *insn);
+static void emit_typed_load(struct ctx *c, const struct dxbc_instruction *insn);
+
+/* C53T (Tier 2): the _s opcodes are their base opcode with a status
+ * operand (operands[1], after the result) and, for the _cl forms, a
+ * trailing LOD clamp. The status is the access's residency code (AGX: bit 0
+ * clear = resident), which only check_access_fully_mapped interprets.
+ * Buffer and typed UAV loads return no residency: their status is
+ * "resident" (Asahi's raw RGB32 loads do the same). */
+static void
+emit_feedback(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   static const struct { uint32_t op, base, clamp; } forms[] = {
+      {DXBC_OP_SAMPLE_L_FEEDBACK, DXBC_OP_SAMPLE_L, 0}, {DXBC_OP_SAMPLE_C_LZ_FEEDBACK, DXBC_OP_SAMPLE_C_LZ, 0},
+      {DXBC_OP_SAMPLE_CLAMP_FEEDBACK, DXBC_OP_SAMPLE, 4}, {DXBC_OP_SAMPLE_B_CLAMP_FEEDBACK, DXBC_OP_SAMPLE_B, 5},
+      {DXBC_OP_SAMPLE_D_CLAMP_FEEDBACK, DXBC_OP_SAMPLE_D, 6}, {DXBC_OP_SAMPLE_C_CLAMP_FEEDBACK, DXBC_OP_SAMPLE_C, 5},
+      {DXBC_OP_LD_FEEDBACK, DXBC_OP_LD, 0}, {DXBC_OP_LD_MS_FEEDBACK, DXBC_OP_LD_MS, 0},
+      {DXBC_OP_GATHER4_FEEDBACK, DXBC_OP_GATHER4, 0}, {DXBC_OP_GATHER4_C_FEEDBACK, DXBC_OP_GATHER4_C, 0},
+      {DXBC_OP_GATHER4_PO_FEEDBACK, DXBC_OP_GATHER4_PO, 0}, {DXBC_OP_GATHER4_PO_C_FEEDBACK, DXBC_OP_GATHER4_PO_C, 0},
+      {DXBC_OP_LD_UAV_TYPED_FEEDBACK, DXBC_OP_LD_UAV_TYPED, 0}, {DXBC_OP_LD_RAW_FEEDBACK, DXBC_OP_LD_RAW, 0},
+      {DXBC_OP_LD_STRUCTURED_FEEDBACK, DXBC_OP_LD_STRUCTURED, 0},
+   };
+   unsigned f = 0;
+   while (f < ARRAY_SIZE(forms) && forms[f].op != insn->opcode)
+      ++f;
+   if (f == ARRAY_SIZE(forms) || insn->num_operands < 3) {
+      fail(c, insn, "feedback opcode");
+      return;
+   }
+   struct dxbc_instruction base = *insn;
+   base.opcode = forms[f].base;
+   memmove(&base.operands[1], &base.operands[2], (base.num_operands - 2) * sizeof(base.operands[0]));
+   --base.num_operands;
+   if (forms[f].clamp && forms[f].clamp < base.num_operands) {
+      c->min_lod = nir_channel(&c->b, read_src(c, &base, &base.operands[forms[f].clamp], nir_type_float32), 0);
+      --base.num_operands;
+   }
+   c->feedback = true;
+   c->feedback_code = NULL;
+   switch (base.opcode) {
+   case DXBC_OP_SAMPLE: case DXBC_OP_SAMPLE_B: case DXBC_OP_SAMPLE_L:
+   case DXBC_OP_SAMPLE_D: case DXBC_OP_SAMPLE_C: case DXBC_OP_SAMPLE_C_LZ:
+      emit_sample(c, &base);
+      break;
+   case DXBC_OP_LD: case DXBC_OP_LD_MS:
+      emit_ld(c, &base);
+      break;
+   case DXBC_OP_GATHER4: case DXBC_OP_GATHER4_C: case DXBC_OP_GATHER4_PO: case DXBC_OP_GATHER4_PO_C:
+      emit_gather(c, &base);
+      break;
+   case DXBC_OP_LD_UAV_TYPED:
+      c->feedback = false;
+      emit_typed_load(c, &base);
+      break;
+   default:
+      c->feedback = false;
+      emit_mem_load(c, &base);
+      break;
+   }
+   c->feedback = false;
+   c->min_lod = NULL;
+   nir_def *code = c->feedback_code ? c->feedback_code : nir_imm_int(&c->b, 0);
+   c->feedback_code = NULL;
+   write_dst(c, insn, &insn->operands[1], replicate4(c, code), false);
+}
+
+/* C53T: check_access_fully_mapped dst, status: ~0 when the access the
+ * status came from touched only mapped tiles */
+static void
+emit_check_access(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   nir_def *resident = nir_is_sparse_texels_resident(b, 1, nir_channel(b, SRC(1, U), 0));
+   write_dst(c, insn, &insn->operands[0], replicate4(c, nir_bcsel(b, resident, nir_imm_int(b, ~0), nir_imm_int(b, 0))),
+             false);
 }
 
 static void
@@ -3159,6 +3258,16 @@ emit_instruction(struct ctx *c, unsigned index)
       return;
    case DXBC_OP_LOD:
       emit_lod(c, insn);
+      return;
+   case DXBC_OP_GATHER4_FEEDBACK: case DXBC_OP_GATHER4_C_FEEDBACK: case DXBC_OP_GATHER4_PO_FEEDBACK:
+   case DXBC_OP_GATHER4_PO_C_FEEDBACK: case DXBC_OP_LD_FEEDBACK: case DXBC_OP_LD_MS_FEEDBACK:
+   case DXBC_OP_LD_UAV_TYPED_FEEDBACK: case DXBC_OP_LD_RAW_FEEDBACK: case DXBC_OP_LD_STRUCTURED_FEEDBACK:
+   case DXBC_OP_SAMPLE_L_FEEDBACK: case DXBC_OP_SAMPLE_C_LZ_FEEDBACK: case DXBC_OP_SAMPLE_CLAMP_FEEDBACK:
+   case DXBC_OP_SAMPLE_B_CLAMP_FEEDBACK: case DXBC_OP_SAMPLE_D_CLAMP_FEEDBACK: case DXBC_OP_SAMPLE_C_CLAMP_FEEDBACK:
+      emit_feedback(c, insn);
+      return;
+   case DXBC_OP_CHECK_ACCESS_FULLY_MAPPED:
+      emit_check_access(c, insn);
       return;
    case DXBC_OP_SAMPLE_INFO:
       emit_sampleinfo(c, insn);

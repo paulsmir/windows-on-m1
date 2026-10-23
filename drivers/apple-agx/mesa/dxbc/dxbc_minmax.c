@@ -122,7 +122,7 @@ nir_def *
 dxbc_minmax_wrap(nir_builder *b, nir_tex_instr *tex, nir_def *minmax)
 {
    const int ci = nir_tex_instr_src_index(tex, nir_tex_src_coord);
-   if (tex->sampler_dim != GLSL_SAMPLER_DIM_2D || tex->is_shadow || ci < 0 ||
+   if (tex->sampler_dim != GLSL_SAMPLER_DIM_2D || tex->is_shadow || tex->is_sparse || ci < 0 ||
        nir_alu_type_get_base_type(tex->dest_type) != nir_type_float ||
        (tex->op != nir_texop_tex && tex->op != nir_texop_txb && tex->op != nir_texop_txl &&
         tex->op != nir_texop_txd) ||

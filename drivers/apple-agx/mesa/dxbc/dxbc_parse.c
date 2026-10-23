@@ -514,7 +514,19 @@ parse_instruction(struct parse_state *s, uint32_t start, uint32_t limit,
       ++s->pos;
    }
 
+   /* C53T: fxc ends the sample feedback (_s) opcodes with one DWORD past
+    * their fixed operands, not always zero (sample_d_cl_s: 0x2000); their
+    * operand counts as vkd3d-shader's tpf reader takes them */
+   const unsigned fixed = opcode == DXBC_OP_SAMPLE_L_FEEDBACK || opcode == DXBC_OP_SAMPLE_C_LZ_FEEDBACK ||
+                          opcode == DXBC_OP_SAMPLE_CLAMP_FEEDBACK ? 6u
+                          : opcode == DXBC_OP_SAMPLE_B_CLAMP_FEEDBACK || opcode == DXBC_OP_SAMPLE_C_CLAMP_FEEDBACK ? 7u
+                          : opcode == DXBC_OP_SAMPLE_D_CLAMP_FEEDBACK ? 8u : 0u;
    while (s->pos < s->end) {
+      if (fixed && insn->num_operands == fixed) {
+         insn->padding = s->end - s->pos;
+         s->pos = s->end;
+         break;
+      }
       /* fxc pads samplepos (ps_4_1) with one zero DWORD inside the
        * instruction length; a zero token is no valid operand (a temp
        * register with no index), so zero tail DWORDs are padding. */

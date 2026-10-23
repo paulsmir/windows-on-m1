@@ -128,6 +128,24 @@ class DxilToNir(unittest.TestCase):
         self.assertEqual(r.stdout.count("@bindless_image_agx"), 4)
         self.assertIn("sampler_handle", r.stdout)
 
+    def test_feedback_accesses_return_residency(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C53T (Tiled
+        # Resources Tier 2): the runtime converts DXBC to DXIL (dxilconv), so
+        # the status-returning accesses and CheckAccessFullyMapped arrive as
+        # DXIL. Each must reach NIR as an is_sparse access (dxil-spirv's
+        # OpImageSparse*) with its clamp as min_lod, through the slot and
+        # heap lowering, or the status reads garbage. (spirv_to_nir only
+        # warns about an undeclared SparseResidency, so this checks the path,
+        # not the capability.) The fixture is tests/fixtures/dxbc/
+        # ps50feedback.hlsl (fxc ps_5_0) converted by dxbc2dxil.cpp.
+        r = subprocess.run([str(self.dxil), str(FIXTURES / "feedback_ps.dxil"), "--print-final"], capture_output=True,
+                           text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        sparse = [line for line in r.stdout.splitlines() if re.search(r"= \(\w+\)(tex|txb|txd|txl|txf|tg4) .*\bsparse\b", line)]
+        self.assertEqual(len(sparse), 8, "\n".join(sparse))
+        self.assertEqual(sum("(min_lod)" in line for line in sparse), 3)
+        self.assertGreaterEqual(len(re.findall(r"@is_sparse_texels_resident", r.stdout)), 8)
+
     def test_dynamic_srv_range_ends_at_the_next_dynamic_range(self):
         # Night Raid GT2 (EXP1879G): a dynamically indexed Cube range filled
         # every used slot after its base, ran into the following dynamic 2D

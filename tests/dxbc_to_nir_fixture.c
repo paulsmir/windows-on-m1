@@ -106,7 +106,7 @@ main(int argc, char **argv)
        !dxbc_container_find_chunk(bytes, (size_t)size, DXBC_FOURCC('S', 'H', 'D', 'R'), &chunk, &chunk_bytes))
       return 2;
    if (dxbc_parse_program(chunk, chunk_bytes / 4, &program, &perr) != DXBC_OK) {
-      printf("PARSE_ERROR %d\n", perr.status);
+      printf("PARSE_ERROR %d offset %u opcode %u\n", perr.status, perr.offset, perr.opcode);
       return 1;
    }
 

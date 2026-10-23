@@ -283,6 +283,26 @@ class DxbcToNir(unittest.TestCase):
         self.assertEqual(minmax.returncode, 0, minmax.stdout + minmax.stderr)
         self.assertEqual(len(re.findall(r"\bquery_levels\b", minmax.stdout)), 4)
 
+    def test_feedback_opcodes_return_residency(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C53T (Tiled
+        # Resources Tier 2): every _s opcode is its base access plus a status
+        # operand, and fxc pads the sample forms with a DWORD that is not
+        # always zero (sample_d_cl_s: 0x2000) -- the parser must not read it
+        # as a ninth operand. Each texture access returns the residency code
+        # (sparse) that CheckAccessFullyMapped tests; a _cl clamp is the
+        # min_lod of implicit-LOD and gradient samples; a raw buffer load has
+        # no residency and reads as resident (code 0).
+        run = subprocess.run([str(self.binary), str(FIXTURES / "ps50feedback.dxbc"), "--d3d12", "--print-final"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        sparse = [line for line in run.stdout.splitlines() if re.search(r"= \(\w+\)(tex|txb|txd|txl|txf|tg4) .*\bsparse\b", line)]
+        self.assertEqual(len(sparse), 7, "\n".join(sparse))
+        self.assertEqual(sorted(re.search(r"\)(\w+) ", line).group(1) for line in sparse),
+                         ["tex", "tg4", "txb", "txd", "txf", "txl", "txl"])
+        self.assertEqual(sum("(min_lod)" in line for line in sparse), 3)
+        self.assertEqual(len(re.findall(r"@is_sparse_texels_resident", run.stdout)), 8)
+        self.assertRegex(run.stdout, r"@is_sparse_texels_resident \(%\d+ \(0x0\)\)")
+
     def test_buffer_srv_ranges_read_the_descriptor_heap(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47: Tier
         # 2 SRV tables span the heap for every SRV kind. Unbounded raw,

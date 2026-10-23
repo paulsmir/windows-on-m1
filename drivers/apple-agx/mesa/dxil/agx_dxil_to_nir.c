@@ -644,6 +644,11 @@ static const struct spirv_capabilities caps = {
    /* ROV (12_1): dxil-spirv's PixelInterlockOrderedEXT critical section
     * (D3D12-FL-program.md "ROV path"); ROVsSupported stays off until probed */
    .FragmentShaderPixelInterlockEXT = true,
+   /* C53T (Tiled Resources Tier 2): dxil-spirv's OpImageSparse* for the
+    * status-returning accesses and CheckAccessFullyMapped; spirv_to_nir
+    * makes them is_sparse texture instructions, which AGX answers natively
+    * (agx_nir_lower_texture is_sparse_texels_resident) */
+   .SparseResidency = true,
 };
 
 static enum agx_dxil_nir_status
