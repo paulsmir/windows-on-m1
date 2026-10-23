@@ -253,3 +253,12 @@ Process review 2026-10-23 (EXP1887/EXP1888):
 - Protected invariants: `.local/handoff/codex/protected-invariants.txt` lists hardware-validated source lines (file | exact line | experiment).
   - codex-review flags a commit that removes such a line without re-adding it. T7b lesson: green tests, but the commit disabled the validated C75c path.
   - Add a row whenever a hardware experiment validates a behavioural line. Use the exact full line: a substring survives a weakening rewrite.
+
+## Fast GravityMark loop (user, 2026-10-23: "focus on GravityMark only, ~5 min per iteration")
+
+- **KMD changes still need a boot.** The m1n1 firmware arm is one-shot per boot, and a device restart cannot re-initialise the GPU. Use a SHORT probe profile: package state, GravityMark D3D12, KMD receipts (probe1917.sh). The full regression set runs only before an accepted state.
+- **UMD changes need no reboot:**
+  1. `scratchpad/umd-quick.sh <baseN> <baseDir> <tag>` builds only the ARM64 UMD from HEAD, at the installed package version (run<baseN>.ps1 cut at ARM64_PACKAGE_DONE).
+  2. `umd-hotswap.sh <dll>` replaces System32 and DriverStore AppleAgxRenderAdmissionUmdArm64.dll; the original is kept as .orig, and `umd-hotswap.sh restore` puts it back.
+  3. `gm-quick.sh <tag> [asteroids] [api]` runs one GravityMark with a 90 s timeout.
+- Each hot-swap run is recorded as EXP<baseN>U<k> in EXPERIMENTS.md (UMD sha256, commit, result). The final package of an accepted UMD still goes through the normal build and full set.
