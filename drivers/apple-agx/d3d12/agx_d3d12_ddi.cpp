@@ -2404,10 +2404,12 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         /* C7b: a 2D render target the runtime can share (DXGI swapchain
          * buffers among them) gets a kernel allocation of the runtime
          * resource -- the D3D10/11 presentation-resource contract (BGRA8 or
-         * RGBA8, one mip, layer and sample, linear) */
+         * RGBA8, one mip, layer and sample, linear). C66: a 2x/4x target
+         * (EXP1899 Portal 2: D3D9On12 presents its 4x back buffer) renders
+         * into its own multisampled texture, resolved at present (EXP1829
+         * C32A: never the single-sampled allocation itself). */
         const bool presentable = !placed && (bind & AGX_D3D12_BIND_RENDER_TARGET) && runtime_resource.handle &&
                                  resource_arg->MipLevels == 1 && resource_arg->DepthOrArraySize == 1 &&
-                                 resource_arg->SampleDesc.Count == 1 && /* EXP1829 C32A: a 4x target became 1x */
                                  (resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
                                   resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
                                   resource_arg->Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
@@ -2419,6 +2421,7 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
                          ? AgxD3d12OwnerCreatePresentationTexture(owner, resource_arg->Format,
                                                                   static_cast<UINT>(resource_arg->Width), resource_arg->Height,
                                                                   (bind & AGX_D3D12_BIND_SAMPLER) != 0,
+                                                                  resource_arg->SampleDesc.Count, bytes,
                                                                   runtime_resource.handle, &texture, &texture_heap->presentation,
                                                                   &presentation_allocation)
                          : AgxD3d12OwnerCreateTexture2D(owner, resource_arg->Format, static_cast<UINT>(resource_arg->Width),
@@ -4076,8 +4079,12 @@ static VOID APIENTRY Present(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEU
     }
     const UINT receipt[] = {reason, arg ? arg->SurfacesToPresent : 0u, arg ? arg->Flags.Value : 0u,
                             arg ? static_cast<UINT>(arg->FlipInterval) : 0u, allocation,
-                            arg && arg->hDstResource.pDrvPrivate ? 1u : 0u};
-    AdmissionUmdDiagnostic("measure-d3d12-present", reason ? hr : S_OK, receipt, 6);
+                            arg && arg->hDstResource.pDrvPrivate ? 1u : 0u,
+                            /* C66: which surface a refused present named */
+                            source ? static_cast<UINT>(source->format) : 0u,
+                            source ? source->width | (source->height << 16) : 0u,
+                            source ? static_cast<UINT>(source->bytes >> 16) : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-present", reason ? hr : S_OK, receipt, 9);
     if (reason && list) ListError(list, hr);
 }
 /* C10 (D3D12-C10-uav-clears.md): UAV clears record the CPU descriptor

@@ -297,11 +297,14 @@ HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *Owner, AGX_D3D12_QUERY_HEAP
 /* C7b (D3D12-C7-present.md): a 2D render target DXGI can share -- a kernel
  * allocation of the runtime resource (the D3D10/11 presentation-resource
  * path: AdmissionUmdCreateResource with the runtime handle, BGRA8/RGBA8,
- * one mip/layer/sample) imported into the owner as a linear texture.
+ * one mip/layer) imported into the owner as a linear texture. C40/C66: a
+ * 10-bit or multisampled (2x/4x) target renders into its own texture of
+ * Bytes, converted or resolved into the allocation at each present.
  * *Allocation receives the D3DKMT allocation, *Presentation the record the
  * destroy call takes. */
 HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width,
-                                               unsigned Height, int ShaderResource, HANDLE RuntimeResource,
+                                               unsigned Height, int ShaderResource, unsigned Samples,
+                                               unsigned long long Bytes, HANDLE RuntimeResource,
                                                AGX_D3D12_BUFFER *Texture, void **Presentation, UINT *Allocation);
 void AgxD3d12OwnerDestroyPresentationTexture(AGX_D3D12_OWNER *Owner, void *Presentation);
 /* C7c: makes a presentation texture's rendering visible to the kernel

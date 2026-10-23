@@ -519,8 +519,14 @@ class D3d12AbiGate(unittest.TestCase):
         texture_path = create[create.index('AgxD3d12OwnerCreateTexture2D('):create.index('return hr;')]
         self.assertNotIn('RegisterHeap', texture_path)
         # EXP1829: a multisampled render target is never a single-sampled
-        # presentation texture
-        self.assertIn('resource_arg->SampleDesc.Count == 1 &&', create[:create.index('AgxD3d12OwnerCreatePresentationTexture(')])
+        # presentation texture; C66 (EXP1899 Portal 2) gives it its own
+        # multisampled texture of the full size, resolved at present
+        self.assertIn('resource_arg->SampleDesc.Count, bytes,', create[create.index('AgxD3d12OwnerCreatePresentationTexture('):])
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        p = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture('):]
+        p = p[:p.index('\n}\n')]
+        self.assertIn('if (format == DXGI_FORMAT_R10G10B10A2_UNORM || samples > 1u) {', p)
+        self.assertIn('bytes, &converted, samples);', p)
         clear = fn('static VOID APIENTRY ClearRenderTargetView(')
         self.assertIn('command.clear.rtv = *rtv;', clear)
         self.assertIn('rtv->kind != kDescriptorRtv', clear)

@@ -1214,10 +1214,12 @@ extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const 
 /* C7b: the D3D10 frontend's presentation resources for D3D12 swapchain
  * buffers (AgxD3d10WindowsPresentationCreate + attach_presentation_render_resource) */
 extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner, DXGI_FORMAT format, unsigned width,
-                                                          unsigned height, int shader_resource, HANDLE runtime_resource,
+                                                          unsigned height, int shader_resource, unsigned samples,
+                                                          unsigned long long bytes, HANDLE runtime_resource,
                                                           AGX_D3D12_BUFFER *texture, void **presentation, UINT *allocation) {
   OwnerLock lock(owner);
-  if (!owner || !owner->Screen || !owner->Context || !runtime_resource || !texture || !presentation || !allocation)
+  if (!owner || !owner->Screen || !owner->Context || !runtime_resource || !texture || !presentation || !allocation ||
+      (samples != 1u && samples != 2u && samples != 4u))
     return E_INVALIDARG;
   memset(texture, 0, sizeof(*texture));
   *presentation = NULL;
@@ -1226,13 +1228,16 @@ extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner
    * presentation contracts store BGRA8/RGBA8 only. A 10-bit swapchain
    * buffer keeps an RGBA8 presentation allocation and renders into its own
    * R10G10B10A2 texture, converted into it at each present. */
+  /* C66 (D3D12-C66-msaa-blt-present.md): likewise a multisampled render
+   * target keeps a single-sampled presentation allocation and renders into
+   * its own multisampled texture, resolved into it at each present. */
   AGX_D3D12_BUFFER converted = {};
-  if (format == DXGI_FORMAT_R10G10B10A2_UNORM) {
+  if (format == DXGI_FORMAT_R10G10B10A2_UNORM || samples > 1u) {
     const HRESULT made = AgxD3d12OwnerCreateTexture2D(owner, format, width, height, 1u, 1u,
                                                       AGX_D3D12_BIND_RENDER_TARGET | (shader_resource ? AGX_D3D12_BIND_SAMPLER : 0u),
-                                                      4ull * width * height, &converted, 1u);
+                                                      bytes, &converted, samples);
     if (FAILED(made)) return made;
-    format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    if (format == DXGI_FORMAT_R10G10B10A2_UNORM) format = DXGI_FORMAT_R8G8B8A8_UNORM;
   }
   (void)collect_presentations(owner);
   auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(
@@ -1534,7 +1539,8 @@ extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *pre
   if (allocation) *allocation = 0;
   if (!owner || !owner->Context || !record || !allocation || !record->Resource.KernelAllocation) return E_INVALIDARG;
   if (record->Converted && record->RenderResource) {
-    /* C40: the rendered 10-bit texture into the RGBA8 presentation storage */
+    /* C40: the rendered 10-bit texture into the RGBA8 presentation storage;
+     * C66: the multisampled one resolved into it */
     struct pipe_blit_info blit = {};
     blit.src.resource = record->Converted;
     blit.src.format = record->Converted->format;
