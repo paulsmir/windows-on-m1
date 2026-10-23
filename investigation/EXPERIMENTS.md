@@ -61431,3 +61431,15 @@ EXP1913 HARDWARE BEFORE 2026-10-23T15:45:34Z:
 - Failure criteria: regressions, DWM crash, new removals, hang.
 - Hashes: sys c6453bb01813, UmdArm64 3104be6278cc, UmdX64 02af5840e185, Umd32 d1e33542f640; manifest bb5e2b5a20ec, hardware-manifest 4ff15a76eb1f; probe1913.sh f493a63f964c (PROBE_LINT_OK); visible recovery rec1913h 94f2575d6ae9be87; m1n1 0d3a75b3.
 - Recovery rec1913h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1913-direct-shared-t2b/run1913.sh.
+
+EXP1913 ACTUAL 2026-10-23T16:28:13Z:
+- RUN_DONE; m1n1 0d3a75b3 stable.
+- Regressions: SAMPLE_HASHES bad 0; e1913 118 PASS on ARM64, x64 and x86 (+1 new step FAIL, see C77); T2VOL PASS; D3D9 6/6; D3D11 smoke PASS; samples 4/4 and ModelViewerI alive; DWM faults 0, no DWM crash; PRESSURE refused at 369 MiB available with the guest alive; no GPU reset; G4_SUBMIT_FAILURE none.
+- C75c (Codex T6b 03a993cb, direct buffers up to the class limit, evictable when unmapped) CONFIRMED:
+  - XFER 0 / 0 MiB in all three GravityMark runs (EXP1912: 71 GiB down);
+  - GravityMark D3D11 completed in 190 s with **Score 2549, FPS 15.2** (EXP1912: Score 7, FPS 0.0);
+  - no UMD crash; NULL-safe map paths not hit.
+- GravityMark D3D12 10k/2k: removed at 25.5/22.6 s. No crash, no G4 refusal, no XFER.
+  - New first refusal: measure-d3d12-texture-region-copy hr=E_INVALIDARG {001000c7, 07090000, 00800080}, then measure-d3d12-execute E_INVALIDARG. This is the owner texture-region copy path: handed to the fork session.
+  - make-resident trims succeed (E_PENDING with trimmed slots).
+- C77 (Codex T3, shared open): AGX_D3D12_C76A FAIL hr=0x887a0036 on all ABIs at "distinct device ... second=NULL". The probe cannot create a second distinct D3D12 device on one adapter (D3D12 returns the singleton device), so the open path was never exercised. Probe defect, verdict INCONCLUSIVE; handed back to Codex (T3b: open from a D3D11 device or a second process).
