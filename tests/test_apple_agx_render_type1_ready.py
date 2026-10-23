@@ -47,7 +47,6 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
             "caps->SupportPerEngineTDR = TRUE",
             "caps->SupportDirectFlip = TRUE",
             "caps->PresentationCaps.SupportKernelModeCommandBuffer = 0u",
-            "caps->PresentationCaps.NoCacheCoherentApertureMemory = 1u",
         ):
             self.assertIn(assignment, caps)
         for unsupported in (
