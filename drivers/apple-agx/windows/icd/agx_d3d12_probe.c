@@ -7,6 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <wchar.h>
 
 #include "agx_d3d12_probe_gs.h"
 #include "agx_d3d12_probe_hs.h"
@@ -722,73 +725,164 @@ static void transition(ID3D12GraphicsCommandList *list, ID3D12Resource *resource
     barrier.Transition.StateAfter = after;
     ID3D12GraphicsCommandList_ResourceBarrier(list, 1, &barrier);
 }
-/* C76A: a real second device (CreateDevice's process singleton would hide
- * import bugs), two fenced writes observed through the other allocation view. */
-static int c76_shared_open(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
-    ID3D12DeviceFactory *factory = NULL;
-    IDXGIFactory4 *dxgi = NULL;
-    IDXGIAdapter1 *adapter = NULL;
-    ID3D12Device *other = NULL;
-    ID3D12CommandQueue *other_queue = NULL;
-    ID3D12Fence *other_fence = NULL;
-    ID3D12Resource *created = NULL, *opened = NULL, *upload = NULL, *readback = NULL;
-    ID3D12CommandAllocator *allocators[2] = {NULL, NULL};
-    ID3D12GraphicsCommandList *lists[2] = {NULL, NULL};
-    HANDLE shared = NULL;
-    unsigned passes = 0;
-    LUID luid;
-    ID3D12Device_GetAdapterLuid(device, &luid);
-    typedef HRESULT (WINAPI *get_interface_fn)(REFCLSID, REFIID, void **);
-    HMODULE d3d = GetModuleHandleA("d3d12.dll");
-    get_interface_fn get_interface = d3d ? (get_interface_fn)(void *)GetProcAddress(d3d, "D3D12GetInterface") : NULL;
-    HRESULT hr = get_interface ? get_interface(&CLSID_D3D12DeviceFactory, &IID_ID3D12DeviceFactory, (void **)&factory) : E_NOINTERFACE;
-    if (SUCCEEDED(hr)) hr = ID3D12DeviceFactory_InitializeFromGlobalState(factory);
-    if (SUCCEEDED(hr)) hr = ID3D12DeviceFactory_SetFlags(factory, D3D12_DEVICE_FACTORY_FLAG_DISALLOW_STORING_NEW_DEVICE_AS_SINGLETON);
-    if (SUCCEEDED(hr)) hr = CreateDXGIFactory1(&IID_IDXGIFactory4, (void **)&dxgi);
-    if (SUCCEEDED(hr)) hr = IDXGIFactory4_EnumAdapterByLuid(dxgi, luid, &IID_IDXGIAdapter1, (void **)&adapter);
-    if (SUCCEEDED(hr)) hr = ID3D12DeviceFactory_CreateDevice(factory, (IUnknown *)adapter, D3D_FEATURE_LEVEL_11_0,
-                                                            &IID_ID3D12Device, (void **)&other);
-    if (SUCCEEDED(hr) && other == device) hr = E_FAIL;
-    printf("C76A distinct device hr=0x%08lx first=%p second=%p\n", (unsigned long)hr, (void *)device, (void *)other);
-    D3D12_COMMAND_QUEUE_DESC qdesc = {D3D12_COMMAND_LIST_TYPE_DIRECT};
-    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandQueue(other, &qdesc, &IID_ID3D12CommandQueue, (void **)&other_queue);
-    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateFence(other, 0, D3D12_FENCE_FLAG_NONE, &IID_ID3D12Fence, (void **)&other_fence);
-    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+/* C76A: cross-process OpenSharedHandle; one import observes two fenced writes.
+ * Events transfer CPU ownership only after run_list proves GPU completion. */
+static int g_warp;
+static HANDLE c76_shared, c76_ready, c76_go, c76_done, c76_parent;
+static HRESULT c76_wait(HANDLE event, HANDLE peer, const char *stage) {
+    HANDLE handles[2] = {event, peer};
+    DWORD result = WaitForMultipleObjects(2, handles, FALSE, 15000);
+    if (result != WAIT_OBJECT_0) printf("C76A %s wait=0x%08lx\n", stage, (unsigned long)result);
+    return result == WAIT_OBJECT_0 ? S_OK : E_FAIL;
+}
+static D3D12_RESOURCE_DESC c76_description(void) {
     D3D12_RESOURCE_DESC desc = {0};
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     desc.Width = 37; desc.Height = 29; desc.DepthOrArraySize = desc.MipLevels = 1;
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count = 1;
     desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_SHARED, &desc,
-        D3D12_RESOURCE_STATE_COMMON, NULL, &IID_ID3D12Resource, (void **)&created);
-    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateSharedHandle(device, (ID3D12DeviceChild *)created, NULL, GENERIC_ALL, NULL, &shared);
-    if (SUCCEEDED(hr)) hr = ID3D12Device_OpenSharedHandle(other, shared, &IID_ID3D12Resource, (void **)&opened);
-    printf("C76A create+share+open hr=0x%08lx\n", (unsigned long)hr);
-    if (shared) { CloseHandle(shared); shared = NULL; }
+    return desc;
+}
+static D3D12_TEXTURE_COPY_LOCATION c76_footprint(ID3D12Resource *buffer) {
+    D3D12_TEXTURE_COPY_LOCATION location = {0};
+    location.pResource = buffer;
+    location.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    location.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    location.PlacedFootprint.Footprint.Width = 37; location.PlacedFootprint.Footprint.Height = 29;
+    location.PlacedFootprint.Footprint.Depth = 1; location.PlacedFootprint.Footprint.RowPitch = 256;
+    return location;
+}
+static int c76_child_read(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    ID3D12Resource *opened = NULL, *readback = NULL;
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    unsigned passes = 0;
+    HRESULT hr = ID3D12Device_OpenSharedHandle(device, c76_shared, &IID_ID3D12Resource, (void **)&opened);
+    printf("C76A route=child-process pid=%lu OpenSharedHandle hr=0x%08lx\n", GetCurrentProcessId(), (unsigned long)hr);
+    CloseHandle(c76_shared); c76_shared = NULL;
     if (SUCCEEDED(hr)) {
-        D3D12_RESOURCE_DESC actual;
+        D3D12_RESOURCE_DESC actual, desc = c76_description();
         ID3D12Resource_GetDesc(opened, &actual);
         if (actual.Dimension != desc.Dimension || actual.Width != desc.Width || actual.Height != desc.Height ||
             actual.Format != desc.Format || actual.MipLevels != 1 || actual.DepthOrArraySize != 1 ||
-            actual.SampleDesc.Count != 1 || actual.Flags != desc.Flags) hr = E_FAIL;
+            actual.SampleDesc.Count != 1 || actual.SampleDesc.Quality != 0 || actual.Flags != desc.Flags) hr = E_FAIL;
     }
     if (SUCCEEDED(hr)) {
-        upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
-        readback = committed_buffer(other, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
-        if (!upload || !readback) hr = E_FAIL;
+        readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+        if (!readback) hr = E_FAIL;
     }
-    for (unsigned i = 0; SUCCEEDED(hr) && i < 2; ++i) {
-        ID3D12Device *d = i ? other : device;
-        hr = ID3D12Device_CreateCommandAllocator(d, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&allocators[i]);
-        if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(d, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocators[i], NULL,
-                                                              &IID_ID3D12GraphicsCommandList, (void **)&lists[i]);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL,
+                                                       &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr) && !SetEvent(c76_ready)) hr = HRESULT_FROM_WIN32(GetLastError());
+    for (unsigned pass = 0; SUCCEEDED(hr) && pass < 2; ++pass) {
+        hr = c76_wait(c76_go, c76_parent, "consumer-go");
+        if (SUCCEEDED(hr) && pass) {
+            hr = ID3D12CommandAllocator_Reset(allocator);
+            if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, NULL);
+        }
+        if (SUCCEEDED(hr)) {
+            D3D12_TEXTURE_COPY_LOCATION target = c76_footprint(readback), source = {0};
+            source.pResource = opened; source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            transition(list, opened, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            ID3D12GraphicsCommandList_CopyTextureRegion(list, &target, 0, 0, 0, &source, NULL);
+            transition(list, opened, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+            hr = run_list(queue, fence, list, base + pass + 1, "C76A consumer");
+            if (FAILED(hr)) { printf("C76A FAIL consumer completion unproven\n"); fflush(stdout); ExitProcess(1); }
+        }
+        if (SUCCEEDED(hr)) {
+            D3D12_RANGE range = {0, 29 * 256};
+            unsigned char *bytes = NULL;
+            hr = ID3D12Resource_Map(readback, 0, &range, (void **)&bytes);
+            if (SUCCEEDED(hr) && !bytes) hr = E_FAIL;
+            if (SUCCEEDED(hr)) {
+                unsigned bad = 0;
+                for (unsigned y = 0; y < 29; ++y) for (unsigned x = 0; x < 37 * 4; ++x)
+                    bad += bytes[y * 256 + x] != (unsigned char)(x * 7 + y * 11 + pass * 83);
+                ID3D12Resource_Unmap(readback, 0, NULL);
+                printf("C76A child pass=%u mismatches=%u\n", pass, bad);
+                if (bad) hr = E_FAIL; else ++passes;
+            }
+        }
+        if (SUCCEEDED(hr) && !SetEvent(c76_done)) hr = HRESULT_FROM_WIN32(GetLastError());
     }
-    D3D12_TEXTURE_COPY_LOCATION source = {0}, target = {0};
-    source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    source.PlacedFootprint.Footprint.Format = desc.Format;
-    source.PlacedFootprint.Footprint.Width = 37; source.PlacedFootprint.Footprint.Height = 29;
-    source.PlacedFootprint.Footprint.Depth = 1; source.PlacedFootprint.Footprint.RowPitch = 256;
-    target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    printf("C76A child result=%s passes=%u hr=0x%08lx\n", SUCCEEDED(hr) && passes == 2 ? "PASS" : "FAIL", passes, (unsigned long)hr);
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (readback) ID3D12Resource_Release(readback);
+    if (opened) ID3D12Resource_Release(opened);
+    return !(SUCCEEDED(hr) && passes == 2);
+}
+static int c76_shared_open(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    ID3D12Resource *created = NULL, *upload = NULL;
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
+    HANDLE shared = NULL, ready = NULL, go = NULL, done = NULL, parent = NULL, log = INVALID_HANDLE_VALUE, input = INVALID_HANDLE_VALUE;
+    PROCESS_INFORMATION process = {0};
+    STARTUPINFOEXW startup = {0};
+    WCHAR exe[MAX_PATH], command[2 * MAX_PATH], temp[MAX_PATH], log_path[MAX_PATH] = {0}, trace_path[MAX_PATH] = {0};
+    WCHAR saved_trace[32768];
+    DWORD saved_length = 0, exit_code = 1;
+    BOOL attributes = FALSE, environment_changed = FALSE, child_exited = FALSE;
+    SIZE_T attribute_bytes = 0;
+    unsigned passes = 0;
+    LUID luid;
+    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC desc = c76_description();
+    HRESULT hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_SHARED, &desc,
+        D3D12_RESOURCE_STATE_COMMON, NULL, &IID_ID3D12Resource, (void **)&created);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateSharedHandle(device, (ID3D12DeviceChild *)created, &sa, GENERIC_ALL, NULL, &shared);
+    printf("C76A route=child-process create+share hr=0x%08lx\n", (unsigned long)hr);
+    if (FAILED(hr)) goto cleanup;
+    ready = CreateEventW(&sa, FALSE, FALSE, NULL);
+    go = CreateEventW(&sa, FALSE, FALSE, NULL);
+    done = CreateEventW(&sa, FALSE, FALSE, NULL);
+    if (!ready || !go || !done || !DuplicateHandle(GetCurrentProcess(), GetCurrentProcess(), GetCurrentProcess(),
+        &parent, SYNCHRONIZE, TRUE, 0)) { hr = E_FAIL; goto cleanup; }
+    DWORD length = GetModuleFileNameW(NULL, exe, MAX_PATH);
+    DWORD temp_length = GetTempPathW(MAX_PATH, temp);
+    if (!length || length >= MAX_PATH || !temp_length || temp_length >= MAX_PATH ||
+        !GetTempFileNameW(temp, L"c76", 0, log_path) || !GetTempFileNameW(temp, L"c76", 0, trace_path)) { hr = E_FAIL; goto cleanup; }
+    log = CreateFileW(log_path, GENERIC_WRITE, FILE_SHARE_READ, &sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    input = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
+    if (log == INVALID_HANDLE_VALUE || input == INVALID_HANDLE_VALUE) { hr = E_FAIL; goto cleanup; }
+    startup.StartupInfo.cb = sizeof(startup);
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup.StartupInfo.hStdInput = input;
+    startup.StartupInfo.hStdOutput = startup.StartupInfo.hStdError = log;
+    InitializeProcThreadAttributeList(NULL, 1, 0, &attribute_bytes);
+    startup.lpAttributeList = HeapAlloc(GetProcessHeap(), 0, attribute_bytes);
+    if (!startup.lpAttributeList) { hr = E_OUTOFMEMORY; goto cleanup; }
+    if (!InitializeProcThreadAttributeList(startup.lpAttributeList, 1, 0, &attribute_bytes)) { hr = E_FAIL; goto cleanup; }
+    attributes = TRUE;
+    HANDLE inherited[] = {shared, ready, go, done, parent, log, input};
+    if (!UpdateProcThreadAttribute(startup.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+        inherited, sizeof(inherited), NULL, NULL)) { hr = E_FAIL; goto cleanup; }
+    ID3D12Device_GetAdapterLuid(device, &luid);
+    if (swprintf_s(command, ARRAYSIZE(command), L"\"%ls\" --c76-child %llu %llu %llu %llu %llu %lu %lu %u",
+        exe, (unsigned long long)(UINT_PTR)shared, (unsigned long long)(UINT_PTR)ready,
+        (unsigned long long)(UINT_PTR)go, (unsigned long long)(UINT_PTR)done, (unsigned long long)(UINT_PTR)parent,
+        luid.LowPart, (DWORD)luid.HighPart, (unsigned)g_warp) < 0) { hr = E_FAIL; goto cleanup; }
+    saved_length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", saved_trace, ARRAYSIZE(saved_trace));
+    if (saved_length >= ARRAYSIZE(saved_trace) || !SetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", trace_path)) { hr = E_FAIL; goto cleanup; }
+    environment_changed = TRUE;
+    if (!CreateProcessW(exe, command, NULL, NULL, TRUE, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &startup.StartupInfo, &process))
+        hr = HRESULT_FROM_WIN32(GetLastError());
+    SetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", saved_length ? saved_trace : NULL);
+    environment_changed = FALSE;
+    if (FAILED(hr)) goto cleanup;
+    printf("C76A child pid=%lu log=%ls trace=%ls\n", process.dwProcessId, log_path, trace_path);
+    CloseHandle(process.hThread); process.hThread = NULL;
+    CloseHandle(log); log = INVALID_HANDLE_VALUE;
+    hr = c76_wait(ready, process.hProcess, "opened");
+    if (FAILED(hr)) goto cleanup;
+    CloseHandle(shared); shared = NULL;
+    upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    if (!upload) { hr = E_FAIL; goto cleanup; }
+    hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL,
+                                                       &IID_ID3D12GraphicsCommandList, (void **)&list);
     for (unsigned pass = 0; SUCCEEDED(hr) && pass < 2; ++pass) {
         unsigned char *bytes = NULL;
         hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&bytes);
@@ -797,59 +891,72 @@ static int c76_shared_open(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D
             for (unsigned y = 0; y < 29; ++y) for (unsigned x = 0; x < 37 * 4; ++x)
                 bytes[y * 256 + x] = (unsigned char)(x * 7 + y * 11 + pass * 83);
             ID3D12Resource_Unmap(upload, 0, NULL);
-            if (pass) for (unsigned i = 0; SUCCEEDED(hr) && i < 2; ++i) {
-                hr = ID3D12CommandAllocator_Reset(allocators[i]);
-                if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(lists[i], allocators[i], NULL);
+            if (pass) {
+                hr = ID3D12CommandAllocator_Reset(allocator);
+                if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, NULL);
             }
         }
         if (SUCCEEDED(hr)) {
-            source.pResource = upload; target.pResource = created;
-            transition(lists[0], created, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
-            ID3D12GraphicsCommandList_CopyTextureRegion(lists[0], &target, 0, 0, 0, &source, NULL);
-            transition(lists[0], created, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
-            hr = run_list(queue, fence, lists[0], base + pass + 1, "C76A producer");
-            if (FAILED(hr)) { printf("AGX_D3D12_C76A: FAIL producer completion unproven\n"); fflush(stdout); ExitProcess(1); }
-        }
-        if (SUCCEEDED(hr)) {
-            /* The second read must survive the creator resource and NT handle. */
+            D3D12_TEXTURE_COPY_LOCATION source = c76_footprint(upload), target = {0};
+            target.pResource = created; target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            transition(list, created, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+            ID3D12GraphicsCommandList_CopyTextureRegion(list, &target, 0, 0, 0, &source, NULL);
+            transition(list, created, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+            hr = run_list(queue, fence, list, base + pass + 1, "C76A producer");
+            if (FAILED(hr)) { printf("AGX_D3D12_C76A: FAIL producer completion unproven\n"); fflush(stdout); TerminateProcess(process.hProcess, 1); ExitProcess(1); }
             if (pass) { ID3D12Resource_Release(created); created = NULL; }
-            source.pResource = readback; target.pResource = opened;
-            transition(lists[1], opened, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
-            ID3D12GraphicsCommandList_CopyTextureRegion(lists[1], &source, 0, 0, 0, &target, NULL);
-            transition(lists[1], opened, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
-            hr = run_list(other_queue, other_fence, lists[1], pass + 1, "C76A consumer");
-            if (FAILED(hr)) { printf("AGX_D3D12_C76A: FAIL consumer completion unproven\n"); fflush(stdout); ExitProcess(1); }
+            if (!SetEvent(go)) hr = HRESULT_FROM_WIN32(GetLastError());
+            if (SUCCEEDED(hr)) hr = c76_wait(done, process.hProcess, "readback");
+            if (SUCCEEDED(hr)) ++passes;
         }
-        if (SUCCEEDED(hr)) {
-            D3D12_RANGE range = {0, 29 * 256};
-            hr = ID3D12Resource_Map(readback, 0, &range, (void **)&bytes);
-            if (SUCCEEDED(hr) && !bytes) hr = E_FAIL;
-            if (SUCCEEDED(hr)) {
-                unsigned bad = 0;
-                for (unsigned y = 0; y < 29; ++y) for (unsigned x = 0; x < 37 * 4; ++x)
-                    bad += bytes[y * 256 + x] != (unsigned char)(x * 7 + y * 11 + pass * 83);
-                ID3D12Resource_Unmap(readback, 0, NULL);
-                printf("C76A pass=%u mismatches=%u\n", pass, bad);
-                if (bad) hr = E_FAIL; else ++passes;
+    }
+cleanup:
+    if (environment_changed) SetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", saved_length ? saved_trace : NULL);
+    if (process.hProcess) {
+        DWORD wait = WaitForSingleObject(process.hProcess, FAILED(hr) ? 0 : 15000);
+        if (wait != WAIT_OBJECT_0) {
+            hr = E_FAIL;
+            TerminateProcess(process.hProcess, 1);
+            wait = WaitForSingleObject(process.hProcess, 5000);
+        }
+        child_exited = wait == WAIT_OBJECT_0;
+        if (!child_exited || !GetExitCodeProcess(process.hProcess, &exit_code) || exit_code != 0) hr = E_FAIL;
+        CloseHandle(process.hProcess);
+    }
+    if (process.hThread) CloseHandle(process.hThread);
+    if (attributes) DeleteProcThreadAttributeList(startup.lpAttributeList);
+    if (startup.lpAttributeList) HeapFree(GetProcessHeap(), 0, startup.lpAttributeList);
+    if (log != INVALID_HANDLE_VALUE) CloseHandle(log);
+    if (input != INVALID_HANDLE_VALUE) CloseHandle(input);
+    if (shared) CloseHandle(shared);
+    if (ready) CloseHandle(ready);
+    if (go) CloseHandle(go);
+    if (done) CloseHandle(done);
+    if (parent) CloseHandle(parent);
+    if (child_exited) {
+        char line[1024]; unsigned open_receipts = 0, presentation_receipts = 0;
+        FILE *file = NULL;
+        (void)_wfopen_s(&file, log_path, L"r");
+        if (file) { while (fgets(line, sizeof(line), file)) fputs(line, stdout); fclose(file); }
+        file = NULL;
+        (void)_wfopen_s(&file, trace_path, L"r");
+        if (file) {
+            while (fgets(line, sizeof(line), file)) {
+                if (!strncmp(line, "d3d12-open-", 11) && strncmp(line, "d3d12-open-adapter ", 18)) { ++open_receipts; fputs(line, stdout); }
+                if (!strncmp(line, "presentation-open ", 18)) { ++presentation_receipts; fputs(line, stdout); }
             }
+            fclose(file);
         }
-    }
-    printf("AGX_D3D12_C76A: %s hr=0x%08lx passes=%u\n", SUCCEEDED(hr) && passes == 2 ? "PASS" : "FAIL", (unsigned long)hr, passes);
-    for (unsigned i = 0; i < 2; ++i) {
-        if (lists[i]) ID3D12GraphicsCommandList_Release(lists[i]);
-        if (allocators[i]) ID3D12CommandAllocator_Release(allocators[i]);
-    }
-    if (readback) ID3D12Resource_Release(readback);
+        printf("C76A umd_open=%s d3d12-open-receipts=%u presentation-open-receipts=%u kmd_open=UNVERIFIED (collect KMD trace)\n",
+            open_receipts || presentation_receipts ? "OBSERVED" : "UNVERIFIED", open_receipts, presentation_receipts);
+    } else printf("C76A umd_open=UNVERIFIED kmd_open=UNVERIFIED child did not exit normally\n");
+    printf("AGX_D3D12_C76A: %s route=child-process hr=0x%08lx passes=%u child_exit=%lu\n",
+           SUCCEEDED(hr) && passes == 2 && child_exited && exit_code == 0 ? "PASS" : "FAIL", (unsigned long)hr, passes, exit_code);
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (upload) ID3D12Resource_Release(upload);
-    if (opened) ID3D12Resource_Release(opened);
     if (created) ID3D12Resource_Release(created);
-    if (other_fence) ID3D12Fence_Release(other_fence);
-    if (other_queue) ID3D12CommandQueue_Release(other_queue);
-    if (other) ID3D12Device_Release(other);
-    if (adapter) IDXGIAdapter1_Release(adapter);
-    if (dxgi) IDXGIFactory4_Release(dxgi);
-    if (factory) ID3D12DeviceFactory_Release(factory);
-    return !(SUCCEEDED(hr) && passes == 2);
+    return !(SUCCEEDED(hr) && passes == 2 && child_exited && exit_code == 0);
 }
 
 static int texture_clear_copy(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
@@ -6957,7 +7064,6 @@ static int step_c14nc(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UI
 /* EXP1826 (C31A): "warp STEP..." runs steps on WARP with the debug layer
  * and prints its messages, separating API misuse in a probe step from
  * driver behaviour before any hardware run. */
-static int g_warp;
 static void dump_debug_messages(ID3D12Device *device, const char *name) {
     ID3D12InfoQueue *q = NULL;
     if (FAILED(ID3D12Device_QueryInterface(device, &IID_ID3D12InfoQueue, (void **)&q))) return;
@@ -6997,6 +7103,47 @@ static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step ste
                 break;
             }
     }
+    return failed;
+}
+
+/* Private mode: parse only numeric inherited handles and the exact adapter LUID.
+ * The child returns its step status, never enters normal probe enumeration. */
+static int c76_child_main(int argc, char **argv) {
+    unsigned long long values[8];
+    if (argc != 10) return 1;
+    for (unsigned i = 0; i < 8; ++i) {
+        char *end = NULL;
+        if (!argv[i + 2][0] || strspn(argv[i + 2], "0123456789") != strlen(argv[i + 2])) return 1;
+        errno = 0;
+        values[i] = strtoull(argv[i + 2], &end, 10);
+        if (errno || !end || *end || (i < 5 && (!values[i] || values[i] > (UINT_PTR)-1)) ||
+            (i >= 5 && i < 7 && values[i] > MAXDWORD) || (i == 7 && values[i] > 1)) return 1;
+    }
+    c76_shared = (HANDLE)(UINT_PTR)values[0]; c76_ready = (HANDLE)(UINT_PTR)values[1];
+    c76_go = (HANDLE)(UINT_PTR)values[2]; c76_done = (HANDLE)(UINT_PTR)values[3]; c76_parent = (HANDLE)(UINT_PTR)values[4];
+    LUID luid = {(DWORD)values[5], (LONG)(DWORD)values[6]};
+    IDXGIFactory4 *factory = NULL;
+    IDXGIAdapter1 *adapter = NULL;
+    /* Ensure successful open receipts are not filtered by the parent's setting. */
+    if (!SetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY", L"0")) return 1;
+    g_warp = (int)values[7];
+    HRESULT hr = S_OK;
+    if (g_warp) {
+        ID3D12Debug *debug = NULL;
+        hr = D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug);
+        if (SUCCEEDED(hr)) {
+            ID3D12Debug_EnableDebugLayer(debug);
+            ID3D12Debug_Release(debug);
+        }
+    }
+    if (SUCCEEDED(hr)) hr = CreateDXGIFactory1(&IID_IDXGIFactory4, (void **)&factory);
+    if (SUCCEEDED(hr)) hr = IDXGIFactory4_EnumAdapterByLuid(factory, luid, &IID_IDXGIAdapter1, (void **)&adapter);
+    printf("C76A child adapter=%08lx:%08lx hr=0x%08lx\n", (DWORD)luid.HighPart, luid.LowPart, (unsigned long)hr);
+    int failed = FAILED(hr) ? 1 : run_isolated(adapter, "C76A_CHILD", c76_child_read);
+    if (adapter) IDXGIAdapter1_Release(adapter);
+    if (factory) IDXGIFactory4_Release(factory);
+    if (c76_shared) CloseHandle(c76_shared);
+    CloseHandle(c76_ready); CloseHandle(c76_go); CloseHandle(c76_done); CloseHandle(c76_parent);
     return failed;
 }
 
@@ -7492,6 +7639,7 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     SetUnhandledExceptionFilter(crash_dump);
     AddVectoredExceptionHandler(1, first_access_violation);
+    if (argc > 1 && !strcmp(argv[1], "--c76-child")) return c76_child_main(argc, argv);
     IDXGIFactory1 *factory = NULL;
     IDXGIAdapter1 *adapter = NULL;
     ID3D12Device *device = NULL;
