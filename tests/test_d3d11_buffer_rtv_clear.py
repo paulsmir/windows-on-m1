@@ -49,6 +49,7 @@ static bool util_is_nan(float f){return std::isnan(f);}
 static unsigned util_format_get_blocksize(pipe_format){return 4;}
 static void util_format_pack_rgba(pipe_format,void*dst,const void*src,unsigned n){assert(n==1);memcpy(dst,src,4);}
 static unsigned pipe_surface_width(pipe_surface*){return 64;}static unsigned pipe_surface_height(pipe_surface*){return 1;}
+static bool predicate=true;static bool CheckPredicate(Device*){return predicate;}
 static int error;static unsigned calls;static uint32_t bytes[64];
 static void SetError(Device*,int e){error=e;}
 static void AgxD3d10WindowsDiagnosticState(void*,const char*){}
@@ -69,6 +70,7 @@ class BufferRtvClear(unittest.TestCase):
 int main(){pipe_context p={nullptr,nullptr,nullptr,clear};Device d={&p,nullptr,{}};pipe_resource r={PIPE_BUFFER,1};
  RenderTargetView v={{&r,R32F,0,0},7,13};
  float values[4]={0.75f,0,0,0};
+ predicate=false;ClearRenderTargetView(&d,&v,values);assert(!calls && !error);predicate=true;
  for(pipe_format f:{R32F,R32UI,R32SI})for(float value:{0.75f,-3.0f,INFINITY,-INFINITY,NAN}){
   v.surface.format=f;values[0]=value;error=0;calls=0;std::fill(bytes,bytes+64,0xdeadbeefu);
   ClearRenderTargetView(&d,&v,values);assert(!error && calls==1);

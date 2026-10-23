@@ -55,6 +55,7 @@ struct pipe_context {
 };
 struct Device {pipe_context *pipe;pipe_framebuffer_state fb;void *windows;int error;};
 static Device *CastDevice(Device *p){return p;}
+static bool CheckPredicate(Device*){return true;}
 static void AgxD3d10WindowsDiagnosticState(void*,const char*){}
 static void SetError(Device *p,int e){p->error=e;}
 #define LOG_UNSUPPORTED(x) ((void)0)

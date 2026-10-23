@@ -1934,6 +1934,7 @@ void APIENTRY
 }''')])
     change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
         'fefcbe8754fd1042b7bf091feab767844cc71a8fe4cbe9f0b41d76dc9dd4fd04',[
+        ('#include "Format.h"', '#include "Format.h"\n#include "Query.h"'),
         # EXP994: D3D10/11 disable depth and stencil tests while no depth-
         # stencil view is bound. Gallium leaves this to the frontend (st/mesa
         # does it for GL); without it the runtime default DepthEnable/LESS
@@ -2087,6 +2088,7 @@ ClearRenderTargetView('''),
                              pipe_surface_height(surface),
                              true);''','''   Device *traceDevice = CastDevice(hDevice);
    if(surface && surface->texture && surface->texture->target==PIPE_BUFFER) {
+      if(traceDevice && !CheckPredicate(traceDevice)) return;
       RenderTargetView *view=CastRenderTargetView(hRenderTargetView);
       if(!AgxD3d11ClearBufferRtv(traceDevice,view,&clear_color,0,view->buffer_num_elements))
          SetError(hDevice,E_NOTIMPL);
