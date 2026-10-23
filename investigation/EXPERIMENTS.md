@@ -61358,3 +61358,18 @@ EXP1911 HARDWARE BEFORE 2026-10-23T14:42:46Z:
 - Failure criteria: regressions, new submit refusals (Transition contention), hang.
 - Hashes: sys b3f49cfe3724, UmdArm64 c4910ade39d3, UmdX64 1ec6d1f288bf, Umd32 685fe4fa8034; manifest 32cd510903d1, hardware-manifest 1d3a973e0152; probe1911.sh 447e878cdcbe (PROBE_LINT_OK); visible recovery rec1911h 5889c8aab5ab3fe6; m1n1 0d3a75b3.
 - Recovery rec1911h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1911-trim-reserve/run1911.sh.
+
+EXP1911 ACTUAL 2026-10-23T15:09:36Z: run1911.sh RC 0, RUN_DONE, m1n1 0d3a75b3 stable.
+- Regressions:
+  - SAMPLE_HASHES bad 0; e1904 118/0 x3; T2VOL PASS; D3D11 smoke PASS;
+  - 4 samples and ModelViewerI alive;
+  - PRESSURE refused at 353 MiB available with the guest alive; no GPU reset.
+- T1 (019b817c trim reservation) is NOT sufficient: G4_SUBMIT_FAILURE branch 9 Parse/Unmapped is still present (total 3; dma 0x110c410000, size 0x118, umdpriv 0x1e0). Verdict: the T1 race is not the (only) cause of the GravityMark D3D12 removals. The fix stays, as an offline-proven race.
+- GravityMark D3D12:
+  - 10k: D3D12 error out of memory at 22 s (BC7 1024x1024 l96 m11 texture create). Pool peak 2688/2688, floor refusals 4.
+  - 2k: "can't map buffer", device removed at 34.5 s, then c0000005 UmdArm64 30.0.1911.0 +0xaed1c, the same failed-map read as EXP1910. Codex T6b fixes it in df8af8e0; not in this package.
+- GravityMark D3D11 ran 71 s (WER 2: Tellusim on its error path). XFER down 69 / 9861 MiB, up 10 / 1025 MiB.
+- NEW: dwm.exe crashed during the GravityMark D3D12 runs (16:57:23 local): Application Error dwmcore.dll 10.0.26100.9711 c00001ad (STATUS_FATAL_MEMORY_EXHAUSTION) at 0x19224c.
+  - This is the first DWM memory-exhaustion crash in this series. The C73 low floor (EXP1908+) lets GPU allocations take memory until LowMemoryCondition, and DWM could not allocate.
+  - Dump in C:\CrashDumps per the WER profile.
+  - Open: the floor policy needs headroom for DWM; candidate: refuse growth when available < max(LowMemory, a fixed 512 MiB reserve), measured.
