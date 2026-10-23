@@ -1753,6 +1753,35 @@ void APIENTRY
    } else {
       *pFormatCaps = 0;
    }
+   /* C69 (EXP1905 GravityMark D3D11: CreateComputeShader E_INVALIDARG for a
+    * typed RG32F UAV load): typed UAV stores and loads. The frontend's
+    * typed UAVs take any translated format (uav_image) and its loads carry
+    * no format (dxbc_to_nir), which Asahi serves (image_load_formatted) --
+    * the D3D12 C49 set validated on J313 (C49A): the formats
+    * TypedUAVLoadAdditionalFormats requires plus Asahi's optional image
+    * formats. The runtime derives that cap from these per-format bits. */
+   {
+      static const DXGI_FORMAT typed_uav[] = {
+         DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_UINT, DXGI_FORMAT_R32G32B32A32_SINT,
+         DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_UINT, DXGI_FORMAT_R16G16B16A16_SINT,
+         DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UINT, DXGI_FORMAT_R8G8B8A8_SINT,
+         DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R16_SINT,
+         DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8_UINT, DXGI_FORMAT_R8_SINT,
+         DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32_SINT,
+         DXGI_FORMAT_R16G16B16A16_UNORM, DXGI_FORMAT_R16G16B16A16_SNORM,
+         DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32_UINT, DXGI_FORMAT_R32G32_SINT,
+         DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UINT, DXGI_FORMAT_R11G11B10_FLOAT,
+         DXGI_FORMAT_R8G8B8A8_SNORM,
+         DXGI_FORMAT_R16G16_FLOAT, DXGI_FORMAT_R16G16_UNORM, DXGI_FORMAT_R16G16_UINT,
+         DXGI_FORMAT_R16G16_SNORM, DXGI_FORMAT_R16G16_SINT,
+         DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8G8_UINT, DXGI_FORMAT_R8G8_SNORM, DXGI_FORMAT_R8G8_SINT,
+         DXGI_FORMAT_R16_UNORM, DXGI_FORMAT_R16_SNORM, DXGI_FORMAT_R8_SNORM};
+      for (unsigned i = 0; i < sizeof(typed_uav) / sizeof(typed_uav[0]); ++i)
+         if (typed_uav[i] == Format) {
+            *pFormatCaps |= D3D11_1DDI_FORMAT_SUPPORT_UAV_WRITES | D3DWDDM2_0DDI_FORMAT_SUPPORT_UAV_READS;
+            break;
+         }
+   }
    /* EXP1289 probe: the APPLE_AGX_D3D_MSAA_CAPS policy selects the formats
     * answering MULTISAMPLE_RENDERTARGET (0: the EXP1284 answers, none); with
     * a mask set every answer is receipted. */

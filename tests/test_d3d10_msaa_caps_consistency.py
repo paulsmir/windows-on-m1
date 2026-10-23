@@ -66,7 +66,7 @@ class MsaaCapsConsistency(unittest.TestCase):
                        {"DXGI_FORMAT_" + n for n in family_names} |
                        {"DXGI_FORMAT_" + n for n in re.findall(r"[PTDR]\((\w+)", policy)})
         names = [n for n in names if n != "DXGI_FORMAT_UNKNOWN"]
-        flags = dict(re.findall(r"#define (D3D10_DDI_FORMAT_SUPPORT_\w+)\s+(0x[0-9A-Fa-f]+)",
+        flags = dict(re.findall(r"#define ((?:D3D10_DDI|D3D11_1DDI|D3DWDDM2_0DDI)_FORMAT_SUPPORT_\w+)\s+(0x[0-9A-Fa-f]+)",
                                 WDK.read_text(errors="replace")))
         program = ["#include <stdio.h>", "typedef unsigned UINT;", "typedef void *D3D10DDI_HDEVICE;",
                    "typedef int BOOL;", "#define TRUE 1", "#define FALSE 0", "#define VOID void",
