@@ -74,4 +74,8 @@ void AgxSetConstantBuffersRange(mesa_shader_stage stage, D3D10DDI_HDEVICE hDevic
                                 UINT count, const D3D10DDI_HRESOURCE *buffers,
                                 const UINT *firstConstant, const UINT *numConstants);
 
+/* Typed UAV ClearView, including rectangles, independent of predication. */
+bool AgxD3d11ClearUavView(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW,
+                         const FLOAT color[4], const D3D10_DDI_RECT *, UINT);
+
 #endif /* AGX_D3D11_DDI_H */

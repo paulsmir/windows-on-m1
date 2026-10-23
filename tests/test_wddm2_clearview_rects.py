@@ -1,14 +1,14 @@
 """EXP1330: ClearView clears rectangles without pipe->clear_render_target.
 
-Invariant caught: with FL 11_0 reported, dwm.exe, LogonUI and M365Copilot
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? with FL 11_0 reported, dwm.exe, LogonUI and M365Copilot
 faulted at address 0 (reject-null-call: the UMD at the ClearView rectangle
 loop, called from d3d11 on behalf of d2d1). ClearView called
 pipe->clear_render_target for each rectangle, and Asahi implements no
 clear_render_target (and no scissored clears). The rectangles are cleared
 through the winsys blitter helper, once per non-empty rectangle, with the
 colour converted for the view's format; a helper failure is refused, the
-whole-view clear keeps the ClearRenderTargetView path, and UAV rectangles
-stay refused. Runs the real ClearView against stubs.
+whole-view clear keeps the ClearRenderTargetView path, and typed UAVs
+route through their view-aware helper. Runs the real ClearView against stubs.
 """
 from pathlib import Path
 import os
@@ -37,11 +37,14 @@ struct D3D11DDI_HUNORDEREDACCESSVIEW { void *pDrvPrivate; };
 struct D3D10_DDI_RECT { LONG left, top, right, bottom; };
 enum pipe_format { FMT_UNORM, FMT_UINT, FMT_SINT };
 union pipe_color_union { float f[4]; int i[4]; unsigned ui[4]; };
-struct pipe_surface { pipe_format format; };
+enum { PIPE_BUFFER };
+struct pipe_resource { unsigned target; };
+struct pipe_surface { pipe_format format; pipe_resource *texture; };
 struct pipe_context { void (*clear_render_target)(pipe_context *, pipe_surface *, const pipe_color_union *,
   unsigned, unsigned, unsigned, unsigned, bool); };
 struct Device { pipe_context *pipe; };
-struct RenderTargetView { pipe_surface surface; };
+struct RenderTargetView { pipe_surface surface; UINT buffer_first_element,buffer_num_elements; };
+static bool AgxD3d11ClearBufferRtv(Device*,RenderTargetView*,const pipe_color_union*,UINT,UINT){assert(false);return false;}
 static Device *CastDevice(D3D10DDI_HDEVICE h) { return static_cast<Device *>(h.pDrvPrivate); }
 static RenderTargetView *CastRenderTargetView(D3D10DDI_HRENDERTARGETVIEW h) {
   return static_cast<RenderTargetView *>(h.pDrvPrivate); }
@@ -59,6 +62,7 @@ static void wholeUav(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW, const FLOA
 static struct { void (*pfnClearRenderTargetView)(D3D10DDI_HDEVICE, D3D10DDI_HRENDERTARGETVIEW, FLOAT *);
   void (*pfnClearUnorderedAccessViewFloat)(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW, const FLOAT *); }
   base11 = {wholeRtv, wholeUav};
+static bool AgxD3d11ClearUavView(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW, const FLOAT*, const D3D10_DDI_RECT*, UINT){++uavClears;return true;}
 @@FUNCTION@@
 int main() {
   pipe_context pipe = {nullptr};  /* Asahi: no clear_render_target */
@@ -85,13 +89,13 @@ int main() {
   /* A helper failure is refused. */
   helperFails = true; ClearView(h, D3D10DDI_HT_RENDERTARGETVIEW, &rtv, color, rects, 1);
   assert(refusals == 1); helperFails = false;
-  /* UAV: whole view only; other views refused. */
+  /* Both whole and rectangular UAV clears route to the typed owner. */
   ClearView(h, D3D11DDI_HT_UNORDEREDACCESSVIEW, &rtv, color, nullptr, 0);
   assert(uavClears == 1);
   ClearView(h, D3D11DDI_HT_UNORDEREDACCESSVIEW, &rtv, color, rects, 1);
   ClearView(h, OTHER, &rtv, color, nullptr, 0);
   ClearView(h, D3D10DDI_HT_RENDERTARGETVIEW, nullptr, color, nullptr, 0);
-  assert(refusals == 4);
+  assert(refusals == 3 && uavClears == 2);
   return 0;
 }
 '''

@@ -37,6 +37,10 @@
 extern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                                           const UINT *Values, UINT Count);
 
+/* OutputMerger.cpp owns typed buffer RTV packing and element bounds. */
+bool AgxD3d11ClearBufferRtv(Device *, RenderTargetView *, const union pipe_color_union *,
+                          UINT first, UINT count);
+
 /* The WDDM 2.0 table starts with the D3D11 table's 152 entries. */
 #define AGX_SAME_SLOT(field)                                                    \
    static_assert(offsetof(D3D11DDI_DEVICEFUNCS, field) ==                      \
@@ -712,6 +716,22 @@ ClearView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HANDLETYPE type, VOID *hView, const
          const D3D10_DDI_RECT &r = rects[i];
          if (r.right <= r.left || r.bottom <= r.top)
             continue;
+         if (surface->texture && surface->texture->target == PIPE_BUFFER) {
+            RenderTargetView *view = CastRenderTargetView(rtv);
+            /* A buffer view is one row of typed elements. */
+            if (r.top >= 1 || r.bottom <= 0 || r.right <= 0)
+               continue;
+            UINT first = r.left > 0 ? (UINT)r.left : 0u;
+            UINT end = (UINT)r.right < view->buffer_num_elements ?
+                       (UINT)r.right : view->buffer_num_elements;
+            if (first >= end)
+               continue;
+            if (!AgxD3d11ClearBufferRtv(device, view, &value, first, end - first)) {
+               refuse(hDevice, "reject-wddm2-clearview", E_FAIL, (UINT)type);
+               return;
+            }
+            continue;
+         }
          /* EXP1330: Asahi has no clear_render_target (dwm and D2D called
           * address 0 here at FL 11_0) */
          if (!AgxD3d10WindowsClearRenderTargetRect(device->pipe, surface, &value,
@@ -723,12 +743,13 @@ ClearView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HANDLETYPE type, VOID *hView, const
       }
       return;
    }
-   if (type == D3D11DDI_HT_UNORDEREDACCESSVIEW && !nRects) {
+   if (type == D3D11DDI_HT_UNORDEREDACCESSVIEW) {
       D3D11DDI_HUNORDEREDACCESSVIEW uav = {hView};
-      base11.pfnClearUnorderedAccessViewFloat(hDevice, uav, color);
+      if (!AgxD3d11ClearUavView(hDevice, uav, color, rects, nRects))
+         refuse(hDevice, "reject-wddm2-clearview", E_NOTIMPL, (UINT)type);
       return;
    }
-   /* UAV rectangles and video views are not implemented */
+   /* Video and other unsupported view types remain fail closed. */
    refuse(hDevice, "reject-wddm2-clearview", E_NOTIMPL, (UINT)type);
 }
 

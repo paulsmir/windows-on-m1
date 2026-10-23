@@ -816,6 +816,70 @@ ClearUnorderedAccessViewFloat11(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACC
    clear_typed(device, view, pixel);
 }
 
+/* ClearView ignores predication and applies each XY rectangle to all slices
+ * selected by the typed view. No render-target bind is required for a UAV. */
+bool
+AgxD3d11ClearUavView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW hView,
+                    const FLOAT color[4], const D3D10_DDI_RECT *rects, UINT nRects)
+{
+   Device *device = CastDevice(hDevice);
+   AgxUnorderedAccessView *view = CastUnorderedAccessView(hView);
+   if (!device || !view || view->owner_device != device || !view->typed || !color ||
+       !view->image.resource || (nRects && !rects))
+      return false;
+   struct pipe_context *pipe = device->pipe;
+   struct pipe_resource *res = view->image.resource;
+   unsigned element = util_format_get_blocksize(view->image.format);
+   if (!element || element > 16)
+      return false;
+   union pipe_color_union value;
+   bool integer = util_format_is_pure_integer(view->image.format);
+   bool sint = util_format_is_pure_sint(view->image.format);
+   for (UINT i = 0; i < 4; ++i) {
+      float c = color[i];
+      if (!integer) value.f[i] = c;
+      else if (sint) value.i[i] = c != c ? 0 : c <= -2147483648.0f ? INT32_MIN :
+                                  c >= 2147483647.0f ? INT32_MAX : (int)c;
+      else value.ui[i] = !(c > 0.0f) ? 0u : c >= 4294967295.0f ? UINT32_MAX : (unsigned)c;
+   }
+   uint8_t pixel[16] = {};
+   util_format_pack_rgba(view->image.format, pixel, &value, 1);
+   bool buffer = res->target == PIPE_BUFFER;
+   unsigned level = buffer ? 0u : view->image.u.tex.level;
+   unsigned width = buffer ? view->image.u.buf.size / element : u_minify(res->width0, level);
+   unsigned height = buffer ? 1u : u_minify(res->height0, level);
+   if (buffer && !pipe->clear_buffer)
+      return false;
+   for (UINT i = 0; i < (nRects ? nRects : 1u); ++i) {
+      unsigned left = 0, top = 0, right = width, bottom = height;
+      if (nRects) {
+         const D3D10_DDI_RECT &r = rects[i];
+         if (r.right <= r.left || r.bottom <= r.top || r.right <= 0 || r.bottom <= 0)
+            continue;
+         left = r.left > 0 ? (unsigned)r.left : 0u;
+         top = r.top > 0 ? (unsigned)r.top : 0u;
+         right = (unsigned)r.right < width ? (unsigned)r.right : width;
+         bottom = (unsigned)r.bottom < height ? (unsigned)r.bottom : height;
+         if (left >= right || top >= bottom)
+            continue;
+      }
+      if (buffer) {
+         pipe->clear_buffer(pipe, res, view->image.u.buf.offset + left * element,
+                            (right - left) * element, pixel, element);
+      } else {
+         struct pipe_box box = {};
+         box.x = left; box.y = top; box.z = view->image.u.tex.first_layer;
+         box.width = right - left; box.height = bottom - top;
+         box.depth = view->image.u.tex.last_layer - view->image.u.tex.first_layer + 1;
+         if (pipe->clear_texture)
+            pipe->clear_texture(pipe, res, level, &box, pixel);
+         else
+            u_default_clear_texture(pipe, res, level, &box, pixel);
+      }
+   }
+   return true;
+}
+
 /* The hidden counter of an append/consume or counter view, as 32 bits at
  * an aligned offset of a buffer. */
 static void APIENTRY
