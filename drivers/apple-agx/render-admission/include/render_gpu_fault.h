@@ -53,7 +53,7 @@ void AdmissionGpuFaultReceiptRecord(ADMISSION_GPU_FAULT_RECEIPT *Receipt,
  * (EXP1303: LONGJOB jobs completed seconds late with four resets, and one
  * receipt could not tell a worker that stopped polling from a job still
  * running on the firmware). */
-#define ADMISSION_GPU_RESET_RECEIPT_VERSION 2u
+#define ADMISSION_GPU_RESET_RECEIPT_VERSION 3u
 #define ADMISSION_GPU_RESET_HISTORY 8u
 #define ADMISSION_GPU_RESET_ENGINE 1u   /* DxgkDdiResetEngine */
 #define ADMISSION_GPU_RESET_ADAPTER 2u  /* DxgkDdiResetFromTimeout */
@@ -66,6 +66,21 @@ typedef enum _ADMISSION_GPU_RESET_QUIESCE {
   AdmissionGpuResetQuiesceBackend,  /* backend left Submitted, job still active */
   AdmissionGpuResetQuiesceState,    /* runtime absent, stopping or resetting */
 } ADMISSION_GPU_RESET_QUIESCE;
+
+/* T10: the last operation checked by this reset. On failure this identifies
+ * the refusing gate; Quiesce further describes the active-job wait. */
+typedef enum _ADMISSION_GPU_RESET_STAGE {
+  AdmissionGpuResetStageNone = 0,
+  AdmissionGpuResetStageValidate,
+  AdmissionGpuResetStageQuiesce,
+  AdmissionGpuResetStagePrivate,
+  AdmissionGpuResetStagePaging,
+  AdmissionGpuResetStagePacketActive,
+  AdmissionGpuResetStagePacketReset,
+  AdmissionGpuResetStageBackendRelease,
+  AdmissionGpuResetStageScheduler,
+  AdmissionGpuResetStageComplete,
+} ADMISSION_GPU_RESET_STAGE;
 
 typedef struct _ADMISSION_GPU_RESET_ENTRY {
   unsigned int EntryMs;          /* interrupt time at entry, ms */
@@ -101,6 +116,11 @@ typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned int HistoryCount;     /* valid entries; the last is at
                                     (Resets - 1) % ADMISSION_GPU_RESET_HISTORY */
   ADMISSION_GPU_RESET_ENTRY History[ADMISSION_GPU_RESET_HISTORY];
+  /* Version 3, appended after the complete v2 prefix (496 bytes). The stage
+   * ring uses the same index as History; old entries are never relabeled. */
+  unsigned int Stage;
+  unsigned int HistoryStage[ADMISSION_GPU_RESET_HISTORY];
+  unsigned int ReservedV3;
 } ADMISSION_GPU_RESET_RECEIPT;
 
 /* TDR drill (DxgkDdiEscape payload): the KMD strands the next Jobs render

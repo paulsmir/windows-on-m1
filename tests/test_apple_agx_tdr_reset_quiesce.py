@@ -1,5 +1,9 @@
 """Replay the KMD engine/adapter reset with an active AGX render job.
 
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+A reset failure must retain its exact gate in the current receipt and history;
+a later success must not inherit that failure stage.
+
 WHAT REAL BUG: EXP1296 bugcheck 0x116 (TdrReason 9, engine reset promoted to
 adapter reset): with a G4 render active, DxgkDdiResetEngine and
 DxgkDdiResetFromTimeout returned STATUS_DEVICE_HARDWARE_ERROR even when the
@@ -224,7 +228,7 @@ typedef struct {
 
 static int lock_depth, rtkit_stops, polls, drop_at_poll, fail_poll, worker_busy,
     worker_completes, paused, private_resets, scene_queued, scene_started,
-    scene_quarantined;
+    scene_quarantined, reactivate_after_quiesce;
 static ULONGLONG now_ms;
 static ADMISSION_CONTEXT *model_adapter;
 static ADMISSION_PLATFORM_RUNTIME *model_runtime;
@@ -299,7 +303,11 @@ static BOOLEAN AppleAgxPlatformProviderPoll(APPLE_AGX_PLATFORM_PROVIDER *p,
 static NTSTATUS AdmissionPlatformRuntimeReset(ADMISSION_CONTEXT *c, ULONG *aborted) {
   (void)c; *aborted = 0u; ++rtkit_stops; return STATUS_DEVICE_HARDWARE_ERROR; }
 static BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *c) {
-  (void)c; assert(!lock_depth); ++private_resets;
+  assert(!lock_depth); ++private_resets;
+  if (reactivate_after_quiesce) {
+    /* Model a worker activating after the first packet-state check. */
+    c->RenderPacket.State = AdmissionRenderPacketActive;
+  }
   if (scene_queued && scene_started) { scene_quarantined = 1; return FALSE; }
   return TRUE;
 }
@@ -393,7 +401,7 @@ static void setup(int worker, int queued) {
   memset(&cancelled, 0, sizeof(cancelled)); memset(&process, 0, sizeof(process));
   rtkit_stops = polls = drop_at_poll = fail_poll = worker_completes = 0;
   published = recorded = 0; memset(&last_recorded, 0, sizeof(last_recorded));
-  private_resets = scene_quarantined = paused = 0;
+  private_resets = scene_quarantined = paused = reactivate_after_quiesce = 0;
   scene_queued = scene_started = 1; now_ms = 1000u;
   model_adapter = &adapter; model_runtime = &runtime;
   adapter.SchedulerInitialized = 1; adapter.PlatformRuntime = &runtime;
@@ -481,7 +489,7 @@ int main(void) {
          last_recorded.BackendPhase == AppleAgxBackendRuntimeSubmitted &&
          last_recorded.FirmwareRecoveries == 1u);
   /* Version 2: the timed history entry mirrors the attempt. */
-  assert(last_recorded.Version == 2u && last_recorded.HistoryCount == 1u &&
+  assert(last_recorded.Version == 3u && last_recorded.HistoryCount == 1u &&
          last_recorded.EntryMs == 1000u && last_recorded.JobAgeMs == 2100u &&
          last_recorded.PollAgeMs == 7u);
   assert(last_recorded.History[0].EntryMs == 1000u &&
@@ -490,6 +498,9 @@ int main(void) {
          last_recorded.History[0].LastAbortedFence == 0xce71cu &&
          last_recorded.History[0].SchedulerFaulted == (0x40000u | 3930u) &&
          last_recorded.History[0].JobAgeMs == 2100u);
+
+  assert(last_recorded.Stage == AdmissionGpuResetStageComplete &&
+         last_recorded.HistoryStage[0] == AdmissionGpuResetStageComplete);
 
   /* 2. The same storm promoted to an adapter reset: success, the last
    * completed fence advances to the last submitted one, restart resumes. */
@@ -533,6 +544,34 @@ int main(void) {
          last_recorded.History[1].Entry == ADMISSION_GPU_RESET_ADAPTER &&
          last_recorded.History[1].Quiesce == AdmissionGpuResetQuiesceTimeout &&
          last_recorded.History[1].EntryMs > last_recorded.History[0].EntryMs);
+
+  assert(last_recorded.Stage == AdmissionGpuResetStageQuiesce &&
+         last_recorded.HistoryStage[0] == AdmissionGpuResetStageQuiesce &&
+         last_recorded.HistoryStage[1] == AdmissionGpuResetStageQuiesce);
+
+  /* An old started scene remains after local packet retirement. Distinguish
+   * its private-reset refusal from the identical c0000483 quiesce status. */
+  setup(0, 0);
+  model_job_ends();
+  scene_queued = scene_started = 1;
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
+  assert(last_recorded.Stage == AdmissionGpuResetStagePrivate &&
+         last_recorded.Quiesce == AdmissionGpuResetQuiesceNone &&
+         last_recorded.HistoryStage[0] == AdmissionGpuResetStagePrivate);
+  /* A successful retry must overwrite the last stage, preserving history. */
+  scene_queued = 0;
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  assert(last_recorded.Stage == AdmissionGpuResetStageComplete &&
+         last_recorded.HistoryStage[0] == AdmissionGpuResetStagePrivate &&
+         last_recorded.HistoryStage[1] == AdmissionGpuResetStageComplete);
+
+  setup(0, 0);
+  model_job_ends();
+  reactivate_after_quiesce = 1;
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
+  assert(last_recorded.Stage == AdmissionGpuResetStagePacketActive &&
+         last_recorded.Quiesce == AdmissionGpuResetQuiesceNone &&
+         last_recorded.HistoryStage[0] == AdmissionGpuResetStagePacketActive);
 
   /* 5. A provider that cannot be polled proves nothing. */
   setup(0, 0); fail_poll = 1;

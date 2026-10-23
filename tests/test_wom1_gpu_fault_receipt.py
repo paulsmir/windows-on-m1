@@ -1,6 +1,6 @@
 """Wom1GpuFault/Wom1GpuReset bookkeeping and their offline decoder.
 
-WHAT REAL INVARIANT: in a fault storm (EXP1296: 2435 firmware Timeout
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? in a fault storm (EXP1296: 2435 firmware Timeout
 recoveries) the receipt must keep the first event, the first event with a
 valid FAULT_INFO and the last one, and count events the firmware did not halt
 for; the decoder must read exactly the KMD's struct layout (a drift would
@@ -90,11 +90,13 @@ int main(int argc, char **argv) {
   reset.LastPollGuard = 1u; reset.WorkerBusy = 0u; reset.Halted = 1u;
   reset.FirmwareRecoveries = 2436u; reset.ContextToken = 0xffff8d02cced4000ull;
   /* Ten resets: the ring keeps the last eight, the newest at (10 - 1) % 8. */
+  reset.Stage = AdmissionGpuResetStagePrivate;
   reset.Resets = 10u; reset.HistoryCount = ADMISSION_GPU_RESET_HISTORY;
   reset.EntryMs = 5000u; reset.JobAgeMs = 2100u; reset.PollAgeMs = 1900u;
   for (index = 0u; index < 10u; ++index) {
     ADMISSION_GPU_RESET_ENTRY *h = &reset.History[index % ADMISSION_GPU_RESET_HISTORY];
     memset(h, 0, sizeof(*h));
+    reset.HistoryStage[index % ADMISSION_GPU_RESET_HISTORY] = index;
     h->EntryMs = 1000u + index; h->Entry = ADMISSION_GPU_RESET_ENGINE;
     h->Quiesce = AdmissionGpuResetQuiesceEnded; h->PacketState = 3u;
     h->PacketFence = 0x100u + index; h->LastAbortedFence = 0x100u + index;
@@ -124,7 +126,7 @@ class Wom1GpuFaultReceipt(unittest.TestCase):
                                    capture_output=True, text=True).stdout.split()
             self.assertEqual([int(v) for v in sizes],
                              [DECODER.EVENT.size, DECODER.FAULT_HEADER.size + 3 * DECODER.EVENT.size,
-                              DECODER.FAULT_HEADER.size, DECODER.RESET_V2])
+                              DECODER.FAULT_HEADER.size, 536])
             fault = DECODER.decode_fault((tmp / 'Wom1GpuFault.bin').read_bytes())
             reset = DECODER.decode_reset((tmp / 'Wom1GpuReset.bin').read_bytes())
 
@@ -153,11 +155,43 @@ class Wom1GpuFaultReceipt(unittest.TestCase):
                          ('active', '0xce71c', 'wait-current-boundary', 2436))
         self.assertEqual((reset['entry_ms'], reset['job_age_ms'], reset['poll_age_ms']),
                          (5000, 2100, 1900))
+        self.assertEqual(reset['stage'], 'private')
+        self.assertEqual([h['stage'] for h in reset['history']],
+                         ['quiesce', 'private', 'paging', 'packet-active',
+                          'packet-reset', 'backend-release', 'scheduler', 'complete'])
         history = reset['history']
         self.assertEqual([h['entry_ms'] for h in history], list(range(1002, 1010)))
         self.assertEqual((history[-1]['packet'], history[-1]['job_age_ms'],
                           history[-1]['poll_age_ms'], history[0]['poll_age_ms']),
                          ('active/0x109', 2009, None, 2))
+
+    def test_v2_history_has_no_invented_stage(self):
+        # v2 bytes, independently authored: two attempts, no v3 tail.
+        data = bytearray(496)
+        import struct
+        struct.pack_into('<4I', data, 0, 2, 496, 2, 1)
+        struct.pack_into('<4I', data, 96, 2000, 0, 0, 2)
+        struct.pack_into('<12I', data, 112, 1000, 1, 0xc0000483, 2,
+                         100, 3, 10, 0, 0, 0, 0, 1)
+        struct.pack_into('<12I', data, 160, 2000, 2, 0, 1,
+                         1, 3, 10, 10, 0, 0, 0, 2)
+        result = DECODER.decode_reset(data)
+        self.assertEqual(result['history'][0]['status'], '0xc0000483')
+        self.assertEqual(result['history'][1]['last_aborted'], '0xa')
+        self.assertNotIn('stage', result)
+        self.assertNotIn('stage', result['history'][0])
+
+    def test_v3_rejects_truncation_and_mismatched_version(self):
+        import struct
+        data = bytearray(536)
+        struct.pack_into('<2I', data, 0, 3, 536)
+        self.assertEqual(DECODER.decode_reset(data)['stage'], 'none')
+        for length in (496, 532, 535):
+            with self.assertRaises(ValueError):
+                DECODER.decode_reset(data[:length])
+        struct.pack_into('<I', data, 0, 2)
+        with self.assertRaises(ValueError):
+            DECODER.decode_reset(data)
 
     def test_exp1303_v1_reset_receipt_still_decodes(self):
         v1 = bytearray(DECODER.RESET.size)

@@ -562,22 +562,28 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   BOOLEAN reset;
   KIRQL oldIrql;
 
+  if (context != NULL)
+    context->GpuReset.Stage = AdmissionGpuResetStageValidate;
   if (context == NULL || ResetEngine == NULL ||
       ResetEngine->NodeOrdinal != ADMISSION_SCHEDULER_NODE ||
       ResetEngine->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
+  context->GpuReset.Stage = AdmissionGpuResetStageQuiesce;
   if (!NT_SUCCESS(AdmissionResetQuiesceActive(context)))
     return STATUS_DEVICE_HARDWARE_ERROR;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   {
-    BOOLEAN privateReset = AdmissionGpuvaG3PrivateReset(context);
+    BOOLEAN privateReset;
+    context->GpuReset.Stage = AdmissionGpuResetStagePrivate;
+    privateReset = AdmissionGpuvaG3PrivateReset(context);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     AdmissionDwmFrameRecordPrivateReset(context, privateReset);
 #endif
     if (!privateReset) return STATUS_DEVICE_HARDWARE_ERROR;
   }
 #endif
+  context->GpuReset.Stage = AdmissionGpuResetStagePaging;
   KeAcquireSpinLock(&context->PagingLock, &oldIrql);
   if (InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0 ||
       InterlockedCompareExchange(&context->PagingWorkersActive, 0, 0) != 0 ||
@@ -587,6 +593,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   }
   KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
   packetState = AdmissionRenderPacketState(&context->RenderPacket);
+  context->GpuReset.Stage = AdmissionGpuResetStagePacketActive;
   if (packetState == AdmissionRenderPacketActive) {
     /* Activated after the quiescence proof above: nothing proves its end. */
     InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
@@ -598,12 +605,14 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
     packetFence = context->RenderPacket.Description.Fence;
     packetContext = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
         context->RenderPacket.Description.ContextToken;
+    context->GpuReset.Stage = AdmissionGpuResetStagePacketReset;
     if (!AdmissionRenderPacketReset(
             &context->RenderPacket, packetFence, 0u)) {
       KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
       KeReleaseSpinLock(&context->PagingLock, oldIrql);
       return STATUS_INVALID_DEVICE_STATE;
     }
+    context->GpuReset.Stage = AdmissionGpuResetStageBackendRelease;
     if (!AdmissionBackendImageReleaseSubmission(
             &context->BackendImage, packetFence)) {
       InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
@@ -612,6 +621,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
       return STATUS_INVALID_DEVICE_STATE;
     }
   }
+  context->GpuReset.Stage = AdmissionGpuResetStageScheduler;
   reset = AppleAgxSchedulerResetEngine(
               &context->Scheduler, ResetEngine->NodeOrdinal,
               ResetEngine->EngineOrdinal, &lastAborted)
@@ -647,6 +657,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
     KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
   }
   InterlockedExchange(&context->SchedulerFaulted, 0);
+  context->GpuReset.Stage = AdmissionGpuResetStageComplete;
   return STATUS_SUCCESS;
 }
 
@@ -679,6 +690,8 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
   KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
   receipt->Quiesce = (ULONG)AdmissionGpuResetQuiesceNone;
   receipt->WaitMs = 0u;
+  receipt->Stage = AdmissionGpuResetStageNone;
+  receipt->ReservedV3 = 0u;
   receipt->EntryMs = receipt->JobAgeMs = 0u;
   receipt->PollAgeMs = MAXULONG;
   AdmissionPlatformRuntimeResetState(context, receipt);
@@ -691,6 +704,8 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
   {
     ADMISSION_GPU_RESET_ENTRY *entry = &receipt->History[
         (receipt->Resets - 1u) % ADMISSION_GPU_RESET_HISTORY];
+    receipt->HistoryStage[(receipt->Resets - 1u) % ADMISSION_GPU_RESET_HISTORY] =
+        receipt->Stage;
     entry->EntryMs = receipt->EntryMs;
     entry->Entry = Entry;
     entry->Status = receipt->Status;
