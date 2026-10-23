@@ -4641,8 +4641,12 @@ AgxD3d10ResourceWithinRequiredLimits(
          (!(pCreateResource->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) ||
           pCreateResource->SampleDesc.Count == 1) &&
          (pCreateResource->MiscFlags == 0 ||
-          (autogen && pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
-              D3D10_DDI_BIND_SHADER_RESOURCE))) &&
+          /* C71 (EXP1906 GravityMark D3D11 "RGf32 Target Surface Mipmaps"):
+           * GENERATE_MIPS needs render target and shader resource binds
+           * (Microsoft, D3D11_RESOURCE_MISC_GENERATE_MIPS); unordered
+           * access may come with them */
+          (autogen && (pCreateResource->BindFlags & ~D3D11_DDI_BIND_UNORDERED_ACCESS) ==
+              (D3D10_DDI_BIND_RENDER_TARGET | D3D10_DDI_BIND_SHADER_RESOURCE))) &&
          !pCreateResource->pPrimaryDesc &&
          /* EXP1284: D3D allows initial data for render targets; the
           * upstream texture-map upload below writes it. Multisampled
@@ -4650,6 +4654,16 @@ AgxD3d10ResourceWithinRequiredLimits(
          (!pCreateResource->pInitialDataUP || pCreateResource->SampleDesc.Count == 1);
       if (!private_rt || !screen->resource_create_with_modifiers) {
          LOG_UNSUPPORTED("A render target outside the D3D10 contract");
+         {
+            /* C71 receipt: which render-target predicate refused it */
+            UINT values[8] = {(UINT)pCreateResource->Format, pCreateResource->BindFlags,
+               pCreateResource->MiscFlags, pCreateResource->MipLevels, pCreateResource->ArraySize,
+               pCreateResource->SampleDesc.Count | (pCreateResource->SampleDesc.Quality << 8),
+               (UINT)pCreateResource->Usage | (pCreateResource->MapFlags << 8),
+               (UINT)pCreateResource->ResourceDimension | ((pCreateResource->pInitialDataUP != NULL) << 8) |
+                  ((pCreateResource->pPrimaryDesc != NULL) << 9)};
+            AgxD3d10WindowsDiagnostic("reject-d3d11-render-target", E_NOTIMPL, values, 8u);
+         }
          SetError(hDevice, E_NOTIMPL);
          return;
       }
