@@ -4361,6 +4361,106 @@ AgxD3d10CopyExtent(unsigned size, unsigned block)
    return block > 1u ? (size + block - 1u) / block * block : size;
 }
 
+/* D3D10.1 format conversion is a bit copy, not a colour conversion.
+ * Only the documented integer/block pairs are admitted, not arbitrary
+ * equal-byte-size formats. BC6H/BC7 extend the 128-bit group in D3D11. */
+static unsigned
+AgxD3d10BlockCopyClass(DXGI_FORMAT format)
+{
+   switch (format) {
+   case DXGI_FORMAT_R16G16B16A16_UINT:
+   case DXGI_FORMAT_R16G16B16A16_SINT:
+   case DXGI_FORMAT_R32G32_UINT:
+   case DXGI_FORMAT_R32G32_SINT: return 8;
+   case DXGI_FORMAT_R32G32B32A32_UINT:
+   case DXGI_FORMAT_R32G32B32A32_SINT: return 16;
+   case DXGI_FORMAT_BC1_UNORM:
+   case DXGI_FORMAT_BC1_UNORM_SRGB:
+   case DXGI_FORMAT_BC4_UNORM:
+   case DXGI_FORMAT_BC4_SNORM: return 0x100 | 8;
+   case DXGI_FORMAT_BC2_UNORM:
+   case DXGI_FORMAT_BC2_UNORM_SRGB:
+   case DXGI_FORMAT_BC3_UNORM:
+   case DXGI_FORMAT_BC3_UNORM_SRGB:
+   case DXGI_FORMAT_BC5_UNORM:
+   case DXGI_FORMAT_BC5_SNORM:
+   case DXGI_FORMAT_BC6H_UF16:
+   case DXGI_FORMAT_BC6H_SF16:
+   case DXGI_FORMAT_BC7_UNORM:
+   case DXGI_FORMAT_BC7_UNORM_SRGB: return 0x100 | 16;
+   default: return 0;
+   }
+}
+
+static bool
+AgxD3d10BlockCopyCompatible(DXGI_FORMAT source, DXGI_FORMAT destination)
+{
+   unsigned src = AgxD3d10BlockCopyClass(source);
+   unsigned dst = AgxD3d10BlockCopyClass(destination);
+   return src && dst && (src ^ dst) == 0x100;
+}
+
+/* Source coordinates are source texels, destination coordinates are destination
+ * pixels. Validate in blocks, then clip each mapped box to its own mip. This
+ * retains the storage of 1x1/2x2 BC tails without a zero-sized reverse copy. */
+static bool
+AgxD3d10CopyBlockAxis(unsigned srcSize, unsigned dstSize,
+                       unsigned srcBlock, unsigned dstBlock,
+                       unsigned first, unsigned last, unsigned dstOffset,
+                       unsigned *srcExtent, unsigned *dstExtent)
+{
+   if (!srcBlock || !dstBlock || first >= srcSize || first >= last ||
+       dstOffset >= dstSize || first % srcBlock || dstOffset % dstBlock)
+      return false;
+   uint64_t srcAligned = ((uint64_t)srcSize + srcBlock - 1) / srcBlock * srcBlock;
+   uint64_t dstBlocks = ((uint64_t)dstSize + dstBlock - 1) / dstBlock;
+   if (last > srcAligned || (last % srcBlock && last != srcSize))
+      return false;
+   uint64_t blocks = ((uint64_t)last - first + srcBlock - 1) / srcBlock;
+   if (blocks > dstBlocks - dstOffset / dstBlock)
+      return false;
+   *srcExtent = (last < srcSize ? last : srcSize) - first;
+   uint64_t pixels = blocks * dstBlock;
+   *dstExtent = pixels < dstSize - dstOffset ? (unsigned)pixels : dstSize - dstOffset;
+   return true;
+}
+
+/* Asahi resource_copy_region uses the CPU transfer fallback for differing
+ * formats. Its utility truncates compressed-source tail dimensions when
+ * shrinking them. Map the independently-sized boxes and copy block rows here;
+ * Asahi texture_map/unmap still own synchronization and tiling. */
+static HRESULT
+AgxD3d10CopyBlocks(struct pipe_context *pipe,
+                    struct pipe_resource *dst, unsigned dstLevel, const struct pipe_box *dstBox,
+                    struct pipe_resource *src, unsigned srcLevel, const struct pipe_box *srcBox)
+{
+   struct pipe_transfer *read = NULL, *write = NULL;
+   void *source = pipe->texture_map(pipe, src, srcLevel, PIPE_MAP_READ, srcBox, &read);
+   if (!source || !read) {
+      if (read) pipe_texture_unmap(pipe, read);
+      return E_OUTOFMEMORY;
+   }
+   void *destination = pipe->texture_map(pipe, dst, dstLevel,
+      PIPE_MAP_WRITE | PIPE_MAP_DISCARD_RANGE, dstBox, &write);
+   if (!destination || !write) {
+      if (write) pipe_texture_unmap(pipe, write);
+      pipe_texture_unmap(pipe, read);
+      return E_OUTOFMEMORY;
+   }
+   unsigned bw = util_format_get_blockwidth(src->format);
+   unsigned bh = util_format_get_blockheight(src->format);
+   unsigned rowBytes = ((srcBox->width + bw - 1) / bw) * util_format_get_blocksize(src->format);
+   unsigned rows = (srcBox->height + bh - 1) / bh;
+   for (int z = 0; z < srcBox->depth; ++z)
+      for (unsigned y = 0; y < rows; ++y)
+         memcpy((uint8_t *)destination + (size_t)z * write->layer_stride + (size_t)y * write->stride,
+                (const uint8_t *)source + (size_t)z * read->layer_stride + (size_t)y * read->stride,
+                rowBytes);
+   pipe_texture_unmap(pipe, write);
+   pipe_texture_unmap(pipe, read);
+   return S_OK;
+}
+
 static enum pipe_format
 AgxD3d10CopyRawFormat(const Resource *source, const Resource *destination,
                       const struct pipe_resource *src, const struct pipe_resource *dst)
@@ -5013,6 +5113,8 @@ AgxD3d10ResourceWithinRequiredLimits(
    unsigned dstLayer = DstSubResource / destination->MipLevels;
    enum pipe_format raw = AgxD3d10CopyRawFormat(source, destination, src, dst);
    bool compressed = src->format == dst->format && util_format_is_compressed(src->format);
+   bool blockCopy = AgxD3d10BlockCopyCompatible(source->Format, destination->Format) &&
+      util_format_get_blocksize(src->format) == util_format_get_blocksize(dst->format);
    unsigned srcW = u_minify(src->width0, srcLevel), srcH = u_minify(src->height0, srcLevel);
    unsigned srcD = src->target == PIPE_TEXTURE_3D ? u_minify(src->depth0, srcLevel) : 1;
    unsigned dstW = u_minify(dst->width0, dstLevel), dstH = u_minify(dst->height0, dstLevel);
@@ -5026,13 +5128,23 @@ AgxD3d10ResourceWithinRequiredLimits(
    unsigned bh = compressed ? util_format_get_blockheight(src->format) : 1u;
    unsigned srcWa = AgxD3d10CopyExtent(srcW, bw), srcHa = AgxD3d10CopyExtent(srcH, bh);
    unsigned dstWa = AgxD3d10CopyExtent(dstW, bw), dstHa = AgxD3d10CopyExtent(dstH, bh);
-   bool valid = (raw != PIPE_FORMAT_NONE || compressed) &&
+   unsigned copyW = 0, copyH = 0, dstCopyW = 0, dstCopyH = 0;
+   bool blockBox = blockCopy &&
+      AgxD3d10CopyBlockAxis(srcW, dstW,
+         util_format_get_blockwidth(src->format), util_format_get_blockwidth(dst->format),
+         left, right, DstX, &copyW, &dstCopyW) &&
+      AgxD3d10CopyBlockAxis(srcH, dstH,
+         util_format_get_blockheight(src->format), util_format_get_blockheight(dst->format),
+         top, bottom, DstY, &copyH, &dstCopyH);
+   bool valid = (raw != PIPE_FORMAT_NONE || compressed || blockCopy) &&
       AgxD3d10CopyTargetFamily(src->target) &&
       AgxD3d10CopyTargetFamily(src->target) == AgxD3d10CopyTargetFamily(dst->target) &&
       src->nr_samples <= 1 && dst->nr_samples <= 1 &&
-      right <= srcWa && bottom <= srcHa && back <= srcD &&
-      DstX <= dstWa && right - left <= dstWa - DstX &&
-      DstY <= dstHa && bottom - top <= dstHa - DstY &&
+      back <= srcD &&
+      (blockCopy ? blockBox :
+       (right <= srcWa && bottom <= srcHa &&
+        DstX <= dstWa && right - left <= dstWa - DstX &&
+        DstY <= dstHa && bottom - top <= dstHa - DstY)) &&
       DstZ <= dstD && back - front <= dstD - DstZ &&
       srcLayer < src->array_size && dstLayer < dst->array_size &&
       !(left % bw) && !(top % bh) && !(DstX % bw) && !(DstY % bh);
@@ -5043,7 +5155,16 @@ AgxD3d10ResourceWithinRequiredLimits(
       AgxD3d10WindowsDiagnostic("reject-resource-copy-region",E_NOTIMPL,values,14u);
       SetError(hDevice, E_NOTIMPL); return;
    }
-   if (compressed) {
+   if (blockCopy) {
+      struct pipe_box srcBox, dstBox;
+      u_box_3d(left, top, src->target == PIPE_TEXTURE_3D ? front : srcLayer,
+         copyW, copyH, back - front, &srcBox);
+      u_box_3d(DstX, DstY, dst->target == PIPE_TEXTURE_3D ? DstZ : dstLayer,
+         dstCopyW, dstCopyH, back - front, &dstBox);
+      HRESULT status = AgxD3d10CopyBlocks(device->pipe, dst, dstLevel, &dstBox,
+                                         src, srcLevel, &srcBox);
+      if (FAILED(status)) { SetError(hDevice, status); return; }
+   } else if (compressed) {
       /* The level's texels inside the block-aligned box (C72). */
       UINT width = MIN2(right, srcW) - left, height = MIN2(bottom, srcH) - top;
       width = MIN2(width, dstW - DstX); height = MIN2(height, dstH - DstY);
