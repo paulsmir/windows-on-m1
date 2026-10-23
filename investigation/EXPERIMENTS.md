@@ -61494,3 +61494,17 @@ EXP1914 ACTUAL 2026-10-23T17:24:52Z:
   - Verdict: no regression from the stricter gate; DWM-safety evidence is partial and accumulates in later runs.
 - T7 receipt v3: no G4 Parse/Unmapped refusal occurred in this run (also none in EXP1913 since C75c), so no provenance was captured. The Unmapped failures disappeared together with the copy-escape/trim pressure.
 - Night Raid C82 run (nr-c82.sh) did not start: arm-interactive received the positional arguments with literal quotes ("A positional parameter cannot be found that accepts argument '223850''"). 3DMark and Steam were never started, so the user's session was not affected. The script is fixed (nr-env.ps1, quoting verified with argtest.ps1); Night Raid moves to the EXP1915 package (C82 + C83).
+
+EXP1915 ACTUAL 2026-10-23T18:04:45Z:
+- RUN_DONE; m1n1 0d3a75b3 stable.
+- Regressions: SAMPLE_HASHES bad 0; e1915 118 PASS x3; T2VOL PASS; D3D9 6/6; D3D11 smoke PASS; samples 4/4 and ModelViewerI alive; DWM faults 0; PRESSURE refused at 446 MiB available with the guest alive; no GPU reset.
+- GravityMark D3D11: Score 2551, FPS 15.3, XFER 0 (stable over EXP1913-1915).
+- The fork's c943004b (ledger C84) is CONFIRMED: measure-d3d12-reinterpret-copy hr=0 for every level (R32G32B32A32_UINT -> BC6H_UF16, 128x128 ... 8x8).
+  - GravityMark D3D12 10k/2k were still removed at 22.6/24.0 s, now after one G4_SUBMIT_FAILURE Parse/Unmapped (total 1; dma 0x111d680000, size 0x160, umdpriv 0x238).
+  - The v3 provenance receipt was captured (Version 3, 0x188 bytes) and handed to Codex T7b for decoding.
+- C77 (Codex T3/T3b) FAIL on 3 ABIs: route=child-process.
+  - The child OpenSharedHandle hr=0 and its execute completed, but it read 4274 mismatches.
+  - The receipts show the open took the presentation-open path (d3d12-open-receipts 0, presentation-open 1).
+  - Real defect: wrong content or layout on a cross-process open. Codex T3c.
+- C83 (opt-in GPU wait, default off): no regression.
+- Night Raid A/B (after1915.sh) aborted cleanly twice (NR_ABORT_NO_3DMARK, env cleaned). The Steam log shows 3DMark.exe launched at 17:50:35Z and ran until the B attempt stopped it, but no window titled exactly "3DMark" appeared within 4 min. Steam launched twice under the user's approval, with no KickingOtherSession. The script now waits 8 min, logs window titles and takes a screenshot on abort. Retry on EXP1916.
