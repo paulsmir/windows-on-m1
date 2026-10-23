@@ -360,6 +360,24 @@ class DxbcToNir(unittest.TestCase):
         legacy = self.run_fixture("cs50uav64")
         self.assertTrue(legacy.stdout.startswith("REFUSED "), legacy.stdout)
 
+    def test_rasterizer_ordered_uavs_take_the_pixel_interlock(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 reports
+        # ROVsSupported for DXBC SM 5.1 too; a rasterizer-ordered UAV
+        # (D3D11_SB_RASTERIZER_ORDERED_ACCESS, bit 17 of dcl_uav_*) must enter
+        # the pixel interlock before its first access, or overlapping
+        # fragments race (the flag used to be ignored).
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps51rov.dxbc"), "--d3d12", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
+        self.assertEqual(out.stdout.count("begin_invocation_interlock"), 1, out.stdout[:4000])
+        self.assertNotIn("end_invocation_interlock", out.stdout)
+        first = min(i for i in (out.stdout.find("image_deref_load"), out.stdout.find("load_ssbo")) if i >= 0)
+        self.assertLess(out.stdout.index("begin_invocation_interlock"), first)
+        plain = subprocess.run([str(self.binary), str(FIXTURES / "ps51heap.dxbc"), "--d3d12", "--print"],
+                               capture_output=True, text=True, timeout=60)
+        self.assertNotIn("invocation_interlock", plain.stdout)
+
     def test_forced_sample_count_variant_computes_its_own_coverage(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? FL 11_1 forced
         # sample counts (TIR, UAV-only rendering) exceed AGX's 4 samples: the

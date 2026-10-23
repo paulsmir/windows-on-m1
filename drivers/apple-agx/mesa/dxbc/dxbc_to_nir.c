@@ -164,6 +164,7 @@ struct ctx {
     * off), its covered-sample mask, the offset centroid inputs are evaluated
     * at, and the registers declared centroid */
    unsigned forced_samples;
+   bool rov_interlock;       /* the pixel interlock is taken (rasterizer-ordered UAVs) */
    nir_def *forced_mask, *forced_centroid;
    bool forced_centroid_reg[MAX_REGS];
    uint32_t passthrough_positions;   /* of which these hold SV_Position */
@@ -1037,6 +1038,21 @@ return_type(uint32_t token)
    }
 }
 
+/* ROV (D3D12 12_1, SM 5.1): a rasterizer-ordered UAV declaration
+ * (D3D11_SB_RASTERIZER_ORDERED_ACCESS) takes the pixel interlock once, ahead
+ * of the shader body -- every access follows its declarations. AGX orders
+ * from the interlock begin (wait_pix) to the end of the shader, so no end is
+ * emitted (as the DXIL path's drop_interlock_end). */
+static void
+rov_declaration(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   if (c->stage != MESA_SHADER_FRAGMENT || !(insn->token0 & (1u << 17)) || c->rov_interlock)
+      return;
+   nir_begin_invocation_interlock(&c->b);
+   c->b.shader->info.fs.pixel_interlock_ordered = true;
+   c->rov_interlock = true;
+}
+
 static void
 declare(struct ctx *c, const struct dxbc_instruction *insn)
 {
@@ -1275,6 +1291,7 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
    }
    case DXBC_OP_DCL_UAV_TYPED: {
       unsigned u = o ? (unsigned)o->index[0].imm : MAX_UAVS;
+      rov_declaration(c, insn);
       struct tex_shape shape;
       nir_alu_type type;
       const bool heap = o && heap_operand(c, o); /* C47 */
@@ -1309,6 +1326,7 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
       unsigned u = o ? (unsigned)o->index[0].imm : MAX_UAVS;
       bool structured = insn->opcode == DXBC_OP_DCL_UAV_STRUCTURED;
       const bool heap = o && heap_operand(c, o); /* C47: a buffer image in the heap */
+      rov_declaration(c, insn);
       if (u >= (heap ? DXBC_HEAP_RANGE_MAX : c->uav_slots) ||
           (structured && (!insn->num_payload || !insn->payload[0] || (insn->payload[0] & 3)))) {
          fail(c, insn, "buffer UAV declaration");
