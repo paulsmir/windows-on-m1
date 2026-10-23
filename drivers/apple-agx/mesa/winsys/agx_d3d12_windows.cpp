@@ -182,15 +182,33 @@ static void owner_backend_fail(unsigned site) { owner_batch_refusal(4u, site, 0u
  * (variant compiles, flush and sync causes) reach AgxWin32PerfNote on
  * Windows, but only the D3D10 owner listened. The same receipt as
  * agx_d3d10_windows.cpp AgxD3d10PerfNote: per-process counts, digits folded
- * to '#'; every 512 messages one "measure-perf-reason" line per changed
- * entry {serial, new count, total, presents, text[0..23]}. */
+ * to '#', one "measure-perf-reason" line per changed entry {serial, new
+ * count, total, presents, text}. The text carries 40 characters (EXP1914:
+ * 23 cut the cause off, "Flush reader due to: Wri"), and the table is
+ * reported every 512 messages, every 64 presents and at owner destruction,
+ * so a short run (GravityMark D3D12: 29 frames) keeps its tail. */
 extern "C" void (*AgxWin32PerfHook)(const char *message);
 static SRWLOCK owner_perf_lock = SRWLOCK_INIT;
-static struct { UINT Hash, Count, Reported; char Text[24]; } owner_perf_table[48];
-static UINT owner_perf_total, owner_perf_serial, owner_perf_lines;
+static struct { UINT Hash, Count, Reported; char Text[40]; } owner_perf_table[48];
+static UINT owner_perf_total, owner_perf_serial, owner_perf_lines, owner_perf_reported_presents;
 static volatile LONG owner_presents;
+/* under owner_perf_lock */
+static void owner_perf_report() {
+  if (owner_perf_lines >= 4096u) return;
+  ++owner_perf_serial;
+  owner_perf_reported_presents = static_cast<UINT>(owner_presents);
+  for (UINT i = 0; i < ARRAYSIZE(owner_perf_table) && owner_perf_table[i].Count; ++i) {
+    if (owner_perf_table[i].Count == owner_perf_table[i].Reported) continue;
+    UINT values[14] = {owner_perf_serial, owner_perf_table[i].Count - owner_perf_table[i].Reported, owner_perf_total,
+                       static_cast<UINT>(owner_presents)};
+    memcpy(&values[4], owner_perf_table[i].Text, sizeof(owner_perf_table[i].Text));
+    owner_perf_table[i].Reported = owner_perf_table[i].Count;
+    ++owner_perf_lines;
+    AdmissionUmdDiagnostic("measure-perf-reason", S_OK, values, ARRAYSIZE(values));
+  }
+}
 static void owner_perf_note(const char *message) {
-  char text[24] = {0};
+  char text[40] = {0};
   UINT hash = 2166136261u, index;
   for (UINT i = 0; message && message[i] && message[i] != '\n' && i < 63u; ++i) {
     const char c = message[i] >= '0' && message[i] <= '9' ? '#' : message[i];
@@ -201,23 +219,18 @@ static void owner_perf_note(const char *message) {
   for (index = 0; index + 1u < ARRAYSIZE(owner_perf_table); ++index)
     if (!owner_perf_table[index].Count || owner_perf_table[index].Hash == hash) break;
   if (!owner_perf_table[index].Count) {
-    static const char other[24] = "(other)";
+    static const char other[40] = "(other)";
     owner_perf_table[index].Hash = hash;
     memcpy(owner_perf_table[index].Text, index + 1u < ARRAYSIZE(owner_perf_table) ? text : other, sizeof(text));
   }
   ++owner_perf_table[index].Count;
-  if ((++owner_perf_total & 511u) == 0u && owner_perf_lines < 4096u) {
-    ++owner_perf_serial;
-    for (UINT i = 0; i < ARRAYSIZE(owner_perf_table) && owner_perf_table[i].Count; ++i) {
-      if (owner_perf_table[i].Count == owner_perf_table[i].Reported) continue;
-      UINT values[10] = {owner_perf_serial, owner_perf_table[i].Count - owner_perf_table[i].Reported, owner_perf_total,
-                         static_cast<UINT>(owner_presents)};
-      memcpy(&values[4], owner_perf_table[i].Text, sizeof(owner_perf_table[i].Text));
-      owner_perf_table[i].Reported = owner_perf_table[i].Count;
-      ++owner_perf_lines;
-      AdmissionUmdDiagnostic("measure-perf-reason", S_OK, values, ARRAYSIZE(values));
-    }
-  }
+  if ((++owner_perf_total & 511u) == 0u || static_cast<UINT>(owner_presents) - owner_perf_reported_presents >= 64u)
+    owner_perf_report();
+  ReleaseSRWLockExclusive(&owner_perf_lock);
+}
+static void owner_perf_flush() {
+  AcquireSRWLockExclusive(&owner_perf_lock);
+  owner_perf_report();
   ReleaseSRWLockExclusive(&owner_perf_lock);
 }
 /* EXP1875: a D3D9On12 batch reported faulted without a submission and
@@ -242,6 +255,7 @@ static HRESULT destroy_kernel_context(AGX_D3D12_OWNER *owner) {
 
 extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   if (!owner) return S_OK;
+  owner_perf_flush(); /* C82: the tail of a short run */
   BOOL consumed = FALSE;
   HRESULT hr = S_OK;
   if (owner->Context) {
