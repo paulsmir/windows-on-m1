@@ -61120,3 +61120,5 @@ EXP1904 pipeline ACTUAL / EXP1904N GT2 BEFORE 2026-10-23T10:18:36Z: RC 0, RUN_DO
 - D3D9 MSAA_PRESENT PASS; the front pixel 0x8facc2 is wallpaper, so the blt-model window is still not composed (C67 gap).
 - KMD receipts clean.
 EXP1904N: Night Raid GT2 (window, async off) for Wom1G4BindRefusal BindFailure = 320 + predicate.
+
+EXP1904N NIGHT_RAID_GT2 ACTUAL 2026-10-23T10:37:32Z: GT2 10:23:34Z-10:24:59Z, Present 0x887A0005. Wom1G4SubmitFailure: total 1. Wom1G4BindRefusal v2: Ready=1, BindFailure 332 = BuildTa3d step 3, BindNativeObjects predicate 12 = g4_zls_valid. The desktop survived (188d73e2 holds again). Cause from Asahi source: the validator demanded a nonzero ZLS control and nonzero ISP_ZLS_PIXELS for any attached depth/stencil, but agx_pack_zls_control packs a transient 32F depth (no load/store) to 0, and a 1x1 render's ZLS pixels are 0. Fix 37123151: an exact ZLS-pixels check against the render size, any control word; RED/GREEN; BASELINE_OK. Verdict: GT2's refusal cause CONFIRMED (receipt) and fixed offline; it goes to hardware in EXP1906 (EXP1905 is the m1n1-only run). Recovery rec1904h before EXP1905.
