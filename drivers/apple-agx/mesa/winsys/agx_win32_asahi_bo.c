@@ -7,7 +7,14 @@
 void (*AgxWin32BackendFailHook)(unsigned site);
 #ifdef APPLE_AGX_GPUVA_WINSYS
 extern void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
+#include "util/os_time.h"
+/* C85 receipt-only (EXP1916 GravityMark D3D12: 8.3 s of a 24 s run went to
+ * creating 87 heaps, about 4 ms per MiB, with no receipt inside): a BO
+ * creation of at least 10 ms reports its MiB, class and the microseconds of
+ * the Windows allocation (NativeDeviceCreateBo), the GPU VA bind and the
+ * owner association. The owner sets the hook (defined in every build). */
 #endif
+void (*AgxWin32BoTimeHook)(unsigned mib, unsigned cls, unsigned create_us, unsigned bind_us, unsigned associate_us);
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -368,6 +375,10 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   bo=calloc(1,sizeof(*bo));
   if(!bo) return NULL;
   bo->Backend=b;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  const int64_t timed_start=os_time_get_nano();
+  int64_t timed_created=0,timed_bound=0;
+#endif
   {
   AGX_WIN32_NATIVE_DEVICE_RESULT created=
       AgxWin32NativeDeviceCreateBo(&b->Buffers,cls,bytes,align,access,&bo->Backing);
@@ -397,6 +408,9 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
     else free(bo);
     AGX_WIN32_ASAHI_FAIL(b, 1u); return NULL;
   }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  timed_created=os_time_get_nano();
+#endif
   bo->Base.handle=(uint32_t)bo->Backing.Buffer.Transport.Token;
   bo->Base.align=align; bo->Base.prime_fd=-1; bo->Base.refcnt=1; bo->Base.label=label;
 #ifdef APPLE_AGX_GPUVA_WINSYS
@@ -410,6 +424,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
     AGX_WIN32_ASAHI_FAIL(b, 1u);return NULL;
   }
   bo->Coordinate.addr=bo->Gpuva.Va;
+  timed_bound=os_time_get_nano();
 #else
   bo->Coordinate.addr=bo->Backing.ConstructionAddress; bo->Coordinate.size_B=bytes;
 #endif
@@ -425,6 +440,14 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   }
   ++b->LiveBos;
   (void)handle_map_put(b,bo); /* a miss falls back to the owner walk */
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  {
+    const int64_t timed_end=os_time_get_nano();
+    if(AgxWin32BoTimeHook && timed_end-timed_start>=10000000)
+      AgxWin32BoTimeHook((unsigned)(bytes>>20),cls,(unsigned)((timed_created-timed_start)/1000),
+          (unsigned)((timed_bound-timed_created)/1000),(unsigned)((timed_end-timed_bound)/1000));
+  }
+#endif
   return &bo->Base;
 }
 

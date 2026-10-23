@@ -233,6 +233,15 @@ static void owner_perf_flush() {
   owner_perf_report();
   ReleaseSRWLockExclusive(&owner_perf_lock);
 }
+/* C85 (EXP1916 GravityMark D3D12: heap creation ~4 ms per MiB):
+ * measure-bo-create {MiB, class, allocation us, GPU VA bind us, association
+ * us} of each BO creation of at least 10 ms (agx_win32_asahi_bo.c) */
+extern "C" void (*AgxWin32BoTimeHook)(unsigned mib, unsigned cls, unsigned create_us, unsigned bind_us,
+                                      unsigned associate_us);
+static void owner_bo_time(unsigned mib, unsigned cls, unsigned create_us, unsigned bind_us, unsigned associate_us) {
+  const UINT values[] = {mib, cls, create_us, bind_us, associate_us};
+  AdmissionUmdDiagnostic("measure-bo-create", S_OK, values, 5u);
+}
 /* EXP1875: a D3D9On12 batch reported faulted without a submission and
  * nothing named the Asahi site that marked the context (kind << 16 | line). */
 extern "C" void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context, unsigned flags, unsigned draws);
@@ -361,6 +370,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     AgxWin32BackendFailHook = owner_backend_fail;
     AgxWin32FirstFaultHook = owner_first_fault;
     AgxWin32PerfHook = owner_perf_note;
+    AgxWin32BoTimeHook = owner_bo_time;
   }
   receipt("measure-d3d12-owner", hr, owner->KernelContext != NULL ? 1u : 0u, owner->Screen != NULL ? 1u : 0u,
           owner->Context != NULL ? 1u : 0u);
