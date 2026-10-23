@@ -61395,3 +61395,20 @@ EXP1912 HARDWARE BEFORE 2026-10-23T15:15:11Z:
 - Failure criteria: regressions, desktop damage, new DWM faults, hang.
 - Hashes: sys fdbc0086fdaf, UmdArm64 610aa240f30f, UmdX64 79ed35f3a23e, Umd32 fd5bb965a951; manifest fa5aa7578e91, hardware-manifest 6a50886298fe; probe1912.sh 71167a3fc1a0 (PROBE_LINT_OK); visible recovery rec1912h 7e2b0d01d7f38e0a; m1n1 0d3a75b3.
 - Recovery rec1912h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1912-d3d11-legal-c76/run1912.sh.
+
+EXP1912 ACTUAL 2026-10-23T15:41:42Z:
+- run1912.sh RUN_DONE; m1n1 0d3a75b3 stable.
+- Regressions: SAMPLE_HASHES bad 0; e1904 118/0 x3; T2VOL PASS; D3D11 smoke PASS; samples 4/4 and ModelViewerI alive; DWM faults 0, no DWM crash; PRESSURE refused at 352 MiB available with the guest alive; no GPU reset.
+- Codex T2 CONFIRMED: GravityMark D3D11 ran the whole 240 s benchmark for the first time.
+  - No reject-resource-copy-region; it reported "Score: 7, FPS: 0.0".
+  - XFER: down 528 / 71325 MiB, up 17 / 1536 MiB. The benchmark is throttled by 64 KiB copy escapes on >16 MiB buffers; C75c (EXP1913) targets this.
+- C76 REJECTED: DXG_ETW unchanged.
+  - 612 RedirectedBlt presents 0xC01E0006, destination 0x0;
+  - 0 CDD allocations, 0 history tokens, GDI_BLT x612;
+  - the hold screenshot has no magenta.
+  - NoCacheCoherentApertureMemory has no measured effect and is reverted. The redirected-blt track has no further evidence-backed cap candidate (Codex T5 research).
+- GravityMark D3D12:
+  - 10k crashed at 34 s: c0000005 UmdArm64 30.0.1912.0 +0xaf6d8, the failed buffer-map read class; Codex T6b df8af8e0 is in EXP1913;
+  - 2k: D3D12 out of memory at 20 s (Df32 4096x4096 texture);
+  - G4_SUBMIT_FAILURE Parse/Unmapped total 3 (receipt v3 provenance in EXP1914).
+- C80 (fork): no regression in the D3D12 samples or ModelViewer (1261 presents).
