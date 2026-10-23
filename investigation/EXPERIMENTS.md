@@ -61373,3 +61373,25 @@ EXP1911 ACTUAL 2026-10-23T15:09:36Z: run1911.sh RC 0, RUN_DONE, m1n1 0d3a75b3 st
   - This is the first DWM memory-exhaustion crash in this series. The C73 low floor (EXP1908+) lets GPU allocations take memory until LowMemoryCondition, and DWM could not allocate.
   - Dump in C:\CrashDumps per the WER profile.
   - Open: the floor policy needs headroom for DWM; candidate: refuse growth when available < max(LowMemory, a fixed 512 MiB reserve), measured.
+
+EXP1912 HARDWARE BEFORE 2026-10-23T15:15:11Z:
+- Package 30.0.1912.0 from 04418fda = EXP1911 93f27273 plus:
+  - Codex T2: 3716c810/2bd9bb9d BC<->integer reinterpret copies; 63069b2b/006f7b91 D3D11.1 CB windows and large CBs;
+  - Codex T6: 0dae2815 texture writeback fails cleanly on map failure; 5e30ed62 Texture1D pin EOL;
+  - C76 bb493eb0 NoCacheCoherentApertureMemory = 1;
+  - the fork's C80 97ff4271 presentation-surface readback through a GPU copy.
+- Probe probe1912.sh = probe1911 plus the C76 DXG_ETW step (dxg-etw-run.sh, held D3D9 window, magenta screenshot).
+- ATOMIC CONTRACT: none -- separate lines:
+  - T2: GravityMark D3D11 past 64 s, no reject-resource-copy-region;
+  - T6: no crash in a texture map failure;
+  - C76: DXG_ETW 184 status/destination and 287 events;
+  - C80: no regression in D3D12 samples and ModelViewer (Night Raid separately).
+- WHY THIS HYPOTHESIS:
+  (1) EXP1909/EXP1910 GravityMark D3D11 refused R32G32B32A32_UINT->BC6H copies (legal per D3D10.1+);
+  (2) EXP1909 crash analysed by Codex T6 (map failure -> NULL+offset into ail_tile);
+  (3) Codex T5: the only presentation-caps discrepancy is NoCacheCoherentApertureMemory = 0 with no coherent aperture.
+- WHAT IS STILL UNKNOWN: whether C76 changes Windows' redirected-blt path; GravityMark D3D11's next stage.
+- Expected: regressions as EXP1911; GravityMark D3D11 past 64 s; DXG_ETW unchanged (rejects C76) or changed (supports it).
+- Failure criteria: regressions, desktop damage, new DWM faults, hang.
+- Hashes: sys fdbc0086fdaf, UmdArm64 610aa240f30f, UmdX64 79ed35f3a23e, Umd32 fd5bb965a951; manifest fa5aa7578e91, hardware-manifest 6a50886298fe; probe1912.sh 71167a3fc1a0 (PROBE_LINT_OK); visible recovery rec1912h 7e2b0d01d7f38e0a; m1n1 0d3a75b3.
+- Recovery rec1912h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1912-d3d11-legal-c76/run1912.sh.
