@@ -61694,3 +61694,15 @@ EXP1921 HARDWARE BEFORE 2026-10-23T23:02:39Z:
 - Recovery: rec1921h; at proxy use AGX_RECOVERY_ALLOW_AT_PROXY=1 (snapshot runs automatically).
 - Hashes: sys 57e04ea4de07, UmdArm64 36feb01f10d2, UmdX64 771c86b91d2d, Umd32 22568b0f4bbe; manifest a2957cb93fc7, hardware-manifest 19448fc053f6; probe1921.sh 8338318e5568 (PROBE_LINT_OK); visible recovery rec1921h 16352dc960da0f75; m1n1 0d3a75b3.
 - Recovery rec1921h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1921-hang-locate/run1921.sh.
+
+EXP1921 ACTUAL 2026-10-23T23:10:22Z:
+- Package 30.0.1921.0 (29446c11: EXP1920 + T10 reset-stage receipts + UMD trace sync); short profile. The guest survived; no bugcheck.
+- GravityMark D3D12 10k:
+  - Ready 34.9 s; device removed at 43.6 s; gm-run "REMOVED KILLED".
+  - The synchronous trace located the hang: the last record of pid 6944 is measure-d3d12-execute #3 (0x7ef commands; values 00000001 000007ef 000d38b1 00000128), i.e. the first full benchmark frame after the load, followed by nothing.
+  - KMD: one firmware timeout, fence 0x17d0, pid 6944, 4 ms after submit, resumed, FAULT_INFO not read; FW_RECOVERY recoveries 1; GPU_RESET none.
+- GravityMark D3D12 2k: out of memory at 26.1 s creating "2D Df32 4096x4096 l2 Target Source Zero". Pool reserve failures 1 and floor refusals 1, peak 2685/2688: the removed 10k device's memory had probably not been released yet. This is secondary.
+- Verdict: hang located. It is the GPU execution of the first full frame (a firmware timeout on its submission), not texture uploads or CPU-side recording. The cause stays undetermined because FAULT_INFO is not read.
+- Next: EXP1922 = the same driver code + device switch Wom1GpuFaultInfoRead=1, a single variable.
+  - Asahi gpu.rs:1422 reads FAULT_INFO on a Timeout; valid means an MMU fault.
+  - Current KMD power-on reads SGX ID/core-mask registers through the same mapping, so the EXP592/EXP671 abort mappings no longer apply.
