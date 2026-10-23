@@ -302,3 +302,15 @@ GPU blit writes and texture reads see them, aliasing and the packed tile
 work, and a remap is coherent for the next submission (CHANGES
 CHG-20261023-C53-HW2-VALIDATED). Next: HW3 (sparse descriptor reads,
 153fd2ab behind APPLE_AGX_D3D12_SPARSE_DESC=1; 9574a135 measurement).
+
+## HW3 result (EXP1890)
+
+VALIDATED: with APPLE_AGX_D3D12_SPARSE_DESC=1 (153fd2ab overlay) the HW2
+checks pass through the Sparse Block table (mapped tiles, alias, packed mip
+tail), and measure-d3d12-reserved-tier2-selftest S_OK {zero 1118, nonzero 0,
+heap changed 0}: a NULL tile written with 0xdeadbeef (scratch) reads 0, and
+the write reaches no heap tile. Both HW3 unknowns are answered: CPU-written
+Sparse Blocks are seen by the next read, and a sparse descriptor spanning the
+AGX mip tail samples correctly. Remaining for Tier 2: buffer SRV reads via
+the read-only shadow (overlay PIPE_BUFFER half), UAV reads of NULL buffer
+tiles, shader status (SparseResidency), min/max filters (C65).
