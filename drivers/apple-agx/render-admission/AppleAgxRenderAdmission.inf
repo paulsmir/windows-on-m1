@@ -62,8 +62,13 @@ AppleAgxOpenGL32.dll
 AppleAgxRenderAdmissionUmd32.dll,,,0x4000
 
 [Admission.SoftwareSettings]
-HKR,,UserModeDriverName,%REG_MULTI_SZ%,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll
-HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,AppleAgxRenderAdmissionUmd32.dll,AppleAgxRenderAdmissionUmd32.dll,AppleAgxRenderAdmissionUmd32.dll,AppleAgxRenderAdmissionUmd32.dll
+; The four names are the D3D9, D3D10, D3D11 and D3D12 UMDs. The UMD has no
+; D3D9 DDI (no OpenAdapter export), and d3d9.dll then failed every device
+; with D3DERR_NOTAVAILABLE (EXP1889 D3D9_DEFAULT). With "<>", the "no D3D9
+; driver" marker, in the D3D9 slot, the DX9 UMD-name query fails and d3d9.dll
+; runs D3D9 devices through D3D9On12 on this D3D12 UMD (validated by D3D9_ON12).
+HKR,,UserModeDriverName,%REG_MULTI_SZ%,"<>",AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll
+HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,"<>",AppleAgxRenderAdmissionUmd32.dll,AppleAgxRenderAdmissionUmd32.dll,AppleAgxRenderAdmissionUmd32.dll
 ; OpenGLFlags bit 0 is set for compatibility. EXP1194: bit 1 is set -- the
 ; runtime then does not call the ICD's finish before its swap-buffers
 ; ("Loading an OpenGL Installable Client Driver"). The ICD's swap flushes

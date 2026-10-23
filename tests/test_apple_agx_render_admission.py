@@ -474,7 +474,14 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         names = re.search(r"^HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,(.+)$", inf, re.M).group(1).split(",")
         # Microsoft's contract: a file name, the file in %systemroot%\SysWOW64
         # (EXP1223: a driver-store path was not loaded).
-        self.assertEqual(names, ["AppleAgxRenderAdmissionUmd32.dll"] * 4)
+        # EXP1889 D3D9_DEFAULT: slot 0 (the D3D9 UMD) is dxgkrnl's "<>" marker
+        # for "no D3D9 driver", so d3d9.dll runs D3D9 devices through
+        # D3D9On12; the UMD has no OpenAdapter (D3D9 DDI) export.
+        self.assertEqual(names, ['"<>"'] + ["AppleAgxRenderAdmissionUmd32.dll"] * 3)
+        native = re.search(r"^HKR,,UserModeDriverName,%REG_MULTI_SZ%,(.+)$", inf, re.M).group(1).split(",")
+        self.assertEqual(native, ['"<>"'] + ["AppleAgxRenderAdmissionUmd.dll"] * 3)
+        exports = self.read("umd/AppleAgxRenderAdmissionUmd.def").split()
+        self.assertNotIn("OpenAdapter", exports)
         section = re.search(r"^\[Admission\.WowUmdCopyFiles\]\n(\S+)$", inf, re.M).group(1)
         self.assertEqual(section.split(",")[0], "AppleAgxRenderAdmissionUmd32.dll")
         self.assertIn("Admission.WowUmdCopyFiles=10,SysWOW64", inf)

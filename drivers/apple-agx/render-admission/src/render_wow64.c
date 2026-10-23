@@ -6,11 +6,17 @@ int AdmissionWow64UmdNamed(unsigned int Type, const void *Data, unsigned int Byt
   if ((Type != ADMISSION_REG_SZ && Type != ADMISSION_REG_MULTI_SZ) || bytes == 0 ||
       Bytes < 4u || (Bytes & 1u) != 0u)
     return 0;
-  /* Registry strings are UTF-16LE; the data need not be aligned. */
+  /* Registry strings are UTF-16LE; the data need not be aligned. A leading
+   * "<>" is the no-D3D9-driver marker of the D3D9 slot (EXP1889): the
+   * registered UMD is the next string. */
   characters = Bytes / 2u;
-  if ((bytes[0] | bytes[1]) == 0u)
+  index = 0u;
+  if (characters >= 3u && bytes[0] == '<' && bytes[1] == 0u &&
+      bytes[2] == '>' && bytes[3] == 0u && (bytes[4] | bytes[5]) == 0u)
+    index = Type == ADMISSION_REG_MULTI_SZ ? 3u : characters;
+  if (index >= characters || (bytes[2u * index] | bytes[2u * index + 1u]) == 0u)
     return 0;
-  for (index = 1u; index < characters; ++index) {
+  for (++index; index < characters; ++index) {
     if ((bytes[2u * index] | bytes[2u * index + 1u]) == 0u)
       return 1;
   }
