@@ -6047,12 +6047,12 @@ agx_shader_initialize("""
         if state_text.count(sparse_anchor)!=1:
             raise SystemExit('Ambiguous texture address anchor')
         state_text=state_text.replace(sparse_anchor,sparse_anchor+'''#ifdef APPLE_AGX_GPUVA_WINSYS
-      /* sampled through the table only with APPLE_AGX_D3D12_SPARSE_DESC=1
-       * until a probe validates the Sparse Block reads (else the image VA) */
+      /* sampled through the table (validated by EXP1890 HW3: NULL tiles read
+       * 0); APPLE_AGX_D3D12_SPARSE_DESC=0 keeps the image VA */
       static int sparse_desc = -1;
       if (sparse_desc < 0) {
          const char *value = getenv("APPLE_AGX_D3D12_SPARSE_DESC");
-         sparse_desc = value && value[0] == '1' && !value[1];
+         sparse_desc = !(value && value[0] == '0' && !value[1]);
       }
       if (sparse_desc && state->target != PIPE_BUFFER) {
          const APPLE_AGX_U64 table = AgxWin32AsahiSparseTableVa(rsrc->bo);
@@ -6061,6 +6061,14 @@ agx_shader_initialize("""
             cfg.address = table + ail_page_to_sparse_index_el(&rsrc->layout, first_layer, 0) *
                                      AIL_SPARSE_ELSIZE_B;
          }
+      }
+      /* C53 Tier 2: texel-buffer reads (SRVs, typed UAV loads) of a reserved
+       * buffer go through its read-only shadow, whose unmapped tiles read 0
+       * (Honeykrisp sparse_ro_offset; 0 for every other BO). The view
+       * offset below is added to the shadow, which mirrors the buffer. */
+      if (sparse_desc && state->target == PIPE_BUFFER) {
+         const APPLE_AGX_U64 shadow = AgxWin32AsahiReadShadowVa(rsrc->bo);
+         if (shadow) cfg.address = shadow;
       }
 #endif
 ''')
