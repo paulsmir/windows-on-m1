@@ -61482,3 +61482,15 @@ EXP1915 HARDWARE BEFORE 2026-10-23T17:22:43Z:
 - Failure criteria: regressions, DWM crash, hang.
 - Hashes: sys 4d6634b8e4f7, UmdArm64 d6cf835a163a, UmdX64 5929895e7e69, Umd32 a0be92f8bbae; manifest 5dd0c2eb2c0d, hardware-manifest 5e37306ef8b4; probe1915.sh 398dac19ea02 (PROBE_LINT_OK); visible recovery rec1915h 4c37d811f595478c; m1n1 0d3a75b3.
 - Recovery rec1915h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1915-reinterpret-gpuwait/run1915.sh.
+
+EXP1914 ACTUAL 2026-10-23T17:24:52Z:
+- RUN_DONE; m1n1 0d3a75b3 stable.
+- Regressions: SAMPLE_HASHES bad 0; e1913 118 PASS x3 (C76A FAIL, the probe defect already fixed by T3b); T2VOL PASS; D3D9 6/6; D3D11 smoke PASS; samples 4/4 and ModelViewerI alive; DWM faults 0, no DWM crash; no GPU reset; G4_SUBMIT_FAILURE none.
+- T8 (M2-f7c headroom: High && !Low gate plus pressure reclaim) is safe in this run:
+  - GravityMark D3D11 again completed: Score 2553, FPS 15.3 (EXP1913: 2549/15.2), XFER 0;
+  - GravityMark D3D12 removed at 22.4-22.8 s, the same position as EXP1913's C84 copy refusal (fork fix in EXP1915);
+  - PRESSURE refused the first texture at 406 MiB available (earlier than C73's 347-390 MiB), guest alive;
+  - no DWM crash (EXP1911's c00001ad did not recur; one run is not yet proof).
+  - Verdict: no regression from the stricter gate; DWM-safety evidence is partial and accumulates in later runs.
+- T7 receipt v3: no G4 Parse/Unmapped refusal occurred in this run (also none in EXP1913 since C75c), so no provenance was captured. The Unmapped failures disappeared together with the copy-escape/trim pressure.
+- Night Raid C82 run (nr-c82.sh) did not start: arm-interactive received the positional arguments with literal quotes ("A positional parameter cannot be found that accepts argument '223850''"). 3DMark and Steam were never started, so the user's session was not affected. The script is fixed (nr-env.ps1, quoting verified with argtest.ps1); Night Raid moves to the EXP1915 package (C82 + C83).
