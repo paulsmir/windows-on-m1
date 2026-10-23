@@ -54,7 +54,15 @@ class D3d12AbiGate(unittest.TestCase):
         level = level[:level.index('\n}\n')]
         self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1', level)
         self.assertIn("value[0] == '0'", level)
-        self.assertIn('? kProfileLevel : D3D12DDI_3DPIPELINELEVEL_11_1;', level)
+        self.assertIn('return kProfileLevel;', level)
+        # C68: a level is claimed only with its features -- 12_0 needs Tiled
+        # Tier 2 (min/max with it), 12_1 also ROVs and CR Tier 1; an opt-out
+        # of any of them (or APPLE_AGX_D3D12_FL12=0) lowers the level, never
+        # an unsupported feature behind a higher one
+        self.assertIn('if (fl12 && TiledTier2())', level)
+        self.assertIn('RovEnabled() && ConservativeRasterEnabled() ? D3D12DDI_3DPIPELINELEVEL_12_1', level)
+        self.assertLess(level.index('APPLE_AGX_D3D12_FL111'), level.index('D3D12DDI_3DPIPELINELEVEL_12_0'))
+        self.assertTrue(level.rstrip().endswith('return D3D12DDI_3DPIPELINELEVEL_11_1;'))
         self.assertNotIn('= kProfileLevel;', source[source.index('static HRESULT APIENTRY GetCaps('):])
         caps = source[source.index('static HRESULT APIENTRY GetCaps('):]
         caps = caps[:caps.index('\n}\n')]

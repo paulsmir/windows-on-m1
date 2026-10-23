@@ -272,10 +272,22 @@ static const D3D12DDI_3DPIPELINELEVEL kProfileLevel = D3D12DDI_3DPIPELINELEVEL_1
  * C62A, C57A, C60A); the default since then, APPLE_AGX_D3D12_FL111=0 keeps a
  * process at 11_0. The runtime reports ROVs and conservative rasterization
  * only at 11_1 and above (EXP1891). */
+/* C68 (D3D12-FL-program.md): 12_0 is 11_1 plus Tiled Resources Tier 2 with
+ * min/max filtering (C53T/C65, EXP1902) and the 18 typed UAV load formats
+ * (C49); 12_1 adds ROVs and conservative rasterization Tier 1 (EXP1893-1897).
+ * The level follows the features each process actually has, so an opt-out
+ * of one of them lowers it; APPLE_AGX_D3D12_FL12=0 keeps a process at 11_1. */
 static D3D12DDI_3DPIPELINELEVEL ProfileLevel() {
     char value[2] = {};
-    return GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1 && value[0] == '0'
-               ? kProfileLevel : D3D12DDI_3DPIPELINELEVEL_11_1;
+    if (GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1 && value[0] == '0')
+        return kProfileLevel;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    const bool fl12 = !(GetEnvironmentVariableA("APPLE_AGX_D3D12_FL12", value, sizeof(value)) == 1 && value[0] == '0');
+    if (fl12 && TiledTier2())
+        return RovEnabled() && ConservativeRasterEnabled() ? D3D12DDI_3DPIPELINELEVEL_12_1
+                                                           : D3D12DDI_3DPIPELINELEVEL_12_0;
+#endif
+    return D3D12DDI_3DPIPELINELEVEL_11_1;
 }
 /* Answers a caps type with T, its remaining bytes zero (a larger, newer
  * structure keeps every later field at its "not supported" zero). */
