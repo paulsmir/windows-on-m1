@@ -23,7 +23,7 @@ class D3d12PixelCenter(unittest.TestCase):
   flags=pins['host_flags'];driver=ROOT/'drivers/apple-agx/mesa/dxbc';mesa=Path(pins['mesa']);build=Path(pins['build'])
   includes=['-I',str(driver),'-I',str(ROOT/'drivers/apple-agx/windows/icd'),'-I',str(mesa/'src/gallium/include'),'-I',str(build/'src/asahi/genxml'),'-I',str(build/'src/asahi'),'-I',str(mesa/'src/asahi')]
   instrumentation=['-g','-O1','-fsanitize=address,undefined'];commands=[];objects=[]
-  for path,name in [(driver/'dxbc_parse.c','parse.o'),(driver/'dxbc_to_nir.c','dxbc.o'),(mesa/'src/asahi/lib/agx_nir_lower_sample_intrinsics.c','sample.o')]:
+  for path,name in [(driver/'dxbc_parse.c','parse.o'),(driver/'dxbc_to_nir.c','dxbc.o'),(driver/'dxbc_minmax.c','minmax.o'),(mesa/'src/asahi/lib/agx_nir_lower_sample_intrinsics.c','sample.o')]:
    obj=out/name;objects.append(obj);commands.append(['/usr/bin/clang','-std=c11','-Werror=implicit-function-declaration',*instrumentation,*flags,*includes,'-c',str(path),'-o',str(obj)])
   objects.append(out/'owner.o');commands.append(['/usr/bin/clang++','-std=c++17','-Werror=sign-compare',*instrumentation,*flags,*includes,'-c',str(source),'-o',str(objects[-1])])
   commands.append(['/usr/bin/clang++',*instrumentation,*map(str,objects),*pins['libraries'],'-L/opt/homebrew/opt/zstd/lib','-lzstd','-lz','-lpthread','-o',str(out/'center-check')])

@@ -51,7 +51,7 @@ class VolumeShaders(unittest.TestCase):
             '-Werror=implicit-function-declaration', *host_flags(build),
             '-I', str(build / 'src/asahi'), '-I', str(mesa / 'src/asahi'),
             '-I', str(DXBC), str(ROOT / 'tests/d3d12_volume_shader_fixture.c'),
-            str(DXBC / 'dxbc_to_nir.c'), str(DXBC / 'dxbc_parse.c'),
+            str(DXBC / 'dxbc_to_nir.c'), str(DXBC / 'dxbc_parse.c'), str(DXBC / 'dxbc_minmax.c'),
             '-o', str(cls.binary), *map(str, libs),
             '-L/opt/homebrew/opt/zstd/lib', '-lzstd', '-lz', '-lpthread']
         run = subprocess.run(command, capture_output=True, text=True)

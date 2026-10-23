@@ -5,10 +5,12 @@
 #include "agx_dxil_checked.h"
 #include "agx_dxil_program.h"
 #include "../dxbc/dxbc_to_nir.h"
+#include "../dxbc/dxbc_minmax.h"
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_xfb_info.h"
 #include "util/set.h"
+#include "util/u_dynarray.h"
 #include "compiler/spirv/nir_spirv.h"
 #include "compiler/spirv/spirv_info.h"
 #include <stdio.h>
@@ -444,10 +446,17 @@ heap_deref(nir_builder *b, nir_deref_instr *deref, unsigned *range, nir_def **in
    return true;
 }
 
+/* C65: a heap-sampled tex and its min/max bits, wrapped after the pass
+ * (dxbc_minmax_wrap adds control flow, which a tex pass must not) */
+struct minmax_wrap {
+   nir_tex_instr *tex;
+   nir_def *minmax;
+};
+
 static bool
 lower_heap_tex(nir_builder *b, nir_tex_instr *tex, void *data)
 {
-   (void)data;
+   struct util_dynarray *wraps = data;
    b->cursor = nir_before_instr(&tex->instr);
    bool progress = false;
    unsigned range;
@@ -463,8 +472,9 @@ lower_heap_tex(nir_builder *b, nir_tex_instr *tex, void *data)
    }
    const int sidx = nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
    if (sidx >= 0 && heap_deref(b, nir_src_as_deref(tex->src[sidx].src), &range, &index)) {
-      /* the map entry's AGX sampler handle (bits 0-15) and MipLODBias (fp16,
-       * bits 16-31), which the shader applies as the DXBC frontend does */
+      /* the map entry's AGX sampler handle (bits 0-10), min/max bits (C65,
+       * 11-15) and MipLODBias (fp16, bits 16-31), which the shader applies as
+       * the DXBC frontend does */
       nir_def *r = heap_range(b, range);
       nir_def *entry = nir_isub(b, nir_iadd(b, nir_channel(b, r, 0), index), nir_channel(b, r, 1));
       nir_def *word = nir_load_ubo(b, 1, 32, nir_imm_int(b, DXBC_HEAP_TABLE_CB),
@@ -472,7 +482,10 @@ lower_heap_tex(nir_builder *b, nir_tex_instr *tex, void *data)
                                    .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0u);
       nir_def *bias = nir_f2f32(b, nir_u2u16(b, nir_ushr_imm(b, word, 16)));
       nir_tex_instr_remove_src(tex, sidx);
-      nir_tex_instr_add_src(tex, nir_tex_src_sampler_handle, nir_u2u16(b, word));
+      nir_tex_instr_add_src(tex, nir_tex_src_sampler_handle,
+                            nir_u2u16(b, nir_iand_imm(b, word, DXBC_SAMPLER_HANDLE_MASK)));
+      struct minmax_wrap wrap = {tex, nir_iand_imm(b, nir_ushr_imm(b, word, DXBC_SAMPLER_MINMAX_SHIFT), 31)};
+      util_dynarray_append(wraps, wrap);
       tex->sampler_index = DXBC_HEAP_SAMPLER_INDEX;
       if (tex->op == nir_texop_tex) {
          tex->op = nir_texop_txb;
@@ -929,7 +942,17 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       nir = NULL;
       goto done;
    }
-   NIR_PASS(_, nir, nir_shader_tex_pass, lower_heap_tex, nir_metadata_control_flow, NULL);
+   {
+      struct util_dynarray wraps;
+      util_dynarray_init(&wraps, NULL);
+      NIR_PASS(_, nir, nir_shader_tex_pass, lower_heap_tex, nir_metadata_control_flow, &wraps);
+      util_dynarray_foreach(&wraps, struct minmax_wrap, w) {
+         nir_builder wb = nir_builder_at(nir_after_instr(&w->tex->instr));
+         if (dxbc_minmax_wrap(&wb, w->tex, w->minmax))
+            nir_progress(true, wb.impl, nir_metadata_none);
+      }
+      util_dynarray_fini(&wraps);
+   }
    record_slots(nir);
    NIR_PASS(_, nir, nir_lower_samplers);
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ubo | nir_var_mem_ssbo, nir_address_format_32bit_index_offset);

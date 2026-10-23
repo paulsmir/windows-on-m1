@@ -50,7 +50,7 @@ class Texture1DArrayShaders(unittest.TestCase):
         dx=ROOT/'drivers/apple-agx/mesa/dxbc'
         with tempfile.TemporaryDirectory(prefix='texture1d-array-nir-') as temp:
             exe=Path(temp)/'nir'
-            argv=['/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang','-std=c11','-isysroot',str(sdk),'-Werror=implicit-function-declaration',*host_flags(b),'-I',str(b/'src/asahi'),'-I',str(m/'src/asahi'),'-I',str(dx),str(ROOT/'tests/d3d12_texture1d_array_shader_fixture.c'),str(dx/'dxbc_to_nir.c'),str(dx/'dxbc_parse.c'),'-o',str(exe),*map(str,libs),'-L/opt/homebrew/opt/zstd/lib','-lzstd','-lz','-lpthread']
+            argv=['/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang','-std=c11','-isysroot',str(sdk),'-Werror=implicit-function-declaration',*host_flags(b),'-I',str(b/'src/asahi'),'-I',str(m/'src/asahi'),'-I',str(dx),str(ROOT/'tests/d3d12_texture1d_array_shader_fixture.c'),str(dx/'dxbc_to_nir.c'),str(dx/'dxbc_parse.c'),str(dx/'dxbc_minmax.c'),'-o',str(exe),*map(str,libs),'-L/opt/homebrew/opt/zstd/lib','-lzstd','-lz','-lpthread']
             z=subprocess.run(argv,capture_output=True,text=True);self.assertEqual(z.returncode,0,z.stdout+z.stderr)
             for kind,mode,want in [
                 ('load','B','13a85e9dd6686f046256f6e2c6fd83f20d0c89b024c5bee08f7692d259425998'),

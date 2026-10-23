@@ -117,7 +117,7 @@ footprint(nir_builder *b, const nir_tex_instr *tex, nir_def *xy, nir_def *layer,
    return nir_bcsel(b, linear, v, sample_at(b, tex, xy, layer, level));
 }
 
-bool
+nir_def *
 dxbc_minmax_wrap(nir_builder *b, nir_tex_instr *tex, nir_def *minmax)
 {
    const int ci = nir_tex_instr_src_index(tex, nir_tex_src_coord);
@@ -127,7 +127,7 @@ dxbc_minmax_wrap(nir_builder *b, nir_tex_instr *tex, nir_def *minmax)
         tex->op != nir_texop_txd) ||
        nir_tex_instr_src_index(tex, nir_tex_src_offset) >= 0 ||
        nir_tex_instr_src_index(tex, nir_tex_src_min_lod) >= 0)
-      return false;
+      return NULL;
    b->cursor = nir_after_instr(&tex->instr);
    nir_def *coord = tex->src[ci].src.ssa;
    nir_def *reduction = nir_iand_imm(b, minmax, 3);
@@ -178,5 +178,5 @@ dxbc_minmax_wrap(nir_builder *b, nir_tex_instr *tex, nir_def *minmax)
       if (!nir_src_is_if(src) && nir_src_use_instr(src) == nir_def_instr(phi)) continue;
       nir_src_rewrite(src, phi);
    }
-   return true;
+   return phi;
 }

@@ -11,7 +11,7 @@ LINK_STDERR=b"ld: warning: ignoring duplicate libraries: '-lc++'\n"
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def entry(p):p=Path(p);return {'bytes':p.stat().st_size,'sha256':sha(p)}
 def source_inputs():
- return list(dict.fromkeys([ROOT/n for n in NAMES]+[checked.ROOT/'drivers/apple-agx/mesa/dxbc'/n for n in ['dxbc_to_nir.c','dxbc_parse.c']]+provider.source_inputs()+checked.source_inputs()+nir_recipe.source_inputs()))
+ return list(dict.fromkeys([ROOT/n for n in NAMES]+[checked.ROOT/'drivers/apple-agx/mesa/dxbc'/n for n in ['dxbc_to_nir.c','dxbc_parse.c','dxbc_minmax.c']]+provider.source_inputs()+checked.source_inputs()+nir_recipe.source_inputs()))
 def render(generated):
  # Existing CURRENT renderer owns fresh-directory creation and actual WDK/PROGRAM generation.
  return provider.render(generated)
@@ -23,7 +23,7 @@ def commands(receipts,generated):
  cs=[];objects=[]
  def unit(name,source,flags,cpp=False):
   obj=out/(name+'.o');objects.append(str(obj));cs.append({'label':name,'argv':[external['cxx']if cpp else external['cc'],*flags,'-MD','-MF',str(out/(name+'.d')),'-c',str(source),'-o',str(obj)]})
- for name,source in [('frontend',MODULE/'agx_owned_program_nir_native.c'),('inspect',ROOT/'tests/owned_program_nir_inspect.c'),('map',dxil/'agx_dxil_nir_map.c'),('dxbc',dxbc/'dxbc_to_nir.c'),('parse',dxbc/'dxbc_parse.c')]:unit(name,source,cflags)
+ for name,source in [('frontend',MODULE/'agx_owned_program_nir_native.c'),('inspect',ROOT/'tests/owned_program_nir_inspect.c'),('map',dxil/'agx_dxil_nir_map.c'),('dxbc',dxbc/'dxbc_to_nir.c'),('parse',dxbc/'dxbc_parse.c'),('minmax',dxbc/'dxbc_minmax.c')]:unit(name,source,cflags)
  # The opaque wrapper has a strong helper reference; every bridge link must
  # include the real clone/consume helper, even without callback-fixture calls.
  _,external_pins=checked.expected_inputs()

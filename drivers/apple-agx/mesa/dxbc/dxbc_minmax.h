@@ -12,33 +12,19 @@
 
 #include "nir.h"
 #include "nir_builder.h"
+#include "dxbc_minmax_bits.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define DXBC_SAMPLER_HANDLE_MASK 0x7ffu
-#define DXBC_SAMPLER_MINMAX_SHIFT 11u
-
-/* The 5 map-word bits of a D3D12 filter (D3D12_FILTER encoding: mip bits
- * 0-1, mag 2-3, min 4-5, anisotropic 0x40, reduction 7-8). */
-static inline unsigned
-dxbc_minmax_bits(unsigned filter)
-{
-   const unsigned aniso = (filter & 0x40u) != 0;
-   return ((filter >> 7) & 3u) |
-          ((aniso || ((filter >> 4) & 3u)) ? 4u : 0u) |
-          ((aniso || ((filter >> 2) & 3u)) ? 8u : 0u) |
-          ((aniso || (filter & 3u)) ? 16u : 0u);
-}
-
 /* Replaces the uses of tex's result (a float 2D or 2D-array sample:
  * tex/txb/txl/txd, no comparison) by a run-time choice: the hardware sample
  * for standard reduction, or the component-wise min/max of the texels the
  * filter would weight (zero-weight texels excluded) for bits 2/3. minmax is
- * the 5-bit field (32-bit). Other tex instructions are left alone (false).
- * The cursor must be after tex. */
-bool dxbc_minmax_wrap(nir_builder *b, nir_tex_instr *tex, nir_def *minmax);
+ * the 5-bit field (32-bit) and must dominate tex. Returns the replacement
+ * (the cursor is left after it), or NULL for a sample it leaves alone. */
+nir_def *dxbc_minmax_wrap(nir_builder *b, nir_tex_instr *tex, nir_def *minmax);
 
 #ifdef __cplusplus
 }

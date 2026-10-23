@@ -113,7 +113,7 @@ class DxbcToNir(unittest.TestCase):
         subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Werror=implicit-function-declaration",
                         *host_flags(build), "-I", str(build / "src/asahi"), "-I", str(mesa / "src/asahi"),
                         "-I", str(DXBC), str(ROOT / "tests/dxbc_to_nir_fixture.c"),
-                        str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_tir_gs.c"),
+                        str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_tir_gs.c"), str(DXBC / "dxbc_minmax.c"),
                         "-o", str(cls.binary), *map(str, libs),
                         "-L/opt/homebrew/opt/zstd/lib", "-lzstd", "-lz", "-lpthread"],
                        check=True, capture_output=True)
@@ -266,13 +266,17 @@ class DxbcToNir(unittest.TestCase):
                               capture_output=True, text=True, timeout=60)
         self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
         self.assertIn("BINDING kind 3 id 0 space 1 reg 0 slot 0 flags 2", heap.stdout)
-        self.assertEqual(heap.stdout.count("(sampler_handle)"), 4)
-        self.assertEqual(heap.stdout.count("31 (sampler)"), 4)
+        self.assertGreaterEqual(heap.stdout.count("(sampler_handle)"), 4)
+        self.assertGreaterEqual(heap.stdout.count("31 (sampler)"), 4)
         self.assertEqual(len(re.findall(r"\btxb .*\(bias\)", heap.stdout)), 2)
         self.assertIn("fexp2", heap.stdout)
         txl = [line for line in heap.stdout.splitlines() if re.search(r"\btxl\b", line)]
-        self.assertEqual(len(txl), 1)
-        self.assertNotIn("(bias)", txl[0])
+        self.assertTrue(txl and all("(bias)" not in line for line in txl))
+        # C65: each of the 4 heap samples masks its handle (bits 0-10) and
+        # gets the min/max emulation branch (one level-count query each;
+        # its explicit-LOD texel samples are the other txl)
+        self.assertEqual(len(re.findall(r"= iand .*\(0x7ff\)", heap.stdout)), 4)
+        self.assertEqual(len(re.findall(r"\bquery_levels\b", heap.stdout)), 4)
 
     def test_buffer_srv_ranges_read_the_descriptor_heap(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47: Tier

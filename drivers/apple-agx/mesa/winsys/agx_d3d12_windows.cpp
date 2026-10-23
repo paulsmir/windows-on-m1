@@ -23,6 +23,7 @@ extern "C" {
 #include "pipe/p_state.h"
 #include "../dxbc/dxbc_to_nir.h"
 #include "../dxbc/dxbc_tir_gs.h"
+#include "../dxbc/dxbc_minmax_bits.h"
 #ifdef APPLE_AGX_D3D12_DXIL
 #include "../dxil/agx_dxil_to_nir.h"
 #endif
@@ -2273,7 +2274,9 @@ extern "C" HRESULT AgxD3d12OwnerSamplerDescriptor(AGX_D3D12_OWNER *owner, const 
   owner->Context->delete_sampler_state(owner->Context, state);
   if (!packed) return E_FAIL;
   out->Bias = bias;
-  out->Valid = 1;
+  /* C65: the min/max reduction and filter bits ride above the valid bit
+   * into the heap sampler map word (dxbc_minmax_bits.h) */
+  out->Valid = static_cast<uint16_t>(1u | (dxbc_minmax_bits(sampler->Filter) << 8));
   return custom ? S_FALSE : S_OK;
 }
 
@@ -2423,8 +2426,19 @@ static void bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
         AdmissionUmdDiagnostic("reject-d3d12-heap-samplers", E_OUTOFMEMORY, receipt, 2);
         memset(handles, 0, h.SamplerCount * sizeof(handles[0]));
       }
-      for (unsigned i = 0; i < h.SamplerCount; ++i)
-        words[4 * AGX_D3D12_HEAP_RANGES + i] = h.Samplers[i].Valid ? handles[i] | (uint32_t(h.Samplers[i].Bias) << 16) : 0u;
+      for (unsigned i = 0; i < h.SamplerCount; ++i) {
+        /* C65: handle bits 0-10, min/max bits 11-15, MipLODBias 16-31 */
+        if (h.Samplers[i].Valid && handles[i] > DXBC_SAMPLER_HANDLE_MASK) {
+          const UINT receipt[] = {s, i, handles[i]};
+          AdmissionUmdDiagnostic("reject-d3d12-heap-sampler-handle", E_OUTOFMEMORY, receipt, 3);
+          handles[i] = 0;
+        }
+        words[4 * AGX_D3D12_HEAP_RANGES + i] =
+            h.Samplers[i].Valid ? (handles[i] & DXBC_SAMPLER_HANDLE_MASK) |
+                                      (uint32_t((h.Samplers[i].Valid >> 8) & 31u) << DXBC_SAMPLER_MINMAX_SHIFT) |
+                                      (uint32_t(h.Samplers[i].Bias) << 16)
+                                : 0u;
+      }
       bytes += 4u * h.SamplerCount;
     }
     if (heap_stages[s] == MESA_SHADER_GEOMETRY && owner->TirViewportValid) {

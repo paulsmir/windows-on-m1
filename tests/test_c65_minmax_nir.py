@@ -55,7 +55,8 @@ static void check(nir_texop op, bool array) {
    nir_def *bits = nir_iand_imm(&b, nir_ushr_imm(&b, word, 11), 31);
    nir_tex_instr *t = sample(&b, op, GLSL_SAMPLER_DIM_2D, array, false);
    nir_def *use = nir_fneg(&b, &t->def);
-   assert(dxbc_minmax_wrap(&b, t, bits));
+   nir_def *phi = dxbc_minmax_wrap(&b, t, bits);
+   assert(phi && nir_def_instr(phi)->type == nir_instr_type_phi);
    nir_validate_shader(b.shader, "minmax");
    /* the use now reads the phi, which reads the raw sample */
    nir_instr *user = nir_def_instr(use);

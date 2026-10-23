@@ -48,11 +48,11 @@ class DxilToNir(unittest.TestCase):
         dlibs = [str(p) for p in sorted(archives.glob("*.a"))]
         link = ["-L/opt/homebrew/opt/zstd/lib", "-lzstd", "-lz", "-lpthread"]
         subprocess.run(["clang", *common, str(ROOT / "tests/dxil_to_nir_fixture.c"), str(DXIL / "agx_dxil_to_nir.c"), str(DXIL / "agx_dxil_program.c"),
-                        str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"), str(tmp / "checked.o"),
+                        str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_minmax.c"), str(tmp / "checked.o"),
                         "-o", str(cls.dxil), *libs, *dlibs, *dlibs, *link, "-lc++",
                         "-L/opt/homebrew/lib", "-lSPIRV-Tools-shared"], check=True, capture_output=True)
         subprocess.run(["clang", *common, str(ROOT / "tests/dxbc_to_nir_fixture.c"), str(DXBC / "dxbc_to_nir.c"),
-                        str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_tir_gs.c"), "-o", str(cls.dxbc), *libs, *link,
+                        str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_tir_gs.c"), str(DXBC / "dxbc_minmax.c"), "-o", str(cls.dxbc), *libs, *link,
                         "-L/opt/homebrew/lib", "-lSPIRV-Tools-shared"], check=True, capture_output=True)
 
     @classmethod

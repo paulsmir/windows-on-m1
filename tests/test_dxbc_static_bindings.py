@@ -38,7 +38,7 @@ class DxbcStaticBindings(unittest.TestCase):
                 '-Werror=implicit-function-declaration', *host_flags(build),
                 '-I', str(build / 'src/asahi'), '-I', str(mesa / 'src/asahi'),
                 '-I', str(DXBC), str(ROOT / 'tests/dxbc_static_bindings_nir_fixture.c'),
-                str(DXBC / 'dxbc_to_nir.c'), str(DXBC / 'dxbc_parse.c'), '-o', str(exe),
+                str(DXBC / 'dxbc_to_nir.c'), str(DXBC / 'dxbc_parse.c'), str(DXBC / 'dxbc_minmax.c'), '-o', str(exe),
                 *map(str, libs), '-L/opt/homebrew/opt/zstd/lib', '-lzstd', '-lz', '-lpthread'],
                 capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)

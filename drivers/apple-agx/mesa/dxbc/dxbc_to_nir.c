@@ -7,6 +7,7 @@
 #include "dxbc_to_nir.h"
 #include "dxbc_tir.h"
 #include "dxbc_tir_gs.h"
+#include "dxbc_minmax.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -2061,7 +2062,7 @@ tex_begin(struct ctx *c, nir_texop op, unsigned t, unsigned s, bool sampler,
  * in DXBC_HEAP_TABLE_CB; the bias applies to implicit-LOD sampling (tex
  * becomes txb, txb adds it) and to gradients (scaled by 2^bias) */
 static unsigned
-heap_sampler(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs)
+heap_sampler(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, nir_def **minmax)
 {
    nir_builder *b = &c->b;
    nir_def *range = nir_load_ubo(b, 4, 32, nir_imm_int(b, DXBC_HEAP_TABLE_CB),
@@ -2072,7 +2073,11 @@ heap_sampler(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs)
                                 nir_iadd_imm(b, nir_ishl_imm(b, entry, 2), DXBC_HEAP_SAMPLER_MAP_OFFSET),
                                 .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0u);
    nir_def *bias = nir_f2f32(b, nir_u2u16(b, nir_ushr_imm(b, word, 16))); /* fp16 bits */
-   tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_sampler_handle, nir_u2u16(b, word));
+   /* C65: handle bits 0-10; the min/max bits 11-15 select the reduction
+    * emulation after the sample (dxbc_minmax.h) */
+   tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_sampler_handle,
+                                              nir_u2u16(b, nir_iand_imm(b, word, DXBC_SAMPLER_HANDLE_MASK)));
+   *minmax = nir_iand_imm(b, nir_ushr_imm(b, word, DXBC_SAMPLER_MINMAX_SHIFT), 31);
    tex->sampler_index = DXBC_HEAP_SAMPLER_INDEX;
    if (tex->op == nir_texop_tex) {
       tex->op = nir_texop_txb;
@@ -2110,13 +2115,16 @@ tex_finish(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, unsigned compon
    }
    if (c->dyn_sampler)
       tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_sampler_offset, c->dyn_sampler);
+   nir_def *minmax = NULL;
    if (c->sampler_heap_offset)
-      num_srcs = heap_sampler(c, tex, num_srcs);
+      num_srcs = heap_sampler(c, tex, num_srcs, &minmax);
    c->dyn_texture = c->dyn_sampler = c->heap_offset = c->sampler_heap_offset = NULL;
    tex->num_srcs = num_srcs;
    nir_def_init(&tex->instr, &tex->def, components, 32);
    nir_builder_instr_insert(&c->b, &tex->instr);
-   return &tex->def;
+   /* C65: a heap sampler's min/max reduction */
+   nir_def *reduced = minmax ? dxbc_minmax_wrap(&c->b, tex, minmax) : NULL;
+   return reduced ? reduced : &tex->def;
 }
 
 static nir_def *
