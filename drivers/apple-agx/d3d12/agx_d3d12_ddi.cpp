@@ -4364,8 +4364,12 @@ static void CopyVolumeTextureRegion(AgxD3d12CommandList *list,
     const UINT w=box?static_cast<UINT>(box->Right-box->Left):extent(src.resource->width,sl);
     const UINT h=box?static_cast<UINT>(box->Bottom-box->Top):extent(src.resource->height,sl);
     const UINT d=box?static_cast<UINT>(box->Back-box->Front):extent(src.resource->layers,sl);
-    const UINT sw=extent(src.resource->width,sl),sh=extent(src.resource->height,sl),sd=extent(src.resource->layers,sl);
-    const UINT dw=extent(dst.resource->width,dl),dh=extent(dst.resource->height,dl),dd=extent(dst.resource->layers,dl);
+    /* EXP1906: BC levels round up to whole blocks */
+    unsigned cbw=1,cbh=1;
+    if(!AgxD3d12FormatBlock(dst.resource->format,&cbw,&cbh) || !cbw || !cbh) cbw=cbh=1;
+    auto blocks=[](UINT v,UINT b){return (v+b-1)/b*b;};
+    const UINT sw=blocks(extent(src.resource->width,sl),cbw),sh=blocks(extent(src.resource->height,sl),cbh),sd=extent(src.resource->layers,sl);
+    const UINT dw=blocks(extent(dst.resource->width,dl),cbw),dh=blocks(extent(dst.resource->height,dl),cbh),dd=extent(dst.resource->layers,dl);
     if(sx>sw || w>sw-sx || sy>sh || h>sh-sy || sz>sd || d>sd-sz ||
         dst_x>dw || w>dw-dst_x || dst_y>dh || h>dh-dst_y || dst_z>dd || d>dd-dst_z) {fail();return;}
     AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;
@@ -4382,7 +4386,10 @@ static void CopyVolumeTextureRegion(AgxD3d12CommandList *list,
   /* C21H: a 1x1 texel or a BC1-BC7 4x4 block; pitches count block rows */
   unsigned bw=0,bh=0;
   const UINT level=static_cast<UINT>(t.offset),block=AgxD3d12FormatBlock(t.resource->format,&bw,&bh);
-  const UINT tw=extent(t.resource->width,level),th=extent(t.resource->height,level),td=extent(t.resource->layers,level);
+  /* EXP1906: a BC level's extent rounds up to whole blocks (D3D footprints
+   * of small mips are block-aligned; the owner copy clamps to the level) */
+  const UINT tw=bw?(extent(t.resource->width,level)+bw-1)/bw*bw:0u,th=bh?(extent(t.resource->height,level)+bh-1)/bh*bh:0u,
+             td=extent(t.resource->layers,level);
   const UINT fw=b.footprint->PhysicalWidth,fh=b.footprint->PhysicalHeight,fd=b.footprint->PhysicalDepth;
   const UINT sx=box?static_cast<UINT>(box->Left):0u,sy=box?static_cast<UINT>(box->Top):0u,sz=box?static_cast<UINT>(box->Front):0u;
   const UINT w=box?static_cast<UINT>(box->Right-box->Left):to_buffer?tw:fw;

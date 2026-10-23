@@ -43,6 +43,20 @@ int main() {
  assert(!l.error&&l.commands==1);c=l.recorded.texture_copy;assert(c.layer==1 &&c.depth==2 &&c.offset==576);
  l={};CopyTextureRegion(handle,&buf,bl,0,0,0,&tex,tl,nullptr);
  assert(!l.error &&l.recorded.texture_copy.to_buffer &&l.recorded.texture_copy.depth==4);
+ {/* C21H (EXP1906): a BC1 volume's small mip (2x2 texels) copies through a
+   * block-aligned 4x4 footprint; level 0's 8x8x4 counts two block rows */
+  AgxD3d12Resource bc={&th,0x10000,131072,D3D12DDI_RT_TEXTURE3D,71,8,8,4,3};
+  D3D12DDIARG_BUFFER_PLACEMENT bt={};bt.BaseAddress.UMD.hResource.pDrvPrivate=&bc;bt.BaseAddress.UMD.Offset=2;
+  D3D12DDIARG_PHYSICAL_SUBRESOURCE_PITCHED_LAYOUT small={71,4,4,1,256,256};
+  D3D12DDIARG_PLACED_RESOURCE sl={D3D12DDI_RL_PLACED_PHYSICAL_SUBRESOURCE_PITCHED,&small};
+  l={};CopyTextureRegion(handle,&bt,tl,0,0,0,&buf,sl,nullptr);
+  assert(!l.error&&l.commands==1);auto s=l.recorded.texture_copy;assert(s.level==2&&s.width==4&&s.height==4&&s.depth==1);
+  bt.BaseAddress.UMD.Offset=0;D3D12DDIARG_PHYSICAL_SUBRESOURCE_PITCHED_LAYOUT full={71,8,8,4,256,512};
+  D3D12DDIARG_PLACED_RESOURCE fl={D3D12DDI_RL_PLACED_PHYSICAL_SUBRESOURCE_PITCHED,&full};
+  l={};CopyTextureRegion(handle,&bt,tl,0,0,0,&buf,fl,nullptr);
+  assert(!l.error&&l.commands==1&&l.recorded.texture_copy.width==8&&l.recorded.texture_copy.slice_pitch==512);
+  /* a texel offset inside a block is refused */
+  bt.BaseAddress.UMD.Offset=2;l={};CopyTextureRegion(handle,&bt,tl,1,0,0,&buf,sl,nullptr);assert(l.error&&!l.commands);}
  // A subresource equal to mip count must not alias mip0/arraylayer1.
  tex.BaseAddress.UMD.Offset=2;l={};CopyTextureRegion(handle,&tex,tl,0,0,0,&buf,bl,nullptr);assert(l.error&& !l.commands);
  tex.BaseAddress.UMD.Offset=1;fp.SlicePitch=256;l={};CopyTextureRegion(handle,&tex,tl,0,0,0,&buf,bl,nullptr);assert(l.error&&!l.commands);
