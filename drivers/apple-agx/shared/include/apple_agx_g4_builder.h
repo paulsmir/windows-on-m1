@@ -42,6 +42,15 @@ APPLE_AGX_BOOL AppleAgxG4BuildTa3d(
     APPLE_AGX_U32 VmSlot,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
     APPLE_AGX_U32 ObjectCount);
+/* The same, naming the refused step in *FailedStep (1 arguments, 2 process
+ * objects, 3 native objects, 4 buffer manager, 5 VM slot, 6 relocations,
+ * 7 render scalars, 8 fragment attachments; 0 on success). */
+APPLE_AGX_BOOL AppleAgxG4BuildTa3dEx(
+    const APPLE_AGX_G4_SUBMIT_VIEW *View,
+    void *Arena, APPLE_AGX_U32 ArenaBytes,
+    APPLE_AGX_U32 VmSlot,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount, APPLE_AGX_U32 *FailedStep);
 
 APPLE_AGX_BOOL AppleAgxG4StageJob(
     const APPLE_AGX_EXP208_JOB_PARAMETERS *Parameters,

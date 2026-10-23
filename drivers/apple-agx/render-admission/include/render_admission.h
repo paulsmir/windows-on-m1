@@ -682,6 +682,7 @@ typedef struct _ADMISSION_CONTEXT {
     ULONG G4Compute, PresentCompute;
     ULONG CompletedFence, LastSubmittedFence, ActiveFence, PreemptionPhase;
     ULONG PacketState, PacketFence, DispatchedFence, RenderWorkerScheduled;
+    ULONG BindFailure; /* version 2: ADMISSION_BACKEND_IMAGE.BindFailure */
   } G4BindRefusal;
   struct _ADMISSION_G4_SUBMIT_FAILURE {
     ULONG Version, Bytes, Branch, Status, DownstreamStatus;

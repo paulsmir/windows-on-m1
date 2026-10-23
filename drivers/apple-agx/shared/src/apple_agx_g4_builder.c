@@ -469,28 +469,49 @@ static APPLE_AGX_BOOL g4_patch_fragment_attachments(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AppleAgxG4BuildTa3dEx(
+    const APPLE_AGX_G4_SUBMIT_VIEW *View,
+    void *Arena, APPLE_AGX_U32 ArenaBytes,
+    APPLE_AGX_U32 VmSlot,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount, APPLE_AGX_U32 *FailedStep) {
+  APPLE_AGX_G4_NATIVE_RENDER render;
+  APPLE_AGX_U32 step = 1u;
+  if (FailedStep != 0) *FailedStep = 0u;
+  if (View == 0 || View->Render == 0 ||
+      View->RenderBytes != sizeof(render) || Arena == 0 ||
+      Objects == 0 || VmSlot == 0u || VmSlot >= 63u) goto Refused;
+  memcpy(&render, View->Render, sizeof(render));
+  ++step;
+  if (!AppleAgxG4BindProcessObjects(&render, View->Process,
+          Objects, ObjectCount)) goto Refused;
+  ++step;
+  if (!AppleAgxG4BindNativeObjects(View, Objects, ObjectCount)) goto Refused;
+  ++step;
+  if (!g4_patch_buffer_manager(&render, View->Process, View->HeapBlocks,
+          Objects)) goto Refused;
+  ++step;
+  if (!AppleAgxRenderTemplateSelectVmSlot(Arena, ArenaBytes, VmSlot)) goto Refused;
+  ++step;
+  if (!AppleAgxG4ApplySceneRelocations(Objects, ObjectCount)) goto Refused;
+  ++step;
+  if (!AppleAgxG4PatchRenderScalars(&render, Objects, ObjectCount)) goto Refused;
+  ++step;
+  if (!g4_patch_fragment_attachments(View, Objects)) goto Refused;
+  return APPLE_AGX_TRUE;
+Refused:
+  if (FailedStep != 0) *FailedStep = step;
+  return APPLE_AGX_FALSE;
+}
+
 APPLE_AGX_BOOL AppleAgxG4BuildTa3d(
     const APPLE_AGX_G4_SUBMIT_VIEW *View,
     void *Arena, APPLE_AGX_U32 ArenaBytes,
     APPLE_AGX_U32 VmSlot,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
     APPLE_AGX_U32 ObjectCount) {
-  APPLE_AGX_G4_NATIVE_RENDER render;
-  if (View == 0 || View->Render == 0 ||
-      View->RenderBytes != sizeof(render) || Arena == 0 ||
-      Objects == 0 || VmSlot == 0u || VmSlot >= 63u) return APPLE_AGX_FALSE;
-  memcpy(&render, View->Render, sizeof(render));
-  if (!AppleAgxG4BindProcessObjects(&render, View->Process,
-          Objects, ObjectCount) ||
-      !AppleAgxG4BindNativeObjects(View, Objects, ObjectCount) ||
-      !g4_patch_buffer_manager(&render, View->Process, View->HeapBlocks,
-          Objects) ||
-      !AppleAgxRenderTemplateSelectVmSlot(Arena, ArenaBytes, VmSlot) ||
-      !AppleAgxG4ApplySceneRelocations(Objects, ObjectCount) ||
-      !AppleAgxG4PatchRenderScalars(&render, Objects, ObjectCount) ||
-      !g4_patch_fragment_attachments(View, Objects))
-    return APPLE_AGX_FALSE;
-  return APPLE_AGX_TRUE;
+  return AppleAgxG4BuildTa3dEx(View, Arena, ArenaBytes, VmSlot, Objects,
+                               ObjectCount, 0);
 }
 
 APPLE_AGX_BOOL AppleAgxG4StageJob(

@@ -301,6 +301,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   APPLE_AGX_EXP208_GDI_BINDING candidate;
   APPLE_AGX_EXP208_RELOCATION_OBJECT saved;
   APPLE_AGX_U32 sequence;
+  APPLE_AGX_U32 step = 0u;
   /* M2-c: a target outside the local reserve has no CPU token or host
    * physical address (both zero); the scene reaches it by GPU VA only. */
   if (Image == 0 || Packet == 0 ||
@@ -332,17 +333,22 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   if (Image->Pristine != APPLE_AGX_TRUE &&
       !AdmissionBackendImagePrepare(Image, &backend)) {
     Image->Ready = APPLE_AGX_FALSE;
+    Image->BindFailure = 1u;
     return APPLE_AGX_FALSE;
   }
-  Image->Pristine = APPLE_AGX_FALSE;
-  if (!AppleAgxG4BuildTa3d(View, Image->ArenaCpuAddress,
-          Image->ArenaBytes, 1u, Image->Objects,
-          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)) {
-    Image->Ready = APPLE_AGX_FALSE;
-    return APPLE_AGX_FALSE;
-  }
-  /* Template reconstruction is not a firmware queue restart. */
+  /* Template reconstruction is not a firmware queue restart, refused scene
+   * or not. */
   Image->Sequence = sequence;
+  Image->Pristine = APPLE_AGX_FALSE;
+  /* EXP1902N: a scene the builder refuses is that job's refusal only. The
+   * image stays Ready and not Pristine, so the next bind re-Prepares the
+   * arena from the template (a cleared Ready refused every later job). */
+  if (!AppleAgxG4BuildTa3dEx(View, Image->ArenaCpuAddress,
+          Image->ArenaBytes, 1u, Image->Objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &step)) {
+    Image->BindFailure = 20u + step;
+    return APPLE_AGX_FALSE;
+  }
   saved = Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
   Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Data =
       (unsigned char *)DestinationCpuAddress;
@@ -354,13 +360,13 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
       Packet->DestinationBytes;
   if (!AppleAgxG4ApplySceneRelocations(Image->Objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)) {
-    Image->Ready = APPLE_AGX_FALSE;
+    Image->BindFailure = 3u;
     return APPLE_AGX_FALSE;
   }
   if (!AppleAgxG4ComposeHeaderV2(&Image->G4Header, &render,
           View->CommandVa, View->CommandBytes,
           View->ColorFormat, View->Process)) {
-    Image->Ready = APPLE_AGX_FALSE;
+    Image->BindFailure = 4u;
     return APPLE_AGX_FALSE;
   }
   memcpy(Image->G4Command, View->Native, View->CommandBytes);
@@ -387,6 +393,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
        AppleAgxG4ColorBytes(View->ColorFormat) : 4u);
   Image->Binding = candidate;
   Image->BoundFence = Packet->Fence;
+  Image->BindFailure = 0u;
   *Binding = candidate;
   return APPLE_AGX_TRUE;
 }

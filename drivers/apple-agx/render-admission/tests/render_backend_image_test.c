@@ -729,6 +729,27 @@ static void test_g4_native_scene_stages_and_releases(void) {
       APPLE_AGX_FALSE,&job));
   assert(image.Sequence==0xffffffffu && !image.JobReady);
   assert(AdmissionBackendImageReleaseSubmission(&image,302u));
+  /* EXP1902N (Night Raid GT2): a scene the builder refuses is that job's
+   * refusal only. It used to clear Ready, after which every later bind --
+   * DWM's too -- failed forever (5646 refusals, black desktop). */
+  {
+    APPLE_AGX_G4_SUBMIT_VIEW bad=view;
+    image.Sequence=5u;
+    bad.Process[0].Bytes=0u;
+    packet.Fence=310u;
+    assert(!AdmissionBackendImageBindG4Submission(
+        &image,&packet,target,&bad,&binding));
+    assert(image.Ready && image.BoundFence==0u && !image.G4Native &&
+        !image.NativeBound && image.BindFailure==22u /* process objects */);
+    packet.Fence=311u;
+    assert(AdmissionBackendImageBindG4Submission(
+        &image,&packet,target,&view,&binding));
+    assert(image.G4Native && image.BoundFence==311u && image.Sequence==5u);
+    assert(AdmissionBackendImageStageJob(&image,311u,1u,2u,3u,4u,
+        APPLE_AGX_TRUE,&job));
+    assert(job.TaWorkAddresses[1]==image.Objects[19].GpuVa);
+    assert(AdmissionBackendImageReleaseSubmission(&image,311u));
+  }
   free(target);free(arena);
 }
 

@@ -78,7 +78,7 @@ static VOID AdmissionG4RecordBindRefusal(ADMISSION_CONTEXT *adapter,
   r = &adapter->G4BindRefusal;
   image = &adapter->BackendImage;
   RtlZeroMemory(r, sizeof(*r));
-  r->Version = 1u;
+  r->Version = 2u;
   r->Bytes = sizeof(*r);
   r->Kind = kind;
   r->Fence = fence;
@@ -99,6 +99,7 @@ static VOID AdmissionG4RecordBindRefusal(ADMISSION_CONTEXT *adapter,
   r->PacketFence = adapter->RenderPacket.Description.Fence;
   r->DispatchedFence = adapter->DispatchedFence;
   r->RenderWorkerScheduled = AdmissionPlatformRenderWorkerScheduled(adapter) ? 1u : 0u;
+  r->BindFailure = image->BindFailure;
   KeMemoryBarrier();
   InterlockedExchange(&adapter->G4BindRefusalClaim, 2);
 }
