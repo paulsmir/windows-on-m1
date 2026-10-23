@@ -61524,3 +61524,12 @@ EXP1916 HARDWARE BEFORE 2026-10-23T18:13:35Z:
 - Failure criteria: regressions, NR B removal or corruption, hang.
 - Hashes: sys e008e196c326, UmdArm64 0e4bc75a3e50, UmdX64 e03bdc28c81e, Umd32 10b9c9481164; manifest 157028ac21be, hardware-manifest f7d684e9f037; probe1916.sh ddeb3615a128 (PROBE_LINT_OK); visible recovery rec1916h d9e24c534f2b38b4; m1n1 0d3a75b3.
 - Recovery rec1916h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1916-nr-c82b/run1916.sh.
+
+EXP1916 ACTUAL 2026-10-23T19:04:04Z:
+- RUN_DONE; regressions as EXP1915: e1915 118 PASS x3 (C76A FAIL: the T3c fix is not in this package); samples 4/4; DWM faults 0; no GPU reset.
+- GravityMark D3D11: Score 2550, FPS 15.2 (stable).
+- GravityMark D3D12 10k/2k: removed at 25.5/22.1 s after one G4 Parse/Unmapped (total 1). Codex T7c (General BOs off the aperture) addresses it in EXP1917.
+- C82b receipt-only: no regression.
+- Night Raid A/B (after1916.sh) both aborted cleanly after 8 min. 3DMark.exe ran but its only window was the splash "Initializing..." (screenshot evidence/EXP1916NA/nr-abort.png); the SSH-side MainWindowTitle stayed empty.
+  - 3DMark reached the menu in EXP1906N; something since then (driver change, SystemInfo scan or the trace variable) blocks its initialization.
+  - Open item, deprioritised by the user's GravityMark focus (2026-10-23). The Steam launches stayed within the approval; no other session was kicked.
