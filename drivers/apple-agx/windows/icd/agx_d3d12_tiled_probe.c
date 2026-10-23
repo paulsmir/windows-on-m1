@@ -14,6 +14,7 @@
 #include "agx_d3d12_tiled_probe_cs.h"
 #include "agx_d3d12_tiled_probe_minmax_cs.h"
 #include "agx_d3d12_tiled_probe_minmax_slot_cs.h"
+#include "agx_d3d12_tiled_probe_feedback_cs.h"
 #include <math.h>
 
 #define TILE 65536u
@@ -388,6 +389,117 @@ static void minmax_reference(int maximum, int mip_linear, const float *pt, float
             }
     }
 }
+/* C53T: Tier 2 residency feedback. A reserved R32_UINT 256x128 texture (two
+ * 128x128 standard tiles) with tile 0 mapped and filled with 0x1234, tile 1
+ * NULL; a Load with status at each tile's centre must return (0x1234,
+ * mapped) and (0, not mapped). */
+static int feedback_step(Ctx *c, D3D12_TILED_RESOURCES_TIER tier) {
+    if (tier < D3D12_TILED_RESOURCES_TIER_2) {
+        puts("AGX_D3D12_C53B_FEEDBACK: SKIP tier 1 (set APPLE_AGX_D3D12_TILED=2)");
+        return 1;
+    }
+    D3D12_RESOURCE_DESC td = {D3D12_RESOURCE_DIMENSION_TEXTURE2D, 0, 256, 128, 1, 1, DXGI_FORMAT_R32_UINT, {1, 0},
+                              D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE, D3D12_RESOURCE_FLAG_NONE};
+    ID3D12Resource *tex = NULL, *up = NULL, *out = NULL, *rb = NULL;
+    ID3D12Heap *heap = NULL;
+    ID3D12DescriptorHeap *views = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3DBlob *blob = NULL;
+    HRESULT hr = ID3D12Device_CreateReservedResource(c->device, &td, D3D12_RESOURCE_STATE_COPY_DEST, NULL,
+                                                     &IID_ID3D12Resource, (void **)&tex);
+    D3D12_HEAP_DESC hd = {TILE, {D3D12_HEAP_TYPE_DEFAULT}, 0, D3D12_HEAP_FLAG_DENY_BUFFERS | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES};
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateHeap(c->device, &hd, &IID_ID3D12Heap, (void **)&heap);
+    D3D12_TILED_RESOURCE_COORDINATE start = {0, 0, 0, 0};
+    D3D12_TILE_REGION_SIZE size = {1, FALSE, 0, 0, 0};
+    UINT heap_start = 0, count = 1;
+    if (SUCCEEDED(hr))
+        ID3D12CommandQueue_UpdateTileMappings(c->queue, tex, 1, &start, &size, heap, 1, NULL, &heap_start, &count,
+                                              D3D12_TILE_MAPPING_FLAG_NONE);
+    up = SUCCEEDED(hr) ? buffer(c, D3D12_HEAP_TYPE_UPLOAD, 128 * 128 * 4, D3D12_RESOURCE_STATE_GENERIC_READ) : NULL;
+    rb = up ? buffer(c, D3D12_HEAP_TYPE_READBACK, 16, D3D12_RESOURCE_STATE_COPY_DEST) : NULL;
+    if (rb) {
+        D3D12_HEAP_PROPERTIES def = {D3D12_HEAP_TYPE_DEFAULT};
+        D3D12_RESOURCE_DESC od = {D3D12_RESOURCE_DIMENSION_BUFFER, 0, 16, 1, 1, 1, DXGI_FORMAT_UNKNOWN, {1, 0},
+                                  D3D12_TEXTURE_LAYOUT_ROW_MAJOR, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS};
+        hr = ID3D12Device_CreateCommittedResource(c->device, &def, D3D12_HEAP_FLAG_NONE, &od,
+                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL, &IID_ID3D12Resource,
+                                                  (void **)&out);
+    } else if (SUCCEEDED(hr)) {
+        hr = E_OUTOFMEMORY;
+    }
+    UINT32 *words = NULL;
+    D3D12_RANGE none = {0, 0};
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(up, 0, &none, (void **)&words);
+    for (UINT i = 0; SUCCEEDED(hr) && i < 128 * 128; ++i) words[i] = 0x1234u;
+    if (words) ID3D12Resource_Unmap(up, 0, NULL);
+    D3D12_DESCRIPTOR_HEAP_DESC vd = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(c->device, &vd, &IID_ID3D12DescriptorHeap, (void **)&views);
+    if (SUCCEEDED(hr)) {
+        D3D12_CPU_DESCRIPTOR_HANDLE vh;
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(views, &vh);
+        D3D12_SHADER_RESOURCE_VIEW_DESC srv = {DXGI_FORMAT_R32_UINT, D3D12_SRV_DIMENSION_TEXTURE2D,
+                                               D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING};
+        srv.Texture2D.MipLevels = 1;
+        ID3D12Device_CreateShaderResourceView(c->device, tex, &srv, vh);
+    }
+    D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, 0};
+    D3D12_ROOT_PARAMETER params[2] = {{D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}, {D3D12_ROOT_PARAMETER_TYPE_UAV}};
+    params[0].DescriptorTable.NumDescriptorRanges = 1;
+    params[0].DescriptorTable.pDescriptorRanges = &range;
+    D3D12_ROOT_SIGNATURE_DESC rd = {2, params, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    if (SUCCEEDED(hr)) hr = D3D12SerializeRootSignature(&rd, D3D_ROOT_SIGNATURE_VERSION_1, &blob, NULL);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(c->device, 0, ID3D10Blob_GetBufferPointer(blob),
+                                              ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature, (void **)&root);
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pd = {root, {g_feedback_probe_cs, sizeof(g_feedback_probe_cs)}};
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateComputePipelineState(c->device, &pd, &IID_ID3D12PipelineState, (void **)&pso);
+    if (SUCCEEDED(hr)) {
+        /* tile 0 (texels 0-127 x 0-127) from the upload buffer */
+        D3D12_TEXTURE_COPY_LOCATION dst = {tex, D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
+        D3D12_TEXTURE_COPY_LOCATION src = {up, D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
+        src.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R32_UINT;
+        src.PlacedFootprint.Footprint.Width = 128;
+        src.PlacedFootprint.Footprint.Height = 128;
+        src.PlacedFootprint.Footprint.Depth = 1;
+        src.PlacedFootprint.Footprint.RowPitch = 128 * 4;
+        ID3D12GraphicsCommandList_CopyTextureRegion(c->list, &dst, 0, 0, 0, &src, NULL);
+        barrier(c, tex, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        D3D12_GPU_DESCRIPTOR_HANDLE vg;
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(views, &vg);
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(c->list, 1, &views);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(c->list, root);
+        ID3D12GraphicsCommandList_SetPipelineState(c->list, pso);
+        ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(c->list, 0, vg);
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(c->list, 1, ID3D12Resource_GetGPUVirtualAddress(out));
+        ID3D12GraphicsCommandList_Dispatch(c->list, 1, 1, 1);
+        barrier(c, out, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(c->list, rb, 0, out, 0, 16);
+        hr = ctx_flush(c);
+    }
+    UINT got[4] = {0};
+    D3D12_RANGE whole = {0, 16};
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(rb, 0, &whole, (void **)&words);
+    if (SUCCEEDED(hr)) {
+        memcpy(got, words, sizeof(got));
+        ID3D12Resource_Unmap(rb, 0, &none);
+    }
+    const UINT bad = (got[0] != 0x1234u) + (got[1] != 1u) + (got[2] != 0u) + (got[3] != 0u);
+    printf("C53B feedback tier=%d mapped (0x%x, %u) null (0x%x, %u)\n", (int)tier, got[0], got[1], got[2], got[3]);
+    result("FEEDBACK", SUCCEEDED(hr) && !bad, hr, bad);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (blob) ID3D10Blob_Release(blob);
+    if (views) ID3D12DescriptorHeap_Release(views);
+    if (rb) ID3D12Resource_Release(rb);
+    if (out) ID3D12Resource_Release(out);
+    if (up) ID3D12Resource_Release(up);
+    if (heap) ID3D12Heap_Release(heap);
+    if (tex) ID3D12Resource_Release(tex);
+    return SUCCEEDED(hr) && !bad;
+}
+
 /* mode 0: heap samplers (unbounded table); 1: a one-sampler table (slot);
  * 2: a static sampler (slot, filter 0 only) */
 static int minmax_step(Ctx *c, D3D12_TILED_RESOURCES_TIER tier, int mode) {
@@ -583,12 +695,13 @@ int main(int argc, char **argv) {
         return ok ? 0 : 1;
     }
     if (options.TiledResourcesTier == D3D12_TILED_RESOURCES_TIER_NOT_SUPPORTED) {
-        puts("AGX_D3D12_C53B: SKIP tier 0 (set APPLE_AGX_D3D12_TILED=1)");
+        puts("AGX_D3D12_C53B: SKIP tier 0 (set APPLE_AGX_D3D12_TILED=1, or 2 for Tier 2)");
         return 0;
     }
     const int textures = texture_steps(&c, (UINT)options.TiledResourcesTier);
     const int buffers = buffer_steps(&c);
     const int null_read = null_read_step(&c, options.TiledResourcesTier);
-    printf("AGX_D3D12_C53B: %s\n", textures && buffers && null_read ? "PASS" : "FAIL");
+    const int feedback = feedback_step(&c, options.TiledResourcesTier);
+    printf("AGX_D3D12_C53B: %s\n", textures && buffers && null_read && feedback ? "PASS" : "FAIL");
     return 0;
 }
