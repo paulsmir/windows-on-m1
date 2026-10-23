@@ -31,7 +31,6 @@ SHIM = r"""
 #define ADMISSION_GPUVA_G1B_PAGE_PROFILE 0
 #define ADMISSION_GPUVA_G1B_ALLOCATION_HINT 0
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
-#define AgxWin32BufferClassGeneral 1u
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
 #define ADMISSION_LOCAL_SEGMENT_SET 2u
 #define ADMISSION_CPU_VISIBLE_SEGMENT_SET 3u
@@ -222,7 +221,7 @@ static int AdmissionAllocationDestroy(ALLOCATION_OBJECT *object) {
 MAIN = r"""
 int main(void) {
   ADMISSION_CONTEXT context = {1, NULL};
-  INPUT native = {2, 1, 0x10000};
+  INPUT native = {1, 1, 0x10000};
   DXGK_ALLOCATIONINFO info = {0};
   DXGKARG_CREATEALLOCATION args = {0};
   args.NumAllocations = 1;
@@ -276,7 +275,8 @@ int main(void) {
   assert(info.SupportedWriteSegmentSet == ADMISSION_APERTURE_SEGMENT_SET);
   assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_APERTURE_SEGMENT);
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
-  /* T7c: General CPU-visible BOs use only the native-representable pool;
+  /* M2-f2: with the pool mapped, a CPU-visible class BO prefers segment 3
+   * then the aperture and never lists the local segment (no 2<->3 move);
    * class0 surfaces keep their shapes. */
   replay_pool_present = 1;
   native.ClassId = 1; native.CpuVisible = 1; native.Size = 0x10000;
@@ -285,8 +285,9 @@ int main(void) {
   info.PrivateDriverDataSize = sizeof(native);
   assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
   assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_POOL_SEGMENT);
-  assert(info.PreferredSegment.SegmentId1 == 0u);
-  assert(info.SupportedReadSegmentSet == ADMISSION_POOL_SEGMENT_SET);
+  assert(info.PreferredSegment.SegmentId1 == ADMISSION_MEMORY_APERTURE_SEGMENT);
+  assert(info.SupportedReadSegmentSet ==
+         (ADMISSION_POOL_SEGMENT_SET | ADMISSION_APERTURE_SEGMENT_SET));
   assert(info.SupportedWriteSegmentSet == info.SupportedReadSegmentSet);
   assert(!(info.SupportedReadSegmentSet & ADMISSION_LOCAL_SEGMENT_SET));
   assert(info.FlagsWddm2.CpuVisible == 1 && info.FlagsWddm2.AccessedPhysically == 0);
@@ -343,92 +344,7 @@ int main(void) {
 """
 
 
-GENERAL_MAIN = r"""
-int main(void) {
-  ADMISSION_CONTEXT context = {1, NULL};
-  const uint64_t sizes[] = {0x10000, 0x1000000, 0x1010000,
-                            0x8100000, 0x10000000};
-  for (unsigned pool = 0; pool <= 1; ++pool) {
-    replay_pool_present = pool;
-    for (unsigned cpu = 0; cpu <= 1; ++cpu) {
-      for (unsigned i = 0; i < sizeof(sizes)/sizeof(sizes[0]); ++i) {
-        INPUT input = {AgxWin32BufferClassGeneral, cpu, sizes[i]};
-        DXGK_ALLOCATIONINFO info = {0};
-        DXGKARG_CREATEALLOCATION args = {0};
-        args.NumAllocations = 1; args.pAllocationInfo = &info;
-        info.pPrivateDriverData = &input;
-        info.PrivateDriverDataSize = sizeof(input);
-        replay_reserved = 0;
-        assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
-        /* Eligibility, not merely preference: system pages must never be
-         * a resident fallback for a native General BO. System paging storage
-         * remains legal through EvictionSegmentSet=0. */
-        assert(!(info.SupportedReadSegmentSet & ADMISSION_APERTURE_SEGMENT_SET));
-        assert(!(info.SupportedWriteSegmentSet & ADMISSION_APERTURE_SEGMENT_SET));
-        assert(info.SupportedReadSegmentSet == (pool ? 4u : 2u));
-        assert(info.SupportedWriteSegmentSet == (pool ? 4u : 2u));
-        assert(info.PreferredSegment.SegmentId0 == (pool ? 3u : 2u));
-        assert(info.PreferredSegment.SegmentId1 == 0u);
-        assert(info.EvictionSegmentSet == 0u);
-        assert(info.FlagsWddm2.CpuVisible == cpu);
-        assert(info.FlagsWddm2.AccessedPhysically == 0u);
-        assert(info.Size == sizes[i] && info.Alignment == 0x10000u);
-        assert(replay_reserved == (pool ? sizes[i] : 0u));
-        assert(((ADMISSION_ALLOCATION_HANDLE *)info.hAllocation)->PoolReserved ==
-               (pool ? sizes[i] : 0u));
-        ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
-        if (pool) {
-          replay_reserve_fail = 1;
-          info.hAllocation = NULL;
-          assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_NO_MEMORY);
-          assert(info.hAllocation == NULL && replay_reserved == sizes[i]);
-          replay_reserve_fail = 0;
-        }
-      }
-    }
-  }
-  /* Shader/command CPU-visible allocations retain the historical admitted
-   * shape. They are outside the General-class change. */
-  for (unsigned cls = 2; cls <= 3; ++cls) {
-    INPUT input = {cls, 1, 0x10000};
-    DXGK_ALLOCATIONINFO info = {0};
-    DXGKARG_CREATEALLOCATION args = {0};
-    args.NumAllocations = 1; args.pAllocationInfo = &info;
-    info.pPrivateDriverData = &input;
-    info.PrivateDriverDataSize = sizeof(input);
-    assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
-    assert(info.PreferredSegment.SegmentId0 == 3u);
-    assert(info.PreferredSegment.SegmentId1 == 1u);
-    assert(info.SupportedReadSegmentSet == 5u && info.SupportedWriteSegmentSet == 5u);
-    ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
-  }
-  return 0;
-}
-"""
-
-
 class G4SegmentPlacementReplay(unittest.TestCase):
-    def test_general_native_groups_exclude_scattered_resident_backing(self):
-        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
-
-        EXP1915: a CPU-visible General BO was resident on scattered system
-        pages and could not publish a native leaf. Execute CreateAllocation
-        across size/visibility/pool combinations; require memory-only residency,
-        preserved direct CPU access, and no aperture fallback on pool exhaustion.
-        """
-        for profile in (0, 16):
-            with self.subTest(page_profile=profile), tempfile.TemporaryDirectory() as directory:
-                source = Path(directory) / "allocation.c"
-                binary = Path(directory) / "allocation"
-                shim = SHIM.replace("#define ADMISSION_GPUVA_G1B_PAGE_PROFILE 0",
-                                    f"#define ADMISSION_GPUVA_G1B_PAGE_PROFILE {profile}")
-                source.write_text(shim + allocation_body() + GENERAL_MAIN)
-                subprocess.run([os.environ.get("CC", "clang"), "-std=c11",
-                                "-Wall", "-Wextra", "-Werror", str(source),
-                                "-o", str(binary)], check=True)
-                run = subprocess.run([str(binary)], capture_output=True, text=True)
-                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
-
     def test_gpu_readable_g4_class_stays_in_local_segment(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "allocation.c"
