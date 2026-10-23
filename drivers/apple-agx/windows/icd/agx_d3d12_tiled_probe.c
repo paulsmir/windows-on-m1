@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "agx_d3d12_tiled_probe_cs.h"
+
 #define TILE 65536u
 #define SIZE 256u
 
@@ -252,6 +254,95 @@ static int buffer_steps(Ctx *c) {
     return SUCCEEDED(hr) && !bad;
 }
 
+/* Tier 2 (D3D12_TILED_RESOURCES_TIER): a shader's SRV reads of a NULL tile
+ * return 0. A reserved buffer of 4 tiles, tile 2 unmapped and written to
+ * first (Tier 2 discards it; on AGX it lands in the tile scratch); a
+ * compute shader copies it through a root SRV into a UAV. Tier >= 2 must
+ * read 0 there (PASS/FAIL); tier 1 only reports what it reads. */
+static int null_read_step(Ctx *c, D3D12_TILED_RESOURCES_TIER tier) {
+    D3D12_RESOURCE_DESC d = {D3D12_RESOURCE_DIMENSION_BUFFER, 0, 4 * TILE, 1, 1, 1, DXGI_FORMAT_UNKNOWN, {1, 0},
+                             D3D12_TEXTURE_LAYOUT_ROW_MAJOR, D3D12_RESOURCE_FLAG_NONE};
+    ID3D12Resource *res = NULL, *up = NULL, *out = NULL, *rb = NULL;
+    ID3D12Heap *heap = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3DBlob *blob = NULL;
+    HRESULT hr = ID3D12Device_CreateReservedResource(c->device, &d, D3D12_RESOURCE_STATE_COPY_DEST, NULL,
+                                                     &IID_ID3D12Resource, (void **)&res);
+    D3D12_HEAP_DESC hd = {4 * TILE, {D3D12_HEAP_TYPE_DEFAULT}, 0, D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS};
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateHeap(c->device, &hd, &IID_ID3D12Heap, (void **)&heap);
+    /* tiles 0, 1 and 3 onto heap tiles 0-2; tile 2 stays NULL */
+    D3D12_TILED_RESOURCE_COORDINATE starts[2] = {{0, 0, 0, 0}, {3, 0, 0, 0}};
+    D3D12_TILE_REGION_SIZE sizes[2] = {{2, FALSE, 0, 0, 0}, {1, FALSE, 0, 0, 0}};
+    UINT heap_starts[2] = {0, 2}, counts[2] = {2, 1};
+    if (SUCCEEDED(hr))
+        ID3D12CommandQueue_UpdateTileMappings(c->queue, res, 2, starts, sizes, heap, 2, NULL, heap_starts, counts,
+                                              D3D12_TILE_MAPPING_FLAG_NONE);
+    up = SUCCEEDED(hr) ? buffer(c, D3D12_HEAP_TYPE_UPLOAD, 4 * TILE, D3D12_RESOURCE_STATE_GENERIC_READ) : NULL;
+    rb = up ? buffer(c, D3D12_HEAP_TYPE_READBACK, 4 * TILE, D3D12_RESOURCE_STATE_COPY_DEST) : NULL;
+    if (rb) {
+        D3D12_HEAP_PROPERTIES def = {D3D12_HEAP_TYPE_DEFAULT};
+        D3D12_RESOURCE_DESC od = d;
+        od.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        hr = ID3D12Device_CreateCommittedResource(c->device, &def, D3D12_HEAP_FLAG_NONE, &od,
+                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL, &IID_ID3D12Resource,
+                                                  (void **)&out);
+    } else if (SUCCEEDED(hr)) {
+        hr = E_OUTOFMEMORY;
+    }
+    UINT32 *words = NULL;
+    D3D12_RANGE none = {0, 0};
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(up, 0, &none, (void **)&words);
+    for (UINT i = 0; SUCCEEDED(hr) && i < 4 * TILE / 4; ++i) words[i] = 0xd0000000u | i;
+    if (words) ID3D12Resource_Unmap(up, 0, NULL);
+    /* root signature: SRV t0 and UAV u0 as root descriptors */
+    D3D12_ROOT_PARAMETER params[2] = {{D3D12_ROOT_PARAMETER_TYPE_SRV}, {D3D12_ROOT_PARAMETER_TYPE_UAV}};
+    D3D12_ROOT_SIGNATURE_DESC rd = {2, params, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    if (SUCCEEDED(hr)) hr = D3D12SerializeRootSignature(&rd, D3D_ROOT_SIGNATURE_VERSION_1, &blob, NULL);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(c->device, 0, ID3D10Blob_GetBufferPointer(blob),
+                                              ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature, (void **)&root);
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pd = {root, {g_tiled_probe_cs, sizeof(g_tiled_probe_cs)}};
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateComputePipelineState(c->device, &pd, &IID_ID3D12PipelineState, (void **)&pso);
+    if (SUCCEEDED(hr)) {
+        /* fill all 4 tiles: tile 2's write goes to a NULL tile */
+        ID3D12GraphicsCommandList_CopyBufferRegion(c->list, res, 0, up, 0, 4 * TILE);
+        barrier(c, res, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(c->list, root);
+        ID3D12GraphicsCommandList_SetPipelineState(c->list, pso);
+        ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(c->list, 0, ID3D12Resource_GetGPUVirtualAddress(res));
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(c->list, 1, ID3D12Resource_GetGPUVirtualAddress(out));
+        ID3D12GraphicsCommandList_Dispatch(c->list, 4 * TILE / 4 / 64, 1, 1);
+        barrier(c, out, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(c->list, rb, 0, out, 0, 4 * TILE);
+        hr = ctx_flush(c);
+    }
+    UINT bad = 0, zero = 0, nonzero = 0;
+    D3D12_RANGE whole = {0, 4 * TILE};
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(rb, 0, &whole, (void **)&words);
+    for (UINT i = 0; SUCCEEDED(hr) && i < 4 * TILE / 4; ++i) {
+        if (i / (TILE / 4) == 2) { if (words[i]) ++nonzero; else ++zero; }
+        else bad += words[i] != (0xd0000000u | i);
+    }
+    if (SUCCEEDED(hr)) ID3D12Resource_Unmap(rb, 0, &none);
+    printf("C53B null read tier=%d mapped_bad=%u null_zero=%u null_nonzero=%u\n", (int)tier, bad, zero, nonzero);
+    const int pass = SUCCEEDED(hr) && !bad && (tier < D3D12_TILED_RESOURCES_TIER_2 || !nonzero);
+    if (tier < D3D12_TILED_RESOURCES_TIER_2 && SUCCEEDED(hr) && !bad)
+        printf("AGX_D3D12_C53B_NULL_READ: MEASURED tier 1 (null_zero=%u null_nonzero=%u)\n", zero, nonzero);
+    else
+        result("NULL_READ", pass, hr, bad + nonzero);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (blob) ID3D10Blob_Release(blob);
+    if (rb) ID3D12Resource_Release(rb);
+    if (out) ID3D12Resource_Release(out);
+    if (up) ID3D12Resource_Release(up);
+    if (heap) ID3D12Heap_Release(heap);
+    if (res) ID3D12Resource_Release(res);
+    return pass;
+}
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     IDXGIFactory4 *factory = NULL;
@@ -284,6 +375,7 @@ int main(int argc, char **argv) {
     }
     const int textures = texture_steps(&c, (UINT)options.TiledResourcesTier);
     const int buffers = buffer_steps(&c);
-    printf("AGX_D3D12_C53B: %s\n", textures && buffers ? "PASS" : "FAIL");
+    const int null_read = null_read_step(&c, options.TiledResourcesTier);
+    printf("AGX_D3D12_C53B: %s\n", textures && buffers && null_read ? "PASS" : "FAIL");
     return 0;
 }
