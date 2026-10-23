@@ -4351,6 +4351,16 @@ AgxD3d10CopyTargetFamily(enum pipe_texture_target target)
    }
 }
 
+/* C72 (EXP1907, GravityMark D3D11): a block-compressed mip smaller than one
+ * block (a 2x2 BC7 level) is addressed in whole blocks. D3D validates a
+ * copy box against the block-aligned size, and the partial block is the
+ * level's storage. 1 for uncompressed formats. */
+static unsigned
+AgxD3d10CopyExtent(unsigned size, unsigned block)
+{
+   return block > 1u ? (size + block - 1u) / block * block : size;
+}
+
 static enum pipe_format
 AgxD3d10CopyRawFormat(const Resource *source, const Resource *destination,
                       const struct pipe_resource *src, const struct pipe_resource *dst)
@@ -5012,15 +5022,20 @@ AgxD3d10ResourceWithinRequiredLimits(
    UINT front = pSrcBox ? pSrcBox->front : 0, back = pSrcBox ? pSrcBox->back : srcD;
    if (pSrcBox && (right <= left || bottom <= top || back <= front))
       return; /* empty box: D3D no-op */
+   unsigned bw = compressed ? util_format_get_blockwidth(src->format) : 1u;
+   unsigned bh = compressed ? util_format_get_blockheight(src->format) : 1u;
+   unsigned srcWa = AgxD3d10CopyExtent(srcW, bw), srcHa = AgxD3d10CopyExtent(srcH, bh);
+   unsigned dstWa = AgxD3d10CopyExtent(dstW, bw), dstHa = AgxD3d10CopyExtent(dstH, bh);
    bool valid = (raw != PIPE_FORMAT_NONE || compressed) &&
       AgxD3d10CopyTargetFamily(src->target) &&
       AgxD3d10CopyTargetFamily(src->target) == AgxD3d10CopyTargetFamily(dst->target) &&
       src->nr_samples <= 1 && dst->nr_samples <= 1 &&
-      right <= srcW && bottom <= srcH && back <= srcD &&
-      DstX <= dstW && right - left <= dstW - DstX &&
-      DstY <= dstH && bottom - top <= dstH - DstY &&
+      right <= srcWa && bottom <= srcHa && back <= srcD &&
+      DstX <= dstWa && right - left <= dstWa - DstX &&
+      DstY <= dstHa && bottom - top <= dstHa - DstY &&
       DstZ <= dstD && back - front <= dstD - DstZ &&
-      srcLayer < src->array_size && dstLayer < dst->array_size;
+      srcLayer < src->array_size && dstLayer < dst->array_size &&
+      !(left % bw) && !(top % bh) && !(DstX % bw) && !(DstY % bh);
    if (!valid) {
       UINT values[14]={(UINT)source->Format,(UINT)destination->Format,
          (UINT)src->target,(UINT)dst->target,srcW,srcH,dstW,dstH,
@@ -5029,9 +5044,12 @@ AgxD3d10ResourceWithinRequiredLimits(
       SetError(hDevice, E_NOTIMPL); return;
    }
    if (compressed) {
+      /* The level's texels inside the block-aligned box (C72). */
+      UINT width = MIN2(right, srcW) - left, height = MIN2(bottom, srcH) - top;
+      width = MIN2(width, dstW - DstX); height = MIN2(height, dstH - DstY);
       struct pipe_box box;
       u_box_3d((int)left,(int)top,(int)(src->target==PIPE_TEXTURE_3D ? front : srcLayer),
-               (int)(right-left),(int)(bottom-top),(int)(back-front),&box);
+               (int)width,(int)height,(int)(back-front),&box);
       device->pipe->resource_copy_region(device->pipe,dst,dstLevel,DstX,DstY,
          dst->target==PIPE_TEXTURE_3D ? DstZ : dstLayer,src,srcLevel,&box);
    } else {
