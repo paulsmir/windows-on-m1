@@ -61342,3 +61342,5 @@ EXP1910 ACTUAL 2026-10-23T14:34:13Z: run1910.sh RC 0, RUN_DONE, m1n1 0d3a75b3 st
 CORRECTION to EXP1909 (C75 verdict), 2026-10-23T14:34:13Z: C75 was rejected because GravityMark D3D12 crashed in CPU tiling (UmdArm64+0x5d998). EXP1910, without C75, also crashes in a CPU access to mapped memory under the same memory pressure. The crash class is therefore not specific to C75, and the EXP1909 rejection is **inconclusive**, not confirmed. C75 stays reverted until Codex T6 explains CPU access to mapped allocations under pressure (evidence added to the T6 brief).
 
 Next: EXP1911 = current HEAD (Codex T1 trim reservation 019b817c, T4 sampler tools), with GravityMark D3D12 as the T1 discriminator.
+
+CORRECTION to EXP1910 ACTUAL (shell quoting dropped text): in "the code then executes  and compares", the missing instruction is "ldr w8, [x0]" at UmdArm64+0xaed1c, the faulting load from the pointer that the map call returned.
