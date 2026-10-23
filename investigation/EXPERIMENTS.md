@@ -61086,3 +61086,27 @@ EXP1903N NIGHT_RAID_GT2 ACTUAL 2026-10-23T09:55:53Z: GT2 09:41:51Z-09:43:14Z, th
 - Wom1G4BindRefusal v2: Ready=1, BindFailure 23 = AppleAgxG4BuildTa3dEx step 3, AppleAgxG4BindNativeObjects;
 - no app events in the next 8 minutes (no DWM crash loop); the desktop screenshot was taken normally.
 188d73e2 CONFIRMED: a refused GT2 scene no longer kills the GPU for every process. GT2's own scene is still refused at native-object binding. The failing predicate is now receipted (BindNativeObjectsEx, BindFailure 320 + predicate) for the next run (EXP1904, rebuilt again with this commit).
+
+EXP1904 FL12_VOLUME_PREDICATE HARDWARE BEFORE 2026-10-23T10:04:36Z:
+- Package 30.0.1904.0 from 44a8f15f = EXP1903 fb85982c, minus C67 (reverted 6e894848), plus:
+  - df1a6edb C68: D3D12 FL 12_0/12_1 from the enabled features;
+  - the fork's faa55b50 C21G: general Texture3D layouts, 1-16-byte formats, sides up to 2048, 12 mips;
+  - 6ddddb42: the native-objects predicate receipt.
+- Build: EXP1904_PACKAGE_BUILD_PASS. sys ecb277a32379, Umd 73aa1dd95825, UmdArm64 88a84119d311, UmdX64 f770065b3bdc, Umd32 997406d5237c.
+- Gates: HASHES_MATCH 25, stage PASS, visible recovery PASS (rec1904h). Two earlier EXP1904 builds (d40c61cb with C67; f8aa30a7 without the receipt) were superseded before install. m1n1 21c3648d.
+- Probe probe1904.sh 85159601666b:
+  - probes e1904 on ARM64/x64/x86 (C62A expects 12_1 by default), plus a C62A run with APPLE_AGX_D3D12_FL12=0 (expects 11_1);
+  - tiled probe 971c0aef: default, minmax, volume (6 C21G steps and AGX_D3D12_C21G);
+  - D3D9 MSAA_PRESENT, DWM faults, KMD receipts.
+- Then by hand:
+  - Night Raid GT2 (window, async off) for BindFailure 320+predicate;
+  - the DxgKrnl ETW trace of the D3D9 windowed present (dxg-etw.ps1).
+- ATOMIC CONTRACT: none -- C68 has the C62A lines, C21G has the volume lines, and the receipt changes no behaviour.
+- WHY THIS HYPOTHESIS:
+  (1) every FL 12_0 requirement is validated on J313 (Tier 2 + min/max EXP1902/EXP1903, typed UAV loads C49) and so are the 12_1 additions (EXP1893-1897);
+  (2) C21G passes on WARP;
+  (3) EXP1903N GT2 refused at BindNativeObjects without a predicate.
+- WINDOWS CONTRACT: D3D12 hardware feature levels (12_0: Tier 2 tiled, resource binding Tier 2, typed UAV loads; 12_1: ROV, CR Tier 1).
+- WHAT IS STILL UNKNOWN: whether the runtime accepts 12_1 creation with our caps; GT2's predicate.
+- Expected: regression 118/0 x3 with C62A 12_1; FL12OFF C62A PASS at 11_1; C21G PASS; GT2 receipt names the predicate.
+- Failure criteria: device creation failures at 12_x, regressions, hang. Recovery evidence/rec1904h/recover.sh. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1904-fl12-pred/run1904.sh.
