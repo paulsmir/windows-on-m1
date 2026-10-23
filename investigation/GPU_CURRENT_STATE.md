@@ -8,7 +8,37 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
-## CURRENT 2026-10-23 12:00Z -- NIGHT RAID COMPLETE (1379); D3D12 FL 12_1; m1n1 0d3a75b3
+## CURRENT 2026-10-23 18:30Z -- CODEX OFFLINE + CHAINED BENCH; GRAVITYMARK D3D11 COMPLETES; PERF = COPY ESCAPES + CPU RETIRE
+
+Workflow (see CLAUDE_WORKING_METHOD "Offline work through Codex"):
+- Codex gpt-6-astra runs offline tasks from `.local/handoff/codex/<task>/TASK.md` (scratchpad `codex-run.sh`). Each branch is merged only after `codex-review.sh` prints REVIEW_OK.
+- The bench runs unattended: `chain-next.sh` and `launch-exp.sh`.
+- The fork session (kmd-native-output-bin-4) owns the D3D12 owner, tiled and volume work.
+
+**Validated on hardware (EXP1907-EXP1912)**
+- C70 staged uploads; C71 autogen RT; C72 BC sub-block copies; C73 LowMemory floor (superseded by T8, see below); C74 index-buffer binds; fork C21H + 51e4b51b; C80 presentation readback.
+- Codex T2 reinterpret copies: GravityMark D3D11 runs the full 240 s benchmark (EXP1912), but at ~0 fps.
+- Rejected: C67b and C76 (redirected-blt caps, no ETW change). The redirected-blt track has no evidence-backed candidate (Codex T5 note).
+
+**Performance**
+- GravityMark moves 10-71 GiB through 64 KiB copy escapes on >16 MiB buffers. Fix: C75c, Codex T6b (direct buffers up to the class limit, evictable when unmapped). Hardware result pending: EXP1913.
+- Night Raid frame ~146 ms (fork C82 analysis):
+  - 68 ms is GBuffer draw_vbo at ~140 us/draw; C82 receipts give the verdict, Night Raid run on EXP1914 approved;
+  - 53 ms is the CPU retire after each Execute; fix C83 (Codex T9, opt-in APPLE_AGX_D3D12_GPU_WAIT=1), not yet on hardware.
+
+**Open defects**
+- GravityMark D3D12:
+  - G4 Parse/Unmapped submit refusal; T1 race fix not sufficient; Codex T7 receipt v3 provenance in EXP1914;
+  - OOM at 20-22 s;
+  - map-failure crashes, fixed by T6/T6b NULL-safety (in EXP1913).
+- DWM c00001ad under GravityMark memory pressure (EXP1911). Fix: Codex T8 M2-f7c headroom policy (High && !Low + immediate reclaim), in EXP1914.
+
+**Queue**
+1. EXP1913: C75c + C77 shared open + T2b, running.
+2. EXP1914: T8 + T7 + C82; build restarted after an X86B FRESH_OUTPUT failure.
+3. Night Raid on EXP1914 (nr-c82.sh), then rec1914h.
+
+## (was CURRENT) 2026-10-23 12:00Z -- NIGHT RAID COMPLETE (1379); D3D12 FL 12_1; m1n1 0d3a75b3
 
 The experiment m1n1 is 0d3a75b3 (vGIC running priority + IPRIORITYR fix; boot- and load-stable EXP1905/1906). Lastgood is 21c3648d; prepare.sh writes the lastgood pair.
 
