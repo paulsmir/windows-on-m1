@@ -290,3 +290,15 @@ WHAT IS STILL UNKNOWN:
   leaf path honours `pte->ReadOnly`.
 - How the AGX treats a write to a read-only page (fault or drop); the
   shadow is never written by construction.
+
+## HW2 result (EXP1889, package 16c8fbeb)
+
+VALIDATED on J313: measure-d3d12-reserved-selftest S_OK {5, 0, 0} (HW1 with
+B4); measure-d3d12-reserved-texture S_OK; measure-d3d12-reserved-texture-
+selftest S_OK {stage 7, bad 0, first_bad 0xffffffff}, on both probe devices.
+The WHAT IS STILL UNKNOWN item "16 KiB-granular mapping" is answered: VidMm
+and the KMD map 16 KiB runs of a 64 KiB-aligned heap into reserved ranges,
+GPU blit writes and texture reads see them, aliasing and the packed tile
+work, and a remap is coherent for the next submission (CHANGES
+CHG-20261023-C53-HW2-VALIDATED). Next: HW3 (sparse descriptor reads,
+153fd2ab behind APPLE_AGX_D3D12_SPARSE_DESC=1; 9574a135 measurement).
