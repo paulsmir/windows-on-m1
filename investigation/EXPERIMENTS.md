@@ -61706,3 +61706,19 @@ EXP1921 ACTUAL 2026-10-23T23:10:22Z:
 - Next: EXP1922 = the same driver code + device switch Wom1GpuFaultInfoRead=1, a single variable.
   - Asahi gpu.rs:1422 reads FAULT_INFO on a Timeout; valid means an MMU fault.
   - Current KMD power-on reads SGX ID/core-mask registers through the same mapping, so the EXP592/EXP671 abort mappings no longer apply.
+
+EXP1922 HARDWARE BEFORE 2026-10-23T23:21:15Z:
+- Package 30.0.1922.0 from 789540ff: driver source archive identical to EXP1921 (bc70e279...); only ledgers/scripts changed.
+- Single variable: device switch Wom1GpuFaultInfoRead=1, set on the staged devnode before the ordered restart (launch-exp AGX_DEVICE_SWITCHES). The KMD reads it once at StartDevice; AdmissionGpuFaultCapture then reads SGX FAULT_INFO (0x17030) on each firmware Timeout/Fault event before resuming.
+- Short profile: GravityMark D3D12 10k and 2k, synchronous UMD trace.
+- WHY THIS HYPOTHESIS: (1) EXP1921 located the hang: GPU execution of the first full benchmark frame, with a firmware Timeout 4 ms after submit; (2) Asahi gpu.rs:1422 reads FAULT_INFO on Timeout and reports a Fault when it is valid, so the type-4 message does not exclude an MMU fault; (3) since T7h, GPU-only resources live only in segment 3 and are evicted under pressure (pool peak 2685/2688): an unmapped/evicted page would show as a valid FAULT_INFO with an address.
+- WINDOWS CONTRACT: unchanged.
+- AGX/ASAHI CONTRACT: FAULT_INFO (G13 regs.rs get_fault_info): bit 0 valid, 1-3 reason (unmapped/af/write_only/read_only/no_access), 7-8 level, 9-16 unit, 17-22 VM slot, bits 30+ = address >> 6.
+- TRANSLATION: none changed.
+- WHAT IS STILL UNKNOWN: whether the read is safe on the current mapping. The EXP592/EXP671 aborts were under older mappings; the current power-on path already reads SGX ID/core-mask registers through the same SgxBase. Also unknown: the fault address/unit, which decides between eviction/residency (T7h placement) and a translation/command bug.
+- Expected: GPU_FAULT_EVENT with fault_info read=true. valid=1 -> the address is joined to allocations (agx_gm_alloc_join.py); valid=0 -> a genuine timeout (the T10 resume path).
+- Failure criteria: a guest abort at the first event (the read unsafe); no event.
+- Recovery: rec1922h (pre-disable receipt snapshot); at proxy use AGX_RECOVERY_ALLOW_AT_PROXY=1.
+- Hashes: sys 8a172cd7ffdc, UmdArm64 36f66090db76, UmdX64 61d40ec90821, Umd32 ee7935cb8309; manifest b78982e17627, hardware-manifest 87c08929fb5c; probe1922.sh b00c42297506 (PROBE_LINT_OK); visible recovery rec1922h cc9cd31df4706f91; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1922h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1922-faultinfo/run1922.sh.
