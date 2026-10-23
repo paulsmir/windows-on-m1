@@ -61325,3 +61325,20 @@ EXP1910 C74_C21H_SWEEP HARDWARE BEFORE 2026-10-23T14:12:45Z:
 - WHAT IS STILL UNKNOWN: whether GravityMark D3D11 reaches the IaSetIndexBuffer point before the uncompressed-to-BC copy refusal (EXP1909 hit the copy at 26 s, EXP1908 did not).
 - Expected: regressions as EXP1909; T2VOL with C21H_REGION_BC1 PASS; GravityMark D3D12 without WER.
 - Failure criteria: regressions, crash, hang. Recovery rec1910h (run directly). Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1910-ib-bcsweep/run1910.sh.
+
+EXP1910 ACTUAL 2026-10-23T14:34:13Z: run1910.sh RC 0, RUN_DONE, m1n1 0d3a75b3 stable.
+- Regressions:
+  - SAMPLE_HASHES bad 0; e1904 118/0 x3; D3D11 smoke PASS;
+  - samples and ModelViewerI alive (presents 1137-1218);
+  - PRESSURE refused at 347 MiB available with the guest alive; GPU reset none.
+- Tiled: T2VOL PASS including C21H_REGION_BC1. The fork's 51e4b51b is CONFIRMED (fork verdict EVIDENCE_PASS 23/23).
+- C74 CONFIRMED: GravityMark D3D11 reached 64 s with no IaSetIndexBuffer refusal. It was then removed by the uncompressed-to-BC copy (reject-resource-copy-region 3 0x5f 4 8 128x128 -> 512x512, Codex T2 P0). Tellusim crashed afterwards on its error path. XFER: down 84 / 11714 MiB, up 14 / 1357 MiB.
+- GravityMark D3D12:
+  - 10k: removed at 36 s, as in EXP1908. G4_SUBMIT_FAILURE branch 9 Parse/Unmapped, total 4. XFER up 53 / 3078 MiB.
+  - 2k: crashed at 33 s, WER c0000005 in AppleAgxRenderAdmissionUmdArm64 30.0.1910.0 at RVA 0xaed1c, **without C75**.
+  - Disassembly of the 2k crash: a pipe vtable call at +0x380 (map, usage 1 = READ, level 0) returns x0; the code then executes  and compares with min(); the call at +0x390 (unmap) follows. This looks like a CPU read of a mapped GPU-written buffer, for example an ExecuteIndirect count, which faults on the returned pointer.
+  - Pool: peak 2686/2688 MiB, floor refusals 5.
+
+CORRECTION to EXP1909 (C75 verdict), 2026-10-23T14:34:13Z: C75 was rejected because GravityMark D3D12 crashed in CPU tiling (UmdArm64+0x5d998). EXP1910, without C75, also crashes in a CPU access to mapped memory under the same memory pressure. The crash class is therefore not specific to C75, and the EXP1909 rejection is **inconclusive**, not confirmed. C75 stays reverted until Codex T6 explains CPU access to mapped allocations under pressure (evidence added to the T6 brief).
+
+Next: EXP1911 = current HEAD (Codex T1 trim reservation 019b817c, T4 sampler tools), with GravityMark D3D12 as the T1 discriminator.
