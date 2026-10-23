@@ -61051,3 +61051,9 @@ EXP1902 pipeline ACTUAL / EXP1902N NIGHT_RAID_GT2 BEFORE 2026-10-23T08:54:08Z: R
 - D3D9 e1900: DEFAULT and ON12 MSAA_PRESENT PASS (3 presents S_OK, cooperative S_OK). C66b CONFIRMED. The front-buffer centre is 0x0c0c0c: the blt-model window is still not composed, the C67 gap.
 
 EXP1902N: Night Raid Custom GT2 only (window mode, async off) on this package, without the UMD trace, to capture Wom1G4BindRefusal (kmd-receipts.sh) if the bind wedge recurs. Recovery rec1902h.
+
+EXP1902N NIGHT_RAID_GT2 ACTUAL 2026-10-23T09:14:31Z: GT2 started 08:59Z (window, async off, no UMD trace) and ended in the same wedge. KMD receipts (evidence/EXP1902N/kmd-receipts-after-gt2.txt):
+- no GpuReset, no PreemptRefusal;
+- Wom1G4SubmitFailure: branch 11 (Bind), 5646 refusals;
+- Wom1G4BindRefusal v1: Kind 3 (render), fence 0x1b3b2, Ready=0, BoundFence/JobFence/G4Native/G4Compute/PresentCompute/NativeBound all 0, CompletedFence = LastSubmitted 0x1b3b1, phase Idle, packet Prepared.
+ROOT CAUSE CONFIRMED: the backend image lost Ready. AdmissionBackendImageBindG4Submission cleared Ready when the builder refused a scene (TA/3D build, relocations, header), and no path set it again, so one refused GT2 scene refused every later GPU-VA job, DWM's included. Fix 188d73e2: a refused scene refuses only that job; the image is re-Prepared from the template at the next bind; BindFailure records the AppleAgxG4BuildTa3dEx step. RED/GREEN host test; BASELINE_OK. GT2's own scene will still be refused until the failing builder step (now receipted) is supported. The EXP1903 package is rebuilt with this fix. Recovery rec1902h.
