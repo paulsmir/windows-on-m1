@@ -130,9 +130,15 @@ static APPLE_AGX_BOOL g4_zls_valid(const APPLE_AGX_G4_NATIVE_RENDER *Render) {
     return APPLE_AGX_FALSE;
   if (!g4_has_zls(Render))
     return !Render->ZlsCtrl && !Render->IspZlsPixels;
-  /* ISP_ZLS_PIXELS = (width - 1) | ((height - 1) << 15). */
-  return Render->ZlsCtrl && Render->IspZlsPixels &&
-      (Render->IspZlsPixels >> 30) == 0u;
+  /* ISP_ZLS_PIXELS = (width - 1) | ((height - 1) << 15), the render size
+   * (Asahi agx_pipe.c CR_ISP_ZLS_PIXELS) -- zero for a 1x1 render. The ZLS
+   * control word may be zero too: a 32F depth buffer that is neither loaded
+   * nor stored (cleared, then discarded) packs to 0 (agx_pack_zls_control);
+   * EXP1904N, Night Raid GT2 (BindFailure 332). */
+  return Render->WidthPx && Render->HeightPx &&
+      Render->WidthPx <= 0x8000u && Render->HeightPx <= 0x8000u &&
+      Render->IspZlsPixels == ((APPLE_AGX_U64)(Render->WidthPx - 1u) |
+                               ((APPLE_AGX_U64)(Render->HeightPx - 1u) << 15));
 }
 
 /* EXP1903N: Night Raid GT2's scene failed here (BindFailure 23); *Refused

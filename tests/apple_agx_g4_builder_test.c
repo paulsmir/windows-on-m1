@@ -356,13 +356,34 @@ int main(void) {
       packet.Render.Stencil.Base = 0x35000000ULL;
       assert(AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      /* EXP1904N (Night Raid GT2, BindFailure 332): a depth buffer that is
+       * neither loaded nor stored (cleared, then discarded) packs a zero
+       * ZLS control word in Asahi (agx_pack_zls_control: 32F, no load/store,
+       * no compression) -- a valid transient depth/stencil. */
       packet.Render.ZlsCtrl = 0ULL;
-      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Render.ZlsCtrl = 0x80080ULL;
+      /* ISP_ZLS_PIXELS is the render size (agx_pipe.c CR_ISP_ZLS_PIXELS):
+       * any other value refuses, zero included for 1280x720 ... */
       packet.Render.IspZlsPixels = 0u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.IspZlsPixels = (1279u - 1u) | ((720u - 1u) << 15);
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      /* ... and zero is exactly a 1x1 render's value */
+      {
+        G4_PACKET one = packet;
+        APPLE_AGX_G4_SUBMIT_VIEW one_view = view;
+        one.Render.WidthPx = one.Render.HeightPx = 1u;
+        one.Render.IspZlsPixels = 0u;
+        one_view.Native = (const unsigned char *)&one;
+        one_view.Render = (const unsigned char *)&one.Render;
+        one_view.Attachments = &one.Attachment;
+        assert(AppleAgxG4BindNativeObjects(&one_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      }
       packet.Render.IspZlsPixels = (1280u - 1u) | ((720u - 1u) << 15);
       packet.Render.Depth.Base = 0ULL;
       packet.Render.Depth.CompBase = 0x36000000ULL;
