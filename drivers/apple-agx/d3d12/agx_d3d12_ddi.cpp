@@ -20,6 +20,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <type_traits>
 #include "agx_d3d12_view_mapping.h"
 #include "agx_d3d12_shared_open.h"
+#include "agx_d3d12_queue_sync.h"
 #include "agx_d3d12_r1_blend_projection.h"
 #include "agx_d3d12_r1_shader_span.h"
 #include "agx_d3d12_zero_cache_library.h"
@@ -85,6 +86,7 @@ template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0074> { static constexp
 template<> struct TableOf<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D; };
 static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error);
 static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error);
+
 static void ReportRejectedQueueError(D3D12DDI_HCOMMANDQUEUE handle, HRESULT error);
 template<class T, UINT Table, UINT Offset> struct Rejected;
 template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENTRY *)(A...), Table, Offset> {
@@ -3388,6 +3390,7 @@ static D3D12DDI_GPU_DESCRIPTOR_HANDLE APIENTRY GetGPUDescriptorHandleForHeapStar
  * pfnCreateContextVirtualCb(hRTCommandQueue) with the KMD context contract
  * the D3D11 device uses (ADMISSION_WIN32_CONTEXT_CREATE). */
 struct AgxD3d12CommandQueue {
+    bool gpu_wait;
     D3D12DDI_HRTCOMMANDQUEUE runtime;
     UINT flags;
     HANDLE context;
@@ -3589,6 +3592,16 @@ static HRESULT APIENTRY CreateCommandQueue(D3D12DDI_HDEVICE handle, const D3D12D
     HRESULT hr = device->callbacks->pfnCreateContextVirtualCb(arg->hRTCommandQueue, &context);
     if (SUCCEEDED(hr) && !context.hContext) hr = E_FAIL;
     queue->context = SUCCEEDED(hr) ? context.hContext : nullptr;
+#if defined(APPLE_AGX_D3D12_NATIVE_OWNER) && defined(APPLE_AGX_GPUVA_WINSYS)
+    if (SUCCEEDED(hr)) {
+        char option[2] = {};
+        const bool enabled = GetEnvironmentVariableA("APPLE_AGX_D3D12_GPU_WAIT", option, sizeof(option)) == 1 &&
+                             option[0] == '1';
+        queue->gpu_wait = enabled && device->kernel && device->kernel->pfnWaitForSynchronizationObjectFromGpuCb;
+        const UINT values[] = {enabled ? 1u : 0u, queue->gpu_wait ? 1u : 0u};
+        AdmissionUmdDiagnostic("measure-d3d12-queue-sync", queue->gpu_wait ? S_OK : S_FALSE, values, 2);
+    }
+#endif
     const UINT receipt[] = {queue->flags, arg->NodeMask, queue->context != nullptr ? 1u : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-queue", hr, receipt, 3);
     return hr;
@@ -4155,9 +4168,9 @@ static VOID APIENTRY ResourceCopy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOUR
 }
 /* C7c (D3D12-C7-present.md): DXGI presents a swapchain buffer through the
  * runtime's list; the runtime submits the kernel present with the returned
- * source allocation on the returned context. ExecuteCommandLists retires
- * the owner's work before it returns, so the buffer's rendering is complete
- * here; the owner flushes for present and publishes the buffer's direct map
+ * source allocation on the returned context. ExecuteCommandLists orders
+ * completion by CPU retirement or the C83 outgoing queue wait. The owner
+ * flushes for present and publishes the buffer's direct map
  * (the D3D11 present order). No GPU work is added and no private data is
  * needed (the D3D11 pfnPresentCb carries none). */
 static UINT APIENTRY GetPresentPrivateDriverDataSize(D3D12DDI_HDEVICE, const D3D12DDIARG_PRESENT_0001 *) {
@@ -6452,7 +6465,10 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
     return hr;
 }
 #endif
-static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+#ifndef APPLE_AGX_D3D12_NATIVE_OWNER
+    (void)queue;
+#endif
     UINT commands = 0;
     HRESULT hr = S_OK;
     /* the receipt splits the execution into replay and submit+wait time
@@ -6561,8 +6577,12 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     QueryPerformanceCounter(&replayed);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     FreeDrawScratch(draw_scratch);
-    if (SUCCEEDED(hr) && device && device->owner)
-        hr = AgxD3d12OwnerSubmitAndWait(static_cast<AGX_D3D12_OWNER *>(device->owner));
+    if (SUCCEEDED(hr) && device && device->owner) {
+        auto *owner = static_cast<AGX_D3D12_OWNER *>(device->owner);
+        hr = queue && queue->gpu_wait
+                 ? AgxD3d12OwnerSubmitForQueue(owner, queue->context)
+                 : AgxD3d12OwnerSubmitAndWait(owner);
+    }
     if (FAILED(hr) && device && device->callbacks && device->callbacks->pfnSetErrorCb)
         device->callbacks->pfnSetErrorCb(device->runtime, hr);
 #endif
@@ -6583,17 +6603,27 @@ static void ReplayAndSubmit(UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
 /* EXP1822: one replay and its submission run under the device owner's lock,
  * so lists executed from several threads (the nBody async compute thread
  * and its render thread) never interleave on the one pipe_context. */
-static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE handle, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+    auto *queue = static_cast<AgxD3d12CommandQueue *>(handle.pDrvPrivate);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-    AGX_D3D12_OWNER *owner = nullptr;
-    for (UINT i = 0; lists && i < count && !owner; ++i)
-        if (const auto *list = static_cast<const AgxD3d12CommandList *>(lists[i].pDrvPrivate))
-            owner = list->device ? static_cast<AGX_D3D12_OWNER *>(list->device->owner) : nullptr;
+    if (!count) return;
+    if (!queue || !queue->device || !queue->context || !lists) {
+        ReportRejectedQueueError(handle, E_INVALIDARG);
+        return;
+    }
+    for (UINT i = 0; i < count; ++i) {
+        const auto *list = static_cast<const AgxD3d12CommandList *>(lists[i].pDrvPrivate);
+        if (!list || list->device != queue->device) {
+            ReportRejectedQueueError(handle, E_INVALIDARG);
+            return;
+        }
+    }
+    auto *owner = static_cast<AGX_D3D12_OWNER *>(queue->device->owner);
     AgxD3d12OwnerLock(owner);
-    ReplayAndSubmit(count, lists);
+    ReplayAndSubmit(queue, count, lists);
     AgxD3d12OwnerUnlock(owner);
 #else
-    ReplayAndSubmit(count, lists);
+    ReplayAndSubmit(queue, count, lists);
 #endif
 }
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {

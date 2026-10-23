@@ -47,7 +47,7 @@ class NativeOwner(unittest.TestCase):
         self.assertNotIn('AgxWin32AsahiBufferCopy', text)
         self.assertIn('bytes > dst->Bytes - dst_offset', copy)
         self.assertIn('bytes > src->Bytes - src_offset', copy)
-        submit = body(text, 'extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(')
+        submit = body(text, 'static HRESULT submit_owner(')
         self.assertLess(submit.index('->flush('), submit.index('AgxWin32AsahiContextRetire('))
         self.assertIn('AgxWin32AsahiContextFaulted(', submit)
 
@@ -170,7 +170,7 @@ class NativeOwner(unittest.TestCase):
         # dropped after it
         self.assertLess(draw.index('bind_stage(pipe, MESA_SHADER_VERTEX'), draw.index('->draw_vbo('))
         self.assertLess(draw.index('->draw_vbo('), draw.rindex('unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count)'))
-        submit = body(text, 'extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(')
+        submit = body(text, 'static HRESULT submit_owner(')
         self.assertLess(submit.index('set_framebuffer_state(owner->Context, &empty)'), submit.index('->flush('))
         # C6e: sampler CSOs exist for one draw only (created, bound, released)
         self.assertLess(draw.index('create_sampler(pipe, &draw->Ps.Samplers[i])'), draw.index('->draw_vbo('))

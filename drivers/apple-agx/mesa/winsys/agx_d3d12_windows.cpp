@@ -14,6 +14,7 @@ extern "C" {
 #include "agx_win32_asahi_scene.h"
 #include "agx_d3d12_windows.h"
 #include "../../d3d12/agx_d3d12_shared_open.h"
+#include "../../d3d12/agx_d3d12_queue_sync.h"
 #if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
 #include "../dxil/agx_owned_nir_handoff.h"
 #endif
@@ -243,10 +244,10 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   if (!owner) return S_OK;
   BOOL consumed = FALSE;
   HRESULT hr = S_OK;
-  if (owner->Context && owner->PendingPresentations) {
+  if (owner->Context) {
     owner->Context->flush(owner->Context, NULL, 0);
-    (void)AgxWin32AsahiContextRetire(owner->Context, 5000u);
-    (void)collect_presentations(owner);
+    if (!AgxWin32AsahiContextRetire(owner->Context, 5000u)) return HRESULT_FROM_WIN32(ERROR_BUSY);
+    if (owner->PendingPresentations) (void)collect_presentations(owner);
   }
   owner->Backend.Closing = 1;
   if (owner->UploadStaging) AgxWin32AsahiResourceRelease(&owner->UploadStaging);
@@ -3390,7 +3391,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   return S_OK;
 }
 
-extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
+static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
   OwnerLock lock(owner);
   if (!owner || !owner->Context) return E_INVALIDARG;
   if (owner->PendingDraws) {
@@ -3406,12 +3407,25 @@ extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
   const LONGLONG flush_start = qpc_now();
   owner->Context->flush(owner->Context, NULL, 0);
   const LONGLONG flushed = qpc_now();
-  const int retired = AgxWin32AsahiContextRetire(owner->Context, 5000u);
+  const unsigned long long fence = AgxWin32AsahiContextNewestFence(owner->Context);
+  const int faulted = AgxWin32AsahiContextFaulted(owner->Context);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  const HRESULT wait = !faulted && context
+      ? AgxD3d12QueueWaitForOwner(owner->Kernel, owner->RuntimeDevice, context, owner->Runtime.RenderSyncObject, fence)
+      : S_FALSE;
+#else
+  const HRESULT wait = S_FALSE;
+#endif
+  const bool ordered = wait == S_OK;
+  const int retired = ordered ? 1 : AgxWin32AsahiContextRetire(owner->Context, 5000u);
+  if (context) {
+    const UINT values[] = {ordered ? 1u : 0u, static_cast<UINT>(fence), static_cast<UINT>(fence >> 32)};
+    AdmissionUmdDiagnostic("measure-d3d12-queue-wait", wait, values, 3);
+  }
   const UINT times[] = {owner->TimedDraws, qpc_us(owner->TimeBind), qpc_us(owner->TimeDrawVbo), qpc_us(owner->TimeUnbind),
                         qpc_us(flushed - flush_start), qpc_us(qpc_now() - flushed),
                         qpc_us(owner->TimeDrawVboIndirect), qpc_us(owner->MaxDrawVbo), owner->SlowDraws};
   AdmissionUmdDiagnostic("measure-d3d12-owner-time", S_OK, times, 9u);
-  const unsigned long long fence = AgxWin32AsahiContextNewestFence(owner->Context);
   const UINT fences[] = {static_cast<UINT>(fence - owner->ReportedFence), static_cast<UINT>(fence)};
   AdmissionUmdDiagnostic("measure-d3d12-owner-fences", S_OK, fences, 2u);
   owner->ReportedFence = fence;
@@ -3419,8 +3433,19 @@ extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
   owner->TimedDraws = 0;
   owner->TimeDrawVboIndirect = owner->MaxDrawVbo = 0;
   owner->SlowDraws = 0;
-  const int faulted = AgxWin32AsahiContextFaulted(owner->Context);
-  const HRESULT hr = retired && !faulted ? S_OK : DXGI_ERROR_DEVICE_HUNG;
+  const HRESULT hr = retired && !faulted && !AgxWin32AsahiContextFaulted(owner->Context)
+                         ? S_OK : DXGI_ERROR_DEVICE_HUNG;
   receipt("measure-d3d12-owner-submit", hr, copies, static_cast<UINT>(retired), static_cast<UINT>(faulted));
   return hr;
+}
+
+/* Explicit CPU consumers retain the synchronous contract. Only Execute
+ * supplies a queue context for the experimental outgoing completion bridge. */
+extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
+  OwnerLock lock(owner);
+  return submit_owner(owner, NULL);
+}
+extern "C" HRESULT AgxD3d12OwnerSubmitForQueue(AGX_D3D12_OWNER *owner, HANDLE context) {
+  OwnerLock lock(owner);
+  return submit_owner(owner, context);
 }

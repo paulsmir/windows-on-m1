@@ -566,8 +566,8 @@ class D3d12AbiGate(unittest.TestCase):
         source = SOURCE.read_text()
         execute = source[source.index('static VOID APIENTRY ExecuteCommandLists('):]
         execute = execute[:execute.index('\n}\n')]
-        self.assertLess(execute.index('AgxD3d12OwnerLock(owner);'), execute.index('ReplayAndSubmit(count, lists);'))
-        self.assertLess(execute.index('ReplayAndSubmit(count, lists);'), execute.index('AgxD3d12OwnerUnlock(owner);'))
+        self.assertLess(execute.index('AgxD3d12OwnerLock(owner);'), execute.index('ReplayAndSubmit(queue, count, lists);'))
+        self.assertLess(execute.index('ReplayAndSubmit(queue, count, lists);'), execute.index('AgxD3d12OwnerUnlock(owner);'))
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         import re
         for m in re.finditer(r'extern "C" [^\n(]*\bAgxD3d12Owner(\w+)\(AGX_D3D12_OWNER \*owner[^{;]*\{\n(.*)\n', owner):

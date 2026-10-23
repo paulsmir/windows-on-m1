@@ -518,6 +518,9 @@ HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *Owner, const AGX_D3D12_DRAW *Draw);
 /* Submits the recorded work and waits for it (C4b orders it before the
  * runtime's later queue signal by completing it first). */
 HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *Owner);
+/* C83: caller holds the owner lock across replay.
+ * Flush then queue a GPU wait, or CPU-retire on unavailable/failed GPU wait. */
+HRESULT AgxD3d12OwnerSubmitForQueue(AGX_D3D12_OWNER *Owner, HANDLE Context);
 
 #ifdef __cplusplus
 }
