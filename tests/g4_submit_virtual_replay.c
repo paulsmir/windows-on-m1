@@ -75,7 +75,20 @@ typedef struct {
   ULONGLONG MappingGeneration;
   unsigned AllowProcessRanges;
 } APPLE_AGX_GPUVA_G3_GRAPH;
+#define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
+/* EXP982: last valid leaf mapping per VidMm allocation handle. */
+typedef struct _ADMISSION_G3_ALLOC_TRACK {
+  ULONGLONG Allocation, ProcessId, LastValidVa, LastValidQpc, LastAnyQpc, LastAnyVa;
+  ULONG LastValidCount, Maps, LastSegment, LastFlags;
+  /* EXP983: physical/virtual FILL and TRANSFER paging operations. */
+  ULONGLONG LastFillQpc, LastTransferQpc;
+  ULONG Fills, Transfers, LastPagingSegment, LastPagingOperation;
+  ULONGLONG AllocationBytes;
+  ULONG ClassId, Win32Flags, AllocationType, CpuVisible, MetadataValid, LastStatus;
+} ADMISSION_G3_ALLOC_TRACK;
+
 typedef struct _ADMISSION_G3_STATE {
+  ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT];
   int Lock;
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
   unsigned ActiveFence,PrivateCompletionFence;
@@ -198,6 +211,9 @@ typedef struct {
         MappingGeneration;
     ULONGLONG LogicalIpa[4];
     unsigned LogicalSegment[4], LogicalFlags[4];
+    ULONGLONG LogicalAllocation[4], LogicalAllocationOffset[4];
+    ULONG TrackFound, OwnerOsProcessId;
+    ADMISSION_G3_ALLOC_TRACK Track;
   } G4SubmitFailure;
   /* EXP1210 receipt-only overlap counters (AdmissionDdiSubmitCommandVirtual). */
   volatile int G4SubmitVirtualInFlight, G4SubmitVirtualFence, G4SubmitVirtualFlags;
@@ -903,6 +919,7 @@ int main(void) {
   unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
   AppleAgxSchedulerInitialize(&adapter.Scheduler);
   process.State = &state;
+  process.OsProcessId = 4321u;
   process.PrivateVa = 1ULL << 36;
   process.Graph.RootIpa = 0x9bf000000ULL;
   process.Graph.Created = 1u;
@@ -926,7 +943,15 @@ int main(void) {
     logical[0x100u + i].GuestIpa = 0x90000000ULL + i * 0x1000ULL;
     logical[0x100u + i].SegmentId = 0u;
     logical[0x100u + i].Flags = 3u;
+    logical[0x100u + i].Allocation = 0x123400ULL;
+    logical[0x100u + i].AllocationOffset = 0x8000ULL + i * 0x1000ULL;
   }
+  ADMISSION_G3_ALLOC_TRACK *track = &state.AllocTrack[
+      ((0x123400u >> 6) ^ (0x123400u >> 16)) % ADMISSION_G3_ALLOC_TRACK_COUNT];
+  track->Allocation = 0x123400ULL; track->ProcessId = 17u;
+  track->ClassId = 2u; track->MetadataValid = 1u;
+  track->AllocationBytes = 0x20000ULL; track->LastFlags = 4u;
+  track->LastSegment = 0u; track->Maps = 7u;
   logical[0x20u].GuestIpa = 0x81000000ULL;
   logical[0x20u].Flags = 1u;
   logical[0x21u].GuestIpa = 0x91003000ULL;
@@ -1037,7 +1062,6 @@ int main(void) {
   assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
          STATUS_INVALID_PARAMETER);
   assert(adapter.G4SubmitFailure.Branch == 9u);
-  assert(adapter.G4SubmitFailure.Version == 2u);
   assert(adapter.G4SubmitFailure.DownstreamStatus != 0u);
   assert(adapter.G4SubmitFailure.PrivateDataSize == sizeof(packet));
   assert(adapter.G4SubmitFailure.UmdPrivateDataSize == sizeof(packet));
@@ -1060,6 +1084,7 @@ int main(void) {
   assert(adapter.G4SubmitFailure.Ordinal == 0u);
   assert(adapter.G4SubmitFailure.Va == ranges[0].Va);
   assert(adapter.G4SubmitFailure.OwnerProcessId == 17u);
+  assert(adapter.G4SubmitFailure.OwnerOsProcessId == 4321u);
   assert(adapter.G4SubmitFailure.RootIpa == process.Graph.RootIpa);
   assert(adapter.G4SubmitFailure.ProcessGeneration == 23u);
   assert(adapter.G4SubmitFailure.MappingGeneration == 31u);
@@ -1069,8 +1094,39 @@ int main(void) {
            0x90000000ULL + i * 0x1000ULL);
     assert(adapter.G4SubmitFailure.LogicalSegment[i] == 0u);
     assert(adapter.G4SubmitFailure.LogicalFlags[i] == 3u);
+    assert(adapter.G4SubmitFailure.LogicalAllocation[i] == 0x123400ULL);
+    assert(adapter.G4SubmitFailure.LogicalAllocationOffset[i] == 0x8000ULL + i * 0x1000ULL);
   }
   assert(adapter.G4SubmitFailureCount == 131);
+  assert(adapter.G4SubmitFailure.Version == 3u);
+  assert(adapter.G4SubmitFailure.TrackFound == 1u);
+  assert(adapter.G4SubmitFailure.Track.ClassId == 2u);
+  assert(adapter.G4SubmitFailure.Track.AllocationBytes == 0x20000ULL);
+  assert(adapter.G4SubmitFailure.Track.LastFlags == 4u);
+  /* A bounded diagnostic table may collide or describe another process.
+   * Neither case may attribute another allocation to this refusal. */
+  struct _ADMISSION_G4_SUBMIT_FAILURE snap = {0};
+  APPLE_AGX_G4_FAILURE missing = {.Va = ranges[0].Va, .Bytes = 1u};
+  track->Allocation++;
+  AdmissionG4SnapshotFailure(&process, &missing, &snap);
+  assert(!snap.TrackFound && snap.LogicalAllocation[0] == 0x123400ULL);
+  track->Allocation--; track->ProcessId++;
+  memset(&snap, 0, sizeof(snap));
+  AdmissionG4SnapshotFailure(&process, &missing, &snap);
+  assert(!snap.TrackFound);
+  track->ProcessId--;
+  /* A 16-KiB group can contain different logical allocation identities.
+   * Select the failing page inside it, even when page zero has no owner. */
+  logical[0x100u].Allocation = 0;
+  missing.Va = ranges[0].Va + 0x2000;
+  memset(&snap, 0, sizeof(snap));
+  AdmissionG4SnapshotFailure(&process, &missing, &snap);
+  assert(snap.TrackFound && snap.Track.Allocation == 0x123400ULL);
+  assert(snap.LogicalAllocation[0] == 0 && snap.LogicalAllocation[2] == 0x123400ULL);
+  logical[0x100u].Allocation = 0x123400ULL;
+  /* Metadata must be copied; a subsequent paging event cannot rewrite it. */
+  track->ClassId = 3u;
+  assert(adapter.G4SubmitFailure.Track.ClassId == 2u);
   process.Graph.AllowProcessRanges = 1;
   adapter.G4SubmitFailureClaim = 0;
   output_mapped = 0;

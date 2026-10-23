@@ -38,7 +38,7 @@ static NTSTATUS AdmissionG4SubmitRejectDetail(
           &adapter->G4SubmitFailure;
       RtlZeroMemory(first, sizeof(*first));
       if (detail != NULL) *first = *detail;
-      first->Version = 2u;
+      first->Version = 3u;
       first->Bytes = sizeof(*first);
       first->Branch = branch;
       first->Status = (ULONG)status;
@@ -1589,7 +1589,7 @@ Unlock:
         s->Records[out++]=state->LeafHistory[
             (state->LeafHistoryNext-1u-n)%ADMISSION_G3_LEAF_RING];
     }
-    s->Version=3u;
+    s->Version=4u; /* T7: appended allocation metadata in Track. */
     if(allocation) {
       ULONGLONG key=(ULONGLONG)(ULONG_PTR)allocation;
       const ADMISSION_G3_ALLOC_TRACK *t=&state->AllocTrack[
@@ -3371,6 +3371,7 @@ static void AdmissionG4SnapshotFailure(
   snapshot->AccessBytes = failure->Bytes;
   snapshot->Write = failure->Write;
   snapshot->OwnerProcessId = process->Graph.ProcessId;
+  snapshot->OwnerOsProcessId = process->OsProcessId;
   snapshot->RootIpa = process->Graph.RootIpa;
   snapshot->ProcessGeneration = process->Graph.ProcessGeneration;
   snapshot->MappingGeneration = process->Graph.MappingGeneration;
@@ -3396,6 +3397,28 @@ static void AdmissionG4SnapshotFailure(
     snapshot->LogicalIpa[i] = pte->GuestIpa;
     snapshot->LogicalSegment[i] = pte->SegmentId;
     snapshot->LogicalFlags[i] = pte->Flags;
+    snapshot->LogicalAllocation[i] = pte->Allocation;
+    snapshot->LogicalAllocationOffset[i] = pte->AllocationOffset;
+  }
+  /* Select the actual failing 4-KiB page, not necessarily group[0]. Both
+   * the shadow and leaf metadata writers use the caller's G3 state lock.
+   * Existing fill/transfer counters are best-effort unlocked diagnostics;
+   * validate the copied identity too. Never dereference a shadow handle. */
+  if (process->State != NULL) {
+    ULONGLONG key = snapshot->LogicalAllocation[(failure->Va >> 12) & 3u];
+    const ADMISSION_G3_ALLOC_TRACK *track = &process->State->AllocTrack[
+        (ULONG)((key >> 6) ^ (key >> 16)) % ADMISSION_G3_ALLOC_TRACK_COUNT];
+    if (key != 0ULL && track->Allocation == key &&
+        track->ProcessId == process->Graph.ProcessId) {
+      snapshot->Track = *track;
+      if (snapshot->Track.Allocation == key &&
+          snapshot->Track.ProcessId == process->Graph.ProcessId &&
+          track->Allocation == key &&
+          track->ProcessId == process->Graph.ProcessId)
+        snapshot->TrackFound = 1u;
+      else
+        RtlZeroMemory(&snapshot->Track, sizeof(snapshot->Track));
+    }
   }
 }
 

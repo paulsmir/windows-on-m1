@@ -361,6 +361,8 @@ typedef struct _ADMISSION_G3_ALLOC_TRACK {
   /* EXP983: physical/virtual FILL and TRANSFER paging operations. */
   ULONGLONG LastFillQpc, LastTransferQpc;
   ULONG Fills, Transfers, LastPagingSegment, LastPagingOperation;
+  ULONGLONG AllocationBytes;
+  ULONG ClassId, Win32Flags, AllocationType, CpuVisible, MetadataValid, LastStatus;
 } ADMISSION_G3_ALLOC_TRACK;
 typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
   ULONG Version, Bytes, Next, Predicate;

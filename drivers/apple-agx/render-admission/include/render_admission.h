@@ -520,6 +520,10 @@ typedef struct _ADMISSION_G3_ALLOC_TRACK {
   /* EXP983: physical/virtual FILL and TRANSFER paging operations. */
   ULONGLONG LastFillQpc, LastTransferQpc;
   ULONG Fills, Transfers, LastPagingSegment, LastPagingOperation;
+  /* T7: copy while UpdatePageTable owns hAllocation. A submit refusal may
+   * inspect this record later without dereferencing an expired handle. */
+  ULONGLONG AllocationBytes;
+  ULONG ClassId, Win32Flags, AllocationType, CpuVisible, MetadataValid, LastStatus;
 } ADMISSION_G3_ALLOC_TRACK;
 typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
   ULONG Version, Bytes, Next, Predicate;
@@ -694,6 +698,12 @@ typedef struct _ADMISSION_CONTEXT {
         MappingGeneration;
     ULONGLONG LogicalIpa[4];
     ULONG LogicalSegment[4], LogicalFlags[4];
+    /* Version 3: identities of the four logical 4-KiB pages and the last
+     * paging record for the failing page. TrackFound=0 means unknown (the
+     * bounded track table can collide), never proof of non-residency. */
+    ULONGLONG LogicalAllocation[4], LogicalAllocationOffset[4];
+    ULONG TrackFound, OwnerOsProcessId;
+    ADMISSION_G3_ALLOC_TRACK Track;
   } G4SubmitFailure;
   /* EXP1210 receipt-only (Wom1G4PreemptOverlap): DxgkDdiPreemptCommand calls
    * and those that arrived while a DxgkDdiSubmitCommandVirtual call was still

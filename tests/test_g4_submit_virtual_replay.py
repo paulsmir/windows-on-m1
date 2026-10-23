@@ -39,6 +39,11 @@ class G4SubmitVirtualReplay(unittest.TestCase):
         self.assertEqual(update.count("RtlCopyMemory(shadow->LogicalPtes + first"), 2)
 
     def test_native_submit_queues_only_after_graph_and_image_bind(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        A refused graph access must identify its logical allocation and copied
+        paging metadata without borrowing a collided/foreign process record;
+        the submission must still fail before any GPU dispatch.
+        """
         production = SOURCE.read_text()
         branches = production.split("/* Branch IDs are a stable diagnostic ABI", 1)[1]
         branches = "enum {" + branches.split("enum {", 1)[1].split("};", 1)[0] + "};"

@@ -2515,7 +2515,7 @@ _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
       InterlockedCompareExchange(&Context->G4SubmitFailureClaim, 0, 0) != 2)
     return;
   snapshot = Context->G4SubmitFailure;
-  if (snapshot.Version != 2u || snapshot.Bytes != sizeof(snapshot)) return;
+  if (snapshot.Version != 3u || snapshot.Bytes != sizeof(snapshot)) return;
   snapshot.TotalFailures = (ULONG)InterlockedCompareExchange(
       &Context->G4SubmitFailureCount, 0, 0);
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(

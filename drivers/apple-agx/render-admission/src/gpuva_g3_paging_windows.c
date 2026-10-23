@@ -790,6 +790,25 @@ static VOID AdmissionG3RecordLeaf(ADMISSION_G3_PROCESS *process,
       RtlZeroMemory(t, sizeof(*t));
       t->Allocation = key;
     }
+    /* The callback owns this allocation now; do not defer the dereference
+     * to SubmitCommandVirtual. Native-fence handles are not allocations. */
+    t->MetadataValid = 0u;
+    t->AllocationBytes = 0ULL;
+    t->ClassId = t->Win32Flags = t->AllocationType = t->CpuVisible = 0u;
+    if (!update->Flags.NativeFence &&
+        (key & (ULONGLONG)(sizeof(ULONG_PTR) - 1u)) == 0ULL) {
+      const ADMISSION_ALLOCATION_HANDLE *allocation =
+          (const ADMISSION_ALLOCATION_HANDLE *)update->hAllocation;
+      if (allocation->Object.Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC) {
+        t->AllocationBytes = allocation->Object.Description.Size;
+        t->ClassId = allocation->Win32ClassId;
+        t->Win32Flags = allocation->Win32Flags;
+        t->AllocationType = (ULONG)allocation->Object.Description.Type;
+        t->CpuVisible = allocation->Object.Description.CpuVisible ? 1u : 0u;
+        t->MetadataValid = 1u;
+      }
+    }
+    t->LastStatus = (ULONG)status;
     t->ProcessId = h->ProcessId;
     t->LastAnyQpc = h->Qpc;
     t->LastAnyVa = h->FirstVa;
