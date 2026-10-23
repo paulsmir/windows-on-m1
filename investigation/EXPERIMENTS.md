@@ -61614,3 +61614,24 @@ EXP1919 HARDWARE BEFORE 2026-10-23T21:43:12Z:
 - Recovery: visible recovery rec1919h (installed by launch-exp), run directly on any hang.
 - Hashes: sys 1f47579e7a76, UmdArm64 24d1afdf39a8, UmdX64 018c9cbceb92, Umd32 cb3d14513355; manifest aae1be9743c1, hardware-manifest 7a21b79a4dc0; probe1919.sh 80d15f4d123a (PROBE_LINT_OK); visible recovery rec1919h cff11dd5f70d996a; m1n1 0d3a75b3.
 - Recovery rec1919h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1919-gpu-only/run1919.sh.
+
+EXP1919 ACTUAL 2026-10-23T22:32:46Z:
+- Boot CM_PROB_NONE, desktop up; package 30.0.1919.0 (db67ef1a, T7h/T7h2 GPU-only placement); short profile.
+- T7h CONFIRMED for its target: G4_SUBMIT_FAILURE none (EXP1918: G4 Parse/Unmapped on the Z32F 4096x4096x2 depth BO), no GPU reset, no AllocateCb E_INVALIDARG (25/25 g4-native-allocate-cb S_OK), no measure-gpu-only-map refusals.
+- GravityMark D3D12 NOT fixed:
+  - 10k: Ready 34.1 s, device removed at 43.2 s;
+  - 2k: Ready 15.4 s, removed at 23.2 s.
+  - The UMD traces stop about 1.5 s before the removal: the process was killed at the 90 s timeout and the buffered tail was lost. No UMD or KMD refusal was recorded.
+- KMD Wom1GpuFault v1: 2 firmware **timeout** events, not faults; FAULT_INFO not read; both resumed.
+  - pid 9720 (10k): fence 0x194a;
+  - pid 280 (2k): fence 0x240d;
+  - submit-to-event 2 ms in both.
+  - Wom1FirmwareRecovery: 2 recoveries, deadline expiries 0. EXP1918 also had 1 timeout recovery, so the class is not new with T7h.
+- Pool: peak 2683/2688 MiB, peak reserved 2974 MiB, reserve failures 0.
+- C85 (fork): AllocateCb about 5x slower in run a (25.6 s for 2682 MiB).
+- Post-run crash: at 22:26Z (after RUN_DONE, idle desktop) the hypervisor log shows "NVMe guest reset #1" (dump write), then PSCI SYSTEM_RESET from Windows. Log saved as full-reset-2226Z.log. Recovery from proxy: rec1919h with AGX_RECOVERY_ALLOW_AT_PROXY=1.
+- Verdict: T7h CONFIRMED (G4 Unmapped removed); GravityMark D3D12 removal INCONCLUSIVE (new boundary: a firmware timeout followed by a hang and removal).
+- Tooling: gm-run.ps1 now closes GravityMark after "device removed" (CloseMainWindow, kill after 15 s), so the UMD trace tail is flushed.
+- Next:
+  1. bugcheck dump analysis (cdb);
+  2. package T7h + fork C86 (owner-cached staging for GPU-only textures) with the flushed-trace gm-run, to locate the hang/timeout submission.
