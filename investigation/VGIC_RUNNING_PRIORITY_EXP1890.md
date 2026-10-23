@@ -241,3 +241,13 @@ SHA-256 `b97cf8834c3f8e8728b796bf211ef8d21f020db2a427415616b5ad54d05baf49`.
 
 Checkpoint: any watchdog snapshot must show LR priorities of NVMe 0x70, xHCI 857 0x50,
 865 0x40, 889 0x60 and vtimer 0x20. Any other value means the priority path is still wrong.
+
+## EXP1905 (0d3a75b3): hardware result
+
+Windows booted on the first attempt. The run completed with no hang and no 0x101:
+probes 118/0 on three ABIs, samples, ModelViewer, and GravityMark D3D11 and D3D12.
+The EXP1894 boot livelock and the EXP1898 CPU0 hang did not recur. Both GravityMark
+runs stopped early on driver gaps (D3D11 at 20 s, CS creation refused; D3D12 at 26 s,
+out of memory), before the ~60 s scene generation where EXP1889/EXP1890 failed. So the
+original 0x101 discriminator is still open. The GPU session uses 0d3a75b3 as the
+experiment m1n1 from EXP1906 on, with 21c3648d as lastgood.
