@@ -61311,3 +61311,17 @@ EXP1909 ACTUAL 2026-10-23T14:03:16Z: run1909.sh RC 0, RUN_DONE, m1n1 0d3a75b3 st
   - Verdict: C75 REJECTED as is (crash). Reverted. Offline analysis handed to Codex T6.
 - C74 not reached: GravityMark D3D11 was removed earlier, at 26 s, by a new legal copy that is refused: reject-resource-copy-region 3 0x5f 4 8 128x128 -> 512x512 (R32G32B32A32_UINT Cube -> BC6H_UF16 CubeArray, uncompressed-to-BC block copy). Handed to Codex T2 P0. Tellusim crashed afterwards (c0000005 in Tellusim_arm64.dll, application error path).
 - Process: Codex offline tasks T1-T5 written to .local/handoff/codex (user request 2026-10-23).
+
+EXP1910 C74_C21H_SWEEP HARDWARE BEFORE 2026-10-23T14:12:45Z:
+- Package 30.0.1910.0 from 7acfaf65: EXP1909 without C75 (revert 68ff6b7a). Contains 4c4a6c84 C74 and the fork's 51e4b51b (BC texture-region copies of sub-block levels).
+- Build: EXP1910_PACKAGE_BUILD_PASS. sys 1b02e0d4a4cd, UmdArm64 99216127b52e, UmdX64 6e4bbbda5154; manifest c6ecc34834a1, hardware-manifest bd28c7235434.
+- Gates: stage PASS, visible recovery PASS (rec1910h 7ad2f4e528bc94f0), lastgood 1b651a4ecf03; m1n1 0d3a75b3.
+- Probe probe1910.sh 393e43364478 (PROBE_LINT_OK) = probe1909 with the tiled probe a2520269 (fork source 5bb98448; adds C21H_REGION_BC1).
+- ATOMIC CONTRACT: none -- C74 has the GravityMark D3D11 line, 51e4b51b has C21H_REGION_BC1, and the C75 revert restores the EXP1908 GravityMark D3D12 behaviour (control).
+- WHY THIS HYPOTHESIS:
+  (1) EXP1908: IaSetIndexBuffer refusal at 64 s;
+  (2) the fork's offline RED/GREEN for sub-block BC region copies;
+  (3) EXP1909 crash attributable to C75 (control: D3D12 back to about 37 s with no WER).
+- WHAT IS STILL UNKNOWN: whether GravityMark D3D11 reaches the IaSetIndexBuffer point before the uncompressed-to-BC copy refusal (EXP1909 hit the copy at 26 s, EXP1908 did not).
+- Expected: regressions as EXP1909; T2VOL with C21H_REGION_BC1 PASS; GravityMark D3D12 without WER.
+- Failure criteria: regressions, crash, hang. Recovery rec1910h (run directly). Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1910-ib-bcsweep/run1910.sh.
