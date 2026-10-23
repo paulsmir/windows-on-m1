@@ -61578,3 +61578,12 @@ EXP1918 ACTUAL + EXP1918U1 2026-10-23T19:33:45Z:
   - GravityMark D3D12 2k on the swapped UMD: Ready 14.5 s, removed at 22.5 s, G4 total 2.
   - Same behaviour as the base, as expected (no UMD change relevant to the failure). Whole iteration: about 6 min.
 - Fast-loop tooling validated: umd-quick.sh, umd-hotswap.sh/hotswap.ps1, gm-quick.sh.
+
+EXP1918U2 2026-10-23T19:40:30Z:
+- UMD hot-swap of HEAD e6847449 (the fork's C85 683187b8, receipt-only measure-bo-create; UMDQ-1918q2 sha256 a4d61a14...) on the installed EXP1918 package, no reboot.
+- GravityMark D3D12 2k: Ready 14.5 s, removed at 22.8 s, G4 Unmapped (total 3) -- unchanged.
+- C85 data: 59 BO creations >=10 ms, 2670 MiB in total.
+  - AllocateCb (KMD CreateAllocation plus pool reserve/commit): 4.6 s;
+  - GPU VA bind (map plus paging): 4.8 s, with one 7 MiB bind at 1.3 s;
+  - UMD association: 0.3 ms.
+  - Load time is KMD-side (~4 ms/MiB); a separate optimisation item.
