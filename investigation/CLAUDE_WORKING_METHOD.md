@@ -229,3 +229,8 @@ Process review 2026-10-23 (EXP1887/EXP1888):
   - Never edit `~/.codex/config.toml`.
 - At every experiment boundary, check `scratchpad/codex-status.sh` (REPORT.md, commits ahead). Then review each branch diff, rebase or cherry-pick it onto the integration branch, run `run_against_baseline.py` (BASELINE_OK), add the CHANGES rows, and validate on hardware.
 - Pipeline waiters: use `scratchpad/wait-log.sh <log> '^NAME '`. It refuses unanchored patterns: EXP1907's `PROBE_DONE` matched `AGX_D3D11_FL111_PROBE_DONE`.
+- Pre-merge gate: `scratchpad/codex-review.sh <task>`. It:
+  - skips commits already applied (`git cherry`);
+  - flags commits that touch `known_failures.txt` or the ledgers, or carry attribution (T4 tried to hide fresh-worktree failures in known_failures);
+  - trial-cherry-picks the clean commits into `.worktrees/codex-review-<pid>`, which must sit under `.worktrees/` because the tests resolve `../../.local/reference`, and runs the baseline there.
+  - Only the two fresh-worktree environment failures are tolerated (texture1d fxc pin, m1n1 broker replay). Merge only after REVIEW_OK.
