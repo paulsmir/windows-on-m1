@@ -48,6 +48,7 @@ struct D3D11DDIARG_CREATERESOURCE {
 struct AGX_D3D12_BUFFER {void *Resource; unsigned long long GpuVa,Bytes;};
 struct AGX_D3D12_OWNER {pipe_context *Context; unsigned PendingCopies; pipe_screen *Screen; pipe_resource *UploadStaging,*DownloadStaging;};
 struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER*) {}};
+static void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *, HRESULT) {} // receipt sink
 /* ACTUAL_COPY_RECORD */
 static bool reserved_texture(pipe_resource*) {return false;}
 static HRESULT copy_reserved_texture(AGX_D3D12_OWNER*,const AGX_D3D12_TEXTURE_COPY*) {return E_INVALIDARG;}

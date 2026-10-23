@@ -16,6 +16,7 @@ struct AGX_D3D12_BUFFER {void *Resource;unsigned long long GpuVa,Bytes;};
 struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingCopies;pipe_screen *Screen;pipe_resource *DownloadStaging;};
 static void AgxWin32AsahiResourceRelease(pipe_resource **resource) {*resource=nullptr;}
 struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}}; /* the owner lock (EXP1824) is not a fixture boundary */
+static void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *, HRESULT) {} // receipt sink
 /* ACTUAL_COPY_RECORD */
 /* C53 T2D: no reserved textures here (their staging path: the HW2 self-test) */
 static bool reserved_texture(pipe_resource *) { return false; }

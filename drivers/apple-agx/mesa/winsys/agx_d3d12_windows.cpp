@@ -157,8 +157,29 @@ static BOOL collect_presentations(AGX_D3D12_OWNER *owner) {
   return owner->PendingPresentations == NULL;
 }
 
+extern "C" void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *owner, HRESULT error) {
+  OwnerLock lock(owner);
+  if (owner && (error == DXGI_ERROR_DEVICE_REMOVED || error == DXGI_ERROR_DEVICE_HUNG ||
+                owner->Runtime.DrawTerminal))
+    AdmissionUmdScreenCpuAccessSnapshot(&owner->Runtime, error, 2u);
+}
+
+static void owner_cpu_pointer(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *buffer, UINT event) {
+  if (!owner || !buffer || !buffer->Resource || !buffer->Cpu || buffer->Bytes <= (16ULL << 20)) return;
+  AGX_WIN32_RELOC_ALLOCATION identity = {};
+  if (AgxWin32AsahiResourceIdentity(static_cast<struct pipe_resource *>(buffer->Resource), &identity))
+    AdmissionUmdScreenCpuAccessEvent(&owner->Runtime, identity.Token, event);
+}
+
+extern "C" void AgxD3d12OwnerRecordHeapMap(AGX_D3D12_OWNER *owner,
+    const AGX_D3D12_BUFFER *buffer, BOOL map) {
+  OwnerLock lock(owner);
+  owner_cpu_pointer(owner, buffer, map ? AdmissionCpuHeapMap : AdmissionCpuHeapUnmap);
+}
+
 static VOID APIENTRY owner_error(D3D10DDI_HRTCORELAYER handle, HRESULT error) {
   AGX_D3D12_OWNER *owner = static_cast<AGX_D3D12_OWNER *>(handle.handle);
+  AgxD3d12OwnerRecordError(owner, error);
   if (owner && owner->Error) owner->Error(owner->ErrorContext, error);
 }
 
@@ -264,6 +285,7 @@ static HRESULT destroy_kernel_context(AGX_D3D12_OWNER *owner) {
 
 extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   if (!owner) return S_OK;
+  AdmissionUmdScreenCpuAccessSnapshot(&owner->Runtime, S_OK, 3u);
   owner_perf_flush(); /* C82: the tail of a short run */
   BOOL consumed = FALSE;
   HRESULT hr = S_OK;
@@ -417,6 +439,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned lo
   buffer->GpuVa = va;
   buffer->Cpu = cpu;
   buffer->Bytes = bytes;
+  owner_cpu_pointer(owner, buffer, AdmissionCpuOwnerPointer);
   return S_OK;
 }
 
@@ -649,6 +672,7 @@ extern "C" HRESULT AgxD3d12OwnerReadBuffer(AGX_D3D12_OWNER *owner, const AGX_D3D
                                &transfer);
   if (!map || !transfer) {
     if (transfer) pipe->buffer_unmap(pipe, transfer);
+    AgxD3d12OwnerRecordError(owner, DXGI_ERROR_DEVICE_HUNG);
     return DXGI_ERROR_DEVICE_HUNG;
   }
   memcpy(data, map, bytes);
@@ -2106,6 +2130,7 @@ static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COP
     pipe->resource_copy_region(pipe, texture, copy->Level, tbox.x, tbox.y, tbox.z, staging, 0, &sbox);
     ++owner->PendingCopies;
   }
+  AgxD3d12OwnerRecordError(owner, hr);
   receipt("measure-d3d12-staged-upload", hr, copy->Width | (copy->Height << 16), copy->Level,
           staging->width0 | (staging->height0 << 16));
   return hr;
@@ -2153,6 +2178,7 @@ static HRESULT staged_download(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_C
            static_cast<unsigned char *>(smap) + static_cast<size_t>(y) * stransfer->stride, static_cast<size_t>(row));
   if (btransfer) pipe->buffer_unmap(pipe, btransfer);
   if (stransfer) pipe->texture_unmap(pipe, stransfer);
+  AgxD3d12OwnerRecordError(owner, hr);
   receipt("measure-d3d12-staged-download", hr, copy->Width | (copy->Height << 16), copy->Level,
           staging->width0 | (staging->height0 << 16));
   return hr;
@@ -2231,6 +2257,7 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
     }
   if (btransfer) pipe->buffer_unmap(pipe, btransfer);
   if (ttransfer) pipe->texture_unmap(pipe, ttransfer);
+  AgxD3d12OwnerRecordError(owner, hr);
   receipt("measure-d3d12-texture-copy", hr, copy->ToBuffer ? 1u : 0u, copy->Width | (copy->Height << 16),
           copy->Pitch);
   return hr;
@@ -3560,6 +3587,7 @@ static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
   owner->SlowDraws = 0;
   const HRESULT hr = retired && !faulted && !AgxWin32AsahiContextFaulted(owner->Context)
                          ? S_OK : DXGI_ERROR_DEVICE_HUNG;
+  AgxD3d12OwnerRecordError(owner, hr);
   receipt("measure-d3d12-owner-submit", hr, copies, static_cast<UINT>(retired), static_cast<UINT>(faulted));
   return hr;
 }

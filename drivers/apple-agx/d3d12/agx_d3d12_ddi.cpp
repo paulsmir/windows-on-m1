@@ -750,6 +750,9 @@ extern "C" const void *AgxD3d12ZeroCacheResolveDevice(D3D12DDI_HDEVICE handle) {
 }
 static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error) {
     auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (device) AgxD3d12OwnerRecordError(static_cast<AGX_D3D12_OWNER *>(device->owner), error);
+#endif
     if (device && device->callbacks && device->callbacks->pfnSetErrorCb)
         device->callbacks->pfnSetErrorCb(device->runtime, error);
 }
@@ -1980,6 +1983,9 @@ static AGX_D3D12_BUFFER HeapBuffer(const AgxD3d12Heap *heap) {
 }
 static void OwnerError(void *context, HRESULT error) {
     auto *device = static_cast<AgxD3d12Device *>(context);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (device) AgxD3d12OwnerRecordError(static_cast<AGX_D3D12_OWNER *>(device->owner), error);
+#endif
     if (device && device->callbacks && device->callbacks->pfnSetErrorCb)
         device->callbacks->pfnSetErrorCb(device->runtime, error);
 }
@@ -2616,6 +2622,10 @@ static HRESULT APIENTRY MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_han
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
     if(heap && heap->volume) {if(data)*data=nullptr;return E_INVALIDARG;}
     if (device && heap && data && heap->native && heap->cpu) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        AGX_D3D12_BUFFER buffer = HeapBuffer(heap);
+        AgxD3d12OwnerRecordHeapMap(static_cast<AGX_D3D12_OWNER *>(device->owner), &buffer, TRUE);
+#endif
         *data = heap->cpu; /* C4b: persistent mapping of the owner's buffer */
         return S_OK;
     }
@@ -2636,6 +2646,12 @@ static HRESULT APIENTRY MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_han
 static VOID APIENTRY UnmapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle) {
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (device && heap && heap->native && heap->cpu) {
+        AGX_D3D12_BUFFER buffer = HeapBuffer(heap);
+        AgxD3d12OwnerRecordHeapMap(static_cast<AGX_D3D12_OWNER *>(device->owner), &buffer, FALSE);
+    }
+#endif
     if (!device || !heap || heap->native || !heap->locks || --heap->locks) return;
     D3DDDICB_UNLOCK unlock = {};
     unlock.NumAllocations = 1;

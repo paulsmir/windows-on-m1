@@ -2,6 +2,7 @@
 #define APPLE_AGX_UMD_INTERNAL_H
 
 #include "umd_va_alias.h"
+#include "umd_cpu_access.h"
 #define ADMISSION_UMD_VA_ALIAS_INITIAL 1024u
 #include "umd_staging_sync.h"
 #include "direct_flip_contract.h"
@@ -62,6 +63,7 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U32 ClassId;
   APPLE_AGX_U32 Flags;
   APPLE_AGX_U32 LockedAccess;
+  ADMISSION_UMD_CPU_ACCESS CpuAccess;
   APPLE_AGX_U32 MapEpoch;
   APPLE_AGX_U32 SourceHolds;
   APPLE_AGX_U32 SubmissionHolds;
@@ -209,6 +211,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
   APPLE_AGX_U64 LastDrawRequest;
   ADMISSION_UMD_DRAW_SUBMISSION *DrawSubmission;
   BOOL DrawTerminal;
+  UINT CpuAccessSnapshots; /* bit 0 failure, bit 1 device teardown */
   /* EXP1043 diagnostic: slot of the last map_va, for paging-wait attribution. */
   APPLE_AGX_U64 PagingWaitToken;
 #ifdef APPLE_AGX_GPUVA_WINSYS
@@ -235,6 +238,19 @@ typedef struct _ADMISSION_UMD_DEVICE {
   SRWLOCK ScreenBufferLock;
   ADMISSION_UMD_SOURCE_HOLD_RECORD SourceHolds[ADMISSION_UMD_SOURCE_HOLD_LIMIT];
 } ADMISSION_UMD_DEVICE;
+
+/* Receipt-only. Call without ScreenBufferLock held. Reasons: 2 failure,
+ * 3 teardown. Destruction uses reason 1 directly under the slot lock. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+VOID AdmissionUmdScreenCpuAccessSnapshot(ADMISSION_UMD_DEVICE *Device,
+                                        HRESULT Status, UINT Reason);
+VOID AdmissionUmdScreenCpuAccessEvent(ADMISSION_UMD_DEVICE *Device,
+                                     APPLE_AGX_U64 Token, UINT Event);
+#ifdef __cplusplus
+}
+#endif
 
 #ifdef APPLE_AGX_GPUVA_WINSYS
 #ifdef __cplusplus

@@ -803,6 +803,7 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
     lock.Flags.LockEntire=1;lock.Flags.ReadOnly=1;
     HRESULT hr=device->KernelCallbacks->pfnLockCb(device->RuntimeDevice.handle,&lock);
     locked=SUCCEEDED(hr);
+    if (locked) AdmissionUmdScreenCpuAccessEvent(device, slot->Token, AdmissionCpuLock);
     if(!locked) return 0;
     if(lock.hAllocation!=slot->StagingAllocation) {device->DrawTerminal=TRUE;address=NULL;}
     else address=(BYTE *)lock.pData;
@@ -822,6 +823,7 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
       ReleaseSRWLockExclusive(&device->ScreenBufferLock);
       device->DrawTerminal=TRUE;return -1;
     }
+    AdmissionUmdScreenCpuAccessEvent(device, slot->Token, AdmissionCpuUnlock);
   }
   return device->DrawTerminal ? -1 : unchanged;
 }
@@ -1027,6 +1029,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
     lock_hr=device->KernelCallbacks->pfnLockCb(
         device->RuntimeDevice.handle,&lock);
     locked=SUCCEEDED(lock_hr);
+    if (locked) AdmissionUmdScreenCpuAccessEvent(device, slot->Token, AdmissionCpuLock);
     if(locked) address=(BYTE *)lock.pData;
     success=locked && address && lock.hAllocation==slot->StagingAllocation;
     if(locked && lock.hAllocation!=slot->StagingAllocation) {
@@ -1106,13 +1109,16 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
         ReleaseSRWLockExclusive(&device->ScreenBufferLock);
       }
       device->DrawTerminal=TRUE;success=0;
-    } else if(uncache) {
-      if(!slot->NativeMapRelease(slot->NativeBo,address,TRUE)) {
-        device->DrawTerminal=TRUE;success=0;
+    } else {
+      if (!shadow) AdmissionUmdScreenCpuAccessEvent(device, slot->Token, AdmissionCpuUnlock);
+      if(uncache) {
+        if(!slot->NativeMapRelease(slot->NativeBo,address,TRUE)) {
+          device->DrawTerminal=TRUE;success=0;
+        }
+        AcquireSRWLockExclusive(&device->ScreenBufferLock);
+        slot->LockedBase=NULL;slot->Mapped=FALSE;slot->LockedAccess=0;
+        ReleaseSRWLockExclusive(&device->ScreenBufferLock);
       }
-      AcquireSRWLockExclusive(&device->ScreenBufferLock);
-      slot->LockedBase=NULL;slot->Mapped=FALSE;slot->LockedAccess=0;
-      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     }
   }
   if(!success) {
@@ -1548,7 +1554,10 @@ static int submit(void *context, const uint64_t *written,
   }
   device->FrameSubmitStatus = submit_result;
 #endif
-  if (FAILED(submit_result)) return 0;
+  if (FAILED(submit_result)) {
+    AdmissionUmdScreenCpuAccessSnapshot(device, submit_result, 2u);
+    return 0;
+  }
   uint64_t internal = device->NextRenderFence + 1;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   device->FrameSubmittedFence = internal;

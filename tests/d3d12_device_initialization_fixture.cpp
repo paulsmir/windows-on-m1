@@ -107,6 +107,7 @@ static void PublishDeviceIdentity(AgxD3d12Device *) {}
 static unsigned selftest_calls;
 static unsigned long GetEnvironmentVariableA(const char *, char *, unsigned long) { return 0; }
 static HRESULT AgxD3d12OwnerReservedSelfTest(AGX_D3D12_OWNER *) { ++selftest_calls; return S_OK; }
+static void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *, HRESULT) {} // receipt sink
 /* PRODUCTION_DEVICE */
 static void check(bool value,const char *why) { if(!value){ std::fprintf(stderr,"%s\n",why); std::exit(1); } }
 int main(int argc,char **argv) {

@@ -40,6 +40,7 @@ BODY = r'''
 #include <cstdio>
 #include <cstring>
 #include "umd_staging_sync.h"
+#include "umd_cpu_access.h"
 typedef int BOOL; typedef unsigned UINT; typedef unsigned D3DKMT_HANDLE; typedef unsigned char BYTE;
 typedef void *PVOID; typedef uintptr_t ULONG_PTR; typedef unsigned long ULONG; typedef size_t SIZE_T;
 typedef long HRESULT;
@@ -55,14 +56,15 @@ static unsigned long long counting_hash(const void *d, unsigned long long n) {
 #define AdmissionUmdStagingHash counting_hash
 struct D3DDDICB_LOCK { D3DKMT_HANDLE hAllocation; struct { unsigned LockEntire, ReadOnly; } Flags; void *pData; };
 struct D3DDDICB_UNLOCK { UINT NumAllocations; const D3DKMT_HANDLE *phAllocations; };
-static BYTE vidmm[4096];
-static HRESULT lock_cb(void *, D3DDDICB_LOCK *l) { l->pData = vidmm; return 0; }
-static HRESULT unlock_cb(void *, D3DDDICB_UNLOCK *) { return 0; }
+static BYTE vidmm[17u<<20];
+static bool fail_lock, fail_unlock;
+static HRESULT lock_cb(void *, D3DDDICB_LOCK *l) { l->pData = fail_lock ? nullptr : vidmm; return fail_lock ? -1 : 0; }
+static HRESULT unlock_cb(void *, D3DDDICB_UNLOCK *) { return fail_unlock ? -1 : 0; }
 struct CALLBACKS { HRESULT (*pfnLockCb)(void *, D3DDDICB_LOCK *); HRESULT (*pfnUnlockCb)(void *, D3DDDICB_UNLOCK *); };
 struct ADMISSION_UMD_SCREEN_BUFFER { BOOL Mapped, Borrowed, WriteWatch; PVOID LockedBase; BYTE *PrivateStaging;
-  D3DKMT_HANDLE StagingAllocation; unsigned long long Bytes; ADMISSION_UMD_STAGING_SYNC Sync; };
+  D3DKMT_HANDLE StagingAllocation; unsigned long long Bytes; ADMISSION_UMD_STAGING_SYNC Sync; unsigned long long Token; ADMISSION_UMD_CPU_ACCESS CpuAccess; };
 struct ADMISSION_UMD_DEVICE { const CALLBACKS *KernelCallbacks; struct { void *handle; } RuntimeDevice;
-  int ScreenBufferLock; BOOL DrawTerminal; };
+  int ScreenBufferLock; BOOL DrawTerminal; ADMISSION_UMD_SCREEN_BUFFER *Watched; };
 static void AcquireSRWLockExclusive(int *) {}
 static void ReleaseSRWLockExclusive(int *) {}
 static bool dirty, watch_fails; static unsigned resets;
@@ -72,6 +74,11 @@ static UINT GetWriteWatch(ULONG, PVOID, SIZE_T, PVOID *pages, ULONG_PTR *count, 
   return 0;
 }
 static UINT ResetWriteWatch(PVOID, SIZE_T) { dirty = false; ++resets; return 0; }
+typedef void VOID; typedef unsigned long long APPLE_AGX_U64;
+static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFind(ADMISSION_UMD_DEVICE *d, APPLE_AGX_U64 token) {
+  return d->Watched && d->Watched->Token==token ? d->Watched : nullptr;
+}
+@@EVENT@@
 @@FUNCS@@
 int main() {
   static BYTE staging[4096];
@@ -104,6 +111,18 @@ int main() {
   /* An invalid record always uploads, without reading. */
   AdmissionUmdStagingInvalidate(&slot.Sync); dirty = false;
   assert(staging_unchanged(&device, &slot) == 0 && hashes == 5);
+  /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+   * Actual temporary LockCb success counts even without a published native
+   * map; failed Unlock retains the lock, failed Lock adds no success. */
+  slot={};slot.Token=7;slot.Bytes=sizeof(vidmm);slot.StagingAllocation=5;device.Watched=&slot;
+  AdmissionUmdStagingRecord(&slot.Sync, AdmissionUmdStagingHash(vidmm,sizeof(vidmm)),sizeof(vidmm));
+  assert(staging_unchanged(&device,&slot)==1);
+  assert(slot.CpuAccess.Locks==1 && !slot.CpuAccess.ActiveLocks && !slot.CpuAccess.Maps);
+  fail_lock=true;assert(staging_unchanged(&device,&slot)==0);
+  assert(slot.CpuAccess.Locks==1 && !slot.CpuAccess.ActiveLocks);
+  fail_lock=false;fail_unlock=true;assert(staging_unchanged(&device,&slot)==-1);
+  assert(slot.CpuAccess.Locks==2 && slot.CpuAccess.ActiveLocks==1 && !slot.CpuAccess.Maps);
+  assert(slot.Mapped && slot.LockedBase==vidmm && device.DrawTerminal);
   puts("EXP1083 staging write watch: PASS");
   return 0;
 }
@@ -112,13 +131,17 @@ int main() {
 
 class StagingWriteWatch(unittest.TestCase):
     def test_unwritten_watched_staging_skips_the_hash(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Temporary successful locks must count independently of native maps; failed unlock must retain active-lock evidence without changing write-watch decisions."""
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in (
             'staging_watched', 'staging_written', 'staging_clean', 'staging_unchanged'))
         self.assertIn('staging_written(', funcs, 'write watch check is missing')
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'replay.cpp'; exe = Path(tmp) / 'replay'
-            src.write_text(BODY.replace('@@FUNCS@@', funcs))
+            from test_umd_deallocated_slot_no_evict import function as extract
+            screen = (SRC.parent/'umd_win32_screen.c').read_text()
+            event = extract(screen, 'AdmissionUmdScreenCpuAccessEvent')
+            src.write_text(BODY.replace('@@FUNCS@@', funcs).replace('@@EVENT@@', event))
             built = subprocess.run(['clang++', '-std=c++17', '-Wall', '-Wextra', '-Wno-unused-function',
                                     '-Wno-missing-field-initializers', '-I', str(INC),
                                     '-fsanitize=address,undefined', str(src), '-o', str(exe)],

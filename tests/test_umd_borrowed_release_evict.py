@@ -33,6 +33,9 @@ BODY = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include "umd_cpu_access.h"
+typedef void VOID;
+#define ARRAYSIZE(a) (sizeof(a)/sizeof(a[0]))
 typedef int HRESULT; typedef unsigned UINT; typedef unsigned D3DKMT_HANDLE; typedef int BOOL;
 typedef unsigned long long ULONGLONG, APPLE_AGX_U64; typedef void *HANDLE;
 #define TRUE 1
@@ -46,7 +49,7 @@ typedef unsigned long long ULONGLONG, APPLE_AGX_U64; typedef void *HANDLE;
 typedef int SRWLOCK;
 static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclusive(SRWLOCK*){}
 static int VirtualFree(void*,size_t,unsigned){return 1;}
-struct ADMISSION_UMD_SCREEN_BUFFER { BOOL Active,Mapped,Transition,CopyHeld,Direct,Resident,Borrowed,SystemDirect;
+struct ADMISSION_UMD_SCREEN_BUFFER { ADMISSION_UMD_CPU_ACCESS CpuAccess; ULONGLONG Bytes; void *LockedBase; BOOL Active,Mapped,Transition,CopyHeld,Direct,Resident,Borrowed,SystemDirect;
   APPLE_AGX_U64 Token; void *NativeBo; UINT SourceHolds,SubmissionHolds;
   D3DKMT_HANDLE KernelAllocation,StagingAllocation; ULONGLONG CanonicalGpuVa; unsigned char *PrivateStaging; };
 struct D3DDDI_EVICT_FLAGS { union { struct { UINT EvictOnlyIfNecessary:1; UINT NotWrittenTo:1; UINT Reserved:30; }; UINT Value; }; };
@@ -56,18 +59,21 @@ static unsigned evicts, onlyIfNecessary, notWrittenTo, deallocations;
 static HRESULT ev(HANDLE,const D3DDDICB_EVICT*e){++evicts;onlyIfNecessary+=e->Flags.EvictOnlyIfNecessary;notWrittenTo+=e->Flags.NotWrittenTo;return S_OK;}
 static HRESULT de(HANDLE,const D3DDDICB_DEALLOCATE*){++deallocations;return S_OK;}
 struct CB { HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); HRESULT(*pfnDeallocateCb)(HANDLE,const D3DDDICB_DEALLOCATE*); };
-struct ADMISSION_UMD_DEVICE { ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[4]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal;
+struct ADMISSION_UMD_DEVICE { ULONGLONG OwnerCookie; ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[4]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal;
   CB *KernelCallbacks; struct { HANDLE handle; } RuntimeDevice; HRESULT LastScreenError; };
 static void AdmissionUmdVaRecordDeallocate(const void*,ULONGLONG,D3DKMT_HANDLE,ULONGLONG,HRESULT){}
+static unsigned cpu_receipts;
+static void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*v,UINT n){++cpu_receipts;assert(n==16 && v[0]==0x101 && v[5]==0x40 && v[8]==(65u<<20));}
 @@FUNCS@@
 int main(){
   CB cb={ev,de}; ADMISSION_UMD_DEVICE d={}; d.KernelCallbacks=&cb;
   ADMISSION_UMD_SCREEN_BUFFER &b=d.ScreenBuffers[0];
-  b.Active=1;b.Token=7;b.Direct=1;b.Borrowed=1;b.Resident=1;b.KernelAllocation=0x40;
+  b.Bytes=65ull<<20;b.Active=1;b.Token=7;b.Direct=1;b.Borrowed=1;b.Resident=1;b.KernelAllocation=0x40;
   assert(AdmissionUmdScreenDestroyBuffer(&d,7)==1);
   /* One reference drop, no forced page-out, contents kept for the owner. */
   assert(evicts==1 && onlyIfNecessary==1 && notWrittenTo==0);
   /* A borrowed Direct allocation is never deallocated by the borrower. */
+  assert(cpu_receipts==1);
   assert(deallocations==0 && !d.ScreenBuffers[0].Active);
   return 0;
 }
@@ -77,12 +83,12 @@ int main(){
 class BorrowedReleaseEvictTests(unittest.TestCase):
     def test_release_drops_residency_without_forcing_eviction(self):
         text = SRC.read_text()
-        funcs = function(text, "AdmissionUmdScreenFind") + "\n" + \
+        funcs = function(text, "AdmissionUmdScreenCpuAccessReceipt") + "\n" + function(text, "AdmissionUmdScreenFind") + "\n" + \
             function(text, "AdmissionUmdScreenDestroyBuffer")
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "t.cpp"; binary = Path(tmp) / "t"
             source.write_text(BODY.replace("@@FUNCS@@", funcs))
-            subprocess.run(["clang++", "-std=c++17", "-w", str(source), "-o", str(binary)],
+            subprocess.run(["clang++", "-std=c++17", "-w", "-I", str(ROOT / "drivers/apple-agx/render-admission/umd/include"), str(source), "-o", str(binary)],
                            check=True)
             subprocess.run([str(binary)], check=True)
 

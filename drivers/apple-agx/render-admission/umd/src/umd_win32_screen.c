@@ -48,6 +48,61 @@ static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFind(
   return NULL;
 }
 
+/* One fixed-size record per large slot. OwnerCookie + Token is a lifetime
+ * key, including across cached BO reuse; slot zeroing starts fresh counters.
+ * Canonical VA is the latest range, not a claim about every sparse alias. */
+static VOID AdmissionUmdScreenCpuAccessReceipt(ADMISSION_UMD_DEVICE *Device,
+    const ADMISSION_UMD_SCREEN_BUFFER *Buffer, HRESULT Status, UINT Reason) {
+  if (!Buffer->Active || Buffer->Bytes <= (16ULL << 20)) return;
+  const ADMISSION_UMD_CPU_ACCESS *facts = &Buffer->CpuAccess;
+  APPLE_AGX_U64 va = 0;
+  UINT flags = (Buffer->Mapped ? 1u : 0u) |
+      (Buffer->LockedBase ? 2u : 0u) | (facts->OwnerPointers ? 4u : 0u) |
+      (facts->ActiveLocks ? 8u : 0u) | (Buffer->Borrowed ? 64u : 0u) |
+      (Buffer->Transition ? 256u : 0u) | (Buffer->NativeBo ? 512u : 0u);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  va = Buffer->CanonicalGpuVa;
+  flags |= (Buffer->Direct ? 16u : 0u) | (Buffer->SystemDirect ? 32u : 0u) |
+      (Buffer->PrivateStaging ? 128u : 0u);
+#endif
+  if (facts->Maps == ~0u || facts->Locks == ~0u || facts->ActiveLocks == ~0u ||
+      facts->OwnerPointers == ~0u || facts->HeapMaps == ~0u || facts->HeapDepth == ~0u)
+    flags |= 1024u;
+  const UINT values[16] = {1u | (Reason << 8),
+      (UINT)Device->OwnerCookie, (UINT)(Device->OwnerCookie >> 32),
+      (UINT)Buffer->Token, (UINT)(Buffer->Token >> 32), Buffer->KernelAllocation,
+      (UINT)va, (UINT)(va >> 32), (UINT)Buffer->Bytes, (UINT)(Buffer->Bytes >> 32),
+      facts->Maps, facts->Locks, facts->OwnerPointers, facts->HeapMaps,
+      facts->HeapDepth, flags};
+  AdmissionUmdDiagnostic("measure-bo-cpu-access", Status, values, ARRAYSIZE(values));
+}
+
+VOID AdmissionUmdScreenCpuAccessEvent(ADMISSION_UMD_DEVICE *Device,
+                                     APPLE_AGX_U64 Token, UINT Event) {
+  if (!Device) return;
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  ADMISSION_UMD_SCREEN_BUFFER *buffer = AdmissionUmdScreenFind(Device, Token);
+  if (buffer && buffer->Bytes > (16ULL << 20))
+    AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, Event);
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+}
+
+VOID AdmissionUmdScreenCpuAccessSnapshot(ADMISSION_UMD_DEVICE *Device,
+                                        HRESULT Status, UINT Reason) {
+  if (!Device || (Reason != 2u && Reason != 3u)) return;
+  UINT bit = Reason == 2u ? 1u : 2u;
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  if (!(Device->CpuAccessSnapshots & bit)) {
+    Device->CpuAccessSnapshots |= bit;
+    /* All >16 MiB slots includes ALL >64 MiB candidates, without a top-N
+     * cutoff. Work and output are bounded by the existing 4096-slot table. */
+    for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++i)
+      AdmissionUmdScreenCpuAccessReceipt(Device, &Device->ScreenBuffers[i], Status, Reason);
+  }
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  AdmissionUmdDiagnosticFlush();
+}
+
 static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFreeSlot(
     ADMISSION_UMD_DEVICE *Device) {
   UINT index;
@@ -377,6 +432,11 @@ HRESULT AdmissionUmdScreenPrepareSubmissionMaps(
       buffers[index]->Transition = FALSE;
     goto locked_done;
   }
+  /* UnlockCb succeeded for the entire list, including entries after a
+   * possible native-cache release failure below. */
+  for (index = 0u; index < count; ++index)
+    if (buffers[index]->Bytes > (16ULL << 20))
+      AdmissionUmdCpuAccessEvent(&buffers[index]->CpuAccess, AdmissionCpuUnlock);
   for (index = 0u; index < count; ++index) {
     ADMISSION_UMD_SCREEN_BUFFER *buffer = buffers[index];
     if (!buffer->Active || !buffer->Transition || !buffer->Mapped ||
@@ -1015,6 +1075,12 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       return 0;
     }
   }
+  if (SUCCEEDED(result)
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      && !buffer->PrivateStaging
+#endif
+      && buffer->Bytes > (16ULL << 20))
+    AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, AdmissionCpuLock);
   if (FAILED(result) || lock.pData == NULL) {
     buffer->Transition = FALSE;
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
@@ -1027,6 +1093,8 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
   if (buffer->MapEpoch == 0u)
     ++buffer->MapEpoch;
   buffer->Mapped = TRUE;
+  if (buffer->Bytes > (16ULL << 20))
+    AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, AdmissionCpuMap);
   buffer->Transition = FALSE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   device->LastScreenError = S_OK;
@@ -1081,6 +1149,11 @@ static int AdmissionUmdScreenUnmapBuffer(void *Context,
     device->LastScreenError = E_FAIL;
     return 0;
   }
+  if (buffer->Bytes > (16ULL << 20)
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      && !buffer->PrivateStaging
+#endif
+      ) AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, AdmissionCpuUnlock);
   buffer->LockedBase = NULL;
   buffer->LockedAccess = 0u;
   buffer->Mapped = FALSE;
@@ -1120,6 +1193,10 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
       buffer->SourceHolds != 0u || buffer->SubmissionHolds != 0u) {
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     return 0;
+  }
+  if (!buffer->CpuAccess.DestructionReported) {
+    AdmissionUmdScreenCpuAccessReceipt(device, buffer, S_OK, 1u);
+    buffer->CpuAccess.DestructionReported = 1u;
   }
   allocation = buffer->KernelAllocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS

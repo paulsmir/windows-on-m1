@@ -21,7 +21,7 @@ enum { AppleAgxWin32BufferCpuRead=1, AppleAgxWin32BufferCpuWrite=2 };
 #define APPLE_AGX_GPUVA_WINSYS 1
 #define DXGI_ERROR_DEVICE_HUNG ((HRESULT)0x887a0006u)
 static unsigned locks,unlocks,waits;
-static bool fail_wait,fail_lock,fail_unlock;
+static bool fail_wait,fail_lock,fail_unlock,null_lock;
 static unsigned expected_waits;
 static unsigned data[8];
 static ADMISSION_UMD_DEVICE *current;
@@ -30,7 +30,7 @@ static HRESULT lock_cb(HANDLE,D3DDDICB_LOCK *r) {
  ++locks;auto &s=current->ScreenBuffers[0];
  assert(s.Resident && s.Transition && !s.Mapped && "Lock before protected residency");
  assert(waits==expected_waits && "Lock before paging completion");
- try_trim();r->pData=fail_lock?NULL:data;return fail_lock?E_FAIL:S_OK;
+ try_trim();r->pData=fail_lock || null_lock?NULL:data;return fail_lock?E_FAIL:S_OK;
 }
 static HRESULT unlock_cb(HANDLE,D3DDDICB_UNLOCK *r) {
  ++unlocks;assert(r->NumAllocations==1);try_trim();return fail_unlock?E_FAIL:S_OK;
@@ -51,7 +51,7 @@ static void try_trim() {
 }
 int main() {
  CB cb={mk,ev,lock_cb,unlock_cb};
- for(unsigned scenario=0;scenario<12;++scenario) {
+ for(unsigned scenario=0;scenario<13;++scenario) {
    ADMISSION_UMD_DEVICE d={};d.Magic=ADMISSION_UMD_DEVICE_MAGIC;
    d.PagingQueue=(HANDLE)1;d.KernelCallbacks=&cb;current=&d;
    auto &s=d.ScreenBuffers[0];s.Active=TRUE;s.Token=10;s.KernelAllocation=0x100;
@@ -62,7 +62,7 @@ int main() {
    if(scenario==11)s.Resident=TRUE;
    expected_waits=scenario==10 || scenario==11?0:1;
    locks=unlocks=waits=made=evicted=0;fail_wait=scenario==1;fail_lock=scenario==2;
-   fail_unlock=scenario==3;refusals=scenario==4?100:0;
+   null_lock=scenario==12;fail_unlock=scenario==3;refusals=scenario==4?100:0;
    if(scenario==5)s.SourceHolds=1;
    if(scenario==6)s.SubmissionHolds=1;
    void *address=NULL;
@@ -70,19 +70,22 @@ int main() {
    if(scenario==0 || scenario==3 || scenario==7 || scenario==10 || scenario==11) {
      assert(ok && address==data+1 && s.Mapped && !s.Transition && s.Resident);
      assert(made==(scenario==11?0u:1u) && locks==1 && waits==expected_waits);
+     assert(s.CpuAccess.Maps==1 && s.CpuAccess.Locks==1 && s.CpuAccess.ActiveLocks==1);
      try_trim();assert(evicted==0);
      assert(AdmissionUmdScreenUnmapBuffer(&d,10)==!fail_unlock);
-     if(fail_unlock) { assert(s.Mapped);try_trim();fail_unlock=false;assert(AdmissionUmdScreenUnmapBuffer(&d,10)); }
+     if(fail_unlock) { assert(s.Mapped && s.CpuAccess.ActiveLocks==1);try_trim();fail_unlock=false;assert(AdmissionUmdScreenUnmapBuffer(&d,10)); }
      UINT trimmed=0;assert(trim_residency(&d,1,&trimmed)==s.Bytes && trimmed==1);
-     assert(!s.Resident && !s.Mapped && !s.Transition);
+     assert(!s.Resident && !s.Mapped && !s.Transition && s.CpuAccess.ActiveLocks==0);
      /* A second map restores once more, with another paging wait. */
      expected_waits=1;residency_status=E_PENDING;returned_fence=7;
      waits=0;assert(AdmissionUmdScreenMapBuffer(&d,10,0,4,2,&address));
      assert(made==(scenario==11?1u:2u) && waits==1 && address==data);
+     assert(s.CpuAccess.Maps==2 && s.CpuAccess.Locks==2 && s.CpuAccess.ActiveLocks==1);
      assert(AdmissionUmdScreenUnmapBuffer(&d,10));
    } else {
      assert(!ok && !address && !s.Mapped && !s.Transition);
-     assert(locks==(scenario==2));
+     assert(!s.CpuAccess.Maps && s.CpuAccess.Locks==(scenario==12) && s.CpuAccess.ActiveLocks==(scenario==12));
+     assert(locks==(scenario==2 || scenario==12));
      if(scenario==1 || scenario==8) {
        assert(d.DrawTerminal && s.Resident);
        fail_wait=false;assert(!AdmissionUmdScreenMapBuffer(&d,10,0,4,1,&address));
@@ -92,13 +95,23 @@ int main() {
      if(scenario==9)assert(d.DrawTerminal && !s.Resident);
    }
  }
+ /* Private staging returns a native pointer without calling LockCb. */
+ ADMISSION_UMD_DEVICE d={};d.Magic=ADMISSION_UMD_DEVICE_MAGIC;d.KernelCallbacks=&cb;current=&d;
+ auto &s=d.ScreenBuffers[0];s.Active=TRUE;s.Token=10;s.KernelAllocation=0x100;
+ s.Bytes=64ull<<20;s.Flags=3;s.PrivateStaging=(BYTE *)data;
+ void *address=NULL;locks=unlocks=0;
+ assert(AdmissionUmdScreenMapBuffer(&d,10,0,4,2,&address) && address==data);
+ assert(s.CpuAccess.Maps==1 && !s.CpuAccess.Locks && !s.CpuAccess.ActiveLocks && !locks);
+ assert(AdmissionUmdScreenUnmapBuffer(&d,10) && !unlocks && !s.Mapped);
  puts("direct CPU map residency: PASS");
 }
 '''
 
 class DirectMapResidency(unittest.TestCase):
     def test_restore_wait_lock_and_persistent_map_exclusion(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Receipt counters must distinguish successful locks, failed locks, private staging, and retained failed unlocks while map/residency ordering stays unchanged."""
         prefix = BODY[:BODY.index('@@FUNCS@@')]
+        prefix = prefix.replace('struct SLOT {', '#include "umd_cpu_access.h"\nstruct SLOT { ADMISSION_UMD_CPU_ACCESS CpuAccess;')
         prefix = prefix.replace('static HRESULT mk(', 'static HRESULT residency_status=E_PENDING;\nstatic ULONGLONG returned_fence=7;\nstatic UINT accepted_count=1;\nstatic HRESULT mk(')
         prefix = prefix.replace('r->PagingFenceValue=7;return E_PENDING;', 'r->NumAllocations=accepted_count;r->PagingFenceValue=returned_fence;return residency_status;')
         prefix = prefix.replace('uint64_t CanonicalGpuVa,Bytes,LastUseFence;',

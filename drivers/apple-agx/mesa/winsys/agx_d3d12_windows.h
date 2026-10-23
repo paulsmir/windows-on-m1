@@ -50,6 +50,9 @@ HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
  * buffers get the persistent CPU mapping (Buffer->Cpu, NULL otherwise). */
 HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *Owner, unsigned long long Bytes, BOOL CpuVisible,
                                   AGX_D3D12_BUFFER *Buffer);
+/* Receipt-only persistent pointer and API MapHeap/UnmapHeap observations. */
+void AgxD3d12OwnerRecordHeapMap(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Buffer, BOOL Map);
+void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *Owner, HRESULT Error);
 void AgxD3d12OwnerDestroyBuffer(AGX_D3D12_OWNER *Owner, AGX_D3D12_BUFFER *Buffer);
 /* C53 B1 (D3D12-C53-tiled-buffers-plan.md): a reserved buffer of 64 KiB
  * tiles, no CPU mapping; every tile starts unmapped (the scratch page).

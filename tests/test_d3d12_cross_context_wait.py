@@ -111,6 +111,7 @@ struct AGX_D3D12_OWNER {
  struct {unsigned RenderSyncObject;} Runtime;
 };
 struct OwnerLock { explicit OwnerLock(AGX_D3D12_OWNER*){} };
+static void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *, HRESULT) {} // receipt sink
 static std::vector<int> calls;
 static HRESULT wait_result=S_OK;
 static int retired=1,faulted=0;

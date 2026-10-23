@@ -138,6 +138,7 @@ struct pipe_context {
 struct AGX_D3D12_OWNER { pipe_context *Context; };
 struct AGX_D3D12_BUFFER { void *Resource; unsigned long long Bytes; };
 struct OwnerLock { OwnerLock(AGX_D3D12_OWNER *) {} };
+static void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *, HRESULT) {} // receipt sink
 static unsigned mode,unmaps;
 static unsigned word=0xabc123;
 static pipe_transfer transfer;
