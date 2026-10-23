@@ -61205,3 +61205,15 @@ EXP1907 C70_C71_C21H HARDWARE BEFORE 2026-10-23T12:18:34Z:
 - WHAT IS STILL UNKNOWN: whether GravityMark D3D12's memory pressure is only upload copies; GravityMark D3D11's next stage.
 - Expected: regression 118/0 x3; C21H PASS; GravityMark D3D12 past 20 s with staged-upload receipts; D3D11 past 41 s without reject receipts.
 - Failure criteria: regressions, hang (snapshots), new device removal. Recovery rec1907h. Command bash /Volumes/pwdev/public_windows/.local/experiments/EXP1907-upload-autogen/run1907.sh.
+
+EXP1907 ACTUAL 2026-10-23T12:49:22Z: run1907.sh RC 0, RUN_DONE. m1n1 0d3a75b3 stable for the whole run (no hang, guest alive after every step).
+- Regressions: SAMPLE_HASHES bad 0; e1904 118/0 on ARM64, x64 and x86 (C62A 0xc100); FL111 ARM64/x86 PASS; ROV/CR/ROVCR/FL12OFF lines as EXP1904; D3D9 6/6 PASS; D3D11 smoke PASS; 4 samples and ModelViewerI alive, no WER. KMD receipts: no GpuReset, PreemptRefusal, G4SubmitFailure or BindRefusal. DWM faults 0.
+- Tiled: T2 and T2MM PASS; T2VOL all 6 C21G volume lines PASS, C21H BC1 FAIL 0x887a0020 (EXP1906: 0x887a0005), BC3 FAIL 0x887a0005. The UMD log shows ExecuteCommandLists E_INVALIDARG at the 6th copy, mip 5 (2x2 < one 4x4 block). ff983790 is not sufficient. Handed to the fork session with the evidence.
+- C70 CONFIRMED in part: measure-d3d12-staged-upload receipts (56 in GravityMark D3D12), no upload-copy failure. GravityMark D3D12 10k and 2k were still removed at 16 s and 15 s.
+  - reject-screen-create: 177 active, class 1, 2 MiB, pfnAllocateCb 0x8007000e.
+  - Wom1M2PoolDemand: ReserveFailures 2, NewSlabFailures 0 (floor refusals), PeakReserved 2335 MiB of a 2688 MiB segment, Held 278 MiB, RamBytes 5988 MiB.
+  - Manual counters on this package: adapter dedicated usage peaked at 2335 MiB (GravityMark 1958 MiB, DWM 240 MiB); pagefile 243 MiB of 6 GiB; free+zero 2-50 MiB; standby 190-380 MiB.
+  - Verdict: the M2-f7 HighMemoryCondition floor refuses while Windows has not trimmed (EXP1308: the high event clears at about 740 MiB available). Fix C73 09f217a4.
+- C71: no reject-d3d11-render-target receipt. GravityMark D3D11 now runs to 26 s (EXP1906: 41 s with a different failure). It is removed by reject-resource-copy-region 98 98 2 7 2 2 2 2 6 70 4 4: BC7 128x128 level 6 (2x2) copied with the block-aligned 4x4 box. Fix C72 be370175.
+- Manual: GravityMark D3D12 thread sample: 110% of one process, threads at 71% and 38%. Not single-thread saturated during loading; inconclusive for performance. WPR CPU sampling is not supported on this guest (0x80070032).
+- Verdicts: C70 confirmed (upload path); C71 superseded by the next blocker (no refusal); C21H rejected (fork); C67b/C72/C73 go to EXP1908.
