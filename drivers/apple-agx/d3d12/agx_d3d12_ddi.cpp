@@ -147,18 +147,17 @@ static BOOL RovEnabled() {
     return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_ROV", value, sizeof(value)) == 1 && value[0] == '0');
 }
 
-/* C53 (D3D12-C53-tiled-textures.md): Tiled Resources Tier 1 and the TILED
- * format bit are reported only in a process with APPLE_AGX_D3D12_TILED=1
- * until reserved buffers and textures are validated on hardware (HW1, HW2);
- * APPLE_AGX_D3D12_TILED=2 reports Tier 2 (C53T feedback, C65 min/max) for
- * its hardware checkpoint. */
+/* C53 (D3D12-C53-tiled-textures.md): Tiled Resources Tier 2 (C53T feedback,
+ * C65 min/max) and the TILED format bit by default, validated on J313 by
+ * EXP1902 (every C53B step; C65A heap, slot, static and cube min/max);
+ * APPLE_AGX_D3D12_TILED=1 keeps a process at Tier 1, =0 at none. */
 static BOOL TiledEnabled() {
     char value[2] = {};
-    return GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && (value[0] == '1' || value[0] == '2');
+    return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && value[0] == '0');
 }
 static BOOL TiledTier2() {
     char value[2] = {};
-    return GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && value[0] == '2';
+    return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && (value[0] == '0' || value[0] == '1'));
 }
 
 static bool ShaderModel6Enabled() {

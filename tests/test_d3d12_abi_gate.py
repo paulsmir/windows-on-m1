@@ -131,12 +131,12 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn(': TiledEnabled() ? D3D12DDI_TILED_RESOURCES_TIER_1', caps)
         tiled = source[source.index('static BOOL TiledEnabled() {'):]
         tiled = tiled[:tiled.index('\n}\n')]
-        self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && (value[0] == \'1\' || value[0] == \'2\')', tiled)
-        # C53T: Tier 2 only behind APPLE_AGX_D3D12_TILED=2
+        self.assertIn('return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && value[0] == \'0\');', tiled)
+        # C53T: Tier 2 by default; TILED=1 keeps Tier 1, TILED=0 none
         self.assertEqual(caps.count('D3D12DDI_TILED_RESOURCES_TIER_2'), 1)
         self.assertIn('d.TiledResourcesTier = TiledTier2()     ? D3D12DDI_TILED_RESOURCES_TIER_2', caps)
         tier2 = source[source.index('static BOOL TiledTier2() {'):]
-        self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && value[0] == \'2\'', tier2[:tier2.index('\n}\n')])
+        self.assertIn('return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && (value[0] == \'0\' || value[0] == \'1\'));', tier2[:tier2.index('\n}\n')])
         self.assertEqual(source.count('D3D12DDI_FORMAT_SUPPORT_TILED'), 1)
         self.assertIn('if (TiledEnabled() && TiledFormat(format)) *support |= D3D12DDI_FORMAT_SUPPORT_TILED;', source)
         # C57: OutputMergerLogicOp only with the logic op carried to Gallium
