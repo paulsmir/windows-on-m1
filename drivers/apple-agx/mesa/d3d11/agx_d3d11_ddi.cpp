@@ -298,6 +298,9 @@ srv_cube_family(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATESHADERRESOURCE
    UINT level = cube ? args->TexCube.MostDetailedMip : args->Tex2D.MostDetailedMip;
    UINT levels = cube ? args->TexCube.MipLevels : args->Tex2D.MipLevels;
    UINT first = cube ? args->TexCube.First2DArrayFace : args->Tex2D.FirstArraySlice;
+   /* NumCubes is a UINT. Bound it before expanding into face coordinates. */
+   if (cube && args->TexCube.NumCubes > tex->array_size / 6u)
+      return false;
    UINT count = cube ? 6u * args->TexCube.NumCubes : args->Tex2D.ArraySize;
    if (levels == ~0u && level <= tex->last_level)
       levels = tex->last_level + 1u - level;
