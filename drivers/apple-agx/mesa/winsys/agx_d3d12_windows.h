@@ -87,8 +87,10 @@ HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *Owner, const UINT *Tokens, A
  * reduction emulation (DXBC_BINDING_MINMAX): the variant a PSO uses only
  * while a MINIMUM/MAXIMUM sampler is bound; the binding maps are the same */
 #define AGX_D3D12_SHADER_MINMAX 1u
+/* C65S: SlotMinmax (NULL = none): per sampler slot, dxbc_minmax_bits of the
+ * sampler the variant is for; slots with reduction 2/3 get the emulation */
 HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *Owner, const UINT *Tokens, unsigned Flags,
-                                        AGX_D3D12_COMPUTE *Compute);
+                                        const unsigned char *SlotMinmax, AGX_D3D12_COMPUTE *Compute);
 #if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
 /* Unwired prepared-compute boundary. Live caller-serialized owner/screen/context
  * and actual prepared object required. Memberwise-empty output; nonempty live
@@ -373,6 +375,9 @@ typedef struct {
     DXGI_FORMAT Format;
   } Element[AGX_D3D12_MAX_ELEMENTS];
   unsigned Flags; /* C65V: AGX_D3D12_SHADER_MINMAX */
+  /* C65S: per stage (AGX_D3D12_HEAP_VS..DS) and sampler slot, the
+   * dxbc_minmax_bits of the slot sampler the variant is for (0 = standard) */
+  unsigned char SlotMinmax[5][AGX_D3D12_SAMPLER_SLOTS];
 } AGX_D3D12_GRAPHICS_DESC;
 typedef struct {
   void *Vs, *Fs, *Blend, *DepthStencil, *Rasterizer;

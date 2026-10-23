@@ -79,8 +79,41 @@ static void refused(enum glsl_sampler_dim dim, bool shadow) {
    ralloc_free(b.shader);
 }
 
+/* C65S: slot samplers (sampler_index, no handle) with constant bits */
+static nir_tex_instr *slot_sample(nir_builder *b, unsigned slot) {
+   nir_tex_instr *t = nir_tex_instr_create(b->shader, 1);
+   t->op = nir_texop_tex; t->sampler_dim = GLSL_SAMPLER_DIM_2D; t->coord_components = 2;
+   t->dest_type = nir_type_float32; t->texture_index = slot; t->sampler_index = slot;
+   t->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord, nir_vec2(b, nir_imm_float(b, 0.3f), nir_imm_float(b, 0.6f)));
+   nir_def_init(&t->instr, &t->def, 4, 32);
+   nir_builder_instr_insert(b, &t->instr);
+   return t;
+}
+
+static void slots(void) {
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, &options, "minmax-slots");
+   unsigned char bits[DXBC_MINMAX_SLOTS] = {0};
+   bits[3] = 2u | 4u | 8u | 16u; /* MINIMUM_MIN_MAG_MIP_LINEAR */
+   bits[5] = 1u | 4u | 8u;       /* comparison: left alone */
+   nir_tex_instr *wrapped = slot_sample(&b, 3), *plain = slot_sample(&b, 5), *heap = sample(&b, nir_texop_tex, GLSL_SAMPLER_DIM_2D, false, false);
+   heap->sampler_index = 3; /* a heap sample (sampler handle) is the frontends' to wrap */
+   nir_def *uses[3] = {nir_fneg(&b, &wrapped->def), nir_fneg(&b, &plain->def), nir_fneg(&b, &heap->def)};
+   assert(dxbc_minmax_wrap_slots(b.shader, bits));
+   nir_validate_shader(b.shader, "minmax-slots");
+   assert(nir_def_instr(nir_instr_as_alu(nir_def_instr(uses[0]))->src[0].src.ssa)->type == nir_instr_type_phi);
+   assert(nir_instr_as_alu(nir_def_instr(uses[1]))->src[0].src.ssa == &plain->def);
+   assert(nir_instr_as_alu(nir_def_instr(uses[2]))->src[0].src.ssa == &heap->def);
+   assert(count_tex(b.shader, nir_texop_txl) == 10u && count_tex(b.shader, nir_texop_lod) == 1u);
+   /* no slot with reduction 2/3: nothing to do */
+   unsigned char none[DXBC_MINMAX_SLOTS] = {0};
+   none[2] = 1u;
+   assert(!dxbc_minmax_wrap_slots(b.shader, none));
+   ralloc_free(b.shader);
+}
+
 int main(void) {
    glsl_type_singleton_init_or_ref();
+   slots();
    check(nir_texop_tex, false);
    check(nir_texop_txl, false);
    check(nir_texop_tex, true);

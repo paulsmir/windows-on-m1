@@ -8,6 +8,7 @@
  * texel exactly (bilinear weight 1, mip weight 0), with the sampler's own
  * wrap modes and border colour -- so no addressing is emulated here. */
 #include "dxbc_minmax.h"
+#include "util/u_dynarray.h"
 
 static bool
 is_handle(nir_tex_src_type type)
@@ -179,4 +180,45 @@ dxbc_minmax_wrap(nir_builder *b, nir_tex_instr *tex, nir_def *minmax)
       nir_src_rewrite(src, phi);
    }
    return phi;
+}
+
+static bool
+slot_sampled(const nir_tex_instr *tex, const unsigned char *bits)
+{
+   for (unsigned i = 0; i < tex->num_srcs; ++i)
+      if (tex->src[i].src_type == nir_tex_src_sampler_handle || tex->src[i].src_type == nir_tex_src_sampler_deref ||
+          tex->src[i].src_type == nir_tex_src_sampler_offset)
+         return false;
+   return tex->sampler_index < DXBC_MINMAX_SLOTS && (bits[tex->sampler_index] & 3u) >= 2u;
+}
+
+bool
+dxbc_minmax_wrap_slots(nir_shader *shader, const unsigned char bits[DXBC_MINMAX_SLOTS])
+{
+   bool any = false;
+   for (unsigned s = 0; s < DXBC_MINMAX_SLOTS; ++s)
+      any |= (bits[s] & 3u) >= 2u;
+   if (!any)
+      return false;
+   bool wrapped = false;
+   nir_foreach_function_impl(impl, shader) {
+      /* collected first: wrapping adds blocks */
+      struct util_dynarray texs;
+      util_dynarray_init(&texs, NULL);
+      nir_foreach_block(block, impl)
+         nir_foreach_instr(instr, block)
+            if (instr->type == nir_instr_type_tex && slot_sampled(nir_instr_as_tex(instr), bits))
+               util_dynarray_append(&texs, nir_instr_as_tex(instr));
+      bool progress = false;
+      nir_builder b = nir_builder_create(impl);
+      util_dynarray_foreach(&texs, nir_tex_instr *, t) {
+         b.cursor = nir_before_instr(&(*t)->instr);
+         nir_def *minmax = nir_imm_int(&b, bits[(*t)->sampler_index]);
+         progress |= dxbc_minmax_wrap(&b, *t, minmax) != NULL;
+      }
+      util_dynarray_fini(&texs);
+      nir_progress(progress, impl, nir_metadata_none);
+      wrapped |= progress;
+   }
+   return wrapped;
 }

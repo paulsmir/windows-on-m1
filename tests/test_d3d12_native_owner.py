@@ -60,7 +60,7 @@ class NativeOwner(unittest.TestCase):
         # the barrier made every dispatch its own submission.
         text = OWNER.read_text()
         # C65V: the plain entry is the flags entry without AGX_D3D12_SHADER_MINMAX
-        self.assertIn('return AgxD3d12OwnerCreateComputeFlags(owner, tokens, 0u, compute);',
+        self.assertIn('return AgxD3d12OwnerCreateComputeFlags(owner, tokens, 0u, NULL, compute);',
                       body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateCompute('))
         create = body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(')
         # C44: DXBC tokens or a DXIL program part, one translation entry
@@ -76,8 +76,8 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('return t_shader_minmax ? minmax_limits : owner_binding_limits;', limits)
         defaults = text.split('static const uint32_t owner_binding_limits[', 1)[1].split('};', 1)[0]
         self.assertNotIn('DXBC_BINDING_MINMAX', defaults)
-        self.assertIn('ShaderMinmaxScope minmax(flags);', body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags('))
-        self.assertIn('ShaderMinmaxScope minmax(desc->Flags);', body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateGraphics('))
+        self.assertIn('ShaderMinmaxScope minmax(flags, ', body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags('))
+        self.assertIn('ShaderMinmaxScope minmax(desc->Flags, desc->SlotMinmax, false);', body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateGraphics('))
         self.assertIn('dxbc_nir_compute_info(', create)
         self.assertIn('->create_compute_state(', create)
         dispatch = body(text, 'extern "C" HRESULT AgxD3d12OwnerDispatch(')
@@ -335,12 +335,17 @@ int main() {
         walk = body(ddi, 'static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,\n                                bool *minmax) {')
         self.assertIn('if (((h.samplers[h.binding.SamplerCount].Valid >> 8) & 3u) >= 2u) *minmax = true;', walk)
         variant = body(ddi, 'static void *MinmaxVariant(')
-        self.assertIn('same = SUCCEEDED(hr) && SameGraphicsSlots(pso->minmax_graphics, pso->graphics);', variant)
-        self.assertIn('desc.Flags = AGX_D3D12_SHADER_MINMAX;', variant)
+        self.assertIn('same = SUCCEEDED(hr) && SameGraphicsSlots(v->graphics, pso->graphics);', variant)
+        self.assertIn('memcpy(desc.SlotMinmax, key.slot, sizeof(desc.SlotMinmax));', variant)
+        # C65S: slot and static samplers key the variant by their reduction
+        slot = body(ddi, 'static bool SlotMinmax(')
+        self.assertIn('dxbc_minmax_bits(b.samplers[s].Filter)', slot)
         draw = body(ddi, 'static __declspec(noinline) HRESULT ReplayDraw(')
-        self.assertIn('if (minmax)\n        if (void *variant = MinmaxVariant(owner, d.pso, false))', draw)
+        self.assertIn('if (minmax || slots)\n        if (void *variant = MinmaxVariant(owner, d.pso, key, false))', draw)
         dispatch = body(ddi, 'static __declspec(noinline) HRESULT ReplayDispatch(')
-        self.assertIn('const void *variant = minmax ? MinmaxVariant(owner, dispatch.pso, true) : nullptr;', dispatch)
+        self.assertIn('const void *variant = minmax || slots ? MinmaxVariant(owner, dispatch.pso, key, true) : nullptr;', dispatch)
+        self.assertIn('wrap_slot_minmax(nir, stage);', owner)
+        self.assertIn('wrap_slot_minmax(nir, MESA_SHADER_COMPUTE);', owner)
 
     def test_teardown_order(self):
         text = OWNER.read_text()

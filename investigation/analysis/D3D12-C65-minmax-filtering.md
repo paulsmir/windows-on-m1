@@ -163,5 +163,23 @@ min/max samplers, is not advertised, so the default loses no contract.
   reduction 2 or 3. It keeps the variant only if every binding map and
   SRV/UAV dimension equals the plain compile's. Receipt:
   `measure-d3d12-minmax-variant {compute, same}`.
-- Slot and static samplers still filter normally. Next step: their
-  reduction bits as compile-time constants of a variant key.
+- Correction: the variant was first inline in the PSO (60724af7). That cost
+  ~28 KB per PSO (five binding maps), so it is now allocated on first use.
+
+## C65S: slot and static samplers
+
+- The key of a variant (`AgxD3d12MinmaxKey`):
+  - the heap flag;
+  - per stage (`AGX_D3D12_HEAP_VS..CS`) and slot, the bound slot or static
+    sampler's `dxbc_minmax_bits` (`SlotMinmax`, from
+    `AgxD3d12OwnerBindings::samplers[].Filter`), with reduction 2/3 only.
+- The PSO caches up to 4 variants (`kMinmaxVariants`). A fifth key draws
+  with the plain pipeline (`reject-d3d12-minmax-variants`).
+- The owner (`wrap_slot_minmax`) runs `dxbc_minmax_wrap_slots` on each
+  translated stage with that stage's row. Each sample through slot s with
+  reduction 2/3 is wrapped with its bits as a constant, so the branch folds to
+  the emulation alone. Samples through heap handles, sampler derefs or a dynamic
+  sampler offset are left alone; a dynamically indexed bounded slot range
+  still filters normally.
+- Checkpoint: C65A has three modes (heap table, one-sampler table, static
+  sampler), all PASS on WARP.

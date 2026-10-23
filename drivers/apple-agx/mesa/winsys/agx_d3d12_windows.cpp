@@ -600,10 +600,25 @@ static const uint32_t owner_binding_limits[DXBC_BINDING_KIND_COUNT] = {
  * the flag for its own translations (the owner lock serializes an owner,
  * the thread keeps owners apart) */
 static thread_local bool t_shader_minmax;
+/* C65S: and the slot samplers' bits: [AGX_D3D12_HEAP_VS..DS] for graphics,
+ * or one row for compute */
+static thread_local const unsigned char (*t_slot_minmax)[AGX_D3D12_SAMPLER_SLOTS];
+static thread_local bool t_slot_minmax_compute;
 struct ShaderMinmaxScope {
   bool saved;
-  explicit ShaderMinmaxScope(unsigned flags) : saved(t_shader_minmax) { t_shader_minmax = (flags & AGX_D3D12_SHADER_MINMAX) != 0; }
-  ~ShaderMinmaxScope() { t_shader_minmax = saved; }
+  const unsigned char (*saved_slots)[AGX_D3D12_SAMPLER_SLOTS];
+  bool saved_compute;
+  ShaderMinmaxScope(unsigned flags, const unsigned char (*slots)[AGX_D3D12_SAMPLER_SLOTS], bool compute)
+      : saved(t_shader_minmax), saved_slots(t_slot_minmax), saved_compute(t_slot_minmax_compute) {
+    t_shader_minmax = (flags & AGX_D3D12_SHADER_MINMAX) != 0;
+    t_slot_minmax = slots;
+    t_slot_minmax_compute = compute;
+  }
+  ~ShaderMinmaxScope() {
+    t_shader_minmax = saved;
+    t_slot_minmax = saved_slots;
+    t_slot_minmax_compute = saved_compute;
+  }
   ShaderMinmaxScope(const ShaderMinmaxScope &) = delete;
   ShaderMinmaxScope &operator=(const ShaderMinmaxScope &) = delete;
 };
@@ -613,6 +628,21 @@ static const uint32_t *shader_binding_limits() {
     AGX_D3D12_SAMPLER_SLOTS | DXBC_BINDING_HEAP_RANGES | DXBC_BINDING_MINMAX
   };
   return t_shader_minmax ? minmax_limits : owner_binding_limits;
+}
+/* C65S: the variant's slot-sampler min/max wrap of a translated stage */
+static void wrap_slot_minmax(struct nir_shader *nir, mesa_shader_stage stage) {
+  if (!nir || !t_slot_minmax) return;
+  int row = -1;
+  switch (stage) {
+  case MESA_SHADER_COMPUTE: row = t_slot_minmax_compute ? 0 : -1; break;
+  case MESA_SHADER_VERTEX: row = t_slot_minmax_compute ? -1 : 0; break;
+  case MESA_SHADER_FRAGMENT: row = t_slot_minmax_compute ? -1 : 1; break;
+  case MESA_SHADER_GEOMETRY: row = t_slot_minmax_compute ? -1 : 2; break;
+  case MESA_SHADER_TESS_CTRL: row = t_slot_minmax_compute ? -1 : 3; break;
+  case MESA_SHADER_TESS_EVAL: row = t_slot_minmax_compute ? -1 : 4; break;
+  default: break;
+  }
+  if (row >= 0) (void)dxbc_minmax_wrap_slots(nir, t_slot_minmax[row]);
 }
 /* C44: a stored shader is DXBC tokens or (SM 6) a DXIL program part with
  * the same version/size header; both translate to the same NIR conventions
@@ -657,18 +687,19 @@ static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage
 extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,
                                               AGX_D3D12_COMPUTE *compute) {
   OwnerLock lock(owner);
-  return AgxD3d12OwnerCreateComputeFlags(owner, tokens, 0u, compute);
+  return AgxD3d12OwnerCreateComputeFlags(owner, tokens, 0u, NULL, compute);
 }
 extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *owner, const UINT *tokens, unsigned flags,
-                                                   AGX_D3D12_COMPUTE *compute) {
+                                                   const unsigned char *slot_minmax, AGX_D3D12_COMPUTE *compute) {
   OwnerLock lock(owner);
-  ShaderMinmaxScope minmax(flags);
+  ShaderMinmaxScope minmax(flags, reinterpret_cast<const unsigned char (*)[AGX_D3D12_SAMPLER_SLOTS]>(slot_minmax), true);
   if (!owner || !owner->Context || !tokens || !compute) return E_INVALIDARG;
   memset(compute, 0, sizeof(*compute));
   struct pipe_context *pipe = owner->Context;
   struct dxbc_nir_error error = {};
   struct nir_shader *nir = translate_shader(tokens, MESA_SHADER_COMPUTE, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
                                             &compute->Bindings, 0u, 0u, NULL, &error);
+  wrap_slot_minmax(nir, MESA_SHADER_COMPUTE);
   if (!nir) {
     receipt("measure-d3d12-compute", E_NOTIMPL, 0u, error.opcode, error.offset);
     return E_NOTIMPL;
@@ -1881,6 +1912,7 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
    * last vertex stage of a stream-output pipeline captures its outputs */
   struct nir_shader *nir = translate_shader(tokens, stage, pipe->screen->nir_options[stage], bindings, passthrough_registers,
                                             passthrough_positions, xfb, &error);
+  wrap_slot_minmax(nir, stage);
   receipt("measure-d3d12-graphics-shader", nir ? S_OK : E_NOTIMPL, static_cast<UINT>(stage), error.opcode, error.offset);
   if (!nir) {
     dump_failed_shader(tokens, stage, 1u);
@@ -2008,7 +2040,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   OwnerLock lock(owner);
   if (!owner || !owner->Context || !desc || !desc->Vs || !graphics || desc->NumElements > AGX_D3D12_MAX_ELEMENTS)
     return E_INVALIDARG;
-  ShaderMinmaxScope minmax(desc->Flags);
+  ShaderMinmaxScope minmax(desc->Flags, desc->SlotMinmax, false);
   memset(graphics, 0, sizeof(*graphics));
   struct pipe_context *pipe = owner->Context;
   /* C39: stream output from the geometry shader, else the vertex shader

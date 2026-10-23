@@ -25,6 +25,7 @@ extern "C" {
  * the 5-bit field (32-bit) and must dominate tex. Returns the replacement
  * (the cursor is left after it), or NULL for a sample it leaves alone. */
 nir_def *dxbc_minmax_wrap(nir_builder *b, nir_tex_instr *tex, nir_def *minmax);
+/* dxbc_minmax_wrap_slots: dxbc_minmax_bits.h */
 
 #ifdef __cplusplus
 }

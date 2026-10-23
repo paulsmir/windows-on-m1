@@ -31,6 +31,7 @@ extern "C" {
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 #include "agx_d3d12_windows.h"
 #include "agx_d3d12_tile_mapping.h"
+#include "../mesa/dxbc/dxbc_minmax_bits.h"
 #endif
 /* agx_win32_screen.c (compiled into this UMD) */
 int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
@@ -1484,12 +1485,13 @@ struct AgxD3d12PipelineState {
     AGX_D3D12_GRAPHICS graphics;
     /* C65V: the owner description of the graphics compile, and the min/max
      * variant a draw or dispatch uses while a MINIMUM/MAXIMUM heap sampler is
-     * bound (minmax_state 0 untried, 1 ready, 2 refused) */
+     * bound (C65S: or a MINIMUM/MAXIMUM slot sampler). Variants are
+     * allocated on first use: an AGX_D3D12_GRAPHICS (five binding maps) is
+     * ~28 KB, which every PSO would otherwise carry. */
     AGX_D3D12_GRAPHICS_DESC owner_desc;
     AGX_D3D12_SO_DECL owner_so;
-    AGX_D3D12_COMPUTE minmax_compute;
-    AGX_D3D12_GRAPHICS minmax_graphics;
-    UINT minmax_state;
+    struct AgxD3d12MinmaxVariant *minmax; /* kMinmaxVariants entries */
+    UINT minmax_count;
 #endif
     HRESULT compiled; /* S_FALSE until the first compile */
     D3D12DDI_BLEND_DESC blend;
@@ -4959,10 +4961,23 @@ static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso
     ReleaseSRWLockExclusive(&pso->compile_lock);
     return result;
 }
-/* C65V: the PSO's min/max variant, translated from the same tokens on first
- * use (replay, under the owner lock). Its slots must be the plain compile's:
- * root bindings were resolved against those. NULL = draw with the plain
- * pipeline (standard filtering). */
+/* C65V/C65S: the PSO's min/max variants, translated from the same tokens on
+ * first use (replay, under the owner lock), keyed by what they emulate: the
+ * heap samplers' reduction (run-time map bits) and, per stage and slot, the
+ * bound slot or static sampler's dxbc_minmax_bits (compile-time constants).
+ * A variant's slots must be the plain compile's: root bindings were resolved
+ * against those. NULL = draw with the plain pipeline (standard filtering). */
+struct AgxD3d12MinmaxKey {
+    UINT heap;
+    unsigned char slot[AGX_D3D12_HEAP_STAGES][kSamplerSlots];
+};
+static constexpr UINT kMinmaxVariants = 4;
+struct AgxD3d12MinmaxVariant {
+    AgxD3d12MinmaxKey key;
+    UINT state; /* 1 ready, 2 refused */
+    AGX_D3D12_COMPUTE compute;
+    AGX_D3D12_GRAPHICS graphics;
+};
 template <typename T> static bool SameSlots(const T &a, const T &b) { return !memcmp(&a, &b, sizeof(a)); }
 static bool SameGraphicsSlots(const AGX_D3D12_GRAPHICS &a, const AGX_D3D12_GRAPHICS &b) {
     return SameSlots(a.VsBindings, b.VsBindings) && SameSlots(a.PsBindings, b.PsBindings) &&
@@ -4974,31 +4989,44 @@ static bool SameGraphicsSlots(const AGX_D3D12_GRAPHICS &a, const AGX_D3D12_GRAPH
            SameSlots(a.GsUavDimensions, b.GsUavDimensions) && SameSlots(a.HsUavDimensions, b.HsUavDimensions) &&
            SameSlots(a.DsUavDimensions, b.DsUavDimensions);
 }
-static void *MinmaxVariant(AGX_D3D12_OWNER *owner, AgxD3d12PipelineState *pso, bool compute) {
+static void *MinmaxVariant(AGX_D3D12_OWNER *owner, AgxD3d12PipelineState *pso, const AgxD3d12MinmaxKey &key, bool compute) {
     AcquireSRWLockExclusive(&pso->compile_lock);
-    if (!pso->minmax_state && pso->compiled == S_OK) {
+    void *variant = nullptr;
+    if (pso->compiled == S_OK && !pso->minmax)
+        pso->minmax = static_cast<AgxD3d12MinmaxVariant *>(
+            HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, kMinmaxVariants * sizeof(AgxD3d12MinmaxVariant)));
+    AgxD3d12MinmaxVariant *v = nullptr;
+    for (UINT i = 0; pso->minmax && i < pso->minmax_count && !v; ++i)
+        if (SameSlots(pso->minmax[i].key, key)) v = &pso->minmax[i];
+    if (!v && pso->minmax && pso->minmax_count < kMinmaxVariants) {
+        v = &pso->minmax[pso->minmax_count++];
+        v->key = key;
         HRESULT hr;
         bool same;
+        const unsigned flags = key.heap ? AGX_D3D12_SHADER_MINMAX : 0u;
         if (compute) {
-            hr = AgxD3d12OwnerCreateComputeFlags(owner, pso->cs, AGX_D3D12_SHADER_MINMAX, &pso->minmax_compute);
-            same = SUCCEEDED(hr) && SameSlots(pso->minmax_compute.Bindings, pso->compute.Bindings) &&
-                   SameSlots(pso->minmax_compute.SrvDimensions, pso->compute.SrvDimensions) &&
-                   SameSlots(pso->minmax_compute.UavDimensions, pso->compute.UavDimensions);
-            if (SUCCEEDED(hr) && !same) AgxD3d12OwnerDestroyCompute(owner, &pso->minmax_compute);
+            hr = AgxD3d12OwnerCreateComputeFlags(owner, pso->cs, flags, key.slot[AGX_D3D12_HEAP_CS], &v->compute);
+            same = SUCCEEDED(hr) && SameSlots(v->compute.Bindings, pso->compute.Bindings) &&
+                   SameSlots(v->compute.SrvDimensions, pso->compute.SrvDimensions) &&
+                   SameSlots(v->compute.UavDimensions, pso->compute.UavDimensions);
+            if (SUCCEEDED(hr) && !same) AgxD3d12OwnerDestroyCompute(owner, &v->compute);
         } else {
             AGX_D3D12_GRAPHICS_DESC desc = pso->owner_desc;
-            desc.Flags = AGX_D3D12_SHADER_MINMAX;
-            hr = AgxD3d12OwnerCreateGraphics(owner, &desc, &pso->minmax_graphics);
-            same = SUCCEEDED(hr) && SameGraphicsSlots(pso->minmax_graphics, pso->graphics);
-            if (SUCCEEDED(hr) && !same) AgxD3d12OwnerDestroyGraphics(owner, &pso->minmax_graphics);
+            desc.Flags = flags;
+            static_assert(sizeof(desc.SlotMinmax) == AGX_D3D12_HEAP_CS * sizeof(key.slot[0]), "graphics stages");
+            memcpy(desc.SlotMinmax, key.slot, sizeof(desc.SlotMinmax));
+            hr = AgxD3d12OwnerCreateGraphics(owner, &desc, &v->graphics);
+            same = SUCCEEDED(hr) && SameGraphicsSlots(v->graphics, pso->graphics);
+            if (SUCCEEDED(hr) && !same) AgxD3d12OwnerDestroyGraphics(owner, &v->graphics);
         }
-        pso->minmax_state = same ? 1u : 2u;
-        const UINT receipt[] = {compute ? 1u : 0u, same ? 1u : 0u};
-        AdmissionUmdDiagnostic("measure-d3d12-minmax-variant", hr, receipt, 2);
+        v->state = same ? 1u : 2u;
+        const UINT receipt[] = {compute ? 1u : 0u, same ? 1u : 0u, key.heap, pso->minmax_count};
+        AdmissionUmdDiagnostic("measure-d3d12-minmax-variant", hr, receipt, 4);
+    } else if (!v) {
+        const UINT receipt[] = {compute ? 1u : 0u, pso->minmax_count};
+        AdmissionUmdDiagnostic("reject-d3d12-minmax-variants", E_OUTOFMEMORY, receipt, 2);
     }
-    void *variant = pso->minmax_state != 1u ? nullptr
-                    : compute ? static_cast<void *>(&pso->minmax_compute)
-                              : static_cast<void *>(&pso->minmax_graphics);
+    if (v && v->state == 1u) variant = compute ? static_cast<void *>(&v->compute) : static_cast<void *>(&v->graphics);
     ReleaseSRWLockExclusive(&pso->compile_lock);
     return variant;
 }
@@ -5012,9 +5040,14 @@ static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE handle, D3D12DDI_HPIP
         AgxD3d12OwnerDestroyCompute(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->compute);
         AgxD3d12OwnerDestroyGraphics(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->graphics);
     }
-    if (device && device->owner && pso && pso->minmax_state == 1u) {
-        AgxD3d12OwnerDestroyCompute(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->minmax_compute);
-        AgxD3d12OwnerDestroyGraphics(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->minmax_graphics);
+    if (pso && pso->minmax) {
+        for (UINT i = 0; device && device->owner && i < pso->minmax_count; ++i)
+            if (pso->minmax[i].state == 1u) {
+                AgxD3d12OwnerDestroyCompute(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->minmax[i].compute);
+                AgxD3d12OwnerDestroyGraphics(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->minmax[i].graphics);
+            }
+        HeapFree(GetProcessHeap(), 0, pso->minmax);
+        pso->minmax = nullptr;
     }
 #else
     (void)handle;
@@ -5864,6 +5897,17 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
         }
     }
 }
+/* C65S: a stage's slot samplers with reduction 2/3 (the rest 0), for the
+ * min/max variant key */
+static bool SlotMinmax(const AgxD3d12OwnerBindings &b, unsigned char out[kSamplerSlots]) {
+    bool any = false;
+    for (UINT s = 0; s < kSamplerSlots; ++s) {
+        const unsigned bits = b.samplers[s].Valid ? dxbc_minmax_bits(b.samplers[s].Filter) : 0u;
+        out[s] = static_cast<unsigned char>((bits & 3u) >= 2u ? bits : 0u);
+        any |= out[s] != 0;
+    }
+    return any;
+}
 /* Replay of the large commands in their own (non-inlined) frames, so the
  * owner-binding records of one command kind are live at a time
  * (STACK_FRAMES gate: EXP1369 build measured 12944 bytes before this). */
@@ -5994,7 +6038,11 @@ static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const
         if (heap) HeapFree(GetProcessHeap(), 0, heap);
         return heap_hr;
     }
-    const void *variant = minmax ? MinmaxVariant(owner, dispatch.pso, true) : nullptr;
+    /* C65V/C65S: a MINIMUM/MAXIMUM heap or slot sampler dispatches with a min/max variant */
+    AgxD3d12MinmaxKey key = {};
+    key.heap = minmax;
+    const bool slots = SlotMinmax(bind, key.slot[AGX_D3D12_HEAP_CS]);
+    const void *variant = minmax || slots ? MinmaxVariant(owner, dispatch.pso, key, true) : nullptr;
     const AGX_D3D12_COMPUTE *pipeline = variant ? static_cast<const AGX_D3D12_COMPUTE *>(variant) : &dispatch.pso->compute;
     /* AgxD3d12OwnerDispatch reads every SRV slot */
     memset(bind.srvs + bind.srv_count, 0, (kSrvSlots - bind.srv_count) * sizeof(bind.srvs[0]));
@@ -6147,9 +6195,16 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
         const HRESULT hr = SetStageHeap(owner, s, heaps[s], &scratch->heaps[s], &minmax);
         if (FAILED(hr)) return hr;
     }
-    /* C65V: a MINIMUM/MAXIMUM heap sampler draws with the min/max variant */
-    if (minmax)
-        if (void *variant = MinmaxVariant(owner, d.pso, false)) draw.Pipeline = static_cast<AGX_D3D12_GRAPHICS *>(variant);
+    /* C65V/C65S: a MINIMUM/MAXIMUM heap or slot sampler draws with a min/max variant */
+    AgxD3d12MinmaxKey key = {};
+    key.heap = minmax;
+    bool slots = SlotMinmax(vs_bind, key.slot[AGX_D3D12_HEAP_VS]);
+    slots |= SlotMinmax(ps_bind, key.slot[AGX_D3D12_HEAP_PS]);
+    if (optional.gs) slots |= SlotMinmax(scratch->gs_bind, key.slot[AGX_D3D12_HEAP_GS]);
+    if (optional.hs) slots |= SlotMinmax(scratch->hs_bind, key.slot[AGX_D3D12_HEAP_HS]);
+    if (optional.ds) slots |= SlotMinmax(scratch->ds_bind, key.slot[AGX_D3D12_HEAP_DS]);
+    if (minmax || slots)
+        if (void *variant = MinmaxVariant(owner, d.pso, key, false)) draw.Pipeline = static_cast<AGX_D3D12_GRAPHICS *>(variant);
     return AgxD3d12OwnerDraw(owner, &draw);
 }
 #endif
