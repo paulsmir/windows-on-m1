@@ -336,3 +336,12 @@ tiles, shader status (SparseResidency), min/max filters (C65).
   - buffer feedback through raw SSBO loads reports resident (DXBC path);
   - (closed by C65C: min/max on cube and 3D textures; SampleGrad on cubes
     and 1D textures still filter normally).
+- RESOLVED from source (Asahi agx_state.c:2753, our overlay in
+  build-native-asahi-state.py at `cfg.address = agx_map_texture_gpu`):
+  - a UAV's texture descriptor (typed loads) is packed by `agx_pack_texture`,
+    so a reserved texture's typed UAV loads go through the Sparse Block table
+    (NULL reads 0, residency reported);
+  - UAV writes go through the PBE to the primary VA, where NULL tiles map
+    the scratch sink.
+  - Probe step UAV_NULL checks both. Only raw/structured UAV buffer loads
+    still read the scratch tile.
