@@ -235,6 +235,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   volatile LONG64 LastPollMs;
   /* G4-r3 (EXP1296): Wom1GpuFault and its opt-in FAULT_INFO read. */
   ADMISSION_GPU_FAULT_RECEIPT GpuFault;
+  ADMISSION_GPU_FAULT_MAPPING GpuFaultMapping;
   BOOLEAN GpuFaultUnpublished;
   BOOLEAN ReadFaultInfo;
 } ADMISSION_PLATFORM_RUNTIME;
@@ -2217,6 +2218,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
       .DataObjects[AppleAgxInitdataMemoryFirmwareStatus].CpuAddress;
   if (status == NULL) return APPLE_AGX_BACKEND_FALSE;
   AdmissionGpuFaultCapture(runtime, Fence, EventKind, status, &event);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionGpuvaG3CaptureFaultMapping(runtime->Adapter, &event,
+      &runtime->GpuFaultMapping);
+#endif
   deadline = AdmissionPlatformNowMs() + 100u;
   KeMemoryBarrier();
   while (status[0x20u / 4u] == 0u) {
@@ -3714,6 +3719,11 @@ static VOID AdmissionPublishFirmwareRecovery(
   if (fault)
     (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &receipt,
                         sizeof(receipt));
+  if (fault && runtime->GpuFaultMapping.Version != 0u) {
+    RtlInitUnicodeString(&name, L"Wom1GpuFaultMapping");
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &runtime->GpuFaultMapping,
+        sizeof(runtime->GpuFaultMapping));
+  }
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
@@ -4919,6 +4929,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->RuntimeIo.Retire = AdmissionBackendRetire;
   AppleAgxCompletionTransactionInitialize(&runtime->Completion);
   AdmissionGpuFaultReceiptInitialize(&runtime->GpuFault);
+  RtlZeroMemory(&runtime->GpuFaultMapping, sizeof(runtime->GpuFaultMapping));
   runtime->GpuFaultUnpublished = FALSE;
   runtime->ReadFaultInfo =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultInfoRead");

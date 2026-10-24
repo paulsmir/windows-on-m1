@@ -17,6 +17,10 @@ Receipts (REG_BINARY under the APPL0002 device key):
                         actual floor counter and last reservation failure.
                         Explicit Wom1M2PoolDemand.bin input only, so older
                         JSON/REG fault collections retain their behavior.
+  Wom1GpuFaultMapping  v1, 256 bytes: first valid fault's active process,
+                        fence, VM slot, native graph leaf and four logical
+                        PTEs, captured before recovery. Unknown capture state
+                        is distinct from an absent mapping; CPU metadata only.
 Dump blackbox:
   --dbginfo HEX         the DxgkDdiCollectDbgInfo snapshot (v1 32 or v2 56
                         bytes; dxgkrnl trims trailing zero bytes) from the
@@ -42,7 +46,8 @@ RESET_NAME = 'Wom1GpuReset'
 RECOVERY_NAME = 'Wom1FirmwareRecovery'
 OMITTED_NAME = 'Wom1G4OmittedLeaves'
 POOL_NAME = 'Wom1M2PoolDemand'
-NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME, OMITTED_NAME)
+MAPPING_NAME = 'Wom1GpuFaultMapping'
+NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME, OMITTED_NAME, MAPPING_NAME)
 RAW_NAMES = NAMES + (POOL_NAME,)
 
 FAULT_INFO_NOT_READ = 0xacce5515abad1dea
@@ -381,7 +386,35 @@ def decode_pool(data):
     return result
 
 
-DECODERS = {OMITTED_NAME: decode_omitted_leaves, FAULT_NAME: decode_fault, RESET_NAME: decode_reset,
+def decode_fault_mapping(data):
+    """First valid fault's locked CPU metadata, not a hardware PTE read."""
+    if len(data) != 256:
+        raise ValueError('unsupported Wom1GpuFaultMapping length')
+    words = struct.unpack_from('<12I10Q', data)
+    version, size, fence, status, pid, slot, uncertain, cpu_only, job, native, writable, kind = words[:12]
+    if version != 1 or size != len(data) or status > 7:
+        raise ValueError('unsupported Wom1GpuFaultMapping version, size or status')
+    names = ('context', 'fault_info_raw', 'fault_va', 'graph_process_id', 'root_ipa',
+             'process_generation', 'mapping_generation', 'lease_token', 'native_ipa', 'table_ipa')
+    result = dict(zip(names, (f'{v:#x}' for v in words[12:])))
+    result.update(version=version, fence=f'{fence:#x}',
+        status=('unavailable', 'busy', 'identity-mismatch', 'vm-mismatch', 'uncertain',
+                'no-table', 'no-shadow', 'captured')[status],
+        os_pid=pid, vm_slot=slot, graph_uncertain=bool(uncertain), cpu_only=bool(cpu_only),
+        job_in_flight=bool(job), native_present=bool(native) if status >= 6 else None,
+        native_writable=bool(writable) if native else None,
+        native_kind=kind if native else None,
+        meaning='CPU graph/shadow at fault capture; not a hardware page-table read', ptes=None)
+    if status == 7:
+        result['ptes'] = []
+        for i in range(4):
+            ipa, allocation, offset, segment, flags = struct.unpack_from('<3Q2I', data, 128+i*32)
+            result['ptes'].append(dict(ipa=f'{ipa:#x}', allocation=f'{allocation:#x}',
+                allocation_offset=f'{offset:#x}', segment=segment, flags=flags))
+    return result
+
+
+DECODERS = {MAPPING_NAME: decode_fault_mapping, OMITTED_NAME: decode_omitted_leaves, FAULT_NAME: decode_fault, RESET_NAME: decode_reset,
             RECOVERY_NAME: decode_recovery, POOL_NAME: decode_pool}
 
 

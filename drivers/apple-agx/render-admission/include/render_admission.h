@@ -2132,6 +2132,8 @@ BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *);
 __declspec(noinline) VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *, ULONG, BOOLEAN);
 VOID AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *, ULONG);
 BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *, ADMISSION_RENDER_CONTEXT *, ULONG);
+VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *,
+    const ADMISSION_GPU_FAULT_EVENT *, ADMISSION_GPU_FAULT_MAPPING *);
 /* Phase 5a: bind the head pending submission into the empty render slot
  * (worker, PASSIVE_LEVEL); FALSE only when an accepted job cannot be bound. */
 BOOLEAN AdmissionG4PendingBindHead(ADMISSION_CONTEXT *);

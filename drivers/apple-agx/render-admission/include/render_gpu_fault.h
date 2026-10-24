@@ -48,6 +48,35 @@ void AdmissionGpuFaultReceiptInitialize(ADMISSION_GPU_FAULT_RECEIPT *Receipt);
 void AdmissionGpuFaultReceiptRecord(ADMISSION_GPU_FAULT_RECEIPT *Receipt,
     ADMISSION_GPU_FAULT_EVENT *Event);
 
+/* Wom1GpuFaultMapping v1: first valid fault, before firmware recovery.
+ * CPU metadata only; NativePresent is the acknowledged software graph, not
+ * a hardware page-table read. Status preserves unknown versus absent. */
+typedef enum _ADMISSION_GPU_FAULT_MAPPING_STATUS {
+  AdmissionGpuFaultMappingUnavailable = 0,
+  AdmissionGpuFaultMappingBusy,
+  AdmissionGpuFaultMappingIdentity,
+  AdmissionGpuFaultMappingVm,
+  AdmissionGpuFaultMappingUncertain,
+  AdmissionGpuFaultMappingNoTable,
+  AdmissionGpuFaultMappingNoShadow,
+  AdmissionGpuFaultMappingCaptured
+} ADMISSION_GPU_FAULT_MAPPING_STATUS;
+
+typedef struct _ADMISSION_GPU_FAULT_MAPPING_PTE {
+  unsigned long long GuestIpa, Allocation, AllocationOffset;
+  unsigned int Segment, Flags;
+} ADMISSION_GPU_FAULT_MAPPING_PTE;
+
+typedef struct _ADMISSION_GPU_FAULT_MAPPING {
+  unsigned int Version, Bytes, Fence, Status;
+  unsigned int OsProcessId, VmSlot, GraphUncertain, CpuOnlyMappings;
+  unsigned int JobInFlight, NativePresent, NativeWritable, NativeKind;
+  unsigned long long ContextToken, FaultInfo, FaultVa, GraphProcessId;
+  unsigned long long RootIpa, ProcessGeneration, MappingGeneration, LeaseToken;
+  unsigned long long NativeIpa, TableIpa;
+  ADMISSION_GPU_FAULT_MAPPING_PTE Ptes[4];
+} ADMISSION_GPU_FAULT_MAPPING;
+
 /* Wom1GpuReset: the last engine or adapter reset and the state it found;
  * version 2 appends timing and the last ADMISSION_GPU_RESET_HISTORY resets
  * (EXP1303: LONGJOB jobs completed seconds late with four resets, and one

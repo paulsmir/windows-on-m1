@@ -7,6 +7,88 @@
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
+/* EXP1932: the rolling omission ring can be overwritten before collection.
+ * Snapshot the first valid fault's current group while JOB_BEGIN still owns
+ * the graph. Never wait behind paging/recovery or dereference a saved token. */
+VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *Adapter,
+    const ADMISSION_GPU_FAULT_EVENT *Event, ADMISSION_GPU_FAULT_MAPPING *Receipt) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_G3_TABLE_SHADOW *shadow;
+  const APPLE_AGX_GPUVA_G3_NODE *leaf;
+  ULONG bucket, first, i;
+  if (Receipt == NULL || Receipt->Version || Event == NULL ||
+      (Event->Flags & (ADMISSION_GPU_FAULT_INFO_READ | ADMISSION_GPU_FAULT_INFO_VALID)) !=
+          (ADMISSION_GPU_FAULT_INFO_READ | ADMISSION_GPU_FAULT_INFO_VALID))
+    return;
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
+  Receipt->Version = 1u;
+  Receipt->Bytes = sizeof(*Receipt);
+  Receipt->Fence = Event->Fence;
+  Receipt->ContextToken = Event->ContextToken;
+  Receipt->FaultInfo = Event->FaultInfo;
+  Receipt->FaultVa = (Event->FaultInfo >> 30) << 6;
+  if (Adapter == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      Adapter->GpuvaG3State == NULL) return;
+  state = (ADMISSION_G3_STATE *)Adapter->GpuvaG3State;
+  Receipt->Status = AdmissionGpuFaultMappingBusy;
+  if (!ExTryToAcquireFastMutex(&state->Lock)) return;
+  Receipt->Status = AdmissionGpuFaultMappingIdentity;
+  process = state->ActiveProcess;
+  if (process == NULL || state->ActiveFence != Event->Fence ||
+      !(Event->Flags & ADMISSION_GPU_FAULT_JOB_KNOWN)) goto Done;
+  for (context = process->Contexts; context != NULL;
+       context = context->GpuvaG3NextContext)
+    if ((ULONGLONG)(ULONG_PTR)context == Event->ContextToken) break;
+  if (context == NULL) goto Done;
+  Receipt->OsProcessId = process->OsProcessId;
+  Receipt->VmSlot = process->Graph.Slot;
+  Receipt->GraphUncertain = process->Graph.Uncertain;
+  Receipt->CpuOnlyMappings = process->CpuOnlyMappings;
+  Receipt->JobInFlight = process->Graph.JobInFlight;
+  Receipt->GraphProcessId = process->Graph.ProcessId;
+  Receipt->RootIpa = process->Graph.RootIpa;
+  Receipt->ProcessGeneration = process->Graph.ProcessGeneration;
+  Receipt->MappingGeneration = process->Graph.MappingGeneration;
+  Receipt->LeaseToken = process->Graph.LeaseToken;
+  Receipt->Status = AdmissionGpuFaultMappingVm;
+  if (Receipt->VmSlot != ((Event->FaultInfo >> 17) & 0x3fu)) goto Done;
+  Receipt->Status = AdmissionGpuFaultMappingUncertain;
+  if (Receipt->GraphUncertain || !Receipt->JobInFlight ||
+      !Receipt->LeaseToken || Receipt->CpuOnlyMappings) goto Done;
+  Receipt->Status = AdmissionGpuFaultMappingNoTable;
+  if (!AppleAgxGpuvaG3GraphLeafTableIpa(&process->Graph,
+          Receipt->FaultVa, &Receipt->TableIpa)) goto Done;
+  leaf = AppleAgxGpuvaG3GraphLeaf(&process->Graph, Receipt->TableIpa,
+      (ULONG)((Receipt->FaultVa >> 14) & 2047u));
+  if (leaf != NULL) {
+    Receipt->NativePresent = leaf->AuxIpa != 0ULL;
+    Receipt->NativeIpa = leaf->AuxIpa;
+    Receipt->NativeWritable = leaf->Writable;
+    Receipt->NativeKind = (ULONG)leaf->Kind;
+  }
+  Receipt->Status = AdmissionGpuFaultMappingNoShadow;
+  bucket = (ULONG)((Receipt->TableIpa >> 14) ^ (Receipt->TableIpa >> 22) ^
+      (Receipt->TableIpa >> 30)) & 255u;
+  for (shadow = process->TableShadowBrokerBuckets[bucket]; shadow != NULL;
+       shadow = shadow->NextBroker)
+    if (shadow->BrokerIpa == Receipt->TableIpa) break;
+  if (shadow == NULL || shadow->LogicalPtes == NULL) goto Done;
+  first = (ULONG)((Receipt->FaultVa >> 12) & 8191u) & ~3u;
+  for (i = 0u; i < 4u; ++i) {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = &shadow->LogicalPtes[first + i];
+    Receipt->Ptes[i].GuestIpa = pte->GuestIpa;
+    Receipt->Ptes[i].Allocation = pte->Allocation;
+    Receipt->Ptes[i].AllocationOffset = pte->AllocationOffset;
+    Receipt->Ptes[i].Segment = pte->SegmentId;
+    Receipt->Ptes[i].Flags = pte->Flags;
+  }
+  Receipt->Status = AdmissionGpuFaultMappingCaptured;
+Done:
+  ExReleaseFastMutex(&state->Lock);
+}
+
 /* Branch IDs are a stable diagnostic ABI for Wom1G4SubmitFailure. */
 enum {
   AdmissionG4RejectOuter = 1,
