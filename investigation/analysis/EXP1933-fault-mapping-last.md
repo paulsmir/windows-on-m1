@@ -1,5 +1,7 @@
 # EXP1933: first fault is not the workload's later fault
 
+**Next-checkpoint proposal superseded:** TASK.md review requires a behavior change after EXP1933. Retain the snapshot implementation (83c2fe2b); use [EXP1933-native-allocation-guard.md](EXP1933-native-allocation-guard.md) and the updated handoff REPORT for the next package. The original evidence and diagnostic proposal below remain historical.
+
 Offline source/evidence analysis, 2026-10-24; no hardware action.
 
 ## Observed boundary
