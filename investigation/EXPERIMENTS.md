@@ -63634,3 +63634,120 @@ EXP1939 HARDWARE BEFORE 2026-10-24T14:35:21Z:
 - Hashes: sys 9beeb8de6230, UmdArm64 f4294205cc86, UmdX64 76b3bdf0cb69, Umd32 1e0bad4d64f0; manifest dc8110315654, hardware-manifest 4cf4e6275292; probe1939.sh 65a0b5bc2035 (PROBE_LINT_OK); visible recovery rec1939h 2effdc6bf8118898; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1939h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1939-heap-after-hazard/run1939.sh.
+
+EXP1939 ACTUAL 2026-10-24T15:10:15Z (Codex draft, exp1939 REPORT.md):
+**Verdict: REJECTED for the BEFORE prediction that the heap-after-hazard fix
+would eliminate zero-PTE faults and let GravityMark progress.** The source-proven
+UMD correction remains valid; this run does not establish that its defect caused
+the earlier faults. EXP1939 still faulted on an unmapped compute read and ended
+in a 0x116. The root cause of that read is undetermined. This handoff delivers
+one bounded KMD provenance improvement, not a claimed GravityMark behavior fix.
+
+Evidence aliases used throughout:
+
+- `E=/Users/pavel/public_windows/.local/experiments/EXP1939-heap-after-hazard`
+- `H=/Volumes/pwdev/public_windows/.local/handoff/codex/exp1939`
+- `S=/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`
+- Repository paths are relative to `/Volumes/pwdev/public_windows/.worktrees/codex-exp1939`.
+
+**Package and launch identity.** BEFORE is `investigation/EXPERIMENTS.md:63630`:
+30.0.1939.0, EXP1938 plus e0940105 heap-after-hazard behavior, device switches
+`Wom1GpuFaultInfoRead=1`, `Wom1PoolHalfSize=1`, m1n1 0d3a75b3, recovery rec1939h.
+`E/hardware-manifest.json:4` identifies source 2e1fdfcb2f6cf05b4b8166cb329de825e33a6b92.
+Current branch base is 44ff58db385563b3bb65d94568a7078f4da068c0. Its pre-change
+paging, scheduler, backend runtime and D3D12 owner source hashes match the
+packaged source-manifest entries; this analysis is not using mismatched source
+for those files. Full measured hashes are in `H/evidence-hashes.json`:
+
+- SYS: `9beeb8de6230b3df1e79623d846e4ad02a1885120278d55d921d0c4405da25ce`.
+- UmdArm64: `f4294205cc86272f899a6589877e83bdc0ac6f58b506b3283d710938b6d1b4dc`.
+- UmdX64: `76b3bdf0cb69711b1c54aa0fc3e7cad12884b9239c52a2ae39197b8b692dff54`.
+- Umd32: `1e0bad4d64f0ad59dc966cc96d9c6acf9b10a917273ea0141ef208d3b63cfe6c`.
+- manifest: `dc8110315654a4d170e6b189f9f15007dbb048f32b45c8fcf5ffb4a8f5bfc598`.
+- hardware manifest: `4cf4e62752929bb617b098850cfdd732a68d7d4e9e4eadf22bcbd114d9c8d4db`.
+
+The recorded full-owner m1n1 artifact hash is
+`b97cf8834c3f8e8728b796bf211ef8d21f020db2a427415616b5ad54d05baf49`;
+Mu J313_EFI-m2f2c.fd is
+`1c7d87d6fd4321feee605b5f9440dab6a350bc7a3964fb2c62b34602f565f3e5`.
+These are saved manifest identities, not newly validated launches.
+
+**Observed phases/timing.** `E/evidence/EXP1939/restart-ssh.log:2-9` records the
+ordered restart at 2026-10-24T14:35:25.3824627Z, oem5.inf, arm=1 and registry flush
+PASS. `S/newexp1939.log:1-7` records stage PASS, Code0, DWM PID1220, Explorer
+PID4504, and loss of SSH at the 16th GravityMark poll. The polling loop sleeps
+five seconds but includes SSH/check latency and a retry, so **16 is a poll
+index, not an exact removal time or an exact 80-second runtime**
+(`E/probe1939.sh:18-20`). The requested first workload was D3D12, 10,000 asteroids,
+windowed 1280x720, with a **90-second harness timeout** (`S/gm-d3d12a-1939.ps1:2`,
+`S/gm-run.ps1:11-23`). No local gm1939a output, error, completion, UMD trace,
+image or timing file was collected. No app removal HRESULT/time or score can be
+reported. The 2K workload was not reached (`E/probe1939.sh:11,24-26`).
+
+`S/newexp1939.log:16-22` later reports Code43, new DWM/Explorer PIDs1296/5112,
+synthetic mouse moves and zero captured scanout frames. This is not continued
+health of the original device/boot. Initial process existence does not prove
+correct display pixels, physical USB input or RDP. SSH and storage worked
+before the loss and during recovery; physical input/RDP were not independently
+validated. Hypervisor snapshots have all eight CPU records; between the two
+snapshots tick/IPI counters advance (`E/evidence/EXP1939/full-hang-snapshots.log:1874-1893`).
+These observations do not prove all Windows CPUs remained responsive at the
+fault and do not identify an IRQ/timer cause.
+
+**Fault and mapping.** Raw durable receipts are
+`E/evidence/rec1939h/kmd-receipts-pre-disable.txt:187-191`; extracted binaries and
+`decoded.json` are in H. They contain one valid fault event and one firmware
+resume request, all associated with compute fence **0x151a9**, context
+`0xffff85838cdf56c0`, OS PID **8400**, graph process **0x14**, VM slot **1**.
+The saved files do not identify PID8400's executable; do not silently call it
+GravityMark. FAULT_INFO `0x1113ba0021822211` decodes to **unmapped read,
+UL1C(1), level0, VA 0x1113ba0000**, 39 ms after job submit. Mapping capture is
+`captured`, graph not uncertain, job in flight, lease0xdd9, root0x9decf0000,
+table0x9df398000, generation0xc2710; native leaf absent and all four logical
+PTEs zero. This is the locked CPU graph/shadow, not a hardware page-table read.
+The first/latest mapping binaries are identical for this single event.
+
+The history scanned the bounded 8,192-entry ring (Next22108) and retained five
+matching records. Particularly useful:
+
+- Sequence16589: exact VA0x1113ba0000, table0x9df3c8000, first7072/count16,
+  valid_count0, flags2 (Repeat), status0, allocation0, generation0x91d38.
+- Sequence19365: VA0x1112000000, count8192, flags6 (Repeat|NotifyEviction),
+  status0, allocation0.
+- Sequence20160: VA0x1112000000, new table0x9df398000, count7088,
+  flags10 (Repeat|InitialUpdate), status0, allocation0.
+- Two older table/index matches concern table recycling and system retirement;
+  they are not proof of a mapping at the fault VA.
+
+No original valid mapping/owner is present in the retained records. That is
+not proof of never-mapped memory. The separate omission ring has totals522
+updates/8309 groups; its last eight entries are graph process5/OS PID1220,
+not fault process0x14/PID8400 (`H/omitted.json`, raw receipt line118). They do
+not identify the faulting allocation.
+
+**Reset and crash.** ResetEngine at boot-relative 151349 ms (job age2080 ms),
+then 152385 ms, then ResetFromTimeout at155352 ms; each waits1000 ms and returns
+0xc0000483 at quiesce. Zero resets succeeded. Compute retirement before/after:
+stamp0x5a6b vs expected0x151a9; done3/write4/expected4; event2 not seen;
+RecoveryPending=true. Completed fence0x151a8, active/last-submitted0x151a9,
+LastAborted=0. The first reset entered without SchedulerFaulted; subsequent
+0x10223 is the scheduler's reset-quiesce marking at `scheduler_windows.c:547`,
+not an RTKit drain error. This differs materially from EXP1938's immediate
+poll failure. No actual completion may be invented from the resume flag.
+
+`E/evidence/dump/102426-15187-01.dmp` is 2,458,212 bytes, SHA256
+`1bcadfa208480de0bd70f7bd4ac6adc298d7e2d6878d61184d245bf916ae6790`.
+The existing offline `tools/windows_dump_header.py:39-51` decodes ARM64,
+eight CPUs, **0x116**, parameters **ffff85838bb3c010, fffff8022111a9f0,
+ffffffffc0000483, 3** (`H/dump-header.json`). No CDB run or stack interpretation
+was performed; exact crash UTC and bugcheck CPU are unknown. Startup scalar
+receipts in the recovery collection may be from the replacement boot, so
+`Wom1RtkitCrashlogCrashed=0` is not used to prove pre-crash firmware health.
+
+**Recovery actually recorded.** `S/rec1939.log` ends with RECOVERY_DONE.
+`E/evidence/rec1939h/cleanup-visible-output.txt` records exact oem5.inf deletion;
+`visible-preflight.txt:1` records the durable boot transition from14:42:07.6828650Z
+to14:43:42.9350330Z and package absent; `visible-inert-gate.txt:1` records
+VISIBLE_INERT_PACKAGE_ABSENT_8CPU. This is saved evidence only; no recovery,
+guest or hardware action was performed by this task.
+
