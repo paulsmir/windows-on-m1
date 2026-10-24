@@ -322,6 +322,15 @@ extern int AgxWin32AsahiDrawPhasesOn;
    }
 }'''
     s=s[:a]+part+s[b:]
+    # EXP1925: a failed decompression leaves the old, non-writeable layout.
+    # Do not assert or bind it as though the transition had succeeded.
+    s=replace(s,'''         agx_legalize_compression(ctx, rsrc, image->format);
+
+         if (image->shader_access & PIPE_IMAGE_ACCESS_WRITE)''','''         agx_legalize_compression(ctx, rsrc, image->format);
+         if (ctx->any_faults)
+            return;
+
+         if (image->shader_access & PIPE_IMAGE_ACCESS_WRITE)''')
     save(sp,s)
     pp='src/gallium/drivers/asahi/agx_pipe.c';s=(out/pp).read_text()
     # GPU timestamps: upstream agx_flush_compute names comp_start for the
@@ -436,6 +445,43 @@ extern int AgxWin32AsahiDrawPhasesOn;
     # CPU readback: flushing the resource's writer is the whole contract.
     # The D3D10 frontend never calls flush_resource.
     s=body(s,'agx_flush_resource','''   agx_flush_writer(agx_context(pctx), agx_resource(pres), "flush_resource");''')
+    # EXP1925: resource_create can fail under memory pressure. The release
+    # UMD previously passed its NULL result into agx_flush_writer. Preserve
+    # the old resource until every copy and its flush have succeeded, and
+    # route failure through the existing sticky context-fault contract.
+    s=replace(s,'''   struct agx_resource *new_res =
+      agx_resource(pctx->screen->resource_create(pctx->screen, templ));
+
+   assert(new_res);''','''   struct agx_context *ctx = agx_context(pctx);
+   if (ctx->any_faults)
+      return;
+
+   struct agx_resource *new_res =
+      agx_resource(pctx->screen->resource_create(pctx->screen, templ));
+   if (!new_res) {
+      ctx->any_faults = true;
+      return;
+   }''')
+    s=replace(s,'''                               &rsrc->base, level, &box);
+   }
+
+   /* Flush the blits out''','''                               &rsrc->base, level, &box);
+      if (ctx->any_faults) {
+         pipe_resource_reference((struct pipe_resource **)&new_res, NULL);
+         return;
+      }
+   }
+
+   /* Flush the blits out''')
+    s=replace(s,'''   agx_flush_writer(agx_context(pctx), new_res, "flush_resource");
+
+   /* Copy the bind flags''','''   agx_flush_writer(ctx, new_res, "flush_resource");
+   if (ctx->any_faults) {
+      pipe_resource_reference((struct pipe_resource **)&new_res, NULL);
+      return;
+   }
+
+   /* Copy the bind flags''')
     s=replace(s,'''   bool staging_blit = ail_is_level_logically_compressed(&rsrc->layout, level);''','''   bool staging_blit = ail_is_level_logically_compressed(&rsrc->layout, level);
 #ifdef APPLE_AGX_GPUVA_WINSYS
    /* EXP1200 receipt-only: which textures the CPU writes through a staging
@@ -763,6 +809,11 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
 
     blit_path='src/gallium/drivers/asahi/agx_blit.c'
     blit=(out/blit_path).read_text()
+    blit=replace(blit,'''   if (asahi_compute_blit_supported(info)) {''','''   /* EXP1925: legalization may have failed to allocate its replacement. */
+   if (ctx->any_faults)
+      return;
+
+   if (asahi_compute_blit_supported(info)) {''')
     blit=replace(blit,'   if (asahi_compute_blit_supported(info)) {','''   if (!agx_device(pipe->screen)->windows_private &&
        asahi_compute_blit_supported(info)) {''')
     save(blit_path,blit)
