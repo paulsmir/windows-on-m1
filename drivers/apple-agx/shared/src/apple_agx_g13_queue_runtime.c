@@ -97,6 +97,7 @@ static void AppleAgxG13ClearPending(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
   Runtime->DeadlineTicks = 0ULL;
   Runtime->DeadlinePassed = APPLE_AGX_BACKEND_FALSE;
   Runtime->CompletionAvailable = APPLE_AGX_BACKEND_FALSE;
+  Runtime->RecoveryPending = APPLE_AGX_BACKEND_FALSE;
   AppleAgxG13QueueRuntimeZero(
       &Runtime->TaPending,
       (APPLE_AGX_BACKEND_U32)sizeof(Runtime->TaPending));
@@ -572,9 +573,49 @@ static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13TerminalFailure(
   return Result;
 }
 
-/* EXP1075: a firmware Timeout or Fault event leaves the firmware halted.
- * When the platform can resume it (Asahi recover()), the reported work is
- * complete (dropped by the firmware) and the queues stay usable. */
+/* Asahi workqueue.rs mark_error()/signal(): error classification does not
+ * transfer ownership. Firmware must advance the real stamps before buffers
+ * can be freed. The KMD has one submission in flight, so all its published
+ * queue entries must also be retired. Do not write stamps or GPU pointers. */
+static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13PollRecovery(
+    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
+  const APPLE_AGX_G13_QUEUE_BINDING *bindings[3];
+  const APPLE_AGX_G13_QUEUE_PENDING *pending[3];
+  APPLE_AGX_BACKEND_U32 count = 0u, index;
+  APPLE_AGX_BACKEND_BOOL retired = APPLE_AGX_BACKEND_TRUE;
+  if (!Runtime->ComputeTerminal) {
+    bindings[count] = &Runtime->Config.Ta;
+    pending[count++] = &Runtime->TaPending;
+    bindings[count] = &Runtime->Config.D3;
+    pending[count++] = &Runtime->D3Pending;
+  }
+  if (Runtime->ComputeTerminal || Runtime->ComputeInRender) {
+    bindings[count] = &Runtime->Config.Compute;
+    pending[count++] = &Runtime->ComputePending;
+  }
+  for (index = 0u; index < count; ++index) {
+    APPLE_AGX_BACKEND_U32 stamp, done, write;
+    if (!Runtime->Io.ReadU32(Runtime->Io.Context, bindings[index]->Stamp, &stamp) ||
+        !Runtime->Io.ReadU32(Runtime->Io.Context, bindings[index]->GpuDonePointer,
+                             &done) ||
+        !Runtime->Io.ReadU32(Runtime->Io.Context, bindings[index]->CpuWritePointer,
+                             &write))
+      return AppleAgxG13QueueRuntimeResultMemoryFailed;
+    if (done >= bindings[index]->RingCapacity ||
+        write >= bindings[index]->RingCapacity ||
+        write != pending[index]->ExpectedDonePointer)
+      return AppleAgxG13QueueRuntimeResultInvalidState;
+    if (done != write || pending[index]->ExpectedStamp == 0u ||
+        (APPLE_AGX_BACKEND_U32)(stamp - pending[index]->ExpectedStamp) >= 0x80000000u)
+      retired = APPLE_AGX_BACKEND_FALSE;
+  }
+  if (retired)
+    AppleAgxG13SetCompletion(Runtime, AppleAgxG13QueueCompletionRecovered);
+  return AppleAgxG13QueueRuntimeResultOk;
+}
+
+/* The resume callback starts recovery. Polling, including polling without a
+ * Flag event, retains the submission until firmware retirement is observed. */
 static APPLE_AGX_BACKEND_BOOL AppleAgxG13RecoverFirmware(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, const APPLE_AGX_G13_EVENT *Event) {
   if ((Event->Kind != (APPLE_AGX_BACKEND_U32)AppleAgxG13EventTimeout &&
@@ -585,8 +626,25 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13RecoverFirmware(
     return APPLE_AGX_BACKEND_FALSE;
   ++Runtime->RecoveredFaults;
   Runtime->LastRecoveredEventKind = Event->Kind;
-  AppleAgxG13SetCompletion(Runtime, AppleAgxG13QueueCompletionRecovered);
+  if (Event->Kind == (APPLE_AGX_BACKEND_U32)AppleAgxG13EventTimeout) {
+    /* Asahi fw/channels.rs: the first word is the u32 timeout counter;
+     * the second word in the codec's u64 is an unknown field. */
+    Runtime->LastRecoveredTimeoutCounter = (APPLE_AGX_BACKEND_U32)Event->TimeoutCounter;
+    Runtime->RecoveredTimeoutValid = APPLE_AGX_BACKEND_TRUE;
+  }
+  Runtime->RecoveryPending = APPLE_AGX_BACKEND_TRUE;
   return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AppleAgxG13StaleTimeout(
+    const APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, const APPLE_AGX_G13_EVENT *Event) {
+  APPLE_AGX_BACKEND_U32 delta;
+  if (Event->Kind != (APPLE_AGX_BACKEND_U32)AppleAgxG13EventTimeout ||
+      !Runtime->RecoveredTimeoutValid)
+    return APPLE_AGX_BACKEND_FALSE;
+  delta = (APPLE_AGX_BACKEND_U32)Event->TimeoutCounter -
+          Runtime->LastRecoveredTimeoutCounter;
+  return delta == 0u || delta >= 0x80000000u;
 }
 
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
@@ -597,10 +655,23 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
   if (Runtime == APPLE_AGX_G13_QUEUE_RUNTIME_NULL ||
       Message == APPLE_AGX_G13_QUEUE_RUNTIME_NULL)
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
+  if (Runtime->RecoveryPending) {
+    if (!AppleAgxG13DecodeEvent(Message, MessageBytes, &event))
+      return AppleAgxG13QueueRuntimeResultInvalidArgument;
+    /* Only Timeout has a counter that proves a duplicate. A Fault may
+     * be a new halt of a dependent queue before this submission retires;
+     * let the platform establish halted and resume it, as Asahi does. */
+    if (event.TerminalFault && !AppleAgxG13StaleTimeout(Runtime, &event) &&
+        !AppleAgxG13RecoverFirmware(Runtime, &event))
+      return AppleAgxG13QueueRuntimeResultResetFailed;
+    return AppleAgxG13PollRecovery(Runtime);
+  }
   if (Runtime->Phase == AppleAgxG13QueueRuntimeComputeSubmitted) {
     APPLE_AGX_G13_EVENT computeEvent;
     if (!AppleAgxG13DecodeEvent(Message,MessageBytes,&computeEvent))
       return AppleAgxG13QueueRuntimeResultInvalidArgument;
+    if (AppleAgxG13StaleTimeout(Runtime, &computeEvent))
+      return AppleAgxG13QueueRuntimeResultOk;
     if (computeEvent.TerminalFault && AppleAgxG13RecoverFirmware(Runtime,&computeEvent))
       return AppleAgxG13QueueRuntimeResultOk;
     if (computeEvent.TerminalFault)
@@ -624,6 +695,8 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
     return AppleAgxG13QueueRuntimeResultInvalidState;
   if (!AppleAgxG13DecodeEvent(Message, MessageBytes, &event))
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
+  if (AppleAgxG13StaleTimeout(Runtime, &event))
+    return AppleAgxG13QueueRuntimeResultOk;
   if (event.TerminalFault && AppleAgxG13RecoverFirmware(Runtime, &event))
     return AppleAgxG13QueueRuntimeResultOk;
   if (event.TerminalFault)
@@ -658,6 +731,8 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCheckTimeout(
   if (Runtime->Phase != AppleAgxG13QueueRuntimeSubmitted &&
       Runtime->Phase != AppleAgxG13QueueRuntimeComputeSubmitted)
     return AppleAgxG13QueueRuntimeResultInvalidState;
+  if (Runtime->RecoveryPending)
+    return AppleAgxG13PollRecovery(Runtime);
   if ((APPLE_AGX_BACKEND_U64)(NowTicks - Runtime->DeadlineTicks) >=
       (1ULL << 63))
     return AppleAgxG13QueueRuntimeResultOk;

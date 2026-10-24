@@ -411,8 +411,8 @@ static void TestIngestFailureNamesDecoderOwner(void) {
   assert(f.Provider.LastIngestRuntimeResult ==
          AppleAgxG13QueueRuntimeResultInvalidArgument);
 }
-/* EXP1075: a firmware Timeout event with a successful resume completes the
- * pending fence through a Recovered observation; the provider accepts the
+/* A firmware Timeout event followed by resume and observed retirement ends
+ * the pending fence through a Recovered observation; the provider accepts the
  * next submission and no queue Quiesce runs. */
 static unsigned int Recoveries;
 static APPLE_AGX_BACKEND_BOOL Recover(void *Context, APPLE_AGX_BACKEND_U32 Fence,
@@ -431,6 +431,27 @@ static void TestFirmwareTimeoutRecovers(void) {
   assert(AppleAgxG13QueueProviderIngestEvent(
       &f.Provider, event, sizeof(event), &batch));
   assert(Recoveries == 1u && f.Quiesces == 0u);
+  /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Resume must not
+   * release the job; ordinary polling must deliver its eventual abort even
+   * without another event notification. */
+  assert(batch.ObservationCount == 0u && batch.CompletedFence == 0u);
+  assert(f.Provider.Phase == AppleAgxG13QueueProviderSubmitted);
+  assert(AppleAgxG13QueueProviderIngestEvent(
+      &f.Provider, event, sizeof(event), &batch));
+  assert(Recoveries == 1u); /* duplicate while resuming */
+  f.TaDone = f.TaWrite; f.D3Done = f.D3Write;
+  f.TaStamp = f.Job.TaExpectedStamp;
+  assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider, 1050ULL, &batch));
+  assert(batch.ObservationCount == 0u);
+  f.D3Stamp = f.Job.D3ExpectedStamp;
+  /* A failed coherent read must be reported, not swallowed by event ingest. */
+  f.FailReads = 1u;
+  PutU32(event, (unsigned int)AppleAgxG13EventFlag);
+  assert(!AppleAgxG13QueueProviderIngestEvent(
+      &f.Provider, event, sizeof(event), &batch));
+  assert(batch.CompletedFence == 0u && batch.ObservationCount == 0u);
+  f.FailReads = 0u;
+  assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider, 1051ULL, &batch));
   assert(batch.ObservationCount == 1u &&
          batch.Observations[0].Status == AppleAgxBackendObservationRecovered);
   assert(batch.CompletedFence == 41u);

@@ -30,7 +30,7 @@ typedef enum _APPLE_AGX_G13_QUEUE_COMPLETION_STATUS {
   AppleAgxG13QueueCompletionFaulted,
   AppleAgxG13QueueCompletionTimedOut,
   AppleAgxG13QueueCompletionCancelled,
-  /* EXP1075: firmware Timeout/Fault reported and the firmware resumed. */
+  /* Firmware Timeout/Fault recovered and actual queue retirement proven. */
   AppleAgxG13QueueCompletionRecovered,
 } APPLE_AGX_G13_QUEUE_COMPLETION_STATUS;
 
@@ -78,9 +78,9 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_IO {
   /*
    * Optional (EXP1075). The firmware halts itself after it reports a Timeout
    * or Fault event (FW status halted=1); Asahi recover() resumes it with
-   * halted=0, resume=1 and keeps the queues. Success means the firmware
-   * dropped the reported work and runs again; the fence then completes
-   * without the queue Quiesce (an RTKit stop the halted firmware cannot ack).
+   * halted=0, resume=1 after clearing pending-stamp records. Success only
+   * acknowledges this resume request. The runtime must still observe actual
+   * stamps and queue retirement before releasing the dropped submission.
    */
   APPLE_AGX_BACKEND_BOOL (*Recover)(void *Context,
                                     APPLE_AGX_BACKEND_U32 Fence,
@@ -164,6 +164,10 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME {
    * submission; the notifier fires once all three queues are done). */
   APPLE_AGX_BACKEND_BOOL ComputeInRender;
   APPLE_AGX_BACKEND_U32 RecoveredFaults, LastRecoveredEventKind;
+  /* Firmware resume requested; submitted bytes remain owned until retirement. */
+  APPLE_AGX_BACKEND_BOOL RecoveryPending;
+  APPLE_AGX_BACKEND_BOOL RecoveredTimeoutValid;
+  APPLE_AGX_BACKEND_U32 LastRecoveredTimeoutCounter;
   /* G4-recovery: the pending job outlived its deadline (counted once per
    * job); the deadline is recorded, not terminal. */
   APPLE_AGX_BACKEND_BOOL DeadlinePassed;

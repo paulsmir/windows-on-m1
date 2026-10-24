@@ -93,10 +93,15 @@ class TdrResetQuiesce(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             program = Path(tmp) / 'reset.c'
             program.write_text(body)
+            firmware = Path(tmp) / 'firmware.c'
+            firmware.write_text(FIRMWARE_REPLAY)
             binary = Path(tmp) / 'reset'
             subprocess.run([os.environ.get('CC', 'clang'), '-std=c11', '-Wall', '-Wextra',
                             '-Werror', '-Wno-unused-function', '-fsanitize=address,undefined',
                             '-I', str(RENDER / 'include'), '-I', str(SHARED / 'include'),
+                            '-I', str(SHARED / 'tests'), str(firmware),
+                            str(SHARED / 'src/apple_agx_g13_queue_runtime.c'),
+                            str(SHARED / 'src/apple_agx_g13_codec.c'),
                             str(program), str(SHARED / 'src/apple_agx_scheduler.c'),
                             str(RENDER / 'src/render_submission.c'), '-o', str(binary)],
                            check=True)
@@ -229,6 +234,9 @@ typedef struct {
 static int lock_depth, rtkit_stops, polls, drop_at_poll, fail_poll, worker_busy,
     worker_completes, paused, private_resets, scene_queued, scene_started,
     scene_quarantined, reactivate_after_quiesce;
+static int use_firmware_runtime;
+void ReplayQueueSetup(unsigned int fence);
+int ReplayQueuePoll(int poll);
 static ULONGLONG now_ms;
 static ADMISSION_CONTEXT *model_adapter;
 static ADMISSION_PLATFORM_RUNTIME *model_runtime;
@@ -296,7 +304,9 @@ static BOOLEAN AppleAgxPlatformProviderPoll(APPLE_AGX_PLATFORM_PROVIDER *p,
   (void)p; (void)max; assert(!lock_depth); assert(!worker_busy);
   *drained = *completed = 0u; ++polls;
   if (fail_poll) return FALSE;
-  if (polls == drop_at_poll) model_job_ends();
+  if (use_firmware_runtime) {
+    if (ReplayQueuePoll(polls)) model_job_ends();
+  } else if (polls == drop_at_poll) model_job_ends();
   return TRUE;
 }
 /* The pre-fix reset path: RTKit stop of the retained firmware, then refusal. */
@@ -465,6 +475,22 @@ static void expect_aborted(const DXGKARG_RESETENGINE *reset) {
 
 int main(void) {
   DXGKARG_RESETENGINE reset;
+
+  /* Real queue runtime: fault -> resume -> partial retirement -> dropped
+   * completion -> genuine quiescence -> successful Windows engine reset. */
+  setup(0, 0); use_firmware_runtime = 1;
+  ReplayQueueSetup(0xce71cu);
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  expect_aborted(&reset);
+  assert(polls == 4 && last_recorded.Quiesce == AdmissionGpuResetQuiesceEnded);
+  assert(last_recorded.Stage == AdmissionGpuResetStageComplete);
+  /* Adapter TDR uses the same retirement proof and can restart scheduling. */
+  setup(0, 0); ReplayQueueSetup(0xce71cu);
+  assert(AdmissionDdiResetFromTimeout(&adapter) == STATUS_SUCCESS);
+  assert(last_recorded.LastAbortedFence == 0xce71cu && paused);
+  assert(AdmissionDdiRestartFromTimeout(&adapter) == STATUS_SUCCESS && !paused);
+  use_firmware_runtime = 0;
 
   /* 1. EXP1296: the worker already left (SchedulerFaulted set before the
    * TDR); the firmware drops the job when the reset polls the provider. */
@@ -671,6 +697,50 @@ int main(void) {
   assert(lock_depth == 0);
   puts("reset quiesce replay ok");
   return 0;
+}
+'''
+
+
+FIRMWARE_REPLAY = r'''
+#include "apple_agx_g13_queue_runtime_test.c"
+#undef assert
+#include <assert.h>
+static TEST_FIXTURE recovery_fixture;
+static APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION recovery_submission;
+void ReplayQueueSetup(unsigned int fence) {
+  TestInitialize(&recovery_fixture);
+  recovery_fixture.Runtime.Io.Recover = TestRecover;
+  recovery_submission = TestSubmission(&recovery_fixture, fence);
+  assert(AppleAgxG13QueueRuntimeSubmit(&recovery_fixture.Runtime,
+                                      &recovery_submission) == 0);
+}
+int ReplayQueuePoll(int poll) {
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE] = {0};
+  if (poll == 1) {
+    PutU32(event, AppleAgxG13EventTimeout);
+    assert(AppleAgxG13QueueRuntimeHandleEvent(&recovery_fixture.Runtime,
+                                              event, sizeof(event)) == 0);
+  }
+  if (poll == 2) {
+    recovery_fixture.TaStamp = recovery_submission.Ta.ExpectedStamp;
+    recovery_fixture.TaDone = recovery_fixture.TaWrite;
+  }
+  if (poll == 3) recovery_fixture.D3Stamp = recovery_submission.D3.ExpectedStamp;
+  if (poll == 4) recovery_fixture.D3Done = recovery_fixture.D3Write;
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&recovery_fixture.Runtime,
+                                             1000ULL + poll) == 0);
+  if (poll < 4) {
+    assert(!AppleAgxG13QueueRuntimeTakeCompletion(&recovery_fixture.Runtime,
+                                                  &completion));
+    return 0;
+  }
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&recovery_fixture.Runtime,
+                                               &completion));
+  assert(completion.Fence == recovery_submission.Fence &&
+         completion.Status == AppleAgxG13QueueCompletionRecovered);
+  assert(recovery_fixture.IoState.Quiesces == 0);
+  return 1;
 }
 '''
 

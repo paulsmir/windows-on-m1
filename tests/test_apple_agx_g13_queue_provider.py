@@ -1,3 +1,7 @@
+"""WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Firmware resume must
+not release a faulted submission before its stamps and queues retire; the
+terminal observation must remain an error, never successful DMA completion.
+"""
 import pathlib
 import subprocess
 import tempfile

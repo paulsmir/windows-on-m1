@@ -719,6 +719,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
   Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardRuntime;
   Provider->LastIngestRuntimeResult = (APPLE_AGX_BACKEND_U32)result;
   if (result == AppleAgxG13QueueRuntimeResultInvalidArgument ||
+      result == AppleAgxG13QueueRuntimeResultMemoryFailed ||
       result == AppleAgxG13QueueRuntimeResultInvalidState ||
       result == AppleAgxG13QueueRuntimeResultResetFailed) {
     if (result == AppleAgxG13QueueRuntimeResultResetFailed)
@@ -765,8 +766,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
   }
   Batch->CompletedFence = completion.Fence;
   if (completion.Status == AppleAgxG13QueueCompletionRecovered) {
-    /* EXP1075: the firmware was resumed after a Timeout/Fault event; the
-     * job completes and the provider accepts the next submission. */
+    /* Firmware retirement after a resumed Timeout/Fault is proven; the
+     * job ends as dropped and the provider accepts the next submission. */
     Batch->ObservationCount = 1u;
     AppleAgxG13ProviderZero(&Batch->Observations[0],
         (APPLE_AGX_BACKEND_U32)sizeof(Batch->Observations[0]));
@@ -807,8 +808,19 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderCheckTimeout(
     return APPLE_AGX_BACKEND_FALSE;
   AppleAgxG13ProviderZero(Batch, (APPLE_AGX_BACKEND_U32)sizeof(*Batch));
   result = AppleAgxG13QueueRuntimeCheckTimeout(&Provider->Runtime, NowTicks);
-  if (result == AppleAgxG13QueueRuntimeResultOk)
+  if (result == AppleAgxG13QueueRuntimeResultOk) {
+    if (!AppleAgxG13QueueRuntimeTakeCompletion(&Provider->Runtime, &completion))
+      return APPLE_AGX_BACKEND_TRUE;
+    if (completion.Fence != Provider->PendingFence ||
+        completion.Status != AppleAgxG13QueueCompletionRecovered)
+      return APPLE_AGX_BACKEND_FALSE;
+    Batch->ObservationCount = 1u;
+    Batch->Observations[0].Status = AppleAgxBackendObservationRecovered;
+    Batch->CompletedFence = completion.Fence;
+    AppleAgxG13ProviderClearStaged(Provider);
+    Provider->Phase = AppleAgxG13QueueProviderCreated;
     return APPLE_AGX_BACKEND_TRUE;
+  }
   if (result == AppleAgxG13QueueRuntimeResultResetFailed) {
     Provider->FailureQuiesced = APPLE_AGX_BACKEND_FALSE;
     Provider->Phase = AppleAgxG13QueueProviderFaulted;
