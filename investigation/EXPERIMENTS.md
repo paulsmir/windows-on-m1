@@ -62016,3 +62016,80 @@ EXP1927 HARDWARE BEFORE 2026-10-24T04:19:56Z:
 - Hashes: sys 346244860e92, UmdArm64 38e92c2f273e, UmdX64 d4db917f4485, Umd32 369411a94824; manifest 9189c1f544c3, hardware-manifest c83485421caf; probe1927.sh dea24e73219e (PROBE_LINT_OK); visible recovery rec1927h 45b85242be19b6fa; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1927h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1927-pool-half/run1927.sh.
+
+EXP1927 ACTUAL 2026-10-24T04:48:10Z (Codex draft, exp1927 REPORT.md):
+
+EXP1927 ACTUAL — offline reconstruction of the saved 2026-10-24 run;
+ready for Claude to append to EXPERIMENTS.md. No hardware action was performed
+by this task. BEFORE: `investigation/EXPERIMENTS.md:61991`. Package
+30.0.1927.0, source `2e3a76faf60186e9ef181cf222e8ed247c5b1d2e`, m1n1
+0d3a75b3. KMD SHA-256
+`346244860e928f072ff6dae0b05a401b8c6f61c9dddd2c94172c39f9a86b880c`;
+ARM64 UMD
+`38e92c2f273e859da8e5fdeea60ca7adeaa751a12457f7b6c5de2f1f3f154a13`.
+Full evidence hashes: `evidence-manifest.sha256` in this task folder.
+
+- **Boot/run phases:** artifact/staging gate passed; ordered restart intent
+  recorded at 04:20:00.3866430Z. APPL0002 reached CM_PROB_NONE,
+  Wom1StartStage=12 / Wom1StartStatus=0. State-start/end guest uptimes 50/257 s.
+  Both workloads opened 1280x720 D3D12 windows. 10k ready/start at 52.821 s,
+  resize at 52.831 s; 2k ready/start at 25.740 s, resize at 25.753 s.
+  Neither has a completed benchmark score/times/image in the saved evidence.
+- **CPU failures/times:** 10k wrapper records TIMEOUT CLOSED at 92 s, WER=1;
+  2k records EXIT at 71 s, WER=1. Both WER records report c0000005 at ARM64
+  UMD RVA 0x48184. Neither supplies exception parameters, a CPU register
+  context, dump/cdb stack, or an explicit device-removal time. These wrapper
+  times are not device-removal times. No system bugcheck/stop parameters or
+  crash dump is supplied; no matching panic/bugcheck is present in the saved
+  full log. The failure is not the previous clean application resource-OOM.
+- **UMD boundary:** `gm1927a-umd.log:15574` / `gm1927b-umd.log:15442` record
+  MakeResident E_OUTOFMEMORY for 51/52 handles after two trim rounds. Both
+  trimmed 29 slots, 0x22ed0000 / 0x227e0000 bytes, with remaining trim demand
+  0x23ae999c / 0x182b6665. Each immediately records Finish refusal, backend
+  failure, first context fault 0x10297, then another BatchBegin refusal at
+  site 0x116. There are 42/43 successful Execute receipts and 18 successful
+  trim/retry receipts per run. Legacy XFER up/down are zero; this does not
+  establish absence of private staging uploads.
+- **Pool v8 (probe and pre-disable identical):** SegmentBytes=1409286144
+  (1344 MiB), committed peak 21488 granules=1343 MiB, reservation peak
+  3039625216 bytes=2898.8125 MiB. Final committed 55246848 bytes=52.6875 MiB,
+  held 90 MiB, reserved 89.625 MiB; held includes committed. PeakSlabs=672
+  (1344 MiB). ReserveFailures=FloorRefusals=NewSlabFailures=CommitFailures=
+  ReleaseFailures=BusyRetries=RefUnderflows=0; LastReserveFailure absent.
+  The smaller cap was consumed and the earlier lifetime-reservation refusal
+  disappeared; MakeResident became the terminal pressure boundary.
+- **GPU receipts:** probe-end Wom1GpuFault=246 events, all resumed,
+  244 valid faults; pre-disable=798 events, all resumed, 796 valid faults.
+  First is firmware timeout / DWM PID 1228 / fence 0x26ee9, UL1C(2) unmapped
+  read at 0x11024d0100, level 0, VM slot 1. Probe-end last is Explorer PID
+  5024 / fence 0x2bec6, VCE(0) unmapped write at 0x11ffe88000; pre-disable
+  last has the same address/unit/PID and fence 0x31da6. FirmwareRecovery
+  counts match 246/798, maximum duration 902 ms, two deadline expiries,
+  longest job fence 0x28307. Wom1GpuReset and preemption-refusal receipts
+  are absent. G4SubmitFailure v3 reports 11 refusals, branch 9 (Parse),
+  status c000000d, downstream 3 (Unmapped), DMA VA 0x11000a0000 / size 0x118.
+  This is separate from the app's MakeResident refusal and CPU AV.
+- **Mapping evidence:** Wom1G4OmittedLeaves=1506 events / 21614 groups;
+  retained sequences 1499-1506 have segment 0 and DWM/Explorer PIDs.
+  These count incomplete groups containing valid PTEs, not ordinary
+  all-invalid unmaps. Retained omission ranges do not prove either retained
+  fault's exact mapping history; in particular, Explorer allocation base
+  0x11024d0000 does not identify an earlier DWM mapping. Allocation-join
+  output is saved, but the first G4 snapshot's process is not joined by
+  that decoder, so its numeric VA match is not causal attribution.
+- **Liveness/recovery:** pinned SSH remained alive after both runs and
+  through recorded cleanup. DWM changed PID 1228 -> 10188; Explorer stayed
+  5024. Synthetic mouse report: 1910 moves; scanout capture: zero frames.
+  Correct display rendering, physical USB input, RDP, and per-CPU IRQ/timer
+  progress are not independently established. Storage supported saved logs
+  and cleanup. Saved rec1927h removed exact oem5.inf, staged package and
+  binaries; durable preflight PASS with final boot
+  2026-10-24T04:28:56.9988220Z, VISIBLE_INERT_PACKAGE_ABSENT_8CPU. GPU faults
+  continued growing before disable: this is not a DWM-stable result.
+- **Verdict: REJECTED** for a usable half-size-pool workload. Confirmed only:
+  opt-in cap consumed and creation-time reservation pressure avoided.
+  Residency still failed, both applications crashed and GPU/DWM faults
+  appeared. MEM1 and the size switch were bundled, so creation progress
+  cannot be attributed independently. Do not promote half-size to default
+  or start another size sweep without new causal evidence.
+
