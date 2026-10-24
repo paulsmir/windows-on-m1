@@ -1973,15 +1973,15 @@ static HRESULT copy_reinterpret_blocks(struct pipe_context *pipe, struct pipe_re
   struct pipe_transfer *read = NULL, *write = NULL;
   void *from = pipe->texture_map(pipe, s, src_level, PIPE_MAP_READ, &sbox, &read);
   void *to = from ? pipe->texture_map(pipe, d, dst_level, PIPE_MAP_WRITE, &dbox, &write) : NULL;
-  HRESULT hr = from && to ? S_OK : E_OUTOFMEMORY;
+  HRESULT hr = from && read && to && write ? S_OK : E_OUTOFMEMORY;
   for (int z = 0; SUCCEEDED(hr) && z < sbox.depth; ++z)
     for (unsigned y = 0; y < rows; ++y)
       memcpy(static_cast<unsigned char *>(to) + static_cast<size_t>(z) * write->layer_stride + static_cast<size_t>(y) * write->stride,
              static_cast<const unsigned char *>(from) + static_cast<size_t>(z) * read->layer_stride +
                  static_cast<size_t>(y) * read->stride,
              static_cast<size_t>(row));
-  if (to) pipe->texture_unmap(pipe, write);
-  if (from) pipe->texture_unmap(pipe, read);
+  if (write) pipe->texture_unmap(pipe, write);
+  if (read) pipe->texture_unmap(pipe, read);
   return hr;
 }
 
@@ -3022,8 +3022,9 @@ static_assert(AGX_D3D12_HEAP_RANGES == DXBC_HEAP_RANGE_MAX && AGX_D3D12_CBV_SLOT
 /* C47: the pending heaps of the graphics stages (or compute) become constant
  * buffers 14/15 and reads of the batch the draw (dispatch) uses: call after
  * the framebuffer and stage bindings, right before draw_vbo/launch_grid */
-static void bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
+static HRESULT bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
   struct pipe_context *pipe = owner->Context;
+  if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
   const unsigned first = compute ? unsigned(AGX_D3D12_HEAP_CS) : 0u;
   const unsigned end = compute ? unsigned(AGX_D3D12_HEAP_STAGES) : unsigned(AGX_D3D12_HEAP_CS);
   for (unsigned s = first; s < end; ++s) {
@@ -3039,14 +3040,14 @@ static void bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
       if (!AgxWin32AsahiBatchSamplerHandles(pipe, compute ? 1 : 0, h.Samplers, sizeof(h.Samplers[0]), h.SamplerCount, handles)) {
         const UINT receipt[] = {s, h.SamplerCount};
         AdmissionUmdDiagnostic("reject-d3d12-heap-samplers", E_OUTOFMEMORY, receipt, 2);
-        memset(handles, 0, h.SamplerCount * sizeof(handles[0]));
+        return E_OUTOFMEMORY;
       }
       for (unsigned i = 0; i < h.SamplerCount; ++i) {
         /* C65: handle bits 0-10, min/max bits 11-15, MipLODBias 16-31 */
         if (h.Samplers[i].Valid && handles[i] > DXBC_SAMPLER_HANDLE_MASK) {
           const UINT receipt[] = {s, i, handles[i]};
           AdmissionUmdDiagnostic("reject-d3d12-heap-sampler-handle", E_OUTOFMEMORY, receipt, 3);
-          handles[i] = 0;
+          return E_OUTOFMEMORY;
         }
         words[4 * AGX_D3D12_HEAP_RANGES + i] =
             h.Samplers[i].Valid ? (handles[i] & DXBC_SAMPLER_HANDLE_MASK) |
@@ -3065,11 +3066,13 @@ static void bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
     table.user_buffer = words;
     table.buffer_size = bytes;
     pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_TABLE_CB, &table);
+    if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
     if (h.Heap) {
       struct pipe_constant_buffer heap = {};
       heap.buffer = static_cast<struct pipe_resource *>(h.Heap->Resource);
       heap.buffer_size = static_cast<unsigned>(h.Heap->Bytes < 65536ull ? h.Heap->Bytes : 65536ull);
       pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_MIRROR_CB, &heap);
+      if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
     }
     struct pipe_resource *resources[64];
     for (unsigned i = 0; i < h.TextureCount;) {
@@ -3077,14 +3080,17 @@ static void bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
       for (; n < 64u && i < h.TextureCount; ++i)
         resources[n++] = static_cast<struct pipe_resource *>(h.Textures[i].Resource);
       AgxWin32AsahiBatchReadResources(pipe, resources, n, compute ? 1 : 0);
+      if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
     }
     for (unsigned i = 0; i < h.WriteCount;) {
       unsigned n = 0;
       for (; n < 64u && i < h.WriteCount; ++i)
         resources[n++] = static_cast<struct pipe_resource *>(h.Writes[i].Resource);
       AgxWin32AsahiBatchWriteResources(pipe, resources, n, compute ? 1 : 0);
+      if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
     }
   }
+  return S_OK;
 }
 static void unbind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
   struct pipe_context *pipe = owner->Context;
@@ -3260,15 +3266,20 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   /* C9: sampler states for this dispatch (released after the launch) */
   void *states[AGX_D3D12_SAMPLER_SLOTS] = {};
   unsigned state_count = 0;
-  for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS; ++i)
-    if (samplers[i].Valid && (states[i] = create_sampler(pipe, &samplers[i]))) state_count = i + 1;
+  HRESULT hr = S_OK;
+  for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS && SUCCEEDED(hr); ++i) {
+    if (!samplers[i].Valid) continue;
+    states[i] = create_sampler(pipe, &samplers[i]);
+    if (!states[i]) hr = E_OUTOFMEMORY;
+    else state_count = i + 1;
+  }
   struct pipe_sampler_view *views[AGX_D3D12_SRV_SLOTS] = {};
   unsigned view_count = 0;
   /* C5-C5d via the draw stages' binding (C9: texture and typed SRVs, typed
    * UAVs as images);
    * Asahi uploads a user buffer when it is set, so root constants are
    * captured here */
-  HRESULT hr = bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count, compute->SrvDimensions, compute->UavDimensions);
+  if (SUCCEEDED(hr)) hr = bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count, compute->SrvDimensions, compute->UavDimensions);
   void *none[AGX_D3D12_SAMPLER_SLOTS] = {};
   if (FAILED(hr)) {
     unbind_stage(pipe, MESA_SHADER_COMPUTE, views, AGX_D3D12_SRV_SLOTS);
@@ -3284,14 +3295,14 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   info.grid[0] = x;
   info.grid[1] = y;
   info.grid[2] = z;
-  bind_heaps(owner, true); /* C47 */
-  if (indirect) {
+  hr = bind_heaps(owner, true); /* C47 */
+  if (SUCCEEDED(hr) && indirect) {
     info.indirect = static_cast<struct pipe_resource *>(indirect->Buffer->Resource);
-    for (unsigned i = 0; i < indirect->MaxCount; ++i) {
+    for (unsigned i = 0; i < indirect->MaxCount && !AgxWin32AsahiContextFaulted(pipe); ++i) {
       info.indirect_offset = static_cast<unsigned>(indirect->Offset + static_cast<unsigned long long>(indirect->Stride) * i);
       pipe->launch_grid(pipe, &info);
     }
-  } else {
+  } else if (SUCCEEDED(hr)) {
     pipe->launch_grid(pipe, &info);
   }
   unbind_heaps(owner, true);
@@ -3306,6 +3317,8 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
     for (unsigned i = 0; i < state_count; ++i)
       if (states[i]) pipe->delete_sampler_state(pipe, states[i]);
   }
+  if (FAILED(hr)) return hr;
+  if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
   ++owner->PendingDispatches;
   return S_OK;
 }
@@ -3486,16 +3499,25 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   pipe->set_sample_mask(pipe, graphics->SampleMask); /* C32 */
   /* C6e: sampler states of each stage for this draw */
   void *vs_samplers[AGX_D3D12_SAMPLER_SLOTS] = {}, *ps_samplers[AGX_D3D12_SAMPLER_SLOTS] = {};
+  HRESULT hr = S_OK;
   unsigned vs_sampler_count = 0, ps_sampler_count = 0;
   for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS; ++i) {
-    if (draw->Vs.Samplers[i].Valid && (vs_samplers[i] = create_sampler(pipe, &draw->Vs.Samplers[i]))) vs_sampler_count = i + 1;
-    if (draw->Ps.Samplers[i].Valid && (ps_samplers[i] = create_sampler(pipe, &draw->Ps.Samplers[i]))) ps_sampler_count = i + 1;
+    if (draw->Vs.Samplers[i].Valid && SUCCEEDED(hr)) {
+      vs_samplers[i] = create_sampler(pipe, &draw->Vs.Samplers[i]);
+      if (!vs_samplers[i]) hr = E_OUTOFMEMORY;
+      else vs_sampler_count = i + 1;
+    }
+    if (draw->Ps.Samplers[i].Valid && SUCCEEDED(hr)) {
+      ps_samplers[i] = create_sampler(pipe, &draw->Ps.Samplers[i]);
+      if (!ps_samplers[i]) hr = E_OUTOFMEMORY;
+      else ps_sampler_count = i + 1;
+    }
   }
   if (vs_sampler_count) pipe->bind_sampler_states(pipe, MESA_SHADER_VERTEX, 0, vs_sampler_count, vs_samplers);
   if (ps_sampler_count) pipe->bind_sampler_states(pipe, MESA_SHADER_FRAGMENT, 0, ps_sampler_count, ps_samplers);
   struct pipe_sampler_view *vs_views[AGX_D3D12_SRV_SLOTS] = {}, *ps_views[AGX_D3D12_SRV_SLOTS] = {};
   unsigned vs_view_count = 0, ps_view_count = 0;
-  HRESULT hr = bind_stage(pipe, MESA_SHADER_VERTEX, draw->Vs.Cbvs, draw->Vs.Srvs, draw->Vs.Uavs, vs_views, &vs_view_count, draw->Pipeline->VsSrvDimensions, draw->Pipeline->VsUavDimensions, draw->Vs.SrvCount);
+  if (SUCCEEDED(hr)) hr = bind_stage(pipe, MESA_SHADER_VERTEX, draw->Vs.Cbvs, draw->Vs.Srvs, draw->Vs.Uavs, vs_views, &vs_view_count, draw->Pipeline->VsSrvDimensions, draw->Pipeline->VsUavDimensions, draw->Vs.SrvCount);
   if (SUCCEEDED(hr))
     hr = bind_stage(pipe, MESA_SHADER_FRAGMENT, draw->Ps.Cbvs, draw->Ps.Srvs, draw->Ps.Uavs, ps_views, &ps_view_count, draw->Pipeline->PsSrvDimensions, draw->Pipeline->PsUavDimensions, draw->Ps.SrvCount);
   /* C27/C37: the optional stages' bindings and samplers */
@@ -3509,18 +3531,21 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
       {MESA_SHADER_TESS_CTRL, graphics->Hs, &draw->Hs, graphics->HsSrvDimensions, graphics->HsUavDimensions},
       {MESA_SHADER_TESS_EVAL, graphics->Ds, &draw->Ds, graphics->DsSrvDimensions, graphics->DsUavDimensions}};
   OptionalStage *stages = NULL;
-  if (graphics->Gs || graphics->Hs || graphics->Ds) {
+  if (SUCCEEDED(hr) && (graphics->Gs || graphics->Hs || graphics->Ds)) {
     stages = static_cast<OptionalStage *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, kOptionalStages * sizeof(OptionalStage)));
     if (!stages && SUCCEEDED(hr)) hr = E_OUTOFMEMORY;
   }
-  for (unsigned s = 0; stages && s < kOptionalStages; ++s) {
+  for (unsigned s = 0; stages && s < kOptionalStages && SUCCEEDED(hr); ++s) {
     OptionalStage &o = stages[s];
     o.stage = optional[s].stage;
     if (!optional[s].shader) continue;
     o.bound = true;
-    for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS; ++i)
-      if (optional[s].bind->Samplers[i].Valid && (o.samplers[i] = create_sampler(pipe, &optional[s].bind->Samplers[i])))
-        o.sampler_count = i + 1;
+    for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS && SUCCEEDED(hr); ++i) {
+      if (!optional[s].bind->Samplers[i].Valid) continue;
+      o.samplers[i] = create_sampler(pipe, &optional[s].bind->Samplers[i]);
+      if (!o.samplers[i]) hr = E_OUTOFMEMORY;
+      else o.sampler_count = i + 1;
+    }
     if (o.sampler_count) pipe->bind_sampler_states(pipe, o.stage, 0, o.sampler_count, o.samplers);
     if (SUCCEEDED(hr))
       hr = bind_stage(pipe, o.stage, optional[s].bind->Cbvs, optional[s].bind->Srvs, optional[s].bind->Uavs, o.views,
@@ -3609,6 +3634,8 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     so[t] = pipe->create_stream_output_target(pipe, static_cast<struct pipe_resource *>(v.Buffer->Resource),
                                               static_cast<unsigned>(v.Offset), static_cast<unsigned>(v.Size));
     struct pipe_resource *offset = so[t] ? AgxWin32AsahiStreamOutputOffset(so[t]) : NULL;
+    so_count = t + 1; /* cleanup includes a target whose offset allocation failed */
+    if (!offset) { hr = E_OUTOFMEMORY; break; }
     if (offset) {
       struct pipe_box box = {}; /* R8_UNORM buffers: bytes */
       box.x = static_cast<int>(v.FilledOffset);
@@ -3616,22 +3643,23 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
       box.height = box.depth = 1;
       pipe->resource_copy_region(pipe, offset, 0, 0, 0, 0, static_cast<struct pipe_resource *>(v.Filled->Resource), 0, &box);
     }
-    so_count = t + 1;
   }
-  if (so_count) {
+  if (SUCCEEDED(hr) && so_count) {
     const unsigned append[4] = {~0u, ~0u, ~0u, ~0u};
     pipe->set_stream_output_targets(pipe, so_count, so, append, mode);
   }
-  bind_heaps(owner, false); /* C47 */
+  if (SUCCEEDED(hr)) hr = bind_heaps(owner, false); /* C47 */
   const LONGLONG bound = qpc_now();
-  pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
+  if (SUCCEEDED(hr)) pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
   const LONGLONG drawn = qpc_now();
+  if (SUCCEEDED(hr) && AgxWin32AsahiContextFaulted(pipe)) hr = DXGI_ERROR_DEVICE_HUNG;
   unbind_heaps(owner, false);
   if (so_count) {
     pipe->set_stream_output_targets(pipe, 0, NULL, NULL, mode);
     for (unsigned t = 0; t < so_count; ++t) {
       if (!so[t]) continue;
-      if (struct pipe_resource *offset = AgxWin32AsahiStreamOutputOffset(so[t])) {
+      struct pipe_resource *offset = AgxWin32AsahiStreamOutputOffset(so[t]);
+      if (SUCCEEDED(hr) && offset) {
         struct pipe_box box = {};
         box.width = 4;
         box.height = box.depth = 1;
@@ -3646,6 +3674,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
   release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
   release_optional_stages(pipe, stages, false);
+  if (FAILED(hr)) return hr;
   ++owner->PendingDraws;
   owner->TimeBind += bound - entered;
   owner->TimeDrawVbo += drawn - bound;
