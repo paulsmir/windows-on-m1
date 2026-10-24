@@ -62869,3 +62869,113 @@ EXP1934 HARDWARE BEFORE 2026-10-24T09:32:19Z:
 - Hashes: sys b4c9e7721265, UmdArm64 883c105b5c7a, UmdX64 acc265537ba5, Umd32 a3a402ee1eb2; manifest b1773e48b52e, hardware-manifest 29936da43c4d; probe1934.sh d1450db0e684 (PROBE_LINT_OK); visible recovery rec1934h 487035e47ed654d6; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1934h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1934-native-coverage/run1934.sh.
+
+EXP1934 ACTUAL 2026-10-24T09:57:30Z (Codex draft, exp1934 REPORT.md):
+
+EXP1934 ACTUAL — offline reconstruction of saved evidence, ready for Claude
+to append to EXPERIMENTS.md. No hardware or guest action was performed by Codex.
+
+**Scope correction:** TASK.md calls EXP1934 receipt-only, but its BEFORE
+(`investigation/EXPERIMENTS.md:62821`) explicitly supersedes that description:
+the package includes the behavioral native-coverage guard (`238076bd`, original
+handoff commit `b1c4130c`) as well as latest-fault capture. This task delivers
+another behavior correction, not additional instrumentation.
+
+Here **E** = `/Volumes/pwdev/public_windows/.local/experiments/EXP1934-native-coverage`,
+**R** = `E/evidence/EXP1934`, **K** =
+`E/evidence/rec1934h/kmd-receipts-pre-disable.txt`, and **S** =
+`/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`.
+Package **30.0.1934.0**, source commit
+**10add45ef572ee227ba8a4db6b2f681443f9b286**, source archive SHA256
+**03878ee933a1563b7a8ba9ff1fec94906a4358d78eef1178f7b13c36858420c4**
+(`E/source-manifest.json`, repository_commit/source_archive_sha256).
+Recorded launch: full-owner, m1n1 **0d3a75b3**;
+**Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1** (K:1–2).
+
+- **Stage / boot:** `E/stage-ssh.log:2` records **09:31:48.2637581Z**,
+  exact oem5.inf, Code28, arm1, eight CPUs, RegistryFlush PASS. Its Boot field
+  refers to the prior recovery boot. BEFORE is **09:32:19Z**. `R/state-start.txt:1`
+  shows CM_PROB_NONE, DWM1228, Explorer5184, uptime49s. The saved full-crash
+  log contains CPU1–7 startup. Exact first-SSH latency, timer health and
+  continuous all-CPU liveness are not established.
+- **10K run:** `S/gm-d3d12a-1934.ps1:2` requests D3D12,10000 asteroids,
+  windowed,90s timeout. `S/newexp1934.log:7` reports
+  **GUEST_DOWN_DURING_GRAVITYMARK 18**. This is loop iteration18, not an
+  18-second removal: `E/probe1934.sh:19` sleeps5s and makes bounded SSH
+  calls/retries per iteration. All gm1934a out/err/done/UMD/times/image files
+  are absent locally; exact app removal/OOM time, score and image are unknown.
+  The script exits at the failed post-10K gate (`:24`); no 2K result exists.
+  PIPELINE_RC0 / RUN_DONE do not establish workload success.
+- **Containment did run:** `R/umd.log:12927,14003,14028,14161,15060,15400,15693,15821`
+  contains eight `reject-native-allocation` rows: six DWM1228, one Explorer5184,
+  one PID8700. Walk reasons are LeafAbsent3 or NoTable2
+  (`apple_agx_g3_copy_query_receipt.h:19`). Later batch/DDI refusals
+  follow them. This shows some missing coverage was refused, not that the
+  complete GPU reference set was checked. The 15921-line global trace has
+  **zero PID9688 rows**. The allocation-join tool finds no D3D12 heap/CPU-access
+  records here; its “none” output cannot classify the absent workload BO.
+- **Actual GPU fault (K:189):** exactly one valid timeout event, resumed,
+  fence **0x153bc**, PID **9688**, context **0xffffe488509bee70**,
+  submit-to-event **45ms**, HaltCount1; flags resumed/info_read/info_valid/job_known.
+  Raw **0x1112790021822211** decodes to **unmapped read**, level0,
+  **UL1C(1)**, VM1, sideband67, VA **0x1112790000**. PID9688 is a workload
+  candidate; no saved process/app trace independently identifies its executable.
+- **First and latest mappings agree (K:190–191):** v1/256bytes, captured,
+  matching fence/context/PID/raw info; graph process **20 (0x14)**,
+  root **0x9defe0000**, process generation1, mapping generation **0xc2746**,
+  lease **0xdb6**, table **0x9def70000**; JobInFlight1, Uncertain0,
+  CpuOnly0, **NativePresent0**. All four logical PTEs have zero flags,
+  IPA, allocation and offset. This is an absent logical mapping at capture,
+  **not EXP1933's valid-but-scattered group**. These are locked CPU graph/shadow
+  snapshots, not hardware-PTE/TLB reads. They do not establish why the VA
+  became absent, or which resource should have occupied it.
+- **Later reset failure (K:188,193):** one firmware recovery at0x153bc/45ms,
+  one deadline expiry, longest job **2088ms** at later fence **0x15700**.
+  Three resets, **zero successful**: ResetEngine at161903ms and162940ms,
+  ResetFromTimeout at165868ms. Each stops at **quiesce/timeout**, waits1001ms,
+  status **0xc0000483**. Active/last-submitted0x15700, completed0x156ff,
+  packet context **0xffffe4884cec6c30**. First reset job age2087ms, poll age1ms;
+  final poll age3966ms. Worker scheduled/active0, firmware Halted0.
+  Scheduler tag1/line547 appears after the first failed reset, not as the
+  original MMU cause. The later packet is not the faulting fence/context.
+- **Dump confirms VIDEO_TDR_FAILURE0x116:** ARM64/eight processors,
+  `E/evidence/dump/102426-13828-01.dmp`, P1 **0xffffe4884b4642a0**,
+  P2 **0xfffff8011c48a5c0**, P3 **0xffffffffc0000483**, P4 **3**.
+  Repository `tools/windows_dump_header.py` parses the header; decoded JSON
+  and dump SHA256 are retained beside this report. No cdb stack text is
+  supplied, so no P2 module attribution is inferred. `E/full-crash.log:3684`
+  records PSCI reset, ELR **0xfffff80120435138**, x30 **0xfffff80120297e04**,
+  SP **0xffffcd8bd83ef010**, SPSR **0x600000c4**; x0 **0x84000009** at3685.
+  Do not recast this confirmed0x116 as an inferred0x101/vGIC failure.
+- **Separate G4 refusal (K:187):** v3/392bytes, Branch9 Parse,
+  status0xc000000d, downstream3 Unmapped, queried VA **0x1103920000**,
+  read1byte, ordinal11, graph process7, GraphPresent0. Four logical pages
+  are valid+writable/scattered. This is a different VA/process observation;
+  do not assign its allocation/class to PID9688's fault.
+- **Omissions/pool (K:118,159):** 445 omission events/7744 groups;
+  the rolling history is not fault-time mapping proof. Poolv8: segment/peak/
+  held **1344MiB**, committed **1324.375MiB**, reserved **2860.125MiB**,
+  peak reserved **2880.375MiB**. Moves87, kills1720, unplaces324.
+  ReserveFailures/FloorRefusals/CommitFailures/NewSlabFailures/ReleaseFailures/
+  BusyRetries/RefUnderflows all0. These are collection-time totals, not proof
+  that memory pressure was cured or the workload completed.
+- **Post-crash / recovery:** `R/state-end.txt:1` shows Code43, DWM1240,
+  Explorer952, uptime47s. Synthetic mouse1910 moves/zero scanout frames
+  do not prove visible correctness. Saved collection/recovery establish
+  SSH/storage availability at those times; uninterrupted display, physical
+  USB input, RDP and all CPUs under load were not independently verified.
+  Exact oem5.inf was disabled at **09:38:47.2977539Z** after reboot
+  **09:37:53.5984040Z**, both arms absent
+  (`E/evidence/rec1934h/visible-disable-output.txt:3`). Removal at
+  **09:40:37.5167699Z**, staged0, Sys/Umd absent
+  (`cleanup-visible-output.txt:2`). Durable preflight PASS after reboot
+  **09:41:40.7968000Z**, PackageAbsent and
+  **VISIBLE_INERT_PACKAGE_ABSENT_8CPU** (`visible-preflight.txt:1`,
+  `visible-inert-gate.txt:1`). Codex did not repeat recovery.
+
+**BEFORE verdict: REJECTED as a sufficient no-MMU-fault containment strategy.**
+The guard demonstrably refused some unsafe allocations, but another process
+reached a valid unmapped GPU read and a later0x116. First/latest capture is
+confirmed; the sampler identity of that fault remains inconclusive. No
+GravityMark completion, correctness or performance result was obtained.
+
