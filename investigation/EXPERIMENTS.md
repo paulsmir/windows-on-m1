@@ -62210,3 +62210,93 @@ EXP1929 HARDWARE BEFORE 2026-10-24T06:17:55Z:
 - Hashes: sys cc09ce43e750, UmdArm64 9d5b2cf469f7, UmdX64 426132ae7eb9, Umd32 94bc17048095; manifest 96b0a993c27f, hardware-manifest 12b74a864351; probe1929.sh eb6c000fccba (PROBE_LINT_OK); visible recovery rec1929h b5e0a7b7661d57a5; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1929h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1929-mem2-b/run1929.sh.
+
+EXP1929 ACTUAL 2026-10-24T06:46:33Z (Codex draft, exp1929 REPORT.md):
+
+Offline reconstruction of the saved 2026-10-24 experiment, ready for Claude to
+append to EXPERIMENTS.md. BEFORE: `investigation/EXPERIMENTS.md:62206`.
+Package **30.0.1929.0**, source **8399ec7e4c719aa185dff5cf58042344774a4014**,
+m1n1 **0d3a75b3**, profile `full-owner-broker-enabled-persistent-residency`.
+The earlier native x86 compile failure was corrected before this package was
+built/installed; the failed build was not a hardware run. Device switch:
+**Wom1GpuFaultInfoRead=1**, no Wom1PoolHalfSize; segment is the normal 2688 MiB.
+
+Evidence root **E** below is
+`/Users/pavel/public_windows/.local/experiments/EXP1929-mem2-b`;
+**R** is `E/evidence/EXP1929`. All observations below are saved evidence.
+No hardware, guest, Windows builder, network, package build/install or recovery
+operation was performed for this offline task.
+
+- **Boot/run phases:** artifact/staging PASS. Ordered-restart intent at
+  06:17:59.5787521Z (`R/restart-ssh.log:2`); the recovery disable receipt records
+  the experimental boot as 06:18:49.0611540Z, approximately 49.5 s later.
+  APPL0002 CM_PROB_NONE, Wom1StartStage=12, Wom1StartStatus=0. Start/end
+  uptimes 50/306 s (`R/state-start.txt:1`, `R/state-end.txt:1`).
+  10k creates its window at 2.256 s, reaches Ready at 37.329 s, starts benchmark
+  at 37.330 s and resize at 37.338 s (`gm1929a-out.txt:19,31,32,37`).
+  2k creates its window at 1.161 s, reaches Ready at 19.379 s, benchmark
+  at 19.380 s and resize at 19.385 s (`gm1929b-out.txt:19,31,32,37`).
+- **Errors/removal/crash:** 10k reports out of memory at **38.801 s**, then
+  fails a 1280x720 RGBAf16 target texture at 38.816 s (`gm1929a-err.txt:1`).
+  2k reports OOM/heap creation failure at **19.970/19.971 s**, followed by
+  repeated heap/texture failures through RenderFrame failure at 21.280 s
+  (`gm1929b-err.txt:1`). Both wrapper results are **TIMEOUT KILLED seconds 106
+  wer 0** (`gm1929a-done.txt:1`, `gm1929b-done.txt:1`, UTF-16). These are
+  app error and wrapper kill times, **not measured device-removal times**.
+  There is no saved process AV, WER crash, system stop code/parameters,
+  minidump/cdb output, crash CPU, or IRQ/timer failure snapshot. `E/full.log:5071`
+  ends with host SerialException / USB device disconnected, not a Windows
+  bugcheck record; do not reclassify it as a guest crash. No completed score,
+  timing output or rendered image is supplied.
+- **UMD refusal boundary:** 10k PID 10944, 45 execute receipts.
+  `gm1929a-umd.log:4066`: General 128 MiB request, flags 0x2c, E_OUTOFMEMORY,
+  192 active slots. `:4088`: 0x730000 request, flags 0xf, 164 active slots;
+  `:4090`: first context fault site 0x20586, E_FAIL; `:4097`: 0x740000 texture
+  allocation refusal. 2k PID 3652, 42 execute receipts. `gm1929b-umd.log:3867`
+  first refuses 128 MiB with 193 active slots; `:3868` retries with 162 slots;
+  `:3870` returns E_OUTOFMEMORY for the heap. Its 17 reject-screen-create rows
+  finish at `:4110`, a 0x730000 request, with first context fault at `:4112`.
+  No failed MakeResident receipt occurs in these per-run traces. The falling
+  slot count is consistent with existing cache reclamation; it does not prove
+  which storage dominated physical pressure. Legacy XFER totals are zero,
+  which does not mean private CPU staging or T13 transfer traffic is zero.
+- **Pool v8 decoded:** probe-end and pre-disable pool bytes are identical.
+  SegmentBytes=2818572288 (2688 MiB); peak committed=2568749056 (2449.75 MiB);
+  peak reserved=2567110656 (2448.1875 MiB). Final committed/reserved=200212480
+  (190.9375 MiB), held=220200960 (210 MiB). **ReserveFailures=20,
+  FloorRefusals=20**, NewSlabFailures=CommitFailures=ReleaseFailures=
+  BusyRetries=RefUnderflows=0. Last refusal: request=7536640 (0x730000),
+  reserved=committed=2460549120 (2346.5625 MiB), held=2464153600 (2350 MiB),
+  TimeMs=203858, HighMemory=clear, LowMemory=clear. The actual floor counter
+  proves the headroom gate fired; event states are post-failure samples.
+  Peaks are not simultaneous ownership totals. Held includes committed;
+  never add held/reserved/committed. Source: `R/kmd-receipts-probe-end.txt:158`.
+- **GPU receipts decoded:** Wom1GpuFault, Wom1GpuReset, Wom1FirmwareRecovery,
+  Wom1PreemptRefusal, Wom1G4SubmitFailure and Wom1G4BindRefusal are absent in
+  both saved receipt collections. Absence is not an invented zero counter.
+  Wom1G4OmittedLeaves records 22 events / 1001 omitted groups. Retained
+  sequences 15–22 each describe one incomplete 4 KiB update at
+  `[0x10000,0x11000)`, segment 0, allocation handle 0; sequences 20/22 have
+  the two GravityMark PIDs. These historical updates are not an attribution
+  of a later GPU fault or proof of current mappings. Full decoded JSON and
+  input hashes: `decoded-receipts.json` beside this report.
+- **Liveness/recovery:** saved pipeline reports GUEST_ALIVE after both apps,
+  RUN_DONE and PIPELINE_RC=0. DWM PID **1216** and Explorer PID **4540** are
+  unchanged across the run. Synthetic mouse result reports 1910 moves;
+  scanout capture has zero frames. Correct visual output, physical USB input,
+  RDP and per-CPU IRQ/timer progress remain unverified. Full log records CPU1–7
+  startup, and recovery reports 8 CPUs; neither is proof of runtime progress
+  on every CPU. SSH and storage supported evidence collection/recovery.
+  Saved rec1929h disables the exact package at 06:24:51.2945354Z, removes
+  **oem5.inf** at 06:26:51.0618687Z (Staged=0, Sys/Umd absent), then records
+  durable preflight PASS, final boot 06:27:20.5114280Z, Package=Absent and
+  **VISIBLE_INERT_PACKAGE_ABSENT_8CPU**. Sources:
+  `E/evidence/rec1929h/{visible-disable-output,cleanup-visible-output,visible-preflight,visible-inert-gate}.txt`.
+- **Verdict: CONFIRMED, narrowly**, for BEFORE's no-UMD-AV / clean error
+  containment expectation on these two runs: allocation failures reached the
+  app as OOM with WER 0, rather than the earlier unchecked-allocation AVs.
+  **INCONCLUSIVE** for the claimed reduction in memory pressure: no matched
+  failure-time ownership census exists, and EXP1928 used the half segment.
+  GravityMark completion, rendering correctness and performance remain
+  unachieved. Preserve MEM2; do not claim it makes the workload fit.
+
