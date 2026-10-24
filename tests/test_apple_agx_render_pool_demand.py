@@ -16,6 +16,7 @@ class RenderPoolDemandTest(unittest.TestCase):
 
         Large placements must back and retain every granule, including the
         tail beyond a commit run; a failed later run must not publish an owner.
+        Busy release must not flood the broker without paging progress.
         """
         with tempfile.TemporaryDirectory() as tmp:
             binary = Path(tmp) / "render_pool_demand_test"

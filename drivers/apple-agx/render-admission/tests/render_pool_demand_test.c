@@ -253,10 +253,27 @@ static void test_busy_and_failed_releases(void)
     assert(AdmissionPoolDemandReclaim(&pool) == 1);
     assert(pool.Stats.BusyRetries == 1 && pool.Stats.ReleaseFailures == 1);
     assert(mapped[1] && mapped[2] && granules[2].Pinned);
-    /* The busy granule retries; the failed one is never retried. */
-    assert(AdmissionPoolDemandReclaim(&pool) == 0 && pool.Stats.BusyRetries == 2 &&
+    /* Busy cannot spin on the same completed paging epoch. */
+    assert(AdmissionPoolDemandReclaim(&pool) == 0 && pool.Stats.BusyRetries == 1 &&
            pool.Stats.ReleaseFailures == 1);
+    for (unsigned i = 0; i < 1000; ++i) {
+        assert(AdmissionPoolDemandReclaimAged(&pool, i) == 0);
+        assert(AdmissionPoolDemandReclaim(&pool) == 0);
+    }
+    assert(pool.Stats.BusyRetries == 1);
+    AdmissionPoolDemandExecuted(&pool, 0); /* first executed sequence */
+    assert(AdmissionPoolDemandReclaim(&pool) == 0);
+    assert(pool.Stats.BusyRetries == 2);
+    AdmissionPoolDemandExecuted(&pool, 0); /* same: no progress */
+    assert(AdmissionPoolDemandReclaim(&pool) == 0);
+    assert(pool.Stats.BusyRetries == 2);
+    AdmissionPoolDemandExecuted(&pool, 7);
+    assert(AdmissionPoolDemandReclaim(&pool) == 0);
+    assert(pool.Stats.BusyRetries == 3);
+    AdmissionPoolDemandExecuted(&pool, 6); /* stale: no progress */
     busy[1] = 0;
+    assert(AdmissionPoolDemandReclaim(&pool) == 0);
+    AdmissionPoolDemandExecuted(&pool, 8);
     assert(AdmissionPoolDemandReclaim(&pool) == 1 && !mapped[1] && mapped[2]);
     assert(pool.Candidates == 0);
 }

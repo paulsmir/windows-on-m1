@@ -46,6 +46,7 @@ static int CommitRun(ADMISSION_POOL_DEMAND *Pool, unsigned long long First,
     ADMISSION_POOL_GRANULE *g = &Pool->Granules[i];
     g->Committed = 1u;
     g->Recorded = 0u;
+    g->Busy = 0u;
     g->IdleSince = 0u;
   }
   Pool->Stats.Commits += Count;
@@ -205,6 +206,11 @@ static unsigned long long Reclaim(ADMISSION_POOL_DEMAND *Pool, int Aged,
       Pool->CandidateList[kept++] = index;
       continue;
     }
+    if (g->Busy && g->BusyAnyExecuted == Pool->AnyExecuted &&
+        g->BusySeq == Pool->ExecutedSeq) {
+      Pool->CandidateList[kept++] = index;
+      continue;
+    }
     if (Aged) {
       if (g->IdleSince == 0u) g->IdleSince = Now + 1u;
       if (Now + 1u - g->IdleSince < Pool->ReleaseDelay) {
@@ -222,6 +228,9 @@ static unsigned long long Reclaim(ADMISSION_POOL_DEMAND *Pool, int Aged,
       ++Pool->Stats.Releases;
       ++released;
     } else if (result == AdmissionPoolReleaseBusy) {
+      g->Busy = 1u;
+      g->BusyAnyExecuted = (unsigned char)Pool->AnyExecuted;
+      g->BusySeq = Pool->ExecutedSeq;
       ++Pool->Stats.BusyRetries;
       Pool->CandidateList[kept++] = index;
     } else {

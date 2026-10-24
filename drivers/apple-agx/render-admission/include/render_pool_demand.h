@@ -22,6 +22,10 @@ typedef struct _ADMISSION_POOL_GRANULE {
   unsigned long long RecordSeq; /* last paging record naming the granule */
   /* Aged reclaim: 1 + the time it was first seen releasable; 0 not yet. */
   unsigned long long IdleSince;
+  /* A Busy unmap is retried only after a newer executed paging epoch. */
+  unsigned long long BusySeq;
+  unsigned char Busy;
+  unsigned char BusyAnyExecuted;
   unsigned int PagingRefs;      /* paging-process 4 KiB PTEs into it */
   unsigned char Committed;
   unsigned char Pinned;         /* committed until the pool stops */
