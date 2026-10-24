@@ -63435,3 +63435,37 @@ trace, and no actual/expected retirement values in v3. This is not evidence
 that either source correction should be reverted. In particular, finishing
 faulted work immediately would again release DMA ownership without proof.
 
+
+EXP1938 HARDWARE BEFORE 2026-10-24T11:50:05Z:
+- Package 30.0.1938.0 = EXP1937 + Codex exp1937 3199666f. Switches Wom1GpuFaultInfoRead Wom1PoolHalfSize.
+- **Next experiment — WHY THIS HYPOTHESIS:**
+- 
+- 1. EXP1937 now stalls on the **faulted fence itself**, after one successful
+-    resume. This makes deferred-retirement state the immediate unexplained
+-    reset boundary, more causally proximate than a hypothetical later-submit
+-    corruption from EXP1932–1936.
+- 2. Three quiesce timeouts with idle worker, successful poll guard and Halted0
+-    rule against a stuck worker or a failed initial resume. They do not say
+-    whether the queue stamp, consumer, or recovery-state selection is holding
+-    ownership. The existing code checks those exact values.
+- 3. Asahi retires commands by observed stamps (`workqueue.rs:850`), while
+-    this KMD additionally requires done==write and expected pointer identity
+-    (`apple_agx_g13_queue_runtime.c:580`). Only measurements can tell whether
+-    firmware failed to retire or an additional guard is blocking after stamp
+-    progress. Removing a guard now would be speculative and potentially
+-    unsafe; recording its operands is the smallest discriminator.
+- 
+- **WINDOWS/AGX CONTRACT:** WDK26100 `d3dkmddi.h:8242` defines
+- LastAbortedFenceId as the packet actually aborted during execution; `:8253`
+- requires ResetEngine at PASSIVE_LEVEL; `:1062` defines the identified
+- DMA_PAGE_FAULTED fence. Asahi `gpu.rs:1006,1059` marks pending work as failed
+- and resumes halted firmware, while `workqueue.rs:850,945` still uses real
+- stamps to retire it. Recovery must preserve submitted memory until its
+- ownership ends. The diagnostic must not write stamps/pointers, change
+- completion, restore invalidated mappings, change timeouts, or touch new MMIO.
+- 
+- **WHAT IS STILL UNKNOWN:** the owner and cause of VA0x1113b90000; whether
+- Recovery rec1938h.
+- Hashes: sys 24e6a693cd9b, UmdArm64 5b2c7aa89882, UmdX64 37af330871d2, Umd32 3af8d36c3653; manifest 225909bc01a0, hardware-manifest 35a761f01fe9; probe1938.sh efd54e2cd3f2 (PROBE_LINT_OK); visible recovery rec1938h 40278a640e595a3f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1938h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1938-retire-evidence/run1938.sh.
