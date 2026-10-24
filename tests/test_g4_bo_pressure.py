@@ -33,7 +33,7 @@ class BoPressure(unittest.TestCase):
                            if l.startswith('#define AGX_WIN32_BO_CACHE_'))
         prefix = prefix.replace('@@LIMITS@@', limits)
         funcs = '\n'.join(function(text, n) for n in (
-            'cache_in_flight', 'cache_evict_oldest', 'cache_put', 'cache_take',
+            'cache_storage_bytes', 'cache_in_flight', 'cache_evict_oldest', 'cache_put', 'cache_take',
             'cache_flush', 'cache_reclaim'))
         program = prefix + funcs + r'''
 #define APPLE_AGX_GPUVA_WINSYS 1

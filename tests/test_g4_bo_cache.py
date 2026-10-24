@@ -53,7 +53,7 @@ typedef struct { uint64_t *Held; unsigned HeldCount; AGX_WIN32_GPUVA_SET Older[3
 typedef struct { int Failed, Closing; AGX_WIN32_GPUVA_SPACE Gpuva;
   void *Cache[AGX_WIN32_BO_CACHE_LIMIT]; APPLE_AGX_U32 CacheCount; APPLE_AGX_U64 CacheBytes; } AGX_WIN32_ASAHI_BACKEND;
 struct windows_bo { struct agx_bo Base; struct { struct { unsigned ClassId; } Buffer; } Backing;
-  AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva; int Imported, Cached, Virtual; /* C53 B1 */ };
+  AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva; void *Shadow; int Imported, Cached, Virtual; /* C53 B1 */ };
 static int disposed, refuse;
 static void AgxWin32PerfNote(const char *fmt, ...) { (void)fmt; }
 static int dispose(struct windows_bo *bo) { (void)bo; if(refuse) return 0; ++disposed; return 1; }
@@ -125,7 +125,7 @@ class BoCache(unittest.TestCase):
     def test_cache_reuse_and_limits(self):
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in
-                          ('cache_in_flight', 'cache_evict_oldest', 'cache_put', 'cache_take', 'cache_flush'))
+                          ('cache_storage_bytes', 'cache_in_flight', 'cache_evict_oldest', 'cache_put', 'cache_take', 'cache_flush'))
         self.assertIn('cache_take', funcs, 'winsys BO cache is missing')
         limits = '\n'.join(l for l in HDR.read_text().splitlines()
                            if l.startswith('#define AGX_WIN32_BO_CACHE_'))
