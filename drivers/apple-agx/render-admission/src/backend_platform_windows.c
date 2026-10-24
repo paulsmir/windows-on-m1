@@ -236,6 +236,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   /* G4-r3 (EXP1296): Wom1GpuFault and its opt-in FAULT_INFO read. */
   ADMISSION_GPU_FAULT_RECEIPT GpuFault;
   ADMISSION_GPU_FAULT_MAPPING GpuFaultMapping;
+  ADMISSION_GPU_FAULT_MAPPING GpuFaultMappingLast;
   BOOLEAN GpuFaultUnpublished;
   BOOLEAN ReadFaultInfo;
 } ADMISSION_PLATFORM_RUNTIME;
@@ -2219,8 +2220,19 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
   if (status == NULL) return APPLE_AGX_BACKEND_FALSE;
   AdmissionGpuFaultCapture(runtime, Fence, EventKind, status, &event);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  AdmissionGpuvaG3CaptureFaultMapping(runtime->Adapter, &event,
-      &runtime->GpuFaultMapping);
+  {
+    /* EXP1933: a desktop fault must not consume the workload's snapshot.
+     * Capture once before resume, keeping the original first-valid receipt
+     * and a separately named latest-valid receipt. An unknown latest result
+     * replaces the old result; an event without valid FAULT_INFO does not. */
+    ADMISSION_GPU_FAULT_MAPPING mapping = {0};
+    AdmissionGpuvaG3CaptureFaultMapping(runtime->Adapter, &event, &mapping);
+    if (mapping.Version != 0u) {
+      if (runtime->GpuFaultMapping.Version == 0u)
+        runtime->GpuFaultMapping = mapping;
+      runtime->GpuFaultMappingLast = mapping;
+    }
+  }
 #endif
   deadline = AdmissionPlatformNowMs() + 100u;
   KeMemoryBarrier();
@@ -3724,6 +3736,11 @@ static VOID AdmissionPublishFirmwareRecovery(
     (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &runtime->GpuFaultMapping,
         sizeof(runtime->GpuFaultMapping));
   }
+  if (fault && runtime->GpuFaultMappingLast.Version != 0u) {
+    RtlInitUnicodeString(&name, L"Wom1GpuFaultMappingLast");
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &runtime->GpuFaultMappingLast,
+        sizeof(runtime->GpuFaultMappingLast));
+  }
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
@@ -4930,6 +4947,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   AppleAgxCompletionTransactionInitialize(&runtime->Completion);
   AdmissionGpuFaultReceiptInitialize(&runtime->GpuFault);
   RtlZeroMemory(&runtime->GpuFaultMapping, sizeof(runtime->GpuFaultMapping));
+  RtlZeroMemory(&runtime->GpuFaultMappingLast, sizeof(runtime->GpuFaultMappingLast));
   runtime->GpuFaultUnpublished = FALSE;
   runtime->ReadFaultInfo =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultInfoRead");

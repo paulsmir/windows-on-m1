@@ -17,8 +17,9 @@ Receipts (REG_BINARY under the APPL0002 device key):
                         actual floor counter and last reservation failure.
                         Explicit Wom1M2PoolDemand.bin input only, so older
                         JSON/REG fault collections retain their behavior.
-  Wom1GpuFaultMapping  v1, 256 bytes: first valid fault's active process,
-                        fence, VM slot, native graph leaf and four logical
+  Wom1GpuFaultMapping / Wom1GpuFaultMappingLast v1, 256 bytes:
+                        first/latest valid fault's active process, fence,
+                        VM slot, native graph leaf and four logical
                         PTEs, captured before recovery. Unknown capture state
                         is distinct from an absent mapping; CPU metadata only.
 Dump blackbox:
@@ -47,7 +48,9 @@ RECOVERY_NAME = 'Wom1FirmwareRecovery'
 OMITTED_NAME = 'Wom1G4OmittedLeaves'
 POOL_NAME = 'Wom1M2PoolDemand'
 MAPPING_NAME = 'Wom1GpuFaultMapping'
-NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME, OMITTED_NAME, MAPPING_NAME)
+# Same v1 layout; latest valid event, including an unknown capture result.
+MAPPING_LAST_NAME = 'Wom1GpuFaultMappingLast'
+NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME, OMITTED_NAME, MAPPING_NAME, MAPPING_LAST_NAME)
 RAW_NAMES = NAMES + (POOL_NAME,)
 
 FAULT_INFO_NOT_READ = 0xacce5515abad1dea
@@ -387,7 +390,7 @@ def decode_pool(data):
 
 
 def decode_fault_mapping(data):
-    """First valid fault's locked CPU metadata, not a hardware PTE read."""
+    """A valid fault's locked CPU metadata, not a hardware PTE read."""
     if len(data) != 256:
         raise ValueError('unsupported Wom1GpuFaultMapping length')
     words = struct.unpack_from('<12I10Q', data)
@@ -414,7 +417,8 @@ def decode_fault_mapping(data):
     return result
 
 
-DECODERS = {MAPPING_NAME: decode_fault_mapping, OMITTED_NAME: decode_omitted_leaves, FAULT_NAME: decode_fault, RESET_NAME: decode_reset,
+DECODERS = {MAPPING_NAME: decode_fault_mapping, MAPPING_LAST_NAME: decode_fault_mapping,
+            OMITTED_NAME: decode_omitted_leaves, FAULT_NAME: decode_fault, RESET_NAME: decode_reset,
             RECOVERY_NAME: decode_recovery, POOL_NAME: decode_pool}
 
 

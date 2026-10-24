@@ -2,11 +2,15 @@
 EXP1932's rolling omission history lost the faulting VA. Capture must retain
 the first valid fault's exact current four-page group, not another process,
 fence, VM slot, neighbouring group, or a later fault. Busy/uncertain state is
-unknown, never evidence of an absent leaf. Exercise production capture bodies
+unknown, never evidence of an absent leaf. EXP1933: another process must not
+consume the only snapshot and hide the later valid fault; persist first and
+latest separately, including an unknown latest result. Exercise production capture bodies
 with the real graph lookup and decode the actual C wire layout.
 """
 from pathlib import Path
 import os
+import base64
+import json
 import subprocess
 import tempfile
 import unittest
@@ -23,6 +27,7 @@ PROGRAM = r'''
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <wchar.h>
 #include "render_gpu_fault.h"
 #include "apple_agx_gpuva_g3_graph.h"
 #include "apple_agx_gpuva_g3_translation.h"
@@ -53,7 +58,7 @@ typedef struct {
   ULONG OsProcessId, CpuOnlyMappings;
 } ADMISSION_G3_PROCESS;
 typedef struct { int Lock; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence; } ADMISSION_G3_STATE;
-typedef struct { ADMISSION_G3_STATE *GpuvaG3State; } ADMISSION_CONTEXT;
+typedef struct { ADMISSION_G3_STATE *GpuvaG3State; void *PhysicalDeviceObject; } ADMISSION_CONTEXT;
 @@FUNCTION@@
 static APPLE_AGX_GPUVA_G3_NODE root, middle, table, re, me, leaf;
 static APPLE_AGX_GPUVA_G3_NODE *rs[8], *ms[2048], *ls[2048];
@@ -61,7 +66,7 @@ static APPLE_AGX_GPUVA_G3_LOGICAL_PTE ptes[8192];
 @@RECOVERY@@
 int main(int argc, char **argv) {
   ADMISSION_G3_PROCESS p={0}; ADMISSION_RENDER_CONTEXT ctx={0};
-  ADMISSION_G3_STATE state={0,&p,71}; ADMISSION_CONTEXT adapter={&state};
+  ADMISSION_G3_STATE state={0,&p,71}; ADMISSION_CONTEXT adapter={&state,0};
   ADMISSION_G3_TABLE_SHADOW shadow={0};
   ADMISSION_GPU_FAULT_EVENT e={0}; ADMISSION_GPU_FAULT_MAPPING r={0};
   const ULONGLONG va=0x1112681040ULL, tableIpa=0x900004000ULL;
@@ -135,6 +140,41 @@ int main(int argc, char **argv) {
   memset(&runtime.GpuFaultMapping,0,sizeof(runtime.GpuFaultMapping)); status[12]=0;
   assert(!AdmissionTransportRecover(&runtime,71,4));
   assert(runtime.GpuFaultMapping.Status==7 && status[12]==0);
+  ADMISSION_GPU_FAULT_MAPPING first_mapping=runtime.GpuFaultMapping;
+  /* A second process/fence/VA must not be hidden by the first valid fault. */
+  ++state.ActiveFence; ++capture_event.Fence;
+  capture_event.FaultInfo+=1ULL<<30; p.OsProcessId=9002;
+  runtime.Provider.QueueProvider.PendingFence=capture_event.Fence;
+  status[8]=1; status[12]=0;
+  assert(AdmissionTransportRecover(&runtime,capture_event.Fence,4));
+  assert(!memcmp(&first_mapping,&runtime.GpuFaultMapping,sizeof(first_mapping)));
+  assert(runtime.GpuFaultMappingLast.Fence==capture_event.Fence);
+  assert(runtime.GpuFaultMappingLast.OsProcessId==9002);
+  assert(runtime.GpuFaultMappingLast.FaultVa==va+64);
+  assert(runtime.GpuFaultMappingLast.Status==AdmissionGpuFaultMappingCaptured);
+  AdmissionPublishFirmwareRecovery(&runtime);
+  assert(first_written && last_written && flushed);
+  assert(!memcmp(&first_written_value,&first_mapping,sizeof(first_mapping)));
+  assert(!memcmp(&last_written_value,&runtime.GpuFaultMappingLast,sizeof(first_mapping)));
+  /* No valid register read: preserve both, never erase known evidence. */
+  ADMISSION_GPU_FAULT_MAPPING last_mapping=runtime.GpuFaultMappingLast;
+  capture_event.Flags=0; status[8]=1; status[12]=0;
+  assert(AdmissionTransportRecover(&runtime,capture_event.Fence,4));
+  assert(!memcmp(&last_mapping,&runtime.GpuFaultMappingLast,sizeof(last_mapping)));
+  /* Unknown latest must replace the old captured result, not misattribute it. */
+  capture_event.Flags=14; busy=1; ++capture_event.Fence;
+  runtime.Provider.QueueProvider.PendingFence=capture_event.Fence;
+  status[8]=1; status[12]=0;
+  assert(AdmissionTransportRecover(&runtime,capture_event.Fence,4));
+  assert(runtime.GpuFaultMappingLast.Status==AdmissionGpuFaultMappingBusy);
+  assert(runtime.GpuFaultMappingLast.Fence==capture_event.Fence);
+  assert(runtime.GpuFaultMappingLast.NativeIpa==0 && runtime.GpuFaultMappingLast.OsProcessId==0);
+  assert(!memcmp(&first_mapping,&runtime.GpuFaultMapping,sizeof(first_mapping)));
+  AdmissionPublishFirmwareRecovery(&runtime);
+  assert(first_written==2 && last_written==2 && flushed==2);
+  assert(!memcmp(&first_written_value,&first_mapping,sizeof(first_mapping)));
+  assert(last_written_value.Status==AdmissionGpuFaultMappingBusy);
+  assert(last_written_value.Fence==capture_event.Fence);
   puts("PASS"); return 0;
 }
 '''
@@ -149,13 +189,14 @@ typedef unsigned APPLE_AGX_BACKEND_U32;
 typedef int APPLE_AGX_BACKEND_BOOL;
 typedef struct {
   ADMISSION_CONTEXT *Adapter;
-  struct { struct { unsigned PendingFence; } QueueProvider; } Provider;
+  struct { struct { unsigned PendingFence; struct { unsigned DeadlineExpiries; } Runtime; } QueueProvider; } Provider;
   struct { struct { void *CpuAddress; } DataObjects[1]; } Initdata;
   ADMISSION_GPU_FAULT_RECEIPT GpuFault;
-  ADMISSION_GPU_FAULT_MAPPING GpuFaultMapping;
+  ADMISSION_GPU_FAULT_MAPPING GpuFaultMapping, GpuFaultMappingLast;
   int GpuFaultUnpublished, FirmwareRecoveries, FirmwareRecoveryUnpublished;
   unsigned LastFirmwareRecoveryKind, LastFirmwareRecoveryFence;
   unsigned LastFirmwareRecoveryMs, MaxFirmwareRecoveryMs;
+  unsigned PublishedDeadlineExpiries, LongestJobMs, LongestJobFence;
   ULONGLONG JobSubmitMs;
 } ADMISSION_PLATFORM_RUNTIME;
 static ADMISSION_GPU_FAULT_EVENT capture_event;
@@ -168,6 +209,36 @@ static void KeMemoryBarrier(void) { }
 static void KeStallExecutionProcessor(unsigned us) { (void)us; }
 static void InterlockedIncrement(int *p) { ++*p; }
 @@BODY@@
+typedef int BOOLEAN;
+typedef void *HANDLE;
+typedef const wchar_t *UNICODE_STRING;
+#define FALSE 0
+#define PLUGPLAY_REGKEY_DEVICE 1
+#define KEY_SET_VALUE 2
+#define REG_BINARY 3
+#define NT_SUCCESS(s) ((s)>=0)
+static int first_written,last_written,flushed;
+static ADMISSION_GPU_FAULT_MAPPING first_written_value,last_written_value;
+static int InterlockedCompareExchange(int *p,int v,int cmp) {
+  int before=*p; if(before==cmp) *p=v; return before;
+}
+static int IoOpenDeviceRegistryKey(void *a,int b,int c,HANDLE *key) {
+  (void)a;(void)b;(void)c;*key=(HANDLE)1; return 0;
+}
+static void RtlInitUnicodeString(UNICODE_STRING *s,const wchar_t *value) {*s=value;}
+static int ZwSetValueKey(HANDLE key,UNICODE_STRING *name,int title,int type,
+    const void *value,unsigned bytes) {
+  (void)key;(void)title;assert(type==REG_BINARY);
+  if(!wcscmp(*name,L"Wom1GpuFaultMapping")) {
+    assert(bytes==256);memcpy(&first_written_value,value,bytes);++first_written;
+  } else if(!wcscmp(*name,L"Wom1GpuFaultMappingLast")) {
+    assert(bytes==256);memcpy(&last_written_value,value,bytes);++last_written;
+  }
+  return 0;
+}
+static int ZwFlushKey(HANDLE key) {(void)key;++flushed;return 0;}
+static void ZwClose(HANDLE key) {(void)key;}
+@@PUBLISH@@
 '''
 
 
@@ -179,7 +250,8 @@ class FaultMapping(unittest.TestCase):
         source = PROGRAM.replace('@@FUNCTION@@', body(text, 'AdmissionGpuvaG3CaptureFaultMapping'))
         backend = (RENDER/'src/backend_platform_windows.c').read_text()
         source = source.replace('@@RECOVERY@@', RECOVERY.replace('@@BODY@@',
-            body(backend, 'AdmissionTransportRecover')))
+            body(backend, 'AdmissionTransportRecover')).replace('@@PUBLISH@@',
+            body(backend, 'AdmissionPublishFirmwareRecovery')))
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             (tmp/'capture.c').write_text(source)
@@ -199,6 +271,16 @@ class FaultMapping(unittest.TestCase):
             self.assertEqual(result['ptes'][1]['allocation'], '0xabc001')
             self.assertEqual(result['ptes'][3]['ipa'], '0xa00006000')
             self.assertEqual(DECODER.read_receipts(path), {'Wom1GpuFaultMapping': data})
+            latest = tmp/'Wom1GpuFaultMappingLast.bin'
+            latest.write_bytes(data)
+            self.assertEqual(DECODER.read_receipts(latest), {'Wom1GpuFaultMappingLast': data})
+            self.assertEqual(DECODER.DECODERS['Wom1GpuFaultMappingLast'](data), result)
+            for suffix, content in [
+                ('.json', json.dumps({'Receipts': {'Wom1GpuFaultMappingLast':
+                    base64.b64encode(data).decode()}})),
+                ('.reg', '"Wom1GpuFaultMappingLast"=hex:' + ','.join(f'{v:02x}' for v in data))]:
+                saved = tmp/('receipts'+suffix); saved.write_text(content)
+                self.assertEqual(DECODER.read_receipts(saved), {'Wom1GpuFaultMappingLast': data})
             for invalid in (b'', data[:-1], bytes(len(data)), data+b'\0'):
                 with self.assertRaises(ValueError): DECODER.decode_fault_mapping(invalid)
 
