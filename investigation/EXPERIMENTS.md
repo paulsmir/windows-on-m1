@@ -61796,3 +61796,17 @@ EXP1924 HARDWARE BEFORE 2026-10-24T02:02:04Z:
 - Hashes: sys 5cb2d42c9046, UmdArm64 0b9c5075dcd3, UmdX64 668bc757258a, Umd32 d545d416c0a8; manifest 4f7aa1e71b41, hardware-manifest ae79fe16d031; probe1924.sh ccd5fc0b39e4 (PROBE_LINT_OK); visible recovery rec1924h 9871c73c0a1dc4ff; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1924h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1924-omit-gate/run1924.sh.
+
+EXP1924 ACTUAL 2026-10-24T02:19:14Z:
+- Package 30.0.1924.0 (4016d17d: T12 omitted-leaf BeginJob gate + Busy backoff); Wom1GpuFaultInfoRead=1.
+- **Boot regression: SSH_NEVER_UP.** Windows bugchecked during boot: NVMe dump write, then PSCI reset. Dump: evidence/dump/102426-20343-01.dmp.
+- Pre-disable receipts:
+  - Wom1G4OmittedLeaves: 10 events / 926 groups at boot, first os_pid 1212 (DWM), a 16,384,000-byte (2560x1600x4) segment-0 surface;
+  - Wom1GpuReset: 3 resets, all ADAPTER 0xC0000483, faulted tag 4 line 4041 (BeginJob refusal stop in backend_platform_windows.c);
+  - no MMU fault.
+- HV "pool window cmd=4 result=6" lines: 0. The Busy backoff held (or was not exercised before the crash).
+- Verdict:
+  - T12 gate REJECTED: refusing every GPU job of a process with any omitted-leaf mapping blocks DWM, whose aperture surfaces with omitted leaves are not unsafe in practice. It turns a working desktop into a boot bugcheck. Reverted (5e121ca9).
+  - Busy backoff kept.
+- Recovery: rec1924h at proxy reported RECOVERY_DONE.
+- Next: EXP1925 = revert + Codex T13 (CPU-accessible D3D12 heaps and owner CPU BOs on native-only canonical storage + write-watched staging). This is the actual fix candidate for GravityMark.
