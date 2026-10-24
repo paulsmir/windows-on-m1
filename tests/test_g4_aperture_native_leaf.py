@@ -33,12 +33,14 @@ class ApertureNativeLeaf(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="t7d-leaf-") as directory:
             directory = Path(directory)
             (directory / "leaf.inc").write_text(
+                function_body(PAGING.read_text(), "AdmissionG3RecordOmitted") + "\n" +
                 function_body(PAGING.read_text(), "AdmissionG3UpdateLeaf"))
             binary = directory / "replay"
             build = subprocess.run([
                 os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
                 "-Werror", "-fsanitize=address,undefined", "-I", str(directory),
                 "-I", str(SHARED / "include"),
+                "-I", str(ROOT / "drivers/apple-agx/render-admission/include"),
                 str(ROOT / "tests/g4_aperture_native_leaf.c"),
                 str(SHARED / "src/apple_agx_gpuva_g3_translation.c"),
                 "-o", str(binary),

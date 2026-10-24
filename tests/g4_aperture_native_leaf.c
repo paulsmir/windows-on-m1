@@ -8,6 +8,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include "apple_agx_gpuva_g3_translation.h"
+#include "render_omitted_leaves.h"
+#define VOID void
+#define ADMISSION_ALLOCATION_OBJECT_MAGIC 42
+typedef struct { struct { unsigned Magic; struct {uint64_t Size;} Description;} Object;} ADMISSION_ALLOCATION_HANDLE;
+typedef struct {long long QuadPart;} QPC;
+static QPC KeQueryPerformanceCounter(void *p) {(void)p;return (QPC){123};}
+static void AdmissionRecordG4OmittedLeaves(void *a,const ADMISSION_OMITTED_LEAVES *r) {(void)a;assert(r->Version==1 && r->Bytes==2976);}
 typedef int NTSTATUS, BOOLEAN;
 typedef unsigned UINT;
 typedef unsigned long long ULONGLONG;
@@ -49,8 +56,8 @@ enum { AppleAgxGpuvaG3SystemBacking, AppleAgxGpuvaG3LocalBacking,
        AdmissionG3PagingFailureLeafGraph };
 typedef struct {
   UINT JobInFlight, LeaseToken, Uncertain, LastStatus;
-  ULONGLONG MappingGeneration;
-  APPLE_AGX_GPUVA_G3_NODE Leaf;
+  ULONGLONG MappingGeneration, ProcessId;
+  APPLE_AGX_GPUVA_G3_NODE Leaf, OtherLeaves[2];
   UINT Mappings, Publications;
 } GRAPH;
 typedef struct _SHADOW {
@@ -58,12 +65,12 @@ typedef struct _SHADOW {
   ULONGLONG BrokerIpa;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *PendingPtes, *LogicalPtes, *ResidentPtes;
 } ADMISSION_G3_TABLE_SHADOW;
-typedef struct { ULONGLONG SystemGroups[8], UnpublishedGroups[32]; } STATE;
+typedef struct { void *Adapter; ADMISSION_OMITTED_LEAVES OmittedLeaves; ULONGLONG SystemGroups[8], UnpublishedGroups[32]; } STATE;
 typedef struct {
   GRAPH Graph;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
   STATE *State;
-  UINT CpuOnlyMappings;
+  UINT CpuOnlyMappings, OsProcessId;
 } ADMISSION_G3_PROCESS;
 static void *ExAllocatePool2(UINT flags, size_t bytes, UINT tag) {
   (void)flags; (void)tag; return malloc(bytes);
@@ -95,16 +102,21 @@ static void AppleAgxGpuvaG3MappingRelease(GRAPH *g, ULONGLONG ipa) {
 }
 static const APPLE_AGX_GPUVA_G3_NODE *AppleAgxGpuvaG3GraphLeaf(
     GRAPH *g, ULONGLONG table, UINT index) {
-  assert(table==0x90000000 && index==0); return g->Leaf.AuxIpa ? &g->Leaf : NULL;
+  assert(table==0x90000000 && index<3);
+  APPLE_AGX_GPUVA_G3_NODE *leaf=index?&g->OtherLeaves[index-1]:&g->Leaf;
+  return leaf->AuxIpa ? leaf : NULL;
 }
 static int AppleAgxGpuvaG3GraphUpdateLeafBacking(GRAPH *g, ULONGLONG table,
     UINT index, ULONGLONG ipa, bool write, UINT kind) {
-  assert(table==0x90000000 && index==0);
-  g->Leaf=(APPLE_AGX_GPUVA_G3_NODE){ipa,write,kind}; ++g->Publications; return 1;
+  assert(table==0x90000000 && index<3);
+  APPLE_AGX_GPUVA_G3_NODE *leaf=index?&g->OtherLeaves[index-1]:&g->Leaf;
+  *leaf=(APPLE_AGX_GPUVA_G3_NODE){ipa,write,kind}; ++g->Publications; return 1;
 }
+static int fail_publication;
 static int AppleAgxGpuvaG3GraphTryLeafBacking(GRAPH *g, ULONGLONG table,
     UINT index, ULONGLONG ipa, bool write, UINT kind, bool *unavailable) {
   *unavailable=false;
+  if (fail_publication) {g->LastStatus=17;return 0;}
   return AppleAgxGpuvaG3GraphUpdateLeafBacking(g,table,index,ipa,write,kind);
 }
 static NTSTATUS AdmissionG3RejectPaging(ADMISSION_G3_PAGING_FAILURE *f,
@@ -124,7 +136,8 @@ int main(void) {
   DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE update={0};
   shadow.BrokerIpa=0x90000000; process.TableShadows=&shadow; process.State=&state;
   update.NumPageTableEntries=4; update.pPageTableEntries=ptes;
-  update.hAllocation=&adapter;
+  ADMISSION_ALLOCATION_HANDLE allocation={.Object={42,{0x10000}}};
+  update.hAllocation=&allocation;
   for (UINT i=0;i<4;++i) { ptes[i].Valid=1; ptes[i].PageAddress=0x10000+i; }
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
   assert(process.Graph.Leaf.AuxIpa==0x10000000 && process.Graph.Leaf.Writable);
@@ -135,9 +148,14 @@ int main(void) {
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
   assert(process.Graph.Leaf.AuxIpa==0 && process.Graph.Mappings==4);
   assert(state.UnpublishedGroups[0]==1);
+  assert(state.OmittedLeaves.TotalEvents==1 && state.OmittedLeaves.TotalGroups==1);
+  const ADMISSION_OMITTED_EVENT *event=&state.OmittedLeaves.Events[0];
+  assert(event->Allocation==(uintptr_t)&allocation && event->AllocationBytes==0x10000);
+  assert(event->UpdateVa==0 && event->UpdateBytes==0x4000 && event->OmittedGroups==1);
+  assert(event->Bitmap[0]==1 && event->GroupCount==1 && event->Flags==3);
   for (UINT i=0;i<4;++i) {
     assert(shadow.LogicalPtes[i].GuestIpa==ptes[i].PageAddress*0x1000ULL);
-    assert(shadow.LogicalPtes[i].Allocation==(ULONGLONG)(ULONG_PTR)&adapter);
+    assert(shadow.LogicalPtes[i].Allocation==(ULONGLONG)(ULONG_PTR)&allocation);
     assert(shadow.LogicalPtes[i].AllocationOffset==i*0x1000ULL);
   }
   /* A one-PTE repair must merge with the three retained pages. */
@@ -178,6 +196,33 @@ int main(void) {
   assert(process.Graph.Mappings==0);
   free(shadow.LogicalPtes); free(shadow.ResidentPtes);
 
+  /* Three groups with a published hole; ring wrap counts updates, while
+   * failed publication contributes no event. First invalid PTE is covered. */
+  memset(&shadow,0,sizeof(shadow));memset(&process,0,sizeof(process));memset(&state,0,sizeof(state));
+  shadow.BrokerIpa=0x90000000;process.TableShadows=&shadow;process.State=&state;
+  process.Graph.ProcessId=77;process.OsProcessId=123;
+  DXGK_PTE many[12]={0};
+  for(UINT i=0;i<12;i++){many[i].Valid=1;many[i].PageAddress=0x50000+i;}
+  many[0].Valid=0;many[9].PageAddress=0x60000;
+  update.NumPageTableEntries=12;update.pPageTableEntries=many;
+  update.FirstPteVirtualAddress=0x90000;update.AllocationOffsetInBytes=0x10000;
+  for(UINT pass=0;pass<10;pass++) {
+    assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
+    assert(state.OmittedLeaves.TotalEvents==pass+1 && state.OmittedLeaves.TotalGroups==2*(pass+1));
+    event=&state.OmittedLeaves.Events[(state.OmittedLeaves.Next+7)%8];
+    assert(event->Bitmap[0]==5 && event->GroupCount==3 && event->OmittedGroups==2);
+    assert(event->FirstOmittedVa==0x90000 && event->LastOmittedVa==0x98000);
+    assert(event->UpdateBytes==0xc000 && event->AllocationVa==0x80000);
+    assert(event->ProcessId==77 && event->OsProcessId==123);
+  }
+  assert(state.OmittedLeaves.Count==8 && state.OmittedLeaves.Next==2);
+  fail_publication=1;many[1].PageAddress=0x70000;
+  assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)<0);
+  assert(state.OmittedLeaves.TotalEvents==10 && shadow.LogicalPtes[1].GuestIpa==0x50001000);
+  fail_publication=0;
+  free(shadow.LogicalPtes);free(shadow.ResidentPtes);
+  update.NumPageTableEntries=4;update.pPageTableEntries=ptes;update.FirstPteVirtualAddress=0;update.AllocationOffsetInBytes=0;
+
   /* CPU-only paging VAs must remain usable for copying scattered system
    * backing without acquiring GPU grants or activating a GPU shadow. */
   memset(&shadow,0,sizeof(shadow)); memset(&process,0,sizeof(process));
@@ -187,9 +232,10 @@ int main(void) {
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
   assert(!process.Graph.Leaf.AuxIpa && !process.Graph.Mappings);
   assert(!process.Graph.Publications && !shadow.ResidentPtes);
+  assert(state.OmittedLeaves.TotalEvents==10);
   for (UINT i=0;i<4;++i) {
     assert(shadow.LogicalPtes[i].GuestIpa==ptes[i].PageAddress*0x1000ULL);
-    assert(shadow.LogicalPtes[i].Allocation==(ULONGLONG)(ULONG_PTR)&adapter);
+    assert(shadow.LogicalPtes[i].Allocation==(ULONGLONG)(ULONG_PTR)&allocation);
   }
   memset(ptes,0,sizeof(ptes));
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);

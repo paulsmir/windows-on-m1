@@ -9,6 +9,10 @@ Receipts (REG_BINARY under the APPL0002 device key):
                         DxgkDdiResetFromTimeout and the state it found; v2
                         adds timing and the last 8 resets; v3 adds reset stages.
   Wom1FirmwareRecovery  8 dwords (EXP1075/G4-recovery).
+  Wom1G4OmittedLeaves   v1, 2976 bytes: eight historical successful leaf
+                        updates, allocation/PID/VA spans and exact 16 KiB
+                        omission bitmap. A match is historical evidence,
+                        not proof that a later fault used the same mapping.
 Dump blackbox:
   --dbginfo HEX         the DxgkDdiCollectDbgInfo snapshot (v1 32 or v2 56
                         bytes; dxgkrnl trims trailing zero bytes) from the
@@ -32,7 +36,8 @@ import struct
 FAULT_NAME = 'Wom1GpuFault'
 RESET_NAME = 'Wom1GpuReset'
 RECOVERY_NAME = 'Wom1FirmwareRecovery'
-NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME)
+OMITTED_NAME = 'Wom1G4OmittedLeaves'
+NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME, OMITTED_NAME)
 
 FAULT_INFO_NOT_READ = 0xacce5515abad1dea
 EVENT_KINDS = {0: 'fault', 1: 'flag', 4: 'timeout'}
@@ -293,7 +298,47 @@ def dbginfo_from_blackbox(data):
     raise ValueError('no driver section in the watchdog secondary data')
 
 
-DECODERS = {FAULT_NAME: decode_fault, RESET_NAME: decode_reset,
+def decode_omitted_leaves(data):
+    """Decode historical omissions; later updates can repair/reuse these VAs."""
+    size, event_size, capacity = 32 + 8 * 368, 368, 8
+    if len(data) != size:
+        raise ValueError(f'Wom1G4OmittedLeaves: expected {size} bytes, got {len(data)}')
+    version, declared, next_slot, count, total, groups = struct.unpack_from('<4I2Q', data)
+    if version != 1 or declared != size or next_slot >= capacity or count > capacity or total < count:
+        raise ValueError('Wom1G4OmittedLeaves: invalid header')
+    events = []
+    for n in range(count):
+        slot = (next_slot + capacity - count + n) % capacity
+        offset = 32 + slot * event_size
+        values = struct.unpack_from('<12Q4I', data, offset)
+        seq, qpc, process, pid, allocation, base, alloc_bytes, va, span, group_va, first, last, segment, omitted, group_count, flags = values
+        if not seq or group_count > 2048 or not omitted or omitted > group_count:
+            raise ValueError('Wom1G4OmittedLeaves: invalid event')
+        bitmap = int.from_bytes(data[offset+112:offset+368], 'little')
+        if bitmap >> group_count or bitmap.bit_count() != omitted:
+            raise ValueError('Wom1G4OmittedLeaves: invalid bitmap')
+        selected = [group_va + i*0x4000 for i in range(group_count) if bitmap & (1 << i)]
+        if selected[0] != first or selected[-1] != last:
+            raise ValueError('Wom1G4OmittedLeaves: inconsistent extent')
+        ranges = []
+        for address in selected:
+            start, end = max(address, va), min(address+0x4000, va+span)
+            if start >= end:
+                raise ValueError('Wom1G4OmittedLeaves: group outside update')
+            if ranges and ranges[-1]['end'] == hex(start):
+                ranges[-1]['end'] = hex(end)
+            else:
+                ranges.append({'start': hex(start), 'end': hex(end)})
+        events.append(dict(sequence=seq, qpc=qpc, process_id=process, os_pid=pid,
+            allocation=hex(allocation), allocation_va=hex(base) if flags & 2 else None,
+            allocation_bytes=alloc_bytes if flags & 1 else None, update_va=hex(va),
+            update_bytes=span, segment=segment if segment != 0xffffffff else 'mixed',
+            omitted_groups=omitted, omitted_ranges=ranges))
+    return dict(version=version, total_events=total, total_groups=groups, events=events,
+                meaning='historical successful updates, not current mapping proof')
+
+
+DECODERS = {OMITTED_NAME: decode_omitted_leaves, FAULT_NAME: decode_fault, RESET_NAME: decode_reset,
             RECOVERY_NAME: decode_recovery}
 
 

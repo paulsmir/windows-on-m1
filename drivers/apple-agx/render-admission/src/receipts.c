@@ -2020,6 +2020,7 @@ enum {
   AdmissionPagingReceiptSystemGroups = 32u,
   AdmissionPagingReceiptSystemShapes = 64u,
   AdmissionPagingReceiptPoolDemand = 128u,
+  AdmissionPagingReceiptOmittedLeaves = 512u,
   AdmissionPagingReceiptBrokerFailures = 256u
 };
 typedef struct _ADMISSION_PAGING_RECEIPTS {
@@ -2036,6 +2037,7 @@ typedef struct _ADMISSION_PAGING_RECEIPTS {
   ADMISSION_G3_SYSTEM_SHAPE SystemShapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT];
   ADMISSION_POOL_DEMAND_RECEIPT PoolDemand;
   ADMISSION_G3_BROKER_FAILURES Broker;
+  ADMISSION_OMITTED_LEAVES Omitted;
 } ADMISSION_PAGING_RECEIPTS;
 
 static IO_WORKITEM_ROUTINE AdmissionPagingReceiptWorker;
@@ -2065,6 +2067,8 @@ static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
       RtlCopyMemory(&receipts->PoolDemand, Data, sizeof(receipts->PoolDemand));
     else if (Kind == AdmissionPagingReceiptBrokerFailures)
       RtlCopyMemory(&receipts->Broker, Data, sizeof(receipts->Broker));
+    else if (Kind == AdmissionPagingReceiptOmittedLeaves)
+      RtlCopyMemory(&receipts->Omitted, Data, sizeof(receipts->Omitted));
     receipts->Dirty |= Kind;
     if (InterlockedCompareExchange(&receipts->Queued, 1, 0) == 0) {
       KeClearEvent(&receipts->Idle);
@@ -2103,6 +2107,7 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     ADMISSION_G3_SYSTEM_SHAPE shapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT];
     ADMISSION_POOL_DEMAND_RECEIPT pool;
     ADMISSION_G3_BROKER_FAILURES broker;
+    ADMISSION_OMITTED_LEAVES omitted;
     ADMISSION_G3_PAGING_WAIT_RECEIPT wait;
     ULONG dirty;
     KIRQL oldIrql;
@@ -2117,6 +2122,7 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     RtlCopyMemory(shapes, receipts->SystemShapes, sizeof(shapes));
     RtlCopyMemory(&pool, &receipts->PoolDemand, sizeof(pool));
     RtlCopyMemory(&broker, &receipts->Broker, sizeof(broker));
+    RtlCopyMemory(&omitted, &receipts->Omitted, sizeof(omitted));
     if (dirty == 0u) {
       /* Cleared under the lock that Stage sets Dirty under: no lost wakeup. */
       InterlockedExchange(&receipts->Queued, 0);
@@ -2125,6 +2131,9 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
       return;
     }
     KeReleaseSpinLock(&receipts->Lock, oldIrql);
+    if (dirty & AdmissionPagingReceiptOmittedLeaves)
+      AdmissionPagingReceiptWrite(context, L"Wom1G4OmittedLeaves",
+                                  &omitted, sizeof(omitted), TRUE);
     if (dirty & AdmissionPagingReceiptFlush)
       AdmissionPagingReceiptWrite(context, L"Wom1G3FlushInput", &flush,
                                   sizeof(flush), FALSE);
@@ -2592,6 +2601,12 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3SystemShapes(
   AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptSystemShapes,
                               Shapes);
 }
+void AdmissionRecordG4OmittedLeaves(ADMISSION_CONTEXT *Context,
+                                   const ADMISSION_OMITTED_LEAVES *Receipt) {
+  if (!Context || !Receipt) return;
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptOmittedLeaves, Receipt);
+}
+
 #endif
 
 _Use_decl_annotations_ void AdmissionRecordPresentTransfer(

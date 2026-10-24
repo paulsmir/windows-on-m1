@@ -508,10 +508,46 @@ static NTSTATUS AdmissionG3PoolPlace(ADMISSION_CONTEXT *adapter,
   return status;
 }
 
+/* Called only after successful native publication and logical commit. */
+static VOID AdmissionG3RecordOmitted(ADMISSION_G3_PROCESS *process,
+    const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
+    ADMISSION_OMITTED_EVENT *event) {
+  ADMISSION_OMITTED_LEAVES *ring = &process->State->OmittedLeaves;
+  const ADMISSION_ALLOCATION_HANDLE *allocation =
+      (const ADMISSION_ALLOCATION_HANDLE *)update->hAllocation;
+  if (!event->OmittedGroups) return;
+  event->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  event->ProcessId = process->Graph.ProcessId;
+  event->OsProcessId = process->OsProcessId;
+  event->Allocation = (ULONGLONG)(ULONG_PTR)update->hAllocation;
+  if (update->FirstPteVirtualAddress >= update->AllocationOffsetInBytes) {
+    event->AllocationVa = update->FirstPteVirtualAddress - update->AllocationOffsetInBytes;
+    event->Flags |= ADMISSION_OMITTED_BASE_VALID;
+  }
+  /* The paging callback owns hAllocation here, as in RecordLeaf below. */
+  if (allocation && !(event->Allocation & (sizeof(ULONG_PTR) - 1u)) &&
+      allocation->Object.Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC) {
+    event->AllocationBytes = allocation->Object.Description.Size;
+    event->Flags |= ADMISSION_OMITTED_METADATA;
+  }
+  ring->Version = 1u;
+  ring->Bytes = sizeof(*ring);
+  if (ring->TotalEvents != MAXULONGLONG) ++ring->TotalEvents;
+  event->Sequence = ring->TotalEvents;
+  if (ring->TotalGroups <= MAXULONGLONG - event->OmittedGroups)
+    ring->TotalGroups += event->OmittedGroups;
+  else ring->TotalGroups = MAXULONGLONG;
+  ring->Events[ring->Next] = *event;
+  ring->Next = (ring->Next + 1u) % ADMISSION_OMITTED_RING;
+  if (ring->Count < ADMISSION_OMITTED_RING) ++ring->Count;
+  AdmissionRecordG4OmittedLeaves(process->State->Adapter, ring);
+}
+
 static NTSTATUS AdmissionG3UpdateLeaf(
     ADMISSION_G3_PROCESS *process, ULONGLONG table_ipa,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
     ADMISSION_CONTEXT *adapter, ADMISSION_G3_PAGING_FAILURE *failure) {
+  ADMISSION_OMITTED_EVENT omitted = {0};
   ADMISSION_SCANOUT_MEMORY_VIEW view, pool;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *candidate = NULL;
   APPLE_AGX_GPUVA_G3_NATIVE_LEAF *before = NULL;
@@ -539,6 +575,11 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   count = update->NumPageTableEntries * scale;
   first_group = first / 4u;
   groups = (first + count - 1u) / 4u - first_group + 1u;
+  omitted.UpdateVa = update->FirstPteVirtualAddress;
+  omitted.UpdateBytes = (ULONGLONG)count * 0x1000ULL;
+  omitted.GroupVa = update->FirstPteVirtualAddress & ~0x3fffULL;
+  omitted.GroupCount = groups;
+  omitted.Segment = ~0u;
   for (shadow = process->TableShadows; shadow; shadow = shadow->Next)
     if (shadow->BrokerIpa == table_ipa) break;
   if (!shadow || shadow->PendingPtes) return STATUS_INVALID_DEVICE_STATE;
@@ -704,6 +745,27 @@ static NTSTATUS AdmissionG3UpdateLeaf(
       goto Done;
     }
     ++published;
+    if (!complete) {
+      BOOLEAN valid = FALSE;
+      /* Count only valid PTEs belonging to this update, including a group
+       * whose first PTE is invalid. Retained neighbour allocations are not
+       * attributed to the current hAllocation. */
+      for (j = 0u; j < 4u; ++j) {
+        UINT index = (first_group + i) * 4u + j;
+        if (index >= first && index < first + count && group[j].Flags) {
+          if (!omitted.OmittedGroups && !valid) omitted.Segment = group[j].SegmentId;
+          else if (omitted.Segment != group[j].SegmentId) omitted.Segment = ~0u;
+          valid = TRUE;
+        }
+      }
+      if (valid) {
+        ULONGLONG va = omitted.GroupVa + (ULONGLONG)i * 0x4000ULL;
+        if (!omitted.OmittedGroups) omitted.FirstOmittedVa = va;
+        omitted.LastOmittedVa = va;
+        ++omitted.OmittedGroups;
+        omitted.Bitmap[i / 8u] |= (unsigned char)(1u << (i % 8u));
+      }
+    }
     if (ADMISSION_G3_FRAME_SEGMENT(segment) && flags) {
       if (segment == 0u) {
         ULONGLONG *tally = &process->State->SystemGroups[
@@ -740,6 +802,7 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   ++process->Graph.MappingGeneration;
   status = STATUS_SUCCESS;
   AdmissionG3CountLeaf64K(process->State, update);
+  AdmissionG3RecordOmitted(process, update, &omitted);
 Done:
   for (i = 0u; i < acquired; ++i)
     if (candidate[first + i].Flags &&
