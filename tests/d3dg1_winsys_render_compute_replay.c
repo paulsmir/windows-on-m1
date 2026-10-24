@@ -72,6 +72,7 @@ struct util_dynarray { void *data; unsigned size; };
 struct agx_pool { struct util_dynarray bos; struct agx_bo *transient_bo; unsigned transient_offset; };
 typedef struct {
   AGX_WIN32_GPUVA_SPACE Gpuva;
+  unsigned ValidateRefs;
   void *Native;
   unsigned GpuvaReady, Failed;
   int ZlsAttachments;
@@ -118,6 +119,7 @@ typedef struct {
   struct agx_bo *Preemption;
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
+  AGX_WIN32_REF_LIST Expected;
   unsigned Entered, ComputeEntered, Submitted, Retired, Rejected;
 } AGX_G4_BATCH;
 
@@ -255,6 +257,13 @@ int AgxWin32AsahiBatchTimestamps(struct agx_batch *batch);
 static int AgxWin32AsahiRenderableFormat(const struct agx_batch *batch, unsigned format) {
   (void)batch; return format != PIPE_FORMAT_NONE && format <= PIPE_FORMAT_R8G8_UNORM;
 }
+/* These envelope tests run the default-off collector. The enabled collector
+ * is executed separately against the actual projected Mesa structures. */
+#define MESA_SHADER_COMPUTE 5
+#define capture_stage_refs(b,s) ((void)(s), assert(!backend(b)->ValidateRefs))
+#define capture_native_refs(b) assert(!backend(b)->ValidateRefs)
+#define capture_compute_addresses(b,c) ((void)(c), assert(!backend(b)->ValidateRefs))
+#define capture_render_addresses(b,r) ((void)(r), assert(!backend(b)->ValidateRefs))
 #include "d3dg1_winsys_functions.inc"
 
 static int written_has(unsigned token) {

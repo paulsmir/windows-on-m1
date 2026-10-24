@@ -45,6 +45,10 @@ static unsigned refused_kind, refused_reason;
 static int batch_refuse(unsigned kind, unsigned reason, unsigned a, unsigned b) {
   (void)a; (void)b; refused_kind = kind; refused_reason = reason; return 0;
 }
+struct validator_backend { unsigned ValidateRefs; };
+static struct validator_backend disabled;
+static struct validator_backend *backend(struct agx_batch *b) {(void)b;return &disabled;}
+#define capture_draw_refs(b,i,d) ((void)(i),(void)(d),assert(!backend(b)->ValidateRefs))
 @@FUNCTIONS@@
 int main(void) {
   struct pipe_resource tex = {0}, args = {0};

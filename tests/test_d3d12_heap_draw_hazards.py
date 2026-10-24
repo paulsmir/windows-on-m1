@@ -142,7 +142,7 @@ class HeapDrawHazards(unittest.TestCase):
         callback=''
         if 'struct AgxD3d12DrawHeapBindings' in owner:
             a=owner.index('struct AgxD3d12DrawHeapBindings')
-            callback=owner[a:owner.index('static void unbind_heaps',a)]
+            callback=function(owner,'static void validate_heap_refs(')+owner[a:owner.index('static void unbind_heaps',a)]
         setter=body(scene,'AgxWin32AsahiSetDrawBindings') if 'AgxWin32AsahiSetDrawBindings(' in scene else ''
         header=HEADER.replace('struct pipe_context {','struct pipe_draw_info;struct pipe_draw_indirect_info;struct pipe_draw_start_count_bias;\nstruct pipe_context {void (*draw_vbo)(struct pipe_context *,const struct pipe_draw_info *,unsigned,const struct pipe_draw_indirect_info *,const struct pipe_draw_start_count_bias *,unsigned);')
         header=header.replace('bool any_faults;','bool any_faults;struct agx_batch *batch;int (*windows_draw_bindings)(void *);void *windows_draw_bindings_data;')

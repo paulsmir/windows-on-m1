@@ -87,6 +87,7 @@ struct agx_batch {
 typedef struct {
   struct agx_device *Native;
   AGX_WIN32_GPUVA_SPACE Gpuva;
+  unsigned ValidateRefs;
   int GpuvaReady, Failed;
   uint64_t NewestFence;
   uint64_t TimestampFrequency, TimestampOffset;
@@ -155,6 +156,15 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *s, const AGX_WIN32_GPUVA_BO *cons
   memcpy(sub.private_data, private_data, private_bytes);
   *fence = 41u; return 1;
 }
+/* These envelope tests run the default-off collector. The enabled collector
+ * is executed separately against the actual projected Mesa structures. */
+#define MESA_SHADER_COMPUTE 5
+#define capture_stage_refs(b,s) ((void)(s), assert(!backend(b)->ValidateRefs))
+#define capture_native_refs(b) assert(!backend(b)->ValidateRefs)
+#define capture_compute_addresses(b,c) ((void)(c), assert(!backend(b)->ValidateRefs))
+#define capture_render_addresses(b,r) ((void)(r), assert(!backend(b)->ValidateRefs))
+static void cleanup_expected(AGX_WIN32_REF_LIST *l){assert(!l->Items && !l->Count);}
+#define AgxWin32RefCleanup cleanup_expected
 @@FUNCTIONS@@
 /* KMD side: the process graph maps exactly the residency set (writable
  * except the command), and the DMA buffer is the CPU envelope. */

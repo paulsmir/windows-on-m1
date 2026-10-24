@@ -3711,6 +3711,9 @@ struct AgxD3d12Indirect {
     UINT64 count_offset;
 };
 struct AgxD3d12Dispatch {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    uint8_t ref_cb_root[kCbSlots], ref_srv_root[kSrvSlots], ref_uav_root[kUavSlots];
+#endif
     AgxD3d12PipelineState *pso;
     AgxD3d12Heap *uav_heap[kUavSlots];
     UINT64 uav_offset[kUavSlots];
@@ -5510,7 +5513,7 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
                     if (at > heap->bytes || bytes > heap->bytes - at) {
                         /* C34: an unbounded range's tail past the heap stays unbound */
                         if (!(binding.flags & DXBC_BINDING_OPTIONAL)) return 6u;
-                        matched = true;
+                    matched = true;
                         continue;
                     }
                     if (sampler) {
@@ -5520,6 +5523,11 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
                         (binding.kind == DXBC_BINDING_UAV ? out->uav_descriptor :
                          binding.kind == DXBC_BINDING_SRV ? out->srv_descriptor : out->cb_descriptor)[slot] = view;
                     }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+                    if(binding.kind!=DXBC_BINDING_SAMPLER)
+                        (binding.kind==DXBC_BINDING_CBV ? out->ref_cb_root :
+                         binding.kind==DXBC_BINDING_SRV ? out->ref_srv_root : out->ref_uav_root)[slot]=(uint8_t)(i+1);
+#endif
                     matched = true;
                 }
                 continue;
@@ -5540,6 +5548,9 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
                 AgxD3d12Heap **heap = uav ? &out->uav_heap[slot] : srv ? &out->srv_heap[slot] : &out->cb_heap[slot];
                 if (!(*heap = HeapAt(list->device, va[i], offset))) return 6u;
             }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+            if(!constants) (cbv ? out->ref_cb_root : srv ? out->ref_srv_root : out->ref_uav_root)[slot]=(uint8_t)(i+1);
+#endif
             matched = true;
         }
         if (binding.kind == DXBC_BINDING_SAMPLER) {
@@ -5602,6 +5613,11 @@ static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *
         } else {
             return 4u;
         }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+        if(p.type==D3D12DDI_ROOT_PARAMETER_TYPE_CBV) out->ref_cb_root[p.shader_register]=(uint8_t)(i+1);
+        if(p.type==D3D12DDI_ROOT_PARAMETER_TYPE_SRV) out->ref_srv_root[p.shader_register]=(uint8_t)(i+1);
+        if(p.type==D3D12DDI_ROOT_PARAMETER_TYPE_UAV) out->ref_uav_root[p.shader_register]=(uint8_t)(i+1);
+#endif
     }
     /* C6e: static samplers visible to the stage (C9: compute sees all) */
     const D3D12DDI_STATIC_SAMPLER *statics = root ? StaticSamplersOf(root) : nullptr;
@@ -6106,6 +6122,7 @@ struct AgxD3d12HeapScratch {
     AGX_D3D12_BUFFER heap;
     AGX_D3D12_BUFFER textures[kHeapTextures];
     AGX_D3D12_BUFFER writes[kHeapTextures];
+    unsigned read_slots[kHeapTextures], write_slots[kHeapTextures];
     AGX_D3D12_HEAP_SAMPLER samplers[DXBC_HEAP_SAMPLER_MAP_MAX];
     AGX_D3D12_HEAP_BINDING binding;
 };
@@ -6119,6 +6136,10 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
  * MAXIMUM sampler (the draw then takes the PSO's min/max variant) */
 static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,
                             bool *minmax) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    AgxD3d12OwnerRefRoots(owner,stage,b ? b->ref_cb_root : nullptr,
+        b ? b->ref_srv_root : nullptr,b ? b->ref_uav_root : nullptr);
+#endif
     if (!b || (!b->descriptors && !b->sampler_descriptors) || !b->heap_ranges)
         return AgxD3d12OwnerSetHeap(owner, stage, nullptr);
     LARGE_INTEGER t0 = {}, t1 = {};
@@ -6138,6 +6159,8 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
     h.binding.Ranges = b->heap_ranges;
     h.binding.Textures = h.textures;
     h.binding.Writes = h.writes;
+    h.binding.ReadSlots = h.read_slots;
+    h.binding.WriteSlots = h.write_slots;
     h.binding.Samplers = h.samplers;
     UINT lowest = UINT_MAX, lowest_sampler = UINT_MAX;
     for (UINT r = 0; r < b->heap_ranges; ++r) {
@@ -6184,10 +6207,12 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
                 AdmissionUmdDiagnostic("reject-d3d12-heap-textures", E_OUTOFMEMORY, receipt, 3);
                 return E_OUTOFMEMORY;
             }
+            h.write_slots[h.binding.WriteCount] = i;
             h.writes[h.binding.WriteCount++] = texture;
             UINT counter_offset = 0;
             if (AgxD3d12Heap *counter = UavCounter(*view, &counter_offset)) {
                 if (h.binding.WriteCount == kHeapTextures) return E_OUTOFMEMORY;
+                h.write_slots[h.binding.WriteCount] = i;
                 h.writes[h.binding.WriteCount++] = HeapBuffer(counter);
             }
             continue;
@@ -6197,6 +6222,7 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
             AdmissionUmdDiagnostic("reject-d3d12-heap-textures", E_OUTOFMEMORY, receipt, 3);
             return E_OUTOFMEMORY;
         }
+        h.read_slots[h.binding.TextureCount] = i;
         h.textures[h.binding.TextureCount++] = texture;
     }
     return AgxD3d12OwnerSetHeap(owner, stage, &h.binding);
@@ -6501,6 +6527,7 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12Device *device = nullptr;
     AgxD3d12DrawScratch *draw_scratch = nullptr; /* EXP1838: one per execution */
+    AgxD3d12OwnerRefCommand(static_cast<AGX_D3D12_OWNER *>(queue->device->owner),0,0);
 #endif
     for (UINT i = 0; lists && i < count; ++i) {
         auto *list = static_cast<AgxD3d12CommandList *>(lists[i].pDrvPrivate);
@@ -6512,6 +6539,7 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
             const AgxD3d12Command &command = list->command[c];
             device = list->device;
             auto *owner = static_cast<AGX_D3D12_OWNER *>(device->owner);
+            AgxD3d12OwnerRefCommand(owner,i,c+1);
             if (command.kind == kCommandCopy) {
                 const AgxD3d12Copy &copy = command.copy;
                 AGX_D3D12_BUFFER dst = HeapBuffer(copy.dst), src = HeapBuffer(copy.src);

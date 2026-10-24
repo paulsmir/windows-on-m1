@@ -505,6 +505,7 @@ typedef struct {
    * First in constant buffer DXBC_HEAP_TABLE_CB */
   const struct AGX_D3D12_HEAP_SAMPLER *Samplers;
   unsigned SamplerCount;
+  const unsigned *ReadSlots, *WriteSlots; /* original descriptor indices */
 } AGX_D3D12_HEAP_BINDING;
 /* C47: a sampler-heap entry's heap form (AgxD3d12OwnerSamplerDescriptor) */
 typedef struct AGX_D3D12_HEAP_SAMPLER {
@@ -514,6 +515,9 @@ typedef struct AGX_D3D12_HEAP_SAMPLER {
 } AGX_D3D12_HEAP_SAMPLER;
 /* C47: a sampler's heap form; S_FALSE when it needs a custom border colour,
  * which the heap path reads as transparent black */
+void AgxD3d12OwnerRefCommand(AGX_D3D12_OWNER *, UINT List, UINT Command);
+void AgxD3d12OwnerRefRoots(AGX_D3D12_OWNER *, unsigned Stage,
+                          const uint8_t *Cbv, const uint8_t *Srv, const uint8_t *Uav);
 HRESULT AgxD3d12OwnerSamplerDescriptor(AGX_D3D12_OWNER *Owner, const AGX_D3D12_SAMPLER *Sampler,
                                        AGX_D3D12_HEAP_SAMPLER *Out);
 HRESULT AgxD3d12OwnerSetHeap(AGX_D3D12_OWNER *Owner, unsigned Stage, const AGX_D3D12_HEAP_BINDING *Binding);

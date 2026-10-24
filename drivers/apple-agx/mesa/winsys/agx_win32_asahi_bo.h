@@ -21,6 +21,7 @@ struct agx_device;
 struct agx_bo;
 struct pipe_screen;
 struct pipe_context;
+struct pipe_resource;
 struct _AGX_WIN32_ASAHI_CAPTURE;
 typedef int (*AGX_WIN32_ASAHI_MAP_RELEASE)(
     const void *NativeBo, const void *ExpectedAddress, int Commit);
@@ -69,6 +70,9 @@ typedef struct {
   APPLE_AGX_U32 HandleMapCap, HandleMapCount;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   AGX_WIN32_GPUVA_SPACE Gpuva;
+  unsigned ValidateRefs;
+  AGX_WIN32_REF RefOrigin;
+  unsigned char RefRoots[6][3][128]; /* Mesa stage, CBV/SRV/UAV, shader slot; root+1 */
   int GpuvaReady;
   /* EXP1195: completion fence of the newest accepted submission (pipe
    * fences); render fences increase with every submission. */
@@ -100,6 +104,18 @@ typedef struct {
   APPLE_AGX_U64 TimestampOffset;
 #endif
 } AGX_WIN32_ASAHI_BACKEND;
+
+struct agx_batch;
+struct pipe_grid_info;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* Snapshots do not add BO references or repair the set being checked. */
+void AgxWin32AsahiCaptureComputeRefs(struct agx_batch *, const struct pipe_grid_info *);
+void AgxWin32AsahiExpectBo(struct agx_batch *, struct agx_bo *, unsigned Kind,
+                          unsigned Slot, unsigned Path);
+void AgxWin32AsahiExpectResource(struct pipe_context *, int Compute,
+    struct pipe_resource *, unsigned Kind, unsigned Stage, unsigned Slot,
+    uint64_t Object);
+#endif
 
 /* EXP1056 receipt-only: the first transition of a backend to Failed reports
  * (file << 16) | line through an optional hook; the result is unchanged.

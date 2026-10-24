@@ -69,6 +69,7 @@ static HRESULT bind_stage(pipe_context *,int,const AGX_D3D12_CBV *,const AGX_D3D
 static void unbind_stage(pipe_context *,int,pipe_sampler_view **,unsigned) {}
 static HRESULT bind_heaps(AGX_D3D12_OWNER *,bool) {return faulted?DXGI_ERROR_DEVICE_HUNG:S_OK;}
 static void unbind_heaps(AGX_D3D12_OWNER *,bool) {}
+static void validate_heap_refs(AGX_D3D12_OWNER *,bool) {}
 '''
 
 

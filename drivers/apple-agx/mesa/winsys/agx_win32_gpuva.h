@@ -51,6 +51,28 @@ typedef struct {
   unsigned Bound;
 } AGX_WIN32_GPUVA_BO;
 
+/* Diagnostic snapshots contain values, never borrowed resource pointers. */
+enum AGX_WIN32_REF_KIND {
+  AgxRefDescriptor=1, AgxRefCbv, AgxRefSrv, AgxRefUav, AgxRefVertex,
+  AgxRefIndex, AgxRefIndirect, AgxRefCount, AgxRefTarget, AgxRefDepth,
+  AgxRefStreamOutput, AgxRefEncoder, AgxRefPool, AgxRefSampler,
+  AgxRefQuery, AgxRefScratch, AgxRefNative, AgxRefHeap
+};
+enum AGX_WIN32_REF_RESULT {
+  AgxRefMissing=1, AgxRefOwner, AgxRefRange, AgxRefIncomplete, AgxRefNotResident
+};
+typedef struct {
+  uint64_t Va, Bytes, Allocation, Object, Execute;
+  unsigned Command, Kind, Stage, Slot, Root, Path;
+} AGX_WIN32_REF;
+typedef struct {
+  AGX_WIN32_REF *Items;
+  unsigned Count, Capacity, Incomplete;
+} AGX_WIN32_REF_LIST;
+int AgxWin32RefAppend(AGX_WIN32_REF_LIST *, const AGX_WIN32_REF *);
+void AgxWin32RefCleanup(AGX_WIN32_REF_LIST *);
+unsigned AgxWin32RefCheck(const AGX_WIN32_REF *, const AGX_WIN32_GPUVA_BO *const *, unsigned);
+
 /* EXP1093: a submission still in flight behind the newest one. */
 typedef struct {
   uint64_t *Handles;
@@ -75,6 +97,12 @@ typedef struct {
   unsigned Terminal;
   unsigned LastFailure; /* diagnostic: source line of the last refused call */
   unsigned LastDetail;  /* diagnostic: MakeResident/Submit callback result */
+  /* Set only for the duration of one caller-serialized native submission. */
+  const AGX_WIN32_REF_LIST *Validation;
+  void (*RefReport)(void *, const AGX_WIN32_REF *, unsigned);
+  int (*RefResident)(void *, uint64_t); /* UMD token has a residency + submit hold */
+  unsigned RefRefuse, RefReported;
+
 } AGX_WIN32_GPUVA_SPACE;
 
 int AgxWin32GpuvaInit(AGX_WIN32_GPUVA_SPACE *, const AGX_WIN32_GPUVA_OPS *, void *);

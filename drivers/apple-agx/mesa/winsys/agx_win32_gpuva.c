@@ -5,6 +5,67 @@
 #define AGX_GPUVA_PAGE 0x10000ULL
 #define AGX_GPUVA_LIMIT (1ULL << 39)
 
+int AgxWin32RefAppend(AGX_WIN32_REF_LIST *list, const AGX_WIN32_REF *ref) {
+  if (list->Incomplete) return 0;
+  if (list->Count == list->Capacity) {
+    unsigned cap = list->Capacity ? list->Capacity * 2u : 64u;
+    if (cap < list->Capacity || (size_t)cap > SIZE_MAX / sizeof(*ref)) {
+      list->Incomplete = 1; return 0;
+    }
+    void *items = realloc(list->Items, (size_t)cap * sizeof(*ref));
+    if (!items) { list->Incomplete = 1; return 0; }
+    list->Items = items; list->Capacity = cap;
+  }
+  list->Items[list->Count++] = *ref;
+  return 1;
+}
+void AgxWin32RefCleanup(AGX_WIN32_REF_LIST *list) {
+  free(list->Items); memset(list, 0, sizeof(*list));
+}
+unsigned AgxWin32RefCheck(const AGX_WIN32_REF *r,
+    const AGX_WIN32_GPUVA_BO *const *refs, unsigned count) {
+  if (!r->Va || !r->Bytes || r->Bytes > UINT64_MAX - r->Va)
+    return AgxRefRange;
+  unsigned result = AgxRefMissing;
+  for (unsigned i = 0; i < count; ++i) {
+    const AGX_WIN32_GPUVA_BO *b = refs[i];
+    if (!b || !b->Bound || !b->Allocation || r->Va < b->Va ||
+        r->Va - b->Va >= b->Bytes) continue;
+    if (r->Allocation && r->Allocation != b->Allocation) {
+      if (result == AgxRefMissing) result = AgxRefOwner;
+      continue;
+    }
+    if (r->Bytes <= b->Bytes - (r->Va - b->Va)) return 0;
+    result = AgxRefRange;
+  }
+  return result;
+}
+static int ref_violation(AGX_WIN32_GPUVA_SPACE *space,
+    const AGX_WIN32_REF *ref, unsigned reason) {
+  if (!space->RefReported) {
+    space->RefReported = 1;
+    if (space->RefReport) space->RefReport(space->Context, ref, reason);
+  }
+  return !space->RefRefuse;
+}
+static int validate_refs(AGX_WIN32_GPUVA_SPACE *space,
+    const AGX_WIN32_GPUVA_BO *const *refs, unsigned count, int resident) {
+  const AGX_WIN32_REF_LIST *list = space->Validation;
+  if (!list) return 1;
+  if (list->Incomplete) {
+    AGX_WIN32_REF empty = {0};
+    return ref_violation(space, &empty, AgxRefIncomplete);
+  }
+  for (unsigned i = 0; i < list->Count; ++i) {
+    const AGX_WIN32_REF *r = &list->Items[i];
+    unsigned reason = AgxWin32RefCheck(r, refs, count);
+    if (!reason && resident && space->RefResident && r->Allocation &&
+        !space->RefResident(space->Context, r->Allocation)) reason = AgxRefNotResident;
+    if (reason) return ref_violation(space, r, reason);
+  }
+  return 1;
+}
+
 int AgxWin32GpuvaInit(AGX_WIN32_GPUVA_SPACE *space,
                       const AGX_WIN32_GPUVA_OPS *ops, void *context) {
   if (!space || !ops || !context || !ops->Reserve || !ops->Map ||
@@ -189,6 +250,9 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
       written_handles[i] = bo->Allocation;
     }
   }
+  if (!validate_refs(space, references, count, 0)) {
+    free(written_handles); free(handles); return gpuva_refuse(space, __LINE__);
+  }
   resident = space->Ops.MakeResident(space->Context, handles, count,
                                       &paging_fence);
   space->LastDetail = (unsigned)resident;
@@ -211,6 +275,11 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
     free(written_handles);
     free(handles);
     return gpuva_refuse(space, __LINE__);
+  }
+  /* MakeResident's paging fence has completed before inspecting UMD holds. */
+  if (!validate_refs(space, references, count, 1)) {
+    if (!space->Ops.Evict(space->Context, handles, count)) space->Terminal = 1;
+    free(written_handles); free(handles); return gpuva_refuse(space, __LINE__);
   }
   int submitted = space->Ops.Submit(space->Context, written_handles,
       written_count, command->Va,

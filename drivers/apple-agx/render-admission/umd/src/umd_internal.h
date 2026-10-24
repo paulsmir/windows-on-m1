@@ -266,6 +266,7 @@ VOID AdmissionUmdScreenCpuAccessEvent(ADMISSION_UMD_DEVICE *Device,
 extern "C"
 #endif
 const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void);
+int AdmissionUmdGpuvaValidateRefResident(void *, uint64_t);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 #ifdef __cplusplus
 extern "C"

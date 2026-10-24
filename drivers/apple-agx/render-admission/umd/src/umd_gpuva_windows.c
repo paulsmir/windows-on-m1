@@ -574,6 +574,18 @@ static int evict(void *context, const uint64_t *tokens, unsigned count) {
   return 1;
 }
 
+/* Called after the winsys waited the MakeResident fence, before Submit.
+ * SubmissionHolds excludes trim until retirement; inspect under its lock. */
+int AdmissionUmdGpuvaValidateRefResident(void *context, uint64_t token) {
+  ADMISSION_UMD_DEVICE *device=(ADMISSION_UMD_DEVICE *)context;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  int valid=slot && slot->Resident && slot->CopyHeld && slot->SubmissionHolds &&
+      !slot->Transition && slot->CanonicalGpuVa && !device->DrawTerminal;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  return valid;
+}
+
 static int make_resident(void *context, const uint64_t *tokens,
                          unsigned count, uint64_t *fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;

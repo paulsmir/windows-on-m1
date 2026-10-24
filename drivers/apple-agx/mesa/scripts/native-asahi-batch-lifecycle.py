@@ -52,6 +52,11 @@ def project_sources(out,project,overlays):
     save(lp,replace(linker,original,packed))
     hp='src/gallium/drivers/asahi/agx_state.h'
     h=(out/hp).read_text()
+    h=replace(h,'#include "agx_helpers.h"', '#include "agx_helpers.h"\n#include "agx_win32_asahi_bo.h"')
+    h=replace(h,'   agx_batch_add_bo_internal(batch, bo);', '''#ifdef APPLE_AGX_GPUVA_WINSYS
+   AgxWin32AsahiExpectBo(batch, bo, AgxRefNative, bo->handle, 1u);
+#endif
+   agx_batch_add_bo_internal(batch, bo);''')
     h=replace(h,'struct agx_batch {','struct agx_batch {\n   void *windows_batch; /* stable request/capture/adapter capsule */')
     h=replace(h,'struct agx_context {\n   struct pipe_context base;', '''struct agx_context {
    struct pipe_context base;
@@ -401,6 +406,12 @@ extern int AgxWin32AsahiDrawPhasesOn;
       ctx->any_faults = true;
    }
 }'''
+    s=s[:a]+part+s[b:]
+    a,b=function(s,'agx_launch_grid');part=s[a:b]
+    part=replace(part,'   struct agx_batch *batch = agx_get_compute_batch(ctx);', '''   struct agx_batch *batch = agx_get_compute_batch(ctx);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   AgxWin32AsahiCaptureComputeRefs(batch, info);
+#endif''')
     s=s[:a]+part+s[b:]
     # EXP1925: a failed decompression leaves the old, non-writeable layout.
     # Do not assert or bind it as though the transition had succeeded.

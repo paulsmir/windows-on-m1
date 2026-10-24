@@ -353,6 +353,47 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   return S_OK;
 }
 
+#ifdef APPLE_AGX_GPUVA_WINSYS
+static void owner_ref_violation(void *, const AGX_WIN32_REF *r, unsigned reason) {
+  const UINT v[]={1u,reason,r->Kind,r->Stage,r->Slot,r->Root,r->Command,
+      (UINT)r->Execute,(UINT)(r->Execute>>32),(UINT)r->Object,(UINT)(r->Object>>32),
+      (UINT)r->Va,(UINT)(r->Va>>32),(UINT)r->Bytes,(UINT)(r->Bytes>>32),
+      (UINT)r->Allocation,(UINT)(r->Allocation>>32),r->Path};
+  AdmissionUmdDiagnostic("measure-ref-violation",E_FAIL,v,ARRAYSIZE(v));
+  AdmissionUmdDiagnostic("reject-ref-validation",E_FAIL,v,ARRAYSIZE(v));
+}
+#endif
+extern "C" void AgxD3d12OwnerRefRoots(AGX_D3D12_OWNER *owner, unsigned stage,
+    const uint8_t *cbv, const uint8_t *srv, const uint8_t *uav) {
+  OwnerLock lock(owner);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(!owner || !owner->Backend.ValidateRefs || stage>=AGX_D3D12_HEAP_STAGES) return;
+  const unsigned native[]={MESA_SHADER_VERTEX,MESA_SHADER_FRAGMENT,MESA_SHADER_GEOMETRY,
+      MESA_SHADER_TESS_CTRL,MESA_SHADER_TESS_EVAL,MESA_SHADER_COMPUTE};
+  auto &roots=owner->Backend.RefRoots[native[stage]];
+  memset(roots,0,sizeof(roots));
+  if(cbv) memcpy(roots[0],cbv,AGX_D3D12_CBV_SLOTS);
+  if(srv) memcpy(roots[1],srv,AGX_D3D12_SRV_SLOTS);
+  if(uav) memcpy(roots[2],uav,AGX_D3D12_UAV_SLOTS);
+#else
+  (void)stage;(void)cbv;(void)srv;(void)uav;
+#endif
+}
+/* Execute sequence is device-local and command ordinal is one-based per list.
+ * Native internal work inherits the triggering API command; Path distinguishes it. */
+extern "C" void AgxD3d12OwnerRefCommand(AGX_D3D12_OWNER *owner, UINT list, UINT command) {
+  OwnerLock lock(owner);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(!owner || !owner->Backend.ValidateRefs) return;
+  if(!command) ++owner->Backend.RefOrigin.Execute;
+  owner->Backend.RefOrigin.Command=command;
+  owner->Backend.RefOrigin.Object=list;
+  owner->Backend.RefOrigin.Root=~0u;
+#else
+  (void)owner;(void)list;(void)command;
+#endif
+}
+
 extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D12_OWNER **out) {
   if (!args || !out || !args->AdapterCallbacks || !args->KernelCallbacks || !args->RuntimeDevice ||
       !args->Generation)
@@ -419,6 +460,13 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
   if (SUCCEEDED(hr)) {
     owner->Context = AgxWin32AsahiContextCreate(owner->Screen, &owner->Owner);
     if (!owner->Context) hr = E_OUTOFMEMORY;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    char validate[2]={},refuse[2]={};
+    owner->Backend.ValidateRefs=GetEnvironmentVariableA("APPLE_AGX_UMD_VALIDATE_REFS",validate,2)==1 && validate[0]=='1';
+    owner->Backend.Gpuva.RefRefuse=GetEnvironmentVariableA("APPLE_AGX_UMD_VALIDATE_REFS_REFUSE",refuse,2)==1 && refuse[0]=='1';
+    owner->Backend.Gpuva.RefReport=owner_ref_violation;
+    owner->Backend.Gpuva.RefResident=AdmissionUmdGpuvaValidateRefResident;
+#endif
     AgxWin32BatchRefusalHook = owner_batch_refusal;
     AgxWin32BackendFailHook = owner_backend_fail;
     AgxWin32FirstFaultHook = owner_first_fault;
@@ -3133,6 +3181,29 @@ static HRESULT bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
   }
   return S_OK;
 }
+static void validate_heap_refs(AGX_D3D12_OWNER *owner, bool compute) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(!owner->Backend.ValidateRefs) return;
+  unsigned first=compute ? AGX_D3D12_HEAP_CS : 0;
+  unsigned end=compute ? AGX_D3D12_HEAP_STAGES : AGX_D3D12_HEAP_CS;
+  for(unsigned s=first;s<end;++s) {
+    const AGX_D3D12_HEAP_BINDING &h=owner->PendingHeaps[s];
+    const uint64_t object=(uint64_t)(uintptr_t)(h.Heap ? h.Heap->Resource : NULL);
+    if(h.Heap) AgxWin32AsahiExpectResource(owner->Context,compute,
+        static_cast<struct pipe_resource *>(h.Heap->Resource),AgxRefHeap,s,0,object);
+    for(unsigned i=0;i<h.TextureCount;++i)
+      AgxWin32AsahiExpectResource(owner->Context,compute,
+          static_cast<struct pipe_resource *>(h.Textures[i].Resource),AgxRefDescriptor,s,
+          h.ReadSlots ? h.ReadSlots[i] : i,object);
+    for(unsigned i=0;i<h.WriteCount;++i)
+      AgxWin32AsahiExpectResource(owner->Context,compute,
+          static_cast<struct pipe_resource *>(h.Writes[i].Resource),AgxRefDescriptor,s,
+          h.WriteSlots ? h.WriteSlots[i] : i,object);
+  }
+#else
+  (void)owner;(void)compute;
+#endif
+}
 struct AgxD3d12DrawHeapBindings {
   AGX_D3D12_OWNER *Owner;
   HRESULT Result;
@@ -3140,6 +3211,7 @@ struct AgxD3d12DrawHeapBindings {
 static int bind_draw_heaps(void *context) {
   auto *bindings = static_cast<AgxD3d12DrawHeapBindings *>(context);
   if (SUCCEEDED(bindings->Result)) bindings->Result = bind_heaps(bindings->Owner, false);
+  if (SUCCEEDED(bindings->Result)) validate_heap_refs(bindings->Owner, false);
   return SUCCEEDED(bindings->Result);
 }
 static void unbind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
@@ -3346,6 +3418,7 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   info.grid[1] = y;
   info.grid[2] = z;
   hr = bind_heaps(owner, true); /* C47 */
+  if (SUCCEEDED(hr)) validate_heap_refs(owner, true);
   if (SUCCEEDED(hr) && indirect) {
     info.indirect = static_cast<struct pipe_resource *>(indirect->Buffer->Resource);
     for (unsigned i = 0; i < indirect->MaxCount && !AgxWin32AsahiContextFaulted(pipe); ++i) {
