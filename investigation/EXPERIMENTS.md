@@ -61987,3 +61987,32 @@ by this task.
   are not independently proven by these traces. GravityMark completion is
   unachieved; this is not a working/stable benchmark verdict.
 
+
+EXP1927 HARDWARE BEFORE 2026-10-24T04:19:56Z:
+- Package 30.0.1927.0 from HEAD = EXP1926 + mem1 BO-cache reclaim (62943700) + Codex exp1926 (097ae828 switch, dc04e1ab pool receipt v8). Device switches Wom1GpuFaultInfoRead Wom1PoolHalfSize. Short profile.
+- **Next experiment — WHY THIS HYPOTHESIS:**
+- 1. Seven policy refusals occur below the advertised segment ceiling, with
+-    no slab or paging-commit failures, so increasing that ceiling or changing
+-    UAT does not address this boundary.
+- 2. KMD keeps `min(live allocation reservations, segment capacity)` physically
+-    backed until destruction. Evicting an allocation alone does not shrink
+-    this promise. A smaller advertised resident bound can stop promise growth
+-    earlier without weakening the headroom gate.
+- 3. EXP1926 already shows a successful idle-residency trim/retry. Testing the
+-    same mechanism before the pool consumes 2.5 GiB is more discriminating
+-    than reopening the LowMemory-only interval that previously starved DWM.
+- 
+- **WINDOWS/AGX CONTRACT:** change the fixed-at-start segment Size and matching
+- backing cap together; keep all resident pages backed, T8 HighMemory && !Low
+- admission, the existing safe reclaim conditions, native-leaf placement and
+- paging transfers. VidMm controls eviction/system-store residency; the UMD
+- trims idle references on MakeResident pressure. The candidate is an opt-in
+- smaller segment, not a new default. **WHAT IS STILL UNKNOWN:** whether the
+- active GPU set fits and evicts/restores at 1344 MiB, native WDK compilation,
+- actual failure-time budgets/commit/available RAM, final output, performance,
+- and sustained DWM survival. Checkpoint and switches are specified below.
+- 
+- Checkpoint: Wom1M2PoolDemand v8 SegmentBytes 1409286144 (else the switch was not consumed). Recovery rec1927h.
+- Hashes: sys 346244860e92, UmdArm64 38e92c2f273e, UmdX64 d4db917f4485, Umd32 369411a94824; manifest 9189c1f544c3, hardware-manifest c83485421caf; probe1927.sh dea24e73219e (PROBE_LINT_OK); visible recovery rec1927h 45b85242be19b6fa; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1927h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1927-pool-half/run1927.sh.
