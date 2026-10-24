@@ -77,9 +77,13 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   /* EXP1022: CPU-only staging of an unshared slot is ordinary process memory
    * (EXP1016-1021: VidMm CPU mappings read at ~80 MB/s vs 2.5 GB/s). */
   BYTE *PrivateStaging;
-  /* EXP1083: PrivateStaging was allocated with MEM_WRITE_WATCH; the watch is
-   * reset whenever the staging is proven equal to the canonical copy. */
+  /* EXP1083: PrivateStaging was allocated with MEM_WRITE_WATCH. Legacy
+   * hash sync resets after copying; T13 snapshots/resets before copying. */
   BOOL WriteWatch;
+  /* T13: D3D12 CPU staging, never a GPU mapping. Shadow is allocated only
+   * after a GPU writer needs byte-wise copy-out merging. */
+  BOOL HeapStaging;
+  BYTE *HeapStagingShadow;
   /* EXP1025/EXP1027: one CPU-visible class allocation (local segment) is both
    * the GPU and the CPU copy (no staging, no copy escapes). */
   BOOL SystemDirect;
@@ -228,6 +232,10 @@ typedef struct _ADMISSION_UMD_DEVICE {
   void *NativeBatchTransaction;
   APPLE_AGX_U64 LastNativeRequest;
   BOOL ScreenClosing;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  BOOL HeapStaging;
+  ULONGLONG HeapStagingDirtyBytes, HeapStagingUploadBytes, HeapStagingDownloadBytes;
+#endif
   APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;
   ADMISSION_UMD_RETIREMENT_QUEUE Retirement;

@@ -51,7 +51,7 @@ static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclus
 static int VirtualFree(void*,size_t,unsigned){return 1;}
 struct ADMISSION_UMD_SCREEN_BUFFER { ADMISSION_UMD_CPU_ACCESS CpuAccess; ULONGLONG Bytes; void *LockedBase; BOOL Active,Mapped,Transition,CopyHeld,Direct,Resident,Borrowed,SystemDirect;
   APPLE_AGX_U64 Token; void *NativeBo; UINT SourceHolds,SubmissionHolds;
-  D3DKMT_HANDLE KernelAllocation,StagingAllocation; ULONGLONG CanonicalGpuVa; unsigned char *PrivateStaging; };
+  D3DKMT_HANDLE KernelAllocation,StagingAllocation; ULONGLONG CanonicalGpuVa; unsigned char *PrivateStaging, *HeapStagingShadow; };
 struct D3DDDI_EVICT_FLAGS { union { struct { UINT EvictOnlyIfNecessary:1; UINT NotWrittenTo:1; UINT Reserved:30; }; UINT Value; }; };
 struct D3DDDICB_EVICT { D3DDDI_EVICT_FLAGS Flags; UINT NumAllocations; const D3DKMT_HANDLE *AllocationList; ULONGLONG NumBytesToTrim; };
 struct D3DDDICB_DEALLOCATE { HANDLE hResource; UINT NumAllocations; const D3DKMT_HANDLE *HandleList; };

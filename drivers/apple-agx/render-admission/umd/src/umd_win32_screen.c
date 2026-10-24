@@ -640,6 +640,12 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
    * CPU maps restore residency and finish paging before taking the lock.
    * Persistent maps remain pinned until their matching Unlock succeeds. */
   systemDirect = !BorrowedStaging && Bytes <= classInfo->MaximumBytes;
+  /* T13: keep C75c for every other owner. The D3D12 owner's CPU-facing
+   * heaps AND internal CPU-written BOs use native canonical storage, with
+   * ordinary process memory for the CPU; no aperture-resident copy BO. */
+  if (device->HeapStaging && !BorrowedStaging &&
+      (Flags & (AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite)) &&
+      !(Flags & AppleAgxWin32BufferShareable)) systemDirect = FALSE;
   if (Flags & AppleAgxWin32BufferGpuOnly) {
     if (ClassId != AgxWin32BufferClassGeneral || BorrowedStaging ||
         (Flags & (AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
@@ -753,6 +759,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   slot->StagingAllocation = staging;
   slot->PrivateStaging = privateStaging;
   slot->WriteWatch = writeWatch;
+  slot->HeapStaging = device->HeapStaging && privateStaging != NULL && !BorrowedStaging;
   slot->SystemDirect = systemDirect;
   slot->Borrowed = BorrowedStaging != 0;
 #endif
@@ -1273,6 +1280,8 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   }
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  if (buffer->HeapStagingShadow)
+    (void)VirtualFree(buffer->HeapStagingShadow, 0, MEM_RELEASE);
   if (buffer->PrivateStaging)
     (void)VirtualFree(buffer->PrivateStaging, 0, MEM_RELEASE);
   ZeroMemory(buffer,sizeof(*buffer));

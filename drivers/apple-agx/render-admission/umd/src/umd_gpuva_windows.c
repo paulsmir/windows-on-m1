@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <stdlib.h>
 #include <wingdi.h>
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(push)
@@ -996,9 +997,156 @@ static int query_canonical(ADMISSION_UMD_DEVICE *device,
   return ok;
 }
 
+/* T13: GetWriteWatch does not specify address ordering. Compare integer
+ * addresses, not pointers to unrelated C objects. */
+static int heap_staging_page_compare(const void *a, const void *b) {
+  const ULONG_PTR x = (ULONG_PTR)*(PVOID const *)a;
+  const ULONG_PTR y = (ULONG_PTR)*(PVOID const *)b;
+  return x < y ? -1 : x != y;
+}
+
+/* Query/residency/generation and the submission holds are owned by the caller.
+ * GetWriteWatch RESET snapshots writes atomically BEFORE copying. Stores to
+ * other data during the copy stay watched for the next submission. A failed
+ * partial upload invalidates Sync so a retry restores the entire allocation.
+ * No hash or scan of clean UPLOAD heaps is needed. */
+static int heap_staging_transfer(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_SCREEN_BUFFER *slot, APPLE_AGX_G3_COPY_REQUEST *payload,
+    bool download, UINT *transfer_count, ULONGLONG *transfer_bytes) {
+  BYTE *cpu = slot->PrivateStaging;
+  const SIZE_T bytes = (SIZE_T)slot->Bytes;
+  const bool full = !slot->Sync.Valid || !slot->WriteWatch;
+  bool fresh_shadow = false;
+  AdmissionUmdStagingInvalidate(&slot->Sync);
+  if (!cpu || !bytes || bytes != slot->Bytes) return 0;
+  /* Only GPU-written BOs need a baseline for merging copy-out. Capture it
+   * before the watch snapshot and before submission, never after GPU writes. */
+  if (slot->GpuWritten && !slot->HeapStagingShadow) {
+    slot->HeapStagingShadow = (BYTE *)VirtualAlloc(NULL, bytes,
+        MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!slot->HeapStagingShadow) return 0;
+    CopyMemory(slot->HeapStagingShadow, cpu, bytes);
+    fresh_shadow = true;
+  }
+  PVOID *pages = NULL;
+  ULONG_PTR page_count = 0;
+  DWORD granularity = 0;
+  if (!download && slot->WriteWatch) {
+    SYSTEM_INFO info = {};
+    GetSystemInfo(&info);
+    if (!info.dwPageSize) return 0;
+    const SIZE_T capacity = (bytes - 1) / info.dwPageSize + 1;
+    if (capacity > (SIZE_T)-1 / sizeof(PVOID)) return 0;
+    pages = (PVOID *)HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(PVOID));
+    if (!pages) return 0;
+    page_count = capacity;
+    if (GetWriteWatch(WRITE_WATCH_FLAG_RESET, cpu, bytes, pages, &page_count, &granularity) ||
+        !granularity || granularity > APPLE_AGX_G3_COPY_CAPACITY || page_count > capacity) {
+      HeapFree(GetProcessHeap(), 0, pages);
+      return 0;
+    }
+    qsort(pages, (SIZE_T)page_count, sizeof(PVOID), heap_staging_page_compare);
+    for (ULONG_PTR i = 0; i < page_count; ++i) {
+      const ULONG_PTR at = (ULONG_PTR)pages[i] - (ULONG_PTR)cpu;
+      if ((ULONG_PTR)pages[i] < (ULONG_PTR)cpu || at >= bytes || at % granularity ||
+          (i && pages[i] == pages[i - 1])) {
+        HeapFree(GetProcessHeap(), 0, pages);
+        return 0;
+      }
+      device->HeapStagingDirtyBytes += bytes - at < granularity ? bytes - at : granularity;
+    }
+  }
+  bool ok = true;
+  SIZE_T cursor = 0;
+  ULONG_PTR page = 0;
+  while (download ? cursor < bytes : (full ? cursor < bytes : page < page_count)) {
+    SIZE_T offset, count;
+    if (download || full) {
+      offset = cursor;
+      count = bytes - cursor < APPLE_AGX_G3_COPY_CAPACITY ? bytes - cursor : APPLE_AGX_G3_COPY_CAPACITY;
+      cursor += count;
+    } else {
+      offset = (ULONG_PTR)pages[page++] - (ULONG_PTR)cpu;
+      count = bytes - offset < granularity ? bytes - offset : granularity;
+      /* Driver copy-out also dirties write-watch pages. Compare only those
+       * pages against the canonical baseline, never scan the clean heap. */
+      if (slot->HeapStagingShadow && !fresh_shadow &&
+          !memcmp(cpu + offset, slot->HeapStagingShadow + offset, count)) continue;
+      while (page < page_count && (ULONG_PTR)pages[page] - (ULONG_PTR)cpu == offset + count &&
+             count + granularity <= APPLE_AGX_G3_COPY_CAPACITY) {
+        SIZE_T next = bytes - offset - count < granularity ? bytes - offset - count : granularity;
+        if (slot->HeapStagingShadow && !fresh_shadow &&
+            !memcmp(cpu + offset + count, slot->HeapStagingShadow + offset + count, next)) break;
+        count += next;
+        ++page;
+      }
+    }
+    payload->Operation = download ? APPLE_AGX_G3_COPY_DOWNLOAD : APPLE_AGX_G3_COPY_UPLOAD;
+    payload->Offset = offset;
+    payload->TransferBytes = (UINT)count;
+    if (!download) CopyMemory(payload->Data, cpu + offset, count);
+    if (!copy_escape(device, payload)) { ok = false; break; }
+    if (download) {
+      if (slot->HeapStagingShadow) {
+        /* Byte stores preserve concurrent CPU changes to disjoint bytes,
+         * even inside a dirty page. A CPU/GPU race on the same byte is the
+         * application's synchronization violation, as with native mapping. */
+        volatile BYTE *mapped = cpu + offset;
+        const BYTE *before = slot->HeapStagingShadow + offset;
+        for (SIZE_T i = 0; i < count; ++i)
+          if (before[i] != payload->Data[i] && mapped[i] == before[i]) mapped[i] = payload->Data[i];
+      } else CopyMemory(cpu + offset, payload->Data, count);
+      device->HeapStagingDownloadBytes += count;
+    } else device->HeapStagingUploadBytes += count;
+    /* Baseline is what was actually transferred, not a later CPU snapshot. */
+    if (slot->HeapStagingShadow) CopyMemory(slot->HeapStagingShadow + offset, payload->Data, count);
+    if (transfer_count) ++*transfer_count;
+    if (transfer_bytes) *transfer_bytes += count;
+  }
+  if (pages) HeapFree(GetProcessHeap(), 0, pages);
+  if (ok) slot->Sync.Valid = TRUE;
+  /* Never reset after the copies: that would erase concurrent CPU stores. */
+  return ok ? 1 : 0;
+}
+
+static int transfer_heap_slot(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_SCREEN_BUFFER *slot, bool download,
+    UINT *transfer_count, ULONGLONG *transfer_bytes) {
+  /* Clean persistent UPLOAD maps pay one constant-size query, no heap-sized
+   * address array, copy escape, residency wait or CPU content scan. */
+  if (!download && slot->Sync.Valid && slot->WriteWatch &&
+      (!slot->GpuWritten || slot->HeapStagingShadow)) {
+    PVOID page = NULL;
+    ULONG_PTR count = 1;
+    DWORD granularity = 0;
+    if (!GetWriteWatch(0, slot->PrivateStaging, (SIZE_T)slot->Bytes,
+                       &page, &count, &granularity) && !count) return 1;
+  }
+  if (!download && slot->SubmissionHolds > 1u && slot->LastUseFence &&
+      !wait_object(device, device->RenderSyncObject, slot->LastUseFence)) return 0;
+  auto *payload = (APPLE_AGX_G3_COPY_REQUEST *)HeapAlloc(
+      GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(APPLE_AGX_G3_COPY_REQUEST));
+  if (!payload) return 0;
+  payload->Magic = APPLE_AGX_G3_COPY_MAGIC;
+  payload->Version = APPLE_AGX_G3_COPY_VERSION;
+  payload->Bytes = sizeof(*payload);
+  payload->Allocation = slot->KernelAllocation;
+  payload->GpuVa = slot->CanonicalGpuVa;
+  payload->Operation = APPLE_AGX_G3_COPY_QUERY;
+  /* A download cannot reconstruct GPU output by replacing its allocation. */
+  int ok = download ? (copy_escape(device, payload) && payload->ProcessGeneration && payload->MappingGeneration)
+                    : query_canonical(device, slot, payload);
+  if (ok) ok = heap_staging_transfer(device, slot, payload, download, transfer_count, transfer_bytes);
+  if (!ok) AdmissionUmdStagingInvalidate(&slot->Sync);
+  HeapFree(GetProcessHeap(), 0, payload);
+  return ok;
+}
+
 static int transfer_slot(ADMISSION_UMD_DEVICE *device,
                           ADMISSION_UMD_SCREEN_BUFFER *slot,bool download,
                           UINT *transfer_count,ULONGLONG *transfer_bytes) {
+  if (slot->HeapStaging)
+    return transfer_heap_slot(device, slot, download, transfer_count, transfer_bytes);
   int unchanged=0;
   if(!download) {
     unchanged=staging_unchanged(device,slot);

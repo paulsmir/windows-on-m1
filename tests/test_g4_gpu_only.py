@@ -177,22 +177,31 @@ int main(void) {
 #include "render_win32_transport.h"
 #define APPLE_AGX_GPUVA_WINSYS 1
 #define UNREFERENCED_PARAMETER(x) ((void)(x))
+#define FALSE 0
+static unsigned heap_staging;
 static int make(unsigned Flags,unsigned ClassId,unsigned BorrowedStaging,unsigned Bytes) {
+ struct {unsigned HeapStaging;} d={heap_staging},*device=&d;
  struct {unsigned MaximumBytes;} c={268435456},*classInfo=&c;
  ADMISSION_WIN32_ALLOCATION_CREATE description={0};ADMISSION_ALLOCATION_DESCRIPTION stagingDescription,out;
  unsigned systemDirect=0,cls=0,flags=0;
  assert(AdmissionAllocationDescribe(Bytes,1,1,ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE,
       ADMISSION_WIN32_ALLOCATION_FORMAT_A8,1,&description.Allocation));
 @@BODY@@
- assert(systemDirect==!BorrowedStaging);
+ const unsigned staged=heap_staging && !BorrowedStaging &&
+     (Flags&(AppleAgxWin32BufferCpuRead|AppleAgxWin32BufferCpuWrite)) && !(Flags&AppleAgxWin32BufferShareable);
+ assert(systemDirect==(!BorrowedStaging && !staged));
  int ok=AdmissionWin32AllocationCreateValidate(&description,sizeof(description),&out,&cls,&flags)==AdmissionWin32TransportSuccess;
- if(ok) {assert(out.CpuVisible==!(Flags&32));assert(flags==Flags && cls==1);}
+ if(ok) {assert(out.CpuVisible==(!(Flags&32) && !staged));assert(flags==Flags && cls==ClassId);}
  return ok;
 }
 int main(void) {
  assert(make(0x2c,1,0,65536));assert(make(0xf,1,0,65536));
  assert(!make(0x2f,1,0,65536));assert(!make(0x2c,1,7,65536));
  assert(!make(0x20,1,0,65536));assert(!make(0x2c,2,0,65536));
+ /* T13 CPU-facing access survives validation while canonical is CpuVisible=0. */
+ heap_staging=1;
+ assert(make(0xf,1,0,65536));assert(make(0x6,2,0,65536));assert(make(0x6,3,0,65536));
+ assert(make(0x2c,1,0,65536));
 }
 '''.replace('@@BODY@@',body),[DRIVER/'render-admission/src/render_win32_transport.c',
         DRIVER/'render-admission/src/render_allocation.c',DRIVER/'shared/src/apple_agx_win32_abi.c'])
