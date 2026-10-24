@@ -63009,3 +63009,114 @@ EXP1935 HARDWARE BEFORE 2026-10-24T10:06:14Z:
 - Hashes: sys 08abacf3b263, UmdArm64 3bc3c4f69d25, UmdX64 a3eff459b3e2, Umd32 80030b73a31f; manifest d70e7b40cf37, hardware-manifest f099f2f6bd0a; probe1935.sh 97e32a152bff (PROBE_LINT_OK); visible recovery rec1935h 1a172cefe68beabe; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1935h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1935-sampler-hold/run1935.sh.
+
+EXP1935 ACTUAL 2026-10-24T10:33:08Z (Codex draft, exp1935 REPORT.md):
+
+EXP1935 ACTUAL — offline reconstruction of the saved 2026-10-24 experiment.
+Ready for Claude to append to EXPERIMENTS.md. No hardware or guest action was
+performed in this task.
+
+Paths: **E** = `/Volumes/pwdev/public_windows/.local/experiments/EXP1935-sampler-hold`;
+**R** = `E/evidence/EXP1935`; **K** =
+`E/evidence/rec1935h/kmd-receipts-pre-disable.txt`; **S** =
+`/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`.
+The probe-end and pre-disable receipt files are byte-identical.
+
+**Candidate:** package 30.0.1935.0, source
+`06f1a6f718b3517b9b744b97e6d5b7f8cc1170e7`, archive SHA256
+`e4a67644acabc5d695714215167d76aa1ad77a2396dea8c127b6e143373442b0`
+(`E/source-manifest.json:4415`). BEFORE at
+`investigation/EXPERIMENTS.md:62983` specifies the behavioral graphics-only
+sampler-reference correction (integrated as b0cb0142), full-owner m1n1
+0d3a75b3, and **Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1** (K:1–2).
+
+- **Stage / boot:** `E/stage-ssh.log:2` records 10:05:44.1562712Z,
+  oem5.inf, Code28, arm1, eight CPUs, RegistryFlush PASS. Its Boot is the
+  preceding recovery boot. `R/restart-ssh.log:2` records the ordered restart
+  at 10:06:18.5770361Z. `R/state-start.txt:1` shows Code0/CM_PROB_NONE,
+  DWM1224, Explorer5160, uptime50s. CPU0–7 entry is present in
+  `E/full-crash.log:219,1852`. Exact first-SSH latency and continuous
+  timer/IRQ/all-CPU health under the workload are not established.
+- **10K workload:** `S/gm-d3d12a-1935.ps1:2` requests D3D12, 10000
+  asteroids, windowed,90s timeout. `S/newexp1935.log:7` reports
+  `GUEST_DOWN_DURING_GRAVITYMARK 15`. This is polling iteration15, not a
+  15-second removal: `E/probe1935.sh:19` sleeps5s and performs bounded
+  SSH attempts/retries each iteration. All gm1935a out/err/done/UMD/times/image
+  files are absent locally. Exact application removal time, image and score
+  are unknown. The subsequent alive gate establishes only SSH responsiveness.
+- **2K attempt is not a second GPU result:** `S/newexp1935.log:14` also
+  reports a failed reachability poll, iteration5. The sole per-app file,
+  `R/gm1935b-err.txt:1`, reports no Direct3D12 devices at2.681s and failed
+  window creation at2.687s. No done/out/UMD/image file exists. The collection
+  overlaps recovery: state-end is CM_PROB_DISABLED_SERVICE (Code32), DWM1208,
+  Explorer4396, uptime40s (`R/state-end.txt:1`). RUN_DONE/PIPELINE_RC0 mean
+  the wrapper ended, not that either workload succeeded.
+- **Guard observations:** nine `reject-native-allocation` rows in
+  `R/umd.log:12950,12992,14102,14148,14259,15111,15186,15477,15591`, all
+  LeafAbsent3, across Explorer5160, DWM1224, PID8800. No row has faulting
+  PID10816. `agx_gm_alloc_join.py` finds zero heap/CPU-access records here;
+  that does not classify the fault allocation. Global rejection totals are
+ 18 batch /130 C++ throws /9 native-allocation /6 SetError
+  (`S/newexp1935.log:39`). The valid coverage guard did not cover or prevent
+  the subsequent fault.
+- **GPU event (K:188):** exactly one event /one valid fault /one resume,
+  timeout, fence **0x18fc2**, PID **10816**, context
+  **0xffffe5877e1405a0**, submit-to-event **40ms**, HaltCount1. Raw
+  **0x1113b90021822211** = **unmapped read**, level0, UL1C(1), VM1,
+  sideband67, VA **0x1113b90000**. The three identical summary lines are
+  First/FirstValid/Last of this single event. PID10816 is the workload
+  candidate; the missing process-specific evidence prevents independent
+  identification of its executable.
+- **Mapping snapshots (K:189–190):** first/latest are identical v1/256bytes,
+  captured, matching event identities, graph process **0x14**, root
+  **0x9defdc000**, process generation1, mapping generation **0xe11b9**,
+  lease **0xd3b**, table **0x9def6c000**, JobInFlight1,
+  Uncertain0, CpuOnly0, **NativePresent0**. All four logical PTEs have
+  zero flags/IPA/allocation/offset. This confirms an absent logical group
+  in the locked CPU snapshot. It neither identifies the former owner nor
+  distinguishes invalidation, never-populated VA, or stale/out-of-range
+  shader addressing. It is not a hardware-PTE/TLB read.
+- **Later reset failure (K:187,192):** one firmware recovery at0x18fc2/40ms,
+  one deadline expiry; longest job **3060ms at0x19305**, a different fence.
+  Three resets, zero successes: engine at149037ms and150074ms, adapter
+  at151077ms; all fail at quiesce/timeout with **0xc0000483**, waits
+  1001/1001/1000ms. Active/last0x19305, completed0x19304, context
+  **0xffffe5877dda3d80**. First reset job age3058ms/poll age0; last poll
+  age2040ms. Worker scheduled/active0, firmware Halted0. Scheduler
+  tag1/line547 appears after the first failed reset; it is not the initial
+  unmapped-read cause. No saved G4 submit/bind refusal value is present.
+- **Crash:** `E/evidence/dump/102426-16343-01.dmp` confirms ARM64/eight
+  processors, **VIDEO_TDR_FAILURE0x116**, parameters
+  **0xffffe58783dd0320,0xfffff80364c9a5c0,0xffffffffc0000483,3**.
+  SHA256 `5b64b5cce3cf4c5be99211aa31a80e17d803f747bb6724c69f55898768b78763`.
+  Decoded with repository `tools/windows_dump_header.py`; no cdb stack text
+  is supplied and P2 is not independently attributed. `E/full-crash.log:3882`
+  records PSCI reset, ELR **0xfffff80366a35138**, x30
+  **0xfffff80366897e04**, SP **0xfffffd0837fe6010**, SPSR **0x600000c4**,
+  x0 **0x84000009**. Its final serial disconnect is not evidence of a
+  different stop code. `E/full.log` is a different, later log; do not use
+  its reset addresses for this crash.
+- **Omissions/pool (K:118,161):** 524 omission events/8393 groups. This is
+  rolling history, not fault-time ownership proof. Poolv8 segment/peak/held
+  **1344MiB**, committed **1324.8125MiB**, reserved **2860.125MiB**,
+  peak reserved **2879.875MiB**; moves317, kills1732, unplaces248.
+  Reserve/floor/commit/new-slab/release failures, busy retries and reference
+  underflows all0. These collection-time totals do not prove OOM was cured.
+- **Recovery:** `E/evidence/rec1935h/visible-disable-output.txt:3` records
+  exact oem5.inf, prior Code43, both arms absent, service Start4, durable
+  disable at **10:11:43.3764026Z**, after boot **10:10:48.9035630Z**.
+  Exact cleanup at **10:13:33.4534492Z** reports staged0/Sys absent/Umd
+  absent (`cleanup-visible-output.txt:2`). Durable preflight PASS after
+  boot **10:14:41.0858010Z**, PackageAbsent, and
+  **VISIBLE_INERT_PACKAGE_ABSENT_8CPU** (`visible-preflight.txt:1`,
+  `visible-inert-gate.txt:1`). These establish saved recovery SSH/storage
+  and final eight-CPU/inert state. Physical USB input, RDP, uninterrupted
+  display and all-CPU liveness during load were not independently tested.
+  Synthetic mouse1910 moves/zero scanout frames do not prove image correctness.
+
+**BEFORE verdict: REJECTED as a sufficient fix for the GravityMark GPU fault.**
+The graphics sampler-reference bug remains a source/test-proven correction;
+this experiment does not prove its observed fault address was that heap.
+An unmapped read and later0x116 persist. No complete benchmark, score,
+image correctness or performance result was obtained.
+
