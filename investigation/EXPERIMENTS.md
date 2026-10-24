@@ -61760,3 +61760,23 @@ EXP1923 HARDWARE BEFORE 2026-10-24T01:27:55Z:
 - Hashes: sys 3b66e535ffc1, UmdArm64 4a5b7366fd93, UmdX64 613e82a28ed5, Umd32 f451a0c81a17; manifest d5d3f6a4ecce, hardware-manifest 43ef67caf425; probe1923.sh 32cf100f425b (PROBE_LINT_OK); visible recovery rec1923h 487fcfe88057960a; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1923h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1923-bc-gpu-only-b/run1923.sh.
+
+EXP1923 ACTUAL 2026-10-24T01:38:10Z:
+- Package 30.0.1923.0 from 45d7f45b (T11 + T11b BC GPU-only + Wom1G4OmittedLeaves receipt). The first build failed in WDK (stdint.h); see the CHANGES correction.
+- Wom1GpuFaultInfoRead=1.
+- GravityMark D3D12 10k: the guest went down during the run (no GravityMark logs fetched).
+  - Hypervisor log: 158481 lines "HV: AGX pool window cmd=4 result=6": UNMAP_RANGE returning AgxPoolWindowBusy (the GPU broker still holds a backing).
+  - The KMD reclaim retries Busy granules on every pass (render_pool_demand.c:224) and m1n1 prints each refusal synchronously over serial, so the system stalled; then the serial device reset (no PSCI line).
+- Receipts (rec1923h/kmd-receipts-pre-disable.txt, omitted-leaves.json):
+  - MMU fault, fence 0x20ed, pid 10716: FAULT_INFO 0x1166069421824211 = unmapped read, unit **UL1C(2)** (no longer DCMP), VM slot 1, VA 0x1166069400.
+  - Wom1G4OmittedLeaves: 32 events, 10255 omitted 16 KiB groups, all in **segment 0 (aperture)**.
+  - **The fault VA lies inside omitted native range event 30** of allocation ...66d890: VA 0x1162b70000, 128 MiB, segment 0. Events 28-32 omit 8192/8192 groups, i.e. the whole allocation.
+  - By size/VA this is a 128 MiB WRITE_COMBINE D3D12 upload heap (as in EXP1918, 0x1162ca0000), which must stay CPU-visible.
+  - Wom1GpuReset: 4 resets, 1 ok, last ADAPTER 0xC0000483.
+- Verdict:
+  - CONFIRMED root-cause class: a GPU-read allocation backed by scattered 4 KiB aperture pages has its native leaves omitted while logical PTEs stay, so the GPU faults (unmapped).
+  - T7h/T11b removed the GPU-only cases (the DCMP fault is gone). The remaining case is CPU-visible GPU-read memory (upload heaps), which cannot be GPU-only.
+  - New defect: Busy-granule reclaim hammering with HV printf, causing a system stall.
+- Next: Codex T12 (user: solve with astra), the production design and fix:
+  - CPU-visible GPU-read allocations must never be GPU-mapped with omitted leaves;
+  - plus Busy reclaim backoff.
