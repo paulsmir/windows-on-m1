@@ -62117,3 +62117,88 @@ EXP1928 HARDWARE BEFORE 2026-10-24T04:56:22Z:
 - Hashes: sys 77d5794bdc0b, UmdArm64 3418b9ebf414, UmdX64 9fbbf79dd89e, Umd32 6402f9634e14; manifest e8155d5a63d3, hardware-manifest c209a6cda553; probe1928.sh 1ce32bf94895 (PROBE_LINT_OK); visible recovery rec1928h 9e211ae2811a8d77; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1928h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1928-batch-fail/run1928.sh.
+
+EXP1928 ACTUAL 2026-10-24T05:17:10Z (Codex draft, exp1928 REPORT.md):
+
+EXP1928 ACTUAL — offline reconstruction of the saved 2026-10-24 run,
+ready for Claude to append to EXPERIMENTS.md. BEFORE is at
+`investigation/EXPERIMENTS.md:62097`. Package 30.0.1928.0, source
+`1260de15308bf0c15afb27b9389fedaaffbc0c95`, m1n1 0d3a75b3; device switches
+Wom1GpuFaultInfoRead=1 and Wom1PoolHalfSize=1. KMD SHA-256
+`77d5794bdc0bef34c341c967e1081fef0e7e5e269eb69e62a45cf66451154201`;
+ARM64 UMD SHA-256
+`3418b9ebf4148ce1bc420aca12f5e91766ae13692b1917fa203003a871215e05`.
+The source manifest's lifecycle-projector hash matches the starting worktree.
+All evidence below is saved evidence; no hardware action was performed here.
+
+- **Boot/run phases:** artifact/staging gate PASS; ordered restart intent
+  04:56:26.6805686Z. APPL0002 CM_PROB_NONE, Wom1StartStage=12 and
+  Wom1StartStatus=0. Start/end recorded uptimes 50/252 seconds. The 10k run
+  creates its D3D12 window at 2.390 s, reaches Ready/Benchmark at 49.102/
+  49.103 s and resize at 49.110 s. The 2k run creates its window at 1.180 s,
+  reaches Ready/Benchmark at 25.821 s and resize at 25.831 s. No completed
+  score, image or timing result is supplied.
+- **CPU crash and removal times:** 10k wrapper EXIT at 89 s, WER=1; 2k EXIT
+  at 68 s, WER=1. Both report c0000005 in AppleAgxRenderAdmissionUmdArm64.DLL
+  30.0.1928.0 at RVA **0x568d0**. These are wrapper exit times, not measured
+  device-removal times. No process dump/cdb output, exception parameters,
+  CPU registers or caller stack is supplied. No system stop code/parameters
+  or system crash dump is supplied. Saved full.log ends with a host serial
+  disconnect (`SerialException: [Errno 6] Device not configured`), not a
+  captured Windows bugcheck; its cause/time relative to recovery is not
+  independently established.
+- **UMD boundary:** `gm1928a-umd.log:15607` and `gm1928b-umd.log:15436`
+  record MakeResident E_OUTOFMEMORY for 51/52 handles after two trim rounds;
+  32 slots / 0x24460000 bytes trimmed in both, remaining demands
+  0x2278999c / 0x2297999c. Each then records Finish refusal (kind 3,
+  site 0x3bb), backend failure (kind 4, site 0x403c4), and first context
+  fault 0x1029f. No subsequent compute Begin refusal is recorded, unlike
+  EXP1927. There are 45/42 execute receipts and 18/19 trim/retry receipts.
+  Legacy XFER up/down are zero; this does not rule out private staging.
+- **New CPU fault identification:** exact DLL disassembly at RVA 0x568d0
+  is `ldr x9,[x0,#0x50]`, immediately after a 16-byte WRITEBACK "Query" BO
+  allocation. Surrounding sentinel initialization/shared occlusion branch
+  match native `agx_create_query`. That function dereferences the returned
+  BO without checking it. The Windows allocator returns NULL after backend
+  failure. This strongly identifies an unchecked query allocation as the
+  next source defect, but X0 and the exact caller remain unobserved without
+  a process dump.
+- **Pool v8:** probe and pre-disable receipts are identical. SegmentBytes
+  1409286144 (1344 MiB), committed peak 21504 granules (1344 MiB), reservation
+  peak 3022651392 bytes (2882.625 MiB). Final committed 89849856 bytes
+  (85.6875 MiB), held 106954752 bytes (102 MiB), reserved 104988672 bytes
+  (100.125 MiB). Held includes committed. ReserveFailures, FloorRefusals,
+  NewSlabFailures, CommitFailures, ReleaseFailures, BusyRetries and
+  RefUnderflows are zero; LastReserveFailure absent. The half-pool setting
+  was consumed; terminal pressure remains at MakeResident.
+- **GPU receipts:** probe and pre-disable both contain 35 firmware timeout
+  events, all resumed and all with valid FAULT_INFO. First: sequence 1,
+  DWM PID 1228, fence 0x287ab, dVDM_ILD unmapped read at 0x11095f0000,
+  level 0, VM slot 1, submit-to-event 1 ms. Last: sequence 35, DWM PID 9964,
+  fence 0x2a933, IPF(3) unmapped read at 0x5a000000, level 1, VM slot 1,
+  1 ms. FirmwareRecovery count 35, max/last duration 1 ms, zero deadline
+  expiries; longest job 51 ms at fence 0x2892b. Wom1GpuReset and
+  Wom1PreemptRefusal are absent. G4SubmitFailure v3: 11 failures, first
+  branch 9 Parse, status c000000d, downstream 3 Unmapped; DMA VA
+  0x1101a50000 / size 0x118, UMD-private size 0x1e0, context flags 4.
+  Its retained range is kind 4, VA 0x1102840000, one-byte read. This is
+  separate from the app's MakeResident refusal and CPU AV.
+- **Mapping evidence:** Wom1G4OmittedLeaves counts 1675 events / 24075 groups;
+  retained sequences 1668–1675 are historical incomplete native-leaf updates.
+  They do not establish the exact mapping history of either retained GPU
+  fault, and a numeric VA match across processes is not attribution.
+- **Liveness and recovery:** saved pipeline records GUEST_ALIVE after both
+  runs and RUN_DONE. DWM PID changed 1228 -> 9964; Explorer stayed 5152.
+  Synthetic mouse report: 1910 moves; scanout capture: zero frames. Correct
+  display output, physical USB input, RDP and per-CPU IRQ/timer progress are
+  not established. SSH/storage supported evidence collection and cleanup.
+  Saved rec1928h removes exact oem5.inf at 05:04:05.9775523Z, staged count 0,
+  binaries absent. Durable preflight PASS with final boot
+  05:05:07.5025120Z, Package=Absent and VISIBLE_INERT_PACKAGE_ABSENT_8CPU.
+- **Verdict: REJECTED** for the BEFORE hypothesis of clean terminal CPU error
+  handling: both runs still AV. Narrow evidence supports that the previous
+  compute guard avoided the old encoder-store fault; preserve it. The new
+  query-construction failure is the next CPU boundary. GPU faults and a DWM
+  restart independently reject whole-workload stability. Do not promote
+  the half-pool switch or claim GravityMark correctness/performance.
+
