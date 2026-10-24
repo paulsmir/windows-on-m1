@@ -62570,3 +62570,108 @@ EXP1932 HARDWARE BEFORE 2026-10-24T08:04:44Z:
 - Hashes: sys b1ce13729e13, UmdArm64 3773f968f970, UmdX64 d4e6df06aeb3, Umd32 25d85eb5797f; manifest 9ae3a48e639e, hardware-manifest c47ca7e8b6a1; probe1932.sh b265e38a874f (PROBE_LINT_OK); visible recovery rec1932h 33ab49bfe4387433; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1932h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1932-trim-private/run1932.sh.
+
+EXP1932 ACTUAL 2026-10-24T08:31:34Z (Codex draft, exp1932 REPORT.md):
+
+EXP1932 ACTUAL — offline reconstruction of the saved 2026-10-24 run,
+ready for Claude to append to EXPERIMENTS.md. No hardware action was performed.
+BEFORE: `investigation/EXPERIMENTS.md:62546`. Package **30.0.1932.0**,
+source **a1986972df29896a64362c576ef7a70ccc764f93**, full-owner profile,
+m1n1 **0d3a75b3**, **Wom1PoolHalfSize=1**, **Wom1GpuFaultInfoRead=1**.
+Here **E** = `/Volumes/pwdev/public_windows/.local/experiments/EXP1932-trim-private`,
+**R** = `E/evidence/EXP1932`, and **S** =
+`/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`.
+
+- **Stage/boot:** stage receipt UTC **08:04:14.3412424Z**, oem5.inf,
+  CM_PROB28, B1 arm1, eight CPUs, registry flush PASS
+  (`E/stage-ssh.log:2`). This is the pre-experiment boot identity, not
+  the experiment’s boot timestamp. BEFORE UTC **08:04:44Z**. The initial
+  experiment reaches CM_PROB_NONE, DWM1228, Explorer5168, uptime50 s
+  (`R/state-start.txt:1`). `E/full-crash.log:31` records CPU1–7 startup.
+  No precise first-SSH latency is available.
+- **10K workload:** the saved wrapper requests ARM64 GravityMark D3D12,
+  windowed **1280x720**, 10,000 asteroids, timeout90
+  (`S/gm-d3d12a-1932.ps1:2`, `S/gm-run.ps1:12`).
+  `S/newexp1932.log:8` reports **GUEST_DOWN_DURING_GRAVITYMARK 14**.
+  That is polling iteration14, not a measured device-removal time: the loop
+  sleeps five seconds but also runs SSH commands and failure retries
+  (`E/probe1932.sh:19`). All six first-run out/err/done/UMD/times/image
+  artifacts are absent locally. No exact app removal/OOM timestamp, score,
+  rendered image, trim count or allocation census can be recovered from them.
+- **First GPU fault:** `R/kmd-receipts-probe-end.txt:189`, v1,
+  Events=ValidFaults=Resumed=1, NotHalted=0. Timeout event,
+  fence **0x13d29**, PID **4104**, context **0xffff9a8fe37eeb00**,
+  **44 ms** from submit, HaltCount1, flags resumed|info_read|info_valid|job_known.
+  FAULT_INFO **0x1112680021822211**: **unmapped read**, level0,
+  **UL1C(1)**, VM slot1, sideband67, VA **0x1112680000**.
+  First, FirstValid and Last are the same single event. PID4104’s executable
+  is not independently established by the missing app trace.
+- **Recovery/reset escalation:** firmware receipt `:188` records one recovery
+  at that fence/44 ms, then one deadline expiry; longest job **3061 ms**,
+  fence **0x13dca**. Reset receipt `:191` v3 records **3 resets, 0 succeeded**:
+  engine at **145160 ms** (job age3060, poll age1), engine at **146196 ms**,
+  adapter at **147198 ms**. All return **0xc0000483**, stage **quiesce**,
+  quiesce **timeout**, waits1000/1001/1001 ms. Active packet0x13dca,
+  completed0x13dc9, context0xffff9a8fe47f5990; final firmware Halted0,
+  worker scheduled/active false, backend phase3/provider phase4.
+  Scheduler fault tag1 line547 is introduced after the first reset failure;
+  it is not evidence of the original MMU cause. No preemption-refusal receipt.
+- **Distinct G4 submission refusal:** `:187`, v3/392 bytes,
+  Branch9 Parse, STATUS_INVALID_PARAMETER **0xc000000d**, downstream3
+  Unmapped, total6. Owner PID **5168** (Explorer from state-start),
+  graph process7; callback PID4 is the system worker. Fault query
+  VA **0x11034f0000**, render access ordinal11, read1 byte, GraphPresent0.
+  Allocation **0xffff9a8fe8986290**, **524288 bytes**, Encoder class3,
+  Win32Flags6, CpuVisible1, metadata-valid1; system segment0, flags3.
+  IPAs **0x8f890e000, 0x8f890d000, 0x8f890c000, 0x8f890b000**, offsets
+  0/0x1000/0x2000/0x3000. These descending pages cannot form a native leaf.
+  TrackFound1, Maps4, Transfers5. This establishes a separate Explorer
+  aperture refusal, **not the cause of PID4104’s GPU fault**. Exact decode:
+  `decoded-g4-submit.json`; schema `render_admission.h:692` and `:518`.
+- **Omitted leaves:** `:118`, v1, **929 events / 13331 groups**. Retained
+  sequence922–925 belongs to DWM1228, 926–929 to Explorer5168; all segment0.
+  None covers VA0x1112680000. The rolling history cannot identify the first
+  fault’s current allocation or native mapping. An omission total alone is
+  not a causal join.
+- **Pool:** `:161`, v8, segment **1344 MiB**, committed **1333 MiB**,
+  peak **1342.6875 MiB**, held **1344 MiB**, reserved **2828.375 MiB**,
+  peak reserved **2880.3125 MiB**. ReserveFailures=FloorRefusals=
+  CommitFailures=NewSlabFailures=ReleaseFailures=BusyRetries=RefUnderflows=0.
+  Moves170, Kills1673, Unplaces241. These are saved totals, not an atomic
+  fault-time working set or proof that private-map trimming executed.
+- **Reboot / 2K:** full-crash log ends with NVMe reset/re-enable and PSCI
+  SYSTEM_RESET (`E/full-crash.log:3644`): ELR_EL2=0xfffff80329e35138,
+  x30=0xfffff80329c97e04, SP=0xfffffc8ce45f8010, SPSR=0x600000c4,
+  x0=0x84000009, then host serial disconnect. **No Windows stop code,
+  parameters, minidump or cdb output is supplied**. Do not label this a
+  confirmed 0x116 or 0x101. Recovery later identifies boot
+  **08:09:20.5575830Z** and Code43; saved StartStage1 / StartStatus
+  **0xc00000bb** (`R/kmd-receipts-probe-end.txt:11`) is post-reboot
+  fail-closed admission, not the original successful admission.
+  The 2K attempt reports **no Direct3D12 devices** at **1.563 s**, context
+  creation failure at **1.565 s** (`R/gm1932b-err.txt:1`), and loop iteration6
+  reports guest down. It is not an independent GPU workload result.
+- **Liveness:** “GUEST_ALIVE_AFTER” and PIPELINE_RC0 are shell-script outcomes
+  following interruptions/reboots, not continuous guest/driver health.
+  End state is CM_PROB_DISABLED_SERVICE, DWM1216, Explorer3988, uptime40 s
+  (`R/state-end.txt:1`). Synthetic mouse1910 moves and zero scanout frames
+  do not establish visible correctness. SSH/storage worked at collection
+  and recovery points; continuous display, physical USB input, RDP and
+  per-CPU runtime IRQ/timer health are unverified.
+- **Saved recovery:** service disabled **08:10:18.1426170Z**, exact oem5.inf,
+  both arms absent (`E/evidence/rec1932h/visible-disable-output.txt:3`).
+  Exact package deleted **08:12:02.4460674Z**, staged0, Sys/Umd absent
+  (`cleanup-visible-output.txt:2`). Durable preflight PASS at new boot
+  **08:12:39.8795560Z**, PackageAbsent and
+  **VISIBLE_INERT_PACKAGE_ABSENT_8CPU** (`visible-preflight.txt:2`,
+  `visible-inert-gate.txt:1`). Probe-end and pre-disable decoded receipts are
+  identical, including post-reboot admission values and retained old faults.
+  These are historical artifacts, not a fresh guest check.
+
+**Verdict: REJECTED for BEFORE’s workload-stability hypothesis.** There is a
+valid MMU fault, firmware recovery, later failed TDR quiescence and a reboot;
+neither benchmark completes. **INCONCLUSIVE for the narrower private-map trim
+benefit or attribution:** there is no saved first-run UMD trace proving what
+was trimmed or what mapping VA0x1112680000 had. The captured pool has no
+reservation/commit failures, but that cannot establish an OOM cure.
+
