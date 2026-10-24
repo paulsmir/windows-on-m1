@@ -63120,3 +63120,35 @@ this experiment does not prove its observed fault address was that heap.
 An unmapped read and later0x116 persist. No complete benchmark, score,
 image correctness or performance result was obtained.
 
+
+EXP1936 HARDWARE BEFORE 2026-10-24T10:41:40Z:
+- Package 30.0.1936.0 = EXP1935 + Codex exp1935 a1661171. Switches Wom1GpuFaultInfoRead Wom1PoolHalfSize.
+- **Next experiment — WHY THIS HYPOTHESIS:**
+- 
+- 1. EXP1934 and EXP1935 both captured an authenticated zero-logical-PTE group,
+-    after explicit reference coverage checks; the sampler correction did not
+-    eliminate it. The decisive missing fact is the mapping's history, not
+-    another guessed BO type or placement policy.
+- 2. The KMD already records same-process leaf updates, invalidations and
+-    whole-table clear/retire events (`gpuva_g3_paging_windows.c:38,818`).
+-    The fault receipt discards that history, while post-recovery rolling
+-    snapshots cannot reliably reconstruct it.
+- 3. Capturing existing records while the fault owns the graph is a bounded
+-    discriminator between recent mapping/invalidation/publication events and
+-    an address with no retained mapping evidence. TASK.md permits this one
+-    receipt-only run; EXP1935 itself was behavioral. Do not follow it with
+-    another receipt-only run at the same boundary.
+- 
+- **WINDOWS/AGX CONTRACT:** VidMm supplies process/table/allocation/index/range
+- paging operations. The KMD owns the software translation graph and native
+- publication; a native16KiB leaf covers four logical4KiB entries. UMD owns
+- submission references/residency holds. Fault capture must authenticate the
+- active fence/context/process/VM and preserve observations before recovery,
+- without changing paging, admission, DMA, interrupts, initialization, power
+- or recovery behavior. Historical allocation tokens are never dereferenced.
+- 
+- **WHAT IS STILL UNKNOWN:** identity/lifetime of the allocation at0x1113b90000;
+- Recovery rec1936h.
+- Hashes: sys 532ff8c68340, UmdArm64 89e108710dc9, UmdX64 271bb83c6265, Umd32 bd35aca39ffc; manifest 0ad1ed21059c, hardware-manifest 15045acdd3d2; probe1936.sh d9f34cdff46e (PROBE_LINT_OK); visible recovery rec1936h 23994126fbe33f29; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1936h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1936-paging-history/run1936.sh.
