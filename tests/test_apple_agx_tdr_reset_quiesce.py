@@ -2,7 +2,10 @@
 
 WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 A reset failure must retain its exact gate in the current receipt and history;
-a later success must not inherit that failure stage.
+a later success must not inherit that failure stage. EXP1938 additionally
+requires RTKit notification errors to preserve DMA ownership: a firmware
+crash, rejected mailbox message, and read failure must not fabricate an
+aborted fence or free the active private scene.
 
 WHAT REAL BUG: EXP1296 bugcheck 0x116 (TdrReason 9, engine reset promoted to
 adapter reset): with a G4 render active, DxgkDdiResetEngine and
@@ -102,7 +105,12 @@ class TdrResetQuiesce(unittest.TestCase):
                             '-I', str(SHARED / 'tests'), str(firmware),
                             str(SHARED / 'src/apple_agx_g13_queue_runtime.c'),
                             str(SHARED / 'src/apple_agx_g13_codec.c'),
-                            str(program), str(SHARED / 'src/apple_agx_scheduler.c'),
+                            str(program),
+                            *[str(SHARED / 'src' / (name + '.c')) for name in (
+                                'apple_agx_rtkit_session', 'apple_agx_rtkit_boot',
+                                'apple_agx_rtkit', 'apple_agx_asc_transport',
+                                'apple_agx_gfx_handoff')],
+                            str(SHARED / 'src/apple_agx_scheduler.c'),
                             str(RENDER / 'src/render_submission.c'), '-o', str(binary)],
                            check=True)
             subprocess.run([str(binary)], check=True, timeout=20)
@@ -120,6 +128,7 @@ SHIM = r'''
 #include "render_present.h"
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_g13_queue_runtime.h"
+#include "apple_agx_rtkit_session.h"
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define _Use_decl_annotations_
 #define _ReturnAddress() ((void *)0)
@@ -144,8 +153,6 @@ SHIM = r'''
 #define ADMISSION_RESET_QUIESCE_TIMEOUT_MS /*TIMEOUT*/u
 #define ADMISSION_SCHEDULER_NODE 0u
 #define ADMISSION_SCHEDULER_ENGINE 0u
-#define APPLE_AGX_RTKIT_RUNTIME_DRAIN_LIMIT 64u
-#define AppleAgxRtkitSessionResultOk 0
 #define AppleAgxBackendRuntimeReady 2
 #define AppleAgxBackendRuntimeSubmitted 3
 #define AppleAgxBackendRuntimeFailed 6
@@ -165,7 +172,6 @@ typedef uintptr_t ULONG_PTR;
 typedef int BOOLEAN, KIRQL;
 typedef unsigned char UCHAR;
 typedef uint32_t APPLE_AGX_BACKEND_U32, APPLE_AGX_RTKIT_U32;
-typedef int APPLE_AGX_RTKIT_SESSION_RESULT;
 typedef union { LONGLONG QuadPart; } LARGE_INTEGER;
 typedef struct { int Signaled; } KEVENT;
 typedef struct _ADMISSION_RENDER_CONTEXT {
@@ -206,7 +212,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN BackendStarted;
   APPLE_AGX_BACKEND_RUNTIME Backend;
   APPLE_AGX_PLATFORM_PROVIDER Provider;
-  int Rtkit, AscIo;
+  APPLE_AGX_RTKIT_SESSION Rtkit;
+  APPLE_AGX_ASC_IO AscIo;
   volatile LONG FirmwareRecoveries;
 } ADMISSION_PLATFORM_RUNTIME;
 struct _ADMISSION_CONTEXT {
@@ -307,9 +314,30 @@ static NTSTATUS KeWaitForSingleObject(KEVENT *e, int r, int m, BOOLEAN a, LARGE_
   now_ms += (ULONGLONG)(-t->QuadPart / 10000LL);
   return STATUS_TIMEOUT;
 }
-static APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionDrainRuntime(
-    int *s, int *io, APPLE_AGX_RTKIT_U32 limit, APPLE_AGX_RTKIT_U32 *n) {
-  (void)s; (void)io; (void)limit; assert(!lock_depth); *n = 0u; return AppleAgxRtkitSessionResultOk; }
+/* Only MMIO is simulated; the RTKit drain and sticky crash state are real. */
+static unsigned mailbox_mode, mailbox_consumed;
+static APPLE_AGX_ASC_BOOL mailbox_read32(void *ctx, unsigned offset, unsigned *v) {
+  (void)ctx;
+  assert(!lock_depth);
+  if (mailbox_mode == 2) return APPLE_AGX_ASC_FALSE;
+  assert(offset == J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET ||
+         offset == J313_AGX_G2_ASC_INBOX_CTRL_OFFSET);
+  *v = mailbox_mode && !mailbox_consumed ? 0 : APPLE_AGX_ASC_MAILBOX_EMPTY;
+  return APPLE_AGX_ASC_TRUE;
+}
+static APPLE_AGX_ASC_BOOL mailbox_read64(void *ctx, unsigned offset,
+                                       unsigned long long *v) {
+  (void)ctx;
+  assert(!lock_depth);
+  if (offset == J313_AGX_G2_ASC_OUTBOX0_OFFSET)
+    *v = mailbox_mode == 3 ? (1ULL << 52) : 0x0043000000000000ULL;
+  else {
+    assert(offset == J313_AGX_G2_ASC_OUTBOX1_OFFSET);
+    *v = mailbox_mode == 3 ? 1u : 0x20u;
+    ++mailbox_consumed;
+  }
+  return APPLE_AGX_ASC_TRUE;
+}
 static BOOLEAN AppleAgxPlatformProviderPoll(APPLE_AGX_PLATFORM_PROVIDER *p,
     APPLE_AGX_BACKEND_U32 max, APPLE_AGX_BACKEND_U32 *drained, APPLE_AGX_BACKEND_U32 *completed) {
   (void)p; (void)max; assert(!lock_depth); assert(!worker_busy);
@@ -422,6 +450,13 @@ static void setup(int worker, int queued) {
   memset(&cancelled, 0, sizeof(cancelled)); memset(&process, 0, sizeof(process));
   rtkit_stops = polls = drop_at_poll = fail_poll = worker_completes = 0;
   captures = 0;
+  mailbox_mode = mailbox_consumed = 0;
+  AppleAgxRtkitSessionInitialize(&runtime.Rtkit);
+  runtime.Rtkit.Running = runtime.Rtkit.CpuReady = APPLE_AGX_RTKIT_TRUE;
+  runtime.Rtkit.Boot.Phase = AppleAgxRtkitBootReady;
+  runtime.Rtkit.CrashlogReplySent = APPLE_AGX_RTKIT_TRUE;
+  runtime.AscIo.Read32 = mailbox_read32;
+  runtime.AscIo.Read64 = mailbox_read64;
   published = recorded = 0; memset(&last_recorded, 0, sizeof(last_recorded));
   private_resets = scene_quarantined = paused = reactivate_after_quiesce = 0;
   scene_queued = scene_started = 1; now_ms = 1000u;
@@ -487,6 +522,39 @@ static void expect_aborted(const DXGKARG_RESETENGINE *reset) {
 
 int main(void) {
   DXGKARG_RESETENGINE reset;
+  unsigned mode;
+
+  /* EXP1938: all three failures enter the same immediate quiesce/poll
+   * result. Neither this receipt nor pending queue operands identify the
+   * rejected message. The unretired scene must survive every failure. */
+  for (mode = 1; mode <= 3; ++mode) {
+    unsigned retry;
+    setup(0, 0); mailbox_mode = mode;
+    for (retry = 0; retry < 3; ++retry) {
+      /* A protocol error consumes its message, unlike sticky crash or
+       * transport failure. Supply another message for each such attempt. */
+      if (mode == 1) mailbox_consumed = 0;
+      memset(&reset, 0, sizeof(reset));
+      assert((retry < 2 ? AdmissionDdiResetEngine(&adapter, &reset) :
+              AdmissionDdiResetFromTimeout(&adapter)) == STATUS_DEVICE_HARDWARE_ERROR);
+      assert(last_recorded.Quiesce == AdmissionGpuResetQuiescePoll &&
+             last_recorded.Stage == AdmissionGpuResetStageQuiesce &&
+             last_recorded.WaitMs == 0 && last_recorded.Succeeded == 0);
+      assert(last_recorded.Resets == retry + 1 && polls == 0 &&
+             private_resets == 0 && rtkit_stops == 0);
+      assert(adapter.Scheduler.ActiveFence == 0xce71cu &&
+             adapter.Scheduler.CompletedFence == 0xce71bu &&
+             AdmissionRenderPacketState(&adapter.RenderPacket) == AdmissionRenderPacketActive);
+      assert(owner.Object.FenceOutstanding == 0xce71cu &&
+             owner.GpuvaG3PrivateFence == (LONG)0xce71cu &&
+             scene_owner.Started && scene_owner.Queued);
+      assert(reset.LastAbortedFenceId == 0 && last_recorded.LastAbortedFence == 0 &&
+             runtime.Resetting == 0 && captures == 2 * (retry + 1));
+    }
+    assert(runtime.Rtkit.CrashlogCrashed == (mode == 3));
+    if (mode == 3) assert(mailbox_consumed == 1); /* crash remains sticky */
+    if (mode == 2) assert(mailbox_consumed == 0); /* no invented message */
+  }
 
   /* Real queue runtime: fault -> resume -> partial retirement -> dropped
    * completion -> genuine quiescence -> successful Windows engine reset. */
