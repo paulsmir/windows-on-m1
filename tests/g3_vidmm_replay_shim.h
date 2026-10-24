@@ -297,6 +297,7 @@ static inline void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, ULON
 #define ADMISSION_G3_LEAF_RING 8192u
 #define ADMISSION_G3_LEAF_EVENT_RESET 0x10u
 #define ADMISSION_G3_LEAF_EVENT_SYSTEM_RETIRE 0x20u
+#define ADMISSION_G3_LEAF_EVENT_UNMAP_OWNER 0x40u
 typedef struct _ADMISSION_G3_LEAF_HISTORY {
   ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
   ULONG First, Count, ValidCount, Flags, Status, FirstSegment;

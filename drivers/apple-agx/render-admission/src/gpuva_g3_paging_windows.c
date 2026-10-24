@@ -543,6 +543,44 @@ static VOID AdmissionG3RecordOmitted(ADMISSION_G3_PROCESS *process,
   AdmissionRecordG4OmittedLeaves(process->State->Adapter, ring);
 }
 
+/* EXP1939: invalidation usually supplies hAllocation=NULL. Keep the previous
+ * logical owners before the successful commit erases them. Runs contain only
+ * adjacent invalidated pages of one owner/segment; holes cannot imply coverage.
+ * The caller holds the G3 lock. No allocation, token dereference or I/O here.
+ * These bounded historical records do not prove current or native residency. */
+static VOID AdmissionG3RecordUnmapOwners(ADMISSION_G3_PROCESS *process,
+    ULONGLONG table_ipa, const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *before,
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *after, UINT first, UINT count) {
+  UINT i = first;
+  while (i < first + count) {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *old = &before[i];
+    UINT start = i++;
+    ADMISSION_G3_LEAF_HISTORY *h;
+    if (!(old->Flags & APPLE_AGX_GPUVA_G3_VALID) || !old->Allocation ||
+        (after[start].Flags & APPLE_AGX_GPUVA_G3_VALID)) continue;
+    while (i < first + count &&
+        (before[i].Flags & APPLE_AGX_GPUVA_G3_VALID) &&
+        !(after[i].Flags & APPLE_AGX_GPUVA_G3_VALID) &&
+        before[i].Allocation == old->Allocation &&
+        before[i].SegmentId == old->SegmentId) ++i;
+    h = &process->State->LeafHistory[
+        process->State->LeafHistoryNext++ % ADMISSION_G3_LEAF_RING];
+    RtlZeroMemory(h, sizeof(*h));
+    h->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    h->ProcessId = process->Graph.ProcessId;
+    h->TableIpa = table_ipa;
+    h->Allocation = old->Allocation;
+    h->FirstVa = update->FirstPteVirtualAddress + (ULONGLONG)(start - first) * 0x1000ULL;
+    h->MappingGeneration = process->Graph.MappingGeneration;
+    h->First = start;
+    h->Count = h->ValidCount = i - start;
+    h->Flags = ADMISSION_G3_LEAF_EVENT_UNMAP_OWNER;
+    h->Status = (ULONG)STATUS_SUCCESS;
+    h->FirstSegment = old->SegmentId;
+  }
+}
+
 static NTSTATUS AdmissionG3UpdateLeaf(
     ADMISSION_G3_PROCESS *process, ULONGLONG table_ipa,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
@@ -797,6 +835,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   /* M2-a: a 64-KiB PTE is sixteen 4-KiB envelope entries (an invalid one
    * leaves them zero), so the CPU paging executor and the G4 CPU-envelope
    * checks resolve 64K-mapped VAs and R131's stale 4-KiB shadow is overwritten. */
+  AdmissionG3RecordUnmapOwners(process, table_ipa, update,
+      shadow->LogicalPtes, shadow->ResidentPtes, first, count);
   RtlCopyMemory(shadow->LogicalPtes + first, shadow->ResidentPtes + first,
                 count * sizeof(*shadow->LogicalPtes));
   ++process->Graph.MappingGeneration;

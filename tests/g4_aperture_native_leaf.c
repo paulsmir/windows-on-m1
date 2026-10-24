@@ -16,7 +16,7 @@ typedef struct {long long QuadPart;} QPC;
 static QPC KeQueryPerformanceCounter(void *p) {(void)p;return (QPC){123};}
 static void AdmissionRecordG4OmittedLeaves(void *a,const ADMISSION_OMITTED_LEAVES *r) {(void)a;assert(r->Version==1 && r->Bytes==2976);}
 typedef int NTSTATUS, BOOLEAN;
-typedef unsigned UINT;
+typedef unsigned UINT, ULONG;
 typedef unsigned long long ULONGLONG;
 typedef uintptr_t ULONG_PTR;
 #define TRUE 1
@@ -65,7 +65,8 @@ typedef struct _SHADOW {
   ULONGLONG BrokerIpa;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *PendingPtes, *LogicalPtes, *ResidentPtes;
 } ADMISSION_G3_TABLE_SHADOW;
-typedef struct { void *Adapter; ADMISSION_OMITTED_LEAVES OmittedLeaves; ULONGLONG SystemGroups[8], UnpublishedGroups[32]; } STATE;
+#include "history.inc"
+typedef struct { ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; void *Adapter; ADMISSION_OMITTED_LEAVES OmittedLeaves; ULONGLONG SystemGroups[8], UnpublishedGroups[32]; } STATE;
 typedef struct {
   GRAPH Graph;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
@@ -172,10 +173,21 @@ int main(void) {
   ptes[1].ReadOnly=0;
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
   assert(process.Graph.Leaf.AuxIpa==0x10000000);
+  assert(state.LeafHistoryNext==0); /* valid replacements are not invalidations */
   ptes[1].Valid=0;
+  update.hAllocation=NULL;
+  fail_publication=1;
+  assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)<0);
+  assert(state.LeafHistoryNext==0 && shadow.LogicalPtes[1].Flags);
+  fail_publication=0;
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
   assert(process.Graph.Leaf.AuxIpa==0 && process.Graph.Mappings==3);
   assert(shadow.LogicalPtes[1].Flags==0 && shadow.LogicalPtes[2].GuestIpa==0x10002000);
+  assert(state.LeafHistoryNext==1);
+  const ADMISSION_G3_LEAF_HISTORY *owner=&state.LeafHistory[0];
+  assert(owner->Flags==ADMISSION_G3_LEAF_EVENT_UNMAP_OWNER);
+  assert(owner->Allocation==(ULONGLONG)(ULONG_PTR)&allocation);
+  assert(owner->First==1 && owner->Count==1 && owner->FirstVa==0x1000);
   /* Full invalidation releases the remaining references. */
   memset(ptes,0,sizeof(ptes)); update.StartIndex=0; update.FirstPteVirtualAddress=0;
   update.AllocationOffsetInBytes=0; update.NumPageTableEntries=4;
@@ -183,6 +195,11 @@ int main(void) {
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
   assert(process.Graph.Mappings==0 && process.Graph.Leaf.AuxIpa==0);
   assert(process.Graph.Publications==7);
+  assert(state.LeafHistoryNext==3); /* runs split at the already-invalid page */
+  assert(state.LeafHistory[1].First==0 && state.LeafHistory[1].Count==1);
+  assert(state.LeafHistory[2].First==2 && state.LeafHistory[2].Count==2);
+  assert(state.LeafHistory[2].Allocation==(ULONGLONG)(ULONG_PTR)&allocation);
+  update.hAllocation=&allocation;
 
   /* T7f: adjacency alone is insufficient: a contiguous quartet starting
    * one Windows page into a native page must not publish a rounded alias. */

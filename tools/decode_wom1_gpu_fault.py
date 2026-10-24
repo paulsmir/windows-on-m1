@@ -464,6 +464,12 @@ def decode_fault_mapping(data):
             event = dict(zip(names, struct.unpack_from('<6Q8I', data, 272 + i * 80)))
             if event['match'] not in (1, 2, 3):
                 raise ValueError('invalid Wom1GpuFaultMapping history match')
+            event['kind'] = {0x10: 'table-reset', 0x20: 'system-retire',
+                             0x40: 'invalidated-logical-owner'}.get(
+                                 event['flags'], 'leaf-update')
+            if event['flags'] == 0x40:
+                event['meaning'] = ('Previous logical owner of these invalidated 4-KiB pages; '
+                                    'historical token, not current ownership or native residency')
             event['match'] = [name for bit, name in ((1, 'va'), (2, 'table-index'))
                               if event['match'] & bit]
             for name in ('process_id', 'table_ipa', 'allocation', 'first_va',

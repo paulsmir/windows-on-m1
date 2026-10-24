@@ -28,13 +28,20 @@ class ApertureNativeLeaf(unittest.TestCase):
         paging, and republish only after a complete contiguous group returns.
         Contiguous but misaligned groups must also stay unpublished; CPU-only
         paging must retain scattered logical pages without GPU publications.
+        EXP1939: rejected publication must not claim an invalidated owner;
+        committed invalidation with hAllocation=NULL must preserve the old token.
         This is a safety invariant, not a fix for GravityMark residency.
         """
         with tempfile.TemporaryDirectory(prefix="t7d-leaf-") as directory:
             directory = Path(directory)
             (directory / "leaf.inc").write_text(
                 function_body(PAGING.read_text(), "AdmissionG3RecordOmitted") + "\n" +
+                function_body(PAGING.read_text(), "AdmissionG3RecordUnmapOwners") + "\n" +
                 function_body(PAGING.read_text(), "AdmissionG3UpdateLeaf"))
+            types = (ROOT / "drivers/apple-agx/render-admission/include/render_admission.h").read_text()
+            types = types[types.index("#define ADMISSION_G3_LEAF_RING "):]
+            types = types[:types.index("} ADMISSION_G3_LEAF_HISTORY;")+len("} ADMISSION_G3_LEAF_HISTORY;")]
+            (directory / "history.inc").write_text(types)
             binary = directory / "replay"
             build = subprocess.run([
                 os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",

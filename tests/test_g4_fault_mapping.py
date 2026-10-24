@@ -10,6 +10,8 @@ EXP1935: zero current PTEs must not discard the paging operations that could
 explain them. Preserve only same-process, overlapping-group history in newest
 order; table-only clears and adjacent subpages matter, unrelated records do not.
 Truncation and missing history must remain explicit, including old v1 input.
+EXP1939: invalidated-owner history must survive matching and decoding, explicitly
+labelled as previous logical ownership rather than current/native residency.
 """
 from pathlib import Path
 import os
@@ -248,7 +250,7 @@ HISTORY_CASES = r"""
   /* Wrap the physical ring. Keep newest 8 of 10, report truncation. */
   memset(state.LeafHistory,0,sizeof(state.LeafHistory));
   for(unsigned n=0;n<10;++n) {
-    h.Qpc=100+n;h.Allocation=0xaaa0+n;
+    h.Qpc=100+n;h.Allocation=0xaaa0+n;h.Flags=0x40;
     state.LeafHistory[(8190+n)%ADMISSION_G3_LEAF_RING]=h;
   }
   state.LeafHistoryNext=8200;CAPTURE();
@@ -371,6 +373,7 @@ class FaultMapping(unittest.TestCase):
             self.assertEqual([e['qpc'] for e in history['events']], list(range(109, 101, -1)))
             self.assertEqual(history['events'][0]['match'], ['va', 'table-index'])
             self.assertEqual(history['events'][0]['allocation'], '0xaaa9')
+            self.assertEqual(history['events'][0].get('kind'), 'invalidated-logical-owner')
             # Real v1 prefix still decodes, without fabricated history.
             old = bytearray(data[:256]); struct.pack_into('<II', old, 0, 1, 256)
             prior = DECODER.decode_fault_mapping(old)
