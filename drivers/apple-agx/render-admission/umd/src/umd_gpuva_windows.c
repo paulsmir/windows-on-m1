@@ -1610,6 +1610,55 @@ static int finish_submission(ADMISSION_UMD_DEVICE *device,uint64_t internal,
   return 1;
 }
 
+/* The CopyHeld set is exactly the current batch's residency set, including
+ * descriptor resources and pool BOs. Its SubmissionHolds keep trim from
+ * releasing residency between this read-only KMD proof and submit/retirement.
+ * Run after uploads, which may replace a canonical allocation. The DMA
+ * envelope is read by the CPU parser, so it needs logical, not native, backing.
+ * Its own logical checks remain in the KMD submit path. */
+static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) {
+  if (!device->Adapter || device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
+      !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
+      !device->KernelCallbacks->pfnEscapeCb) return 0;
+  for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++i) {
+    APPLE_AGX_G3_NATIVE_QUERY q = {};
+    bool held, valid;
+    AcquireSRWLockShared(&device->ScreenBufferLock);
+    const auto *slot = &device->ScreenBuffers[i];
+    held = slot->CopyHeld && slot->CanonicalGpuVa != command_va;
+    valid = slot->Active && !slot->Transition && slot->SubmissionHolds &&
+        slot->KernelAllocation && slot->CanonicalGpuVa && slot->Bytes;
+    if (held && valid) {
+      q.Allocation = slot->KernelAllocation;
+      q.GpuVa = slot->CanonicalGpuVa;
+      q.AllocationBytes = slot->Bytes;
+      q.Write = (slot->Flags & AppleAgxWin32BufferGpuWrite) != 0u;
+    }
+    ReleaseSRWLockShared(&device->ScreenBufferLock);
+    if (!held) continue;
+    if (!valid) return 0;
+    q.Magic = APPLE_AGX_G3_NATIVE_QUERY_MAGIC;
+    q.Version = APPLE_AGX_G3_NATIVE_QUERY_VERSION;
+    q.Bytes = sizeof(q);
+    D3DDDICB_ESCAPE request = {};
+    request.hDevice = device->RuntimeDevice.handle;
+    request.hContext = device->KernelContext;
+    request.pPrivateDriverData = &q;
+    request.PrivateDriverDataSize = sizeof(q);
+    HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
+        device->Adapter->RuntimeAdapter.handle, &request);
+    if (FAILED(hr) || q.Ready != 1u) {
+      UINT values[9] = {q.Allocation, (UINT)q.GpuVa, (UINT)(q.GpuVa >> 32),
+          (UINT)q.AllocationBytes, (UINT)(q.AllocationBytes >> 32), q.Write,
+          q.Reason, (UINT)q.FailedVa, (UINT)(q.FailedVa >> 32)};
+      AdmissionUmdDiagnostic("reject-native-allocation", FAILED(hr) ? hr : E_FAIL,
+          values, ARRAYSIZE(values));
+      return 0;
+    }
+  }
+  return 1;
+}
+
 /* Every GPU-written slot of a submission (mark_written); only the direct
  * displayable ones become WrittenPrimaries, which D3DDDI_MAX_WRITTEN_PRIMARIES
  * bounds below. Matches the winsys AGX_G4_WRITTEN_LIMIT (EXP1851). */
@@ -1684,6 +1733,7 @@ static int submit(void *context, const uint64_t *written,
 #endif
     return device->DrawTerminal ? 2 : 0;
   }
+  if (!native_held_ready(device, va)) return 0;
   request.Commands = va;
   request.CommandLength = bytes;
   request.BroadcastContextCount = 1;

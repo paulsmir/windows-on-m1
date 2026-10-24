@@ -1323,6 +1323,109 @@ static BOOLEAN AdmissionG3CaptureCopyQueryFailure(ADMISSION_CONTEXT *adapter,
   return TRUE;
 }
 
+/* Read-only metadata query, after the UMD's residency fence and while its
+ * submission holds exclude trim. Unlike T12, inspect only the named canonical
+ * allocation, never unrelated mappings in this process. No wait for an active
+ * GPU job is needed: the G3 mutex serializes publication and this walk. */
+NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  APPLE_AGX_G3_NATIVE_QUERY q;
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *p;
+  ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_OPEN_ALLOCATION *opened;
+  ADMISSION_ALLOCATION_HANDLE *allocation;
+  ADMISSION_DEVICE *device;
+  DXGKARGCB_GETHANDLEDATA lookup = {0};
+  DXGKARGCB_RELEASEHANDLEDATA reference = {0};
+  APPLE_AGX_GPUVA_G3_WALK_FAILURE walk = {0};
+  ULONGLONG page, end, ipa;
+  NTSTATUS status = STATUS_INVALID_PARAMETER;
+  if (!adapter || !adapter->Started || !args ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL || args->Flags.Value ||
+      !args->pPrivateDriverData || args->PrivateDriverDataSize != sizeof(q) ||
+      !adapter->Interface.DxgkCbAcquireHandleData ||
+      !adapter->Interface.DxgkCbReleaseHandleData)
+    return STATUS_INVALID_PARAMETER;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (!state) return STATUS_INVALID_DEVICE_STATE;
+  RtlCopyMemory(&q, args->pPrivateDriverData, sizeof(q));
+  if (q.Magic != APPLE_AGX_G3_NATIVE_QUERY_MAGIC ||
+      q.Version != APPLE_AGX_G3_NATIVE_QUERY_VERSION || q.Bytes != sizeof(q) ||
+      !q.Allocation || !q.GpuVa || (q.GpuVa & 0xffffULL) ||
+      q.GpuVa >= (1ULL << 39) || !q.AllocationBytes ||
+      q.AllocationBytes > MAXULONG || q.AllocationBytes > (1ULL << 39) - q.GpuVa ||
+      q.Write > 1u || q.Ready || q.Reason || q.FailedVa || q.Reserved || q.Reserved2)
+    return STATUS_INVALID_PARAMETER;
+  lookup.hObject = q.Allocation;
+  lookup.Type = DXGK_HANDLE_ALLOCATION;
+  lookup.Flags.DeviceSpecific = 1u;
+  reference.Type = DXGK_HANDLE_ALLOCATION;
+  opened = (ADMISSION_OPEN_ALLOCATION *)adapter->Interface.DxgkCbAcquireHandleData(
+      &lookup, &reference.ReleaseHandle);
+  if (!opened || !reference.ReleaseHandle) {
+    status = STATUS_INVALID_HANDLE;
+    goto Release;
+  }
+  ExAcquireFastMutex(&state->Lock);
+  p = AdmissionGpuvaG3FindProcess(state, args->hKmdProcessHandle);
+  if (!p || p->Poisoned || p->CpuOnlyMappings || !p->Graph.Created ||
+      p->Graph.Uncertain) goto Unlock;
+  for (context = p->Contexts; context && (HANDLE)context != args->hContext;
+       context = context->GpuvaG3NextContext) {}
+  if (!context || !context->Win32Transport || context->GpuvaG3Closing ||
+      context->GpuvaG3Poisoned || !context->Object.Device) goto Unlock;
+  /* R147: paging selects the process graph before pre-submit escapes. The
+   * context SetRoot notification is only guaranteed before execution; do not
+   * require it here. Submit/BeginJob retain their context-root checks. */
+  device = CONTAINING_RECORD(context->Object.Device, ADMISSION_DEVICE, Object);
+  if ((HANDLE)device != args->hDevice || device->Object.Adapter != &adapter->ObjectAdapter ||
+      opened->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC ||
+      opened->Device != device || opened->RuntimeAllocation != q.Allocation ||
+      !opened->Allocation || opened->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC ||
+      (q.Write && opened->ReadOnly)) goto Unlock;
+  allocation = CONTAINING_RECORD(opened->Allocation, ADMISSION_ALLOCATION_HANDLE, Object);
+  /* Adopted/imported slots expose logical surface bytes, while their KMD
+   * allocation is rounded up. Authenticate that extent, then prove the whole
+   * description extent, never a caller-selected safe prefix. */
+  if (q.AllocationBytes > allocation->Object.Description.Size ||
+      allocation->Object.Description.Size > MAXULONG ||
+      allocation->Object.Description.Size > (1ULL << 39) - q.GpuVa) goto Unlock;
+  q.AllocationBytes = allocation->Object.Description.Size;
+  /* A well-formed query reports not-ready as data. It is not a failed paging
+   * DDI or a failed scheduled submit; the UMD can decline before submission. */
+  status = STATUS_SUCCESS;
+  if (!AppleAgxGpuvaG3GraphInspectRangeAccess(&p->Graph, q.GpuVa,
+          (UINT)q.AllocationBytes, q.Write != 0u, &walk)) {
+    q.FailedVa = walk.Va;
+    q.Reason = walk.Reason;
+    goto Output;
+  }
+  end = q.GpuVa + q.AllocationBytes;
+  for (page = q.GpuVa; page < end; page += 0x1000ULL) {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = AdmissionG3CopyPte(p, page);
+    q.FailedVa = page;
+    q.Reason = APPLE_AGX_G3_NATIVE_QUERY_IDENTITY;
+    if (!pte || !(pte->Flags & APPLE_AGX_GPUVA_G3_VALID) ||
+        (q.Write && !(pte->Flags & APPLE_AGX_GPUVA_G3_WRITE)) ||
+        pte->Allocation != (ULONGLONG)(ULONG_PTR)allocation ||
+        pte->AllocationOffset != page - q.GpuVa) goto Output;
+    q.Reason = APPLE_AGX_G3_NATIVE_QUERY_TRANSLATION;
+    if (!AppleAgxGpuvaG3GraphTranslateVa(&p->Graph, page, &ipa) ||
+        ipa != pte->GuestIpa) goto Output;
+  }
+  q.Ready = 1u;
+  q.FailedVa = 0ULL;
+  q.Reason = 0u;
+Output:
+  RtlCopyMemory(args->pPrivateDriverData, &q, sizeof(q));
+Unlock:
+  ExReleaseFastMutex(&state->Lock);
+Release:
+  if (reference.ReleaseHandle) adapter->Interface.DxgkCbReleaseHandleData(reference);
+  return status;
+}
+
 typedef struct _ADMISSION_G3_COPY_PAGING_QUIESCENCE {
   ULONG Version, Bytes, Status, OsProcessId;
   LONG RecordsUnsubmitted;
