@@ -13,6 +13,10 @@ Receipts (REG_BINARY under the APPL0002 device key):
                         updates, allocation/PID/VA spans and exact 16 KiB
                         omission bitmap. A match is historical evidence,
                         not proof that a later fault used the same mapping.
+  Wom1M2PoolDemand      v7 304 / v8 360 bytes: pool totals; v8 appends the
+                        actual floor counter and last reservation failure.
+                        Explicit Wom1M2PoolDemand.bin input only, so older
+                        JSON/REG fault collections retain their behavior.
 Dump blackbox:
   --dbginfo HEX         the DxgkDdiCollectDbgInfo snapshot (v1 32 or v2 56
                         bytes; dxgkrnl trims trailing zero bytes) from the
@@ -37,7 +41,9 @@ FAULT_NAME = 'Wom1GpuFault'
 RESET_NAME = 'Wom1GpuReset'
 RECOVERY_NAME = 'Wom1FirmwareRecovery'
 OMITTED_NAME = 'Wom1G4OmittedLeaves'
+POOL_NAME = 'Wom1M2PoolDemand'
 NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME, OMITTED_NAME)
+RAW_NAMES = NAMES + (POOL_NAME,)
 
 FAULT_INFO_NOT_READ = 0xacce5515abad1dea
 EVENT_KINDS = {0: 'fault', 1: 'flag', 4: 'timeout'}
@@ -338,8 +344,45 @@ def decode_omitted_leaves(data):
                 meaning='historical successful updates, not current mapping proof')
 
 
+def decode_pool(data):
+    """v7 prefix is unchanged; absent v8 observations are unknown, not zero."""
+    if len(data) < 16:
+        raise ValueError('truncated Wom1M2PoolDemand header')
+    version, size, granule, last_window = struct.unpack_from('<4I', data)
+    if size != {7: 304, 8: 360}.get(version) or len(data) != size or granule != 65536:
+        raise ValueError('unsupported Wom1M2PoolDemand version, length or granule')
+    names = (
+        'segment_bytes', 'committed_granules', 'peak_granules', 'commits',
+        'commit_failures', 'releases', 'busy_retries', 'release_failures',
+        'places', 'moves', 'kills', 'unplaces', 'pinned_granules', 'unaligned',
+        'ref_underflows', 'commit_calls', 'commit_us', 'commit_us_max',
+        'release_us', 'release_us_max', 'candidates', 'executed_seq',
+        'release_delay_ms', 'held_granules', 'slabs', 'peak_slabs', 'new_slabs',
+        'new_slab_failures', 'freed_slabs', 'slab_contiguous', 'slab_chunked',
+        'ram_bytes', 'reserved_bytes', 'peak_reserved_bytes', 'reserve_failures',
+        'broker_bytes')
+    result = dict(zip(names, struct.unpack_from('<36Q', data, 16)))
+    result.update(version=version, granule_bytes=granule, last_window_result=last_window,
+                  committed_bytes=result['committed_granules'] * granule,
+                  peak_committed_bytes=result['peak_granules'] * granule,
+                  held_bytes=result['held_granules'] * granule,
+                  floor_refusals=None, last_reserve_failure=None)
+    if version == 8:
+        result['floor_refusals'], = struct.unpack_from('<Q', data, 304)
+        fields = ('request_bytes', 'reserved_bytes', 'held_bytes', 'committed_bytes',
+                  'time_ms', 'high_memory', 'low_memory')
+        failure = dict(zip(fields, struct.unpack_from('<5Q2I', data, 312)))
+        if result['reserve_failures']:
+            for field in ('high_memory', 'low_memory'):
+                value = failure[field]
+                failure[field] = {0: 'clear', 1: 'set', 2: 'unavailable'}.get(
+                    value, f'unknown({value})')
+            result['last_reserve_failure'] = failure
+    return result
+
+
 DECODERS = {OMITTED_NAME: decode_omitted_leaves, FAULT_NAME: decode_fault, RESET_NAME: decode_reset,
-            RECOVERY_NAME: decode_recovery}
+            RECOVERY_NAME: decode_recovery, POOL_NAME: decode_pool}
 
 
 def read_receipts(path):
@@ -360,10 +403,10 @@ def read_receipts(path):
             if matches:
                 found[name] = bytes.fromhex(matches[0].replace(',', ''))
         return found
-    for name in NAMES:
+    for name in RAW_NAMES:
         if path.stem == name:
             return {name: data}
-    raise ValueError(f'{path.name}: name a raw file after one of {", ".join(NAMES)}')
+    raise ValueError(f'{path.name}: name a raw file after one of {", ".join(RAW_NAMES)}')
 
 
 def main():

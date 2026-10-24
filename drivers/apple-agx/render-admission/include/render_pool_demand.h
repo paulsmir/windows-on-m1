@@ -85,7 +85,16 @@ typedef enum _ADMISSION_POOL_PLACE {
  * moves by ADMISSION_POOL_DEMAND_RECEIPT_STEP granules or a failure count
  * changes. Times are microseconds of commit (page allocation + MAP_AT) and
  * release (UNMAP_RANGE + page free). */
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 7u /* 2: ReleaseDelayMs; 3: Stats.CommitCalls; 4: slabs; 5: RamBytes; 6: reservations; 7: BrokerBytes */
+/* Last failed reservation, after rollback and before pressure reclaim.
+ * Events are sampled after failure: 0 clear, 1 set, 2 unavailable. They
+ * are not an atomic snapshot of the earlier MayGrow decision. */
+typedef struct _ADMISSION_POOL_RESERVE_FAILURE {
+  unsigned long long RequestBytes, ReservedBytes, HeldBytes, CommittedBytes;
+  unsigned long long TimeMs;
+  unsigned int HighMemory, LowMemory;
+} ADMISSION_POOL_RESERVE_FAILURE;
+
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 8u /* v7: BrokerBytes; v8: floor refusals and last reservation failure */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -107,6 +116,9 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned long long ReservedBytes, PeakReservedBytes, ReserveFailures;
   /* v7 (M2-f6): the broker table the segment size used (0: built-in). */
   unsigned long long BrokerBytes;
+  /* v8: retained even after subsequent successful reservations. */
+  unsigned long long FloorRefusals;
+  ADMISSION_POOL_RESERVE_FAILURE LastReserveFailure;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.

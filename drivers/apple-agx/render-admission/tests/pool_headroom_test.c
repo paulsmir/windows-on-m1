@@ -20,6 +20,7 @@ typedef struct {
     ADMISSION_POOL_DEMAND Demand;
     ADMISSION_POOL_SLABS Slabs;
     int *HighMemory, *LowMemory;
+    ADMISSION_POOL_RESERVE_FAILURE LastReserveFailure;
 } ADMISSION_POOL_RUNTIME;
 typedef struct { ADMISSION_POOL_RUNTIME *PoolDemand; } ADMISSION_CONTEXT;
 static ADMISSION_POOL_RUNTIME pool;
@@ -30,6 +31,7 @@ static ADMISSION_POOL_SLAB *backing[N];
 static unsigned slots[N];
 static int high, low, locked, busy[N];
 static unsigned allocations, releases;
+static int fail_new;
 static ULONGLONG now;
 static int KeReadStateEvent(int *event) { return *event; }
 static ULONGLONG AdmissionPoolNowMs(void) { return now; }
@@ -45,6 +47,7 @@ static void AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *ctx) {
 static ADMISSION_POOL_SLAB *new_slab(void *opaque) {
     (void)opaque;
     ++allocations;
+    if (fail_new) return NULL;
     return calloc(1, sizeof(ADMISSION_POOL_SLAB));
 }
 static void free_slab(void *opaque, ADMISSION_POOL_SLAB *slab) {
@@ -83,6 +86,7 @@ static void reset(void) {
     pool.LowMemory = &low;
     high = 1; low = 0; now = 100;
     allocations = releases = 0;
+    fail_new = 0;
 }
 static void test_event_policy(void) {
     reset();
@@ -166,6 +170,9 @@ static void test_safety_and_promises(void) {
     AdmissionMemoryPoolExecuted(&context, 7);
     assert(!granules[2].Committed);
     busy[3] = 0;
+    /* A BUSY broker unmap is retried only after paging makes progress.
+     * Clearing the fixture's busy flag alone is not a new paging epoch. */
+    AdmissionMemoryPoolExecuted(&context, 8);
     AdmissionPoolDemandPagingRef(&pool.Demand, G, -1);
     AdmissionPoolDemandUnplace(&pool.Demand, &active);
     /* Reserve also performs pressure reclaim, even if already backed. */
@@ -173,11 +180,43 @@ static void test_safety_and_promises(void) {
     assert(pool.Demand.Stats.CommittedGranules == 1 && granules[0].Pinned);
     assert(pool.Slabs.Reserved == 64 && allocations == 2);
 }
+static void test_failure_snapshot(void) {
+    reset();
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    high = 0;
+    assert(!AdmissionMemoryPoolReserve(&context, G));
+    assert(pool.Slabs.Stats.FloorRefusals == 1);
+    assert(pool.LastReserveFailure.RequestBytes == G);
+    assert(pool.LastReserveFailure.ReservedBytes == 32 * G);
+    assert(pool.LastReserveFailure.HeldBytes == 32 * G);
+    assert(pool.LastReserveFailure.CommittedBytes == 0);
+    assert(pool.LastReserveFailure.TimeMs == 100);
+    assert(pool.LastReserveFailure.HighMemory == 0);
+    assert(pool.LastReserveFailure.LowMemory == 0);
+    high = 1; now = 200;
+    assert(AdmissionMemoryPoolReserve(&context, G));
+    assert(pool.LastReserveFailure.TimeMs == 100); /* success preserves evidence */
+    fail_new = 1; now = 300;
+    assert(!AdmissionMemoryPoolReserve(&context, 64 * G));
+    assert(pool.Slabs.Stats.FloorRefusals == 1);
+    assert(pool.Slabs.Stats.NewSlabFailures == 1);
+    assert(pool.LastReserveFailure.RequestBytes == 64 * G);
+    assert(pool.LastReserveFailure.ReservedBytes == 33 * G);
+    assert(pool.LastReserveFailure.TimeMs == 300);
+    assert(pool.LastReserveFailure.HighMemory == 1);
+    reset();
+    pool.HighMemory = pool.LowMemory = NULL;
+    assert(!AdmissionMemoryPoolReserve(&context, G));
+    assert(pool.LastReserveFailure.HighMemory == 2);
+    assert(pool.LastReserveFailure.LowMemory == 2);
+    assert(pool.LastReserveFailure.HeldBytes == 0);
+}
 int main(void) {
     test_event_policy();
     test_admitted_paging_under_pressure();
     test_pressure_reclaim();
     test_safety_and_promises();
+    test_failure_snapshot();
     AdmissionPoolSlabDrain(&pool.Slabs);
     return 0;
 }

@@ -237,6 +237,7 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   /* M2-f7: \KernelObjects\HighMemoryCondition and LowMemoryCondition
    * (referenced), or NULL. */
   PKEVENT HighMemory, LowMemory;
+  ADMISSION_POOL_RESERVE_FAILURE LastReserveFailure;
 } ADMISSION_POOL_RUNTIME;
 
 static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
@@ -467,6 +468,8 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
         pool->Slabs.Stats.PeakReserved * ADMISSION_POOL_DEMAND_GRANULE;
     receipt.ReserveFailures = pool->Slabs.Stats.ReserveFailures;
     receipt.BrokerBytes = Context->PoolBrokerBytes;
+    receipt.FloorRefusals = pool->Slabs.Stats.FloorRefusals;
+    receipt.LastReserveFailure = pool->LastReserveFailure;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
     pool->StagedReserved = pool->Slabs.Reserved;
@@ -530,6 +533,23 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
   reserved = AdmissionPoolSlabReserve(&pool->Slabs,
       (Bytes + ADMISSION_POOL_DEMAND_GRANULE - 1ULL) /
           ADMISSION_POOL_DEMAND_GRANULE) ? TRUE : FALSE;
+  if (!reserved) {
+    /* Preserve the refusal boundary before reclaim changes the counts.
+     * Event states are post-failure samples; FloorRefusals is the actual
+     * decision counter. No extra policy call, allocation or registry I/O. */
+    pool->LastReserveFailure.RequestBytes = Bytes;
+    pool->LastReserveFailure.ReservedBytes =
+        pool->Slabs.Reserved * ADMISSION_POOL_DEMAND_GRANULE;
+    pool->LastReserveFailure.HeldBytes = pool->Slabs.Stats.Slabs *
+        ADMISSION_POOL_SLAB_SLOTS * ADMISSION_POOL_DEMAND_GRANULE;
+    pool->LastReserveFailure.CommittedBytes =
+        pool->Demand.Stats.CommittedGranules * ADMISSION_POOL_DEMAND_GRANULE;
+    pool->LastReserveFailure.TimeMs = AdmissionPoolNowMs();
+    pool->LastReserveFailure.HighMemory = pool->HighMemory == NULL ? 2u :
+        (KeReadStateEvent(pool->HighMemory) != 0 ? 1u : 0u);
+    pool->LastReserveFailure.LowMemory = pool->LowMemory == NULL ? 2u :
+        (KeReadStateEvent(pool->LowMemory) != 0 ? 1u : 0u);
+  }
   /* First let this reservation reuse held pages; then return only surplus. */
   if (!AdmissionPoolMayGrow(pool)) AdmissionPoolReclaimLocked(pool);
   AdmissionMemoryPoolUnlock(Context);
