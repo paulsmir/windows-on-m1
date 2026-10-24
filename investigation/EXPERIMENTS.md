@@ -62542,3 +62542,31 @@ refusal. A commit-exhaustion explanation is rejected at these samples; exact
 attribution of physical pressure remains incomplete. **Workload stability is
 REJECTED**: both runs OOM, DWM crashes/restarts, neither benchmark completes.
 
+
+EXP1932 HARDWARE BEFORE 2026-10-24T08:04:44Z:
+- Package 30.0.1932.0 = EXP1931 + Codex exp1931 b86c14ee. Switches Wom1GpuFaultInfoRead Wom1PoolHalfSize (per Codex REPORT).
+- **Next experiment — WHY THIS HYPOTHESIS:**
+- 
+- 1. Hundreds of MiB of private CPU maps remain, and source treats every Mapped
+-    slot as pinned canonical GPU backing even though T13 returns VirtualAlloc
+-    memory without locking that backing. This is a concrete policy mismatch.
+- 2. EXP1927/28's existing half pool avoided creation-time reserve refusals but
+-    failed MakeResident after trimming. The newly identified private-map
+-    exclusion is directly at that boundary; no new size tuning is proposed.
+- 3. Existing submission holds, residency restore and paging-fence wait protect
+-    subsequent copies/GPU use. The new executable regression proves idle
+-    private-map eviction was excluded and is now permitted without revoking
+-    the CPU pointer or weakening the HighMemory guard.
+- 
+- **WINDOWS/AGX CONTRACT:** release only an idle T13 slot's persistent canonical
+- residency reference. Keep its private pointer, bytes, dirty tracking, canonical
+- handle/GPUVA and copy ownership intact. VidMm preserves evicted contents;
+- the UMD restores residency before use and waits paging. All direct/shared/KMT,
+- submission/source/copy/transition exclusions remain. KMD backing admission,
+- native leaves, firmware, caps, signer and recovery remain unchanged.
+- 
+- **WHAT IS STILL UNKNOWN:** how many mapped private slots are idle at the
+- Recovery rec1932h.
+- Hashes: sys b1ce13729e13, UmdArm64 3773f968f970, UmdX64 d4e6df06aeb3, Umd32 25d85eb5797f; manifest 9ae3a48e639e, hardware-manifest c47ca7e8b6a1; probe1932.sh b265e38a874f (PROBE_LINT_OK); visible recovery rec1932h 33ab49bfe4387433; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1932h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1932-trim-private/run1932.sh.
