@@ -61922,3 +61922,68 @@ EXP1926 HARDWARE BEFORE 2026-10-24T03:04:03Z:
 - Hashes: sys 3bb481c17945, UmdArm64 55a455899e34, UmdX64 4185717cdeee, Umd32 1b7cf45d5c1e; manifest 97f539aa4467, hardware-manifest e64efd719ea2; probe1926.sh 56782a100c33 (PROBE_LINT_OK); visible recovery rec1926h 0939936fe3f356cd; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1926h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1926-transition-oom/run1926.sh.
+
+EXP1926 ACTUAL 2026-10-24T04:11:26Z (Codex draft, exp1926 REPORT.md):
+
+EXP1926 ACTUAL — offline reconstruction of the saved 2026-10-24 run.
+Package 30.0.1926.0, source `42f4e891`, KMD SHA prefix `3bb481c17945`,
+ARM64 UMD `55a455899e34`, m1n1 `0d3a75b3`; exact artifact hashes remain in
+the recorded BEFORE/manifests. BEFORE: `investigation/EXPERIMENTS.md:61903`.
+This section is ready for Claude to append; no hardware action was performed
+by this task.
+
+- **Phases and timing:** artifact/staging gate passed, APPL0002 reached
+  CM_PROB_NONE (Wom1StartStage=12, Wom1StartStatus=0). The saved state window
+  spans guest uptime 49 to 309 seconds. Both runs created a 1280x720 D3D12
+  benchmark window. 10k ready/start at 47.182/47.183 s; resize 47.190 s;
+  first OOM 49.091 s. 2k ready/start 20.943/20.944 s; resize 20.951 s;
+  first OOM 22.779 s, repeated through 24.070 s. Both were timeout-killed
+  at 106 s, WER 0. No explicit device-removal timestamp is present; these
+  OOM/kill times are not removal times. No completed score/times/image output
+  establishes benchmark success.
+- **Failures:** 10k `gm1926a-umd.log:4252` fails a 0x08100000-byte (129 MiB)
+  BO, underlying E_OUTOFMEMORY; the app reports a 4096x4096 Df32 texture
+  failure. 2k `gm1926b-umd.log:3878,3897,3936,3949,3959,3966` reports four
+  128 MiB BO refusals and 0x730000/0x740000-byte refusals; the final app error
+  is an RGBAu16n 1280x720 texture. Both end in clean resource creation failure,
+  not a saved c0000005 exception.
+- **Pool decode:** probe-end and pre-disable v7 receipts are identical:
+  segment 2688 MiB; peak reserved 2547.875 MiB; peak committed 2548.4375 MiB;
+  ReserveFailures 7, NewSlabFailures 0, CommitFailures 0, ReleaseFailures 0,
+  BusyRetries 0. Final reserved/committed 195.5 MiB and held 214 MiB (held
+  includes committed). PeakSlabs 1296 = 2592 MiB held. v7 lacks FloorRefusals
+  and a failure-time snapshot. The two reserve-failure branches in
+  `render_pool_slab.c:79` imply these seven are gate refusals; final totals
+  do not identify simultaneous pressure or event values at each refusal.
+- **Existing VidMm retry:** 10k `gm1926a-umd.log:4205-4206` successfully trims
+  0x08010000 bytes (128.0625 MiB) for a 0x003a0000-byte request; the retried
+  residency call returns E_PENDING. The later CreateAllocation refusal is a
+  separate boundary. This is evidence that the UMD budget retry is active,
+  not proof of complete eviction/restore correctness.
+- **GPU receipts:** no Wom1GpuFault, Wom1GpuReset or Wom1FirmwareRecovery;
+  Wom1GpuFaultInfoRead=1. No G4 submit/bind or preemption refusal is reported
+  by the saved summary. Wom1G4OmittedLeaves v1: 23 events / 888 groups; the
+  retained ring sequences 16-23 all describe allocation-zero
+  0x10000..0x11000 reservations (including GravityMark PIDs 5776 and 4124).
+  The ring is historical and incomplete, not proof of all mappings.
+- **Staging/cost:** 44 recorded successful Executes for 10k, 43 for 2k.
+  T13 dirty/upload/download totals: 861327360 / 1151008768 / 0 bytes (10k)
+  and 860188672 / 1149997056 / 0 (2k). The summary's legacy XFER zero does
+  not mean no uploads. C87 whole-slot readback cost is not implicated by
+  these pre-OOM traces: captured downloads are zero; later steady-state
+  readback cost remains unknown.
+- **Crash/liveness/recovery:** no Windows stop code/parameters, minidump,
+  cdb trace, or hypervisor crash is supplied; `full.log` contains no matched
+  bugcheck/panic/stall report. SSH stayed alive after both runs. DWM PID 1216
+  and explorer PID 4508 were unchanged. Synthetic mouse report: 1910 moves;
+  scanout capture: 0 frames. Rendered display, physical USB input, RDP and
+  per-CPU IRQ/timer health are not independently verified. Storage supported
+  saved logs and cleanup. Saved recovery removed exact oem5.inf and service/
+  binaries; durable preflight PASS, final boot
+  2026-10-24T03:14:06.8766660Z, VISIBLE_INERT_PACKAGE_ABSENT_8CPU.
+- **Verdict: CONFIRMED for the bounded BEFORE outcome** of no observed AV,
+  clean application OOM and no observed MMU fault. The exact internal
+  transition guard's execution and explicit context/device-error propagation
+  are not independently proven by these traces. GravityMark completion is
+  unachieved; this is not a working/stable benchmark verdict.
+
