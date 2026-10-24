@@ -63268,3 +63268,36 @@ is missing. The workload still faulted and bugchecked; no stability/performance
 claim is supported. An incorrect hardware publication of currently valid logical
 PTEs is less likely at this boundary because the logical entries are also zero.
 
+
+EXP1937 HARDWARE BEFORE 2026-10-24T11:17:44Z:
+- Package 30.0.1937.0 = EXP1936 + Codex exp1936 8b2766f1 + Codex tdr1 (f0dc7825, 1df8b112). Switches Wom1GpuFaultInfoRead Wom1PoolHalfSize.
+- ATOMIC CONTRACT: none -- independent changes: the UMD reference union (signature: no zero-PTE fault) and the KMD fault recovery (signature: Wom1GpuReset stage Complete, no bugcheck).
+- **Next experiment — WHY THIS HYPOTHESIS:**
+- 
+- 1. EXP1936's successful all-invalid updates and absent logical/native group
+-    favor a stale address or omitted residency reference over failure to publish
+-    four currently valid contiguous pages. This is a causal ranking, not proof
+-    of the UMD allocation identity.
+- 2. Source independently demonstrates a UMD omission mechanism: `bind_heaps`
+-    used to add earlier-stage references and upload CB14 before a later stage's
+-    sampler helper could flush/replace the batch. The host regression executes
+-    those production functions and loses earlier references on the old code.
+- 3. The existing native coverage guard checks only the current held set
+-    (`umd_gpuva_windows.c:1613`), so a BO missing from that set escapes it.
+-    Preparing one sampler union before registering all stages closes this real
+-    hole without suppressing valid paging invalidations or changing placement.
+- 
+- **WINDOWS/AGX CONTRACT:** WDK26100 `d3dkmddi.h:2081` defines the paging flags;
+- `d3dukmdt.h:1475` defines MakeResident's allocation list, result count and fence.
+- The UMD must include every BO the submitted commands reference in its residency
+- transaction and hold it through retirement. KMD must honor VidMm invalidations;
+- restoring a stale VA from historical tokens would violate lifetime/ownership.
+- Asahi sampler handles are indexes into a particular batch's heap, and resource
+- reads/writes add BOs to that specific batch. All graphics stage maps must be
+- prepared together before any stage's resources join the draw's batch.
+- 
+- **WHAT IS STILL UNKNOWN:** the former owner of0x1112680000; whether this precise
+- Recovery rec1937h.
+- Hashes: sys d838ae7275f1, UmdArm64 4e37b8ba6408, UmdX64 9542caebd5be, Umd32 136561aee50f; manifest 8620d854e9f2, hardware-manifest 76521a26ee3a; probe1937.sh e27f8da37bc4 (PROBE_LINT_OK); visible recovery rec1937h 5cce32fcd3c9ad25; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1937h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1937-interstage-tdr/run1937.sh.
