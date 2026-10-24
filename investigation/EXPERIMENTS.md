@@ -61810,3 +61810,19 @@ EXP1924 ACTUAL 2026-10-24T02:19:14Z:
   - Busy backoff kept.
 - Recovery: rec1924h at proxy reported RECOVERY_DONE.
 - Next: EXP1925 = revert + Codex T13 (CPU-accessible D3D12 heaps and owner CPU BOs on native-only canonical storage + write-watched staging). This is the actual fix candidate for GravityMark.
+
+EXP1925 HARDWARE BEFORE 2026-10-24T02:29:35Z:
+- Package 30.0.1925.0 from cd96d55b = EXP1924 4016d17d - T12 gate (revert 5e121ca9; Busy backoff kept) + Codex T13 7256f48e (heap staging) and 35c012b3 (staging-bytes-per-Execute receipt).
+- Device switch Wom1GpuFaultInfoRead=1. Short profile: GravityMark D3D12 10k and 2k.
+- Single behavioural variable: T13. The revert restores EXP1923 behaviour; the receipt is receipt-only.
+- WHY THIS HYPOTHESIS: (1) EXP1923 proved the remaining fault: a GPU read inside an omitted-leaf range of a 128 MiB CPU-visible upload heap in the aperture; (2) WDDM 3.0 keeps a system-memory fallback for CPU-visible allocations, so they must not be the GPU-facing storage; (3) T13 makes the GPU-facing storage CpuVisible=0 segment-3 (native leaves always representable) and moves CPU access to process memory, synchronised at the D3D12 points (Execute for uploads, completion for readback).
+- WINDOWS CONTRACT: D3D12 CPU writes to an UPLOAD heap become visible to GPU work submitted later; readback data is visible after the completion fence. MEM_WRITE_WATCH/GetWriteWatch track the dirty pages.
+- AGX/ASAHI CONTRACT: the UAT needs 16 KiB-contiguous backing; segment-3 pool granules provide it.
+- TRANSLATION: MapHeap pointer -> write-watched process staging; Execute -> dirty-page copy escapes (<=64 KiB) into canonical storage; completion -> merge of GPU-written ranges.
+- WHAT IS STILL UNKNOWN: load-time and per-frame copy cost on hardware (new receipt); whether all GPU-read CPU-visible paths are covered (OMITTED_LEAVES should hold no GPU-read D3D12 allocations); DWM/D3D11 untouched (D3D12 owner only).
+- Expected: no MMU fault; GravityMark D3D12 passes execute #47 and runs; staging bytes per Execute small after the load.
+- Failure criteria: an unmapped fault again (join to OMITTED_LEAVES); a staging-induced corruption or hang; a load that is too slow (receipt).
+- Recovery: rec1925h (pre-disable snapshot); at proxy use AGX_RECOVERY_ALLOW_AT_PROXY=1.
+- Hashes: sys 755943c40fb3, UmdArm64 8c5c21ef0f98, UmdX64 3169341998e3, Umd32 5e60a4d100f6; manifest 0c4312a26e2a, hardware-manifest 4fd251cc9afd; probe1925.sh bb903e53a05b (PROBE_LINT_OK); visible recovery rec1925h 8f9c37a12d5847a6; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1925h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1925-heap-staging/run1925.sh.
