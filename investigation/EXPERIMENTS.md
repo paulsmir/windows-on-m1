@@ -62437,3 +62437,108 @@ EXP1931 HARDWARE BEFORE 2026-10-24T07:28:42Z:
 - Hashes: sys 0eb8746744a3, UmdArm64 b20c58859864, UmdX64 58d9a50f09a1, Umd32 81468d76e23a; manifest 910c73997fe0, hardware-manifest a60d021e875d; probe1931.sh de9cb1986842 (PROBE_LINT_OK); visible recovery rec1931h 49a4e2e577a7be18; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1931h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1931-os-mem/run1931.sh.
+
+EXP1931 ACTUAL 2026-10-24T07:55:32Z (Codex draft, exp1931 REPORT.md):
+
+EXP1931 ACTUAL — offline reconstruction of the saved 2026-10-24 run,
+ready for Claude to append to EXPERIMENTS.md. No hardware action was performed
+for this report. Package **30.0.1931.0**, source
+`5f3d3335bc8fbd4439b18e695e73253e3135044b`, m1n1 **0d3a75b3**,
+full-owner profile, **2688 MiB pool**, **Wom1GpuFaultInfoRead=1**.
+BEFORE: `investigation/EXPERIMENTS.md:62415`.
+Here **E** is `/Volumes/pwdev/public_windows/.local/experiments/EXP1931-os-mem`
+and **R** is `E/evidence/EXP1931`.
+
+- **Boot/admission:** ordered restart intent at **07:28:46.2756139Z**;
+  saved recovery identifies the experiment boot as **07:29:33.6826390Z**,
+  47.407 s later (not a measured SSH arrival time). APPL0002 CM_PROB_NONE,
+  Wom1StartStage=12 / Wom1StartStatus=0. State-start/end uptimes 50/305 s.
+  Sources: `R/restart-ssh.log:2`, `R/state-start.txt:1`,
+  `R/state-end.txt:1`, `R/kmd-receipts-probe-end.txt:10`,
+  `E/evidence/rec1931h/visible-disable-output.txt:5`.
+- **10K run, PID 9704:** 10,000 asteroids at 33.498 s, ready at 33.788 s,
+  benchmark starts 33.801 s, resize 33.822 s. First OOM **34.156 s**;
+  heap creation fails, later RGBAf16 1280x720 targets fail. Runner timeout-kills
+  at **106 s**, WER count 1. Sources: `R/gm1931a-out.txt:29`, `:31`,
+  `:32`, `R/gm1931a-err.txt:1`, `R/gm1931a-done.txt:1` (UTF-16).
+- **2K run, PID 1116:** 2,000 asteroids at 18.044 s, ready at 18.272 s,
+  benchmark starts 18.273 s, resize 18.284 s. First OOM **19.215 s**;
+  RGBAf16 targets fail at 20.322/20.324 s. Runner timeout-kills at **106 s**,
+  WER count 0. Sources: corresponding `gm1931b-out.txt:29,31,32`,
+  `gm1931b-err.txt:1`, `gm1931b-done.txt:1`.
+  These are OOM/runner times, **not device-removal times**. No explicit
+  GravityMark device-removal timestamp or completed benchmark result exists.
+- **Original allocation boundary:** first request in each run is General,
+  GPU-only flags **0x2c**, **128 MiB**, AllocateCb/`0x8007000e`, no pending
+  allocation handle. `gm1931a-umd.log:4042` / `gm1931b-umd.log:3868`.
+  Four complete v2 snapshots per run, every OS query valid. Last two 2K
+  snapshots instead request **7.1875/7.25 MiB**, flags 0xf, at AllocateCb.
+  One transitional slot is excluded per census; no unknown-size or copy-held
+  exclusions. Exact values: `memory-a.json`, `memory-b.json` in this folder.
+- **Physical/commit discriminator:** first 10K / 2K available physical memory
+  is **768.387 / 808.508 MiB**, available commit **3921.008 / 4000.348 MiB**;
+  physical total **5988.379 MiB**, commit limit **12132.379 MiB**.
+  Process PrivateUsage **2904.508 / 2901.367 MiB**, working set
+  **486.305 / 749.316 MiB**. All eight physical samples span
+  **746.902–821.516 MiB**, available commit **3709.195–4025.324 MiB**.
+  Sources: six-row groups at `gm1931a-umd.log:4042,4065,4090,4118` and
+  `gm1931b-umd.log:3868,3891,4012,4027`. This rules out exhausted commit
+  at the sampled boundary; it does not identify which process owns all
+  resident system memory. Queries are adjacent, not atomic with KMD events.
+- **Copy ownership:** both first samples have **588.938 MiB private staging**,
+  **570.750 MiB mapped** across 86 slots, **18.188 MiB unmapped** across 15.
+  Retry reduces private storage to **566.063 MiB**, mapped **552.438 MiB**
+  across 58 slots. Merge baseline is **zero in every sample**. First canonical
+  logical span is **2140.672 MiB / 2140.734 MiB**. These are logical spans,
+  not residency; never add them to working-set/pool totals. Not all mapped
+  storage is necessarily idle and eligible for the new policy.
+- **KMD pool:** probe-end and pre-disable v8 receipts are identical:
+  segment **2688 MiB**, peak reserved **2456.375 MiB**, peak committed
+  **2463.938 MiB**, peak slabs **2464 MiB**; final committed/reserved
+  **173.438 MiB**, held **188 MiB**. **ReserveFailures=FloorRefusals=28**,
+  NewSlabFailures=CommitFailures=ReleaseFailures=BusyRetries=RefUnderflows=0.
+  Last refusal: **7.25 MiB**, reserved/committed **2456.375 MiB**, held
+  **2462 MiB**, uptime **202372 ms**, **HighMemory clear / LowMemory clear**.
+  This last event is not the first refusal. Source: both receipt files `:160`;
+  strict source-schema decode in `decoded-receipts.json`, extracted `.bin`
+  files under `probe/` and `predisable/`.
+- **DWM failure:** 10K WER is **dwm.exe 10.0.26100.9549**, module
+  **udwm.dll 10.0.26100.9711**, exception **0xc00001ad**, RVA **0xf4a44**.
+  It is not a GravityMark/UMD AV. DWM PID changes **1216 -> 8516**;
+  Explorer stays 1420. DWM's own trace refuses 512 KiB shader BOs,
+  then 256 KiB encoder / 64 KiB General BOs, with
+  ResourceUpdateSubResourceUP SetError(E_OUTOFMEMORY):
+  `R/umd.log:13737,13748,14161,14169`.
+  The existing full-pool headroom guard did **not** establish DWM stability.
+- **GPU receipts:** Wom1GpuFault, Wom1GpuReset, Wom1FirmwareRecovery,
+  G4 submit/bind refusal and preemption-refusal receipts are absent in both
+  collections. Wom1G4OmittedLeaves v1: **24 events / 1828 groups**.
+  Retained sequence 22, PID1216, segment0, allocation
+  `0xffff85095e46c710`, VA `0x1050000`, bytes16384000, omits **953 groups**.
+  The other seven retained events are allocation-zero 4 KiB updates at
+  `[0x10000,0x11000)`. This is historical mapping evidence, not proof that
+  a retained omission caused DWM's exception. Source: receipt `:117`.
+- **Crash/dump:** no saved kernel/process dump, cdb output or full-crash.log
+  is supplied. No system bugcheck code/parameters or faulting CPU register
+  state is established. The user-mode DWM WER exception above is the captured
+  crash evidence. `R/full.log:30–37` records CPU1–7 startup, not runtime
+  IRQ/timer progress.
+- **Liveness:** saved pipeline reports GUEST_ALIVE after each workload,
+  RUN_DONE and PIPELINE_RC=0. SSH/storage supported evidence collection.
+  Synthetic mouse task reports 1910 moves; scanout captures zero frames.
+  Correct visible rendering, physical USB input, RDP and per-CPU runtime
+  health are unverified. Source summary: scratchpad `newexp1931.log` and
+  `run1931.out` given in TASK.md; `R/mouse-done.txt`.
+- **Saved recovery:** service disabled **07:35:18.0363670Z**; exact
+  **oem5.inf** removed **07:37:04.9283886Z**, staged0 and Sys/Umd absent;
+  durable preflight PASS at boot **07:37:37.2821480Z**, Package=Absent,
+  **VISIBLE_INERT_PACKAGE_ABSENT_8CPU**. Sources:
+  `E/evidence/rec1931h/{visible-disable-output,cleanup-visible-output,visible-preflight,visible-inert-gate}.txt`.
+  These are saved observations, not a fresh guest verification.
+
+**Verdict: CONFIRMED for BEFORE's measurement checkpoint.** All eight OS/process
+samples are valid and show remaining commit space at physical-headroom policy
+refusal. A commit-exhaustion explanation is rejected at these samples; exact
+attribution of physical pressure remains incomplete. **Workload stability is
+REJECTED**: both runs OOM, DWM crashes/restarts, neither benchmark completes.
+
