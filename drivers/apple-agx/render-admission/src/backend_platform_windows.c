@@ -2210,6 +2210,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   ADMISSION_GPU_FAULT_EVENT event;
   volatile ULONG *status;
+  volatile ULONG *pending;
+  const APPLE_AGX_MEMORY_OBJECT *regionC;
+  ULONG index;
   ULONGLONG deadline;
   if (runtime == NULL || Fence == 0u ||
       runtime->Provider.QueueProvider.PendingFence != Fence ||
@@ -2217,7 +2220,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
     return APPLE_AGX_BACKEND_FALSE;
   status = (volatile ULONG *)runtime->Initdata
       .DataObjects[AppleAgxInitdataMemoryFirmwareStatus].CpuAddress;
-  if (status == NULL) return APPLE_AGX_BACKEND_FALSE;
+  regionC = &runtime->Initdata.DataObjects[AppleAgxInitdataMemoryRegionC];
+  if (status == NULL || regionC->CpuAddress == NULL ||
+      ADMISSION_REGIONC_PENDING_STAMPS_OFFSET > regionC->Length ||
+      ADMISSION_REGIONC_PENDING_STAMPS_BYTES >
+          regionC->Length - ADMISSION_REGIONC_PENDING_STAMPS_OFFSET)
+    return APPLE_AGX_BACKEND_FALSE;
+  pending = (volatile ULONG *)((UCHAR *)regionC->CpuAddress +
+                               ADMISSION_REGIONC_PENDING_STAMPS_OFFSET);
   AdmissionGpuFaultCapture(runtime, Fence, EventKind, status, &event);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   {
@@ -2245,6 +2255,22 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
     KeStallExecutionProcessor(50u);
     KeMemoryBarrier();
   }
+  /* Asahi gpu.rs mark_pending_events / fw/initdata.rs PendingStamp:
+   * 256 {info, wait_value} records, bit 0 means pending. The serialized
+   * KMD conservatively faults the entire outstanding submission (including
+   * its dependent queues), rather than reporting any affected work as done.
+   * Clear the firmware's pending-event bookkeeping before resume, not the
+   * queue's completion stamps. RecoveryPending retains all DMA ownership
+   * until those real stamps and consumer pointers advance. */
+  for (index = 0u;
+       index < ADMISSION_REGIONC_PENDING_STAMPS_BYTES / sizeof(ULONG);
+       index += 2u) {
+    if ((pending[index] & 1u) != 0u) {
+      pending[index] = 0u;
+      pending[index + 1u] = 0u;
+    }
+  }
+  KeMemoryBarrier();
   status[0x20u / 4u] = 0u;
   KeMemoryBarrier();
   status[0x30u / 4u] = 1u;

@@ -13,6 +13,7 @@ Truncation and missing history must remain explicit, including old v1 input.
 """
 from pathlib import Path
 import os
+import re
 import base64
 import json
 import subprocess
@@ -142,6 +143,10 @@ int main(int argc, char **argv) {
   assert(p.Graph.MappingGeneration==1234 && p.Graph.LeaseToken==7);
   /* Actual recovery callback must capture before its firmware resume write. */
   ADMISSION_PLATFORM_RUNTIME runtime={0}; unsigned status[16]={0};
+  unsigned char regionC[ADMISSION_REGIONC_PENDING_STAMPS_OFFSET +
+                        ADMISSION_REGIONC_PENDING_STAMPS_BYTES] = {0};
+  runtime.Initdata.DataObjects[1].CpuAddress=regionC;
+  runtime.Initdata.DataObjects[1].Length=sizeof(regionC);
   runtime.Adapter=&adapter; runtime.Provider.QueueProvider.PendingFence=71;
   runtime.Initdata.DataObjects[0].CpuAddress=status; capture_event=e;
   status[8]=1; assert(AdmissionTransportRecover(&runtime,71,4));
@@ -262,12 +267,16 @@ RECOVERY = r'''
 #define APPLE_AGX_BACKEND_TRUE 1
 #define TRUE 1
 #define AppleAgxInitdataMemoryFirmwareStatus 0
+#define AppleAgxInitdataMemoryRegionC 1
+@@REGION_DEFINES@@
+typedef unsigned char UCHAR;
+typedef struct { void *CpuAddress; ULONGLONG Length; } APPLE_AGX_MEMORY_OBJECT;
 typedef unsigned APPLE_AGX_BACKEND_U32;
 typedef int APPLE_AGX_BACKEND_BOOL;
 typedef struct {
   ADMISSION_CONTEXT *Adapter;
   struct { struct { unsigned PendingFence; struct { unsigned DeadlineExpiries; } Runtime; } QueueProvider; } Provider;
-  struct { struct { void *CpuAddress; } DataObjects[1]; } Initdata;
+  struct { APPLE_AGX_MEMORY_OBJECT DataObjects[2]; } Initdata;
   ADMISSION_GPU_FAULT_RECEIPT GpuFault;
   ADMISSION_GPU_FAULT_MAPPING GpuFaultMapping, GpuFaultMappingLast;
   int GpuFaultUnpublished, FirmwareRecoveries, FirmwareRecoveryUnpublished;
@@ -333,6 +342,12 @@ class FaultMapping(unittest.TestCase):
         source = source.replace('@@RECOVERY@@', RECOVERY.replace('@@BODY@@',
             body(backend, 'AdmissionTransportRecover')).replace('@@PUBLISH@@',
             body(backend, 'AdmissionPublishFirmwareRecovery')))
+        header = (RENDER/'include/render_admission.h').read_text()
+        source = source.replace('@@REGION_DEFINES@@', '\n'.join(
+            re.search(r'^#define ' + name + r' .+$', text, re.M)[0]
+            for name, text in (
+                ('ADMISSION_REGIONC_PENDING_STAMPS_OFFSET', backend),
+                ('ADMISSION_REGIONC_PENDING_STAMPS_BYTES', header))))
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             (tmp/'capture.c').write_text(source)
