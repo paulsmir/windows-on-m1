@@ -3417,16 +3417,23 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   info.grid[0] = x;
   info.grid[1] = y;
   info.grid[2] = z;
-  hr = bind_heaps(owner, true); /* C47 */
-  if (SUCCEEDED(hr)) validate_heap_refs(owner, true);
-  if (SUCCEEDED(hr) && indirect) {
+  if (indirect) {
     info.indirect = static_cast<struct pipe_resource *>(indirect->Buffer->Resource);
     for (unsigned i = 0; i < indirect->MaxCount && !AgxWin32AsahiContextFaulted(pipe); ++i) {
+      /* agx_launch_internal may flush a full CDM encoder after any record.
+       * Rebuild batch-relative heap handles/references for the next record. */
+      hr = bind_heaps(owner, true);
+      if (FAILED(hr)) break;
+      validate_heap_refs(owner, true);
       info.indirect_offset = static_cast<unsigned>(indirect->Offset + static_cast<unsigned long long>(indirect->Stride) * i);
       pipe->launch_grid(pipe, &info);
     }
-  } else if (SUCCEEDED(hr)) {
-    pipe->launch_grid(pipe, &info);
+  } else {
+    hr = bind_heaps(owner, true);
+    if (SUCCEEDED(hr)) {
+      validate_heap_refs(owner, true);
+      pipe->launch_grid(pipe, &info);
+    }
   }
   unbind_heaps(owner, true);
   /* EXP1850 ModelViewer: memory_barrier after every launch flushed each
