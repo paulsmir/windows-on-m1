@@ -62202,3 +62202,11 @@ All evidence below is saved evidence; no hardware action was performed here.
   restart independently reject whole-workload stability. Do not promote
   the half-pool switch or claim GravityMark correctness/performance.
 
+
+EXP1929 HARDWARE BEFORE 2026-10-24T06:17:55Z:
+- Package 30.0.1929.0 from 8399ec7e (rebuild: the first build failed in the native x86 compile, agx_blit.c implicit AgxWin32AsahiMarkContextFault; never installed) = EXP1928 + Codex mem2 (bf2717e0 0f2643ec b7e4565b c70dc85f). Switch Wom1GpuFaultInfoRead only (no Wom1PoolHalfSize).
+- WHY THIS HYPOTHESIS: EXP1925-1928 each crashed at one NULL-after-failed-allocation site; mem2 audits all direct consumers with k-th-allocation fault injection and reduces staging merge baselines and command-shadow retention.
+- Expected: no UMD AV (WER 0 for GravityMark); clean device error or further progress; less memory pressure. Recovery rec1929h.
+- Hashes: sys cc09ce43e750, UmdArm64 9d5b2cf469f7, UmdX64 426132ae7eb9, Umd32 94bc17048095; manifest 96b0a993c27f, hardware-manifest 12b74a864351; probe1929.sh eb6c000fccba (PROBE_LINT_OK); visible recovery rec1929h b5e0a7b7661d57a5; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1929h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1929-mem2-b/run1929.sh.
