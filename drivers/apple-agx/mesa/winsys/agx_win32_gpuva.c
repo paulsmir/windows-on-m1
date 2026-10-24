@@ -257,7 +257,7 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
                                       &paging_fence);
   space->LastDetail = (unsigned)resident;
   /* Submission uses the written tokens only during this call. */
-  if (resident == 3) {
+  if (resident == 3 || (resident == 2 && !paging_fence)) {
     space->Terminal = 1;
     gpuva_shift(space);
     space->Held = handles;
@@ -265,15 +265,20 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
     free(written_handles);
     return gpuva_refuse(space, __LINE__);
   }
-  if (!resident || (resident == 2 && !paging_fence)) {
+  if (!resident) {
     free(written_handles);
     free(handles);
     return gpuva_refuse(space, __LINE__);
   }
   if (paging_fence && !space->Ops.WaitPaging(space->Context, paging_fence)) {
-    if (!space->Ops.Evict(space->Context, handles, count)) space->Terminal = 1;
+    /* Residency was accepted, but paging completion is unknown. Retain
+     * these holds exactly as for an uncertain Map/MakeResident; releasing
+     * them could let trim invalidate a mapping still being updated. */
+    space->Terminal = 1;
+    gpuva_shift(space);
+    space->Held = handles;
+    space->HeldCount = count;
     free(written_handles);
-    free(handles);
     return gpuva_refuse(space, __LINE__);
   }
   /* MakeResident's paging fence has completed before inspecting UMD holds. */
