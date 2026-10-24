@@ -62979,3 +62979,33 @@ reached a valid unmapped GPU read and a later0x116. First/latest capture is
 confirmed; the sampler identity of that fault remains inconclusive. No
 GravityMark completion, correctness or performance result was obtained.
 
+
+EXP1935 HARDWARE BEFORE 2026-10-24T10:06:14Z:
+- Package 30.0.1935.0 = EXP1934 + Codex exp1934 de65cceb. Switches Wom1GpuFaultInfoRead Wom1PoolHalfSize.
+- **Next experiment — WHY THIS HYPOTHESIS:**
+- 
+- 1. The fault has zero logical PTEs despite validation of held references,
+-    making a missing submission reference a concrete candidate.
+- 2. Current source publishes a graphics sampler-heap VA but includes its BO
+-    in the residency/validation set only when a CDM command accompanies the
+-    render. Mesa owns this heap separately from pools and bo_list. A production
+-    replay reproduces the resulting missing residency and passes with the fix.
+- 3. Compute-only already includes the same BO. Moving the existing add_bo call
+-    to the common render set fixes the owning layer without changing placement,
+-    native-PTE policy, firmware or reset behavior. It is a specific behavioral
+-    correction, not proof that the saved fault address was the sampler heap.
+- 
+- **WINDOWS/AGX CONTRACT:** every BO named by GPU work must join the explicit
+- residency set, wait for its paging fence, receive pending CPU uploads, pass
+- native coverage, and remain held until completion. A render packet's VA is
+- not itself an allocation residency reference. Mesa owns sampler allocation
+- and batch lifetime; winsys owns collection, UMD owns residency/copies/holds,
+- VidMm owns placement/paging order, KMD owns native publication/execution.
+- Initialization, interrupts, DMA publication, power and recovery ownership
+- remain unchanged. Details and primary file:line evidence follow below.
+- 
+- **WHAT IS STILL UNKNOWN:** the allocation/executable identity at0x1112790000;
+- Recovery rec1935h.
+- Hashes: sys 08abacf3b263, UmdArm64 3bc3c4f69d25, UmdX64 a3eff459b3e2, Umd32 80030b73a31f; manifest d70e7b40cf37, hardware-manifest f099f2f6bd0a; probe1935.sh 97e32a152bff (PROBE_LINT_OK); visible recovery rec1935h 1a172cefe68beabe; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1935h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1935-sampler-hold/run1935.sh.
