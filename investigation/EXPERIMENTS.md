@@ -62704,3 +62704,116 @@ EXP1933 HARDWARE BEFORE 2026-10-24T08:40:02Z:
 - Hashes: sys ca1346657b2e, UmdArm64 a6ee4b798c42, UmdX64 0d921f4da628, Umd32 e742157d2aee; manifest 3bdc59d179b6, hardware-manifest d0e838dc315e; probe1933.sh b0cfaa6741e1 (PROBE_LINT_OK); visible recovery rec1933h 09375c6c0b39cc7b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1933h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1933-fault-map/run1933.sh.
+
+EXP1933 ACTUAL 2026-10-24T09:23:26Z (Codex draft, exp1933 REPORT.md):
+
+EXP1933 ACTUAL — offline reconstruction of the saved 2026-10-24 run.
+Ready for Claude to append to EXPERIMENTS.md. No hardware action was performed.
+BEFORE: `investigation/EXPERIMENTS.md:62679`. Package **30.0.1933.0**, source
+**e21d96ce97d7011b1b9a2f6c3bab31b48c1b3317**, full-owner profile, m1n1
+**0d3a75b3**, **Wom1GpuFaultInfoRead=1**, **Wom1PoolHalfSize=1**.
+
+Here **E** = `/Volumes/pwdev/public_windows/.local/experiments/EXP1933-fault-map`,
+**R** = `E/evidence/EXP1933`, and **S** =
+`/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`.
+All statements below refer to saved artifacts, not fresh guest observations.
+
+- **Stage / boot:** `E/stage-ssh.log:2` records **08:39:32.5032407Z**,
+  oem5.inf, Code28, arm1, eight CPUs and RegistryFlush PASS. The Boot field is
+  the preceding recovery boot, not the experimental boot. BEFORE is
+  **08:40:02Z**. `R/state-start.txt:1` reaches CM_PROB_NONE, DWM1216,
+  Explorer2420, uptime50 s. `E/full-crash.log:31` records CPU1–7 startup;
+  display preflight is physical2560x1600. Precise first-SSH latency and
+  per-CPU timer/interrupt health are not established.
+- **10K run:** saved probe requests GravityMark D3D12 10K; the wrapper profile
+  is ARM64, windowed1280x720, timeout90. `S/newexp1933.log:7` reports
+  **GUEST_DOWN_DURING_GRAVITYMARK 14**. This is loop iteration14, not a
+  measured removal time: iterations include sleep5, SSH and retry delays
+  (`E/probe1933.sh:19`). The first run's out/err/done/UMD/times/image files are
+  absent locally. No exact app removal time, OOM time, score or image can be
+  recovered from them. Shell PIPELINE_RC0 is not workload success.
+- **First actual GPU fault:** `R/kmd-receipts-probe-end.txt:189`, v1:
+  timeout event1, fence**0xe92e**, PID**2420** (Explorer from state-start),
+  context**0xffffd18db4138310**, submit-to-event**1 ms**, HaltCount1,
+  resumed|info_read|info_valid|job_known. Raw**0x1101a917e1822211** decodes to
+  **unmapped read**, level0, **UL1C(1)**, VM1, sideband67,
+  VA**0x1101a917c0**.
+- **The new mapping discriminator succeeded for that first fault** (`:190`):
+  v1/256 bytes, status**captured**, matching raw info/fence/context/PID,
+  graph process7, root**0x9cfe58000**, generation1, mapping generation
+  **0x21bb**, lease**0xd06**, JobInFlight1, Uncertain0, CpuOnly0,
+  table**0x9cfe50000**, **NativePresent0**. Its four logical pages are
+  valid+writable (flags3), segment0, allocation**0xffffd18db4c12410**,
+  offsets0/0x1000/0x2000/0x3000, with IPAs
+  **0x898c8e000, 0x8f8250000, 0x8f8251000, 0x8f8252000**.
+  The native group starts atVA0x1101a90000. Those pages cannot be one aligned
+  contiguous16KiB leaf. This confirms missing native backing at Explorer's
+  fault; it does not identify allocation class, total size or CPU-map status.
+  The CPU graph is not a direct hardware-PTE/TLB read.
+- **Second valid GPU fault:** same fault receipt, event2, fence**0x1430a**,
+  PID**9624**, context**0xffffd18db52fc040**, submit-to-event**43 ms**,
+  HaltCount2, same flags. Raw**0x1112680021822211**: unmapped read,
+  level0, UL1C(1), VM1, sideband67, VA**0x1112680000**. This repeats the
+  address from EXP1932 but in a different process. PID9624 is the workload
+  candidate; its executable is not independently identified by an app trace.
+  **Its mapping was not retained:** the first-valid global guard was already
+  consumed by Explorer. Equal VM slot/address values across jobs do not join
+  process mappings. Events=ValidFaults=Resumed=2, NotHalted=0.
+- **Later TDR / crash:** firmware receipt `:188` has two recoveries, last
+  fence0x1430a/43ms, one deadline expiry; longest job**2911 ms** at
+  fence**0x14688**. Reset receipt `:192` has **3 resets, 0 succeeded**:
+  engine at145938ms, engine146975ms, adapter147978ms. All fail at stage
+  **quiesce**, result**timeout**, status**0xc0000483**, waits1000/1001/1000ms.
+  Packet/active/last fence0x14688, completed0x14687; packet context
+  0xffffd18db2bc9a60. First reset job age2910ms/poll age1ms; final poll
+  age2041ms, firmware Halted0, worker scheduled/active0. Scheduler fault
+  tag1/line547 appears after the first reset failure, not as the original
+  MMU cause. No preemption-refusal receipt.
+- **Dump confirms VIDEO_TDR_FAILURE 0x116**, ARM64/eight processors:
+  `E/evidence/dump/102426-13953-01.dmp`, header offsets0x38/0x40,
+  **P1=0xffffd18db410a010, P2=0xfffff800ac3aa150,
+  P3=0xffffffffc0000483, P4=0x3**. Parsed with the repository's
+  `tools/windows_dump_header.py`; `decoded-dump.json` preserves the result.
+  No cdb text is supplied; no module/stack attribution is inferred from P2.
+  `E/full-crash.log:3486` shows PSCI SYSTEM_RESET, ELR0xfffff800aee35138,
+  x30=0xfffff800aec97e04, SP0xffffc904e4be6010, SPSR0x600000c4,
+  x0=0x84000009. This is a confirmed0x116, not a0x101 timer diagnosis.
+- **Separate G4 refusal:** `:187`, v3/392 bytes, Branch9 Parse,
+  status0xc000000d/downstream3 Unmapped, total7, queryVA**0x1103050000**,
+  graph process3 / owner PID**1216** (DWM), read1byte, ordinal11,
+  GraphPresent0. Allocation**0xffffd18db418fd90**, 512KiB, class3 Encoder,
+  Win32Flags6, GPU_LOCAL type2, CpuVisible1, MetadataValid1; four valid
+  scattered segment0 pages. This is a third, separate observation; neither
+  its class nor its allocation may be assigned to either GPU fault.
+- **Omission / pool totals:** omission receipt `:118` reports **901 events /
+  14033 groups**; its last eight rolling events do not establish the second
+  fault's mapping. Pool v8 `:162`: segment1344MiB, committed**1329.875MiB**,
+  peak/held1344MiB, reserved**2858.5MiB**, peak reserved**2878.6875MiB**.
+  ReserveFailures, FloorRefusals, CommitFailures, NewSlabFailures,
+  ReleaseFailures, BusyRetries, RefUnderflows all0. Moves143/Kills1641/
+  Unplaces322. These are collection-time totals, not fault-time residency
+  and not proof of an OOM cure.
+- **Post-reboot / second attempt:** `R/gm1933b-err.txt:1` says no Direct3D12
+  devices at**1.657 s**, context open fails at1.659s. Probe reports guest
+  down atiteration6. This is not an independent 2K GPU test. Recovery
+  records the reboot at**08:44:38.6958740Z**, Code43. `R/state-end.txt:1`
+  shows disabled service, DWM1220, Explorer5124, uptime41s. The script's
+  GUEST_ALIVE_AFTER markers do not imply uninterrupted adapter health.
+  Synthetic mouse1910 moves / zero scanout frames do not establish visible
+  correctness. SSH/storage worked for saved collection and recovery;
+  physical USB input, RDP, continuous display and all-CPU liveness unverified.
+- **Recorded recovery:** exact oem5.inf service disabled at
+  **08:45:31.9267233Z**, both arms absent
+  (`E/evidence/rec1933h/visible-disable-output.txt:3`). Exact package removal
+  at**08:47:21.8416994Z**, staged0/Sys absent/Umd absent
+  (`cleanup-visible-output.txt:2`). Durable preflight PASS, new boot
+  **08:48:25.0346760Z**, PackageAbsent, **VISIBLE_INERT_PACKAGE_ABSENT_8CPU**
+  (`visible-preflight.txt:1`, `visible-inert-gate.txt:1`). Probe-end and
+  pre-disable decoded receipts are equal. No new recovery attempt by Codex.
+
+**BEFORE verdict: CONFIRMED for its first-fault discriminator / missing-native-
+backing hypothesis at Explorer's fault. INCONCLUSIVE for attribution of the
+later PID9624 fault. Workload stability is REJECTED:** valid MMU faults,
+failed reset quiescence and a confirmed0x116, with no benchmark completion.
+The experiment was explicitly receipt-only; it never promised a behavior fix.
+
