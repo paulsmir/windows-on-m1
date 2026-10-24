@@ -86,5 +86,40 @@ class Dump1938Round3Tests(unittest.TestCase):
                 self.assertNotRegex(line, r"&&|\|\|")
 
 
+class Dump1938Round4Tests(unittest.TestCase):
+    script = ROOT / "investigation/analysis/EXP1938-dump/cdb-commands-4.txt"
+
+    def test_inspection_has_no_extension_walks_and_explicit_read_bounds(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        Pass 3's single-address !pool repeated the same entry until the run
+        was cut off, preventing all later reads. The final pass must use only
+        independent built-in commands, with explicit finite data/code lengths.
+        This checks the delivered command budget, not CDB execution semantics.
+        """
+        allowed = {".echo", ".expr", ".reload", "lmvm", ".bugcheck", "kv",
+                   ".frame", "u", "dps", "dt"}
+        data_words = code_instructions = 0
+        for number, line in enumerate(self.script.read_text().splitlines(), 1):
+            if not line.strip():
+                continue
+            with self.subTest(line=number):
+                verb = line.split()[0].lower()
+                self.assertIn(verb, allowed)
+                self.assertNotRegex(line, r"[;{}]")
+                if verb in {"u", "dps"}:
+                    bound = re.search(r" L([0-9a-fA-F]+)$", line)
+                    self.assertIsNotNone(bound, "Read needs an explicit bound")
+                    count = int(bound[1], 16)
+                    self.assertGreater(count, 0)
+                    self.assertLessEqual(count, 0x200)
+                    if verb == "dps":
+                        data_words += count
+                    else:
+                        code_instructions += count
+        self.assertLessEqual(data_words * 8, 0x3000)
+        self.assertLessEqual(code_instructions, 0x300)
+
+
 if __name__ == "__main__":
     unittest.main()
