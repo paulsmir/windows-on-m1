@@ -54,5 +54,37 @@ class Dump1938CommandsTests(unittest.TestCase):
                     self.assertEqual(lines[i - 1], f"r {match[1]} = 0")
 
 
+class Dump1938Round3Tests(unittest.TestCase):
+    # Pass 2 stays immutable; these regressions cover the replacement script.
+    script = ROOT / "investigation/analysis/EXP1938-dump/cdb-commands-3.txt"
+
+    def test_driver_object_uses_installed_service_name(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        Pass 2 queried the SYS basename as a driver object and found nothing.
+        The debugger lookup must use the service identity registered by the INF.
+        This checks two independently maintained artifacts, not a magic string.
+        """
+        inf = (ROOT / "drivers/apple-agx/render-admission/"
+               "AppleAgxRenderAdmission.inf").read_text()
+        services = re.findall(r"(?im)^AddService\s*=\s*([^,\s]+)", inf)
+        lookups = re.findall(r"(?im)^!drvobj\s+\\Driver\\(\S+)\s+7$",
+                             self.script.read_text())
+        self.assertTrue(lookups, "Missing independent driver-object discovery")
+        for lookup in lookups:
+            self.assertIn(lookup, services)
+
+    def test_masm_conditions_do_not_use_cpp_boolean_operators(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        Pass 2's MASM .if rejected && with 'Numeric expression missing'.
+        Ban the same C++ boolean syntax in MASM control expressions; this is
+        a static guard, not a claim that the rest of CDB syntax was executed.
+        """
+        for line in self.script.read_text().splitlines():
+            if line.startswith(".if"):
+                self.assertNotRegex(line, r"&&|\|\|")
+
+
 if __name__ == "__main__":
     unittest.main()
