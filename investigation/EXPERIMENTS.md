@@ -61780,3 +61780,19 @@ EXP1923 ACTUAL 2026-10-24T01:38:10Z:
 - Next: Codex T12 (user: solve with astra), the production design and fix:
   - CPU-visible GPU-read allocations must never be GPU-mapped with omitted leaves;
   - plus Busy reclaim backoff.
+
+EXP1924 HARDWARE BEFORE 2026-10-24T02:02:04Z:
+- Package 30.0.1924.0 from 4016d17d = EXP1923 45d7f45b + Codex T12 01e7b741 (BeginJob refuses GPU leases while any tracked GPU mapping has logical pages without native leaves) and 121a83bb (Busy granules retried only after executed paging progress).
+- Device switch Wom1GpuFaultInfoRead=1. Short profile: GravityMark D3D12 10k and 2k.
+- ATOMIC CONTRACT: none -- two independent fail-closed corrections, each with its own receipt/log signature (T12 BeginJob refusal; HV "pool window cmd=4 result=6" count).
+- WHY THIS HYPOTHESIS: (1) EXP1923: the GPU read an omitted-leaf range of a 128 MiB aperture upload heap -> UL1C unmapped fault -> hang -> TDR quiesce failure; EXP1919/1920 ended in 0x116; (2) 158481 Busy UNMAP_RANGE commands with HV prints stalled the machine; (3) both are deterministic in the source (no gate before BeginJob; Busy candidates retried every pass).
+- WINDOWS CONTRACT: a refused GPU job must surface as device removal for that process (dxgkrnl DMA fault/refusal), not as a hang that needs TDR.
+- AGX/ASAHI CONTRACT: no GPU access to VA without a native 16 KiB leaf.
+- TRANSLATION: no change for representable backing.
+- WHAT IS STILL UNKNOWN: whether dxgkrnl handles the refusal cleanly (the process is removed, DWM and the system survive); whether pool pressure still causes Busy churn after the backoff.
+- Expected: GravityMark D3D12 removed early with the T12 refusal; no MMU fault, no TDR, no bugcheck, guest alive; Busy line count bounded. GravityMark is NOT expected to complete (T13 pending).
+- Failure criteria: an MMU fault despite the gate; a bugcheck or guest stall; an unbounded HV Busy flood.
+- Recovery: rec1924h (pre-disable snapshot); at proxy use AGX_RECOVERY_ALLOW_AT_PROXY=1.
+- Hashes: sys 5cb2d42c9046, UmdArm64 0b9c5075dcd3, UmdX64 668bc757258a, Umd32 d545d416c0a8; manifest 4f7aa1e71b41, hardware-manifest ae79fe16d031; probe1924.sh ccd5fc0b39e4 (PROBE_LINT_OK); visible recovery rec1924h 9871c73c0a1dc4ff; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1924h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1924-omit-gate/run1924.sh.
