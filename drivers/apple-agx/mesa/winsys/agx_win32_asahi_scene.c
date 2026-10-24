@@ -462,6 +462,19 @@ static struct agx_batch *heap_batch(struct agx_context *ctx, int compute) {
   }
   return batch;
 }
+/* agx_set_sampler_uniforms can append each bound native sampler later in
+ * the draw/dispatch. Count all stages conservatively, including helper work;
+ * these entries do not deduplicate against the explicit heap union. */
+static unsigned heap_sampler_headroom(const struct agx_context *ctx) {
+  unsigned count = 0;
+  for (unsigned stage = 0; stage < MESA_SHADER_STAGES; ++stage) {
+    if (!ctx->stage[stage].shader || !ctx->stage[stage].shader->uses_bindless_samplers)
+      continue;
+    for (unsigned mask = ctx->stage[stage].valid_samplers; mask; mask &= mask - 1u)
+      ++count;
+  }
+  return count;
+}
 /* D3D12 C47: heap samplers enter the sampler heap of the batch the next draw
  * (dispatch) uses, deduplicated; handles are 28 + heap index (agx_uniforms.c).
  * A batch whose heap cannot take them all is flushed first. */
@@ -473,7 +486,9 @@ int AgxWin32AsahiBatchSamplerHandles(struct pipe_context *pctx, int compute, con
   struct agx_device *dev=agx_device(pctx->screen);
   struct agx_batch *batch=heap_batch(ctx,compute);
   if(!batch) return 0;
-  if(batch->sampler_heap.count+count>AGX_SAMPLER_HEAP_SIZE) {
+  unsigned reserve=heap_sampler_headroom(ctx);
+  if(reserve>AGX_SAMPLER_HEAP_SIZE-count) return 0;
+  if(batch->sampler_heap.count>AGX_SAMPLER_HEAP_SIZE-count-reserve) {
     agx_flush_batch_for_reason(ctx,batch,"D3D12 heap samplers");
     batch=heap_batch(ctx,compute);
     if(!batch) return 0;

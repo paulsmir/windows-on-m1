@@ -208,7 +208,11 @@ struct pipe_context {
  void (*set_constant_buffer)(pipe_context *,int,unsigned,const pipe_constant_buffer *)=[](pipe_context *,int,unsigned,const pipe_constant_buffer *){++bound;};
 };
 struct AGX_D3D12_BUFFER {void *Resource;uint64_t Bytes;};
-struct Sampler {unsigned Valid,Bias;};
+struct Sampler {uint8_t Packed[8];unsigned Valid,Bias;};
+using AGX_D3D12_HEAP_SAMPLER=Sampler;
+static void *GetProcessHeap(){return nullptr;}
+static void *HeapAlloc(void *,unsigned,size_t n){return malloc(n);}
+static void HeapFree(void *,unsigned,void *p){free(p);}
 struct AGX_D3D12_HEAP_BINDING {
  AGX_D3D12_BUFFER *Heap;unsigned SamplerCount,TextureCount,WriteCount,First[4];
  Sampler *Samplers;AGX_D3D12_BUFFER *Textures,*Writes;
@@ -223,11 +227,11 @@ static void AgxWin32AsahiBatchReadResources(pipe_context *,pipe_resource **,unsi
 static void AgxWin32AsahiBatchWriteResources(pipe_context *,pipe_resource **,unsigned,int) {++encoded;}
 '''
         marker='static HRESULT bind_heaps(' if 'static HRESULT bind_heaps(' in text else 'static void bind_heaps('
-        self.run_cpp(prefix+function(text,marker)+r'''
+        self.run_cpp(prefix+function(text,'static HRESULT bind_heap_samplers(')+function(text,marker)+r'''
 int main() {
  for(nth=0;nth<=1;++nth) {
   attempts=live=bound=encoded=0;pipe_context pipe;AGX_D3D12_OWNER owner={};owner.Context=&pipe;
-  Sampler samplers[1]={{1,0}};AGX_D3D12_BUFFER resource={nullptr,0};
+  Sampler samplers[1]={{{0},1,0}};AGX_D3D12_BUFFER resource={nullptr,0};
   owner.PendingHeaps[5].SamplerCount=1;owner.PendingHeaps[5].Samplers=samplers;
   owner.PendingHeaps[5].TextureCount=1;owner.PendingHeaps[5].Textures=&resource;
   bind_heaps(&owner,true);

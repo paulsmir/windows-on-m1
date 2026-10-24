@@ -44,6 +44,7 @@ struct agx_device { int unused; };
 struct pipe_context { void *screen; };
 struct agx_context { struct pipe_context base; bool any_faults; };
 #define agx_context(p) ((struct agx_context *)(p))
+static unsigned heap_sampler_headroom(const struct agx_context *ctx) {(void)ctx;return 0;}
 static struct agx_device dev;
 static struct agx_device *agx_device(void *p) { (void)p;return &dev; }
 static struct agx_batch batch;

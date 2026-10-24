@@ -217,6 +217,7 @@ int main(int argc,char **argv) {
 #define APPLE_AGX_U16 uint16_t
 struct agx_device { unsigned unused; };
 struct agx_sampler_packed { unsigned value; };
+static unsigned heap_sampler_headroom(const struct agx_context *ctx) {(void)ctx;return 0;}
 static struct agx_sampler_packed stored[4];
 static unsigned additions, flushes;
 static struct agx_device *agx_device(void *s) {(void)s;return NULL;}

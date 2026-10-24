@@ -3019,6 +3019,68 @@ static_assert(AGX_D3D12_HEAP_RANGES == DXBC_HEAP_RANGE_MAX && AGX_D3D12_CBV_SLOT
                   sizeof(AGX_D3D12_HEAP_BINDING::First) == DXBC_HEAP_SAMPLER_MAP_OFFSET &&
                   AGX_D3D12_SAMPLER_SLOTS <= DXBC_HEAP_SAMPLER_INDEX,
               "heap ranges and their constant buffers (dxbc_bindings.h)");
+/* EXP1936: prepare one sampler union before publishing any stage's CB14 or
+ * resource references. A per-stage call can flush the batch after an earlier
+ * stage joined it, stranding both its residency set and its sampler handles.
+ * Deduplicate packed hardware bytes; bias/reduction/valid remain per view. */
+static HRESULT bind_heap_samplers(AGX_D3D12_OWNER *owner, bool compute) {
+  const unsigned first = compute ? unsigned(AGX_D3D12_HEAP_CS) : 0u;
+  const unsigned end = compute ? unsigned(AGX_D3D12_HEAP_STAGES) : unsigned(AGX_D3D12_HEAP_CS);
+  unsigned total = 0;
+  for (unsigned s = first; s < end; ++s) {
+    const AGX_D3D12_HEAP_BINDING &h = owner->PendingHeaps[s];
+    if (h.SamplerCount > DXBC_HEAP_SAMPLER_MAP_MAX || (h.SamplerCount && !h.Samplers))
+      return E_INVALIDARG;
+    total += h.SamplerCount;
+  }
+  if (!total) return S_OK;
+  auto *samplers = static_cast<AGX_D3D12_HEAP_SAMPLER *>(
+      HeapAlloc(GetProcessHeap(), 0, total * sizeof(AGX_D3D12_HEAP_SAMPLER)));
+  auto *handles = static_cast<APPLE_AGX_U16 *>(
+      HeapAlloc(GetProcessHeap(), 0, total * sizeof(APPLE_AGX_U16)));
+  if (!samplers || !handles) {
+    if (samplers) HeapFree(GetProcessHeap(), 0, samplers);
+    if (handles) HeapFree(GetProcessHeap(), 0, handles);
+    return E_OUTOFMEMORY;
+  }
+  unsigned count = 0;
+  for (unsigned s = first; s < end; ++s) {
+    const AGX_D3D12_HEAP_BINDING &h = owner->PendingHeaps[s];
+    for (unsigned i = 0; i < h.SamplerCount; ++i) {
+      unsigned index = 0;
+      for (; index < count; ++index)
+        if (!memcmp(samplers[index].Packed, h.Samplers[i].Packed, sizeof(samplers[index].Packed))) break;
+      if (index == count) samplers[count++] = h.Samplers[i];
+      owner->HeapTables[s][4 * AGX_D3D12_HEAP_RANGES + i] = index;
+    }
+  }
+  HRESULT hr = S_OK;
+  if (!AgxWin32AsahiBatchSamplerHandles(owner->Context, compute ? 1 : 0, samplers,
+                                       sizeof(*samplers), count, handles)) {
+    const UINT receipt[] = {first, count};
+    AdmissionUmdDiagnostic("reject-d3d12-heap-samplers", E_OUTOFMEMORY, receipt, 2);
+    hr = E_OUTOFMEMORY;
+  }
+  for (unsigned s = first; SUCCEEDED(hr) && s < end; ++s) {
+    const AGX_D3D12_HEAP_BINDING &h = owner->PendingHeaps[s];
+    for (unsigned i = 0; i < h.SamplerCount; ++i) {
+      uint32_t &word = owner->HeapTables[s][4 * AGX_D3D12_HEAP_RANGES + i];
+      const unsigned handle = handles[word];
+      if (h.Samplers[i].Valid && handle > DXBC_SAMPLER_HANDLE_MASK) {
+        const UINT receipt[] = {s, i, handle};
+        AdmissionUmdDiagnostic("reject-d3d12-heap-sampler-handle", E_OUTOFMEMORY, receipt, 3);
+        hr = E_OUTOFMEMORY;
+        break;
+      }
+      word = h.Samplers[i].Valid ? (handle & DXBC_SAMPLER_HANDLE_MASK) |
+             (uint32_t((h.Samplers[i].Valid >> 8) & 31u) << DXBC_SAMPLER_MINMAX_SHIFT) |
+             (uint32_t(h.Samplers[i].Bias) << 16) : 0u;
+    }
+  }
+  HeapFree(GetProcessHeap(), 0, handles);
+  HeapFree(GetProcessHeap(), 0, samplers);
+  return hr;
+}
 /* C47: the pending heaps of the graphics stages (or compute) become constant
  * buffers 14/15 and reads of the batch the draw (dispatch) uses: call after
  * the framebuffer and stage bindings, right before draw_vbo/launch_grid */
@@ -3027,36 +3089,15 @@ static HRESULT bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
   if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
   const unsigned first = compute ? unsigned(AGX_D3D12_HEAP_CS) : 0u;
   const unsigned end = compute ? unsigned(AGX_D3D12_HEAP_STAGES) : unsigned(AGX_D3D12_HEAP_CS);
+  HRESULT hr = bind_heap_samplers(owner, compute);
+  if (FAILED(hr)) return hr;
   for (unsigned s = first; s < end; ++s) {
     const AGX_D3D12_HEAP_BINDING &h = owner->PendingHeaps[s];
     if (!h.Heap && !h.SamplerCount) continue;
-    /* the samplers first: entering them may flush the batch the reads and
-     * writes below join */
     uint32_t *words = owner->HeapTables[s];
     memcpy(words, h.First, sizeof(h.First));
     unsigned bytes = sizeof(h.First);
-    if (h.SamplerCount) {
-      APPLE_AGX_U16 handles[DXBC_HEAP_SAMPLER_MAP_MAX];
-      if (!AgxWin32AsahiBatchSamplerHandles(pipe, compute ? 1 : 0, h.Samplers, sizeof(h.Samplers[0]), h.SamplerCount, handles)) {
-        const UINT receipt[] = {s, h.SamplerCount};
-        AdmissionUmdDiagnostic("reject-d3d12-heap-samplers", E_OUTOFMEMORY, receipt, 2);
-        return E_OUTOFMEMORY;
-      }
-      for (unsigned i = 0; i < h.SamplerCount; ++i) {
-        /* C65: handle bits 0-10, min/max bits 11-15, MipLODBias 16-31 */
-        if (h.Samplers[i].Valid && handles[i] > DXBC_SAMPLER_HANDLE_MASK) {
-          const UINT receipt[] = {s, i, handles[i]};
-          AdmissionUmdDiagnostic("reject-d3d12-heap-sampler-handle", E_OUTOFMEMORY, receipt, 3);
-          return E_OUTOFMEMORY;
-        }
-        words[4 * AGX_D3D12_HEAP_RANGES + i] =
-            h.Samplers[i].Valid ? (handles[i] & DXBC_SAMPLER_HANDLE_MASK) |
-                                      (uint32_t((h.Samplers[i].Valid >> 8) & 31u) << DXBC_SAMPLER_MINMAX_SHIFT) |
-                                      (uint32_t(h.Samplers[i].Bias) << 16)
-                                : 0u;
-      }
-      bytes += 4u * h.SamplerCount;
-    }
+    bytes += 4u * h.SamplerCount;
     if (heap_stages[s] == MESA_SHADER_GEOMETRY && owner->TirViewportValid) {
       /* C61C: a wrapped GS reading heap ranges reads the viewport here */
       memcpy(words + DXBC_TIR_GS_HEAP_VIEWPORT_BYTES / 4u, owner->TirViewport, sizeof(owner->TirViewport));
