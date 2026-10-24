@@ -195,6 +195,48 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
    return ctx->batch;''')
     save(bp,s)
     qp='src/gallium/drivers/asahi/agx_query.c';query=(out/qp).read_text()
+    # EXP1928: a failed Windows backend returns NULL from agx_bo_create.
+    # Query construction must propagate allocation/map failure to the frontend,
+    # which already handles a NULL query, without leaking a BO or an OQ slot.
+    query=replace(query,'''   struct agx_query *query = calloc(1, sizeof(struct agx_query));''','''   struct agx_query *query = calloc(1, sizeof(struct agx_query));
+   if (!query)
+      return NULL;''')
+    query=replace(query,'''                                0, AGX_BO_WRITEBACK, "Query");
+      query->ptr''','''                                0, AGX_BO_WRITEBACK, "Query");
+      if (!query->bo) {
+         free(query);
+         return NULL;
+      }
+      query->ptr''')
+    query=replace(query,'''   if (!query->ptr.gpu) {
+      free(query);''','''   if (!query->ptr.gpu || !query->ptr.cpu) {
+      agx_bo_unreference(agx_device(ctx->screen), query->bo);
+      free(query);''')
+    query=replace(query,'''   struct agx_oq_heap *heap = rzalloc(ctx, struct agx_oq_heap);
+   ralloc_set_destructor''','''   struct agx_oq_heap *heap = rzalloc(ctx, struct agx_oq_heap);
+   if (!heap)
+      return NULL;
+   ralloc_set_destructor''')
+    query=replace(query,'''                    AGX_BO_WRITEBACK, "Occlusion query heap");''','''                    AGX_BO_WRITEBACK, "Occlusion query heap");
+   if (!heap->bo) {
+      ralloc_free(heap);
+      return NULL;
+   }''')
+    query=replace(query,'''   /* Find first available */
+   int ffs''','''   if (!heap)
+      return (struct agx_ptr){NULL, 0};
+
+   /* Find first available */
+   int ffs''')
+    query=replace(query,'''   /* Allocate it */
+   unsigned index''','''   /* Do not consume a shared slot until its CPU mapping is usable. */
+   void *map = agx_bo_map(heap->bo);
+   if (!map)
+      return (struct agx_ptr){NULL, 0};
+
+   /* Allocate it */
+   unsigned index''')
+    query=replace(query,'''      (uint8_t *)agx_bo_map(heap->bo) + offset,''','''      (uint8_t *)map + offset,''')
     a,b=function(query,'agx_end_query');part=query[a:b]
     old='''   case PIPE_QUERY_TIMESTAMP: {
       /* Timestamp logically written now, set up batches to MAX their finish
