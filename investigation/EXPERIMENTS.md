@@ -62300,3 +62300,27 @@ operation was performed for this offline task.
   GravityMark completion, rendering correctness and performance remain
   unachieved. Preserve MEM2; do not claim it makes the workload fit.
 
+
+EXP1930 HARDWARE BEFORE 2026-10-24T06:55:18Z:
+- Package 30.0.1930.0 = EXP1929 + Codex exp1929 d8c8d0e5. Switch Wom1GpuFaultInfoRead.
+- **Next experiment — WHY THIS HYPOTHESIS:** (1) pool v8 records 20 actual
+- headroom refusals with no slab/commit failures; (2) the first 128 MiB request
+- fails with 192/193 live slots and the following slot count falls, so final pool
+- counters and cumulative traffic miss the causal boundary; (3) source retains
+- private staging and mapped merge baselines separately from canonical storage.
+- Measure those owners at the allocation refusal before rollback/cache reclaim.
+- The candidate below is **receipt-only**, explicitly allowed by TASK.md; the
+- current evidence does not justify another allocation-policy fix.
+- 
+- **WINDOWS/AGX CONTRACT:** allocation and residency can fail independently;
+- return the existing error and preserve cleanup ownership. UMD owns private CPU
+- copies; KMD/VidMm owns canonical backing, residency, DMA and interrupts. T8's
+- HighMemory && !LowMemory growth gate, C75c, T13 pointer lifetimes, native-leaf
+- placement, caps, signer, firmware and recovery remain intact. Canonical spans
+- and CPU-copy spans are separate categories, not additive pool reservations.
+- 
+- **WHAT IS STILL UNKNOWN:** the live copy footprint and process/OS memory state
+- Recovery rec1930h.
+- Hashes: sys 9908d93c9243, UmdArm64 82738670e95c, UmdX64 8b7318962c42, Umd32 e33c70468eb9; manifest cf5e11d50d65, hardware-manifest 087d4d7910d1; probe1930.sh c81de354708c (PROBE_LINT_OK); visible recovery rec1930h c2dbab523b15c85c; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1930h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1930-oom-snapshot/run1930.sh.
