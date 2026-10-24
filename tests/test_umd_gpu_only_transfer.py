@@ -31,11 +31,11 @@ static void agx_blit_from_staging(struct pipe_context *p,struct agx_transfer *t)
  (void)p;++copies;memcpy((char *)agx_resource(t->base.resource)->bo+t->base.box.x,agx_resource(t->staging.rsrc)->bo,t->base.box.width);
 }
 ''')
-            harness=harness.replace('(void)p;(void)r;(void)s; }', '(void)p;(void)r;(void)s;++syncs; }')
+            harness=harness.replace('(void)r;(void)s;if(fail_sync)', '(void)r;(void)s;++syncs;if(fail_sync)')
             harness=harness.replace('@@MAP@@',function_body(pipe,'agx_transfer_map'))
             harness+='''
 #define agx_transfer(t) ((struct agx_transfer *)(t))
-static void agx_flush_readers(struct pipe_context *p,struct agx_resource *r,const char *s) {(void)p;(void)r;(void)s;}
+static void agx_flush_readers(struct agx_context *p,struct agx_resource *r,const char *s) {(void)p;(void)r;(void)s;}
 static void ail_tile(void *m,void *s,const struct ail_layout *l,unsigned level,unsigned stride,int x,int y,int w,int h) {(void)m;(void)s;(void)l;(void)level;(void)stride;(void)x;(void)y;(void)w;(void)h;assert(0);}
 static void agx_transfer_unmap(struct pipe_context *pctx,struct pipe_transfer *transfer)
 '''+function_body(pipe,'agx_transfer_unmap')+r'''
@@ -43,26 +43,26 @@ int main(void) {
  uint32_t content[16]={0,0,7,2}, copy[16]={0};
  struct agx_resource r={0};r.base.target=PIPE_BUFFER;r.base.flags=PIPE_RESOURCE_FLAG_UNMAPPABLE;
  r.layout.levels=1;r.bo=content;forbidden=content;staging.bo=copy;
- struct pipe_context ctx={0};struct pipe_box box={8,0,0,8,1,1};struct pipe_transfer *t=NULL;
- void *map=agx_transfer_map(&ctx,&r.base,0,PIPE_MAP_READ,&box,&t);
+ struct agx_context ctx={0};struct pipe_box box={8,0,0,8,1,1};struct pipe_transfer *t=NULL;
+ void *map=agx_transfer_map(&ctx.base,&r.base,0,PIPE_MAP_READ,&box,&t);
  assert(map==copy && t && copies==1 && syncs==1 && maps==1 && copy[0]==7 && copy[1]==2);
- agx_transfer_unmap(&ctx,t);assert(!r.base.refs && !staging.base.refs);
+ agx_transfer_unmap(&ctx.base,t);assert(!r.base.refs && !staging.base.refs);
  copies=syncs=maps=0;
- map=agx_transfer_map(&ctx,&r.base,0,PIPE_MAP_WRITE,&box,&t);
+ map=agx_transfer_map(&ctx.base,&r.base,0,PIPE_MAP_WRITE,&box,&t);
  assert(map==copy && t && !copies && !syncs);copy[0]=91;copy[1]=37;
- agx_transfer_unmap(&ctx,t);assert(copies==1 && content[2]==91 && content[3]==37);
+ agx_transfer_unmap(&ctx.base,t);assert(copies==1 && content[2]==91 && content[3]==37);
  maps=0;fail_map=1;t=(void *)1;
- assert(!agx_transfer_map(&ctx,&r.base,0,PIPE_MAP_READ,&box,&t));
- assert(!t && !r.base.refs && !staging.base.refs && ctx.faults==1);
- fail_map=0;maps=copies=0;t=(void *)1;
- assert(!agx_transfer_map(&ctx,&r.base,0,PIPE_MAP_READ|PIPE_MAP_DIRECTLY,&box,&t));
+ assert(!agx_transfer_map(&ctx.base,&r.base,0,PIPE_MAP_READ,&box,&t));
+ assert(!t && !r.base.refs && !staging.base.refs && ctx.base.faults==1 && ctx.any_faults);
+ ctx.any_faults=false;fail_map=0;maps=copies=0;t=(void *)1;
+ assert(!agx_transfer_map(&ctx.base,&r.base,0,PIPE_MAP_READ|PIPE_MAP_DIRECTLY,&box,&t));
  assert(!t && !maps && !copies);
  /* GPU-only linear/twiddled textures also take the staging path. */
  for(unsigned tiled=0;tiled<2;++tiled) {
    r.base.target=2;twiddled=tiled;maps=copies=syncs=0;
-   map=agx_transfer_map(&ctx,&r.base,0,PIPE_MAP_READ,&box,&t);
+   map=agx_transfer_map(&ctx.base,&r.base,0,PIPE_MAP_READ,&box,&t);
    assert(map==copy && copies==1 && syncs==1 && maps==1 && !detiles);
-   agx_transfer_unmap(&ctx,t);
+   agx_transfer_unmap(&ctx.base,t);
  }
 }
 '''

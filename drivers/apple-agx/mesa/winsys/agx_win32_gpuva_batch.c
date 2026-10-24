@@ -610,6 +610,7 @@ static int publish_shadows(struct agx_batch *batch) {
     struct agx_bo *stream=encoders[i]->bo;
     if(!stream) continue;
     uintptr_t map=(uintptr_t)agx_bo_map(stream),current=(uintptr_t)encoders[i]->current;
+    if(!map || !current) return 0;
     size_t used=stream->size;
     if(map && current>=map && current-map<=stream->size)
       used=(size_t)(current-map)+AGX_WIN32_ENCODER_TAIL;

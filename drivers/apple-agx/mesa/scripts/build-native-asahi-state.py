@@ -6771,6 +6771,21 @@ agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image_view
             pipe_target.write_text(project_resource_layout(pipe_target.read_text()))
             overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
                 'after_resource_layout_query'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
+            failure_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-allocation-failure.py'
+            failure_spec = importlib.util.spec_from_file_location('native_allocation_failure', failure_script)
+            failure_module = importlib.util.module_from_spec(failure_spec)
+            failure_spec.loader.exec_module(failure_module)
+            failure_module.project_sources(out, args.project, overlays)
+            library_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-library-failure.py'
+            library_spec = importlib.util.spec_from_file_location('native_library_failure', library_script)
+            library_module = importlib.util.module_from_spec(library_spec)
+            library_spec.loader.exec_module(library_module)
+            library_module.project_sources(out, args.project, overlays)
+            blit_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-blit-failure.py'
+            blit_spec = importlib.util.spec_from_file_location('native_blit_failure', blit_script)
+            blit_module = importlib.util.module_from_spec(blit_spec)
+            blit_spec.loader.exec_module(blit_module)
+            blit_module.project_sources(out, args.project, overlays)
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
                 path = out/key

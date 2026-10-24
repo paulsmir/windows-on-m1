@@ -31,7 +31,7 @@ struct agx_transfer {
    struct { struct pipe_resource *rsrc; struct pipe_box box; } staging;
    void *map;
 };
-struct agx_context { struct pipe_context base; };
+struct agx_context { struct pipe_context base; bool any_faults; };
 #define agx_context(p) ((struct agx_context *)(p))
 #define agx_resource(p) ((struct agx_resource *)(p))
 #define agx_transfer(p) ((struct agx_transfer *)(p))
@@ -41,7 +41,7 @@ static bool fail_create, fail_map, pending_read;
 static enum pipe_format want_staging;
 static struct pipe_box wanted;
 static unsigned bw, bh;
-static void AgxWin32AsahiMarkContextFault(struct agx_context *c, unsigned site) { (void)c; assert(site); ++faults; }
+static void AgxWin32AsahiMarkContextFault(struct agx_context *c, unsigned site) { assert(site); ++faults; c->any_faults=true; }
 static void agx_prepare_for_map(struct agx_context *c, struct agx_resource *r, unsigned l, unsigned u, const struct pipe_box *b, bool staging) {
    (void)c;(void)r;(void)l;(void)u;(void)b;assert(staging);
 }
@@ -122,7 +122,7 @@ int main(void) {
       unsigned char *expected=malloc(bytes);assert(expected);memcpy(expected,gpu.bo,bytes);
       struct pipe_box box=level ? (struct pipe_box){.x=0,.y=0,.z=1,.width=2,.height=2,.depth=2} : (struct pipe_box){.x=8,.y=12,.z=1,.width=12,.height=8,.depth=2};
       wanted=box;struct pipe_transfer *t=NULL;
-      maps=blits=syncs=flushes=faults=0;
+      ctx.any_faults=false;maps=blits=syncs=flushes=faults=0;
       unsigned char *map=agx_transfer_map(&ctx.base,&gpu.base,level,PIPE_MAP_READ|PIPE_MAP_WRITE,&box,&t);
       assert(map && t && maps==1 && blits==1 && syncs==1 && !flushes && live==1);
       for(unsigned z=0;z<2;z++) for(unsigned y=0;y<(unsigned)(box.height+3)/4;y++)
@@ -136,11 +136,11 @@ int main(void) {
       assert(!memcmp(expected,gpu.bo,bytes));
       /* Failed staging allocation/map must not publish a transfer or leak. */
       for(unsigned fail=0;fail<2;fail++) {
-         fail_create=fail==0;fail_map=fail==1;t=(void *)1;
+         ctx.any_faults=false;fail_create=fail==0;fail_map=fail==1;t=(void *)1;
          assert(!agx_transfer_map(&ctx.base,&gpu.base,level,PIPE_MAP_READ,&box,&t));
          assert(!t && !live && gpu.base.reference.count==1 && faults==fail+1);
       }
-      fail_create=fail_map=false;
+      ctx.any_faults=false;fail_create=fail_map=false;
       unsigned before=maps;
       const unsigned modes[]={PIPE_MAP_DIRECTLY,PIPE_MAP_PERSISTENT,PIPE_MAP_COHERENT};
       for(unsigned i=0;i<3;i++) {

@@ -253,13 +253,15 @@ int AgxWin32AsahiBufferCopy(struct pipe_context *ctx,
      dst_offset>dst->width0 || bytes>dst->width0-dst_offset ||
      src_offset>src->width0 || bytes>src->width0-src_offset) return 0;
   struct agx_resource *d=agx_resource(dst),*s=agx_resource(src);
-  if(!d->bo || !s->bo) return 0;
+  if(!d->bo || !s->bo || agx_context(ctx)->any_faults) return 0;
   /* EXP1312: a CPU copy syncs like a CPU transfer (Asahi
    * agx_prepare_for_map): the source's GPU writer, and every batch using
    * the destination. CopyStructureCount's compute copy had written the
    * count on the GPU while this memcpy read the stale CPU contents. */
   agx_sync_writer(agx_context(ctx),s,"Windows buffer copy source");
+  if(agx_context(ctx)->any_faults) return 0;
   agx_sync_readers(agx_context(ctx),d,"Windows buffer copy destination");
+  if(agx_context(ctx)->any_faults) return 0;
   unsigned char *dm=(unsigned char *)agx_bo_map(d->bo);
   unsigned char *sm=(unsigned char *)agx_bo_map(s->bo);
   if(!dm || !sm) return 0;
@@ -421,8 +423,13 @@ void agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image
 int AgxWin32AsahiImageDescriptors(struct pipe_context *ctx, const struct pipe_image_view *view,
     void *texture, void *pbe, APPLE_AGX_U64 *key) {
   if(!ctx || !view || !view->resource || !texture || !pbe || !key || view->resource->screen!=ctx->screen) return 0;
+  if(agx_context(ctx)->any_faults) return 0;
   const unsigned slot=PIPE_MAX_SHADER_IMAGES-1u;
   ctx->set_shader_images(ctx,MESA_SHADER_COMPUTE,slot,1,0,view);
+  if(agx_context(ctx)->any_faults) {
+    ctx->set_shader_images(ctx,MESA_SHADER_COMPUTE,slot,0,1,NULL);
+    return 0;
+  }
   agx_win32_pack_image_view(texture,pbe,view);
   ctx->set_shader_images(ctx,MESA_SHADER_COMPUTE,slot,0,1,NULL);
   *key=AgxWin32AsahiResourceLayoutKey(view->resource);
@@ -474,11 +481,19 @@ int AgxWin32AsahiBatchSamplerHandles(struct pipe_context *pctx, int compute, con
   for(unsigned i=0;i<count;++i) {
     const struct agx_sampler_packed *sampler=(const struct agx_sampler_packed *)((const char *)packed+(size_t)i*stride);
     const struct agx_sampler_packed *heap=batch->sampler_heap.bo ? agx_bo_map(batch->sampler_heap.bo) : NULL;
+    if(batch->sampler_heap.bo && !heap) {
+      AgxWin32AsahiMarkContextFault(ctx,(4u<<16)|__LINE__);
+      return 0;
+    }
     unsigned index=batch->sampler_heap.count;
     for(unsigned j=0;heap && j<batch->sampler_heap.count;++j)
       if(!memcmp(&heap[j],sampler,sizeof(*sampler))) { index=j; break; }
     if(index==batch->sampler_heap.count)
       index=agx_sampler_heap_add(dev,&batch->sampler_heap,(struct agx_sampler_packed *)sampler);
+    if(index>=AGX_SAMPLER_HEAP_SIZE) {
+      AgxWin32AsahiMarkContextFault(ctx,(4u<<16)|__LINE__);
+      return 0;
+    }
     handles[i]=(APPLE_AGX_U16)(28u+index);
   }
   return 1;

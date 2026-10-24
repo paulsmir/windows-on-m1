@@ -31,28 +31,29 @@ struct pipe_draw_info { unsigned index_size,instance_count,start_instance; };
 struct pipe_draw_start_count_bias { unsigned start,count; int index_bias; };
 struct pipe_draw_indirect_info { struct pipe_resource *buffer,*indirect_draw_count; unsigned indirect_draw_count_offset,offset,stride,draw_count; void *count_from_stream_output; };
 struct pipe_context { void *screen; void (*draw_vbo)(struct pipe_context *, const struct pipe_draw_info *, unsigned, const void *, const struct pipe_draw_start_count_bias *, unsigned); unsigned faults; };
-#define agx_context(p) (p)
+struct agx_context { struct pipe_context base; bool any_faults; };
+#define agx_context(p) ((struct agx_context *)(p))
 #define agx_resource(p) ((struct agx_resource *)(p))
 static unsigned maps, fail_map, freed, draws, detiles;
-static bool twiddled, compressed;
+static bool twiddled, compressed, fail_prepare, fail_sync;
 static struct agx_resource staging;
 #define CALLOC_STRUCT(t) calloc(1,sizeof(struct t))
 #define FREE(p) do { ++freed; free(p); } while (0)
 #define BITSET_SET(v,n) ((v) |= 1u << (n))
 #define MIN2(a,b) ((a)<(b)?(a):(b))
 #define debug_printf(...) ((void)0)
-static void AgxWin32AsahiMarkContextFault(struct pipe_context *p,unsigned site) { assert(site); ++p->faults; }
+static void AgxWin32AsahiMarkContextFault(struct agx_context *p,unsigned site) { assert(site); ++p->base.faults; p->any_faults=true; }
 static void pipe_resource_reference(struct pipe_resource **p,struct pipe_resource *v) { if (*p) --(*p)->refs; *p=v; if(v) ++v->refs; }
 static bool ail_is_level_logically_compressed(const struct ail_layout *l,unsigned n) { (void)l;(void)n;return compressed; }
 static bool ail_is_level_twiddled_uncompressed(const struct ail_layout *l,unsigned n) { (void)l;(void)n;return twiddled; }
-static void agx_prepare_for_map(struct pipe_context *p,struct agx_resource *r,unsigned l,unsigned u,const struct pipe_box *b,bool s) { (void)p;(void)r;(void)l;(void)u;(void)b;(void)s; }
+static void agx_prepare_for_map(struct agx_context *p,struct agx_resource *r,unsigned l,unsigned u,const struct pipe_box *b,bool s) { (void)r;(void)l;(void)u;(void)b;(void)s;if(fail_prepare)AgxWin32AsahiMarkContextFault(p,1); }
 static void util_range_set_empty(unsigned *r) { *r=0; }
 static void util_range_add(struct pipe_resource *r,unsigned *v,int x,int end) { (void)r;(void)x;*v=end; }
 static struct agx_resource *agx_alloc_staging(void *s,struct agx_resource *r,unsigned l,const struct pipe_box *b) { (void)s;(void)r;(void)l;(void)b;staging.base.refs=1;return &staging; }
 static unsigned ail_get_linear_stride_B(const struct ail_layout *l,unsigned n) { (void)l;(void)n;return 16; }
 static bool agx_resource_valid(struct agx_resource *r,unsigned l) { (void)r;(void)l;return true; }
 static void agx_blit_to_staging(struct pipe_context *p,struct agx_transfer *t) { (void)p;(void)t; }
-static void agx_sync_writer(struct pipe_context *p,struct agx_resource *r,const char *s) { (void)p;(void)r;(void)s; }
+static void agx_sync_writer(struct agx_context *p,struct agx_resource *r,const char *s) { (void)r;(void)s;if(fail_sync)AgxWin32AsahiMarkContextFault(p,1); }
 static void *agx_bo_map(void *bo) { return ++maps==fail_map ? NULL:bo; }
 static unsigned util_format_get_stride(unsigned f,int w) { (void)f;return w; }
 static unsigned util_format_get_2d_size(unsigned f,unsigned s,int h) { (void)f;return s*h; }
@@ -69,29 +70,38 @@ static void draw(struct pipe_context *p,const struct pipe_draw_info *i,unsigned 
 int main(void) {
    uint32_t data[16]={1,0,7,2,0,0};
    struct agx_resource r={0};r.base.target=PIPE_BUFFER;r.bo=data;r.layout.levels=1;
-   struct pipe_context ctx={0};ctx.draw_vbo=draw;
+   struct agx_context ctx={0};ctx.base.draw_vbo=draw;
    struct pipe_draw_info info={0};
    struct pipe_draw_indirect_info ind={&r.base,&r.base,0,8,16,1,NULL};
    /* Count failure, nonzero-offset argument failure, then successful draw. */
    for (unsigned scenario=1;scenario<=3;++scenario) {
-      maps=freed=draws=ctx.faults=0;fail_map=scenario;
-      util_draw_indirect(&ctx,&info,0,&ind);
+      ctx.any_faults=false;maps=freed=draws=ctx.base.faults=0;fail_map=scenario;
+      util_draw_indirect(&ctx.base,&info,0,&ind);
       assert(r.base.refs==0);
-      assert(ctx.faults==(scenario<3));assert(draws==(scenario==3));
+      assert(ctx.base.faults==(scenario<3));assert(draws==(scenario==3));
       assert(freed==(scenario==1?1:2));
    }
    /* Direct caller: NULL + nonzero offset must not become an address. */
    struct pipe_transfer *t=(void *)1;
-   maps=freed=ctx.faults=0;fail_map=1;
-   assert(!pipe_buffer_map_range(&ctx,&r.base,8,4,PIPE_MAP_READ,&t));
-   assert(!t && ctx.faults==1 && freed==1 && r.base.refs==0);
+   ctx.any_faults=false;maps=freed=ctx.base.faults=0;fail_map=1;
+   assert(!pipe_buffer_map_range(&ctx.base,&r.base,8,4,PIPE_MAP_READ,&t));
+   assert(!t && ctx.base.faults==1 && freed==1 && r.base.refs==0);
    /* Texture reads share the producer: never detile a failed BO map. */
    r.base.target=2;
    for(unsigned mode=0;mode<2;++mode) {
       compressed=mode;twiddled=!mode;staging.bo=data;
-      maps=freed=ctx.faults=detiles=0;fail_map=1;
-      assert(!pipe_buffer_map_range(&ctx,&r.base,0,4,PIPE_MAP_READ,&t));
-      assert(!t && ctx.faults==1 && freed==1 && r.base.refs==0 && staging.base.refs==0 && detiles==0);
+      ctx.any_faults=false;maps=freed=ctx.base.faults=detiles=0;fail_map=1;
+      assert(!pipe_buffer_map_range(&ctx.base,&r.base,0,4,PIPE_MAP_READ,&t));
+      assert(!t && ctx.base.faults==1 && freed==1 && r.base.refs==0 && staging.base.refs==0 && detiles==0);
+   }
+   /* A fault from preparation must abort before allocating a transfer; a
+    * staging-writer fault must release both references before CPU BO access. */
+   for(unsigned stage=0;stage<2;++stage) {
+      ctx.any_faults=false;ctx.base.faults=0;maps=freed=detiles=0;fail_map=0;
+      compressed=true;twiddled=false;fail_prepare=stage==0;fail_sync=stage==1;t=(void *)1;
+      assert(!pipe_buffer_map_range(&ctx.base,&r.base,0,4,PIPE_MAP_READ,&t));
+      assert(!t && ctx.any_faults && ctx.base.faults && !maps && !detiles);
+      assert(!r.base.refs && !staging.base.refs && freed==(stage==1));
    }
 }
 '''
