@@ -6,12 +6,17 @@ unknown, never evidence of an absent leaf. EXP1933: another process must not
 consume the only snapshot and hide the later valid fault; persist first and
 latest separately, including an unknown latest result. Exercise production capture bodies
 with the real graph lookup and decode the actual C wire layout.
+EXP1935: zero current PTEs must not discard the paging operations that could
+explain them. Preserve only same-process, overlapping-group history in newest
+order; table-only clears and adjacent subpages matter, unrelated records do not.
+Truncation and missing history must remain explicit, including old v1 input.
 """
 from pathlib import Path
 import os
 import base64
 import json
 import subprocess
+import struct
 import tempfile
 import unittest
 
@@ -57,7 +62,11 @@ typedef struct {
   ADMISSION_G3_TABLE_SHADOW *TableShadowBrokerBuckets[256];
   ULONG OsProcessId, CpuOnlyMappings;
 } ADMISSION_G3_PROCESS;
-typedef struct { int Lock; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence; } ADMISSION_G3_STATE;
+@@LEAF_TYPES@@
+typedef struct { int Lock; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence;
+  ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING];
+  ULONG LeafHistoryNext;
+} ADMISSION_G3_STATE;
 typedef struct { ADMISSION_G3_STATE *GpuvaG3State; void *PhysicalDeviceObject; } ADMISSION_CONTEXT;
 @@FUNCTION@@
 static APPLE_AGX_GPUVA_G3_NODE root, middle, table, re, me, leaf;
@@ -66,7 +75,8 @@ static APPLE_AGX_GPUVA_G3_LOGICAL_PTE ptes[8192];
 @@RECOVERY@@
 int main(int argc, char **argv) {
   ADMISSION_G3_PROCESS p={0}; ADMISSION_RENDER_CONTEXT ctx={0};
-  ADMISSION_G3_STATE state={0,&p,71}; ADMISSION_CONTEXT adapter={&state,0};
+  static ADMISSION_G3_STATE state; state.ActiveProcess=&p;state.ActiveFence=71;
+  ADMISSION_CONTEXT adapter={&state,0};
   ADMISSION_G3_TABLE_SHADOW shadow={0};
   ADMISSION_GPU_FAULT_EVENT e={0}; ADMISSION_GPU_FAULT_MAPPING r={0};
   const ULONGLONG va=0x1112681040ULL, tableIpa=0x900004000ULL;
@@ -116,6 +126,7 @@ int main(int argc, char **argv) {
   assert(r.Status==AdmissionGpuFaultMappingCaptured && !r.NativePresent);
   assert(r.FaultVa==va && r.Ptes[1].Allocation==0xabc001 && !locked);
   assert(r.Ptes[3].GuestIpa==0xa00006000ULL && r.MappingGeneration==1234);
+  @@HISTORY_CASES@@
   FILE *f=fopen(argv[1],"wb"); assert(f && fwrite(&r,sizeof(r),1,f)==1); fclose(f);
   ADMISSION_GPU_FAULT_MAPPING saved=r;
   ptes[group+1].GuestIpa=0; ++e.Fence;
@@ -179,6 +190,72 @@ int main(int argc, char **argv) {
 }
 '''
 
+
+HISTORY_CASES = r"""
+#ifdef ADMISSION_GPU_FAULT_HISTORY_COUNT
+  /* Exercise real capture, not a test copy of its matcher. No current PTE
+   * mutation is needed: provenance is historical and independent of validity. */
+  const ULONGLONG base=va&~0x3fffULL;
+  ADMISSION_G3_LEAF_HISTORY h={0};
+  h.ProcessId=p.Graph.ProcessId;h.TableIpa=tableIpa;h.FirstVa=base;
+  h.First=group;h.Count=4;h.ValidCount=4;h.Allocation=0xaaa;
+  h.MappingGeneration=1220;h.Qpc=100;h.FirstSegment=3;
+  state.LeafHistory[0]=h;state.LeafHistoryNext=1;
+  #define CAPTURE() do {memset(&r,0,sizeof(r));AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);} while(0)
+  CAPTURE();assert(r.HistoryScanned==1 && r.HistoryMatches==1 && r.HistoryCount==1);
+  assert(r.History[0].Match==3 && r.History[0].Sequence==1);
+  /* A newer same-VA foreign process or disjoint 16 KiB group cannot match. */
+  state.LeafHistory[1]=h;state.LeafHistory[1].ProcessId++;
+  state.LeafHistory[2]=h;state.LeafHistory[2].FirstVa+=0x4000;state.LeafHistory[2].First+=4;
+  state.LeafHistoryNext=3;CAPTURE();assert(r.HistoryMatches==1);
+  /* Neighbor within the native group may invalidate the complete leaf. */
+  state.LeafHistory[3]=h;state.LeafHistory[3].First=group+3;
+  state.LeafHistory[3].FirstVa=base+0x3000;state.LeafHistory[3].Count=1;
+  state.LeafHistory[3].ValidCount=0;state.LeafHistory[3].Flags=4;
+  state.LeafHistoryNext=4;CAPTURE();assert(r.HistoryMatches==2);
+  assert(r.History[0].ValidCount==0 && r.History[0].Flags==4);
+  /* Whole-table clear has no VA; match by authenticated table/index. */
+  state.LeafHistory[4]=h;state.LeafHistory[4].FirstVa=0;
+  state.LeafHistory[4].First=0;state.LeafHistory[4].Count=8192;
+  state.LeafHistory[4].Flags=ADMISSION_G3_LEAF_EVENT_RESET;
+  state.LeafHistory[4].ValidCount=0;state.LeafHistory[4].Allocation=0;
+  state.LeafHistoryNext=5;CAPTURE();assert(r.HistoryMatches==3);
+  assert(r.History[0].Match==2 && r.History[0].Flags==16);
+  state.LeafHistory[4].Flags=ADMISSION_G3_LEAF_EVENT_SYSTEM_RETIRE;
+  CAPTURE();assert(r.History[0].Flags==32);
+  /* Replaced table still matches via VA; failed updates stay failed. */
+  state.LeafHistory[5]=h;state.LeafHistory[5].TableIpa+=0x4000;
+  state.LeafHistory[5].Status=0xc000000d;state.LeafHistoryNext=6;
+  CAPTURE();assert(r.HistoryMatches==4 && r.History[0].Match==1);
+  assert(r.History[0].Status==0xc000000d);
+  /* Missing current table must not erase historical VA evidence. */
+  ms[(va>>25)&2047u]=NULL;CAPTURE();
+  assert(r.Status==AdmissionGpuFaultMappingNoTable && r.HistoryMatches==3);
+  assert(r.History[0].Match==1);ms[(va>>25)&2047u]=&me;
+  /* Malformed/out-of-range index cannot wrap into a false table match. */
+  state.LeafHistory[6]=h;state.LeafHistory[6].FirstVa=0;
+  state.LeafHistory[6].First=0xffffffffu;state.LeafHistory[6].Count=8;
+  state.LeafHistoryNext=7;CAPTURE();assert(r.HistoryMatches==4);
+  busy=1;CAPTURE();assert(r.Status==AdmissionGpuFaultMappingBusy && !r.HistoryScanned);busy=0;
+  p.Graph.Uncertain=1;CAPTURE();assert(!r.HistoryScanned);p.Graph.Uncertain=0;
+  /* Empty ring is known to be scanned empty, not proof of never mapped. */
+  state.LeafHistoryNext=0;CAPTURE();assert(!r.HistoryCount && !r.HistoryMatches);
+  /* Wrap the physical ring. Keep newest 8 of 10, report truncation. */
+  memset(state.LeafHistory,0,sizeof(state.LeafHistory));
+  for(unsigned n=0;n<10;++n) {
+    h.Qpc=100+n;h.Allocation=0xaaa0+n;
+    state.LeafHistory[(8190+n)%ADMISSION_G3_LEAF_RING]=h;
+  }
+  state.LeafHistoryNext=8200;CAPTURE();
+  assert(r.HistoryNext==8200 && r.HistoryScanned==8192);
+  assert(r.HistoryMatches==10 && r.HistoryCount==8);
+  assert(r.History[0].Sequence==8200 && r.History[7].Sequence==8193);
+  assert(r.History[0].Qpc==109 && r.History[7].Qpc==102);
+  assert(p.Graph.MappingGeneration==1234 && p.Graph.LeaseToken==7 && !locked);
+  #undef CAPTURE
+#endif
+"""
+
 RECOVERY = r'''
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define APPLE_AGX_BACKEND_FALSE 0
@@ -230,9 +307,9 @@ static int ZwSetValueKey(HANDLE key,UNICODE_STRING *name,int title,int type,
     const void *value,unsigned bytes) {
   (void)key;(void)title;assert(type==REG_BINARY);
   if(!wcscmp(*name,L"Wom1GpuFaultMapping")) {
-    assert(bytes==256);memcpy(&first_written_value,value,bytes);++first_written;
+    assert(bytes==sizeof(ADMISSION_GPU_FAULT_MAPPING));memcpy(&first_written_value,value,bytes);++first_written;
   } else if(!wcscmp(*name,L"Wom1GpuFaultMappingLast")) {
-    assert(bytes==256);memcpy(&last_written_value,value,bytes);++last_written;
+    assert(bytes==sizeof(ADMISSION_GPU_FAULT_MAPPING));memcpy(&last_written_value,value,bytes);++last_written;
   }
   return 0;
 }
@@ -248,6 +325,10 @@ class FaultMapping(unittest.TestCase):
         self.assertTrue('VOID AdmissionGpuvaG3CaptureFaultMapping(' in text,
                       'fault VA cannot be correlated with the current graph')
         source = PROGRAM.replace('@@FUNCTION@@', body(text, 'AdmissionGpuvaG3CaptureFaultMapping'))
+        types = (RENDER/'include/render_admission.h').read_text()
+        types = types[types.index('#define ADMISSION_G3_LEAF_RING '):]
+        types = types[:types.index('} ADMISSION_G3_LEAF_HISTORY;')+len('} ADMISSION_G3_LEAF_HISTORY;')]
+        source = source.replace('@@LEAF_TYPES@@', types).replace('@@HISTORY_CASES@@', HISTORY_CASES)
         backend = (RENDER/'src/backend_platform_windows.c').read_text()
         source = source.replace('@@RECOVERY@@', RECOVERY.replace('@@BODY@@',
             body(backend, 'AdmissionTransportRecover')).replace('@@PUBLISH@@',
@@ -265,7 +346,25 @@ class FaultMapping(unittest.TestCase):
             subprocess.run([str(tmp/'capture'), str(path)], check=True)
             data = path.read_bytes()
             result = DECODER.decode_fault_mapping(data)
+            self.assertEqual(result['version'], 2, 'fault capture loses the paging history')
             self.assertEqual(result['status'], 'captured')
+            history = result['history']
+            self.assertEqual(history['matched'], 10)
+            self.assertEqual(history['scanned'], 8192)
+            self.assertTrue(history['truncated'])
+            self.assertEqual(len(history['events']), 8)
+            self.assertEqual([e['qpc'] for e in history['events']], list(range(109, 101, -1)))
+            self.assertEqual(history['events'][0]['match'], ['va', 'table-index'])
+            self.assertEqual(history['events'][0]['allocation'], '0xaaa9')
+            # Real v1 prefix still decodes, without fabricated history.
+            old = bytearray(data[:256]); struct.pack_into('<II', old, 0, 1, 256)
+            prior = DECODER.decode_fault_mapping(old)
+            self.assertEqual(prior['version'], 1)
+            self.assertIsNone(prior['history'])
+            self.assertEqual(prior['ptes'], result['ptes'])
+            for offset, value in ((256+4, 8193), (256+8, 8193), (256+12, 9)):
+                bad = bytearray(data); struct.pack_into('<I', bad, offset, value)
+                with self.assertRaises(ValueError): DECODER.decode_fault_mapping(bad)
             self.assertEqual(result['fault_va'], '0x1112681040')
             self.assertFalse(result['native_present'])
             self.assertEqual(result['ptes'][1]['allocation'], '0xabc001')

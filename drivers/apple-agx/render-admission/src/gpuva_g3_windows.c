@@ -23,7 +23,7 @@ VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *Adapter,
           (ADMISSION_GPU_FAULT_INFO_READ | ADMISSION_GPU_FAULT_INFO_VALID))
     return;
   RtlZeroMemory(Receipt, sizeof(*Receipt));
-  Receipt->Version = 1u;
+  Receipt->Version = 2u;
   Receipt->Bytes = sizeof(*Receipt);
   Receipt->Fence = Event->Fence;
   Receipt->ContextToken = Event->ContextToken;
@@ -86,6 +86,44 @@ VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *Adapter,
   }
   Receipt->Status = AdmissionGpuFaultMappingCaptured;
 Done:
+  /* No allocation, wait, handle lookup or paging decision here. Only inspect
+   * the existing locked ring after process/fence/VM authentication. Include
+   * all four logical pages: changing a neighbor can remove a native leaf.
+   * VA matches survive table replacement; table/index matches cover records
+   * made before linking a table and whole-table clear/retire events. */
+  if (Receipt->Status >= AdmissionGpuFaultMappingNoTable) {
+    ULONGLONG base = Receipt->FaultVa & ~0x3fffULL;
+    ULONG group = (ULONG)((base >> 12) & 8191u), n;
+    Receipt->HistoryNext = state->LeafHistoryNext;
+    Receipt->HistoryScanned = state->LeafHistoryNext < ADMISSION_G3_LEAF_RING ?
+        state->LeafHistoryNext : ADMISSION_G3_LEAF_RING;
+    for (n = 0u; n < Receipt->HistoryScanned; ++n) {
+      ULONG sequence = state->LeafHistoryNext - n;
+      const ADMISSION_G3_LEAF_HISTORY *h =
+          &state->LeafHistory[(sequence - 1u) % ADMISSION_G3_LEAF_RING];
+      ULONG match = 0u;
+      ADMISSION_GPU_FAULT_HISTORY *out;
+      if (h->ProcessId != Receipt->GraphProcessId || !h->Count ||
+          h->Count > 8192u) continue;
+      if (h->FirstVa && (h->FirstVa <= base ?
+          base - h->FirstVa < (ULONGLONG)h->Count * 0x1000ULL :
+          h->FirstVa - base < 0x4000ULL)) match |= 1u;
+      if (Receipt->TableIpa && h->TableIpa == Receipt->TableIpa &&
+          h->First < 8192u && h->Count <= 8192u - h->First &&
+          h->First < group + 4u && group < h->First + h->Count) match |= 2u;
+      if (!match) continue;
+      ++Receipt->HistoryMatches;
+      if (Receipt->HistoryCount == ADMISSION_GPU_FAULT_HISTORY_COUNT) continue;
+      out = &Receipt->History[Receipt->HistoryCount++];
+      out->Qpc = h->Qpc; out->ProcessId = h->ProcessId;
+      out->TableIpa = h->TableIpa; out->Allocation = h->Allocation;
+      out->FirstVa = h->FirstVa; out->MappingGeneration = h->MappingGeneration;
+      out->First = h->First; out->Count = h->Count;
+      out->ValidCount = h->ValidCount; out->Flags = h->Flags;
+      out->Status = h->Status; out->FirstSegment = h->FirstSegment;
+      out->Sequence = sequence; out->Match = match;
+    }
+  }
   ExReleaseFastMutex(&state->Lock);
 }
 

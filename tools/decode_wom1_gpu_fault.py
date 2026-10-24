@@ -17,11 +17,12 @@ Receipts (REG_BINARY under the APPL0002 device key):
                         actual floor counter and last reservation failure.
                         Explicit Wom1M2PoolDemand.bin input only, so older
                         JSON/REG fault collections retain their behavior.
-  Wom1GpuFaultMapping / Wom1GpuFaultMappingLast v1, 256 bytes:
+  Wom1GpuFaultMapping / Wom1GpuFaultMappingLast v1 256 / v2 912 bytes:
                         first/latest valid fault's active process, fence,
                         VM slot, native graph leaf and four logical
                         PTEs, captured before recovery. Unknown capture state
                         is distinct from an absent mapping; CPU metadata only.
+                        v2 freezes up to eight matching paging-ring records.
 Dump blackbox:
   --dbginfo HEX         the DxgkDdiCollectDbgInfo snapshot (v1 32 or v2 56
                         bytes; dxgkrnl trims trailing zero bytes) from the
@@ -48,7 +49,7 @@ RECOVERY_NAME = 'Wom1FirmwareRecovery'
 OMITTED_NAME = 'Wom1G4OmittedLeaves'
 POOL_NAME = 'Wom1M2PoolDemand'
 MAPPING_NAME = 'Wom1GpuFaultMapping'
-# Same v1 layout; latest valid event, including an unknown capture result.
+# Same mapping layout; latest valid event, including an unknown capture result.
 MAPPING_LAST_NAME = 'Wom1GpuFaultMappingLast'
 NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME, OMITTED_NAME, MAPPING_NAME, MAPPING_LAST_NAME)
 RAW_NAMES = NAMES + (POOL_NAME,)
@@ -391,11 +392,11 @@ def decode_pool(data):
 
 def decode_fault_mapping(data):
     """A valid fault's locked CPU metadata, not a hardware PTE read."""
-    if len(data) != 256:
+    if len(data) not in (256, 912):
         raise ValueError('unsupported Wom1GpuFaultMapping length')
     words = struct.unpack_from('<12I10Q', data)
     version, size, fence, status, pid, slot, uncertain, cpu_only, job, native, writable, kind = words[:12]
-    if version != 1 or size != len(data) or status > 7:
+    if (version, size) not in ((1, 256), (2, 912)) or size != len(data) or status > 7:
         raise ValueError('unsupported Wom1GpuFaultMapping version, size or status')
     names = ('context', 'fault_info_raw', 'fault_va', 'graph_process_id', 'root_ipa',
              'process_generation', 'mapping_generation', 'lease_token', 'native_ipa', 'table_ipa')
@@ -407,13 +408,35 @@ def decode_fault_mapping(data):
         job_in_flight=bool(job), native_present=bool(native) if status >= 6 else None,
         native_writable=bool(writable) if native else None,
         native_kind=kind if native else None,
-        meaning='CPU graph/shadow at fault capture; not a hardware page-table read', ptes=None)
+        meaning='CPU graph/shadow at fault capture; not a hardware page-table read',
+        ptes=None, history=None)
     if status == 7:
         result['ptes'] = []
         for i in range(4):
             ipa, allocation, offset, segment, flags = struct.unpack_from('<3Q2I', data, 128+i*32)
             result['ptes'].append(dict(ipa=f'{ipa:#x}', allocation=f'{allocation:#x}',
                 allocation_offset=f'{offset:#x}', segment=segment, flags=flags))
+    if version == 2:
+        next_entry, scanned, matched, count = struct.unpack_from('<4I', data, 256)
+        if scanned > 8192 or matched > scanned or count != min(matched, 8):
+            raise ValueError('invalid Wom1GpuFaultMapping history counts')
+        history = dict(next=next_entry, scanned=scanned, matched=matched,
+            truncated=matched > count, events=[],
+            meaning='Historical paging observations; no match does not prove never mapped')
+        names = ('qpc', 'process_id', 'table_ipa', 'allocation', 'first_va',
+                 'mapping_generation', 'first', 'count', 'valid_count', 'flags',
+                 'status', 'first_segment', 'sequence', 'match')
+        for i in range(count):
+            event = dict(zip(names, struct.unpack_from('<6Q8I', data, 272 + i * 80)))
+            if event['match'] not in (1, 2, 3):
+                raise ValueError('invalid Wom1GpuFaultMapping history match')
+            event['match'] = [name for bit, name in ((1, 'va'), (2, 'table-index'))
+                              if event['match'] & bit]
+            for name in ('process_id', 'table_ipa', 'allocation', 'first_va',
+                         'mapping_generation', 'status'):
+                event[name] = f'{event[name]:#x}'
+            history['events'].append(event)
+        result['history'] = history
     return result
 
 

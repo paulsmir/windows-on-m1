@@ -48,7 +48,7 @@ void AdmissionGpuFaultReceiptInitialize(ADMISSION_GPU_FAULT_RECEIPT *Receipt);
 void AdmissionGpuFaultReceiptRecord(ADMISSION_GPU_FAULT_RECEIPT *Receipt,
     ADMISSION_GPU_FAULT_EVENT *Event);
 
-/* Wom1GpuFaultMapping v1: first valid fault, before firmware recovery.
+/* Wom1GpuFaultMapping v2: first valid fault, before firmware recovery.
  * CPU metadata only; NativePresent is the acknowledged software graph, not
  * a hardware page-table read. Status preserves unknown versus absent. */
 typedef enum _ADMISSION_GPU_FAULT_MAPPING_STATUS {
@@ -67,6 +67,18 @@ typedef struct _ADMISSION_GPU_FAULT_MAPPING_PTE {
   unsigned int Segment, Flags;
 } ADMISSION_GPU_FAULT_MAPPING_PTE;
 
+/* EXP1935: freeze the existing paging ring before recovery overwrites it.
+ * Historical observations only: a zero Count is unknown, not never-mapped.
+ * Match bits: 1 VA overlap, 2 current table/index overlap (whole native group).
+ * Flags/Status retain the leaf producer's values, including failed updates.
+ * Allocation is an opaque historical token and must never be dereferenced. */
+#define ADMISSION_GPU_FAULT_HISTORY_COUNT 8u
+typedef struct _ADMISSION_GPU_FAULT_HISTORY {
+  unsigned long long Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
+  unsigned int First, Count, ValidCount, Flags, Status, FirstSegment;
+  unsigned int Sequence, Match;
+} ADMISSION_GPU_FAULT_HISTORY;
+
 typedef struct _ADMISSION_GPU_FAULT_MAPPING {
   unsigned int Version, Bytes, Fence, Status;
   unsigned int OsProcessId, VmSlot, GraphUncertain, CpuOnlyMappings;
@@ -75,6 +87,11 @@ typedef struct _ADMISSION_GPU_FAULT_MAPPING {
   unsigned long long RootIpa, ProcessGeneration, MappingGeneration, LeaseToken;
   unsigned long long NativeIpa, TableIpa;
   ADMISSION_GPU_FAULT_MAPPING_PTE Ptes[4];
+  /* v2 follows the entire 256-byte v1 prefix. Newest matching records first.
+   * HistoryScanned is bounded by the existing ring; HistoryMatches can exceed
+   * HistoryCount. Even a complete ring is not a complete mapping lifetime. */
+  unsigned int HistoryNext, HistoryScanned, HistoryMatches, HistoryCount;
+  ADMISSION_GPU_FAULT_HISTORY History[ADMISSION_GPU_FAULT_HISTORY_COUNT];
 } ADMISSION_GPU_FAULT_MAPPING;
 
 /* Wom1GpuReset: the last engine or adapter reset and the state it found;
