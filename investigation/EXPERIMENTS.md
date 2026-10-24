@@ -63469,3 +63469,160 @@ EXP1938 HARDWARE BEFORE 2026-10-24T11:50:05Z:
 - Hashes: sys 24e6a693cd9b, UmdArm64 5b2c7aa89882, UmdX64 37af330871d2, Umd32 3af8d36c3653; manifest 225909bc01a0, hardware-manifest 35a761f01fe9; probe1938.sh efd54e2cd3f2 (PROBE_LINT_OK); visible recovery rec1938h 40278a640e595a3f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1938h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1938-retire-evidence/run1938.sh.
+
+EXP1938 ACTUAL 2026-10-24T12:18:07Z (Codex draft, exp1938 REPORT.md):
+
+EXP1938 ACTUAL — offline reconstruction of the saved 2026-10-24 run.
+**The diagnostic reached a different boundary: a later job failed RTKit
+notification polling before retirement polling could progress. It did not
+reproduce EXP1937's same-fence quiescence timeout. GravityMark did not complete;
+the guest ultimately bugchecked VIDEO_TDR_FAILURE.**
+
+Paths: **E** = `/Volumes/pwdev/public_windows/.local/experiments/EXP1938-retire-evidence`;
+**R** = `E/evidence/EXP1938`; **K** = `R/kmd-receipts-probe-end.txt`;
+**S** = `/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`.
+`K` is byte-identical to `E/evidence/rec1938h/kmd-receipts-pre-disable.txt`.
+Extracted binaries and full production-decoder output are in this handoff's
+`decoded/` directory. Evidence was read locally; no hardware was accessed.
+
+## Candidate and observed phases
+
+- BEFORE: `investigation/EXPERIMENTS.md:63439`. Receipt-only package
+  30.0.1938.0, source `d86499a281c25433d02f4f280d8687b33160985d`.
+  Manifest SHA256 `225909bc01a0059de880554c29994042093fdcb222b8d4416973c7ba52ae3d3e`.
+  SYS `24e6a693cd9b824028b4409921dd3a1bf40a1a8cf0a2ce2cf3b464b2dc5abcf1`;
+  ARM64 UMD `5b2c7aa898825d3ebdebd7ed17036a6ced1873c556f98fc9aa27f1c028f86e7b`.
+  `E/manifest.json` identifies m1n1 0d3a75b3 artifact
+  `b97cf8834c3f8e8728b796bf211ef8d21f020db2a427415616b5ad54d05baf49`
+  and Mu artifact `1c7d87d6fd4321feee605b5f9440dab6a350bc7a3964fb2c62b34602f565f3e5`.
+  `K:1–2` confirms Wom1GpuFaultInfoRead=1 and Wom1PoolHalfSize=1.
+- `E/stage-ssh.log:2`: staged exact oem5.inf at 11:49:34.7687592Z,
+  Code28, arm1, eight CPUs, RegistryFlush PASS. `R/restart-ssh.log:2`:
+  ordered full-profile restart at 11:50:09.4164522Z.
+  `R/state-start.txt:1`: Code0, DWM1228, Explorer5164, uptime50s.
+  First-SSH elapsed time and continuous all-CPU/IRQ/timer health are unknown.
+- 10K GravityMark ARM64 D3D12, windowed1280x720: `R/gm1938a-out.txt:20–35`
+  reports device creation at6.064s, scene manager, render manager at21.191s,
+  rasterization at40.245s, 10000 asteroids at66.465s, ready66.746s,
+  benchmark start66.748s and resize66.758s. There is no score/FPS/completion
+  or saved image/times file. UTF-16 `R/gm1938a-done.txt:1` says
+  **TIMEOUT KILLED seconds106 wer0**. Stderr is empty. This is a harness kill,
+  not an authenticated application device-removal time.
+- `S/newexp1938.log:7–10`: 10K timeout, zero copy-escape traffic, SSH alive,
+  then `GUEST_DOWN_DURING_GRAVITYMARK 2` during the2K attempt. **2 is a poll
+  index, not two seconds** (`E/probe1938.sh:31`: sleeps and reachability retry).
+  All gm1938b outputs are absent; launch/completion/PID/removal time cannot
+  be authenticated. Do not treat the later alive line as continuity of the
+  original boot. `R/state-end.txt:1` is Code43 with different DWM1248 and
+  Explorer5160, uptime38s. Wrapper RUN_DONE/PIPELINE_RC0 are not workload PASS.
+
+## Decoded receipts and crash
+
+- **First and only GPU fault (`K:188`):** Timeout, fence **0x19472**, PID
+  **1228**, context0xffffd684d8ff7cd0,1ms submit-to-event,HaltCount1;
+  resumed/info_read/info_valid/job_known. Raw **0x1107f2268d835411**:
+  **unmapped read,level0,dVDM_ILD,VM1,sideband27,VA0x1107f22680**.
+  First/FirstValid/Last match. PID1228 is DWM in `R/state-start.txt:2`.
+- **Mapping (`K:189–190`):** v2, status **busy**. The capture failed to
+  acquire its graph snapshot; all mapping/history values are unavailable.
+  Zero-filled fields are **not proof of absent PTEs**. No fault-VA owner or
+  exact invalidation/publication history is established in this experiment.
+- **Firmware recovery (`K:187`):** one recovery at fence0x19472,1ms;
+  deadline expiries0; longest job28ms at0x18a71. These published counters do
+  not include a successfully completed later0x1973d job.
+- **Reset (`K:191`):** v4/792bytes; three resets,zero successes,
+  status0xc0000483,stage **quiesce**,outcome **poll**,not timeout. Engine
+  attempts at197277ms/197345ms,adapter197347ms; waits **0/0/1ms**;
+  poll ages3102/3170/3172ms. Active/submitted/packet fence **0x1973d**,
+  completed **0x1973c**,last-aborted0. The active fence is715 greater than
+  the recovered fault fence; this difference is not a packet-count claim.
+  Worker inactive,backend phase3,provider phase4,poll guard0,Halted0.
+  All three entries already have SchedulerFaulted **0x41082** =
+  `backend_platform_windows.c:4226`, the RTKit notification-drain failure.
+- Both new retirement samples are captured,identical,read_mask7:
+  fence0x1973d,runtime phase3,**RecoveryPending0**,TA+3D only.
+
+  | Queue | Stamp | Expected stamp | Done | Write / expected done | Capacity |
+  |---|---:|---:|---:|---:|---:|
+  | TA | 0x7a179000 | 0x7a179100 | 210 | 212 | 1280 |
+  | 3D | 0x3d179000 | 0x3d179100 | 544 | 546 | 1280 |
+
+  EventSeen/Complete are false. Both stamps and consumers are short;
+  neither consumer-only relaxation nor treating resume as completion is
+  supported. These are sequential CPU shared-memory observations, not an
+  atomic GPU/TLB snapshot. They do not say what the stopped firmware will do.
+- G4 submit and bind refusal receipts are absent. Omitted-leaf receipt:
+  1159events/19121groups; the retained eight are DWM1228 and do not cover
+  VA0x1107f22680. Nearby VAs are not ownership evidence. Poolv8:
+  segment/held1344MiB,committed1264.5625MiB,peak1334.0625MiB,
+  reserved1622.75MiB,peak2892.5MiB; reserve/commit/new-slab/release
+  failures,busy retries,ref underflows,floor refusals0. These are collection
+  totals, not proof of no transient memory pressure.
+- `alloc-join.log`: GM's87heaps total1992MiB and three mapped128MiB upload
+  slots. No G4 refusal to join. **Do not join DWM's fault VA to GM's address
+  space:** identical VA ranges in different processes do not identify a BO.
+  gm1938a trace has0native-allocation/0batch/0SetError refusals and32C++
+  throw records. Aggregate `R/umd.log` has10/20/5 and130 respectively;
+  aggregate cross-process counts must not be attributed to the10K app.
+- **Dump:** `E/evidence/dump/102426-13750-01.dmp`, ARM64,eight processors,
+  **0x116 VIDEO_TDR_FAILURE**,parameters
+  **0xffffd684d64e3010,0xfffff803c291a9f0,0xffffffffc0000483,3**.
+  SHA256 `37915ed3f388f09bf1b52605d7d58f023b7435a96f899e7daf93093c8ab6a9f2`.
+  Header decoded by `tools/windows_dump_header.py`. No cdb text/stack is
+  supplied; P2 is not independently symbol-attributed. A bounded raw-byte
+  scan found neither a plausible ready RTKit session structure nor CLHE
+  crashlog signature; this is not a substitute for debugger VA translation.
+  `E/full-crash.log:4211` records PSCI reset:ELR0xfffff803c4635138,
+  x30=0xfffff803c4497e04,SP0xfffffe819a435010,SPSR0x600000c4;
+  x0=0x84000009. No separate CPU-watchdog failure is established.
+- **Recovery:** exact oem5.inf disabled at11:56:33.5483517Z from Code43,
+  both arms absent,Start4 (`rec1938h/visible-disable-output.txt:3`). Exact
+  removal at11:58:20.5772382Z,staged0,SYS/UMD absent
+  (`cleanup-visible-output.txt:2`). Durable preflight after boot
+  11:59:28.0484980Z says PASS/PackageAbsent; final gate is
+  VISIBLE_INERT_PACKAGE_ABSENT_8CPU. Saved SSH/storage and final eight-CPU
+  recovery are established. Uninterrupted display,physical USB input,RDP
+  and all-CPU health at failure are unknown. Synthetic mouse moves1910 and
+  empty scanout output are not visual benchmark validation.
+
+## BEFORE verdict and next causal decision
+
+**REJECTED for the premise that this run's reset was blocked by deferred
+retirement of the recovered fence.** The measured fence differs, recovery is
+not pending, and resets fail immediately at a prior notification gate.
+The v4 diagnostic itself captured its requested operands successfully.
+Whether EXP1937's same-fence failure had the same cause remains
+**inconclusive**; EXP1938 must not silently reinterpret that old result.
+
+**WHY THIS HYPOTHESIS:** a persistent RTKit failure, especially a firmware
+crash indication, is now the strongest reset hypothesis:
+
+1. All three attempts hit the notification-poll gate in0–1ms; a missing
+   completion event/consumer guard would instead reach provider polling.
+2. The worker's first fault site is exactly the RTKit drain call, before
+   provider polling. The packaged source was byte-checked against the
+   inspected worktree, so this is not an inferred line from another build.
+3. `apple_agx_rtkit_session.c:266` returns FirmwareCrashed on every subsequent
+   call after a crash message. This fits the persistence better than one
+   consumed unknown message. It remains a hypothesis: repeated protocol
+   messages or corrupted transport/session state are not excluded.
+
+**WINDOWS/AGX CONTRACT:** local WDK26100 `d3dkmddi.h:8242` identifies
+LastAbortedFenceId as a packet actually aborted in execution; `:8253`
+requires ResetEngine at PASSIVE_LEVEL. Asahi
+`drivers/gpu/drm/asahi/workqueue.rs:850` retires by actual stamps;
+`gpu.rs:1006,1059` marks errors and resumes halted firmware.
+`gpu.rs:379` treats an RTKit crash separately, failing jobs through Linux's
+own crash architecture. A firmware crash is not a normal GPU fault/resume.
+The Windows retained runtime must retain DMA owners without retirement or
+another proven stop/idle proof; a successful Windows reset also requires a
+usable backend for subsequent work.
+
+**WHAT IS STILL UNKNOWN:** the failing drain result,endpoint,payload and
+runtime CrashlogCrashed state; the firmware crash image/assertion if any;
+why DWM read the unmapped VA; the original mapping/BO owner; precise crash
+and app-removal times; whether later work triggered a firmware crash;
+whether a restartable full reset can be implemented under the retained
+firmware contract. Native WDK compilation and new hardware behavior were
+not tested, because there is no production candidate in this branch.
+
