@@ -667,15 +667,60 @@ static PKEVENT AdmissionPoolOpenEvent(PCWSTR Name) {
   return event;
 }
 
-/* An empty segment over the window, sized for this machine (M2-f4a,
- * AdmissionPoolDemandSegmentBytes); FALSE leaves no state behind. */
+/* EXP1926: fixed-at-start pressure candidate. A lower resident bound lets
+ * VidMm page before lifetime reservations consume the entire normal pool.
+ * Do not lower ReserveCap alone: paging may use every advertised byte.
+ * Default and the T8 growth gate are unchanged. */
+static ULONGLONG AdmissionPoolSegmentBytes(ULONGLONG RamBytes,
+                                          ULONGLONG WindowBytes,
+                                          ULONGLONG BrokerBytes,
+                                          BOOLEAN HalfSize) {
+  ULONGLONG bytes = AdmissionPoolDemandSegmentBytesEx(
+      RamBytes, WindowBytes, BrokerBytes);
+  if (HalfSize && bytes != 0ULL) {
+    bytes = (bytes / 2ULL) & ~(ADMISSION_POOL_DEMAND_SIZE_STEP - 1ULL);
+    if (bytes < ADMISSION_POOL_DEMAND_MIN_BYTES)
+      bytes = ADMISSION_POOL_DEMAND_MIN_BYTES;
+  }
+  return bytes;
+}
+
+/* Device key, once at PASSIVE_LEVEL before the segment is published.
+ * Only REG_DWORD=1 opts in; absent/malformed values keep the normal size. */
+static BOOLEAN AdmissionPoolHalfSizeEnabled(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1PoolHalfSize");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
+/* An empty segment over the window, sized for this machine (M2-f4a), with
+ * an optional smaller residency bound. FALSE leaves no state behind. */
 static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
                                         ADMISSION_POOL_ATTEMPT *Window) {
   ADMISSION_POOL_DEMAND_OPS ops;
   ADMISSION_POOL_RUNTIME *pool;
   ULONGLONG ram = AdmissionPoolRamBytes();
-  ULONGLONG bytes = AdmissionPoolDemandSegmentBytesEx(ram, Window->RequestedBytes,
-                                                      Context->PoolBrokerBytes);
+  ULONGLONG bytes = AdmissionPoolSegmentBytes(ram, Window->RequestedBytes,
+      Context->PoolBrokerBytes, AdmissionPoolHalfSizeEnabled(Context));
   ULONGLONG count = bytes / ADMISSION_POOL_DEMAND_GRANULE;
   PHYSICAL_ADDRESS base;
   if (bytes == 0ULL) {
