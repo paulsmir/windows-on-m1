@@ -62324,3 +62324,90 @@ EXP1930 HARDWARE BEFORE 2026-10-24T06:55:18Z:
 - Hashes: sys 9908d93c9243, UmdArm64 82738670e95c, UmdX64 8b7318962c42, Umd32 e33c70468eb9; manifest cf5e11d50d65, hardware-manifest 087d4d7910d1; probe1930.sh c81de354708c (PROBE_LINT_OK); visible recovery rec1930h c2dbab523b15c85c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1930h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1930-oom-snapshot/run1930.sh.
+
+EXP1930 ACTUAL 2026-10-24T07:20:00Z (Codex draft, exp1930 REPORT.md):
+
+EXP1930 ACTUAL — offline reconstruction of the saved 2026-10-24 run.
+Package **30.0.1930.0**, source **51646cf5d9c136b83ab5a64033bcbc252a1b1a91**,
+m1n1 **0d3a75b3**, full-owner profile, full-size pool,
+**Wom1GpuFaultInfoRead=1**. No new hardware operation was performed for this report.
+Here **E** is `/Volumes/pwdev/public_windows/.local/experiments/EXP1930-oom-snapshot`
+and **R** is `E/evidence/EXP1930`.
+
+- **Boot/admission:** saved ordered-restart receipt at 06:55:21.8801230Z;
+  recovery's BeforeBootUtc identifies the experiment boot as
+  06:56:06.4553530Z (44.575 s after the restart receipt, not a measured SSH
+  arrival time). APPL0002 is CM_PROB_NONE; Wom1StartStage=12/Status=0.
+  DWM 1228 and Explorer 5092 stay unchanged from uptime 52 s through 310 s.
+  Sources: `R/restart-ssh.log:2`, `R/state-start.txt:1`, `R/state-end.txt:1`,
+  `R/kmd-receipts-probe-end.txt:10`,
+  `E/evidence/rec1930h/visible-disable-output.txt:5`.
+- **10K run, PID 9580:** creates 10,000 asteroids at 50.897 s, ready at
+  51.169 s, starts the 1280x720 D3D12 benchmark at 51.170 s. First allocation
+  refusal is a **129 MiB General GPU-only** request, flags 0x2c, at AllocateCb
+  with HRESULT 0x8007000e, before private staging allocation. The app reports
+  OOM at **53.269 s**, then failure to create a 4096x4096 Df32 two-level texture.
+  The bounded runner kills it at **106 s**. Sources: `gm1930a-out.txt:29`,
+  `:31`, `gm1930a-err.txt:1`, `gm1930a-umd.log:4250`, `:4259`,
+  `gm1930a-done.txt:1` (UTF-16).
+- **2K run, PID 488:** creates 2,000 asteroids at 16.528 s, ready and starts
+  at 16.679 s. First refusal is a **128 MiB General GPU-only** request,
+  flags 0x2c, also AllocateCb/0x8007000e. OOM at **16.708 s**, then heap
+  creation failures and an RGBAu16n 1280x720 frame texture failure. Runner
+  kills at **106 s**. Sources: `gm1930b-out.txt:29`, `:31`,
+  `gm1930b-err.txt:1`, `gm1930b-umd.log:3863`, `gm1930b-done.txt:1`.
+  These are OOM times, **not device-removal times**: no removal is established.
+- **Failure-time ownership census:** all six snapshots decode completely.
+  Each has exactly one transitional slot excluded (the in-progress request),
+  no copy-held or unknown-size exclusion, and no pending allocation handle.
+  At the first refusal, the 10K run owns **2354.984 MiB canonical /
+  675.125 MiB private staging**, including **570.750 MiB mapped private**
+  across 86 slots and **104.375 MiB unmapped private** across 30 slots.
+  Cache retry reduces these to **2324.859 / 645.000 MiB**, but still refuses.
+  The 2K first snapshot is **2140.734 / 588.938 MiB**, with the same
+  **570.750 MiB mapped private** and only **18.188 MiB unmapped private**.
+  Retry reduces these to **2117.859 / 566.062 MiB**, still refusing.
+  **Merge-baseline storage is zero in every snapshot.** These are logical
+  spans, not resident bytes; canonical and CPU spans must not be added to
+  pool totals or process counters. Sources: `gm1930a-umd.log:4250-4258`,
+  `gm1930b-umd.log:3863-3871`; full values in `decoded-memory.json` here.
+- **KMD receipts:** probe-end and pre-disable collections agree.
+  Wom1M2PoolDemand v8: segment **2688 MiB**, peak committed/reserved
+  **2540.1875 MiB**, final committed/reserved **214.25 MiB**, held **254 MiB**.
+  **ReserveFailures=FloorRefusals=20**, NewSlabFailures=CommitFailures=0.
+  Last reservation failure: request **7.25 MiB**, reserved/committed
+  **2339.8125 MiB**, held **2340 MiB**, time **204290 ms**,
+  **HighMemory clear / LowMemory clear**. This last event is not the first
+  128/129 MiB refusal. Source: both receipt files `:160`; decoder uses the
+  source schema, not approximate offsets. Wom1G4OmittedLeaves v1 records
+  30 historical events / 899 groups; retained sequences 23–30 each describe
+  one incomplete 4 KiB update `[0x10000,0x11000)`, segment 0, allocation 0.
+  Sequence 29 has PID 488. This does not establish a fault or current mapping.
+  Wom1GpuFault, Wom1GpuReset and Wom1FirmwareRecovery are **absent** in both
+  collections; pipeline reports no G4 submit/bind refusal. Full decoded
+  values and extracted binaries are retained alongside this report.
+- **Crash/dump:** no saved kernel dump or full-crash.log. 10K's WER count 1
+  is **PhoneExperienceHost.exe**, Microsoft.UI.Xaml.dll, **0xc000027b**,
+  offset **0x2eb718** (`gm1930a-done.txt:2-5` decoded as UTF-16).
+  It is not a GravityMark or UMD AV. 2K WER count is 0. No Windows stop code
+  or bugcheck parameters are established by these files.
+- **Liveness:** saved pipeline records GUEST_ALIVE after both runs, RUN_DONE,
+  PIPELINE_RC=0. SSH/storage supported evidence collection. The mouse task
+  reports 1910 synthetic moves; scanout reports zero captured frames.
+  Correct display output, physical USB input, RDP and runtime progress on
+  each CPU are unverified. `E/full.log:30-37` records CPU1–7 startup;
+  the recovery gate reports 8 CPUs, neither proving per-CPU IRQ/timer progress.
+- **Saved recovery:** service disabled at **07:02:13.6462383Z**, exact
+  **oem5.inf** removed at **07:04:02.0924769Z** (Staged=0, Sys/Umd absent),
+  then durable preflight PASS at boot **07:05:01.3216440Z**, Package=Absent,
+  **VISIBLE_INERT_PACKAGE_ABSENT_8CPU**. Sources:
+  `E/evidence/rec1930h/{visible-disable-output,cleanup-visible-output,visible-preflight,visible-inert-gate}.txt`.
+  These are saved recovery observations, not a fresh verification of the guest.
+
+**Verdict: CONFIRMED for BEFORE's measurement checkpoint.** The receipt
+captures live copy owners at AllocateCb refusal before rollback/cache retry.
+The merge-baseline explanation is **REJECTED for these sampled failures**.
+Mapped private staging is substantial, but its causal sufficiency as the OOM
+source remains **INCONCLUSIVE**: no process commit/working-set or available
+physical/commit sample was collected. GravityMark does not complete.
+
