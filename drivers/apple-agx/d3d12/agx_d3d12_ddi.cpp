@@ -6641,7 +6641,9 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE handle, UINT cou
     }
     auto *owner = static_cast<AGX_D3D12_OWNER *>(queue->device->owner);
     AgxD3d12OwnerLock(owner);
+    AgxD3d12OwnerMeasureHeapStaging(owner, TRUE);
     ReplayAndSubmit(queue, count, lists);
+    AgxD3d12OwnerMeasureHeapStaging(owner, FALSE);
     AgxD3d12OwnerUnlock(owner);
 #else
     ReplayAndSubmit(queue, count, lists);

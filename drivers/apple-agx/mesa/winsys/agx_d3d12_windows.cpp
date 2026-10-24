@@ -122,6 +122,26 @@ struct OwnerLock {
 extern "C" void AgxD3d12OwnerLock(AGX_D3D12_OWNER *owner) { if (owner) EnterCriticalSection(&owner->Lock); }
 extern "C" void AgxD3d12OwnerUnlock(AGX_D3D12_OWNER *owner) { if (owner) LeaveCriticalSection(&owner->Lock); }
 
+/* Called under the owner lock around one Execute, including intermediate
+ * flushes during replay. Counts checked-copy bytes, not GPU-blitter bytes. */
+extern "C" void AgxD3d12OwnerMeasureHeapStaging(AGX_D3D12_OWNER *owner, BOOL begin) {
+  OwnerLock lock(owner);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (!owner || !owner->Runtime.HeapStaging) return;
+  auto *runtime = &owner->Runtime;
+  if (!begin) {
+    const UINT values[] = {1u,
+      static_cast<UINT>(runtime->HeapStagingDirtyBytes), static_cast<UINT>(runtime->HeapStagingDirtyBytes >> 32),
+      static_cast<UINT>(runtime->HeapStagingUploadBytes), static_cast<UINT>(runtime->HeapStagingUploadBytes >> 32),
+      static_cast<UINT>(runtime->HeapStagingDownloadBytes), static_cast<UINT>(runtime->HeapStagingDownloadBytes >> 32)};
+    AdmissionUmdDiagnostic("measure-d3d12-heap-staging", S_OK, values, 7u);
+  }
+  runtime->HeapStagingDirtyBytes = runtime->HeapStagingUploadBytes = runtime->HeapStagingDownloadBytes = 0;
+#else
+  (void)owner; (void)begin;
+#endif
+}
+
 /* C7b: a presentation texture (agx_d3d10_windows.cpp
  * AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE) */
 struct AGX_D3D12_PRESENTATION {

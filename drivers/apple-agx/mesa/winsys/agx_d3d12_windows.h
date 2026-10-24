@@ -45,6 +45,7 @@ HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *Args, AGX_D3D12_OWNER **
 /* EXP1822: the owner's recursive lock (ExecuteCommandLists holds it across a replay). */
 void AgxD3d12OwnerLock(AGX_D3D12_OWNER *Owner);
 void AgxD3d12OwnerUnlock(AGX_D3D12_OWNER *Owner);
+void AgxD3d12OwnerMeasureHeapStaging(AGX_D3D12_OWNER *Owner, BOOL Begin);
 HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
 /* CpuVisible: the heap's CPU page property is not NOT_AVAILABLE; only such
  * buffers get the persistent CPU mapping (Buffer->Cpu, NULL otherwise). */
