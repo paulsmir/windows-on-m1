@@ -101,9 +101,6 @@ typedef struct _ADMISSION_G3_TABLE_SHADOW {
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ResidentPtes;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *PendingPtes;
-  /* T12: valid GPU-process logical groups without native leaves. Updated
-   * transactionally under State->Lock; BeginJob refuses while any remain. */
-  ULONGLONG OmittedNativeLeaves[32];
 } ADMISSION_G3_TABLE_SHADOW;
 
 typedef struct _ADMISSION_G3_PRIVATE_SCENE {

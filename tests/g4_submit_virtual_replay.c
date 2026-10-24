@@ -65,7 +65,6 @@ typedef struct _ADMISSION_G3_TABLE_SHADOW {
   struct _ADMISSION_G3_TABLE_SHADOW *NextBroker;
   struct _ADMISSION_G3_TABLE_SHADOW *Next;
   ULONGLONG BrokerIpa;
-  ULONGLONG OmittedNativeLeaves[32];
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes;
 } ADMISSION_G3_TABLE_SHADOW;
 typedef struct {
@@ -1175,12 +1174,6 @@ int main(void) {
   assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
   assert(graph_begin_calls == 0);
   output_ipa -= 0x1000ULL;
-  /* T12: an indirect resource outside every parsed envelope/attachment
-   * cannot be omitted when a GPU execution lease is acquired. */
-  shadow.OmittedNativeLeaves[31] = 1ULL << 63;
-  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
-  assert(graph_begin_calls == 0 && state.ActiveProcess == NULL);
-  shadow.OmittedNativeLeaves[31] = 0;
   assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) == STATUS_SUCCESS);
   assert(graph_begin_calls == 1);
   assert(context.GpuvaG3MappingGeneration == process.Graph.MappingGeneration);

@@ -2767,20 +2767,6 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
       process->CpuOnlyMappings)
     return STATUS_INVALID_DEVICE_STATE;
   ExAcquireFastMutex(&state->Lock);
-  /* T12: shaders may dereference resources absent from the parsed envelope.
-   * Paging can retain their CPU provenance, but no GPU lease may expose an
-   * omitted native leaf. Partial updates remain repairable without poisoning
-   * the process or returning an unsupported UpdatePageTable status. */
-  for (ADMISSION_G3_TABLE_SHADOW *shadow = process->TableShadows;
-       shadow != NULL; shadow = shadow->Next) {
-    for (UINT word = 0u; word < 32u; ++word) {
-      if (shadow->OmittedNativeLeaves[word] != 0ULL) {
-        ExReleaseFastMutex(&state->Lock);
-        return STATUS_INVALID_DEVICE_STATE;
-      }
-    }
-  }
-
 #if ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB
   AdmissionG3VerifyUploads(adapter,state,process);
 #endif

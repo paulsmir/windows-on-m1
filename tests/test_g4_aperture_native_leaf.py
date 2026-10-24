@@ -28,16 +28,13 @@ class ApertureNativeLeaf(unittest.TestCase):
         paging, and republish only after a complete contiguous group returns.
         Contiguous but misaligned groups must also stay unpublished; CPU-only
         paging must retain scattered logical pages without GPU publications.
-        The execution gate bitmap must follow omissions, repairs and unmaps
-        transactionally. This is safety, not native scattered backing.
+        This is a safety invariant, not a fix for GravityMark residency.
         """
         with tempfile.TemporaryDirectory(prefix="t7d-leaf-") as directory:
             directory = Path(directory)
             (directory / "leaf.inc").write_text(
                 function_body(PAGING.read_text(), "AdmissionG3RecordOmitted") + "\n" +
-                function_body(PAGING.read_text(), "AdmissionG3UpdateLeaf") + "\n" +
-                function_body(PAGING.read_text(), "AdmissionG3RetireSystemSubtree") + "\n" +
-                function_body(PAGING.read_text(), "AdmissionG3ResetTableShadow"))
+                function_body(PAGING.read_text(), "AdmissionG3UpdateLeaf"))
             binary = directory / "replay"
             build = subprocess.run([
                 os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
