@@ -63626,3 +63626,11 @@ whether a restartable full reset can be implemented under the retained
 firmware contract. Native WDK compilation and new hardware behavior were
 not tested, because there is no production candidate in this branch.
 
+
+EXP1939 HARDWARE BEFORE 2026-10-24T14:35:21Z:
+- Package 30.0.1939.0 = EXP1938 + Codex dump1938 e0940105 (behaviour) and cdb tooling. Switches Wom1GpuFaultInfoRead Wom1PoolHalfSize.
+- WHY THIS HYPOTHESIS: EXP1934-1937 unmapped faults with zero logical PTEs after coverage checks point to references missing from the submitted batch; the projected Mesa draw path bound heap references before hazard legalization, whose flush could strand them (failing-then-passing regression).
+- Expected: no zero-PTE GPU fault; GravityMark progresses. Failure: the same fault class persists. Recovery rec1939h.
+- Hashes: sys 9beeb8de6230, UmdArm64 f4294205cc86, UmdX64 76b3bdf0cb69, Umd32 1e0bad4d64f0; manifest dc8110315654, hardware-manifest 4cf4e6275292; probe1939.sh 65a0b5bc2035 (PROBE_LINT_OK); visible recovery rec1939h 2effdc6bf8118898; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1939h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1939-heap-after-hazard/run1939.sh.
