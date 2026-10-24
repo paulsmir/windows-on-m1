@@ -1452,9 +1452,11 @@ int AdmissionUmdGpuvaPublishDirectMap(ADMISSION_UMD_DEVICE *device,
  * canonical allocation; the copy escape needs its valid PTEs. */
 static int restore_residency(ADMISSION_UMD_DEVICE *device, uint64_t token) {
   AcquireSRWLockShared(&device->ScreenBufferLock);
+  const bool terminal=device->DrawTerminal!=FALSE;
   auto *slot=find_slot(device,token);
   D3DKMT_HANDLE handle=slot && !slot->Resident ? slot->KernelAllocation : 0;
   ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if(terminal) return 0;
   if(!handle) return 1;
   if(!device->KernelCallbacks->pfnMakeResidentCb) return 0;
   UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
@@ -1466,9 +1468,18 @@ static int restore_residency(ADMISSION_UMD_DEVICE *device, uint64_t token) {
   slot=find_slot(device,token);
   if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
-  if(hr==E_PENDING && !request.PagingFenceValue) return 0;
-  return !request.PagingFenceValue ||
-      wait_paging_at(device,request.PagingFenceValue,6u,token);
+  if((hr==E_PENDING && !request.PagingFenceValue) ||
+      (request.PagingFenceValue &&
+       !wait_paging_at(device,request.PagingFenceValue,6u,token))) {
+    /* Every caller, including private-staging downloads, must retain the
+     * uncertainty. Resident records an accepted reference, not a completed
+     * fence; a later retry may not use it to bypass this failed wait. */
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    device->DrawTerminal=TRUE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    return 0;
+  }
+  return 1;
 }
 
 /* T6b: called only after ScreenMapBuffer reserves Transition, and before
