@@ -62411,3 +62411,29 @@ Mapped private staging is substantial, but its causal sufficiency as the OOM
 source remains **INCONCLUSIVE**: no process commit/working-set or available
 physical/commit sample was collected. GravityMark does not complete.
 
+
+EXP1931 HARDWARE BEFORE 2026-10-24T07:28:42Z:
+- Package 30.0.1931.0 = EXP1930 + Codex exp1930 15987d30. Switch Wom1GpuFaultInfoRead.
+- **Next experiment — WHY THIS HYPOTHESIS:** (1) the KMD measures real headroom
+- refusals with no slab/commit failure; (2) the census finds zero merge baselines
+- and mostly mapped private storage, whose CPU pointers cannot simply be
+- revoked; (3) reclaiming 30.125/22.875 MiB of cached storage does not make the
+- request succeed. The next discriminator is adjacent OS physical/commit
+- headroom and process commit/working set at that same refusal. It distinguishes
+- pressure in process memory beyond the reported copies from broader system
+- pressure without guessing an allocation-policy remedy. This candidate is
+- **receipt-only**, as TASK.md allows; it does not claim to fix GravityMark OOM.
+- 
+- **WINDOWS/AGX CONTRACT:** AllocateCb returns an HRESULT; creation failure
+- propagates unchanged, preserving handles until cleanup succeeds. The UMD owns
+- its CPU copies and pointer lifetimes; KMD owns canonical backing/headroom,
+- VidMm residency, and the existing platform owns DMA/interrupts/power/recovery.
+- The Asahi allocation/cache retry sequence remains intact. Snapshot queries
+- run outside ScreenBufferLock, before diagnostic emission/rollback/retry, are
+- bounded to four refusals per device, and cannot decide allocation behavior.
+- 
+- **WHAT IS STILL UNKNOWN:** actual OS/process memory headroom at the original
+- Recovery rec1931h.
+- Hashes: sys 0eb8746744a3, UmdArm64 b20c58859864, UmdX64 58d9a50f09a1, Umd32 81468d76e23a; manifest 910c73997fe0, hardware-manifest a60d021e875d; probe1931.sh de9cb1986842 (PROBE_LINT_OK); visible recovery rec1931h 49a4e2e577a7be18; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1931h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1931-os-mem/run1931.sh.
