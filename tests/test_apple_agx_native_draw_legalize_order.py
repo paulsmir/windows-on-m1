@@ -1,5 +1,8 @@
 """EXP1189: the native draw entry legalizes before it takes the batch.
 
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The historical native draw
+boundary described below, with no frontend heap callback installed.
+
 EXP1189 CS 1.6 benchmark (PACKAGE1189, second hl.exe of the boot, during
 load): reject-batch kind 8 detail 1 (BatchLeave on a batch with no capsule,
 fence 0, draws 0), then measure-native-first-fault at the generated
@@ -46,7 +49,7 @@ struct pipe_draw_indirect_info { bool count_from_stream_output; };
 struct pipe_draw_start_count_bias { unsigned start, count; int index_bias; };
 /* capsule: the Windows batch record; a reset batch has none (freed). */
 struct agx_batch { bool capsule; int entered; unsigned draws; };
-struct agx_context { struct pipe_context base; bool any_faults; struct agx_batch *batch;
+struct agx_context { struct pipe_context base; int (*windows_draw_bindings)(void *); void *windows_draw_bindings_data; bool any_faults; struct agx_batch *batch;
                      bool feedback_loop; };
 static struct agx_batch slots[4];
 static unsigned next_slot, bodies;

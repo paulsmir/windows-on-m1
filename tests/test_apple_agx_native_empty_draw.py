@@ -1,5 +1,8 @@
 """EXP1061: a D3D draw of zero vertices or instances must not poison the context.
 
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The historical native draw
+boundary described below, with no frontend heap callback installed.
+
 EXP1061 Notepad (pid 5580): measure-native-first-fault at agx_state.c line
 5421, the native draw entry refusing PrepareDraw/Enter on the second draw of
 a batch; from then on every flush of the context is dropped (any_faults), so
@@ -43,7 +46,7 @@ struct pipe_draw_info { unsigned instance_count; };
 struct pipe_draw_indirect_info { bool count_from_stream_output; };
 struct pipe_draw_start_count_bias { unsigned start, count; int index_bias; };
 struct agx_batch { int entered; };
-struct agx_context { struct pipe_context base; bool any_faults; struct agx_batch *batch; bool prepare_fails, no_color, refusal_poisons; };
+struct agx_context { struct pipe_context base; int (*windows_draw_bindings)(void *); void *windows_draw_bindings_data; bool any_faults; struct agx_batch *batch; bool prepare_fails, no_color, refusal_poisons; };
 static struct agx_batch the_batch;
 static unsigned gets, bodies, leaves;
 static struct agx_context *agx_context(struct pipe_context *p) { return (struct agx_context *)p; }

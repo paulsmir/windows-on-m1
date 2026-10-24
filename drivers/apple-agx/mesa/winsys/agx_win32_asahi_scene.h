@@ -66,6 +66,10 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(
  * after ScreenCreate returned NULL. It is never a usable factory result. */
 struct pipe_screen *AgxWin32AsahiScreenRecover(AGX_WIN32_ASAHI_BACKEND *);
 struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *, void *);
+/* Exclusive context owner scopes this callback to draw_vbo. Native draws
+ * invoke it after hazard legalization and before taking their batch; internal
+ * legalization draws suppress it. Clear it before releasing caller storage. */
+void AgxWin32AsahiSetDrawBindings(struct pipe_context *, int (*)(void *), void *);
 struct pipe_resource *AgxWin32AsahiImportLinearColor32(
     struct pipe_screen *, const AGX_WIN32_SCREEN_BUFFER *,
     APPLE_AGX_U32 Width, APPLE_AGX_U32 Height, APPLE_AGX_U32 Pitch,

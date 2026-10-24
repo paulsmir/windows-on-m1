@@ -53,6 +53,11 @@ def project_sources(out,project,overlays):
     hp='src/gallium/drivers/asahi/agx_state.h'
     h=(out/hp).read_text()
     h=replace(h,'struct agx_batch {','struct agx_batch {\n   void *windows_batch; /* stable request/capture/adapter capsule */')
+    h=replace(h,'struct agx_context {\n   struct pipe_context base;', '''struct agx_context {
+   struct pipe_context base;
+   /* Scoped to the frontend draw; rebuilt after native hazard flushes. */
+   int (*windows_draw_bindings)(void *);
+   void *windows_draw_bindings_data;''')
     # EXP1070: on Windows every perf_debug message (flush/sync reasons,
     # shadowing, fallbacks) is counted per process, whatever AGX_DBG_PERF says.
     h,n=re.subn(r'#define perf_debug\(dev, \.\.\.\)[^\n]*\\\n(?:[^\n]*\\\n)*[^\n]*while \(0\)\n',
@@ -287,7 +292,11 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     * predicate's writer -- the very batch this draw would enter. As
     * upstream, it is evaluated first, here before the batch is taken (the
     * body no longer evaluates it; DrawAuto and multi-draw re-enter here). */
-   if (unlikely(!agx_render_condition_check(ctx)))
+   int (*bindings)(void *) = ctx->windows_draw_bindings;
+   ctx->windows_draw_bindings = NULL;
+   bool render = agx_render_condition_check(ctx);
+   ctx->windows_draw_bindings = bindings;
+   if (unlikely(!render))
       return;
    if (indirect && indirect->count_from_stream_output) {
       /* DrawAuto is expanded by upstream Asahi into a direct draw.  The graph
@@ -310,10 +319,20 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     * writes before taking the batch: they may flush the bound render
     * target's writer, i.e. this batch. Taken first, an empty batch was
     * reset under the entered draw (capsule freed), the body drew into a new
-    * one and Leave faulted the context. The body's own calls then find
-    * nothing left to legalize. */
+    * one and Leave faulted the context. Application heap bindings must join
+    * the batch AFTER these flushes. Internal legalization draws must not
+    * inherit application heaps, and the body must not legalize again after
+    * those heaps have registered new readers. */
+   ctx->windows_draw_bindings = NULL;
    agx_legalize_feedback_loops(ctx);
    agx_legalize_xfb(ctx);
+   bool bound = !ctx->any_faults &&
+                (!bindings || bindings(ctx->windows_draw_bindings_data));
+   ctx->windows_draw_bindings = bindings;
+   if (!bound) {
+      ctx->any_faults = true;
+      return;
+   }
    struct agx_batch *batch = agx_get_batch(ctx);
    /* One check per line: the fault receipt site names the refusing check. */
    if (!batch) {
@@ -342,6 +361,9 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     drawbody=s[a:b]
     drawbody=replace(drawbody,
         '   if (unlikely(!agx_render_condition_check(ctx)))\n      return;\n\n','')
+    drawbody=replace(drawbody,
+        '   agx_legalize_feedback_loops(ctx);\n   agx_legalize_xfb(ctx);',
+        '   /* The Windows wrapper legalizes before binding frontend heaps. */')
     def mark(text, line, phase, after):
         i=text.index(line)
         cut=i+len(line) if after else i

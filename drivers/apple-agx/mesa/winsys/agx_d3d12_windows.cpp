@@ -3133,6 +3133,15 @@ static HRESULT bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
   }
   return S_OK;
 }
+struct AgxD3d12DrawHeapBindings {
+  AGX_D3D12_OWNER *Owner;
+  HRESULT Result;
+};
+static int bind_draw_heaps(void *context) {
+  auto *bindings = static_cast<AgxD3d12DrawHeapBindings *>(context);
+  if (SUCCEEDED(bindings->Result)) bindings->Result = bind_heaps(bindings->Owner, false);
+  return SUCCEEDED(bindings->Result);
+}
 static void unbind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
   struct pipe_context *pipe = owner->Context;
   const unsigned first = compute ? unsigned(AGX_D3D12_HEAP_CS) : 0u;
@@ -3689,10 +3698,16 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     const unsigned append[4] = {~0u, ~0u, ~0u, ~0u};
     pipe->set_stream_output_targets(pipe, so_count, so, append, mode);
   }
-  if (SUCCEEDED(hr)) hr = bind_heaps(owner, false); /* C47 */
+  /* Native feedback/XFB legalization may flush the current batch. Bind heap
+   * resources and batch-relative sampler handles only after that boundary,
+   * including each recursive native draw which may select another batch. */
+  AgxD3d12DrawHeapBindings heap_bindings = {owner, S_OK};
+  AgxWin32AsahiSetDrawBindings(pipe, bind_draw_heaps, &heap_bindings);
   const LONGLONG bound = qpc_now();
   if (SUCCEEDED(hr)) pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
   const LONGLONG drawn = qpc_now();
+  AgxWin32AsahiSetDrawBindings(pipe, NULL, NULL);
+  if (SUCCEEDED(hr)) hr = heap_bindings.Result;
   if (SUCCEEDED(hr) && AgxWin32AsahiContextFaulted(pipe)) hr = DXGI_ERROR_DEVICE_HUNG;
   unbind_heaps(owner, false);
   if (so_count) {

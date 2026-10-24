@@ -448,6 +448,12 @@ int AgxWin32AsahiSamplerDescriptor(void *cso, void *out, APPLE_AGX_U16 *bias, in
   *custom_border=so->uses_custom_border;
   return 1;
 }
+void AgxWin32AsahiSetDrawBindings(struct pipe_context *pctx,
+    int (*bindings)(void *), void *data) {
+  struct agx_context *ctx=agx_context(pctx);
+  ctx->windows_draw_bindings=bindings;
+  ctx->windows_draw_bindings_data=data;
+}
 /* EXP1927: a residency failure can occur while acquiring a batch (or
  * flushing a hazard in a prior heap chunk). Never initialize its encoder or
  * grow its sampler heap after that failure. Kind 4 names this scene bridge. */

@@ -1,5 +1,8 @@
 """EXP1287: the native draw entry evaluates the render condition first.
 
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The historical native draw
+boundary described below, with no frontend heap callback installed.
+
 EXP1287 predication smoke (px/pa, PACKAGE1287): reject-batch kind 8 reason 8
 (Leave of a batch that was never entered, fence 0, draws 1) on the first
 predicated draw, then every value 0 (the context faulted). Asahi implements
@@ -43,7 +46,7 @@ struct pipe_draw_info { unsigned instance_count; };
 struct pipe_draw_indirect_info { bool count_from_stream_output; };
 struct pipe_draw_start_count_bias { unsigned start, count; int index_bias; };
 struct agx_batch { bool capsule; int entered; unsigned draws; };
-struct agx_context { struct pipe_context base; bool any_faults; struct agx_batch *batch;
+struct agx_context { struct pipe_context base; int (*windows_draw_bindings)(void *); void *windows_draw_bindings_data; bool any_faults; struct agx_batch *batch;
                      bool predicate_written; bool predicate_passes; };
 static struct agx_batch slots[2];
 static unsigned bodies;
