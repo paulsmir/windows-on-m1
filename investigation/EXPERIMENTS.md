@@ -63301,3 +63301,137 @@ EXP1937 HARDWARE BEFORE 2026-10-24T11:17:44Z:
 - Hashes: sys d838ae7275f1, UmdArm64 4e37b8ba6408, UmdX64 9542caebd5be, Umd32 136561aee50f; manifest 8620d854e9f2, hardware-manifest 76521a26ee3a; probe1937.sh e27f8da37bc4 (PROBE_LINT_OK); visible recovery rec1937h 5cce32fcd3c9ad25; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1937h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1937-interstage-tdr/run1937.sh.
+
+EXP1937 ACTUAL 2026-10-24T11:41:34Z (Codex draft, exp1937 REPORT.md):
+
+EXP1937 ACTUAL — offline reconstruction of the saved 2026-10-24 run, ready
+for Claude to append to EXPERIMENTS.md. **The candidate did not meet either
+hardware target: the GPU still read an unmapped VA and recovery ended in
+VIDEO_TDR_FAILURE.** This task delivers the permitted diagnostic change,
+not a claim to have fixed either hardware failure.
+
+Paths used below: **E** =
+`/Volumes/pwdev/public_windows/.local/experiments/EXP1937-interstage-tdr`;
+**R** = `E/evidence/EXP1937`; **K** = `R/kmd-receipts-probe-end.txt`;
+**S** = `/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`.
+K and `E/evidence/rec1937h/kmd-receipts-pre-disable.txt` are byte-identical.
+The extracted receipt binaries and complete decoder output are in this
+handoff's `decoded/` directory.
+
+**Candidate and BEFORE:** package 30.0.1937.0, source commit
+`c8ae6424b5cb3c5fee69dddfa8b0a970bf1e27c8`, source archive SHA256
+`6f61ec1913a974f7e1db6b34763571558a9febbdcf9ff416fee16293ade6d387`
+(`E/source-manifest.json:4415`). BEFORE at
+`investigation/EXPERIMENTS.md:63272` combines the EXP1936 interstage sampler
+union fix and TDR1 pending-event clearing/deferred retirement. The two
+independent success signatures were no zero-PTE fault and reset Complete
+without bugcheck. Device switches are both 1: Wom1GpuFaultInfoRead and
+Wom1PoolHalfSize (K:1–2). SYS SHA256 is
+`d838ae7275f14105d05ca161707417aba39db0f7e9ad515ce6e0457bdb825654`.
+The recorded m1n1 is 0d3a75b3, artifact SHA256
+`b97cf8834c3f8e8728b796bf211ef8d21f020db2a427415616b5ad54d05baf49`;
+Mu artifact SHA256
+`1c7d87d6fd4321feee605b5f9440dab6a350bc7a3964fb2c62b34602f565f3e5`
+(`E/manifest.json`). These identify the observed package, not the next one.
+
+- **Stage/boot:** `E/stage-ssh.log:2` records staging at
+  11:17:13.4466121Z, oem5.inf, Code28, arm1, eight CPUs and RegistryFlush PASS.
+  `R/restart-ssh.log:2` records the ordered restart at 11:17:47.9904544Z.
+  `R/state-start.txt:1` is Code0, DWM1216, Explorer1420, uptime49s.
+  `E/full-crash.log:1797` onward records startup of secondary CPUs, and the
+  dump reports eight processors. Exact time to first SSH and continuous
+  CPU/timer/IRQ health during the workload are not established.
+- **10K attempt:** `S/gm-d3d12a-1937.ps1:2` requests D3D12, 10000 asteroids,
+  windowed, 90s timeout. `S/newexp1937.log:7` records
+  `GUEST_DOWN_DURING_GRAVITYMARK 15`. This is poll15, **not 15 seconds**:
+  `E/probe1937.sh:19` includes 5s sleeps, bounded SSH, and retries.
+  All gm1937a stdout/stderr/done/UMD/times/image files are absent locally.
+  Exact application device-removal time, completion, score, FPS and image
+  correctness are unknown.
+- **2K attempt:** `S/newexp1937.log:14` records failed reachability poll4;
+  gm1937b results are also absent. The subsequent alive messages only prove
+  transient SSH responsiveness. They do not authenticate the original boot
+  or a functioning experimental GPU. Recovery overlaps the pipeline:
+  `R/state-end.txt:1` is Code32, DWM1220, Explorer4000, uptime39s.
+  RUN_DONE and PIPELINE_RC0 are wrapper results, not benchmark success.
+- **Initial GPU event (K:189):** exactly one event, one valid fault and one
+  resume; Timeout, fence **0x193c4**, PID **8736**, context
+  **0xffffab8adb78ec10**, 43ms from submission, HaltCount1. Raw
+  **0x1113b90021822211** decodes to **unmapped read, level0, UL1C(1), VM1,
+  sideband67, VA 0x1113b90000**. First/FirstValid/Last are identical.
+  Missing application logs mean PID8736's executable identity is not
+  independently authenticated by these artifacts.
+- **Fault mapping (K:190–191):** first/latest identical, v2/912 bytes,
+  captured, graph process0x13, root0x9def08000, process generation1,
+  mapping generation0xe114b, lease0xd59, table0x9df3cc000. JobInFlight1,
+  Uncertain0, CpuOnly0, NativePresent0; all four logical PTEs are entirely
+  zero. This is the CPU graph/shadow, not a hardware PTE/TLB read.
+  HistoryNext24914, Scanned8192, Matches14, Count8: history is truncated.
+
+  | Sequence | QPC | Table / VA | Meaning |
+  |---|---:|---|---|
+  | 21662 | 3198170339 | table0x9def00000, VA0x1113b90000, 16×4KiB | Repeat invalidation, valid0, success |
+  | 22523 | 3241595623 | table0x9def00000, VA0x1112000000, 8192×4KiB | Repeat+NotifyEviction, valid0, success |
+  | 23317 | 3353314122 | table0x9df3cc000, VA0x1112000000, 7072×4KiB | Repeat+InitialUpdate, valid0, success; covers fault VA |
+
+  No retained matching valid publication follows23317. Sequence20911's
+  allocation token0xffffab8ada63e810 belongs to VA0x1126000000 in an earlier
+  use of the current table; it does **not** identify the owner of the fault
+  VA. The history flags use the receipt's encoding in
+  `gpuva_g3_paging_windows.c:908`, not raw WDK bit positions. An invalidation
+  request alone does not prove that an allocation was previously mapped.
+- **Reset failure (K:188,192):** unlike EXP1936's later-fence stall, the
+  recovered fence and all three failed resets are **the same 0x193c4**.
+  FirmwareRecoveries1, last recovery43ms, deadline expiries0, longest
+  job2621ms on0x193c4. Three resets, zero successes, each stage=quiesce,
+  quiesce=timeout, status0xc0000483. Engine entries at146029ms and147066ms,
+  adapter at150034ms; waits1001/1000/1001ms. Active/last0x193c4,
+  completed0x193c3, last-aborted0. First reset job age2619ms/poll age0;
+  later poll ages1037/4005ms. Worker scheduled/active0, Halted0,
+  backend phase3, provider phase6, poll guard0. Scheduler tag1/line547 is
+  absent at the first reset and present later: it records reset failure,
+  not the cause of the original MMU fault. JobAge0 on later attempts does
+  not prove that the active packet retired.
+- **Crash:** `E/evidence/dump/102426-18718-01.dmp`, decoded with
+  `tools/windows_dump_header.py`, is ARM64, eight processors,
+  **VIDEO_TDR_FAILURE0x116**, parameters
+  **0xffffab8ae0494010, 0xfffff802f46ba750, 0xffffffffc0000483, 3**.
+  SHA256 `4f0c459af4b0e2d1ad2fe317f17db61e45094d0f439f8f176e3fb948637d5149`.
+  No cdb text/stack is supplied; P2 is not independently symbol-attributed.
+  `E/full-crash.log:3484` records PSCI reset: ELR0xfffff802f8635138,
+  x30 0xfffff802f8497e04, SP0xfffff48840e3e010, SPSR0x600000c4,
+  x0 0x84000009. Use full-crash.log for this crash; full.log also contains
+  a different later reset. No separate CPU-watchdog cause is established.
+- **Other evidence:** K:187 is G4 Parse refusal branch9/downstream3,
+  DMA0x110a890000, failing VA0x11068d0000, total2, distinct from the MMU
+  fault VA. `agx_gm_alloc_join.py` finds zero heap and CPU-access records;
+  missing joins cannot establish the original allocation identity.
+  `R/umd.log:12265,12285,12976,13789,13857,14746,14795,15127,15437`
+  has nine LeafAbsent3 native-allocation refusals, none for PID8736.
+  Wrapper totals:18 batch refusals,130 C++ throws/stack records,9 native
+  allocation refusals,5 SetError. K:118 has708 omission events/12339 groups;
+  retained events are for DWM1216, not PID8736. K:161 poolv8:
+  segment/held1344MiB, committed1341.8125MiB, peak1344MiB,
+  reserved2840.875MiB, peak reserved2875.8125MiB;
+  moves275/kills1841/unplaces281; reserve/commit/new-slab/release failures,
+  busy retries, ref underflows and floor refusals0. Collection-time totals
+  do not demonstrate absence of workload memory pressure.
+- **Recovery:** `E/evidence/rec1937h/visible-disable-output.txt:3` records
+  exact oem5.inf disable at11:22:58.7403697Z, prior Code43, after
+  boot11:22:05.4230520Z, both arms absent and Start4. Exact removal at
+  11:24:46.0953250Z (`cleanup-visible-output.txt:2`) leaves staged0,
+  SYS/UMD absent. Durable preflight after boot11:25:49.5838920Z is PASS,
+  PackageAbsent (`visible-preflight.txt:1`); final gate is
+  VISIBLE_INERT_PACKAGE_ABSENT_8CPU. Saved SSH collection/storage and final
+  recovery/eight-CPU state are established. Physical USB input, RDP,
+  uninterrupted display and all-CPU health during failure were not tested;
+  synthetic mouse1910 moves and scanout0 are not benchmark image evidence.
+
+**BEFORE verdict: REJECTED as a sufficient remedy, for both success targets.**
+The UMD change did not prevent this zero-PTE fault; the KMD change did not
+produce reset Complete/no bugcheck. Whether the individual source mechanisms
+occurred as predicted remains **inconclusive**: there is no faulting-BO owner
+trace, and no actual/expected retirement values in v3. This is not evidence
+that either source correction should be reverted. In particular, finishing
+faulted work immediately would again release DMA ownership without proof.
+
