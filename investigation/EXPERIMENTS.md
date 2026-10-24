@@ -61826,3 +61826,76 @@ EXP1925 HARDWARE BEFORE 2026-10-24T02:29:35Z:
 - Hashes: sys 755943c40fb3, UmdArm64 8c5c21ef0f98, UmdX64 3169341998e3, Umd32 5e60a4d100f6; manifest 0c4312a26e2a, hardware-manifest 4fd251cc9afd; probe1925.sh bb903e53a05b (PROBE_LINT_OK); visible recovery rec1925h 8f9c37a12d5847a6; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1925h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1925-heap-staging/run1925.sh.
+
+EXP1925 ACTUAL 2026-10-24T02:54:43Z (Codex draft, exp1925 REPORT.md; Claude spot-checked):
+Package 30.0.1925.0, source `cd96d55b540da6ba8617cb6ec9da0825d0569fc2`.
+This section is ready for the integration owner to append to EXPERIMENTS.md.
+No hardware action was performed while preparing it.
+
+- **Boot/run phases:** artifact/staging gate passed; APPL0002 reached
+  `CM_PROB_NONE`. The saved recovery receipt identifies the experimental
+  boot at `2026-10-24T02:29:52.7040640Z`. Both short GravityMark D3D12 runs
+  reached benchmark setup at 1280x720. 10k: ready at 46.813 s, benchmark
+  starts at 46.819 s, resize at 46.841 s, process exit recorded at 55 s.
+  2k: ready/start at 24.922 s, resize at 24.968 s, first OOM at 25.483 s,
+  process exit at 32 s. Neither produced a saved score, times file or image.
+  There is no recorded explicit device-removal timestamp; process exit and
+  OOM timing must not be relabeled as GPU removal timing.
+- **UMD failure:** the 10k done file records GravityMark `c0000005` in
+  `AppleAgxRenderAdmissionUmdArm64.DLL+0x43fb4`, and DWM `c00001ad` in
+  `dwmcore.dll+0x19224c`. The 2k done file repeats identical WER descriptions
+  without timestamps, so it does not independently establish a second crash.
+  The 10k trace ends with `reject-screen-create`, allocation `0x730000`,
+  underlying `8007000e`, followed by `reject-batch`. The 2k trace has three
+  128 MiB allocation failures, application OOM messages, then a failed
+  `0x730000` allocation and `reject-batch`.
+- **Crash localization:** exact packaged ARM64 instructions identify
+  `agx_flush_writer` at RVA `0x43fac`; the faulting `ldr x9,[x1,#0x80]`
+  accesses the resource BO. Inlined `transition_resource`/`agx_decompress`
+  calls `resource_create` at `0xa8e8`, saves the unchecked result at
+  `0xa8f0`, and forwards it to `agx_flush_writer` at `0xa9c0`. This matches
+  the source's assert-only allocation check. It is a reproducible unchecked
+  NULL failure, strongly supported as the observed crash path. No local
+  map/PDB, minidump, x1 value or exception call stack was supplied; function
+  identification uses instructions and source structure, not debug symbols.
+- **Decoded KMD:** probe-end and pre-disable snapshots agree. No
+  `Wom1GpuFault` or `Wom1FirmwareRecovery` value; `Wom1GpuFaultInfoRead=1`.
+  `Wom1GpuReset` v3: one reset, one success, `DxgkDdiResetEngine`, status 0,
+  scheduler fault tag `0x101bd` (`scheduler_windows.c:445`, failed boundary
+  preemption), queued packet `0x328`, completed `0x326`, last submitted
+  `0x329`, active 0, halted 0, firmware recoveries 0, reset stage complete.
+  Reset entry 19687 ms, poll age 2141 ms, quiesce none; these are receipt
+  clock values, not established app-relative timing. `Wom1PreemptRefusal`:
+  fence `0x18`, previous fence `0x17` still NotificationClaimed, pending 1,
+  cutoff `0x329`, queue count 2, active 0, responsive 1. This is a separate
+  scheduler boundary, not evidence of a firmware MMU fault.
+- **Omissions:** `Wom1G4OmittedLeaves` v1 totals 27 events / 2660 groups.
+  Retained ring sequences 20-27: GravityMark PIDs 10444 and 5340 only have
+  the allocation-zero `0x10000..0x11000` reservation event; large retained
+  omissions (898/859 groups, allocation VA `0x1050000`, 16384000 bytes)
+  belong to DWM PID 1244. This finite historical ring is not proof that
+  every earlier allocation/mapping was correct.
+- **Pressure/cost:** pool summary: segment 2688 MiB, peak committed/reserved
+  2505 MiB, final committed/reserved 127 MiB, held 160 MiB, reserve failures
+  7, slab/commit failures 0. The actual staging receipts report 45 completed
+  Executes for 10k and 42 for 2k, all successful recorded Execute statuses.
+  Dirty/upload/download totals: 861396992 / 1151078400 / 0 bytes (10k),
+  860114944 / 1149861888 / 0 bytes (2k). `XFER ... 0 MiB` in the summary
+  counts the old `measure-xfer` rows; it does not mean T13 made no copies.
+  No evidence establishes progress beyond Execute 47 or steady-state speed.
+- **Liveness/recovery:** saved logs report SSH alive after each run. DWM PID
+  changes 1244 -> 2052; explorer remains 5200. Synthetic mouse movement
+  reports 1910 moves, but no scanout/image evidence verifies rendered display
+  or physical USB input. Storage was sufficient for logs and orderly cleanup;
+  RDP and per-CPU IRQ/timer health were not independently measured. No Windows
+  bugcheck/stop parameters or dump are supplied. Recovery disabled the service,
+  removed the exact package, and ended with `RECOVERY_DONE` and
+  `VISIBLE_INERT_PACKAGE_ABSENT_8CPU`; final boot is
+  `2026-10-24T02:37:47.2708960Z` (saved inert gate, not a new live check).
+- **Verdict: INCONCLUSIVE for the complete BEFORE hypothesis.** No repeat of
+  the previous firmware MMU fault is observed in the bounded runs, but both
+  stop before the required progression. T13 is not validated as a working or
+  stable GravityMark solution. The next demonstrated defect is CPU-side
+  handling of failed texture transition allocation. DWM pressure and scheduler
+  reset remain separate open issues.
+
