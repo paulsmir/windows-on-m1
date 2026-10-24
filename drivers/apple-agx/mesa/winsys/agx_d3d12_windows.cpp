@@ -947,6 +947,15 @@ extern "C" int AgxD3d12FormatMultisample(DXGI_FORMAT format, unsigned samples) {
   return block_bytes(physical) != 0;
 }
 
+/* One uncompressed UINT texel carries one BC block. */
+static enum pipe_format bc_staging_format(enum pipe_format format) {
+  unsigned bw = 0, bh = 0;
+  unsigned bytes = texture_block(format, &bw, &bh);
+  if (bw != 4 || bh != 4) return PIPE_FORMAT_NONE;
+  return bytes == 8 ? PIPE_FORMAT_R32G32_UINT :
+         bytes == 16 ? PIPE_FORMAT_R32G32B32A32_UINT : PIPE_FORMAT_NONE;
+}
+
 extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FORMAT format, unsigned width,
                                                 unsigned height, unsigned layers, unsigned levels, unsigned bind,
                                                 unsigned long long bytes, AGX_D3D12_BUFFER *texture, unsigned samples) {
@@ -971,10 +980,11 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
   /* Only opt in when ordinary staging blits can round-trip the format.
    * Asahi stages single-plane depth through its color interchange format,
    * including uncompressed mip tails (UNMAPPABLE forces staging). Combined
-   * depth/stencil, BC, non-renderable formats and MSAA keep existing paths. */
-  if ((bind & AGX_D3D12_BIND_GPU_ONLY) && bw == 1 && bh == 1 && samples <= 1 &&
+   * depth/stencil, non-renderable formats and MSAA keep existing paths.
+   * BC uses raw UINT block views through the same staging blitter. */
+  if ((bind & AGX_D3D12_BIND_GPU_ONLY) && samples <= 1 &&
       owner->Screen->is_format_supported) {
-    enum pipe_format staging_format = templ.format;
+    enum pipe_format staging_format = bw > 1 ? bc_staging_format(templ.format) : templ.format;
     if (bind & AGX_D3D12_BIND_DEPTH_STENCIL) {
       switch (templ.format) {
       case PIPE_FORMAT_Z16_UNORM: staging_format = PIPE_FORMAT_R16_UNORM; break;
@@ -1905,12 +1915,35 @@ static bool reinterpret_copy_boxes(const struct pipe_resource *d, unsigned dst_l
   *row = static_cast<unsigned long long>(nx) * dbytes;
   return true;
 }
+/* C84 block coordinates, reused by C70/C80 staging. The native blitter
+ * splits raw BC views by mip/layer and retains the normal resource hazards. */
+static void gpu_copy_blocks(struct pipe_context *pipe, struct pipe_resource *d, unsigned dl,
+                             struct pipe_box db, struct pipe_resource *s, unsigned sl, struct pipe_box sb) {
+  unsigned dw = 1, dh = 1, sw = 1, sh = 1;
+  const unsigned bytes = texture_block(d->format, &dw, &dh);
+  texture_block(s->format, &sw, &sh);
+  db.x /= dw; db.y /= dh; db.width = (db.width + dw - 1) / dw; db.height = (db.height + dh - 1) / dh;
+  sb.x /= sw; sb.y /= sh; sb.width = (sb.width + sw - 1) / sw; sb.height = (sb.height + sh - 1) / sh;
+  struct pipe_blit_info blit = {};
+  blit.src.resource = s; blit.src.level = sl; blit.src.box = sb;
+  blit.dst.resource = d; blit.dst.level = dl; blit.dst.box = db;
+  blit.src.format = blit.dst.format = bytes == 8 ? PIPE_FORMAT_R32G32_UINT : PIPE_FORMAT_R32G32B32A32_UINT;
+  blit.mask = PIPE_MASK_RGBA;
+  blit.filter = PIPE_TEX_FILTER_NEAREST;
+  pipe->blit(pipe, &blit);
+}
+
 /* Asahi resource_copy_region takes its CPU fallback for differing formats,
  * whose utility truncates the tails; copy the block rows through both maps
  * (Asahi texture_map owns synchronization and tiling), as the D3D11 path does. */
 static HRESULT copy_reinterpret_blocks(struct pipe_context *pipe, struct pipe_resource *d, unsigned dst_level,
                                        const struct pipe_box &dbox, struct pipe_resource *s, unsigned src_level,
                                        const struct pipe_box &sbox, unsigned rows, unsigned long long row) {
+  if (((d->flags | s->flags) & PIPE_RESOURCE_FLAG_UNMAPPABLE) &&
+      (bc_staging_format(d->format) != PIPE_FORMAT_NONE || bc_staging_format(s->format) != PIPE_FORMAT_NONE)) {
+    gpu_copy_blocks(pipe, d, dst_level, dbox, s, src_level, sbox);
+    return S_OK;
+  }
   struct pipe_transfer *read = NULL, *write = NULL;
   void *from = pipe->texture_map(pipe, s, src_level, PIPE_MAP_READ, &sbox, &read);
   void *to = from ? pipe->texture_map(pipe, d, dst_level, PIPE_MAP_WRITE, &dbox, &write) : NULL;
@@ -1956,6 +1989,7 @@ extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const 
                              layers, &reinterpret_dst, &reinterpret_src, &reinterpret_rows, &reinterpret_row)) {
     const HRESULT hr = copy_reinterpret_blocks(owner->Context, d, dst_level, reinterpret_dst, s, src_level, reinterpret_src,
                                                reinterpret_rows, reinterpret_row);
+    if (SUCCEEDED(hr)) ++owner->PendingCopies;
     receipt("measure-d3d12-reinterpret-copy", hr, static_cast<UINT>(d->format) | (static_cast<UINT>(s->format) << 16),
             dst_level | (src_level << 8), width | (height << 16));
     return hr;
@@ -2130,16 +2164,24 @@ static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COP
                              struct pipe_resource *buffer, const struct pipe_box &tbox, const struct pipe_box &bbox,
                              unsigned rows, unsigned long long row) {
   struct pipe_context *pipe = owner->Context;
+  const enum pipe_format raw = bc_staging_format(texture->format);
+  const enum pipe_format stage_format = raw == PIPE_FORMAT_NONE ? texture->format : raw;
+  struct pipe_box sbox = tbox;
+  sbox.x = sbox.y = sbox.z = 0;
+  if (raw != PIPE_FORMAT_NONE) {
+    sbox.width = (tbox.width + 3) / 4;
+    sbox.height = (tbox.height + 3) / 4;
+  }
   struct pipe_resource *staging = owner->UploadStaging;
-  if (staging && (staging->format != texture->format || staging->width0 < static_cast<unsigned>(tbox.width) ||
-                  staging->height0 < static_cast<unsigned>(tbox.height)))
+  if (staging && (staging->format != stage_format || staging->width0 < static_cast<unsigned>(sbox.width) ||
+                  staging->height0 < static_cast<unsigned>(sbox.height)))
     AgxWin32AsahiResourceRelease(&owner->UploadStaging);
   if (!owner->UploadStaging) {
     struct pipe_resource templ = {};
     templ.target = PIPE_TEXTURE_2D;
-    templ.format = texture->format;
-    templ.width0 = static_cast<unsigned>(tbox.width) > 256u ? static_cast<unsigned>(tbox.width) : 256u;
-    templ.height0 = static_cast<uint16_t>(tbox.height > 256 ? tbox.height : 256);
+    templ.format = stage_format;
+    templ.width0 = static_cast<unsigned>(sbox.width) > 256u ? static_cast<unsigned>(sbox.width) : 256u;
+    templ.height0 = static_cast<uint16_t>(sbox.height > 256 ? sbox.height : 256);
     templ.depth0 = 1;
     templ.array_size = 1;
     templ.usage = PIPE_USAGE_STAGING; /* linear: mapped without a staging blit of its own */
@@ -2148,8 +2190,7 @@ static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COP
     if (!owner->UploadStaging) return E_OUTOFMEMORY;
   }
   staging = owner->UploadStaging;
-  struct pipe_box sbox = tbox;
-  sbox.x = sbox.y = sbox.z = 0;
+
   struct pipe_transfer *stransfer = NULL, *btransfer = NULL;
   void *smap = pipe->texture_map(pipe, staging, 0, PIPE_MAP_WRITE, &sbox, &stransfer);
   void *bmap = smap ? pipe->buffer_map(pipe, buffer, 0, PIPE_MAP_READ, &bbox, &btransfer) : NULL;
@@ -2160,7 +2201,8 @@ static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COP
   if (btransfer) pipe->buffer_unmap(pipe, btransfer);
   if (stransfer) pipe->texture_unmap(pipe, stransfer);
   if (SUCCEEDED(hr)) {
-    pipe->resource_copy_region(pipe, texture, copy->Level, tbox.x, tbox.y, tbox.z, staging, 0, &sbox);
+    if (raw != PIPE_FORMAT_NONE) gpu_copy_blocks(pipe, texture, copy->Level, tbox, staging, 0, sbox);
+    else pipe->resource_copy_region(pipe, texture, copy->Level, tbox.x, tbox.y, tbox.z, staging, 0, &sbox);
     ++owner->PendingCopies;
   }
   AgxD3d12OwnerRecordError(owner, hr);
@@ -2181,16 +2223,24 @@ static HRESULT staged_download(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_C
                                struct pipe_resource *buffer, const struct pipe_box &tbox, const struct pipe_box &bbox,
                                unsigned rows, unsigned long long row) {
   struct pipe_context *pipe = owner->Context;
+  const enum pipe_format raw = bc_staging_format(texture->format);
+  const enum pipe_format stage_format = raw == PIPE_FORMAT_NONE ? texture->format : raw;
+  struct pipe_box sbox = tbox;
+  sbox.x = sbox.y = sbox.z = 0;
+  if (raw != PIPE_FORMAT_NONE) {
+    sbox.width = (tbox.width + 3) / 4;
+    sbox.height = (tbox.height + 3) / 4;
+  }
   struct pipe_resource *staging = owner->DownloadStaging;
-  if (staging && (staging->format != texture->format || staging->width0 < static_cast<unsigned>(tbox.width) ||
-                  staging->height0 < static_cast<unsigned>(tbox.height)))
+  if (staging && (staging->format != stage_format || staging->width0 < static_cast<unsigned>(sbox.width) ||
+                  staging->height0 < static_cast<unsigned>(sbox.height)))
     AgxWin32AsahiResourceRelease(&owner->DownloadStaging);
   if (!owner->DownloadStaging) {
     struct pipe_resource templ = {};
     templ.target = PIPE_TEXTURE_2D;
-    templ.format = texture->format;
-    templ.width0 = static_cast<unsigned>(tbox.width) > 256u ? static_cast<unsigned>(tbox.width) : 256u;
-    templ.height0 = static_cast<uint16_t>(tbox.height > 256 ? tbox.height : 256);
+    templ.format = stage_format;
+    templ.width0 = static_cast<unsigned>(sbox.width) > 256u ? static_cast<unsigned>(sbox.width) : 256u;
+    templ.height0 = static_cast<uint16_t>(sbox.height > 256 ? sbox.height : 256);
     templ.depth0 = 1;
     templ.array_size = 1;
     templ.usage = PIPE_USAGE_STAGING; /* linear: mapped without a staging blit of its own */
@@ -2199,9 +2249,9 @@ static HRESULT staged_download(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_C
     if (!owner->DownloadStaging) return E_OUTOFMEMORY;
   }
   staging = owner->DownloadStaging;
-  pipe->resource_copy_region(pipe, staging, 0, 0, 0, 0, texture, copy->Level, &tbox);
-  struct pipe_box sbox = tbox;
-  sbox.x = sbox.y = sbox.z = 0;
+  if (raw != PIPE_FORMAT_NONE) gpu_copy_blocks(pipe, staging, 0, sbox, texture, copy->Level, tbox);
+  else pipe->resource_copy_region(pipe, staging, 0, 0, 0, 0, texture, copy->Level, &tbox);
+
   struct pipe_transfer *stransfer = NULL, *btransfer = NULL;
   void *smap = pipe->texture_map(pipe, staging, 0, PIPE_MAP_READ, &sbox, &stransfer);
   void *bmap = smap ? pipe->buffer_map(pipe, buffer, 0, PIPE_MAP_WRITE, &bbox, &btransfer) : NULL;
@@ -2271,7 +2321,8 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
    * through an Asahi staging resource created per map, a new BO per
    * CopyTextureRegion (the C70 class); 2D ones take the owner's cached
    * stagings like shared allocations do */
-  const bool staged_2d = texture->target == PIPE_TEXTURE_2D &&
+  const bool staged_2d = (texture->target == PIPE_TEXTURE_2D ||
+                          (texture->target == PIPE_TEXTURE_2D_ARRAY && bc_staging_format(texture->format) != PIPE_FORMAT_NONE)) &&
                          ((texture->bind & PIPE_BIND_SHARED) || (texture->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE));
   if (!copy->ToBuffer && copy->Depth == 1 && (compressed_texture(owner, texture) || staged_2d))
     return staged_upload(owner, copy, texture, buffer, tbox, bbox, rows, row);

@@ -247,6 +247,7 @@ int main() {
                     'static unsigned level_extent(unsigned extent, unsigned level) {',
                     'static unsigned texture_block(',
                     'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {',
+                    'static enum pipe_format bc_staging_format(', 'static void gpu_copy_blocks(',
                     'static HRESULT staged_upload(', 'static HRESULT staged_download(',
                     'extern "C" HRESULT AgxD3d12OwnerCopyTexture(']
         funcs='\n'.join(block(owner, signature) for signature in signatures)

@@ -374,6 +374,36 @@ def project_gpu_only_resources(pipe):
     implementation. Never propagate UNMAPPABLE into the staging resource.
     """
     changes = (
+        ('   switch (format) {\n   case PIPE_FORMAT_Z16_UNORM:', """   if (util_format_is_compressed(format)) {
+      unsigned bytes = util_format_get_blocksize(format);
+      assert(bytes == 8 || bytes == 16);
+      return bytes == 8 ? PIPE_FORMAT_R32G32_UINT : PIPE_FORMAT_R32G32B32A32_UINT;
+   }
+   switch (format) {
+   case PIPE_FORMAT_Z16_UNORM:"""),
+        ('   tmpl.format = agx_staging_format(rsc->layout.format);', """   tmpl.format = agx_staging_format(rsc->layout.format);
+   if (util_format_is_compressed(rsc->layout.format)) {
+      tmpl.width0 = util_format_get_nblocksx(rsc->layout.format, box->width);
+      tmpl.height0 = util_format_get_nblocksy(rsc->layout.format, box->height);
+   }"""),
+        ('   blit.src.box = trans->staging.box;\n   blit.mask', """   blit.src.box = trans->staging.box;
+   if (util_format_is_compressed(dst->format)) {
+      unsigned bw = util_format_get_blockwidth(dst->format);
+      unsigned bh = util_format_get_blockheight(dst->format);
+      blit.dst.box.x /= bw; blit.dst.box.y /= bh;
+      blit.src.box.width = blit.dst.box.width = DIV_ROUND_UP(blit.dst.box.width, bw);
+      blit.src.box.height = blit.dst.box.height = DIV_ROUND_UP(blit.dst.box.height, bh);
+   }
+   blit.mask"""),
+        ('   blit.dst.box = trans->staging.box;\n   blit.mask', """   blit.dst.box = trans->staging.box;
+   if (util_format_is_compressed(src->format)) {
+      unsigned bw = util_format_get_blockwidth(src->format);
+      unsigned bh = util_format_get_blockheight(src->format);
+      blit.src.box.x /= bw; blit.src.box.y /= bh;
+      blit.src.box.width = blit.dst.box.width = DIV_ROUND_UP(blit.src.box.width, bw);
+      blit.src.box.height = blit.dst.box.height = DIV_ROUND_UP(blit.src.box.height, bh);
+   }
+   blit.mask"""),
         ('   uint32_t create_flags = 0;', '''   uint32_t create_flags = 0;
    if (templ->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE)
       create_flags |= AGX_WIN32_BO_GPU_ONLY;'''),
@@ -425,6 +455,78 @@ def project_gpu_only_resources(pipe):
             raise ValueError('Ambiguous GPU-only resource anchor: ' + old)
         pipe = pipe.replace(old, new, 1)
     return pipe
+
+def project_bc_block_views(state, blit):
+    """T11b: raw BC block views on the existing compute blitter.
+
+    Follow the single-level/layer view contract in Honeykrisp hk_image_view.c.
+    All edits apply to notice-bearing pinned source; no upstream body is copied.
+    """
+    def once(text, old, new):
+        if text.count(old) != 1:
+            raise ValueError('Ambiguous BC block-view anchor: ' + old)
+        return text.replace(old, new, 1)
+    state = once(state, '      cfg.srgb = (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB);', """      /* A BC block viewed as UINT is one uncompressed texel. Rebase
+       * each mip/layer: dividing base dimensions misaddresses mip tails. */
+      if (util_format_is_compressed(rsrc->base.format) &&
+          !util_format_is_compressed(format)) {
+         unsigned level = state->u.tex.first_level;
+         assert(level == state->u.tex.last_level);
+         assert(first_layer == state->u.tex.last_layer);
+         cfg.width = util_format_get_nblocksx(rsrc->base.format, u_minify(rsrc->base.width0, level));
+         cfg.height = util_format_get_nblocksy(rsrc->base.format, u_minify(rsrc->base.height0, level));
+         cfg.first_level = 0;
+         cfg.last_level = 1;
+      }
+      cfg.srgb = (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB);""")
+    state = once(state, '      cfg.address = agx_map_texture_gpu(rsrc, first_layer);', """      cfg.address = agx_map_texture_gpu(rsrc, first_layer);
+      if (util_format_is_compressed(rsrc->base.format) && !util_format_is_compressed(format))
+         cfg.address += ail_get_level_offset_B(&rsrc->layout, state->u.tex.first_level);""")
+    state = once(state, '         cfg.level = level;\n\n         unsigned layers', """         cfg.level = level;
+         if (util_format_is_compressed(tex->base.format) && !util_format_is_compressed(view->format)) {
+            assert(layer == view->u.tex.last_layer);
+            cfg.buffer += ail_get_level_offset_B(&tex->layout, level);
+            cfg.width = util_format_get_nblocksx(tex->base.format, u_minify(tex->base.width0, level));
+            cfg.height = util_format_get_nblocksy(tex->base.format, u_minify(tex->base.height0, level));
+            cfg.level = 0;
+         }
+
+         unsigned layers""")
+    # Compute uses normalized sampler coordinates and clamps the dispatch to
+    # the destination. Both must use blocks, matching the raw descriptors.
+    blit = once(blit, '   float src_width = (float)u_minify(src->width0, info->src.level);\n   float src_height = (float)u_minify(src->height0, info->src.level);', """   bool src_blocks = util_format_is_compressed(src->format) && !util_format_is_compressed(info->src.format);
+   bool dst_blocks = util_format_is_compressed(dst->format) && !util_format_is_compressed(info->dst.format);
+   unsigned src_width_px = u_minify(src->width0, info->src.level);
+   unsigned src_height_px = u_minify(src->height0, info->src.level);
+   unsigned dst_width = u_minify(dst->width0, info->dst.level);
+   unsigned dst_height = u_minify(dst->height0, info->dst.level);
+   float src_width = src_blocks ? util_format_get_nblocksx(src->format, src_width_px) : src_width_px;
+   float src_height = src_blocks ? util_format_get_nblocksy(src->format, src_height_px) : src_height_px;
+   if (dst_blocks) {
+      dst_width = util_format_get_nblocksx(dst->format, dst_width);
+      dst_height = util_format_get_nblocksy(dst->format, dst_height);
+   }""")
+    blit = once(blit, 'MIN2(expanded_x1, u_minify(info->dst.resource->width0, info->dst.level))', 'MIN2(expanded_x1, dst_width)')
+    blit = once(blit, 'MIN2(expanded_y1, u_minify(info->dst.resource->height0, info->dst.level))', 'MIN2(expanded_y1, dst_height)')
+    # Keep all hazard/resource references in Asahi. Split arrays before creating
+    # raw views, so they never derive a layer stride from reduced dimensions.
+    blit = once(blit, '   /* Legalize compression /before/ calling into u_blitter', """   if ((util_format_is_compressed(info->src.resource->format) && !util_format_is_compressed(info->src.format)) ||
+       (util_format_is_compressed(info->dst.resource->format) && !util_format_is_compressed(info->dst.format))) {
+      assert(info->src.box.depth == info->dst.box.depth);
+      assert(asahi_compute_blit_supported(info));
+      if (info->src.box.depth > 1) {
+         for (int z = 0; z < info->src.box.depth; ++z) {
+            struct pipe_blit_info layer = *info;
+            layer.src.box.z += z; layer.dst.box.z += z;
+            layer.src.box.depth = layer.dst.box.depth = 1;
+            agx_blit(pipe, &layer);
+         }
+         return;
+      }
+   }
+
+   /* Legalize compression /before/ calling into u_blitter""")
+    return state, blit
 
 def project_resource_layout(pipe):
     """Share the pinned native pre-BO prefix with an original no-BO query.
@@ -6461,6 +6563,10 @@ agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image_view
    agx_batch_upload_pbe(NULL, pbe, (struct pipe_image_view *)view, false, false, false, false);
 }
 '''+pack_anchor)
+        blit_target = out/'src/gallium/drivers/asahi/agx_blit.c'
+        state_text, blit_text = project_bc_block_views(state_text, blit_target.read_text())
+        blit_target.write_text(blit_text)
+        overlays.setdefault('src/gallium/drivers/asahi/agx_blit.c', {})['after_bc_block_views'] = hashlib.sha256(blit_text.encode()).hexdigest()
         state_target.write_text(state_text)
         overlays['src/gallium/drivers/asahi/agx_state.c']['after_state_capture']=hashlib.sha256(state_target.read_bytes()).hexdigest()
         # EXP844/845: StartMenuExperienceHost and Explorer faulted in

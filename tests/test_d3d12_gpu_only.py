@@ -80,7 +80,7 @@ int main(void) {assert(flags_for(0)==256);assert(flags_for(1)==0);assert(flags_f
 '''.replace('@@BODY@@',owner[start:end]))
 
     def test_committed_2d_intent_and_staging_eligibility(self):
-        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? T7h excluded the Z32F DEFAULT texture implicated by EXP1918U5. Single-plane depth must opt in via its color staging format; combined/stencil, CPU-accessible, placed, BC, MSAA and unsupported staging formats retain their backing."""
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? T7h excluded the Z32F DEFAULT texture implicated by EXP1918U5. Single-plane depth must opt in via its color staging format; combined/stencil, CPU-accessible, placed, MSAA and unsupported staging formats retain their backing."""
         ddi=(DRIVER/'d3d12/agx_d3d12_ddi.cpp').read_text()
         a=ddi.index('    const bool placed = !heap_arg')
         a=ddi.index('        const UINT bind =',a);b=ddi.index('        /* C7b:',a)
@@ -106,6 +106,7 @@ enum pipe_format { PIPE_FORMAT_NONE=100, PIPE_FORMAT_Z16_UNORM,
  PIPE_FORMAT_Z32_FLOAT, PIPE_FORMAT_R16_UNORM, PIPE_FORMAT_R32_FLOAT,
  PIPE_FORMAT_Z24_UNORM_S8_UINT, PIPE_FORMAT_Z32_FLOAT_S8X24_UINT,
  PIPE_FORMAT_S8_UINT, PIPE_FORMAT_Z24X8_UNORM };
+static enum pipe_format bc_staging_format(unsigned f) {return (enum pipe_format)(f==7?7:8);}
 static unsigned unsupported=9;
 static int supports(void *s,unsigned f,unsigned t,unsigned n,unsigned m,unsigned bind) {
  (void)s;(void)t;assert(n==1 && m==1 && bind==3);
@@ -126,7 +127,10 @@ int main(void) {
  assert(placement(1,1,0,1,1,1,0)==256);
  assert(placement(1,2,0,1,1,1,0)==256); /* sampled color can still be staged */
  assert(!placement(2,1,0,1,1,1,0));assert(!placement(1,1,1,1,1,1,0));
- assert(!placement(1,2,0,4,4,1,0));assert(!placement(1,4,0,1,1,1,0));
+ assert(placement(1,2,0,4,4,1,0)==256);
+ assert(placement(1,2,0,4,4,1,7)==256);
+ assert(!placement(1,2,1,4,4,1,0));assert(!placement(2,2,0,4,4,1,0));
+ assert(!placement(1,2,0,4,4,4,0));assert(!placement(1,4,0,1,1,1,0));
  assert(!placement(1,1,0,1,1,4,0));assert(!placement(1,2,0,1,1,1,9));
  const unsigned depth[]={PIPE_FORMAT_Z16_UNORM,PIPE_FORMAT_Z32_FLOAT};
  const unsigned staging[]={PIPE_FORMAT_R16_UNORM,PIPE_FORMAT_R32_FLOAT};
