@@ -63152,3 +63152,119 @@ EXP1936 HARDWARE BEFORE 2026-10-24T10:41:40Z:
 - Hashes: sys 532ff8c68340, UmdArm64 89e108710dc9, UmdX64 271bb83c6265, Umd32 bd35aca39ffc; manifest 0ad1ed21059c, hardware-manifest 15045acdd3d2; probe1936.sh d9f34cdff46e (PROBE_LINT_OK); visible recovery rec1936h 23994126fbe33f29; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1936h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1936-paging-history/run1936.sh.
+
+EXP1936 ACTUAL 2026-10-24T11:09:00Z (Codex draft, exp1936 REPORT.md):
+
+EXP1936 ACTUAL — offline reconstruction of the saved 2026-10-24 experiment,
+ready for Claude to append to EXPERIMENTS.md. No hardware, guest, builder,
+package build/install, recovery or other-worktree operation was performed here.
+
+Paths: **E** = `/Volumes/pwdev/public_windows/.local/experiments/EXP1936-paging-history`;
+**R** = `E/evidence/EXP1936`; **K** =
+`E/evidence/rec1936h/kmd-receipts-pre-disable.txt`; **S** =
+`/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`.
+The probe-end and pre-disable receipt files are byte-identical.
+
+**Candidate:** package 30.0.1936.0, source
+`c650062dd99ac223f7e847a30adb408db352996d`, source archive SHA256
+`f41ceade89613cee526b0392b011f03d12cb1c1e48aa75d826d63f89c0cf5cb7`
+(`E/source-manifest.json:4415`). BEFORE is
+`investigation/EXPERIMENTS.md:63124`: receipt-only fault paging-history v2,
+m1n1 0d3a75b3, Wom1GpuFaultInfoRead=1 and Wom1PoolHalfSize=1 (K:1–2).
+SYS SHA256 `532ff8c683401a688f214260efe56d118c73ac65e7262e19c570c60bbc1e917e`
+(`visible-disable-output.txt:13`).
+
+- **Stage/boot:** `E/stage-ssh.log:2` records staging at
+  10:41:10.2856398Z, oem5.inf, Code28, arm1, eight CPUs and RegistryFlush PASS.
+  Its Boot is the preceding recovery boot. `R/restart-ssh.log:2` records
+  ordered restart at 10:41:44.2916984Z. `R/state-start.txt:1` shows Code0,
+  DWM1236, Explorer3784, uptime51s. `E/full-crash.log:1797` onward records
+  secondary CPU startup; dump header has eight processors. Exact first-SSH
+  latency and continuous CPU/timer/IRQ liveness under load are not established.
+- **10K workload:** `S/gm-d3d12a-1936.ps1:2` requests D3D12, 10000 asteroids,
+  windowed, 90s timeout. `S/newexp1936.log:7` says
+  `GUEST_DOWN_DURING_GRAVITYMARK 14`. This is poll14, not a 14-second removal:
+  `E/probe1936.sh:19` includes 5s sleeps, bounded SSH and retries. All local
+  gm1936a stdout/stderr/done/UMD/times/image files are absent. Exact application
+  failure time, benchmark completion, score and image correctness are unknown.
+- **2K attempt:** `S/newexp1936.log:14` reports failed reachability poll4.
+  All gm1936b result files are also absent. The later alive gates prove only
+  transient SSH responsiveness, not the original boot/device identity. Recovery
+  overlaps collection: `R/state-end.txt:1` has Code32, DWM1236, Explorer4248,
+  uptime40s. Neither attempt supplies a successful GPU result; RUN_DONE and
+  PIPELINE_RC0 are wrapper completion, not a benchmark verdict.
+- **Initial GPU event (K:189):** one event/one valid fault/one resume, timeout,
+  fence **0x14beb**, PID **10064**, context **0xffff8d0d2aef9170**, 42ms from
+  submission, HaltCount1. Raw **0x1112680021822211** decodes to **unmapped
+  read**, level0, UL1C(1), VM1, sideband67, VA **0x1112680000**. First,
+  FirstValid and Last are the same event. Missing app logs mean PID10064's
+  executable is not independently authenticated by the supplied artifacts.
+- **Fault mapping/history (K:190–191):** first/latest identical v2/912bytes,
+  captured, matching fence/context/VM, graph process **0x13**, root
+  **0x9deb80000**, process generation1, mapping generation **0xc271a**, lease
+  **0xc93**, table **0x9defb8000**, JobInFlight1, Uncertain0, CpuOnly0,
+  NativePresent0. All four logical entries are entirely zero. HistoryNext19654,
+  Scanned8192, Matches15, Count8: **history is truncated**. Relevant records:
+
+  | Sequence | QPC | Table | VA/range | Flags / result |
+  |---|---:|---|---|---|
+  | 15715 | 3059533697 | 0x9deff0000 | 0x1112680000, 16×4KiB | Repeat, valid0, success; exact fault-range invalidation request |
+  | 18451 | 3242686014 | 0x9deff0000 | 0x1112000000, 8192×4KiB | Repeat+NotifyEviction, valid0, success; former VA table eviction |
+  | 19246 | 3325006050 | 0x9defb8000 | 0x1112000000, 7088×4KiB | Repeat+InitialUpdate, valid0, success; current table initialization covering fault VA |
+
+  Sequence16681 is a whole-table reset of the current table; 16682 and15775
+  refer to its earlier use at0x1182000000, and13980's allocation token
+  **0xffff8d0d2aa28110** belongs to that earlier VA. Those are table/index-only
+  matches, **not ownership evidence for0x1112680000**. No retained matching
+  valid publication follows19246. An invalidation request alone does not prove
+  what, if anything, was mapped there before it. This snapshot is CPU graph
+  metadata, not a hardware PTE/TLB read.
+- **Later reset failure (K:188,193):** recovery of0x14beb at42ms, then deadline
+  expiry on a different fence, **0x14c11**, longest job3061ms. Three resets,
+  zero successes: engine at146504ms/147541ms, adapter at148542ms, all quiesce
+  timeout **0xc0000483**, waits1000/1000/1001ms. Active/last0x14c11,
+  completed0x14c10, context0xffff8d0d259ef800. First reset job age3060ms,
+  poll age1ms; last poll age2039ms. Worker scheduled/active0, Halted0.
+  Scheduler tag1/line547 first appears after the initial reset failed;
+  it is not the original unmapped-read cause.
+- **Crash:** `E/evidence/dump/102426-15015-01.dmp`, decoded offline by
+  `tools/windows_dump_header.py`, confirms ARM64/eight processors,
+  **VIDEO_TDR_FAILURE0x116**, parameters
+  **0xffff8d0d32a83010,0xfffff80241f9a6e0,0xffffffffc0000483,3**.
+  SHA256 `9646aa871cf82738c67d045cb6cbc9350914e274a714d2561f7b8078c4e0b9cc`.
+  No cdb text/stack is supplied, so P2 is not independently attributed.
+  `E/full-crash.log:3585` records PSCI reset with ELR0xfffff80245035138,
+  x30 0xfffff80244e97e04, SP0xffffd98c8df16010, SPSR0x600000c4,
+  x0 0x84000009. The logged NVMe reset is not a different bugcheck verdict.
+- **Other receipts:** six `reject-native-allocation` rows in
+  `R/umd.log:11830,13236,13354,14187,14212,14233`, all LeafAbsent3,
+  PIDs1236/9032/3784, none10064. Global totals12 batch/130 C++ throws/
+  6 native-allocation/4 SetError (`S/newexp1936.log:39` onward).
+  K:187 has G4 submit refusal branch9/Parse, downstream3/Unmapped,
+  DMA0x1101ad0000, failing VA0x1102fa0000; it is not the MMU fault VA.
+  `agx_gm_alloc_join.py` finds zero heap/CPU-access records, so its missing
+  joins cannot identify or classify the fault BO. K:118 has168 omission
+  events/2407 groups. K:161 poolv8: segment/held1344MiB,
+  committed1329.6875MiB, peak1333.5625MiB, reserved2812.875MiB,
+  peak reserved2880MiB; moves165/kills1679/unplaces120; reserve/commit/
+  new-slab/release failures, floor refusals, busy retries, ref underflows0.
+  Collection-time totals do not prove the workload's memory pressure is fixed.
+- **Recovery:** `visible-disable-output.txt:3` records durable disable of
+  exact oem5.inf at10:47:13.9176040Z, prior Code43, both arms absent, Start4,
+  after boot10:46:15.5409500Z. `cleanup-visible-output.txt:2` records exact
+  removal at10:49:07.0227805Z, staged0/SYS absent/UMD absent. Durable
+  `visible-preflight.txt:1` PASS after boot10:50:10.2559940Z, PackageAbsent;
+  `visible-inert-gate.txt:1` is VISIBLE_INERT_PACKAGE_ABSENT_8CPU. Saved SSH
+  collection/storage and final inert/eight-CPU state are established. Physical
+  USB input, RDP, uninterrupted display and all-CPU health during the failure
+  were not independently tested; synthetic mouse1910 moves and scanout0 do
+  not establish a rendered benchmark image.
+
+**BEFORE verdict: CONFIRMED for the diagnostic hypothesis** — the authenticated
+fault snapshot retained successful invalidation/eviction/initialization history
+covering the fault VA. **INCONCLUSIVE for the allocation/lifetime root cause**:
+no owner is identified for the fault VA, history is truncated, and app evidence
+is missing. The workload still faulted and bugchecked; no stability/performance
+claim is supported. An incorrect hardware publication of currently valid logical
+PTEs is less likely at this boundary because the logical entries are also zero.
+
