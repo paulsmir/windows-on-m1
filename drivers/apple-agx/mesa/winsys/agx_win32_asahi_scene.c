@@ -4,6 +4,7 @@
 #include "util/format/u_format.h"
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
+#include "agx_win32_asahi_batch.h"
 #include "agx_win32_asahi_bo.h"
 #ifdef APPLE_AGX_GPUVA_WINSYS
 #include "agx_win32_sparse.h"
@@ -440,6 +441,20 @@ int AgxWin32AsahiSamplerDescriptor(void *cso, void *out, APPLE_AGX_U16 *bias, in
   *custom_border=so->uses_custom_border;
   return 1;
 }
+/* EXP1927: a residency failure can occur while acquiring a batch (or
+ * flushing a hazard in a prior heap chunk). Never initialize its encoder or
+ * grow its sampler heap after that failure. Kind 4 names this scene bridge. */
+static struct agx_batch *heap_batch(struct agx_context *ctx, int compute) {
+  if(ctx->any_faults) return NULL;
+  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  if(ctx->any_faults) return NULL;
+  if(!batch || !(compute ? batch->cdm.bo && batch->cdm.current :
+                           batch->vdm.bo && batch->vdm.current)) {
+    AgxWin32AsahiMarkContextFault(ctx,(4u<<16)|__LINE__);
+    return NULL;
+  }
+  return batch;
+}
 /* D3D12 C47: heap samplers enter the sampler heap of the batch the next draw
  * (dispatch) uses, deduplicated; handles are 28 + heap index (agx_uniforms.c).
  * A batch whose heap cannot take them all is flushed first. */
@@ -449,10 +464,12 @@ int AgxWin32AsahiBatchSamplerHandles(struct pipe_context *pctx, int compute, con
   if(!packed || !handles || count>AGX_SAMPLER_HEAP_SIZE) return 0;
   struct agx_context *ctx=agx_context(pctx);
   struct agx_device *dev=agx_device(pctx->screen);
-  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  struct agx_batch *batch=heap_batch(ctx,compute);
+  if(!batch) return 0;
   if(batch->sampler_heap.count+count>AGX_SAMPLER_HEAP_SIZE) {
     agx_flush_batch_for_reason(ctx,batch,"D3D12 heap samplers");
-    batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+    batch=heap_batch(ctx,compute);
+    if(!batch) return 0;
   }
   for(unsigned i=0;i<count;++i) {
     const struct agx_sampler_packed *sampler=(const struct agx_sampler_packed *)((const char *)packed+(size_t)i*stride);
@@ -475,12 +492,13 @@ void AgxWin32AsahiBatchReadResources(struct pipe_context *pctx, struct pipe_reso
     unsigned count, int compute) {
   if(!pctx || !resources || !count) return;
   struct agx_context *ctx=agx_context(pctx);
-  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  struct agx_batch *batch=heap_batch(ctx,compute);
+  if(!batch) return;
   /* EXP1855: Asahi tracks a batch's resources only after its state is
    * initialised (agx_batch_writes_internal asserts batch->initialized; the
    * draw/launch paths call agx_batch_init_state first). It is idempotent. */
   agx_batch_init_state(batch);
-  for(unsigned i=0;i<count;++i)
+  for(unsigned i=0;i<count && !ctx->any_faults;++i)
     if(resources[i] && resources[i]->screen==pctx->screen) agx_batch_reads(batch,agx_resource(resources[i]));
 }
 /* D3D12 C47: resources a descriptor heap lets the draw (dispatch) write --
@@ -490,15 +508,16 @@ void AgxWin32AsahiBatchWriteResources(struct pipe_context *pctx, struct pipe_res
     unsigned count, int compute) {
   if(!pctx || !resources || !count) return;
   struct agx_context *ctx=agx_context(pctx);
-  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  struct agx_batch *batch=heap_batch(ctx,compute);
+  if(!batch) return;
   agx_batch_init_state(batch); /* as AgxWin32AsahiBatchReadResources */
-  for(unsigned i=0;i<count;++i) {
+  for(unsigned i=0;i<count && !ctx->any_faults;++i) {
     if(!resources[i] || resources[i]->screen!=pctx->screen) continue;
     struct agx_resource *rsrc=agx_resource(resources[i]);
     if(resources[i]->target==PIPE_BUFFER)
       agx_batch_writes_range(batch,rsrc,0,resources[i]->width0);
     else
-      for(unsigned level=0;level<=resources[i]->last_level;++level) agx_batch_writes(batch,rsrc,level);
+      for(unsigned level=0;level<=resources[i]->last_level && !ctx->any_faults;++level) agx_batch_writes(batch,rsrc,level);
     batch->incoherent_writes=true;
   }
 }

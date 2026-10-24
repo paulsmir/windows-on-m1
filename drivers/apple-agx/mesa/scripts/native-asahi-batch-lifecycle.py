@@ -177,6 +177,22 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
    agx_batch_cleanup(ctx, batch, false);''')
     s=replace(s,'   /* Batch is now free */','   if (agx_batch_is_submitted(batch) || agx_batch_is_active(batch)) return NULL;\n\n   /* Batch is now free */')
     s=replace(s,'   assert(util_framebuffer_state_equal(&ctx->framebuffer, &ctx->batch->key));','   if (!ctx->batch) return NULL;\n   assert(util_framebuffer_state_equal(&ctx->framebuffer, &ctx->batch->key));')
+    # EXP1927: Windows can refuse an encoder/batch after MakeResident OOM.
+    # Do not publish that batch to callers which immediately encode CDM state.
+    # Keep ctx->batch/active ownership intact for the normal abort/cleanup path.
+    s=body(s,'agx_get_compute_batch','''   if (ctx->any_faults)
+      return NULL;
+
+   agx_dirty_all(ctx);
+   struct pipe_framebuffer_state key = {.width = AGX_COMPUTE_BATCH_WIDTH};
+   ctx->batch = agx_get_batch_for_framebuffer(ctx, &key);
+   if (ctx->any_faults)
+      return NULL;
+   if (!ctx->batch || !ctx->batch->cdm.bo || !ctx->batch->cdm.current) {
+      ctx->any_faults = true;
+      return NULL;
+   }
+   return ctx->batch;''')
     save(bp,s)
     qp='src/gallium/drivers/asahi/agx_query.c';query=(out/qp).read_text()
     a,b=function(query,'agx_end_query');part=query[a:b]
@@ -817,6 +833,27 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
     blit=replace(blit,'   if (asahi_compute_blit_supported(info)) {','''   if (!agx_device(pipe->screen)->windows_private &&
        asahi_compute_blit_supported(info)) {''')
     save(blit_path,blit)
+    # Every compute-acquisition consumer must honor the fallible getter.
+    # Apply after the lifecycle projections so these cover the shipped bodies.
+    for path, expected, failure in (
+            ('agx_blit.c', 1, 'return;'),
+            ('agx_pipe.c', 2, 'return;'),
+            ('agx_query.c', 1, 'return false;'),
+            ('agx_state.c', 1, 'return;')):
+        path = 'src/gallium/drivers/asahi/' + path
+        text = (out/path).read_text()
+        text, count = re.subn(
+            r'(?m)^( +)(struct agx_batch \*batch = agx_get_compute_batch\([^;]+;)',
+            lambda m: m[0] + '\n' + m[1] + 'if (!batch)\n' + m[1] + '   ' + failure,
+            text)
+        if count != expected:
+            raise RuntimeError('Compute batch consumer count changed: ' + path)
+        if path.endswith('agx_query.c'):
+            # A failed GPU query is not permission to map/read after device loss.
+            text=replace(text,'''      /* Else, fallback to CPU */''','''      if (ctx->any_faults)
+         return;
+      /* Else, fallback to CPU */''')
+        save(path,text)
     project_d3d_robustness(out,save)
 
 
