@@ -99,7 +99,7 @@ typedef struct _ADMISSION_GPU_FAULT_MAPPING {
  * (EXP1303: LONGJOB jobs completed seconds late with four resets, and one
  * receipt could not tell a worker that stopped polling from a job still
  * running on the firmware). */
-#define ADMISSION_GPU_RESET_RECEIPT_VERSION 3u
+#define ADMISSION_GPU_RESET_RECEIPT_VERSION 4u
 #define ADMISSION_GPU_RESET_HISTORY 8u
 #define ADMISSION_GPU_RESET_ENGINE 1u   /* DxgkDdiResetEngine */
 #define ADMISSION_GPU_RESET_ADAPTER 2u  /* DxgkDdiResetFromTimeout */
@@ -138,6 +138,21 @@ typedef struct _ADMISSION_GPU_RESET_ENTRY {
   unsigned int FirmwareRecoveries;
 } ADMISSION_GPU_RESET_ENTRY;
 
+/* v4: read-only samples after the reset owns the idle worker, before/after
+ * its bounded poll. QueueMask bits 0/1/2 are TA/3D/compute. ReadMask bits
+ * 0/1/2 mean Stamp/Done/Write was read successfully; zero is NOT a value.
+ * Flags bits 0/1 retain EventSeen/Complete. These are sequential observations
+ * of firmware-shared words, not an atomic GPU snapshot or proof of quiescence. */
+typedef struct _ADMISSION_GPU_RECOVERY_QUEUE {
+  unsigned int EventNumber, Flags, ReadMask;
+  unsigned int Stamp, ExpectedStamp, Done, Write, ExpectedDone, Capacity;
+} ADMISSION_GPU_RECOVERY_QUEUE;
+
+typedef struct _ADMISSION_GPU_RECOVERY_SNAPSHOT {
+  unsigned int Captured, Fence, Phase, RecoveryPending, QueueMask;
+  ADMISSION_GPU_RECOVERY_QUEUE Queues[3];
+} ADMISSION_GPU_RECOVERY_SNAPSHOT;
+
 typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned int Version, Bytes;
   unsigned int Resets, Succeeded;
@@ -167,6 +182,9 @@ typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned int Stage;
   unsigned int HistoryStage[ADMISSION_GPU_RESET_HISTORY];
   unsigned int ReservedV3;
+  /* v4 follows the complete 536-byte v3 prefix. Latest reset only; samples
+   * are cleared even when this attempt never acquires the runtime. */
+  ADMISSION_GPU_RECOVERY_SNAPSHOT RetirementBefore, RetirementAfter;
 } ADMISSION_GPU_RESET_RECEIPT;
 
 /* TDR drill (DxgkDdiEscape payload): the KMD strands the next Jobs render

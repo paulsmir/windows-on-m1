@@ -692,6 +692,8 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
   receipt->WaitMs = 0u;
   receipt->Stage = AdmissionGpuResetStageNone;
   receipt->ReservedV3 = 0u;
+  RtlZeroMemory(&receipt->RetirementBefore, sizeof(receipt->RetirementBefore));
+  RtlZeroMemory(&receipt->RetirementAfter, sizeof(receipt->RetirementAfter));
   receipt->EntryMs = receipt->JobAgeMs = 0u;
   receipt->PollAgeMs = MAXULONG;
   AdmissionPlatformRuntimeResetState(context, receipt);

@@ -126,7 +126,7 @@ class Wom1GpuFaultReceipt(unittest.TestCase):
                                    capture_output=True, text=True).stdout.split()
             self.assertEqual([int(v) for v in sizes],
                              [DECODER.EVENT.size, DECODER.FAULT_HEADER.size + 3 * DECODER.EVENT.size,
-                              DECODER.FAULT_HEADER.size, 536])
+                              DECODER.FAULT_HEADER.size, 792])
             fault = DECODER.decode_fault((tmp / 'Wom1GpuFault.bin').read_bytes())
             reset = DECODER.decode_reset((tmp / 'Wom1GpuReset.bin').read_bytes())
 

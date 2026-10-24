@@ -119,6 +119,7 @@ SHIM = r'''
 #include "render_paging.h"
 #include "render_present.h"
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g13_queue_runtime.h"
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define _Use_decl_annotations_
 #define _ReturnAddress() ((void *)0)
@@ -196,8 +197,7 @@ typedef struct {
   ULONG Fence;
   ADMISSION_RENDER_CONTEXT *Context;
 } ADMISSION_G4_PENDING;
-typedef struct { int Provider; } APPLE_AGX_PLATFORM_PROVIDER;
-typedef struct { int Phase; } APPLE_AGX_BACKEND_RUNTIME;
+typedef struct { int Provider; struct { APPLE_AGX_G13_QUEUE_RUNTIME Runtime; } QueueProvider; } APPLE_AGX_PLATFORM_PROVIDER;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_CONTEXT *Adapter;
@@ -241,6 +241,17 @@ static ULONGLONG now_ms;
 static ADMISSION_CONTEXT *model_adapter;
 static ADMISSION_PLATFORM_RUNTIME *model_runtime;
 static ADMISSION_G3_PRIVATE_SCENE *model_active_scene;
+static unsigned captures;
+#define AdmissionGpuRecoverySnapshot CaptureRaw
+#include "render_gpu_recovery_snapshot.h"
+#undef AdmissionGpuRecoverySnapshot
+static void AdmissionGpuRecoverySnapshot(const APPLE_AGX_G13_QUEUE_RUNTIME *r,
+    ADMISSION_GPU_RECOVERY_SNAPSHOT *s) {
+  assert(model_runtime->Resetting && model_runtime->WorkIdle.Signaled);
+  assert(!lock_depth);
+  ++captures;
+  CaptureRaw(r, s);
+}
 
 static LONG InterlockedCompareExchange(volatile LONG *p, LONG v, LONG e) {
   LONG o = *p; if (o == e) *p = v; return o; }
@@ -410,6 +421,7 @@ static void setup(int worker, int queued) {
   memset(&owner, 0, sizeof(owner)); memset(&other, 0, sizeof(other));
   memset(&cancelled, 0, sizeof(cancelled)); memset(&process, 0, sizeof(process));
   rtkit_stops = polls = drop_at_poll = fail_poll = worker_completes = 0;
+  captures = 0;
   published = recorded = 0; memset(&last_recorded, 0, sizeof(last_recorded));
   private_resets = scene_quarantined = paused = reactivate_after_quiesce = 0;
   scene_queued = scene_started = 1; now_ms = 1000u;
@@ -498,6 +510,8 @@ int main(void) {
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
   expect_aborted(&reset); assert(polls == 3);
+  assert(captures == 2u && last_recorded.RetirementBefore.Captured &&
+         last_recorded.RetirementAfter.Captured);
   /* Wom1GpuReset names the setter of SchedulerFaulted and the end of the job. */
   assert(recorded == 1 && published == 1);
   assert(last_recorded.Version == ADMISSION_GPU_RESET_RECEIPT_VERSION &&
@@ -515,7 +529,7 @@ int main(void) {
          last_recorded.BackendPhase == AppleAgxBackendRuntimeSubmitted &&
          last_recorded.FirmwareRecoveries == 1u);
   /* Version 2: the timed history entry mirrors the attempt. */
-  assert(last_recorded.Version == 3u && last_recorded.HistoryCount == 1u &&
+  assert(last_recorded.Version == 4u && last_recorded.HistoryCount == 1u &&
          last_recorded.EntryMs == 1000u && last_recorded.JobAgeMs == 2100u &&
          last_recorded.PollAgeMs == 7u);
   assert(last_recorded.History[0].EntryMs == 1000u &&
@@ -609,10 +623,14 @@ int main(void) {
   /* 6. A worker that never leaves: no exclusive poll ownership, no success. */
   setup(1, 0); runtime.Resetting = 0;
   worker_busy = 0; runtime.WorkIdle.Signaled = 0; /* stuck worker */
+  memset(&adapter.GpuReset.RetirementBefore, 0xff, sizeof(adapter.GpuReset.RetirementBefore));
+  memset(&adapter.GpuReset.RetirementAfter, 0xff, sizeof(adapter.GpuReset.RetirementAfter));
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
   assert(polls == 0 && adapter.Scheduler.ActiveFence == 0xce71cu && runtime.Resetting == 0);
   assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceWorker && published == 0);
+  assert(captures == 0u && !last_recorded.RetirementBefore.Captured &&
+         !last_recorded.RetirementAfter.Captured);
 
   /* 7. Nothing active (a queued render): unchanged engine reset. */
   setup(0, 0); drop_at_poll = 1;

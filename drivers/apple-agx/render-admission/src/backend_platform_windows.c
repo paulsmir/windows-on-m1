@@ -1,5 +1,6 @@
 #include "render_admission.h"
 #include "render_job_timing.h"
+#include "render_gpu_recovery_snapshot.h"
 
 /* Fault diagnostics: first nonzero transition stores file tag 4 and
  * source line. Consumers retain zero/nonzero semantics; reset clears it. */
@@ -5126,6 +5127,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
     status = STATUS_DEVICE_BUSY;
     goto Exit;
   }
+  if (Receipt != NULL)
+    AdmissionGpuRecoverySnapshot(&runtime->Provider.QueueProvider.Runtime,
+                                 &Receipt->RetirementBefore);
   for (;;) {
     APPLE_AGX_BACKEND_U32 drained = 0u;
     APPLE_AGX_BACKEND_U32 completed = 0u;
@@ -5182,8 +5186,12 @@ Exit:
   }
   /* Recoveries this thread ran are published like the worker's; a worker
    * that did not leave still owns the provider and its receipts. */
-  if (outcome != AdmissionGpuResetQuiesceWorker)
+  if (outcome != AdmissionGpuResetQuiesceWorker) {
+    if (Receipt != NULL)
+      AdmissionGpuRecoverySnapshot(&runtime->Provider.QueueProvider.Runtime,
+                                   &Receipt->RetirementAfter);
     AdmissionPublishFirmwareRecovery(runtime);
+  }
   InterlockedExchange(&runtime->Resetting, 0);
   return status;
 }

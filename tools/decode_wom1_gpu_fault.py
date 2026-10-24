@@ -5,9 +5,10 @@ Receipts (REG_BINARY under the APPL0002 device key):
   Wom1GpuFault          v1, 168 bytes: firmware Timeout/Fault events, captured
                         before the firmware is resumed (first, first with a
                         valid FAULT_INFO, last).
-  Wom1GpuReset          v1 96 / v2 496 / v3 536 bytes: the last DxgkDdiResetEngine or
+  Wom1GpuReset          v1 96 / v2 496 / v3 536 / v4 792 bytes: the last DxgkDdiResetEngine or
                         DxgkDdiResetFromTimeout and the state it found; v2
-                        adds timing and the last 8 resets; v3 adds reset stages.
+                        adds timing and the last 8 resets; v3 adds reset stages;
+                        v4 adds before/after quiesce queue retirement samples.
   Wom1FirmwareRecovery  8 dwords (EXP1075/G4-recovery).
   Wom1G4OmittedLeaves   v1, 2976 bytes: eight historical successful leaf
                         updates, allocation/PID/VA spans and exact 16 KiB
@@ -87,6 +88,10 @@ RESET_HISTORY = 8
 RESET_V2 = RESET.size + RESET_V2_TAIL.size + RESET_HISTORY * RESET_ENTRY.size
 RESET_V3_TAIL = struct.Struct('<10I')
 RESET_V3 = RESET_V2 + RESET_V3_TAIL.size
+RECOVERY_SNAPSHOT_HEADER = struct.Struct('<5I')
+RECOVERY_QUEUE = struct.Struct('<9I')
+RECOVERY_SNAPSHOT_SIZE = RECOVERY_SNAPSHOT_HEADER.size + 3 * RECOVERY_QUEUE.size
+RESET_V4 = RESET_V3 + 2 * RECOVERY_SNAPSHOT_SIZE
 DBGINFO_V1 = 32
 DBGINFO_V2 = 56
 
@@ -183,14 +188,40 @@ def decode_reset_entry(data, offset):
             'firmware_recoveries': recoveries}
 
 
+def decode_retirement(data, offset):
+    captured, fence, phase, recovery, mask = RECOVERY_SNAPSHOT_HEADER.unpack_from(data, offset)
+    if captured not in (0, 1) or recovery not in (0, 1) or mask & ~7:
+        raise ValueError('invalid retirement snapshot flags')
+    if not captured:
+        return {'captured': False}
+    result = {'captured': True, 'fence': f'{fence:#x}', 'runtime_phase': phase,
+              'recovery_pending': bool(recovery), 'queues': {},
+              'meaning': 'sequential shared-memory observations, not atomic GPU state'}
+    for index, name in enumerate(('ta', '3d', 'compute')):
+        if not mask & (1 << index):
+            continue
+        values = RECOVERY_QUEUE.unpack_from(
+            data, offset + RECOVERY_SNAPSHOT_HEADER.size + index * RECOVERY_QUEUE.size)
+        event, flags, reads, stamp, expected, done, write, expected_done, capacity = values
+        if flags & ~3 or reads & ~7:
+            raise ValueError('invalid retirement queue flags')
+        result['queues'][name] = {
+            'event_number': event, 'event_seen': bool(flags & 1), 'complete': bool(flags & 2),
+            'read_mask': reads, 'stamp': f'{stamp:#x}' if reads & 1 else None,
+            'expected_stamp': f'{expected:#x}', 'done': done if reads & 2 else None,
+            'write': write if reads & 4 else None,
+            'expected_done': expected_done, 'capacity': capacity}
+    return result
+
+
 def decode_reset(data):
-    if len(data) not in (RESET.size, RESET_V2, RESET_V3):
+    if len(data) not in (RESET.size, RESET_V2, RESET_V3, RESET_V4):
         raise ValueError('unsupported Wom1GpuReset length')
     (version, size, resets, succeeded, entry, status, faulted, packet_state,
      packet_fence, active, completed, submitted, phase, aborted, quiesce,
      wait_ms, backend, provider, poll_guard, worker, halted, recoveries,
      context) = RESET.unpack_from(data)
-    if (version, size) not in ((1, RESET.size), (2, RESET_V2), (3, RESET_V3)) or size != len(data):
+    if (version, size) not in ((1, RESET.size), (2, RESET_V2), (3, RESET_V3), (4, RESET_V4)) or size != len(data):
         raise ValueError('unsupported Wom1GpuReset version')
     result = {
         'version': version, 'resets': resets, 'succeeded': succeeded,
@@ -220,11 +251,14 @@ def decode_reset(data):
         result.update(entry_ms=entry_ms, job_age_ms=job_age, poll_age_ms=age(poll_age),
                       history=[decode_reset_entry(data, base + i * RESET_ENTRY.size)
                                for i in order])
-        if version == 3:
+        if version >= 3:
             stages = RESET_V3_TAIL.unpack_from(data, RESET_V2)
             result['stage'] = name_of(RESET_STAGES, stages[0])
             for entry, index in zip(result['history'], order):
                 entry['stage'] = name_of(RESET_STAGES, stages[1 + index])
+        if version >= 4:
+            result['retirement_before'] = decode_retirement(data, RESET_V3)
+            result['retirement_after'] = decode_retirement(data, RESET_V3 + RECOVERY_SNAPSHOT_SIZE)
     return result
 
 
