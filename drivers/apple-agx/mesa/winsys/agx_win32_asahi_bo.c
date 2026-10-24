@@ -327,6 +327,27 @@ static void cache_flush(AGX_WIN32_ASAHI_BACKEND *b) {
     (void)dispose(bo);
   }
 }
+
+/* Allocation pressure must not retain dispensable cache storage. Unlike
+ * shutdown, leave BOs named by any in-flight submission in the cache. A
+ * refused dispose remains registered for Collect; only actual destruction
+ * counts as progress that can justify retrying the allocation. */
+static unsigned cache_reclaim(AGX_WIN32_ASAHI_BACKEND *b) {
+  unsigned released=0;
+  for(APPLE_AGX_U32 i=0;i<b->CacheCount && !b->Failed && !b->Closing;) {
+    struct windows_bo *bo=(struct windows_bo *)b->Cache[i];
+    if(cache_in_flight(b,bo)) { ++i; continue; }
+    memmove(&b->Cache[i],&b->Cache[i+1],
+        (size_t)(--b->CacheCount-i)*sizeof(b->Cache[0]));
+    b->CacheBytes-=bo->Base.size;
+    bo->Cached=0;
+    if(dispose(bo)) {
+      ++released;
+      AgxWin32PerfNote("BO cache pressure release");
+    }
+  }
+  return released;
+}
 #endif
 
 struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned align,
@@ -388,6 +409,16 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   {
   AGX_WIN32_NATIVE_DEVICE_RESULT created=
       AgxWin32NativeDeviceCreateBo(&b->Buffers,cls,bytes,align,access,&bo->Backing);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* Asahi also releases its BO cache on allocation failure. Retry once,
+   * only after a clean callback refusal and real reclamation. A retained
+   * rollback resource or backend fault must keep the fail-closed path. */
+  if(created==AgxWin32NativeDeviceCallback && !bo->Backing.Live &&
+     !b->Failed && !b->Closing && cache_reclaim(b) && !b->Failed && !b->Closing) {
+    AgxWin32PerfNote("BO cache pressure retry");
+    created=AgxWin32NativeDeviceCreateBo(&b->Buffers,cls,bytes,align,access,&bo->Backing);
+  }
+#endif
   if(created!=AgxWin32NativeDeviceSuccess) {
 #ifdef APPLE_AGX_GPUVA_WINSYS
     /* EXP1058 receipt-only (reject-batch kind 5): result code, size in 4 KiB
