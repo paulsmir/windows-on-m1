@@ -9,8 +9,9 @@ its residency list and retry until nothing more can be trimmed.
 WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 
 Invariants: only idle GPU-local or SystemDirect slots lose their residency reference (never a
-slot a submission, CPU map, shared owner or presentation still uses, never a
-CPU-mapped SystemDirect BO); least recently used first; enough bytes to
+slot a submission, canonical CPU map, shared owner or presentation still uses,
+never a CPU-mapped SystemDirect BO); T13 private CPU storage can survive
+canonical eviction; least recently used first; enough bytes to
 cover the request, at least one slot; nothing when nothing is eligible.
 """
 from pathlib import Path

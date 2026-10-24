@@ -258,7 +258,8 @@ static int wait_paging_at(ADMISSION_UMD_DEVICE *device, uint64_t fence,
                           UINT site, uint64_t token);
 
 /* M2-f11 (EXP1271): drop the persistent residency reference (EXP978) of idle
- * GPU-local or unmapped SystemDirect slots, least recently used first, until Want bytes are covered
+ * GPU-local (including private CPU staging) or unmapped SystemDirect slots,
+ * least recently used first, until Want bytes are covered
  * (umd_residency_trim.h). Returns the bytes dropped and their slot count. */
 static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
                                 UINT *trimmed) {
@@ -281,6 +282,10 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
       v->Active=slot->Active;v->Resident=slot->Resident;
       v->Transition=slot->Transition;v->CopyHeld=slot->CopyHeld;
       v->Mapped=slot->Mapped;v->Direct=slot->Direct;
+      /* T13 maps VirtualAlloc storage without locking the canonical BO.
+       * Its CPU pointer remains usable while VidMm evicts that BO. */
+      v->PrivateCpuMap=slot->HeapStaging && slot->PrivateStaging != NULL &&
+          !slot->StagingAllocation;
       v->SystemDirect=slot->SystemDirect;v->Borrowed=slot->Borrowed;
       v->KmtResidencyHeld=slot->KmtResidencyHeld;
       v->SubmissionHolds=slot->SubmissionHolds;v->SourceHolds=slot->SourceHolds;

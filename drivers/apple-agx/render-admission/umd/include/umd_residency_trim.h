@@ -13,6 +13,8 @@
 typedef struct _ADMISSION_UMD_TRIM_SLOT {
   int Active, Resident, Transition, CopyHeld, Mapped;
   int Direct, SystemDirect, Borrowed, KmtResidencyHeld;
+  /* T13 CPU map lives in private process memory, not canonical backing. */
+  int PrivateCpuMap;
   unsigned SubmissionHolds, SourceHolds, KernelAllocation;
   unsigned long long Bytes, LastUseFence;
 } ADMISSION_UMD_TRIM_SLOT;
@@ -22,15 +24,20 @@ typedef struct _ADMISSION_UMD_TRIM_SLOT {
 
 /* A slot may lose its residency reference only when nothing can reach its
  * canonical allocation before the slot is made resident again: no submission
- * holds it (being built or in flight), no CPU map, shared owner or source
- * hold, and no presentation use. SystemDirect is eligible between CPU locks:
+ * holds it (being built or in flight), no canonical CPU map, shared owner or
+ * source hold, and no presentation use. A T13 private CPU map survives
+ * canonical eviction: VidMm preserves canonical contents, and submission
+ * restores residency under its holds before staging copies or GPU use. The
+ * private pointer and dirty tracking must remain intact. SystemDirect is
+ * eligible only between CPU locks:
  * CPU map reserves Transition through MakeResident, the paging wait and Lock;
  * Mapped then pins the allocation until Unlock succeeds. GPU submissions
  * restore residency under their submission holds. Placement still belongs to
  * VidMm; the KMD must reject any unsupported aperture backing (M2-f8). */
 static inline int AdmissionUmdTrimEligible(const ADMISSION_UMD_TRIM_SLOT *s) {
   return s->Active && s->Resident && !s->Transition && !s->CopyHeld &&
-         !s->Mapped && !s->Direct && !s->Borrowed &&
+         (!s->Mapped || (s->PrivateCpuMap && !s->SystemDirect)) &&
+         !s->Direct && !s->Borrowed &&
          !s->KmtResidencyHeld && !s->SubmissionHolds && !s->SourceHolds &&
          s->KernelAllocation && s->Bytes;
 }

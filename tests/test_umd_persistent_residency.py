@@ -66,7 +66,7 @@ static void AcquireSRWLockShared(SRWLOCK*l){assert(*l>=0);++*l;}
 static void ReleaseSRWLockShared(SRWLOCK*l){assert(*l>0);--*l;}
 #include "umd_residency_trim.h"
 struct D3DDDI_MAKERESIDENT { HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; const UINT*PriorityList; ULONGLONG PagingFenceValue; ULONGLONG NumBytesToTrim; };
-struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,Mapped,Resident,Borrowed,KmtResidencyHeld; UINT SourceHolds,SubmissionHolds;
+struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,Mapped,Resident,Borrowed,KmtResidencyHeld,HeapStaging; UINT SourceHolds,SubmissionHolds;
   D3DKMT_HANDLE KernelAllocation,StagingAllocation; unsigned char *PrivateStaging; uint64_t CanonicalGpuVa,Bytes,LastUseFence; void*NativeBo; void*NativeMapRelease; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 static unsigned made, evicted, made_handles, refusals;  /* refusals: next mk calls refused for budget */
