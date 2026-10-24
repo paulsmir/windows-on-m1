@@ -1,4 +1,9 @@
-"""R148: production batch collection and GpuVA lifecycle, with KMD parser.
+"""WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+A graphics-only batch must hold and upload its sampler heap even when it is
+absent from bo_list and both pools; otherwise trim can invalidate a live
+sampler VA and the native-coverage guard never checks it (EXP1934).
+
+R148: production batch collection and GpuVA lifecycle, with KMD parser.
 
 The host models VidMm's explicit residency requirement: reserving/mapping a VA
 alone does not make its canonical allocation resident. Pool BOs deliberately do

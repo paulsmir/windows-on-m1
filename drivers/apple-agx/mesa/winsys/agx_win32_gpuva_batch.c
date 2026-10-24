@@ -786,9 +786,12 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      /* EXP1069: descriptors may name the device's zero/scratch pages. */
      !add_bo(b,refs,&count,limit,agx_device(batch->ctx->base.screen)->zero_bo) ||
      !add_bo(b,refs,&count,limit,agx_device(batch->ctx->base.screen)->scratch_bo) ||
+     /* Bindless graphics uses this heap without a CDM command too. It is
+      * owned separately from bo_list/pools: hold, upload and validate its
+      * canonical allocation for every render submission (EXP1934). */
+     !add_bo(b,refs,&count,limit,batch->sampler_heap.bo) ||
      (compute && (!add_bo(b,refs,&count,limit,batch->cdm.bo) ||
-                  !add_bo(b,refs,&count,limit,g->Preemption) ||
-                  !add_bo(b,refs,&count,limit,batch->sampler_heap.bo))))
+                  !add_bo(b,refs,&count,limit,g->Preemption))))
     { fail_site=__LINE__; goto fail; }
   for(unsigned i=0;i<batch->key.nr_cbufs;++i) {
     if(batch->key.cbufs[i].texture) {

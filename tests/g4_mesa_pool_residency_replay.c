@@ -223,7 +223,7 @@ static int AgxWin32AsahiRenderableFormat(const struct agx_batch *batch, unsigned
 
 /* scenario: normal, empty pools, null pool entry, invalid identity,
  * general-pool capacity overflow, pipeline-pool capacity overflow. */
-static void run(unsigned fail,unsigned many,unsigned scenario) {
+static void run(unsigned fail,unsigned many,unsigned scenario,unsigned sampler) {
   memset(&owner,0,sizeof(owner));memset(bos,0,sizeof(bos));
   resident_count=submit_count=eviction_count=release_count=0;reject_submit=fail;
   publish_count=0;expected_publish=scenario==1?1u:many?8u:3u;
@@ -269,10 +269,19 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
     batch.bo_list.bit_count=UINT32_MAX-(PIPE_MAX_COLOR_BUFS+19)-1;
     batch.pool.bos.size=(scenario==4?2u:1u)*sizeof(pool_bos[0]);
   }
+  /* EXP1934: a graphics-only bindless sampler heap is separate from both
+   * pools and the handle bitset. A valid VA does not imply residency. */
+  if(sampler) {
+    batch.sampler_heap.bo=&bos[12];
+    render.SamplerHeap=bos[12].view.Va;
+    render.SamplerCount=37;
+    if(sampler==2) batch.bo_list.handles[batch.bo_list.count++]=12;
+    if(sampler==3) bos[12].refs=0;
+  }
   /* Set aliases at the actual ABI offsets, checked by the wrapper below. */
   struct drm_asahi_cmd_render native;memcpy(&native,&render,sizeof(render));
   int result=AgxWin32AsahiBatchFinish(&batch,&native,NULL);
-  if(scenario>=2) {
+  if(scenario>=2 || sampler==3) {
     assert(!result && !submit_count && !resident_count && !eviction_count);
     assert(!owner.Gpuva.Held && !owner.Gpuva.Terminal);
     /* The entry guard refuses without failing the backend; the caller
@@ -285,14 +294,20 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
     for(unsigned i=2;i<16;++i) assert(!bos[i].resident);
     return;
   }
-  if(!fail && !result) {
+  if(!fail && !result && !sampler) {
     assert(failure.Ordinal==12 && failure.Va==render.IspScissorBase);
     fprintf(stderr,"R148 missing batch-pool residency/upload (expected admitted submit)\n");
   }
   assert(result==!fail);
   /* The zero and scratch pages (bos 10, 11) are resident in every batch. */
-  assert(submit_count==1 && resident_count==(scenario==1?6u:many?11u:8u));
+  assert(submit_count==1 && resident_count==(scenario==1?6u:many?11u:8u)+(sampler?1u:0u));
   assert(bos[10].uploaded && bos[11].uploaded);
+  if(sampler) {
+    assert(bos[12].uploaded);
+    /* On success the job retains the heap until its completion fence. On
+     * submit failure it releases the same residency set immediately. */
+    assert(bos[12].resident==!fail);
+  }
   if(scenario!=1) {
     assert(bos[5].uploaded && bos[8].uploaded && bos[8].flags==1);
     if(many) assert(bos[6].uploaded && bos[7].uploaded && bos[9].uploaded);
@@ -304,7 +319,10 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
   for(unsigned i=2;i<16;++i) assert(bos[i].refs==1 && !bos[i].resident);
 }
 int main(void) {
-  run(0,0,0);run(0,1,0);run(1,1,0);run(0,0,1);
-  run(0,0,2);run(0,0,3);run(0,0,4);run(0,0,5);run(0,0,6);
+  run(0,0,0,0);run(0,1,0,0);run(1,1,0,0);run(0,0,1,0);
+  run(0,0,2,0);run(0,0,3,0);run(0,0,4,0);run(0,0,5,0);run(0,0,6,0);
+  run(0,0,0,1);run(0,1,0,1);run(0,0,1,1); /* independent heap */
+  run(0,0,0,2);run(1,1,0,2); /* duplicate identity, rejected submit */
+  run(1,0,0,1);run(0,0,0,3); /* cleanup, invalid heap identity */
   puts("R148 production batch pool residency/upload/rollback: PASS");return 0;
 }
