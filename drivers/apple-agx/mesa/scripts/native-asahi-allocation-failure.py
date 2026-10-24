@@ -572,6 +572,8 @@ windows_restart_done:
     # is shared by native_pipeline_contract.c), not only within agx_state.c.
     for filename,anchor in (
             ('agx_query.c','#include "agx_state.h"'),
+            # EXP1929 x86 build: agx_blit.c calls AgxWin32AsahiMarkContextFault too.
+            ('agx_blit.c','#include "agx_state.h"'),
             ('agx_win32_pipeline.inc','#include "agx_win32_asahi_pipeline.h"')):
         path=base+filename;s=(out/path).read_text()
         s=once(s,anchor,anchor+'\n#include "agx_win32_asahi_batch.h"')
