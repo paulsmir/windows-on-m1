@@ -61899,3 +61899,26 @@ No hardware action was performed while preparing it.
   handling of failed texture transition allocation. DWM pressure and scheduler
   reset remain separate open issues.
 
+
+EXP1926 HARDWARE BEFORE 2026-10-24T03:04:03Z:
+- Package 30.0.1926.0 from 42f4e891 = EXP1925 cd96d55b + Codex exp1925 4de133c5 (checked transition allocation). Device switch Wom1GpuFaultInfoRead=1. Short profile.
+- **Next experiment — WHY THIS HYPOTHESIS:** (1) the exact UMD crash instruction
+- is a resource dereference in writer lookup; (2) its decompression caller passes
+- an unchecked allocation result; (3) the final UMD records show OOM and the host
+- regression reproduces the failure. Fixing this owning-layer failure should
+- replace the AV with an explicit context/device error if pressure persists.
+- It does not predict that the allocations will begin succeeding.
+- 
+- **WINDOWS/AGX CONTRACT:** failed internal resource creation must not publish a
+- partially converted resource or dereference NULL. A layout transition publishes
+- new bind/layout/modifier/BO only after valid-level copies and writer flush
+- succeed. Pending batches retain their own BO references. The existing Windows
+- owner rejects a faulted context and propagates device error. T13 canonical
+- placement, UAT leaf policy, capabilities, signer, firmware and recovery remain
+- unchanged. **WHAT IS STILL UNKNOWN:** native compilation, exception registers,
+- underlying memory pressure, DWM reset causality, and behavior after this boundary.
+- 
+- Expected: no c0000005 in the UMD; OOM surfaces as a device error; no MMU fault. Recovery rec1926h.
+- Hashes: sys 3bb481c17945, UmdArm64 55a455899e34, UmdX64 4185717cdeee, Umd32 1b7cf45d5c1e; manifest 97f539aa4467, hardware-manifest e64efd719ea2; probe1926.sh 56782a100c33 (PROBE_LINT_OK); visible recovery rec1926h 0939936fe3f356cd; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1926h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1926-transition-oom/run1926.sh.
