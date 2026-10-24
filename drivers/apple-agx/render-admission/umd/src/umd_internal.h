@@ -216,6 +216,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
   ADMISSION_UMD_DRAW_SUBMISSION *DrawSubmission;
   BOOL DrawTerminal;
   UINT CpuAccessSnapshots; /* bit 0 failure, bit 1 device teardown */
+  UINT MemoryRefusalSnapshots; /* first four allocation refusals, under ScreenBufferLock */
   /* EXP1043 diagnostic: slot of the last map_va, for paging-wait attribution. */
   APPLE_AGX_U64 PagingWaitToken;
 #ifdef APPLE_AGX_GPUVA_WINSYS

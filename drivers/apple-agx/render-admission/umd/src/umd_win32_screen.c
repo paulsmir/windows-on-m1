@@ -588,6 +588,62 @@ static int AdmissionUmdScreenQueryDevice(void *Context,
   return 1;
 }
 
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* EXP1929: pool v8 identifies a headroom refusal, but cumulative transfer
+ * bytes cannot identify retained CPU copies. Sample ownership BEFORE rollback
+ * and the winsys cache retry. Logical spans only, not physical residency or
+ * working set; borrowed/aliased canonical spans may overlap. Skip transitions,
+ * copy-held slots and unknown sizes explicitly. Copy pointers are tested,
+ * never dereferenced. CopyHeld protects transfers which publish merge shadows
+ * outside ScreenBufferLock; do not sample those pointers during a transfer.
+ * Caller holds no ScreenBufferLock. Emit only after releasing it. */
+static VOID AdmissionUmdScreenMemoryRefusal(ADMISSION_UMD_DEVICE *Device,
+    HRESULT Status, APPLE_AGX_U64 Token, UINT ClassId, UINT Flags,
+    APPLE_AGX_U64 Bytes, UINT Stage, UINT Pending) {
+  UINT header[16] = {1u, (UINT)Device->OwnerCookie,
+      (UINT)(Device->OwnerCookie >> 32), (UINT)Token, (UINT)(Token >> 32),
+      0u, ClassId, Flags, (UINT)Bytes, (UINT)(Bytes >> 32), Stage, Pending};
+  UINT rows[3][16] = {};
+  APPLE_AGX_U64 totals[3][3] = {}; /* all, mapped, unmapped logical bytes */
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  if (Device->MemoryRefusalSnapshots >= 4u) {
+    ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+    return;
+  }
+  header[5] = ++Device->MemoryRefusalSnapshots;
+  for (UINT i = 0u; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++i) {
+    const ADMISSION_UMD_SCREEN_BUFFER *slot = &Device->ScreenBuffers[i];
+    if (!slot->Active) continue;
+    ++header[12];
+    if (slot->Transition) { ++header[13]; continue; }
+    if (slot->CopyHeld) { ++header[15]; continue; }
+    if (!slot->Bytes) { ++header[14]; continue; }
+    const BOOL present[3] = {slot->KernelAllocation != 0,
+        slot->PrivateStaging != NULL, slot->HeapStagingShadow != NULL};
+    for (UINT kind = 0u; kind < 3u; ++kind) {
+      if (!present[kind]) continue;
+      ++rows[kind][7];
+      totals[kind][0] += slot->Bytes;
+      const UINT subset = slot->Mapped ? 1u : 2u;
+      ++rows[kind][slot->Mapped ? 10u : 13u];
+      totals[kind][subset] += slot->Bytes;
+    }
+  }
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  AdmissionUmdDiagnostic("measure-memory-refusal", Status, header, ARRAYSIZE(header));
+  for (UINT kind = 0u; kind < 3u; ++kind) {
+    for (UINT i = 0u; i < 6u; ++i) rows[kind][i] = header[i];
+    rows[kind][6] = kind + 1u; /* canonical, private staging, merge baseline */
+    for (UINT subset = 0u; subset < 3u; ++subset) {
+      const UINT at = 8u + subset * 3u;
+      rows[kind][at] = (UINT)totals[kind][subset];
+      rows[kind][at + 1u] = (UINT)(totals[kind][subset] >> 32);
+    }
+    AdmissionUmdDiagnostic("measure-memory-storage", Status, rows[kind], 16u);
+  }
+}
+#endif
+
 static int AdmissionUmdScreenCreateClassBufferImpl(
     void *Context, APPLE_AGX_U32 ClassId, APPLE_AGX_U64 Bytes,
     APPLE_AGX_U64 Alignment, APPLE_AGX_U32 Flags,
@@ -604,6 +660,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
 #ifdef APPLE_AGX_GPUVA_WINSYS
   BYTE *privateStaging = NULL;
   BOOL systemDirect = FALSE, writeWatch = FALSE;
+  UINT failureStage = 1u; /* AllocateCb / missing canonical handle */
 #endif
   ADMISSION_ALLOCATION_DESCRIPTION stagingDescription;
   if (Token) *Token = 0;
@@ -705,6 +762,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   canonical = allocationInfo.hAllocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(result) && canonical && !staging && !systemDirect) {
+    failureStage = 2u; /* CPU private staging after canonical allocation */
     /* EXP1022: unshared staging is read and written only by this process
      * (the KMD copy escape receives its bytes); keep it in ordinary memory. */
     UNREFERENCED_PARAMETER(stagingDescription);
@@ -730,6 +788,9 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
     HRESULT failure = FAILED(result) ? result : E_FAIL;
     D3DKMT_HANDLE owned[2] = {canonical, staging == BorrowedStaging ? 0 : staging};
 #ifdef APPLE_AGX_GPUVA_WINSYS
+    AdmissionUmdScreenMemoryRefusal(device, failure, token, ClassId, Flags,
+        Bytes, failureStage, (canonical ? 1u : 0u) |
+        (privateStaging ? 2u : 0u) | (BorrowedStaging ? 4u : 0u));
     if (privateStaging) (void)VirtualFree(privateStaging, 0, MEM_RELEASE);
 #endif
     for (UINT i = 0; i < 2; ++i) {
