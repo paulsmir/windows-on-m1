@@ -571,6 +571,17 @@ int AgxWin32AsahiClass(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base,
   return 1;
 }
 #ifdef APPLE_AGX_GPUVA_WINSYS
+/* Diagnostic alias bounds. Actual mappings remain owned by the paging path. */
+int AgxWin32AsahiVirtualContains(struct agx_bo *base,uint64_t va,uint64_t bytes) {
+  struct windows_bo *bo=(struct windows_bo *)base;
+  if(!bo || !bo->Virtual || !bytes) return 0;
+  const AGX_WIN32_GPUVA_BO *ranges[2]={&bo->Reserved,&bo->ReadShadow};
+  for(unsigned i=0;i<2;++i) {
+    const AGX_WIN32_GPUVA_BO *r=ranges[i];
+    if(r->Bound && va>=r->Va && va-r->Va<r->Bytes && bytes<=r->Bytes-(va-r->Va)) return 1;
+  }
+  return 0;
+}
 const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
     AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base) {
   struct windows_bo *bo=(struct windows_bo *)base;

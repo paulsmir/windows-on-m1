@@ -43,7 +43,7 @@ class ReferenceCollectors(unittest.TestCase):
             source=re.sub(r'/\*.*?\*/','',(W/'agx_win32_gpuva_batch.c').read_text(),flags=re.S)
             names=['backend','capsule','expect_bo','AgxWin32AsahiExpectBo','expect_resource',
                    'AgxWin32AsahiExpectResource','capture_stage_refs','capture_draw_refs',
-                   'expect_address','capture_compute_addresses','capture_render_addresses','capture_native_refs']
+                   'expect_address_origin','expect_address','AgxWin32AsahiExpectDescriptors','capture_compute_addresses','capture_render_addresses','capture_native_refs']
             code=r'''
 #include "gallium/drivers/asahi/agx_state.h"
 #include "apple_agx_g4_submit.h"
@@ -54,6 +54,8 @@ static struct agx_batch *selected;
 struct agx_batch *agx_get_batch(struct agx_context *c){(void)c;return selected;}
 struct agx_batch *agx_get_compute_batch(struct agx_context *c){(void)c;return selected;}
 const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *bo){(void)b;return &maps[bo->handle];}
+struct windows_bo {struct agx_bo Base;int Virtual;AGX_WIN32_GPUVA_BO Reserved,ReadShadow;};
+@@VIRTUAL_CONTAINS@@
 unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *bo){(void)bo;return 0;}
 struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *bo,unsigned i){(void)bo;(void)i;return NULL;}
 struct agx_bo *AgxWin32AsahiVirtualTable(struct agx_bo *bo){(void)bo;return NULL;}
@@ -94,11 +96,40 @@ int main(void){
  capture_compute_addresses(&batch,&compute);assert(g.Expected.Items[7].Bytes==128);
  /* A changed/reused owner may cover the VA but must not satisfy old identity. */
  maps[1].Allocation=99;assert(AgxWin32RefCheck(&g.Expected.Items[0],held,1)==AgxRefOwner);
+ AgxWin32RefCleanup(&g.Expected);
+ /* Bound but unreachable descriptors are not GPU references. */
+ struct agx_sampler_view unused={0};unused.rsrc=&resource;
+ ctx.stage[MESA_SHADER_COMPUTE].textures[7]=&unused;
+ ctx.stage[MESA_SHADER_COMPUTE].texture_count=8;
+ shader.info.nr_bindful_textures=1;
+ capture_stage_refs(&batch,MESA_SHADER_COMPUTE);assert(g.Expected.Count==0);
+ /* Large sparse buffer: a root binding beyond its 64 KiB canonical anchor. */
+ va.addr=0x800000;bo.size=0x40000;maps[1].Va=0x100000;
+ b.RefOrigin.List=3;
+ expect_resource(&batch,&resource.base,AgxRefCbv,5,0,0x20000,64,0);
+ assert(g.Expected.Count==1 && g.Expected.Items[0].List==3);
+ assert(g.Expected.Items[0].Va==maps[1].Va && g.Expected.Items[0].Bytes==maps[1].Bytes);
+ assert(!AgxWin32RefCheck(&g.Expected.Items[0],held,1));
+ AgxWin32RefCleanup(&g.Expected);
+ /* A held intended resource must not hide a stale packed heap address. */
+ struct windows_bo virtual_bo={0};virtual_bo.Virtual=1;
+ virtual_bo.Reserved=(AGX_WIN32_GPUVA_BO){17,0x800000,0x40000,1};
+ virtual_bo.ReadShadow=(AGX_WIN32_GPUVA_BO){17,0xa00000,0x40000,1};
+ assert(AgxWin32AsahiVirtualContains(&virtual_bo.Base,0x820000,64));
+ assert(AgxWin32AsahiVirtualContains(&virtual_bo.Base,0xa20000,64));
+ assert(!AgxWin32AsahiVirtualContains(&virtual_bo.Base,0xa3fff0,32));
+ assert(!AgxWin32AsahiVirtualContains(&virtual_bo.Base,UINT64_MAX-4,16));
+ uint32_t packed[18]={0};
+ agx_pack(packed,TEXTURE,t){t.address=0xdead0000;}
+ AgxWin32AsahiExpectDescriptors(&ctx.base,1,packed,5,71,0xabcdef);
+ assert(g.Expected.Count==1 && g.Expected.Items[0].Slot==71 && g.Expected.Items[0].Object==0xabcdef);
+ assert(g.Expected.Items[0].Va==0xdead0000);
+ assert(AgxWin32RefCheck(&g.Expected.Items[0],held,1)==AgxRefMissing);
  AgxWin32RefCleanup(&g.Expected);return 0;
 }
-'''.replace('@@FUNCTIONS@@','\n'.join(body(source,n) for n in names))
+'''.replace('@@FUNCTIONS@@','\n'.join(body(source,n) for n in names)).replace('@@VIRTUAL_CONTAINS@@',body(re.sub(r'/\*.*?\*/','',(W/'agx_win32_asahi_bo.c').read_text(),flags=re.S),'AgxWin32AsahiVirtualContains'))
             (p/'collect.c').write_text(code)
-            z=subprocess.run(['clang',*flags,'-fsanitize=address,undefined',str(p/'collect.c'),
+            z=subprocess.run(['clang',*flags,'-fsanitize=address,undefined','-fno-sanitize-recover=all',str(p/'collect.c'),
                               str(W/'agx_win32_gpuva.c'),'-o',str(p/'collect')],capture_output=True,text=True)
             self.assertEqual(z.returncode,0,z.stderr)
             z=subprocess.run([str(p/'collect')],capture_output=True,text=True)

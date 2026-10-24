@@ -506,6 +506,7 @@ typedef struct {
   const struct AGX_D3D12_HEAP_SAMPLER *Samplers;
   unsigned SamplerCount;
   const unsigned *ReadSlots, *WriteSlots; /* original descriptor indices */
+  const void *RefDescriptorData; /* actual CPU-visible GPU heap mirror, diagnostic only */
 } AGX_D3D12_HEAP_BINDING;
 /* C47: a sampler-heap entry's heap form (AgxD3d12OwnerSamplerDescriptor) */
 typedef struct AGX_D3D12_HEAP_SAMPLER {

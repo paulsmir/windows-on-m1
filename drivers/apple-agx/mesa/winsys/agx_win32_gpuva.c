@@ -56,12 +56,18 @@ static int validate_refs(AGX_WIN32_GPUVA_SPACE *space,
     AGX_WIN32_REF empty = {0};
     return ref_violation(space, &empty, AgxRefIncomplete);
   }
-  for (unsigned i = 0; i < list->Count; ++i) {
-    const AGX_WIN32_REF *r = &list->Items[i];
-    unsigned reason = AgxWin32RefCheck(r, refs, count);
-    if (!reason && resident && space->RefResident && r->Allocation &&
-        !space->RefResident(space->Context, r->Allocation)) reason = AgxRefNotResident;
-    if (reason) return ref_violation(space, r, reason);
+  /* Prefer actual descriptor contents, then API bindings, before generic
+   * native registration: the first receipt should identify the API slot. */
+  for (unsigned pass = 0; pass < 3; ++pass) {
+    for (unsigned i = 0; i < list->Count; ++i) {
+      const AGX_WIN32_REF *r = &list->Items[i];
+      unsigned priority = r->Path == 5 ? 0 : r->Path == 2 ? 1 : 2;
+      if (priority != pass) continue;
+      unsigned reason = AgxWin32RefCheck(r, refs, count);
+      if (!reason && resident && space->RefResident && r->Allocation &&
+          !space->RefResident(space->Context, r->Allocation)) reason = AgxRefNotResident;
+      if (reason) return ref_violation(space, r, reason);
+    }
   }
   return 1;
 }

@@ -110,6 +110,8 @@ struct pipe_grid_info;
 #ifdef APPLE_AGX_GPUVA_WINSYS
 /* Snapshots do not add BO references or repair the set being checked. */
 void AgxWin32AsahiCaptureComputeRefs(struct agx_batch *, const struct pipe_grid_info *);
+void AgxWin32AsahiExpectDescriptors(struct pipe_context *, int Compute,
+    const void *PackedTexturePbeCounter, unsigned Stage, unsigned Slot, uint64_t Object);
 void AgxWin32AsahiExpectBo(struct agx_batch *, struct agx_bo *, unsigned Kind,
                           unsigned Slot, unsigned Path);
 void AgxWin32AsahiExpectResource(struct pipe_context *, int Compute,
@@ -184,6 +186,7 @@ int AgxWin32AsahiMapVirtualPages(struct agx_bo *Virtual, unsigned FirstPage,
  * included (0 for an ordinary BO); IsTileScratch tells the scratch and the
  * shadow zero BO apart (never CPU-read, so never marked written). */
 unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *);
+int AgxWin32AsahiVirtualContains(struct agx_bo *, uint64_t Va, uint64_t Bytes);
 struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *, unsigned Index);
 int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *);
 /* C53 T2D (D3D12-C53-tiled-textures.md): a reserved texture. Arm makes the

@@ -26,7 +26,8 @@ static int paging(void*c,uint64_t f){FIXTURE*q=c;assert(f==5 && q->phase==1);q->
 static int submit(void*c,const uint64_t*w,unsigned n,uint64_t v,uint32_t b,const void*d,uint32_t z,uint64_t*f){FIXTURE*q=c;(void)w;(void)n;(void)v;(void)b;(void)d;(void)z;assert(q->phase==2);q->submit++;*f=q->submit;return 1;}
 static int wait_render(void*c,uint64_t f){(void)c;(void)f;return 1;}
 static int evict(void*c,const uint64_t*h,unsigned n){(void)c;(void)h;(void)n;return 1;}
-static unsigned reports;
+static unsigned reports,residency_checks;
+static int resident_check(void *ctx,uint64_t token){FIXTURE*f=ctx;assert(f->phase==2 && token==12);++residency_checks;return 0;}
 static AGX_WIN32_REF last;
 static void report(void *ctx,const AGX_WIN32_REF *r,unsigned reason) {
  (void)ctx; assert(reason); ++reports; last=*r;
@@ -62,6 +63,10 @@ int main(void) {
  s.RefRefuse=1;
  assert(AgxWin32GpuvaSubmit(&s,refs,2,&command,64,NULL,0,&private_data,4,&done));
  assert(!f.bad_order);assert(AgxWin32GpuvaRetire(&s,done));
+ s.RefResident=resident_check;s.RefReported=0;
+ assert(!AgxWin32GpuvaSubmit(&s,refs,2,&command,64,NULL,0,&private_data,4,&done));
+ assert(residency_checks==1 && reports==2 && f.submit==2);
+ s.RefResident=NULL;
  list.Incomplete=1;
  assert(!AgxWin32GpuvaSubmit(&s,refs,2,&command,64,NULL,0,&private_data,4,&done));
  s.Validation=NULL; /* default off ignores diagnostics entirely */

@@ -6186,6 +6186,7 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
     if (!b->descriptors) return AgxD3d12OwnerSetHeap(owner, stage, &h.binding);
     h.heap = HeapBuffer(b->descriptors);
     h.binding.Heap = &h.heap;
+    h.binding.RefDescriptorData = b->descriptors->mirror;
     const UINT count = static_cast<UINT>(b->descriptors->bytes / kCbvSrvUavDescriptorBytes);
     for (UINT i = lowest; i < count; ++i) {
         auto *view = reinterpret_cast<AgxD3d12Descriptor *>(static_cast<BYTE *>(b->descriptors->cpu) +

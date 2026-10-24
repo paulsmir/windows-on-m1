@@ -63,7 +63,7 @@ enum AGX_WIN32_REF_RESULT {
 };
 typedef struct {
   uint64_t Va, Bytes, Allocation, Object, Execute;
-  unsigned Command, Kind, Stage, Slot, Root, Path;
+  unsigned Command, Kind, Stage, Slot, Root, Path, List;
 } AGX_WIN32_REF;
 typedef struct {
   AGX_WIN32_REF *Items;

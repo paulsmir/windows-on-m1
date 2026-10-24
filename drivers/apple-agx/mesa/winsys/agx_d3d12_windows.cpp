@@ -355,7 +355,7 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
 
 #ifdef APPLE_AGX_GPUVA_WINSYS
 static void owner_ref_violation(void *, const AGX_WIN32_REF *r, unsigned reason) {
-  const UINT v[]={1u,reason,r->Kind,r->Stage,r->Slot,r->Root,r->Command,
+  const UINT v[]={1u|(reason<<8)|(r->Kind<<16)|(r->Stage<<24),r->Slot,r->Root,r->List,r->Command,
       (UINT)r->Execute,(UINT)(r->Execute>>32),(UINT)r->Object,(UINT)(r->Object>>32),
       (UINT)r->Va,(UINT)(r->Va>>32),(UINT)r->Bytes,(UINT)(r->Bytes>>32),
       (UINT)r->Allocation,(UINT)(r->Allocation>>32),r->Path};
@@ -387,7 +387,7 @@ extern "C" void AgxD3d12OwnerRefCommand(AGX_D3D12_OWNER *owner, UINT list, UINT 
   if(!owner || !owner->Backend.ValidateRefs) return;
   if(!command) ++owner->Backend.RefOrigin.Execute;
   owner->Backend.RefOrigin.Command=command;
-  owner->Backend.RefOrigin.Object=list;
+  owner->Backend.RefOrigin.List=list;
   owner->Backend.RefOrigin.Root=~0u;
 #else
   (void)owner;(void)list;(void)command;
@@ -3191,14 +3191,23 @@ static void validate_heap_refs(AGX_D3D12_OWNER *owner, bool compute) {
     const uint64_t object=(uint64_t)(uintptr_t)(h.Heap ? h.Heap->Resource : NULL);
     if(h.Heap) AgxWin32AsahiExpectResource(owner->Context,compute,
         static_cast<struct pipe_resource *>(h.Heap->Resource),AgxRefHeap,s,0,object);
-    for(unsigned i=0;i<h.TextureCount;++i)
+    for(unsigned i=0;i<h.TextureCount;++i) {
+      unsigned slot=h.ReadSlots ? h.ReadSlots[i] : i;
+      const void *packed=h.RefDescriptorData ? static_cast<const BYTE *>(h.RefDescriptorData)+
+          (size_t)slot*DXBC_HEAP_DESCRIPTOR_STRIDE+DXBC_HEAP_DESCRIPTOR_AGX_OFFSET : NULL;
+      AgxWin32AsahiExpectDescriptors(owner->Context,compute,packed,s,slot,object);
       AgxWin32AsahiExpectResource(owner->Context,compute,
           static_cast<struct pipe_resource *>(h.Textures[i].Resource),AgxRefDescriptor,s,
-          h.ReadSlots ? h.ReadSlots[i] : i,object);
-    for(unsigned i=0;i<h.WriteCount;++i)
+          slot,object);
+    }
+    for(unsigned i=0;i<h.WriteCount;++i) {
+      unsigned slot=h.WriteSlots ? h.WriteSlots[i] : i;
+      const void *packed=h.RefDescriptorData ? static_cast<const BYTE *>(h.RefDescriptorData)+
+          (size_t)slot*DXBC_HEAP_DESCRIPTOR_STRIDE+DXBC_HEAP_DESCRIPTOR_AGX_OFFSET : NULL;
+      AgxWin32AsahiExpectDescriptors(owner->Context,compute,packed,s,slot,object);
       AgxWin32AsahiExpectResource(owner->Context,compute,
-          static_cast<struct pipe_resource *>(h.Writes[i].Resource),AgxRefDescriptor,s,
-          h.WriteSlots ? h.WriteSlots[i] : i,object);
+          static_cast<struct pipe_resource *>(h.Writes[i].Resource),AgxRefDescriptor,s,slot,object);
+    }
   }
 #else
   (void)owner;(void)compute;

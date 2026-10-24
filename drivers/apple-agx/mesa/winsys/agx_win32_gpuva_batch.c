@@ -165,6 +165,15 @@ static void expect_bo(struct agx_batch *batch, struct agx_bo *bo,
   if(!b || !b->ValidateRefs || !g || !bo) return;
   const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,bo);
   if(!mapped) { g->Expected.Incomplete=1; return; }
+  if(bo->va && bo->va->addr!=mapped->Va) {
+    /* The virtual coordinate can span many pages; its canonical BO is a
+     * small handle anchor. Check logical bounds before holding that anchor
+     * and the actual backing allocations, each in its own VA range. */
+    if(offset>=bo->size || (bytes && bytes>bo->size-offset)) {
+      g->Expected.Incomplete=1;return;
+    }
+    offset=0;bytes=mapped->Bytes;
+  }
   origin.Allocation=mapped->Allocation;
   origin.Va=mapped->Va;
   origin.Bytes=bytes ? bytes : (offset < mapped->Bytes ? mapped->Bytes-offset : 0);
@@ -229,10 +238,10 @@ static void capture_stage_refs(struct agx_batch *batch,unsigned stage) {
   for(unsigned i=0;i<PIPE_MAX_SHADER_BUFFERS;++i)
     if(s->ssbo_mask & (1u<<i)) expect_resource(batch,s->ssbo[i].buffer,AgxRefUav,
         stage,i,s->ssbo[i].buffer_offset,s->ssbo[i].buffer_size,0);
-  for(unsigned i=0;i<PIPE_MAX_SHADER_IMAGES;++i)
+  for(unsigned i=0;i<32u && i<s->shader->info.nr_bindful_images;++i)
     if(s->image_mask & (1u<<i)) expect_resource(batch,s->images[i].resource,
         AgxRefUav,stage,i,0,0,0);
-  for(unsigned i=0;i<s->texture_count;++i) if(s->textures[i])
+  for(unsigned i=0;i<s->texture_count && i<s->shader->info.nr_bindful_textures;++i) if(s->textures[i])
     expect_resource(batch,&s->textures[i]->rsrc->base,AgxRefSrv,stage,i,0,0,0);
 }
 void AgxWin32AsahiCaptureComputeRefs(struct agx_batch *batch,
@@ -264,21 +273,54 @@ static void capture_draw_refs(struct agx_batch *batch,
   }
 }
 /* Native envelope addresses are checked independently of its BO list. */
-static void expect_address(struct agx_batch *batch,uint64_t va,uint64_t bytes,
-    unsigned kind,unsigned slot) {
+static void expect_address_origin(struct agx_batch *batch,uint64_t va,uint64_t bytes,
+    AGX_WIN32_REF r) {
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
   if(!b->ValidateRefs || !va) return;
-  AGX_WIN32_REF r=b->RefOrigin;
-  r.Va=va;r.Bytes=bytes;r.Allocation=0;r.Kind=kind;r.Slot=slot;r.Path=4;
+  r.Va=va;r.Bytes=bytes;r.Allocation=0;
   APPLE_AGX_U32 cursor=0;
   const struct agx_bo *bo;
   while(b->Ops.NextBo && (bo=b->Ops.NextBo(b->Owner,&cursor))!=NULL) {
     const AGX_WIN32_GPUVA_BO *map=AgxWin32AsahiGpuvaBo(b,(struct agx_bo *)bo);
+    if(map && AgxWin32AsahiVirtualContains((struct agx_bo *)bo,va,bytes)) {
+      /* Alias address is bounded separately; holds are canonical/backing. */
+      expect_bo(batch,(struct agx_bo *)bo,r,0,0);return;
+    }
     if(map && va>=map->Va && va-map->Va<map->Bytes) {
       r.Allocation=map->Allocation;break;
     }
   }
   (void)AgxWin32RefAppend(&capsule(batch)->Expected,&r);
+}
+static void expect_address(struct agx_batch *batch,uint64_t va,uint64_t bytes,
+    unsigned kind,unsigned slot) {
+  AGX_WIN32_REF r=backend(batch)->RefOrigin;
+  r.Kind=kind;r.Slot=slot;r.Path=4;
+  expect_address_origin(batch,va,bytes,r);
+}
+void AgxWin32AsahiExpectDescriptors(struct pipe_context *pipe,int compute,
+    const void *packed,unsigned stage,unsigned slot,uint64_t object) {
+  AGX_WIN32_ASAHI_BACKEND *b=agx_device(pipe->screen)->windows_private;
+  if(!b || !b->ValidateRefs) return;
+  struct agx_context *ctx=agx_context(pipe);
+  if(ctx->any_faults) return;
+  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  if(!batch || !capsule(batch)) return;
+  if(!packed) { capsule(batch)->Expected.Incomplete=1;return; }
+  AGX_WIN32_REF origin=b->RefOrigin;
+  origin.Kind=AgxRefDescriptor;origin.Stage=stage;origin.Slot=slot;origin.Object=object;origin.Path=5;
+  struct AGX_TEXTURE texture;
+  if(!AGX_TEXTURE_unpack(stderr,packed,&texture)) { capsule(batch)->Expected.Incomplete=1;return; }
+  expect_address_origin(batch,texture.address,1,origin);
+  if(texture.compressed) expect_address_origin(batch,texture.acceleration_buffer,1,origin);
+  for(unsigned i=0;i<2;++i) {
+    struct AGX_PBE pbe;
+    if(!AGX_PBE_unpack(stderr,(const uint8_t *)packed+AGX_TEXTURE_LENGTH+i*AGX_PBE_LENGTH,&pbe)) {
+      capsule(batch)->Expected.Incomplete=1;return;
+    }
+    expect_address_origin(batch,pbe.buffer,1,origin);
+    if(pbe.compressed) expect_address_origin(batch,pbe.acceleration_buffer,1,origin);
+  }
 }
 static void capture_compute_addresses(struct agx_batch *batch,
     const struct drm_asahi_cmd_compute *c) {
