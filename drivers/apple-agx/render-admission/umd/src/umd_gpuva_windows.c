@@ -673,6 +673,15 @@ static int make_resident(void *context, const uint64_t *tokens,
   HeapFree(GetProcessHeap(), 0, priorities);
   HeapFree(GetProcessHeap(), 0, handles);
   if ((FAILED(hr) && hr != E_PENDING) || request.NumAllocations != pending) {
+    if(accepted) {
+      /* Some references were accepted but their paging completion is not
+       * established. Tell the winsys to retain the whole set; otherwise a
+       * retry can see Resident and skip the uncompleted paging fence. */
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      device->DrawTerminal=TRUE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      return 3;
+    }
     release_copies(device,tokens,count);return 0;
   }
   if(hr==E_PENDING && !request.PagingFenceValue) {
