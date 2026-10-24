@@ -62093,3 +62093,27 @@ Full evidence hashes: `evidence-manifest.sha256` in this task folder.
   cannot be attributed independently. Do not promote half-size to default
   or start another size sweep without new causal evidence.
 
+
+EXP1928 HARDWARE BEFORE 2026-10-24T04:56:22Z:
+- Package 30.0.1928.0 = EXP1927 + Codex exp1927 03b9b628. Switches Wom1GpuFaultInfoRead Wom1PoolHalfSize (the latter only to reproduce the failure).
+- **Next experiment — WHY THIS HYPOTHESIS:**
+- 1. Both saved traces have the same MakeResident -> backend/context fault ->
+-    failed Begin sequence, making terminal CPU error handling the closest
+-    evidenced cause of the access violation.
+- 2. Exact DLL disassembly shows an initial compute encoder barrier store at
+-    RVA 0x48184; pinned source returns an unusable compute batch after failure
+-    and its callers immediately encode it.
+- 3. Compiled regressions reproduce that unsafe continuation and now reject
+-    the failed acquisition while preserving successful behavior and cleanup
+-    ownership. No guessed GPU mapping or pool policy change is required.
+- 
+- **WINDOWS/AGX CONTRACT:** VidMm may refuse MakeResident over budget and return
+- NumBytesToTrim. UMD batch acquisition must propagate refusal, and encoding
+- must not proceed on a failed context or absent BO/CPU cursor. Preserve KMD
+- paging, T8 headroom, native-leaf placement, firmware, caps, signer and recovery.
+- The next run tests clean failure propagation, not a claim to fix GPU residency
+- or MMU faults. **WHAT IS STILL UNKNOWN:** CPU fault address/call stack and
+- Recovery rec1928h.
+- Hashes: sys 77d5794bdc0b, UmdArm64 3418b9ebf414, UmdX64 9fbbf79dd89e, Umd32 6402f9634e14; manifest e8155d5a63d3, hardware-manifest c209a6cda553; probe1928.sh 1ce32bf94895 (PROBE_LINT_OK); visible recovery rec1928h 9e211ae2811a8d77; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1928h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1928-batch-fail/run1928.sh.
