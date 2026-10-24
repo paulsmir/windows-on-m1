@@ -62817,3 +62817,55 @@ later PID9624 fault. Workload stability is REJECTED:** valid MMU faults,
 failed reset quiescence and a confirmed0x116, with no benchmark completion.
 The experiment was explicitly receipt-only; it never promised a behavior fix.
 
+
+EXP1934 HARDWARE BEFORE 2026-10-24T09:32:19Z:
+- Package 30.0.1934.0 = EXP1933 + Codex exp1933 (83c2fe2b, b1c4130c). Switches Wom1GpuFaultInfoRead Wom1PoolHalfSize.
+- **Next experiment — WHY THIS HYPOTHESIS:**
+- 
+- 1. The retained Explorer snapshot directly proves valid logical system PTEs
+-    with an absent native leaf at the actual fault. The paging implementation
+-    deliberately retains logical pages when it cannot publish a native quartet.
+- 2. The G4 parser checks explicit command addresses, but shader and descriptor
+-    accesses can reach other parts of a BO. Mesa already records those BOs in
+-    the exact submission residency set, making that set a narrower, causally
+-    relevant boundary than T12's rejected whole-process omission scan.
+- 3. The UMD holds this set after the paging fence and before SubmitCommandCb.
+-    An authenticated native-coverage query can refuse the unsafe job there,
+-    without choosing an undocumented paging failure status or submitting work
+-    that cannot execute. Valid references with unrelated omissions still pass.
+- 
+- **WINDOWS/AGX CONTRACT:** VidMm owns residency and ordered PTE updates; KMD
+- owns logical provenance and acknowledged native16KiB publication; Mesa owns
+- the reference/write set; UMD owns residency holds and submit admission. The
+- new software escape checks the full authenticated allocation description
+- extent, native coverage/permissions and every logical page's owner, offset
+- and native IPA under the G3 mutex. It accepts imported logical sizes within
+- that extent and checks the entire description, including the canonical padding
+- where the description contains it. It does not promise access beyond that
+- description. Paging selects the process root before the query; context SetRoot
+- is required only by the unchanged execution checks.
+- 
+- UMD checks only CopyHeld allocations after staging uploads and before the
+- Windows submit callback. The internal CPU command envelope is excluded from
+- this native check and retains the existing KMD logical validation. Sparse
+- resources' anchors, tables and backing BOs are checked at canonical mappings;
+- the existing sparse alias-map contract remains responsible for reserved VAs.
+- A not-ready query is successful escape transport with Ready=0, not a failed
+- paging or scheduled-submit DDI. The UMD logs the precise refused resource,
+- returns failure, and its existing unsubmitted cleanup releases the holds.
+- No fabricated completion, GPU access, remapping, capability, signer, firmware,
+- pool policy or recovery change is added.
+- 
+- **Review correction:** The earlier receipt-only next-run proposal is
+- superseded. Commit83c2fe2b remains as requested, but the next experiment is
+- behavioral containment. No consecutive-diagnostic exception is claimed.
+- This guard prevents submission through known omitted native coverage for
+- referenced canonical resources; it does **not** make scattered backing usable.
+- An affected application's device may still be removed. Correct rendering and
+- benchmark stability remain unproven until hardware validation.
+- 
+- **WHAT IS STILL UNKNOWN:** the later PID9624 fault's mapping and executable
+- Expected: boot and DWM survive (unlike T12); no unmapped GPU fault; GravityMark either progresses or gets a clean refusal. Recovery rec1934h.
+- Hashes: sys b4c9e7721265, UmdArm64 883c105b5c7a, UmdX64 acc265537ba5, Umd32 a3a402ee1eb2; manifest b1773e48b52e, hardware-manifest 29936da43c4d; probe1934.sh d1450db0e684 (PROBE_LINT_OK); visible recovery rec1934h 487035e47ed654d6; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1934h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1934-native-coverage/run1934.sh.
