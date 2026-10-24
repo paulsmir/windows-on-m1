@@ -62675,3 +62675,32 @@ benefit or attribution:** there is no saved first-run UMD trace proving what
 was trimmed or what mapping VA0x1112680000 had. The captured pool has no
 reservation/commit failures, but that cannot establish an OOM cure.
 
+
+EXP1933 HARDWARE BEFORE 2026-10-24T08:40:02Z:
+- Package 30.0.1933.0 = EXP1932 + Codex exp1932 ebfec593. Switches Wom1GpuFaultInfoRead Wom1PoolHalfSize.
+- **Next experiment — WHY THIS HYPOTHESIS:**
+- 
+- 1. The first actual GPU fault is an unmapped read. The current KMD can accept
+-    logical system PTEs while omitting their native leaf, and this run contains
+-    929 such updates plus a concrete Explorer example. Missing native backing
+-    is therefore a stronger candidate than the old reservation-floor failure.
+- 2. The retained omission events have different PIDs/VAs. No safe behavior fix
+-    follows from attributing them to PID4104; capture its exact current group.
+- 3. JOB_BEGIN already pins the graph through completion, and the fault handler
+-    runs before firmware resume. A first-fault snapshot at that boundary can
+-    distinguish omitted/scattered backing, invalid logical mappings and a
+-    graph-versus-hardware discrepancy without changing admission or residency.
+- 
+- **WINDOWS/AGX CONTRACT:** Windows owns residency/ordered PTE updates; KMD owns
+- logical shadows and native 16-KiB publication metadata. Capture four logical
+- 4-KiB pages and the native graph at the fault VA under the existing state lock,
+- checking active fence, live context membership and VM slot. If the lock/identity
+- cannot be established, record unknown. Do not read new MMIO, dereference saved
+- allocation handles, change recovery, or infer hardware PTE contents from the
+- software graph. m1n1/Mu remain unchanged.
+- 
+- **WHAT IS STILL UNKNOWN:** the faulting allocation and type, its residency
+- Recovery rec1933h.
+- Hashes: sys ca1346657b2e, UmdArm64 a6ee4b798c42, UmdX64 0d921f4da628, Umd32 e742157d2aee; manifest 3bdc59d179b6, hardware-manifest d0e838dc315e; probe1933.sh b0cfaa6741e1 (PROBE_LINT_OK); visible recovery rec1933h 09375c6c0b39cc7b; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1933h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1933-fault-map/run1933.sh.
