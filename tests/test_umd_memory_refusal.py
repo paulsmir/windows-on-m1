@@ -3,7 +3,8 @@
 Allocation refusals must retain failure-time CPU-copy ownership before rollback
 and cache reclamation. Cumulative traffic and final pool totals cannot answer
 this. Exercise production receipt and rollback bodies, including >4 GiB totals,
-transitions, mapped subsets, bounded output and unchanged allocation behavior.
+transitions, mapped subsets, bounded output and unchanged allocation behavior. OS query failures must not masquerade as
+zero available memory, truncate wide counters, or change caller LastError.
 """
 from pathlib import Path
 import importlib.util
@@ -58,9 +59,32 @@ static void AdmissionUmdDiagnostic(const char *name,HRESULT hr,const UINT *v,UIN
  memcpy(r.v.data(),v,n*4); rows.push_back(r);
 }
 static unsigned cleanup; static bool fail_cleanup;
-static int VirtualFree(void *,size_t,unsigned) { assert(rows.size()>=4); ++cleanup;return 1; }
+static int VirtualFree(void *,size_t,unsigned) { assert(rows.size()>=6); ++cleanup;return 1; }
 static HRESULT deallocate(void *,D3DDDICB_DEALLOCATE *p) {
- assert(rows.size()>=4 && p->NumAllocations==1);++cleanup;return fail_cleanup?E_FAIL:0;
+ assert(rows.size()>=6 && p->NumAllocations==1);++cleanup;return fail_cleanup?E_FAIL:0;
+}
+using DWORD=unsigned; using SIZE_T=size_t;
+struct MEMORYSTATUSEX { DWORD dwLength; uint64_t ullTotalPhys,ullAvailPhys,
+ ullTotalPageFile,ullAvailPageFile; };
+struct PROCESS_MEMORY_COUNTERS {};
+struct PROCESS_MEMORY_COUNTERS_EX { DWORD cb; SIZE_T PrivateUsage,WorkingSetSize,
+ PeakWorkingSetSize,PeakPagefileUsage; };
+static DWORD last_error=99; static unsigned queries, query_mode;
+[[maybe_unused]] static DWORD GetLastError() { return last_error; }
+[[maybe_unused]] static void SetLastError(DWORD e) { last_error=e; }
+[[maybe_unused]] static void *GetCurrentProcess() { return (void*)7; }
+[[maybe_unused]] static BOOL GlobalMemoryStatusEx(MEMORYSTATUSEX *m) {
+ assert(!current->ScreenBufferLock && m->dwLength==sizeof(*m)); ++queries;
+ m->ullAvailPhys=0x123456789ull; m->ullTotalPhys=0x23456789aull;
+ m->ullAvailPageFile=0x3456789abull; m->ullTotalPageFile=0x456789abcull;
+ last_error=123;return !(query_mode&1);
+}
+[[maybe_unused]] static BOOL K32GetProcessMemoryInfo(void *h,PROCESS_MEMORY_COUNTERS *base,DWORD cb) {
+ auto *p=(PROCESS_MEMORY_COUNTERS_EX*)base;
+ assert(!current->ScreenBufferLock && h==(void*)7 && cb==sizeof(*p) && p->cb==cb);++queries;
+ p->PrivateUsage=0x56789abcdull;p->WorkingSetSize=0x6789abcdeull;
+ p->PeakWorkingSetSize=0x789abcdefull;p->PeakPagefileUsage=0x89abcdef0ull;
+ last_error=456;return !(query_mode&2);
 }
 @@RECEIPT@@
 static int failure(ADMISSION_UMD_DEVICE *device,HRESULT result,UINT canonical,
@@ -87,9 +111,9 @@ int main() {
  d.ScreenBuffers[7]={1,1,0,0,0,nullptr,nullptr,0}; // current request
  auto before=d;
  assert(!failure(&d,E_OUTOFMEMORY,0,nullptr,1));
- assert(rows.size()==4 && !cleanup && d.LastScreenError==E_OUTOFMEMORY);
+ assert(rows.size()==6 && queries==2 && last_error==99 && !cleanup && d.LastScreenError==E_OUTOFMEMORY);
  auto &h=rows[0];assert(!strcmp(h.name,"measure-memory-refusal") && h.hr==E_OUTOFMEMORY);
- assert(h.v[0]==1 && wide(h,1)==d.OwnerCookie && wide(h,3)==0x123456789ull);
+ assert(h.v[0]==2 && wide(h,1)==d.OwnerCookie && wide(h,3)==0x123456789ull);
  assert(h.v[5]==1 && h.v[6]==1 && h.v[7]==15 && wide(h,8)==0x8000000);
  assert(h.v[10]==1 && h.v[11]==0 && h.v[12]==7 && h.v[13]==2 && h.v[14]==1 && h.v[15]==1);
  // category, slots, bytes, mapped slots/bytes, unmapped slots/bytes
@@ -105,20 +129,34 @@ int main() {
  assert(rows[3].v[7]==1 && wide(rows[3],8)==0x80000000 && !rows[3].v[10]);
  assert(!memcmp(d.ScreenBuffers,before.ScreenBuffers,7*sizeof(d.ScreenBuffers[0])));
  assert(!d.ScreenBuffers[7].Active && !d.DrawTerminal && !d.ScreenBufferLock);
+ // OS samples use full-width values and preserve the allocation caller's error.
+ assert(!strcmp(rows[4].name,"measure-memory-system") && rows[4].v[6]==1 && !rows[4].v[7]);
+ assert(wide(rows[4],8)==0x123456789ull && wide(rows[4],10)==0x23456789aull);
+ assert(wide(rows[4],12)==0x3456789abull && wide(rows[4],14)==0x456789abcull);
+ assert(!strcmp(rows[5].name,"measure-memory-process") && rows[5].v[6]==1 && !rows[5].v[7]);
+ assert(wide(rows[5],8)==0x56789abcdull && wide(rows[5],10)==0x6789abcdeull);
+ assert(wide(rows[5],12)==0x789abcdefull && wide(rows[5],14)==0x89abcdef0ull);
+ query_mode=1;
  // Private allocation failure after AllocateCb success: preserve pending
  // ownership before freeing it; borrowed staging is never deallocated.
  d.ScreenBuffers[7]={1,1,0,0,0,nullptr,nullptr,0};
  assert(!failure(&d,E_OUTOFMEMORY,77,nullptr,2,88,88));
- assert(rows[4].v[10]==2 && rows[4].v[11]==(1|4) && cleanup==1);
+ assert(rows[6].v[10]==2 && rows[6].v[11]==(1|4) && cleanup==1);
+ assert(!rows[10].v[6] && rows[10].v[7]==123 && rows[11].v[6]==1);
+ for(unsigned j=8;j<16;++j) assert(!rows[10].v[j]);
+ assert(last_error==99);query_mode=2;
  // Callback failure with a handle plus failed rollback retains the owner.
  fail_cleanup=true;d.ScreenBuffers[7]={1,1,0,0,0,nullptr,nullptr,0};
  assert(!failure(&d,E_FAIL,79,(BYTE*)9,1));
- assert(rows[8].v[11]==3 && cleanup==3 && d.DrawTerminal);
+ assert(rows[12].v[11]==3 && cleanup==3 && d.DrawTerminal);
  assert(d.ScreenBuffers[7].KernelAllocation==79 && !d.ScreenBuffers[7].Transition);
+ assert(rows[16].v[6]==1 && !rows[17].v[6] && rows[17].v[7]==456);
+ for(unsigned j=8;j<16;++j) assert(!rows[17].v[j]);
+ assert(last_error==99);query_mode=3;
  // Successful path produces no receipt; fourth failure exhausts budget.
- assert(failure(&d,0,77,(BYTE*)8,2) && rows.size()==12);
- assert(!failure(&d,E_FAIL,0,nullptr,1) && rows.size()==16);
- assert(!failure(&d,E_FAIL,0,nullptr,1) && rows.size()==16 && d.MemoryRefusalSnapshots==4);
+ assert(failure(&d,0,77,(BYTE*)8,2) && rows.size()==18 && queries==6);
+ assert(!failure(&d,E_FAIL,0,nullptr,1) && rows.size()==24 && queries==8 && last_error==99);
+ assert(!failure(&d,E_FAIL,0,nullptr,1) && rows.size()==24 && queries==8 && last_error==99 && d.MemoryRefusalSnapshots==4);
  for(const auto &r:rows) {printf("%s hr=0x%08x pid=7 tid=8 session=1 qpc=9",r.name,unsigned(r.hr));
   for(auto w:r.v) printf(" %08x",w);puts("");}
 }
@@ -141,7 +179,7 @@ class MemoryRefusal(unittest.TestCase):
             self.assertEqual(built.returncode,0,built.stderr)
             run = subprocess.run([str(exe)],capture_output=True,text=True)
             self.assertEqual(run.returncode,0,run.stderr)
-            self.assertEqual(len(run.stdout.splitlines()),16)
+            self.assertEqual(len(run.stdout.splitlines()),24)
             decoder = self.decoder()
             decoded = decoder.decode(run.stdout)
             self.assertEqual(len(decoded),4)
@@ -149,6 +187,12 @@ class MemoryRefusal(unittest.TestCase):
             self.assertEqual(first['owner_cookie'],'0xabcdef0123456789')
             self.assertEqual(first['request']['bytes'],134217728)
             self.assertEqual(first['request']['stage'],'allocate-callback')
+            self.assertEqual(first['system']['available_physical_bytes'],4886718345)
+            self.assertEqual(first['process']['private_usage_bytes'],0x56789abcd)
+            self.assertEqual(decoded[1]['system'],{'valid':False,'error':123})
+            self.assertEqual(decoded[2]['process'],{'valid':False,'error':456})
+            self.assertFalse(decoded[3]['system']['valid'])
+            self.assertFalse(decoded[3]['process']['valid'])
             self.assertEqual(first['transitional_slots_excluded'],2)
             self.assertEqual(first['unknown_size_slots_excluded'],1)
             self.assertEqual(first['copy_held_slots_excluded'],1)
@@ -166,9 +210,21 @@ class MemoryRefusal(unittest.TestCase):
             for bad in ('', '\n'.join(lines[:-1]), run.stdout+lines[0]+'\n',
                         changed(0,0,'00000009'), changed(1,6,'00000009'),
                         changed(1,7,'00000004'), changed(0,10,'00000009'),
+                        changed(4,6,'00000002'), changed(4,7,'00000001'),
+                        changed(10,8,'00000001'), changed(4,0,'00000001'),
                         '\n'.join([lines[0].rsplit(' ',1)[0]]+lines[1:])):
                 with self.subTest(bad=bad[:90]), self.assertRaises(ValueError):
                     decoder.decode(bad)
+            # v1 remains readable; no OS samples means unknown, not zero.
+            legacy=[]
+            for line in lines:
+                if line.startswith(('measure-memory-system','measure-memory-process')):
+                    continue
+                w=line.split();w[-16]='00000001';legacy.append(' '.join(w))
+            old=decoder.decode('\n'.join(legacy))
+            self.assertIsNone(old[0]['system'])
+            self.assertIsNone(old[0]['process'])
+            self.assertEqual(old[0]['storage'],first['storage'])
             self.assertEqual(decoder.decode('\n'.join(reversed(lines))),decoded)
             other=run.stdout.replace('pid=7','pid=17')
             self.assertEqual(len(decoder.decode(run.stdout+other)),8)

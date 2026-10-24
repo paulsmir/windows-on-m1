@@ -1,5 +1,8 @@
 #include <windows.h>
 #include <wingdi.h>
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#include <psapi.h> /* K32GetProcessMemoryInfo, kernel32 on Windows 7+ */
+#endif
 
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 
@@ -600,7 +603,7 @@ static int AdmissionUmdScreenQueryDevice(void *Context,
 static VOID AdmissionUmdScreenMemoryRefusal(ADMISSION_UMD_DEVICE *Device,
     HRESULT Status, APPLE_AGX_U64 Token, UINT ClassId, UINT Flags,
     APPLE_AGX_U64 Bytes, UINT Stage, UINT Pending) {
-  UINT header[16] = {1u, (UINT)Device->OwnerCookie,
+  UINT header[16] = {2u, (UINT)Device->OwnerCookie,
       (UINT)(Device->OwnerCookie >> 32), (UINT)Token, (UINT)(Token >> 32),
       0u, ClassId, Flags, (UINT)Bytes, (UINT)(Bytes >> 32), Stage, Pending};
   UINT rows[3][16] = {};
@@ -630,6 +633,33 @@ static VOID AdmissionUmdScreenMemoryRefusal(ADMISSION_UMD_DEVICE *Device,
     }
   }
   ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  /* EXP1930: logical copy spans alone cannot distinguish process commit
+   * from physical pressure outside those copies. Sample the OS before any
+   * diagnostic I/O/rollback/cache retry, without holding the slot lock.
+   * These are adjacent, best-effort observations, not an atomic residency
+   * snapshot. Failed queries must never be interpreted as zero headroom. */
+  const DWORD savedError = GetLastError();
+  MEMORYSTATUSEX memory = {};
+  PROCESS_MEMORY_COUNTERS_EX process = {};
+  UINT osRows[2][16] = {};
+  APPLE_AGX_U64 osValues[2][4] = {};
+  memory.dwLength = sizeof(memory);
+  process.cb = sizeof(process);
+  osRows[0][6] = GlobalMemoryStatusEx(&memory) != FALSE;
+  if (osRows[0][6]) {
+    osValues[0][0] = memory.ullAvailPhys;
+    osValues[0][1] = memory.ullTotalPhys;
+    osValues[0][2] = memory.ullAvailPageFile;
+    osValues[0][3] = memory.ullTotalPageFile;
+  } else osRows[0][7] = GetLastError();
+  osRows[1][6] = K32GetProcessMemoryInfo(GetCurrentProcess(),
+      (PROCESS_MEMORY_COUNTERS *)&process, sizeof(process)) != FALSE;
+  if (osRows[1][6]) {
+    osValues[1][0] = process.PrivateUsage;
+    osValues[1][1] = process.WorkingSetSize;
+    osValues[1][2] = process.PeakWorkingSetSize;
+    osValues[1][3] = process.PeakPagefileUsage;
+  } else osRows[1][7] = GetLastError();
   AdmissionUmdDiagnostic("measure-memory-refusal", Status, header, ARRAYSIZE(header));
   for (UINT kind = 0u; kind < 3u; ++kind) {
     for (UINT i = 0u; i < 6u; ++i) rows[kind][i] = header[i];
@@ -641,6 +671,16 @@ static VOID AdmissionUmdScreenMemoryRefusal(ADMISSION_UMD_DEVICE *Device,
     }
     AdmissionUmdDiagnostic("measure-memory-storage", Status, rows[kind], 16u);
   }
+  for (UINT kind = 0u; kind < 2u; ++kind) {
+    for (UINT i = 0u; i < 6u; ++i) osRows[kind][i] = header[i];
+    for (UINT i = 0u; i < 4u; ++i) {
+      osRows[kind][8u + i * 2u] = (UINT)osValues[kind][i];
+      osRows[kind][9u + i * 2u] = (UINT)(osValues[kind][i] >> 32);
+    }
+    AdmissionUmdDiagnostic(kind ? "measure-memory-process" : "measure-memory-system",
+        Status, osRows[kind], 16u);
+  }
+  SetLastError(savedError);
 }
 #endif
 
