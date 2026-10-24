@@ -61743,3 +61743,20 @@ EXP1922 ACTUAL 2026-10-23T23:32:24Z:
   - the allocation missing from the residency list;
   - the mapping missing the compression-metadata tail;
   - C84 temporaries.
+
+EXP1923 HARDWARE BEFORE 2026-10-24T01:27:55Z:
+- Package 30.0.1923.0 from 45d7f45b (rebuild; the 68f502f0 build EXP1923-bc-gpu-only failed in the WDK KMD compile because render_omitted_leaves.h included <stdint.h>, never installed, kept as -superseded) = EXP1922 source + Codex T11 fe2542c9 (pre-map residency paging fail-closed) + Codex T11b d6247b1e (Wom1G4OmittedLeaves receipt, receipt-only) and a1f36c87 (non-MSAA BC1-BC7 committed DEFAULT textures GPU-only, staged through raw block views).
+- Device switch Wom1GpuFaultInfoRead=1 kept (AGX_DEVICE_SWITCHES) so a remaining fault is attributed.
+- Short profile: GravityMark D3D12 10k and 2k, synchronous UMD trace.
+- ATOMIC CONTRACT: none -- one behavioural variable (BC GPU-only placement, a1f36c87). T11 changes only a failure path no receipt showed occurring; the omitted-leaf receipt is receipt-only.
+- WHY THIS HYPOTHESIS: (1) EXP1922: both first-frame timeouts are DCMP unmapped reads (VA 0x119e720d40 / 0x11ac135080); (2) the 10k VA ranks inside the committed BC7_UNORM 1024x1024x96x11 texture (130 MiB), which T7h left CPU-visible; (3) gpuva_g3_paging_windows.c keeps logical PTEs but omits incomplete native leaves on scattered aperture backing, and sampled textures are not G4-validated. This is the exact class T7h fixed for the depth BO.
+- WINDOWS CONTRACT: as T7h -- CpuVisible=0, segment-3-only allocations for GPU-only resources; D3D12 never CPU-maps DEFAULT textures.
+- AGX/ASAHI CONTRACT: BC blocks copied as same-size uint texels (8/16 bytes) via GPU copies; the UAT needs 16 KiB-contiguous backing (segment 3).
+- TRANSLATION: CopyTextureRegion to/from a BC texture -> raw-block-view GPU copy through a CPU-visible linear staging.
+- WHAT IS STILL UNKNOWN: whether the faulting allocation is that BC7 texture (Wom1G4OmittedLeaves answers if a fault remains); BC raw-view copy correctness on hardware; memory pressure with more segment-3-only bytes.
+- Expected: no DCMP unmapped fault; execute #47/#48 completes; GravityMark D3D12 runs further or completes.
+- Failure criteria: a DCMP fault remains (join its VA to OMITTED_LEAVES); BC visual corruption; new refusals.
+- Recovery: rec1923h (pre-disable receipt snapshot); at proxy use AGX_RECOVERY_ALLOW_AT_PROXY=1.
+- Hashes: sys 3b66e535ffc1, UmdArm64 4a5b7366fd93, UmdX64 613e82a28ed5, Umd32 f451a0c81a17; manifest d5d3f6a4ecce, hardware-manifest 43ef67caf425; probe1923.sh 32cf100f425b (PROBE_LINT_OK); visible recovery rec1923h 487fcfe88057960a; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1923h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1923-bc-gpu-only-b/run1923.sh.
