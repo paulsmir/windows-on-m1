@@ -46,7 +46,7 @@ struct SYNC { bool Valid; };
 static void AdmissionUmdStagingInvalidate(SYNC *s) {s->Valid=false;}
 struct ADMISSION_UMD_SCREEN_BUFFER {
  BYTE *PrivateStaging, *HeapStagingShadow; ULONGLONG Bytes; BOOL WriteWatch, GpuWritten;
- SYNC Sync;
+ SYNC Sync; BOOL Mapped=TRUE;
 };
 struct ADMISSION_UMD_DEVICE { ULONGLONG HeapStagingDirtyBytes,HeapStagingUploadBytes,HeapStagingDownloadBytes; };
 struct APPLE_AGX_G3_COPY_REQUEST { UINT Operation,TransferBytes; ULONGLONG Offset; BYTE Data[65536]; };
@@ -136,6 +136,45 @@ int main() {
 '''
 
 class HeapStaging(unittest.TestCase):
+    def test_unmapped_slots_do_not_allocate_merge_baselines(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? An unmapped private slot has no CPU writer; allocating a full merge duplicate wastes memory, while first-map download must preserve GPU output before pointer publication."""
+        text = (SRC/'umd_gpuva_windows.c').read_text()
+        funcs = '\n'.join(function(text,n) for n in ('heap_staging_page_compare','heap_staging_transfer'))
+        prefix = PRELUDE[:PRELUDE.index('@@FUNCTIONS@@')]
+        prefix = prefix.replace('static bool alloc_fail;', 'static bool alloc_fail; static unsigned shadow_allocations;')
+        prefix = prefix.replace('static void *VirtualAlloc(void *,size_t n,unsigned,unsigned) {',
+                                'static void *VirtualAlloc(void *,size_t n,unsigned,unsigned) { ++shadow_allocations;')
+        harness = prefix + funcs + r'''
+int main() {
+ length=3*65536+123;base=(BYTE*)calloc(1,length);canonical.assign(length,0);
+ ADMISSION_UMD_DEVICE d={};ADMISSION_UMD_SCREEN_BUFFER s={base,nullptr,length,TRUE,TRUE,{false}};
+ APPLE_AGX_G3_COPY_REQUEST p={};s.Mapped=FALSE;
+ // A fresh GPU-written but never CPU-mapped slot needs no merge copy.
+ assert(heap_staging_transfer(&d,&s,&p,false,nullptr,nullptr));
+ assert(!shadow_allocations && !s.HeapStagingShadow);
+ canonical[100]=0x72;canonical[length-1]=0x73;
+ // PrepareCpuMap downloads while still unmapped, then publishes the pointer.
+ // No allocation is needed at all on this path, even under allocation pressure.
+ alloc_fail=true;
+ assert(heap_staging_transfer(&d,&s,&p,true,nullptr,nullptr));
+ assert(!shadow_allocations && !s.HeapStagingShadow && base[100]==0x72 && base[length-1]==0x73);
+ alloc_fail=false;s.Mapped=TRUE;
+ // Once CPU access exists, establish the baseline before a GPU writer.
+ assert(heap_staging_transfer(&d,&s,&p,false,nullptr,nullptr));
+ assert(shadow_allocations==1 && s.HeapStagingShadow);
+ canonical[100]=0x91;write_byte(101,0x92);
+ assert(heap_staging_transfer(&d,&s,&p,true,nullptr,nullptr));
+ assert(base[100]==0x91 && base[101]==0x92);
+ free(s.HeapStagingShadow);free(base);
+}
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            src=Path(tmp)/'unmapped.cpp';exe=Path(tmp)/'unmapped';src.write_text(harness)
+            b=subprocess.run(['clang++','-std=c++17','-fsanitize=address,undefined',str(src),'-o',str(exe)],capture_output=True,text=True)
+            self.assertEqual(b.returncode,0,b.stderr)
+            r=subprocess.run([str(exe)],capture_output=True,text=True)
+            self.assertEqual(r.returncode,0,r.stderr)
+
     def test_actual_dirty_copy_and_readback_merge(self):
         text = (SRC/'umd_gpuva_windows.c').read_text()
         funcs = '\n'.join(function(text,n) for n in ('heap_staging_page_compare','heap_staging_transfer'))

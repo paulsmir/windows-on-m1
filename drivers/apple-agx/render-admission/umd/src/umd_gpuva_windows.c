@@ -1019,9 +1019,12 @@ static int heap_staging_transfer(ADMISSION_UMD_DEVICE *device,
   bool fresh_shadow = false;
   AdmissionUmdStagingInvalidate(&slot->Sync);
   if (!cpu || !bytes || bytes != slot->Bytes) return 0;
-  /* Only GPU-written BOs need a baseline for merging copy-out. Capture it
-   * before the watch snapshot and before submission, never after GPU writes. */
-  if (slot->GpuWritten && !slot->HeapStagingShadow) {
+  /* Only GPU-written BOs with an exposed CPU map need a merge baseline.
+   * An unmapped private slot has no CPU writer (cpu_quiet); PrepareCpuMap
+   * downloads its pending GPU output before publishing the first pointer.
+   * Capture mapped baselines before the watch snapshot and submission,
+   * never after GPU writes. Keep existing baselines across later unmaps. */
+  if (slot->GpuWritten && slot->Mapped && !slot->HeapStagingShadow) {
     slot->HeapStagingShadow = (BYTE *)VirtualAlloc(NULL, bytes,
         MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!slot->HeapStagingShadow) return 0;
