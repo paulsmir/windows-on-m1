@@ -42,7 +42,8 @@ class G4SubmitVirtualReplay(unittest.TestCase):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
         A refused graph access must identify its logical allocation and copied
         paging metadata without borrowing a collided/foreign process record;
-        the submission must still fail before any GPU dispatch.
+        the submission must still fail before any GPU dispatch. An omitted
+        indirect resource must block BeginJob even outside parsed ranges.
         """
         production = SOURCE.read_text()
         branches = production.split("/* Branch IDs are a stable diagnostic ABI", 1)[1]

@@ -120,6 +120,15 @@ static BOOLEAN AdmissionG3RetireSystemSubtree(ADMISSION_G3_PROCESS *process,
           ADMISSION_G3_FRAME_SEGMENT(shadow->LogicalPtes[i].SegmentId))
         RtlZeroMemory(&shadow->LogicalPtes[i], sizeof(*shadow->LogicalPtes));
     }
+    /* Retiring system entries clears a refusal only when no logical page
+     * remains in that group. A mixed local/system partial group stays closed. */
+    for (UINT group = 0u; group < 2048u; ++group) {
+      const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ptes = shadow->LogicalPtes;
+      if (ptes == NULL || !(ptes[group * 4u].Flags |
+          ptes[group * 4u + 1u].Flags | ptes[group * 4u + 2u].Flags |
+          ptes[group * 4u + 3u].Flags))
+        shadow->OmittedNativeLeaves[group / 64u] &= ~(1ULL << (group % 64u));
+    }
   }
   return !process->Graph.Uncertain;
 }
@@ -153,6 +162,7 @@ static void AdmissionG3ResetTableShadow(ADMISSION_G3_PROCESS *process,
       AdmissionG3PoolPagingRefs(process->State->Adapter, s->LogicalPtes, NULL,
                                 0u, 8192u);
     if (s->LogicalPtes) RtlZeroMemory(s->LogicalPtes, 8192u * sizeof(*s->LogicalPtes));
+    RtlZeroMemory(s->OmittedNativeLeaves, sizeof(s->OmittedNativeLeaves));
   }
 }
 
@@ -782,6 +792,21 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     if (!complete && flags && segment < 32u &&
         process->State->UnpublishedGroups[segment] != MAXULONGLONG)
       ++process->State->UnpublishedGroups[segment];
+  }
+  /* T12: commit coverage only after every publication succeeded. Rollback
+   * leaves the old bitmap intact; uncertain rollback already forbids jobs.
+   * Count retained neighbours too (including partial unmaps), not only the
+   * PTEs attributed to this update by the diagnostic omission receipt. */
+  for (i = 0u; i < groups; ++i) {
+    UINT index = first_group + i;
+    ULONGLONG bit = 1ULL << (index % 64u);
+    BOOLEAN valid = FALSE;
+    for (j = 0u; j < 4u; ++j)
+      if (candidate[index * 4u + j].Flags) valid = TRUE;
+    if (valid && !AppleAgxGpuvaG3GraphLeaf(&process->Graph, table_ipa, index))
+      shadow->OmittedNativeLeaves[index / 64u] |= bit;
+    else
+      shadow->OmittedNativeLeaves[index / 64u] &= ~bit;
   }
   /* Publication and TLB acknowledgement precede release of the old lifetime. */
   if (shadow->ResidentPtes) {
