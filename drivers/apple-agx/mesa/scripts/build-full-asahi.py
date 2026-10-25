@@ -9,14 +9,16 @@ import hashlib
 import json
 import os
 from pathlib import Path
+# Builder root (APPLE AGX\active as its 8.3 alias, no space); override with APPLE_AGX_BUILDER_ROOT.
+BUILDER = Path(os.environ.get('APPLE_AGX_BUILDER_ROOT', r'C:\Users\pauls\APB12E~1\active'))
 import re
 import shutil
 import subprocess
 import uuid
 from compact_blocker import first_diagnostic
 
-ROOT = Path(r'C:\Users\pauls\AD04-fullcompiler-001')
-MESA = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
+ROOT = (BUILDER / r'AD04-fullcompiler-001')
+MESA = (BUILDER / r'AD04-d3d10-frontend-build\mesa')
 parser = argparse.ArgumentParser()
 parser.add_argument('--architecture', choices=('x64', 'arm64', 'x86'), default='x64')
 # EXP1182: a Mesa build other than nir-<architecture> (e.g. b_ndebug=true).
@@ -26,8 +28,8 @@ ARGS = parser.parse_args()
 MESA = ARGS.mesa_source or MESA
 ARCH = ARGS.architecture
 BUILD = ARGS.mesa_build or ROOT / ('nir-' + ARCH)
-GENERATED = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
-CLANG = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin')
+GENERATED = (BUILDER / r'AD04-asahi-windows-compiler\b5\generated')
+CLANG = (BUILDER / r'AD04-asahi-windows-compiler\llvm20\bin')
 INPUT = ROOT / 'asahi-input'
 OUT = ROOT / ('asahi-' + ARCH + '-' + uuid.uuid4().hex)
 OUT.mkdir()
@@ -105,7 +107,7 @@ for name, sha in [('agx_compiler.h', 'c41df12679c1692cc50617e81d57eb03cf906d8c5f
     shutil.copy2(INPUT / name, compiler / name)
 (OUT / 'src/util').mkdir()
 shutil.copy2(INPUT / 'lut.h', OUT / 'src/util/lut.h')
-includes = [Path(r'C:\Users\pauls\AD04-uatomic\include'), OUT / 'src', compiler, BUILD / 'src', BUILD / 'include',
+includes = [(BUILDER / r'AD04-uatomic\include'), OUT / 'src', compiler, BUILD / 'src', BUILD / 'include',
             BUILD / 'src/compiler', BUILD / 'src/compiler/nir', MESA / 'include',
             MESA / 'src', MESA / 'src/compiler', MESA / 'src/compiler/nir',
             GENERATED / 'src/asahi/compiler', GENERATED / 'src/asahi/libagx',

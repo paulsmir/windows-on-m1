@@ -2,11 +2,12 @@
 # including libgallium_wgl/opengl32 softpipe controls and the static GL/NIR
 # libraries the x86 ICD links). Writes ninja output beside the build.
 param([string]$Name='nir-x86')
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference='Stop'
-$root='C:\Users\pauls\AD04-fullcompiler-001'
+$root="$builderRoot\AD04-fullcompiler-001"
 $tool='C:\VS2022Community\VC\Tools\MSVC\14.44.35207'
 $kit='C:\Program Files (x86)\Windows Kits\10'
-$clang='C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin'
+$clang="$builderRoot\AD04-asahi-windows-compiler\llvm20\bin"
 $env:PATH="$root\winflex;$root\venv\Scripts;$clang;$tool\bin\HostX64\x86;$tool\bin\HostX64\x64;"+$env:PATH
 $env:INCLUDE="$tool\include;$kit\Include\10.0.26100.0\ucrt;$kit\Include\10.0.26100.0\shared;$kit\Include\10.0.26100.0\um"
 $env:LIB="$tool\lib\x86;$kit\Lib\10.0.26100.0\ucrt\x86;$kit\Lib\10.0.26100.0\um\x86"

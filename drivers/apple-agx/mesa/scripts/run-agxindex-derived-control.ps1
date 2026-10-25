@@ -1,13 +1,15 @@
-param([string]$Root = 'C:\Users\pauls\AD04-agxindex-derived')
+param([string]$Root = '')
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
+if (!$Root) { $Root = "$builderRoot\AD04-agxindex-derived" }
 $ErrorActionPreference = 'Stop'
-$mesa = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa'
+$mesa = "$builderRoot\AD04-d3d10-frontend-build\mesa"
 $sourceCompiler = "$mesa\src\asahi\compiler"
 $derivedCompiler = Join-Path $Root 'compiler'
-$generated = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated'
-$clang = 'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe'
-$fourcc = 'C:\Users\pauls\AD04-uatomic\include'
-$uatomic = 'C:\Users\pauls\AD04-uatomic\uatomic_clang_compat.h'
-$overlayInput = 'C:\Users\pauls\agx_compiler_derived_input.h'
+$generated = "$builderRoot\AD04-asahi-windows-compiler\b5\generated"
+$clang = "$builderRoot\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe"
+$fourcc = "$builderRoot\AD04-uatomic\include"
+$uatomic = "$builderRoot\AD04-uatomic\uatomic_clang_compat.h"
+$overlayInput = "$builderRoot\agx_compiler_derived_input.h"
 $overlay = Join-Path $Root 'compiler\agx_compiler.h'
 $source = Join-Path $derivedCompiler 'agx_compile.c'
 if (Test-Path $Root) { throw "refusing to reuse existing output root: $Root" }

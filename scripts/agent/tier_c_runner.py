@@ -7,6 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Builder root (APPLE AGX\active as its 8.3 alias, no space); override with APPLE_AGX_BUILDER_ROOT.
+BUILDER = os.environ.get('APPLE_AGX_BUILDER_ROOT', r'C:\Users\pauls\APB12E~1\active')
+
 
 def git(repo, *args):
     return subprocess.run(["git", "-C", str(repo), *args], text=True,
@@ -33,7 +36,7 @@ def command_for(command_id, repo):
         "FRYZZING_VERIFY_CLANG": [
             "ssh", "-i", "/Users/pavel/.ssh/windows_builder", "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=8", "pauls@192.168.1.24",
-            'cmd /c "C:\\Users\\pauls\\AD04-asahi-windows-compiler\\llvm20\\bin\\clang-cl.exe --version"',
+            f'cmd /c "{BUILDER}\\AD04-asahi-windows-compiler\\llvm20\\bin\\clang-cl.exe --version"',
         ],
     }
     return commands.get(command_id)

@@ -1,6 +1,8 @@
 # C53B: builds agx_d3d12_tiled_probe.c (copied into $r) for x64 (run "warp" on the
 # builder as the reference) and ARM64 (J313) with MSVC /W4 /WX.
-param([string]$r = 'C:\Users\pauls\t2d-probe')
+param([string]$r = '')
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
+if (!$r) { $r = "$builderRoot\t2d-probe" }
 $tool='C:\VS2022Community\VC\Tools\MSVC\14.44.35207'; $kit='C:\Program Files (x86)\Windows Kits\10'; $v='10.0.26100.0'
 $env:INCLUDE="$tool\include;$kit\Include\$v\ucrt;$kit\Include\$v\shared;$kit\Include\$v\um"
 Set-Location $r

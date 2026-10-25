@@ -1,9 +1,10 @@
 param(
    [Parameter(Mandatory = $true)][string]$Root
 )
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference = 'Stop'
 if (Test-Path $Root) { throw "refusing to reuse existing result root: $Root" }
-$clang = 'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe'
+$clang = "$builderRoot\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe"
 $source = Join-Path (Split-Path -Parent $PSCommandPath) 'math_constants_probe.c'
 New-Item -ItemType Directory -Force $Root | Out-Null
 foreach ($target in @('x64', 'arm64')) {

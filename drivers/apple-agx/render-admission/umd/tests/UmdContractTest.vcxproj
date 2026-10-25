@@ -4,6 +4,11 @@
     <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
     <ProjectConfiguration Include="Release|ARM64"><Configuration>Release</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
   </ItemGroup>
+  <PropertyGroup Label="AppleAgxBuilderRoot">
+    <!-- builder root: APPLE AGX\active (8.3 alias, no space); environment APPLE_AGX_BUILDER_ROOT overrides -->
+    <AppleAgxBuilderRoot Condition="'$(AppleAgxBuilderRoot)' == ''">$(APPLE_AGX_BUILDER_ROOT)</AppleAgxBuilderRoot>
+    <AppleAgxBuilderRoot Condition="'$(AppleAgxBuilderRoot)' == ''">C:\Users\pauls\APB12E~1\active</AppleAgxBuilderRoot>
+  </PropertyGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{2ACF82EF-8F8B-42CB-8E95-C63549FAE71C}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
@@ -91,7 +96,7 @@
   </Target>
   <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true' and '$(EnableNativeRuntimeTest)' != 'true'">
     <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_NATIVE_POOL_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
-    <Link><AdditionalDependencies>$(NativeObjectRoot)\pool.obj;$(NativeObjectRoot)\agx_win32_asahi_bo.obj;$(NativeObjectRoot)\agx_win32_asahi_capture.obj;$(NativeObjectRoot)\agx_win32_asahi_pool_test.obj;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\util\libmesa_util.a;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\c11\impl\libmesa_util_c11.a;synchronization.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+    <Link><AdditionalDependencies>$(NativeObjectRoot)\pool.obj;$(NativeObjectRoot)\agx_win32_asahi_bo.obj;$(NativeObjectRoot)\agx_win32_asahi_capture.obj;$(NativeObjectRoot)\agx_win32_asahi_pool_test.obj;$(AppleAgxBuilderRoot)\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\util\libmesa_util.a;$(AppleAgxBuilderRoot)\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\c11\impl\libmesa_util_c11.a;synchronization.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup Condition="'$(EnableNativePoolTest)' == 'true' and '$(EnableNativeRuntimeTest)' != 'true'">
     <Object Include="$(NativeObjectRoot)\agx_state.obj" Condition="'$(EnableNativeStateTest)' == 'true'" />

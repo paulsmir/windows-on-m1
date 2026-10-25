@@ -9,14 +9,16 @@ param(
   [Parameter(Mandatory = $true)][string]$Closure,
   [Parameter(Mandatory = $true)][string]$Out,
   # EXP1182: the x86 Mesa build the closure was built from (b_ndebug builds).
-  [string]$MesaBuild = 'C:\Users\pauls\AD04-fullcompiler-001\nir-x86'
+  [string]$MesaBuild = ''
 )
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
+if (!$MesaBuild) { $MesaBuild = "$builderRoot\AD04-fullcompiler-001\nir-x86" }
 $ErrorActionPreference = 'Stop'
-$mesa = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa'
+$mesa = "$builderRoot\AD04-d3d10-frontend-build\mesa"
 $build = $MesaBuild
 $tool = 'C:\VS2022Community\VC\Tools\MSVC\14.44.35207'
 $kit = 'C:\Program Files (x86)\Windows Kits\10'
-$clang = 'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin'
+$clang = "$builderRoot\AD04-asahi-windows-compiler\llvm20\bin"
 $env:PATH = "$clang;$tool\bin\HostX64\x86;$tool\bin\HostX64\x64;" + $env:PATH
 $env:INCLUDE = "$tool\include;$kit\Include\10.0.26100.0\ucrt;$kit\Include\10.0.26100.0\shared;$kit\Include\10.0.26100.0\um"
 $env:LIB = "$tool\lib\x86;$kit\Lib\10.0.26100.0\ucrt\x86;$kit\Lib\10.0.26100.0\um\x86"

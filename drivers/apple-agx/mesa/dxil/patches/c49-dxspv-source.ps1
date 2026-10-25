@@ -1,5 +1,6 @@
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference='Stop'
-$from='C:\Users\pauls\EXP1388-dxil-runtime-build-only\source'; $to='C:\Users\pauls\c49-dxspv-source'
+$from="$builderRoot\EXP1388-dxil-runtime-build-only\source"; $to="$builderRoot\c49-dxspv-source"
 if(Test-Path $to){throw 'exists'}
 robocopy $from $to /E /NFL /NDL /NJH /NJS /XD .git | Out-Null
 $f="$to\opcodes\dxil\dxil_arithmetic.cpp"; $t=[IO.File]::ReadAllText($f)

@@ -6,7 +6,7 @@
 #   run-umd-contract-test.sh --worktree     archive the working tree (tracked files,
 #                                           uncommitted edits included) via git stash create
 #
-# Each run uses a fresh C:\Users\pauls\umdcontract-<rev>-<utc> directory, kept on FAIL
+# Each run uses a fresh <builder root>\umdcontract-<rev>-<utc> directory, kept on FAIL
 # for debugging and removed on PASS. It never touches the persistent package tree
 # (AD04-persistent-dwm-next) and does not start while msbuild/cl/link run on the
 # builder (exit 75). Local logs: .local/umd-contract/<run>/.
@@ -45,8 +45,10 @@ mkdir -p "$evidence_dir"
 archive="$evidence_dir/source.tar.gz"
 git -C "$repo_root" archive --format=tar "$source_commit" drivers/apple-agx | gzip -n > "$archive"
 archive_sha256=$(shasum -a 256 "$archive" | awk '{print $1}')
-remote_root="C:/Users/pauls/$run_id"
-remote_archive="C:/Users/pauls/$run_id.tar.gz"
+# builder root (APPLE AGX\active, 8.3 alias without the space); override with APPLE_AGX_BUILDER_ROOT
+builder_root=$(printf '%s' "${APPLE_AGX_BUILDER_ROOT:-C:/Users/pauls/APB12E~1/active}" | tr '\\' /)
+remote_root="$builder_root/$run_id"
+remote_archive="$builder_root/$run_id.tar.gz"
 {
   printf 'run_id=%s\nhead=%s\nsource_commit=%s\nworktree_snapshot=%s\n' \
     "$run_id" "$head_commit" "$source_commit" "$worktree"

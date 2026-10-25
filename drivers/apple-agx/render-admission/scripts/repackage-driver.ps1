@@ -21,8 +21,10 @@ param(
     [string]$Arm64xForwarder,
     [Parameter(Mandatory = $true)][string]$SignerThumbprint,
     [string]$Kit = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0',
-    [string]$SignTool = 'C:\Users\pauls\packages\Microsoft.Windows.SDK.CPP.10.0.28000.2526\c\bin\10.0.28000.0\x86\signtool.exe'
+    [string]$SignTool = ''
 )
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
+if (!$SignTool) { $SignTool = "$builderRoot\packages\Microsoft.Windows.SDK.CPP.10.0.28000.2526\c\bin\10.0.28000.0\x86\signtool.exe" }
 $ErrorActionPreference = 'Stop'
 $sys = Join-Path $BinaryDirectory 'AppleAgxRenderAdmission.sys'
 $umd = Join-Path $BinaryDirectory 'AppleAgxRenderAdmissionUmd.dll'

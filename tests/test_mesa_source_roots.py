@@ -23,7 +23,7 @@ class SourceRootRegression(unittest.TestCase):
                         if isinstance(n,ast.Constant) and isinstance(n.value,str) and 'AD04-d3d10-frontend-build' in n.value:n.value=str(default)
                 code=compile(ast.fix_missing_locations(ast.Module(body=[assignment],type_ignores=[])),filename,'exec')
                 for override,expected in [(None,b'pristine'),(chosen,b'projected')]:
-                    options=types.SimpleNamespace(mesa_source=override);env={'Path':pathlib.Path,'ARGS':options,'args':options,'MESA':default,'mesa':default}
+                    options=types.SimpleNamespace(mesa_source=override);env={'Path':pathlib.Path,'BUILDER':pathlib.Path('/builder-root'),'ARGS':options,'args':options,'MESA':default,'mesa':default}
                     exec(code,env)
                     self.assertEqual((env[name]/'src/compiler/shader_info.h').read_bytes(),expected)
     def test_runtime_rejects_mixed_preparation_and_compiler_evidence(self):

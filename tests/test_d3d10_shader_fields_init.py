@@ -43,7 +43,7 @@ def project(output):
     if not mesa or not libagx:
         return None
     text = SCRIPT.read_text()
-    text, n2 = re.subn(r"Path\(r.C:\\Users\\pauls\\AD04-umd-owner-004-generated\\src\\asahi\\lib\\libagx_shaders.h.\)",
+    text, n2 = re.subn(r"\(BUILDER / r.AD04-umd-owner-004-generated\\src\\asahi\\lib\\libagx_shaders.h.\)",
                        lambda m: f"Path({str(libagx)!r})", text)
     if n2 != 1:
         raise AssertionError("projection reference paths moved")

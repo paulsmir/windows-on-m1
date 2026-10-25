@@ -1,6 +1,7 @@
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference = 'Stop'
-$root = 'C:\Users\pauls\AD04-fullcompiler-001'
-$python = 'C:\Users\pauls\AppData\Local\Programs\Python\Python313\python.exe'
+$root = "$builderRoot\AD04-fullcompiler-001"
+$python = "$builderRoot\AppData\Local\Programs\Python\Python313\python.exe"
 if (Test-Path $root) { throw 'Preserve existing compiler build root' }
 New-Item -ItemType Directory $root | Out-Null
 & $python -m venv "$root\venv"

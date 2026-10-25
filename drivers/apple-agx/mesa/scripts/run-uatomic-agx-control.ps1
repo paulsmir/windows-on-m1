@@ -1,8 +1,10 @@
-param([string]$Root = 'C:\Users\pauls\AD04-uatomic')
+param([string]$Root = '')
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
+if (!$Root) { $Root = "$builderRoot\AD04-uatomic" }
 $ErrorActionPreference = 'Continue'
-$clang = 'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe'
-$mesa = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa'
-$generated = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated'
+$clang = "$builderRoot\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe"
+$mesa = "$builderRoot\AD04-d3d10-frontend-build\mesa"
+$generated = "$builderRoot\AD04-asahi-windows-compiler\b5\generated"
 $overlay = Join-Path $Root 'uatomic_clang_compat.h'
 $source = "$mesa\src\asahi\compiler\agx_compile.c"
 $include = @('/I', "$Root\include", '/I', "$mesa\include", '/I', "$mesa\src", '/I', "$mesa\src\compiler", '/I', "$mesa\src\compiler\nir", '/I', "$mesa\src\asahi\compiler", '/I', "$mesa\src\asahi\libagx", '/I', "$generated\src", '/I', "$generated\src\compiler", '/I', "$generated\src\compiler\nir", '/I', "$generated\src\asahi\compiler", '/I', "$generated\src\asahi\libagx")

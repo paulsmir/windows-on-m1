@@ -27,8 +27,8 @@ param(
     [string]$PreparedNirOwnerRequestSha256,
     [string]$PreparedNirOwnerOutput,
     [switch]$AllowAssertBuild,
-    [string]$MesaSourceRoot = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
-    [string]$MesaGeneratedRoot = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated',
+    [string]$MesaSourceRoot = '',
+    [string]$MesaGeneratedRoot = '',
     [ValidateRange(0,65535)]
     [int]$PackageBuild = 461,
     # The x86 OpenGL ICD (build-icd-x86.ps1 output) the INF installs as the
@@ -38,6 +38,9 @@ param(
     # as UserModeDriverNameWow.
     [string]$WowUmd
 )
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
+if (!$MesaSourceRoot) { $MesaSourceRoot = "$builderRoot\AD04-d3d10-frontend-build\mesa" }
+if (!$MesaGeneratedRoot) { $MesaGeneratedRoot = "$builderRoot\AD04-asahi-windows-compiler\b5\generated" }
 
 $ErrorActionPreference = "Stop"
 if ([string]::IsNullOrWhiteSpace($WowOpenGLIcd) -or

@@ -12,17 +12,20 @@ param(
   [Parameter(Mandatory = $true)][string]$Repository,
   [Parameter(Mandatory = $true)][string]$Closure,
   [Parameter(Mandatory = $true)][string]$Out,
-  [string]$MesaBuild = 'C:\Users\pauls\AD04-fullcompiler-001\nir-x64',
+  [string]$MesaBuild = '',
   [int]$PackageBuild = 0,
-  [string]$MesaSource = 'C:\Users\pauls\EXP1811-x64-mesa-projected-source\mesa'
+  [string]$MesaSource = ''
 )
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
+if (!$MesaBuild) { $MesaBuild = "$builderRoot\AD04-fullcompiler-001\nir-x64" }
+if (!$MesaSource) { $MesaSource = "$builderRoot\EXP1811-x64-mesa-projected-source\mesa" }
 $ErrorActionPreference = 'Stop'
 # Fresh x64 closure (EXP1811 source, EXP1813 build, EXP1817 runtime).
 $mesa = $MesaSource
 $build = $MesaBuild
 $tool = 'C:\VS2022Community\VC\Tools\MSVC\14.44.35207'
 $kit = 'C:\Program Files (x86)\Windows Kits\10'
-$clang = 'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin'
+$clang = "$builderRoot\AD04-asahi-windows-compiler\llvm20\bin"
 $env:PATH = "$clang;$tool\bin\HostX64\x64;" + $env:PATH
 $env:INCLUDE = "$tool\include;$kit\Include\10.0.26100.0\ucrt;$kit\Include\10.0.26100.0\shared;$kit\Include\10.0.26100.0\um"
 $env:LIB = "$tool\lib\x64;$kit\Lib\10.0.26100.0\ucrt\x64;$kit\Lib\10.0.26100.0\um\x64"

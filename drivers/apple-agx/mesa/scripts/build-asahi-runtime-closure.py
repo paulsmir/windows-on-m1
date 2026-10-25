@@ -11,17 +11,19 @@ import hashlib
 import json
 import os
 from pathlib import Path
+# Builder root (APPLE AGX\active as its 8.3 alias, no space); override with APPLE_AGX_BUILDER_ROOT.
+BUILDER = Path(os.environ.get('APPLE_AGX_BUILDER_ROOT', r'C:\Users\pauls\APB12E~1\active'))
 import re
 import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
-ROOT = Path(r'C:\Users\pauls\AD04-fullcompiler-001')
-MESA = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
-CLANG = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin')
-GENERATED = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
-OWNER_GENERATED = Path(r'C:\Users\pauls\AD04-umd-owner-004-generated')
+ROOT = (BUILDER / r'AD04-fullcompiler-001')
+MESA = (BUILDER / r'AD04-d3d10-frontend-build\mesa')
+CLANG = (BUILDER / r'AD04-asahi-windows-compiler\llvm20\bin')
+GENERATED = (BUILDER / r'AD04-asahi-windows-compiler\b5\generated')
+OWNER_GENERATED = (BUILDER / r'AD04-umd-owner-004-generated')
 COMPILER_EVIDENCE = {
     'x64': ROOT / 'asahi-x64-4aac999030764fef813f32b1e0dcc7fd',
     'arm64': ROOT / 'asahi-arm64-37c472b7142e4e52a35fccf1b41da45a',
@@ -61,11 +63,11 @@ DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c','dxbc_tir_gs.c','dxbc_minmax.c')  # C65
 # (c49-dxspv-source, dxil_arithmetic.cpp SHA f90631e4...; c49-build-dxspv.ps1).
 # (agx_dxil_program.c is compiled by the UMD project itself)
 DXIL_UNITS = ('agx_dxil_to_nir.c', 'agx_dxil_checked.cpp')
-DXIL_SPIRV_SOURCE = Path(r'C:\Users\pauls\c49-dxspv-source')
-DXIL_SPIRV_BUILD = {'x64': Path(r'C:\Users\pauls\c49-dxspv-x64\build'),
-                    'arm64': Path(r'C:\Users\pauls\c49-dxspv-arm64\build'),
+DXIL_SPIRV_SOURCE = (BUILDER / r'c49-dxspv-source')
+DXIL_SPIRV_BUILD = {'x64': (BUILDER / r'c49-dxspv-x64\build'),
+                    'arm64': (BUILDER / r'c49-dxspv-arm64\build'),
                     # EXP1874B: the WOW64 D3D12 UMD (D3D9On12), the same c49 source
-                    'x86': Path(r'C:\Users\pauls\c49-dxspv-x86\build')}
+                    'x86': (BUILDER / r'c49-dxspv-x86\build')}
 DXIL_SPIRV_LIBRARIES = ('dxil-spirv-c-static.lib', 'dxil-converter.lib', 'spirv-module.lib',
                         'bc/llvm-bc.lib', 'third_party/bc-decoder.lib', 'third_party/dxbc-spirv.lib',
                         'third_party/glslang-spirv-builder.lib', 'dxil-utils.lib', 'dxil-debug.lib')
@@ -531,7 +533,7 @@ def main():
                     args.project / 'drivers/apple-agx/mesa/dxbc',
                     args.project / 'drivers/apple-agx/mesa/d3d11',
                     args.project / 'drivers/apple-agx/shared/include',
-                    Path(r'C:\Users\pauls\AD04-uatomic\include'),
+                    (BUILDER / r'AD04-uatomic\include'),
                     evidence / 'src', evidence / 'src/asahi/compiler',
                     build / 'src', build / 'include', build / 'src/compiler',
                     build / 'src/compiler/nir', MESA / 'include', MESA / 'src',

@@ -6,9 +6,10 @@ param(
   [string]$NativeSource,
   [uint32]$ExpectedCandidateBuild=0
 )
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference='Stop'
 if($RunId -notmatch '^[A-Za-z0-9-]+$'){ throw 'Invalid RunId' }
-$root='C:\Users\pauls\AD04-fullcompiler-001'
+$root="$builderRoot\AD04-fullcompiler-001"
 $output=Join-Path $root ('asahi-runtime-'+$Architecture+'-'+$RunId)
 if(Test-Path $output){ throw 'Fresh RunId required' }
 $python=Join-Path $root 'venv\Scripts\python.exe'
@@ -50,8 +51,8 @@ try {
     '/t:Build','/nr:false','/m:2','/p:Configuration=Release',"/p:Platform=$platform",
     '/p:EnableNativeRuntimeTest=true','/p:EnableMesaPipeFactoryTest=true',
     '/p:EnableMesaD3d10FrontendTest=true',"/p:NativeRuntimeProps=$props",
-    '/p:MesaSourceRoot=C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
-    '/p:MesaGeneratedRoot=C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated',
+    "/p:MesaSourceRoot=$builderRoot\AD04-d3d10-frontend-build\mesa",
+    "/p:MesaGeneratedRoot=$builderRoot\AD04-asahi-windows-compiler\b5\generated",
     "/p:NativeObjectRoot=$NativeSource","/p:IntDir=$exeRoot\obj\","/p:OutDir=$exeRoot\")
   $arguments | ConvertTo-Json | Set-Content (Join-Path $output 'build-command.json')
   & $msbuild @arguments *> (Join-Path $output 'build.log')

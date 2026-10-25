@@ -1,10 +1,11 @@
 param([ValidateSet('x64','ARM64')][string]$Architecture='x64')
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference='Stop'
-$root='C:\Users\pauls\AD04-fullcompiler-001'
-$mesa='C:\Users\pauls\AD04-d3d10-frontend-build\mesa'
+$root="$builderRoot\AD04-fullcompiler-001"
+$mesa="$builderRoot\AD04-d3d10-frontend-build\mesa"
 $tool='C:\VS2022Community\VC\Tools\MSVC\14.44.35207'
 $kit='C:\Program Files (x86)\Windows Kits\10'
-$clang='C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin'
+$clang="$builderRoot\AD04-asahi-windows-compiler\llvm20\bin"
 $build=Join-Path $root "nir-$Architecture"
 if(Test-Path $build){throw 'Preserve previous configure evidence'}
 $env:PATH="$root\venv\Scripts;$clang;$tool\bin\HostX64\x64;"+$env:PATH
@@ -17,7 +18,7 @@ $args=@('setup',$build,$mesa,'--buildtype=debugoptimized','--wrap-mode=nofallbac
  '-Dplatforms=[]','-Dgallium-drivers=[]','-Dvulkan-drivers=[]','-Dopengl=false',
  '-Dgles1=disabled','-Dgles2=disabled','-Dglx=disabled','-Degl=disabled',
  '-Dgbm=disabled','-Dllvm=disabled','-Dshared-glapi=disabled','-Dxmlconfig=disabled',
- '-Dexpat=disabled','-Dzlib=disabled','-Dzstd=disabled','-Dbuild-tests=false','-Dc_args=/FI"C:\\Users\\pauls\\AD04-fullcompiler-001\\uatomic_clang_compat.h"','-Dcpp_args=/FI"C:\\Users\\pauls\\AD04-fullcompiler-001\\uatomic_clang_compat.h"')
+ '-Dexpat=disabled','-Dzlib=disabled','-Dzstd=disabled','-Dbuild-tests=false',"-Dc_args=/FI`"$($root.Replace('\','\\'))\\uatomic_clang_compat.h`"","-Dcpp_args=/FI`"$($root.Replace('\','\\'))\\uatomic_clang_compat.h`"")
 $p=Start-Process -FilePath "$root\venv\Scripts\meson.exe" -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$root\configure-$Architecture.stdout.log" -RedirectStandardError "$root\configure-$Architecture.stderr.log"
 Write-Output "CONFIGURE_EXIT=$($p.ExitCode)"
 Get-Content "$root\configure-$Architecture.stdout.log" -Tail 12

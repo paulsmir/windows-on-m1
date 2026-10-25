@@ -12,6 +12,8 @@ import json
 import os
 import re
 from pathlib import Path
+# Builder root (APPLE AGX\active as its 8.3 alias, no space); override with APPLE_AGX_BUILDER_ROOT.
+BUILDER = Path(os.environ.get('APPLE_AGX_BUILDER_ROOT', r'C:\Users\pauls\APB12E~1\active'))
 import shutil
 import subprocess
 
@@ -735,12 +737,12 @@ if args.gpuva and not args.native_batch_lifecycle:
     parser.error('GPUVA requires native batch lifecycle projection')
 out = args.output
 out.mkdir(exist_ok=False)
-mesa = args.mesa_source or Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
-build = args.mesa_build or Path(r'C:\Users\pauls\AD04-fullcompiler-001') / ('nir-'+args.architecture)
-generated = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
+mesa = args.mesa_source or (BUILDER / r'AD04-d3d10-frontend-build\mesa')
+build = args.mesa_build or (BUILDER / r'AD04-fullcompiler-001') / ('nir-'+args.architecture)
+generated = (BUILDER / r'AD04-asahi-windows-compiler\b5\generated')
 sdk = Path(r'C:\Program Files (x86)\Windows Kits\10')
 vc = Path(r'C:\VS2022Community\VC\Tools\MSVC\14.44.35207')
-llvm = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin')
+llvm = (BUILDER / r'AD04-asahi-windows-compiler\llvm20\bin')
 if args.mesa_source:
     (out / 'source-root.json').write_text(json.dumps({
         'mesa_source': str(mesa.resolve()), 'mesa_build': str(build.resolve()),
@@ -6059,7 +6061,7 @@ AgxD3d10ResourceWithinRequiredLimits(
     # zero-sized host record: keep an opaque host placeholder and explicitly
     # dispatch the source-declared zero byte payload. Other generated argument
     # layouts and assertions remain unchanged.
-    shutil.copy2(Path(r'C:\Users\pauls\AD04-umd-owner-004-generated\src\asahi\lib\libagx_shaders.h'),
+    shutil.copy2((BUILDER / r'AD04-umd-owner-004-generated\src\asahi\lib\libagx_shaders.h'),
                  out/'src/asahi/lib/libagx_shaders.h')
     change('src/asahi/lib/libagx_shaders.h',
         'b10e6ec36950ecd55878f4665f644969a93ba7bdbeb75f7c6584e8a1da11bc37',[
@@ -6831,9 +6833,9 @@ includes = [build/'src', build/'include', mesa/'include', mesa/'src',
     mesa/'src/compiler', mesa/'src/compiler/nir', build/'src/compiler',
     build/'src/compiler/nir', generated/'src/asahi/compiler',
     generated/'src/asahi/libagx', mesa/'src/asahi/libagx',
-    Path(r'C:\Users\pauls\AD04-umd-owner-004-generated\src'),
-    Path(r'C:\Users\pauls\AD04-umd-owner-004-generated\src\asahi\genxml'),
-    Path(r'C:\Users\pauls\AD04-umd-owner-004-generated\src\asahi\lib'),
+    (BUILDER / r'AD04-umd-owner-004-generated\src'),
+    (BUILDER / r'AD04-umd-owner-004-generated\src\asahi\genxml'),
+    (BUILDER / r'AD04-umd-owner-004-generated\src\asahi\lib'),
     mesa/'src/virtio/vdrm', mesa/'src/virtio/virtio-gpu']
 if args.windows_platform_declarations:
     includes=[out/'include',out/'src',out/'src/asahi/lib',out/'src/asahi/layout',
