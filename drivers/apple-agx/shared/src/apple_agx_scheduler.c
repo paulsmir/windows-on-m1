@@ -17,11 +17,18 @@ static APPLE_AGX_BOOL AppleAgxSchedulerFenceAtOrAfter(
              : APPLE_AGX_FALSE;
 }
 
+static APPLE_AGX_U32 AppleAgxSchedulerRetiredFence(
+    const APPLE_AGX_SCHEDULER *Scheduler) {
+  return Scheduler->LastAbortedFence != 0u
+             ? Scheduler->LastAbortedFence : Scheduler->CompletedFence;
+}
+
 void AppleAgxSchedulerInitialize(APPLE_AGX_SCHEDULER *Scheduler) {
   APPLE_AGX_U32 index;
   if (Scheduler == APPLE_AGX_NULL)
     return;
   Scheduler->CompletedFence = 0;
+  Scheduler->LastAbortedFence = 0;
   Scheduler->LastSubmittedFence = 0;
   Scheduler->QueuedFence = 0;
   Scheduler->QueueHead = Scheduler->QueueCount = 0u;
@@ -99,6 +106,9 @@ APPLE_AGX_BOOL AppleAgxSchedulerCompleteFence(
                                          EngineOrdinal, Fence))
     return APPLE_AGX_FALSE;
   Scheduler->CompletedFence = Fence;
+  /* A newer successful boundary supersedes the abort for reset purposes.
+   * Do not compare an ancient abort across half of the fence-number space. */
+  Scheduler->LastAbortedFence = 0u;
   return APPLE_AGX_TRUE;
 }
 
@@ -114,7 +124,7 @@ APPLE_AGX_BOOL AppleAgxSchedulerCanCompleteFence(
           AppleAgxPreemptionWaitCurrentBoundary &&
       Fence != Scheduler->PreemptionActiveFence)
     return APPLE_AGX_FALSE;
-  distance = Fence - Scheduler->CompletedFence;
+  distance = Fence - AppleAgxSchedulerRetiredFence(Scheduler);
   return distance != 0u && distance < 0x80000000u ? APPLE_AGX_TRUE
                                                    : APPLE_AGX_FALSE;
 }
@@ -164,7 +174,7 @@ APPLE_AGX_BOOL AppleAgxSchedulerQueueResubmittedPagingFence(
           EngineOrdinal) || Fence == 0u ||
       Scheduler->QueueCount >= APPLE_AGX_SCHEDULER_QUEUE_CAPACITY ||
       AppleAgxSchedulerAdmissionBlocked(Scheduler) ||
-      !AppleAgxSchedulerFenceAfter(Fence, Scheduler->CompletedFence) ||
+      !AppleAgxSchedulerFenceAfter(Fence, AppleAgxSchedulerRetiredFence(Scheduler)) ||
       (Scheduler->ActiveFence != 0u &&
        !AppleAgxSchedulerFenceAfter(Fence, Scheduler->ActiveFence)))
     return APPLE_AGX_FALSE;
@@ -214,6 +224,19 @@ APPLE_AGX_BOOL AppleAgxSchedulerCompleteActiveFence(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AppleAgxSchedulerAbortActiveFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence) {
+  if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
+      Fence == 0u || Scheduler->ActiveFence != Fence ||
+      !AppleAgxSchedulerCanCompleteFence(Scheduler, NodeOrdinal, EngineOrdinal,
+                                        Fence))
+    return APPLE_AGX_FALSE;
+  Scheduler->LastAbortedFence = Fence;
+  Scheduler->ActiveFence = 0u;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_U32 AppleAgxSchedulerLastSubmittedFence(
     const APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal) {
@@ -258,10 +281,10 @@ APPLE_AGX_BOOL AppleAgxSchedulerBeginBoundaryPreemption(
       CutoffFence != Scheduler->LastSubmittedFence ||
       ActiveFence != Scheduler->ActiveFence ||
       !AppleAgxSchedulerFenceAtOrAfter(CutoffFence,
-                                      Scheduler->CompletedFence) ||
+                                      AppleAgxSchedulerRetiredFence(Scheduler)) ||
       (ActiveFence != 0u &&
        (!AppleAgxSchedulerFenceAfter(ActiveFence,
-                                    Scheduler->CompletedFence) ||
+                                    AppleAgxSchedulerRetiredFence(Scheduler)) ||
         !AppleAgxSchedulerFenceAtOrAfter(CutoffFence, ActiveFence))))
     return APPLE_AGX_FALSE;
   Scheduler->PreemptedFenceCount = Scheduler->QueueCount;
@@ -309,10 +332,11 @@ APPLE_AGX_BOOL AppleAgxSchedulerObserveBoundaryCompletion(
           AppleAgxPreemptionWaitCurrentBoundary ||
       CompletedFence == 0u ||
       Scheduler->PreemptionActiveFence != CompletedFence ||
-      Scheduler->CompletedFence != CompletedFence)
+      (Scheduler->CompletedFence != CompletedFence &&
+       Scheduler->LastAbortedFence != CompletedFence))
     return APPLE_AGX_FALSE;
   Scheduler->PreemptionActiveFence = 0u;
-  Scheduler->PreemptionLastCompletedFence = CompletedFence;
+  Scheduler->PreemptionLastCompletedFence = Scheduler->CompletedFence;
   Scheduler->PreemptionPhase = AppleAgxPreemptionReadyToNotify;
   return APPLE_AGX_TRUE;
 }
@@ -395,7 +419,9 @@ APPLE_AGX_BOOL AppleAgxSchedulerResetEngine(
     return APPLE_AGX_FALSE;
   *LastAbortedFence = Scheduler->ActiveFence != 0u
                           ? Scheduler->ActiveFence
-                          : Scheduler->CompletedFence;
+                          : AppleAgxSchedulerRetiredFence(Scheduler);
+  if (Scheduler->ActiveFence != 0u)
+    Scheduler->LastAbortedFence = Scheduler->ActiveFence;
   after = Scheduler->QueueCount != 0u
               ? Scheduler->FenceQueue[(Scheduler->QueueHead +
                     Scheduler->QueueCount - 1u) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY]

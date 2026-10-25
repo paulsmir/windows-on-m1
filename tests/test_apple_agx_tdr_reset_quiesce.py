@@ -290,7 +290,7 @@ static void model_job_ends(void) {
   ADMISSION_RENDER_CONTEXT *owner =
       (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)c->RenderPacket.Description.ContextToken;
   assert(!lock_depth);
-  assert(AppleAgxSchedulerCompleteActiveFence(&c->Scheduler, 0, 0, fence));
+  assert(AppleAgxSchedulerAbortActiveFence(&c->Scheduler, 0, 0, fence));
   if (AppleAgxSchedulerPreemptionPhase(&c->Scheduler) == AppleAgxPreemptionWaitCurrentBoundary)
     assert(AppleAgxSchedulerObserveBoundaryCompletion(&c->Scheduler, 0, 0, fence));
   assert(AdmissionRenderPacketComplete(&c->RenderPacket, fence));
@@ -512,7 +512,8 @@ static void setup(int worker, int queued) {
 
 static void expect_aborted(const DXGKARG_RESETENGINE *reset) {
   assert(reset->LastAbortedFenceId == 0xce71cu);
-  assert(adapter.Scheduler.ActiveFence == 0u && adapter.Scheduler.CompletedFence == 0xce71cu);
+  assert(adapter.Scheduler.ActiveFence == 0u && adapter.Scheduler.CompletedFence == 0xce71bu &&
+         adapter.Scheduler.LastAbortedFence == 0xce71cu);
   assert(adapter.Scheduler.PreemptionPhase == AppleAgxPreemptionIdle);
   assert(AdmissionRenderPacketState(&adapter.RenderPacket) == AdmissionRenderPacketEmpty);
   assert(owner.GpuvaG3Poisoned && owner.Object.FenceOutstanding == 0u);
@@ -619,6 +620,12 @@ int main(void) {
   assert(owner.GpuvaG3Poisoned && rtkit_stops == 0 && adapter.SchedulerFaulted == 0);
   assert(AdmissionDdiRestartFromTimeout(&adapter) == STATUS_SUCCESS && !paused);
   assert(last_recorded.Entry == ADMISSION_GPU_RESET_ADAPTER && last_recorded.Succeeded == 1u);
+  /* The adapter reset's OS fence convention supersedes the prior abort.
+   * A later engine reset must not regress to that older executed boundary. */
+  assert(adapter.Scheduler.LastAbortedFence == 0u);
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  assert(reset.LastAbortedFenceId == 0xce71eu);
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&adapter.Scheduler,0,0,0xce71eu));
 
   /* 3. The worker is still polling and the job ends naturally on its way out:
    * no RTKit stop, success (a non-private job reaches the runtime path). */
@@ -809,10 +816,9 @@ int ReplayQueuePoll(int poll) {
                                               event, sizeof(event)) == 0);
   }
   if (poll == 2) {
-    recovery_fixture.TaStamp = recovery_submission.Ta.ExpectedStamp;
     recovery_fixture.TaDone = recovery_fixture.TaWrite;
   }
-  if (poll == 3) recovery_fixture.D3Stamp = recovery_submission.D3.ExpectedStamp;
+  /* Killed commands leave both stamps unchanged. Only done pointers advance. */
   if (poll == 4) recovery_fixture.D3Done = recovery_fixture.D3Write;
   assert(AppleAgxG13QueueRuntimeCheckTimeout(&recovery_fixture.Runtime,
                                              1000ULL + poll) == 0);
@@ -826,6 +832,7 @@ int ReplayQueuePoll(int poll) {
   assert(completion.Fence == recovery_submission.Fence &&
          completion.Status == AppleAgxG13QueueCompletionRecovered);
   assert(recovery_fixture.IoState.Quiesces == 0);
+  assert(recovery_fixture.TaStamp == 0 && recovery_fixture.D3Stamp == 0);
   return 1;
 }
 '''

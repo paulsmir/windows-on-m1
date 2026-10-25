@@ -769,6 +769,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
      * the last completed fence to the last submitted fence at the reset. */
     KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
     context->Scheduler.CompletedFence = context->Scheduler.LastSubmittedFence;
+    context->Scheduler.LastAbortedFence = 0u;
     KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
   }
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)

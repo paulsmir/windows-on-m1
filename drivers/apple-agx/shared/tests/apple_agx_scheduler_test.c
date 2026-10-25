@@ -391,7 +391,50 @@ static void test_engine_reset_keeps_unexecuted_fences_resubmittable(void) {
   assert(AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,41u));
 }
 
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * A firmware-killed job is aborted, not successfully completed. Reset and
+ * preemption must retain that distinction, including fence wrap and retry. */
+static void test_killed_fence_is_aborted_without_success(void) {
+  APPLE_AGX_SCHEDULER s;
+  APPLE_AGX_PREEMPTION p;
+  APPLE_AGX_U32 aborted;
+  unsigned wrap;
+  for (wrap = 0; wrap < 2; ++wrap) {
+    APPLE_AGX_U32 before = wrap ? 0xfffffffeu : 17u;
+    APPLE_AGX_U32 killed = before + 1u;
+    APPLE_AGX_U32 next = wrap ? 1u : 19u;
+    AppleAgxSchedulerInitialize(&s);
+    s.CompletedFence = s.LastSubmittedFence = before;
+    assert(AppleAgxSchedulerQueueFence(&s,0,0,killed));
+    assert(AppleAgxSchedulerActivateFence(&s,0,0,killed));
+    assert(AppleAgxSchedulerQueueFence(&s,0,0,next));
+    assert(AppleAgxSchedulerBeginBoundaryPreemption(&s,0,0,42,next,killed));
+    assert(!AppleAgxSchedulerAbortActiveFence(&s,1,0,killed));
+    assert(!AppleAgxSchedulerAbortActiveFence(&s,0,0,next));
+    assert(s.ActiveFence == killed && s.CompletedFence == before);
+    assert(AppleAgxSchedulerAbortActiveFence(&s,0,0,killed));
+    assert(!AppleAgxSchedulerAbortActiveFence(&s,0,0,killed));
+    assert(!AppleAgxSchedulerCompleteFence(&s,0,0,killed));
+    assert(s.CompletedFence == before && s.LastAbortedFence == killed);
+    assert(AppleAgxSchedulerObserveBoundaryCompletion(&s,0,0,killed));
+    assert(AppleAgxSchedulerClaimBoundaryPreemption(&s,&p));
+    assert(p.LastCompletedFence == before);
+    assert(AppleAgxSchedulerResetEngine(&s,0,0,&aborted));
+    assert(aborted == killed && s.CompletedFence == before);
+    assert(AppleAgxSchedulerResetEngine(&s,0,0,&aborted));
+    assert(aborted == killed);
+    assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&s,0,0,killed));
+    assert(AppleAgxSchedulerQueueResubmittedPagingFence(&s,0,0,next));
+    assert(AppleAgxSchedulerActivateFence(&s,0,0,next));
+    assert(AppleAgxSchedulerCompleteActiveFence(&s,0,0,next));
+    assert(s.CompletedFence == next && s.LastAbortedFence == 0u);
+    assert(AppleAgxSchedulerResetEngine(&s,0,0,&aborted));
+    assert(aborted == next); /* completed boundary when nothing was aborted */
+  }
+}
+
 int main(void) {
+  test_killed_fence_is_aborted_without_success();
   test_one_engine_topology_rejects_invalid_coordinates();
   test_context_lifetime_is_owned_by_one_engine();
   test_completed_fence_is_monotonic_and_queryable();

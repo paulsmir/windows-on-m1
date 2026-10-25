@@ -2262,7 +2262,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
    * its dependent queues), rather than reporting any affected work as done.
    * Clear the firmware's pending-event bookkeeping before resume, not the
    * queue's completion stamps. RecoveryPending retains all DMA ownership
-   * until those real stamps and consumer pointers advance. */
+   * until all GPU done pointers reach their published endpoints. Killed work
+   * need not execute its success-stamp writes. */
   for (index = 0u;
        index < ADMISSION_REGIONC_PENDING_STAMPS_BYTES / sizeof(ULONG);
        index += 2u) {
@@ -3294,8 +3295,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     }
   }
   if (runtime->Completion.Phase == AppleAgxCompletionClaimed) {
-    if (!AppleAgxSchedulerCompleteActiveFence(
-            &adapter->Scheduler, Node, Engine, Fence) ||
+    if (!(Status == AppleAgxBackendCompletionDropped
+              ? AppleAgxSchedulerAbortActiveFence(
+                    &adapter->Scheduler, Node, Engine, Fence)
+              : AppleAgxSchedulerCompleteActiveFence(
+                    &adapter->Scheduler, Node, Engine, Fence)) ||
         !AppleAgxCompletionTransactionAdvance(
             &runtime->Completion, Fence, Node, Engine,
             AppleAgxCompletionClaimed,
@@ -3305,6 +3309,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     }
   }
   if (runtime->Completion.Phase == AppleAgxCompletionSchedulerCommitted) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    if (Status == AppleAgxBackendCompletionDropped)
+      runtime->CompletionContext->GpuvaG3Poisoned = TRUE;
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     if (runtime->CompletedOutput.Phase == AdmissionCompletedOutputEmpty) {
       ADMISSION_OPEN_ALLOCATION *opened =

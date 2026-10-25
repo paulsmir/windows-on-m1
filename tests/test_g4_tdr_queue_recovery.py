@@ -1,6 +1,6 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 Faulted render, compute, and combined submissions retain DMA ownership until
-all firmware stamps and consumers retire. Stale timeout events cannot abort
+all firmware done pointers retire; killed work need not write success stamps. Stale timeout events cannot abort
 a successor; a new Fault must still resume a new halt during recovery.
 """
 from pathlib import Path
@@ -66,13 +66,13 @@ int main(void) {
     assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
     assert(AppleAgxG13QueueRuntimeSubmit(&f.Runtime,&s)!=0);
     f.TaDone=f.TaWrite; f.D3Done=f.D3Write;
-    f.TaStamp=s.Ta.ExpectedStamp; f.D3Stamp=s.D3.ExpectedStamp;
+    /* Killed commands never execute their final stamp writes. */
     if (mode) {
       assert(AppleAgxG13QueueRuntimeCheckTimeout(&f.Runtime,100001ULL)==0);
       assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
       /* Beyond the expected stamp across wrap is legal, but a missing
        * compute consumer retirement still holds the entire submission. */
-      f.ComputeStamp=0x100u;
+      /* Even a killed compute job must return its ring entry. */
       assert(AppleAgxG13QueueRuntimeCheckTimeout(&f.Runtime,100002ULL)==0);
       assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
       f.ComputeDone=f.ComputeWrite;
@@ -95,6 +95,7 @@ int main(void) {
            completion.Fence==101u && !f.Runtime.RecoveryPending);
     assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
     assert(f.IoState.Quiesces==0);
+    assert(f.TaStamp==0 && f.D3Stamp==0 && f.ComputeStamp==0);
     if (mode==0) {
       /* A queued old Timeout must not abort the successor or attempt to
        * resume firmware that is already running (m1n1 stale-counter guard). */

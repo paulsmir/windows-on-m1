@@ -439,11 +439,10 @@ static void TestFirmwareTimeoutRecovers(void) {
   assert(AppleAgxG13QueueProviderIngestEvent(
       &f.Provider, event, sizeof(event), &batch));
   assert(Recoveries == 1u); /* duplicate while resuming */
-  f.TaDone = f.TaWrite; f.D3Done = f.D3Write;
-  f.TaStamp = f.Job.TaExpectedStamp;
+  f.TaDone = f.TaWrite;
   assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider, 1050ULL, &batch));
-  assert(batch.ObservationCount == 0u);
-  f.D3Stamp = f.Job.D3ExpectedStamp;
+  assert(batch.ObservationCount == 0u); /* 3D still owns its bytes */
+  f.D3Done = f.D3Write; /* killed work leaves both success stamps unchanged */
   /* A failed coherent read must be reported, not swallowed by event ingest. */
   f.FailReads = 1u;
   PutU32(event, (unsigned int)AppleAgxG13EventFlag);

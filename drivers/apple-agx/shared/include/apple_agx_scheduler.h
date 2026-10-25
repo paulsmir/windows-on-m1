@@ -29,6 +29,8 @@ typedef enum _APPLE_AGX_PREEMPTION_PHASE {
 
 typedef struct _APPLE_AGX_SCHEDULER {
   APPLE_AGX_U32 CompletedFence;
+  /* Error boundary since last success, never a successful DMA completion. */
+  APPLE_AGX_U32 LastAbortedFence;
   APPLE_AGX_U32 LastSubmittedFence;
   APPLE_AGX_U32 QueuedFence;
   APPLE_AGX_U32 QueueHead, QueueCount;
@@ -81,6 +83,10 @@ APPLE_AGX_BOOL AppleAgxSchedulerActivateFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
 APPLE_AGX_BOOL AppleAgxSchedulerCompleteActiveFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+/* Caller must prove firmware no longer owns the active submission's DMA. */
+APPLE_AGX_BOOL AppleAgxSchedulerAbortActiveFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
 APPLE_AGX_U32 AppleAgxSchedulerLastSubmittedFence(

@@ -573,10 +573,12 @@ static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13TerminalFailure(
   return Result;
 }
 
-/* Asahi workqueue.rs mark_error()/signal(): error classification does not
- * transfer ownership. Firmware must advance the real stamps before buffers
- * can be freed. The KMD has one submission in flight, so all its published
- * queue entries must also be retired. Do not write stamps or GPU pointers. */
+/* A faulted command need not execute its success-stamp write. Asahi
+ * workqueue.rs doneptr() counts work items completed by the GPU (not merely
+ * fetched, which is gpu_rptr). After halt/mark-killed/resume, require every
+ * published entry of our single outstanding submission to reach that done
+ * boundary. A resume request alone is NOT ownership transfer. Never write
+ * stamps or GPU pointers, and never turn this path into a success completion. */
 static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13PollRecovery(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
   const APPLE_AGX_G13_QUEUE_BINDING *bindings[3];
@@ -594,9 +596,8 @@ static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13PollRecovery(
     pending[count++] = &Runtime->ComputePending;
   }
   for (index = 0u; index < count; ++index) {
-    APPLE_AGX_BACKEND_U32 stamp, done, write;
-    if (!Runtime->Io.ReadU32(Runtime->Io.Context, bindings[index]->Stamp, &stamp) ||
-        !Runtime->Io.ReadU32(Runtime->Io.Context, bindings[index]->GpuDonePointer,
+    APPLE_AGX_BACKEND_U32 done, write;
+    if (!Runtime->Io.ReadU32(Runtime->Io.Context, bindings[index]->GpuDonePointer,
                              &done) ||
         !Runtime->Io.ReadU32(Runtime->Io.Context, bindings[index]->CpuWritePointer,
                              &write))
@@ -605,8 +606,7 @@ static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13PollRecovery(
         write >= bindings[index]->RingCapacity ||
         write != pending[index]->ExpectedDonePointer)
       return AppleAgxG13QueueRuntimeResultInvalidState;
-    if (done != write || pending[index]->ExpectedStamp == 0u ||
-        (APPLE_AGX_BACKEND_U32)(stamp - pending[index]->ExpectedStamp) >= 0x80000000u)
+    if (done != write)
       retired = APPLE_AGX_BACKEND_FALSE;
   }
   if (retired)

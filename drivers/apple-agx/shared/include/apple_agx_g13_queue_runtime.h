@@ -80,7 +80,8 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_IO {
    * or Fault event (FW status halted=1); Asahi recover() resumes it with
    * halted=0, resume=1 after clearing pending-stamp records. Success only
    * acknowledges this resume request. The runtime must still observe actual
-   * stamps and queue retirement before releasing the dropped submission.
+   * GPU done pointers reaching every published queue endpoint before releasing
+   * the dropped submission. Killed commands need not write success stamps.
    */
   APPLE_AGX_BACKEND_BOOL (*Recover)(void *Context,
                                     APPLE_AGX_BACKEND_U32 Fence,
