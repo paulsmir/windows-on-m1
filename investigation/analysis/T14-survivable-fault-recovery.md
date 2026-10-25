@@ -71,3 +71,32 @@ and another app submission succeeds. Existing retirement receipts distinguish
 unchanged stamps with consumed queues (new path) from unchanged consumers
 (still unsafe). Collect receipts/dump before exact-package cleanup in the
 established GPU-visible recovery; emergency GPU-hidden only per existing rules.
+
+## Offline result
+
+The real queue/reset regressions first failed because killed work with unchanged
+stamps could not retire. They now pass after every participating GPU done pointer
+reaches its published endpoint. The real backend completion replay also verifies
+one DMA_PAGE_FAULTED, an unchanged successful fence, only the culprit context
+poisoned, and retry without double release. Scheduler tests cover wrap, repeated
+reset, preemption and never-started paging resubmission. The adapter reset's
+existing OS fence convention explicitly supersedes the older abort boundary.
+
+Valid fault VA, read/write and level are now passed to DMA_PAGE_FAULTED only
+for the captured fence and context; unread sentinel, invalid bit and stale owner
+or fence are tested. No new MMIO read is introduced.
+
+Ten targeted tests pass with ASan/UBSan (ASAN_OPTIONS=detect_leaks=0 because
+LeakSanitizer cannot run under this sandbox's tracing). Default baseline:
+
+```
+ran 489 tests in 214 modules; 6 failing, 6 known, 0 NEW, 0 FIXED
+BASELINE_OK
+```
+
+Broader optional checks: 22/24 pass. The unchanged render_backend_image_test.c
+fails compilation on missing uintptr_t and an unused parameter; the unchanged
+render-platform test expects AppleAgxUatGpuSharedReadWrite in the unchanged
+memory runtime. These are outside the default baseline and were not added to
+known_failures. Logs, review responses, exact commits and remaining limitations
+are in the task-folder REPORT.md. No WDK build or hardware validation is claimed.

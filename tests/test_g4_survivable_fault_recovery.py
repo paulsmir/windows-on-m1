@@ -1,7 +1,8 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 A dropped firmware job must retire as an aborted fence and notify Windows of
 an error exactly once, without advancing successful completion or poisoning a
-second context. Exercise the production completion callbacks and scheduler;
+second context. Valid fault VA/write/level must be attached only to the matching
+fence/context; stale or unread register data must stay unknown. Exercise the production completion callbacks and scheduler;
 only WDK services, image/graph release and the packet container are modeled.
 """
 from pathlib import Path
@@ -61,7 +62,7 @@ SHIM = r'''
 typedef int BOOLEAN, NTSTATUS, KIRQL;
 typedef int32_t LONG;
 typedef unsigned UINT, ULONG, DXGK_PAGE_FAULT_FLAGS;
-typedef uint64_t UINT64;
+typedef uint64_t UINT64, ULONGLONG;
 typedef uintptr_t ULONG_PTR;
 typedef void *PVOID;
 typedef struct {
@@ -151,7 +152,7 @@ static NTSTATUS sync_callback(void *a, BOOLEAN (*fn)(PVOID), PVOID p, unsigned n
 CASES = r'''
 int main(void) {
   unsigned mode;
-  for (mode=0; mode<3; ++mode) {
+  for (mode=0; mode<11; ++mode) {
     ADMISSION_CONTEXT a={0};
     ADMISSION_PLATFORM_RUNTIME r={0};
     ADMISSION_RENDER_CONTEXT culprit={0}, other={0};
@@ -170,6 +171,20 @@ int main(void) {
     a.RenderPacket.State=2; a.RenderPacket.Description.Fence=41;
     a.RenderPacket.Description.ContextToken=(UINT64)(uintptr_t)&culprit;
     culprit.Object.FenceOutstanding=41; other.Object.FenceOutstanding=42;
+    if (mode>=3) {
+      ADMISSION_GPU_FAULT_EVENT *fault=&r.GpuFault.Last;
+      fault->Fence=41; fault->ContextToken=(UINT64)(uintptr_t)&culprit;
+      fault->Flags=ADMISSION_GPU_FAULT_INFO_READ|ADMISSION_GPU_FAULT_INFO_VALID|
+                   ADMISSION_GPU_FAULT_JOB_KNOWN;
+      fault->FaultInfo=((0x1113ba0000ULL>>6)<<30)|1u|(2u<<7);
+      if (mode!=4) fault->FaultInfo|=1u<<4; /* read */
+      if (mode==5) fault->Fence=40;
+      if (mode==6) fault->ContextToken=(UINT64)(uintptr_t)&other;
+      if (mode==7) fault->FaultInfo&=~1ULL;
+      if (mode==8) fault->Flags=0; /* opt-in read absent: never decode sentinel */
+      if (mode==10) fault->FaultInfo=ADMISSION_GPU_FAULT_INFO_NOT_READ;
+      if (mode==9) fault->FaultInfo=((0x8000000040ULL>>6)<<30)|1u|(1u<<4);
+    }
     if (mode==2) {
       sync_fail=1;
       assert(!AdmissionBackendComplete(&r,41,0,0,status));
@@ -186,8 +201,14 @@ int main(void) {
     } else {
       assert(observed.InterruptType==DXGK_INTERRUPT_DMA_PAGE_FAULTED);
       assert(observed.DmaPageFaulted.FaultedFenceId==41);
-      assert(observed.DmaPageFaulted.PageFaultFlags==0);
-      assert(observed.DmaPageFaulted.FaultedVirtualAddress==0);
+      assert(observed.DmaPageFaulted.PageFaultFlags==(mode==4 ? DXGK_PAGE_FAULT_WRITE : 0));
+      assert(observed.DmaPageFaulted.FaultedVirtualAddress==
+          (mode==3 || mode==4 ? 0x1113ba0000ULL : mode==9 ? 0xffffff8000000040ULL : 0));
+      assert(observed.DmaPageFaulted.PageTableLevel==(mode==3 || mode==4 ? 2u : 0u));
+      assert(observed.DmaPageFaulted.FaultedPrimitiveAPISequenceNumber==~(UINT64)0);
+      assert(observed.DmaPageFaulted.FaultedBindTableEntry==~(UINT)0);
+      assert(observed.DmaPageFaulted.FaultErrorCode.IsDeviceSpecificCode==1);
+      assert(observed.DmaPageFaulted.FaultErrorCode.DeviceSpecificCode==4);
       assert(a.Scheduler.CompletedFence==40 && a.Scheduler.LastAbortedFence==41);
     }
     assert(!AdmissionBackendComplete(&r,41,0,0,status));

@@ -3158,6 +3158,29 @@ static BOOLEAN AdmissionNotifyCompletionAtInterrupt(PVOID Context) {
     data.DmaPageFaulted.FaultedBindTableEntry = ~(UINT)0u;
     data.DmaPageFaulted.PageFaultFlags = (DXGK_PAGE_FAULT_FLAGS)0;
     data.DmaPageFaulted.FaultedVirtualAddress = 0;
+    {
+      /* Decode only the captured G13 register for this fence AND owner.
+       * A stale receipt or an unread FAULT_INFO sentinel is not a VA.
+       * Asahi regs.rs get_fault_info: address[63:30] in 64-byte units,
+       * read bit 4, page-table level bits 8:7; m1n1 canonicalizes bit 39. */
+      const ADMISSION_GPU_FAULT_EVENT *fault = &runtime->GpuFault.Last;
+      const ULONG valid = ADMISSION_GPU_FAULT_INFO_READ |
+          ADMISSION_GPU_FAULT_INFO_VALID | ADMISSION_GPU_FAULT_JOB_KNOWN;
+      if (fault->Fence == notification->Fence &&
+          runtime->CompletionContext != NULL &&
+          fault->ContextToken == (ULONGLONG)(ULONG_PTR)runtime->CompletionContext &&
+          (fault->Flags & valid) == valid &&
+          fault->FaultInfo != ADMISSION_GPU_FAULT_INFO_NOT_READ &&
+          (fault->FaultInfo & 1ULL) != 0ULL) {
+        ULONGLONG va = (fault->FaultInfo >> 30u) << 6u;
+        if ((va & (1ULL << 39u)) != 0ULL)
+          va |= 0xffffff0000000000ULL;
+        data.DmaPageFaulted.FaultedVirtualAddress = va;
+        data.DmaPageFaulted.PageTableLevel = (UINT)((fault->FaultInfo >> 7u) & 3u);
+        if ((fault->FaultInfo & (1ULL << 4u)) == 0ULL)
+          data.DmaPageFaulted.PageFaultFlags = DXGK_PAGE_FAULT_WRITE;
+      }
+    }
     data.DmaPageFaulted.NodeOrdinal = notification->Node;
     data.DmaPageFaulted.EngineOrdinal = notification->Engine;
     data.DmaPageFaulted.FaultErrorCode.IsDeviceSpecificCode = 1u;
