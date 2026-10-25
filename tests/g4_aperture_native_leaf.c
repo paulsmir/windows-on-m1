@@ -144,6 +144,12 @@ int main(void) {
   assert(process.Graph.Leaf.AuxIpa==0x10000000 && process.Graph.Leaf.Writable);
   assert(process.Graph.Mappings==4);
 
+  /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+   * Acknowledged native identities must not be confused with the original
+   * paging pages, including the three neighbors of a partial update. */
+  for (UINT i=0;i<4;++i)
+    assert(shadow.ResidentPtes[i].NativeIpa==0x10000000ULL+i*0x1000ULL);
+
   /* Keep all four logical pages valid but replace the second PFN. */
   ptes[1].PageAddress=0x20001;
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
@@ -155,6 +161,7 @@ int main(void) {
   assert(event->UpdateVa==0 && event->UpdateBytes==0x4000 && event->OmittedGroups==1);
   assert(event->Bitmap[0]==1 && event->GroupCount==1 && event->Flags==3);
   for (UINT i=0;i<4;++i) {
+    assert(shadow.ResidentPtes[i].NativeIpa==0);
     assert(shadow.LogicalPtes[i].GuestIpa==ptes[i].PageAddress*0x1000ULL);
     assert(shadow.LogicalPtes[i].Allocation==(ULONGLONG)(ULONG_PTR)&allocation);
     assert(shadow.LogicalPtes[i].AllocationOffset==i*0x1000ULL);
@@ -165,10 +172,13 @@ int main(void) {
   update.NumPageTableEntries=1; update.pPageTableEntries=ptes+1;
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
   assert(process.Graph.Leaf.AuxIpa==0x10000000 && process.Graph.Mappings==4);
+  for (UINT i=0;i<4;++i)
+    assert(shadow.ResidentPtes[i].NativeIpa==0x10000000ULL+i*0x1000ULL);
   /* A mixed permission group must not widen write access. */
   ptes[1].ReadOnly=1;
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
   assert(process.Graph.Leaf.AuxIpa==0);
+  for (UINT i=0;i<4;++i) assert(!shadow.ResidentPtes[i].NativeIpa);
   /* Restore, then remove just one quarter: retire the old native leaf. */
   ptes[1].ReadOnly=0;
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
@@ -179,10 +189,13 @@ int main(void) {
   fail_publication=1;
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)<0);
   assert(state.LeafHistoryNext==0 && shadow.LogicalPtes[1].Flags);
+  for (UINT i=0;i<4;++i)
+    assert(shadow.ResidentPtes[i].NativeIpa==0x10000000ULL+i*0x1000ULL);
   fail_publication=0;
   assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
   assert(process.Graph.Leaf.AuxIpa==0 && process.Graph.Mappings==3);
   assert(shadow.LogicalPtes[1].Flags==0 && shadow.LogicalPtes[2].GuestIpa==0x10002000);
+  for (UINT i=0;i<4;++i) assert(!shadow.ResidentPtes[i].NativeIpa);
   assert(state.LeafHistoryNext==1);
   const ADMISSION_G3_LEAF_HISTORY *owner=&state.LeafHistory[0];
   assert(owner->Flags==ADMISSION_G3_LEAF_EVENT_UNMAP_OWNER);

@@ -7,7 +7,7 @@ static void valid_group(APPLE_AGX_GPUVA_G3_LOGICAL_PTE p[4],
                         uint64_t base, uint32_t segment, uint32_t flags) {
   for (unsigned i = 0; i < 4; ++i)
     p[i] = (APPLE_AGX_GPUVA_G3_LOGICAL_PTE){base + i * 0x1000u,
-                                             segment, flags, 0, 0};
+                                             segment, flags, 0, 0, 0};
 }
 
 int main(void) {
@@ -136,8 +136,8 @@ int main(void) {
       1u, 0x10000u, out, 0u, &n) == AppleAgxGpuvaG3Invalid);
   {
     APPLE_AGX_GPUVA_G3_LOGICAL_PTE wide[2] = {
-        {0x20000000ULL, 2u, APPLE_AGX_GPUVA_G3_VALID | APPLE_AGX_GPUVA_G3_WRITE, 0, 0},
-        {0x20010000ULL, 2u, APPLE_AGX_GPUVA_G3_VALID, 0, 0}};
+        {0x20000000ULL, 2u, APPLE_AGX_GPUVA_G3_VALID | APPLE_AGX_GPUVA_G3_WRITE, 0, 0, 0},
+        {0x20010000ULL, 2u, APPLE_AGX_GPUVA_G3_VALID, 0, 0, 0}};
     APPLE_AGX_GPUVA_G3_NATIVE_LEAF four[8];
     assert(AppleAgxGpuvaG3Plan64KSpan(wide, 510u, 2u, 0x1fffe0000ULL,
         2u, four, 8u, &n) == AppleAgxGpuvaG3Ok);

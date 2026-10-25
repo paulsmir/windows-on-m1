@@ -817,6 +817,13 @@ static NTSTATUS AdmissionG3UpdateLeaf(
           update->FirstPteVirtualAddress - (ULONGLONG)first * 0x1000ULL +
               (ULONGLONG)(first_group + i) * 0x4000ULL, ipa);
     }
+    /* Record the acknowledged native identity separately from the original
+     * paging IPA. A one-PTE edit republishes/omits the entire native quartet,
+     * so update all four identities, including the unchanged logical pages.
+     * Failed/uncertain publications never commit this candidate metadata. */
+    for (j = 0u; j < 4u; ++j)
+      candidate[(first_group + i) * 4u + j].NativeIpa =
+          complete ? ipa + (ULONGLONG)j * 0x1000ULL : 0ULL;
     if (!complete && flags && segment < 32u &&
         process->State->UnpublishedGroups[segment] != MAXULONGLONG)
       ++process->State->UnpublishedGroups[segment];

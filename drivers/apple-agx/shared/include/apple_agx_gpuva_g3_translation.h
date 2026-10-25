@@ -38,6 +38,10 @@ typedef struct _APPLE_AGX_GPUVA_G3_LOGICAL_PTE {
   unsigned int Flags;
   /* Optional VidMm allocation provenance; never a registration authority. */
   unsigned long long Allocation, AllocationOffset;
+  /* KMD resident metadata: acknowledged native translation, or zero for an
+   * omitted group. GuestIpa remains the original CPU paging endpoint. This
+   * is not a broker grant and does not authorize new backing by itself. */
+  unsigned long long NativeIpa;
 } APPLE_AGX_GPUVA_G3_LOGICAL_PTE;
 
 typedef struct _APPLE_AGX_GPUVA_G3_NATIVE_LEAF {

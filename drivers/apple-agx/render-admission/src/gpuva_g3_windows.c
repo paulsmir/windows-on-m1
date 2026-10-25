@@ -1449,8 +1449,12 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
         pte->Allocation != (ULONGLONG)(ULONG_PTR)allocation ||
         pte->AllocationOffset != page - q.GpuVa) goto Output;
     q.Reason = APPLE_AGX_G3_NATIVE_QUERY_TRANSLATION;
-    if (!AppleAgxGpuvaG3GraphTranslateVa(&p->Graph, page, &ipa) ||
-        ipa != pte->GuestIpa) goto Output;
+    /* Native identity is committed only after publication acknowledgement.
+     * Until an ordered shadow owner exists, the only admitted backing mode
+     * is direct: native and original paging identities must also agree. */
+    if (!pte->NativeIpa || pte->NativeIpa != pte->GuestIpa ||
+        !AppleAgxGpuvaG3GraphTranslateVa(&p->Graph, page, &ipa) ||
+        ipa != pte->NativeIpa) goto Output;
   }
   q.Ready = 1u;
   q.FailedVa = 0ULL;

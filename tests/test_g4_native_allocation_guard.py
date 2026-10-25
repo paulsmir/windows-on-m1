@@ -164,6 +164,7 @@ int main(void) {
   ptes[n].Allocation=(ULONG_PTR)&allocation;ptes[n].AllocationOffset=i*4096;}
  APPLE_AGX_G3_NATIVE_QUERY q={0}; q.Magic=APPLE_AGX_G3_NATIVE_QUERY_MAGIC;q.Version=1;q.Bytes=sizeof(q);
  q.Allocation=42;q.GpuVa=va;q.AllocationBytes=65536;q.Write=1;
+ for(unsigned i=0;i<8192;++i) ptes[i].NativeIpa=ptes[i].GuestIpa;
  DXGKARG_ESCAPE e={&q,sizeof(q),{0},&p,&c,&d};
  #define CHECK(ready) do {q.Ready=0;q.FailedVa=0;q.Reason=0;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)==0);assert(q.Ready==(ready));assert(!locked && !refs);} while(0)
  CHECK(1); assert(sizeof(q)==64);
@@ -184,6 +185,10 @@ int main(void) {
  ++ptes[n+5].Allocation;CHECK(0);--ptes[n+5].Allocation;
  ++ptes[n+5].AllocationOffset;CHECK(0);--ptes[n+5].AllocationOffset;
  ptes[n+5].Flags=0;CHECK(0);ptes[n+5].Flags=3;CHECK(1);
+ /* An original address alone cannot substitute for native publication. */
+ ++ptes[n+5].NativeIpa;CHECK(0);--ptes[n+5].NativeIpa;
+ ULONGLONG native=ptes[n+5].NativeIpa;
+ ptes[n+5].NativeIpa=0;CHECK(0);ptes[n+5].NativeIpa=native;CHECK(1);
  /* Read-only query during an active job needs no wait or lease mutation. */
  p.Graph.JobInFlight=1;p.Graph.LeaseToken=77;CHECK(1);assert(p.Graph.LeaseToken==77);
  #define BAD(change,restore) do {change;q.Ready=0;q.FailedVa=0;q.Reason=0;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);restore;assert(!locked && !refs);} while(0)

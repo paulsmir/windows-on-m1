@@ -52,7 +52,7 @@ static APPLE_AGX_GPUVA_G3_LOGICAL_PTE old[8192], next[8192], saved[8192];
 static void reset(void) { memset(&state,0,sizeof(state));memset(old,0,sizeof(old));memset(next,0,sizeof(next)); }
 static void populate(unsigned first,unsigned count,ULONGLONG token,unsigned seg) {
   for(unsigned i=first;i<first+count;++i)
-    old[i]=(APPLE_AGX_GPUVA_G3_LOGICAL_PTE){0xa00000000ULL+i*4096,seg,3,token,i*4096};
+    old[i]=(APPLE_AGX_GPUVA_G3_LOGICAL_PTE){0xa00000000ULL+i*4096,seg,3,token,i*4096,0};
 }
 static void check(unsigned n,unsigned first,unsigned count,ULONGLONG token,unsigned seg,
                   ULONGLONG va) {
