@@ -63863,3 +63863,16 @@ EXP1947 ACTUAL (Claude headline 2026-10-25T18:10:07Z): package 30.0.1947.0 (4601
 - Verdict: rc7 removed the GPU-fault/0x116 class from both workloads (stable desktop recovery). The new boundary is adapter-wide device removal by VidMm under overcommit (cause unknown: paging failure? budget? our KMD refusing a paging op?). Evidence: evidence/EXP1947, guest-extra/{umd.log,events*.txt}, rcpt-final. Next: Codex rc8.
 
 EXP1947 CORRECTION 2026-10-25T18:25:39Z: the probe slots ran gm-d3d12a/b-1947.ps1 derived by launch-exp from the 1946 scripts (zsh did not word-split my loop variable, so the intended files were written as "gm-d3d12a 2000-1947.ps1"). The env and workload are identical to the BEFORE: trim 0, guard 1, WATCH_VA empty for GravityMark, REFUSALS_ONLY 1, 2k then 10k, Timeout 240. Only the comment header of those scripts was stale.
+
+EXP1948 HARDWARE BEFORE 2026-10-25T18:31:14Z:
+- Package 30.0.1948.0 = EXP1947 + rc8:
+  - KMD: the virtual paging transfer encoder now accepts the WDK-defined Src64KBPages/Dst64KBPages flags. Before, every nonzero transfer flag was refused; Reserved bits are still rejected.
+  - UMD: after a not-ready native query, one CPU-only scheduling touch, then the whole held allocation set is revalidated (DWM Rodata pre-submit refusals).
+- Switches Wom1GpuFaultInfoRead=1 and Wom1PoolHalfSize=1. Probe slot "10K" = 2k, slot "2K" = 10k. Trim on, guard on, Timeout 240. No machine-wide env.
+- WHY THIS HYPOTHESIS: EXP1947 had no GPU fault or TDR, but VidMm returned D3DDDIERR_DEVICEREMOVED to GravityMark and DWM (APPCRASH 0x8898008d) under overcommit. The paging profile shows 329923 virtual transfers. A refused legal 64 KiB transfer is a paging failure, and a paging failure makes VidMm remove the device.
+- Expected: no device removal; GravityMark 2k renders frames (times/score); DWM survives 10k.
+- Failure: DEVICEREMOVED again points to another paging/commit refusal (decode the KMD paging receipts); scattered-backing native-leaf refusals (Encoder) point to the open limitation in the rc8 report.
+- Recovery: rec1948h visible recovery with app-log collection.
+- Hashes: sys ce6e13ccfe11, UmdArm64 e1c78d919baa, UmdX64 83347e243109, Umd32 52620c412bb6; manifest adfeb8c155f8, hardware-manifest 4e093bf7eeb8; probe1948.sh b1d31f09d442 (PROBE_LINT_OK); visible recovery rec1948h 453ab23184443472; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1948h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1948-rc8-paging/run1948.sh.
