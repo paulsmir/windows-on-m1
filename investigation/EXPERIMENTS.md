@@ -64005,3 +64005,13 @@ EXP1956 HARDWARE BEFORE 2026-10-25T22:40:50Z:
 - Recovery rec1956h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1956-trim-overshoot/run1956.sh.
 
 EXP1956 ACTUAL (Claude headline 2026-10-25T23:02:40Z): package 30.0.1956.0 (caec2bde = EXP1955 code + rc17 trim overshoot bound), Wom1GpuFaultInfoRead=1 + Wom1PoolFraction=3. Stable: both arms run to the harness close, guest alive. 2k: 14 scene presents in 131 s = 6.4/min (EXP1954: 6.1), so rc17 is neutral for speed. Slow-frame anatomy (2k, 108.6-130.7 s): the gaps follow measure-make-resident-trimmed (E_PENDING) and last 13.8 / 2.8 / 2.4 / 1.0 s. The 13.8 s wait follows a trim of 0x90 slots / 235 MB and a MakeResident of 0x22 allocations, i.e. paging throughput of about 17 MB/s. Next: rc21 coalesced paging transfers (EXP1957).
+
+EXP1957 HARDWARE BEFORE 2026-10-25T23:09:18Z:
+- Package 30.0.1957.0 = EXP1956 + rc18-rc20 (unused shadow prerequisites; rc18 native/paging identity split is active) + rc21. The paging encoder coalesces verified physically contiguous system backing into runs of up to 4 MiB, with one map/copy/unmap per run instead of per 4 KiB record.
+- Switches Wom1GpuFaultInfoRead=1 and Wom1PoolFraction=3. Probe slot "10K" = 2k, slot "2K" = 10k. Trim on, guard on, Timeout 240.
+- WHY THIS HYPOTHESIS: in EXP1956 the slow scene frames (17-22 s) are paging-fence waits after make-resident-trimmed, e.g. 13.8 s for about 235 MB, about 17 MB/s. rc21 found that every system-memory transfer was split into 4 KiB records, each with its own mapping/copy/barrier/unmap.
+- Metric: scene presents/min after Ready (EXP1956 2k: 6.4/min) and the longest paging wait. Also no regression: no device removal, DWM alive, and rc18 identity active without faults.
+- Recovery: rec1957h.
+- Hashes: sys cb06b6a93d4b, UmdArm64 45f873763d6d, UmdX64 8cf373d78a4b, Umd32 ede4432dc48e; manifest 185fd9b4411e, hardware-manifest a613eaba5d31; probe1957.sh 9c524bcd2b30 (PROBE_LINT_OK); visible recovery rec1957h b5053441eae1f0e8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
+- Recovery rec1957h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1957-fast-paging/run1957.sh.
