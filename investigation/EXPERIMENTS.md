@@ -63929,3 +63929,14 @@ ROOT CAUSE CAPTURED by the DxgKrnl ETW (etw/gm1951-dxg.csv, line ~1116141; excer
 - "WORKER_THREAD: Unrecoverable page in failure" follows, then VidSchErrorFailedToPageInRequiredResource (0xc) on the device.
 - Then GetDeviceState = 5 (ERROROUTOFMEMORY) and the runtime marks the device as error: user-mode DxgkMarkDeviceAsError, VidSchErrorDriverFaulted, 18x across GM, DWM and other processes.
 The single GPU-accessible segment (the native pool) has no system-memory/aperture overflow segment, so VidMm has nowhere to place the allocation. Next: Codex rc13, a GPU-visible system-memory spill segment (the rc12 hybrid design).
+
+EXP1952 HARDWARE BEFORE 2026-10-25T20:16:40Z:
+- Package 30.0.1952.0 = EXP1951 + rc13: with the device switch Wom1SysmemSpill=1 (read once at adapter pool start), explicit GPU-only General allocations may use the existing aperture (system memory) as secondary placement. The native pool stays preferred; CPU-visible policies are unchanged.
+- Switches Wom1GpuFaultInfoRead=1, Wom1PoolHalfSize=1, Wom1SysmemSpill=1. Probe slot "10K" = 2k, slot "2K" = 10k. Trim on, guard on, Timeout 240. DxgKrnl ETW by GUID from an elevated SSH session.
+- WHY THIS HYPOTHESIS: EXP1951 ETW and the pool receipts prove case A. The 1344 MiB segment peaked at 100%, VidMm needed 67 MB with 38.7 MB left, the page-in failed ("Unrecoverable page in failure"), and the devices were then removed. No KMD refusal was recorded. A second GPU-accessible placement gives VidMm room. The comparison baseline is EXP1951, which had no spill.
+- Expected: no "Unrecoverable page in failure" in the ETW, no DxgkMarkDeviceAsError, DWM alive, and GravityMark 2k renders frames.
+- Failure: native-group refusals for scattered aperture backing (the documented limitation; receipts G4/SubmitFailure, reject-native-allocation); the same page-in failure (spill not used); a new fault class.
+- Recovery: rec1952h.
+- Hashes: sys f31631e404cf, UmdArm64 72f4e676947f, UmdX64 303937d85788, Umd32 56a07e008de1; manifest b26be1c28b35, hardware-manifest 62b32e8017d8; probe1952.sh eb914e9482ee (PROBE_LINT_OK); visible recovery rec1952h c76bcac5ed4247ea; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1 Wom1SysmemSpill=1.
+- Recovery rec1952h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1952-sysmem-spill/run1952.sh.
