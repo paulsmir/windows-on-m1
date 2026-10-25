@@ -1725,11 +1725,12 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
   if (!device->Adapter || device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
       !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
       !device->KernelCallbacks->pfnEscapeCb) return 0;
-  for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++i) {
+  bool scheduled = false;
+  for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);) {
     APPLE_AGX_G3_NATIVE_QUERY q = {};
     bool held, valid;
     AcquireSRWLockShared(&device->ScreenBufferLock);
-    const auto *slot = &device->ScreenBuffers[i];
+    const auto *slot = &device->ScreenBuffers[i++];
     held = slot->CopyHeld && slot->CanonicalGpuVa != command_va;
     valid = slot->Active && !slot->Transition && slot->SubmissionHolds &&
         slot->KernelAllocation && slot->CanonicalGpuVa && slot->Bytes;
@@ -1752,6 +1753,19 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
     request.PrivateDriverDataSize = sizeof(q);
     HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
         device->Adapter->RuntimeAdapter.handle, &request);
+    if (SUCCEEDED(hr) && q.Ready != 1u && !scheduled) {
+      /* Like the CPU copy path, this escape runs before VidSch schedules
+       * the device. MakeResident's fence need not publish its deferred PTEs.
+       * Schedule one CPU-only touch, then repeat the complete authenticated
+       * proof. Genuine omitted/scattered leaves remain refused. Holds stay
+       * owned throughout; an escape or touch failure is never bypassed. */
+      scheduled = true;
+      if (!touch_device(device, command_va)) return 0;
+      /* Scheduling may publish moves for earlier slots too. Recheck the
+       * entire held set with fresh, zero-output query payloads. */
+      i = 0u;
+      continue;
+    }
     if (FAILED(hr) || q.Ready != 1u) {
       UINT values[9] = {q.Allocation, (UINT)q.GpuVa, (UINT)(q.GpuVa >> 32),
           (UINT)q.AllocationBytes, (UINT)(q.AllocationBytes >> 32), q.Write,

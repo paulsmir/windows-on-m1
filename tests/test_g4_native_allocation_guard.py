@@ -49,6 +49,40 @@ class NativeAllocationGuard(unittest.TestCase):
         funcs = '\n'.join(function(text, n) for n in ('native_held_ready', 'submit'))
         self.compile_run(UMD_FIXTURE.replace('@@FUNCS@@', funcs), cpp=True)
 
+    def test_deferred_mapping_is_scheduled_once_then_revalidated(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        A read-only escape before scheduling sees deferred PTEs. Retry only
+        after a successful bounded touch; genuine missing backing still fails.
+        """
+        fixture = UMD_FIXTURE[:UMD_FIXTURE.index('int main() {')]
+        fixture += r'''int main() {
+ (void)submit;(void)hold;
+ CALLBACKS cbks={cb,signal_cb,escape_cb};ADAPTER a={ADMISSION_UMD_ADAPTER_MAGIC,{9}};
+ ADMISSION_UMD_DEVICE d={};d.Adapter=&a;d.KernelCallbacks=&cbks;d.KernelContext=7;
+ d.RuntimeDevice.handle=3;d.RenderSyncObject=8;uploads=1;
+ for(unsigned i=0;i<3;++i) {auto &s=d.ScreenBuffers[i];s.Active=s.CopyHeld=true;
+  s.KernelAllocation=i+1;s.CanonicalGpuVa=0x10000ull*(i+1);s.Bytes=65536;s.SubmissionHolds=1;}
+ deferred=true;
+ assert(native_held_ready(&d,0x10000));assert(touches==1 && queries==3);
+ // Already published mappings do not schedule another packet.
+ touches=queries=0;assert(native_held_ready(&d,0x10000));assert(!touches && queries==2);
+ // A later missing leaf restarts proof of earlier slots as well.
+ bad=3;touches=queries=0;assert(native_held_ready(&d,0x10000));
+ assert(touches==1 && queries==4);
+ // A real omitted leaf remains refused after exactly one scheduling attempt.
+ deferred=false;bad=2;touches=queries=0;
+ assert(!native_held_ready(&d,0x10000));assert(touches==1 && queries==2);
+ // Callback failure is terminal for this check, not a request to schedule.
+ escape_fail=true;touches=queries=0;
+ assert(!native_held_ready(&d,0x10000));assert(!touches && queries==1);
+ escape_fail=false;touch_fail=true;deferred=true;bad=2;touches=queries=0;
+ assert(!native_held_ready(&d,0x10000));assert(touches==1 && queries==1);
+ assert(!submits && !signals && !locks);
+}
+'''
+        funcs = '\n'.join(function(UMD.read_text(), n) for n in ('native_held_ready', 'submit'))
+        self.compile_run(fixture.replace('@@FUNCS@@', funcs), cpp=True)
+
 KMD_FIXTURE = r'''
 #include <assert.h>
 #include <stddef.h>
@@ -210,6 +244,13 @@ static int signal_render(ADMISSION_UMD_DEVICE *,uint64_t) {++signals;return 1;}
 static int finish_submission(ADMISSION_UMD_DEVICE *,uint64_t n,UINT,uint64_t *f) {*f=n;return 1;}
 static HRESULT cb(UINT,D3DDDICB_SUBMITCOMMAND*) {++submits;return 0;}
 static void signal_cb() {}
+static unsigned touches;
+static bool deferred, touch_fail;
+[[maybe_unused]] static int touch_device(ADMISSION_UMD_DEVICE *,uint64_t va) {
+ assert(va==0x10000 && !locks); ++touches;
+ if(deferred) bad=0;
+ return !touch_fail;
+}
 static HRESULT escape_cb(UINT,D3DDDICB_ESCAPE *e) {
  assert(uploads && !locks && !e->Flags.Value && e->hDevice==3 && e->hContext==7);
  ++queries;
@@ -232,13 +273,13 @@ int main() {
  uint64_t fence=0;unsigned private_data=0;hold(d);
  /* Real old submit reaches cb even though referenced allocation 2 is bad. */
  assert(submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence)==0);
- assert(!submits && !signals && !fence && !locks && queries==1);
+ assert(!submits && !signals && !fence && !locks && queries==2);
  /* Unreferenced allocation 4 is bad; command 1 has no native leaf either. */
  bad=4;queries=0;hold(d);assert(submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence)==1);
  assert(submits==1 && signals==1 && queries==2 && fence==1);
  /* Revalidate every submission; no stale Ready cache after residency moves. */
  bad=3;queries=0;hold(d);fence=0;assert(!submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence));
- assert(submits==1 && queries==2 && !fence);
+ assert(submits==1 && queries==4 && !fence);
  bad=0;escape_fail=true;hold(d);assert(!submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence));
  assert(submits==1);escape_fail=false;upload_fail=true;queries=0;hold(d);
  assert(!submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence) && !queries && submits==1);
