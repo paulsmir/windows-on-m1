@@ -64034,3 +64034,5 @@ EXP1958 HARDWARE BEFORE 2026-10-25T23:36:09Z:
 - Hashes: sys c3a3d3b392b0, UmdArm64 df360ac71e6e, UmdX64 db654331cf35, Umd32 cd46279b8ce7; manifest 1a26beb50353, hardware-manifest b328c669c9c3; probe1958.sh 4d885c303e9a (PROBE_LINT_OK); visible recovery rec1958h 4137a118ebdb09d7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
 - Recovery rec1958h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1958-ram-overhead/run1958.sh.
+
+EXP1958 ACTUAL (Claude headline 2026-10-25T23:47:32Z): package 30.0.1958.0 (27c3c712 = EXP1957 + rc22 descriptor-heap CPU shadow reuse), Wom1GpuFaultInfoRead=1 + Wom1PoolFraction=3. Stable: both arms reach the harness close, guest alive; 10k loaded this time. 2k: 9 scene presents = 5.6/min. 10k: 20 = 8.3/min. Longest paging waits are 20.3 / 23 s, unchanged. Verdict: rc22 (about 60 MiB) is neutral. User answered: the J313 has 8 GB, so the 6.28 GB guest is near the maximum. Path forward: pageable (shadow-backed) GPU memory so the locked pool can shrink; rc24 with Codex effort HIGH (user decision).
