@@ -63966,3 +63966,13 @@ EXP1953 ACTUAL (Claude headline 2026-10-25T21:12:38Z): package 30.0.1953.0 (2a86
 - Verdict: rc15 SUPPORTED. The 2016 MiB native pool removes the unrecoverable page-in boundary for this workload. Next: performance (rc16).
 
 GUEST-CLEANUP 2026-10-25T21:35:26Z (user, AGX-Cleanup.cmd v2 on the guest desktop): deleted the old C:\ProgramData\EXPnnnn-Trace UMD trace folders (592 of 597, about 31 GB; the 5 newest kept), the old C:\Users\pavel\EXPnnnn folders (pinned samples EXP1825/1834/1838/1844-1848/1854 and the 5 newest kept), LiveKernelReports and MEMORY.DMP. No archive copy. Guest C: free went from 9.7 GB to 41.3 GB.
+
+EXP1954 HARDWARE BEFORE 2026-10-25T21:36:47Z:
+- Package 30.0.1954.0 = EXP1953 + rc16: both paging query paths advertise 8192 B of private storage, enough for the scheduler's 64 records instead of 32. A 65-page coverage takes 2 passes instead of 3.
+- Switches Wom1GpuFaultInfoRead=1 and Wom1PoolFraction=3 (same as EXP1953). Probe slot "10K" = 2k, slot "2K" = 10k. Trim on, guard on, Timeout 240.
+- WHY THIS HYPOTHESIS: EXP1953 renders stably but at about 0.25 fps. rc16 found about 99.4% of late-scene wall time inside Execute replay, with repeated trims and long pending-MakeResident gaps. The paging throughput is the dominant sink, and EXP1951 showed about 730k INSUFFICIENT_DMA_BUFFER retries.
+- Metric: scene presents per minute after Ready, compared with EXP1953 (rc16 per-present CSVs give the baseline). Also: no device removal and DWM alive (no regression).
+- Recovery: rec1954h.
+- Hashes: sys 5631f49ab2c9, UmdArm64 99f65e937340, UmdX64 d092e6d26740, Umd32 20c61f845b99; manifest 7351ecbbf3be, hardware-manifest 7589b283897e; probe1954.sh 28155db2ed8b (PROBE_LINT_OK); visible recovery rec1954h 93031e01d404850b; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
+- Recovery rec1954h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1954-paging-private/run1954.sh.
