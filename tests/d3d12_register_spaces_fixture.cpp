@@ -26,7 +26,7 @@ struct FakePso {struct {dxbc_binding_map Bindings;} compute;
 struct AgxD3d12CommandList {void *device; FakePso *pso;};
 struct AgxD3d12Dispatch {
  AgxD3d12Heap *uav_heap[8]={},*cb_heap[14]={},*srv_heap[128]={};
- AgxD3d12Heap *descriptors=nullptr; UINT heap_first[64]={}, heap_ranges=0; /* C47 */
+ AgxD3d12Heap *descriptors=nullptr; UINT heap_first[64]={}, heap_count[64]={}, heap_ranges=0; /* C47 */
  AgxD3d12Heap *sampler_descriptors=nullptr; UINT64 heap_sampler_mask=0;
  UINT64 uav_offset[8]={},cb_offset[14]={},srv_offset[128]={};
  UINT cb_constants[14]={},cb_count[14]={},root_dwords[64]={};
@@ -169,6 +169,13 @@ static void extended(const char *mode) {
   assert(!ResolveRoot(&list,&root,va,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out));
   assert(out.descriptors==&heaps[0] && out.heap_ranges==1 && out.heap_first[0]==8);
   assert(out.srv_descriptor[0]==reinterpret_cast<AgxD3d12Descriptor*>(big+9*64));
+  // WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Finite root ranges
+  // must not demand residency for unrelated heap tail descriptors.
+  assert(out.heap_count[0]==8); // unbounded root clipped to logical heap end
+  RangesOf(&root)[0].count=5;
+  assert(!ResolveRoot(&list,&root,va,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out));
+  assert(out.heap_first[0]==8 && out.heap_count[0]==2);
+  RangesOf(&root)[0].count=UINT_MAX;
   map.count=3; map.bindings[2]={DXBC_BINDING_SRV,2,2,0,1,DXBC_BINDING_HEAP};
   root.parameters=3;
   root.parameter[2]={D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,0,0,0,0,D3D12DDI_SHADER_VISIBILITY_PIXEL,1,1};

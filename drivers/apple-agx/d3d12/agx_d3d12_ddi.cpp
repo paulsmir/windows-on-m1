@@ -3790,6 +3790,7 @@ struct AgxD3d12Dispatch {
      * heap index of each range's first register */
     AgxD3d12Heap *descriptors;
     UINT heap_first[kHeapRanges];
+    UINT heap_count[kHeapRanges];
     UINT heap_ranges;
     AgxD3d12Heap *sampler_descriptors; /* C47: the shader-visible sampler heap of heap sampler ranges */
     UINT64 heap_sampler_mask;          /* the heap ranges that are sampler ranges */
@@ -5494,6 +5495,7 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
     out->sampler_descriptors = nullptr;
     out->heap_ranges = 0;
     out->heap_sampler_mask = 0;
+    memset(out->heap_count, 0, sizeof(out->heap_count));
     for (UINT m = 0; m < map.count; ++m) {
         const struct dxbc_binding &binding = map.bindings[m];
         const UINT slot = binding.slot;
@@ -5524,7 +5526,13 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
                     if (!heap || !heap->cpu || offset % stride || (bound && bound != heap)) return 6u;
                     bound = heap;
                     if (sampler) out->heap_sampler_mask |= 1ull << slot;
-                    out->heap_first[slot] = static_cast<UINT>(offset / stride) + range.offset + delta;
+                    const UINT64 first = offset / stride + range.offset + static_cast<UINT64>(delta);
+                    const UINT64 entries = DescriptorHeapBytes(heap) / stride;
+                    if (first >= entries || first > UINT_MAX) return 6u;
+                    const UINT64 available = entries - first;
+                    const UINT64 declared = range.count == UINT_MAX ? available : range.count - delta;
+                    out->heap_first[slot] = static_cast<UINT>(first);
+                    out->heap_count[slot] = static_cast<UINT>(declared < available ? declared : available);
                     if (slot >= out->heap_ranges) out->heap_ranges = slot + 1;
                     found = true;
                 }
@@ -6201,6 +6209,15 @@ static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d
     g_heap_walk.ticks += t1.QuadPart - t0.QuadPart;
     return hr;
 }
+/* Bindless indexing may reach every entry in its root range, but not
+ * unrelated tables or the rest of the heap. Holes in the stage map are empty.
+ * Keep unbounded ranges conservative through the logical heap end. */
+static bool HeapSlotReachable(const AgxD3d12Dispatch *b, UINT index) {
+    for (UINT r = 0; r < b->heap_ranges; ++r)
+        if (!(b->heap_sampler_mask & (1ull << r)) && index >= b->heap_first[r] &&
+            index - b->heap_first[r] < b->heap_count[r]) return true;
+    return false;
+}
 static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,
                                 bool *minmax) {
     if (!*scratch) *scratch = static_cast<AgxD3d12HeapScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12HeapScratch)));
@@ -6240,6 +6257,7 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
     h.binding.RefDescriptorData = b->descriptors->mirror;
     const UINT count = static_cast<UINT>(DescriptorHeapBytes(b->descriptors) / kCbvSrvUavDescriptorBytes);
     for (UINT i = lowest; i < count; ++i) {
+        if (!HeapSlotReachable(b, i)) continue;
         auto *view = reinterpret_cast<AgxD3d12Descriptor *>(static_cast<BYTE *>(b->descriptors->cpu) +
                                                             static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes);
         const bool uav = UavDescriptorKind(view->kind);
