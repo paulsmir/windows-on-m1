@@ -56,6 +56,11 @@ typedef unsigned long long ULONGLONG; typedef size_t SIZE_T; typedef void* HANDL
 #define ADMISSION_UMD_IN_FLIGHT_SETS 4u  /* umd_internal.h (EXP1203) */
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) ADMISSION_UMD_SCREEN_BUFFER_LIMIT
 #define ADMISSION_UMD_DEVICE_MAGIC 0x55u
+static unsigned GetEnvironmentVariableA(const char *name,char *out,unsigned size){
+  const char *v=getenv(name);if(!v)return 0;
+  unsigned n=(unsigned)strlen(v);if(n>=size)return n+1;
+  memcpy(out,v,n+1);return n;
+}
 static void* GetProcessHeap(){return nullptr;}
 static void* HeapAlloc(void*,unsigned,size_t n){return calloc(1,n);}
 static void HeapFree(void*,unsigned,void*p){free(p);}
@@ -81,7 +86,7 @@ static HRESULT ev(HANDLE,const D3DDDICB_EVICT*e){if(before_evict)before_evict();
   last_evicted_count=e->NumAllocations;for(UINT i=0;i<e->NumAllocations;++i)last_evicted[i]=e->AllocationList[i];return evict_result;}
 static void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
 struct CB { HRESULT(*pfnMakeResidentCb)(HANDLE,D3DDDI_MAKERESIDENT*); HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); };
-struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
+struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing,BorrowedContext; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
 static void va_record(const void*,UINT,unsigned long long,D3DKMT_HANDLE,unsigned long long,unsigned long long,HRESULT){}
 @@FUNCS@@
 int main(){
@@ -183,6 +188,51 @@ class PersistentResidency(unittest.TestCase):
         """
         self.run_replay(BODY[:BODY.index('int main(){')] + TRIM_RACE,
                         'trim reservation interleaving: PASS')
+
+    def test_d3d12_no_trim_preserves_idle_residency_and_returns_oom(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        The D3D12 opt-in must prevent autonomous eviction even of idle internal
+        BOs, return a real budget failure, and leave other APIs/default intact.
+        Executes production trim and MakeResident retry code with fake VidMm.
+        """
+        main = r'''int main() {
+          CB cb={mk,ev}; ADMISSION_UMD_DEVICE d={};
+          d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.PagingQueue=(HANDLE)1;
+          d.KernelCallbacks=&cb;
+          for(unsigned api=0;api<2;++api) {
+            d.BorrowedContext=api;
+            const char *values[]={nullptr,"0","1","yes","10",""};
+            for(const char *value:values) {
+              if(value) setenv("APPLE_AGX_D3D12_DISABLE_TRIM",value,1);
+              else unsetenv("APPLE_AGX_D3D12_DISABLE_TRIM");
+              memset(d.ScreenBuffers,0,sizeof(d.ScreenBuffers));
+              for(unsigned i=0;i<2;++i) {
+                SLOT &s=d.ScreenBuffers[i];s.Active=TRUE;s.Token=10+i;
+                s.KernelAllocation=0x100+i;s.StagingAllocation=0x200+i;
+                s.CanonicalGpuVa=0x10000*(i+1);s.Bytes=65536;
+              }
+              SLOT &idle=d.ScreenBuffers[0];idle.Resident=TRUE;
+              made=evicted=0;refusals=1;
+              uint64_t token=11,fence=0;
+              const bool disabled=api && value && !strcmp(value,"1");
+              int result=make_resident(&d,&token,1,&fence);
+              if(disabled) {
+                assert(result==0 && made==1 && evicted==0);
+                assert(idle.Resident && !idle.Transition);
+                assert(!d.ScreenBuffers[1].Resident && !d.ScreenBuffers[1].SubmissionHolds);
+                assert(!d.ScreenBuffers[1].CopyHeld);
+              } else {
+                assert(result==2 && made==2 && evicted==1);
+                assert(!idle.Resident);
+                assert(evict(&d,&token,1));
+              }
+            }
+          }
+          unsetenv("APPLE_AGX_D3D12_DISABLE_TRIM");
+          puts("D3D12 trim discriminator: PASS");
+        }'''
+        self.run_replay(BODY[:BODY.index('int main(){')] + main,
+                        'D3D12 trim discriminator: PASS')
 
     def test_slots_stay_resident_across_submits(self):
         self.run_replay(BODY, 'EXP978 persistent residency: PASS')

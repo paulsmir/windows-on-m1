@@ -267,6 +267,20 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
   ULONGLONG covered=0ull;
   HRESULT hr=E_FAIL;
   *trimmed=0u;
+  /* RC4 discriminator: D3D12 queue owners use this device storage. Keep
+   * every persistent reference, including internal BOs whose GPU reachability
+   * is not yet proven by the fault trace. Other APIs retain budget trimming.
+   * Set before launching the app; only the exact value 1 opts in. A budget
+   * refusal then propagates through residency_request without an eviction.
+   * This is not a replacement for application MakeResident/Evict DDIs. */
+  if(device->BorrowedContext) {
+    char disable[2]={};
+    if(GetEnvironmentVariableA("APPLE_AGX_D3D12_DISABLE_TRIM",disable,
+        sizeof(disable))==1u && disable[0]=='1') {
+      AdmissionUmdDiagnostic("measure-d3d12-trim-disabled",S_OK,NULL,0u);
+      return 0ull;
+    }
+  }
   if(!n || !device->KernelCallbacks->pfnEvictCb) return 0ull;
   auto *view=(ADMISSION_UMD_TRIM_SLOT *)HeapAlloc(GetProcessHeap(),
       HEAP_ZERO_MEMORY,(SIZE_T)n*sizeof(ADMISSION_UMD_TRIM_SLOT));
