@@ -271,7 +271,12 @@ def project_sources(out, project, overlays):
       if (!{field}) {{
          AgxWin32AsahiMarkContextFault(batch->ctx, (5u << 16) | __LINE__);
          return;
-      }}''')
+      }}
+      /* The helper address bypasses normal shader binding. Its cached BO
+       * must join this consuming batch even when scratch was allocated by
+       * an earlier batch; a cache pointer is not a Windows residency hold. */
+      agx_batch_add_bo(batch,
+         agx_get_precompiled(&batch->ctx->bg_eot, LIBAGX_HELPER)->bo);''')
     # Complete context construction or unwind all initialized components.
     s=once(s,'''   struct pipe_context *pctx = &ctx->base;
 
