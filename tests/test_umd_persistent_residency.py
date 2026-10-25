@@ -193,6 +193,51 @@ int main() {
 
 
 class PersistentResidency(unittest.TestCase):
+    def test_trim_avoids_large_terminal_overshoot(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Strict LRU drops a large heap for a small shortfall even when a smaller
+        idle allocation covers it. Execute production selection and EvictCb;
+        preserve holds, LRU ties, zero-shortfall progress and exhaustion.
+        """
+        main = r'''int main() {
+          CB cb={mk,ev}; ADMISSION_UMD_DEVICE d={}; d.KernelCallbacks=&cb;
+          const uint64_t sizes[]={4,128,16,16,8,1};
+          for(unsigned i=0;i<6;++i){
+            auto &s=d.ScreenBuffers[i];s.Active=s.Resident=TRUE;
+            s.Token=10+i;s.KernelAllocation=0x100+i;
+            s.Bytes=sizes[i]<<20;s.LastUseFence=i+1;
+          }
+          // A perfect-sized allocation held by a submission is unavailable.
+          d.ScreenBuffers[4].SubmissionHolds=1;
+          d.ScreenBuffers[5].Mapped=1;
+          UINT count=0;
+          assert(trim_residency(&d,12ull<<20,&count)==(20ull<<20));
+          assert(count==2 && last_evicted[0]==0x100 && last_evicted[1]==0x102);
+          assert(d.ScreenBuffers[1].Resident && d.ScreenBuffers[3].Resident);
+          assert(d.ScreenBuffers[4].Resident && d.ScreenBuffers[5].Resident);
+          // Equal sized candidates retain the oldest fence ordering.
+          assert(trim_residency(&d,8ull<<20,&count)==(16ull<<20));
+          assert(count==1 && last_evicted[0]==0x103);
+          // No fitting smaller alternative: the heap must still be trimmable.
+          assert(trim_residency(&d,1,&count)==(128ull<<20) && count==1);
+          assert(last_evicted[0]==0x101);
+          assert(trim_residency(&d,~0ull,&count)==0 && count==0);
+          // Exact-fit replacement is eligible this time (>=, not >).
+          for(unsigned i=0;i<3;++i) d.ScreenBuffers[i].Resident=TRUE;
+          d.ScreenBuffers[2].Bytes=8ull<<20;
+          assert(trim_residency(&d,12ull<<20,&count)==(12ull<<20));
+          assert(count==2 && last_evicted[1]==0x102);
+          // A zero shortfall must progress with the smallest idle slot.
+          d.ScreenBuffers[0].Resident=TRUE;
+          assert(trim_residency(&d,0,&count)==(4ull<<20));
+          assert(count==1 && last_evicted[0]==0x100);
+          assert(d.ScreenBuffers[1].Resident);
+          puts("bounded trim overshoot: PASS");
+        }
+'''
+        self.run_replay(BODY[:BODY.index('int main(){')] + main,
+                        'bounded trim overshoot: PASS')
+
     def test_trim_reserves_slots_until_evict_finishes(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
         A trim candidate must not acquire a submission hold between selection

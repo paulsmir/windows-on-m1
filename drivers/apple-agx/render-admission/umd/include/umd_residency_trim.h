@@ -43,7 +43,10 @@ static inline int AdmissionUmdTrimEligible(const ADMISSION_UMD_TRIM_SLOT *s) {
 }
 
 /* Chooses eligible slots, least recently used first (lower slot index first
- * on equal fences), until their bytes cover Want. At least one slot is chosen
+ * on equal fences), until their bytes cover Want. If the terminal slot would
+ * overshoot, use the smallest remaining eligible slot covering the shortfall
+ * (oldest first on equal sizes). Avoid dropping a large heap reference for a
+ * small deficit when a smaller idle allocation suffices. At least one slot is chosen
  * when any is eligible, since VidMm may refuse with NumBytesToTrim 0. Writes
  * the slot indices to Chosen (capacity Count) and returns how many it chose;
  * *Covered receives their bytes. */
@@ -63,6 +66,21 @@ static inline unsigned AdmissionUmdTrimChoose(
     Chosen[j] = v;
   }
   while (picked < eligible) {
+    unsigned best = picked;
+    unsigned long long remaining = Want > bytes ? Want - bytes : 0ull;
+    if (Slots[Chosen[best]].Bytes > remaining) {
+      for (j = picked + 1u; j < eligible; ++j) {
+        unsigned long long candidate = Slots[Chosen[j]].Bytes;
+        if (candidate >= remaining && candidate < Slots[Chosen[best]].Bytes)
+          best = j;
+      }
+    }
+    /* Only the terminal choice can move; the earlier LRU prefix is intact. */
+    if (best != picked) {
+      unsigned swap = Chosen[picked];
+      Chosen[picked] = Chosen[best];
+      Chosen[best] = swap;
+    }
     bytes += Slots[Chosen[picked++]].Bytes;
     if (bytes >= Want) break;
   }
