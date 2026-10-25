@@ -21,7 +21,15 @@ class PoolResidencyLimit(unittest.TestCase):
         """
         self.check_registry_reader('AdmissionPoolHalfSizeEnabled', 'Wom1PoolHalfSize')
 
-    def check_registry_reader(self, reader_name, value_name):
+    def test_only_fraction_three_enables_three_quarter_policy(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        Invalid registry values must not change the published residency limit.
+        Only the explicitly requested fraction 3 opts into the new policy.
+        """
+        self.check_registry_reader('AdmissionPoolThreeQuarterEnabled', 'Wom1PoolFraction', 3)
+
+    def check_registry_reader(self, reader_name, value_name, enabled_value=1):
         source = (RENDER / 'src/pool_windows.c').read_text()
         reader = function(source, reader_name)
         body = r'''
@@ -46,7 +54,8 @@ typedef struct { void *PhysicalDeviceObject; } ADMISSION_CONTEXT;
 #define KeyValuePartialInformation 2
 #define NT_SUCCESS(s) ((s) >= 0)
 static int open_result, query_result, opens, queries, closes;
-static ULONG kind = REG_DWORD, length = 4, payload = 1;
+#define ENABLE_VALUE 1
+static ULONG kind = REG_DWORD, length = 4, payload = ENABLE_VALUE;
 static int IoOpenDeviceRegistryKey(void *pdo, int which, int access, HANDLE *key) {
     assert(pdo && which == PLUGPLAY_REGKEY_DEVICE && access == KEY_QUERY_VALUE);
     ++opens; if (!open_result) *key = pdo; return open_result;
@@ -72,11 +81,11 @@ int main(void) {
     open_result = 0; query_result = -1;
     assert(!AdmissionPoolHalfSizeEnabled(&ctx) && closes == 1);
     query_result = 0;
-    for (unsigned i = 0; i < 4; ++i) {
+    for (unsigned i = 0; i < 6; ++i) {
         payload = i;
-        assert(AdmissionPoolHalfSizeEnabled(&ctx) == (i == 1));
+        assert(AdmissionPoolHalfSizeEnabled(&ctx) == (i == ENABLE_VALUE));
     }
-    payload = 1; kind = 3;
+    payload = ENABLE_VALUE; kind = 3;
     assert(!AdmissionPoolHalfSizeEnabled(&ctx));
     kind = REG_DWORD; length = 1;
     assert(!AdmissionPoolHalfSizeEnabled(&ctx));
@@ -86,6 +95,7 @@ int main(void) {
     return 0;
 }
 '''
+        body = body.replace('#define ENABLE_VALUE 1', f'#define ENABLE_VALUE {enabled_value}')
         body = body.replace('AdmissionPoolHalfSizeEnabled', reader_name).replace('Wom1PoolHalfSize', value_name)
         with tempfile.TemporaryDirectory() as tmp:
             src, exe = Path(tmp) / 'registry.c', Path(tmp) / 'registry'
@@ -114,9 +124,10 @@ typedef unsigned long long ULONGLONG;
 typedef int BOOLEAN;
 '''+policy+r'''
 static unsigned news;
+static int fail_new;
 static int high = 1;
 static ADMISSION_POOL_SLAB *alloc_slab(void *ctx) {
-    (void)ctx; ++news; return calloc(1, sizeof(ADMISSION_POOL_SLAB));
+    (void)ctx; if (fail_new) return NULL; ++news; return calloc(1, sizeof(ADMISSION_POOL_SLAB));
 }
 static void free_slab(void *ctx, ADMISSION_POOL_SLAB *s) {
     (void)ctx; assert(!s->Live); free(s);
@@ -125,36 +136,51 @@ static int may_grow(void *ctx) { (void)ctx; return high; }
 int main(void) {
     const ULONGLONG m = 1ULL << 20;
     /* Independent arithmetic: 5988/2 - 256, aligned down to 64 = 2688. */
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 0) == 2688*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 1) == 1344*m);
-    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 0) == 1024*m);
-    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 1) == 512*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 1024*m, 1) == 384*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 640*m, 4608*m, 1) == 320*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 576*m, 4608*m, 1) == 256*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 256*m, 4608*m, 1) == 256*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 255*m, 4608*m, 1) == 0);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 256*m, 1) == 0);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 0, 0) == 2688*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 1, 0) == 1344*m);
+    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 0, 0) == 1024*m);
+    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 1, 0) == 512*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 1024*m, 1, 0) == 384*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 640*m, 4608*m, 1, 0) == 320*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 576*m, 4608*m, 1, 0) == 256*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 256*m, 4608*m, 1, 0) == 256*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 255*m, 4608*m, 1, 0) == 0);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 256*m, 1, 0) == 0);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 0, 1) == 2016*m);
+    /* HalfSize remains the conservative winner if both switches are set. */
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 1, 1) == 1344*m);
+    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 0, 1) == 768*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 640*m, 4608*m, 0, 1) == 480*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 256*m, 4608*m, 0, 1) == 256*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 255*m, 4608*m, 0, 1) == 0);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 1024*m, 0, 1) == 576*m);
     /* Use the real sizing result as the reservation cap, as pool start does. */
     ADMISSION_POOL_SLABS pool = {0};
     pool.NewSlab = alloc_slab; pool.FreeSlab = free_slab; pool.MayGrow = may_grow;
-    pool.ReserveCap = AdmissionPoolSegmentBytes(6279270400ULL, 512*m, 4608*m, 1) /
+    pool.ReserveCap = AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 0, 1) /
                       ADMISSION_POOL_DEMAND_GRANULE;
-    assert(pool.ReserveCap == 4096);
-    assert(AdmissionPoolSlabReserve(&pool, 4096));
-    assert(news == 128);
+    assert(pool.ReserveCap == 32256);
+    /* A physical allocation failure rolls back only the attempted promise. */
+    assert(AdmissionPoolSlabReserve(&pool, 32));
+    fail_new = 1;
+    assert(!AdmissionPoolSlabReserve(&pool, 32));
+    assert(pool.Reserved == 32 && pool.Stats.Slabs == 1);
+    assert(pool.Stats.NewSlabFailures == 1 && pool.Stats.ReserveFailures == 1);
+    fail_new = 0;
+    assert(AdmissionPoolSlabReserve(&pool, 32224));
+    assert(news == 1008);
     high = 0;
     assert(AdmissionPoolSlabReserve(&pool, 8192));
-    assert(pool.Reserved == 12288 && news == 128);
-    ADMISSION_POOL_SLAB *slab[4096]; unsigned slot[4096];
-    assert(AdmissionPoolSlabTake(&pool, 4096, slab, slot));
-    assert(news == 128 && !pool.Stats.NewSlabFailures && !pool.Stats.FloorRefusals);
-    for (unsigned i = 0; i < 4096; ++i) AdmissionPoolSlabGive(&pool, slab[i], slot[i]);
-    assert(pool.Stats.Slabs == 128); /* evicted allocations still promised */
-    assert(AdmissionPoolSlabTake(&pool, 4096, slab, slot));
-    assert(news == 128); /* a different full resident set uses the same backing */
-    for (unsigned i = 0; i < 4096; ++i) AdmissionPoolSlabGive(&pool, slab[i], slot[i]);
-    AdmissionPoolSlabUnreserve(&pool, 12288);
+    assert(pool.Reserved == 40448 && news == 1008);
+    ADMISSION_POOL_SLAB *slab[32256]; unsigned slot[32256];
+    assert(AdmissionPoolSlabTake(&pool, 32256, slab, slot));
+    assert(news == 1008 && pool.Stats.NewSlabFailures == 1 && !pool.Stats.FloorRefusals);
+    for (unsigned i = 0; i < 32256; ++i) AdmissionPoolSlabGive(&pool, slab[i], slot[i]);
+    assert(pool.Stats.Slabs == 1008); /* evicted allocations still promised */
+    assert(AdmissionPoolSlabTake(&pool, 32256, slab, slot));
+    assert(news == 1008); /* a different full resident set uses the same backing */
+    for (unsigned i = 0; i < 32256; ++i) AdmissionPoolSlabGive(&pool, slab[i], slot[i]);
+    AdmissionPoolSlabUnreserve(&pool, 40448);
     assert(pool.Stats.Slabs == 0);
     return 0;
 }
@@ -182,6 +208,7 @@ int main(void) {
         start = function(source, 'AdmissionPoolDemandStart')
         self.assertIn('ULONGLONG bytes = AdmissionPoolSegmentBytes(', start)
         self.assertIn('AdmissionPoolHalfSizeEnabled(Context)', start)
+        self.assertIn('AdmissionPoolThreeQuarterEnabled(Context)', start)
         self.assertIn('ULONGLONG count = bytes / ADMISSION_POOL_DEMAND_GRANULE;', start)
         self.assertIn('pool->Slabs.ReserveCap = count;', start)
         self.assertIn('Context->PoolBytes = bytes;', start)

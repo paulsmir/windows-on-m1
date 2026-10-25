@@ -694,11 +694,21 @@ static PKEVENT AdmissionPoolOpenEvent(PCWSTR Name) {
 static ULONGLONG AdmissionPoolSegmentBytes(ULONGLONG RamBytes,
                                           ULONGLONG WindowBytes,
                                           ULONGLONG BrokerBytes,
-                                          BOOLEAN HalfSize) {
+                                          BOOLEAN HalfSize,
+                                          BOOLEAN ThreeQuarter) {
   ULONGLONG bytes = AdmissionPoolDemandSegmentBytesEx(
       RamBytes, WindowBytes, BrokerBytes);
   if (HalfSize && bytes != 0ULL) {
     bytes = (bytes / 2ULL) & ~(ADMISSION_POOL_DEMAND_SIZE_STEP - 1ULL);
+    if (bytes < ADMISSION_POOL_DEMAND_MIN_BYTES)
+      bytes = ADMISSION_POOL_DEMAND_MIN_BYTES;
+  } else if (ThreeQuarter && bytes != 0ULL) {
+    /* RC15: retain 3/4 of the ordinary bound, including the backing promise.
+     * Divide first to avoid overflow. The normal bound is 64 MiB-aligned,
+     * hence this result is 16 MiB-aligned (whole 2 MiB slabs). On J313 this
+     * is 2016 MiB: 672 MiB more residency than HalfSize, 672 MiB less locked
+     * backing than full size. The validated High&&!Low floor stays intact. */
+    bytes = (bytes / 4ULL) * 3ULL;
     if (bytes < ADMISSION_POOL_DEMAND_MIN_BYTES)
       bytes = ADMISSION_POOL_DEMAND_MIN_BYTES;
   }
@@ -727,6 +737,33 @@ static BOOLEAN AdmissionPoolHalfSizeEnabled(ADMISSION_CONTEXT *Context) {
                                  value, sizeof(data.Buffer), &bytes)) &&
       value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
       *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
+/* RC15: only fraction 3 opts in; other values preserve the default.
+ * HalfSize wins if both are set, so a stale switch cannot enlarge its cap. */
+static BOOLEAN AdmissionPoolThreeQuarterEnabled(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1PoolFraction");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 3u)
     enabled = TRUE;
   ZwClose(key);
   return enabled;
@@ -766,7 +803,8 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   ADMISSION_POOL_RUNTIME *pool;
   ULONGLONG ram = AdmissionPoolRamBytes();
   ULONGLONG bytes = AdmissionPoolSegmentBytes(ram, Window->RequestedBytes,
-      Context->PoolBrokerBytes, AdmissionPoolHalfSizeEnabled(Context));
+      Context->PoolBrokerBytes, AdmissionPoolHalfSizeEnabled(Context),
+      AdmissionPoolThreeQuarterEnabled(Context));
   ULONGLONG count = bytes / ADMISSION_POOL_DEMAND_GRANULE;
   PHYSICAL_ADDRESS base;
   if (bytes == 0ULL) {
