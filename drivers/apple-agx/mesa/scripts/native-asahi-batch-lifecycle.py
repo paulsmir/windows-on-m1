@@ -277,6 +277,18 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
          return false;
    }
    sync_query_writers(ctx, query, "Reading query results");''')
+    # RC6 / EXP1945: query copies consume a raw GPU address. The producer's
+    # BO reference does not cover this later compute batch, and queries with
+    # CPU-updated counters may not have a producer batch at all. Track the
+    # source just like the destination so Windows restores trimmed backing
+    # and keeps it resident through the consuming submission's retirement.
+    query=replace(query,'''   /* Set params */
+   agx_batch_writes_range(batch, rsrc, offset, result_type_size(result_type));''','''   /* The query source is read by the copy kernel, including the shared
+    * occlusion heap. A raw address alone does not enter the BO list. */
+   agx_batch_add_bo(batch, is_occlusion(query) ? ctx->oq->bo : query->bo);
+
+   /* Set params */
+   agx_batch_writes_range(batch, rsrc, offset, result_type_size(result_type));''')
     save(qp,query)
     # Real draw entrypoint is wrapped so every native early return unwinds the
     # stable root. No manually constructed command/capture substitutes this call.
