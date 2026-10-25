@@ -140,6 +140,11 @@ grep -q 'AGX_RECOVERY_DISABLE_SERVICE: PASS' "$R/visible-disable-output.txt"
 ssh_bounded 'shutdown /r /t 3'
 wait_cycle "$owners"
 launch_normal disabled
+# rc1: a guest hang/bugcheck during the workload left no app logs (EXP1939 had no gm1939a UMD log, so the
+# faulting resource could not be identified). They are still on the guest disk here; copy them before cleanup.
+mkdir -p "$R/app-logs"
+perl -e 'alarm 120; exec @ARGV' "$T/airscp" "pavel@192.168.1.37:C:/Users/pavel/gravitymark/runs/gm${X}*" "$R/app-logs/" >/dev/null 2>&1 || echo "VISIBLE_COPY_FAILED app-logs (best effort; recovery continues)"
+echo "APP_LOGS_COLLECTED $(ls "$R/app-logs" | wc -l | tr -d ' ')"
 ssh_bounded 'powershell -NoProfile -Command "$ErrorActionPreference=\"Stop\"; $d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); $s=Get-CimInstance Win32_SystemDriver -Filter \"Name='"'"'AppleAgxAdmission'"'"'\"; if($d.Count -ne 1 -or [int]$d[0].Problem -ne 32 -or $s.State -ne \"Stopped\" -or (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission).Start -ne 4){throw \"disabled-visible gate\"}; \"VISIBLE_CODE32_SERVICE_STOPPED\""' | tee "$R/visible-disabled-gate.txt"
 grep -q VISIBLE_CODE32_SERVICE_STOPPED "$R/visible-disabled-gate.txt"
 # Cleanup commits an ordered restart itself. An SSH EOF/timeout is not proof
