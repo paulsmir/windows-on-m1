@@ -400,6 +400,10 @@ static HRESULT residency_request(ADMISSION_UMD_DEVICE *device,
   UINT rounds=0u, trimmed=0u;
   ULONGLONG trimmedBytes=0ull;
   bool cantTrimFurther=false;
+  char cantTrimOption[2]={0};
+  const bool allowCantTrimFurther=
+      GetEnvironmentVariableA("APPLE_AGX_UMD_CANT_TRIM_FURTHER",
+          cantTrimOption,sizeof(cantTrimOption))!=1u || cantTrimOption[0]!='0';
   HRESULT hr;
   for(;;) {
     ZeroMemory(request,sizeof(*request));
@@ -409,6 +413,11 @@ static HRESULT residency_request(ADMISSION_UMD_DEVICE *device,
     request->Flags.CantTrimFurther=cantTrimFurther;
     hr=device->KernelCallbacks->pfnMakeResidentCb(
         device->RuntimeDevice.handle,request);
+    if(cantTrimFurther || (!allowCantTrimFurther && hr==E_OUTOFMEMORY)) {
+      UINT values[3]={count,(UINT)cantTrimFurther,rounds};
+      AdmissionUmdDiagnostic("measure-make-resident-cant-trim",hr,values,
+                             ARRAYSIZE(values));
+    }
     if(hr!=E_OUTOFMEMORY || cantTrimFurther ||
        rounds>=ADMISSION_UMD_TRIM_ROUNDS) break;
     UINT slots=0u;
@@ -416,18 +425,19 @@ static HRESULT residency_request(ADMISSION_UMD_DEVICE *device,
      * otherwise the round cap could prevent the final overbudget request. */
     const bool lastRound=rounds+1u==ADMISSION_UMD_TRIM_ROUNDS;
     ULONGLONG freed=trim_residency(device,
-        lastRound ? ~0ull : request->NumBytesToTrim,&slots);
+        lastRound && allowCantTrimFurther ? ~0ull : request->NumBytesToTrim,&slots);
     ++rounds;
     if(!slots) {
       /* The current process budget is not the maximum budget. WDK's
        * CantTrimFurther lets VidMm arbitrate pressure across devices after
        * our idle references are exhausted. Try once, preserve its paging
        * fence, and propagate a maximum-budget refusal without MustSucceed. */
+      if(!allowCantTrimFurther) break;
       cantTrimFurther=true;
       continue;
     }
     trimmed+=slots;trimmedBytes+=freed;
-    if(lastRound) cantTrimFurther=true;
+    if(lastRound && allowCantTrimFurther) cantTrimFurther=true;
   }
   if(FAILED(hr) && hr!=E_PENDING) {
     UINT values[8]={count,rounds,trimmed,(UINT)trimmedBytes,
