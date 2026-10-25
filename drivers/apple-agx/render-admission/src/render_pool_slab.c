@@ -184,6 +184,30 @@ int AdmissionPoolSlabTakePrivate(ADMISSION_POOL_SLABS *Slabs,
   return 1;
 }
 
+int AdmissionPoolSlabTakePrivateRange(ADMISSION_POOL_SLABS *Slabs,
+    unsigned long long Count, ADMISSION_POOL_PRIVATE *Leases) {
+  unsigned long long i;
+  if (Slabs == 0 || Leases == 0 || Count == 0u ||
+      Slabs->PrivateCount > Slabs->PrivateCap ||
+      Count > Slabs->PrivateCap - Slabs->PrivateCount ||
+      Count > ~0ULL - Promised(Slabs))
+    return 0;
+  /* Validate the entire destination before acquiring anything. Never unwind
+   * a lease that belonged to the caller before this transaction. */
+  for (i = 0u; i < Count; ++i)
+    if (Leases[i].Slab != 0 || Leases[i].Slot != 0u) return 0;
+  for (i = 0u; i < Count; ++i) {
+    if (!AdmissionPoolSlabTakePrivate(Slabs, &Leases[i])) {
+      while (i != 0u) {
+        --i;
+        (void)AdmissionPoolSlabGivePrivate(Slabs, &Leases[i]);
+      }
+      return 0;
+    }
+  }
+  return 1;
+}
+
 int AdmissionPoolSlabGivePrivate(ADMISSION_POOL_SLABS *Slabs,
                                  ADMISSION_POOL_PRIVATE *Lease) {
   ADMISSION_POOL_SLAB *s;

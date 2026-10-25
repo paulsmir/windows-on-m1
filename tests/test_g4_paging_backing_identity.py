@@ -2,7 +2,7 @@
 CPU paging must retain original backing after native identity separation. A
 queued transfer must see earlier executed fills, never a build-time byte copy.
 Runs actual resolver, encoder, mapper and executor; OS mappings are host arrays.
-A real private slab lease supplies the distinct native identity. Its bytes stay
+A real atomic private range supplies two distinct native identities. Their bytes stay
 untouched until an activation path exists. This does not implement or emulate
 shadow activation, GPU execution or eviction.
 """
@@ -96,7 +96,7 @@ typedef struct {UINT Operation;void *hSystemContext;UINT MultipassOffset,DmaSize
  UINT TransferDirection;union {UINT Flags;struct {UINT Src64KBPages:1,Dst64KBPages:1,Reserved:30;};} Flags;} TransferVirtual;
 } DXGKARG_BUILDPAGINGBUFFER;
 typedef struct {PUCHAR CpuAddress;ULONGLONG GuestIpaAddress,Bytes;} ADMISSION_SCANOUT_MEMORY_VIEW;
-static unsigned char local[0x10000], system_pages[4][4096], private_bytes[0x10000];
+static unsigned char local[0x10000], system_pages[4][4096], private_bytes[0x20000];
 static ADMISSION_POOL_SLAB private_slab;
 static ADMISSION_POOL_SLAB *NewPrivateSlab(void *ctx) {
  (void)ctx; for(unsigned i=0;i<32;++i) private_slab.Pa[i]=0x300000+i*0x10000;
@@ -118,7 +118,7 @@ static int AdmissionMemoryPoolView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY
 static void *MmMapIoSpace(PHYSICAL_ADDRESS pa,UINT n,UINT cache){
  assert(n==4096 && cache==MmCached);
  for(unsigned i=0;i<4;++i) if(pa.QuadPart==0x200000+(LONGLONG)i*0x9000) return system_pages[i];
- if(pa.QuadPart>=0x300000 && pa.QuadPart<0x310000)
+ if(pa.QuadPart>=0x300000 && pa.QuadPart<0x320000)
   return private_bytes+(pa.QuadPart-0x300000);
  return NULL;}
 static void MmUnmapIoSpace(void *p,UINT n){assert(p && n==4096);}
@@ -131,15 +131,15 @@ int main(void){
  ADMISSION_G3_PROCESS p={{1,0,&root},&table};
  ADMISSION_RENDER_CONTEXT c={{123,&d},&p,0,1};
  unsigned char dma[4096];ADMISSION_PAGING_RECORD records[16],fill;
- ADMISSION_POOL_SLABS slabs={0};ADMISSION_POOL_PRIVATE lease={0};
- slabs.NewSlab=NewPrivateSlab;slabs.FreeSlab=FreePrivateSlab;slabs.PrivateCap=1;
- assert(AdmissionPoolSlabTakePrivate(&slabs,&lease));
+ ADMISSION_POOL_SLABS slabs={0};ADMISSION_POOL_PRIVATE leases[2]={{0}};
+ slabs.NewSlab=NewPrivateSlab;slabs.FreeSlab=FreePrivateSlab;slabs.PrivateCap=2;
+ assert(AdmissionPoolSlabTakePrivateRange(&slabs,2,leases));
  memset(private_bytes,0xa5,sizeof(private_bytes));
  for(unsigned i=0;i<4;++i){
   ptes[16+i].Flags=3;ptes[16+i].SegmentId=2;ptes[16+i].GuestIpa=0x100000+i*4096;
-  ptes[16+i].NativeIpa=lease.Slab->Pa[lease.Slot]+i*4096; /* deliberately different: never a CPU endpoint */
+  ptes[16+i].NativeIpa=leases[0].Slab->Pa[leases[0].Slot]+i*4096; /* deliberately different: never a CPU endpoint */
   ptes[32+i].Flags=3;ptes[32+i].GuestIpa=0x200000+i*0x9000;
-  ptes[32+i].NativeIpa=lease.Slab->Pa[lease.Slot]+i*4096;
+  ptes[32+i].NativeIpa=leases[1].Slab->Pa[leases[1].Slot]+i*4096;
  }
  DXGKARG_BUILDPAGINGBUFFER x={0};
  #define PREP() do{x.hSystemContext=&c;x.pDmaBuffer=dma;x.DmaSize=sizeof(dma);\
@@ -171,7 +171,9 @@ int main(void){
  for(unsigned i=0;i<4;++i) assert(!AdmissionG3ExecuteVirtualPaging(&a,&records[i]));
  for(unsigned i=0;i<0x4000;++i) assert(local[i]==0x73);
  for(unsigned i=0;i<sizeof(private_bytes);++i) assert(private_bytes[i]==0xa5);
- assert(AdmissionPoolSlabGivePrivate(&slabs,&lease));
+ assert(AdmissionPoolSlabGivePrivate(&slabs,&leases[0]));
+ assert(slabs.PrivateCount==1);
+ assert(AdmissionPoolSlabGivePrivate(&slabs,&leases[1]));
  assert(slabs.PrivateCount==0 && slabs.Stats.Slabs==0);
  assert(!state.Lock);
 }

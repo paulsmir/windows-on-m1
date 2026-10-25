@@ -63,6 +63,13 @@ typedef struct _ADMISSION_POOL_PRIVATE {
 } ADMISSION_POOL_PRIVATE;
 int AdmissionPoolSlabTakePrivate(ADMISSION_POOL_SLABS *Slabs,
                                  ADMISSION_POOL_PRIVATE *Lease);
+/* Whole-allocation acquisition. Leases has Count zero-initialized,
+ * address-stable entries. Reject zero Count or any active entry; on failure
+ * release the acquired prefix, preserving existing leases and reservations.
+ * The cap bounds Count before inspecting the array. Same lock/lifetime rules
+ * as TakePrivate; each 64-KiB chunk is contiguous, not the whole range. */
+int AdmissionPoolSlabTakePrivateRange(ADMISSION_POOL_SLABS *Slabs,
+    unsigned long long Count, ADMISSION_POOL_PRIVATE *Leases);
 int AdmissionPoolSlabGivePrivate(ADMISSION_POOL_SLABS *Slabs,
                                  ADMISSION_POOL_PRIVATE *Lease);
 
