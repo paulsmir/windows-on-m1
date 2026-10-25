@@ -63,3 +63,16 @@ published per-DDI error policy also precludes claiming that returning OOM
 alone keeps these devices alive. Allocation/backing placement or a complete
 retained-command retry design is still necessary if the next run reaches that
 boundary. No unsupported blanket SetError rewrite is included.
+
+## Evidence arrived during handoff: EXP1950
+
+Correction to the earlier availability statement: EXP1950/evidence appeared
+before the final report. Arm A gm1950a-umd.log:10047-10054 shows CantTrimFurther=0,
+MakeResident E_OUTOFMEMORY after bounded trimming, then batch refusal and our
+Execute DEVICE_HUNG. This directly supports the error-preservation change.
+Arm B :15348-15356 shows CantTrimFurther=1 accepted pending work followed by
+MakeResident 0x88760870 and then our HUNG, like EXP1947/1948. Its earlier runtime
+removal cause remains unresolved. Both application stderr files report removal.
+The global umd.log:33742-33746 also directly pairs native leaf-absent reason 3
+with D3D11 ResourceCopyRegion E_FAIL. These are old-package observations, not
+validation of RC11. No hardware was accessed to obtain them.
