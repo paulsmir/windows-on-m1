@@ -44,9 +44,26 @@ def decode_procargs(blob):
     return executable, argv
 
 
+def read_proc_cmdline(pid):
+    """Linux: argv from /proc/<pid>/cmdline (NUL-terminated strings), the executable from /proc/<pid>/exe."""
+    base = Path('/proc') / str(pid)
+    try:
+        raw = (base / 'cmdline').read_bytes()
+        executable = os.readlink(base / 'exe')
+    except FileNotFoundError as exc:
+        raise OSError(errno.ESRCH, 'process vanished') from exc
+    if not raw:
+        raise OSError(errno.ESRCH, 'process vanished or is a zombie')
+    if not raw.endswith(b'\0'):
+        raise SelectionError('truncated /proc cmdline')
+    return executable, [os.fsdecode(arg) for arg in raw[:-1].split(b'\0')]
+
+
 def read_procargs(pid):
+    if sys.platform.startswith('linux'):
+        return read_proc_cmdline(pid)
     if sys.platform != 'darwin':
-        raise SelectionError('only Darwin KERN_PROCARGS2 is supported')
+        raise SelectionError('only Darwin KERN_PROCARGS2 and Linux /proc are supported')
     libc = ctypes.CDLL(None, use_errno=True)
     call = libc.sysctl
     call.argtypes = [ctypes.POINTER(ctypes.c_int), ctypes.c_uint,
@@ -185,7 +202,7 @@ def main():
         if not launcher.is_file() or not contract.is_file():
             raise SelectionError('launcher and contract must be existing regular files')
         # ps discovers candidates only. Its serialized command is NEVER parsed as argv.
-        output = subprocess.run(['/bin/ps', '-axww', '-o', 'pid=,command='],
+        output = subprocess.run(['/bin/ps', '-axww' if sys.platform == 'darwin' else 'axww', '-o', 'pid=,command='],
                                 check=True, capture_output=True, text=True, timeout=10).stdout
         pids = []
         for row in output.splitlines():

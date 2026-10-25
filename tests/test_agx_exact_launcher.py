@@ -109,3 +109,44 @@ class ExactLauncherTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+@unittest.skipUnless(__import__('sys').platform.startswith('linux'), 'Linux /proc reader')
+class LinuxProcReaderTests(unittest.TestCase):
+    """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? On the WSL host (2026-10-25) the selector only knew
+    Darwin KERN_PROCARGS2, so every recovery with a live run_uefi.py owner would refuse. The /proc reader
+    must return the exact argv (spaces and empty arguments intact) of a live direct launcher, select it, and
+    report a vanished process as ESRCH."""
+
+    def test_live_direct_launcher_is_selected_from_proc(self):
+        import subprocess, sys, time
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / 'real worktree'; work.mkdir()
+            launcher = work / 'run_uefi.py'; launcher.write_text('import time\ntime.sleep(30)\n')
+            contract = work / 'contract.bin'; contract.write_bytes(b'contract')
+            argv = [sys.executable, '-u', str(launcher), 'fw with space.fd', '', '--contract-output', str(contract)]
+            p = subprocess.Popen(argv)
+            self.addCleanup(p.wait); self.addCleanup(p.kill)
+            for _ in range(50):
+                if Path(f'/proc/{p.pid}/cmdline').read_bytes():
+                    break
+                time.sleep(0.05)
+            executable, seen = m.read_procargs(p.pid)
+            self.assertEqual(seen, argv)
+            self.assertTrue(m.python_name(executable))
+            # the empty positional is a fixture-only argument; the owner grammar takes one payload
+            owner_argv = argv[:4] + argv[5:]
+            q = subprocess.Popen(owner_argv)
+            self.addCleanup(q.wait); self.addCleanup(q.kill)
+            for _ in range(50):
+                if Path(f'/proc/{q.pid}/cmdline').read_bytes():
+                    break
+                time.sleep(0.05)
+            self.assertEqual(m.select_owner([q.pid], m.read_procargs, launcher, contract), q.pid)
+
+    def test_vanished_process_is_esrch(self):
+        import subprocess, sys
+        p = subprocess.Popen([sys.executable, '-c', 'pass']); p.wait()
+        with self.assertRaises(OSError) as caught:
+            m.read_procargs(p.pid)
+        self.assertEqual(caught.exception.errno, errno.ESRCH)
