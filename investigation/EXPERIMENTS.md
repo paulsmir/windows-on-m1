@@ -63976,3 +63976,8 @@ EXP1954 HARDWARE BEFORE 2026-10-25T21:36:47Z:
 - Hashes: sys 5631f49ab2c9, UmdArm64 99f65e937340, UmdX64 d092e6d26740, Umd32 20c61f845b99; manifest 7351ecbbf3be, hardware-manifest 7589b283897e; probe1954.sh 28155db2ed8b (PROBE_LINT_OK); visible recovery rec1954h 93031e01d404850b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
 - Recovery rec1954h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1954-paging-private/run1954.sh.
+
+EXP1954 ACTUAL (Claude headline 2026-10-25T21:50:20Z): package 30.0.1954.0 (41d1653e = EXP1953 + rc16 paging private 8 KiB), switches Wom1GpuFaultInfoRead=1 + Wom1PoolFraction=3. Stable again: 2k and 10k run to the harness close, guest alive, no device removal. Scene presents after Ready:
+- EXP1953 (baseline): 2k 14 in 173 s = 4.8/min; 10k 16 in 156 s = 6.1/min.
+- EXP1954: 2k 13 in 127 s = 6.1/min; 10k 13 in 146 s = 5.4/min.
+No significant change; rc16 is neutral. Frame intervals are bimodal (about 1 s, or 15-25 s), consistent with working-set paging thrash on most frames. Next: Codex rc17 (residency thrash / trim hysteresis).
