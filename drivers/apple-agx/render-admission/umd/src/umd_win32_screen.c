@@ -603,21 +603,48 @@ static int AdmissionUmdScreenQueryDevice(void *Context,
 static VOID AdmissionUmdScreenMemoryRefusal(ADMISSION_UMD_DEVICE *Device,
     HRESULT Status, APPLE_AGX_U64 Token, UINT ClassId, UINT Flags,
     APPLE_AGX_U64 Bytes, UINT Stage, UINT Pending) {
-  UINT header[16] = {2u, (UINT)Device->OwnerCookie,
+  UINT header[16] = {3u, (UINT)Device->OwnerCookie,
       (UINT)(Device->OwnerCookie >> 32), (UINT)Token, (UINT)(Token >> 32),
       0u, ClassId, Flags, (UINT)Bytes, (UINT)(Bytes >> 32), Stage, Pending};
   UINT rows[3][16] = {};
   APPLE_AGX_U64 totals[3][3] = {}; /* all, mapped, unmapped logical bytes */
+  UINT state[16] = {}, ownership[2][16] = {};
+  APPLE_AGX_U64 canonicalBytes = 0, submissionHolds = 0, sourceHolds = 0;
+  APPLE_AGX_U64 ownershipBytes[6] = {};
   AcquireSRWLockExclusive(&Device->ScreenBufferLock);
   if (Device->MemoryRefusalSnapshots >= 4u) {
     ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
     return;
   }
   header[5] = ++Device->MemoryRefusalSnapshots;
+  state[6] = (Device->DrawTerminal ? 1u : 0u) |
+      (Device->ScreenClosing ? 2u : 0u);
   for (UINT i = 0u; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++i) {
     const ADMISSION_UMD_SCREEN_BUFFER *slot = &Device->ScreenBuffers[i];
     if (!slot->Active) continue;
     ++header[12];
+    /* EXP1940: CopyHeld clears at queueing, SubmissionHolds at retirement.
+     * Count scalar ownership even during transitions/transfers; unlike the
+     * CPU-copy census below this never reads a staging pointer. Categories
+     * overlap, bytes count each canonical span once per category, and zero
+     * size remains explicitly unknown. These are not physical page counts. */
+    if (slot->KernelAllocation) {
+      ++state[7];
+      canonicalBytes += slot->Bytes;
+      submissionHolds += slot->SubmissionHolds;
+      sourceHolds += slot->SourceHolds;
+      if (slot->Transition) ++state[14];
+      if (!slot->Bytes) ++state[15];
+      const BOOL held[6] = {slot->Resident, slot->SubmissionHolds != 0u,
+          slot->CopyHeld, slot->SourceHolds != 0u, slot->KmtResidencyHeld,
+          slot->Resident && !slot->Transition && !slot->SubmissionHolds &&
+              !slot->CopyHeld && !slot->SourceHolds && !slot->KmtResidencyHeld};
+      for (UINT kind = 0u; kind < ARRAYSIZE(held); ++kind) {
+        if (!held[kind]) continue;
+        ++ownership[kind / 3u][7u + (kind % 3u) * 3u];
+        ownershipBytes[kind] += slot->Bytes;
+      }
+    }
     if (slot->Transition) { ++header[13]; continue; }
     if (slot->CopyHeld) { ++header[15]; continue; }
     if (!slot->Bytes) { ++header[14]; continue; }
@@ -633,6 +660,12 @@ static VOID AdmissionUmdScreenMemoryRefusal(ADMISSION_UMD_DEVICE *Device,
     }
   }
   ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  const APPLE_AGX_U64 stateValues[3] = {canonicalBytes, submissionHolds, sourceHolds};
+  for (UINT i = 0u; i < 6u; ++i) state[i] = header[i];
+  for (UINT i = 0u; i < ARRAYSIZE(stateValues); ++i) {
+    state[8u + i * 2u] = (UINT)stateValues[i];
+    state[9u + i * 2u] = (UINT)(stateValues[i] >> 32);
+  }
   /* EXP1930: logical copy spans alone cannot distinguish process commit
    * from physical pressure outside those copies. Sample the OS before any
    * diagnostic I/O/rollback/cache retry, without holding the slot lock.
@@ -679,6 +712,17 @@ static VOID AdmissionUmdScreenMemoryRefusal(ADMISSION_UMD_DEVICE *Device,
     }
     AdmissionUmdDiagnostic(kind ? "measure-memory-process" : "measure-memory-system",
         Status, osRows[kind], 16u);
+  }
+  AdmissionUmdDiagnostic("measure-memory-state", Status, state, ARRAYSIZE(state));
+  for (UINT group = 0u; group < ARRAYSIZE(ownership); ++group) {
+    for (UINT i = 0u; i < 6u; ++i) ownership[group][i] = header[i];
+    ownership[group][6] = group + 1u;
+    for (UINT i = 0u; i < 3u; ++i) {
+      const APPLE_AGX_U64 bytes = ownershipBytes[group * 3u + i];
+      ownership[group][8u + i * 3u] = (UINT)bytes;
+      ownership[group][9u + i * 3u] = (UINT)(bytes >> 32);
+    }
+    AdmissionUmdDiagnostic("measure-memory-residency", Status, ownership[group], 16u);
   }
   SetLastError(savedError);
 }

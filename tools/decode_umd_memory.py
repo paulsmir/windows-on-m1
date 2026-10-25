@@ -8,6 +8,10 @@ reported separately. V2 adds adjacent OS/process samples with independent validi
 are the GlobalMemoryStatusEx commit limits/headroom available to the process,
 not page-file disk bytes. PrivateUsage is process commit; WorkingSetSize includes
 shared pages. None of these metrics is additive with the storage spans.
+V3 adds scalar canonical ownership (including transitional/copy-held slots),
+device terminal state and hold totals. Ownership categories overlap; an unheld
+resident can still be CPU-mapped and is not necessarily eligible for trimming.
+Resident means a UMD reference was accepted, not that its paging fence completed.
 Truncated or incompatible snapshots are errors, not zeros.
 """
 import argparse
@@ -15,9 +19,11 @@ import json
 from pathlib import Path
 import re
 
-ROW = re.compile(r'^(measure-memory-(?:refusal|storage|system|process)) hr=(0x[0-9a-fA-F]{8}) '
+ROW = re.compile(r'^(measure-memory-(?:refusal|storage|system|process|state|residency)) hr=(0x[0-9a-fA-F]{8}) '
                  r'pid=(\d+) tid=\d+ session=\d+ qpc=\d+ (.*)$')
 CATEGORIES = {1: 'canonical', 2: 'private_staging', 3: 'merge_baseline'}
+OWNERSHIP = {1: ('resident', 'submission_held', 'copy_held'),
+             2: ('source_held', 'kmt_held', 'unheld_resident')}
 OS_FIELDS = {
     'system': ('available_physical_bytes', 'total_physical_bytes',
                'available_commit_bytes', 'commit_limit_bytes'),
@@ -44,10 +50,11 @@ def decode(text):
         if len(fields) != 16 or any(not re.fullmatch(r'[0-9a-fA-F]{8}', x) for x in fields):
             raise ValueError(f'line {number}: expected 16 dwords')
         words = [int(x, 16) for x in fields]
-        if words[0] not in (1, 2) or not 1 <= words[5] <= 4 or not int(status, 16) & 0x80000000:
+        if words[0] not in (1, 2, 3) or not 1 <= words[5] <= 4 or not int(status, 16) & 0x80000000:
             raise ValueError(f'line {number}: unsupported version, sequence or success status')
         key = (int(pid), wide(words, 1), wide(words, 3), words[5])
-        record = snapshots.setdefault(key, {'status': status.lower(), 'header': None, 'storage': {}, 'os': {}, 'version': words[0]})
+        record = snapshots.setdefault(key, {'status': status.lower(), 'header': None,
+            'storage': {}, 'os': {}, 'state': None, 'ownership': {}, 'version': words[0]})
         if record['version'] != words[0]:
             raise ValueError(f'line {number}: mixed snapshot versions')
         if record['status'] != status.lower():
@@ -60,7 +67,7 @@ def decode(text):
             record['header'] = words
         elif name in ('measure-memory-system', 'measure-memory-process'):
             category = name.removeprefix('measure-memory-')
-            if words[0] != 2 or category in record['os']:
+            if words[0] < 2 or category in record['os']:
                 raise ValueError(f'line {number}: incompatible or duplicate OS row')
             if words[6] not in (0, 1) or (words[6] and words[7]) or (not words[6] and any(words[8:])):
                 raise ValueError(f'line {number}: inconsistent OS query validity')
@@ -69,6 +76,21 @@ def decode(text):
                 sample.update({field: wide(words, 8 + 2*i)
                                for i, field in enumerate(OS_FIELDS[category])})
             record['os'][category] = sample
+        elif name == 'measure-memory-state':
+            if words[0] != 3 or record['state'] is not None or words[6] & ~3:
+                raise ValueError(f'line {number}: incompatible or duplicate state row')
+            record['state'] = dict(draw_terminal=bool(words[6] & 1),
+                screen_closing=bool(words[6] & 2), canonical_slots=words[7],
+                canonical_bytes=wide(words, 8), submission_holds=wide(words, 10),
+                source_holds=wide(words, 12), transitional_canonical_slots=words[14],
+                unknown_size_canonical_slots=words[15])
+        elif name == 'measure-memory-residency':
+            categories = OWNERSHIP.get(words[6])
+            if words[0] != 3 or categories is None or categories[0] in record['ownership']:
+                raise ValueError(f'line {number}: incompatible or duplicate ownership row')
+            for i, category in enumerate(categories):
+                record['ownership'][category] = dict(slots=words[7 + i*3],
+                                                    bytes=wide(words, 8 + i*3))
         else:
             category = CATEGORIES.get(words[6])
             if category is None or category in record['storage']:
@@ -85,10 +107,31 @@ def decode(text):
         h = record['header']
         if h is None or set(record['storage']) != set(CATEGORIES.values()):
             raise ValueError('incomplete snapshot: header and all three storage categories required')
-        if record['version'] == 2 and set(record['os']) != set(OS_FIELDS):
-            raise ValueError('incomplete v2 snapshot: both OS samples required')
+        if record['version'] >= 2 and set(record['os']) != set(OS_FIELDS):
+            raise ValueError('incomplete snapshot: both OS samples required')
         if any(s['slots'] > h[12]-h[13]-h[14]-h[15] for s in record['storage'].values()):
             raise ValueError('storage count exceeds eligible slots')
+        state, ownership = record['state'], record['ownership']
+        if record['version'] == 3:
+            if state is None or len(ownership) != 6:
+                raise ValueError('incomplete v3 snapshot: state and both ownership groups required')
+            if (state['canonical_slots'] > h[12] or
+                state['transitional_canonical_slots'] > min(h[13], state['canonical_slots']) or
+                state['unknown_size_canonical_slots'] > state['canonical_slots'] or
+                record['storage']['canonical']['slots'] > state['canonical_slots'] or
+                record['storage']['canonical']['bytes'] > state['canonical_bytes']):
+                raise ValueError('inconsistent scalar canonical census')
+            for sample in ownership.values():
+                if (sample['slots'] > state['canonical_slots'] or
+                    sample['bytes'] > state['canonical_bytes'] or
+                    (not sample['slots'] and sample['bytes'])):
+                    raise ValueError('ownership category exceeds canonical census')
+            for kind in ('submission', 'source'):
+                if state[kind + '_holds'] < ownership[kind + '_held']['slots']:
+                    raise ValueError('hold total is less than held slot count')
+            if any(ownership['unheld_resident'][field] > ownership['resident'][field]
+                   for field in ('slots', 'bytes')):
+                raise ValueError('unheld residency exceeds residency')
         result.append(dict(pid=pid, owner_cookie=hex(cookie), request_token=hex(token),
             sequence=sequence, status=record['status'],
             request=dict(class_id=h[6], flags=hex(h[7]), bytes=wide(h, 8), stage=STAGES[h[10]],
@@ -97,7 +140,8 @@ def decode(text):
             active_slots=h[12], transitional_slots_excluded=h[13], unknown_size_slots_excluded=h[14],
             copy_held_slots_excluded=h[15],
             storage=record['storage'], system=record['os'].get('system'),
-            process=record['os'].get('process')))
+            process=record['os'].get('process'), state=state,
+            ownership=ownership if record['version'] == 3 else None))
     return result
 
 

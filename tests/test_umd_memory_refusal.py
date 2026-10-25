@@ -5,6 +5,9 @@ and cache reclamation. Cumulative traffic and final pool totals cannot answer
 this. Exercise production receipt and rollback bodies, including >4 GiB totals,
 transitions, mapped subsets, bounded output and unchanged allocation behavior. OS query failures must not masquerade as
 zero available memory, truncate wide counters, or change caller LastError.
+EXP1940: CopyHeld=0 does not imply SubmissionHolds=0. Failure-time scalar
+ownership must include queued submissions, overlapping residency and transitions,
+without sampling unstable CPU-copy pointers or changing any hold.
 """
 from pathlib import Path
 import importlib.util
@@ -41,22 +44,26 @@ struct ADMISSION_UMD_SCREEN_BUFFER {
  BOOL Active,Transition,Mapped; UINT KernelAllocation;
  APPLE_AGX_U64 Bytes; BYTE *PrivateStaging,*HeapStagingShadow;
  UINT StagingAllocation; BOOL CopyHeld=FALSE;
+ BOOL Resident=FALSE,KmtResidencyHeld=FALSE; UINT SubmissionHolds=0,SourceHolds=0;
 };
 struct D3DDDICB_DEALLOCATE { UINT NumAllocations; const UINT *HandleList; };
 struct CALLBACKS { HRESULT (*pfnDeallocateCb)(void *,D3DDDICB_DEALLOCATE *); };
 struct ADMISSION_UMD_DEVICE {
  int ScreenBufferLock; APPLE_AGX_U64 OwnerCookie; UINT MemoryRefusalSnapshots;
  ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[8]; CALLBACKS *KernelCallbacks;
- struct { void *handle; } RuntimeDevice; BOOL DrawTerminal; HRESULT LastScreenError;
+ struct { void *handle; } RuntimeDevice; BOOL DrawTerminal; HRESULT LastScreenError; BOOL ScreenClosing;
 };
 static void AcquireSRWLockExclusive(int *p) {assert(!*p);*p=1;}
 static void ReleaseSRWLockExclusive(int *p) {assert(*p==1);*p=0;}
 static ADMISSION_UMD_DEVICE *current;
 struct Row { const char *name; HRESULT hr; std::array<UINT,16> v; };
-static std::vector<Row> rows;
+static std::vector<Row> rows, ownership_rows;
 static void AdmissionUmdDiagnostic(const char *name,HRESULT hr,const UINT *v,UINT n) {
  assert(!current->ScreenBufferLock && n==16); Row r={name,hr,{}};
- memcpy(r.v.data(),v,n*4); rows.push_back(r);
+ memcpy(r.v.data(),v,n*4);
+ if(!strcmp(name,"measure-memory-state") || !strcmp(name,"measure-memory-residency"))
+  ownership_rows.push_back(r);
+ else rows.push_back(r);
 }
 static unsigned cleanup; static bool fail_cleanup;
 static int VirtualFree(void *,size_t,unsigned) { assert(rows.size()>=6); ++cleanup;return 1; }
@@ -109,11 +116,32 @@ int main() {
  d.ScreenBuffers[5]={1,0,0,7,0,nullptr,nullptr,0}; // retained unknown size
  d.ScreenBuffers[6]=d.ScreenBuffers[0];d.ScreenBuffers[6].CopyHeld=TRUE; // concurrent transfer
  d.ScreenBuffers[7]={1,1,0,0,0,nullptr,nullptr,0}; // current request
+ // Queued GPU work drops CopyHeld before retirement; this hold is still live.
+ d.ScreenBuffers[0].Resident=TRUE; d.ScreenBuffers[0].SubmissionHolds=2;
+ d.ScreenBuffers[1].Resident=TRUE;
+ d.ScreenBuffers[2].Resident=TRUE; d.ScreenBuffers[2].KmtResidencyHeld=TRUE;
+ d.ScreenBuffers[4].Resident=TRUE; d.ScreenBuffers[4].SubmissionHolds=1;
+ d.ScreenBuffers[5].SourceHolds=3; // unknown size must still count as a slot/hold
+ d.ScreenBuffers[6].Resident=TRUE;
  auto before=d;
  assert(!failure(&d,E_OUTOFMEMORY,0,nullptr,1));
  assert(rows.size()==6 && queries==2 && last_error==99 && !cleanup && d.LastScreenError==E_OUTOFMEMORY);
+ assert(ownership_rows.size()==3);
+ const auto &state=ownership_rows[0];
+ assert(!strcmp(state.name,"measure-memory-state") && state.v[6]==0);
+ assert(state.v[7]==6 && wide(state,8)==0x30000ffffull);
+ assert(wide(state,10)==3 && wide(state,12)==3 && state.v[14]==1 && state.v[15]==1);
+ const auto &own=ownership_rows[1];
+ assert(!strcmp(own.name,"measure-memory-residency") && own.v[6]==1);
+ assert(own.v[7]==5 && wide(own,8)==0x30000ffffull); // resident
+ assert(own.v[10]==2 && wide(own,11)==0x1bfffffffull); // submission-held incl transition
+ assert(own.v[13]==1 && wide(own,14)==0xc0000000ull); // copy-held
+ const auto &idle=ownership_rows[2];
+ assert(idle.v[6]==2 && idle.v[7]==1 && !wide(idle,8)); // source-held unknown size
+ assert(idle.v[10]==1 && wide(idle,11)==0x10000); // KMT-held
+ assert(idle.v[13]==1 && wide(idle,14)==0x80000000); // unheld resident, not necessarily trimmable
  auto &h=rows[0];assert(!strcmp(h.name,"measure-memory-refusal") && h.hr==E_OUTOFMEMORY);
- assert(h.v[0]==2 && wide(h,1)==d.OwnerCookie && wide(h,3)==0x123456789ull);
+ assert(h.v[0]==3 && wide(h,1)==d.OwnerCookie && wide(h,3)==0x123456789ull);
  assert(h.v[5]==1 && h.v[6]==1 && h.v[7]==15 && wide(h,8)==0x8000000);
  assert(h.v[10]==1 && h.v[11]==0 && h.v[12]==7 && h.v[13]==2 && h.v[14]==1 && h.v[15]==1);
  // category, slots, bytes, mapped slots/bytes, unmapped slots/bytes
@@ -157,6 +185,10 @@ int main() {
  assert(failure(&d,0,77,(BYTE*)8,2) && rows.size()==18 && queries==6);
  assert(!failure(&d,E_FAIL,0,nullptr,1) && rows.size()==24 && queries==8 && last_error==99);
  assert(!failure(&d,E_FAIL,0,nullptr,1) && rows.size()==24 && queries==8 && last_error==99 && d.MemoryRefusalSnapshots==4);
+ assert(ownership_rows.size()==12);
+ // Fourth snapshot sees terminal state from the previous failed rollback.
+ assert(ownership_rows[9].v[6]==1);
+ rows.insert(rows.end(),ownership_rows.begin(),ownership_rows.end());
  for(const auto &r:rows) {printf("%s hr=0x%08x pid=7 tid=8 session=1 qpc=9",r.name,unsigned(r.hr));
   for(auto w:r.v) printf(" %08x",w);puts("");}
 }
@@ -179,11 +211,19 @@ class MemoryRefusal(unittest.TestCase):
             self.assertEqual(built.returncode,0,built.stderr)
             run = subprocess.run([str(exe)],capture_output=True,text=True)
             self.assertEqual(run.returncode,0,run.stderr)
-            self.assertEqual(len(run.stdout.splitlines()),24)
+            self.assertEqual(len(run.stdout.splitlines()),36)
             decoder = self.decoder()
             decoded = decoder.decode(run.stdout)
             self.assertEqual(len(decoded),4)
             first=decoded[0]
+            self.assertEqual(first['ownership']['submission_held'],
+                             {'slots':2, 'bytes':0x1bfffffff})
+            self.assertEqual(first['ownership']['unheld_resident'],
+                             {'slots':1, 'bytes':0x80000000})
+            self.assertEqual(first['state']['submission_holds'],3)
+            self.assertEqual(first['state']['unknown_size_canonical_slots'],1)
+            self.assertFalse(first['state']['draw_terminal'])
+            self.assertTrue(decoded[3]['state']['draw_terminal'])
             self.assertEqual(first['owner_cookie'],'0xabcdef0123456789')
             self.assertEqual(first['request']['bytes'],134217728)
             self.assertEqual(first['request']['stage'],'allocate-callback')
@@ -210,6 +250,9 @@ class MemoryRefusal(unittest.TestCase):
             for bad in ('', '\n'.join(lines[:-1]), run.stdout+lines[0]+'\n',
                         changed(0,0,'00000009'), changed(1,6,'00000009'),
                         changed(1,7,'00000004'), changed(0,10,'00000009'),
+                        changed(24,6,'00000004'), changed(24,7,'00000009'),
+                        changed(25,6,'00000003'), changed(25,10,'00000009'),
+                        changed(25,12,'ffffffff'), changed(25,0,'00000002'),
                         changed(4,6,'00000002'), changed(4,7,'00000001'),
                         changed(10,8,'00000001'), changed(4,0,'00000001'),
                         '\n'.join([lines[0].rsplit(' ',1)[0]]+lines[1:])):
@@ -218,13 +261,23 @@ class MemoryRefusal(unittest.TestCase):
             # v1 remains readable; no OS samples means unknown, not zero.
             legacy=[]
             for line in lines:
-                if line.startswith(('measure-memory-system','measure-memory-process')):
+                if line.startswith(('measure-memory-system','measure-memory-process',
+                                    'measure-memory-state','measure-memory-residency')):
                     continue
                 w=line.split();w[-16]='00000001';legacy.append(' '.join(w))
             old=decoder.decode('\n'.join(legacy))
+            self.assertIsNone(old[0]['state'])
+            self.assertIsNone(old[0]['ownership'])
             self.assertIsNone(old[0]['system'])
             self.assertIsNone(old[0]['process'])
             self.assertEqual(old[0]['storage'],first['storage'])
+            v2=[]
+            for line in lines[:24]:
+                w=line.split();w[-16]='00000002';v2.append(' '.join(w))
+            old2=decoder.decode('\n'.join(v2))
+            self.assertIsNone(old2[0]['ownership'])
+            self.assertIsNone(old2[0]['state'])
+            self.assertEqual(old2[0]['system'],first['system'])
             self.assertEqual(decoder.decode('\n'.join(reversed(lines))),decoded)
             other=run.stdout.replace('pid=7','pid=17')
             self.assertEqual(len(decoder.decode(run.stdout+other)),8)
