@@ -63993,3 +63993,13 @@ EXP1955 HARDWARE BEFORE 2026-10-25T21:58:03Z:
 - Recovery rec1955h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1955-full-pool/run1955.sh.
 
 EXP1955 ACTUAL (Claude headline 2026-10-25T22:19:53Z): package 30.0.1955.0 (6c27b19d, same driver code as EXP1954), only switch Wom1GpuFaultInfoRead=1, i.e. the full 2688 MiB pool. Both arms fail at LOAD with D3D12 out of memory: 2k at 54.6 s ("can not create 2D Df32 4096x4096 l2 Target Source Zero texture"), 10k at 20.2 s ("can not create 2D RGBAf16 1280x720 Target Surface texture"). Each run is then killed at the harness limit; guest alive, no device removal. Same boundary as EXP1940: the full segment exhausts the T8 RAM-headroom gate at allocation time. Verdict: the full pool is NOT viable on this 6.28 GB guest; Wom1PoolFraction=3 (2016 MiB) stays the operating point.
+
+EXP1956 HARDWARE BEFORE 2026-10-25T22:40:50Z:
+- Package 30.0.1956.0 = EXP1955 code + rc17: the trim selector prefers a smaller eligible allocation that still covers the remaining shortfall. Before, the final LRU pick could greatly exceed it (in the regression, a 12 MiB shortfall released 132 MiB; now 20 MiB).
+- Switches Wom1GpuFaultInfoRead=1 and Wom1PoolFraction=3 (2016 MiB). EXP1955 showed the full pool OOMs at load. Probe slot "10K" = 2k, slot "2K" = 10k. Trim on, guard on, Timeout 240.
+- WHY THIS HYPOTHESIS: EXP1953/1954 scene frames are bimodal (about 1 s vs 15-25 s), and rc17 found substantial excess reference release in the slow frames.
+- Metric: scene presents/min after Ready and the interval distribution, against EXP1954 (6.1 / 5.4 per min).
+- Recovery: rec1956h.
+- Hashes: sys a99d53c0720b, UmdArm64 230c3dd19e39, UmdX64 546c8b7f44a2, Umd32 4824dfe9c259; manifest fd0f42f10bcf, hardware-manifest 414476465fa9; probe1956.sh 8471686e1f58 (PROBE_LINT_OK); visible recovery rec1956h c220f0c15d32ad68; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
+- Recovery rec1956h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1956-trim-overshoot/run1956.sh.
