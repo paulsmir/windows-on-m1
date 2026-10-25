@@ -1,7 +1,8 @@
 /* EXP1121: every 2.4 MiB VidMm fill/transfer took 17-19 BuildPagingBuffer
  * passes because each record covered one 4 KiB page.  Physically contiguous
  * local-segment pages form one record (the CPU view of the local segment is
- * linear); system pages, discontiguous local pages and pattern phase stay
+ * linear); resolved contiguous system pages now coalesce too. Discontinuities
+ * and pattern phase stay
  * exact. */
 static UINT coalesce_build(ADMISSION_CONTEXT *a, DXGKARG_BUILDPAGINGBUFFER *x,
     unsigned char *dma, unsigned char *private_data) {
@@ -107,7 +108,8 @@ static void paging_coalesce_cases(void) {
   coalesce_run(&a,private_data,count);
   assert(memcmp(local_cpu+0x200000,local_cpu+0x100000,0x10000)==0);
 
-  /* Local to system: the system side stays one record per 4 KiB page. */
+  /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+   * Contiguous system backing must use one mapping/copy, not four page records. */
   memset(system_cpu,0,sizeof(system_cpu));
   memset(&x,0,sizeof(x));
   x.Operation=DXGK_OPERATION_VIRTUAL_TRANSFER;
@@ -117,14 +119,14 @@ static void paging_coalesce_cases(void) {
   x.TransferVirtual.TransferSizeInBytes=0x4000;
   x.TransferVirtual.TransferDirection=DXGK_MEMORY_TRANSFER_LOCAL_TO_SYSTEM;
   count=coalesce_build(&a,&x,dma,private_data);
-  assert(count==4);
-  for (i=0;i<4;++i) assert(records[i].Bytes==0x1000u);
+  assert(count==1 && records[0].Bytes==0x4000u);
   coalesce_run(&a,private_data,count);
   assert(memcmp(system_cpu,local_cpu+0x100000,0x4000)==0);
 
-  /* The validator admits multi-page records only inside the local segment. */
+  /* The validator admits resolved contiguous endpoints, not aperture offsets. */
   {
     ADMISSION_PAGING_RECORD bad=records[0];
+    bad.DestinationSegment=ADMISSION_MEMORY_APERTURE_SEGMENT;
     bad.Bytes=0x2000u;
     assert(!AdmissionPagingRecordsValid(&bad,1,64,sizeof(ADMISSION_PAGING_MARKER)));
     bad=records[0];
@@ -134,7 +136,7 @@ static void paging_coalesce_cases(void) {
     bad.Bytes=0x2000u;
     assert(AdmissionPagingRecordsValid(&bad,1,64,sizeof(ADMISSION_PAGING_MARKER)));
     assert(NT_SUCCESS(AdmissionG3ExecuteVirtualPaging(&a,&bad)));
-    bad.DestinationSegment=0u;
+    bad.DestinationSegment=ADMISSION_MEMORY_APERTURE_SEGMENT;
     assert(!AdmissionPagingRecordsValid(&bad,1,64,sizeof(ADMISSION_PAGING_MARKER)));
     assert(!NT_SUCCESS(AdmissionG3ExecuteVirtualPaging(&a,&bad)));
   }

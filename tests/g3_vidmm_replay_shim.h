@@ -552,7 +552,7 @@ static BOOLEAN AdmissionPagingQuiescent(ADMISSION_CONTEXT *a) {
   return replay_paging_pending==0;
 }
 static void AdmissionPagingNoteEncoded(ADMISSION_CONTEXT *a,UINT n) {(void)a;replay_encoded_records+=n;}
-int AdmissionPagingLocalRun(const ADMISSION_PAGING_RECORD *);
+int AdmissionPagingContiguousRun(const ADMISSION_PAGING_RECORD *);
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *,UINT,UINT,UINT);
 static UINT replay_paging_submits,replay_paging_submit_bytes,replay_paging_submit_fence;
 static NTSTATUS AdmissionCpuQueueSubmit(ADMISSION_CONTEXT *adapter,

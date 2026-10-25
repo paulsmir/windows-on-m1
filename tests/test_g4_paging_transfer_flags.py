@@ -2,6 +2,7 @@
 The KMD rejects the defined Src64KBPages/Dst64KBPages paging flags as invalid.
 Exercise its real encoder: all three legal directions and page-size hints must
 produce exact byte ranges; reserved flags must not emit a paging record.
+Contiguous system backing must coalesce instead of forcing a record per page.
 Also catch private-buffer underallocation that halves scheduler capacity and
 forces avoidable flushes: both queries must encode 65 scattered pages in two passes.
 """
@@ -64,6 +65,7 @@ static NTSTATUS AdmissionG3ResolveLogicalVa(ADMISSION_G3_PROCESS *p,ULONGLONG ro
  ULONGLONG va,int write,ULONGLONG *ipa,UINT *segment){
  (void)p;(void)root;(void)write;
  assert(va>=0x10000 && va<0xd0000);*ipa=va+0x900000000ULL;
+ if(capacity_test && va>=0x80000u) *ipa+=(va-0x80000u)/4096*4096;
  *segment=va>=(capacity_test?0x80000u:0x30000u)?0:2;return 0;
 }
 static NTSTATUS AdmissionG3SnapshotAperture(ADMISSION_CONTEXT *a,ULONGLONG *i,UINT *s){(void)a;(void)i;(void)s;return 0;}
@@ -84,12 +86,12 @@ int main(void){
   NTSTATUS status=AdmissionG3EncodeVirtualPaging(&a,&x);
   if(flags&4){assert(status==STATUS_INVALID_PARAMETER && !encoded && !x.MultipassOffset);continue;}
   assert(status==STATUS_SUCCESS && x.MultipassOffset==0x10000);
-  assert(encoded==(direction==2?1u:16u));
+  assert(encoded==1u);
   ADMISSION_PAGING_RECORD *r=(ADMISSION_PAGING_RECORD*)priv;unsigned bytes=0;
   for(unsigned j=0;j<encoded;++j){
    assert(r[j].SourceIpa==x.TransferVirtual.SourceVirtualAddress+0x900000000ULL+bytes);
    assert(r[j].DestinationIpa==x.TransferVirtual.DestinationVirtualAddress+0x900000000ULL+bytes);
-   assert(r[j].Bytes==(direction==2?0x10000u:0x1000u));bytes+=r[j].Bytes;
+   assert(r[j].Bytes==0x10000u);bytes+=r[j].Bytes;
   }
   assert(bytes==65536 && !state.Lock);
  }
@@ -121,7 +123,7 @@ int main(void){
     ADMISSION_PAGING_RECORD *r=((ADMISSION_PAGING_RECORD*)priv)+j;
     assert(r->Bytes==4096);
     assert(r->SourceIpa==0x900010000ULL+covered);
-    assert(r->DestinationIpa==0x900080000ULL+covered);
+    assert(r->DestinationIpa==0x900080000ULL+covered*2);
     covered+=r->Bytes;
    }
    ++passes;

@@ -14,12 +14,14 @@ int AdmissionPagingFenceCanSubmit(unsigned int LastSubmitted,
   return distance != 0u && distance < 0x80000000u;
 }
 
-int AdmissionPagingLocalRun(const ADMISSION_PAGING_RECORD *Record) {
+int AdmissionPagingContiguousRun(const ADMISSION_PAGING_RECORD *Record) {
   return (Record->Kind == AdmissionPagingVirtualFill ||
           Record->Kind == AdmissionPagingVirtualTransfer) &&
-      ADMISSION_PAGING_MEMORY_SEGMENT(Record->DestinationSegment) &&
+      (Record->DestinationSegment == 0u ||
+       ADMISSION_PAGING_MEMORY_SEGMENT(Record->DestinationSegment)) &&
       (Record->Kind != AdmissionPagingVirtualTransfer ||
-       ADMISSION_PAGING_MEMORY_SEGMENT(Record->SourceSegment));
+       (Record->SourceSegment == 0u ||
+        ADMISSION_PAGING_MEMORY_SEGMENT(Record->SourceSegment)));
 }
 
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *Records,
@@ -45,7 +47,7 @@ int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *Records,
         return 0;
     } else if (Records[index].Bytes == 0u ||
                Records[index].Bytes > ADMISSION_PAGING_LOCAL_RUN_MAX ||
-               (!AdmissionPagingLocalRun(&Records[index]) &&
+               (!AdmissionPagingContiguousRun(&Records[index]) &&
                 (Records[index].Bytes > 0x1000u ||
                  (Records[index].Kind == AdmissionPagingVirtualTransfer &&
                   (Records[index].SourceIpa & 0xfffu) +

@@ -163,6 +163,9 @@ class G3VidMmReplayTests(unittest.TestCase):
         self.assertIn("paging process CPU-only: PASS", result.stdout)
 
     def test_contiguous_local_paging_is_one_record(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Contiguous system paging must coalesce and execute exact bytes.
+        """
         env = dict(os.environ, G3_REPLAY_PAGING_COALESCE="1")
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
                                 env=env, text=True, capture_output=True)

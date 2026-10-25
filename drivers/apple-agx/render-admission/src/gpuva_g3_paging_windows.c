@@ -1139,9 +1139,10 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
           &record.SourceIpa, &record.SourceSegment);
       if (!NT_SUCCESS(status)) return status;
     }
-    /* Extend a local-segment record across physically contiguous pages; the
-     * first page that is not local or not contiguous starts a new record. */
-    if (AdmissionPagingLocalRun(&record) &&
+    /* Extend resolved system/local/pool endpoints only after checking every
+     * logical page. A segment or physical discontinuity starts a new record.
+     * Unresolved aperture offsets conservatively stay page-sized. */
+    if (AdmissionPagingContiguousRun(&record) &&
         (record.Kind != AdmissionPagingVirtualTransfer ||
          ((src ^ dst) & 0xfffULL) == 0ULL)) {
       ExAcquireFastMutex(&state->Lock);
@@ -1220,11 +1221,13 @@ static NTSTATUS AdmissionG3MapPagingIpa(
     return STATUS_SUCCESS;
   }
   if ((segment != 0u && segment != ADMISSION_MEMORY_APERTURE_SEGMENT) ||
-      bytes > 0x1000u - (UINT)(ipa & 0xfffu))
+      bytes > (segment == 0u ? ADMISSION_PAGING_LOCAL_RUN_MAX :
+          0x1000u - (UINT)(ipa & 0xfffu)))
     return STATUS_INVALID_PARAMETER;
-  if (page > 0x7fffffffffffffffULL) return STATUS_INVALID_ADDRESS;
+  if (ipa > 0x7fffffffffffffffULL - (bytes - 1u)) return STATUS_INVALID_ADDRESS;
   physical.QuadPart = (LONGLONG)page;
-  *system_mapping = MmMapIoSpace(physical, 0x1000u, MmCached);
+  *system_mapping = MmMapIoSpace(physical,
+      ((SIZE_T)(ipa & 0xfffu) + bytes + 0xfffu) & ~(SIZE_T)0xfffu, MmCached);
   if (*system_mapping == NULL) return STATUS_INSUFFICIENT_RESOURCES;
   *address = (PUCHAR)*system_mapping + (SIZE_T)(ipa & 0xfffu);
   UNREFERENCED_PARAMETER(adapter);
@@ -1266,7 +1269,7 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(
        record->Kind != AdmissionPagingVirtualTransfer &&
        record->Kind != AdmissionPagingMonitoredFence) ||
       record->Bytes == 0u ||
-      record->Bytes > (AdmissionPagingLocalRun(record) ?
+      record->Bytes > (AdmissionPagingContiguousRun(record) ?
           ADMISSION_PAGING_LOCAL_RUN_MAX : 0x1000u) ||
       KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_PARAMETER;
@@ -1294,9 +1297,13 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(
         destination[index] = value[record->PatternOffset + index];
   }
   KeMemoryBarrier();
-  if (source_mapping != NULL) MmUnmapIoSpace(source_mapping, 0x1000u);
+  if (source_mapping != NULL) MmUnmapIoSpace(source_mapping,
+      ((SIZE_T)(record->SourceIpa & 0xfffu) + record->Bytes + 0xfffu) &
+          ~(SIZE_T)0xfffu);
   if (destination_mapping != NULL)
-    MmUnmapIoSpace(destination_mapping, 0x1000u);
+    MmUnmapIoSpace(destination_mapping,
+        ((SIZE_T)(record->DestinationIpa & 0xfffu) + record->Bytes + 0xfffu) &
+            ~(SIZE_T)0xfffu);
   return status;
 }
 

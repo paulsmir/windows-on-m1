@@ -45,7 +45,7 @@ FUNCTIONS = {
         "AdmissionG3NotePagingWait", "AdmissionG3SnapPagingWait", "AdmissionGpuvaG3NoteAllocationPaging", "AdmissionGpuvaG3BuildPagingBuffer",
     ],
     "callbacks.c": ["AdmissionDdiEscape", "AdmissionDdiCreateContext", "AdmissionDdiDestroyContext"],
-    "render_paging.c": ["AdmissionPagingLocalRun", "AdmissionPagingRecordsValid"],
+    "render_paging.c": ["AdmissionPagingContiguousRun", "AdmissionPagingRecordsValid"],
 }
 
 
