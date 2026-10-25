@@ -64015,3 +64015,12 @@ EXP1957 HARDWARE BEFORE 2026-10-25T23:09:18Z:
 - Hashes: sys cb06b6a93d4b, UmdArm64 45f873763d6d, UmdX64 8cf373d78a4b, Umd32 ede4432dc48e; manifest 185fd9b4411e, hardware-manifest a613eaba5d31; probe1957.sh 9c524bcd2b30 (PROBE_LINT_OK); visible recovery rec1957h b5053441eae1f0e8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
 - Recovery rec1957h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1957-fast-paging/run1957.sh.
+
+EXP1957 ACTUAL (Claude headline 2026-10-25T23:17:16Z): package 30.0.1957.0 (76c8166f = EXP1956 + rc18-rc20 prerequisites + rc21 coalesced paging runs), Wom1GpuFaultInfoRead=1 + Wom1PoolFraction=3.
+- 2k: 13 scene presents in 101 s = 7.7/min (EXP1956: 6.4). The longest waits after measure-make-resident-trimmed are still 20.7 / 16.8 / 16.5 / 16.4 / 15.8 s, so rc21 does NOT shorten the paging waits.
+- 10k: OOM at LOAD at 26.2 s ("can not create Cube BC4Ru8n 2048x2048 m12 texture"), then device removed; guest alive. The UMD memory-refusal receipt (decode_umd_memory.py, request 16 MiB at allocate-callback) shows:
+  - system: available physical 693 MB of 6279 MB; commit 7.65 GB used of a 12.72 GB limit, i.e. above physical RAM;
+  - GM process: private 2.63 GB, working set 1.85 GB;
+  - UMD canonical 1.99 GB (1.54 GB unmapped); private staging 465 MB.
+- Interpretation: the binding limit is guest RAM. With the 2 GB locked native pool, GravityMark private memory and the OS, commit exceeds physical RAM. The about 17 MB/s "paging" waits are pagefile/disk I/O, which explains why coalescing CPU copies (rc21) is neutral. The 10k load OOM is the T8 headroom gate at about 690 MB free (run-to-run RAM variance; rc18/rc21 are not implicated by this evidence).
+- Next: reduce the RAM overhead (UMD private staging and CPU shadows) and confirm the guest RAM size / m1n1 carve-outs.
