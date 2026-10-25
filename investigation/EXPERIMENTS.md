@@ -63853,3 +63853,11 @@ EXP1947 HARDWARE BEFORE 2026-10-25T17:58:06Z:
 - Hashes: sys bd00539f3ae5, UmdArm64 cb176cdc68e7, UmdX64 68183baf2410, Umd32 68420ef29f13; manifest 8e9fea623872, hardware-manifest 5a9b6b8eda94; probe1947.sh cf297ee998a9 (PROBE_LINT_OK); visible recovery rec1947h dc430340c95cfe18; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1947h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1947-rc7-residency/run1947.sh.
+
+EXP1947 ACTUAL (Claude headline 2026-10-25T18:10:07Z): package 30.0.1947.0 (46011dfe = EXP1946 + rc7: CantTrimFurther retry, bounded heap walk, spill-helper refs, D3D11 watch-bo), Wom1GpuFaultInfoRead=1 + Wom1PoolHalfSize=1. Machine env for DWM: WATCH_VA etc. (stage1947 sets TRACE_FILE to C:\ProgramData\EXP1947-Trace\umd.log).
+- 2k: Ready 66.6 s; device removed at 1:39.
+- 10k: Ready 19.0 s; device removed at 2:04.
+- GUEST ALIVE IN BOTH ARMS. NO firmware fault/timeout, NO Wom1GpuReset, NO 0x116.
+- Both GM logs end the same way: after earlier trims (one with 0x1d entries / 2 rounds, i.e. the CantTrimFurther path, returning E_PENDING), the next first-frame MakeResident (1 allocation, 0 rounds) returns 0x88760870 (D3DDDIERR_DEVICEREMOVED). Then measure-replace-canonical 0x88760870, reject-batch, first-fault, execute 0x887a0006. VidMm had already removed the device.
+- DWM also lost its device: dwm.exe APPCRASH 0x8898008d at 19:04:17 and 19:04:27, restart count 2. The DWM/system UMD trace (guest-extra/umd.log, 21 MB) has hundreds of reject-native-allocation / reject-batch for pids 952/1220, plus reject-seterror ResourceCopyRegion line 1784.
+- Verdict: rc7 removed the GPU-fault/0x116 class from both workloads (stable desktop recovery). The new boundary is adapter-wide device removal by VidMm under overcommit (cause unknown: paging failure? budget? our KMD refusing a paging op?). Evidence: evidence/EXP1947, guest-extra/{umd.log,events*.txt}, rcpt-final. Next: Codex rc8.
