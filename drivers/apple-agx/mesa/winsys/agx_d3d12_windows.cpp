@@ -122,6 +122,32 @@ struct OwnerLock {
 extern "C" void AgxD3d12OwnerLock(AGX_D3D12_OWNER *owner) { if (owner) EnterCriticalSection(&owner->Lock); }
 extern "C" void AgxD3d12OwnerUnlock(AGX_D3D12_OWNER *owner) { if (owner) LeaveCriticalSection(&owner->Lock); }
 
+/* RC22: identify the actual CPU storage, not an environment setting. Only
+ * an active mapped T13 allocation proves this pointer is cached process RAM.
+ * The caller owns the resource for the lifetime of its descriptor heap. */
+extern "C" BOOL AgxD3d12OwnerCpuMapIsPrivate(AGX_D3D12_OWNER *owner, const void *cpu) {
+  OwnerLock lock(owner);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (!owner || !cpu) return FALSE;
+  auto *runtime = &owner->Runtime;
+  BOOL found = FALSE;
+  AcquireSRWLockShared(&runtime->ScreenBufferLock);
+  for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(runtime); ++i) {
+    const auto *slot = &runtime->ScreenBuffers[i];
+    if (slot->Active && !slot->Transition && slot->HeapStaging && slot->Mapped &&
+        slot->PrivateStaging == cpu && slot->LockedBase == cpu) {
+      found = TRUE;
+      break;
+    }
+  }
+  ReleaseSRWLockShared(&runtime->ScreenBufferLock);
+  return found;
+#else
+  (void)cpu;
+  return FALSE;
+#endif
+}
+
 /* Called under the owner lock around one Execute, including intermediate
  * flushes during replay. Counts checked-copy bytes, not GPU-blitter bytes. */
 extern "C" void AgxD3d12OwnerMeasureHeapStaging(AGX_D3D12_OWNER *owner, BOOL begin) {

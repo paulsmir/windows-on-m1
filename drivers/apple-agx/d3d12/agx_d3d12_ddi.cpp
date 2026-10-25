@@ -3345,7 +3345,11 @@ static HRESULT APIENTRY CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D1
         /* EXP1855 (DynamicIndexing: 7 ms per frame walking descriptors in
          * write-combined memory): CPU handles name a cached shadow; the GPU
          * buffer receives the heap forms (MirrorHeapForms) */
-        if (SUCCEEDED(hr) && heap->memory.native) {
+        /* T13 already exposes cached process memory with write-watch upload.
+         * Reuse that map; a second full heap adds commit without changing
+         * CPU access or GPU visibility. Keep the shadow for WC mappings. */
+        if (SUCCEEDED(hr) && heap->memory.native &&
+            !AgxD3d12OwnerCpuMapIsPrivate(static_cast<AGX_D3D12_OWNER *>(device->owner), heap->cpu)) {
             void *shadow = VirtualAlloc(nullptr, static_cast<SIZE_T>(heap->memory.bytes), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
             if (!shadow) {
                 ReleaseHeap(device, &heap->memory);
@@ -3355,6 +3359,11 @@ static HRESULT APIENTRY CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D1
                 heap->memory.mirror = static_cast<unsigned char *>(heap->cpu);
                 heap->memory.cpu = heap->cpu = shadow;
             }
+        } else if (SUCCEEDED(hr) && heap->memory.native) {
+            /* A cached BO may contain its previous owner's descriptors.
+             * Match the zero-initialization of a fresh VirtualAlloc shadow;
+             * these stores also dirty the T13 write-watch for upload. */
+            memset(heap->cpu, 0, static_cast<SIZE_T>(heap->memory.bytes));
         }
 #endif
         heap->gpuva = SUCCEEDED(hr) ? heap->memory.gpuva : 0;
@@ -6254,7 +6263,7 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
     if (!b->descriptors) return AgxD3d12OwnerSetHeap(owner, stage, &h.binding);
     h.heap = HeapBuffer(b->descriptors);
     h.binding.Heap = &h.heap;
-    h.binding.RefDescriptorData = b->descriptors->mirror;
+    h.binding.RefDescriptorData = b->descriptors->mirror ? b->descriptors->mirror : b->descriptors->cpu;
     const UINT count = static_cast<UINT>(DescriptorHeapBytes(b->descriptors) / kCbvSrvUavDescriptorBytes);
     for (UINT i = lowest; i < count; ++i) {
         if (!HeapSlotReachable(b, i)) continue;

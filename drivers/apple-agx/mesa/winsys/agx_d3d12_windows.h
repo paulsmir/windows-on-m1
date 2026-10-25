@@ -46,6 +46,7 @@ HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *Args, AGX_D3D12_OWNER **
 void AgxD3d12OwnerLock(AGX_D3D12_OWNER *Owner);
 void AgxD3d12OwnerUnlock(AGX_D3D12_OWNER *Owner);
 void AgxD3d12OwnerMeasureHeapStaging(AGX_D3D12_OWNER *Owner, BOOL Begin);
+BOOL AgxD3d12OwnerCpuMapIsPrivate(AGX_D3D12_OWNER *Owner, const void *Cpu);
 HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
 /* CpuVisible: the heap's CPU page property is not NOT_AVAILABLE; only such
  * buffers get the persistent CPU mapping (Buffer->Cpu, NULL otherwise). */
