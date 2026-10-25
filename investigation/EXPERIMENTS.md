@@ -63876,3 +63876,11 @@ EXP1948 HARDWARE BEFORE 2026-10-25T18:31:14Z:
 - Hashes: sys ce6e13ccfe11, UmdArm64 e1c78d919baa, UmdX64 83347e243109, Umd32 52620c412bb6; manifest adfeb8c155f8, hardware-manifest 4e093bf7eeb8; probe1948.sh b1d31f09d442 (PROBE_LINT_OK); visible recovery rec1948h 453ab23184443472; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1948h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1948-rc8-paging/run1948.sh.
+
+EXP1948 ACTUAL (Claude headline 2026-10-25T18:41:10Z): package 30.0.1948.0 (683a8684 = EXP1947 + rc8: 64 KiB paging-transfer flags, native coverage recheck), the same switches.
+- 2k: Ready 52.9 s, device removed 1:48.
+- 10k: Ready 24.4 s, device removed 2:33.
+- Identical to EXP1947: the first-frame MakeResident (1 allocation, 0 rounds) returns 0x88760870 D3DDDIERR_DEVICEREMOVED, then replace-canonical, first-fault, execute 0x887a0006.
+- DWM crashes 0x8898008d twice per arm at the same time (adapter-wide removal). There is no firmware fault, no reset receipt and no bugcheck. The guest is alive.
+- Verdict on rc8: the 64 KiB flags were NOT the cause; the removal source is still unknown. Evidence: evidence/EXP1948, guest-extra/{umd.log,events.txt}, rcpt-final.
+- Next: rc9 + DxgKrnl ETW capture of the removal reason.
