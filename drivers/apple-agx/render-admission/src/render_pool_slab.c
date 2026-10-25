@@ -20,7 +20,8 @@ static void Unlink(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Slab) {
 }
 
 static unsigned long long Promised(const ADMISSION_POOL_SLABS *Slabs) {
-  return Slabs->Reserved < Slabs->ReserveCap ? Slabs->Reserved : Slabs->ReserveCap;
+  return (Slabs->Reserved < Slabs->ReserveCap ?
+      Slabs->Reserved : Slabs->ReserveCap) + Slabs->PrivateCount;
 }
 
 /* An empty slab may go back to Windows beyond SpareLimit empty slabs, and
@@ -52,6 +53,8 @@ static ADMISSION_POOL_SLAB *AddSlab(ADMISSION_POOL_SLABS *Slabs) {
     ++Slabs->Stats.NewSlabFailures;
     return 0;
   }
+  for (unsigned int i = 0u; i < ADMISSION_POOL_SLAB_SLOTS; ++i)
+    slab->PrivateOwner[i] = 0;
   slab->FreeMask = ALL_SLOTS;
   slab->Live = 0u;
   slab->Next = Slabs->List;
@@ -67,6 +70,7 @@ void AdmissionPoolSlabGive(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Sla
                            unsigned int Slot) {
   unsigned int bit;
   if (Slabs == 0 || Slab == 0 || Slot >= ADMISSION_POOL_SLAB_SLOTS) return;
+  if (Slab->PrivateOwner[Slot] != 0) return;
   bit = 1u << Slot;
   if (Slab->FreeMask & bit) return; /* already free */
   Slab->FreeMask |= bit;
@@ -82,6 +86,15 @@ int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Cou
   if (Count > ~0ULL - Slabs->Reserved) {
     ++Slabs->Stats.ReserveFailures;
     return 0;
+  }
+  {
+    unsigned long long reserved = Slabs->Reserved + Count;
+    unsigned long long native = reserved < Slabs->ReserveCap ?
+        reserved : Slabs->ReserveCap;
+    if (native > ~0ULL - Slabs->PrivateCount) {
+      ++Slabs->Stats.ReserveFailures;
+      return 0;
+    }
   }
   Slabs->Reserved += Count;
   while (Slabs->Stats.Slabs * ADMISSION_POOL_SLAB_SLOTS < Promised(Slabs)) {
@@ -138,8 +151,61 @@ int AdmissionPoolSlabTake(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count,
   return 1;
 }
 
+/* Raw leases use the same verified contiguous chunks as normal placements,
+ * but never borrow the native promise. A temporary additional floor protects
+ * both that promise and normal slots still live after unreservation. */
+int AdmissionPoolSlabTakePrivate(ADMISSION_POOL_SLABS *Slabs,
+                                 ADMISSION_POOL_PRIVATE *Lease) {
+  ADMISSION_POOL_SLAB *s, *slot_slab;
+  unsigned int slot;
+  unsigned long long live = 0u, need;
+  if (Slabs == 0 || Lease == 0 || Lease->Slab != 0 ||
+      Slabs->PrivateCount >= Slabs->PrivateCap ||
+      Promised(Slabs) == ~0ULL)
+    return 0;
+  for (s = Slabs->List; s != 0; s = s->Next) live += s->Live;
+  need = Promised(Slabs);
+  if (live > need) need = live;
+  if (need == ~0ULL) return 0;
+  ++need;
+  while (Slabs->Stats.Slabs * ADMISSION_POOL_SLAB_SLOTS < need) {
+    if ((Slabs->MayGrow != 0 && !Slabs->MayGrow(Slabs->Context)) ||
+        AddSlab(Slabs) == 0) {
+      Trim(Slabs);
+      return 0;
+    }
+  }
+  /* Enough free slots now exist; Take cannot grow while the pool is locked. */
+  if (!AdmissionPoolSlabTake(Slabs, 1u, &slot_slab, &slot)) return 0;
+  ++Slabs->PrivateCount;
+  slot_slab->PrivateOwner[slot] = Lease;
+  Lease->Slab = slot_slab;
+  Lease->Slot = slot;
+  return 1;
+}
+
+int AdmissionPoolSlabGivePrivate(ADMISSION_POOL_SLABS *Slabs,
+                                 ADMISSION_POOL_PRIVATE *Lease) {
+  ADMISSION_POOL_SLAB *s;
+  unsigned int slot;
+  if (Slabs == 0 || Lease == 0 || Lease->Slab == 0 ||
+      Lease->Slot >= ADMISSION_POOL_SLAB_SLOTS || Slabs->PrivateCount == 0u)
+    return 0;
+  /* Find before dereferencing: a copied/stale lease may name a freed slab. */
+  for (s = Slabs->List; s != 0 && s != Lease->Slab; s = s->Next) {}
+  slot = Lease->Slot;
+  if (s == 0 || s->PrivateOwner[slot] != Lease) return 0;
+  s->PrivateOwner[slot] = 0;
+  --Slabs->PrivateCount;
+  Lease->Slab = 0;
+  Lease->Slot = 0u;
+  AdmissionPoolSlabGive(Slabs, s, slot);
+  Trim(Slabs);
+  return 1;
+}
+
 void AdmissionPoolSlabDrain(ADMISSION_POOL_SLABS *Slabs) {
-  if (Slabs == 0) return;
+  if (Slabs == 0 || Slabs->PrivateCount != 0u) return;
   while (Slabs->List != 0) {
     ADMISSION_POOL_SLAB *s = Slabs->List;
     Slabs->List = s->Next;
