@@ -77,6 +77,12 @@ void AdmissionPoolSlabGive(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Sla
 
 int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count) {
   if (Slabs == 0) return 0;
+  /* A wrapped total would discard existing promises and let Trim return
+   * backing still needed by admitted allocations. Refuse before mutation. */
+  if (Count > ~0ULL - Slabs->Reserved) {
+    ++Slabs->Stats.ReserveFailures;
+    return 0;
+  }
   Slabs->Reserved += Count;
   while (Slabs->Stats.Slabs * ADMISSION_POOL_SLAB_SLOTS < Promised(Slabs)) {
     int floor = Slabs->MayGrow != 0 && !Slabs->MayGrow(Slabs->Context);
