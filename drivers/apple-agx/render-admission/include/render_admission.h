@@ -614,6 +614,8 @@ typedef struct _ADMISSION_CONTEXT {
   PVOID PoolDemand;
   /* RC13: boot-only opt-in; GPU-only General may spill to system backing. */
   BOOLEAN SysmemSpill;
+  /* RC23: requested policy only; eligible creates refuse until bridge exists. */
+  BOOLEAN SysmemShadow;
   /* Sequence number of the last encoded paging record. */
   volatile LONG64 PagingRecordSeq;
   PVOID PlatformRuntime;

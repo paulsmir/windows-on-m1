@@ -443,6 +443,18 @@ static NTSTATUS AdmissionCreateAllocationImpl(
                                         (D3DDDIFORMAT)description->Format) ||
        description->Type != (UINT)D3DKMDT_GDISURFACE_TEXTURE))
     return STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* RC23 stop gate: private leases are storage, not an authorized/coherent
+   * shadow. Until cache/grants, ordered copies, shared generations and teardown
+   * are integrated, refuse at this fallible boundary before reserving pages or
+   * publishing a handle. In particular, SysmemSpill must not silently satisfy
+   * a shadow request with scattered direct backing. Default/CPU maps stay on
+   * their existing paths. See investigation/analysis/RC23-shadow-stop-gate.md. */
+  if (context->SysmemShadow && classId == AgxWin32BufferClassGeneral &&
+      description->CpuVisible == 0u &&
+      (flags & AppleAgxWin32BufferGpuOnly) != 0u)
+    return STATUS_NOT_SUPPORTED;
+#endif
   allocation = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*allocation),
                                ADMISSION_POOL_TAG);
   if (allocation == NULL)

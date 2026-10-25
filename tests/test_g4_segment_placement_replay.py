@@ -74,7 +74,7 @@ static void AdmissionPresentResourceRefreshRate(const ADMISSION_PRESENT_RESOURCE
                                                 unsigned *numerator, unsigned *denominator) {
   (void)data; *numerator = 0; *denominator = 1;
 }
-typedef struct { int Memory; void *PhysicalDeviceObject; int SysmemSpill; } ADMISSION_CONTEXT;
+typedef struct { int Memory; void *PhysicalDeviceObject; int SysmemSpill; int SysmemShadow; } ADMISSION_CONTEXT;
 /* Scanout capability is an OS/backend boundary, unrelated to BO placement.
  * This fixture exposes only the original BGRA scanout format. */
 typedef unsigned D3DDDIFORMAT;
@@ -222,7 +222,7 @@ static int AdmissionAllocationDestroy(ALLOCATION_OBJECT *object) {
 
 MAIN = r"""
 int main(void) {
-  ADMISSION_CONTEXT context = {1, NULL, 0};
+  ADMISSION_CONTEXT context = {1, NULL, 0, 0};
   INPUT native = {1, 1, 0x10000};
   DXGK_ALLOCATIONINFO info = {0};
   DXGKARG_CREATEALLOCATION args = {0};
