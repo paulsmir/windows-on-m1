@@ -201,6 +201,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
       Context->Memory.Topology.PagingBufferSegmentId;
   output->PagingBufferSize =
       (UINT)Context->Memory.Topology.PagingBufferSize;
-  output->PagingBufferPrivateDataSize = PAGE_SIZE;
+  output->PagingBufferPrivateDataSize = (UINT)ADMISSION_PAGING_PRIVATE_BYTES;
   return STATUS_SUCCESS;
 }

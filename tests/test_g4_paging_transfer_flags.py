@@ -2,8 +2,11 @@
 The KMD rejects the defined Src64KBPages/Dst64KBPages paging flags as invalid.
 Exercise its real encoder: all three legal directions and page-size hints must
 produce exact byte ranges; reserved flags must not emit a paging record.
+Also catch private-buffer underallocation that halves scheduler capacity and
+forces avoidable flushes: both queries must encode 65 scattered pages in two passes.
 """
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -21,6 +24,7 @@ class PagingTransferFlags(unittest.TestCase):
 #include "render_paging.h"
 typedef unsigned UINT; typedef unsigned long long ULONGLONG;
 typedef int NTSTATUS, BOOLEAN; typedef unsigned char *PUCHAR;
+#define PAGE_SIZE 4096u
 #define TRUE 1
 #define FALSE 0
 #define MAXULONG 0xffffffffu
@@ -53,13 +57,14 @@ typedef struct {UINT Operation;void *hSystemContext;UINT MultipassOffset,DmaSize
  UINT TransferDirection;union {UINT Flags;struct {UINT Src64KBPages:1,Dst64KBPages:1,Reserved:30;};} Flags;} TransferVirtual;
 } DXGKARG_BUILDPAGINGBUFFER;
 static unsigned encoded;
+static int capacity_test;
 static void ExAcquireFastMutex(int *p){assert(!*p);*p=1;}
 static void ExReleaseFastMutex(int *p){assert(*p);*p=0;}
 static NTSTATUS AdmissionG3ResolveLogicalVa(ADMISSION_G3_PROCESS *p,ULONGLONG root,
  ULONGLONG va,int write,ULONGLONG *ipa,UINT *segment){
  (void)p;(void)root;(void)write;
- assert(va>=0x10000 && va<0x40000);*ipa=va+0x900000000ULL;
- *segment=va>=0x30000?0:2;return 0;
+ assert(va>=0x10000 && va<0xd0000);*ipa=va+0x900000000ULL;
+ *segment=va>=(capacity_test?0x80000u:0x30000u)?0:2;return 0;
 }
 static NTSTATUS AdmissionG3SnapshotAperture(ADMISSION_CONTEXT *a,ULONGLONG *i,UINT *s){(void)a;(void)i;(void)s;return 0;}
 static void AdmissionMemoryPoolNoteRecord(ADMISSION_CONTEXT *a,ADMISSION_PAGING_RECORD *r){(void)a;(void)r;}
@@ -88,9 +93,56 @@ int main(void){
   }
   assert(bytes==65536 && !state.Lock);
  }
+ /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+  * Advertised private storage must fill the existing 64-record queue, not
+  * force a flush after 32 records while marker space remains available.
+  * Both query paths must preserve exact 65-page multipass coverage. */
+ capacity_test=1;
+ const unsigned advertised[] = {@@PRIVATE_SIZES@@};
+ for(unsigned q=0;q<2;++q){
+  assert(advertised[q]==64*sizeof(ADMISSION_PAGING_RECORD));
+  DXGKARG_BUILDPAGINGBUFFER x={0};encoded=0;
+  x.Operation=8;x.hSystemContext=&c;
+  x.TransferVirtual.SourceVirtualAddress=0x10000;
+  x.TransferVirtual.DestinationVirtualAddress=0x80000;
+  x.TransferVirtual.TransferSizeInBytes=65*4096;
+  x.TransferVirtual.TransferDirection=0;
+  unsigned passes=0,covered=0;
+  do {
+   x.pDmaBuffer=dma;x.pDmaBufferPrivateData=priv;
+   x.DmaSize=sizeof(dma);x.DmaBufferPrivateDataSize=advertised[q];
+   x.DmaBufferWriteOffset=0;encoded=0;
+   NTSTATUS status=AdmissionG3EncodeVirtualPaging(&a,&x);
+   assert(status==(passes==0?STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER:STATUS_SUCCESS));
+   assert(encoded==(passes==0?64u:1u));
+   assert(AdmissionPagingRecordsValid((ADMISSION_PAGING_RECORD*)priv,encoded,64,
+       encoded*sizeof(ADMISSION_PAGING_MARKER)));
+   for(unsigned j=0;j<encoded;++j){
+    ADMISSION_PAGING_RECORD *r=((ADMISSION_PAGING_RECORD*)priv)+j;
+    assert(r->Bytes==4096);
+    assert(r->SourceIpa==0x900010000ULL+covered);
+    assert(r->DestinationIpa==0x900080000ULL+covered);
+    covered+=r->Bytes;
+   }
+   ++passes;
+   assert(passes<=2 && x.MultipassOffset==covered);
+  } while(covered<65*4096);
+  assert(passes==2 && !state.Lock);
+ }
 }
 '''
-        code = code.replace('@@FUNCTION@@', body((RENDER/'src/gpuva_g3_paging_windows.c').read_text(), 'AdmissionG3EncodeVirtualPaging'))
+        sizes = [re.search(r'output->PagingBufferPrivateDataSize = ([^;]+);',
+                           (RENDER/'src'/name).read_text())[1]
+                 for name in ('lifecycle.c', 'memory_windows.c')]
+        # Use the advertised production expressions, including the queue bound.
+        header = (RENDER/'include/render_admission.h').read_text()
+        maximum = re.search(r'#define ADMISSION_MAX_PAGING_RECORDS[^\n]*', header)[0]
+        code = code.replace('#define ADMISSION_MAX_PAGING_RECORDS 64', maximum)
+        macro = re.search(r'#define ADMISSION_PAGING_PRIVATE_BYTES[^\n]*', header)
+        if macro:
+            code = macro[0] + '\n' + code
+        code = code.replace('@@PRIVATE_SIZES@@', ', '.join(sizes))
+        code = code.replace('@@FUNCTION@@' , body((RENDER/'src/gpuva_g3_paging_windows.c').read_text(), 'AdmissionG3EncodeVirtualPaging'))
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp);(p/'t.c').write_text(code)
             run=subprocess.run(['clang','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',

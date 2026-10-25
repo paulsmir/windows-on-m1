@@ -73,6 +73,9 @@
 #define ADMISSION_GDI_ALLOCATION_LIST_SIZE 256u
 #define ADMISSION_GDI_PATCH_LIST_SIZE 256u
 #define ADMISSION_MAX_PAGING_RECORDS 64u
+/* Match the private allocation to the existing scheduler record capacity.
+ * A single 4-KiB page holds only 32 records on the 64-bit ABI. */
+#define ADMISSION_PAGING_PRIVATE_BYTES (ADMISSION_MAX_PAGING_RECORDS * sizeof(ADMISSION_PAGING_RECORD))
 
 typedef enum _ADMISSION_RECEIPT {
   AdmissionReceiptAddEntered = 1,
