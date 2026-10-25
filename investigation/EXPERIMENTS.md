@@ -63909,3 +63909,14 @@ EXP1950 HARDWARE BEFORE 2026-10-25T19:21:59Z:
 - Recovery rec1950h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1950-ctf-discriminator/run1950.sh.
 
 EXP1950 ACTUAL (Claude headline 2026-10-25T19:35:58Z): package 30.0.1950.0 (6725550c = EXP1949 + rc10 CantTrimFurther opt-out + KMD DDI first-failure receipts; the KMD WDK build passed). Arm a, 2k with CANT_TRIM_FURTHER=0: device removed at 1:45. Arm b, =1: device removed at 1:40. The guest is alive in both arms. CantTrimFurther is NOT the cause (rc10 hypothesis REJECTED). A DxgKrnl ETW capture by GUID from an elevated SSH session covers arm b (etw/gm1950-dxg.csv, 1 GB). It has DxgkMarkDeviceAsError Start/Stop (USER-MODE D3DKMTMarkDeviceAsError) from PID 0x19F8 and repeatedly from 0x4CC (DWM). The removals are user-mode-initiated by the runtimes after our UMD reported errors, which confirms the RE report (rc9/RE-dxgkrnl.md section 3.4/5.2). The DDI-status receipt is still to be decoded. Next: EXP1951 = rc11 error-cause preservation.
+
+EXP1951 HARDWARE BEFORE 2026-10-25T19:42:45Z:
+- Package 30.0.1951.0 = EXP1950 + rc11: a clean OOM residency refusal no longer poisons CPU mapping (a map can be retried); residency, canonical-mapping and native-backing failures keep their real cause (OOM, removal) instead of generic E_FAIL or DEVICE_HUNG.
+- Switches Wom1GpuFaultInfoRead=1 and Wom1PoolHalfSize=1. Probe slot "10K" = 2k, slot "2K" = 10k. Trim on, CantTrimFurther default, guard on, Timeout 240. DxgKrnl ETW by GUID from an elevated SSH session.
+- WHY THIS HYPOTHESIS: EXP1950 ETW plus the dxgkrnl RE show user-mode device removal (DxgkMarkDeviceAsError from GravityMark and DWM). The runtimes remove a device when our UMD reports E_FAIL or an unexpected HRESULT under memory pressure (DWM: ResourceMap/ResourceCopyRegion SetErrorCb E_FAIL).
+- Expected: DWM survives (no 0x8898008d, no flicker); GravityMark either renders or gets a clean E_OUTOFMEMORY without device removal.
+- Failure: DxgkMarkDeviceAsError again means another UMD path still reports E_FAIL; find it in the per-process umd.log just before the ETW removal timestamp.
+- Recovery: rec1951h.
+- Hashes: sys 565aae9d2f1d, UmdArm64 59cd53312046, UmdX64 78e01a1bc301, Umd32 d25ee7d3eebc; manifest cfbf43357314, hardware-manifest ea2805a10251; probe1951.sh 7ffc61150a94 (PROBE_LINT_OK); visible recovery rec1951h 0677e367c933fd71; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1951h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1951-rc11-errors/run1951.sh.
