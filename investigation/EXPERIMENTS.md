@@ -63884,3 +63884,13 @@ EXP1948 ACTUAL (Claude headline 2026-10-25T18:41:10Z): package 30.0.1948.0 (683a
 - DWM crashes 0x8898008d twice per arm at the same time (adapter-wide removal). There is no firmware fault, no reset receipt and no bugcheck. The guest is alive.
 - Verdict on rc8: the 64 KiB flags were NOT the cause; the removal source is still unknown. Evidence: evidence/EXP1948, guest-extra/{umd.log,events.txt}, rcpt-final.
 - Next: rc9 + DxgKrnl ETW capture of the removal reason.
+
+EXP1949 HARDWARE BEFORE 2026-10-25T18:48:00Z:
+- Package 30.0.1949.0 = EXP1948 code (HEAD 26612114; no driver change after 683a8684). Same switches Wom1GpuFaultInfoRead=1 + Wom1PoolHalfSize=1, trim on, guard on.
+- Each GM run is wrapped in a circular ETW session "agxdxg": Microsoft-Windows-DxgKrnl, all keywords, level 5, 256 MB. The session is converted with tracerpt to CSV, so the events before the removal are kept.
+- WHY THIS HYPOTHESIS: EXP1947/1948 show adapter-wide device removal (GravityMark 0x88760870 at MakeResident, DWM 0x8898008d) with no firmware fault, no reset DDI and no bugcheck. The KMD paging receipts store no statuses, so the removal source (VidMm paging failure, a failed DDI, budget, ...) is unknown. DxgKrnl ETW names it. This is the single allowed receipt-only run after the EXP1946-1948 behaviour runs.
+- Expected: the CSV contains the DxgKrnl device-removal / VidMm paging-failure / adapter-error events with a status and a DDI name just before qpc of the GM reject-make-resident.
+- Recovery: rec1949h visible recovery with app-log collection (gm1949*-dxg.etl/csv are collected with the app logs).
+- Hashes: sys 0bf7befe5a56, UmdArm64 09d2f3579328, UmdX64 219d7a240ccb, Umd32 2f49a0a20963; manifest d960a678f44d, hardware-manifest 3a9acb38ab01; probe1949.sh dda3b26b87ac (PROBE_LINT_OK); visible recovery rec1949h 88cdc529e17fa4f3; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1949h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1949-dxg-etw/run1949.sh.
