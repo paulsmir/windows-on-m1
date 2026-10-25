@@ -63751,3 +63751,5 @@ to14:43:42.9350330Z and package absent; `visible-inert-gate.txt:1` records
 VISIBLE_INERT_PACKAGE_ABSENT_8CPU. This is saved evidence only; no recovery,
 guest or hardware action was performed by this task.
 
+
+EXP1939 CORRECTION 2026-10-25T11:10:09Z (host move, no result change): the launch host moved from the Mac to WSL x86_64 on the builder PC. The launch linker /tmp/agx-lld-dir/ld.lld (Mac toolchain22, Mach-O, cannot run here) is re-pinned in EXP1939 hardware-manifest.json to the WSL host linker (Ubuntu LLD 18.1.3, sha256 7ad9a0e8fe6d0e79b71172d731e33872c0274e49fceb7b516d774876d5a58ade); the Mac pin is kept in hardware-manifest.json.mac-host. All other 25 pinned artifacts (Mu 361a2134 m2f2c firmware, m1n1 0d3a75b3, package, scripts) verify unchanged. Used only to run rec1939h as the visible recovery before EXP1940. m1n1 stubs on this host: clang + ld.lld (proxyenv USE_CLANG=1).
