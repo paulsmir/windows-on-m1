@@ -16,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import tempfile
 
 
@@ -94,6 +95,40 @@ def wrapper_bytes(host: Path, experiment: Path, number: str) -> bytes:
             f"exec /bin/bash -- {quote(str(host))} {quote(str(experiment))} {quote(number)}\n").encode()
 
 
+def same_path(recorded, actual: Path) -> bool:
+    """A recorded path names the same file as actual, through any path alias (see is_wrapper)."""
+    if not isinstance(recorded, str) or not recorded:
+        return False
+    return recorded == str(actual) or Path(recorded).resolve() == Path(actual).resolve()
+
+
+def is_wrapper(data: bytes, host: Path, experiment: Path, number: str) -> bool:
+    """The installed visible wrapper, also when it names host/experiment through a path alias.
+
+    Path aliases are real on the WSL host: /Volumes/pwdev and /Users/pavel/public_windows are symlinks to
+    /home/pavel/pwdev there, so a wrapper written with either spelling must still be recognised."""
+    if data == wrapper_bytes(host, experiment, number):
+        return True
+    header = ("#!/bin/bash\n# Installed by agx-install-visible-recovery.py; ordinary GPU-visible recovery.\n")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    if not text.startswith(header) or not text.endswith("\n") or text.count("\n") != 3:
+        return False
+    try:
+        argv = shlex.split(text[len(header):])
+    except ValueError:
+        return False
+    if len(argv) != 6 or argv[:3] != ["exec", "/bin/bash", "--"] or argv[5] != number:
+        return False
+    try:
+        return (Path(argv[3]).resolve(strict=True) == host.resolve(strict=True) and
+                Path(argv[4]).resolve(strict=True) == experiment.resolve(strict=True))
+    except OSError:
+        return False
+
+
 def legacy_template(experiment_dir: Path, experiment_id: str, worktree: Path | None = None) -> Path:
     """Read-only selection for cloning a previous generated recovery template."""
     if not re.fullmatch(r"[1-9][0-9]*", experiment_id):
@@ -112,7 +147,7 @@ def legacy_template(experiment_dir: Path, experiment_id: str, worktree: Path | N
     backup_data = read_regular(backup) if backup.exists() or backup.is_symlink() else None
     host = root / "scripts/agx-recover-visible.sh"
     helper = root / "scripts/agx-recovery-disable-service.ps1"
-    if original == wrapper_bytes(host, experiment, experiment_id):
+    if is_wrapper(original, host, experiment, experiment_id):
         if backup_data is None:
             raise RecoveryInstallError("visible wrapper has no preserved legacy original")
         assert_legacy(backup_data, experiment, experiment_id)
@@ -129,8 +164,8 @@ def legacy_template(experiment_dir: Path, experiment_id: str, worktree: Path | N
             raise RecoveryInstallError("invalid visible recovery source manifest") from exc
         if not isinstance(source, dict) or source.get("Version") not in (1, 2) or \
                 source.get("ExperimentId") != experiment_id or \
-                source.get("ExperimentDirectory") != str(experiment) or \
-                source.get("Worktree") != str(root) or \
+                not same_path(source.get("ExperimentDirectory"), experiment) or \
+                not same_path(source.get("Worktree"), root) or \
                 source.get("RecoveryMode") != "GpuVisibleServiceDisabledOrderedReboot":
             raise RecoveryInstallError("source manifest experiment/worktree identity mismatch")
         files = source.get("Files")
@@ -142,7 +177,7 @@ def legacy_template(experiment_dir: Path, experiment_id: str, worktree: Path | N
             raise RecoveryInstallError("source manifest artifact set mismatch")
         for name, path in expected.items():
             record = files[name]
-            if (not isinstance(record, dict) or record.get("Path") != str(path)
+            if (not isinstance(record, dict) or not same_path(record.get("Path"), path)
                     or not isinstance(record.get("Sha256"), str)
                     or not re.fullmatch(r"[0-9a-f]{64}", record["Sha256"])):
                 raise RecoveryInstallError(f"source manifest artifact identity mismatch: {name}")
@@ -178,7 +213,7 @@ def install(experiment_dir: Path, experiment_id: str, worktree: Path | None = No
     backup_bytes = read_regular(backup) if backup.exists() or backup.is_symlink() else None
     manifest_bytes = read_regular(manifest) if manifest.exists() or manifest.is_symlink() else None
 
-    if original == wrapper:
+    if is_wrapper(original, host, experiment, experiment_id):
         if backup_bytes is None:
             raise RecoveryInstallError("visible wrapper has no preserved legacy original")
         legacy = backup_bytes

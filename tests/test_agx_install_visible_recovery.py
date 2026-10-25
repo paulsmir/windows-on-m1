@@ -65,6 +65,32 @@ waitcycle; nohup $R/launch-hidden.sh > $R/launch.log 2>&1 & sshup
         with self.assertRaises(FACTORY.RecoveryInstallError): self.install()
         self.assertEqual(self.manifest.read_bytes(), before)
 
+    def test_wrapper_and_manifest_written_through_a_path_alias_select_the_template(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? On the WSL host /Volumes/pwdev and
+        /Users/pavel/public_windows are symlinks, so the EXP1939 wrapper and manifest written on the Mac
+        (alias spelling) no longer byte-matched the resolve()-built ones and launch-exp refused EXP1940."""
+        self.install()
+        alias_exp = self.root / "alias experiments"
+        alias_exp.mkdir()
+        (alias_exp / self.experiment.name).symlink_to(self.experiment, target_is_directory=True)
+        alias_work = self.root / "alias worktree"
+        alias_work.symlink_to(self.worktree, target_is_directory=True)
+        exp_alias = alias_exp / self.experiment.name
+        text = self.script.read_text()
+        text = text.replace(FACTORY.quote(str(self.experiment.resolve())), FACTORY.quote(str(exp_alias)))
+        text = text.replace(FACTORY.quote(str((self.worktree / "scripts/agx-recover-visible.sh").resolve())),
+                            FACTORY.quote(str(alias_work / "scripts/agx-recover-visible.sh")))
+        self.script.write_text(text)
+        source = json.loads(self.manifest.read_text())
+        source["ExperimentDirectory"] = str(exp_alias)
+        source["Worktree"] = str(alias_work)
+        for record in source["Files"].values():
+            record["Path"] = record["Path"].replace(str(self.experiment.resolve()), str(exp_alias)).replace(
+                str(self.worktree.resolve()), str(alias_work))
+        source["Files"]["Wrapper"]["Sha256"] = FACTORY.digest(self.script.read_bytes())
+        self.manifest.write_text(json.dumps(source))
+        self.assertEqual(FACTORY.legacy_template(exp_alias, "9999", alias_work), self.backup.resolve())
+
     def test_historical_v1_template_remains_readonly_compatible(self):
         self.install()
         source = json.loads(self.manifest.read_text())
