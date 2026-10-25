@@ -63920,3 +63920,12 @@ EXP1951 HARDWARE BEFORE 2026-10-25T19:42:45Z:
 - Hashes: sys 565aae9d2f1d, UmdArm64 59cd53312046, UmdX64 78e01a1bc301, Umd32 d25ee7d3eebc; manifest cfbf43357314, hardware-manifest ea2805a10251; probe1951.sh 7ffc61150a94 (PROBE_LINT_OK); visible recovery rec1951h 0677e367c933fd71; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
 - Recovery rec1951h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1951-rc11-errors/run1951.sh.
+
+EXP1951 ACTUAL (Claude headline 2026-10-25T19:58:12Z): package 30.0.1951.0 (d7da7939 = EXP1950 + rc11 error-cause preservation). 2k: device removed at 1:25; 10k: device removed at 2:18; guest alive. The execute now reports the preserved 0x88760870 instead of DEVICE_HUNG.
+ROOT CAUSE CAPTURED by the DxgKrnl ETW (etw/gm1951-dxg.csv, line ~1116141; excerpt etw/vidmm-pagein-failure-excerpt.csv), in the VidMm worker thread (System PID 4, TID 0x1414):
+- GravityMark (pid 8532) local commitment is 1370570752 B, against a 1409286144 B HalfSize segment.
+- Its process state is DXGK_PROCESSCOMMITTEDSTATE_UNDER_COMMITTED and the placement restriction is None.
+- The page-in of allocation 0xFFFFE101BA9F6C80 (DXGKETW_ALLOCATIONFAULT_NOT_RESIDENT) fails three times with {Operation Failed}.
+- "WORKER_THREAD: Unrecoverable page in failure" follows, then VidSchErrorFailedToPageInRequiredResource (0xc) on the device.
+- Then GetDeviceState = 5 (ERROROUTOFMEMORY) and the runtime marks the device as error: user-mode DxgkMarkDeviceAsError, VidSchErrorDriverFaulted, 18x across GM, DWM and other processes.
+The single GPU-accessible segment (the native pool) has no system-memory/aperture overflow segment, so VidMm has nowhere to place the allocation. Next: Codex rc13, a GPU-visible system-memory spill segment (the rc12 hybrid design).
