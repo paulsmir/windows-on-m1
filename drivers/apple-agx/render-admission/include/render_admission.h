@@ -2264,4 +2264,12 @@ void AdmissionRecordB1Qualification(_In_ ADMISSION_CONTEXT *Context,
                                     _In_ ULONG OutputPixelB);
 #endif
 
+/* RC10: no allocation, registry I/O or handle dereference in status capture. */
+BOOLEAN AdmissionRecordDdiStatus(ULONG Slot, NTSTATUS Status, ULONG Operation,
+    ULONGLONG Allocation, ULONGLONG Object);
+HANDLE AdmissionPagingStatusAllocation(const DXGKARG_BUILDPAGINGBUFFER *Args);
+void AdmissionQueueDdiStatus(ADMISSION_CONTEXT *Context);
+void AdmissionRecordPagingInternalStatus(ADMISSION_CONTEXT *Context,
+    const DXGKARG_BUILDPAGINGBUFFER *Args, NTSTATUS Status);
+
 #endif

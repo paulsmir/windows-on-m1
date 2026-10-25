@@ -1,4 +1,7 @@
 #include "render_admission.h"
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+#include "render_ddi_status_wrappers.h"
+#endif
 
 DRIVER_INITIALIZE DriverEntry;
 #pragma alloc_text(INIT, DriverEntry)
@@ -106,6 +109,9 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiSetRootPageTable = AdmissionDdiSetRootPageTable;
 #endif
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionInstallStatusReceipts(&initialization);
+#endif
   status = DxgkInitialize(DriverObject, RegistryPath, &initialization);
   AdmissionRecordService(RegistryPath, L"Wom1CleanDxgkInitializeStatus", (ULONG)status);
   return status;

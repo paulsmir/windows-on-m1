@@ -1392,6 +1392,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBufferChecked(ADMISSION_CONTEXT *adapter,
   ADMISSION_G3_PROCESS *process;
   HANDLE handle;
   NTSTATUS status = AdmissionGpuvaG3BuildPagingBuffer(adapter, args);
+  AdmissionRecordPagingInternalStatus(adapter, args, status);
   if (args == NULL || AdmissionG3PagingStatusAllowed(status, args->Operation) ||
       (args->Operation != DXGK_OPERATION_UPDATE_PAGE_TABLE &&
        args->Operation != DXGK_OPERATION_FLUSH_TLB))

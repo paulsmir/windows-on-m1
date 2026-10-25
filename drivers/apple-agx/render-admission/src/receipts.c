@@ -1,5 +1,52 @@
 #include "render_admission.h"
 
+#include "render_ddi_status.h"
+
+/* Module lifetime, never reset while writers may be active. One supported
+ * adapter; Object is the opaque first DDI argument, not necessarily a device.
+ * SubmitCommandVirtual has no allocation argument: Allocation stays zero. */
+static ADMISSION_DDI_STATUS_SLOT AdmissionDdiStatuses[ADMISSION_DDI_STATUS_SLOTS];
+C_ASSERT(sizeof(ADMISSION_DDI_STATUS_SLOT) == 48);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+static void AdmissionWriteDdiStatuses(ADMISSION_CONTEXT *Context);
+#endif
+
+BOOLEAN AdmissionRecordDdiStatus(ULONG Slot, NTSTATUS Status, ULONG Operation,
+    ULONGLONG Allocation, ULONGLONG Object) {
+  if (Slot >= ADMISSION_DDI_STATUS_SLOTS || NT_SUCCESS(Status)) return FALSE;
+  return (BOOLEAN)AdmissionDdiStatusAccumulate(&AdmissionDdiStatuses[Slot],
+      Status, (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart,
+      Allocation, Object, Operation);
+}
+
+HANDLE AdmissionPagingStatusAllocation(const DXGKARG_BUILDPAGINGBUFFER *Args) {
+  if (Args == NULL) return NULL;
+  switch (Args->Operation) {
+  case DXGK_OPERATION_TRANSFER: return Args->Transfer.hAllocation;
+  case DXGK_OPERATION_FILL: return Args->Fill.hAllocation;
+  case DXGK_OPERATION_DISCARD_CONTENT: return Args->DiscardContent.hAllocation;
+  case DXGK_OPERATION_MAP_APERTURE_SEGMENT: return Args->MapApertureSegment.hAllocation;
+  case DXGK_OPERATION_UNMAP_APERTURE_SEGMENT: return Args->UnmapApertureSegment.hAllocation;
+  case DXGK_OPERATION_SPECIAL_LOCK_TRANSFER: return Args->SpecialLockTransfer.hAllocation;
+  case DXGK_OPERATION_VIRTUAL_TRANSFER: return Args->TransferVirtual.hAllocation;
+  case DXGK_OPERATION_VIRTUAL_FILL: return Args->FillVirtual.hAllocation;
+  case DXGK_OPERATION_UPDATE_PAGE_TABLE: return Args->UpdatePageTable.hAllocation;
+  case DXGK_OPERATION_INIT_CONTEXT_RESOURCE: return Args->InitContextResource.hAllocation;
+  case DXGK_OPERATION_NOTIFY_RESIDENCY: return Args->NotifyResidency.hAllocation;
+  default: return NULL; /* No single allocation in the supported operation. */
+  }
+}
+
+void AdmissionRecordPagingInternalStatus(ADMISSION_CONTEXT *Context,
+    const DXGKARG_BUILDPAGINGBUFFER *Args, NTSTATUS Status) {
+  ULONG operation = Args != NULL ? (ULONG)Args->Operation : MAXULONG;
+  if (AdmissionRecordDdiStatus(112u + (operation < 15u ? operation : 15u),
+      Status, operation, (ULONGLONG)(ULONG_PTR)AdmissionPagingStatusAllocation(Args),
+      (ULONGLONG)(ULONG_PTR)Context))
+    AdmissionQueueDdiStatus(Context);
+}
+
+
 #define ADMISSION_QUERY_RECEIPT_VERSION 1u
 #define ADMISSION_DISPLAY_DDI_RECEIPT_VERSION 1u
 
@@ -2012,6 +2059,7 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingResult(
  * paging failure, unpublished groups, paging wait) are copied here and
  * written by a work item, so DxgkDdiBuildPagingBuffer does no registry I/O. */
 enum {
+  AdmissionPagingReceiptDdiStatus = 1024u,
   AdmissionPagingReceiptFlush = 1u,
   AdmissionPagingReceiptFailure = 2u,
   AdmissionPagingReceiptUnpublished = 4u,
@@ -2081,6 +2129,11 @@ static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
                     DelayedWorkQueue, Context);
 }
 
+void AdmissionQueueDdiStatus(ADMISSION_CONTEXT *Context) {
+  if (Context != NULL && KeGetCurrentIrql() <= DISPATCH_LEVEL)
+    AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptDdiStatus, NULL);
+}
+
 static void AdmissionPagingReceiptWrite(ADMISSION_CONTEXT *Context,
     PCWSTR Name, const VOID *Value, ULONG Bytes, BOOLEAN Flush) {
   HANDLE key = NULL;
@@ -2131,6 +2184,8 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
       return;
     }
     KeReleaseSpinLock(&receipts->Lock, oldIrql);
+    if (dirty & AdmissionPagingReceiptDdiStatus)
+      AdmissionWriteDdiStatuses(context);
     if (dirty & AdmissionPagingReceiptOmittedLeaves)
       AdmissionPagingReceiptWrite(context, L"Wom1G4OmittedLeaves",
                                   &omitted, sizeof(omitted), TRUE);
@@ -2190,6 +2245,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingReceiptsStart(
     return STATUS_INSUFFICIENT_RESOURCES;
   }
   Context->PagingReceipts = receipts;
+  AdmissionQueueDdiStatus(Context);
   return STATUS_SUCCESS;
 }
 
@@ -2946,6 +3002,7 @@ _Use_decl_annotations_ void AdmissionRecordPagingProfile(
       InterlockedCompareExchange64(&Context->PagingProfile.LastPublishedQpc,
                                    now, last) != last)
     return;
+  AdmissionQueueDdiStatus(Context);
   RtlZeroMemory(value, sizeof(value));
   value[0] = 1u;
   value[1] = (ULONGLONG)now;
@@ -3028,3 +3085,55 @@ _Use_decl_annotations_ void AdmissionRecordGpuReset(ADMISSION_CONTEXT *Context) 
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
+
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+void AdmissionQueueDdiStatus(ADMISSION_CONTEXT *Context) {
+  UNREFERENCED_PARAMETER(Context);
+}
+#endif
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* Sole publisher: the serial PASSIVE worker. Heap snapshot avoids adding 6 KiB to the KMD stack.
+ * First records are immutable after release publication; counters are sampled
+ * atomically, independently (not a globally atomic point-in-time snapshot). */
+static void AdmissionWriteDdiStatuses(ADMISSION_CONTEXT *Context) {
+  struct SNAPSHOT {
+    ULONG Version, Bytes, Slots, SlotBytes;
+    ULONGLONG Qpc, Frequency;
+    ADMISSION_DDI_STATUS_SLOT Entries[ADMISSION_DDI_STATUS_SLOTS];
+  } *snapshot;
+  LARGE_INTEGER frequency;
+  HANDLE key = NULL;
+  ULONG i;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL) return;
+  snapshot = ExAllocatePool2(POOL_FLAG_PAGED, sizeof(*snapshot), ADMISSION_POOL_TAG);
+  if (snapshot == NULL) return;
+  snapshot->Version = 1u;
+  snapshot->Bytes = sizeof(*snapshot);
+  snapshot->Slots = ADMISSION_DDI_STATUS_SLOTS;
+  snapshot->SlotBytes = sizeof(ADMISSION_DDI_STATUS_SLOT);
+  snapshot->Qpc = KeQueryPerformanceCounter(&frequency).QuadPart;
+  snapshot->Frequency = frequency.QuadPart;
+  for (i = 0u; i < ADMISSION_DDI_STATUS_SLOTS; ++i) {
+    ADMISSION_DDI_STATUS_SLOT *source = &AdmissionDdiStatuses[i];
+    ADMISSION_DDI_STATUS_SLOT *target = &snapshot->Entries[i];
+    if (InterlockedCompareExchange(&source->Ready, 2, 2) == 2) {
+      target->Qpc = source->Qpc;
+      target->Allocation = source->Allocation;
+      target->Object = source->Object;
+      target->Operation = source->Operation;
+      target->Status = source->Status;
+      target->Ready = 2;
+    }
+    target->Count = InterlockedCompareExchange64(&source->Count, 0, 0);
+  }
+  if (NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+      PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1DdiStatus", snapshot, sizeof(*snapshot));
+    ZwClose(key);
+  }
+  ExFreePoolWithTag(snapshot, ADMISSION_POOL_TAG);
+}
+
+#endif
