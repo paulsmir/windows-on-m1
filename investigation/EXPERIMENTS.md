@@ -63810,3 +63810,17 @@ EXP1944 HARDWARE BEFORE 2026-10-25T15:46:31Z:
 - Recovery rec1944h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1944-no-trim/run1944.sh.
 
 EXP1944 ACTUAL (Claude headline 2026-10-25T16:08:51Z): package 30.0.1944.0 (cc1b56f7), Wom1GpuFaultInfoRead=1 + Wom1PoolHalfSize=1, heap guard on in both arms. Arm a (2k, APPLE_AGX_D3D12_DISABLE_TRIM=1): measure-d3d12-trim-disabled, then reject-make-resident 0x8007000e (5x) and GravityMark "device removed" at 20.6 s during load (Creating Asteroids). The guest survived (SSH alive). Per the rc4 table: a clean OOM, INCONCLUSIVE for the fault, but it shows the 2k working set does not fit the HalfSize budget without paging. Arm b (DISABLE_TRIM=0, = EXP1943 arm a): guest down -> PSCI reset (0x116 expected; dump 102526-13625-01.dmp). GPU fault at the SAME VA as EXP1943, 0x115d960000 (PID 9540, fence 0x14e09, zero PTEs): deterministic object. KMD history: the 64 KiB allocation 0xffffba0e873c2090 at that VA was invalidated at qpc 3548043972, about 6 s after the UMD trims at qpc 3402-3407e6 (the last one evicted 0xb8 slots / 1015 MiB with EvictOnlyIfNecessary). The 32 MiB leaf was then rewritten invalid and the table replaced (system-retire 21225), with no later valid publication. The UMD touched the VA at load (gm1944b line 1930) after a 64x64 committed texture. Next: Codex rc5. Evidence: evidence/EXP1944, rec1944h/app-logs, rec1944h/kmd-receipts-pre-disable.txt, evidence/decoded/mapping.json. rec1944h RECOVERY_DONE.
+
+EXP1945 HARDWARE BEFORE 2026-10-25T16:32:06Z:
+- Package 30.0.1945.0 = EXP1944 + rc5: APPLE_AGX_UMD_WATCH_VA=0x115d960000 records measure-watch-bo/-resource/-trim/-slot/-set: full BO identity, creation/reuse/release, resource->allocation joins, trim selection with full VA/token/KMT handle, per-submission reference membership, MakeResident request/result and paging fence for the watched slot, including explicit no-match records. RECEIPT-ONLY: the one allowed after the EXP1943/EXP1944 behaviour runs.
+- Switches Wom1GpuFaultInfoRead=1 and Wom1PoolHalfSize=1. Both probe slots run 2k with WATCH_VA, trim on, heap guard on, Timeout 180 (slot b only if the guest survives slot a).
+- WHY THIS HYPOTHESIS: EXP1943 and EXP1944b fault at the same VA 0x115d960000 with zero PTEs. KMD: the 64 KiB allocation there was invalidated about 6 s after the UMD trims and never republished. Whether the faulting submission referenced and requested that slot is unknown, so the reference path vs the KMD restore path cannot be told apart.
+- Expected / decisions (rc5 REPORT table):
+  - identity + trim, then member=0 while the GPU reads it -> reference/address-lifetime bug in that object's path;
+  - member=1/requested=1/accepted, then invalid mapping -> KMD residency/paging/remap boundary;
+  - no active match with an earlier release/reuse -> stale pointer/lifetime;
+  - different VA or missing receipts -> non-decisive.
+- Recovery: rec1945h visible recovery with app-log collection; minidump.
+- Hashes: sys 3fcb314f9d24, UmdArm64 ed2652af499f, UmdX64 38714493e8ee, Umd32 5f3dedad8cc0; manifest 4bc8c57a1424, hardware-manifest be930d82b781; probe1945.sh fa69e4d3c6d6 (PROBE_LINT_OK); visible recovery rec1945h 6491b1b920a8cf2c; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1945h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1945-watch-va/run1945.sh.
