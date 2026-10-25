@@ -64024,3 +64024,13 @@ EXP1957 ACTUAL (Claude headline 2026-10-25T23:17:16Z): package 30.0.1957.0 (76c8
   - UMD canonical 1.99 GB (1.54 GB unmapped); private staging 465 MB.
 - Interpretation: the binding limit is guest RAM. With the 2 GB locked native pool, GravityMark private memory and the OS, commit exceeds physical RAM. The about 17 MB/s "paging" waits are pagefile/disk I/O, which explains why coalescing CPU copies (rc21) is neutral. The 10k load OOM is the T8 headroom gate at about 690 MB free (run-to-run RAM variance; rc18/rc21 are not implicated by this evidence).
 - Next: reduce the RAM overhead (UMD private staging and CPU shadows) and confirm the guest RAM size / m1n1 carve-outs.
+
+EXP1958 HARDWARE BEFORE 2026-10-25T23:36:09Z:
+- Package 30.0.1958.0 = EXP1957 + rc22: when the owner already provides a cached T13 private map, the redundant descriptor-heap CPU shadow is dropped. In EXP1957 that was about 60 MiB of commitment.
+- Switches Wom1GpuFaultInfoRead=1, Wom1PoolFraction=3. Probe slot "10K" = 2k, slot "2K" = 10k.
+- WHY THIS HYPOTHESIS: EXP1957 showed the guest RAM is overcommitted (693 MB available, commit 7.65 GB over 6.28 GB physical), so the "paging waits" are pagefile I/O. Every MB of driver overhead removed lowers the swap pressure.
+- Metric: available physical RAM in the refusal receipts (if any), scene presents/min (EXP1957 2k: 7.7), the longest paging wait, and whether the 10k load OOM recurs.
+- Recovery: rec1958h.
+- Hashes: sys c3a3d3b392b0, UmdArm64 df360ac71e6e, UmdX64 db654331cf35, Umd32 cd46279b8ce7; manifest 1a26beb50353, hardware-manifest b328c669c9c3; probe1958.sh 4d885c303e9a (PROBE_LINT_OK); visible recovery rec1958h 4137a118ebdb09d7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
+- Recovery rec1958h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1958-ram-overhead/run1958.sh.
