@@ -8,6 +8,21 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-25 02:30Z -- MOVED TO THE WINDOWS PC (WSL); EXP1940/EXP1941 BUILT, WAITING FOR THE J313
+
+- Work environment: WSL Ubuntu on the builder PC (repo at /Volumes/pwdev/public_windows, symlinked). Offline
+  baseline BASELINE_OK on Linux (host Mesa tree rebuilt natively; 351d5b4d).
+- Builder: everything under C:\Users\pauls\APPLE AGX\active, one root APPLE_AGX_BUILDER_ROOT =
+  C:\Users\pauls\APB12E~1\active (8.3 alias, no space) (7bdafb7c); README.txt there. Obsolete -> APPLE AGX\old.
+  WSL pipeline names the root in .local/scratchpad-tools-backup/agx-env.sh; build-chain.sh replaces chain<N>.sh.
+- Built, not yet run (J313 not in m1n1: USB 3-6 "Device Descriptor Request Failed"; needs a power cycle):
+  - EXP1940 30.0.1940.0 (02c1393e): val1 validator + 4 candidate fixes + C-linkage fix; GravityMark D3D12 10k
+    with gm-run.ps1 -ValidateRefs 1, switch Wom1GpuFaultInfoRead only. before1940.txt ready.
+  - EXP1941 30.0.1941.0 (2e6d8976): EXP1940 + Codex t14 (firmware-killed retired jobs complete as aborted;
+    fault VA in DMA_PAGE_FAULTED). before1941.txt ready. Run after EXP1940.
+- On J313 return: one recovery boot (rec1939h) to validate the WSL m1n1 chain (udev /dev/cu.usbmodem*,
+  scheduled task J313-usbipd-attach, proxyenv USE_CLANG), then launch-exp.sh for EXP1940.
+
 ## CURRENT 2026-10-23 21:30Z -- GRAVITYMARK D3D12 ONLY (user focus); ACTIVE HYPOTHESIS T7h
 
 - Installed: EXP1918 package 30.0.1918.0 (b57cd075) with the UMDQ-1918q5 UMD hot-swapped (d8e1612f...). Restore with `umd-hotswap.sh restore`, then run recovery rec1918h/recover.sh directly.
