@@ -63964,3 +63964,5 @@ EXP1953 ACTUAL (Claude headline 2026-10-25T21:12:38Z): package 30.0.1953.0 (2a86
 - Performance is about 0.25 fps.
 - The only non-OK UMD lines are one val1 measure-ref-violation/reject-ref-validation per arm, in record mode.
 - Verdict: rc15 SUPPORTED. The 2016 MiB native pool removes the unrecoverable page-in boundary for this workload. Next: performance (rc16).
+
+GUEST-CLEANUP 2026-10-25T21:35:26Z (user, AGX-Cleanup.cmd v2 on the guest desktop): deleted the old C:\ProgramData\EXPnnnn-Trace UMD trace folders (592 of 597, about 31 GB; the 5 newest kept), the old C:\Users\pavel\EXPnnnn folders (pinned samples EXP1825/1834/1838/1844-1848/1854 and the 5 newest kept), LiveKernelReports and MEMORY.DMP. No archive copy. Guest C: free went from 9.7 GB to 41.3 GB.
