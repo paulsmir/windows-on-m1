@@ -399,20 +399,35 @@ static HRESULT residency_request(ADMISSION_UMD_DEVICE *device,
     UINT *priorities) {
   UINT rounds=0u, trimmed=0u;
   ULONGLONG trimmedBytes=0ull;
+  bool cantTrimFurther=false;
   HRESULT hr;
   for(;;) {
     ZeroMemory(request,sizeof(*request));
     request->hPagingQueue=device->PagingQueue;
     request->NumAllocations=count;request->AllocationList=handles;
     request->PriorityList=priorities;
+    request->Flags.CantTrimFurther=cantTrimFurther;
     hr=device->KernelCallbacks->pfnMakeResidentCb(
         device->RuntimeDevice.handle,request);
-    if(hr!=E_OUTOFMEMORY || rounds>=ADMISSION_UMD_TRIM_ROUNDS) break;
+    if(hr!=E_OUTOFMEMORY || cantTrimFurther ||
+       rounds>=ADMISSION_UMD_TRIM_ROUNDS) break;
     UINT slots=0u;
-    ULONGLONG freed=trim_residency(device,request->NumBytesToTrim,&slots);
+    /* Exhaust eligible idle references on the last bounded trim round;
+     * otherwise the round cap could prevent the final overbudget request. */
+    const bool lastRound=rounds+1u==ADMISSION_UMD_TRIM_ROUNDS;
+    ULONGLONG freed=trim_residency(device,
+        lastRound ? ~0ull : request->NumBytesToTrim,&slots);
     ++rounds;
-    if(!slots) break;
+    if(!slots) {
+      /* The current process budget is not the maximum budget. WDK's
+       * CantTrimFurther lets VidMm arbitrate pressure across devices after
+       * our idle references are exhausted. Try once, preserve its paging
+       * fence, and propagate a maximum-budget refusal without MustSucceed. */
+      cantTrimFurther=true;
+      continue;
+    }
     trimmed+=slots;trimmedBytes+=freed;
+    if(lastRound) cantTrimFurther=true;
   }
   if(FAILED(hr) && hr!=E_PENDING) {
     UINT values[8]={count,rounds,trimmed,(UINT)trimmedBytes,

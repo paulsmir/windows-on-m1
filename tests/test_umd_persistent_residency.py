@@ -72,7 +72,7 @@ static void ReleaseSRWLockExclusive(SRWLOCK*l){assert(*l==-1);*l=0;}
 static void AcquireSRWLockShared(SRWLOCK*l){assert(*l>=0);++*l;}
 static void ReleaseSRWLockShared(SRWLOCK*l){assert(*l>0);--*l;}
 #include "umd_residency_trim.h"
-struct D3DDDI_MAKERESIDENT { HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; const UINT*PriorityList; ULONGLONG PagingFenceValue; ULONGLONG NumBytesToTrim; };
+struct D3DDDI_MAKERESIDENT { struct { UINT CantTrimFurther, MustSucceed; } Flags; HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; const UINT*PriorityList; ULONGLONG PagingFenceValue; ULONGLONG NumBytesToTrim; };
 struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,Mapped,Resident,Borrowed,KmtResidencyHeld,HeapStaging; UINT SourceHolds,SubmissionHolds;
   D3DKMT_HANDLE KernelAllocation,StagingAllocation; unsigned char *PrivateStaging; uint64_t CanonicalGpuVa,Bytes,LastUseFence; void*NativeBo; void*NativeMapRelease; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
@@ -193,10 +193,10 @@ class PersistentResidency(unittest.TestCase):
         self.run_replay(BODY[:BODY.index('int main(){')] + TRIM_RACE,
                         'trim reservation interleaving: PASS')
 
-    def test_d3d12_no_trim_preserves_idle_residency_and_returns_oom(self):
+    def test_d3d12_no_trim_preserves_idle_residency(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
         The D3D12 opt-in must prevent autonomous eviction even of idle internal
-        BOs, return a real budget failure, and leave other APIs/default intact.
+        BOs, allow VidMm budget arbitration, and leave other APIs/default intact.
         Executes production trim and MakeResident retry code with fake VidMm.
         """
         main = r'''int main() {
@@ -221,10 +221,10 @@ class PersistentResidency(unittest.TestCase):
               const bool disabled=api && value && !strcmp(value,"1");
               int result=make_resident(&d,&token,1,&fence);
               if(disabled) {
-                assert(result==0 && made==1 && evicted==0);
+                assert(result==2 && made==2 && evicted==0);
                 assert(idle.Resident && !idle.Transition);
-                assert(!d.ScreenBuffers[1].Resident && !d.ScreenBuffers[1].SubmissionHolds);
-                assert(!d.ScreenBuffers[1].CopyHeld);
+                assert(d.ScreenBuffers[1].Resident && d.ScreenBuffers[1].SubmissionHolds);
+                assert(evict(&d,&token,1));
               } else {
                 assert(result==2 && made==2 && evicted==1);
                 assert(!idle.Resident);
