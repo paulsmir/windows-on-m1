@@ -63981,3 +63981,13 @@ EXP1954 ACTUAL (Claude headline 2026-10-25T21:50:20Z): package 30.0.1954.0 (41d1
 - EXP1953 (baseline): 2k 14 in 173 s = 4.8/min; 10k 16 in 156 s = 6.1/min.
 - EXP1954: 2k 13 in 127 s = 6.1/min; 10k 13 in 146 s = 5.4/min.
 No significant change; rc16 is neutral. Frame intervals are bimodal (about 1 s, or 15-25 s), consistent with working-set paging thrash on most frames. Next: Codex rc17 (residency thrash / trim hysteresis).
+
+EXP1955 HARDWARE BEFORE 2026-10-25T21:58:03Z:
+- Package 30.0.1955.0 = EXP1954 code (HEAD 6c27b19d; no driver change after 41d1653e). Only switch: Wom1GpuFaultInfoRead=1, so the default full segment is about 2688 MiB.
+- WHY THIS HYPOTHESIS: at 2016 MiB (EXP1953/1954) scene frames come every 15-25 s with bimodal intervals, i.e. working-set paging thrash. If the per-frame working set is between 2016 and 2688 MiB, the full segment removes the thrash. EXP1940 (full size) failed at load with 17 T8 floor refusals, but that was before the rc6-rc16 residency and error fixes. This run shows whether the floor still refuses.
+- Expected: no load-time floor refusals, much shorter frame intervals (presents/min >> 6), no device removal, DWM alive.
+- Failure: floor refusals / heap OOM at load (T8 calibration is needed); the same thrash (the working set exceeds 2688 MiB, or the trim policy is at fault, see rc17).
+- Recovery: rec1955h.
+- Hashes: sys 669e3b86ff7b, UmdArm64 c7e16b512e96, UmdX64 88a30a34f3ea, Umd32 e9deb38c2c98; manifest caf318f29ec7, hardware-manifest 0e864e0871b3; probe1955.sh 3489850b0891 (PROBE_LINT_OK); visible recovery rec1955h e1bf3218e14eb745; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1955h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1955-full-pool/run1955.sh.
