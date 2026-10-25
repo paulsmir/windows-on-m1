@@ -63896,3 +63896,14 @@ EXP1949 HARDWARE BEFORE 2026-10-25T18:48:00Z:
 - Recovery rec1949h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1949-dxg-etw/run1949.sh.
 
 EXP1949 ACTUAL (Claude headline 2026-10-25T18:55:27Z): package 30.0.1949.0 (26612114, same driver code as EXP1948), same switches. 2k: device removed at 1:30; 10k: device removed at 1:50; guest alive. The symptom is the same as EXP1947/1948. The DxgKrnl ETW capture did NOT record: no gm1949*-dxg.etl/.csv in the runs folder. The logman session was probably refused in the scheduled GravityMark task, which lacks elevation. The receipt run is INCONCLUSIVE for the removal reason. rc9 (Codex) refuted the "G4 submit refusal for scattered DWM backing" trigger by timing: in EXP1948 the refusing PID opened its adapter 19.1 s after GravityMark DEVICEREMOVED. Its proposed internal-command staging patch (protected C75c behaviour) was not applied.
+
+EXP1950 HARDWARE BEFORE 2026-10-25T19:21:59Z:
+- Package 30.0.1950.0 = EXP1949 code + rc10: (1) env APPLE_AGX_UMD_CANT_TRIM_FURTHER=0 disables the rc7 final CantTrimFurther MakeResident retry (EXP1946 behaviour); (2) the KMD records the first failure and per-DDI failure counters for 67 NTSTATUS DDI callbacks and per-operation BuildPagingBuffer statuses before normalization (decoder tools/decode_ddi_status.py).
+- Switches Wom1GpuFaultInfoRead=1 and Wom1PoolHalfSize=1. Probe slot "10K" = 2k with CANT_TRIM_FURTHER=0; slot "2K" = 2k with =1. Trim on, guard on, Timeout 240. DxgKrnl ETW is started from an elevated SSH session after boot.
+- WHY THIS HYPOTHESIS: adapter-wide device removal (GravityMark 0x88760870 at MakeResident, DWM 0x8898008d, no TDR) first appeared in EXP1947, together with the CantTrimFurther retry. EXP1946 without the retry failed cleanly with E_OUTOFMEMORY and DWM survived. The WDK reserves device error for MustSucceed, so the hypothesis is unproven; the KMD status receipts show whether one of our DDIs failed first.
+- ATOMIC CONTRACT: one env variable between the arms; the receipts are passive.
+- Expected: arm a = a clean E_OUTOFMEMORY at the first frame with DWM alive and no DDI failure; arm b = DEVICEREMOVED + DWM crash. If arm a also removes devices, CantTrimFurther is not the cause, and the KMD first-failure receipt or the ETW names the source.
+- Recovery: rec1950h visible recovery.
+- Hashes: sys 9674293af07b, UmdArm64 af942888361f, UmdX64 6ba0cefc2e7e, Umd32 40e14ebbbe3b; manifest 3d5a2283c67b, hardware-manifest 0d4ab853d169; probe1950.sh 07b0656996d9 (PROBE_LINT_OK); visible recovery rec1950h 0693734c39131bb2; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolHalfSize=1.
+- Recovery rec1950h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1950-ctf-discriminator/run1950.sh.
