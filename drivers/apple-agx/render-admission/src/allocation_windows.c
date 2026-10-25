@@ -555,6 +555,23 @@ static NTSTATUS AdmissionCreateAllocationImpl(
 #endif
     info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* RC13: allow VidMm to spill GPU-only General BOs into its existing
+   * system-memory aperture when segment 3 has no placement. Preserve the
+   * pool reservation: VidMm may still page this allocation into any local
+   * slot. This is an opt-in placement experiment, not a contiguous-page
+   * guarantee. The existing 4K/64K decoder only publishes complete aligned
+   * 16K physical groups; scattered groups remain unmapped and fail the
+   * native-coverage gate before submission. CPU-visible BOs are unchanged. */
+  if (context->SysmemSpill && classId == AgxWin32BufferClassGeneral &&
+      description->CpuVisible == 0u &&
+      (flags & AppleAgxWin32BufferGpuOnly) != 0u &&
+      allocation->PoolReserved != 0u) {
+    info->PreferredSegment.SegmentId1 = ADMISSION_MEMORY_APERTURE_SEGMENT;
+    info->SupportedReadSegmentSet |= ADMISSION_APERTURE_SEGMENT_SET;
+    info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
+  }
+#endif
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;

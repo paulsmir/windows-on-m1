@@ -19,8 +19,11 @@ class PoolResidencyLimit(unittest.TestCase):
         machine into a different segment capacity; every opened key is closed.
         This executes the real Windows reader with registry API substitutes.
         """
+        self.check_registry_reader('AdmissionPoolHalfSizeEnabled', 'Wom1PoolHalfSize')
+
+    def check_registry_reader(self, reader_name, value_name):
         source = (RENDER / 'src/pool_windows.c').read_text()
-        reader = function(source, 'AdmissionPoolHalfSizeEnabled')
+        reader = function(source, reader_name)
         body = r'''
 #include <assert.h>
 #include <stddef.h>
@@ -83,6 +86,7 @@ int main(void) {
     return 0;
 }
 '''
+        body = body.replace('AdmissionPoolHalfSizeEnabled', reader_name).replace('Wom1PoolHalfSize', value_name)
         with tempfile.TemporaryDirectory() as tmp:
             src, exe = Path(tmp) / 'registry.c', Path(tmp) / 'registry'
             src.write_text(body)

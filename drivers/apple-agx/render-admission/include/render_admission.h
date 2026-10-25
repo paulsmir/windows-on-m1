@@ -609,6 +609,8 @@ typedef struct _ADMISSION_CONTEXT {
   /* M2-f3: segment 3 backed on demand (pool_windows.c); NULL for the fixed
    * pool or no pool. */
   PVOID PoolDemand;
+  /* RC13: boot-only opt-in; GPU-only General may spill to system backing. */
+  BOOLEAN SysmemSpill;
   /* Sequence number of the last encoded paging record. */
   volatile LONG64 PagingRecordSeq;
   PVOID PlatformRuntime;

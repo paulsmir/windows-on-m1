@@ -32,6 +32,7 @@ SHIM = r"""
 #define ADMISSION_GPUVA_G1B_ALLOCATION_HINT 0
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define AppleAgxWin32BufferGpuOnly 0x20u
+#define AgxWin32BufferClassGeneral 1u
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
 #define ADMISSION_LOCAL_SEGMENT_SET 2u
 #define ADMISSION_CPU_VISIBLE_SEGMENT_SET 3u
@@ -73,7 +74,7 @@ static void AdmissionPresentResourceRefreshRate(const ADMISSION_PRESENT_RESOURCE
                                                 unsigned *numerator, unsigned *denominator) {
   (void)data; *numerator = 0; *denominator = 1;
 }
-typedef struct { int Memory; void *PhysicalDeviceObject; } ADMISSION_CONTEXT;
+typedef struct { int Memory; void *PhysicalDeviceObject; int SysmemSpill; } ADMISSION_CONTEXT;
 /* Scanout capability is an OS/backend boundary, unrelated to BO placement.
  * This fixture exposes only the original BGRA scanout format. */
 typedef unsigned D3DDDIFORMAT;
@@ -221,7 +222,7 @@ static int AdmissionAllocationDestroy(ALLOCATION_OBJECT *object) {
 
 MAIN = r"""
 int main(void) {
-  ADMISSION_CONTEXT context = {1, NULL};
+  ADMISSION_CONTEXT context = {1, NULL, 0};
   INPUT native = {1, 1, 0x10000};
   DXGK_ALLOCATIONINFO info = {0};
   DXGKARG_CREATEALLOCATION args = {0};

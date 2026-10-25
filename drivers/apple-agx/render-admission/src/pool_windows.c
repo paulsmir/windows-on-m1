@@ -732,6 +732,32 @@ static BOOLEAN AdmissionPoolHalfSizeEnabled(ADMISSION_CONTEXT *Context) {
   return enabled;
 }
 
+/* RC13: freeze the experimental placement policy before allocation creation. */
+static BOOLEAN AdmissionSysmemSpillEnabled(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1SysmemSpill");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
 /* An empty segment over the window, sized for this machine (M2-f4a), with
  * an optional smaller residency bound. FALSE leaves no state behind. */
 static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
@@ -841,6 +867,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolStart(ADMISSION_CONTEXT *Context)
       KeGetCurrentIrql() != PASSIVE_LEVEL ||
       !AdmissionMemoryReady(&Context->Memory))
     return;
+  Context->SysmemSpill = AdmissionSysmemSpillEnabled(Context);
   RtlZeroMemory(&receipt, sizeof(receipt));
   receipt.Version = ADMISSION_POOL_PROBE_VERSION;
   receipt.Bytes = sizeof(receipt);
