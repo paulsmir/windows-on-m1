@@ -63953,3 +63953,14 @@ EXP1953 HARDWARE BEFORE 2026-10-25T20:59:11Z:
 - Hashes: sys 6cd392afed5b, UmdArm64 f214f43294b6, UmdX64 cd95fcf856c2, Umd32 ac54886b2712; manifest 082f2b4dde33, hardware-manifest e961d4d976b0; probe1953.sh 1f5e49d943d7 (PROBE_LINT_OK); visible recovery rec1953h 246efa6fdb901080; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
 - Recovery rec1953h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1953-pool-fraction/run1953.sh.
+
+EXP1953 ACTUAL (Claude headline 2026-10-25T21:12:38Z): package 30.0.1953.0 (2a86a479 = EXP1952 + rc15). Switches: Wom1GpuFaultInfoRead=1, Wom1PoolFraction=3 (2016 MiB native segment); no HalfSize, no SysmemSpill. First launch attempt: prepare failed at the stage1953 disk policy gate (guest C: 3.87 GB free, caused by ETW CSV/ETL files); the files were fetched, then deleted, and the relaunch freed 6.49 GB.
+**MILESTONE: GravityMark D3D12 runs stably to the harness limit for the first time.**
+- 2k: Ready, then rendering until the 240 s harness close; "Clearing Scene" / "GravityMark 1.89 Done" at 4:06; 54 presents, 62 executes, no device removal, no GPU fault, no TDR.
+- 10k: same, Done at 4:00; 53 presents, 66 executes.
+- DWM alive the whole time: no 0x8898008d, started at boot 21:59.
+- The guest stays alive in both arms.
+- No times/image file: the run was ended by the harness timeout, not by benchmark completion.
+- Performance is about 0.25 fps.
+- The only non-OK UMD lines are one val1 measure-ref-violation/reject-ref-validation per arm, in record mode.
+- Verdict: rc15 SUPPORTED. The 2016 MiB native pool removes the unrecoverable page-in boundary for this workload. Next: performance (rc16).
