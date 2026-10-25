@@ -63942,3 +63942,14 @@ EXP1952 HARDWARE BEFORE 2026-10-25T20:16:40Z:
 - Recovery rec1952h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1952-sysmem-spill/run1952.sh.
 
 EXP1952 ACTUAL (Claude headline 2026-10-25T20:27:13Z): package 30.0.1952.0 (64e422c8 = EXP1951 + rc13 sysmem spill), switches Wom1GpuFaultInfoRead, Wom1PoolHalfSize, Wom1SysmemSpill. 2k: device removed at 35.6 s during load (Creating Asteroids). 10k: device removed at 15.7 s. Guest alive. The first failure is reject-native-allocation 0x80004005 for a spilled 64 MiB allocation (KMT 0x40003040, VA 0x115eac0000, reason 5 = incomplete native range tail), then reject-batch, first-fault, execute 0x887a0006. The spill moves allocations into the aperture, but they are not native-mappable (16 KiB UAT leaves): it is worse than EXP1951, because the failure now happens at load. rc14 (analysis only, 5836ce5b): WDK gives no per-allocation contiguous 64 KiB guarantee; a correct shadow/bounce is a large design. Next: rc15, a larger native pool without HalfSize with a calibrated RAM floor (the quick path); the shadow design is deferred.
+
+EXP1953 HARDWARE BEFORE 2026-10-25T20:59:11Z:
+- Package 30.0.1953.0 = EXP1952 + rc15: device switch Wom1PoolFraction=3 selects a 2016 MiB native segment with a matching physical-backing cap. The T8 HighMemory&&!LowMemory gate is unchanged.
+- Switches Wom1GpuFaultInfoRead=1 and Wom1PoolFraction=3, WITHOUT Wom1PoolHalfSize and WITHOUT Wom1SysmemSpill. Probe slot "10K" = 2k, slot "2K" = 10k. Trim on, guard on, Timeout 240. DxgKrnl ETW by GUID over SSH.
+- WHY THIS HYPOTHESIS: EXP1951 (HalfSize, 1344 MiB) ran the segment 100% full; VidMm needed 67 MB with 38.7 MB left -> "Unrecoverable page in failure" -> device removal. 672 MiB more native capacity should fit the GravityMark 2k working set. The full size (2688 MiB) hit floor refusals at load in EXP1940.
+- Expected: no load-time floor refusals, no "Unrecoverable page in failure", no DxgkMarkDeviceAsError, DWM alive, GravityMark 2k renders frames (times file).
+- Failure: floor refusals at load (the T8 gate is too strict at 2016 MiB); the same page-in failure (the working set exceeds 2016 MiB); a new class.
+- Recovery: rec1953h.
+- Hashes: sys 6cd392afed5b, UmdArm64 f214f43294b6, UmdX64 cd95fcf856c2, Umd32 ac54886b2712; manifest 082f2b4dde33, hardware-manifest e961d4d976b0; probe1953.sh 1f5e49d943d7 (PROBE_LINT_OK); visible recovery rec1953h 246efa6fdb901080; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
+- Recovery rec1953h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1953-pool-fraction/run1953.sh.
