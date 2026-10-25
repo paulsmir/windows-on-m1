@@ -1040,7 +1040,11 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
     source_va = args->TransferVirtual.SourceVirtualAddress;
     destination_va = args->TransferVirtual.DestinationVirtualAddress;
     total = args->TransferVirtual.TransferSizeInBytes;
-    if (args->TransferVirtual.Flags.Flags != 0u ||
+    /* WDK DXGK_TRANSFERVIRTUALFLAGS defines Src64KBPages/Dst64KBPages.
+     * Logical PTE resolution already normalizes either page size to 4-KiB
+     * slices; the CPU transfer must preserve its exact byte range. Only
+     * reserved bits are invalid, not the page-size hints on eviction/page-in. */
+    if (args->TransferVirtual.Flags.Reserved != 0u ||
         args->TransferVirtual.TransferDirection >
             DXGK_MEMORY_TRANSFER_LOCAL_TO_LOCAL)
       return STATUS_INVALID_PARAMETER;
