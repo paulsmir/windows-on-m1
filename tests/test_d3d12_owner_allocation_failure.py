@@ -31,6 +31,9 @@ using HRESULT=int; using UINT=unsigned;
 #define E_OUTOFMEMORY (-2)
 #define E_INVALIDARG (-3)
 #define DXGI_ERROR_DEVICE_HUNG (-4)
+
+// GPUVA cause propagation is exercised by test_d3d12_pressure_error.
+template<class T> static HRESULT owner_failure(T *, HRESULT fallback) { return fallback; }
 #define FAILED(h) ((h)<0)
 #define SUCCEEDED(h) ((h)>=0)
 #define AGX_D3D12_SAMPLER_SLOTS 4

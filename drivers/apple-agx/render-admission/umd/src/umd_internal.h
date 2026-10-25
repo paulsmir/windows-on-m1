@@ -239,6 +239,8 @@ typedef struct _ADMISSION_UMD_DEVICE {
 #endif
   APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;
+  /* Current GPUVA operation failure, separate from screen allocation scratch. */
+  HRESULT GpuvaFailure;
   ADMISSION_UMD_RETIREMENT_QUEUE Retirement;
   HRESULT LastRetirementError;
   ULONG RetirementErrorCount;

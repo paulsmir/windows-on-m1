@@ -96,6 +96,9 @@ int main() {
 #include <vector>
 using HRESULT=int; using UINT=unsigned; using HANDLE=void*; using LONGLONG=long long;
 constexpr HRESULT S_OK=0,S_FALSE=1,E_FAIL=-1,E_INVALIDARG=-2,DXGI_ERROR_DEVICE_HUNG=-3;
+
+// GPUVA cause propagation is exercised by test_d3d12_pressure_error.
+template<class T> static HRESULT owner_failure(T *, HRESULT fallback) { return fallback; }
 struct pipe_framebuffer_state {};
 struct pipe_context {
  void (*set_framebuffer_state)(pipe_context*,pipe_framebuffer_state*);

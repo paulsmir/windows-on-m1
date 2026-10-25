@@ -9,6 +9,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "umd_internal.h"
 #include "umd_residency_trim.h"
 #include "apple_agx_g3_copy_abi.h"
+#include "apple_agx_g3_copy_query_receipt.h"
 #include "apple_agx_g4_submit.h"
 #include "render_job_timing.h"
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -631,7 +632,7 @@ static D3DKMT_HANDLE *translate_handles(ADMISSION_UMD_DEVICE *device,
     return NULL;
   D3DKMT_HANDLE *handles = (D3DKMT_HANDLE *)HeapAlloc(
       GetProcessHeap(), 0, (SIZE_T)count * sizeof(*handles));
-  if (!handles) return NULL;
+  if (!handles) { device->GpuvaFailure = E_OUTOFMEMORY; return NULL; }
   for (unsigned i = 0; i < count; ++i) {
     handles[i] = allocation_handle(device, tokens[i]);
     if (!handles[i]) {
@@ -675,11 +676,13 @@ static int make_resident(void *context, const uint64_t *tokens,
   if (!device || !fence || !device->PagingQueue ||
       !device->KernelCallbacks ||
       !device->KernelCallbacks->pfnMakeResidentCb) return 0;
+  if (!device->DrawTerminal) device->GpuvaFailure = S_OK;
   D3DKMT_HANDLE *handles = translate_handles(device, tokens, count);
   if (!handles) return 0;
   UINT *priorities = (UINT *)HeapAlloc(GetProcessHeap(), 0,
                                       (SIZE_T)count * sizeof(*priorities));
   if (!priorities) {
+    device->GpuvaFailure = E_OUTOFMEMORY;
     HeapFree(GetProcessHeap(), 0, handles);
     return 0;
   }
@@ -756,6 +759,7 @@ static int make_resident(void *context, const uint64_t *tokens,
   HeapFree(GetProcessHeap(), 0, priorities);
   HeapFree(GetProcessHeap(), 0, handles);
   if ((FAILED(hr) && hr != E_PENDING) || request.NumAllocations != pending) {
+    device->GpuvaFailure = FAILED(hr) && hr != E_PENDING ? hr : E_FAIL;
     if(accepted) {
       /* Some references were accepted but their paging completion is not
        * established. Tell the winsys to retain the whole set; otherwise a
@@ -884,6 +888,7 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
     }
   }
 #endif
+  device->GpuvaFailure = FAILED(status) ? status : S_OK;
   return SUCCEEDED(status);
 }
 
@@ -1004,6 +1009,7 @@ static int map_canonical_as(ADMISSION_UMD_DEVICE *device,
       (hr!=E_PENDING || (request.PagingFenceValue &&
                          wait_paging_at(device,request.PagingFenceValue,3u,slot->Token)));
   UINT values[3]={(UINT)slot->CanonicalGpuVa,(UINT)(slot->CanonicalGpuVa>>32),(UINT)ok};
+  if (!ok) device->GpuvaFailure = FAILED(hr) && hr != E_PENDING ? hr : E_FAIL;
   AdmissionUmdDiagnostic("measure-remap",hr,values,ARRAYSIZE(values));
   return ok;
 }
@@ -1058,6 +1064,7 @@ static int replace_canonical(ADMISSION_UMD_DEVICE *device,
   D3DKMT_HANDLE fresh=0, old=slot->KernelAllocation;
   if(slot->Direct || slot->SystemDirect || slot->Borrowed || !old || !slot->CanonicalGpuVa ||
      !device->KernelCallbacks->pfnMakeResidentCb) return 0;
+  device->GpuvaFailure = S_OK;
   HRESULT hr=AdmissionUmdScreenNewCanonical(device,slot->ClassId,slot->Flags,
                                             slot->Bytes,&fresh);
   int ok=SUCCEEDED(hr) && fresh;
@@ -1086,6 +1093,8 @@ static int replace_canonical(ADMISSION_UMD_DEVICE *device,
     (void)AdmissionUmdScreenFreeAllocation(device,fresh);
   }
   UINT values[3]={(UINT)old,(UINT)fresh,(UINT)ok};
+  if (!ok && !FAILED(device->GpuvaFailure))
+    device->GpuvaFailure = FAILED(hr) && hr != E_PENDING ? hr : E_FAIL;
   AdmissionUmdDiagnostic("measure-replace-canonical",hr,values,ARRAYSIZE(values));
   return ok;
 }
@@ -1095,6 +1104,11 @@ static int query_canonical(ADMISSION_UMD_DEVICE *device,
                            APPLE_AGX_G3_COPY_REQUEST *payload) {
   int ok=copy_escape(device,payload) && payload->ProcessGeneration &&
       payload->MappingGeneration;
+  const HRESULT cause = device->GpuvaFailure;
+  if (!ok && (device->DrawTerminal || cause == D3DDDIERR_DEVICEREMOVED ||
+      cause == DXGI_ERROR_DEVICE_REMOVED || cause == DXGI_ERROR_DEVICE_HUNG ||
+      cause == DXGI_ERROR_DEVICE_RESET || cause == DXGI_ERROR_DRIVER_INTERNAL_ERROR))
+    return 0;
   if(!ok && replace_canonical(device,slot)) {
     payload->Allocation=slot->KernelAllocation;
     payload->Operation=APPLE_AGX_G3_COPY_QUERY;payload->Offset=0;
@@ -1549,13 +1563,24 @@ static int restore_residency(ADMISSION_UMD_DEVICE *device, uint64_t token) {
   D3DKMT_HANDLE handle=slot && !slot->Resident ? slot->KernelAllocation : 0;
   ReleaseSRWLockShared(&device->ScreenBufferLock);
   if(terminal) return 0;
+  device->GpuvaFailure = S_OK;
   if(!handle) return 1;
   if(!device->KernelCallbacks->pfnMakeResidentCb) return 0;
   UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   D3DDDI_MAKERESIDENT request={};
   HRESULT hr=residency_request(device,&request,&handle,1u,&priority);
   va_record(device,6u,token,handle,0,request.PagingFenceValue,hr);
-  if((FAILED(hr) && hr!=E_PENDING) || request.NumAllocations!=1u) return 0;
+  if((FAILED(hr) && hr!=E_PENDING) || request.NumAllocations!=1u) {
+    device->GpuvaFailure = FAILED(hr) && hr!=E_PENDING ? hr : E_FAIL;
+    /* A hard refusal without accepted paging work is retryable. A malformed
+     * success or a returned fence remains uncertain and must retain ownership. */
+    if(SUCCEEDED(hr) || hr==E_PENDING || request.PagingFenceValue) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      device->DrawTerminal=TRUE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    }
+    return 0;
+  }
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   slot=find_slot(device,token);
   if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
@@ -1586,14 +1611,9 @@ int AdmissionUmdGpuvaRestoreCpuMapResidency(ADMISSION_UMD_DEVICE *device,
       !device->DrawTerminal && !device->ScreenClosing;
   ReleaseSRWLockShared(&device->ScreenBufferLock);
   if(!valid) return 0;
-  if(restore_residency(device,token)) return 1;
-  /* An accepted reference may have an unfinished paging fence. Never let a
-   * later map observe Resident and skip that failed wait. Teardown retains
-   * the reference for its ordinary Evict/deallocation path. */
-  AcquireSRWLockExclusive(&device->ScreenBufferLock);
-  device->DrawTerminal=TRUE;
-  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
-  return 0;
+  /* restore_residency owns accepted-work uncertainty. A clean budget
+   * refusal has no paging reference to retain and must not poison the device. */
+  return restore_residency(device,token);
 }
 
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,uint64_t token) {
@@ -1735,6 +1755,7 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
   if (!device->Adapter || device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
       !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
       !device->KernelCallbacks->pfnEscapeCb) return 0;
+  device->GpuvaFailure = S_OK;
   bool scheduled = false;
   for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);) {
     APPLE_AGX_G3_NATIVE_QUERY q = {};
@@ -1780,7 +1801,12 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
       UINT values[9] = {q.Allocation, (UINT)q.GpuVa, (UINT)(q.GpuVa >> 32),
           (UINT)q.AllocationBytes, (UINT)(q.AllocationBytes >> 32), q.Write,
           q.Reason, (UINT)q.FailedVa, (UINT)(q.FailedVa >> 32)};
-      AdmissionUmdDiagnostic("reject-native-allocation", FAILED(hr) ? hr : E_FAIL,
+      /* Missing native backing is not a GPU hang. Identity/translation
+       * mismatches and failed runtime callbacks are not reclassified as OOM. */
+      device->GpuvaFailure = FAILED(hr) ? hr :
+          (q.Reason == AppleAgxG3WalkLeafAbsent ||
+           q.Reason == AppleAgxG3WalkLeafNotPublished) ? E_OUTOFMEMORY : E_FAIL;
+      AdmissionUmdDiagnostic("reject-native-allocation", device->GpuvaFailure,
           values, ARRAYSIZE(values));
       return 0;
     }
@@ -1904,6 +1930,7 @@ static int submit(void *context, const uint64_t *written,
   device->FrameSubmitStatus = submit_result;
 #endif
   if (FAILED(submit_result)) {
+    device->GpuvaFailure = submit_result;
     AdmissionUmdScreenCpuAccessSnapshot(device, submit_result, 2u);
     return 0;
   }

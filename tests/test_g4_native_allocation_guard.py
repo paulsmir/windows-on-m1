@@ -89,6 +89,7 @@ KMD_FIXTURE = r'''
 #include <stdint.h>
 #include <string.h>
 #include "apple_agx_g3_copy_abi.h"
+#include "apple_agx_g3_copy_query_receipt.h"
 #include "apple_agx_gpuva_g3_graph.h"
 #include "apple_agx_gpuva_g3_translation.h"
 typedef unsigned UINT, ULONG; typedef unsigned long long ULONGLONG;
@@ -204,13 +205,16 @@ UMD_FIXTURE = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include "apple_agx_g3_copy_abi.h"
+#include "apple_agx_g3_copy_query_receipt.h"
 using UINT=unsigned;using ULONGLONG=unsigned long long;using HRESULT=int;
 using D3DKMT_HANDLE=unsigned;
 #define TRUE 1
 #define FALSE 0
 #define S_OK 0
 #define E_FAIL -1
+#define E_OUTOFMEMORY -2
 #define FAILED(x) ((x)<0)
 #define SUCCEEDED(x) ((x)>=0)
 #define ARRAYSIZE(x) (sizeof(x)/sizeof((x)[0]))
@@ -228,9 +232,9 @@ struct CALLBACKS {HRESULT (*pfnSubmitCommandCb)(UINT,D3DDDICB_SUBMITCOMMAND*);
 struct ADAPTER {UINT Magic;struct {UINT handle;} RuntimeAdapter;};
 struct ADMISSION_UMD_DEVICE {UINT KernelContext,RenderSyncObject;CALLBACKS *KernelCallbacks;
  uint64_t NextRenderFence;struct {UINT handle;} RuntimeDevice;int ScreenBufferLock;
- ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[4];UINT RenderCbSequence;bool DrawTerminal;ADAPTER *Adapter;};
+ ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[4];UINT RenderCbSequence;bool DrawTerminal;HRESULT GpuvaFailure;ADAPTER *Adapter;};
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) 4u
-static int locks,submits,signals,queries,uploads;static unsigned bad=2;static bool escape_fail,upload_fail;
+static int locks,submits,signals,queries,uploads;static unsigned bad=2;static unsigned reason=AppleAgxG3WalkLeafAbsent;static bool escape_fail,upload_fail;
 static void AcquireSRWLockShared(int*) {assert(!locks);++locks;}
 static void ReleaseSRWLockShared(int*) {assert(locks==1);--locks;}
 static void AcquireSRWLockExclusive(int *p) {AcquireSRWLockShared(p);}
@@ -258,7 +262,7 @@ static HRESULT escape_cb(UINT,D3DDDICB_ESCAPE *e) {
  auto *q=(APPLE_AGX_G3_NATIVE_QUERY*)e->pPrivateDriverData;
  assert(e->PrivateDriverDataSize==sizeof(*q) && q->Magic==APPLE_AGX_G3_NATIVE_QUERY_MAGIC);
  assert(q->Allocation!=1 && q->Allocation!=4 && q->AllocationBytes==65536);
- q->Ready=q->Allocation!=bad;q->FailedVa=q->Ready?0:q->GpuVa+32768;
+ q->Ready=q->Allocation!=bad;q->Reason=q->Ready?0:reason;q->FailedVa=q->Ready?0:q->GpuVa+32768;
 #endif
  return escape_fail ? E_FAIL : S_OK;
 }
@@ -274,14 +278,23 @@ int main() {
  /* Real old submit reaches cb even though referenced allocation 2 is bad. */
  assert(submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence)==0);
  assert(!submits && !signals && !fence && !locks && queries==2);
+ assert(d.GpuvaFailure==E_OUTOFMEMORY && !d.DrawTerminal);
+ // Identity and translation mismatches must not be disguised as pressure.
+ for(unsigned why: {APPLE_AGX_G3_NATIVE_QUERY_IDENTITY,APPLE_AGX_G3_NATIVE_QUERY_TRANSLATION}) {
+  reason=why;assert(!native_held_ready(&d,0x10000));assert(d.GpuvaFailure==E_FAIL);
+ }
+ reason=AppleAgxG3WalkLeafNotPublished;
+ assert(!native_held_ready(&d,0x10000));assert(d.GpuvaFailure==E_OUTOFMEMORY);
+ reason=AppleAgxG3WalkLeafAbsent;
  /* Unreferenced allocation 4 is bad; command 1 has no native leaf either. */
  bad=4;queries=0;hold(d);assert(submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence)==1);
  assert(submits==1 && signals==1 && queries==2 && fence==1);
+ assert(d.GpuvaFailure==S_OK);
  /* Revalidate every submission; no stale Ready cache after residency moves. */
  bad=3;queries=0;hold(d);fence=0;assert(!submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence));
  assert(submits==1 && queries==4 && !fence);
  bad=0;escape_fail=true;hold(d);assert(!submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence));
- assert(submits==1);escape_fail=false;upload_fail=true;queries=0;hold(d);
+ assert(submits==1 && d.GpuvaFailure==E_FAIL);escape_fail=false;upload_fail=true;queries=0;hold(d);
  assert(!submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence) && !queries && submits==1);
 }
 '''

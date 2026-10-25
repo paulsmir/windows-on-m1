@@ -1219,7 +1219,8 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       buffer = AdmissionUmdScreenFind(device, Token);
       if (buffer != NULL) buffer->Transition = FALSE;
       ReleaseSRWLockExclusive(&device->ScreenBufferLock);
-      device->LastScreenError = DXGI_ERROR_DEVICE_HUNG;
+      device->LastScreenError = !device->DrawTerminal && FAILED(device->GpuvaFailure)
+          ? device->GpuvaFailure : DXGI_ERROR_DEVICE_HUNG;
       return 0;
     }
 #endif

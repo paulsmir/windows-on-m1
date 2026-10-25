@@ -30,6 +30,7 @@ static void AgxD3d10WindowsPresentMeasure(unsigned kind,HRESULT status,const uns
   (void)kind;(void)status;(void)values;(void)count;
 }
 #define S_OK 0
+#define E_OUTOFMEMORY ((HRESULT)0x8007000eu)
 #define E_FAIL ((HRESULT)0x80004005u)
 #define E_INVALIDARG ((HRESULT)0x80070057u)
 #define FAILED(x) ((x)<0)
@@ -39,7 +40,7 @@ typedef struct { struct { HRESULT RenderStatus,PostStatus; } Submission; } ADMIS
 typedef struct {
   int Stage;
   AGX_WIN32_ASAHI_BACKEND Backend;
-  struct { void *NativeBatchTransaction; unsigned DrawTerminal; HRESULT LastScreenError; } Runtime;
+  struct { void *NativeBatchTransaction; unsigned DrawTerminal; HRESULT LastScreenError,GpuvaFailure; } Runtime;
 } AGX_D3D10_WINDOWS_DEVICE;
 static AGX_D3D10_WINDOWS_DEVICE device;
 #define owner device.Backend
@@ -70,6 +71,11 @@ static void FrontendFlush(Device *hDevice) {
         source = source.replace("int result=AgxWin32AsahiBatchFinish(&batch,&native,NULL);", """
   active_batch=&batch;active_render=&native;finish_result=0;
   device.Stage=AgxD3d10DeviceReady;
+  device.Runtime.DrawTerminal=1;
+  device.Runtime.GpuvaFailure=device.Runtime.LastScreenError=E_OUTOFMEMORY;
+  assert(AgxD3d10WindowsFlushStatus(&device)!=E_OUTOFMEMORY);
+  device.Runtime.DrawTerminal=0;
+  device.Runtime.GpuvaFailure=device.Runtime.LastScreenError=S_OK;
   frontend_errors=0;frontend_error=S_OK;
   struct Pipe pipe={native_flush};Device frontend={&device,&pipe};
   FrontendFlush(&frontend);

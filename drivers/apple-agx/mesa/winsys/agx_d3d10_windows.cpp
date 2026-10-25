@@ -876,6 +876,11 @@ HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device) {
     return FAILED(batch->Submission.PostStatus)?batch->Submission.PostStatus:
         batch->Submission.RenderStatus;
   if(!Device->Backend.Failed && !Device->Runtime.DrawTerminal) return S_OK;
+  if (FAILED(Device->Runtime.GpuvaFailure) &&
+      !(Device->Runtime.DrawTerminal && Device->Runtime.GpuvaFailure == E_OUTOFMEMORY))
+    return Device->Runtime.GpuvaFailure;
+  if (Device->Runtime.DrawTerminal && Device->Runtime.LastScreenError == E_OUTOFMEMORY)
+    return E_FAIL;
   return FAILED(Device->Runtime.LastScreenError)?
       Device->Runtime.LastScreenError:E_FAIL;
 }

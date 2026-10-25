@@ -177,6 +177,15 @@ static BOOL collect_presentations(AGX_D3D12_OWNER *owner) {
   return owner->PendingPresentations == NULL;
 }
 
+/* The GPUVA transport returns bool to Mesa, but retains the callback cause.
+ * Accepted work with uncertain completion is never a recoverable OOM. */
+static HRESULT owner_failure(AGX_D3D12_OWNER *owner, HRESULT fallback) {
+  const HRESULT cause = owner->Runtime.GpuvaFailure;
+  if (cause == E_OUTOFMEMORY && owner->Runtime.DrawTerminal)
+    return DXGI_ERROR_DEVICE_HUNG;
+  return FAILED(cause) ? cause : fallback;
+}
+
 extern "C" void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *owner, HRESULT error) {
   OwnerLock lock(owner);
   if (owner && (error == DXGI_ERROR_DEVICE_REMOVED || error == DXGI_ERROR_DEVICE_HUNG ||
@@ -1920,7 +1929,7 @@ extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *pre
     owner->Context->blit(owner->Context, &blit);
   }
   InterlockedIncrement(&owner_presents);
-  HRESULT hr = AgxWin32AsahiContextFlushForPresent(owner->Context) ? S_OK : E_FAIL;
+  HRESULT hr = AgxWin32AsahiContextFlushForPresent(owner->Context) ? S_OK : owner_failure(owner, E_FAIL);
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(hr) && record->RenderBuffer.Transport.Token &&
       !AdmissionUmdGpuvaPublishDirectMap(&owner->Runtime, record->RenderBuffer.Transport.Token))
@@ -3184,7 +3193,7 @@ static HRESULT bind_heap_samplers(AGX_D3D12_OWNER *owner, bool compute) {
  * the framebuffer and stage bindings, right before draw_vbo/launch_grid */
 static HRESULT bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
   struct pipe_context *pipe = owner->Context;
-  if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
+  if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
   const unsigned first = compute ? unsigned(AGX_D3D12_HEAP_CS) : 0u;
   const unsigned end = compute ? unsigned(AGX_D3D12_HEAP_STAGES) : unsigned(AGX_D3D12_HEAP_CS);
   HRESULT hr = bind_heap_samplers(owner, compute);
@@ -3205,13 +3214,13 @@ static HRESULT bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
     table.user_buffer = words;
     table.buffer_size = bytes;
     pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_TABLE_CB, &table);
-    if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
+    if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
     if (h.Heap) {
       struct pipe_constant_buffer heap = {};
       heap.buffer = static_cast<struct pipe_resource *>(h.Heap->Resource);
       heap.buffer_size = static_cast<unsigned>(h.Heap->Bytes < 65536ull ? h.Heap->Bytes : 65536ull);
       pipe->set_constant_buffer(pipe, heap_stages[s], DXBC_HEAP_MIRROR_CB, &heap);
-      if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
+      if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
     }
     struct pipe_resource *resources[64];
     for (unsigned i = 0; i < h.TextureCount;) {
@@ -3219,14 +3228,14 @@ static HRESULT bind_heaps(AGX_D3D12_OWNER *owner, bool compute) {
       for (; n < 64u && i < h.TextureCount; ++i)
         resources[n++] = static_cast<struct pipe_resource *>(h.Textures[i].Resource);
       AgxWin32AsahiBatchReadResources(pipe, resources, n, compute ? 1 : 0);
-      if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
+      if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
     }
     for (unsigned i = 0; i < h.WriteCount;) {
       unsigned n = 0;
       for (; n < 64u && i < h.WriteCount; ++i)
         resources[n++] = static_cast<struct pipe_resource *>(h.Writes[i].Resource);
       AgxWin32AsahiBatchWriteResources(pipe, resources, n, compute ? 1 : 0);
-      if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
+      if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
     }
   }
   return S_OK;
@@ -3507,7 +3516,7 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
       if (states[i]) pipe->delete_sampler_state(pipe, states[i]);
   }
   if (FAILED(hr)) return hr;
-  if (AgxWin32AsahiContextFaulted(pipe)) return DXGI_ERROR_DEVICE_HUNG;
+  if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
   ++owner->PendingDispatches;
   return S_OK;
 }
@@ -3847,7 +3856,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   const LONGLONG drawn = qpc_now();
   AgxWin32AsahiSetDrawBindings(pipe, NULL, NULL);
   if (SUCCEEDED(hr)) hr = heap_bindings.Result;
-  if (SUCCEEDED(hr) && AgxWin32AsahiContextFaulted(pipe)) hr = DXGI_ERROR_DEVICE_HUNG;
+  if (SUCCEEDED(hr) && AgxWin32AsahiContextFaulted(pipe)) hr = owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
   unbind_heaps(owner, false);
   if (so_count) {
     pipe->set_stream_output_targets(pipe, 0, NULL, NULL, mode);
@@ -3924,7 +3933,7 @@ static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
   owner->TimeDrawVboIndirect = owner->MaxDrawVbo = 0;
   owner->SlowDraws = 0;
   const HRESULT hr = retired && !faulted && !AgxWin32AsahiContextFaulted(owner->Context)
-                         ? S_OK : DXGI_ERROR_DEVICE_HUNG;
+                         ? S_OK : owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
   AgxD3d12OwnerRecordError(owner, hr);
   receipt("measure-d3d12-owner-submit", hr, copies, static_cast<UINT>(retired), static_cast<UINT>(faulted));
   return hr;

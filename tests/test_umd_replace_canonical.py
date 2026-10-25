@@ -45,6 +45,7 @@ typedef unsigned long long ULONGLONG; typedef uint64_t APPLE_AGX_U64; typedef un
 #define S_FALSE 1
 #define E_PENDING ((HRESULT)0x8000000Au)
 #define E_FAIL ((HRESULT)0x80004005u)
+#define FAILED(h) ((h)<0)
 #define SUCCEEDED(h) ((h)>=0)
 #define D3DDDI_ALLOCATIONPRIORITY_NORMAL 0x78000000u
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
@@ -64,9 +65,9 @@ struct SLOT { uint64_t Token; BOOL SystemDirect,Direct,Borrowed,Resident; UINT C
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct HANDLE_ { void *handle; };
 struct CB { HRESULT (*pfnMakeResidentCb)(void*, D3DDDI_MAKERESIDENT*); HRESULT (*pfnMapGpuVirtualAddressCb)(void*, D3DDDI_MAPGPUVIRTUALADDRESS*); };
-struct ADMISSION_UMD_DEVICE { SRWLOCK ScreenBufferLock; CB *KernelCallbacks; HANDLE_ RuntimeDevice; D3DKMT_HANDLE PagingQueue;
+struct ADMISSION_UMD_DEVICE { HRESULT GpuvaFailure; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; HANDLE_ RuntimeDevice; D3DKMT_HANDLE PagingQueue;
   ADMISSION_UMD_VA_ALIAS VaAliases[40]; UINT VaAliasCount; };
-static std::string order; static HRESULT new_hr=S_OK, make_hr=E_PENDING; static uint64_t map_va_out_delta;
+static std::string order; static HRESULT new_hr=S_OK, make_hr=E_PENDING, map_hr=E_PENDING; static uint64_t map_va_out_delta;
 static D3DKMT_HANDLE freed[4]; static int nfreed;
 static HRESULT AdmissionUmdScreenNewCanonical(ADMISSION_UMD_DEVICE*, APPLE_AGX_U32, APPLE_AGX_U32, APPLE_AGX_U64 b, D3DKMT_HANDLE *a){
   order+="N"; assert(b); if(new_hr<0) return new_hr; *a=0x99; return S_OK; }
@@ -76,7 +77,7 @@ static ULONGLONG alias_offsets; static UINT alias_maps; static HRESULT alias_hr=
 static HRESULT map(void*, D3DDDI_MAPGPUVIRTUALADDRESS *m){ order+="M"; assert(m->hAllocation==0x99);
   if(m->BaseAddress>=0x8000000){ ++alias_maps; alias_offsets+=m->OffsetInPages; m->VirtualAddress=m->BaseAddress;
     m->PagingFenceValue=10; return alias_hr; }
-  m->VirtualAddress=m->BaseAddress+map_va_out_delta; m->PagingFenceValue=10; return E_PENDING; }
+  m->VirtualAddress=m->BaseAddress+map_va_out_delta; m->PagingFenceValue=10; return map_hr; }
 static int wait_paging(ADMISSION_UMD_DEVICE*, uint64_t f){ order+="W"; return f==9 || f==10; }
 static int wait_paging_at(ADMISSION_UMD_DEVICE *d, uint64_t f, UINT, uint64_t){ return wait_paging(d,f); }
 static void va_record(const void*, UINT, ULONGLONG, D3DKMT_HANDLE, ULONGLONG, ULONGLONG, HRESULT) {}
@@ -107,10 +108,18 @@ int main(){
   s=fresh_slot(); order.clear(); nfreed=0; map_va_out_delta=0x10000;
   assert(replace_canonical(&d,&s)==0 && order=="NRWMF" && freed[0]==0x99);
   assert(s.KernelAllocation==0x40 && !s.Resident && s.Sync.Valid && s.Chunks.Valid);
+  assert(d.GpuvaFailure==E_FAIL);
   map_va_out_delta=0;
+  for(HRESULT failure : {(HRESULT)0x8007000eu,(HRESULT)0x88760870u}) {
+    s=fresh_slot();order.clear();nfreed=0;map_hr=failure;
+    assert(!replace_canonical(&d,&s) && d.GpuvaFailure==failure);
+    assert(s.KernelAllocation==0x40 && nfreed==1 && freed[0]==0x99);
+  }
+  map_hr=E_PENDING;
   /* MakeResident failure: no map, fresh freed. */
   s=fresh_slot(); order.clear(); nfreed=0; make_hr=E_FAIL;
   assert(replace_canonical(&d,&s)==0 && order=="NRF" && freed[0]==0x99 && s.KernelAllocation==0x40);
+  assert(d.GpuvaFailure==E_FAIL);
   make_hr=E_PENDING;
   /* Allocation failure: nothing to free. */
   s=fresh_slot(); order.clear(); nfreed=0; new_hr=E_FAIL;

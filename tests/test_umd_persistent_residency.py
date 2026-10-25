@@ -64,7 +64,8 @@ static unsigned GetEnvironmentVariableA(const char *name,char *out,unsigned size
 static unsigned GetLastError(){return 0;}
 static void SetLastError(unsigned){}
 static void* GetProcessHeap(){return nullptr;}
-static void* HeapAlloc(void*,unsigned,size_t n){return calloc(1,n);}
+static unsigned alloc_calls,fail_alloc;
+static void* HeapAlloc(void*,unsigned,size_t n){return ++alloc_calls==fail_alloc?nullptr:calloc(1,n);}
 static void HeapFree(void*,unsigned,void*p){free(p);}
 typedef int SRWLOCK;
 static void AcquireSRWLockExclusive(SRWLOCK*l){assert(*l==0);*l=-1;}
@@ -88,7 +89,7 @@ static HRESULT ev(HANDLE,const D3DDDICB_EVICT*e){if(before_evict)before_evict();
   last_evicted_count=e->NumAllocations;for(UINT i=0;i<e->NumAllocations;++i)last_evicted[i]=e->AllocationList[i];return evict_result;}
 static void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
 struct CB { HRESULT(*pfnMakeResidentCb)(HANDLE,D3DDDI_MAKERESIDENT*); HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); };
-struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing,BorrowedContext; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
+struct ADMISSION_UMD_DEVICE { HRESULT GpuvaFailure; UINT Magic; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing,BorrowedContext; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
 static void va_record(const void*,UINT,unsigned long long,D3DKMT_HANDLE,unsigned long long,unsigned long long,HRESULT){}
 #define ADMISSION_UMD_WATCH_WINDOWS
 #include "umd_va_watch.h"
@@ -129,9 +130,17 @@ int main(){
  refusals=100; made=0; evicted=0;
  uint64_t t5[1]={15};
  assert(make_resident(&d,t5,1,&fence)==0);
+ assert(d.GpuvaFailure==E_OUTOFMEMORY);
  assert(!d.ScreenBuffers[5].Resident && !d.ScreenBuffers[5].CopyHeld && !d.ScreenBuffers[5].SubmissionHolds);
  assert(d.ScreenBuffers[0].Resident);   /* still held in flight */
  assert(made<=ADMISSION_UMD_TRIM_ROUNDS+1u && evicted>=1);
+ for(unsigned fail=1;fail<=2;++fail) {
+  alloc_calls=0;fail_alloc=fail;
+  assert(!make_resident(&d,t5,1,&fence) && d.GpuvaFailure==E_OUTOFMEMORY);
+  assert(!d.DrawTerminal && !d.ScreenBuffers[5].CopyHeld);
+ }
+ fail_alloc=0;uint64_t invalid=999;
+ assert(!make_resident(&d,&invalid,1,&fence) && d.GpuvaFailure==S_OK);
  puts("EXP978 persistent residency: PASS");
 }
 '''

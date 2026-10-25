@@ -92,6 +92,14 @@ int main() {
        fail_wait=false;assert(!AdmissionUmdScreenMapBuffer(&d,10,0,4,1,&address));
        assert(locks==0 && made==1); /* never bypass a failed paging wait */
      }
+     if(scenario==4) {
+       // A hard budget refusal accepted no work: preserve OOM and allow retry.
+       assert(!d.DrawTerminal && !s.Resident && d.LastScreenError==E_OUTOFMEMORY);
+       refusals=0;expected_waits=1;waits=0;
+       assert(AdmissionUmdScreenMapBuffer(&d,10,0,4,1,&address));
+       assert(address==data && s.Resident && s.Mapped && !d.DrawTerminal);
+       assert(AdmissionUmdScreenUnmapBuffer(&d,10));
+     }
      if(scenario==5 || scenario==6)assert(made==0);
      if(scenario==9)assert(d.DrawTerminal && !s.Resident);
    }
