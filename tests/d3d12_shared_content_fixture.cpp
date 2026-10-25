@@ -1,3 +1,5 @@
+// Diagnostics are outside this replay; RC5 tests their production bodies.
+#define owner_watch_resource(...) ((void)0)
 /* Execute production private-data decode and copy translation. Gallium callbacks
  * model storage only: a native Direct BO map is a cached CPU shadow, while a
  * resource_copy_region addresses the shared allocation. No GPU is simulated. */

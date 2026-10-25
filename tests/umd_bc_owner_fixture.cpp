@@ -1,3 +1,5 @@
+// Diagnostics are outside this replay; RC5 tests their production bodies.
+#define owner_watch_resource(...) ((void)0)
 /* CPU oracle for actual owner replay. GPU contents are opaque to CPU maps;
  * the controlled blit callback models raw block copying, not hardware. */
 #include <cassert>

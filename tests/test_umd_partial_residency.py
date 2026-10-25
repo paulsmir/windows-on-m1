@@ -12,7 +12,7 @@ from test_umd_persistent_residency import BODY, ROOT, SRC, function
 class PartialResidency(unittest.TestCase):
     def test_partial_acceptance_is_terminal_and_retained(self):
         funcs='\n'.join(function(SRC.read_text(),n) for n in (
-            'find_slot','release_copies','allocation_handle','translate_handles',
+            'watch_slots','find_slot','release_copies','allocation_handle','translate_handles',
             'trim_residency','residency_request','make_resident'))
         code=BODY[:BODY.index('@@FUNCS@@')]+funcs+r'''
 static HRESULT partial(HANDLE,D3DDDI_MAKERESIDENT*r){assert(r->NumAllocations==2);r->NumAllocations=1;r->PagingFenceValue=7;return E_FAIL;}

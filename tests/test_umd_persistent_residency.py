@@ -61,6 +61,8 @@ static unsigned GetEnvironmentVariableA(const char *name,char *out,unsigned size
   unsigned n=(unsigned)strlen(v);if(n>=size)return n+1;
   memcpy(out,v,n+1);return n;
 }
+static unsigned GetLastError(){return 0;}
+static void SetLastError(unsigned){}
 static void* GetProcessHeap(){return nullptr;}
 static void* HeapAlloc(void*,unsigned,size_t n){return calloc(1,n);}
 static void HeapFree(void*,unsigned,void*p){free(p);}
@@ -88,6 +90,8 @@ static void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
 struct CB { HRESULT(*pfnMakeResidentCb)(HANDLE,D3DDDI_MAKERESIDENT*); HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); };
 struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing,BorrowedContext; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
 static void va_record(const void*,UINT,unsigned long long,D3DKMT_HANDLE,unsigned long long,unsigned long long,HRESULT){}
+#define ADMISSION_UMD_WATCH_WINDOWS
+#include "umd_va_watch.h"
 @@FUNCS@@
 int main(){
  CB cb={mk,ev}; ADMISSION_UMD_DEVICE d={}; d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.PagingQueue=(HANDLE)1; d.KernelCallbacks=&cb;
@@ -240,11 +244,11 @@ class PersistentResidency(unittest.TestCase):
     def run_replay(self, template, success):
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in
-                          ('find_slot', 'release_copies', 'allocation_handle',
+                          ('watch_slots', 'find_slot', 'release_copies', 'allocation_handle',
                            'translate_handles', 'evict', 'trim_residency',
                            'residency_request', 'make_resident'))
         funcs = funcs.replace('auto *slot', 'SLOT *slot')
-        body = template.replace('@@FUNCS@@', funcs)
+        body = template.replace('@@FUNCS@@', '#define ADMISSION_UMD_WATCH_WINDOWS\n#include "umd_va_watch.h"\n' + funcs)
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'replay.cpp'; exe = Path(tmp) / 'replay'
             src.write_text(body)

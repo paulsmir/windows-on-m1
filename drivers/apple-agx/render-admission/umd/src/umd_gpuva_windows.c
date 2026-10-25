@@ -122,6 +122,38 @@ ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *device,
 #endif
 
 
+#define ADMISSION_UMD_WATCH_WINDOWS
+#include "umd_va_watch.h"
+
+/* Caller holds ScreenBufferLock. phase: 1 selection, 2 MakeResident result,
+ * 3 submit snapshot, 5 Evict result. Empty match is explicit.
+ * All pairs are low DWORD first. The token and allocation handle join BO
+ * identity to the existing KMD VA/process mapping history. */
+static void watch_slots(ADMISSION_UMD_DEVICE *device, UINT phase,
+    const uint64_t *tokens, unsigned count, const D3DKMT_HANDLE *requested,
+    unsigned pending, ULONGLONG fence, HRESULT hr) {
+  const ULONGLONG watch=AdmissionUmdWatchVa();
+  if(!watch) return;
+  UINT matches=0;
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++i) {
+    const auto *slot=&device->ScreenBuffers[i];
+    if(!slot->Active || !AdmissionUmdWatchContains(watch,slot->CanonicalGpuVa,slot->Bytes)) continue;
+    UINT member=phase==3u && slot->CopyHeld ? 1u : 0u,called=0;
+    for(unsigned j=0;j<count;++j) if(tokens[j]==slot->Token) member=1;
+    for(unsigned j=0;j<pending;++j) if(requested[j]==slot->KernelAllocation) called=1;
+    UINT v[]={phase,(UINT)slot->Token,(UINT)(slot->Token>>32),slot->KernelAllocation,
+        (UINT)slot->CanonicalGpuVa,(UINT)(slot->CanonicalGpuVa>>32),
+        (UINT)slot->Bytes,(UINT)(slot->Bytes>>32),member,called,
+        (UINT)slot->Resident,(UINT)slot->SubmissionHolds,(UINT)fence,(UINT)(fence>>32),
+        (UINT)slot->LastUseFence,(UINT)(slot->LastUseFence>>32)};
+    AdmissionUmdDiagnostic("measure-watch-slot",hr,v,ARRAYSIZE(v));
+    ++matches;
+  }
+  UINT summary[]={phase,(UINT)watch,(UINT)(watch>>32),matches,count,pending,
+      (UINT)fence,(UINT)(fence>>32)};
+  AdmissionUmdDiagnostic("measure-watch-set",hr,summary,ARRAYSIZE(summary));
+}
+
 /* EXP981 receipt-only: process-wide ring of GPU VA lifecycle operations
  * (all devices of this process share one GPU VA space). A failed copy slot
  * dumps every entry overlapping its canonical VA or naming its token. */
@@ -314,6 +346,13 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
        * a submission hold and skip its callback while Resident is still
        * TRUE, just before this trim drops that residency reference. */
       device->ScreenBuffers[chosen[i]].Transition=TRUE;
+      if(AdmissionUmdWatchVa()) {
+        const auto *slot=&device->ScreenBuffers[chosen[i]];
+        UINT v[]={(UINT)slot->Token,(UINT)(slot->Token>>32),slot->KernelAllocation,
+            (UINT)slot->CanonicalGpuVa,(UINT)(slot->CanonicalGpuVa>>32),
+            (UINT)slot->Bytes,(UINT)(slot->Bytes>>32)};
+        AdmissionUmdDiagnostic("measure-watch-trim",S_OK,v,ARRAYSIZE(v));
+      }
     }
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   }
@@ -331,6 +370,7 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
         slot->Transition=FALSE;
       }
     }
+    watch_slots(device,5u,tokens,count,handles,count,0,hr);
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     if(SUCCEEDED(hr)) {
       for(UINT i=0;i<count;++i)
@@ -653,6 +693,7 @@ static int make_resident(void *context, const uint64_t *tokens,
     auto *slot=find_slot(device,tokens[i]);
     if(slot && !slot->Resident) handles[pending++]=handles[i];
   }
+  watch_slots(device,1u,tokens,count,handles,pending,0,S_OK);
   ReleaseSRWLockShared(&device->ScreenBufferLock);
   if(!pending) {
     HeapFree(GetProcessHeap(), 0, priorities);
@@ -684,6 +725,9 @@ static int make_resident(void *context, const uint64_t *tokens,
         {slot->Resident=TRUE;break;}
     }
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  watch_slots(device,2u,tokens,count,handles,pending,request.PagingFenceValue,hr);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
   HeapFree(GetProcessHeap(), 0, priorities);
   HeapFree(GetProcessHeap(), 0, handles);
   if ((FAILED(hr) && hr != E_PENDING) || request.NumAllocations != pending) {
@@ -1791,6 +1835,9 @@ static int submit(void *context, const uint64_t *written,
   LARGE_INTEGER submit_start;
   (void)QueryPerformanceCounter(&submit_start);
 #endif
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  watch_slots(device,3u,NULL,0,NULL,0,request.RenderCBSequence,S_OK);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
   HRESULT submit_result = device->KernelCallbacks->pfnSubmitCommandCb(
       device->RuntimeDevice.handle, &request);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)

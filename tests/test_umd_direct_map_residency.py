@@ -130,7 +130,7 @@ struct CB {''')
         prefix = prefix.replace('UINT Magic; SLOT ScreenBuffers', 'HRESULT LastScreenError; UINT Magic; SLOT ScreenBuffers')
         gpu = SRC.read_text()
         screen = (SRC.parent/'umd_win32_screen.c').read_text()
-        funcs = '\n'.join(function(gpu,n) for n in ('find_slot','release_copies','allocation_handle','translate_handles','evict','trim_residency','residency_request','make_resident','restore_residency'))
+        funcs = '\n'.join(function(gpu,n) for n in ('watch_slots','find_slot','release_copies','allocation_handle','translate_handles','evict','trim_residency','residency_request','make_resident','restore_residency'))
         funcs += '\n' + function(gpu,'AdmissionUmdGpuvaRestoreCpuMapResidency',required=False)
         funcs += '\n' + '\n'.join(function(screen,n) for n in ('AdmissionUmdScreenCpuAllocation','AdmissionUmdScreenFind','AdmissionUmdScreenMapBuffer','AdmissionUmdScreenUnmapBuffer'))
         with tempfile.TemporaryDirectory(prefix='t6b-residency-') as tmp:

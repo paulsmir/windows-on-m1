@@ -5,6 +5,13 @@
 #endif
 
 void (*AgxWin32BackendFailHook)(unsigned site);
+/* Diagnostic identity: event 1 new, 2 cache reuse, 3 release. */
+void (*AgxWin32BoIdentityHook)(unsigned event, unsigned token,
+    unsigned long long va, unsigned long long bytes, unsigned flags, const char *label);
+static void bo_identity(unsigned event, const struct agx_bo *bo) {
+  if(AgxWin32BoIdentityHook && bo && bo->va)
+    AgxWin32BoIdentityHook(event,bo->handle,bo->va->addr,bo->size,(unsigned)bo->flags,bo->label);
+}
 void (*AgxWin32GpuOnlyMapHook)(unsigned token, unsigned flags);
 #ifdef APPLE_AGX_GPUVA_WINSYS
 extern void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
@@ -402,6 +409,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   if((bo=cache_take(b,bytes,(unsigned)flags,cls))) {
     AgxWin32PerfNote("BO cache hit");
     bo->Base.refcnt=1; bo->Base.label=label;
+    bo_identity(2u,&bo->Base);
     return &bo->Base;
   }
   /* EXP1081 receipt-only: hit/miss/evict counts in measure-perf-reason. */
@@ -484,6 +492,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
     AGX_WIN32_ASAHI_FAIL(b, 1u); return NULL;
   }
   ++b->LiveBos;
+  bo_identity(1u,&bo->Base);
   (void)handle_map_put(b,bo); /* a miss falls back to the owner walk */
 #ifdef APPLE_AGX_GPUVA_WINSYS
   {
@@ -555,6 +564,7 @@ struct agx_bo *AgxWin32AsahiImportBo(
     AGX_WIN32_ASAHI_FAIL(b, 1u);return NULL;
   }
   ++b->LiveBos;
+  bo_identity(1u,&bo->Base);
   (void)handle_map_put(b,bo); /* a miss falls back to the owner walk */
   return &bo->Base;
 }
@@ -974,6 +984,7 @@ void agx_bo_unreference(struct agx_device *native,struct agx_bo *base) {
   if(!base) return;
   if(base->dev!=native || base->refcnt<=0) { AGX_WIN32_ASAHI_FAIL(bo->Backend, 1u); return; }
   if(--base->refcnt==0) {
+    bo_identity(3u,base);
 #ifdef APPLE_AGX_GPUVA_WINSYS
     if(cache_put(bo)) return;
 #endif

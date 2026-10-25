@@ -1,3 +1,5 @@
+// Diagnostics are outside this replay; RC5 tests their production bodies.
+#define owner_watch_resource(...) ((void)0)
 #include <cassert>
 #include <cstdint>
 #include <cstdio>

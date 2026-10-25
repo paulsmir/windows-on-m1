@@ -37,6 +37,7 @@ static void *AgxWin32AsahiBufferWriteMap(void *,pipe_resource *) {++maps;return 
 static uint64_t AgxWin32AsahiBufferGpuAddress(pipe_resource *) {return 0x10000;}
 static int AgxWin32AsahiBufferMarkValid(void *,pipe_resource *) {++marks;return 1;}
 static void AgxWin32AsahiResourceRelease(pipe_resource **) {assert(0);}
+#define owner_watch_resource(...) ((void)0)
 static void owner_cpu_pointer(AGX_D3D12_OWNER *,AGX_D3D12_BUFFER *,unsigned) {}
 @@BODY@@
 int main() {

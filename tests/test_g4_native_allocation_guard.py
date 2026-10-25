@@ -165,6 +165,8 @@ int main(void) {
 '''
 
 UMD_FIXTURE = r'''
+/* Receipt sink is tested separately by test_umd_va_watch. */
+#define watch_slots(...) ((void)0)
 #include <cassert>
 #include <cstdint>
 #include <cstring>

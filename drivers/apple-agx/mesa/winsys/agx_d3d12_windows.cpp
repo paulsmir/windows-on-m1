@@ -203,6 +203,39 @@ static VOID APIENTRY owner_error(D3D10DDI_HRTCORELAYER handle, HRESULT error) {
   if (owner && owner->Error) owner->Error(owner->ErrorContext, error);
 }
 
+#define ADMISSION_UMD_WATCH_WINDOWS
+#include "umd_va_watch.h"
+extern "C" void (*AgxWin32BoIdentityHook)(unsigned, unsigned,
+    unsigned long long, unsigned long long, unsigned, const char *);
+static void owner_bo_identity(unsigned event, unsigned token,
+    unsigned long long va, unsigned long long bytes, unsigned flags, const char *label) {
+  if(!AdmissionUmdWatchVa()) return;
+  UINT v[16]={event,token,0u,(UINT)va,(UINT)(va>>32),(UINT)bytes,(UINT)(bytes>>32),flags};
+  /* Fixed 32-byte label, zero-filled, no borrowed pointer in the log. */
+  if(label) for(unsigned i=0;i<32u && label[i];++i)
+    reinterpret_cast<char *>(&v[8])[i]=label[i];
+  AdmissionUmdDiagnostic("measure-watch-bo",S_OK,v,ARRAYSIZE(v));
+}
+static void owner_watch_resource(AGX_D3D12_OWNER *owner,struct pipe_resource *resource,UINT kind) {
+  if(!AdmissionUmdWatchVa() || !resource) return;
+  AGX_WIN32_RELOC_ALLOCATION identity={};
+  if(!AgxWin32AsahiResourceIdentity(resource,&identity)) return;
+  auto *device=&owner->Runtime;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++i) {
+    const auto *slot=&device->ScreenBuffers[i];
+    if(!slot->Active || slot->Token!=identity.Token) continue;
+    const ULONGLONG ptr=(ULONGLONG)(ULONG_PTR)resource;
+    UINT v[]={kind,(UINT)ptr,(UINT)(ptr>>32),(UINT)slot->Token,(UINT)(slot->Token>>32),
+        slot->KernelAllocation,(UINT)slot->CanonicalGpuVa,(UINT)(slot->CanonicalGpuVa>>32),
+        (UINT)slot->Bytes,(UINT)(slot->Bytes>>32),(UINT)resource->target,(UINT)resource->format,
+        resource->width0,resource->height0,resource->depth0,resource->array_size};
+    AdmissionUmdDiagnostic("measure-watch-resource",S_OK,v,ARRAYSIZE(v));
+    break;
+  }
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+}
+
 static void receipt(PCSTR stage, HRESULT status, UINT a, UINT b, UINT c) {
   const UINT values[] = {a, b, c};
   AdmissionUmdDiagnostic(stage, status, values, 3u);
@@ -399,6 +432,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
       !args->Generation)
     return E_INVALIDARG;
   *out = NULL;
+  AgxWin32BoIdentityHook = owner_bo_identity;
   auto *owner = static_cast<AGX_D3D12_OWNER *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AGX_D3D12_OWNER)));
   if (!owner) return E_OUTOFMEMORY;
   InitializeCriticalSection(&owner->Lock);
@@ -516,6 +550,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned lo
     AgxWin32AsahiResourceRelease(&resource);
     return E_OUTOFMEMORY;
   }
+  owner_watch_resource(owner,resource,1u);
   buffer->Resource = resource;
   buffer->GpuVa = va;
   buffer->Cpu = cpu;
@@ -539,6 +574,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateReservedBuffer(AGX_D3D12_OWNER *owner, uns
     AgxWin32AsahiResourceRelease(&resource);
     return E_OUTOFMEMORY;
   }
+  owner_watch_resource(owner,resource,1u);
   buffer->Resource = resource;
   buffer->GpuVa = va;
   buffer->Bytes = bytes;
@@ -1081,6 +1117,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
   receipt("measure-d3d12-texture", resource ? S_OK : E_OUTOFMEMORY, static_cast<UINT>(templ.format), width | (height << 16),
           layers | (levels << 16));
   if (!resource) return E_OUTOFMEMORY;
+  owner_watch_resource(owner,resource,1u);
   texture->Resource = resource;
   texture->GpuVa = AgxWin32AsahiBufferGpuAddress(resource);
   texture->Bytes = bytes;
@@ -1118,6 +1155,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateReservedTexture2D(AGX_D3D12_OWNER *owner, 
   receipt("measure-d3d12-reserved-texture", resource ? S_OK : E_NOTIMPL, static_cast<UINT>(templ.format),
           width | (height << 16), layers | (levels << 16));
   if (!resource) return E_NOTIMPL;
+  owner_watch_resource(owner,resource,1u);
   texture->Resource = resource;
   texture->GpuVa = AgxWin32AsahiBufferGpuAddress(resource);
   return S_OK;
@@ -1300,6 +1338,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture1DArray(AGX_D3D12_OWNER *owner,DXGI
   templ.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
   struct pipe_resource *resource=owner->Screen->resource_create_with_modifiers(owner->Screen,&templ,&layout.Modifier,1);
   if(!resource)return E_OUTOFMEMORY;
+  owner_watch_resource(owner,resource,1u);
   texture->Resource=resource;texture->GpuVa=AgxWin32AsahiBufferGpuAddress(resource);texture->Bytes=bytes;return S_OK;
 }
 
@@ -1317,6 +1356,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture1D(AGX_D3D12_OWNER *owner,DXGI_FORM
   struct pipe_resource *resource=owner->Screen->resource_create_with_modifiers(owner->Screen,&templ,&layout.Modifier,1);
   if(!resource)return E_OUTOFMEMORY;
   const unsigned long long va=AgxWin32AsahiBufferGpuAddress(resource);
+  owner_watch_resource(owner,resource,1u);
   texture->Resource=resource;texture->GpuVa=va;texture->Bytes=bytes;return S_OK;
 }
 
@@ -1338,6 +1378,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture3D(AGX_D3D12_OWNER *owner,DXGI_FORM
     templ.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
   struct pipe_resource *resource=owner->Screen->resource_create_with_modifiers(owner->Screen,&templ,&layout.Modifier,1);
   if(!resource) return E_OUTOFMEMORY;
+  owner_watch_resource(owner,resource,1u);
   texture->Resource=resource;texture->GpuVa=AgxWin32AsahiBufferGpuAddress(resource);texture->Bytes=actual;
   return S_OK;
 }
@@ -1552,6 +1593,7 @@ extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner
     return hr;
   }
   struct pipe_resource *rendered = record->Converted ? record->Converted : record->RenderResource;
+  owner_watch_resource(owner,rendered,1u);
   texture->Resource = rendered;
   texture->GpuVa = AgxWin32AsahiBufferGpuAddress(rendered);
   texture->Bytes = record->Resource.DirectFlip.Allocation.Size;
@@ -1624,6 +1666,7 @@ extern "C" HRESULT AgxD3d12OwnerOpenSharedTexture(AGX_D3D12_OWNER *owner, UINT k
     HeapFree(GetProcessHeap(), 0, record);
     return hr;
   }
+  owner_watch_resource(owner,record->RenderResource,1u);
   texture->Resource = record->RenderResource;
   texture->GpuVa = AgxWin32AsahiBufferGpuAddress(record->RenderResource);
   texture->Bytes = decoded.Bytes;
@@ -2190,6 +2233,7 @@ static HRESULT copy_reserved_texture(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEX
   templ.usage = PIPE_USAGE_DEFAULT;
   templ.bind = PIPE_BIND_SAMPLER_VIEW;
   struct pipe_resource *staging = owner->Screen->resource_create(owner->Screen, &templ);
+  owner_watch_resource(owner,staging,2u);
   if (!staging) return E_OUTOFMEMORY;
   AGX_D3D12_BUFFER staged = {};
   staged.Resource = staging;
@@ -2261,9 +2305,13 @@ static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COP
     templ.usage = PIPE_USAGE_STAGING; /* linear: mapped without a staging blit of its own */
     templ.bind = PIPE_BIND_SAMPLER_VIEW;
     owner->UploadStaging = owner->Screen->resource_create(owner->Screen, &templ);
+    owner_watch_resource(owner,owner->UploadStaging,3u);
     if (!owner->UploadStaging) return E_OUTOFMEMORY;
   }
   staging = owner->UploadStaging;
+  owner_watch_resource(owner,texture,5u);
+  owner_watch_resource(owner,staging,6u);
+  owner_watch_resource(owner,buffer,7u);
 
   struct pipe_transfer *stransfer = NULL, *btransfer = NULL;
   void *smap = pipe->texture_map(pipe, staging, 0, PIPE_MAP_WRITE, &sbox, &stransfer);
@@ -2320,6 +2368,7 @@ static HRESULT staged_download(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_C
     templ.usage = PIPE_USAGE_STAGING; /* linear: mapped without a staging blit of its own */
     templ.bind = PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW; /* the copy is a blit into it */
     owner->DownloadStaging = owner->Screen->resource_create(owner->Screen, &templ);
+    owner_watch_resource(owner,owner->DownloadStaging,4u);
     if (!owner->DownloadStaging) return E_OUTOFMEMORY;
   }
   staging = owner->DownloadStaging;

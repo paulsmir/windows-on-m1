@@ -5,6 +5,8 @@
  * whose every DDI stays fail-closed, so the runtime's next requests become
  * measurable. Ordinary processes still get E_NOTIMPL from OpenAdapter12. */
 #include <windows.h>
+#define ADMISSION_UMD_WATCH_WINDOWS
+#include "umd_va_watch.h"
 /* d3dkmddi.h expects NTSTATUS, which user-mode windows.h does not define. */
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(disable : 4201)
@@ -2429,6 +2431,13 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         }
         const UINT receipt[] = {reason, base ? 1u : 0u, static_cast<UINT>(offset), static_cast<UINT>(resource_arg->Width)};
         AdmissionUmdDiagnostic("measure-d3d12-placed", reason ? E_NOTIMPL : S_OK, receipt, 4);
+        if(!reason && AdmissionUmdWatchVa()) {
+            const UINT64 native=(UINT64)(uintptr_t)base->heap->native;
+            const UINT join[]={(UINT)native,(UINT)(native>>32),base->heap->allocation,
+                (UINT)resource->gpuva,(UINT)(resource->gpuva>>32),
+                (UINT)resource->bytes,(UINT)(resource->bytes>>32)};
+            AdmissionUmdDiagnostic("measure-watch-placed",S_OK,join,ARRAYSIZE(join));
+        }
         return reason ? E_NOTIMPL : S_OK;
     }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
@@ -2504,6 +2513,13 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
                                 resource_arg->Height, static_cast<UINT>(bytes >> 16),
                                 bind | (presentable ? 0x100u : 0u) | (placed ? 0x200u : 0u)};
         AdmissionUmdDiagnostic("measure-d3d12-committed-texture", hr, receipt, 5);
+        if(SUCCEEDED(hr) && AdmissionUmdWatchVa()) {
+            const UINT64 native=(UINT64)(uintptr_t)texture_heap->native;
+            const UINT join[]={(UINT)placed,(UINT)native,(UINT)(native>>32),
+                texture_heap->allocation,(UINT)bytes,(UINT)(bytes>>32),
+                (UINT)resource_arg->Format,resource->width,resource->height};
+            AdmissionUmdDiagnostic("measure-watch-texture",S_OK,join,ARRAYSIZE(join));
+        }
         return hr;
     }
 #endif
