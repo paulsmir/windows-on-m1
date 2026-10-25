@@ -3042,6 +3042,7 @@ extern "C" HRESULT AgxD3d12OwnerSrvDescriptor(AGX_D3D12_OWNER *owner, const AGX_
   return S_OK;
 }
 extern "C" void AgxD3d12NullTextureDescriptor(void *out) { AgxWin32AsahiNullTextureDescriptor(out); }
+extern "C" void AgxD3d12NullPbeDescriptor(void *out) { AgxWin32AsahiNullPbeDescriptor(out); }
 extern "C" unsigned long long AgxD3d12OwnerLayoutKey(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *buffer) {
   OwnerLock lock(owner);
   return owner && buffer ? AgxWin32AsahiResourceLayoutKey(static_cast<struct pipe_resource *>(buffer->Resource)) : 0u;

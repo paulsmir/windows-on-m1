@@ -476,7 +476,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('range.type != D3D12DDI_DESCRIPTOR_RANGE_TYPE_CBV) return 4u;', table)
         self.assertIn('uav ? kUavSlots : srv ? kSrvSlots : kCbSlots', table)
         self.assertIn('range.space || range.base_register >= slots', table)
-        self.assertIn('at + sizeof(AgxD3d12Descriptor) > heap->bytes', table)
+        self.assertIn('at + sizeof(AgxD3d12Descriptor) > DescriptorHeapBytes(heap)', table)
         execute = fn('static void OwnerBindings(')
         self.assertIn('DescriptorUav(*view, &o->uav_buffers[u], &o->uavs[u])', execute)
         self.assertIn('view.kind != kDescriptorUavBuffer', source[source.index('static bool DescriptorUav('):])

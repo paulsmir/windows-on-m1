@@ -159,6 +159,7 @@ HRESULT AgxD3d12OwnerSrvDescriptor(AGX_D3D12_OWNER *Owner, const AGX_D3D12_SRV *
 unsigned long long AgxD3d12OwnerLayoutKey(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Buffer);
 /* Asahi's null texture descriptor (reads 0): unpopulated heap entries */
 void AgxD3d12NullTextureDescriptor(void *Out);
+void AgxD3d12NullPbeDescriptor(void *Out);
 /* C47: a UAV's heap form: texture and PBE descriptors (24 bytes each) */
 HRESULT AgxD3d12OwnerUavDescriptor(AGX_D3D12_OWNER *Owner, const AGX_D3D12_UAV *Uav, void *Texture, void *Pbe,
                                    void *CounterPbe, unsigned long long *Key);

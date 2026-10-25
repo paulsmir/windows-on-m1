@@ -1730,6 +1730,7 @@ struct AgxD3d12Heap {
     D3DKMT_HANDLE allocation;
     UINT64 gpuva;
     UINT64 bytes;
+    UINT64 descriptor_bytes; /* guarded heaps: logical extent, excluding backing tail */
     BOOL cpu_visible;
     UINT locks;
     void *cpu;
@@ -1747,6 +1748,9 @@ struct AgxD3d12Heap {
      * order); nullptr for buffers */
     struct AGX_TILE_GEOMETRY *geometry;
 };
+static UINT64 DescriptorHeapBytes(const AgxD3d12Heap *heap) {
+    return heap->descriptor_bytes ? heap->descriptor_bytes : heap->bytes;
+}
 struct AgxD3d12Resource {
     AgxD3d12Heap *heap;
     UINT64 gpuva;
@@ -2037,7 +2041,7 @@ static AgxD3d12Heap *HeapAt(AgxD3d12Device *device, UINT64 va, UINT64 *offset) {
     AcquireSRWLockShared(&device->heap_lock);
     for (UINT i = 0; va && i < device->heap_count; ++i) {
         AgxD3d12Heap *heap = device->heaps[i];
-        if (va >= heap->gpuva && va - heap->gpuva < heap->bytes) {
+        if (va >= heap->gpuva && va - heap->gpuva < DescriptorHeapBytes(heap)) {
             *offset = va - heap->gpuva;
             result = heap;
             break;
@@ -2054,7 +2058,7 @@ static AgxD3d12Heap *MirroredHeapAt(AgxD3d12Device *device, const void *cpu) {
     for (UINT i = 0; i < device->mirrored_count; ++i) {
         AgxD3d12Heap *heap = device->mirrored[i];
         const BYTE *base = static_cast<const BYTE *>(heap->cpu);
-        if (static_cast<const BYTE *>(cpu) >= base && static_cast<UINT64>(static_cast<const BYTE *>(cpu) - base) < heap->bytes) {
+        if (static_cast<const BYTE *>(cpu) >= base && static_cast<UINT64>(static_cast<const BYTE *>(cpu) - base) < DescriptorHeapBytes(heap)) {
             result = heap;
             break;
         }
@@ -2823,7 +2827,7 @@ static void MirrorHeapForms(const AgxD3d12Heap *heap, const void *first, UINT co
     if (!heap || !heap->mirror || !heap->cpu || !first || !count) return;
     const SIZE_T offset = static_cast<SIZE_T>(static_cast<const BYTE *>(first) - static_cast<const BYTE *>(heap->cpu));
     if (static_cast<const BYTE *>(first) < static_cast<const BYTE *>(heap->cpu) || offset % kCbvSrvUavDescriptorBytes ||
-        offset + static_cast<UINT64>(count) * kCbvSrvUavDescriptorBytes > heap->bytes)
+        offset + static_cast<UINT64>(count) * kCbvSrvUavDescriptorBytes > DescriptorHeapBytes(heap))
         return;
     for (UINT i = 0; i < count; ++i) {
         const SIZE_T at = offset + static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes + kHeapFormOffset;
@@ -3300,15 +3304,23 @@ static HRESULT APIENTRY CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D1
     heap->type = static_cast<UINT>(arg->Type);
     heap->descriptors = arg->NumDescriptors;
     const UINT64 bytes = static_cast<UINT64>(arg->NumDescriptors) * DescriptorBytes(arg->Type);
+    char guard_option[2] = {};
+    const bool guard = (arg->Flags & D3D12DDI_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) &&
+        (arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV || arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER) &&
+        GetEnvironmentVariableA("APPLE_AGX_D3D12_DESCRIPTOR_HEAP_GUARD", guard_option, sizeof(guard_option)) == 1 &&
+        guard_option[0] == '1';
     HRESULT hr = S_OK;
     if (arg->Flags & D3D12DDI_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) {
         D3D12DDIARG_CREATEHEAP_0001 memory = {};
-        memory.ByteSize = bytes;
+        /* One extra 64 KiB in the same BO: residency/retirement covers the
+         * guard with the heap. Keep logical walks and handle lookup unchanged. */
+        memory.ByteSize = bytes + (guard ? kHeapPage : 0);
         memory.Alignment = kHeapPage;
         memory.MemoryPool = D3D12DDI_MEMORY_POOL_L0;
         memory.CPUPageProperty = D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE;
         hr = CreateHeap(device, memory, &heap->memory);
         if (SUCCEEDED(hr)) {
+            if (guard) heap->memory.descriptor_bytes = bytes;
             D3D12DDI_HHEAP memory_handle = {&heap->memory};
             hr = MapHeap(handle, memory_handle, &heap->cpu);
             if (FAILED(hr)) ReleaseHeap(device, &heap->memory);
@@ -3339,6 +3351,23 @@ static HRESULT APIENTRY CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D1
     if (SUCCEEDED(hr) && heap->cpu && arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)
         for (UINT i = 0; i < heap->descriptors; ++i)
             AgxD3d12NullTextureDescriptor(HeapFormOf(static_cast<BYTE *>(heap->cpu) + static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes)->texture);
+    if (SUCCEEDED(hr) && guard && heap->cpu) {
+        BYTE *tail = static_cast<BYTE *>(heap->cpu) + static_cast<SIZE_T>(bytes);
+        memset(tail, 0, static_cast<SIZE_T>(heap->memory.bytes - bytes));
+        if (arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
+            for (UINT64 at = bytes; at + kCbvSrvUavDescriptorBytes <= heap->memory.bytes; at += kCbvSrvUavDescriptorBytes) {
+                AgxD3d12HeapForm *form = HeapFormOf(static_cast<BYTE *>(heap->cpu) + static_cast<SIZE_T>(at));
+                AgxD3d12NullTextureDescriptor(form->texture);
+                AgxD3d12NullPbeDescriptor(form->pbe);
+                AgxD3d12NullPbeDescriptor(form->counter);
+            }
+        }
+        /* Samplers are consumed through the batch sampler map, not this BO.
+         * Zero kind/Valid is their existing null representation. Copy their
+         * guard explicitly too; ordinary sampler writes need no GPU mirror. */
+        if (heap->memory.mirror)
+            memcpy(heap->memory.mirror + static_cast<SIZE_T>(bytes), tail, static_cast<SIZE_T>(heap->memory.bytes - bytes));
+    }
     if (SUCCEEDED(hr) && heap->memory.mirror) {
         if (arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
             memcpy(heap->memory.mirror, heap->cpu, static_cast<SIZE_T>(heap->memory.bytes));
@@ -3357,6 +3386,12 @@ static HRESULT APIENTRY CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D1
         }
     }
 #endif
+    if (SUCCEEDED(hr) && guard) {
+        const UINT64 begin = heap->gpuva + bytes, end = heap->gpuva + heap->memory.bytes;
+        const UINT receipt[] = {heap->type, heap->descriptors, static_cast<UINT>(heap->gpuva), static_cast<UINT>(heap->gpuva >> 32),
+            static_cast<UINT>(begin), static_cast<UINT>(begin >> 32), static_cast<UINT>(end), static_cast<UINT>(end >> 32)};
+        AdmissionUmdDiagnostic("measure-d3d12-descriptor-guard", hr, receipt, ARRAYSIZE(receipt));
+    }
     const UINT receipt[] = {heap->type, heap->descriptors, static_cast<UINT>(arg->Flags), heap->gpuva != 0};
     AdmissionUmdDiagnostic("measure-d3d12-descriptor-heap", hr, receipt, 4);
     return hr;
@@ -5378,7 +5413,7 @@ static UINT BindTable(AgxD3d12CommandList *list, const AgxD3d12RootSignature *ro
                                    ? kSamplerSlots - range.base_register : range.count;
             for (UINT d = 0; d < count; ++d) {
                 const UINT64 at = offset + (static_cast<UINT64>(range.offset) + d) * DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER);
-                if (range.offset == UINT_MAX || at + sizeof(AgxD3d12SamplerDescriptor) > heap->bytes) {
+                if (range.offset == UINT_MAX || at + sizeof(AgxD3d12SamplerDescriptor) > DescriptorHeapBytes(heap)) {
                     if (range.count == UINT_MAX) break;
                     return 6u;
                 }
@@ -5396,7 +5431,7 @@ static UINT BindTable(AgxD3d12CommandList *list, const AgxD3d12RootSignature *ro
                                ? slots - range.base_register : range.count;
         for (UINT d = 0; d < count; ++d) {
             const UINT64 at = offset + (static_cast<UINT64>(range.offset) + d) * DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-            if (range.offset == UINT_MAX || at + sizeof(AgxD3d12Descriptor) > heap->bytes) {
+            if (range.offset == UINT_MAX || at + sizeof(AgxD3d12Descriptor) > DescriptorHeapBytes(heap)) {
                 if (range.count == UINT_MAX) break; /* an unbounded range ends with its heap */
                 return 6u;
             }
@@ -5510,7 +5545,7 @@ static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSigna
                                                                 : D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
                     const UINT64 at = offset + (static_cast<UINT64>(range.offset) + delta) * stride;
                     const UINT64 bytes = sampler ? sizeof(AgxD3d12SamplerDescriptor) : sizeof(AgxD3d12Descriptor);
-                    if (at > heap->bytes || bytes > heap->bytes - at) {
+                    if (at > DescriptorHeapBytes(heap) || bytes > DescriptorHeapBytes(heap) - at) {
                         /* C34: an unbounded range's tail past the heap stays unbound */
                         if (!(binding.flags & DXBC_BINDING_OPTIONAL)) return 6u;
                     matched = true;
@@ -6170,7 +6205,7 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
     }
     if (b->sampler_descriptors && lowest_sampler != UINT_MAX) {
         /* C47: the sampler map covers the heap from the lowest sampler range */
-        const UINT samplers = static_cast<UINT>(b->sampler_descriptors->bytes / kSamplerDescriptorBytes);
+        const UINT samplers = static_cast<UINT>(DescriptorHeapBytes(b->sampler_descriptors) / kSamplerDescriptorBytes);
         for (UINT r = 0; r < b->heap_ranges; ++r)
             if (b->heap_sampler_mask & (1ull << r)) h.binding.First[r][1] = lowest_sampler;
         for (UINT i = lowest_sampler; i < samplers && h.binding.SamplerCount < DXBC_HEAP_SAMPLER_MAP_MAX; ++i) {
@@ -6187,7 +6222,7 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
     h.heap = HeapBuffer(b->descriptors);
     h.binding.Heap = &h.heap;
     h.binding.RefDescriptorData = b->descriptors->mirror;
-    const UINT count = static_cast<UINT>(b->descriptors->bytes / kCbvSrvUavDescriptorBytes);
+    const UINT count = static_cast<UINT>(DescriptorHeapBytes(b->descriptors) / kCbvSrvUavDescriptorBytes);
     for (UINT i = lowest; i < count; ++i) {
         auto *view = reinterpret_cast<AgxD3d12Descriptor *>(static_cast<BYTE *>(b->descriptors->cpu) +
                                                             static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes);

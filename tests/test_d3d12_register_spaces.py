@@ -31,7 +31,8 @@ class StaticRegisterSpaces(unittest.TestCase):
         start = text.rfind('/* C17: namespace-aware root resolution */', 0, resolve)
         if start < 0:
             start = resolve
-        code = text[start:function_end(text, resolve)]
+        extent = text.index("static UINT64 DescriptorHeapBytes(")
+        code = text[extent:function_end(text, extent)] + "\n" + text[start:function_end(text, resolve)]
         fixture = (ROOT / 'tests/d3d12_register_spaces_fixture.cpp').read_text()
         cls.tmp = tempfile.TemporaryDirectory(prefix='d3d12-spaces-')
         source = Path(cls.tmp.name) / 'root.cpp'
