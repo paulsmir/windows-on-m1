@@ -36,6 +36,7 @@ BODY = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include "umd_va_alias.h"
 typedef int HRESULT; typedef unsigned UINT; typedef unsigned D3DKMT_HANDLE; typedef int BOOL;

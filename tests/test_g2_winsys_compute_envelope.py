@@ -266,6 +266,8 @@ int main(void) {
   refuse_create_at = creates + 1u; b.Failed = 0;
   assert(!AgxWin32AsahiBatchFinishCompute(&batch, &command) && h->Rejected && !h->Submitted &&
          sub.calls == 1u && b.Failed);
+  /* The rejected capsule is released like a retired one. */
+  assert(AgxWin32AsahiBatchRelease(&batch) && !batch.windows_batch);
   puts("g2 winsys compute envelope: PASS");
   return 0;
 }

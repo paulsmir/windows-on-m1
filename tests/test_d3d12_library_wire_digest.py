@@ -1,6 +1,7 @@
-"""Check actual CPU library wire digests using macOS system SHA-256."""
+"""Check actual CPU library wire digests using the host system SHA-256 (CommonCrypto on macOS, OpenSSL elsewhere)."""
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 ROOT=Path(__file__).resolve().parents[1]
@@ -10,7 +11,8 @@ class WireDigestTest(unittest.TestCase):
             exe=Path(td)/'wire-digest'
             build=subprocess.run(['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined',
                 '-fno-omit-frame-pointer','-I'+str(ROOT/'drivers/apple-agx/d3d12'),
-                str(ROOT/'tests/d3d12_library_wire_digest_fixture.cpp'),'-o',str(exe)],
+                str(ROOT/'tests/d3d12_library_wire_digest_fixture.cpp'),'-o',str(exe),
+                *([] if sys.platform=='darwin' else ['-lcrypto'])],
                 capture_output=True,text=True,timeout=60)
             self.assertEqual(build.returncode,0,build.stderr)
             run=subprocess.run([str(exe)],capture_output=True,text=True,timeout=60)

@@ -64,6 +64,10 @@ int main(void){
  struct agx_screen screen={0};AGX_WIN32_ASAHI_BACKEND b={0};screen.dev.windows_private=&b;
  struct agx_context ctx={0};ctx.base.screen=&screen.pscreen;
  struct agx_batch batch={0};AGX_G4_BATCH g={0};batch.ctx=&ctx;batch.windows_batch=&g;selected=&batch;
+ /* Empty pools with storage, as after a batch's first pool allocation:
+  * util_dynarray_foreach on NULL data is NULL+0, which C11 UBSan refuses. */
+ static struct agx_bo *no_pool_bos[1];
+ batch.pool.bos.data=no_pool_bos;batch.pipeline_pool.bos.data=no_pool_bos;
  struct agx_bo bo={0};struct agx_va va={0};va.addr=0x100000;bo.va=&va;bo.handle=1;bo.size=65536;
  maps[1]=(AGX_WIN32_GPUVA_BO){17,va.addr,65536,1};
  struct agx_resource resource={0};resource.bo=&bo;resource.base.target=PIPE_BUFFER;

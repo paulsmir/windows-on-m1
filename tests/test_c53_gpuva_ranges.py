@@ -22,7 +22,7 @@ class GpuvaRanges(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='c53-gpuva-') as tmp:
             exe = Path(tmp) / 'gpuva'
             # the B0 test leaves later ops members to zero-initialisation
-            built = subprocess.run([os.environ.get('CC', 'cc'), '-std=c11', '-Wall', '-Wextra', '-Werror',
+            built = subprocess.run([os.environ.get('CC', 'clang'), '-std=c11', '-Wall', '-Wextra', '-Werror',
                                     '-Wno-missing-field-initializers', '-fsanitize=address,undefined',
                                     '-I', str(WINSYS), '-I', str(ROOT / 'drivers/apple-agx/shared/include'),
                                     str(WINSYS / 'agx_win32_gpuva.c'), str(WINSYS / 'agx_win32_gpuva_test.c'),

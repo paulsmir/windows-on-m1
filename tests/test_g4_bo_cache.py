@@ -58,9 +58,13 @@ static int disposed, refuse;
 static void AgxWin32PerfNote(const char *fmt, ...) { (void)fmt; }
 static int dispose(struct windows_bo *bo) { (void)bo; if(refuse) return 0; ++disposed; return 1; }
 @@FUNCS@@
+/* dispose() keeps the BO readable for the asserts; every BO is freed at exit */
+static struct windows_bo **made; static unsigned made_count;
 static struct windows_bo *mk(AGX_WIN32_ASAHI_BACKEND *b,size_t size,unsigned flags,unsigned cls,uint64_t alloc) {
   struct windows_bo *bo=calloc(1,sizeof(*bo)); bo->Backend=b; bo->Base.size=size; bo->Base.flags=flags;
-  bo->Backing.Buffer.ClassId=cls; bo->Gpuva.Allocation=alloc; bo->Gpuva.Bound=1; return bo; }
+  bo->Backing.Buffer.ClassId=cls; bo->Gpuva.Allocation=alloc; bo->Gpuva.Bound=1;
+  made=realloc(made,(made_count+1)*sizeof(*made)); assert(made); made[made_count++]=bo; return bo; }
+static void free_made(void) { for(unsigned i=0;i<made_count;++i) free(made[i]); free(made); made=NULL; made_count=0; }
 int main(void) {
   AGX_WIN32_ASAHI_BACKEND b; memset(&b,0,sizeof b);
   struct windows_bo *a=mk(&b,0x40000,0,1,11), *e=mk(&b,0x80000,0,3,12), *imp=mk(&b,0x40000,0,1,13);
@@ -115,6 +119,7 @@ int main(void) {
   refuse=0;
   for(unsigned i=0;i<4;++i) assert(cache_put(mk(&b,0x10000,0,1,200+i)));
   cache_flush(&b); assert(disposed==before+4 && b.CacheCount==0);
+  free_made();
   puts("EXP996 bo cache: PASS");
   return 0;
 }

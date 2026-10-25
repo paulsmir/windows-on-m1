@@ -230,11 +230,13 @@ static int submit(void *ctx, const uint64_t *written, unsigned written_count,
   sub.packet_bytes = packet_bytes; sub.va = va; sub.bytes = bytes;
   sub.written_count = written_count;
   memcpy(sub.written, written, written_count * sizeof(written[0]));
-  sub.v5_result = AppleAgxG4ParseSubmitComputeEx(packet, packet_bytes, packet_bytes, va,
+  /* parse the retained copy, as the KMD does: the view points into it after
+   * Finish's stack packet is gone */
+  sub.v5_result = AppleAgxG4ParseSubmitComputeEx(sub.packet, packet_bytes, packet_bytes, va,
       bytes, APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES, mapped, NULL, &sub.view, &failure);
   {
     APPLE_AGX_G4_SUBMIT_VIEW v3_view;
-    sub.v3_result = AppleAgxG4ParseSubmitEx(packet, packet_bytes, packet_bytes, va, bytes,
+    sub.v3_result = AppleAgxG4ParseSubmitEx(sub.packet, packet_bytes, packet_bytes, va, bytes,
         mapped, NULL, &v3_view, NULL);
   }
   if (sub.v5_result != AppleAgxG4ParseOk) {

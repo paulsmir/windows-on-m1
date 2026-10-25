@@ -26,6 +26,7 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 import json
 import re
 import tempfile
@@ -68,6 +69,14 @@ for line in (FIXTURES / "smoke/targets.txt").read_text().splitlines():
         TRANSLATED["smoke/" + name] = STAGES[target[:2]]
 
 
+# libSystem carries libm and libc++ on macOS; on Linux the fixtures name libm,
+# use libstdc++ (the host tree's C++ runtime) and Homebrew's prefix.
+HOST_LIBS = [] if sys.platform == "darwin" else ["-lm"]
+CXX_RUNTIME = "-lc++" if sys.platform == "darwin" else "-lstdc++"
+BREW_LIB = "/opt/homebrew/lib" if sys.platform == "darwin" else "/home/linuxbrew/.linuxbrew/lib"
+BREW_LINK = ["-L" + BREW_LIB] + ([] if sys.platform == "darwin" else ["-Wl,-rpath," + BREW_LIB])
+
+
 def local_tree(*parts):
     for base in ([Path(os.environ["AGX_LOCAL_TREE"])] if "AGX_LOCAL_TREE" in os.environ else []) + \
             [ROOT / ".local", ROOT.parents[1] / ".local"]:
@@ -86,7 +95,8 @@ def host_flags(build):
             directory = Path(entry["directory"])
             # macOS has no <endian.h>; util/u_endian.h falls back to the
             # compiler's byte-order macros without HAVE_ENDIAN_H
-            flags = [a for a in args if a.startswith("-D") and a != "-DHAVE_ENDIAN_H"]
+            flags = [a for a in args if a.startswith("-D") and
+                     (a != "-DHAVE_ENDIAN_H" or sys.platform != "darwin")]
             for a in args:
                 if a.startswith("-I"):
                     path = Path(a[2:])
@@ -115,7 +125,7 @@ class DxbcToNir(unittest.TestCase):
                         "-I", str(DXBC), str(ROOT / "tests/dxbc_to_nir_fixture.c"),
                         str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_tir_gs.c"), str(DXBC / "dxbc_minmax.c"),
                         "-o", str(cls.binary), *map(str, libs),
-                        "-L/opt/homebrew/opt/zstd/lib", "-lzstd", "-lz", "-lpthread"],
+                        "-L/opt/homebrew/opt/zstd/lib", "-lzstd", "-lz", "-lpthread", *HOST_LIBS],
                        check=True, capture_output=True)
 
     @classmethod

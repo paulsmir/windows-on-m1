@@ -221,8 +221,11 @@ int main(void) {
   for (unsigned i = 0; i + 1u < DEPTH; ++i) assert(!slots[i].windows_batch);
   assert(!slots[DEPTH].windows_batch);
   assert(!backend.Gpuva.Held && !backend.Gpuva.OlderCount && live_leases == 0);
-  free(other_slots[0].windows_batch);
-  free(slots[DEPTH + 1u].windows_batch);
+  /* the still-open batches (slot 3 stays open across EXP1161) */
+  for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) {
+    free(other_slots[i].windows_batch);
+    free(slots[i].windows_batch);
+  }
   puts("PASS");
   return 0;
 }

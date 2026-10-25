@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import unittest
 
-from test_dxbc_to_nir import local_tree, host_flags, ROOT, DXBC
+from test_dxbc_to_nir import local_tree, host_flags, ROOT, DXBC, HOST_LIBS, CXX_RUNTIME, BREW_LINK
 
 FIXTURES = ROOT / 'tests/fixtures/dxil/c44'
 DXIL = ROOT / 'drivers/apple-agx/mesa/dxil'
@@ -46,14 +46,14 @@ class DxilToNir(unittest.TestCase):
                   "-I", str(build / "src"), "-I", str(DXBC), "-I", str(DXIL), "-I", str(spirv)]
         libs = [str(build / p) for p in MESA_LIBS]
         dlibs = [str(p) for p in sorted(archives.glob("*.a"))]
-        link = ["-L/opt/homebrew/opt/zstd/lib", "-lzstd", "-lz", "-lpthread"]
+        link = ["-L/opt/homebrew/opt/zstd/lib", "-lzstd", "-lz", "-lpthread", *HOST_LIBS]
         subprocess.run(["clang", *common, str(ROOT / "tests/dxil_to_nir_fixture.c"), str(DXIL / "agx_dxil_to_nir.c"), str(DXIL / "agx_dxil_program.c"),
                         str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_minmax.c"), str(tmp / "checked.o"),
-                        "-o", str(cls.dxil), *libs, *dlibs, *dlibs, *link, "-lc++",
-                        "-L/opt/homebrew/lib", "-lSPIRV-Tools-shared"], check=True, capture_output=True)
+                        "-o", str(cls.dxil), *libs, *dlibs, *dlibs, *link, CXX_RUNTIME,
+                        *BREW_LINK, "-lSPIRV-Tools-shared"], check=True, capture_output=True)
         subprocess.run(["clang", *common, str(ROOT / "tests/dxbc_to_nir_fixture.c"), str(DXBC / "dxbc_to_nir.c"),
                         str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_tir_gs.c"), str(DXBC / "dxbc_minmax.c"), "-o", str(cls.dxbc), *libs, *link,
-                        "-L/opt/homebrew/lib", "-lSPIRV-Tools-shared"], check=True, capture_output=True)
+                        *BREW_LINK, "-lSPIRV-Tools-shared"], check=True, capture_output=True)
 
     @classmethod
     def tearDownClass(cls):

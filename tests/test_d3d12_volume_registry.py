@@ -15,7 +15,7 @@ import re
 import subprocess
 import tempfile
 import unittest
-from test_dxbc_to_nir import ROOT, local_tree, host_flags
+from test_dxbc_to_nir import ROOT, local_tree, host_flags, HOST_LIBS, CXX_RUNTIME
 
 
 class VolumeRegistry(unittest.TestCase):
@@ -32,7 +32,7 @@ class VolumeRegistry(unittest.TestCase):
             r = subprocess.run([os.environ.get('CC', 'clang'), '-std=c11', '-O2', '-fsanitize=address,undefined',
                                 *host_flags(build), '-I', str(ROOT / 'tests'), '-I', str(ROOT / 'drivers/apple-agx/d3d12'),
                                 str(ROOT / 'tests/d3d12_volume_registry_fixture.c'), '-o', str(exe), *map(str, libs),
-                                '-L/opt/homebrew/opt/zstd/lib', '-lzstd', '-lz', '-lpthread', '-lc++'],
+                                '-L/opt/homebrew/opt/zstd/lib', '-lzstd', '-lz', '-lpthread', *HOST_LIBS, CXX_RUNTIME],
                                capture_output=True, text=True, timeout=60)
             self.assertEqual(r.returncode, 0, r.stderr[-4000:])
             r = subprocess.run([str(exe)], capture_output=True, text=True, timeout=600)

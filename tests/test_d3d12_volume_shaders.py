@@ -17,7 +17,7 @@ import re
 import subprocess
 import tempfile
 import unittest
-from test_dxbc_to_nir import ROOT, DXBC, local_tree, host_flags
+from test_dxbc_to_nir import ROOT, DXBC, local_tree, host_flags, HOST_LIBS
 
 SHADERS = {
     'cs_volume_load': ('B',
@@ -53,7 +53,7 @@ class VolumeShaders(unittest.TestCase):
             '-I', str(DXBC), str(ROOT / 'tests/d3d12_volume_shader_fixture.c'),
             str(DXBC / 'dxbc_to_nir.c'), str(DXBC / 'dxbc_parse.c'), str(DXBC / 'dxbc_minmax.c'),
             '-o', str(cls.binary), *map(str, libs),
-            '-L/opt/homebrew/opt/zstd/lib', '-lzstd', '-lz', '-lpthread']
+            '-L/opt/homebrew/opt/zstd/lib', '-lzstd', '-lz', '-lpthread', *HOST_LIBS]
         run = subprocess.run(command, capture_output=True, text=True)
         if run.returncode:
             cls.tmp.cleanup()

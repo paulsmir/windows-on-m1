@@ -7,9 +7,10 @@ import ast
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
-from test_dxbc_to_nir import ROOT, local_tree
+from test_dxbc_to_nir import ROOT, local_tree, host_flags, HOST_LIBS
 from test_d3d12_pbe_depth import selected, projector
 
 
@@ -40,9 +41,16 @@ class BcDescriptors(unittest.TestCase):
             geometry='\n#define asahi_compute_save(c) ((void)0)\n#define agx_context(c) (c)\n#define TILE_WIDTH 32\n#define TILE_HEIGHT 32\nstatic void geometry(const struct pipe_blit_info *info, float *values, unsigned *dims) {\n struct pipe_context *ctx = NULL;\n'+body+'\n memcpy(values,data,4*sizeof(float));dims[0]=width;dims[1]=height;\n}\n'
             (out/'descriptor.c').write_text(FIXTURE.replace('/* GEOMETRY */',support+geometry))
             exe=out/'check'
+            flags=config['flags']
+            if sys.platform!='darwin':
+                # the pinned recipe is the macOS tree's: keep its includes and
+                # options, take the configuration defines from this host's tree
+                sdk=flags[flags.index('-isysroot')+1]
+                flags=[f for f in flags if not f.startswith('-D') and f not in ('-isysroot',sdk)]+\
+                      [f for f in host_flags(build) if f.startswith('-D')]
             r=subprocess.run(['clang','-std=c11','-DC24_SELECTED_SOURCE="'+str(out/'selected-state.inc')+'"',
-                *config['flags'],str(out/'descriptor.c'),*[str(build/n) for n in config['libs']],
-                '-L/opt/homebrew/opt/zstd/lib','-lzstd','-lz','-lpthread','-o',str(exe)],cwd=build,capture_output=True,text=True)
+                *flags,str(out/'descriptor.c'),*[str(build/n) for n in config['libs']],
+                '-L/opt/homebrew/opt/zstd/lib','-lzstd','-lz','-lpthread',*HOST_LIBS,'-o',str(exe)],cwd=build,capture_output=True,text=True)
             self.assertEqual(r.returncode,0,r.stderr)
             r=subprocess.run([str(exe)],capture_output=True,text=True)
             self.assertEqual(r.returncode,0,r.stdout+r.stderr)

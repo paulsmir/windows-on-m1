@@ -1,4 +1,8 @@
+#ifdef __APPLE__
 #include <CommonCrypto/CommonDigest.h>
+#else
+#include <openssl/evp.h>
+#endif
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -9,9 +13,15 @@
 static void u32(std::vector<std::uint8_t>&b,std::size_t n,std::uint32_t v){for(unsigned i=0;i<4;++i)b[n+i]=std::uint8_t(v>>(i*8));}
 static void u64(std::vector<std::uint8_t>&b,std::size_t n,std::uint64_t v){for(unsigned i=0;i<8;++i)b[n+i]=std::uint8_t(v>>(i*8));}
 static bool digest(const AgxD3d12WireSpan*sp,std::size_t count,std::uint8_t out[32],void*){
+#ifdef __APPLE__
  CC_SHA256_CTX ctx;CC_SHA256_Init(&ctx);
  for(std::size_t i=0;i<count;++i)CC_SHA256_Update(&ctx,sp[i].data,static_cast<CC_LONG>(sp[i].bytes));
  CC_SHA256_Final(out,&ctx);return true;
+#else
+ EVP_MD_CTX*ctx=EVP_MD_CTX_new();bool ok=ctx&&EVP_DigestInit_ex(ctx,EVP_sha256(),nullptr);
+ for(std::size_t i=0;ok&&i<count;++i)ok=EVP_DigestUpdate(ctx,sp[i].data,sp[i].bytes);
+ unsigned n=0;ok=ok&&EVP_DigestFinal_ex(ctx,out,&n)&&n==32;EVP_MD_CTX_free(ctx);return ok;
+#endif
 }
 static bool fail_digest(const AgxD3d12WireSpan*,std::size_t,std::uint8_t[32],void*){return false;}
 static std::array<std::uint8_t,32> compiler_key,adapter_key;

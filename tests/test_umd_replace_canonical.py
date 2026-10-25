@@ -35,6 +35,7 @@ BODY = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <string>
 typedef int HRESULT; typedef unsigned UINT; typedef unsigned D3DKMT_HANDLE; typedef int BOOL;
 typedef unsigned long long ULONGLONG; typedef uint64_t APPLE_AGX_U64; typedef unsigned APPLE_AGX_U32;

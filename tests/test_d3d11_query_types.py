@@ -26,6 +26,7 @@ from test_d3d10_shader_fields_init import function_body, project
 
 PROGRAM = r'''
 #include <cassert>
+#include <algorithm>
 #include <cstring>
 #include <vector>
 typedef unsigned UINT; typedef unsigned long ULONG; typedef unsigned long long ULONGLONG; typedef long HRESULT;
@@ -36,7 +37,8 @@ typedef unsigned UINT; typedef unsigned long ULONG; typedef unsigned long long U
 #define APIENTRY
 #define __in
 #define LOG_ENTRYPOINT()
-enum D3D10DDI_QUERY { D3D10DDI_QUERY_EVENT = 0, D3D10DDI_QUERY_OCCLUSION, D3D10DDI_QUERY_TIMESTAMP,
+/* MS ABI: an unscoped enum is int, so out-of-range types such as 0x1000 are valid values */
+enum D3D10DDI_QUERY : int { D3D10DDI_QUERY_EVENT = 0, D3D10DDI_QUERY_OCCLUSION, D3D10DDI_QUERY_TIMESTAMP,
   D3D10DDI_QUERY_TIMESTAMPDISJOINT, D3D10DDI_QUERY_PIPELINESTATS, D3D10DDI_QUERY_OCCLUSIONPREDICATE,
   D3D10DDI_QUERY_STREAMOUTPUTSTATS, D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE, D3D11DDI_QUERY_PIPELINESTATS,
   D3D11DDI_QUERY_STREAMOUTPUTSTATS_STREAM0, D3D11DDI_QUERY_STREAMOUTPUTSTATS_STREAM1,
@@ -61,7 +63,9 @@ struct pipe_context {
 };
 static pipe_query *create_query(pipe_context *, unsigned type, unsigned index) {
   pipe_query *q = new pipe_query{(int)type, index}; made.push_back(q); return q; }
-static void destroy_query(pipe_context *, pipe_query *q) { delete q; }
+static void destroy_query(pipe_context *, pipe_query *q) {
+  made.erase(std::find(made.begin(), made.end(), q)); delete q; }
+static void release_made() { for (pipe_query *q : made) delete q; made.clear(); }
 struct AGX_D3D10_WINDOWS_DEVICE { int unused; };
 struct Device { pipe_context *pipe; AGX_D3D10_WINDOWS_DEVICE *windows; };
 enum QueryPhase { QueryCreated, QueryIssued, QuerySignaled, QueryFailed, QueryDestroyed };
@@ -85,7 +89,7 @@ static Query create(D3D10DDI_QUERY type, UINT flags = 0) {
   static Device dev = {&pipe, &w};
   Query q; memset(&q, 0, sizeof(q));
   D3D10DDIARG_CREATEQUERY args = {type, flags};
-  lastError = S_OK; made.clear();
+  lastError = S_OK; release_made();
   CreateQuery(D3D10DDI_HDEVICE{&dev}, &args, D3D10DDI_HQUERY{&q}, D3D10DDI_HRTQUERY{nullptr});
   return q;
 }
@@ -121,6 +125,7 @@ int main() {
          q.handle == made[0] && q.extra_count == 0);
   q = create(D3D10DDI_QUERY_TIMESTAMPDISJOINT);
   assert(lastError == S_OK && made.empty() && !q.handle);
+  release_made();
   return 0;
 }
 '''
