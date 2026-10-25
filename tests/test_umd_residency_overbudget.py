@@ -11,7 +11,7 @@ class Overbudget(unittest.TestCase):
     run_replay = persistent.PersistentResidency.run_replay
     def test_exhausted_trim_requests_vidmm_overbudget_once(self):
         code = BODY[:BODY.index('int main(){')]
-        code += r''' 
+        code += r'''
 static unsigned calls, overbudget;
 static bool hard_limit;
 static HRESULT budget(HANDLE,D3DDDI_MAKERESIDENT *r) {
