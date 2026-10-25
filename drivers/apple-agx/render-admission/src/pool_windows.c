@@ -616,8 +616,9 @@ static VOID AdmissionPoolDemandFree(ADMISSION_POOL_RUNTIME *Pool) {
   ExFreePoolWithTag(Pool, ADMISSION_POOL_TAG);
 }
 
-/* Window pages leave before their pages return to Windows; a refused
- * UNMAP_ALL keeps every page allocated (PoolLeaks). */
+/* Window pages leave before their pages return to Windows. Outstanding private
+ * leases or a refused UNMAP_ALL retain the entire runtime, not just the pages:
+ * slab ownership and callbacks still belong to this object (PoolLeaks). */
 static VOID AdmissionPoolDemandStop(ADMISSION_CONTEXT *Context) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
   ULONGLONG i;
@@ -635,8 +636,11 @@ static VOID AdmissionPoolDemandStop(ADMISSION_CONTEXT *Context) {
     delay.QuadPart = -10000LL; /* 1 ms */
     (void)KeDelayExecutionThread(KernelMode, FALSE, &delay);
   }
-  if (InterlockedCompareExchange(&pool->WorkPending, 0, 0) != 0) {
-    /* A work item still references the runtime: keep it (and its pages). */
+  if (InterlockedCompareExchange(&pool->WorkPending, 0, 0) != 0 ||
+      pool->Slabs.PrivateCount != 0ULL) {
+    /* A worker or private lease still owns the runtime. Private grants/copies
+     * are not retired by UNMAP_ALL, which owns only the advertised window.
+     * Preserve mappings, slabs and their owner together on this leak path. */
     InterlockedIncrement(&Context->PoolLeaks);
     Context->PoolDemand = NULL;
     return;
@@ -651,11 +655,11 @@ static VOID AdmissionPoolDemandStop(ADMISSION_CONTEXT *Context) {
     /* Every window page is gone: all slabs return to Windows. */
     for (i = 0ULL; i < pool->Demand.Count; ++i) pool->SlabOf[i] = NULL;
     AdmissionPoolSlabDrain(&pool->Slabs);
+    AdmissionPoolDemandFree(pool);
   } else {
-    /* Still aliased: keep every slab (and its pages) for good. */
+    /* Still aliased: keep the slab list and its containing owner for good. */
     InterlockedIncrement(&Context->PoolLeaks);
   }
-  AdmissionPoolDemandFree(pool);
   Context->PoolCpu = NULL;
   Context->PoolIpa = 0ULL;
   Context->PoolBytes = 0ULL;
