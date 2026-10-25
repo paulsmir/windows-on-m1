@@ -349,7 +349,12 @@ def main():
             'mesa_source': str(MESA.resolve()), 'mesa_build': str(build.resolve()),
             'shader_info_sha256': sha256(MESA / 'src/compiler/shader_info.h')}
         for receipt in (build / 'source-root.json', native / 'source-root.json', evidence / 'source-root.json'):
-            if json.loads(receipt.read_text(encoding='utf-8-sig')) != source_identity:
+            # roots compare resolved: a receipt may name them by an alias (the builder root's 8.3 form)
+            received = json.loads(receipt.read_text(encoding='utf-8-sig'))
+            for root in ('mesa_source', 'mesa_build'):
+                if root in received:
+                    received[root] = str(Path(received[root]).resolve())
+            if received != source_identity:
                 raise RuntimeError('Mesa source/build/header identity mismatch: ' + str(receipt))
         (out / 'source-root.json').write_text(json.dumps(source_identity, indent=2) + '\n')
     manifest = {'architecture': args.architecture, 'project': str(args.project),

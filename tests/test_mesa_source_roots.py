@@ -39,7 +39,7 @@ class SourceRootRegression(unittest.TestCase):
             (mesa/'src/compiler/shader_info.h').write_bytes(b'one selected header')
             identity={'mesa_source':str(mesa.resolve()),'mesa_build':str(build.resolve()),'shader_info_sha256':hashlib.sha256(b'one selected header').hexdigest()}
             for p in [build,native,evidence]:(p/'source-root.json').write_text(json.dumps(identity))
-            env={'args':types.SimpleNamespace(mesa_source=mesa),'MESA':mesa,'native':native,'evidence':evidence,'out':out,'build':build,'json':json,'sha256':lambda p:hashlib.sha256(p.read_bytes()).hexdigest()}
+            env={'Path':pathlib.Path,'args':types.SimpleNamespace(mesa_source=mesa),'MESA':mesa,'native':native,'evidence':evidence,'out':out,'build':build,'json':json,'sha256':lambda p:hashlib.sha256(p.read_bytes()).hexdigest()}
             exec(code,env);self.assertEqual(json.loads((out/'source-root.json').read_text()),identity)
             wrong=dict(identity);wrong['shader_info_sha256']='old header'
             for changed in [build,native,evidence]:
@@ -59,7 +59,7 @@ class SourceRootRegression(unittest.TestCase):
             for q in [mesa/'src/compiler',build,out]:q.mkdir(parents=True)
             (mesa/'src/compiler/shader_info.h').write_bytes(b'projected header')
             identity={'mesa_source':str(mesa.resolve()),'mesa_build':str(build.resolve()),'shader_info_sha256':hashlib.sha256(b'projected header').hexdigest()}
-            env={'ARGS':types.SimpleNamespace(mesa_source=mesa),'MESA':mesa,'BUILD':build,'OUT':out,'json':json,'hashlib':hashlib}
+            env={'Path':pathlib.Path,'ARGS':types.SimpleNamespace(mesa_source=mesa),'MESA':mesa,'BUILD':build,'OUT':out,'json':json,'hashlib':hashlib}
             with self.assertRaises(FileNotFoundError):exec(code,env)
             receipt=build/'source-root.json';receipt.write_text(json.dumps(dict(identity,shader_info_sha256='pristine')))
             with self.assertRaisesRegex(RuntimeError,'identity mismatch'):exec(code,env)
