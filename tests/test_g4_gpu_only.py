@@ -141,9 +141,10 @@ int main(void) {
 #define AppleAgxWin32BufferCpuWrite 2
 #define AgxWin32NativeBoSuccess 0
 struct agx_bo { unsigned flags,handle; int refcnt; size_t size; void *_map; };
-typedef struct { int Failed; struct { void *Screen; } Buffers; int Gpuva; } AGX_WIN32_ASAHI_BACKEND;
+typedef struct { void *PrivateMap; uint64_t Bytes; } AGX_WIN32_ASAHI_CPU_STORAGE;
+typedef struct { int Failed; void *Owner; struct { int (*CpuStorage)(void *,const void *,uint64_t,AGX_WIN32_ASAHI_CPU_STORAGE *); } Ops; struct { void *Screen; } Buffers; int Gpuva; } AGX_WIN32_ASAHI_BACKEND;
 struct agx_device { AGX_WIN32_ASAHI_BACKEND *windows_private; };
-struct windows_bo { struct agx_bo Base; AGX_WIN32_ASAHI_BACKEND *Backend; int Virtual,Backing; struct { uint64_t Allocation; } Gpuva; void *Shadow; };
+struct windows_bo { struct agx_bo Base; AGX_WIN32_ASAHI_BACKEND *Backend; int Virtual; struct { uint64_t ConstructionSerial; } Backing; struct { uint64_t Allocation; } Gpuva; void *Shadow; };
 static unsigned locks,receipts,retires;
 static char storage[16];
 #define AGX_WIN32_ASAHI_FAIL(b,n) ((b)->Failed=(n))
@@ -151,7 +152,7 @@ static void report(unsigned token,unsigned flags) { assert(token==42 && flags==A
 static void (*AgxWin32GpuOnlyMapHook)(unsigned,unsigned)=report;
 static uint64_t AgxWin32GpuvaHoldingFence(int *g,uint64_t a) { (void)g;(void)a;++retires;return 0; }
 static int AgxWin32GpuvaRetire(int *g,uint64_t f) { (void)g;(void)f;return 1; }
-static int AgxWin32NativeBoMap(void *s,int *b,unsigned a,void **p) { (void)s;(void)b;(void)a;++locks;*p=storage;return 0; }
+static int AgxWin32NativeBoMap(void *s,void *b,unsigned a,void **p) { (void)s;(void)b;(void)a;++locks;*p=storage;return 0; }
 static void *shadow_alloc(size_t n) { (void)n;return storage; }
 @@BODY@@
 int main(void) {

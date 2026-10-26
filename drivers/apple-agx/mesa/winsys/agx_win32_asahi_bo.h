@@ -26,6 +26,10 @@ struct _AGX_WIN32_ASAHI_CAPTURE;
 typedef int (*AGX_WIN32_ASAHI_MAP_RELEASE)(
     const void *NativeBo, const void *ExpectedAddress, int Commit);
 typedef struct {
+  void *PrivateMap; /* stable mapped T13 storage, NULL for other mappings */
+  APPLE_AGX_U64 Bytes; /* retained private staging and merge baseline */
+} AGX_WIN32_ASAHI_CPU_STORAGE;
+typedef struct {
   int (*Enter)(void *, AGX_WIN32_SCREEN *);
   void (*Leave)(void *);
   int (*Associate)(void *, APPLE_AGX_U64, const void *, APPLE_AGX_U64,
@@ -33,6 +37,9 @@ typedef struct {
   int (*Detach)(void *, APPLE_AGX_U64, const void *, APPLE_AGX_U64);
   int (*Identity)(void *, const void *, APPLE_AGX_U64, AGX_WIN32_RELOC_ALLOCATION *);
   const void *(*NextBo)(void *, APPLE_AGX_U32 *);
+  /* Optional, queried under native-owner serialization; identity must match. */
+  int (*CpuStorage)(void *, const void *, APPLE_AGX_U64,
+                    AGX_WIN32_ASAHI_CPU_STORAGE *);
 } AGX_WIN32_ASAHI_OWNER_OPS;
 
 /* One caller-serialized native device. Screen/owner storage must outlive it.

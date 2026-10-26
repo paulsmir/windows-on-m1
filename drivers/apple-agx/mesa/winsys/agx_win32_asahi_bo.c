@@ -95,6 +95,9 @@ static void shadow_free(void *p) {
 int AgxWin32AsahiShadowPublish(struct agx_bo *base,size_t bytes) {
   struct windows_bo *bo=(struct windows_bo *)base;
   if(!base || !((unsigned)base->flags&AGX_WIN32_BO_SHADOW) || !base->_map) return 1;
+  /* A proven T13 map is already cached and write-watched. The UMD publishes
+   * its dirty bytes to canonical storage at submission. No second copy. */
+  if(!bo->Shadow) return base->_map==bo->Backing.CpuAddress;
   if(base->_map!=bo->Shadow || !bo->Backing.CpuAddress) return 0;
   if(bytes>base->size) bytes=base->size;
   memcpy(bo->Backing.CpuAddress,bo->Shadow,bytes);
@@ -963,6 +966,13 @@ static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed
 #ifdef APPLE_AGX_GPUVA_WINSYS
   /* EXP1207: the shadow outlives the map with the BO (BO cache reuse). */
   if((unsigned)base->flags&AGX_WIN32_BO_SHADOW) {
+    AGX_WIN32_ASAHI_CPU_STORAGE storage={0};
+    if(!bo->Shadow && b->Ops.CpuStorage &&
+       b->Ops.CpuStorage(b->Owner,base,bo->Backing.ConstructionSerial,&storage) &&
+       storage.PrivateMap==address) {
+      base->_map=address;
+      return;
+    }
     if(!bo->Shadow && !(bo->Shadow=shadow_alloc(base->size))) {
       AGX_WIN32_ASAHI_FAIL(b, 1u); return;
     }
