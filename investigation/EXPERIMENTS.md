@@ -64301,3 +64301,18 @@ EXP1972 HARDWARE BEFORE 2026-10-26T17:13:20Z:
 - Hashes: sys fd4821d20826, UmdArm64 69528cd5295b, UmdX64 0cdf515d4cd1, Umd32 aaa7af8b44a5; manifest 41c5ae8b4a55, hardware-manifest b5b39a459149; probe1972.sh 4cb92e0dfa6b (PROBE_LINT_OK); visible recovery rec1972h aaf3d20483143735; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1972h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1972-fhd-100k/run1972.sh.
+
+CORRECTION to EXP1971 BEFORE and EXP1972 BEFORE (2026-10-26T17:38:48Z): both ran at **1280x720, not FHD**. The probe uploads the scratchpad master gm-run.ps1 to the guest before each arm, and that master still hard-coded -width 1280 -height 720 (the -Width/-Height edit had been made only on the guest copy, which the upload overwrote). The master now has -Width/-Height (default 1280x720). EXP1971 therefore failed at load at HD 200k, not FHD 200k.
+
+EXP1971 HARDWARE ACTUAL: FAIL at load at HD 1280x720 with 200k asteroids (corrected).
+- Arm a (CPU_POOL_MAP=0): out of memory creating a 2D BC7 1024x1024 l96 texture at 46.8 s; 38 texture E_OUTOFMEMORY and 43 reject-screen-create (135 MB allocations).
+- Arm b (CPU_POOL_MAP default): device removed at 29.3 s after reject-native-allocation E_OUTOFMEMORY.
+- The full 2688 MiB native pool cannot hold the 200k scene. User decision: unified GPU memory over all guest RAM (Codex rc46). Recovery rec1971h: RECOVERY_DONE.
+
+EXP1972 HARDWARE ACTUAL 2026-10-26T17:38:48Z: PASS for stability, at **HD 1280x720** (see correction).
+- Arm a (100k asteroids): Score 543 / 3.2 FPS (native base M1 macOS HD 100k: about 9,950 / 59.6 FPS). Median frame 272 ms; GPU busy estimate 31 ms.
+- Arm b (50k asteroids): Score 651 / 3.9 FPS.
+- Steady-state waits per Execute in arm a (464 Executes): draw.native_ready_escape 71.1 ms for 15 calls; query_resolve.native_ready_escape 69.2 ms for 3; draw.copy_escape 58.1 ms for 164 (CPU_POOL_MAP=0); render_fence 37.6 ms for 22.
+- rc45 verdict: batching cut the readiness escapes about 25x (385+148 -> 15+3) but not their cost, because each proof walks every 4 KiB page of every held allocation, O(resident bytes) per submission. Codex rc47 makes it generation-based.
+- The images now show shaded grey asteroids at 100k; the flat-white look at 2k may be distance/exposure. The rc44 discriminator remains.
+- Recovery rec1972h (running).
