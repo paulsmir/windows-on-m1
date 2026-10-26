@@ -64083,3 +64083,12 @@ EXP1961 ACTUAL (Claude headline 2026-10-26T09:12:44Z): **FIRST COMPLETE GRAVITYM
 - Compared with EXP1960 (same driver, legacy RAM: 5.6/6.6 scene presents/min, about 0.1 fps): about 20x.
 - Verdict: CONFIRMED. Guest RAM was the binding limit for GravityMark; the expanded profile is now the default for experiments.
 - Next: rendering throughput (Night Raid-class bottlenecks: draw_vbo cost, CPU retire), plus a Night Raid / D3D11 / GL regression check on this m1n1.
+
+EXP1962 HARDWARE BEFORE 2026-10-26T09:19:55Z:
+- Package 30.0.1962.0 = same driver code as EXP1961. Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded. Only switch: Wom1GpuFaultInfoRead=1, so the pool is full size. Single variable vs EXP1961: the pool fraction (3/4 -> full).
+- WHY THIS HYPOTHESIS: EXP1961 (3/4 pool) completes GravityMark (2k 352 / 1.8 FPS), but the median frame is 0.22 s while 2167 trims and 15-21 s paging stalls remain: the working set still overflows 2016 MiB. The full pool failed at load in EXP1955 only because the 6.28 GB guest hit the RAM floor; with 6.88 GB it may fit.
+- Expected: no load OOM; far fewer trims and stalls; higher score/FPS. Failure: load OOM at the T8 floor (keep 3/4), or more stalls (RAM pressure moved to the OS).
+- Recovery: rec1962h (lastgood: old macho, legacy profile).
+- Hashes: sys d0de36cbd9a6, UmdArm64 7094ad297a6e, UmdX64 c22d3d7c0213, Umd32 d37c0ee90019; manifest b583f6d1e42a, hardware-manifest 1812316f5925; probe1962.sh cc93f50cd32e (PROBE_LINT_OK); visible recovery rec1962h 6eda7c16c1cd5c85; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1962h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1962-full-pool-ram/run1962.sh.
