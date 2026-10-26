@@ -1,0 +1,23 @@
+{
+  "inputs": {
+    "agx_win32_query_timestamp.cl": "b219511b7c53eba22a96f1809b26b39b97a0d0578d7e28c8ef32c3977a72f3cc",
+    "agx_win32_query_timestamp.h": "c5fc5721a888cf13f5bbbc3152e97573162c4c56f2bb304c7e7de04d9226ac15",
+    "generate-query-timestamp.py": "07ef41c2b937b469428afc34c0b8f3d1f165da95389c0048de5fb1430382dc7b",
+    "mesa_clc": "66c18e352e0d143668007d710a2eaf774f22f0be60647b0302ea2b94717d7dea",
+    "asahi_clc": "9019c2368ae69fec007b69ae7dda3fc90fa966b9966e7308ac1cb15fafa800a3",
+    "libcl.h": "85dced14fe9802e67efbf4f122aa0f3c7ec40a8d89cf816e971f1274ef96f2a7",
+    "stdint.h": "d345a6cbd8350cac0c48069449f8cc1c22a78694c72e4fc8db45296a7fed90fd",
+    "macros.h": "f965ee46d99dcd390d49c86aa9df63bc62ad706ab13d8e3e2ae1b4db57afb238"
+  },
+  "outputs": {
+    "agx_win32_query_timestamp_shaders.h": "4f364811735dfacb95665805069f7142cae34201910cbd881a9bace265bfc164",
+    "agx_win32_query_timestamp_shaders.c": "5ce057d8d30004cbc3853a89da9413a4fc317ef16fcf7e80f13ac288ac13e130",
+    "LICENSE.txt": "85de76d163f54f644d07b62c1908c1aabeb4880f3b4ecf1e492081bd4a3a4770"
+  },
+  "spirv_sha256": "39ec8a97cd031662b7343b5b3b153f1e0fa59c5d68d881197c6157e9e0486656",
+  "targets": [
+    "g13g",
+    "g13x"
+  ],
+  "license": "MIT; original kernel, Mesa compiler; notices retained"
+}

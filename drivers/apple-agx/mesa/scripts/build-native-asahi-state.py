@@ -6824,6 +6824,11 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 stream_module = importlib.util.module_from_spec(stream_spec)
                 stream_spec.loader.exec_module(stream_module)
                 stream_module.project_sources(out, args.project, overlays)
+                timestamp_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-query-timestamp.py'
+                timestamp_spec = importlib.util.spec_from_file_location('native_query_timestamp', timestamp_script)
+                timestamp_module = importlib.util.module_from_spec(timestamp_spec)
+                timestamp_spec.loader.exec_module(timestamp_module)
+                timestamp_module.project_sources(out, args.project, overlays)
 
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
