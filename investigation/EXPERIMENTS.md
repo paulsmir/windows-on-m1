@@ -64402,3 +64402,11 @@ EXP1976 HARDWARE BEFORE 2026-10-26T19:45:49Z:
 - Hashes: sys 25f7a02796ff, UmdArm64 1aa64acff24b, UmdX64 c4c5b280e986, Umd32 3a5f27083f82; manifest 33baa1966a14, hardware-manifest b43ac9fdb04f; probe1976.sh e186b0b3604a (PROBE_LINT_OK); visible recovery rec1976h 354a2d61e507aef2; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1976h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1976-stream-probes/run1976.sh.
+
+EXP1976 HARDWARE ACTUAL 2026-10-26T19:58:23Z: FAIL for the GPU stream; probe steps executed.
+- RC44D/RC44I (probe e1976): did not reach the pixel check. The probe's own HLSL fails to compile (X3662: UAV-derived values used in a gradient operation, ps_5_1); a probe bug, fixed in Codex rc55.
+- RC43I16Z/O/N and RC43I32Z/O/N with APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1: all FAIL with "C6D draw close+execute+signal hr=0x887a0005" (DXGI_ERROR_DEVICE_REMOVED), even for count=0. The guest stayed alive: rc43 containment kept these failures in the process.
+- Arm a (GravityMark HD 50k, stream on): the guest went down. Bugcheck **0x119 P1=2 P2=ffffffffc000000d (STATUS_INVALID_PARAMETER)** P3=ffffe183d1379a50 P4=ffffe487530a44b0; minidump rec1976h/102626-14562-01.dmp; app logs in rec1976h/app-logs (no counted-path rows before the crash). rc43 contained STATUS_DEVICE_BUSY but not this submit status.
+- Arm b did not run.
+- Recovery rec1976h (AGX_RECOVERY_ALLOW_AT_PROXY=1): RECOVERY_DONE.
+- Next: Codex rc54 (xhigh) to root-cause the stream (probe device removal at Close/Execute, submit STATUS_INVALID_PARAMETER) and make every KMD submit failure non-fatal for the system.
