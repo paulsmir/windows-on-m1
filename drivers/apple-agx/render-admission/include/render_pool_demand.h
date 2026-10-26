@@ -22,7 +22,9 @@ typedef struct _ADMISSION_POOL_GRANULE {
   unsigned long long RecordSeq; /* last paging record naming the granule */
   /* Aged reclaim: 1 + the time it was first seen releasable; 0 not yet. */
   unsigned long long IdleSince;
-  /* A Busy unmap is retried only after a newer executed paging epoch. */
+  /* Ordinary reclaim retries Busy only after a newer executed paging epoch.
+   * The periodic Windows worker also clears Busy under the pool lock: broker
+   * holds can end during graph teardown with no further paging execution. */
   unsigned long long BusySeq;
   unsigned char Busy;
   unsigned char BusyAnyExecuted;

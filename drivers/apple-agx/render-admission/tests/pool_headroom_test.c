@@ -1,40 +1,58 @@
 /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
  * Actual Windows admission must refuse new locked pages before LowMemory,
  * and pressure reclaim must drop only safe, surplus backing without aging. */
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "render_pool_demand.h"
 #include "render_pool_slab.h"
+#ifdef __cplusplus
+}
+#endif
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
 typedef unsigned long long ULONGLONG;
 typedef void VOID;
+typedef void *PDEVICE_OBJECT, *PVOID;
 typedef int BOOLEAN;
 #define TRUE 1
 #define FALSE 0
 #define _Use_decl_annotations_
+#define _In_
+#define _In_opt_
+#define UNREFERENCED_PARAMETER(x) ((void)(x))
 #define G ADMISSION_POOL_DEMAND_GRANULE
 #define N 128
 
+typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct {
     ADMISSION_POOL_DEMAND Demand;
     ADMISSION_POOL_SLABS Slabs;
     int *HighMemory, *LowMemory;
     ADMISSION_POOL_RESERVE_FAILURE LastReserveFailure;
+    ADMISSION_CONTEXT *Context;
+    int WorkQueued, WorkPending, Stopping;
 } ADMISSION_POOL_RUNTIME;
-typedef struct { ADMISSION_POOL_RUNTIME *PoolDemand; } ADMISSION_CONTEXT;
+struct _ADMISSION_CONTEXT { ADMISSION_POOL_RUNTIME *PoolDemand; };
 static ADMISSION_POOL_RUNTIME pool;
 static ADMISSION_CONTEXT context = { &pool };
 static ADMISSION_POOL_GRANULE granules[N];
 static unsigned long long candidates[N];
 static ADMISSION_POOL_SLAB *backing[N];
 static unsigned slots[N];
-static int high, low, locked, busy[N];
-static unsigned allocations, releases;
+static int high, low, locked, busy[N], broken[N];
+static unsigned allocations, releases, unmaps;
 static int fail_new;
 static ULONGLONG now;
 static int KeReadStateEvent(int *event) { return *event; }
 static ULONGLONG AdmissionPoolNowMs(void) { return now; }
+static int InterlockedExchange(int *p, int v) { int old = *p; *p = v; return old; }
+static int InterlockedCompareExchange(int *p, int v, int expected) {
+    int old = *p; if (old == expected) *p = v; return old;
+}
+static int InterlockedDecrement(int *p) { return --*p; }
 static ADMISSION_POOL_DEMAND *AdmissionMemoryPoolLock(ADMISSION_CONTEXT *ctx) {
     assert(!locked++);
     return &ctx->PoolDemand->Demand;
@@ -48,7 +66,7 @@ static ADMISSION_POOL_SLAB *new_slab(void *opaque) {
     (void)opaque;
     ++allocations;
     if (fail_new) return NULL;
-    return calloc(1, sizeof(ADMISSION_POOL_SLAB));
+    return (ADMISSION_POOL_SLAB *)calloc(1, sizeof(ADMISSION_POOL_SLAB));
 }
 static void free_slab(void *opaque, ADMISSION_POOL_SLAB *slab) {
     (void)opaque;
@@ -62,6 +80,9 @@ static int commit(void *opaque, ULONGLONG first, ULONGLONG count) {
 }
 static ADMISSION_POOL_RELEASE release(void *opaque, ULONGLONG index) {
     (void)opaque;
+    assert(locked);
+    ++unmaps;
+    if (broken[index]) return AdmissionPoolReleaseFailed;
     if (busy[index]) return AdmissionPoolReleaseBusy;
     AdmissionPoolSlabGive(&pool.Slabs, backing[index], slots[index]);
     backing[index] = NULL;
@@ -73,6 +94,7 @@ static void reset(void) {
     memset(granules, 0, sizeof(granules));
     memset(backing, 0, sizeof(backing));
     memset(busy, 0, sizeof(busy));
+    memset(broken, 0, sizeof(broken));
     ADMISSION_POOL_DEMAND_OPS ops = { &pool, commit, release };
     assert(AdmissionPoolDemandInit(&pool.Demand, granules, candidates, N, &ops));
     pool.Demand.ReleaseDelay = 5000;
@@ -84,9 +106,114 @@ static void reset(void) {
     pool.Slabs.ReserveCap = N;
     pool.HighMemory = &high;
     pool.LowMemory = &low;
+    pool.Context = &context;
     high = 1; low = 0; now = 100;
-    allocations = releases = 0;
+    allocations = releases = unmaps = 0;
     fail_new = 0;
+}
+
+/* Execute one periodic wake; there is no fake paging completion. */
+static void worker_tick(void) {
+    now += 500;
+    pool.WorkQueued = pool.WorkPending = 1;
+    AdmissionPoolReclaimWork(NULL, &pool);
+    assert(!locked && !pool.WorkQueued && !pool.WorkPending);
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * Process graph teardown can remove the final broker hold without executing
+ * another paging record. Caching Busy until that unrelated epoch changes
+ * leaks the backing forever. A timer wake retries, but only acknowledged
+ * unmaps may free slots, and surviving allocations keep their promises. */
+static void test_idle_worker_after_broker_release(void) {
+    for (int pressure = 0; pressure != 2; ++pressure) {
+        ADMISSION_POOL_PLACEMENT dead = {0}, live = {0};
+        reset();
+        assert(AdmissionMemoryPoolReserve(&context, 64 * G));
+        assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+        assert(AdmissionPoolDemandPlace(&pool.Demand, &dead, 0, 64 * G) == AdmissionPoolPlaced);
+        assert(AdmissionPoolDemandPlace(&pool.Demand, &live, 64 * G, 32 * G) == AdmissionPoolPlaced);
+        AdmissionPoolDemandRecord(&pool.Demand, 0, 64 * G, 7);
+        AdmissionMemoryPoolExecuted(&context, 7);
+        AdmissionPoolDemandUnplace(&pool.Demand, &dead);
+        AdmissionMemoryPoolUnreserve(&context, 64 * G);
+        for (unsigned i = 0; i != 64; ++i) busy[i] = 1;
+        high = !pressure;
+        AdmissionMemoryPoolReclaim(&context);
+        now += pool.Demand.ReleaseDelay;
+        AdmissionMemoryPoolReclaim(&context);
+        assert(unmaps == 64 && pool.Demand.Stats.BusyRetries == 64);
+        assert(pool.Demand.Candidates == 64 && pool.Slabs.Stats.Slabs == 3);
+        /* Frequent reserve/execution/destroy reclaim calls do not spin. */
+        for (unsigned i = 0; i != 100; ++i) AdmissionMemoryPoolReclaim(&context);
+        assert(unmaps == 64);
+        worker_tick();
+        assert(unmaps == 128 && releases == 0); /* still genuinely busy */
+        for (unsigned i = 0; i != 64; ++i) busy[i] = 0;
+        fail_new = 1;
+        worker_tick();
+        assert(pool.Demand.ExecutedSeq == 7 && pool.Slabs.Reserved == 32);
+        assert(pool.Demand.Stats.CommittedGranules == 32 && !pool.Demand.Candidates);
+        assert(unmaps == 192 && allocations == 3);
+        assert(pool.Slabs.Stats.Slabs == (pressure ? 1u : 2u));
+        assert(releases == (pressure ? 2u : 1u)); /* at most one empty spare */
+        for (unsigned i = 64; i != 96; ++i)
+            assert(backing[i] && granules[i].Owner == &live);
+        /* A surviving, evicted allocation restores from its promise even
+         * with physical allocation denied, then final destruction shrinks. */
+        AdmissionPoolDemandUnplace(&pool.Demand, &live);
+        high = 0;
+        AdmissionMemoryPoolReclaim(&context);
+        assert(pool.Slabs.Stats.Slabs == 1 && pool.Slabs.Reserved == 32);
+        assert(AdmissionPoolDemandPlace(&pool.Demand, &live, 96 * G, 32 * G) == AdmissionPoolPlaced);
+        assert(allocations == 3);
+        AdmissionPoolDemandUnplace(&pool.Demand, &live);
+        AdmissionMemoryPoolUnreserve(&context, 32 * G);
+        worker_tick();
+        assert(!pool.Slabs.Reserved && !pool.Slabs.Stats.Slabs && releases == 3);
+    }
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * Retrying the broker must not discard CPU/paging/owner/stop safety gates,
+ * shorten idle aging, or reuse a slot after an unacknowledged hard failure. */
+static void test_idle_worker_keeps_all_release_guards(void) {
+    ADMISSION_POOL_PLACEMENT dead = {0}, live = {0};
+    reset();
+    assert(AdmissionPoolDemandPlace(&pool.Demand, &dead, 0, 7 * G) == AdmissionPoolPlaced);
+    AdmissionPoolDemandUnplace(&pool.Demand, &dead);
+    for (unsigned i = 0; i != 7; ++i) busy[i] = 1;
+    high = 0;
+    AdmissionMemoryPoolReclaim(&context);
+    assert(unmaps == 7);
+    for (unsigned i = 0; i != 7; ++i) busy[i] = 0;
+    assert(AdmissionPoolDemandPin(&pool.Demand, 0, G));
+    AdmissionPoolDemandPagingRef(&pool.Demand, G, 1);
+    AdmissionPoolDemandRecord(&pool.Demand, 2 * G, G, 9);
+    assert(AdmissionPoolDemandPlace(&pool.Demand, &live, 3 * G, G) == AdmissionPoolPlaced);
+    broken[4] = 1;
+    busy[5] = 1;
+    worker_tick();
+    assert(unmaps == 10 && pool.Demand.Stats.CommittedGranules == 6);
+    assert(!backing[6] && granules[4].Pinned);
+    worker_tick();
+    assert(unmaps == 11 && pool.Demand.Stats.ReleaseFailures == 1);
+    assert(backing[0] && backing[1] && backing[2] && backing[3] && backing[4] && backing[5]);
+    pool.Stopping = 1;
+    busy[5] = 0;
+    worker_tick();
+    assert(unmaps == 11 && backing[5]);
+
+    reset();
+    dead.Base = dead.Bytes = 0;
+    assert(AdmissionPoolDemandPlace(&pool.Demand, &dead, 0, G) == AdmissionPoolPlaced);
+    AdmissionPoolDemandUnplace(&pool.Demand, &dead);
+    worker_tick();
+    ULONGLONG first_idle = now;
+    while (now - first_idle < pool.Demand.ReleaseDelay - 500) worker_tick();
+    assert(unmaps == 0 && backing[0]);
+    worker_tick();
+    assert(unmaps == 1 && !backing[0]);
 }
 static void test_event_policy(void) {
     reset();
@@ -276,6 +403,8 @@ static void test_over_cap_restore_uses_same_backing(void) {
     assert(!pool.Slabs.Reserved && !pool.Slabs.Stats.Slabs);
 }
 int main(void) {
+    test_idle_worker_after_broker_release();
+    test_idle_worker_keeps_all_release_guards();
     test_event_policy();
     test_admitted_paging_under_pressure();
     test_pressure_reclaim();

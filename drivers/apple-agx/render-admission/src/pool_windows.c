@@ -582,8 +582,21 @@ static VOID AdmissionPoolReclaimWork(_In_ PDEVICE_OBJECT Device,
   if (pool == NULL) return;
   /* From here the DPC may queue the item again. */
   InterlockedExchange(&pool->WorkQueued, 0);
-  if (InterlockedCompareExchange(&pool->Stopping, 0, 0) == 0)
-    AdmissionMemoryPoolReclaim(pool->Context);
+  if (InterlockedCompareExchange(&pool->Stopping, 0, 0) == 0) {
+    ADMISSION_POOL_DEMAND *demand = AdmissionMemoryPoolLock(pool->Context);
+    if (demand != NULL) {
+      /* A process graph can drop the last broker hold without executing a
+       * newer paging record. Give Busy candidates one retry per timer wake
+       * (500 ms), otherwise they can keep dead allocations' backing forever.
+       * Ordinary reclaim calls still suppress same-epoch retries. Only that
+       * suppression is cleared: owner/pin/paging/record checks and the broker
+       * acknowledgement remain mandatory before any slot returns. */
+      for (ULONGLONG i = 0ULL; i < demand->Candidates; ++i)
+        demand->Granules[demand->CandidateList[i]].Busy = 0u;
+      AdmissionPoolReclaimLocked(pool);
+      AdmissionMemoryPoolUnlock(pool->Context);
+    }
+  }
   InterlockedDecrement(&pool->WorkPending);
 }
 

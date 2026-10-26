@@ -31,26 +31,52 @@ class PoolHeadroomTest(unittest.TestCase):
         C73 admitted new locked slabs with high-memory clear and low-memory
         clear. Pressure must refuse that growth and return idle surplus now,
         preserving promised backing and every ownership/execution safety gate.
+        After a broker Busy response, the periodic worker must eventually
+        release idle backing even when no further paging record executes.
         The fixture executes the actual Windows wrappers and portable pools.
         """
+        self.run_policy()
+
+    def test_worker_cpp_with_c_allocator_linkage(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        The extracted Windows worker and policy must compile as C++ and link
+        to the C allocators; this catches /TP syntax and linkage regressions.
+        Host compilation is not a native MSVC/WDK x86 build.
+        """
+        self.run_policy(cpp=True)
+
+    def run_policy(self, cpp=False):
         source = (RENDER / 'src/pool_windows.c').read_text()
         names = ['AdmissionPoolMayGrow']
         if 'static VOID AdmissionPoolReclaimLocked(' in source:
             names.append('AdmissionPoolReclaimLocked')
         names += ['AdmissionMemoryPoolExecuted', 'AdmissionMemoryPoolReserve',
                   'AdmissionMemoryPoolUnreserve',
-                  'AdmissionMemoryPoolReclaim']
+                  'AdmissionMemoryPoolReclaim', 'AdmissionPoolReclaimWork']
         with tempfile.TemporaryDirectory(prefix='pool-headroom-') as tmp:
             tmp = Path(tmp)
             (tmp / 'pool_policy.inc').write_text('\n\n'.join(function(source, n) for n in names))
             exe = tmp / 'headroom'
+            flags = ['-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
+                     '-I', str(tmp), '-I', str(RENDER / 'include')]
+            objects = []
+            for name in ('render_pool_demand', 'render_pool_slab'):
+                obj = tmp / (name + '.o')
+                subprocess.run([os.environ.get('CC', 'clang'), '-std=c11',
+                                *flags, '-c', str(RENDER / 'src' / (name + '.c')),
+                                '-o', str(obj)], check=True)
+                objects.append(str(obj))
+            source = RENDER / 'tests/pool_headroom_test.c'
+            if cpp:
+                cpp_source = tmp / 'policy.cpp'
+                cpp_source.write_text(source.read_text())
+                source = cpp_source
             subprocess.run([
-                os.environ.get('CC', 'clang'), '-std=c11', '-Wall', '-Wextra',
-                '-Werror', '-fsanitize=address,undefined', '-I', str(tmp),
-                '-I', str(RENDER / 'include'),
-                str(RENDER / 'tests/pool_headroom_test.c'),
-                str(RENDER / 'src/render_pool_demand.c'),
-                str(RENDER / 'src/render_pool_slab.c'), '-o', str(exe),
+                os.environ.get('CXX', 'clang++') if cpp else os.environ.get('CC', 'clang'),
+                '-std=c++17' if cpp else '-std=c11', *flags,
+                *(['-Wno-missing-field-initializers'] if cpp else []),
+                str(source), *objects, '-o', str(exe),
             ], check=True)
             subprocess.run([str(exe)], check=True, timeout=10)
 
