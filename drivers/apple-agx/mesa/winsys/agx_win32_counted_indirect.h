@@ -38,9 +38,11 @@ agx_win32_draw_indirect_count(struct agx_context *ctx,
     * batch entry or heap binding. Never generate MaxCount zeroed records:
     * native Asahi would still CPU-encode and query-count every one of them. */
    ctx->windows_draw_bindings = NULL;
+   unsigned count_wait = AgxWin32WaitBegin(AgxWaitCountMap);
    const uint32_t *count = pipe_buffer_map_range(pctx,
       indirect->indirect_draw_count, indirect->indirect_draw_count_offset,
       sizeof(*count), PIPE_MAP_READ, &transfer);
+   AgxWin32WaitEnd(count_wait);
    if (!count || !transfer) {
       if (transfer)
          pipe_buffer_unmap(pctx, transfer);

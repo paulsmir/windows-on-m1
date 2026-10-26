@@ -30,7 +30,7 @@ int main(){
 '''
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);(p/'test.cpp').write_text(code)
-            z=subprocess.run(['clang++','-std=c++17','-fsanitize=address,undefined','-fno-sanitize-recover=all',
+            z=subprocess.run(['clang++','-std=c++17', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'),'-fsanitize=address,undefined','-fno-sanitize-recover=all',
                  '-I'+str(ROOT/'drivers/apple-agx/render-admission/umd/include'),str(p/'test.cpp'),'-o',str(p/'test')],capture_output=True,text=True)
             self.assertEqual(z.returncode,0,z.stderr)
             z=subprocess.run([str(p/'test')],capture_output=True,text=True)

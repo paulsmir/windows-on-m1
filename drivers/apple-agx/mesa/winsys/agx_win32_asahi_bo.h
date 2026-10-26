@@ -2,6 +2,7 @@
 #define AGX_WIN32_ASAHI_BO_H
 
 #include "agx_win32_native_device.h"
+#include "agx_win32_wait.h"
 #include "agx_win32_reloc_capture.h"
 #include <stdint.h>
 #ifdef APPLE_AGX_GPUVA_WINSYS

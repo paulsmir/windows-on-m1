@@ -306,7 +306,7 @@ class PersistentResidency(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'replay.cpp'; exe = Path(tmp) / 'replay'
             src.write_text(body)
-            built = subprocess.run(['clang++', '-std=c++17', '-Wall', '-Wno-unused-function',
+            built = subprocess.run(['clang++', '-std=c++17', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-Wall', '-Wno-unused-function',
                                     '-fsanitize=address,undefined',
                                     '-I', str(ROOT / 'drivers/apple-agx/render-admission/umd/include'),
                                     str(src), '-o', str(exe)],

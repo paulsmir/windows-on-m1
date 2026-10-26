@@ -943,6 +943,7 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
         save(path,text)
     project_query_timeline(out, save)
     project_d3d_robustness(out,save)
+    project_wait_timing(out,save)
 
 
 def project_query_timeline(out, save):
@@ -1203,3 +1204,57 @@ agx_win32_should_lower_robustness_d3d(const nir_intrinsic_instr *intr,
    }
 ''')+uniforms[b:]
     save(up,uniforms)
+
+
+def project_wait_timing(out, save):
+    """RC42: preserve native bodies; bracket void sync/flush paths on all exits.
+
+    Every affected TU includes the declaration-bearing Asahi adapter header.
+    The clock/collector remains in the UMD; GL without a hook is inert.
+    """
+    groups = {
+        'agx_batch.c': {
+            'agx_sync_writer': 'AgxWaitSyncWriter',
+            'agx_sync_readers': 'AgxWaitSyncReaders',
+            'agx_flush_writer': 'AgxWaitFlush',
+            'agx_flush_readers': 'AgxWaitFlush',
+            'agx_flush_all': 'AgxWaitFlush',
+            'agx_sync_all': 'AgxWaitSyncReaders',
+        },
+        'agx_pipe.c': {
+            'agx_prepare_for_map': 'AgxWaitTransferMap',
+            'agx_blit_to_staging': 'AgxWaitStagingBlit',
+            'agx_blit_from_staging': 'AgxWaitStagingBlit',
+            'agx_flush_batch': 'AgxWaitFlush',
+        },
+        'agx_query.c': {
+            'agx_query_increment_cpu': 'AgxWaitQueryIncrement',
+            'sync_query_writers': 'AgxWaitQueryWriters',
+            'flush_query_writers': 'AgxWaitQueryWriters',
+        },
+    }
+    for filename, sites in groups.items():
+        path = 'src/gallium/drivers/asahi/' + filename
+        text = (out/path).read_text()
+        if '#include "agx_win32_asahi_bo.h"' not in text:
+            text = replace(text, '#include "agx_state.h"',
+                           '#include "agx_state.h"\n#include "agx_win32_asahi_bo.h"')
+        for name, site in sites.items():
+            a, b = function(text, name)
+            original = text[a+1:b-1]
+            # Only void returns are accepted, so a future return-type change
+            # fails projection instead of accidentally evaluating it twice.
+            if re.search(r'\breturn\s+[^;]+;', original):
+                raise RuntimeError('Wait scope needs void function: ' + name)
+            original = re.sub(r'\breturn\s*;',
+                '{ AgxWin32WaitEnd(wait_token); return; }', original)
+            timed = '{\n   unsigned wait_token = AgxWin32WaitBegin(' + site + ');' + original
+            timed += '\n   AgxWin32WaitEnd(wait_token);\n}'
+            text = text[:a] + timed + text[b:]
+        if filename == 'agx_batch.c':
+            text = replace(text,
+                '   agx_sync_batch_for_reason(ctx, batch, "Too many batches");',
+                '   unsigned slot_wait = AgxWin32WaitBegin(AgxWaitBatchSlot);\n'
+                '   agx_sync_batch_for_reason(ctx, batch, "Too many batches");\n'
+                '   AgxWin32WaitEnd(slot_wait);')
+        save(path, text)

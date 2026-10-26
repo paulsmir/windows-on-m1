@@ -49,7 +49,7 @@ class QueryGenerations(unittest.TestCase):
         (self.path / 'test.c').write_text(fixture.replace('@@PRODUCTION@@', source))
         mesa = local_tree('reference', 'mesa')
         built = subprocess.run([
-            'clang', '-std=c11', '-DAPPLE_AGX_GPUVA_WINSYS',
+            'clang', '-std=c11', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-DAPPLE_AGX_GPUVA_WINSYS',
             '-Werror=implicit-function-declaration', '-fsanitize=address,undefined',
             '-I' + str(ROOT / 'drivers/apple-agx/mesa/winsys'),
             '-I' + str(mesa / 'src'), str(self.path / 'test.c'),

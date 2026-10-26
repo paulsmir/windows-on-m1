@@ -336,7 +336,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('bytes > d->bytes - dst_offset', copy)
         self.assertIn('bytes > r->bytes - src_offset', copy)
         self.assertIn('list->commands >= kListCommands', copy)
-        execute = source[source.index('static void ReplayAndSubmit('):]
+        execute = source[source.index('static HRESULT ReplayAndSubmit('):]
         execute = execute[:execute.index('\n}\n')]
         self.assertLess(execute.index('AgxD3d12OwnerCopy('), execute.index('AgxD3d12OwnerSubmitAndWait('))
         # C5: copies and dispatches replay in recording order through one loop
@@ -554,7 +554,7 @@ class D3d12AbiGate(unittest.TestCase):
         side = fn('static bool CopySide(')
         self.assertIn('D3D12DDI_RL_SELECT_SUBRESOURCE', side)
         self.assertIn('D3D12DDI_RL_PLACED_PHYSICAL_SUBRESOURCE_PITCHED', side)
-        execute = fn('static void ReplayAndSubmit(')
+        execute = fn('static HRESULT ReplayAndSubmit(')
         self.assertIn('AgxD3d12OwnerClearRenderTarget(', execute)
         self.assertIn('AgxD3d12OwnerCopyTexture(', execute)
         # buffers carry their type so a footprint side is never a texture
@@ -676,7 +676,7 @@ class D3d12AbiGate(unittest.TestCase):
         optional = fn('static AgxD3d12OptionalBinds DrawOptionalBinds(')
         for stage in ('gs', 'hs', 'ds'):
             self.assertIn('draw.pso->%s_dwords ? pending.%s : nullptr' % (stage, stage), optional)
-        replay_loop = fn('static void ReplayAndSubmit(')
+        replay_loop = fn('static HRESULT ReplayAndSubmit(')
         self.assertIn('ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch);', replay_loop)
         self.assertIn('pending = {};', replay_loop)
         self.assertIn('"measure-d3d12-draw"', draw)
@@ -786,7 +786,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('(d->type == D3D12DDI_RT_TEXTURE2D) != (s->type == D3D12DDI_RT_TEXTURE2D) ? 4u', rc)
         self.assertIn('rc.whole_levels = s->levels < d->levels ? s->levels : d->levels;', rc)
         self.assertIn('d->bytes < s->bytes ? d->bytes : s->bytes', rc)
-        self.assertIn('AgxD3d12OwnerCopyTextureRegion(', fn('static void ReplayAndSubmit('))
+        self.assertIn('AgxD3d12OwnerCopyTextureRegion(', fn('static HRESULT ReplayAndSubmit('))
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         region = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion('):]
         region = region[:region.index('\n}\n')]

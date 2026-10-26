@@ -129,7 +129,7 @@ class DeallocatedSlotNoEvictTests(unittest.TestCase):
             source = Path(tmp) / "t.cpp"; binary = Path(tmp) / "t"
             source.write_text(BODY.replace("@@SCREEN@@", screen_funcs)
                               .replace("@@RUNTIME@@", runtime_funcs))
-            subprocess.run(["clang++", "-std=c++17", "-w", "-I", str(ROOT / "drivers/apple-agx/render-admission/umd/include"), str(source), "-o", str(binary)],
+            subprocess.run(["clang++", "-std=c++17", '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), "-w", "-I", str(ROOT / "drivers/apple-agx/render-admission/umd/include"), str(source), "-o", str(binary)],
                            check=True)
             subprocess.run([str(binary)], check=True)
 

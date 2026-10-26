@@ -7,6 +7,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <d3d10umddi.h>
 #pragma warning(pop)
 #include "umd_internal.h"
+#include "../../../mesa/winsys/agx_win32_wait.h"
 #include "umd_residency_trim.h"
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g3_copy_query_receipt.h"
@@ -103,8 +104,10 @@ ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *device,
   request.Flags.HardwareAccess = 0;
   request.pPrivateDriverData = &arm;
   request.PrivateDriverDataSize = sizeof(arm);
+  unsigned wait_pfnEscapeCb_1=AdmissionUmdWaitBegin(AgxWaitFrameArmEscape);
   status = device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnEscapeCb_1);
   if (SUCCEEDED(status)) {
     device->DwmFrameArmAttempts = 0u;
     device->DwmFrameArmAttempted = TRUE;
@@ -269,8 +272,10 @@ static int reserve_va(void *context, uint64_t bytes, uint64_t minimum,
   request.MinimumAddress = minimum;
   request.MaximumAddress = maximum;
   request.Size = bytes;
+  unsigned wait_pfnReserveGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitReserveGpuVa);
   HRESULT hr = device->KernelCallbacks->pfnReserveGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnReserveGpuVirtualAddressCb);
   {
     UINT values[5] = {(UINT)(bytes >> 16), (UINT)(minimum >> 16),
                       (UINT)(maximum >> 32), request.hAdapter != 0u,
@@ -362,7 +367,9 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
     /* EXP1124: drop the references only; VidMm pages out what it needs. */
     evict.Flags.EvictOnlyIfNecessary=1u;
     evict.NumAllocations=count;evict.AllocationList=handles;
+    unsigned wait_pfnEvictCb=AdmissionUmdWaitBegin(AgxWaitEvict);
     hr=device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle,&evict);
+    AdmissionUmdWaitEnd(wait_pfnEvictCb);
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
     for(UINT i=0;i<count;++i) {
       auto *slot=&device->ScreenBuffers[chosen[i]];
@@ -412,8 +419,10 @@ static HRESULT residency_request(ADMISSION_UMD_DEVICE *device,
     request->NumAllocations=count;request->AllocationList=handles;
     request->PriorityList=priorities;
     request->Flags.CantTrimFurther=cantTrimFurther;
+    unsigned wait_pfnMakeResidentCb_1=AdmissionUmdWaitBegin(AgxWaitMakeResident);
     hr=device->KernelCallbacks->pfnMakeResidentCb(
         device->RuntimeDevice.handle,request);
+    AdmissionUmdWaitEnd(wait_pfnMakeResidentCb_1);
     if(cantTrimFurther || (!allowCantTrimFurther && hr==E_OUTOFMEMORY)) {
       UINT values[3]={count,(UINT)cantTrimFurther,rounds};
       AdmissionUmdDiagnostic("measure-make-resident-cant-trim",hr,values,
@@ -506,8 +515,10 @@ static int map_va(void *context, uint64_t token, uint64_t va,
   request.SizeInPages = pages;
   request.Protection.Write = (protection & AGX_GPUVA_MAP_WRITE) != 0;
   request.Protection.Execute = (protection & AGX_GPUVA_MAP_EXECUTE) != 0;
+  unsigned wait_pfnMapGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitMapGpuVa);
   HRESULT hr = device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnMapGpuVirtualAddressCb);
   {
     UINT values[5] = {request.hAllocation != 0u,
                       request.hPagingQueue != 0u, (UINT)pages,
@@ -581,8 +592,10 @@ static int map_va_at(void *context, uint64_t token, uint64_t va,
   request.SizeInPages = pages;
   request.Protection.Write = (protection & AGX_GPUVA_MAP_WRITE) != 0;
   request.Protection.Execute = (protection & AGX_GPUVA_MAP_EXECUTE) != 0;
+  unsigned wait_pfnMapGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitMapGpuVa);
   HRESULT hr = device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnMapGpuVirtualAddressCb);
   {
     UINT values[5] = {(UINT)offset_pages, (UINT)pages,
                       request.VirtualAddress == va,
@@ -612,8 +625,10 @@ static int free_va(void *context, uint64_t va, uint64_t bytes) {
       !device->KernelCallbacks->pfnFreeGpuVirtualAddressCb) return 0;
   request.BaseAddress = va;
   request.Size = bytes;
+  unsigned wait_pfnFreeGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitFreeGpuVa);
   HRESULT hr = device->KernelCallbacks->pfnFreeGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnFreeGpuVirtualAddressCb);
   va_record(device,3u,0,0,va,bytes,hr);
   if (SUCCEEDED(hr) && device->VaAliasCount) {
     /* C53 B0: a freed range keeps no alias (a cut never needs more room
@@ -787,8 +802,12 @@ static int wait_object(ADMISSION_UMD_DEVICE *device,
   request.ObjectCount = 1;
   request.ObjectHandleArray = &object;
   request.FenceValueArray = &fence;
-  return SUCCEEDED(device->KernelCallbacks->pfnWaitForSynchronizationObjectFromCpuCb(
-      device->RuntimeDevice.handle, &request));
+  unsigned wait_token=AdmissionUmdWaitBegin(device && object==device->PagingSyncObject ?
+      AgxWaitPagingFence : AgxWaitRenderFence);
+  HRESULT status=device->KernelCallbacks->pfnWaitForSynchronizationObjectFromCpuCb(
+      device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_token);
+  return SUCCEEDED(status);
 }
 
 static int wait_paging_at(ADMISSION_UMD_DEVICE *device, uint64_t fence,
@@ -871,8 +890,10 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
   request.Flags.Value=0;
   request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
   EXP1016_START(escape_start);
+  unsigned wait_pfnEscapeCb_2=AdmissionUmdWaitBegin(AgxWaitCopyEscape);
   HRESULT status = device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle,&request);
+  AdmissionUmdWaitEnd(wait_pfnEscapeCb_2);
   EXP1016_NOTE(1u,payload->TransferBytes,escape_start);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   if (FAILED(status) && frame_process_is_dwm()) {
@@ -927,7 +948,9 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
   if(temporary) {
     D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
     lock.Flags.LockEntire=1;lock.Flags.ReadOnly=1;
+    unsigned wait_pfnLockCb_1=AdmissionUmdWaitBegin(AgxWaitLockHash);
     HRESULT hr=device->KernelCallbacks->pfnLockCb(device->RuntimeDevice.handle,&lock);
+    AdmissionUmdWaitEnd(wait_pfnLockCb_1);
     locked=SUCCEEDED(hr);
     if (locked) AdmissionUmdScreenCpuAccessEvent(device, slot->Token, AdmissionCpuLock);
     if(!locked) return 0;
@@ -972,8 +995,10 @@ static int touch_device(ADMISSION_UMD_DEVICE *device,uint64_t va) {
   request.BroadcastContextCount=1;request.BroadcastContext[0]=device->KernelContext;
   request.pPrivateDriverData=&touch;request.PrivateDriverDataSize=sizeof(touch);
   request.RenderCBSequence=(UINT)InterlockedIncrement(&device->RenderCbSequence);
+  unsigned wait_pfnSubmitCommandCb_1=AdmissionUmdWaitBegin(AgxWaitSubmit);
   HRESULT hr=device->KernelCallbacks->pfnSubmitCommandCb(
       device->RuntimeDevice.handle,&request);
+  AdmissionUmdWaitEnd(wait_pfnSubmitCommandCb_1);
   uint64_t next=device->NextRenderFence+1;
   int ok=SUCCEEDED(hr) && signal_render(device,next) &&
       wait_object(device,device->RenderSyncObject,next);
@@ -1000,8 +1025,10 @@ static int map_canonical_as(ADMISSION_UMD_DEVICE *device,
   request.SizeInPages=((slot->Bytes+0xffffULL)&~0xffffULL)>>12;
   request.Protection.Write=(slot->Flags & AppleAgxWin32BufferGpuWrite)!=0;
   request.Protection.Execute=slot->ClassId==AgxWin32BufferClassShader;
+  unsigned wait_pfnMapGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitMapGpuVa);
   HRESULT hr=device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
       device->RuntimeDevice.handle,&request);
+  AdmissionUmdWaitEnd(wait_pfnMapGpuVirtualAddressCb);
   va_record(device,2u,slot->Token,request.hAllocation,request.BaseAddress,
             request.SizeInPages<<12,hr);
   int ok=(SUCCEEDED(hr) || hr==E_PENDING) &&
@@ -1039,8 +1066,10 @@ static int map_aliases_as(ADMISSION_UMD_DEVICE *device,
       request.SizeInPages=aliases[index].Pages;
       request.Protection.Write=(aliases[index].Protection & AGX_GPUVA_MAP_WRITE)!=0;
       request.Protection.Execute=(aliases[index].Protection & AGX_GPUVA_MAP_EXECUTE)!=0;
+      unsigned wait_pfnMapGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitMapGpuVa);
       HRESULT hr=device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
           device->RuntimeDevice.handle,&request);
+      AdmissionUmdWaitEnd(wait_pfnMapGpuVirtualAddressCb);
       va_record(device,7u,slot->Token,allocation,request.BaseAddress,request.SizeInPages<<12,hr);
       ok&=(SUCCEEDED(hr) || hr==E_PENDING) && request.VirtualAddress==aliases[index].Va &&
           (hr!=E_PENDING || (request.PagingFenceValue &&
@@ -1311,8 +1340,10 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   if(success && temporary) {
     D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
     lock.Flags.LockEntire=1;
+    unsigned wait_pfnLockCb_2=AdmissionUmdWaitBegin(AgxWaitLockTransfer);
     lock_hr=device->KernelCallbacks->pfnLockCb(
         device->RuntimeDevice.handle,&lock);
+    AdmissionUmdWaitEnd(wait_pfnLockCb_2);
     locked=SUCCEEDED(lock_hr);
     if (locked) AdmissionUmdScreenCpuAccessEvent(device, slot->Token, AdmissionCpuLock);
     if(locked) address=(BYTE *)lock.pData;
@@ -1660,8 +1691,10 @@ int AdmissionUmdGpuvaValidateCpuPoolMap(ADMISSION_UMD_DEVICE *device,
   request.hContext = device->KernelContext;
   request.pPrivateDriverData = &q;
   request.PrivateDriverDataSize = sizeof(q);
+  unsigned wait_pfnEscapeCb_3=AdmissionUmdWaitBegin(AgxWaitPoolMapEscape);
   HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnEscapeCb_3);
   if (SUCCEEDED(hr) && q.Ready == 1u) {
     device->GpuvaFailure = S_OK;
     return 1;
@@ -1843,8 +1876,10 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
     request.hContext = device->KernelContext;
     request.pPrivateDriverData = &q;
     request.PrivateDriverDataSize = sizeof(q);
+    unsigned wait_pfnEscapeCb_4=AdmissionUmdWaitBegin(AgxWaitNativeReadyEscape);
     HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
         device->Adapter->RuntimeAdapter.handle, &request);
+    AdmissionUmdWaitEnd(wait_pfnEscapeCb_4);
     if (SUCCEEDED(hr) && q.Ready != 1u && !scheduled) {
       /* Like the CPU copy path, this escape runs before VidSch schedules
        * the device. MakeResident's fence need not publish its deferred PTEs.
@@ -1964,8 +1999,10 @@ static int submit(void *context, const uint64_t *written,
   AcquireSRWLockShared(&device->ScreenBufferLock);
   watch_slots(device,3u,NULL,0,NULL,0,request.RenderCBSequence,S_OK);
   ReleaseSRWLockShared(&device->ScreenBufferLock);
+  unsigned wait_pfnSubmitCommandCb_2=AdmissionUmdWaitBegin(AgxWaitSubmit);
   HRESULT submit_result = device->KernelCallbacks->pfnSubmitCommandCb(
       device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnSubmitCommandCb_2);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   measure_g4_phase(4u,submit_start,request.RenderCBSequence,bytes,submit_result);
 #endif
@@ -2073,8 +2110,10 @@ static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) 
   UINT operation=payload->Operation,width=payload->Width,height=payload->Height,
       utile=(payload->UtileWidth<<8)|payload->UtileHeight,layers=payload->Layers,
       samples=payload->Samples;
+  unsigned wait_pfnEscapeCb_5=AdmissionUmdWaitBegin(AgxWaitSceneEscape);
   HRESULT hr=device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle,&request);
+  AdmissionUmdWaitEnd(wait_pfnEscapeCb_5);
   if(FAILED(hr)) {
     /* EXP873 diagnostic: which private scene request the KMD refused. */
     UINT values[7]={operation,(UINT)hr,width,height,utile,layers,samples};
@@ -2108,7 +2147,9 @@ VOID AdmissionUmdGpuCompletionDrain(ADMISSION_UMD_DEVICE *device,
     request.hContext = device->KernelContext;
     request.pPrivateDriverData = &query;
     request.PrivateDriverDataSize = sizeof(query);
+    unsigned wait_pfnEscapeCb_6=AdmissionUmdWaitBegin(AgxWaitCompletionEscape);
     hr = device->KernelCallbacks->pfnEscapeCb(device->Adapter->RuntimeAdapter.handle, &request);
+    AdmissionUmdWaitEnd(wait_pfnEscapeCb_6);
     if (FAILED(hr) || query.Count > ADMISSION_GPU_COMPLETION_PAGE || !query.Frequency) {
       AdmissionUmdDiagnostic("measure-gpu-collection-error", FAILED(hr) ? hr : E_FAIL, NULL, 0);
       return;
@@ -2161,8 +2202,10 @@ static int gpu_timestamps(void *context, uint64_t command_va, uint64_t *start,
   request.hContext=device->KernelContext;
   request.Flags.HardwareAccess=0u;
   request.pPrivateDriverData=&query;request.PrivateDriverDataSize=sizeof(query);
+  unsigned wait_pfnEscapeCb_7=AdmissionUmdWaitBegin(AgxWaitTimestampEscape);
   HRESULT hr=device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle,&request);
+  AdmissionUmdWaitEnd(wait_pfnEscapeCb_7);
   {
     /* EXP1341 receipt-only: each answer and the KMD's newest compute
      * capture (first 64 per process; measure- lines are outside the

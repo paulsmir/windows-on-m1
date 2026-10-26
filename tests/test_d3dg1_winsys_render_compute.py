@@ -42,7 +42,7 @@ class D3dG1WinsysRenderCompute(unittest.TestCase):
                 "#define AGX_WIN32_ASAHI_FAIL(b, f) ((b)->Failed = 1)\n" +
                 "\n".join(body(source, name) for name in names))
             binary = tmp / "replay"
-            built = subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall",
+            built = subprocess.run([os.environ.get("CC", "clang"), "-std=c11", '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), "-Wall",
                 "-Wextra", "-Werror", "-fsanitize=address,undefined",
                 "-I", str(tmp), "-I", str(ROOT / "tests"),
                 "-I", str(ROOT / "drivers/apple-agx/shared/include"),

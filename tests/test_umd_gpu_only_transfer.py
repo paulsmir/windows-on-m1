@@ -67,7 +67,7 @@ int main(void) {
 }
 '''
             src,exe=Path(tmp)/'test.c',Path(tmp)/'test';src.write_text(harness)
-            built=subprocess.run(['clang','-std=c11','-fsanitize=address,undefined',str(src),'-o',str(exe)],capture_output=True,text=True)
+            built=subprocess.run(['clang','-std=c11', '-include', str(Path(__file__).with_name('d3d12_wait_disabled_fixture.h')),'-fsanitize=address,undefined',str(src),'-o',str(exe)],capture_output=True,text=True)
             self.assertEqual(built.returncode,0,built.stderr)
             run=subprocess.run([str(exe)],capture_output=True,text=True)
             self.assertEqual(run.returncode,0,run.stdout+run.stderr)
@@ -115,7 +115,7 @@ int main(void) {
 }
 '''.replace('@@BODY@@',function_body(pipe,'agx_alloc_staging'))
             src,exe=Path(tmp)/'test.c',Path(tmp)/'test';src.write_text(harness)
-            b=subprocess.run(['clang','-std=c11','-fsanitize=address,undefined',str(src),'-o',str(exe)],capture_output=True,text=True)
+            b=subprocess.run(['clang','-std=c11', '-include', str(Path(__file__).with_name('d3d12_wait_disabled_fixture.h')),'-fsanitize=address,undefined',str(src),'-o',str(exe)],capture_output=True,text=True)
             self.assertEqual(b.returncode,0,b.stderr)
             r=subprocess.run([str(exe)],capture_output=True,text=True)
             self.assertEqual(r.returncode,0,r.stdout+r.stderr)
@@ -166,7 +166,7 @@ int main(void) {
 }
 '''.replace('@@TO@@',function_body(pipe,'agx_blit_to_staging')).replace('@@FROM@@',function_body(pipe,'agx_blit_from_staging'))
             src,exe=Path(tmp)/'test.c',Path(tmp)/'test';src.write_text(h)
-            b=subprocess.run(['clang','-std=c11','-fsanitize=address,undefined',str(src),'-o',str(exe)],capture_output=True,text=True)
+            b=subprocess.run(['clang','-std=c11', '-include', str(Path(__file__).with_name('d3d12_wait_disabled_fixture.h')),'-fsanitize=address,undefined',str(src),'-o',str(exe)],capture_output=True,text=True)
             self.assertEqual(b.returncode,0,b.stderr)
             r=subprocess.run([str(exe)],capture_output=True,text=True)
             self.assertEqual(r.returncode,0,r.stdout+r.stderr)
@@ -197,7 +197,7 @@ int main(void) {
             src,exe=Path(tmp)/'depth.c',Path(tmp)/'depth';src.write_text(source)
             libs=[build/p for p in ('src/asahi/layout/libasahi_layout.a','src/util/libmesa_util.a',
                  'src/util/libmesa_util_simd.a','src/c11/impl/libmesa_util_c11.a','src/util/blake3/libblake3.a')]
-            b=subprocess.run(['clang','-std=c11','-fsanitize=address,undefined',*host_flags(build),
+            b=subprocess.run(['clang','-std=c11', '-include', str(Path(__file__).with_name('d3d12_wait_disabled_fixture.h')),'-fsanitize=address,undefined',*host_flags(build),
                 '-I',str(mesa/'src'),'-I',str(mesa/'src/gallium/include'),
                 '-I',str(mesa/'src/gallium/auxiliary'),str(src),'-o',str(exe),*map(str,libs),
                 '-L/opt/homebrew/opt/zstd/lib','-lzstd','-lz','-lpthread'],capture_output=True,text=True)
@@ -232,7 +232,7 @@ int main(void) {
             src,exe=Path(tmp)/'depth.c',Path(tmp)/'depth';src.write_text(source)
             libs=[build/p for p in ('src/asahi/layout/libasahi_layout.a','src/util/libmesa_util.a',
                  'src/util/libmesa_util_simd.a','src/c11/impl/libmesa_util_c11.a','src/util/blake3/libblake3.a')]
-            b=subprocess.run(['clang','-std=c11','-fsanitize=address,undefined',*host_flags(build),
+            b=subprocess.run(['clang','-std=c11', '-include', str(Path(__file__).with_name('d3d12_wait_disabled_fixture.h')),'-fsanitize=address,undefined',*host_flags(build),
                 '-I',str(mesa/'src'),'-I',str(mesa/'src/gallium/include'),
                 '-I',str(mesa/'src/gallium/auxiliary'),str(src),'-o',str(exe),*map(str,libs),
                 '-L/opt/homebrew/opt/zstd/lib','-lzstd','-lz','-lpthread'],capture_output=True,text=True)
@@ -270,7 +270,7 @@ static unsigned flags_for(unsigned flags) {
 int main(void) {assert(flags_for(0)==0);assert(flags_for(256)==(1u<<29));assert(flags_for(2)==4);}
 '''.replace('@@BODY@@',pipe[a:b])
             src,exe=Path(tmp)/'test.c',Path(tmp)/'test';src.write_text(h)
-            b=subprocess.run(['clang','-std=c11',str(src),'-o',str(exe)],capture_output=True,text=True)
+            b=subprocess.run(['clang','-std=c11', '-include', str(Path(__file__).with_name('d3d12_wait_disabled_fixture.h')),str(src),'-o',str(exe)],capture_output=True,text=True)
             self.assertEqual(b.returncode,0,b.stderr)
             r=subprocess.run([str(exe)],capture_output=True,text=True)
             self.assertEqual(r.returncode,0,r.stdout+r.stderr)

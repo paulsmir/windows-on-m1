@@ -145,7 +145,7 @@ class StagingWriteWatch(unittest.TestCase):
             event = ('static void AdmissionUmdScreenCpuAccessReceipt(ADMISSION_UMD_DEVICE *, '
                      'const ADMISSION_UMD_SCREEN_BUFFER *, HRESULT, UINT) {}\n') + event
             src.write_text(BODY.replace('@@FUNCS@@', funcs).replace('@@EVENT@@', event))
-            built = subprocess.run(['clang++', '-std=c++17', '-Wall', '-Wextra', '-Wno-unused-function',
+            built = subprocess.run(['clang++', '-std=c++17', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-Wall', '-Wextra', '-Wno-unused-function',
                                     '-Wno-missing-field-initializers', '-I', str(INC),
                                     '-fsanitize=address,undefined', str(src), '-o', str(exe)],
                                    text=True, capture_output=True)

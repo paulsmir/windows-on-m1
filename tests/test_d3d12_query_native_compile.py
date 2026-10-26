@@ -29,7 +29,9 @@ class QueryNativeCompile(unittest.TestCase):
                 '   void *windows_private; /* Host compile platform shim. */'))
             (p / 'xf86drm.h').write_text(
                 '/* Host declaration for the unused Linux import branch. */\n'
-                '#pragma once\nint drmSyncobjImportSyncFile(int, unsigned, int);\n')
+                '#pragma once\nint drmSyncobjImportSyncFile(int, unsigned, int);\n'
+                '#include <strings.h>\n#define _strnicmp strncasecmp\n'
+                '#include "renderonly/renderonly.h"\n')
             includes = [
                 p, out / 'src', out / 'include', out / 'include/drm-uapi',
                 out / 'src/asahi/lib', out / 'src/asahi/libagx',
@@ -59,6 +61,7 @@ _Static_assert(AGX_MAX_BATCHES <= AGX_WIN32_QUERY_TIMESTAMP_MAX_SOURCES,
 ''')
             for unit in (out / 'src/gallium/drivers/asahi/agx_query.c',
                          out / 'src/gallium/drivers/asahi/agx_batch.c',
+                         out / 'src/gallium/drivers/asahi/agx_pipe.c',
                          p / 'context_abi.c'):
                 with self.subTest(unit=unit.name):
                     result = subprocess.run(

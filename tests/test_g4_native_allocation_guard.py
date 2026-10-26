@@ -24,7 +24,7 @@ class NativeAllocationGuard(unittest.TestCase):
             exe = Path(tmp) / 'replay'
             src.write_text(source)
             cmd = [os.environ.get('CXX' if cpp else 'CC', 'clang++' if cpp else 'clang'),
-                   '-std=c++17' if cpp else '-std=c11', '-Wall', '-Wextra', '-Werror',
+                   '-std=c++17' if cpp else '-std=c11', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-Wall', '-Wextra', '-Werror',
                    '-fsanitize=address,undefined', '-I', str(SHARED / 'include'), str(src)]
             if graph:
                 cmd += [str(SHARED / 'src' / name) for name in (

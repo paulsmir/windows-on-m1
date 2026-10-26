@@ -43,7 +43,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c"
 SPACE = ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva.c"
 
-PROGRAM = r'''
+PROGRAM = '#include "'+str(ROOT/'tests/d3d12_wait_disabled_fixture.h')+'"\n'+r'''
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>

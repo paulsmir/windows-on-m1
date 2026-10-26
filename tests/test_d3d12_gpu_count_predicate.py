@@ -13,7 +13,7 @@ from test_d3d12_owner_allocation_failure import function
 
 HELPER = ROOT/'drivers/apple-agx/mesa/winsys/agx_win32_counted_indirect.h'
 
-PRELUDE = r'''
+PRELUDE = '#include "'+str(ROOT/'drivers/apple-agx/mesa/winsys/agx_win32_wait.h')+'"\n'+r'''
 #include <assert.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -29,7 +29,11 @@ struct agx_context {struct pipe_context base;bool any_faults;int (*windows_draw_
 struct pipe_transfer {unsigned unused;};
 static struct pipe_transfer transfer;
 static struct pipe_resource arguments,counter;
-static unsigned value,maps,unmaps,encoded,calls,fault,expected_stride;
+static unsigned value,maps,unmaps,encoded,calls,fault,expected_stride,wait_begins,wait_ends;
+static unsigned wait_begin(unsigned site){assert(site==26);++wait_begins;return 1;}
+static void wait_end(unsigned token){assert(token==1);++wait_ends;}
+unsigned (*AgxWin32WaitBeginHook)(unsigned)=wait_begin;
+void (*AgxWin32WaitEndHook)(unsigned)=wait_end;
 static int bind(void *p){(void)p;return 1;}
 static void AgxWin32AsahiMarkContextFault(struct agx_context *c,unsigned site){assert(site);c->any_faults=true;}
 static const uint32_t *pipe_buffer_map_range(struct pipe_context *p,struct pipe_resource *r,unsigned offset,unsigned bytes,unsigned flags,struct pipe_transfer **t){
@@ -56,12 +60,13 @@ PROGRAM = r'''
 int main(void){
  unsigned limits[]={1,33,2400,12000,1000000},values[]={0,1,3,33,UINT32_MAX};
  for(unsigned index=0;index<=4;index+=4)for(unsigned l=0;l<5;++l)for(unsigned v=0;v<5;++v)for(fault=0;fault<6;++fault){
-  value=values[v];maps=unmaps=encoded=calls=0;expected_stride=index?20:16;
+  value=values[v];maps=unmaps=encoded=calls=wait_begins=wait_ends=0;expected_stride=index?20:16;
   arguments.width0=28+limits[l]*expected_stride;counter.width0=16;
   struct agx_context c={{draw},false,bind,0,3,0};struct pipe_draw_info info={index};
   struct pipe_draw_indirect_info in={&arguments,&counter,28,0,limits[l],12};
   agx_win32_draw_indirect_count(&c,&info,7,&in,NULL);
   assert(maps==1&&unmaps==(fault>=3||!fault));
+  assert(wait_begins==1 && wait_ends==1);
   assert(c.windows_draw_bindings==bind&&c.windows_indirect_path==2&&c.windows_indirect_reason==3&&!c.windows_indirect_encode_us);
   unsigned expected=values[v]<limits[l]?values[v]:limits[l];
   assert(encoded==(fault>=1&&fault<=4?0:expected));

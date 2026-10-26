@@ -59,7 +59,7 @@ int main() {
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             (path / 'test.cpp').write_text(source)
-            subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
+            subprocess.run(['c++', '-std=c++17', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-Wall', '-Wextra', '-Werror',
                             '-I', str(HEADER.parent), str(path / 'test.cpp'), '-o', str(path / 'test')], check=True)
             subprocess.run([str(path / 'test')], check=True)
 
@@ -157,7 +157,7 @@ int main(){
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             (path / 'test.cpp').write_text(source)
-            subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', '-Werror', '-DAPPLE_AGX_GPUVA_WINSYS',
+            subprocess.run(['c++', '-std=c++17', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-Wall', '-Wextra', '-Werror', '-DAPPLE_AGX_GPUVA_WINSYS',
                             str(path / 'test.cpp'), '-o', str(path / 'test')], check=True)
             subprocess.run([str(path / 'test')], check=True)
             # RenderSyncObject is absent from ADMISSION_UMD_DEVICE without
@@ -171,7 +171,7 @@ int main() {
 }
 '''
             (path / 'fallback.cpp').write_text(fallback)
-            subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
+            subprocess.run(['c++', '-std=c++17', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
                             str(path / 'fallback.cpp'), '-o', str(path / 'fallback')], check=True)
             subprocess.run([str(path / 'fallback')], check=True)
 
@@ -192,7 +192,8 @@ int main() {
         submit = body(owner, 'static HRESULT submit_owner(')
         self.assertLess(submit.index('->flush('), submit.index('AgxD3d12QueueWaitForOwner('))
         self.assertIn('owner->Runtime.RenderSyncObject, fence', submit)
-        self.assertIn('ordered ? 1 : AgxWin32AsahiContextRetire(', submit)
+        self.assertIn('if (!ordered)', submit)
+        self.assertIn('retired = AgxWin32AsahiContextRetire(', submit)
         destroy = body(owner, 'extern "C" HRESULT AgxD3d12OwnerDestroy(')
         self.assertIn('if (owner->Context)', destroy)
         self.assertLess(destroy.index('AgxWin32AsahiContextRetire('), destroy.index('AgxWin32AsahiContextDestroy('))

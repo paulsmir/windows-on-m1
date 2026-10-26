@@ -134,11 +134,11 @@ class CpuPoolAllocation(unittest.TestCase):
             for unit in [DRIVER/'render-admission/src/render_win32_transport.c',
                          DRIVER/'render-admission/src/render_allocation.c', DRIVER/'shared/src/apple_agx_win32_abi.c']:
                 obj = Path(tmp)/(unit.stem+'.o')
-                compiled = subprocess.run(['clang', '-std=c11', '-fsanitize=address,undefined',
+                compiled = subprocess.run(['clang', '-std=c11', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-fsanitize=address,undefined',
                                            *includes, '-c', str(unit), '-o', str(obj)], capture_output=True, text=True)
                 self.assertEqual(compiled.returncode, 0, compiled.stderr)
                 objects.append(str(obj))
-            cmd = ['clang++', '-std=c++17', '-fsanitize=address,undefined',
+            cmd = ['clang++', '-std=c++17', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-fsanitize=address,undefined',
                    *includes, str(src), *objects, '-o', str(exe)]
             built = subprocess.run(cmd, capture_output=True, text=True)
             self.assertEqual(built.returncode, 0, built.stderr)

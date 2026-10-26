@@ -24,7 +24,7 @@ class ReplayTiming(unittest.TestCase):
         f=function(s,'static unsigned ReplayTimingBucket(')
         for kind in ['kCommandCopy','kCommandTextureCopy','kCommandTextureRegionCopy','kCommandResolve','kCommandQuery','kCommandDispatch','kCommandDraw','kCommandIndirectExpand']:
             self.assertIn(kind,f)
-        replay=function(s,'static void ReplayAndSubmit(')
+        replay=function(s,'static HRESULT ReplayAndSubmit(')
         self.assertIn('measure-d3d12-replay-time',replay)
         self.assertIn('command_ticks[ReplayTimingBucket(command.kind)]',replay)
 

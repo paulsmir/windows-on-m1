@@ -88,7 +88,7 @@ class BorrowedReleaseEvictTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "t.cpp"; binary = Path(tmp) / "t"
             source.write_text(BODY.replace("@@FUNCS@@", funcs))
-            subprocess.run(["clang++", "-std=c++17", "-w", "-I", str(ROOT / "drivers/apple-agx/render-admission/umd/include"), str(source), "-o", str(binary)],
+            subprocess.run(["clang++", "-std=c++17", '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), "-w", "-I", str(ROOT / "drivers/apple-agx/render-admission/umd/include"), str(source), "-o", str(binary)],
                            check=True)
             subprocess.run([str(binary)], check=True)
 

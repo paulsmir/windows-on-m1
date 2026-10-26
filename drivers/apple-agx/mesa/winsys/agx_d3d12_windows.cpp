@@ -307,6 +307,14 @@ static void owner_backend_fail(unsigned site) { owner_batch_refusal(4u, site, 0u
  * reported every 512 messages, every 64 presents and at owner destruction,
  * so a short run (GravityMark D3D12: 29 frames) keeps its tail. */
 extern "C" void (*AgxWin32PerfHook)(const char *message);
+/* Publish the immutable diagnostic bridge before the first owner can
+ * Execute. Later owner creation must not race active native hook readers. */
+static INIT_ONCE owner_wait_once = INIT_ONCE_STATIC_INIT;
+static BOOL CALLBACK owner_wait_init(PINIT_ONCE, PVOID, PVOID *) {
+  AgxWin32WaitBeginHook = AdmissionUmdWaitBegin;
+  AgxWin32WaitEndHook = AdmissionUmdWaitEnd;
+  return TRUE;
+}
 static SRWLOCK owner_perf_lock = SRWLOCK_INIT;
 static struct { UINT Hash, Count, Reported; char Text[40]; } owner_perf_table[48];
 static UINT owner_perf_total, owner_perf_serial, owner_perf_lines, owner_perf_reported_presents;
@@ -566,7 +574,8 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     AgxWin32BatchRefusalHook = owner_batch_refusal;
     AgxWin32BackendFailHook = owner_backend_fail;
     AgxWin32FirstFaultHook = owner_first_fault;
-    AgxWin32PerfHook = owner_perf_note;
+    AgxWin32PerfHook = AdmissionUmdMeasureEnabled() ? owner_perf_note : NULL;
+    (void)InitOnceExecuteOnce(&owner_wait_once, owner_wait_init, NULL, NULL);
     AgxWin32BoTimeHook = owner_bo_time;
     AgxWin32GpuOnlyMapHook = owner_gpu_only_map;
   }
@@ -1935,7 +1944,10 @@ extern "C" void AgxD3d12OwnerDestroyQueryHeap(AGX_D3D12_OWNER *owner, AGX_D3D12_
 static struct pipe_query *heap_query(struct pipe_context *pipe, AGX_D3D12_QUERY_HEAP *heap, unsigned index, unsigned s,
                                      unsigned pipe_type, unsigned pipe_index) {
   struct pipe_query **slot = &heap->Query[index * heap->Slots + s];
-  if (!*slot) *slot = pipe->create_query(pipe, pipe_type, pipe_index);
+  if (!*slot) {
+    AgxUmdWaitScope timing(AgxWaitQueryCreate);
+    *slot = pipe->create_query(pipe, pipe_type, pipe_index);
+  }
   return *slot;
 }
 
@@ -4047,7 +4059,11 @@ static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
   const HRESULT wait = S_FALSE;
 #endif
   const bool ordered = wait == S_OK;
-  const int retired = ordered ? 1 : AgxWin32AsahiContextRetire(owner->Context, 5000u);
+  int retired = 1;
+  if (!ordered) {
+    AgxUmdWaitScope timing(AgxWaitContextRetire);
+    retired = AgxWin32AsahiContextRetire(owner->Context, 5000u);
+  }
   if (context) {
     const UINT values[] = {ordered ? 1u : 0u, static_cast<UINT>(fence), static_cast<UINT>(fence >> 32)};
     AdmissionUmdDiagnostic("measure-d3d12-queue-wait", wait, values, 3);

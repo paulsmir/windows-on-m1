@@ -488,10 +488,11 @@ static int retire_held(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
   if(b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u) return 1;
   uint64_t oldest=b->Gpuva.Older[0].Fence;
   struct agx_batch *old=submitted_at(batch,oldest);
-  if(!old) return AgxWin32GpuvaRetire(&b->Gpuva,oldest) &&
-                  b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u;
-  return AgxWin32AsahiBatchPoll(old,1000) &&
-         b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u;
+  unsigned wait_token=AgxWin32WaitBegin(AgxWaitInflightSlot);
+  int retired=old ? AgxWin32AsahiBatchPoll(old,1000) :
+                   AgxWin32GpuvaRetire(&b->Gpuva,oldest);
+  AgxWin32WaitEnd(wait_token);
+  return retired && b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u;
 }
 
 int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
@@ -1287,10 +1288,16 @@ int AgxWin32AsahiBatchPoll(struct agx_batch *batch,APPLE_AGX_U32 timeout) {
                   !AgxWin32GpuvaComplete(&b->Gpuva,g->Fence))) return 0;
   /* EXP1082: a CPU map may already have retired this submission's residency
    * set (native_map); then only its fence is waited for. */
+  unsigned wait_token=timeout ? AgxWin32WaitBegin(AgxWaitBatchPoll) : 0;
+  int retired;
   if(AgxWin32GpuvaFenceHeld(&b->Gpuva,g->Fence)) {
-    if(!AgxWin32GpuvaRetire(&b->Gpuva,g->Fence)) return 0;
-  } else if(b->Gpuva.Terminal || !b->Gpuva.Ops.WaitRender ||
-            !b->Gpuva.Ops.WaitRender(b->Gpuva.Context,g->Fence)) return 0;
+    retired=AgxWin32GpuvaRetire(&b->Gpuva,g->Fence);
+  } else {
+    retired=!b->Gpuva.Terminal && b->Gpuva.Ops.WaitRender &&
+            b->Gpuva.Ops.WaitRender(b->Gpuva.Context,g->Fence);
+  }
+  AgxWin32WaitEnd(wait_token);
+  if(!retired) return 0;
   g->Retired=1;
   (void)release_lease(b,g); /* a failed release is retried by Release */
   return 1;

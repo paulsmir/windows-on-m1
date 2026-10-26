@@ -221,7 +221,7 @@ struct CB {''')
         with tempfile.TemporaryDirectory(prefix='t6b-residency-') as tmp:
             src,exe=Path(tmp)/'test.cpp',Path(tmp)/'test'
             src.write_text(prefix+extra.replace('@@PRODUCTION@@',funcs))
-            built=subprocess.run(['clang++','-std=c++17','-Wall','-Wno-unused-function','-fsanitize=address,undefined','-I',str(ROOT/'drivers/apple-agx/render-admission/umd/include'),'-I',str(ROOT/'drivers/apple-agx/shared/include'),str(src),'-o',str(exe)],capture_output=True,text=True)
+            built=subprocess.run(['clang++','-std=c++17', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'),'-Wall','-Wno-unused-function','-fsanitize=address,undefined','-I',str(ROOT/'drivers/apple-agx/render-admission/umd/include'),'-I',str(ROOT/'drivers/apple-agx/shared/include'),str(src),'-o',str(exe)],capture_output=True,text=True)
             self.assertEqual(built.returncode,0,built.stdout+built.stderr)
             run=subprocess.run([str(exe)],capture_output=True,text=True)
             self.assertEqual(run.returncode,0,run.stdout+run.stderr)

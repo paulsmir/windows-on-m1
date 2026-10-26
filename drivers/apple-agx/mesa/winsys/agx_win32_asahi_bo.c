@@ -4,6 +4,9 @@
 #include "agx_win32_sparse.h"
 #endif
 
+unsigned (*AgxWin32WaitBeginHook)(unsigned site);
+void (*AgxWin32WaitEndHook)(unsigned token);
+
 void (*AgxWin32BackendFailHook)(unsigned site);
 /* Diagnostic identity: event 1 new, 2 cache reuse, 3 release. */
 void (*AgxWin32BoIdentityHook)(unsigned event, unsigned token,

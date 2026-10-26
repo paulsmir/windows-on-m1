@@ -49,6 +49,7 @@ int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
 /* the UMD trace logger (umd_runtime_device.c; C linkage through umd_internal.h) */
 extern "C" VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status, const UINT *Values, UINT Count);
 extern "C" BOOL AdmissionUmdMeasureEnabled(VOID);
+#include "../mesa/winsys/agx_win32_wait.h"
 
 namespace {
 /* D3D12 A3 (EXP1343: OpenAdapter12 returned a NULL driver adapter handle
@@ -6606,7 +6607,7 @@ static unsigned ReplayTimingBucket(UINT kind) {
     }
 }
 #endif
-static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
 #ifndef APPLE_AGX_D3D12_NATIVE_OWNER
     (void)queue;
 #endif
@@ -6634,6 +6635,9 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
         AgxD3d12OptionalBinds pending = {}; /* C27/C37 */
         for (UINT c = 0; SUCCEEDED(hr) && c < list->commands; ++c) {
             const AgxD3d12Command &command = list->command[c];
+            AdmissionUmdWaitSetPhase(command.kind == kCommandDraw ? AgxWaitPhaseDraw :
+                command.kind == kCommandDispatch || command.kind == kCommandIndirectExpand ?
+                    AgxWaitPhaseDispatch : AgxWaitPhaseOther);
             LARGE_INTEGER command_start = {};
             if (measure) QueryPerformanceCounter(&command_start);
             device = list->device;
@@ -6681,6 +6685,9 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
                 pending = {};
             } else if (command.kind == kCommandQuery) {
                 const AgxD3d12QueryCommand &q = command.query;
+                AdmissionUmdWaitSetPhase(q.op == kQueryResolve ? AgxWaitPhaseQueryResolve :
+                    q.op == kQueryBegin ? AgxWaitPhaseQueryBegin : AgxWaitPhaseQueryEnd);
+                AgxUmdWaitScope query_timing(AgxWaitQueryCommand);
                 auto *queries = static_cast<AGX_D3D12_QUERY_HEAP *>(q.heap->owner);
                 if (q.op == kQueryResolve) {
                     AGX_D3D12_BUFFER dst = HeapBuffer(q.dst);
@@ -6731,6 +6738,7 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
     QueryPerformanceCounter(&replayed);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     FreeDrawScratch(draw_scratch);
+    AdmissionUmdWaitSetPhase(AgxWaitPhaseSubmit);
     if (SUCCEEDED(hr) && device && device->owner) {
         auto *owner = static_cast<AGX_D3D12_OWNER *>(device->owner);
         hr = queue && queue->gpu_wait
@@ -6743,8 +6751,9 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
     QueryPerformanceCounter(&submitted);
     const LONGLONG hz = frequency.QuadPart ? frequency.QuadPart : 1;
     const UINT receipt[] = {count, commands, static_cast<UINT>((replayed.QuadPart - start.QuadPart) * 1000000 / hz),
-                            static_cast<UINT>((submitted.QuadPart - replayed.QuadPart) * 1000000 / hz)};
-    AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 4);
+                            static_cast<UINT>((submitted.QuadPart - replayed.QuadPart) * 1000000 / hz),
+                            AdmissionUmdWaitSerial()};
+    AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 5);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (measure) {
         UINT phases[12];
@@ -6766,6 +6775,7 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
         memset(&g_heap_walk, 0, sizeof(g_heap_walk));
     }
 #endif
+    return hr;
 }
 /* EXP1822: one replay and its submission run under the device owner's lock,
  * so lists executed from several threads (the nBody async compute thread
@@ -6786,11 +6796,16 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE handle, UINT cou
         }
     }
     auto *owner = static_cast<AGX_D3D12_OWNER *>(queue->device->owner);
-    AgxD3d12OwnerLock(owner);
+    const int wait_profile = AdmissionUmdWaitExecuteBegin();
+    {
+        AgxUmdWaitScope lock_timing(AgxWaitOwnerLock);
+        AgxD3d12OwnerLock(owner);
+    }
     AgxD3d12OwnerMeasureHeapStaging(owner, TRUE);
-    ReplayAndSubmit(queue, count, lists);
+    const HRESULT replay_status = ReplayAndSubmit(queue, count, lists);
     AgxD3d12OwnerMeasureHeapStaging(owner, FALSE);
     AgxD3d12OwnerUnlock(owner);
+    if (wait_profile) AdmissionUmdWaitExecuteEnd(replay_status);
 #else
     ReplayAndSubmit(queue, count, lists);
 #endif

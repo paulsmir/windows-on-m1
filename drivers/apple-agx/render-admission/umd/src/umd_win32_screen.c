@@ -13,6 +13,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 
 extern "C" {
 #include "umd_internal.h"
+#include "../../../mesa/winsys/agx_win32_wait.h"
 }
 
 static DECLSPEC_ALIGN(8) volatile LONG64 NextOwnerCookie;
@@ -838,8 +839,10 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   slot->Borrowed=BorrowedStaging!=0;
 #endif
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  unsigned wait_pfnAllocateCb_1=AdmissionUmdWaitBegin(AgxWaitAllocate);
   result = device->KernelCallbacks->pfnAllocateCb(
       device->RuntimeDevice.handle, &allocate);
+  AdmissionUmdWaitEnd(wait_pfnAllocateCb_1);
   {
     UINT values[4] = {ClassId, (UINT)Bytes, (UINT)Alignment,
                       allocationInfo.hAllocation != 0u};
@@ -969,8 +972,10 @@ HRESULT AdmissionUmdScreenNewCanonical(ADMISSION_UMD_DEVICE *Device,
   ZeroMemory(&allocate, sizeof(allocate));
   allocate.NumAllocations = 1u;
   allocate.pAllocationInfo = &allocationInfo;
+  unsigned wait_pfnAllocateCb_2=AdmissionUmdWaitBegin(AgxWaitAllocateCanonical);
   result = Device->KernelCallbacks->pfnAllocateCb(
       Device->RuntimeDevice.handle, &allocate);
+  AdmissionUmdWaitEnd(wait_pfnAllocateCb_2);
   if (SUCCEEDED(result) && allocationInfo.hAllocation == 0u) result = E_FAIL;
   if (SUCCEEDED(result)) *Allocation = allocationInfo.hAllocation;
   return result;
@@ -1244,8 +1249,12 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       result = S_OK;
     } else
 #endif
-    result = device->KernelCallbacks->pfnLockCb(
-        device->RuntimeDevice.handle, &lock);
+    {
+      unsigned wait_pfnLockCb_1=AdmissionUmdWaitBegin(AgxWaitLock);
+      result = device->KernelCallbacks->pfnLockCb(
+          device->RuntimeDevice.handle, &lock);
+      AdmissionUmdWaitEnd(wait_pfnLockCb_1);
+    }
     {
       UINT values[2] = {allocation != 0u, lock.pData != NULL};
       AdmissionUmdDiagnostic("g4-native-lock-cb", result, values,
@@ -1444,7 +1453,9 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
     D3DDDICB_EVICT evict = {};
     evict.Flags.EvictOnlyIfNecessary = 1u;
     evict.NumAllocations = 1; evict.AllocationList = &resident;
+    unsigned wait_pfnEvictCb=AdmissionUmdWaitBegin(AgxWaitEvict);
     result = device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle, &evict);
+    AdmissionUmdWaitEnd(wait_pfnEvictCb);
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
     if (FAILED(result)) {
       buffer->Transition = FALSE;
@@ -1544,7 +1555,9 @@ static int AdmissionUmdScreenWaitFence(void *Context, APPLE_AGX_U32 Fence,
   }
   if (fence->Completed)
     return 1;
+  unsigned event_wait=TimeoutMs ? AdmissionUmdWaitBegin(AgxWaitEvent) : 0;
   waitResult = WaitForSingleObject(fence->Event, TimeoutMs);
+  AdmissionUmdWaitEnd(event_wait);
   if (waitResult == WAIT_OBJECT_0) {
     fence->Completed = TRUE;
     device->LastScreenError = S_OK;

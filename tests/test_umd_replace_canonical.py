@@ -152,7 +152,7 @@ class ReplaceCanonical(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'replay.cpp'; exe = Path(tmp) / 'replay'
             src.write_text(BODY.replace('@@FUNCS@@', funcs))
-            built = subprocess.run(['clang++', '-std=c++17', '-Wall', '-Wno-unused-function',
+            built = subprocess.run(['clang++', '-std=c++17', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-Wall', '-Wno-unused-function',
                                     '-fsanitize=address,undefined', str(src), '-o', str(exe)],
                                    text=True, capture_output=True)
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)

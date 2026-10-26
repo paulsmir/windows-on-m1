@@ -99,7 +99,7 @@ static void FrontendFlush(Device *hDevice) {
             (tmp / "g4_mesa_pool_functions.inc").write_text("void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);\n#define AGX_WIN32_ASAHI_FAIL(b, f) ((b)->Failed = 1)\n" + "\n".join(body(batch, n) for n in names))
             (tmp / "replay.c").write_text(source)
             binary = tmp / "replay"
-            subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
+            subprocess.run([os.environ.get("CC", "clang"), "-std=c11", '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), "-Wall", "-Wextra",
                 "-Werror", "-fsanitize=address,undefined", "-I", str(tmp),
                 "-I", str(ROOT / "drivers/apple-agx/shared/include"),
                 "-I", str(ROOT / "drivers/apple-agx/mesa/winsys"), str(tmp / "replay.c"),

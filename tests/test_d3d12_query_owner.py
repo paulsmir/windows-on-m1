@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from test_d3d10_shader_fields_init import ROOT
 
-PRELUDE=r'''
+PRELUDE='#include "'+str(ROOT/'tests/d3d12_wait_disabled_fixture.h')+'"\n'+r'''
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
