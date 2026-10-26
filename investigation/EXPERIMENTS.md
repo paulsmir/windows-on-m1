@@ -64106,3 +64106,10 @@ EXP1963 HARDWARE BEFORE 2026-10-26T09:52:36Z:
 - Hashes: sys 1f85c4301405, UmdArm64 e62b3850ecac, UmdX64 e2363e414bc4, Umd32 f87519feeb06; manifest 547920cfccbb, hardware-manifest 770b15ae4089; probe1963.sh de6a8be096d6 (PROBE_LINT_OK); visible recovery rec1963h 2718a154220e0468; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1963h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1963-counted-indirect/run1963.sh.
+
+EXP1963 HARDWARE ACTUAL 2026-10-26T10:08:26Z:
+- PARTIAL PASS. 2k: Score 784 / 4.7 FPS; 10k: Score 798 / 4.8 FPS (EXP1962: 744 / 4.4, 755 / 4.5). Both runs completed with WER 0 and the guest alive. The image is correct (asteroids, planet, finish dialog).
+- Median frame after the first 20 frames: 2k 0.183 s (EXP1962 0.194), 10k 0.185 s (0.192); p90 0.218 / 0.203 s; max 0.36 s.
+- rc31 analyze.py on gm1963a typical frame 683: wall 183 ms, replay 177 ms, draw_vbo 118 ms, counted indirect still 87 ms over 7 counted draws; 149 dispatches; 27 fences per frame (EXP1961: 41).
+- Conclusion: removing the argument CPU unroll gained only ~6%. The synchronous CPU read of the count (a flush plus a GPU wait per counted draw) now dominates. Next: rc32, GPU-side count predication (Honeykrisp libagx_predicate_indirect) with no CPU readback.
+- Recovery rec1963h: RECOVERY_DONE.
