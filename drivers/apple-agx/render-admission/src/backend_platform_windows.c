@@ -2384,6 +2384,51 @@ static APPLE_AGX_BACKEND_U64 AdmissionTransportNow(void *Context) {
   return Context != NULL ? AdmissionPlatformNowMs() : 0ULL;
 }
 
+/* Asahi gpu.rs handle_channel_error: acknowledge the queue named by the
+ * firmware event through device control, without halt/resume or ASC stop.
+ * The queue runtime resolves the event slot and retains DMA until retirement. */
+static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecoverChannel(
+    void *Context, APPLE_AGX_BACKEND_U32 Fence,
+    APPLE_AGX_BACKEND_U32 PipeType,
+    APPLE_AGX_BACKEND_U64 QueueInfoGpuAddress,
+    APPLE_AGX_BACKEND_U32 EventValue) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  APPLE_AGX_DEVICE_CONTROL_PUBLICATION publication = {0};
+  APPLE_AGX_DEVICE_CONTROL_RESULT result;
+  ULONGLONG deadline;
+  unsigned int polls = 0u;
+  if (runtime == NULL || Fence == 0u ||
+      runtime->Provider.QueueProvider.PendingFence != Fence ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return APPLE_AGX_BACKEND_FALSE;
+  deadline = AdmissionPlatformNowMs() + J313_AGX_G2_INITDATA_TIMEOUT_MS;
+  result = AppleAgxDeviceControlPublishRecoverChannelG13V13_5(
+      &runtime->Initdata.ChannelMemory, &runtime->TransportIo,
+      PipeType, QueueInfoGpuAddress, EventValue, &publication);
+  if (result != AppleAgxDeviceControlResultOk)
+    return APPLE_AGX_BACKEND_FALSE;
+  for (;;) {
+    result = AppleAgxDeviceControlWaitForReceiptG13V13_5(
+        &publication, &runtime->TransportIo, 1u, &polls);
+    if (result != AppleAgxDeviceControlResultReceiptTimedOut)
+      break;
+    if (AdmissionPlatformNowMs() >= deadline)
+      return APPLE_AGX_BACKEND_FALSE;
+    KeStallExecutionProcessor(ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US);
+  }
+  if (result != AppleAgxDeviceControlResultOk)
+    return APPLE_AGX_BACKEND_FALSE;
+  InterlockedIncrement(&runtime->FirmwareRecoveries);
+  /* A dependent channel error must not replace the captured Timeout/Fault
+   * cause or its FAULT_INFO. Standalone channel failures have no guessed VA. */
+  if (runtime->LastFirmwareRecoveryFence != Fence) {
+    runtime->LastFirmwareRecoveryFence = Fence;
+    runtime->LastFirmwareRecoveryKind = AppleAgxG13EventChannelError;
+  }
+  runtime->FirmwareRecoveryUnpublished = TRUE;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
 static unsigned char AdmissionFirmwareDeviceControl(
     ADMISSION_PLATFORM_RUNTIME *Runtime, BOOLEAN Idle,
     unsigned long long DeadlineMs) {
@@ -4945,6 +4990,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->QueueIo.ReadU32 = AdmissionTransportReadU32;
   runtime->QueueIo.Quiesce = AdmissionTransportQuiesce;
   runtime->QueueIo.Recover = AdmissionTransportRecover;
+  runtime->QueueIo.RecoverChannel = AdmissionTransportRecoverChannel;
 
   runtime->FirmwarePrimitives.Context = runtime;
   runtime->FirmwarePrimitives.IsPassiveLevel = AdmissionFirmwareAtPassive;

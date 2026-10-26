@@ -435,6 +435,20 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueueQuiesce(
              : APPLE_AGX_BACKEND_FALSE;
 }
 
+static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueueRecoverChannel(
+    void *Context, APPLE_AGX_BACKEND_U32 Fence,
+    APPLE_AGX_BACKEND_U32 PipeType,
+    APPLE_AGX_BACKEND_U64 QueueInfoGpuAddress,
+    APPLE_AGX_BACKEND_U32 EventValue) {
+  APPLE_AGX_PLATFORM_PROVIDER *provider = Context;
+  return provider != PLATFORM_NULL && provider->BindingReady &&
+                 provider->CallerQueueRuntimeIo.RecoverChannel != PLATFORM_NULL
+             ? provider->CallerQueueRuntimeIo.RecoverChannel(
+                   provider->CallerQueueRuntimeIo.Context, Fence, PipeType,
+                   QueueInfoGpuAddress, EventValue)
+             : APPLE_AGX_BACKEND_FALSE;
+}
+
 static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformRenderRelocate(
     void *Context, void *Arena, APPLE_AGX_BACKEND_U32 ArenaBytes,
     const APPLE_AGX_RENDER_TEMPLATE_ROOTS *Roots,
@@ -701,6 +715,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
   queue_io.SendRunMessage = AppleAgxPlatformQueueSendRunMessage;
   queue_io.Quiesce = AppleAgxPlatformQueueQuiesce;
   queue_io.Recover = AppleAgxPlatformQueueRecover;
+  queue_io.RecoverChannel = AppleAgxPlatformQueueRecoverChannel;
   AppleAgxPlatformZero(&provider_io,
                        (APPLE_AGX_BACKEND_U32)sizeof(provider_io));
   provider_io.Context = Provider;

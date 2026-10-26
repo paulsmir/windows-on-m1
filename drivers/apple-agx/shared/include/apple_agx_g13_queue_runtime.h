@@ -86,6 +86,13 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_IO {
   APPLE_AGX_BACKEND_BOOL (*Recover)(void *Context,
                                     APPLE_AGX_BACKEND_U32 Fence,
                                     APPLE_AGX_BACKEND_U32 EventKind);
+  /* ChannelError's separate Asahi handshake. Success proves only that the
+   * device-control command was consumed, never that DMA ownership returned. */
+  APPLE_AGX_BACKEND_BOOL (*RecoverChannel)(
+      void *Context, APPLE_AGX_BACKEND_U32 Fence,
+      APPLE_AGX_BACKEND_U32 PipeType,
+      APPLE_AGX_BACKEND_U64 QueueInfoGpuAddress,
+      APPLE_AGX_BACKEND_U32 EventValue);
 } APPLE_AGX_G13_QUEUE_RUNTIME_IO;
 
 /* D3D-G1b: a TA submission may lead with a firmware Barrier work item
@@ -169,6 +176,10 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME {
   APPLE_AGX_BACKEND_BOOL RecoveryPending;
   APPLE_AGX_BACKEND_BOOL RecoveredTimeoutValid;
   APPLE_AGX_BACKEND_U32 LastRecoveredTimeoutCounter;
+  APPLE_AGX_BACKEND_U32 ChannelRecoveryMask;
+  APPLE_AGX_BACKEND_BOOL ChannelRecoveryFailed;
+  APPLE_AGX_BACKEND_U32 RecoveredChannelMask;
+  APPLE_AGX_BACKEND_U32 LastRecoveredChannelValue[3];
   /* G4-recovery: the pending job outlived its deadline (counted once per
    * job); the deadline is recorded, not terminal. */
   APPLE_AGX_BACKEND_BOOL DeadlinePassed;
