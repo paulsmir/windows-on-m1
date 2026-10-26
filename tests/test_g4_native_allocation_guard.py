@@ -79,6 +79,49 @@ class NativeAllocationGuard(unittest.TestCase):
         funcs = '\n'.join(function(text, n) for n in ('native_held_ready', 'submit'))
         self.compile_run(UMD_FIXTURE.replace('@@FUNCS@@', funcs), cpp=True)
 
+    def test_held_set_snapshot_rejects_stale_owners_and_avoids_empty_escape(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The batched
+        snapshot must reject transitional/deallocated/unheld canonical slots,
+        resnapshot a replaced allocation, and never submit after batch OOM.
+        """
+        fixture = UMD_FIXTURE[:UMD_FIXTURE.index('int main() {')]
+        fixture += r'''int main() {
+ (void)submit;(void)hold;
+ CALLBACKS cbks={cb,signal_cb,escape_cb};ADAPTER a={ADMISSION_UMD_ADAPTER_MAGIC,{9}};
+ ADMISSION_UMD_DEVICE d={};d.Adapter=&a;d.KernelCallbacks=&cbks;d.KernelContext=7;
+ d.RuntimeDevice.handle=3;d.RenderSyncObject=8;uploads=1;bad=0;
+ for(unsigned i=0;i<3;++i) {auto &s=d.ScreenBuffers[i];s.Active=s.CopyHeld=true;
+  s.KernelAllocation=i+1;s.CanonicalGpuVa=0x10000ull*(i+1);s.Bytes=65536;s.SubmissionHolds=1;}
+ assert(native_held_ready(&d,0x10000) && escapes==1 && queries==2 && !allocations);
+ auto saved=d.ScreenBuffers[2];
+ for(unsigned fault=0;fault<6;++fault) {
+  auto &s=d.ScreenBuffers[2];s=saved;
+  if(fault==0)s.Active=false;if(fault==1)s.Transition=true;
+  if(fault==2)s.SubmissionHolds=0;if(fault==3)s.KernelAllocation=0;
+  if(fault==4)s.CanonicalGpuVa=0;if(fault==5)s.Bytes=0;
+  escapes=queries=0;
+  assert(!native_held_ready(&d,0x10000) && !escapes && !queries && !allocations);
+  assert(d.GpuvaFailure==E_FAIL);
+ }
+ d.ScreenBuffers[2]=saved;
+ // Fresh post-upload canonical identity is sent, not last submission's Ready.
+ d.ScreenBuffers[2].KernelAllocation=99;bad=99;escapes=queries=touches=0;
+ assert(!native_held_ready(&d,0x10000) && escapes==2 && queries==4 && touches==1);
+ assert(d.GpuvaFailure==E_OUTOFMEMORY && !allocations);
+ bad=0;allocation_fail=true;escapes=0;
+ assert(!native_held_ready(&d,0x10000) && d.GpuvaFailure==E_OUTOFMEMORY && !escapes && !allocations);
+ allocation_fail=false;
+ d.ScreenBuffers[1].CopyHeld=d.ScreenBuffers[2].CopyHeld=false;
+ assert(native_held_ready(&d,0x10000) && !escapes && !allocations);
+ // An older KMD refusing the batch transport cannot authorize submission.
+ d.ScreenBuffers[1].CopyHeld=d.ScreenBuffers[2].CopyHeld=true;escape_fail=true;
+ touches=0;assert(!native_held_ready(&d,0x10000) && !touches && !allocations);
+ assert(!submits && !signals && !locks);
+}
+'''
+        funcs = '\n'.join(function(UMD.read_text(), n) for n in ('native_held_ready', 'submit'))
+        self.compile_run(fixture.replace('@@FUNCS@@', funcs), cpp=True)
+
     def test_deferred_mapping_is_scheduled_once_then_revalidated(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
         A read-only escape before scheduling sees deferred PTEs. Retry only
@@ -241,6 +284,7 @@ UMD_FIXTURE = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <initializer_list>
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g3_copy_query_receipt.h"
@@ -270,6 +314,12 @@ struct ADMISSION_UMD_DEVICE {UINT KernelContext,RenderSyncObject;CALLBACKS *Kern
  uint64_t NextRenderFence;struct {UINT handle;} RuntimeDevice;int ScreenBufferLock;
  ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[4];UINT RenderCbSequence;bool DrawTerminal;HRESULT GpuvaFailure;ADAPTER *Adapter;};
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) 4u
+#define HEAP_ZERO_MEMORY 8u
+static int allocations;static bool allocation_fail;
+[[maybe_unused]] static void *GetProcessHeap() {return nullptr;}
+[[maybe_unused]] static void *HeapAlloc(void *,unsigned,size_t n) {if(allocation_fail)return nullptr;++allocations;return calloc(1,n);}
+[[maybe_unused]] static void HeapFree(void *,unsigned,void *p) {--allocations;free(p);}
+static unsigned escapes;
 static int locks,submits,signals,queries,uploads;static unsigned bad=2;static unsigned reason=AppleAgxG3WalkLeafAbsent;static bool escape_fail,upload_fail;
 static void AcquireSRWLockShared(int*) {assert(!locks);++locks;}
 static void ReleaseSRWLockShared(int*) {assert(locks==1);--locks;}
@@ -293,13 +343,21 @@ static bool deferred, touch_fail;
 }
 static HRESULT escape_cb(UINT,D3DDDICB_ESCAPE *e) {
  assert(uploads && !locks && !e->Flags.Value && e->hDevice==3 && e->hContext==7);
- ++queries;
-#ifdef APPLE_AGX_G3_NATIVE_QUERY_MAGIC
- auto *q=(APPLE_AGX_G3_NATIVE_QUERY*)e->pPrivateDriverData;
- assert(e->PrivateDriverDataSize==sizeof(*q) && q->Magic==APPLE_AGX_G3_NATIVE_QUERY_MAGIC);
- assert(q->Allocation!=1 && q->Allocation!=4 && q->AllocationBytes==65536);
- q->Ready=q->Allocation!=bad;q->Reason=q->Ready?0:reason;q->FailedVa=q->Ready?0:q->GpuVa+32768;
-#endif
+ ++escapes;
+ auto *b=(APPLE_AGX_G3_NATIVE_QUERY_BATCH*)e->pPrivateDriverData;
+ assert(b->Magic==APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC && b->Version==1);
+ assert(b->Count==2 && b->Bytes==sizeof(*b)+b->Count*sizeof(APPLE_AGX_G3_NATIVE_QUERY));
+ assert(e->PrivateDriverDataSize==b->Bytes && !b->Ready && !b->FailedIndex);
+ auto *entries=(APPLE_AGX_G3_NATIVE_QUERY*)(b+1);
+ for(unsigned i=0;i<b->Count;++i) {
+  auto *q=&entries[i];++queries;
+  assert(q->Magic==APPLE_AGX_G3_NATIVE_QUERY_MAGIC && q->Bytes==sizeof(*q));
+  assert(q->Allocation!=1 && q->Allocation!=4 && q->AllocationBytes==65536);
+  assert(!q->Ready && !q->Reason && !q->FailedVa && !q->Reserved && !q->Reserved2);
+  q->Ready=q->Allocation!=bad;q->Reason=q->Ready?0:reason;q->FailedVa=q->Ready?0:q->GpuVa+32768;
+  if(escape_fail || !q->Ready) {b->FailedIndex=i;return escape_fail ? E_FAIL : S_OK;}
+ }
+ b->Ready=1;
  return escape_fail ? E_FAIL : S_OK;
 }
 @@FUNCS@@
@@ -323,8 +381,8 @@ int main() {
  assert(!native_held_ready(&d,0x10000));assert(d.GpuvaFailure==E_OUTOFMEMORY);
  reason=AppleAgxG3WalkLeafAbsent;
  /* Unreferenced allocation 4 is bad; command 1 has no native leaf either. */
- bad=4;queries=0;hold(d);assert(submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence)==1);
- assert(submits==1 && signals==1 && queries==2 && fence==1);
+ bad=4;queries=escapes=0;hold(d);assert(submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence)==1);
+ assert(submits==1 && signals==1 && queries==2 && escapes==1 && fence==1 && !allocations);
  assert(d.GpuvaFailure==S_OK);
  /* Revalidate every submission; no stale Ready cache after residency moves. */
  bad=3;queries=0;hold(d);fence=0;assert(!submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence));

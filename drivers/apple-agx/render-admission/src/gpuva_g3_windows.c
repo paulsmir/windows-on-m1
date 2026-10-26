@@ -1513,6 +1513,51 @@ Release:
   return status;
 }
 
+/* Transport batching only: retain the single-query handle reference, graph
+ * mutex, full-description extent and page-by-page identity/translation proof.
+ * The UMD's submission holds retain residency across entries and submission,
+ * exactly as for separate escapes. No Ready result is cached across calls.
+ * Local entry copies also keep each proof independent of output writes. */
+NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  APPLE_AGX_G3_NATIVE_QUERY_BATCH batch;
+  APPLE_AGX_G3_NATIVE_QUERY query;
+  DXGKARG_ESCAPE single;
+  unsigned char *entries;
+  ULONG i;
+  NTSTATUS status;
+  if (!adapter || !adapter->Started || !args ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL || args->Flags.Value ||
+      !args->pPrivateDriverData || args->PrivateDriverDataSize < sizeof(batch))
+    return STATUS_INVALID_PARAMETER;
+  RtlCopyMemory(&batch, args->pPrivateDriverData, sizeof(batch));
+  if (batch.Magic != APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC ||
+      batch.Version != APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION ||
+      !batch.Count || batch.Count > APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAX ||
+      batch.Bytes != sizeof(batch) + batch.Count * sizeof(query) ||
+      batch.Bytes != args->PrivateDriverDataSize || batch.Ready ||
+      batch.FailedIndex || batch.Reserved[0] || batch.Reserved[1])
+    return STATUS_INVALID_PARAMETER;
+  entries = (unsigned char *)args->pPrivateDriverData + sizeof(batch);
+  single = *args;
+  single.pPrivateDriverData = &query;
+  single.PrivateDriverDataSize = sizeof(query);
+  for (i = 0u; i < batch.Count; ++i) {
+    RtlCopyMemory(&query, entries + i * sizeof(query), sizeof(query));
+    status = AdmissionGpuvaG3NativeQueryEscape(adapter, &single);
+    if (status != STATUS_SUCCESS) return status;
+    RtlCopyMemory(entries + i * sizeof(query), &query, sizeof(query));
+    if (query.Ready != 1u) {
+      batch.FailedIndex = i;
+      RtlCopyMemory(args->pPrivateDriverData, &batch, sizeof(batch));
+      return STATUS_SUCCESS;
+    }
+  }
+  batch.Ready = 1u;
+  RtlCopyMemory(args->pPrivateDriverData, &batch, sizeof(batch));
+  return STATUS_SUCCESS;
+}
+
 typedef struct _ADMISSION_G3_COPY_PAGING_QUIESCENCE {
   ULONG Version, Bytes, Status, OsProcessId;
   LONG RecordsUnsubmitted;

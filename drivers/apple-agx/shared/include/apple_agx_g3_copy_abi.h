@@ -38,6 +38,19 @@ typedef struct _APPLE_AGX_G3_NATIVE_QUERY {
   APPLE_AGX_U64 FailedVa, Reserved2;
 } APPLE_AGX_G3_NATIVE_QUERY;
 
+/* RC45: one buffered escape for the entire held allocation set. Exactly
+ * Count ordinary queries follow this header (no pointers, handles widened
+ * to native pointers, or partial array). Each retains the v1/v2 proof above.
+ * Ready is set only after every entry succeeds; FailedIndex selects the
+ * first not-ready entry. All output fields must be zero on input. */
+#define APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC 0x42565041u
+#define APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION 1u
+#define APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAX 4096u
+typedef struct _APPLE_AGX_G3_NATIVE_QUERY_BATCH {
+  APPLE_AGX_U32 Magic, Version, Bytes, Count;
+  APPLE_AGX_U32 Ready, FailedIndex, Reserved[2];
+} APPLE_AGX_G3_NATIVE_QUERY_BATCH;
+
 /* Diagnostic only; not part of the buffered request or its version. */
 typedef struct _APPLE_AGX_G3_COPY_TRANSFER_FAILURE {
   APPLE_AGX_U32 Version, Bytes, Operation, Predicate;

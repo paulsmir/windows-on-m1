@@ -1849,65 +1849,82 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
   if (!device->Adapter || device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
       !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
       !device->KernelCallbacks->pfnEscapeCb) return 0;
-  device->GpuvaFailure = S_OK;
-  bool scheduled = false;
-  for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);) {
-    APPLE_AGX_G3_NATIVE_QUERY q = {};
-    bool held, valid;
+  device->GpuvaFailure = E_FAIL;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const UINT capacity = ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (capacity > APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAX) return 0;
+  const UINT bytes = (UINT)(sizeof(APPLE_AGX_G3_NATIVE_QUERY_BATCH) +
+      capacity * sizeof(APPLE_AGX_G3_NATIVE_QUERY));
+  auto *batch = (APPLE_AGX_G3_NATIVE_QUERY_BATCH *)HeapAlloc(
+      GetProcessHeap(), HEAP_ZERO_MEMORY, bytes);
+  if (!batch) { device->GpuvaFailure = E_OUTOFMEMORY; return 0; }
+  auto *entries = (APPLE_AGX_G3_NATIVE_QUERY *)(batch + 1);
+  int ready = 0;
+  for (unsigned attempt = 0u; attempt < 2u; ++attempt) {
+    *batch = {};
+    bool valid = true;
     AcquireSRWLockShared(&device->ScreenBufferLock);
-    const auto *slot = &device->ScreenBuffers[i++];
-    held = slot->CopyHeld && slot->CanonicalGpuVa != command_va;
-    valid = slot->Active && !slot->Transition && slot->SubmissionHolds &&
-        slot->KernelAllocation && slot->CanonicalGpuVa && slot->Bytes;
-    if (held && valid) {
-      q.Allocation = slot->KernelAllocation;
-      q.GpuVa = slot->CanonicalGpuVa;
-      q.AllocationBytes = slot->Bytes;
-      q.Write = (slot->Flags & AppleAgxWin32BufferGpuWrite) != 0u;
+    const UINT limit = ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);
+    if (limit > capacity) valid = false;
+    for (UINT i = 0u; valid && i < limit; ++i) {
+      const auto *slot = &device->ScreenBuffers[i];
+      if (!slot->CopyHeld || slot->CanonicalGpuVa == command_va) continue;
+      if (!slot->Active || slot->Transition || !slot->SubmissionHolds ||
+          !slot->KernelAllocation || !slot->CanonicalGpuVa || !slot->Bytes) {
+        valid = false;
+        break;
+      }
+      auto *q = &entries[batch->Count++];
+      *q = {};
+      q->Magic = APPLE_AGX_G3_NATIVE_QUERY_MAGIC;
+      q->Version = APPLE_AGX_G3_NATIVE_QUERY_VERSION;
+      q->Bytes = sizeof(*q);
+      q->Allocation = slot->KernelAllocation;
+      q->GpuVa = slot->CanonicalGpuVa;
+      q->AllocationBytes = slot->Bytes;
+      q->Write = (slot->Flags & AppleAgxWin32BufferGpuWrite) != 0u;
     }
     ReleaseSRWLockShared(&device->ScreenBufferLock);
-    if (!held) continue;
-    if (!valid) return 0;
-    q.Magic = APPLE_AGX_G3_NATIVE_QUERY_MAGIC;
-    q.Version = APPLE_AGX_G3_NATIVE_QUERY_VERSION;
-    q.Bytes = sizeof(q);
+    if (!valid) break;
+    if (!batch->Count) { ready = 1; break; }
+    batch->Magic = APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC;
+    batch->Version = APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION;
+    batch->Bytes = (UINT)(sizeof(*batch) + batch->Count * sizeof(*entries));
     D3DDDICB_ESCAPE request = {};
     request.hDevice = device->RuntimeDevice.handle;
     request.hContext = device->KernelContext;
-    request.pPrivateDriverData = &q;
-    request.PrivateDriverDataSize = sizeof(q);
-    unsigned wait_pfnEscapeCb_4=AdmissionUmdWaitBegin(AgxWaitNativeReadyEscape);
+    request.pPrivateDriverData = batch;
+    request.PrivateDriverDataSize = batch->Bytes;
+    unsigned wait = AdmissionUmdWaitBegin(AgxWaitNativeReadyEscape);
     HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
         device->Adapter->RuntimeAdapter.handle, &request);
-    AdmissionUmdWaitEnd(wait_pfnEscapeCb_4);
-    if (SUCCEEDED(hr) && q.Ready != 1u && !scheduled) {
-      /* Like the CPU copy path, this escape runs before VidSch schedules
-       * the device. MakeResident's fence need not publish its deferred PTEs.
-       * Schedule one CPU-only touch, then repeat the complete authenticated
-       * proof. Genuine omitted/scattered leaves remain refused. Holds stay
-       * owned throughout; an escape or touch failure is never bypassed. */
-      scheduled = true;
-      if (!touch_device(device, command_va)) return 0;
-      /* Scheduling may publish moves for earlier slots too. Recheck the
-       * entire held set with fresh, zero-output query payloads. */
-      i = 0u;
+    AdmissionUmdWaitEnd(wait);
+    if (SUCCEEDED(hr) && batch->Ready == 1u) { ready = 1; break; }
+    if (SUCCEEDED(hr) && attempt == 0u) {
+      /* Deferred paging is not necessarily published at MakeResident's
+       * fence. Schedule at most one CPU-only touch, then rebuild and prove
+       * the ENTIRE held set, including entries preceding the failed entry.
+       * Holds stay owned throughout. Never reuse Ready across submissions. */
+      if (!touch_device(device, command_va)) break;
       continue;
     }
-    if (FAILED(hr) || q.Ready != 1u) {
-      UINT values[9] = {q.Allocation, (UINT)q.GpuVa, (UINT)(q.GpuVa >> 32),
-          (UINT)q.AllocationBytes, (UINT)(q.AllocationBytes >> 32), q.Write,
-          q.Reason, (UINT)q.FailedVa, (UINT)(q.FailedVa >> 32)};
-      /* Missing native backing is not a GPU hang. Identity/translation
-       * mismatches and failed runtime callbacks are not reclassified as OOM. */
-      device->GpuvaFailure = FAILED(hr) ? hr :
-          (q.Reason == AppleAgxG3WalkLeafAbsent ||
-           q.Reason == AppleAgxG3WalkLeafNotPublished) ? E_OUTOFMEMORY : E_FAIL;
-      AdmissionUmdDiagnostic("reject-native-allocation", device->GpuvaFailure,
-          values, ARRAYSIZE(values));
-      return 0;
-    }
+    const auto *q = &entries[batch->FailedIndex < batch->Count &&
+        batch->FailedIndex < capacity ? batch->FailedIndex : 0u];
+    UINT values[9] = {q->Allocation, (UINT)q->GpuVa, (UINT)(q->GpuVa >> 32),
+        (UINT)q->AllocationBytes, (UINT)(q->AllocationBytes >> 32), q->Write,
+        q->Reason, (UINT)q->FailedVa, (UINT)(q->FailedVa >> 32)};
+    /* Callback/identity/translation failure is not memory pressure. */
+    device->GpuvaFailure = FAILED(hr) ? hr :
+        (q->Reason == AppleAgxG3WalkLeafAbsent ||
+         q->Reason == AppleAgxG3WalkLeafNotPublished) ? E_OUTOFMEMORY : E_FAIL;
+    AdmissionUmdDiagnostic("reject-native-allocation", device->GpuvaFailure,
+        values, ARRAYSIZE(values));
+    break;
   }
-  return 1;
+  HeapFree(GetProcessHeap(), 0, batch);
+  if (ready) device->GpuvaFailure = S_OK;
+  return ready;
 }
 
 /* Every GPU-written slot of a submission (mark_written); only the direct

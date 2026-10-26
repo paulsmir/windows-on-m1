@@ -939,6 +939,8 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
 NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *Adapter,
     const DXGKARG_ESCAPE *Args);
+NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *Adapter,
+    const DXGKARG_ESCAPE *Args);
 NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *Adapter,
                                   const DXGKARG_ESCAPE *Args);
 typedef struct _ADMISSION_OPEN_ALLOCATION {
