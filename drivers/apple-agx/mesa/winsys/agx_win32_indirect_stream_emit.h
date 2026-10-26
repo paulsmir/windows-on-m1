@@ -38,6 +38,11 @@ agx_win32_stream_fallback(struct agx_context *ctx,
       return 5;
    if (agx_device(ctx->base.screen)->chip > AGX_CHIP_G13X)
       return 6;
+   /* EXP1966: the first GPU-generated stream on hardware ended in bugcheck
+    * 0x119 (invalid fence). Opt-in until the stream is validated. */
+   const char *stream = getenv("APPLE_AGX_D3D12_GPU_INDIRECT_STREAM");
+   if (!stream || stream[0] != '1')
+      return 7;
    return 0;
 }
 
