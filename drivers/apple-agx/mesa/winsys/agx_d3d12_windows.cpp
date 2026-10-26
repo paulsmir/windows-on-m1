@@ -321,7 +321,10 @@ static UINT owner_perf_total, owner_perf_serial, owner_perf_lines, owner_perf_re
 static volatile LONG owner_presents;
 /* under owner_perf_lock */
 static void owner_perf_report() {
-  if (owner_perf_lines >= 4096u) return;
+  /* Keep the startup detail budget, then one aggregate sample per 64
+   * presents for the rest of the process lifetime (at most 48 rows/sample). */
+  if (owner_perf_lines >= 4096u &&
+      static_cast<UINT>(owner_presents) - owner_perf_reported_presents < 64u) return;
   ++owner_perf_serial;
   owner_perf_reported_presents = static_cast<UINT>(owner_presents);
   for (UINT i = 0; i < ARRAYSIZE(owner_perf_table) && owner_perf_table[i].Count; ++i) {
