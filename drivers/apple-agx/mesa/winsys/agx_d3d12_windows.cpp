@@ -3906,10 +3906,12 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   range.start = draw->StartVertex;
   range.count = draw->VertexCount;
   if (draw->IndexSize) {
-    /* the index buffer's byte offset becomes whole indices of the draw */
+    /* Direct draws fold the view base into StartIndex. Indirect arguments
+     * supply StartIndex on the GPU, so the native IB address carries it. */
     const AGX_D3D12_BUFFER *ib = draw->IndexBuffer;
     if (!ib || !ib->Resource || (draw->IndexSize != 2 && draw->IndexSize != 4) || draw->IndexOffset % draw->IndexSize ||
-        draw->IndexOffset >= ib->Bytes) {
+        draw->IndexOffset >= ib->Bytes ||
+        draw->IndexOffset >= static_cast<struct pipe_resource *>(ib->Resource)->width0) {
       unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
       unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
       release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
@@ -3920,7 +3922,8 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     info.index.resource = static_cast<struct pipe_resource *>(ib->Resource);
     info.primitive_restart = draw->RestartIndex != 0;
     info.restart_index = draw->RestartIndex;
-    range.start += static_cast<unsigned>(draw->IndexOffset / draw->IndexSize);
+    if (!draw->Indirect.Buffer)
+      range.start += static_cast<unsigned>(draw->IndexOffset / draw->IndexSize);
     range.index_bias = draw->BaseVertex;
   }
   /* C14: indirect draws read count/instances/start from the argument buffer */
@@ -3932,7 +3935,6 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
                      (in->Offset & 3u) || in->Buffer->Bytes > 0xffffffffull ||
                      in->Offset > in->Buffer->Bytes || args > in->Buffer->Bytes - in->Offset ||
                      in->MaxCount - 1u > (in->Buffer->Bytes - in->Offset - args) / in->Stride ||
-                     (draw->IndexSize && draw->IndexOffset) ||
                      (in->CountBuffer && (!in->CountBuffer->Resource || (in->CountOffset & 3u) ||
                       in->CountBuffer->Bytes > 0xffffffffull || in->CountOffset > in->CountBuffer->Bytes ||
                       4u > in->CountBuffer->Bytes - in->CountOffset));
@@ -3988,11 +3990,14 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   const LONGLONG bound = qpc_now();
   /* The native wrapper generates eligible GPU streams before rendering.
    * Other counted draws read only the count before entering a render batch. */
+  AgxWin32AsahiSetIndirectIndexBuffer(pipe, in->Buffer && draw->IndexSize ? info.index.resource : NULL,
+                                     static_cast<unsigned>(draw->IndexOffset));
   AgxWin32AsahiSetDrawBindings(pipe, bind_draw_heaps, &heap_bindings);
   if (!in->Buffer || indirect.draw_count) {
     if (SUCCEEDED(hr)) pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
   }
   const LONGLONG drawn = qpc_now();
+  AgxWin32AsahiSetIndirectIndexBuffer(pipe, NULL, 0);
   AgxWin32AsahiSetDrawBindings(pipe, NULL, NULL);
   if (SUCCEEDED(hr)) hr = heap_bindings.Result;
   if (SUCCEEDED(hr) && AgxWin32AsahiContextFaulted(pipe)) hr = owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);

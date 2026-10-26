@@ -94,6 +94,10 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
    free(out);free(args);free(usc);
 }
 int main(void) {
+   /* RC43 hardware-probe matrix: MaxCount2, both index sizes, count0/1/2. */
+   for (unsigned index = 2; index <= 4; index += 2)
+      for (unsigned count = 0; count <= 2; ++count)
+         run(index, 2, count, true, 12);
    unsigned values[]={0,1,16,17,18,UINT32_MAX};
    unsigned indices[]={0,2,4};
    for(unsigned i=0;i<3;++i)for(unsigned n=0;n<6;++n) {

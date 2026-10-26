@@ -946,7 +946,8 @@ class D3d12AbiGate(unittest.TestCase):
         # C14 invariants: only single Draw/DrawIndexed/Dispatch signatures
         # (the Gallium indirect layouts) with a stride covering the record;
         # argument/count placements are resource-relative (+ resource base);
-        # indexed indirect draws need index offset 0; the owner reads the
+        # indexed indirect view bases are covered by the executable replay;
+        # the owner reads the
         # count buffer on the GPU for draws and refuses it for dispatches.
         source = SOURCE.read_text()
         def fn(name):
@@ -958,7 +959,6 @@ class D3d12AbiGate(unittest.TestCase):
         ei = fn('static VOID APIENTRY ExecuteIndirect(')
         self.assertIn('a->gpuva - a->heap->gpuva + args.BaseAddress.UMD.Offset', ei)
         self.assertIn('c->gpuva - c->heap->gpuva + count.BaseAddress.UMD.Offset', ei)
-        self.assertIn('indirect && indexed && list->index_offset ? 8u', fn('static void RecordDraw('))
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         d = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerDraw('):]
         d = d[:d.index('\n}\n')]

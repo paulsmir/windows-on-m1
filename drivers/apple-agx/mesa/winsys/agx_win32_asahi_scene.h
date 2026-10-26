@@ -70,6 +70,9 @@ struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *, void *);
  * invoke it after hazard legalization and before taking their batch; internal
  * legalization draws suppress it. Clear it before releasing caller storage. */
 void AgxWin32AsahiSetDrawBindings(struct pipe_context *, int (*)(void *), void *);
+/* Exclusive owner scopes the IB view base to draw_vbo, then clears it.
+ * Resource identity keeps native replacement index buffers unmodified. */
+void AgxWin32AsahiSetIndirectIndexBuffer(struct pipe_context *, struct pipe_resource *, unsigned);
 void AgxWin32AsahiIndirectMetrics(struct pipe_context *, unsigned out[3]);
 struct pipe_resource *AgxWin32AsahiImportLinearColor32(
     struct pipe_screen *, const AGX_WIN32_SCREEN_BUFFER *,

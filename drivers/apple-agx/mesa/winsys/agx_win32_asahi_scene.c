@@ -461,6 +461,12 @@ void AgxWin32AsahiSetDrawBindings(struct pipe_context *pctx,
   }
 #endif
 }
+void AgxWin32AsahiSetIndirectIndexBuffer(struct pipe_context *pctx,
+    struct pipe_resource *resource, unsigned offset) {
+  struct agx_context *ctx=agx_context(pctx);
+  ctx->windows_indirect_index_resource=resource;
+  ctx->windows_indirect_index_offset=resource ? offset : 0;
+}
 void AgxWin32AsahiIndirectMetrics(struct pipe_context *pctx, unsigned out[3]) {
 #ifdef APPLE_AGX_GPUVA_WINSYS
   struct agx_context *ctx=agx_context(pctx);

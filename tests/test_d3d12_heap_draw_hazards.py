@@ -15,7 +15,7 @@ from test_d3d10_shader_fields_init import project
 
 DRAW = r'''
 using LONGLONG=long long;
-struct pipe_draw_info {unsigned instance_count,mode;};
+struct pipe_draw_info {unsigned instance_count,mode;struct {void *resource;} index;};
 struct pipe_draw_start_count_bias {unsigned count;};
 struct pipe_draw_indirect_info {bool count_from_stream_output;unsigned draw_count,indirect_draw_count_offset;void *indirect_draw_count;};
 struct agx_win32_indirect_stream {const pipe_draw_indirect_info *indirect;uint32_t params_offset;unsigned mode;};
@@ -39,6 +39,7 @@ static long long qpc_now(){return 0;}
 #define AGX_WIN32_DRAW_PHASE(x) ((void)(x))
 static void AgxWin32AsahiPublishPages(struct agx_device *){}
 static void AgxWin32AsahiBatchTraceDraw(agx_context *,agx_batch *,unsigned){}
+static void AgxWin32AsahiSetIndirectIndexBuffer(pipe_context *,void *r,unsigned offset){assert(!r&&!offset);}
 static bool AgxWin32AsahiBatchDrawAllowed(agx_context *c,const pipe_draw_info *,unsigned,const pipe_draw_indirect_info *,const pipe_draw_start_count_bias *,unsigned){return !c->any_faults;}
 static bool AgxWin32AsahiBatchDrawRefused(agx_context *,const pipe_draw_info *,const pipe_draw_indirect_info *,const pipe_draw_start_count_bias *,unsigned){return false;}
 static bool AgxWin32AsahiBatchPrepareDraw(agx_batch *,const pipe_draw_info *,const pipe_draw_indirect_info *,const pipe_draw_start_count_bias *){return true;}
@@ -92,6 +93,7 @@ static void agx_draw_vbo_windows_body(pipe_context *p,const pipe_draw_info *info
 static HRESULT owner_draw(AGX_D3D12_OWNER *owner,pipe_draw_info &info,pipe_draw_start_count_bias &range){
  pipe_context *pipe=owner->Context;HRESULT hr=S_OK;
  AGX_D3D12_INDIRECT in_value={};auto *in=&in_value;
+ struct {unsigned IndexSize,IndexOffset;} direct={};auto *draw=&direct;
  pipe_draw_indirect_info indirect={};
 @@CALLSITE@@
  (void)bound;(void)drawn;return hr;

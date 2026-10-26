@@ -473,9 +473,8 @@ typedef struct {
     const AGX_D3D12_UAV *Uavs;
     unsigned SrvCount; /* Srvs[0, SrvCount) are read; later slots are unbound */
   } Vs, Ps, Gs, Hs, Ds; /* C27: Gs only when the pipeline has a geometry shader; C37: Hs/Ds likewise */
-  /* C14: indirect draws (Indirect.Buffer NULL = direct); an indexed indirect
-   * draw needs IndexOffset 0 (Gallium takes the start index from the
-   * arguments) */
+  /* Indirect.Buffer NULL = direct. IndexOffset is the IB view base;
+   * GPU StartIndexLocation is relative to it. */
   AGX_D3D12_INDIRECT Indirect;
   /* C39: stream-output targets (Buffer NULL = unbound slot); the filled
    * size (bytes written from Offset) lives at Filled + FilledOffset */

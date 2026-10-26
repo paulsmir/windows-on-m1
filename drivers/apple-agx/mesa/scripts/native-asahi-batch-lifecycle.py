@@ -62,7 +62,12 @@ def project_sources(out,project,overlays):
    struct pipe_context base;
    /* Scoped to the frontend draw; rebuilt after native hazard flushes. */
    int (*windows_draw_bindings)(void *);
-   void *windows_draw_bindings_data;''')
+   void *windows_draw_bindings_data;
+   /* D3D IB view base, independent of GPU StartIndexLocation. Scoped to
+    * one owner draw and keyed to the original resource so native lowering
+    * can replace the IB without inheriting its offset. */
+   struct pipe_resource *windows_indirect_index_resource;
+   unsigned windows_indirect_index_offset;''')
     # EXP1070: on Windows every perf_debug message (flush/sync reasons,
     # shadowing, fallbacks) is counted per process, whatever AGX_DBG_PERF says.
     h,n=re.subn(r'#define perf_debug\(dev, \.\.\.\)[^\n]*\\\n(?:[^\n]*\\\n)*[^\n]*while \(0\)\n',
@@ -293,6 +298,20 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     # Real draw entrypoint is wrapped so every native early return unwinds the
     # stable root. No manually constructed command/capture substitutes this call.
     sp='src/gallium/drivers/asahi/agx_state.c';s=(out/sp).read_text()
+    a,b=function(s,'agx_index_buffer_rsrc_ptr')
+    s=s[:a]+replace(s[a:b], '   return agx_map_gpu(rsrc);', '''   struct agx_context *ctx = batch->ctx;
+   unsigned offset = info->index.resource == ctx->windows_indirect_index_resource ?
+      ctx->windows_indirect_index_offset : 0;
+   if (offset) {
+      if (!info->index_size || offset % info->index_size ||
+          offset >= rsrc->base.width0 || offset >= *extent) {
+         *extent = 0;
+         AgxWin32AsahiMarkContextFault(ctx, (5u << 16) | __LINE__);
+         return 0;
+      }
+      *extent = ALIGN_POT(*extent - offset, 4);
+   }
+   return agx_map_gpu(rsrc) + offset;''')+s[b:]
     s=replace(s,'#include "agx_win32_pipeline.inc"','#include "agx_win32_pipeline.inc"\n#include "agx_win32_asahi_batch.h"')
     a,b=function(s,'agx_draw_vbo');decl=s.rfind('static void',0,a);signature=s[decl:a]
     renamed=signature.replace('agx_draw_vbo(','agx_draw_vbo_windows_body(')

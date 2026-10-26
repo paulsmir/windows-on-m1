@@ -64,7 +64,7 @@ using HRESULT=int;using LONGLONG=long long;
 #define S_OK 0
 #define SUCCEEDED(x) ((x)>=0)
 #define DXGI_ERROR_DEVICE_HUNG -2
-struct pipe_draw_info {};
+struct pipe_draw_info {struct {void *resource;} index;};
 struct pipe_draw_start_count_bias {};
 struct pipe_draw_indirect_info {unsigned draw_count;void *indirect_draw_count;};
 struct pipe_context {void (*draw_vbo)(pipe_context *,const pipe_draw_info *,unsigned,const pipe_draw_indirect_info *,const pipe_draw_start_count_bias *,unsigned);};
@@ -76,6 +76,7 @@ static HRESULT owner_failure(AGX_D3D12_OWNER *,HRESULT hr){return hr;}
 static bool AgxWin32AsahiContextFaulted(pipe_context *){return fault;}
 static int bind_draw_heaps(void *){return 1;}
 static void AgxWin32AsahiSetDrawBindings(pipe_context *,int (*fn)(void *),void *){callbacks=fn!=nullptr;}
+static void AgxWin32AsahiSetIndirectIndexBuffer(pipe_context *,void *r,unsigned offset){assert(!r&&!offset);}
 static LONGLONG qpc_now(){return 0;}
 static void draw_buffer(pipe_context *,const pipe_draw_info *,unsigned id,const pipe_draw_indirect_info *in,const pipe_draw_start_count_bias *,unsigned n){
  assert(callbacks&&!id&&n==1);++draws;
@@ -83,6 +84,7 @@ static void draw_buffer(pipe_context *,const pipe_draw_info *,unsigned id,const 
 }
 static HRESULT run(AGX_D3D12_OWNER *owner,AGX_D3D12_INDIRECT *in,bool counted){
  pipe_context *pipe=owner->Context;HRESULT hr=S_OK;
+ struct {unsigned IndexSize,IndexOffset;} nonindexed={};auto *draw=&nonindexed;
  pipe_draw_info info={};pipe_draw_start_count_bias range={};
  pipe_draw_indirect_info indirect={12000,counted?&counter:nullptr};
 '''+source[begin:end]+r'''
