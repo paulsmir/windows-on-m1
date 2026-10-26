@@ -64071,3 +64071,15 @@ EXP1961 HARDWARE BEFORE 2026-10-26T09:02:38Z:
 - Hashes: sys ad48aa295511, UmdArm64 0774693eb220, UmdX64 b3c349b12fbd, Umd32 35e9e26796dd; manifest 18152e7d66e1, hardware-manifest 6533f563928f; probe1961.sh a8a9accfc268 (PROBE_LINT_OK); visible recovery rec1961h 5079f1c5cf6ea721; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
 - Recovery rec1961h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1961-guest-ram/run1961.sh.
+
+EXP1961 ACTUAL (Claude headline 2026-10-26T09:12:44Z): **FIRST COMPLETE GRAVITYMARK D3D12 BENCHMARK RESULTS.**
+- Package 30.0.1961.0 = EXP1960 driver code + run_uefi 83d32cac; switches Wom1GpuFaultInfoRead=1, Wom1PoolFraction=3.
+- m1n1 075e3980 (macho 452ab29f, codex/m1n1-guestram = 0d3a75b3 + rc30 dc303ad7/075e3980), --guest-ram-profile expanded, proxyclient from .worktrees/m1n1-guestram.
+- Boot OK (CM_PROB_NONE). Guest TotalPhysicalMemory 6884 MB, about +896 MiB vs the 6.28 GB legacy profile.
+- GravityMark D3D12 1280x720 windowed, TAA:
+  - 2k asteroids: "Benchmark Finished", Score 352, Time 191.9 s, FPS 1.8. The image (evidence/EXP1961/gm1961a-image.png) renders the planet, asteroids and UI correctly.
+  - 10k asteroids: Score 256, Time 177.7 s, FPS 1.4.
+- No device removal, no GPU fault, guest alive, DWM alive.
+- Compared with EXP1960 (same driver, legacy RAM: 5.6/6.6 scene presents/min, about 0.1 fps): about 20x.
+- Verdict: CONFIRMED. Guest RAM was the binding limit for GravityMark; the expanded profile is now the default for experiments.
+- Next: rendering throughput (Night Raid-class bottlenecks: draw_vbo cost, CPU retire), plus a Night Raid / D3D11 / GL regression check on this m1n1.
