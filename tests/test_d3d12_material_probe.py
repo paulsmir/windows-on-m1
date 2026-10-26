@@ -7,6 +7,7 @@ This is an oracle/ABI test, not a claim that Windows or GPU pixels were tested.
 """
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import unittest
 
@@ -20,7 +21,7 @@ class MaterialProbe(unittest.TestCase):
         source = r'''
 #include <assert.h>
 #include <string.h>
-#include "agx_d3d12_material_oracle.h"
+#include "agx_d3d12_probe_material_oracle.h"
 int main(void) {
     unsigned char colour[1024], index[1024];
     const unsigned char gold[2][2][4] = {
@@ -61,6 +62,26 @@ int main(void) {
                     r = subprocess.run([str(p/'test')], capture_output=True, text=True)
                     self.assertEqual(r.returncode, 0, r.stdout+r.stderr)
 
+    def test_fresh_probe_source_stage_compiles(self):
+        # The standard build-d3d12probe.sh stages probe.c, probe_*.h and
+        # dxbc_tir.h only. A helper outside that closure breaks all three
+        # Windows probe builds even when a source-tree compile passes.
+        if not (SDK/'msvc/vcruntime.h').exists():
+            self.skipTest('pinned Windows SDK/MSVC headers absent')
+        with tempfile.TemporaryDirectory() as d:
+            stage = Path(d)
+            for source in [ICD/'agx_d3d12_probe.c', *ICD.glob('agx_d3d12_probe_*.h'),
+                           ROOT/'drivers/apple-agx/mesa/dxbc/dxbc_tir.h']:
+                shutil.copy2(source, stage/source.name)
+            cmd = ['clang', '-target', 'aarch64-pc-windows-msvc', '-fms-extensions',
+                   '-fms-compatibility', '-fsyntax-only', '-Werror=implicit-function-declaration',
+                   '-Wno-ignored-attributes', '-Wno-ignored-pragma-intrinsic',
+                   '-Wno-nonportable-include-path', '-Wno-pragma-pack']
+            for sub in ('um', 'shared', 'ucrt', 'msvc'):
+                cmd += ['-I', str(SDK/sub)]
+            r = subprocess.run([*cmd, str(stage/'agx_d3d12_probe.c')], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout+r.stderr)
+
     def test_sdk_call_surface_c_and_x86_cpp(self):
         if not (SDK/'msvc/vcruntime.h').exists():
             self.skipTest('pinned Windows SDK/MSVC headers absent')
@@ -75,7 +96,7 @@ static ID3D12Resource *committed_buffer(ID3D12Device*, D3D12_HEAP_TYPE, D3D12_RE
 static ID3D12Resource *uav_buffer(ID3D12Device*);
 static void transition(ID3D12GraphicsCommandList*, ID3D12Resource*, D3D12_RESOURCE_STATES, D3D12_RESOURCE_STATES);
 static HRESULT run_list(ID3D12CommandQueue*, ID3D12Fence*, ID3D12GraphicsCommandList*, UINT64, const char*);
-#include "agx_d3d12_material_probe.h"
+#include "agx_d3d12_probe_material.h"
 '''
         with tempfile.TemporaryDirectory() as d:
             p = Path(d)/'test.c'; p.write_text(source)

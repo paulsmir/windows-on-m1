@@ -7676,7 +7676,7 @@ static LONG WINAPI first_access_violation(EXCEPTION_POINTERS *ep) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-#include "agx_d3d12_material_probe.h"
+#include "agx_d3d12_probe_material.h"
 
 /* the steps WARP ("warp <steps>") and the AGX adapter ("only <steps>",
  * EXP1862: one step under the guest debugger) run by name */

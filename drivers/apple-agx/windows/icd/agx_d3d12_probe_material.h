@@ -5,7 +5,7 @@
 #ifndef AGX_D3D12_MATERIAL_PROBE_H
 #define AGX_D3D12_MATERIAL_PROBE_H
 #include <d3dcompiler.h>
-#include "agx_d3d12_material_oracle.h"
+#include "agx_d3d12_probe_material_oracle.h"
 #ifdef __cplusplus
 #define RC44_IID(x) (x)
 #else
