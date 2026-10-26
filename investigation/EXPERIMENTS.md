@@ -64058,3 +64058,5 @@ EXP1960 HARDWARE BEFORE 2026-10-26T08:28:33Z:
 - Hashes: sys 25dd0fb53a7d, UmdArm64 1864cca4ce5e, UmdX64 48d521c94909, Umd32 80f8271a7ae2; manifest 9a509de76b11, hardware-manifest bfd49afae1a8; probe1960.sh d34219c0d78d (PROBE_LINT_OK); visible recovery rec1960h 54a2c32d85d7b278; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
 - Recovery rec1960h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1960-footprint/run1960.sh.
+
+EXP1960 ACTUAL (Claude headline 2026-10-26T08:46:14Z): package 30.0.1960.0 (a8be12f3 = EXP1959 code + rc26/rc27 opt-ins off + rc29 footprint fixes), Wom1GpuFaultInfoRead=1 + Wom1PoolFraction=3, CPU_POOL_MAP off. Stable: both arms reach the harness close, guest alive, no load OOM. 2k: 9 scene presents = 5.6/min. 10k: 13 = 6.6/min. Longest paging waits 20.2 / 19.8 s. Unchanged vs EXP1958 (5.6/8.3): rc29 is neutral, consistent with its audit (GravityMark genuinely needs about 2 GB GPU plus 2.6 GB process memory). Next lever: guest RAM size (6.28 GB of 8 GB; m1n1 rc30 in progress).
