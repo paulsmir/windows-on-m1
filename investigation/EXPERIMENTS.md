@@ -64182,3 +64182,11 @@ EXP1967 HARDWARE BEFORE 2026-10-26T12:58:59Z:
 - Hashes: sys 1e99b0523c18, UmdArm64 720cf560c0dc, UmdX64 63ebd5042997, Umd32 3ff37bd57a88; manifest ce1196bc97c4, hardware-manifest 2dd3e24aa37d; probe1967.sh 46b2533b022d (PROBE_LINT_OK); visible recovery rec1967h cf9b100c83ab8551; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1967h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1967-gpu-timing/run1967.sh.
+
+EXP1967 HARDWARE ACTUAL 2026-10-26T13:11:53Z:
+- PASS (stability), PARTIAL (timing).
+- 2k: Score 796 / 4.8 FPS, median frame 0.178 s (EXP1963: 784 / 4.7, 0.183 s). 10k: Score 751 / 4.5 FPS, median 0.194 s, p90 0.223 s, max 0.58 s (EXP1963: 798 / 4.8, 0.185 s). Both arms completed with WER 0 and the guest alive; no fault.
+- Counted path: every row is path=2 reason=7 (5564 rows at 2k, 5249 at 10k): the count-bounded native fallback, with the GPU stream opt-in off.
+- rc35 timing receipts are missing. Only measure-d3d12-dispatch-time rows appear; there are no measure-gpu-completion, measure-gpu-stages, replay-time or replay-window rows. Cause: those gates use AdmissionUmdDiagnosticEnabled, which is false under APPLE_AGX_UMD_REFUSALS_ONLY=1 (GravityMark's trace mode). Fixed by e7e0ba38 (AdmissionUmdMeasureEnabled).
+- Image (gm1967b): finish dialog, planet, asteroid field. The asteroids render as flat white shapes with no visible shading or texture, the same as earlier runs; to be checked against a reference as a correctness issue.
+- Recovery rec1967h.
