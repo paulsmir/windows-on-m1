@@ -275,6 +275,10 @@ static void receipt(PCSTR stage, HRESULT status, UINT a, UINT b, UINT c) {
   const UINT values[] = {a, b, c};
   AdmissionUmdDiagnostic(stage, status, values, 3u);
 }
+static void receipt(PCSTR stage, HRESULT status, UINT a, UINT b, UINT c, UINT d, UINT e) {
+  const UINT values[] = {a, b, c, d, e};
+  AdmissionUmdDiagnostic(stage, status, values, 5u);
+}
 
 /* EXP1851: a refused batch faults the backend and Asahi's next BO allocation
  * fails silently; report refusals as the D3D10 owner does (reject-batch
@@ -3917,15 +3921,16 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
   release_optional_stages(pipe, stages, false);
   if (FAILED(hr)) return hr;
-  if (in->Buffer && in->CountBuffer) {
+  if (in->Buffer && (in->CountBuffer || in->MaxCount > 1)) {
     /* Per successful call, independent of the capped perf-reason table:
-     * path (1 GPU predicate, 2 CPU fallback), MaxCount, total call us. */
-#ifdef APPLE_AGX_GPUVA_WINSYS
-    const UINT path = mode == MESA_PRIM_PATCHES ? 2u : 1u;
-#else
-    const UINT path = 2u;
-#endif
-    receipt("measure-d3d12-counted-path", S_OK, path, in->MaxCount, qpc_us(drawn - bound));
+     * path (1 GPU predicate, 2 CPU fallback, 3 GPU stream), MaxCount,
+     * total draw_vbo us, native state/stream encode us, fallback reason.
+     * Get the path actually emitted: topology alone cannot identify queries,
+     * passthrough GS or other native lowering. Zero means ordinary uncounted. */
+    unsigned metrics[3] = {};
+    AgxWin32AsahiIndirectMetrics(pipe, metrics);
+    receipt("measure-d3d12-counted-path", S_OK, metrics[0], in->MaxCount,
+            qpc_us(drawn - bound), metrics[1], metrics[2]);
   }
   ++owner->PendingDraws;
   owner->TimeBind += bound - entered;

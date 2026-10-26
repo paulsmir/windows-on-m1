@@ -453,6 +453,24 @@ void AgxWin32AsahiSetDrawBindings(struct pipe_context *pctx,
   struct agx_context *ctx=agx_context(pctx);
   ctx->windows_draw_bindings=bindings;
   ctx->windows_draw_bindings_data=data;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(bindings) {
+    ctx->windows_indirect_path=0;
+    ctx->windows_indirect_reason=0;
+    ctx->windows_indirect_encode_us=0;
+  }
+#endif
+}
+void AgxWin32AsahiIndirectMetrics(struct pipe_context *pctx, unsigned out[3]) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  struct agx_context *ctx=agx_context(pctx);
+  out[0]=ctx->windows_indirect_path;
+  out[1]=ctx->windows_indirect_encode_us;
+  out[2]=ctx->windows_indirect_reason;
+#else
+  (void)pctx;
+  out[0]=2;out[1]=out[2]=0;
+#endif
 }
 /* EXP1927: a residency failure can occur while acquiring a batch (or
  * flushing a hazard in a prior heap chunk). Never initialize its encoder or

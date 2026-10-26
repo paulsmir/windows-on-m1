@@ -8,6 +8,7 @@ can establish executable closure; a successful archive alone does not do so.
 import argparse
 import ctypes
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -615,6 +616,12 @@ def main():
         # not beside the unprojected generated Windows input.
         projected_c = native / 'src/asahi/lib/libagx_shaders.c'
         shutil.copy2(generated_c, projected_c)
+        if args.gpuva:
+            stream_script = args.project / 'drivers/apple-agx/mesa/scripts/native-asahi-indirect-stream.py'
+            stream_spec = importlib.util.spec_from_file_location('native_indirect_stream', stream_script)
+            stream_module = importlib.util.module_from_spec(stream_spec)
+            stream_spec.loader.exec_module(stream_module)
+            projected_c.write_text(stream_module.project_library_c(projected_c.read_text(), args.project))
         runtime.append(projected_c)
         runtime += [MESA / 'src/gallium/auxiliary' / name for name in AUX_UNITS]
         # Actual executable link, run native-lifecycle-20260913g, names these

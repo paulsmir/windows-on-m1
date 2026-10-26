@@ -103,4 +103,7 @@ done:
    if (output.bo)
       agx_bo_unreference(dev, output.bo);
 }
+#ifdef AGX_WIN32_INDIRECT_STREAM_H
+#include "agx_win32_indirect_stream_emit.h"
+#endif
 #endif

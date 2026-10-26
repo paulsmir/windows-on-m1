@@ -18,6 +18,15 @@ using LONGLONG=long long;
 struct pipe_draw_info {unsigned instance_count,mode;};
 struct pipe_draw_start_count_bias {unsigned count;};
 struct pipe_draw_indirect_info {bool count_from_stream_output;unsigned draw_count,indirect_draw_count_offset;void *indirect_draw_count;};
+struct agx_win32_indirect_stream {const pipe_draw_indirect_info *indirect;uint32_t params_offset;};
+#define AGX_DIRTY_VS 1
+#define MIN2(a,b) ((a)<(b)?(a):(b))
+static uint64_t os_time_get_nano(){return 0;}
+// This fixture exercises direct draws. GPU stream behavior is executed by
+// test_d3d12_indirect_stream_glue, with the real production helper and kernel.
+static unsigned agx_win32_stream_fallback(agx_context *,const pipe_draw_info *,unsigned,unsigned){assert(false);return 1;}
+static bool agx_win32_stream_inputs_valid(const pipe_draw_info *,const pipe_draw_indirect_info *){assert(false);return false;}
+static void agx_win32_stream_flush_inputs(agx_context *,const pipe_draw_indirect_info *){assert(false);}
 #define MESA_PRIM_PATCHES 14
 struct AGX_D3D12_INDIRECT {bool Buffer;const AGX_D3D12_BUFFER *CountBuffer;UINT MaxCount;unsigned long long CountOffset;};
 // This fixture covers direct draws only; counted-draw I/O has its own replay.
@@ -44,7 +53,7 @@ static void agx_legalize_xfb(agx_context *c){
   agx_flush_batch_for_reason(c,&batches[current],"simulated XFB readers");
  agx_legalize_feedback_loops(c);
 }
-static void perf_debug_ctx(agx_context *,const char *){}
+static void perf_debug_ctx(agx_context *,const char *,...){}
 static void agx_win32_draw_indirect_count(agx_context *,const pipe_draw_info *,unsigned,const pipe_draw_indirect_info *,const pipe_draw_start_count_bias *){assert(false);}
 static void agx_draw_vbo_windows_body(pipe_context *,const pipe_draw_info *,unsigned,const pipe_draw_indirect_info *,const pipe_draw_start_count_bias *,unsigned);
 @@WRAPPER@@
@@ -152,7 +161,7 @@ class HeapDrawHazards(unittest.TestCase):
             callback=function(owner,'static void validate_heap_refs(')+owner[a:owner.index('static void unbind_heaps',a)]
         setter=body(scene,'AgxWin32AsahiSetDrawBindings') if 'AgxWin32AsahiSetDrawBindings(' in scene else ''
         header=HEADER.replace('struct pipe_context {','struct pipe_draw_info;struct pipe_draw_indirect_info;struct pipe_draw_start_count_bias;\nstruct pipe_context {void (*draw_vbo)(struct pipe_context *,const struct pipe_draw_info *,unsigned,const struct pipe_draw_indirect_info *,const struct pipe_draw_start_count_bias *,unsigned);')
-        header=header.replace('bool any_faults;','bool any_faults;struct agx_batch *batch;int (*windows_draw_bindings)(void *);void *windows_draw_bindings_data;')
+        header=header.replace('bool any_faults;','bool any_faults;struct agx_batch *batch;int (*windows_draw_bindings)(void *);void *windows_draw_bindings_data;struct agx_win32_indirect_stream *windows_indirect_stream;unsigned windows_indirect_path,windows_indirect_reason,windows_indirect_encode_us,dirty;')
         prelude=PROGRAM[:PROGRAM.index('int main(')].replace('@@OWNER@@',function(owner,'static HRESULT bind_heap_samplers(')+function(owner,'static HRESULT bind_heaps('))
         native=function(scene,'static unsigned heap_sampler_headroom(')+body(scene,'AgxWin32AsahiBatchSamplerHandles')
         draw=DRAW.replace('@@COUNT_HELPER@@','').replace('@@WRAPPER@@',wrapper).replace('@@CALLBACK@@',callback).replace('@@SETTER@@',setter).replace('@@CALLSITE@@',owner[start:end]).replace('@@BODY_PREPARE@@',preparation)
@@ -161,7 +170,7 @@ class HeapDrawHazards(unittest.TestCase):
             (p/'fixture.h').write_text(header)
             (p/'native.c').write_text('#include "fixture.h"\n'+native)
             (p/'draw.cpp').write_text(prelude+draw)
-            flags=['-Wall','-Wextra','-Werror','-fsanitize=address,undefined']
+            flags=['-Wall','-Wextra','-Werror','-Wno-missing-field-initializers','-fsanitize=address,undefined']
             for command in [
                 ['clang','-std=c11',*flags,'-c',str(p/'native.c'),'-o',str(p/'native.o')],
                 ['clang++','-std=c++17',*flags,'-Wno-unused-function','-Wno-unused-variable',str(p/'draw.cpp'),str(p/'native.o'),'-o',str(p/'replay')]]:

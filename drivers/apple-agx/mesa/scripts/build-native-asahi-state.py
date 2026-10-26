@@ -6821,6 +6821,11 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 (out/path).write_text(text)
                 overlays.setdefault(path, {})['after_count_predicate'] = (
                     hashlib.sha256(text.encode()).hexdigest())
+                stream_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-indirect-stream.py'
+                stream_spec = importlib.util.spec_from_file_location('native_indirect_stream', stream_script)
+                stream_module = importlib.util.module_from_spec(stream_spec)
+                stream_spec.loader.exec_module(stream_module)
+                stream_module.project_sources(out, args.project, overlays)
 
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():

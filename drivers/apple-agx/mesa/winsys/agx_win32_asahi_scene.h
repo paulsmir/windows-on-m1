@@ -70,6 +70,7 @@ struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *, void *);
  * invoke it after hazard legalization and before taking their batch; internal
  * legalization draws suppress it. Clear it before releasing caller storage. */
 void AgxWin32AsahiSetDrawBindings(struct pipe_context *, int (*)(void *), void *);
+void AgxWin32AsahiIndirectMetrics(struct pipe_context *, unsigned out[3]);
 struct pipe_resource *AgxWin32AsahiImportLinearColor32(
     struct pipe_screen *, const AGX_WIN32_SCREEN_BUFFER *,
     APPLE_AGX_U32 Width, APPLE_AGX_U32 Height, APPLE_AGX_U32 Pitch,
