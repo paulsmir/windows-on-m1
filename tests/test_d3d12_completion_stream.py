@@ -91,7 +91,7 @@ class CompletionWiring(unittest.TestCase):
         u=(ROOT/'drivers/apple-agx/render-admission/umd/src/umd_gpuva_windows.c').read_text()
         drain=function(u,'VOID AdmissionUmdGpuCompletionDrain(')
         self.assertIn('page < 4u',drain)
-        self.assertIn('AdmissionUmdDiagnosticEnabled()',drain)
+        self.assertIn('AdmissionUmdMeasureEnabled()',drain)
         self.assertNotIn('Wait',drain)
         self.assertIn('measure-gpu-completion',drain)
         self.assertIn('measure-gpu-stages',drain)

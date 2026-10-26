@@ -48,7 +48,7 @@ int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
 
 /* the UMD trace logger (umd_runtime_device.c; C linkage through umd_internal.h) */
 extern "C" VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status, const UINT *Values, UINT Count);
-extern "C" BOOL AdmissionUmdDiagnosticEnabled(VOID);
+extern "C" BOOL AdmissionUmdMeasureEnabled(VOID);
 
 namespace {
 /* D3D12 A3 (EXP1343: OpenAdapter12 returned a NULL driver adapter handle
@@ -6619,7 +6619,7 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&start);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-    const bool measure = AdmissionUmdDiagnosticEnabled() != FALSE;
+    const bool measure = AdmissionUmdMeasureEnabled() != FALSE;
     LONGLONG command_ticks[6] = {};
     UINT command_counts[6] = {};
     AgxD3d12Device *device = nullptr;

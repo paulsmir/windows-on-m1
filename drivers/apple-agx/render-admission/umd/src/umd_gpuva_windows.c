@@ -2089,7 +2089,7 @@ static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) 
 VOID AdmissionUmdGpuCompletionDrain(ADMISSION_UMD_DEVICE *device,
     unsigned long long *cursor) {
   unsigned page;
-  if (!AdmissionUmdDiagnosticEnabled() || !device || !cursor ||
+  if (!AdmissionUmdMeasureEnabled() || !device || !cursor ||
       device->Magic != ADMISSION_UMD_DEVICE_MAGIC || !device->Adapter ||
       device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
       !device->KernelCallbacks || !device->KernelCallbacks->pfnEscapeCb ||

@@ -30,6 +30,7 @@ using HRESULT=int; using UINT=unsigned;using LONGLONG=long long;
 #define FALSE 0
 static int diagnostics_enabled=1;
 static int AdmissionUmdDiagnosticEnabled(){return diagnostics_enabled;}
+static int AdmissionUmdMeasureEnabled(){return diagnostics_enabled;}
 static LONGLONG clock_tick;
 static LONGLONG qpc_now(){return ++clock_tick;}
 #define S_OK 0

@@ -3529,7 +3529,7 @@ struct DispatchTiming {
   LONGLONG Last;
   bool Enabled;
   explicit DispatchTiming(AGX_D3D12_OWNER *owner) : Owner(owner), Last(0),
-      Enabled(AdmissionUmdDiagnosticEnabled() != FALSE) {
+      Enabled(AdmissionUmdMeasureEnabled() != FALSE) {
     if (Enabled) { Last = qpc_now(); ++Owner->TimedDispatches; }
   }
   void Mark(Phase phase) {

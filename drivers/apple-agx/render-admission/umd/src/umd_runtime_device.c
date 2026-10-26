@@ -77,6 +77,17 @@ BOOL AdmissionUmdDiagnosticEnabled(VOID) {
   return path != NULL && !refusalsOnly;
 }
 
+/* EXP1967: "measure-" receipts pass the refusals-only filter (see
+ * AdmissionUmdDiagnosticPermit), so measurement timers follow the trace
+ * path alone; AdmissionUmdDiagnosticEnabled stays false in that mode. */
+BOOL AdmissionUmdMeasureEnabled(VOID) {
+  DWORD saved = GetLastError();
+  BOOL refusalsOnly;
+  PCWSTR path = AdmissionUmdTraceConfig(&refusalsOnly);
+  SetLastError(saved);
+  return path != NULL;
+}
+
 /* EXP959 exhausted the normal startup budget before DWM's first failed
  * deallocation. Keep the failure receipt independent and bounded. */
 static BOOL AdmissionUmdDiagnosticPermit(
