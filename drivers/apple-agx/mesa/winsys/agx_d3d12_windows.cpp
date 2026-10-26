@@ -1899,8 +1899,8 @@ extern "C" HRESULT AgxD3d12OwnerClearUav(AGX_D3D12_OWNER *owner, const AGX_D3D12
   return S_OK;
 }
 
-/* C11: query heaps (agx_query.c: occlusion counters/predicates, timestamps
- * with the CPU-fallback copy, PIPELINE_STATISTICS_SINGLE per counter) */
+/* C11: query heaps. Resolve emits GPU work; the native query implementation
+ * retains each result generation until its producers and readers retire. */
 struct AGX_D3D12_QUERY_HEAP {
   unsigned Type, Count, Slots;
   struct pipe_query *Query[1]; /* Count * Slots */
@@ -1970,11 +1970,15 @@ extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12
   if (!owner || !owner->Context || !heap || !dst || !dst->Resource || start > heap->Count ||
       count > heap->Count - start)
     return E_INVALIDARG;
+  if ((heap->Type == 0 && type > 1u) || (heap->Type == 1 && type != 2u) ||
+      (heap->Type == 2 && type != 3u))
+    return E_INVALIDARG;
   const unsigned values = heap->Type == 2 ? kQueryStatistics : 1u;
   const unsigned long long bytes = static_cast<unsigned long long>(count) * values * 8u;
   if (offset > dst->Bytes || bytes > dst->Bytes - offset || dst->Bytes > 0xffffffffull || (offset & 7u))
     return E_INVALIDARG;
   struct pipe_context *pipe = owner->Context;
+  if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
   struct pipe_resource *resource = static_cast<struct pipe_resource *>(dst->Resource);
   static const UINT64 zero = 0;
   for (unsigned i = 0; i < count; ++i) {
@@ -1986,6 +1990,7 @@ extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12
         pipe->get_query_result_resource(pipe, q, PIPE_QUERY_WAIT, PIPE_QUERY_TYPE_U64, 0, resource, at);
       else
         pipe->clear_buffer(pipe, resource, at, 8u, &zero, 8);
+      if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
     }
   }
   ++owner->PendingDispatches;
