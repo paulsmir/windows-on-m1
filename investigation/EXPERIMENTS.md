@@ -64096,3 +64096,13 @@ EXP1962 HARDWARE BEFORE 2026-10-26T09:19:55Z:
 EXP1962 ACTUAL (Claude headline 2026-10-26T09:29:30Z): package 30.0.1962.0 (same driver as EXP1961), expanded guest RAM (m1n1 075e3980), only Wom1GpuFaultInfoRead=1, i.e. the FULL 2688 MiB native pool. No load OOM. GravityMark D3D12 1280x720: 2k Score 755 / 4.5 FPS; 10k Score 744 / 4.4 FPS (EXP1961 3/4 pool: 352/1.8 and 256/1.4). Guest alive, no device removal. Verdict: CONFIRMED. With 6.88 GB guest RAM the full pool fits and removes most paging stalls; the full pool (no fraction switch) is the new operating point.
 
 EXP1962 CORRECTION 2026-10-26T09:29:43Z: the probe slot "10K" runs arm a = 2k asteroids. Corrected: 2k Score 744 / 4.4 FPS; 10k Score 755 / 4.5 FPS. Frame analysis (2k): 779 presents; after 60 s median 0.194 s, p90 0.22 s; the longest wait after make-resident-trimmed is 0.2 s (EXP1961: 15-21 s); 633 trims. Paging stalls are eliminated, so the frame time is now render throughput.
+
+EXP1963 HARDWARE BEFORE 2026-10-26T09:52:36Z:
+- Package 30.0.1963.0 = EXP1962 driver + rc31 29780667. For ExecuteIndirect with a count buffer, the owner reads and clamps only the count on the CPU and passes the argument records through Asahi's native indirect draw. The old path CPU-mapped the argument buffers and unrolled direct draws. Tessellation keeps the fallback.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (full pool).
+- WHY THIS HYPOTHESIS: rc31 timing of EXP1961: median frame 217 ms (2k) is 210 ms of Execute replay; draw_vbo 142 ms, of which the counted-indirect subset is 115 ms (10k: 135 of 242 ms). That subset maps up to seven argument buffers to the CPU per frame.
+- Expected: higher Score/FPS than EXP1962 (2k 744 / 4.4, 10k 755 / 4.5), a shorter median frame, the image still correct (no missing asteroids), no faults.
+- Recovery: rec1963h.
+- Hashes: sys 1f85c4301405, UmdArm64 e62b3850ecac, UmdX64 e2363e414bc4, Umd32 f87519feeb06; manifest 547920cfccbb, hardware-manifest 770b15ae4089; probe1963.sh de6a8be096d6 (PROBE_LINT_OK); visible recovery rec1963h 2718a154220e0468; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1963h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1963-counted-indirect/run1963.sh.
