@@ -64316,3 +64316,17 @@ EXP1972 HARDWARE ACTUAL 2026-10-26T17:38:48Z: PASS for stability, at **HD 1280x7
 - rc45 verdict: batching cut the readiness escapes about 25x (385+148 -> 15+3) but not their cost, because each proof walks every 4 KiB page of every held allocation, O(resident bytes) per submission. Codex rc47 makes it generation-based.
 - The images now show shaded grey asteroids at 100k; the flat-white look at 2k may be distance/exposure. The rc44 discriminator remains.
 - Recovery rec1972h (running).
+
+EXP1973 HARDWARE BEFORE 2026-10-26T18:17:12Z:
+- Package 30.0.1973.0 = EXP1972 driver + rc46 runner fix (tools/agx_gravitymark_run.ps1 staged as gm-run.ps1; -Width/-Height bound) + rc47:
+  - d36d0b34 per-allocation readiness tokens in the KMD, invalidated by every native-leaf, logical PTE, topology, retirement and destroy mutation; pages are re-walked only on a miss;
+  - 7529e3a3 skips the wait callback for already-satisfied 64-bit render fences;
+  - 3ab1f4fb analyzer covers every steady Execute.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (pool 3136 MiB).
+- WHY THIS HYPOTHESIS: EXP1972 (actually HD 100k) spent about 140 ms per frame in batched readiness proofs (71 ms draw for 15 calls and 69 ms resolve for 3 calls), because every proof walks every 4 KiB page of every held allocation; render_fence took 37.6 ms. rc47 makes unchanged proofs O(1) per allocation.
+- Expected: native_ready_escape time near zero in steady state (cache hits), a frame far below 272 ms, scores reported against macOS (FHD 100k about 7,700; FHD 50k about 10,400); the app output confirms 1920x1080; no fault.
+- Failure criteria: a stale-proof GPU fault (an unmapped or permission fault), any bugcheck, a hang, or no gain.
+- Recovery: rec1973h.
+- Hashes: sys 949e3a649172, UmdArm64 6ddfcd22209f, UmdX64 e9a3e0df37bf, Umd32 67accb8f7573; manifest 32a721f325fd, hardware-manifest 2b2c24cba378; probe1973.sh 88119456251f (PROBE_LINT_OK); visible recovery rec1973h 9a6d608b6e893629; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1973h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1973-readiness-cache/run1973.sh.
