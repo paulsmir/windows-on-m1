@@ -333,6 +333,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       return AdmissionGpuvaG3CopyEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == ADMISSION_TDR_DRILL_MAGIC)
       return AdmissionPlatformTdrDrillEscape((ADMISSION_CONTEXT *)Adapter, Args);
+    if (private_magic == ADMISSION_GPU_FAULT_DRILL_MAGIC)
+      return AdmissionGpuvaG3FaultDrillEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC)
       return AdmissionPlatformGpuTimestampEscape((ADMISSION_CONTEXT *)Adapter, Args);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)

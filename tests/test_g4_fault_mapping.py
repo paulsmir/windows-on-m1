@@ -64,6 +64,7 @@ typedef struct {
   ADMISSION_RENDER_CONTEXT *Contexts;
   ADMISSION_G3_TABLE_SHADOW *TableShadowBrokerBuckets[256];
   ULONG OsProcessId, CpuOnlyMappings;
+  ADMISSION_GPU_FAULT_DRILL FaultDrill;
 } ADMISSION_G3_PROCESS;
 @@LEAF_TYPES@@
 typedef struct { int Lock; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence;
@@ -103,6 +104,7 @@ int main(int argc, char **argv) {
   e.Fence=71; e.ContextToken=(ULONG_PTR)&ctx;
   e.Flags=ADMISSION_GPU_FAULT_JOB_KNOWN|ADMISSION_GPU_FAULT_INFO_VALID|ADMISSION_GPU_FAULT_INFO_READ;
   e.FaultInfo=((va>>6)<<30)|(1ULL<<17)|0x11;
+  p.FaultDrill.Fence=71; p.FaultDrill.GpuVa=va;
   /* Invalid reads do not consume the first-valid capture. */
   e.Flags=0; AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r); assert(!r.Version);
   e.Flags=14; busy=1; AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);
@@ -116,12 +118,14 @@ int main(int argc, char **argv) {
   memset(&r,0,sizeof(r)); p.Graph.Slot=2;
   AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);
   assert(r.Status==AdmissionGpuFaultMappingVm); p.Graph.Slot=1;
+  assert(!p.FaultDrill.FaultInfo); /* wrong fence/context/VM cannot satisfy drill */
   memset(&r,0,sizeof(r)); p.Graph.Uncertain=1;
   AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);
   assert(r.Status==AdmissionGpuFaultMappingUncertain); p.Graph.Uncertain=0;
   memset(&r,0,sizeof(r)); ms[(va>>25)&2047u]=NULL;
   AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);
   assert(r.Status==AdmissionGpuFaultMappingNoTable); ms[(va>>25)&2047u]=&me;
+  assert(p.FaultDrill.FaultInfo==e.FaultInfo); /* actual matching register read */
   memset(&r,0,sizeof(r)); shadow.LogicalPtes=NULL;
   AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);
   assert(r.Status==AdmissionGpuFaultMappingNoShadow); shadow.LogicalPtes=ptes;

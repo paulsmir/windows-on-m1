@@ -199,4 +199,13 @@ typedef struct _ADMISSION_TDR_DRILL {
   unsigned int Magic, Version, Bytes, Jobs;
 } ADMISSION_TDR_DRILL;
 
+/* Explicit one-shot diagnostic: a CDM command-fetch fault in the caller's
+ * process, not an unbounded shader. Operation 1 arms, 0 queries. GpuVa is
+ * chosen/proven by the KMD, never supplied by the caller. */
+#define ADMISSION_GPU_FAULT_DRILL_MAGIC 0x52444647u
+typedef struct _ADMISSION_GPU_FAULT_DRILL {
+  unsigned int Magic, Version, Bytes, Operation, Armed, Fence;
+  unsigned long long GpuVa, FaultInfo;
+} ADMISSION_GPU_FAULT_DRILL;
+
 #endif /* APPLE_AGX_RENDER_GPU_FAULT_H */

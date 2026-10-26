@@ -852,6 +852,7 @@ typedef struct _ADMISSION_CONTEXT {
   } PreemptRefusal;
   /* G4-r3 TDR drill (ADMISSION_TDR_DRILL): armed by escape for one process. */
   BOOLEAN TdrDrillAllowed;
+  BOOLEAN GpuFaultDrillAllowed;
   volatile LONG TdrDrillPid, TdrDrillJobs, TdrDrillFence;
 } ADMISSION_CONTEXT;
 
@@ -1983,6 +1984,11 @@ NTSTATUS AdmissionPlatformCalibrateGpuClock(_In_ ADMISSION_CONTEXT *Context,
 /* G4-r3 TDR drill escape (ADMISSION_TDR_DRILL), in the caller's process. */
 NTSTATUS AdmissionPlatformTdrDrillEscape(_Inout_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_ESCAPE *Args);
+NTSTATUS AdmissionGpuvaG3FaultDrillEscape(_Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_ESCAPE *Args);
+BOOLEAN AdmissionGpuvaG3FaultDrillApply(_Inout_ ADMISSION_CONTEXT *Context,
+    ULONG Fence, _Inout_ unsigned long long *StreamBase,
+    _Inout_ unsigned int *StreamBytes);
 BOOLEAN AdmissionPlatformRuntimeResponsive(
     _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionWin32SnapshotRenderCommand(

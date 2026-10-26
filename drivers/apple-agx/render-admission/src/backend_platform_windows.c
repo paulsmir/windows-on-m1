@@ -2624,6 +2624,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
      * after a barrier flush submitted it, so no request reaches the KMD). */
     input.Timestamps = 1u;
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (!image->PresentCompute)
+    (void)AdmissionGpuvaG3FaultDrillApply(runtime->Adapter, fence,
+        &input.CdmStreamBase, &input.CdmStreamBytes);
+#endif
   if (!AppleAgxRenderSharedMemoryBuildCompute(
           &runtime->Initdata.RenderSharedMemory, &input, &output))
     return APPLE_AGX_BACKEND_FALSE;
@@ -2848,6 +2853,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     input.HelperProgram = image->G4PreludeCompute.Helper.Binary;
     input.HelperArgument = image->G4PreludeCompute.Helper.Data;
     input.HelperConfig = image->G4PreludeCompute.Helper.Cfg;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    (void)AdmissionGpuvaG3FaultDrillApply(runtime->Adapter,
+        Submission->Submission.Fence, &input.CdmStreamBase, &input.CdmStreamBytes);
+#endif
     if (!AppleAgxRenderSharedMemoryBuildCompute(
             &runtime->Initdata.RenderSharedMemory, &input, &output))
       goto BuildFailure;
@@ -5131,6 +5140,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   InterlockedExchange(&Context->TdrDrillJobs, 0);
   Context->TdrDrillAllowed =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1TdrDrillAllowed");
+  Context->GpuFaultDrillAllowed =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultDrillAllowed");
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
   KeInitializeEvent(&runtime->SlotEvent, NotificationEvent, FALSE);
   InterlockedExchange(&runtime->WorkScheduled, 0);

@@ -42,6 +42,10 @@ VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *Adapter,
        context = context->GpuvaG3NextContext)
     if ((ULONGLONG)(ULONG_PTR)context == Event->ContextToken) break;
   if (context == NULL) goto Done;
+  if (process->FaultDrill.Fence == Event->Fence &&
+      process->FaultDrill.GpuVa == Receipt->FaultVa &&
+      process->Graph.Slot == ((Event->FaultInfo >> 17) & 0x3fu))
+    process->FaultDrill.FaultInfo = Event->FaultInfo;
   Receipt->OsProcessId = process->OsProcessId;
   Receipt->VmSlot = process->Graph.Slot;
   Receipt->GraphUncertain = process->Graph.Uncertain;
@@ -3015,6 +3019,98 @@ static BOOLEAN AdmissionG3PresentAccessible(ADMISSION_G3_PROCESS *process,
        (source != 0u &&
         AdmissionG4GraphAccessTyped(process, present->Source.Va, source, 0,
             AppleAgxG4AccessProcess, 0u))) ? TRUE : FALSE;
+}
+
+/* RC37 diagnostic. The caller can arm only its existing process object;
+ * query is still available after that device has entered error. */
+NTSTATUS AdmissionGpuvaG3FaultDrillEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  ADMISSION_GPU_FAULT_DRILL query;
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *owner = NULL;
+  PLIST_ENTRY link;
+  ULONG pid;
+  NTSTATUS status = STATUS_INVALID_HANDLE;
+  if (adapter == NULL || args == NULL || args->pPrivateDriverData == NULL ||
+      args->PrivateDriverDataSize != sizeof(query) ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_PARAMETER;
+  if (!adapter->GpuFaultDrillAllowed)
+    return STATUS_NOT_SUPPORTED;
+  RtlCopyMemory(&query, args->pPrivateDriverData, sizeof(query));
+  if (query.Magic != ADMISSION_GPU_FAULT_DRILL_MAGIC || query.Version != 1u ||
+      query.Bytes != sizeof(query) || query.Operation > 1u)
+    return STATUS_INVALID_PARAMETER;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
+  pid = HandleToULong(PsGetCurrentProcessId());
+  ExAcquireFastMutex(&state->Lock);
+  for (link = state->Processes.Flink; link != &state->Processes; link = link->Flink) {
+    ADMISSION_G3_PROCESS *p = CONTAINING_RECORD(link, ADMISSION_G3_PROCESS, Link);
+    if (p->Magic != ADMISSION_G3_PROCESS_MAGIC || p->OsProcessId != pid ||
+        p->CpuOnlyMappings) continue;
+    if (owner != NULL) { status = STATUS_DEVICE_BUSY; goto Done; }
+    owner = p;
+  }
+  if (owner == NULL) goto Done;
+  if (query.Operation == 1u) {
+    if (owner->Poisoned || owner->Graph.Uncertain || !owner->Graph.Created) {
+      status = STATUS_INVALID_DEVICE_STATE;
+      goto Done;
+    }
+    RtlZeroMemory(&owner->FaultDrill, sizeof(owner->FaultDrill));
+    owner->FaultDrill.Armed = 1u;
+  }
+  query.Armed = owner->FaultDrill.Armed;
+  query.Fence = owner->FaultDrill.Fence;
+  query.GpuVa = owner->FaultDrill.GpuVa;
+  query.FaultInfo = owner->FaultDrill.FaultInfo;
+  RtlCopyMemory(args->pPrivateDriverData, &query, sizeof(query));
+  status = STATUS_SUCCESS;
+Done:
+  ExReleaseFastMutex(&state->Lock);
+  return status;
+}
+
+/* Called only after ordinary BeginJob validation/JOB_BEGIN and before work
+ * encoding/publication. The leased graph cannot be paged underneath the test.
+ * This changes CDM instruction fetch, not a shader pointer or another process. */
+BOOLEAN AdmissionGpuvaG3FaultDrillApply(ADMISSION_CONTEXT *adapter,
+    ULONG fence, unsigned long long *streamBase, unsigned int *streamBytes) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  APPLE_AGX_GPUVA_G3_WALK_FAILURE walk;
+  const ULONGLONG faultVa = 0x10000ULL;
+  BOOLEAN injected = FALSE;
+  if (adapter == NULL || !adapter->GpuFaultDrillAllowed ||
+      streamBase == NULL || streamBytes == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL || !fence)
+    return FALSE;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (state == NULL) return FALSE;
+  ExAcquireFastMutex(&state->Lock);
+  process = state->ActiveProcess;
+  if (state->ActiveFence != fence || process == NULL ||
+      !process->FaultDrill.Armed) goto Done;
+  process->FaultDrill.Armed = 0u; /* consume before any GPU-visible effect */
+  RtlZeroMemory(&walk, sizeof(walk));
+  if (process->Poisoned || process->CpuOnlyMappings || !process->Graph.Created ||
+      process->Graph.Uncertain || !process->Graph.JobInFlight ||
+      !process->Graph.RootTable || !process->Graph.RootIpa || !process->Graph.LeaseToken ||
+      process->Graph.Slot != ADMISSION_GPUVA_G3_JOB_VM_SLOT ||
+      AppleAgxGpuvaG3GraphInspectRangeAccess(&process->Graph, faultVa, 64u,
+          FALSE, &walk) ||
+      /* NoRoot means an absent root EDGE here, with RootTable proven above. */
+      (walk.Reason != AppleAgxG3WalkNoRoot && walk.Reason != AppleAgxG3WalkNoTable &&
+       walk.Reason != AppleAgxG3WalkLeafAbsent)) goto Done;
+  *streamBase = faultVa;
+  *streamBytes = 64u;
+  process->FaultDrill.Fence = fence;
+  process->FaultDrill.GpuVa = faultVa;
+  injected = TRUE;
+Done:
+  ExReleaseFastMutex(&state->Lock);
+  return injected;
 }
 
 NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
