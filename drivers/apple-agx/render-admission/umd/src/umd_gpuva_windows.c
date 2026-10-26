@@ -1001,8 +1001,11 @@ static int signal_render(ADMISSION_UMD_DEVICE *device,uint64_t next);
 static int touch_device(ADMISSION_UMD_DEVICE *device,uint64_t va) {
   APPLE_AGX_G4_TOUCH touch={APPLE_AGX_G4_TOUCH_MAGIC,(unsigned)sizeof(touch)};
   D3DDDICB_SUBMITCOMMAND request={};
-  if(!va || !device->KernelContext || !device->RenderSyncObject ||
+  if(!device || device->DrawTerminal || !va ||
+     !device->KernelContext || !device->RenderSyncObject ||
+     !device->KernelCallbacks ||
      !device->KernelCallbacks->pfnSubmitCommandCb ||
+     !device->KernelCallbacks->pfnSignalSynchronizationObjectFromGpu2Cb ||
      device->NextRenderFence>UINT64_MAX-2) return 0;
   request.Commands=va;request.CommandLength=sizeof(uint32_t);
   request.BroadcastContextCount=1;request.BroadcastContext[0]=device->KernelContext;
@@ -1016,8 +1019,16 @@ static int touch_device(ADMISSION_UMD_DEVICE *device,uint64_t va) {
   int ok=SUCCEEDED(hr) && signal_render(device,next) &&
       wait_object(device,device->RenderSyncObject,next);
   if(ok) device->NextRenderFence=next;
+  else {
+    device->GpuvaFailure=FAILED(hr) ? hr : E_FAIL;
+    /* The CPU-only packet still owns scheduler work after acceptance. A
+     * failed signal/wait cannot authorize releasing its held allocations or
+     * reusing the fence sequence. Submit propagates this as retained work. */
+    if(SUCCEEDED(hr)) device->DrawTerminal=TRUE;
+  }
   UINT values[2]={(UINT)va,(UINT)ok};
-  AdmissionUmdDiagnostic("measure-touch",hr,values,ARRAYSIZE(values));
+  AdmissionUmdDiagnostic("measure-touch",ok ? hr : device->GpuvaFailure,
+      values,ARRAYSIZE(values));
   return ok;
 }
 
@@ -1508,7 +1519,7 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
       if(slot->CopyHeld && !slot->Direct && !slot->SystemDirect && !slot->Queried &&
          !(cpu_quiet(slot) && slot->Sync.Valid)) fresh=slot->CanonicalGpuVa;
     }
-    if(fresh) (void)touch_device(device,fresh);
+    if(fresh && !touch_device(device,fresh)) return 0;
   }
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++i) {
     auto *slot=&device->ScreenBuffers[i];
@@ -1693,11 +1704,9 @@ int AdmissionUmdGpuvaValidateCpuPoolMap(ADMISSION_UMD_DEVICE *device,
   /* Lock can rotate placement. Flush deferred paging once even if the old
    * graph still looks valid: a pre-Lock pool proof must not authenticate the
    * new CPU mapping. The existing touch is CPU-only and its fence is waited. */
-  if (!touch_device(device, identity.GpuVa)) {
-    device->DrawTerminal = TRUE;
-    device->GpuvaFailure = E_FAIL;
-    return 0;
-  }
+  /* touch_device distinguishes clean refusal from accepted-work uncertainty.
+   * A clean refusal can unlock and retry the map without losing the device. */
+  if (!touch_device(device, identity.GpuVa)) return 0;
   APPLE_AGX_G3_NATIVE_QUERY q = identity;
   D3DDDICB_ESCAPE request = {};
   request.hDevice = device->RuntimeDevice.handle;
@@ -1859,7 +1868,8 @@ static int finish_submission(ADMISSION_UMD_DEVICE *device,uint64_t internal,
  * envelope is read by the CPU parser, so it needs logical, not native, backing.
  * Its own logical checks remain in the KMD submit path. */
 static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) {
-  if (!device->Adapter || device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
+  if (device->DrawTerminal || !device->Adapter ||
+      device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
       !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
       !device->KernelCallbacks->pfnEscapeCb) return 0;
   device->GpuvaFailure = E_FAIL;
@@ -1933,23 +1943,32 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
       }
       ready = 1; break;
     }
-    if (SUCCEEDED(hr) && attempt == 0u) {
+    const bool valid_failure = batch->Ready == 0u &&
+        batch->FailedIndex < batch->Count && batch->FailedIndex < capacity;
+    const auto *q = &entries[valid_failure ? batch->FailedIndex : 0u];
+    const bool missing = valid_failure && q->Ready == 0u &&
+        q->FailedVa >= q->GpuVa && q->FailedVa - q->GpuVa < q->AllocationBytes &&
+        (q->Reason == AppleAgxG3WalkNoRoot || q->Reason == AppleAgxG3WalkNoTable ||
+         q->Reason == AppleAgxG3WalkLeafAbsent ||
+         q->Reason == AppleAgxG3WalkLeafNotPublished ||
+         q->Reason == AppleAgxG3WalkTailShort);
+    if (SUCCEEDED(hr) && missing && attempt == 0u) {
       /* Deferred paging is not necessarily published at MakeResident's
        * fence. Schedule at most one CPU-only touch, then rebuild and prove
        * the ENTIRE held set, including entries preceding the failed entry.
-       * Holds stay owned throughout; KMD must validate every hint again. */
+       * Holds stay owned throughout; KMD must validate every hint again.
+       * This cannot repair incompatible physical backing. Identity, transport
+       * and malformed-response failures are not deferred publication. */
       if (!touch_device(device, command_va)) break;
       continue;
     }
-    const auto *q = &entries[batch->FailedIndex < batch->Count &&
-        batch->FailedIndex < capacity ? batch->FailedIndex : 0u];
     UINT values[9] = {q->Allocation, (UINT)q->GpuVa, (UINT)(q->GpuVa >> 32),
         (UINT)q->AllocationBytes, (UINT)(q->AllocationBytes >> 32), q->Write,
         q->Reason, (UINT)q->FailedVa, (UINT)(q->FailedVa >> 32)};
     /* Callback/identity/translation failure is not memory pressure. */
     device->GpuvaFailure = FAILED(hr) ? hr :
-        (q->Reason == AppleAgxG3WalkLeafAbsent ||
-         q->Reason == AppleAgxG3WalkLeafNotPublished) ? E_OUTOFMEMORY : E_FAIL;
+        (missing && (q->Reason == AppleAgxG3WalkLeafAbsent ||
+                     q->Reason == AppleAgxG3WalkLeafNotPublished)) ? E_OUTOFMEMORY : E_FAIL;
     AdmissionUmdDiagnostic("reject-native-allocation", device->GpuvaFailure,
         values, ARRAYSIZE(values));
     break;
@@ -2033,7 +2052,7 @@ static int submit(void *context, const uint64_t *written,
 #endif
     return device->DrawTerminal ? 2 : 0;
   }
-  if (!native_held_ready(device, va)) return 0;
+  if (!native_held_ready(device, va)) return device->DrawTerminal ? 2 : 0;
   request.Commands = va;
   request.CommandLength = bytes;
   request.BroadcastContextCount = 1;

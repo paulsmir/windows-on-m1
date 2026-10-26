@@ -28,7 +28,7 @@ static unsigned data[8];
 static ADMISSION_UMD_DEVICE *current;
 static void try_trim();
 static unsigned queries,touches;
-static bool reject_pool,escape_fail,touch_fail,deferred;
+static bool reject_pool,escape_fail,touch_fail,touch_refuse,deferred;
 static HRESULT pool_query(HANDLE,D3DDDICB_ESCAPE *e) {
  ++queries;try_trim();auto &s=current->ScreenBuffers[0];
  assert(s.Transition && s.Resident && !s.Mapped && locks);
@@ -39,7 +39,12 @@ static HRESULT pool_query(HANDLE,D3DDDICB_ESCAPE *e) {
  q->Ready=!(reject_pool || deferred);q->Reason=reject_pool?0x102u:deferred?2u:0u;
  return S_OK;
 }
-static int touch_device(ADMISSION_UMD_DEVICE *,uint64_t) {++touches;try_trim();deferred=false;return !touch_fail;}
+static int touch_device(ADMISSION_UMD_DEVICE *d,uint64_t) {
+ ++touches;try_trim();deferred=false;
+ if(touch_fail) {d->DrawTerminal=TRUE;d->GpuvaFailure=E_FAIL;return 0;}
+ if(touch_refuse) {d->GpuvaFailure=E_OUTOFMEMORY;return 0;}
+ return 1;
+}
 
 static HRESULT lock_cb(HANDLE,D3DDDICB_LOCK *r) {
  ++locks;auto &s=current->ScreenBuffers[0];
@@ -145,7 +150,7 @@ class DirectMapResidency(unittest.TestCase):
 int main() {
  CB cb={mk,ev,lock_cb,unlock_cb,pool_query};
  ADAPTER a={ADMISSION_UMD_ADAPTER_MAGIC,{(HANDLE)1}};
- for(unsigned scenario=0;scenario<8;++scenario) {
+ for(unsigned scenario=0;scenario<9;++scenario) {
   ADMISSION_UMD_DEVICE d={};d.Magic=ADMISSION_UMD_DEVICE_MAGIC;d.PagingQueue=(HANDLE)1;
   d.KernelCallbacks=&cb;d.DirectCpuPool=TRUE;d.Adapter=&a;d.KernelContext=(HANDLE)2;d.RuntimeDevice.handle=(HANDLE)3;current=&d;
   auto &s=d.ScreenBuffers[0];s.Active=TRUE;s.Token=10;s.KernelAllocation=0x100;
@@ -153,6 +158,7 @@ int main() {
   locks=unlocks=waits=made=evicted=queries=touches=0;expected_waits=1;
   reject_pool=scenario==1 || scenario==2;fail_unlock=scenario==2 || scenario==7;rename_lock=scenario==7;
   escape_fail=scenario==3;deferred=scenario==4 || scenario==5;touch_fail=scenario==5;
+  touch_refuse=scenario==8;
   null_lock=scenario==6;
   void *address=(void*)1;
   int ok=AdmissionUmdScreenMapBuffer(&d,10,0,4,3,&address);
@@ -177,6 +183,15 @@ int main() {
    } else {
     assert(!s.Mapped && !s.LockedBase && !s.CpuAccess.ActiveLocks);
     if(scenario==5)assert(d.DrawTerminal && touches==1);
+    // WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? A touch refused
+    // before acceptance must allow unlock/clean OOM and a later CPU-map retry.
+    if(scenario==8) {
+     assert(!d.DrawTerminal && d.LastScreenError==E_OUTOFMEMORY && !queries);
+     touch_refuse=false;
+     assert(AdmissionUmdScreenMapBuffer(&d,10,0,4,3,&address));
+     assert(address==data && made==1 && s.Mapped);
+     assert(AdmissionUmdScreenUnmapBuffer(&d,10));
+    }
     if(scenario==1) {
      assert(d.LastScreenError==E_OUTOFMEMORY && !d.DrawTerminal);
      reject_pool=false;

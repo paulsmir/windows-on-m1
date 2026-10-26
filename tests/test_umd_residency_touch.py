@@ -64,9 +64,10 @@ struct CB { void *pfnLockCb, *pfnUnlockCb; };
 struct ADMISSION_UMD_DEVICE { HRESULT GpuvaFailure; BOOL DrawTerminal; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; };
 struct APPLE_AGX_G3_COPY_REQUEST { D3DKMT_HANDLE Allocation; UINT Operation; ULONGLONG Offset; UINT TransferBytes; ULONGLONG ProcessGeneration, MappingGeneration; };
 static int touches, queries, query_ok_after, remaps;
+static bool touch_ok=true;
 static int cycles;static HRESULT query_error;
 static int replace_canonical(ADMISSION_UMD_DEVICE*, SLOT *s){ assert(s->CanonicalGpuVa); ++remaps; ++cycles; return 1; }
-static int touch_device(ADMISSION_UMD_DEVICE*, uint64_t va){ assert(va); ++touches; return 1; }
+static int touch_device(ADMISSION_UMD_DEVICE*, uint64_t va){ assert(va); ++touches; return touch_ok; }
 static int copy_escape(ADMISSION_UMD_DEVICE *d, APPLE_AGX_G3_COPY_REQUEST *q){
   d->GpuvaFailure=query_error;
   ++queries; if(queries>query_ok_after){q->ProcessGeneration=q->MappingGeneration=1;return 1;} return 0; }
@@ -79,6 +80,11 @@ int main(){
     s.CanonicalGpuVa=0x10000*(i+1);s.Flags=AppleAgxWin32BufferGpuWrite;s.Queried=1;s.Sync.Valid=1;}
   assert(transfer_held(&d,false)==1 && touches==0);
   d.ScreenBuffers[2].Queried=0;
+  /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? An upload must not
+   * continue copying after its prerequisite scheduling touch failed. */
+  touch_ok=false;
+  assert(!transfer_held(&d,false) && touches==1);
+  touch_ok=true;touches=0;
   assert(transfer_held(&d,false)==1);
   if(touches!=1){printf("expected one touch before first copy, got %d\n",touches);return 1;}
   touches=0; assert(transfer_held(&d,true)==1 && touches==0);

@@ -1277,9 +1277,10 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(result) && device->DirectCpuPool && buffer->SystemDirect &&
       !buffer->Borrowed && !(buffer->Flags & AppleAgxWin32BufferShareable)) {
-    /* Lock pins the actual placement; Transition excludes trim/submit until
-     * the whole native pool proof succeeds and Mapped takes over. No private
-     * allocation, dirty watch, upload or copy-out is needed for this pointer. */
+    /* Lock preserves the CPU pointer, not a permanent segment-3 placement.
+     * Transition excludes our trim/submit until the current full pool proof
+     * succeeds and Mapped takes over. Later submissions still require native
+     * proof: VidMm can republish this allocation outside the pool. */
     BOOL sameAllocation = lock.hAllocation == buffer->KernelAllocation;
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     BOOL ready = sameAllocation && lock.pData &&

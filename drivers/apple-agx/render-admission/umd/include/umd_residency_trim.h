@@ -31,7 +31,8 @@ typedef struct _ADMISSION_UMD_TRIM_SLOT {
  * private pointer and dirty tracking must remain intact. SystemDirect is
  * eligible only between CPU locks:
  * CPU map reserves Transition through MakeResident, the paging wait and Lock;
- * Mapped then pins the allocation until Unlock succeeds. GPU submissions
+ * Mapped then retains our residency reference until Unlock succeeds; it does
+ * not pin VidMm's physical placement to the native pool. GPU submissions
  * restore residency under their submission holds. Placement still belongs to
  * VidMm; the KMD must reject any unsupported aperture backing (M2-f8). */
 static inline int AdmissionUmdTrimEligible(const ADMISSION_UMD_TRIM_SLOT *s) {

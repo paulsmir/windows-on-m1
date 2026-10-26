@@ -163,6 +163,30 @@ int main(void) {
  assert(AppleAgxGpuvaG3GraphRegisterTable(&p.Graph,0x10010000,2));
  assert(AppleAgxGpuvaG3GraphRegisterTable(&p.Graph,0x10010000,1));
  walks=0;RUN(1);assert(walks==16 && q.Reserved2!=token);
+ // RC50: a successful CPU pool proof is not a native placement pin.
+ // WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? A later scattered
+ // system republish must invalidate even a warm full-pool token. Scheduling
+ // without a new mapping cannot make absent native leaves ready.
+ for(unsigned i=0;i<16;++i) ptes[16+i].SegmentId=3;
+ q.Reserved=APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY;RUN(1);token=q.Reserved2;
+ for(unsigned i=0;i<4;++i)
+  assert(AppleAgxGpuvaG3GraphUpdateLeaf(&p.Graph,ti,4+i,0,false));
+ for(unsigned i=0;i<16;++i) {
+  ptes[16+i].SegmentId=0;ptes[16+i].GuestIpa=0x50000000+i*8192;
+  ptes[16+i].NativeIpa=0;
+ }
+ q.Reserved2=token;RUN(0);
+ assert(q.Reason==AppleAgxG3WalkLeafAbsent && q.FailedVa==va && !q.Reserved2);
+ q.Reserved2=token;RUN(0);assert(!q.Reserved2);
+ // Only an actual complete republish can pass; the prior token stays stale.
+ for(unsigned i=0;i<4;++i)
+  assert(AppleAgxGpuvaG3GraphUpdateLeaf(&p.Graph,ti,4+i,ipa+i*16384,true));
+ for(unsigned i=0;i<16;++i) {
+  ptes[16+i].SegmentId=3;
+  ptes[16+i].GuestIpa=ptes[16+i].NativeIpa=ipa+i*4096;
+ }
+ q.Reserved2=token;RUN(1);assert(q.Reserved2!=token);
+ q.Reserved=0;RUN(1);
  // v2 batch reports actual hits and a zero-token full proof.
  struct {APPLE_AGX_G3_NATIVE_QUERY_BATCH b;APPLE_AGX_G3_NATIVE_QUERY q[2];} batch={0};
  batch.b.Magic=APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC;batch.b.Version=2;
