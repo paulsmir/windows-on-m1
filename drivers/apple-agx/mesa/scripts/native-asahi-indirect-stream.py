@@ -54,6 +54,9 @@ def project_sources(out, project, overlays):
 
     path='src/gallium/drivers/asahi/agx_state.h'
     h=(out/path).read_text()
+    h=once(h,'struct agx_encoder {', '''struct agx_encoder {
+   /* CPU/GPU construction coordinates of the current linked chunk. */
+   struct agx_ptr windows_chunk;''')
     h=once(h,'      bool uses_fbfetch;',
            '      bool uses_fbfetch;\n      bool windows_uses_draw_id;')
     h=once(h,'   void *windows_draw_bindings_data;', '''   void *windows_draw_bindings_data;
@@ -67,6 +70,9 @@ def project_sources(out, project, overlays):
 
     path='src/gallium/drivers/asahi/agx_batch.c'
     s=(out/path).read_text()
+    s=once(s,'return (struct agx_encoder){.bo = bo, .current = map, .end = map + bo->size};',
+           '''return (struct agx_encoder){.bo = bo, .current = map, .end = map + bo->size,
+      .windows_chunk = {map, bo->va->addr}};''')
     s=once(s,'   agx_pool_init(&batch->pool, dev, "Batch pool", AGX_WIN32_BO_SHADOW, true);',
            '''   agx_pool_init(&batch->windows_stream_pool, dev, "GPU indirect VDM",
                  AGX_WIN32_BO_GPU_ONLY, false);
@@ -112,6 +118,8 @@ def project_sources(out, project, overlays):
 
     path='src/gallium/drivers/asahi/agx_state.c'
     s=(out/path).read_text()
+    s=once(s,'   enc->end = enc->current + size;',
+           '   enc->end = enc->current + size;\n   enc->windows_chunk = T;')
     s=once(s,'''   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT)''', '''   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));

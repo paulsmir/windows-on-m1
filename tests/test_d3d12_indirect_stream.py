@@ -1,6 +1,6 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 RC32 encodes MaxCount draws on the CPU. The replacement must generate bounded
-VDM records on the GPU, terminate at the clamped count, and select a distinct
+VDM records on the GPU, link back at the clamped count without a return stack, and select a distinct
 USC parameter address for every draw (including negative base vertex and
 nonzero first instance). Execute the production kernel with the real Mesa
 pack helpers under ASan/UBSan; no substitute stream encoder is used.
@@ -37,7 +37,7 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
    const unsigned stride=36, usc_stride=128, usc_bytes=80, patch=16;
    unsigned enabled=counted && value<limit ? value : limit;
    unsigned slot=agx_win32_stream_record_bytes(indexed);
-   unsigned bytes=limit*slot+AGX_VDM_BARRIER_LENGTH;
+   unsigned bytes=limit*slot+AGX_VDM_STREAM_LINK_LENGTH;
    uint32_t *out=malloc(bytes+32), *args=malloc(stride*limit+64);
    uint8_t *usc=malloc(usc_stride*limit+32), tmpl[80];
    memset(out,0xcd,bytes+32); memset(usc,0xab,usc_stride*limit+32);
@@ -50,6 +50,7 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
    }
    struct agx_win32_stream_params p={
       .stream=(uintptr_t)out, .pipelines=(uintptr_t)usc,
+      .continuation=0x123456789cull,
       .usc_template=(uintptr_t)tmpl, .arguments=(uintptr_t)args+12,
       .count=counted ? (uintptr_t)&value : 0,
       .index_buffer=0x1234567800ull, .max_count=limit,
@@ -84,8 +85,9 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
       for(unsigned k=usc_bytes;k<usc_stride;++k)
          assert(usc[i*usc_stride+k]==0xab);
    }
-   assert(out[enabled*slot/4]==0x28000000u);
-   for(unsigned k=enabled*slot+4;k<bytes+32;++k)
+   assert(out[enabled*slot/4]==0x80000012u);
+   assert(out[enabled*slot/4+1]==0x3456789cu);
+   for(unsigned k=enabled*slot+8;k<bytes+32;++k)
       assert(((uint8_t *)out)[k]==0xcd);
    for(unsigned k=enabled*usc_stride;k<limit*usc_stride+32;++k)
       assert(usc[k]==0xab);

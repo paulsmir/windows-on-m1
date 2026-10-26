@@ -1,7 +1,7 @@
 {
   "inputs": {
-    "agx_win32_indirect_stream.cl": "3de58eda8cb5345c1817cbe5580fe997a04ba783e42fcd57cf5f3ae0664433ec",
-    "agx_win32_indirect_stream.h": "ed13aa2bfc90215481b35c856d264bc3f26efe75a6d071c7e796eb2d4e4ecc1f",
+    "agx_win32_indirect_stream.cl": "724b75f48bfc3f30c7a75fed69fd8adc25f8c247c47dc0e4081fe52840e251c2",
+    "agx_win32_indirect_stream.h": "ca97a3c50382a6bb3d3ffd0bcfd415cee5da50559188414071e59d605436db42",
     "mesa_clc": "66c18e352e0d143668007d710a2eaf774f22f0be60647b0302ea2b94717d7dea",
     "asahi_clc": "9019c2368ae69fec007b69ae7dda3fc90fa966b9966e7308ac1cb15fafa800a3",
     "libagx_dgc.h": "ab8db337b1c95bec23aebcbf92521a98f862a4fb7b23a0f2828e20ffd336eecc",
@@ -11,9 +11,9 @@
   },
   "outputs": {
     "agx_win32_stream_shaders.h": "8176be6e894aa10ac82b0855d3afadf88f1919d7d5a62ca951bc8556ed481b83",
-    "agx_win32_stream_shaders.c": "c9eeb1019d372cc55fdd01c9b1a557df25935d47670378b17090015b34d489be"
+    "agx_win32_stream_shaders.c": "e82a7c6ebab1fc15ae3623dc90f6b75b5fd25b4c2de4f656036b1fa2bfc96ee6"
   },
-  "spirv_sha256": "64c1fee787ba5ce283d9e1367e61cde8875d2bb9200984134ac8045b49945cb9",
+  "spirv_sha256": "ca8aabf3143a6744523c30b382cd660cc8d68560c22554fff1126bb9e38651a0",
   "targets": [
     "g13g",
     "g13x"

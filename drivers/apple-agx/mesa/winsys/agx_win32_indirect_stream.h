@@ -9,6 +9,7 @@
 
 struct agx_win32_stream_params {
    uint64_t stream, pipelines, usc_template, arguments, count, index_buffer;
+   uint64_t continuation;
    uint32_t max_count, argument_stride, usc_bytes, usc_stride;
    uint32_t params_offset, params_uniform, pipeline_base, index_range;
    uint32_t index_size, restart, topology;
@@ -18,6 +19,10 @@ struct agx_win32_stream_params {
    uint64_t ia_vertices, ia_primitives, vs_invocations;
    uint64_t c_primitives, c_invocations;
 } PACKED;
+
+/* Native agx_ensure_cmdbuf_has_space/hk_ensure_cs_has_space reserve this
+ * mapped tail because VDM fetches beyond the last control word. */
+#define AGX_WIN32_STREAM_FETCH_PADDING 0x800u
 
 static inline uint32_t
 agx_win32_stream_record_bytes(uint32_t index_size)

@@ -17,7 +17,7 @@ static void stats(unsigned mode,unsigned vertices,unsigned instances,unsigned pr
  /* Allocate arguments for executed records only. ASan catches any read of
   * the terminator/inactive record, including count=0 and rounded-up lanes. */
  uint32_t *args=calloc(enabled?enabled:1,stride);
- uint32_t *out=calloc(limit*slot+4,1);uint8_t *usc=calloc(limit?limit:1,64),tmpl[8]={0};
+ uint32_t *out=calloc(limit*slot+8,1);uint8_t *usc=calloc(limit?limit:1,64),tmpl[8]={0};
  for(unsigned i=0;i<enabled;++i){args[i*stride/4]=vertices;args[i*stride/4+1]=instances;}
  uint64_t counters[5]={11,13,17,19,23};
  struct agx_win32_stream_params p={.stream=(uintptr_t)out,.pipelines=(uintptr_t)usc,.usc_template=(uintptr_t)tmpl,

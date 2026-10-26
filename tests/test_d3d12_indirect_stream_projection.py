@@ -15,6 +15,70 @@ from test_d3d12_owner_allocation_failure import function
 from test_d3d12_indirect_stream import WINSYS
 
 class IndirectStreamProjection(unittest.TestCase):
+    def test_encoder_continuation_coordinates_follow_rollover(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        A stream must resume in the current encoder chunk, including after
+        rollover; using the original BO's address corrupts the VDM branch.
+        Execute the projected allocator and rollover with distinct GPU bases.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td)
+            out = project(p/'native')
+            header = (out/'src/gallium/drivers/asahi/agx_state.h').read_text()
+            encoder = header[header.index('struct agx_encoder {'):].split('};', 1)[0] + '};'
+            allocate = function((out/'src/gallium/drivers/asahi/agx_batch.c').read_text(),
+                                'struct agx_encoder\nagx_encoder_allocate(')
+            rollover = function((out/'src/gallium/drivers/asahi/agx_state.c').read_text(),
+                                'static void\nagx_ensure_cmdbuf_has_space(')
+            code = r'''
+#include <assert.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+#define likely(x) (x)
+#define AGX_VDM_STREAM_LINK_LENGTH 8
+#define AGX_CDM_STREAM_LINK_LENGTH 8
+struct agx_ptr {void *cpu; uint64_t gpu;};
+struct va {uint64_t addr;};
+struct agx_bo {struct va *va; size_t size;};
+struct agx_device {unsigned unused;};
+struct agx_pool {unsigned unused;};
+struct agx_context {bool any_faults;};
+static uint8_t initial[0x80000], next[65536];
+static struct va address={0x1100040000ull};
+static struct agx_bo bo={&address,sizeof(initial)};
+static unsigned allocations, jumps, fail;
+static struct agx_bo *AgxWin32AsahiEncoderCreate(struct agx_device *d,size_t n,unsigned f,const char *s){(void)d;(void)f;(void)s;assert(n==sizeof(initial));return &bo;}
+static void *agx_bo_map(struct agx_bo *b){assert(b==&bo);return initial;}
+static void agx_bo_unreference(struct agx_device *d,struct agx_bo *b){(void)d;(void)b;assert(0);}
+static struct agx_ptr agx_pool_alloc_aligned(struct agx_pool *p,size_t n,unsigned a){(void)p;assert(n==sizeof(next)&&a==256);++allocations;return fail?(struct agx_ptr){0}:(struct agx_ptr){next,0x1234000000ull};}
+static void AgxWin32AsahiMarkContextFault(struct agx_context *c,unsigned site){assert(site);c->any_faults=true;}
+static void agx_cs_jump(uint32_t *p,uint64_t target,bool vdm){assert(p==(void *)(initial+sizeof(initial)-16)&&target==0x1234000000ull&&vdm);++jumps;}
+''' + encoder + r'''
+struct agx_batch {struct agx_context *ctx;struct agx_encoder vdm,cdm;struct agx_pool pool;};
+''' + allocate + '\n' + rollover + r'''
+int main(void){struct agx_device d={0};struct agx_context c={0};struct agx_batch b={.ctx=&c};
+b.vdm=agx_encoder_allocate(&b,&d);
+assert(b.vdm.windows_chunk.cpu==initial&&b.vdm.windows_chunk.gpu==0x1100040000ull);
+agx_ensure_cmdbuf_has_space(&b,&b.vdm,32);assert(!allocations&&!jumps);
+b.vdm.current=initial+sizeof(initial)-16;fail=1;
+agx_ensure_cmdbuf_has_space(&b,&b.vdm,32);
+assert(c.any_faults&&!jumps&&b.vdm.windows_chunk.cpu==initial);
+fail=0;c.any_faults=false;agx_ensure_cmdbuf_has_space(&b,&b.vdm,32);
+assert(!c.any_faults&&jumps==1&&b.vdm.current==next&&b.vdm.end==next+sizeof(next));
+assert(b.vdm.windows_chunk.cpu==next&&b.vdm.windows_chunk.gpu==0x1234000000ull);
+b.vdm.current+=68;agx_ensure_cmdbuf_has_space(&b,&b.vdm,32);
+assert(allocations==2&&jumps==1&&b.vdm.windows_chunk.cpu==next&&b.vdm.windows_chunk.gpu==0x1234000000ull);
+return 0;}
+'''
+            (p/'encoder.c').write_text(code)
+            r = subprocess.run(['clang', '-std=c11', '-Wall', '-Werror',
+                                '-fsanitize=address,undefined', str(p/'encoder.c'),
+                                '-o', str(p/'encoder')], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = subprocess.run([str(p/'encoder')], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+
     def test_projection_uses_one_draw_and_links_kernel(self):
         with tempfile.TemporaryDirectory() as td:
             out=project(Path(td)/'out')

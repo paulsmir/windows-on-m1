@@ -115,6 +115,18 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
    const struct pipe_draw_indirect_info *in = stream->indirect;
    const unsigned count = in->draw_count;
    unsigned record = agx_win32_stream_record_bytes(draw.indexed);
+   const unsigned tail = AGX_VDM_STREAM_LINK_LENGTH + AGX_WIN32_STREAM_FETCH_PADDING;
+   const struct agx_ptr chunk = batch->vdm.windows_chunk;
+   const uintptr_t cpu = (uintptr_t)out, start = (uintptr_t)chunk.cpu;
+   const uintptr_t end = (uintptr_t)batch->vdm.end;
+   /* The active encoder can be a later pool slab, not the original vdm.bo.
+    * Keep the construction coordinate from allocation/rollover. */
+   if (!start || !chunk.gpu || cpu < start || cpu > end ||
+       AGX_VDM_STREAM_LINK_LENGTH > end - cpu || (cpu & 3u))
+      goto fail;
+   uint64_t continuation = chunk.gpu + (cpu - start) + AGX_VDM_STREAM_LINK_LENGTH;
+   if (continuation < chunk.gpu || continuation >= (1ull << 40))
+      goto fail;
    /* Keep rounding and pool growth valid on WOW64 as well as 64-bit hosts. */
    if (!stream->usc_template || !stream->usc_bytes ||
        stream->usc_bytes > UINT32_MAX - 63u ||
@@ -122,7 +134,7 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
         (stream->usc_bytes < 8 || stream->params_offset > stream->usc_bytes - 8)))
       goto fail;
    unsigned usc_stride = ALIGN_POT(stream->usc_bytes, 64);
-   if (count > (UINT32_MAX - 16383u - AGX_VDM_BARRIER_LENGTH) / record ||
+   if (count > (UINT32_MAX - 16383u - tail) / record ||
        count > (UINT32_MAX - 16383u) / usc_stride)
       goto fail;
 
@@ -146,7 +158,7 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
     * them to the submission/residency set; pools retain them until cleanup. */
    struct agx_bo *vdm_bo = NULL, *usc_bo = NULL;
    struct agx_ptr vdm = agx_pool_alloc_aligned_with_bo(&batch->windows_stream_pool,
-      (size_t)count * record + AGX_VDM_BARRIER_LENGTH, 64, &vdm_bo);
+      (size_t)count * record + tail, 256, &vdm_bo);
    struct agx_ptr usc = agx_pool_alloc_aligned_with_bo(&batch->windows_stream_usc_pool,
       (size_t)count * usc_stride, 64, &usc_bo);
    if (!vdm.gpu || !vdm_bo || !usc.gpu || !usc_bo ||
@@ -160,6 +172,7 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
 
    struct agx_win32_stream_params params = {
       .stream = vdm.gpu, .pipelines = usc.gpu,
+      .continuation = continuation,
       .usc_template = stream->usc_template,
       .arguments = draw.b.ptr,
       .count = in->indirect_draw_count ?
@@ -194,7 +207,7 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       return NULL;
 
    ctx->windows_indirect_path = 3;
-   return (uint8_t *)agx_vdm_call((uint32_t *)out, vdm.gpu);
+   return (uint8_t *)agx_vdm_jump((uint32_t *)out, vdm.gpu);
 fail:
    AgxWin32AsahiMarkContextFault(ctx, (5u << 16) | __LINE__);
    return NULL;

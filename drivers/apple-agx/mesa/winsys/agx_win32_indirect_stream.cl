@@ -28,7 +28,9 @@ libagx_win32_indirect_stream(constant struct agx_win32_stream_params *p)
    global uint32_t *out = (global uint32_t *)(uintptr_t)
       (p->stream + (uint64_t)i * slot);
    if (i == count) {
-      agx_vdm_return(out);
+      /* Use the same ordinary links as native encoder rollover. The pinned
+       * G13 XML marks call/return support as tentative; no return stack needed. */
+      agx_vdm_jump(out, p->continuation);
       return;
    }
 
