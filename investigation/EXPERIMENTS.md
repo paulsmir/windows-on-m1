@@ -64092,3 +64092,5 @@ EXP1962 HARDWARE BEFORE 2026-10-26T09:19:55Z:
 - Hashes: sys d0de36cbd9a6, UmdArm64 7094ad297a6e, UmdX64 c22d3d7c0213, Umd32 d37c0ee90019; manifest b583f6d1e42a, hardware-manifest 1812316f5925; probe1962.sh cc93f50cd32e (PROBE_LINT_OK); visible recovery rec1962h 6eda7c16c1cd5c85; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1962h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1962-full-pool-ram/run1962.sh.
+
+EXP1962 ACTUAL (Claude headline 2026-10-26T09:29:30Z): package 30.0.1962.0 (same driver as EXP1961), expanded guest RAM (m1n1 075e3980), only Wom1GpuFaultInfoRead=1, i.e. the FULL 2688 MiB native pool. No load OOM. GravityMark D3D12 1280x720: 2k Score 755 / 4.5 FPS; 10k Score 744 / 4.4 FPS (EXP1961 3/4 pool: 352/1.8 and 256/1.4). Guest alive, no device removal. Verdict: CONFIRMED. With 6.88 GB guest RAM the full pool fits and removes most paging stalls; the full pool (no fraction switch) is the new operating point.
