@@ -1,7 +1,8 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 A dropped firmware job must retire as an aborted fence and notify Windows of
-an error exactly once, without advancing successful completion or poisoning a
-second context. Valid fault VA/write/level must be attached only to the matching
+an error exactly once, advancing the WDDM completed boundary to FaultedFenceId without reporting
+success or poisoning a second context. A query or preemption must never regress
+behind the page-fault notification (EXP1966 0x119). Valid fault VA/write/level must be attached only to the matching
 fence/context; stale or unread register data must stay unknown. Exercise the production completion callbacks and scheduler;
 only WDK services, image/graph release and the packet container are modeled.
 """
@@ -154,8 +155,14 @@ static NTSTATUS sync_callback(void *a, BOOLEAN (*fn)(PVOID), PVOID p, unsigned n
 
 CASES = r'''
 int main(void) {
-  unsigned mode;
+  const unsigned prior_fences[] = {40u, 0x161du, 0xfffffffeu};
+  unsigned sample, before, mode;
+  for (sample=0; sample<3; ++sample)
+  for (before=0; before<2; ++before)
   for (mode=0; mode<11; ++mode) {
+    const unsigned prior = prior_fences[sample], failed = prior + 1u;
+    const unsigned next = failed == 0xffffffffu ? 1u : failed + 1u;
+    APPLE_AGX_PREEMPTION preemption;
     ADMISSION_CONTEXT a={0};
     ADMISSION_PLATFORM_RUNTIME r={0};
     ADMISSION_RENDER_CONTEXT culprit={0}, other={0};
@@ -167,43 +174,45 @@ int main(void) {
     a.InterfaceValid=1; a.Interface.DxgkCbNotifyInterrupt=notify;
     a.Interface.DxgkCbQueueDpc=dpc; a.Interface.DxgkCbSynchronizeExecution=sync_callback;
     AppleAgxSchedulerInitialize(&a.Scheduler);
-    a.Scheduler.CompletedFence=a.Scheduler.LastSubmittedFence=40;
-    assert(AppleAgxSchedulerQueueFence(&a.Scheduler,0,0,41));
-    assert(AppleAgxSchedulerActivateFence(&a.Scheduler,0,0,41));
-    assert(AppleAgxSchedulerQueueFence(&a.Scheduler,0,0,42));
-    a.RenderPacket.State=2; a.RenderPacket.Description.Fence=41;
+    a.Scheduler.CompletedFence=a.Scheduler.LastSubmittedFence=prior;
+    assert(AppleAgxSchedulerQueueFence(&a.Scheduler,0,0,failed));
+    assert(AppleAgxSchedulerActivateFence(&a.Scheduler,0,0,failed));
+    assert(AppleAgxSchedulerQueueFence(&a.Scheduler,0,0,next));
+    a.RenderPacket.State=2; a.RenderPacket.Description.Fence=failed;
     a.RenderPacket.Description.ContextToken=(UINT64)(uintptr_t)&culprit;
-    culprit.Object.FenceOutstanding=41; other.Object.FenceOutstanding=42;
+    culprit.Object.FenceOutstanding=failed; other.Object.FenceOutstanding=next;
     if (mode>=3) {
       ADMISSION_GPU_FAULT_EVENT *fault=&r.GpuFault.Last;
-      fault->Fence=41; fault->ContextToken=(UINT64)(uintptr_t)&culprit;
+      fault->Fence=failed; fault->ContextToken=(UINT64)(uintptr_t)&culprit;
       fault->Flags=ADMISSION_GPU_FAULT_INFO_READ|ADMISSION_GPU_FAULT_INFO_VALID|
                    ADMISSION_GPU_FAULT_JOB_KNOWN;
       fault->FaultInfo=((0x1113ba0000ULL>>6)<<30)|1u|(2u<<7);
       if (mode!=4) fault->FaultInfo|=1u<<4; /* read */
-      if (mode==5) fault->Fence=40;
+      if (mode==5) fault->Fence=prior;
       if (mode==6) fault->ContextToken=(UINT64)(uintptr_t)&other;
       if (mode==7) fault->FaultInfo&=~1ULL;
       if (mode==8) fault->Flags=0; /* opt-in read absent: never decode sentinel */
       if (mode==10) fault->FaultInfo=ADMISSION_GPU_FAULT_INFO_NOT_READ;
       if (mode==9) fault->FaultInfo=((0x8000000040ULL>>6)<<30)|1u|(1u<<4);
     }
+    if (before)
+      assert(AppleAgxSchedulerBeginBoundaryPreemption(&a.Scheduler,0,0,77,next,failed));
     if (mode==2) {
       sync_fail=1;
-      assert(!AdmissionBackendComplete(&r,41,0,0,status));
-      assert(!notifications && released==1 && a.Scheduler.LastAbortedFence==41);
+      assert(!AdmissionBackendComplete(&r,failed,0,0,status));
+      assert(!notifications && released==1 && a.Scheduler.LastAbortedFence==failed);
       sync_fail=0; /* retry must not complete the aborted fence or release twice */
     }
-    assert(AdmissionBackendComplete(&r,41,0,0,status));
+    assert(AdmissionBackendComplete(&r,failed,0,0,status));
     assert(notifications==1 && dpcs==1 && released==1 && !lock_depth);
-    assert(!culprit.Object.FenceOutstanding && other.Object.FenceOutstanding==42);
+    assert(!culprit.Object.FenceOutstanding && other.Object.FenceOutstanding==next);
     assert(!other.GpuvaG3Poisoned && culprit.GpuvaG3Poisoned==(mode!=0));
     if (mode==0) {
       assert(observed.InterruptType==DXGK_INTERRUPT_DMA_COMPLETED);
-      assert(a.Scheduler.CompletedFence==41 && !a.Scheduler.LastAbortedFence);
+      assert(a.Scheduler.CompletedFence==failed && !a.Scheduler.LastAbortedFence);
     } else {
       assert(observed.InterruptType==DXGK_INTERRUPT_DMA_PAGE_FAULTED);
-      assert(observed.DmaPageFaulted.FaultedFenceId==41);
+      assert(observed.DmaPageFaulted.FaultedFenceId==failed);
       assert(observed.DmaPageFaulted.PageFaultFlags==(mode==4 ? DXGK_PAGE_FAULT_WRITE : 0));
       assert(observed.DmaPageFaulted.FaultedVirtualAddress==
           (mode==3 || mode==4 ? 0x1113ba0000ULL : mode==9 ? 0xffffff8000000040ULL : 0));
@@ -212,13 +221,25 @@ int main(void) {
       assert(observed.DmaPageFaulted.FaultedBindTableEntry==~(UINT)0);
       assert(observed.DmaPageFaulted.FaultErrorCode.IsDeviceSpecificCode==1);
       assert(observed.DmaPageFaulted.FaultErrorCode.DeviceSpecificCode==4);
-      assert(a.Scheduler.CompletedFence==40 && a.Scheduler.LastAbortedFence==41);
+      assert(a.Scheduler.CompletedFence==failed && a.Scheduler.LastAbortedFence==failed);
     }
-    assert(!AdmissionBackendComplete(&r,41,0,0,status));
+    /* WDDM requires the same boundary after both success and known-fence
+     * page fault, including a preemption already waiting for this packet. */
+    assert(AppleAgxSchedulerCurrentFence(&a.Scheduler,0,0)==failed);
+    if (!before)
+      assert(AppleAgxSchedulerBeginBoundaryPreemption(&a.Scheduler,0,0,77,next,0));
+    assert(AppleAgxSchedulerClaimBoundaryPreemption(&a.Scheduler,&preemption));
+    assert(preemption.PreemptionFence==77 && preemption.LastCompletedFence==failed);
+    assert(AppleAgxSchedulerCommitBoundaryPreemption(&a.Scheduler,77));
+    assert(!AdmissionBackendComplete(&r,failed,0,0,status));
     assert(notifications==1 && released==1);
     assert(AppleAgxSchedulerResetEngine(&a.Scheduler,0,0,&aborted));
-    assert(aborted==41 && a.Scheduler.CompletedFence==(mode==0 ? 41u : 40u));
-    assert(AppleAgxSchedulerQueueResubmittedPagingFence(&a.Scheduler,0,0,42));
+    assert(aborted==failed && a.Scheduler.CompletedFence==failed);
+    assert(AppleAgxSchedulerQueueResubmittedPagingFence(&a.Scheduler,0,0,next));
+    assert(AppleAgxSchedulerActivateFence(&a.Scheduler,0,0,next));
+    /* A reset abort is different: no PAGE_FAULTED was reported for next. */
+    assert(AppleAgxSchedulerAbortActiveFence(&a.Scheduler,0,0,next));
+    assert(AppleAgxSchedulerCurrentFence(&a.Scheduler,0,0)==failed);
   }
   return 0;
 }

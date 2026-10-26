@@ -237,6 +237,19 @@ APPLE_AGX_BOOL AppleAgxSchedulerAbortActiveFence(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AppleAgxSchedulerFaultActiveFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence) {
+  if (!AppleAgxSchedulerAbortActiveFence(Scheduler, NodeOrdinal,
+                                        EngineOrdinal, Fence))
+    return APPLE_AGX_FALSE;
+  /* DXGK_PAGE_FAULT_FENCE_INVALID is clear: Windows advances to FaultedFenceId.
+   * QueryCurrentFence and pending/new preemptions must agree with that boundary.
+   * Keep LastAbortedFence for reset accounting and the error notification. */
+  Scheduler->CompletedFence = Fence;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_U32 AppleAgxSchedulerLastSubmittedFence(
     const APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal) {

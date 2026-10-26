@@ -3421,7 +3421,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   }
   if (runtime->Completion.Phase == AppleAgxCompletionClaimed) {
     if (!(Status == AppleAgxBackendCompletionDropped
-              ? AppleAgxSchedulerAbortActiveFence(
+              ? AppleAgxSchedulerFaultActiveFence(
                     &adapter->Scheduler, Node, Engine, Fence)
               : AppleAgxSchedulerCompleteActiveFence(
                     &adapter->Scheduler, Node, Engine, Fence)) ||

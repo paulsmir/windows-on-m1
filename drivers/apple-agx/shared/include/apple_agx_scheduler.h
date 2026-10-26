@@ -89,6 +89,13 @@ APPLE_AGX_BOOL AppleAgxSchedulerCompleteActiveFence(
 APPLE_AGX_BOOL AppleAgxSchedulerAbortActiveFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+
+/* Retired hardware work reported with a known-fence DMA_PAGE_FAULTED.
+ * Unlike a reset abort, WDDM requires this to advance the completed boundary.
+ * The caller still reports an error, never DMA_COMPLETED. */
+APPLE_AGX_BOOL AppleAgxSchedulerFaultActiveFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
 APPLE_AGX_U32 AppleAgxSchedulerLastSubmittedFence(
     const APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal);
