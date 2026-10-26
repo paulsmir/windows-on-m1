@@ -65,6 +65,9 @@ def optional_body(source, name):
 
 class TdrResetQuiesce(unittest.TestCase):
     def test_reset_succeeds_only_after_firmware_ends_the_active_job(self):
+        self.run_replay(CASES, FIRMWARE_REPLAY)
+
+    def run_replay(self, cases, firmware_replay, queue_runtime=None):
         scheduler = (RENDER / 'src/scheduler_windows.c').read_text()
         backend = (RENDER / 'src/backend_platform_windows.c').read_text()
         queue = (RENDER / 'src/work_queue_windows.c').read_text()
@@ -92,18 +95,18 @@ class TdrResetQuiesce(unittest.TestCase):
                 '\n'.join(function_body(scheduler, n) for n in (
                     'AdmissionResetEngineEntry', 'AdmissionDdiResetEngine',
                     'AdmissionDdiResetFromTimeout',
-                    'AdmissionDdiRestartFromTimeout')) + CASES)
+                    'AdmissionDdiRestartFromTimeout')) + cases)
         with tempfile.TemporaryDirectory() as tmp:
             program = Path(tmp) / 'reset.c'
             program.write_text(body)
             firmware = Path(tmp) / 'firmware.c'
-            firmware.write_text(FIRMWARE_REPLAY)
+            firmware.write_text(firmware_replay)
             binary = Path(tmp) / 'reset'
             subprocess.run([os.environ.get('CC', 'clang'), '-std=c11', '-Wall', '-Wextra',
                             '-Werror', '-Wno-unused-function', '-fsanitize=address,undefined',
                             '-I', str(RENDER / 'include'), '-I', str(SHARED / 'include'),
                             '-I', str(SHARED / 'tests'), str(firmware),
-                            str(SHARED / 'src/apple_agx_g13_queue_runtime.c'),
+                            str(queue_runtime or SHARED / 'src/apple_agx_g13_queue_runtime.c'),
                             str(SHARED / 'src/apple_agx_g13_codec.c'),
                             str(program),
                             *[str(SHARED / 'src' / (name + '.c')) for name in (
