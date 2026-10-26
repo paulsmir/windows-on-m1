@@ -64330,3 +64330,15 @@ EXP1973 HARDWARE BEFORE 2026-10-26T18:17:12Z:
 - Hashes: sys 949e3a649172, UmdArm64 6ddfcd22209f, UmdX64 e9a3e0df37bf, Umd32 67accb8f7573; manifest 32a721f325fd, hardware-manifest 2b2c24cba378; probe1973.sh 88119456251f (PROBE_LINT_OK); visible recovery rec1973h 9a6d608b6e893629; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1973h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1973-readiness-cache/run1973.sh.
+
+EXP1973 HARDWARE ACTUAL 2026-10-26T18:27:50Z: PARTIAL PASS. This is the first true FHD run; the app log shows "Creating 1920x1080 Direct3D12 Window".
+- Arm a (FHD 100k, rc47 readiness cache, CPU_POOL_MAP=0): Score **1275 / 7.6 FPS** (EXP1972 at HD 100k: 543 / 3.2; macOS FHD 100k: about 7,700 / 46). Median frame 114.7 ms; GPU busy estimate 26.3 ms.
+- Steady-state waits (1145 Executes): native_ready_escape left the top sites (cache hits). Remaining per Execute:
+  - draw.copy_escape 48.3 ms for 164 calls;
+  - query_resolve.copy_escape 9.8 ms for 144 calls;
+  - draw.render_fence 32.7 ms for 8 calls (counted-draw count reads);
+  - draw.flush 4.8 ms.
+- Arm b (FHD 50k, run second in the same guest boot): FAIL at load with OOM ("can't create 2D BC7RGBAu8n 1024x1024 l96 m11"). The 100k arm passed before it, which suggests memory from the first process was not returned or system headroom was exhausted.
+- rc47 verdict: VALIDATED; readiness proof cost removed in steady state (about 140 ms -> ~0).
+- Next: EXP1974 with canonical CPU maps (one copy: removes the copy escapes and the duplicate staging memory). Codex rc49 investigates the user-reported taskbar flicker during runs.
+- Recovery rec1973h (running).
