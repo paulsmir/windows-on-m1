@@ -24,7 +24,8 @@ struct pipe_draw_indirect_info {struct pipe_resource *buffer,*indirect_draw_coun
 struct shader {struct {unsigned system_values_read[16];} info;};
 struct agx_device {unsigned chip;uint64_t shader_base;};
 struct agx_pool {unsigned kind;};
-struct agx_bo {unsigned unused;};
+struct agx_va {uint64_t addr,size_B;};
+struct agx_bo {struct agx_va *va;size_t size;};
 struct agx_ptr {void *cpu;uint64_t gpu;};
 struct agx_encoder {void *bo;uint8_t *current,*end;struct agx_ptr windows_chunk;};
 struct agx_batch;
@@ -41,10 +42,12 @@ struct agx_batch {struct agx_context *ctx;struct agx_pool pool,windows_stream_po
 static struct agx_device dev;
 static unsigned allocations,fault,reads,launches,entered,leaves,writer_flushes,capacity_flushes,output_refs;
 static struct agx_bo output_bos[2];
+static struct agx_va output_vas[2];
+static unsigned bad_extent;
 static unsigned query_refs;
 static uint64_t agx_get_query_address(struct agx_batch *b,void *q){assert(b->ctx->active_queries&&q);++query_refs;if(fault==11)b->ctx->any_faults=true;return (uintptr_t)q;}
 static bool passthrough;
-static void *blocks[8];static uint8_t cdm[1024],vdm[256];
+static void *blocks[8];static uint8_t cdm[1024],vdm[4096];
 static struct agx_device *agx_device(struct agx_device *d){return d;}
 static struct agx_resource *agx_resource(struct pipe_resource *r){return (void *)r;}
 static uint64_t agx_map_gpu(struct agx_resource *r){return r->gpu;}
@@ -67,7 +70,23 @@ static struct agx_ptr agx_pool_alloc_aligned_with_bo(struct agx_pool *pool,size_
  assert(pool->kind==1||pool->kind==2);
  if(pool->kind==1){assert(alignment==256);assert(size>=8+0x800);}
  struct agx_ptr p=agx_pool_alloc_aligned(pool,size,alignment);
- *bo=p.gpu?&output_bos[pool->kind-1]:NULL;p.cpu=NULL;return p;
+ unsigned n=pool->kind-1;
+ *bo=p.gpu?&output_bos[n]:NULL;
+ if(p.gpu){
+  p.gpu=0x1200000000ull+n*0x100000;
+  output_vas[n]=(struct agx_va){p.gpu,size};
+  output_bos[n]=(struct agx_bo){&output_vas[n],size};
+  if(pool->kind==2)dev.shader_base=p.gpu-0x10000;
+  if(bad_extent==1&&n==0)--output_bos[n].size;
+  if(bad_extent==2&&n==1)--output_vas[n].size_B;
+  if(bad_extent==3&&n==0)p.gpu=output_vas[n].addr=(1ull<<39)-256;
+  if(bad_extent==4&&n==0)p.gpu+=4;
+  if(bad_extent==5&&n==1)p.gpu+=4;
+  if(bad_extent==6&&n==0)output_vas[n].addr=p.gpu+256;
+  if(bad_extent==7&&n==1)output_bos[n].va=NULL;
+  if(bad_extent==8&&n==1)dev.shader_base=p.gpu-(1ull<<32)+64;
+ }
+ p.cpu=NULL;return p;
 }
 static void agx_batch_add_bo(struct agx_batch *b,struct agx_bo *bo){assert(bo==&output_bos[output_refs++]);if(fault==10)b->ctx->any_faults=true;}
 static uint64_t agx_pool_upload_aligned(struct agx_pool *pool,void *data,size_t size,unsigned alignment){struct agx_ptr p=agx_pool_alloc_aligned(pool,size,alignment);if(p.cpu)memcpy(p.cpu,data,size);return p.gpu;}
@@ -76,7 +95,9 @@ static bool AgxWin32AsahiBatchComputeLeave(struct agx_batch *b){assert(b&&entere
 static void launch(struct agx_batch *b,struct agx_grid grid,unsigned barrier,uint64_t args){
  assert(barrier==(AGX_BARRIER_ALL|AGX_PREGFX)&&entered==1);++launches;
  if(fault==5){b->ctx->any_faults=true;return;}
- for(unsigned i=0;i<grid.count[0];++i){cl_global_id.x=i;libagx_win32_indirect_stream((void *)(uintptr_t)args);}
+ struct agx_win32_stream_params params=*(struct agx_win32_stream_params *)(uintptr_t)args;
+ params.stream=(uintptr_t)blocks[1];params.pipelines=(uintptr_t)blocks[2];
+ for(unsigned i=0;i<grid.count[0];++i){cl_global_id.x=i;libagx_win32_indirect_stream(&params);}
 }
 #define libagx_win32_indirect_stream launch
 #include "agx_win32_indirect_stream_emit.h"
@@ -133,6 +154,21 @@ int main(void){
   if(entered)assert(leaves==1);
   for(unsigned i=0;i<8;++i){free(blocks[i]);blocks[i]=NULL;}
  }
+ /* RC43: full GPU output ownership/VA and continuation fetch bounds must
+  * be checked before dispatch; a bad allocation must never emit a link. */
+ for(bad_extent=1;bad_extent<=11;++bad_extent){
+  fault=0;init(&ctx,&batch,&vs);allocations=reads=launches=entered=leaves=output_refs=0;
+  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};
+  struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)args+4,0x1000,256,AGX_INDEX_SIZE_U32,false);
+  if(bad_extent==9)batch.vdm.end=vdm+24;
+  if(bad_extent==10)batch.vdm.windows_chunk.gpu=(1ull<<39)-16;
+  if(bad_extent==11)batch.vdm.windows_chunk.gpu+=1;
+  uint32_t *out=(void *)(vdm+16);memset(out,0xff,32);
+  uint8_t *end=agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,(void *)out);
+  assert(ctx.any_faults&&!end&&!launches&&!entered&&!ctx.windows_indirect_path&&out[0]==UINT32_MAX);
+  for(unsigned i=0;i<8;++i){free(blocks[i]);blocks[i]=NULL;}
+ }
+ bad_extent=0;
  /* CPU emission performs exactly the same calls for 1 and 12000 records. */
  for(unsigned records=1;records<=12000;records+=11999){
   fault=0;init(&ctx,&batch,&vs);allocations=reads=launches=entered=leaves=output_refs=0;

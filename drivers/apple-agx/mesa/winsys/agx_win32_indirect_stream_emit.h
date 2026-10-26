@@ -65,6 +65,23 @@ agx_win32_stream_cdm_bytes(void)
           AGX_CDM_BARRIER_LENGTH;
 }
 
+/* The generated stream is not CPU-readable by the KMD validator. Prove the
+ * complete writable output, including VDM fetch padding, before launching its
+ * producer. Windows process mappings use 39 bits even though VDM links encode
+ * 40. Check both backing and VA extents without overflowing either sum. */
+static bool
+agx_win32_stream_output_valid(const struct agx_bo *bo, uint64_t va,
+                              uint64_t bytes, unsigned alignment)
+{
+   const uint64_t limit = 1ull << 39;
+   if (!bo || !bo->va || !bytes || va < 0x10000 || va >= limit ||
+       bytes > limit - va || (va & (alignment - 1u)) || va < bo->va->addr)
+      return false;
+   uint64_t offset = va - bo->va->addr;
+   return offset <= bo->size && bytes <= bo->size - offset &&
+          offset <= bo->va->size_B && bytes <= bo->va->size_B - offset;
+}
+
 static bool
 agx_win32_stream_inputs_valid(const struct pipe_draw_info *info,
                                const struct pipe_draw_indirect_info *in)
@@ -121,11 +138,12 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
    const uintptr_t end = (uintptr_t)batch->vdm.end;
    /* The active encoder can be a later pool slab, not the original vdm.bo.
     * Keep the construction coordinate from allocation/rollover. */
-   if (!start || !chunk.gpu || cpu < start || cpu > end ||
-       AGX_VDM_STREAM_LINK_LENGTH > end - cpu || (cpu & 3u))
+   if (!start || chunk.gpu < 0x10000 || cpu < start || cpu > end ||
+       tail > end - cpu || (cpu & 3u) || (chunk.gpu & 3u))
       goto fail;
    uint64_t continuation = chunk.gpu + (cpu - start) + AGX_VDM_STREAM_LINK_LENGTH;
-   if (continuation < chunk.gpu || continuation >= (1ull << 40))
+   if (continuation < chunk.gpu || continuation >= (1ull << 39) ||
+       AGX_WIN32_STREAM_FETCH_PADDING > (1ull << 39) - continuation)
       goto fail;
    /* Keep rounding and pool growth valid on WOW64 as well as 64-bit hosts. */
    if (!stream->usc_template || !stream->usc_bytes ||
@@ -161,7 +179,10 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       (size_t)count * record + tail, 256, &vdm_bo);
    struct agx_ptr usc = agx_pool_alloc_aligned_with_bo(&batch->windows_stream_usc_pool,
       (size_t)count * usc_stride, 64, &usc_bo);
-   if (!vdm.gpu || !vdm_bo || !usc.gpu || !usc_bo ||
+   if (!agx_win32_stream_output_valid(vdm_bo, vdm.gpu,
+          (uint64_t)count * record + tail, 256) ||
+       !agx_win32_stream_output_valid(usc_bo, usc.gpu,
+          (uint64_t)count * usc_stride, 64) ||
        usc.gpu < dev->shader_base ||
        usc.gpu - dev->shader_base > UINT32_MAX - (uint64_t)count * usc_stride)
       goto fail;
