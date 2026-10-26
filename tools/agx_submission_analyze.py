@@ -8,8 +8,11 @@ latency and hypervisor clock offsets are not calibrated away. Invalid/missing
 ranges stay unknown. Intervals are unioned before intersection, so overlapping
 TA/fragment or jobs are not counted twice. Receipts can arrive in later frames.
 
-Usage: agx_submission_analyze.py UMD.log --csv frames.csv [--qpc-hz 24000000]
+Usage: agx_submission_analyze.py UMD.log --csv frames.csv --execute-csv executes.csv
 Old logs need explicit QPC frequency; new logs carry it. JSON summary on stdout.
+Execute CSV includes records after the final Present with an empty frame field.
+Joined receipts and valid timing are separate coverage measures: invalid scope
+flags never become exact timing merely because every Execute has a receipt.
 """
 import argparse
 import collections
@@ -72,10 +75,11 @@ def wait_frame(pending, sites, tag='measure-d3d12-wait', prefix='wait'):
     waits = [w for t, w in pending if t == tag]
     queries = [w for t, w in pending if t == 'measure-d3d12-query-time']
     executions = sum(t == 'measure-d3d12-execute' for t, _ in pending)
-    complete = (bool(waits) and len(waits) == executions and
-                not any(w[3] & 3 for w in waits) and
-                not any(t == 'wait-orphan' for t, _ in pending))
+    joined = (bool(waits) and len(waits) == executions and
+              not any(t == 'wait-orphan' for t, _ in pending))
+    complete = joined and not any(w[3] & 3 for w in waits)
     frame = dict(wait_profiled_executes=len(waits) if waits else None,
+                 wait_join_complete=joined if waits or executions else None,
                  wait_profile_complete=complete if waits or any(t == 'measure-d3d12-execute' and len(w) >= 5 and w[4] for t,w in pending) else None,
                  wait_omitted_ms=sum(w[2] for w in waits)/1000 if waits else None,
                  wait_flags=0 if waits else None)
@@ -101,7 +105,8 @@ def wait_frame(pending, sites, tag='measure-d3d12-wait', prefix='wait'):
     return frame
 
 
-def analyze(lines, qpc_hz=None):
+def analyze(lines, qpc_hz=None, *, include_executes=False):
+    """Return Present frames and coverage; optionally include all Execute rows."""
     rows = collections.defaultdict(list)
     completions, stages = {}, {}
     cpu = collections.defaultdict(list)
@@ -109,6 +114,7 @@ def analyze(lines, qpc_hz=None):
     loss_ranges = []
     resets = errors = missing_timing = 0
     wait_sites, path_sites, wait_seen = set(), set(), {}
+    wait_duplicates = 0
     execute_keys = set()
     for number, line in enumerate(lines, 1):
         match = re.search(r'^(\S+).*?pid=(\d+).*?qpc=(\d+)(.*)$', line)
@@ -130,6 +136,7 @@ def analyze(lines, qpc_hz=None):
             if key in wait_seen:
                 if wait_seen[key] != words:
                     raise ValueError('Conflicting Execute wait serial; split process lifetimes')
+                if tag == 'measure-d3d12-wait': wait_duplicates += 1
                 continue
             wait_seen[key] = words
             if tag != 'measure-d3d12-query-time':
@@ -206,19 +213,33 @@ def analyze(lines, qpc_hz=None):
             estimated[pid].append((mapped_begin, mapped_end))
     orphan_keys = {(pid, serial) for pid, _, serial in wait_seen} - execute_keys
     orphan_pids = {pid for pid, _ in orphan_keys}
-    frames = []
+    frames, executes = [], []
     names = ['draw', 'dispatch', 'copy', 'query', 'indirect_expand', 'other']
     for pid, process_rows in sorted(rows.items()):
         pending = []
+        pending_executes = []
+        frame_number = 1
         previous = process_rows[0][0]
         for qpc, number, tag, words in process_rows:
             if tag in ('measure-d3d12-wait', 'measure-d3d12-query-time', 'measure-d3d12-wait-path'):
                 continue  # joined below to the Execute which owns this serial
             pending.append((tag, words))
-            if tag == 'measure-d3d12-execute' and len(words) >= 5 and words[4]:
-                for companion in ('measure-d3d12-wait', 'measure-d3d12-query-time', 'measure-d3d12-wait-path'):
-                    payload = wait_seen.get((pid, companion, words[4]))
-                    if payload is not None: pending.append((companion, payload))
+            if tag == 'measure-d3d12-execute':
+                serial = words[4] if len(words) >= 5 and words[4] else None
+                owned = [(tag, words)]
+                if serial is not None:
+                    for companion in ('measure-d3d12-wait', 'measure-d3d12-query-time', 'measure-d3d12-wait-path'):
+                        payload = wait_seen.get((pid, companion, serial))
+                        if payload is not None: owned.append((companion, payload))
+                pending.extend(owned[1:])
+                if pid in orphan_pids: owned.append(('wait-orphan', []))
+                execution = dict(pid=pid, serial=serial, frame=None, line=number, qpc=qpc,
+                                 replay_ms=words[2]/1000 if len(words) >= 3 else None,
+                                 submit_ms=words[3]/1000 if len(words) >= 4 else None)
+                execution.update(wait_frame(owned, wait_sites))
+                execution.update(wait_frame(owned, path_sites, 'measure-d3d12-wait-path', 'wait_path'))
+                executes.append(execution)
+                pending_executes.append(execution)
             if tag != 'measure-d3d12-present':
                 continue
             def sums(name, length):
@@ -234,7 +255,7 @@ def analyze(lines, qpc_hz=None):
             replay = sums('measure-d3d12-replay-time', 12)
             has_replay = any(t == 'measure-d3d12-replay-time' for t, _ in pending)
             has_dispatch = any(t == 'measure-d3d12-dispatch-time' for t, _ in pending)
-            frame = dict(pid=pid, frame=sum(f['pid'] == pid for f in frames)+1,
+            frame = dict(pid=pid, frame=frame_number,
                          end_line=number, start_qpc=previous, end_qpc=qpc,
                          wall_ms=(qpc-previous)*1000/hz,
                          replay_ms=execute[2]/1000, submit_ms=execute[3]/1000,
@@ -260,6 +281,9 @@ def analyze(lines, qpc_hz=None):
             frame.update(wait_frame(pending, wait_sites))
             frame.update(wait_frame(pending, path_sites, 'measure-d3d12-wait-path', 'wait_path'))
             frames.append(frame)
+            for execution in pending_executes: execution['frame'] = frame_number
+            pending_executes = []
+            frame_number += 1
             previous, pending = qpc, []
     summary = dict(qpc_hz=hz, frames=len(frames), completion_records=len(completions),
                    valid_stages=valid_stages, invalid_or_missing_stages=invalid_stages,
@@ -276,6 +300,18 @@ def analyze(lines, qpc_hz=None):
         return statistics.median(values) if values else None
     summary['wait_orphan_executes'] = len(orphan_keys)
     summary['wait_orphan_ids'] = [dict(pid=pid, serial=serial) for pid, serial in sorted(orphan_keys)]
+    profiled = [e for e in executes if e['wait_profiled_executes']]
+    invalid = sum(bool(e['wait_flags'] & 3) for e in profiled)
+    summary.update(execute_records=len(executes),
+                   execute_framed_records=sum(e['frame'] is not None for e in executes),
+                   execute_unpresented_records=sum(e['frame'] is None for e in executes),
+                   wait_receipts=sum(tag == 'measure-d3d12-wait' for _, tag, _ in wait_seen),
+                   wait_joined_executes=len(profiled), wait_missing_executes=len(executes)-len(profiled),
+                   wait_valid_executes=len(profiled)-invalid, wait_invalid_executes=invalid,
+                   wait_censored_executes=sum(bool(e['wait_flags'] & 4 or e['wait_omitted_ms']) for e in profiled),
+                   wait_unpresented_executes=sum(e['frame'] is None for e in profiled),
+                   wait_duplicate_receipts=wait_duplicates)
+    if include_executes: summary['execute_rows'] = executes
     summary['wait_site_medians'] = {
         str(site): dict(name=wait_name(site),
             median_ms=median(f[f'wait_{site}_ms'] for f in steady),
@@ -296,7 +332,11 @@ def analyze(lines, qpc_hz=None):
                                   for phase in ['begin', 'end', 'resolve']}
     summary['wait_coverage'] = ('Exclusive CPU wall time in instrumented scopes; includes callback CPU work. '
         'Per-site lower bounds when top-N omits entries; null means missing or censored. Orphan companions make their process coverage incomplete. '
-        'Medians exclude the first partial frame of EACH process. Query and wait-path timings are inclusive; do not sum them with waits or with each other. Companions join by PID/Execute serial, not arrival frame.')
+        'Medians exclude the first partial frame of EACH process. Query and wait-path timings are inclusive; do not sum them with waits or with each other. '
+        'Companions join by PID/Execute serial, not arrival frame. Execute counts include the first frame and records after the last Present; '
+        'unpresented records have no frame or inferred frame duration. Joined counts measure receipt coverage, valid counts exclude flag 1/2; '
+        'censored counts overlap both valid and invalid counts. A joined frame need not have valid timing.')
+    summary['wait_joined_frames'] = sum(f['wait_join_complete'] is True for f in steady)
     summary['wait_complete_frames'] = sum(f['wait_profile_complete'] is True for f in steady)
     return frames, summary
 
@@ -306,12 +346,19 @@ def main():
     parser.add_argument('log', type=Path)
     parser.add_argument('--qpc-hz', type=int)
     parser.add_argument('--csv', type=Path)
+    parser.add_argument('--execute-csv', type=Path, help='all Executes, including records after the last Present')
     args = parser.parse_args()
-    frames, summary = analyze(args.log.read_text(errors='replace').splitlines(), args.qpc_hz)
+    frames, summary = analyze(args.log.read_text(errors='replace').splitlines(), args.qpc_hz,
+                              include_executes=bool(args.execute_csv))
     if args.csv and frames:
         with args.csv.open('w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=frames[0])
             writer.writeheader(); writer.writerows(frames)
+    executes = summary.pop('execute_rows', [])
+    if args.execute_csv and executes:
+        with args.execute_csv.open('w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=executes[0])
+            writer.writeheader(); writer.writerows(executes)
     print(json.dumps(summary, indent=2))
 
 

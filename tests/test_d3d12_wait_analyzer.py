@@ -4,7 +4,12 @@ must accumulate, and per-site medians must exclude each process's first frame.
 Query Begin/End/Resolve must remain separate, including interleaved Executes.
 """
 import importlib.util
+import os
 from pathlib import Path
+import csv
+import subprocess
+import sys
+import tempfile
 import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -16,6 +21,112 @@ def waits(serial,site,us,omitted=0,flags=0):
     return [1,serial,omitted,flags,site,1,us,0,0,0,0,0,0,0,0,0]
 
 class WaitAnalyzer(unittest.TestCase):
+    def test_exp1970_counts_invalid_and_unpresented_executes(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        EXP1970's valid-frame count hid joined invalid Executes and silently
+        dropped four trailing Executes; counting them must not invent timing.
+        """
+        log=(ROOT/'tests/fixtures/exp1970_wait_excerpt.txt').read_text().splitlines()
+        frames,summary=a.analyze(log)
+        self.assertEqual(len(frames),3)
+        self.assertIn('execute_records',summary,'joined and trailing Executes are not accounted')
+        self.assertEqual(summary['execute_records'],7)
+        self.assertEqual(summary['execute_framed_records'],3)
+        self.assertEqual(summary['execute_unpresented_records'],4)
+        self.assertEqual(summary['wait_joined_executes'],7)
+        self.assertEqual(summary['wait_missing_executes'],0)
+        self.assertEqual(summary['wait_valid_executes'],6)
+        self.assertEqual(summary['wait_invalid_executes'],1)
+        self.assertEqual(summary['wait_censored_executes'],2)
+        self.assertEqual(summary['wait_unpresented_executes'],4)
+        self.assertEqual(summary['wait_joined_frames'],2)
+        self.assertEqual(summary['wait_complete_frames'],1)
+        _,detailed=a.analyze(log,include_executes=True)
+        executes=detailed['execute_rows']
+        self.assertEqual([e['serial'] for e in executes],[42,43,819,820,821,822,823])
+        self.assertEqual([e['frame'] for e in executes],[1,2,3,None,None,None,None])
+        invalid=executes[1]
+        self.assertTrue(invalid['wait_join_complete'])
+        self.assertEqual(invalid['wait_flags'],5)
+        self.assertFalse(invalid['wait_profile_complete'])
+        self.assertIsNone(invalid['wait_29_ms'])
+        self.assertIsNone(invalid['wait_29_lower_ms'])
+        self.assertIsNone(invalid['query_resolve_ms'])
+        self.assertEqual(executes[-1]['wait_22_ms'],0)
+        self.assertNotIn('wall_ms',executes[-1])
+
+    def test_execute_export_preserves_missing_censored_and_duplicate_receipts(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Execute accounting must not turn missing/top-N sites into exact zeroes
+        or count a repeated identical companion as another Execute.
+        """
+        receipt=row('measure-d3d12-wait',4,waits(42,3,1000,flags=4))
+        log=[row('start',0,[]),row('measure-d3d12-execute',1,[1,1,1000,0,41]),
+             row('measure-d3d12-present',2,[]),
+             row('measure-d3d12-execute',3,[1,1,2000,0,42]),receipt,receipt,
+             row('measure-d3d12-execute',5,[1,1,3000,0,43]),
+             row('measure-d3d12-wait',6,waits(43,8,2000))]
+        frames,summary=a.analyze(log,1000)
+        self.assertEqual(len(frames),1)
+        self.assertIn('execute_records',summary,'unpresented Executes have no coverage report')
+        self.assertEqual(summary['execute_records'],3)
+        self.assertEqual(summary['wait_joined_executes'],2)
+        self.assertEqual(summary['wait_missing_executes'],1)
+        self.assertEqual(summary['wait_duplicate_receipts'],1)
+        self.assertEqual(summary['wait_receipts'],2)
+        _,detailed=a.analyze(log,1000,include_executes=True)
+        missing,censored,valid=detailed['execute_rows']
+        self.assertFalse(missing['wait_join_complete'])
+        self.assertIsNone(missing['wait_3_ms'])
+        self.assertIsNone(missing['wait_3_lower_ms'])
+        self.assertIsNone(censored['wait_8_ms'])
+        self.assertEqual(censored['wait_8_lower_ms'],0)
+        self.assertEqual(valid['wait_8_ms'],2)
+
+    def test_execute_csv_includes_tail_without_fabricated_frame(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        The CLI must actually export post-Present Executes with their serial
+        and empty frame association, rather than silently omit them.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            output=Path(tmp)/'executes.csv'
+            result=subprocess.run([sys.executable,str(ROOT/'tools/agx_submission_analyze.py'),
+                str(ROOT/'tests/fixtures/exp1970_wait_excerpt.txt'),
+                '--execute-csv',str(output)],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            with output.open() as stream:
+                executes=list(csv.DictReader(stream))
+        self.assertEqual(len(executes),7)
+        self.assertEqual(executes[-1]['serial'],'823')
+        self.assertEqual(executes[-1]['frame'],'')
+        self.assertEqual(executes[1]['wait_29_ms'],'')
+
+    @unittest.skipUnless(os.environ.get('AGX_EXP1970_UMD_LOG'), 'optional full EXP1970 capture')
+    def test_exp1970_full_capture(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        All 823 saved EXP1970 Executes must reconcile, including 776 invalid
+        profiles and four post-Present records, without accepting bad timings.
+        """
+        frames,summary=a.analyze(Path(os.environ['AGX_EXP1970_UMD_LOG']).read_text().splitlines(),
+                                 include_executes=True)
+        self.assertEqual(len(frames),812)
+        self.assertEqual(summary['execute_records'],823)
+        self.assertEqual(summary['execute_framed_records'],819)
+        self.assertEqual(summary['execute_unpresented_records'],4)
+        self.assertEqual(summary['wait_receipts'],823)
+        self.assertEqual(summary['wait_joined_executes'],823)
+        self.assertEqual(summary['wait_missing_executes'],0)
+        self.assertEqual(summary['wait_valid_executes'],47)
+        self.assertEqual(summary['wait_invalid_executes'],776)
+        self.assertEqual(summary['wait_censored_executes'],818)
+        self.assertEqual(summary['wait_unpresented_executes'],4)
+        self.assertEqual(summary['wait_duplicate_receipts'],0)
+        self.assertEqual(summary['wait_orphan_executes'],0)
+        self.assertEqual(summary['wait_joined_frames'],811)
+        self.assertEqual(summary['wait_complete_frames'],35)
+        self.assertEqual(len(summary['execute_rows']),823)
+        self.assertEqual(sum(e['query_resolve_ms'] is None for e in summary['execute_rows']),776)
+
     def test_multiple_executes_censoring_and_queries(self):
         site=3*256+3 # Resolve / render fence
         log=[row('start',0,[]),row('measure-d3d12-present',10,[]),
