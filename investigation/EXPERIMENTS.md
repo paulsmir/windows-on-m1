@@ -64214,3 +64214,24 @@ EXP1968 HARDWARE ACTUAL 2026-10-26T13:53:45Z:
 - Conclusion: GravityMark is bound by CPU<->GPU synchronization, not GPU work and not dispatch encoding. The two syncs are the query replay (59 ms) and the counted-draw count reads (most of 115 ms). The user target is at least 3000 points (native M1 Metal is about 9,950 / 60 FPS at 100k asteroids, 720p).
 - Next: Codex rc40, GPU-timeline ResolveQueryData and no-wait queries; then EXP1969 with rc40 plus a second arm with the opt-in GPU stream (rc38 fixes); rc39 shader capture for the white-asteroid bug.
 - Recovery rec1968h: RECOVERY_DONE.
+
+EXP1969 HARDWARE BEFORE 2026-10-26T14:55:45Z:
+- Package 30.0.1969.0 = EXP1968 driver + rc39 0fb1df37 (APPLE_AGX_D3D12_SHADER_DUMP_ALL capture) + rc40:
+  - 0fb97ea4 nonblocking zero-timeout BatchPoll;
+  - 8af2925d query type validation;
+  - 0650ac16 KMD publishes batch timestamps;
+  - 3fd1d1a1 GPU timestamp reduction;
+  - c7dd412b GPU-timeline ResolveQueryData and no-wait Begin;
+  - and rc41 (D3D11 discard/copy/mip drains scoped to resources).
+- Arm a = 2k default (CPU count read path=2) + shader capture to C:\Users\pavel\agx-capture-1969. Arm b = 2k with APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1 (rc36 stream with the rc38 link/fence fixes), the full no-wait version.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (full pool).
+- WHY THIS HYPOTHESIS: EXP1968 timing shows GPU busy 9.3 ms in a 180.6 ms frame. Query replay takes 59.4 ms for 9 commands (three pipeline-statistics Begin/End/Resolve triples); the source shows Begin syncing outstanding generations, timestamp resolves on the CPU, and zero-timeout polls blocking. The 7 counted draws with CPU count reads take most of the 114.7 ms of draws.
+- Expected:
+  - arm a: replay_query_ms near zero, frame about 120 ms or lower, score at least EXP1968 (750);
+  - arm b: counted-path path=3 reason 0 (no CPU count read), replay_draw_ms far below 114 ms, frame far below arm a;
+  - both: correct images and no faults.
+- Failure criteria: a GPU fault, 0x116/0x119 or any bugcheck, device removal, a hang, wrong query results (visible culling breakage), or a regression.
+- Recovery: rec1969h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest is down).
+- Hashes: sys 4992bf428496, UmdArm64 9955a7e5e8bf, UmdX64 39c074b1be43, Umd32 ca556073f283; manifest e57465829cfc, hardware-manifest b0e9d784e526; probe1969.sh e40e535acde5 (PROBE_LINT_OK); visible recovery rec1969h fdc717b3208806cc; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1969h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1969-no-wait/run1969.sh.
