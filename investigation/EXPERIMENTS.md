@@ -64060,3 +64060,14 @@ EXP1960 HARDWARE BEFORE 2026-10-26T08:28:33Z:
 - Recovery rec1960h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1960-footprint/run1960.sh.
 
 EXP1960 ACTUAL (Claude headline 2026-10-26T08:46:14Z): package 30.0.1960.0 (a8be12f3 = EXP1959 code + rc26/rc27 opt-ins off + rc29 footprint fixes), Wom1GpuFaultInfoRead=1 + Wom1PoolFraction=3, CPU_POOL_MAP off. Stable: both arms reach the harness close, guest alive, no load OOM. 2k: 9 scene presents = 5.6/min. 10k: 13 = 6.6/min. Longest paging waits 20.2 / 19.8 s. Unchanged vs EXP1958 (5.6/8.3): rc29 is neutral, consistent with its audit (GravityMark genuinely needs about 2 GB GPU plus 2.6 GB process memory). Next lever: guest RAM size (6.28 GB of 8 GB; m1n1 rc30 in progress).
+
+EXP1961 HARDWARE BEFORE 2026-10-26T09:02:38Z:
+- Package 30.0.1961.0 = EXP1960 driver code + integration run_uefi.py 83d32cac (--guest-ram-profile expanded, M1N1_PROXYCLIENT override). m1n1 macho 452ab29f, built from codex/m1n1-guestram 075e3980: dc303ad7 decouples assisted guest RAM from the fixed firmware placement; 075e3980 validates broker RAM bounds independently of the fixed load address. Proxyclient from .worktrees/m1n1-guestram (64 MiB proxy heap instead of 768 MiB).
+- Launch: AGX_M1N1=<new macho>, AGX_GUEST_RAM_PROFILE=expanded, AGX_M1N1_LASTGOOD=0d3a75b3 macho (legacy RAM profile). Switches Wom1GpuFaultInfoRead=1, Wom1PoolFraction=3.
+- WHY THIS HYPOTHESIS: the J313 has 8 GB but the guest gets 6.28 GB. rc30 accounting: 1.34 GB below the fixed guest base, including the 768 MiB Python proxy heap. GravityMark genuinely needs about 2 GB GPU plus 2.6 GB process memory (rc29), so on 6.28 GB it pagefile-thrashes (5-8 frames/min). About 0.9 GB more guest RAM should remove most of the thrash.
+- Caveat: this toolchain does not reproduce the deployed m1n1 byte-for-byte (rebuilt base 46161dd4 vs b97cf883), so a boot failure must be split into "new RAM layout" vs "rebuild"; the lastgood launcher uses the old macho with the legacy profile.
+- Expected: boot OK; guest ram_bytes about 7.2 GB (pool receipt / Get-CimInstance); GravityMark presents/min well above 8, much shorter paging waits; DWM alive.
+- Recovery: rec1961h; if boot fails, recover with the lastgood launcher.
+- Hashes: sys ad48aa295511, UmdArm64 0774693eb220, UmdX64 b3c349b12fbd, Umd32 35e9e26796dd; manifest 18152e7d66e1, hardware-manifest 6533f563928f; probe1961.sh a8a9accfc268 (PROBE_LINT_OK); visible recovery rec1961h 5079f1c5cf6ea721; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
+- Recovery rec1961h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1961-guest-ram/run1961.sh.
