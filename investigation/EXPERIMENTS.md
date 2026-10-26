@@ -64479,3 +64479,18 @@ EXP1979 HARDWARE ACTUAL 2026-10-26T21:45:43Z: FAIL. rc56 native staging was on b
 - Verdict: rc56 REJECTED as a default until fixed (rc58). APPLE_AGX_D3D12_NATIVE_STAGING=0 disables it; EXP1980 runs with it off.
 - Recovery rec1979h: RECOVERY_DONE.
 - Tooling note: Codex rc58 aborted. Every model (gpt-6-astra, gpt-6-sol, gpt-5.x) now returns "model not supported when using Codex with a ChatGPT account", so rc58 continues with a Claude subagent.
+
+EXP1980 HARDWARE BEFORE 2026-10-26T21:51:37Z:
+- Package 30.0.1980.0 = EXP1979 driver + rc57:
+  - fdc98d57 validates the native G4 envelope at the fallible boundary before scheduling, so parser errors fail the call instead of a later fatal submit;
+  - 789093d0 RC57C/M/U probes: high-count counted/uncounted streams with a PIPELINE_STATISTICS query active;
+  - 2adaa537 doc.
+  Probe e1980 arm64 sha256 e1a5e1eaa144a4ee.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1. GravityMark arms set APPLE_AGX_D3D12_NATIVE_STAGING=0 because EXP1979 showed the rc56 path removes the device (reject-private-escape E_INVALIDARG).
+- WHY THIS HYPOTHESIS: EXP1978 passed the small stream probes, but GravityMark's first stream use (MaxCount 2400 with statistics active) ended in 0x119 P1=2 STATUS_INVALID_PARAMETER from the KMD submit path. rc57 adds GravityMark-shaped probes, and preflight should turn a parser rejection into an application error.
+- Expected: RC43 PASS again; RC57 steps PASS (the stream handles high count with statistics) or fail without a bugcheck; arm a at about 1632 (EXP1975a); arm b either completes with render_fence near zero or fails with device removal and the guest alive.
+- Failure criteria: a bugcheck (containment still incomplete), a hang, or arm a below 1632.
+- Recovery: rec1980h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest is down).
+- Hashes: sys 909f2e6a2875, UmdArm64 f4535d3256d0, UmdX64 9de6e1d15dd3, Umd32 aeb0ef0a1887; manifest 6df513732618, hardware-manifest 1e44b37be775; probe1980.sh 3c5ca4af4a88 (PROBE_LINT_OK); visible recovery rec1980h fd8cfcc5fefe152c; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1980h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1980-stream-preflight/run1980.sh.
