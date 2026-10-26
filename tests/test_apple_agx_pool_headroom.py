@@ -38,6 +38,7 @@ class PoolHeadroomTest(unittest.TestCase):
         if 'static VOID AdmissionPoolReclaimLocked(' in source:
             names.append('AdmissionPoolReclaimLocked')
         names += ['AdmissionMemoryPoolExecuted', 'AdmissionMemoryPoolReserve',
+                  'AdmissionMemoryPoolUnreserve',
                   'AdmissionMemoryPoolReclaim']
         with tempfile.TemporaryDirectory(prefix='pool-headroom-') as tmp:
             tmp = Path(tmp)
