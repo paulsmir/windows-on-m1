@@ -6811,11 +6811,9 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 if text.count(anchor) != 1:
                     raise SystemExit('Ambiguous counted draw entry')
                 text = text.replace(anchor, '''   if (indirect && indirect->indirect_draw_count) {
-      if (info->mode != MESA_PRIM_PATCHES) {
-         agx_win32_draw_indirect_count(ctx, info, drawid_offset, indirect, draws);
-         return;
-      }
-      perf_debug_ctx(ctx, "CPU counted indirect: patches");
+      perf_debug_ctx(ctx, "CPU counted indirect: stream fallback");
+      agx_win32_draw_indirect_count(ctx, info, drawid_offset, indirect, draws);
+      return;
    }
 ''' + anchor, 1)
                 (out/path).write_text(text)

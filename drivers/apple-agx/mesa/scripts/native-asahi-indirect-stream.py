@@ -168,10 +168,6 @@ def project_sources(out, project, overlays):
       }
    }
    if (indirect && indirect->indirect_draw_count) {''')
-    s=once(s,'         agx_win32_draw_indirect_count(ctx, info, drawid_offset, indirect, draws);',
-           '         ctx->windows_indirect_path = 1;\n         agx_win32_draw_indirect_count(ctx, info, drawid_offset, indirect, draws);')
-    s=once(s,'      perf_debug_ctx(ctx, "CPU counted indirect: patches");',
-           '      ctx->windows_indirect_path = 2;\n      perf_debug_ctx(ctx, "CPU counted indirect: patches");')
     anchor='''   agx_draw_vbo_windows_body(pctx, info, drawid_offset, indirect, draws, num_draws);
    AgxWin32AsahiBatchTraceDraw(ctx, batch, 3u);'''
     s=once(s,anchor,'''   uint64_t encode_start = os_time_get_nano();

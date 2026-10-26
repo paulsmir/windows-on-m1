@@ -1,9 +1,8 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
-Counted indirect replay must keep GPU-produced count/arguments off the CPU,
-retain scratch through submission/recursive batch rollover, order its kernel
-before consumers, and fail closed on allocation/dispatch/submission failure.
-Execute the production glue and the pinned MIT libagx kernel (only in temp
-files); mocked boundaries are BO/batch submission, not the predication logic.
+EXP1965 fallback predicated and CPU-encoded MaxCount records (including zero
+records) while statistics queries were active. Execute the production fallback:
+map only the count, preserve the argument resource, and encode min(count, max).
+No predicate scratch/kernel survives on this route, even for large MaxCount.
 """
 from pathlib import Path
 import subprocess
@@ -13,161 +12,115 @@ from test_d3d10_shader_fields_init import project, ROOT
 from test_d3d12_owner_allocation_failure import function
 
 HELPER = ROOT/'drivers/apple-agx/mesa/winsys/agx_win32_counted_indirect.h'
-MESA = ROOT/'.local/reference/mesa'
 
 PRELUDE = r'''
 #include <assert.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#define PIPE_BUFFER 0
-#define AGX_BARRIER_ALL 1
-#define AGX_PREGFX 2
-#define global
-#define constant const
-#define KERNEL(x)
-typedef unsigned uint;
-static struct {unsigned x;} cl_global_id;
-@@KERNEL@@
-#undef global
-#undef constant
-struct agx_device {int unused;};
-struct agx_va {uint64_t addr;};
-struct agx_bo {struct agx_va *va; unsigned refs;};
-struct pipe_resource {unsigned target,width0;void *screen;};
-struct agx_resource {struct pipe_resource base;struct agx_bo *bo;};
+#include <stddef.h>
+#define MIN2(a,b) ((a)<(b)?(a):(b))
+#define PIPE_MAP_READ 1
+struct pipe_resource {unsigned width0;};
 struct pipe_draw_info {unsigned index_size;};
 struct pipe_draw_start_count_bias {unsigned unused;};
-struct pipe_draw_indirect_info {struct pipe_resource *buffer,*indirect_draw_count;unsigned offset,stride,draw_count,indirect_draw_count_offset;void *count_from_stream_output;};
-struct pipe_context {void *screen;void (*draw_vbo)(struct pipe_context *,const struct pipe_draw_info *,unsigned,const struct pipe_draw_indirect_info *,const struct pipe_draw_start_count_bias *,unsigned);};
-struct agx_context {struct pipe_context base;bool any_faults;int (*windows_draw_bindings)(void *);void *windows_draw_bindings_data;};
-struct agx_pool {unsigned unused;};
-struct agx_batch {struct agx_context *ctx;struct agx_pool pool;};
-struct agx_ptr {void *cpu;uint64_t gpu;};
-static unsigned source[100000],counter[8],scratch[100000];
-static struct agx_va input_va,count_va,scratch_va;
-static struct agx_bo input_bo={&input_va,1},count_bo={&count_va,1},scratch_bo={&scratch_va,0};
-static struct agx_resource input,count_resource;
-static struct agx_batch batch;
-static unsigned fault,reads,launches,flushes,encoded,notes,active,max_count,words,original_stride;
-static bool retained,submitted;
-static struct agx_device dev;
-static struct agx_resource *agx_resource(struct pipe_resource *r){return (struct agx_resource *)r;}
-static struct agx_device *agx_device(void *s){(void)s;return &dev;}
-static uint64_t agx_map_gpu(struct agx_resource *r){return r->bo->va->addr;}
-static void AgxWin32AsahiMarkContextFault(struct agx_context *ctx,unsigned site){assert(site);ctx->any_faults=true;}
-static struct agx_batch *agx_get_compute_batch(struct agx_context *ctx){assert(!ctx->windows_draw_bindings);if(fault==1){ctx->any_faults=true;return NULL;}active=1;batch.ctx=ctx;return &batch;}
-static void agx_batch_reads(struct agx_batch *b,struct agx_resource *r){assert(b==&batch);assert(r==&input||r==&count_resource);++reads;if(fault==2)b->ctx->any_faults=true;}
-static void agx_batch_init_state(struct agx_batch *b){assert(b==&batch);if(fault==3)b->ctx->any_faults=true;}
-static struct agx_ptr agx_pool_alloc_aligned_with_bo(struct agx_pool *p,size_t size,unsigned alignment,struct agx_bo **out){assert(p==&batch.pool&&alignment==4);assert(size==max_count*words*4);if(fault==4)return (struct agx_ptr){0};scratch_bo.refs=1;*out=&scratch_bo;return (struct agx_ptr){scratch,scratch_va.addr};}
-static void agx_bo_reference(struct agx_bo *bo){assert(bo==&scratch_bo&&bo->refs);++bo->refs;retained=true;}
-static void agx_bo_unreference(struct agx_device *d,struct agx_bo *bo){assert(d==&dev&&bo==&scratch_bo&&bo->refs);--bo->refs;retained=false;}
-static unsigned agx_1d(unsigned n){return n;}
-static void submit(struct agx_batch *b){assert(b==&batch&&retained&&scratch_bo.refs==2);++flushes;submitted=true;active=0;--scratch_bo.refs;if(fault==6)b->ctx->any_faults=true;}
-static void launch(struct agx_batch *b,unsigned n,unsigned barrier,uint64_t out,uint64_t in,uint64_t count,unsigned stride,bool indexed){
- assert(reads==2&&retained&&!b->ctx->windows_draw_bindings);
- assert(barrier==(AGX_BARRIER_ALL|AGX_PREGFX));assert(n==max_count&&stride==original_stride/4);
- ++launches;if(fault==5){b->ctx->any_faults=true;return;}
- for(unsigned i=0;i<n;++i){cl_global_id.x=i;libagx_predicate_indirect((uint32_t *)(uintptr_t)out,(const uint32_t *)(uintptr_t)in,(const uint32_t *)(uintptr_t)count,stride,indexed);}
- if(fault==7)submit(b); /* CDM capacity flush inside launch */
-}
-#define libagx_predicate_indirect launch
-static bool agx_batch_is_active(struct agx_batch *b){assert(b==&batch);return active;}
-static void agx_flush_batch_for_reason(struct agx_context *c,struct agx_batch *b,const char *s){assert(c==b->ctx&&s);submit(b);}
-static void perf_note(struct agx_context *ctx,const char *s){assert(ctx&&!ctx->any_faults&&submitted&&s);++notes;}
-#define perf_debug_ctx perf_note
+struct pipe_draw_indirect_info {struct pipe_resource *buffer,*indirect_draw_count;unsigned offset,stride,draw_count,indirect_draw_count_offset;};
+struct pipe_context {void (*draw_vbo)(struct pipe_context *,const struct pipe_draw_info *,unsigned,const struct pipe_draw_indirect_info *,const struct pipe_draw_start_count_bias *,unsigned);};
+struct agx_context {struct pipe_context base;bool any_faults;int (*windows_draw_bindings)(void *);unsigned windows_indirect_path,windows_indirect_reason,windows_indirect_encode_us;};
+struct pipe_transfer {unsigned unused;};
+static struct pipe_transfer transfer;
+static struct pipe_resource arguments,counter;
+static unsigned value,maps,unmaps,encoded,calls,fault,expected_stride;
 static int bind(void *p){(void)p;return 1;}
+static void AgxWin32AsahiMarkContextFault(struct agx_context *c,unsigned site){assert(site);c->any_faults=true;}
+static const uint32_t *pipe_buffer_map_range(struct pipe_context *p,struct pipe_resource *r,unsigned offset,unsigned bytes,unsigned flags,struct pipe_transfer **t){
+ struct agx_context *c=(void *)p;assert(!c->windows_draw_bindings);
+ assert(r==&counter&&offset==12&&bytes==4&&flags==PIPE_MAP_READ);++maps;
+ *t=fault==1||fault==2?NULL:&transfer;
+ if(fault==4)c->any_faults=true;
+ return fault==1||fault==3?NULL:&value;
+}
+static void pipe_buffer_unmap(struct pipe_context *p,struct pipe_transfer *t){assert(!((struct agx_context *)p)->windows_draw_bindings&&t==&transfer);++unmaps;}
 static void draw(struct pipe_context *p,const struct pipe_draw_info *info,unsigned id,const struct pipe_draw_indirect_info *in,const struct pipe_draw_start_count_bias *r,unsigned n){
- (void)info;(void)r;assert(id==0&&n==1&&submitted&&retained&&scratch_bo.refs==1);
- struct agx_context *ctx=(struct agx_context *)p;assert(ctx->windows_draw_bindings==bind);
- assert(!in->indirect_draw_count&&!in->indirect_draw_count_offset&&in->draw_count==max_count&&in->stride==words*4);
- struct agx_resource *out=agx_resource(in->buffer);assert(out->bo==&scratch_bo&&!out->base.screen);
- for(unsigned i=0;i<max_count;++i){
-  /* Each native subdraw can acquire/retire another batch: the local pin stays. */
-  ++scratch_bo.refs;
-  for(unsigned j=0;j<words;++j)assert(scratch[in->offset/4+i*words+j]==(i<counter[3]?source[7+i*(original_stride/4)+j]:0));
-  --scratch_bo.refs;++encoded;
+ (void)info;(void)r;struct agx_context *c=(void *)p;
+ assert(c->windows_draw_bindings==bind&&maps==1&&unmaps==1&&id==7&&n==1);
+ assert(in->buffer==&arguments&&in->offset==28&&in->stride==expected_stride);
+ assert(!in->indirect_draw_count&&!in->indirect_draw_count_offset);
+ ++calls;encoded+=in->draw_count;
+ /* Native recursion may overwrite metrics, including a stream for a smaller
+  * native draw; the outer fallback must report the original reason. */
+ c->windows_indirect_path=3;c->windows_indirect_reason=4;c->windows_indirect_encode_us=99;
+ if(fault==5)c->any_faults=true;
+}
+'''
+PROGRAM = r'''
+int main(void){
+ unsigned limits[]={1,33,2400,12000,1000000},values[]={0,1,3,33,UINT32_MAX};
+ for(unsigned index=0;index<=4;index+=4)for(unsigned l=0;l<5;++l)for(unsigned v=0;v<5;++v)for(fault=0;fault<6;++fault){
+  value=values[v];maps=unmaps=encoded=calls=0;expected_stride=index?20:16;
+  arguments.width0=28+limits[l]*expected_stride;counter.width0=16;
+  struct agx_context c={{draw},false,bind,0,3,0};struct pipe_draw_info info={index};
+  struct pipe_draw_indirect_info in={&arguments,&counter,28,0,limits[l],12};
+  agx_win32_draw_indirect_count(&c,&info,7,&in,NULL);
+  assert(maps==1&&unmaps==(fault>=3||!fault));
+  assert(c.windows_draw_bindings==bind&&c.windows_indirect_path==2&&c.windows_indirect_reason==3&&!c.windows_indirect_encode_us);
+  unsigned expected=values[v]<limits[l]?values[v]:limits[l];
+  assert(encoded==(fault>=1&&fault<=4?0:expected));
+  assert(calls==!!encoded);
+  assert(c.any_faults==((fault>=1&&fault<=4)||(fault==5&&expected)));
  }
+ for(unsigned bad=0;bad<9;++bad){
+  maps=unmaps=encoded=calls=0;fault=0;arguments.width0=1000;counter.width0=16;
+  struct agx_context c={{draw},false,bind,0,1,0};struct pipe_draw_info info={4};
+  struct pipe_draw_indirect_info in={&arguments,&counter,28,32,3,12};
+  if(bad==0)in.offset=UINT32_MAX;if(bad==1)in.indirect_draw_count_offset=UINT32_MAX;
+  if(bad==2)in.stride=19;if(bad==3)in.draw_count=UINT32_MAX;
+  if(bad==4)in.stride=30;if(bad==5)in.offset=27;
+  if(bad==6)in.indirect_draw_count_offset=11;if(bad==7)in.buffer=NULL;
+  if(bad==8)in.indirect_draw_count=NULL;
+  agx_win32_draw_indirect_count(&c,&info,7,&in,NULL);
+  assert(c.any_faults&&!encoded&&!maps&&c.windows_draw_bindings==bind);
+ }
+ struct agx_context c={{draw},false,bind,0,0,0};struct pipe_draw_info info={4};
+ struct pipe_draw_indirect_info empty={0};maps=encoded=0;
+ agx_win32_draw_indirect_count(&c,&info,7,&empty,NULL);
+ assert(!c.any_faults&&!encoded&&!maps&&c.windows_draw_bindings==bind);
 }
 '''
 
-PROGRAM = r'''
-static void run(unsigned index,unsigned value,unsigned failure,unsigned records){
- memset(scratch,0xcd,sizeof(scratch));for(unsigned i=0;i<100000;++i)source[i]=i*17+1;
- counter[3]=value;words=index?5:4;max_count=records;original_stride=32;fault=failure;
- reads=launches=flushes=encoded=notes=active=0;retained=submitted=false;scratch_bo.refs=0;
- input_va.addr=(uintptr_t)source;count_va.addr=(uintptr_t)counter;scratch_va.addr=(uintptr_t)scratch;
- input=(struct agx_resource){{PIPE_BUFFER,sizeof(source),(void *)1},&input_bo};
- count_resource=(struct agx_resource){{PIPE_BUFFER,sizeof(counter),(void *)1},&count_bo};
- struct agx_context ctx={{NULL,draw},false,bind,NULL};
- struct pipe_draw_info info={index};struct pipe_draw_start_count_bias range={0};
- struct pipe_draw_indirect_info indirect={&input.base,&count_resource.base,28,original_stride,max_count,12,NULL};
- agx_win32_draw_indirect_count(&ctx,&info,0,&indirect,&range);
- assert(ctx.windows_draw_bindings==bind&&!retained);
- if(failure&&failure!=7){assert(ctx.any_faults&&!encoded&&!notes);}
- else {assert(!ctx.any_faults&&launches==1&&flushes==1&&encoded==max_count&&notes==1&&scratch_bo.refs==0);}
- /* Aborted batches own their original pool reference until cleanup. */
- scratch_bo.refs=0;
-}
-int main(void){
- unsigned values[]={0,1,32,33,99,UINT32_MAX};
- for(unsigned index=0;index<=4;index+=4)for(unsigned v=0;v<6;++v)for(unsigned f=0;f<8;++f)run(index,values[v],f,33);
- for(unsigned index=0;index<=4;index+=4){run(index,0,0,1);run(index,1,0,1);run(index,1,0,12000);}
- for(unsigned bad=0;bad<7;++bad){
-  run(4,3,0,33);encoded=reads=launches=0;
-  struct agx_context ctx={{NULL,draw},false,bind,NULL};struct pipe_draw_info info={4};
-  struct pipe_draw_indirect_info in={&input.base,&count_resource.base,28,32,33,12,NULL};
-  if(bad==0)in.offset=UINT32_MAX;
-  if(bad==1)in.indirect_draw_count_offset=UINT32_MAX;
-  if(bad==2)in.stride=19;
-  if(bad==3)in.draw_count=UINT32_MAX;
-  if(bad==4)in.stride=30;
-  if(bad==5)in.offset=27;
-  if(bad==6)in.indirect_draw_count_offset=11;
-  agx_win32_draw_indirect_count(&ctx,&info,0,&in,NULL);
-  assert(ctx.any_faults&&!encoded&&!reads&&!launches&&ctx.windows_draw_bindings==bind);
- }
- struct agx_context ctx={{NULL,draw},false,bind,NULL};struct pipe_draw_info info={4};
- struct pipe_draw_indirect_info empty={0};encoded=reads=launches=0;
- agx_win32_draw_indirect_count(&ctx,&info,0,&empty,NULL);
- assert(!ctx.any_faults&&!encoded&&!reads&&!launches&&ctx.windows_draw_bindings==bind);
- return 0;
-}
-''' 
-
 class GpuCountPredicate(unittest.TestCase):
-    def test_real_kernel_and_batch_lifetime(self):
-        self.assertTrue(HELPER.exists(), 'GPU predication helper is missing')
-        kernel=(MESA/'src/asahi/libagx/draws.cl').read_text()
-        kernel=kernel[:kernel.index('#include')]+function(kernel,'KERNEL(32)\nlibagx_predicate_indirect(')
-        kernel=kernel.replace('KERNEL(32)\n','KERNEL(32)\nvoid\n')
-        helper=HELPER.read_text()
-        # The production include supplies types/extern declarations, modeled above.
-        helper='\n'.join(s for s in helper.splitlines() if not s.startswith('#include'))
-        code=PRELUDE.replace('@@KERNEL@@',kernel)+helper+PROGRAM
+    def test_count_bounded_fallback_and_failed_maps(self):
+        helper='\n'.join(s for s in HELPER.read_text().splitlines() if not s.startswith('#include'))
         with tempfile.TemporaryDirectory() as td:
-            p=Path(td);(p/'test.c').write_text(code)
-            result=subprocess.run(['clang','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',str(p/'test.c'),'-o',str(p/'test')],capture_output=True,text=True)
-            self.assertEqual(result.returncode,0,result.stderr)
-            result=subprocess.run([str(p/'test')],capture_output=True,text=True)
-            self.assertEqual(result.returncode,0,result.stderr)
+            p=Path(td);(p/'test.c').write_text(PRELUDE+helper+PROGRAM)
+            r=subprocess.run(['clang','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',str(p/'test.c'),'-o',str(p/'test')],capture_output=True,text=True)
+            self.assertEqual(r.returncode,0,r.stderr)
+            r=subprocess.run([str(p/'test')],capture_output=True,text=True)
+            self.assertEqual(r.returncode,0,r.stderr)
 
     def test_projection_routes_before_graphics_batch_entry(self):
         with tempfile.TemporaryDirectory() as td:
             out=project(Path(td)/'out')
-            self.assertIsNotNone(out)
             state=(out/'src/gallium/drivers/asahi/agx_state.c').read_text()
             wrapper=function(state[state.rindex('static void\nagx_draw_vbo('):], 'static void\nagx_draw_vbo(')
-            self.assertIn('agx_win32_draw_indirect_count(',wrapper)
-            self.assertLess(wrapper.index('agx_win32_draw_indirect_count('),wrapper.index('AgxWin32AsahiBatchEnter('))
-            self.assertLess(wrapper.index('agx_win32_draw_indirect_count('),wrapper.index('agx_legalize_feedback_loops('))
-            self.assertIn('info->mode != MESA_PRIM_PATCHES',wrapper)
-            self.assertIn('#include "agx_win32_counted_indirect.h"',state)
-            self.assertIn('CPU counted indirect: patches',wrapper)
-            # Actual generated library has both precompiled specializations.
-            library=(out/'src/asahi/lib/libagx_shaders.h').read_text()
-            self.assertIn('#define libagx_predicate_indirect(',library)
+            # Execute the projected routing block, retaining its actual branches.
+            routing=wrapper[wrapper.index('   if (indirect && indirect->indirect_draw_count) {'):wrapper.index('   /* EXP1189:')]
+            code='''#include <assert.h>
+#include <stddef.h>
+#define MESA_PRIM_PATCHES 14
+struct ctx {unsigned windows_indirect_path;} c;
+struct info {unsigned mode;} i;
+struct indirect {void *indirect_draw_count; unsigned draw_count;} in;
+static unsigned native,entered;
+#define perf_debug_ctx(...) ((void)0)
+#define agx_win32_draw_indirect_count(...) (++native)
+static void route(struct ctx *ctx,struct info *info,struct indirect *indirect){
+'''+routing+'''++entered;}
+int main(void){for(unsigned mode=0;mode<=MESA_PRIM_PATCHES;++mode){i.mode=mode;for(unsigned max=1;max<=12000;max+=11999){native=entered=0;in.indirect_draw_count=&in;in.draw_count=max;route(&c,&i,&in);assert(native==1&&!entered&&c.windows_indirect_path!=1);}}}
+'''
+            p=Path(td);(p/'route.c').write_text(code)
+            r=subprocess.run(['clang','-std=c11',str(p/'route.c'),'-o',str(p/'route')],capture_output=True,text=True)
+            self.assertEqual(r.returncode,0,r.stderr)
+            r=subprocess.run([str(p/'route')],capture_output=True,text=True)
+            self.assertEqual(r.returncode,0,r.stderr)
 
 if __name__=='__main__':unittest.main()

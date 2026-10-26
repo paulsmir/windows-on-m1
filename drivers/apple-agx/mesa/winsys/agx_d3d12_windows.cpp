@@ -3889,8 +3889,8 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
    * including each recursive native draw which may select another batch. */
   AgxD3d12DrawHeapBindings heap_bindings = {owner, S_OK};
   const LONGLONG bound = qpc_now();
-  /* The native wrapper predicates GPU counts before entering a render batch.
-   * Patch topology retains the native CPU fallback and its failure handling. */
+  /* The native wrapper generates eligible GPU streams before rendering.
+   * Other counted draws read only the count before entering a render batch. */
   AgxWin32AsahiSetDrawBindings(pipe, bind_draw_heaps, &heap_bindings);
   if (!in->Buffer || indirect.draw_count) {
     if (SUCCEEDED(hr)) pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
@@ -3923,7 +3923,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   if (FAILED(hr)) return hr;
   if (in->Buffer && (in->CountBuffer || in->MaxCount > 1)) {
     /* Per successful call, independent of the capped perf-reason table:
-     * path (1 GPU predicate, 2 CPU fallback, 3 GPU stream), MaxCount,
+     * path (2 CPU count fallback, 3 GPU stream; 1 retired), MaxCount,
      * total draw_vbo us, native state/stream encode us, fallback reason.
      * Get the path actually emitted: topology alone cannot identify queries,
      * passthrough GS or other native lowering. Zero means ordinary uncounted. */
