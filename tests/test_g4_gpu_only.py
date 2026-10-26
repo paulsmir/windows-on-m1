@@ -102,6 +102,10 @@ int main(void) {
 ''')
 
     def test_winsys_access_translation(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        GPU-generated USC needs writable General backing in the low VA window;
+        ordinary CPU-produced Encoder/Shader allocations remain read-only.
+        """
         src=(DRIVER/'mesa/winsys/agx_win32_asahi_bo.c').read_text()
         start=src.index('  cls=(flags&AGX_BO_EXEC)')
         end=src.index('#ifdef APPLE_AGX_GPUVA_WINSYS',start)
@@ -123,6 +127,8 @@ int main(void) {
  assert(access_for(0)==15);
  assert(access_for(AGX_WIN32_BO_GPU_ONLY)==0x2c);
  assert(access_for(AGX_WIN32_BO_GPU_ONLY|AGX_BO_READONLY)==0x24);
+ assert(access_for(AGX_WIN32_BO_GPU_ONLY|AGX_BO_LOW_VA)==0x2c);
+ assert(access_for(AGX_WIN32_BO_GPU_ONLY|AGX_BO_LOW_VA|AGX_BO_READONLY)==0x24);
  assert(access_for(AGX_BO_LOW_VA)==6);
  assert(access_for(AGX_BO_LOW_VA|AGX_BO_EXEC)==6);
 }

@@ -403,7 +403,8 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   if(align!=0x4000) return NULL; /* construction allocator currently guarantees 16 KiB */
 #endif
   cls=(flags&AGX_BO_EXEC)?AgxWin32BufferClassShader:
-      ((flags&AGX_BO_LOW_VA || b->EncoderAllocationIntent)?AgxWin32BufferClassEncoder:AgxWin32BufferClassGeneral);
+      ((flags&AGX_WIN32_BO_GPU_ONLY)?AgxWin32BufferClassGeneral:
+      ((flags&AGX_BO_LOW_VA || b->EncoderAllocationIntent)?AgxWin32BufferClassEncoder:AgxWin32BufferClassGeneral));
   access=AppleAgxWin32BufferCpuWrite|AppleAgxWin32BufferGpuRead;
   if(cls==AgxWin32BufferClassGeneral) {
     access|=AppleAgxWin32BufferCpuRead;
@@ -413,8 +414,10 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if ((flags & AGX_WIN32_BO_GPU_ONLY) &&
-      ((flags & (AGX_BO_LOW_VA | AGX_BO_EXEC | AGX_WIN32_BO_SHADOW)) ||
+      ((flags & (AGX_BO_EXEC | AGX_WIN32_BO_SHADOW)) ||
        b->EncoderAllocationIntent || b->NextVirtual)) return NULL;
+  /* GPU-produced USC is writable General storage, reserved in the USC VA
+   * window by LOW_VA below. Encoder/Shader class permissions stay unchanged. */
   /* C53 T2D: the image BO of a reserved texture under construction */
   if(b->NextVirtual) {
     b->NextVirtual=0;
