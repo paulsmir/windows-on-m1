@@ -5584,7 +5584,13 @@ AgxD3d10ResourceWithinRequiredLimits(
    }
    pMappedSubResource->pData=NULL;
    pMappedSubResource->RowPitch=pMappedSubResource->DepthPitch=0;
-   HRESULT status = DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE ? S_OK :
+   /* DISCARD reaches Asahi's transfer map with its discard flags: it can
+    * rename storage still read by the GPU, or synchronize that resource
+    * when renaming is unavailable. Draining the whole context here defeats
+    * renaming and also waits for unrelated draws. NOOVERWRITE keeps its
+    * existing application-owned hazard contract. */
+   HRESULT status = (DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE ||
+                     DDIMap == D3D10_DDI_MAP_WRITE_DISCARD) ? S_OK :
       (Flags & D3D10_DDI_MAP_FLAG_DONOTWAIT) ?
        AgxD3d10WindowsTryFlushRetire(device->windows) :
        AgxD3d10WindowsFlushRetire(device->windows);
