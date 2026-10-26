@@ -64048,3 +64048,13 @@ EXP1959 HARDWARE BEFORE 2026-10-26T07:09:12Z:
 - Recovery rec1959h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1959-cpu-pool-map/run1959.sh.
 
 EXP1959 ACTUAL (Claude headline 2026-10-26T07:13:04Z): package 30.0.1959.0 (846cca14 = EXP1958 + rc24 pool-stop fix + rc25), switches Wom1GpuFaultInfoRead=1 + Wom1PoolFraction=3, env APPLE_AGX_D3D12_CPU_POOL_MAP=1 in both arms. Relaunch: the first launch hit the verify-launch Mac-disk gate (4.4 GB free on /Volumes/pwdev; ETW files moved to /Volumes/SSD/agx-etw-archive); the second hit the prepare restage diff (fixed in prepare.sh: stage outputs excluded); resumed manually. Result: both arms fail at LOAD with D3D12 out of memory in Buffer::create (2k at 13.7 s, 10k at 36.2 s), then device removed; guest alive. Verdict: rc25 direct canonical CPU maps REJECTED as default policy. Persistently mapped CPU buffers stay locked in the finite 2016 MiB native pool and exhaust it. Production direction: put CPU-visible (UPLOAD/READBACK) resources in a separate GPU-visible system-memory segment backed on demand by contiguous guest RAM; m1n1 0d3a75b3 already accepts guest RAM outside the pool window (rc26). Next: Codex rc27 (high).
+
+EXP1960 HARDWARE BEFORE 2026-10-26T08:28:33Z:
+- Package 30.0.1960.0 = EXP1959 code + rc26 (opt-in broker probe, off) + rc27 (opt-in refusal, off) + rc29. CPU_POOL_MAP off (EXP1959 rejected it).
+- Switches Wom1GpuFaultInfoRead=1, Wom1PoolFraction=3.
+- WHY THIS HYPOTHESIS: rc29 audit: GravityMark genuinely requests about 2 GB (our rounding overhead is only about 7 MB). The remaining driver CPU duplicates (command-pool shadows, uncharged cache copies) are removed; the expected effect is small. This run measures the baseline for the next lever (guest RAM size, m1n1 rc30).
+- Metric: process private / available RAM (any refusal receipts), presents/min (EXP1958: 5.6/8.3), longest paging wait, no regression.
+- Recovery: rec1960h.
+- Hashes: sys 25dd0fb53a7d, UmdArm64 1864cca4ce5e, UmdX64 48d521c94909, Umd32 80f8271a7ae2; manifest 9a509de76b11, hardware-manifest bfd49afae1a8; probe1960.sh d34219c0d78d (PROBE_LINT_OK); visible recovery rec1960h 54a2c32d85d7b278; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
+- Recovery rec1960h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1960-footprint/run1960.sh.
