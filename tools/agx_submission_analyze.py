@@ -13,6 +13,8 @@ Old logs need explicit QPC frequency; new logs carry it. JSON summary on stdout.
 Execute CSV includes records after the final Present with an empty frame field.
 Joined receipts and valid timing are separate coverage measures: invalid scope
 flags never become exact timing merely because every Execute has a receipt.
+Observed Execute medians retain flagged raw samples, separately from the legacy
+valid frame medians; their coverage counts expose missing and top-N absent sites.
 """
 import argparse
 import collections
@@ -86,16 +88,22 @@ def wait_frame(pending, sites, tag='measure-d3d12-wait', prefix='wait'):
     for w in waits: frame['wait_flags'] |= w[3]
     for site in sorted(sites):
         us = count = 0
+        observed = False
         exact = complete
         for w in waits:
             entries = {w[i]: (w[i+1], w[i+2]) for i in range(4, 16, 3) if w[i]}
             if site in entries:
+                observed = True
                 count += entries[site][0]; us += entries[site][1]
             elif w[2] or w[3] & 4:
                 exact = False  # censored by this Execute's top-N limit
         frame[f'wait_{site}_ms'] = us/1000 if exact else None
         frame[f'wait_{site}_count'] = count if exact else None
         frame[f'wait_{site}_lower_ms'] = us/1000 if waits and not any(w[3] & 1 for w in waits) else None
+        # Preserve the receipt, even when its profile is invalid. These are
+        # raw observations, not validated timings or inferred absent zeroes.
+        frame[f'wait_{site}_observed_ms'] = us/1000 if observed else None
+        frame[f'wait_{site}_observed_count'] = count if observed else None
     query_complete = complete and {w[1] for w in queries} == {w[1] for w in waits}
     for i, phase in enumerate(['begin', 'end', 'resolve']):
         frame[f'query_{phase}_count'] = sum(w[2+i*2] for w in queries) if query_complete else None
@@ -233,7 +241,8 @@ def analyze(lines, qpc_hz=None, *, include_executes=False):
                         if payload is not None: owned.append((companion, payload))
                 pending.extend(owned[1:])
                 if pid in orphan_pids: owned.append(('wait-orphan', []))
-                execution = dict(pid=pid, serial=serial, frame=None, line=number, qpc=qpc,
+                execution = dict(pid=pid, serial=serial, frame=None, steady=frame_number > 1,
+                                 line=number, qpc=qpc,
                                  replay_ms=words[2]/1000 if len(words) >= 3 else None,
                                  submit_ms=words[3]/1000 if len(words) >= 4 else None)
                 execution.update(wait_frame(owned, wait_sites))
@@ -295,6 +304,7 @@ def analyze(lines, qpc_hz=None, *, include_executes=False):
                    coverage='Observed records only; tail in-flight jobs require a later drain. Loss counts are adapter-wide. No total GPU-busy claim.',
                    median_frame_ms=statistics.median(f['wall_ms'] for f in frames[1:]) if len(frames)>1 else None)
     steady = [f for f in frames if f['frame'] > 1]
+    steady_executes = [e for e in executes if e['steady']]
     def median(values):
         values = [v for v in values if v is not None]
         return statistics.median(values) if values else None
@@ -311,28 +321,55 @@ def analyze(lines, qpc_hz=None, *, include_executes=False):
                    wait_censored_executes=sum(bool(e['wait_flags'] & 4 or e['wait_omitted_ms']) for e in profiled),
                    wait_unpresented_executes=sum(e['frame'] is None for e in profiled),
                    wait_duplicate_receipts=wait_duplicates)
+    steady_profiled = [e for e in steady_executes if e['wait_profiled_executes']]
+    steady_invalid = sum(bool(e['wait_flags'] & 3) for e in steady_profiled)
+    summary.update(wait_steady_executes=len(steady_executes),
+                   wait_steady_joined_executes=len(steady_profiled),
+                   wait_steady_missing_executes=len(steady_executes)-len(steady_profiled),
+                   wait_steady_valid_executes=len(steady_profiled)-steady_invalid,
+                   wait_steady_invalid_executes=steady_invalid,
+                   wait_steady_censored_executes=sum(bool(e['wait_flags'] & 4 or e['wait_omitted_ms']) for e in steady_profiled),
+                   wait_steady_unpresented_executes=sum(e['frame'] is None for e in steady_executes))
     if include_executes: summary['execute_rows'] = executes
-    summary['wait_site_medians'] = {
-        str(site): dict(name=wait_name(site),
-            median_ms=median(f[f'wait_{site}_ms'] for f in steady),
-            median_lower_ms=median(f[f'wait_{site}_lower_ms'] for f in steady),
-            median_count=median(f[f'wait_{site}_count'] for f in steady),
-            exact_frames=sum(f[f'wait_{site}_ms'] is not None for f in steady),
-            observed_frames=sum(f[f'wait_{site}_lower_ms'] is not None for f in steady))
-        for site in sorted(wait_sites)}
-    summary['wait_path_medians'] = {
-        str(site): dict(name=wait_name(site),
-            median_ms=median(f[f'wait_path_{site}_ms'] for f in steady),
-            median_lower_ms=median(f[f'wait_path_{site}_lower_ms'] for f in steady),
-            median_count=median(f[f'wait_path_{site}_count'] for f in steady),
-            exact_frames=sum(f[f'wait_path_{site}_ms'] is not None for f in steady),
-            observed_frames=sum(f[f'wait_path_{site}_lower_ms'] is not None for f in steady))
-        for site in sorted(path_sites)}
+    def site_medians(sites, prefix):
+        result = {}
+        joined = [e for e in steady_executes if e[f'{prefix}_profiled_executes']]
+        for site in sorted(sites):
+            key = f'{prefix}_{site}'
+            observed = [e for e in joined if e[f'{key}_observed_ms'] is not None]
+            absent = [e for e in joined if e[f'{key}_observed_ms'] is None]
+            result[str(site)] = dict(name=wait_name(site),
+                # These legacy fields remain per-frame, with the same validity
+                # gates. The observed_* fields below are explicitly per-Execute.
+                median_ms=median(f[f'{key}_ms'] for f in steady),
+                median_lower_ms=median(f[f'{key}_lower_ms'] for f in steady),
+                median_count=median(f[f'{key}_count'] for f in steady),
+                exact_frames=sum(f[f'{key}_ms'] is not None for f in steady),
+                observed_frames=sum(f[f'{key}_lower_ms'] is not None for f in steady),
+                observed_execute_median_ms=median(e[f'{key}_observed_ms'] for e in observed),
+                observed_execute_median_count=median(e[f'{key}_observed_count'] for e in observed),
+                steady_executes=len(steady_executes), observed_executes=len(observed),
+                observed_valid_executes=sum(not (e[f'{prefix}_flags'] & 3) for e in observed),
+                observed_invalid_executes=sum(bool(e[f'{prefix}_flags'] & 1) for e in observed),
+                observed_saturated_executes=sum(bool(e[f'{prefix}_flags'] & 2) for e in observed),
+                observed_censored_executes=sum(bool(e[f'{prefix}_flags'] & 4 or e[f'{prefix}_omitted_ms']) for e in observed),
+                exact_executes=sum(e[f'{key}_ms'] is not None for e in steady_executes),
+                absent_executes=len(absent),
+                censored_absent_executes=sum(bool(e[f'{prefix}_flags'] & 4 or e[f'{prefix}_omitted_ms']) for e in absent),
+                missing_executes=len(steady_executes)-len(joined))
+        return result
+    summary['wait_site_medians'] = site_medians(wait_sites, 'wait')
+    summary['wait_path_medians'] = site_medians(path_sites, 'wait_path')
     summary['query_median_ms'] = {phase: median(f[f'query_{phase}_ms'] for f in steady)
                                   for phase in ['begin', 'end', 'resolve']}
     summary['wait_coverage'] = ('Exclusive CPU wall time in instrumented scopes; includes callback CPU work. '
         'Per-site lower bounds when top-N omits entries; null means missing or censored. Orphan companions make their process coverage incomplete. '
-        'Medians exclude the first partial frame of EACH process. Query and wait-path timings are inclusive; do not sum them with waits or with each other. '
+        'Legacy median_ms/median_count/median_lower_ms and *_frames fields use frame aggregates and exclude the first partial frame of EACH process. '
+        'observed_execute_median_* fields use raw entries from ALL Executes after each process first Present, including unpresented tails. '
+        'They are not exact times or lower bounds: invalid and saturated entries are retained, while absent/missing sites are excluded, never zero-filled. '
+        'Observed medians are conditional on a site appearing in the top-N receipt; observed/absent/missing counts partition steady_executes. '
+        'Per-site invalid/saturated/censored counts overlap; observed_valid excludes flags 1/2. Processes with no Present have no known steady Executes. '
+        'Query and wait-path timings are inclusive; do not sum them with waits or with each other. '
         'Companions join by PID/Execute serial, not arrival frame. Execute counts include the first frame and records after the last Present; '
         'unpresented records have no frame or inferred frame duration. Joined counts measure receipt coverage, valid counts exclude flag 1/2; '
         'censored counts overlap both valid and invalid counts. A joined frame need not have valid timing.')
