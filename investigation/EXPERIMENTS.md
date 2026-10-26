@@ -64428,3 +64428,21 @@ EXP1977 HARDWARE ACTUAL 2026-10-26T20:25:52Z: PASS. HD 1280x720, CPU_POOL_MAP=0,
 - Both arms loaded and finished with WER 0 and the guest alive. This is the first run of the 200k scene, and the first time a second process in the same boot loaded.
 - rc53 verdict: VALIDATED (neutral-memory admission). rc51 idle reclaim was present.
 - Recovery rec1977h (running).
+
+EXP1978 HARDWARE BEFORE 2026-10-26T20:36:19Z:
+- Package 30.0.1978.0 = EXP1977 driver + rc54:
+  - 14c493f6 terminal CPU paging faults are reported as DMA_PAGE_FAULTED and retire the matching active fence;
+  - d983f609 indexed ExecuteIndirect honours a nonzero index-buffer-view offset (it was E_NOTIMPL reason 8);
+  - plus rc52 (ring allocator, not wired) and rc55 (RC44 shader uses SampleLevel).
+  Probe e1978 arm64 sha256 b69d2ee8fa2ac22a.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1.
+- WHY THIS HYPOTHESIS: EXP1976 RC43 probes failed at recording with E_NOTIMPL reason 8 (the probe binds its IB at an offset), so the stream itself was never exercised; the RC44 probe did not compile. rc54 removes the recording rejection. If GravityMark binds offset index-buffer views, the default path may also change, so the image is re-checked. EXP1976 GravityMark with the stream ended in a firmware Timeout (fence 0x2b73, no valid fault) and then 0x119 P1=2 STATUS_INVALID_PARAMETER; this run re-tests it after the RC43 probes.
+- Expected:
+  - RC43 steps record, then pass or fail on pixels or counts (a real stream verdict);
+  - RC44D/RC44I give a pixel verdict;
+  - arm a finishes with a score at or above EXP1973 (1275; macOS FHD 100k about 7,700);
+  - arm b either passes with render_fence near zero or reproduces the timeout; a bugcheck there would still be the known remaining gap.
+- Recovery: rec1978h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest is down).
+- Hashes: sys b2e060afa469, UmdArm64 d1133705d950, UmdX64 c58a3e8255fa, Umd32 7592f8b846b5; manifest 4b369e7c4dc5, hardware-manifest 79ebf63c2d83; probe1978.sh ebdb4ce21858 (PROBE_LINT_OK); visible recovery rec1978h 19444be05b445ff9; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1978h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1978-probes-ibv/run1978.sh.
