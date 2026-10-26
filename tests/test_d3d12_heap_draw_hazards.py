@@ -15,7 +15,7 @@ from test_d3d10_shader_fields_init import project
 
 DRAW = r'''
 using LONGLONG=long long;
-struct pipe_draw_info {unsigned instance_count;};
+struct pipe_draw_info {unsigned instance_count,mode;};
 struct pipe_draw_start_count_bias {unsigned count;};
 struct pipe_draw_indirect_info {bool count_from_stream_output;unsigned draw_count,indirect_draw_count_offset;void *indirect_draw_count;};
 #define MESA_PRIM_PATCHES 14
@@ -44,6 +44,8 @@ static void agx_legalize_xfb(agx_context *c){
   agx_flush_batch_for_reason(c,&batches[current],"simulated XFB readers");
  agx_legalize_feedback_loops(c);
 }
+static void perf_debug_ctx(agx_context *,const char *){}
+static void agx_win32_draw_indirect_count(agx_context *,const pipe_draw_info *,unsigned,const pipe_draw_indirect_info *,const pipe_draw_start_count_bias *){assert(false);}
 static void agx_draw_vbo_windows_body(pipe_context *,const pipe_draw_info *,unsigned,const pipe_draw_indirect_info *,const pipe_draw_start_count_bias *,unsigned);
 @@WRAPPER@@
 static void agx_legalize_feedback_loops(agx_context *c){
@@ -53,7 +55,7 @@ static void agx_legalize_feedback_loops(agx_context *c){
  if(mode==0 || mode==1 || mode==2 || mode==7){
   legalizing=true;
   if(mode==1){
-   pipe_draw_info info={1};pipe_draw_start_count_bias range={3};
+   pipe_draw_info info={1,0};pipe_draw_start_count_bias range={3};
    agx_draw_vbo(&c->base,&info,0,nullptr,&range,1);
   }
   agx_flush_batch_for_reason(c,&batches[current],"simulated hazard");
@@ -95,7 +97,7 @@ int main(int argc,char **argv){
  for(unsigned s=0;s<2;++s){auto &h=owner.PendingHeaps[s];h.Heap=&rb[s];h.Textures=&rb[s];h.TextureCount=1;h.Writes=&rb[s];h.WriteCount=1;h.Samplers=samplers;h.SamplerCount=3;}
  if(mode==2)fail_alloc=1;
  if(mode==3)condition=false;
- pipe_draw_info info={1};pipe_draw_start_count_bias range={mode==4?0u:3u};
+ pipe_draw_info info={1,0};pipe_draw_start_count_bias range={mode==4?0u:3u};
  HRESULT hr;
  if(mode==5){agx_draw_vbo(&ctx.base,&info,0,nullptr,&range,1);hr=S_OK;}
  else hr=owner_draw(&owner,info,range);
@@ -153,7 +155,7 @@ class HeapDrawHazards(unittest.TestCase):
         header=header.replace('bool any_faults;','bool any_faults;struct agx_batch *batch;int (*windows_draw_bindings)(void *);void *windows_draw_bindings_data;')
         prelude=PROGRAM[:PROGRAM.index('int main(')].replace('@@OWNER@@',function(owner,'static HRESULT bind_heap_samplers(')+function(owner,'static HRESULT bind_heaps('))
         native=function(scene,'static unsigned heap_sampler_headroom(')+body(scene,'AgxWin32AsahiBatchSamplerHandles')
-        draw=DRAW.replace('@@COUNT_HELPER@@',function(owner,'static HRESULT resolve_draw_count(')).replace('@@WRAPPER@@',wrapper).replace('@@CALLBACK@@',callback).replace('@@SETTER@@',setter).replace('@@CALLSITE@@',owner[start:end]).replace('@@BODY_PREPARE@@',preparation)
+        draw=DRAW.replace('@@COUNT_HELPER@@','').replace('@@WRAPPER@@',wrapper).replace('@@CALLBACK@@',callback).replace('@@SETTER@@',setter).replace('@@CALLSITE@@',owner[start:end]).replace('@@BODY_PREPARE@@',preparation)
         with tempfile.TemporaryDirectory(prefix='heap-draw-hazards-') as directory:
             p=Path(directory)
             (p/'fixture.h').write_text(header)

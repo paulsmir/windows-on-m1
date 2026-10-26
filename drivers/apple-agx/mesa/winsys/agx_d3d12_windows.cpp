@@ -3591,23 +3591,6 @@ static unsigned no_attachment_extent(float origin, float size) {
   return edge >= 16384.0f ? 16384u : edge >= 1.0f ? static_cast<unsigned>(edge) : 1u;
 }
 
-/* Asahi's counted multi-draw fallback maps both buffers and replays CPU
- * draws. Resolve only the count here, then use its ordinary native indirect
- * unroll so the argument records stay on the GPU. The synchronized map must
- * precede frontend heap callbacks: it can flush or use the internal blitter.
- * The caller has validated the argument stream and optional count resource. */
-static HRESULT resolve_draw_count(AGX_D3D12_OWNER *owner, const AGX_D3D12_INDIRECT *in,
-                                  struct pipe_draw_indirect_info *indirect) {
-  if (!in->CountBuffer) return S_OK;
-  UINT count = 0;
-  const HRESULT hr = AgxD3d12OwnerReadBuffer(owner, in->CountBuffer, in->CountOffset, sizeof(count), &count);
-  if (FAILED(hr)) return hr;
-  indirect->draw_count = count < in->MaxCount ? count : in->MaxCount;
-  indirect->indirect_draw_count = NULL;
-  indirect->indirect_draw_count_offset = 0;
-  return S_OK;
-}
-
 extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *draw) {
   OwnerLock lock(owner);
   const LONGLONG entered = qpc_now();
@@ -3844,10 +3827,14 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   const AGX_D3D12_INDIRECT *in = &draw->Indirect;
   if (in->Buffer) {
     const unsigned args = draw->IndexSize ? 20u : 16u;
-    const bool bad = !in->Buffer->Resource || !in->MaxCount || in->Stride < args || in->Buffer->Bytes > 0xffffffffull ||
-                     in->Offset + static_cast<unsigned long long>(in->Stride) * (in->MaxCount - 1u) + args > in->Buffer->Bytes ||
+    const bool bad = !in->Buffer->Resource || !in->MaxCount || in->Stride < args || (in->Stride & 3u) ||
+                     (in->Offset & 3u) || in->Buffer->Bytes > 0xffffffffull ||
+                     in->Offset > in->Buffer->Bytes || args > in->Buffer->Bytes - in->Offset ||
+                     in->MaxCount - 1u > (in->Buffer->Bytes - in->Offset - args) / in->Stride ||
                      (draw->IndexSize && draw->IndexOffset) ||
-                     (in->CountBuffer && (!in->CountBuffer->Resource || in->CountOffset + 4u > in->CountBuffer->Bytes));
+                     (in->CountBuffer && (!in->CountBuffer->Resource || (in->CountOffset & 3u) ||
+                      in->CountBuffer->Bytes > 0xffffffffull || in->CountOffset > in->CountBuffer->Bytes ||
+                      4u > in->CountBuffer->Bytes - in->CountOffset));
     if (bad) {
       unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
       unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
@@ -3898,10 +3885,8 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
    * including each recursive native draw which may select another batch. */
   AgxD3d12DrawHeapBindings heap_bindings = {owner, S_OK};
   const LONGLONG bound = qpc_now();
-  /* Keep the count wait in TimeDrawVbo for comparison with the old fallback.
-   * Indexed tessellation still needs Asahi's CPU argument lowering. */
-  if (SUCCEEDED(hr) && in->Buffer && mode != MESA_PRIM_PATCHES)
-    hr = resolve_draw_count(owner, in, &indirect);
+  /* The native wrapper predicates GPU counts before entering a render batch.
+   * Patch topology retains the native CPU fallback and its failure handling. */
   AgxWin32AsahiSetDrawBindings(pipe, bind_draw_heaps, &heap_bindings);
   if (!in->Buffer || indirect.draw_count) {
     if (SUCCEEDED(hr)) pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
@@ -3932,6 +3917,16 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
   release_optional_stages(pipe, stages, false);
   if (FAILED(hr)) return hr;
+  if (in->Buffer && in->CountBuffer) {
+    /* Per successful call, independent of the capped perf-reason table:
+     * path (1 GPU predicate, 2 CPU fallback), MaxCount, total call us. */
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    const UINT path = mode == MESA_PRIM_PATCHES ? 2u : 1u;
+#else
+    const UINT path = 2u;
+#endif
+    receipt("measure-d3d12-counted-path", S_OK, path, in->MaxCount, qpc_us(drawn - bound));
+  }
   ++owner->PendingDraws;
   owner->TimeBind += bound - entered;
   owner->TimeDrawVbo += drawn - bound;

@@ -6792,6 +6792,36 @@ agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image_view
             blit_module = importlib.util.module_from_spec(blit_spec)
             blit_spec.loader.exec_module(blit_module)
             blit_module.project_sources(out, args.project, overlays)
+            if args.gpuva:
+                # Count lowering must precede graphics batch entry: it may
+                # submit the app's producers before recursively binding heaps.
+                path = 'src/gallium/drivers/asahi/agx_state.c'
+                text = (out/path).read_text()
+                signature = '''static void
+agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
+             unsigned drawid_offset,
+             const struct pipe_draw_indirect_info *indirect,
+             const struct pipe_draw_start_count_bias *draws, unsigned num_draws)
+{'''
+                if text.count(signature) != 1:
+                    raise SystemExit('Ambiguous counted draw wrapper')
+                text = text.replace(signature,
+                    '#include "agx_win32_counted_indirect.h"\n\n' + signature, 1)
+                anchor = '   /* EXP1189: as upstream, legalize feedback loops'
+                if text.count(anchor) != 1:
+                    raise SystemExit('Ambiguous counted draw entry')
+                text = text.replace(anchor, '''   if (indirect && indirect->indirect_draw_count) {
+      if (info->mode != MESA_PRIM_PATCHES) {
+         agx_win32_draw_indirect_count(ctx, info, drawid_offset, indirect, draws);
+         return;
+      }
+      perf_debug_ctx(ctx, "CPU counted indirect: patches");
+   }
+''' + anchor, 1)
+                (out/path).write_text(text)
+                overlays.setdefault(path, {})['after_count_predicate'] = (
+                    hashlib.sha256(text.encode()).hexdigest())
+
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
                 path = out/key
