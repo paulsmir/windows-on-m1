@@ -64144,3 +64144,10 @@ EXP1965 HARDWARE BEFORE 2026-10-26T11:26:11Z:
 - Hashes: sys 2d5697065e1f, UmdArm64 efd89d88d939, UmdX64 14d31ad98155, Umd32 012ca3da2ab2; manifest 4a3d5dd0cc03, hardware-manifest cc6ee8818444; probe1965.sh b28f5ef1d76a (PROBE_LINT_OK); visible recovery rec1965h 70ebbd6adaeae9fd; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1965h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1965-gpu-vdm-stream/run1965.sh.
+
+EXP1965 HARDWARE ACTUAL 2026-10-26T11:39:25Z:
+- REJECTED as a performance candidate: the rc33 stream path never engaged.
+- 2k: Score 300 / 1.8 FPS (EXP1963: 784 / 4.7; EXP1964: 315 / 1.9). All 2092 measure-d3d12-counted-path rows show path=1 (rc32 predicate), MaxCount 0x960, reason=3: agx_win32_indirect_stream_emit.h:20-29 rejects the stream while a pipeline-statistics query is active. GravityMark creates three PIPELINE_STATISTICS query heaps (measure-d3d12-query-heap type 2, count 0x400). Per-call CPU time is again 13-160 ms.
+- 10k: the guest went down. Bugcheck 0x116 (P1 ffffd98ea01272e0, P2 fffff802e3b71ec0 AppleAgxRenderAdmission.sys+0x1ec0, P3 c0000483, P4 3); minidump rec1965h/102626-16968-01.dmp. The KMD fault receipt shows FAULT_INFO 0x11ac9a001303cc11, the same unmapped CDM read at 0x11ac9a0000 as EXP1964: a deterministic fault on the rc32 path at MaxCount 12000.
+- Recovery rec1965h (AGX_RECOVERY_ALLOW_AT_PROXY=1): RECOVERY_DONE.
+- Next: rc36 (Codex xhigh). Fall back to rc31 instead of the rc32 MaxCount unroll; maintain pipeline-statistics counters on the GPU stream path; root-cause the 0x11ac9a0000 fault.
