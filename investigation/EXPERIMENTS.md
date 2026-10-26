@@ -64342,3 +64342,17 @@ EXP1973 HARDWARE ACTUAL 2026-10-26T18:27:50Z: PARTIAL PASS. This is the first tr
 - rc47 verdict: VALIDATED; readiness proof cost removed in steady state (about 140 ms -> ~0).
 - Next: EXP1974 with canonical CPU maps (one copy: removes the copy escapes and the duplicate staging memory). Codex rc49 investigates the user-reported taskbar flicker during runs.
 - Recovery rec1973h (running).
+
+EXP1974 HARDWARE BEFORE 2026-10-26T18:33:59Z:
+- Package 30.0.1974.0 = EXP1973 driver + rc48 (3db5b6a5 failed reservations return their new slabs; e0d0abbe serial restore regressions). The only intended runtime variable versus EXP1973 is APPLE_AGX_D3D12_CPU_POOL_MAP unset (rc45 default) instead of 0.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (pool 3136 MiB).
+- WHY THIS HYPOTHESIS: EXP1973 arm a (FHD 100k, 1275 / 7.6 FPS, frame 114.7 ms) spent 58 ms per frame in copy escapes (164 in draws plus 144 in query resolves) through the private staging path. rc46 found the 200k scene needs canonical plus private staging copies (process commit 4.1 GB, 714 MB of staging) and hit the HighMemory veto. EXP1973 arm b (FHD 50k, run second) failed at load with OOM. One unified copy should remove both the copy time and the duplicate memory, like macOS.
+- Expected:
+  - arm a: copy_escape near zero, a frame well below 114.7 ms, a score above 1275 (macOS FHD 100k is about 7,700);
+  - arm b: loads and finishes (macOS FHD 200k is about 5,500);
+  - correct images and no faults.
+- Failure criteria: a LeafAbsent/native proof refusal (as in EXP1971 arm b), device removal, an OOM at load, any fault, or a regression.
+- Recovery: rec1974h.
+- Hashes: sys ed048ea964d5, UmdArm64 cab3c40a1ea7, UmdX64 7d56f9f44898, Umd32 04c1a5224650; manifest c631241ad741, hardware-manifest 20b67ddec504; probe1974.sh c1e073105cad (PROBE_LINT_OK); visible recovery rec1974h 173be508ce2a9fbb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1974h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1974-unified-copy/run1974.sh.
