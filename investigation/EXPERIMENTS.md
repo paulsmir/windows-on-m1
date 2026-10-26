@@ -64356,3 +64356,11 @@ EXP1974 HARDWARE BEFORE 2026-10-26T18:33:59Z:
 - Hashes: sys ed048ea964d5, UmdArm64 cab3c40a1ea7, UmdX64 7d56f9f44898, Umd32 04c1a5224650; manifest c631241ad741, hardware-manifest 20b67ddec504; probe1974.sh c1e073105cad (PROBE_LINT_OK); visible recovery rec1974h 173be508ce2a9fbb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1974h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1974-unified-copy/run1974.sh.
+
+EXP1974 HARDWARE ACTUAL 2026-10-26T18:59:34Z: FAIL. Canonical CPU maps on (CPU_POOL_MAP unset), FHD 1920x1080.
+- Arm a (100k): device removed at 64.6 s, after load. gm1974a-umd.log:21759 has reject-native-allocation 0x8007000e (handle 0x40003380, VA 0x11873a0000, 0x08000000 = 128 MiB, write=1, reason 3), then reject-batch x2, measure-d3d12-first-fault, device removed.
+- Arm b (200k): got past "Creating 200,000 Asteroids" with no load OOM (EXP1971 with private staging went OOM), then the same refusal (handle 0x400035c0, 128 MiB, reason 3), and device removed at 43.8 s.
+- Guest alive in both arms; no bugcheck.
+- Verdict: canonical CPU maps as the default are REJECTED until the missing-native-leaf refusal is fixed (Codex rc50). The single copy looks like it fits the 200k scene.
+- rc45 be8ed552 (default on) stays in the source, but runs use CPU_POOL_MAP=0 until rc50 lands.
+- Recovery rec1974h (running).
