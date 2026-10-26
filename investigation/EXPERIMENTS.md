@@ -64235,3 +64235,13 @@ EXP1969 HARDWARE BEFORE 2026-10-26T14:55:45Z:
 - Hashes: sys 4992bf428496, UmdArm64 9955a7e5e8bf, UmdX64 39c074b1be43, Umd32 ca556073f283; manifest e57465829cfc, hardware-manifest b0e9d784e526; probe1969.sh e40e535acde5 (PROBE_LINT_OK); visible recovery rec1969h fdc717b3208806cc; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1969h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1969-no-wait/run1969.sh.
+
+EXP1969 HARDWARE ACTUAL 2026-10-26T15:30:35Z:
+- Arm a (2k, rc40 GPU-timeline queries, default counted path, shader capture): PASS for stability, NO GAIN. Score 748 / 4.5 FPS; median frame (after 20) 0.186 s. The analyzer medians match EXP1968: wall 186.2 ms, query 60.8 ms for 9 commands, draw 118.1 ms, GPU busy 9.4 ms, outstanding 43.6 ms. rc40's removed waits were not the cost in the query bucket; rc42 adds a per-site CPU wait profiler.
+- Arm b (2k, same package plus APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1): FAIL during loading, before any counted draw (crash-b/gm1969b-umd.log has no counted-path rows). Bugcheck 0x119 P1=2 (submission failure), P2=ffffffff80000011 (STATUS_DEVICE_BUSY), P3=fffff60455b04a50, P4=ffff8c0d2f093170; minidump evidence/crash-b/102626-13906-01.dmp. Root cause goes to rc43.
+- Shader capture: 103 files under evidence/shader-capture (agx-capture-1969.zip) for the white-asteroid analysis.
+- Recovery rec1969h needed three attempts:
+  - attempt 1: NORMAL_SSH_NOT_UP, because the cleanup had deleted EXP931-ntfs-system-log-recovery (the normal launcher's verify-launch.py); restored from the builder;
+  - attempt 2: the visible-disable receipt already existed; renamed it on the guest;
+  - attempt 3: RECOVERY_DONE.
+  The cleanup had also deleted the EXP641 air_known_hosts and the EXP-20260903-385 emergency firmware; both are restored and hash-verified.
