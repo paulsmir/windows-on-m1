@@ -64450,3 +64450,10 @@ EXP1978 HARDWARE BEFORE 2026-10-26T20:36:19Z:
 EXP1978 PROBE RESULTS 2026-10-26T20:40:58Z (GravityMark arms still running):
 - RC44D and RC44I PASS (bad=0; 16 pixels in each of 2 cases, direct and counted-indirect). Texture-array material selection through per-instance data and nonzero start instances renders correctly, so the white-asteroid symptom is not this path.
 - RC43I16Z/O/N and RC43I32Z/O/N PASS, with the _COUNT checks PASS, and APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1. All 6 measure-d3d12-counted-path rows are path=3 reason 0. **This is the first hardware PASS of the GPU-generated VDM stream** (counts 0/1/2, 16/32-bit indices, an ordinary follow-up draw). rc54 d983f609 (IB view offset) unblocked recording.
+
+EXP1978 HARDWARE ACTUAL 2026-10-26T21:13:46Z:
+- Probes: PASS (see the probe-results entry). RC43 stream x6 with path=3; RC44D/RC44I with bad=0.
+- Arm a (FHD 100k, default path): 1275 / 7.6 FPS, equal to EXP1973; rc54 does not change the default-path score.
+- Arm b (HD 50k, GPU stream on): the guest went down at about 16 s, during loading, before any measure-d3d12-counted-path row. Bugcheck **0x119 P1=2 P2=ffffffffc000000d (STATUS_INVALID_PARAMETER)** P3=fffffe83bbefba50 P4=ffffa90f4ddd8c00; minidump rec1978h/102626-16953-01.dmp; app logs in rec1978h/app-logs. This matches EXP1976. The stream passes the small probes (MaxCount 2, no statistics query) but GravityMark's first stream use (MaxCount 2400 with a pipeline-statistics query active) is rejected by the KMD submit path, and the rejection is still fatal (rc54: parser errors map to INVALID_PARAMETER at gpuva_g3_windows.c ~4857).
+- Recovery rec1978h (AGX_RECOVERY_ALLOW_AT_PROXY=1): RECOVERY_DONE.
+- Next: Codex rc57 (parser rejection of large or statistics streams, plus containment); EXP1979 = rc56 native staging (copy escapes).
