@@ -937,6 +937,39 @@ static void wrap_slot_minmax(struct nir_shader *nir, mesa_shader_stage stage) {
   }
   if (row >= 0) (void)dxbc_minmax_wrap_slots(nir, t_slot_minmax[row]);
 }
+/* APPLE_AGX_D3D12_SHADER_DUMP_DIR retains failure captures (reason 1..4).
+ * RC39: also set APPLE_AGX_D3D12_SHADER_DUMP_ALL=1 to capture every translation
+ * input (reason 0), including accepted VS/PS/CS programs for wrong-image
+ * diagnosis. These are DXBC token streams or DXIL program parts, NOT DXBC
+ * containers. CREATE_NEW deduplicates <fnv64>-s<stage>-r<reason>.bin files;
+ * use a fresh existing directory per run. No shader or rendering state changes. */
+static void dump_shader_input(const UINT *tokens, mesa_shader_stage stage, UINT reason) {
+  char dir[MAX_PATH];
+  const DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D12_SHADER_DUMP_DIR", dir, sizeof(dir));
+  if (!tokens || length == 0 || length >= sizeof(dir) - 48 || tokens[1] < 2 || tokens[1] >= 0x4000000u) return;
+  if (!reason) {
+    char all[2] = {};
+    if (GetEnvironmentVariableA("APPLE_AGX_D3D12_SHADER_DUMP_ALL", all, sizeof(all)) != 1 || all[0] != '1') return;
+  }
+  const size_t bytes = static_cast<size_t>(tokens[1]) * 4u;
+  unsigned long long hash = 0xcbf29ce484222325ull;
+  for (size_t i = 0; i < bytes; ++i) hash = (hash ^ reinterpret_cast<const unsigned char *>(tokens)[i]) * 0x100000001b3ull;
+  char path[MAX_PATH];
+  wsprintfA(path, "%s\\%08x%08x-s%u-r%u.bin", dir, static_cast<UINT>(hash >> 32), static_cast<UINT>(hash),
+            static_cast<UINT>(stage), reason);
+  HANDLE file = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) return;
+  DWORD written = 0;
+  const bool complete = WriteFile(file, tokens, static_cast<DWORD>(bytes), &written, NULL) && written == bytes;
+  CloseHandle(file);
+  if (!complete) {
+    /* A short file must not block a subsequent CREATE_NEW retry. */
+    (void)DeleteFileA(path);
+    return;
+  }
+  receipt("measure-d3d12-shader-input", S_OK, static_cast<UINT>(stage), reason,
+          static_cast<UINT>(hash >> 32), static_cast<UINT>(hash), static_cast<UINT>(bytes));
+}
 /* C44: a stored shader is DXBC tokens or (SM 6) a DXIL program part with
  * the same version/size header; both translate to the same NIR conventions
  * and binding map. DXIL stream output is built on the translated NIR
@@ -947,6 +980,7 @@ static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage
                                            const nir_shader_compiler_options *options, struct dxbc_binding_map *bindings,
                                            uint32_t passthrough_registers, uint32_t passthrough_positions,
                                            const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error) {
+  dump_shader_input(tokens, stage, 0u);
 #ifdef APPLE_AGX_D3D12_DXIL
   if (tokens && tokens[1] >= 6 && tokens[1] < 0x4000000u &&
       agx_dxil_is_program(tokens, static_cast<size_t>(tokens[1]) * 4u)) {
@@ -2595,26 +2629,6 @@ static unsigned stencil_op(unsigned op) {
   default: return PIPE_STENCIL_OP_KEEP;
   }
 }
-/* EXP1878G: a real application's PSO failed with no receipt naming the
- * cause. APPLE_AGX_D3D12_SHADER_DUMP_DIR set: a shader whose translation or
- * slot gathering fails is written there as <fnv64>-s<stage>-r<reason>.bin
- * (the DXBC/DXIL container as the runtime passed it) for offline replay. */
-static void dump_failed_shader(const UINT *tokens, mesa_shader_stage stage, UINT reason) {
-  char dir[MAX_PATH];
-  const DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D12_SHADER_DUMP_DIR", dir, sizeof(dir));
-  if (!tokens || length == 0 || length >= sizeof(dir) - 48 || tokens[1] < 2 || tokens[1] >= 0x4000000u) return;
-  const size_t bytes = static_cast<size_t>(tokens[1]) * 4u;
-  unsigned long long hash = 0xcbf29ce484222325ull;
-  for (size_t i = 0; i < bytes; ++i) hash = (hash ^ reinterpret_cast<const unsigned char *>(tokens)[i]) * 0x100000001b3ull;
-  char path[MAX_PATH];
-  wsprintfA(path, "%s\\%08x%08x-s%u-r%u.bin", dir, static_cast<UINT>(hash >> 32), static_cast<UINT>(hash),
-            static_cast<UINT>(stage), reason);
-  HANDLE file = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-  if (file == INVALID_HANDLE_VALUE) return;
-  DWORD written = 0;
-  (void)WriteFile(file, tokens, static_cast<DWORD>(bytes), &written, NULL);
-  CloseHandle(file);
-}
 static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_shader_stage stage,
                            struct dxbc_binding_map *bindings, uint8_t dimensions[DXBC_RESOURCE_SLOTS],
                            uint8_t uav_dimensions[DXBC_UAV_DIMENSION_SLOTS], uint32_t passthrough_registers = 0,
@@ -2630,7 +2644,7 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   wrap_slot_minmax(nir, stage);
   receipt("measure-d3d12-graphics-shader", nir ? S_OK : E_NOTIMPL, static_cast<UINT>(stage), error.opcode, error.offset);
   if (!nir) {
-    dump_failed_shader(tokens, stage, 1u);
+    dump_shader_input(tokens, stage, 1u);
     return NULL;
   }
   /* EXP1878G: name the slot-gathering refusal (2 SRV, 3 UAV dimensions) */
@@ -2639,7 +2653,7 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   if (!srv_ok || !uav_ok) {
     const UINT reason = srv_ok ? 3u : 2u;
     receipt("measure-d3d12-graphics-shader-slots", E_NOTIMPL, static_cast<UINT>(stage), reason, 0u);
-    dump_failed_shader(tokens, stage, reason);
+    dump_shader_input(tokens, stage, reason);
     ralloc_free(nir);
     memset(bindings, 0, sizeof(*bindings));
     return NULL;
@@ -2691,7 +2705,7 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   void *cso = stage == MESA_SHADER_VERTEX ? pipe->create_vs_state(pipe, &state) : pipe->create_fs_state(pipe, &state);
   if (!cso) {
     receipt("measure-d3d12-graphics-shader-slots", E_NOTIMPL, static_cast<UINT>(stage), 4u, 0u);
-    dump_failed_shader(tokens, stage, 4u);
+    dump_shader_input(tokens, stage, 4u);
   }
   return cso;
 }
