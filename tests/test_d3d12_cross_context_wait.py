@@ -19,6 +19,7 @@ class CrossContextWait(unittest.TestCase):
 #include <cassert>
 #include <cstdint>
 #include <vector>
+#include <cstring>
 using UINT = unsigned; using UINT64 = uint64_t;
 using HANDLE = void *; using D3DKMT_HANDLE = unsigned; using HRESULT = int32_t;
 constexpr HRESULT S_OK=0, S_FALSE=1, E_FAIL=-1;
@@ -94,6 +95,7 @@ int main() {
 #include <cassert>
 #include <cstdint>
 #include <vector>
+#include <cstring>
 using HRESULT=int; using UINT=unsigned; using HANDLE=void*; using LONGLONG=long long;
 constexpr HRESULT S_OK=0,S_FALSE=1,E_FAIL=-1,E_INVALIDARG=-2,DXGI_ERROR_DEVICE_HUNG=-3;
 
@@ -110,6 +112,7 @@ struct AGX_D3D12_OWNER {
  bool DrawFramebufferValid; unsigned TimedDraws,SlowDraws;
  LONGLONG TimeBind,TimeDrawVbo,TimeUnbind,TimeDrawVboIndirect,MaxDrawVbo;
  unsigned long long ReportedFence,CompletionCursor;
+ LONGLONG DispatchTicks[4];unsigned TimedDispatches;
  void *Kernel,*RuntimeDevice;
  struct {unsigned RenderSyncObject;} Runtime;
 };

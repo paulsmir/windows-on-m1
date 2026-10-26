@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from test_d3d12_owner_allocation_failure import OWNER, PRELUDE, function
+from test_d3d12_owner_allocation_failure import OWNER, PRELUDE, function, dispatch_helpers
 
 class ComputeSamplerCache(unittest.TestCase):
     def test_dispatch_reuses_state_and_cleans_up(self):
@@ -17,7 +17,7 @@ class ComputeSamplerCache(unittest.TestCase):
         end=header.index('} AGX_D3D12_SAMPLER;')+len('} AGX_D3D12_SAMPLER;')
         sampler_type=header[header.rfind('typedef struct {',0,end):end]
         pre=PRELUDE.replace('struct AGX_D3D12_SAMPLER {unsigned Valid;};',sampler_type)
-        code=pre+function(source,'static void *compute_sampler(')+function(source,'static void release_compute_samplers(')+function(source,'extern "C" HRESULT AgxD3d12OwnerDispatch(')+r'''
+        code=pre+dispatch_helpers(source)+function(source,'extern "C" HRESULT AgxD3d12OwnerDispatch(')+r'''
 int main(){
  pipe_context pipe;AGX_D3D12_OWNER owner={&pipe,0};
  AGX_D3D12_COMPUTE compute={&pipe,{1,1,1},{},{}};
@@ -26,6 +26,8 @@ int main(){
  for(unsigned i=0;i<149;i++)
   assert(AgxD3d12OwnerDispatch(&owner,&compute,uavs,cbvs,srvs,samplers,1,1,1,nullptr)==S_OK);
  assert(attempts==2 && live==2 && encoded==149 && bound==298);
+ assert(owner.TimedDispatches==149);
+ for(unsigned i=0;i<4;i++) assert(owner.DispatchTicks[i]==149);
  samplers[0].Filter=2;
  assert(AgxD3d12OwnerDispatch(&owner,&compute,uavs,cbvs,srvs,samplers,1,1,1,nullptr)==S_OK);
  assert(attempts==3 && live==2);
@@ -47,7 +49,10 @@ int main(){
   assert(compute_sampler(&owner,0,&key));assert(attempts==before+1);
  }
  release_compute_samplers(&owner);assert(!live);
-
+ diagnostics_enabled=0;
+ unsigned timed=owner.TimedDispatches;LONGLONG ticks=clock_tick;
+ assert(AgxD3d12OwnerDispatch(&owner,&compute,uavs,cbvs,srvs,samplers,1,1,1,nullptr)==S_OK);
+ assert(owner.TimedDispatches==timed && clock_tick==ticks);
 }
 '''
         with tempfile.TemporaryDirectory() as td:

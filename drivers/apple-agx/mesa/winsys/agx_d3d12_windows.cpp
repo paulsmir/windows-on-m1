@@ -59,6 +59,8 @@ struct AGX_D3D12_OWNER {
   void *ErrorContext;
   UINT PendingCopies;
   UINT PendingDispatches;
+  LONGLONG DispatchTicks[4];
+  UINT TimedDispatches;
   /* Immutable CPU descriptors only. Bindings and batch handles are never cached. */
   AGX_D3D12_SAMPLER ComputeSamplerDesc[AGX_D3D12_SAMPLER_SLOTS];
   void *ComputeSamplers[AGX_D3D12_SAMPLER_SLOTS];
@@ -3506,6 +3508,39 @@ static void release_optional_stages(struct pipe_context *pipe, OptionalStage *st
   if (stages) HeapFree(GetProcessHeap(), 0, stages);
 }
 
+static LONGLONG qpc_now() {
+  LARGE_INTEGER t;
+  QueryPerformanceCounter(&t);
+  return t.QuadPart;
+}
+static UINT qpc_us(LONGLONG ticks) {
+  static LONGLONG frequency;
+  if (!frequency) {
+    LARGE_INTEGER f;
+    QueryPerformanceFrequency(&f);
+    frequency = f.QuadPart ? f.QuadPart : 1;
+  }
+  return static_cast<UINT>(ticks * 1000000 / frequency);
+}
+
+struct DispatchTiming {
+  enum Phase { Bind, Heap, Launch, Unbind };
+  AGX_D3D12_OWNER *Owner;
+  LONGLONG Last;
+  bool Enabled;
+  explicit DispatchTiming(AGX_D3D12_OWNER *owner) : Owner(owner), Last(0),
+      Enabled(AdmissionUmdDiagnosticEnabled() != FALSE) {
+    if (Enabled) { Last = qpc_now(); ++Owner->TimedDispatches; }
+  }
+  void Mark(Phase phase) {
+    if (!Enabled) return;
+    const LONGLONG now = qpc_now();
+    Owner->DispatchTicks[phase] += now - Last;
+    Last = now;
+  }
+  ~DispatchTiming() { Mark(Unbind); }
+};
+
 extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12_COMPUTE *compute,
                                          const AGX_D3D12_UAV uavs[AGX_D3D12_UAV_SLOTS],
                                          const AGX_D3D12_CBV cbvs[AGX_D3D12_CBV_SLOTS],
@@ -3522,6 +3557,7 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
                    indirect->Offset + static_cast<unsigned long long>(indirect->Stride) * (indirect->MaxCount - 1u) + 12u >
                        indirect->Buffer->Bytes))
     return E_INVALIDARG;
+  DispatchTiming timing(owner);
   struct pipe_context *pipe = owner->Context;
   /* Borrow immutable cached objects, but bind/unbind for every dispatch. */
   void *states[AGX_D3D12_SAMPLER_SLOTS] = {};
@@ -3542,6 +3578,7 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   if (SUCCEEDED(hr)) hr = bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count, compute->SrvDimensions, compute->UavDimensions);
   void *none[AGX_D3D12_SAMPLER_SLOTS] = {};
   if (FAILED(hr)) {
+    timing.Mark(DispatchTiming::Bind);
     unbind_stage(pipe, MESA_SHADER_COMPUTE, views, AGX_D3D12_SRV_SLOTS);
     return hr;
   }
@@ -3553,22 +3590,27 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   info.grid[0] = x;
   info.grid[1] = y;
   info.grid[2] = z;
+  timing.Mark(DispatchTiming::Bind);
   if (indirect) {
     info.indirect = static_cast<struct pipe_resource *>(indirect->Buffer->Resource);
     for (unsigned i = 0; i < indirect->MaxCount && !AgxWin32AsahiContextFaulted(pipe); ++i) {
       /* agx_launch_internal may flush a full CDM encoder after any record.
        * Rebuild batch-relative heap handles/references for the next record. */
       hr = bind_heaps(owner, true);
+      if (SUCCEEDED(hr)) validate_heap_refs(owner, true);
+      timing.Mark(DispatchTiming::Heap);
       if (FAILED(hr)) break;
-      validate_heap_refs(owner, true);
       info.indirect_offset = static_cast<unsigned>(indirect->Offset + static_cast<unsigned long long>(indirect->Stride) * i);
       pipe->launch_grid(pipe, &info);
+      timing.Mark(DispatchTiming::Launch);
     }
   } else {
     hr = bind_heaps(owner, true);
+    if (SUCCEEDED(hr)) validate_heap_refs(owner, true);
+    timing.Mark(DispatchTiming::Heap);
     if (SUCCEEDED(hr)) {
-      validate_heap_refs(owner, true);
       pipe->launch_grid(pipe, &info);
+      timing.Mark(DispatchTiming::Launch);
     }
   }
   unbind_heaps(owner, true);
@@ -3600,21 +3642,6 @@ static enum mesa_prim primitive(unsigned topology) {
   case 13: return MESA_PRIM_TRIANGLE_STRIP_ADJACENCY;
   default: return topology >= 33 && topology <= 64 ? MESA_PRIM_PATCHES /* C37: 1..32 control points */ : MESA_PRIM_COUNT;
   }
-}
-
-static LONGLONG qpc_now() {
-  LARGE_INTEGER t;
-  QueryPerformanceCounter(&t);
-  return t.QuadPart;
-}
-static UINT qpc_us(LONGLONG ticks) {
-  static LONGLONG frequency;
-  if (!frequency) {
-    LARGE_INTEGER f;
-    QueryPerformanceFrequency(&f);
-    frequency = f.QuadPart ? f.QuadPart : 1;
-  }
-  return static_cast<UINT>(ticks * 1000000 / frequency);
 }
 
 /* UAV-only rendering (EXP1889 C60A): with neither an RTV nor a DSV the pass
@@ -4010,6 +4037,11 @@ static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
                         qpc_us(flushed - flush_start), qpc_us(qpc_now() - flushed),
                         qpc_us(owner->TimeDrawVboIndirect), qpc_us(owner->MaxDrawVbo), owner->SlowDraws};
   AdmissionUmdDiagnostic("measure-d3d12-owner-time", S_OK, times, 9u);
+  const UINT dispatch[] = {owner->TimedDispatches, qpc_us(owner->DispatchTicks[0]),
+      qpc_us(owner->DispatchTicks[1]), qpc_us(owner->DispatchTicks[2]), qpc_us(owner->DispatchTicks[3])};
+  AdmissionUmdDiagnostic("measure-d3d12-dispatch-time", S_OK, dispatch, 5u);
+  memset(owner->DispatchTicks, 0, sizeof(owner->DispatchTicks));
+  owner->TimedDispatches = 0;
   const UINT fences[] = {static_cast<UINT>(fence - owner->ReportedFence), static_cast<UINT>(fence)};
   AdmissionUmdDiagnostic("measure-d3d12-owner-fences", S_OK, fences, 2u);
   owner->ReportedFence = fence;

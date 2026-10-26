@@ -26,7 +26,12 @@ PRELUDE = r'''
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-using HRESULT=int; using UINT=unsigned;
+using HRESULT=int; using UINT=unsigned;using LONGLONG=long long;
+#define FALSE 0
+static int diagnostics_enabled=1;
+static int AdmissionUmdDiagnosticEnabled(){return diagnostics_enabled;}
+static LONGLONG clock_tick;
+static LONGLONG qpc_now(){return ++clock_tick;}
 #define S_OK 0
 #define E_OUTOFMEMORY (-2)
 #define E_INVALIDARG (-3)
@@ -64,7 +69,7 @@ struct AGX_D3D12_SAMPLER {unsigned Valid;};
 struct AGX_D3D12_UAV {}; struct AGX_D3D12_CBV {};struct AGX_D3D12_SRV {};
 struct AGX_D3D12_COMPUTE {void *State;unsigned Block[3];uint8_t SrvDimensions[4],UavDimensions[4];};
 struct AGX_D3D12_INDIRECT {AGX_D3D12_BUFFER *Buffer,*CountBuffer;unsigned MaxCount,Stride;uint64_t Offset;};
-struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingDispatches;AGX_D3D12_SAMPLER ComputeSamplerDesc[4];void *ComputeSamplers[4];};
+struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingDispatches;AGX_D3D12_SAMPLER ComputeSamplerDesc[4];void *ComputeSamplers[4];LONGLONG DispatchTicks[4];unsigned TimedDispatches;};
 struct OwnerLock {OwnerLock(AGX_D3D12_OWNER *){}};
 static void *create_sampler(pipe_context *,const AGX_D3D12_SAMPLER *) {return allocate();}
 static int AgxWin32AsahiContextFaulted(pipe_context *) {return faulted;}
@@ -74,6 +79,12 @@ static HRESULT bind_heaps(AGX_D3D12_OWNER *,bool) {return faulted?DXGI_ERROR_DEV
 static void unbind_heaps(AGX_D3D12_OWNER *,bool) {}
 static void validate_heap_refs(AGX_D3D12_OWNER *,bool) {}
 '''
+
+
+def dispatch_helpers(text):
+    return (function(text,'static void *compute_sampler(')+
+            function(text,'static void release_compute_samplers(')+
+            function(text,'struct DispatchTiming {')+';\n')
 
 
 class OwnerAllocationFailure(unittest.TestCase):
@@ -88,7 +99,7 @@ class OwnerAllocationFailure(unittest.TestCase):
 
     def test_dispatch_kth_sampler_failure_never_launches(self):
         text=OWNER.read_text()
-        self.run_cpp(PRELUDE+function(text,'static void *compute_sampler(')+function(text,'static void release_compute_samplers(')+function(text,'extern "C" HRESULT AgxD3d12OwnerDispatch(')+r'''
+        self.run_cpp(PRELUDE+dispatch_helpers(text)+function(text,'extern "C" HRESULT AgxD3d12OwnerDispatch(')+r'''
 int main() {
  for(nth=0;nth<=5;++nth) {
   faulted=nth==5;

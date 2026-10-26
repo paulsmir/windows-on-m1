@@ -6591,6 +6591,20 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
     return hr;
 }
 #endif
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* Mutually exclusive replay wall-time buckets. Owner timers nest inside these. */
+static unsigned ReplayTimingBucket(UINT kind) {
+    switch (kind) {
+    case kCommandDraw: return 0;
+    case kCommandDispatch: return 1;
+    case kCommandCopy: case kCommandTextureCopy: case kCommandTextureRegionCopy:
+    case kCommandResolve: return 2;
+    case kCommandQuery: return 3;
+    case kCommandIndirectExpand: return 4;
+    default: return 5;
+    }
+}
+#endif
 static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
 #ifndef APPLE_AGX_D3D12_NATIVE_OWNER
     (void)queue;
@@ -6604,6 +6618,9 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&start);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    const bool measure = AdmissionUmdDiagnosticEnabled() != FALSE;
+    LONGLONG command_ticks[6] = {};
+    UINT command_counts[6] = {};
     AgxD3d12Device *device = nullptr;
     AgxD3d12DrawScratch *draw_scratch = nullptr; /* EXP1838: one per execution */
     AgxD3d12OwnerRefCommand(static_cast<AGX_D3D12_OWNER *>(queue->device->owner),0,0);
@@ -6616,6 +6633,8 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
         AgxD3d12OptionalBinds pending = {}; /* C27/C37 */
         for (UINT c = 0; SUCCEEDED(hr) && c < list->commands; ++c) {
             const AgxD3d12Command &command = list->command[c];
+            LARGE_INTEGER command_start = {};
+            if (measure) QueryPerformanceCounter(&command_start);
             device = list->device;
             auto *owner = static_cast<AGX_D3D12_OWNER *>(device->owner);
             AgxD3d12OwnerRefCommand(owner,i,c+1);
@@ -6699,6 +6718,12 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
             } else {
                 hr = ReplayDispatch(owner, command.dispatch);
             }
+            if (measure) {
+                LARGE_INTEGER command_end;
+                QueryPerformanceCounter(&command_end);
+                command_ticks[ReplayTimingBucket(command.kind)] += command_end.QuadPart - command_start.QuadPart;
+                ++command_counts[ReplayTimingBucket(command.kind)];
+            }
         }
 #endif
     }
@@ -6720,6 +6745,19 @@ static void ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12
                             static_cast<UINT>((submitted.QuadPart - replayed.QuadPart) * 1000000 / hz)};
     AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 4);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (measure) {
+        UINT phases[12];
+        for (unsigned bucket = 0; bucket < 6; ++bucket) {
+            phases[bucket] = static_cast<UINT>(command_ticks[bucket] * 1000000 / hz);
+            phases[6 + bucket] = command_counts[bucket];
+        }
+        AdmissionUmdDiagnostic("measure-d3d12-replay-time", hr, phases, 12);
+        const UINT window[] = {static_cast<UINT>(start.QuadPart), static_cast<UINT>(start.QuadPart >> 32),
+            static_cast<UINT>(replayed.QuadPart), static_cast<UINT>(replayed.QuadPart >> 32),
+            static_cast<UINT>(submitted.QuadPart), static_cast<UINT>(submitted.QuadPart >> 32),
+            static_cast<UINT>(hz), static_cast<UINT>(hz >> 32)};
+        AdmissionUmdDiagnostic("measure-d3d12-replay-window", hr, window, 8);
+    }
     if (g_heap_walk.walks) {
         const UINT walk[] = {g_heap_walk.walks, g_heap_walk.walked, g_heap_walk.packs,
                              static_cast<UINT>(g_heap_walk.ticks * 1000000 / hz)};

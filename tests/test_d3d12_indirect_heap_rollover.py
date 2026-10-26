@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from test_d3d12_owner_allocation_failure import PRELUDE, OWNER, function
+from test_d3d12_owner_allocation_failure import PRELUDE, OWNER, function, dispatch_helpers
 
 class IndirectHeapRollover(unittest.TestCase):
     def test_each_launch_rebinds_after_cdm_flush(self):
@@ -17,7 +17,7 @@ class IndirectHeapRollover(unittest.TestCase):
             'assert(heap_batch==batch);++encoded;++batch;if(launch_fault)faulted=true;')
         pre=pre.replace('return faulted?DXGI_ERROR_DEVICE_HUNG:S_OK;',
             'if(++binds==fail_bind)return E_OUTOFMEMORY;heap_batch=batch;return faulted?DXGI_ERROR_DEVICE_HUNG:S_OK;')
-        code=pre+function(OWNER.read_text(),'static void *compute_sampler(')+function(OWNER.read_text(),'extern "C" HRESULT AgxD3d12OwnerDispatch(')+r'''
+        code=pre+dispatch_helpers(OWNER.read_text())+function(OWNER.read_text(),'extern "C" HRESULT AgxD3d12OwnerDispatch(')+r'''
 int main(){
  for(fail_bind=0;fail_bind<4;++fail_bind){
   batch=1;heap_batch=binds=encoded=0;
