@@ -154,3 +154,15 @@ bool AppleAgxGpuvaV5ClientDetachMailbox(APPLE_AGX_GPUVA_V5_CLIENT *client)
     client->Mailbox = 0;
     return true;
 }
+
+bool AppleAgxGpuvaV5ClientHasSysmem(APPLE_AGX_GPUVA_V5_CLIENT *client)
+{
+    AGX_GPUVA_V5_REQUEST q = {0};
+    AGX_GPUVA_V5_RESPONSE r = {0};
+    if (!client || !client->Epoch) return false;
+    q.Command = AGX_GPUVA_V5_QUERY_CAPS;
+    return AppleAgxGpuvaV5ClientCall(client, &q, &r) &&
+           !r.Status && !r.Flags &&
+           r.Reserved[1] == AGX_GPUVA_V5_SYSMEM_ABI &&
+           (r.Reserved[0] & AGX_GPUVA_V5_CAP_SYSMEM) != 0;
+}

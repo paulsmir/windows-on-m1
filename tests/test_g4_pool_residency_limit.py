@@ -29,8 +29,9 @@ class PoolResidencyLimit(unittest.TestCase):
         """
         self.check_registry_reader('AdmissionPoolThreeQuarterEnabled', 'Wom1PoolFraction', 3)
 
-    def check_registry_reader(self, reader_name, value_name, enabled_value=1):
-        source = (RENDER / 'src/pool_windows.c').read_text()
+    def check_registry_reader(self, reader_name, value_name, enabled_value=1, source=None):
+        if source is None:
+            source = (RENDER / 'src/pool_windows.c').read_text()
         reader = function(source, reader_name)
         body = r'''
 #include <assert.h>

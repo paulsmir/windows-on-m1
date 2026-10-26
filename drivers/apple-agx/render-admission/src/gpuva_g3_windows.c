@@ -324,6 +324,32 @@ static VOID AdmissionG3DetachMailbox(ADMISSION_G3_STATE *state) {
   state->Mailbox = NULL;
 }
 
+/* RC26: explicit ABI probe request; default off. */
+static BOOLEAN AdmissionSysmemGpuMapRequested(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1SysmemGpuMap");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
 NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
   ADMISSION_G3_STATE *state;
   AGX_GPUVA_V5_REQUEST probe = {0};
@@ -348,6 +374,12 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
       response.Status != 2u || response.Epoch == 0ULL || response.Flags) {
     ExFreePoolWithTag(state, ADMISSION_POOL_TAG);
     return STATUS_DEVICE_HARDWARE_ERROR;
+  }
+  /* RC26 is an ABI prerequisite, not permission to publish shadow backing.
+   * Old brokers refuse the appended query; opt-in fails before attachment. */
+  if (AdmissionSysmemGpuMapRequested(context) && !AppleAgxGpuvaV5ClientHasSysmem(&state->Client)) {
+    ExFreePoolWithTag(state, ADMISSION_POOL_TAG);
+    return STATUS_NOT_SUPPORTED;
   }
   AdmissionG3AttachMailbox(state);
   context->GpuvaG3State = state;

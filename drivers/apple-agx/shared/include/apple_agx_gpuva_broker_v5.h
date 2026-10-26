@@ -16,6 +16,13 @@
 #define AGX_GPUVA_V5_MAILBOX_BYTES 0x4000u
 #define AGX_GPUVA_V5_MAILBOX_RESPONSE 0x80u
 
+/* Optional extension 1; wire ABI remains 6. Query failure means absent.
+ * Strict exclusive ordinary-RAM grants, one aligned 16-KiB leaf per call.
+ * Caller pins backing until jobs retire, leaf clear/TLBI and revoke succeed. */
+#define AGX_GPUVA_V5_SYSMEM_ABI 1u
+#define AGX_GPUVA_V5_CAP_SYSMEM 1ULL
+#define AGX_GPUVA_V5_SYSMEM_PAGE_BYTES 0x4000u
+
 enum {
     AGX_GPUVA_V5_CREATE = 1,
     AGX_GPUVA_V5_REGISTER_TABLE,
@@ -34,6 +41,11 @@ enum {
     AGX_GPUVA_V5_FLUSH_TLB,
     /* AuxIpa = mailbox page IPA, or 0 to detach. */
     AGX_GPUVA_V5_ATTACH_MAILBOX,
+    /* All payload fields zero. Reserved[0]=caps, Reserved[1]=extension ABI. */
+    AGX_GPUVA_V5_QUERY_CAPS,
+    /* Process/generation, AllocationGeneration, AuxIpa only; exclusive.
+     * UPDATE_LEAF and REVOKE_BACKING retain their existing semantics. */
+    AGX_GPUVA_V5_REGISTER_SYSMEM_BACKING,
 };
 
 typedef struct _AGX_GPUVA_V5_REQUEST {
