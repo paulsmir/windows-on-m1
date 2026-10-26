@@ -64113,3 +64113,14 @@ EXP1963 HARDWARE ACTUAL 2026-10-26T10:08:26Z:
 - rc31 analyze.py on gm1963a typical frame 683: wall 183 ms, replay 177 ms, draw_vbo 118 ms, counted indirect still 87 ms over 7 counted draws; 149 dispatches; 27 fences per frame (EXP1961: 41).
 - Conclusion: removing the argument CPU unroll gained only ~6%. The synchronous CPU read of the count (a flush plus a GPU wait per counted draw) now dominates. Next: rc32, GPU-side count predication (Honeykrisp libagx_predicate_indirect) with no CPU readback.
 - Recovery rec1963h: RECOVERY_DONE.
+
+EXP1964 HARDWARE BEFORE 2026-10-26T10:38:28Z:
+- Package 30.0.1964.0 = EXP1963 driver + rc32 (20be3b95 scratch-pool WOW64 overflow guard, d1121a5a GPU predicate). For counted ExecuteIndirect the owner no longer reads the count on the CPU. The linked libagx_predicate_indirect kernel copies records with index < count into batch-pool scratch and zeroes the rest; Asahi then encodes MaxCount native indirect draws. Patch topology keeps the CPU fallback.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (full pool).
+- WHY THIS HYPOTHESIS: EXP1963 counted indirect is still 87/99 ms of a 183/185 ms frame; the synchronous count ReadBuffer flushes and waits for the GPU 7 times per frame. Risk (rc32 REPORT): MaxCount 2400/12000 gives 16800/84000 CPU draw encodes per frame, so no net gain is predicted; this run measures the per-record cost (measure-d3d12-counted-path total_call_us) for rc33 (GPU-generated VDM stream).
+- Expected: measure-d3d12-counted-path path=1 for 7 calls per frame, no "CPU counted indirect: patches", correct image, no faults. Score/FPS vs EXP1963 (784/4.7, 798/4.8) is open: 2k may improve, 10k may regress.
+- Failure criteria: missing or garbage asteroids, device removal, TDR, a GPU fault, or a hang.
+- Recovery: rec1964h.
+- Hashes: sys f675502d9282, UmdArm64 58c9e5c4f29e, UmdX64 617e5b29b70c, Umd32 6d905a6c7b39; manifest 28aeadd8c740, hardware-manifest df89d78b4dc3; probe1964.sh 4bd34417b540 (PROBE_LINT_OK); visible recovery rec1964h 051886cd5a46f926; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1964h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1964-gpu-count-predicate/run1964.sh.
