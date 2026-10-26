@@ -112,7 +112,14 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionInstallStatusReceipts(&initialization);
 #endif
+#ifdef APPLE_AGX_NATIVE_STAGING
+  /* Mapping is optional when Windows refuses process notification setup. */
+  (void)AdmissionNativeStagingInitialize();
+#endif
   status = DxgkInitialize(DriverObject, RegistryPath, &initialization);
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (!NT_SUCCESS(status)) AdmissionNativeStagingUninitialize();
+#endif
   AdmissionRecordService(RegistryPath, L"Wom1CleanDxgkInitializeStatus", (ULONG)status);
   return status;
 }

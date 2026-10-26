@@ -122,6 +122,7 @@
     <ClCompile Include="src\render_pool_demand.c" />
     <ClCompile Include="src\render_pool_slab.c" />
     <ClCompile Include="src\pool_windows.c" />
+    <ClCompile Include="src\native_staging_windows.c" />
     <ClCompile Include="src\memory_windows.c" />
     <ClCompile Include="src\render_allocation.c" />
     <ClCompile Include="src\allocation_windows.c" />

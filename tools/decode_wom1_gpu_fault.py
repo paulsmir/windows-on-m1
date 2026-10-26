@@ -388,11 +388,11 @@ def decode_omitted_leaves(data):
 
 
 def decode_pool(data):
-    """Preserve v7/v8 meanings; v9 captures decision terms and reason totals."""
+    """Preserve v7-v9 prefixes; v10 separates pinned native-ring backing."""
     if len(data) < 16:
         raise ValueError('truncated Wom1M2PoolDemand header')
     version, size, granule, last_window = struct.unpack_from('<4I', data)
-    if size != {7: 304, 8: 360, 9: 432}.get(version) or len(data) != size or granule != 65536:
+    if size != {7: 304, 8: 360, 9: 432, 10: 448}.get(version) or len(data) != size or granule != 65536:
         raise ValueError('unsupported Wom1M2PoolDemand version, length or granule')
     names = (
         'segment_bytes', 'committed_granules', 'peak_granules', 'commits',
@@ -410,7 +410,9 @@ def decode_pool(data):
                   peak_committed_bytes=result['peak_granules'] * granule,
                   held_bytes=result['held_granules'] * granule,
                   floor_refusals=None, last_reserve_failure=None, refusal_counts=None,
-                  event_sample={7: None, 8: 'post_failure', 9: 'admission_decision'}[version])
+                  native_staging_bytes=None, total_promised_bytes=None, total_held_bytes=None,
+                  event_sample={7: None, 8: 'post_failure', 9: 'admission_decision',
+                                10: 'admission_decision'}[version])
     if version >= 8:
         result['floor_refusals'], = struct.unpack_from('<Q', data, 304)
         fields = ('request_bytes', 'reserved_bytes', 'held_bytes', 'committed_bytes',
@@ -431,6 +433,9 @@ def decode_pool(data):
             failure.update(reason=({0: 'none'} | dict(enumerate(reasons, 1))).get(
                 reason, f'unknown({reason})'), required_granules=required,
                 held_granules=held, reserve_cap_granules=cap, private_granules=private)
+    if version >= 10:
+        result['native_staging_bytes'], result['total_promised_bytes'] = struct.unpack_from('<2Q', data, 432)
+        result['total_held_bytes'] = result['held_bytes'] + result['native_staging_bytes']
     return result
 
 

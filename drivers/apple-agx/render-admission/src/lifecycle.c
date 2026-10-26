@@ -1151,4 +1151,8 @@ VOID AdmissionDdiResetDevice(PVOID MiniportDeviceContext) {
   UNREFERENCED_PARAMETER(MiniportDeviceContext);
 }
 
-VOID AdmissionDdiUnload(VOID) {}
+VOID AdmissionDdiUnload(VOID) {
+#ifdef APPLE_AGX_NATIVE_STAGING
+  AdmissionNativeStagingUninitialize();
+#endif
+}

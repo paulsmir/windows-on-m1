@@ -34,7 +34,9 @@ int main(void) {
                    "v7 prefix changed");
     _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, LastReserveFailure.Reason) == 360,
                    "v8 prefix changed");
-    _Static_assert(sizeof(r) == 432, "v9 wire ABI changed");
+    _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, NativeStagingBytes) == 432,
+                   "v9 prefix changed");
+    _Static_assert(sizeof(r) == 448, "v10 wire ABI changed");
     r.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION; r.Bytes = sizeof(r);
     r.GranuleBytes = 65536; r.LastWindowResult = 9;
     r.SegmentBytes = 1409286144ULL;
@@ -57,6 +59,8 @@ int main(void) {
     r.LastReserveFailure.PrivateGranules = 7;
     r.RefusalCounts[0] = 4; r.RefusalCounts[1] = 1;
     r.RefusalCounts[2] = 2; r.RefusalCounts[3] = 0;
+    r.NativeStagingBytes = 134217728;
+    r.TotalPromisedBytes = 134217728 + 201*65536ULL;
     return fwrite(&r, sizeof(r), 1, stdout) == 1 ? 0 : 1;
 }
 '''
@@ -68,7 +72,10 @@ int main(void) {
                             str(src), '-o', str(exe)], check=True)
             raw = subprocess.check_output([str(exe)])
         got = decoder.decode_pool(raw)
-        self.assertEqual(got['version'], 9)
+        self.assertEqual(got['version'], 10)
+        self.assertEqual(got['native_staging_bytes'], 134217728)
+        self.assertEqual(got['total_promised_bytes'], 134217728 + 201*65536)
+        self.assertEqual(got['total_held_bytes'], 134217728 + 224*65536)
         self.assertEqual(got['segment_bytes'], 1409286144)
         self.assertEqual(got['committed_bytes'], 13172736)
         self.assertEqual(got['held_bytes'], 14680064)
@@ -86,6 +93,9 @@ int main(void) {
         self.assertEqual(got['refusal_counts'], dict(low_memory=4,
             signal_unavailable=1, backing_allocation=2, arithmetic=0))
         self.assertEqual(got['event_sample'], 'admission_decision')
+        v9 = bytearray(raw[:432])
+        struct.pack_into('<II', v9, 0, 9, 432)
+        self.assertIsNone(decoder.decode_pool(v9)['native_staging_bytes'])
         v8 = bytearray(raw[:360])
         struct.pack_into('<II', v8, 0, 8, 360)
         previous = decoder.decode_pool(v8)

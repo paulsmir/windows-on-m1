@@ -528,7 +528,11 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * alone. Segment 2 is the fixed firmware reserve; 4 x 64 MiB targets
    * exhausted it. Without an aperture in its set VidMm evicts it to system
    * memory (paging TRANSFER) instead of making it resident there. */
-  if (classId != 0u && AdmissionMemoryPoolView(context, &pool)) {
+  if (classId != 0u &&
+#ifdef APPLE_AGX_NATIVE_STAGING
+      info->PrivateDriverDataSize != sizeof(ADMISSION_NATIVE_STAGING_ALLOCATION) &&
+#endif
+      AdmissionMemoryPoolView(context, &pool)) {
     /* M2-f5: the pages this allocation may occupy in segment 3 are taken
      * from Windows now, so its later placement (UpdatePageTable, also from
      * the paging process) never fails for memory. Microsoft
@@ -602,6 +606,28 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   info->AllocationPriority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   info->Flags2.Value = 0u;
   info->PhysicalAdapterIndex = 0u;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (info->PrivateDriverDataSize == sizeof(ADMISSION_NATIVE_STAGING_ALLOCATION)) {
+    const ADMISSION_NATIVE_STAGING_ALLOCATION *native =
+        (const ADMISSION_NATIVE_STAGING_ALLOCATION *)info->pPrivateDriverData;
+    if (resourceData != NULL || !AdmissionNativeStagingBind(context,
+          native->Token, native->Offset, aligned, &allocation->NativeStagingBinding)) {
+      info->hAllocation = NULL;
+      (void)AdmissionAllocationDestroy(&allocation->Object);
+      ExFreePoolWithTag(allocation, ADMISSION_POOL_TAG);
+      return STATUS_INVALID_PARAMETER;
+    }
+    /* The original pinned MDL supplies the physical pages. VidMm receives
+     * its user VA as pSystemMem and may only map that system backing. There
+     * is no second segment-3 promise or local copy to migrate into. */
+    info->PreferredSegment.Value = 0u;
+    info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_APERTURE_SEGMENT;
+    info->SupportedReadSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
+    info->SupportedWriteSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
+    info->FlagsWddm2.ExistingSysMem = 1u;
+    info->FlagsWddm2.AccessedPhysically = 0u;
+  }
+#endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (r105Enabled) {
     AdmissionR105Apply(info, &r105);
@@ -695,6 +721,9 @@ static NTSTATUS AdmissionDestroyAllocationImpl(
     AdmissionMemoryPoolForget(context, &allocation->PoolPlacement);
     /* M2-f5: so does its reservation. */
     AdmissionMemoryPoolUnreserve(context, allocation->PoolReserved);
+#endif
+#ifdef APPLE_AGX_NATIVE_STAGING
+    AdmissionNativeStagingUnbind(allocation->NativeStagingBinding);
 #endif
     (void)AdmissionAllocationDestroy(&allocation->Object);
     ExFreePoolWithTag(allocation, ADMISSION_POOL_TAG);
@@ -926,6 +955,10 @@ static NTSTATUS AdmissionOpenAllocationImpl(
       goto Rollback;
     }
     if (!AdmissionAllocationDescriptionValid(description) ||
+#ifdef APPLE_AGX_NATIVE_STAGING
+        (allocation->NativeStagingBinding && !AdmissionNativeStagingOwns(
+            allocation->NativeStagingBinding, adapter, device->GpuvaG3Process)) ||
+#endif
         !AdmissionAllocationDescriptionValid(&allocation->Object.Description) ||
         RtlCompareMemory(description, &allocation->Object.Description,
                          sizeof(*description)) != sizeof(*description) ||

@@ -158,6 +158,10 @@ typedef struct _ADMISSION_G3_PROCESS {
   ADMISSION_RENDER_CONTEXT *Contexts;
   HANDLE DxgkProcess;
   ULONG Magic, DeviceRefs, ContextRefs, OsProcessId;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  ULONG NativeMapRefs;
+  BOOLEAN NativeClosing;
+#endif
   /* Lifetime is this process object, not a reusable numeric PID. State Lock
    * protects arming, one-shot consumption and captured hardware evidence. */
   ADMISSION_GPU_FAULT_DRILL FaultDrill;

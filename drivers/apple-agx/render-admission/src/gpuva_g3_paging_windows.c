@@ -677,6 +677,18 @@ static NTSTATUS AdmissionG3UpdateLeaf(
           (pte->ReadOnly ? 0u : APPLE_AGX_GPUVA_G3_WRITE);
       out->Allocation = (ULONGLONG)(ULONG_PTR)update->hAllocation;
       out->AllocationOffset = allocation_offset + (ULONGLONG)j * 0x1000ULL;
+#ifdef APPLE_AGX_NATIVE_STAGING
+      if (update->hAllocation) {
+        const ADMISSION_ALLOCATION_HANDLE *owner =
+            (const ADMISSION_ALLOCATION_HANDLE *)update->hAllocation;
+        /* pSystemMem is a separate runtime input: the private token alone
+         * cannot prove that VidMm mapped the authenticated native bytes. */
+        if (owner->NativeStagingBinding &&
+            (pte->Segment != 0u || !AdmissionNativeStagingPage(
+                owner->NativeStagingBinding, out->AllocationOffset, out->GuestIpa)))
+          goto Done;
+      }
+#endif
     }
   }
   if (process->Graph.MappingGeneration > MAXULONGLONG - (2ULL * groups + 1ULL)) {

@@ -394,6 +394,9 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
 NTSTATUS AdmissionGpuvaG3Stop(ADMISSION_CONTEXT *context) {
   ADMISSION_G3_STATE *state;
   if (context == NULL) return STATUS_INVALID_PARAMETER;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (!AdmissionNativeStagingAdapterIdle(context)) return STATUS_DEVICE_BUSY;
+#endif
   state = (ADMISSION_G3_STATE *)context->GpuvaG3State;
   if (state == NULL) return STATUS_SUCCESS;
   ExAcquireFastMutex(&state->Lock);
@@ -2517,6 +2520,64 @@ Fail:
   return status;
 }
 
+#ifdef APPLE_AGX_NATIVE_STAGING
+NTSTATUS AdmissionGpuvaG3NativeStagingEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  ADMISSION_NATIVE_STAGING_REQUEST q;
+  ADMISSION_DEVICE *device;
+  ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_G3_STATE *state;
+  NTSTATUS status;
+  BOOLEAN valid;
+  if (!adapter || !adapter->Started || !args || args->Flags.Value ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL || !args->pPrivateDriverData ||
+      args->PrivateDriverDataSize != sizeof(q)) return STATUS_INVALID_PARAMETER;
+  RtlCopyMemory(&q, args->pPrivateDriverData, sizeof(q));
+  if (q.Magic != ADMISSION_NATIVE_STAGING_MAGIC || q.Version != 1u ||
+      q.Bytes != sizeof(q) || q.UserVa ||
+      (q.Capacity ? q.Token != 0ULL : q.Token == 0ULL) ||
+      (q.Capacity & 65535u) || q.Capacity > ADMISSION_NATIVE_STAGING_MAX_BYTES)
+    return STATUS_INVALID_PARAMETER;
+  device = (ADMISSION_DEVICE *)args->hDevice;
+  context = (ADMISSION_RENDER_CONTEXT *)args->hContext;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (!state || !device || !context ||
+      device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC ||
+      device->Object.Adapter != &adapter->ObjectAdapter ||
+      context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
+      context->Object.Device != &device->Object) return STATUS_INVALID_HANDLE;
+  ExAcquireFastMutex(&state->Lock);
+  process = AdmissionGpuvaG3FindProcess(state, device->GpuvaG3Process);
+  valid = process && process == context->GpuvaG3Process &&
+      process->NativeMapRefs != MAXULONG &&
+      process->OsProcessId == HandleToULong(PsGetCurrentProcessId()) &&
+      (!q.Capacity || (!process->NativeClosing && !process->Poisoned &&
+                       !process->Graph.Uncertain));
+  if (valid) ++process->NativeMapRefs;
+  ExReleaseFastMutex(&state->Lock);
+  if (!valid) return STATUS_INVALID_HANDLE;
+  /* Hold our own process reference through manager registration and cleanup;
+   * do not infer this lifetime from an OS handle supplied to a Level-0 DDI.
+   * No GPU/pool lock may cover the process-notification registry. */
+  status = q.Capacity ? AdmissionNativeStagingMap(adapter, process, q.Capacity,
+      &q.Token, &q.UserVa) : AdmissionNativeStagingCancel(adapter, process, q.Token);
+  ExAcquireFastMutex(&state->Lock);
+  if (q.Capacity && NT_SUCCESS(status) && process->NativeClosing) {
+    ExReleaseFastMutex(&state->Lock);
+    AdmissionNativeStagingUnmapProcess(adapter, process);
+    status = STATUS_DEVICE_BUSY;
+    ExAcquireFastMutex(&state->Lock);
+  }
+  /* Publish the buffered reply before releasing our reference, in the same
+   * critical section as the final closing check. */
+  if (NT_SUCCESS(status)) RtlCopyMemory(args->pPrivateDriverData, &q, sizeof(q));
+  --process->NativeMapRefs;
+  ExReleaseFastMutex(&state->Lock);
+  return status;
+}
+#endif
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
     PVOID MiniportDeviceContext, HANDLE KmdProcessHandle) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)MiniportDeviceContext;
@@ -2526,6 +2587,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
     return STATUS_INVALID_PARAMETER;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  /* Close admission before dropping the GPU lock. An escape may still be
+   * preparing a mapping and must finish cleanup before this object can die. */
+  ExAcquireFastMutex(&state->Lock);
+  process = AdmissionGpuvaG3FindProcess(state, KmdProcessHandle);
+  if (process == NULL) {
+    ExReleaseFastMutex(&state->Lock);
+    return STATUS_INVALID_HANDLE;
+  }
+  process->NativeClosing = TRUE;
+  ExReleaseFastMutex(&state->Lock);
+  /* CPU teardown is independent of a later uncertain GPU retirement. */
+  AdmissionNativeStagingUnmapProcess(adapter, KmdProcessHandle);
+  if (!AdmissionNativeStagingProcessIdle(adapter, KmdProcessHandle))
+    return STATUS_DEVICE_BUSY;
+#endif
   ExAcquireFastMutex(&state->Lock);
   process = AdmissionGpuvaG3FindProcess(state, KmdProcessHandle);
   if (process == NULL) {
@@ -2540,6 +2617,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
       }
   }
   if (process->DeviceRefs || process->ContextRefs ||
+#ifdef APPLE_AGX_NATIVE_STAGING
+      process->NativeMapRefs ||
+#endif
       process->Graph.Uncertain ||
       (process->Graph.Created &&
        !AppleAgxGpuvaG3GraphDestroy(&process->Graph))) {
@@ -2588,6 +2668,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
   --state->ProcessCount;
   process->Magic = 0u;
   ExReleaseFastMutex(&state->Lock);
+#ifdef APPLE_AGX_NATIVE_STAGING
+  AdmissionNativeStagingDestroyProcess(adapter, process);
+#endif
   ExFreePoolWithTag(process, ADMISSION_POOL_TAG);
   return STATUS_SUCCESS;
 }

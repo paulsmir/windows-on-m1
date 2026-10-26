@@ -107,7 +107,7 @@ typedef struct _ADMISSION_POOL_RESERVE_FAILURE {
   unsigned long long PrivateGranules;
 } ADMISSION_POOL_RESERVE_FAILURE;
 
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 9u /* v9: decision samples/terms and reason totals */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 10u /* v10: separately pinned native staging */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -135,6 +135,7 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   /* Index is ADMISSION_POOL_REFUSAL_* minus one. Totals include every refusal,
    * even when registry staging coalesces multiple decisions. */
   unsigned long long RefusalCounts[ADMISSION_POOL_REFUSAL_COUNT];
+  unsigned long long NativeStagingBytes, TotalPromisedBytes;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.

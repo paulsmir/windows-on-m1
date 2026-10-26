@@ -325,6 +325,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       Args->PrivateDriverDataSize >= sizeof(ULONG)) {
     ULONG private_magic;
     RtlCopyMemory(&private_magic, Args->pPrivateDriverData, sizeof(private_magic));
+#ifdef APPLE_AGX_NATIVE_STAGING
+    if (private_magic == ADMISSION_NATIVE_STAGING_MAGIC)
+      return AdmissionGpuvaG3NativeStagingEscape((ADMISSION_CONTEXT *)Adapter, Args);
+#endif
     if (private_magic == 0x33565041u)
       return AdmissionGpuvaG3PrivateEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == APPLE_AGX_G3_NATIVE_QUERY_MAGIC)

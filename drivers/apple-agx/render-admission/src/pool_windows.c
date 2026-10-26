@@ -234,6 +234,7 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ULONG LastWindowResult;
   /* Receipt staging: committed granules and failure total last staged. */
   ULONGLONG StagedGranules, StagedFailures, StagedReserved;
+  ULONGLONG NativeStagingBytes, StagedNativeBytes;
   /* M2-f7: \KernelObjects\HighMemoryCondition and LowMemoryCondition
    * (referenced), or NULL. */
   PKEVENT HighMemory, LowMemory;
@@ -459,6 +460,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
       pool->StagedReserved - pool->Slabs.Reserved;
   BOOLEAN stage = moved >= ADMISSION_POOL_DEMAND_RECEIPT_STEP ||
                   reserved >= ADMISSION_POOL_DEMAND_RECEIPT_STEP ||
+                  pool->NativeStagingBytes != pool->StagedNativeBytes ||
                   failures != pool->StagedFailures;
   if (stage) {
     receipt.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION;
@@ -490,12 +492,17 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.ReserveFailures = pool->Slabs.Stats.ReserveFailures;
     receipt.BrokerBytes = Context->PoolBrokerBytes;
     receipt.FloorRefusals = pool->Slabs.Stats.FloorRefusals;
+    receipt.NativeStagingBytes = pool->NativeStagingBytes;
+    receipt.TotalPromisedBytes = ((pool->Slabs.Reserved < pool->Slabs.ReserveCap ?
+        pool->Slabs.Reserved : pool->Slabs.ReserveCap) + pool->Slabs.PrivateCount) *
+        ADMISSION_POOL_DEMAND_GRANULE + pool->NativeStagingBytes;
     receipt.LastReserveFailure = pool->LastReserveFailure;
     for (ULONG i = 0u; i < ADMISSION_POOL_REFUSAL_COUNT; ++i)
       receipt.RefusalCounts[i] = pool->RefusalCounts[i];
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
     pool->StagedReserved = pool->Slabs.Reserved;
+    pool->StagedNativeBytes = pool->NativeStagingBytes;
   }
   /* Idle granules wait for the periodic reclaim. */
   if (pool->Demand.Candidates != 0u &&
@@ -599,6 +606,39 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnreserve(
           ADMISSION_POOL_DEMAND_GRANULE);
   AdmissionMemoryPoolUnlock(Context);
 }
+
+#ifdef APPLE_AGX_NATIVE_STAGING
+/* Dedicated original MDLs are charged separately: they cannot satisfy a
+ * segment-3 placement and must not make the slab allocator take duplicate
+ * backing. The physical manager charges before allocation and keeps the
+ * charge until CPU, VidMm and graph ownership have all ended. */
+BOOLEAN AdmissionMemoryPoolChargeNative(ADMISSION_CONTEXT *Context,
+    ULONGLONG Bytes) {
+  ADMISSION_POOL_RUNTIME *pool;
+  BOOLEAN allowed = FALSE;
+  const ULONGLONG cap = 4ULL * ADMISSION_NATIVE_STAGING_MAX_BYTES;
+  if (!Context || !Bytes || (Bytes & 65535ULL) || Bytes > cap ||
+      !AdmissionMemoryPoolLock(Context)) return FALSE;
+  pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+  if (!pool->Stopping && pool->NativeStagingBytes <= cap - Bytes &&
+      AdmissionPoolMayGrow(pool)) {
+    pool->NativeStagingBytes += Bytes;
+    allowed = TRUE;
+  }
+  AdmissionMemoryPoolUnlock(Context);
+  return allowed;
+}
+
+VOID AdmissionMemoryPoolUnchargeNative(ADMISSION_CONTEXT *Context,
+    ULONGLONG Bytes) {
+  ADMISSION_POOL_RUNTIME *pool;
+  if (!Context || !Bytes || !AdmissionMemoryPoolLock(Context)) return;
+  pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+  /* An invalid release cannot erase somebody else's backing promise. */
+  if (Bytes <= pool->NativeStagingBytes) pool->NativeStagingBytes -= Bytes;
+  AdmissionMemoryPoolUnlock(Context);
+}
+#endif
 
 _Use_decl_annotations_ VOID AdmissionMemoryPoolReclaim(ADMISSION_CONTEXT *Context) {
   ADMISSION_POOL_DEMAND *demand = AdmissionMemoryPoolLock(Context);

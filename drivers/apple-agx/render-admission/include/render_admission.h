@@ -13,6 +13,10 @@
 #include <d3dkmthk.h>
 #include <dispmprt.h>
 #include <ntstrsafe.h>
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+#define APPLE_AGX_NATIVE_STAGING 1
+#include "render_native_staging.h"
+#endif
 #include "render_objects.h"
 #include "render_memory.h"
 #include "render_allocation.h"
@@ -934,11 +938,18 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
   ADMISSION_POOL_PLACEMENT PoolPlacement;
   /* M2-f5: segment-3 pages reserved for this allocation at creation. */
   ULONGLONG PoolReserved;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  PVOID NativeStagingBinding;
+#endif
 } ADMISSION_ALLOCATION_HANDLE;
 
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
 NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *Adapter,
     const DXGKARG_ESCAPE *Args);
+#ifdef APPLE_AGX_NATIVE_STAGING
+NTSTATUS AdmissionGpuvaG3NativeStagingEscape(ADMISSION_CONTEXT *Adapter,
+    const DXGKARG_ESCAPE *Args);
+#endif
 NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *Adapter,
     const DXGKARG_ESCAPE *Args);
 void AdmissionGpuvaG3InvalidateAllocation(ADMISSION_CONTEXT *Adapter,

@@ -36,11 +36,29 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidateEx(
   const ADMISSION_WIN32_ALLOCATION_CREATE *create =
       (const ADMISSION_WIN32_ALLOCATION_CREATE *)PrivateData;
   const ADMISSION_ALLOCATION_DESCRIPTION *allocation;
+  ADMISSION_WIN32_ALLOCATION_CREATE normalized;
   APPLE_AGX_U32 classId = 0u;
   APPLE_AGX_U32 flags = 0u;
   if (PrivateData == ADMISSION_WIN32_NULL || Description == ADMISSION_WIN32_NULL ||
       ClassId == ADMISSION_WIN32_NULL || Flags == ADMISSION_WIN32_NULL)
     return AdmissionWin32TransportArgument;
+  if (PrivateDataBytes == sizeof(ADMISSION_NATIVE_STAGING_ALLOCATION)) {
+    const ADMISSION_NATIVE_STAGING_ALLOCATION *native =
+        (const ADMISSION_NATIVE_STAGING_ALLOCATION *)PrivateData;
+    if (create->Version != ADMISSION_WIN32_ALLOCATION_VERSION_NATIVE ||
+        create->Bytes != sizeof(*native) || !native->Token ||
+        (create->Flags & AppleAgxWin32BufferShareable) ||
+        (native->Offset & 65535ULL) ||
+        native->Offset >= ADMISSION_NATIVE_STAGING_MAX_BYTES ||
+        !create->Allocation.Size || (create->Allocation.Size & 65535ULL) ||
+        create->Allocation.Size > ADMISSION_NATIVE_STAGING_MAX_BYTES - native->Offset)
+      return AdmissionWin32TransportClass;
+    normalized = *create;
+    normalized.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
+    normalized.Bytes = sizeof(normalized);
+    create = &normalized;
+    PrivateDataBytes = sizeof(normalized);
+  }
   if (PrivateDataBytes == sizeof(ADMISSION_ALLOCATION_DESCRIPTION)) {
     allocation = (const ADMISSION_ALLOCATION_DESCRIPTION *)PrivateData;
     if (!AdmissionAllocationDescriptionValid(allocation))
