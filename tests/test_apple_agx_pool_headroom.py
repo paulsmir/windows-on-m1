@@ -28,8 +28,8 @@ class PoolHeadroomTest(unittest.TestCase):
     def test_windows_admission_and_pressure_reclaim(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 
-        C73 admitted new locked slabs with high-memory clear and low-memory
-        clear. Pressure must refuse that growth and return idle surplus now,
+        RC53: neutral memory must admit backed creation; LowMemory must stop
+        growth. Loss of HighMemory must still return idle surplus now,
         preserving promised backing and every ownership/execution safety gate.
         After a broker Busy response, the periodic worker must eventually
         release idle backing even when no further paging record executes.
@@ -48,7 +48,7 @@ class PoolHeadroomTest(unittest.TestCase):
 
     def run_policy(self, cpp=False):
         source = (RENDER / 'src/pool_windows.c').read_text()
-        names = ['AdmissionPoolMayGrow']
+        names = ['AdmissionPoolMayGrow', 'AdmissionPoolShouldReclaim']
         if 'static VOID AdmissionPoolReclaimLocked(' in source:
             names.append('AdmissionPoolReclaimLocked')
         names += ['AdmissionMemoryPoolExecuted', 'AdmissionMemoryPoolReserve',

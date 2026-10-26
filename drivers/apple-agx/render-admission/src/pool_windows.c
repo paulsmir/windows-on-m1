@@ -237,7 +237,8 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   /* M2-f7: \KernelObjects\HighMemoryCondition and LowMemoryCondition
    * (referenced), or NULL. */
   PKEVENT HighMemory, LowMemory;
-  ADMISSION_POOL_RESERVE_FAILURE LastReserveFailure;
+  ADMISSION_POOL_RESERVE_FAILURE LastReserveFailure, ReserveAttempt;
+  ULONGLONG RefusalCounts[ADMISSION_POOL_REFUSAL_COUNT];
 } ADMISSION_POOL_RUNTIME;
 
 static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
@@ -386,21 +387,41 @@ static ULONGLONG AdmissionPoolNowMs(VOID) {
   return KeQueryInterruptTime() / 10000ULL;
 }
 
-/* M2-f7c: locked system pages need headroom before Windows reaches its low
- * threshold. HighMemoryCondition is the documented permission for aggressive
- * allocation; a missing high event fails closed. LowMemory is an extra veto.
- * Only reservation growth uses this gate, never already-admitted paging. */
+/* RC53: neutral memory (both events clear) is not low memory. Only the
+ * LowMemory notification vetoes new reservation slabs. Missing telemetry
+ * fails closed, separately from observed pressure. Never gate admitted paging. */
 static int AdmissionPoolMayGrow(void *Opaque) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
-  return pool->HighMemory != NULL && KeReadStateEvent(pool->HighMemory) != 0 &&
-         (pool->LowMemory == NULL || KeReadStateEvent(pool->LowMemory) == 0);
+  ADMISSION_POOL_RESERVE_FAILURE *decision = &pool->ReserveAttempt;
+  /* Called under the pool mutex before growth (also by private leases).
+   * Reserve includes its attempt in Reserved and checks overflow first;
+   * only that wrapper publishes this scratch decision as a failure receipt. */
+  decision->HighMemory = pool->HighMemory == NULL ? 2u :
+      (KeReadStateEvent(pool->HighMemory) != 0 ? 1u : 0u);
+  decision->LowMemory = pool->LowMemory == NULL ? 2u :
+      (KeReadStateEvent(pool->LowMemory) != 0 ? 1u : 0u);
+  decision->TimeMs = AdmissionPoolNowMs();
+  decision->HeldGranules = pool->Slabs.Stats.Slabs * ADMISSION_POOL_SLAB_SLOTS;
+  decision->RequiredGranules = (pool->Slabs.Reserved < pool->Slabs.ReserveCap ?
+      pool->Slabs.Reserved : pool->Slabs.ReserveCap) + pool->Slabs.PrivateCount;
+  decision->Reason = decision->LowMemory == 0u ? ADMISSION_POOL_REFUSAL_NONE :
+      (decision->LowMemory == 1u ? ADMISSION_POOL_REFUSAL_LOW_MEMORY :
+                                 ADMISSION_POOL_REFUSAL_NO_SIGNAL);
+  return decision->Reason == ADMISSION_POOL_REFUSAL_NONE;
+}
+
+/* Preserve M2-f7c early reclaim even in the neutral interval: release safe
+ * surplus before LowMemory, but do not treat absent HighMemory as an OOM. */
+static int AdmissionPoolShouldReclaim(ADMISSION_POOL_RUNTIME *Pool) {
+  return Pool->HighMemory == NULL || KeReadStateEvent(Pool->HighMemory) == 0 ||
+         Pool->LowMemory == NULL || KeReadStateEvent(Pool->LowMemory) != 0;
 }
 
 /* Called with the pool mutex held. Pressure bypasses only the idle delay
  * and empty-slab cache: Reclaim still enforces owner/pin/paging/sequence and
  * broker-unmap safety, and slab trimming still preserves promised backing. */
 static VOID AdmissionPoolReclaimLocked(ADMISSION_POOL_RUNTIME *Pool) {
-  if (AdmissionPoolMayGrow(Pool)) {
+  if (!AdmissionPoolShouldReclaim(Pool)) {
     (void)AdmissionPoolDemandReclaimAged(&Pool->Demand, AdmissionPoolNowMs());
   } else {
     ULONGLONG spare = Pool->Slabs.SpareLimit;
@@ -470,6 +491,8 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.BrokerBytes = Context->PoolBrokerBytes;
     receipt.FloorRefusals = pool->Slabs.Stats.FloorRefusals;
     receipt.LastReserveFailure = pool->LastReserveFailure;
+    for (ULONG i = 0u; i < ADMISSION_POOL_REFUSAL_COUNT; ++i)
+      receipt.RefusalCounts[i] = pool->RefusalCounts[i];
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
     pool->StagedReserved = pool->Slabs.Reserved;
@@ -528,15 +551,30 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
     ADMISSION_CONTEXT *Context, ULONGLONG Bytes) {
   ADMISSION_POOL_RUNTIME *pool;
   BOOLEAN reserved;
+  ADMISSION_POOL_RESERVE_FAILURE attempt = {0};
+  ULONGLONG slabFailures;
   if (Bytes == 0ULL || AdmissionMemoryPoolLock(Context) == NULL) return TRUE;
   pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+  /* No policy call for a fully backed promise. If the allocator rejects
+   * before MayGrow, its only refusal is checked arithmetic overflow. */
+  attempt.HighMemory = attempt.LowMemory = 2u;
+  attempt.Reason = ADMISSION_POOL_REFUSAL_ARITHMETIC;
+  attempt.TimeMs = AdmissionPoolNowMs();
+  attempt.HeldGranules = pool->Slabs.Stats.Slabs * ADMISSION_POOL_SLAB_SLOTS;
+  attempt.ReserveCapGranules = pool->Slabs.ReserveCap;
+  attempt.PrivateGranules = pool->Slabs.PrivateCount;
+  pool->ReserveAttempt = attempt;
+  slabFailures = pool->Slabs.Stats.NewSlabFailures;
   reserved = AdmissionPoolSlabReserve(&pool->Slabs,
       (Bytes + ADMISSION_POOL_DEMAND_GRANULE - 1ULL) /
           ADMISSION_POOL_DEMAND_GRANULE) ? TRUE : FALSE;
   if (!reserved) {
-    /* Preserve the refusal boundary before reclaim changes the counts.
-     * Event states are post-failure samples; FloorRefusals is the actual
-     * decision counter. No extra policy call, allocation or registry I/O. */
+    /* The last policy sample belongs to the slab that failed, including
+     * partial growth. Preserve it across rollback and later reclaim calls. */
+    if (pool->Slabs.Stats.NewSlabFailures != slabFailures)
+      pool->ReserveAttempt.Reason = ADMISSION_POOL_REFUSAL_BACKING;
+    pool->LastReserveFailure = pool->ReserveAttempt;
+    ++pool->RefusalCounts[pool->LastReserveFailure.Reason - 1u];
     pool->LastReserveFailure.RequestBytes = Bytes;
     pool->LastReserveFailure.ReservedBytes =
         pool->Slabs.Reserved * ADMISSION_POOL_DEMAND_GRANULE;
@@ -544,14 +582,9 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
         ADMISSION_POOL_SLAB_SLOTS * ADMISSION_POOL_DEMAND_GRANULE;
     pool->LastReserveFailure.CommittedBytes =
         pool->Demand.Stats.CommittedGranules * ADMISSION_POOL_DEMAND_GRANULE;
-    pool->LastReserveFailure.TimeMs = AdmissionPoolNowMs();
-    pool->LastReserveFailure.HighMemory = pool->HighMemory == NULL ? 2u :
-        (KeReadStateEvent(pool->HighMemory) != 0 ? 1u : 0u);
-    pool->LastReserveFailure.LowMemory = pool->LowMemory == NULL ? 2u :
-        (KeReadStateEvent(pool->LowMemory) != 0 ? 1u : 0u);
   }
   /* First let this reservation reuse held pages; then return only surplus. */
-  if (!AdmissionPoolMayGrow(pool)) AdmissionPoolReclaimLocked(pool);
+  if (AdmissionPoolShouldReclaim(pool)) AdmissionPoolReclaimLocked(pool);
   AdmissionMemoryPoolUnlock(Context);
   return reserved;
 }

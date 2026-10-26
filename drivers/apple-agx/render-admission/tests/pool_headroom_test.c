@@ -1,5 +1,5 @@
 /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
- * Actual Windows admission must refuse new locked pages before LowMemory,
+ * Actual Windows admission must allow neutral memory and refuse LowMemory,
  * and pressure reclaim must drop only safe, surplus backing without aging. */
 #ifdef __cplusplus
 extern "C" {
@@ -31,7 +31,8 @@ typedef struct {
     ADMISSION_POOL_DEMAND Demand;
     ADMISSION_POOL_SLABS Slabs;
     int *HighMemory, *LowMemory;
-    ADMISSION_POOL_RESERVE_FAILURE LastReserveFailure;
+    ADMISSION_POOL_RESERVE_FAILURE LastReserveFailure, ReserveAttempt;
+    ULONGLONG RefusalCounts[ADMISSION_POOL_REFUSAL_COUNT];
     ADMISSION_CONTEXT *Context;
     int WorkQueued, WorkPending, Stopping;
 } ADMISSION_POOL_RUNTIME;
@@ -44,9 +45,17 @@ static ADMISSION_POOL_SLAB *backing[N];
 static unsigned slots[N];
 static int high, low, locked, busy[N], broken[N];
 static unsigned allocations, releases, unmaps;
-static int fail_new;
+static int fail_new, clear_low_after_read;
+static unsigned low_on_allocation, fail_on_allocation;
 static ULONGLONG now;
-static int KeReadStateEvent(int *event) { return *event; }
+static int KeReadStateEvent(int *event) {
+    int value = *event;
+    if (event == &low && clear_low_after_read) {
+        low = 0;
+        clear_low_after_read = 0;
+    }
+    return value;
+}
 static ULONGLONG AdmissionPoolNowMs(void) { return now; }
 static int InterlockedExchange(int *p, int v) { int old = *p; *p = v; return old; }
 static int InterlockedCompareExchange(int *p, int v, int expected) {
@@ -65,7 +74,8 @@ static void AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *ctx) {
 static ADMISSION_POOL_SLAB *new_slab(void *opaque) {
     (void)opaque;
     ++allocations;
-    if (fail_new) return NULL;
+    if (fail_new || allocations == fail_on_allocation) return NULL;
+    if (allocations == low_on_allocation) low = 1;
     return (ADMISSION_POOL_SLAB *)calloc(1, sizeof(ADMISSION_POOL_SLAB));
 }
 static void free_slab(void *opaque, ADMISSION_POOL_SLAB *slab) {
@@ -109,7 +119,8 @@ static void reset(void) {
     pool.Context = &context;
     high = 1; low = 0; now = 100;
     allocations = releases = unmaps = 0;
-    fail_new = 0;
+    fail_new = clear_low_after_read = 0;
+    low_on_allocation = fail_on_allocation = 0;
 }
 
 /* Execute one periodic wake; there is no fake paging completion. */
@@ -217,13 +228,13 @@ static void test_idle_worker_keeps_all_release_guards(void) {
 }
 static void test_event_policy(void) {
     reset();
-    /* Missing high is unknown, not permission to consume more pages. */
+    /* HighMemory controls reclaim, not admission; LowMemory must be known. */
     for (int h = -1; h <= 1; ++h) {
         for (int l = -1; l <= 1; ++l) {
             high = h; low = l;
             pool.HighMemory = h < 0 ? NULL : &high;
             pool.LowMemory = l < 0 ? NULL : &low;
-            assert(AdmissionPoolMayGrow(&pool) == (h == 1 && l != 1));
+            assert(AdmissionPoolMayGrow(&pool) == (l == 0));
         }
     }
     reset();
@@ -236,14 +247,17 @@ static void test_event_policy(void) {
     assert(allocations == 1 && releases == 0 && pool.Slabs.Reserved == 1);
     reset();
     assert(AdmissionMemoryPoolReserve(&context, 32 * G));
-    high = 0; /* low is still clear: C73 wrongly admits another slab here */
-    assert(!AdmissionMemoryPoolReserve(&context, G));
-    assert(allocations == 1 && pool.Slabs.Reserved == 32);
+    high = 0; /* Neutral memory must permit fully backed creation. */
+    assert(AdmissionMemoryPoolReserve(&context, G));
+    assert(allocations == 2 && pool.Slabs.Reserved == 33);
+    low = 1;
+    assert(!AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(allocations == 2 && pool.Slabs.Reserved == 33);
     assert(pool.Slabs.Stats.FloorRefusals == 1);
     assert(pool.Slabs.Stats.NewSlabFailures == 0);
-    high = 1;
-    assert(AdmissionMemoryPoolReserve(&context, G));
-    assert(allocations == 2);
+    high = 1; low = 0;
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(allocations == 3);
 }
 static void test_admitted_paging_under_pressure(void) {
     ADMISSION_POOL_PLACEMENT owner = {0}, overlap = {0};
@@ -307,10 +321,13 @@ static void test_safety_and_promises(void) {
     assert(pool.Demand.Stats.CommittedGranules == 1 && granules[0].Pinned);
     assert(pool.Slabs.Reserved == 64 && allocations == 2);
 }
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * A notification can change between the admission check and failure capture.
+ * The refusal receipt must retain the value actually used by the veto. */
 static void test_failure_snapshot(void) {
     reset();
     assert(AdmissionMemoryPoolReserve(&context, 32 * G));
-    high = 0;
+    high = 0; low = 1; clear_low_after_read = 1;
     assert(!AdmissionMemoryPoolReserve(&context, G));
     assert(pool.Slabs.Stats.FloorRefusals == 1);
     assert(pool.LastReserveFailure.RequestBytes == G);
@@ -319,10 +336,18 @@ static void test_failure_snapshot(void) {
     assert(pool.LastReserveFailure.CommittedBytes == 0);
     assert(pool.LastReserveFailure.TimeMs == 100);
     assert(pool.LastReserveFailure.HighMemory == 0);
-    assert(pool.LastReserveFailure.LowMemory == 0);
-    high = 1; now = 200;
+    assert(pool.LastReserveFailure.LowMemory == 1);
+    assert(pool.LastReserveFailure.Reason == ADMISSION_POOL_REFUSAL_LOW_MEMORY);
+    assert(pool.LastReserveFailure.RequiredGranules == 33);
+    assert(pool.LastReserveFailure.HeldGranules == 32);
+    assert(pool.LastReserveFailure.ReserveCapGranules == N);
+    assert(pool.LastReserveFailure.PrivateGranules == 0);
+    assert(pool.RefusalCounts[ADMISSION_POOL_REFUSAL_LOW_MEMORY - 1] == 1);
+    high = 1; low = 0; now = 200;
     assert(AdmissionMemoryPoolReserve(&context, G));
     assert(pool.LastReserveFailure.TimeMs == 100); /* success preserves evidence */
+    assert(pool.LastReserveFailure.Reason == ADMISSION_POOL_REFUSAL_LOW_MEMORY);
+    assert(pool.RefusalCounts[ADMISSION_POOL_REFUSAL_LOW_MEMORY - 1] == 1);
     fail_new = 1; now = 300;
     assert(!AdmissionMemoryPoolReserve(&context, 64 * G));
     assert(pool.Slabs.Stats.FloorRefusals == 1);
@@ -331,12 +356,55 @@ static void test_failure_snapshot(void) {
     assert(pool.LastReserveFailure.ReservedBytes == 33 * G);
     assert(pool.LastReserveFailure.TimeMs == 300);
     assert(pool.LastReserveFailure.HighMemory == 1);
+    assert(pool.LastReserveFailure.Reason == ADMISSION_POOL_REFUSAL_BACKING);
+    assert(pool.RefusalCounts[ADMISSION_POOL_REFUSAL_BACKING - 1] == 1);
     reset();
     pool.HighMemory = pool.LowMemory = NULL;
     assert(!AdmissionMemoryPoolReserve(&context, G));
     assert(pool.LastReserveFailure.HighMemory == 2);
     assert(pool.LastReserveFailure.LowMemory == 2);
     assert(pool.LastReserveFailure.HeldBytes == 0);
+    assert(pool.LastReserveFailure.Reason == ADMISSION_POOL_REFUSAL_NO_SIGNAL);
+    assert(pool.RefusalCounts[ADMISSION_POOL_REFUSAL_NO_SIGNAL - 1] == 1);
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * Mid-request pressure/allocator failure must record the failing slab's
+ * decision before rollback, return every new slab, and keep old promises.
+ * Arithmetic refusal is not pressure and must not inherit stale samples. */
+static void test_partial_growth_and_arithmetic_receipts(void) {
+    for (int physical = 0; physical != 2; ++physical) {
+        reset();
+        assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+        high = 0;
+        if (physical) fail_on_allocation = 3;
+        else low_on_allocation = 2;
+        assert(!AdmissionMemoryPoolReserve(&context, 64 * G));
+        unsigned reason = physical ? ADMISSION_POOL_REFUSAL_BACKING :
+                                     ADMISSION_POOL_REFUSAL_LOW_MEMORY;
+        assert(pool.LastReserveFailure.Reason == reason);
+        assert(pool.LastReserveFailure.RequiredGranules == 96);
+        assert(pool.LastReserveFailure.HeldGranules == 64);
+        assert(pool.LastReserveFailure.ReservedBytes == 32 * G);
+        assert(pool.LastReserveFailure.HeldBytes == 32 * G);
+        assert(pool.LastReserveFailure.HighMemory == 0);
+        assert(pool.LastReserveFailure.LowMemory == (physical ? 0u : 1u));
+        assert(pool.Slabs.Reserved == 32 && pool.Slabs.Stats.Slabs == 1);
+        assert(releases == 1 && pool.RefusalCounts[reason - 1] == 1);
+        /* Fully backed creation under pressure does not discard last refusal. */
+        assert(AdmissionMemoryPoolReserve(&context, 0));
+        assert(pool.LastReserveFailure.Reason == reason);
+    }
+    reset();
+    pool.Slabs.Reserved = ~0ULL;
+    assert(!AdmissionMemoryPoolReserve(&context, G));
+    assert(pool.Slabs.Reserved == ~0ULL && allocations == 0);
+    assert(pool.LastReserveFailure.Reason == ADMISSION_POOL_REFUSAL_ARITHMETIC);
+    assert(pool.LastReserveFailure.RequiredGranules == 0);
+    assert(pool.LastReserveFailure.HighMemory == 2);
+    assert(pool.LastReserveFailure.LowMemory == 2);
+    assert(pool.RefusalCounts[ADMISSION_POOL_REFUSAL_ARITHMETIC - 1] == 1);
+    pool.Slabs.Reserved = 0;
 }
 
 /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
@@ -410,6 +478,7 @@ int main(void) {
     test_pressure_reclaim();
     test_safety_and_promises();
     test_failure_snapshot();
+    test_partial_growth_and_arithmetic_receipts();
     test_serial_restore_and_destruction_shrink();
     test_over_cap_restore_uses_same_backing();
     AdmissionPoolSlabDrain(&pool.Slabs);

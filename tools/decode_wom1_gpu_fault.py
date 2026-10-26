@@ -388,11 +388,11 @@ def decode_omitted_leaves(data):
 
 
 def decode_pool(data):
-    """v7 prefix is unchanged; absent v8 observations are unknown, not zero."""
+    """Preserve v7/v8 meanings; v9 captures decision terms and reason totals."""
     if len(data) < 16:
         raise ValueError('truncated Wom1M2PoolDemand header')
     version, size, granule, last_window = struct.unpack_from('<4I', data)
-    if size != {7: 304, 8: 360}.get(version) or len(data) != size or granule != 65536:
+    if size != {7: 304, 8: 360, 9: 432}.get(version) or len(data) != size or granule != 65536:
         raise ValueError('unsupported Wom1M2PoolDemand version, length or granule')
     names = (
         'segment_bytes', 'committed_granules', 'peak_granules', 'commits',
@@ -409,8 +409,9 @@ def decode_pool(data):
                   committed_bytes=result['committed_granules'] * granule,
                   peak_committed_bytes=result['peak_granules'] * granule,
                   held_bytes=result['held_granules'] * granule,
-                  floor_refusals=None, last_reserve_failure=None)
-    if version == 8:
+                  floor_refusals=None, last_reserve_failure=None, refusal_counts=None,
+                  event_sample={7: None, 8: 'post_failure', 9: 'admission_decision'}[version])
+    if version >= 8:
         result['floor_refusals'], = struct.unpack_from('<Q', data, 304)
         fields = ('request_bytes', 'reserved_bytes', 'held_bytes', 'committed_bytes',
                   'time_ms', 'high_memory', 'low_memory')
@@ -421,6 +422,15 @@ def decode_pool(data):
                 failure[field] = {0: 'clear', 1: 'set', 2: 'unavailable'}.get(
                     value, f'unknown({value})')
             result['last_reserve_failure'] = failure
+    if version >= 9:
+        reasons = ('low_memory', 'signal_unavailable', 'backing_allocation', 'arithmetic')
+        result['refusal_counts'] = dict(zip(reasons, struct.unpack_from('<4Q', data, 400)))
+        failure = result['last_reserve_failure']
+        if failure is not None:
+            reason, _reserved, required, held, cap, private = struct.unpack_from('<2I4Q', data, 360)
+            failure.update(reason=({0: 'none'} | dict(enumerate(reasons, 1))).get(
+                reason, f'unknown({reason})'), required_granules=required,
+                held_granules=held, reserve_cap_granules=cap, private_granules=private)
     return result
 
 

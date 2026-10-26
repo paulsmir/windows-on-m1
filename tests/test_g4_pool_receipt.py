@@ -32,7 +32,9 @@ int main(void) {
     ADMISSION_POOL_DEMAND_RECEIPT r = {0};
     _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, FloorRefusals) == 304,
                    "v7 prefix changed");
-    _Static_assert(sizeof(r) == 360, "v8 wire ABI changed");
+    _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, LastReserveFailure.Reason) == 360,
+                   "v8 prefix changed");
+    _Static_assert(sizeof(r) == 432, "v9 wire ABI changed");
     r.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION; r.Bytes = sizeof(r);
     r.GranuleBytes = 65536; r.LastWindowResult = 9;
     r.SegmentBytes = 1409286144ULL;
@@ -47,7 +49,14 @@ int main(void) {
     r.LastReserveFailure.HeldBytes = 1411383296ULL;
     r.LastReserveFailure.CommittedBytes = 1405157376ULL;
     r.LastReserveFailure.TimeMs = 12345;
-    r.LastReserveFailure.HighMemory = 0; r.LastReserveFailure.LowMemory = 2;
+    r.LastReserveFailure.HighMemory = 0; r.LastReserveFailure.LowMemory = 1;
+    r.LastReserveFailure.Reason = ADMISSION_POOL_REFUSAL_LOW_MEMORY;
+    r.LastReserveFailure.RequiredGranules = 23552;
+    r.LastReserveFailure.HeldGranules = 21536;
+    r.LastReserveFailure.ReserveCapGranules = 50176;
+    r.LastReserveFailure.PrivateGranules = 7;
+    r.RefusalCounts[0] = 4; r.RefusalCounts[1] = 1;
+    r.RefusalCounts[2] = 2; r.RefusalCounts[3] = 0;
     return fwrite(&r, sizeof(r), 1, stdout) == 1 ? 0 : 1;
 }
 '''
@@ -59,7 +68,7 @@ int main(void) {
                             str(src), '-o', str(exe)], check=True)
             raw = subprocess.check_output([str(exe)])
         got = decoder.decode_pool(raw)
-        self.assertEqual(got['version'], 8)
+        self.assertEqual(got['version'], 9)
         self.assertEqual(got['segment_bytes'], 1409286144)
         self.assertEqual(got['committed_bytes'], 13172736)
         self.assertEqual(got['held_bytes'], 14680064)
@@ -70,7 +79,19 @@ int main(void) {
         self.assertEqual(got['last_reserve_failure'], {
             'request_bytes': 134217728, 'reserved_bytes': 1409286144,
             'held_bytes': 1411383296, 'committed_bytes': 1405157376,
-            'time_ms': 12345, 'high_memory': 'clear', 'low_memory': 'unavailable'})
+            'time_ms': 12345, 'high_memory': 'clear', 'low_memory': 'set',
+            'reason': 'low_memory', 'required_granules': 23552,
+            'held_granules': 21536, 'reserve_cap_granules': 50176,
+            'private_granules': 7})
+        self.assertEqual(got['refusal_counts'], dict(low_memory=4,
+            signal_unavailable=1, backing_allocation=2, arithmetic=0))
+        self.assertEqual(got['event_sample'], 'admission_decision')
+        v8 = bytearray(raw[:360])
+        struct.pack_into('<II', v8, 0, 8, 360)
+        previous = decoder.decode_pool(v8)
+        self.assertEqual(previous['event_sample'], 'post_failure')
+        self.assertIsNone(previous['refusal_counts'])
+        self.assertNotIn('reason', previous['last_reserve_failure'])
         legacy = bytearray(raw[:304])
         struct.pack_into('<II', legacy, 0, 7, 304)
         old = decoder.decode_pool(legacy)
@@ -86,7 +107,7 @@ int main(void) {
         """
         good = struct.pack('<4I36Q', 7, 304, 65536, 0, *([0]*36))
         for raw in (b'', good[:8], good[:-1], good+b'\0',
-                    struct.pack('<I', 9)+good[4:],
+                    struct.pack('<I', 10)+good[4:],
                     good[:4]+struct.pack('<I', 360)+good[8:],
                     good[:8]+struct.pack('<I', 0)+good[12:]):
             with self.subTest(size=len(raw)), self.assertRaises(ValueError):
@@ -98,7 +119,13 @@ int main(void) {
         struct.pack_into('<2I', v8, 352, 99, 1)
         self.assertEqual(decoder.decode_pool(v8)['last_reserve_failure']['high_memory'],
                          'unknown(99)')
-        for raw in (v8[:304], v8[:-1], v8+b'\0'):
+        v9 = bytearray(432)
+        struct.pack_into('<4I', v9, 0, 9, 432, 65536, 0)
+        struct.pack_into('<Q', v9, 288, 1)
+        struct.pack_into('<I', v9, 360, 99)
+        self.assertEqual(decoder.decode_pool(v9)['last_reserve_failure']['reason'],
+                         'unknown(99)')
+        for raw in (v8[:304], v8[:-1], v8+b'\0', v9[:360], v9[:-1], v9+b'\0'):
             with self.subTest(size=len(raw)), self.assertRaises(ValueError):
                 decoder.decode_pool(raw)
 

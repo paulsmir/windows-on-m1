@@ -87,16 +87,27 @@ typedef enum _ADMISSION_POOL_PLACE {
  * moves by ADMISSION_POOL_DEMAND_RECEIPT_STEP granules or a failure count
  * changes. Times are microseconds of commit (page allocation + MAP_AT) and
  * release (UNMAP_RANGE + page free). */
-/* Last failed reservation, after rollback and before pressure reclaim.
- * Events are sampled after failure: 0 clear, 1 set, 2 unavailable. They
- * are not an atomic snapshot of the earlier MayGrow decision. */
+/* v9 records the event samples used by MayGrow, not a later resample.
+ * Counts in the original prefix are after rollback, before pressure reclaim.
+ * Decision granules describe the attempted floor before rollback; arithmetic
+ * failure has RequiredGranules=0 (not evaluated). Events: 0 clear, 1 set,
+ * 2 unavailable/not sampled. High/Low are sequential samples, not atomic. */
+#define ADMISSION_POOL_REFUSAL_NONE 0u
+#define ADMISSION_POOL_REFUSAL_LOW_MEMORY 1u
+#define ADMISSION_POOL_REFUSAL_NO_SIGNAL 2u
+#define ADMISSION_POOL_REFUSAL_BACKING 3u
+#define ADMISSION_POOL_REFUSAL_ARITHMETIC 4u
+#define ADMISSION_POOL_REFUSAL_COUNT 4u
 typedef struct _ADMISSION_POOL_RESERVE_FAILURE {
   unsigned long long RequestBytes, ReservedBytes, HeldBytes, CommittedBytes;
   unsigned long long TimeMs;
   unsigned int HighMemory, LowMemory;
+  unsigned int Reason, Reserved;
+  unsigned long long RequiredGranules, HeldGranules, ReserveCapGranules;
+  unsigned long long PrivateGranules;
 } ADMISSION_POOL_RESERVE_FAILURE;
 
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 8u /* v7: BrokerBytes; v8: floor refusals and last reservation failure */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 9u /* v9: decision samples/terms and reason totals */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -121,6 +132,9 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   /* v8: retained even after subsequent successful reservations. */
   unsigned long long FloorRefusals;
   ADMISSION_POOL_RESERVE_FAILURE LastReserveFailure;
+  /* Index is ADMISSION_POOL_REFUSAL_* minus one. Totals include every refusal,
+   * even when registry staging coalesces multiple decisions. */
+  unsigned long long RefusalCounts[ADMISSION_POOL_REFUSAL_COUNT];
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.
