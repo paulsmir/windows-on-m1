@@ -15,7 +15,7 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   - m1n1 075e3980 (branch codex/m1n1-guestram, macho .local/experiments/m1n1-075e3980-guestram, sha 452ab29f);
   - run_uefi `--guest-ram-profile expanded` plus `M1N1_PROXYCLIENT=.worktrees/m1n1-guestram/proxyclient` (prepare.sh sets both when AGX_GUEST_RAM_PROFILE=expanded);
   - guest RAM 6.88 GB (was 6.28);
-  - device switches Wom1GpuFaultInfoRead=1 and Wom1PoolFraction=3 (2016 MiB native pool).
+  - device switch Wom1GpuFaultInfoRead=1 and the FULL 2688 MiB native pool (no Wom1PoolFraction; EXP1962: 2k 744 / 4.4 FPS, 10k 755 / 4.5 FPS, paging stalls gone).
 - Fixed on the way (EXP1941-1961):
   - query-source BO residency (rc6);
   - bounded heap walks, CantTrimFurther, spill-helper references (rc7);

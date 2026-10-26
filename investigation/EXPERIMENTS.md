@@ -64094,3 +64094,5 @@ EXP1962 HARDWARE BEFORE 2026-10-26T09:19:55Z:
 - Recovery rec1962h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1962-full-pool-ram/run1962.sh.
 
 EXP1962 ACTUAL (Claude headline 2026-10-26T09:29:30Z): package 30.0.1962.0 (same driver as EXP1961), expanded guest RAM (m1n1 075e3980), only Wom1GpuFaultInfoRead=1, i.e. the FULL 2688 MiB native pool. No load OOM. GravityMark D3D12 1280x720: 2k Score 755 / 4.5 FPS; 10k Score 744 / 4.4 FPS (EXP1961 3/4 pool: 352/1.8 and 256/1.4). Guest alive, no device removal. Verdict: CONFIRMED. With 6.88 GB guest RAM the full pool fits and removes most paging stalls; the full pool (no fraction switch) is the new operating point.
+
+EXP1962 CORRECTION 2026-10-26T09:29:43Z: the probe slot "10K" runs arm a = 2k asteroids. Corrected: 2k Score 744 / 4.4 FPS; 10k Score 755 / 4.5 FPS. Frame analysis (2k): 779 presents; after 60 s median 0.194 s, p90 0.22 s; the longest wait after make-resident-trimmed is 0.2 s (EXP1961: 15-21 s); 633 trims. Paging stalls are eliminated, so the frame time is now render throughput.
