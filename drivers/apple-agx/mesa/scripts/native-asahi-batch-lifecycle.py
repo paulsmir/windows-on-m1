@@ -941,7 +941,165 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
          return;
       /* Else, fallback to CPU */''')
         save(path,text)
+    project_query_timeline(out, save)
     project_d3d_robustness(out,save)
+
+
+def project_query_timeline(out, save):
+    """RC40: immutable query generations and GPU timestamp resolves."""
+    hp = 'src/gallium/drivers/asahi/agx_state.h'
+    h = (out/hp).read_text()
+    h = replace(h, 'struct agx_query {', '''struct agx_query {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   struct agx_query *windows_next;
+   uint64_t windows_timestamp_seed;
+   unsigned windows_timestamp_count;
+   struct agx_bo *windows_timestamp_bos[AGX_MAX_BATCHES];
+#endif''')
+    h = replace(h, 'struct agx_context {', '''struct agx_context {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   struct agx_query *windows_retired_queries;
+#endif''')
+    # pipe_context must remain the first member (agx_context casts it).
+    h = h.replace('''struct agx_context {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   struct agx_query *windows_retired_queries;
+#endif
+   struct pipe_context base;''', '''struct agx_context {
+   struct pipe_context base;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   struct agx_query *windows_retired_queries;
+#endif''')
+    save(hp, h)
+    qp = 'src/gallium/drivers/asahi/agx_query.c'
+    query = (out/qp).read_text()
+    query = replace(query, '#include "agx_state.h"', '''#include "agx_state.h"
+#include "agx_win32_asahi_batch.h"
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "agx_win32_query_timestamp.h"
+static void agx_win32_query_release_snapshot(struct agx_context *, struct agx_query *);
+static void agx_add_query_to_batch(struct agx_batch *, struct agx_query *);
+#endif''')
+    a, b = function(query, 'agx_destroy_query')
+    part = query[a:b]
+    part = replace(part, "   /* We don't reference count", '''#ifdef APPLE_AGX_GPUVA_WINSYS
+   if (is_query_busy(ctx, query)) {
+      query->windows_next = ctx->windows_retired_queries;
+      ctx->windows_retired_queries = query;
+      return;
+   }
+   agx_win32_query_release_snapshot(ctx, query);
+#endif
+   /* We don't reference count''')
+    part = replace(part, '      sync_query_writers(ctx, query, "Occlusion query destroy");', '''#ifndef APPLE_AGX_GPUVA_WINSYS
+      sync_query_writers(ctx, query, "Occlusion query destroy");
+#endif''')
+    query = query[:a] + part + query[b:]
+    query = replace(query, 'static bool\nagx_begin_query', '''#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "agx_win32_query_lifecycle.h"
+#endif
+
+static bool
+agx_begin_query''')
+    a, b = function(query, 'agx_begin_query')
+    part = query[a:b]
+    part = replace(part, '   ctx->dirty |= AGX_DIRTY_QUERY;', '''#ifdef APPLE_AGX_GPUVA_WINSYS
+   if (!agx_win32_query_reset(ctx, query))
+      return false;
+#endif
+   ctx->dirty |= AGX_DIRTY_QUERY;''')
+    part = replace(part, '   sync_query_writers(ctx, query, "Query overwritten");', '''#ifndef APPLE_AGX_GPUVA_WINSYS
+   sync_query_writers(ctx, query, "Query overwritten");
+#endif''')
+    query = query[:a] + part + query[b:]
+    a, b = function(query, 'agx_end_query')
+    part = query[a:b]
+    part = replace(part, '   case PIPE_QUERY_TIMESTAMP: {', '''   case PIPE_QUERY_TIMESTAMP: {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      /* Timestamp has End only: version before attaching this End's writers. */
+      if (!agx_win32_query_reset(ctx, query))
+         return false;
+#endif''')
+    part = replace(part, '      *value = agx_get_gpu_timestamp(dev);', '''      *value = agx_get_gpu_timestamp(dev);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      query->windows_timestamp_seed = *value;
+      if (ctx->any_faults)
+         return false;
+#endif''')
+    query = query[:a] + part + query[b:]
+    query = replace(query, '''   if (query->type == PIPE_QUERY_TIMESTAMP ||
+       query->type == PIPE_QUERY_TIME_ELAPSED)
+      return false;''', '''   if (query->type == PIPE_QUERY_TIME_ELAPSED)
+      return false;
+#ifndef APPLE_AGX_GPUVA_WINSYS
+   if (query->type == PIPE_QUERY_TIMESTAMP)
+      return false;
+#else
+   /* D3D12 resolves U64. Preserve native GL conversion semantics for the
+    * other query-buffer result types through their existing fallback. */
+   if (query->type == PIPE_QUERY_TIMESTAMP && result_type != PIPE_QUERY_TYPE_U64)
+      return false;
+#endif''')
+    query = replace(query, '''   /* The query source is read by the copy kernel, including the shared''', '''#ifdef APPLE_AGX_GPUVA_WINSYS
+   if (query->type == PIPE_QUERY_TIMESTAMP) {
+      STATIC_ASSERT(AGX_MAX_BATCHES == AGX_WIN32_QUERY_TIMESTAMP_MAX_SOURCES);
+      if (query->windows_timestamp_count > AGX_MAX_BATCHES) {
+         AgxWin32AsahiMarkContextFault(ctx, 40u);
+         return false;
+      }
+      uint64_t addresses[AGX_MAX_BATCHES];
+      for (unsigned i = 0; i < query->windows_timestamp_count; ++i) {
+         struct agx_bo *bo = query->windows_timestamp_bos[i];
+         agx_batch_add_bo(batch, bo);
+         addresses[i] = bo->va->addr;
+      }
+      uint64_t sources = 0;
+      if (query->windows_timestamp_count) {
+         sources = agx_pool_upload_aligned(&batch->pool, addresses,
+             query->windows_timestamp_count * sizeof(uint64_t), 8);
+         if (!sources) {
+            AgxWin32AsahiMarkContextFault(ctx, 41u);
+            return false;
+         }
+      }
+      agx_batch_writes_range(batch, rsrc, offset, 8);
+      libagx_win32_query_timestamp(batch, agx_1d(1), AGX_BARRIER_ALL,
+          sources, query->windows_timestamp_count, query->windows_timestamp_seed,
+          agx_map_gpu(rsrc) + offset);
+      return true;
+   }
+#endif
+   /* The query source is read by the copy kernel, including the shared''')
+    query = replace(query, '''   agx_batch_add_bo(batch, is_occlusion(query) ? ctx->oq->bo : query->bo);''', '''#ifdef APPLE_AGX_GPUVA_WINSYS
+   /* Resolve readers must prevent CPU reset/free just like query writers. */
+   agx_add_query_to_batch(batch, query);
+#else
+   agx_batch_add_bo(batch, is_occlusion(query) ? ctx->oq->bo : query->bo);
+#endif''')
+    a, b = function(query, 'agx_batch_add_timestamp_query')
+    part = query[a:b]
+    part = replace(part, '   if (q) {', '''   if (q) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      if (q->type == PIPE_QUERY_TIMESTAMP && batch->initialized) {
+         struct agx_bo *bo = AgxWin32AsahiBatchTimestampBo(batch);
+         if (!bo || q->windows_timestamp_count >= AGX_MAX_BATCHES) {
+            AgxWin32AsahiMarkContextFault(batch->ctx, 42u);
+            return;
+         }
+         agx_bo_reference(bo);
+         q->windows_timestamp_bos[q->windows_timestamp_count++] = bo;
+      }
+#endif''')
+    query = query[:a] + part + query[b:]
+    a, b = function(query, 'agx_finish_batch_queries')
+    part = query[a:b]
+    part = part[:-1] + '''#ifdef APPLE_AGX_GPUVA_WINSYS
+   /* All saved CPU timestamp pointers have now been consumed. */
+   AgxWin32AsahiQueryCleanup(batch->ctx);
+#endif
+}'''
+    query = query[:a] + part + query[b:]
+    save(qp, query)
 
 
 def project_d3d_robustness(out,save):

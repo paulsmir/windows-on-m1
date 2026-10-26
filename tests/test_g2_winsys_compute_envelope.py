@@ -9,8 +9,8 @@ with the KMD's G13 context-store size. Invariants:
   command, the private data repeats it behind the compute header;
 - the per-job context-store buffer is a separate writable BO in the
   residency set, 64 KiB aligned and at least the G13 size;
-- the written set is every BO the batch is the Mesa writer of, and only
-  those (the UMD refreshes their CPU copies after the job);
+- the written set is every BO the batch is the Mesa writer of, plus its
+  immutable timestamp publication output;
 - flags and timestamps are refused before anything is created, and a
   refused submission rejects the batch without a fence;
 - GPU timestamps: Mesa's timestamp handles are stripped (the KMD records
@@ -207,6 +207,7 @@ int main(void) {
   batch.pipeline_pool.transient_bo = low;
   writer_of[dst->handle] = &batch;
   AGX_G4_BATCH *g = calloc(1, sizeof(*g)); batch.windows_batch = g;
+  g->Timestamp = make_bo(sizeof(uint64_t));
   struct drm_asahi_cmd_compute command = {0};
   command.cdm_ctrl_stream_base = cdm->va->addr;
   command.cdm_ctrl_stream_end = cdm->va->addr + 0x60;
@@ -242,9 +243,13 @@ int main(void) {
   /* Residency: command, stream, preemption, device pages, batch BOs, pools. */
   assert(in_refs(g->Command) && in_refs(cdm) && in_refs(g->Preemption) && in_refs(screen.rodata) &&
          in_refs(screen.dev.zero_bo) && in_refs(screen.dev.scratch_bo) && in_refs(src) &&
-         in_refs(dst) && in_refs(kernel) && in_refs(pool) && in_refs(low));
-  /* Written: the BO the batch writes (the copy destination), only it. */
-  assert(sub.written_count == 1u && sub.written[0].Allocation == dst->view.Allocation);
+         in_refs(dst) && in_refs(kernel) && in_refs(pool) && in_refs(low) && in_refs(g->Timestamp));
+  /* Both the copy destination and completion publication output are written. */
+  assert(sub.written_count == 2u &&
+         ((sub.written[0].Allocation == dst->view.Allocation &&
+           sub.written[1].Allocation == g->Timestamp->view.Allocation) ||
+          (sub.written[1].Allocation == dst->view.Allocation &&
+           sub.written[0].Allocation == g->Timestamp->view.Allocation)));
   /* The KMD admits exactly this envelope. */
   APPLE_AGX_G4_COMPUTE_VIEW view; APPLE_AGX_G4_FAILURE failure;
   assert(AppleAgxG4IsCompute(sub.private_data, sub.private_bytes));
@@ -254,20 +259,23 @@ int main(void) {
   assert(view.Compute.CdmCtrlStreamBase == cdm->va->addr && view.Preemption.Va == g->Preemption->va->addr);
   assert(view.Compute.Helper.Binary == 0x40u && view.Compute.Helper.Data == src->va->addr &&
          view.Compute.Helper.Cfg == 0u);
-  assert(!view.Compute.Timestamps.StartHandle && !view.Compute.Timestamps.EndHandle &&
-         !view.Compute.Timestamps.StartOffset && !view.Compute.Timestamps.EndOffset);
-  /* Release returns both job BOs once the job retired. */
+  assert(view.Compute.Timestamps.StartHandle == APPLE_AGX_G4_TIMESTAMP_PUBLISH &&
+         AppleAgxG4TimestampPublishVa(&view.Compute.Timestamps) == g->Timestamp->va->addr);
+  /* The output survives pending submission and is released with the capsule. */
+  assert(!AgxWin32AsahiBatchRelease(&batch) && g->Timestamp->refs == 1);
   g->Retired = 1;
-  struct agx_bo *command_bo = g->Command, *preempt_bo = g->Preemption;
+  struct agx_bo *command_bo = g->Command, *preempt_bo = g->Preemption, *timestamp_bo = g->Timestamp;
   assert(AgxWin32AsahiBatchRelease(&batch) && !batch.windows_batch &&
-         command_bo->refs == 0 && preempt_bo->refs == 0);
+         command_bo->refs == 0 && preempt_bo->refs == 0 && timestamp_bo->refs == 0);
   /* A failed creation rejects the batch without a submission. */
   AGX_G4_BATCH *h = calloc(1, sizeof(*h)); batch.windows_batch = h;
+  h->Timestamp = make_bo(sizeof(uint64_t));timestamp_bo = h->Timestamp;
   refuse_create_at = creates + 1u; b.Failed = 0;
   assert(!AgxWin32AsahiBatchFinishCompute(&batch, &command) && h->Rejected && !h->Submitted &&
          sub.calls == 1u && b.Failed);
   /* The rejected capsule is released like a retired one. */
   assert(AgxWin32AsahiBatchRelease(&batch) && !batch.windows_batch);
+  assert(timestamp_bo->refs == 0);
   puts("g2 winsys compute envelope: PASS");
   return 0;
 }

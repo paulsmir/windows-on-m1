@@ -108,6 +108,7 @@ typedef struct {
 } AGX_G4_PRIVATE_V5;
 typedef struct {
   struct agx_bo *Command;
+  struct agx_bo *Timestamp;
   struct agx_bo *Preemption;
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
@@ -194,7 +195,9 @@ static int mapped(void *ctx,unsigned long long va,unsigned bytes,int write,
 }
 static int submit(void *ctx,const uint64_t *written,unsigned written_count,
     uint64_t va,uint32_t bytes,const void *packet,uint32_t packet_bytes,uint64_t *fence) {
-  (void)ctx;++submit_count;assert(written_count==1 && written[0]==4);
+  (void)ctx;++submit_count;
+  assert(written_count==2 && ((written[0]==4 && written[1]==13) ||
+                            (written[0]==13 && written[1]==4)));
   assert(publish_count==expected_publish);
   /* Model transfer_held: only canonical allocations in the residency set
    * have their CPU staging contents uploaded before KMD submission. */
@@ -206,10 +209,16 @@ static int submit(void *ctx,const uint64_t *written,unsigned written_count,
     fprintf(stderr,"R148 parse=%d ordinal=%u VA=%llx resident_count=%u\n",
       result,failure.Ordinal,failure.Va,resident_count);return 0;
   }
+  APPLE_AGX_G4_NATIVE_RENDER published_render;
+  memcpy(&published_render,view.Render,sizeof(published_render));
+  assert(published_render.TimestampsFragment.StartHandle==APPLE_AGX_G4_TIMESTAMP_PUBLISH &&
+         AppleAgxG4TimestampPublishVa(&published_render.TimestampsFragment)==bos[13].view.Va);
   if(reject_submit) return 0;
   *fence=20;return 1;
 }
-static int wait_render(void *ctx,uint64_t fence) { (void)ctx;assert(fence==20);return 1; }
+static uint64_t completed_fence;
+static int query_render(void *ctx,uint64_t fence) { (void)ctx;return fence<=completed_fence; }
+static int wait_render(void *ctx,uint64_t fence) { (void)ctx;assert(fence==20);completed_fence=fence;return 1; }
 static int evict(void *ctx,const uint64_t *tokens,unsigned count) {
   (void)ctx;++eviction_count;
   for(unsigned i=0;i<count;++i) {assert(bos[tokens[i]].resident);bos[tokens[i]].resident=0;}
@@ -235,6 +244,7 @@ static int AgxWin32AsahiRenderableFormat(const struct agx_batch *batch, unsigned
 static void run(unsigned fail,unsigned many,unsigned scenario,unsigned sampler) {
   memset(&owner,0,sizeof(owner));memset(bos,0,sizeof(bos));
   resident_count=submit_count=eviction_count=release_count=0;reject_submit=fail;
+  completed_fence=0;
   publish_count=0;expected_publish=scenario==1?1u:many?8u:3u;
   for(unsigned i=1;i<16;++i) {
     vas[i].addr=0x100000ULL*i;bos[i].va=&vas[i];bos[i].handle=i;
@@ -245,7 +255,7 @@ static void run(unsigned fail,unsigned many,unsigned scenario,unsigned sampler) 
   vas[5].addr=many?0x15000000:0x270000;bos[5].view.Va=vas[5].addr;
   owner.GpuvaReady=1;
   owner.Gpuva.Ops=(AGX_WIN32_GPUVA_OPS){.MakeResident=make_resident,
-    .WaitPaging=wait_paging,.Submit=submit,.WaitRender=wait_render,
+    .WaitPaging=wait_paging,.Submit=submit,.WaitRender=wait_render,.QueryRender=query_render,
     .Evict=evict,.PrivateEscape=private_escape};
   struct agx_bo *pool_bos[4]={&bos[5],&bos[6],&bos[3],&bos[7]};
   struct agx_bo *pipeline_bos[3]={&bos[8],&bos[9],&bos[5]};
@@ -259,6 +269,7 @@ static void run(unsigned fail,unsigned many,unsigned scenario,unsigned sampler) 
     .pipeline_pool={.bos={pipeline_bos,(many?3u:1u)*sizeof(pipeline_bos[0])}},
     .key={.nr_cbufs=1,.cbufs={{&color,PIPE_FORMAT_B8G8R8A8_UNORM}}}};
   batch.windows_batch=calloc(1,sizeof(AGX_G4_BATCH));assert(batch.windows_batch);
+  capsule(&batch)->Timestamp=&bos[13];
   APPLE_AGX_G4_NATIVE_RENDER render={.WidthPx=31,.HeightPx=17,.Layers=1,
     .Samples=1,.SampleSizeBytes=8,.UtileWidthPx=16,.UtileHeightPx=16,
     .VdmCtrlStreamBase=bos[2].view.Va,
@@ -298,7 +309,7 @@ static void run(unsigned fail,unsigned many,unsigned scenario,unsigned sampler) 
     assert(scenario!=6 || !owner.Failed);
     if(scenario==6) assert(AgxWin32AsahiBatchAbort(&batch));
     assert(AgxWin32AsahiBatchRelease(&batch));
-    assert(!batch.windows_batch && !bos[1].refs);
+    assert(!batch.windows_batch && !bos[1].refs && !bos[13].refs);
     assert(release_count==(scenario>=4?0u:1u));
     for(unsigned i=2;i<16;++i) assert(!bos[i].resident);
     return;
@@ -309,8 +320,9 @@ static void run(unsigned fail,unsigned many,unsigned scenario,unsigned sampler) 
   }
   assert(result==!fail);
   /* The zero and scratch pages (bos 10, 11) are resident in every batch. */
-  assert(submit_count==1 && resident_count==(scenario==1?6u:many?11u:8u)+(sampler?1u:0u));
+  assert(submit_count==1 && resident_count==(scenario==1?7u:many?12u:9u)+(sampler?1u:0u));
   assert(bos[10].uploaded && bos[11].uploaded);
+  assert(bos[13].resident==!fail && bos[13].refs==1);
   if(sampler) {
     assert(bos[12].uploaded);
     /* On success the job retains the heap until its completion fence. On
@@ -321,11 +333,16 @@ static void run(unsigned fail,unsigned many,unsigned scenario,unsigned sampler) 
     assert(bos[5].uploaded && bos[8].uploaded && bos[8].flags==1);
     if(many) assert(bos[6].uploaded && bos[7].uploaded && bos[9].uploaded);
   }
-  if(!fail) {assert(owner.Gpuva.Held);assert(AgxWin32AsahiBatchPoll(&batch,1000));}
+  if(!fail) {
+    assert(owner.Gpuva.Held);
+    assert(!AgxWin32AsahiBatchPoll(&batch,0) && bos[13].resident);
+    assert(!AgxWin32AsahiBatchRelease(&batch) && bos[13].refs==1);
+    assert(AgxWin32AsahiBatchPoll(&batch,1000));
+  }
   assert(!owner.Gpuva.Held && eviction_count==1);
   assert(AgxWin32AsahiBatchRelease(&batch));
-  assert(!batch.windows_batch && release_count==1 && !bos[1].refs);
-  for(unsigned i=2;i<16;++i) assert(bos[i].refs==1 && !bos[i].resident);
+  assert(!batch.windows_batch && release_count==1 && !bos[1].refs && !bos[13].refs);
+  for(unsigned i=2;i<16;++i) assert(bos[i].refs==(i==13?0u:1u) && !bos[i].resident);
 }
 int main(void) {
   run(0,0,0,0);run(0,1,0,0);run(1,1,0,0);run(0,0,1,0);

@@ -116,6 +116,7 @@ typedef struct {
 } AGX_G4_PRIVATE_V5;
 typedef struct {
   struct agx_bo *Command;
+  struct agx_bo *Timestamp;
   struct agx_bo *Preemption;
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
@@ -246,7 +247,9 @@ static int submit(void *ctx, const uint64_t *written, unsigned written_count,
   }
   *fence = 20; return 1;
 }
-static int wait_render(void *ctx, uint64_t fence) { (void)ctx; assert(fence == 20); return 1; }
+static uint64_t completed_fence;
+static int query_render(void *ctx, uint64_t fence) { (void)ctx; return fence <= completed_fence; }
+static int wait_render(void *ctx, uint64_t fence) { (void)ctx; assert(fence == 20); completed_fence=fence;return 1; }
 static int evict(void *ctx, const uint64_t *tokens, unsigned count) {
   (void)ctx;
   for (unsigned i = 0; i < count; ++i) { assert(bos[tokens[i]].resident); bos[tokens[i]].resident = 0; }
@@ -284,7 +287,7 @@ int main(void) {
   bos[6].size = sizeof(bos[6].cpu);
   owner.GpuvaReady = 1;
   owner.Gpuva.Ops = (AGX_WIN32_GPUVA_OPS){.MakeResident = make_resident,
-    .WaitPaging = wait_paging, .Submit = submit, .WaitRender = wait_render,
+    .WaitPaging = wait_paging, .Submit = submit, .WaitRender = wait_render, .QueryRender = query_render,
     .Evict = evict, .PrivateEscape = private_escape, .GpuTimestamps = gpu_timestamps};
   bos[15].size = sizeof(bos[15].cpu); memset(bos[15].cpu, 0xee, sizeof(bos[15].cpu));
   struct agx_bo *pool_bos[1] = {&bos[5]}, *pipeline_bos[1] = {&bos[8]};
@@ -302,6 +305,8 @@ int main(void) {
   writer_of[4] = writer_of[13] = &batch;
   batch.windows_batch = calloc(1, sizeof(AGX_G4_BATCH)); assert(batch.windows_batch);
   AGX_G4_BATCH *g = capsule(&batch);
+  /* Begin owns this distinct GPU-only output before End can snapshot it. */
+  g->Timestamp = &bos[7];
   APPLE_AGX_G4_NATIVE_RENDER render = {.WidthPx = 31, .HeightPx = 17, .Layers = 1,
     .Samples = 1, .SampleSizeBytes = 8, .UtileWidthPx = 16, .UtileHeightPx = 16,
     .VdmCtrlStreamBase = bos[2].view.Va, .IspScissorBase = bos[5].view.Va + 0xe40};
@@ -347,6 +352,10 @@ int main(void) {
   assert(sub.v5_result == AppleAgxG4ParseOk && sub.v3_result != AppleAgxG4ParseOk);
   assert(!sub.view.Compute.Timestamps.StartHandle && !sub.view.Compute.Timestamps.EndHandle &&
          !sub.view.Compute.Timestamps.EndOffset);
+  APPLE_AGX_G4_NATIVE_RENDER published_render;
+  memcpy(&published_render,sub.view.Render,sizeof(published_render));
+  assert(published_render.TimestampsFragment.StartHandle == APPLE_AGX_G4_TIMESTAMP_PUBLISH &&
+         AppleAgxG4TimestampPublishVa(&published_render.TimestampsFragment) == bos[7].view.Va);
   assert(sub.view.HasCompute &&
          sub.view.Compute.CdmCtrlStreamBase == compute.cdm_ctrl_stream_base &&
          sub.view.Compute.CdmCtrlStreamEnd == compute.cdm_ctrl_stream_end &&
@@ -374,14 +383,19 @@ int main(void) {
   assert(last.Type == APPLE_AGX_G4_RENDER && last.VdmBarrier == 0xffffu && last.CdmBarrier == 1u);
   /* Residency: the CDM stream, the context-store buffer and the sampler
    * heap join the render's set; both encoders are published. */
-  assert(resident_count == 12u && bos[6].uploaded && bos[12].uploaded && bos[14].uploaded);
+  assert(resident_count == 13u && bos[6].uploaded && bos[12].uploaded && bos[14].uploaded &&
+         bos[7].resident && bos[7].refs == 1);
   assert(bos[2].published == 1u && bos[6].published == 1u);
   /* Written: the colour buffer and the buffer the compute work writes. */
-  assert(sub.written_count == 2u && written_has(4) && written_has(13));
+  assert(sub.written_count == 3u && written_has(4) && written_has(13) && written_has(7));
+  /* A pending nonblocking poll neither retires nor drops the publication BO. */
+  assert(!AgxWin32AsahiBatchPoll(&batch, 0) && bos[7].resident && bos[7].refs == 1);
+  assert(!AgxWin32AsahiBatchRelease(&batch));
   /* Retirement writes the KMD's start/end into the batch's slot of Mesa's
    * timestamp buffer when queries are attached (render: vertex start,
    * fragment end; its compute: comp start/end), then returns both job BOs. */
   assert(AgxWin32AsahiBatchPoll(&batch, 1000) && timestamp_queries == 0u);
+  assert(!bos[7].resident && bos[7].refs == 1);
   assert(AgxWin32AsahiBatchTimestamps(&batch) && timestamp_queries == 0u); /* no query */
   {
     struct agx_ptr attached = {NULL};
@@ -399,7 +413,7 @@ int main(void) {
   }
   batch.timestamps.data = NULL; batch.timestamps.size = 0;
   assert(AgxWin32AsahiBatchRelease(&batch));
-  assert(!batch.windows_batch && release_count == 1 && !bos[1].refs && !bos[12].refs);
+  assert(!batch.windows_batch && release_count == 1 && !bos[1].refs && !bos[12].refs && !bos[7].refs);
 
   /* D3D-G2b: a render batch with two colour targets (no compute work) is one
    * envelope whose attachments name both (the first is the KMD's bound
@@ -414,6 +428,7 @@ int main(void) {
     mrt.bo_list.count = 1; mrt.bo_list.handles[0] = 3;
     writer_of[13] = NULL;
     mrt.windows_batch = calloc(1, sizeof(AGX_G4_BATCH)); assert(mrt.windows_batch);
+    capsule(&mrt)->Timestamp = &bos[7];++bos[7].refs;
     unsigned before = submit_count;
     /* an unsupported format on any bound target refuses the batch */
     mrt.key.cbufs[1].format = 0x7fffu;
@@ -426,8 +441,9 @@ int main(void) {
     memcpy(&a0, sub.view.Attachments, sizeof(a0));
     memcpy(&a1, (const unsigned char *)sub.view.Attachments + sizeof(a0), sizeof(a1));
     assert(a0.Pointer == bos[4].view.Va && a1.Pointer == bos[15].view.Va);
-    assert(sub.written_count == 2u && written_has(4) && written_has(15));
+    assert(sub.written_count == 3u && written_has(4) && written_has(15) && written_has(7));
     assert(AgxWin32AsahiBatchPoll(&mrt, 1000) && AgxWin32AsahiBatchRelease(&mrt));
+    assert(!bos[7].refs);
   }
   puts("D3D-G1 winsys render+compute envelope: PASS");
   return 0;

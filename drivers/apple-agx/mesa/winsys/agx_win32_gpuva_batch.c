@@ -72,6 +72,7 @@ _Static_assert(offsetof(APPLE_AGX_G4_COMPUTE_ENVELOPE,Native)==
 
 typedef struct {
   struct agx_bo *Command;
+  struct agx_bo *Timestamp;
   /* G2: the CDM context-store buffer of a compute job, in this process's VM
    * (Asahi allocates one per job from the user VM, queue/compute.rs). */
   struct agx_bo *Preemption;
@@ -525,8 +526,18 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
   }
   AGX_G4_BATCH *g=calloc(1,sizeof(*g));
   if(!g) return batch_refuse(1u, __LINE__, 0u, 0u);
+  /* EndQuery can name an already submitted batch. Allocate immutable output
+   * before submission, and keep it GPU-only so no CPU shadow can overwrite
+   * the KMD completion store. KMD writes it before signalling this job. */
+  g->Timestamp=agx_bo_create(agx_device(batch->ctx->base.screen),sizeof(uint64_t),
+      0,AGX_WIN32_BO_GPU_ONLY,"Batch timestamp");
+  if(!g->Timestamp) { free(g); return batch_refuse(1u,__LINE__,0u,0u); }
   batch->windows_batch=g;
   return 1;
+}
+struct agx_bo *AgxWin32AsahiBatchTimestampBo(struct agx_batch *batch) {
+  AGX_G4_BATCH *g=capsule(batch);
+  return g ? g->Timestamp : NULL;
 }
 /* EXP1166: the Asahi draw path re-enters draw_vbo on the current batch
  * (util_draw_multi for num_draws > 1, unrolled/emulated indirect draws,
@@ -881,7 +892,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
    * VDM, rodata, zero and scratch pages (EXP1069), depth/stencil, the CDM
    * stream, compute preemption and sampler heap (D3D-G1), and slack.
    * The entry guard and the reference limit must use the same count. */
-  enum { fixed_refs=19u };
+  enum { fixed_refs=20u };
   if(!b || !g || !render || b->Failed || b->Gpuva.Terminal ||
      !batch_has_render_work(batch) || (compute!=NULL)!=(batch->cdm.bo!=NULL) ||
      compute_refused || g->Submitted || g->Rejected ||
@@ -931,6 +942,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   memcpy(&native_render,render,sizeof(native_render));
   strip_timestamps(&native_render.TimestampsVertex);
   strip_timestamps(&native_render.TimestampsFragment);
+  if(!g->Timestamp || !g->Timestamp->va) { fail_site=__LINE__; goto fail; }
+  AppleAgxG4TimestampPublish(&native_render.TimestampsFragment,g->Timestamp->va->addr);
   /* The first G13 scene constructor uses one cluster. Asahi selects this
    * firmware path with the UAPI NO_VERTEX_CLUSTERING bit. */
   native_render.Flags|=1u<<2;
@@ -1006,7 +1019,9 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   }
   refs=calloc(limit,sizeof(*refs));
   if(!refs) { fail_site=__LINE__; goto fail; }
-  if(!add_bo(b,refs,&count,limit,g->Command) ||
+  if(!add_bo(b,refs,&count,limit,g->Timestamp) ||
+     !add_written(b,written,&written_count,g->Timestamp) ||
+     !add_bo(b,refs,&count,limit,g->Command) ||
      !add_bo(b,refs,&count,limit,batch->vdm.bo) ||
      !add_bo(b,refs,&count,limit,agx_screen(batch->ctx->base.screen)->rodata) ||
      /* EXP1069: descriptors may name the device's zero/scratch pages. */
@@ -1123,7 +1138,7 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   int handle;
   /* Command, stream, preemption, rodata, zero and scratch pages, sampler
    * heap and slack. */
-  enum { fixed_refs=8u };
+  enum { fixed_refs=9u };
   if(!b || !g || !compute || b->Failed || b->Gpuva.Terminal ||
      !compute_only(batch) || g->Submitted || g->Rejected || g->ComputeEntered ||
      compute->flags || batch->bo_list.bit_count>UINT32_MAX-fixed_refs)
@@ -1154,6 +1169,8 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   memcpy(&envelope.Native,&command_header,sizeof(envelope.Native));
   memcpy(&envelope.Compute,compute,sizeof(envelope.Compute));
   strip_timestamps(&envelope.Compute.Timestamps);
+  if(!g->Timestamp || !g->Timestamp->va) { fail_site=__LINE__; goto fail; }
+  AppleAgxG4TimestampPublish(&envelope.Compute.Timestamps,g->Timestamp->va->addr);
   preemption.Va=g->Preemption->va->addr;
   preemption.Bytes=(unsigned)g->Preemption->size;
   preemption.Reserved=0u;
@@ -1163,7 +1180,9 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   memcpy(cpu,&envelope.Native,command_bytes);
   refs=calloc(limit,sizeof(*refs));
   if(!refs) { fail_site=__LINE__; goto fail; }
-  if(!add_bo(b,refs,&count,limit,g->Command) ||
+  if(!add_bo(b,refs,&count,limit,g->Timestamp) ||
+     !add_written(b,written,&written_count,g->Timestamp) ||
+     !add_bo(b,refs,&count,limit,g->Command) ||
      !add_bo(b,refs,&count,limit,batch->cdm.bo) ||
      !add_bo(b,refs,&count,limit,g->Preemption) ||
      !add_bo(b,refs,&count,limit,agx_screen(batch->ctx->base.screen)->rodata) ||
@@ -1308,6 +1327,7 @@ int AgxWin32AsahiBatchRelease(struct agx_batch *batch) {
     return 0;
   if(!release_lease(b,g)) return 0;
   if(g->Command) agx_bo_unreference(b->Native,g->Command);
+  if(g->Timestamp) agx_bo_unreference(b->Native,g->Timestamp);
   if(g->Preemption) agx_bo_unreference(b->Native,g->Preemption);
   batch->windows_batch=NULL;
   AgxWin32RefCleanup(&g->Expected);

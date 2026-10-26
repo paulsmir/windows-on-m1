@@ -37,13 +37,13 @@ struct pipe_resource {uint64_t data[64];};
 struct pipe_query {unsigned type,index;uint64_t result;};
 struct operation {pipe_query *query;pipe_resource *dst;unsigned at;};
 static std::vector<operation> gpu;
-static bool faulted;
+static bool faulted, fault_on_emit;
 struct pipe_context {
  pipe_query *(*create_query)(pipe_context *,unsigned,unsigned)=[](pipe_context *,unsigned type,unsigned index){return new pipe_query{type,index,0};};
  void (*destroy_query)(pipe_context *,pipe_query *)=[](pipe_context *,pipe_query *q){delete q;};
  bool (*begin_query)(pipe_context *,pipe_query *)=[](pipe_context *,pipe_query *q){q->result=0;return true;};
  bool (*end_query)(pipe_context *,pipe_query *)=[](pipe_context *,pipe_query *q){q->result=0x100000000ull+q->index+1;return true;};
- void (*get_query_result_resource)(pipe_context *,pipe_query *,unsigned,unsigned,int,pipe_resource *,unsigned)=[](pipe_context *,pipe_query *q,unsigned flags,unsigned type,int index,pipe_resource *dst,unsigned at){assert(flags==PIPE_QUERY_WAIT&&type==PIPE_QUERY_TYPE_U64&&index==0);gpu.push_back({q,dst,at});};
+ void (*get_query_result_resource)(pipe_context *,pipe_query *,unsigned,unsigned,int,pipe_resource *,unsigned)=[](pipe_context *,pipe_query *q,unsigned flags,unsigned type,int index,pipe_resource *dst,unsigned at){assert(flags==PIPE_QUERY_WAIT&&type==PIPE_QUERY_TYPE_U64&&index==0);gpu.push_back({q,dst,at});if(fault_on_emit)faulted=true;};
  void (*clear_buffer)(pipe_context *,pipe_resource *,unsigned,unsigned,const void *,unsigned)=[](pipe_context *,pipe_resource *dst,unsigned at,unsigned bytes,const void *zero,unsigned size){assert(bytes==8&&size==8&&*(const uint64_t *)zero==0);gpu.push_back({nullptr,dst,at});};
 };
 struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingDispatches;};
@@ -97,8 +97,8 @@ int main(){pipe_context pipe;AGX_D3D12_OWNER owner{&pipe,0};pipe_resource r;mems
         self.replay(r'''
 int main(){pipe_context pipe;AGX_D3D12_OWNER owner{&pipe,0};pipe_resource r={};AGX_D3D12_BUFFER dst{&r,sizeof(r)};AGX_D3D12_QUERY_HEAP *h=nullptr;
  assert(AgxD3d12OwnerCreateQueryHeap(&owner,1,1,&h)==S_OK);
- assert(AgxD3d12OwnerQuery(&owner,h,2,0,0)==S_OK);faulted=true;
- assert(AgxD3d12OwnerResolveQueries(&owner,h,2,0,1,&dst,0)==DXGI_ERROR_DEVICE_HUNG);
+ assert(AgxD3d12OwnerQuery(&owner,h,2,0,0)==S_OK);fault_on_emit=true;
+ assert(AgxD3d12OwnerResolveQueries(&owner,h,2,0,1,&dst,0)==DXGI_ERROR_DEVICE_HUNG);assert(gpu.size()==1 && faulted);
  AgxD3d12OwnerDestroyQueryHeap(&owner,h);return 0;}
 ''')
 
