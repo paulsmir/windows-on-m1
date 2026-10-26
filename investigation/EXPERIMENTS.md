@@ -64151,3 +64151,16 @@ EXP1965 HARDWARE ACTUAL 2026-10-26T11:39:25Z:
 - 10k: the guest went down. Bugcheck 0x116 (P1 ffffd98ea01272e0, P2 fffff802e3b71ec0 AppleAgxRenderAdmission.sys+0x1ec0, P3 c0000483, P4 3); minidump rec1965h/102626-16968-01.dmp. The KMD fault receipt shows FAULT_INFO 0x11ac9a001303cc11, the same unmapped CDM read at 0x11ac9a0000 as EXP1964: a deterministic fault on the rc32 path at MaxCount 12000.
 - Recovery rec1965h (AGX_RECOVERY_ALLOW_AT_PROXY=1): RECOVERY_DONE.
 - Next: rc36 (Codex xhigh). Fall back to rc31 instead of the rc32 MaxCount unroll; maintain pipeline-statistics counters on the GPU stream path; root-cause the 0x11ac9a0000 fault.
+
+EXP1966 HARDWARE BEFORE 2026-10-26T12:12:34Z:
+- Package 30.0.1966.0 = EXP1965 driver + rc36:
+  - 896eafc6: stream-ineligible counted draws read the count on the CPU and natively draw only min(count, MaxCount) records; the rc32 predicate/scratch/MaxCount unroll is removed;
+  - f2e5a87c: the stream kernel atomically accumulates IA vertices/primitives, VS invocations and clipper counts per active record, so pipeline-statistics queries no longer disqualify the stream.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (full pool).
+- WHY THIS HYPOTHESIS: in EXP1965 all 2092 counted calls were rejected with reason 3 because GravityMark keeps a pipeline-statistics query active (three type-2 query heaps), so they fell back to the rc32 MaxCount unroll (2k 300/1.8 FPS; 10k 0x116 with a deterministic unmapped CDM read at 0x11ac9a0000 in the combined render/CDM job that consumes rc32 scratch). rc36 admits statistics on the stream and removes rc32.
+- Expected: measure-d3d12-counted-path path=3 reason=0 (no path=1); constant native encode time per call; correct image; no 0x11ac9a0000 fault; Score/FPS above EXP1963 (784/4.7, 798/4.8); median frame below 183/185 ms.
+- Failure criteria: missing or garbage asteroids (GPU-written VDM/USC visibility), any GPU fault, TDR/0x116, device removal, or a hang.
+- Recovery: rec1966h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest is down).
+- Hashes: sys 4bb4433451eb, UmdArm64 be47e8e8da82, UmdX64 c5bf6f4dcae5, Umd32 f4562b8f2cfa; manifest 07b036d55e09, hardware-manifest 2bd5707ce03f; probe1966.sh bd04da5d5357 (PROBE_LINT_OK); visible recovery rec1966h 90fe1e703bd99bac; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1966h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1966-stream-statistics/run1966.sh.
