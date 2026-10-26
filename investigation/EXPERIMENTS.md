@@ -64364,3 +64364,14 @@ EXP1974 HARDWARE ACTUAL 2026-10-26T18:59:34Z: FAIL. Canonical CPU maps on (CPU_P
 - Verdict: canonical CPU maps as the default are REJECTED until the missing-native-leaf refusal is fixed (Codex rc50). The single copy looks like it fits the 200k scene.
 - rc45 be8ed552 (default on) stays in the source, but runs use CPU_POOL_MAP=0 until rc50 lands.
 - Recovery rec1974h (running).
+
+EXP1975 HARDWARE BEFORE 2026-10-26T19:05:30Z:
+- Package 30.0.1975.0 = EXP1974 driver + rc49 (6392c580 bounded scanout queue-to-latch timing capture; c880bed2 composition analyzer). Canonical CPU maps stay off (CPU_POOL_MAP=0) until rc50 fixes the missing-native-leaf refusal from EXP1971b and EXP1974.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1.
+- WHY THIS HYPOTHESIS: (1) the user asked for varied runs compared with the macOS leaderboard (HD 100k about 9,950); the EXP1973 path (rc47) has not run at HD. (2) EXP1973 arm b (FHD 50k) hit a load OOM right after a successful FHD 100k arm; running the smaller scene first here tests whether the second arm's OOM depends on the order (memory not returned). (3) rc49 needs timestamped scanout records to explain the user-reported taskbar flicker.
+- Expected: both arms finish at HD with scores above EXP1972 (HD 100k 543, HD 50k 651); the display ring holds queue/latch timestamps; no fault. If arm b fails to load, the cross-arm memory leak is likely.
+- Failure criteria: a fault, a bugcheck, a hang, or missing scanout timing.
+- Recovery: rec1975h.
+- Hashes: sys 20cb96325f67, UmdArm64 6d416d62a0bd, UmdX64 9750633a3b5d, Umd32 4d21b6e9ac7d; manifest bc72511a421d, hardware-manifest e3149a3843d6; probe1975.sh 7933fbc61cf4 (PROBE_LINT_OK); visible recovery rec1975h fcb4a5e07e10ab26; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1975h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1975-hd-scanout/run1975.sh.
