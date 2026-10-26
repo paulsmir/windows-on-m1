@@ -8,6 +8,28 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-26 10:30Z -- GRAVITYMARK D3D12 COMPLETES (2k 352 / 1.8 FPS, 10k 256 / 1.4 FPS, EXP1961)
+
+- Host: the Mac (J313 over USB). The PC is the builder plus Codex. Hosting the J313 from Windows failed: see the EXP1940 entries.
+- Operating point:
+  - m1n1 075e3980 (branch codex/m1n1-guestram, macho .local/experiments/m1n1-075e3980-guestram, sha 452ab29f);
+  - run_uefi `--guest-ram-profile expanded` plus `M1N1_PROXYCLIENT=.worktrees/m1n1-guestram/proxyclient` (prepare.sh sets both when AGX_GUEST_RAM_PROFILE=expanded);
+  - guest RAM 6.88 GB (was 6.28);
+  - device switches Wom1GpuFaultInfoRead=1 and Wom1PoolFraction=3 (2016 MiB native pool).
+- Fixed on the way (EXP1941-1961):
+  - query-source BO residency (rc6);
+  - bounded heap walks, CantTrimFurther, spill-helper references (rc7);
+  - error-cause preservation (rc11);
+  - user-mode device removal diagnosed (dxgkrnl RE plus ETW: VidMm "Unrecoverable page in failure" on a full single segment).
+- Proven limits:
+  - the pool backing promise must stay at min(live, cap), as for dGPU VRAM (rc28);
+  - GravityMark genuinely needs about 2 GB GPU plus 2.6 GB process memory (rc29);
+  - guest RAM was the binding limit.
+- Open:
+  - stalls remain: median frame 0.22 s, but 15-21 s paging stalls and about 2k trims. EXP1962 tests the full 2688 MiB pool on the larger RAM;
+  - rendering throughput (Night Raid-class costs);
+  - the regression check of D3D11/GL/Night Raid on the new m1n1.
+
 ## CURRENT 2026-10-25 02:30Z -- MOVED TO THE WINDOWS PC (WSL); EXP1940/EXP1941 BUILT, WAITING FOR THE J313
 
 - Work environment: WSL Ubuntu on the builder PC (repo at /Volumes/pwdev/public_windows, symlinked). Offline
