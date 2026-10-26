@@ -64272,3 +64272,21 @@ EXP1970 HARDWARE ACTUAL 2026-10-26T16:33:12Z:
 - Conclusion: about 145 ms of the 180 ms frame is UMD->KMD escapes (kernel transition plus hypervisor trap, 0.1-0.25 ms each). native_held_ready() (umd_gpuva_windows.c ~1848) proves native backing with one escape per held BO per submission, about 533 per frame; there are also 162 CPU copies per frame through a KMD escape. GPU waits are small (13.7 ms). This replaces the earlier "query bucket" reading: the query/draw buckets were escape time.
 - Next: Codex rc45 (xhigh) to batch or cache the readiness proof and move copies to CPU mappings. The user target is now at least 9000 points at Full HD (native macOS level), as high as possible. The guest gm-run.ps1 gained -Width/-Height (backup gm-run.ps1.bak-1280).
 - Recovery rec1970h: RECOVERY_DONE.
+
+EXP1971 HARDWARE BEFORE 2026-10-26T17:00:12Z:
+- Package 30.0.1971.0 = EXP1970 driver + rc43 (submit failure containment; stream validation and probes; GPU stream still opt-in, off) + rc44 (material probe steps, not run) + rc45:
+  - 0b353789 one authenticated escape per submission for the whole held set (instead of one per BO);
+  - be8ed552 D3D12 defaults to canonical CPU maps (DirectCpuPool), so ordinary staging needs no copy escapes; APPLE_AGX_D3D12_CPU_POOL_MAP=0 restores the old path;
+  - 6efe7bad analyzer counts every Execute.
+- First run at leaderboard settings. Native base M1 macOS/Metal: FHD 200k is about 5,200-5,500 (31-33 FPS).
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (full pool 2688 MiB).
+- WHY THIS HYPOTHESIS: EXP1970 attributed about 145 ms of the 180 ms frame to UMD->KMD escapes: native_held_ready 533 per frame (about 108 ms) and copy_escape 162 per frame (37 ms); GPU busy was about 9 ms. rc45 removes the per-BO escapes (arm a) and the staging copies (arm b). EXP1959 rejected CPU_POOL_MAP as a default because of load OOM in a 2016 MiB pool; this run re-tests it with the full 2688 MiB pool and expanded RAM at 200k asteroids.
+- Expected:
+  - arm a: native_ready_escape at most 2 per Execute, frame time far below 180 ms;
+  - arm b: copy_escape near zero, and either a further gain or a load OOM (then rejected again);
+  - both: correct images and no faults.
+- Failure criteria: a GPU fault, any bugcheck, a hang, or arm a slower than EXP1970.
+- Recovery: rec1971h.
+- Hashes: sys ec59c44054be, UmdArm64 d63aea69c7c8, UmdX64 3419f660f2cd, Umd32 d21d04bc1d8f; manifest 9a12511426a5, hardware-manifest baa7fbe8ef59; probe1971.sh 45764d21d2e1 (PROBE_LINT_OK); visible recovery rec1971h 8343692234a0b4d3; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1971h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1971-escape-batch/run1971.sh.
