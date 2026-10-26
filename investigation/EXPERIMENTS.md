@@ -64245,3 +64245,19 @@ EXP1969 HARDWARE ACTUAL 2026-10-26T15:30:35Z:
   - attempt 2: the visible-disable receipt already existed; renamed it on the guest;
   - attempt 3: RECOVERY_DONE.
   The cleanup had also deleted the EXP641 air_known_hosts and the EXP-20260903-385 emergency firmware; both are restored and hash-verified.
+
+EXP1970 HARDWARE BEFORE 2026-10-26T16:06:22Z:
+- Package 30.0.1970.0 = EXP1969 driver + rc42:
+  - 3d851a19 thread-local wait accounting per Execute (measure-d3d12-wait);
+  - 42f0a0f6 wait sites at native hazards, the in-flight queue, batch slots, MakeResident/paging, Windows CPU-wait callbacks, count maps, query writers and query BO creation;
+  - 33d87dbc perf reasons sampled after the startup cap;
+  - 58fce739 analyzer per-site medians.
+  Also e4d00323 (recovery log dedupe) and the prepare.sh hard-link change (tooling only).
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (full pool).
+- WHY THIS HYPOTHESIS: EXP1969a kept the 60.8 ms query bucket and 118 ms draw bucket after rc40 removed the explicit query waits, while the GPU is busy only about 9.4 ms per 186 ms frame. The blocking sites are unattributed; rc42 ranks lazy query BO creation (up to 33 per frame), Resolve flush with in-flight queue backpressure, and the counted count map, and its receipts distinguish them.
+- Expected: Score/FPS like EXP1969a (about 750), no fault; measure-d3d12-wait rows per Execute with per-site counts and microseconds, plus separate query Begin/End/Resolve times; the sites explain most of the 60.8 ms query bucket and 118 ms draw bucket.
+- Failure criteria: missing wait rows, a profiler overhead regression of more than 5%, any fault or bugcheck, or a hang.
+- Recovery: rec1970h.
+- Hashes: sys 946680b40605, UmdArm64 ee617e43a6c7, UmdX64 2a95da0e1cb9, Umd32 5fc1b145e879; manifest 74acefb47e7f, hardware-manifest 2b79d43984fb; probe1970.sh 2ca01d7843d8 (PROBE_LINT_OK); visible recovery rec1970h 8d01e4e65714a361; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1970h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1970-wait-profile/run1970.sh.
