@@ -23,8 +23,8 @@ class BoPressure(unittest.TestCase):
         prefix = BODY[:BODY.index('@@FUNCS@@')]
         prefix = prefix.replace('int Failed, Closing;',
                                 'int Failed, Closing, Buffers; void *UnpublishedBo;')
-        prefix = prefix.replace('unsigned ClassId; } Buffer; } Backing;',
-                                'unsigned ClassId; } Buffer; int Live; } Backing;')
+        prefix = prefix.replace('unsigned ClassId; } Buffer; APPLE_AGX_U64 ConstructionSerial; } Backing;',
+                                'unsigned ClassId; } Buffer; APPLE_AGX_U64 ConstructionSerial; int Live; } Backing;')
         prefix = prefix.replace('static int disposed, refuse;',
                                 'static int disposed, refuse, fail_dispose;')
         prefix = prefix.replace('(void)bo; if(refuse) return 0;',

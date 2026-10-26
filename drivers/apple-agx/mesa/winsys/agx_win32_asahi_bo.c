@@ -42,6 +42,7 @@ struct windows_bo {
   AGX_WIN32_GPUVA_BO Gpuva;
   int Imported;
   int Cached;
+  APPLE_AGX_U64 CacheStorageBytes;
   /* EXP1207: the cached CPU map of an AGX_WIN32_BO_SHADOW BO (Base._map);
    * Backing.CpuAddress stays the allocation's write-combined view. */
   void *Shadow;
@@ -274,12 +275,21 @@ static int dispose(struct windows_bo *bo) {
 }
 
 #ifdef APPLE_AGX_GPUVA_WINSYS
-/* Count storage retained solely for reuse, including the optional cached CPU
- * shadow. Size/flags/class still determine a hit. A cached BO has refcnt zero,
- * so its shadow cannot be allocated or resized until cache_take removes it. */
+/* Count every retained copy, not just canonical and winsys storage. T13 may
+ * own private staging plus a GPU-write merge baseline. The native owner
+ * serializes this query with mapping/submission; cached BOs have no clients
+ * that can create new CPU storage. Save the charge at insertion so removal
+ * never depends on a later owner query or teardown state. */
 static APPLE_AGX_U64 cache_storage_bytes(const struct windows_bo *bo) {
+  const AGX_WIN32_ASAHI_BACKEND *b=bo->Backend;
+  AGX_WIN32_ASAHI_CPU_STORAGE storage={0};
   if(bo->Base.size>AGX_WIN32_BO_CACHE_BYTES) return AGX_WIN32_BO_CACHE_BYTES+1;
-  return (APPLE_AGX_U64)bo->Base.size*(bo->Shadow?2u:1u);
+  APPLE_AGX_U64 bytes=(APPLE_AGX_U64)bo->Base.size*(bo->Shadow?2u:1u);
+  if(bytes>AGX_WIN32_BO_CACHE_BYTES) return AGX_WIN32_BO_CACHE_BYTES+1;
+  if(b->Ops.CpuStorage &&
+     (!b->Ops.CpuStorage(b->Owner,&bo->Base,bo->Backing.ConstructionSerial,&storage) ||
+      storage.Bytes>AGX_WIN32_BO_CACHE_BYTES-bytes)) return AGX_WIN32_BO_CACHE_BYTES+1;
+  return bytes+storage.Bytes;
 }
 /* EXP996: every new BO costs AllocateCb, ReserveGpuVirtualAddress, a mapping
  * and residency paging-fence wait (EXP994 DWM: ~460 new BOs, 2553 paging waits,
@@ -299,7 +309,7 @@ static int cache_in_flight(const AGX_WIN32_ASAHI_BACKEND *b,const struct windows
 static void cache_evict_oldest(AGX_WIN32_ASAHI_BACKEND *b) {
   struct windows_bo *bo=(struct windows_bo *)b->Cache[0];
   memmove(&b->Cache[0],&b->Cache[1],(size_t)(--b->CacheCount)*sizeof(b->Cache[0]));
-  b->CacheBytes-=cache_storage_bytes(bo);
+  b->CacheBytes-=bo->CacheStorageBytes;
   bo->Cached=0;
   AgxWin32PerfNote("BO cache evict");
   (void)dispose(bo);
@@ -318,6 +328,7 @@ static int cache_put(struct windows_bo *bo) {
         storage>AGX_WIN32_BO_CACHE_BYTES-b->CacheBytes))
     cache_evict_oldest(b);
   bo->Cached=1;
+  bo->CacheStorageBytes=storage;
   b->Cache[b->CacheCount++]=bo;
   b->CacheBytes+=storage;
   return 1;
@@ -329,7 +340,7 @@ static struct windows_bo *cache_take(AGX_WIN32_ASAHI_BACKEND *b,size_t bytes,
     if(bo->Base.size!=bytes || (unsigned)bo->Base.flags!=flags ||
        bo->Backing.Buffer.ClassId!=cls || cache_in_flight(b,bo)) continue;
     memmove(&b->Cache[i],&b->Cache[i+1],(size_t)(--b->CacheCount-i)*sizeof(b->Cache[0]));
-    b->CacheBytes-=cache_storage_bytes(bo);
+    b->CacheBytes-=bo->CacheStorageBytes;
     bo->Cached=0;
     return bo;
   }
@@ -340,7 +351,7 @@ static struct windows_bo *cache_take(AGX_WIN32_ASAHI_BACKEND *b,size_t bytes,
 static void cache_flush(AGX_WIN32_ASAHI_BACKEND *b) {
   while(b->CacheCount) {
     struct windows_bo *bo=(struct windows_bo *)b->Cache[--b->CacheCount];
-    b->CacheBytes-=cache_storage_bytes(bo);
+    b->CacheBytes-=bo->CacheStorageBytes;
     bo->Cached=0;
     (void)dispose(bo);
   }
@@ -357,7 +368,7 @@ static unsigned cache_reclaim(AGX_WIN32_ASAHI_BACKEND *b) {
     if(cache_in_flight(b,bo)) { ++i; continue; }
     memmove(&b->Cache[i],&b->Cache[i+1],
         (size_t)(--b->CacheCount-i)*sizeof(b->Cache[0]));
-    b->CacheBytes-=cache_storage_bytes(bo);
+    b->CacheBytes-=bo->CacheStorageBytes;
     bo->Cached=0;
     if(dispose(bo)) {
       ++released;

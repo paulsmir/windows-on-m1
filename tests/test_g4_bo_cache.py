@@ -50,10 +50,12 @@ struct agx_bo { size_t size; unsigned flags; int refcnt; };
 typedef struct { uint64_t Allocation, Va, Bytes; unsigned Bound; } AGX_WIN32_GPUVA_BO;
 typedef struct { uint64_t *Handles; unsigned Count; uint64_t Fence; } AGX_WIN32_GPUVA_SET;
 typedef struct { uint64_t *Held; unsigned HeldCount; AGX_WIN32_GPUVA_SET Older[3]; unsigned OlderCount; } AGX_WIN32_GPUVA_SPACE;
-typedef struct { int Failed, Closing; AGX_WIN32_GPUVA_SPACE Gpuva;
+typedef struct { void *PrivateMap; APPLE_AGX_U64 Bytes; } AGX_WIN32_ASAHI_CPU_STORAGE;
+typedef struct { int Failed, Closing; void *Owner;
+ struct { int (*CpuStorage)(void *,const void *,APPLE_AGX_U64,AGX_WIN32_ASAHI_CPU_STORAGE *); } Ops; AGX_WIN32_GPUVA_SPACE Gpuva;
   void *Cache[AGX_WIN32_BO_CACHE_LIMIT]; APPLE_AGX_U32 CacheCount; APPLE_AGX_U64 CacheBytes; } AGX_WIN32_ASAHI_BACKEND;
-struct windows_bo { struct agx_bo Base; struct { struct { unsigned ClassId; } Buffer; } Backing;
-  AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva; void *Shadow; int Imported, Cached, Virtual; /* C53 B1 */ };
+struct windows_bo { struct agx_bo Base; struct { struct { unsigned ClassId; } Buffer; APPLE_AGX_U64 ConstructionSerial; } Backing;
+  AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva; void *Shadow; int Imported, Cached, Virtual; APPLE_AGX_U64 CacheStorageBytes; /* C53 B1 */ };
 static int disposed, refuse;
 static void AgxWin32PerfNote(const char *fmt, ...) { (void)fmt; }
 static int dispose(struct windows_bo *bo) { (void)bo; if(refuse) return 0; ++disposed; return 1; }

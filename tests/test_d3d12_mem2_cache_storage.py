@@ -14,6 +14,37 @@ import test_d3d12_mem2_winsys_failures as winsys_tests
 class CacheStorage(unittest.TestCase):
     replay = winsys_tests.WinsysFailures.replay
 
+    def test_owner_private_copies_count_against_cache_budget(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? T13 staging and merge copies must not escape the cache byte cap; failed identity queries must not admit unaccounted storage."""
+        source = SRC.read_text()
+        functions = '\n'.join(function(source, name) for name in (
+            'cache_storage_bytes', 'cache_in_flight', 'cache_evict_oldest',
+            'cache_put', 'cache_take', 'cache_flush', 'cache_reclaim'))
+        limits = '\n'.join(line for line in HDR.read_text().splitlines()
+                           if line.startswith('#define AGX_WIN32_BO_CACHE_'))
+        prefix = BODY.split('@@FUNCS@@')[0].replace('@@LIMITS@@', limits)
+        self.replay(prefix + functions + r'''
+static uint64_t extra;static int query_ok=1;static unsigned queries;
+static int storage(void *owner,const void *key,uint64_t serial,AGX_WIN32_ASAHI_CPU_STORAGE *out) {
+ (void)key;assert(owner==(void*)42 && serial==7);++queries;
+ out->Bytes=extra;out->PrivateMap=NULL;return query_ok;
+}
+int main(void) {
+ AGX_WIN32_ASAHI_BACKEND b={0};b.Owner=(void*)42;b.Ops.CpuStorage=storage;
+ struct windows_bo a={0};a.Backend=&b;a.Base.size=16ull<<20;
+ a.Backing.ConstructionSerial=7;a.Gpuva.Bound=1;
+ extra=32ull<<20;assert(cache_put(&a) && b.CacheBytes==(48ull<<20));
+ /* Debit the charge captured at insertion, never a fresh mutable query. */
+ extra=0;unsigned before=queries;
+ assert(cache_take(&b,a.Base.size,0,0)==&a && !b.CacheBytes && queries==before);
+ a.Shadow=(void*)1;extra=32ull<<20;assert(cache_put(&a) && b.CacheBytes==(64ull<<20));
+ cache_flush(&b);assert(!b.CacheBytes);
+ extra=~0ull;assert(!cache_put(&a) && !b.CacheBytes && !b.CacheCount);
+ extra=0;query_ok=0;assert(!cache_put(&a) && !b.CacheBytes);
+ query_ok=1;assert(cache_put(&a));cache_flush(&b);assert(!b.CacheBytes);
+}
+''')
+
     def test_shadow_bytes_bound_reuse_eviction_flush_and_pressure(self):
         source = SRC.read_text()
         functions = '\n'.join(function(source, name) for name in (
