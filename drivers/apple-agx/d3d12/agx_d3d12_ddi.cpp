@@ -48,6 +48,7 @@ int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
 
 /* the UMD trace logger (umd_runtime_device.c; C linkage through umd_internal.h) */
 extern "C" VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status, const UINT *Values, UINT Count);
+extern "C" BOOL AdmissionUmdDiagnosticEnabled(VOID);
 
 namespace {
 /* D3D12 A3 (EXP1343: OpenAdapter12 returned a NULL driver adapter handle
