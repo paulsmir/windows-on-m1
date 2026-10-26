@@ -6026,6 +6026,10 @@ AgxD3d10ResourceWithinRequiredLimits(
             '1420e8cbc883bad80bc014a285a922fffe47da92597f1671c6ebe8f4df8ab4ed',[
             ('   util_dynarray_append(&pool->bos, bo);',
              '   if (!bo) return NULL;\n   util_dynarray_append(&pool->bos, bo);'),
+            # size_t is 32-bit on WOW64. Test remaining slab capacity before
+            # adding a near-4GiB scratch size to the existing slab offset.
+            ('   if (unlikely(bo == NULL || (offset + sz) >= POOL_SLAB_SIZE)) {',
+             '   if (unlikely(bo == NULL || offset >= POOL_SLAB_SIZE || sz >= POOL_SLAB_SIZE - offset)) {'),
             ('   assert(alignment == util_next_power_of_two(alignment));',
              '   assert(alignment == util_next_power_of_two(alignment));\n   if (out_bo) *out_bo = NULL;'),
             ('   pool->transient_offset = offset + sz;\n\n   struct agx_ptr ret = {\n      .cpu = agx_bo_map(bo) + offset,',
