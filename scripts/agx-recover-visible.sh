@@ -144,6 +144,8 @@ launch_normal disabled
 # faulting resource could not be identified). They are still on the guest disk here; copy them before cleanup.
 mkdir -p "$R/app-logs"
 perl -e 'alarm 120; exec @ARGV' "$T/airscp" "pavel@192.168.1.37:C:/Users/pavel/gravitymark/runs/gm${X}*" "$R/app-logs/" >/dev/null 2>&1 || echo "VISIBLE_COPY_FAILED app-logs (best effort; recovery continues)"
+# Keep only what the probe did not already save: byte-identical copies of evidence/EXP$X files only cost Mac disk.
+for f in "$R"/app-logs/*; do s="$N/evidence/EXP$X/${f##*/}"; [ -f "$f" ] && [ -f "$s" ] && cmp -s "$f" "$s" && rm -f "$f"; done
 echo "APP_LOGS_COLLECTED $(ls "$R/app-logs" | wc -l | tr -d ' ')"
 ssh_bounded 'powershell -NoProfile -Command "$ErrorActionPreference=\"Stop\"; $d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); $s=Get-CimInstance Win32_SystemDriver -Filter \"Name='"'"'AppleAgxAdmission'"'"'\"; if($d.Count -ne 1 -or [int]$d[0].Problem -ne 32 -or $s.State -ne \"Stopped\" -or (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission).Start -ne 4){throw \"disabled-visible gate\"}; \"VISIBLE_CODE32_SERVICE_STOPPED\""' | tee "$R/visible-disabled-gate.txt"
 grep -q VISIBLE_CODE32_SERVICE_STOPPED "$R/visible-disabled-gate.txt"
