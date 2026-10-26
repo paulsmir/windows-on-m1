@@ -197,13 +197,27 @@ static struct agx_bo *agx_pool_alloc_backing(struct agx_pool *p,size_t bytes){as
 static void *agx_bo_map(struct agx_bo *b){assert(b==&bo);++maps;return (void *)(uintptr_t)0x10000;}
 '''+allocator+r'''
 int main(void){
- for(unsigned gpu=0;gpu<2;++gpu){
+ const unsigned maxima[]={2400,12000,60000};
+ for(unsigned mi=0;mi<3;++mi)for(unsigned gpu=0;gpu<2;++gpu){
   struct agx_pool p={0};p.create_flags=gpu?AGX_WIN32_BO_GPU_ONLY:0;maps=backs=0;
   struct agx_bo *owned=NULL;
-  struct agx_ptr a=agx_pool_alloc_aligned_with_bo(&p,28*12000+4,64,&owned);
+  const unsigned bytes=28*maxima[mi]+8+0x800;
+  struct agx_ptr a=agx_pool_alloc_aligned_with_bo(&p,bytes,256,&owned);
   assert(owned==&bo&&a.gpu==va.addr&&backs==1&&maps==!gpu);
   assert(gpu?!a.cpu:a.cpu==(void *)(uintptr_t)0x10000);
-  assert(p.transient_offset==28*12000+4);
+  assert(p.transient_offset==bytes);
+  for(unsigned call=1;call<7;++call){
+   a=agx_pool_alloc_aligned_with_bo(&p,bytes,256,&owned);
+   assert(owned==&bo && !(a.gpu&255) && p.transient_offset>=bytes);
+   if(gpu)assert(!maps&&!a.cpu);
+  }
+  /* USC clones grow independently, in aligned strides, and remain GPU-only. */
+  p=(struct agx_pool){0};p.create_flags=AGX_WIN32_BO_GPU_ONLY;maps=0;
+  for(unsigned call=0;call<7;++call){
+   a=agx_pool_alloc_aligned_with_bo(&p,128*maxima[mi],64,&owned);
+   assert(a.gpu&&!(a.gpu&63)&&owned==&bo&&!a.cpu&&!maps);
+   assert(p.transient_offset>=128*maxima[mi]);
+  }
  }
  struct agx_pool p={0};p.create_flags=AGX_WIN32_BO_GPU_ONLY;fail=true;
  struct agx_bo *owned=&bo;struct agx_ptr a=agx_pool_alloc_aligned_with_bo(&p,64,64,&owned);

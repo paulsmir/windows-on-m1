@@ -47,7 +47,7 @@ static unsigned bad_extent;
 static unsigned query_refs;
 static uint64_t agx_get_query_address(struct agx_batch *b,void *q){assert(b->ctx->active_queries&&q);++query_refs;if(fault==11)b->ctx->any_faults=true;return (uintptr_t)q;}
 static bool passthrough;
-static void *blocks[8];static uint8_t cdm[1024],vdm[4096];
+static void *blocks[64];static uint8_t cdm[1024],vdm[4096];
 static struct agx_device *agx_device(struct agx_device *d){return d;}
 static struct agx_resource *agx_resource(struct pipe_resource *r){return (void *)r;}
 static uint64_t agx_map_gpu(struct agx_resource *r){return r->gpu;}
@@ -61,7 +61,7 @@ static struct agx_encoder agx_encoder_allocate(struct agx_batch *b,struct agx_de
 static void agx_batch_reads(struct agx_batch *b,struct agx_resource *r){assert(r);++reads;if(fault==9)b->ctx->any_faults=true;}
 static struct agx_ptr agx_pool_alloc_aligned(struct agx_pool *pool,size_t size,unsigned alignment){
  ++allocations;if(allocations==fault)return (struct agx_ptr){0};
- assert(size&&allocations<8);void *p=NULL;assert(!posix_memalign(&p,alignment<8?8:alignment,size));
+ assert(size&&allocations<64);void *p=NULL;assert(!posix_memalign(&p,alignment<8?8:alignment,size));
  blocks[allocations]=p;memset(p,0xcd,size);
  if(pool->kind==2)dev.shader_base=(uintptr_t)p-0x10000;
  return (struct agx_ptr){p,(uintptr_t)p};
@@ -88,7 +88,7 @@ static struct agx_ptr agx_pool_alloc_aligned_with_bo(struct agx_pool *pool,size_
  }
  p.cpu=NULL;return p;
 }
-static void agx_batch_add_bo(struct agx_batch *b,struct agx_bo *bo){assert(bo==&output_bos[output_refs++]);if(fault==10)b->ctx->any_faults=true;}
+static void agx_batch_add_bo(struct agx_batch *b,struct agx_bo *bo){assert(bo==&output_bos[output_refs++ % 2]);if(fault==10)b->ctx->any_faults=true;}
 static uint64_t agx_pool_upload_aligned(struct agx_pool *pool,void *data,size_t size,unsigned alignment){struct agx_ptr p=agx_pool_alloc_aligned(pool,size,alignment);if(p.cpu)memcpy(p.cpu,data,size);return p.gpu;}
 static bool AgxWin32AsahiBatchComputeEnter(struct agx_batch *b){assert(b);if(fault==4)return false;++entered;return true;}
 static bool AgxWin32AsahiBatchComputeLeave(struct agx_batch *b){assert(b&&entered==1);++leaves;return fault!=6;}
@@ -96,7 +96,7 @@ static void launch(struct agx_batch *b,struct agx_grid grid,unsigned barrier,uin
  assert(barrier==(AGX_BARRIER_ALL|AGX_PREGFX)&&entered==1);++launches;
  if(fault==5){b->ctx->any_faults=true;return;}
  struct agx_win32_stream_params params=*(struct agx_win32_stream_params *)(uintptr_t)args;
- params.stream=(uintptr_t)blocks[1];params.pipelines=(uintptr_t)blocks[2];
+ params.stream=(uintptr_t)blocks[allocations-2];params.pipelines=(uintptr_t)blocks[allocations-1];
  for(unsigned i=0;i<grid.count[0];++i){cl_global_id.x=i;libagx_win32_indirect_stream(&params);}
 }
 #define libagx_win32_indirect_stream launch
@@ -199,6 +199,40 @@ int main(void){
    assert(stats[PIPE_STAT_QUERY_C_INVOCATIONS]==(enabled?8:0));
    assert(!stats[PIPE_STAT_QUERY_PS_INVOCATIONS]&&!stats[PIPE_STAT_QUERY_CS_INVOCATIONS]&&!stats[PIPE_STAT_QUERY_GS_INVOCATIONS]);}
   for(unsigned i=0;i<8;++i){free(blocks[i]);blocks[i]=NULL;}
+ }
+
+ /* RC57: execute real generator/emitter for GM-sized arguments, with five
+  * statistics counters, optional count, and seven streams in one batch.
+  * Keep each allocation alive until all continuations have been checked. */
+ const unsigned maxima[]={2400,12000,60000};
+ for(unsigned mi=0;mi<3;++mi)for(unsigned counted=0;counted<2;++counted){
+  unsigned records=maxima[mi];uint32_t *large=calloc(records,20);assert(large);
+  for(unsigned i=0;i<records;++i){large[5*i]=6;large[5*i+1]=1;large[5*i+3]=i;}
+  struct agx_resource input={{records*20},(uintptr_t)large};
+  struct pipe_draw_indirect_info many={&input.base,counted?&counter.base:NULL,0,records,20,0};
+  value=records;assert(agx_win32_stream_inputs_valid(&info,&many));
+  fault=0;init(&ctx,&batch,&vs);allocations=reads=launches=output_refs=query_refs=0;
+  uint64_t stats[12]={0};for(unsigned k=0;k<11;++k)ctx.pipeline_statistics[k]=&stats[k];
+  for(unsigned call=0;call<7;++call){
+   entered=leaves=0;
+   struct agx_win32_indirect_stream stream={&many,(uintptr_t)tmpl,sizeof(tmpl),8,12,MESA_PRIM_TRIANGLES};
+   struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)large,0x1000,256,AGX_INDEX_SIZE_U32,false);
+   uint8_t *out=vdm+32+call*8;
+   assert(agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,out)==out+8);
+   assert(!ctx.any_faults&&ctx.windows_indirect_path==3&&entered==leaves);
+   const struct agx_win32_stream_params *p=blocks[3*call+3];
+   assert(p->max_count==records&&p->continuation==0x1234000028ull+call*8);
+   const uint32_t *tail=(void *)((uint8_t *)blocks[3*call+1]+records*28);
+   assert(tail[0]==0x80000012u&&tail[1]==0x34000028u+call*8);
+  }
+  assert(allocations==21&&launches==7&&output_refs==14&&query_refs==35);
+  assert(stats[PIPE_STAT_QUERY_IA_VERTICES]==42ull*records);
+  assert(stats[PIPE_STAT_QUERY_VS_INVOCATIONS]==42ull*records);
+  assert(stats[PIPE_STAT_QUERY_IA_PRIMITIVES]==14ull*records);
+  assert(stats[PIPE_STAT_QUERY_C_INVOCATIONS]==14ull*records);
+  assert(stats[PIPE_STAT_QUERY_C_PRIMITIVES]==14ull*records);
+  for(unsigned i=0;i<64;++i){free(blocks[i]);blocks[i]=NULL;}
+  free(large);
  }
  fault=0;init(&ctx,&batch,&vs);batch.cdm=(struct agx_encoder){cdm,cdm+sizeof(cdm)-1,cdm+sizeof(cdm)};
  capacity_flushes=0;agx_win32_stream_flush_inputs(&ctx,&in);assert(capacity_flushes==1);
