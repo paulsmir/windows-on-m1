@@ -64446,3 +64446,7 @@ EXP1978 HARDWARE BEFORE 2026-10-26T20:36:19Z:
 - Hashes: sys b2e060afa469, UmdArm64 d1133705d950, UmdX64 c58a3e8255fa, Umd32 7592f8b846b5; manifest 4b369e7c4dc5, hardware-manifest 79ebf63c2d83; probe1978.sh ebdb4ce21858 (PROBE_LINT_OK); visible recovery rec1978h 19444be05b445ff9; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1978h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1978-probes-ibv/run1978.sh.
+
+EXP1978 PROBE RESULTS 2026-10-26T20:40:58Z (GravityMark arms still running):
+- RC44D and RC44I PASS (bad=0; 16 pixels in each of 2 cases, direct and counted-indirect). Texture-array material selection through per-instance data and nonzero start instances renders correctly, so the white-asteroid symptom is not this path.
+- RC43I16Z/O/N and RC43I32Z/O/N PASS, with the _COUNT checks PASS, and APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1. All 6 measure-d3d12-counted-path rows are path=3 reason 0. **This is the first hardware PASS of the GPU-generated VDM stream** (counts 0/1/2, 16/32-bit indices, an ordinary follow-up draw). rc54 d983f609 (IB view offset) unblocked recording.
