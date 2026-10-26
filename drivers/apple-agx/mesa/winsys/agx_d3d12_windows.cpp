@@ -59,6 +59,9 @@ struct AGX_D3D12_OWNER {
   void *ErrorContext;
   UINT PendingCopies;
   UINT PendingDispatches;
+  /* Immutable CPU descriptors only. Bindings and batch handles are never cached. */
+  AGX_D3D12_SAMPLER ComputeSamplerDesc[AGX_D3D12_SAMPLER_SLOTS];
+  void *ComputeSamplers[AGX_D3D12_SAMPLER_SLOTS];
   UINT PendingDraws; /* C6b: draws whose framebuffer/vertex bindings the submit drops */
   /* the framebuffer the last draw bound: Asahi's set_framebuffer_state
    * leaves the batch and dirties every state, so an unchanged framebuffer
@@ -380,6 +383,15 @@ static HRESULT destroy_kernel_context(AGX_D3D12_OWNER *owner) {
   return hr;
 }
 
+static void release_compute_samplers(AGX_D3D12_OWNER *owner) {
+  for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS; ++i) {
+    if (owner->ComputeSamplers[i]) {
+      owner->Context->delete_sampler_state(owner->Context, owner->ComputeSamplers[i]);
+      owner->ComputeSamplers[i] = NULL;
+    }
+  }
+}
+
 extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   if (!owner) return S_OK;
   AdmissionUmdScreenCpuAccessSnapshot(&owner->Runtime, S_OK, 3u);
@@ -405,6 +417,7 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
     owner->EmptyVelems = NULL;
   }
   if (owner->Context) {
+    release_compute_samplers(owner);
     if (!AgxWin32AsahiContextDestroy(owner->Context)) return HRESULT_FROM_WIN32(ERROR_BUSY);
     owner->Context = NULL;
   }
@@ -2927,6 +2940,25 @@ static void *create_sampler(struct pipe_context *pipe, const AGX_D3D12_SAMPLER *
   return pipe->create_sampler_state(pipe, &state);
 }
 
+/* Asahi copies and packs this state at creation; it holds no resource or
+ * batch references (agx_state.c agx_create_sampler_state). Each slot owns
+ * one object, with transactional replacement on a key change. Equality is
+ * bytewise so NaN payloads and signed zero cannot cause a false cache hit;
+ * padding, if any, can only cause a harmless miss. */
+static void *compute_sampler(AGX_D3D12_OWNER *owner, unsigned slot,
+                             const AGX_D3D12_SAMPLER *sampler) {
+  if (owner->ComputeSamplers[slot] &&
+      !memcmp(&owner->ComputeSamplerDesc[slot], sampler, sizeof(*sampler)))
+    return owner->ComputeSamplers[slot];
+  void *state = create_sampler(owner->Context, sampler);
+  if (!state) return NULL;
+  if (owner->ComputeSamplers[slot])
+    owner->Context->delete_sampler_state(owner->Context, owner->ComputeSamplers[slot]);
+  memcpy(&owner->ComputeSamplerDesc[slot], sampler, sizeof(*sampler));
+  owner->ComputeSamplers[slot] = state;
+  return state;
+}
+
 /* C23 only tightens the newly admitted 1D boundary. Unused slots and all
  * pre-existing non-1D combinations retain their previous policy. */
 static bool uav_dimension_matches(uint8_t dimension, const AGX_D3D12_UAV *uav) {
@@ -3487,13 +3519,13 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
                        indirect->Buffer->Bytes))
     return E_INVALIDARG;
   struct pipe_context *pipe = owner->Context;
-  /* C9: sampler states for this dispatch (released after the launch) */
+  /* Borrow immutable cached objects, but bind/unbind for every dispatch. */
   void *states[AGX_D3D12_SAMPLER_SLOTS] = {};
   unsigned state_count = 0;
   HRESULT hr = S_OK;
   for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS && SUCCEEDED(hr); ++i) {
     if (!samplers[i].Valid) continue;
-    states[i] = create_sampler(pipe, &samplers[i]);
+    states[i] = compute_sampler(owner, i, &samplers[i]);
     if (!states[i]) hr = E_OUTOFMEMORY;
     else state_count = i + 1;
   }
@@ -3507,8 +3539,6 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   void *none[AGX_D3D12_SAMPLER_SLOTS] = {};
   if (FAILED(hr)) {
     unbind_stage(pipe, MESA_SHADER_COMPUTE, views, AGX_D3D12_SRV_SLOTS);
-    for (unsigned i = 0; i < state_count; ++i)
-      if (states[i]) pipe->delete_sampler_state(pipe, states[i]);
     return hr;
   }
   pipe->bind_compute_state(pipe, compute->State);
@@ -3546,8 +3576,6 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count);
   if (state_count) {
     pipe->bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, none);
-    for (unsigned i = 0; i < state_count; ++i)
-      if (states[i]) pipe->delete_sampler_state(pipe, states[i]);
   }
   if (FAILED(hr)) return hr;
   if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);

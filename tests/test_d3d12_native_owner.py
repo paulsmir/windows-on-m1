@@ -108,8 +108,8 @@ class NativeOwner(unittest.TestCase):
                                              'launch_grid', 'unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count)')]
         self.assertEqual(order, sorted(order))
         self.assertNotIn('templ.format = PIPE_FORMAT_R32_UINT;', dispatch)
-        # C9: compute samplers live for one launch; typed UAVs are images u#
-        order = [dispatch.index(k) for k in ('create_sampler(pipe, &samplers[i])', 'bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, states)',
+        # RC35: cached immutable compute samplers still bind for every launch; typed UAVs are images u#
+        order = [dispatch.index(k) for k in ('compute_sampler(owner, i, &samplers[i])', 'bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, states)',
                                              'launch_grid',
                                              'bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, none)')]
         self.assertEqual(order, sorted(order))

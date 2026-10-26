@@ -64,7 +64,7 @@ struct AGX_D3D12_SAMPLER {unsigned Valid;};
 struct AGX_D3D12_UAV {}; struct AGX_D3D12_CBV {};struct AGX_D3D12_SRV {};
 struct AGX_D3D12_COMPUTE {void *State;unsigned Block[3];uint8_t SrvDimensions[4],UavDimensions[4];};
 struct AGX_D3D12_INDIRECT {AGX_D3D12_BUFFER *Buffer,*CountBuffer;unsigned MaxCount,Stride;uint64_t Offset;};
-struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingDispatches;};
+struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingDispatches;AGX_D3D12_SAMPLER ComputeSamplerDesc[4];void *ComputeSamplers[4];};
 struct OwnerLock {OwnerLock(AGX_D3D12_OWNER *){}};
 static void *create_sampler(pipe_context *,const AGX_D3D12_SAMPLER *) {return allocate();}
 static int AgxWin32AsahiContextFaulted(pipe_context *) {return faulted;}
@@ -88,7 +88,7 @@ class OwnerAllocationFailure(unittest.TestCase):
 
     def test_dispatch_kth_sampler_failure_never_launches(self):
         text=OWNER.read_text()
-        self.run_cpp(PRELUDE+function(text,'extern "C" HRESULT AgxD3d12OwnerDispatch(')+r'''
+        self.run_cpp(PRELUDE+function(text,'static void *compute_sampler(')+function(text,'static void release_compute_samplers(')+function(text,'extern "C" HRESULT AgxD3d12OwnerDispatch(')+r'''
 int main() {
  for(nth=0;nth<=5;++nth) {
   faulted=nth==5;
@@ -100,7 +100,7 @@ int main() {
   HRESULT hr=AgxD3d12OwnerDispatch(&owner,&compute,uavs,cbvs,srvs,samplers,1,1,1,nullptr);
   bool fail=nth>0&&nth<=3;
   assert(hr==(fail?E_OUTOFMEMORY:faulted?DXGI_ERROR_DEVICE_HUNG:S_OK));
-  assert(encoded==((fail||faulted)?0u:1u));assert(owner.PendingDispatches==encoded);assert(!live);
+  assert(encoded==((fail||faulted)?0u:1u));assert(owner.PendingDispatches==encoded);release_compute_samplers(&owner);assert(!live);
  }
  nth=attempts=live=encoded=0;faulted=false;launch_fault=true;
  pipe_context pipe;AGX_D3D12_OWNER owner={&pipe,0};
