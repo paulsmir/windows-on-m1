@@ -20,6 +20,7 @@ static DECLSPEC_ALIGN(8) volatile LONG64 NextOwnerCookie;
 static D3DKMT_HANDLE AdmissionUmdScreenCpuAllocation(
     const ADMISSION_UMD_SCREEN_BUFFER *Buffer) {
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  if (Buffer->FailedCpuLock) return Buffer->FailedCpuLock;
   return Buffer->SystemDirect ? Buffer->KernelAllocation : Buffer->StagingAllocation;
 #else
   return Buffer->KernelAllocation;
@@ -783,8 +784,10 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   systemDirect = !BorrowedStaging && Bytes <= classInfo->MaximumBytes;
   /* T13: keep C75c for every other owner. The D3D12 owner's CPU-facing
    * heaps AND internal CPU-written BOs use native canonical storage, with
-   * ordinary process memory for the CPU; no aperture-resident copy BO. */
-  if (device->HeapStaging && !BorrowedStaging &&
+   * ordinary process memory for the CPU; no aperture-resident copy BO.
+   * RC25 instead keeps one canonical allocation; MapBuffer proves its full
+   * pool placement after Lock and retains the lock while the pointer lives. */
+  if (device->HeapStaging && !device->DirectCpuPool && !BorrowedStaging &&
       (Flags & (AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite)) &&
       !(Flags & AppleAgxWin32BufferShareable)) systemDirect = FALSE;
   if (Flags & AppleAgxWin32BufferGpuOnly) {
@@ -1160,6 +1163,7 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       AdmissionUmdScreenFind(device, Token);
   D3DDDICB_LOCK lock;
   HRESULT result;
+  if (Address) *Address = NULL;
   if (device == NULL || Address == NULL ||
       (Access & (AppleAgxWin32BufferCpuRead |
                  AppleAgxWin32BufferCpuWrite)) == 0u ||
@@ -1169,6 +1173,7 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       device->KernelCallbacks->pfnLockCb == NULL)
     return 0;
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  if (device->DirectCpuPool && !device->KernelCallbacks->pfnUnlockCb) return 0;
   AcquireSRWLockShared(&device->ScreenBufferLock);
   buffer = AdmissionUmdScreenFind(device, Token);
   BOOL gpuOnly = buffer && (buffer->Flags & AppleAgxWin32BufferGpuOnly);
@@ -1260,6 +1265,46 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
 #endif
       && buffer->Bytes > (16ULL << 20))
     AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, AdmissionCpuLock);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (SUCCEEDED(result) && device->DirectCpuPool && buffer->SystemDirect &&
+      !buffer->Borrowed && !(buffer->Flags & AppleAgxWin32BufferShareable)) {
+    /* Lock pins the actual placement; Transition excludes trim/submit until
+     * the whole native pool proof succeeds and Mapped takes over. No private
+     * allocation, dirty watch, upload or copy-out is needed for this pointer. */
+    BOOL sameAllocation = lock.hAllocation == buffer->KernelAllocation;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    BOOL ready = sameAllocation && lock.pData &&
+        AdmissionUmdGpuvaValidateCpuPoolMap(device, Token);
+    if (!ready) {
+      HRESULT failure = sameAllocation && lock.pData && FAILED(device->GpuvaFailure)
+          ? device->GpuvaFailure : E_FAIL;
+      D3DDDICB_UNLOCK undo = {};
+      undo.NumAllocations = 1u;
+      undo.phAllocations = &lock.hAllocation;
+      HRESULT undone = device->KernelCallbacks->pfnUnlockCb(
+          device->RuntimeDevice.handle, &undo);
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      /* Transition has retained this slot and its residency throughout. A
+       * failed cleanup must keep the real lock/owner even though no pointer
+       * was exposed. Terminal teardown may not reclaim uncertain ownership. */
+      if (FAILED(undone)) {
+        buffer->FailedCpuLock = lock.hAllocation;
+        buffer->LockedBase = lock.pData;
+        buffer->LockedAccess = 0u;
+        buffer->Mapped = TRUE;
+        device->DrawTerminal = TRUE;
+      } else if (buffer->Bytes > (16ULL << 20)) {
+        AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, AdmissionCpuUnlock);
+      }
+      if (!sameAllocation) device->DrawTerminal = TRUE;
+      buffer->Transition = FALSE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      device->LastScreenError = failure;
+      return 0;
+    }
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  }
+#endif
   if (FAILED(result) || lock.pData == NULL) {
     buffer->Transition = FALSE;
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
@@ -1333,6 +1378,9 @@ static int AdmissionUmdScreenUnmapBuffer(void *Context,
       && !buffer->PrivateStaging
 #endif
       ) AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, AdmissionCpuUnlock);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  buffer->FailedCpuLock = 0;
+#endif
   buffer->LockedBase = NULL;
   buffer->LockedAccess = 0u;
   buffer->Mapped = FALSE;

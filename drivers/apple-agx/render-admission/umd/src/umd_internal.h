@@ -74,6 +74,7 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
 #ifdef APPLE_AGX_GPUVA_WINSYS
   BOOL WrittenPrimary;
   D3DKMT_HANDLE StagingAllocation;
+  D3DKMT_HANDLE FailedCpuLock; /* exact handle retained after refused-map Unlock failure */
   /* EXP1022: CPU-only staging of an unshared slot is ordinary process memory
    * (EXP1016-1021: VidMm CPU mappings read at ~80 MB/s vs 2.5 GB/s). */
   BYTE *PrivateStaging;
@@ -235,6 +236,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
   BOOL ScreenClosing;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   BOOL HeapStaging;
+  BOOL DirectCpuPool; /* RC25: opt-in canonical WC maps with pool proof */
   ULONGLONG HeapStagingDirtyBytes, HeapStagingUploadBytes, HeapStagingDownloadBytes;
 #endif
   APPLE_AGX_U32 NextScreenFence;
@@ -324,6 +326,8 @@ extern "C" {
 void AdmissionUmdVaRecordDeallocate(const void *device, ULONGLONG token,
                                     D3DKMT_HANDLE allocation, ULONGLONG va,
                                     HRESULT hr);
+int AdmissionUmdGpuvaValidateCpuPoolMap(ADMISSION_UMD_DEVICE *device,
+                                       APPLE_AGX_U64 token);
 int AdmissionUmdGpuvaRestoreCpuMapResidency(ADMISSION_UMD_DEVICE *device,
                                            uint64_t token);
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,

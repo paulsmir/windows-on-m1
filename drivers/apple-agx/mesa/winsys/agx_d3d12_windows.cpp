@@ -511,6 +511,10 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     owner->Runtime.HeapStaging =
         !(GetEnvironmentVariableA("APPLE_AGX_D3D12_HEAP_STAGING", heap_staging, sizeof(heap_staging)) == 1 &&
           heap_staging[0] == '0');
+    char cpu_pool_map[2] = {};
+    owner->Runtime.DirectCpuPool =
+        GetEnvironmentVariableA("APPLE_AGX_D3D12_CPU_POOL_MAP", cpu_pool_map,
+                                sizeof(cpu_pool_map)) == 1 && cpu_pool_map[0] == '1';
 #endif
     owner->Owner.Device = &owner->Runtime;
     owner->Owner.Backend = &owner->Backend;

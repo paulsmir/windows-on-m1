@@ -180,7 +180,7 @@ int main(void) {
 #define FALSE 0
 static unsigned heap_staging;
 static int make(unsigned Flags,unsigned ClassId,unsigned BorrowedStaging,unsigned Bytes) {
- struct {unsigned HeapStaging;} d={heap_staging},*device=&d;
+ struct {unsigned HeapStaging, DirectCpuPool;} d={heap_staging,0},*device=&d;
  struct {unsigned MaximumBytes;} c={268435456},*classInfo=&c;
  ADMISSION_WIN32_ALLOCATION_CREATE description={0};ADMISSION_ALLOCATION_DESCRIPTION stagingDescription,out;
  unsigned systemDirect=0,cls=0,flags=0;

@@ -258,7 +258,7 @@ int main() {
             self.assertEqual(r.returncode,0,r.stderr)
 
     def test_actual_allocation_policy_preserves_c75_and_removes_aperture(self):
-        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? An UPLOAD heap or internal shader/encoder/query BO must request CpuVisible=0, while D3D11 C75c and shared/import paths retain their allocation policy."""
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Default T13 heaps retain CpuVisible=0; RC25 opts unshared CPU-facing BOs into one canonical allocation, while D3D11 C75c and shared/import paths retain their policy."""
         screen=(SRC/'umd_win32_screen.c').read_text()
         start=screen.index('  systemDirect = !BorrowedStaging')
         end=screen.index('\n#else',start)
@@ -277,7 +277,7 @@ using UINT=unsigned;using BOOL=int;using APPLE_AGX_U64=uint64_t;
 #define AppleAgxWin32BufferGpuWrite 8
 #define AppleAgxWin32BufferGpuOnly 16
 #define AppleAgxWin32BufferShareable 32
-struct DEVICE {bool HeapStaging;};struct CLASS {uint64_t MaximumBytes;};
+struct DEVICE {bool HeapStaging, DirectCpuPool;};struct CLASS {uint64_t MaximumBytes;};
 struct DESC {unsigned Version;struct {unsigned Type,CpuVisible;} Allocation;};
 static DESC result;static BOOL direct;
 static int select(DEVICE *device,unsigned ClassId,unsigned Flags,bool BorrowedStaging,uint64_t Bytes) {
@@ -292,6 +292,8 @@ int main() {
    unsigned flags=2|4|(cls==1?1|8:0);
    d.HeapStaging=false;assert(select(&d,cls,flags,false,size));assert(direct && result.Allocation.CpuVisible);
    d.HeapStaging=true;assert(select(&d,cls,flags,false,size));assert(!direct && !result.Allocation.CpuVisible && result.Allocation.Type==3);
+   d.DirectCpuPool=true;assert(select(&d,cls,flags,false,size));assert(direct && result.Allocation.CpuVisible && result.Allocation.Type==1);
+   d.DirectCpuPool=false;
   }
   assert(select(&d,1,16|4|8,false,size));assert(direct && !result.Allocation.CpuVisible);
   assert(select(&d,1,1|2|4|8|32,false,size));assert(direct && result.Allocation.CpuVisible);

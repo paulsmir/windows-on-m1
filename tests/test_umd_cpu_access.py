@@ -56,7 +56,7 @@ struct ADMISSION_UMD_DRAW_SUBMISSION {
 };
 struct ADMISSION_UMD_SCREEN_BUFFER {
   BOOL Active, Mapped, Borrowed, Transition, Direct, SystemDirect;
-  uint64_t Serial; UINT LockedAccess, StagingAllocation; int Sync;
+  uint64_t Serial; UINT LockedAccess, StagingAllocation, FailedCpuLock; int Sync;
   int (*NativeMapRelease)(const void *,const void *,int);
   void *LockedBase, *NativeBo, *PrivateStaging;
   APPLE_AGX_U64 Token, Bytes, CanonicalGpuVa;

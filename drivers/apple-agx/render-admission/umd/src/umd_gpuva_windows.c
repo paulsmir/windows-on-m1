@@ -1616,6 +1616,67 @@ int AdmissionUmdGpuvaRestoreCpuMapResidency(ADMISSION_UMD_DEVICE *device,
   return restore_residency(device,token);
 }
 
+/* RC25: called with a successful canonical CPU lock, before publishing its
+ * pointer. A residency reference alone does not establish native placement.
+ * v2 proves every original/native page is in the pool; old KMDs refuse v2.
+ * No GPU access or physical mapping is performed by this query. */
+int AdmissionUmdGpuvaValidateCpuPoolMap(ADMISSION_UMD_DEVICE *device,
+                                      uint64_t token) {
+  APPLE_AGX_G3_NATIVE_QUERY identity = {};
+  device->GpuvaFailure = E_FAIL;
+  if (!device->Adapter || device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
+      !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
+      !device->KernelContext || !device->KernelCallbacks->pfnEscapeCb) return 0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const auto *slot = find_slot(device, token);
+  bool valid = device->DirectCpuPool && slot && slot->Active && slot->SystemDirect &&
+      slot->Transition && slot->Resident && !slot->Mapped && !slot->PrivateStaging &&
+      !slot->Borrowed && !slot->CopyHeld && !slot->SubmissionHolds && !slot->SourceHolds &&
+      slot->KernelAllocation && slot->CanonicalGpuVa && slot->Bytes &&
+      !device->DrawTerminal && !device->ScreenClosing;
+  if (valid) {
+    identity.Magic = APPLE_AGX_G3_NATIVE_QUERY_MAGIC;
+    identity.Version = APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION;
+    identity.Reserved = APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY;
+    identity.Bytes = sizeof(identity);
+    identity.Allocation = slot->KernelAllocation;
+    identity.GpuVa = slot->CanonicalGpuVa;
+    identity.AllocationBytes = slot->Bytes;
+    identity.Write = (slot->Flags & AppleAgxWin32BufferGpuWrite) != 0u;
+  }
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (!valid) return 0;
+  /* Lock can rotate placement. Flush deferred paging once even if the old
+   * graph still looks valid: a pre-Lock pool proof must not authenticate the
+   * new CPU mapping. The existing touch is CPU-only and its fence is waited. */
+  if (!touch_device(device, identity.GpuVa)) {
+    device->DrawTerminal = TRUE;
+    device->GpuvaFailure = E_FAIL;
+    return 0;
+  }
+  APPLE_AGX_G3_NATIVE_QUERY q = identity;
+  D3DDDICB_ESCAPE request = {};
+  request.hDevice = device->RuntimeDevice.handle;
+  request.hContext = device->KernelContext;
+  request.pPrivateDriverData = &q;
+  request.PrivateDriverDataSize = sizeof(q);
+  HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle, &request);
+  if (SUCCEEDED(hr) && q.Ready == 1u) {
+    device->GpuvaFailure = S_OK;
+    return 1;
+  }
+  device->GpuvaFailure = FAILED(hr) ? hr :
+      (q.Reason == APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL ||
+       q.Reason == AppleAgxG3WalkLeafAbsent ||
+       q.Reason == AppleAgxG3WalkLeafNotPublished) ? E_OUTOFMEMORY : E_FAIL;
+  UINT values[4] = {q.Allocation, q.Reason, (UINT)q.FailedVa,
+      (UINT)(q.FailedVa >> 32)};
+  AdmissionUmdDiagnostic("reject-cpu-pool-map", device->GpuvaFailure,
+      values, ARRAYSIZE(values));
+  return 0;
+}
+
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,uint64_t token) {
   AcquireSRWLockShared(&device->ScreenBufferLock);
   auto *slot=find_slot(device,token);
