@@ -12,6 +12,9 @@
 #define RC44_IID(x) (&(x))
 #endif
 
+/* ps_5_1 forbids UAV-derived values in implicit-gradient samples (X3662).
+ * These textures have one mip: explicit LOD 0 preserves the u4 material path
+ * and the colour oracle without requiring derivatives of the selected layer. */
 static const char rc44_hlsl[] =
     "struct V { float4 p:POSITION; float4 n:TEXCOORD0; float2 uv:TEXCOORD1; uint4 data:TEXCOORD2; };\n"
     "struct P { float4 p:SV_Position; float3 n:TEXCOORD0; float4 tangent:TEXCOORD1; float2 uv:TEXCOORD2; nointerpolation uint3 ids:TEXCOORD3; };\n"
@@ -20,7 +23,7 @@ static const char rc44_hlsl[] =
     "RWByteAddressBuffer records:register(u4);\n"
     "struct O { float4 colour:SV_Target0; float4 index:SV_Target1; };\n"
     "O ps_main(P i) { uint word=records.Load(i.ids.x*16+4); uint d=min(word>>16,7u); uint layer=word&65535u;\n"
-    "O o; o.colour=materials[d].Sample(samp,float3(i.uv,layer))*float4(i.n.zzz,1);\n"
+    "O o; o.colour=materials[d].SampleLevel(samp,float3(i.uv,layer),0)*float4(i.n.zzz,1);\n"
     "o.index=float4(i.ids.y,d,layer,255)/255.0; return o; }\n";
 
 static int rc44_material(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int indirect) {

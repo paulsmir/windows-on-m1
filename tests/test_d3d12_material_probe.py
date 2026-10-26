@@ -6,6 +6,8 @@ Compile its full D3D12 call surface against the pinned SDK in C and x86 /TP.
 This is an oracle/ABI test, not a claim that Windows or GPU pixels were tested.
 """
 from pathlib import Path
+import ast
+import re
 import subprocess
 import shutil
 import tempfile
@@ -17,6 +19,22 @@ SDK = ROOT / '.local/reference/winsdk26100'
 
 
 class MaterialProbe(unittest.TestCase):
+    def test_uav_material_selection_has_no_implicit_gradients(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        EXP1976: ps_5_1 rejects UAV-derived array layers in Sample (X3662).
+        Keep the material load, but use explicit mip zero for the one-mip
+        textures so neither descriptor nor layer needs implicit derivatives.
+        This source guard supplements the ABI/oracle tests, not FXC execution.
+        """
+        source = (ICD/'agx_d3d12_probe_material.h').read_text()
+        literal = source.split('static const char rc44_hlsl[] =', 1)[1].split(';\n', 1)[0]
+        hlsl = ''.join(ast.literal_eval(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', literal))
+        self.assertIn('RWByteAddressBuffer records:register(u4)', hlsl)
+        self.assertIn('records.Load(i.ids.x*16+4)', hlsl)
+        self.assertNotRegex(hlsl, r'\.(?:Sample|SampleBias|SampleCmp|Gather\w*)\s*\(')
+        self.assertNotRegex(hlsl, r'\b(?:ddx\w*|ddy\w*|fwidth)\s*\(')
+        self.assertRegex(hlsl, r'materials\[d\]\.SampleLevel\(samp,\s*float3\(i\.uv,\s*layer\),\s*0\)')
+
     def test_readback_rejects_wrong_material_instance_and_clear(self):
         source = r'''
 #include <assert.h>
