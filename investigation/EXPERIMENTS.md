@@ -64410,3 +64410,14 @@ EXP1976 HARDWARE ACTUAL 2026-10-26T19:58:23Z: FAIL for the GPU stream; probe ste
 - Arm b did not run.
 - Recovery rec1976h (AGX_RECOVERY_ALLOW_AT_PROXY=1): RECOVERY_DONE.
 - Next: Codex rc54 (xhigh) to root-cause the stream (probe device removal at Close/Execute, submit STATUS_INVALID_PARAMETER) and make every KMD submit failure non-fatal for the system.
+
+EXP1977 HARDWARE BEFORE 2026-10-26T20:05:30Z:
+- Package 30.0.1977.0 = EXP1976 driver + rc53 (8132db82: pool growth is admitted while Windows LowMemory is clear, including the neutral High=0/Low=0 state; refusal reasons recorded in the v9 Wom1M2PoolDemand receipt; early HighMemory reclaim kept) + rc51 (9f2588b5 idle unmap retry, already in EXP1976).
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1.
+- WHY THIS HYPOTHESIS: EXP1971 (HD 200k) and the second arms of EXP1973 and EXP1975 failed at load with floor vetoes below the 3136 MiB cap (43 and 64 refusals with no commit or slab failure). The old gate refused unless HighMemory was set, so the neutral memory state always refused (rc53 decode).
+- Expected: both arms load and finish (compare with macOS: HD 100k about 9,950, HD 200k about 6,500); the v9 receipt shows refusal reasons only for real LowMemory; DWM survives (desktop alive, no DWM fatal memory exhaustion).
+- Failure criteria: a load OOM with a v9 reason other than LowMemory, a DWM failure or black desktop, any bugcheck or hang.
+- Recovery: rec1977h.
+- Hashes: sys 993a6b1c7c7e, UmdArm64 21aeb67387e6, UmdX64 305e8155278f, Umd32 256274ab0343; manifest d73a9f4be4d1, hardware-manifest 5ff7e5517d53; probe1977.sh 07ebf7ffa495 (PROBE_LINT_OK); visible recovery rec1977h c67d8edbfbaf1345; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1977h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1977-pool-admission/run1977.sh.
