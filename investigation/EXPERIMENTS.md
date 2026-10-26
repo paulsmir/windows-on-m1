@@ -64386,3 +64386,19 @@ EXP1975 HARDWARE ACTUAL 2026-10-26T19:20:37Z: PARTIAL PASS. HD 1280x720, CPU_POO
 - The cross-arm OOM is now order-independent: EXP1973 (FHD 100k then FHD 50k) and EXP1975 (HD 50k then HD 100k) both fail the second arm, while EXP1972 (before rc47) passed both arms. Suspected regression: memory not returned after process exit since rc47/rc48; sent to Codex rc51 (addendum).
 - rc49 scanout timing: the display ring is in the receipts, analysis pending.
 - Recovery rec1975h (running).
+
+EXP1976 HARDWARE BEFORE 2026-10-26T19:45:49Z:
+- Package 30.0.1976.0 = EXP1975 driver + rc50 (95ee1301 retained ownership across failed readiness touches; bounded topology retry) + rc51 (9f2588b5 idle pool unmap retry after independent broker release). Probe agx_d3d12_probe e1976 arm64 sha256 52697fee4669d8d4.
+- Steps:
+  1. RC44D/RC44I: the same material contract through direct and counted-indirect draws, compared at the pixel level (white-asteroid discriminator).
+  2. RC43I16Z/O/N and RC43I32Z/O/N with APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1: GPU-generated VDM continuation for 16/32-bit indices with counts zero, one and N.
+  3. Arm a: GravityMark HD 50k with the stream on.
+  4. Arm b: the same with the stream off (the EXP1975a reference is 1632 / 9.8 FPS).
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1.
+- WHY THIS HYPOTHESIS: EXP1975a still spends about 24 ms per frame in render_fence waits from the CPU count reads of the 7 counted draws. The GPU stream removes them but hit 0x119 in EXP1966/EXP1969b. rc38 fixed fence accounting and the links; rc43 contained virtual-submit failures (no bugcheck on a bad submit) and added the probes. The probes isolate stream correctness before GravityMark.
+- Expected: RC44D/RC44I PASS or a pixel difference that names the cause; the RC43 steps PASS with counted-path stream use; arm a at or above 1632 with draw.render_fence near zero; no bugcheck (rc43 containment).
+- Failure criteria: a bugcheck, a guest hang, RC43 pixel failures, or device removal in arm a.
+- Recovery: rec1976h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest is down).
+- Hashes: sys 25f7a02796ff, UmdArm64 1aa64acff24b, UmdX64 c4c5b280e986, Umd32 3a5f27083f82; manifest 33baa1966a14, hardware-manifest b43ac9fdb04f; probe1976.sh e186b0b3604a (PROBE_LINT_OK); visible recovery rec1976h 354a2d61e507aef2; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1976h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1976-stream-probes/run1976.sh.
