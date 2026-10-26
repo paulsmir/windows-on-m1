@@ -3591,6 +3591,23 @@ static unsigned no_attachment_extent(float origin, float size) {
   return edge >= 16384.0f ? 16384u : edge >= 1.0f ? static_cast<unsigned>(edge) : 1u;
 }
 
+/* Asahi's counted multi-draw fallback maps both buffers and replays CPU
+ * draws. Resolve only the count here, then use its ordinary native indirect
+ * unroll so the argument records stay on the GPU. The synchronized map must
+ * precede frontend heap callbacks: it can flush or use the internal blitter.
+ * The caller has validated the argument stream and optional count resource. */
+static HRESULT resolve_draw_count(AGX_D3D12_OWNER *owner, const AGX_D3D12_INDIRECT *in,
+                                  struct pipe_draw_indirect_info *indirect) {
+  if (!in->CountBuffer) return S_OK;
+  UINT count = 0;
+  const HRESULT hr = AgxD3d12OwnerReadBuffer(owner, in->CountBuffer, in->CountOffset, sizeof(count), &count);
+  if (FAILED(hr)) return hr;
+  indirect->draw_count = count < in->MaxCount ? count : in->MaxCount;
+  indirect->indirect_draw_count = NULL;
+  indirect->indirect_draw_count_offset = 0;
+  return S_OK;
+}
+
 extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *draw) {
   OwnerLock lock(owner);
   const LONGLONG entered = qpc_now();
@@ -3880,9 +3897,15 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
    * resources and batch-relative sampler handles only after that boundary,
    * including each recursive native draw which may select another batch. */
   AgxD3d12DrawHeapBindings heap_bindings = {owner, S_OK};
-  AgxWin32AsahiSetDrawBindings(pipe, bind_draw_heaps, &heap_bindings);
   const LONGLONG bound = qpc_now();
-  if (SUCCEEDED(hr)) pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
+  /* Keep the count wait in TimeDrawVbo for comparison with the old fallback.
+   * Indexed tessellation still needs Asahi's CPU argument lowering. */
+  if (SUCCEEDED(hr) && in->Buffer && mode != MESA_PRIM_PATCHES)
+    hr = resolve_draw_count(owner, in, &indirect);
+  AgxWin32AsahiSetDrawBindings(pipe, bind_draw_heaps, &heap_bindings);
+  if (!in->Buffer || indirect.draw_count) {
+    if (SUCCEEDED(hr)) pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
+  }
   const LONGLONG drawn = qpc_now();
   AgxWin32AsahiSetDrawBindings(pipe, NULL, NULL);
   if (SUCCEEDED(hr)) hr = heap_bindings.Result;

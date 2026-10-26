@@ -17,7 +17,12 @@ DRAW = r'''
 using LONGLONG=long long;
 struct pipe_draw_info {unsigned instance_count;};
 struct pipe_draw_start_count_bias {unsigned count;};
-struct pipe_draw_indirect_info {bool count_from_stream_output;};
+struct pipe_draw_indirect_info {bool count_from_stream_output;unsigned draw_count,indirect_draw_count_offset;void *indirect_draw_count;};
+#define MESA_PRIM_PATCHES 14
+struct AGX_D3D12_INDIRECT {bool Buffer;const AGX_D3D12_BUFFER *CountBuffer;UINT MaxCount;unsigned long long CountOffset;};
+// This fixture covers direct draws only; counted-draw I/O has its own replay.
+static HRESULT AgxD3d12OwnerReadBuffer(AGX_D3D12_OWNER *,const AGX_D3D12_BUFFER *,unsigned long long,unsigned,void *){assert(false);return E_INVALIDARG;}
+@@COUNT_HELPER@@
 static unsigned encoded,meta_encoded,mode,depth;
 static bool legalizing,legalized,condition=true;
 static long long qpc_now(){return 0;}
@@ -75,7 +80,7 @@ static void agx_draw_vbo_windows_body(pipe_context *p,const pipe_draw_info *info
 @@SETTER@@
 static HRESULT owner_draw(AGX_D3D12_OWNER *owner,pipe_draw_info &info,pipe_draw_start_count_bias &range){
  pipe_context *pipe=owner->Context;HRESULT hr=S_OK;
- struct {bool Buffer;} in_value={false};auto *in=&in_value;
+ AGX_D3D12_INDIRECT in_value={};auto *in=&in_value;
  pipe_draw_indirect_info indirect={};
 @@CALLSITE@@
  (void)bound;(void)drawn;return hr;
@@ -148,7 +153,7 @@ class HeapDrawHazards(unittest.TestCase):
         header=header.replace('bool any_faults;','bool any_faults;struct agx_batch *batch;int (*windows_draw_bindings)(void *);void *windows_draw_bindings_data;')
         prelude=PROGRAM[:PROGRAM.index('int main(')].replace('@@OWNER@@',function(owner,'static HRESULT bind_heap_samplers(')+function(owner,'static HRESULT bind_heaps('))
         native=function(scene,'static unsigned heap_sampler_headroom(')+body(scene,'AgxWin32AsahiBatchSamplerHandles')
-        draw=DRAW.replace('@@WRAPPER@@',wrapper).replace('@@CALLBACK@@',callback).replace('@@SETTER@@',setter).replace('@@CALLSITE@@',owner[start:end]).replace('@@BODY_PREPARE@@',preparation)
+        draw=DRAW.replace('@@COUNT_HELPER@@',function(owner,'static HRESULT resolve_draw_count(')).replace('@@WRAPPER@@',wrapper).replace('@@CALLBACK@@',callback).replace('@@SETTER@@',setter).replace('@@CALLSITE@@',owner[start:end]).replace('@@BODY_PREPARE@@',preparation)
         with tempfile.TemporaryDirectory(prefix='heap-draw-hazards-') as directory:
             p=Path(directory)
             (p/'fixture.h').write_text(header)
