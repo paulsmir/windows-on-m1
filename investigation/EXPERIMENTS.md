@@ -64201,3 +64201,16 @@ EXP1968 HARDWARE BEFORE 2026-10-26T13:18:40Z:
 - Hashes: sys 331c0355e963, UmdArm64 83461a8fc854, UmdX64 7a80bab6f091, Umd32 d87a22f85f0c; manifest c971c8365a99, hardware-manifest 8d81f4ff21df; probe1968.sh 988c4a3670b7 (PROBE_LINT_OK); visible recovery rec1968h 4c2eeef2c1081e32; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1968h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1968-timing-recovery/run1968.sh.
+
+EXP1968 HARDWARE ACTUAL 2026-10-26T13:53:45Z:
+- PASS (stability and timing). 2k: Score 750 / 4.5 FPS; 10k: Score 774 / 4.6 FPS; median frames (after 20) 2k/10k: 0.181 0.191  s. WER 0, guest alive, no fault. rc37/rc38 code paths stayed dormant.
+- First working GPU timing (e7e0ba38): gm1968a has 15594 measure-gpu-completion/stages rows, 820 replay-time/replay-window rows and 815 dispatch-time rows.
+- tools/agx_submission_analyze.py, medians over 769 frames (2k):
+  - wall 180.6 ms, replay 174.7 ms, submit 2.6 ms;
+  - **GPU busy estimate 9.3 ms**; submit-to-completion outstanding 43.1 ms;
+  - replay_query_ms **59.4 ms for 9 query commands**;
+  - replay_draw_ms 114.7 ms for 13 draws (7 counted ExecuteIndirect with a CPU count read);
+  - dispatch 1.1 ms for 146 (bind 0.14, launch 0.68); copies 0.02 ms.
+- Conclusion: GravityMark is bound by CPU<->GPU synchronization, not GPU work and not dispatch encoding. The two syncs are the query replay (59 ms) and the counted-draw count reads (most of 115 ms). The user target is at least 3000 points (native M1 Metal is about 9,950 / 60 FPS at 100k asteroids, 720p).
+- Next: Codex rc40, GPU-timeline ResolveQueryData and no-wait queries; then EXP1969 with rc40 plus a second arm with the opt-in GPU stream (rc38 fixes); rc39 shader capture for the white-asteroid bug.
+- Recovery rec1968h: RECOVERY_DONE.
