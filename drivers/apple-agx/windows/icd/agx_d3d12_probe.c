@@ -7676,9 +7676,12 @@ static LONG WINAPI first_access_violation(EXCEPTION_POINTERS *ep) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+#include "agx_d3d12_material_probe.h"
+
 /* the steps WARP ("warp <steps>") and the AGX adapter ("only <steps>",
  * EXP1862: one step under the guest debugger) run by name */
 static const struct { const char *name; probe_step step; } named_steps[] = {
+    {"RC44D", step_rc44d}, {"RC44I", step_rc44i},
     {"RC38Z", step_rc38z}, {"RC38N", step_rc38n}, {"RC38I", step_rc38i},
     {"RC43I16Z", step_rc43i16z},
     {"RC43I16O", step_rc43i16o},
