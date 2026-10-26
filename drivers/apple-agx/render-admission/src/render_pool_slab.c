@@ -80,6 +80,7 @@ void AdmissionPoolSlabGive(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Sla
 }
 
 int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count) {
+  ADMISSION_POOL_SLAB *old_head;
   if (Slabs == 0) return 0;
   /* A wrapped total would discard existing promises and let Trim return
    * backing still needed by admitted allocations. Refuse before mutation. */
@@ -96,6 +97,7 @@ int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Cou
       return 0;
     }
   }
+  old_head = Slabs->List;
   Slabs->Reserved += Count;
   while (Slabs->Stats.Slabs * ADMISSION_POOL_SLAB_SLOTS < Promised(Slabs)) {
     int floor = Slabs->MayGrow != 0 && !Slabs->MayGrow(Slabs->Context);
@@ -103,7 +105,11 @@ int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Cou
       Slabs->Reserved -= Count;
       ++Slabs->Stats.ReserveFailures;
       if (floor) ++Slabs->Stats.FloorRefusals;
-      Trim(Slabs);
+      /* AddSlab prepends empty slabs under the caller's pool lock. Return
+       * exactly this transaction's pages: Trim would keep new slabs as
+       * spares even though the creation that acquired them was refused.
+       * Existing promises, occupied slots and preexisting spares survive. */
+      while (Slabs->List != old_head) FreeEmpty(Slabs, Slabs->List);
       return 0;
     }
   }

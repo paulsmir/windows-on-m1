@@ -5,7 +5,7 @@
 #include <string.h>
 
 #define SLOTS ADMISSION_POOL_SLAB_SLOTS
-static unsigned news, frees, fail_new_at, low_memory, growth_checks;
+static unsigned news, frees, fail_new_at, low_memory, growth_checks, fail_growth_at;
 static ADMISSION_POOL_SLAB *live_slabs[64];
 
 static ADMISSION_POOL_SLAB *fake_new(void *context)
@@ -39,7 +39,7 @@ static int fake_may_grow(void *context)
 {
     (void)context;
     ++growth_checks;
-    return !low_memory;
+    return !low_memory && (!fail_growth_at || growth_checks < fail_growth_at);
 }
 
 static ADMISSION_POOL_SLABS slabs;
@@ -49,7 +49,7 @@ static void reset(unsigned long long spare)
     AdmissionPoolSlabDrain(&slabs);
     memset(&slabs, 0, sizeof(slabs));
     memset(live_slabs, 0, sizeof(live_slabs));
-    news = frees = fail_new_at = low_memory = growth_checks = 0;
+    news = frees = fail_new_at = low_memory = growth_checks = fail_growth_at = 0;
     slabs.NewSlab = fake_new;
     slabs.FreeSlab = fake_free;
     slabs.SpareLimit = spare;
@@ -183,6 +183,62 @@ static void test_reserve_failure_is_all_or_nothing(void)
     assert(slabs.Stats.Slabs == 1 && frees == 1);
 }
 
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * Failed creation must not retain newly allocated pages as the spare cache.
+ * Both a physical failure and a headroom veto after partial growth must undo
+ * only that transaction, preserving older promises, slots and cached slabs. */
+static void test_failed_growth_returns_new_slabs_even_with_spare_cache(void)
+{
+    for (unsigned pressure = 0; pressure != 2; ++pressure) {
+        ADMISSION_POOL_SLAB *s[1];
+        unsigned slot[1];
+        reset(1);
+        slabs.ReserveCap = 128;
+        slabs.MayGrow = fake_may_grow;
+        assert(AdmissionPoolSlabReserve(&slabs, 32));
+        assert(AdmissionPoolSlabTake(&slabs, 1, s, slot));
+        if (pressure) fail_growth_at = 3;
+        else fail_new_at = 3;
+        assert(!AdmissionPoolSlabReserve(&slabs, 64));
+        assert(slabs.Reserved == 32 && slabs.Stats.PeakReserved == 32);
+        assert(slabs.Stats.Slabs == 1 && frees == 1 && slabs.Empty == 0);
+        assert(slabs.List == s[0] && s[0]->Live == 1);
+        assert(slabs.Stats.ReserveFailures == 1);
+        assert(slabs.Stats.FloorRefusals == pressure);
+        assert(slabs.Stats.NewSlabFailures == !pressure);
+        AdmissionPoolSlabGive(&slabs, s[0], slot[0]);
+        assert(slabs.Stats.Slabs == 1); /* older promise still covered */
+    }
+    /* Rollback is not a global cache trim: retain preexisting spares. */
+    reset(2);
+    slabs.ReserveCap = 128;
+    ADMISSION_POOL_SLAB *s[33];
+    unsigned slot[33];
+    assert(AdmissionPoolSlabTake(&slabs, 33, s, slot));
+    for (unsigned i = 0; i != 33; ++i)
+        AdmissionPoolSlabGive(&slabs, s[i], slot[i]);
+    ADMISSION_POOL_SLAB *old_head = slabs.List;
+    fail_new_at = 4;
+    assert(!AdmissionPoolSlabReserve(&slabs, 128));
+    assert(slabs.Reserved == 0 && slabs.Empty == 2 && slabs.Stats.Slabs == 2);
+    assert(slabs.List == old_head && frees == 1);
+    /* No preexisting list: unwind more than one newly allocated slab. */
+    for (unsigned pressure = 0; pressure != 2; ++pressure) {
+        reset(3);
+        slabs.ReserveCap = 128;
+        slabs.MayGrow = fake_may_grow;
+        if (pressure) fail_growth_at = 3;
+        else fail_new_at = 3;
+        assert(!AdmissionPoolSlabReserve(&slabs, 96));
+        assert(slabs.Reserved == 0 && slabs.Stats.PeakReserved == 0);
+        assert(slabs.List == 0 && slabs.Empty == 0 && slabs.Stats.Slabs == 0);
+        assert(frees == 2 && slabs.Stats.FreedSlabs == 2);
+        assert(slabs.Stats.NewSlabs == 2 && slabs.Stats.ReserveFailures == 1);
+        assert(slabs.Stats.FloorRefusals == pressure);
+        assert(slabs.Stats.NewSlabFailures == !pressure);
+    }
+}
+
 static void test_reserve_is_capped_at_the_segment(void)
 {
     ADMISSION_POOL_SLAB *s[64];
@@ -283,6 +339,7 @@ int main(void)
     test_drain();
     test_reserve_backs_later_takes();
     test_reserve_failure_is_all_or_nothing();
+    test_failed_growth_returns_new_slabs_even_with_spare_cache();
     test_reserve_is_capped_at_the_segment();
     test_reserve_keeps_the_windows_memory_floor();
     reset(0);
