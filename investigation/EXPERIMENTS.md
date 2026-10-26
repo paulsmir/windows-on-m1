@@ -64171,3 +64171,14 @@ EXP1966 HARDWARE ACTUAL 2026-10-26T12:25:06Z:
 - Bugcheck 0x119 VIDEO_SCHEDULER_INTERNAL_ERROR P1=1 (invalid fence ID) P2=0x161d P3=0x161e P4=ffffc808c8158000; minidump rec1966h/102626-18984-01.dmp. The KMD Wom1GpuFault receipt is present (rec1966h/kmd-receipts-pre-disable.txt) but not decoded yet.
 - Recovery rec1966h (AGX_RECOVERY_ALLOW_AT_PROXY=1): RECOVERY_DONE.
 - Disposition: the GPU-generated VDM stream is unsafe on hardware. Commit 6284f828 makes it opt-in (APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1); by default counted draws use the count-bounded native fallback (the rc31 behaviour, EXP1963 784/4.7). Next: EXP1967 = default path + rc35 GPU completion timing; root cause of the 0x119/stream fault goes to Codex rc38.
+
+EXP1967 HARDWARE BEFORE 2026-10-26T12:58:59Z:
+- Package 30.0.1967.0 = EXP1966 driver + rc35 (ebe814f8 compute sampler reuse; 7f620f3e KMD completion/firmware stage timing ring, collected by the UMD without GPU waits; 47999fcd replay and dispatch phase receipts; cf46d794 analyzer) + db3877db and 8ba1cd50 (x86 declaration and C-linkage fixes for rc35) + 6284f828 (GPU indirect stream opt-in; default = CPU count read + native draws of min(count, MaxCount), the rc31 behaviour).
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (full pool). No APPLE_AGX_D3D12_GPU_INDIRECT_STREAM.
+- WHY THIS HYPOTHESIS: EXP1963 (rc31 count read) is the best stable point (784/4.7, 798/4.8) but has no GPU execution time, so CPU-bound vs GPU-bound is unknown (rc31/rc35 reports). rc35 adds per-submission completion and firmware stage timing plus replay phase splits; EXP1964-1966 showed rc32/rc33 paths are unsafe, so this run returns to the rc31 path and measures.
+- Expected: counted-path rows path=2 reason=7; Score/FPS at least EXP1963 (784/4.7, 798/4.8, small gain possible from sampler reuse); no GPU fault or bugcheck; measure-gpu-completion/measure-gpu-stages/measure-d3d12-replay-time/measure-d3d12-dispatch-time rows present and analyzable with tools/agx_submission_analyze.py (GPU busy estimate, CPU/GPU overlap per frame).
+- Failure criteria: a GPU fault, TDR/0x116/0x119, device removal, a hang, missing timing receipts, or a performance regression below EXP1963.
+- Recovery: rec1967h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest is down).
+- Hashes: sys 1e99b0523c18, UmdArm64 720cf560c0dc, UmdX64 63ebd5042997, Umd32 3ff37bd57a88; manifest ce1196bc97c4, hardware-manifest 2dd3e24aa37d; probe1967.sh 46b2533b022d (PROBE_LINT_OK); visible recovery rec1967h cf9b100c83ab8551; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1967h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1967-gpu-timing/run1967.sh.
