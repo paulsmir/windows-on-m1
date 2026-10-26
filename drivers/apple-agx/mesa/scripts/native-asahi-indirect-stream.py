@@ -133,6 +133,10 @@ def project_sources(out, project, overlays):
       out = (void *)agx_vdm_draw((uint32_t *)out, 0 /* ignored for now */, draw,
                                  agx_primitive_for_pipe(info->mode));
    }''')
+    # The stream kernel counts all emitted records; native IA would count
+    # the template record once more (and count it even when GPU count is zero).
+    s=once(s, '   if (ctx->active_queries && !ctx->in_tess &&',
+           '   if (!ctx->windows_indirect_stream && ctx->active_queries && !ctx->in_tess &&')
     s=once(s,'   agx_dirty_reset_graphics(ctx);', '''   agx_dirty_reset_graphics(ctx);
    /* The last GPU-selected USC differs from the CPU's template. Restore it
     * on the next ordinary draw, even if application state is unchanged. */
@@ -157,6 +161,7 @@ def project_sources(out, project, overlays):
          ctx->windows_draw_bindings = bindings;
          if (ctx->any_faults) return;
          stream.indirect = indirect;
+         stream.mode = info->mode;
          stream.params_offset = UINT32_MAX;
          stream_indirect = *indirect;
          stream_indirect.draw_count = 1;

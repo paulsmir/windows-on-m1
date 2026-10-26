@@ -27,7 +27,10 @@ static struct { unsigned x; } cl_global_id;
 #include "compiler/libcl/libcl.h"
 #undef KERNEL
 #define KERNEL(n) void
+#define atomic_add(p,v) __atomic_fetch_add((p),(v),__ATOMIC_RELAXED)
 #include "agx_win32_indirect_stream.cl"
+#undef NDEBUG
+#include <assert.h>
 
 static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
                 unsigned param_uniform) {

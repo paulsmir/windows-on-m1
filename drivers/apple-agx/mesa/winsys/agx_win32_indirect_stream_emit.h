@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT
  * Included after native Asahi state helpers. Only pure, ordinary VS/FS draws
- * use this path; all native lowering and query paths retain their own draws.
+ * use this path; unsupported lowering/query paths retain their own draws.
  */
 #ifndef AGX_WIN32_INDIRECT_STREAM_EMIT_H
 #define AGX_WIN32_INDIRECT_STREAM_EMIT_H
@@ -21,7 +21,8 @@ agx_win32_stream_fallback(struct agx_context *ctx,
        ctx->tf_any_overflow)
       return 3;
    for (unsigned i = 0; i < ARRAY_SIZE(ctx->pipeline_statistics); ++i)
-      if (ctx->pipeline_statistics[i])
+      if (ctx->pipeline_statistics[i] &&
+          (i > PIPE_STAT_QUERY_CS_INVOCATIONS || info->primitive_restart))
          return 3;
    for (unsigned i = 0; i < ARRAY_SIZE(ctx->prims_generated); ++i)
       if (ctx->prims_generated[i] || ctx->tf_prims_generated[i] ||
@@ -38,6 +39,16 @@ agx_win32_stream_fallback(struct agx_context *ctx,
    if (agx_device(ctx->base.screen)->chip > AGX_CHIP_G13X)
       return 6;
    return 0;
+}
+
+/* Register the native query writer and retain its BO for both CDM and
+ * render submission. Resolve flushes that writer before copying results. */
+static uint64_t
+agx_win32_stream_query_address(struct agx_batch *batch, unsigned statistic)
+{
+   struct agx_context *ctx = batch->ctx;
+   return ctx->active_queries && ctx->pipeline_statistics[statistic] ?
+      agx_get_query_address(batch, ctx->pipeline_statistics[statistic]) : 0;
 }
 
 static unsigned
@@ -158,8 +169,15 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       .pipeline_base = agx_usc_addr(dev, usc.gpu),
       .index_range = draw.index_buffer_range_B,
       .index_size = draw.indexed ? agx_index_size_to_B(draw.index_size) : 0,
-      .restart = draw.restart, .topology = topology,
+      .restart = draw.restart, .topology = topology, .mode = stream->mode,
+      .ia_vertices = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_IA_VERTICES),
+      .ia_primitives = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_IA_PRIMITIVES),
+      .vs_invocations = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_VS_INVOCATIONS),
+      .c_primitives = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_PRIMITIVES),
+      .c_invocations = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_INVOCATIONS),
    };
+   if (ctx->any_faults)
+      return NULL;
    uint64_t args = agx_pool_upload_aligned(&batch->pool, &params, sizeof(params), 8);
    if (!args || !AgxWin32AsahiBatchComputeEnter(batch))
       goto fail;

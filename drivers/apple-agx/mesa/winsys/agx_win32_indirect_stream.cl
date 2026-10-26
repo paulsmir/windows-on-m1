@@ -4,6 +4,16 @@
  */
 #include "agx_win32_indirect_stream.h"
 
+/* Native IA queries use the low 32 bits of 64-bit slots. Records run in
+ * parallel here, so additions must be atomic (native's one-record helper
+ * is serialized). Null means no query, never the Linux scratch sentinel. */
+static inline void
+agx_win32_stream_add(uint64_t address, uint32_t delta)
+{
+   if (address)
+      atomic_add((global uint32_t *)(uintptr_t)address, delta);
+}
+
 KERNEL(32)
 libagx_win32_indirect_stream(constant struct agx_win32_stream_params *p)
 {
@@ -23,6 +33,18 @@ libagx_win32_indirect_stream(constant struct agx_win32_stream_params *p)
    }
 
    uint64_t arg = p->arguments + (uint64_t)i * p->argument_stride;
+   if (p->ia_vertices || p->ia_primitives || p->vs_invocations ||
+       p->c_primitives || p->c_invocations) {
+      constant uint32_t *record = (constant uint32_t *)(uintptr_t)arg;
+      uint32_t vertices = record[0] * record[1];
+      uint32_t primitives =
+         u_decomposed_prims_for_vertices(p->mode, record[0]) * record[1];
+      agx_win32_stream_add(p->ia_vertices, vertices);
+      agx_win32_stream_add(p->vs_invocations, vertices);
+      agx_win32_stream_add(p->ia_primitives, primitives);
+      agx_win32_stream_add(p->c_primitives, primitives);
+      agx_win32_stream_add(p->c_invocations, primitives);
+   }
    global uint8_t *usc = (global uint8_t *)(uintptr_t)
       (p->pipelines + (uint64_t)i * p->usc_stride);
    constant uint8_t *src = (constant uint8_t *)(uintptr_t)p->usc_template;

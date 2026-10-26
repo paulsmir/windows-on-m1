@@ -12,6 +12,11 @@ struct agx_win32_stream_params {
    uint32_t max_count, argument_stride, usc_bytes, usc_stride;
    uint32_t params_offset, params_uniform, pipeline_base, index_range;
    uint32_t index_size, restart, topology;
+   /* Same low 32-bit query storage used by native libagx IA updates.
+    * Zero addresses disable individual counters. PS remains shader-side. */
+   uint32_t mode;
+   uint64_t ia_vertices, ia_primitives, vs_invocations;
+   uint64_t c_primitives, c_invocations;
 } PACKED;
 
 static inline uint32_t
@@ -29,6 +34,7 @@ struct agx_win32_indirect_stream {
    const struct pipe_draw_indirect_info *indirect;
    uint64_t usc_template;
    uint32_t usc_bytes, params_offset, params_uniform;
+   unsigned mode;
 };
 #endif
 #endif

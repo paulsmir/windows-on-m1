@@ -18,7 +18,7 @@ using LONGLONG=long long;
 struct pipe_draw_info {unsigned instance_count,mode;};
 struct pipe_draw_start_count_bias {unsigned count;};
 struct pipe_draw_indirect_info {bool count_from_stream_output;unsigned draw_count,indirect_draw_count_offset;void *indirect_draw_count;};
-struct agx_win32_indirect_stream {const pipe_draw_indirect_info *indirect;uint32_t params_offset;};
+struct agx_win32_indirect_stream {const pipe_draw_indirect_info *indirect;uint32_t params_offset;unsigned mode;};
 #define AGX_DIRTY_VS 1
 #define MIN2(a,b) ((a)<(b)?(a):(b))
 static uint64_t os_time_get_nano(){return 0;}

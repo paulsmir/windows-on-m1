@@ -29,7 +29,8 @@ def main():
     asahi=build/'src/asahi/clc/asahi_clc'
     args.output.mkdir(parents=True,exist_ok=True)
     inputs=[source,winsys/'agx_win32_indirect_stream.h',clc,asahi,
-            mesa/'src/asahi/libagx/libagx_dgc.h',build/'src/asahi/genxml/agx_pack.h',
+            mesa/'src/asahi/libagx/libagx_dgc.h',mesa/'src/compiler/shader_enums.h',
+            build/'src/asahi/genxml/agx_pack.h',
             mesa/'src/asahi/genxml/cmdbuf.xml']
     with tempfile.TemporaryDirectory(prefix='rc33-clc-') as td:
         spv=Path(td)/'stream.spv'

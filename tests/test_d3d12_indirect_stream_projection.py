@@ -53,6 +53,33 @@ class IndirectStreamProjection(unittest.TestCase):
             self.assertNotIn('windows_stream_pool',publish)
             self.assertNotIn('windows_stream_usc_pool',publish)
 
+    def test_native_ia_is_suppressed_only_for_stream(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Native IA must not count the template in addition to GPU stream records,
+        especially when the count is zero. Ordinary and disabled-query behavior
+        remains native. Execute the projected gate with each combination.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            p=Path(td);out=project(p/'native')
+            state=(out/'src/gallium/drivers/asahi/agx_state.c').read_text()
+            start=state.index('   /* Increment IA statistics')
+            guard=state[state.index('   if (',start):state.index('      uint64_t ptr;',start)]
+            code='''#include <stdbool.h>
+#include <assert.h>
+#include "pipe/p_defines.h"
+struct context {bool windows_indirect_stream,active_queries,in_tess,active_draw_without_restart;unsigned pipeline_statistics[PIPE_STAT_QUERY_COUNT];struct {void *shader;} stage[MESA_SHADER_STAGES];};
+static bool native(struct context *ctx){
+'''+guard+'''return true;}return false;}
+int main(void){struct context c={0};c.pipeline_statistics[PIPE_STAT_QUERY_IA_VERTICES]=1;
+for(unsigned stream=0;stream<2;++stream)for(unsigned active=0;active<2;++active){c.windows_indirect_stream=stream;c.active_queries=active;assert(native(&c)==(!stream&&active));}}
+'''
+            (p/'gate.c').write_text(code)
+            mesa=local_tree('reference','mesa')
+            r=subprocess.run(['clang','-std=c11','-DHAVE___BUILTIN_CLZ','-I'+str(mesa/'src'),'-I'+str(mesa/'include'),'-I'+str(mesa/'src/gallium/include'),str(p/'gate.c'),'-o',str(p/'gate')],capture_output=True,text=True)
+            self.assertEqual(r.returncode,0,r.stderr)
+            r=subprocess.run([str(p/'gate')],capture_output=True,text=True)
+            self.assertEqual(r.returncode,0,r.stderr)
+
     def test_generated_bundle_matches_sources_and_both_chip_tables(self):
         script=ROOT/'drivers/apple-agx/mesa/scripts/native-asahi-indirect-stream.py'
         spec=importlib.util.spec_from_file_location('stream_projection',script)
@@ -64,16 +91,18 @@ class IndirectStreamProjection(unittest.TestCase):
         for chip in ('g13g','g13x'):
             table=merged.split('const uint32_t *libagx_'+chip+'[',1)[1]
             table=table[:table.index('};')]
-            self.assertIn('[LIBAGX_WIN32_INDIRECT_STREAM] = libagx_win32_indirect_stream_0_g13g,',table)
+            self.assertIn('[LIBAGX_WIN32_INDIRECT_STREAM] = libagx_win32_indirect_stream_0_'+chip+',',table)
             self.assertIn('[LIBAGX_HELPER]',table)
         # Ordinary compiler bundle remains byte-identical, except insertion of
         # the additional kernel/entry. Repeat on a fresh input, never duplicate.
-        self.assertEqual(merged.count('static const uint32_t libagx_win32_indirect_stream_'),1)
+        self.assertEqual(merged.count('static const uint32_t libagx_win32_indirect_stream_'),2)
         manifest=json.loads((directory/'manifest.json').read_text())
         self.assertEqual(manifest['targets'],['g13g','g13x'])
         mesa=local_tree('reference','mesa')
         self.assertEqual(hashlib.sha256((mesa/'src/asahi/libagx/libagx_dgc.h').read_bytes()).hexdigest(),
                          manifest['inputs']['libagx_dgc.h'])
+        self.assertEqual(hashlib.sha256((mesa/'src/compiler/shader_enums.h').read_bytes()).hexdigest(),
+                         manifest['inputs']['shader_enums.h'])
         closure=(ROOT/'drivers/apple-agx/mesa/scripts/build-asahi-runtime-closure.py').read_text()
         self.assertIn('stream_module.project_library_c(projected_c.read_text(), args.project)',closure)
 

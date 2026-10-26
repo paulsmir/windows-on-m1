@@ -1,5 +1,5 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
-The GPU stream must reject queries/GS/tess and invalid extents, flush prior
+The GPU stream must admit pipeline statistics, reject unsupported queries/GS/tess and invalid extents, flush prior
 argument/count writers before graphics, reserve CDM capacity before entry,
 and emit no VDM call on any allocation or launch failure. Execute production
 admission/emission and the real kernel; mock only batch/allocator boundaries.
@@ -16,9 +16,10 @@ PRELUDE = PROGRAM[:PROGRAM.index('static void run(')].replace(
     '#include "agx_win32_indirect_stream.cl"\n#undef NDEBUG\n#include <assert.h>')
 
 GLUE = r'''
+#include "gallium/include/pipe/p_defines.h"
 struct pipe_resource {unsigned width0;};
 struct agx_resource {struct pipe_resource base;uint64_t gpu;};
-struct pipe_draw_info {unsigned mode,index_size;bool has_user_indices;};
+struct pipe_draw_info {unsigned mode,index_size;bool has_user_indices,primitive_restart;};
 struct pipe_draw_indirect_info {struct pipe_resource *buffer,*indirect_draw_count;unsigned offset,draw_count,stride,indirect_draw_count_offset;};
 struct shader {struct {unsigned system_values_read[16];} info;};
 struct agx_device {unsigned chip;uint64_t shader_base;};
@@ -29,7 +30,7 @@ struct agx_encoder {void *bo;uint8_t *current,*end;};
 struct agx_batch;
 struct agx_context {
  struct {struct agx_device *screen;} base;
- bool in_tess,active_draw_without_restart,any_faults;
+ bool in_tess,active_draw_without_restart,any_faults,active_queries;
  struct {struct shader *shader;} stage[MESA_SHADER_STAGES];
  struct {unsigned num_targets;} streamout;
  void *occlusion_query,*time_elapsed,*cond_query,*tf_any_overflow;
@@ -40,6 +41,8 @@ struct agx_batch {struct agx_context *ctx;struct agx_pool pool,windows_stream_po
 static struct agx_device dev;
 static unsigned allocations,fault,reads,launches,entered,leaves,writer_flushes,capacity_flushes,output_refs;
 static struct agx_bo output_bos[2];
+static unsigned query_refs;
+static uint64_t agx_get_query_address(struct agx_batch *b,void *q){assert(b->ctx->active_queries&&q);++query_refs;if(fault==11)b->ctx->any_faults=true;return (uintptr_t)q;}
 static bool passthrough;
 static void *blocks[8];static uint8_t cdm[1024];
 static struct agx_device *agx_device(struct agx_device *d){return d;}
@@ -77,7 +80,7 @@ static void launch(struct agx_batch *b,struct agx_grid grid,unsigned barrier,uin
 #include "agx_win32_indirect_stream_emit.h"
 
 static void init(struct agx_context *ctx,struct agx_batch *batch,struct shader *vs){
- *ctx=(struct agx_context){0};ctx->base.screen=&dev;ctx->batch=batch;
+ *ctx=(struct agx_context){0};ctx->base.screen=&dev;ctx->batch=batch;ctx->active_queries=true;
  ctx->stage[MESA_SHADER_VERTEX].shader=vs;
  *batch=(struct agx_batch){.ctx=ctx,.windows_stream_pool={1},.windows_stream_usc_pool={2}};dev.chip=AGX_CHIP_G13G;
 }
@@ -89,7 +92,10 @@ int main(void){
  for(unsigned s=MESA_SHADER_TESS_CTRL;s<=MESA_SHADER_TESS_EVAL;++s){ctx.stage[s].shader=&vs;assert(agx_win32_stream_fallback(&ctx,&info,0,1)==1);ctx.stage[s].shader=NULL;}
  ctx.stage[MESA_SHADER_GEOMETRY].shader=&vs;assert(agx_win32_stream_fallback(&ctx,&info,0,1)==2);ctx.stage[MESA_SHADER_GEOMETRY].shader=NULL;
  ctx.streamout.num_targets=1;assert(agx_win32_stream_fallback(&ctx,&info,0,1)==2);ctx.streamout.num_targets=0;
- for(unsigned i=0;i<12;++i){ctx.pipeline_statistics[i]=&vs;assert(agx_win32_stream_fallback(&ctx,&info,0,1)==3);ctx.pipeline_statistics[i]=NULL;}
+ for(unsigned i=0;i<12;++i){ctx.pipeline_statistics[i]=&vs;assert(agx_win32_stream_fallback(&ctx,&info,0,1)==(i<=10?0:3));ctx.pipeline_statistics[i]=NULL;}
+ ctx.pipeline_statistics[0]=&vs;info.primitive_restart=true;
+ assert(agx_win32_stream_fallback(&ctx,&info,0,1)==3);
+ info.primitive_restart=false;ctx.pipeline_statistics[0]=NULL;
  void **queries[]={&ctx.occlusion_query,&ctx.time_elapsed,&ctx.cond_query,&ctx.tf_any_overflow,&ctx.prims_generated[3],&ctx.tf_prims_generated[3],&ctx.tf_overflow[3]};
  for(unsigned i=0;i<ARRAY_SIZE(queries);++i){*queries[i]=&vs;assert(agx_win32_stream_fallback(&ctx,&info,0,1)==3);*queries[i]=NULL;}
  vs.info.windows_uses_draw_id=true;
@@ -127,6 +133,27 @@ int main(void){
   struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)args+4,0x1000,256,AGX_INDEX_SIZE_U32,true);
   uint32_t words[8];assert(agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,(void *)words));
   assert(allocations==3&&reads==2&&launches==1&&output_refs==2&&entered==leaves);
+  for(unsigned i=0;i<8;++i){free(blocks[i]);blocks[i]=NULL;}
+ }
+ /* All five IA/VS/clipper counters use the query BO addresses; inactive
+  * queries do not register or update any query. PS and absent-stage slots
+  * remain untouched by this internal compute dispatch. */
+ for(unsigned enabled=0;enabled<3;++enabled){
+  fault=enabled==2?11:0;init(&ctx,&batch,&vs);ctx.active_queries=enabled!=0;
+  allocations=reads=launches=entered=leaves=output_refs=query_refs=0;
+  uint64_t stats[12]={0};for(unsigned k=0;k<11;++k)ctx.pipeline_statistics[k]=&stats[k];
+  in.draw_count=3;value=2;args[1]=3;args[2]=2;args[9]=6;args[10]=3;
+  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12,MESA_PRIM_TRIANGLES};
+  struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)args+4,0x1000,256,AGX_INDEX_SIZE_U32,false);
+  uint32_t words[8];uint8_t *end=agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,(void *)words);
+  if(enabled==2){assert(!end&&ctx.any_faults&&!launches);}
+  else{assert(end&&!ctx.any_faults&&query_refs==(enabled?5:0));
+   assert(stats[PIPE_STAT_QUERY_IA_VERTICES]==(enabled?24:0));
+   assert(stats[PIPE_STAT_QUERY_VS_INVOCATIONS]==(enabled?24:0));
+   assert(stats[PIPE_STAT_QUERY_IA_PRIMITIVES]==(enabled?8:0));
+   assert(stats[PIPE_STAT_QUERY_C_PRIMITIVES]==(enabled?8:0));
+   assert(stats[PIPE_STAT_QUERY_C_INVOCATIONS]==(enabled?8:0));
+   assert(!stats[PIPE_STAT_QUERY_PS_INVOCATIONS]&&!stats[PIPE_STAT_QUERY_CS_INVOCATIONS]&&!stats[PIPE_STAT_QUERY_GS_INVOCATIONS]);}
   for(unsigned i=0;i<8;++i){free(blocks[i]);blocks[i]=NULL;}
  }
  fault=0;init(&ctx,&batch,&vs);batch.cdm=(struct agx_encoder){cdm,cdm+sizeof(cdm)-1,cdm+sizeof(cdm)};
