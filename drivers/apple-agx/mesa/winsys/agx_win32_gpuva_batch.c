@@ -1262,9 +1262,10 @@ int AgxWin32AsahiFenceWait(struct agx_device *dev,APPLE_AGX_U64 fence) {
 int AgxWin32AsahiBatchPoll(struct agx_batch *batch,APPLE_AGX_U32 timeout) {
   AGX_G4_BATCH *g=capsule(batch);
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
-  (void)timeout;
   if(!g || g->Retired || g->Rejected) return 1;
   if(!b || !g->Submitted || !g->Fence) return 0;
+  if(!timeout && (!b->Gpuva.Ops.QueryRender ||
+                  !AgxWin32GpuvaComplete(&b->Gpuva,g->Fence))) return 0;
   /* EXP1082: a CPU map may already have retired this submission's residency
    * set (native_map); then only its fence is waited for. */
   if(AgxWin32GpuvaFenceHeld(&b->Gpuva,g->Fence)) {
