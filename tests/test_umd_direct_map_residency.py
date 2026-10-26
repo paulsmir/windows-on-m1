@@ -209,7 +209,47 @@ int main() {
 '''
         self.run_replay(extra)
 
-    def run_replay(self, extra):
+    def test_native_ring_map_waits_without_runtime_lock(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        Ring CPU reads must wait the last GPU fence, never call Lock/Unlock
+        or claim a runtime lock, and never run the pool-only placement query.
+        """
+        extra = EXTRA[:EXTRA.index('int main() {')]
+        extra = extra.replace('@@PRODUCTION@@', r'''
+static bool native_wait_failed;
+static unsigned native_waits;
+static int AdmissionUmdGpuvaWaitNativeStaging(ADMISSION_UMD_DEVICE *d,
+    unsigned long long fence) {
+ assert(d==current && fence==12 && d->ScreenBuffers[0].Transition);
+ ++native_waits;return !native_wait_failed;
+}
+@@PRODUCTION@@''')
+        extra += r'''
+int main() {
+ CB cb={mk,ev,lock_cb,unlock_cb,pool_query};
+ for(unsigned failed=0;failed<2;++failed) {
+  ADMISSION_UMD_DEVICE d={};d.Magic=ADMISSION_UMD_DEVICE_MAGIC;
+  d.KernelCallbacks=&cb;d.DirectCpuPool=TRUE;current=&d;
+  auto &s=d.ScreenBuffers[0];s.Active=TRUE;s.Token=10;s.KernelAllocation=0x100;
+  s.SystemDirect=TRUE;s.Resident=TRUE;s.Bytes=64ull<<20;s.Flags=3;
+  s.NativeStagingAddress=(BYTE *)data;s.LastUseFence=12;
+  locks=unlocks=queries=native_waits=0;native_wait_failed=failed!=0;
+  void *address=NULL;
+  assert(AdmissionUmdScreenMapBuffer(&d,10,4,4,1,&address)==!failed);
+  assert(!locks && !queries && native_waits==1 && !s.CpuAccess.ActiveLocks);
+  if(failed)assert(!s.Mapped && !s.Transition && !address);
+  else {
+   assert(address==data+1 && s.Mapped);
+   assert(AdmissionUmdScreenUnmapBuffer(&d,10));
+   assert(!unlocks && !s.Mapped && !s.CpuAccess.Locks && !s.CpuAccess.ActiveLocks);
+  }
+ }
+}
+'''
+        self.run_replay(extra, native=True)
+
+    def run_replay(self, extra, native=False):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Receipt counters must distinguish successful locks, failed locks, private staging, and retained failed unlocks while map/residency ordering stays unchanged."""
         prefix = BODY[:BODY.index('@@FUNCS@@')]
         prefix = prefix.replace('struct SLOT {', '#include "umd_cpu_access.h"\nstruct SLOT { ADMISSION_UMD_CPU_ACCESS CpuAccess;')
@@ -226,6 +266,9 @@ struct CB {''')
         prefix = prefix.replace('struct CB {', 'struct ADAPTER { UINT Magic; struct { HANDLE handle; } RuntimeAdapter; };\nstruct D3DDDICB_ESCAPE { HANDLE hDevice,hContext; void *pPrivateDriverData; UINT PrivateDriverDataSize; };\nstruct CB {')
         prefix = prefix.replace('HRESULT(*pfnUnlockCb)(HANDLE,D3DDDICB_UNLOCK*);', 'HRESULT(*pfnUnlockCb)(HANDLE,D3DDDICB_UNLOCK*); HRESULT(*pfnEscapeCb)(HANDLE,D3DDDICB_ESCAPE*);')
         prefix += '#include "apple_agx_g3_copy_abi.h"\n#define ADMISSION_UMD_ADAPTER_MAGIC 0x66u\n#define AppleAgxG3WalkLeafAbsent 1u\n#define AppleAgxG3WalkLeafNotPublished 2u\n'
+        if native:
+            prefix = '#define APPLE_AGX_NATIVE_STAGING 1\n' + prefix
+            prefix = prefix.replace('struct SLOT {', 'struct SLOT { unsigned char *NativeStagingAddress;')
 
         gpu = SRC.read_text()
         screen = (SRC.parent/'umd_win32_screen.c').read_text()

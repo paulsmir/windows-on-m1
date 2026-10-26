@@ -13,6 +13,8 @@
 #include "agx_win32_construction_address.h"
 #include "umd_draw_composer.h"
 #ifdef APPLE_AGX_GPUVA_WINSYS
+#define APPLE_AGX_NATIVE_STAGING 1
+#include "umd_staging_ring.h"
 #include "agx_win32_gpuva.h"
 #endif
 
@@ -44,6 +46,16 @@
   ((UINT)((((APPLE_AGX_U64)(Key)) * 0x9E3779B97F4A7C15ULL) >> 51))
 #define ADMISSION_UMD_SCREEN_FENCE_LIMIT 64u
 #define ADMISSION_UMD_SOURCE_HOLD_LIMIT 64u
+
+#ifdef APPLE_AGX_NATIVE_STAGING
+#define ADMISSION_UMD_NATIVE_ARENAS 4u
+typedef struct _ADMISSION_UMD_NATIVE_ARENA {
+  BOOL Attempted;
+  BYTE *Address;
+  ULONGLONG Token;
+  ADMISSION_UMD_STAGING_RING *Ring;
+} ADMISSION_UMD_NATIVE_ARENA;
+#endif
 
 typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U64 Token;
@@ -88,6 +100,10 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   /* EXP1025/EXP1027: one CPU-visible class allocation (local segment) is both
    * the GPU and the CPU copy (no staging, no copy escapes). */
   BOOL SystemDirect;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  BYTE *NativeStagingAddress;
+  ULONGLONG NativeStagingTicket, NativeStagingToken;
+#endif
   APPLE_AGX_U64 CanonicalGpuVa;
   /* Opaque hint only. KMD reauthenticates and checks invalidation under its
    * graph lock; no UMD token ever skips the batch escape. */
@@ -240,6 +256,10 @@ typedef struct _ADMISSION_UMD_DEVICE {
 #ifdef APPLE_AGX_GPUVA_WINSYS
   BOOL HeapStaging;
   BOOL DirectCpuPool; /* RC25: opt-in canonical WC maps with pool proof */
+#ifdef APPLE_AGX_NATIVE_STAGING
+  BOOL NativeStagingDisabled;
+  ADMISSION_UMD_NATIVE_ARENA NativeStaging[ADMISSION_UMD_NATIVE_ARENAS];
+#endif
   ULONGLONG HeapStagingDirtyBytes, HeapStagingUploadBytes, HeapStagingDownloadBytes;
 #endif
   APPLE_AGX_U32 NextScreenFence;
@@ -338,6 +358,10 @@ int AdmissionUmdGpuvaValidateCpuPoolMap(ADMISSION_UMD_DEVICE *device,
                                        APPLE_AGX_U64 token);
 int AdmissionUmdGpuvaRestoreCpuMapResidency(ADMISSION_UMD_DEVICE *device,
                                            uint64_t token);
+#ifdef APPLE_AGX_NATIVE_STAGING
+int AdmissionUmdGpuvaWaitNativeStaging(ADMISSION_UMD_DEVICE *device,
+                                      unsigned long long fence);
+#endif
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,
                                    uint64_t token);
 int AdmissionUmdGpuvaPrepareDirectMap(ADMISSION_UMD_DEVICE *device,

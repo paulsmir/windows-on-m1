@@ -553,6 +553,10 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     owner->Runtime.DirectCpuPool =
         !(GetEnvironmentVariableA("APPLE_AGX_D3D12_CPU_POOL_MAP", cpu_pool_map,
                                  sizeof(cpu_pool_map)) == 1 && cpu_pool_map[0] == '0');
+    char native_staging[2] = {};
+    owner->Runtime.NativeStagingDisabled =
+        GetEnvironmentVariableA("APPLE_AGX_D3D12_NATIVE_STAGING", native_staging,
+                                sizeof(native_staging)) == 1 && native_staging[0] == '0';
 #endif
     owner->Owner.Device = &owner->Runtime;
     owner->Owner.Backend = &owner->Backend;

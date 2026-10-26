@@ -14,7 +14,7 @@ class WaitWiring(unittest.TestCase):
         Compile/replay the actual private-staging branch under the x86 C++ mode.
         """
         s=(ROOT/'drivers/apple-agx/render-admission/umd/src/umd_win32_screen.c').read_text()
-        start=s.index('#ifdef APPLE_AGX_GPUVA_WINSYS\n    if (privateStaging)')
+        start=s.index('#ifdef APPLE_AGX_GPUVA_WINSYS\n#ifdef APPLE_AGX_NATIVE_STAGING\n    if (nativeAddress)')
         end=s.index('    {\n      UINT values[2]',start)
         code='''
 #include <cassert>

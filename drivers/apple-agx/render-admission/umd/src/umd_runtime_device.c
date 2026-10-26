@@ -789,6 +789,11 @@ HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device,
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (device->VaAliases) HeapFree(GetProcessHeap(), 0, device->VaAliases);
 #endif
+#ifdef APPLE_AGX_NATIVE_STAGING
+  for (UINT i = 0u; i < ADMISSION_UMD_NATIVE_ARENAS; ++i)
+    if (device->NativeStaging[i].Ring)
+      HeapFree(GetProcessHeap(), 0, device->NativeStaging[i].Ring);
+#endif
   ZeroMemory(device, sizeof(*device));
   *consumed = TRUE;
   return terminalError;

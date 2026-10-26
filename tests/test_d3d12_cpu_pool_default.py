@@ -1,6 +1,6 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 
-The production D3D12 owner must allocate canonical CPU mappings by default,
+With native staging unavailable/disabled, the D3D12 owner must retain canonical CPU mappings by default,
 without duplicate private storage or submitting those bytes through the staging
 copy dispatcher. Only an exact CPU_POOL_MAP=0 selects private staging. Execute
 the real owner configuration, allocation and transfer-dispatch bodies; retain
@@ -18,9 +18,10 @@ ROOT = Path(__file__).resolve().parents[1]
 DRIVER = ROOT / "drivers/apple-agx"
 
 ENVIRONMENT = r'''
-static const char *pool_environment, *staging_environment;
+static const char *pool_environment, *staging_environment, *native_environment="0";
 static unsigned GetEnvironmentVariableA(const char *name, char *out, size_t capacity) {
- const char *value = !strcmp(name, "APPLE_AGX_D3D12_CPU_POOL_MAP") ? pool_environment : staging_environment;
+ const char *value = !strcmp(name, "APPLE_AGX_D3D12_CPU_POOL_MAP") ? pool_environment :
+     !strcmp(name, "APPLE_AGX_D3D12_NATIVE_STAGING") ? native_environment : staging_environment;
  if (!value) return 0;
  size_t length = strlen(value);
  // Win32 returns the required capacity, including NUL, if too small.
@@ -100,6 +101,10 @@ int main() {
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d, 1, 65536, 65536, 0xf, &token, 0));
  assert(d.ScreenBuffers[0].SystemDirect && !private_allocs && !d.ScreenBuffers[0].PrivateStaging);
  puts("D3D12 default canonical maps and staging dispatch: PASS");
+ for(const auto &setting:settings) {
+  native_environment=setting.value;configure(&owner);
+  assert(bool(owner.Runtime.NativeStagingDisabled)==setting.staged);
+ }
 }
 '''
 
@@ -114,6 +119,8 @@ class D3d12CpuPoolDefault(unittest.TestCase):
         prefix = allocation_fixture.HARNESS.split("int main() {")[0]
         prefix = prefix.replace("#include <cassert>", "#include <cassert>\n#include <cstdio>\n#include <cstdint>")
         prefix = prefix.replace("using UINT=unsigned;", "using ULONGLONG=unsigned long long;\nusing UINT=unsigned;")
+        prefix = prefix.replace("BOOL ScreenClosing,DrawTerminal,HeapStaging,DirectCpuPool;",
+                                "BOOL ScreenClosing,DrawTerminal,HeapStaging,DirectCpuPool,NativeStagingDisabled;")
         prefix = prefix.replace("struct CB {", "static int lock_unused() {return 1;}\nstatic int unlock_unused() {return 1;}\nstruct CB {")
         prefix = prefix.replace("HRESULT (*pfnDeallocateCb)(void*,D3DDDICB_DEALLOCATE*);",
                                 "HRESULT (*pfnDeallocateCb)(void*,D3DDDICB_DEALLOCATE*); int (*pfnLockCb)(); int (*pfnUnlockCb)();")

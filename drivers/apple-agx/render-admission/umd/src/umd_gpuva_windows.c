@@ -1503,6 +1503,13 @@ static bool download_due(const ADMISSION_UMD_SCREEN_BUFFER *slot) {
 }
 
 static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
+#ifdef APPLE_AGX_NATIVE_STAGING
+  /* Publish persistent WC CPU writes before any native consumer, and order
+   * CPU reads after completion on the return path. No per-copy syscall. */
+  MemoryBarrier();
+  UINT nativeCount = 0u;
+  ULONGLONG nativeBytes = 0ULL;
+#endif
   UINT measured_count=0u;
   ULONGLONG measured_bytes=0u;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -1523,6 +1530,12 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
   }
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++i) {
     auto *slot=&device->ScreenBuffers[i];
+#ifdef APPLE_AGX_NATIVE_STAGING
+    if (slot->CopyHeld && slot->NativeStagingAddress) {
+      ++nativeCount;
+      nativeBytes += slot->Bytes;
+    }
+#endif
     /* EXP1059: upload a CPU-mapped Direct shadow before the GPU uses the
      * surface and drop the map; the next map downloads the GPU result. */
     bool shadow=!download && direct_shadow_slot(slot) && slot->PrivateStaging &&
@@ -1552,6 +1565,14 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
       ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     }
   }
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (nativeCount && AdmissionUmdMeasureEnabled()) {
+    /* Referenced capacity, not a claim about dirty/copied byte counts. */
+    UINT values[4] = {(UINT)download, nativeCount, (UINT)nativeBytes,
+        (UINT)(nativeBytes >> 32)};
+    AdmissionUmdDiagnostic("native-ring-use", S_OK, values, ARRAYSIZE(values));
+  }
+#endif
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   measure_g4_phase(download ? 6u : 3u,phase_start,measured_count,
       measured_bytes,S_OK);
@@ -2150,6 +2171,16 @@ static int wait_render(void *context, uint64_t fence) {
 #endif
   return waited;
 }
+
+#ifdef APPLE_AGX_NATIVE_STAGING
+int AdmissionUmdGpuvaWaitNativeStaging(ADMISSION_UMD_DEVICE *device,
+                                      unsigned long long fence) {
+  if (!device || device->DrawTerminal || (fence && !wait_render(device, fence)))
+    return 0;
+  MemoryBarrier();
+  return 1;
+}
+#endif
 
 /* EXP1082: non-blocking: whether the GPU has signalled this render fence. */
 static int query_render(void *context, uint64_t fence) {
