@@ -64290,3 +64290,14 @@ EXP1971 HARDWARE BEFORE 2026-10-26T17:00:12Z:
 - Hashes: sys ec59c44054be, UmdArm64 d63aea69c7c8, UmdX64 3419f660f2cd, Umd32 d21d04bc1d8f; manifest 9a12511426a5, hardware-manifest baa7fbe8ef59; probe1971.sh 45764d21d2e1 (PROBE_LINT_OK); visible recovery rec1971h 8343692234a0b4d3; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1971h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1971-escape-batch/run1971.sh.
+
+EXP1972 HARDWARE BEFORE 2026-10-26T17:13:20Z:
+- Package 30.0.1972.0: same code as EXP1971 (integration 47702731 plus ledger commits).
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (full pool 2688 MiB).
+- WHY THIS HYPOTHESIS: EXP1971 could not measure rc45 because FHD 200k ran out of GPU memory at load (arm a: 135 MB texture allocations E_OUTOFMEMORY; arm b: device removed); rc46 is working on capacity. 100k and 50k need less memory and are leaderboard settings too (native base M1 macOS/Metal: FHD 100k about 7,700 / 46 FPS, FHD 50k about 10,400 / 62 FPS). rc45 should remove about 108 ms of per-BO readiness escapes per frame (EXP1970).
+- Expected: both arms load and finish; native_ready_escape at most 2 per Execute; a frame far below 180 ms; the score reported against the leaderboard numbers; no fault.
+- Failure criteria: an OOM at load (then capacity is the blocker at 100k too), any fault or bugcheck, or a hang.
+- Recovery: rec1972h.
+- Hashes: sys fd4821d20826, UmdArm64 69528cd5295b, UmdX64 0cdf515d4cd1, Umd32 aaa7af8b44a5; manifest 41c5ae8b4a55, hardware-manifest b5b39a459149; probe1972.sh 4cb92e0dfa6b (PROBE_LINT_OK); visible recovery rec1972h aaf3d20483143735; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1972h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1972-fhd-100k/run1972.sh.
