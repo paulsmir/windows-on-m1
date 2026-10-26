@@ -277,7 +277,10 @@ static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
     data.DmaCompleted.SubmissionFenceId = notification->Fence;
     data.DmaCompleted.NodeOrdinal = 0u;
     data.DmaCompleted.EngineOrdinal = 0u;
-  } else if (notification->FaultVa != 0ULL) {
+  } else {
+    /* DMA_FAULTED is reserved. WDDM also uses PAGE_FAULTED for a
+     * non-MMU error: VA zero and a device-specific cause. The CPU worker
+     * has already retired this exact packet before notifying its fence. */
     data.InterruptType = DXGK_INTERRUPT_DMA_PAGE_FAULTED;
     data.DmaPageFaulted.FaultedFenceId = notification->Fence;
     data.DmaPageFaulted.FaultedPrimitiveAPISequenceNumber =
@@ -291,12 +294,11 @@ static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
     data.DmaPageFaulted.NodeOrdinal = 0u;
     data.DmaPageFaulted.EngineOrdinal = 0u;
     data.DmaPageFaulted.PageTableLevel = 0u;
-  } else {
-    data.InterruptType = DXGK_INTERRUPT_DMA_FAULTED;
-    data.DmaFaulted.FaultedFenceId = notification->Fence;
-    data.DmaFaulted.Status = notification->Status;
-    data.DmaFaulted.NodeOrdinal = 0u;
-    data.DmaFaulted.EngineOrdinal = 0u;
+    if (notification->FaultVa == 0ULL) {
+      data.DmaPageFaulted.FaultErrorCode.IsDeviceSpecificCode = 1u;
+      data.DmaPageFaulted.FaultErrorCode.DeviceSpecificCode =
+          (ULONG)notification->Status & 0x7fffffffu;
+    }
   }
   context->Interface.DxgkCbNotifyInterrupt(
       context->Interface.DeviceHandle, &data);
@@ -310,6 +312,33 @@ static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
   (void)context->Interface.DxgkCbQueueDpc(
       context->Interface.DeviceHandle);
   return TRUE;
+}
+
+/* Only the worker that finished executing the CPU packet may call this.
+ * A known-fence error advances QueryCurrentFence and pending preemption just
+ * like a retired GPU error, but never reports a successful DMA completion. */
+static BOOLEAN AdmissionPagingRecordTerminal(ADMISSION_CONTEXT *Context,
+    UINT Fence, NTSTATUS Status) {
+  BOOLEAN completed;
+  KIRQL oldIrql;
+  if (NT_SUCCESS(Status))
+    return AdmissionSchedulerRecordCompletion(Context, Fence);
+  if (Context == NULL || Fence == 0u ||
+      InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0)
+    return FALSE;
+  KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+  completed = AppleAgxSchedulerFaultActiveFence(&Context->Scheduler,
+      0u, 0u, Fence) ? TRUE : FALSE;
+  if (completed && Context->DispatchedFence == Fence)
+    Context->DispatchedFence = 0u;
+  if (completed && AppleAgxSchedulerPreemptionPhase(&Context->Scheduler) ==
+          AppleAgxPreemptionWaitCurrentBoundary)
+    completed = AppleAgxSchedulerObserveBoundaryCompletion(
+        &Context->Scheduler, 0u, 0u, Fence) ? TRUE : FALSE;
+  KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+  if (!completed)
+    InterlockedCompareExchange(&Context->SchedulerFaulted, 0x20000L | __LINE__, 0);
+  return completed;
 }
 
 static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
@@ -354,9 +383,13 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   if (context->PresentCopyBytes != 0u)
     AdmissionRecordPresentTransfer(context, context->PagingFence,
         context->PresentCopyCommand, context->PresentCopyBytes, copiedBytes, status);
-  if (NT_SUCCESS(status) &&
-      !AdmissionSchedulerRecordCompletion(context, context->PagingFence))
-    status = STATUS_INVALID_DEVICE_STATE;
+  if (!AdmissionPagingRecordTerminal(context, context->PagingFence, status)) {
+    /* A mismatch proves neither ownership nor retirement. Keep the pending
+     * packet for recovery; do not notify a fence belonging to other work. */
+    context->PagingCompletionStatus = STATUS_INVALID_DEVICE_STATE;
+    InterlockedDecrement(&context->PagingWorkersActive);
+    return;
+  }
   context->PagingCompletionStatus = status;
   AdmissionPagingProfileAdd(context->PagingProfile.Worker,
       KeQueryPerformanceCounter(NULL).QuadPart - workerStart);
@@ -501,8 +534,7 @@ _Use_decl_annotations_ VOID AdmissionPagingDpc(
         KeQueryPerformanceCounter(NULL).QuadPart - Context->PagingNotifyQpc);
   KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
   completedFence = Context->PagingFence;
-  if (NT_SUCCESS(Context->PagingCompletionStatus))
-    Context->PagingLastCompletedFence = completedFence;
+  Context->PagingLastCompletedFence = completedFence;
   if (Context->PresentCopyContext != NULL) {
     KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
     AdmissionContextRetireFence(Context->PresentCopyContext, completedFence);
