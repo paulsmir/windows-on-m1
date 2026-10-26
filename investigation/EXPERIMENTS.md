@@ -64124,3 +64124,12 @@ EXP1964 HARDWARE BEFORE 2026-10-26T10:38:28Z:
 - Hashes: sys f675502d9282, UmdArm64 58c9e5c4f29e, UmdX64 617e5b29b70c, Umd32 6d905a6c7b39; manifest 28aeadd8c740, hardware-manifest df89d78b4dc3; probe1964.sh 4bd34417b540 (PROBE_LINT_OK); visible recovery rec1964h 051886cd5a46f926; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1964h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1964-gpu-count-predicate/run1964.sh.
+
+EXP1964 HARDWARE ACTUAL 2026-10-26T10:52:52Z:
+- REJECTED (performance regression, then bugcheck 0x116 at 10k).
+- 2k: Score 315 / 1.9 FPS (EXP1963: 784 / 4.7). Median frame 0.471 s after the first 20 frames, p90 0.531 s. The image is correct.
+- measure-d3d12-counted-path shows path=1 (GPU predicate) with MaxCount 0x960 (2400). Each call takes 13-60 ms (e.g. 0xebe3 us), up to about 25 us of CPU per record, because Asahi encodes all MaxCount records (agx_state.c:4393 recursive draw_vbo) even when the GPU zeroes them.
+- 10k (MaxCount 0x2ee0 = 12000): one call took 0xaadbf us (700 ms). The guest then bugchecked: minidump rec1964h/102626-16671-01.dmp, bugcheck 0x116 VIDEO_TDR_FAILURE, P1 ffffe701e9a02050, P2 fffff803eff51ec0, P3 c0000483, P4 3. PSCI reset after the NVMe crash-dump write (full.log 4993-5000). App logs: rec1964h/app-logs.
+- Conclusion: removing the CPU count read is right, but per-record CPU encoding is not viable at MaxCount 2400/12000. A production path must make the CPU cost of a counted call O(1): rc33, a GPU-generated VDM draw stream (in progress).
+- Separate production gap: TDR recovery failed (0x116 instead of a recovered device). It is tracked as its own task.
+- Recovery rec1964h (AGX_RECOVERY_ALLOW_AT_PROXY=1): RECOVERY_DONE, package absent, 8 CPUs.
