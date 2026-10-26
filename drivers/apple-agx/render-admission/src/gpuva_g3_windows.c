@@ -3363,7 +3363,49 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
   return status;
 }
 
-BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
+/* RC40: the graph job still pins this process mapping. Recheck its published
+ * write access and its resident CPU shadow before writing through the native
+ * local/pool view; never turn an arbitrary process GPUVA into a CPU pointer. */
+static BOOLEAN AdmissionG3PublishTimestampLocked(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_PROCESS *process, ULONGLONG va, ULONGLONG endNs) {
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte;
+  ULONGLONG ipa, offset;
+  if (!process || process->Poisoned || process->CpuOnlyMappings ||
+      !process->Graph.JobInFlight || !process->Graph.LeaseToken ||
+      process->Graph.Uncertain || !endNs || va < 0x10000ULL ||
+      va >= (1ULL << 39) || (va & 7ULL) ||
+      !AppleAgxGpuvaG3GraphContainsRangeAccess(&process->Graph, va, 8u, TRUE) ||
+      !AppleAgxGpuvaG3GraphTranslateVa(&process->Graph, va, &ipa))
+    return FALSE;
+  pte = AdmissionG3CopyPte(process, va);
+  if (!pte || !pte->Allocation ||
+      pte->Flags != (APPLE_AGX_GPUVA_G3_VALID | APPLE_AGX_GPUVA_G3_WRITE) ||
+      pte->GuestIpa > (~0ULL) - (va & 0xfffULL) ||
+      ipa != pte->GuestIpa + (va & 0xfffULL))
+    return FALSE;
+  RtlZeroMemory(&view, sizeof(view));
+  if (pte->SegmentId == ADMISSION_MEMORY_LOCAL_SEGMENT) {
+    if (!NT_SUCCESS(AdmissionMemoryRuntimeLocalView(adapter, &view))) return FALSE;
+  } else if (pte->SegmentId == ADMISSION_MEMORY_POOL_SEGMENT) {
+    if (!NT_SUCCESS(AdmissionMemoryPoolView(adapter, &view))) return FALSE;
+  } else {
+    return FALSE;
+  }
+  if (!view.CpuAddress ||
+      !AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress, view.Bytes,
+                                         ipa, sizeof(endNs)))
+    return FALSE;
+  offset = ipa - view.GuestIpaAddress;
+  KeMemoryBarrier();
+  RtlCopyMemory((PUCHAR)view.CpuAddress + (SIZE_T)offset, &endNs, sizeof(endNs));
+  KeMemoryBarrier();
+  return TRUE;
+}
+
+BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence, ULONGLONG timestampVa,
+    ULONGLONG timestampEndNs) {
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
   BOOLEAN complete;
@@ -3378,6 +3420,14 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
     return TRUE;
   }
   if (process == NULL || state->ActiveFence != fence) {
+    ExReleaseFastMutex(&state->Lock);
+    return FALSE;
+  }
+  if (timestampVa &&
+      (context == NULL || context->GpuvaG3Process != process ||
+       context->GpuvaG3Poisoned ||
+       !AdmissionG3PublishTimestampLocked(adapter, process, timestampVa,
+                                         timestampEndNs))) {
     ExReleaseFastMutex(&state->Lock);
     return FALSE;
   }
@@ -3398,6 +3448,10 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
   /* EXP1138: wake escapes waiting for this process's job to end. */
   if (complete) KeSetEvent(&state->JobEvent, IO_NO_INCREMENT, FALSE);
   return complete;
+}
+
+BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
+  return AdmissionGpuvaG3CompleteJobTimestamp(adapter, NULL, fence, 0ULL, 0ULL);
 }
 
 NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(

@@ -54,6 +54,7 @@ static APPLE_AGX_G4_PARSE_RESULT validate_render(
     unsigned long long Va; unsigned int Bytes; int Write;
   } addresses[19];
   unsigned int index, count = 0u;
+  unsigned long long timestamp_va;
 #define AGX4_RANGE(value, bytes, write) do { \
   addresses[count].Va = (value); addresses[count].Bytes = (bytes); \
   addresses[count].Write = (write); ++count; \
@@ -74,15 +75,23 @@ static APPLE_AGX_G4_PARSE_RESULT validate_render(
       (!render.SampleSizeBytes && render.Samples != 1u))
     return AppleAgxG4ParseInvalid;
   if (render.TimestampsVertex.StartHandle ||
-      render.TimestampsVertex.EndHandle ||
-      render.TimestampsFragment.StartHandle ||
-      render.TimestampsFragment.EndHandle)
+      render.TimestampsVertex.EndHandle)
     return AppleAgxG4ParseUnsupported;
   if (render.TimestampsVertex.StartOffset ||
-      render.TimestampsVertex.EndOffset ||
-      render.TimestampsFragment.StartOffset ||
-      render.TimestampsFragment.EndOffset)
+      render.TimestampsVertex.EndOffset)
     return AppleAgxG4ParseInvalid;
+  timestamp_va = AppleAgxG4TimestampPublishVa(&render.TimestampsFragment);
+  if (!timestamp_va) {
+    if (render.TimestampsFragment.StartHandle ||
+        render.TimestampsFragment.EndHandle)
+      return AppleAgxG4ParseUnsupported;
+    if (render.TimestampsFragment.StartOffset ||
+        render.TimestampsFragment.EndOffset)
+      return AppleAgxG4ParseInvalid;
+  } else if (!check_access(access, timestamp_va, 8u, 1,
+                          AppleAgxG4AccessTimestamp)) {
+    return AppleAgxG4ParseUnmapped;
+  }
   AGX4_ADDRESS(render.VdmCtrlStreamBase, 0);
   AGX4_ADDRESS(usc_va(render.VertexHelper.Binary), 0);
   AGX4_ADDRESS(render.VertexHelper.Data, 0);
@@ -144,9 +153,10 @@ static APPLE_AGX_G4_PARSE_RESULT validate_compute_fields(
         !valid_va(compute->Helper.Data, 1u))))
     return AppleAgxG4ParseInvalid;
   /* GPU timestamps (T1): a request per end, recorded in the KMD block. */
-  if (compute->Timestamps.StartHandle > APPLE_AGX_G4_TIMESTAMP_REQUEST ||
+  if (!AppleAgxG4TimestampPublishVa(&compute->Timestamps) &&
+      (compute->Timestamps.StartHandle > APPLE_AGX_G4_TIMESTAMP_REQUEST ||
       compute->Timestamps.EndHandle > APPLE_AGX_G4_TIMESTAMP_REQUEST ||
-      compute->Timestamps.StartOffset || compute->Timestamps.EndOffset)
+      compute->Timestamps.StartOffset || compute->Timestamps.EndOffset))
     return AppleAgxG4ParseInvalid;
   if (compute->CdmCtrlStreamBase >= compute->CdmCtrlStreamEnd ||
       (compute->CdmCtrlStreamBase & 3ULL) || (compute->CdmCtrlStreamEnd & 3ULL))
@@ -176,6 +186,8 @@ static APPLE_AGX_G4_PARSE_RESULT validate_compute_access(
     const APPLE_AGX_G4_PROCESS_RANGE *preemption, AGX4_ACCESS_STATE *state) {
   unsigned long long stream_bytes =
       compute->CdmCtrlStreamEnd - compute->CdmCtrlStreamBase;
+  unsigned long long timestamp_va =
+      AppleAgxG4TimestampPublishVa(&compute->Timestamps);
   if (!check_access(state, compute->CdmCtrlStreamBase, (unsigned int)stream_bytes,
                     0, AppleAgxG4AccessComputeStream) ||
       (compute->SamplerCount &&
@@ -187,6 +199,8 @@ static APPLE_AGX_G4_PARSE_RESULT validate_compute_access(
                       AppleAgxG4AccessComputeStream) ||
         !check_access(state, compute->Helper.Data, 1u, 0,
                       AppleAgxG4AccessComputeStream))) ||
+      (timestamp_va && !check_access(state, timestamp_va, 8u, 1,
+                                     AppleAgxG4AccessTimestamp)) ||
       !check_access(state, preemption->Va, preemption->Bytes, 1,
                     AppleAgxG4AccessComputePreemption))
     return AppleAgxG4ParseUnmapped;
@@ -289,6 +303,11 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
         dma_bytes - sizeof(native_header) < sizeof(compute))
       return AppleAgxG4ParseInvalid;
     memcpy(&compute, bytes + sizeof(native_header), sizeof(compute));
+    /* A render publishes its fragment end once; its compute prelude does
+     * not represent this batch's completion. Legacy request fields retain
+     * their existing contract. */
+    if (compute.Timestamps.StartHandle == APPLE_AGX_G4_TIMESTAMP_PUBLISH)
+      return AppleAgxG4ParseInvalid;
     compute_result = validate_compute_fields(&compute, &header_v5.Preemption,
         preempt_bytes, dma_va, dma_bytes);
     if (compute_result == AppleAgxG4ParseOk)

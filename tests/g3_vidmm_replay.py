@@ -33,6 +33,7 @@ FUNCTIONS = {
         "AdmissionGpuvaG3SubmitVirtualPaging",
         "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
         "AdmissionG4GraphAccessTyped", "AdmissionG3PresentSurfaceBytes", "AdmissionG3PresentAccessible", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
+        "AdmissionG3PublishTimestampLocked", "AdmissionGpuvaG3CompleteJobTimestamp",
         "AdmissionGpuvaG3CompleteJob",
     ],
     "gpuva_g3_paging_windows.c": [
@@ -113,6 +114,7 @@ def generate(revision=None, function_revisions=None):
                     "AdmissionGpuvaG3SubmitVirtualPaging",
                     "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
                     "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
+                    "AdmissionG3PublishTimestampLocked", "AdmissionGpuvaG3CompleteJobTimestamp",
                     "AdmissionGpuvaG3CompleteJob",
                     "AdmissionG3FindPagingEdge",
                     "AdmissionG3ResolveLogicalVa",

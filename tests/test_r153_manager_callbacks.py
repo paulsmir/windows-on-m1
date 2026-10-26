@@ -22,7 +22,7 @@ class ManagerCallbackTests(unittest.TestCase):
             '@SAVE@', function('AdmissionSaveG4Manager'))
         complete = platform[platform.index('static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete('):]
         self.assertLess(complete.index('AdmissionSaveG4Manager(runtime, Fence)'),
-                        complete.index('AdmissionGpuvaG3CompleteJob(adapter, Fence)'))
+                        complete.index('AdmissionGpuvaG3CompleteJobTimestamp(adapter, g3_context, Fence,'))
         worker = platform[platform.index('  submission.Submission.Kind = AppleAgxSubmissionGdi;'):]
         self.assertLess(worker.index('AdmissionGpuvaG3BeginJob('), worker.index('AdmissionPrepareG4Manager(runtime)'))
         self.assertLess(worker.index('AdmissionPrepareG4Manager(runtime)'),worker.index('AppleAgxBackendRuntimeSubmit('))

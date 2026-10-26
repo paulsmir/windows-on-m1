@@ -424,6 +424,43 @@ static VOID AdmissionFwTimingCaptureWindows(
  * compute job names its sidecar block (the firmware writes the job's
  * start/end at 0x00/0x08). The job is still pending, so its kind and block
  * are valid. */
+/* RC40: use the same firmware counter and frequency as the established
+ * timestamp escape. No estimate or CPU wall time can substitute for a
+ * completed job's end. Conversion failure keeps completion fail-closed. */
+static BOOLEAN AdmissionGpuTimestampEndNanoseconds(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONGLONG *endNs) {
+  APPLE_AGX_BACKEND_JOB_IMAGE *job = &runtime->Backend.PendingJob;
+  ULONGLONG end = 0ULL, frequency, seconds, remainder, fraction;
+  LARGE_INTEGER qpcFrequency;
+  /* A notification retry may arrive after Release restored the timestamp
+   * objects. Keep the value while PendingJob still identifies this job. */
+  if (job->TimestampEndNs) {
+    *endNs = job->TimestampEndNs;
+    return TRUE;
+  }
+  if (job->Kind == AppleAgxBackendJobCompute) {
+    if (job->ComputeTimestampBlock == NULL) return FALSE;
+    RtlCopyMemory(&end, (const UCHAR *)job->ComputeTimestampBlock + 8u,
+                  sizeof(end));
+  } else {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object = &runtime->QueueObjects[29u];
+    if (object->Data == NULL || object->Size != sizeof(end)) return FALSE;
+    RtlCopyMemory(&end, object->Data, sizeof(end));
+  }
+  (void)KeQueryPerformanceCounter(&qpcFrequency);
+  if (!end || qpcFrequency.QuadPart <= 0) return FALSE;
+  frequency = (ULONGLONG)qpcFrequency.QuadPart;
+  seconds = end / frequency;
+  remainder = end % frequency;
+  if (seconds > (~0ULL) / 1000000000ULL ||
+      remainder > (~0ULL) / 1000000000ULL) return FALSE;
+  fraction = remainder * 1000000000ULL / frequency;
+  if (seconds * 1000000000ULL > (~0ULL) - fraction) return FALSE;
+  *endNs = seconds * 1000000000ULL + fraction;
+  job->TimestampEndNs = *endNs;
+  return *endNs != 0ULL;
+}
+
 static VOID AdmissionGpuTimestampCaptureWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
   const APPLE_AGX_BACKEND_JOB_IMAGE *job = &runtime->Backend.PendingJob;
@@ -3153,6 +3190,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRelocate(
     return APPLE_AGX_BACKEND_FALSE;
   /* GPU timestamps: the batch the UMD will ask about. */
   image = runtime->Adapter != NULL ? &runtime->Adapter->BackendImage : NULL;
+  Job->TimestampPublishVa = image != NULL ? image->TimestampPublishVa : 0ULL;
+  Job->TimestampEndNs = 0ULL;
   if (image != NULL && image->G4Compute && !image->PresentCompute)
     Job->CommandVa = image->G4ComputeEnvelope.Header.Base.CommandVa;
   else if (image != NULL && image->G4Native)
@@ -3372,9 +3411,17 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   {
     ADMISSION_RENDER_CONTEXT *g3_context = runtime->CompletionContext;
+    ULONGLONG timestampVa = 0ULL, timestampEnd = 0ULL;
     if (g3_context == NULL && adapter != NULL)
       g3_context = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
           adapter->RenderPacket.Description.ContextToken;
+    if (Status == AppleAgxBackendCompletionSuccess &&
+        runtime->Backend.PendingJob.TimestampPublishVa) {
+      timestampVa = runtime->Backend.PendingJob.TimestampPublishVa;
+      if (adapter == NULL || g3_context == NULL ||
+          g3_context->GpuvaG3Process == NULL)
+        return APPLE_AGX_BACKEND_FALSE;
+    }
     /* G2: a compute job ends on its compute stamp, a render job on 3D. The
      * job kind outlives the image binding: a retried completion arrives
      * after the release below. */
@@ -3384,7 +3431,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
               !runtime->Backend.ComputeComplete :
               (!runtime->Backend.TaComplete || !runtime->Backend.D3Complete)) ||
          !AdmissionSaveG4Manager(runtime, Fence) ||
-         !AdmissionGpuvaG3CompleteJob(adapter, Fence)))
+         (timestampVa &&
+          !AdmissionGpuTimestampEndNanoseconds(runtime, &timestampEnd)) ||
+         !AdmissionGpuvaG3CompleteJobTimestamp(adapter, g3_context, Fence,
+                                              timestampVa, timestampEnd)))
       return APPLE_AGX_BACKEND_FALSE;
     AdmissionJobTimingMarkWindows(runtime, Fence, AdmissionJobPhaseJobEnd);
     AdmissionGpuCompletionCaptureWindows(runtime, Fence, Status);

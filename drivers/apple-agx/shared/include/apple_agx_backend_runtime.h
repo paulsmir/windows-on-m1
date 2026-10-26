@@ -116,6 +116,11 @@ typedef struct _APPLE_AGX_BACKEND_JOB_IMAGE {
   /* GPU timestamps: the G4 envelope's command (DMA buffer) GPU VA, which
    * the UMD names its batch by; 0 for jobs without a G4 envelope. */
   APPLE_AGX_U64 CommandVa;
+  /* RC40: validated process destination for completion's end nanoseconds;
+   * never passed to the firmware. Zero preserves the escape-only path. */
+  APPLE_AGX_U64 TimestampPublishVa;
+  /* Retained across completion retries after the image has been restored. */
+  APPLE_AGX_U64 TimestampEndNs;
 } APPLE_AGX_BACKEND_JOB_IMAGE;
 
 typedef struct _APPLE_AGX_BACKEND_OBSERVATION {

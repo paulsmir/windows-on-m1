@@ -24,7 +24,7 @@ def function(text, name):
 
 class JobEventWakesEscapes(unittest.TestCase):
     def test_complete_job_signals_after_unlock(self):
-        body = function(SRC.read_text(), "AdmissionGpuvaG3CompleteJob")
+        body = function(SRC.read_text(), "AdmissionGpuvaG3CompleteJobTimestamp")
         unlock = body.rindex("ExReleaseFastMutex(&state->Lock);")
         signal = body.index("KeSetEvent(&state->JobEvent")
         self.assertLess(unlock, signal)

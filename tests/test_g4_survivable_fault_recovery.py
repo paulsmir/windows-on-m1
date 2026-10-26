@@ -5,6 +5,8 @@ success or poisoning a second context. A query or preemption must never regress
 behind the page-fault notification (EXP1966 0x119). Valid fault VA/write/level must be attached only to the matching
 fence/context; stale or unread register data must stay unknown. Exercise the production completion callbacks and scheduler;
 only WDK services, image/graph release and the packet container are modeled.
+A failed RC40 timestamp capture/publication must leave the success fence active;
+the dropped-job path must continue reporting its fault without publishing.
 """
 from pathlib import Path
 import os
@@ -110,6 +112,7 @@ typedef struct {
   ADMISSION_GPU_FAULT_RECEIPT GpuFault;
 } ADMISSION_PLATFORM_RUNTIME;
 static unsigned notifications, dpcs, released, lock_depth, sync_fail;
+static unsigned timestamp_source_ok=1, timestamp_publish_ok=1;
 static DXGKARGCB_NOTIFY_INTERRUPT_DATA observed;
 static void memset_zero(void *p, size_t n) { memset(p, 0, n); }
 static void KeAcquireSpinLock(unsigned *l, KIRQL *irql) { (void)l; *irql=0; assert(!lock_depth++); }
@@ -129,7 +132,17 @@ static void AdmissionGpuCompletionCaptureWindows(ADMISSION_PLATFORM_RUNTIME *r, 
     APPLE_AGX_BACKEND_COMPLETION_STATUS status) { (void)r; (void)f; (void)status; }
 static void AdmissionJobTimingFirmwareWindows(void *r, unsigned f) { (void)r; (void)f; }
 static int AdmissionSaveG4Manager(void *r, unsigned f) { (void)r; (void)f; return 1; }
-static int AdmissionGpuvaG3CompleteJob(void *a, unsigned f) { (void)a; (void)f; return 1; }
+/* Real graph publication is exercised in the RC40 replay; here its return
+ * status verifies that the real completion callback never reports early. */
+static int AdmissionGpuTimestampEndNanoseconds(ADMISSION_PLATFORM_RUNTIME *r, ULONGLONG *ns) {
+  (void)r; *ns=42; return timestamp_source_ok;
+}
+static int AdmissionGpuvaG3CompleteJobTimestamp(void *a, void *c, unsigned f,
+    ULONGLONG va, ULONGLONG ns) {
+  (void)a; (void)c; (void)f;
+  if (va) { assert(ns==42); return timestamp_publish_ok; }
+  assert(!ns); return 1;
+}
 static int AdmissionDynamicOverlayReleaseActive(void *r, unsigned f) { (void)r; (void)f; return 1; }
 static int AdmissionBackendImageReleaseSubmissionRestore(void *a, void *s, unsigned f) {
   (void)a; (void)s; (void)f; ++released; return 1;
@@ -197,6 +210,19 @@ int main(void) {
     }
     if (before)
       assert(AppleAgxSchedulerBeginBoundaryPreemption(&a.Scheduler,0,0,77,next,failed));
+    /* No success notification or image release before timestamp publication. */
+    r.Backend.PendingJob.TimestampPublishVa=0x1234500008ULL;
+    if (mode==0) {
+      culprit.GpuvaG3Process=&a;
+      r.Backend.TaComplete=r.Backend.D3Complete=r.Backend.ComputeComplete=1;
+      timestamp_source_ok=0;
+      assert(!AdmissionBackendComplete(&r,failed,0,0,status));
+      assert(!notifications && !released && culprit.Object.FenceOutstanding==failed);
+      timestamp_source_ok=1;timestamp_publish_ok=0;
+      assert(!AdmissionBackendComplete(&r,failed,0,0,status));
+      assert(!notifications && !released && culprit.Object.FenceOutstanding==failed);
+      timestamp_publish_ok=1;
+    }
     if (mode==2) {
       sync_fail=1;
       assert(!AdmissionBackendComplete(&r,failed,0,0,status));

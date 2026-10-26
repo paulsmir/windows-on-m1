@@ -55,6 +55,7 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   APPLE_AGX_U32 G4CommandBytes;
+  APPLE_AGX_U64 TimestampPublishVa;
   APPLE_AGX_G4_PRIVATE_LEASE G4Lease;
   /* D3D-G1: a v5 render's compute prelude. G4Command keeps the whole
    * stream (compute, attachments, render); the job builder adds the compute

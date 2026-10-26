@@ -2148,6 +2148,9 @@ DXGKDDI_ESCAPE AdmissionDdiEscape;
 BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *);
 BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *);
 BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *);
+BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *,
+    ADMISSION_RENDER_CONTEXT *, ULONG Fence, ULONGLONG TimestampVa,
+    ULONGLONG TimestampEndNs);
 /* noinline: its _ReturnAddress names the cancelling path (receipt). */
 __declspec(noinline) VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *, ULONG, BOOLEAN);
 VOID AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *, ULONG);

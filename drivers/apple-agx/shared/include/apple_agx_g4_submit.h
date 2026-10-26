@@ -165,9 +165,31 @@ typedef struct {
  * Mesa's buffer and offsets and copies the values back (GPU timestamps
  * design, docs/superpowers/plans/2026-10-16-gpu-timestamps.md). */
 #define APPLE_AGX_G4_TIMESTAMP_REQUEST 1u
+/* RC40: publish the firmware end in nanoseconds into a process allocation
+ * before completing this job. This is a KMD completion operation, never a
+ * firmware pointer. StartHandle selects the mode; EndHandle/EndOffset are
+ * the low/high halves of an aligned eight-byte destination GPUVA. */
+#define APPLE_AGX_G4_TIMESTAMP_PUBLISH 2u
 typedef struct {
   unsigned int StartHandle, StartOffset, EndHandle, EndOffset;
 } APPLE_AGX_G4_TIMESTAMPS;
+
+static inline unsigned long long AppleAgxG4TimestampPublishVa(
+    const APPLE_AGX_G4_TIMESTAMPS *ts) {
+  unsigned long long va;
+  if (!ts || ts->StartHandle != APPLE_AGX_G4_TIMESTAMP_PUBLISH ||
+      ts->StartOffset) return 0ULL;
+  va = ((unsigned long long)ts->EndOffset << 32) | ts->EndHandle;
+  return va >= 0x10000ULL && va < (1ULL << 39) && !(va & 7ULL) ? va : 0ULL;
+}
+
+static inline void AppleAgxG4TimestampPublish(APPLE_AGX_G4_TIMESTAMPS *ts,
+    unsigned long long va) {
+  ts->StartHandle = APPLE_AGX_G4_TIMESTAMP_PUBLISH;
+  ts->StartOffset = 0u;
+  ts->EndHandle = (unsigned int)va;
+  ts->EndOffset = (unsigned int)(va >> 32);
+}
 
 /* G2: the MIT Asahi UAPI compute payload (drm_asahi_cmd_compute). The KMD
  * builds the firmware RunCompute work item around it; the CDM control
@@ -437,7 +459,8 @@ typedef enum {
    * USC helper program, compute preemption buffer. */
   AppleAgxG4AccessComputeStream = 5,
   AppleAgxG4AccessSamplerHeap = 6,
-  AppleAgxG4AccessComputePreemption = 7
+  AppleAgxG4AccessComputePreemption = 7,
+  AppleAgxG4AccessTimestamp = 8
 } APPLE_AGX_G4_ACCESS_KIND;
 typedef enum {
   AppleAgxG4FailureNone = 0,

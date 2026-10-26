@@ -371,6 +371,8 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   }
   memcpy(Image->G4Command, View->Native, View->CommandBytes);
   Image->G4CommandBytes = View->CommandBytes;
+  Image->TimestampPublishVa =
+      AppleAgxG4TimestampPublishVa(&render.TimestampsFragment);
   Image->G4Lease = View->Lease;
   Image->G4WithCompute = View->HasCompute ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
   if (View->HasCompute) {
@@ -410,6 +412,8 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Compute(
       Envelope->Native.Type != APPLE_AGX_G4_COMPUTE)
     return APPLE_AGX_FALSE;
   memcpy(&Image->G4ComputeEnvelope, Envelope, sizeof(*Envelope));
+  Image->TimestampPublishVa =
+      AppleAgxG4TimestampPublishVa(&Envelope->Compute.Timestamps);
   AdmissionBackendBindingZero(&Image->Binding);
   Image->G4Compute = APPLE_AGX_TRUE;
   Image->BoundFence = Fence;
@@ -428,6 +432,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindPresentCompute(
           &Present->DestinationRect, Present->Rects, Present->RectCount))
     return APPLE_AGX_FALSE;
   memcpy(&Image->Present, Present, sizeof(*Present));
+  Image->TimestampPublishVa = 0ULL;
   AdmissionBackendBindingZero(&Image->Binding);
   Image->PresentCompute = APPLE_AGX_TRUE;
   Image->BoundFence = Fence;
@@ -553,6 +558,7 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
     memset(&Image->G4ComputeEnvelope, 0, sizeof(Image->G4ComputeEnvelope));
     memset(&Image->Present, 0, sizeof(Image->Present));
     Image->G4Compute = APPLE_AGX_FALSE;
+    Image->TimestampPublishVa = 0ULL;
     Image->PresentCompute = APPLE_AGX_FALSE;
     Image->BoundFence = 0u;
     Image->JobFence = 0u;
