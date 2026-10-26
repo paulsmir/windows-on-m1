@@ -64133,3 +64133,14 @@ EXP1964 HARDWARE ACTUAL 2026-10-26T10:52:52Z:
 - Conclusion: removing the CPU count read is right, but per-record CPU encoding is not viable at MaxCount 2400/12000. A production path must make the CPU cost of a counted call O(1): rc33, a GPU-generated VDM draw stream (in progress).
 - Separate production gap: TDR recovery failed (0x116 instead of a recovered device). It is tracked as its own task.
 - Recovery rec1964h (AGX_RECOVERY_ALLOW_AT_PROXY=1): RECOVERY_DONE, package absent, 8 CPUs.
+
+EXP1965 HARDWARE BEFORE 2026-10-26T11:26:11Z:
+- Package 30.0.1965.0 = EXP1964 driver + rc33 (eb1c617b GPU stream kernel, 055d9537 GPU-writable LOW_VA GPU_ONLY General buffers, 39f51ce1 single native state + one VDM call with GPU-generated per-record VDM draws and USC PARAMS). Queries/tess/GS/DrawID keep the rc32/rc31 fallbacks.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (full pool).
+- WHY THIS HYPOTHESIS: EXP1964 showed the GPU predicate is correct (2k image) but CPU-encodes every MaxCount record (13-60 ms per call, 700 ms at 10k, then 0x116). EXP1963 counted indirect is 87/99 ms of the frame with the synchronous count read. rc33 makes CPU encoding constant in MaxCount (7 native encodes per frame instead of 16800/84000), and the GPU writes the records.
+- Expected: measure-d3d12-counted-path path=3 reason=0 for 7 calls per frame, encode time constant (microseconds to about 1 ms), correct image, Score/FPS above EXP1963 (784/4.7, 798/4.8), and a median frame below 183/185 ms.
+- Failure criteria: missing/garbage asteroids (GPU-written command/USC coherency), a GPU fault, TDR/0x116, device removal, a hang, or a fallback path on ordinary draws.
+- Recovery: rec1965h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest is down).
+- Hashes: sys 2d5697065e1f, UmdArm64 efd89d88d939, UmdX64 14d31ad98155, Umd32 012ca3da2ab2; manifest 4a3d5dd0cc03, hardware-manifest cc6ee8818444; probe1965.sh b28f5ef1d76a (PROBE_LINT_OK); visible recovery rec1965h 70ebbd6adaeae9fd; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1965h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1965-gpu-vdm-stream/run1965.sh.
