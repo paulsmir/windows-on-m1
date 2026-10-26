@@ -1,0 +1,21 @@
+{
+  "inputs": {
+    "agx_win32_indirect_stream.cl": "792ae8ad4bfde693aa1be2e193792e47d6419610608d1d8e8edb14fd4bbdbffe",
+    "agx_win32_indirect_stream.h": "74bfc10c98154afdde3f8096415766c7fe21e85362123f13553090f15253c0de",
+    "mesa_clc": "66c18e352e0d143668007d710a2eaf774f22f0be60647b0302ea2b94717d7dea",
+    "asahi_clc": "9019c2368ae69fec007b69ae7dda3fc90fa966b9966e7308ac1cb15fafa800a3",
+    "libagx_dgc.h": "ab8db337b1c95bec23aebcbf92521a98f862a4fb7b23a0f2828e20ffd336eecc",
+    "agx_pack.h": "aedee39dd8eb0305acdd21512c1334f2923b4b3a99db0dd2ef61912471415ce8",
+    "cmdbuf.xml": "6bc10b31f5519584e28af65be046d35cae09dfa1fc94222bd11897f2cb1ad21a"
+  },
+  "outputs": {
+    "agx_win32_stream_shaders.h": "8176be6e894aa10ac82b0855d3afadf88f1919d7d5a62ca951bc8556ed481b83",
+    "agx_win32_stream_shaders.c": "ffccd7f5ee6b1694f73ca6bab2936f668b75730b08d140d87708cd3589a63b31"
+  },
+  "spirv_sha256": "2f402926d3eafaf5f803d0874297c691865d9f1d680ee5bb7e9283c53f6feb54",
+  "targets": [
+    "g13g",
+    "g13x"
+  ],
+  "license": "MIT; original kernel, Mesa encoders/compiler; notices retained"
+}
