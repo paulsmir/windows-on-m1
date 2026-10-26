@@ -4068,7 +4068,10 @@ AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
       SetError(hDevice,E_NOTIMPL);return;
    }
    for(unsigned level=first+1;level<=last;++level) {
-      HRESULT status=AgxD3d10WindowsFlushRetire(device->windows);
+      /* The source texture_map below waits for the preceding mip writer;
+       * the newly allocated staging texture has no GPU users. Leave other
+       * resources in flight instead of retiring the context at every LOD. */
+      HRESULT status=AgxD3d10WindowsFlushStatus(device->windows);
       if(FAILED(status)) {SetError(hDevice,status);return;}
       struct pipe_resource info={};
       info.target=texture->target;info.format=texture->format;

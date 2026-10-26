@@ -4,6 +4,8 @@ GenMips rejected legal non-BGRA SRVs and copied every staging row as width*4.
 Compile the generated DDI and check typed per-level blits, exact storage bytes,
 array/volume ranges and cleanup. WDK GenMips consumes an SRV; Gallium's
 u_gen_mipmap.c defines typed filtering and slice/mip coordinates.
+Also catch whole-context retirement before each mip: texture_map already owns
+the source read dependency and must be reachable with unrelated GPU work busy.
 """
 from test_d3d10_copy_bc_reinterpret import SCRIPT, compile_run
 import unittest
@@ -67,7 +69,7 @@ static pipe_resource staged;static pipe_transfer transfers[2];static uint8_t src
 static unsigned expected_first, expected_last, expected_layer,expected_count;
 static void SetError(Device*,int e){error=e;}
 static void AgxD3d10WindowsDiagnostic(const char*,int,const UINT*,unsigned){}
-static int AgxD3d10WindowsFlushRetire(void*){return 0;}
+static int AgxD3d10WindowsFlushRetire(void*){return E_FAIL;}
 static int AgxD3d10WindowsFlushStatus(void*){return 0;}
 static bool supported(pipe_screen*,unsigned f,unsigned,unsigned,unsigned,unsigned bind){assert(bind==(PIPE_BIND_RENDER_TARGET|PIPE_BIND_SAMPLER_VIEW));return f!=UNSUPPORTED;}
 static pipe_resource*create(pipe_screen*,const pipe_resource*i,const uint64_t*,unsigned){++creates;staged=*i;return &staged;}
