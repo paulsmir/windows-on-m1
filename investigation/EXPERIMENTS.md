@@ -64375,3 +64375,14 @@ EXP1975 HARDWARE BEFORE 2026-10-26T19:05:30Z:
 - Hashes: sys 20cb96325f67, UmdArm64 6d416d62a0bd, UmdX64 9750633a3b5d, Umd32 4d21b6e9ac7d; manifest bc72511a421d, hardware-manifest e3149a3843d6; probe1975.sh 7933fbc61cf4 (PROBE_LINT_OK); visible recovery rec1975h fcb4a5e07e10ab26; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1975h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1975-hd-scanout/run1975.sh.
+
+EXP1975 HARDWARE ACTUAL 2026-10-26T19:20:37Z: PARTIAL PASS. HD 1280x720, CPU_POOL_MAP=0.
+- Arm a (50k): **Score 1632 / 9.8 FPS**, the best so far. Median frame 89.3 ms; GPU busy estimate 19.0 ms. Steady waits per Execute:
+  - draw.copy_escape 39.8 ms for 164 calls;
+  - draw.render_fence 24.1 ms for 8;
+  - q_resolve.copy_escape 6.4 ms for 120;
+  - flush 4.9 ms.
+- Arm b (100k, second process in the same boot): FAIL at load at 24.7 s with "out of memory, D3D12Context::Buffer::create()".
+- The cross-arm OOM is now order-independent: EXP1973 (FHD 100k then FHD 50k) and EXP1975 (HD 50k then HD 100k) both fail the second arm, while EXP1972 (before rc47) passed both arms. Suspected regression: memory not returned after process exit since rc47/rc48; sent to Codex rc51 (addendum).
+- rc49 scanout timing: the display ring is in the receipts, analysis pending.
+- Recovery rec1975h (running).
