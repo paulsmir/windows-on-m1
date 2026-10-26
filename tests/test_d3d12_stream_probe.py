@@ -23,6 +23,8 @@ class StreamProbe(unittest.TestCase):
         records = s[start:s.index('        if (expanded)', start)]
         start = s.index('        if (indexed) {\n            D3D12_INDEX_BUFFER_VIEW')
         commands = s[start:s.index(' else if (expanded)', start)]
+        start = s.index('        if (stream_index32) {')
+        indices = s[start:s.index('        memcpy(bytes + 256', start)]
         verdict = s[s.rindex('    return '):]
         counter = next(line.strip() for line in s.splitlines() if 'counted_ok = c[0]' in line)
         code = r'''
@@ -35,6 +37,7 @@ typedef struct {uint64_t BufferLocation;unsigned SizeInBytes,Format;} D3D12_INDE
 typedef struct {unsigned Type;} D3D12_INDIRECT_ARGUMENT_DESC;
 typedef struct {unsigned ByteStride,NumArgumentDescs;D3D12_INDIRECT_ARGUMENT_DESC *pArgumentDescs;unsigned NodeMask;} D3D12_COMMAND_SIGNATURE_DESC;
 #define DXGI_FORMAT_R16_UINT 57
+#define DXGI_FORMAT_R32_UINT 42
 #define D3D12_INDIRECT_ARGUMENT_TYPE_DRAW 0
 #define D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED 1
 #define SUCCEEDED(h) ((h)>=0)
@@ -42,8 +45,9 @@ static int IID_ID3D12CommandSignature;
 static unsigned char buffer[4096];
 static unsigned direct,indexed_direct,indirect_calls,stride,kind,max_count,count_offset;
 static int refuse;
+static unsigned index_format,index_bytes;
 static uint64_t ID3D12Resource_GetGPUVirtualAddress(void *p){assert(p==buffer);return 0x100000;}
-static void ID3D12GraphicsCommandList_IASetIndexBuffer(void *l,D3D12_INDEX_BUFFER_VIEW *v){assert(l&&v->BufferLocation==0x100200&&v->SizeInBytes==12);}
+static void ID3D12GraphicsCommandList_IASetIndexBuffer(void *l,D3D12_INDEX_BUFFER_VIEW *v){assert(l&&v->BufferLocation==0x100200);index_format=v->Format;index_bytes=v->SizeInBytes;}
 static void ID3D12GraphicsCommandList_DrawIndexedInstanced(void *l,unsigned n,unsigned i,unsigned start,int bias,unsigned first){assert(l&&n==6&&i==1&&!start&&!bias&&!first);++indexed_direct;}
 static void ID3D12GraphicsCommandList_DrawInstanced(void *l,unsigned n,unsigned i,unsigned start,unsigned first){assert(l&&n==3&&i==1&&!start&&!first);++direct;}
 static HRESULT ID3D12Device_CreateCommandSignature(void *d,D3D12_COMMAND_SIGNATURE_DESC *s,void *root,int *iid,void **sig){assert(d&&!root&&iid==&IID_ID3D12CommandSignature&&s->NumArgumentDescs==1&&!s->NodeMask);stride=s->ByteStride;kind=s->pArgumentDescs[0].Type;*sig=(void *)1;return refuse?-1:0;}
@@ -56,7 +60,7 @@ const char *step="host";unsigned char *bytes=buffer;
 void *device=(void *)1,*list=(void *)1,*vertices=buffer,*signature=NULL;
 HRESULT hr=0;
 memset(buffer,0xcd,sizeof(buffer));direct=indexed_direct=indirect_calls=0;
-''' + records + commands + r'''
+''' + indices + records + commands + r'''
 if(mode==2){assert(indexed_direct==1&&!direct&&!indirect_calls);return;}
 if(refuse){assert(!direct&&!indexed_direct&&!indirect_calls&&hr==-1);return;}
 assert(indirect_calls==1&&max_count==2);
@@ -65,11 +69,14 @@ assert(count_offset==(stream_probe?2112u:2080u));
 const UINT *args=(const void *)(buffer+2048);
 assert(args[0]==(indexed?6u:3u)&&args[1]==1&&args[2]==0&&args[3]==0);
 assert(args[stride/4]==args[0]&&args[stride/4+1]==1);
-assert(*(const UINT *)(buffer+count_offset)==(stream_zero?0u:1u));
+unsigned expected_count=mode>=17?(unsigned)(mode-17)%3u:(mode==14?0u:1u);
+assert(*(const UINT *)(buffer+count_offset)==expected_count);
+if(mode>=17){assert(indexed&&index_format==(mode>=20?42u:57u)&&index_bytes==(mode>=20?24u:12u));}
+if(mode>=20){const UINT expected[6]={0,1,2,2,1,3};assert(!memcmp(buffer+512,expected,sizeof(expected)));}
 assert(direct==(stream_probe&&!indexed?1u:0u)&&indexed_direct==(stream_probe&&indexed?1u:0u));
 /* Literal good totals: 512 shaded pixels per triangle, 1024 per quad. */
 unsigned green=indexed?1024u:512u;
-UINT count=stream_probe&&!stream_zero?2u*green:green;const UINT *c=&count;
+UINT count=stream_probe?(expected_count+1u)*green:green;const UINT *c=&count;
 int counted_ok=0;
 ''' + counter + r'''
 assert(counted_ok&&verdict(1,stream_probe,counted_ok)==0);
@@ -78,7 +85,7 @@ assert(counted_ok&&verdict(1,stream_probe,counted_ok)==0);
 assert(!counted_ok&&verdict(1,1,counted_ok)==1);
 assert(verdict(0,1,1)==1);
 }
-int main(void){run(2);run(5);run(14);run(15);run(16);refuse=1;run(14);run(15);run(16);return 0;}
+int main(void){run(2);run(5);for(int m=14;m<=22;++m)run(m);refuse=1;for(int m=14;m<=22;++m)run(m);return 0;}
 '''
         with tempfile.TemporaryDirectory() as td:
             p = Path(td)

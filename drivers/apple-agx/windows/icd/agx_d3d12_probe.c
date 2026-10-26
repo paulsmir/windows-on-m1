@@ -1089,9 +1089,11 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     /* EXP1369: the indexed mode must build the C6b (empty) root signature */
     /* RC38: bounded zero/one GPU stream, then an ordinary draw using the
      * same state. Named opt-in steps only; not part of the default suite. */
-    const int stream_probe = mode >= 14 && mode <= 16;
-    const int stream_zero = mode == 14;
-    const int indexed = mode == 2 || mode == 16;
+    const int stream_matrix = mode >= 17 && mode <= 22;
+    const int stream_probe = (mode >= 14 && mode <= 16) || stream_matrix;
+    const UINT stream_count = stream_matrix ? (UINT)(mode - 17) % 3u : mode == 14 ? 0u : 1u;
+    const int stream_index32 = mode >= 20 && mode <= 22;
+    const int indexed = mode == 2 || mode == 16 || stream_matrix;
     const int redundant_root = mode == 8;
     /* C30 (EXP1825 HelloBundles/Bundles): mode 9 is mode 1 with the draw in
      * a bundle -- the bundle sets the same root signature, the PSO, topology
@@ -1143,7 +1145,8 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {rooted ? 2u : counted ? 1u : 0u, rooted ? parameters : counted ? &uav_parameter : NULL, 0, NULL,
                                            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
-    const char *step = stream_probe ? (stream_zero ? "RC38Z" : indexed ? "RC38I" : "RC38N") : viewed ? "C50A" : dxil ? "C44B" : msaa ? "C32A" : expanded ? "C31A" : bundled ? "C30A" : redundant_root ? "ROOTG" : spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
+    static const char *stream_steps[] = {"RC43I16Z", "RC43I16O", "RC43I16N", "RC43I32Z", "RC43I32O", "RC43I32N"};
+    const char *step = stream_matrix ? stream_steps[mode - 17] : stream_probe ? (!stream_count ? "RC38Z" : indexed ? "RC38I" : "RC38N") : viewed ? "C50A" : dxil ? "C44B" : msaa ? "C32A" : expanded ? "C31A" : bundled ? "C30A" : redundant_root ? "ROOTG" : spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
     const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted ? 0 : 255),
                                    (unsigned char)(rooted ? 255 : 0)};
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
@@ -1191,6 +1194,10 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         if (indexed) memcpy(bytes, quad, sizeof(quad));
         else memcpy(bytes, data, sizeof(data));
         memcpy(bytes + 512, indices, sizeof(indices));
+        if (stream_index32) {
+            const UINT indices32[6] = {0, 1, 2, 2, 1, 3};
+            memcpy(bytes + 512, indices32, sizeof(indices32));
+        }
         memcpy(bytes + 256, scale, sizeof(scale)); /* the root CBV (256-byte aligned) */
         memset(bytes + 1024, 0, 16); /* C13: the counter's initial value */
         {
@@ -1200,11 +1207,11 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             memcpy(bytes + 2080, &one, sizeof(one));
             if (stream_probe) {
                 const UINT indexed_records[10] = {6, 1, 0, 0, 0, 6, 1, 0, 0, 0};
-                const UINT count = stream_zero ? 0u : 1u;
+                const UINT count = stream_count;
                 if (indexed) memcpy(bytes + 2048, indexed_records, sizeof(indexed_records));
                 /* Outside both 20-byte indexed records. */
                 memcpy(bytes + 2112, &count, sizeof(count));
-                printf("%s MaxCount=2 count=%u indexed=%d ordinary-followup=1\n", step, count, indexed);
+                printf("%s MaxCount=2 count=%u index-bytes=%u ordinary-followup=1\n", step, count, indexed ? (stream_index32 ? 4u : 2u) : 0u);
             }
         }
         if (expanded) {
@@ -1355,7 +1362,9 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             }
         }
         if (indexed) {
-            D3D12_INDEX_BUFFER_VIEW ibv = {ID3D12Resource_GetGPUVirtualAddress(vertices) + 512, 12, DXGI_FORMAT_R16_UINT};
+            D3D12_INDEX_BUFFER_VIEW ibv = {ID3D12Resource_GetGPUVirtualAddress(vertices) + 512,
+                                         stream_index32 ? 24u : 12u,
+                                         stream_index32 ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT};
             ID3D12GraphicsCommandList_IASetIndexBuffer(list, &ibv);
             if (!indirect) ID3D12GraphicsCommandList_DrawIndexedInstanced(list, 6, 1, 0, 0, 0);
         }
@@ -1492,12 +1501,15 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         int counted_ok = 0;
         if (SUCCEEDED(hr) && counter_back && SUCCEEDED(ID3D12Resource_Map(counter_back, 0, &all, (void **)&c)) && c) {
             printf("C13 counter=%u drawn=%u\n", c[0], green);
-            counted_ok = c[0] == green * (stream_probe && !stream_zero ? 2u : 1u);
+            counted_ok = c[0] == green * (stream_probe ? stream_count + 1u : 1u);
             stream_counter_ok = counted_ok;
             ID3D12Resource_Unmap(counter_back, 0, NULL);
         }
-        printf("AGX_D3D12_%s: %s\n", stream_probe ? (stream_zero ? "RC38Z_COUNT" : indexed ? "RC38I_COUNT" : "RC38N_COUNT") : spaced ? "C17B" : indirect_no_count ? "C14NCA" : indirect ? "C14A" : "C13A",
-               pass && counted_ok ? "PASS" : "FAIL");
+        if (stream_probe)
+            printf("AGX_D3D12_%s_COUNT: %s\n", step, pass && counted_ok ? "PASS" : "FAIL");
+        else
+            printf("AGX_D3D12_%s: %s\n", spaced ? "C17B" : indirect_no_count ? "C14NCA" : indirect ? "C14A" : "C13A",
+                   pass && counted_ok ? "PASS" : "FAIL");
     }
     if (signature) ID3D12CommandSignature_Release(signature);
     if (bundle) ID3D12GraphicsCommandList_Release(bundle);
@@ -7097,6 +7109,12 @@ static int step_c14nc(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UI
 static int step_rc38z(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 14); }
 static int step_rc38n(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 15); }
 static int step_rc38i(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 16); }
+static int step_rc43i16z(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 17); }
+static int step_rc43i16o(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 18); }
+static int step_rc43i16n(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 19); }
+static int step_rc43i32z(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 20); }
+static int step_rc43i32o(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 21); }
+static int step_rc43i32n(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 22); }
 /* EXP1826 (C31A): "warp STEP..." runs steps on WARP with the debug layer
  * and prints its messages, separating API misuse in a probe step from
  * driver behaviour before any hardware run. */
@@ -7662,6 +7680,12 @@ static LONG WINAPI first_access_violation(EXCEPTION_POINTERS *ep) {
  * EXP1862: one step under the guest debugger) run by name */
 static const struct { const char *name; probe_step step; } named_steps[] = {
     {"RC38Z", step_rc38z}, {"RC38N", step_rc38n}, {"RC38I", step_rc38i},
+    {"RC43I16Z", step_rc43i16z},
+    {"RC43I16O", step_rc43i16o},
+    {"RC43I16N", step_rc43i16n},
+    {"RC43I32Z", step_rc43i32z},
+    {"RC43I32O", step_rc43i32o},
+    {"RC43I32N", step_rc43i32n},
     {"C76A", c76_shared_open},
     {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
     {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures},
