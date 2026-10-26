@@ -17,6 +17,35 @@ C_ASSERT(DXGK_INVALID_MMU_ID == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID);
     defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_render_template_vm_slot.h"
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* RC27: the raw-RAM broker and a second private pool do not establish
+ * VidMm shared-backing ownership/accounting or fallible page-in. Recognize
+ * the requested contract, but refuse until it is implemented; see
+ * investigation/analysis/RC27-system-segment-contract.md. */
+static BOOLEAN AdmissionSystemSegmentRequested(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1SystemSegment");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
 static BOOLEAN AdmissionReportGpuvaArmConsumed(ADMISSION_CONTEXT *context) {
   ULONGLONG payload, result;
   if (context == NULL || context->Win32BootGeneration == 0u) {
@@ -226,6 +255,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   }
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_DEVICE_STATE;
   context->StartInfo = *DxgkStartInfo;
   context->Interface = *DxgkInterface;
   context->InterfaceValid = TRUE;
@@ -245,6 +276,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     return STATUS_DEVICE_NOT_READY;
   }
   if (!AdmissionConsumeGpuvaArm(context, L"G3Armed", TRUE)) {
+    AdmissionRecordStartStage(context, AdmissionStartEntered,
+                              STATUS_NOT_SUPPORTED);
+    return STATUS_NOT_SUPPORTED;
+  }
+  /* Consume the one-shot arm as usual, then stop before any runtime owner
+   * starts. Refusing later in G3 would unnecessarily unwind live scanout. */
+  if (AdmissionSystemSegmentRequested(context)) {
     AdmissionRecordStartStage(context, AdmissionStartEntered,
                               STATUS_NOT_SUPPORTED);
     return STATUS_NOT_SUPPORTED;
