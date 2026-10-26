@@ -793,3 +793,48 @@ HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device,
   *consumed = TRUE;
   return terminalError;
 }
+
+/* RC42: no allocation, global lock, environment lookup or clock read at
+ * inactive sites. Each Execute thread owns its accumulator and nesting stack. */
+#include "umd_wait_profile.h"
+static __declspec(thread) AgxWaitProfile AdmissionWait;
+static volatile LONG AdmissionWaitSerial;
+int AdmissionUmdWaitExecuteBegin(void) {
+  LARGE_INTEGER hz;
+  if (AdmissionWait.Active || !AdmissionUmdMeasureEnabled()) return 0;
+  QueryPerformanceFrequency(&hz);
+  AgxWaitReset(&AdmissionWait,(unsigned)InterlockedIncrement(&AdmissionWaitSerial),
+               (unsigned long long)hz.QuadPart);
+  return 1;
+}
+unsigned AdmissionUmdWaitSerial(void) {
+  return AdmissionWait.Active ? AdmissionWait.Serial : 0;
+}
+void AdmissionUmdWaitSetPhase(unsigned phase) {
+  if (AdmissionWait.Active && phase<AgxWaitPhaseCount) AdmissionWait.Phase=phase;
+}
+unsigned AdmissionUmdWaitBegin(unsigned site) {
+  LARGE_INTEGER now;
+  if (!AdmissionWait.Active) return 0;
+  QueryPerformanceCounter(&now);
+  return AgxWaitPush(&AdmissionWait,site,(unsigned long long)now.QuadPart);
+}
+void AdmissionUmdWaitEnd(unsigned token) {
+  LARGE_INTEGER now;
+  if (!token || !AdmissionWait.Active) return;
+  QueryPerformanceCounter(&now);
+  AgxWaitPop(&AdmissionWait,token,(unsigned long long)now.QuadPart);
+}
+void AdmissionUmdWaitExecuteEnd(long status) {
+  unsigned words[16],paths[16],queries[8];
+  if (!AdmissionWait.Active) return;
+  AgxWaitPackSites(&AdmissionWait,paths,1);
+  AgxWaitPack(&AdmissionWait,words,queries);
+  paths[3]|=AdmissionWait.Flags;
+  AdmissionWait.Active=0;
+  AdmissionUmdDiagnostic("measure-d3d12-wait",status,words,16);
+  AdmissionUmdDiagnostic("measure-d3d12-query-time",status,queries,8);
+  AdmissionUmdDiagnostic("measure-d3d12-wait-path",status,paths,16);
+}
+
+/* End RC42 wait collector. */
