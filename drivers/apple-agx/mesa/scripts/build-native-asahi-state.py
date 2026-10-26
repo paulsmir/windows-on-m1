@@ -5593,8 +5593,9 @@ AgxD3d10ResourceWithinRequiredLimits(
     * when renaming is unavailable. Draining the whole context here defeats
     * renaming and also waits for unrelated draws. NOOVERWRITE keeps its
     * existing application-owned hazard contract. */
-   HRESULT status = (DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE ||
-                     DDIMap == D3D10_DDI_MAP_WRITE_DISCARD) ? S_OK :
+   HRESULT status = DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE ? S_OK :
+      DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ?
+       AgxD3d10WindowsFlushStatus(device->windows) :
       (Flags & D3D10_DDI_MAP_FLAG_DONOTWAIT) ?
        AgxD3d10WindowsTryFlushRetire(device->windows) :
        AgxD3d10WindowsFlushRetire(device->windows);

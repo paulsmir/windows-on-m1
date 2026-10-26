@@ -112,6 +112,10 @@ int main() {
  drains=polls=maps=0; error=0;
  run(&device,&resource,D3D10_DDI_MAP_WRITE_NOOVERWRITE,0);
  assert(!drains && !polls && maps==1 && !error);
+ // DISCARD must retain device/backend error propagation without a drain.
+ drains=polls=maps=0; error=-42;
+ run(&device,&resource,D3D10_DDI_MAP_WRITE_DISCARD,0);
+ assert(!drains && !polls && !maps && error==-42);
 }
 '''.replace('DECISION', decision).replace('MAPPING', mapping)
                      .replace('static void run(', '#include <initializer_list>\nstatic void run('))
