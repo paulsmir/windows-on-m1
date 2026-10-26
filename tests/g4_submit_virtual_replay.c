@@ -218,7 +218,7 @@ typedef struct {
   /* EXP1210 receipt-only overlap counters (AdmissionDdiSubmitCommandVirtual). */
   volatile int G4SubmitVirtualInFlight, G4SubmitVirtualFence, G4SubmitVirtualFlags;
   struct { volatile int Preemptions, Overlaps, Submissions, Resubmissions; } G4PreemptOverlap;
-  int SchedulerLock, SchedulerFaulted, RuntimeReady, RuntimeQueueable;
+  int SchedulerLock, SchedulerFaulted, SchedulerInitialized, RuntimeReady, RuntimeQueueable;
   APPLE_AGX_SCHEDULER Scheduler;
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];

@@ -169,12 +169,14 @@ static NTSTATUS sync_callback(void *a, BOOLEAN (*fn)(PVOID), PVOID p, unsigned n
 CASES = r'''
 int main(void) {
   const unsigned prior_fences[] = {40u, 0x161du, 0xfffffffeu};
-  unsigned sample, before, mode;
+  unsigned sample, before, mode, rejected;
   for (sample=0; sample<3; ++sample)
   for (before=0; before<2; ++before)
-  for (mode=0; mode<11; ++mode) {
+  for (mode=0; mode<11; ++mode)
+  for (rejected=0; rejected<2; ++rejected) {
     const unsigned prior = prior_fences[sample], failed = prior + 1u;
-    const unsigned next = failed == 0xffffffffu ? 1u : failed + 1u;
+    const unsigned reported = rejected ? (failed == 0xffffffffu ? 1u : failed + 1u) : failed;
+    const unsigned next = reported == 0xffffffffu ? 1u : reported + 1u;
     APPLE_AGX_PREEMPTION preemption;
     ADMISSION_CONTEXT a={0};
     ADMISSION_PLATFORM_RUNTIME r={0};
@@ -190,6 +192,7 @@ int main(void) {
     a.Scheduler.CompletedFence=a.Scheduler.LastSubmittedFence=prior;
     assert(AppleAgxSchedulerQueueFence(&a.Scheduler,0,0,failed));
     assert(AppleAgxSchedulerActivateFence(&a.Scheduler,0,0,failed));
+    if (rejected) assert(AppleAgxSchedulerRejectFence(&a.Scheduler,0,0,reported));
     assert(AppleAgxSchedulerQueueFence(&a.Scheduler,0,0,next));
     a.RenderPacket.State=2; a.RenderPacket.Description.Fence=failed;
     a.RenderPacket.Description.ContextToken=(UINT64)(uintptr_t)&culprit;
@@ -235,7 +238,7 @@ int main(void) {
     assert(!other.GpuvaG3Poisoned && culprit.GpuvaG3Poisoned==(mode!=0));
     if (mode==0) {
       assert(observed.InterruptType==DXGK_INTERRUPT_DMA_COMPLETED);
-      assert(a.Scheduler.CompletedFence==failed && !a.Scheduler.LastAbortedFence);
+      assert(a.Scheduler.CompletedFence==reported && !a.Scheduler.LastAbortedFence);
     } else {
       assert(observed.InterruptType==DXGK_INTERRUPT_DMA_PAGE_FAULTED);
       assert(observed.DmaPageFaulted.FaultedFenceId==failed);
@@ -247,25 +250,25 @@ int main(void) {
       assert(observed.DmaPageFaulted.FaultedBindTableEntry==~(UINT)0);
       assert(observed.DmaPageFaulted.FaultErrorCode.IsDeviceSpecificCode==1);
       assert(observed.DmaPageFaulted.FaultErrorCode.DeviceSpecificCode==4);
-      assert(a.Scheduler.CompletedFence==failed && a.Scheduler.LastAbortedFence==failed);
+      assert(a.Scheduler.CompletedFence==reported && a.Scheduler.LastAbortedFence==failed);
     }
     /* WDDM requires the same boundary after both success and known-fence
      * page fault, including a preemption already waiting for this packet. */
-    assert(AppleAgxSchedulerCurrentFence(&a.Scheduler,0,0)==failed);
+    assert(AppleAgxSchedulerCurrentFence(&a.Scheduler,0,0)==reported);
     if (!before)
       assert(AppleAgxSchedulerBeginBoundaryPreemption(&a.Scheduler,0,0,77,next,0));
     assert(AppleAgxSchedulerClaimBoundaryPreemption(&a.Scheduler,&preemption));
-    assert(preemption.PreemptionFence==77 && preemption.LastCompletedFence==failed);
+    assert(preemption.PreemptionFence==77 && preemption.LastCompletedFence==reported);
     assert(AppleAgxSchedulerCommitBoundaryPreemption(&a.Scheduler,77));
     assert(!AdmissionBackendComplete(&r,failed,0,0,status));
     assert(notifications==1 && released==1);
     assert(AppleAgxSchedulerResetEngine(&a.Scheduler,0,0,&aborted));
-    assert(aborted==failed && a.Scheduler.CompletedFence==failed);
+    assert(aborted==reported && a.Scheduler.CompletedFence==reported);
     assert(AppleAgxSchedulerQueueResubmittedPagingFence(&a.Scheduler,0,0,next));
     assert(AppleAgxSchedulerActivateFence(&a.Scheduler,0,0,next));
     /* A reset abort is different: no PAGE_FAULTED was reported for next. */
     assert(AppleAgxSchedulerAbortActiveFence(&a.Scheduler,0,0,next));
-    assert(AppleAgxSchedulerCurrentFence(&a.Scheduler,0,0)==failed);
+    assert(AppleAgxSchedulerCurrentFence(&a.Scheduler,0,0)==reported);
   }
   return 0;
 }

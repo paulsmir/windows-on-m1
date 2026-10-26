@@ -35,11 +35,16 @@ typedef struct _APPLE_AGX_SCHEDULER {
   APPLE_AGX_U32 QueuedFence;
   APPLE_AGX_U32 QueueHead, QueueCount;
   APPLE_AGX_U32 FenceQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
+  /* Rejected virtual submissions complete only after their accepted
+   * predecessor retires. They need no packet or extra queue capacity. */
+  APPLE_AGX_U32 RejectedAfter[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   /* Fence IDs accepted before a preemption or engine reset but discarded from
    * the queue. Dxgkrnl may resubmit an old paging packet with its original ID. */
   APPLE_AGX_U32 PreemptedFenceQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
+  APPLE_AGX_U32 PreemptedRejectedAfter[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   APPLE_AGX_U32 PreemptedFenceCount;
   APPLE_AGX_U32 ActiveFence;
+  APPLE_AGX_U32 ActiveRejectedAfter;
   APPLE_AGX_U32 PendingPreemptionFence;
   APPLE_AGX_U32 PreemptionCutoffFence;
   APPLE_AGX_U32 PreemptionActiveFence;
@@ -74,6 +79,11 @@ APPLE_AGX_U32 AppleAgxSchedulerCurrentFence(
     const APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal);
 APPLE_AGX_BOOL AppleAgxSchedulerQueueFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+/* STATUS_INVALID_PARAMETER from SubmitCommandVirtual, not hardware work.
+ * The caller holds the same lock used for queueing and completion. */
+APPLE_AGX_BOOL AppleAgxSchedulerRejectFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
 APPLE_AGX_BOOL AppleAgxSchedulerQueueResubmittedPagingFence(

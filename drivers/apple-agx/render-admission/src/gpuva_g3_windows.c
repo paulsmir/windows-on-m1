@@ -147,7 +147,8 @@ enum {
   AdmissionG4RejectQueue = 12,
   AdmissionG4RejectLegacyShape = 13,
   AdmissionG4RejectLegacyPacket = 14,
-  AdmissionG4RejectLegacySubmit = 15
+  AdmissionG4RejectLegacySubmit = 15,
+  AdmissionG4RejectStatus = 16
 };
 
 static NTSTATUS AdmissionG4SubmitRejectDetail(
@@ -4967,6 +4968,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
     }
   }
   status = AdmissionDdiSubmitCommandVirtualInner(Adapter, Args);
+  /* WDDM permits exactly SUCCESS or INVALID_PARAMETER here. In particular,
+   * CPU touch/paging queue backpressure must not leak DEVICE_BUSY (0x119/2).
+   * Retain the original failure, and attach the rejected fence to its actual
+   * predecessor: it becomes completed only after that work retires. This
+   * never releases a GPU job, fabricates an interrupt or clears a fault. */
+  if (status != STATUS_SUCCESS) {
+    if (overlap != NULL && Args != NULL &&
+        Args->NodeOrdinal == 0u && Args->EngineOrdinal == 0u &&
+        InterlockedCompareExchange(&overlap->SchedulerInitialized, 0, 0) != 0) {
+      KIRQL oldIrql;
+      KeAcquireSpinLock(&overlap->SchedulerLock, &oldIrql);
+      (void)AppleAgxSchedulerRejectFence(&overlap->Scheduler, 0u, 0u,
+                                        Args->SubmissionFenceId);
+      KeReleaseSpinLock(&overlap->SchedulerLock, oldIrql);
+    }
+    if (status != STATUS_INVALID_PARAMETER)
+      (void)AdmissionG4SubmitReject(overlap, NULL, Args,
+          AdmissionG4RejectStatus, STATUS_INVALID_PARAMETER, (ULONG)status,
+          FALSE);
+    status = STATUS_INVALID_PARAMETER;
+  }
   if (overlap != NULL) InterlockedDecrement(&overlap->G4SubmitVirtualInFlight);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   if (Args != NULL)
