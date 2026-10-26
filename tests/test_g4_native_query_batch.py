@@ -61,7 +61,7 @@ static NTSTATUS batch_one(ADMISSION_CONTEXT *a, DXGKARG_ESCAPE *e) {
  #define RUN() AdmissionGpuvaG3NativeQueryBatchEscape(&a,&request)
  #define BAD(change) do {INIT();change;assert(RUN()!=0);assert(!b.Header.Ready && !refs && !locked);} while(0)
  INIT();assert(sizeof(b.Header)==32);assert(RUN()==0 && b.Header.Ready==1 && !refs && !locked);
- BAD(b.Header.Magic++);BAD(b.Header.Version++);BAD(b.Header.Bytes--);
+ BAD(b.Header.Magic++);BAD(b.Header.Version=3);BAD(b.Header.Bytes--);
  BAD(b.Header.Count=0);BAD(b.Header.Count=1);BAD(b.Header.Count=3);
  BAD(b.Header.Count=APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAX+1u);
  BAD(b.Header.Count=0xffffffffu);BAD(b.Header.FailedIndex=1);

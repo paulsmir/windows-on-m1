@@ -16,24 +16,19 @@ from aperture_shadow_model import ShadowEpoch, PAGE, NATIVE
 ROOT = Path(__file__).resolve().parents[1]
 SHARED = ROOT / "drivers/apple-agx/shared"
 PAGING = ROOT / "drivers/apple-agx/render-admission/src/gpuva_g3_paging_windows.c"
+PRIVATE = ROOT / "drivers/apple-agx/render-admission/src/gpuva_g3_private.h"
 
 
 class ApertureNativeLeaf(unittest.TestCase):
-    def test_scattered_replacement_retires_native_leaf_and_preserves_logical_pages(self):
-        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
-
-        Publishing four scattered PFNs as one native leaf aliases unrelated
-        memory. Keeping the old leaf on replacement exposes stale backing.
-        The real KMD must invalidate it, preserve all logical PFNs for CPU
-        paging, and republish only after a complete contiguous group returns.
-        Contiguous but misaligned groups must also stay unpublished; CPU-only
-        paging must retain scattered logical pages without GPU publications.
-        EXP1939: rejected publication must not claim an invalidated owner;
-        committed invalidation with hAllocation=NULL must preserve the old token.
-        This is a safety invariant, not a fix for GravityMark residency.
-        """
+    def run_leaf_replay(self, case=None):
         with tempfile.TemporaryDirectory(prefix="t7d-leaf-") as directory:
             directory = Path(directory)
+            # Keep the exact production inline helper; the shared extractor
+            # recognizes non-inline functions only. No invalidator stub.
+            private = PRIVATE.read_text()
+            start = private.index("static inline void AdmissionG3NativeInvalidatePtes(")
+            end = private.index("\n}", start) + 2
+            (directory / "native_invalidate.inc").write_text(private[start:end])
             (directory / "leaf.inc").write_text(
                 function_body(PAGING.read_text(), "AdmissionG3RecordOmitted") + "\n" +
                 function_body(PAGING.read_text(), "AdmissionG3RecordUnmapOwners") + "\n" +
@@ -53,10 +48,38 @@ class ApertureNativeLeaf(unittest.TestCase):
                 "-o", str(binary),
             ], capture_output=True, text=True)
             self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
-            run = subprocess.run([str(binary)], capture_output=True, text=True,
+            run = subprocess.run([str(binary)] + ([case] if case else []),
+                                 capture_output=True, text=True,
                                  timeout=10)
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
-            self.assertIn("T7d native-leaf safety: PASS", run.stdout)
+            self.assertIn("RC47 native-ready invalidation: PASS" if case else
+                          "T7d native-leaf safety: PASS", run.stdout)
+
+    def test_scattered_replacement_retires_native_leaf_and_preserves_logical_pages(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        Publishing four scattered PFNs as one native leaf aliases unrelated
+        memory. Keeping the old leaf on replacement exposes stale backing.
+        The real KMD must invalidate it, preserve all logical PFNs for CPU
+        paging, and republish only after a complete contiguous group returns.
+        Contiguous but misaligned groups must also stay unpublished; CPU-only
+        paging must retain scattered logical pages without GPU publications.
+        EXP1939: rejected publication must not claim an invalidated owner;
+        committed invalidation with hAllocation=NULL must preserve the old token.
+        This is a safety invariant, not a fix for GravityMark residency.
+        """
+        self.run_leaf_replay()
+
+    def test_native_readiness_cache_invalidates_changed_quartet_owners(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? A metadata-only
+        ownership/offset edit with unchanged native IPA must retire both old
+        and new proof hints. One 4-KiB unmap, permission or backing change can
+        omit a whole native quartet and must invalidate every neighbour owner,
+        while unrelated allocation hints remain hot. This executes the actual
+        UpdateLeaf and invalidation/cache helpers, with graph publication still
+        the existing fixture boundary rather than a claim about live TLB state.
+        """
+        self.run_leaf_replay("readiness")
 
 
 class ShadowDesignContract(unittest.TestCase):

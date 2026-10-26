@@ -690,6 +690,7 @@ static NTSTATUS AdmissionDestroyAllocationImpl(
     ADMISSION_ALLOCATION_HANDLE *allocation =
         (ADMISSION_ALLOCATION_HANDLE *)Args->pAllocationList[index];
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionGpuvaG3InvalidateAllocation(context, allocation);
     /* M2-f3: the segment-3 placement ends with the allocation. */
     AdmissionMemoryPoolForget(context, &allocation->PoolPlacement);
     /* M2-f5: so does its reservation. */

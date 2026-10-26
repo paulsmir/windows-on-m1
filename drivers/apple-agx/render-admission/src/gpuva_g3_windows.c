@@ -1098,6 +1098,36 @@ static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
   return &shadow->ResidentPtes[(UINT)((va>>12)&8191u)];
 }
 
+/* Every native mutation uses the graph callback, including private helpers,
+ * rollback and table retirement. Private-only leaves have no VidMm shadow
+ * and cannot invalidate an authenticated user allocation. */
+static void AdmissionG3NativeInvalidate(void *opaque, ULONGLONG table, UINT index) {
+  ADMISSION_G3_PROCESS *p = (ADMISSION_G3_PROCESS *)opaque;
+  ADMISSION_G3_TABLE_SHADOW *shadow;
+  ULONG bucket;
+  if (!table) { AppleAgxG3NativeCacheInvalidateAll(&p->NativeReady); return; }
+  bucket = (ULONG)((table >> 14) ^ (table >> 22) ^ (table >> 30)) & 255u;
+  for (shadow = p->TableShadowBrokerBuckets[bucket]; shadow; shadow = shadow->NextBroker)
+    if (shadow->BrokerIpa == table) {
+      AdmissionG3NativeInvalidatePtes(p, shadow->ResidentPtes, index * 4u, 4u);
+      break;
+    }
+}
+
+/* Allocation addresses may be reused after destroy. Drop identity keys from
+ * every process before freeing; never dereference an old cache/PTE key. */
+void AdmissionGpuvaG3InvalidateAllocation(ADMISSION_CONTEXT *adapter, HANDLE allocation) {
+  ADMISSION_G3_STATE *state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  PLIST_ENTRY link;
+  if (!state) return;
+  ExAcquireFastMutex(&state->Lock);
+  for (link = state->Processes.Flink; link != &state->Processes; link = link->Flink) {
+    ADMISSION_G3_PROCESS *p = CONTAINING_RECORD(link, ADMISSION_G3_PROCESS, Link);
+    AppleAgxG3NativeCacheInvalidate(&p->NativeReady, (ULONGLONG)(ULONG_PTR)allocation);
+  }
+  ExReleaseFastMutex(&state->Lock);
+}
+
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 typedef struct _ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT {
   ULONG Version, Bytes, OsProcessId, TablesScanned;
@@ -1428,12 +1458,15 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
   if (q.Magic != APPLE_AGX_G3_NATIVE_QUERY_MAGIC ||
       ((q.Version != APPLE_AGX_G3_NATIVE_QUERY_VERSION || q.Reserved != 0u) &&
        (q.Version != APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION ||
-        q.Reserved != APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY)) ||
+        q.Reserved != APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
+       (q.Version != APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION ||
+        q.Reserved > APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY)) ||
       q.Bytes != sizeof(q) ||
       !q.Allocation || !q.GpuVa || (q.GpuVa & 0xffffULL) ||
       q.GpuVa >= (1ULL << 39) || !q.AllocationBytes ||
       q.AllocationBytes > MAXULONG || q.AllocationBytes > (1ULL << 39) - q.GpuVa ||
-      q.Write > 1u || q.Ready || q.Reason || q.FailedVa || q.Reserved2)
+      q.Write > 1u || q.Ready || q.Reason || q.FailedVa ||
+      (q.Version != APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION && q.Reserved2))
     return STATUS_INVALID_PARAMETER;
   lookup.hObject = q.Allocation;
   lookup.Type = DXGK_HANDLE_ALLOCATION;
@@ -1473,6 +1506,15 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
   /* A well-formed query reports not-ready as data. It is not a failed paging
    * DDI or a failed scheduled submit; the UMD can decline before submission. */
   status = STATUS_SUCCESS;
+  if (q.Version == APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION) {
+    if (AppleAgxG3NativeCacheHit(&p->NativeReady,
+        (ULONGLONG)(ULONG_PTR)allocation, q.GpuVa, q.AllocationBytes,
+        q.Write | (q.Reserved << 1), q.Reserved2)) {
+      q.Ready = 1u;
+      goto Output;
+    }
+    q.Reserved2 = 0ULL;
+  }
   if (!AppleAgxGpuvaG3GraphInspectRangeAccess(&p->Graph, q.GpuVa,
           (UINT)q.AllocationBytes, q.Write != 0u, &walk)) {
     q.FailedVa = walk.Va;
@@ -1488,7 +1530,7 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
         (q.Write && !(pte->Flags & APPLE_AGX_GPUVA_G3_WRITE)) ||
         pte->Allocation != (ULONGLONG)(ULONG_PTR)allocation ||
         pte->AllocationOffset != page - q.GpuVa) goto Output;
-    if (q.Version == APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION &&
+    if ((q.Reserved & APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
         pte->SegmentId != ADMISSION_MEMORY_POOL_SEGMENT) {
       q.Reason = APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL;
       goto Output;
@@ -1504,6 +1546,10 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
   q.Ready = 1u;
   q.FailedVa = 0ULL;
   q.Reason = 0u;
+  if (q.Version == APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION)
+    q.Reserved2 = AppleAgxG3NativeCacheStore(&p->NativeReady,
+        (ULONGLONG)(ULONG_PTR)allocation, q.GpuVa, q.AllocationBytes,
+        q.Write | (q.Reserved << 1));
 Output:
   RtlCopyMemory(args->pPrivateDriverData, &q, sizeof(q));
 Unlock:
@@ -1513,10 +1559,10 @@ Release:
   return status;
 }
 
-/* Transport batching only: retain the single-query handle reference, graph
- * mutex, full-description extent and page-by-page identity/translation proof.
+/* Retain the single-query handle reference, graph mutex, full-description
+ * extent and page-by-page identity/translation proof on every cache miss.
  * The UMD's submission holds retain residency across entries and submission,
- * exactly as for separate escapes. No Ready result is cached across calls.
+ * exactly as for separate escapes. v2 returns hits/misses in Reserved[0..1].
  * Local entry copies also keep each proof independent of output writes. */
 NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *adapter,
     const DXGKARG_ESCAPE *args) {
@@ -1532,7 +1578,8 @@ NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *adapter,
     return STATUS_INVALID_PARAMETER;
   RtlCopyMemory(&batch, args->pPrivateDriverData, sizeof(batch));
   if (batch.Magic != APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC ||
-      batch.Version != APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION ||
+      (batch.Version != APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION &&
+       batch.Version != APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION) ||
       !batch.Count || batch.Count > APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAX ||
       batch.Bytes != sizeof(batch) + batch.Count * sizeof(query) ||
       batch.Bytes != args->PrivateDriverDataSize || batch.Ready ||
@@ -1543,7 +1590,12 @@ NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *adapter,
   single.pPrivateDriverData = &query;
   single.PrivateDriverDataSize = sizeof(query);
   for (i = 0u; i < batch.Count; ++i) {
+    ULONGLONG token;
     RtlCopyMemory(&query, entries + i * sizeof(query), sizeof(query));
+    if (batch.Version == APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION &&
+        query.Version == APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION)
+      return STATUS_INVALID_PARAMETER;
+    token = query.Reserved2;
     status = AdmissionGpuvaG3NativeQueryEscape(adapter, &single);
     if (status != STATUS_SUCCESS) return status;
     RtlCopyMemory(entries + i * sizeof(query), &query, sizeof(query));
@@ -1552,6 +1604,8 @@ NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *adapter,
       RtlCopyMemory(args->pPrivateDriverData, &batch, sizeof(batch));
       return STATUS_SUCCESS;
     }
+    if (batch.Version == APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION)
+      ++batch.Reserved[token && token == query.Reserved2 ? 0u : 1u];
   }
   batch.Ready = 1u;
   RtlCopyMemory(args->pPrivateDriverData, &batch, sizeof(batch));
@@ -2436,6 +2490,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
    * IPA base is stable for the broker epoch and common to every process. */
   process->Graph.SharedBackingGeneration = local_view.GuestIpaAddress;
   process->Graph.Registry = &state->Registry;
+  process->Graph.InvalidateNative = AdmissionG3NativeInvalidate;
+  process->Graph.InvalidateContext = process;
   if (!AppleAgxGpuvaG3GraphCreate(&process->Graph, process->BootstrapIpa,
                                   Args->Flags.SystemProcess != 0u)) {
     if (process->Graph.Uncertain) {

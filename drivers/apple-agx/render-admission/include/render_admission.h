@@ -941,6 +941,8 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *Adapter,
     const DXGKARG_ESCAPE *Args);
 NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *Adapter,
     const DXGKARG_ESCAPE *Args);
+void AdmissionGpuvaG3InvalidateAllocation(ADMISSION_CONTEXT *Adapter,
+    HANDLE Allocation);
 NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *Adapter,
                                   const DXGKARG_ESCAPE *Args);
 typedef struct _ADMISSION_OPEN_ALLOCATION {

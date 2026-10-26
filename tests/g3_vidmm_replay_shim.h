@@ -13,6 +13,7 @@
 #define FIELD_OFFSET(t, m) offsetof(t, m)
 #include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_gpuva_g3_graph.h"
+#include "apple_agx_g3_native_cache.h"
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_g13_compute_work.h"
 #include "apple_agx_present_job.h"
@@ -401,6 +402,7 @@ struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;
   ADMISSION_G3_STATE *State;
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
+  APPLE_AGX_G3_NATIVE_CACHE NativeReady;
   APPLE_AGX_MEMORY_IO Io;
   APPLE_AGX_MEMORY_OBJECT BootstrapRoot;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;

@@ -89,6 +89,9 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
    * the GPU and the CPU copy (no staging, no copy escapes). */
   BOOL SystemDirect;
   APPLE_AGX_U64 CanonicalGpuVa;
+  /* Opaque hint only. KMD reauthenticates and checks invalidation under its
+   * graph lock; no UMD token ever skips the batch escape. */
+  APPLE_AGX_U64 NativeReadyToken;
   BOOL CopyHeld;
   /* R158: presentation allocation used directly as the GPU-local render
    * target (CpuVisible=0, local segment, 64 KiB aligned): no staging, no

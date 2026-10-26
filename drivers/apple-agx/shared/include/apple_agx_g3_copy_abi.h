@@ -27,6 +27,10 @@ typedef struct _APPLE_AGX_G3_COPY_REQUEST {
 /* RC25: v2 requires the whole allocation in the native pool. Old KMDs
  * reject this version rather than silently returning a weaker v1 proof. */
 #define APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION 2u
+/* RC47: same 64-byte wire size. Reserved2 is a KMD-issued proof token,
+ * input/output; zero requests a full proof. Reserved may be POOL_ONLY.
+ * Older versions still require Reserved2=0 and always walk. */
+#define APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION 3u
 #define APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY 1u
 #define APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL 0x102u
 #define APPLE_AGX_G3_NATIVE_QUERY_IDENTITY 0x100u
@@ -40,11 +44,14 @@ typedef struct _APPLE_AGX_G3_NATIVE_QUERY {
 
 /* RC45: one buffered escape for the entire held allocation set. Exactly
  * Count ordinary queries follow this header (no pointers, handles widened
- * to native pointers, or partial array). Each retains the v1/v2 proof above.
+ * to native pointers, or partial array). v1 retains the v1/v2 proof above;
+ * v2 also accepts cached v3 entries and returns hit/full-proof counts in
+ * Reserved[0]/Reserved[1]. Both versions require zero input counters.
  * Ready is set only after every entry succeeds; FailedIndex selects the
  * first not-ready entry. All output fields must be zero on input. */
 #define APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC 0x42565041u
 #define APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION 1u
+#define APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION 2u
 #define APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAX 4096u
 typedef struct _APPLE_AGX_G3_NATIVE_QUERY_BATCH {
   APPLE_AGX_U32 Magic, Version, Bytes, Count;

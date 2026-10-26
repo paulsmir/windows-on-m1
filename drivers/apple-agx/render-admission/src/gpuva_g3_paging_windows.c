@@ -107,6 +107,7 @@ static BOOLEAN AdmissionG3RetireSystemSubtree(ADMISSION_G3_PROCESS *process,
                               ADMISSION_G3_LEAF_EVENT_SYSTEM_RETIRE);
   for (shadow = process->TableShadows; shadow; shadow = shadow->Next) {
     if (shadow->BrokerIpa != table_ipa) continue;
+    AdmissionG3NativeInvalidatePtes(process, shadow->ResidentPtes, 0u, 8192u);
     if (process->CpuOnlyMappings)
       AdmissionG3PoolPagingRefs(process->State->Adapter, shadow->LogicalPtes,
                                 NULL, 0u, 8192u);
@@ -142,6 +143,7 @@ static void AdmissionG3ResetTableShadow(ADMISSION_G3_PROCESS *process,
   AdmissionG3RecordTableEvent(process, table_ipa, ADMISSION_G3_LEAF_EVENT_RESET);
   for (s = process->TableShadows; s; s = s->Next) {
     if (s->BrokerIpa != table_ipa) continue;
+    AdmissionG3NativeInvalidatePtes(process, s->ResidentPtes, 0u, 8192u);
     if (s->ResidentPtes) {
       for (UINT i = 0u; i < 8192u; ++i)
         if (s->ResidentPtes[i].Flags &&
@@ -829,6 +831,10 @@ static NTSTATUS AdmissionG3UpdateLeaf(
       ++process->State->UnpublishedGroups[segment];
   }
   /* Publication and TLB acknowledgement precede release of the old lifetime. */
+  AdmissionG3NativeInvalidatePtes(process, shadow->ResidentPtes,
+      first_group * 4u, groups * 4u);
+  AdmissionG3NativeInvalidatePtes(process, candidate,
+      first_group * 4u, groups * 4u);
   if (shadow->ResidentPtes) {
     for (i = first; i < first + count; ++i)
       if (shadow->ResidentPtes[i].Flags &&

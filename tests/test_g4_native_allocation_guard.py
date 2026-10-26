@@ -65,7 +65,7 @@ class NativeAllocationGuard(unittest.TestCase):
  q.Version=2;q.Reserved=0;
  assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);
  q.Reserved=2;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);
- q.Version=3;q.Reserved=1;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);
+ q.Version=4;q.Reserved=1;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);
  q.Version=1;q.Reserved=1;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);
  q.Reserved=0;q.Ready=0;q.Reason=0;q.FailedVa=0;
 '''
@@ -165,6 +165,7 @@ KMD_FIXTURE = r'''
 #include "apple_agx_g3_copy_query_receipt.h"
 #include "apple_agx_gpuva_g3_graph.h"
 #include "apple_agx_gpuva_g3_translation.h"
+#include "apple_agx_g3_native_cache.h"
 typedef unsigned UINT, ULONG; typedef unsigned long long ULONGLONG;
 typedef uintptr_t ULONG_PTR; typedef void *HANDLE; typedef int NTSTATUS;
 #define PASSIVE_LEVEL 0
@@ -193,7 +194,7 @@ typedef struct _CTX { struct _CTX *GpuvaG3NextContext; struct { void *Device; } 
  UINT Win32Transport,GpuvaG3Closing,GpuvaG3Poisoned; ULONGLONG GpuvaG3RootIpa; } ADMISSION_RENDER_CONTEXT;
 typedef struct _SHADOW { struct _SHADOW *NextBroker; ULONGLONG BrokerIpa;
  APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ResidentPtes; } ADMISSION_G3_TABLE_SHADOW;
-typedef struct { APPLE_AGX_GPUVA_G3_GRAPH Graph; UINT Poisoned,CpuOnlyMappings;
+typedef struct { APPLE_AGX_GPUVA_G3_GRAPH Graph; APPLE_AGX_G3_NATIVE_CACHE NativeReady; UINT Poisoned,CpuOnlyMappings;
  ADMISSION_RENDER_CONTEXT *Contexts; ADMISSION_G3_TABLE_SHADOW *TableShadowBrokerBuckets[256]; } ADMISSION_G3_PROCESS;
 typedef struct { int Lock; ADMISSION_G3_PROCESS *Process; } ADMISSION_G3_STATE;
 typedef struct { UINT hObject,Type; struct { UINT DeviceSpecific; } Flags; } DXGKARGCB_GETHANDLEDATA;
@@ -303,7 +304,7 @@ using D3DKMT_HANDLE=unsigned;
 #define ADMISSION_UMD_ADAPTER_MAGIC 123u
 #define AppleAgxWin32BufferGpuWrite 8u
 struct ADMISSION_UMD_SCREEN_BUFFER {bool Active,Transition,CopyHeld,Direct,WrittenPrimary;
- uint64_t Token,CanonicalGpuVa,Bytes,LastUseFence;UINT KernelAllocation,Flags,SubmissionHolds;};
+ uint64_t Token,CanonicalGpuVa,Bytes,LastUseFence,NativeReadyToken;UINT KernelAllocation,Flags,SubmissionHolds;};
 struct D3DDDICB_SUBMITCOMMAND {UINT NumPrimaries,WrittenPrimaries[16];uint64_t Commands;
  UINT CommandLength,BroadcastContextCount,BroadcastContext[1],PrivateDriverDataSize,RenderCBSequence;void *pPrivateDriverData;};
 struct D3DDDICB_ESCAPE {UINT hDevice,hContext;struct {UINT Value;} Flags;void *pPrivateDriverData;UINT PrivateDriverDataSize;};
@@ -326,6 +327,7 @@ static void ReleaseSRWLockShared(int*) {assert(locks==1);--locks;}
 static void AcquireSRWLockExclusive(int *p) {AcquireSRWLockShared(p);}
 static void ReleaseSRWLockExclusive(int *p) {ReleaseSRWLockShared(p);}
 static UINT InterlockedIncrement(UINT *p) {return ++*p;}
+static bool AdmissionUmdMeasureEnabled() {return false;}
 static void AdmissionUmdDiagnostic(const char *,HRESULT,const UINT *,size_t) {}
 static void AdmissionUmdScreenCpuAccessSnapshot(ADMISSION_UMD_DEVICE *,HRESULT,UINT) {}
 static int mark_written(ADMISSION_UMD_DEVICE *,const uint64_t*,unsigned) {return 1;}
@@ -345,7 +347,7 @@ static HRESULT escape_cb(UINT,D3DDDICB_ESCAPE *e) {
  assert(uploads && !locks && !e->Flags.Value && e->hDevice==3 && e->hContext==7);
  ++escapes;
  auto *b=(APPLE_AGX_G3_NATIVE_QUERY_BATCH*)e->pPrivateDriverData;
- assert(b->Magic==APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC && b->Version==1);
+ assert(b->Magic==APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC && b->Version==APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION);
  assert(b->Count==2 && b->Bytes==sizeof(*b)+b->Count*sizeof(APPLE_AGX_G3_NATIVE_QUERY));
  assert(e->PrivateDriverDataSize==b->Bytes && !b->Ready && !b->FailedIndex);
  auto *entries=(APPLE_AGX_G3_NATIVE_QUERY*)(b+1);
@@ -353,7 +355,7 @@ static HRESULT escape_cb(UINT,D3DDDICB_ESCAPE *e) {
   auto *q=&entries[i];++queries;
   assert(q->Magic==APPLE_AGX_G3_NATIVE_QUERY_MAGIC && q->Bytes==sizeof(*q));
   assert(q->Allocation!=1 && q->Allocation!=4 && q->AllocationBytes==65536);
-  assert(!q->Ready && !q->Reason && !q->FailedVa && !q->Reserved && !q->Reserved2);
+  assert(!q->Ready && !q->Reason && !q->FailedVa && !q->Reserved);
   q->Ready=q->Allocation!=bad;q->Reason=q->Ready?0:reason;q->FailedVa=q->Ready?0:q->GpuVa+32768;
   if(escape_fail || !q->Ready) {b->FailedIndex=i;return escape_fail ? E_FAIL : S_OK;}
  }

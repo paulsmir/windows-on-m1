@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "apple_agx_gpuva_g3_translation.h"
+#include "apple_agx_g3_native_cache.h"
 #include "render_omitted_leaves.h"
 #define VOID void
 #define ADMISSION_ALLOCATION_OBJECT_MAGIC 42
@@ -69,10 +70,12 @@ typedef struct _SHADOW {
 typedef struct { ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; void *Adapter; ADMISSION_OMITTED_LEAVES OmittedLeaves; ULONGLONG SystemGroups[8], UnpublishedGroups[32]; } STATE;
 typedef struct {
   GRAPH Graph;
+  APPLE_AGX_G3_NATIVE_CACHE NativeReady;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
   STATE *State;
   UINT CpuOnlyMappings, OsProcessId;
 } ADMISSION_G3_PROCESS;
+#include "native_invalidate.inc"
 static void *ExAllocatePool2(UINT flags, size_t bytes, UINT tag) {
   (void)flags; (void)tag; return malloc(bytes);
 }
@@ -130,7 +133,96 @@ static void AdmissionG3NoteSystemShape(STATE *s, ULONGLONG allocation,
 }
 #include "leaf.inc"
 
-int main(void) {
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * Cache hits depend on the logical identity of every page in the proof, not
+ * just a byte-identical native IPA. A single edited page changes the native
+ * quartet and may invalidate three other allocation owners' coverage too.
+ * The cached tokens model earlier successful proofs; UpdateLeaf and both
+ * cache helpers are actual source. Graph publication remains a boundary stub. */
+static void native_readiness_invalidation_cases(void) {
+  for (UINT change=0;change<5;++change) {
+    ADMISSION_CONTEXT adapter={0}; STATE state={0};
+    ADMISSION_G3_TABLE_SHADOW shadow={0}; ADMISSION_G3_PROCESS process={0};
+    ADMISSION_G3_PAGING_FAILURE failure={0}; DXGK_PTE ptes[4]={0};
+    ADMISSION_ALLOCATION_HANDLE owners[6]={0};
+    DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE update={0};
+    ULONGLONG tokens[6]={0};
+    shadow.BrokerIpa=0x90000000; process.TableShadows=&shadow; process.State=&state;
+    update.NumPageTableEntries=1;
+    for (UINT i=0;i<6;++i) {
+      owners[i].Object.Magic=ADMISSION_ALLOCATION_OBJECT_MAGIC;
+      owners[i].Object.Description.Size=0x10000;
+    }
+    /* Four distinct logical owners share one fully contiguous native leaf. */
+    for (UINT i=0;i<4;++i) {
+      ptes[i].Valid=1; ptes[i].PageAddress=0x10000+i;
+      update.StartIndex=i; update.FirstPteVirtualAddress=(ULONGLONG)i*0x1000;
+      update.pPageTableEntries=ptes+i; update.hAllocation=owners+i;
+      assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
+    }
+    assert(process.Graph.Leaf.AuxIpa==0x10000000 && process.Graph.Leaf.Writable);
+    for (UINT i=0;i<4;++i) {
+      assert(shadow.ResidentPtes[i].Allocation==(ULONGLONG)(ULONG_PTR)&owners[i]);
+      assert(shadow.ResidentPtes[i].NativeIpa==0x10000000ULL+(ULONGLONG)i*0x1000);
+    }
+    /* These opaque tokens stand for successful earlier proofs. Owner 4 may
+     * have a proof at another VA before gaining this alias; owner 5 never
+     * appears in the edited quartet. Neither key is dereferenced by cache. */
+    for (UINT i=0;i<6;++i) {
+      ULONGLONG key=(ULONGLONG)(ULONG_PTR)&owners[i];
+      tokens[i]=AppleAgxG3NativeCacheStore(&process.NativeReady,key,
+          0x100000ULL+(ULONGLONG)i*0x10000,0x10000,1);
+      assert(tokens[i]);
+    }
+    for (UINT i=0;i<6;++i)
+      assert(AppleAgxG3NativeCacheHit(&process.NativeReady,
+          (ULONGLONG)(ULONG_PTR)&owners[i],
+          0x100000ULL+(ULONGLONG)i*0x10000,0x10000,1,tokens[i]));
+
+    update.StartIndex=1; update.FirstPteVirtualAddress=0x1000;
+    update.pPageTableEntries=ptes+1; update.hAllocation=owners+1;
+    if (change==0) update.hAllocation=owners+4; /* IPA unchanged, new owner. */
+    if (change==1) update.AllocationOffsetInBytes=0x8000; /* Same owner/IPA. */
+    if (change==2) {ptes[1].Valid=0; update.hAllocation=NULL;}
+    if (change==3) ptes[1].ReadOnly=1; /* Mixed native permissions: omit. */
+    if (change==4) ptes[1].PageAddress=0x20001; /* Scattered quartet: omit. */
+    assert(AdmissionG3UpdateLeaf(&process,shadow.BrokerIpa,&update,&adapter,&failure)==0);
+
+    /* Old owner, new owner and all three unedited neighbours must miss. */
+    for (UINT i=0;i<4;++i)
+      assert(!AppleAgxG3NativeCacheHit(&process.NativeReady,
+          (ULONGLONG)(ULONG_PTR)&owners[i],
+          0x100000ULL+(ULONGLONG)i*0x10000,0x10000,1,tokens[i]));
+    assert(AppleAgxG3NativeCacheHit(&process.NativeReady,
+        (ULONGLONG)(ULONG_PTR)&owners[4],0x140000,0x10000,1,tokens[4])==(change!=0));
+    assert(AppleAgxG3NativeCacheHit(&process.NativeReady,
+        (ULONGLONG)(ULONG_PTR)&owners[5],0x150000,0x10000,1,tokens[5]));
+
+    if (change<2) {
+      assert(process.Graph.Leaf.AuxIpa==0x10000000 && process.Graph.Leaf.Writable);
+      for (UINT i=0;i<4;++i)
+        assert(shadow.ResidentPtes[i].NativeIpa==0x10000000ULL+(ULONGLONG)i*0x1000);
+      assert(shadow.ResidentPtes[1].Allocation==
+          (ULONGLONG)(ULONG_PTR)&owners[change==0?4:1]);
+      assert(shadow.ResidentPtes[1].AllocationOffset==(change==1?0x8000ULL:0ULL));
+    } else {
+      assert(process.Graph.Leaf.AuxIpa==0);
+      for (UINT i=0;i<4;++i) assert(!shadow.ResidentPtes[i].NativeIpa);
+      if (change==2) assert(!shadow.LogicalPtes[1].Flags);
+      if (change==3) assert(shadow.LogicalPtes[1].Flags==APPLE_AGX_GPUVA_G3_VALID);
+      if (change==4) assert(shadow.LogicalPtes[1].GuestIpa==0x20001000);
+    }
+    free(shadow.LogicalPtes); free(shadow.ResidentPtes);
+  }
+  puts("RC47 native-ready invalidation: PASS");
+}
+
+int main(int argc,char **argv) {
+  if (argc==2 && !strcmp(argv[1],"readiness")) {
+    native_readiness_invalidation_cases();
+    return 0;
+  }
+  assert(argc==1);
   ADMISSION_CONTEXT adapter={0}; STATE state={0};
   ADMISSION_G3_TABLE_SHADOW shadow={0}; ADMISSION_G3_PROCESS process={0};
   ADMISSION_G3_PAGING_FAILURE failure={0}; DXGK_PTE ptes[4]={0};

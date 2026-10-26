@@ -1857,9 +1857,10 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
   const UINT bytes = (UINT)(sizeof(APPLE_AGX_G3_NATIVE_QUERY_BATCH) +
       capacity * sizeof(APPLE_AGX_G3_NATIVE_QUERY));
   auto *batch = (APPLE_AGX_G3_NATIVE_QUERY_BATCH *)HeapAlloc(
-      GetProcessHeap(), HEAP_ZERO_MEMORY, bytes);
+      GetProcessHeap(), HEAP_ZERO_MEMORY, bytes + capacity * sizeof(UINT));
   if (!batch) { device->GpuvaFailure = E_OUTOFMEMORY; return 0; }
   auto *entries = (APPLE_AGX_G3_NATIVE_QUERY *)(batch + 1);
+  auto *indices = (UINT *)((unsigned char *)batch + bytes);
   int ready = 0;
   for (unsigned attempt = 0u; attempt < 2u; ++attempt) {
     *batch = {};
@@ -1875,21 +1876,23 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
         valid = false;
         break;
       }
+      indices[batch->Count] = i;
       auto *q = &entries[batch->Count++];
       *q = {};
       q->Magic = APPLE_AGX_G3_NATIVE_QUERY_MAGIC;
-      q->Version = APPLE_AGX_G3_NATIVE_QUERY_VERSION;
+      q->Version = APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION;
       q->Bytes = sizeof(*q);
       q->Allocation = slot->KernelAllocation;
       q->GpuVa = slot->CanonicalGpuVa;
       q->AllocationBytes = slot->Bytes;
       q->Write = (slot->Flags & AppleAgxWin32BufferGpuWrite) != 0u;
+      q->Reserved2 = slot->NativeReadyToken;
     }
     ReleaseSRWLockShared(&device->ScreenBufferLock);
     if (!valid) break;
     if (!batch->Count) { ready = 1; break; }
     batch->Magic = APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC;
-    batch->Version = APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION;
+    batch->Version = APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION;
     batch->Bytes = (UINT)(sizeof(*batch) + batch->Count * sizeof(*entries));
     D3DDDICB_ESCAPE request = {};
     request.hDevice = device->RuntimeDevice.handle;
@@ -1900,12 +1903,28 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
     HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
         device->Adapter->RuntimeAdapter.handle, &request);
     AdmissionUmdWaitEnd(wait);
-    if (SUCCEEDED(hr) && batch->Ready == 1u) { ready = 1; break; }
+    if (SUCCEEDED(hr) && batch->Ready == 1u) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      for (UINT i = 0u; i < batch->Count; ++i) {
+        auto *slot = &device->ScreenBuffers[indices[i]];
+        const auto *q = &entries[i];
+        if (slot->Active && !slot->Transition && slot->CopyHeld &&
+            slot->SubmissionHolds && slot->KernelAllocation == q->Allocation &&
+            slot->CanonicalGpuVa == q->GpuVa)
+          slot->NativeReadyToken = q->Reserved2;
+      }
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      if (AdmissionUmdMeasureEnabled()) {
+        UINT values[3] = {batch->Count, batch->Reserved[0], batch->Reserved[1]};
+        AdmissionUmdDiagnostic("measure-native-ready-cache", S_OK, values, ARRAYSIZE(values));
+      }
+      ready = 1; break;
+    }
     if (SUCCEEDED(hr) && attempt == 0u) {
       /* Deferred paging is not necessarily published at MakeResident's
        * fence. Schedule at most one CPU-only touch, then rebuild and prove
        * the ENTIRE held set, including entries preceding the failed entry.
-       * Holds stay owned throughout. Never reuse Ready across submissions. */
+       * Holds stay owned throughout; KMD must validate every hint again. */
       if (!touch_device(device, command_va)) break;
       continue;
     }

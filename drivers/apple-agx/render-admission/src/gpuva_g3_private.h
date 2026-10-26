@@ -5,6 +5,7 @@
 #include "apple_agx_g3_private_storage.h"
 #include "apple_agx_render_manager.h"
 #include "apple_agx_g3_private_abi.h"
+#include "apple_agx_g3_native_cache.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #define ADMISSION_G3_PROCESS_MAGIC 0x47335052u
@@ -133,6 +134,7 @@ typedef struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;
   ADMISSION_G3_STATE *State;
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
+  APPLE_AGX_G3_NATIVE_CACHE NativeReady;
   APPLE_AGX_MEMORY_IO Io;
   APPLE_AGX_MEMORY_OBJECT BootstrapRoot;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
@@ -169,6 +171,18 @@ typedef struct _ADMISSION_G3_PROCESS {
   /* EXP1030: broker status (graph LastStatus) when first poisoned. */
   ULONG PoisonBrokerStatus;
 } ADMISSION_G3_PROCESS;
+
+/* Logical identity can change even when a native leaf is byte-identical.
+ * Invalidate both owners of every affected quartet, including neighbours
+ * whose NativeIpa changes after a one-PTE edit. No key is dereferenced. */
+static inline void AdmissionG3NativeInvalidatePtes(ADMISSION_G3_PROCESS *p,
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ptes, UINT first, UINT count) {
+  UINT i;
+  if (!ptes) return;
+  for (i = first; i < first + count; ++i)
+    if (ptes[i].Allocation)
+      AppleAgxG3NativeCacheInvalidate(&p->NativeReady, ptes[i].Allocation);
+}
 
 #define ADMISSION_G3_POISON(Process, File) do { \
     (Process)->Poisoned = TRUE; \

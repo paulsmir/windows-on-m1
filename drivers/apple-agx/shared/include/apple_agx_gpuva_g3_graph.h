@@ -54,6 +54,12 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   APPLE_AGX_GPUVA_G3_ALLOC Allocate;
   APPLE_AGX_GPUVA_G3_FREE Free;
   void *MemoryContext;
+  /* Optional proof-cache invalidation, before native mutation, under the
+   * caller's graph lock. TableIpa=0 invalidates topology; otherwise Index
+   * names the 16-KiB leaf in that table. No firmware protocol change. */
+  void (*InvalidateNative)(void *Context, unsigned long long TableIpa,
+                           unsigned int Index);
+  void *InvalidateContext;
   unsigned long long ProcessId, ProcessGeneration, RootIpa, NextGeneration;
   unsigned long long SharedBackingGeneration;
   APPLE_AGX_GPUVA_G3_REGISTRY *Registry;

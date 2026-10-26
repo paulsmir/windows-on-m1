@@ -361,6 +361,8 @@ bool AppleAgxGpuvaG3GraphRegisterTable(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   for (existing = graph->Tables; existing; existing = existing->Next)
     if (existing->Ipa == ipa) break;
   if (existing && existing->Level == level) return true;
+  if (existing && graph->InvalidateNative)
+    graph->InvalidateNative(graph->InvalidateContext, 0ULL, 0u);
   /* VidMm reuses a freed page-table page at another level (EXP846 0x10E/0xB).
    * Retire the old table only when no parent still links it: clear its own
    * entries, revoke it, then register the page at the new level. */
@@ -399,6 +401,8 @@ bool AppleAgxGpuvaG3GraphBindRoot(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   if (!graph || !graph->Created || graph->Uncertain ||
       !find_table(graph, ipa, 0u) || graph->MappingGeneration == ~0ULL) return false;
   if (graph->RootIpa == ipa) return true;
+  if (graph->InvalidateNative)
+    graph->InvalidateNative(graph->InvalidateContext, 0ULL, 0u);
   request.Command = AGX_GPUVA_V5_RELOCATE_ROOT;
   request.TableIpa = ipa;
   if (!call(graph, &request)) return false;
@@ -425,6 +429,8 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   edge = find_edge(graph->Parents, table_ipa, index);
   if (child_ipa && edge && edge->AuxIpa == child_ipa) return true;
   if (!child_ipa && !edge) return true;
+  if (graph->InvalidateNative)
+    graph->InvalidateNative(graph->InvalidateContext, 0ULL, 0u);
   if (child_ipa && !edge && !(new_edge = node(graph))) return false;
   request.Command = AGX_GPUVA_V5_UPDATE_PARENT;
   request.TableIpa = table_ipa;
@@ -488,6 +494,8 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   if (guest_ipa && leaf && leaf->AuxIpa == guest_ipa &&
       leaf->Writable == (unsigned)writable && leaf->Kind == kind) return true;
   if (!guest_ipa && !leaf) return true;
+  if (graph->InvalidateNative)
+    graph->InvalidateNative(graph->InvalidateContext, table_ipa, index);
   if (guest_ipa) {
     if (!leaf) {
       new_leaf = node(graph);
