@@ -799,6 +799,19 @@ static int wait_object(ADMISSION_UMD_DEVICE *device,
   if (!device || !object || !fence || !device->KernelCallbacks ||
       !device->KernelCallbacks->pfnWaitForSynchronizationObjectFromCpuCb)
     return 0;
+#if defined(_WIN64)
+  /* The monitored fence has a read-only CPU mapping. Acquire its completed
+   * value without entering Windows when the condition is already satisfied.
+   * Keep runtime waits on x86, where a plain 64-bit load can tear. */
+  if (object == device->RenderSyncObject && device->RenderFenceAddress &&
+      !device->DrawTerminal &&
+      (((ULONG_PTR)device->RenderFenceAddress & 7u) == 0u)) {
+    uint64_t completed = (uint64_t)ReadAcquire64(
+        (const volatile LONG64 *)device->RenderFenceAddress);
+    if (completed != UINT64_MAX && completed >= fence)
+      return 1;
+  }
+#endif
   request.ObjectCount = 1;
   request.ObjectHandleArray = &object;
   request.FenceValueArray = &fence;
