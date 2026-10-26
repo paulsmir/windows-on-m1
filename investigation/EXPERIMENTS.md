@@ -64190,3 +64190,14 @@ EXP1967 HARDWARE ACTUAL 2026-10-26T13:11:53Z:
 - rc35 timing receipts are missing. Only measure-d3d12-dispatch-time rows appear; there are no measure-gpu-completion, measure-gpu-stages, replay-time or replay-window rows. Cause: those gates use AdmissionUmdDiagnosticEnabled, which is false under APPLE_AGX_UMD_REFUSALS_ONLY=1 (GravityMark's trace mode). Fixed by e7e0ba38 (AdmissionUmdMeasureEnabled).
 - Image (gm1967b): finish dialog, planet, asteroid field. The asteroids render as flat white shapes with no visible shading or texture, the same as earlier runs; to be checked against a reference as a correctness issue.
 - Recovery rec1967h.
+
+EXP1968 HARDWARE BEFORE 2026-10-26T13:18:40Z:
+- Package 30.0.1968.0 = EXP1967 driver + e7e0ba38 (AdmissionUmdMeasureEnabled: completion drain, replay and dispatch timers run in refusals-only trace mode) + rc37 (30a891b8 G13 ChannelError recovery handshake; 0e49bb86 opt-in GPU fault drill, gated by Wom1GpuFaultDrillAllowed, not set here; 81eb253a doc) + rc38 (b8bc6d2e advance the WDDM completed boundary after a known-fence fault; 73716143 explicit VDM continuation links for the opt-in GPU stream; cfd2ebf8 stream probes; 1308352d doc). The GPU stream stays off (no APPLE_AGX_D3D12_GPU_INDIRECT_STREAM).
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1 (full pool).
+- WHY THIS HYPOTHESIS: EXP1967 ran stably (2k 796/4.8, 10k 751/4.5) but logged no GPU completion or replay-phase rows, because the rc35 gates used AdmissionUmdDiagnosticEnabled, which is false under APPLE_AGX_UMD_REFUSALS_ONLY=1. With e7e0ba38 the same run must produce the GPU busy estimate and CPU/GPU overlap that decide whether GravityMark is CPU-bound or GPU-bound. rc37/rc38 change only the fault/recovery paths, which stay dormant without a fault.
+- Expected: Score/FPS around EXP1967; measure-gpu-completion, measure-gpu-stages, measure-gpu-coverage, measure-d3d12-replay-time and measure-d3d12-replay-window rows present; tools/agx_submission_analyze.py gives per-frame GPU busy and overlap; no fault or bugcheck.
+- Failure criteria: missing timing rows, a GPU fault, a bugcheck, device removal, a hang, or a regression below EXP1967.
+- Recovery: rec1968h.
+- Hashes: sys 331c0355e963, UmdArm64 83461a8fc854, UmdX64 7a80bab6f091, Umd32 d87a22f85f0c; manifest c971c8365a99, hardware-manifest 8d81f4ff21df; probe1968.sh 988c4a3670b7 (PROBE_LINT_OK); visible recovery rec1968h 4c2eeef2c1081e32; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1968h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1968-timing-recovery/run1968.sh.
