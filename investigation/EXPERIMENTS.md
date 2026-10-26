@@ -64261,3 +64261,14 @@ EXP1970 HARDWARE BEFORE 2026-10-26T16:06:22Z:
 - Hashes: sys 946680b40605, UmdArm64 ee617e43a6c7, UmdX64 2a95da0e1cb9, Umd32 5fc1b145e879; manifest 74acefb47e7f, hardware-manifest 2b79d43984fb; probe1970.sh 2ca01d7843d8 (PROBE_LINT_OK); visible recovery rec1970h 8d01e4e65714a361; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1970h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1970-wait-profile/run1970.sh.
+
+EXP1970 HARDWARE ACTUAL 2026-10-26T16:33:12Z:
+- PASS. 2k: Score 782 / 4.7 FPS; 10k: Score 776 / 4.6 FPS; median frame 180 ms. No fault.
+- The rc42 wait profiler works: 823 measure-d3d12-wait rows, one per Execute. The rc42 analyzer joined only 35 frames, so the medians below come from a direct parse of the steady state (Executes 200+, n=623), per Execute:
+  - draw.native_ready_escape: 55.5 ms, 385 calls;
+  - query_resolve.native_ready_escape: 52.3 ms, 148 calls;
+  - draw.copy_escape: 37.3 ms, 162 calls;
+  - draw.render_fence: 13.7 ms, 22 calls.
+- Conclusion: about 145 ms of the 180 ms frame is UMD->KMD escapes (kernel transition plus hypervisor trap, 0.1-0.25 ms each). native_held_ready() (umd_gpuva_windows.c ~1848) proves native backing with one escape per held BO per submission, about 533 per frame; there are also 162 CPU copies per frame through a KMD escape. GPU waits are small (13.7 ms). This replaces the earlier "query bucket" reading: the query/draw buckets were escape time.
+- Next: Codex rc45 (xhigh) to batch or cache the readiness proof and move copies to CPU mappings. The user target is now at least 9000 points at Full HD (native macOS level), as high as possible. The guest gm-run.ps1 gained -Width/-Height (backup gm-run.ps1.bak-1280).
+- Recovery rec1970h: RECOVERY_DONE.
