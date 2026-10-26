@@ -140,6 +140,8 @@ def is_owner(executable, argv, launcher, contract):
     grammar.add_argument('--wdt-cpu', type=int, choices=range(8))
     grammar.add_argument('--display-mode', choices=('none', 'physical', 'virtual', 'both'))
     grammar.add_argument('--debug-mode', choices=('off', 'uart', 'full', 'monitor'))
+    # rc30: run_uefi --guest-ram-profile (EXP1961)
+    grammar.add_argument('--guest-ram-profile', choices=('legacy', 'expanded'))
     for option in ('dry-run', 'low-mem', 'no-pin'):
         grammar.add_argument('--' + option, action='store_true')
     parsed = grammar.parse_args(args)
