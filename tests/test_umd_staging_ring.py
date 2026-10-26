@@ -231,7 +231,34 @@ static void stress(void) {
   { ADMISSION_UMD_RING_SLICE s; assert(!AdmissionUmdRingReserve(&ring, 1, 1, 0, &s)); }
   assert(AdmissionUmdRingRetire(&ring, ADMISSION_UMD_RING_MAX_SLICES) && AdmissionUmdRingDrained(&ring));
 }
+/* A BO can be referenced by many submissions. Its storage cannot retire at
+ * the first submission's fence or merely because CPU mapping has ended. */
+static void retained_bos(void) {
+  ADMISSION_UMD_STAGING_RING ring;
+  ADMISSION_UMD_RING_SLICE a, b, c;
+  assert(AdmissionUmdRingInit(&ring, 128));
+  assert(AdmissionUmdRingReserveOwned(&ring, 64, 16, &a));
+  assert(AdmissionUmdRingReserveOwned(&ring, 64, 16, &b));
+  assert(!AdmissionUmdRingReserveOwned(&ring, 1, 1, &c));
+  assert(AdmissionUmdRingRetire(&ring, 10));
+  assert(ring.Used == 128); /* owner holds survive any earlier completion */
+  assert(!AdmissionUmdRingReleaseOwned(&ring, a.Ticket, 12, 11));
+  assert(!AdmissionUmdRingReleaseCpu(&ring, a.Ticket));
+  assert(AdmissionUmdRingReleaseOwned(&ring, b.Ticket, 10, 12));
+  assert(ring.Used == 128); /* out-of-order destruction does not break FIFO */
+  assert(!AdmissionUmdRingReleaseOwned(&ring, b.Ticket, 10, 12));
+  assert(AdmissionUmdRingReleaseOwned(&ring, a.Ticket, 12, 12));
+  assert(AdmissionUmdRingDrained(&ring));
+  assert(AdmissionUmdRingReserveOwned(&ring, 128, 1, &c));
+  assert(!AdmissionUmdRingReleaseOwned(&ring, a.Ticket, 0, 12));
+  assert(AdmissionUmdRingReleaseOwned(&ring, c.Ticket, 0, 12));
+  /* Never mix a pending batch and persistent ownership in one ring. */
+  assert(AdmissionUmdRingReserve(&ring, 1, 1, 0, &a));
+  assert(!AdmissionUmdRingReserveOwned(&ring, 1, 1, &b));
+  assert(AdmissionUmdRingCancel(&ring, a.Ticket));
+}
 int main(void) {
+  retained_bos();
   wrap_and_fences(); cpu_holds_and_cancel(); invalid_and_terminal(); queued_uploads(); fence_identity_and_partial_wrap(); stress();
   return 0;
 }

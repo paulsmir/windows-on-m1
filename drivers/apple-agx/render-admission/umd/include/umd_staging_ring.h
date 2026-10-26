@@ -18,8 +18,9 @@
  *
  * Header-only plain C types support both C and the x86 /TP C++ build without
  * new external linkage or user CRT dependencies. Storage belongs on the heap.
- * Runtime routing is intentionally not connected until the Windows mapping
- * lifetime and native backing owner are established. */
+ * Owned slices retain BO storage across repeated submissions. Their release
+ * requires both final BO ownership and the last-use fence proof; they are not
+ * transient pending spans and cannot be committed by CommitAll. */
 #define ADMISSION_UMD_RING_MAX_BYTES (128u * 1024u * 1024u)
 #define ADMISSION_UMD_RING_MAX_SLICES 256u
 
@@ -175,8 +176,46 @@ static inline int AdmissionUmdRingReleaseCpu(ADMISSION_UMD_STAGING_RING *Ring,
     ADMISSION_UMD_RING_ENTRY *e =
         &Ring->Entries[(Ring->Head + i) % ADMISSION_UMD_RING_MAX_SLICES];
     if (e->Slice.Ticket != Ticket) continue;
-    if (!e->Submitted || !e->CpuHeld || e->Fence > Ring->Completed) return 0;
+    if (e->Submitted != 1u || !e->CpuHeld || e->Fence > Ring->Completed) return 0;
     e->CpuHeld = 0u;
+    AdmissionUmdRingReclaim(Ring);
+    return 1;
+  }
+  return 0;
+}
+
+/* The caller owns the BO and all CPU views until ReleaseOwned. Submitted=2
+ * keeps the slice out of the transient pending suffix; CpuHeld prevents any
+ * timeline retirement from recycling a still-live BO. */
+static inline int AdmissionUmdRingReserveOwned(ADMISSION_UMD_STAGING_RING *Ring,
+    unsigned int Bytes, unsigned int Alignment, ADMISSION_UMD_RING_SLICE *Slice) {
+  ADMISSION_UMD_RING_ENTRY *e;
+  if (!Ring || Ring->Pending ||
+      !AdmissionUmdRingReserve(Ring, Bytes, Alignment, 1u, Slice)) return 0;
+  e = AdmissionUmdRingPending(Ring, Slice->Ticket);
+  e->Submitted = 2u;
+  --Ring->Pending;
+  return 1;
+}
+
+/* Only after the BO has no CPU/submission references and DeallocateCb has
+ * succeeded. LastUse is the actual last render fence (zero for never used);
+ * Completed is a proof from that device's monitored timeline, never a ticket.
+ * A failed/uncertain submission retains the owner and must not call this. */
+static inline int AdmissionUmdRingReleaseOwned(ADMISSION_UMD_STAGING_RING *Ring,
+    unsigned long long Ticket, unsigned long long LastUse,
+    unsigned long long Completed) {
+  unsigned int i;
+  if (!Ring || Ring->Poisoned || !Ticket || Completed < LastUse) return 0;
+  for (i = 0u; i < Ring->Count; ++i) {
+    ADMISSION_UMD_RING_ENTRY *e =
+        &Ring->Entries[(Ring->Head + i) % ADMISSION_UMD_RING_MAX_SLICES];
+    if (e->Slice.Ticket != Ticket) continue;
+    if (e->Submitted != 2u || !e->CpuHeld) return 0;
+    e->Submitted = 1u;
+    e->Fence = LastUse;
+    e->CpuHeld = 0u;
+    if (Completed > Ring->Completed) Ring->Completed = Completed;
     AdmissionUmdRingReclaim(Ring);
     return 1;
   }
