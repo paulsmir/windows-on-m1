@@ -8,6 +8,19 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-10-26 14:00Z -- GRAVITYMARK IS CPU<->GPU SYNC-BOUND (EXP1968); TARGET >= 3000 POINTS
+- User target: GravityMark D3D12 score >= 3000 (native M1 Metal is about 9,950 / 60 FPS at 100k asteroids, 720p). We are at 750-800 / 4.5-4.8 FPS at 2k-10k asteroids. 2k and 10k run at the same speed.
+- Stable package: EXP1967/EXP1968 (integration ff298b99). Counted ExecuteIndirect uses the count-bounded native path (CPU count read, path=2 reason 7). The GPU-generated VDM stream is opt-in (APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1): EXP1966 hit 0x119, and rc38 fixed the fence accounting and the links, but this is not hardware-validated. rc32 is removed.
+- EXP1968 timing (rc35 receipts plus tools/agx_submission_analyze.py), median 2k frame of 180.6 ms:
+  - GPU busy is about 9.3 ms;
+  - query replay is 59.4 ms for 9 commands;
+  - draws are 114.7 ms for 13 (7 counted, with CPU count reads);
+  - dispatch is 1.1 ms for 146.
+- The frame is CPU waiting on the GPU. Next: rc40 (GPU-timeline ResolveQueryData and no-wait queries), then the GPU stream arm.
+- Open correctness bug: the asteroids render flat white. rc39 shader capture uses APPLE_AGX_D3D12_SHADER_DUMP_ALL=1 with APPLE_AGX_D3D12_SHADER_DUMP_DIR.
+- Faults: 0x116 in EXP1964/1965 (unmapped CDM read 0x11ac9a0000 on the removed rc32 path; TDR quiesce cannot succeed while the firmware never retires). rc37 added ChannelError recovery and an opt-in fault drill (Wom1GpuFaultDrillAllowed); timeout-only recovery is still open.
+- Launch: m1n1 075e3980 with AGX_GUEST_RAM_PROFILE=expanded; lastgood 0d3a75b3; AGX_DEVICE_SWITCHES=Wom1GpuFaultInfoRead (full pool).
+
 ## CURRENT 2026-10-26 10:30Z -- GRAVITYMARK D3D12 COMPLETES (2k 352 / 1.8 FPS, 10k 256 / 1.4 FPS, EXP1961)
 
 - Host: the Mac (J313 over USB). The PC is the builder plus Codex. Hosting the J313 from Windows failed: see the EXP1940 entries.
