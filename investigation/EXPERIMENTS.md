@@ -64036,3 +64036,13 @@ EXP1958 HARDWARE BEFORE 2026-10-25T23:36:09Z:
 - Recovery rec1958h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1958-ram-overhead/run1958.sh.
 
 EXP1958 ACTUAL (Claude headline 2026-10-25T23:47:32Z): package 30.0.1958.0 (27c3c712 = EXP1957 + rc22 descriptor-heap CPU shadow reuse), Wom1GpuFaultInfoRead=1 + Wom1PoolFraction=3. Stable: both arms reach the harness close, guest alive; 10k loaded this time. 2k: 9 scene presents = 5.6/min. 10k: 20 = 8.3/min. Longest paging waits are 20.3 / 23 s, unchanged. Verdict: rc22 (about 60 MiB) is neutral. User answered: the J313 has 8 GB, so the 6.28 GB guest is near the maximum. Path forward: pageable (shadow-backed) GPU memory so the locked pool can shrink; rc24 with Codex effort HIGH (user decision).
+
+EXP1959 HARDWARE BEFORE 2026-10-26T07:09:12Z:
+- Package 30.0.1959.0 = EXP1958 + rc24 pool-stop lifetime fix + rc25. Under the env opt-in, CPU-facing D3D12 buffers map their canonical pool allocation directly after an authenticated full-pool-backing proof. They stay resident and locked while mapped, and T13 private staging is not used.
+- Switches Wom1GpuFaultInfoRead=1, Wom1PoolFraction=3. Both probe slots set APPLE_AGX_D3D12_CPU_POOL_MAP=1 (slot "10K" = 2k, slot "2K" = 10k).
+- WHY THIS HYPOTHESIS: the guest RAM is overcommitted (EXP1957: commit 7.65 GB vs 6.28 GB physical; GravityMark private 2.63 GB, including 443 MiB of UMD private staging copies). A production UMA driver keeps a single shared CPU/GPU copy. Estimated about 383 MiB less private commit.
+- Metric: GravityMark private bytes and available RAM (any refusal receipts), longest paging wait, scene presents/min vs EXP1958 (2k 5.6, 10k 8.3); correctness: no new faults, the image still renders, DWM alive.
+- Recovery: rec1959h.
+- Hashes: sys 7172aada481b, UmdArm64 268178d94273, UmdX64 34da1e40cb74, Umd32 f019f4ac1828; manifest 6bbbff1519e5, hardware-manifest 307b88a4f3a3; probe1959.sh e2cc8ea2d83d (PROBE_LINT_OK); visible recovery rec1959h 80b5d8c76bd1ef9d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolFraction=3.
+- Recovery rec1959h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1959-cpu-pool-map/run1959.sh.
