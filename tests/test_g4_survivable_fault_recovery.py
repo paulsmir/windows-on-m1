@@ -123,6 +123,9 @@ static void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, unsigned f)
   assert(c->Object.FenceOutstanding==f); c->Object.FenceOutstanding=0;
 }
 static void AdmissionJobTimingMarkWindows(void *r, unsigned f, unsigned phase) { (void)r; (void)f; (void)phase; }
+/* Timestamp capture is telemetry only; the real ring/capture has its own replay. */
+static void AdmissionGpuCompletionCaptureWindows(ADMISSION_PLATFORM_RUNTIME *r, unsigned f,
+    APPLE_AGX_BACKEND_COMPLETION_STATUS status) { (void)r; (void)f; (void)status; }
 static void AdmissionJobTimingFirmwareWindows(void *r, unsigned f) { (void)r; (void)f; }
 static int AdmissionSaveG4Manager(void *r, unsigned f) { (void)r; (void)f; return 1; }
 static int AdmissionGpuvaG3CompleteJob(void *a, unsigned f) { (void)a; (void)f; return 1; }

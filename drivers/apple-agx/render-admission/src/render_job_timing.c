@@ -147,3 +147,45 @@ int AdmissionGpuClockCalibrate(const ADMISSION_GPU_TIMESTAMP_RING *ring,
                   ((ticks % frequency) * 1000000000ull) / frequency;
   return 1;
 }
+
+int AdmissionGpuCompletionRecord(ADMISSION_GPU_COMPLETION_RING *ring,
+    const ADMISSION_GPU_COMPLETION *record) {
+  ADMISSION_GPU_COMPLETION *out;
+  if (!ring || !record || !record->Fence || !record->CommandVa) return 0;
+  /* A notification can be retried while this same pending job is retained. */
+  if (ring->Sequence) {
+    const ADMISSION_GPU_COMPLETION *last =
+        &ring->Record[(ring->Sequence - 1u) % ADMISSION_GPU_COMPLETION_CAPACITY];
+    if (last->Fence == record->Fence && last->ProcessId == record->ProcessId &&
+        last->CommandVa == record->CommandVa && last->SubmitQpc == record->SubmitQpc)
+      return 0;
+  }
+  out = &ring->Record[ring->Sequence % ADMISSION_GPU_COMPLETION_CAPACITY];
+  *out = *record;
+  out->Sequence = ++ring->Sequence;
+  return 1;
+}
+
+void AdmissionGpuCompletionRead(const ADMISSION_GPU_COMPLETION_RING *ring,
+    unsigned int pid, ADMISSION_GPU_COMPLETION_QUERY *query) {
+  unsigned long long cursor, oldest;
+  if (!ring || !query) return;
+  cursor = query->Cursor;
+  timing_zero(query->Record, sizeof(query->Record));
+  query->Count = query->Reset = 0u;
+  query->Reserved = 0u;
+  query->Lost = 0u;
+  query->Newest = ring->Sequence;
+  query->MissingTiming = ring->MissingTiming;
+  if (cursor > ring->Sequence) { cursor = 0u; query->Reset = 1u; }
+  oldest = ring->Sequence > ADMISSION_GPU_COMPLETION_CAPACITY ?
+      ring->Sequence - ADMISSION_GPU_COMPLETION_CAPACITY : 0u;
+  if (cursor < oldest) { query->Lost = oldest - cursor; cursor = oldest; }
+  while (cursor < ring->Sequence && query->Count < ADMISSION_GPU_COMPLETION_PAGE) {
+    const ADMISSION_GPU_COMPLETION *record =
+        &ring->Record[cursor % ADMISSION_GPU_COMPLETION_CAPACITY];
+    ++cursor;
+    if (record->ProcessId == pid) query->Record[query->Count++] = *record;
+  }
+  query->Cursor = cursor;
+}

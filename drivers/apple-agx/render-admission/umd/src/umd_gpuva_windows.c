@@ -2083,6 +2083,62 @@ static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) 
   return SUCCEEDED(hr);
 }
 
+/* RC35: collect already-completed records only. The adapter ring is always
+ * cheap to fill; escapes and text formatting run only when capture is enabled.
+ * Four bounded pages avoid turning diagnostics into an unbounded work loop. */
+VOID AdmissionUmdGpuCompletionDrain(ADMISSION_UMD_DEVICE *device,
+    unsigned long long *cursor) {
+  unsigned page;
+  if (!AdmissionUmdDiagnosticEnabled() || !device || !cursor ||
+      device->Magic != ADMISSION_UMD_DEVICE_MAGIC || !device->Adapter ||
+      device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
+      !device->KernelCallbacks || !device->KernelCallbacks->pfnEscapeCb ||
+      !device->RuntimeDevice.handle || !device->KernelContext || device->ScreenClosing)
+    return;
+  for (page = 0; page < 4u; ++page) {
+    ADMISSION_GPU_COMPLETION_QUERY query = {0};
+    D3DDDICB_ESCAPE request = {0};
+    HRESULT hr;
+    unsigned i;
+    query.Magic = ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC;
+    query.Version = ADMISSION_GPU_COMPLETION_VERSION;
+    query.Bytes = sizeof(query);
+    query.Cursor = *cursor;
+    request.hDevice = device->RuntimeDevice.handle;
+    request.hContext = device->KernelContext;
+    request.pPrivateDriverData = &query;
+    request.PrivateDriverDataSize = sizeof(query);
+    hr = device->KernelCallbacks->pfnEscapeCb(device->Adapter->RuntimeAdapter.handle, &request);
+    if (FAILED(hr) || query.Count > ADMISSION_GPU_COMPLETION_PAGE || !query.Frequency) {
+      AdmissionUmdDiagnostic("measure-gpu-collection-error", FAILED(hr) ? hr : E_FAIL, NULL, 0);
+      return;
+    }
+    for (i = 0; i < query.Count; ++i) {
+      const ADMISSION_GPU_COMPLETION *r = &query.Record[i];
+      const UINT completion[] = {(UINT)r->Sequence, (UINT)(r->Sequence >> 32),
+          (UINT)r->CommandVa, (UINT)(r->CommandVa >> 32), r->Fence, r->Kind, r->Status,
+          (UINT)r->SubmitQpc, (UINT)(r->SubmitQpc >> 32),
+          (UINT)r->CompleteQpc, (UINT)(r->CompleteQpc >> 32),
+          (UINT)query.Frequency, (UINT)(query.Frequency >> 32)};
+      const UINT stages[] = {(UINT)r->Sequence, (UINT)(r->Sequence >> 32),
+          (UINT)r->Start, (UINT)(r->Start >> 32), (UINT)r->End, (UINT)(r->End >> 32),
+          (UINT)r->TaStart, (UINT)(r->TaStart >> 32), (UINT)r->TaEnd, (UINT)(r->TaEnd >> 32)};
+      AdmissionUmdDiagnostic("measure-gpu-completion", S_OK, completion, ARRAYSIZE(completion));
+      AdmissionUmdDiagnostic("measure-gpu-stages", S_OK, stages, ARRAYSIZE(stages));
+    }
+    {
+      const UINT coverage[] = {(UINT)query.Cursor, (UINT)(query.Cursor >> 32),
+          (UINT)query.Newest, (UINT)(query.Newest >> 32),
+          (UINT)query.Lost, (UINT)(query.Lost >> 32), query.Reset,
+          (UINT)query.MissingTiming, (UINT)(query.MissingTiming >> 32),
+          (UINT)*cursor, (UINT)(*cursor >> 32)};
+      AdmissionUmdDiagnostic("measure-gpu-coverage", S_OK, coverage, ARRAYSIZE(coverage));
+    }
+    *cursor = query.Cursor;
+    if (query.Cursor == query.Newest) break;
+  }
+}
+
 /* GPU timestamps: the KMD's firmware start/end of this process's completed
  * batch (ADMISSION_GPU_TIMESTAMP_QUERY, docs/superpowers/plans/
  * 2026-10-16-gpu-timestamps.md). */

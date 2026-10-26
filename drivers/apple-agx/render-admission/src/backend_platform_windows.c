@@ -154,6 +154,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_FW_TIMING_RING FwTimingSnapshot;
   /* GPU timestamps of completed jobs, by fence (JobTimingLock). */
   ADMISSION_GPU_TIMESTAMP_RING GpuTimestamps;
+  ADMISSION_GPU_COMPLETION_RING GpuCompletions;
   /* EXP1341 receipt-only: the newest compute job's capture. */
   ULONG ComputeTsFence, ComputeTsRequested;
   ULONGLONG ComputeTsCommandVa, ComputeTsWords[4];
@@ -465,6 +466,52 @@ static VOID AdmissionGpuTimestampCaptureWindows(
   if (slot != NULL)
     (void)AdmissionGpuTimestampRecord(&runtime->GpuTimestamps, fence,
         slot->ProcessId, job->CommandVa, kind, start, gpuEnd, qpc);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+/* RC35: no allocation, registry I/O, wait or firmware protocol change.
+ * The worker still owns PendingJob and timestamp storage at this boundary. */
+static VOID AdmissionGpuCompletionCaptureWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence,
+    APPLE_AGX_BACKEND_COMPLETION_STATUS status) {
+  const APPLE_AGX_BACKEND_JOB_IMAGE *job = &runtime->Backend.PendingJob;
+  const ADMISSION_JOB_TIMING_SLOT *slot;
+  ADMISSION_GPU_COMPLETION record = {0};
+  KIRQL oldIrql;
+  if (!job->CommandVa) return; /* internal present blit, not a UMD batch */
+  record.CommandVa = job->CommandVa;
+  record.Fence = fence;
+  record.Status = status == AppleAgxBackendCompletionSuccess ? 0u : 1u;
+  record.Kind = job->Kind == AppleAgxBackendJobCompute ?
+      ADMISSION_GPU_TIMESTAMP_COMPUTE : ADMISSION_GPU_TIMESTAMP_RENDER;
+  if (!record.Status) {
+    if (record.Kind == ADMISSION_GPU_TIMESTAMP_COMPUTE) {
+      if (job->ComputeTimestampBlock) {
+        RtlCopyMemory(&record.Start, job->ComputeTimestampBlock, sizeof(record.Start));
+        RtlCopyMemory(&record.End, (const UCHAR *)job->ComputeTimestampBlock + 8u, sizeof(record.End));
+      }
+    } else {
+      const ULONG ids[4] = {28u, 29u, ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_START,
+                                     ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END};
+      ULONGLONG *values[4] = {&record.Start, &record.End, &record.TaStart, &record.TaEnd};
+      ULONG i;
+      for (i = 0; i < 4u; ++i) {
+        const APPLE_AGX_EXP208_RELOCATION_OBJECT *object = &runtime->QueueObjects[ids[i]];
+        if (object->Data && object->Size == sizeof(ULONGLONG))
+          RtlCopyMemory(values[i], object->Data, sizeof(ULONGLONG));
+      }
+    }
+  }
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  slot = AdmissionJobTimingFind(&runtime->JobTiming, fence);
+  if (slot) {
+    record.ProcessId = slot->ProcessId;
+    record.SubmitQpc = slot->Qpc[AdmissionJobPhaseSubmit];
+    record.CompleteQpc = slot->Qpc[AdmissionJobPhaseComplete];
+    (void)AdmissionGpuCompletionRecord(&runtime->GpuCompletions, &record);
+  } else {
+    ++runtime->GpuCompletions.MissingTiming;
+  }
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
 }
 
@@ -3286,6 +3333,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
          !AdmissionGpuvaG3CompleteJob(adapter, Fence)))
       return APPLE_AGX_BACKEND_FALSE;
     AdmissionJobTimingMarkWindows(runtime, Fence, AdmissionJobPhaseJobEnd);
+    AdmissionGpuCompletionCaptureWindows(runtime, Fence, Status);
     AdmissionJobTimingFirmwareWindows(runtime, Fence);
   }
 #endif
@@ -3826,6 +3874,29 @@ static BOOLEAN AdmissionTdrDrillTake(ADMISSION_CONTEXT *Adapter,
 }
 #endif
 
+/* Version-2 bulk telemetry. The caller chooses only a cursor, never a PID. */
+static NTSTATUS AdmissionGpuCompletionEscape(
+    ADMISSION_CONTEXT *context, const DXGKARG_ESCAPE *args) {
+  ADMISSION_GPU_COMPLETION_QUERY query;
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  KIRQL oldIrql;
+  if (!context || !args || !args->pPrivateDriverData ||
+      args->PrivateDriverDataSize != sizeof(query)) return STATUS_INVALID_PARAMETER;
+  RtlCopyMemory(&query, args->pPrivateDriverData, sizeof(query));
+  if (query.Magic != ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC ||
+      query.Version != ADMISSION_GPU_COMPLETION_VERSION || query.Bytes != sizeof(query))
+    return STATUS_INVALID_PARAMETER;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)context->PlatformRuntime;
+  if (!runtime) return STATUS_DEVICE_NOT_READY;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  AdmissionGpuCompletionRead(&runtime->GpuCompletions,
+      (unsigned int)HandleToULong(PsGetCurrentProcessId()), &query);
+  query.Frequency = runtime->JobTiming.QpcFrequency;
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+  RtlCopyMemory(args->pPrivateDriverData, &query, sizeof(query));
+  return STATUS_SUCCESS;
+}
+
 /* GPU timestamps: the caller's completed job's firmware start/end. */
 _Use_decl_annotations_ NTSTATUS AdmissionPlatformGpuTimestampEscape(
     ADMISSION_CONTEXT *Context, const DXGKARG_ESCAPE *Args) {
@@ -3835,6 +3906,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformGpuTimestampEscape(
   LARGE_INTEGER frequency;
   KIRQL oldIrql;
   int found;
+  if (Args && Args->PrivateDriverDataSize == sizeof(ADMISSION_GPU_COMPLETION_QUERY))
+    return AdmissionGpuCompletionEscape(Context, Args);
   if (Context == NULL || Args == NULL || Args->pPrivateDriverData == NULL ||
       Args->PrivateDriverDataSize != sizeof(query))
     return STATUS_INVALID_PARAMETER;

@@ -128,4 +128,32 @@ typedef struct _ADMISSION_GPU_TIMESTAMP_QUERY {
   unsigned long long ComputeCommandVa, ComputeWords[4];
 } ADMISSION_GPU_TIMESTAMP_QUERY;
 
+/* RC35: bounded asynchronous telemetry, independent of application queries.
+ * QPC endpoints are submit and first KMD completion observation. Firmware
+ * values are raw stage ticks, not calibrated QPC. Status 0 means success.
+ * Loss counts adapter-wide overwritten records (not guessed per-process loss).
+ * Version 2 shares the APTS magic but never changes the version-1 query ABI. */
+#define ADMISSION_GPU_COMPLETION_VERSION 2u
+#define ADMISSION_GPU_COMPLETION_CAPACITY 256u
+#define ADMISSION_GPU_COMPLETION_PAGE 32u
+typedef struct _ADMISSION_GPU_COMPLETION {
+  unsigned long long Sequence, CommandVa, SubmitQpc, CompleteQpc;
+  unsigned long long Start, End, TaStart, TaEnd;
+  unsigned int Fence, ProcessId, Kind, Status;
+} ADMISSION_GPU_COMPLETION;
+typedef struct _ADMISSION_GPU_COMPLETION_RING {
+  unsigned long long Sequence, MissingTiming;
+  ADMISSION_GPU_COMPLETION Record[ADMISSION_GPU_COMPLETION_CAPACITY];
+} ADMISSION_GPU_COMPLETION_RING;
+typedef struct _ADMISSION_GPU_COMPLETION_QUERY {
+  unsigned int Magic, Version, Bytes, Count;
+  unsigned long long Cursor, Newest, Lost, Frequency, MissingTiming;
+  unsigned int Reset, Reserved;
+  ADMISSION_GPU_COMPLETION Record[ADMISSION_GPU_COMPLETION_PAGE];
+} ADMISSION_GPU_COMPLETION_QUERY;
+int AdmissionGpuCompletionRecord(ADMISSION_GPU_COMPLETION_RING *Ring,
+    const ADMISSION_GPU_COMPLETION *Record);
+void AdmissionGpuCompletionRead(const ADMISSION_GPU_COMPLETION_RING *Ring,
+    unsigned int ProcessId, ADMISSION_GPU_COMPLETION_QUERY *Query);
+
 #endif

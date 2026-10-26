@@ -109,7 +109,7 @@ struct AGX_D3D12_OWNER {
  pipe_context *Context; unsigned PendingDraws,PendingCopies,PendingDispatches;
  bool DrawFramebufferValid; unsigned TimedDraws,SlowDraws;
  LONGLONG TimeBind,TimeDrawVbo,TimeUnbind,TimeDrawVboIndirect,MaxDrawVbo;
- unsigned long long ReportedFence;
+ unsigned long long ReportedFence,CompletionCursor;
  void *Kernel,*RuntimeDevice;
  struct {unsigned RenderSyncObject;} Runtime;
 };
@@ -122,6 +122,7 @@ static unsigned long long newest=0x100000003ull;
 static LONGLONG qpc_now(){return 1;}
 static UINT qpc_us(LONGLONG x){return (UINT)x;}
 static void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
+template<class T> static void AdmissionUmdGpuCompletionDrain(T*,unsigned long long*){}
 static void receipt(const char*,HRESULT,UINT,UINT,UINT){}
 static unsigned long long AgxWin32AsahiContextNewestFence(pipe_context*){return newest;}
 static int AgxWin32AsahiContextFaulted(pipe_context*){return faulted;}

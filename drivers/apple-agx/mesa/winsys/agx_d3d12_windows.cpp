@@ -82,6 +82,7 @@ struct AGX_D3D12_OWNER {
   /* receipt-only (measure-d3d12-owner-fences): the newest submission fence
    * the previous submit reported */
   unsigned long long ReportedFence;
+  unsigned long long CompletionCursor;
   /* C47: the heap bindings the next draw or dispatch uses (AgxD3d12OwnerSetHeap)
    * and their constant buffer DXBC_HEAP_TABLE_CB (range table + sampler map) */
   AGX_D3D12_HEAP_BINDING PendingHeaps[AGX_D3D12_HEAP_STAGES];
@@ -402,6 +403,9 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
     owner->Context->flush(owner->Context, NULL, 0);
     if (!AgxWin32AsahiContextRetire(owner->Context, 5000u)) return HRESULT_FROM_WIN32(ERROR_BUSY);
     if (owner->PendingPresentations) (void)collect_presentations(owner);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    AdmissionUmdGpuCompletionDrain(&owner->Runtime, &owner->CompletionCursor);
+#endif
   }
   owner->Backend.Closing = 1;
   if (owner->UploadStaging) AgxWin32AsahiResourceRelease(&owner->UploadStaging);
@@ -4015,6 +4019,9 @@ static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
   owner->SlowDraws = 0;
   const HRESULT hr = retired && !faulted && !AgxWin32AsahiContextFaulted(owner->Context)
                          ? S_OK : owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  AdmissionUmdGpuCompletionDrain(&owner->Runtime, &owner->CompletionCursor);
+#endif
   AgxD3d12OwnerRecordError(owner, hr);
   receipt("measure-d3d12-owner-submit", hr, copies, static_cast<UINT>(retired), static_cast<UINT>(faulted));
   return hr;
