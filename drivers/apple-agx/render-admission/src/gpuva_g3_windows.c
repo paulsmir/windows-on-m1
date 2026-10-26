@@ -1389,11 +1389,14 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
   if (!state) return STATUS_INVALID_DEVICE_STATE;
   RtlCopyMemory(&q, args->pPrivateDriverData, sizeof(q));
   if (q.Magic != APPLE_AGX_G3_NATIVE_QUERY_MAGIC ||
-      q.Version != APPLE_AGX_G3_NATIVE_QUERY_VERSION || q.Bytes != sizeof(q) ||
+      ((q.Version != APPLE_AGX_G3_NATIVE_QUERY_VERSION || q.Reserved != 0u) &&
+       (q.Version != APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION ||
+        q.Reserved != APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY)) ||
+      q.Bytes != sizeof(q) ||
       !q.Allocation || !q.GpuVa || (q.GpuVa & 0xffffULL) ||
       q.GpuVa >= (1ULL << 39) || !q.AllocationBytes ||
       q.AllocationBytes > MAXULONG || q.AllocationBytes > (1ULL << 39) - q.GpuVa ||
-      q.Write > 1u || q.Ready || q.Reason || q.FailedVa || q.Reserved || q.Reserved2)
+      q.Write > 1u || q.Ready || q.Reason || q.FailedVa || q.Reserved2)
     return STATUS_INVALID_PARAMETER;
   lookup.hObject = q.Allocation;
   lookup.Type = DXGK_HANDLE_ALLOCATION;
@@ -1448,6 +1451,11 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
         (q.Write && !(pte->Flags & APPLE_AGX_GPUVA_G3_WRITE)) ||
         pte->Allocation != (ULONGLONG)(ULONG_PTR)allocation ||
         pte->AllocationOffset != page - q.GpuVa) goto Output;
+    if (q.Version == APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION &&
+        pte->SegmentId != ADMISSION_MEMORY_POOL_SEGMENT) {
+      q.Reason = APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL;
+      goto Output;
+    }
     q.Reason = APPLE_AGX_G3_NATIVE_QUERY_TRANSLATION;
     /* Native identity is committed only after publication acknowledgement.
      * Until an ordered shadow owner exists, the only admitted backing mode

@@ -43,6 +43,36 @@ class NativeAllocationGuard(unittest.TestCase):
         funcs = '\n'.join(body(text, n) for n in ('AdmissionG3CopyPte', 'AdmissionGpuvaG3NativeQueryEscape'))
         self.compile_run(KMD_FIXTURE.replace('@@FUNCS@@', funcs), graph=True)
 
+    def test_pool_map_query_requires_every_native_page_in_pool(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Native coverage alone admits aperture pages; a persistent direct pool map needs a full pool placement proof and must fail against an older KMD."""
+        fixture = KMD_FIXTURE.replace('#define PASSIVE_LEVEL 0', '#define PASSIVE_LEVEL 0\n#define ADMISSION_MEMORY_POOL_SEGMENT 3u')
+        point = ' CHECK(1); assert(sizeof(q)==64);'
+        cases = r'''
+ CHECK(1); assert(sizeof(q)==64);
+ q.Version=2;q.Reserved=1;
+ for(unsigned i=0;i<16;++i)ptes[((va>>12)&8191)+i].SegmentId=3;
+ CHECK(1);
+ unsigned interior=((va>>12)&8191)+7;
+ ptes[interior].SegmentId=1;CHECK(0);
+ assert(q.FailedVa==va+7*4096);
+ ptes[interior].SegmentId=3;CHECK(1);
+ q.AllocationBytes=16384;ptes[interior].SegmentId=1;CHECK(0);
+ assert(q.AllocationBytes==65536 && q.FailedVa==va+7*4096);
+ ptes[interior].SegmentId=3;CHECK(1);
+ q.Version=1;q.Reserved=0;ptes[interior].SegmentId=1;CHECK(1);
+ ptes[interior].SegmentId=3;
+ q.Ready=0;q.Reason=0;q.FailedVa=0;
+ q.Version=2;q.Reserved=0;
+ assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);
+ q.Reserved=2;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);
+ q.Version=3;q.Reserved=1;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);
+ q.Version=1;q.Reserved=1;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);
+ q.Reserved=0;q.Ready=0;q.Reason=0;q.FailedVa=0;
+'''
+        fixture = fixture.replace(point,cases)
+        funcs = '\n'.join(body(KMD.read_text(), n) for n in ('AdmissionG3CopyPte', 'AdmissionGpuvaG3NativeQueryEscape'))
+        self.compile_run(fixture.replace('@@FUNCS@@', funcs), graph=True)
+
     def test_umd_blocks_before_actual_submit_callback(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Residency alone currently lets a referenced omitted leaf reach the Windows submission callback."""
         text = UMD.read_text()
@@ -95,6 +125,7 @@ KMD_FIXTURE = r'''
 typedef unsigned UINT, ULONG; typedef unsigned long long ULONGLONG;
 typedef uintptr_t ULONG_PTR; typedef void *HANDLE; typedef int NTSTATUS;
 #define PASSIVE_LEVEL 0
+#define ADMISSION_MEMORY_POOL_SEGMENT 3u
 #define STATUS_SUCCESS 0
 #define STATUS_INVALID_PARAMETER -1
 #define STATUS_INVALID_HANDLE -2

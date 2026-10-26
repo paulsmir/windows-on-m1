@@ -24,12 +24,17 @@ typedef struct _APPLE_AGX_G3_COPY_REQUEST {
  * Separate magic and fixed 64-byte layout avoid the 64-KiB copy payload. */
 #define APPLE_AGX_G3_NATIVE_QUERY_MAGIC 0x4e565041u
 #define APPLE_AGX_G3_NATIVE_QUERY_VERSION 1u
+/* RC25: v2 requires the whole allocation in the native pool. Old KMDs
+ * reject this version rather than silently returning a weaker v1 proof. */
+#define APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION 2u
+#define APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY 1u
+#define APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL 0x102u
 #define APPLE_AGX_G3_NATIVE_QUERY_IDENTITY 0x100u
 #define APPLE_AGX_G3_NATIVE_QUERY_TRANSLATION 0x101u
 typedef struct _APPLE_AGX_G3_NATIVE_QUERY {
   APPLE_AGX_U32 Magic, Version, Bytes, Allocation;
   APPLE_AGX_U64 GpuVa, AllocationBytes;
-  APPLE_AGX_U32 Write, Ready, Reason, Reserved;
+  APPLE_AGX_U32 Write, Ready, Reason, Reserved; /* v2: POOL_ONLY input */
   APPLE_AGX_U64 FailedVa, Reserved2;
 } APPLE_AGX_G3_NATIVE_QUERY;
 
