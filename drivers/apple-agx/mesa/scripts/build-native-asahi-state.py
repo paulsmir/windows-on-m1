@@ -5258,7 +5258,8 @@ AgxD3d10ResourceWithinRequiredLimits(
          SetError(hDevice,E_INVALIDARG);return;
       }
       HRESULT result=AgxD3d10WindowsFlushStatus(device->windows);
-      if(SUCCEEDED(result)) result=AgxD3d10WindowsFlushRetire(device->windows);
+      /* The copy helper synchronizes the source writer and destination users.
+       * Unrelated batches need not complete before this CPU copy. */
       if(SUCCEEDED(result) && !AgxWin32AsahiBufferCopy(
            device->pipe,dst,0,src,0,src->width0)) result=E_FAIL;
       if(FAILED(result)) SetError(hDevice,result);
@@ -5357,7 +5358,7 @@ AgxD3d10ResourceWithinRequiredLimits(
           pSrcBox->bottom==1 && pSrcBox->back==1));
       if(!valid){SetError(hDevice,E_INVALIDARG);return;}
       HRESULT result=AgxD3d10WindowsFlushStatus(device->windows);
-      if(SUCCEEDED(result)) result=AgxD3d10WindowsFlushRetire(device->windows);
+      /* AgxWin32AsahiBufferCopy owns source/destination synchronization. */
       UINT bytes=right-left;
       if(SUCCEEDED(result) && bytes && !AgxWin32AsahiBufferCopy(
            device->pipe,dst,DstX,src,left,bytes)) result=E_FAIL;

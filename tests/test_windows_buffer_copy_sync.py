@@ -1,4 +1,6 @@
-"""EXP1312: the Windows CPU buffer copy waits for the GPU like a CPU transfer.
+"""WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+EXP1312: the Windows CPU buffer copy waits for the GPU like a CPU transfer.
 
 Invariant caught: AgxWin32AsahiBufferCopy (the D3D ResourceCopy path for
 buffers) memcpy'd from the source BO without syncing its GPU writer, and
@@ -32,7 +34,7 @@ struct util_range { unsigned start, end; };
 struct agx_bo { unsigned char cpu[64]; int pending; unsigned char gpu[64]; };
 struct agx_resource { struct pipe_resource base; struct agx_bo *bo; struct util_range valid_buffer_range;
                       unsigned data_valid[1]; };
-struct agx_context { struct pipe_context base; };
+struct agx_context { struct pipe_context base; int any_faults; };
 #define BITSET_SET(set, bit) ((set)[(bit) / 32] |= 1u << ((bit) % 32))
 static struct agx_resource *agx_resource(struct pipe_resource *p) { return (struct agx_resource *)p; }
 static struct agx_context *agx_context(struct pipe_context *p) { return (struct agx_context *)p; }
@@ -54,7 +56,7 @@ static void agx_sync_readers(struct agx_context *c, struct agx_resource *r, cons
 @@FUNCTION@@
 int main(void) {
   struct pipe_screen screen = {0};
-  struct agx_context ctx = {{&screen}};
+  struct agx_context ctx = {{&screen}, 0};
   struct agx_bo src_bo = {{0}, 0, {0}}, dst_bo = {{0}, 0, {0}};
   struct agx_resource src = {{&screen, PIPE_BUFFER, 16}, &src_bo, {0, 16}, {0}};
   struct agx_resource dst = {{&screen, PIPE_BUFFER, 16}, &dst_bo, {0, 0}, {0}};
@@ -62,9 +64,13 @@ int main(void) {
   memcpy(src_bo.cpu, &value, 4);      /* stale CPU copy */
   memcpy(src_bo.gpu, &counted, 4);    /* the compute copy's result */
   src_bo.pending = 1;
+  memset(dst_bo.gpu, 0x5a, sizeof(dst_bo.gpu));
+  dst_bo.pending = 1;
   assert(AgxWin32AsahiBufferCopy(&ctx.base, &dst.base, 0, &src.base, 0, 4));
   memcpy(&got, dst_bo.cpu, 4);
   assert(got == 86u);
+  /* The destination's preceding GPU write survives outside the copied range. */
+  assert(!src_bo.pending && !dst_bo.pending && dst_bo.cpu[4] == 0x5a);
   assert(synced_writers >= 1 && synced_readers >= 1);
   /* Its own preconditions are unchanged. */
   assert(!AgxWin32AsahiBufferCopy(&ctx.base, &src.base, 0, &src.base, 0, 4));
