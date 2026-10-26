@@ -64472,3 +64472,10 @@ EXP1979 HARDWARE BEFORE 2026-10-26T21:21:36Z:
 - Hashes: sys 388e8c5f47c5, UmdArm64 839550ccdb06, UmdX64 69651f51de2f, Umd32 a728585d1cff; manifest 52df8427d934, hardware-manifest 13a20b84208a; probe1979.sh 7c52f1dd0fc9 (PROBE_LINT_OK); visible recovery rec1979h 2a2a9211aa25e3af; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1979h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1979-native-staging/run1979.sh.
+
+EXP1979 HARDWARE ACTUAL 2026-10-26T21:45:43Z: FAIL. rc56 native staging was on by default.
+- Arm a (HD 50k): device removed at 4.17 s. Arm b (FHD 100k): device removed at 1.84 s. The guest stayed alive in both.
+- gm1979a-umd.log: reject-private-escape 0x80070057 (words 00000001 80070057 00000200 00000100 00002020 00000001 00000001), then reject-batch x2 and measure-d3d12-first-fault. A KMD escape on the rc56 path rejects with E_INVALIDARG.
+- Verdict: rc56 REJECTED as a default until fixed (rc58). APPLE_AGX_D3D12_NATIVE_STAGING=0 disables it; EXP1980 runs with it off.
+- Recovery rec1979h: RECOVERY_DONE.
+- Tooling note: Codex rc58 aborted. Every model (gpt-6-astra, gpt-6-sol, gpt-5.x) now returns "model not supported when using Codex with a ChatGPT account", so rc58 continues with a Claude subagent.
