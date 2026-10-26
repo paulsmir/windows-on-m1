@@ -64421,3 +64421,10 @@ EXP1977 HARDWARE BEFORE 2026-10-26T20:05:30Z:
 - Hashes: sys 993a6b1c7c7e, UmdArm64 21aeb67387e6, UmdX64 305e8155278f, Umd32 256274ab0343; manifest d73a9f4be4d1, hardware-manifest 5ff7e5517d53; probe1977.sh 07ebf7ffa495 (PROBE_LINT_OK); visible recovery rec1977h c67d8edbfbaf1345; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1977h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1977-pool-admission/run1977.sh.
+
+EXP1977 HARDWARE ACTUAL 2026-10-26T20:25:52Z: PASS. HD 1280x720, CPU_POOL_MAP=0, two consecutive GravityMark processes.
+- Arm a (100k): **1442 / 8.6 FPS** (macOS M1 HD 100k: about 9,950).
+- Arm b (200k): **1046 / 5.6 FPS** (macOS M1 HD 200k: about 6,500).
+- Both arms loaded and finished with WER 0 and the guest alive. This is the first run of the 200k scene, and the first time a second process in the same boot loaded.
+- rc53 verdict: VALIDATED (neutral-memory admission). rc51 idle reclaim was present.
+- Recovery rec1977h (running).
