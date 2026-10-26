@@ -64164,3 +64164,10 @@ EXP1966 HARDWARE BEFORE 2026-10-26T12:12:34Z:
 - Hashes: sys 4bb4433451eb, UmdArm64 be47e8e8da82, UmdX64 c5bf6f4dcae5, Umd32 f4562b8f2cfa; manifest 07b036d55e09, hardware-manifest 2bd5707ce03f; probe1966.sh bd04da5d5357 (PROBE_LINT_OK); visible recovery rec1966h 90fe1e703bd99bac; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1966h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1966-stream-statistics/run1966.sh.
+
+EXP1966 HARDWARE ACTUAL 2026-10-26T12:25:06Z:
+- FAIL: bugcheck 0x119 during the first arm (2k).
+- The rc36 GPU stream engaged: the only measure-d3d12-counted-path row is path=3, MaxCount 0x960, total 0x88108 us (557 ms), native encode 0x1f0e2 us (127 ms, first call, including pipeline setup), reason 0. The log ends right after that row (rec1966h/app-logs/gm1966a-umd.log:12862).
+- Bugcheck 0x119 VIDEO_SCHEDULER_INTERNAL_ERROR P1=1 (invalid fence ID) P2=0x161d P3=0x161e P4=ffffc808c8158000; minidump rec1966h/102626-18984-01.dmp. The KMD Wom1GpuFault receipt is present (rec1966h/kmd-receipts-pre-disable.txt) but not decoded yet.
+- Recovery rec1966h (AGX_RECOVERY_ALLOW_AT_PROXY=1): RECOVERY_DONE.
+- Disposition: the GPU-generated VDM stream is unsafe on hardware. Commit 6284f828 makes it opt-in (APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1); by default counted draws use the count-bounded native fallback (the rc31 behaviour, EXP1963 784/4.7). Next: EXP1967 = default path + rc35 GPU completion timing; root cause of the 0x119/stream fault goes to Codex rc38.
