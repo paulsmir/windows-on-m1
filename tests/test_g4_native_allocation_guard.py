@@ -330,6 +330,9 @@ static UINT InterlockedIncrement(UINT *p) {return ++*p;}
 static bool AdmissionUmdMeasureEnabled() {return false;}
 static void AdmissionUmdDiagnostic(const char *,HRESULT,const UINT *,size_t) {}
 static void AdmissionUmdScreenCpuAccessSnapshot(ADMISSION_UMD_DEVICE *,HRESULT,UINT) {}
+/* Readiness tests isolate the preceding allocation gate; RC57 exercises
+ * the real envelope preflight and scheduled callback independently. */
+static int g4_preflight(ADMISSION_UMD_DEVICE *,uint64_t,uint32_t,const void *,uint32_t) {return 1;}
 static int mark_written(ADMISSION_UMD_DEVICE *,const uint64_t*,unsigned) {return 1;}
 static int transfer_held(ADMISSION_UMD_DEVICE *,bool down) {assert(!down);++uploads;return !upload_fail;}
 static int signal_render(ADMISSION_UMD_DEVICE *,uint64_t) {++signals;return 1;}

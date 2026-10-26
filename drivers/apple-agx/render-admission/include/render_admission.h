@@ -950,6 +950,8 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *Adapter,
 NTSTATUS AdmissionGpuvaG3NativeStagingEscape(ADMISSION_CONTEXT *Adapter,
     const DXGKARG_ESCAPE *Args);
 #endif
+NTSTATUS AdmissionGpuvaG4PreflightEscape(ADMISSION_CONTEXT *Adapter,
+    const DXGKARG_ESCAPE *Args);
 NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *Adapter,
     const DXGKARG_ESCAPE *Args);
 void AdmissionGpuvaG3InvalidateAllocation(ADMISSION_CONTEXT *Adapter,

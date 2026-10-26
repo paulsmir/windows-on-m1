@@ -12,6 +12,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g3_copy_query_receipt.h"
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g4_preflight.h"
 #include "render_job_timing.h"
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 #include "render_qualification.h"
@@ -1999,6 +2000,46 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
   return ready;
 }
 
+/* A malformed AGX4 envelope is an application-device failure, not a
+ * scheduled DMA. Prove it through a fallible escape after residency/upload;
+ * keep the ordinary submit/BeginJob validation for changes after this check. */
+static int g4_preflight(ADMISSION_UMD_DEVICE *device, uint64_t va,
+    uint32_t bytes, const void *private_data, uint32_t private_bytes) {
+  if (!private_data || !private_bytes ||
+      private_bytes > APPLE_AGX_G4_PREFLIGHT_PRIVATE_MAX ||
+      !device->KernelCallbacks->pfnEscapeCb) {
+    device->GpuvaFailure = E_FAIL;
+    return 0;
+  }
+  auto *q = (APPLE_AGX_G4_PREFLIGHT *)HeapAlloc(GetProcessHeap(),
+      HEAP_ZERO_MEMORY, sizeof(APPLE_AGX_G4_PREFLIGHT));
+  if (!q) { device->GpuvaFailure = E_OUTOFMEMORY; return 0; }
+  q->Magic = APPLE_AGX_G4_PREFLIGHT_MAGIC;
+  q->Version = APPLE_AGX_G4_PREFLIGHT_VERSION;
+  q->Bytes = sizeof(*q);
+  q->CommandVa = va; q->CommandBytes = bytes; q->PrivateBytes = private_bytes;
+  memcpy(q->Private, private_data, private_bytes);
+  D3DDDICB_ESCAPE request = {};
+  request.hDevice = device->RuntimeDevice.handle;
+  request.hContext = device->KernelContext;
+  request.pPrivateDriverData = q;
+  request.PrivateDriverDataSize = sizeof(*q);
+  HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle, &request);
+  const int ready = SUCCEEDED(hr) && q->Ready == 1u && q->Status == 0u &&
+      q->ParseResult == AppleAgxG4ParseOk;
+  if (!ready) {
+    device->GpuvaFailure = FAILED(hr) ? hr : E_FAIL;
+    UINT values[] = {q->Status, q->ParseResult, q->Failure.Subsite,
+        q->Failure.Kind, q->Failure.Ordinal, (UINT)q->Failure.Va,
+        (UINT)(q->Failure.Va >> 32), q->Failure.Bytes, q->Failure.Write};
+    AdmissionUmdDiagnostic("reject-native-envelope", device->GpuvaFailure,
+        values, ARRAYSIZE(values));
+  }
+  HeapFree(GetProcessHeap(), 0, q);
+  return ready;
+}
+
 /* Every GPU-written slot of a submission (mark_written); only the direct
  * displayable ones become WrittenPrimaries, which D3DDDI_MAX_WRITTEN_PRIMARIES
  * bounds below. Matches the winsys AGX_G4_WRITTEN_LIMIT (EXP1851). */
@@ -2074,6 +2115,8 @@ static int submit(void *context, const uint64_t *written,
     return device->DrawTerminal ? 2 : 0;
   }
   if (!native_held_ready(device, va)) return device->DrawTerminal ? 2 : 0;
+  /* Return 0, never the accepted/uncertain result 2: no DMA was scheduled. */
+  if (!g4_preflight(device, va, bytes, private_data, private_bytes)) return 0;
   request.Commands = va;
   request.CommandLength = bytes;
   request.BroadcastContextCount = 1;

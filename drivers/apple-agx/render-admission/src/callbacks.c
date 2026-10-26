@@ -1,3 +1,4 @@
+#include "apple_agx_g4_preflight.h"
 #include "render_admission.h"
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_gpuva_g3_caps.h"
@@ -331,6 +332,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
 #endif
     if (private_magic == 0x33565041u)
       return AdmissionGpuvaG3PrivateEscape((ADMISSION_CONTEXT *)Adapter, Args);
+    if (private_magic == APPLE_AGX_G4_PREFLIGHT_MAGIC)
+      return AdmissionGpuvaG4PreflightEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == APPLE_AGX_G3_NATIVE_QUERY_MAGIC)
       return AdmissionGpuvaG3NativeQueryEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC)

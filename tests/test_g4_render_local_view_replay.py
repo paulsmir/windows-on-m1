@@ -15,6 +15,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           'AdmissionG4FindPrivateScene','AdmissionG4FindPrivateResubmission','AdmissionG4ResubmissionRefusal',
           'AdmissionG4PrivateGraphAccess','AdmissionG4PrivateGeometry','AdmissionG4PrivateUnqueue',
           'AdmissionG4SnapshotFailure','AdmissionG4OutputInLocal','AdmissionG4ResolveOutput',
+          'AdmissionG4PreflightLocked','AdmissionGpuvaG4PreflightEscape',
           'AdmissionGpuvaG3PrivatePreempt','AdmissionGpuvaG3PrivateCancel','AdmissionG4PendingAdmissible',
           'AdmissionG4PendingQueue','AdmissionG4PendingBindHead','AdmissionG4PendingDropLocked',
           'AdmissionG4SubmitComputeLocked','AdmissionG4SubmitVirtualEnvelope',

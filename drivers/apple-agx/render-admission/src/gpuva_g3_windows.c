@@ -2,6 +2,7 @@
 #include <intrin.h> /* _ReturnAddress (cancel-caller receipt) */
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g4_preflight.h"
 #include "apple_agx_g13_compute_work.h"
 #include "apple_agx_present_job.h"
 
@@ -5016,6 +5017,112 @@ Rollback:
   AdmissionG4PrivateUnqueue(process,private_scene,args->SubmissionFenceId);
   return AdmissionG4SubmitReject(adapter, context, args,
       rollbackBranch, STATUS_INVALID_PARAMETER, 0u, TRUE);
+}
+
+/* Caller holds the process graph mutex. Validate immutable submission
+ * inputs without reserving a scheduler/private-fence slot or binding an image.
+ * Context root installation and slot availability belong to scheduled submit. */
+static NTSTATUS AdmissionG4PreflightLocked(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_PROCESS *process, ADMISSION_RENDER_CONTEXT *context,
+    APPLE_AGX_G4_PREFLIGHT *q) {
+  APPLE_AGX_G4_PRIVATE_HEADER header;
+  APPLE_AGX_G4_PRIVATE_HEADER_V3 v3;
+  APPLE_AGX_G4_SUBMIT_VIEW view;
+  APPLE_AGX_G4_COMPUTE_VIEW compute;
+  ADMISSION_G3_PRIVATE_SCENE *scene = NULL;
+  ADMISSION_SCANOUT_MEMORY_VIEW local;
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_G4_ATTACHMENT color;
+  NTSTATUS status;
+  if (q->PrivateBytes < sizeof(header)) return STATUS_INVALID_PARAMETER;
+  RtlCopyMemory(&header, q->Private, sizeof(header));
+  if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE) {
+    q->ParseResult = AppleAgxG4ParseComputeEx(q->Private, q->PrivateBytes,
+        q->PrivateBytes, q->CommandVa, q->CommandBytes,
+        APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES, AdmissionG4GraphAccessTyped,
+        process, &compute, &q->Failure);
+    return q->ParseResult == AppleAgxG4ParseOk ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+  }
+  if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA ||
+      header.Version == APPLE_AGX_G4_PRIVATE_VERSION_RENDER_COMPUTE) {
+    if (q->PrivateBytes < sizeof(v3)) return STATUS_INVALID_PARAMETER;
+    RtlCopyMemory(&v3, q->Private, sizeof(v3));
+    if (!v3.Lease.ManagerId || v3.Lease.ManagerId != process->Graph.ProcessId ||
+        v3.Lease.ManagerGeneration != process->PrivateManager.Generation ||
+        v3.Lease.ManagerGeneration != context->GpuvaG3PrivateManagerGeneration)
+      return STATUS_INVALID_PARAMETER;
+    for (scene = process->PrivateScenes; scene; scene = scene->Next)
+      if (scene->Storage.Generation == v3.Lease.SceneId) break;
+    if (!scene || scene->Context != context ||
+        scene->Storage.Generation != v3.Lease.SceneGeneration ||
+        scene->ReleaseRequested || scene->Quarantined || scene->Queued ||
+        scene->Submitting || scene->Started) return STATUS_INVALID_PARAMETER;
+  }
+  q->ParseResult = AppleAgxG4ParseSubmitComputeEx(q->Private, q->PrivateBytes,
+      q->PrivateBytes, q->CommandVa, q->CommandBytes,
+      APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+      scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
+      scene ? (void *)scene : (void *)process, &view, &q->Failure);
+  if (q->ParseResult != AppleAgxG4ParseOk) return STATUS_INVALID_PARAMETER;
+  if ((scene && !AdmissionG4PrivateGeometry(scene, &view)) ||
+      !view.AttachmentCount || view.AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS)
+    return STATUS_INVALID_PARAMETER;
+  status = AdmissionMemoryRuntimeLocalView(adapter, &local);
+  if (!NT_SUCCESS(status)) return status;
+  RtlZeroMemory(&packet, sizeof(packet));
+  RtlCopyMemory(&color, view.Attachments, sizeof(color));
+  if (!AdmissionG4ResolveOutput(process, &color, &local, &packet)) {
+    q->Failure.Subsite = AppleAgxG4FailureOutput;
+    q->Failure.Kind = AppleAgxG4AccessAttachment;
+    q->Failure.Va = color.Pointer; q->Failure.Bytes = (ULONG)color.Size;
+    q->Failure.Write = 1u;
+    return STATUS_INVALID_PARAMETER;
+  }
+  return STATUS_SUCCESS;
+}
+
+NTSTATUS AdmissionGpuvaG4PreflightEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  APPLE_AGX_G4_PREFLIGHT q;
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_DEVICE *device;
+  if (!adapter || !adapter->Started || !args ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL || args->Flags.Value ||
+      !args->pPrivateDriverData || args->PrivateDriverDataSize != sizeof(q))
+    return STATUS_INVALID_PARAMETER;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (!state) return STATUS_INVALID_DEVICE_STATE;
+  RtlCopyMemory(&q, args->pPrivateDriverData, sizeof(q));
+  if (q.Magic != APPLE_AGX_G4_PREFLIGHT_MAGIC ||
+      q.Version != APPLE_AGX_G4_PREFLIGHT_VERSION || q.Bytes != sizeof(q) ||
+      !q.PrivateBytes || q.PrivateBytes > sizeof(q.Private) ||
+      q.Ready || q.Status || q.ParseResult || q.Failure.Subsite ||
+      q.Failure.Kind || q.Failure.Ordinal || q.Failure.Va ||
+      q.Failure.Bytes || q.Failure.Write) return STATUS_INVALID_PARAMETER;
+  q.Status = (ULONG)STATUS_INVALID_DEVICE_STATE;
+  ExAcquireFastMutex(&state->Lock);
+  process = AdmissionGpuvaG3FindProcess(state, args->hKmdProcessHandle);
+  if (!process || process->Poisoned || process->CpuOnlyMappings ||
+      !process->Graph.Created || process->Graph.Uncertain ||
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0)) goto Output;
+  for (context = process->Contexts; context && (HANDLE)context != args->hContext;
+       context = context->GpuvaG3NextContext) {}
+  if (!context || !context->Win32Transport || context->GpuvaG3Closing ||
+      context->GpuvaG3Poisoned || !context->Object.Device ||
+      !(context->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) ||
+      (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM | ADMISSION_CONTEXT_GDI))) goto Output;
+  device = CONTAINING_RECORD(context->Object.Device, ADMISSION_DEVICE, Object);
+  if ((HANDLE)device != args->hDevice ||
+      device->Object.Adapter != &adapter->ObjectAdapter) goto Output;
+  /* R147: SetRoot is only guaranteed before scheduled execution. */
+  q.Status = (ULONG)AdmissionG4PreflightLocked(adapter, process, context, &q);
+  q.Ready = q.Status == (ULONG)STATUS_SUCCESS;
+Output:
+  ExReleaseFastMutex(&state->Lock);
+  RtlCopyMemory(args->pPrivateDriverData, &q, sizeof(q));
+  return STATUS_SUCCESS;
 }
 
 /* EXP1003: residency touch, completed by the CPU queue in fence order. */

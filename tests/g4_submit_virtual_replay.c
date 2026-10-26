@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g4_preflight.h"
+#include <stddef.h>
 #include "apple_agx_scheduler.h"
 #include "apple_agx_g3_private_storage.h"
 #include "apple_agx_render_manager.h"
@@ -88,6 +90,7 @@ typedef struct _ADMISSION_G3_ALLOC_TRACK {
 } ADMISSION_G3_ALLOC_TRACK;
 
 typedef struct _ADMISSION_G3_STATE {
+  struct _ADMISSION_G3_PROCESS *Process;
   ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT];
   int Lock;
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
@@ -111,6 +114,7 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
 #define ADMISSION_G3_PRIVATE_SCENE_CACHE 8u
 
 typedef struct _ADMISSION_G3_PROCESS {
+  ADMISSION_RENDER_CONTEXT *Contexts;
   ULONGLONG PrivateVa;
   APPLE_AGX_G3_PRIVATE_EXTENT PresentArena;
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
@@ -131,6 +135,8 @@ typedef struct _ADMISSION_G3_PROCESS {
       (Process)->PoisonSite = ((unsigned)(File) << 16) | (unsigned)__LINE__; \
   } while (0)
 typedef struct { void *Adapter; } REPLAY_DEVICE;
+typedef struct { REPLAY_DEVICE Object; } ADMISSION_DEVICE;
+#define CONTAINING_RECORD(p,t,f) ((t*)((char*)(p)-offsetof(t,f)))
 typedef struct {
   unsigned Flags, Magic;
   REPLAY_DEVICE *Device;
@@ -227,6 +233,7 @@ typedef struct {
   ADMISSION_BACKEND_IMAGE BackendImage;
 } ADMISSION_CONTEXT;
 struct _ADMISSION_RENDER_CONTEXT {
+  ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext;
   volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain, GpuvaG3PreemptFence; BOOLEAN GpuvaG3Closing;
   volatile LONG GpuvaG3PrivateFence2,GpuvaG3CancelFence2,GpuvaG3PreemptFence2;
   volatile LONG GpuvaG3CancelCaller, GpuvaG3CancelCaller2;
@@ -474,7 +481,7 @@ static int AppleAgxGpuvaG3GraphContainsRangeAccess(
   if (va == 0x20000 && !write && v5_dma_bytes && bytes == v5_dma_bytes) return 1;
   if (va == 0x30000 && !write && bytes == 1) return 1;
   /* G2 compute: CDM stream, writable 64 KiB context-store buffer. */
-  if (va == 0x50000 && !write && bytes == 0x40u) return 1;
+  if (va == 0x50000 && !write && bytes && bytes <= 0x10000u) return 1;
   if (va == 0x60000 && write && bytes == 0x10000u) return compute_preempt_mapped;
   /* The parser probes the attachment's first byte; the whole output range
    * is writable only while the output is mapped (M2-c VA-only outputs). */
@@ -490,6 +497,11 @@ static int AppleAgxGpuvaG3GraphContainsRangeAccess(
   return 0;
 }
 
+typedef struct { HANDLE hDevice,hContext,hKmdProcessHandle; REPLAY_FLAGS Flags;
+ void *pPrivateDriverData; UINT PrivateDriverDataSize; } DXGKARG_ESCAPE;
+static ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(ADMISSION_G3_STATE *s,HANDLE h) {
+ assert(s->Lock);return h==s->Process ? s->Process : NULL;
+}
 static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {(void)p;return TRUE;}
 /* The Python driver inserts the unmodified production KMD functions here. */
 /* R162 upload re-hash is evidence-only and compiled out in production. */
@@ -767,6 +779,61 @@ static void render_compute_cases(ADMISSION_CONTEXT *adapter,
   args.DmaBufferSize = command_bytes;
   args.SubmissionFenceId = 23u;
   v5_dma_bytes = command_bytes;
+  /* RC57: the same production parser runs before any scheduler ownership.
+   * MaxCount changes output BO extents, never this fixed metadata envelope.
+   * Multiple generators increase CDM bytes; queries use normal BO addresses.
+   * Keep the actual 60000-record EXP1978 shape alongside requested 2400/12000. */
+  {
+    static const unsigned maxima[] = {2400u, 12000u, 60000u};
+    APPLE_AGX_G4_PREFLIGHT q;
+    DXGKARG_ESCAPE e = {0};
+    e.hContext=context; e.hDevice=context->Object.Device;
+    e.hKmdProcessHandle=context->GpuvaG3Process;
+    e.pPrivateDriverData=&q; e.PrivateDriverDataSize=sizeof(q);
+    int before_dispatch=dispatches;
+    ULONGLONG saved_root=context->GpuvaG3RootIpa;
+    context->GpuvaG3RootIpa=0; /* R147: before SetRoot is legal. */
+    #define PREFLIGHT_INIT() do { memset(&q,0,sizeof(q)); q.Magic=APPLE_AGX_G4_PREFLIGHT_MAGIC; \
+      q.Version=APPLE_AGX_G4_PREFLIGHT_VERSION;q.Bytes=sizeof(q);q.CommandVa=dma_va; \
+      q.CommandBytes=command_bytes;q.PrivateBytes=sizeof(v5);memcpy(q.Private,&v5,sizeof(v5)); } while(0)
+    for(unsigned m=0;m<3;++m) for(unsigned calls=1;calls<=7;calls+=6)
+      for(unsigned counted=0;counted<2;++counted) {
+        v5.Compute.CdmCtrlStreamEnd=0x50000ULL+64u*calls;
+        PREFLIGHT_INIT();
+        assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_SUCCESS && q.Ready);
+        assert(!q.Status && q.ParseResult==AppleAgxG4ParseOk);
+        printf("RC57 envelope max=%u calls=%u counted=%u: PASS\n",maxima[m],calls,counted);
+      }
+    v5.Compute.CdmCtrlStreamEnd=0x50040ULL;
+    PREFLIGHT_INIT(); context->GpuvaG3PrivateFence=81;context->GpuvaG3PrivateFence2=82;
+    assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_SUCCESS && q.Ready);
+    context->GpuvaG3PrivateFence=context->GpuvaG3PrivateFence2=0;
+    PREFLIGHT_INIT(); ((APPLE_AGX_G4_PRIVATE_HEADER_V5 *)q.Private)->V3.Lease.SceneGeneration++;
+    assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_SUCCESS && !q.Ready);
+    PREFLIGHT_INIT(); compute_preempt_mapped=0;
+    assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_SUCCESS && !q.Ready);
+    assert(q.ParseResult==AppleAgxG4ParseUnmapped && q.Failure.Kind==AppleAgxG4AccessComputePreemption);
+    compute_preempt_mapped=1;
+    PREFLIGHT_INIT(); ((APPLE_AGX_G4_NATIVE_COMPUTE *)(q.Private+sizeof(v5.Header)+sizeof(v5.ComputeCommand)))->Flags=1;
+    assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_SUCCESS && !q.Ready);
+    assert(q.ParseResult==AppleAgxG4ParseInvalid);
+    PREFLIGHT_INIT(); q.PrivateBytes=sizeof(q.Private)+1;
+    assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_INVALID_PARAMETER);
+    PREFLIGHT_INIT(); e.hContext=NULL;
+    assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_SUCCESS && !q.Ready);e.hContext=context;
+    PREFLIGHT_INIT(); e.hDevice=NULL;
+    assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_SUCCESS && !q.Ready);e.hDevice=context->Object.Device;
+    PREFLIGHT_INIT(); e.hKmdProcessHandle=NULL;
+    assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_SUCCESS && !q.Ready);e.hKmdProcessHandle=context->GpuvaG3Process;
+    PREFLIGHT_INIT(); adapter->SchedulerFaulted=1;
+    assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_SUCCESS && !q.Ready);adapter->SchedulerFaulted=0;
+    PREFLIGHT_INIT(); ++scene->Geometry.WidthPx;
+    assert(AdmissionGpuvaG4PreflightEscape(adapter,&e)==STATUS_SUCCESS && !q.Ready);--scene->Geometry.WidthPx;
+    assert(dispatches==before_dispatch && !scene->Queued && !scene->Submitting && !scene->Fence &&
+           !context->Object.FenceOutstanding && !adapter->Scheduler.QueueCount);
+    context->GpuvaG3RootIpa=saved_root;
+    #undef PREFLIGHT_INIT
+  }
   /* A render that does not wait on the compute fails before any owner. */
   memcpy(v5.Native + sizeof(render.AttachCommand) + sizeof(render.Attachment),
          &packet->Command, sizeof(packet->Command));
@@ -832,6 +899,16 @@ static void compute_cases(ADMISSION_CONTEXT *adapter, ADMISSION_G3_STATE *state,
   args.DmaBufferVirtualAddress = 0x20000ULL;
   args.DmaBufferSize = sizeof(e.Native) + sizeof(e.Compute);
   args.SubmissionFenceId = 40u;
+  {
+    APPLE_AGX_G4_PREFLIGHT q={0};
+    q.CommandVa=args.DmaBufferVirtualAddress;q.CommandBytes=args.DmaBufferSize;
+    q.PrivateBytes=sizeof(e);memcpy(q.Private,&e,sizeof(e));
+    assert(AdmissionG4PreflightLocked(adapter,context->GpuvaG3Process,context,&q)==STATUS_SUCCESS);
+    assert(q.ParseResult==AppleAgxG4ParseOk && dispatches==dispatch_before);
+    ((APPLE_AGX_G4_COMPUTE_ENVELOPE *)q.Private)->Compute.CdmCtrlStreamEnd=0;
+    assert(AdmissionG4PreflightLocked(adapter,context->GpuvaG3Process,context,&q)==STATUS_INVALID_PARAMETER);
+    assert(q.ParseResult==AppleAgxG4ParseInvalid && dispatches==dispatch_before);
+  }
   assert(AdmissionG4SubmitVirtualEnvelope(adapter, context, &args) == STATUS_SUCCESS);
   assert(adapter->RenderPacket.State == AdmissionRenderPacketQueued &&
          d->Kind == ADMISSION_RENDER_PACKET_KIND_COMPUTE && d->Fence == 40u &&
@@ -918,7 +995,7 @@ int main(void) {
   static APPLE_AGX_GPUVA_G3_LOGICAL_PTE logical[8192];
   unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
   AppleAgxSchedulerInitialize(&adapter.Scheduler);
-  process.State = &state;
+  process.State = &state; state.Process = &process; process.Contexts = &context;
   process.OsProcessId = 4321u;
   process.PrivateVa = 1ULL << 36;
   process.Graph.RootIpa = 0x9bf000000ULL;
