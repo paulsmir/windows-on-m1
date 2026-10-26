@@ -7,6 +7,7 @@
 
 static KDEFERRED_ROUTINE AdmissionScanoutTimerDpc;
 static KSYNCHRONIZE_ROUTINE AdmissionScanoutVsyncControl;
+static ULONGLONG AdmissionScanoutTime100ns(void);
 
 typedef struct _ADMISSION_SCANOUT_RUNTIME {
   ADMISSION_CONTEXT *Adapter;
@@ -18,6 +19,7 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   volatile LONG Faulted;
   volatile LONG64 PendingPhysicalAddress;
   volatile LONG64 PendingSequence;
+  volatile LONG64 PendingQueuedTime100ns;
   volatile LONG64 DeferredPrimaryAddress;
   /* MPO3 flip identity: tagged before the queue, carried with the pending
    * flip, and reported as CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 on latch. */
@@ -188,6 +190,8 @@ static NTSTATUS AdmissionScanoutQualifyVisible(
     status = STATUS_DEVICE_BUSY;
     goto Exit;
   }
+  InterlockedExchange64(&Runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
   panel_result = AppleAgxFixedPanelQueuePresent(
       &Runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, 0ULL, &sequence);
   if (panel_result != AppleAgxFixedPanelOk) {
@@ -399,6 +403,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     status = STATUS_DEVICE_BUSY;
     goto Exit;
   }
+  InterlockedExchange64(&runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
   panel_result = AppleAgxFixedPanelQueuePresent(
       &runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, destinationOffset,
       &sequence);
@@ -774,6 +780,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutRetireQualification(
     (void)AdmissionDisplayOutputLeaseRetire(&temporary);
     return STATUS_DEVICE_BUSY;
   }
+  InterlockedExchange64(&runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
   result = AppleAgxFixedPanelQueuePresent(
       &runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, 0ULL, &sequence);
   if (result != AppleAgxFixedPanelOk) {
@@ -955,6 +963,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueueDeferred(
   }
   address = InterlockedExchange64(&runtime->DeferredPrimaryAddress, 0);
   InterlockedExchange64(&runtime->PendingPhysicalAddress, address);
+  InterlockedExchange64(&runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
   result = AppleAgxFixedPanelQueuePresent(
       &runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, offset, &sequence);
   if (result != AppleAgxFixedPanelOk) {
@@ -1087,6 +1097,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   InterlockedExchange64(
       &runtime->PendingPhysicalAddress,
       Args->PrimaryAddress.QuadPart);
+  InterlockedExchange64(&runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
   result = AppleAgxFixedPanelQueuePresent(
       &runtime->Panel, Args->PrimarySegment, surface_offset, &sequence);
   if (result != AppleAgxFixedPanelOk) {
@@ -1156,7 +1168,11 @@ static VOID AdmissionScanoutVsyncRecord(ADMISSION_SCANOUT_RUNTIME *Runtime,
   e = &q->Events[n < 32ULL ? (ULONG)n : 32u + (ULONG)((n - 32ULL) % 32ULL)];
   RtlZeroMemory(e, sizeof(*e));
   e->Sequence = n + 1ULL;
-  e->Time100ns = AdmissionScanoutTime100ns();
+  /* Kind 8 is emitted retrospectively at the matched latch, so all ring
+   * writes remain serialized at DIRQL. Its timestamp is queue entry, not
+   * event insertion time; PendingSequence/Address identify the same flip. */
+  e->Time100ns = Kind == 8u ? (ULONGLONG)InterlockedCompareExchange64(
+      &Runtime->PendingQueuedTime100ns, 0, 0) : AdmissionScanoutTime100ns();
   e->Period = Runtime->Timeline.LastPeriod;
   e->PendingSequence = (ULONGLONG)InterlockedCompareExchange64(
       &Runtime->PendingSequence, 0, 0);
@@ -1220,7 +1236,11 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
         mpo_flip = InterlockedExchange(&runtime->PendingMpo, 0) != 0;
         mpo_present_id = (ULONGLONG)InterlockedExchange64(
             &runtime->PendingMpoPresentId, 0);
+        if (InterlockedCompareExchange64(
+                &runtime->PendingQueuedTime100ns, 0, 0) != 0)
+          AdmissionScanoutVsyncRecord(runtime, 8u, STATUS_SUCCESS);
         AdmissionScanoutVsyncRecord(runtime, 3u, STATUS_SUCCESS);
+        InterlockedExchange64(&runtime->PendingQueuedTime100ns, 0);
         InterlockedExchange64(&runtime->LastNotifiedSequence,
                               (LONG64)latched_sequence);
         InterlockedExchange(&runtime->PendingValid, 0);
