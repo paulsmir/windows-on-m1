@@ -1087,7 +1087,11 @@ static int texture_clear_copy(ID3D12Device *device, ID3D12CommandQueue *queue, I
  * DrawIndexedInstanced; PASS = centre yellow, 960..1088 pixels. */
 static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int mode) {
     /* EXP1369: the indexed mode must build the C6b (empty) root signature */
-    const int indexed = mode == 2;
+    /* RC38: bounded zero/one GPU stream, then an ordinary draw using the
+     * same state. Named opt-in steps only; not part of the default suite. */
+    const int stream_probe = mode >= 14 && mode <= 16;
+    const int stream_zero = mode == 14;
+    const int indexed = mode == 2 || mode == 16;
     const int redundant_root = mode == 8;
     /* C30 (EXP1825 HelloBundles/Bundles): mode 9 is mode 1 with the draw in
      * a bundle -- the bundle sets the same root signature, the PSO, topology
@@ -1118,7 +1122,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     /* C14 (D3D12-C14-execute-indirect.md): mode 5 is mode 4 drawn through
      * ExecuteIndirect -- two identical draw records, a count buffer of 1;
      * the counter shows whether the count limits the draws */
-    const int indirect = mode == 5 || mode == 6;
+    const int indirect = mode == 5 || mode == 6 || stream_probe;
     const int indirect_no_count = mode == 6;
     const int spaced = mode == 7;
     const int counted = mode == 4 || indirect || spaced;
@@ -1139,7 +1143,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {rooted ? 2u : counted ? 1u : 0u, rooted ? parameters : counted ? &uav_parameter : NULL, 0, NULL,
                                            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
-    const char *step = viewed ? "C50A" : dxil ? "C44B" : msaa ? "C32A" : expanded ? "C31A" : bundled ? "C30A" : redundant_root ? "ROOTG" : spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
+    const char *step = stream_probe ? (stream_zero ? "RC38Z" : indexed ? "RC38I" : "RC38N") : viewed ? "C50A" : dxil ? "C44B" : msaa ? "C32A" : expanded ? "C31A" : bundled ? "C30A" : redundant_root ? "ROOTG" : spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
     const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted ? 0 : 255),
                                    (unsigned char)(rooted ? 255 : 0)};
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
@@ -1155,7 +1159,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0};
     unsigned char *bytes = NULL;
     unsigned green = 0, red = 0, other = 4096;
-    int centre_ok = 0, corner_ok = 0;
+    int centre_ok = 0, corner_ok = 0, stream_counter_ok = 0;
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     desc.Width = 64;
     desc.Height = 64;
@@ -1194,6 +1198,14 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             const UINT records[8] = {3, 1, 0, 0, 3, 1, 0, 0}, one = 1;
             memcpy(bytes + 2048, records, sizeof(records));
             memcpy(bytes + 2080, &one, sizeof(one));
+            if (stream_probe) {
+                const UINT indexed_records[10] = {6, 1, 0, 0, 0, 6, 1, 0, 0, 0};
+                const UINT count = stream_zero ? 0u : 1u;
+                if (indexed) memcpy(bytes + 2048, indexed_records, sizeof(indexed_records));
+                /* Outside both 20-byte indexed records. */
+                memcpy(bytes + 2112, &count, sizeof(count));
+                printf("%s MaxCount=2 count=%u indexed=%d ordinary-followup=1\n", step, count, indexed);
+            }
         }
         if (expanded) {
             const D3D12_GPU_VIRTUAL_ADDRESS cbv = ID3D12Resource_GetGPUVirtualAddress(vertices) + 256;
@@ -1345,16 +1357,25 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         if (indexed) {
             D3D12_INDEX_BUFFER_VIEW ibv = {ID3D12Resource_GetGPUVirtualAddress(vertices) + 512, 12, DXGI_FORMAT_R16_UINT};
             ID3D12GraphicsCommandList_IASetIndexBuffer(list, &ibv);
-            ID3D12GraphicsCommandList_DrawIndexedInstanced(list, 6, 1, 0, 0, 0);
-        } else if (indirect) {
-            D3D12_INDIRECT_ARGUMENT_DESC arg = {D3D12_INDIRECT_ARGUMENT_TYPE_DRAW};
-            D3D12_COMMAND_SIGNATURE_DESC sd = {16, 1, &arg, 0};
+            if (!indirect) ID3D12GraphicsCommandList_DrawIndexedInstanced(list, 6, 1, 0, 0, 0);
+        }
+        if (indirect) {
+            D3D12_INDIRECT_ARGUMENT_DESC arg = {indexed ? D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED : D3D12_INDIRECT_ARGUMENT_TYPE_DRAW};
+            D3D12_COMMAND_SIGNATURE_DESC sd = {indexed ? 20u : 16u, 1, &arg, 0};
             HRESULT sh = ID3D12Device_CreateCommandSignature(device, &sd, NULL, &IID_ID3D12CommandSignature, (void **)&signature);
             printf("%s CreateCommandSignature hr=0x%08lx\n", step, (unsigned long)sh);
-            if (SUCCEEDED(sh))
+            if (SUCCEEDED(sh)) {
                 ID3D12GraphicsCommandList_ExecuteIndirect(list, signature, indirect_no_count ? 1 : 2,
                                                            vertices, 2048, indirect_no_count ? NULL : vertices,
-                                                           indirect_no_count ? 0 : 2080);
+                                                           indirect_no_count ? 0 : stream_probe ? 2112 : 2080);
+                if (stream_probe) {
+                    /* No VS rebind: require the continuation to reach this draw. */
+                    if (indexed) ID3D12GraphicsCommandList_DrawIndexedInstanced(list, 6, 1, 0, 0, 0);
+                    else ID3D12GraphicsCommandList_DrawInstanced(list, 3, 1, 0, 0);
+                }
+            } else if (stream_probe) {
+                hr = sh;
+            }
         } else if (expanded) {
             D3D12_INDIRECT_ARGUMENT_DESC args[3] = {{D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT},
                                                     {D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW},
@@ -1382,7 +1403,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             }
             printf("C30A bundle hr=0x%08lx\n", (unsigned long)bh);
             if (SUCCEEDED(bh)) ID3D12GraphicsCommandList_ExecuteBundle(list, bundle);
-        } else {
+        } else if (!indexed) {
             ID3D12GraphicsCommandList_DrawInstanced(list, 3, 1, 0, 0);
         }
         if (counted && counter && counter_back) {
@@ -1471,10 +1492,11 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         int counted_ok = 0;
         if (SUCCEEDED(hr) && counter_back && SUCCEEDED(ID3D12Resource_Map(counter_back, 0, &all, (void **)&c)) && c) {
             printf("C13 counter=%u drawn=%u\n", c[0], green);
-            counted_ok = c[0] == green;
+            counted_ok = c[0] == green * (stream_probe && !stream_zero ? 2u : 1u);
+            stream_counter_ok = counted_ok;
             ID3D12Resource_Unmap(counter_back, 0, NULL);
         }
-        printf("AGX_D3D12_%s: %s\n", spaced ? "C17B" : indirect_no_count ? "C14NCA" : indirect ? "C14A" : "C13A",
+        printf("AGX_D3D12_%s: %s\n", stream_probe ? (stream_zero ? "RC38Z_COUNT" : indexed ? "RC38I_COUNT" : "RC38N_COUNT") : spaced ? "C17B" : indirect_no_count ? "C14NCA" : indirect ? "C14A" : "C13A",
                pass && counted_ok ? "PASS" : "FAIL");
     }
     if (signature) ID3D12CommandSignature_Release(signature);
@@ -1497,7 +1519,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     if (resolved) ID3D12Resource_Release(resolved);
     if (readback) ID3D12Resource_Release(readback);
     if (vertices) ID3D12Resource_Release(vertices);
-    return !pass;
+    return !pass || (stream_probe && !stream_counter_ok);
 }
 
 /* C6e (D3D12-C6-graphics.md): a textured full-screen quad (triangle strip)
@@ -7072,6 +7094,9 @@ static int step_c14(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT
 static int step_c17b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 7); }
 static int step_c16a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { (void)b; return compute_srv(d, q, f, 1); }
 static int step_c14nc(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 6); }
+static int step_rc38z(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 14); }
+static int step_rc38n(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 15); }
+static int step_rc38i(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 16); }
 /* EXP1826 (C31A): "warp STEP..." runs steps on WARP with the debug layer
  * and prints its messages, separating API misuse in a probe step from
  * driver behaviour before any hardware run. */
@@ -7636,6 +7661,7 @@ static LONG WINAPI first_access_violation(EXCEPTION_POINTERS *ep) {
 /* the steps WARP ("warp <steps>") and the AGX adapter ("only <steps>",
  * EXP1862: one step under the guest debugger) run by name */
 static const struct { const char *name; probe_step step; } named_steps[] = {
+    {"RC38Z", step_rc38z}, {"RC38N", step_rc38n}, {"RC38I", step_rc38i},
     {"C76A", c76_shared_open},
     {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
     {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures},
