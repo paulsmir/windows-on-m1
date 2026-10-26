@@ -64457,3 +64457,18 @@ EXP1978 HARDWARE ACTUAL 2026-10-26T21:13:46Z:
 - Arm b (HD 50k, GPU stream on): the guest went down at about 16 s, during loading, before any measure-d3d12-counted-path row. Bugcheck **0x119 P1=2 P2=ffffffffc000000d (STATUS_INVALID_PARAMETER)** P3=fffffe83bbefba50 P4=ffffa90f4ddd8c00; minidump rec1978h/102626-16953-01.dmp; app logs in rec1978h/app-logs. This matches EXP1976. The stream passes the small probes (MaxCount 2, no statistics query) but GravityMark's first stream use (MaxCount 2400 with a pipeline-statistics query active) is rejected by the KMD submit path, and the rejection is still fatal (rc54: parser errors map to INVALID_PARAMETER at gpuva_g3_windows.c ~4857).
 - Recovery rec1978h (AGX_RECOVERY_ALLOW_AT_PROXY=1): RECOVERY_DONE.
 - Next: Codex rc57 (parser rejection of large or statistics streams, plus containment); EXP1979 = rc56 native staging (copy escapes).
+
+EXP1979 HARDWARE BEFORE 2026-10-26T21:21:36Z:
+- Package 30.0.1979.0 = EXP1978 driver + rc56:
+  - 386b99e7 ring slices retained through the final BO fence;
+  - eff4fca1 staging MDLs owned through Windows process and GPU teardown;
+  - 821a7d91 D3D12 CPU-facing BOs routed through native staging arenas;
+  - b205f764 doc.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1.
+- WHY THIS HYPOTHESIS: copy escapes are the largest remaining CPU cost: 46 ms of the 89 ms HD 50k frame (EXP1975a, 1632) and 58 ms of the 115 ms FHD 100k frame (EXP1973a/EXP1978a, 1275). rc56 backs CPU-facing staging with native pages the GPU can use directly, so these copies need no kernel transition.
+- Expected: copy_escape count and time near zero; arm a above 1632 and arm b above 1275 (macOS FHD 100k about 7,700); correct images; no faults; the guest alive after both arms (process-exit teardown of the user mapping works).
+- Failure criteria: PROCESS_HAS_LOCKED_PAGES (0x76) or any bugcheck at process exit, a GPU fault, device removal, or wrong images.
+- Recovery: rec1979h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest is down).
+- Hashes: sys 388e8c5f47c5, UmdArm64 839550ccdb06, UmdX64 69651f51de2f, Umd32 a728585d1cff; manifest 52df8427d934, hardware-manifest 13a20b84208a; probe1979.sh 7c52f1dd0fc9 (PROBE_LINT_OK); visible recovery rec1979h 2a2a9211aa25e3af; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1979h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1979-native-staging/run1979.sh.
