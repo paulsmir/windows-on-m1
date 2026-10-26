@@ -270,6 +270,9 @@ VOID AdmissionUmdScreenCpuAccessEvent(ADMISSION_UMD_DEVICE *Device,
 extern "C"
 #endif
 const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void);
+#ifdef __cplusplus
+extern "C"
+#endif
 VOID AdmissionUmdGpuCompletionDrain(ADMISSION_UMD_DEVICE *Device,
     unsigned long long *Cursor);
 #ifdef __cplusplus
