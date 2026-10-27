@@ -6801,6 +6801,7 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE handle, UINT cou
         AgxD3d12OwnerLock(owner);
     }
     AgxD3d12OwnerMeasureHeapStaging(owner, TRUE);
+    AgxD3d12OwnerStageUploads(owner);
     const HRESULT replay_status = ReplayAndSubmit(queue, count, lists);
     AgxD3d12OwnerMeasureHeapStaging(owner, FALSE);
     AgxD3d12OwnerUnlock(owner);

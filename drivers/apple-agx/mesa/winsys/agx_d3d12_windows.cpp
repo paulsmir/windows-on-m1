@@ -110,6 +110,16 @@ struct AGX_D3D12_OWNER {
    * surface go through this linear staging texture (GPU copy, then a CPU
    * copy from its map); reused like UploadStaging. */
   struct pipe_resource *DownloadStaging;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* RC65: the native-staged upload ring BO, its slice metadata, the
+   * persistent CPU-visible buffers whose dirty runs may go through it, and
+   * the GPU copies one Execute records from it (AgxD3d12OwnerStageUploads). */
+  struct pipe_resource *UploadRingResource;
+  ADMISSION_UMD_UPLOAD_RING UploadRing;
+  struct AGX_D3D12_UPLOAD_TARGET { struct pipe_resource *Resource; unsigned long long Token; } *UploadTargets;
+  UINT UploadTargetCount, UploadTargetCapacity;
+  ADMISSION_UMD_UPLOAD_COPY UploadCopies[ADMISSION_UMD_UPLOAD_RING_COPIES];
+#endif
   /* EXP1822: D3D12 queues and lists are used from several threads (nBody's
    * async compute thread next to its render thread). The pipe_context is not
    * thread-safe, so every entry point holds this recursive lock, and
@@ -443,6 +453,14 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   owner->Backend.Closing = 1;
   if (owner->UploadStaging) AgxWin32AsahiResourceRelease(&owner->UploadStaging);
   if (owner->DownloadStaging) AgxWin32AsahiResourceRelease(&owner->DownloadStaging);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (owner->UploadRingResource) AgxWin32AsahiResourceRelease(&owner->UploadRingResource);
+  if (owner->UploadRing.Scratch) HeapFree(GetProcessHeap(), 0, owner->UploadRing.Scratch);
+  if (owner->UploadTargets) HeapFree(GetProcessHeap(), 0, owner->UploadTargets);
+  owner->UploadRing.Scratch = NULL;
+  owner->UploadTargets = NULL;
+  owner->UploadTargetCount = owner->UploadTargetCapacity = 0;
+#endif
   if (owner->Context && owner->EmptyFs) {
     owner->Context->bind_fs_state(owner->Context, NULL);
     owner->Context->delete_fs_state(owner->Context, owner->EmptyFs);
@@ -515,6 +533,91 @@ extern "C" void AgxD3d12OwnerRefCommand(AGX_D3D12_OWNER *owner, UINT list, UINT 
   (void)owner;(void)list;(void)command;
 #endif
 }
+
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* RC65: the upload ring BO is created with the owner, before an
+ * application's scene load fills the large native arena (RC64/EXP1985: it
+ * was 60/60 MiB full from frame 55). It is used only when native staging
+ * holds it: with private staging the ring itself would pay the copy escapes
+ * it removes. Only private-staging heaps (APPLE_AGX_D3D12_CPU_POOL_MAP=0)
+ * have write-watched dirty runs; canonical pool maps need no ring.
+ * APPLE_AGX_D3D12_UPLOAD_RING=0 keeps the escape path for comparison.
+ * Receipt measure-d3d12-upload-ring-init {status: 0 ready, 1 disabled,
+ * 2 no private staging, 3 create, 4 map, 5 not native; bytes; token}. */
+static void create_upload_ring(AGX_D3D12_OWNER *owner) {
+  char option[2] = {};
+  UINT status = 0u;
+  unsigned long long token = 0ull;
+  owner->UploadRing.Disabled = 1u;
+  if (GetEnvironmentVariableA("APPLE_AGX_D3D12_UPLOAD_RING", option, sizeof(option)) == 1 && option[0] == '0')
+    status = 1u;
+  else if (!owner->Runtime.HeapStaging || owner->Runtime.DirectCpuPool || owner->Runtime.NativeStagingDisabled)
+    status = 2u;
+  struct pipe_resource *resource = NULL;
+  void *cpu = NULL;
+  if (!status) {
+    struct pipe_resource templ = {};
+    templ.target = PIPE_BUFFER;
+    templ.format = PIPE_FORMAT_R8_UNORM;
+    templ.width0 = ADMISSION_UMD_UPLOAD_RING_BYTES;
+    templ.height0 = 1;
+    templ.depth0 = 1;
+    templ.array_size = 1;
+    templ.usage = PIPE_USAGE_STAGING;
+    /* the template of a CPU-visible heap (AgxD3d12OwnerCreateBuffer) */
+    templ.bind = PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_INDEX_BUFFER | PIPE_BIND_CONSTANT_BUFFER |
+                 PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SAMPLER_VIEW;
+    resource = owner->Screen->resource_create(owner->Screen, &templ);
+    if (!resource) status = 3u;
+  }
+  if (!status && !(cpu = AgxWin32AsahiBufferWriteMap(owner->Context, resource))) status = 4u;
+  if (!status) {
+    AGX_WIN32_RELOC_ALLOCATION identity = {};
+    if (AgxWin32AsahiResourceIdentity(resource, &identity)) token = identity.Token;
+    if (!token || !AdmissionUmdGpuvaNativeStagingSlot(&owner->Runtime, token, cpu) ||
+        !AdmissionUmdRingInit(&owner->UploadRing.Ring, ADMISSION_UMD_UPLOAD_RING_BYTES))
+      status = 5u;
+  }
+  if (status && resource) AgxWin32AsahiResourceRelease(&resource);
+  if (!status) {
+    owner->UploadRingResource = resource;
+    owner->UploadRing.Cpu = static_cast<unsigned char *>(cpu);
+    owner->UploadRing.Disabled = 0u;
+  }
+  const UINT values[] = {status, ADMISSION_UMD_UPLOAD_RING_BYTES, static_cast<UINT>(token)};
+  AdmissionUmdDiagnostic("measure-d3d12-upload-ring-init", status ? S_FALSE : S_OK, values, 3u);
+}
+
+/* RC65: every persistent CPU-visible owner buffer is a candidate; the UMD
+ * decides per Execute (native, GPU-written or clean ones are skipped). A
+ * buffer that cannot be registered keeps the escape path. */
+static void add_upload_target(AGX_D3D12_OWNER *owner, struct pipe_resource *resource) {
+  if (owner->UploadRing.Disabled) return;
+  AGX_WIN32_RELOC_ALLOCATION identity = {};
+  if (!AgxWin32AsahiResourceIdentity(resource, &identity) || !identity.Token) return;
+  if (owner->UploadTargetCount == owner->UploadTargetCapacity) {
+    const UINT capacity = owner->UploadTargetCapacity ? owner->UploadTargetCapacity * 2u : 64u;
+    if (capacity <= owner->UploadTargetCapacity) return;
+    const SIZE_T bytes = static_cast<SIZE_T>(capacity) * sizeof(*owner->UploadTargets);
+    void *grown = owner->UploadTargets ? HeapReAlloc(GetProcessHeap(), 0, owner->UploadTargets, bytes)
+                                       : HeapAlloc(GetProcessHeap(), 0, bytes);
+    if (!grown) return;
+    owner->UploadTargets = static_cast<AGX_D3D12_OWNER::AGX_D3D12_UPLOAD_TARGET *>(grown);
+    owner->UploadTargetCapacity = capacity;
+  }
+  owner->UploadTargets[owner->UploadTargetCount].Resource = resource;
+  owner->UploadTargets[owner->UploadTargetCount].Token = identity.Token;
+  ++owner->UploadTargetCount;
+}
+
+static void remove_upload_target(AGX_D3D12_OWNER *owner, const struct pipe_resource *resource) {
+  for (UINT i = 0; i < owner->UploadTargetCount; ++i)
+    if (owner->UploadTargets[i].Resource == resource) {
+      owner->UploadTargets[i] = owner->UploadTargets[--owner->UploadTargetCount];
+      return;
+    }
+}
+#endif
 
 extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D12_OWNER **out) {
   if (!args || !out || !args->AdapterCallbacks || !args->KernelCallbacks || !args->RuntimeDevice ||
@@ -610,6 +713,9 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     AgxWin32BoTimeHook = owner_bo_time;
     AgxWin32GpuOnlyMapHook = owner_gpu_only_map;
   }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (SUCCEEDED(hr)) create_upload_ring(owner);
+#endif
   receipt("measure-d3d12-owner", hr, owner->KernelContext != NULL ? 1u : 0u, owner->Screen != NULL ? 1u : 0u,
           owner->Context != NULL ? 1u : 0u);
   if (FAILED(hr)) {
@@ -653,6 +759,9 @@ extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned lo
     return E_OUTOFMEMORY;
   }
   owner_watch_resource(owner,resource,1u);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (cpu) add_upload_target(owner, resource);
+#endif
   buffer->Resource = resource;
   buffer->GpuVa = va;
   buffer->Cpu = cpu;
@@ -862,6 +971,9 @@ extern "C" void AgxD3d12OwnerDestroyBuffer(AGX_D3D12_OWNER *owner, AGX_D3D12_BUF
   OwnerLock lock(owner);
   if (!owner || !buffer || !buffer->Resource) return;
   struct pipe_resource *resource = static_cast<struct pipe_resource *>(buffer->Resource);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  remove_upload_target(owner, resource);
+#endif
   AgxWin32AsahiResourceRelease(&resource);
   memset(buffer, 0, sizeof(*buffer));
 }
@@ -4067,6 +4179,72 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   owner->TimeUnbind += qpc_now() - drawn;
   ++owner->TimedDraws;
   return S_OK;
+}
+
+/* RC65 (EXP1985): at Execute start, before the replay, move the dirty runs
+ * of persistent private-staging heaps into a native ring slice and record
+ * GPU copies from it into their canonical BOs; the copies are submitted
+ * alone, so that submission names exactly the ring targets as written (the
+ * UMD neither marks them GpuWritten nor uploads them again). In GPU order
+ * the copy runs after every earlier reader (no WAR) and before this replay.
+ * Whatever the ring cannot take keeps the per-run copy escape path. Receipt
+ * measure-d3d12-upload-ring {1, ring slots, copies, ring bytes lo/hi,
+ * fallback slots, fallback dirty bytes lo/hi, fallback reasons
+ * (umd_upload_ring.h), invalidated slots, 1 accepted | 2 refused | 4 ring
+ * disabled, ring used, ring capacity, stage us, flush us}, once per Execute
+ * with ring activity or a fallback. */
+extern "C" void AgxD3d12OwnerStageUploads(AGX_D3D12_OWNER *owner) {
+  OwnerLock lock(owner);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (!owner || !owner->Context || !owner->UploadRingResource || owner->UploadRing.Disabled ||
+      !owner->UploadTargetCount) return;
+  ADMISSION_UMD_UPLOAD_RING *ring = &owner->UploadRing;
+  const LONGLONG start = qpc_now();
+  LONGLONG flush_ticks = 0;
+  ring->Slots = ring->Copies = ring->Fallbacks = ring->FallbackReasons = ring->Invalidated = 0u;
+  ring->Bytes = ring->FallbackBytes = 0ull;
+  UINT count = 0u, status = 0u;
+  AdmissionUmdGpuvaUploadRingRetire(&owner->Runtime, ring);
+  /* Unsubmitted recorded work would share the copy batch. */
+  if (owner->PendingDraws || owner->PendingCopies || owner->PendingDispatches) {
+    ring->FallbackReasons |= ADMISSION_UMD_UPLOAD_FALLBACK_PENDING;
+  } else {
+    for (UINT i = 0; i < owner->UploadTargetCount; ++i)
+      (void)AdmissionUmdGpuvaUploadRingStage(&owner->Runtime, owner->UploadTargets[i].Token, i, ring,
+                                             owner->UploadCopies, ADMISSION_UMD_UPLOAD_RING_COPIES, &count);
+  }
+  if (count) {
+    for (UINT i = 0; i < count; ++i) {
+      const ADMISSION_UMD_UPLOAD_COPY &copy = owner->UploadCopies[i];
+      struct pipe_box box = {};
+      box.x = static_cast<int>(copy.RingOffset);
+      box.width = static_cast<int>(copy.Bytes);
+      box.height = 1;
+      box.depth = 1;
+      owner->Context->resource_copy_region(owner->Context, owner->UploadTargets[copy.Target].Resource, 0,
+                                           static_cast<unsigned>(copy.Offset), 0, 0, owner->UploadRingResource,
+                                           0, &box);
+    }
+    const unsigned long long before = AgxWin32AsahiContextNewestFence(owner->Context);
+    const LONGLONG flush_start = qpc_now();
+    owner->Context->flush(owner->Context, NULL, 0);
+    flush_ticks = qpc_now() - flush_start;
+    const unsigned long long fence = AgxWin32AsahiContextNewestFence(owner->Context);
+    const int accepted = fence > before && !AgxWin32AsahiContextFaulted(owner->Context);
+    (void)AdmissionUmdGpuvaUploadRingFinish(&owner->Runtime, ring, accepted, accepted ? fence : 0ull);
+    status = accepted ? 1u : 2u;
+  }
+  if (count || ring->Fallbacks || ring->Invalidated || ring->FallbackReasons) {
+    const UINT values[15] = {1u, ring->Slots, ring->Copies, static_cast<UINT>(ring->Bytes),
+        static_cast<UINT>(ring->Bytes >> 32), ring->Fallbacks, static_cast<UINT>(ring->FallbackBytes),
+        static_cast<UINT>(ring->FallbackBytes >> 32), ring->FallbackReasons, ring->Invalidated,
+        status | (ring->Disabled ? 4u : 0u), ring->Ring.Used, ring->Ring.Capacity,
+        qpc_us(qpc_now() - start), qpc_us(flush_ticks)};
+    AdmissionUmdDiagnostic("measure-d3d12-upload-ring", S_OK, values, 15u);
+  }
+#else
+  (void)owner;
+#endif
 }
 
 static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
