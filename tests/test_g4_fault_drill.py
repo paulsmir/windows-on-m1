@@ -34,6 +34,27 @@ class FaultDrill(unittest.TestCase):
     def test_actual_arm_query_and_injection_boundaries(self):
         self.run_drill(SHIM, CASES)
 
+    def test_probe_log_survives_a_guest_crash(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        EXP2005: the guest bugchecked 0x116 during the drill and no drill log
+        came back. Every log line must reach the disk (write-through handle,
+        FlushFileBuffers after each WriteFile) and the last line written
+        before a crash must name the stage: the parent logs each child's log
+        path before CreateProcess, and the fault child logs FAULT_DISPATCH
+        before the faulting dispatch."""
+        probe = (ROOT / 'drivers/apple-agx/windows/icd/agx_gpu_fault_probe.c').read_text()
+        say = re.search(r'static void say\(.*?^}', probe, re.S | re.M)[0]
+        self.assertRegex(say, r'WriteFile\(log_file,.*?\);\s*FlushFileBuffers\(log_file\);')
+        self.assertIn('FILE_FLAG_WRITE_THROUGH', probe)
+        fault = re.search(r'static int fault_child\(void\) \{.*?^}', probe, re.S | re.M)[0]
+        arm = fault.index('status=drill(luid,&receipt,1)')
+        marker = fault.index('say("FAULT_DISPATCH");')
+        dispatch = fault.index('ID3D11DeviceContext_Dispatch', arm)
+        self.assertLess(arm, marker)
+        self.assertLess(marker, dispatch)
+        child = re.search(r'static int child\(const char \*log_path.*?^}', probe, re.S | re.M)[0]
+        self.assertLess(child.index('say("CHILD_START'), child.index('CreateProcessA('))
+
     def run_drill(self, shim, cases):
         source = (RENDER / 'src/gpuva_g3_windows.c').read_text()
         functions = []

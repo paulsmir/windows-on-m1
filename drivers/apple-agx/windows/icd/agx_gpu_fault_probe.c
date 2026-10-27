@@ -24,11 +24,20 @@
 #include <string.h>
 #include "../../render-admission/include/render_gpu_fault.h"
 
+/* rc77 (EXP2005: the guest bugchecked about 10 s into the drill and no drill
+ * log came back). Each line carries milliseconds since boot and is written
+ * through and flushed (data and metadata) before the probe does anything
+ * else, so the last line on disk names the stage the guest died in; the
+ * parent logs each child's log path before starting it. Collect these files
+ * on the recovery boot when the in-boot copy fails. */
 static HANDLE log_file = INVALID_HANDLE_VALUE;
 static void say(const char *format, ...) {
-  char line[1024]; va_list ap; int n; DWORD written;
-  va_start(ap, format); n = vsnprintf(line, sizeof(line)-3, format, ap); va_end(ap);
+  char line[1024]; va_list ap; int n, m; DWORD written;
+  m = snprintf(line, sizeof(line)-3, "[%llu] ", (unsigned long long)GetTickCount64());
+  if (m < 0 || m >= (int)sizeof(line)-3) return;
+  va_start(ap, format); n = vsnprintf(line+m, sizeof(line)-3-(size_t)m, format, ap); va_end(ap);
   if (n < 0) return;
+  n += m;
   if (n > (int)sizeof(line)-3) n = (int)sizeof(line)-3;
   line[n++]='\r'; line[n++]='\n';
   fwrite(line, 1, (size_t)n, stdout); fflush(stdout);
@@ -123,6 +132,7 @@ static int fault_child(void) {
   if (FAILED(hr)) return 1;
   status=drill(luid,&receipt,1); say("ARM status=%08lx armed=%u",(unsigned long)status,receipt.Armed);
   if (status<0 || receipt.Armed!=1) return 1;
+  say("FAULT_DISPATCH");
   ID3D11DeviceContext_Dispatch(ctx,1,1,1);
   ID3D11DeviceContext_End(ctx,(ID3D11Asynchronous *)query); ID3D11DeviceContext_Flush(ctx);
   hr=wait_query(d,ctx,query); removed=ID3D11Device_GetDeviceRemovedReason(d);
@@ -205,7 +215,9 @@ static int child(const char *log_path, const char *mode) {
   n=snprintf(command,sizeof(command),"\"%s\" \"%s.%u.%s.txt\" %s",exe,log_path,++sequence,mode,mode);
   if (n<0 || n>=(int)sizeof(command)) return 1;
   si.cb=sizeof(si);
+  say("CHILD_START %s log=%s.%u.%s.txt",mode,log_path,sequence,mode);
   if (!CreateProcessA(exe,command,NULL,NULL,FALSE,0,NULL,NULL,&si,&pi)) return 1;
+  say("CHILD_PID %s pid=%lu",mode,pi.dwProcessId);
   CloseHandle(pi.hThread);
   if (WaitForSingleObject(pi.hProcess,25000)!=WAIT_OBJECT_0) {
     say("CHILD_TIMEOUT %s pid=%lu",mode,pi.dwProcessId);
