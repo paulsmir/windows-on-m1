@@ -64852,3 +64852,20 @@ EXP1993 HARDWARE BEFORE 2026-10-27T18:21:20Z:
 - Hashes: sys 074fd286b30b, UmdArm64 ea737dbdac2f, UmdX64 0b511eed31e0, Umd32 43a42f0edd23; manifest 6d99a462c0e1, hardware-manifest ba2dfbfb0007; probe1993.sh 91600b855275 (PROBE_LINT_OK); visible recovery rec1993h cf46dd624337acc4; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1993h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1993-stream-scratch/run1993.sh.
+
+EXP1993 HARDWARE ACTUAL (2026-10-27): **PASS, new best; the GPU indirect stream works in GravityMark**.
+- RC59G, RC59G_COUNT, RC63G and RC63G_STATS: PASS.
+- Stream=1:
+  - HD 50k: **3726 / 22.3 FPS**, up 9% (EXP1992: 3410), correct image;
+  - FHD 100k: **2372 / 14.2 FPS**, up 10% (EXP1992: 2159);
+  - full runs, 0 reject-batch, no removal.
+- agx_gpu_frame_breakdown:
+
+  | Run | Jobs/frame | Frame (ms) | GPU span (ms) | Idle (ms) |
+  |---|---|---|---|---|
+  | HD | 20 → 16 | 43.3 → 39.6 | 35.2 | 3.1 |
+  | FHD | 16 | 63.7 | 61.5 | 0.37, fully GPU-bound |
+
+  - FHD: standalone compute 24.1 ms exact, main pass 14.7 ms, render-compute 14.5 ms.
+- Verdict: rc71 a55c47f2 (VA release) and 73d97dd5 (stream scratch) validated.
+- Next: make the stream the default path; GPU efficiency (compute per-group cost, render-compute pre-3D).
