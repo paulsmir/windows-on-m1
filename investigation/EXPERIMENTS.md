@@ -64615,3 +64615,17 @@ EXP1985 HARDWARE ACTUAL 2026-10-27T15:11:07Z: **PASS, new best**. Native staging
   - draw.render_fence 27.3 ms for 7;
   - submit.render_fence 14.6 ms.
 - The remaining copy escapes are for BOs above the 16 MiB native limit or other ordinary paths; render_fence is the CPU count read of counted ExecuteIndirect (the GPU stream would remove it, but it still hangs in GravityMark, EXP1982b).
+
+EXP1986 HARDWARE BEFORE 2026-10-27T15:44:09Z:
+- WHY: in EXP1985 the arenas were full (60/60 MiB) by frame 55. Later the query, pool and encoder BOs and the readback buffers (209 small BOs) fell back to copy escapes. Each UPLOAD/DOWNLOAD escape waits for this process to have no job in flight.
+- ATOMIC CONTRACT: one policy change plus a measurement-only receipt.
+- Expected:
+  - q_resolve.copy_escape about 0, down from 1.5 ms;
+  - draw.copy_escape lower by the small-BO share;
+  - the class receipt shows the remaining cost in the >16 MiB UPLOAD heaps;
+  - score at least 2093 (HD 50k) and 1658 (FHD 100k).
+- Failure criteria: device removal, OOM, or a score below EXP1985.
+- Recovery: rec1986h.
+- Hashes: sys 709470cb3c14, UmdArm64 b0d6ea70b33f, UmdX64 503b8a1a8b58, Umd32 9455ef575069; manifest 0dfe32c57183, hardware-manifest 0a72e7001583; probe1986.sh e043732e7986 (PROBE_LINT_OK); visible recovery rec1986h d648e4b16ab3b3a0; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1986h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1986-small-arenas/run1986.sh.
