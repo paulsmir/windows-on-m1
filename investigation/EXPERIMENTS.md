@@ -65095,3 +65095,22 @@ EXP2003 HARDWARE ACTUAL (2026-10-27): **fault drill NOT RUN (tool precondition)*
 - Fixed in 0a049640: DWM is found through WTSEnumerateProcesses, with a PID-only liveness check when no handle is available. Rerun as EXP2004 (probe sha256 c994eba3…).
 - GravityMark D3D12 HD 50k (rc75 line, Wom1GpuFaultDrillAllowed=1 set): **4579 / 27.4 FPS** (EXP2002: 4439). Probably a cooler machine, since there was no preceding heavy arm.
 - No removal; G4_SUBMIT_FAILURE none.
+
+EXP2004 HARDWARE BEFORE 2026-10-27T21:39:00Z:
+- WHY:
+  - rc75 drops bounds checks on root descriptors (D3D12-legal), so a buggy app can now make a real unmapped GPU data read;
+  - EXP1964/1965 bugchecked 0x116 on an unmapped CDM read before rc37 and rc63;
+  - the rc37 drill (one-shot injected read fault in a child process) has never run on hardware;
+  - a production driver must remove only the faulting app.
+- ATOMIC CONTRACT: none; drill, then the post-fault render arm.
+- Expected:
+  - AGX_GPU_FAULT_INJECTED: PASS, fresh-render PASS, AGX_GPU_FAULT_RECOVERY: PASS;
+  - DWM alive; KMD receipts show exactly one fault and a channel-error or TDR recovery;
+  - GravityMark afterwards about 4439.
+- Failure criteria:
+  - a bugcheck (0x116 or other) or a wedged guest; in that case rc75 stays behind an opt-in until fault recovery is fixed;
+  - drill FAIL with DWM alive: recovery is incomplete.
+- Recovery: rec2004h, and a power cycle by the operator if the guest wedges.
+- Hashes: sys 849c1acd0174, UmdArm64 38af2373d57a, UmdX64 cd60e308b766, Umd32 f48c19e1668d; manifest 15bb85f4d1c6, hardware-manifest 374a6742a4ac; probe2004.sh d8aa55907ab4 (PROBE_LINT_OK); visible recovery rec2004h b7ec2c168ad4e268; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultDrillAllowed=1.
+- Recovery rec2004h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2004-fault-drill2/run2004.sh.
