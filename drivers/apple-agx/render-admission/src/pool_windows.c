@@ -611,14 +611,27 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnreserve(
 /* Dedicated original MDLs are charged separately: they cannot satisfy a
  * segment-3 placement and must not make the slab allocator take duplicate
  * backing. The physical manager charges before allocation and keeps the
- * charge until CPU, VidMm and graph ownership have all ended. */
+ * charge until CPU, VidMm and graph ownership have all ended.
+ * RC62 (EXP1984): every native BO is aperture-only, so the charge is also
+ * bounded by the aperture segment's CommitLimit. Three 128 MiB arenas left
+ * persistently mapped native BOs over the 256 MiB NON_LOCAL budget: a later
+ * MakeResident failed with CantTrimFurther after trimming 1446 MiB of local
+ * residency that could not help. Keep three quarters for other placements. */
+static ULONGLONG AdmissionNativeStagingCap(const ADMISSION_CONTEXT *Context) {
+  ULONGLONG cap = (Context->Memory.Topology.Aperture.CommitLimit /
+                   ADMISSION_NATIVE_STAGING_APERTURE_SHARE) & ~65535ULL;
+  return cap < ADMISSION_NATIVE_STAGING_BUDGET_BYTES ? cap :
+                                                       ADMISSION_NATIVE_STAGING_BUDGET_BYTES;
+}
+
 BOOLEAN AdmissionMemoryPoolChargeNative(ADMISSION_CONTEXT *Context,
     ULONGLONG Bytes) {
   ADMISSION_POOL_RUNTIME *pool;
   BOOLEAN allowed = FALSE;
-  const ULONGLONG cap = 4ULL * ADMISSION_NATIVE_STAGING_MAX_BYTES;
-  if (!Context || !Bytes || (Bytes & 65535ULL) || Bytes > cap ||
-      !AdmissionMemoryPoolLock(Context)) return FALSE;
+  ULONGLONG cap;
+  if (!Context || !Bytes || (Bytes & 65535ULL)) return FALSE;
+  cap = AdmissionNativeStagingCap(Context);
+  if (Bytes > cap || !AdmissionMemoryPoolLock(Context)) return FALSE;
   pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
   if (!pool->Stopping && pool->NativeStagingBytes <= cap - Bytes &&
       AdmissionPoolMayGrow(pool)) {

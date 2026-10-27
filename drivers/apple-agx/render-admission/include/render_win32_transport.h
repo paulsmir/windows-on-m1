@@ -13,6 +13,12 @@
 #define ADMISSION_WIN32_ALLOCATION_VERSION_NATIVE 3u
 #define ADMISSION_NATIVE_STAGING_MAGIC 0x534e4741u /* "AGNS" */
 #define ADMISSION_NATIVE_STAGING_MAX_BYTES (128u * 1024u * 1024u)
+/* RC62 (EXP1984): native staging BOs are aperture-only ExistingSysMem, so all
+ * of them together must fit in segment 1 (256 MiB CommitLimit, the NON_LOCAL
+ * budget group) beside every other aperture placement. The aggregate native
+ * capacity is at most this and at most a quarter of the aperture limit. */
+#define ADMISSION_NATIVE_STAGING_BUDGET_BYTES (64u * 1024u * 1024u)
+#define ADMISSION_NATIVE_STAGING_APERTURE_SHARE 4u
 /* Private native storage intent, not a D3DKMDT_GDISURFACETYPE declaration. */
 #define ADMISSION_WIN32_ALLOCATION_GPU_LOCAL 0x100u
 #define ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE 2u
