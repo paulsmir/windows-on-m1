@@ -52,12 +52,21 @@ agx_win32_parse_shader_stats(const char *message, struct agx_win32_shader_stats 
 {
    memset(out, 0, sizeof(*out));
    int consumed = 0;
+#define AGX_WIN32_STATS_FORMAT \
+   "%7s shader: %u instrs, %u alu, %u fscib, %u ic, %u code size, %u gprs, %u uniforms, " \
+   "%u scratch, %u threads, %u loops, %u:%u spills:fills, %u preamble inst%n"
+   /* The UMD builds with /sdl /WX, which rejects sscanf (C4996). */
+#ifdef _MSC_VER
    const int fields =
-      sscanf(message,
-             "%7s shader: %u instrs, %u alu, %u fscib, %u ic, %u code size, %u gprs, %u uniforms, "
-             "%u scratch, %u threads, %u loops, %u:%u spills:fills, %u preamble inst%n",
-             out->stage, &out->instrs, &out->alu, &out->fscib, &out->ic, &out->code, &out->gprs, &out->uniforms,
+      sscanf_s(message, AGX_WIN32_STATS_FORMAT, out->stage, (unsigned)sizeof(out->stage), &out->instrs, &out->alu, &out->fscib, &out->ic, &out->code, &out->gprs, &out->uniforms,
              &out->scratch, &out->threads, &out->loops, &out->spills, &out->fills, &out->preamble, &consumed);
+#else
+   const int fields =
+      sscanf(message, AGX_WIN32_STATS_FORMAT, out->stage, &out->instrs, &out->alu, &out->fscib, &out->ic, &out->code,
+             &out->gprs, &out->uniforms, &out->scratch, &out->threads, &out->loops, &out->spills, &out->fills,
+             &out->preamble, &consumed);
+#endif
+#undef AGX_WIN32_STATS_FORMAT
    return fields == 14 && consumed > 0;
 }
 
