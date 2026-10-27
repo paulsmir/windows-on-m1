@@ -627,6 +627,11 @@ def main():
             timestamp_module = importlib.util.module_from_spec(timestamp_spec)
             timestamp_spec.loader.exec_module(timestamp_module)
             projected_c.write_text(timestamp_module.project_library_c(projected_c.read_text(), args.project))
+            query_ia_script = args.project / 'drivers/apple-agx/mesa/scripts/native-asahi-query-ia.py'
+            query_ia_spec = importlib.util.spec_from_file_location('native_query_ia', query_ia_script)
+            query_ia_module = importlib.util.module_from_spec(query_ia_spec)
+            query_ia_spec.loader.exec_module(query_ia_module)
+            projected_c.write_text(query_ia_module.project_library_c(projected_c.read_text(), args.project))
         runtime.append(projected_c)
         runtime += [MESA / 'src/gallium/auxiliary' / name for name in AUX_UNITS]
         # Actual executable link, run native-lifecycle-20260913g, names these

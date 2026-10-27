@@ -162,6 +162,8 @@ class QueryTimestampKernel(unittest.TestCase):
             source = (build / 'src/asahi/lib/libagx_shaders.c').read_text()
             source = module('indirect-stream').project_library_c(source, ROOT)
             source = module('query-timestamp').project_library_c(source, ROOT)
+            # The projected header enumerates every Windows program (RC67).
+            source = module('query-ia').project_library_c(source, ROOT)
             library = out / 'src/asahi/lib/libagx_shaders.c'
             library.write_text(source)
             (p / 'test.c').write_text(r'''

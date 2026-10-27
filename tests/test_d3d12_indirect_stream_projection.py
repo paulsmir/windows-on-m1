@@ -141,11 +141,12 @@ return 0;}
             code='''#include <stdbool.h>
 #include <assert.h>
 #include "pipe/p_defines.h"
-struct context {bool windows_indirect_stream,active_queries,in_tess,active_draw_without_restart;unsigned pipeline_statistics[PIPE_STAT_QUERY_COUNT];struct {void *shader;} stage[MESA_SHADER_STAGES];};
+struct context {bool windows_indirect_stream,windows_query_ia_records,active_queries,in_tess,active_draw_without_restart;unsigned pipeline_statistics[PIPE_STAT_QUERY_COUNT];struct {void *shader;} stage[MESA_SHADER_STAGES];};
 static bool native(struct context *ctx){
 '''+guard+'''return true;}return false;}
 int main(void){struct context c={0};c.pipeline_statistics[PIPE_STAT_QUERY_IA_VERTICES]=1;
-for(unsigned stream=0;stream<2;++stream)for(unsigned active=0;active<2;++active){c.windows_indirect_stream=stream;c.active_queries=active;assert(native(&c)==(!stream&&active));}}
+/* RC67: records already counted by one batched dispatch are skipped too. */
+for(unsigned stream=0;stream<2;++stream)for(unsigned batched=0;batched<2;++batched)for(unsigned active=0;active<2;++active){c.windows_indirect_stream=stream;c.windows_query_ia_records=batched;c.active_queries=active;assert(native(&c)==(!stream&&!batched&&active));}}
 '''
             (p/'gate.c').write_text(code)
             mesa=local_tree('reference','mesa')
