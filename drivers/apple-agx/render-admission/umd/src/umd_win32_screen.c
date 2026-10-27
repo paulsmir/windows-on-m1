@@ -994,7 +994,8 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
       nativeDescription.Token = nativeToken;
       nativeDescription.Offset = nativeSlice.Offset;
     } else AdmissionUmdNativeStagingFallback(device,
-        nativeBytes > ADMISSION_UMD_NATIVE_SLICE_LIMIT ? 4u : 1u, Bytes, S_OK);
+        nativeBytes > ADMISSION_UMD_NATIVE_SLICE_LIMIT ? 4u :
+        nativeBytes > ADMISSION_UMD_NATIVE_SMALL_SLICE ? 5u : 1u, Bytes, S_OK);
   }
 #endif
 

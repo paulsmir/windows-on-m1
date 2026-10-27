@@ -9,6 +9,10 @@ same arena is still live; the FIFO ring instead mapped a new arena per wrap.
 Arenas grow by demand (4, 8, 16, 32 MiB, within the 64 MiB aperture share),
 an arena too small for a request is not mapped for it, and a BO over 16 MiB
 never maps an arena: the old code mapped 128 MiB per arena for a 64 KiB BO.
+RC64 (EXP1985): slices over 1 MiB use only the 32 MiB arena. First-come
+placement let multi-MiB load-time BOs take all 60 MiB, so every later query,
+pool, encoder and readback BO (64-512 KiB) fell back to per-submission copy
+escapes. Small slices keep 28 MiB that large slices can never take.
 """
 import re
 from pathlib import Path
@@ -195,27 +199,36 @@ static void finish(ADMISSION_UMD_DEVICE *d) {
   assert(!pthread_rwlock_destroy(&d->ScreenBufferLock.value));
 }
 static void four_arenas(ADMISSION_UMD_DEVICE *d) {
-  ADMISSION_UMD_RING_SLICE slices[4],extra,second;
-  BYTE *address[4],*p=nullptr; ULONGLONG tokens[4],t=0;
-  for(unsigned i=0;i<4;++i) {
-    UINT bytes=(i==3 ? 16u : arena_mib[i])<<20;
-    assert(AdmissionUmdNativeStagingReserve(d,bytes,65536,&slices[i],&address[i],&tokens[i]));
-    assert(map_calls==i+1 && capacities[i]==(arena_mib[i]<<20));
-    assert(slices[i].Offset==0 && slices[i].Bytes==bytes);
-    assert((uintptr_t)address[i]==mappings[i].base && tokens[i]==mappings[i].token);
-    mappings[i].bound=TRUE;
+  /* Small slices fill the three small arenas; large ones use only the last. */
+  ADMISSION_UMD_RING_SLICE small[28],large[2],extra;
+  BYTE *p=nullptr; ULONGLONG small_token[28],large_token[2],t=0;
+  for(unsigned i=0;i<28;++i) {
+    const unsigned arena=i<4u ? 0u : i<12u ? 1u : 2u;
+    const unsigned first=arena==0u ? 0u : arena==1u ? 4u : 12u;
+    assert(AdmissionUmdNativeStagingReserve(d,1u<<20,65536,&small[i],&p,&small_token[i]));
+    assert(map_calls==arena+1 && capacities[arena]==(arena_mib[arena]<<20));
+    assert(small_token[i]==mappings[arena].token && small[i].Offset==(i-first)<<20);
+    assert((uintptr_t)p==mappings[arena].base+small[i].Offset);
+    mappings[arena].bound=TRUE;
   }
-  assert(AdmissionUmdNativeStagingReserve(d,16u<<20,65536,&second,&p,&t));
-  assert(t==tokens[3] && second.Offset==(16u<<20) && map_calls==4);
+  for(unsigned i=0;i<2;++i) {
+    assert(AdmissionUmdNativeStagingReserve(d,16u<<20,65536,&large[i],&p,&large_token[i]));
+    assert(map_calls==4 && capacities[3]==(32u<<20) && large_token[i]==mappings[3].token);
+    assert(large[i].Offset==i*(16u<<20));
+  }
+  mappings[3].bound=TRUE;
   assert(!AdmissionUmdNativeStagingReserve(d,65536,65536,&extra,&p,&t));
   assert(map_calls==4 && !cancel_calls);
-  assert(!AdmissionUmdNativeStagingRelease(d,77,slices[0].Ticket,0));
-  assert(AdmissionUmdNativeStagingRelease(d,tokens[2],slices[2].Ticket,12));
+  assert(!AdmissionUmdNativeStagingRelease(d,77,small[0].Ticket,0));
+  for(unsigned i=12;i<28;++i)
+    assert(AdmissionUmdNativeStagingRelease(d,small_token[i],small[i].Ticket,12));
   for(unsigned i=0;i<4;++i)
     assert(d->NativeStaging[i].Ring->Used==(i==2 ? 0u : (arena_mib[i]<<20)));
+  /* A large slice never takes the released small arena. */
+  assert(!AdmissionUmdNativeStagingReserve(d,2u<<20,65536,&extra,&p,&t));
   assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&extra,&p,&t));
-  assert(t==tokens[2] && extra.Offset==0 && extra.Ticket!=slices[2].Ticket && map_calls==4);
-  assert(!AdmissionUmdNativeStagingRelease(d,t,slices[2].Ticket,12));
+  assert(t==mappings[2].token && extra.Offset==0 && extra.Ticket!=small[12].Ticket && map_calls==4);
+  assert(!AdmissionUmdNativeStagingRelease(d,t,small[12].Ticket,12));
   AdmissionUmdNativeStagingFallback(d,19,0x123456789ULL,E_FAIL);
   assert(fallback_count==1 && fallback_status==E_FAIL);
   assert(fallback_values[0]==19 && fallback_values[1]==0x23456789u && fallback_values[2]==1);
@@ -238,13 +251,13 @@ static void invalid_transport(ADMISSION_UMD_DEVICE *d) {
 /* A live older slice must not pin space released after it. */
 static void out_of_order_reuse(ADMISSION_UMD_DEVICE *d) {
   ADMISSION_UMD_RING_SLICE a,b,c; BYTE *p; ULONGLONG t,t2;
-  assert(AdmissionUmdNativeStagingReserve(d,2u<<20,65536,&a,&p,&t));
-  assert(AdmissionUmdNativeStagingReserve(d,2u<<20,65536,&b,&p,&t2) && t==t2);
+  assert(AdmissionUmdNativeStagingReserve(d,1u<<20,65536,&a,&p,&t));
+  assert(AdmissionUmdNativeStagingReserve(d,1u<<20,65536,&b,&p,&t2) && t==t2);
   assert(AdmissionUmdNativeStagingRelease(d,t,b.Ticket,4));
-  assert(d->NativeStaging[0].Ring->Used==(2u<<20));
+  assert(d->NativeStaging[0].Ring->Used==(1u<<20));
   assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&c,&p,&t2));
-  assert(t2==t && c.Offset==(2u<<20) && map_calls==1);
-  assert((uintptr_t)p==mappings[0].base+(2u<<20));
+  assert(t2==t && c.Offset==(1u<<20) && map_calls==1);
+  assert((uintptr_t)p==mappings[0].base+(1u<<20));
   assert(!AdmissionUmdNativeStagingRelease(d,t,b.Ticket,4)); /* stale ticket */
   assert(AdmissionUmdNativeStagingRelease(d,t,a.Ticket,7));
   assert(AdmissionUmdNativeStagingRelease(d,t,c.Ticket,8));
@@ -257,7 +270,7 @@ static void steady_churn(ADMISSION_UMD_DEVICE *d) {
   assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&keep,&p,&tk));
   for(unsigned frame=0;frame<300;++frame) {
     for(unsigned i=0;i<3;++i) {
-      assert(AdmissionUmdNativeStagingReserve(d,(1u<<20)+i*65536u,65536,&s[i],&p,&t));
+      assert(AdmissionUmdNativeStagingReserve(d,(1u<<20)-i*65536u,65536,&s[i],&p,&t));
       assert(t==tk && s[i].Offset>=65536u);
       for(unsigned j=0;j<i;++j)
         assert(s[i].Offset>=s[j].Offset+s[j].Bytes || s[j].Offset>=s[i].Offset+s[i].Bytes);
@@ -271,27 +284,58 @@ static void steady_churn(ADMISSION_UMD_DEVICE *d) {
 }
 /* Arenas grow by demand and never for a BO the native path must not hold. */
 static void demand_growth(ADMISSION_UMD_DEVICE *d) {
-  ADMISSION_UMD_RING_SLICE s,big,mid,x; BYTE *p; ULONGLONG t,tb,tm;
+  ADMISSION_UMD_RING_SLICE s,big,mid,x,small; BYTE *p; ULONGLONG t,tb,tm,ts;
   assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&s,&p,&t));
   assert(map_calls==1 && capacities[0]==(4u<<20));
-  /* 16 MiB skips the 8 MiB arena without mapping it. */
+  /* RC64: 16 MiB maps only the large arena, never the 8 or 16 MiB one. */
   assert(AdmissionUmdNativeStagingReserve(d,16u<<20,65536,&big,&p,&tb));
-  assert(map_calls==2 && capacities[1]==(16u<<20) && tb!=t);
-  assert(!d->NativeStaging[1].Attempted && d->NativeStaging[2].Ring);
+  assert(map_calls==2 && capacities[1]==(32u<<20) && tb!=t);
+  assert(!d->NativeStaging[1].Attempted && !d->NativeStaging[2].Attempted && d->NativeStaging[3].Ring);
   /* Over the per-BO limit (EXP1984: 128 MiB heaps): no new mapping. */
   assert(!AdmissionUmdNativeStagingReserve(d,(16u<<20)+65536u,65536,&x,&p,&t));
   assert(!AdmissionUmdNativeStagingReserve(d,128u<<20,65536,&x,&p,&t));
   assert(!AdmissionUmdNativeStagingReserve(d,65536,32u<<20,&x,&p,&t));
   assert(map_calls==2);
-  /* A later 8 MiB request uses the skipped arena. */
+  /* A later 8 MiB request shares the large arena; still no small mapping. */
   assert(AdmissionUmdNativeStagingReserve(d,8u<<20,65536,&mid,&p,&tm));
-  assert(map_calls==3 && capacities[2]==(8u<<20) && d->NativeStaging[1].Ring);
+  assert(map_calls==2 && tm==tb && mid.Offset==(16u<<20) && !d->NativeStaging[1].Attempted);
+  /* A 1 MiB slice is small: the first small arena still has room. */
+  assert(AdmissionUmdNativeStagingReserve(d,1u<<20,65536,&small,&p,&ts));
+  assert(map_calls==2 && ts==t && small.Offset==65536u);
   unsigned long long mapped=0;
   for(unsigned i=0;i<map_calls;++i) mapped+=capacities[i];
-  assert(mapped==(28u<<20) && mapped<=ADMISSION_NATIVE_STAGING_BUDGET_BYTES);
+  assert(mapped==(36u<<20) && mapped<=ADMISSION_NATIVE_STAGING_BUDGET_BYTES);
   assert(AdmissionUmdNativeStagingRelease(d,tb,big.Ticket,0));
   assert(AdmissionUmdNativeStagingRelease(d,tm,mid.Ticket,0));
+  assert(AdmissionUmdNativeStagingRelease(d,ts,small.Ticket,0));
   assert(!cancel_calls);
+}
+/* RC64 (EXP1985): load-time large BOs must not starve the small per-batch,
+ * query and readback BOs of a scene that starts after them. */
+static void small_reserved(ADMISSION_UMD_DEVICE *d) {
+  ADMISSION_UMD_RING_SLICE large[4],small[128],x; BYTE *p; ULONGLONG t,tl[4],tsm[128];
+  unsigned large_count=0,small_count=0;
+  /* Scene load: 7-9 MiB staging BOs (EXP1985 f36-f55) until refused. */
+  while(AdmissionUmdNativeStagingReserve(d,(7u<<20)+(1u<<18),65536,&large[large_count],&p,&tl[large_count]))
+    ++large_count;
+  assert(large_count==4 && map_calls==1 && capacities[0]==(32u<<20));
+  assert(!AdmissionUmdNativeStagingReserve(d,4u<<20,65536,&x,&p,&t));
+  assert(map_calls==1);
+  /* Scene start: 64 KiB query, 256 KiB pool and 512 KiB encoder BOs. */
+  static const unsigned sizes[3]={65536u,262144u,524288u};
+  unsigned long long small_bytes=0;
+  while(small_bytes+sizes[small_count%3]<=(28ull<<20)) {
+    assert(AdmissionUmdNativeStagingReserve(d,sizes[small_count%3],65536,&small[small_count],&p,
+                                            &tsm[small_count]));
+    small_bytes+=sizes[small_count%3];
+    ++small_count;
+  }
+  assert(map_calls==4 && small_bytes>(27ull<<20));
+  for(unsigned i=0;i<small_count;++i) assert(AdmissionUmdNativeStagingRelease(d,tsm[i],small[i].Ticket,0));
+  for(unsigned i=0;i<large_count;++i) assert(AdmissionUmdNativeStagingRelease(d,tl[i],large[i].Ticket,0));
+  /* With the large arena free again, a small slice still prefers its own. */
+  assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&x,&p,&t) && t==mappings[1].token);
+  assert(AdmissionUmdNativeStagingRelease(d,t,x.Ticket,0) && !cancel_calls);
 }
 int main(int argc,char **argv) {
   assert(argc==2); ADMISSION_UMD_DEVICE d; init(&d);
@@ -301,6 +345,7 @@ int main(int argc,char **argv) {
   else if(!strcmp(argv[1],"reuse")) out_of_order_reuse(&d);
   else if(!strcmp(argv[1],"churn")) steady_churn(&d);
   else if(!strcmp(argv[1],"demand")) demand_growth(&d);
+  else if(!strcmp(argv[1],"small")) small_reserved(&d);
   else if(!strcmp(argv[1],"disabled")) {
     d.NativeStagingDisabled=TRUE;
     assert(!AdmissionUmdNativeStagingReserve(&d,65536,65536,&s,&p,&t));
@@ -347,7 +392,7 @@ class NativeStagingArena(unittest.TestCase):
                  "AdmissionUmdNativeStagingRelease")
         bodies = [function(text, name) for name in names]
         self.assertTrue(all(bodies), "production native arena helper missing")
-        scenarios = ("four", "transport", "reuse", "churn", "demand", "disabled", "heap", "reentrant",
+        scenarios = ("four", "transport", "reuse", "churn", "demand", "small", "disabled", "heap", "reentrant",
                      *(str(i) for i in range(1, 15)))
         with tempfile.TemporaryDirectory(prefix="umd-native-arena-") as path:
             tmp = Path(path)

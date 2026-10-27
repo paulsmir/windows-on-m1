@@ -23,18 +23,31 @@
 #define ADMISSION_UMD_NATIVE_FIRST_ARENA_BYTES (4u * 1024u * 1024u)
 #define ADMISSION_UMD_NATIVE_SLICE_LIMIT (16u * 1024u * 1024u)
 
+/* RC64 (EXP1985): first-come placement let multi-MiB BOs fill all 60 MiB
+ * during scene load. Every later query (64 KiB), pool slab (256 KiB),
+ * encoder (512 KiB) and readback heap (512 KiB) BO then fell back (reason 1)
+ * and paid copy escapes on every submission or resolve. A slice over 1 MiB
+ * may use only the largest arena; the 4 + 8 + 16 = 28 MiB of the first three
+ * arenas stay reserved for small slices, which also use the largest arena
+ * once their own are full. The aggregate charge is unchanged. */
+#define ADMISSION_UMD_NATIVE_SMALL_SLICE (1u * 1024u * 1024u)
+#define ADMISSION_UMD_NATIVE_LARGE_ARENA 3u
+
 typedef struct _ADMISSION_UMD_NATIVE_SPANS {
   unsigned int Capacity, Used, Count, Poisoned;
   unsigned long long NextTicket, Completed;
   ADMISSION_UMD_RING_SLICE Live[ADMISSION_UMD_NATIVE_ARENA_SLICES];
 } ADMISSION_UMD_NATIVE_SPANS;
 
-/* Capacity of arena Index (0-based), or 0 when it cannot hold the request. */
+/* Capacity of arena Index (0-based), or 0 when it cannot or must not hold
+ * the request (a large slice outside the largest arena). */
 static inline unsigned int AdmissionUmdNativeArenaBytes(
     unsigned int Index, unsigned long long Bytes, unsigned long long Alignment) {
   unsigned long long capacity;
   if (Index >= 4u || !Bytes || Bytes > ADMISSION_UMD_NATIVE_SLICE_LIMIT ||
       !Alignment || (Alignment & (Alignment - 1ULL))) return 0u;
+  if (Bytes > ADMISSION_UMD_NATIVE_SMALL_SLICE && Index != ADMISSION_UMD_NATIVE_LARGE_ARENA)
+    return 0u;
   capacity = (unsigned long long)ADMISSION_UMD_NATIVE_FIRST_ARENA_BYTES << Index;
   return Bytes <= capacity && Alignment <= capacity ? (unsigned int)capacity : 0u;
 }

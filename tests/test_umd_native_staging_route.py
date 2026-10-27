@@ -92,6 +92,16 @@ int main() {
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,ADMISSION_UMD_NATIVE_SLICE_LIMIT+65536ull,65536,15,&token,0));
  assert(!s.NativeStagingAddress && s.PrivateStaging && fallback_reason==4u);
  VirtualFree(s.PrivateStaging,0,0);
+ /* RC64: a refused slice over 1 MiB names the exhausted large-slice share
+  * (reason 5), separately from a full small arena set (reason 1). */
+ d.ScreenBuffers[0]={};private_allocs=0;
+ assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,ADMISSION_UMD_NATIVE_SMALL_SLICE+65536ull,65536,15,&token,0));
+ assert(!s.NativeStagingAddress && s.PrivateStaging && fallback_reason==5u);
+ VirtualFree(s.PrivateStaging,0,0);
+ d.ScreenBuffers[0]={};private_allocs=0;
+ assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,ADMISSION_UMD_NATIVE_SMALL_SLICE,65536,15,&token,0));
+ assert(!s.NativeStagingAddress && s.PrivateStaging && fallback_reason==1u);
+ VirtualFree(s.PrivateStaging,0,0);
  /* Native AllocateCb fails after returning a handle: clean rollback permits
   * ordinary staging, while failed rollback retains the original slice. */
  d.ScreenBuffers[0]={};native_enabled=true;fail_native=true;
