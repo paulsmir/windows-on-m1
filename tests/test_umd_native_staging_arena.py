@@ -106,11 +106,11 @@ static BOOL HeapFree(HANDLE h,UINT flags,void *p) {
 static void AdmissionUmdDiagnostic(const char *name,HRESULT status,
                                     const UINT *v,UINT count) {
   assert(!lock_depth);
-  if(!strcmp(name,"native-ring-fallback")) {
+  if(!strcmp(name,"measure-native-ring-fallback")) {
     assert(count==5); memcpy(fallback_values,v,sizeof(fallback_values));
     fallback_status=status; ++fallback_count;
   } else {
-    assert(!strcmp(name,"native-ring-map") && count==4);
+    assert(!strcmp(name,"measure-native-ring-map") && count==4);
     memcpy(map_values,v,sizeof(map_values)); ++map_receipts;
   }
 }
@@ -263,6 +263,10 @@ int main(int argc,char **argv) {
 #endif
     assert(!ok && map_calls==1 && !heap_live && !d.NativeStaging[0].Ring);
     assert(map_receipts==1 && map_values[3]==((reply_mode==12 || reply_mode==13) ? 1u : 0u));
+    if(reply_mode!=12 && reply_mode!=13) {
+      assert(fallback_count==1 && fallback_values[0]==3u);
+      assert(fallback_status==E_FAIL && !d.DrawTerminal && !d.ScreenClosing);
+    }
     if(reply_mode==1 || reply_mode==6) assert(!cancel_calls);
     else assert(cancel_calls==1 && cancel_success==(cancel_fail ? 0u : 1u));
   }

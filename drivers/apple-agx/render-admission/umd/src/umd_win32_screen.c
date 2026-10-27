@@ -741,7 +741,7 @@ static VOID AdmissionUmdNativeStagingFallback(ADMISSION_UMD_DEVICE *Device,
       values[4] += Device->NativeStaging[i].Ring->Capacity;
     }
   ReleaseSRWLockShared(&Device->ScreenBufferLock);
-  AdmissionUmdDiagnostic("native-ring-fallback", Status, values, ARRAYSIZE(values));
+  AdmissionUmdDiagnostic("measure-native-ring-fallback", Status, values, ARRAYSIZE(values));
 }
 
 static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
@@ -784,7 +784,7 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
             q.Capacity - 1ULL <= (ULONGLONG)(ULONG_PTR)-1 - q.UserVa &&
             AdmissionUmdRingInit(ring, q.Capacity);
         UINT values[4] = {q.Capacity, (UINT)q.Token, (UINT)(q.Token >> 32), (UINT)valid};
-        AdmissionUmdDiagnostic("native-ring-map", hr, values, ARRAYSIZE(values));
+        AdmissionUmdDiagnostic("measure-native-ring-map", hr, values, ARRAYSIZE(values));
         AcquireSRWLockExclusive(&Device->ScreenBufferLock);
         if (valid && !Device->ScreenClosing && !Device->DrawTerminal) {
           arena->Ring = ring;
@@ -803,6 +803,11 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
                 Device->Adapter->RuntimeAdapter.handle, &request);
           }
           HeapFree(GetProcessHeap(), 0, ring);
+          /* Mapping is optional: report its real failure without setting
+           * LastScreenError/DrawTerminal; the caller allocates ordinarily. */
+          if (!valid)
+            AdmissionUmdNativeStagingFallback(Device, 3u, Bytes,
+                FAILED(hr) ? hr : E_FAIL);
         }
       }
     }
