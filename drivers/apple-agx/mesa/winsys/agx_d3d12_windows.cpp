@@ -2121,6 +2121,16 @@ extern "C" HRESULT AgxD3d12OwnerQuery(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HE
   if ((heap->Type == 0 && type > 1u) || (heap->Type == 1 && (type != 2u || begin)) || (heap->Type == 2 && type != 3u))
     return E_INVALIDARG;
   if (heap->Type == 2) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    /* RC67 (EXP1988: 64 KiB QUERY escapes are the main copy cost): the 11
+     * statistics of one index share one BO, reset as a unit before Begin.
+     * On failure heap_query/begin_query below keep one BO per statistic. */
+    if (begin) {
+      AgxUmdWaitScope timing(AgxWaitQueryCreate);
+      (void)AgxWin32AsahiQueryGroupBegin(pipe, PIPE_QUERY_PIPELINE_STATISTICS_SINGLE,
+                                         &heap->Query[index * heap->Slots], kQueryStatistics);
+    }
+#endif
     for (unsigned s = 0; s < kQueryStatistics; ++s) {
       struct pipe_query *q = heap_query(pipe, heap, index, s, PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, s);
       if (!q || !(begin ? pipe->begin_query(pipe, q) : pipe->end_query(pipe, q))) return E_FAIL;

@@ -6845,6 +6845,11 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 query_ia_module = importlib.util.module_from_spec(query_ia_spec)
                 query_ia_spec.loader.exec_module(query_ia_module)
                 query_ia_module.project_sources(out, args.project, overlays)
+                query_group_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-query-group.py'
+                query_group_spec = importlib.util.spec_from_file_location('native_query_group', query_group_script)
+                query_group_module = importlib.util.module_from_spec(query_group_spec)
+                query_group_spec.loader.exec_module(query_group_module)
+                query_group_module.project_sources(out, args.project, overlays)
 
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():

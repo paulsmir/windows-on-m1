@@ -7,6 +7,7 @@ struct pipe_screen;
 struct pipe_context;
 struct pipe_resource;
 struct pipe_stream_output_target;
+struct pipe_query;
 
 typedef enum {
   AgxAsahiSceneEmpty, AgxAsahiScenePreparing, AgxAsahiScenePrepared,
@@ -151,6 +152,12 @@ int AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
  * (bytes from its buffer_offset), which the GPU advances as it appends. */
 struct pipe_resource *AgxWin32AsahiStreamOutputOffset(struct pipe_stream_output_target *);
 int AgxWin32AsahiContextFaulted(struct pipe_context *);
+/* RC67 (GPUVA): before Begin, give the Count queries of one D3D12 query
+ * index one shared BO (query i = PIPE query Type, index i), creating them if
+ * all are null and moving the whole group to fresh storage if any member is
+ * busy. 0 leaves the queries unchanged (agx_win32_query_group.h). */
+int AgxWin32AsahiQueryGroupBegin(struct pipe_context *, unsigned Type,
+    struct pipe_query **Group, unsigned Count);
 int AgxWin32AsahiContextFlushForPresent(struct pipe_context *);
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *);
 
