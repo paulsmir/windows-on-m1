@@ -64690,3 +64690,17 @@ EXP1988 HARDWARE BEFORE 2026-10-27T16:58:33Z:
 - Hashes: sys 20d8b4e37e3a, UmdArm64 1a065e3363d4, UmdX64 c6465085ef7e, Umd32 96ee652fc03a; manifest 67df07f07b23, hardware-manifest 94c00bebb4c9; probe1988.sh b382486429fd (PROBE_LINT_OK); visible recovery rec1988h 884668faa3b99f7e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1988h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1988-shader-offnative/run1988.sh.
+
+EXP1988 HARDWARE ACTUAL (2026-10-27): **PASS, new best**.
+- HD 50k: **2318 / 13.9 FPS**, up 11% (EXP1986: 2082). FHD 100k: **1769 / 10.6 FPS**, up 7% (EXP1985: 1658). No removal; the guest is alive; G4_SUBMIT_FAILURE none.
+- Reason-6 rows: 196, from shader BOs. Reason-1 rows: 61 at HD (was 94+) and 85 at FHD (was 142+).
+- measure-copy-escape-class, median per Execute over the last two thirds of the frames:
+
+  | Run | QUERY ≤64 KiB | QUERY ≤1 MiB | UPLOAD ≤64 KiB | DOWNLOAD | Total |
+  |---|---|---|---|---|---|
+  | HD | 28, 12.4 ms | 2, 0.07 ms (was 13, 16.8 ms) | 16, 1.0 ms | 15, 1.35 ms | 61, **15.1 ms** (EXP1986: 83, 34.5 ms) |
+  | FHD | 46, 29.1 ms | 2 | 34 | (not given) | 97, 31.7 ms |
+
+- Arena occupancy at a refusal (measure-native-arena-class): General 45.75 MiB in 113 slots, Encoder 14.25 MiB in 38 slots, Shader 0.
+- The remaining cost is the QUERY drain on 64 KiB slots (the pipeline-statistics query BOs), which rc67 and rc68 target.
+- Verdict: rc66 383df460 validated.
