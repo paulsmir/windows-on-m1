@@ -64600,3 +64600,18 @@ EXP1985 HARDWARE BEFORE 2026-10-27T15:00:55Z:
 - Hashes: sys 063359aad153, UmdArm64 cdf03e21c349, UmdX64 c8e2620c1d05, Umd32 7bd283023329; manifest 2364a270553f, hardware-manifest 1be45812aeb2; probe1985.sh 9844d8a5abd9 (PROBE_LINT_OK); visible recovery rec1985h 84e105385b0d36bb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1985h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1985-native-budget/run1985.sh.
+
+EXP1985 HARDWARE ACTUAL 2026-10-27T15:11:07Z: **PASS, new best**. Native staging (rc56..rc62) on by default.
+- Arm a (HD 50k): **2093 / 12.5 FPS**; median frame 70.6 ms (EXP1982a: 1621).
+- Arm b (FHD 100k): **1658 / 9.9 FPS** (EXP1978a: 1275; macOS about 7,700).
+- No device removal and no OOM; the guest is alive.
+- Steady-state waits per Execute, HD 50k:
+  - draw.copy_escape 29.3 ms for 48 calls (was 164);
+  - draw.render_fence 21.9 ms for 7;
+  - flush 3.2 ms;
+  - q_resolve.copy_escape 2.4 ms for 29.
+- Steady-state waits per Execute, FHD 100k:
+  - draw.copy_escape 37.2 ms for 44;
+  - draw.render_fence 27.3 ms for 7;
+  - submit.render_fence 14.6 ms.
+- The remaining copy escapes are for BOs above the 16 MiB native limit or other ordinary paths; render_fence is the CPU count read of counted ExecuteIndirect (the GPU stream would remove it, but it still hangs in GravityMark, EXP1982b).
