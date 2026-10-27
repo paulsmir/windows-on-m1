@@ -1368,6 +1368,16 @@ static int heap_staging_transfer(ADMISSION_UMD_DEVICE *device,
  * slot's copies run beside the device's own job instead of draining it. */
 static UINT copy_unreferenced(ADMISSION_UMD_DEVICE *device,
                               const ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  /* Control run: the exact value 0, set before the app starts, restores the
+   * R157 drain (no proof is sent). Read once per process. */
+  static volatile LONG proof_mode = -1;
+  if (proof_mode < 0) {
+    char value[2] = {};
+    (void)InterlockedExchange(&proof_mode,
+        GetEnvironmentVariableA("APPLE_AGX_COPY_ESCAPE_PROOF", value, sizeof(value)) == 1u &&
+        value[0] == '0' ? 0 : 1);
+  }
+  if (!proof_mode) return 0u;
   const uint64_t completed = (uint64_t)InterlockedCompareExchange64(
       &device->RenderCompletedFence, 0, 0);
   AcquireSRWLockShared(&device->ScreenBufferLock);

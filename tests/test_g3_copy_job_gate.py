@@ -270,6 +270,9 @@ class CopyJobGate(unittest.TestCase):
         proof = umd_function(text, "copy_unreferenced")
         self.assertIn("AppleAgxG3CopySlotUnreferenced(slot->SubmissionHolds,", proof)
         self.assertIn("slot->CopyHeld, slot->SourceHolds, slot->Borrowed, slot->Direct,", proof)
+        # Control run: APPLE_AGX_COPY_ESCAPE_PROOF=0 sends no proof (R157 drain).
+        self.assertLess(proof.index('"APPLE_AGX_COPY_ESCAPE_PROOF"'), proof.index("if (!proof_mode) return 0u;"))
+        self.assertLess(proof.index("if (!proof_mode) return 0u;"), proof.index("AppleAgxG3CopySlotUnreferenced("))
 
 
 if __name__ == "__main__":
