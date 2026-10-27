@@ -62,10 +62,17 @@ def project_sources(out, project, overlays):
     h=once(h,'   void *windows_draw_bindings_data;', '''   void *windows_draw_bindings_data;
    struct agx_win32_indirect_stream *windows_indirect_stream;
    unsigned windows_indirect_path, windows_indirect_reason;
-   unsigned windows_indirect_encode_us;''')
+   unsigned windows_indirect_encode_us;
+   /* RC71: idle stream outputs of retired batches (agx_win32_stream_scratch.h) */
+   struct agx_bo *windows_stream_spare[2][16];''')
     h=once(h,'struct agx_batch {', '''struct agx_batch {
    /* GPU-produced data only: never CPU-mapped or shadow-published. */
    struct agx_pool windows_stream_pool, windows_stream_usc_pool;''')
+    h=once(h,'''void agx_decompress_inplace(struct agx_batch *batch, struct pipe_surface *surf,
+                            const char *reason);''','''void agx_decompress_inplace(struct agx_batch *batch, struct pipe_surface *surf,
+                            const char *reason);
+
+#include "agx_win32_stream_scratch.h"''')
     save(path,h)
 
     path='src/gallium/drivers/asahi/agx_batch.c'
@@ -79,10 +86,17 @@ def project_sources(out, project, overlays):
    agx_pool_init(&batch->windows_stream_usc_pool, dev, "GPU indirect USC",
                  AGX_WIN32_BO_GPU_ONLY | AGX_BO_LOW_VA, false);
    agx_pool_init(&batch->pool, dev, "Batch pool", AGX_WIN32_BO_SHADOW, true);''')
+    # RC71: the retired batch gives its stream outputs back to the context.
     s=once(s,'   agx_pool_cleanup(&batch->pipeline_pool);',
            '''   agx_pool_cleanup(&batch->pipeline_pool);
-   agx_pool_cleanup(&batch->windows_stream_pool);
-   agx_pool_cleanup(&batch->windows_stream_usc_pool);''')
+   agx_win32_stream_scratch_retire(ctx, &batch->windows_stream_pool, 0);
+   agx_win32_stream_scratch_retire(ctx, &batch->windows_stream_usc_pool, 1);''')
+    save(path,s)
+
+    path='src/gallium/drivers/asahi/agx_pipe.c'
+    s=(out/path).read_text()
+    s=once(s,'   agx_scratch_fini(&ctx->scratch_cs);',
+           '   agx_scratch_fini(&ctx->scratch_cs);\n   agx_win32_stream_scratch_fini(ctx);')
     save(path,s)
 
     path='src/asahi/lib/pool.c'

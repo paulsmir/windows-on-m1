@@ -192,12 +192,14 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
 
    /* Output-only batch pools use writable General BOs, including USC low VA.
     * They are never CPU-mapped or published. Explicit batch references add
-    * them to the submission/residency set; pools retain them until cleanup. */
+    * them to the submission/residency set; pools retain them until cleanup.
+    * RC71: each output is a whole BO the context retains across batches
+    * (agx_win32_stream_scratch.h), at offset 0 of a 64 KiB aligned VA. */
    struct agx_bo *vdm_bo = NULL, *usc_bo = NULL;
-   struct agx_ptr vdm = agx_pool_alloc_aligned_with_bo(&batch->windows_stream_pool,
-      (size_t)count * record + tail, 256, &vdm_bo);
-   struct agx_ptr usc = agx_pool_alloc_aligned_with_bo(&batch->windows_stream_usc_pool,
-      (size_t)count * usc_stride, 64, &usc_bo);
+   struct agx_ptr vdm = agx_win32_stream_scratch(batch, 0,
+      (size_t)count * record + tail, &vdm_bo);
+   struct agx_ptr usc = agx_win32_stream_scratch(batch, 1,
+      (size_t)count * usc_stride, &usc_bo);
    if (!agx_win32_stream_output_valid(vdm_bo, vdm.gpu,
           (uint64_t)count * record + tail, 256) ||
        !agx_win32_stream_output_valid(usc_bo, usc.gpu,

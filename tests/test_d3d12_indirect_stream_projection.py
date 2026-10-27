@@ -118,8 +118,9 @@ return 0;}
             self.assertIn('#define libagx_win32_indirect_stream(',library)
             batch=(out/'src/gallium/drivers/asahi/agx_batch.c').read_text()
             self.assertIn('AGX_WIN32_BO_GPU_ONLY | AGX_BO_LOW_VA, false)',batch)
-            self.assertIn('agx_pool_cleanup(&batch->windows_stream_pool)',batch)
-            self.assertIn('agx_pool_cleanup(&batch->windows_stream_usc_pool)',batch)
+            # RC71: the retired batch gives its outputs back to the context
+            self.assertIn('agx_win32_stream_scratch_retire(ctx, &batch->windows_stream_pool, 0)',batch)
+            self.assertIn('agx_win32_stream_scratch_retire(ctx, &batch->windows_stream_usc_pool, 1)',batch)
             # Output pools are retained by normal BO references, never sent
             # through the CPU shadow publisher before/after the GPU writes.
             publish=function((WINSYS/'agx_win32_gpuva_batch.c').read_text(),

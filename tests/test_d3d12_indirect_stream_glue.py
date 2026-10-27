@@ -99,6 +99,10 @@ static void launch(struct agx_batch *b,struct agx_grid grid,unsigned barrier,uin
  params.stream=(uintptr_t)blocks[allocations-2];params.pipelines=(uintptr_t)blocks[allocations-1];
  for(unsigned i=0;i<grid.count[0];++i){cl_global_id.x=i;libagx_win32_indirect_stream(&params);}
 }
+/* RC71: production takes each output from agx_win32_stream_scratch
+ * (agx_state.h); its reuse is tested in test_rc71_stream_scratch.py. */
+static struct agx_ptr agx_win32_stream_scratch(struct agx_batch *b,unsigned kind,size_t size,struct agx_bo **bo){
+ return agx_pool_alloc_aligned_with_bo(kind?&b->windows_stream_usc_pool:&b->windows_stream_pool,size,kind?64:256,bo);}
 #define libagx_win32_indirect_stream launch
 #include "agx_win32_indirect_stream_emit.h"
 
