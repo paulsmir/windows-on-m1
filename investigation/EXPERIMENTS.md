@@ -64494,3 +64494,14 @@ EXP1980 HARDWARE BEFORE 2026-10-26T21:51:37Z:
 - Hashes: sys 909f2e6a2875, UmdArm64 f4535d3256d0, UmdX64 9de6e1d15dd3, Umd32 aeb0ef0a1887; manifest 6df513732618, hardware-manifest 1e44b37be775; probe1980.sh 3c5ca4af4a88 (PROBE_LINT_OK); visible recovery rec1980h fd8cfcc5fefe152c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1980h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1980-stream-preflight/run1980.sh.
+
+EXP1980 HARDWARE ACTUAL 2026-10-27T09:09:56Z:
+- Probes (e1980; APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1 for RC43/RC57): **all PASS**. RC44D/RC44I bad=0; RC43I16Z..RC43I32N with their COUNT checks; RC57C, RC57M and RC57U (high-count counted, multi and uncounted streams with a PIPELINE_STATISTICS query) with their STATS and COUNT checks.
+- Arm a (GravityMark HD 50k, default path, NATIVE_STAGING=0): **1638 / 9.8 FPS** (EXP1975a: 1632).
+- Arm b (HD 50k, stream on): the guest went down at about 17 s, during loading, with no counted-path row. Bugcheck **0x119 P1=2 P2=ffffffffc000000d** P3=ffff980bc9047a50 P4=ffffb987a6142310; minidump rec1980h/102626-14046-01.dmp. rc57's preflight does not catch this case; the rejection happens after preflight.
+- Recovery needed manual completion:
+  - attempt 1: the cleanup SSH was killed by the 180 s alarm after the package was removed, so the signer certificate stayed and the durable preflight failed ("signer state mismatch");
+  - attempt 2: EXACT_OWNER_REFUSED (the normal launcher was running);
+  - a guest reboot then stayed at the proxy;
+  - attempt 3 at the proxy: the guest booted, but disable-service failed (no service; package absent). During that relaunch a **bugcheck 0x101 CLOCK_WATCHDOG_TIMEOUT** occurred (minidump 102726-17625-01.dmp, P1=0x18, P3=ffffd200dfd68980, P4=2), not yet analyzed;
+  - final: the signer cert was removed manually and the durable preflight returned Verdict PASS with the package absent (rec1980h/recover-run-manual.log).
