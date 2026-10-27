@@ -65175,3 +65175,21 @@ EXP2006 HARDWARE ACTUAL (2026-10-27): **PASS, new best HD**. rc76 clear absorb.
   - compute 10.2 ms, main pass 6.7 ms.
 - agx_gpu_frame_breakdown FHD: wall 52.9 ms (EXP2002: 55.1), GPU span 50.5 ms.
 - Verdict: rc76 validated (de8be3df, 182f64b1, 12c1a9df, 017419ef).
+
+EXP2007 HARDWARE BEFORE 2026-10-27T22:27:56Z:
+- WHY:
+  - EXP2005: the drill's CDM read of an unmapped VA 0x10000 gave a valid FAULT_INFO Timeout; after the halt/resume the firmware never retired the compute entry (done 1 / write 2 for 3.8 s), so all 3 resets failed at quiesce with c0000483, causing 0x116;
+  - the only difference from Asahi, which recovers, is fault_control: 0 (m1n1 oracle, hard faults) against 0xb (Asahi production).
+- ATOMIC CONTRACT: one firmware init word.
+- Expected:
+  - GravityMark about 5081 with a correct image;
+  - drill: FAULT_INJECTED PASS, FRESH_RENDER PASS, RECOVERY PASS, guest and DWM alive;
+  - receipts: Wom1GpuFault valid (VA 0x10000), and either DMA_PAGE_FAULTED (no reset) or a reset with Succeeded ≥ 1.
+- Failure criteria:
+  - 0x116 again: hypothesis rejected;
+  - drill FAULT_INJECTED FAIL with no Wom1GpuFault: silent soft fault;
+  - a GravityMark regression.
+- Recovery: rec2007h. If the guest crashes, collect C:\Users\pavel\gravitymark\runs\fault2007-log.txt* on the recovery boot.
+- Hashes: sys fb10b214e98a, UmdArm64 6a8cf5228854, UmdX64 88718b76b1a8, Umd32 e77c60cd2ce1; manifest 4e074c1411f1, hardware-manifest dd4b28bc2644; probe2007.sh a4f3d301dc91 (PROBE_LINT_OK); visible recovery rec2007h a749a64cfebebb87; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultDrillAllowed=1.
+- Recovery rec2007h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2007-soft-faults/run2007.sh.
