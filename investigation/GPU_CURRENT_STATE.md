@@ -1947,3 +1947,19 @@ c2eb9203ab6c75725e3d9754e9b4c8b6dd89116eb6e012c6231dbb82bc3f0744;
 - Security review previously rejected C21E/UBFE and fault-sweep delegation.
   Do not retry identical tasks or route around via model/agent/security setup.
   Ordinary nominal CPU/header/getter regression tasks are separate authorized work.
+
+## 2026-10-27 GravityMark D3D12 performance state (EXP1985-EXP1995)
+- Accepted package line: integration d3dc7f65 / 90f5a5fd. It includes:
+  - native staging (rc56-rc66);
+  - the copy-escape proof (rc68);
+  - batched IA statistics (rc67);
+  - the 50 ms completion busy-poll (rc72);
+  - the GPU indirect stream as the default (rc69 params, rc71 VA release and scratch, rc63 faulted-scheduler TDR);
+  - the written-BO cap at 1024.
+- Best results:
+  - D3D12 HD 50k **3873** (EXP1995);
+  - D3D12 FHD 100k **2372** (EXP1993);
+  - D3D11 HD 10k 2515 (no regression).
+- Bound: GPU timeline. FHD has 0.4 ms of idle in a 63.7 ms frame (`tools/agx_gpu_frame_breakdown.py`).
+- Largest GPU costs: standalone compute (24 ms FHD), main pass (15 ms), render-compute pre-3D (13 ms).
+- Next causal target: shader cost (rc74). The rc73 barrier elision is rejected: GravityMark barriers after almost every dispatch.
