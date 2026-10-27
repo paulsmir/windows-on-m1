@@ -65232,3 +65232,20 @@ EXP2008 HARDWARE ACTUAL (2026-10-27): **PASS, new best**. rc76b per-RT clear col
   | FHD | 9 | — | 47.3 | 46.4 | — | 18.7 | 11.1 | 12.4 |
 
 - Verdict: rc76b c07d76ef validated.
+
+EXP2009 HARDWARE BEFORE 2026-10-27T23:07:02Z:
+- WHY:
+  - EXP2005/2007 drill faults were in gCDM_CS_KS0_SP, the CDM control-stream fetcher, which only driver-built streams reach; they were unrecoverable with fault_control 0 and 0xb;
+  - an app-caused shader data-read fault has never been tested;
+  - Wom1GpuFaultPostResume records the SGX 0x17620/0x17630 fault control, rptr/done/write and the post-resume events.
+- ATOMIC CONTRACT: none; separate arms.
+- Expected:
+  - GravityMark about 5715;
+  - RC77D PASS (device removed, process alive);
+  - C5D PASS;
+  - Wom1GpuFault with a data unit at VA 0x10000; DWM alive.
+- Failure criteria: a 0x116 bugcheck (data faults also unrecoverable); or a G4 refusal (the fault never reached the GPU).
+- Recovery: rec2009h with AT_PROXY.
+- Hashes: sys 6c0abf035f49, UmdArm64 ebe3b8a32146, UmdX64 866b92db39c6, Umd32 20e7c47239a5; manifest e035d9bac4e3, hardware-manifest 5117c709aa6a; probe2009.sh 1c1e9add7751 (PROBE_LINT_OK); visible recovery rec2009h 2c49f13f4491142b; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultControlRead=1 Wom1GpuFaultRecoverChannel=1.
+- Recovery rec2009h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2009-data-fault/run2009.sh.
