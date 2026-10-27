@@ -3816,7 +3816,17 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
       timing.Mark(DispatchTiming::Heap);
       if (FAILED(hr)) break;
       info.indirect_offset = static_cast<unsigned>(indirect->Offset + static_cast<unsigned long long>(indirect->Stride) * i);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      /* RC73: D3D12 orders dispatches only by app barriers (replayed as
+       * AgxD3d12OwnerBarrier) and list/Execute boundaries: only this grid
+       * launch may overlap the owner grids around it (heap binding and its
+       * uploads keep native barriers). */
+      AgxWin32AsahiCdmRelaxed(pipe, owner->CdmRelaxed);
+#endif
       pipe->launch_grid(pipe, &info);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      AgxWin32AsahiCdmRelaxed(pipe, 0);
+#endif
       timing.Mark(DispatchTiming::Launch);
     }
   } else {
@@ -3824,7 +3834,14 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
     if (SUCCEEDED(hr)) validate_heap_refs(owner, true);
     timing.Mark(DispatchTiming::Heap);
     if (SUCCEEDED(hr)) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      /* RC73: as for an indirect record above. */
+      AgxWin32AsahiCdmRelaxed(pipe, owner->CdmRelaxed);
+#endif
       pipe->launch_grid(pipe, &info);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      AgxWin32AsahiCdmRelaxed(pipe, 0);
+#endif
       timing.Mark(DispatchTiming::Launch);
     }
   }
@@ -3832,8 +3849,10 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   /* EXP1850 ModelViewer: memory_barrier after every launch flushed each
    * UAV-writing dispatch into its own submission (~70 a frame, ~40 ms).
    * Asahi orders the launches of one compute batch by a CDM barrier that
-   * flushes and invalidates the caches (agx_launch_internal), and flushes a
-   * resource's writer batch before another batch or a CPU map uses it. */
+   * flushes and invalidates the caches (agx_launch_internal; RC73: between
+   * owner grids only where an app barrier or list boundary is replayed), and
+   * flushes a resource's writer batch before another batch or a CPU map
+   * uses it. */
   unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count);
   if (state_count) {
     pipe->bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, none);
