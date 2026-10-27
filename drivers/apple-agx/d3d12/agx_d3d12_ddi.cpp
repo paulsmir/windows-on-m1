@@ -3906,8 +3906,7 @@ enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kComman
               kCommandQuery = 9, kCommandGsBind = 10 /* C27: the GS bindings of the next draw */,
               kCommandIndirectExpand = 11 /* C31: ExecuteIndirect with root or IA arguments */,
               kCommandResolve = 12 /* C32: ResolveSubresource */,
-              kCommandHsBind = 13, kCommandDsBind = 14 /* C37: the HS and DS bindings of the next draw */,
-              kCommandBarrier = 15 /* RC73: one or more app ResourceBarriers */ };
+              kCommandHsBind = 13, kCommandDsBind = 14 /* C37: the HS and DS bindings of the next draw */ };
 /* C32: a recorded ResolveSubresource (subresources decoded at record time) */
 struct AgxD3d12Resolve {
     AgxD3d12Heap *dst, *src;
@@ -5982,28 +5981,10 @@ static VOID APIENTRY ExecuteIndirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOM
     else
         RecordDraw(list, 0, 0, 0, 0, 0, signature->kind == 2u, &indirect);
 }
-/* RC73: D3D12 orders two dispatches only by an app barrier between them
- * (UAV accesses without one are unordered; ExecuteCommandLists completion
- * is a full sync). Every barrier type (transition, aliasing, UAV, ranged,
- * either half of a split barrier) is recorded at its position, consecutive
- * ones as one command, and replayed as AgxD3d12OwnerBarrier: the owner's
- * grid launches before it complete, with the native CDM cache
- * flush/invalidate, before those after it. Layout transitions need no AGX
- * work: textures keep one layout in every state. */
-static void RecordBarrier(D3D12DDI_HCOMMANDLIST handle, UINT count) {
-    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
-    if (!list || !count) return;
-    if (list->commands && list->command[list->commands - 1].kind == kCommandBarrier) return;
-    if (list->commands >= kListCommands) {
-        ListError(list, E_OUTOFMEMORY);
-        return;
-    }
-    AgxD3d12Command *slot = AppendCommand(list);
-    if (slot) slot->kind = kCommandBarrier;
-}
-static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDIARG_RESOURCE_BARRIER_0003 *) {
-    RecordBarrier(handle, count);
-}
+/* Between copies on one queue the owner's libagx copies already carry
+ * AGX_BARRIER_ALL and execution completes before the next list; transitions
+ * need no AGX work yet. */
+static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST, UINT, const D3D12DDIARG_RESOURCE_BARRIER_0003 *) {}
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 /* The owner bindings of one stage's slot records: root views and table
  * descriptors (read now, at execution) of the right kind. */
@@ -6651,10 +6632,6 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
         commands += list->commands;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
         AgxD3d12OptionalBinds pending = {}; /* C27/C37 */
-        /* RC73: lists of one Execute replay into one submission; keep a
-         * barrier at each list boundary (no ordering is assumed across it). */
-        if (i && list->commands && list->device && list->device->owner && SUCCEEDED(hr))
-            hr = AgxD3d12OwnerBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), 1);
         for (UINT c = 0; SUCCEEDED(hr) && c < list->commands; ++c) {
             const AgxD3d12Command &command = list->command[c];
             AdmissionUmdWaitSetPhase(command.kind == kCommandDraw ? AgxWaitPhaseDraw :
@@ -6700,8 +6677,6 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
                 const AgxD3d12Resolve &r = command.resolve;
                 AGX_D3D12_BUFFER dst = HeapBuffer(r.dst), src = HeapBuffer(r.src);
                 hr = AgxD3d12OwnerResolve(owner, &dst, r.dst_level, r.dst_layer, &src, r.src_layer, r.format);
-            } else if (command.kind == kCommandBarrier) {
-                hr = AgxD3d12OwnerBarrier(owner, 0);
             } else if (TakeOptionalBind(command, &pending)) { /* C27/C37: consumed by the next draw */
             } else if (command.kind == kCommandDraw) {
                 if (!draw_scratch) draw_scratch = NewDrawScratch();
@@ -7320,12 +7295,9 @@ static_assert(std::is_same_v<decltype(&CheckResourceAllocationInfo0022), PFND3D1
 static_assert(std::is_same_v<decltype(&CheckExistingResourceAllocationInfo0022),
                              PFND3D12DDI_CHECKEXISITINGRESOURCEALLOCATIONINFO_0022>);
 /* C50: the 0033 command-list entries. ResourceBarrier_0022 replaces the
- * aliasing member with ranged barriers; recorded like every barrier (RC73).
- * Present_0028 adds a sync-interval override, never requested. */
-static VOID APIENTRY ResourceBarrier0022(D3D12DDI_HCOMMANDLIST handle, UINT count,
-                                         const D3D12DDIARG_RESOURCE_BARRIER_0022 *) {
-    RecordBarrier(handle, count);
-}
+ * aliasing member with ranged barriers; like every barrier here it needs no
+ * AGX work. Present_0028 adds a sync-interval override, never requested. */
+static VOID APIENTRY ResourceBarrier0022(D3D12DDI_HCOMMANDLIST, UINT, const D3D12DDIARG_RESOURCE_BARRIER_0022 *) {}
 static VOID APIENTRY Present0028(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEUE queue,
                                  const D3D12DDIARG_PRESENT_0001 *arg, D3D12DDI_PRESENT_0028 *out) {
     D3D12DDI_PRESENT_0003 legacy = {};

@@ -198,10 +198,6 @@ HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *Owner, const AGX_D3D12_COMPUTE *C
                               const AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS],
                               const AGX_D3D12_SAMPLER Samplers[AGX_D3D12_SAMPLER_SLOTS], unsigned X, unsigned Y,
                               unsigned Z, const AGX_D3D12_INDIRECT *Indirect);
-/* RC73: a replayed app ResourceBarrier (ListBoundary 0) or the start of a
- * command list (1). Grids launched before it complete, with the native CDM
- * cache flush/invalidate, before grids launched after it. */
-HRESULT AgxD3d12OwnerBarrier(AGX_D3D12_OWNER *Owner, int ListBoundary);
 /* C6a (investigation/analysis/D3D12-C6-graphics.md): textures. Bytes of
  * one texel block of a DXGI format the owner can create (uncompressed,
  * 1x1 blocks), 0 otherwise. */
