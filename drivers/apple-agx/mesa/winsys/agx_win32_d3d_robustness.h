@@ -201,11 +201,31 @@ struct agx_win32_d3d_lowering {
    bool branches;       /* APPLE_AGX_D3D_BUFFER_BRANCHES=1 */
 };
 
+/* RC75: an access the frontend marked ACCESS_IN_BOUNDS (a D3D12 root
+ * descriptor, dxbc_nir_mark_root_views) has no bound to test: D3D12 root
+ * CBVs/SRVs/UAVs carry no size, and an access past the allocation is
+ * undefined. It stays as written, a whole (vector) access. */
+static inline bool
+agx_win32_d3d_unchecked(const nir_intrinsic_instr *intr)
+{
+   return (nir_intrinsic_access(intr) & ACCESS_IN_BOUNDS) != 0;
+}
+
 static inline bool
 agx_win32_d3d_lower_buffer_access_instr(nir_builder *b, nir_intrinsic_instr *intr,
                                         void *data)
 {
    const struct agx_win32_d3d_lowering *state = (const struct agx_win32_d3d_lowering *)data;
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_ubo:
+   case nir_intrinsic_load_ssbo:
+   case nir_intrinsic_store_ssbo:
+      if (agx_win32_d3d_unchecked(intr))
+         return false;
+      break;
+   default:
+      return false;
+   }
    switch (intr->intrinsic) {
    case nir_intrinsic_load_ubo:
       return agx_win32_d3d_lower_load_ubo(b, intr);
@@ -268,8 +288,11 @@ agx_win32_d3d_group_stores(nir_function_impl *impl, struct set *checked)
    nir_foreach_block(block, impl) {
       unsigned count = 0;
       nir_foreach_instr(instr, block) {
+         /* an unchecked (root-descriptor) store is not tested: it ends a run
+          * like any other memory access, so no checked store moves past it */
          const bool store = instr->type == nir_instr_type_intrinsic &&
-                            nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_store_ssbo;
+                            nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_store_ssbo &&
+                            !agx_win32_d3d_unchecked(nir_instr_as_intrinsic(instr));
          /* pure values only: moving a store later past them changes no
           * memory order */
          const bool gap = instr->type == nir_instr_type_alu || instr->type == nir_instr_type_load_const ||

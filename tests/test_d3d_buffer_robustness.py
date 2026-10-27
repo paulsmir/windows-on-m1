@@ -124,6 +124,21 @@ class D3dBufferAccessLowering(unittest.TestCase):
         # every bound size 0..36 (a Store4 at 0 and a Store2 at 24).
         self.expect({"ssbo_store_run_sweep": "wrong 0"})
 
+    def test_root_descriptor_accesses_stay_whole_and_unchecked(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? RC75: D3D12 root
+        # CBVs/UAVs have no size (Resource Binding spec: "no size parameter
+        # in root descriptors defining where out of bounds behavior would
+        # kick in"), yet every access was bounds-checked against the heap's
+        # end and split per component: GravityMark's heaviest kernel
+        # (bdb1944a, 84% of its compute instruction work) compiles to 5660
+        # AGX instructions checked, 4161 unchecked. An access marked
+        # ACCESS_IN_BOUNDS must keep its vector form (2 loads, 1 store), the
+        # two checked stores keep their own tests (an if/else with one if per
+        # component each, 1 store
+        # kept + 4 per-component stores each), and no checked store may move
+        # across the root store.
+        self.expect({"root_views": "2 1 10 10 ordered"})
+
     def test_atomics_are_left_to_the_gl_lowering(self):
         # nir_lower_robust_access predicates them (nothing written, result 0)
         self.expect({"ssbo_atomic": "kept"})

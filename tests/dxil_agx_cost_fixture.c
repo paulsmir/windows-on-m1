@@ -9,14 +9,19 @@
  * the backend's own; uniform numbering is not.
  *
  * usage: dxil_agx_cost_fixture <dxil>|--synthetic-uav-reads=K|--synthetic-local-array=N
- *        [--no-d3d-robust] [--assume-in-bounds]
+ *        [--no-d3d-robust] [--assume-in-bounds] [--root-views=UAV,CBV]
  *        [--print-lowered] [--print-nir]
+ * --root-views: hex masks of the UAV and constant-buffer slots that are
+ * D3D12 root descriptors (RC75 dxbc_nir_mark_root_views: left unchecked) 
  * prints one line:
  *   COST stage <s> block <x>x<y>x<z> shared <B> nir-ifs <n> guarded-loads <n>
  *        loads <n> stores <n> txf <n> mem-blocks <n> hot-mem-blocks <n>
  *        hot-nir <n> hot-branches <n> instrs <n> alu <n> fscib <n> ic <n>
  *        gprs <n> threads <n> scratch <n> spills <n> fills <n> loops <n>
- *        code <n> preamble <n>
+ *        code <n> preamble <n> nir-alu <n> nir-mem <n> nir-tex <n>
+ *        nir-shared <n> barriers <n> atomics <n> root-marked <n>
+ * (RC75 op classes of the final NIR handed to the backend: ALU, device
+ * memory, texture/image, threadgroup memory, workgroup barriers, atomics)
  * or "REFUSED ..." when the translation refuses; a graphics stage prints
  * "NIRCOST stage <s> hot-mem-blocks <n> hot-nir <n> hot-branches <n>", the
  * D3D lowering's in-bounds path before Gallium's I/O lowering. */
@@ -206,6 +211,89 @@ memory_blocks(nir_shader *nir)
       }
    }
    return blocks;
+}
+
+/* RC75: what the final NIR spends its instructions on */
+struct classes {
+   unsigned alu, mem, tex, shared, barriers, atomics;
+};
+
+static void
+count_classes(nir_shader *nir, struct classes *c)
+{
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type == nir_instr_type_alu) {
+               const nir_op op = nir_instr_as_alu(instr)->op;
+               c->alu += op != nir_op_mov && op != nir_op_vec2 && op != nir_op_vec3 && op != nir_op_vec4;
+               continue;
+            }
+            if (instr->type == nir_instr_type_tex) {
+               c->tex++;
+               continue;
+            }
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            switch (intr->intrinsic) {
+            case nir_intrinsic_load_global:
+            case nir_intrinsic_load_global_constant:
+            case nir_intrinsic_store_global:
+            case nir_intrinsic_load_constant_agx:
+               c->mem++;
+               break;
+            case nir_intrinsic_global_atomic:
+            case nir_intrinsic_global_atomic_swap:
+            case nir_intrinsic_global_atomic_agx:
+            case nir_intrinsic_global_atomic_swap_agx:
+               c->mem++;
+               c->atomics++;
+               break;
+            case nir_intrinsic_load_shared:
+            case nir_intrinsic_store_shared:
+               c->shared++;
+               break;
+            case nir_intrinsic_shared_atomic:
+            case nir_intrinsic_shared_atomic_swap:
+               c->shared++;
+               c->atomics++;
+               break;
+            case nir_intrinsic_barrier:
+               c->barriers += nir_intrinsic_execution_scope(intr) >= SCOPE_WORKGROUP;
+               break;
+            default: {
+               const char *name = nir_intrinsic_infos[intr->intrinsic].name;
+               if (strstr(name, "image")) {
+                  c->tex++;
+                  c->atomics += strstr(name, "atomic") != NULL;
+               }
+               break;
+            }
+            }
+         }
+      }
+   }
+}
+
+/* RC75: root-descriptor accesses the frontend marked */
+static unsigned
+count_marked(nir_shader *nir)
+{
+   unsigned marked = 0;
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            marked += (intr->intrinsic == nir_intrinsic_load_ubo || intr->intrinsic == nir_intrinsic_load_ssbo ||
+                       intr->intrinsic == nir_intrinsic_store_ssbo) &&
+                      (nir_intrinsic_access(intr) & ACCESS_IN_BOUNDS);
+         }
+      }
+   }
+   return marked;
 }
 
 static void
@@ -413,7 +501,10 @@ int
 main(int argc, char **argv)
 {
    bool d3d_robust = true, print_nir = false, print_lowered = false, in_bounds = false;
+   unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
+      if (sscanf(argv[a], "--root-views=%x,%x", &root_uavs, &root_cbvs) == 2)
+         continue;
       d3d_robust &= strcmp(argv[a], "--no-d3d-robust") != 0;
       print_nir |= !strcmp(argv[a], "--print-nir");
       print_lowered |= !strcmp(argv[a], "--print-lowered"); /* after the D3D lowering */
@@ -466,6 +557,9 @@ main(int argc, char **argv)
    const unsigned block[3] = {nir->info.workgroup_size[0], nir->info.workgroup_size[1], nir->info.workgroup_size[2]};
    const unsigned shared = nir->info.shared_size;
 
+   /* RC75: the owner marks root-descriptor slots after translation */
+   dxbc_nir_mark_root_views(nir, root_cbvs, root_uavs);
+   const unsigned marked = count_marked(nir);
    /* agx_shader_initialize (native projection, D3D context) */
    if (d3d_robust)
       NIR_PASS(_, nir, agx_win32_lower_d3d_buffer_access);
@@ -517,6 +611,8 @@ main(int argc, char **argv)
       nir_print_shader(nir, stdout);
    /* J313: G13G (M1), no G13X cluster coherency, no soft fault */
    const unsigned mem_blocks = memory_blocks(nir);
+   struct classes classes = {0};
+   count_classes(nir, &classes);
    struct agx_shader_key key = {.dev = {.needs_g13x_coherency = U_TRISTATE_NO},
                                 .has_scratch = true, .promote_constants = true, .reserved_preamble = 240};
    struct agx_shader_part part = {0};
@@ -524,10 +620,11 @@ main(int argc, char **argv)
    const struct agx2_stats *s = &part.info.stats;
    printf("COST stage %s block %ux%ux%u shared %u nir-ifs %u guarded-loads %u loads %u stores %u txf %u mem-blocks %u hot-mem-blocks %u hot-nir %u hot-branches %u "
           "instrs %u alu %u fscib %u ic %u gprs %u threads %u scratch %u spills %u fills %u loops %u code %u "
-          "preamble %u\n",
+          "preamble %u nir-alu %u nir-mem %u nir-tex %u nir-shared %u barriers %u atomics %u root-marked %u\n",
           mesa_shader_stage_name(MESA_SHADER_COMPUTE), block[0], block[1], block[2], shared, counts.ifs,
           counts.guarded_loads, counts.loads, counts.stores, counts.txf, mem_blocks, hot.memory_blocks, hot.instrs, hot.branches, s->instrs, s->alu, s->fscib, s->ic,
-          s->gprs, s->threads, s->scratch, s->spills, s->fills, s->loops, s->code_size, s->preamble_inst);
+          s->gprs, s->threads, s->scratch, s->spills, s->fills, s->loops, s->code_size, s->preamble_inst,
+          classes.alu, classes.mem, classes.tex, classes.shared, classes.barriers, classes.atomics, marked);
    free(part.binary);
    ralloc_free(nir);
    glsl_type_singleton_decref();

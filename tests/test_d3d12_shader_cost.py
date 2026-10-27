@@ -18,6 +18,12 @@ pinned AGX backend (tests/dxil_agx_cost_fixture.c):
   must live on the AGX stack, not in Asahi's register if/else trees: fewer
   instructions and GPRs than APPLE_AGX_D3D_SCRATCH_ARRAYS=0 (Asahi's rule
   alone: more than 256 bytes), while a 64-byte one stays in registers.
+RC75: D3D12 root descriptors have no size, so accesses through them are
+not checked: a kernel whose UAV slots are all root descriptors
+(--root-views) must compile exactly as the unchecked kernel (same
+instructions, no branch, its float4 loads whole), while the same slots as
+descriptor-table views keep the D3D checks (RED before: the lowering
+checked every slot).
 The receipt ranking must join dispatches with their compute statistics by
 the CS hash's low 32 bits, count direct groups and threads, keep indirect
 dispatches as counts, and ignore other processes.
@@ -127,6 +133,19 @@ class CompiledCost(unittest.TestCase):
         small = self.tool.cost(self.binary, '--synthetic-local-array=16')
         self.assertEqual(small, self.tool.cost(self.binary, '--synthetic-local-array=16', env=asahi_rule))
         self.assertEqual(small['scratch'], 0)
+
+    def test_root_descriptor_slots_compile_unchecked(self):
+        for source in ('--synthetic-uav-reads=4', FIXTURE):
+            with self.subTest(source=str(source)):
+                robust, unchecked = self.costs(source)
+                root = self.tool.cost(self.binary, source, '--root-views=ff,3fff')
+                self.assertGreater(root['root-marked'], 0)
+                for key in ('instrs', 'alu', 'gprs', 'loads', 'stores', 'hot-branches', 'nir-mem'):
+                    self.assertEqual(root[key], unchecked[key], key)
+                self.assertLess(root['instrs'], robust['instrs'])
+                # a slot that is not a root descriptor keeps its checks
+                table = self.tool.cost(self.binary, source, '--root-views=0,0')
+                self.assertEqual(table, robust)
 
     def test_a_run_of_uav_stores_is_tested_once(self):
         robust, unchecked = self.costs(FIXTURE)

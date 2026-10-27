@@ -3864,6 +3864,51 @@ dxbc_nir_finalize(nir_shader *nir)
    nir_validate_shader(nir, "dxbc_nir_finalize");
 }
 
+/* RC75: masks[0] constant-buffer slots, masks[1] UAV (shader-buffer) slots */
+static bool
+dxbc_nir_mark_root_view(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   const uint32_t *masks = (const uint32_t *)data;
+   uint32_t mask;
+   unsigned src;
+   (void)b;
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_ubo:
+      mask = masks[0];
+      src = 0;
+      break;
+   case nir_intrinsic_load_ssbo:
+      mask = masks[1];
+      src = 0;
+      break;
+   case nir_intrinsic_store_ssbo:
+      mask = masks[1];
+      src = 1;
+      break;
+   default:
+      return false;
+   }
+   if (!nir_src_is_const(intr->src[src]))
+      return false;
+   const uint64_t slot = nir_src_as_uint(intr->src[src]);
+   if (slot >= 32u || !(mask & (1u << slot)) || (nir_intrinsic_access(intr) & ACCESS_IN_BOUNDS))
+      return false;
+   nir_intrinsic_set_access(intr, (enum gl_access_qualifier)(nir_intrinsic_access(intr) | ACCESS_IN_BOUNDS));
+   return true;
+}
+
+bool
+dxbc_nir_mark_root_views(nir_shader *nir, uint32_t cbv_slots, uint32_t uav_slots)
+{
+   /* root UAVs have no counter (their slots are below DXBC_NIR_UAV_COUNTER_SLOT) */
+   const uint32_t masks[2] = {cbv_slots, uav_slots & ((1u << DXBC_NIR_MAX_UAVS) - 1u)};
+   if (!nir || (!masks[0] && !masks[1]))
+      return false;
+   /* slot indices built as base + array index fold to constants */
+   NIR_PASS(_, nir, nir_opt_constant_folding);
+   return nir_shader_intrinsics_pass(nir, dxbc_nir_mark_root_view, nir_metadata_all, (void *)masks);
+}
+
 void
 dxbc_nir_compute_info(const nir_shader *nir, unsigned block[3], unsigned *shared_bytes)
 {

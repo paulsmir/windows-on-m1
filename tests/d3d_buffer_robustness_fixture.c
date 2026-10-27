@@ -271,6 +271,60 @@ ssbo_store_run_sweep(void)
    return wrong;
 }
 
+/* RC75: accesses marked ACCESS_IN_BOUNDS (D3D12 root descriptors,
+ * dxbc_nir_mark_root_views) are left whole: a float4 load of a root UAV,
+ * a float4 store between two checked stores, a root constant-buffer read;
+ * printed as "<case> <kept vector loads> <kept vector stores> <ifs>
+ * <checked stores left> <order ok>" */
+static void
+root_view_case(void)
+{
+   nir_builder b = begin();
+   const enum gl_access_qualifier root = ACCESS_IN_BOUNDS;
+   sink(&b, nir_load_ssbo(&b, 4, 32, nir_imm_int(&b, 1), nir_imm_int(&b, 32), .access = root,
+                          .align_mul = 16, .align_offset = 0));
+   sink(&b, nir_load_ubo(&b, 4, 32, nir_imm_int(&b, 3), nir_imm_int(&b, 64), .access = root,
+                         .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0u));
+   nir_store_ssbo(&b, nir_imm_ivec4(&b, 1, 2, 3, 4), nir_imm_int(&b, 2), nir_imm_int(&b, 0),
+                  .write_mask = 0xf, .align_mul = 4, .align_offset = 0);
+   nir_store_ssbo(&b, nir_imm_ivec4(&b, 5, 6, 7, 8), nir_imm_int(&b, 1), nir_imm_int(&b, 0),
+                  .write_mask = 0xf, .access = root, .align_mul = 16, .align_offset = 0);
+   nir_store_ssbo(&b, nir_imm_ivec4(&b, 9, 10, 11, 12), nir_imm_int(&b, 2), nir_imm_int(&b, 16),
+                  .write_mask = 0xf, .align_mul = 4, .align_offset = 0);
+   agx_win32_lower_d3d_buffer_access(b.shader);
+   nir_validate_shader(b.shader, "root views");
+   unsigned loads = 0, stores = 0, checked = 0, order = 0, seen = 0;
+   nir_foreach_function_impl(impl, b.shader) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            const bool unchecked = nir_intrinsic_has_access(intr) && (nir_intrinsic_access(intr) & ACCESS_IN_BOUNDS);
+            if ((intr->intrinsic == nir_intrinsic_load_ssbo || intr->intrinsic == nir_intrinsic_load_ubo) && unchecked)
+               loads += intr->def.num_components == 4;
+            if (intr->intrinsic != nir_intrinsic_store_ssbo)
+               continue;
+            if (unchecked) {
+               stores += util_bitcount(nir_intrinsic_write_mask(intr)) == 4;
+               /* the root store follows every copy of the first checked store */
+               order += seen == 0 ? 0 : 1;
+               seen |= 2;
+            } else {
+               checked++;
+               /* a checked copy of the second store must not precede the root store */
+               if (nir_src_is_const(intr->src[2]) && nir_src_as_uint(intr->src[2]) == 16 && !(seen & 2))
+                  order = 100;
+               seen |= 1;
+            }
+         }
+      }
+   }
+   printf("root_views %u %u %u %u %s\n", loads, stores, count_ifs(b.shader), checked,
+          order == 1 ? "ordered" : "reordered");
+   ralloc_free(b.shader);
+}
+
 static void
 atomic_case(void)
 {
@@ -305,6 +359,7 @@ main(void)
    ssbo_store_case("ssbo_store_masked_partial", 4, 0x9, 16);
    ssbo_store_case("ssbo_store_wrapping_offset", 0xfffffffcu, 0x3, 16);
    atomic_case();
+   root_view_case();
    unsigned load_ifs;
    const unsigned load_wrong = ssbo_load_sweep(&load_ifs);
    printf("ssbo_load_sweep wrong %u ifs %u\n", load_wrong, load_ifs);

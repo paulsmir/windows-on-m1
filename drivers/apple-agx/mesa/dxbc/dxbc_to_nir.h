@@ -87,6 +87,18 @@ dxbc_to_nir_hs(const struct dxbc_program *program,
  * standard optimization loop; the shader info is gathered and validated. */
 void dxbc_nir_finalize(struct nir_shader *nir);
 
+/* RC75: D3D12 root descriptors carry no size (Microsoft "Resource Binding"
+ * spec, Using Descriptors Directly in the Root Arguments: "there is no size
+ * parameter in root descriptors defining where out of bounds behavior would
+ * kick in"; the application stays within the allocation, accesses past it
+ * are undefined). Marks the constant-buffer loads of the slots in
+ * cbv_slots and the shader-buffer loads and stores of the UAV slots in
+ * uav_slots (constant slot indices only) ACCESS_IN_BOUNDS, which the D3D
+ * buffer-robustness lowering (winsys/agx_win32_d3d_robustness.h) leaves
+ * unchecked and whole (vector). Descriptor-table views keep their checks.
+ * Returns whether anything was marked. */
+bool dxbc_nir_mark_root_views(struct nir_shader *nir, uint32_t cbv_slots, uint32_t uav_slots);
+
 /* Asahi's integer pixel-coordinate lowering requires frontend fragment-center
  * normalization. Call exactly once on a fresh fragment shader, before handing
  * it to Asahi. Kept explicit: other frontends may already normalize position. */
