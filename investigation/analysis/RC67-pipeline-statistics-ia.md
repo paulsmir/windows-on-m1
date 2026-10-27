@@ -68,11 +68,38 @@ Result per GravityMark HD Execute: ~1020 IA dispatches + CDM barriers become ~7 
 dispatches + ~13 native ones. RC57 statistics probes use the GPU stream path or single draws,
 both unchanged.
 
+## Second change: one BO per D3D12 statistics index (EXP1988)
+
+EXP1988 (rc66 in, `.local/experiments/EXP1988-shader-offnative/evidence/EXP1988/gm1988{a,b}-umd.log`,
+coordinator summary): QUERY escapes on 64 KiB slots are now the main copy cost, 28 per HD
+Execute (12.4 ms, score 2318) and 46 per FHD Execute (29.1 ms); other small classes are ~0.
+Arena occupancy at a refusal: General 45.75 MiB in 113 slots, Encoder 14.25 MiB in 38.
+
+Source: the owner begins all 11 statistics queries of an index together
+(`mesa/winsys/agx_d3d12_windows.cpp` `AgxD3d12OwnerQuery`), each owns a 16-byte BO
+(`agx_query.c:166`) rounded to a 64 KiB allocation, Begin zeroes each on the CPU, and the
+GPUVA Begin swaps in a fresh query (a new BO) whenever the old one is busy
+(`mesa/winsys/agx_win32_query_lifecycle.h` `agx_win32_query_reset`). Each dirty BO pays its own
+QUERY (drain, RC66) and UPLOAD escape at the next submission.
+
+`mesa/winsys/agx_win32_query_group.h` (`AgxWin32AsahiQueryGroupBegin`, projected by
+`mesa/scripts/native-asahi-query-group.py`) gives the 11 queries one BO and resets them as a unit
+before Begin. Invariants: query i at 16 * i; the BO holds exactly one group, so a whole-page
+upload or download only carries slots that Begin zeroes together while no member is busy; a busy
+member moves the whole group to one fresh BO (old storage retires by generation, identities
+kept), so the per-query reset in `agx_begin_query` never allocates a lone BO; every member holds
+a BO reference. Owner calls it for statistics Begin only; on failure the old per-query path runs.
+
+Expected: 11 statistics BOs and their escapes per Begin become 1. If, as RC66 decoded for
+EXP1986, ~22 of the 28 HD escapes are statistics BOs (two indices per Execute), ~20 escapes go,
+up to ~9 ms per HD Execute at EXP1988's 0.44 ms each (FHD: proportionally more). This share is
+an assumption until the next receipt.
+
 ## Not changed
 
-- One `PIPELINE_STATISTICS` query or a shared BO for the 11 single queries: a CPU Begin zeroes
-  each query slot after syncing only that query's writers (`agx_query.c:290`). With a shared
-  BO the Windows transport uploads the BO as a whole, which can overwrite another query's
-  in-flight GPU result. Needs its own design; RC66 owns these escapes.
+- A single PIPELINE_STATISTICS query: Asahi has none (`agx_begin_query` refuses the type); the
+  shared BO gives the same storage effect without a new query type.
+- A slab shared by several indices: a CPU Begin of one index would ship stale CPU bytes of
+  another index's in-flight results in the same page. Rejected.
 - CPU arithmetic for direct draws: ~13 per Execute, not worth a second mechanism.
 - Counting only the counters the app reads: D3D12 resolves all 11 values.
