@@ -1,10 +1,13 @@
-"""Execute the production native-arena helpers with the real ring allocator.
+"""Execute the production native-arena helpers with the real slice allocator.
 
 WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Arena fallback must never
 reuse another token's slice, exceed four mappings, publish a closing-device or
 unrepresentable WOW64 view, or leak a never-bound mapping because cancellation
 reuses a malformed reply header. Failure retains only the documented KMD owner.
+RC62 (EXP1984): a released slice must be reusable while an older slice of the
+same arena is still live; the FIFO ring instead mapped a new arena per wrap.
 """
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -24,7 +27,7 @@ HARNESS = r'''
 #include <cstring>
 #include <pthread.h>
 #include "render_win32_transport.h"
-#include "umd_staging_ring.h"
+#include "umd_native_arena.h"
 using VOID=void; using BOOL=int; using BYTE=unsigned char; using UINT=unsigned;
 using ULONGLONG=unsigned long long; using HRESULT=int32_t; using HANDLE=void *;
 using SIZE_T=size_t;
@@ -53,7 +56,7 @@ struct D3DDDICB_ESCAPE {
 struct CALLBACKS {HRESULT (*pfnEscapeCb)(HANDLE,D3DDDICB_ESCAPE *);};
 struct ADMISSION_UMD_ADAPTER {UINT Magic; struct {HANDLE handle;} RuntimeAdapter;};
 struct ADMISSION_UMD_NATIVE_ARENA {
-  BOOL Attempted; BYTE *Address; ULONGLONG Token; ADMISSION_UMD_STAGING_RING *Ring;
+  BOOL Attempted; BYTE *Address; ULONGLONG Token; @@RING@@ *Ring;
 };
 struct ADMISSION_UMD_DEVICE {
   UINT Magic;
@@ -220,14 +223,38 @@ static void invalid_transport(ADMISSION_UMD_DEVICE *d) {
   callbacks.pfnEscapeCb=nullptr; assert(!reserve()); callbacks.pfnEscapeCb=escape;
   assert(!map_calls && !heap_live);
 }
-static void fifo_retention(ADMISSION_UMD_DEVICE *d) {
+/* A live older slice must not pin space released after it. */
+static void out_of_order_reuse(ADMISSION_UMD_DEVICE *d) {
   ADMISSION_UMD_RING_SLICE a,b,c; BYTE *p; ULONGLONG t,t2;
   assert(AdmissionUmdNativeStagingReserve(d,64u<<20,65536,&a,&p,&t));
   assert(AdmissionUmdNativeStagingReserve(d,64u<<20,65536,&b,&p,&t2) && t==t2);
   assert(AdmissionUmdNativeStagingRelease(d,t,b.Ticket,4));
-  assert(d->NativeStaging[0].Ring->Used==(128u<<20));
-  assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&c,&p,&t2) && t2!=t);
+  assert(d->NativeStaging[0].Ring->Used==(64u<<20));
+  assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&c,&p,&t2));
+  assert(t2==t && c.Offset==(64u<<20) && map_calls==1);
+  assert((uintptr_t)p==mappings[0].base+(64u<<20));
+  assert(!AdmissionUmdNativeStagingRelease(d,t,b.Ticket,4)); /* stale ticket */
   assert(AdmissionUmdNativeStagingRelease(d,t,a.Ticket,7));
+  assert(AdmissionUmdNativeStagingRelease(d,t,c.Ticket,8));
+  assert(!d->NativeStaging[0].Ring->Used && !cancel_calls);
+}
+/* Steady state: one long-lived BO plus per-frame staging churn stays in the
+ * first arena and every reservation is a distinct, non-overlapping slice. */
+static void steady_churn(ADMISSION_UMD_DEVICE *d) {
+  ADMISSION_UMD_RING_SLICE keep,s[3]; BYTE *p; ULONGLONG t,tk;
+  assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&keep,&p,&tk));
+  for(unsigned frame=0;frame<300;++frame) {
+    for(unsigned i=0;i<3;++i) {
+      assert(AdmissionUmdNativeStagingReserve(d,(16u+i)<<20,65536,&s[i],&p,&t));
+      assert(t==tk && s[i].Offset>=65536u);
+      for(unsigned j=0;j<i;++j)
+        assert(s[i].Offset>=s[j].Offset+s[j].Bytes || s[j].Offset>=s[i].Offset+s[i].Bytes);
+    }
+    for(unsigned i=0;i<3;++i)
+      assert(AdmissionUmdNativeStagingRelease(d,t,s[(i+frame)%3].Ticket,frame+1ull));
+  }
+  assert(map_calls==1 && d->NativeStaging[0].Ring->Used==65536u);
+  assert(AdmissionUmdNativeStagingRelease(d,tk,keep.Ticket,0));
   assert(!d->NativeStaging[0].Ring->Used && !cancel_calls);
 }
 int main(int argc,char **argv) {
@@ -235,7 +262,8 @@ int main(int argc,char **argv) {
   ADMISSION_UMD_RING_SLICE s={}; BYTE *p=nullptr; ULONGLONG t=0;
   if(!strcmp(argv[1],"four")) four_arenas(&d);
   else if(!strcmp(argv[1],"transport")) invalid_transport(&d);
-  else if(!strcmp(argv[1],"fifo")) fifo_retention(&d);
+  else if(!strcmp(argv[1],"reuse")) out_of_order_reuse(&d);
+  else if(!strcmp(argv[1],"churn")) steady_churn(&d);
   else if(!strcmp(argv[1],"disabled")) {
     d.NativeStagingDisabled=TRUE;
     assert(!AdmissionUmdNativeStagingReserve(&d,65536,65536,&s,&p,&t));
@@ -282,12 +310,17 @@ class NativeStagingArena(unittest.TestCase):
                  "AdmissionUmdNativeStagingRelease")
         bodies = [function(text, name) for name in names]
         self.assertTrue(all(bodies), "production native arena helper missing")
-        scenarios = ("four", "transport", "fifo", "disabled", "heap", "reentrant",
+        scenarios = ("four", "transport", "reuse", "churn", "disabled", "heap", "reentrant",
                      *(str(i) for i in range(1, 15)))
         with tempfile.TemporaryDirectory(prefix="umd-native-arena-") as path:
             tmp = Path(path)
             src = tmp / "arena.cpp"
-            src.write_text(HARNESS.replace("@@HELPERS@@", "\n".join(bodies)))
+            internal = (DRIVER / "render-admission/umd/src/umd_internal.h").read_text()
+            ring = re.search(r"\b(ADMISSION_UMD_[A-Z_]+) \*Ring;\s*\} ADMISSION_UMD_NATIVE_ARENA;",
+                             internal)
+            self.assertTrue(ring, "native arena slice type missing")
+            src.write_text(HARNESS.replace("@@HELPERS@@", "\n".join(bodies))
+                           .replace("@@RING@@", ring.group(1)))
             for wow64 in (False, True):
                 exe = tmp / ("wow64" if wow64 else "native")
                 flags = ["-DTEST_WOW64", "-Wno-int-to-pointer-cast"] if wow64 else []

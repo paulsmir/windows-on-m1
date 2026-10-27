@@ -15,6 +15,7 @@
 #ifdef APPLE_AGX_GPUVA_WINSYS
 #define APPLE_AGX_NATIVE_STAGING 1
 #include "umd_staging_ring.h"
+#include "umd_native_arena.h"
 #include "agx_win32_gpuva.h"
 #endif
 
@@ -53,7 +54,7 @@ typedef struct _ADMISSION_UMD_NATIVE_ARENA {
   BOOL Attempted;
   BYTE *Address;
   ULONGLONG Token;
-  ADMISSION_UMD_STAGING_RING *Ring;
+  ADMISSION_UMD_NATIVE_SPANS *Ring;
 } ADMISSION_UMD_NATIVE_ARENA;
 #endif
 

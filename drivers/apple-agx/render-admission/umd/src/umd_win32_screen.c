@@ -763,8 +763,8 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
     if (!arena->Attempted) { arena->Attempted = TRUE; initialize = TRUE; }
     ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
     if (initialize) {
-      auto *ring = (ADMISSION_UMD_STAGING_RING *)HeapAlloc(
-          GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(ADMISSION_UMD_STAGING_RING));
+      auto *ring = (ADMISSION_UMD_NATIVE_SPANS *)HeapAlloc(
+          GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(ADMISSION_UMD_NATIVE_SPANS));
       if (ring) {
         ADMISSION_NATIVE_STAGING_REQUEST q = {};
         D3DDDICB_ESCAPE request = {};
@@ -782,7 +782,7 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
             q.Capacity == ADMISSION_NATIVE_STAGING_MAX_BYTES && q.Token && q.UserVa &&
             !(q.UserVa & 65535ULL) && q.UserVa <= (ULONGLONG)(ULONG_PTR)-1 &&
             q.Capacity - 1ULL <= (ULONGLONG)(ULONG_PTR)-1 - q.UserVa &&
-            AdmissionUmdRingInit(ring, q.Capacity);
+            AdmissionUmdNativeSpansInit(ring, q.Capacity);
         UINT values[4] = {q.Capacity, (UINT)q.Token, (UINT)(q.Token >> 32), (UINT)valid};
         AdmissionUmdDiagnostic("measure-native-ring-map", hr, values, ARRAYSIZE(values));
         AcquireSRWLockExclusive(&Device->ScreenBufferLock);
@@ -813,7 +813,7 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
     }
     AcquireSRWLockExclusive(&Device->ScreenBufferLock);
     if (!Device->ScreenClosing && !Device->DrawTerminal && arena->Ring) {
-      reserved = AdmissionUmdRingReserveOwned(arena->Ring,
+      reserved = AdmissionUmdNativeSpansReserve(arena->Ring,
           (UINT)Bytes, (UINT)Alignment, Slice);
       if (reserved) {
         *Address = arena->Address + Slice->Offset;
@@ -837,7 +837,7 @@ static BOOL AdmissionUmdNativeStagingRelease(ADMISSION_UMD_DEVICE *Device,
   for (UINT i=0; i<ADMISSION_UMD_NATIVE_ARENAS; ++i) {
     ADMISSION_UMD_NATIVE_ARENA *arena = &Device->NativeStaging[i];
     if (arena->Ring && arena->Token == Token) {
-      released = AdmissionUmdRingReleaseOwned(arena->Ring, Ticket, LastUse,
+      released = AdmissionUmdNativeSpansRelease(arena->Ring, Ticket, LastUse,
           LastUse > arena->Ring->Completed ? LastUse : arena->Ring->Completed);
       break;
     }
