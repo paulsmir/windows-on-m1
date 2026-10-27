@@ -21,6 +21,10 @@ BOOLEAN AdmissionNativeStagingBind(struct _ADMISSION_CONTEXT *Adapter,
 VOID AdmissionNativeStagingUnbind(PVOID Binding);
 BOOLEAN AdmissionNativeStagingPage(PVOID Binding,
     ULONGLONG AllocationOffset, ULONGLONG Ipa);
+/* Inverse of Page: the offset of Ipa inside this binding's own slice, or
+ * FALSE for every page that is not one of its slice pages. */
+BOOLEAN AdmissionNativeStagingLocate(PVOID Binding, ULONGLONG Ipa,
+    PULONGLONG AllocationOffset);
 /* Receipt-only, like Page: the authenticated page at AllocationOffset and
  * the ring offset whose page is Ipa (ADMISSION_NATIVE_PTE_NONE if absent). */
 VOID AdmissionNativeStagingDescribe(PVOID Binding, ULONGLONG AllocationOffset,

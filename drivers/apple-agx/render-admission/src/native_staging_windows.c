@@ -351,6 +351,40 @@ BOOLEAN AdmissionNativeStagingPage(PVOID Binding,
           << PAGE_SHIFT) == Ipa;
 }
 
+/* RC61 (EXP1983): the inverse of Page, under the same lifetime contract.
+ * pSystemMem is UserVa + Offset of this binding's ring, so VidMm's PTE for
+ * allocation offset o carries the ring page at Offset + o. Return o for Ipa
+ * only when Ipa is one of this binding's own slice pages; any other page
+ * (another slice, another ring, a dummy page) is FALSE. Bind requires a
+ * 64 KiB Offset/Bytes and NativeGeometry proved every 64 KiB chunk
+ * contiguous, so only chunk heads are scanned (at most 2048 for 128 MiB),
+ * the exact PFN is still compared. */
+BOOLEAN AdmissionNativeStagingLocate(PVOID Binding, ULONGLONG Ipa,
+    PULONGLONG AllocationOffset) {
+  const NATIVE_BINDING *binding = (const NATIVE_BINDING *)Binding;
+  const PFN_NUMBER *pages;
+  ULONGLONG chunk;
+  if (AllocationOffset == NULL) return FALSE;
+  *AllocationOffset = 0ULL;
+  if (binding == NULL || binding->Magic != NATIVE_BINDING_MAGIC ||
+      (Ipa & (PAGE_SIZE - 1u)) != 0ULL)
+    return FALSE;
+  pages = MmGetMdlPfnArray(binding->Ring->Mdl);
+  for (chunk = 0ULL; chunk < binding->Bytes; chunk += NATIVE_RING_CHUNK) {
+    ULONGLONG head = (ULONGLONG)pages[(binding->Offset + chunk) >> PAGE_SHIFT]
+        << PAGE_SHIFT;
+    ULONGLONG inner;
+    if (Ipa < head || Ipa - head >= NATIVE_RING_CHUNK) continue;
+    inner = Ipa - head;
+    if (((ULONGLONG)pages[(binding->Offset + chunk + inner) >> PAGE_SHIFT]
+         << PAGE_SHIFT) != Ipa)
+      continue;
+    *AllocationOffset = chunk + inner;
+    return TRUE;
+  }
+  return FALSE;
+}
+
 /* RC60 receipt helper, under the same lifetime contract as Page. It runs
  * only for a page the paging path already refused, so the bounded scan of
  * the immutable ring PFN array (32768 entries for 128 MiB) is off the
