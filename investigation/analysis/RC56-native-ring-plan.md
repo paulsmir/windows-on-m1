@@ -131,6 +131,17 @@ cleanup retains its ticket and terminal owner. Arenas remain charged for the
 KMD-process graph lifetime, including after a UMD device closes; this is an
 explicit bounded memory/performance tradeoff, not an eviction-capable arena.
 
+RC64 (EXP1985) changed the placement order inside that charge. First-come
+placement let multi-MiB BOs created during scene load fill all 60 MiB
+(occupancy 60/60 MiB from frame 55 to the end). Every later small BO then
+fell back with reason 1: Asahi's per-query BO (16 bytes, a 64 KiB slice),
+pool slabs (256 KiB), batch encoders (512 KiB) and the 512 KiB D3D12 readback
+heaps, which are written or read on every submission or resolve. Now a slice
+over 1 MiB uses only the 32 MiB arena. The 4, 8 and 16 MiB arenas (28 MiB)
+hold only slices up to 1 MiB, which also use the 32 MiB arena once their own
+arenas are full. A refused slice over 1 MiB reports reason 5. The aggregate
+charge, the 16 MiB per-BO limit and the release rules are unchanged.
+
 TDR does not itself remove CPU views or permit physical page reuse. Failed
 graph retirement retains backing. Normal Stop refuses live processes/rings
 before tearing down the pool. Final Unload always removes its registered
@@ -148,9 +159,15 @@ Receipts: `native-ring-map` records mapping status/capacity/token;
 `native-ring-allocation` records token/ticket/offset/bytes;
 `native-ring-use` records referenced native capacity per transfer phase, **not
 dirty bytes**; `native-ring-fallback` reason 1 means arena unavailable/full, reason 4
-means the BO is over the 16 MiB native slice limit, reason 3 means a refused
-arena mapping and reason 2 means clean ExistingSysMem allocation refusal,
-with requested bytes, aggregate occupancy/capacity and HRESULT. Pool receipt
+means the BO is over the 16 MiB native slice limit, reason 5 (RC64) means a
+slice over 1 MiB found the 32 MiB large-slice arena full, reason 3 means a
+refused arena mapping and reason 2 means clean ExistingSysMem allocation
+refusal, with requested bytes, aggregate occupancy/capacity and HRESULT.
+RC64 `measure-copy-escape-class` (once per D3D12 Execute with escapes): word 0
+is version 1; words 1-12 are `count << 20 | microseconds` (12 and 20 bits,
+saturating) for query, upload and download, each by slot size <=64 KiB,
+<=1 MiB, <=16 MiB and larger; word 13 is the same for escapes outside a slot
+transfer; words 14-15 are the total count and microseconds. Pool receipt
 v10 and its decoder separate NativeStagingBytes and TotalPromisedBytes while
 preserving v7-v9 prefixes.
 NativeStagingBytes includes an in-progress allocation charge. The decoder's
