@@ -64505,3 +64505,18 @@ EXP1980 HARDWARE ACTUAL 2026-10-27T09:09:56Z:
   - a guest reboot then stayed at the proxy;
   - attempt 3 at the proxy: the guest booted, but disable-service failed (no service; package absent). During that relaunch a **bugcheck 0x101 CLOCK_WATCHDOG_TIMEOUT** occurred (minidump 102726-17625-01.dmp, P1=0x18, P3=ffffd200dfd68980, P4=2), not yet analyzed;
   - final: the signer cert was removed manually and the durable preflight returned Verdict PASS with the package absent (rec1980h/recover-run-manual.log).
+
+EXP1981 HARDWARE BEFORE 2026-10-27T09:33:03Z:
+- Package 30.0.1981.0 = EXP1980 driver + rc58:
+  - cb590097: the UMD reserves and encodes 64 KiB native staging extents, as the KMD validator requires;
+  - 39e752a2: a failed map falls back with measure-native-ring receipts;
+  - 7f4c1d7c: allocation identity is proven before reading the native binding;
+  - 973be537: the private-acquire failure receipt v2 records the first poison site.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1. The previous recovery was completed manually (rec1980h/recover-run-manual.log).
+- WHY THIS HYPOTHESIS: EXP1979 lost the device because the process was poisoned before its first private acquire. rc58 found a deterministic UMD/KMD extent mismatch for native staging BOs, plus an unchecked read of the native binding in the paging leaf check (the likely poison site 0x26). Copy escapes are 46-58 ms per frame on the default path.
+- Expected: no reject-private-escape and no device removal; copy_escape near zero; arm a above 1638, arm b above 1275; measure-native-ring-* receipts present.
+- Failure criteria: device removal (then read Wom1G3PrivateAcquireFailure.Reserved), a bugcheck, or a hang.
+- Recovery: rec1981h.
+- Hashes: sys 0df9225fccbe, UmdArm64 b7c630967227, UmdX64 e17632185cc7, Umd32 d91e58a5fcb0; manifest a883a8f57ce6, hardware-manifest fc8cde5abfb9; probe1981.sh 9148de56e5f1 (PROBE_LINT_OK); visible recovery rec1981h 7b86156447d5cf42; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1981h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1981-native-staging2/run1981.sh.
