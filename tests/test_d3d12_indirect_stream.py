@@ -2,7 +2,9 @@
 RC32 encodes MaxCount draws on the CPU. The replacement must generate bounded
 VDM records on the GPU, link back at the clamped count without a return stack, and select a distinct
 USC parameter address for every draw (including negative base vertex and
-nonzero first instance). Execute the production kernel with the real Mesa
+nonzero first instance). rc79: a grid smaller than MaxCount + 1 (threads
+striding over the records) must produce byte-identical records, terminator
+and untouched tails, so the dispatch need not scale with MaxCount. Execute the production kernel with the real Mesa
 pack helpers under ASan/UBSan; no substitute stream encoder is used.
 """
 from pathlib import Path
@@ -32,8 +34,8 @@ static struct { unsigned x; } cl_global_id;
 #undef NDEBUG
 #include <assert.h>
 
-static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
-                unsigned param_uniform) {
+static void run_threads(unsigned indexed, unsigned limit, unsigned value, bool counted,
+                unsigned param_uniform, unsigned threads) {
    const unsigned stride=36, usc_stride=128, usc_bytes=80, patch=16;
    unsigned enabled=counted && value<limit ? value : limit;
    unsigned slot=agx_win32_stream_record_bytes(indexed);
@@ -62,6 +64,9 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
       .index_size=indexed, .restart=1, .topology=AGX_PRIMITIVE_TRIANGLE_STRIP,
       /* RC69: the template's native VS block; word 1 is replaced per record. */
       .vs_state={0x4000002eu, 0x1111u, 0xdeadbeefu, 0x0808u, 0x2u, 0},
+      /* rc79: 0 = one record per work-item (grid MaxCount + 1); otherwise a
+       * grid of `threads` work-items strides over the records. */
+      .threads=threads,
    };
    /* Reverse work-item order also proves the terminator has no race with slots. */
    for(unsigned i=limit+32;i-- > 0;) {
@@ -105,6 +110,14 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
    for(unsigned k=enabled*usc_stride;k<limit*usc_stride+32;++k)
       assert(usc[k]==0xab);
    free(out);free(args);free(usc);
+}
+static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
+                unsigned param_uniform) {
+   run_threads(indexed, limit, value, counted, param_uniform, 0);
+   /* rc79: a bounded grid writes exactly the same records and terminator. */
+   run_threads(indexed, limit, value, counted, param_uniform, 1);
+   run_threads(indexed, limit, value, counted, param_uniform, 3);
+   run_threads(indexed, limit, value, counted, param_uniform, 32);
 }
 int main(void) {
    /* RC43 hardware-probe matrix: MaxCount2, both index sizes, count0/1/2. */

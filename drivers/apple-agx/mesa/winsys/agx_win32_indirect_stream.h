@@ -25,6 +25,12 @@ struct agx_win32_stream_params {
    /* Byte offset of each record's private draw-parameter copy in its USC
     * slot; meaningful only when params_offset is not UINT32_MAX. */
    uint32_t params_data;
+   /* rc79: 0 = work-item i writes record i (the grid is max_count + 1, as
+    * hardware-validated since RC33); otherwise the grid has this many
+    * work-items and work-item i writes records i, i + threads, ... up to
+    * and including the terminator, so a MaxCount of 60000 with a GPU count
+    * of ~150 (RC67 EXP1989) need not launch 60001 work-items. */
+   uint32_t threads;
 } PACKED;
 
 /* RC69 (EXP1987 RC63G): every record must rebind its own USC in the form all

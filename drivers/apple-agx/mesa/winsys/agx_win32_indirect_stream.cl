@@ -14,16 +14,11 @@ agx_win32_stream_add(uint64_t address, uint32_t delta)
       atomic_add((global uint32_t *)(uintptr_t)address, delta);
 }
 
-KERNEL(32)
-libagx_win32_indirect_stream(constant struct agx_win32_stream_params *p)
+/* Record i < count, or the terminator at i == count. */
+static inline void
+agx_win32_stream_record(constant struct agx_win32_stream_params *p,
+                        uint32_t i, uint32_t count)
 {
-   uint32_t i = cl_global_id.x;
-   uint32_t count = p->count ?
-      *((constant uint32_t *)(uintptr_t)p->count) : p->max_count;
-   count = count < p->max_count ? count : p->max_count;
-   if (i > count)
-      return;
-
    uint32_t slot = agx_win32_stream_record_bytes(p->index_size);
    global uint32_t *out = (global uint32_t *)(uintptr_t)
       (p->stream + (uint64_t)i * slot);
@@ -84,4 +79,20 @@ libagx_win32_indirect_stream(constant struct agx_win32_stream_params *p)
                                 agx_translate_index_size(p->index_size),
                                 p->restart) : agx_draw_indirect(arg);
    agx_vdm_draw(out, 0, draw, p->topology);
+}
+
+KERNEL(32)
+libagx_win32_indirect_stream(constant struct agx_win32_stream_params *p)
+{
+   uint32_t first = cl_global_id.x;
+   if (p->threads && first >= p->threads)
+      return;
+   uint32_t count = p->count ?
+      *((constant uint32_t *)(uintptr_t)p->count) : p->max_count;
+   count = count < p->max_count ? count : p->max_count;
+   /* rc79: threads == 0 runs one record per work-item (step count + 1).
+    * The emitter bounds max_count (and so i + step) far below 2^31. */
+   uint32_t step = p->threads ? p->threads : count + 1u;
+   for (uint32_t i = first; i <= count; i += step)
+      agx_win32_stream_record(p, i, count);
 }

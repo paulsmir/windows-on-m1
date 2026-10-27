@@ -1,7 +1,9 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 The GPU stream must admit pipeline statistics, reject unsupported queries/GS/tess and invalid extents, flush prior
 argument/count writers before graphics, reserve CDM capacity before entry,
-and emit no VDM link on any allocation or launch failure. Execute production
+and emit no VDM link on any allocation or launch failure. rc79: the grid is
+MaxCount + 1 unless APPLE_AGX_D3D12_STREAM_THREADS names a valid smaller
+bound, and the bounded grid produces the same records and statistics. Execute production
 admission/emission and the real kernel; mock only batch/allocator boundaries.
 """
 from pathlib import Path
@@ -92,8 +94,9 @@ static void agx_batch_add_bo(struct agx_batch *b,struct agx_bo *bo){assert(bo==&
 static uint64_t agx_pool_upload_aligned(struct agx_pool *pool,void *data,size_t size,unsigned alignment){struct agx_ptr p=agx_pool_alloc_aligned(pool,size,alignment);if(p.cpu)memcpy(p.cpu,data,size);return p.gpu;}
 static bool AgxWin32AsahiBatchComputeEnter(struct agx_batch *b){assert(b);if(fault==4)return false;++entered;return true;}
 static bool AgxWin32AsahiBatchComputeLeave(struct agx_batch *b){assert(b&&entered==1);++leaves;return fault!=6;}
+static unsigned last_grid;
 static void launch(struct agx_batch *b,struct agx_grid grid,unsigned barrier,uint64_t args){
- assert(barrier==(AGX_BARRIER_ALL|AGX_PREGFX)&&entered==1);++launches;
+ assert(barrier==(AGX_BARRIER_ALL|AGX_PREGFX)&&entered==1);++launches;last_grid=grid.count[0];
  if(fault==5){b->ctx->any_faults=true;return;}
  struct agx_win32_stream_params params=*(struct agx_win32_stream_params *)(uintptr_t)args;
  params.stream=(uintptr_t)blocks[allocations-2];params.pipelines=(uintptr_t)blocks[allocations-1];
@@ -231,9 +234,14 @@ int main(void){
 
  /* RC57: execute real generator/emitter for GM-sized arguments, with five
   * statistics counters, optional count, and seven streams in one batch.
-  * Keep each allocation alive until all continuations have been checked. */
+  * Keep each allocation alive until all continuations have been checked.
+  * rc79: also with APPLE_AGX_D3D12_STREAM_THREADS=1024, whose bounded grid
+  * must give the same records, links and statistics. */
  const unsigned maxima[]={2400,12000,60000};
+ for(unsigned bounded=0;bounded<2;++bounded)
  for(unsigned mi=0;mi<3;++mi)for(unsigned counted=0;counted<2;++counted){
+  if(bounded)setenv("APPLE_AGX_D3D12_STREAM_THREADS","1024",1);
+  else unsetenv("APPLE_AGX_D3D12_STREAM_THREADS");
   unsigned records=maxima[mi];uint32_t *large=calloc(records,20);assert(large);
   for(unsigned i=0;i<records;++i){large[5*i]=6;large[5*i+1]=1;large[5*i+3]=i;}
   struct agx_resource input={{records*20},(uintptr_t)large};
@@ -250,6 +258,7 @@ int main(void){
    assert(!ctx.any_faults&&ctx.windows_indirect_path==3&&entered==leaves);
    const struct agx_win32_stream_params *p=blocks[3*call+3];
    assert(p->max_count==records&&p->continuation==0x1234000028ull+call*8);
+   assert(p->threads==(bounded?1024u:0u)&&last_grid==(bounded?1024u:records+1u));
    const uint32_t *tail=(void *)((uint8_t *)blocks[3*call+1]+records*agx_win32_stream_record_bytes(4));
    assert(tail[0]==0x80000012u&&tail[1]==0x34000028u+call*8);
   }
@@ -262,6 +271,16 @@ int main(void){
   for(unsigned i=0;i<64;++i){free(blocks[i]);blocks[i]=NULL;}
   free(large);
  }
+ /* rc79: only a decimal 32..65536 below MaxCount + 1 bounds the grid. */
+ { const char *bad[]={"","abc","16","31","65537","99999999999","1024x"};
+   for(unsigned k=0;k<ARRAY_SIZE(bad);++k){setenv("APPLE_AGX_D3D12_STREAM_THREADS",bad[k],1);
+     assert(agx_win32_stream_threads(60000)==0);}
+   setenv("APPLE_AGX_D3D12_STREAM_THREADS","32",1);assert(agx_win32_stream_threads(60000)==32);
+   setenv("APPLE_AGX_D3D12_STREAM_THREADS","65536",1);assert(agx_win32_stream_threads(65536)==65536);
+   assert(agx_win32_stream_threads(65535)==0);
+   setenv("APPLE_AGX_D3D12_STREAM_THREADS","1024",1);assert(agx_win32_stream_threads(1023)==0);
+   assert(agx_win32_stream_threads(1024)==1024);
+   unsetenv("APPLE_AGX_D3D12_STREAM_THREADS");assert(agx_win32_stream_threads(60000)==0); }
  fault=0;init(&ctx,&batch,&vs);batch.cdm=(struct agx_encoder){cdm,cdm+sizeof(cdm)-1,cdm+sizeof(cdm)};
  capacity_flushes=0;agx_win32_stream_flush_inputs(&ctx,&in);assert(capacity_flushes==1);
  /* Constant-time size check rejects a pipeline allocation wrap before allocating. */

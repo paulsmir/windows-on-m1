@@ -47,6 +47,32 @@ agx_win32_stream_fallback(struct agx_context *ctx,
    return 0;
 }
 
+/* rc79: the stream dispatch launches MaxCount + 1 work-items although only
+ * count + 1 of them write (GravityMark: MaxCount 60000, ~150 executed records
+ * per call, RC67 EXP1989). APPLE_AGX_D3D12_STREAM_THREADS=N (32..65536)
+ * bounds the grid to N work-items that stride over the records; unset,
+ * invalid or not smaller than MaxCount + 1 keeps the hardware-validated
+ * one-record-per-work-item grid (params.threads 0). Hardware A/B pending. */
+#define AGX_WIN32_STREAM_THREADS_MIN 32u
+#define AGX_WIN32_STREAM_THREADS_MAX 65536u
+static unsigned
+agx_win32_stream_threads(unsigned max_count)
+{
+   const char *value = getenv("APPLE_AGX_D3D12_STREAM_THREADS");
+   unsigned threads = 0;
+   if (!value || !*value)
+      return 0;
+   for (; *value; ++value) {
+      if (*value < '0' || *value > '9' || threads > AGX_WIN32_STREAM_THREADS_MAX)
+         return 0;
+      threads = threads * 10u + (unsigned)(*value - '0');
+   }
+   if (threads < AGX_WIN32_STREAM_THREADS_MIN ||
+       threads > AGX_WIN32_STREAM_THREADS_MAX || threads >= max_count + 1u)
+      return 0;
+   return threads;
+}
+
 /* Register the native query writer and retain its BO for both CDM and
  * render submission. Resolve flushes that writer before copying results. */
 static uint64_t
@@ -237,6 +263,7 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       .vs_invocations = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_VS_INVOCATIONS),
       .c_primitives = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_PRIMITIVES),
       .c_invocations = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_INVOCATIONS),
+      .threads = agx_win32_stream_threads(count),
    };
    memcpy(params.vs_state, stream->vs_state, sizeof(params.vs_state));
    if (ctx->any_faults)
@@ -244,7 +271,8 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
    uint64_t args = agx_pool_upload_aligned(&batch->pool, &params, sizeof(params), 8);
    if (!args || !AgxWin32AsahiBatchComputeEnter(batch))
       goto fail;
-   libagx_win32_indirect_stream(batch, agx_1d(count + 1u),
+   libagx_win32_indirect_stream(batch,
+                                agx_1d(params.threads ? params.threads : count + 1u),
                                 AGX_BARRIER_ALL | AGX_PREGFX, args);
    if (!AgxWin32AsahiBatchComputeLeave(batch))
       goto fail;
