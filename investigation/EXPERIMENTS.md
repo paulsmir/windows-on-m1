@@ -65193,3 +65193,13 @@ EXP2007 HARDWARE BEFORE 2026-10-27T22:27:56Z:
 - Hashes: sys fb10b214e98a, UmdArm64 6a8cf5228854, UmdX64 88718b76b1a8, Umd32 e77c60cd2ce1; manifest 4e074c1411f1, hardware-manifest dd4b28bc2644; probe2007.sh a4f3d301dc91 (PROBE_LINT_OK); visible recovery rec2007h a749a64cfebebb87; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultDrillAllowed=1.
 - Recovery rec2007h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2007-soft-faults/run2007.sh.
+
+EXP2007 HARDWARE ACTUAL (2026-10-27): rc77 fault_control 0xb, **drill FAIL again (0x116)**; GravityMark neutral.
+- GravityMark D3D12 HD 50k: 5072 / 30.3 FPS (EXP2006: 5081), so 0xb is neutral for performance.
+- Drill logs (rc77 timestamps; collected on the recovery boot):
+  - `fault2007-log.txt`: render child PASS (pixel ffff00ff), then `CHILD_START fault`;
+  - `.2.fault.txt`: setup 0, warmup 0, `ARM armed=1`, `FAULT_DISPATCH`, then nothing.
+- Minidump 102726-14843-01.dmp: **0x116, P2 sys+0x1ec0 (ResetFromTimeout), P3 c0000483, P4 3**, the same as EXP2005.
+- Receipts: rec2007h/kmd-receipts-pre-disable.txt, with Wom1GpuFault and Wom1GpuFaultMapping present.
+- Verdict: the hypothesis "hard faults prevent retirement" is rejected; this is back with rc77. 0xb is kept (Asahi parity, neutral).
+- Recovery: rec2007h AT_PROXY.
