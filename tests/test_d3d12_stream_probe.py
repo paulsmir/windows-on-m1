@@ -67,7 +67,8 @@ typedef struct {unsigned ByteStride,NumArgumentDescs;D3D12_INDIRECT_ARGUMENT_DES
 #define SUCCEEDED(h) ((h)>=0)
 #define FAILED(h) ((h)<0)
 static int IID_ID3D12CommandSignature;
-static unsigned char buffer[65536];
+static unsigned char buffer[65536],gpu_buffer[16];
+static unsigned copies,copy_bytes[2],copy_dst_offset[2],copy_src_offset[2],transitions;
 static unsigned direct,indexed_direct,indirect_calls,stride,kind,max_count,count_offset;
 static int refuse;
 static unsigned index_format,index_bytes,query_ends,query_begins,query_resolves,query_active,large_test;
@@ -75,7 +76,17 @@ typedef struct {unsigned Type,Count,NodeMask;} D3D12_QUERY_HEAP_DESC;
 #define D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS 1
 #define D3D12_HEAP_TYPE_READBACK 2
 #define D3D12_RESOURCE_STATE_COPY_DEST 3
+#define D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT 0x200
+#define D3D12_HEAP_TYPE_DEFAULT 1
+#define D3D12_RESOURCE_FLAG_NONE 0
 #define E_FAIL -1
+static void *c21_buffer(void *d,unsigned t,unsigned long long bytes,unsigned flags,unsigned state){
+ assert(d&&t==1&&bytes==60000ull*20u+256u&&!flags&&state==3&&!copies);return gpu_buffer;}
+static void ID3D12GraphicsCommandList_CopyBufferRegion(void *l,void *dst,unsigned long long dst_offset,void *src,unsigned long long src_offset,unsigned long long bytes){
+ assert(l&&dst==gpu_buffer&&src==buffer&&copies<2&&!transitions&&!indirect_calls);
+ copy_dst_offset[copies]=(unsigned)dst_offset;copy_src_offset[copies]=(unsigned)src_offset;copy_bytes[copies++]=(unsigned)bytes;}
+static void transition(void *l,void *r,unsigned before,unsigned after){
+ assert(l&&r==gpu_buffer&&before==3&&after==0x200&&copies==2&&!indirect_calls);++transitions;}
 static int IID_ID3D12QueryHeap;
 static HRESULT ID3D12Device_CreateQueryHeap(void *d,D3D12_QUERY_HEAP_DESC *q,int *iid,void **h){assert(d&&q->Type==1&&q->Count==1&&!q->NodeMask&&iid==&IID_ID3D12QueryHeap);*h=(void *)1;return 0;}
 static void *committed_buffer(void *d,unsigned t,unsigned s){assert(d&&t==2&&s==3);return (void *)1;}
@@ -88,28 +99,38 @@ static void ID3D12GraphicsCommandList_IASetIndexBuffer(void *l,D3D12_INDEX_BUFFE
 static void ID3D12GraphicsCommandList_DrawIndexedInstanced(void *l,unsigned n,unsigned i,unsigned start,int bias,unsigned first){assert(l&&n==6&&i==1&&!start&&!bias&&!first&&!query_active);++indexed_direct;}
 static void ID3D12GraphicsCommandList_DrawInstanced(void *l,unsigned n,unsigned i,unsigned start,unsigned first){assert(l&&n==3&&i==1&&!start&&!first);++direct;}
 static HRESULT ID3D12Device_CreateCommandSignature(void *d,D3D12_COMMAND_SIGNATURE_DESC *s,void *root,int *iid,void **sig){assert(d&&!root&&iid==&IID_ID3D12CommandSignature&&s->NumArgumentDescs==1&&!s->NodeMask);stride=s->ByteStride;kind=s->pArgumentDescs[0].Type;*sig=(void *)1;return refuse?-1:0;}
-static void ID3D12GraphicsCommandList_ExecuteIndirect(void *l,void *sig,unsigned max,void *args,uint64_t offset,void *count,uint64_t at){assert(l&&sig&&args==buffer&&offset==2048&&(count==buffer||count==NULL));assert(query_active==large_test);++indirect_calls;max_count=max;count_offset=(unsigned)at;}
+static void ID3D12GraphicsCommandList_ExecuteIndirect(void *l,void *sig,unsigned max,void *args,uint64_t offset,void *count,uint64_t at){
+ assert(l&&sig&&((args==buffer&&offset==2048&&(count==buffer||count==NULL))||(args==gpu_buffer&&!offset&&count==gpu_buffer&&transitions==1)));assert(query_active==large_test);++indirect_calls;max_count=max;count_offset=(unsigned)at;}
 static int verdict(int pass,int stream_probe,int stream_counter_ok,int stream_large,int stream_statistics_ok){
 ''' + verdict + '\n}\n' + r'''
 static void run(int mode){
 ''' + flags + r'''
 const char *step="host";unsigned char *bytes=buffer;
-void *device=(void *)1,*list=(void *)1,*vertices=buffer,*signature=NULL;
+void *device=(void *)1,*list=(void *)1,*vertices=buffer,*signature=NULL,*gpu_args=NULL;
 void *statistics=(void *)1,*results=NULL;
 HRESULT hr=0;
-memset(buffer,0xcd,sizeof(buffer));direct=indexed_direct=indirect_calls=query_ends=query_begins=query_resolves=query_active=0;large_test=mode>=23;
+memset(buffer,0xcd,sizeof(buffer));direct=indexed_direct=indirect_calls=query_ends=query_begins=query_resolves=query_active=0;large_test=mode>=23&&mode<=25;
+copies=transitions=0;
 ''' + indices + records + query_begin + commands + query_resolve + r'''
 if(mode==2){assert(indexed_direct==1&&!direct&&!indirect_calls);return;}
 if(refuse){assert(!direct&&!indexed_direct&&!indirect_calls&&hr==-1);return;}
-assert(query_ends==(mode>=23?1u:0u)&&query_begins==query_ends&&query_resolves==query_ends);
-assert(indirect_calls==(mode==25?7u:1u)&&max_count==(mode>=23?2400u:2u));
+assert(query_ends==(large_test?1u:0u)&&query_begins==query_ends&&query_resolves==query_ends);
+assert(indirect_calls==(mode==25?7u:1u)&&max_count==(mode==26?60000u:mode>=23?2400u:2u));
+/* RC59G: both GPU copies precede the barrier and the ExecuteIndirect; the
+ * DEFAULT count sits past MaxCount records, the live records are all 2400. */
+if(mode==26){assert(copies==2&&transitions==1&&gpu_args==gpu_buffer);
+ assert(!copy_dst_offset[0]&&copy_src_offset[0]==2048&&copy_bytes[0]==2400u*20u);
+ assert(copy_dst_offset[1]==60000u*20u&&copy_src_offset[1]==2048u+2400u*20u&&copy_bytes[1]==4);
+ assert(copy_src_offset[1]>=copy_src_offset[0]+copy_bytes[0]);
+ const UINT *live=(const void *)(buffer+2048);assert(live[2399*5]==6&&live[2399*5+1]==1);}
+else assert(!copies&&!transitions&&!gpu_args);
 assert(stride==(indexed?20u:16u)&&kind==(indexed?1u:0u));
-assert(count_offset==(mode==24?0u:mode>=23?2048u+2400u*20u:stream_probe?2112u:2080u));
+assert(count_offset==(mode==24?0u:mode==26?60000u*20u:mode>=23?2048u+2400u*20u:stream_probe?2112u:2080u));
 const UINT *args=(const void *)(buffer+2048);
 assert(args[0]==(indexed?6u:3u)&&args[1]==1&&args[2]==0&&args[3]==0);
 assert(args[stride/4]==args[0]&&args[stride/4+1]==1);
 unsigned expected_count=mode>=23?2400u:mode>=17?(unsigned)(mode-17)%3u:(mode==14?0u:1u);
-if(mode!=24)assert(*(const UINT *)(buffer+count_offset)==expected_count);
+if(mode!=24)assert(*(const UINT *)(buffer+(mode==26?2048u+2400u*20u:count_offset))==expected_count);
 if(mode>=17){assert(indexed&&index_format==(mode>=20?42u:57u)&&index_bytes==(mode>=20?24u:12u));}
 if(mode>=20){const UINT expected[6]={0,1,2,2,1,3};assert(!memcmp(buffer+512,expected,sizeof(expected)));}
 assert(direct==(stream_probe&&!indexed?1u:0u)&&indexed_direct==(stream_probe&&indexed?1u:0u));
@@ -118,14 +139,14 @@ unsigned green=indexed?1024u:512u;
 UINT count=stream_probe?(expected_count*(mode==25?7u:1u)+1u)*green:green;const UINT *c=&count;
 int counted_ok=0;
 ''' + counter + r'''
-assert(counted_ok&&verdict(1,stream_probe,counted_ok,mode>=23,1)==0);
+assert(counted_ok&&verdict(1,stream_probe,counted_ok,large_test,1)==0);
 ++count;
 ''' + counter + r'''
-assert(!counted_ok&&verdict(1,1,counted_ok,mode>=23,1)==1);
-assert(verdict(0,1,1,mode>=23,1)==1);
-if(mode>=23)assert(verdict(1,1,1,1,0)==1);
+assert(!counted_ok&&verdict(1,1,counted_ok,large_test,1)==1);
+assert(verdict(0,1,1,large_test,1)==1);
+if(large_test)assert(verdict(1,1,1,1,0)==1);
 }
-int main(void){run(2);run(5);for(int m=14;m<=25;++m)run(m);refuse=1;for(int m=14;m<=25;++m)run(m);return 0;}
+int main(void){run(2);run(5);for(int m=14;m<=26;++m)run(m);refuse=1;for(int m=14;m<=26;++m)run(m);return 0;}
 '''
         with tempfile.TemporaryDirectory() as td:
             p = Path(td)

@@ -1085,19 +1085,27 @@ static int texture_clear_copy(ID3D12Device *device, ID3D12CommandQueue *queue, I
  * visible to the PS only; PASS = centre blue. rooted = 2 (C6d): a yellow
  * quad (-0.5..0.5) from four vertices and six R16 indices through
  * DrawIndexedInstanced; PASS = centre yellow, 960..1088 pixels. */
+static ID3D12Resource *c21_buffer(ID3D12Device *device, D3D12_HEAP_TYPE type, UINT64 bytes,
+                                 D3D12_RESOURCE_FLAGS flags, D3D12_RESOURCE_STATES state);
 static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int mode) {
     /* EXP1369: the indexed mode must build the C6b (empty) root signature */
     /* RC38: bounded zero/one GPU stream, then an ordinary draw using the
      * same state. Named opt-in steps only; not part of the default suite. */
     const int stream_large = mode >= 23 && mode <= 25;
-    const UINT stream_max = stream_large ? 2400u : 2u;
+    /* RC59G (GravityMark HD50k loading, EXP1976-1980 UMD logs): one R32
+     * indexed counted ExecuteIndirect with MaxCount 60000 whose records and
+     * count a GPU copy writes into a DEFAULT buffer in the same list, then
+     * an INDIRECT_ARGUMENT barrier; 2400 records are live. No query. */
+    const int stream_gpu_args = mode == 26;
+    const UINT stream_max = stream_gpu_args ? 60000u : stream_large ? 2400u : 2u;
     const UINT stream_calls = mode == 25 ? 7u : 1u;
-    const UINT stream_count_offset = stream_large ? 2048u + 2400u * 20u : 2112u;
+    const UINT stream_count_offset = stream_large || stream_gpu_args ? 2048u + 2400u * 20u : 2112u;
+    const UINT stream_gpu_count_offset = 60000u * 20u; /* past every record */
     const int stream_matrix = mode >= 17 && mode <= 22;
-    const int stream_probe = (mode >= 14 && mode <= 16) || stream_matrix || stream_large;
-    const UINT stream_count = stream_large ? stream_max : stream_matrix ? (UINT)(mode - 17) % 3u : mode == 14 ? 0u : 1u;
-    const int stream_index32 = (mode >= 20 && mode <= 22) || stream_large;
-    const int indexed = mode == 2 || mode == 16 || stream_matrix || stream_large;
+    const int stream_probe = (mode >= 14 && mode <= 16) || stream_matrix || stream_large || stream_gpu_args;
+    const UINT stream_count = stream_large || stream_gpu_args ? 2400u : stream_matrix ? (UINT)(mode - 17) % 3u : mode == 14 ? 0u : 1u;
+    const int stream_index32 = (mode >= 20 && mode <= 22) || stream_large || stream_gpu_args;
+    const int indexed = mode == 2 || mode == 16 || stream_matrix || stream_large || stream_gpu_args;
     const int redundant_root = mode == 8;
     /* C30 (EXP1825 HelloBundles/Bundles): mode 9 is mode 1 with the draw in
      * a bundle -- the bundle sets the same root signature, the PSO, topology
@@ -1133,6 +1141,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     const int spaced = mode == 7;
     const int counted = mode == 4 || indirect || spaced;
     ID3D12CommandSignature *signature = NULL;
+    ID3D12Resource *gpu_args = NULL;
     ID3D12GraphicsCommandList *bundle = NULL;
     ID3D12Resource *resolved = NULL;
     ID3D12CommandAllocator *bundle_allocator = NULL;
@@ -1150,7 +1159,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_ROOT_SIGNATURE_DESC root_desc = {rooted ? 2u : counted ? 1u : 0u, rooted ? parameters : counted ? &uav_parameter : NULL, 0, NULL,
                                            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
     static const char *stream_steps[] = {"RC43I16Z", "RC43I16O", "RC43I16N", "RC43I32Z", "RC43I32O", "RC43I32N"};
-    const char *step = stream_large ? (mode == 23 ? "RC57C" : mode == 24 ? "RC57U" : "RC57M") : stream_matrix ? stream_steps[mode - 17] : stream_probe ? (!stream_count ? "RC38Z" : indexed ? "RC38I" : "RC38N") : viewed ? "C50A" : dxil ? "C44B" : msaa ? "C32A" : expanded ? "C31A" : bundled ? "C30A" : redundant_root ? "ROOTG" : spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
+    const char *step = stream_gpu_args ? "RC59G" : stream_large ? (mode == 23 ? "RC57C" : mode == 24 ? "RC57U" : "RC57M") : stream_matrix ? stream_steps[mode - 17] : stream_probe ? (!stream_count ? "RC38Z" : indexed ? "RC38I" : "RC38N") : viewed ? "C50A" : dxil ? "C44B" : msaa ? "C32A" : expanded ? "C31A" : bundled ? "C30A" : redundant_root ? "ROOTG" : spaced ? "C17B_DRAW" : indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : indirect_no_count ? "C14NC" : indirect ? "C14" : counted ? "C13" : "C6B";
     const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted ? 0 : 255),
                                    (unsigned char)(rooted ? 255 : 0)};
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
@@ -1213,8 +1222,8 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
                 const UINT indexed_records[10] = {6, 1, 0, 0, 0, 6, 1, 0, 0, 0};
                 const UINT count = stream_count;
                 if (indexed) memcpy(bytes + 2048, indexed_records, sizeof(indexed_records));
-                if (stream_large)
-                    for (UINT r = 0; r < stream_max; ++r)
+                if (stream_large || stream_gpu_args)
+                    for (UINT r = 0; r < stream_count; ++r)
                         memcpy(bytes + 2048 + r * 20u, indexed_records, 20u);
                 /* Outside every indexed record, within the 64 KiB upload. */
                 memcpy(bytes + stream_count_offset, &count, sizeof(count));
@@ -1390,11 +1399,28 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             D3D12_COMMAND_SIGNATURE_DESC sd = {indexed ? 20u : 16u, 1, &arg, 0};
             HRESULT sh = ID3D12Device_CreateCommandSignature(device, &sd, NULL, &IID_ID3D12CommandSignature, (void **)&signature);
             printf("%s CreateCommandSignature hr=0x%08lx\n", step, (unsigned long)sh);
+            if (SUCCEEDED(sh) && SUCCEEDED(hr) && stream_gpu_args) {
+                gpu_args = c21_buffer(device, D3D12_HEAP_TYPE_DEFAULT, stream_gpu_count_offset + 256u,
+                                      D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_COPY_DEST);
+                if (!gpu_args) {
+                    hr = E_FAIL;
+                } else {
+                    ID3D12GraphicsCommandList_CopyBufferRegion(list, gpu_args, 0, vertices, 2048, stream_count * 20u);
+                    ID3D12GraphicsCommandList_CopyBufferRegion(list, gpu_args, stream_gpu_count_offset, vertices,
+                                                               stream_count_offset, 4);
+                    transition(list, gpu_args, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+                }
+                printf("%s DEFAULT arguments+count by GPU copy bytes=%u hr=0x%08lx\n", step,
+                       stream_gpu_count_offset + 256u, (unsigned long)hr);
+            }
             if (SUCCEEDED(sh) && SUCCEEDED(hr)) {
                 for (UINT call = 0; call < stream_calls; ++call)
-                    ID3D12GraphicsCommandList_ExecuteIndirect(list, signature, stream_large ? stream_max : indirect_no_count ? 1 : 2,
-                                                               vertices, 2048, indirect_no_count ? NULL : vertices,
-                                                               indirect_no_count ? 0 : stream_probe ? stream_count_offset : 2080);
+                    ID3D12GraphicsCommandList_ExecuteIndirect(list, signature, stream_large || stream_gpu_args ? stream_max
+                                                               : indirect_no_count ? 1 : 2,
+                                                               stream_gpu_args ? gpu_args : vertices, stream_gpu_args ? 0 : 2048,
+                                                               indirect_no_count ? NULL : stream_gpu_args ? gpu_args : vertices,
+                                                               indirect_no_count ? 0 : stream_gpu_args ? stream_gpu_count_offset
+                                                               : stream_probe ? stream_count_offset : 2080);
                 if (stream_large)
                     ID3D12GraphicsCommandList_EndQuery(list, statistics, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0);
                 if (stream_probe) {
@@ -1551,6 +1577,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
                    pass && counted_ok ? "PASS" : "FAIL");
     }
     if (signature) ID3D12CommandSignature_Release(signature);
+    if (gpu_args) ID3D12Resource_Release(gpu_args);
     if (bundle) ID3D12GraphicsCommandList_Release(bundle);
     if (bundle_allocator) ID3D12CommandAllocator_Release(bundle_allocator);
     if (counter_back) ID3D12Resource_Release(counter_back);
@@ -7722,8 +7749,9 @@ static LONG WINAPI first_access_violation(EXCEPTION_POINTERS *ep) {
 static int step_rc57c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 base) { return draw_triangle(d, q, f, base, 23); }
 static int step_rc57u(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 base) { return draw_triangle(d, q, f, base, 24); }
 static int step_rc57m(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 base) { return draw_triangle(d, q, f, base, 25); }
+static int step_rc59g(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 base) { return draw_triangle(d, q, f, base, 26); }
 static const struct { const char *name; probe_step step; } named_steps[] = {
-    {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m},
+    {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g},
     {"RC44D", step_rc44d}, {"RC44I", step_rc44i},
     {"RC38Z", step_rc38z}, {"RC38N", step_rc38n}, {"RC38I", step_rc38i},
     {"RC43I16Z", step_rc43i16z},
