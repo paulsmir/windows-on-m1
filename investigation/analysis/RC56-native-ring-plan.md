@@ -174,6 +174,57 @@ NativeStagingBytes includes an in-progress allocation charge. The decoder's
 total_held_bytes adds that charge to held slab bytes, so it is an upper bound
 on physical holdings during preparation, not a separate physical census.
 
+RC65 (EXP1985/EXP1986) adds a per-Execute upload ring for the CPU-written
+heaps native staging cannot hold (reason 4 over 16 MiB, or refused for space).
+Before, each dirty run of up to 64 KiB of such a heap was one UPLOAD copy
+escape, preceded by a QUERY escape per slot, and both wait in the KMD until the
+process has no job in flight (`gpuva_g3_windows.c` copy wait, "node 0 is
+serialized"). Now the owner creates one 8 MiB native-staged ring BO with
+itself (`create_upload_ring`; used only when `AdmissionUmdGpuvaNativeStagingSlot`
+proves its CPU map is the native slice, and only with private staging, i.e.
+`APPLE_AGX_D3D12_CPU_POOL_MAP=0`; `APPLE_AGX_D3D12_UPLOAD_RING=0` opts out).
+At Execute start, after the heap-staging receipt begins and before the replay,
+`AgxD3d12OwnerStageUploads` stages every registered persistent CPU-visible
+buffer (`AdmissionUmdGpuvaUploadRingStage`): preview the write watch without
+reset, plan runs (`umd_upload_ring.h`, clean gaps up to 64 KiB merged, at most
+128 copies per Execute), reserve one slice of the RC52 FIFO ring, reset the
+watch and copy the runs into the slice. The owner records one
+`resource_copy_region` per run from the ring into the canonical BO (Asahi
+`agx_resource_copy_region`: a `libagx_copy_uint4` compute dispatch) and flushes
+those copies as their own submission. The canonical BO is written only by that
+GPU copy; the GPU runs submissions in order, so it follows every earlier reader
+(no WAR) and precedes this replay. The slice is reused only after the copy
+submission's fence appears on the monitored render fence.
+
+While the copy is pending the slot carries `UploadRingPending`: `mark_written`
+does not set `GpuWritten` (no download or merge shadow of bytes the staging
+already holds) and `transfer_held` does not upload the slot in the copy
+submission. Stores after the snapshot stay watched and upload with the next
+submission, whose escape waits for the copy job. A refused reservation
+(ring space or slice records, copy capacity, a dirty set over the ring) consumes
+nothing and keeps the escape path; recorded-but-unsubmitted work skips the ring
+for that Execute. A snapshot that grew past its slice after the reset, or a copy
+submission without an accepted fence, invalidates `Sync` of those slots (full
+restore) and, for the latter, disables the ring. Eligible slots are mapped,
+write-watched, synchronized private staging without a GPU writer or merge
+shadow; native, borrowed and direct slots are never staged.
+
+Receipts: `measure-d3d12-upload-ring-init` {status 0 ready, 1 disabled,
+2 no private staging, 3 create, 4 map, 5 not native; bytes; token} once per
+owner; `measure-d3d12-upload-ring` once per Execute with ring activity or a
+fallback: {1, ring slots, copies, ring bytes lo/hi, fallback slots, fallback
+dirty bytes lo/hi, reasons (1 space, 2 copies, 4 large, 8 pending), invalidated
+slots, 1 accepted | 2 refused | 4 ring disabled, ring used, ring capacity,
+stage us, flush us}. The ring's own bytes are not in
+`measure-d3d12-heap-staging`; its escapes stay in `measure-copy-escape-class`.
+
+EXP1986's class receipt bounds the effect: per Execute the over-16-MiB class
+paid 1 QUERY (1.33-1.39 ms) and 2 UPLOAD escapes (0.30-0.46 ms), while slots up
+to 1 MiB paid 43-49 QUERY escapes (29-40 ms) and 35-38 uploads. The ring
+removes the large-heap escapes and those of small owner heaps dirty at Execute
+start, for one extra submission per Execute. It cannot cover Asahi's internal
+BOs (pool slabs, encoders, query BOs), which are written during the replay.
+
 ## Verification and remaining hardware gate
 
 The final targeted run executes 84 tests. Host manager tests compile production
