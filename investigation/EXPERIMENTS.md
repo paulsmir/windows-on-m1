@@ -64639,3 +64639,25 @@ EXP1986 HARDWARE ACTUAL (2026-10-27): **PASS, neutral**.
 - The rc64 premise is refuted: the cost is per-slot QUERY escapes on small slots, not the upload heaps.
 - Reason-1 fallbacks remain for 64 KiB BOs: 94 at HD and 142 at FHD (Asahi uses one query BO per query), so the reserved 28 MiB is still exhausted.
 - Verdict: rc64 neutral, kept for its receipt.
+
+EXP1987 HARDWARE BEFORE 2026-10-27T16:25:17Z:
+- rc63:
+  - b3b5b134: a faulted scheduler no longer reports DMA_PREEMPTED, so the TDR fires and ResetEngine clears SchedulerFaulted;
+  - e3d9932d: probe RC63G.
+- rc65: an 8 MiB native upload ring; GPU copies replace the escapes of the >16 MiB heaps.
+- WHY:
+  - EXP1982b: the stream hang wedged the machine because no TDR ran (no Wom1GpuReset receipt);
+  - the stream removes the 22-27 ms render_fence wait;
+  - rc65 removes about 1.7 ms of large-heap escapes.
+- ATOMIC CONTRACT: none; separate steps with their own lines and receipts (TOOL_RC63, arm a, arm b).
+- Expected:
+  - RC59G PASS; RC63G PASS or a reproduced hang;
+  - arm a at least 2082, with measure-d3d12-upload-ring-init status 0, ring rows with status 1, class w4 and w8 about 0;
+  - arm b either completes (score above arm a) or times out with a Wom1GpuReset receipt within TdrDelay, GravityMark removed, DWM alive, and an ordered reboot without a power cycle.
+- Failure criteria:
+  - arm a below 2082 or a wrong image;
+  - in arm b, a hang without Wom1GpuReset or a wedged reboot.
+- Recovery: rec1987h. If the guest is wedged, power-cycle (operator).
+- Hashes: sys 4cb50042c4d6, UmdArm64 aa1929c7fe74, UmdX64 874482a6ade3, Umd32 3d6eddcbfe9b; manifest d9bcaf511151, hardware-manifest 3f6e712dafa9; probe1987.sh 172121129ce7 (PROBE_LINT_OK); visible recovery rec1987h 4c326d6cddc15a80; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1987h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1987-ring-tdr/run1987.sh.
