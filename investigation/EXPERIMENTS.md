@@ -65007,3 +65007,18 @@ EXP2001 HARDWARE BEFORE 2026-10-27T20:49:23Z:
 - Hashes: sys 0865a3d1927d, UmdArm64 e6a3f19ccea5, UmdX64 063788ed3bbd, Umd32 609dcc33e29d; manifest cd41c1167add, hardware-manifest db135456bb46; probe2001.sh f0099561ed15 (PROBE_LINT_OK); visible recovery rec2001h 4a1a9d6df8c087ad; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2001h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2001-leaderboard2/run2001.sh.
+
+EXP2001 HARDWARE ACTUAL (2026-10-27): **PASS**, leaderboard settings, EXP2000 code.
+- FHD 200k (the site default): **1788 / 10.7 FPS**. macOS M1 is about 5500, a 3.1x gap. This loads now; EXP1977 hit OOM.
+- FHD 50k: **2980 / 17.8 FPS**. macOS is about 10400, a 3.5x gap.
+- No removal; G4_SUBMIT_FAILURE none.
+
+Leaderboard summary for the accepted line:
+
+| Setting | Score | macOS M1 | Gap |
+|---|---|---|---|
+| HD 50k | 3959 | — | — |
+| HD 100k | 3047 | ~9950 | 3.3x |
+| FHD 50k | 2980 | ~10400 | 3.5x |
+| FHD 100k | 2262-2372 | ~7700 | 3.3x |
+| FHD 200k | 1788 | ~5500 | 3.1x |
