@@ -65121,3 +65121,23 @@ EXP2004 HARDWARE ACTUAL (2026-10-27): **fault drill NOT REACHED (tool preconditi
 - Fixed in 2c44bed4 (probe sha256 6711d63c…); rerun inside EXP2005.
 - GravityMark D3D12 HD 50k: 4518 / 27.0 FPS (EXP2002 4439, EXP2003 4579; run-to-run spread about 3%).
 - No removal; G4_SUBMIT_FAILURE none.
+
+EXP2005 HARDWARE BEFORE 2026-10-27T21:51:07Z:
+1. The rc37 GPU fault drill. The probe sha256 is 6711d63c…; it now accepts the AGX 'APPL' vendor id (2c44bed4) and finds DWM through WTS (0a049640).
+2. GravityMark D3D12 HD 50k with rc76 clear absorb.
+3. GravityMark D3D12 FHD 100k.
+Switches Wom1GpuFaultInfoRead=1 and Wom1GpuFaultDrillAllowed=1. Package 30.0.2005.0 = EXP2004 + rc76 (de8be3df tool, 182f64b1 COLOR1..7 clear wrapper, 12c1a9df clear absorb with APPLE_AGX_D3D12_CLEAR_ABSORB=0 as the kill switch, 017419ef receipt letters).
+- WHY:
+  - EXP2004: the drill failed in its baseline render child (DXGI 887a0002, vendor id mismatch) before any fault, so fault recovery is still unproven while rc75 drops root bounds checks;
+  - rc76: 8 of 11 render jobs per frame are clear-only passes (0.63 ms span each for 0.16 ms of 3D, about 0.29 ms of serialized KMD per job).
+- ATOMIC CONTRACT: none; separate arms.
+- Expected:
+  - drill: AGX_GPU_FAULT_INJECTED PASS, fresh render PASS, RECOVERY PASS, guest alive;
+  - HD 50k: measure-d3d12-clear-absorb shows absorbed about 8 per Execute, render_jobs 11 → 3-6, score above 4439/4579;
+  - FHD above 2715;
+  - correct image.
+- Failure criteria: a bugcheck or wedge in the drill, a wrong image, or removal.
+- Recovery: rec2005h; a power cycle if the guest wedges.
+- Hashes: sys 2b1a08cb22a6, UmdArm64 51d3c16e13ad, UmdX64 552f0325e4de, Umd32 d9aa2b3e3dd5; manifest af6e17968a89, hardware-manifest 41b1a47f069a; probe2005.sh 5b512cc97481 (PROBE_LINT_OK); visible recovery rec2005h 7b73c00abec089b4; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultDrillAllowed=1.
+- Recovery rec2005h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2005-clear-absorb/run2005.sh.
