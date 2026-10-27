@@ -64952,3 +64952,5 @@ EXP1996 HARDWARE ACTUAL (2026-10-27): **PASS**, leaderboard-setting baseline.
 EXP1997 BUILD FAILURE (2026-10-27): X86B121 failed: 'use of undeclared identifier nir_shader_as_str' in agx_d3d12_windows.cpp (rc74 NIR dump), WOW64 closure. Not run. Fixed by ec5c9573; rerun as EXP1998.
 
 EXP1998 BUILD FAILURE (2026-10-27): the ARM64 UMD (MSVC /sdl /WX) rejected sscanf in agx_win32_shader_stats.h:56 (C4996). Not run. Fixed in ad59f376; rerun as EXP1999.
+
+EXP1999 BUILD FAILURE (2026-10-27): the ARM64 UMD also lacks nir_shader_as_str (agx_d3d12_windows.cpp:1249, C3861). Not run. The NIR text dump now compiles only under APPLE_AGX_D3D12_NIR_TEXT_DUMP (3f46afcb); rerun as EXP2000.
