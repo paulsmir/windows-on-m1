@@ -122,7 +122,8 @@ static void init(struct agx_context *ctx,struct agx_batch *batch,struct shader *
 int main(void){
  struct agx_context ctx;struct agx_batch batch;struct shader vs={0};
  struct pipe_draw_info info={.mode=MESA_PRIM_TRIANGLES,.index_size=4};
- init(&ctx,&batch,&vs);unsetenv("APPLE_AGX_D3D12_GPU_INDIRECT_STREAM");assert(agx_win32_stream_fallback(&ctx,&info,0,1)==7);
+ init(&ctx,&batch,&vs);unsetenv("APPLE_AGX_D3D12_GPU_INDIRECT_STREAM");assert(!agx_win32_stream_fallback(&ctx,&info,0,1));
+ setenv("APPLE_AGX_D3D12_GPU_INDIRECT_STREAM","0",1);assert(agx_win32_stream_fallback(&ctx,&info,0,1)==7);
  setenv("APPLE_AGX_D3D12_GPU_INDIRECT_STREAM","1",1);assert(!agx_win32_stream_fallback(&ctx,&info,0,1));
  info.mode=MESA_PRIM_PATCHES;assert(agx_win32_stream_fallback(&ctx,&info,0,1)==1);info.mode=MESA_PRIM_TRIANGLES;
  for(unsigned s=MESA_SHADER_TESS_CTRL;s<=MESA_SHADER_TESS_EVAL;++s){ctx.stage[s].shader=&vs;assert(agx_win32_stream_fallback(&ctx,&info,0,1)==1);ctx.stage[s].shader=NULL;}

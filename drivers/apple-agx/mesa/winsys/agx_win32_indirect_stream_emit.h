@@ -38,10 +38,11 @@ agx_win32_stream_fallback(struct agx_context *ctx,
       return 5;
    if (agx_device(ctx->base.screen)->chip > AGX_CHIP_G13X)
       return 6;
-   /* EXP1966: the first GPU-generated stream on hardware ended in bugcheck
-    * 0x119 (invalid fence). Opt-in until the stream is validated. */
+   /* EXP1993 validated the stream in GravityMark (rc69 per-record params,
+    * rc71 VA release and scratch reuse), so it is the default.
+    * APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=0 restores the CPU count path. */
    const char *stream = getenv("APPLE_AGX_D3D12_GPU_INDIRECT_STREAM");
-   if (!stream || stream[0] != '1')
+   if (stream && stream[0] == '0')
       return 7;
    return 0;
 }
