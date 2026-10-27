@@ -3845,6 +3845,21 @@ dxbc_nir_finalize(nir_shader *nir)
       NIR_PASS(progress, nir, nir_opt_algebraic);
       NIR_PASS(progress, nir, nir_opt_constant_folding);
    } while (progress);
+   /* RC74: in a compute shader, an indexable temp (DXBC x#, a DXIL alloca
+    * array) still indexed by a run-time value is the AGX stack (scratch)
+    * when it holds more than DXBC_NIR_SCRATCH_ARRAY_BYTES. agx_preprocess_nir
+    * moves only arrays of more than 256 bytes there and turns smaller ones
+    * into if/else trees, one leaf per element on every access, with the
+    * whole array in registers: GravityMark's uint[32] x3 and uint[64] kernels
+    * (EXP1969)
+    * compile to 255 GPRs (occupancy 384) and 2-4x the instructions. Same
+    * lowering and size rules as agx_preprocess_nir, a lower threshold.
+    * APPLE_AGX_D3D_SCRATCH_ARRAYS=0 keeps Asahi's rule alone, for a hardware
+    * comparison. */
+   const char *scratch_arrays = getenv("APPLE_AGX_D3D_SCRATCH_ARRAYS");
+   if (nir->info.stage == MESA_SHADER_COMPUTE && (!scratch_arrays || strcmp(scratch_arrays, "0")))
+      NIR_PASS(_, nir, nir_lower_vars_to_scratch, DXBC_NIR_SCRATCH_ARRAY_BYTES, glsl_get_natural_size_align_bytes,
+               glsl_get_word_size_align_bytes);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
    nir_validate_shader(nir, "dxbc_nir_finalize");
 }

@@ -77,6 +77,10 @@ dxbc_to_nir_hs(const struct dxbc_program *program,
                uint32_t passthrough_registers, uint32_t passthrough_positions,
                struct dxbc_nir_error *error);
 
+/* RC74: a compute shader's run-time indexed temp arrays larger than this go
+ * to the AGX stack (dxbc_nir_finalize) */
+#define DXBC_NIR_SCRATCH_ARRAY_BYTES 64
+
 /* The finalization tgsi_to_nir applies before handing NIR to a driver
  * without screen->finalize_nir (Asahi): lower returns and continue
  * constructs, registers and variables to SSA, system values, then a

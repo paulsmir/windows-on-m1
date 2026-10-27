@@ -12,7 +12,12 @@ pinned AGX backend (tests/dxil_agx_cost_fixture.c):
 - the eight consecutive stores of fixtures/dxil/conv-probe/cs_c47b.dxil
   must be tested as one run: no more in-bounds wait points than without
   robustness (D3D-H6 form: 8);
-- no scratch or spills are introduced into these kernels.
+- no scratch or spills are introduced into these kernels;
+- an indexable temp of more than 64 bytes read at a run-time index
+  (DXBC x#, a DXIL alloca; GravityMark's uint[32] x3 and uint[64] kernels)
+  must live on the AGX stack, not in Asahi's register if/else trees: fewer
+  instructions and GPRs than APPLE_AGX_D3D_SCRATCH_ARRAYS=0 (Asahi's rule
+  alone: more than 256 bytes), while a 64-byte one stays in registers.
 The receipt ranking must join dispatches with their compute statistics by
 the CS hash's low 32 bits, count direct groups and threads, keep indirect
 dispatches as counts, and ignore other processes.
@@ -108,6 +113,20 @@ class CompiledCost(unittest.TestCase):
                 self.assertEqual(robust['hot-branches'], 1)
                 self.assertLessEqual(robust['hot-mem-blocks'], unchecked['hot-mem-blocks'] + 1)
                 self.assertEqual((robust['scratch'], robust['spills']), (0, 0))
+
+    def test_indexed_temp_arrays_live_on_the_stack(self):
+        asahi_rule = {'APPLE_AGX_D3D_SCRATCH_ARRAYS': '0'}
+        for elements in (17, 32, 64):
+            with self.subTest(elements=elements):
+                stack = self.tool.cost(self.binary, f'--synthetic-local-array={elements}')
+                registers = self.tool.cost(self.binary, f'--synthetic-local-array={elements}', env=asahi_rule)
+                self.assertGreaterEqual(stack['scratch'], 4 * elements)
+                self.assertEqual(registers['scratch'], 0)
+                self.assertLess(stack['instrs'], registers['instrs'])
+                self.assertLess(stack['gprs'], registers['gprs'])
+        small = self.tool.cost(self.binary, '--synthetic-local-array=16')
+        self.assertEqual(small, self.tool.cost(self.binary, '--synthetic-local-array=16', env=asahi_rule))
+        self.assertEqual(small['scratch'], 0)
 
     def test_a_run_of_uav_stores_is_tested_once(self):
         robust, unchecked = self.costs(FIXTURE)

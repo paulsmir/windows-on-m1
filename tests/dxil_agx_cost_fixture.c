@@ -8,7 +8,8 @@
  * and texture handles), so instruction counts, GPRs, scratch and spills are
  * the backend's own; uniform numbering is not.
  *
- * usage: dxil_agx_cost_fixture <dxil>|--synthetic-uav-reads=K [--no-d3d-robust] [--assume-in-bounds]
+ * usage: dxil_agx_cost_fixture <dxil>|--synthetic-uav-reads=K|--synthetic-local-array=N
+ *        [--no-d3d-robust] [--assume-in-bounds]
  *        [--print-lowered] [--print-nir]
  * prints one line:
  *   COST stage <s> block <x>x<y>x<z> shared <B> nir-ifs <n> guarded-loads <n>
@@ -362,6 +363,7 @@ static nir_shader *
 synthetic_uav_reads(unsigned reads)
 {
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "rc74-uav-reads");
+   b.shader->info.internal = false;
    b.shader->info.workgroup_size[0] = 64;
    b.shader->info.workgroup_size[1] = b.shader->info.workgroup_size[2] = 1;
    b.shader->info.num_ssbos = 2;
@@ -375,6 +377,35 @@ synthetic_uav_reads(unsigned reads)
    nir_store_ssbo(&b, sum, nir_imm_int(&b, 1), nir_amul_imm(&b, element, 16), .write_mask = 0xf,
                   .access = ACCESS_NON_READABLE, .align_mul = 4, .align_offset = 0);
    nir_shader_gather_info(b.shader, nir_shader_get_entrypoint(b.shader));
+   return b.shader;
+}
+
+/* --synthetic-local-array=N: an indexable temp of N dwords (DXBC x#, a
+ * DXIL alloca) filled from u0 and read at a per-thread index, through the
+ * frontend tail (dxbc_nir_finalize) as every translated shader */
+static nir_shader *
+synthetic_local_array(unsigned elements)
+{
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "rc74-local-array");
+   b.shader->info.internal = false; /* an application shader (agx_compile treats internal scratch specially) */
+   b.shader->info.workgroup_size[0] = 64;
+   b.shader->info.workgroup_size[1] = b.shader->info.workgroup_size[2] = 1;
+   b.shader->info.num_ssbos = 2;
+   nir_variable *array = nir_local_variable_create(b.impl, glsl_array_type(glsl_uint_type(), elements, 4), "x0");
+   nir_def *thread = nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
+   nir_deref_instr *base = nir_build_deref_var(&b, array);
+   for (unsigned i = 0; i < elements; ++i)
+      nir_store_deref(&b, nir_build_deref_array_imm(&b, base, i),
+                      nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 0), nir_imm_int(&b, (int)(4 * i)),
+                                    .access = ACCESS_NON_WRITEABLE, .align_mul = 4, .align_offset = 0),
+                      1);
+   nir_def *index = nir_umod_imm(&b, thread, elements);
+   nir_def *value = nir_load_deref(&b, nir_build_deref_array(&b, base, index));
+   nir_store_deref(&b, nir_build_deref_array(&b, base, nir_iadd_imm(&b, index, 1)), thread, 1);
+   value = nir_iadd(&b, value, nir_load_deref(&b, nir_build_deref_array(&b, base, nir_umod_imm(&b, nir_iadd_imm(&b, thread, 7), elements))));
+   nir_store_ssbo(&b, value, nir_imm_int(&b, 1), nir_amul_imm(&b, thread, 4), .write_mask = 1,
+                  .access = ACCESS_NON_READABLE, .align_mul = 4, .align_offset = 0);
+   dxbc_nir_finalize(b.shader);
    return b.shader;
 }
 
@@ -394,6 +425,8 @@ main(int argc, char **argv)
    unsigned reads = 0;
    if (argc > 1 && sscanf(argv[1], "--synthetic-uav-reads=%u", &reads) == 1 && reads && reads <= 64) {
       nir = synthetic_uav_reads(reads);
+   } else if (argc > 1 && sscanf(argv[1], "--synthetic-local-array=%u", &reads) == 1 && reads && reads <= 256) {
+      nir = synthetic_local_array(reads);
    } else {
       FILE *f = argc > 1 ? fopen(argv[1], "rb") : NULL;
       if (!f)

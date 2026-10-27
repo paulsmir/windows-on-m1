@@ -22,6 +22,7 @@ build directory (--build-dir, default a temporary one).
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -130,10 +131,13 @@ def build(out_dir):
     return binary
 
 
-def cost(binary, source, *flags):
-    """The fixture's COST fields for one input (a path or
-    --synthetic-uav-reads=K), {} when refused."""
-    r = subprocess.run([str(binary), str(source), *flags], capture_output=True, text=True, timeout=300)
+def cost(binary, source, *flags, env=None):
+    """The fixture's COST fields for one input (a path,
+    --synthetic-uav-reads=K or --synthetic-local-array=N), {} when refused;
+    env: extra environment (APPLE_AGX_D3D_BUFFER_BRANCHES=1 or
+    APPLE_AGX_D3D_SCRATCH_ARRAYS=0 compile the earlier forms)."""
+    r = subprocess.run([str(binary), str(source), *flags], capture_output=True, text=True, timeout=300,
+                       env={**os.environ, **(env or {})})
     if r.returncode:
         raise RuntimeError(f'{source}: fixture exited {r.returncode}: {r.stderr[-2000:]}')
     line = next((l for l in r.stdout.splitlines() if l.startswith('COST ')), None)
