@@ -65045,3 +65045,28 @@ EXP2002 HARDWARE BEFORE 2026-10-27T21:04:43Z:
 - Hashes: sys dc7b6a2a33d6, UmdArm64 79c7b364235e, UmdX64 25393f381a8b, Umd32 99b9af116fba; manifest 4185c4047a1f, hardware-manifest 8071ceb7f6d2; probe2002.sh 0b13b6248a55 (PROBE_LINT_OK); visible recovery rec2002h f2513b500f62bee8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2002h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2002-root-views/run2002.sh.
+
+EXP2002 HARDWARE ACTUAL (2026-10-27): **PASS, new best**. rc75: root-descriptor views without bounds checks.
+- Results:
+
+  | Arm | Setting | Score / FPS | Comparison |
+  |---|---|---|---|
+  | a | HD 50k | **4439 / 26.6** | EXP2000: 3959, +12% |
+  | b | HD 50k, ROOT_BOUNDS=1 (control, second run) | 3595 / 21.5 | |
+  | c | FHD 100k | **2715 / 16.2** | best was 2372 (+14%); EXP2000: 2262 (+20%); macOS ~7700, a 2.8x gap |
+
+- No GPU fault, no removal; G4_SUBMIT_FAILURE none.
+- measure-d3d12-shader-stats is now present: 151 rows.
+- agx_gpu_frame_breakdown:
+
+  | Arm | Frame (ms) | GPU span (ms) | Standalone compute (ms) | Main pass (ms) | Render-compute job (ms) | Small passes (ms) |
+  |---|---|---|---|---|---|---|
+  | a | 33.4 | 29.9 | 10.3 (EXP2000: 12.9) | 7.0 (8.6) | 6.4 | 5.0 |
+  | b | — | 34.5 | 13.0 | 8.8 | — | — |
+  | c | 55.1 | 51.8 | 18.8 (23.4) | 11.0 (14.1) | 13.9 | — |
+
+- The graphics stages gained too: their root CBVs are unchecked.
+- Verdict:
+  - rc75 65dc77c6 and d8544011 validated (as is the attribution);
+  - 9dd60824, f74296a6 and fba1cd95 validated as tooling.
+- Open: before release, run the CDM fault drill (rc37 Wom1GpuFaultDrillAllowed) to show an app OOB root access only removes the app.
