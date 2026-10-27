@@ -64832,3 +64832,23 @@ EXP1992 HARDWARE ACTUAL (2026-10-27): **PASS, new best**.
 
 - The FHD arm runs second; that it gained less is unexplained (possibly thermal).
 - Verdict: rc72 d63d0061 validated.
+
+EXP1993 HARDWARE BEFORE 2026-10-27T18:21:20Z:
+- rc71:
+  - a55c47f2: a deferred BO VA is freed once its in-flight submissions retire;
+  - 73d97dd5: stream outputs are reused from per-context spares.
+- WHY: in EXP1990 arm b the stream run died at 78 s with reject-batch {4, 0x101f1}, an AgxWin32GpuvaBind failure in agx_bo_create for a LOW_VA encoder BO.
+  - 3125 BO cache evictions and 2847 trims;
+  - PendingVa[64] was drained only when idle, so later disposes leaked the BO and its VA.
+- ATOMIC CONTRACT: none; separate steps.
+- Expected:
+  - RC63G PASS;
+  - both arms complete the full run;
+  - no reject-batch; BO cache evict about 0;
+  - "GPU stream scratch create" at most about 32;
+  - no render_fence count reads (path 3), so the score is above EXP1992 (3410 HD, 2159 FHD), with fewer jobs per frame in agx_gpu_frame_breakdown.
+- Failure criteria: device removal, a hang without a Wom1GpuReset receipt, or a lower score.
+- Recovery: rec1993h.
+- Hashes: sys 074fd286b30b, UmdArm64 ea737dbdac2f, UmdX64 0b511eed31e0, Umd32 43a42f0edd23; manifest 6d99a462c0e1, hardware-manifest ba2dfbfb0007; probe1993.sh 91600b855275 (PROBE_LINT_OK); visible recovery rec1993h cf46dd624337acc4; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1993h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1993-stream-scratch/run1993.sh.
