@@ -3832,14 +3832,27 @@ dxbc_nir_finalize(nir_shader *nir)
       NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_shared,
                nir_address_format_32bit_offset);
    }
+   /* RC78: with Honeykrisp's control-flow passes (hk_shader.c nir_opts,
+    * which Asahi's agx_optimize_loop_nir lacks): nir_opt_loop folds the
+    * single-pass loops dxil-spirv and dxilconv emit for structured breaks
+    * and merges loop terminators, nir_opt_if simplifies conditions known
+    * inside their branches and phis of constant branches. GravityMark's
+    * lighting kernel 806ee7b1bdb1944a: 24 -> 21 loops, -3% instructions.
+    * APPLE_AGX_D3D_CF_OPT=0 leaves them out, for a hardware comparison. */
+   const char *cf_opt = getenv("APPLE_AGX_D3D_CF_OPT");
+   const bool control_flow = !cf_opt || strcmp(cf_opt, "0");
    do {
       progress = false;
       NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
       NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
       NIR_PASS(progress, nir, nir_opt_dead_write_vars);
+      if (control_flow)
+         NIR_PASS(progress, nir, nir_opt_loop);
       NIR_PASS(progress, nir, nir_opt_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
       NIR_PASS(progress, nir, nir_opt_dce);
+      if (control_flow)
+         NIR_PASS(progress, nir, nir_opt_if, nir_opt_if_optimize_phi_true_false);
       NIR_PASS(progress, nir, nir_opt_dead_cf);
       NIR_PASS(progress, nir, nir_opt_cse);
       NIR_PASS(progress, nir, nir_opt_algebraic);

@@ -35,6 +35,13 @@ fewer instructions than APPLE_AGX_D3D_CRAWL_SPECULATE=0, and the NIR handed
 to the backend is otherwise unchanged (same ALU, memory and texture ops:
 the layer clamp stays). A descriptor-heap handle (DXBC_HEAP_HANDLE_MARK,
 an app index into the heap mirror) must not be marked.
+RC78: dxil-spirv structures early exits as single-pass loops
+(loop { if (c) { ...; break; } else { ...; break; } }), which Asahi's
+optimization loop keeps (GravityMark's lighting kernel: 3 of its 24
+loops). With Honeykrisp's nir_opt_loop and nir_opt_if in the frontend tail
+(dxbc_nir_finalize) --synthetic-break-loops=4 must compile to no loop and
+fewer instructions than APPLE_AGX_D3D_CF_OPT=0, with the same ALU and memory
+operations.
 The receipt ranking must join dispatches with their compute statistics by
 the CS hash's low 32 bits, count direct groups and threads, keep indirect
 dispatches as counts, and ignore other processes.
@@ -175,6 +182,17 @@ class CompiledCost(unittest.TestCase):
         heap = self.tool.cost(self.binary, source + ',heap')
         self.assertEqual(heap['crawl-speculated'], 0)
         self.assertEqual(heap, self.tool.cost(self.binary, source + ',heap', env=asahi_rule))
+
+    def test_single_pass_loops_fold_into_their_branches(self):
+        source = '--synthetic-break-loops=4'
+        folded = self.tool.cost(self.binary, source)
+        kept = self.tool.cost(self.binary, source, env={'APPLE_AGX_D3D_CF_OPT': '0'})
+        self.assertEqual(kept['loops'], 4)
+        self.assertEqual(folded['loops'], 0)
+        self.assertLess(folded['instrs'], kept['instrs'])
+        self.assertLessEqual(folded['gprs'], kept['gprs'])
+        for key in ('nir-alu', 'nir-mem', 'loads', 'stores'):
+            self.assertEqual(folded[key], kept[key], key)
 
     def test_a_run_of_uav_stores_is_tested_once(self):
         robust, unchecked = self.costs(FIXTURE)

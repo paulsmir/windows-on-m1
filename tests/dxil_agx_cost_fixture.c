@@ -9,7 +9,7 @@
  * the backend's own; uniform numbering is not.
  *
  * usage: dxil_agx_cost_fixture <dxil>|--synthetic-uav-reads=K|--synthetic-local-array=N|
- *        --synthetic-array-samples=N[,heap]
+ *        --synthetic-array-samples=N[,heap]|--synthetic-break-loops=N
  *        [--no-d3d-robust] [--assume-in-bounds] [--root-views=UAV,CBV]
  *        [--print-lowered] [--print-nir]
  * --root-views: hex masks of the UAV and constant-buffer slots that are
@@ -580,6 +580,42 @@ synthetic_array_samples(unsigned samples, bool heap)
    return b.shader;
 }
 
+/* --synthetic-break-loops=N: RC78, the single-pass loops dxil-spirv emits
+ * to structure early exits (GravityMark's lighting kernel keeps 3 of them
+ * through Asahi's optimizations): N times
+ *    loop { if (bit i of the thread id) { a += u0[i]; break; }
+ *           else { a *= 0.5; break; } }
+ * through the frontend tail (dxbc_nir_finalize), the sum written to u1 */
+static nir_shader *
+synthetic_break_loops(unsigned count)
+{
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "rc78-break-loops");
+   b.shader->info.internal = false;
+   b.shader->info.workgroup_size[0] = 64;
+   b.shader->info.workgroup_size[1] = b.shader->info.workgroup_size[2] = 1;
+   b.shader->info.num_ssbos = 2;
+   nir_variable *acc = nir_local_variable_create(b.impl, glsl_float_type(), "a");
+   nir_store_var(&b, acc, nir_imm_float(&b, 1.0f), 1);
+   nir_def *x = nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
+   for (unsigned i = 0; i < count; ++i) {
+      nir_push_loop(&b);
+      nir_push_if(&b, nir_ine_imm(&b, nir_iand_imm(&b, nir_ushr_imm(&b, x, i), 1), 0));
+      nir_def *value = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 0), nir_imm_int(&b, (int)(4 * i)),
+                                     .access = ACCESS_NON_WRITEABLE, .align_mul = 4, .align_offset = 0);
+      nir_store_var(&b, acc, nir_fadd(&b, nir_load_var(&b, acc), value), 1);
+      nir_jump(&b, nir_jump_break);
+      nir_push_else(&b, NULL);
+      nir_store_var(&b, acc, nir_fmul_imm(&b, nir_load_var(&b, acc), 0.5), 1);
+      nir_jump(&b, nir_jump_break);
+      nir_pop_if(&b, NULL);
+      nir_pop_loop(&b, NULL);
+   }
+   nir_store_ssbo(&b, nir_load_var(&b, acc), nir_imm_int(&b, 1), nir_amul_imm(&b, x, 4), .write_mask = 1,
+                  .access = ACCESS_NON_READABLE, .align_mul = 4, .align_offset = 0);
+   dxbc_nir_finalize(b.shader);
+   return b.shader;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -603,6 +639,8 @@ main(int argc, char **argv)
       nir = synthetic_local_array(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-array-samples=%u", &reads) == 1 && reads && reads <= 16) {
       nir = synthetic_array_samples(reads, strstr(argv[1], ",heap") != NULL);
+   } else if (argc > 1 && sscanf(argv[1], "--synthetic-break-loops=%u", &reads) == 1 && reads && reads <= 16) {
+      nir = synthetic_break_loops(reads);
    } else {
       FILE *f = argc > 1 ? fopen(argv[1], "rb") : NULL;
       if (!f)
