@@ -723,11 +723,18 @@ agx_flush(struct pipe_context *pctx,''')
     * Partial masks never reach pipe->clear (st/mesa clears with quads), and
     * the Asahi body ignores both masks. EXP1148: a GL glClear(COLOR|DEPTH)
     * was refused by the former D3D10-shaped guard and faulted the context.
-    * Accepted: COLOR0, DEPTH and STENCIL-with-DEPTH, alone or together. */
-   const unsigned supported = PIPE_CLEAR_COLOR0 | PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL;
+    * Accepted: COLOR0..7, DEPTH and STENCIL-with-DEPTH, alone or together;
+    * each colour buffer cleared needs its whole nibble of color_clear_mask.
+    * rc76: the D3D12 owner clears several attachments of a draw pass in one
+    * call (agx_clear's per-buffer loop: every COLORn is a fast clear of
+    * cbufs[n] with its own clamped colour, or a u_blitter quad). */
+   const unsigned supported = PIPE_CLEAR_COLOR | PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL;
    bool shape = buffers && !(buffers & ~supported) &&
                 (!(buffers & PIPE_CLEAR_STENCIL) || (buffers & PIPE_CLEAR_DEPTH));
-   bool color_ok = !(buffers & PIPE_CLEAR_COLOR0) || (color_clear_mask & 0xf) == 0xf;
+   bool color_ok = true;
+   for (unsigned rt = 0; rt < PIPE_MAX_COLOR_BUFS; ++rt)
+      if ((buffers & (PIPE_CLEAR_COLOR0 << rt)) &&
+          ((color_clear_mask >> (4 * rt)) & 0xf) != 0xf) color_ok = false;
    bool depth_ok = !(buffers & PIPE_CLEAR_DEPTH) || (depth >= 0.0 && depth <= 1.0);
    bool stencil_ok = !(buffers & PIPE_CLEAR_STENCIL) ||
                      stencil_clear_mask == 0 || stencil_clear_mask == 0xff;
