@@ -43,6 +43,12 @@ compute prelude firmware start/end, same timebase as the TA end):
   prelude       the prelude time of every render job with a valid row
 A row is stale (ignored) unless start <= end, the mapped start lies inside
 the job's span bound and the end is no later than the TA end.
+rc79 TVB (measure-gpu-tvb: the process buffer manager's cumulative firmware
+overflow_count and max_pages after each render): a render's partial renders
+are the overflow increase since the process's previous render with a row
+(unknown for the first, or after a decrease); partials sums all renders,
+rc_partials/main_partials the roles, partial_jobs the renders with a known
+count, tvb_max_pages the largest max_pages seen in the frame.
 JSON summary (medians over frames after --skip) on stdout.
 
 --kmd-timing decodes the KMD's Wom1JobTiming971 registry receipt
@@ -72,11 +78,12 @@ def u64(w, i):
 def parse(lines):
     """Return (pid, hz, jobs sorted by sequence, present QPCs) of the
     process with the most completion records."""
-    comp, stage, prelude, presents, rates = {}, {}, {}, {}, set()
+    comp, stage, prelude, tvb, presents, rates = {}, {}, {}, {}, {}, set()
     for line in lines:
         tag = line.split(' ', 1)[0]
         if tag not in ('measure-gpu-completion', 'measure-gpu-stages',
-                       'measure-gpu-prelude', 'measure-d3d12-present'):
+                       'measure-gpu-prelude', 'measure-gpu-tvb',
+                       'measure-d3d12-present'):
             continue
         fields = line.split()
         meta = dict(f.split('=', 1) for f in fields[1:] if '=' in f)
@@ -96,6 +103,8 @@ def parse(lines):
                 u64(words, 2), u64(words, 4), u64(words, 6), u64(words, 8))
         elif tag == 'measure-gpu-prelude' and len(words) == 6:
             prelude.setdefault(pid, {})[u64(words, 0)] = (u64(words, 2), u64(words, 4))
+        elif tag == 'measure-gpu-tvb' and len(words) == 4:
+            tvb.setdefault(pid, {})[u64(words, 0)] = (words[2], words[3])
     if not comp:
         raise ValueError('no measure-gpu-completion rows')
     if len(rates) != 1:
@@ -106,6 +115,15 @@ def parse(lines):
         start, end, _, ta_end = stage.get(pid, {}).get(j['seq'], (0, 0, 0, 0))
         j['start'], j['end'], j['ta_end'] = start, end, ta_end
         j['p_start'], j['p_end'] = prelude.get(pid, {}).get(j['seq'], (0, 0))
+        j['tvb'] = tvb.get(pid, {}).get(j['seq'])
+    last = None
+    for j in jobs:
+        j['partials'] = None
+        if j['kind'] != RENDER or j['tvb'] is None:
+            continue
+        if last is not None and j['tvb'][0] >= last:
+            j['partials'] = j['tvb'][0] - last
+        last = j['tvb'][0]
     return pid, rates.pop(), jobs, sorted(presents.get(pid, []))
 
 
@@ -179,7 +197,12 @@ def frame(js, wall_ms, hz):
         rc_prelude_jobs=len(split), rc_prelude_ms=sum(j['prelude'] for j in split),
         rc_prelude_kick_ms=sum(j['prelude_kick'] for j in split),
         rc_ta_ms=sum(j['ta'] for j in split),
-        prelude_ms=sum(j['prelude'] for j in render if j['prelude'] is not None))
+        prelude_ms=sum(j['prelude'] for j in render if j['prelude'] is not None),
+        partials=sum(j['partials'] or 0 for j in render),
+        partial_jobs=sum(1 for j in render if j['partials'] is not None),
+        rc_partials=sum(j['partials'] or 0 for j in big),
+        main_partials=(main['partials'] or 0) if main else 0,
+        tvb_max_pages=max((j['tvb'][1] for j in render if j['tvb']), default=0))
 
 
 def analyze(lines, skip=0.3):

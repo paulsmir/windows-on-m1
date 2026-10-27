@@ -14,7 +14,10 @@ jobs the one-job-at-a-time worker kept waiting.
 rc79: a render's measure-gpu-prelude row (completion v3) splits its pre-3D
 time into the compute prelude (exact firmware start/end), the kick before
 it and the TA after it (TA end - prelude end); renders without the row, or
-whose prelude stamps are stale, contribute nothing to the split.
+whose prelude stamps are stale, contribute nothing to the split. The
+measure-gpu-tvb rows carry the process manager's cumulative TVB overflow
+count: a render's partial renders are the increase since the process's
+previous render with a row (none for the first one or after a decrease).
 """
 from pathlib import Path
 import importlib.util
@@ -57,6 +60,10 @@ def job(seq, kind, sub, cmp, start=0, end=None, ta_end=0, status=0, pid=7):
 def prelude(seq, start, end, pid=7):
     fw = lambda ms: t(ms) + OFFSET
     return row('measure-gpu-prelude', [seq, 0, fw(start), 0, fw(end), 0], pid)
+
+
+def tvb(seq, overflows, max_pages, pid=7):
+    return row('measure-gpu-tvb', [seq, 0, overflows, max_pages], pid)
 
 
 def present(ms):
@@ -160,6 +167,25 @@ class PreludeSplit(unittest.TestCase):
         self.assertEqual(frames[0]['rc_prelude_jobs'], 0)
         self.assertEqual(frames[0]['rc_prelude_ms'], 0)
         self.assertEqual(frames[0]['rc_ta_ms'], 0)
+
+
+class TvbPartialRenders(unittest.TestCase):
+    def test_partial_renders_per_render_from_cumulative_overflows(self):
+        b = load()
+        log = [present(0)]
+        log += job(1, 1, 0, 10, start=1, end=9, ta_end=8) + [tvb(1, 100, 900)]   # first: unknown
+        log += job(2, 2, 10, 12, start=10.5, end=12)                            # compute
+        log += job(3, 1, 12, 40, start=1, end=39, ta_end=20) + [tvb(3, 103, 950)] # main, 3
+        log += job(4, 1, 40, 50, start=1, end=49, ta_end=48) + [tvb(4, 110, 960)] # rc_big, 7
+        log += job(5, 1, 50, 52, start=1, end=51.5, ta_end=51) + [tvb(5, 2, 10)]  # reset
+        log += [present(100)]
+        frames, _ = b.analyze(log, skip=0)
+        f = frames[0]
+        self.assertEqual(f['rc_partials'], 7)
+        self.assertEqual(f['main_partials'], 3)
+        self.assertEqual(f['partials'], 10)
+        self.assertEqual(f['partial_jobs'], 2)
+        self.assertEqual(f['tvb_max_pages'], 960)
 
 
 class KmdJobTiming(unittest.TestCase):
