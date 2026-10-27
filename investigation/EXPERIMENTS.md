@@ -64561,3 +64561,10 @@ EXP1983 HARDWARE BEFORE 2026-10-27T14:01:21Z:
 - Hashes: sys f478058a45c0, UmdArm64 7fe776e5a2fd, UmdX64 6564fa0e6539, Umd32 8f79426e7264; manifest 8c3defb744e9, hardware-manifest 0ed73c3d3abf; probe1983.sh 9a597a69ce0a (PROBE_LINT_OK); visible recovery rec1983h 6405a26cfefd6b97; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1983h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1983-native-leaf/run1983.sh.
+
+EXP1983 HARDWARE ACTUAL 2026-10-27T14:05:01Z: FAIL, but the cause is now named. Native staging with rc60.
+- Arm a (HD 50k): device removed at 4.3 s. Arm b (FHD 100k): device removed at 2.6 s. The guest stayed alive.
+- The process was not poisoned (rc60 works): native ring maps 2 and 3 returned hr 0.
+- The batch was refused by reject-native-allocation 0x80004005: handle 0x40000880, VA 0x1104070000, 0x02000000 bytes, reason 5.
+- Wom1G3NativePteRefusal: Reason **4 (ring page at another offset)**, InitialUpdate, 112 PTEs. Allocation 0xffff9808f0db87f0 at VA 0x1106000000 has BindingOffset 0x4090000 (32 MiB), but VidMm mapped the ring page at **RingOffset 0x6020000** (PageIpa 0x96cfa0000, ExpectedIpa 0x979f60000). The ExistingSysMem pointer VidMm uses and the KMD binding offset of the slice disagree.
+- Next: subagent rc61 fixes the slice offset/pointer correspondence.
