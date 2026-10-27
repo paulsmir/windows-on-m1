@@ -583,6 +583,103 @@ static VOID AdmissionG3RecordUnmapOwners(ADMISSION_G3_PROCESS *process,
   }
 }
 
+#ifdef APPLE_AGX_NATIVE_STAGING
+/* As in AdmissionG3PoolPlace, opaque VidMm allocation identities are not our
+ * extended allocation object: prove alignment and magic before reading the
+ * optional native binding. NULL for every other owner. */
+static PVOID AdmissionG3NativeStagingBinding(HANDLE allocation) {
+  const ADMISSION_ALLOCATION_HANDLE *owner =
+      (const ADMISSION_ALLOCATION_HANDLE *)allocation;
+  if (owner == NULL || ((ULONG_PTR)owner & (sizeof(ULONG_PTR) - 1u)) != 0u ||
+      owner->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC)
+    return NULL;
+  return owner->NativeStagingBinding;
+}
+
+/* RC60 (EXP1981): VidMm's UpdatePageTable for the third 32 MiB native-staging
+ * allocation failed this check with STATUS_INVALID_PARAMETER (Wom1DdiStatus
+ * slot 123); BuildPagingBufferChecked then poisoned the whole process (site
+ * 0x26) and every later private ACQUIRE and ring map was refused.
+ * DxgkDdiBuildPagingBuffer may not fail an UpdatePageTable, and VidMm owns
+ * the logical mapping of an ExistingSysMem allocation (dummy page, Repeat,
+ * partial ranges, 64 KiB PTEs). The native contract is narrower: a group of
+ * this allocation becomes a native leaf only if all four pages are owned by
+ * it, lie in system segment 0, and equal the authenticated ring page at
+ * their allocation offset. Anything else is kept logical-only and omitted
+ * (the readiness proof then refuses GPU use of that range, not the process).
+ * Caller holds the G3 lock; checks valid pages of one candidate group. */
+static BOOLEAN AdmissionG3NativeStagingGroup(ADMISSION_G3_PROCESS *process,
+    const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update, PVOID binding,
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ptes, UINT group, UINT first,
+    UINT count, UINT scale, BOOLEAN *noted) {
+  const ULONGLONG key = (ULONGLONG)(ULONG_PTR)update->hAllocation;
+  ADMISSION_NATIVE_PTE_REFUSAL *r = &process->State->NativePteRefusal;
+  const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *page = NULL;
+  UINT j, index = 0u, reason = 0u;
+  for (j = 0u; j < 4u && reason == 0u; ++j) {
+    index = group * 4u + j;
+    page = &ptes[index];
+    if (!(page->Flags & APPLE_AGX_GPUVA_G3_VALID)) continue;
+    if (page->Allocation != key) reason = ADMISSION_NATIVE_PTE_OWNER;
+    else if (page->SegmentId != 0u) reason = ADMISSION_NATIVE_PTE_SEGMENT;
+    else if (!AdmissionNativeStagingPage(binding, page->AllocationOffset,
+                                         page->GuestIpa))
+      reason = ADMISSION_NATIVE_PTE_FOREIGN; /* classified below */
+  }
+  if (reason == 0u) return TRUE;
+  if (r->RefusedGroups != MAXULONGLONG) ++r->RefusedGroups;
+  if (!*noted) {
+    *noted = TRUE;
+    if (r->RefusedUpdates != MAXULONGLONG) ++r->RefusedUpdates;
+  }
+  if (r->Version == 0u) {
+    r->Version = ADMISSION_NATIVE_PTE_REFUSAL_VERSION;
+    r->Bytes = sizeof(*r);
+    r->UpdateFlags = (update->Flags.Repeat ? 1u : 0u) |
+        (update->Flags.InitialUpdate ? 2u : 0u) |
+        (update->Flags.NotifyEviction ? 4u : 0u) |
+        (update->Flags.Use64KBPages ? 8u : 0u);
+    r->StartIndex = update->StartIndex;
+    r->NumPageTableEntries = update->NumPageTableEntries;
+    r->PageIndex = index;
+    r->InputIndex = MAXULONG;
+    r->Segment = page->SegmentId;
+    r->OsProcessId = process->OsProcessId;
+    r->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    r->ProcessId = process->Graph.ProcessId;
+    r->Allocation = key;
+    r->PageOwner = page->Allocation;
+    r->FirstPteVirtualAddress = update->FirstPteVirtualAddress;
+    r->AllocationOffsetInBytes = update->AllocationOffsetInBytes;
+    r->PageVa = update->FirstPteVirtualAddress -
+        (ULONGLONG)first * 0x1000ULL + (ULONGLONG)index * 0x1000ULL;
+    r->PageAllocationOffset = page->AllocationOffset;
+    r->PageIpa = page->GuestIpa;
+    if (index >= first && index < first + count) {
+      const DXGK_PTE *input;
+      r->InputIndex = AppleAgxGpuvaG3PteInputIndex((index - first) / scale,
+                                                   update->Flags.Repeat);
+      input = &update->pPageTableEntries[r->InputIndex];
+      r->InputPteFlags = input->Flags;
+      r->InputPageAddress = input->PageAddress;
+    }
+    AdmissionNativeStagingDescribe(binding, page->AllocationOffset,
+        page->GuestIpa, &r->ExpectedIpa, &r->BindingOffset,
+        &r->BindingBytes, &r->RingOffset);
+    if (reason == ADMISSION_NATIVE_PTE_FOREIGN)
+      reason = r->ExpectedIpa == ADMISSION_NATIVE_PTE_NONE ?
+          ADMISSION_NATIVE_PTE_RANGE :
+          r->RingOffset != ADMISSION_NATIVE_PTE_NONE ?
+          ADMISSION_NATIVE_PTE_RING : ADMISSION_NATIVE_PTE_FOREIGN;
+    r->Reason = reason;
+  }
+  /* Staging only (no registry I/O here); first, then at powers of two. */
+  if ((r->RefusedGroups & (r->RefusedGroups - 1ULL)) == 0ULL)
+    AdmissionRecordG3NativePteRefusal(process->State->Adapter, r);
+  return FALSE;
+}
+#endif
+
 static NTSTATUS AdmissionG3UpdateLeaf(
     ADMISSION_G3_PROCESS *process, ULONGLONG table_ipa,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
@@ -597,6 +694,12 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   UINT limit = update->Flags.Use64KBPages ? 512u : 8192u;
   ULONGLONG step = (ULONGLONG)scale * 0x1000ULL;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  /* pSystemMem is a separate runtime input: the private token alone cannot
+   * prove that VidMm mapped the authenticated native bytes. */
+  PVOID native_binding = AdmissionG3NativeStagingBinding(update->hAllocation);
+  BOOLEAN native_noted = FALSE;
+#endif
   if (process->Graph.JobInFlight || process->Graph.LeaseToken)
     return STATUS_DEVICE_BUSY;
   if (process->Graph.MappingGeneration == MAXULONGLONG ||
@@ -677,23 +780,6 @@ static NTSTATUS AdmissionG3UpdateLeaf(
           (pte->ReadOnly ? 0u : APPLE_AGX_GPUVA_G3_WRITE);
       out->Allocation = (ULONGLONG)(ULONG_PTR)update->hAllocation;
       out->AllocationOffset = allocation_offset + (ULONGLONG)j * 0x1000ULL;
-#ifdef APPLE_AGX_NATIVE_STAGING
-      if (update->hAllocation) {
-        const ADMISSION_ALLOCATION_HANDLE *owner =
-            (const ADMISSION_ALLOCATION_HANDLE *)update->hAllocation;
-        /* pSystemMem is a separate runtime input: the private token alone
-         * cannot prove that VidMm mapped the authenticated native bytes. */
-        /* As in AdmissionG3PoolPlace, opaque VidMm allocation identities
-         * are not our extended allocation object. Inspect its identity
-         * before accessing the optional native binding. */
-        if (((ULONG_PTR)owner & (sizeof(ULONG_PTR) - 1u)) == 0u &&
-            owner->Object.Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC &&
-            owner->NativeStagingBinding &&
-            (pte->Segment != 0u || !AdmissionNativeStagingPage(
-                owner->NativeStagingBinding, out->AllocationOffset, out->GuestIpa)))
-          goto Done;
-      }
-#endif
     }
   }
   if (process->Graph.MappingGeneration > MAXULONGLONG - (2ULL * groups + 1ULL)) {
@@ -753,6 +839,14 @@ static NTSTATUS AdmissionG3UpdateLeaf(
         (segment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
          !AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress, view.Bytes,
                                               ipa, 0x4000ULL))) complete = FALSE;
+#ifdef APPLE_AGX_NATIVE_STAGING
+    /* A native-staging group is published only from its own ring pages;
+     * every other legal VidMm mapping stays logical-only (omitted). */
+    if (native_binding && !AdmissionG3NativeStagingGroup(process, update,
+            native_binding, candidate, first_group + i, first, count, scale,
+            &native_noted))
+      complete = FALSE;
+#endif
     bool unavailable = false;
     BOOLEAN refused = FALSE;
     BOOLEAN updated = AppleAgxGpuvaG3GraphTryLeafBacking(&process->Graph, table_ipa,
