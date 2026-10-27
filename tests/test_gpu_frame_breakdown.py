@@ -5,9 +5,16 @@ a job queued behind another starts no earlier than the previous completion
 firmware ends are mapped with the lowest-latency offset so detection latency
 is separated from GPU time, receipts drained in a later frame still belong to
 the frame of their completion QPC, and another process's records are ignored.
+rc76: the fixed per-job cost is measured from the same bound -- a compute
+job's kick (mapped firmware start minus the bound) and a small render job's
+time to its TA end -- and a stale start never yields a kick. The KMD
+Wom1JobTiming971 decoder follows render_job_timing.h's v1 layout (a wrong
+version or size is refused) and counts the completion-to-kick gap only for
+jobs the one-job-at-a-time worker kept waiting.
 """
 from pathlib import Path
 import importlib.util
+import struct
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,6 +88,10 @@ class GpuFrameBreakdown(unittest.TestCase):
         self.assertAlmostEqual(f['c_work_exact_ms'], 17)
         self.assertAlmostEqual(f['c_work_span_ms'], 18)
         self.assertEqual(f['c_empty_jobs'], 1)
+        # rc76: job 2 starts 1 ms after job 1 completed, job 3 2 ms after its submit
+        self.assertEqual(f['c_kick_jobs'], 2)
+        self.assertAlmostEqual(f['c_kick_ms'], 1 + 2)
+        self.assertAlmostEqual(f['r_small_ta_ms'], 0.3)
         g = frames[1]
         self.assertEqual(g['jobs'], 2)
         self.assertAlmostEqual(g['gpu_span_ms'], 19 + 5)
@@ -88,6 +99,7 @@ class GpuFrameBreakdown(unittest.TestCase):
         self.assertEqual(g['c_empty_jobs'], 1)
         self.assertEqual(g['c_work_jobs'], 0)
         self.assertAlmostEqual(g['idle_ms'], 100 - 20 - 5)
+        self.assertEqual(g['c_kick_jobs'], 0)  # job 8's start is stale
 
     def test_failed_job_has_no_firmware_time(self):
         b = load()
@@ -97,6 +109,46 @@ class GpuFrameBreakdown(unittest.TestCase):
         self.assertEqual(summary['failed_jobs'], 1)
         self.assertAlmostEqual(frames[0]['detect_ms'], 0)
         self.assertAlmostEqual(frames[0]['gpu_span_ms'], 10 + 10)
+
+
+def kmd_snapshot(slots, hz=1000000, version=1):
+    """slots: (fence, pid, {phase: qpc})"""
+    b = load()
+    data = bytearray(struct.pack('<IIIIQQ', version, 32 + 64 * 168, len(slots), 0, hz, 0))
+    for i in range(64):
+        fence, pid, q = slots[i] if i < len(slots) else (0, 0, {})
+        data += struct.pack('<IIIIQQ12Q4QII', fence, pid, 0, 0, 0, 0,
+                            *[q.get(p, 0) for p in b.KMD_PHASES], 0, 0, 0, 0, 0, 0)
+    return bytes(data)
+
+
+class KmdJobTiming(unittest.TestCase):
+    def test_intervals_and_queued_gap(self):
+        b = load()
+        first = dict(submit=100, worker=110, begin_before=111, begin_after=190, backend_before=191,
+                     backend_after=260, first_progress=600, complete=680, job_end=700, notify=745)
+        # submitted while the first ran: waited for its notify
+        second = dict(submit=300, worker=800, begin_before=801, begin_after=880, backend_before=881,
+                      backend_after=950, first_progress=1290, complete=1370, notify=1430)
+        # submitted after the second's notify: an idle GPU, not a KMD gap
+        third = dict(submit=2000, worker=2050, backend_after=2200, complete=2500, notify=2560)
+        out = b.kmd_job_timing(kmd_snapshot([(2, 7, second), (1, 7, first), (3, 7, third)]))
+        self.assertEqual(out['slots'], 3)
+        m = out['median_us']
+        self.assertEqual(m['begin_job'], 79)
+        self.assertEqual(m['build'], 69)
+        self.assertEqual(m['kick_to_progress'], 340)
+        self.assertEqual(m['complete_to_notify'], 60)
+        self.assertEqual(out['samples']['queued_notify_to_worker'], 1)
+        self.assertEqual(m['queued_notify_to_worker'], 800 - 745)
+        self.assertEqual(m['queued_complete_to_kick'], 950 - 680)
+
+    def test_refuses_another_layout(self):
+        b = load()
+        with self.assertRaises(ValueError):
+            b.kmd_job_timing(kmd_snapshot([], version=2))
+        with self.assertRaises(ValueError):
+            b.kmd_job_timing(kmd_snapshot([])[:100])
 
 
 if __name__ == '__main__':
