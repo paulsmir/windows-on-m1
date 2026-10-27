@@ -64869,3 +64869,23 @@ EXP1993 HARDWARE ACTUAL (2026-10-27): **PASS, new best; the GPU indirect stream 
   - FHD: standalone compute 24.1 ms exact, main pass 14.7 ms, render-compute 14.5 ms.
 - Verdict: rc71 a55c47f2 (VA release) and 73d97dd5 (stream scratch) validated.
 - Next: make the stream the default path; GPU efficiency (compute per-group cost, render-compute pre-3D).
+
+EXP1994 HARDWARE BEFORE 2026-10-27T18:51:14Z:
+- rc73:
+  - 26abbf21: owner-grid launches defer the trailing CDM barrier;
+  - bb57d8e8: D3D12 ResourceBarrier is now replayed as an owner barrier (previously a no-op), plus a list-boundary barrier;
+  - 5817e04f: owner dispatches marked relaxed;
+  - bfbc5afe: probe RC73B.
+- WHY: rc70/EXP1991 shows standalone compute is the largest GPU cost (13.9 ms HD, 24.1 ms FHD, 174 dispatches per Execute). Asahi barriers after every launch, while D3D12 orders UAV access only through app barriers (Microsoft resource-barrier docs; Enhanced Barriers spec).
+- ATOMIC CONTRACT: the barrier replay and the relaxation are one contract: relaxing without app barriers would be wrong.
+- Expected:
+  - RC73B PASS in both modes;
+  - measure-d3d12-cdm-barriers shows relaxed launches;
+  - c_work_exact_ms below 13.9 (HD);
+  - correct image;
+  - score above EXP1992 (3410 / 2159).
+- Failure criteria: RC73B FAIL, a wrong image, or removal. Fallback env: CDM_BARRIERS=1.
+- Recovery: rec1994h.
+- Hashes: sys 3d812f4f6d3e, UmdArm64 6e9103821ed8, UmdX64 77897d81b8b1, Umd32 9c92c3291a27; manifest faf4b862e768, hardware-manifest 948ba7323676; probe1994.sh 7b56075b46c6 (PROBE_LINT_OK); visible recovery rec1994h 0277b1330b779bfd; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1994h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1994-cdm-relaxed/run1994.sh.
