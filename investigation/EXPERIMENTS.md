@@ -64736,3 +64736,19 @@ EXP1989 HARDWARE ACTUAL (2026-10-27): **PASS (HD new best), FHD lower**.
   - FHD: 27.4 → 45.8 ms, and submit.render_fence 7.7 → 16.5 ms.
 - The frame is now bound by waiting for GPU completion before the count read. The next steps are the GPU stream (rc69, EXP1990) and the GPU time per frame.
 - Verdict: rc68 validated (escapes 15 → 2 ms, no data-race symptom, image OK by run completion); the FHD score effect is not attributable until the render_fence wait is removed.
+
+EXP1990 HARDWARE BEFORE 2026-10-27T17:34:00Z:
+- rc69:
+  - a820f66e: a complete native VS state block per record;
+  - 912c4de0: a private PARAMS copy {BaseVertex, StartInstance} per record.
+- WHY: EXP1987 RC63G FAIL (bad=4095, got=texel 0). StartInstance was lost on the stream path: every record used record 0's base instance. This is a candidate for the GravityMark stream device removal.
+- ATOMIC CONTRACT: none; separate steps (TOOL_RC63, arm a, arm b).
+- Expected:
+  - RC59G PASS; **RC63G PASS (bad=0)** with STATS PASS on path 3;
+  - arm a about EXP1989's arm a;
+  - arm b completes with correct asteroids and scores above arm a (render_fence removed), or, if removed, a Wom1GpuReset receipt and a guest that stays alive (a separate defect).
+- Failure criteria: RC63G still failing, or a wedge.
+- Recovery: rec1990h.
+- Hashes: sys a46565534e33, UmdArm64 941f99b542b5, UmdX64 a17df5627040, Umd32 c3f9477cab34; manifest 614bc7d5a2ac, hardware-manifest 52709687e6b9; probe1990.sh 14e2421be948 (PROBE_LINT_OK); visible recovery rec1990h 9df348e3d5e0bc28; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1990h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1990-stream-params/run1990.sh.
