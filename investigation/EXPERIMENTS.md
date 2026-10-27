@@ -64948,3 +64948,5 @@ EXP1996 HARDWARE ACTUAL (2026-10-27): **PASS**, leaderboard-setting baseline.
   | HD 100k | 50.6 | 47.6 | 1.5 | **20.4** | 9.1 | 9.9 |
 
 - The standalone compute scales with asteroid count, not with resolution: it is the main target (rc74).
+
+EXP1997 BUILD FAILURE (2026-10-27): X86B121 failed: 'use of undeclared identifier nir_shader_as_str' in agx_d3d12_windows.cpp (rc74 NIR dump), WOW64 closure. Not run. Fixed by ec5c9573; rerun as EXP1998.
