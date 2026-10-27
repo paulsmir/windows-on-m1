@@ -47,7 +47,7 @@ static HRESULT open_device(ID3D11Device **device, ID3D11DeviceContext **ctx, LUI
     hr=IDXGIFactory1_EnumAdapters1(factory,i,&adapter);
     if (FAILED(hr)) break;
     hr=IDXGIAdapter1_GetDesc1(adapter,&desc);
-    if (SUCCEEDED(hr) && desc.VendorId==0x106b && !(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
+    if (SUCCEEDED(hr) && (desc.VendorId==0x106b || desc.VendorId==0x4c505041) && !(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
       *luid=desc.AdapterLuid;
       hr=D3D11CreateDevice((IDXGIAdapter *)adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,0,
           &requested,1,D3D11_SDK_VERSION,device,&level,ctx);
