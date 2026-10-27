@@ -169,6 +169,108 @@ ssbo_store_case(const char *name, uint32_t offset, unsigned mask, uint32_t bound
    ralloc_free(b.shader);
 }
 
+/* RC74: control flow the lowering leaves (after folding) */
+static unsigned
+count_ifs(nir_shader *s)
+{
+   unsigned ifs = 0;
+   nir_foreach_function_impl(impl, s)
+      nir_foreach_block(block, impl)
+         ifs += nir_block_get_following_if(block) != NULL;
+   return ifs;
+}
+
+/* RC74: every component of a load at a constant offset, against the D3D
+ * rule computed here, for each size; the bound size stays a runtime value
+ * until finish() folds it, so the straight-line form is what is checked */
+static unsigned
+ssbo_load_sweep(unsigned *ifs)
+{
+   unsigned wrong = 0;
+   *ifs = 0;
+   for (unsigned n = 1; n <= 4; ++n) {
+      for (uint32_t offset = 0; offset <= 24; offset += 4) {
+         for (uint32_t bound = 0; bound <= 28; bound += 4) {
+            nir_builder b = begin();
+            sink(&b, nir_load_ssbo(&b, n, 32, nir_imm_int(&b, 2), nir_imm_int(&b, (int)offset),
+                                   .align_mul = 4, .align_offset = 0));
+            agx_win32_lower_d3d_buffer_access(b.shader);
+            *ifs += count_ifs(b.shader);
+            finish(b.shader, bound);
+            nir_foreach_function_impl(impl, b.shader) {
+               nir_foreach_block(block, impl) {
+                  nir_foreach_instr(instr, block) {
+                     if (instr->type != nir_instr_type_intrinsic ||
+                         nir_instr_as_intrinsic(instr)->intrinsic != nir_intrinsic_store_global)
+                        continue;
+                     nir_intrinsic_instr *st = nir_instr_as_intrinsic(instr);
+                     for (unsigned c = 0; c < n; ++c) {
+                        nir_scalar v = nir_scalar_chase_movs(nir_get_scalar(st->src[0].ssa, c));
+                        const bool in = offset + 4 * (c + 1) <= bound;
+                        if (nir_scalar_is_const(v)) {
+                           wrong += in || nir_scalar_as_uint(v) != 0;
+                           continue;
+                        }
+                        nir_instr *load = nir_def_instr(v.def);
+                        nir_src *at = load->type == nir_instr_type_intrinsic ?
+                           nir_get_io_offset_src(nir_instr_as_intrinsic(load)) : NULL;
+                        wrong += !in || !at || !nir_src_is_const(*at) ||
+                                 nir_instr_as_intrinsic(load)->intrinsic != nir_intrinsic_load_ssbo ||
+                                 nir_src_as_uint(*at) + 4 * v.comp != offset + 4 * c;
+                     }
+                  }
+               }
+            }
+            ralloc_free(b.shader);
+         }
+      }
+   }
+   return wrong;
+}
+
+/* RC74: two consecutive stores (a run tested together) write exactly the
+ * in-bounds components of each, for each size */
+static unsigned
+ssbo_store_run_sweep(void)
+{
+   unsigned wrong = 0;
+   for (uint32_t bound = 0; bound <= 36; bound += 4) {
+      nir_builder b = begin();
+      nir_store_ssbo(&b, nir_imm_ivec4(&b, 1, 2, 3, 4), nir_imm_int(&b, 2), nir_imm_int(&b, 0),
+                     .write_mask = 0xf, .align_mul = 4, .align_offset = 0);
+      nir_store_ssbo(&b, nir_imm_ivec2(&b, 5, 6), nir_imm_int(&b, 2), nir_imm_int(&b, 24),
+                     .write_mask = 0x3, .align_mul = 4, .align_offset = 0);
+      agx_win32_lower_d3d_buffer_access(b.shader);
+      finish(b.shader, bound);
+      /* written bytes, by the dwords the folded stores cover */
+      unsigned written = 0, expected = 0;
+      for (unsigned d = 0; d < 4; ++d)
+         expected |= (4 * (d + 1) <= bound) << d;
+      for (unsigned d = 0; d < 2; ++d)
+         expected |= (24 + 4 * (d + 1) <= bound) << (6 + d);
+      nir_foreach_function_impl(impl, b.shader) {
+         nir_foreach_block(block, impl) {
+            nir_foreach_instr(instr, block) {
+               if (instr->type != nir_instr_type_intrinsic ||
+                   nir_instr_as_intrinsic(instr)->intrinsic != nir_intrinsic_store_ssbo)
+                  continue;
+               nir_intrinsic_instr *st = nir_instr_as_intrinsic(instr);
+               if (!nir_src_is_const(st->src[2])) {
+                  wrong++;
+                  continue;
+               }
+               const unsigned first = nir_src_as_uint(st->src[2]) / 4;
+               u_foreach_bit(c, nir_intrinsic_write_mask(st))
+                  written |= 1u << (first + c);
+            }
+         }
+      }
+      wrong += written != expected;
+      ralloc_free(b.shader);
+   }
+   return wrong;
+}
+
 static void
 atomic_case(void)
 {
@@ -203,6 +305,10 @@ main(void)
    ssbo_store_case("ssbo_store_masked_partial", 4, 0x9, 16);
    ssbo_store_case("ssbo_store_wrapping_offset", 0xfffffffcu, 0x3, 16);
    atomic_case();
+   unsigned load_ifs;
+   const unsigned load_wrong = ssbo_load_sweep(&load_ifs);
+   printf("ssbo_load_sweep wrong %u ifs %u\n", load_wrong, load_ifs);
+   printf("ssbo_store_run_sweep wrong %u\n", ssbo_store_run_sweep());
    glsl_type_singleton_decref();
    return 0;
 }

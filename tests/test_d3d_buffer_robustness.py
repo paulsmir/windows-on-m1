@@ -106,6 +106,24 @@ class D3dBufferAccessLowering(unittest.TestCase):
             "ssbo_store_masked_partial": "stores 4x1",
             "ssbo_store_wrapping_offset": "stores"})
 
+    def test_uav_loads_are_straight_line_and_exact_for_every_size(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? RC74: the AGX
+        # backend waits for every outstanding load at the end of a block
+        # (agx_insert_waits.c), so the D3D-H6 form (an if/else around each
+        # UAV load) serialised every UAV read of a shader. The straight-line
+        # form must keep D3D's per-component rule: for 1-4 components at
+        # each offset 0..24 and each bound size 0..28, an in-bounds component
+        # reads its own dword and an out-of-bounds one is 0, with no branch
+        # left in the lowered (unfolded) code.
+        self.expect({"ssbo_load_sweep": "wrong 0 ifs 0"})
+
+    def test_consecutive_uav_stores_write_exactly_their_in_bounds_parts(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? RC74 tests a run
+        # of consecutive stores together (one branch when all are in bounds).
+        # Each store must still write exactly its in-bounds components for
+        # every bound size 0..36 (a Store4 at 0 and a Store2 at 24).
+        self.expect({"ssbo_store_run_sweep": "wrong 0"})
+
     def test_atomics_are_left_to_the_gl_lowering(self):
         # nir_lower_robust_access predicates them (nothing written, result 0)
         self.expect({"ssbo_atomic": "kept"})
