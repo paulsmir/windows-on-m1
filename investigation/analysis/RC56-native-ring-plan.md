@@ -113,10 +113,19 @@ defines that system-memory placement and its ordinary per-process page tables.
 Actual Windows admission/coherence is still a validation gate, not established
 by a host fixture.
 
-There are at most four 128-MiB arenas **globally**, hence at most 512 MiB pinned
-by this mechanism across all devices/processes. Each UMD device grows lazily
-within that global cap. Metadata has 256 owned slices per arena; FIFO blockage,
-metadata exhaustion, oversized BOs, low-memory refusal or runtime admission
+RC62 (EXP1984) replaced the original capacity rule of four 128-MiB arenas
+(512 MiB). Every native BO is aperture-only, so all of them must fit in the
+256 MiB aperture CommitLimit (NON_LOCAL budget group) beside every other
+aperture placement. With three 128 MiB arenas mapped, a 128 MiB native heap
+failed MakeResident with E_OUTOFMEMORY even after CantTrimFurther. The rule now:
+the KMD charge is capped at a quarter of the aperture CommitLimit, at most
+64 MiB, across all devices and processes (`pool_windows.c`
+AdmissionNativeStagingCap). A UMD device maps arenas of 4, 8, 16 and 32 MiB by
+demand, always the smallest unmapped arena that fits the request
+(`umd_native_arena.h`). BOs over 16 MiB keep the ordinary path (fallback
+reason 4). Each arena has a first-fit table of 256 owned slices, so a slice
+released after its last-use fence is reusable while older slices stay live.
+Metadata exhaustion, oversized BOs, low-memory refusal or runtime admission
 failure fall back. A clean failed allocation releases its slice; failed handle
 cleanup retains its ticket and terminal owner. Arenas remain charged for the
 KMD-process graph lifetime, including after a UMD device closes; this is an
@@ -138,8 +147,9 @@ their existing paths. No stream/submit validator was changed.
 Receipts: `native-ring-map` records mapping status/capacity/token;
 `native-ring-allocation` records token/ticket/offset/bytes;
 `native-ring-use` records referenced native capacity per transfer phase, **not
-dirty bytes**; `native-ring-fallback` reason 1 means arena unavailable/full/
-ineligible-size and reason 2 means clean ExistingSysMem allocation refusal,
+dirty bytes**; `native-ring-fallback` reason 1 means arena unavailable/full, reason 4
+means the BO is over the 16 MiB native slice limit, reason 3 means a refused
+arena mapping and reason 2 means clean ExistingSysMem allocation refusal,
 with requested bytes, aggregate occupancy/capacity and HRESULT. Pool receipt
 v10 and its decoder separate NativeStagingBytes and TotalPromisedBytes while
 preserving v7-v9 prefixes.
