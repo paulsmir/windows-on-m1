@@ -64661,3 +64661,15 @@ EXP1987 HARDWARE BEFORE 2026-10-27T16:25:17Z:
 - Hashes: sys 4cb50042c4d6, UmdArm64 aa1929c7fe74, UmdX64 874482a6ade3, Umd32 3d6eddcbfe9b; manifest d9bcaf511151, hardware-manifest 3f6e712dafa9; probe1987.sh 172121129ce7 (PROBE_LINT_OK); visible recovery rec1987h 4c326d6cddc15a80; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1987h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1987-ring-tdr/run1987.sh.
+
+EXP1987 HARDWARE ACTUAL (2026-10-27):
+- TOOL_RC63 (stream=1):
+  - RC59G PASS, RC59G_COUNT PASS;
+  - **RC63G FAIL**: `readback bad=4095 first=1 got=1,1,64,255`, so only record 0's pixel is right. Per-record BaseVertex and/or StartInstance are lost on the stream path. This is the leading candidate for the GravityMark stream hang; it goes to rc69.
+  - RC63G_STATS PASS: IA 360000/120000, VS 360000, clip 120000, PS 4096.
+- Arm a (HD 50k, upload ring on): **2053 / 12.3 FPS** (EXP1986: 2082), within noise or slightly lower. Upload-ring init status 0 (8 MiB); 2107 ring rows.
+- Arm b (HD 50k, stream=1): device removed at 31 s, **guest alive**, and a **Wom1GpuReset receipt is present**. The rc63 faulted-preemption TDR fix is validated: before it, EXP1982b wedged the machine.
+- Verdicts:
+  - rc63 b3b5b134 validated;
+  - rc63 RC63G probe validated, since it reproduces a real bug;
+  - rc65 neutral.
