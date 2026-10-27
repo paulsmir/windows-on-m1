@@ -1,0 +1,120 @@
+"""RC74: AGX cost of D3D12 compute shaders (tools/agx_shader_cost.py).
+
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+The D3D buffer-robustness lowering (winsys/agx_win32_d3d_robustness.h) put
+each UAV load and store in its own if/else; the AGX backend waits for every
+outstanding memory access at the end of a block (agx_insert_waits.c), so an
+in-bounds invocation overlapped none of its UAV accesses. Compiled with the
+pinned AGX backend (tests/dxil_agx_cost_fixture.c):
+- a kernel of K float4 UAV reads and one float4 write must take no branch for
+  its loads and one for its store, and wait at most once more than the same
+  kernel without robustness (D3D-H6 form: K + 1 branches and wait points);
+- the eight consecutive stores of fixtures/dxil/conv-probe/cs_c47b.dxil
+  must be tested as one run: no more in-bounds wait points than without
+  robustness (D3D-H6 form: 8);
+- no scratch or spills are introduced into these kernels.
+The receipt ranking must join dispatches with their compute statistics by
+the CS hash's low 32 bits, count direct groups and threads, keep indirect
+dispatches as counts, and ignore other processes.
+"""
+from pathlib import Path
+import importlib.util
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURE = ROOT / 'tests/fixtures/dxil/conv-probe/cs_c47b.dxil'
+
+
+def load_tool():
+    spec = importlib.util.spec_from_file_location('agx_shader_cost', ROOT / 'tools/agx_shader_cost.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def row(name, words, pid=7):
+    return f'{name} hr=0x00000000 pid={pid} tid=1 session=1 qpc=1 ' + ' '.join(f'{w:08x}' for w in words)
+
+
+def stats(hash_hi, hash_lo, instrs, block, stage=5):
+    v = [0] * 16
+    v[0], v[1], v[2], v[3], v[4], v[6], v[7], v[14] = hash_hi, hash_lo, stage, 400, instrs, 100, 384, block
+    return row('measure-d3d12-shader-stats', v)
+
+
+class ReceiptRanking(unittest.TestCase):
+    def test_dispatches_join_their_compute_statistics(self):
+        tool = load_tool()
+        b8x8 = 8 | 8 << 11 | 1 << 22
+        b256 = 256 | 1 << 11 | 1 << 22
+        lines = [
+            stats(0x1, 0xaaaa0001, 2800, b8x8),
+            stats(0x1, 0xaaaa0001, 900, b8x8),          # a smaller variant: the largest one counts
+            stats(0x2, 0xbbbb0002, 300, b256),
+            stats(0x3, 0xcccc0003, 100, 0, stage=0),     # a vertex shader is not a compute shader
+            row('measure-d3d12-dispatch', [0, 240, 135, 1, 3, 0xaaaa0001]),
+            row('measure-d3d12-dispatch', [0, 240, 135, 1, 3, 0xaaaa0001]),
+            row('measure-d3d12-dispatch', [0, 0, 0, 0, 2, 0xbbbb0002]),   # indirect
+            row('measure-d3d12-dispatch', [0, 4, 1, 1, 2, 0xbbbb0002]),
+            row('measure-d3d12-dispatch', [7, 4, 1, 1, 2, 0xbbbb0002]),   # refused: not run
+            row('measure-d3d12-dispatch', [0, 99, 1, 1, 2, 0xbbbb0002], pid=9),  # another process
+            row('measure-d3d12-dispatch', [0, 1, 1, 1, 2, 0xdddd0004]),   # no statistics (a compile before diagnostics)
+        ]
+        result = tool.rank_log(lines)
+        self.assertEqual(result['pid'], 7)
+        ranking = {r['tag']: r for r in result['ranking']}
+        big = ranking['aaaa0001']
+        self.assertEqual((big['dispatches'], big['direct'], big['indirect'], big['groups']), (2, 2, 0, 2 * 240 * 135))
+        self.assertEqual(big['threads'], 2 * 240 * 135 * 64)
+        self.assertEqual(big['instrs'], 2800)
+        self.assertEqual(big['score'], 2 * 240 * 135 * 64 * 2800)
+        self.assertEqual(big['block'], (8, 8, 1))
+        small = ranking['bbbb0002']
+        self.assertEqual((small['dispatches'], small['direct'], small['indirect'], small['groups']), (2, 1, 1, 4))
+        self.assertEqual(small['threads'], 4 * 256)
+        self.assertIsNone(ranking['dddd0004']['instrs'])
+        self.assertEqual(result['ranking'][0]['tag'], 'aaaa0001')
+
+
+class CompiledCost(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tool = load_tool()
+        cls.tmp = tempfile.TemporaryDirectory(prefix='shader-cost-')
+        try:
+            cls.binary = cls.tool.build(cls.tmp.name)
+        except Exception:
+            cls.tmp.cleanup()
+            raise
+        if not cls.binary:
+            cls.tmp.cleanup()
+            raise unittest.SkipTest('host Mesa / dxil-spirv trees not available')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def costs(self, source):
+        robust = self.tool.cost(self.binary, source)
+        unchecked = self.tool.cost(self.binary, source, '--no-d3d-robust')
+        self.assertTrue(robust and unchecked, source)
+        return robust, unchecked
+
+    def test_uav_reads_overlap_and_the_store_is_one_branch(self):
+        for reads in (1, 4, 8):
+            with self.subTest(reads=reads):
+                robust, unchecked = self.costs(f'--synthetic-uav-reads={reads}')
+                self.assertEqual(robust['hot-branches'], 1)
+                self.assertLessEqual(robust['hot-mem-blocks'], unchecked['hot-mem-blocks'] + 1)
+                self.assertEqual((robust['scratch'], robust['spills']), (0, 0))
+
+    def test_a_run_of_uav_stores_is_tested_once(self):
+        robust, unchecked = self.costs(FIXTURE)
+        self.assertEqual(robust['hot-mem-blocks'], unchecked['hot-mem-blocks'])
+        self.assertEqual(robust['hot-branches'], 1)
+        self.assertEqual((robust['scratch'], robust['spills']), (0, 0))
+
+
+if __name__ == '__main__':
+    unittest.main()
