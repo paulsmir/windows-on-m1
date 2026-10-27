@@ -89,6 +89,18 @@ APPLE_AGX_BOOL AppleAgxSchedulerRejectFence(
 APPLE_AGX_BOOL AppleAgxSchedulerQueueResubmittedPagingFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+/* RC59: a paging packet that arrives while a boundary preemption is still
+ * unclaimed (WaitCurrentBoundary/ReadyToNotify) cannot be queued, and a
+ * paging SubmitCommandVirtual must not fail (dxgmms2 bugchecks 0x119/2).
+ * Admit it as already preempted: it joins the preempted fence list behind
+ * the cutoff, is never executed from this submission, and is resubmittable
+ * once after the DMA_PREEMPTED report (or after an engine reset). A paging
+ * resubmission of a fence still in that list is accepted unchanged. The
+ * caller holds the scheduler lock and stores no packet data. */
+APPLE_AGX_BOOL AppleAgxSchedulerAdmitPagingFenceAsPreempted(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence,
+    APPLE_AGX_BOOL Resubmission);
 APPLE_AGX_BOOL AppleAgxSchedulerActivateFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);

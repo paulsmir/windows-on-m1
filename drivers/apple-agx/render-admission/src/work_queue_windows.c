@@ -7,7 +7,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
   ADMISSION_RENDER_CONTEXT *presentContext = NULL;
   ADMISSION_PRESENT_BLT_COMMAND presentCommand;
   KIRQL oldIrql;
-  BOOLEAN queued;
+  BOOLEAN queued, preempted, paging;
   if (Context == NULL || Args == NULL ||
       (Kind == ADMISSION_CPU_PACKET_NOP ? (Data != NULL || Bytes != 0u)
                                         : (Data == NULL || Bytes == 0u)) ||
@@ -30,17 +30,40 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
   }
   KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
   KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
-  queued = FALSE;
+  queued = preempted = FALSE;
+  paging = Kind == ADMISSION_CPU_PACKET_PAGING ? TRUE : FALSE;
+  /* RC59 (EXP1969/1976/1978/1980 dumps): dxgmms2 submits system paging
+   * packets with allow-failure clear, so any refusal here becomes 0x119/2
+   * (VidSchiSubmitPagingCommand -> VidSchiSendToExecutionQueue). A frozen
+   * (SchedulerFaulted) scheduler therefore still accepts a valid paging
+   * packet: it is held, never dispatched (AdmissionDispatchQueuedWork stops
+   * while faulted), and the engine reset that dxgkrnl's TDR issues for the
+   * unfinished fence retires the queue and keeps the fence resubmittable.
+   * Present/NOP refusals stay fallible device errors. */
   if (InterlockedCompareExchange(&Context->PagingStopping, 0, 0) == 0 &&
-      InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) == 0 &&
+      (paging ||
+       InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) == 0) &&
       (presentContext == NULL || presentContext->Object.FenceOutstanding == 0u) &&
       Context->CpuQueueCount < APPLE_AGX_SCHEDULER_QUEUE_CAPACITY) {
-    if (Kind == ADMISSION_CPU_PACKET_PAGING && Args->Flags.Resubmission)
+    if (paging && Args->Flags.Resubmission)
       queued = AppleAgxSchedulerQueueResubmittedPagingFence(
           &Context->Scheduler, 0u, 0u, Args->SubmissionFenceId);
     if (!queued)
       queued = AppleAgxSchedulerQueueFence(&Context->Scheduler, 0u, 0u,
                                            Args->SubmissionFenceId);
+    /* An unclaimed boundary preemption refuses admission; the packet joins
+     * that preemption instead and Windows resubmits it after DMA_PREEMPTED. */
+    if (!queued && paging)
+      preempted = AppleAgxSchedulerAdmitPagingFenceAsPreempted(
+          &Context->Scheduler, 0u, 0u, Args->SubmissionFenceId,
+          Args->Flags.Resubmission ? TRUE : FALSE);
+  }
+  if (preempted) {
+    /* No packet is stored: its records stay unsubmitted (R161 quiescence)
+     * until the resubmission queues them. */
+    KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
+    KeReleaseSpinLock(&Context->PagingLock, oldIrql);
+    return STATUS_SUCCESS;
   }
   if (!queued) {
     KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);

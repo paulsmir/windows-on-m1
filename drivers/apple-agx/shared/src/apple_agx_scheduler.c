@@ -268,6 +268,36 @@ APPLE_AGX_BOOL AppleAgxSchedulerQueueResubmittedPagingFence(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AppleAgxSchedulerAdmitPagingFenceAsPreempted(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence,
+    APPLE_AGX_BOOL Resubmission) {
+  APPLE_AGX_U32 index, count;
+  if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
+      Fence == 0u ||
+      (Scheduler->PreemptionPhase != AppleAgxPreemptionWaitCurrentBoundary &&
+       Scheduler->PreemptionPhase != AppleAgxPreemptionReadyToNotify))
+    return APPLE_AGX_FALSE;
+  count = Scheduler->PreemptedFenceCount;
+  if (Resubmission) {
+    for (index = 0u; index < count; ++index)
+      if (Scheduler->PreemptedFenceQueue[index] == Fence)
+        return APPLE_AGX_TRUE; /* Still preempted: resubmitted after the report. */
+    return APPLE_AGX_FALSE;
+  }
+  if (count >= APPLE_AGX_SCHEDULER_QUEUE_CAPACITY ||
+      !AppleAgxSchedulerFenceAfter(Fence, Scheduler->LastSubmittedFence) ||
+      !AppleAgxSchedulerFenceAfter(Fence, AppleAgxSchedulerRetiredFence(Scheduler)) ||
+      (count != 0u &&
+       !AppleAgxSchedulerFenceAfter(Fence, Scheduler->PreemptedFenceQueue[count - 1u])))
+    return APPLE_AGX_FALSE;
+  Scheduler->PreemptedFenceQueue[count] = Fence;
+  Scheduler->PreemptedRejectedAfter[count] = 0u;
+  Scheduler->PreemptedFenceCount = count + 1u;
+  Scheduler->LastSubmittedFence = Fence;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_BOOL AppleAgxSchedulerActivateFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence) {
