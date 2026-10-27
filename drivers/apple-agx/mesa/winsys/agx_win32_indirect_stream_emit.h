@@ -165,11 +165,12 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
    /* Keep rounding and pool growth valid on WOW64 as well as 64-bit hosts. */
    if (!agx_win32_stream_vs_state_valid(stream) ||
        !stream->usc_template || !stream->usc_bytes ||
-       stream->usc_bytes > UINT32_MAX - 63u ||
+       stream->usc_bytes > UINT32_MAX - 79u ||
        (stream->params_offset != UINT32_MAX &&
         (stream->usc_bytes < 8 || stream->params_offset > stream->usc_bytes - 8)))
       goto fail;
-   unsigned usc_stride = ALIGN_POT(stream->usc_bytes, 64);
+   const bool has_params = stream->params_offset != UINT32_MAX;
+   unsigned usc_stride = agx_win32_stream_usc_stride(stream->usc_bytes, has_params);
    if (count > (UINT32_MAX - 16383u - tail) / record ||
        count > (UINT32_MAX - 16383u) / usc_stride)
       goto fail;
@@ -223,6 +224,7 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       .usc_bytes = stream->usc_bytes, .usc_stride = usc_stride,
       .params_offset = stream->params_offset,
       .params_uniform = stream->params_uniform,
+      .params_data = has_params ? agx_win32_stream_params_data(stream->usc_bytes) : 0,
       .pipeline_base = agx_usc_addr(dev, usc.gpu),
       .index_range = draw.index_buffer_range_B,
       .index_size = draw.indexed ? agx_index_size_to_B(draw.index_size) : 0,

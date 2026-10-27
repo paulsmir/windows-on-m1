@@ -22,6 +22,9 @@ struct agx_win32_stream_params {
     * word 0, word 1, outputs, unknown, pad. Each record repeats it with only
     * word 1 (the pipeline) replaced. */
    uint32_t vs_state[6];
+   /* Byte offset of each record's private draw-parameter copy in its USC
+    * slot; meaningful only when params_offset is not UINT32_MAX. */
+   uint32_t params_data;
 } PACKED;
 
 /* RC69 (EXP1987 RC63G): every record must rebind its own USC in the form all
@@ -29,6 +32,27 @@ struct agx_win32_stream_params {
  * and unknown together. A word-1-only update ran all 60000 GPU records with
  * the template's draw parameters on hardware. */
 #define AGX_WIN32_STREAM_VS_STATE_WORDS 6u
+
+/* RC69: the PARAMS load of a record reads {first vertex or base vertex, base
+ * instance} from a copy this dispatch writes after the record's USC words,
+ * not from the application's (possibly GPU-copied) argument memory. RC44I
+ * validated PARAMS loads only from CPU-written arguments. */
+#define AGX_WIN32_STREAM_PARAMS_BYTES 8u
+
+static inline uint32_t
+agx_win32_stream_params_data(uint32_t usc_bytes)
+{
+   return (usc_bytes + 7u) & ~7u;
+}
+
+/* Callers bound usc_bytes by UINT32_MAX - 79 so neither sum wraps. */
+static inline uint32_t
+agx_win32_stream_usc_stride(uint32_t usc_bytes, bool params)
+{
+   uint32_t bytes = params ? agx_win32_stream_params_data(usc_bytes) +
+                                AGX_WIN32_STREAM_PARAMS_BYTES : usc_bytes;
+   return (bytes + 63u) & ~63u;
+}
 
 /* Native agx_ensure_cmdbuf_has_space/hk_ensure_cs_has_space reserve this
  * mapped tail because VDM fetches beyond the last control word. */

@@ -193,11 +193,14 @@ int main(void){
  for(unsigned records=1;records<=12000;records+=11999){
   fault=0;init(&ctx,&batch,&vs);allocations=reads=launches=entered=leaves=output_refs=0;
   in.draw_count=records;value=records;
+  /* RC69: the kernel copies every executed record's draw parameters. */
+  uint32_t *record_args=calloc(records,32);assert(record_args);
   struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};native_vs(&stream);
-  struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)args+4,0x1000,256,AGX_INDEX_SIZE_U32,true);
+  struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)record_args+4,0x1000,256,AGX_INDEX_SIZE_U32,true);
   uint32_t *words=(void *)(vdm+32);assert(agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,(void *)words));
   assert(allocations==3&&reads==2&&launches==1&&output_refs==2&&entered==leaves);
   for(unsigned i=0;i<8;++i){free(blocks[i]);blocks[i]=NULL;}
+  free(record_args);
  }
  /* All five IA/VS/clipper counters use the query BO addresses; inactive
   * queries do not register or update any query. PS and absent-stage slots

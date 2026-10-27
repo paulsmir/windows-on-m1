@@ -57,6 +57,7 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
       .argument_stride=stride, .usc_bytes=usc_bytes, .usc_stride=usc_stride,
       .params_offset=param_uniform==UINT32_MAX ? UINT32_MAX : patch,
       .params_uniform=param_uniform,
+      .params_data=agx_win32_stream_params_data(usc_bytes),
       .pipeline_base=0x10000, .index_range=4096,
       .index_size=indexed, .restart=1, .topology=AGX_PRIMITIVE_TRIANGLE_STRIP,
       /* RC69: the template's native VS block; word 1 is replaced per record. */
@@ -82,12 +83,19 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
       assert(!memcmp(s+AGX_WIN32_STREAM_VS_STATE_WORDS,expected,
                      slot-AGX_WIN32_STREAM_VS_STATE_WORDS*4));
       uint8_t check[80];memcpy(check,tmpl,80);
+      unsigned untouched=usc_bytes;
       if(param_uniform!=UINT32_MAX) {
+         /* RC69: the load reads this record's private copy of its last two
+          * argument words, stored right after the USC words. */
+         uint64_t copy=p.pipelines+(uint64_t)i*usc_stride+p.params_data;
          struct agx_usc_builder b=agx_usc_builder(check+patch,8);
-         agx_usc_uniform(&b,param_uniform,4,arg+(indexed?12:8));
+         agx_usc_uniform(&b,param_uniform,4,copy);
+         assert(p.params_data>=usc_bytes&&p.params_data+8<=usc_stride);
+         assert(!memcmp((uint8_t *)(uintptr_t)copy,(uint8_t *)(uintptr_t)(arg+(indexed?12:8)),8));
+         untouched=p.params_data+8;
       }
       assert(!memcmp(usc+i*usc_stride,check,usc_bytes));
-      for(unsigned k=usc_bytes;k<usc_stride;++k)
+      for(unsigned k=untouched;k<usc_stride;++k)
          assert(usc[i*usc_stride+k]==0xab);
    }
    assert(out[enabled*slot/4]==0x80000012u);

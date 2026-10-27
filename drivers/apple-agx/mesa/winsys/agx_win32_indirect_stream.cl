@@ -55,11 +55,19 @@ libagx_win32_indirect_stream(constant struct agx_win32_stream_params *p)
 
    /* The native VS pipeline reserves four halfwords for first vertex and
     * base instance. Repoint that load, never modify a shared uniform word:
-    * several draws can be in flight simultaneously. No shader ABI changes. */
+    * several draws can be in flight simultaneously. No shader ABI changes.
+    * The two words are copied next to this record's USC words, which the
+    * render pass demonstrably reads, so the load does not depend on the
+    * argument buffer's producer. */
    if (p->params_offset != UINT32_MAX) {
+      constant uint32_t *draw_params = (constant uint32_t *)(uintptr_t)
+         (arg + (p->index_size ? 12 : 8));
+      global uint32_t *copy = (global uint32_t *)(usc + p->params_data);
+      copy[0] = draw_params[0];
+      copy[1] = draw_params[1];
       struct agx_usc_builder b = agx_usc_builder(usc + p->params_offset, 8);
       agx_usc_uniform(&b, p->params_uniform, 4,
-                      arg + (p->index_size ? 12 : 8));
+                      p->pipelines + (uint64_t)i * p->usc_stride + p->params_data);
    }
 
    /* The template's native VS block with this record's pipeline. */
