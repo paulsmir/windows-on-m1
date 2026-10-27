@@ -64568,3 +64568,16 @@ EXP1983 HARDWARE ACTUAL 2026-10-27T14:05:01Z: FAIL, but the cause is now named. 
 - The batch was refused by reject-native-allocation 0x80004005: handle 0x40000880, VA 0x1104070000, 0x02000000 bytes, reason 5.
 - Wom1G3NativePteRefusal: Reason **4 (ring page at another offset)**, InitialUpdate, 112 PTEs. Allocation 0xffff9808f0db87f0 at VA 0x1106000000 has BindingOffset 0x4090000 (32 MiB), but VidMm mapped the ring page at **RingOffset 0x6020000** (PageIpa 0x96cfa0000, ExpectedIpa 0x979f60000). The ExistingSysMem pointer VidMm uses and the KMD binding offset of the slice disagree.
 - Next: subagent rc61 fixes the slice offset/pointer correspondence.
+
+EXP1984 HARDWARE BEFORE 2026-10-27T14:30:03Z:
+- Package 30.0.1984.0 = EXP1983 driver + rc61:
+  - df053322: AdmissionNativeStagingLocate;
+  - 45a43069: AdmissionG3NativeStagingRebase.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1.
+- WHY THIS HYPOTHESIS: in EXP1983 the refused groups were the tails of mappings that cross a 32 MiB leaf table. VidMm's continuation UpdatePageTable kept AllocationOffsetInBytes at 0, so the KMD expected the ring page at the binding start, refused it (reason 4), and the readiness proof hit TailShort, which removed the device. The same shape appeared three times in the OmittedLeaves events.
+- Expected: no reject-native-allocation and no device removal; copy_escape near zero; scores above about 1630 (HD 50k) and 1275 (FHD 100k).
+- Failure criteria: a reason 0x100 identity reject on non-native allocations at a 32 MiB boundary, any fault, or a hang.
+- Recovery: rec1984h.
+- Hashes: sys 31d7e092f4b2, UmdArm64 7366e9e4308c, UmdX64 098efda08c86, Umd32 4ce17e029a80; manifest febc076eee83, hardware-manifest 329126caca04; probe1984.sh d5b7c4aec23a (PROBE_LINT_OK); visible recovery rec1984h f749279aa4b84048; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1984h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1984-native-rebase/run1984.sh.
