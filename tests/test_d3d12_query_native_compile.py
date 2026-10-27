@@ -59,9 +59,7 @@ _Static_assert(offsetof(struct agx_context, base) == 0,
 _Static_assert(AGX_MAX_BATCHES <= AGX_WIN32_QUERY_TIMESTAMP_MAX_SOURCES,
                "timestamp snapshots must fit the reduction kernel");
 ''')
-            # RC73: agx_state.c carries the relaxed CDM launch helper entries.
-            for unit in (out / 'src/gallium/drivers/asahi/agx_state.c',
-                         out / 'src/gallium/drivers/asahi/agx_query.c',
+            for unit in (out / 'src/gallium/drivers/asahi/agx_query.c',
                          out / 'src/gallium/drivers/asahi/agx_batch.c',
                          out / 'src/gallium/drivers/asahi/agx_pipe.c',
                          p / 'context_abi.c'):

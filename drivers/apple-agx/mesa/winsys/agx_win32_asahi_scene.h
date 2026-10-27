@@ -158,15 +158,6 @@ int AgxWin32AsahiContextFaulted(struct pipe_context *);
  * busy. 0 leaves the queries unchanged (agx_win32_query_group.h). */
 int AgxWin32AsahiQueryGroupBegin(struct pipe_context *, unsigned Type,
     struct pipe_query **Group, unsigned Count);
-/* RC73 (GPUVA, agx_win32_cdm_barrier.h): Relaxed nonzero lets the next grid
- * launches run without the native CDM barrier between them; Barrier emits
- * the deferred one (an app ResourceBarrier or list boundary); Receipt copies
- * and resets the six counters (relaxed launches, native launches, deferred
- * barriers emitted at app barriers / before internal launches / at flush,
- * app barriers). */
-void AgxWin32AsahiCdmRelaxed(struct pipe_context *, int Relaxed);
-void AgxWin32AsahiCdmBarrier(struct pipe_context *);
-void AgxWin32AsahiCdmReceipt(struct pipe_context *, unsigned *Out, unsigned Count);
 int AgxWin32AsahiContextFlushForPresent(struct pipe_context *);
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *);
 

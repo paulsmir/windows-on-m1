@@ -6850,11 +6850,6 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 query_group_module = importlib.util.module_from_spec(query_group_spec)
                 query_group_spec.loader.exec_module(query_group_module)
                 query_group_module.project_sources(out, args.project, overlays)
-                cdm_barrier_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-cdm-barrier.py'
-                cdm_barrier_spec = importlib.util.spec_from_file_location('native_cdm_barrier', cdm_barrier_script)
-                cdm_barrier_module = importlib.util.module_from_spec(cdm_barrier_spec)
-                cdm_barrier_spec.loader.exec_module(cdm_barrier_module)
-                cdm_barrier_module.project_sources(out, args.project, overlays)
 
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
