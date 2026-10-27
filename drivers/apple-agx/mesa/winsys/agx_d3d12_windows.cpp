@@ -413,8 +413,14 @@ struct ShaderStatsDraw {
   ShaderStatsDraw(const ShaderStatsDraw &) = delete;
   ShaderStatsDraw &operator=(const ShaderStatsDraw &) = delete;
 };
+/* RC75: with any trace (refusals-only included; "measure-" receipts pass
+ * its filter, AdmissionUmdMeasureEnabled). One receipt per compiled part,
+ * at creation (compute) or at the first draw of a variant (graphics):
+ * EXP2000 (APPLE_AGX_UMD_REFUSALS_ONLY=1) had none. Asahi computes the
+ * statistics on every compile (agx_state.c agx_compile_nir); the callback
+ * only formats them. */
 static void install_shader_stats(struct pipe_context *pipe) {
-  if (!pipe || !pipe->set_debug_callback || !AdmissionUmdDiagnosticEnabled()) return;
+  if (!pipe || !pipe->set_debug_callback || !AdmissionUmdMeasureEnabled()) return;
   struct util_debug_callback callback = {};
   callback.debug_message = shader_stats_message;
   pipe->set_debug_callback(pipe, &callback);

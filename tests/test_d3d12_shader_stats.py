@@ -12,7 +12,7 @@ its slot, a compute compile must carry its shader hash, block and shared size,
 a draw's VS/FS parts the pipeline's stage hashes, a part compiled with no tag
 (a draw's GS/tessellation helper, a meta shader) must be marked internal, and
 other debug messages must be ignored. Also checks the hooks are wired: the
-callback only with UMD diagnostics enabled, the compute compile and draw_vbo
+callback with any trace (refusals-only too, RC75), the compute compile and draw_vbo
 inside their scopes.
 """
 from pathlib import Path
@@ -173,7 +173,9 @@ class ShaderStatsReceipt(unittest.TestCase):
     def test_hooks_are_wired_where_asahi_compiles(self):
         text = OWNER.read_text()
         install = function(text, 'static void install_shader_stats(')
-        self.assertIn('!AdmissionUmdDiagnosticEnabled()', install)
+        # RC75: refusals-only traces (EXP2000) carry measure- receipts only
+        self.assertIn('!AdmissionUmdMeasureEnabled()', install)
+        self.assertNotIn('AdmissionUmdDiagnosticEnabled()', install)
         self.assertIn('pipe->set_debug_callback(pipe, &callback);', install)
         self.assertIn('install_shader_stats(owner->Context);', text)
         compute = function(text, 'extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(')
