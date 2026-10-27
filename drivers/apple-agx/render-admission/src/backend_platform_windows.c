@@ -557,6 +557,17 @@ static VOID AdmissionGpuCompletionCaptureWindows(
         if (object->Data && object->Size == sizeof(ULONGLONG))
           RtlCopyMemory(values[i], object->Data, sizeof(ULONGLONG));
       }
+      /* rc79: the buffer-manager Stats AdmissionSaveG4Manager just flushed
+       * for the CPU (max_pages 0x0, overflow_count 0x8). */
+      {
+        const APPLE_AGX_EXP208_RELOCATION_OBJECT *stats =
+            &runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_MISC];
+        if (stats->Data && stats->Size == 64u) {
+          RtlCopyMemory(&record.TvbMaxPages, stats->Data, sizeof(record.TvbMaxPages));
+          RtlCopyMemory(&record.TvbOverflows, (const UCHAR *)stats->Data + 8u,
+                        sizeof(record.TvbOverflows));
+        }
+      }
       /* rc79: a v5 render's compute prelude block (job start/end). */
       if (job->ComputeTimestampBlock) {
         RtlCopyMemory(&record.PreludeStart, job->ComputeTimestampBlock, sizeof(record.PreludeStart));

@@ -107,7 +107,8 @@ class PreludeTimestamps(unittest.TestCase):
         could not be separated. The prelude must request the firmware block
         unless the Wom1PreludeTimestampsOff switch is set, hand it to the job
         image, and the completion ABI must carry it as version 3 on both the
-        KMD and the UMD side.
+        KMD and the UMD side, with the process's cumulative TVB overflow
+        count (partial renders) so a render's partial renders are countable.
         """
         from test_d3d12_owner_allocation_failure import function
         k=(ROOT/'drivers/apple-agx/render-admission/src/backend_platform_windows.c').read_text()
@@ -123,6 +124,8 @@ class PreludeTimestamps(unittest.TestCase):
         u=(ROOT/'drivers/apple-agx/render-admission/umd/src/umd_gpuva_windows.c').read_text()
         drain=function(u,'VOID AdmissionUmdGpuCompletionDrain(')
         self.assertIn('"measure-gpu-prelude"',drain)
+        self.assertIn('"measure-gpu-tvb"',drain)
+        self.assertIn('TvbOverflows, TvbMaxPages',h)
 
 
 class CompletionCapture(unittest.TestCase):
@@ -147,6 +150,7 @@ typedef unsigned APPLE_AGX_BACKEND_COMPLETION_STATUS;
 #define AppleAgxBackendJobCompute 2
 #define ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_START 30
 #define ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END 31
+#define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_MISC 22u
 #define RtlCopyMemory memcpy
 #define KeAcquireSpinLock(l,i) ((void)(l),(void)(i))
 #define KeReleaseSpinLock(l,i) ((void)(l),(void)(i))
@@ -187,6 +191,25 @@ int main(void){
  assert(q.Count==1 && q.Record[0].Start==140 && q.Record[0].TaStart==110 && q.Record[0].TaEnd==170);
  /* rc79: a render without compute work has no prelude timestamps. */
  assert(!q.Record[0].PreludeStart && !q.Record[0].PreludeEnd);
+ /* rc79: without a buffer-manager Stats object no TVB counters. */
+ assert(!q.Record[0].TvbOverflows && !q.Record[0].TvbMaxPages);
+ /* rc79: the firmware buffer-manager Stats (Asahi fw/buffer.rs: max_pages
+  * 0x0, overflow_count 0x8) the completion just flushed for the CPU. */
+ { unsigned stats[16]={0};
+   stats[0]=2148;stats[2]=12078;
+   r.QueueObjects[22].Data=stats;r.QueueObjects[22].Size=64;
+   assert(AdmissionJobTimingBegin(&r.JobTiming,5,7,42,4096,100));
+   assert(AdmissionJobTimingMark(&r.JobTiming,5,AdmissionJobPhaseComplete,204));
+   AdmissionGpuCompletionCaptureWindows(&r,5,0);
+   AdmissionGpuCompletionRead(&r.GpuCompletions,7,&q);
+   assert(q.Count==1 && q.Record[0].TvbOverflows==12078 && q.Record[0].TvbMaxPages==2148);
+   r.QueueObjects[22].Size=8; /* wrong size: not read */
+   assert(AdmissionJobTimingBegin(&r.JobTiming,6,7,42,4096,100));
+   assert(AdmissionJobTimingMark(&r.JobTiming,6,AdmissionJobPhaseComplete,205));
+   AdmissionGpuCompletionCaptureWindows(&r,6,0);
+   AdmissionGpuCompletionRead(&r.GpuCompletions,7,&q);
+   assert(q.Count==1 && !q.Record[0].TvbOverflows);
+   r.QueueObjects[22].Data=0;r.QueueObjects[22].Size=0; }
  /* rc79: a v5 render's compute prelude names its own firmware block. */
  { ULONGLONG prelude[4]={105,135,0,0};
    r.Backend.PendingJob.ComputeTimestampBlock=prelude;

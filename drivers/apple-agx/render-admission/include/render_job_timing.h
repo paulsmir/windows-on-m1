@@ -145,7 +145,12 @@ typedef struct _ADMISSION_GPU_TIMESTAMP_QUERY {
  * v5 render's compute prelude (the CDM work the TA waits for behind its
  * Barrier), raw ticks of the same timebase as TaEnd; 0 for a render without
  * compute work, for compute jobs (Start/End already are theirs), when the
- * device value Wom1PreludeTimestampsOff = 1, or on failure. */
+ * device value Wom1PreludeTimestampsOff = 1, or on failure.
+ * TvbOverflows/TvbMaxPages: a successful render's firmware buffer-manager
+ * Stats overflow_count and max_pages (Asahi fw/buffer.rs Stats 0x8/0x0) as
+ * the completion flushed them: cumulative per process manager, so the
+ * difference between two of the process's renders is the later render's
+ * TVB overflows, i.e. partial renders; 0 for compute jobs. */
 #define ADMISSION_GPU_COMPLETION_VERSION 3u
 #define ADMISSION_GPU_COMPLETION_CAPACITY 256u
 #define ADMISSION_GPU_COMPLETION_PAGE 32u
@@ -154,6 +159,7 @@ typedef struct _ADMISSION_GPU_COMPLETION {
   unsigned long long Start, End, TaStart, TaEnd;
   unsigned long long PreludeStart, PreludeEnd;
   unsigned int Fence, ProcessId, Kind, Status;
+  unsigned int TvbOverflows, TvbMaxPages;
 } ADMISSION_GPU_COMPLETION;
 typedef struct _ADMISSION_GPU_COMPLETION_RING {
   unsigned long long Sequence, MissingTiming;

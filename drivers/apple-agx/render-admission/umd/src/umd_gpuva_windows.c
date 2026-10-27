@@ -2610,6 +2610,12 @@ VOID AdmissionUmdGpuCompletionDrain(ADMISSION_UMD_DEVICE *device,
             (UINT)r->PreludeEnd, (UINT)(r->PreludeEnd >> 32)};
         AdmissionUmdDiagnostic("measure-gpu-prelude", S_OK, prelude, ARRAYSIZE(prelude));
       }
+      /* rc79: cumulative TVB overflows (partial renders) of the manager. */
+      if (r->Kind == ADMISSION_GPU_TIMESTAMP_RENDER && !r->Status) {
+        const UINT tvb[] = {(UINT)r->Sequence, (UINT)(r->Sequence >> 32),
+            r->TvbOverflows, r->TvbMaxPages};
+        AdmissionUmdDiagnostic("measure-gpu-tvb", S_OK, tvb, ARRAYSIZE(tvb));
+      }
     }
     {
       const UINT coverage[] = {(UINT)query.Cursor, (UINT)(query.Cursor >> 32),
