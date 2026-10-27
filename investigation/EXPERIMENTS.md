@@ -64549,3 +64549,15 @@ EXP1982 HARDWARE ACTUAL 2026-10-27T12:45:51Z:
 - EXP1982 recovery addendum 2026-10-27T13:59:59Z:
   - After the stream hang, the visible recovery disabled the service, but the ordered reboot never completed. The serial log stopped at 13:45 local, the USB endpoints vanished, and the launcher (pid 61797) hung (OWNED_LAUNCHER_STILL_RUNNING). The GPU stream timeout therefore left the machine wedged.
   - The operator power-cycled the J313 into the m1n1 proxy. The AT_PROXY recovery then needed the usual visible-disable.json rename, and finished with RECOVERY_DONE.
+
+EXP1983 HARDWARE BEFORE 2026-10-27T14:01:21Z:
+- Package 30.0.1983.0 = EXP1982 driver + rc60:
+  - 0c986cb0: the native PTE refusal receipt;
+  - ea36f9f6: a 16 KiB group is published natively only when its four pages are the authenticated ring pages; anything else stays logical-only, with no process poison.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1.
+- WHY THIS HYPOTHESIS: in EXP1981 the first UpdatePageTable of the third 32 MiB native-staging slice failed the binding check (0xC000000D), and BuildPagingBufferChecked poisoned the process (site 0x26). That caused the private-escape refusal, the 0x88760873 map refusals and the device removal.
+- Expected: no reject-private-escape and no device removal; copy_escape near zero; scores above 1621/1638 (HD 50k) and 1275 (FHD 100k). Wom1G3NativePteRefusal names which page VidMm supplied (reason 4 = offset semantics, 5 + Repeat = dummy, 5 = foreign).
+- Recovery: rec1983h.
+- Hashes: sys f478058a45c0, UmdArm64 7fe776e5a2fd, UmdX64 6564fa0e6539, Umd32 8f79426e7264; manifest 8c3defb744e9, hardware-manifest 0ed73c3d3abf; probe1983.sh 9a597a69ce0a (PROBE_LINT_OK); visible recovery rec1983h 6405a26cfefd6b97; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1983h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1983-native-leaf/run1983.sh.
