@@ -968,12 +968,19 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   if (device->HeapStaging && !BorrowedStaging &&
       (Flags & (AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite)) &&
       !(Flags & (AppleAgxWin32BufferShareable | AppleAgxWin32BufferGpuOnly))) {
-    if (AdmissionUmdNativeStagingReserve(device, Bytes, Alignment,
+    /* VidMm exposes the whole 64-KiB-rounded allocation. Own and clear
+     * that complete span, even when the caller requests a shorter BO. */
+    ULONGLONG nativeBytes = (stagingDescription.Size + 65535ULL) & ~65535ULL;
+    ULONGLONG nativeAlignment = Alignment < 65536ULL ? 65536ULL : Alignment;
+    if (AdmissionUmdNativeStagingReserve(device, nativeBytes, nativeAlignment,
           &nativeSlice, &nativeAddress, &nativeToken)) {
       nativeDescription.Create = description;
       nativeDescription.Create.Version = ADMISSION_WIN32_ALLOCATION_VERSION_NATIVE;
       nativeDescription.Create.Bytes = sizeof(nativeDescription);
       nativeDescription.Create.Allocation = stagingDescription;
+      nativeDescription.Create.Allocation.Width = nativeSlice.Bytes;
+      nativeDescription.Create.Allocation.Pitch = nativeSlice.Bytes;
+      nativeDescription.Create.Allocation.Size = nativeSlice.Bytes;
       nativeDescription.Token = nativeToken;
       nativeDescription.Offset = nativeSlice.Offset;
     } else AdmissionUmdNativeStagingFallback(device, 1u, Bytes, S_OK);
@@ -984,7 +991,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   if (nativeAddress) {
     /* The slice is exclusively reserved and all former BO/fence owners have
      * retired. ExistingSysMem preserves its input bytes, so zero on reuse. */
-    ZeroMemory(nativeAddress, (SIZE_T)Bytes);
+    ZeroMemory(nativeAddress, (SIZE_T)nativeSlice.Bytes);
     MemoryBarrier();
     allocationInfo.pPrivateDriverData = &nativeDescription;
     allocationInfo.PrivateDriverDataSize = sizeof(nativeDescription);

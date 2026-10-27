@@ -37,7 +37,7 @@ static void AdmissionUmdWaitEnd(unsigned){}
 static ADMISSION_UMD_STAGING_RING arena;
 static bool native_enabled;
 static unsigned fallback_count;
-static BYTE native_memory[65536];
+static BYTE native_memory[3 * 65536];
 static bool AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *d,unsigned long long n,
     unsigned long long align,ADMISSION_UMD_RING_SLICE *s,BYTE **p,unsigned long long *token) {
  assert(d->ScreenBuffers[0].Active && d->ScreenBuffers[0].Transition);
@@ -64,8 +64,24 @@ int main() {
  auto &s=d.ScreenBuffers[0];
  assert(s.NativeStagingAddress==native_memory && s.NativeStagingTicket);
  assert(s.SystemDirect && !s.PrivateStaging && !private_allocs && parsed.CpuVisible);
- for(unsigned i=0;i<sizeof(native_memory);++i)assert(native_memory[i]==0);
+ for(unsigned i=0;i<65536;++i)assert(native_memory[i]==0);
  assert(arena.Used==65536);
+
+ /* Legal caller sizes need complete native pages in the encoded allocation,
+  * ring ownership and zero-on-reuse, including the padding bytes. The real
+  * KMD decoder above must admit every request without an ordinary fallback. */
+ d.ScreenBuffers[0]={};
+ assert(AdmissionUmdRingInit(&arena,sizeof(native_memory)));
+ for(unsigned bytes : {16384u, 32768u, 81920u}) {
+  d.ScreenBuffers[0]={};memset(native_memory,0xcc,sizeof(native_memory));
+  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,bytes,65536,15,&token,0));
+  unsigned extent=bytes==81920u ? 131072u : 65536u;
+  assert(s.NativeStagingAddress && !s.PrivateStaging && s.Bytes==bytes);
+  assert(parsed.Size==extent && arena.Used==extent);
+  for(unsigned i=0;i<extent;++i)assert(native_memory[i]==0);
+  assert(native_memory[extent]==0xcc);
+  assert(AdmissionUmdRingReleaseOwned(&arena,s.NativeStagingTicket,0,0));
+ }
  d.ScreenBuffers[0]={}; native_enabled=false;private_allocs=0;
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,65536,65536,15,&token,0));
  assert(!s.NativeStagingAddress && !s.NativeStagingTicket && s.PrivateStaging);
