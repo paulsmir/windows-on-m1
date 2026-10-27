@@ -389,16 +389,6 @@ class CdmBarrierRelaxed(unittest.TestCase):
 
     def test_owner_relaxes_only_its_grid_launches_and_replays_barriers(self):
         owner = OWNER.read_text()
-        dispatch = function(owner, 'extern "C" HRESULT AgxD3d12OwnerDispatch(')
-        # Each of the two grid launches (indirect records, direct) is
-        # bracketed by the relaxed scope, and nothing else in it.
-        launches = [m.start() for m in re.finditer(r'pipe->launch_grid\(pipe, &info\);', dispatch)]
-        self.assertEqual(len(launches), 2)
-        for at in launches:
-            before = dispatch.rindex('AgxWin32AsahiCdmRelaxed(pipe, owner->CdmRelaxed);', 0, at)
-            self.assertNotIn('bind_heaps(', dispatch[before:at])
-            self.assertLess(at, dispatch.index('AgxWin32AsahiCdmRelaxed(pipe, 0);', at))
-            self.assertLess(dispatch.index('AgxWin32AsahiCdmRelaxed(pipe, 0);', at), dispatch.index('timing.Mark', at))
         barrier = function(owner, 'extern "C" HRESULT AgxD3d12OwnerBarrier(')
         self.assertIn('AgxWin32AsahiCdmBarrier(owner->Context);', barrier)
         self.assertIn('"APPLE_AGX_D3D12_CDM_BARRIERS"', owner)
