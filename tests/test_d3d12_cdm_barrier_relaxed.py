@@ -387,6 +387,32 @@ class CdmBarrierRelaxed(unittest.TestCase):
         script = (SCRIPTS / 'build-native-asahi-state.py').read_text()
         self.assertLess(script.index('native-asahi-query-group.py'), script.index('native-asahi-cdm-barrier.py'))
 
+    def test_owner_relaxes_only_its_grid_launches_and_replays_barriers(self):
+        owner = OWNER.read_text()
+        barrier = function(owner, 'extern "C" HRESULT AgxD3d12OwnerBarrier(')
+        self.assertIn('AgxWin32AsahiCdmBarrier(owner->Context);', barrier)
+        self.assertIn('"APPLE_AGX_D3D12_CDM_BARRIERS"', owner)
+        self.assertIn('"measure-d3d12-cdm-barriers"', owner)
+        scene = (WINSYS / 'agx_win32_asahi_scene.h').read_text()
+        for name in ('AgxWin32AsahiCdmRelaxed', 'AgxWin32AsahiCdmBarrier', 'AgxWin32AsahiCdmReceipt'):
+            self.assertLess(scene.index('extern "C"'), scene.index(name))
+        self.assertIn('HRESULT AgxD3d12OwnerBarrier(AGX_D3D12_OWNER *Owner, int ListBoundary);',
+                      (WINSYS / 'agx_d3d12_windows.h').read_text())
+
+    def test_ddi_records_every_resource_barrier_and_replays_it_in_order(self):
+        ddi = DDI.read_text()
+        for name in ('static VOID APIENTRY ResourceBarrier(', 'static VOID APIENTRY ResourceBarrier0022('):
+            body = function(ddi, name)
+            self.assertIn('RecordBarrier(handle, count);', body, name)
+        record = function(ddi, 'static void RecordBarrier(')
+        self.assertIn('slot->kind = kCommandBarrier;', record)
+        replay = function(ddi, 'static HRESULT ReplayAndSubmit(')
+        self.assertIn('hr = AgxD3d12OwnerBarrier(owner, 0);', replay)
+        self.assertIn('AgxD3d12OwnerBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), 1)', replay)
+        # The barrier branch precedes the catch-all dispatch replay.
+        self.assertLess(replay.index('command.kind == kCommandBarrier'), replay.index('hr = ReplayDispatch(owner, command.dispatch);'))
+        self.assertIsNotNone(re.search(r'kCommandBarrier = 15\b', ddi))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -119,6 +119,13 @@ struct AGX_D3D12_OWNER {
   struct AGX_D3D12_UPLOAD_TARGET { struct pipe_resource *Resource; unsigned long long Token; } *UploadTargets;
   UINT UploadTargetCount, UploadTargetCapacity;
   ADMISSION_UMD_UPLOAD_COPY UploadCopies[ADMISSION_UMD_UPLOAD_RING_COPIES];
+  /* RC73: owner grid launches skip the CDM barrier between them unless an
+   * app barrier separates them (agx_win32_cdm_barrier.h).
+   * APPLE_AGX_D3D12_CDM_BARRIERS=1 keeps the native barrier after every
+   * launch for comparison. AppBarriers: recorded barrier batches replayed
+   * since the last submit (receipt measure-d3d12-cdm-barriers). */
+  bool CdmRelaxed;
+  UINT AppBarriers, ListBoundaries;
 #endif
   /* EXP1822: D3D12 queues and lists are used from several threads (nBody's
    * async compute thread next to its render thread). The pipe_context is not
@@ -732,6 +739,13 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(hr)) create_upload_ring(owner);
+  if (SUCCEEDED(hr)) {
+    char cdm_barriers[2] = {};
+    owner->CdmRelaxed = !(GetEnvironmentVariableA("APPLE_AGX_D3D12_CDM_BARRIERS", cdm_barriers,
+                                                  sizeof(cdm_barriers)) == 1 && cdm_barriers[0] == '1');
+    const UINT values[] = {owner->CdmRelaxed ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-cdm-barriers-init", S_OK, values, 1u);
+  }
 #endif
   receipt("measure-d3d12-owner", hr, owner->KernelContext != NULL ? 1u : 0u, owner->Screen != NULL ? 1u : 0u,
           owner->Context != NULL ? 1u : 0u);
@@ -3830,6 +3844,23 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   return S_OK;
 }
 
+/* RC73: an app ResourceBarrier (any type, split halves included) or the
+ * start of a command list: every grid launched so far completes, with the
+ * native CDM cache flush/invalidate, before any later launch. Without
+ * deferred barriers this emits nothing. */
+extern "C" HRESULT AgxD3d12OwnerBarrier(AGX_D3D12_OWNER *owner, int list_boundary) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Context) return E_INVALIDARG;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  AgxWin32AsahiCdmBarrier(owner->Context);
+  if (list_boundary) ++owner->ListBoundaries;
+  else ++owner->AppBarriers;
+#else
+  (void)list_boundary;
+#endif
+  return S_OK;
+}
+
 static enum mesa_prim primitive(unsigned topology) {
   switch (topology) {
   case 1: return MESA_PRIM_POINTS;          /* D3D_PRIMITIVE_TOPOLOGY_POINTLIST */
@@ -4335,13 +4366,40 @@ static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
   return hr;
 }
 
+/* RC73 receipt per submit (after its flush): {owner dispatch-class commands,
+ * relaxed grid launches, native launches (each with its barrier), deferred
+ * barriers emitted at app barriers, before internal launches, at stream end,
+ * app barrier batches, list boundaries, relaxed}. Skipped barriers = relaxed
+ * launches - the three emitted kinds. */
+static void cdm_barrier_receipt(AGX_D3D12_OWNER *owner, UINT dispatches) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (!owner || !owner->Context) return;
+  unsigned counts[6] = {};
+  AgxWin32AsahiCdmReceipt(owner->Context, counts, 6u);
+  const UINT values[9] = {dispatches, counts[0], counts[1], counts[2], counts[3], counts[4],
+                          owner->AppBarriers, owner->ListBoundaries, owner->CdmRelaxed ? 1u : 0u};
+  if (counts[0] || counts[1] || owner->AppBarriers)
+    AdmissionUmdDiagnostic("measure-d3d12-cdm-barriers", S_OK, values, 9u);
+  owner->AppBarriers = owner->ListBoundaries = 0;
+#else
+  (void)owner;
+  (void)dispatches;
+#endif
+}
+
 /* Explicit CPU consumers retain the synchronous contract. Only Execute
  * supplies a queue context for the experimental outgoing completion bridge. */
 extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
   OwnerLock lock(owner);
-  return submit_owner(owner, NULL);
+  const UINT dispatches = owner ? owner->PendingDispatches : 0u;
+  const HRESULT hr = submit_owner(owner, NULL);
+  cdm_barrier_receipt(owner, dispatches);
+  return hr;
 }
 extern "C" HRESULT AgxD3d12OwnerSubmitForQueue(AGX_D3D12_OWNER *owner, HANDLE context) {
   OwnerLock lock(owner);
-  return submit_owner(owner, context);
+  const UINT dispatches = owner ? owner->PendingDispatches : 0u;
+  const HRESULT hr = submit_owner(owner, context);
+  cdm_barrier_receipt(owner, dispatches);
+  return hr;
 }
