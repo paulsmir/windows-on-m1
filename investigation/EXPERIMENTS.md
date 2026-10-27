@@ -64900,3 +64900,18 @@ EXP1994 HARDWARE ACTUAL (2026-10-27): **rc73 REJECTED, neutral**.
   - FHD 100k 2067 / 10.9 FPS (EXP1992: 2159).
 - measure-d3d12-cdm-barriers median: 174 relaxed launches, but **172 owed barriers emitted at app barriers** (202 app barrier batches). GravityMark puts a barrier after almost every dispatch, so almost nothing is skipped.
 - Verdict: rc73 (e52ee7fd, de3558aa, 32fc8647, ebf6e16b) rejected and reverted in integration (15ac8cd4). The finer-grained analysis is with the rc73 agent.
+
+EXP1995 HARDWARE BEFORE 2026-10-27T19:11:00Z:
+- WHY:
+  - 7cdb3e6b makes the stream the default after EXP1993 (3726 HD with the env);
+  - rc73 was reverted after EXP1994;
+  - the shared UMD paths changed since the last D3D11 run (rc56-rc72: native staging, the escape proof, the VA release fix, the poll), so D3D11 must be re-checked.
+- ATOMIC CONTRACT: none; separate arms.
+- Expected:
+  - arm a about 3726 with path 3 counted rows and no env;
+  - arm b at least about 2550, completes, correct image.
+- Failure criteria: a regression in either arm.
+- Recovery: rec1995h.
+- Hashes: sys 166e8b6a60eb, UmdArm64 17e599aa136f, UmdX64 c21370548965, Umd32 76394521bc6e; manifest 7fe475ff9a3f, hardware-manifest 01e59b00edeb; probe1995.sh 6fe232ca1989 (PROBE_LINT_OK); visible recovery rec1995h ca3d429cd5289d1c; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1995h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1995-stream-default/run1995.sh.
