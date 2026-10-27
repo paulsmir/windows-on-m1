@@ -65089,3 +65089,9 @@ EXP2003 HARDWARE BEFORE 2026-10-27T21:25:47Z:
 - Hashes: sys d8f96b67a2fb, UmdArm64 16aa1842e154, UmdX64 ab1ed560b21b, Umd32 4a3f79d12db4; manifest aa4f27248f89, hardware-manifest 4aa62c14ff07; probe2003.sh 2574006e8a37 (PROBE_LINT_OK); visible recovery rec2003h b87aeca8c5aad6bb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultDrillAllowed=1.
 - Recovery rec2003h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2003-fault-drill/run2003.sh.
+
+EXP2003 HARDWARE ACTUAL (2026-10-27): **fault drill NOT RUN (tool precondition)**; GravityMark new best.
+- The drill exited 1 with `RC37_START dwm=0` / `DWM_PROCESS_UNAVAILABLE`. The probe found DWM with ProcessIdToSessionId, which needs a process handle that a non-elevated user cannot get on dwm.exe. No fault was injected.
+- Fixed in 0a049640: DWM is found through WTSEnumerateProcesses, with a PID-only liveness check when no handle is available. Rerun as EXP2004 (probe sha256 c994eba3…).
+- GravityMark D3D12 HD 50k (rc75 line, Wom1GpuFaultDrillAllowed=1 set): **4579 / 27.4 FPS** (EXP2002: 4439). Probably a cooler machine, since there was no preceding heavy arm.
+- No removal; G4_SUBMIT_FAILURE none.
