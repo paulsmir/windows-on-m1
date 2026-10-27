@@ -18,6 +18,7 @@
 #include <d3dkmthk.h>
 #include <dwmapi.h>
 #include <tlhelp32.h>
+#include <wtsapi32.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -182,18 +183,18 @@ static int render_child(void) {
   say("AGX_GPU_FAULT_FRESH_RENDER: PASS dwm_frame=%llu",timing.cFrame); return 0;
 }
 
+/* EXP2003: a non-elevated tool cannot open dwm.exe (Window Manager\DWM-n) to
+ * query its session, so the session comes from the WTS process list, which
+ * needs no process handle. */
 static DWORD dwm_pid(void) {
-  HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0); PROCESSENTRY32W entry={0};
-  DWORD session=0, result=0;
-  if (snapshot==INVALID_HANDLE_VALUE) return 0;
-  if (!ProcessIdToSessionId(GetCurrentProcessId(),&session)) { CloseHandle(snapshot); return 0; }
-  entry.dwSize=sizeof(entry);
-  if (Process32FirstW(snapshot,&entry)) do {
-    DWORD found_session;
-    if (!_wcsicmp(entry.szExeFile,L"dwm.exe") && ProcessIdToSessionId(entry.th32ProcessID,&found_session) &&
-        found_session==session) { result=entry.th32ProcessID; break; }
-  } while (Process32NextW(snapshot,&entry));
-  CloseHandle(snapshot); return result;
+  WTS_PROCESS_INFOW *list=NULL; DWORD count=0, session=0, result=0;
+  if (!ProcessIdToSessionId(GetCurrentProcessId(),&session)) return 0;
+  if (!WTSEnumerateProcessesW(WTS_CURRENT_SERVER_HANDLE,0,1,&list,&count)) return 0;
+  for (DWORD i=0;i<count;++i)
+    if (list[i].pProcessName && !_wcsicmp(list[i].pProcessName,L"dwm.exe") && list[i].SessionId==session) {
+      result=list[i].ProcessId; break;
+    }
+  WTSFreeMemory(list); return result;
 }
 
 static int child(const char *log_path, const char *mode) {
@@ -226,11 +227,13 @@ int main(int argc, char **argv) {
   }
   before=dwm_pid(); dwm=before ? OpenProcess(SYNCHRONIZE,FALSE,before) : NULL;
   say("RC37_START pid=%lu dwm=%lu",GetCurrentProcessId(),before);
-  if (!dwm) { say("DWM_PROCESS_UNAVAILABLE"); return 1; }
+  /* Without SYNCHRONIZE access, DWM survival is judged by its PID alone. */
+  if (!before) { say("DWM_PROCESS_UNAVAILABLE"); return 1; }
+  if (!dwm) say("DWM_HANDLE_UNAVAILABLE err=%lu pid-only", GetLastError());
   result=child(argv[1],"render");
   if (!result) result=child(argv[1],"fault");
   if (!result) result=child(argv[1],"render");
-  if (WaitForSingleObject(dwm,0)!=WAIT_TIMEOUT || dwm_pid()!=before) result=1;
-  CloseHandle(dwm);
+  if ((dwm && WaitForSingleObject(dwm,0)!=WAIT_TIMEOUT) || dwm_pid()!=before) result=1;
+  if (dwm) CloseHandle(dwm);
   say("AGX_GPU_FAULT_RECOVERY: %s",result ? "FAIL" : "PASS"); return result;
 }
