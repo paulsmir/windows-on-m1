@@ -1242,11 +1242,12 @@ static void dump_shader_nir(const UINT *tokens, mesa_shader_stage stage, struct 
             static_cast<UINT>(stage));
   HANDLE file = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
   if (file == INVALID_HANDLE_VALUE) return;
-#if defined(_M_IX86)
-  /* The WOW64 closure does not carry nir_print (EXP1997 X86B121). */
-  char *text = NULL;
-#else
+#ifdef APPLE_AGX_D3D12_NIR_TEXT_DUMP
   char *text = nir_shader_as_str(nir, NULL);
+#else
+  /* The UMD builds do not carry nir_print (EXP1997 x86, EXP1999 ARM64);
+   * a diagnostic build defines APPLE_AGX_D3D12_NIR_TEXT_DUMP. */
+  char *text = NULL;
 #endif
   const DWORD bytes = text ? static_cast<DWORD>(strlen(text)) : 0u;
   DWORD written = 0;

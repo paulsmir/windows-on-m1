@@ -102,6 +102,7 @@ class ShaderCapture(unittest.TestCase):
         # Define the file writer before the actual common translation entry.
         code=PRELUDE[:PRELUDE.index('static void translate(unsigned stage)')]
         code+=function(text,'static void '+name+'(')+'\n'
+        code+='#define APPLE_AGX_D3D12_NIR_TEXT_DUMP 1\n'
         code+=function(text,'static void dump_shader_nir(')+'\n'
         code+=function(text,'static struct nir_shader *translate_shader(')+'\n'
         code+=PRELUDE[PRELUDE.index('static void translate(unsigned stage)'):]
