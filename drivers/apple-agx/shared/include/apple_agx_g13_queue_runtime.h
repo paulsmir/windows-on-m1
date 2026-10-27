@@ -180,6 +180,12 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME {
   APPLE_AGX_BACKEND_BOOL ChannelRecoveryFailed;
   APPLE_AGX_BACKEND_U32 RecoveredChannelMask;
   APPLE_AGX_BACKEND_U32 LastRecoveredChannelValue[3];
+  /* rc77: events the firmware sent while RecoveryPending (any kind, also
+   * stale Timeouts), and the one KMD-initiated RecoverChannel per job. */
+  APPLE_AGX_BACKEND_U32 PostRecoveryEvents, PostRecoveryKindMask;
+  APPLE_AGX_BACKEND_U32 LastPostRecoveryKind;
+  APPLE_AGX_BACKEND_BOOL ForcedChannelRecovery;
+  APPLE_AGX_BACKEND_U32 ForcedChannelMask;
   /* G4-recovery: the pending job outlived its deadline (counted once per
    * job); the deadline is recorded, not terminal. */
   APPLE_AGX_BACKEND_BOOL DeadlinePassed;
@@ -214,6 +220,17 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCancel(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 Fence);
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT
 AppleAgxG13QueueRuntimeReset(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime);
+/* rc77 (EXP2005/EXP2007): after a Timeout/Fault was recovered (firmware
+ * resumed) and a queue of the pending job still has done != write, publish
+ * Asahi's RecoverChannel (fw/channels.rs:187) once per unretired pipe with
+ * that pipe's QueueInfo and the job's expected stamp, as gpu.rs:1459 does for
+ * a ChannelError. Once per job; never without a prior firmware recovery.
+ * Ownership is still proven only by PollRecovery (done == write), reached
+ * through the next CheckTimeout or event; this call never completes the job.
+ * *Issued is the mask of pipes the command was sent for (0 when nothing was
+ * needed). */
+APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeForceChannelRecovery(
+    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 *Issued);
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeTakeCompletion(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime,
     APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION *Completion);

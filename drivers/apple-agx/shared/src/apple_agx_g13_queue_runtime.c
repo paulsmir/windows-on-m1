@@ -100,6 +100,10 @@ static void AppleAgxG13ClearPending(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
   Runtime->RecoveryPending = APPLE_AGX_BACKEND_FALSE;
   Runtime->ChannelRecoveryMask = 0u;
   Runtime->ChannelRecoveryFailed = APPLE_AGX_BACKEND_FALSE;
+  Runtime->PostRecoveryEvents = Runtime->PostRecoveryKindMask = 0u;
+  Runtime->LastPostRecoveryKind = 0u;
+  Runtime->ForcedChannelRecovery = APPLE_AGX_BACKEND_FALSE;
+  Runtime->ForcedChannelMask = 0u;
   AppleAgxG13QueueRuntimeZero(
       &Runtime->TaPending,
       (APPLE_AGX_BACKEND_U32)sizeof(Runtime->TaPending));
@@ -707,6 +711,74 @@ static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13RecoverChannel(
   return AppleAgxG13PollRecovery(Runtime);
 }
 
+APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeForceChannelRecovery(
+    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 *Issued) {
+  const APPLE_AGX_G13_QUEUE_BINDING *bindings[3];
+  const APPLE_AGX_G13_QUEUE_PENDING *pending[3];
+  APPLE_AGX_BACKEND_U32 pipes[3];
+  APPLE_AGX_BACKEND_U32 count = 0u, index, issued = 0u;
+  if (Issued != APPLE_AGX_G13_QUEUE_RUNTIME_NULL)
+    *Issued = 0u;
+  if (Runtime == APPLE_AGX_G13_QUEUE_RUNTIME_NULL ||
+      Issued == APPLE_AGX_G13_QUEUE_RUNTIME_NULL)
+    return AppleAgxG13QueueRuntimeResultInvalidArgument;
+  if ((Runtime->Phase != AppleAgxG13QueueRuntimeSubmitted &&
+       Runtime->Phase != AppleAgxG13QueueRuntimeComputeSubmitted) ||
+      !Runtime->RecoveryPending || Runtime->RecoveredFaults == 0u ||
+      Runtime->ForcedChannelRecovery)
+    return AppleAgxG13QueueRuntimeResultInvalidState;
+  if (Runtime->ChannelRecoveryFailed)
+    return AppleAgxG13QueueRuntimeResultResetFailed;
+  if (Runtime->Io.RecoverChannel == APPLE_AGX_G13_QUEUE_RUNTIME_NULL)
+    return AppleAgxG13QueueRuntimeResultInvalidState;
+  if (!Runtime->ComputeTerminal) {
+    bindings[count] = &Runtime->Config.Ta;
+    pending[count] = &Runtime->TaPending;
+    pipes[count++] = (APPLE_AGX_BACKEND_U32)AppleAgxG13QueueTa;
+    bindings[count] = &Runtime->Config.D3;
+    pending[count] = &Runtime->D3Pending;
+    pipes[count++] = (APPLE_AGX_BACKEND_U32)AppleAgxG13Queue3d;
+  }
+  if (Runtime->ComputeTerminal || Runtime->ComputeInRender) {
+    bindings[count] = &Runtime->Config.Compute;
+    pending[count] = &Runtime->ComputePending;
+    pipes[count++] = (APPLE_AGX_BACKEND_U32)AppleAgxG13QueueCompute;
+  }
+  Runtime->ForcedChannelRecovery = APPLE_AGX_BACKEND_TRUE;
+  for (index = 0u; index < count; ++index) {
+    APPLE_AGX_BACKEND_U32 done, write, bit = 1u << pipes[index];
+    if (!Runtime->Io.ReadU32(Runtime->Io.Context, bindings[index]->GpuDonePointer,
+                             &done) ||
+        !Runtime->Io.ReadU32(Runtime->Io.Context, bindings[index]->CpuWritePointer,
+                             &write))
+      return AppleAgxG13QueueRuntimeResultMemoryFailed;
+    if (done >= bindings[index]->RingCapacity ||
+        write >= bindings[index]->RingCapacity ||
+        write != pending[index]->ExpectedDonePointer)
+      return AppleAgxG13QueueRuntimeResultInvalidState;
+    if (done == write || (Runtime->ChannelRecoveryMask & bit) != 0u)
+      continue;
+    if (!Runtime->Io.RecoverChannel(Runtime->Io.Context, Runtime->PendingFence,
+            pipes[index], bindings[index]->QueueInfoGpuAddress,
+            pending[index]->ExpectedStamp)) {
+      /* Possibly visible: never publish again for this job. */
+      Runtime->ChannelRecoveryFailed = APPLE_AGX_BACKEND_TRUE;
+      Runtime->ForcedChannelMask = issued | bit;
+      *Issued = issued | bit;
+      return AppleAgxG13QueueRuntimeResultResetFailed;
+    }
+    issued |= bit;
+    Runtime->ChannelRecoveryMask |= bit;
+    Runtime->RecoveredChannelMask |= bit;
+    Runtime->LastRecoveredChannelValue[pipes[index]] = pending[index]->ExpectedStamp;
+  }
+  Runtime->ForcedChannelMask = issued;
+  *Issued = issued;
+  /* Retirement is observed by the next CheckTimeout/HandleEvent, so the
+   * provider takes the completion through its ordinary path. */
+  return AppleAgxG13QueueRuntimeResultOk;
+}
+
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, const unsigned char *Message,
     APPLE_AGX_BACKEND_U32 MessageBytes) {
@@ -722,6 +794,12 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
     return AppleAgxG13QueueRuntimeResultResetFailed;
   if (!AppleAgxG13DecodeEvent(Message, MessageBytes, &event))
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
+  if (Runtime->RecoveryPending) {
+    ++Runtime->PostRecoveryEvents;
+    Runtime->PostRecoveryKindMask |=
+        1u << (event.Kind < 31u ? event.Kind : 31u);
+    Runtime->LastPostRecoveryKind = event.Kind;
+  }
   if (event.Kind == (APPLE_AGX_BACKEND_U32)AppleAgxG13EventChannelError)
     return AppleAgxG13RecoverChannel(Runtime, &event);
   if (Runtime->RecoveryPending) {
