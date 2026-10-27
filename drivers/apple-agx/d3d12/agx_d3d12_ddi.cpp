@@ -50,6 +50,7 @@ int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
 extern "C" VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status, const UINT *Values, UINT Count);
 extern "C" BOOL AdmissionUmdMeasureEnabled(VOID);
 #include "../mesa/winsys/agx_win32_wait.h"
+#include "../mesa/winsys/agx_win32_shader_stats.h"
 
 namespace {
 /* D3D12 A3 (EXP1343: OpenAdapter12 returned a NULL driver adapter handle
@@ -1529,6 +1530,10 @@ struct AgxD3d12PipelineState {
     UINT cs_dwords, vs_dwords, ps_dwords, gs_dwords;
     UINT hs_dwords, ds_dwords, hs_registers, hs_positions; /* C37 */
     AgxD3d12StreamOutput so; /* C39: declared = the pipeline captures stream output */
+    /* RC74 receipt-only: low 32 bits of the CS tokens' FNV-1a 64 hash (the
+     * measure-d3d12-shader-stats HASH_LO of its compiled statistics), set by
+     * the first compile; 0 before */
+    UINT cs_tag;
     UINT cs[1]; /* the CS program, then the VS, the PS, the GS (C27), the HS and the DS (C37) */
 };
 static void PublishPsoIdentity(AgxD3d12PipelineState *pso, AgxD3d12Device *device) {
@@ -5170,6 +5175,8 @@ static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso
         return result;
     }
     AGX_D3D12_OWNER *owner = EnsureOwner(device);
+    if (pso->cs_dwords >= 2)
+        pso->cs_tag = static_cast<UINT>(agx_win32_shader_hash(pso->cs, static_cast<size_t>(pso->cs_dwords) * sizeof(UINT)));
 #if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
     pso->compiled = E_FAIL;
     if (owner) {
@@ -5717,8 +5724,9 @@ static void RecordDispatch(AgxD3d12CommandList *list, UINT x, UINT y, UINT z, co
     /* C17: compilation produces the immutable namespace map used by ResolveRoot. */
     if (!refusal && FAILED(CompileCompute(list->device, pso))) refusal = 7u;
     if (!refusal) refusal = ResolveRoot(list, root, list->compute_root_va, list->compute_root_dwords, kAnyStage, &dispatch);
-    const UINT receipt[] = {refusal, x, y, z, root ? root->parameters : 0u};
-    AdmissionUmdDiagnostic("measure-d3d12-dispatch", refusal ? E_NOTIMPL : S_OK, receipt, 5);
+    /* RC74: the 6th value names the compute shader (cs_tag) for a per-shader ranking */
+    const UINT receipt[] = {refusal, x, y, z, root ? root->parameters : 0u, pso ? pso->cs_tag : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-dispatch", refusal ? E_NOTIMPL : S_OK, receipt, 6);
     if (refusal) {
         ListError(list, refusal == 3u || refusal == 6u ? E_INVALIDARG : E_NOTIMPL);
         return;

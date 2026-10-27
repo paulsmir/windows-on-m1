@@ -429,6 +429,10 @@ typedef struct {
   uint8_t VsUavDimensions[DXBC_UAV_DIMENSION_SLOTS], PsUavDimensions[DXBC_UAV_DIMENSION_SLOTS],
           GsUavDimensions[DXBC_UAV_DIMENSION_SLOTS], HsUavDimensions[DXBC_UAV_DIMENSION_SLOTS],
           DsUavDimensions[DXBC_UAV_DIMENSION_SLOTS];
+  /* RC74 receipt-only: FNV-1a 64 hash and size of the VS, HS, DS, GS and PS
+   * tokens, which tag their compiled statistics (0 bytes: no stage) */
+  unsigned long long StatsHash[5];
+  unsigned StatsBytes[5];
 } AGX_D3D12_GRAPHICS;
 HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *Owner, const AGX_D3D12_GRAPHICS_DESC *Desc,
                                     AGX_D3D12_GRAPHICS *Graphics);

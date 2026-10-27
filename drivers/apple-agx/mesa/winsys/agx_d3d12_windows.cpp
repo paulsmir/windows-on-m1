@@ -32,6 +32,8 @@ extern "C" {
 #include "util/format/u_format.h"
 #include "util/u_surface.h"
 #include "util/u_simple_shaders.h"
+#include "agx_win32_shader_stats.h"
+#include "util/u_debug.h"
 
 /* The D3D10 frontend's DXGI -> pipe format table (gallium/frontends/d3d10umd
  * Format.cpp, linked in the native runtime archive). */
@@ -331,6 +333,91 @@ static void receipt(PCSTR stage, HRESULT status, UINT a, UINT b, UINT c) {
 static void receipt(PCSTR stage, HRESULT status, UINT a, UINT b, UINT c, UINT d, UINT e) {
   const UINT values[] = {a, b, c, d, e};
   AdmissionUmdDiagnostic(stage, status, values, 5u);
+}
+
+/* RC74 receipt-only: the AGX statistics of every compiled shader part
+ * (agx_win32_shader_stats.h), tagged with the D3D shader being compiled:
+ * the compute shader around create_compute_state, the pipeline's stages
+ * around draw_vbo (Asahi compiles graphics variants there). A part compiled
+ * outside a tag (meta shaders, a draw's GS/tessellation helpers) carries
+ * stage | 0x100 and hash 0. */
+struct ShaderStatsTag {
+  unsigned long long Hash;
+  UINT Bytes, Block, Shared;
+};
+static thread_local const ShaderStatsTag *t_stats_tag[MESA_SHADER_COMPUTE + 1];
+static ShaderStatsTag shader_stats_tag(const UINT *tokens) {
+  ShaderStatsTag tag = {};
+  if (tokens && tokens[1] >= 2 && tokens[1] < 0x4000000u) {
+    tag.Bytes = tokens[1] * 4u;
+    tag.Hash = agx_win32_shader_hash(tokens, tag.Bytes);
+  }
+  return tag;
+}
+static void shader_stats_message(void *data, unsigned *id, enum util_debug_type type, const char *fmt, va_list args) {
+  (void)data;
+  (void)id;
+  if (type != UTIL_DEBUG_TYPE_SHADER_INFO || !fmt) return;
+  char text[512];
+  const int length = vsnprintf(text, sizeof(text), fmt, args);
+  struct agx_win32_shader_stats stats;
+  if (length <= 0 || length >= static_cast<int>(sizeof(text)) || !agx_win32_parse_shader_stats(text, &stats)) return;
+  const int stage = agx_win32_shader_stats_stage(stats.stage);
+  const ShaderStatsTag *tag = stage >= 0 ? t_stats_tag[stage] : NULL;
+  UINT v[AGX_WIN32_STATS_COUNT] = {};
+  v[AGX_WIN32_STATS_HASH_HI] = tag ? static_cast<UINT>(tag->Hash >> 32) : 0u;
+  v[AGX_WIN32_STATS_HASH_LO] = tag ? static_cast<UINT>(tag->Hash) : 0u;
+  v[AGX_WIN32_STATS_STAGE] = (stage >= 0 ? static_cast<UINT>(stage) : 0xffu) | (tag ? 0u : 0x100u);
+  v[AGX_WIN32_STATS_BYTES] = tag ? tag->Bytes : 0u;
+  v[AGX_WIN32_STATS_INSTRS] = stats.instrs;
+  v[AGX_WIN32_STATS_ALU] = stats.alu;
+  v[AGX_WIN32_STATS_GPRS] = stats.gprs;
+  v[AGX_WIN32_STATS_THREADS] = stats.threads;
+  v[AGX_WIN32_STATS_SCRATCH] = stats.scratch;
+  v[AGX_WIN32_STATS_SPILLS] = stats.spills;
+  v[AGX_WIN32_STATS_FILLS] = stats.fills;
+  v[AGX_WIN32_STATS_LOOPS] = stats.loops;
+  v[AGX_WIN32_STATS_CODE] = stats.code;
+  v[AGX_WIN32_STATS_PREAMBLE] = stats.preamble;
+  v[AGX_WIN32_STATS_BLOCK] = tag ? tag->Block : 0u;
+  v[AGX_WIN32_STATS_SHARED] = tag ? tag->Shared : 0u;
+  AdmissionUmdDiagnostic("measure-d3d12-shader-stats", S_OK, v, AGX_WIN32_STATS_COUNT);
+}
+/* the tags of one compile (compute) or one draw (graphics), restored after */
+struct ShaderStatsScope {
+  const ShaderStatsTag *saved[MESA_SHADER_COMPUTE + 1];
+  explicit ShaderStatsScope(const ShaderStatsTag *const tags[MESA_SHADER_COMPUTE + 1]) {
+    memcpy(saved, t_stats_tag, sizeof(saved));
+    memcpy(t_stats_tag, tags, sizeof(saved));
+  }
+  ~ShaderStatsScope() { memcpy(t_stats_tag, saved, sizeof(saved)); }
+  ShaderStatsScope(const ShaderStatsScope &) = delete;
+  ShaderStatsScope &operator=(const ShaderStatsScope &) = delete;
+};
+/* a draw's stage tags (Asahi compiles graphics variants in draw_vbo) */
+struct ShaderStatsDraw {
+  ShaderStatsTag tags[5];
+  const ShaderStatsTag *saved[MESA_SHADER_COMPUTE + 1];
+  explicit ShaderStatsDraw(const AGX_D3D12_GRAPHICS *graphics) : tags() {
+    static const mesa_shader_stage stages[5] = {MESA_SHADER_VERTEX, MESA_SHADER_TESS_CTRL, MESA_SHADER_TESS_EVAL,
+                                                MESA_SHADER_GEOMETRY, MESA_SHADER_FRAGMENT};
+    memcpy(saved, t_stats_tag, sizeof(saved));
+    memset(t_stats_tag, 0, sizeof(saved));
+    for (unsigned i = 0; graphics && i < 5; ++i) {
+      tags[i].Hash = graphics->StatsHash[i];
+      tags[i].Bytes = graphics->StatsBytes[i];
+      if (tags[i].Bytes) t_stats_tag[stages[i]] = &tags[i];
+    }
+  }
+  ~ShaderStatsDraw() { memcpy(t_stats_tag, saved, sizeof(saved)); }
+  ShaderStatsDraw(const ShaderStatsDraw &) = delete;
+  ShaderStatsDraw &operator=(const ShaderStatsDraw &) = delete;
+};
+static void install_shader_stats(struct pipe_context *pipe) {
+  if (!pipe || !pipe->set_debug_callback || !AdmissionUmdDiagnosticEnabled()) return;
+  struct util_debug_callback callback = {};
+  callback.debug_message = shader_stats_message;
+  pipe->set_debug_callback(pipe, &callback);
 }
 
 /* EXP1851: a refused batch faults the backend and Asahi's next BO allocation
@@ -715,6 +802,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
   if (SUCCEEDED(hr)) {
     owner->Context = AgxWin32AsahiContextCreate(owner->Screen, &owner->Owner);
     if (!owner->Context) hr = E_OUTOFMEMORY;
+    install_shader_stats(owner->Context);
 #ifdef APPLE_AGX_GPUVA_WINSYS
     char validate[2]={},refuse[2]={};
     owner->Backend.ValidateRefs=GetEnvironmentVariableA("APPLE_AGX_UMD_VALIDATE_REFS",validate,2)==1 && validate[0]=='1';
@@ -1139,6 +1227,29 @@ static void dump_shader_input(const UINT *tokens, mesa_shader_stage stage, UINT 
   receipt("measure-d3d12-shader-input", S_OK, static_cast<UINT>(stage), reason,
           static_cast<UINT>(hash >> 32), static_cast<UINT>(hash), static_cast<UINT>(bytes));
 }
+/* RC74: with APPLE_AGX_D3D12_SHADER_DUMP_DIR and APPLE_AGX_D3D12_SHADER_DUMP_NIR=1,
+ * also the translated (frontend) NIR of every accepted shader as text,
+ * <fnv64>-s<stage>.nir beside its token capture (CREATE_NEW deduplicates).
+ * No shader or rendering state changes. */
+static void dump_shader_nir(const UINT *tokens, mesa_shader_stage stage, struct nir_shader *nir) {
+  char dir[MAX_PATH], flag[2] = {};
+  const DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D12_SHADER_DUMP_DIR", dir, sizeof(dir));
+  if (!tokens || !nir || length == 0 || length >= sizeof(dir) - 48 || tokens[1] < 2 || tokens[1] >= 0x4000000u) return;
+  if (GetEnvironmentVariableA("APPLE_AGX_D3D12_SHADER_DUMP_NIR", flag, sizeof(flag)) != 1 || flag[0] != '1') return;
+  const unsigned long long hash = agx_win32_shader_hash(tokens, static_cast<size_t>(tokens[1]) * 4u);
+  char path[MAX_PATH];
+  wsprintfA(path, "%s\\%08x%08x-s%u.nir", dir, static_cast<UINT>(hash >> 32), static_cast<UINT>(hash),
+            static_cast<UINT>(stage));
+  HANDLE file = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) return;
+  char *text = nir_shader_as_str(nir, NULL);
+  const DWORD bytes = text ? static_cast<DWORD>(strlen(text)) : 0u;
+  DWORD written = 0;
+  const bool complete = text && WriteFile(file, text, bytes, &written, NULL) && written == bytes;
+  CloseHandle(file);
+  ralloc_free(text);
+  if (!complete) (void)DeleteFileA(path);
+}
 /* C44: a stored shader is DXBC tokens or (SM 6) a DXIL program part with
  * the same version/size header; both translate to the same NIR conventions
  * and binding map. DXIL stream output is built on the translated NIR
@@ -1196,6 +1307,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *owner, const
   struct nir_shader *nir = translate_shader(tokens, MESA_SHADER_COMPUTE, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
                                             &compute->Bindings, 0u, 0u, NULL, &error);
   wrap_slot_minmax(nir, MESA_SHADER_COMPUTE);
+  dump_shader_nir(tokens, MESA_SHADER_COMPUTE, nir);
   if (!nir) {
     receipt("measure-d3d12-compute", E_NOTIMPL, 0u, error.opcode, error.offset);
     return E_NOTIMPL;
@@ -1212,7 +1324,15 @@ extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *owner, const
   state.ir_type = PIPE_SHADER_IR_NIR;
   state.prog = nir;
   state.static_shared_mem = shared;
-  compute->State = pipe->create_compute_state(pipe, &state);
+  {
+    ShaderStatsTag tag = shader_stats_tag(tokens);
+    tag.Block = (block[0] & 0x7ffu) | (block[1] & 0x7ffu) << 11 | (block[2] & 0x3ffu) << 22;
+    tag.Shared = shared;
+    const ShaderStatsTag *tags[MESA_SHADER_COMPUTE + 1] = {};
+    tags[MESA_SHADER_COMPUTE] = &tag;
+    ShaderStatsScope stats(tags);
+    compute->State = pipe->create_compute_state(pipe, &state);
+  }
   const HRESULT hr = compute->State && block[0] && block[1] && block[2] ? S_OK : E_OUTOFMEMORY;
   receipt("measure-d3d12-compute", hr, block[0], block[1], block[2]);
   if (FAILED(hr)) {
@@ -2829,6 +2949,7 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   struct nir_shader *nir = translate_shader(tokens, stage, pipe->screen->nir_options[stage], bindings, passthrough_registers,
                                             passthrough_positions, xfb, &error);
   wrap_slot_minmax(nir, stage);
+  dump_shader_nir(tokens, stage, nir);
   receipt("measure-d3d12-graphics-shader", nir ? S_OK : E_NOTIMPL, static_cast<UINT>(stage), error.opcode, error.offset);
   if (!nir) {
     dump_shader_input(tokens, stage, 1u);
@@ -2958,6 +3079,15 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
     return E_INVALIDARG;
   ShaderMinmaxScope minmax(desc->Flags, desc->SlotMinmax, false);
   memset(graphics, 0, sizeof(*graphics));
+  {
+    /* RC74 receipt-only: the stages' hashes for their statistics */
+    const UINT *const stage_tokens[5] = {desc->Vs, desc->Hs, desc->Ds, desc->Gs, desc->Ps};
+    for (unsigned i = 0; i < 5; ++i) {
+      const ShaderStatsTag tag = shader_stats_tag(stage_tokens[i]);
+      graphics->StatsHash[i] = tag.Hash;
+      graphics->StatsBytes[i] = tag.Bytes;
+    }
+  }
   struct pipe_context *pipe = owner->Context;
   /* C39: stream output from the geometry shader, else the vertex shader
    * (a pipeline with a hull/domain shader refuses it at draw recording) */
@@ -4149,6 +4279,8 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   /* Native feedback/XFB legalization may flush the current batch. Bind heap
    * resources and batch-relative sampler handles only after that boundary,
    * including each recursive native draw which may select another batch. */
+  /* RC74: the variants Asahi compiles in draw_vbo report their statistics */
+  const ShaderStatsDraw stats_draw(graphics);
   AgxD3d12DrawHeapBindings heap_bindings = {owner, S_OK};
   const LONGLONG bound = qpc_now();
   /* The native wrapper generates eligible GPU streams before rendering.

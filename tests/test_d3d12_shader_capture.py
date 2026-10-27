@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from test_d3d12_owner_allocation_failure import OWNER, function
 
+WINSYS = Path(__file__).resolve().parents[1] / 'drivers/apple-agx/mesa/winsys'
+
 PRELUDE = r'''
 #include <cassert>
 #include <cstdint>
@@ -20,8 +22,10 @@ PRELUDE = r'''
 #include <map>
 #include <vector>
 #include <cstdarg>
+#include "agx_win32_shader_stats.h"
 using UINT=uint32_t; using DWORD=uint32_t; using HANDLE=int;
 using mesa_shader_stage=unsigned;
+#define MESA_SHADER_COMPUTE 5u
 #define MAX_PATH 260
 #define GENERIC_WRITE 1
 #define CREATE_NEW 1
@@ -78,8 +82,12 @@ static agx_dxil_nir_status agx_dxil_to_nir(const UINT *,size_t,const unsigned *,
  ++translations;*out={&translated,compiler_stage,{}};return AGX_DXIL_NIR_OK;
 }
 static bool agx_dxil_nir_xfb(nir_shader *,const dxbc_nir_xfb *){return true;}
-static void ralloc_free(void *){assert(false);}
-static void reset(){env.clear();files.clear();writes=creates=translations=receipts=0;fail_open=fail_write=short_write=false;}
+// RC74: the frontend NIR text of dump_shader_nir is the only allocation freed
+static char nir_text[]="shader: MESA_SHADER_COMPUTE\n";
+static unsigned nir_texts;
+static char *nir_shader_as_str(nir_shader *nir,void *){assert(nir==&translated);++nir_texts;return nir_text;}
+static void ralloc_free(void *p){assert(p==nir_text);}
+static void reset(){env.clear();files.clear();writes=creates=translations=receipts=nir_texts=0;fail_open=fail_write=short_write=false;}
 static const UINT tokens[]={0x10065,6,0x4c495844,0x100,0x10,0};
 static void translate(unsigned stage){
  compiler_stage=stage;dxbc_binding_map map;dxbc_nir_error error;
@@ -94,6 +102,7 @@ class ShaderCapture(unittest.TestCase):
         # Define the file writer before the actual common translation entry.
         code=PRELUDE[:PRELUDE.index('static void translate(unsigned stage)')]
         code+=function(text,'static void '+name+'(')+'\n'
+        code+=function(text,'static void dump_shader_nir(')+'\n'
         code+=function(text,'static struct nir_shader *translate_shader(')+'\n'
         code+=PRELUDE[PRELUDE.index('static void translate(unsigned stage)'):]
         code+=main.replace('DUMP_INPUT',name)
@@ -102,7 +111,7 @@ class ShaderCapture(unittest.TestCase):
             for dxil in (False, True):
                 with self.subTest(dxil=dxil):
                     flags=['-DAPPLE_AGX_D3D12_DXIL'] if dxil else []
-                    r=subprocess.run(['clang++','-std=c++17','-fsanitize=address,undefined',*flags,str(path/'test.cpp'),'-o',str(path/'test')],capture_output=True,text=True)
+                    r=subprocess.run(['clang++','-std=c++17','-fsanitize=address,undefined',*flags,'-I',str(WINSYS),str(path/'test.cpp'),'-o',str(path/'test')],capture_output=True,text=True)
                     self.assertEqual(r.returncode,0,r.stderr)
                     r=subprocess.run([str(path/'test')],capture_output=True,text=True)
                     self.assertEqual(r.returncode,0,r.stdout+r.stderr)
@@ -148,6 +157,26 @@ int main(){reset();env["APPLE_AGX_D3D12_SHADER_DUMP_DIR"]="capture";
  short_write=true;translate(0);assert(files.empty());short_write=false;
  translate(0);assert(translations==4 && files.size()==1 && writes==3);
  assert(files.begin()->second.size()==sizeof(tokens) && receipts==1);
+}
+''')
+
+    def test_frontend_nir_is_dumped_beside_the_tokens_on_request(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? RC74: the NIR dump
+        # must be opt-in (APPLE_AGX_D3D12_SHADER_DUMP_NIR=1 with the dump
+        # directory), named by the same FNV-1a 64 hash and stage as the token
+        # capture so the two pair up, written once (CREATE_NEW), skip a
+        # refused translation, and leave no file after a failed write.
+        self.run_case(r'''
+int main(){reset();env["APPLE_AGX_D3D12_SHADER_DUMP_DIR"]="capture";
+ dump_shader_nir(tokens,MESA_SHADER_COMPUTE,&translated);assert(!nir_texts && files.empty());
+ env["APPLE_AGX_D3D12_SHADER_DUMP_NIR"]="1";
+ dump_shader_nir(tokens,MESA_SHADER_COMPUTE,nullptr);assert(!nir_texts && files.empty());
+ dump_shader_nir(tokens,MESA_SHADER_COMPUTE,&translated);assert(nir_texts==1 && files.size()==1);
+ const auto &f=files.at("capture\\8f28162bed108d89-s5.nir");
+ assert(f.size()==strlen(nir_text) && !memcmp(f.data(),nir_text,f.size()));
+ dump_shader_nir(tokens,MESA_SHADER_COMPUTE,&translated);assert(files.size()==1 && writes==1); // CREATE_NEW dedup
+ files.clear();fail_write=true;dump_shader_nir(tokens,4,&translated);assert(files.empty());fail_write=false;
+ env["APPLE_AGX_D3D12_SHADER_DUMP_NIR"]="0";dump_shader_nir(tokens,4,&translated);assert(files.empty());
 }
 ''')
 
