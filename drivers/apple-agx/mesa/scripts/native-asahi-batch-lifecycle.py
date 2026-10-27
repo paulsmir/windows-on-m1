@@ -1181,7 +1181,8 @@ def project_d3d_robustness(out,save):
     save(pp,pipe)
     sp='src/gallium/drivers/asahi/agx_state.c';state=(out/sp).read_text()
     state=replace(state,'#include "agx_state.h"\n',
-        '#include "agx_state.h"\n#include "agx_win32_d3d_robustness.h"\n')
+        '#include "agx_state.h"\n#include "agx_win32_d3d_robustness.h"\n'
+        '#include "agx_win32_d3d_texture_crawl.h"\n')
     a,b=function(state,'should_lower_robustness')
     state=state[:b]+'''
 
@@ -1212,6 +1213,16 @@ agx_win32_should_lower_robustness_d3d(const nir_intrinsic_instr *intr,
    NIR_PASS(_, nir, nir_lower_robust_access,
             d3d_robust ? agx_win32_should_lower_robustness_d3d : should_lower_robustness,
             &robust);''')
+    # RC78 (winsys/agx_win32_d3d_texture_crawl.h): a D3D shader's descriptor
+    # crawls of the per-draw texture table may run in the preamble; the table
+    # agx_upload_textures fills holds nr_bindful_textures + 2 *
+    # nr_bindful_images descriptors.
+    state=replace(state,'''   NIR_PASS(_, nir, agx_nir_lower_texture);
+''','''   NIR_PASS(_, nir, agx_nir_lower_texture);
+   if (d3d_robust)
+      NIR_PASS(_, nir, agx_win32_speculate_texture_crawls,
+               so->info.nr_bindful_textures + 2 * so->info.nr_bindful_images);
+''')
     call='   agx_shader_initialize(dev, so, nir, ctx->support_lod_bias, ctx->robust);'
     if state.count(call)!=2:
         raise RuntimeError('Native shader initialization callers changed')

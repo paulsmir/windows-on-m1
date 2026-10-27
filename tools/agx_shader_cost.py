@@ -22,6 +22,11 @@ Usage:
       unchecked; measure-d3d12-root-views receipts name them per shader).
       RC75 op classes of the final NIR: nir-alu, nir-mem (device memory),
       nir-tex (texture and image), nir-shared, barriers, atomics.
+      RC78: preamble (instructions run once per dispatch), ic (integer and
+      complex unit work of the shader) and crawl-speculated (texture
+      descriptor loads allowed into the preamble; set
+      APPLE_AGX_D3D_CRAWL_SPECULATE=0 in the environment for Asahi's
+      placement).
 JSON or a table on stdout; nothing is written elsewhere except the fixture
 build directory (--build-dir, default a temporary one).
 """
@@ -202,7 +207,8 @@ def main(argv=None):
                 row[name] = {k: c[k] for k in ('instrs', 'alu', 'gprs', 'threads', 'scratch', 'spills',
                                                'hot-mem-blocks', 'hot-branches', 'block', 'shared', 'loops',
                                                'nir-alu', 'nir-mem', 'nir-tex', 'nir-shared', 'barriers',
-                                               'atomics', 'root-marked') if k in c}
+                                               'atomics', 'root-marked', 'preamble', 'ic',
+                                               'crawl-speculated') if k in c}
             if len(row) > 1:
                 rows.append(row)
         rows.sort(key=lambda r: r[variants[0][0]]['instrs'], reverse=True)

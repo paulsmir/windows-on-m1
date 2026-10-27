@@ -24,6 +24,17 @@ not checked: a kernel whose UAV slots are all root descriptors
 instructions, no branch, its float4 loads whole), while the same slots as
 descriptor-table views keep the D3D checks (RED before: the lowering
 checked every slot).
+RC78: a Texture2DArray sample clamps its layer through a descriptor crawl
+(libagx loads of the texture descriptor); the Windows backend has no soft
+faults, so Asahi left every crawl under divergent control flow in the
+shader (GravityMark 806ee7b1bdb1944a: 30 such samples, 84% of the frame's
+compute). A bound texture's crawl reads the per-draw descriptor table and
+must be marked speculatable and run in the preamble: the shader of
+--synthetic-array-samples=8 then issues no descriptor loads (no IC work),
+fewer instructions than APPLE_AGX_D3D_CRAWL_SPECULATE=0, and the NIR handed
+to the backend is otherwise unchanged (same ALU, memory and texture ops:
+the layer clamp stays). A descriptor-heap handle (DXBC_HEAP_HANDLE_MARK,
+an app index into the heap mirror) must not be marked.
 The receipt ranking must join dispatches with their compute statistics by
 the CS hash's low 32 bits, count direct groups and threads, keep indirect
 dispatches as counts, and ignore other processes.
@@ -146,6 +157,24 @@ class CompiledCost(unittest.TestCase):
                 # a slot that is not a root descriptor keeps its checks
                 table = self.tool.cost(self.binary, source, '--root-views=0,0')
                 self.assertEqual(table, robust)
+
+    def test_array_sample_crawls_run_in_the_preamble(self):
+        asahi_rule = {'APPLE_AGX_D3D_CRAWL_SPECULATE': '0'}
+        source = '--synthetic-array-samples=8'
+        hoisted = self.tool.cost(self.binary, source)
+        shader = self.tool.cost(self.binary, source, env=asahi_rule)
+        self.assertGreaterEqual(hoisted['crawl-speculated'], 8)
+        self.assertEqual(shader['crawl-speculated'], 0)
+        self.assertEqual(hoisted['ic'], 0)
+        self.assertGreater(shader['ic'], 0)
+        self.assertLess(hoisted['instrs'], shader['instrs'])
+        self.assertLessEqual(hoisted['gprs'], shader['gprs'])
+        self.assertGreater(hoisted['preamble'], shader['preamble'])
+        for key in ('nir-alu', 'nir-mem', 'nir-tex', 'loops'):
+            self.assertEqual(hoisted[key], shader[key], key)
+        heap = self.tool.cost(self.binary, source + ',heap')
+        self.assertEqual(heap['crawl-speculated'], 0)
+        self.assertEqual(heap, self.tool.cost(self.binary, source + ',heap', env=asahi_rule))
 
     def test_a_run_of_uav_stores_is_tested_once(self):
         robust, unchecked = self.costs(FIXTURE)

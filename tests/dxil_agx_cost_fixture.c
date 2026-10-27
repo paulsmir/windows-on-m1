@@ -8,7 +8,8 @@
  * and texture handles), so instruction counts, GPRs, scratch and spills are
  * the backend's own; uniform numbering is not.
  *
- * usage: dxil_agx_cost_fixture <dxil>|--synthetic-uav-reads=K|--synthetic-local-array=N
+ * usage: dxil_agx_cost_fixture <dxil>|--synthetic-uav-reads=K|--synthetic-local-array=N|
+ *        --synthetic-array-samples=N[,heap]
  *        [--no-d3d-robust] [--assume-in-bounds] [--root-views=UAV,CBV]
  *        [--print-lowered] [--print-nir]
  * --root-views: hex masks of the UAV and constant-buffer slots that are
@@ -20,8 +21,11 @@
  *        gprs <n> threads <n> scratch <n> spills <n> fills <n> loops <n>
  *        code <n> preamble <n> nir-alu <n> nir-mem <n> nir-tex <n>
  *        nir-shared <n> barriers <n> atomics <n> root-marked <n>
+ *        crawl-speculated <n>
  * (RC75 op classes of the final NIR handed to the backend: ALU, device
- * memory, texture/image, threadgroup memory, workgroup barriers, atomics)
+ * memory, texture/image, threadgroup memory, workgroup barriers, atomics;
+ * RC78 crawl-speculated: texture descriptor loads that
+ * agx_win32_speculate_texture_crawls lets run in the preamble)
  * or "REFUSED ..." when the translation refuses; a graphics stage prints
  * "NIRCOST stage <s> hot-mem-blocks <n> hot-nir <n> hot-branches <n>", the
  * D3D lowering's in-bounds path before Gallium's I/O lowering. */
@@ -38,6 +42,7 @@
 #include "asahi/compiler/agx_nir.h"
 
 #include "agx_win32_d3d_robustness.h"
+#include "agx_win32_d3d_texture_crawl.h"
 
 /* Gallium agx_state.c should_lower_robustness for a robust context, minus
  * UBO/SSBO accesses (agx_win32_should_lower_robustness_d3d) */
@@ -59,7 +64,8 @@ gl_part_of_d3d_robustness(const nir_intrinsic_instr *intr, const void *data)
 
 /* stand-in for Gallium agx_nir_lower_bindings: bound images to texture
  * state registers (reads at 2i + textures, writes at 2i + textures + 1),
- * textures past the state registers or needing a descriptor crawl bindless */
+ * textures past the state registers or needing a descriptor crawl bindless,
+ * at an index clamped to the shader's textures (images) as Gallium does */
 static bool
 bind_resources(nir_builder *b, nir_instr *instr, void *data)
 {
@@ -75,6 +81,7 @@ bind_resources(nir_builder *b, nir_instr *instr, void *data)
       nir_def *index = nir_steal_tex_src(tex, nir_tex_src_texture_offset);
       if (!index)
          index = nir_imm_int(b, (int)tex->texture_index);
+      index = nir_umin(b, index, nir_imm_intN_t(b, b->shader->info.num_textures - 1, index->bit_size));
       nir_tex_instr_add_src(tex, nir_tex_src_texture_handle, nir_load_texture_handle_agx(b, index));
       return true;
    }
@@ -101,7 +108,9 @@ bind_resources(nir_builder *b, nir_instr *instr, void *data)
       nir_src_rewrite(&intr->src[0], nir_imm_intN_t(b, (int)(nir_scalar_as_uint(index) * 2 + offset), 16));
       return true;
    }
-   nir_def *slot = nir_iadd_imm(b, nir_imul_imm(b, nir_u2u32(b, intr->src[0].ssa), 2), offset);
+   nir_def *image = nir_umin(b, intr->src[0].ssa,
+                             nir_imm_intN_t(b, b->shader->info.num_images - 1, intr->src[0].ssa->bit_size));
+   nir_def *slot = nir_iadd_imm(b, nir_imul_imm(b, nir_u2u32(b, image), 2), offset);
    nir_rewrite_image_intrinsic(intr, nir_load_texture_handle_agx(b, slot), nir_image_intrinsic_type_bindless);
    return true;
 }
@@ -294,6 +303,25 @@ count_marked(nir_shader *nir)
       }
    }
    return marked;
+}
+
+/* RC78: descriptor loads marked speculatable */
+static unsigned
+count_speculated(nir_shader *nir)
+{
+   unsigned speculated = 0;
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            speculated += intr->intrinsic == nir_intrinsic_load_global_constant &&
+                          (nir_intrinsic_access(intr) & ACCESS_CAN_SPECULATE);
+         }
+      }
+   }
+   return speculated;
 }
 
 static void
@@ -497,6 +525,61 @@ synthetic_local_array(unsigned elements)
    return b.shader;
 }
 
+/* --synthetic-array-samples=N[,heap]: RC78, the shape of GravityMark's
+ * lighting kernel 806ee7b1bdb1944a: N samples (txl, lod 0) of a
+ * Texture2DArray at layers 0..N-1, each in its own branch on a per-thread
+ * bit (divergent control flow), summed and written to u0.  Every array
+ * sample clamps its layer to the texture's layer count through a descriptor
+ * crawl.  ",heap": the texture is a D3D12 descriptor-heap handle
+ * (DXBC_HEAP_HANDLE_MARK) instead of bound slot t0. */
+static nir_shader *
+synthetic_array_samples(unsigned samples, bool heap)
+{
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "rc78-array-samples");
+   b.shader->info.internal = false;
+   b.shader->info.workgroup_size[0] = b.shader->info.workgroup_size[1] = 8;
+   b.shader->info.workgroup_size[2] = 1;
+   b.shader->info.num_ssbos = 1;
+   nir_variable *texture = nir_variable_create(b.shader, nir_var_uniform,
+                                               glsl_texture_type(GLSL_SAMPLER_DIM_2D, true, GLSL_TYPE_FLOAT), "t0");
+   texture->data.binding = 0;
+   nir_variable *sampler = nir_variable_create(b.shader, nir_var_uniform, glsl_bare_sampler_type(), "s0");
+   sampler->data.binding = 0;
+   /* as the frontends record them (agx_dxil_to_nir record_slots) */
+   BITSET_SET(b.shader->info.textures_used, 0);
+   BITSET_SET(b.shader->info.samplers_used, 0);
+   nir_def *id = nir_load_global_invocation_id(&b, 32);
+   nir_def *x = nir_channel(&b, id, 0);
+   nir_def *u = nir_fmul_imm(&b, nir_u2f32(&b, x), 1.0 / 64.0);
+   nir_def *v = nir_fmul_imm(&b, nir_u2f32(&b, nir_channel(&b, id, 1)), 1.0 / 64.0);
+   nir_def *sum = nir_imm_float(&b, 0.0f);
+   for (unsigned i = 0; i < samples; ++i) {
+      nir_push_if(&b, nir_ine_imm(&b, nir_iand_imm(&b, nir_ushr_imm(&b, x, i), 1), 0));
+      nir_tex_instr *tex = nir_tex_instr_create(b.shader, heap ? 3 : 2);
+      tex->op = nir_texop_txl;
+      tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
+      tex->is_array = true;
+      tex->coord_components = 3;
+      tex->dest_type = nir_type_float32;
+      tex->texture_index = 0;
+      tex->sampler_index = 0;
+      tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord, nir_vec3(&b, u, v, nir_imm_float(&b, (float)i)));
+      tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_float(&b, 0.0f));
+      if (heap)
+         tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_texture_handle,
+                                           nir_bindless_image_agx(&b, nir_imm_int(&b, 64), .desc_set = DXBC_HEAP_HANDLE_MARK));
+      nir_def_init(&tex->instr, &tex->def, 4, 32);
+      nir_builder_instr_insert(&b, &tex->instr);
+      nir_def *taken = nir_fadd(&b, sum, nir_channel(&b, &tex->def, 0));
+      nir_pop_if(&b, NULL);
+      sum = nir_if_phi(&b, taken, sum);
+   }
+   nir_store_ssbo(&b, sum, nir_imm_int(&b, 0), nir_amul_imm(&b, x, 4), .write_mask = 1,
+                  .access = ACCESS_NON_READABLE, .align_mul = 4, .align_offset = 0);
+   nir_shader_gather_info(b.shader, nir_shader_get_entrypoint(b.shader));
+   return b.shader;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -518,6 +601,8 @@ main(int argc, char **argv)
       nir = synthetic_uav_reads(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-local-array=%u", &reads) == 1 && reads && reads <= 256) {
       nir = synthetic_local_array(reads);
+   } else if (argc > 1 && sscanf(argv[1], "--synthetic-array-samples=%u", &reads) == 1 && reads && reads <= 16) {
+      nir = synthetic_array_samples(reads, strstr(argv[1], ",heap") != NULL);
    } else {
       FILE *f = argc > 1 ? fopen(argv[1], "rb") : NULL;
       if (!f)
@@ -584,6 +669,8 @@ main(int argc, char **argv)
    NIR_PASS(_, nir, nir_lower_tex, &(nir_lower_tex_options){.lower_index_to_offset = true});
    NIR_PASS(_, nir, nir_opt_constant_folding);
    NIR_PASS(_, nir, nir_shader_instructions_pass, bind_resources, nir_metadata_control_flow, NULL);
+   /* agx_shader_initialize: so->info.nr_bindful_textures / _images */
+   const unsigned descriptors = BITSET_LAST_BIT(nir->info.textures_used) + 2 * BITSET_LAST_BIT(nir->info.images_used);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
    NIR_PASS(_, nir, nir_lower_alu_to_scalar, NULL, NULL);
    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
@@ -602,6 +689,10 @@ main(int argc, char **argv)
    struct counts counts = {0};
    count_cf(&nir_shader_get_entrypoint(nir)->body, 0, &counts);
    NIR_PASS(_, nir, agx_nir_lower_texture);
+   /* RC78: the D3D context's crawl placement (native projection) */
+   if (d3d_robust)
+      NIR_PASS(_, nir, agx_win32_speculate_texture_crawls, descriptors);
+   const unsigned speculated = count_speculated(nir);
    NIR_PASS(_, nir, nir_lower_ssbo, NULL);
    agx_preprocess_nir(nir);
 
@@ -620,11 +711,13 @@ main(int argc, char **argv)
    const struct agx2_stats *s = &part.info.stats;
    printf("COST stage %s block %ux%ux%u shared %u nir-ifs %u guarded-loads %u loads %u stores %u txf %u mem-blocks %u hot-mem-blocks %u hot-nir %u hot-branches %u "
           "instrs %u alu %u fscib %u ic %u gprs %u threads %u scratch %u spills %u fills %u loops %u code %u "
-          "preamble %u nir-alu %u nir-mem %u nir-tex %u nir-shared %u barriers %u atomics %u root-marked %u\n",
+          "preamble %u nir-alu %u nir-mem %u nir-tex %u nir-shared %u barriers %u atomics %u root-marked %u "
+          "crawl-speculated %u\n",
           mesa_shader_stage_name(MESA_SHADER_COMPUTE), block[0], block[1], block[2], shared, counts.ifs,
           counts.guarded_loads, counts.loads, counts.stores, counts.txf, mem_blocks, hot.memory_blocks, hot.instrs, hot.branches, s->instrs, s->alu, s->fscib, s->ic,
           s->gprs, s->threads, s->scratch, s->spills, s->fills, s->loops, s->code_size, s->preamble_inst,
-          classes.alu, classes.mem, classes.tex, classes.shared, classes.barriers, classes.atomics, marked);
+          classes.alu, classes.mem, classes.tex, classes.shared, classes.barriers, classes.atomics, marked,
+          speculated);
    free(part.binary);
    ralloc_free(nir);
    glsl_type_singleton_decref();
