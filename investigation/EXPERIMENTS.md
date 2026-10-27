@@ -64935,3 +64935,16 @@ EXP1996 HARDWARE BEFORE 2026-10-27T19:41:35Z:
 - Hashes: sys 244bd743eb39, UmdArm64 d7040e82d55f, UmdX64 e91b194c35da, Umd32 e6050a4cca49; manifest 0415108eca6b, hardware-manifest 1ec5b2d3d38f; probe1996.sh 282d2c8bba95 (PROBE_LINT_OK); visible recovery rec1996h 0078791329dd28bb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1996h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1996-leaderboard/run1996.sh.
+
+EXP1996 HARDWARE ACTUAL (2026-10-27): **PASS**, leaderboard-setting baseline.
+- FHD 100k: 2270 / 13.6 FPS (EXP1993: 2372; this arm ran first and is within noise). macOS M1 is about 7700, a 3.4x gap.
+- HD 100k: **3047 / 18.2 FPS** (EXP1977: 1442). macOS is about 9950, a 3.3x gap.
+- No removal; G4_SUBMIT_FAILURE none; the 0291f785 written cap is in production use.
+- agx_gpu_frame_breakdown:
+
+  | Run | Frame (ms) | GPU span (ms) | Idle (ms) | Compute exact (ms) | Main pass (ms) | Render-compute (ms) |
+  |---|---|---|---|---|---|---|
+  | FHD | 64.6 | 61.3 | 2.1 | 24.1 | 14.7 | 14.3 |
+  | HD 100k | 50.6 | 47.6 | 1.5 | **20.4** | 9.1 | 9.9 |
+
+- The standalone compute scales with asteroid count, not with resolution: it is the main target (rc74).
