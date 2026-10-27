@@ -103,6 +103,21 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
     KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
     return TRUE;
   }
+  /* RC63 (EXP1982b): a faulted scheduler never dispatches again before an
+   * engine reset (AdmissionDispatchQueuedWork), and since rc59 it still
+   * accepts and holds every paging packet. Reporting DMA_PREEMPTED here tells
+   * VidSch the engine stopped at a boundary and can take the resubmission;
+   * VidSch then resubmits into the frozen queue, every later preemption
+   * succeeds again, its TDR timer never expires, and nothing ever calls
+   * DxgkDdiResetEngine (EXP1982b: no Wom1GpuReset in 300 s, paging waits and
+   * the ordered reboot hung). Microsoft TDR: the timeout is a preemption
+   * that does not complete within TdrDelay. Leave the boundary ready and
+   * unreported, so that timeout fires; AppleAgxSchedulerResetEngine clears
+   * it, the reset clears SchedulerFaulted, and VidSch resubmits. */
+  if (InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) != 0) {
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+    return TRUE; /* Deferred to the TDR engine reset; not a new fault. */
+  }
   claimed = AppleAgxSchedulerClaimBoundaryPreemption(
                 &Context->Scheduler, &notification.Preemption)
                 ? TRUE
