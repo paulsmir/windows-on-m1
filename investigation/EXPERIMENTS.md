@@ -64789,3 +64789,18 @@ EXP1991 HARDWARE BEFORE 2026-10-27T17:47:46Z:
 - Hashes: sys e6fad6c4110a, UmdArm64 fad0372b0b85, UmdX64 e8e88ae1d74a, Umd32 26de1357e2ab; manifest 231cad5a52b6, hardware-manifest 83f4b5c9f562; probe1991.sh b8b4c5228dd4 (PROBE_LINT_OK); visible recovery rec1991h aa5aca93e3acba17; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1991h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1991-stats-batch/run1991.sh.
+
+EXP1991 HARDWARE ACTUAL (2026-10-27): **PASS, new best**.
+- RC57C/U/M with stream off: PASS, _STATS PASS, _COUNT PASS (rc67 batched IA).
+- HD 50k: **2879 / 17.2 FPS**, up 18% (EXP1990: 2439).
+- FHD 100k: **2069 / 12.4 FPS**, up 17% (EXP1988: 1769).
+- No removal; G4_SUBMIT_FAILURE none.
+- agx_gpu_frame_breakdown (median per frame):
+  - frame: HD 51.4 ms (EXP1989: 61.5); FHD 73.7 ms (88.2).
+  - GPU span: HD 39.9 ms (45.4); FHD 58.9 ms (70.7).
+  - render-compute pre-3D time: HD 5.9 ms (11.4); FHD 10.9 ms (19.8). The IA prelude was about half of it; the rest is TA plus the remaining prelude.
+  - standalone compute, exact: HD 13.9 ms, FHD 24.1 ms, unchanged and now the largest GPU cost.
+  - main pass: HD 10.2 ms, FHD 14.3 ms.
+  - small passes: about 4.7-4.9 ms.
+  - detect: HD 5.6 ms, FHD 7.4 ms.
+- Verdict: rc67 validated (1ebe0686, f1e2ac4d, 5397a196).
