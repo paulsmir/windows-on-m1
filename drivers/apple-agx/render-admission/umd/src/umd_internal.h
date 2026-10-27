@@ -215,6 +215,9 @@ typedef struct _ADMISSION_UMD_DEVICE {
   D3DKMT_HANDLE RenderSyncObject;
   volatile UINT64 *RenderFenceAddress;
   UINT64 NextRenderFence;
+  /* RC68: highest render fence a wait on RenderSyncObject saw reached;
+   * monotonic (CAS max), read for the copy-escape no-reference proof. */
+  volatile LONG64 RenderCompletedFence;
   /* EXP1082: the queued render job whose completion (wait for its fence,
    * download of held GPU-written slots) runs at its retirement. */
   UINT64 PendingRenderFence;
@@ -275,6 +278,12 @@ typedef struct _ADMISSION_UMD_DEVICE {
   UINT CopyEscapeClass;
   UINT CopyEscapeCount[13];
   ULONGLONG CopyEscapeMicros[13];
+  /* RC68: per-Execute job gate of the copy escapes, per operation (query,
+   * upload, download): [0] sent with the UNREFERENCED proof, [1] ran
+   * beside this device's own job (KMD OVERLAPPED), [2] waited for a job
+   * (KMD WAITED); GateWaitMicros is the time of the waited escapes. */
+  UINT CopyEscapeGate[3][3];
+  ULONGLONG CopyEscapeGateWaitMicros[3];
 #endif
   APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;

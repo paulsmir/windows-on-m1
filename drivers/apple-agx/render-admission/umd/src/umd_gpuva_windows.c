@@ -10,6 +10,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "../../../mesa/winsys/agx_win32_wait.h"
 #include "umd_residency_trim.h"
 #include "apple_agx_g3_copy_abi.h"
+#include "apple_agx_g3_copy_gate.h"
 #include "apple_agx_g3_copy_query_receipt.h"
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_g4_preflight.h"
@@ -794,6 +795,18 @@ static int make_resident(void *context, const uint64_t *tokens,
   return hr == E_PENDING ? 2 : 1;
 }
 
+/* RC68: record that the render fence reached `fence` (monotonic max; a
+ * lost race only keeps a lower value, which weakens no proof). */
+static void render_fence_reached(ADMISSION_UMD_DEVICE *device, uint64_t fence) {
+  LONG64 seen = InterlockedCompareExchange64(&device->RenderCompletedFence, 0, 0);
+  while ((uint64_t)seen < fence) {
+    const LONG64 prior = InterlockedCompareExchange64(&device->RenderCompletedFence,
+                                                      (LONG64)fence, seen);
+    if (prior == seen) break;
+    seen = prior;
+  }
+}
+
 static int wait_object(ADMISSION_UMD_DEVICE *device,
                        D3DKMT_HANDLE object, uint64_t fence) {
   D3DDDICB_WAITFORSYNCHRONIZATIONOBJECTFROMCPU request = {};
@@ -809,8 +822,10 @@ static int wait_object(ADMISSION_UMD_DEVICE *device,
       (((ULONG_PTR)device->RenderFenceAddress & 7u) == 0u)) {
     uint64_t completed = (uint64_t)ReadAcquire64(
         (const volatile LONG64 *)device->RenderFenceAddress);
-    if (completed != UINT64_MAX && completed >= fence)
+    if (completed != UINT64_MAX && completed >= fence) {
+      render_fence_reached(device, fence);
       return 1;
+    }
   }
 #endif
   request.ObjectCount = 1;
@@ -821,6 +836,8 @@ static int wait_object(ADMISSION_UMD_DEVICE *device,
   HRESULT status=device->KernelCallbacks->pfnWaitForSynchronizationObjectFromCpuCb(
       device->RuntimeDevice.handle, &request);
   AdmissionUmdWaitEnd(wait_token);
+  if (SUCCEEDED(status) && object == device->RenderSyncObject)
+    render_fence_reached(device, fence);
   return SUCCEEDED(status);
 }
 
@@ -914,6 +931,24 @@ static void copy_escape_account(ADMISSION_UMD_DEVICE *device, UINT operation,
       ticks % (ULONGLONG)hz * 1000000ULL / (ULONGLONG)hz;
 }
 
+/* RC68 receipt: which escapes carried the no-reference proof, ran beside
+ * this device's own job, or waited for a job (and how long those took). */
+static void copy_escape_gate_account(ADMISSION_UMD_DEVICE *device, UINT operation,
+    UINT proof, UINT outcome, ULONGLONG ticks) {
+  if (operation > APPLE_AGX_G3_COPY_DOWNLOAD) return;
+  UINT *gate = device->CopyEscapeGate[operation];
+  if (proof && gate[0] != ~0u) ++gate[0];
+  if ((outcome & APPLE_AGX_G3_COPY_RESULT_OVERLAPPED) && gate[1] != ~0u) ++gate[1];
+  if (outcome & APPLE_AGX_G3_COPY_RESULT_WAITED) {
+    if (gate[2] != ~0u) ++gate[2];
+    LARGE_INTEGER value = {};
+    (void)QueryPerformanceFrequency(&value);
+    const ULONGLONG hz = value.QuadPart > 0 ? (ULONGLONG)value.QuadPart : 1ULL;
+    device->CopyEscapeGateWaitMicros[operation] += ticks / hz * 1000000ULL +
+        ticks % hz * 1000000ULL / hz;
+  }
+}
+
 static int copy_escape(ADMISSION_UMD_DEVICE *device,
                         APPLE_AGX_G3_COPY_REQUEST *payload) {
   D3DDDICB_ESCAPE request={};
@@ -927,6 +962,11 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
    * the whole GPU before each 64-KiB CPU transfer. */
   request.Flags.Value=0;
   request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
+  /* RC68: Reserved carries the no-reference proof in and the job-gate
+   * outcome out (success only); restore the proof for the next escape of
+   * this transfer, which reuses the request. */
+  const UINT proof = payload->Reserved & APPLE_AGX_G3_COPY_FLAG_UNREFERENCED;
+  payload->Reserved = proof;
   EXP1016_START(escape_start);
   LARGE_INTEGER class_start = {}, class_end = {};
   (void)QueryPerformanceCounter(&class_start);
@@ -937,6 +977,10 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
   (void)QueryPerformanceCounter(&class_end);
   copy_escape_account(device, payload->Operation,
                       (ULONGLONG)(class_end.QuadPart - class_start.QuadPart));
+  copy_escape_gate_account(device, payload->Operation, proof,
+                           SUCCEEDED(status) ? payload->Reserved : 0u,
+                           (ULONGLONG)(class_end.QuadPart - class_start.QuadPart));
+  payload->Reserved = proof;
   EXP1016_NOTE(1u,payload->TransferBytes,escape_start);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   if (FAILED(status) && frame_process_is_dwm()) {
@@ -1318,6 +1362,22 @@ static int heap_staging_transfer(ADMISSION_UMD_DEVICE *device,
   return ok ? 1 : 0;
 }
 
+/* RC68: APPLE_AGX_G3_COPY_FLAG_UNREFERENCED when no submission of this
+ * device that may still run holds the slot (AppleAgxG3CopySlotUnreferenced).
+ * Call after the LastUseFence wait of an upload; the KMD then lets this
+ * slot's copies run beside the device's own job instead of draining it. */
+static UINT copy_unreferenced(ADMISSION_UMD_DEVICE *device,
+                              const ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  const uint64_t completed = (uint64_t)InterlockedCompareExchange64(
+      &device->RenderCompletedFence, 0, 0);
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const int unreferenced = AppleAgxG3CopySlotUnreferenced(slot->SubmissionHolds,
+      slot->CopyHeld, slot->SourceHolds, slot->Borrowed, slot->Direct,
+      device->DrawTerminal, slot->LastUseFence, completed);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  return unreferenced ? APPLE_AGX_G3_COPY_FLAG_UNREFERENCED : 0u;
+}
+
 static int transfer_heap_slot(ADMISSION_UMD_DEVICE *device,
     ADMISSION_UMD_SCREEN_BUFFER *slot, bool download,
     UINT *transfer_count, ULONGLONG *transfer_bytes) {
@@ -1342,6 +1402,7 @@ static int transfer_heap_slot(ADMISSION_UMD_DEVICE *device,
   payload->Allocation = slot->KernelAllocation;
   payload->GpuVa = slot->CanonicalGpuVa;
   payload->Operation = APPLE_AGX_G3_COPY_QUERY;
+  payload->Reserved = copy_unreferenced(device, slot);
   /* A download cannot reconstruct GPU output by replacing its allocation. */
   int ok = download ? (copy_escape(device, payload) && payload->ProcessGeneration && payload->MappingGeneration)
                     : query_canonical(device, slot, payload);
@@ -1569,6 +1630,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   payload->Magic=APPLE_AGX_G3_COPY_MAGIC;payload->Version=APPLE_AGX_G3_COPY_VERSION;
   payload->Bytes=sizeof(*payload);payload->Allocation=slot->KernelAllocation;
   payload->GpuVa=slot->CanonicalGpuVa;payload->Operation=APPLE_AGX_G3_COPY_QUERY;
+  payload->Reserved=copy_unreferenced(device,slot);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   (void)AdmissionUmdGpuvaFrameArm(device, slot->KernelAllocation,
                                    slot->CanonicalGpuVa);

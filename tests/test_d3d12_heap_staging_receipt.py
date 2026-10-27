@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class HeapStagingReceipt(unittest.TestCase):
     def test_execute_measurement_covers_intermediate_submissions(self):
-        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Dirty-byte receipts must count the complete Execute, retain 64-bit values and reset between Executes instead of leaking previous Map traffic. RC64: copy-escape class counters must reset the same way and saturate without carrying a count into the microsecond field."""
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Dirty-byte receipts must count the complete Execute, retain 64-bit values and reset between Executes instead of leaking previous Map traffic. RC64: copy-escape class counters must reset the same way and saturate without carrying a count into the microsecond field. RC68: the job-gate row must report, per operation, proof/overlap/wait counts and waited microseconds, appear only when an escape was counted, and reset per Execute."""
         from test_umd_deallocated_slot_no_evict import function as extract
         owner=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         ddi=(ROOT/'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp').read_text()
@@ -25,10 +25,11 @@ class HeapStagingReceipt(unittest.TestCase):
 #define APPLE_AGX_GPUVA_WINSYS 1
 #define S_OK 0
 using UINT=unsigned;using BOOL=int;
-struct AGX_D3D12_OWNER {struct {bool HeapStaging;uint64_t HeapStagingDirtyBytes,HeapStagingUploadBytes,HeapStagingDownloadBytes;UINT CopyEscapeCount[13];uint64_t CopyEscapeMicros[13];} Runtime;};
+struct AGX_D3D12_OWNER {struct {bool HeapStaging;uint64_t HeapStagingDirtyBytes,HeapStagingUploadBytes,HeapStagingDownloadBytes;UINT CopyEscapeCount[13];uint64_t CopyEscapeMicros[13];UINT CopyEscapeGate[3][3];uint64_t CopyEscapeGateWaitMicros[3];} Runtime;};
 struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER*){}};
-static UINT words[7],classes[16];static unsigned receipts,class_receipts;
+static UINT words[7],classes[16],gates[13];static unsigned receipts,class_receipts,gate_receipts;
 static void AdmissionUmdDiagnostic(const char *name,int,const UINT *v,UINT n) {
+ if(!strcmp(name,"measure-copy-escape-gate")) {assert(n==13 && receipts);++gate_receipts;memcpy(gates,v,sizeof(gates));return;}
  if(!strcmp(name,"measure-copy-escape-class")) {assert(n==16 && receipts);++class_receipts;memcpy(classes,v,sizeof(classes));return;}
  assert(!strcmp(name,"measure-d3d12-heap-staging") && n==7);++receipts;memcpy(words,v,sizeof(words));
 }
@@ -53,6 +54,20 @@ int main() {
  assert(classes[1]==((3u<<20)|210u) && classes[6]==((0xfffu<<20)|0xfffffu) && classes[13]==((1u<<20)|0xfffffu));
  assert(classes[2]==0 && classes[14]==5004u && classes[15]==0xffffffffu);
  for(unsigned i=0;i<13;++i) assert(!o.Runtime.CopyEscapeCount[i] && !o.Runtime.CopyEscapeMicros[i]);
+ /* RC68: no gate row without gate counts; then {1, op x (proof, overlap, wait, wait us)}. */
+ assert(!gate_receipts);
+ o.Runtime.CopyEscapeGate[2][2]=4;AgxD3d12OwnerMeasureHeapStaging(&o,1);assert(!o.Runtime.CopyEscapeGate[2][2]);
+ o.Runtime.CopyEscapeGate[0][0]=22;o.Runtime.CopyEscapeGate[0][1]=20;                 /* query */
+ o.Runtime.CopyEscapeGate[1][0]=13;o.Runtime.CopyEscapeGate[1][2]=2;o.Runtime.CopyEscapeGateWaitMicros[1]=1500; /* upload */
+ o.Runtime.CopyEscapeGateWaitMicros[2]=(9ull<<32);                                    /* download */
+ o.Runtime.CopyEscapeGate[2][2]=1;
+ AgxD3d12OwnerMeasureHeapStaging(&o,0);
+ assert(gate_receipts==1 && gates[0]==1);
+ assert(gates[1]==22 && gates[2]==20 && gates[3]==0 && gates[4]==0);
+ assert(gates[5]==13 && gates[6]==0 && gates[7]==2 && gates[8]==1500);
+ assert(gates[9]==0 && gates[10]==0 && gates[11]==1 && gates[12]==0xffffffffu);
+ for(unsigned op=0;op<3;++op) {assert(!o.Runtime.CopyEscapeGateWaitMicros[op]);
+   for(unsigned k=0;k<3;++k) assert(!o.Runtime.CopyEscapeGate[op][k]);}
 }
 '''.replace('@@BODY@@',body)
         with tempfile.TemporaryDirectory() as tmp:

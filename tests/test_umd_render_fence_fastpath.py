@@ -3,6 +3,9 @@
 WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? A completed render fence
 must avoid redundant Windows CPU-wait callbacks without skipping staging
 downloads, accepting unfinished work, or writing the read-only fence page.
+RC68: only a reached render fence (fast path or successful render wait) may
+raise RenderCompletedFence, the input of the copy-escape no-reference proof;
+paging, unrelated, failed or lower waits must not.
 """
 from pathlib import Path
 import re
@@ -74,7 +77,12 @@ struct ADMISSION_UMD_DEVICE {
   UINT64 NextRenderFence, PendingRenderFence;
   UINT PendingRenderSequence;
   BOOL DrawTerminal;
+  volatile LONG64 RenderCompletedFence;
 };
+static LONG64 InterlockedCompareExchange64(volatile LONG64 *target, LONG64 value, LONG64 compare) {
+  __atomic_compare_exchange_n(target, &compare, value, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+  return compare;
+}
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) ((d)->ScreenBufferHighWater)
 static void AcquireSRWLockShared(int *) {}
 static void ReleaseSRWLockShared(int *) {}
@@ -142,8 +150,9 @@ int main() {
   reset(&d); signalled = target;
   assert(wait_object(&d, 7, target));
   assert(waits == 0 && starts == 0 && ends == 0 && reads == 1);
+  assert((uint64_t)d.RenderCompletedFence == target);
   assert(wait_object(&d, 7, target - 1));
-  assert(waits == 0 && reads == 2);
+  assert(waits == 0 && reads == 2 && (uint64_t)d.RenderCompletedFence == target);
 
   reset(&d); signalled = target - 1;
   assert(wait_object(&d, 7, target));
@@ -177,11 +186,13 @@ int main() {
     expected_object = object;
     assert(wait_object(&d, object, target));
     assert(waits == 1 && starts == 1 && ends == 1);
+    assert((uint64_t)d.RenderCompletedFence == (mode >= 4 ? 0u : target));
+    d.RenderCompletedFence = 0;
     assert(last_site == (mode == 4 ? AgxWaitPagingFence : AgxWaitRenderFence));
     assert(reads == (mode == 3 ? 1u : 0u));
     fail_wait = true;
     assert(!wait_object(&d, object, target));
-    assert(waits == 2 && starts == 2 && ends == 2);
+    assert(waits == 2 && starts == 2 && ends == 2 && !d.RenderCompletedFence);
   }
 
   // A read-modify-write "load" would fault on the actual mapping contract.
@@ -269,6 +280,7 @@ int main() {
   reset(&d); signalled = 5;
   assert(wait_object(&d, 7, 5));
   assert(waits == 1 && starts == 1 && ends == 1 && reads == 0);
+  assert(d.RenderCompletedFence == 5);
   reset(&d); signalled = d.PendingRenderFence = 5;
   assert(wait_render(&d, 5));
   assert(calls == "w5 d w5 " && waits == 2 && downloads == 1 && reads == 0);
@@ -281,7 +293,7 @@ class RenderFenceFastpath(unittest.TestCase):
     def replay(self, main, win64):
         text = SOURCE.read_text()
         bodies = '\n'.join(function(text, name) for name in (
-            'wait_object', 'cpu_quiet', 'download_due',
+            'render_fence_reached', 'wait_object', 'cpu_quiet', 'download_due',
             'completion_needs_download', 'complete_render',
             'finish_submission', 'wait_render'))
         with tempfile.TemporaryDirectory() as directory:

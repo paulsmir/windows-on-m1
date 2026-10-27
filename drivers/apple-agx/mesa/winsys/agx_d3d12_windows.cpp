@@ -193,11 +193,28 @@ extern "C" void AgxD3d12OwnerMeasureHeapStaging(AGX_D3D12_OWNER *owner, BOOL beg
     classes[14] = static_cast<UINT>(count < 0xffffffffull ? count : 0xffffffffull);
     classes[15] = static_cast<UINT>(micros < 0xffffffffull ? micros : 0xffffffffull);
     if (count) AdmissionUmdDiagnostic("measure-copy-escape-class", S_OK, classes, 16u);
+    /* RC68 measure-copy-escape-gate {1, then for query, upload, download:
+     * escapes sent with the no-reference proof, run beside this device's
+     * own job, waited for a job, us spent in the waited ones}. */
+    UINT gate[13] = {1u};
+    unsigned long long gated = 0;
+    for (UINT op = 0; op < 3u; ++op) {
+      for (UINT k = 0; k < 3u; ++k) gate[1u + op * 4u + k] = runtime->CopyEscapeGate[op][k];
+      const unsigned long long us = runtime->CopyEscapeGateWaitMicros[op];
+      gate[4u + op * 4u] = static_cast<UINT>(us < 0xffffffffull ? us : 0xffffffffull);
+      gated += runtime->CopyEscapeGate[op][0] + runtime->CopyEscapeGate[op][1] +
+               runtime->CopyEscapeGate[op][2];
+    }
+    if (gated) AdmissionUmdDiagnostic("measure-copy-escape-gate", S_OK, gate, 13u);
   }
   runtime->HeapStagingDirtyBytes = runtime->HeapStagingUploadBytes = runtime->HeapStagingDownloadBytes = 0;
   for (UINT i = 0; i < 13u; ++i) {
     runtime->CopyEscapeCount[i] = 0u;
     runtime->CopyEscapeMicros[i] = 0ull;
+  }
+  for (UINT op = 0; op < 3u; ++op) {
+    for (UINT k = 0; k < 3u; ++k) runtime->CopyEscapeGate[op][k] = 0u;
+    runtime->CopyEscapeGateWaitMicros[op] = 0ull;
   }
 #else
   (void)owner; (void)begin;

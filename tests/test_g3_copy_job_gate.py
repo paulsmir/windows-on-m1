@@ -20,11 +20,13 @@ import subprocess
 import tempfile
 import unittest
 
+from test_umd_staging_write_watch import function as umd_function
 
 ROOT = Path(__file__).resolve().parents[1]
 DRIVER = ROOT / "drivers/apple-agx"
 GATE = DRIVER / "shared/include/apple_agx_g3_copy_gate.h"
 KMD = DRIVER / "render-admission/src/gpuva_g3_windows.c"
+UMD = DRIVER / "render-admission/umd/src/umd_gpuva_windows.c"
 
 HARNESS = r'''
 #include <assert.h>
@@ -247,6 +249,27 @@ class CopyJobGate(unittest.TestCase):
         complete = kmd_function(text, "AdmissionGpuvaG3CompleteJobTimestamp")
         self.assertIn("state->ActiveProcess = NULL;\n    state->ActiveContext = NULL;", complete)
         self.assertEqual(text.count("state->ActiveProcess = NULL;"), 1)
+
+    def test_umd_proof_follows_the_last_use_wait(self):
+        text = UMD.read_text()
+        for name in ("transfer_heap_slot", "transfer_slot"):
+            body = umd_function(text, name)
+            self.assertTrue(body, name)
+            wait = body.index("wait_object(device")
+            proof = body.index("copy_unreferenced(device")
+            first_escape = min(i for i in (body.find("query_canonical("), body.find("copy_escape(")) if i >= 0)
+            self.assertLess(wait, proof, name)
+            self.assertLess(proof, first_escape, name)
+        escape = umd_function(text, "copy_escape")
+        call = escape.index("pfnEscapeCb(")
+        self.assertLess(escape.index("const UINT proof = payload->Reserved & APPLE_AGX_G3_COPY_FLAG_UNREFERENCED;"), call)
+        self.assertGreater(escape.rindex("payload->Reserved = proof;"), call)
+        self.assertIn("copy_escape_gate_account(device, payload->Operation, proof,", escape)
+        wait = umd_function(text, "wait_object")
+        self.assertEqual(wait.count("render_fence_reached(device, fence);"), 2)
+        proof = umd_function(text, "copy_unreferenced")
+        self.assertIn("AppleAgxG3CopySlotUnreferenced(slot->SubmissionHolds,", proof)
+        self.assertIn("slot->CopyHeld, slot->SourceHolds, slot->Borrowed, slot->Direct,", proof)
 
 
 if __name__ == "__main__":

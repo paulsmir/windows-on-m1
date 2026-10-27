@@ -350,7 +350,7 @@ int main() {
         prefix=PRELUDE[:PRELUDE.index('@@FUNCTIONS@@')]
         prefix=prefix.replace(' SYNC Sync;', ' SYNC Sync; unsigned SubmissionHolds, KernelAllocation; ULONGLONG LastUseFence, CanonicalGpuVa;')
         prefix=prefix.replace('struct ADMISSION_UMD_DEVICE { ULONGLONG','struct ADMISSION_UMD_DEVICE { unsigned RenderSyncObject; ULONGLONG')
-        prefix=prefix.replace('struct APPLE_AGX_G3_COPY_REQUEST { UINT Operation,TransferBytes;', 'struct APPLE_AGX_G3_COPY_REQUEST { UINT Operation,TransferBytes,Magic,Version,Bytes,Allocation; ULONGLONG GpuVa,ProcessGeneration,MappingGeneration;')
+        prefix=prefix.replace('struct APPLE_AGX_G3_COPY_REQUEST { UINT Operation,TransferBytes;', 'struct APPLE_AGX_G3_COPY_REQUEST { UINT Operation,TransferBytes,Magic,Version,Bytes,Allocation,Reserved; ULONGLONG GpuVa,ProcessGeneration,MappingGeneration;')
         prefix=prefix.replace(' assert(*count>=dirty.size());', ''' if(*count<dirty.size()) {assert(!flags);*count=1;*pages=base+dirty[0];return 0;}
  assert(*count>=dirty.size());''')
         prefix=prefix.replace('static int copy_escape(', 'static unsigned canonical_queries,replacements,waits;static bool query_fail,wait_fail;\nstatic int copy_escape(')
@@ -362,6 +362,9 @@ int main() {
 #define APPLE_AGX_G3_COPY_VERSION 1
 #define APPLE_AGX_G3_COPY_QUERY 0
 static int wait_object(ADMISSION_UMD_DEVICE *,unsigned,ULONGLONG) {++waits;return !wait_fail;}
+/* RC68: the no-reference proof is taken after the LastUseFence wait. */
+static unsigned proof_waits=~0u;
+static unsigned copy_unreferenced(ADMISSION_UMD_DEVICE *,ADMISSION_UMD_SCREEN_BUFFER *) {proof_waits=waits;return 1u;}
 static int query_canonical(ADMISSION_UMD_DEVICE *d,ADMISSION_UMD_SCREEN_BUFFER *s,APPLE_AGX_G3_COPY_REQUEST *p) {
  if(copy_escape(d,p))return 1;++replacements;s->Sync.Valid=false;return 0;
 }
@@ -378,6 +381,7 @@ int main() {
  assert(!transfer_heap_slot(&d,&s,false,nullptr,nullptr));assert(waits==1 && dirty.size()==2);
  wait_fail=false;
  assert(transfer_heap_slot(&d,&s,false,nullptr,nullptr));assert(waits==2 && canonical[4]==0x19 && canonical[70000]==0x29);
+ assert(proof_waits==2);
  query_fail=true;
  assert(!transfer_heap_slot(&d,&s,true,nullptr,nullptr));assert(!replacements && !s.Sync.Valid);
  assert(!transfer_heap_slot(&d,&s,false,nullptr,nullptr));assert(replacements==1);
