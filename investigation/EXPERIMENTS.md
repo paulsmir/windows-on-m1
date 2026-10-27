@@ -65149,3 +65149,18 @@ EXP2005 HARDWARE ACTUAL (2026-10-27): **rc37 fault drill FAIL: bugcheck 0x116**.
 - Conclusion: an app-caused GPU data-read fault takes down the whole system. This is pre-existing, not caused by rc75, but it matters more now that root views are unchecked. It is the production blocker given to rc77.
 - Recovery: rec2005h with AGX_RECOVERY_ALLOW_AT_PROXY=1.
 - rc76 clear absorb is not yet measured; it is rerun next without the drill.
+
+EXP2006 HARDWARE BEFORE 2026-10-27T22:05:36Z:
+- WHY: rc76 found that 8 of 11 render jobs per frame are clear-only passes (0.63 ms span each, 0.16 ms of 3D); absorbing them into the next draw's load-op clear removes them. EXP2005 never reached these arms because of the drill bugcheck.
+- ATOMIC CONTRACT: one behaviour change (clear absorb, with kill switch APPLE_AGX_D3D12_CLEAR_ABSORB=0) plus a tool and a receipt.
+- Expected:
+  - measure-d3d12-clear-absorb: absorbed about 8 per Execute;
+  - render_jobs 11 → 3-6;
+  - GPU span 3-5 ms lower;
+  - HD above about 4500 (EXP2002-2004: 4439-4579); FHD above 2715;
+  - correct image.
+- Failure criteria: a wrong image, removal, or a regression.
+- Recovery: rec2006h.
+- Hashes: sys 8dba55646391, UmdArm64 80181c561302, UmdX64 549bc7243067, Umd32 deee57b1b7b9; manifest 396cf786e621, hardware-manifest d851be02876d; probe2006.sh 95a56961bb1a (PROBE_LINT_OK); visible recovery rec2006h 657e5ac5dd6da0fc; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2006h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2006-clear-absorb2/run2006.sh.
