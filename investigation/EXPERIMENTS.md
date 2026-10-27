@@ -64526,3 +64526,16 @@ EXP1981 HARDWARE ACTUAL 2026-10-27T09:52:01Z: FAIL. rc56+rc58 native staging on.
 - measure-native-ring-map: the first map succeeded; later maps failed with 0x88760873 and fell back with reason 3 (rc58 fallback works).
 - Wom1G3PrivateAcquireFailure v2 Reserved = 0x002605a4, so the first poison site is **0x26**, the native leaf check in BuildPagingBuffer (rc58's hypothesis). The process was poisoned before its first private acquire, which led to device removal.
 - Next: subagent rc60 (find the refused PTE in the 0x26 check and the ring-map 0x88760873). EXP1982 tests the rc59 stream containment with NATIVE_STAGING=0.
+
+EXP1982 HARDWARE BEFORE 2026-10-27T12:33:13Z:
+- Package 30.0.1982.0 = EXP1981 driver + rc59:
+  - 981166c1: a valid paging SubmitCommandVirtual is never refused because of scheduler state; while faulted it is held until the engine-reset TDR, and during an unreported preemption it is admitted as preempted;
+  - e3b44b69: RC59G, MaxCount 60000 with GPU-written arguments and count.
+  rc58 is also included, but native staging is disabled in the GravityMark arms (EXP1981 still failed: poison site 0x26).
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1.
+- WHY THIS HYPOTHESIS: all four stream bugchecks (EXP1969/1976/1978/1980) share the dxgmms2 stack VidSchiSubmitPagingCommand -> 0x119/2, where a valid system paging packet (fence = timed-out fence + 1) was refused with STATUS_DEVICE_BUSY from AdmissionCpuQueueSubmit after a firmware Timeout.
+- Expected: RC59G and RC57C PASS (path 3), or RC59G reproduces the Timeout without a bugcheck. GravityMark with the stream either runs (render_fence near zero, score above 1638) or the app is removed with a per-engine TDR while the guest stays up. A 0x116/0x117 means the remaining TDR defect.
+- Recovery: rec1982h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest is down).
+- Hashes: sys 70a0059baa28, UmdArm64 0ea6a9a11dce, UmdX64 3e5d75923461, Umd32 9c2a01bcba73; manifest 2d5a5950e552, hardware-manifest fd8f990a43fe; probe1982.sh 52f2aa0e61a5 (PROBE_LINT_OK); visible recovery rec1982h 7b7854ef9aa68f1f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1982h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1982-paging-containment/run1982.sh.
