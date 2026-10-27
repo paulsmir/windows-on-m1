@@ -67,8 +67,13 @@ _Static_assert(offsetof(APPLE_AGX_G4_COMPUTE_ENVELOPE,Native)==
 /* The UMD bridge marks at most this many written allocations per submission
  * (ADMISSION_UMD_WRITTEN_LIMIT in umd_gpuva_windows.c submit). EXP1851: 16
  * (the WDK's written-primaries bound) refused a D3D12 compute batch with the
- * frame's dispatches; only direct displayable slots count as primaries. */
-#define AGX_G4_WRITTEN_LIMIT 128u
+ * frame's dispatches; only direct displayable slots count as primaries.
+ * EXP1994 RC73B: 128 refused one compute batch writing 128 UAV buffers, the
+ * readback copy target and the timestamp (130; reject-batch {3, line of the
+ * writer add_written in AgxWin32AsahiBatchFinishCompute}). The list is only
+ * the UMD's CPU-copy refresh set (distinct active slots, no WDK bound); 1024
+ * entries are 8 KiB of stack per submission. */
+#define AGX_G4_WRITTEN_LIMIT 1024u
 
 typedef struct {
   struct agx_bo *Command;

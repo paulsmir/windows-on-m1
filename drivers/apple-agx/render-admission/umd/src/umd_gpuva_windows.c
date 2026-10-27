@@ -2337,8 +2337,8 @@ static int g4_preflight(ADMISSION_UMD_DEVICE *device, uint64_t va,
 
 /* Every GPU-written slot of a submission (mark_written); only the direct
  * displayable ones become WrittenPrimaries, which D3DDDI_MAX_WRITTEN_PRIMARIES
- * bounds below. Matches the winsys AGX_G4_WRITTEN_LIMIT (EXP1851). */
-#define ADMISSION_UMD_WRITTEN_LIMIT 128u
+ * bounds below. Matches the winsys AGX_G4_WRITTEN_LIMIT (EXP1851, EXP1994). */
+#define ADMISSION_UMD_WRITTEN_LIMIT 1024u
 static int submit(void *context, const uint64_t *written,
                   unsigned written_count, uint64_t va, uint32_t bytes,
                   const void *private_data, uint32_t private_bytes,
