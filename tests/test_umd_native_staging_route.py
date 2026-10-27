@@ -3,6 +3,10 @@
 CPU-facing D3D12 BOs must pass the exact native slice as pSystemMem, avoid a
 second CPU shadow/local promise, and preserve ordinary fallback and failed
 allocation ownership. Execute the real UMD allocation body and wire decoder.
+RC66 (EXP1986): a Shader-class BO is written by the CPU once and must not take
+a native slice that a per-batch query/pool/encoder BO needs; it keeps the
+ordinary path (reason 6) even with native space free. A full arena (reason 1/5)
+reports which classes hold the native slices.
 """
 from pathlib import Path
 import subprocess
@@ -36,11 +40,12 @@ static unsigned AdmissionUmdWaitBegin(unsigned){return 0;}
 static void AdmissionUmdWaitEnd(unsigned){}
 static ADMISSION_UMD_STAGING_RING arena;
 static bool native_enabled;
-static unsigned fallback_count,fallback_reason;
+static unsigned fallback_count,fallback_reason,reserve_calls;
 static BYTE native_memory[3 * 65536];
 static bool AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *d,unsigned long long n,
     unsigned long long align,ADMISSION_UMD_RING_SLICE *s,BYTE **p,unsigned long long *token) {
  assert(d->ScreenBuffers[0].Active && d->ScreenBuffers[0].Transition);
+ ++reserve_calls;
  if(!native_enabled)return false;
  if(!AdmissionUmdRingReserveOwned(&arena,(unsigned)n,(unsigned)align,s))return false;
  *p=native_memory+s->Offset;*token=99;return true;
@@ -49,6 +54,7 @@ static bool AdmissionUmdNativeStagingRelease(ADMISSION_UMD_DEVICE *d,unsigned lo
     unsigned long long fence) {assert(d->ScreenBuffers[0].Active && d->ScreenBuffers[0].Transition);
     assert(token==99);return AdmissionUmdRingReleaseOwned(&arena,ticket,fence,arena.Completed);}
 static void AdmissionUmdNativeStagingFallback(ADMISSION_UMD_DEVICE*,unsigned r,unsigned long long,HRESULT){++fallback_count;fallback_reason=r;}
+static_assert(ADMISSION_UMD_NATIVE_SHADER_CLASS==AgxWin32BufferClassShader,"native class policy");
 '''
         body=function((DRIVER/'render-admission/umd/src/umd_win32_screen.c').read_text(),
                       'AdmissionUmdScreenCreateClassBufferImpl')
@@ -82,6 +88,19 @@ int main() {
   assert(native_memory[extent]==0xcc);
   assert(AdmissionUmdRingReleaseOwned(&arena,s.NativeStagingTicket,0,0));
  }
+ /* RC66: native space is free, yet a Shader-class BO (CPU writes its
+  * binary once) keeps write-watched private staging: no reservation. */
+ d.ScreenBuffers[0]={};private_allocs=0;fallback_count=reserve_calls=0;
+ assert(AdmissionUmdScreenCreateClassBufferImpl(&d,AgxWin32BufferClassShader,65536,65536,0x6,&token,0));
+ assert(!s.NativeStagingAddress && !s.NativeStagingTicket && s.PrivateStaging && s.HeapStaging);
+ assert(!s.SystemDirect && !arena.Used && !reserve_calls && private_allocs==1);
+ assert(fallback_count==1 && fallback_reason==6u);
+ VirtualFree(s.PrivateStaging,0,0);
+ /* The Encoder class (rewritten every batch) still takes the native slice. */
+ d.ScreenBuffers[0]={};private_allocs=0;fallback_count=reserve_calls=0;
+ assert(AdmissionUmdScreenCreateClassBufferImpl(&d,AgxWin32BufferClassEncoder,65536,65536,0x6,&token,0));
+ assert(s.NativeStagingAddress && !s.PrivateStaging && reserve_calls==1 && !fallback_count);
+ assert(AdmissionUmdRingReleaseOwned(&arena,s.NativeStagingTicket,0,0));
  d.ScreenBuffers[0]={}; native_enabled=false;private_allocs=0;
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,65536,65536,15,&token,0));
  assert(!s.NativeStagingAddress && !s.NativeStagingTicket && s.PrivateStaging);

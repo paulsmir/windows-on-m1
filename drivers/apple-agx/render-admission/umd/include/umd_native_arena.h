@@ -33,6 +33,23 @@
 #define ADMISSION_UMD_NATIVE_SMALL_SLICE (1u * 1024u * 1024u)
 #define ADMISSION_UMD_NATIVE_LARGE_ARENA 3u
 
+/* RC66 (EXP1986): the native budget is spent on the BOs that would otherwise
+ * pay copy escapes on every submission. Asahi gives each compiled or linked
+ * shader its own BO (agx_state.c:1484, agx_linker.c:123), 64 KiB on Windows;
+ * the CPU copies the binary in once and the GPU only reads it afterwards, so
+ * as write-watched private staging it pays one upload and then no escape
+ * (a clean watch returns before the QUERY). The per-batch encoder and pool
+ * BOs and the query BOs are rewritten every batch and recycled through the
+ * winsys BO cache with their storage: placed first-come during scene load,
+ * shader BOs left them on private staging for the whole run (EXP1986:
+ * 43-49 QUERY escapes per Execute on <= 1 MiB slots). The value is
+ * AgxWin32BufferClassShader; umd_win32_screen.c checks it at compile time
+ * (this header stays free of the shared ABI headers). */
+#define ADMISSION_UMD_NATIVE_SHADER_CLASS 2u
+static inline int AdmissionUmdNativeStagingClassEligible(unsigned int ClassId) {
+  return ClassId != ADMISSION_UMD_NATIVE_SHADER_CLASS;
+}
+
 typedef struct _ADMISSION_UMD_NATIVE_SPANS {
   unsigned int Capacity, Used, Count, Poisoned;
   unsigned long long NextTicket, Completed;

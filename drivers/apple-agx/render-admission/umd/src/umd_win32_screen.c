@@ -744,6 +744,9 @@ static VOID AdmissionUmdNativeStagingFallback(ADMISSION_UMD_DEVICE *Device,
   AdmissionUmdDiagnostic("measure-native-ring-fallback", Status, values, ARRAYSIZE(values));
 }
 
+typedef char AdmissionUmdNativeShaderClassMatches[
+    ADMISSION_UMD_NATIVE_SHADER_CLASS == (UINT)AgxWin32BufferClassShader ? 1 : -1];
+
 static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
     ULONGLONG Bytes, ULONGLONG Alignment, ADMISSION_UMD_RING_SLICE *Slice,
     BYTE **Address, ULONGLONG *Token) {
@@ -982,7 +985,10 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
      * that complete span, even when the caller requests a shorter BO. */
     ULONGLONG nativeBytes = (stagingDescription.Size + 65535ULL) & ~65535ULL;
     ULONGLONG nativeAlignment = Alignment < 65536ULL ? 65536ULL : Alignment;
-    if (AdmissionUmdNativeStagingReserve(device, nativeBytes, nativeAlignment,
+    /* RC66: write-once shader binaries keep the ordinary path (reason 6). */
+    if (!AdmissionUmdNativeStagingClassEligible(ClassId))
+      AdmissionUmdNativeStagingFallback(device, 6u, Bytes, S_OK);
+    else if (AdmissionUmdNativeStagingReserve(device, nativeBytes, nativeAlignment,
           &nativeSlice, &nativeAddress, &nativeToken)) {
       nativeDescription.Create = description;
       nativeDescription.Create.Version = ADMISSION_WIN32_ALLOCATION_VERSION_NATIVE;
