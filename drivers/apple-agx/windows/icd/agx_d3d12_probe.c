@@ -569,8 +569,15 @@ static int compute_table(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
  * and a table {SRV t1, structured uint, B[i] = i + 100} written directly
  * into the shader-visible heap; agx_d3d12_probe_cs_srv.hlsl writes
  * A[i] + 2 B[i] = 5i + 200. */
-static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, int high_slots) {
-    const char *step = high_slots ? "C16A" : "C5D";
+/* rc77 (fault_va != 0, step RC77D, opt-in only): the C5D dispatch with its
+ * root SRV t0 at an unmapped GPU VA. D3D12 does not validate root descriptor
+ * addresses and rc75 compiles root-descriptor loads without bounds checks, so
+ * this is the shader data-read fault a buggy application can make (unlike
+ * the rc37 drill's CDM control-stream fault). PASS = this device is removed
+ * and the process is alive; run a fresh step (C5D) afterwards. */
+static int compute_srv_va(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, int high_slots,
+                          UINT64 fault_va) {
+    const char *step = fault_va ? "RC77D" : high_slots ? "C16A" : "C5D";
     D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, high_slots ? 126u : 1u, 0, 0};
     D3D12_ROOT_PARAMETER parameters[4] = {{D3D12_ROOT_PARAMETER_TYPE_UAV}, {D3D12_ROOT_PARAMETER_TYPE_SRV},
                                           {D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
@@ -656,7 +663,8 @@ static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
         ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &heap);
         ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
         ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 0, ID3D12Resource_GetGPUVirtualAddress(uav));
-        ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(list, 1, ID3D12Resource_GetGPUVirtualAddress(a));
+        ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(
+            list, 1, fault_va ? fault_va : ID3D12Resource_GetGPUVirtualAddress(a));
         ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 2, gpu_start);
         if (high_slots) ID3D12GraphicsCommandList_SetComputeRootConstantBufferView(list, 3, ID3D12Resource_GetGPUVirtualAddress(cb));
         ID3D12GraphicsCommandList_Dispatch(list, 256, 1, 1);
@@ -669,8 +677,20 @@ static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
         ID3D12CommandList *lists[] = {(ID3D12CommandList *)list};
         ID3D12CommandQueue_ExecuteCommandLists(queue, 1, lists);
         hr = ID3D12CommandQueue_Signal(queue, fence, 7);
-        for (int i = 0; i < 300 && (value = ID3D12Fence_GetCompletedValue(fence)) < 7; ++i) Sleep(10);
+        if (fault_va) printf("%s FAULT_DISPATCH va=0x%llx\n", step, (unsigned long long)fault_va);
+        for (int i = 0; i < (fault_va ? 1500 : 300) && (value = ID3D12Fence_GetCompletedValue(fence)) < 7; ++i) {
+            if (fault_va && FAILED(ID3D12Device_GetDeviceRemovedReason(device))) break;
+            Sleep(10);
+        }
         printf("%s execute+signal hr=0x%08lx completed %llu\n", step, (unsigned long)hr, (unsigned long long)value);
+    }
+    if (fault_va) {
+        const HRESULT removed = device ? ID3D12Device_GetDeviceRemovedReason(device) : E_FAIL;
+        printf("AGX_D3D12_RC77D: %s removed=0x%08lx completed=%llu\n",
+               SUCCEEDED(hr) && FAILED(removed) ? "PASS" : "FAIL", (unsigned long)removed,
+               (unsigned long long)value);
+        bad = SUCCEEDED(hr) && FAILED(removed) ? 0u : 1u;
+        hr = E_ABORT; /* skip the readback and the C5D verdict below */
     }
     if (SUCCEEDED(hr) && value == 7) {
         D3D12_RANGE all = {0, 65536};
@@ -683,7 +703,8 @@ static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("AGX_D3D12_%s: %s\n", step, SUCCEEDED(hr) && value == 7 && bad == 0 ? "PASS" : "FAIL");
+    if (!fault_va)
+        printf("AGX_D3D12_%s: %s\n", step, SUCCEEDED(hr) && value == 7 && bad == 0 ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (pso) ID3D12PipelineState_Release(pso);
@@ -696,7 +717,10 @@ static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
     if (b) ID3D12Resource_Release(b);
     if (a) ID3D12Resource_Release(a);
     if (uav) ID3D12Resource_Release(uav);
-    return !(SUCCEEDED(hr) && bad == 0);
+    return fault_va ? bad != 0u : !(SUCCEEDED(hr) && bad == 0);
+}
+static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, int high_slots) {
+    return compute_srv_va(device, queue, fence, high_slots, 0);
 }
 
 /* C6a (D3D12-C6-graphics.md): a 64x64 RGBA8 render-target texture cleared
@@ -7171,6 +7195,11 @@ static int step_c13(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT
 static int step_c14(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 5); }
 static int step_c17b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 7); }
 static int step_c16a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { (void)b; return compute_srv(d, q, f, 1); }
+/* rc77: 0x10000 is the VA the rc37 drill proved unmapped (root edge absent,
+ * Wom1GpuFaultMapping EXP2005/EXP2007); below every dxgkrnl GPU VA range. */
+static int step_rc77d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
+    (void)b; return compute_srv_va(d, q, f, 0, 0x10000ULL);
+}
 static int step_c14nc(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 6); }
 static int step_rc38z(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 14); }
 static int step_rc38n(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 15); }
@@ -8082,7 +8111,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"RC43I32Z", step_rc43i32z},
     {"RC43I32O", step_rc43i32o},
     {"RC43I32N", step_rc43i32n},
-    {"C76A", c76_shared_open},
+    {"C76A", c76_shared_open}, {"RC77D", step_rc77d},
     {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
     {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures},
     {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c}, {"C37D", step_c37d}, {"C37E", step_c37e},
