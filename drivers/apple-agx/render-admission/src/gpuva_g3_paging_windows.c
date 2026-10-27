@@ -683,7 +683,12 @@ static NTSTATUS AdmissionG3UpdateLeaf(
             (const ADMISSION_ALLOCATION_HANDLE *)update->hAllocation;
         /* pSystemMem is a separate runtime input: the private token alone
          * cannot prove that VidMm mapped the authenticated native bytes. */
-        if (owner->NativeStagingBinding &&
+        /* As in AdmissionG3PoolPlace, opaque VidMm allocation identities
+         * are not our extended allocation object. Inspect its identity
+         * before accessing the optional native binding. */
+        if (((ULONG_PTR)owner & (sizeof(ULONG_PTR) - 1u)) == 0u &&
+            owner->Object.Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC &&
+            owner->NativeStagingBinding &&
             (pte->Segment != 0u || !AdmissionNativeStagingPage(
                 owner->NativeStagingBinding, out->AllocationOffset, out->GuestIpa)))
           goto Done;
