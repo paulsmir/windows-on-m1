@@ -16,6 +16,7 @@
 #define APPLE_AGX_NATIVE_STAGING 1
 #include "umd_staging_ring.h"
 #include "umd_native_arena.h"
+#include "umd_upload_ring.h"
 #include "agx_win32_gpuva.h"
 #endif
 
@@ -129,6 +130,11 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   /* EXP1093: render fence of the latest submission that holds this slot; an
    * upload into it waits for that fence while another submission holds it. */
   UINT64 LastUseFence;
+  /* RC65: the upload-ring GPU copy of this slot's snapshot is recorded and
+   * its submission not yet accepted. That copy writes bytes the staging
+   * already holds: it neither marks the slot GpuWritten nor lets the same
+   * submission upload the slot again. Cleared by UploadRingFinish. */
+  BOOL UploadRingPending;
 #endif
 } ADMISSION_UMD_SCREEN_BUFFER;
 
@@ -372,6 +378,25 @@ int AdmissionUmdGpuvaWaitNativeStaging(ADMISSION_UMD_DEVICE *device,
 #endif
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,
                                    uint64_t token);
+/* RC65 upload ring (umd_upload_ring.h). Stage: 1 when the slot's dirty runs
+ * were copied into a reserved ring slice and appended to Copies (dirty bits
+ * consumed, slot UploadRingPending); 0 when nothing was consumed (clean,
+ * ineligible, ring/copy capacity: the escape path keeps the bytes); -1 when
+ * the snapshot no longer fit after its reset (Sync invalidated: the next
+ * submission restores the whole slot). Finish clears UploadRingPending after
+ * the copy submission; without an accepted fence it invalidates those slots
+ * and disables the ring. Retire reclaims slices up to the completed fence. */
+int AdmissionUmdGpuvaUploadRingStage(ADMISSION_UMD_DEVICE *device,
+    uint64_t token, unsigned int target, ADMISSION_UMD_UPLOAD_RING *ring,
+    ADMISSION_UMD_UPLOAD_COPY *copies, unsigned int capacity,
+    unsigned int *count);
+unsigned int AdmissionUmdGpuvaUploadRingFinish(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_UPLOAD_RING *ring, int accepted, unsigned long long fence);
+void AdmissionUmdGpuvaUploadRingRetire(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_UPLOAD_RING *ring);
+/* RC65: whether Cpu is the native staging map of the slot (no escapes). */
+int AdmissionUmdGpuvaNativeStagingSlot(ADMISSION_UMD_DEVICE *device,
+    uint64_t token, const void *cpu);
 int AdmissionUmdGpuvaPrepareDirectMap(ADMISSION_UMD_DEVICE *device,
                                       uint64_t token);
 int AdmissionUmdGpuvaFinishDirectMap(ADMISSION_UMD_DEVICE *device,

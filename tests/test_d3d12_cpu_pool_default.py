@@ -126,7 +126,7 @@ class D3d12CpuPoolDefault(unittest.TestCase):
                                 "HRESULT (*pfnDeallocateCb)(void*,D3DDDICB_DEALLOCATE*); int (*pfnLockCb)(); int (*pfnUnlockCb)();")
         prefix = prefix.replace("BOOL Active,Transition,Borrowed,WriteWatch,HeapStaging,SystemDirect;",
                                 "BOOL Active,Transition,Borrowed,WriteWatch,HeapStaging,SystemDirect;\n"
-                                " BOOL Direct,Mapped,CopyHeld,GpuWritten,Queried;\n"
+                                " BOOL Direct,Mapped,CopyHeld,GpuWritten,Queried,UploadRingPending;\n"
                                 " unsigned long long CanonicalGpuVa; void *NativeBo; int (*NativeMapRelease)();\n"
                                 " struct {bool Valid;} Sync;")
         prefix = prefix.replace("@@FUNCTION@@", function(screen, "AdmissionUmdScreenCreateClassBufferImpl"))

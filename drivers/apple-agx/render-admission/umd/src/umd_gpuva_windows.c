@@ -1351,6 +1351,181 @@ static int transfer_heap_slot(ADMISSION_UMD_DEVICE *device,
   return ok;
 }
 
+/* RC65: a persistent CPU-written heap whose dirty pages may go through the
+ * upload ring. Sync.Valid: staging equals canonical except for watched
+ * pages, so the dirty set is the whole difference (a full restore keeps the
+ * escape path). Mapped: unmapped private slots have no CPU writer and are
+ * never uploaded per submission (cpu_quiet). No GPU writer: a GpuWritten or
+ * shadowed slot needs the copy-out merge of heap_staging_transfer. Native
+ * (SystemDirect) and borrowed/direct slots have no private staging. */
+static bool upload_ring_eligible(const ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  return slot->Active && !slot->Transition && slot->HeapStaging && slot->WriteWatch &&
+      slot->PrivateStaging && slot->Mapped && slot->LockedBase == slot->PrivateStaging &&
+      slot->Sync.Valid && slot->Queried && !slot->GpuWritten && !slot->HeapStagingShadow &&
+      !slot->Borrowed && !slot->Direct && !slot->SystemDirect && !slot->UploadRingPending &&
+      slot->KernelAllocation && slot->CanonicalGpuVa && slot->Bytes;
+}
+
+/* Sorted, validated offsets of the watched pages, then the copy plan. */
+static unsigned int upload_ring_plan(PVOID *pages, ULONG_PTR count, const BYTE *cpu,
+    SIZE_T bytes, DWORD granularity, unsigned long long *offsets, unsigned int target,
+    ADMISSION_UMD_UPLOAD_COPY *runs, unsigned int capacity, unsigned long long *slice) {
+  *slice = 0ULL;
+  if (count > ADMISSION_UMD_UPLOAD_RING_PAGES) return ~0u;
+  qsort(pages, (SIZE_T)count, sizeof(PVOID), heap_staging_page_compare);
+  for (ULONG_PTR i = 0; i < count; ++i) {
+    if ((ULONG_PTR)pages[i] < (ULONG_PTR)cpu) return ~0u;
+    offsets[i] = (unsigned long long)((ULONG_PTR)pages[i] - (ULONG_PTR)cpu);
+  }
+  return AdmissionUmdUploadPlan(offsets, (unsigned int)count, (unsigned int)granularity,
+      (unsigned long long)bytes, ADMISSION_UMD_UPLOAD_RING_GAP, target, runs, capacity, slice);
+}
+
+static void upload_ring_invalidate(ADMISSION_UMD_DEVICE *device, uint64_t token) {
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  auto *slot = find_slot(device, token);
+  if (slot) AdmissionUmdStagingInvalidate(&slot->Sync);
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+}
+
+/* Caller holds the owner lock (no concurrent submission, map or release of
+ * this slot). The canonical BO is never written here: only the recorded GPU
+ * copy writes it, after every earlier reader in GPU order. The write watch
+ * is previewed without reset first, so a refused reservation consumes
+ * nothing; the reset snapshot is taken immediately before the CPU copy, and
+ * stores after it stay watched for the next Execute or submission. */
+static int upload_ring_stage_slot(ADMISSION_UMD_DEVICE *device, uint64_t token,
+    unsigned int target, ADMISSION_UMD_UPLOAD_RING *ring,
+    ADMISSION_UMD_UPLOAD_COPY *copies, unsigned int capacity, unsigned int *count) {
+  if (!device || !ring || ring->Disabled || !ring->Cpu || !copies || !count ||
+      *count > capacity) return 0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const ADMISSION_UMD_SCREEN_BUFFER *slot = find_slot(device, token);
+  const bool eligible = slot && upload_ring_eligible(slot);
+  BYTE *cpu = eligible ? slot->PrivateStaging : NULL;
+  const SIZE_T bytes = eligible ? (SIZE_T)slot->Bytes : 0u;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (!cpu || !bytes) return 0;
+  if (!ring->Scratch) {
+    ring->Scratch = HeapAlloc(GetProcessHeap(), 0, (SIZE_T)ADMISSION_UMD_UPLOAD_RING_PAGES *
+                              (sizeof(unsigned long long) + sizeof(PVOID)));
+    if (!ring->Scratch) return 0;
+  }
+  auto *offsets = (unsigned long long *)ring->Scratch;
+  auto *pages = (PVOID *)(offsets + ADMISSION_UMD_UPLOAD_RING_PAGES);
+  ULONG_PTR found = ADMISSION_UMD_UPLOAD_RING_PAGES;
+  DWORD granularity = 0;
+  if (GetWriteWatch(0, cpu, bytes, pages, &found, &granularity) || !found ||
+      !granularity || found > ADMISSION_UMD_UPLOAD_RING_PAGES) return 0;
+  ADMISSION_UMD_UPLOAD_COPY *runs = copies + *count;
+  unsigned long long need = 0ULL;
+  unsigned int planned = found == ADMISSION_UMD_UPLOAD_RING_PAGES ? ~0u :
+      upload_ring_plan(pages, found, cpu, bytes, granularity, offsets, target, runs,
+                       capacity - *count, &need);
+  ADMISSION_UMD_RING_SLICE slice = {};
+  unsigned int reason = found == ADMISSION_UMD_UPLOAD_RING_PAGES ? ADMISSION_UMD_UPLOAD_FALLBACK_LARGE :
+      planned == ~0u || !planned ? ADMISSION_UMD_UPLOAD_FALLBACK_COPIES : 0u;
+  if (!reason && (need > ring->Ring.Capacity ||
+      !AdmissionUmdRingReserve(&ring->Ring, (unsigned int)need, ADMISSION_UMD_UPLOAD_RING_ALIGN,
+                               0u, &slice))) reason = ADMISSION_UMD_UPLOAD_FALLBACK_SPACE;
+  if (reason) {
+    ++ring->Fallbacks;
+    ring->FallbackBytes += (unsigned long long)found * granularity;
+    ring->FallbackReasons |= reason;
+    return 0;
+  }
+  found = ADMISSION_UMD_UPLOAD_RING_PAGES;
+  if (GetWriteWatch(WRITE_WATCH_FLAG_RESET, cpu, bytes, pages, &found, &granularity) ||
+      !granularity || !found || found >= ADMISSION_UMD_UPLOAD_RING_PAGES ||
+      (planned = upload_ring_plan(pages, found, cpu, bytes, granularity, offsets, target, runs,
+                                  capacity - *count, &need)) == ~0u ||
+      !planned || need > slice.Bytes) {
+    /* The reset may have consumed pages this slice cannot carry. */
+    (void)AdmissionUmdRingCancel(&ring->Ring, slice.Ticket);
+    upload_ring_invalidate(device, token);
+    ++ring->Invalidated;
+    return -1;
+  }
+  unsigned long long moved = 0ULL;
+  for (unsigned int i = 0; i < planned; ++i) {
+    CopyMemory(ring->Cpu + slice.Offset + runs[i].RingOffset, cpu + runs[i].Offset, runs[i].Bytes);
+    runs[i].RingOffset += slice.Offset;
+    moved += runs[i].Bytes;
+  }
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  auto *owned = find_slot(device, token);
+  const bool kept = owned && owned->PrivateStaging == cpu && upload_ring_eligible(owned);
+  if (kept) owned->UploadRingPending = TRUE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  if (!kept) {
+    (void)AdmissionUmdRingCancel(&ring->Ring, slice.Ticket);
+    upload_ring_invalidate(device, token);
+    ++ring->Invalidated;
+    return -1;
+  }
+  *count += planned;
+  ++ring->Slots;
+  ring->Copies += planned;
+  ring->Bytes += moved;
+  return 1;
+}
+
+/* After the copy submission. Accepted: its fence owns every pending slice.
+ * Otherwise the copies may never run although their dirty bits are gone:
+ * restore those slots in full and keep the slices out of reuse for good. */
+static unsigned int upload_ring_finish(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_UPLOAD_RING *ring, int accepted, unsigned long long fence) {
+  unsigned int cleared = 0u;
+  if (!device || !ring) return 0u;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++i) {
+    auto *slot = &device->ScreenBuffers[i];
+    if (!slot->UploadRingPending) continue;
+    slot->UploadRingPending = FALSE;
+    if (!accepted) AdmissionUmdStagingInvalidate(&slot->Sync);
+    ++cleared;
+  }
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  if (ring->Ring.Pending &&
+      (!accepted || !AdmissionUmdRingCommitAll(&ring->Ring, fence))) {
+    AdmissionUmdRingPoison(&ring->Ring);
+    ring->Disabled = 1u;
+  }
+  return cleared;
+}
+
+/* The monitored render fence is the completion proof of the ring copies. */
+static void upload_ring_retire(ADMISSION_UMD_DEVICE *device, ADMISSION_UMD_UPLOAD_RING *ring) {
+  if (!device || !ring || !ring->Ring.Capacity || ring->Ring.Poisoned ||
+      !device->RenderFenceAddress) return;
+  const unsigned long long completed = *device->RenderFenceAddress;
+  if (completed > ring->Ring.Completed) (void)AdmissionUmdRingRetire(&ring->Ring, completed);
+}
+
+int AdmissionUmdGpuvaUploadRingStage(ADMISSION_UMD_DEVICE *device, uint64_t token,
+    unsigned int target, ADMISSION_UMD_UPLOAD_RING *ring,
+    ADMISSION_UMD_UPLOAD_COPY *copies, unsigned int capacity, unsigned int *count) {
+  return upload_ring_stage_slot(device, token, target, ring, copies, capacity, count);
+}
+unsigned int AdmissionUmdGpuvaUploadRingFinish(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_UPLOAD_RING *ring, int accepted, unsigned long long fence) {
+  return upload_ring_finish(device, ring, accepted, fence);
+}
+void AdmissionUmdGpuvaUploadRingRetire(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_UPLOAD_RING *ring) {
+  upload_ring_retire(device, ring);
+}
+int AdmissionUmdGpuvaNativeStagingSlot(ADMISSION_UMD_DEVICE *device, uint64_t token,
+                                       const void *cpu) {
+  if (!device || !cpu) return 0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const ADMISSION_UMD_SCREEN_BUFFER *slot = find_slot(device, token);
+  const int native = slot && slot->Active && slot->SystemDirect && !slot->PrivateStaging &&
+      slot->NativeStagingAddress && slot->NativeStagingAddress == (const BYTE *)cpu;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  return native;
+}
+
 /* RC64: attributes every copy escape of one slot transfer to its size. */
 struct copy_escape_scope {
   ADMISSION_UMD_DEVICE *Device;
@@ -1584,9 +1759,12 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
      * surface and drop the map; the next map downloads the GPU result. */
     bool shadow=!download && direct_shadow_slot(slot) && slot->PrivateStaging &&
         slot->Mapped && slot->NativeBo && slot->NativeMapRelease;
+    /* RC65: an upload-ring slot's snapshot reaches canonical storage by the
+     * GPU copy this submission carries. Its later stores stay watched and
+     * upload with the next submission, after that copy in GPU order. */
     if(download ? !download_due(slot) :
        (!slot->CopyHeld || (slot->Direct && !shadow) || slot->SystemDirect ||
-        (cpu_quiet(slot) && slot->Sync.Valid))) {
+        slot->UploadRingPending || (cpu_quiet(slot) && slot->Sync.Valid))) {
       if(slot->CopyHeld && !download) {
         UINT values[4]={(UINT)slot->Token,(UINT)(slot->Token>>32),
             (UINT)slot->Direct|((UINT)slot->SystemDirect<<1)|
@@ -1838,7 +2016,9 @@ static int mark_written(ADMISSION_UMD_DEVICE *device, const uint64_t *written,
         slot=&device->ScreenBuffers[j];break;
       }
     if(!slot || slot->Transition || !slot->CopyHeld) ok=0;
-    else slot->GpuWritten=TRUE;
+    /* RC65: the upload-ring copy stores bytes the staging already holds;
+     * downloading them could only erase newer CPU stores. */
+    else if(!slot->UploadRingPending) slot->GpuWritten=TRUE;
   }
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   return ok;
