@@ -64629,3 +64629,13 @@ EXP1986 HARDWARE BEFORE 2026-10-27T15:44:09Z:
 - Hashes: sys 709470cb3c14, UmdArm64 b0d6ea70b33f, UmdX64 503b8a1a8b58, Umd32 9455ef575069; manifest 0dfe32c57183, hardware-manifest 0a72e7001583; probe1986.sh e043732e7986 (PROBE_LINT_OK); visible recovery rec1986h d648e4b16ab3b3a0; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1986h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1986-small-arenas/run1986.sh.
+
+EXP1986 HARDWARE ACTUAL (2026-10-27): **PASS, neutral**.
+- HD 50k: 2082 / 12.4 FPS (EXP1985: 2093). FHD 100k: 1649 / 9.9 FPS (EXP1985: 1658). No device removal; the guest is alive.
+- measure-copy-escape-class per Execute (rc65 analysis, last two thirds of the frames):
+  - over 16 MiB: about 1.7 ms (1 QUERY + 2 UPLOAD);
+  - up to 1 MiB: **43-49 QUERY escapes, 29-40 ms**, plus 35-38 UPLOAD;
+  - total copy escapes 95-106 per Execute, 35-45 ms.
+- The rc64 premise is refuted: the cost is per-slot QUERY escapes on small slots, not the upload heaps.
+- Reason-1 fallbacks remain for 64 KiB BOs: 94 at HD and 142 at FHD (Asahi uses one query BO per query), so the reserved 28 MiB is still exhausted.
+- Verdict: rc64 neutral, kept for its receipt.
