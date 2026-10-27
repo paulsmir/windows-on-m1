@@ -11,12 +11,17 @@ Usage:
       their grids live in GPU memory. Score = threads x instructions (the
       instruction-issue work of the shader's direct dispatches).
   agx_shader_cost.py compile PATH... [--no-d3d-robust] [--assume-in-bounds]
+                    [--root-views UAV,CBV]
       Offline cost of captured shaders (APPLE_AGX_D3D12_SHADER_DUMP_DIR with
       APPLE_AGX_D3D12_SHADER_DUMP_ALL=1: <hash>-s5-r0.bin files, or any DXIL
       program/container): tests/dxil_agx_cost_fixture.c built against the
       host Mesa (the pinned 9aa1215f compiler) and run on each compute shader.
       --compare prints the D3D-robust, the robust in-bounds path and the
-      unchecked cost side by side.
+      unchecked cost side by side. --root-views takes the hex masks of the
+      UAV and constant-buffer slots that are D3D12 root descriptors (RC75:
+      unchecked; measure-d3d12-root-views receipts name them per shader).
+      RC75 op classes of the final NIR: nir-alu, nir-mem (device memory),
+      nir-tex (texture and image), nir-shared, barriers, atomics.
 JSON or a table on stdout; nothing is written elsewhere except the fixture
 build directory (--build-dir, default a temporary one).
 """
@@ -166,6 +171,7 @@ def main(argv=None):
     comp.add_argument('--compare', action='store_true')
     comp.add_argument('--no-d3d-robust', action='store_true')
     comp.add_argument('--assume-in-bounds', action='store_true')
+    comp.add_argument('--root-views', help='UAV,CBV hex slot masks of root descriptors')
     comp.add_argument('--build-dir')
     args = parser.parse_args(argv)
     if args.mode == 'log':
@@ -184,6 +190,8 @@ def main(argv=None):
                     if args.compare else
                     [('cost', tuple(f for f, on in (('--no-d3d-robust', args.no_d3d_robust),
                                                     ('--assume-in-bounds', args.assume_in_bounds)) if on))])
+        if args.root_views:
+            variants = [(name, flags + (f'--root-views={args.root_views}',)) for name, flags in variants]
         rows = []
         for path in inputs(args.paths):
             row = {'shader': path.name}
@@ -192,7 +200,9 @@ def main(argv=None):
                 if not c:
                     break
                 row[name] = {k: c[k] for k in ('instrs', 'alu', 'gprs', 'threads', 'scratch', 'spills',
-                                               'hot-mem-blocks', 'hot-branches', 'block', 'shared') if k in c}
+                                               'hot-mem-blocks', 'hot-branches', 'block', 'shared', 'loops',
+                                               'nir-alu', 'nir-mem', 'nir-tex', 'nir-shared', 'barriers',
+                                               'atomics', 'root-marked') if k in c}
             if len(row) > 1:
                 rows.append(row)
         rows.sort(key=lambda r: r[variants[0][0]]['instrs'], reverse=True)
