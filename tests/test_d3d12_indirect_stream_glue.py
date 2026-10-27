@@ -102,6 +102,13 @@ static void launch(struct agx_batch *b,struct agx_grid grid,unsigned barrier,uin
 #define libagx_win32_indirect_stream launch
 #include "agx_win32_indirect_stream_emit.h"
 
+/* RC69: the complete native VS block agx_encode_state captured for the template. */
+static void native_vs(struct agx_win32_indirect_stream *s){
+ uint32_t *o=s->vs_state;
+ agx_push(o,VDM_STATE,cfg){cfg.vertex_shader_word_0_present=true;cfg.vertex_shader_word_1_present=true;
+  cfg.vertex_outputs_present=true;cfg.vertex_unknown_present=true;}
+ o[0]=0x1111u;o[1]=0x2222u;o[2]=0x0808u;o[3]=0x2u;o[4]=0;s->vs_state_valid=true;
+}
 static void init(struct agx_context *ctx,struct agx_batch *batch,struct shader *vs){
  *ctx=(struct agx_context){0};ctx->base.screen=&dev;ctx->batch=batch;ctx->active_queries=true;
  ctx->stage[MESA_SHADER_VERTEX].shader=vs;
@@ -141,7 +148,7 @@ int main(void){
   init(&ctx,&batch,&vs);allocations=reads=launches=entered=leaves=writer_flushes=capacity_flushes=output_refs=0;
   agx_win32_stream_flush_inputs(&ctx,&in);assert(writer_flushes==(fault==8?1:2));
   if(fault==8)continue;
-  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};
+  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};native_vs(&stream);
   struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)args+4,0x1000,256,AGX_INDEX_SIZE_U32,true);
   uint32_t *out=(void *)(vdm+16);memset(out,0xff,32);
   uint8_t *end=agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,(void *)out);
@@ -149,7 +156,7 @@ int main(void){
   else{assert(!ctx.any_faults&&ctx.windows_indirect_path==3&&end==(uint8_t *)out+8);assert(allocations==3&&reads==2&&output_refs==2&&launches==1&&entered==leaves);assert((out[0]>>28)==8);
    const struct agx_win32_stream_params *p=blocks[3];
    assert(p->continuation==0x1234000018ull);
-   const uint32_t *tail=(const void *)((const uint8_t *)blocks[1]+value*28);
+   const uint32_t *tail=(const void *)((const uint8_t *)blocks[1]+value*agx_win32_stream_record_bytes(4));
    assert(tail[0]==0x80000012u&&tail[1]==0x34000018u);}
   if(entered)assert(leaves==1);
   for(unsigned i=0;i<8;++i){free(blocks[i]);blocks[i]=NULL;}
@@ -158,7 +165,7 @@ int main(void){
   * be checked before dispatch; a bad allocation must never emit a link. */
  for(bad_extent=1;bad_extent<=11;++bad_extent){
   fault=0;init(&ctx,&batch,&vs);allocations=reads=launches=entered=leaves=output_refs=0;
-  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};
+  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};native_vs(&stream);
   struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)args+4,0x1000,256,AGX_INDEX_SIZE_U32,false);
   if(bad_extent==9)batch.vdm.end=vdm+24;
   if(bad_extent==10)batch.vdm.windows_chunk.gpu=(1ull<<39)-16;
@@ -169,11 +176,24 @@ int main(void){
   for(unsigned i=0;i<8;++i){free(blocks[i]);blocks[i]=NULL;}
  }
  bad_extent=0;
+ /* RC69: never repeat a missing, word-1-only or unpadded VS block per record. */
+ for(unsigned bad=0;bad<4;++bad){
+  fault=0;init(&ctx,&batch,&vs);allocations=reads=launches=entered=leaves=output_refs=0;
+  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};native_vs(&stream);
+  if(bad==0)stream.vs_state_valid=false;
+  if(bad==1)stream.vs_state[0]&=~2u;  /* word 0 absent */
+  if(bad==2)stream.vs_state[0]|=1u;   /* restart index shifts the words */
+  if(bad==3)stream.vs_state[5]=1u;    /* pad is not zero */
+  struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)args+4,0x1000,256,AGX_INDEX_SIZE_U32,true);
+  uint32_t *out=(void *)(vdm+16);memset(out,0xff,32);
+  assert(!agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,(void *)out));
+  assert(ctx.any_faults&&!allocations&&!launches&&!entered&&out[0]==UINT32_MAX);
+ }
  /* CPU emission performs exactly the same calls for 1 and 12000 records. */
  for(unsigned records=1;records<=12000;records+=11999){
   fault=0;init(&ctx,&batch,&vs);allocations=reads=launches=entered=leaves=output_refs=0;
   in.draw_count=records;value=records;
-  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};
+  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};native_vs(&stream);
   struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)args+4,0x1000,256,AGX_INDEX_SIZE_U32,true);
   uint32_t *words=(void *)(vdm+32);assert(agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,(void *)words));
   assert(allocations==3&&reads==2&&launches==1&&output_refs==2&&entered==leaves);
@@ -187,7 +207,7 @@ int main(void){
   allocations=reads=launches=entered=leaves=output_refs=query_refs=0;
   uint64_t stats[12]={0};for(unsigned k=0;k<11;++k)ctx.pipeline_statistics[k]=&stats[k];
   in.draw_count=3;value=2;args[1]=3;args[2]=2;args[9]=6;args[10]=3;
-  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12,MESA_PRIM_TRIANGLES};
+  struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12,MESA_PRIM_TRIANGLES};native_vs(&stream);
   struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)args+4,0x1000,256,AGX_INDEX_SIZE_U32,false);
   uint32_t *words=(void *)(vdm+32);uint8_t *end=agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,(void *)words);
   if(enabled==2){assert(!end&&ctx.any_faults&&!launches);}
@@ -215,14 +235,14 @@ int main(void){
   uint64_t stats[12]={0};for(unsigned k=0;k<11;++k)ctx.pipeline_statistics[k]=&stats[k];
   for(unsigned call=0;call<7;++call){
    entered=leaves=0;
-   struct agx_win32_indirect_stream stream={&many,(uintptr_t)tmpl,sizeof(tmpl),8,12,MESA_PRIM_TRIANGLES};
+   struct agx_win32_indirect_stream stream={&many,(uintptr_t)tmpl,sizeof(tmpl),8,12,MESA_PRIM_TRIANGLES};native_vs(&stream);
    struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)large,0x1000,256,AGX_INDEX_SIZE_U32,false);
    uint8_t *out=vdm+32+call*8;
    assert(agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,out)==out+8);
    assert(!ctx.any_faults&&ctx.windows_indirect_path==3&&entered==leaves);
    const struct agx_win32_stream_params *p=blocks[3*call+3];
    assert(p->max_count==records&&p->continuation==0x1234000028ull+call*8);
-   const uint32_t *tail=(void *)((uint8_t *)blocks[3*call+1]+records*28);
+   const uint32_t *tail=(void *)((uint8_t *)blocks[3*call+1]+records*agx_win32_stream_record_bytes(4));
    assert(tail[0]==0x80000012u&&tail[1]==0x34000028u+call*8);
   }
   assert(allocations==21&&launches==7&&output_refs==14&&query_refs==35);
@@ -238,7 +258,7 @@ int main(void){
  capacity_flushes=0;agx_win32_stream_flush_inputs(&ctx,&in);assert(capacity_flushes==1);
  /* Constant-time size check rejects a pipeline allocation wrap before allocating. */
  in.draw_count=UINT32_MAX;allocations=0;
- struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};
+ struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12};native_vs(&stream);
  uint32_t *out=(void *)(vdm+48);struct agx_draw d=agx_draw_indirect((uintptr_t)args);
  assert(!agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,(void *)out));
  assert(ctx.any_faults&&!allocations);

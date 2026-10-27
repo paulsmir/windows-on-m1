@@ -118,6 +118,21 @@ def project_sources(out, project, overlays):
 
     path='src/gallium/drivers/asahi/agx_state.c'
     s=(out/path).read_text()
+    # RC69: keep the exact native VS block of the template draw; each GPU
+    # record repeats it with only its own pipeline word.
+    s=once(s,'''      /* Pad up to a multiple of 8 bytes */
+      memset(out, 0, 4);
+      out += 4;
+   }''', '''      /* Pad up to a multiple of 8 bytes */
+      memset(out, 0, 4);
+      out += 4;
+      if (ctx->windows_indirect_stream) {
+         memcpy(ctx->windows_indirect_stream->vs_state,
+                out - sizeof(ctx->windows_indirect_stream->vs_state),
+                sizeof(ctx->windows_indirect_stream->vs_state));
+         ctx->windows_indirect_stream->vs_state_valid = true;
+      }
+   }''')
     s=once(s,'   enc->end = enc->current + size;',
            '   enc->end = enc->current + size;\n   enc->windows_chunk = T;')
     s=once(s,'''   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));

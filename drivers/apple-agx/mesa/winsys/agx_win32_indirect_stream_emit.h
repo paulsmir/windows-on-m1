@@ -121,6 +121,23 @@ agx_win32_stream_flush_inputs(struct agx_context *ctx,
       agx_flush_batch_for_reason(ctx, batch, "Indirect stream CDM capacity");
 }
 
+/* The captured block must be the complete native VS update that
+ * agx_encode_state emits (header, word 0, word 1, outputs, unknown, zero
+ * pad); anything else is refused rather than repeated per record. */
+static bool
+agx_win32_stream_vs_state_valid(const struct agx_win32_indirect_stream *stream)
+{
+   uint32_t header = 0, *h = &header;
+   agx_push(h, VDM_STATE, cfg) {
+      cfg.vertex_shader_word_0_present = true;
+      cfg.vertex_shader_word_1_present = true;
+      cfg.vertex_outputs_present = true;
+      cfg.vertex_unknown_present = true;
+   }
+   return stream->vs_state_valid && stream->vs_state[0] == header &&
+          !stream->vs_state[AGX_WIN32_STREAM_VS_STATE_WORDS - 1];
+}
+
 static uint8_t *
 agx_win32_emit_indirect_stream(struct agx_batch *batch,
                                 struct agx_win32_indirect_stream *stream,
@@ -146,7 +163,8 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
        AGX_WIN32_STREAM_FETCH_PADDING > (1ull << 39) - continuation)
       goto fail;
    /* Keep rounding and pool growth valid on WOW64 as well as 64-bit hosts. */
-   if (!stream->usc_template || !stream->usc_bytes ||
+   if (!agx_win32_stream_vs_state_valid(stream) ||
+       !stream->usc_template || !stream->usc_bytes ||
        stream->usc_bytes > UINT32_MAX - 63u ||
        (stream->params_offset != UINT32_MAX &&
         (stream->usc_bytes < 8 || stream->params_offset > stream->usc_bytes - 8)))
@@ -215,6 +233,7 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       .c_primitives = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_PRIMITIVES),
       .c_invocations = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_INVOCATIONS),
    };
+   memcpy(params.vs_state, stream->vs_state, sizeof(params.vs_state));
    if (ctx->any_faults)
       return NULL;
    uint64_t args = agx_pool_upload_aligned(&batch->pool, &params, sizeof(params), 8);

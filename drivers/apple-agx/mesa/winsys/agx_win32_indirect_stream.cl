@@ -62,10 +62,14 @@ libagx_win32_indirect_stream(constant struct agx_win32_stream_params *p)
                       arg + (p->index_size ? 12 : 8));
    }
 
-   agx_push(out, VDM_STATE, cfg)
-      cfg.vertex_shader_word_1_present = true;
+   /* The template's native VS block with this record's pipeline. */
+   out[0] = p->vs_state[0];
+   out[1] = p->vs_state[1];
+   out += 2;
    agx_push(out, VDM_STATE_VERTEX_SHADER_WORD_1, cfg)
       cfg.pipeline = p->pipeline_base + i * p->usc_stride;
+   for (uint32_t w = 3; w < AGX_WIN32_STREAM_VS_STATE_WORDS; ++w)
+      *(out++) = p->vs_state[w];
 
    struct agx_draw draw = p->index_size ?
       agx_draw_indexed_indirect(arg, p->index_buffer, p->index_range,

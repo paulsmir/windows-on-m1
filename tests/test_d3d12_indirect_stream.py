@@ -59,6 +59,8 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
       .params_uniform=param_uniform,
       .pipeline_base=0x10000, .index_range=4096,
       .index_size=indexed, .restart=1, .topology=AGX_PRIMITIVE_TRIANGLE_STRIP,
+      /* RC69: the template's native VS block; word 1 is replaced per record. */
+      .vs_state={0x4000002eu, 0x1111u, 0xdeadbeefu, 0x0808u, 0x2u, 0},
    };
    /* Reverse work-item order also proves the terminator has no race with slots. */
    for(unsigned i=limit+32;i-- > 0;) {
@@ -66,7 +68,9 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
    }
    for(unsigned i=0;i<enabled;++i) {
       uint32_t *s=(void *)((uint8_t *)out+i*slot);
-      assert(s[0]==0x40000004u && s[1]==p.pipeline_base+i*usc_stride);
+      assert(s[0]==p.vs_state[0] && s[1]==p.vs_state[1] &&
+             s[2]==p.pipeline_base+i*usc_stride && s[3]==p.vs_state[3] &&
+             s[4]==p.vs_state[4] && s[5]==p.vs_state[5]);
       uint64_t arg=p.arguments+(uint64_t)i*stride;
       uint32_t expected[8]={0};
       struct agx_draw d=indexed ?
@@ -74,8 +78,9 @@ static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
                                   agx_translate_index_size(indexed),true) :
          agx_draw_indirect(arg);
       uint32_t *end=agx_vdm_draw(expected,0,d,p.topology);
-      assert((end-expected)*4+8==slot);
-      assert(!memcmp(s+2,expected,slot-8));
+      assert((end-expected)*4+AGX_WIN32_STREAM_VS_STATE_WORDS*4==slot);
+      assert(!memcmp(s+AGX_WIN32_STREAM_VS_STATE_WORDS,expected,
+                     slot-AGX_WIN32_STREAM_VS_STATE_WORDS*4));
       uint8_t check[80];memcpy(check,tmpl,80);
       if(param_uniform!=UINT32_MAX) {
          struct agx_usc_builder b=agx_usc_builder(check+patch,8);

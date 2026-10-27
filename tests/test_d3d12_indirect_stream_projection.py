@@ -100,6 +100,16 @@ return 0;}
             self.assertIn('agx_win32_emit_indirect_stream(',body)
             self.assertIn('ctx->dirty |= AGX_DIRTY_VS;',body,
                           'generated USC selection must be invalidated for the next draw')
+            # RC69: the stream repeats the template's complete native VS
+            # block, captured right after agx_encode_state emits and pads it.
+            encode=function(state,'static uint8_t *\nagx_encode_state(')
+            vs_block=encode[encode.index('cfg.vertex_shader_word_0_present = true;'):]
+            vs_block=vs_block[:vs_block.index('ctx->windows_indirect_stream->vs_state_valid = true;')]
+            for needle in ('VDM_STATE_VERTEX_SHADER_WORD_0','VDM_STATE_VERTEX_SHADER_WORD_1',
+                           'VDM_STATE_VERTEX_OUTPUTS','VDM_STATE_VERTEX_UNKNOWN',
+                           'memset(out, 0, 4);\n      out += 4;',
+                           'out - sizeof(ctx->windows_indirect_stream->vs_state)'):
+                self.assertIn(needle,vs_block)
             usc=(out/'src/gallium/drivers/asahi/agx_win32_pipeline.inc').read_text()
             self.assertIn('params_offset = b.head - (uint8_t *)t.cpu;',usc)
             self.assertIn('usc_bytes = b.head - (uint8_t *)t.cpu;',usc)
