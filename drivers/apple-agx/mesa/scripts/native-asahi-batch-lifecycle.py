@@ -539,12 +539,29 @@ extern int AgxWin32AsahiDrawPhasesOn;
    struct drm_asahi_cmd_render render;
 #ifdef APPLE_AGX_GPUVA_WINSYS
    /* EXP1201 receipt-only: the kinds of batches submitted (framebuffer
-    * size, draws bucket, clear mask, depth), counted by text by the ICD. */
-   perf_debug_ctx(ctx, "submit %ux%u d%s c%x z%u", batch->key.width,
+    * size, draws bucket, clear mask, depth), counted by text by the ICD.
+    * rc76: the D3D12 receipt folds digits to '#' (EXP2000 could not tell a
+    * clear-only pass from a one-draw pass), so the draws bucket is a word
+    * (none, one, few 2-9, tens, many), the clear and load masks letters
+    * (Z depth, S stencil, a-h colour buffers 0-7; '-' none) and depth y/n. */
+   char clear_letters[11], load_letters[11];
+   for (unsigned m = 0; m < 2; ++m) {
+      const unsigned bits = m ? batch->load & ~batch->clear : batch->clear;
+      char *out = m ? load_letters : clear_letters;
+      unsigned n = 0;
+      if (bits & PIPE_CLEAR_DEPTH) out[n++] = 'Z';
+      if (bits & PIPE_CLEAR_STENCIL) out[n++] = 'S';
+      for (unsigned rt = 0; rt < PIPE_MAX_COLOR_BUFS; ++rt)
+         if (bits & (PIPE_CLEAR_COLOR0 << rt)) out[n++] = (char)('a' + rt);
+      if (!n) out[n++] = '-';
+      out[n] = 0;
+   }
+   perf_debug_ctx(ctx, "submit %ux%u d%s c%s l%s z%s", batch->key.width,
                   batch->key.height,
-                  !batch->draws ? "0" : batch->draws == 1 ? "1" :
-                  batch->draws < 10 ? "2-9" : batch->draws < 100 ? "10-99" : "100+",
-                  batch->clear, batch->key.zsbuf.texture != NULL);
+                  !batch->draws ? "none" : batch->draws == 1 ? "one" :
+                  batch->draws < 10 ? "few" : batch->draws < 100 ? "tens" : "many",
+                  clear_letters, load_letters,
+                  batch->key.zsbuf.texture != NULL ? "y" : "n");
 #endif
    agx_flush_render(ctx, batch, &render);
 #ifdef APPLE_AGX_GPUVA_WINSYS
