@@ -1518,6 +1518,9 @@ struct AgxD3d12PipelineState {
      * ~28 KB, which every PSO would otherwise carry. */
     AGX_D3D12_GRAPHICS_DESC owner_desc;
     AGX_D3D12_SO_DECL owner_so;
+    /* RC75: the root descriptors of the root signature the PSO is compiled
+     * for (its variants use the same) */
+    AGX_D3D12_ROOT_VIEWS root_views;
     struct AgxD3d12MinmaxVariant *minmax; /* kMinmaxVariants entries */
     UINT minmax_count;
 #endif
@@ -4951,7 +4954,37 @@ static VOID APIENTRY IASetIndexBuffer(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     list->index_size = list->index_heap ? size : 0u;
     if (!list->index_heap) ListError(list, E_INVALIDARG);
 }
-static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *pso) {
+/* RC75: the root CBVs and UAVs of a root signature, with the stages that
+ * see them (compute sees every parameter, as ResolveRoot with kAnyStage).
+ * D3D12 requires the bound root signature to match the PSO's, so the one
+ * bound at a PSO's first dispatch or draw describes all of them. */
+static void RootViews(const AgxD3d12RootSignature *root, AGX_D3D12_ROOT_VIEWS *out) {
+    memset(out, 0, sizeof(*out));
+    for (UINT i = 0; root && i < root->parameters && out->Count < AGX_D3D12_ROOT_VIEWS_MAX; ++i) {
+        const AgxD3d12RootParameter &p = root->parameter[i];
+        const bool cbv = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_CBV, uav = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_UAV;
+        if (!cbv && !uav) continue;
+        unsigned stages = 1u << AGX_D3D12_HEAP_CS;
+        switch (p.visibility) {
+        case D3D12DDI_SHADER_VISIBILITY_ALL:
+            stages |= 1u << AGX_D3D12_HEAP_VS | 1u << AGX_D3D12_HEAP_PS | 1u << AGX_D3D12_HEAP_GS |
+                      1u << AGX_D3D12_HEAP_HS | 1u << AGX_D3D12_HEAP_DS;
+            break;
+        case D3D12DDI_SHADER_VISIBILITY_VERTEX: stages |= 1u << AGX_D3D12_HEAP_VS; break;
+        case D3D12DDI_SHADER_VISIBILITY_HULL: stages |= 1u << AGX_D3D12_HEAP_HS; break;
+        case D3D12DDI_SHADER_VISIBILITY_DOMAIN: stages |= 1u << AGX_D3D12_HEAP_DS; break;
+        case D3D12DDI_SHADER_VISIBILITY_GEOMETRY: stages |= 1u << AGX_D3D12_HEAP_GS; break;
+        case D3D12DDI_SHADER_VISIBILITY_PIXEL: stages |= 1u << AGX_D3D12_HEAP_PS; break;
+        default: break;
+        }
+        auto &v = out->View[out->Count++];
+        v.Kind = cbv ? DXBC_BINDING_CBV : DXBC_BINDING_UAV;
+        v.Space = p.space;
+        v.Register = p.shader_register;
+        v.Stages = stages;
+    }
+}
+static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *pso, const AgxD3d12RootSignature *root) {
     AcquireSRWLockExclusive(&pso->compile_lock);
     if (pso->compiled != S_FALSE) {
         const HRESULT result = pso->compiled;
@@ -4961,6 +4994,8 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
     AGX_D3D12_OWNER *owner = EnsureOwner(device);
     AGX_D3D12_GRAPHICS_DESC &desc = pso->owner_desc; /* C65V: kept for the min/max variant */
     memset(&desc, 0, sizeof(desc));
+    RootViews(root, &pso->root_views);
+    desc.Root = &pso->root_views;
     desc.Vs = pso->vs_dwords ? pso->cs + pso->cs_dwords : nullptr;
     desc.Ps = pso->ps_dwords ? pso->cs + pso->cs_dwords + pso->vs_dwords : nullptr;
     desc.Gs = pso->gs_dwords ? pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords : nullptr;
@@ -5167,7 +5202,8 @@ static VOID APIENTRY SetGraphicsRootUnorderedAccessView(D3D12DDI_HCOMMANDLIST ha
     if (AgxD3d12CommandList *list = ListOf(handle)) SetRootBufferView(list, index, va, D3D12DDI_ROOT_PARAMETER_TYPE_UAV, true);
 }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso) {
+static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso, const AgxD3d12RootSignature *root) {
+    (void)root; /* unused by the prepared-NIR owner */
     AcquireSRWLockExclusive(&pso->compile_lock);
     if (pso->compiled != S_FALSE) {
         const HRESULT result = pso->compiled;
@@ -5201,7 +5237,9 @@ static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso
         }
     }
 #else
-    pso->compiled = owner ? AgxD3d12OwnerCreateCompute(owner, pso->cs, &pso->compute) : E_FAIL;
+    RootViews(root, &pso->root_views);
+    pso->compiled = owner ? AgxD3d12OwnerCreateComputeRoot(owner, pso->cs, 0u, NULL, &pso->root_views, &pso->compute)
+                          : E_FAIL;
 #endif
     const HRESULT result = pso->compiled;
     ReleaseSRWLockExclusive(&pso->compile_lock);
@@ -5251,7 +5289,8 @@ static void *MinmaxVariant(AGX_D3D12_OWNER *owner, AgxD3d12PipelineState *pso, c
         bool same;
         const unsigned flags = key.heap ? AGX_D3D12_SHADER_MINMAX : 0u;
         if (compute) {
-            hr = AgxD3d12OwnerCreateComputeFlags(owner, pso->cs, flags, key.slot[AGX_D3D12_HEAP_CS], &v->compute);
+            hr = AgxD3d12OwnerCreateComputeRoot(owner, pso->cs, flags, key.slot[AGX_D3D12_HEAP_CS], &pso->root_views,
+                                                &v->compute);
             same = SUCCEEDED(hr) && SameSlots(v->compute.Bindings, pso->compute.Bindings) &&
                    SameSlots(v->compute.SrvDimensions, pso->compute.SrvDimensions) &&
                    SameSlots(v->compute.UavDimensions, pso->compute.UavDimensions);
@@ -5722,7 +5761,7 @@ static void RecordDispatch(AgxD3d12CommandList *list, UINT x, UINT y, UINT z, co
     AgxD3d12Dispatch dispatch = {};
     UINT refusal = !pso || !pso->cs_dwords ? 1u : !root ? 2u : list->commands >= kListCommands ? 3u : 0u;
     /* C17: compilation produces the immutable namespace map used by ResolveRoot. */
-    if (!refusal && FAILED(CompileCompute(list->device, pso))) refusal = 7u;
+    if (!refusal && FAILED(CompileCompute(list->device, pso, root))) refusal = 7u;
     if (!refusal) refusal = ResolveRoot(list, root, list->compute_root_va, list->compute_root_dwords, kAnyStage, &dispatch);
     /* RC74: the 6th value names the compute shader (cs_tag) for a per-shader ranking */
     const UINT receipt[] = {refusal, x, y, z, root ? root->parameters : 0u, pso ? pso->cs_tag : 0u};
@@ -5767,7 +5806,7 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
                  : indexed && !list->index_heap ? 6u
                  : list->commands + (pso->gs_dwords ? 1u : 0u) + (pso->hs_dwords ? 2u : 0u) >= kListCommands ? 3u : 0u;
     AgxD3d12Dispatch vs_bind = {}, ps_bind = {};
-    if (!refusal && FAILED(CompileGraphics(list->device, pso))) refusal = 7u;
+    if (!refusal && FAILED(CompileGraphics(list->device, pso, list->graphics_root))) refusal = 7u;
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                                         D3D12DDI_SHADER_VISIBILITY_VERTEX, &vs_bind);
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,

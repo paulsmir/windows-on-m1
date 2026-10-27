@@ -99,6 +99,29 @@ HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *Owner, const UINT *Tokens, A
  * sampler the variant is for; slots with reduction 2/3 get the emulation */
 HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *Owner, const UINT *Tokens, unsigned Flags,
                                         const unsigned char *SlotMinmax, AGX_D3D12_COMPUTE *Compute);
+/* RC75: the root descriptors of the root signature a pipeline is compiled
+ * for. D3D12 root CBVs/SRVs/UAVs are bare GPU virtual addresses with no size
+ * (Resource Binding spec, "Using Descriptors Directly in the Root
+ * Arguments"): the shader's accesses through them are compiled without
+ * bounds checks (dxbc_nir_mark_root_views). Root SRVs are R32_UINT texel
+ * buffers here and are not listed. Stages: bit AGX_D3D12_HEAP_VS..CS per
+ * stage that sees the descriptor (compute sees every one). */
+#define AGX_D3D12_ROOT_VIEWS_MAX 64
+typedef struct AGX_D3D12_ROOT_VIEWS {
+  unsigned Count;
+  struct {
+    unsigned Kind; /* DXBC_BINDING_CBV or DXBC_BINDING_UAV */
+    unsigned Space, Register, Stages;
+  } View[AGX_D3D12_ROOT_VIEWS_MAX];
+} AGX_D3D12_ROOT_VIEWS;
+/* AgxD3d12OwnerCreateComputeFlags for a pipeline whose root signature has
+ * the root descriptors Root (NULL: none). APPLE_AGX_D3D12_ROOT_BOUNDS=1
+ * keeps the checks (read per compile). Receipt measure-d3d12-root-views
+ * {stage, CS hash low 32 bits, root CBV slots, root UAV slots, CBV slots,
+ * UAV slots, applied}. */
+HRESULT AgxD3d12OwnerCreateComputeRoot(AGX_D3D12_OWNER *Owner, const UINT *Tokens, unsigned Flags,
+                                       const unsigned char *SlotMinmax, const AGX_D3D12_ROOT_VIEWS *Root,
+                                       AGX_D3D12_COMPUTE *Compute);
 #if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
 /* Unwired prepared-compute boundary. Live caller-serialized owner/screen/context
  * and actual prepared object required. Memberwise-empty output; nonempty live
@@ -402,6 +425,8 @@ typedef struct {
   /* C65S: per stage (AGX_D3D12_HEAP_VS..DS) and sampler slot, the
    * dxbc_minmax_bits of the slot sampler the variant is for (0 = standard) */
   unsigned char SlotMinmax[5][AGX_D3D12_SAMPLER_SLOTS];
+  /* RC75: the pipeline's root descriptors (NULL: none), as for compute */
+  const struct AGX_D3D12_ROOT_VIEWS *Root;
 } AGX_D3D12_GRAPHICS_DESC;
 typedef struct {
   void *Vs, *Fs, *Blend, *DepthStencil, *Rasterizer;

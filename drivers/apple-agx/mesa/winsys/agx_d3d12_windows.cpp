@@ -1200,6 +1200,84 @@ static void wrap_slot_minmax(struct nir_shader *nir, mesa_shader_stage stage) {
   }
   if (row >= 0) (void)dxbc_minmax_wrap_slots(nir, t_slot_minmax[row]);
 }
+/* RC75: the root descriptors of the pipeline being compiled
+ * (AgxD3d12OwnerCreateComputeRoot, AGX_D3D12_GRAPHICS_DESC::Root) */
+static thread_local const AGX_D3D12_ROOT_VIEWS *t_root_views;
+static thread_local bool t_root_views_set;
+struct RootViewsScope {
+  const AGX_D3D12_ROOT_VIEWS *saved;
+  bool saved_set;
+  explicit RootViewsScope(const AGX_D3D12_ROOT_VIEWS *root) : saved(t_root_views), saved_set(t_root_views_set) {
+    t_root_views = root;
+    t_root_views_set = root != NULL;
+  }
+  ~RootViewsScope() {
+    t_root_views = saved;
+    t_root_views_set = saved_set;
+  }
+  RootViewsScope(const RootViewsScope &) = delete;
+  RootViewsScope &operator=(const RootViewsScope &) = delete;
+};
+static int root_view_stage(mesa_shader_stage stage) {
+  switch (stage) {
+  case MESA_SHADER_VERTEX: return AGX_D3D12_HEAP_VS;
+  case MESA_SHADER_FRAGMENT: return AGX_D3D12_HEAP_PS;
+  case MESA_SHADER_GEOMETRY: return AGX_D3D12_HEAP_GS;
+  case MESA_SHADER_TESS_CTRL: return AGX_D3D12_HEAP_HS;
+  case MESA_SHADER_TESS_EVAL: return AGX_D3D12_HEAP_DS;
+  case MESA_SHADER_COMPUTE: return AGX_D3D12_HEAP_CS;
+  default: return -1;
+  }
+}
+static bool root_view_of(const AGX_D3D12_ROOT_VIEWS *root, unsigned stage_bit, unsigned kind, unsigned space,
+                         unsigned reg) {
+  for (unsigned i = 0; root && i < root->Count && i < AGX_D3D12_ROOT_VIEWS_MAX; ++i)
+    if (root->View[i].Kind == kind && root->View[i].Space == space && root->View[i].Register == reg &&
+        (root->View[i].Stages & stage_bit))
+      return true;
+  return false;
+}
+/* RC75: a translated stage's CBV and UAV slots bound from root descriptors
+ * read and write without D3D bounds checks (dxbc_nir_mark_root_views).
+ * A slot comes from the stage's binding map (SM5.1/DXIL; heap ranges are
+ * descriptor tables), or for an identity map (SM5.0) is the register of
+ * space 0, as ResolveRoot binds them. The root signature must match the
+ * pipeline's (D3D12), so every dispatch or draw of it binds those slots
+ * from the same root descriptors. */
+static void mark_root_views(struct nir_shader *nir, mesa_shader_stage stage, const struct dxbc_binding_map *bindings,
+                            const UINT *tokens) {
+  const int heap_stage = root_view_stage(stage);
+  if (!nir || !t_root_views_set || heap_stage < 0) return;
+  const unsigned bit = 1u << heap_stage;
+  uint32_t root_cbv = 0, root_uav = 0, cbv = 0, uav = 0;
+  if (bindings && bindings->active) {
+    for (uint32_t i = 0; i < bindings->count && i < DXBC_BINDING_MAP_MAX; ++i) {
+      const struct dxbc_binding &b = bindings->bindings[i];
+      if ((b.flags & DXBC_BINDING_HEAP) || b.slot >= 32u ||
+          (b.kind != DXBC_BINDING_CBV && b.kind != DXBC_BINDING_UAV))
+        continue;
+      const bool cb = b.kind == DXBC_BINDING_CBV;
+      (cb ? cbv : uav) |= 1u << b.slot;
+      if (root_view_of(t_root_views, bit, b.kind, b.space, b.reg)) (cb ? root_cbv : root_uav) |= 1u << b.slot;
+    }
+  } else {
+    for (unsigned i = 0; t_root_views && i < t_root_views->Count && i < AGX_D3D12_ROOT_VIEWS_MAX; ++i) {
+      const auto &v = t_root_views->View[i];
+      if (v.Space || v.Register >= 32u || !(v.Stages & bit)) continue;
+      if (v.Kind == DXBC_BINDING_CBV) root_cbv |= 1u << v.Register;
+      if (v.Kind == DXBC_BINDING_UAV) root_uav |= 1u << v.Register;
+    }
+  }
+  root_cbv &= (1u << AGX_D3D12_CBV_SLOTS) - 1u;
+  root_uav &= (1u << AGX_D3D12_UAV_SLOTS) - 1u;
+  char keep[2] = {};
+  const bool checked = GetEnvironmentVariableA("APPLE_AGX_D3D12_ROOT_BOUNDS", keep, sizeof(keep)) == 1 && keep[0] == '1';
+  const bool applied = !checked && (root_cbv || root_uav) && dxbc_nir_mark_root_views(nir, root_cbv, root_uav);
+  const ShaderStatsTag tag = shader_stats_tag(tokens);
+  const UINT values[] = {static_cast<UINT>(stage), static_cast<UINT>(tag.Hash), root_cbv, root_uav, cbv, uav,
+                         applied ? 1u : checked ? 2u : 0u};
+  AdmissionUmdDiagnostic("measure-d3d12-root-views", S_OK, values, ARRAYSIZE(values));
+}
 /* APPLE_AGX_D3D12_SHADER_DUMP_DIR retains failure captures (reason 1..4).
  * RC39: also set APPLE_AGX_D3D12_SHADER_DUMP_ALL=1 to capture every translation
  * input (reason 0), including accepted VS/PS/CS programs for wrong-image
@@ -1308,6 +1386,13 @@ extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT
   OwnerLock lock(owner);
   return AgxD3d12OwnerCreateComputeFlags(owner, tokens, 0u, NULL, compute);
 }
+extern "C" HRESULT AgxD3d12OwnerCreateComputeRoot(AGX_D3D12_OWNER *owner, const UINT *tokens, unsigned flags,
+                                                  const unsigned char *slot_minmax, const AGX_D3D12_ROOT_VIEWS *root,
+                                                  AGX_D3D12_COMPUTE *compute) {
+  OwnerLock lock(owner);
+  RootViewsScope roots(root);
+  return AgxD3d12OwnerCreateComputeFlags(owner, tokens, flags, slot_minmax, compute);
+}
 extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *owner, const UINT *tokens, unsigned flags,
                                                    const unsigned char *slot_minmax, AGX_D3D12_COMPUTE *compute) {
   OwnerLock lock(owner);
@@ -1319,6 +1404,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *owner, const
   struct nir_shader *nir = translate_shader(tokens, MESA_SHADER_COMPUTE, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
                                             &compute->Bindings, 0u, 0u, NULL, &error);
   wrap_slot_minmax(nir, MESA_SHADER_COMPUTE);
+  mark_root_views(nir, MESA_SHADER_COMPUTE, &compute->Bindings, tokens);
   dump_shader_nir(tokens, MESA_SHADER_COMPUTE, nir);
   if (!nir) {
     receipt("measure-d3d12-compute", E_NOTIMPL, 0u, error.opcode, error.offset);
@@ -2961,6 +3047,7 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   struct nir_shader *nir = translate_shader(tokens, stage, pipe->screen->nir_options[stage], bindings, passthrough_registers,
                                             passthrough_positions, xfb, &error);
   wrap_slot_minmax(nir, stage);
+  mark_root_views(nir, stage, bindings, tokens);
   dump_shader_nir(tokens, stage, nir);
   receipt("measure-d3d12-graphics-shader", nir ? S_OK : E_NOTIMPL, static_cast<UINT>(stage), error.opcode, error.offset);
   if (!nir) {
@@ -3090,6 +3177,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   if (!owner || !owner->Context || !desc || !desc->Vs || !graphics || desc->NumElements > AGX_D3D12_MAX_ELEMENTS)
     return E_INVALIDARG;
   ShaderMinmaxScope minmax(desc->Flags, desc->SlotMinmax, false);
+  RootViewsScope roots(desc->Root);
   memset(graphics, 0, sizeof(*graphics));
   {
     /* RC74 receipt-only: the stages' hashes for their statistics */
