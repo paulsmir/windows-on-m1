@@ -678,6 +678,51 @@ static BOOLEAN AdmissionG3NativeStagingGroup(ADMISSION_G3_PROCESS *process,
     AdmissionRecordG3NativePteRefusal(process->State->Adapter, r);
   return FALSE;
 }
+
+/* RC61 (EXP1983, Wom1G3NativePteRefusal reason 4; Wom1G4OmittedLeaves events
+ * 35-37): when one VidMm mapping of a native-staging allocation crosses a
+ * 32 MiB leaf table, the update for the second table (StartIndex 0,
+ * FirstPteVirtualAddress = table base) arrives with AllocationOffsetInBytes
+ * still 0, while its PTEs carry the right ring pages: 0x96cfa0000 is ring
+ * offset 0x6020000 = BindingOffset 0x4090000 + 0x1f90000, the VA distance
+ * 0x1106000000 - 0x1104070000 from the UMD's GPU VA. The UMD pointer and the
+ * KMD binding agree; only AllocationOffsetInBytes + i * step is not this
+ * update's frame. Anchor the frame of the whole update on its first system
+ * page: if that page is not the authenticated page at VidMm's offset but is
+ * one of this binding's own slice pages, shift every valid PTE of the update
+ * by the same delta. Every group is then still authenticated page by page
+ * (AdmissionG3NativeStagingGroup), so a native leaf can only map this
+ * allocation's own slice in the order VidMm placed it; a dummy, foreign or
+ * other-slice anchor changes nothing. The logical offsets feed the readiness
+ * identity check (pte->AllocationOffset == va - GpuVa), so they are rebased
+ * too. Caller holds the G3 lock; candidate is not yet published. */
+static VOID AdmissionG3NativeStagingRebase(PVOID binding,
+    APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ptes, UINT first, UINT count) {
+  const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *anchor = NULL;
+  ULONGLONG located, delta;
+  BOOLEAN up;
+  UINT i;
+  for (i = first; i < first + count && anchor == NULL; ++i)
+    if ((ptes[i].Flags & APPLE_AGX_GPUVA_G3_VALID) && ptes[i].SegmentId == 0u)
+      anchor = &ptes[i];
+  if (anchor == NULL ||
+      AdmissionNativeStagingPage(binding, anchor->AllocationOffset,
+                                 anchor->GuestIpa) ||
+      !AdmissionNativeStagingLocate(binding, anchor->GuestIpa, &located))
+    return;
+  up = located >= anchor->AllocationOffset;
+  delta = up ? located - anchor->AllocationOffset :
+               anchor->AllocationOffset - located;
+  for (i = first; i < first + count; ++i)
+    if ((ptes[i].Flags & APPLE_AGX_GPUVA_G3_VALID) &&
+        (up ? ptes[i].AllocationOffset > MAXULONGLONG - delta :
+              ptes[i].AllocationOffset < delta))
+      return; /* no consistent frame: leave VidMm's offsets, groups refuse */
+  for (i = first; i < first + count; ++i)
+    if (ptes[i].Flags & APPLE_AGX_GPUVA_G3_VALID)
+      ptes[i].AllocationOffset = up ? ptes[i].AllocationOffset + delta :
+                                      ptes[i].AllocationOffset - delta;
+}
 #endif
 
 static NTSTATUS AdmissionG3UpdateLeaf(
@@ -782,6 +827,10 @@ static NTSTATUS AdmissionG3UpdateLeaf(
       out->AllocationOffset = allocation_offset + (ULONGLONG)j * 0x1000ULL;
     }
   }
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (native_binding)
+    AdmissionG3NativeStagingRebase(native_binding, candidate, first, count);
+#endif
   if (process->Graph.MappingGeneration > MAXULONGLONG - (2ULL * groups + 1ULL)) {
     status = STATUS_INTEGER_OVERFLOW;
     goto Done;

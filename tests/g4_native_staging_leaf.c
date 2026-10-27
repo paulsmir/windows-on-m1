@@ -298,28 +298,160 @@ static void repeated_dummy_page(void) {
   EXPECT(r->RefusedGroups==8 && r->Reason==ADMISSION_NATIVE_PTE_FOREIGN, "first refusal kept");
 }
 
-/* Ring pages one group away from their allocation offset: geometrically a
- * complete aligned quartet, but not this allocation's authenticated bytes. */
-static void misplaced_ring_pages(void) {
+/* RC61: VidMm's AllocationOffsetInBytes is not this update's frame (here
+ * 0x4000 for pages that are allocation offsets 0..27). The ring pages
+ * themselves anchor the frame; every group is still authenticated. */
+static void shifted_frame(void) {
   reset();
   map_exact(0,28);
   update.AllocationOffsetInBytes=0x4000;
   NTSTATUS status=leaf();
+  EXPECT(status==STATUS_SUCCESS, "shifted status");
+  if (status!=STATUS_SUCCESS) return;
+  EXPECT(native_leaves(0,7)==7, "shifted frame publishes every group");
+  EXPECT(state.NativePteRefusal.Version==0, "shifted frame no refusal");
+  for (UINT i=0;i<28;++i)
+    EXPECT(shadow.LogicalPtes[i].AllocationOffset==(ULONGLONG)i*0x1000, "shifted logical offset");
+}
+
+/* Ring pages out of order within the slice: a consistent frame cannot make
+ * them this allocation's bytes at their VA. Only the swapped groups stay
+ * logical-only. */
+static void misplaced_ring_pages(void) {
+  reset();
+  map_exact(0,28);
+  for (UINT i=0;i<4;++i) {
+    ULONGLONG t=ptes[4+i].PageAddress;
+    ptes[4+i].PageAddress=ptes[8+i].PageAddress; ptes[8+i].PageAddress=t;
+  }
+  NTSTATUS status=leaf();
   EXPECT(status==STATUS_SUCCESS, "misplaced status");
   if (status!=STATUS_SUCCESS) return;
-  EXPECT(native_leaves(0,7)==0, "misplaced publishes no native leaf");
+  EXPECT(native_leaves(0,1)==1 && native_leaves(3,4)==4, "misplaced others native");
+  EXPECT(process.Graph.Leaves[1].AuxIpa==0 && process.Graph.Leaves[2].AuxIpa==0,
+         "misplaced groups omitted");
   const ADMISSION_NATIVE_PTE_REFUSAL *r=&state.NativePteRefusal;
-  EXPECT(r->Reason==ADMISSION_NATIVE_PTE_RING && r->PageIndex==0, "misplaced reason");
+  EXPECT(r->Reason==ADMISSION_NATIVE_PTE_RING && r->PageIndex==4, "misplaced reason");
   EXPECT(r->PageAllocationOffset==0x4000 && r->ExpectedIpa==ring_page(4)<<12, "misplaced expected");
-  EXPECT(r->RingOffset==0x10000, "misplaced ring offset names the actual page");
-  EXPECT(r->RefusedGroups==7, "misplaced totals");
-  /* Offsets past the binding: range refusal, still not a failure. */
+  EXPECT(r->RingOffset==0x18000, "misplaced ring offset names the actual page");
+  EXPECT(r->RefusedGroups==2, "misplaced totals");
+  /* Ring pages outside this binding's slice, at an offset past the binding:
+   * range refusal, still not a failure, and no frame shift into the slice. */
   reset();
   map_exact(0,4);
   update.AllocationOffsetInBytes=0x20000;
+  for (UINT i=0;i<4;++i) ptes[i].PageAddress=ring_pfn[48+i];
   EXPECT(leaf()==STATUS_SUCCESS, "range status");
+  EXPECT(process.Graph.Leaves[0].AuxIpa==0, "range publishes no leaf");
   EXPECT(state.NativePteRefusal.Reason==ADMISSION_NATIVE_PTE_RANGE &&
          state.NativePteRefusal.ExpectedIpa==ADMISSION_NATIVE_PTE_NONE, "range reason");
+  /* Another slice of the same ring at a valid offset: never this slice. */
+  reset();
+  map_exact(0,4);
+  for (UINT i=0;i<4;++i) ptes[i].PageAddress=ring_pfn[48+i];
+  EXPECT(leaf()==STATUS_SUCCESS, "other-slice status");
+  EXPECT(process.Graph.Leaves[0].AuxIpa==0, "other-slice publishes no leaf");
+  EXPECT(state.NativePteRefusal.Reason==ADMISSION_NATIVE_PTE_RING &&
+         state.NativePteRefusal.RingOffset==0x30000, "other-slice reason");
+}
+
+/* RC61 (EXP1983): several arenas, several slices per arena, each mapped by
+ * VidMm at a GPU VA that crosses a 32 MiB leaf table. The first table's
+ * update carries AllocationOffsetInBytes 0 at StartIndex 8192-k; the second
+ * table's update starts at index 0 with AllocationOffsetInBytes still 0
+ * (Wom1G3NativePteRefusal: FirstPteVirtualAddress 0x1106000000,
+ * AllocationOffsetInBytes 0, PageIpa = ring page BindingOffset+0x1f90000).
+ * Compare every native leaf and logical offset against the PFNs of the
+ * registered pointer (ring UserVa + binding Offset + VA offset). */
+#define ARENAS 3u
+static PFN_NUMBER arena_pfn[ARENAS][64];
+static MDL arena_mdl[ARENAS];
+static NATIVE_RING arena[ARENAS];
+static const struct { UINT Ring; ULONGLONG Offset, Bytes; UINT Head; } slices[] = {
+  {0u, 0x00000, 0x20000, 16u}, {0u, 0x20000, 0x20000, 16u},
+  {1u, 0x10000, 0x30000, 32u}, {2u, 0x30000, 0x10000, 4u},
+  {2u, 0x00000, 0x30000, 44u},
+};
+
+static ULONGLONG registered_page(UINT s, UINT allocation_page) {
+  return arena_pfn[slices[s].Ring][(slices[s].Offset >> 12) + allocation_page];
+}
+
+/* One UpdatePageTable of allocation pages [page, page+count) at table index
+ * start, with VidMm's AllocationOffsetInBytes as observed (0). */
+static NTSTATUS map_table(ADMISSION_ALLOCATION_HANDLE *owner,
+    UINT source_slice, UINT start, UINT page, UINT count, ULONGLONG table_va) {
+  memset(ptes,0,sizeof(ptes));
+  update.hAllocation=owner;
+  update.Flags.Repeat=0; update.Flags.Use64KBPages=0; update.Flags.InitialUpdate=1;
+  update.StartIndex=start; update.NumPageTableEntries=count;
+  update.FirstPteVirtualAddress=table_va+(ULONGLONG)start*0x1000;
+  update.AllocationOffsetInBytes=0;
+  for (UINT i=0;i<count;++i) {
+    ptes[i].Valid=1;
+    ptes[i].PageAddress=registered_page(source_slice,page+i);
+  }
+  return leaf();
+}
+
+static void continuation_frames(void) {
+  static NATIVE_BINDING bindings[sizeof(slices)/sizeof(slices[0])];
+  static ADMISSION_ALLOCATION_HANDLE owners[sizeof(slices)/sizeof(slices[0])];
+  for (UINT a=0;a<ARENAS;++a) {
+    /* Distinct, physically unordered 64 KiB chunks per arena. */
+    static const PFN_NUMBER base[ARENAS][4]={
+      {0xa0030,0xa0000,0xa0020,0xa0010},{0xb0000,0xb0070,0xb0040,0xb0010},
+      {0xc0050,0xc0020,0xc0000,0xc0090}};
+    for (UINT c=0;c<4;++c) for (UINT i=0;i<16;++i) arena_pfn[a][c*16+i]=base[a][c]+i;
+    arena_mdl[a].Pfn=arena_pfn[a];
+    arena[a].Mdl=&arena_mdl[a]; arena[a].Bytes=0x40000;
+  }
+  for (UINT s=0;s<sizeof(slices)/sizeof(slices[0]);++s) {
+    bindings[s]=(NATIVE_BINDING){&arena[slices[s].Ring],slices[s].Offset,
+                                 slices[s].Bytes,NATIVE_BINDING_MAGIC};
+    owners[s].Object.Magic=ADMISSION_ALLOCATION_OBJECT_MAGIC;
+    owners[s].Object.Description.Size=slices[s].Bytes;
+    owners[s].NativeStagingBinding=&bindings[s];
+  }
+  for (UINT s=0;s<sizeof(slices)/sizeof(slices[0]);++s) {
+    UINT pages=(UINT)(slices[s].Bytes>>12), head=slices[s].Head, tail=pages-head;
+    /* First table: allocation pages [0, head) at the end of the table. */
+    reset();
+    EXPECT(map_table(&owners[s],s,8192u-head,0,head,0x1104000000ULL)==STATUS_SUCCESS,
+           "continuation first status");
+    for (UINT g=0;g<head/4u;++g)
+      EXPECT(process.Graph.Leaves[(8192u-head)/4u+g].AuxIpa==registered_page(s,g*4u)<<12,
+             "continuation first native");
+    EXPECT(state.NativePteRefusal.Version==0, "continuation first no refusal");
+    /* Second table: pages [head, pages) from index 0, offset still 0. */
+    reset();
+    NTSTATUS status=map_table(&owners[s],s,0,head,tail,0x1106000000ULL);
+    EXPECT(status==STATUS_SUCCESS, "continuation second status");
+    if (status!=STATUS_SUCCESS) continue;
+    for (UINT g=0;g<tail/4u;++g)
+      EXPECT(process.Graph.Leaves[g].AuxIpa==registered_page(s,head+g*4u)<<12,
+             "continuation native");
+    for (UINT i=0;i<tail;++i) {
+      EXPECT(shadow.LogicalPtes[i].AllocationOffset==(ULONGLONG)(head+i)*0x1000,
+             "continuation logical offset");
+      EXPECT(shadow.ResidentPtes[i].NativeIpa==registered_page(s,head+i)<<12,
+             "continuation native identity");
+    }
+    EXPECT(state.NativePteRefusal.Version==0, "continuation no refusal");
+  }
+  /* pSystemMem of another arena, or of another slice of the same arena, is
+   * never this allocation's backing, whatever its frame. */
+  reset();
+  EXPECT(map_table(&owners[0],2,0,0,16,0x1106000000ULL)==STATUS_SUCCESS,
+         "foreign-arena status");
+  for (UINT g=0;g<4;++g) EXPECT(process.Graph.Leaves[g].AuxIpa==0, "foreign-arena no leaf");
+  EXPECT(state.NativePteRefusal.Reason==ADMISSION_NATIVE_PTE_FOREIGN, "foreign-arena reason");
+  reset();
+  EXPECT(map_table(&owners[0],1,0,0,16,0x1106000000ULL)==STATUS_SUCCESS,
+         "other-slice-arena status");
+  for (UINT g=0;g<4;++g) EXPECT(process.Graph.Leaves[g].AuxIpa==0, "other-slice-arena no leaf");
+  EXPECT(state.NativePteRefusal.Reason==ADMISSION_NATIVE_PTE_RING &&
+         state.NativePteRefusal.RingOffset==0x20000, "other-slice-arena reason");
 }
 
 /* One foreign PFN omits only its own group. */
@@ -384,7 +516,9 @@ int main(void) {
   ordinary_owner=native_owner; ordinary_owner.NativeStagingBinding=NULL;
   exact_mappings();
   repeated_dummy_page();
+  shifted_frame();
   misplaced_ring_pages();
+  continuation_frames();
   one_foreign_page();
   wrong_segment();
   other_owners();

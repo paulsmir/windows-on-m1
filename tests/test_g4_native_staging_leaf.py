@@ -17,6 +17,19 @@ and the actual AdmissionNativeStagingPage/Describe with a host MDL:
 - ordinary allocations and opaque handles keep the existing rule.
 The RED case runs the pre-RC60 UpdateLeaf (ff8a6872) on the same input and
 requires it to return a failure for the legal repeated-dummy update.
+
+RC61 (EXP1983, Wom1G3NativePteRefusal reason 4): one VidMm mapping of a
+32 MiB native-staging slice crossed a 32 MiB leaf table. The second table's
+update (FirstPteVirtualAddress 0x1106000000, StartIndex 0) carried
+AllocationOffsetInBytes 0 while its PTEs held the correct ring pages
+(ring offset 0x6020000 = BindingOffset 0x4090000 + 0x1f90000, the VA offset);
+the KMD derived offset 0 and refused every group, so the readiness proof
+returned TailShort and the device was removed. Several arenas and slices are
+mapped across a table boundary with that VidMm shape; every native leaf and
+logical offset must equal the PFN of the registered pointer (ring UserVa +
+binding Offset + VA offset), and pages of another arena or another slice
+must stay unpublished. The RC61 RED case runs the RC60 UpdateLeaf (c48591a4)
+and requires the continuation and shifted-frame cases to fail.
 """
 from pathlib import Path
 import os
@@ -32,10 +45,12 @@ SHARED = ROOT / "drivers/apple-agx/shared"
 RENDER = ROOT / "drivers/apple-agx/render-admission"
 PAGING_PATH = "drivers/apple-agx/render-admission/src/gpuva_g3_paging_windows.c"
 BASE = "ff8a6872"
+RC60 = "c48591a4"  # last UpdateLeaf before the RC61 frame anchor
 
 
 def native_types(source):
     magic = re.search(r"(?m)^#define NATIVE_BINDING_MAGIC .*$", source).group(0)
+    magic += "\n" + re.search(r"(?m)^#define NATIVE_RING_CHUNK .*$", source).group(0)
     start = source.index("typedef struct _NATIVE_RING {")
     end = source.index("} NATIVE_BINDING;") + len("} NATIVE_BINDING;")
     return magic + "\n" + source[start:end] + "\n"
@@ -56,10 +71,12 @@ class NativeStagingLeaf(unittest.TestCase):
             (d / "native_types.inc").write_text(native_types(native))
             (d / "native.inc").write_text("\n".join(
                 body(native, n) for n in ("AdmissionNativeStagingPage",
+                                          "AdmissionNativeStagingLocate",
                                           "AdmissionNativeStagingDescribe")))
             names = ["AdmissionG3RecordOmitted", "AdmissionG3RecordUnmapOwners"]
             names += [n for n in ("AdmissionG3NativeStagingBinding",
-                                  "AdmissionG3NativeStagingGroup")
+                                  "AdmissionG3NativeStagingGroup",
+                                  "AdmissionG3NativeStagingRebase")
                       if re.search(r"\b" + n + r"\s*\([^;]*\)\s*\{", paging)]
             names.append("AdmissionG3UpdateLeaf")
             (d / "leaf.inc").write_text("\n".join(body(paging, n) for n in names))
@@ -104,6 +121,21 @@ class NativeStagingLeaf(unittest.TestCase):
         self.assertIn("FAIL repeat-dummy status", run.stdout)
         self.assertIn("FAIL misplaced status", run.stdout)
         self.assertIn("FAIL segment status", run.stdout)
+
+    def test_red_rc60_refuses_continuation_frame(self):
+        try:
+            paging = subprocess.check_output(["git", "show", f"{RC60}:{PAGING_PATH}"],
+                                             cwd=ROOT, text=True, stderr=subprocess.DEVNULL)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            self.skipTest(f"base revision {RC60} is not available")
+        run = self.build_and_run(paging)
+        self.assertNotEqual(run.returncode, 0, run.stdout)
+        self.assertIn("FAIL continuation native", run.stdout)
+        self.assertIn("FAIL continuation logical offset", run.stdout)
+        self.assertIn("FAIL shifted frame publishes every group", run.stdout)
+        # RC60 containment itself is unchanged: no update fails.
+        self.assertNotIn("status", "".join(
+            line for line in run.stdout.splitlines() if line.startswith("FAIL")))
 
 
 if __name__ == "__main__":
