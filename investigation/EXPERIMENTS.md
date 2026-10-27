@@ -64995,3 +64995,15 @@ EXP2000 HARDWARE ACTUAL (2026-10-27): **PASS, small gain**.
 - The memory-wait hypothesis for the heavy kernels is mostly refuted.
 - measure-d3d12-shader-stats is absent in refusals-only mode; rc75 makes it available.
 - Verdict: rc74 60dd76d8 and 7f8659df validated (small gain); 271bbe3b, 7abe0c1b and 7817793d validated as tooling.
+
+EXP2001 HARDWARE BEFORE 2026-10-27T20:49:23Z:
+- WHY: the user asked for varied runs compared with the leaderboard. The hardware is otherwise idle while rc75 runs offline.
+  - FHD 200k is the site default, never run here since EXP1977 (OOM era).
+  - FHD 50k is the setting where the user's ≥9000 target matches native.
+- ATOMIC CONTRACT: none; measurement.
+- Expected: both complete; FHD 200k loads with unified memory (rc53); no removal.
+- Failure criteria: OOM, removal.
+- Recovery: rec2001h.
+- Hashes: sys 0865a3d1927d, UmdArm64 e6a3f19ccea5, UmdX64 063788ed3bbd, Umd32 609dcc33e29d; manifest cd41c1167add, hardware-manifest db135456bb46; probe2001.sh f0099561ed15 (PROBE_LINT_OK); visible recovery rec2001h 4a1a9d6df8c087ad; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2001h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2001-leaderboard2/run2001.sh.
