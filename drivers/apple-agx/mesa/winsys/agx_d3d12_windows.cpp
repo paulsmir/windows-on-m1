@@ -167,8 +167,28 @@ extern "C" void AgxD3d12OwnerMeasureHeapStaging(AGX_D3D12_OWNER *owner, BOOL beg
       static_cast<UINT>(runtime->HeapStagingUploadBytes), static_cast<UINT>(runtime->HeapStagingUploadBytes >> 32),
       static_cast<UINT>(runtime->HeapStagingDownloadBytes), static_cast<UINT>(runtime->HeapStagingDownloadBytes >> 32)};
     AdmissionUmdDiagnostic("measure-d3d12-heap-staging", S_OK, values, 7u);
+    /* RC64 measure-copy-escape-class {1, 12 x (count << 20 | us) for query,
+     * upload, download x slot <=64 KiB, <=1 MiB, <=16 MiB, larger, the same
+     * for escapes outside a slot transfer, total count, total us}. Count and
+     * us saturate at 12 and 20 bits; the totals at 32 bits. */
+    UINT classes[16] = {1u};
+    unsigned long long count = 0, micros = 0;
+    for (UINT i = 0; i < 13u; ++i) {
+      const UINT n = runtime->CopyEscapeCount[i] < 0xfffu ? runtime->CopyEscapeCount[i] : 0xfffu;
+      const unsigned long long us = runtime->CopyEscapeMicros[i];
+      classes[1u + i] = (n << 20) | static_cast<UINT>(us < 0xfffffull ? us : 0xfffffull);
+      count += runtime->CopyEscapeCount[i];
+      micros += us;
+    }
+    classes[14] = static_cast<UINT>(count < 0xffffffffull ? count : 0xffffffffull);
+    classes[15] = static_cast<UINT>(micros < 0xffffffffull ? micros : 0xffffffffull);
+    if (count) AdmissionUmdDiagnostic("measure-copy-escape-class", S_OK, classes, 16u);
   }
   runtime->HeapStagingDirtyBytes = runtime->HeapStagingUploadBytes = runtime->HeapStagingDownloadBytes = 0;
+  for (UINT i = 0; i < 13u; ++i) {
+    runtime->CopyEscapeCount[i] = 0u;
+    runtime->CopyEscapeMicros[i] = 0ull;
+  }
 #else
   (void)owner; (void)begin;
 #endif

@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class HeapStagingReceipt(unittest.TestCase):
     def test_execute_measurement_covers_intermediate_submissions(self):
-        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Dirty-byte receipts must count the complete Execute, retain 64-bit values and reset between Executes instead of leaking previous Map traffic."""
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Dirty-byte receipts must count the complete Execute, retain 64-bit values and reset between Executes instead of leaking previous Map traffic. RC64: copy-escape class counters must reset the same way and saturate without carrying a count into the microsecond field."""
         from test_umd_deallocated_slot_no_evict import function as extract
         owner=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         ddi=(ROOT/'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp').read_text()
@@ -25,10 +25,11 @@ class HeapStagingReceipt(unittest.TestCase):
 #define APPLE_AGX_GPUVA_WINSYS 1
 #define S_OK 0
 using UINT=unsigned;using BOOL=int;
-struct AGX_D3D12_OWNER {struct {bool HeapStaging;uint64_t HeapStagingDirtyBytes,HeapStagingUploadBytes,HeapStagingDownloadBytes;} Runtime;};
+struct AGX_D3D12_OWNER {struct {bool HeapStaging;uint64_t HeapStagingDirtyBytes,HeapStagingUploadBytes,HeapStagingDownloadBytes;UINT CopyEscapeCount[13];uint64_t CopyEscapeMicros[13];} Runtime;};
 struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER*){}};
-static UINT words[7];static unsigned receipts;
+static UINT words[7],classes[16];static unsigned receipts,class_receipts;
 static void AdmissionUmdDiagnostic(const char *name,int,const UINT *v,UINT n) {
+ if(!strcmp(name,"measure-copy-escape-class")) {assert(n==16 && receipts);++class_receipts;memcpy(classes,v,sizeof(classes));return;}
  assert(!strcmp(name,"measure-d3d12-heap-staging") && n==7);++receipts;memcpy(words,v,sizeof(words));
 }
 @@BODY@@
@@ -41,6 +42,17 @@ int main() {
  AgxD3d12OwnerMeasureHeapStaging(&o,0);
  assert(receipts==1 && words[0]==1 && words[1]==4 && words[2]==3 && words[3]==6 && words[4]==5 && words[5]==8 && words[6]==7);
  assert(!o.Runtime.HeapStagingDirtyBytes && !o.Runtime.HeapStagingUploadBytes && !o.Runtime.HeapStagingDownloadBytes);
+ /* RC64: no escapes, no class row; Map-time escapes before Execute reset. */
+ assert(!class_receipts);
+ o.Runtime.CopyEscapeCount[5]=9;AgxD3d12OwnerMeasureHeapStaging(&o,1);assert(!o.Runtime.CopyEscapeCount[5]);
+ o.Runtime.CopyEscapeCount[0]=3;o.Runtime.CopyEscapeMicros[0]=210;      /* query, <=64 KiB */
+ o.Runtime.CopyEscapeCount[5]=5000;o.Runtime.CopyEscapeMicros[5]=(1ull<<21); /* upload, <=1 MiB */
+ o.Runtime.CopyEscapeCount[12]=1;o.Runtime.CopyEscapeMicros[12]=(5ull<<32);  /* outside a slot */
+ AgxD3d12OwnerMeasureHeapStaging(&o,0);
+ assert(class_receipts==1 && classes[0]==1);
+ assert(classes[1]==((3u<<20)|210u) && classes[6]==((0xfffu<<20)|0xfffffu) && classes[13]==((1u<<20)|0xfffffu));
+ assert(classes[2]==0 && classes[14]==5004u && classes[15]==0xffffffffu);
+ for(unsigned i=0;i<13;++i) assert(!o.Runtime.CopyEscapeCount[i] && !o.Runtime.CopyEscapeMicros[i]);
 }
 '''.replace('@@BODY@@',body)
         with tempfile.TemporaryDirectory() as tmp:

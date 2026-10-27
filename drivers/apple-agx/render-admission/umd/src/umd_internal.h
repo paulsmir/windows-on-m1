@@ -262,6 +262,13 @@ typedef struct _ADMISSION_UMD_DEVICE {
   ADMISSION_UMD_NATIVE_ARENA NativeStaging[ADMISSION_UMD_NATIVE_ARENAS];
 #endif
   ULONGLONG HeapStagingDirtyBytes, HeapStagingUploadBytes, HeapStagingDownloadBytes;
+  /* RC64: per-Execute copy escapes by operation (query, upload, download) x
+   * the transferred slot's size class (<=64 KiB, <=1 MiB, <=16 MiB, larger);
+   * index 12 counts escapes outside transfer_slot. CopyEscapeClass is
+   * 1 + class while transfer_slot runs, else 0. Measurement only. */
+  UINT CopyEscapeClass;
+  UINT CopyEscapeCount[13];
+  ULONGLONG CopyEscapeMicros[13];
 #endif
   APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;

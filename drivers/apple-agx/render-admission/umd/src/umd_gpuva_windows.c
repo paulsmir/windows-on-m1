@@ -890,6 +890,30 @@ static LONGLONG exp1016_now(void) {
 #define EXP1016_NOTE(kind,bytes,name) do {} while(0)
 #endif
 
+/* RC64 (EXP1985): which slots still pay copy escapes, per Execute. The
+ * wait profile gives only the site total (draw.copy_escape 29-37 ms). */
+static UINT copy_escape_size_class(ULONGLONG bytes) {
+  return bytes <= 65536ULL ? 0u : bytes <= ADMISSION_UMD_NATIVE_SMALL_SLICE ? 1u :
+         bytes <= ADMISSION_UMD_NATIVE_SLICE_LIMIT ? 2u : 3u;
+}
+static void copy_escape_account(ADMISSION_UMD_DEVICE *device, UINT operation,
+                                ULONGLONG ticks) {
+  static volatile LONG64 frequency;
+  LONG64 hz = frequency;
+  if (!hz) {
+    LARGE_INTEGER value = {};
+    (void)QueryPerformanceFrequency(&value);
+    hz = value.QuadPart > 0 ? value.QuadPart : 1;
+    frequency = hz;
+  }
+  const UINT index = device->CopyEscapeClass && device->CopyEscapeClass <= 4u &&
+      operation <= APPLE_AGX_G3_COPY_DOWNLOAD ?
+      operation * 4u + device->CopyEscapeClass - 1u : 12u;
+  if (device->CopyEscapeCount[index] != ~0u) ++device->CopyEscapeCount[index];
+  device->CopyEscapeMicros[index] += ticks / (ULONGLONG)hz * 1000000ULL +
+      ticks % (ULONGLONG)hz * 1000000ULL / (ULONGLONG)hz;
+}
+
 static int copy_escape(ADMISSION_UMD_DEVICE *device,
                         APPLE_AGX_G3_COPY_REQUEST *payload) {
   D3DDDICB_ESCAPE request={};
@@ -904,10 +928,15 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
   request.Flags.Value=0;
   request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
   EXP1016_START(escape_start);
+  LARGE_INTEGER class_start = {}, class_end = {};
+  (void)QueryPerformanceCounter(&class_start);
   unsigned wait_pfnEscapeCb_2=AdmissionUmdWaitBegin(AgxWaitCopyEscape);
   HRESULT status = device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle,&request);
   AdmissionUmdWaitEnd(wait_pfnEscapeCb_2);
+  (void)QueryPerformanceCounter(&class_end);
+  copy_escape_account(device, payload->Operation,
+                      (ULONGLONG)(class_end.QuadPart - class_start.QuadPart));
   EXP1016_NOTE(1u,payload->TransferBytes,escape_start);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   if (FAILED(status) && frame_process_is_dwm()) {
@@ -1322,9 +1351,23 @@ static int transfer_heap_slot(ADMISSION_UMD_DEVICE *device,
   return ok;
 }
 
+/* RC64: attributes every copy escape of one slot transfer to its size. */
+struct copy_escape_scope {
+  ADMISSION_UMD_DEVICE *Device;
+  UINT Outer;
+  copy_escape_scope(ADMISSION_UMD_DEVICE *device, ULONGLONG bytes)
+      : Device(device), Outer(device->CopyEscapeClass) {
+    device->CopyEscapeClass = 1u + copy_escape_size_class(bytes);
+  }
+  ~copy_escape_scope() { Device->CopyEscapeClass = Outer; }
+  copy_escape_scope(const copy_escape_scope &) = delete;
+  copy_escape_scope &operator=(const copy_escape_scope &) = delete;
+};
+
 static int transfer_slot(ADMISSION_UMD_DEVICE *device,
                           ADMISSION_UMD_SCREEN_BUFFER *slot,bool download,
                           UINT *transfer_count,ULONGLONG *transfer_bytes) {
+  const copy_escape_scope escape_class(device, slot->Bytes);
   if (slot->HeapStaging)
     return transfer_heap_slot(device, slot, download, transfer_count, transfer_bytes);
   int unchanged=0;
