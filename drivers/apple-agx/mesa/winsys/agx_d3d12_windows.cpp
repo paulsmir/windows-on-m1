@@ -3998,6 +3998,8 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   if (!draw->Indirect.Buffer && (!draw->VertexCount || !draw->InstanceCount)) return S_OK;
   struct pipe_context *pipe = owner->Context;
   AGX_D3D12_GRAPHICS *graphics = draw->Pipeline;
+  /* RC74: the variants Asahi compiles in draw_vbo report their statistics */
+  const ShaderStatsDraw stats_draw(graphics);
   /* framebuffer from the RTVs: the size is the smallest bound level */
   struct pipe_framebuffer_state fb = {};
   fb.nr_cbufs = static_cast<uint8_t>(draw->NumRtvs);
@@ -4279,8 +4281,6 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   /* Native feedback/XFB legalization may flush the current batch. Bind heap
    * resources and batch-relative sampler handles only after that boundary,
    * including each recursive native draw which may select another batch. */
-  /* RC74: the variants Asahi compiles in draw_vbo report their statistics */
-  const ShaderStatsDraw stats_draw(graphics);
   AgxD3d12DrawHeapBindings heap_bindings = {owner, S_OK};
   const LONGLONG bound = qpc_now();
   /* The native wrapper generates eligible GPU streams before rendering.
