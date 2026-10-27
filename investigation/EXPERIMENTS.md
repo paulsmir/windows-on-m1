@@ -65276,3 +65276,21 @@ EXP2010 HARDWARE BEFORE 2026-10-27T23:36:03Z:
 - Hashes: sys bfac19e34a63, UmdArm64 16f69d1f7ef0, UmdX64 63dad9a10274, Umd32 19f2868258dd; manifest e0f015b9acf1, hardware-manifest 0f878b055658; probe2010.sh 1fb19cca2e47 (PROBE_LINT_OK); visible recovery rec2010h 11a209cb759812d8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2010h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2010-crawl-tvbrcpt/run2010.sh.
+
+EXP2010 HARDWARE ACTUAL (2026-10-28): **PASS, new best FHD**. rc78 and rc79.
+- HD 50k: 5820 / 34.8 FPS (EXP2008-2009: 5715-5798). FHD 100k: **3371 / 20.2 FPS** (EXP2008: 3086; macOS about 7700, a 2.3x gap).
+- No removal.
+- bdb1944a hardware stats: 3619 instructions (EXP2008: 4125), 215 GPRs, occupancy 448.
+- Breakdown:
+
+  | Run | Compute (ms) | Frame (ms) | GPU span (ms) | rc_prelude_ms | rc_prelude_kick_ms | rc_ta_ms | Partial renders | tvb_max_pages |
+  |---|---|---|---|---|---|---|---|---|
+  | HD | 10.2 → 9.9 | 25.9 | 25.2 | 0.09 | 1.95 | 3.89 | **4** | 383 |
+  | FHD | 18.7 → 18.3 | 45.5 | 44.7 | 0.11 | 2.24 | 8.26 | **8** | 875 |
+
+  The backed TVB is 128 pages. All partial renders are in the render-compute jobs.
+- TVB overflow is confirmed and handed to rc80. The prelude compute is negligible. The kick of render-compute jobs is about 1 ms each and unexplained.
+- Verdict:
+  - rc78 d3043d19 and 14f0229d validated;
+  - rc79 2eb56e76, b618de48, 11317098 and 2b0f1130 validated (receipts);
+  - 511c0087 implemented (opt-in, untested).
