@@ -64915,3 +64915,9 @@ EXP1995 HARDWARE BEFORE 2026-10-27T19:11:00Z:
 - Hashes: sys 166e8b6a60eb, UmdArm64 17e599aa136f, UmdX64 c21370548965, Umd32 76394521bc6e; manifest 7fe475ff9a3f, hardware-manifest 01e59b00edeb; probe1995.sh 6fe232ca1989 (PROBE_LINT_OK); visible recovery rec1995h ca3d429cd5289d1c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1995h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1995-stream-default/run1995.sh.
+
+EXP1995 HARDWARE ACTUAL (2026-10-27): **PASS, new best**.
+- GravityMark D3D12 HD 50k with the stream as the default (no env), rc73 reverted: **3873 / 23.2 FPS** (EXP1993 with the env: 3726).
+- GravityMark D3D11 HD 10k: 2515 / 15.0 FPS (EXP1913-1916: about 2550). No regression from rc56-rc72.
+- No removal; G4_SUBMIT_FAILURE none.
+- Verdict: 7cdb3e6b (stream default) validated.
