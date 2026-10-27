@@ -1,6 +1,7 @@
 #include <ntifs.h>
 #include "render_admission.h"
 #include "render_native_staging.h"
+#include "render_native_staging_receipt.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 /* MmAllocatePagesForMdlEx supplies zeroed WC pages in native 64KiB chunks.
@@ -348,6 +349,38 @@ BOOLEAN AdmissionNativeStagingPage(PVOID Binding,
   pages = MmGetMdlPfnArray(binding->Ring->Mdl);
   return ((ULONGLONG)pages[(binding->Offset + AllocationOffset) >> PAGE_SHIFT]
           << PAGE_SHIFT) == Ipa;
+}
+
+/* RC60 receipt helper, under the same lifetime contract as Page. It runs
+ * only for a page the paging path already refused, so the bounded scan of
+ * the immutable ring PFN array (32768 entries for 128 MiB) is off the
+ * ordinary path. It decides nothing; Page remains the only authority. */
+VOID AdmissionNativeStagingDescribe(PVOID Binding, ULONGLONG AllocationOffset,
+    ULONGLONG Ipa, PULONGLONG ExpectedIpa, PULONGLONG BindingOffset,
+    PULONGLONG BindingBytes, PULONGLONG RingOffset) {
+  const NATIVE_BINDING *binding = (const NATIVE_BINDING *)Binding;
+  const PFN_NUMBER *pages;
+  ULONG i, count;
+  if (ExpectedIpa == NULL || BindingOffset == NULL || BindingBytes == NULL ||
+      RingOffset == NULL)
+    return;
+  *ExpectedIpa = *RingOffset = ADMISSION_NATIVE_PTE_NONE;
+  *BindingOffset = *BindingBytes = 0ULL;
+  if (binding == NULL || binding->Magic != NATIVE_BINDING_MAGIC) return;
+  *BindingOffset = binding->Offset;
+  *BindingBytes = binding->Bytes;
+  pages = MmGetMdlPfnArray(binding->Ring->Mdl);
+  if ((AllocationOffset & (PAGE_SIZE - 1u)) == 0ULL &&
+      AllocationOffset < binding->Bytes)
+    *ExpectedIpa = (ULONGLONG)pages[(binding->Offset + AllocationOffset) >>
+                                    PAGE_SHIFT] << PAGE_SHIFT;
+  if ((Ipa & (PAGE_SIZE - 1u)) != 0ULL) return;
+  count = binding->Ring->Bytes >> PAGE_SHIFT;
+  for (i = 0u; i < count; ++i)
+    if (((ULONGLONG)pages[i] << PAGE_SHIFT) == Ipa) {
+      *RingOffset = (ULONGLONG)i << PAGE_SHIFT;
+      break;
+    }
 }
 
 BOOLEAN AdmissionNativeStagingOwns(PVOID Binding,

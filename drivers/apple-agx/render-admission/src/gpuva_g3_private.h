@@ -42,6 +42,10 @@ typedef struct _ADMISSION_G3_STATE {
   ULONG LastCompletedFence;
   ULONG PrivateCompletionFence;
   ADMISSION_OMITTED_LEAVES OmittedLeaves;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  /* RC60 receipt, under Lock: first native-staging page left unpublished. */
+  ADMISSION_NATIVE_PTE_REFUSAL NativePteRefusal;
+#endif
   ULONGLONG UnpublishedGroups[32];
   /* M2-b receipt: valid 64 KiB PTEs applied by leaf updates, per segment. */
   ULONGLONG Leaf64KPtes[32];

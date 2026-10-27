@@ -2069,7 +2069,8 @@ enum {
   AdmissionPagingReceiptSystemShapes = 64u,
   AdmissionPagingReceiptPoolDemand = 128u,
   AdmissionPagingReceiptOmittedLeaves = 512u,
-  AdmissionPagingReceiptBrokerFailures = 256u
+  AdmissionPagingReceiptBrokerFailures = 256u,
+  AdmissionPagingReceiptNativePteRefusal = 2048u
 };
 typedef struct _ADMISSION_PAGING_RECEIPTS {
   KSPIN_LOCK Lock;
@@ -2086,6 +2087,7 @@ typedef struct _ADMISSION_PAGING_RECEIPTS {
   ADMISSION_POOL_DEMAND_RECEIPT PoolDemand;
   ADMISSION_G3_BROKER_FAILURES Broker;
   ADMISSION_OMITTED_LEAVES Omitted;
+  ADMISSION_NATIVE_PTE_REFUSAL NativePteRefusal;
 } ADMISSION_PAGING_RECEIPTS;
 
 static IO_WORKITEM_ROUTINE AdmissionPagingReceiptWorker;
@@ -2117,6 +2119,9 @@ static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
       RtlCopyMemory(&receipts->Broker, Data, sizeof(receipts->Broker));
     else if (Kind == AdmissionPagingReceiptOmittedLeaves)
       RtlCopyMemory(&receipts->Omitted, Data, sizeof(receipts->Omitted));
+    else if (Kind == AdmissionPagingReceiptNativePteRefusal)
+      RtlCopyMemory(&receipts->NativePteRefusal, Data,
+                    sizeof(receipts->NativePteRefusal));
     receipts->Dirty |= Kind;
     if (InterlockedCompareExchange(&receipts->Queued, 1, 0) == 0) {
       KeClearEvent(&receipts->Idle);
@@ -2161,6 +2166,7 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     ADMISSION_POOL_DEMAND_RECEIPT pool;
     ADMISSION_G3_BROKER_FAILURES broker;
     ADMISSION_OMITTED_LEAVES omitted;
+    ADMISSION_NATIVE_PTE_REFUSAL native;
     ADMISSION_G3_PAGING_WAIT_RECEIPT wait;
     ULONG dirty;
     KIRQL oldIrql;
@@ -2176,6 +2182,7 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     RtlCopyMemory(&pool, &receipts->PoolDemand, sizeof(pool));
     RtlCopyMemory(&broker, &receipts->Broker, sizeof(broker));
     RtlCopyMemory(&omitted, &receipts->Omitted, sizeof(omitted));
+    RtlCopyMemory(&native, &receipts->NativePteRefusal, sizeof(native));
     if (dirty == 0u) {
       /* Cleared under the lock that Stage sets Dirty under: no lost wakeup. */
       InterlockedExchange(&receipts->Queued, 0);
@@ -2189,6 +2196,10 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     if (dirty & AdmissionPagingReceiptOmittedLeaves)
       AdmissionPagingReceiptWrite(context, L"Wom1G4OmittedLeaves",
                                   &omitted, sizeof(omitted), TRUE);
+    if (dirty & AdmissionPagingReceiptNativePteRefusal)
+      /* Flushed: a later device removal or bugcheck must keep the page. */
+      AdmissionPagingReceiptWrite(context, L"Wom1G3NativePteRefusal",
+                                  &native, sizeof(native), TRUE);
     if (dirty & AdmissionPagingReceiptFlush)
       AdmissionPagingReceiptWrite(context, L"Wom1G3FlushInput", &flush,
                                   sizeof(flush), FALSE);
@@ -2661,6 +2672,15 @@ void AdmissionRecordG4OmittedLeaves(ADMISSION_CONTEXT *Context,
                                    const ADMISSION_OMITTED_LEAVES *Receipt) {
   if (!Context || !Receipt) return;
   AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptOmittedLeaves, Receipt);
+}
+_Use_decl_annotations_ void AdmissionRecordG3NativePteRefusal(
+    ADMISSION_CONTEXT *Context, const ADMISSION_NATIVE_PTE_REFUSAL *Receipt) {
+  /* Called under the G3 state lock from UpdatePageTable: staging only. */
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Receipt == NULL || Receipt->Version != ADMISSION_NATIVE_PTE_REFUSAL_VERSION)
+    return;
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptNativePteRefusal,
+                              Receipt);
 }
 
 #endif

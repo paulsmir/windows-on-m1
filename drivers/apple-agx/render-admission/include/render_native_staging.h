@@ -21,6 +21,11 @@ BOOLEAN AdmissionNativeStagingBind(struct _ADMISSION_CONTEXT *Adapter,
 VOID AdmissionNativeStagingUnbind(PVOID Binding);
 BOOLEAN AdmissionNativeStagingPage(PVOID Binding,
     ULONGLONG AllocationOffset, ULONGLONG Ipa);
+/* Receipt-only, like Page: the authenticated page at AllocationOffset and
+ * the ring offset whose page is Ipa (ADMISSION_NATIVE_PTE_NONE if absent). */
+VOID AdmissionNativeStagingDescribe(PVOID Binding, ULONGLONG AllocationOffset,
+    ULONGLONG Ipa, PULONGLONG ExpectedIpa, PULONGLONG BindingOffset,
+    PULONGLONG BindingBytes, PULONGLONG RingOffset);
 BOOLEAN AdmissionNativeStagingOwns(PVOID Binding,
     struct _ADMISSION_CONTEXT *Adapter, PVOID GpuProcess);
 VOID AdmissionNativeStagingUnmapProcess(struct _ADMISSION_CONTEXT *Adapter,

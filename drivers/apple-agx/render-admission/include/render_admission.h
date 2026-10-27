@@ -34,6 +34,7 @@
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
 #include "render_omitted_leaves.h"
+#include "render_native_staging_receipt.h"
 #include "render_gdi.h"
 #include "render_umd_command.h"
 #include "render_win32_transport.h"
@@ -1479,6 +1480,9 @@ void AdmissionRecordGpuvaG3SystemShapes(
     _In_reads_(ADMISSION_G3_SYSTEM_SHAPE_COUNT)
         const ADMISSION_G3_SYSTEM_SHAPE *Shapes);
 void AdmissionRecordG4OmittedLeaves(ADMISSION_CONTEXT *Context, const ADMISSION_OMITTED_LEAVES *Receipt);
+/* RC60 receipt Wom1G3NativePteRefusal (staged; written by a work item). */
+void AdmissionRecordG3NativePteRefusal(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_NATIVE_PTE_REFUSAL *Receipt);
 BOOLEAN AdmissionGpuvaG3DeclarationReady(_In_ const ADMISSION_CONTEXT *Context);
 _IRQL_requires_(PASSIVE_LEVEL)
 NTSTATUS AdmissionPagingReceiptsStart(_In_ ADMISSION_CONTEXT *Context);
