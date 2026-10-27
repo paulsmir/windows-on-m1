@@ -99,6 +99,32 @@ class CompletionWiring(unittest.TestCase):
         owner=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         self.assertIn('AdmissionUmdGpuCompletionDrain',function(owner,'static HRESULT submit_owner('))
 
+class PreludeTimestamps(unittest.TestCase):
+    def test_v5_prelude_requests_and_names_its_timestamps(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        rc79: the v5 render's compute prelude was built without timestamps
+        (only envelope compute set input.Timestamps), so prelude and TA time
+        could not be separated. The prelude must request the firmware block
+        unless the Wom1PreludeTimestampsOff switch is set, hand it to the job
+        image, and the completion ABI must carry it as version 3 on both the
+        KMD and the UMD side.
+        """
+        from test_d3d12_owner_allocation_failure import function
+        k=(ROOT/'drivers/apple-agx/render-admission/src/backend_platform_windows.c').read_text()
+        build=function(k,'static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(')
+        prelude=build[build.index('image->G4PreludeCompute.CdmCtrlStreamBase;'):]
+        prelude=prelude[:prelude.index('AdmissionBuildTaComputeBarrier')]
+        self.assertIn('input.Timestamps = runtime->PreludeTimestampsOff ? 0u : 1u;',prelude)
+        self.assertIn('Job->ComputeTimestampBlock = output.TimestampCpuAddress;',prelude)
+        self.assertIn('L"Wom1PreludeTimestampsOff"',k)
+        h=(INC/'render_job_timing.h').read_text()
+        self.assertIn('#define ADMISSION_GPU_COMPLETION_VERSION 3u',h)
+        self.assertIn('PreludeStart, PreludeEnd',h)
+        u=(ROOT/'drivers/apple-agx/render-admission/umd/src/umd_gpuva_windows.c').read_text()
+        drain=function(u,'VOID AdmissionUmdGpuCompletionDrain(')
+        self.assertIn('"measure-gpu-prelude"',drain)
+
+
 class CompletionCapture(unittest.TestCase):
     def test_real_capture_reports_missing_slot_and_preserves_raw_stages(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
@@ -124,7 +150,7 @@ typedef unsigned APPLE_AGX_BACKEND_COMPLETION_STATUS;
 #define RtlCopyMemory memcpy
 #define KeAcquireSpinLock(l,i) ((void)(l),(void)(i))
 #define KeReleaseSpinLock(l,i) ((void)(l),(void)(i))
-typedef struct {unsigned Kind;ULONGLONG CommandVa;void *ComputeTimestampBlock;} APPLE_AGX_BACKEND_JOB_IMAGE;
+typedef struct {unsigned Kind;ULONGLONG CommandVa;const void *ComputeTimestampBlock;} APPLE_AGX_BACKEND_JOB_IMAGE;
 typedef struct {void *Data;unsigned Size;} APPLE_AGX_EXP208_RELOCATION_OBJECT;
 typedef struct {
  struct {APPLE_AGX_BACKEND_JOB_IMAGE PendingJob;} Backend;
@@ -151,17 +177,32 @@ int main(void){
  assert(q.Count==1 && q.MissingTiming==1 && q.Record[0].Start==120 && q.Record[0].CompleteQpc==200);
  assert(q.Record[0].SubmitQpc==100 && q.Record[0].End==190);
  r.Backend.PendingJob.Kind=1;
+ /* Render images start from a zeroed staged job: no prelude block. */
+ r.Backend.PendingJob.ComputeTimestampBlock=0;
  for(i=0;i<4;i++){r.QueueObjects[28+i].Data=&render[i];r.QueueObjects[28+i].Size=8;}
  assert(AdmissionJobTimingBegin(&r.JobTiming,2,7,42,4096,100));
  assert(AdmissionJobTimingMark(&r.JobTiming,2,AdmissionJobPhaseComplete,201));
  AdmissionGpuCompletionCaptureWindows(&r,2,0);
  AdmissionGpuCompletionRead(&r.GpuCompletions,7,&q);
  assert(q.Count==1 && q.Record[0].Start==140 && q.Record[0].TaStart==110 && q.Record[0].TaEnd==170);
+ /* rc79: a render without compute work has no prelude timestamps. */
+ assert(!q.Record[0].PreludeStart && !q.Record[0].PreludeEnd);
+ /* rc79: a v5 render's compute prelude names its own firmware block. */
+ { ULONGLONG prelude[4]={105,135,0,0};
+   r.Backend.PendingJob.ComputeTimestampBlock=prelude;
+   assert(AdmissionJobTimingBegin(&r.JobTiming,4,7,42,4096,100));
+   assert(AdmissionJobTimingMark(&r.JobTiming,4,AdmissionJobPhaseComplete,203));
+   AdmissionGpuCompletionCaptureWindows(&r,4,0);
+   AdmissionGpuCompletionRead(&r.GpuCompletions,7,&q);
+   assert(q.Count==1 && q.Record[0].PreludeStart==105 && q.Record[0].PreludeEnd==135);
+   assert(q.Record[0].Start==140 && q.Record[0].TaEnd==170);
+   r.Backend.PendingJob.ComputeTimestampBlock=0; }
  assert(AdmissionJobTimingBegin(&r.JobTiming,3,7,42,4096,100));
  assert(AdmissionJobTimingMark(&r.JobTiming,3,AdmissionJobPhaseComplete,202));
  AdmissionGpuCompletionCaptureWindows(&r,3,1);
  AdmissionGpuCompletionRead(&r.GpuCompletions,7,&q);
  assert(q.Count==1 && q.Record[0].Status && !q.Record[0].Start && !q.Record[0].TaStart);
+ assert(!q.Record[0].PreludeStart && !q.Record[0].PreludeEnd);
  return 0;
 }
 '''

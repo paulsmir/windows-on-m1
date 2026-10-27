@@ -140,13 +140,19 @@ typedef struct _ADMISSION_GPU_TIMESTAMP_QUERY {
  * QPC endpoints are submit and first KMD completion observation. Firmware
  * values are raw stage ticks, not calibrated QPC. Status 0 means success.
  * Loss counts adapter-wide overwritten records (not guessed per-process loss).
- * Version 2 shares the APTS magic but never changes the version-1 query ABI. */
-#define ADMISSION_GPU_COMPLETION_VERSION 2u
+ * Version 2 shares the APTS magic but never changes the version-1 query ABI.
+ * Version 3 (rc79): PreludeStart/PreludeEnd are the firmware start/end of a
+ * v5 render's compute prelude (the CDM work the TA waits for behind its
+ * Barrier), raw ticks of the same timebase as TaEnd; 0 for a render without
+ * compute work, for compute jobs (Start/End already are theirs), when the
+ * device value Wom1PreludeTimestampsOff = 1, or on failure. */
+#define ADMISSION_GPU_COMPLETION_VERSION 3u
 #define ADMISSION_GPU_COMPLETION_CAPACITY 256u
 #define ADMISSION_GPU_COMPLETION_PAGE 32u
 typedef struct _ADMISSION_GPU_COMPLETION {
   unsigned long long Sequence, CommandVa, SubmitQpc, CompleteQpc;
   unsigned long long Start, End, TaStart, TaEnd;
+  unsigned long long PreludeStart, PreludeEnd;
   unsigned int Fence, ProcessId, Kind, Status;
 } ADMISSION_GPU_COMPLETION;
 typedef struct _ADMISSION_GPU_COMPLETION_RING {

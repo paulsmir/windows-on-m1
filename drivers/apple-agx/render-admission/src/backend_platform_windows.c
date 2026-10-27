@@ -246,6 +246,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN RecoverChannelOnStall;
   BOOLEAN ReadFaultControl;
   ADMISSION_GPU_POST_RESUME_RECEIPT PostResume;
+  /* rc79: device value Wom1PreludeTimestampsOff = 1 builds v5 render
+   * preludes without the timestamp microsequence (the pre-rc79 job). */
+  BOOLEAN PreludeTimestampsOff;
 } ADMISSION_PLATFORM_RUNTIME;
 
 C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 184);
@@ -553,6 +556,12 @@ static VOID AdmissionGpuCompletionCaptureWindows(
         const APPLE_AGX_EXP208_RELOCATION_OBJECT *object = &runtime->QueueObjects[ids[i]];
         if (object->Data && object->Size == sizeof(ULONGLONG))
           RtlCopyMemory(values[i], object->Data, sizeof(ULONGLONG));
+      }
+      /* rc79: a v5 render's compute prelude block (job start/end). */
+      if (job->ComputeTimestampBlock) {
+        RtlCopyMemory(&record.PreludeStart, job->ComputeTimestampBlock, sizeof(record.PreludeStart));
+        RtlCopyMemory(&record.PreludeEnd, (const UCHAR *)job->ComputeTimestampBlock + 8u,
+                      sizeof(record.PreludeEnd));
       }
     }
   }
@@ -2907,6 +2916,12 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     input.HelperProgram = image->G4PreludeCompute.Helper.Binary;
     input.HelperArgument = image->G4PreludeCompute.Helper.Data;
     input.HelperConfig = image->G4PreludeCompute.Helper.Cfg;
+    /* rc79: the prelude records its firmware start/end like envelope
+     * compute (the same timestamp microsequence, EXP1342), so completion
+     * telemetry separates the prelude from the TA that waits for it. The
+     * block lies in the compute sidecar, which this job alone uses until
+     * its completion (one job at a time). */
+    input.Timestamps = runtime->PreludeTimestampsOff ? 0u : 1u;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     (void)AdmissionGpuvaG3FaultDrillApply(runtime->Adapter,
         Submission->Submission.Fence, &input.CdmStreamBase, &input.CdmStreamBytes);
@@ -2914,6 +2929,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     if (!AppleAgxRenderSharedMemoryBuildCompute(
             &runtime->Initdata.RenderSharedMemory, &input, &output))
       goto BuildFailure;
+    Job->ComputeTimestampBlock = output.TimestampCpuAddress;
     Job->ComputeWorkAddresses[0] = output.WorkGpuAddress;
     Job->ComputeWorkAddressCount = 1u;
     Job->ComputeEvent = input.EventNumber;
@@ -3995,7 +4011,7 @@ static BOOLEAN AdmissionTdrDrillTake(ADMISSION_CONTEXT *Adapter,
 }
 #endif
 
-/* Version-2 bulk telemetry. The caller chooses only a cursor, never a PID. */
+/* Version-3 bulk telemetry. The caller chooses only a cursor, never a PID. */
 static NTSTATUS AdmissionGpuCompletionEscape(
     ADMISSION_CONTEXT *context, const DXGKARG_ESCAPE *args) {
   ADMISSION_GPU_COMPLETION_QUERY query;
@@ -5205,6 +5221,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->GpuFaultUnpublished = FALSE;
   runtime->ReadFaultInfo =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultInfoRead");
+  runtime->PreludeTimestampsOff =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1PreludeTimestampsOff");
   InterlockedExchange(&Context->TdrDrillJobs, 0);
   Context->TdrDrillAllowed =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1TdrDrillAllowed");

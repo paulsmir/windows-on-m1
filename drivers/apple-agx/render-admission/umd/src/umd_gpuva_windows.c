@@ -2603,6 +2603,13 @@ VOID AdmissionUmdGpuCompletionDrain(ADMISSION_UMD_DEVICE *device,
           (UINT)r->TaStart, (UINT)(r->TaStart >> 32), (UINT)r->TaEnd, (UINT)(r->TaEnd >> 32)};
       AdmissionUmdDiagnostic("measure-gpu-completion", S_OK, completion, ARRAYSIZE(completion));
       AdmissionUmdDiagnostic("measure-gpu-stages", S_OK, stages, ARRAYSIZE(stages));
+      /* rc79: only renders with a timed compute prelude add a row. */
+      if (r->PreludeEnd) {
+        const UINT prelude[] = {(UINT)r->Sequence, (UINT)(r->Sequence >> 32),
+            (UINT)r->PreludeStart, (UINT)(r->PreludeStart >> 32),
+            (UINT)r->PreludeEnd, (UINT)(r->PreludeEnd >> 32)};
+        AdmissionUmdDiagnostic("measure-gpu-prelude", S_OK, prelude, ARRAYSIZE(prelude));
+      }
     }
     {
       const UINT coverage[] = {(UINT)query.Cursor, (UINT)(query.Cursor >> 32),
