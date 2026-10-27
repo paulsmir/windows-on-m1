@@ -65249,3 +65249,13 @@ EXP2009 HARDWARE BEFORE 2026-10-27T23:07:02Z:
 - Hashes: sys 6c0abf035f49, UmdArm64 ebe3b8a32146, UmdX64 866b92db39c6, Umd32 20e7c47239a5; manifest e035d9bac4e3, hardware-manifest 5117c709aa6a; probe2009.sh 1c1e9add7751 (PROBE_LINT_OK); visible recovery rec2009h 2c49f13f4491142b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultControlRead=1 Wom1GpuFaultRecoverChannel=1.
 - Recovery rec2009h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2009-data-fault/run2009.sh.
+
+EXP2009 HARDWARE ACTUAL (2026-10-28):
+- GravityMark D3D12 HD 50k: 5798 / 34.7 FPS (EXP2008: 5715); the rc77 opt-ins are neutral.
+- RC77D (root SRV at unmapped VA 0x10000): `record+close hr=0x887a0005`, `AGX_D3D12_RC77D: FAIL removed=0x887a0020 completed=0`.
+  - The UMD removed the device at record or close time (DRIVER_INTERNAL_ERROR), so the fault never reached the GPU. The process and the guest are alive.
+  - So a root descriptor naming no allocation is caught in the UMD (app-only removal).
+  - The GPU data-fault class (an OOB read past a valid allocation into an unmapped page) is still untested.
+- C5D: the tool exited in 1 s with empty output; inconclusive (step selection).
+- No bugcheck.
+- Verdict: the app-caused invalid root VA path is safe. The GPU data-fault recovery question remains open (rc77).
