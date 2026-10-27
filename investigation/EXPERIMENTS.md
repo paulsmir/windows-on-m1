@@ -64520,3 +64520,9 @@ EXP1981 HARDWARE BEFORE 2026-10-27T09:33:03Z:
 - Hashes: sys 0df9225fccbe, UmdArm64 b7c630967227, UmdX64 e17632185cc7, Umd32 d91e58a5fcb0; manifest a883a8f57ce6, hardware-manifest fc8cde5abfb9; probe1981.sh 9148de56e5f1 (PROBE_LINT_OK); visible recovery rec1981h 7b86156447d5cf42; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1981h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1981-native-staging2/run1981.sh.
+
+EXP1981 HARDWARE ACTUAL 2026-10-27T09:52:01Z: FAIL. rc56+rc58 native staging on.
+- Arm a (HD 50k): device removed at 4.0 s. Arm b (FHD 100k): device removed at 1.9 s. The guest stayed alive.
+- measure-native-ring-map: the first map succeeded; later maps failed with 0x88760873 and fell back with reason 3 (rc58 fallback works).
+- Wom1G3PrivateAcquireFailure v2 Reserved = 0x002605a4, so the first poison site is **0x26**, the native leaf check in BuildPagingBuffer (rc58's hypothesis). The process was poisoned before its first private acquire, which led to device removal.
+- Next: subagent rc60 (find the refused PTE in the 0x26 check and the ring-map 0x88760873). EXP1982 tests the rc59 stream containment with NATIVE_STAGING=0.
