@@ -64818,3 +64818,17 @@ EXP1992 HARDWARE BEFORE 2026-10-27T18:03:23Z:
 - Hashes: sys c9ffbd109e72, UmdArm64 4f2140c9d28a, UmdX64 c1bbc3ccfb25, Umd32 697e0a6fcdad; manifest bd705a4ad081, hardware-manifest 86431d0e6da4; probe1992.sh 9be523458fba (PROBE_LINT_OK); visible recovery rec1992h 7e18568e8c358b6f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1992h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1992-poll-latency/run1992.sh.
+
+EXP1992 HARDWARE ACTUAL (2026-10-27): **PASS, new best**.
+- HD 50k: **3410 / 20.4 FPS**, up 18% (EXP1991: 2879).
+- FHD 100k: **2159 / 12.9 FPS**, up 4% (EXP1991: 2069).
+- No removal; G4_SUBMIT_FAILURE none.
+- agx_gpu_frame_breakdown:
+
+  | Run | detect_ms | frame (ms) | GPU span (ms) | idle (ms) |
+  |---|---|---|---|---|
+  | HD | 5.6 → **0.94** | 51.4 → 43.3 | 39.9 → 37.2 | — |
+  | FHD | 7.4 → **1.0** | 73.7 → 71.7 | 58.9 → 60.6 | 6.5 → 9.6 |
+
+- The FHD arm runs second; that it gained less is unexplained (possibly thermal).
+- Verdict: rc72 d63d0061 validated.
