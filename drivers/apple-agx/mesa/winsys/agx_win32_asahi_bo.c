@@ -234,6 +234,24 @@ int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *b, struct agx_device *native,
 
 #ifdef APPLE_AGX_GPUVA_WINSYS
 static void virtual_release(struct windows_bo *bo);
+/* RC71 (EXP1990): free each deferred VA whose fence has retired. */
+static void pending_va_free_retired(AGX_WIN32_ASAHI_BACKEND *b) {
+  for(APPLE_AGX_U32 i=0;i<b->PendingVaCount;) {
+    if(AgxWin32GpuvaUnbindAfter(&b->Gpuva,&b->PendingVa[i],b->PendingVaFence[i])) {
+      --b->PendingVaCount;
+      b->PendingVa[i]=b->PendingVa[b->PendingVaCount];
+      b->PendingVaFence[i]=b->PendingVaFence[b->PendingVaCount];
+    } else ++i;
+  }
+}
+/* Defer a VA until the newest submission now in flight retires. */
+static int pending_va_push(AGX_WIN32_ASAHI_BACKEND *b,const AGX_WIN32_GPUVA_BO *va) {
+  pending_va_free_retired(b);
+  if(b->PendingVaCount>=AGX_WIN32_PENDING_VA_LIMIT) return 0;
+  b->PendingVa[b->PendingVaCount]=*va;
+  b->PendingVaFence[b->PendingVaCount++]=AgxWin32GpuvaNewestFence(&b->Gpuva);
+  return 1;
+}
 #endif
 static int dispose(struct windows_bo *bo) {
   AGX_WIN32_ASAHI_BACKEND *b=bo->Backend;
@@ -253,9 +271,11 @@ static int dispose(struct windows_bo *bo) {
    * submission. Freeing the VA first left that slot naming a released (and
    * soon reused) VA, and the copy QUERY then failed predicate57. Release the
    * slot and allocation first; free the VA only once nothing names it. */
-  if(b->PendingVaCount>=sizeof(b->PendingVa)/sizeof(b->PendingVa[0])) {
+  pending_va_free_retired(b);
+  if(b->PendingVaCount>=AGX_WIN32_PENDING_VA_LIMIT) {
     if(!b->Ops.Associate(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
                         bo->Backing.ConstructionSerial,release_map)) AGX_WIN32_ASAHI_FAIL(b, 1u);
+    b->RefusedRelease=1;
     return 0;
   }
 #endif
@@ -266,7 +286,7 @@ static int dispose(struct windows_bo *bo) {
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if(bo->Gpuva.Bound && !AgxWin32GpuvaUnbind(&b->Gpuva,&bo->Gpuva))
-    b->PendingVa[b->PendingVaCount++]=bo->Gpuva;
+    (void)pending_va_push(b,&bo->Gpuva); /* room was checked above */
 #endif
   handle_map_remove(b,bo);
   --b->LiveBos;
@@ -419,6 +439,8 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   if ((flags & AGX_WIN32_BO_GPU_ONLY) &&
       ((flags & (AGX_BO_EXEC | AGX_WIN32_BO_SHADOW)) ||
        b->EncoderAllocationIntent || b->NextVirtual)) return NULL;
+  /* RC71: VAs released while their submissions ran are free now. */
+  AgxWin32AsahiDrainPendingVa(b);
   /* GPU-produced USC is writable General storage, reserved in the USC VA
    * window by LOW_VA below. Encoder/Shader class permissions stay unchanged. */
   /* C53 T2D: the image BO of a reserved texture under construction */
@@ -727,25 +749,19 @@ static void virtual_release(struct windows_bo *bo) {
     /* the range is freed once no submission is in flight (EXP979) */
     if(!virtual_retire(b,bo) ||
        !AgxWin32GpuvaFreeRange(&b->Gpuva,bo->Reserved.Va,bo->Reserved.Bytes)) {
-      if(b->PendingVaCount<sizeof(b->PendingVa)/sizeof(b->PendingVa[0])) {
-        /* Unbind frees exactly Bytes: include the range's guard tile */
-        b->PendingVa[b->PendingVaCount]=bo->Reserved;
-        b->PendingVa[b->PendingVaCount++].Bytes+=AGX_WIN32_GPUVA_RANGE_GUARD;
-      } else {
-        AGX_WIN32_ASAHI_FAIL(b, 1u);
-      }
+      /* Unbind frees exactly Bytes: include the range's guard tile */
+      AGX_WIN32_GPUVA_BO range=bo->Reserved;
+      range.Bytes+=AGX_WIN32_GPUVA_RANGE_GUARD;
+      if(!pending_va_push(b,&range)) AGX_WIN32_ASAHI_FAIL(b, 1u);
     }
     memset(&bo->Reserved,0,sizeof(bo->Reserved));
   }
   if(bo->ReadShadow.Bound) {
     if(!virtual_retire(b,bo) ||
        !AgxWin32GpuvaFreeRange(&b->Gpuva,bo->ReadShadow.Va,bo->ReadShadow.Bytes)) {
-      if(b->PendingVaCount<sizeof(b->PendingVa)/sizeof(b->PendingVa[0])) {
-        b->PendingVa[b->PendingVaCount]=bo->ReadShadow;
-        b->PendingVa[b->PendingVaCount++].Bytes+=AGX_WIN32_GPUVA_RANGE_GUARD;
-      } else {
-        AGX_WIN32_ASAHI_FAIL(b, 1u);
-      }
+      AGX_WIN32_GPUVA_BO range=bo->ReadShadow;
+      range.Bytes+=AGX_WIN32_GPUVA_RANGE_GUARD;
+      if(!pending_va_push(b,&range)) AGX_WIN32_ASAHI_FAIL(b, 1u);
     }
     memset(&bo->ReadShadow,0,sizeof(bo->ReadShadow));
   }
@@ -1023,11 +1039,8 @@ int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *b) {
   const struct agx_bo *key;
   if(!b || !b->Native) return 0;
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  for(APPLE_AGX_U32 i=0;i<b->PendingVaCount;) {
-    if(AgxWin32GpuvaUnbind(&b->Gpuva,&b->PendingVa[i]))
-      b->PendingVa[i]=b->PendingVa[--b->PendingVaCount];
-    else ++i;
-  }
+  pending_va_free_retired(b);
+  b->RefusedRelease=0; /* the walk below retries every refused release */
 #endif
   if(b->UnpublishedBo) {
     struct windows_bo *bo=b->UnpublishedBo;
@@ -1052,6 +1065,23 @@ int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *b) {
   if(b->PendingVaCount) return 0;
 #endif
   return b->LiveBos==0 && b->UnpublishedBo==NULL;
+}
+void AgxWin32AsahiDrainPendingVa(AGX_WIN32_ASAHI_BACKEND *b) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  APPLE_AGX_U32 cursor=0;
+  const struct agx_bo *key;
+  if(!b || !b->Native) return;
+  pending_va_free_retired(b);
+  if(!b->RefusedRelease || b->PendingVaCount>=AGX_WIN32_PENDING_VA_LIMIT) return;
+  b->RefusedRelease=0;
+  /* As Collect: a refused release is a registered BO with refcnt 0. */
+  while((key=b->Ops.NextBo(b->Owner,&cursor))) {
+    struct windows_bo *bo=(struct windows_bo *)key;
+    if(bo->Backend==b && bo->Base.refcnt==0 && !bo->Cached) (void)dispose(bo);
+  }
+#else
+  (void)b;
+#endif
 }
 int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *b) {
   if(!b || !b->Native || b->ActiveCapture || b->ActiveEmission) return 0;

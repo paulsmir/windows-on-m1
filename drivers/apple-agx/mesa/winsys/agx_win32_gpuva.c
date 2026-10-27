@@ -140,6 +140,22 @@ int AgxWin32GpuvaUnbind(AGX_WIN32_GPUVA_SPACE *space,
   return 1;
 }
 
+uint64_t AgxWin32GpuvaNewestFence(const AGX_WIN32_GPUVA_SPACE *space) {
+  if (!space) return 0;
+  if (space->Held) return space->RenderFence;
+  return space->OlderCount ? space->Older[space->OlderCount - 1u].Fence : 0;
+}
+
+int AgxWin32GpuvaUnbindAfter(AGX_WIN32_GPUVA_SPACE *space,
+                             AGX_WIN32_GPUVA_BO *bo, uint64_t fence) {
+  if (!space || !bo || !bo->Bound || space->Terminal) return 0;
+  if (!fence) return AgxWin32GpuvaUnbind(space, bo);
+  if (AgxWin32GpuvaFenceHeld(space, fence) ||
+      !space->Ops.Free(space->Context, bo->Va, bo->Bytes)) return 0;
+  memset(bo, 0, sizeof(*bo));
+  return 1;
+}
+
 int AgxWin32GpuvaReserveRange(AGX_WIN32_GPUVA_SPACE *space, uint64_t bytes,
                               uint64_t *va) {
   uint64_t reserved = 0;

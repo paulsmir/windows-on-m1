@@ -20,6 +20,7 @@ typedef struct {
   AGX_WIN32_GPUVA_SPACE Gpuva;
   AGX_WIN32_GPUVA_BO PendingVa[64];
   APPLE_AGX_U32 PendingVaCount;
+  APPLE_AGX_U64 PendingVaFence[64]; int RefusedRelease; /* RC71 */
 } AGX_WIN32_ASAHI_BACKEND;
 typedef struct { void *CpuAddress; struct { struct { APPLE_AGX_U64 Token; } Transport; } Buffer;
   APPLE_AGX_U64 ConstructionSerial; } BACKING;

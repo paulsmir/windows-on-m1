@@ -139,6 +139,15 @@ int AgxWin32GpuvaComplete(AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);
 uint64_t AgxWin32GpuvaHoldingFence(const AGX_WIN32_GPUVA_SPACE *, uint64_t Allocation);
 /* Whether CompletionFence is an in-flight (held) submission's fence. */
 int AgxWin32GpuvaFenceHeld(const AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);
+/* RC71: the completion fence of the newest submission in flight (0: none). */
+uint64_t AgxWin32GpuvaNewestFence(const AGX_WIN32_GPUVA_SPACE *);
+/* RC71 (EXP1990): free the VA of a BO whose allocation is already destroyed
+ * once Fence -- the newest submission in flight when it was released
+ * (AgxWin32GpuvaNewestFence) -- has retired. Submissions retire in order and
+ * no later one can name a destroyed allocation, so nothing can still use the
+ * range. Fence 0 needs an idle space, as Unbind. 0 while Fence is in flight. */
+int AgxWin32GpuvaUnbindAfter(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *,
+                             uint64_t Fence);
 
 #ifdef __cplusplus
 }

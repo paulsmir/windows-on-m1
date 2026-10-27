@@ -17,6 +17,8 @@
 
 #define AGX_WIN32_BO_CACHE_LIMIT 128u
 #define AGX_WIN32_BO_CACHE_BYTES (64ull << 20)
+/* EXP979/RC71: released VAs deferred until their submissions retire */
+#define AGX_WIN32_PENDING_VA_LIMIT 64u
 
 struct agx_device;
 struct agx_bo;
@@ -87,8 +89,17 @@ typedef struct {
   APPLE_AGX_U64 NewestFence;
   /* EXP979: VA ranges whose allocation is already destroyed but whose
    * reservation could not be freed yet (submission in flight). */
-  AGX_WIN32_GPUVA_BO PendingVa[64];
+  AGX_WIN32_GPUVA_BO PendingVa[AGX_WIN32_PENDING_VA_LIMIT];
   APPLE_AGX_U32 PendingVaCount;
+  /* RC71 (EXP1990): the newest submission in flight when each PendingVa
+   * entry was deferred; the entry is freed once that fence retires. Only
+   * AgxWin32AsahiCollect drained the list, and only with no submission in
+   * flight, so a GPU kept busy filled it for good and every later release
+   * was refused: the BO, its allocation and its VA stayed registered. */
+  APPLE_AGX_U64 PendingVaFence[AGX_WIN32_PENDING_VA_LIMIT];
+  /* RC71: a release was refused for a full PendingVa; its BO waits for a
+   * drain that makes room (AgxWin32AsahiDrainPendingVa). */
+  int RefusedRelease;
   /* C53 B1/B4: distinct backing BOs of live virtual BOs -- an upper bound
    * on the references a submission adds by expanding them. */
   APPLE_AGX_U32 VirtualBackingRefs;
@@ -148,6 +159,11 @@ void AgxWin32PerfNote(const char *fmt, ...);
 int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *, struct agx_device *,
     AGX_WIN32_SCREEN *, const AGX_WIN32_ASAHI_OWNER_OPS *, void *, APPLE_AGX_U64);
 int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *);
+/* RC71: free the VA of every deferred release whose fence has retired, then
+ * retry the releases a full list refused. Every BO creation and release
+ * drains first, so the list stays bounded by the releases of the
+ * submissions in flight. */
+void AgxWin32AsahiDrainPendingVa(AGX_WIN32_ASAHI_BACKEND *);
 int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *);
 int AgxWin32AsahiIdentity(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *,
     AGX_WIN32_RELOC_ALLOCATION *);
