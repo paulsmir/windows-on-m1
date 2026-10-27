@@ -64954,3 +64954,27 @@ EXP1997 BUILD FAILURE (2026-10-27): X86B121 failed: 'use of undeclared identifie
 EXP1998 BUILD FAILURE (2026-10-27): the ARM64 UMD (MSVC /sdl /WX) rejected sscanf in agx_win32_shader_stats.h:56 (C4996). Not run. Fixed in ad59f376; rerun as EXP1999.
 
 EXP1999 BUILD FAILURE (2026-10-27): the ARM64 UMD also lacks nir_shader_as_str (agx_d3d12_windows.cpp:1249, C3861). Not run. The NIR text dump now compiles only under APPLE_AGX_D3D12_NIR_TEXT_DUMP (3f46afcb); rerun as EXP2000.
+
+EXP2000 HARDWARE BEFORE 2026-10-27T20:19:07Z:
+- rc74 plus build fixes (NIR dump diagnostic-only, sscanf_s; EXP1997-1999 failed to build):
+  - 60dd76d8: branchless UAV bounds lowering;
+  - 271bbe3b: shader-stats receipts;
+  - 7abe0c1b: cost tool;
+  - 7f8659df: compute temp arrays over 64 B to scratch;
+  - 7817793d.
+- WHY:
+  - EXP1996 is GPU-bound; standalone compute (20.4 ms HD 100k, 24.1 ms FHD) scales with asteroid count;
+  - GravityMark's DXIL compute does per-UAV-access if/else bounds checks; the AGX backend waits at every block end;
+  - over 82 captured CS, the in-bounds waits fall 2388 → 827 and the instructions 112.7k → 73.8k.
+- ATOMIC CONTRACT: the shader lowering changes, each with an env fallback; separate arms.
+- Expected:
+  - correct image;
+  - no removal or reject-batch;
+  - c_work_exact below 13.7 (HD) and below 24.1 (FHD);
+  - score above EXP1995 (3873) and EXP1996 (2270);
+  - D3D11 at least about 2515.
+- Failure criteria: a wrong image, removal, a G4 refusal, or a regression. Fallback env: APPLE_AGX_D3D_BUFFER_BRANCHES=1, APPLE_AGX_D3D_SCRATCH_ARRAYS=0.
+- Recovery: rec2000h.
+- Hashes: sys c81da6cb45ce, UmdArm64 fddcba942c34, UmdX64 22d0941de5ec, Umd32 bee63f18f112; manifest 1684ef7ae0c0, hardware-manifest 242a5b64fe05; probe2000.sh 5e27283cc0df (PROBE_LINT_OK); visible recovery rec2000h 265452510a4e1660; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2000h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2000-shader-cost/run2000.sh.
