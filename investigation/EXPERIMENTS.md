@@ -64704,3 +64704,19 @@ EXP1988 HARDWARE ACTUAL (2026-10-27): **PASS, new best**.
 - Arena occupancy at a refusal (measure-native-arena-class): General 45.75 MiB in 113 slots, Encoder 14.25 MiB in 38 slots, Shader 0.
 - The remaining cost is the QUERY drain on 64 KiB slots (the pipeline-statistics query BOs), which rc67 and rc68 target.
 - Verdict: rc66 383df460 validated.
+
+EXP1989 HARDWARE BEFORE 2026-10-27T17:18:21Z:
+- WHY: each KMD copy escape waits until this process has no GPU job in flight, so the first escape of every submission drains the GPU. EXP1988 still has 28 (HD) and 46 (FHD) QUERY escapes on 64 KiB slots, 12.4 ms and 29.1 ms per Execute.
+- Contract: an escape runs beside its own context's job only when the UMD proves no unretired submission holds the slot (LastUseFence <= the reached render fence, not Borrowed/Direct/SourceHolds) and the allocation is not a presentation allocation; otherwise it waits as before.
+- ATOMIC CONTRACT: one gate change with its proof, receipt and control; EXP1988 is the control.
+- Expected:
+  - measure-copy-escape-gate with QUERY proof > 0 and overlap > 0;
+  - QUERY us/escape below 100;
+  - no new reject-copy or replace-canonical rows;
+  - score above 2318 (HD) and above 1769 (FHD);
+  - correct image.
+- Failure criteria: device removal, TDR, bugcheck, a wrong image (a CPU/GPU data race), or a score below EXP1988.
+- Recovery: rec1989h.
+- Hashes: sys acaa0ef2a330, UmdArm64 3f9edbcd24d9, UmdX64 8e1692e75185, Umd32 ee18568f29bd; manifest 28f556f74743, hardware-manifest d9626789334e; probe1989.sh c5c3df8517e3 (PROBE_LINT_OK); visible recovery rec1989h 816343e98dadc746; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1989h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1989-escape-proof/run1989.sh.
