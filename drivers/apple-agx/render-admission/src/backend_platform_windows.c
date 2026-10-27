@@ -4648,7 +4648,8 @@ static VOID AdmissionPlatformWorker(
     if (runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted)
       break;
     {
-      /* EXP1073: poll short jobs at a fine step before sleeping ticks. */
+      /* EXP1073/rc72: poll jobs at a fine step for the spin window, then
+       * sleep ticks. */
       LARGE_INTEGER pollNow = KeQueryPerformanceCounter(NULL);
       ULONG stallUs = AdmissionJobPollStallUs(pollFrequency.QuadPart > 0 ?
           (ULONGLONG)(pollNow.QuadPart - pollStart.QuadPart) * 1000000ULL /

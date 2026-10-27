@@ -55,8 +55,16 @@ int AdmissionJobTimingTarget(ADMISSION_JOB_TIMING_STATE *State,
  * jobs completed inside the first 1 ms sleep after the kick, so detection
  * cost one timer tick (BackendAfter->Complete median 1510 us, minimum
  * 1041 us). The worker busy-polls every STEP microseconds for the first
- * WINDOW microseconds after the kick, then sleeps one tick per poll. */
-#define ADMISSION_JOB_POLL_SPIN_WINDOW_US 2000u
+ * WINDOW microseconds after the kick, then sleeps one tick per poll.
+ * rc72 (EXP1989, GravityMark D3D12): with a 2 ms window every job of 2 ms
+ * or more was seen ~1.1 ms after its firmware end (6.3/7.2 ms per HD/FHD
+ * frame; jobs under 2 ms: 0.03 ms). The device has no firmware completion
+ * interrupt (only the synthetic scanout edge), so the window now covers the
+ * longest EXP1989 job (45.2 ms). Each step returns to the worker's loop
+ * condition (Stopping, Resetting, TDR drill, job phase); a job outliving
+ * the window (hung GPU awaiting TDR) busy-waits at most WINDOW, then
+ * sleeps ticks. Cost: one vCPU of 8 while a job runs. */
+#define ADMISSION_JOB_POLL_SPIN_WINDOW_US 50000u
 #define ADMISSION_JOB_POLL_SPIN_STEP_US 20u
 /* Microseconds to busy-wait before the next poll, or 0 to sleep one tick. */
 unsigned int AdmissionJobPollStallUs(unsigned long long ElapsedUs);
