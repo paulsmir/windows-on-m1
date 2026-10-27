@@ -64581,3 +64581,9 @@ EXP1984 HARDWARE BEFORE 2026-10-27T14:30:03Z:
 - Hashes: sys 31d7e092f4b2, UmdArm64 7366e9e4308c, UmdX64 098efda08c86, Umd32 4ce17e029a80; manifest febc076eee83, hardware-manifest 329126caca04; probe1984.sh d5b7c4aec23a (PROBE_LINT_OK); visible recovery rec1984h f749279aa4b84048; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1984h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1984-native-rebase/run1984.sh.
+
+EXP1984 HARDWARE ACTUAL 2026-10-27T14:33:51Z: FAIL with a new, later boundary. Native staging with rc61.
+- There were no native PTE refusals, no reject-native-allocation and no device removal from readiness, so rc61 worked.
+- Both arms ended with app "out of memory" in D3D12Context::Buffer::create: arm a (HD 50k) at 26.0 s, arm b (FHD 100k) at 7.8 s.
+- gm1984a: native ring maps 2, 3 and 4 succeeded (128 MiB each). Right after map 4 came reject-make-resident 0x8007000e x2, then reject-batch. Native staging arenas appear to exhaust the pool or the residency budget.
+- Next: subagent rc62 (arena sizing and budget accounting).
