@@ -10,6 +10,13 @@ Receipts (REG_BINARY under the APPL0002 device key):
                         adds timing and the last 8 resets; v3 adds reset stages;
                         v4 adds before/after quiesce queue retirement samples.
   Wom1FirmwareRecovery  8 dwords (EXP1075/G4-recovery).
+  Wom1GpuFaultPostResume v1, 184 bytes (rc77): at the end of each reset
+                        wait, RegionC fault_control, SGX 0x17620/0x17630
+                        (Wom1GpuFaultControlRead), FAULT_INFO, the first 64
+                        firmware-status bytes, live pending stamps, RegionC
+                        fault_info, compute rptr/done/write, events received
+                        while recovery was pending and the optional KMD
+                        RecoverChannel (Wom1GpuFaultRecoverChannel).
   Wom1G4OmittedLeaves   v1, 2976 bytes: eight historical successful leaf
                         updates, allocation/PID/VA spans and exact 16 KiB
                         omission bitmap. A match is historical evidence,
@@ -52,7 +59,10 @@ POOL_NAME = 'Wom1M2PoolDemand'
 MAPPING_NAME = 'Wom1GpuFaultMapping'
 # Same mapping layout; latest valid event, including an unknown capture result.
 MAPPING_LAST_NAME = 'Wom1GpuFaultMappingLast'
-NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME, OMITTED_NAME, MAPPING_NAME, MAPPING_LAST_NAME)
+# rc77: firmware state at the end of each reset quiescence wait.
+POST_RESUME_NAME = 'Wom1GpuFaultPostResume'
+NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME, OMITTED_NAME, MAPPING_NAME, MAPPING_LAST_NAME,
+         POST_RESUME_NAME)
 RAW_NAMES = NAMES + (POOL_NAME,)
 
 FAULT_INFO_NOT_READ = 0xacce5515abad1dea
@@ -495,9 +505,53 @@ def decode_fault_mapping(data):
     return result
 
 
+
+POST_EVENT_KINDS = {**EVENT_KINDS, 7: 'grow_tvb', 8: 'channel_error'}
+FORCE_STATES = {0: 'disabled', 1: 'not-reached', 2: 'sent', 3: 'refused'}
+RUNTIME_RESULTS = {0: 'ok'}
+
+
+def decode_post_resume(data):
+    if len(data) != 184:
+        raise ValueError('unsupported Wom1GpuFaultPostResume length')
+    version, size, fence, wait_ms, fault_control, sgx_read, r17620, r17630 = \
+        struct.unpack_from('<8I', data, 0)
+    if (version, size) != (1, 184):
+        raise ValueError('unsupported Wom1GpuFaultPostResume version')
+    fault_info = struct.unpack_from('<Q', data, 32)[0]
+    status = struct.unpack_from('<16I', data, 40)
+    pending = struct.unpack_from('<I', data, 104)[0]
+    region_fault = struct.unpack_from('<6I', data, 108)
+    (rptr_read, rptr, done, write, events, kinds, last_kind,
+     force_state, force_result, force_mask, force_at) = struct.unpack_from('<11I', data, 132)
+    return {
+        'version': version, 'fence': f'{fence:#x}', 'wait_ms': wait_ms,
+        'regionc_fault_control': f'{fault_control:#x}',
+        'sgx_fault_control': ({'0x17620': f'{r17620:#x}', '0x17630': f'{r17630:#x}'}
+                              if sgx_read else None),
+        'fault_info': decode_fault_info(fault_info),
+        'firmware_status': {'halt_count': status[4], 'halted': status[8],
+                            'resume': status[12], 'words': [f'{w:#x}' for w in status]},
+        'pending_stamps_active': pending,
+        'regionc_fault_info': [f'{w:#x}' for w in region_fault],
+        'compute': {'rptr': rptr if rptr_read else None, 'done': done, 'write': write},
+        'events_after_resume': {'count': events,
+                                'kinds': [POST_EVENT_KINDS.get(k, k) for k in range(32)
+                                          if kinds & (1 << k)],
+                                'last': POST_EVENT_KINDS.get(last_kind, last_kind) if events else None},
+        'recover_channel': {'state': FORCE_STATES.get(force_state, force_state),
+                            'result': RUNTIME_RESULTS.get(force_result, force_result),
+                            'pipes': [n for b, n in ((1, 'ta'), (2, '3d'), (4, 'compute'))
+                                      if force_mask & b],
+                            'at_ms': force_at},
+        'meaning': 'sequential CPU reads after the firmware resume, not atomic GPU state',
+    }
+
+
 DECODERS = {MAPPING_NAME: decode_fault_mapping, MAPPING_LAST_NAME: decode_fault_mapping,
             OMITTED_NAME: decode_omitted_leaves, FAULT_NAME: decode_fault, RESET_NAME: decode_reset,
-            RECOVERY_NAME: decode_recovery, POOL_NAME: decode_pool}
+            RECOVERY_NAME: decode_recovery, POOL_NAME: decode_pool,
+            POST_RESUME_NAME: decode_post_resume}
 
 
 def read_receipts(path):
