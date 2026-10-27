@@ -64921,3 +64921,17 @@ EXP1995 HARDWARE ACTUAL (2026-10-27): **PASS, new best**.
 - GravityMark D3D11 HD 10k: 2515 / 15.0 FPS (EXP1913-1916: about 2550). No regression from rc56-rc72.
 - No removal; G4_SUBMIT_FAILURE none.
 - Verdict: 7cdb3e6b (stream default) validated.
+
+EXP1996 HARDWARE BEFORE 2026-10-27T19:41:35Z:
+- WHY:
+  - the user asked for varied settings compared with the official leaderboard: base M1 macOS FHD 100k about 7700, HD 100k about 9950;
+  - this gives the reference for rc74 (shader cost) on the leaderboard settings, and validates 0291f785 (written cap) in production use.
+- ATOMIC CONTRACT: none; measurement arms.
+- Expected:
+  - FHD 100k at least 2372 (EXP1993);
+  - HD 100k completes; reference EXP1977: 1442.
+- Failure criteria: removal, or a regression against EXP1993.
+- Recovery: rec1996h.
+- Hashes: sys 244bd743eb39, UmdArm64 d7040e82d55f, UmdX64 e91b194c35da, Umd32 e6050a4cca49; manifest 0415108eca6b, hardware-manifest 1ec5b2d3d38f; probe1996.sh 282d2c8bba95 (PROBE_LINT_OK); visible recovery rec1996h 0078791329dd28bb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1996h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1996-leaderboard/run1996.sh.
