@@ -64768,3 +64768,24 @@ EXP1990 HARDWARE ACTUAL (2026-10-27):
     - native-ring-fallback reason 1 for a 256 KiB BO, with arenas at 60/60 MiB;
     - then reject-batch {4, 0x101f1} and {1, 0x1f9}, then measure-d3d12-first-fault 0x100b6.
   - So it is a UMD batch-submission refusal under residency trim and memory pressure, not a stream GPU defect. This goes to rc71.
+
+EXP1991 HARDWARE BEFORE 2026-10-27T17:47:46Z:
+- rc67:
+  - 1ebe0686 and f1e2ac4d: one libagx_win32_query_ia_records dispatch per counted multi-draw instead of one IA dispatch plus a CDM barrier per unrolled record;
+  - 5397a196: one BO for the 11 queries of a D3D12 statistics index.
+- WHY:
+  - EXP1986 has about 1020 "Input assembly counters" updates per Execute, from about 7 counted calls of about 150 records;
+  - EXP1988 has 28 (HD) and 46 (FHD) 64 KiB QUERY escapes per Execute from per-statistic BOs;
+  - EXP1989 is waiting for the GPU (render_fence 32/46 ms), so fewer serialized GPU dispatches should shorten that wait.
+- ATOMIC CONTRACT: none; separate probe step and arms.
+- Expected:
+  - RC57C/U/M _STATS and _COUNT PASS;
+  - "records batched" perf reason present;
+  - IA updates about 13 per Execute;
+  - fewer QUERY escapes;
+  - score above 2404 (HD) and above 1651 (FHD).
+- Failure criteria: a statistics probe FAIL, device removal, or a lower score.
+- Recovery: rec1991h.
+- Hashes: sys e6fad6c4110a, UmdArm64 fad0372b0b85, UmdX64 e8e88ae1d74a, Umd32 26de1357e2ab; manifest 231cad5a52b6, hardware-manifest 83f4b5c9f562; probe1991.sh b8b4c5228dd4 (PROBE_LINT_OK); visible recovery rec1991h aa5aca93e3acba17; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1991h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1991-stats-batch/run1991.sh.
