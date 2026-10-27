@@ -6381,8 +6381,12 @@ static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const
     if (heap) HeapFree(GetProcessHeap(), 0, heap);
     return hr;
 }
+/* rc76: at most this many clears go to the draw that follows them */
+static constexpr UINT kDeferredClears = 16;
 struct AgxD3d12DrawScratch {
     AGX_D3D12_BUFFER rtv_textures[8], vb_buffers[kVertexBuffers], dsv_texture, index_buffer, indirect_args, indirect_count;
+    AGX_D3D12_BUFFER clear_textures[kDeferredClears]; /* rc76 */
+    AGX_D3D12_DRAW_CLEAR clears[kDeferredClears];
     AGX_D3D12_BUFFER so_buffers[kSoTargets], so_filled[kSoTargets]; /* C39 */
     AGX_D3D12_DRAW draw;
     AgxD3d12OwnerBindings vs_bind, ps_bind, gs_bind, hs_bind, ds_bind;
@@ -6432,10 +6436,76 @@ static AgxD3d12OptionalBinds DrawOptionalBinds(const AgxD3d12Draw &draw, const A
     return {draw.pso->gs_dwords ? pending.gs : nullptr, draw.pso->hs_dwords ? pending.hs : nullptr,
             draw.pso->ds_dwords ? pending.ds : nullptr};
 }
+/* rc76 (EXP2000 GravityMark D3D12: 8 of 11 render jobs a frame were
+ * clear-only passes, ~0.6 ms of GPU span each, 5 of them back to back
+ * before one pass): the ClearRenderTargetView/ClearDepthStencilView
+ * commands directly before a draw -- nothing but clears and that draw's
+ * optional-stage binds between them -- go to the draw, which makes them its
+ * pass's load-op clears when that is exact (AgxD3d12OwnerDrawWithClears) and
+ * otherwise runs them first as before. APPLE_AGX_D3D12_CLEAR_ABSORB=0
+ * replays every clear on its own. */
+static bool ClearAbsorbEnabled() {
+    static const bool enabled = [] {
+        char value[2] = {};
+        return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_CLEAR_ABSORB", value, sizeof(value)) == 1 && value[0] == '0');
+    }();
+    return enabled;
+}
+/* rc76: the clears list->command[c, c + n) ending at the first non-clear,
+ * when that is (after optional binds) the draw *draw; n, or 0 when no draw
+ * follows or the run is longer than kDeferredClears */
+static UINT DeferredClearRun(const AgxD3d12CommandList *list, UINT c, UINT *draw) {
+    UINT end = c;
+    while (end < list->commands &&
+           (list->command[end].kind == kCommandClear || list->command[end].kind == kCommandClearDepth))
+        ++end;
+    UINT d = end;
+    while (d < list->commands && (list->command[d].kind == kCommandGsBind || list->command[d].kind == kCommandHsBind ||
+                                  list->command[d].kind == kCommandDsBind))
+        ++d;
+    if (end == c || end - c > kDeferredClears || d >= list->commands || list->command[d].kind != kCommandDraw) return 0;
+    *draw = d;
+    return end - c;
+}
+/* rc76 receipt-only (measure-d3d12-clear-absorb): per Execute */
+struct AgxD3d12ClearAbsorbStats {
+    UINT immediate, deferred, absorbed, absorbed_draws, fallback_draws, reasons;
+};
 static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional,
-                                                AgxD3d12DrawScratch *scratch) {
+                                                AgxD3d12DrawScratch *scratch, const AgxD3d12Command *clears = nullptr,
+                                                UINT clear_count = 0, AgxD3d12ClearAbsorbStats *stats = nullptr) {
     /* the draw's owner records live in the caller's scratch (NewDrawScratch) */
     if (!scratch) return E_OUTOFMEMORY;
+    if (clear_count > kDeferredClears) return E_INVALIDARG;
+    for (UINT k = 0; k < clear_count; ++k) { /* rc76: the arguments the replay loop's clear branches pass */
+        AGX_D3D12_DRAW_CLEAR &out = scratch->clears[k];
+        memset(&out, 0, sizeof(out));
+        if (clears[k].kind == kCommandClearDepth) {
+            const AgxD3d12ClearDepth &clear = clears[k].clear_depth;
+            scratch->clear_textures[k] = HeapBuffer(clear.dsv.heap);
+            out.Depth = 1;
+            out.Format = clear.dsv.format;
+            out.Level = clear.dsv.level;
+            out.FirstLayer = clear.dsv.first_layer;
+            out.Layers = clear.dsv.layers;
+            out.Flags = clear.flags;
+            out.DepthValue = clear.depth;
+            out.Stencil = clear.stencil;
+            out.Rects = clear.rects ? clear.rect : nullptr;
+            out.RectCount = clear.rects;
+        } else {
+            const AgxD3d12Clear &clear = clears[k].clear;
+            scratch->clear_textures[k] = HeapBuffer(clear.rtv.heap);
+            out.Format = clear.rtv.format;
+            out.Level = clear.rtv.level;
+            out.FirstLayer = clear.rtv.first_layer;
+            out.Layers = clear.rtv.layers;
+            memcpy(out.Color, clear.color, sizeof(out.Color));
+            out.Rects = clear.rects ? clear.rect : nullptr;
+            out.RectCount = clear.rects;
+        }
+        out.Texture = &scratch->clear_textures[k];
+    }
     AGX_D3D12_BUFFER(&rtv_textures)[8] = scratch->rtv_textures;
     AGX_D3D12_BUFFER(&vb_buffers)[kVertexBuffers] = scratch->vb_buffers;
     AGX_D3D12_DRAW &draw = scratch->draw;
@@ -6519,7 +6589,11 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     bool minmax = false;
     for (unsigned s = 0; s < AGX_D3D12_HEAP_CS; ++s) {
         const HRESULT hr = SetStageHeap(owner, s, heaps[s], &scratch->heaps[s], &minmax);
-        if (FAILED(hr)) return hr;
+        if (FAILED(hr)) {
+            /* rc76: the deferred clears still run, in order, before the failure */
+            if (clear_count) (void)AgxD3d12OwnerDrawWithClears(owner, nullptr, scratch->clears, clear_count, nullptr, nullptr);
+            return hr;
+        }
     }
     /* C65V/C65S: a MINIMUM/MAXIMUM heap or slot sampler draws with a min/max variant */
     AgxD3d12MinmaxKey key = {};
@@ -6531,7 +6605,18 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     if (optional.ds) slots |= SlotMinmax(scratch->ds_bind, key.slot[AGX_D3D12_HEAP_DS]);
     if (minmax || slots)
         if (void *variant = MinmaxVariant(owner, d.pso, key, false)) draw.Pipeline = static_cast<AGX_D3D12_GRAPHICS *>(variant);
-    return AgxD3d12OwnerDraw(owner, &draw);
+    if (!clear_count) return AgxD3d12OwnerDraw(owner, &draw);
+    UINT absorbed = 0, reason = 0;
+    const HRESULT hr = AgxD3d12OwnerDrawWithClears(owner, &draw, scratch->clears, clear_count, &absorbed, &reason);
+    if (stats) {
+        stats->absorbed += absorbed;
+        if (absorbed) ++stats->absorbed_draws;
+        else {
+            ++stats->fallback_draws;
+            stats->reasons |= 1u << (reason & 31u);
+        }
+    }
+    return hr;
 }
 #endif
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
@@ -6671,6 +6756,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
     UINT command_counts[6] = {};
     AgxD3d12Device *device = nullptr;
     AgxD3d12DrawScratch *draw_scratch = nullptr; /* EXP1838: one per execution */
+    AgxD3d12ClearAbsorbStats absorb = {}; /* rc76 */
     AgxD3d12OwnerRefCommand(static_cast<AGX_D3D12_OWNER *>(queue->device->owner),0,0);
 #endif
     for (UINT i = 0; lists && i < count; ++i) {
@@ -6679,6 +6765,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
         commands += list->commands;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
         AgxD3d12OptionalBinds pending = {}; /* C27/C37 */
+        UINT deferred_first = 0, deferred_end = 0, deferred_draw = 0; /* rc76: clears the draw at deferred_draw runs */
         for (UINT c = 0; SUCCEEDED(hr) && c < list->commands; ++c) {
             const AgxD3d12Command &command = list->command[c];
             AdmissionUmdWaitSetPhase(command.kind == kCommandDraw ? AgxWaitPhaseDraw :
@@ -6689,7 +6776,24 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             device = list->device;
             auto *owner = static_cast<AGX_D3D12_OWNER *>(device->owner);
             AgxD3d12OwnerRefCommand(owner,i,c+1);
-            if (command.kind == kCommandCopy) {
+            if ((command.kind == kCommandClear || command.kind == kCommandClearDepth) && c >= deferred_end) {
+                UINT draw_index = 0;
+                UINT run = ClearAbsorbEnabled() ? DeferredClearRun(list, c, &draw_index) : 0u;
+                /* the draw takes them through its scratch: no scratch, no deferral */
+                if (run && !draw_scratch) draw_scratch = NewDrawScratch();
+                if (!draw_scratch) run = 0;
+                if (run) {
+                    deferred_first = c;
+                    deferred_end = c + run;
+                    deferred_draw = draw_index;
+                    absorb.deferred += run;
+                } else {
+                    ++absorb.immediate;
+                }
+            }
+            if (c >= deferred_first && c < deferred_end) {
+                /* rc76: replayed by the draw at deferred_draw (AgxD3d12OwnerDrawWithClears) */
+            } else if (command.kind == kCommandCopy) {
                 const AgxD3d12Copy &copy = command.copy;
                 AGX_D3D12_BUFFER dst = HeapBuffer(copy.dst), src = HeapBuffer(copy.src);
                 hr = AgxD3d12OwnerCopy(owner, &dst, copy.dst_offset, &src, copy.src_offset, copy.bytes);
@@ -6727,7 +6831,13 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             } else if (TakeOptionalBind(command, &pending)) { /* C27/C37: consumed by the next draw */
             } else if (command.kind == kCommandDraw) {
                 if (!draw_scratch) draw_scratch = NewDrawScratch();
-                hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch);
+                if (deferred_end > deferred_first && c == deferred_draw) {
+                    hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch,
+                                    &list->command[deferred_first], deferred_end - deferred_first, &absorb);
+                    deferred_first = deferred_end = 0;
+                } else {
+                    hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch);
+                }
                 pending = {};
             } else if (command.kind == kCommandQuery) {
                 const AgxD3d12QueryCommand &q = command.query;
@@ -6813,6 +6923,15 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             static_cast<UINT>(submitted.QuadPart), static_cast<UINT>(submitted.QuadPart >> 32),
             static_cast<UINT>(hz), static_cast<UINT>(hz >> 32)};
         AdmissionUmdDiagnostic("measure-d3d12-replay-window", hr, window, 8);
+        /* rc76: clears replayed on their own (no draw follows), deferred to
+         * the following draw, absorbed as its load-op clears, the draws that
+         * absorbed or ran them first, and the AGX_D3D12_ABSORB_* reasons
+         * (bit mask) of the latter */
+        if (absorb.immediate || absorb.deferred) {
+            const UINT clears[] = {absorb.immediate, absorb.deferred, absorb.absorbed, absorb.absorbed_draws,
+                                   absorb.fallback_draws, absorb.reasons};
+            AdmissionUmdDiagnostic("measure-d3d12-clear-absorb", hr, clears, 6);
+        }
     }
     if (g_heap_walk.walks) {
         const UINT walk[] = {g_heap_walk.walks, g_heap_walk.walked, g_heap_walk.packs,

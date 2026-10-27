@@ -117,6 +117,10 @@ int AgxWin32AsahiMapReservedTextureTile(struct pipe_resource *Reserved, unsigned
                                         unsigned Mip, unsigned X, unsigned Y,
                                         struct pipe_resource *Heap, unsigned HeapTile);
 #endif
+/* rc76: whether pipe->clear(Buffers) on the bound framebuffer is a fast
+ * (load-op) clear of every buffer: its batch has neither drawn nor loaded
+ * them. Takes the batch as agx_clear does. */
+int AgxWin32AsahiClearIsFast(struct pipe_context *, unsigned Buffers);
 int AgxWin32AsahiBufferMarkValid(struct pipe_context *, struct pipe_resource *);
 void *AgxWin32AsahiBufferWriteMap(struct pipe_context *, struct pipe_resource *);
 void AgxWin32AsahiContextDiagnostic(struct pipe_context *,

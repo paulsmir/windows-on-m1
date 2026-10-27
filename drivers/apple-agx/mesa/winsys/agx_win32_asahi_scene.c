@@ -478,6 +478,16 @@ void AgxWin32AsahiIndirectMetrics(struct pipe_context *pctx, unsigned out[3]) {
   out[0]=2;out[1]=out[2]=0;
 #endif
 }
+/* rc76: whether pipe->clear(Buffers) on the bound framebuffer clears every
+ * buffer fast (load-op clear): agx_clear (agx_pipe.c) clears fast exactly
+ * the buffers its batch -- agx_get_batch, taken here as agx_clear takes it
+ * -- has neither drawn nor loaded, and draws a u_blitter quad for the rest. */
+int AgxWin32AsahiClearIsFast(struct pipe_context *pctx, unsigned buffers) {
+  struct agx_context *ctx=pctx?agx_context(pctx):NULL;
+  if(!ctx || ctx->any_faults) return 0;
+  struct agx_batch *batch=agx_get_batch(ctx);
+  return !ctx->any_faults && batch && !(buffers & (batch->draw | batch->load));
+}
 /* EXP1927: a residency failure can occur while acquiring a batch (or
  * flushing a hazard in a prior heap chunk). Never initialize its encoder or
  * grow its sampler heap after that failure. Kind 4 names this scene bridge. */

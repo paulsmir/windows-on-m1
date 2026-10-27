@@ -558,6 +558,42 @@ HRESULT AgxD3d12OwnerSetHeap(AGX_D3D12_OWNER *Owner, unsigned Stage, const AGX_D
 /* Records one draw; bindings that reference heaps are dropped by the next
  * AgxD3d12OwnerSubmitAndWait. */
 HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *Owner, const AGX_D3D12_DRAW *Draw);
+/* rc76: a ClearRenderTargetView (Depth 0) or ClearDepthStencilView (Depth 1,
+ * Flags as AgxD3d12OwnerClearDepthStencil) recorded just before a draw with
+ * nothing but other such clears between them. */
+typedef struct {
+  const AGX_D3D12_BUFFER *Texture;
+  DXGI_FORMAT Format;
+  unsigned Level, FirstLayer, Layers;
+  int Depth;
+  unsigned Flags;
+  float Color[4];
+  float DepthValue;
+  unsigned Stencil;
+  const RECT *Rects; /* NULL = the whole level */
+  unsigned RectCount;
+} AGX_D3D12_DRAW_CLEAR;
+/* rc76 (EXP2000: GravityMark's 8 clear-only render passes a frame, ~0.6 ms
+ * of GPU span each): Draw after Clears[0, Count). When every clear covers
+ * its whole level, is one layer of exactly one attachment of the draw's
+ * framebuffer in that view's format, level and layer, the colour clears
+ * agree, a stencil clear goes with a depth clear and the draw's batch has
+ * neither drawn nor loaded those attachments, the clears become that render
+ * pass's load-op clears (one pipe->clear on the draw framebuffer): no
+ * clear-only render pass and no reload of its targets. Otherwise every clear
+ * first runs on its own one-layer framebuffer, in order
+ * (AgxD3d12OwnerClearRenderTarget / AgxD3d12OwnerClearDepthStencil), as it
+ * would without this call; Draw NULL runs only the clears that way.
+ * *Absorbed: the clears absorbed (0 or Count); *Reason: why not (an
+ * AGX_D3D12_ABSORB_* value; AGX_D3D12_ABSORB_OK when absorbed). */
+enum {
+  AGX_D3D12_ABSORB_OK, AGX_D3D12_ABSORB_ATTACHMENT, AGX_D3D12_ABSORB_EXTENT, AGX_D3D12_ABSORB_RECT,
+  AGX_D3D12_ABSORB_VALUE, AGX_D3D12_ABSORB_STENCIL, AGX_D3D12_ABSORB_BUSY,
+  AGX_D3D12_ABSORB_EARLY /* the draw returned before binding its framebuffer */
+};
+HRESULT AgxD3d12OwnerDrawWithClears(AGX_D3D12_OWNER *Owner, const AGX_D3D12_DRAW *Draw,
+                                    const AGX_D3D12_DRAW_CLEAR *Clears, unsigned Count,
+                                    unsigned *Absorbed, unsigned *Reason);
 /* Submits the recorded work and waits for it (C4b orders it before the
  * runtime's later queue signal by completing it first). */
 HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *Owner);

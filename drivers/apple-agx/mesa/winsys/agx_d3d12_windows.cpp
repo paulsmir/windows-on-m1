@@ -74,6 +74,10 @@ struct AGX_D3D12_OWNER {
    * invalidate it; u_blitter restores it. */
   struct pipe_framebuffer_state DrawFramebuffer;
   bool DrawFramebufferValid;
+  /* rc76: the clears AgxD3d12OwnerDrawWithClears hands to the draw it runs
+   * (NULL once the draw consumed them), and the outcome */
+  const AGX_D3D12_DRAW_CLEAR *DrawClears;
+  unsigned DrawClearCount, DrawClearsAbsorbed, DrawClearReason;
   /* receipt-only: QPC ticks of the draws' binding, draw_vbo and unbinding
    * and of the submit's flush and retire, reported and reset per submit
    * (measure-d3d12-owner-time) */
@@ -2703,6 +2707,149 @@ extern "C" HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *owner, const 
   return clear_view_layers(owner, surface, true, buffers, &none, z, stencil, rects, rect_count) ? S_OK : E_NOTIMPL;
 }
 
+/* rc76: the colour clear_view_layers clears a view of Format with: the
+ * FLOAT[4] converted as AgxD3d12OwnerClearRenderTarget converts it (C57). */
+static union pipe_color_union clear_color_value(DXGI_FORMAT format, const float color[4]) {
+  const int integer = clear_integer_kind(format);
+  union pipe_color_union value = {};
+  for (unsigned i = 0; i < 4; ++i) {
+    const float f = color[i];
+    if (integer > 0)
+      value.ui[i] = !(f > 0.0f) ? 0u : f >= 4294967295.0f ? 0xffffffffu : static_cast<uint32_t>(f);
+    else if (integer < 0)
+      value.i[i] = !(f == f) ? 0 : f <= -2147483648.0f ? INT32_MIN : f >= 2147483647.0f ? INT32_MAX : static_cast<int32_t>(f);
+    else
+      value.f[i] = f;
+  }
+  return value;
+}
+
+/* rc76: whether Clears[0, Count), run one by one on one-layer framebuffers
+ * (clear_view_layers) just before Draw, equal one pipe->clear of *Buffers
+ * (*Color, *Z, *Stencil) on Draw's framebuffer Fb (built by
+ * AgxD3d12OwnerDraw). Gallium's pipe->clear clears the selected buffers over
+ * the whole framebuffer area, so each clear must
+ * - cover its whole level (no rect, or a rect covering it, as
+ *   clear_view_layers decides; a partial rect keeps its refusal),
+ * - pass the checks of its one-layer path (else that path reports the error),
+ * - be one layer of a resource that is exactly one attachment of Fb, in the
+ *   draw view's format, level and layer (a second binding of the resource
+ *   would store its unclear tiles over the cleared ones),
+ * - have Fb's size as its level size.
+ * Later clears of an attachment override earlier ones, as in order. One
+ * pipe->clear carries one colour: the colour attachments' final values must
+ * agree. The Windows agx_clear takes stencil only with depth. Returns
+ * AGX_D3D12_ABSORB_OK or the first reason against. */
+static unsigned clear_absorb_plan(const AGX_D3D12_DRAW *draw, const struct pipe_framebuffer_state *fb,
+                                  const AGX_D3D12_DRAW_CLEAR *clears, unsigned count, unsigned *buffers,
+                                  union pipe_color_union *color, double *z, unsigned *stencil) {
+  union pipe_color_union value[PIPE_MAX_COLOR_BUFS] = {};
+  unsigned colors = 0, zs = 0;
+  *buffers = 0;
+  *z = 0.0;
+  *stencil = 0;
+  memset(color, 0, sizeof(*color));
+  for (unsigned k = 0; k < count; ++k) {
+    const AGX_D3D12_DRAW_CLEAR &c = clears[k];
+    const struct pipe_resource *resource =
+        c.Texture ? static_cast<const struct pipe_resource *>(c.Texture->Resource) : NULL;
+    if (!resource || c.Layers != 1 || c.Level > resource->last_level ||
+        c.FirstLayer >= texture_layer_extent(resource, c.Level))
+      return AGX_D3D12_ABSORB_ATTACHMENT;
+    const unsigned width = level_extent(resource->width0, c.Level), height = level_extent(resource->height0, c.Level);
+    bool whole = !c.RectCount;
+    for (unsigned r = 0; r < c.RectCount && !whole; ++r)
+      whole = c.Rects && c.Rects[r].left <= 0 && c.Rects[r].top <= 0 &&
+              c.Rects[r].right >= static_cast<LONG>(width) && c.Rects[r].bottom >= static_cast<LONG>(height);
+    if (!whole) return AGX_D3D12_ABSORB_RECT;
+    if (fb->width != width || fb->height != height) return AGX_D3D12_ABSORB_EXTENT;
+    unsigned uses = fb->zsbuf.texture == resource ? 1u : 0u, slot = PIPE_MAX_COLOR_BUFS;
+    for (unsigned i = 0; i < fb->nr_cbufs && i < PIPE_MAX_COLOR_BUFS; ++i)
+      if (fb->cbufs[i].texture == resource) {
+        ++uses;
+        slot = i;
+      }
+    if (uses != 1) return AGX_D3D12_ABSORB_ATTACHMENT;
+    if (!c.Depth) {
+      if (slot >= draw->NumRtvs || !draw->Rtv[slot].Texture || draw->Rtv[slot].Format != c.Format ||
+          draw->Rtv[slot].Level != c.Level || draw->Rtv[slot].FirstLayer != c.FirstLayer || draw->Rtv[slot].Layers != 1 ||
+          FormatTranslate(c.Format, FALSE) == PIPE_FORMAT_NONE)
+        return AGX_D3D12_ABSORB_ATTACHMENT;
+      value[slot] = clear_color_value(c.Format, c.Color);
+      colors |= PIPE_CLEAR_COLOR0 << slot;
+      continue;
+    }
+    const enum pipe_format format = FormatTranslate(c.Format, TRUE);
+    const struct util_format_description *desc = format != PIPE_FORMAT_NONE ? util_format_description(format) : NULL;
+    if (fb->zsbuf.texture != resource || !draw->Dsv.Texture || draw->Dsv.Format != c.Format ||
+        draw->Dsv.Level != c.Level || draw->Dsv.FirstLayer != c.FirstLayer || draw->Dsv.Layers != 1 ||
+        c.FirstLayer >= resource->array_size || !(c.Flags & 3u) || !desc ||
+        desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS)
+      return AGX_D3D12_ABSORB_ATTACHMENT;
+    if (c.Flags & 1u) {
+      zs |= PIPE_CLEAR_DEPTH;
+      *z = !(c.DepthValue >= 0.0f) ? 0.0 : c.DepthValue > 1.0f ? 1.0 : c.DepthValue;
+    }
+    if ((c.Flags & 2u) && desc->swizzle[1] != PIPE_SWIZZLE_NONE) {
+      zs |= PIPE_CLEAR_STENCIL;
+      *stencil = c.Stencil;
+    }
+  }
+  for (unsigned i = 0, first = PIPE_MAX_COLOR_BUFS; i < PIPE_MAX_COLOR_BUFS; ++i) {
+    if (!(colors & (PIPE_CLEAR_COLOR0 << i))) continue;
+    if (first == PIPE_MAX_COLOR_BUFS) {
+      first = i;
+      *color = value[i];
+    } else if (memcmp(&value[i], color, sizeof(*color))) {
+      return AGX_D3D12_ABSORB_VALUE;
+    }
+  }
+  if ((zs & PIPE_CLEAR_STENCIL) && !(zs & PIPE_CLEAR_DEPTH)) return AGX_D3D12_ABSORB_STENCIL;
+  *buffers = colors | zs;
+  return AGX_D3D12_ABSORB_OK;
+}
+
+/* rc76: the clears on their own one-layer framebuffers, in order; the first
+ * failure ends them as it ends a replay */
+static HRESULT run_draw_clears(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW_CLEAR *clears, unsigned count) {
+  for (unsigned k = 0; k < count; ++k) {
+    const AGX_D3D12_DRAW_CLEAR &c = clears[k];
+    const HRESULT hr = c.Depth ? AgxD3d12OwnerClearDepthStencil(owner, c.Texture, c.Format, c.Level, c.FirstLayer,
+                                                                c.Layers, c.Flags, c.DepthValue, c.Stencil, c.Rects,
+                                                                c.RectCount)
+                               : AgxD3d12OwnerClearRenderTarget(owner, c.Texture, c.Format, c.Level, c.FirstLayer,
+                                                                c.Layers, c.Color, c.Rects, c.RectCount);
+    if (FAILED(hr)) return hr;
+  }
+  return S_OK;
+}
+
+/* rc76: called by AgxD3d12OwnerDraw once Fb is bound; consumes the pending
+ * clears. A fast clear only: agx_clear draws a u_blitter quad for buffers
+ * its batch already drew or loaded, which the one-layer path never needs. */
+static HRESULT draw_absorb_clears(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *draw,
+                                  const struct pipe_framebuffer_state *fb) {
+  const AGX_D3D12_DRAW_CLEAR *clears = owner->DrawClears;
+  const unsigned count = owner->DrawClearCount;
+  struct pipe_context *pipe = owner->Context;
+  owner->DrawClears = NULL;
+  unsigned buffers = 0, stencil = 0;
+  double z = 0.0;
+  union pipe_color_union color = {};
+  unsigned reason = clear_absorb_plan(draw, fb, clears, count, &buffers, &color, &z, &stencil);
+  if (reason == AGX_D3D12_ABSORB_OK && buffers && !AgxWin32AsahiClearIsFast(pipe, buffers))
+    reason = AGX_D3D12_ABSORB_BUSY;
+  owner->DrawClearReason = reason;
+  if (reason == AGX_D3D12_ABSORB_OK) {
+    if (buffers) pipe->clear(pipe, buffers, 0xffffffffu, 0xff, NULL, &color, z, stencil);
+    owner->DrawClearsAbsorbed = count;
+    return S_OK;
+  }
+  /* the one-layer framebuffers replace the draw's (DrawFramebufferValid
+   * false): AgxD3d12OwnerDraw binds it again */
+  return run_draw_clears(owner, clears, count);
+}
+
 /* Maps the texture box and the buffer range; the maps synchronise with work
  * already recorded on the context, so the copy keeps replay order. */
 static bool reserved_texture(struct pipe_resource *texture) {
@@ -4180,6 +4327,15 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     owner->DrawFramebuffer = fb;
     owner->DrawFramebufferValid = true;
   }
+  if (owner->DrawClears) { /* rc76: AgxD3d12OwnerDrawWithClears */
+    const HRESULT cleared = draw_absorb_clears(owner, draw, &fb);
+    if (FAILED(cleared)) return cleared;
+    if (!owner->DrawFramebufferValid) { /* they ran on their own framebuffers */
+      pipe->set_framebuffer_state(pipe, &fb);
+      owner->DrawFramebuffer = fb;
+      owner->DrawFramebufferValid = true;
+    }
+  }
   pipe->bind_vs_state(pipe, graphics->Vs);
   if (!graphics->Fs && !owner->EmptyFs) owner->EmptyFs = util_make_empty_fragment_shader(pipe);
   if (!graphics->Fs && !owner->EmptyFs) return E_OUTOFMEMORY;
@@ -4438,6 +4594,31 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   owner->TimeUnbind += qpc_now() - drawn;
   ++owner->TimedDraws;
   return S_OK;
+}
+
+extern "C" HRESULT AgxD3d12OwnerDrawWithClears(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *draw,
+                                               const AGX_D3D12_DRAW_CLEAR *clears, unsigned count,
+                                               unsigned *absorbed, unsigned *reason) {
+  OwnerLock lock(owner);
+  if (absorbed) *absorbed = 0;
+  if (reason) *reason = AGX_D3D12_ABSORB_OK;
+  if (!count) return AgxD3d12OwnerDraw(owner, draw);
+  if (!owner || !clears) return E_INVALIDARG;
+  owner->DrawClears = clears;
+  owner->DrawClearCount = count;
+  owner->DrawClearsAbsorbed = 0;
+  owner->DrawClearReason = AGX_D3D12_ABSORB_EARLY;
+  HRESULT hr = AgxD3d12OwnerDraw(owner, draw);
+  if (owner->DrawClears) {
+    /* The draw returned before binding its framebuffer, so it changed no
+     * GPU state: its clears run now as they would have run before it. */
+    owner->DrawClears = NULL;
+    const HRESULT cleared = run_draw_clears(owner, clears, count);
+    if (FAILED(cleared)) hr = cleared;
+  }
+  if (absorbed) *absorbed = owner->DrawClearsAbsorbed;
+  if (reason) *reason = owner->DrawClearReason;
+  return hr;
 }
 
 /* RC65 (EXP1985): at Execute start, before the replay, move the dirty runs
