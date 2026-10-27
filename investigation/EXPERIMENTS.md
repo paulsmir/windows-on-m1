@@ -64539,3 +64539,10 @@ EXP1982 HARDWARE BEFORE 2026-10-27T12:33:13Z:
 - Hashes: sys 70a0059baa28, UmdArm64 0ea6a9a11dce, UmdX64 3e5d75923461, Umd32 9c2a01bcba73; manifest 2d5a5950e552, hardware-manifest fd8f990a43fe; probe1982.sh 52f2aa0e61a5 (PROBE_LINT_OK); visible recovery rec1982h 7b7854ef9aa68f1f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1982h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1982-paging-containment/run1982.sh.
+
+EXP1982 HARDWARE ACTUAL 2026-10-27T12:45:51Z:
+- Probes: RC44D/I, RC59G (MaxCount 60000, GPU-written arguments and count) and RC57C with the stream: **all PASS**, with STATS and COUNT.
+- Arm a (HD 50k, default, NATIVE_STAGING=0): 1621 / 9.7 FPS.
+- Arm b (HD 50k, stream on): **no bugcheck** (rc59 contained the paging refusal), but GravityMark hung after loading: one counted-path row with path=3, then nothing until the harness killed it at 300 s. The UMD log has 4 reject-native-envelope and 15 reject-seterror rows; the guest is alive. So the stream job still times out in GravityMark (cause open), but the system now survives.
+- Note: the recovery for EXP1981 had to be rerun because the cloned cleanup scripts expected oem5.inf while Windows published oem6.inf. prepare.sh now rewrites the actual published INF name from stage-receipt.json (CLEANUP_INF line).
+- Recovery rec1982h (running).
