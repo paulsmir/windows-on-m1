@@ -64673,3 +64673,20 @@ EXP1987 HARDWARE ACTUAL (2026-10-27):
   - rc63 b3b5b134 validated;
   - rc63 RC63G probe validated, since it reproduces a real bug;
   - rc65 neutral.
+
+EXP1988 HARDWARE BEFORE 2026-10-27T16:58:33Z:
+- rc66:
+  - 383df460: Shader-class BOs never reserve native slices (reason 6);
+  - a1bd769d: the measure-native-arena-class receipt.
+- WHY: EXP1986 has 43-49 small-slot QUERY escapes per Execute (29-40 ms), each draining the previous GPU job. Hot BOs (pipeline-statistics query BOs, encoders, pool slabs) fell back because write-once shader BOs filled the arenas during load (inferred).
+- ATOMIC CONTRACT: one policy change plus a receipt.
+- Expected:
+  - reason-6 rows appear;
+  - reason-1 rows for 64 KiB BOs well below 94 (HD);
+  - class w1+w2 (QUERY up to 1 MiB) about 0;
+  - score above 2082 (HD) and above 1649 (FHD).
+- Failure criteria: device removal, a wrong image, or a score below EXP1986.
+- Recovery: rec1988h.
+- Hashes: sys 20d8b4e37e3a, UmdArm64 1a065e3363d4, UmdX64 c6465085ef7e, Umd32 96ee652fc03a; manifest 67df07f07b23, hardware-manifest 94c00bebb4c9; probe1988.sh b382486429fd (PROBE_LINT_OK); visible recovery rec1988h 884668faa3b99f7e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1988h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1988-shader-offnative/run1988.sh.
