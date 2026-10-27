@@ -65203,3 +65203,19 @@ EXP2007 HARDWARE ACTUAL (2026-10-27): rc77 fault_control 0xb, **drill FAIL again
 - Receipts: rec2007h/kmd-receipts-pre-disable.txt, with Wom1GpuFault and Wom1GpuFaultMapping present.
 - Verdict: the hypothesis "hard faults prevent retirement" is rejected; this is back with rc77. 0xb is kept (Asahi parity, neutral).
 - Recovery: rec2007h AT_PROXY.
+
+EXP2008 HARDWARE BEFORE 2026-10-27T22:42:24Z:
+- WHY: in EXP2006, 5 of the 8 clears fell back (reason VALUE). They are the 4 G-buffer RTV clears with differing colours plus the DSV. The submit letters show 5 `dnone` clear-only passes and a G-buffer pass that loads 5 targets. Asahi keeps a fast-clear colour per RT (batch->uploaded_clear_color[rt]).
+- ATOMIC CONTRACT: one behaviour change (kill switch APPLE_AGX_D3D12_CLEAR_ABSORB=0).
+- Expected:
+  - absorbed 8, fallback_draws 0;
+  - no `dnone` rows;
+  - render jobs 9 → 4;
+  - GPU span about 3 ms lower;
+  - **image identical to EXP2006** (G-buffer clear colours);
+  - HD above 5081.
+- Failure criteria: a wrong image, removal, or a regression.
+- Recovery: rec2008h.
+- Hashes: sys 1cfaa06ab500, UmdArm64 e4b0f9dd09d6, UmdX64 e20c5130c28c, Umd32 86586da5959d; manifest cd2867a6f2b3, hardware-manifest 551882ff7724; probe2008.sh 11cfdcf9f35c (PROBE_LINT_OK); visible recovery rec2008h 6e28dfd7f6a7a8aa; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2008h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2008-clear-percolor/run2008.sh.
