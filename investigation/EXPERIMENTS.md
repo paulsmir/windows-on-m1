@@ -64804,3 +64804,17 @@ EXP1991 HARDWARE ACTUAL (2026-10-27): **PASS, new best**.
   - small passes: about 4.7-4.9 ms.
   - detect: HD 5.6 ms, FHD 7.4 ms.
 - Verdict: rc67 validated (1ebe0686, f1e2ac4d, 5397a196).
+
+EXP1992 HARDWARE BEFORE 2026-10-27T18:03:23Z:
+- WHY: rc70's tools/agx_gpu_frame_breakdown.py on EXP1989 gives completion-detection latency of 6.3 ms (HD) and 7.2 ms (FHD) per frame. Jobs of 2 ms or more are detected about 1.1 ms late because, after a 2 ms spin, the worker sleeps for 1 ms ticks (render_job_timing.h:59). The app is GPU-timeline-bound, so this is on the critical path.
+- ATOMIC CONTRACT: one constant.
+- Expected:
+  - median.detect_ms below 1;
+  - frame about 5-7 ms shorter;
+  - score above EXP1991;
+  - no removal or TDR.
+- Failure criteria: removal, a lower score (thermal or hypervisor cost of the spin), or a TDR.
+- Recovery: rec1992h.
+- Hashes: sys c9ffbd109e72, UmdArm64 4f2140c9d28a, UmdX64 c1bbc3ccfb25, Umd32 697e0a6fcdad; manifest bd705a4ad081, hardware-manifest 86431d0e6da4; probe1992.sh 9be523458fba (PROBE_LINT_OK); visible recovery rec1992h 7e18568e8c358b6f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1992h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1992-poll-latency/run1992.sh.
