@@ -65141,3 +65141,11 @@ Switches Wom1GpuFaultInfoRead=1 and Wom1GpuFaultDrillAllowed=1. Package 30.0.200
 - Hashes: sys 2b1a08cb22a6, UmdArm64 51d3c16e13ad, UmdX64 552f0325e4de, Umd32 d9aa2b3e3dd5; manifest af6e17968a89, hardware-manifest 41b1a47f069a; probe2005.sh 5b512cc97481 (PROBE_LINT_OK); visible recovery rec2005h 7b73c00abec089b4; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultDrillAllowed=1.
 - Recovery rec2005h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2005-clear-absorb/run2005.sh.
+
+EXP2005 HARDWARE ACTUAL (2026-10-27): **rc37 fault drill FAIL: bugcheck 0x116**. The rc76 arms did not run.
+- The drill started; the guest went down within about 10 s (GUEST_DOWN_DURING_FAULT_DRILL 2).
+- The vUART shows a PSCI reset from the Windows bugcheck path. During the UEFI reboot, the proxy serial dropped ("Device not configured"). No drill log or KMD receipts came back.
+- Minidump `evidence/EXP2005/102726-15437-01.dmp`: **0x116 VIDEO_TDR_FAILURE, P3 = 0xC0000483, P4 = 3**. This is the same mechanism as EXP1922: after a GPU MMU fault the reset cannot prove quiescence and returns 0xC0000483, so dxgkrnl bugchecks the machine.
+- Conclusion: an app-caused GPU data-read fault takes down the whole system. This is pre-existing, not caused by rc75, but it matters more now that root views are unchecked. It is the production blocker given to rc77.
+- Recovery: rec2005h with AGX_RECOVERY_ALLOW_AT_PROXY=1.
+- rc76 clear absorb is not yet measured; it is rerun next without the drill.
