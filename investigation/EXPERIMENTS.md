@@ -64889,3 +64889,14 @@ EXP1994 HARDWARE BEFORE 2026-10-27T18:51:14Z:
 - Hashes: sys 3d812f4f6d3e, UmdArm64 6e9103821ed8, UmdX64 77897d81b8b1, Umd32 9c92c3291a27; manifest faf4b862e768, hardware-manifest 948ba7323676; probe1994.sh 7b56075b46c6 (PROBE_LINT_OK); visible recovery rec1994h 0277b1330b779bfd; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1994h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1994-cdm-relaxed/run1994.sh.
+
+EXP1994 HARDWARE ACTUAL (2026-10-27): **rc73 REJECTED, neutral**.
+- RC73B **FAIL** in both modes: relaxed, and native with APPLE_AGX_D3D12_CDM_BARRIERS=1.
+  - The probe reports completed = UINT64_MAX (device removed).
+  - Log rows: reject-batch {3, 0x4af} and {4, 0x404c9}; first-fault 0x102cb.
+  - The cause is in the probe's 131 UAVs, 128 dispatches and 64 barriers, or in the barrier replay, independent of the relaxation; it is back with the rc73 agent.
+- GravityMark, stream off, relaxed mode:
+  - HD 50k 3431 / 20.5 FPS (EXP1992: 3410);
+  - FHD 100k 2067 / 10.9 FPS (EXP1992: 2159).
+- measure-d3d12-cdm-barriers median: 174 relaxed launches, but **172 owed barriers emitted at app barriers** (202 app barrier batches). GravityMark puts a barrier after almost every dispatch, so almost nothing is skipped.
+- Verdict: rc73 (e52ee7fd, de3558aa, 32fc8647, ebf6e16b) rejected and reverted in integration (15ac8cd4). The finer-grained analysis is with the rc73 agent.
