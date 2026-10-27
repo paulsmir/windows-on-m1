@@ -19,7 +19,10 @@ WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
   pipe->clear on the draw framebuffer only when that equals running them one
   by one on one-layer framebuffers: whole level, one layer, exactly one
   attachment in the same view format/level/layer, level size == framebuffer
-  size, one colour, stencil with depth; later clears override earlier ones.
+  size, stencil with depth; later clears override earlier ones; each colour
+  attachment keeps its own final value (rc76b, EXP2006: the G-buffer clears
+  differ in colour), set by AgxWin32AsahiSetFastClearColor into the batch's
+  fast-clear slot only while that slot is the clear's.
 - The colour conversion of the absorbed path is the one-layer path's (C57).
 - The replay defers only clears directly followed by a draw and still runs
   them when the draw does not consume them.
@@ -157,9 +160,14 @@ static AGX_D3D12_DRAW_CLEAR dsv(const AGX_D3D12_BUFFER *b, DXGI_FORMAT f, unsign
   AGX_D3D12_DRAW_CLEAR c = {}; c.Texture = b; c.Format = f; c.Layers = 1; c.Depth = 1; c.Flags = flags;
   c.DepthValue = d; c.Stencil = s; return c;
 }
+static pipe_color_union colors[PIPE_MAX_COLOR_BUFS];
 static unsigned plan(const Pass &p, const AGX_D3D12_DRAW_CLEAR *c, unsigned n, unsigned *buffers,
                      pipe_color_union *color, double *z, unsigned *s) {
-  return clear_absorb_plan(&p.draw, &p.fb, c, n, buffers, color, z, s);
+  const unsigned reason = clear_absorb_plan(&p.draw, &p.fb, c, n, buffers, colors, z, s);
+  unsigned first = 0;
+  while (first < PIPE_MAX_COLOR_BUFS && !(*buffers & (PIPE_CLEAR_COLOR0 << first))) ++first;
+  *color = colors[first < PIPE_MAX_COLOR_BUFS ? first : 0];
+  return reason;
 }
 int main() {
   unsigned buffers, s; double z; pipe_color_union color;
@@ -169,12 +177,14 @@ int main() {
     c[4] = dsv(&p.dbuf, DXGI_FORMAT_D24_UNORM_S8_UINT, 3u, 1.5f, 7u);
     assert(plan(p, c, 5, &buffers, &color, &z, &s) == AGX_D3D12_ABSORB_OK);
     assert(buffers == ((0xfu << 2) | PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL) && z == 1.0 && s == 7u && color.f[0] == 0.0f);
-    /* colours that differ need two pipe->clear calls: not absorbed */
+    /* rc76b (EXP2006): colours that differ are absorbed, each attachment keeps its own */
     c[2].Color[1] = 0.5f;
-    assert(plan(p, c, 5, &buffers, &color, &z, &s) == AGX_D3D12_ABSORB_VALUE && buffers == 0);
+    assert(plan(p, c, 5, &buffers, &color, &z, &s) == AGX_D3D12_ABSORB_OK &&
+           buffers == ((0xfu << 2) | PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL));
+    assert(colors[2].f[1] == 0.5f && colors[0].f[1] == 0.0f && colors[3].f[1] == 0.0f);
     /* in order: the later clear of the same target wins */
-    AGX_D3D12_DRAW_CLEAR again[6]; memcpy(again, c, sizeof(c)); again[5] = rtv(&p.buf[2], p.draw.Rtv[2].Format, 0.0f);
-    assert(plan(p, again, 6, &buffers, &color, &z, &s) == AGX_D3D12_ABSORB_OK);
+    AGX_D3D12_DRAW_CLEAR again[6]; memcpy(again, c, sizeof(c)); again[5] = rtv(&p.buf[2], p.draw.Rtv[2].Format, 0.25f);
+    assert(plan(p, again, 6, &buffers, &color, &z, &s) == AGX_D3D12_ABSORB_OK && colors[2].f[1] == 0.25f);
   }
   { /* one target only, the others keep their contents */
     Pass p; AGX_D3D12_DRAW_CLEAR c = rtv(&p.buf[1], p.draw.Rtv[1].Format, 0.25f);
@@ -310,6 +320,70 @@ class ClearAbsorbPlan(unittest.TestCase):
         self.assertEqual(loop(one_layer), loop(absorbed))
 
 
+SET_COLOR_PROGRAM = r'''
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+#define PIPE_CLEAR_COLOR0 (1 << 2)
+#define PIPE_MAX_COLOR_BUFS 8
+union pipe_color_union { float f[4]; };
+struct pipe_context { int unused; };
+struct pipe_surface { unsigned format; void *texture; };
+struct pipe_framebuffer_state { unsigned nr_cbufs; struct pipe_surface cbufs[8]; };
+struct agx_pool { uint64_t next; };
+struct agx_batch { unsigned clear, draw; struct pipe_framebuffer_state key; struct agx_pool pool;
+                   uint64_t uploaded_clear_color[8]; int entered, refuse; };
+struct agx_context { struct pipe_context base; bool any_faults; struct agx_batch batch; };
+static float last[4];
+static struct agx_context *agx_context(struct pipe_context *p) { return (struct agx_context *)p; }
+static struct agx_batch *agx_get_batch(struct agx_context *ctx) { return &ctx->batch; }
+static union pipe_color_union util_clamp_color(unsigned format, const union pipe_color_union *c) {
+  union pipe_color_union r = *c; if (format == 1 && r.f[0] > 1.0f) r.f[0] = 1.0f; return r; }
+static uint64_t agx_pool_upload_aligned(struct agx_pool *pool, const void *data, size_t sz, unsigned align) {
+  (void)align; assert(sz == 16); for (int i = 0; i < 4; ++i) last[i] = ((const float *)data)[i]; return pool->next += 64; }
+static int AgxWin32AsahiBatchEnter(struct agx_batch *b) { if (b->refuse) return 0; ++b->entered; return 1; }
+static int AgxWin32AsahiBatchLeave(struct agx_batch *b) { return b->entered-- > 0; }
+@@FUNCTION@@
+int main(void) {
+  static int tex;
+  struct agx_context ctx = {0};
+  ctx.batch.key.nr_cbufs = 4;
+  for (int i = 0; i < 4; ++i) { ctx.batch.key.cbufs[i].texture = &tex; ctx.batch.key.cbufs[i].format = 1; }
+  ctx.batch.clear = 0xfu << 2; ctx.batch.pool.next = 0x1000;
+  for (int i = 0; i < 4; ++i) ctx.batch.uploaded_clear_color[i] = 0x1000;
+  union pipe_color_union red = {{2.0f, 0.0f, 0.0f, 1.0f}};
+  /* the clamped colour replaces buffer 2's upload only */
+  assert(AgxWin32AsahiSetFastClearColor(&ctx.base, 2, &red) && !ctx.any_faults && !ctx.batch.entered);
+  assert(ctx.batch.uploaded_clear_color[2] == 0x1040 && ctx.batch.uploaded_clear_color[1] == 0x1000 && last[0] == 1.0f);
+  /* a buffer the clear skipped (render condition) is left alone */
+  assert(AgxWin32AsahiSetFastClearColor(&ctx.base, 5, &red) && ctx.batch.pool.next == 0x1040);
+  /* once drawn, the slot is no longer the clear's: refused */
+  ctx.batch.draw = PIPE_CLEAR_COLOR0 << 1;
+  assert(!AgxWin32AsahiSetFastClearColor(&ctx.base, 1, &red) && ctx.batch.uploaded_clear_color[1] == 0x1000);
+  /* a batch capsule refusal faults the context */
+  ctx.batch.refuse = 1;
+  assert(!AgxWin32AsahiSetFastClearColor(&ctx.base, 3, &red) && ctx.any_faults);
+  return 0;
+}
+'''
+
+
+class FastClearColor(unittest.TestCase):
+    def test_own_colour_replaces_the_fast_clear_slot(self):
+        function = block(SCENE.read_text(), 'int AgxWin32AsahiSetFastClearColor(')
+        with tempfile.TemporaryDirectory(prefix='rc76b-colour-') as tmp:
+            path = Path(tmp) / 'colour.c'
+            exe = Path(tmp) / 'colour'
+            path.write_text(SET_COLOR_PROGRAM.replace('@@FUNCTION@@', function))
+            build = subprocess.run([os.environ.get('CC', 'clang'), '-std=c11', '-Wall', '-Wextra', '-Werror',
+                                    '-Wno-unused-function', '-fsanitize=address,undefined', str(path), '-o', str(exe)],
+                                   capture_output=True, text=True)
+            self.assertEqual(build.returncode, 0, build.stderr)
+            ran = subprocess.run([str(exe)], capture_output=True, text=True)
+            self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+
+
 class ClearAbsorbWiring(unittest.TestCase):
     def test_draw_consumes_or_runs_the_clears(self):
         owner = OWNER.read_text()
@@ -325,6 +399,10 @@ class ClearAbsorbWiring(unittest.TestCase):
         self.assertIn('owner->DrawClears = NULL;', absorb_fn)
         self.assertLess(absorb_fn.index('AgxWin32AsahiClearIsFast(pipe, buffers)'), absorb_fn.index('pipe->clear(pipe, buffers'))
         self.assertIn('return run_draw_clears(owner, clears, count);', absorb_fn)
+        # rc76b: every colour buffer whose value differs from the shared one gets its own, after the clear
+        own = absorb_fn.index('AgxWin32AsahiSetFastClearColor(pipe, rt, &color[rt])')
+        self.assertLess(absorb_fn.index('pipe->clear(pipe, buffers'), own)
+        self.assertLess(own, absorb_fn.index('owner->DrawClearsAbsorbed = count;'))
         wrapper = block(owner, 'extern "C" HRESULT AgxD3d12OwnerDrawWithClears(')
         self.assertLess(wrapper.index('owner->DrawClears = clears;'), wrapper.index('HRESULT hr = AgxD3d12OwnerDraw(owner, draw);'))
         # a draw that returned before binding its framebuffer still has its clears run

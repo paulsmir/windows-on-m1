@@ -2736,19 +2736,20 @@ static union pipe_color_union clear_color_value(DXGI_FORMAT format, const float 
  *   draw view's format, level and layer (a second binding of the resource
  *   would store its unclear tiles over the cleared ones),
  * - have Fb's size as its level size.
- * Later clears of an attachment override earlier ones, as in order. One
- * pipe->clear carries one colour: the colour attachments' final values must
- * agree. The Windows agx_clear takes stencil only with depth. Returns
- * AGX_D3D12_ABSORB_OK or the first reason against. */
+ * Later clears of an attachment override earlier ones, as in order;
+ * Color[n] is colour buffer n's final value (rc76b: each attachment keeps
+ * its own, AgxWin32AsahiSetFastClearColor). The Windows agx_clear takes
+ * stencil only with depth. Returns AGX_D3D12_ABSORB_OK or the first reason
+ * against. */
 static unsigned clear_absorb_plan(const AGX_D3D12_DRAW *draw, const struct pipe_framebuffer_state *fb,
                                   const AGX_D3D12_DRAW_CLEAR *clears, unsigned count, unsigned *buffers,
-                                  union pipe_color_union *color, double *z, unsigned *stencil) {
-  union pipe_color_union value[PIPE_MAX_COLOR_BUFS] = {};
+                                  union pipe_color_union color[PIPE_MAX_COLOR_BUFS], double *z, unsigned *stencil) {
+  union pipe_color_union *value = color;
   unsigned colors = 0, zs = 0;
   *buffers = 0;
   *z = 0.0;
   *stencil = 0;
-  memset(color, 0, sizeof(*color));
+  memset(color, 0, PIPE_MAX_COLOR_BUFS * sizeof(*color));
   for (unsigned k = 0; k < count; ++k) {
     const AGX_D3D12_DRAW_CLEAR &c = clears[k];
     const struct pipe_resource *resource =
@@ -2795,15 +2796,6 @@ static unsigned clear_absorb_plan(const AGX_D3D12_DRAW *draw, const struct pipe_
       *stencil = c.Stencil;
     }
   }
-  for (unsigned i = 0, first = PIPE_MAX_COLOR_BUFS; i < PIPE_MAX_COLOR_BUFS; ++i) {
-    if (!(colors & (PIPE_CLEAR_COLOR0 << i))) continue;
-    if (first == PIPE_MAX_COLOR_BUFS) {
-      first = i;
-      *color = value[i];
-    } else if (memcmp(&value[i], color, sizeof(*color))) {
-      return AGX_D3D12_ABSORB_VALUE;
-    }
-  }
   if ((zs & PIPE_CLEAR_STENCIL) && !(zs & PIPE_CLEAR_DEPTH)) return AGX_D3D12_ABSORB_STENCIL;
   *buffers = colors | zs;
   return AGX_D3D12_ABSORB_OK;
@@ -2826,7 +2818,12 @@ static HRESULT run_draw_clears(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW_CLEA
 
 /* rc76: called by AgxD3d12OwnerDraw once Fb is bound; consumes the pending
  * clears. A fast clear only: agx_clear draws a u_blitter quad for buffers
- * its batch already drew or loaded, which the one-layer path never needs. */
+ * its batch already drew or loaded, which the one-layer path never needs.
+ * rc76b (EXP2006: GravityMark's four G-buffer clears differ in colour, so
+ * they and the depth clear fell back): one pipe->clear takes one colour, so
+ * every colour buffer whose own value differs gets it in its batch slot
+ * before anything draws (the colour agx_clear uploads, read only when the
+ * batch is flushed). */
 static HRESULT draw_absorb_clears(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *draw,
                                   const struct pipe_framebuffer_state *fb) {
   const AGX_D3D12_DRAW_CLEAR *clears = owner->DrawClears;
@@ -2835,13 +2832,20 @@ static HRESULT draw_absorb_clears(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *
   owner->DrawClears = NULL;
   unsigned buffers = 0, stencil = 0;
   double z = 0.0;
-  union pipe_color_union color = {};
-  unsigned reason = clear_absorb_plan(draw, fb, clears, count, &buffers, &color, &z, &stencil);
+  union pipe_color_union color[PIPE_MAX_COLOR_BUFS] = {};
+  unsigned reason = clear_absorb_plan(draw, fb, clears, count, &buffers, color, &z, &stencil);
   if (reason == AGX_D3D12_ABSORB_OK && buffers && !AgxWin32AsahiClearIsFast(pipe, buffers))
     reason = AGX_D3D12_ABSORB_BUSY;
   owner->DrawClearReason = reason;
   if (reason == AGX_D3D12_ABSORB_OK) {
-    if (buffers) pipe->clear(pipe, buffers, 0xffffffffu, 0xff, NULL, &color, z, stencil);
+    unsigned first = 0;
+    while (first < PIPE_MAX_COLOR_BUFS && !(buffers & (PIPE_CLEAR_COLOR0 << first))) ++first;
+    const union pipe_color_union *shared = first < PIPE_MAX_COLOR_BUFS ? &color[first] : &color[0];
+    if (buffers) pipe->clear(pipe, buffers, 0xffffffffu, 0xff, NULL, shared, z, stencil);
+    for (unsigned rt = first + 1; rt < PIPE_MAX_COLOR_BUFS; ++rt)
+      if ((buffers & (PIPE_CLEAR_COLOR0 << rt)) && memcmp(&color[rt], shared, sizeof(*shared)) &&
+          !AgxWin32AsahiSetFastClearColor(pipe, rt, &color[rt]))
+        return E_FAIL;
     owner->DrawClearsAbsorbed = count;
     return S_OK;
   }

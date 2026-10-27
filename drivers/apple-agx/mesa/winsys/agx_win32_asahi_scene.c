@@ -1,6 +1,7 @@
 #include "gallium/drivers/asahi/agx_state.h"
 #include "compiler/nir/nir_builder.h"
 #include "util/u_inlines.h"
+#include "util/u_helpers.h" /* rc76b: util_clamp_color, as agx_pipe.c */
 #include "util/format/u_format.h"
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
@@ -487,6 +488,27 @@ int AgxWin32AsahiClearIsFast(struct pipe_context *pctx, unsigned buffers) {
   if(!ctx || ctx->any_faults) return 0;
   struct agx_batch *batch=agx_get_batch(ctx);
   return !ctx->any_faults && batch && !(buffers & (batch->draw | batch->load));
+}
+/* rc76b: right after a fast pipe->clear of the bound framebuffer, colour
+ * buffer Rt's own clear colour: agx_clear uploads one clamped colour per
+ * fast-cleared buffer into the batch pool (uploaded_clear_color), which only
+ * the background program reads when the batch is flushed, so replacing it
+ * before the batch draws Rt clears Rt with Color. A buffer the clear did not
+ * set (a render condition skipped it) is left alone. 0 on a fault. */
+int AgxWin32AsahiSetFastClearColor(struct pipe_context *pctx, unsigned rt,
+    const union pipe_color_union *color) {
+  struct agx_context *ctx=pctx?agx_context(pctx):NULL;
+  if(!ctx || ctx->any_faults || !color || rt>=PIPE_MAX_COLOR_BUFS) return 0;
+  struct agx_batch *batch=agx_get_batch(ctx);
+  if(ctx->any_faults || !batch) return 0;
+  const unsigned bit=PIPE_CLEAR_COLOR0<<rt;
+  if(!(batch->clear & bit)) return 1;
+  if((batch->draw & bit) || rt>=batch->key.nr_cbufs || !batch->key.cbufs[rt].texture) return 0;
+  if(!AgxWin32AsahiBatchEnter(batch)) { ctx->any_faults=true; return 0; }
+  union pipe_color_union clamped=util_clamp_color(batch->key.cbufs[rt].format,color);
+  batch->uploaded_clear_color[rt]=agx_pool_upload_aligned(&batch->pool,clamped.f,sizeof(clamped.f),16);
+  if(!AgxWin32AsahiBatchLeave(batch)) { ctx->any_faults=true; return 0; }
+  return batch->uploaded_clear_color[rt]!=0;
 }
 /* EXP1927: a residency failure can occur while acquiring a batch (or
  * flushing a hazard in a prior heap chunk). Never initialize its encoder or

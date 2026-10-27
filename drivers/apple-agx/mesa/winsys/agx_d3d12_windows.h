@@ -576,8 +576,9 @@ typedef struct {
 /* rc76 (EXP2000: GravityMark's 8 clear-only render passes a frame, ~0.6 ms
  * of GPU span each): Draw after Clears[0, Count). When every clear covers
  * its whole level, is one layer of exactly one attachment of the draw's
- * framebuffer in that view's format, level and layer, the colour clears
- * agree, a stencil clear goes with a depth clear and the draw's batch has
+ * framebuffer in that view's format, level and layer (rc76b: each colour
+ * attachment keeps its own value), a stencil clear goes with a depth clear
+ * and the draw's batch has
  * neither drawn nor loaded those attachments, the clears become that render
  * pass's load-op clears (one pipe->clear on the draw framebuffer): no
  * clear-only render pass and no reload of its targets. Otherwise every clear
@@ -588,7 +589,7 @@ typedef struct {
  * AGX_D3D12_ABSORB_* value; AGX_D3D12_ABSORB_OK when absorbed). */
 enum {
   AGX_D3D12_ABSORB_OK, AGX_D3D12_ABSORB_ATTACHMENT, AGX_D3D12_ABSORB_EXTENT, AGX_D3D12_ABSORB_RECT,
-  AGX_D3D12_ABSORB_VALUE, AGX_D3D12_ABSORB_STENCIL, AGX_D3D12_ABSORB_BUSY,
+  AGX_D3D12_ABSORB_VALUE /* rc76 only: colours differed (rc76b absorbs them) */, AGX_D3D12_ABSORB_STENCIL, AGX_D3D12_ABSORB_BUSY,
   AGX_D3D12_ABSORB_EARLY /* the draw returned before binding its framebuffer */
 };
 HRESULT AgxD3d12OwnerDrawWithClears(AGX_D3D12_OWNER *Owner, const AGX_D3D12_DRAW *Draw,

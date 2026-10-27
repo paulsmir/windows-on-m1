@@ -121,6 +121,10 @@ int AgxWin32AsahiMapReservedTextureTile(struct pipe_resource *Reserved, unsigned
  * (load-op) clear of every buffer: its batch has neither drawn nor loaded
  * them. Takes the batch as agx_clear does. */
 int AgxWin32AsahiClearIsFast(struct pipe_context *, unsigned Buffers);
+/* rc76b: after a fast pipe->clear, colour buffer Rt's own clear colour
+ * (the batch draws nothing first). 0 on a fault. */
+union pipe_color_union;
+int AgxWin32AsahiSetFastClearColor(struct pipe_context *, unsigned Rt, const union pipe_color_union *Color);
 int AgxWin32AsahiBufferMarkValid(struct pipe_context *, struct pipe_resource *);
 void *AgxWin32AsahiBufferWriteMap(struct pipe_context *, struct pipe_resource *);
 void AgxWin32AsahiContextDiagnostic(struct pipe_context *,
