@@ -15,7 +15,7 @@ class NativeStagingRoute(unittest.TestCase):
     def test_real_allocation_route(self):
         harness=HARNESS[:HARNESS.index('int main()')]
         harness=harness.replace('#define APPLE_AGX_GPUVA_WINSYS 1',
-            '#define APPLE_AGX_GPUVA_WINSYS 1\n#define APPLE_AGX_NATIVE_STAGING 1\n#include "umd_staging_ring.h"')
+            '#define APPLE_AGX_GPUVA_WINSYS 1\n#define APPLE_AGX_NATIVE_STAGING 1\n#include "umd_native_arena.h"')
         harness=harness.replace('struct D3DDDI_ALLOCATIONINFO {',
             'struct D3DDDI_ALLOCATIONINFO {void *pSystemMem;')
         harness=harness.replace('BYTE *PrivateStaging;',
@@ -36,7 +36,7 @@ static unsigned AdmissionUmdWaitBegin(unsigned){return 0;}
 static void AdmissionUmdWaitEnd(unsigned){}
 static ADMISSION_UMD_STAGING_RING arena;
 static bool native_enabled;
-static unsigned fallback_count;
+static unsigned fallback_count,fallback_reason;
 static BYTE native_memory[3 * 65536];
 static bool AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *d,unsigned long long n,
     unsigned long long align,ADMISSION_UMD_RING_SLICE *s,BYTE **p,unsigned long long *token) {
@@ -48,7 +48,7 @@ static bool AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *d,unsigned lo
 static bool AdmissionUmdNativeStagingRelease(ADMISSION_UMD_DEVICE *d,unsigned long long token,unsigned long long ticket,
     unsigned long long fence) {assert(d->ScreenBuffers[0].Active && d->ScreenBuffers[0].Transition);
     assert(token==99);return AdmissionUmdRingReleaseOwned(&arena,ticket,fence,arena.Completed);}
-static void AdmissionUmdNativeStagingFallback(ADMISSION_UMD_DEVICE*,unsigned,unsigned long long,HRESULT){++fallback_count;}
+static void AdmissionUmdNativeStagingFallback(ADMISSION_UMD_DEVICE*,unsigned r,unsigned long long,HRESULT){++fallback_count;fallback_reason=r;}
 '''
         body=function((DRIVER/'render-admission/umd/src/umd_win32_screen.c').read_text(),
                       'AdmissionUmdScreenCreateClassBufferImpl')
@@ -85,7 +85,13 @@ int main() {
  d.ScreenBuffers[0]={}; native_enabled=false;private_allocs=0;
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,65536,65536,15,&token,0));
  assert(!s.NativeStagingAddress && !s.NativeStagingTicket && s.PrivateStaging);
- VirtualFree(s.PrivateStaging,0,0);assert(fallback_count);
+ VirtualFree(s.PrivateStaging,0,0);assert(fallback_count && fallback_reason==1u);
+ /* RC62: a BO over the native slice limit keeps the ordinary path and says
+  * so (reason 4) instead of reporting a full arena. */
+ d.ScreenBuffers[0]={};private_allocs=0;
+ assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,ADMISSION_UMD_NATIVE_SLICE_LIMIT+65536ull,65536,15,&token,0));
+ assert(!s.NativeStagingAddress && s.PrivateStaging && fallback_reason==4u);
+ VirtualFree(s.PrivateStaging,0,0);
  /* Native AllocateCb fails after returning a handle: clean rollback permits
   * ordinary staging, while failed rollback retains the original slice. */
  d.ScreenBuffers[0]={};native_enabled=true;fail_native=true;

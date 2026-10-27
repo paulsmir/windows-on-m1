@@ -6,6 +6,9 @@ unrepresentable WOW64 view, or leak a never-bound mapping because cancellation
 reuses a malformed reply header. Failure retains only the documented KMD owner.
 RC62 (EXP1984): a released slice must be reusable while an older slice of the
 same arena is still live; the FIFO ring instead mapped a new arena per wrap.
+Arenas grow by demand (4, 8, 16, 32 MiB, within the 64 MiB aperture share),
+an arena too small for a request is not mapped for it, and a BO over 16 MiB
+never maps an arena: the old code mapped 128 MiB per arena for a 64 KiB BO.
 """
 import re
 from pathlib import Path
@@ -81,6 +84,8 @@ static const HANDLE device_handle=(HANDLE)(uintptr_t)0x202;
 static const HANDLE context_handle=(HANDLE)(uintptr_t)0x303;
 struct MAPPING {ULONGLONG token,base; BOOL canceled,bound;};
 static MAPPING mappings[8];
+static UINT capacities[8];
+static const UINT arena_mib[4]={4u,8u,16u,32u};
 static UINT fallback_values[5],map_values[4],fallback_count,map_receipts;
 static HRESULT fallback_status;
 
@@ -136,9 +141,11 @@ static HRESULT escape(HANDLE adapter,D3DDDICB_ESCAPE *request) {
     return E_FAIL;
   }
   assert(q->Magic==ADMISSION_NATIVE_STAGING_MAGIC && q->Version==1 &&
-      q->Bytes==sizeof(*q) && q->Capacity==(128u<<20) && !q->Token && !q->UserVa);
+      q->Bytes==sizeof(*q) && q->Capacity && !(q->Capacity & 65535u) &&
+      q->Capacity<=(128u<<20) && !q->Token && !q->UserVa);
   unsigned index=map_calls++;
   assert(index<4);
+  capacities[index]=q->Capacity;
   if(reply_mode==1) return E_FAIL;
   /* These are OS-returned user VAs, never dereferenced by these helpers. The
    * WOW64 variant exercises the actual ULONG_PTR boundary on a 64-bit host. */
@@ -188,27 +195,32 @@ static void finish(ADMISSION_UMD_DEVICE *d) {
   assert(!pthread_rwlock_destroy(&d->ScreenBufferLock.value));
 }
 static void four_arenas(ADMISSION_UMD_DEVICE *d) {
-  ADMISSION_UMD_RING_SLICE slices[4],extra;
+  ADMISSION_UMD_RING_SLICE slices[4],extra,second;
   BYTE *address[4],*p=nullptr; ULONGLONG tokens[4],t=0;
   for(unsigned i=0;i<4;++i) {
-    assert(AdmissionUmdNativeStagingReserve(d,128u<<20,65536,&slices[i],&address[i],&tokens[i]));
-    assert(map_calls==i+1 && slices[i].Offset==0 && slices[i].Bytes==(128u<<20));
+    UINT bytes=(i==3 ? 16u : arena_mib[i])<<20;
+    assert(AdmissionUmdNativeStagingReserve(d,bytes,65536,&slices[i],&address[i],&tokens[i]));
+    assert(map_calls==i+1 && capacities[i]==(arena_mib[i]<<20));
+    assert(slices[i].Offset==0 && slices[i].Bytes==bytes);
     assert((uintptr_t)address[i]==mappings[i].base && tokens[i]==mappings[i].token);
     mappings[i].bound=TRUE;
   }
+  assert(AdmissionUmdNativeStagingReserve(d,16u<<20,65536,&second,&p,&t));
+  assert(t==tokens[3] && second.Offset==(16u<<20) && map_calls==4);
   assert(!AdmissionUmdNativeStagingReserve(d,65536,65536,&extra,&p,&t));
   assert(map_calls==4 && !cancel_calls);
   assert(!AdmissionUmdNativeStagingRelease(d,77,slices[0].Ticket,0));
   assert(AdmissionUmdNativeStagingRelease(d,tokens[2],slices[2].Ticket,12));
   for(unsigned i=0;i<4;++i)
-    assert(d->NativeStaging[i].Ring->Used==(i==2 ? 0u : (128u<<20)));
+    assert(d->NativeStaging[i].Ring->Used==(i==2 ? 0u : (arena_mib[i]<<20)));
   assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&extra,&p,&t));
   assert(t==tokens[2] && extra.Offset==0 && extra.Ticket!=slices[2].Ticket && map_calls==4);
   assert(!AdmissionUmdNativeStagingRelease(d,t,slices[2].Ticket,12));
   AdmissionUmdNativeStagingFallback(d,19,0x123456789ULL,E_FAIL);
   assert(fallback_count==1 && fallback_status==E_FAIL);
   assert(fallback_values[0]==19 && fallback_values[1]==0x23456789u && fallback_values[2]==1);
-  assert(fallback_values[3]==(3u*(128u<<20)+65536u) && fallback_values[4]==(512u<<20));
+  assert(fallback_values[3]==((4u+8u+32u)<<20)+65536u && fallback_values[4]==(60u<<20));
+  assert(fallback_values[4]<=ADMISSION_NATIVE_STAGING_BUDGET_BYTES);
   assert(!cancel_calls); /* empty or full live arenas retain their KMD owner */
 }
 static void invalid_transport(ADMISSION_UMD_DEVICE *d) {
@@ -226,13 +238,13 @@ static void invalid_transport(ADMISSION_UMD_DEVICE *d) {
 /* A live older slice must not pin space released after it. */
 static void out_of_order_reuse(ADMISSION_UMD_DEVICE *d) {
   ADMISSION_UMD_RING_SLICE a,b,c; BYTE *p; ULONGLONG t,t2;
-  assert(AdmissionUmdNativeStagingReserve(d,64u<<20,65536,&a,&p,&t));
-  assert(AdmissionUmdNativeStagingReserve(d,64u<<20,65536,&b,&p,&t2) && t==t2);
+  assert(AdmissionUmdNativeStagingReserve(d,2u<<20,65536,&a,&p,&t));
+  assert(AdmissionUmdNativeStagingReserve(d,2u<<20,65536,&b,&p,&t2) && t==t2);
   assert(AdmissionUmdNativeStagingRelease(d,t,b.Ticket,4));
-  assert(d->NativeStaging[0].Ring->Used==(64u<<20));
+  assert(d->NativeStaging[0].Ring->Used==(2u<<20));
   assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&c,&p,&t2));
-  assert(t2==t && c.Offset==(64u<<20) && map_calls==1);
-  assert((uintptr_t)p==mappings[0].base+(64u<<20));
+  assert(t2==t && c.Offset==(2u<<20) && map_calls==1);
+  assert((uintptr_t)p==mappings[0].base+(2u<<20));
   assert(!AdmissionUmdNativeStagingRelease(d,t,b.Ticket,4)); /* stale ticket */
   assert(AdmissionUmdNativeStagingRelease(d,t,a.Ticket,7));
   assert(AdmissionUmdNativeStagingRelease(d,t,c.Ticket,8));
@@ -245,7 +257,7 @@ static void steady_churn(ADMISSION_UMD_DEVICE *d) {
   assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&keep,&p,&tk));
   for(unsigned frame=0;frame<300;++frame) {
     for(unsigned i=0;i<3;++i) {
-      assert(AdmissionUmdNativeStagingReserve(d,(16u+i)<<20,65536,&s[i],&p,&t));
+      assert(AdmissionUmdNativeStagingReserve(d,(1u<<20)+i*65536u,65536,&s[i],&p,&t));
       assert(t==tk && s[i].Offset>=65536u);
       for(unsigned j=0;j<i;++j)
         assert(s[i].Offset>=s[j].Offset+s[j].Bytes || s[j].Offset>=s[i].Offset+s[i].Bytes);
@@ -253,9 +265,33 @@ static void steady_churn(ADMISSION_UMD_DEVICE *d) {
     for(unsigned i=0;i<3;++i)
       assert(AdmissionUmdNativeStagingRelease(d,t,s[(i+frame)%3].Ticket,frame+1ull));
   }
-  assert(map_calls==1 && d->NativeStaging[0].Ring->Used==65536u);
+  assert(map_calls==1 && capacities[0]==(4u<<20) && d->NativeStaging[0].Ring->Used==65536u);
   assert(AdmissionUmdNativeStagingRelease(d,tk,keep.Ticket,0));
   assert(!d->NativeStaging[0].Ring->Used && !cancel_calls);
+}
+/* Arenas grow by demand and never for a BO the native path must not hold. */
+static void demand_growth(ADMISSION_UMD_DEVICE *d) {
+  ADMISSION_UMD_RING_SLICE s,big,mid,x; BYTE *p; ULONGLONG t,tb,tm;
+  assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&s,&p,&t));
+  assert(map_calls==1 && capacities[0]==(4u<<20));
+  /* 16 MiB skips the 8 MiB arena without mapping it. */
+  assert(AdmissionUmdNativeStagingReserve(d,16u<<20,65536,&big,&p,&tb));
+  assert(map_calls==2 && capacities[1]==(16u<<20) && tb!=t);
+  assert(!d->NativeStaging[1].Attempted && d->NativeStaging[2].Ring);
+  /* Over the per-BO limit (EXP1984: 128 MiB heaps): no new mapping. */
+  assert(!AdmissionUmdNativeStagingReserve(d,(16u<<20)+65536u,65536,&x,&p,&t));
+  assert(!AdmissionUmdNativeStagingReserve(d,128u<<20,65536,&x,&p,&t));
+  assert(!AdmissionUmdNativeStagingReserve(d,65536,32u<<20,&x,&p,&t));
+  assert(map_calls==2);
+  /* A later 8 MiB request uses the skipped arena. */
+  assert(AdmissionUmdNativeStagingReserve(d,8u<<20,65536,&mid,&p,&tm));
+  assert(map_calls==3 && capacities[2]==(8u<<20) && d->NativeStaging[1].Ring);
+  unsigned long long mapped=0;
+  for(unsigned i=0;i<map_calls;++i) mapped+=capacities[i];
+  assert(mapped==(28u<<20) && mapped<=ADMISSION_NATIVE_STAGING_BUDGET_BYTES);
+  assert(AdmissionUmdNativeStagingRelease(d,tb,big.Ticket,0));
+  assert(AdmissionUmdNativeStagingRelease(d,tm,mid.Ticket,0));
+  assert(!cancel_calls);
 }
 int main(int argc,char **argv) {
   assert(argc==2); ADMISSION_UMD_DEVICE d; init(&d);
@@ -264,6 +300,7 @@ int main(int argc,char **argv) {
   else if(!strcmp(argv[1],"transport")) invalid_transport(&d);
   else if(!strcmp(argv[1],"reuse")) out_of_order_reuse(&d);
   else if(!strcmp(argv[1],"churn")) steady_churn(&d);
+  else if(!strcmp(argv[1],"demand")) demand_growth(&d);
   else if(!strcmp(argv[1],"disabled")) {
     d.NativeStagingDisabled=TRUE;
     assert(!AdmissionUmdNativeStagingReserve(&d,65536,65536,&s,&p,&t));
@@ -310,7 +347,7 @@ class NativeStagingArena(unittest.TestCase):
                  "AdmissionUmdNativeStagingRelease")
         bodies = [function(text, name) for name in names]
         self.assertTrue(all(bodies), "production native arena helper missing")
-        scenarios = ("four", "transport", "reuse", "churn", "disabled", "heap", "reentrant",
+        scenarios = ("four", "transport", "reuse", "churn", "demand", "disabled", "heap", "reentrant",
                      *(str(i) for i in range(1, 15)))
         with tempfile.TemporaryDirectory(prefix="umd-native-arena-") as path:
             tmp = Path(path)

@@ -748,8 +748,9 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
     ULONGLONG Bytes, ULONGLONG Alignment, ADMISSION_UMD_RING_SLICE *Slice,
     BYTE **Address, ULONGLONG *Token) {
   BOOL reserved = FALSE;
-  if (!Bytes || Bytes > ADMISSION_NATIVE_STAGING_MAX_BYTES ||
-      Alignment > ADMISSION_NATIVE_STAGING_MAX_BYTES ||
+  /* RC62: oversized BOs keep the ordinary path (fallback reason 4). */
+  if (!Bytes || Bytes > ADMISSION_UMD_NATIVE_SLICE_LIMIT ||
+      Alignment > ADMISSION_UMD_NATIVE_SLICE_LIMIT ||
       Device->NativeStagingDisabled || !Device->KernelCallbacks ||
       !Device->KernelCallbacks->pfnEscapeCb ||
       !Device->Adapter || Device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
@@ -759,6 +760,10 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
   for (UINT index=0; index<ADMISSION_UMD_NATIVE_ARENAS; ++index) {
     ADMISSION_UMD_NATIVE_ARENA *arena = &Device->NativeStaging[index];
     BOOL initialize = FALSE;
+    /* RC62 (EXP1984): grow by demand. Skip an arena too small for this
+     * request without mapping it; a later smaller request may still use it. */
+    const UINT capacity = AdmissionUmdNativeArenaBytes(index, Bytes, Alignment);
+    if (!capacity) continue;
     AcquireSRWLockExclusive(&Device->ScreenBufferLock);
     if (!arena->Attempted) { arena->Attempted = TRUE; initialize = TRUE; }
     ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
@@ -770,7 +775,7 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
         D3DDDICB_ESCAPE request = {};
         q.Magic = ADMISSION_NATIVE_STAGING_MAGIC;
         q.Version = 1u; q.Bytes = sizeof(q);
-        q.Capacity = ADMISSION_NATIVE_STAGING_MAX_BYTES;
+        q.Capacity = capacity;
         request.hDevice = Device->RuntimeDevice.handle;
         request.hContext = Device->KernelContext;
         request.pPrivateDriverData = &q;
@@ -779,7 +784,7 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
             Device->Adapter->RuntimeAdapter.handle, &request);
         BOOL valid = SUCCEEDED(hr) && q.Magic == ADMISSION_NATIVE_STAGING_MAGIC &&
             q.Version == 1u && q.Bytes == sizeof(q) &&
-            q.Capacity == ADMISSION_NATIVE_STAGING_MAX_BYTES && q.Token && q.UserVa &&
+            q.Capacity == capacity && q.Token && q.UserVa &&
             !(q.UserVa & 65535ULL) && q.UserVa <= (ULONGLONG)(ULONG_PTR)-1 &&
             q.Capacity - 1ULL <= (ULONGLONG)(ULONG_PTR)-1 - q.UserVa &&
             AdmissionUmdNativeSpansInit(ring, q.Capacity);
@@ -988,7 +993,8 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
       nativeDescription.Create.Allocation.Size = nativeSlice.Bytes;
       nativeDescription.Token = nativeToken;
       nativeDescription.Offset = nativeSlice.Offset;
-    } else AdmissionUmdNativeStagingFallback(device, 1u, Bytes, S_OK);
+    } else AdmissionUmdNativeStagingFallback(device,
+        nativeBytes > ADMISSION_UMD_NATIVE_SLICE_LIMIT ? 4u : 1u, Bytes, S_OK);
   }
 #endif
 

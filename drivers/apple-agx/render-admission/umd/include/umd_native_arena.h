@@ -15,11 +15,29 @@
  * live table is kept sorted by offset. Plain C, no CRT, C and /TP C++. */
 #define ADMISSION_UMD_NATIVE_ARENA_SLICES 256u
 
+/* Demand-sized arenas: the next mapping is the smallest unmapped arena that
+ * fits the request. 4 + 8 + 16 + 32 MiB = 60 MiB stays inside the KMD's
+ * aggregate native budget (a quarter of the 256 MiB aperture). One BO may use
+ * at most 16 MiB; larger CPU-facing BOs keep the ordinary path, so no single
+ * long-lived heap can hold an arena or the aperture budget. */
+#define ADMISSION_UMD_NATIVE_FIRST_ARENA_BYTES (4u * 1024u * 1024u)
+#define ADMISSION_UMD_NATIVE_SLICE_LIMIT (16u * 1024u * 1024u)
+
 typedef struct _ADMISSION_UMD_NATIVE_SPANS {
   unsigned int Capacity, Used, Count, Poisoned;
   unsigned long long NextTicket, Completed;
   ADMISSION_UMD_RING_SLICE Live[ADMISSION_UMD_NATIVE_ARENA_SLICES];
 } ADMISSION_UMD_NATIVE_SPANS;
+
+/* Capacity of arena Index (0-based), or 0 when it cannot hold the request. */
+static inline unsigned int AdmissionUmdNativeArenaBytes(
+    unsigned int Index, unsigned long long Bytes, unsigned long long Alignment) {
+  unsigned long long capacity;
+  if (Index >= 4u || !Bytes || Bytes > ADMISSION_UMD_NATIVE_SLICE_LIMIT ||
+      !Alignment || (Alignment & (Alignment - 1ULL))) return 0u;
+  capacity = (unsigned long long)ADMISSION_UMD_NATIVE_FIRST_ARENA_BYTES << Index;
+  return Bytes <= capacity && Alignment <= capacity ? (unsigned int)capacity : 0u;
+}
 
 static inline int AdmissionUmdNativeSpansInit(ADMISSION_UMD_NATIVE_SPANS *Spans,
                                               unsigned int Capacity) {
