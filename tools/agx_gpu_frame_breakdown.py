@@ -34,6 +34,15 @@ rc76 fixed-cost split (per frame, sums):
             worker's BeginJob/build/kick and the firmware's start latency
   r_small_ta small render jobs: mapped TA end - the same bound (kick, firmware
             start, compute prelude and TA); r_small_3d is the rest
+rc79 prelude split (completion v3 measure-gpu-prelude rows: the v5 render's
+compute prelude firmware start/end, same timebase as the TA end):
+  rc_prelude    rc_big jobs with a valid row: prelude end - prelude start
+  rc_prelude_kick  their mapped prelude start - the span bound
+  rc_ta         their TA end - prelude end (TA barrier wake-up, VDM, vertex
+                shading, tiling); rc_prelude_jobs counts them
+  prelude       the prelude time of every render job with a valid row
+A row is stale (ignored) unless start <= end, the mapped start lies inside
+the job's span bound and the end is no later than the TA end.
 JSON summary (medians over frames after --skip) on stdout.
 
 --kmd-timing decodes the KMD's Wom1JobTiming971 registry receipt
@@ -63,11 +72,11 @@ def u64(w, i):
 def parse(lines):
     """Return (pid, hz, jobs sorted by sequence, present QPCs) of the
     process with the most completion records."""
-    comp, stage, presents, rates = {}, {}, {}, set()
+    comp, stage, prelude, presents, rates = {}, {}, {}, {}, set()
     for line in lines:
         tag = line.split(' ', 1)[0]
         if tag not in ('measure-gpu-completion', 'measure-gpu-stages',
-                       'measure-d3d12-present'):
+                       'measure-gpu-prelude', 'measure-d3d12-present'):
             continue
         fields = line.split()
         meta = dict(f.split('=', 1) for f in fields[1:] if '=' in f)
@@ -85,6 +94,8 @@ def parse(lines):
         elif tag == 'measure-gpu-stages' and len(words) == 10:
             stage.setdefault(pid, {})[u64(words, 0)] = (
                 u64(words, 2), u64(words, 4), u64(words, 6), u64(words, 8))
+        elif tag == 'measure-gpu-prelude' and len(words) == 6:
+            prelude.setdefault(pid, {})[u64(words, 0)] = (u64(words, 2), u64(words, 4))
     if not comp:
         raise ValueError('no measure-gpu-completion rows')
     if len(rates) != 1:
@@ -94,6 +105,7 @@ def parse(lines):
     for j in jobs:
         start, end, _, ta_end = stage.get(pid, {}).get(j['seq'], (0, 0, 0, 0))
         j['start'], j['end'], j['ta_end'] = start, end, ta_end
+        j['p_start'], j['p_end'] = prelude.get(pid, {}).get(j['seq'], (0, 0))
     return pid, rates.pop(), jobs, sorted(presents.get(pid, []))
 
 
@@ -116,6 +128,14 @@ def timeline(jobs, hz):
         j['d3'] = None
         if j['kind'] == RENDER and valid and j['ta_end'] and j['end'] >= j['ta_end']:
             j['d3'] = min((j['end'] - j['ta_end']) * 1e3 / hz, j['span'])
+        j['prelude'] = j['prelude_kick'] = j['ta'] = None
+        if (j['kind'] == RENDER and valid and j['p_end'] and j['ta_end'] and
+                j['p_start'] <= j['p_end'] <= j['ta_end'] and
+                j['p_end'] - j['p_start'] < hz and
+                j['lo'] <= j['p_start'] - offset <= j['end_q']):
+            j['prelude'] = (j['p_end'] - j['p_start']) * 1e3 / hz
+            j['prelude_kick'] = (j['p_start'] - offset - j['lo']) * 1e3 / hz
+            j['ta'] = (j['ta_end'] - j['p_end']) * 1e3 / hz
         j['exact'] = None
         j['kick'] = None
         if (j['kind'] == COMPUTE and valid and j['start'] and
@@ -140,6 +160,7 @@ def frame(js, wall_ms, hz):
     outstanding = sum(j['span'] + j['detect'] for j in js)
     kicks = [j['kick'] for j in compute if j['kick'] is not None]
     small_ta = [(j['ta_q'] - j['lo']) * 1e3 / hz for j in small if j['ta_q'] is not None]
+    split = [j for j in big if j['prelude'] is not None]
     return dict(
         wall_ms=wall_ms, jobs=len(js), render_jobs=len(render),
         compute_jobs=len(compute), gpu_span_ms=span(js),
@@ -154,7 +175,11 @@ def frame(js, wall_ms, hz):
         c_work_span_ms=span(work),
         c_empty_jobs=len(empty), c_empty_span_ms=span(empty),
         c_kick_jobs=len(kicks), c_kick_ms=sum(kicks),
-        r_small_ta_ms=sum(small_ta))
+        r_small_ta_ms=sum(small_ta),
+        rc_prelude_jobs=len(split), rc_prelude_ms=sum(j['prelude'] for j in split),
+        rc_prelude_kick_ms=sum(j['prelude_kick'] for j in split),
+        rc_ta_ms=sum(j['ta'] for j in split),
+        prelude_ms=sum(j['prelude'] for j in render if j['prelude'] is not None))
 
 
 def analyze(lines, skip=0.3):

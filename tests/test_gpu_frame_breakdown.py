@@ -11,6 +11,10 @@ time to its TA end -- and a stale start never yields a kick. The KMD
 Wom1JobTiming971 decoder follows render_job_timing.h's v1 layout (a wrong
 version or size is refused) and counts the completion-to-kick gap only for
 jobs the one-job-at-a-time worker kept waiting.
+rc79: a render's measure-gpu-prelude row (completion v3) splits its pre-3D
+time into the compute prelude (exact firmware start/end), the kick before
+it and the TA after it (TA end - prelude end); renders without the row, or
+whose prelude stamps are stale, contribute nothing to the split.
 """
 from pathlib import Path
 import importlib.util
@@ -48,6 +52,11 @@ def job(seq, kind, sub, cmp, start=0, end=None, ta_end=0, status=0, pid=7):
         rows.append(row('measure-gpu-stages',
                         [seq, 0, fw(start), 0, fw(end), 0, 0, 0, fw(ta_end), 0], pid))
     return rows
+
+
+def prelude(seq, start, end, pid=7):
+    fw = lambda ms: t(ms) + OFFSET
+    return row('measure-gpu-prelude', [seq, 0, fw(start), 0, fw(end), 0], pid)
 
 
 def present(ms):
@@ -120,6 +129,37 @@ def kmd_snapshot(slots, hz=1000000, version=1):
         data += struct.pack('<IIIIQQ12Q4QII', fence, pid, 0, 0, 0, 0,
                             *[q.get(p, 0) for p in b.KMD_PHASES], 0, 0, 0, 0, 0, 0)
     return bytes(data)
+
+
+class PreludeSplit(unittest.TestCase):
+    def test_prelude_and_ta_of_render_compute_jobs(self):
+        b = load()
+        log = [present(0)]
+        log += job(1, 2, 0, 5, start=1, end=5)                      # calibration
+        log += job(2, 1, 5, 20, start=1, end=19, ta_end=17)          # rc_big
+        log += [prelude(2, 7, 12)]
+        log += job(3, 1, 20, 50, start=1, end=49, ta_end=25)         # main
+        log += [prelude(3, 21, 22)]
+        log += job(4, 1, 50, 60, start=1, end=59, ta_end=58)         # rc_big, no row
+        log += job(5, 1, 60, 70, start=1, end=69, ta_end=68)         # rc_big, stale
+        log += [prelude(5, 40, 41)]
+        log += [present(100)]
+        frames, _ = b.analyze(log, skip=0)
+        f = frames[0]
+        self.assertEqual(f['rc_big_jobs'], 3)
+        self.assertEqual(f['rc_prelude_jobs'], 1)
+        self.assertAlmostEqual(f['rc_prelude_ms'], 5)
+        self.assertAlmostEqual(f['rc_prelude_kick_ms'], 2)
+        self.assertAlmostEqual(f['rc_ta_ms'], 5)
+        self.assertAlmostEqual(f['prelude_ms'], 5 + 1)
+
+    def test_logs_without_prelude_rows(self):
+        b = load()
+        log = [present(0)] + job(1, 1, 10, 22, start=3, end=20, ta_end=15) + [present(100)]
+        frames, _ = b.analyze(log, skip=0)
+        self.assertEqual(frames[0]['rc_prelude_jobs'], 0)
+        self.assertEqual(frames[0]['rc_prelude_ms'], 0)
+        self.assertEqual(frames[0]['rc_ta_ms'], 0)
 
 
 class KmdJobTiming(unittest.TestCase):
