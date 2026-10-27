@@ -7231,6 +7231,37 @@ static SIZE_T APIENTRY CalcPrivateRootSignatureSize0013(D3D12DDI_HDEVICE device,
     ReleaseRoot11(&projection);
     return bytes;
 }
+/* RC75 receipt-only: the 1.1 flags of a root signature's buffer views.
+ * Resource Binding spec: a descriptor range without DESCRIPTORS_VOLATILE
+ * (the 1.1 default) makes out-of-bounds buffer-view accesses invalid
+ * ("undefined results, including possible device reset"), unless it keeps
+ * DESCRIPTORS_STATIC_KEEPING_BUFFER_BOUNDS_CHECKS; root descriptors have no
+ * bounds at all. measure-d3d12-root-signature-1-1 {parameters, CBV/SRV/UAV
+ * ranges, static ranges without bounds checks, volatile ranges, ranges
+ * keeping bounds checks, root CBV/SRV/UAV descriptors}. */
+static void RootSignature11Receipt(const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *arg) {
+    if (!arg || arg->Version != D3D12DDI_ROOT_SIGNATURE_VERSION_1_1 || !arg->pRootSignature_1_1) return;
+    const D3D12DDI_ROOT_SIGNATURE_0013 &root = *arg->pRootSignature_1_1;
+    UINT ranges = 0, unchecked = 0, volatile_ranges = 0, keep = 0, descriptors = 0;
+    for (UINT i = 0; i < root.NumParameters && root.pRootParameters; ++i) {
+        const D3D12DDI_ROOT_PARAMETER_0013 &p = root.pRootParameters[i];
+        if (p.ParameterType != D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) {
+            if (p.ParameterType != D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS) ++descriptors;
+            continue;
+        }
+        for (UINT r = 0; r < p.DescriptorTable.NumDescriptorRanges && p.DescriptorTable.pDescriptorRanges; ++r) {
+            const D3D12DDI_DESCRIPTOR_RANGE_0013 &d = p.DescriptorTable.pDescriptorRanges[r];
+            if (d.RangeType == D3D12DDI_DESCRIPTOR_RANGE_TYPE_SAMPLER) continue;
+            const UINT flags = static_cast<UINT>(d.Flags);
+            ++ranges;
+            if (flags & D3D12DDI_DESCRIPTOR_RANGE_FLAG_0013_DESCRIPTORS_VOLATILE) ++volatile_ranges;
+            else if (flags & D3D12DDI_DESCRIPTOR_RANGE_FLAG_0052_DESCRIPTORS_STATIC_KEEPING_BUFFER_BOUNDS_CHECKS) ++keep;
+            else ++unchecked;
+        }
+    }
+    const UINT receipt[] = {root.NumParameters, ranges, unchecked, volatile_ranges, keep, descriptors};
+    AdmissionUmdDiagnostic("measure-d3d12-root-signature-1-1", S_OK, receipt, 6);
+}
 static HRESULT APIENTRY CreateRootSignature0013(D3D12DDI_HDEVICE device,
                                                 const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *arg,
                                                 D3D12DDI_HROOTSIGNATURE handle) {
@@ -7238,6 +7269,7 @@ static HRESULT APIENTRY CreateRootSignature0013(D3D12DDI_HDEVICE device,
     if (!ProjectRoot11(arg, &projection)) return E_INVALIDARG;
     const HRESULT hr = CreateRootSignature(device, &projection.arg, handle);
     ReleaseRoot11(&projection);
+    if (SUCCEEDED(hr)) RootSignature11Receipt(arg);
     return hr;
 }
 static_assert(std::is_same_v<decltype(&CalcPrivateRootSignatureSize0013),
