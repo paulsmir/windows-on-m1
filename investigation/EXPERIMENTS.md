@@ -64587,3 +64587,16 @@ EXP1984 HARDWARE ACTUAL 2026-10-27T14:33:51Z: FAIL with a new, later boundary. N
 - Both arms ended with app "out of memory" in D3D12Context::Buffer::create: arm a (HD 50k) at 26.0 s, arm b (FHD 100k) at 7.8 s.
 - gm1984a: native ring maps 2, 3 and 4 succeeded (128 MiB each). Right after map 4 came reject-make-resident 0x8007000e x2, then reject-batch. Native staging arenas appear to exhaust the pool or the residency budget.
 - Next: subagent rc62 (arena sizing and budget accounting).
+
+EXP1985 HARDWARE BEFORE 2026-10-27T15:00:55Z:
+- Package 30.0.1985.0 = EXP1984 driver + rc62:
+  - a6334097: the native cap is min(64 MiB, aperture CommitLimit/4);
+  - 04077cda: first-fit slice reuse;
+  - d5973d4e: demand-sized 4/8/16/32 MiB arenas, and BOs over 16 MiB use the ordinary path.
+- Launch: AGX_M1N1=075e3980 macho, AGX_GUEST_RAM_PROFILE=expanded; switch Wom1GpuFaultInfoRead=1.
+- WHY THIS HYPOTHESIS: EXP1984 failed with MakeResident E_OUTOFMEMORY right after the fourth 128 MiB native arena. Native BOs are aperture-only, and the aperture CommitLimit is 256 MiB, so three or four 128 MiB arenas exceed the NON_LOCAL budget.
+- Expected: no reject-make-resident and no app OOM; native capacity at most 60 MiB; fallback reason 4 for large heaps; scores of at least 1621 (HD 50k) and 1275 (FHD 100k), with fewer copy escapes.
+- Recovery: rec1985h.
+- Hashes: sys 063359aad153, UmdArm64 cdf03e21c349, UmdX64 c8e2620c1d05, Umd32 7bd283023329; manifest 2364a270553f, hardware-manifest 1be45812aeb2; probe1985.sh 9844d8a5abd9 (PROBE_LINT_OK); visible recovery rec1985h 84e105385b0d36bb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec1985h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1985-native-budget/run1985.sh.
