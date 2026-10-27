@@ -65259,3 +65259,20 @@ EXP2009 HARDWARE ACTUAL (2026-10-28):
 - C5D: the tool exited in 1 s with empty output; inconclusive (step selection).
 - No bugcheck.
 - Verdict: the app-caused invalid root VA path is safe. The GPU data-fault recovery question remains open (rc77).
+
+EXP2010 HARDWARE BEFORE 2026-10-27T23:36:03Z:
+- WHY:
+  - rc78: bdb1944a (about 81% of compute) does a texture-descriptor crawl per array sample under divergent control flow, which could not be hoisted; offline 4169 → 3663 instructions;
+  - rc79: the render-compute pre-3D time (6.8/12.4 ms) is suspected to be TA plus partial renders, with the TVB capped at 4 MiB and 3-7 overflows per frame in earlier receipts.
+- ATOMIC CONTRACT: none; receipt-only changes plus two compiler changes with env attribution (APPLE_AGX_D3D_CRAWL_SPECULATE=0, APPLE_AGX_D3D_CF_OPT=0).
+- Expected:
+  - bdb1944a shader-stats below 3700 instructions;
+  - compute 0.7 ms or more lower at HD;
+  - measure-gpu-prelude and measure-gpu-tvb rows present, with rc_prelude_ms / rc_ta_ms / partials measured;
+  - image identical to EXP2008;
+  - score above 5715 and 3086.
+- Failure criteria: a wrong image (shadows), removal, or a regression.
+- Recovery: rec2010h.
+- Hashes: sys bfac19e34a63, UmdArm64 16f69d1f7ef0, UmdX64 63dad9a10274, Umd32 19f2868258dd; manifest e0f015b9acf1, hardware-manifest 0f878b055658; probe2010.sh 1fb19cca2e47 (PROBE_LINT_OK); visible recovery rec2010h 11a209cb759812d8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2010h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2010-crawl-tvbrcpt/run2010.sh.
