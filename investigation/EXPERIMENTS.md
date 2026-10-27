@@ -65114,3 +65114,10 @@ EXP2004 HARDWARE BEFORE 2026-10-27T21:39:00Z:
 - Hashes: sys 849c1acd0174, UmdArm64 38af2373d57a, UmdX64 cd60e308b766, Umd32 f48c19e1668d; manifest 15bb85f4d1c6, hardware-manifest 374a6742a4ac; probe2004.sh d8aa55907ab4 (PROBE_LINT_OK); visible recovery rec2004h b7ec2c168ad4e268; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultDrillAllowed=1.
 - Recovery rec2004h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2004-fault-drill2/run2004.sh.
+
+EXP2004 HARDWARE ACTUAL (2026-10-27): **fault drill NOT REACHED (tool precondition)**.
+- DWM was now found (pid 1220; handle access denied err=5, so the check is PID-only).
+- The baseline render child failed `RENDER_SETUP 887a0002`: the probe matched VendorId 0x106b, but the AGX adapter reports 0x4c505041 'APPL'. No fault was injected; no Wom1GpuFault receipt.
+- Fixed in 2c44bed4 (probe sha256 6711d63c…); rerun inside EXP2005.
+- GravityMark D3D12 HD 50k: 4518 / 27.0 FPS (EXP2002 4439, EXP2003 4579; run-to-run spread about 3%).
+- No removal; G4_SUBMIT_FAILURE none.
