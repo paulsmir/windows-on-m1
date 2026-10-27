@@ -64720,3 +64720,19 @@ EXP1989 HARDWARE BEFORE 2026-10-27T17:18:21Z:
 - Hashes: sys acaa0ef2a330, UmdArm64 3f9edbcd24d9, UmdX64 8e1692e75185, Umd32 ee18568f29bd; manifest 28f556f74743, hardware-manifest d9626789334e; probe1989.sh c5c3df8517e3 (PROBE_LINT_OK); visible recovery rec1989h 816343e98dadc746; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1989h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1989-escape-proof/run1989.sh.
+
+EXP1989 HARDWARE ACTUAL (2026-10-27): **PASS (HD new best), FHD lower**.
+- HD 50k: **2404 / 14.4 FPS**, up 4% (EXP1988: 2318).
+- FHD 100k: 1651 / 8.9 FPS (EXP1988: 1769 / 10.6 FPS). The score does not match 167×FPS, which suggests uneven frames.
+- No removal; the guest is alive; G4_SUBMIT_FAILURE none.
+- measure-copy-escape-class total per Execute:
+  - HD: 32 escapes, **1.97 ms** (EXP1988: 61, 15.1 ms);
+  - FHD: 103 escapes, **3.91 ms** (EXP1988: 97, 31.7 ms).
+- measure-copy-escape-gate:
+  - HD: QUERY proof 15, overlapped 2;
+  - FHD: QUERY 51 / 14, UPLOAD 37 / 12.
+- The drain moved to draw.render_fence (the CPU count read of counted ExecuteIndirect):
+  - HD: 20.2 → 31.6 ms per Execute;
+  - FHD: 27.4 → 45.8 ms, and submit.render_fence 7.7 → 16.5 ms.
+- The frame is now bound by waiting for GPU completion before the count read. The next steps are the GPU stream (rc69, EXP1990) and the GPU time per frame.
+- Verdict: rc68 validated (escapes 15 → 2 ms, no data-race symptom, image OK by run completion); the FHD score effect is not attributable until the render_fence wait is removed.
