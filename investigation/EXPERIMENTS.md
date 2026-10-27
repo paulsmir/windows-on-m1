@@ -64978,3 +64978,20 @@ EXP2000 HARDWARE BEFORE 2026-10-27T20:19:07Z:
 - Hashes: sys c81da6cb45ce, UmdArm64 fddcba942c34, UmdX64 22d0941de5ec, Umd32 bee63f18f112; manifest 1684ef7ae0c0, hardware-manifest 242a5b64fe05; probe2000.sh 5e27283cc0df (PROBE_LINT_OK); visible recovery rec2000h 265452510a4e1660; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2000h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2000-shader-cost/run2000.sh.
+
+EXP2000 HARDWARE ACTUAL (2026-10-27): **PASS, small gain**.
+- rc74 plus the build fixes.
+- D3D12 HD 50k: **3959 / 23.7 FPS**, new best (EXP1995: 3873).
+- D3D12 FHD 100k: 2262 (EXP1996: 2270).
+- D3D11 HD 10k: 2529 (EXP1995: 2515), no regression.
+- No removal; G4_SUBMIT_FAILURE none; image OK by run completion.
+- agx_gpu_frame_breakdown:
+
+  | Run | Standalone compute (ms) | Main pass (ms) | GPU span (ms) |
+  |---|---|---|---|
+  | HD | 13.7 → **12.9** (−6%) | 9.2 → 8.6 | 33.9 |
+  | FHD | 24.1 → **23.4** (−3%) | 14.7 → 14.1 | 61.3 → 60.0 |
+
+- The memory-wait hypothesis for the heavy kernels is mostly refuted.
+- measure-d3d12-shader-stats is absent in refusals-only mode; rc75 makes it available.
+- Verdict: rc74 60dd76d8 and 7f8659df validated (small gain); 271bbe3b, 7abe0c1b and 7817793d validated as tooling.
