@@ -64752,3 +64752,19 @@ EXP1990 HARDWARE BEFORE 2026-10-27T17:34:00Z:
 - Hashes: sys a46565534e33, UmdArm64 941f99b542b5, UmdX64 a17df5627040, Umd32 c3f9477cab34; manifest 614bc7d5a2ac, hardware-manifest 52709687e6b9; probe1990.sh 14e2421be948 (PROBE_LINT_OK); visible recovery rec1990h 9df348e3d5e0bc28; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec1990h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP1990-stream-params/run1990.sh.
+
+EXP1990 HARDWARE ACTUAL (2026-10-27):
+- TOOL_RC63 (stream=1):
+  - RC59G PASS, RC59G_COUNT PASS;
+  - **RC63G PASS (bad=0)**, RC63G_STATS PASS.
+  - rc69 a820f66e and 912c4de0 validated: per-record StartInstance now reaches the VS (EXP1987: bad=4095).
+- Arm a (HD 50k, default counted path): **2439 / 14.6 FPS**, new best (EXP1989: 2404).
+- Arm b (HD 50k, stream=1):
+  - device removed at 78.75 s (EXP1987: 31 s), DXGI 0x887a0006; the guest is alive;
+  - **no Wom1GpuFault and no Wom1GpuReset receipt**, so this is not a GPU hang;
+  - 3403 path=3 counted rows, so the stream ran for about 78 s;
+  - the failing sequence is `gm1990b-umd.log:207400-207422`:
+    - repeated measure-trim and measure-make-resident-trimmed (hr 0x8000000a);
+    - native-ring-fallback reason 1 for a 256 KiB BO, with arenas at 60/60 MiB;
+    - then reject-batch {4, 0x101f1} and {1, 0x1f9}, then measure-d3d12-first-fault 0x100b6.
+  - So it is a UMD batch-submission refusal under residency trim and memory pressure, not a stream GPU defect. This goes to rc71.
