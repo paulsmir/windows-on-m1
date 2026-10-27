@@ -65022,3 +65022,26 @@ Leaderboard summary for the accepted line:
 | FHD 50k | 2980 | ~10400 | 3.5x |
 | FHD 100k | 2262-2372 | ~7700 | 3.3x |
 | FHD 200k | 1788 | ~5500 | 3.1x |
+
+EXP2002 HARDWARE BEFORE 2026-10-27T21:04:43Z:
+- rc75:
+  - 65dc77c6 and d8544011: root CBV/UAV accesses are unchecked, per the D3D12 resource-binding spec (root descriptors have no size, so OOB is undefined);
+  - 9dd60824: shader stats in refusals-only mode;
+  - f74296a6: RS 1.1 receipt;
+  - fba1cd95: tool.
+- WHY:
+  - EXP2000 shows one per-pixel kernel, bdb1944a (8x8, 1 dispatch per frame), is about 84% of compute thread-instructions;
+  - it is ALU-bound, with bounds-check ALU and scalar loads adding 36% (5660 vs 4161 instructions);
+  - its 9 root parameters are mostly root descriptors.
+- ATOMIC CONTRACT: none; arms a and b are an A/B of one switch.
+- Expected:
+  - measure-d3d12-shader-stats rows present;
+  - measure-d3d12-root-views for bdb1944a with applied=1;
+  - c_work_exact HD at most about 11.5 ms (arm a), with arm b about 12.9;
+  - correct image, no GPU fault;
+  - score above 3959 (HD) and above 2262 (FHD).
+- Failure criteria: a GPU fault or bugcheck in arm a but not b (an OOB root access by the app; risk 0x116), or no change.
+- Recovery: rec2002h.
+- Hashes: sys dc7b6a2a33d6, UmdArm64 79c7b364235e, UmdX64 25393f381a8b, Umd32 99b9af116fba; manifest 4185c4047a1f, hardware-manifest 8071ceb7f6d2; probe2002.sh 0b13b6248a55 (PROBE_LINT_OK); visible recovery rec2002h f2513b500f62bee8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2002h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2002-root-views/run2002.sh.
