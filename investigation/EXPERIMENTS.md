@@ -64546,3 +64546,6 @@ EXP1982 HARDWARE ACTUAL 2026-10-27T12:45:51Z:
 - Arm b (HD 50k, stream on): **no bugcheck** (rc59 contained the paging refusal), but GravityMark hung after loading: one counted-path row with path=3, then nothing until the harness killed it at 300 s. The UMD log has 4 reject-native-envelope and 15 reject-seterror rows; the guest is alive. So the stream job still times out in GravityMark (cause open), but the system now survives.
 - Note: the recovery for EXP1981 had to be rerun because the cloned cleanup scripts expected oem5.inf while Windows published oem6.inf. prepare.sh now rewrites the actual published INF name from stage-receipt.json (CLEANUP_INF line).
 - Recovery rec1982h (running).
+- EXP1982 recovery addendum 2026-10-27T13:59:59Z:
+  - After the stream hang, the visible recovery disabled the service, but the ordered reboot never completed. The serial log stopped at 13:45 local, the USB endpoints vanished, and the launcher (pid 61797) hung (OWNED_LAUNCHER_STILL_RUNNING). The GPU stream timeout therefore left the machine wedged.
+  - The operator power-cycled the J313 into the m1n1 proxy. The AT_PROXY recovery then needed the usual visible-disable.json rename, and finished with RECOVERY_DONE.
