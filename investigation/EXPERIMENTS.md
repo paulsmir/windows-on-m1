@@ -65219,3 +65219,16 @@ EXP2008 HARDWARE BEFORE 2026-10-27T22:42:24Z:
 - Hashes: sys 1cfaa06ab500, UmdArm64 e4b0f9dd09d6, UmdX64 e20c5130c28c, Umd32 86586da5959d; manifest cd2867a6f2b3, hardware-manifest 551882ff7724; probe2008.sh 11cfdcf9f35c (PROBE_LINT_OK); visible recovery rec2008h 6e28dfd7f6a7a8aa; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2008h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2008-clear-percolor/run2008.sh.
+
+EXP2008 HARDWARE ACTUAL (2026-10-27): **PASS, new best**. rc76b per-RT clear colours.
+- HD 50k: **5715 / 34.2 FPS** (EXP2006: 5081). FHD 100k: **3086 / 16.2 FPS** (best was 2715; macOS about 7700, a 2.5x gap).
+- Image correct; no removal; G4_SUBMIT_FAILURE none.
+- clear-absorb median: {0, deferred 8, absorbed 8, absorbed_draws 3, fallback 0, reasons 0}.
+- agx_gpu_frame_breakdown:
+
+  | Run | Jobs/frame | Render jobs | Frame (ms) | GPU span (ms) | Idle (ms) | Compute (ms) | Main pass (ms) | Render-compute (ms) |
+  |---|---|---|---|---|---|---|---|---|
+  | HD | 14 → 9 | 9 → 4 | 26.5 | 25.7 | 0.14 | 10.2 | 6.8 | 6.8 |
+  | FHD | 9 | — | 47.3 | 46.4 | — | 18.7 | 11.1 | 12.4 |
+
+- Verdict: rc76b c07d76ef validated.
