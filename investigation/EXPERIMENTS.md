@@ -65164,3 +65164,14 @@ EXP2006 HARDWARE BEFORE 2026-10-27T22:05:36Z:
 - Hashes: sys 8dba55646391, UmdArm64 80181c561302, UmdX64 549bc7243067, Umd32 deee57b1b7b9; manifest 396cf786e621, hardware-manifest d851be02876d; probe2006.sh 95a56961bb1a (PROBE_LINT_OK); visible recovery rec2006h 657e5ac5dd6da0fc; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2006h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2006-clear-absorb2/run2006.sh.
+
+EXP2006 HARDWARE ACTUAL (2026-10-27): **PASS, new best HD**. rc76 clear absorb.
+- HD 50k: **5081 / 30.4 FPS** (EXP2002-2004: 4439-4579). FHD 100k: 2695 (EXP2002: 2715).
+- No removal; G4_SUBMIT_FAILURE none.
+- measure-d3d12-clear-absorb median: {immediate 0, deferred 8, absorbed 3, absorbed_draws 2, fallback_draws 1, reasons 16 (VALUE)}. 5 of the 8 clears fall back, most likely MRT clears with a different colour per RT; this goes to the rc76 follow-up.
+- agx_gpu_frame_breakdown HD:
+  - jobs 16 → 14, render jobs 11 → 9, small passes 8 → 6 (3.8 ms);
+  - GPU span 29.0 ms, idle **0.16 ms**, fully GPU-bound;
+  - compute 10.2 ms, main pass 6.7 ms.
+- agx_gpu_frame_breakdown FHD: wall 52.9 ms (EXP2002: 55.1), GPU span 50.5 ms.
+- Verdict: rc76 validated (de8be3df, 182f64b1, 12c1a9df, 017419ef).
