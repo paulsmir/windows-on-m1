@@ -1,6 +1,7 @@
 #include "gpuva_g3_private.h"
 #include <intrin.h> /* _ReturnAddress (cancel-caller receipt) */
 #include "apple_agx_g3_copy_abi.h"
+#include "apple_agx_g3_copy_gate.h"
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_g4_preflight.h"
 #include "apple_agx_g13_compute_work.h"
@@ -1668,6 +1669,10 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   UINT pte_wait=0u;
   ULONGLONG pte_wait_start=0ULL;
   LARGE_INTEGER delay;
+  /* RC68: job gate of this request (AppleAgxG3CopyJobGate); strict drops
+   * the UMD proof once the allocation is known to be a presentation one. */
+  UINT gate=APPLE_AGX_G3_COPY_GATE_IDLE, outcome=0u;
+  BOOLEAN strict=FALSE;
   /* Read only the operation tag when the OS-buffered envelope covers it.
    * An absent/truncated tag is not guessed to be a QUERY. */
   if(args && KeGetCurrentIrql()==PASSIVE_LEVEL && args->pPrivateDriverData &&
@@ -1700,7 +1705,9 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   COPY_REJECT_IF(q->Magic!=APPLE_AGX_G3_COPY_MAGIC, 10u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(q->Version!=1u, 11u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(q->Bytes!=sizeof(*q), 12u, STATUS_INVALID_PARAMETER, Free);
-  COPY_REJECT_IF(q->Reserved || q->Reserved2, 13u, STATUS_INVALID_PARAMETER, Free);
+  /* RC68: Reserved may carry the UMD proof and echo a previous outcome
+   * (ignored on input); any other bit is invalid. */
+  COPY_REJECT_IF((q->Reserved&~APPLE_AGX_G3_COPY_RESERVED_MASK) || q->Reserved2, 13u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(q->Operation>APPLE_AGX_G3_COPY_DOWNLOAD, 14u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(!q->Allocation, 15u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(!q->GpuVa, 16u, STATUS_INVALID_PARAMETER, Free);
@@ -1733,10 +1740,17 @@ RetryPagingQuiescence:
      * FILL/TRANSFER ran; otherwise it writes the new placement and a later
      * transfer overwrites it (or it reads the placement before the move). */
     /* EXP1002: canonical copies are process-private and run under this
-     * lock (BeginJob takes it too); only this process's job conflicts. */
-    if(!p || (state->ActiveProcess!=p && !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
+     * lock (BeginJob takes it too); only this process's job conflicts.
+     * RC68: a job of the caller's own context does not conflict when the
+     * UMD proved that no submission which may still run holds the slot. */
+    gate=p ? AppleAgxG3CopyJobGate(q->Operation,strict ? 0u : q->Reserved,
+        state->ActiveProcess==p || p->Graph.JobInFlight || p->Graph.LeaseToken,
+        state->ActiveProcess==p && state->ActiveContext==(ADMISSION_RENDER_CONTEXT *)args->hContext,
+        FALSE) : APPLE_AGX_G3_COPY_GATE_WAIT;
+    if(!p || (gate!=APPLE_AGX_G3_COPY_GATE_WAIT &&
         (q->Operation==APPLE_AGX_G3_COPY_QUERY || AdmissionPagingQuiescent(adapter))) ||
        KeQueryInterruptTime()>=deadline) break;
+    if(gate==APPLE_AGX_G3_COPY_GATE_WAIT) outcome|=APPLE_AGX_G3_COPY_RESULT_WAITED;
     ExReleaseFastMutex(&state->Lock);
     /* EXP1138: wake when this process's job ends (1 ms backstop for the
      * paging-quiescence condition, which has no event). */
@@ -1769,9 +1783,23 @@ RetryPagingQuiescence:
   COPY_REJECT_IF(allocation->Object.Description.CpuVisible, 40u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(!allocation->Presentation &&
       allocation->Object.Description.Type!=ADMISSION_WIN32_ALLOCATION_GPU_LOCAL, 41u, STATUS_INVALID_PARAMETER, Unlock);
-  COPY_REJECT_IF(state->ActiveProcess==p, 42u, STATUS_DEVICE_BUSY, Unlock);
-  COPY_REJECT_IF(p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
-  COPY_REJECT_IF(p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
+  /* RC68: the proof never covers a presentation allocation (present and
+   * flip work reads it outside the UMD holds): wait as before. */
+  gate=AppleAgxG3CopyJobGate(q->Operation,strict ? 0u : q->Reserved,
+      state->ActiveProcess==p || p->Graph.JobInFlight || p->Graph.LeaseToken,
+      state->ActiveProcess==p && state->ActiveContext==(ADMISSION_RENDER_CONTEXT *)args->hContext,
+      allocation->Presentation!=0u);
+  if(gate==APPLE_AGX_G3_COPY_GATE_WAIT && !strict &&
+     (q->Reserved&APPLE_AGX_G3_COPY_FLAG_UNREFERENCED) && allocation->Presentation &&
+     KeQueryInterruptTime()<deadline) {
+    strict=TRUE;
+    ExReleaseFastMutex(&state->Lock);
+    goto RetryPagingQuiescence;
+  }
+  COPY_REJECT_IF(gate==APPLE_AGX_G3_COPY_GATE_WAIT && state->ActiveProcess==p, 42u, STATUS_DEVICE_BUSY, Unlock);
+  COPY_REJECT_IF(gate==APPLE_AGX_G3_COPY_GATE_WAIT && p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
+  COPY_REJECT_IF(gate==APPLE_AGX_G3_COPY_GATE_WAIT && p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
+  if(gate==APPLE_AGX_G3_COPY_GATE_OVERLAP) outcome|=APPLE_AGX_G3_COPY_RESULT_OVERLAPPED;
   /* A paging buffer can be built between the initial check and either final
    * check. Retry the whole owner/context validation on either late change,
    * preserving the original cumulative 3 s bound and R161 guard. */
@@ -1867,6 +1895,9 @@ RetryPagingQuiescence:
     if(q->Operation==APPLE_AGX_G3_COPY_UPLOAD)
       AdmissionG3TraceUpload(state,p,first,(ULONG)length,q->Data);
   }
+  /* RC68 receipt: the input flag is consumed; Reserved returns the gate
+   * outcome (the UMD restores its flag before reusing the request). */
+  q->Reserved=outcome;
   RtlCopyMemory(args->pPrivateDriverData,q,sizeof(*q));status=STATUS_SUCCESS;
 Unlock:
   if(pte_wait && predicate) {
@@ -3432,6 +3463,7 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
      * invalidate an otherwise valid job. JOB_BEGIN pins the validated graph. */
     context->GpuvaG3MappingGeneration = process->Graph.MappingGeneration;
     state->ActiveProcess = process;
+    state->ActiveContext = context;
     state->ActiveFence = fence;
     status = STATUS_SUCCESS;
 #ifdef _MSC_VER
@@ -3628,6 +3660,7 @@ BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
         s->GpuDone=1u;state->PrivateCompletionFence=fence;
       }
     state->ActiveProcess = NULL;
+    state->ActiveContext = NULL;
     state->ActiveFence = 0u;
     state->LastCompletedFence = fence;
   } else {

@@ -67,7 +67,7 @@ typedef struct {
   ADMISSION_GPU_FAULT_DRILL FaultDrill;
 } ADMISSION_G3_PROCESS;
 @@LEAF_TYPES@@
-typedef struct { int Lock; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence;
+typedef struct { int Lock; ADMISSION_G3_PROCESS *ActiveProcess; void *ActiveContext; ULONG ActiveFence;
   ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING];
   ULONG LeafHistoryNext;
 } ADMISSION_G3_STATE;

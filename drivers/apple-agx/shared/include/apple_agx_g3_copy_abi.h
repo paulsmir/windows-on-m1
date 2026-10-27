@@ -9,6 +9,9 @@
 #define APPLE_AGX_G3_COPY_QUERY 0u
 #define APPLE_AGX_G3_COPY_UPLOAD 1u
 #define APPLE_AGX_G3_COPY_DOWNLOAD 2u
+/* RC68: Reserved carries APPLE_AGX_G3_COPY_FLAG_UNREFERENCED in and the
+ * job-gate outcome out (apple_agx_g3_copy_gate.h); bits outside
+ * APPLE_AGX_G3_COPY_RESERVED_MASK and Reserved2 must be zero. */
 typedef struct _APPLE_AGX_G3_COPY_REQUEST {
   APPLE_AGX_U32 Magic, Version, Bytes, Operation;
   APPLE_AGX_U32 Allocation, Reserved;

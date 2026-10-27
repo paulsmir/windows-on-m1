@@ -38,6 +38,10 @@ typedef struct _ADMISSION_G3_STATE {
   ULONGLONG NextProcessId;
   ULONG ProcessCount;
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
+  /* RC68: the context whose job ActiveProcess runs (set and cleared with
+   * it). Compared only, never dereferenced: the copy escape accepts a UMD
+   * no-reference proof only for the caller's own context's job. */
+  ADMISSION_RENDER_CONTEXT *ActiveContext;
   ULONG ActiveFence;
   ULONG LastCompletedFence;
   ULONG PrivateCompletionFence;

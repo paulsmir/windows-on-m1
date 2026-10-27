@@ -173,7 +173,7 @@ typedef struct { int JobInFlight, Uncertain; ULONGLONG LeaseToken; } GRAPH;
 typedef struct _ADMISSION_RENDER_CONTEXT { void *GpuvaG3Process; int GpuvaG3Poisoned; } ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE { struct _ADMISSION_G3_PRIVATE_SCENE *Next; unsigned Queued, Started, Fence, GpuDone; } ADMISSION_G3_PRIVATE_SCENE;
 typedef struct { GRAPH Graph; int Poisoned, CpuOnlyMappings; ADMISSION_G3_PRIVATE_SCENE *PrivateScenes; } ADMISSION_G3_PROCESS;
-typedef struct { int Lock, JobEvent; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence, LastCompletedFence, PrivateCompletionFence; } ADMISSION_G3_STATE;
+typedef struct { int Lock, JobEvent; ADMISSION_G3_PROCESS *ActiveProcess; void *ActiveContext; ULONG ActiveFence, LastCompletedFence, PrivateCompletionFence; } ADMISSION_G3_STATE;
 typedef struct { void *GpuvaG3State; } ADMISSION_CONTEXT;
 static APPLE_AGX_GPUVA_G3_LOGICAL_PTE pte;
 static unsigned char local_bytes[0x2000], pool_bytes[0x2000];

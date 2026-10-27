@@ -87,7 +87,7 @@ typedef struct PROCESS {
   GRAPH Graph;
   ADMISSION_GPU_FAULT_DRILL FaultDrill;
 } ADMISSION_G3_PROCESS;
-typedef struct { LIST_ENTRY Processes; unsigned Lock, ActiveFence; ADMISSION_G3_PROCESS *ActiveProcess; } ADMISSION_G3_STATE;
+typedef struct { LIST_ENTRY Processes; unsigned Lock, ActiveFence; ADMISSION_G3_PROCESS *ActiveProcess; void *ActiveContext; } ADMISSION_G3_STATE;
 typedef struct { void *GpuvaG3State; unsigned GpuFaultDrillAllowed; } ADMISSION_CONTEXT;
 typedef struct { void *pPrivateDriverData; unsigned PrivateDriverDataSize; } DXGKARG_ESCAPE;
 static unsigned irql, pid, lock_depth, mapped, reason, inspected;

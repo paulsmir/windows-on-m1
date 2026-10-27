@@ -94,6 +94,7 @@ typedef struct _ADMISSION_G3_STATE {
   ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT];
   int Lock;
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
+  void *ActiveContext;
   unsigned ActiveFence,PrivateCompletionFence;
   struct {
     APPLE_AGX_G4_PRIVATE_HEADER_V5 Header;
