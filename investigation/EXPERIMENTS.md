@@ -65070,3 +65070,22 @@ EXP2002 HARDWARE ACTUAL (2026-10-27): **PASS, new best**. rc75: root-descriptor 
   - rc75 65dc77c6 and d8544011 validated (as is the attribution);
   - 9dd60824, f74296a6 and fba1cd95 validated as tooling.
 - Open: before release, run the CDM fault drill (rc37 Wom1GpuFaultDrillAllowed) to show an app OOB root access only removes the app.
+
+EXP2003 HARDWARE BEFORE 2026-10-27T21:25:47Z:
+- WHY:
+  - rc75 drops bounds checks on root descriptors (D3D12-legal), so a buggy app can now make a real unmapped GPU data read;
+  - EXP1964/1965 bugchecked 0x116 on an unmapped CDM read before rc37 and rc63;
+  - the rc37 drill (one-shot injected read fault in a child process) has never run on hardware;
+  - a production driver must remove only the faulting app.
+- ATOMIC CONTRACT: none; drill, then the post-fault render arm.
+- Expected:
+  - AGX_GPU_FAULT_INJECTED: PASS, fresh-render PASS, AGX_GPU_FAULT_RECOVERY: PASS;
+  - DWM alive; KMD receipts show exactly one fault and a channel-error or TDR recovery;
+  - GravityMark afterwards about 4439.
+- Failure criteria:
+  - a bugcheck (0x116 or other) or a wedged guest; in that case rc75 stays behind an opt-in until fault recovery is fixed;
+  - drill FAIL with DWM alive: recovery is incomplete.
+- Recovery: rec2003h, and a power cycle by the operator if the guest wedges.
+- Hashes: sys d8f96b67a2fb, UmdArm64 16aa1842e154, UmdX64 ab1ed560b21b, Umd32 4a3f79d12db4; manifest aa4f27248f89, hardware-manifest 4aa62c14ff07; probe2003.sh 2574006e8a37 (PROBE_LINT_OK); visible recovery rec2003h b87aeca8c5aad6bb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultDrillAllowed=1.
+- Recovery rec2003h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2003-fault-drill/run2003.sh.
