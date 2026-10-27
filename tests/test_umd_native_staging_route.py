@@ -40,7 +40,7 @@ static unsigned AdmissionUmdWaitBegin(unsigned){return 0;}
 static void AdmissionUmdWaitEnd(unsigned){}
 static ADMISSION_UMD_STAGING_RING arena;
 static bool native_enabled;
-static unsigned fallback_count,fallback_reason,reserve_calls;
+static unsigned fallback_count,fallback_reason,reserve_calls,class_receipts,class_reason,class_id;
 static BYTE native_memory[3 * 65536];
 static bool AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *d,unsigned long long n,
     unsigned long long align,ADMISSION_UMD_RING_SLICE *s,BYTE **p,unsigned long long *token) {
@@ -55,6 +55,8 @@ static bool AdmissionUmdNativeStagingRelease(ADMISSION_UMD_DEVICE *d,unsigned lo
     assert(token==99);return AdmissionUmdRingReleaseOwned(&arena,ticket,fence,arena.Completed);}
 static void AdmissionUmdNativeStagingFallback(ADMISSION_UMD_DEVICE*,unsigned r,unsigned long long,HRESULT){++fallback_count;fallback_reason=r;}
 static_assert(ADMISSION_UMD_NATIVE_SHADER_CLASS==AgxWin32BufferClassShader,"native class policy");
+static void AdmissionUmdNativeStagingClassReceipt(ADMISSION_UMD_DEVICE *d,unsigned r,unsigned c){
+ assert(d->ScreenBuffers[0].Active && d->ScreenBuffers[0].Transition);++class_receipts;class_reason=r;class_id=c;}
 '''
         body=function((DRIVER/'render-admission/umd/src/umd_win32_screen.c').read_text(),
                       'AdmissionUmdScreenCreateClassBufferImpl')
@@ -90,32 +92,35 @@ int main() {
  }
  /* RC66: native space is free, yet a Shader-class BO (CPU writes its
   * binary once) keeps write-watched private staging: no reservation. */
- d.ScreenBuffers[0]={};private_allocs=0;fallback_count=reserve_calls=0;
+ d.ScreenBuffers[0]={};private_allocs=0;fallback_count=reserve_calls=class_receipts=0;
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,AgxWin32BufferClassShader,65536,65536,0x6,&token,0));
  assert(!s.NativeStagingAddress && !s.NativeStagingTicket && s.PrivateStaging && s.HeapStaging);
  assert(!s.SystemDirect && !arena.Used && !reserve_calls && private_allocs==1);
- assert(fallback_count==1 && fallback_reason==6u);
+ assert(fallback_count==1 && fallback_reason==6u && !class_receipts);
  VirtualFree(s.PrivateStaging,0,0);
  /* The Encoder class (rewritten every batch) still takes the native slice. */
  d.ScreenBuffers[0]={};private_allocs=0;fallback_count=reserve_calls=0;
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,AgxWin32BufferClassEncoder,65536,65536,0x6,&token,0));
  assert(s.NativeStagingAddress && !s.PrivateStaging && reserve_calls==1 && !fallback_count);
  assert(AdmissionUmdRingReleaseOwned(&arena,s.NativeStagingTicket,0,0));
- d.ScreenBuffers[0]={}; native_enabled=false;private_allocs=0;
+ d.ScreenBuffers[0]={}; native_enabled=false;private_allocs=0;class_receipts=0;
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,65536,65536,15,&token,0));
  assert(!s.NativeStagingAddress && !s.NativeStagingTicket && s.PrivateStaging);
  VirtualFree(s.PrivateStaging,0,0);assert(fallback_count && fallback_reason==1u);
+ assert(class_receipts==1 && class_reason==1u && class_id==1u);
  /* RC62: a BO over the native slice limit keeps the ordinary path and says
   * so (reason 4) instead of reporting a full arena. */
  d.ScreenBuffers[0]={};private_allocs=0;
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,ADMISSION_UMD_NATIVE_SLICE_LIMIT+65536ull,65536,15,&token,0));
  assert(!s.NativeStagingAddress && s.PrivateStaging && fallback_reason==4u);
+ assert(class_receipts==1); /* over the slice limit: no arena was full */
  VirtualFree(s.PrivateStaging,0,0);
  /* RC64: a refused slice over 1 MiB names the exhausted large-slice share
   * (reason 5), separately from a full small arena set (reason 1). */
  d.ScreenBuffers[0]={};private_allocs=0;
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,ADMISSION_UMD_NATIVE_SMALL_SLICE+65536ull,65536,15,&token,0));
  assert(!s.NativeStagingAddress && s.PrivateStaging && fallback_reason==5u);
+ assert(class_receipts==2 && class_reason==5u);
  VirtualFree(s.PrivateStaging,0,0);
  d.ScreenBuffers[0]={};private_allocs=0;
  assert(AdmissionUmdScreenCreateClassBufferImpl(&d,1,ADMISSION_UMD_NATIVE_SMALL_SLICE,65536,15,&token,0));

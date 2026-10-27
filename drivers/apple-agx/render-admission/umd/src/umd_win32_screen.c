@@ -747,6 +747,29 @@ static VOID AdmissionUmdNativeStagingFallback(ADMISSION_UMD_DEVICE *Device,
 typedef char AdmissionUmdNativeShaderClassMatches[
     ADMISSION_UMD_NATIVE_SHADER_CLASS == (UINT)AgxWin32BufferClassShader ? 1 : -1];
 
+/* RC66: which classes hold the native slices when a slice is refused
+ * because the arenas are full (reason 1 or 5). measure-native-arena-class
+ * {1, reason, refused class, 64 KiB-rounded native bytes of the General,
+ * Shader and Encoder classes, then their slot counts}. Live slots only; a BO
+ * kept in the winsys BO cache is a live slot. Refusals are rare (EXP1986:
+ * about 150 per run), so the slot scan is not on any per-submission path. */
+static VOID AdmissionUmdNativeStagingClassReceipt(ADMISSION_UMD_DEVICE *Device,
+    UINT Reason, UINT ClassId) {
+  UINT values[9] = {1u, Reason, ClassId, 0u, 0u, 0u, 0u, 0u, 0u};
+  AcquireSRWLockShared(&Device->ScreenBufferLock);
+  for (UINT i=0; i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++i) {
+    const ADMISSION_UMD_SCREEN_BUFFER *slot = &Device->ScreenBuffers[i];
+    if (!slot->Active || !slot->NativeStagingAddress ||
+        slot->ClassId < (UINT)AgxWin32BufferClassGeneral ||
+        slot->ClassId > (UINT)AgxWin32BufferClassEncoder) continue;
+    const UINT index = slot->ClassId - (UINT)AgxWin32BufferClassGeneral;
+    values[3u + index] += (UINT)((slot->Bytes + 65535ULL) & ~65535ULL);
+    ++values[6u + index];
+  }
+  ReleaseSRWLockShared(&Device->ScreenBufferLock);
+  AdmissionUmdDiagnostic("measure-native-arena-class", S_OK, values, ARRAYSIZE(values));
+}
+
 static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
     ULONGLONG Bytes, ULONGLONG Alignment, ADMISSION_UMD_RING_SLICE *Slice,
     BYTE **Address, ULONGLONG *Token) {
@@ -999,9 +1022,12 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
       nativeDescription.Create.Allocation.Size = nativeSlice.Bytes;
       nativeDescription.Token = nativeToken;
       nativeDescription.Offset = nativeSlice.Offset;
-    } else AdmissionUmdNativeStagingFallback(device,
-        nativeBytes > ADMISSION_UMD_NATIVE_SLICE_LIMIT ? 4u :
-        nativeBytes > ADMISSION_UMD_NATIVE_SMALL_SLICE ? 5u : 1u, Bytes, S_OK);
+    } else {
+      const UINT reason = nativeBytes > ADMISSION_UMD_NATIVE_SLICE_LIMIT ? 4u :
+          nativeBytes > ADMISSION_UMD_NATIVE_SMALL_SLICE ? 5u : 1u;
+      AdmissionUmdNativeStagingFallback(device, reason, Bytes, S_OK);
+      if (reason != 4u) AdmissionUmdNativeStagingClassReceipt(device, reason, ClassId);
+    }
   }
 #endif
 
