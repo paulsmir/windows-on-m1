@@ -2042,7 +2042,7 @@ static BOOLEAN AdmissionG3CapturePrivateFailure(ADMISSION_CONTEXT *adapter,
     return FALSE;
   r=&adapter->G3PrivateFailure;
   RtlZeroMemory(r,sizeof(*r));
-  r->Version=1u;r->Bytes=sizeof(*r);r->Branch=branch;r->Status=(UINT)status;
+  r->Version=2u;r->Bytes=sizeof(*r);r->Branch=branch;r->Status=(UINT)status;
   r->Pid=HandleToULong(PsGetCurrentProcessId());r->Operation=q->Operation;
   r->ProcessHandle=(ULONGLONG)(ULONG_PTR)args->hKmdProcessHandle;
   r->ContextHandle=(ULONGLONG)(ULONG_PTR)args->hContext;
@@ -2069,6 +2069,9 @@ static BOOLEAN AdmissionG3CapturePrivateFailure(ADMISSION_CONTEXT *adapter,
     r->ManagerGeneration=p->PrivateManager.Generation;
     r->ManagerPresent=p->PrivateManager.Generation!=0;
     r->FreshManager=!r->ManagerPresent;r->Poisoned=p->Poisoned;
+    /* v2 preserves the cause before the first scene exists: completion-time
+     * Wom1G3Poison cannot run when an earlier paging failure prevented jobs. */
+    r->Reserved=p->PoisonSite;
     r->GraphUncertain=p->Graph.Uncertain;r->JobInFlight=p->Graph.JobInFlight;
     for (scene=p->PrivateScenes;scene;scene=scene->Next) {
       ++r->SceneCount;
