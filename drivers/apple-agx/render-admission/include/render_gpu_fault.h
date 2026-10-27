@@ -153,6 +153,33 @@ typedef struct _ADMISSION_GPU_RECOVERY_SNAPSHOT {
   ADMISSION_GPU_RECOVERY_QUEUE Queues[3];
 } ADMISSION_GPU_RECOVERY_SNAPSHOT;
 
+/* rc77 (EXP2005/EXP2007): Wom1GpuFaultPostResume, REG_BINARY, written at the
+ * end of every reset quiescence wait: what the firmware did after it was
+ * resumed from a Timeout/Fault, and the optional KMD RecoverChannel
+ * (Wom1GpuFaultRecoverChannel=1). Sequential CPU reads of shared memory, not
+ * an atomic GPU state. SGX words are read only with Wom1GpuFaultControlRead=1
+ * (SgxRead = 1); otherwise they are 0. */
+#define ADMISSION_GPU_POST_RESUME_VERSION 1u
+#define ADMISSION_GPU_POST_RESUME_FORCE_DISABLED 0u
+#define ADMISSION_GPU_POST_RESUME_FORCE_NOT_REACHED 1u
+#define ADMISSION_GPU_POST_RESUME_FORCE_SENT 2u
+#define ADMISSION_GPU_POST_RESUME_FORCE_REFUSED 3u
+typedef struct _ADMISSION_GPU_POST_RESUME_RECEIPT {
+  unsigned int Version, Bytes;
+  unsigned int Fence, WaitMs;
+  unsigned int RegionCFaultControl;     /* RegionC word 0x10fd8 as published */
+  unsigned int SgxRead, Sgx17620, Sgx17630;
+  unsigned long long FaultInfo;         /* SGX 0x17030 at the end of the wait */
+  unsigned int FirmwareStatus[16];      /* first 64 bytes: halt_count +0x10,
+                                           halted +0x20, resume +0x30 */
+  unsigned int PendingStampsActive;     /* RegionC pending_stamps with bit 0 */
+  unsigned int RegionCFaultInfo[6];     /* RegionC fault_info (Asahi FaultInfo) */
+  unsigned int ComputeRptrRead, ComputeRptr, ComputeDone, ComputeWrite;
+  unsigned int PostEvents, PostEventKindMask, LastPostEventKind;
+  unsigned int ForceState, ForceResult, ForceMask, ForceAtMs;
+  unsigned int Reserved;
+} ADMISSION_GPU_POST_RESUME_RECEIPT;
+
 typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned int Version, Bytes;
   unsigned int Resets, Succeeded;

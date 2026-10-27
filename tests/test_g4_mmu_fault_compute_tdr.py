@@ -13,6 +13,11 @@ nothing writes a stamp, stops RTKit or fabricates an aborted fence. Once the
 firmware retires the compute entry (what rc77's fault_control 0xb is meant to
 allow), ResetFromTimeout succeeds, aborts exactly the culprit and restarts.
 
+rc77 (EXP2007: fault_control 0xb did not help): with the opt-in
+Wom1GpuFaultRecoverChannel=1 the reset wait sends RecoverChannel once for the
+unretired compute pipe; if the firmware then retires the entry, the first
+ResetEngine succeeds; if not, the job still fails closed with one command.
+
 Compile the production reset DDIs, scheduler and queue runtime together
 (test_apple_agx_tdr_reset_quiesce harness); the firmware model controls only
 event arrival and the shared compute done pointer.
@@ -29,6 +34,8 @@ class MmuFaultComputeTdr(unittest.TestCase):
 
 CASES = replay.CASES.split('int main(void) {')[0] + r'''
 void ReplayQueueAllowRetirement(unsigned allowed);
+void ReplayQueueRecoverChannelRetires(unsigned retires);
+unsigned ReplayQueueRecoverChannelCalls(void);
 int main(void) {
   unsigned retry;
   DXGKARG_RESETENGINE reset;
@@ -64,6 +71,43 @@ int main(void) {
   assert(owner.GpuvaG3Poisoned && owner.Object.FenceOutstanding == 0);
   assert(AdmissionDdiRestartFromTimeout(&adapter) == STATUS_SUCCESS && !paused);
   assert(!adapter.SchedulerFaulted && !rtkit_stops && !lock_depth);
+
+  /* rc77 Wom1GpuFaultRecoverChannel=1, firmware retires after the command:
+   * the first ResetEngine succeeds and aborts only the culprit. */
+  setup(0, 3);
+  adapter.SchedulerFaulted = 0;
+  runtime.RecoverChannelOnStall = TRUE;
+  use_firmware_runtime = 1;
+  ReplayQueueSetup(0xce71cu);
+  ReplayQueueRecoverChannelRetires(1);
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  assert(ReplayQueueRecoverChannelCalls() == 1u);
+  assert(reset.LastAbortedFenceId == 0xce71cu &&
+         last_recorded.Quiesce == AdmissionGpuResetQuiesceEnded);
+  assert(last_post_resume.ForceState == ADMISSION_GPU_POST_RESUME_FORCE_SENT &&
+         last_post_resume.ForceMask == 4u && last_post_resume.ForceResult == 0u &&
+         last_post_resume.ForceAtMs >= ADMISSION_FORCE_CHANNEL_AFTER_MS &&
+         last_post_resume.Fence == 0xce71cu);
+  assert(owner.GpuvaG3Poisoned && !rtkit_stops && !lock_depth);
+
+  /* The command does not help: one command for the job, every reset still
+   * fails closed (no fabricated retirement). */
+  setup(0, 3);
+  adapter.SchedulerFaulted = 0;
+  runtime.RecoverChannelOnStall = TRUE;
+  use_firmware_runtime = 1;
+  ReplayQueueSetup(0xce71cu);
+  ReplayQueueRecoverChannelRetires(0);
+  for (retry = 0; retry < 3; ++retry) {
+    memset(&reset, 0, sizeof(reset));
+    assert((retry < 2 ? AdmissionDdiResetEngine(&adapter, &reset) :
+            AdmissionDdiResetFromTimeout(&adapter)) == STATUS_DEVICE_HARDWARE_ERROR);
+    assert(ReplayQueueRecoverChannelCalls() == 1u);
+    assert(last_post_resume.ForceState == ADMISSION_GPU_POST_RESUME_FORCE_SENT);
+    assert(adapter.Scheduler.ActiveFence == 0xce71cu && reset.LastAbortedFenceId == 0);
+  }
+  assert(post_resume_published >= 3 && !rtkit_stops && !lock_depth);
   puts("compute mmu fault TDR replay ok");
   return 0;
 }
@@ -74,12 +118,25 @@ FIRMWARE = r'''
 #undef assert
 #include <assert.h>
 static TEST_FIXTURE f;
-static unsigned allowed, event_sent;
+static unsigned allowed, event_sent, channel_retires, channel_calls;
 void ReplayQueueAllowRetirement(unsigned value) { allowed = value; }
+void ReplayQueueRecoverChannelRetires(unsigned value) { channel_retires = value; }
+unsigned ReplayQueueRecoverChannelCalls(void) { return channel_calls; }
+APPLE_AGX_G13_QUEUE_RUNTIME *ReplayQueueRuntime(void) { return &f.Runtime; }
+static APPLE_AGX_BACKEND_BOOL ReplayRecoverChannel(void *Context, APPLE_AGX_BACKEND_U32 Fence,
+    APPLE_AGX_BACKEND_U32 Pipe, APPLE_AGX_BACKEND_U64 Queue, APPLE_AGX_BACKEND_U32 Value) {
+  (void)Context;
+  assert(Fence == 0xce71cu && Pipe == AppleAgxG13QueueCompute &&
+         Queue == f.Runtime.Config.Compute.QueueInfoGpuAddress && Value == 0xce71cu);
+  ++channel_calls;
+  if (channel_retires) allowed = 1;
+  return APPLE_AGX_BACKEND_TRUE;
+}
 void ReplayQueueSetup(unsigned fence) {
   APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s;
   TestInitialize(&f); TestEnableCompute(&f);
   f.Runtime.Io.Recover = TestRecover;
+  f.Runtime.Io.RecoverChannel = ReplayRecoverChannel;
   memset(&s, 0, sizeof(s));
   s.Fence = fence; s.Timestamp = 0x1122334455667788ULL; s.NowTicks = 1000ULL;
   s.Compute.Source = f.ComputeSource; s.Compute.Destination = f.ComputeDestination;
@@ -91,7 +148,7 @@ void ReplayQueueSetup(unsigned fence) {
   f.ComputeWrite = f.ComputeDone = 1u; f.ComputeStamp = fence - 4u;
   assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime, &s) == 0);
   assert(f.Runtime.ComputeTerminal && f.ComputeWrite == 2u);
-  allowed = event_sent = 0;
+  allowed = event_sent = channel_retires = channel_calls = 0;
 }
 int ReplayQueuePoll(int poll) {
   APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;

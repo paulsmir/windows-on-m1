@@ -241,7 +241,24 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_GPU_FAULT_MAPPING GpuFaultMappingLast;
   BOOLEAN GpuFaultUnpublished;
   BOOLEAN ReadFaultInfo;
+  /* rc77: Wom1GpuFaultRecoverChannel / Wom1GpuFaultControlRead switches and
+   * the Wom1GpuFaultPostResume receipt of the last reset quiescence wait. */
+  BOOLEAN RecoverChannelOnStall;
+  BOOLEAN ReadFaultControl;
+  ADMISSION_GPU_POST_RESUME_RECEIPT PostResume;
 } ADMISSION_PLATFORM_RUNTIME;
+
+C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 184);
+/* RegionC fault_control (apple_agx_regionc.c), fault_info (Asahi FaultInfo,
+ * 0x18 bytes after unk_117bc) and the SGX registers fault_control bits 0
+ * and 1 set (Asahi fw/initdata.rs:1154-1155). */
+#define ADMISSION_REGIONC_FAULT_CONTROL_OFFSET 0x10fd8u
+#define ADMISSION_PLATFORM_SGX_FAULT_CONTROL_0 0x17620u
+#define ADMISSION_PLATFORM_SGX_FAULT_CONTROL_1 0x17630u
+/* rc77: the KMD RecoverChannel is sent this long into a reset's quiescence
+ * wait (ADMISSION_RESET_QUIESCE_TIMEOUT_MS), after the firmware has had the
+ * whole TdrDelay since its resume to retire the job itself. */
+#define ADMISSION_FORCE_CHANNEL_AFTER_MS 100u
 
 /* 1 ms in 100-ns units (ExSetTimerResolution). */
 #define ADMISSION_PLATFORM_TIMER_RESOLUTION 10000u
@@ -5193,6 +5210,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1TdrDrillAllowed");
   Context->GpuFaultDrillAllowed =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultDrillAllowed");
+  runtime->RecoverChannelOnStall =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultRecoverChannel");
+  runtime->ReadFaultControl =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultControlRead");
+  RtlZeroMemory(&runtime->PostResume, sizeof(runtime->PostResume));
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
   KeInitializeEvent(&runtime->SlotEvent, NotificationEvent, FALSE);
   InterlockedExchange(&runtime->WorkScheduled, 0);
@@ -5308,6 +5330,100 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
  * cannot strand the job. The job leaves the active slot only through
  * AdmissionBackendComplete: natural completion, or the firmware's drop after
  * a Timeout/Fault event and resume (AdmissionTransportRecover). */
+/* rc77 (EXP2005/EXP2007): after resume the compute entry stayed at done 1 /
+ * write 2 with no further event visible in receipts. Record what the
+ * firmware state is at the end of each reset wait. Caller owns the runtime
+ * (Resetting set, worker idle). */
+static VOID AdmissionCapturePostResume(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ULONG Fence, ULONG WaitMs, ADMISSION_GPU_POST_RESUME_RECEIPT *Receipt) {
+  const APPLE_AGX_G13_QUEUE_RUNTIME *queue =
+      &runtime->Provider.QueueProvider.Runtime;
+  const APPLE_AGX_MEMORY_OBJECT *status =
+      &runtime->Initdata.DataObjects[AppleAgxInitdataMemoryFirmwareStatus];
+  const APPLE_AGX_MEMORY_OBJECT *regionC =
+      &runtime->Initdata.DataObjects[AppleAgxInitdataMemoryRegionC];
+  const APPLE_AGX_G13_QUEUE_BINDING *compute = &queue->Config.Compute;
+  APPLE_AGX_BACKEND_U32 value;
+  ULONG index;
+  Receipt->Version = ADMISSION_GPU_POST_RESUME_VERSION;
+  Receipt->Bytes = sizeof(*Receipt);
+  Receipt->Fence = Fence;
+  Receipt->WaitMs = WaitMs;
+  KeMemoryBarrier();
+  if (status->CpuAddress != NULL &&
+      status->Length >= sizeof(Receipt->FirmwareStatus))
+    for (index = 0u; index < 16u; ++index)
+      Receipt->FirmwareStatus[index] =
+          ((const volatile ULONG *)status->CpuAddress)[index];
+  if (regionC->CpuAddress != NULL &&
+      ADMISSION_REGIONC_FAULT_CONTROL_OFFSET + sizeof(ULONG) <= regionC->Length)
+    Receipt->RegionCFaultControl = *(const volatile ULONG *)(
+        (const UCHAR *)regionC->CpuAddress + ADMISSION_REGIONC_FAULT_CONTROL_OFFSET);
+  if (regionC->CpuAddress != NULL &&
+      ADMISSION_REGIONC_FAULT_INFO_OFFSET + sizeof(Receipt->RegionCFaultInfo) <=
+          regionC->Length)
+    for (index = 0u; index < 6u; ++index)
+      Receipt->RegionCFaultInfo[index] = ((const volatile ULONG *)(
+          (const UCHAR *)regionC->CpuAddress +
+          ADMISSION_REGIONC_FAULT_INFO_OFFSET))[index];
+  Receipt->PendingStampsActive = 0u;
+  if (regionC->CpuAddress != NULL &&
+      ADMISSION_REGIONC_PENDING_STAMPS_OFFSET <= regionC->Length &&
+      ADMISSION_REGIONC_PENDING_STAMPS_BYTES <=
+          regionC->Length - ADMISSION_REGIONC_PENDING_STAMPS_OFFSET) {
+    const volatile ULONG *pending = (const volatile ULONG *)(
+        (const UCHAR *)regionC->CpuAddress + ADMISSION_REGIONC_PENDING_STAMPS_OFFSET);
+    for (index = 0u;
+         index < ADMISSION_REGIONC_PENDING_STAMPS_BYTES / sizeof(ULONG);
+         index += 2u)
+      if ((pending[index] & 1u) != 0u)
+        ++Receipt->PendingStampsActive;
+  }
+  Receipt->SgxRead = 0u;
+  Receipt->FaultInfo = ADMISSION_GPU_FAULT_INFO_NOT_READ;
+  if (runtime->ReadFaultInfo && runtime->SgxBase != NULL)
+    Receipt->FaultInfo = READ_REGISTER_ULONG64((volatile ULONG64 *)(
+        runtime->SgxBase + ADMISSION_PLATFORM_SGX_FAULT_INFO_OFFSET));
+  if (runtime->ReadFaultControl && runtime->SgxBase != NULL) {
+    Receipt->Sgx17620 = READ_REGISTER_ULONG((volatile ULONG *)(
+        runtime->SgxBase + ADMISSION_PLATFORM_SGX_FAULT_CONTROL_0));
+    Receipt->Sgx17630 = READ_REGISTER_ULONG((volatile ULONG *)(
+        runtime->SgxBase + ADMISSION_PLATFORM_SGX_FAULT_CONTROL_1));
+    Receipt->SgxRead = 1u;
+  }
+  Receipt->ComputeRptrRead = 0u;
+  if (queue->Config.HasCompute && compute->GpuDonePointer != NULL &&
+      compute->CpuWritePointer != NULL) {
+    /* Asahi fw/workqueue.rs RingState: gpu_doneptr +0, gpu_rptr +0x30,
+     * cpu_wptr +0x40. Read rptr only when the binding has that layout. */
+    if (compute->CpuWritePointer == compute->GpuDonePointer + 16 &&
+        runtime->TransportIo.ReadU32(runtime, compute->GpuDonePointer + 12, &value)) {
+      Receipt->ComputeRptr = value;
+      Receipt->ComputeRptrRead = 1u;
+    }
+    if (runtime->TransportIo.ReadU32(runtime, compute->GpuDonePointer, &value))
+      Receipt->ComputeDone = value;
+    if (runtime->TransportIo.ReadU32(runtime, compute->CpuWritePointer, &value))
+      Receipt->ComputeWrite = value;
+  }
+  Receipt->PostEvents = queue->PostRecoveryEvents;
+  Receipt->PostEventKindMask = queue->PostRecoveryKindMask;
+  Receipt->LastPostEventKind = queue->LastPostRecoveryKind;
+}
+
+static VOID AdmissionPublishPostResume(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    return;
+  RtlInitUnicodeString(&name, L"Wom1GpuFaultPostResume");
+  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &runtime->PostResume,
+                      sizeof(runtime->PostResume));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
     ADMISSION_CONTEXT *Context, ULONG Fence, ULONG TimeoutMs,
     ADMISSION_GPU_RESET_RECEIPT *Receipt) {
@@ -5318,6 +5434,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
   ULONGLONG deadline;
   NTSTATUS status;
   BOOLEAN active;
+  BOOLEAN forceTried = FALSE;
   KIRQL oldIrql;
 
   if (Receipt != NULL)
@@ -5342,6 +5459,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
   if (Receipt != NULL)
     AdmissionGpuRecoverySnapshot(&runtime->Provider.QueueProvider.Runtime,
                                  &Receipt->RetirementBefore);
+  if (runtime->PostResume.Fence != Fence) {
+    /* A new job: the force state of Wom1GpuFaultPostResume belongs to the
+     * previous one. Owned here: Resetting is set and the worker is idle. */
+    RtlZeroMemory(&runtime->PostResume, sizeof(runtime->PostResume));
+    runtime->PostResume.Fence = Fence;
+    runtime->PostResume.ForceState = runtime->RecoverChannelOnStall
+        ? ADMISSION_GPU_POST_RESUME_FORCE_NOT_REACHED
+        : ADMISSION_GPU_POST_RESUME_FORCE_DISABLED;
+  }
   for (;;) {
     APPLE_AGX_BACKEND_U32 drained = 0u;
     APPLE_AGX_BACKEND_U32 completed = 0u;
@@ -5365,6 +5491,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
       outcome = AdmissionGpuResetQuiesceTimeout;
       status = STATUS_IO_TIMEOUT;
       break;
+    }
+    /* rc77 (opt-in Wom1GpuFaultRecoverChannel=1): the firmware was resumed
+     * after a Timeout/Fault and has not retired the job within TdrDelay.
+     * Send RecoverChannel once for each unretired pipe (Asahi gpu.rs:1459
+     * operands); the reset still succeeds only after done == write. */
+    if (runtime->RecoverChannelOnStall && !forceTried &&
+        runtime->PostResume.ForceState == ADMISSION_GPU_POST_RESUME_FORCE_NOT_REACHED &&
+        AdmissionPlatformNowMs() - start >= ADMISSION_FORCE_CHANNEL_AFTER_MS &&
+        runtime->Provider.QueueProvider.Runtime.RecoveryPending &&
+        runtime->Provider.QueueProvider.Runtime.PendingFence == Fence) {
+      APPLE_AGX_BACKEND_U32 mask = 0u;
+      APPLE_AGX_G13_QUEUE_RUNTIME_RESULT forced;
+      forceTried = TRUE;
+      forced = AppleAgxG13QueueRuntimeForceChannelRecovery(
+          &runtime->Provider.QueueProvider.Runtime, &mask);
+      runtime->PostResume.ForceResult = (ULONG)forced;
+      runtime->PostResume.ForceMask = mask;
+      runtime->PostResume.ForceAtMs = (ULONG)(AdmissionPlatformNowMs() - start);
+      runtime->PostResume.ForceState =
+          forced == AppleAgxG13QueueRuntimeResultOk && mask != 0u
+              ? ADMISSION_GPU_POST_RESUME_FORCE_SENT
+              : ADMISSION_GPU_POST_RESUME_FORCE_REFUSED;
     }
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     {
@@ -5403,6 +5551,9 @@ Exit:
       AdmissionGpuRecoverySnapshot(&runtime->Provider.QueueProvider.Runtime,
                                    &Receipt->RetirementAfter);
     AdmissionPublishFirmwareRecovery(runtime);
+    AdmissionCapturePostResume(runtime, Fence,
+        (ULONG)(AdmissionPlatformNowMs() - start), &runtime->PostResume);
+    AdmissionPublishPostResume(runtime);
   }
   InterlockedExchange(&runtime->Resetting, 0);
   return status;

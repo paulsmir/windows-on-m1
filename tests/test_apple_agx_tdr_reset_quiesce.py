@@ -79,7 +79,10 @@ class TdrResetQuiesce(unittest.TestCase):
         pending = (re.search(r'#define ADMISSION_G4_PENDING_CAPACITY \d+u', header).group(0) +
                    '\n' + re.search(r'typedef enum _ADMISSION_G4_PENDING_STATE.*?'
                                     r'} ADMISSION_G4_PENDING_STATE;', header, re.S).group(0))
-        body = (SHIM.replace('/*TIMEOUT*/', timeout.group(1) if timeout else '1000')
+        force = re.search(r'#define ADMISSION_FORCE_CHANNEL_AFTER_MS (\d+)u', backend)
+        body = ('#define ADMISSION_FORCE_CHANNEL_AFTER_MS ' +
+                (force.group(1) if force else '100') + 'u\n' +
+                SHIM.replace('/*TIMEOUT*/', timeout.group(1) if timeout else '1000')
                     .replace('/*PACKET*/', packet).replace('/*PENDING*/', pending) +
                 '\n'.join(function_body(gpuva, n) for n in (
                     'AdmissionGpuvaG3PrivateCancel', 'AdmissionGpuvaG3PrivatePreempt',
@@ -218,6 +221,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   APPLE_AGX_RTKIT_SESSION Rtkit;
   APPLE_AGX_ASC_IO AscIo;
   volatile LONG FirmwareRecoveries;
+  BOOLEAN RecoverChannelOnStall;
+  ADMISSION_GPU_POST_RESUME_RECEIPT PostResume;
 } ADMISSION_PLATFORM_RUNTIME;
 struct _ADMISSION_CONTEXT {
   int SchedulerLock, PagingLock, BackendImage;
@@ -341,6 +346,27 @@ static APPLE_AGX_ASC_BOOL mailbox_read64(void *ctx, unsigned offset,
   }
   return APPLE_AGX_ASC_TRUE;
 }
+/* rc77: a firmware replay may expose its real queue runtime; the backend's
+ * view of it (provider runtime fields) is synchronized after every poll and
+ * its forced RecoverChannel is redirected to that real runtime. */
+__attribute__((weak)) APPLE_AGX_G13_QUEUE_RUNTIME *ReplayQueueRuntime(void) { return NULL; }
+static void sync_queue_runtime(APPLE_AGX_PLATFORM_PROVIDER *p) {
+  APPLE_AGX_G13_QUEUE_RUNTIME *real = ReplayQueueRuntime();
+  if (real == NULL) return;
+  p->QueueProvider.Runtime.Phase = real->Phase;
+  p->QueueProvider.Runtime.PendingFence = real->PendingFence;
+  p->QueueProvider.Runtime.RecoveryPending = real->RecoveryPending;
+  p->QueueProvider.Runtime.PostRecoveryEvents = real->PostRecoveryEvents;
+  p->QueueProvider.Runtime.PostRecoveryKindMask = real->PostRecoveryKindMask;
+  p->QueueProvider.Runtime.LastPostRecoveryKind = real->LastPostRecoveryKind;
+}
+static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT ReplayForceChannelRecovery(
+    APPLE_AGX_G13_QUEUE_RUNTIME *r, APPLE_AGX_BACKEND_U32 *issued) {
+  APPLE_AGX_G13_QUEUE_RUNTIME *real = ReplayQueueRuntime();
+  assert(!lock_depth);
+  return AppleAgxG13QueueRuntimeForceChannelRecovery(real ? real : r, issued);
+}
+#define AppleAgxG13QueueRuntimeForceChannelRecovery ReplayForceChannelRecovery
 static BOOLEAN AppleAgxPlatformProviderPoll(APPLE_AGX_PLATFORM_PROVIDER *p,
     APPLE_AGX_BACKEND_U32 max, APPLE_AGX_BACKEND_U32 *drained, APPLE_AGX_BACKEND_U32 *completed) {
   (void)p; (void)max; assert(!lock_depth); assert(!worker_busy);
@@ -348,6 +374,7 @@ static BOOLEAN AppleAgxPlatformProviderPoll(APPLE_AGX_PLATFORM_PROVIDER *p,
   if (fail_poll) return FALSE;
   if (use_firmware_runtime) {
     if (ReplayQueuePoll(polls)) model_job_ends();
+    sync_queue_runtime(p);
   } else if (polls == drop_at_poll) model_job_ends();
   return TRUE;
 }
@@ -371,6 +398,20 @@ static int published, recorded;
 static ADMISSION_GPU_RESET_RECEIPT last_recorded;
 static void AdmissionPublishFirmwareRecovery(ADMISSION_PLATFORM_RUNTIME *r) {
   (void)r; assert(!lock_depth); ++published; }
+/* rc77: model of the post-resume receipt (no shared memory or MMIO here). */
+static int post_resume_published;
+static ADMISSION_GPU_POST_RESUME_RECEIPT last_post_resume;
+static void AdmissionCapturePostResume(ADMISSION_PLATFORM_RUNTIME *r, ULONG fence,
+    ULONG wait_ms, ADMISSION_GPU_POST_RESUME_RECEIPT *receipt) {
+  receipt->Version = ADMISSION_GPU_POST_RESUME_VERSION;
+  receipt->Bytes = sizeof(*receipt);
+  receipt->Fence = fence; receipt->WaitMs = wait_ms;
+  receipt->PostEvents = r->Provider.QueueProvider.Runtime.PostRecoveryEvents;
+  receipt->PostEventKindMask = r->Provider.QueueProvider.Runtime.PostRecoveryKindMask;
+  receipt->LastPostEventKind = r->Provider.QueueProvider.Runtime.LastPostRecoveryKind;
+}
+static void AdmissionPublishPostResume(ADMISSION_PLATFORM_RUNTIME *r) {
+  assert(!lock_depth); ++post_resume_published; last_post_resume = r->PostResume; }
 static void AdmissionPlatformRuntimeResetState(ADMISSION_CONTEXT *c, ADMISSION_GPU_RESET_RECEIPT *r) {
   ADMISSION_PLATFORM_RUNTIME *p = c->PlatformRuntime;
   r->BackendPhase = (ULONG)p->Backend.Phase; r->WorkerBusy = p->WorkScheduled ? 1u : 0u;
