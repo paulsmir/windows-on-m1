@@ -916,9 +916,19 @@ C_ASSERT((ULONG)D3DKMDT_VPPS_UNINITIALIZED == 0u &&
 _Use_decl_annotations_ BOOLEAN AdmissionScanoutScaledModes(
     ADMISSION_CONTEXT *Context) {
 #if ADMISSION_DISPLAY_SCALED_MODES
-  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
-  return runtime != NULL &&
-                 AppleAgxFixedPanelScaledSourceSupported(&runtime->Panel)
+  /* EXP2053: dxgkrnl asks for monitor modes once, before the panel is
+   * Started (the first scanout), so the decision follows the broker's ABI
+   * and capabilities read at StartDevice (AdmissionScanoutStart), not the
+   * Started state. Commit and flip still require a started panel. */
+  ADMISSION_SCANOUT_RUNTIME *runtime;
+  if (Context == NULL || Context->ScanoutRuntime == NULL)
+    return FALSE;
+  runtime = (ADMISSION_SCANOUT_RUNTIME *)Context->ScanoutRuntime;
+  return runtime->Adapter == Context &&
+                 runtime->Panel.Scanout.AbiVersion ==
+                     APPLE_AGX_SCANOUT_ABI_VERSION_V2 &&
+                 (runtime->Panel.Scanout.Capabilities &
+                  APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE) != 0u
              ? TRUE
              : FALSE;
 #else
