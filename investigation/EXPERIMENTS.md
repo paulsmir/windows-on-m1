@@ -66263,3 +66263,20 @@ EXP2044 HARDWARE ACTUAL (2026-10-28): **the Earth flicker is captured in screens
 - Verdict:
   - The rc105 guard is kept (harmless; no inversions seen).
   - The flicker is a shading defect, most likely in the Texture2DArray shadow-atlas path (DSV/SRV array slices, a comparison sampler, or BORDER colour, since border_color_format is never set). This goes to rc108.
+
+EXP2045 HARDWARE BEFORE 2026-10-28T15:25:45Z:
+- WHY: in EXP2042 the first C→R kick failed at line 5115: BeginJobAs refused with refusal 7 (output), because it read the compute job's packet, which has no destination. The host test on the GravityMark successor state now passes.
+- ATOMIC CONTRACT: one change (the fix, on top of the EXP2042 switch set).
+- Expected:
+  - Wom1JobWindow kicks > 0, kick_failures 0, adopted ≈ kicks, max_in_flight 2, batch_sizes[2] > 0;
+  - timing depth2.wired kicks_while_busy > 0;
+  - no TDR or removal; correct image;
+  - HD median frame below about 22.8 ms.
+- Failure criteria:
+  - kick_failures > 0 (begin_successor_refusal names the check);
+  - a Timeout or TDR right after the first R→C kick (the 3D stamp is held under a deferred event);
+  - an image difference.
+- Recovery: rec2045h.
+- Hashes: sys 6852c0d7c67a, UmdArm64 7678ae05c02c, UmdX64 a349da1591a1, Umd32 557c0d251419; manifest 7e152ebf67e3, hardware-manifest dd6bd228bfce; probe2045.sh 523c44c6e5ec (PROBE_LINT_OK); visible recovery rec2045h 0050c424fd687f6f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1.
+- Recovery rec2045h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2045-kick3/run2045.sh.
