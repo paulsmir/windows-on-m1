@@ -66447,3 +66447,20 @@ EXP2050 HARDWARE ACTUAL (2026-10-28): **a 4 GiB unified pool works. FHD 200k com
 
 - No removal or fault. rec2050h Preflight PASS.
 - Verdict: rc109 is confirmed. The policy value stays on the guest for later runs.
+
+EXP2051 HARDWARE BEFORE 2026-10-28T20:08:00Z:
+- rc102 86d05b5d:
+  - refusal 64: 3D-stamp-wait classes (R→C, R→R) need Wom1JobDepth2KickOn3d, absent here, so only C→R/C→C are kicked;
+  - Image Sequence/Dynamic rollback on a failed kick;
+  - Wom1JobWindowKickFail v2 with BuildRefusal.
+Device switches: Wom1GpuFaultInfoRead=1, Wom1JobDepth2=1, Wom1JobDepth2Caps=1, Wom1JobDepth2Kick=1. Order: HD 50k (a), FHD 100k (c).
+- WHY: EXP2047 had the first real kick (R→C, succeeded), then a C→R build refused right after StageJob, then a depth-1 TA stamp hang (0x1994), possibly from the advanced Image Sequence.
+- ATOMIC CONTRACT: one change set on the Kick switches.
+- Expected:
+  - C→R kicks > 0 with max_in_flight 2, no hang;
+  - or a KickFail v2 naming build_refusal, with the reset recovering.
+- Failure criteria: a hang or 0x116 (then compare the TA stamp pattern with EXP2047's 0x1994).
+- Recovery: rec2051h.
+- Hashes: sys 0b9a8b4d0e0d, UmdArm64 97ad630508de, UmdX64 ac5299b8d6df, Umd32 4d2ec18d799f; manifest a2dc0c27985d, hardware-manifest 0c9d5107acba; probe2051.sh dffbe8953f6f (PROBE_LINT_OK); visible recovery rec2051h 58da34f9e1f57f1b; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1.
+- Recovery rec2051h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2051-kick5/run2051.sh.
