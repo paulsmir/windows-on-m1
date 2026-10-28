@@ -571,6 +571,12 @@ agx_win32_d3d_group_loads(nir_function_impl *impl, struct set *checked, unsigned
 static inline bool
 agx_win32_lower_d3d_buffer_access(nir_shader *nir)
 {
+   /* RC111 diagnostic only (EXP2057): APPLE_AGX_D3D_ROBUST_DIAG=off leaves
+    * every UBO/SSBO access unchecked, as Metal does, to measure what the
+    * D3D bounds tests cost on hardware. Not D3D-conformant. */
+   const char *diag = getenv("APPLE_AGX_D3D_ROBUST_DIAG");
+   if (diag && !strcmp(diag, "off"))
+      return false;
    const char *env = getenv("APPLE_AGX_D3D_BUFFER_BRANCHES");
    const unsigned min_saved = agx_win32_d3d_load_run_min_saved(getenv("APPLE_AGX_D3D_LOAD_RUNS"));
    struct agx_win32_d3d_lowering state = {NULL, env && env[0] == '1' && !env[1]};
