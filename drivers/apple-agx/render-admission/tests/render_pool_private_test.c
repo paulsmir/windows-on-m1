@@ -85,6 +85,51 @@ static void Range(void) {
   AdmissionPoolSlabUnreserve(&p, 32);
   assert(!p.PrivateCount && !p.Stats.Slabs);
 }
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * rc86: a lease may skip its clear only while its slot still holds the
+ * zeroed pages NewSlab returned. A slot ever handed out for a placement, or
+ * given back by an owner that did not zero it, must never report Zero; the
+ * clean preference must not break packing into the most used slab. */
+static void Clean(void) {
+  ADMISSION_POOL_SLABS p = {0};
+  ADMISSION_POOL_PRIVATE a = {0}, b = {0}, c = {0};
+  ADMISSION_POOL_SLAB *slab[33];
+  unsigned slot[33];
+  p.NewSlab = New; p.FreeSlab = Free; p.MayGrow = Grow;
+  p.ReserveCap = 64; p.PrivateCap = 8; p.SpareLimit = 4;
+  calls = frees = 0; limit = 100; grow = 1;
+  assert(AdmissionPoolSlabTakePrivate(&p, &a));
+  assert(a.Zero == 1u);                      /* fresh Windows-zeroed slot */
+  { unsigned dirty = a.Slot;
+    a.Zero = 0u;                              /* owner used it, no clear */
+    assert(AdmissionPoolSlabGivePrivate(&p, &a) && !a.Zero);
+    assert(AdmissionPoolSlabTakePrivate(&p, &b));
+    assert(b.Zero == 1u && b.Slot != dirty); } /* another clean slot */
+  b.Zero = 1u;                                /* owner zeroed it */
+  { ADMISSION_POOL_SLAB *was = b.Slab; unsigned at = b.Slot;
+    assert(AdmissionPoolSlabGivePrivate(&p, &b));
+    assert(AdmissionPoolSlabTakePrivate(&p, &c));
+    assert(c.Zero == 1u && c.Slab == was && c.Slot == at);
+    assert(AdmissionPoolSlabGivePrivate(&p, &c)); }
+  /* Every slot of slab 1 handed out once for placements: dirty. */
+  assert(AdmissionPoolSlabTake(&p, 32, slab, slot));
+  for (unsigned i = 0; i < 32; ++i) AdmissionPoolSlabGive(&p, slab[i], slot[i]);
+  assert(p.Stats.Slabs == 1);
+  for (unsigned i = 0; i < 32; ++i) {
+    ADMISSION_POOL_PRIVATE l = {0};
+    assert(AdmissionPoolSlabTakePrivate(&p, &l) && l.Zero == 0u);
+    assert(AdmissionPoolSlabGivePrivate(&p, &l));
+  }
+  /* Packing: with a partly used slab, a lease goes there even though a
+   * newer empty slab is still clean. */
+  assert(AdmissionPoolSlabTake(&p, 33, slab, slot)); /* 32 + 1 in a new slab */
+  AdmissionPoolSlabGive(&p, slab[0], slot[0]);       /* slab 1: 31 live */
+  assert(AdmissionPoolSlabTakePrivate(&p, &a));
+  assert(a.Slab == slab[0] && a.Zero == 0u);
+  assert(AdmissionPoolSlabGivePrivate(&p, &a));
+  for (unsigned i = 1; i < 33; ++i) AdmissionPoolSlabGive(&p, slab[i], slot[i]);
+  AdmissionPoolSlabDrain(&p);
+}
 int main(void) {
   ADMISSION_POOL_SLABS p = {0}, other = {0};
   ADMISSION_POOL_PRIVATE a = {0}, b = {0}, copy;
@@ -159,5 +204,6 @@ int main(void) {
   p.Reserved = p.ReserveCap = 0;
   AdmissionPoolSlabDrain(&p);
   Range();
+  Clean();
   return 0;
 }

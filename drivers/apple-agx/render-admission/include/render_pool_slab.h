@@ -17,6 +17,9 @@ typedef struct _ADMISSION_POOL_SLAB {
   unsigned long long Pa[ADMISSION_POOL_SLAB_SLOTS]; /* 64 KiB-aligned */
   unsigned int FreeMask;                       /* bit i: slot i free */
   unsigned int Live;                           /* slots handed out */
+  /* rc86: bit i: slot i still holds the zeroed pages NewSlab returned and
+   * has never been handed out since (no window map, no lease use). */
+  unsigned int CleanMask;
   struct _ADMISSION_POOL_PRIVATE *PrivateOwner[ADMISSION_POOL_SLAB_SLOTS];
   struct _ADMISSION_POOL_SLAB *Next;
 } ADMISSION_POOL_SLAB;
@@ -27,6 +30,9 @@ typedef struct _ADMISSION_POOL_SLAB_STATS {
   unsigned long long ReserveFailures, PeakReserved;
   /* M2-f7: reservations refused at the Windows memory floor (MayGrow 0). */
   unsigned long long FloorRefusals;
+  /* rc86: successful reservations that took no slab from Windows (held or
+   * cached empty slots covered them). */
+  unsigned long long ReserveNoGrowth;
 } ADMISSION_POOL_SLAB_STATS;
 
 typedef struct _ADMISSION_POOL_SLABS {
@@ -60,6 +66,10 @@ typedef struct _ADMISSION_POOL_SLABS {
 typedef struct _ADMISSION_POOL_PRIVATE {
   ADMISSION_POOL_SLAB *Slab;
   unsigned int Slot;
+  /* rc86: the slot's bytes are known zero. TakePrivate sets it from the
+   * slab's CleanMask; the owner clears it once it exposes the slot and sets
+   * it again only after zeroing, so GivePrivate can keep the slot clean. */
+  unsigned int Zero;
 } ADMISSION_POOL_PRIVATE;
 int AdmissionPoolSlabTakePrivate(ADMISSION_POOL_SLABS *Slabs,
                                  ADMISSION_POOL_PRIVATE *Lease);
@@ -85,6 +95,10 @@ void AdmissionPoolSlabGive(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Sla
 int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count);
 /* Ends a promise (clamped at zero) and returns empty slabs it no longer needs. */
 void AdmissionPoolSlabUnreserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count);
+/* rc86: nonzero when more than Keep empty slabs could go back to Windows
+ * now (beyond Keep and still covering every promise). */
+int AdmissionPoolSlabHasSurplus(const ADMISSION_POOL_SLABS *Slabs,
+                                unsigned long long Keep);
 /* Frees every slab (stop); normal slots still handed out are the caller's
  * leak. With private leases outstanding retain the entire pool: a caller must
  * retire/release them first, or retain the pool and MDLs on uncertain revoke. */

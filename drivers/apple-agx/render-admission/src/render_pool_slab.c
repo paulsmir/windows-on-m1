@@ -56,6 +56,8 @@ static ADMISSION_POOL_SLAB *AddSlab(ADMISSION_POOL_SLABS *Slabs) {
   for (unsigned int i = 0u; i < ADMISSION_POOL_SLAB_SLOTS; ++i)
     slab->PrivateOwner[i] = 0;
   slab->FreeMask = ALL_SLOTS;
+  /* NewSlab's contract: fresh zeroed pages. */
+  slab->CleanMask = ALL_SLOTS;
   slab->Live = 0u;
   slab->Next = Slabs->List;
   Slabs->List = slab;
@@ -79,8 +81,15 @@ void AdmissionPoolSlabGive(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Sla
   if (MayFree(Slabs)) FreeEmpty(Slabs, Slab);
 }
 
+int AdmissionPoolSlabHasSurplus(const ADMISSION_POOL_SLABS *Slabs,
+                                unsigned long long Keep) {
+  return Slabs != 0 && Slabs->Stats.Slabs != 0u && Slabs->Empty > Keep &&
+         (Slabs->Stats.Slabs - 1u) * ADMISSION_POOL_SLAB_SLOTS >= Promised(Slabs);
+}
+
 int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count) {
   ADMISSION_POOL_SLAB *old_head;
+  unsigned long long new_slabs;
   if (Slabs == 0) return 0;
   /* A wrapped total would discard existing promises and let Trim return
    * backing still needed by admitted allocations. Refuse before mutation. */
@@ -98,6 +107,7 @@ int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Cou
     }
   }
   old_head = Slabs->List;
+  new_slabs = Slabs->Stats.NewSlabs;
   Slabs->Reserved += Count;
   while (Slabs->Stats.Slabs * ADMISSION_POOL_SLAB_SLOTS < Promised(Slabs)) {
     int floor = Slabs->MayGrow != 0 && !Slabs->MayGrow(Slabs->Context);
@@ -115,6 +125,7 @@ int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Cou
   }
   if (Slabs->Reserved > Slabs->Stats.PeakReserved)
     Slabs->Stats.PeakReserved = Slabs->Reserved;
+  if (Slabs->Stats.NewSlabs == new_slabs) ++Slabs->Stats.ReserveNoGrowth;
   return 1;
 }
 
@@ -148,6 +159,8 @@ int AdmissionPoolSlabTake(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count,
     while (taken < Count && best->FreeMask != 0u) {
       unsigned int i = LowestSlot(best->FreeMask);
       best->FreeMask &= ~(1u << i);
+      /* Handed out: its content is no longer the zero NewSlab supplied. */
+      best->CleanMask &= ~(1u << i);
       ++best->Live;
       Slab[taken] = best;
       Slot[taken] = i;
@@ -181,8 +194,29 @@ int AdmissionPoolSlabTakePrivate(ADMISSION_POOL_SLABS *Slabs,
       return 0;
     }
   }
-  /* Enough free slots now exist; Take cannot grow while the pool is locked. */
-  if (!AdmissionPoolSlabTake(Slabs, 1u, &slot_slab, &slot)) return 0;
+  /* Enough free slots now exist; Take cannot grow while the pool is locked.
+   * Same choice as Take (the most used slab with a free slot, packing), but
+   * among equally used slabs and within the chosen slab prefer a clean slot:
+   * its bytes are still the zero NewSlab supplied, so the owner need not
+   * clear them again (rc86). */
+  slot_slab = 0;
+  for (s = Slabs->List; s != 0; s = s->Next)
+    if (s->FreeMask != 0u &&
+        (slot_slab == 0 || s->Live > slot_slab->Live ||
+         (s->Live == slot_slab->Live &&
+          (s->FreeMask & s->CleanMask) != 0u &&
+          (slot_slab->FreeMask & slot_slab->CleanMask) == 0u)))
+      slot_slab = s;
+  if (slot_slab == 0) return 0;
+  {
+    unsigned int clean = slot_slab->FreeMask & slot_slab->CleanMask;
+    slot = LowestSlot(clean != 0u ? clean : slot_slab->FreeMask);
+    Lease->Zero = clean != 0u ? 1u : 0u;
+  }
+  if (slot_slab->Live == 0u) --Slabs->Empty;
+  slot_slab->FreeMask &= ~(1u << slot);
+  slot_slab->CleanMask &= ~(1u << slot);
+  ++slot_slab->Live;
   ++Slabs->PrivateCount;
   slot_slab->PrivateOwner[slot] = Lease;
   Lease->Slab = slot_slab;
@@ -227,8 +261,11 @@ int AdmissionPoolSlabGivePrivate(ADMISSION_POOL_SLABS *Slabs,
   if (s == 0 || s->PrivateOwner[slot] != Lease) return 0;
   s->PrivateOwner[slot] = 0;
   --Slabs->PrivateCount;
+  /* The owner zeroed the slot after its last use: it is clean again. */
+  if (Lease->Zero) s->CleanMask |= 1u << slot;
   Lease->Slab = 0;
   Lease->Slot = 0u;
+  Lease->Zero = 0u;
   AdmissionPoolSlabGive(Slabs, s, slot);
   Trim(Slabs);
   return 1;
