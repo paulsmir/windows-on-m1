@@ -65517,3 +65517,20 @@ EXP2018 HARDWARE ACTUAL (2026-10-28): rc86 (trim recency, slab cache, TVB zero s
   - rc86 trim recency does NOT remove the startup thrash: the working set itself exceeds the LOCAL budget;
   - the slab cache and receipts are kept (neutral or positive).
 - Next: shrink the working set (rc87).
+
+EXP2019 HARDWARE BEFORE 2026-10-28T03:53:55Z:
+- WHY:
+  - EXP2017/2018: the FHD working set (3216 MiB at 100k, 3418 at 200k in segment 3) exceeds the LOCAL budget (about 2.9 GiB), causing 43-51 s startup thrash and 200k steady churn;
+  - 400 MiB is texture-only heap backing that no resource uses, because placed textures have their own BOs (C36);
+  - at 200k, stream scratch above the 128 MiB cap re-created 30 MiB outputs every frame.
+- ATOMIC CONTRACT: none; switch APPLE_AGX_D3D12_DEFER_TEXTURE_HEAPS=0.
+- Expected:
+  - four `measure-d3d12-heap` status-3 receipts; inventory about 2816/3018 MiB;
+  - startup trims about 0; first-frame gap under 25 s; 129 MiB bind under 2 s;
+  - 200k: scratch creates under 50; steady trims much lower; frames over 500 ms far below 55;
+  - scores above 3636 / 1357.
+- Failure criteria: removal (the runtime using a deferred heap), a wrong image, or a regression.
+- Recovery: rec2019h.
+- Hashes: sys dff14b5d82c9, UmdArm64 dbb3c3b77222, UmdX64 88d139a8486f, Umd32 9d7b10d5ecb1; manifest a63601ae7ab3, hardware-manifest 22d9653a7338; probe2019.sh 8cdf9d56fa66 (PROBE_LINT_OK); visible recovery rec2019h c22dda371c4b4317; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2019h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2019-workset/run2019.sh.
