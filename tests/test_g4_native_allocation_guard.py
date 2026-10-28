@@ -395,6 +395,14 @@ static bool deferred, touch_fail;
  if(deferred) bad=0;
  return !touch_fail;
 }
+/* rc107: the CPU-visible pool placement repair has its own replay
+ * (test_umd_cpu_pool_rehome); here it declines, as for every non-pool slot. */
+#define ADMISSION_UMD_REHOME_ROUNDS 2u
+#define ADMISSION_UMD_REHOME_SUBMIT 0u
+static unsigned rehome_requests;
+[[maybe_unused]] static int rehome_cpu_pool(ADMISSION_UMD_DEVICE *,uint64_t,uint64_t,UINT,UINT) {
+ assert(!locks); ++rehome_requests; return 0;
+}
 static HRESULT escape_cb(UINT,D3DDDICB_ESCAPE *e) {
  assert(uploads && !locks && !e->Flags.Value && e->hDevice==3 && e->hContext==7);
  ++escapes;

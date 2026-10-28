@@ -9,6 +9,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "umd_internal.h"
 #include "../../../mesa/winsys/agx_win32_wait.h"
 #include "umd_residency_trim.h"
+#include "umd_cpu_pool_rehome.h"
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g3_copy_gate.h"
 #include "apple_agx_g3_copy_query_receipt.h"
@@ -300,9 +301,12 @@ static int wait_paging_at(ADMISSION_UMD_DEVICE *device, uint64_t fence,
 /* M2-f11 (EXP1271): drop the persistent residency reference (EXP978) of idle
  * GPU-local (including private CPU staging) or unmapped SystemDirect slots,
  * least recently used first, until Want bytes are covered
- * (umd_residency_trim.h). Returns the bytes dropped and their slot count. */
-static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
-                                UINT *trimmed) {
+ * (umd_residency_trim.h). Returns the bytes dropped and their slot count.
+ * rc107: Eager asks VidMm to page the slots out now (EvictOnlyIfNecessary=0,
+ * EXP1124) so the pool has room before a CPU-visible allocation is paged
+ * back in (umd_cpu_pool_rehome.h); budget trims stay lazy. */
+static ULONGLONG trim_residency_with(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
+                                     UINT *trimmed, bool eager) {
   UINT n=ADMISSION_UMD_SCREEN_BUFFER_SCAN(device), count=0u;
   ULONGLONG covered=0ull;
   HRESULT hr=E_FAIL;
@@ -368,7 +372,7 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
   if(count) {
     D3DDDICB_EVICT evict={};
     /* EXP1124: drop the references only; VidMm pages out what it needs. */
-    evict.Flags.EvictOnlyIfNecessary=1u;
+    evict.Flags.EvictOnlyIfNecessary=eager ? 0u : 1u;
     evict.NumAllocations=count;evict.AllocationList=handles;
     unsigned wait_pfnEvictCb=AdmissionUmdWaitBegin(AgxWaitEvict);
     hr=device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle,&evict);
@@ -387,9 +391,10 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
       for(UINT i=0;i<count;++i)
         va_record(device,8u,tokens[i],handles[i],0,view[chosen[i]].Bytes,hr);
     }
-    UINT values[7]={count,(UINT)covered,(UINT)(covered>>32),(UINT)want,
+    /* rc107 appends value 7: 1 for an eager (rehome) trim. */
+    UINT values[8]={count,(UINT)covered,(UINT)(covered>>32),(UINT)want,
         (UINT)(want>>32),(UINT)evict.NumBytesToTrim,
-        (UINT)(evict.NumBytesToTrim>>32)};
+        (UINT)(evict.NumBytesToTrim>>32),eager ? 1u : 0u};
     AdmissionUmdDiagnostic("measure-trim",hr,values,ARRAYSIZE(values));
   }
   if(view) HeapFree(GetProcessHeap(),0,view);
@@ -399,6 +404,11 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
   if(!count || FAILED(hr)) return 0ull;
   *trimmed=count;
   return covered;
+}
+
+static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
+                                UINT *trimmed) {
+  return trim_residency_with(device, want, trimmed, false);
 }
 
 /* M2-f11: pfnMakeResidentCb under the budget contract (Microsoft,
@@ -2012,6 +2022,190 @@ static int restore_residency(ADMISSION_UMD_DEVICE *device, uint64_t token) {
   return 1;
 }
 
+/* rc107: the KMD's read-only census of where VidMm currently maps this
+ * allocation (APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION). It is never a
+ * native-readiness proof; the batch refuses it. 0 on transport failure or an
+ * older KMD, which refuses the version. */
+static int placement_query(ADMISSION_UMD_DEVICE *device, D3DKMT_HANDLE allocation,
+                           uint64_t va, uint64_t bytes,
+                           APPLE_AGX_G3_NATIVE_QUERY *out) {
+  APPLE_AGX_G3_NATIVE_QUERY q = {};
+  *out = q;
+  if (!device->Adapter || device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
+      !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
+      !device->KernelContext || !device->KernelCallbacks->pfnEscapeCb ||
+      !allocation || !va || !bytes) return 0;
+  q.Magic = APPLE_AGX_G3_NATIVE_QUERY_MAGIC;
+  q.Version = APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION;
+  q.Bytes = sizeof(q);
+  q.Allocation = allocation;
+  q.GpuVa = va;
+  q.AllocationBytes = bytes;
+  D3DDDICB_ESCAPE request = {};
+  request.hDevice = device->RuntimeDevice.handle;
+  request.hContext = device->KernelContext;
+  request.pPrivateDriverData = &q;
+  request.PrivateDriverDataSize = sizeof(q);
+  unsigned wait = AdmissionUmdWaitBegin(AgxWaitPoolMapEscape);
+  HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle, &request);
+  AdmissionUmdWaitEnd(wait);
+  const bool known = q.Ready == 1u ? q.Reason == 0u :
+      q.Ready == 0u && (q.Reason == APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL ||
+                        q.Reason == APPLE_AGX_G3_NATIVE_QUERY_NOT_RESIDENT ||
+                        q.Reason == APPLE_AGX_G3_NATIVE_QUERY_IDENTITY);
+  if (FAILED(hr) || q.Magic != APPLE_AGX_G3_NATIVE_QUERY_MAGIC ||
+      q.Version != APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION ||
+      q.Allocation != allocation || q.GpuVa != va || !known) return 0;
+  *out = q;
+  return 1;
+}
+
+/* rc107: drop this slot's residency reference and ask VidMm to page it out
+ * now. EXP1124: EvictOnlyIfNecessary=0 is "finished, evict at the first
+ * opportunity" (a LOCAL_TO_SYSTEM transfer followed within ~35 ms). */
+static HRESULT evict_now(ADMISSION_UMD_DEVICE *device, D3DKMT_HANDLE handle) {
+  if (!handle || !device->KernelCallbacks->pfnEvictCb) return E_FAIL;
+  D3DDDICB_EVICT evict = {};
+  evict.Flags.EvictOnlyIfNecessary = 0u;
+  evict.NumAllocations = 1u;
+  evict.AllocationList = &handle;
+  unsigned wait = AdmissionUmdWaitBegin(AgxWaitEvict);
+  HRESULT hr = device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle, &evict);
+  AdmissionUmdWaitEnd(wait);
+  return hr;
+}
+
+/* rc107 (EXP1974, umd_cpu_pool_rehome.h): the slot is a CPU-visible pool
+ * canonical allocation that VidMm republished outside the pool while it is
+ * still resident (segment-0 system pages; no native leaf can exist there).
+ * Page it back in while the pool has room. Returns 1 when the census then
+ * finds every page in the pool, 2 when the page-in ran but VidMm placed it
+ * outside the pool again (a later round frees more), 0 when the repair does
+ * not apply or failed. The caller still runs the complete native proof. A
+ * clean MakeResident refusal leaves Resident=FALSE, the ordinary state a
+ * later submission or map restores. Accepted work whose completion is
+ * unknown sets DrawTerminal, as everywhere else.
+ * Receipt measure-cpu-pool-rehome: mode, pass, census reason, pool pages,
+ * non-pool pages before; eager-trim slots and MiB; polls | gone << 8;
+ * census reason, pool pages, non-pool pages after. */
+static int rehome_cpu_pool(ADMISSION_UMD_DEVICE *device, uint64_t token,
+                           uint64_t touch_va, UINT mode, UINT pass) {
+  ADMISSION_UMD_REHOME_SLOT view = {};
+  APPLE_AGX_G3_NATIVE_QUERY q = {};
+  D3DKMT_HANDLE handle = 0;
+  uint64_t va = 0, bytes = 0, last = 0;
+  UINT holds = 0u, trimmed = 0u, polls = 0u;
+  bool gone = false;
+  UINT values[11] = {mode, pass, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+  char option[2] = {};
+  /* Exact 0 restores the pre-rc107 refusal for comparison. */
+  if (GetEnvironmentVariableA("APPLE_AGX_CPU_POOL_REHOME", option,
+                              sizeof(option)) == 1u && option[0] == '0')
+    return 0;
+  if (!touch_va || !device->KernelCallbacks->pfnMakeResidentCb) return 0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot = find_slot(device, token);
+  if (slot) {
+    view.Active = slot->Active; view.Resident = slot->Resident;
+    view.Transition = slot->Transition; view.CopyHeld = slot->CopyHeld;
+    view.Mapped = slot->Mapped; view.SystemDirect = slot->SystemDirect;
+    view.Borrowed = slot->Borrowed; view.Direct = slot->Direct;
+    view.PrivateStaging = slot->PrivateStaging != NULL;
+#ifdef APPLE_AGX_NATIVE_STAGING
+    view.NativeStaging = slot->NativeStagingAddress != NULL;
+#endif
+    view.KmtResidencyHeld = slot->KmtResidencyHeld;
+    view.SubmissionHolds = slot->SubmissionHolds;
+    view.SourceHolds = slot->SourceHolds;
+    view.KernelAllocation = slot->KernelAllocation;
+    view.CanonicalGpuVa = slot->CanonicalGpuVa;
+    view.Bytes = slot->Bytes;
+    handle = slot->KernelAllocation; va = slot->CanonicalGpuVa;
+    bytes = slot->Bytes; last = slot->LastUseFence; holds = slot->SubmissionHolds;
+  }
+  const bool eligible = slot && !device->DrawTerminal && !device->ScreenClosing &&
+      AdmissionUmdRehomeEligible(&view, mode);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (!eligible || !placement_query(device, handle, va, bytes, &q)) return 0;
+  values[2] = q.Reason; values[3] = (UINT)q.Reserved2;
+  values[4] = (UINT)(q.Reserved2 >> 32);
+  /* Pool-resident pages with a missing leaf, or a foreign page, are not a
+   * placement this repair can change. */
+  if (q.Ready == 1u || q.Reason == APPLE_AGX_G3_NATIVE_QUERY_IDENTITY) {
+    AdmissionUmdDiagnostic("measure-cpu-pool-rehome", E_FAIL, values, ARRAYSIZE(values));
+    return 0;
+  }
+  /* Another in-flight submission may still read this allocation. */
+  if (mode == ADMISSION_UMD_REHOME_SUBMIT && holds > 1u && last &&
+      !wait_object(device, device->RenderSyncObject, last)) return 0;
+  const ULONGLONG freed = trim_residency_with(
+      device, AdmissionUmdRehomeWant(bytes, pass), &trimmed, true);
+  values[5] = trimmed; values[6] = (UINT)(freed >> 20);
+  HRESULT hr = evict_now(device, handle);
+  if (FAILED(hr)) {
+    AdmissionUmdDiagnostic("measure-cpu-pool-rehome", hr, values, ARRAYSIZE(values));
+    return 0;
+  }
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  slot = find_slot(device, token);
+  if (slot && slot->KernelAllocation == handle) slot->Resident = FALSE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  /* VidMm processes the eviction asynchronously. A MakeResident that
+   * arrives first would find the allocation still resident outside the
+   * pool and change nothing. A touch lets VidSch schedule the device. */
+  for (; polls < ADMISSION_UMD_REHOME_POLLS && !gone; ++polls) {
+    if (polls) Sleep(1u);
+    if (!touch_device(device, touch_va)) {
+      AdmissionUmdDiagnostic("measure-cpu-pool-rehome", device->GpuvaFailure,
+                             values, ARRAYSIZE(values));
+      return 0;
+    }
+    if (placement_query(device, handle, va, bytes, &q) && !(q.Reserved2 >> 32))
+      gone = true;
+  }
+  values[7] = polls | (gone ? 0x100u : 0u);
+  UINT priority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
+  D3DDDI_MAKERESIDENT request = {};
+  hr = residency_request(device, &request, &handle, 1u, &priority);
+  va_record(device, 6u, token, handle, 0, request.PagingFenceValue, hr);
+  if ((FAILED(hr) && hr != E_PENDING) || request.NumAllocations != 1u) {
+    device->GpuvaFailure = FAILED(hr) && hr != E_PENDING ? hr : E_FAIL;
+    if (SUCCEEDED(hr) || hr == E_PENDING || request.PagingFenceValue) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      device->DrawTerminal = TRUE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    }
+    AdmissionUmdDiagnostic("measure-cpu-pool-rehome", device->GpuvaFailure,
+                           values, ARRAYSIZE(values));
+    return 0;
+  }
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  slot = find_slot(device, token);
+  if (slot && slot->KernelAllocation == handle) {
+    slot->Resident=TRUE;slot->TrimRecency=device->NextRenderFence+1u;
+  }
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  if ((hr == E_PENDING && !request.PagingFenceValue) ||
+      (request.PagingFenceValue &&
+       !wait_paging_at(device, request.PagingFenceValue, 7u, token))) {
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    device->DrawTerminal = TRUE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    return 0;
+  }
+  /* Deferred PTE publication (EXP1003) needs one scheduled touch. */
+  if (!touch_device(device, touch_va)) return 0;
+  const bool counted = placement_query(device, handle, va, bytes, &q) != 0;
+  const bool home = counted && q.Ready == 1u;
+  values[8] = q.Reason; values[9] = (UINT)q.Reserved2;
+  values[10] = (UINT)(q.Reserved2 >> 32);
+  AdmissionUmdDiagnostic("measure-cpu-pool-rehome", home ? S_OK : E_OUTOFMEMORY,
+                         values, ARRAYSIZE(values));
+  if (home) return 1;
+  return counted && q.Reason == APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL ? 2 : 0;
+}
+
 /* T6b: called only after ScreenMapBuffer reserves Transition, and before
  * LockCb. Keep that reservation through paging and pointer publication so
  * trim cannot drop the new reference between MakeResident and Mapped. */
@@ -2066,19 +2260,34 @@ int AdmissionUmdGpuvaValidateCpuPoolMap(ADMISSION_UMD_DEVICE *device,
    * A clean refusal can unlock and retry the map without losing the device. */
   if (!touch_device(device, identity.GpuVa)) return 0;
   APPLE_AGX_G3_NATIVE_QUERY q = identity;
-  D3DDDICB_ESCAPE request = {};
-  request.hDevice = device->RuntimeDevice.handle;
-  request.hContext = device->KernelContext;
-  request.pPrivateDriverData = &q;
-  request.PrivateDriverDataSize = sizeof(q);
-  unsigned wait_pfnEscapeCb_3=AdmissionUmdWaitBegin(AgxWaitPoolMapEscape);
-  HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
-      device->Adapter->RuntimeAdapter.handle, &request);
-  AdmissionUmdWaitEnd(wait_pfnEscapeCb_3);
-  if (SUCCEEDED(hr) && q.Ready == 1u) {
-    device->GpuvaFailure = S_OK;
-    return 1;
+  HRESULT hr = E_FAIL;
+  for (UINT pass = 0u;; ++pass) {
+    q = identity;
+    D3DDDICB_ESCAPE request = {};
+    request.hDevice = device->RuntimeDevice.handle;
+    request.hContext = device->KernelContext;
+    request.pPrivateDriverData = &q;
+    request.PrivateDriverDataSize = sizeof(q);
+    unsigned wait_pfnEscapeCb_3=AdmissionUmdWaitBegin(AgxWaitPoolMapEscape);
+    hr = device->KernelCallbacks->pfnEscapeCb(
+        device->Adapter->RuntimeAdapter.handle, &request);
+    AdmissionUmdWaitEnd(wait_pfnEscapeCb_3);
+    if (SUCCEEDED(hr) && q.Ready == 1u) {
+      device->GpuvaFailure = S_OK;
+      return 1;
+    }
+    /* rc107 (EXP1974): VidMm placed this CPU-visible allocation outside the
+     * pool, typically at creation into a full segment 3. Page it back in
+     * under the same lock and Transition, then repeat the full pool proof. */
+    if (!SUCCEEDED(hr) || pass >= ADMISSION_UMD_REHOME_ROUNDS ||
+        (q.Reason != APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL &&
+         q.Reason != AppleAgxG3WalkLeafAbsent &&
+         q.Reason != AppleAgxG3WalkLeafNotPublished) ||
+        !rehome_cpu_pool(device, token, identity.GpuVa,
+                         ADMISSION_UMD_REHOME_MAP, pass))
+      break;
   }
+  if (device->DrawTerminal) return 0;
   device->GpuvaFailure = FAILED(hr) ? hr :
       (q.Reason == APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL ||
        q.Reason == AppleAgxG3WalkLeafAbsent ||
@@ -2245,7 +2454,8 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
   auto *entries = (APPLE_AGX_G3_NATIVE_QUERY *)(batch + 1);
   auto *indices = (UINT *)((unsigned char *)batch + bytes);
   int ready = 0;
-  for (unsigned attempt = 0u; attempt < 2u; ++attempt) {
+  unsigned rehomes = 0u;
+  for (unsigned attempt = 0u; attempt < 2u + ADMISSION_UMD_REHOME_ROUNDS; ++attempt) {
     *batch = {};
     bool valid = true;
     AcquireSRWLockShared(&device->ScreenBufferLock);
@@ -2321,6 +2531,24 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
        * and malformed-response failures are not deferred publication. */
       if (!touch_device(device, command_va)) break;
       continue;
+    }
+    if (SUCCEEDED(hr) && missing && attempt != 0u &&
+        rehomes < ADMISSION_UMD_REHOME_ROUNDS) {
+      /* rc107 (EXP1974): still missing after the scheduling touch. A held
+       * CPU-visible pool allocation that VidMm republished outside the pool
+       * is paged back in (bounded); then the whole set is proved again. */
+      uint64_t token = 0u;
+      AcquireSRWLockShared(&device->ScreenBufferLock);
+      const auto *failed = &device->ScreenBuffers[indices[batch->FailedIndex]];
+      if (failed->KernelAllocation == q->Allocation &&
+          failed->CanonicalGpuVa == q->GpuVa) token = failed->Token;
+      ReleaseSRWLockShared(&device->ScreenBufferLock);
+      /* 1: back in the pool; 2: placed outside again, the next round
+       * frees more idle residency. Either way prove everything again. */
+      if (token && rehome_cpu_pool(device, token, command_va,
+                                   ADMISSION_UMD_REHOME_SUBMIT, rehomes++))
+        continue;
+      if (device->DrawTerminal) break;
     }
     UINT values[9] = {q->Allocation, (UINT)q->GpuVa, (UINT)(q->GpuVa >> 32),
         (UINT)q->AllocationBytes, (UINT)(q->AllocationBytes >> 32), q->Write,

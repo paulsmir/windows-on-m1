@@ -266,13 +266,17 @@ struct CB {''')
         prefix = prefix.replace('struct CB {', 'struct ADAPTER { UINT Magic; struct { HANDLE handle; } RuntimeAdapter; };\nstruct D3DDDICB_ESCAPE { HANDLE hDevice,hContext; void *pPrivateDriverData; UINT PrivateDriverDataSize; };\nstruct CB {')
         prefix = prefix.replace('HRESULT(*pfnUnlockCb)(HANDLE,D3DDDICB_UNLOCK*);', 'HRESULT(*pfnUnlockCb)(HANDLE,D3DDDICB_UNLOCK*); HRESULT(*pfnEscapeCb)(HANDLE,D3DDDICB_ESCAPE*);')
         prefix += '#include "apple_agx_g3_copy_abi.h"\n#define ADMISSION_UMD_ADAPTER_MAGIC 0x66u\n#define AppleAgxG3WalkLeafAbsent 1u\n#define AppleAgxG3WalkLeafNotPublished 2u\n'
+        # rc107: the placement repair has its own replay (test_umd_cpu_pool_rehome).
+        prefix += ('#include "umd_cpu_pool_rehome.h"\nstatic unsigned rehome_requests;\n'
+                   'static int rehome_cpu_pool(ADMISSION_UMD_DEVICE *,uint64_t,uint64_t,UINT,UINT)'
+                   ' {++rehome_requests;return 0;}\n')
         if native:
             prefix = '#define APPLE_AGX_NATIVE_STAGING 1\n' + prefix
             prefix = prefix.replace('struct SLOT {', 'struct SLOT { unsigned char *NativeStagingAddress;')
 
         gpu = SRC.read_text()
         screen = (SRC.parent/'umd_win32_screen.c').read_text()
-        funcs = '\n'.join(function(gpu,n) for n in ('watch_slots','find_slot','release_copies','allocation_handle','translate_handles','evict','trim_residency','residency_request','make_resident','restore_residency'))
+        funcs = '\n'.join(function(gpu,n) for n in ('watch_slots','find_slot','release_copies','allocation_handle','translate_handles','evict','trim_residency_with','trim_residency','residency_request','make_resident','restore_residency'))
         funcs += '\n' + function(gpu,'AdmissionUmdGpuvaRestoreCpuMapResidency',required=False)
         funcs += '\n' + function(gpu,'AdmissionUmdGpuvaValidateCpuPoolMap',required=False)
         funcs += '\n' + '\n'.join(function(screen,n) for n in ('AdmissionUmdScreenCpuAllocation','AdmissionUmdScreenFind','AdmissionUmdScreenMapBuffer','AdmissionUmdScreenUnmapBuffer'))

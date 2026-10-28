@@ -299,7 +299,7 @@ class PersistentResidency(unittest.TestCase):
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in
                           ('watch_slots', 'find_slot', 'release_copies', 'allocation_handle',
-                           'translate_handles', 'evict', 'trim_residency',
+                           'translate_handles', 'evict', 'trim_residency_with', 'trim_residency',
                            'residency_request', 'make_resident'))
         funcs = funcs.replace('auto *slot', 'SLOT *slot')
         body = template.replace('@@FUNCS@@', '#define ADMISSION_UMD_WATCH_WINDOWS\n#include "umd_va_watch.h"\n' + funcs)
