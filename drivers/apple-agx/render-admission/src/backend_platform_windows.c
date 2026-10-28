@@ -338,6 +338,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * of the successor got, and the Wom1JobWindowKickFail record. */
   ULONG Depth2KickRunningKind, Depth2KickNextKind;
   ULONG Depth2BuildStep;
+  ULONG Depth2KickClasses; /* AdmissionJobWindowKickClasses */
   ADMISSION_JOB_WINDOW_KICK_FAILURE Depth2KickFailure;
 } ADMISSION_PLATFORM_RUNTIME;
 
@@ -3275,8 +3276,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   AdmissionStampCheckWindows(runtime, Plan->InitializeQueues);
 #endif
   if (!AppleAgxInitdataMemoryGetRenderBindings(&runtime->Initdata,
-                                               &bindings) ||
-      !(runtime->Adapter->BackendImage.G4Manager ?
+                                               &bindings))
+    goto BuildFailure;
+  runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_BINDINGS;
+  if (!(runtime->Adapter->BackendImage.G4Manager ?
           AppleAgxRenderSharedMemoryBuildManagedG4Job(
               &runtime->Initdata.RenderSharedMemory,
               runtime->Adapter->BackendImage.G4Manager,
@@ -5087,6 +5090,7 @@ static VOID AdmissionJobWindowKickFailedWindows(ADMISSION_CONTEXT *adapter,
   f->Barrier = runtime->Depth2KickBarrier;
   f->JobWordStamp = runtime->Initdata.RenderSharedMemory.JobWordStamp;
   f->JobWordSet = runtime->Initdata.RenderSharedMemory.JobWordSet;
+  f->BuildRefusal = runtime->Initdata.RenderSharedMemory.LastBuildRefusal;
   InterlockedCompareExchange(&adapter->SchedulerFaulted,
                              0x40000L | (LONG)(line & 0xffffu), 0);
   AdmissionJobWindowKickFailureExportWindows(adapter, runtime);
@@ -5115,6 +5119,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   APPLE_AGX_BACKEND_RUNTIME_RESULT result;
   ULONG refusal, next = 0u, barrier = 0u;
   ULONGLONG preemption = 0ULL;
+  APPLE_AGX_U32 stageSequence;
+  APPLE_AGX_EXP208_DYNAMIC_RESULT stageDynamic;
   KIRQL old_irql;
   if (!runtime->JobDepth2Kick || runtime->Depth2KickedFence != 0u ||
       runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted ||
@@ -5148,6 +5154,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
       ahead.ActiveFence == fence &&
       AppleAgxSchedulerKickedFence(&adapter->Scheduler) == 0u ? 1u : 0u;
   s.Capabilities = runtime->Depth2Capabilities;
+  s.KickClasses = runtime->Depth2KickClasses;
   s.Running = runtime->Depth2Running;
   /* 61: a new queue lifetime, InitBM or a manager rebind need idle queues
    * (AdmissionPrepareG4Manager, AppleAgxG13QueueProviderPlanSuccessor).
@@ -5232,6 +5239,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   submission.DmaSubmissionStart = packet.DmaStart;
   submission.DmaSubmissionEnd = packet.DmaEnd;
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBackendBefore);
+  stageSequence = image->Sequence;
+  stageDynamic = image->Dynamic;
   result = AppleAgxBackendRuntimeSubmitSuccessor(&runtime->Backend, &submission);
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBackendAfter);
   if (result != AppleAgxBackendRuntimeResultOk) {
@@ -5247,6 +5256,13 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
         runtime->Provider.QueueProvider.Runtime.Phase != AppleAgxG13QueueRuntimeFaulted) {
       AdmissionGpuvaG3AbortJob(adapter, next);
       flags |= ADMISSION_KICK_FAIL_G3_ABORTED;
+      /* EXP2047: a render staged for it gives its stamp sequence back
+       * (the reset releases the binding but keeps the sequence), so the
+       * jobs after the reset keep the firmware's stamp epoch. */
+      if (image->JobReady && image->JobFence == next &&
+          AdmissionBackendImageUnstageJob(&adapter->BackendImage, next,
+                                          stageSequence, &stageDynamic))
+        flags |= ADMISSION_KICK_FAIL_UNSTAGED;
     }
     AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next, 0u,
                                         (ULONG)result, flags);
@@ -6853,6 +6869,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
    * (the second sidecar set and the compute-queue Barrier it kicks). */
   runtime->JobDepth2Kick = runtime->Depth2Capabilities != 0u &&
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2Kick") ? TRUE : FALSE;
+  /* rc102 (EXP2047): pairs whose Barrier waits on N's 3D stamp only with
+   * Wom1JobDepth2KickOn3d = 1 (refusal 64). */
+  runtime->Depth2KickClasses = AdmissionJobWindowKickClasses(
+      runtime->JobDepth2Kick &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2KickOn3d") ? 1u : 0u);
 #else
   runtime->JobAhead = FALSE;
   runtime->JobDepth2 = FALSE;

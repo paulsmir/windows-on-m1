@@ -915,22 +915,28 @@ static APPLE_AGX_BOOL build_active_job(
   APPLE_AGX_BACKEND_JOB_IMAGE candidate;
   APPLE_AGX_U32 index;
   APPLE_AGX_BOOL initialize_persistent;
+#define BUILD_REFUSE(code) do { if (Owner != RENDER_SHARED_NULL) \
+    Owner->LastBuildRefusal = APPLE_AGX_RENDER_BUILD_REFUSAL_##code; \
+    return APPLE_AGX_FALSE; } while (0)
+  if (Owner != RENDER_SHARED_NULL) Owner->LastBuildRefusal = 0u;
   if (SourceObjects == RENDER_SHARED_NULL ||
       SourceObjectCount != APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
       StagedJob == RENDER_SHARED_NULL || ActiveObjects == RENDER_SHARED_NULL ||
       ActiveJob == RENDER_SHARED_NULL || ArenaGpuAddress == 0ULL ||
       (ArenaGpuAddress & (APPLE_AGX_EXP208_ARENA_ALIGNMENT - 1u)) != 0ULL ||
-      TemplateArenaBytes != APPLE_AGX_EXP208_ARENA_BYTES ||
-      StagedJob->TaWorkAddressCount != APPLE_AGX_EXP208_ROOT_COUNT ||
+      TemplateArenaBytes != APPLE_AGX_EXP208_ARENA_BYTES)
+    BUILD_REFUSE(JOB_ARGUMENTS);
+  if (StagedJob->TaWorkAddressCount != APPLE_AGX_EXP208_ROOT_COUNT ||
       StagedJob->D3WorkAddressCount != APPLE_AGX_EXP208_ROOT_COUNT ||
       StagedJob->TaEvent >= 128u || StagedJob->D3Event >= 128u ||
       StagedJob->TaEvent == StagedJob->D3Event ||
       StagedJob->TaExpectedStamp == 0u ||
       StagedJob->D3ExpectedStamp == 0u ||
       StagedJob->TaExpectedDonePointer >= APPLE_AGX_EXP208_QUEUE_CAPACITY ||
-      StagedJob->D3ExpectedDonePointer >= APPLE_AGX_EXP208_QUEUE_CAPACITY ||
-      !runtime_bindings_valid(RuntimeBindings))
-    return APPLE_AGX_FALSE;
+      StagedJob->D3ExpectedDonePointer >= APPLE_AGX_EXP208_QUEUE_CAPACITY)
+    BUILD_REFUSE(STAGED_JOB);
+  if (!runtime_bindings_valid(RuntimeBindings))
+    BUILD_REFUSE(RUNTIME_BINDINGS);
   for (index = 0u; index < SourceObjectCount; ++index)
     ActiveObjects[index] = SourceObjects[index];
   initialize_persistent = InitializeQueues;
@@ -938,16 +944,16 @@ static APPLE_AGX_BOOL build_active_job(
           Owner, TemplateArena, TemplateArenaBytes, ActiveObjects,
           SourceObjectCount, initialize_persistent, IncludeInitBm,
           job_slot(StagedJob)))
-    return APPLE_AGX_FALSE;
+    BUILD_REFUSE(BIND);
   build_mark(Owner, APPLE_AGX_RENDER_BUILD_MARK_COPIED);
   if (IncludeInitBm) {
     APPLE_AGX_EXP208_RELOCATION_OBJECT *control = &ActiveObjects[20];
     APPLE_AGX_U32 total;
     if (control->Data == RENDER_SHARED_NULL || control->Size < 8u)
-      return APPLE_AGX_FALSE;
+      BUILD_REFUSE(INITBM);
     total = get_shared_u32(control->Data, Owner->DirectReads);
     if (total == 0u)
-      return APPLE_AGX_FALSE;
+      BUILD_REFUSE(INITBM);
     put_u32(control->Data + 4u, total);
   }
   if (!apply_active_relocations(
@@ -957,12 +963,12 @@ static APPLE_AGX_BOOL build_active_job(
       ActiveObjects[APPLE_AGX_EXP208_TA_WORK_OBJECT].GpuVa == 0ULL ||
       ActiveObjects[APPLE_AGX_EXP208_D3_BARRIER_OBJECT].GpuVa == 0ULL ||
       ActiveObjects[APPLE_AGX_EXP208_D3_WORK_OBJECT].GpuVa == 0ULL)
-    return APPLE_AGX_FALSE;
+    BUILD_REFUSE(RELOCATIONS);
   if (ActiveObjects[17u].Data == RENDER_SHARED_NULL ||
       ActiveObjects[17u].Size < 548u ||
       ActiveObjects[15u].Data == RENDER_SHARED_NULL ||
       ActiveObjects[15u].Size < 612u)
-    return APPLE_AGX_FALSE;
+    BUILD_REFUSE(STATS);
   put_u64(ActiveObjects[17u].Data + 36u,
           RuntimeBindings->StatsTaOwnerGpuAddress +
               APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET);
@@ -993,19 +999,20 @@ static APPLE_AGX_BOOL build_active_job(
     if (threshold == RENDER_SHARED_NULL ||
         ActiveObjects[APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD].Size <
             4u)
-      return APPLE_AGX_FALSE;
+      BUILD_REFUSE(THRESHOLD);
     if (initialize_persistent)
       Owner->NotifierComputeCount = Owner->NotifierComputeStamp = 0u;
     render = !Owner->DirectReads && Owner->StagedEventCountValid ?
         Owner->StagedEventCount : get_shared_u32(threshold, APPLE_AGX_TRUE);
     if (render > ~(APPLE_AGX_U32)0 - Owner->NotifierComputeCount)
-      return APPLE_AGX_FALSE;
+      BUILD_REFUSE(THRESHOLD);
     Owner->NotifierRenderCount = render;
     put_u32(threshold, render + Owner->NotifierComputeCount);
   }
   *ActiveJob = candidate;
   build_mark(Owner, APPLE_AGX_RENDER_BUILD_MARK_RELOCATED);
   return APPLE_AGX_TRUE;
+#undef BUILD_REFUSE
 }
 
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
@@ -1128,18 +1135,25 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
   APPLE_AGX_U32 i,count;
   const APPLE_AGX_EXP208_RELOCATION *relocations;
   static const APPLE_AGX_U32 objects[]={1u,20u,21u,22u,13u};
-  if (!Owner || !Manager || !Key || !Fence || Owner->ManagerFence ||
-      Manager->PendingFence || !Key->Owner || !Key->Generation || !Key->RootIpa ||
+#define MANAGED_REFUSE(code) do { \
+    Owner->LastBuildRefusal = APPLE_AGX_RENDER_BUILD_REFUSAL_##code; \
+    return APPLE_AGX_FALSE; } while (0)
+  if (!Owner) return APPLE_AGX_FALSE;
+  Owner->LastBuildRefusal = 0u;
+  if (Owner->ManagerFence) MANAGED_REFUSE(MANAGER_FENCE);
+  if (Manager && Manager->PendingFence) MANAGED_REFUSE(MANAGER_PENDING);
+  if (!Manager || !Key || !Fence || !Key->Owner || !Key->Generation || !Key->RootIpa ||
       SourceObjectCount!=APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
       !manager_objects_valid(SourceObjects) || !ActiveObjects ||
-      !SourceObjects[13].Data || SourceObjects[13].Size!=72u ||
-      (AppleAgxRenderManagerNeedsBind(Owner,Key) && !IncludeInitBm))
-    return APPLE_AGX_FALSE;
+      !SourceObjects[13].Data || SourceObjects[13].Size!=72u)
+    MANAGED_REFUSE(MANAGER_KEY);
+  if (AppleAgxRenderManagerNeedsBind(Owner,Key) && !IncludeInitBm)
+    MANAGED_REFUSE(MANAGER_BIND);
   for (i=0u;i<3u;++i) {
     APPLE_AGX_U32 object=i==0u?41u:(i==1u?42u:43u);
     if (!Key->Backing[i].Bytes || Key->Backing[i].Reserved ||
         Key->Backing[i].Va!=SourceObjects[object].GpuVa)
-      return APPLE_AGX_FALSE;
+      MANAGED_REFUSE(MANAGER_BACKING);
   }
   restore=Manager->Valid && manager_key_equal(&Manager->Key,Key,APPLE_AGX_FALSE);
   Owner->LastBuildRestored=restore;
@@ -1181,7 +1195,8 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
   for (i=0u;i<AppleAgxRenderTemplateRelocationCount();++i)
     if ((relocations[i].SourceObject==1u || relocations[i].SourceObject==13u) &&
         !AppleAgxApplyRelocations(ActiveObjects,SourceObjectCount,&relocations[i],1u))
-      return APPLE_AGX_FALSE;
+      MANAGED_REFUSE(MANAGER_RELOCATE);
+#undef MANAGED_REFUSE
   Owner->ManagerKey=*Key;
   Owner->ManagerFence=Fence;
   Manager->PendingFence=Fence;

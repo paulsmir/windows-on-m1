@@ -62,6 +62,15 @@ static unsigned int barrier_available(unsigned int Barrier,
   }
 }
 
+unsigned int AdmissionJobWindowKickClasses(unsigned int On3d) {
+  unsigned int classes = (1u << ADMISSION_JOB_WINDOW_BARRIER_TA_ON_COMPUTE) |
+                         (1u << ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_COMPUTE);
+  if (On3d)
+    classes |= (1u << ADMISSION_JOB_WINDOW_BARRIER_TA_ON_3D) |
+               (1u << ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D);
+  return classes;
+}
+
 unsigned int AdmissionJobWindowKickRefusal(
     const ADMISSION_JOB_WINDOW_KICK_STATE *s) {
   const ADMISSION_JOB_WINDOW_JOB *n, *m;
@@ -99,6 +108,10 @@ unsigned int AdmissionJobWindowKickRefusal(
   if (!barrier_available(AdmissionJobWindowBarrier(n->Kind, m->Kind),
                          s->Capabilities))
     return 60u;
+  /* rc102 (EXP2047): a class the wired window was not switched on for. */
+  if (s->KickClasses != 0u &&
+      !(s->KickClasses & (1u << AdmissionJobWindowBarrier(n->Kind, m->Kind))))
+    return 64u;
   if (s->NextNeedsIdle) return 61u;
   if (s->SetsValid && s->RunningSet == s->NextSet) return 62u;
   return 0u;

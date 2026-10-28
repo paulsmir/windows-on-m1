@@ -630,8 +630,10 @@ def kmd_job_window(data):
                 reset_aborts=aborts, last_kicked_fence=last_kicked)
 
 
-# rc102 (EXP2045): Wom1JobWindowKickFail, ADMISSION_JOB_WINDOW_KICK_FAILURE v1.
+# rc102 (EXP2045): Wom1JobWindowKickFail, ADMISSION_JOB_WINDOW_KICK_FAILURE
+# v1 (27 words) and v2 (EXP2047: + build_refusal).
 KICK_FAILURE = struct.Struct('<27I')
+KICK_FAILURE_V2 = struct.Struct('<28I')
 KICK_FAILURE_FIELDS = (
     'version', 'bytes', 'failures', 'fence', 'running_fence', 'line',
     'begin_refusal', 'status', 'backend_result', 'backend_phase',
@@ -656,12 +658,21 @@ WINDOW_KINDS = ('none', 'render', 'render_prelude', 'compute', 'present', 'other
 KICK_FAIL_FLAGS = ((0x1, 'terminal_pending'), (0x2, 'successor_pending'),
                    (0x4, 'completion_ready'), (0x8, 'recovery_pending'),
                    (0x10, 'channel_failed'), (0x20, 'bm_initialized'),
-                   (0x40, 'ta_first_run'), (0x80, 'd3_first_run'), (0x100, 'g3_aborted'))
+                   (0x40, 'ta_first_run'), (0x80, 'd3_first_run'), (0x100, 'g3_aborted'),
+                   (0x200, 'unstaged'))
 KICK_BUILD_STEPS = {0: 'not_entered', 1: 'render_entered', 2: 'render_overlay',
                     3: 'render_staged', 4: 'render_built', 5: 'render_compute',
-                    6: 'render_lead', 7: 'render_flushed', 21: 'compute_entered',
+                    6: 'render_lead', 7: 'render_flushed', 8: 'render_bindings',
+                    21: 'compute_entered',
                     22: 'compute_stream', 23: 'compute_built', 24: 'compute_lead',
                     30: 'relocated'}
+
+
+# APPLE_AGX_RENDER_BUILD_REFUSAL_* (apple_agx_render_shared_memory.h)
+BUILD_REFUSALS = {0: 'none', 1: 'manager_fence', 2: 'manager_pending', 3: 'manager_key',
+                  4: 'manager_bind', 5: 'manager_backing', 6: 'manager_relocate',
+                  10: 'job_arguments', 11: 'staged_job', 12: 'runtime_bindings', 13: 'bind',
+                  14: 'initbm', 15: 'relocations', 16: 'stats', 17: 'threshold'}
 
 
 def _named(names, value):
@@ -671,9 +682,13 @@ def _named(names, value):
 def kmd_kick_failure(data):
     """rc102 (EXP2045): the state at the last failed depth-2 kick."""
     raw = _registry_value(data, 'Wom1JobWindowKickFail')
-    f = dict(zip(KICK_FAILURE_FIELDS, KICK_FAILURE.unpack_from(raw, 0)))
-    if f['version'] != 1 or f['bytes'] != KICK_FAILURE.size or len(raw) < KICK_FAILURE.size:
-        raise ValueError('not an ADMISSION_JOB_WINDOW_KICK_FAILURE v1 record')
+    version = struct.unpack_from('<I', raw, 0)[0] if len(raw) >= 4 else 0
+    layout = {1: KICK_FAILURE, 2: KICK_FAILURE_V2}.get(version)
+    if layout is None or len(raw) < layout.size:
+        raise ValueError('not an ADMISSION_JOB_WINDOW_KICK_FAILURE v1/v2 record')
+    f = dict(zip(KICK_FAILURE_FIELDS + ('build_refusal',), layout.unpack_from(raw, 0)))
+    if f['bytes'] != layout.size:
+        raise ValueError('not an ADMISSION_JOB_WINDOW_KICK_FAILURE v1/v2 record')
     del f['version'], f['bytes']
     f['status'] = '%#010x' % f['status']
     f['backend_result'] = _named(BACKEND_RESULTS, f['backend_result'])
@@ -690,6 +705,8 @@ def kmd_kick_failure(data):
     f['running_kind'] = _named(WINDOW_KINDS, f['running_kind'])
     f['next_kind'] = _named(WINDOW_KINDS, f['next_kind'])
     f['barrier'] = BARRIER_CLASSES.get(f['barrier'], 'none')
+    if 'build_refusal' in f:
+        f['build_refusal'] = BUILD_REFUSALS.get(f['build_refusal'], f['build_refusal'])
     return f
 
 

@@ -204,6 +204,17 @@ APPLE_AGX_BOOL AdmissionBackendImageStageJob(
     APPLE_AGX_BOOL IncludeInitBm,
     APPLE_AGX_BACKEND_JOB_IMAGE *Job);
 
+/* rc102 (EXP2047): a staged job that never reached the firmware (its
+ * build failed after StageJob) gives its stamp sequence back: Sequence and
+ * Dynamic return to Previous*, the job is unstaged, the binding stays. The
+ * queues' stamp epoch then matches what the firmware ran (ReleaseSubmission
+ * keeps Sequence). FALSE when the image does not hold exactly that staged
+ * job one sequence ahead. */
+APPLE_AGX_BOOL AdmissionBackendImageUnstageJob(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 PreviousSequence,
+    const APPLE_AGX_EXP208_DYNAMIC_RESULT *PreviousDynamic);
+
 void AdmissionBackendImageReset(ADMISSION_BACKEND_IMAGE *Image);
 
 #endif /* APPLE_AGX_RENDER_BACKEND_IMAGE_H */

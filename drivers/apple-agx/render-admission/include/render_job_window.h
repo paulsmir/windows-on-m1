@@ -98,6 +98,10 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
   /* rc102: the sidecar job-word sets of N and N+1 when both use the
    * sidecar (SetsValid); they must differ. */
   unsigned int SetsValid, RunningSet, NextSet;
+  /* rc102 (EXP2047): the Barrier classes the wired window may kick, bit
+   * (1 << ADMISSION_JOB_WINDOW_BARRIER_*); 0 = no restriction (the rc95
+   * receipt mode). Refusal 64 otherwise. */
+  unsigned int KickClasses;
 } ADMISSION_JOB_WINDOW_KICK_STATE;
 
 /* While N runs: may N+1 be kicked now? Refusal values:
@@ -113,9 +117,17 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
  *   the hardware-validated D3D-G1b one (EXP1279+). */
 unsigned int AdmissionJobWindowKickRefusal(
     const ADMISSION_JOB_WINDOW_KICK_STATE *State);
+/* rc102 (EXP2047): the classes the wired window kicks. By default only
+ * those whose Barrier waits on N's compute stamp; On3d (device value
+ * Wom1JobDepth2KickOn3d = 1) adds those waiting on N's 3D stamp (R->R,
+ * R->C), whose end the notifier may defer behind N+1's (U4). */
+unsigned int AdmissionJobWindowKickClasses(unsigned int On3d);
 /* rc102 refusals of the wired window (after 1-60):
  *   61 N+1 needs idle queues (new queue lifetime, InitBM, manager bind),
- *   62 N and N+1 would share one sidecar job-word set. */
+ *   62 N and N+1 would share one sidecar job-word set,
+ *   (63 the KMD's KickLocked refused),
+ *   64 the pair's Barrier class is not in KickClasses (checked after 60;
+ *      EXP2047: the classes waiting on N's 3D stamp are opt-in). */
 
 /* Does a job of this kind use the compute sidecar / the buffer manager? */
 unsigned int AdmissionJobWindowUsesSidecar(unsigned int Kind);
@@ -208,7 +220,7 @@ typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
  * before the TDR it leads to; decoded by agx_gpu_frame_breakdown.py
  * --kmd-kick-fail). Backend/provider/runtime fields are the shared
  * enumerations' numeric values. */
-#define ADMISSION_JOB_WINDOW_KICK_FAILURE_VERSION 1u
+#define ADMISSION_JOB_WINDOW_KICK_FAILURE_VERSION 2u /* v2: BuildRefusal */
 /* Flags */
 #define ADMISSION_KICK_FAIL_TERMINAL_PENDING   0x0001u /* backend */
 #define ADMISSION_KICK_FAIL_SUCCESSOR_PENDING  0x0002u /* backend */
@@ -219,6 +231,7 @@ typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
 #define ADMISSION_KICK_FAIL_TA_FIRST_RUN       0x0040u
 #define ADMISSION_KICK_FAIL_D3_FIRST_RUN       0x0080u
 #define ADMISSION_KICK_FAIL_G3_ABORTED         0x0100u /* nested lease undone */
+#define ADMISSION_KICK_FAIL_UNSTAGED           0x0200u /* render stamp sequence given back */
 /* BuildStep: how far the KMD build of the successor got (0: not entered,
  * the provider plan or the platform refused first). */
 #define ADMISSION_KICK_BUILD_RENDER_ENTERED    1u
@@ -228,6 +241,7 @@ typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
 #define ADMISSION_KICK_BUILD_RENDER_COMPUTE    5u
 #define ADMISSION_KICK_BUILD_RENDER_LEAD       6u
 #define ADMISSION_KICK_BUILD_RENDER_FLUSHED    7u
+#define ADMISSION_KICK_BUILD_RENDER_BINDINGS   8u  /* the render bindings were read */
 #define ADMISSION_KICK_BUILD_COMPUTE_ENTERED   21u
 #define ADMISSION_KICK_BUILD_COMPUTE_STREAM    22u
 #define ADMISSION_KICK_BUILD_COMPUTE_BUILT     23u
@@ -249,6 +263,9 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_FAILURE {
   unsigned int BuildStep;       /* ADMISSION_KICK_BUILD_* */
   unsigned int RunningKind, NextKind, Barrier; /* ADMISSION_JOB_WINDOW_* */
   unsigned int JobWordStamp, JobWordSet;       /* sidecar owner at failure */
+  /* v2 (EXP2047): APPLE_AGX_RENDER_BUILD_REFUSAL_* of the shared render
+   * builder (0: it did not refuse, or was not reached). */
+  unsigned int BuildRefusal;
 } ADMISSION_JOB_WINDOW_KICK_FAILURE;
 
 void AdmissionJobWindowReceiptInitialize(ADMISSION_JOB_WINDOW_RECEIPT *Receipt);

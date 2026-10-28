@@ -206,7 +206,26 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
    * (valid when JobWordStamp != 0); cleared with the compute queue. */
   APPLE_AGX_U32 JobWordSet;
   APPLE_AGX_U32 JobWordStamp;
+  /* rc102 (EXP2047): why the last managed/active render build refused,
+   * APPLE_AGX_RENDER_BUILD_REFUSAL_* (0 = it did not refuse). Diagnostic
+   * only (Wom1JobWindowKickFail). */
+  APPLE_AGX_U32 LastBuildRefusal;
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
+
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_FENCE    1u  /* Owner->ManagerFence */
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_PENDING  2u  /* Manager->PendingFence */
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_KEY      3u  /* key or manager objects */
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_BIND     4u  /* rebind without InitBM */
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_BACKING  5u  /* backing vs objects 41-43 */
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_RELOCATE 6u  /* Info/Scene relocation */
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_JOB_ARGUMENTS    10u /* build_active_job inputs */
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_STAGED_JOB       11u /* staged job fields */
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_RUNTIME_BINDINGS 12u
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_BIND             13u /* bind_relocation_objects */
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_INITBM           14u
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_RELOCATIONS      15u
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_STATS            16u
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_THRESHOLD        17u
 
 /* rc83: points of a render build reported through Owner->BuildMark. */
 #define APPLE_AGX_RENDER_BUILD_MARK_COPIED 1u    /* template objects copied */
