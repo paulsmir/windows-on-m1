@@ -1468,6 +1468,19 @@ VOID AdmissionMemoryPoolUnreserve(_In_opt_ ADMISSION_CONTEXT *Context,
                                   ULONGLONG Bytes);
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionMemoryPoolReclaim(_In_opt_ ADMISSION_CONTEXT *Context);
+/* rc80 (apple_agx_g3_tvb.h): one exclusive 64 KiB slab granule of Windows
+ * memory for a TVB window block, zeroed, outside the segment-3 promise and
+ * bounded by the slab PrivateCap; *GuestIpa is its 64 KiB-aligned IPA. Take
+ * refuses while Windows signals LowMemory (AdmissionPoolMayGrow). Give zeroes
+ * it again and returns it; call it only after the broker revoked every
+ * GPU mapping. A granule that cannot be zeroed is retained (PoolLeaks). */
+_IRQL_requires_max_(APC_LEVEL)
+BOOLEAN AdmissionMemoryPoolTvbTake(_In_opt_ ADMISSION_CONTEXT *Context,
+                                   _Inout_ ADMISSION_POOL_PRIVATE *Lease,
+                                   _Out_ ULONGLONG *GuestIpa);
+_IRQL_requires_max_(APC_LEVEL)
+BOOLEAN AdmissionMemoryPoolTvbGive(_In_opt_ ADMISSION_CONTEXT *Context,
+                                   _Inout_ ADMISSION_POOL_PRIVATE *Lease);
 _IRQL_requires_(PASSIVE_LEVEL)
 void AdmissionRecordM2PoolProbe(_In_opt_ ADMISSION_CONTEXT *Context,
                                 _In_ const ADMISSION_POOL_PROBE *Probe);

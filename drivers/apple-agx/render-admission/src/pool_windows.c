@@ -1,4 +1,5 @@
 #include "render_admission.h"
+#include "apple_agx_g3_tvb.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 /* M2-f2: segment 3 is a CPU-visible memory segment populated from Windows
@@ -653,6 +654,85 @@ VOID AdmissionMemoryPoolUnchargeNative(ADMISSION_CONTEXT *Context,
 }
 #endif
 
+/* rc80: a lease granule is slot `Slot` of its slab, bytes [Slot * 64 KiB,
+ * +64 KiB) of the slab's page MDL in both slab shapes (AdmissionPoolNewSlab:
+ * Pa[i] is frame i * 16). Map exactly those pages write-combined, as they
+ * were allocated, and clear them. */
+static BOOLEAN AdmissionPoolZeroLease(const ADMISSION_POOL_PRIVATE *Lease) {
+  PMDL source, part;
+  PUCHAR base;
+  PVOID cpu;
+  if (Lease == NULL || Lease->Slab == NULL || Lease->Slab->Handle == NULL ||
+      Lease->Slot >= ADMISSION_POOL_SLAB_SLOTS) return FALSE;
+  source = (PMDL)Lease->Slab->Handle;
+  base = (PUCHAR)MmGetMdlVirtualAddress(source) +
+         (SIZE_T)Lease->Slot * (SIZE_T)ADMISSION_POOL_DEMAND_GRANULE;
+  part = IoAllocateMdl(base, (ULONG)ADMISSION_POOL_DEMAND_GRANULE, FALSE,
+                       FALSE, NULL);
+  if (part == NULL) return FALSE;
+  IoBuildPartialMdl(source, part, base, (ULONG)ADMISSION_POOL_DEMAND_GRANULE);
+  if (((ULONGLONG)MmGetMdlPfnArray(part)[0] << PAGE_SHIFT) !=
+      Lease->Slab->Pa[Lease->Slot]) {
+    IoFreeMdl(part);
+    return FALSE;
+  }
+  cpu = MmMapLockedPagesSpecifyCache(part, KernelMode, MmWriteCombined, NULL,
+      FALSE, NormalPagePriority | MdlMappingNoExecute);
+  if (cpu == NULL) {
+    IoFreeMdl(part);
+    return FALSE;
+  }
+  RtlZeroMemory(cpu, (SIZE_T)ADMISSION_POOL_DEMAND_GRANULE);
+  KeMemoryBarrier();
+  MmUnmapLockedPages(cpu, part);
+  IoFreeMdl(part);
+  return TRUE;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolTvbTake(
+    ADMISSION_CONTEXT *Context, ADMISSION_POOL_PRIVATE *Lease,
+    ULONGLONG *GuestIpa) {
+  ADMISSION_POOL_RUNTIME *pool;
+  BOOLEAN taken = FALSE;
+  if (GuestIpa != NULL) *GuestIpa = 0ULL;
+  if (Lease == NULL || GuestIpa == NULL || Lease->Slab != NULL ||
+      AdmissionMemoryPoolLock(Context) == NULL) return FALSE;
+  pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+  if (!pool->Stopping && AdmissionPoolSlabTakePrivate(&pool->Slabs, Lease))
+    taken = TRUE;
+  AdmissionMemoryPoolUnlock(Context);
+  if (!taken) return FALSE;
+  /* The lease is exclusive: its slab cannot be freed while it is live. */
+  if (!AdmissionPoolZeroLease(Lease)) {
+    /* Never GPU-mapped, so it may return unzeroed; a stopped runtime keeps
+     * its private slots (AdmissionPoolDemandStop leak path). */
+    if (AdmissionMemoryPoolLock(Context) != NULL) {
+      (void)AdmissionPoolSlabGivePrivate(&pool->Slabs, Lease);
+      AdmissionMemoryPoolUnlock(Context);
+    }
+    return FALSE;
+  }
+  *GuestIpa = Lease->Slab->Pa[Lease->Slot];
+  return TRUE;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolTvbGive(
+    ADMISSION_CONTEXT *Context, ADMISSION_POOL_PRIVATE *Lease) {
+  ADMISSION_POOL_RUNTIME *pool;
+  BOOLEAN given;
+  if (Lease == NULL || Lease->Slab == NULL) return Lease != NULL;
+  /* Process data never returns to the pool: an unzeroed granule stays. */
+  if (Context == NULL || !AdmissionPoolZeroLease(Lease)) {
+    if (Context != NULL) InterlockedIncrement(&Context->PoolLeaks);
+    return FALSE;
+  }
+  if (AdmissionMemoryPoolLock(Context) == NULL) return FALSE;
+  pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+  given = AdmissionPoolSlabGivePrivate(&pool->Slabs, Lease) != 0;
+  AdmissionMemoryPoolUnlock(Context);
+  return given;
+}
+
 _Use_decl_annotations_ VOID AdmissionMemoryPoolReclaim(ADMISSION_CONTEXT *Context) {
   ADMISSION_POOL_DEMAND *demand = AdmissionMemoryPoolLock(Context);
   if (demand == NULL) return;
@@ -978,6 +1058,8 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   pool->Slabs.SpareLimit = ADMISSION_POOL_SPARE_SLABS;
   /* M2-f5: VidMm never places more than the segment. */
   pool->Slabs.ReserveCap = count;
+  /* rc80: TVB window blocks lease raw granules beyond that promise. */
+  pool->Slabs.PrivateCap = AppleAgxG3TvbGlobalGranules(ram);
   ExInitializeFastMutex(&pool->Lock);
   KeInitializeTimer(&pool->Timer);
   KeInitializeDpc(&pool->Dpc, AdmissionPoolReclaimDpc, pool);
