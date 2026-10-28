@@ -66470,3 +66470,18 @@ EXP2051 HARDWARE ACTUAL (2026-10-28): **depth-2 Kick (C→R only): every kick fa
 - Wom1JobWindowKickFail v2: C→R behind compute (fences 6395/6394, then 7655/7654), line 5267, image_failed at build_step render_bindings, **build_refusal manager_bind**; flags g3_aborted and unstaged.
 - Wom1GpuReset: 2/2, then 3/3 succeeded. The rc102 abort and unstage paths are confirmed; the Sequence rollback left no TA-stamp hang.
 - Verdict: the window decision must apply the builder's manager-bind predicate (refusal 61); back to rc102. Kick stays off by default.
+
+EXP2052 HARDWARE BEFORE 2026-10-28T20:26:45Z:
+- WHY: EXP2051's C→R kicks failed with manager_bind (stale binding in the decision). rc102 estimates C→R is rare (1 of 51 pairs) and R→C is 6 of 51. EXP2047 kicked one R→C pair successfully. This run measures whether depth 2 kicks often enough to matter and is stable.
+- ATOMIC CONTRACT: one change set on the Kick switches.
+- Expected:
+  - kick_failures 0; C→R refused with 61;
+  - R→C kicks > 0 with max_in_flight 2; no hang or TDR;
+  - score vs EXP2050 (FHD 4319, HD 6600–6957).
+- Failure criteria:
+  - a hang or TDR after an R→C kick (unknown 1: the 3D stamp is held under a deferred event);
+  - kick failures.
+- Recovery: rec2052h.
+- Hashes: sys df7a46f7661d, UmdArm64 d90a7e3b8763, UmdX64 39ab7d64dd6f, Umd32 1d01c5fd63b8; manifest 66dab85352d4, hardware-manifest e97c5b15eeee; probe2052.sh 90b2a1f46877 (PROBE_LINT_OK); visible recovery rec2052h bcf76bb688f5c15f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1 Wom1JobDepth2KickOn3d=1.
+- Recovery rec2052h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2052-kick-on3d/run2052.sh.
