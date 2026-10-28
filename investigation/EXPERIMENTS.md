@@ -66073,3 +66073,17 @@ EXP2038 HARDWARE BEFORE 2026-10-28T12:18:35Z:
 - Hashes: sys a1f50373837f, UmdArm64 9338067f9a1e, UmdX64 e2c242ea2bc4, Umd32 ed0c4bc72ca0; manifest 7b64c04042ba, hardware-manifest 71813f53963c; probe2038.sh 6d16e8c6d760 (PROBE_LINT_OK); visible recovery rec2038h dab68d805714fcbb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobPollSpinUs=50000.
 - Recovery rec2038h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2038-poll-spin/run2038.sh.
+
+EXP2038 HARDWARE ACTUAL (2026-10-28): **control for rc100 (Wom1JobPollSpinUs=50000, the rc72 busy poll, same code as EXP2037). rc100 is confirmed thermally.**
+
+| Run | rc72 spin (EXP2038): score / state-6 share | rc100 predicted sleep (EXP2037): score / state-6 share |
+|---|---|---|
+| 1 | 4159 / 90.5% | 4150 / 93.5% |
+| 2 | 3942 / 58.6% | **4044 / 77.3%** |
+| 3 | 3798 / 45.7% | **3895 / 64.0%** |
+
+- Wom1JobPoll: mode "rc72 spin 50000 us", busy_fraction 1.0 (rc100: 0.17). temp_max 93 °C (rc100 89–91 °C).
+- Verdict:
+  - On a warm machine rc100 keeps the GPU at its top clock 18 points longer and scores 2.5–2.6% higher; it is neutral cold.
+  - rc100 stays the default.
+  - Remaining: the 17% poll busy and about 410 µs timer lateness. The proper fix is the completion interrupt (AIC 578 → vINTID 887, already routed by m1n1; it needs ACPI publication plus a KMD ISR).
