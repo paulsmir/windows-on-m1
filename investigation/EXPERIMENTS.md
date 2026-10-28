@@ -65655,3 +65655,17 @@ EXP2024 HARDWARE ACTUAL (2026-10-28): regression check on the EXP2023 code.
   - 4 frames over 200 ms (6.0 s; EXP2000: 1, 0.6 s).
   - Most of the loss is the startup gap and hitches; it goes to rc91.
 - The GravityMark OpenGL arm is invalid: the app itself reports "unknown platform OpenGL", because this GravityMark build has no Windows GL renderer. It says nothing about the driver.
+
+EXP2025 HARDWARE BEFORE 2026-10-28T06:32:36Z:
+- WHY: rc91 found the rc88 prefill on DelayedWorkQueue stalls the KMD paging worker. DispatchToWorker max is 1.1-1.55 s in EXP2022-2024 against 8-20 ms before, so D3D11's in-window large-resource binds took 1-2 s each (D3D11 2529 → 2279).
+- ATOMIC CONTRACT: none; rc90 is off by default.
+- Expected:
+  - D3D11 at least 2500; frames 1->3 under 3 s;
+  - Wom1M2PoolDemand PrefillSlabs 0; Wom1G3PagingProfile DispatchToWorker max under 50 ms;
+  - D3D12 HD 50k within noise of 6595-6783;
+  - the rc90 code inert (ahead_flags 0); no removal.
+- Failure criteria: a regression or removal.
+- Recovery: rec2025h.
+- Hashes: sys 0c11450aec3e, UmdArm64 a33721ca9de7, UmdX64 bcc6af9e904f, Umd32 89415234efcf; manifest 05e86bb6e07a, hardware-manifest 9a8416cb903a; probe2025.sh a829265570b9 (PROBE_LINT_OK); visible recovery rec2025h b3214f62c7fe2813; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2025h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2025-prefill-off/run2025.sh.
