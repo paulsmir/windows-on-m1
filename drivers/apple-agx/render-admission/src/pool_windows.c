@@ -251,7 +251,26 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ULONGLONG CacheDrops;
   /* rc86: time of the last reservation; the empty-slab cache ages from it. */
   ULONGLONG LastReserveMs;
+  /* rc88: background prefill of the empty-slab cache (AdmissionPoolPrefill*):
+   * its work item, queued flag, the boot switch, and its cost. SlabFailUs:
+   * time in MmAllocatePagesForMdlEx calls whose slab was not usable
+   * (refused, short or not contiguous), all callers. */
+  PIO_WORKITEM PrefillWork;
+  volatile LONG PrefillQueued;
+  BOOLEAN PrefillEnabled;
+  /* Time of the last successful reservation of at least
+   * ADMISSION_POOL_PREFILL_MIN_BYTES: the prefill follows large creations
+   * (an app loading), not DWM's steady small ones. */
+  ULONGLONG LastLargeReserveMs;
+  ULONGLONG PrefillUs, PrefillDiscards, PrefillFailures, SlabFailUs;
 } ADMISSION_POOL_RUNTIME;
+
+/* rc88: what one AdmissionPoolAllocSlab call cost, folded into the runtime
+ * counters under the pool lock (the prefill allocates without it). */
+typedef struct _ADMISSION_POOL_SLAB_COST {
+  ULONGLONG Calls, Us, UsMax, CheckUs, FailUs;
+  ULONGLONG Contiguous, Chunked;
+} ADMISSION_POOL_SLAB_COST;
 
 static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
   LARGE_INTEGER frequency, end = KeQueryPerformanceCounter(&frequency);
@@ -276,13 +295,16 @@ static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
  * to ADMISSION_POOL_SPARE_SLABS once no reservation came for
  * ADMISSION_POOL_RELEASE_DELAY_MS. Promised backing is unchanged. */
 #define ADMISSION_POOL_CACHE_SLABS 64ULL
+/* rc88 prefill (AdmissionPoolPrefillWork): slabs per work item, and the
+ * smallest creation that starts it. */
+#define ADMISSION_POOL_PREFILL_BATCH 64u
+#define ADMISSION_POOL_PREFILL_MIN_BYTES 0x1000000ULL /* 16 MiB */
 C_ASSERT(ADMISSION_POOL_MAX_RUN <= 1024ULL);
 
 /* A 2 MiB slab of fresh zeroed pages: one contiguous 2 MiB chunk when
  * Windows has one (EXP1259: one contiguous 1 GiB took 374 ms), else 32
  * 64 KiB-aligned 64 KiB chunks (EXP1246). */
-static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
-  ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+static ADMISSION_POOL_SLAB *AdmissionPoolAllocSlab(ADMISSION_POOL_SLAB_COST *Cost) {
   const ULONGLONG pages = ADMISSION_POOL_DEMAND_GRANULE / PAGE_SIZE;
   PHYSICAL_ADDRESS low, high, skip;
   ADMISSION_POOL_SLAB *slab;
@@ -298,7 +320,7 @@ static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
     /* Initialized for MSVC /W4 C4701: Next is reached only after the
      * check started, but by goto. */
     LARGE_INTEGER start = {0};
-    ULONGLONG us;
+    ULONGLONG us = 0ULL;
     skip.QuadPart = (LONGLONG)(attempt == 0u ? ADMISSION_POOL_SLAB_BYTES
                                              : ADMISSION_POOL_DEMAND_GRANULE);
     start = KeQueryPerformanceCounter(NULL);
@@ -306,10 +328,13 @@ static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
         (SIZE_T)ADMISSION_POOL_SLAB_BYTES, MmWriteCombined,
         MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
     us = AdmissionPoolElapsedUs(start);
-    ++pool->SlabAllocCalls;
-    pool->SlabAllocUs += us;
-    if (us > pool->SlabAllocUsMax) pool->SlabAllocUsMax = us;
-    if (mdl == NULL) continue;
+    ++Cost->Calls;
+    Cost->Us += us;
+    if (us > Cost->UsMax) Cost->UsMax = us;
+    if (mdl == NULL) {
+      Cost->FailUs += us;
+      continue;
+    }
     start = KeQueryPerformanceCounter(NULL);
     frames = MmGetMdlPfnArray(mdl);
     if (MmGetMdlByteCount(mdl) != ADMISSION_POOL_SLAB_BYTES) goto Next;
@@ -322,18 +347,40 @@ static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
         if (frames[i * pages + j] != frames[i * pages] + j) goto Next;
       slab->Pa[i] = pa;
     }
-    pool->SlabCheckUs += AdmissionPoolElapsedUs(start);
+    Cost->CheckUs += AdmissionPoolElapsedUs(start);
     slab->Handle = mdl;
-    if (attempt == 0u) ++pool->SlabContiguous;
-    else ++pool->SlabChunked;
+    if (attempt == 0u) ++Cost->Contiguous;
+    else ++Cost->Chunked;
     return slab;
 Next:
-    pool->SlabCheckUs += AdmissionPoolElapsedUs(start);
+    Cost->CheckUs += AdmissionPoolElapsedUs(start);
+    Cost->FailUs += us;
     MmFreePagesFromMdl(mdl);
     ExFreePool(mdl);
   }
   ExFreePoolWithTag(slab, ADMISSION_POOL_TAG);
   return NULL;
+}
+
+/* Under the pool lock. */
+static VOID AdmissionPoolAddSlabCost(ADMISSION_POOL_RUNTIME *Pool,
+                                     const ADMISSION_POOL_SLAB_COST *Cost) {
+  Pool->SlabAllocCalls += Cost->Calls;
+  Pool->SlabAllocUs += Cost->Us;
+  if (Cost->UsMax > Pool->SlabAllocUsMax) Pool->SlabAllocUsMax = Cost->UsMax;
+  Pool->SlabCheckUs += Cost->CheckUs;
+  Pool->SlabFailUs += Cost->FailUs;
+  Pool->SlabContiguous += Cost->Contiguous;
+  Pool->SlabChunked += Cost->Chunked;
+}
+
+/* ADMISSION_POOL_SLABS.NewSlab: called with the pool lock held. */
+static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
+  ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+  ADMISSION_POOL_SLAB_COST cost = {0};
+  ADMISSION_POOL_SLAB *slab = AdmissionPoolAllocSlab(&cost);
+  AdmissionPoolAddSlabCost(pool, &cost);
+  return slab;
 }
 
 static VOID AdmissionPoolFreeSlab(void *Opaque, ADMISSION_POOL_SLAB *Slab) {
@@ -482,6 +529,8 @@ _Use_decl_annotations_ ADMISSION_POOL_DEMAND *AdmissionMemoryPoolLock(
   return &pool->Demand;
 }
 
+static VOID AdmissionPoolPrefillQueueLocked(ADMISSION_POOL_RUNTIME *Pool);
+
 /* Stages Wom1M2PoolDemand when the committed size moved by a receipt step
  * or a failure count changed. */
 _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context) {
@@ -554,6 +603,10 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.SpareLimit = pool->Slabs.SpareLimit;
     receipt.EmptySlabs = pool->Slabs.Empty;
     receipt.CacheDrops = pool->CacheDrops;
+    receipt.PrefillSlabs = pool->Slabs.Stats.AdoptedSlabs;
+    receipt.PrefillUs = pool->PrefillUs;
+    receipt.PrefillDiscards = pool->PrefillDiscards + pool->PrefillFailures;
+    receipt.SlabFailUs = pool->SlabFailUs;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
     pool->StagedReserved = pool->Slabs.Reserved;
@@ -568,6 +621,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     due.QuadPart = -ADMISSION_POOL_RECLAIM_PERIOD_MS * 10000LL;
     (void)KeSetTimer(&pool->Timer, due, &pool->Dpc);
   }
+  AdmissionPoolPrefillQueueLocked(pool);
   ExReleaseFastMutex(&pool->Lock);
   if (stage) AdmissionRecordM2PoolDemand(Context, &receipt);
 }
@@ -655,6 +709,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
   pool->ReserveUs += us;
   if (us > pool->ReserveUsMax) pool->ReserveUsMax = us;
   pool->LastReserveMs = AdmissionPoolNowMs();
+  if (reserved && Bytes >= ADMISSION_POOL_PREFILL_MIN_BYTES)
+    pool->LastLargeReserveMs = pool->LastReserveMs;
   AdmissionMemoryPoolUnlock(Context);
   return reserved;
 }
@@ -880,10 +936,106 @@ static VOID AdmissionPoolReclaimDpc(_In_ PKDPC Dpc, _In_opt_ PVOID Opaque,
   }
 }
 
+/* rc88 (EXP2019a, FHD 100k: 1849 MmAllocatePagesForMdlEx calls took 37.2 s
+ * of the run, 20 ms each, and the pool lock was held through all of them;
+ * Wom1M2PoolDemand v11 ReserveUs 35.5 s against SlabAllocUs 37.2 s, so a
+ * 128 MiB pfnAllocateCb is Windows page allocation, not VidMm; the first
+ * frame's 128 MiB creations took 0.3-1.7 s each): keep the rc86 empty-slab
+ * cache full from a work item instead of filling it inside the next
+ * creation. Pages come from Windows without the pool lock, while the app's
+ * thread does other work, and join the cache as empty spares; they never
+ * exceed the cache the rc86 policy already keeps (SpareLimit empty slabs),
+ * Trim and the pressure reclaim treat them as any cached slab, and the
+ * periodic worker still returns the cache after RELEASE_DELAY idle.
+ * Allowed only while the switch is on (Wom1PoolPrefill, default on), the
+ * pool runs, HighMemoryCondition is set and LowMemoryCondition clear (the
+ * cache's own condition), a creation of at least
+ * ADMISSION_POOL_PREFILL_MIN_BYTES reserved within the cache's idle delay,
+ * and the cache is short. One work item adds at most
+ * ADMISSION_POOL_PREFILL_BATCH slabs, rechecking before each. */
+static BOOLEAN AdmissionPoolPrefillAllowed(BOOLEAN Enabled, BOOLEAN Stopping,
+                                           ULONG HighMemory, ULONG LowMemory,
+                                           ULONGLONG NowMs, ULONGLONG LastReserveMs,
+                                           ULONGLONG Wanted) {
+  return Enabled && !Stopping && HighMemory == 1u && LowMemory == 0u &&
+         LastReserveMs != 0ULL && NowMs >= LastReserveMs &&
+         NowMs - LastReserveMs < ADMISSION_POOL_RELEASE_DELAY_MS &&
+         Wanted != 0ULL ? TRUE : FALSE;
+}
+
+/* Under the pool lock. */
+static BOOLEAN AdmissionPoolPrefillWanted(ADMISSION_POOL_RUNTIME *Pool) {
+  ULONG high = Pool->HighMemory == NULL ? 2u :
+      (KeReadStateEvent(Pool->HighMemory) != 0 ? 1u : 0u);
+  ULONG low = Pool->LowMemory == NULL ? 2u :
+      (KeReadStateEvent(Pool->LowMemory) != 0 ? 1u : 0u);
+  return AdmissionPoolPrefillAllowed(Pool->PrefillEnabled,
+      InterlockedCompareExchange(&Pool->Stopping, 0, 0) != 0 ? TRUE : FALSE,
+      high, low,
+      AdmissionPoolNowMs(), Pool->LastLargeReserveMs,
+      AdmissionPoolSlabPrefillWants(&Pool->Slabs));
+}
+
+static IO_WORKITEM_ROUTINE AdmissionPoolPrefillWork;
+static VOID AdmissionPoolPrefillWork(_In_ PDEVICE_OBJECT Device,
+                                     _In_opt_ PVOID Opaque) {
+  ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+  ULONG i;
+  UNREFERENCED_PARAMETER(Device);
+  if (pool == NULL) return;
+  /* From here a pool unlock may queue the item again. */
+  InterlockedExchange(&pool->PrefillQueued, 0);
+  for (i = 0u; i < ADMISSION_POOL_PREFILL_BATCH; ++i) {
+    ADMISSION_POOL_SLAB_COST cost = {0};
+    ADMISSION_POOL_SLAB *slab;
+    BOOLEAN wanted, adopted = FALSE;
+    LARGE_INTEGER start;
+    /* Stop drains WorkPending before it frees the runtime or clears
+     * Context->PoolDemand, so the raw lock stays valid here. Release it
+     * without AdmissionMemoryPoolUnlock: no receipt and no re-queue. */
+    ExAcquireFastMutex(&pool->Lock);
+    wanted = AdmissionPoolPrefillWanted(pool);
+    ExReleaseFastMutex(&pool->Lock);
+    if (!wanted) break;
+    start = KeQueryPerformanceCounter(NULL);
+    slab = AdmissionPoolAllocSlab(&cost);
+    ExAcquireFastMutex(&pool->Lock);
+    AdmissionPoolAddSlabCost(pool, &cost);
+    pool->PrefillUs += AdmissionPoolElapsedUs(start);
+    if (slab != NULL) {
+      /* The cache may have filled or the condition cleared meanwhile. */
+      if (AdmissionPoolPrefillWanted(pool) &&
+          AdmissionPoolSlabAdopt(&pool->Slabs, slab))
+        adopted = TRUE;
+      else {
+        ++pool->PrefillDiscards;
+        AdmissionPoolFreeSlab(pool, slab);
+      }
+    } else {
+      ++pool->PrefillFailures;
+    }
+    ExReleaseFastMutex(&pool->Lock);
+    if (!adopted) break;
+  }
+  InterlockedDecrement(&pool->WorkPending);
+}
+
+/* Under the pool lock (AdmissionMemoryPoolUnlock). IoQueueWorkItem is
+ * callable at APC_LEVEL; Stop's WorkPending drain covers this item. */
+static VOID AdmissionPoolPrefillQueueLocked(ADMISSION_POOL_RUNTIME *Pool) {
+  if (Pool->PrefillWork == NULL || !AdmissionPoolPrefillWanted(Pool) ||
+      InterlockedCompareExchange(&Pool->PrefillQueued, 1, 0) != 0)
+    return;
+  InterlockedIncrement(&Pool->WorkPending);
+  IoQueueWorkItem(Pool->PrefillWork, AdmissionPoolPrefillWork,
+                  DelayedWorkQueue, Pool);
+}
+
 static VOID AdmissionPoolDemandFree(ADMISSION_POOL_RUNTIME *Pool) {
   if (Pool->HighMemory) ObDereferenceObject(Pool->HighMemory);
   if (Pool->LowMemory) ObDereferenceObject(Pool->LowMemory);
   if (Pool->Work) IoFreeWorkItem(Pool->Work);
+  if (Pool->PrefillWork) IoFreeWorkItem(Pool->PrefillWork);
   if (Pool->SlotOf) ExFreePoolWithTag(Pool->SlotOf, ADMISSION_POOL_TAG);
   if (Pool->SlabOf) ExFreePoolWithTag(Pool->SlabOf, ADMISSION_POOL_TAG);
   if (Pool->Candidates) ExFreePoolWithTag(Pool->Candidates, ADMISSION_POOL_TAG);
@@ -903,6 +1055,11 @@ static VOID AdmissionPoolDemandStop(ADMISSION_CONTEXT *Context) {
   /* No reclaim runs past this point: no new arm or queue, the armed timer
    * cancelled, running DPCs drained, queued work items finished. */
   InterlockedExchange(&pool->Stopping, 1);
+  /* rc88: an unlock that saw Stopping clear queues its prefill item, and
+   * counts it in WorkPending, before it releases the pool lock: after this
+   * barrier no new item can appear and the drain below covers the rest. */
+  ExAcquireFastMutex(&pool->Lock);
+  ExReleaseFastMutex(&pool->Lock);
   KeCancelTimer(&pool->Timer);
   KeFlushQueuedDpcs();
   for (waited = 0u; InterlockedCompareExchange(&pool->WorkPending, 0, 0) != 0 &&
@@ -1082,6 +1239,33 @@ static BOOLEAN AdmissionPoolApertureReserveHalfEnabled(ADMISSION_CONTEXT *Contex
   return enabled;
 }
 
+/* rc88: only REG_DWORD Wom1PoolPrefill=0 turns the background slab
+ * prefill off; absent or other values keep it on. */
+static BOOLEAN AdmissionPoolPrefillDisabled(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1PoolPrefill");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 0u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
 /* RC13: freeze the experimental placement policy before allocation creation. */
 static BOOLEAN AdmissionSysmemSpillEnabled(ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;
@@ -1180,6 +1364,10 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
     AdmissionPoolDemandFree(pool);
     return FALSE;
   }
+  /* rc88: without its work item the pool runs as before, unprefilled. */
+  pool->PrefillEnabled = AdmissionPoolPrefillDisabled(Context) ? FALSE : TRUE;
+  if (pool->PrefillEnabled)
+    pool->PrefillWork = IoAllocateWorkItem(Context->PhysicalDeviceObject);
   pool->Demand.ReleaseDelay = ADMISSION_POOL_RELEASE_DELAY_MS;
   pool->Demand.MaxRun = ADMISSION_POOL_MAX_RUN;
   pool->Slabs.Context = pool;

@@ -405,11 +405,12 @@ def decode_omitted_leaves(data):
 
 def decode_pool(data):
     """Preserve v7-v10 prefixes; v10 separates pinned native-ring backing;
-    v11 (rc86) appends the creation cost split and the empty-slab cache."""
+    v11 (rc86) appends the creation cost split and the empty-slab cache;
+    v12 (rc88) appends the background slab prefill and failed-attempt time."""
     if len(data) < 16:
         raise ValueError('truncated Wom1M2PoolDemand header')
     version, size, granule, last_window = struct.unpack_from('<4I', data)
-    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576}.get(version) or len(data) != size or granule != 65536:
+    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576, 12: 608}.get(version) or len(data) != size or granule != 65536:
         raise ValueError('unsupported Wom1M2PoolDemand version, length or granule')
     names = (
         'segment_bytes', 'committed_granules', 'peak_granules', 'commits',
@@ -430,7 +431,8 @@ def decode_pool(data):
                   native_staging_bytes=None, total_promised_bytes=None, total_held_bytes=None,
                   creation_cost=None,
                   event_sample={7: None, 8: 'post_failure', 9: 'admission_decision',
-                                10: 'admission_decision', 11: 'admission_decision'}[version])
+                                10: 'admission_decision', 11: 'admission_decision',
+                                12: 'admission_decision'}[version])
     if version >= 8:
         result['floor_refusals'], = struct.unpack_from('<Q', data, 304)
         fields = ('request_bytes', 'reserved_bytes', 'held_bytes', 'committed_bytes',
@@ -464,6 +466,13 @@ def decode_pool(data):
         cost['meaning'] = ('slab_alloc: MmAllocatePagesForMdlEx incl. zeroing; reserve: '
                            'KMD share of pfnAllocateCb; commit_us: window MAP_AT')
         result['creation_cost'] = cost
+    result['prefill'] = None
+    if version >= 12:
+        names = ('prefill_slabs', 'prefill_us', 'prefill_discards', 'slab_fail_us')
+        prefill = dict(zip(names, struct.unpack_from('<4Q', data, 576)))
+        prefill['meaning'] = ('slabs a work item added to the empty-slab cache outside the '
+                              'pool lock; slab_fail_us: unusable MmAllocatePagesForMdlEx calls')
+        result['prefill'] = prefill
     return result
 
 

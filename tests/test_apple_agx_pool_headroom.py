@@ -59,7 +59,7 @@ class PoolHeadroomTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='pool-headroom-') as tmp:
             tmp = Path(tmp)
             defines = re.findall(r'^#define ADMISSION_POOL_(?:SPARE_SLABS|CACHE_SLABS|'
-                                 r'RELEASE_DELAY_MS) .*$', source, re.M)
+                                 r'RELEASE_DELAY_MS|PREFILL_MIN_BYTES) .*$', source, re.M)
             (tmp / 'pool_policy.inc').write_text('\n'.join(defines) + '\n\n' +
                 '\n\n'.join(function(source, n) for n in names))
             exe = tmp / 'headroom'

@@ -107,7 +107,7 @@ typedef struct _ADMISSION_POOL_RESERVE_FAILURE {
   unsigned long long PrivateGranules;
 } ADMISSION_POOL_RESERVE_FAILURE;
 
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 11u /* v11: creation cost split, slab cache */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 12u /* v12: slab prefill */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -152,6 +152,12 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned long long ReserveCalls, ReserveUs, ReserveUsMax, ReserveNoGrowth;
   unsigned long long LeaseZeroCount, LeaseZeroUs, LeaseZeroSkips;
   unsigned long long SpareLimit, EmptySlabs, CacheDrops;
+  /* v12 (rc88): slabs the background prefill added to the empty-slab cache,
+   * its wall time (page allocation outside the pool lock, microseconds),
+   * slabs it allocated but could not keep or could not get, and the time of
+   * MmAllocatePagesForMdlEx calls whose result was not a usable slab (a
+   * refused or non-contiguous 2 MiB attempt before its 64 KiB fallback). */
+  unsigned long long PrefillSlabs, PrefillUs, PrefillDiscards, SlabFailUs;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.

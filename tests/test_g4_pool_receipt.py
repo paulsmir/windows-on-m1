@@ -38,7 +38,9 @@ int main(void) {
                    "v9 prefix changed");
     _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, SlabAllocCalls) == 448,
                    "v10 prefix changed");
-    _Static_assert(sizeof(r) == 576, "v11 wire ABI changed");
+    _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, PrefillSlabs) == 576,
+                   "v11 prefix changed");
+    _Static_assert(sizeof(r) == 608, "v12 wire ABI changed");
     r.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION; r.Bytes = sizeof(r);
     r.GranuleBytes = 65536; r.LastWindowResult = 9;
     r.SegmentBytes = 1409286144ULL;
@@ -68,6 +70,7 @@ int main(void) {
     r.ReserveCalls = 11; r.ReserveUs = 830000; r.ReserveUsMax = 700000;
     r.ReserveNoGrowth = 6; r.LeaseZeroCount = 3; r.LeaseZeroUs = 300;
     r.LeaseZeroSkips = 29; r.SpareLimit = 64; r.EmptySlabs = 12; r.CacheDrops = 2;
+    r.PrefillSlabs = 41; r.PrefillUs = 917000; r.PrefillDiscards = 3; r.SlabFailUs = 52000;
     return fwrite(&r, sizeof(r), 1, stdout) == 1 ? 0 : 1;
 }
 '''
@@ -79,7 +82,14 @@ int main(void) {
                             str(src), '-o', str(exe)], check=True)
             raw = subprocess.check_output([str(exe)])
         got = decoder.decode_pool(raw)
-        self.assertEqual(got['version'], 11)
+        self.assertEqual(got['version'], 12)
+        self.assertEqual({k: v for k, v in got['prefill'].items() if k != 'meaning'},
+                         dict(prefill_slabs=41, prefill_us=917000, prefill_discards=3,
+                              slab_fail_us=52000))
+        v11 = bytearray(raw[:576])
+        struct.pack_into('<II', v11, 0, 11, 576)
+        self.assertIsNone(decoder.decode_pool(v11)['prefill'])
+        self.assertEqual(decoder.decode_pool(v11)['creation_cost']['cache_drops'], 2)
         cost = got['creation_cost']
         self.assertEqual((cost['slab_alloc_calls'], cost['slab_alloc_us'],
                           cost['slab_alloc_us_max'], cost['slab_check_us'],

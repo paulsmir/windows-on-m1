@@ -33,6 +33,9 @@ typedef struct _ADMISSION_POOL_SLAB_STATS {
   /* rc86: successful reservations that took no slab from Windows (held or
    * cached empty slots covered them). */
   unsigned long long ReserveNoGrowth;
+  /* rc88: slabs a background prefill allocated outside the pool lock and
+   * added as empty spares (AdmissionPoolSlabAdopt), and those refused. */
+  unsigned long long AdoptedSlabs, AdoptRefusals;
 } ADMISSION_POOL_SLAB_STATS;
 
 typedef struct _ADMISSION_POOL_SLABS {
@@ -99,6 +102,16 @@ void AdmissionPoolSlabUnreserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long 
  * now (beyond Keep and still covering every promise). */
 int AdmissionPoolSlabHasSurplus(const ADMISSION_POOL_SLABS *Slabs,
                                 unsigned long long Keep);
+/* rc88: a background prefill keeps SpareLimit empty slabs ready so that a
+ * creation's reservation needs no Windows page allocation under the pool
+ * lock. Wants: how many empty slabs are missing below SpareLimit. Adopt: a
+ * slab the caller got from NewSlab without the pool lock (Handle and Pa
+ * filled) joins the list as an empty spare while fewer than SpareLimit
+ * empty slabs exist; otherwise nothing changes, 0 is returned and the
+ * caller gives the slab back with FreeSlab. An adopted slab never exceeds
+ * the SpareLimit the ordinary Trim keeps, so Trim does not undo it. */
+unsigned long long AdmissionPoolSlabPrefillWants(const ADMISSION_POOL_SLABS *Slabs);
+int AdmissionPoolSlabAdopt(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Slab);
 /* Frees every slab (stop); normal slots still handed out are the caller's
  * leak. With private leases outstanding retain the entire pool: a caller must
  * retire/release them first, or retain the pool and MDLs on uncertain revoke. */

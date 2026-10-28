@@ -28,8 +28,8 @@ typedef struct {
 } ADMISSION_CONTEXT;
 typedef struct {
   LONG Stopping, WorkPending;
-  int Timer;
-  void *HighMemory, *LowMemory, *Work, *SlotOf, *Candidates, *Granules;
+  int Timer, Lock;
+  void *HighMemory, *LowMemory, *Work, *PrefillWork, *SlotOf, *Candidates, *Granules;
   ADMISSION_POOL_SLAB **SlabOf;
   struct {ULONGLONG Count;} Demand;
   ADMISSION_POOL_SLABS Slabs;
@@ -44,7 +44,14 @@ static LONG InterlockedCompareExchange(LONG *p,LONG n,LONG old) {
   LONG r=*p;if(r==old)*p=n;return r;
 }
 static LONG InterlockedIncrement(LONG *p) {return ++*p;}
-static void KeCancelTimer(int *p) {assert(p==&owner->Timer);++cancelled;}
+/* rc88: Stop takes the pool lock once, after Stopping and before the drain,
+ * so no unlock can queue a prefill item past it. */
+static unsigned barriers;
+static void ExAcquireFastMutex(int *p) {
+  assert(p==&owner->Lock && owner->Stopping && !cancelled && !*p);*p=1;++barriers;
+}
+static void ExReleaseFastMutex(int *p) {assert(p==&owner->Lock && *p);*p=0;}
+static void KeCancelTimer(int *p) {assert(p==&owner->Timer && barriers==1);++cancelled;}
 static void KeFlushQueuedDpcs(void) {assert(cancelled);++flushed;}
 static int KeDelayExecutionThread(int mode,int alert,LARGE_INTEGER *delay) {
   assert(mode==0 && !alert && delay->QuadPart==-10000 && flushed);
@@ -90,6 +97,7 @@ int main(int argc,char **argv) {
   if(!strcmp(argv[1],"empty")) {AdmissionPoolDemandStop(&ctx);return 0;}
   owner=calloc(1,sizeof(*owner));assert(owner);
   owner->HighMemory=malloc(1);owner->LowMemory=malloc(1);owner->Work=malloc(1);
+  owner->PrefillWork=malloc(1);
   owner->SlotOf=malloc(1);owner->Candidates=malloc(1);owner->Granules=malloc(1);
   owner->SlabOf=calloc(4,sizeof(*owner->SlabOf));owner->Demand.Count=4;
   owner->Slabs.Context=owner;owner->Slabs.NewSlab=NewSlab;
@@ -125,7 +133,7 @@ int main(int argc,char **argv) {
     AdmissionPoolSlabDrain(&owner->Slabs);
     AdmissionPoolDemandFree(owner);
   } else {
-    assert(freed_owner==1 && freed_slabs==1 && freed_fields==7);
+    assert(freed_owner==1 && freed_slabs==1 && freed_fields==8);
     assert(unmaps==1 && commands==1 && !ctx.PoolLeaks);
     assert(!ctx.PoolCpu && !ctx.PoolIpa && !ctx.PoolBytes);
     if(finish_after)assert(waits==finish_after);

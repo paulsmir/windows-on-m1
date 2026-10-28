@@ -47,12 +47,7 @@ static void Trim(ADMISSION_POOL_SLABS *Slabs) {
   }
 }
 
-static ADMISSION_POOL_SLAB *AddSlab(ADMISSION_POOL_SLABS *Slabs) {
-  ADMISSION_POOL_SLAB *slab = Slabs->NewSlab(Slabs->Context);
-  if (slab == 0) {
-    ++Slabs->Stats.NewSlabFailures;
-    return 0;
-  }
+static void Insert(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *slab) {
   for (unsigned int i = 0u; i < ADMISSION_POOL_SLAB_SLOTS; ++i)
     slab->PrivateOwner[i] = 0;
   slab->FreeMask = ALL_SLOTS;
@@ -65,7 +60,32 @@ static ADMISSION_POOL_SLAB *AddSlab(ADMISSION_POOL_SLABS *Slabs) {
   ++Slabs->Stats.NewSlabs;
   if (++Slabs->Stats.Slabs > Slabs->Stats.PeakSlabs)
     Slabs->Stats.PeakSlabs = Slabs->Stats.Slabs;
+}
+
+static ADMISSION_POOL_SLAB *AddSlab(ADMISSION_POOL_SLABS *Slabs) {
+  ADMISSION_POOL_SLAB *slab = Slabs->NewSlab(Slabs->Context);
+  if (slab == 0) {
+    ++Slabs->Stats.NewSlabFailures;
+    return 0;
+  }
+  Insert(Slabs, slab);
   return slab;
+}
+
+unsigned long long AdmissionPoolSlabPrefillWants(const ADMISSION_POOL_SLABS *Slabs) {
+  if (Slabs == 0 || Slabs->Empty >= Slabs->SpareLimit) return 0u;
+  return Slabs->SpareLimit - Slabs->Empty;
+}
+
+int AdmissionPoolSlabAdopt(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Slab) {
+  if (Slabs == 0 || Slab == 0) return 0;
+  if (AdmissionPoolSlabPrefillWants(Slabs) == 0u) {
+    ++Slabs->Stats.AdoptRefusals;
+    return 0;
+  }
+  Insert(Slabs, Slab);
+  ++Slabs->Stats.AdoptedSlabs;
+  return 1;
 }
 
 void AdmissionPoolSlabGive(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Slab,

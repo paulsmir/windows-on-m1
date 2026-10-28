@@ -38,6 +38,7 @@ typedef struct {
     int WorkQueued, WorkPending, Stopping;
     ULONGLONG ReserveCalls, ReserveUs, ReserveUsMax, CacheDrops, LastReserveMs;
     ULONGLONG LeaseZeroCount, LeaseZeroUs, LeaseZeroSkips;
+    ULONGLONG LastLargeReserveMs; /* rc88 prefill trigger */
 } ADMISSION_POOL_RUNTIME;
 struct _ADMISSION_CONTEXT { ADMISSION_POOL_RUNTIME *PoolDemand; int PoolLeaks; };
 static ADMISSION_POOL_RUNTIME pool;
