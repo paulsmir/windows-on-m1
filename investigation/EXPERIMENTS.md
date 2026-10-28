@@ -65647,3 +65647,11 @@ EXP2024 HARDWARE BEFORE 2026-10-28T05:53:10Z:
 - Hashes: sys 48f3d480b869, UmdArm64 c493f6d26f7a, UmdX64 b41e1fd5ab15, Umd32 5aed73a13c51; manifest f437e467234e, hardware-manifest 1133c3734893; probe2024.sh 5f0e50da2b10 (PROBE_LINT_OK); visible recovery rec2024h 45efc22ad665abcd; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2024h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2024-regress/run2024.sh.
+
+EXP2024 HARDWARE ACTUAL (2026-10-28): regression check on the EXP2023 code.
+- GravityMark D3D11 HD 10k: **2279 / 13.6 FPS** (EXP2000: 2529, EXP1995: 2515), a 10% drop.
+  - Median frame 70.9 ms (EXP2000: 69.0, +2.7%).
+  - First-frame gap 6.7 s (EXP2000: 1.2 s).
+  - 4 frames over 200 ms (6.0 s; EXP2000: 1, 0.6 s).
+  - Most of the loss is the startup gap and hitches; it goes to rc91.
+- The GravityMark OpenGL arm is invalid: the app itself reports "unknown platform OpenGL", because this GravityMark build has no Windows GL renderer. It says nothing about the driver.
