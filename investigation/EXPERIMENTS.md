@@ -65729,3 +65729,13 @@ EXP2027 HARDWARE ACTUAL (2026-10-28): **TDR drill with build-ahead: the guest we
 - The arm b GravityMark did not run.
 - run_uefi was killed by the operator script; recovery is rec2027h AT_PROXY.
 - Open: is it caused by build-ahead, or is the drill unrecoverable anyway? Which code reads 0x17030 in the reset path (Wom1GpuFaultInfoRead / rc77 PostResume)? This goes to rc92. Build-ahead stays default off.
+
+EXP2028 HARDWARE BEFORE 2026-10-28T07:25:59Z:
+- WHY: rc91 attributes the remaining D3D11 startup gap (8.4 s against EXP2000's 1.8 s) to cold-boot Windows page allocation: 19.8 ms per 2 MiB slab first after boot against 6.9 ms warm. D3D11 creates about 2 GB inside the scored window.
+- ATOMIC CONTRACT: none; run order only.
+- Expected: D3D11 warm frames 1→3 under 3 s; score at least about 2450; D3D12 HD 50k about 6650-6800.
+- Failure criteria: removal.
+- Recovery: rec2028h.
+- Hashes: sys 631289d52c83, UmdArm64 06f6ff3b7cab, UmdX64 7438702e424f, Umd32 ea45d18b52d9; manifest 2c96a4352159, hardware-manifest c259b9fbf147; probe2028.sh 508e45ac71d5 (PROBE_LINT_OK); visible recovery rec2028h f5195badbfcd0786; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2028h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2028-d3d11-warm/run2028.sh.
