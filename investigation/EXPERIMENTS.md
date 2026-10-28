@@ -65692,3 +65692,14 @@ EXP2026 HARDWARE BEFORE 2026-10-28T06:48:46Z:
 - Hashes: sys 271d01aa1b19, UmdArm64 86f3e38b30fd, UmdX64 0c8232e0c1d8, Umd32 f039c4f143bb; manifest 32e84be85290, hardware-manifest f75d7c2cedab; probe2026.sh 21b96d57d3a0 (PROBE_LINT_OK); visible recovery rec2026h 996c3cf0acd9a4e5; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobBuildAhead=1.
 - Recovery rec2026h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2026-build-ahead/run2026.sh.
+
+EXP2026 HARDWARE ACTUAL (2026-10-28): rc90 build-ahead ON (Wom1JobBuildAhead=1).
+- HD 50k: **6803 / 40.7 FPS**, new best. Median frame 22.70 ms (EXP2025 off: 23.39); c_kick 1.48 → 1.35 ms.
+- FHD 100k: 3916 (best 3919, GPU-bound).
+- No removal, TDR or fault.
+- Wom1JobTiming971Hot (last 64 jobs, pids 716/1224):
+  - ahead released 59, prebound 51, chained 51;
+  - chain refusals: 4 (preemption pending) ×6, 38 (CPU packet) ×2;
+  - queued_complete_to_kick 76 µs (EXP2012 hot DWM: 532 µs; rc83-era about 240 µs);
+  - build 26 µs (prebound).
+- Verdict: rc90 d697ceba, 996a4439, dcea10d1 and 39e7f0fb validated on GravityMark. The TDR drill with the switch on is still pending before default-on.
