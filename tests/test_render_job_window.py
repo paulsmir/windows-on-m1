@@ -529,6 +529,96 @@ class JobWindowModel(unittest.TestCase):
                 self.assertNotEqual(ran.returncode, 0, name + ": mutation survived\n" + ran.stdout)
 
 
+SHARED = ROOT / "drivers/apple-agx/shared"
+RC102_MODEL = Path(__file__).resolve().parent / "render_job_window_rc102_model.c"
+RC102_SOURCES = {
+    "codec": SHARED / "src/apple_agx_g13_codec.c",
+    "runtime": SHARED / "src/apple_agx_g13_queue_runtime.c",
+    "provider": SHARED / "src/apple_agx_g13_queue_provider.c",
+    "backend": SHARED / "src/apple_agx_backend_runtime.c",
+    "submission": SHARED / "src/apple_agx_submission.c",
+    "firmware": SHARED / "src/apple_agx_firmware.c",
+    "rtkit": SHARED / "src/apple_agx_rtkit.c",
+    "scheduler": SHARED / "src/apple_agx_scheduler.c",
+    "window": SOURCE,
+}
+
+
+def _build_and_run_rc102(tmp: Path, mutated=None) -> subprocess.CompletedProcess:
+    sources = dict(RC102_SOURCES)
+    if mutated:
+        name, old, new = mutated
+        text = sources[name].read_text()
+        if old not in text:
+            raise AssertionError(f"{name}: mutation anchor missing: {old!r}")
+        path = tmp / sources[name].name
+        path.write_text(text.replace(old, new, 1))
+        sources[name] = path
+    exe = tmp / "rc102_model"
+    built = subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
+                            "-Werror", "-fsanitize=address,undefined",
+                            "-I", str(SHARED / "include"), "-I", str(INCLUDE),
+                            str(RC102_MODEL), *map(str, sources.values()), "-o", str(exe)],
+                           capture_output=True, text=True)
+    if built.returncode != 0:
+        return built
+    return subprocess.run([str(exe)], capture_output=True, text=True)
+
+
+class JobWindowRealStateMachine(unittest.TestCase):
+    """rc102: two jobs in flight through the real queue runtime, queue
+    provider, backend runtime, scheduler and window
+    (render_job_window_rc102_model.c).
+
+    WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? A kicked successor
+    that is lost, reported out of order or twice, handed back to VidSch by
+    a preemption or reset, or completed without its own stamps; a reset
+    that returns while the firmware still holds a job of the window; a
+    batched (U4) pair that is not reported in one poll. Scenarios: order
+    (every pair class), depth 1 (switch off), preludes, refused pairs,
+    faults in either job (both U5 variants), a TDR with two outstanding,
+    preemption with a never-kicked packet behind, the rc63 scheduler fault,
+    paging, and the rc97 drill with the job behind queued or kicked."""
+
+    def test_two_in_flight_invariants(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ran = _build_and_run_rc102(Path(directory))
+            self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+            self.assertIn("PASS", ran.stdout)
+
+    def test_each_depth2_step_is_load_bearing(self):
+        """RED evidence: removing one step of the real code breaks the model."""
+        mutations = {
+            "successor not observed": ("runtime",
+                "      !AppleAgxG13ObserveSuccessor(Runtime, &event))",
+                "      0)"),
+            "no promotion": ("runtime",
+                "       status == AppleAgxG13QueueCompletionRecovered) &&\n      Runtime->Successor.Fence != 0u) {",
+                "       status == AppleAgxG13QueueCompletionRecovered) &&\n      0) {"),
+            "recovery bounded by the running job": ("runtime",
+                "        write != newest[index]->ExpectedDonePointer)\n      return AppleAgxG13QueueRuntimeResultInvalidState;\n    if (done != write)\n      retired",
+                "        (head[index] && write != head[index]->ExpectedDonePointer))\n      return AppleAgxG13QueueRuntimeResultInvalidState;\n    if (done != write)\n      retired"),
+            "batched successor not taken": ("provider",
+                "  if (!AppleAgxG13ProviderTake(Provider, Batch, &next))",
+                "  if (1)"),
+            "backend keeps no successor": ("backend",
+                "  if (Runtime->SuccessorPending && nextPhase == AppleAgxBackendRuntimeReady)",
+                "  if (Runtime->SuccessorPending && nextPhase == AppleAgxBackendRuntimeStopping)"),
+            "preemption hands the kicked fence back": ("scheduler",
+                "  kicked = AppleAgxSchedulerTakeKicked(Scheduler);\n  if (Scheduler->KickedFence != 0u && kicked == 0u)",
+                "  kicked = 0u;\n  Scheduler->KickedFence = 0u;\n  if (0)"),
+            "no idle-queue refusal": ("window", "if (s->NextNeedsIdle) return 61u;", ""),
+            "successor verdict without stamps": ("runtime",
+                "        reached = APPLE_AGX_BACKEND_FALSE;",
+                "        reached = APPLE_AGX_BACKEND_TRUE;"),
+        }
+        for name, mutation in mutations.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                ran = _build_and_run_rc102(Path(directory), mutation)
+                self.assertTrue(ran.stdout, name + ": did not build\n" + ran.stderr)
+                self.assertNotEqual(ran.returncode, 0, name + ": mutation survived\n" + ran.stdout[-2000:])
+
+
 class JobWindowSource(unittest.TestCase):
     def test_kmd_clean_and_in_the_project(self):
         for path in (SOURCE, HEADER):
