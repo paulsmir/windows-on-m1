@@ -6,6 +6,9 @@ overlap, leave the arena, or break their alignment; a release needs the
 last-use fence proof and its exact ticket; released space must be reusable
 while older slices stay live (EXP1984: FIFO head blocking mapped extra arenas);
 a poisoned arena hands out and releases nothing.
+rc99: a placement below a limit never ends above it (ordinary slices must not
+take the readback reserve at the top of the first arena), and only the first
+arena has a reserve.
 """
 from pathlib import Path
 import subprocess
@@ -98,6 +101,50 @@ int main(void) {
       --count;
     }
     assert(AdmissionUmdNativeSpansDrained(&s) && fails);
+  }
+  /* rc99: limit-bounded first fit and the readback reserve split. */
+  assert(AdmissionUmdNativeArenaLimit(0, 4u << 20, 2u << 20, 0) == (2u << 20));
+  assert(AdmissionUmdNativeArenaLimit(0, 4u << 20, 2u << 20, 1) == (4u << 20));
+  assert(AdmissionUmdNativeArenaLimit(0, 4u << 20, 0u, 0) == (4u << 20));
+  assert(AdmissionUmdNativeArenaLimit(0, 4u << 20, 0u, 1) == 0u);
+  assert(AdmissionUmdNativeArenaLimit(0, 4u << 20, 8u << 20, 0) == 0u);
+  for (unsigned i = 1; i < 4; ++i) {
+    assert(AdmissionUmdNativeArenaLimit(i, 8u << 20, 2u << 20, 0) == (8u << 20));
+    assert(AdmissionUmdNativeArenaLimit(i, 8u << 20, 2u << 20, 1) == 0u);
+  }
+  assert(AdmissionUmdNativeSpansInit(&s, 1024));
+  assert(!AdmissionUmdNativeSpansReserveBelow(&s, 64, 64, 1025, &a));
+  assert(!AdmissionUmdNativeSpansReserveBelow(&s, 64, 64, 32, &a));
+  assert(AdmissionUmdNativeSpansReserveBelow(&s, 256, 64, 512, &a) && a.Offset == 0);
+  assert(AdmissionUmdNativeSpansReserveBelow(&s, 256, 64, 512, &b) && b.Offset == 256);
+  assert(!AdmissionUmdNativeSpansReserveBelow(&s, 64, 64, 512, &c));
+  assert(AdmissionUmdNativeSpansReserveBelow(&s, 256, 64, 1024, &c) && c.Offset == 512);
+  /* The gap below a slice above the limit is still usable up to the limit. */
+  assert(AdmissionUmdNativeSpansRelease(&s, b.Ticket, 0, 0));
+  assert(!AdmissionUmdNativeSpansReserveBelow(&s, 256, 64, 384, &b));
+  assert(AdmissionUmdNativeSpansReserveBelow(&s, 128, 64, 384, &b) && b.Offset == 256);
+  check();
+  {
+    ADMISSION_UMD_RING_SLICE live[ADMISSION_UMD_NATIVE_ARENA_SLICES];
+    unsigned count = 0;
+    assert(AdmissionUmdNativeSpansInit(&s, 1u << 20));
+    for (unsigned step = 0; step < 100000; ++step) {
+      if (count && (rnd() % 3 == 0 || count == ADMISSION_UMD_NATIVE_ARENA_SLICES)) {
+        unsigned i = rnd() % count;
+        assert(AdmissionUmdNativeSpansRelease(&s, live[i].Ticket, 0, 0));
+        live[i] = live[--count];
+      } else {
+        unsigned align = 1u << (rnd() % 15);
+        unsigned bytes = 1u + rnd() % (1u << (rnd() % 15));
+        unsigned limit = rnd() % 2 ? (1u << 20) : (1u << 19);
+        ADMISSION_UMD_RING_SLICE x;
+        if (AdmissionUmdNativeSpansReserveBelow(&s, bytes, align, limit, &x)) {
+          assert(x.Offset + x.Bytes <= limit && !(x.Offset & (align - 1u)));
+          live[count++] = x;
+        }
+      }
+      check();
+    }
   }
   puts("native spans PASS");
   return 0;

@@ -13,6 +13,13 @@ RC64 (EXP1985): slices over 1 MiB use only the 32 MiB arena. First-come
 placement let multi-MiB load-time BOs take all 60 MiB, so every later query,
 pool, encoder and readback BO (64-512 KiB) fell back to per-submission copy
 escapes. Small slices keep 28 MiB that large slices can never take.
+rc99 (EXP2031/EXP2033): GravityMark creates its four 512 KiB READBACK heaps
+after scene load, with the arenas about 59/60 MiB full; three of four fell
+back to private staging, and each frame then completed a submission
+synchronously and downloaded 512 KiB through copy escapes (4.1 ms of GPU
+idle). A readback slice must find the reserve at the top of the first arena
+however full the ordinary placement is, ordinary slices must never take the
+reserve, and the kill switch (reserve 0) must restore the RC64 placement.
 """
 import re
 from pathlib import Path
@@ -47,6 +54,7 @@ using ULONG_PTR=uintptr_t;
 #define FALSE 0
 #define S_OK ((HRESULT)0)
 #define E_FAIL ((HRESULT)-1)
+#define E_OUTOFMEMORY ((HRESULT)0x8007000Eu)
 #define SUCCEEDED(x) ((x)>=0)
 #define FAILED(x) ((x)<0)
 #define HEAP_ZERO_MEMORY 8u
@@ -72,6 +80,8 @@ struct ADMISSION_UMD_DEVICE {
   struct {HANDLE handle;} RuntimeDevice;
   HANDLE KernelContext;
   BOOL NativeStagingDisabled,ScreenClosing,DrawTerminal;
+  UINT NativeReadbackReserve;
+  BOOL NativeReadbackIntent;
   SRWLOCK ScreenBufferLock;
   ADMISSION_UMD_NATIVE_ARENA NativeStaging[ADMISSION_UMD_NATIVE_ARENAS];
 };
@@ -91,7 +101,8 @@ static MAPPING mappings[8];
 static UINT capacities[8];
 static const UINT arena_mib[4]={4u,8u,16u,32u};
 static UINT fallback_values[5],map_values[4],fallback_count,map_receipts;
-static HRESULT fallback_status;
+static UINT reserve_values[6],reserve_receipts;
+static HRESULT fallback_status,reserve_status;
 
 static void AcquireSRWLockExclusive(SRWLOCK *l) {
   assert(!lock_depth); assert(!pthread_rwlock_wrlock(&l->value)); ++lock_depth;
@@ -121,6 +132,9 @@ static void AdmissionUmdDiagnostic(const char *name,HRESULT status,
   if(!strcmp(name,"measure-native-ring-fallback")) {
     assert(count==5); memcpy(fallback_values,v,sizeof(fallback_values));
     fallback_status=status; ++fallback_count;
+  } else if(!strcmp(name,"measure-native-readback-reserve")) {
+    assert(count==6); memcpy(reserve_values,v,sizeof(reserve_values));
+    reserve_status=status; ++reserve_receipts;
   } else {
     assert(!strcmp(name,"measure-native-ring-map") && count==4);
     memcpy(map_values,v,sizeof(map_values)); ++map_receipts;
@@ -337,10 +351,79 @@ static void small_reserved(ADMISSION_UMD_DEVICE *d) {
   assert(AdmissionUmdNativeStagingReserve(d,65536,65536,&x,&p,&t) && t==mappings[1].token);
   assert(AdmissionUmdNativeStagingRelease(d,t,x.Ticket,0) && !cancel_calls);
 }
+/* rc99: the GravityMark order. Scene load fills every ordinary byte with
+ * 512 KiB slices; then the four READBACK heaps arrive. */
+static unsigned fill_ordinary(ADMISSION_UMD_DEVICE *d,ADMISSION_UMD_RING_SLICE *s,ULONGLONG *t,
+                              unsigned limit) {
+  unsigned n=0; BYTE *p=nullptr;
+  while(n<limit && AdmissionUmdNativeStagingReserve(d,512u<<10,65536,&s[n],&p,&t[n])) {
+    if(t[n]==mappings[0].token) assert((uintptr_t)p==mappings[0].base+s[n].Offset);
+    ++n;
+  }
+  assert(n<limit && map_calls==4);
+  return n;
+}
+static void readback_reserve(ADMISSION_UMD_DEVICE *d) {
+  d->NativeReadbackReserve=2u<<20;
+  ADMISSION_UMD_RING_SLICE s[160],r[5],x; ULONGLONG t[160],tr[5],tx; BYTE *p=nullptr;
+  /* A readback heap created while ordinary space is free uses that space. */
+  d->NativeReadbackIntent=TRUE;
+  assert(AdmissionUmdNativeStagingReserve(d,512u<<10,65536,&x,&p,&tx));
+  assert(tx==mappings[0].token && x.Offset==0 && !reserve_receipts);
+  d->NativeReadbackIntent=FALSE;
+  assert(AdmissionUmdNativeStagingRelease(d,tx,x.Ticket,0));
+  const unsigned n=fill_ordinary(d,s,t,160);
+  /* 2 + 8 + 16 + 32 MiB of ordinary space; nothing in the reserve. */
+  assert(n==116);
+  for(unsigned i=0;i<n;++i)
+    if(t[i]==mappings[0].token) assert(s[i].Offset+s[i].Bytes<=(2u<<20));
+  assert(d->NativeStaging[0].Ring->Used==(2u<<20));
+  assert(!AdmissionUmdNativeStagingReserve(d,65536,65536,&x,&p,&tx));
+  /* Four readback heaps take the reserve; a fifth is refused. */
+  d->NativeReadbackIntent=TRUE;
+  for(unsigned i=0;i<4;++i) {
+    assert(AdmissionUmdNativeStagingReserve(d,512u<<10,65536,&r[i],&p,&tr[i]));
+    assert(tr[i]==mappings[0].token && r[i].Offset==(2u<<20)+i*(512u<<10));
+    assert((uintptr_t)p==mappings[0].base+r[i].Offset);
+    assert(reserve_receipts==i+1 && reserve_status==S_OK && reserve_values[0]==1u &&
+           reserve_values[1]==1u && reserve_values[2]==(512u<<10) &&
+           reserve_values[3]==r[i].Offset && reserve_values[5]==(2u<<20));
+  }
+  assert(!AdmissionUmdNativeStagingReserve(d,512u<<10,65536,&r[4],&p,&tr[4]));
+  assert(reserve_receipts==5 && reserve_status==E_OUTOFMEMORY && !reserve_values[1] &&
+         reserve_values[4]==(4u<<20));
+  /* Over 1 MiB a readback never reaches the first arena's reserve. */
+  assert(!AdmissionUmdNativeStagingReserve(d,2u<<20,65536,&x,&p,&tx) && reserve_receipts==5);
+  d->NativeReadbackIntent=FALSE;
+  /* A released reserve slice is not ordinary space. */
+  assert(AdmissionUmdNativeStagingRelease(d,tr[1],r[1].Ticket,3));
+  assert(!AdmissionUmdNativeStagingReserve(d,512u<<10,65536,&x,&p,&tx));
+  d->NativeReadbackIntent=TRUE;
+  assert(AdmissionUmdNativeStagingReserve(d,512u<<10,65536,&r[1],&p,&tr[1]));
+  assert(r[1].Offset==(2u<<20)+(512u<<10));
+  d->NativeReadbackIntent=FALSE;
+  for(unsigned i=0;i<4;++i) assert(AdmissionUmdNativeStagingRelease(d,tr[i],r[i].Ticket,4));
+  for(unsigned i=0;i<n;++i) assert(AdmissionUmdNativeStagingRelease(d,t[i],s[i].Ticket,4));
+  for(unsigned i=0;i<4;++i) assert(!d->NativeStaging[i].Ring->Used);
+  assert(map_calls==4 && !cancel_calls);
+}
+/* Kill switch: reserve 0 is the RC64 placement, the intent changes nothing. */
+static void readback_reserve_off(ADMISSION_UMD_DEVICE *d) {
+  ADMISSION_UMD_RING_SLICE s[160],x; ULONGLONG t[160],tx; BYTE *p=nullptr;
+  const unsigned n=fill_ordinary(d,s,t,160);
+  assert(n==120 && d->NativeStaging[0].Ring->Used==(4u<<20));
+  d->NativeReadbackIntent=TRUE;
+  assert(!AdmissionUmdNativeStagingReserve(d,512u<<10,65536,&x,&p,&tx));
+  assert(!reserve_receipts);
+  for(unsigned i=0;i<n;++i) assert(AdmissionUmdNativeStagingRelease(d,t[i],s[i].Ticket,1));
+  assert(map_calls==4 && !cancel_calls);
+}
 int main(int argc,char **argv) {
   assert(argc==2); ADMISSION_UMD_DEVICE d; init(&d);
   ADMISSION_UMD_RING_SLICE s={}; BYTE *p=nullptr; ULONGLONG t=0;
-  if(!strcmp(argv[1],"four")) four_arenas(&d);
+  if(!strcmp(argv[1],"readback")) readback_reserve(&d);
+  else if(!strcmp(argv[1],"readback-off")) readback_reserve_off(&d);
+  else if(!strcmp(argv[1],"four")) four_arenas(&d);
   else if(!strcmp(argv[1],"transport")) invalid_transport(&d);
   else if(!strcmp(argv[1],"reuse")) out_of_order_reuse(&d);
   else if(!strcmp(argv[1],"churn")) steady_churn(&d);
@@ -392,7 +475,7 @@ class NativeStagingArena(unittest.TestCase):
                  "AdmissionUmdNativeStagingRelease")
         bodies = [function(text, name) for name in names]
         self.assertTrue(all(bodies), "production native arena helper missing")
-        scenarios = ("four", "transport", "reuse", "churn", "demand", "small", "disabled", "heap", "reentrant",
+        scenarios = ("readback", "readback-off", "four", "transport", "reuse", "churn", "demand", "small", "disabled", "heap", "reentrant",
                      *(str(i) for i in range(1, 15)))
         with tempfile.TemporaryDirectory(prefix="umd-native-arena-") as path:
             tmp = Path(path)

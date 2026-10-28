@@ -45,6 +45,28 @@
  * 43-49 QUERY escapes per Execute on <= 1 MiB slots). The value is
  * AgxWin32BufferClassShader; umd_win32_screen.c checks it at compile time
  * (this header stays free of the shared ABI headers). */
+/* rc99 (EXP2031/EXP2033): a D3D12 READBACK heap (CPU page property
+ * WRITE_BACK) is written by the GPU and mapped by the CPU, so on private
+ * staging every submission that writes it completes synchronously and
+ * downloads it through 64 KiB copy escapes (finish_submission): 4.1 ms of
+ * GPU idle per frame in GravityMark HD. Its slices are placed late (after
+ * scene load, when the arenas are about 59/60 MiB full), so whether they
+ * got native storage was a race. The top of the first arena is kept for
+ * such slices: ordinary slices never use it, a readback slice uses it only
+ * after the ordinary placement refused. 0 (the kill switch) restores the
+ * RC64 placement exactly. */
+#define ADMISSION_UMD_NATIVE_READBACK_RESERVE (2u * 1024u * 1024u)
+
+/* Highest end offset a slice may use in arena Index. Ordinary placement
+ * (Reserved = 0) stops below the readback reserve of the first arena; the
+ * reserve pass (Reserved = 1) may use only the first arena, all of it. */
+static inline unsigned int AdmissionUmdNativeArenaLimit(unsigned int Index,
+    unsigned int Capacity, unsigned int Reserve, int Reserved) {
+  if (Index) return Reserved ? 0u : Capacity;
+  if (Reserved) return Reserve ? Capacity : 0u;
+  return Reserve < Capacity ? Capacity - Reserve : 0u;
+}
+
 #define ADMISSION_UMD_NATIVE_SHADER_CLASS 2u
 static inline int AdmissionUmdNativeStagingClassEligible(unsigned int ClassId) {
   return ClassId != ADMISSION_UMD_NATIVE_SHADER_CLASS;
@@ -83,17 +105,21 @@ static inline int AdmissionUmdNativeSpansInit(ADMISSION_UMD_NATIVE_SPANS *Spans,
   return 1;
 }
 
-static inline int AdmissionUmdNativeSpansReserve(ADMISSION_UMD_NATIVE_SPANS *Spans,
-    unsigned int Bytes, unsigned int Alignment, ADMISSION_UMD_RING_SLICE *Slice) {
+/* rc99: first fit below Limit (<= Capacity); live slices above Limit stay
+ * untouched and only bound the gaps below them. */
+static inline int AdmissionUmdNativeSpansReserveBelow(ADMISSION_UMD_NATIVE_SPANS *Spans,
+    unsigned int Bytes, unsigned int Alignment, unsigned int Limit,
+    ADMISSION_UMD_RING_SLICE *Slice) {
   unsigned long long cursor = 0ULL, start = 0ULL;
   unsigned int at, i;
   if (!Spans || !Slice || !Spans->Capacity || Spans->Poisoned || !Bytes ||
       Bytes > Spans->Capacity || !Alignment || (Alignment & (Alignment - 1u)) ||
       Alignment > Spans->Capacity || Spans->Count == ADMISSION_UMD_NATIVE_ARENA_SLICES ||
-      Spans->NextTicket == ~0ULL) return 0;
+      Spans->NextTicket == ~0ULL || Limit > Spans->Capacity || Bytes > Limit) return 0;
   for (at = 0u; at <= Spans->Count; ++at) {
     unsigned long long limit = at < Spans->Count ?
         (unsigned long long)Spans->Live[at].Offset : (unsigned long long)Spans->Capacity;
+    if (limit > Limit) limit = Limit;
     start = (cursor + Alignment - 1ULL) & ~((unsigned long long)Alignment - 1ULL);
     if (start <= limit && limit - start >= Bytes) break;
     if (at < Spans->Count)
@@ -108,6 +134,12 @@ static inline int AdmissionUmdNativeSpansReserve(ADMISSION_UMD_NATIVE_SPANS *Spa
   Spans->Used += Bytes;
   *Slice = Spans->Live[at];
   return 1;
+}
+
+static inline int AdmissionUmdNativeSpansReserve(ADMISSION_UMD_NATIVE_SPANS *Spans,
+    unsigned int Bytes, unsigned int Alignment, ADMISSION_UMD_RING_SLICE *Slice) {
+  return AdmissionUmdNativeSpansReserveBelow(Spans, Bytes, Alignment,
+      Spans ? Spans->Capacity : 0u, Slice);
 }
 
 /* Only after the BO has no CPU/submission references and DeallocateCb has

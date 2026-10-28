@@ -273,6 +273,11 @@ typedef struct _ADMISSION_UMD_DEVICE {
   BOOL DirectCpuPool; /* RC25: opt-in canonical WC maps with pool proof */
 #ifdef APPLE_AGX_NATIVE_STAGING
   BOOL NativeStagingDisabled;
+  /* rc99: bytes at the top of the first arena kept for READBACK-heap
+   * slices (0: off), and the intent of the BO being created, set by the
+   * D3D12 owner under its lock around a READBACK heap creation. */
+  UINT NativeReadbackReserve;
+  BOOL NativeReadbackIntent;
   ADMISSION_UMD_NATIVE_ARENA NativeStaging[ADMISSION_UMD_NATIVE_ARENAS];
 #endif
   ULONGLONG HeapStagingDirtyBytes, HeapStagingUploadBytes, HeapStagingDownloadBytes;

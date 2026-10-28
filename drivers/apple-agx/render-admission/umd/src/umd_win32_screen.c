@@ -844,8 +844,11 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
     }
     AcquireSRWLockExclusive(&Device->ScreenBufferLock);
     if (!Device->ScreenClosing && !Device->DrawTerminal && arena->Ring) {
-      reserved = AdmissionUmdNativeSpansReserve(arena->Ring,
-          (UINT)Bytes, (UINT)Alignment, Slice);
+      /* rc99: ordinary placement never takes the readback reserve. */
+      reserved = AdmissionUmdNativeSpansReserveBelow(arena->Ring,
+          (UINT)Bytes, (UINT)Alignment,
+          AdmissionUmdNativeArenaLimit(index, arena->Ring->Capacity,
+              Device->NativeReadbackReserve, 0), Slice);
       if (reserved) {
         *Address = arena->Address + Slice->Offset;
         *Token = arena->Token;
@@ -855,6 +858,34 @@ static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
     ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
     if (reserved) return TRUE;
     if (initialize && !available) break;
+  }
+  /* rc99: a READBACK-heap slice the ordinary placement refused may use the
+   * reserve at the top of the first (already mapped) arena. Receipt
+   * measure-native-readback-reserve {1, placed, bytes, offset, first-arena
+   * used bytes after the attempt, reserve bytes}; rare (one per readback
+   * heap created while the arenas are full). */
+  if (Device->NativeReadbackIntent && Device->NativeReadbackReserve &&
+      AdmissionUmdNativeArenaBytes(0u, Bytes, Alignment)) {
+    ADMISSION_UMD_NATIVE_ARENA *arena = &Device->NativeStaging[0];
+    UINT values[6] = {1u, 0u, (UINT)Bytes, 0u, 0u, Device->NativeReadbackReserve};
+    AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+    if (!Device->ScreenClosing && !Device->DrawTerminal && arena->Ring) {
+      reserved = AdmissionUmdNativeSpansReserveBelow(arena->Ring,
+          (UINT)Bytes, (UINT)Alignment,
+          AdmissionUmdNativeArenaLimit(0u, arena->Ring->Capacity,
+              Device->NativeReadbackReserve, 1), Slice);
+      if (reserved) {
+        *Address = arena->Address + Slice->Offset;
+        *Token = arena->Token;
+        values[1] = 1u;
+        values[3] = Slice->Offset;
+      }
+      values[4] = arena->Ring->Used;
+    }
+    ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+    AdmissionUmdDiagnostic("measure-native-readback-reserve", reserved ? S_OK : E_OUTOFMEMORY,
+                           values, ARRAYSIZE(values));
+    if (reserved) return TRUE;
   }
   return FALSE;
 }
