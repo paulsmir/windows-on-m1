@@ -67,8 +67,27 @@ class TdrResetQuiesce(unittest.TestCase):
     def test_reset_succeeds_only_after_firmware_ends_the_active_job(self):
         self.run_replay(CASES, FIRMWARE_REPLAY)
 
-    def run_replay(self, cases, firmware_replay, queue_runtime=None):
+    def test_refused_successor_does_not_block_the_private_reset(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP2045: the
+        kicked successor's SubmitSuccessor was refused after
+        BeginSuccessorJob had joined it to the running job's graph lease and
+        started its private scene. The running job then ended and was
+        reported; the reset found no active packet and nothing with the
+        firmware, but its private stage quarantined the successor's started
+        scene and refused every retry (3 resets, 0 succeeded, 0x116). The
+        reset must end the never-handed-over job's G3 job before that stage.
+        Without that step (the pre-fix reset) the replay must fail."""
         scheduler = (RENDER / 'src/scheduler_windows.c').read_text()
+        step = re.search(r'\n  /\* rc102 \(EXP2045\): so does a kicked successor.*?\n  }\n',
+                         scheduler, re.S)
+        self.assertIsNotNone(step)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_replay(CASES, FIRMWARE_REPLAY,
+                            scheduler=scheduler.replace(step.group(0), '\n'), quiet=True)
+
+    def run_replay(self, cases, firmware_replay, queue_runtime=None, scheduler=None,
+                   quiet=False):
+        scheduler = scheduler or (RENDER / 'src/scheduler_windows.c').read_text()
         backend = (RENDER / 'src/backend_platform_windows.c').read_text()
         queue = (RENDER / 'src/work_queue_windows.c').read_text()
         gpuva = (RENDER / 'src/gpuva_g3_windows.c').read_text()
@@ -94,6 +113,7 @@ class TdrResetQuiesce(unittest.TestCase):
                 optional_body(backend, 'AdmissionPostResumePollByte') + '\n' +
                 optional_body(backend, 'AdmissionPostResumePollFailure') + '\n' +
                 optional_body(backend, 'AdmissionPlatformRuntimeQuiesceActive') + '\n' +
+                optional_body(backend, 'AdmissionPlatformRuntimeUnheldKicked') + '\n' +
                 optional_body(scheduler, 'AdmissionResetQuiesceActive') + '\n' +
                 noinline_body(scheduler, 'AdmissionResetEngineInternal') + '\n' +
                 noinline_body(scheduler, 'AdmissionResetEngineRecorded') + '\n' +
@@ -121,7 +141,8 @@ class TdrResetQuiesce(unittest.TestCase):
                             str(SHARED / 'src/apple_agx_scheduler.c'),
                             str(RENDER / 'src/render_submission.c'), '-o', str(binary)],
                            check=True)
-            subprocess.run([str(binary)], check=True, timeout=20)
+            subprocess.run([str(binary)], check=True, timeout=20,
+                           stderr=subprocess.DEVNULL if quiet else None)
 
 
 SHIM = r'''
@@ -213,7 +234,8 @@ typedef struct {
 } ADMISSION_G4_PENDING;
 typedef struct { int Provider; APPLE_AGX_BACKEND_U32 LastPollGuard, LastDrainGuard;
   struct { APPLE_AGX_G13_QUEUE_RUNTIME Runtime; APPLE_AGX_BACKEND_U32 LastIngestGuard;
-           APPLE_AGX_G13_QUEUE_PROVIDER_PHASE Phase; APPLE_AGX_BACKEND_U32 PendingFence; } QueueProvider;
+           APPLE_AGX_G13_QUEUE_PROVIDER_PHASE Phase; APPLE_AGX_BACKEND_U32 PendingFence;
+           APPLE_AGX_BACKEND_U32 SuccessorFence; } QueueProvider;
 } APPLE_AGX_PLATFORM_PROVIDER;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct _ADMISSION_PLATFORM_RUNTIME {
@@ -296,9 +318,24 @@ static void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, ULONG f) {
   } else if (c->GpuvaG3SecondFence == f) c->GpuvaG3SecondFence = 0u;
 }
 
-/* rc102: these replays kick no depth-2 successor (the scheduler holds no
- * kicked fence), so the reset never aborts one. */
-static void AdmissionG4PendingAbortKickedLocked(ADMISSION_CONTEXT *c) { (void)c; assert(0); }
+/* rc102: the kicked head the engine reset aborts (the real one also
+ * releases the image binding, which this replay does not model). Only the
+ * EXP2045 replay kicks a successor. */
+static ULONG kicked_aborted_locked;
+VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *context, ULONG fence,
+                                   BOOLEAN uncertain);
+static void AdmissionG4PendingAbortKickedLocked(ADMISSION_CONTEXT *c) {
+  ADMISSION_G4_PENDING *e;
+  assert(lock_depth && c->G4PendingCount != 0u);
+  e = &c->G4Pending[c->G4PendingHead];
+  assert(e->State == AdmissionG4PendingKicked && e->Context != NULL);
+  kicked_aborted_locked = e->Fence;
+  AdmissionGpuvaG3PrivateCancel(e->Context, e->Fence, FALSE);
+  AdmissionContextRetireFence(e->Context, e->Fence);
+  e->State = AdmissionG4PendingFree; e->Context = NULL;
+  c->G4PendingHead = (c->G4PendingHead + 1u) % ADMISSION_G4_PENDING_CAPACITY;
+  --c->G4PendingCount;
+}
 static ULONG g3_aborted_job;
 static void AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *c, ULONG f) {
   (void)c; assert(!lock_depth && f != 0u); g3_aborted_job = f;
@@ -655,6 +692,37 @@ int main(void) {
          last_recorded.Stage == AdmissionGpuResetStageComplete && polls == 0);
   assert(g3_aborted_job == 0xce71cu && owner.GpuvaG3CancelFence == (LONG)0xce71cu &&
          !scene_quarantined);
+  /* rc102 (EXP2045): job 0xce71c ran with the successor 0xce71d (context
+   * other) kicked behind it; BeginSuccessorJob started its scene, then
+   * SubmitSuccessor was refused (SchedulerFaulted at that line): nothing
+   * reached the firmware. 0xce71c ended and was reported; the kicked fence
+   * stays (no adoption once faulted). The reset must end the successor's
+   * G3 job unrun before its private stage, abort the fence and recover. */
+  setup(0, 3);
+  assert(AppleAgxSchedulerKickQueuedFence(&adapter.Scheduler, 0, 0, 0xce71du));
+  assert(adapter.G4Pending[adapter.G4PendingHead].Fence == 0xce71du);
+  adapter.G4Pending[adapter.G4PendingHead].State = AdmissionG4PendingKicked;
+  runtime.Depth2KickedFence = 0xce71du;
+  scene_first.Started = 1u;
+  assert(AppleAgxSchedulerCompleteActiveFence(&adapter.Scheduler, 0, 0, 0xce71cu));
+  assert(AdmissionRenderPacketComplete(&adapter.RenderPacket, 0xce71cu));
+  AdmissionContextRetireFence(&owner, 0xce71cu);
+  owner.GpuvaG3PrivateFence = 0; scene_owner.Queued = 0u;
+  adapter.DispatchedFence = 0u;
+  adapter.SchedulerFaulted = 0x40000 | 5148;
+  runtime.Backend.Phase = AppleAgxBackendRuntimeReady;
+  runtime.Provider.QueueProvider.Phase = AppleAgxG13QueueProviderCreated;
+  model_active_scene = &scene_first; scene_queued = scene_started = 1;
+  g3_aborted_job = kicked_aborted_locked = 0u;
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceEnded &&
+         last_recorded.Stage == AdmissionGpuResetStageComplete && polls == 0);
+  assert(g3_aborted_job == 0xce71du && !scene_started && !scene_quarantined);
+  assert(kicked_aborted_locked == 0xce71du && reset.LastAbortedFenceId == 0xce71du);
+  assert(AppleAgxSchedulerKickedFence(&adapter.Scheduler) == 0u &&
+         adapter.SchedulerFaulted == 0 && other.GpuvaG3Poisoned);
+  model_active_scene = &scene_owner;
   /* A backend that still holds work (provider not idle) is not that case. */
   setup(0, 0); adapter.SchedulerFaulted = 0x40000 | 5499;
   runtime.Backend.Phase = AppleAgxBackendRuntimeReady;

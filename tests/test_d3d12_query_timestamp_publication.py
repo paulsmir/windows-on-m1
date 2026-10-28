@@ -294,7 +294,9 @@ typedef struct {
      APPLE_AGX_BACKEND_U32, const APPLE_AGX_BACKEND_SUBMISSION *, APPLE_AGX_BACKEND_JOB_IMAGE *);
    } Image;
  } PlatformIo;
+ unsigned int Depth2BuildStep; /* rc102 (EXP2045): Wom1JobWindowKickFail build step */
 } ADMISSION_PLATFORM_RUNTIME;
+#include "render_job_window.h"
 static APPLE_AGX_BACKEND_BOOL relocate(void *c, void *arena, APPLE_AGX_BACKEND_U32 bytes,
  const APPLE_AGX_RENDER_TEMPLATE_ROOTS *roots, const unsigned char *sub, APPLE_AGX_BACKEND_U32 count,
  const APPLE_AGX_BACKEND_SUBMISSION *submission, APPLE_AGX_BACKEND_JOB_IMAGE *job) {

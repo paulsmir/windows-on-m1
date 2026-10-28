@@ -614,6 +614,13 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   /* rc102: the unsubmitted job's graph job ends unrun and its scene was
    * never touched by the GPU, so the private reset need not quarantine it. */
   if (unsubmitted != 0u) AdmissionGpuvaG3AbortJob(context, unsubmitted);
+  /* rc102 (EXP2045): so does a kicked successor whose SubmitSuccessor was
+   * refused (BeginSuccessorJob had joined it to the running job's lease
+   * and started its scene; nothing handed it to the firmware). */
+  {
+    ULONG unheld = AdmissionPlatformRuntimeUnheldKicked(context);
+    if (unheld != 0u) AdmissionGpuvaG3AbortJob(context, unheld);
+  }
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   {

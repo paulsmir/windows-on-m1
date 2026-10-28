@@ -2022,6 +2022,12 @@ VOID AdmissionJobTimingNoteWindows(ADMISSION_CONTEXT *Adapter, ULONG Fence,
 NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
     _In_ ULONG TimeoutMs, _Inout_opt_ ADMISSION_GPU_RESET_RECEIPT *Receipt);
+/* rc102 (EXP2045): after that quiescence (worker idle, Resetting set),
+ * the scheduler's kicked fence when nothing holds it: the backend never
+ * accepted it (SubmitSuccessor refused, no queue work became visible) and
+ * no packet runs it. 0 otherwise. Its graph job must end unrun before the
+ * private reset (AdmissionGpuvaG3AbortJob). */
+ULONG AdmissionPlatformRuntimeUnheldKicked(_In_ ADMISSION_CONTEXT *Context);
 /* Any IRQL, no locks: the platform half of Wom1GpuReset (backend/provider
  * phases, worker, firmware halted flag, recoveries). */
 VOID AdmissionPlatformRuntimeResetState(_In_ ADMISSION_CONTEXT *Context,

@@ -37,7 +37,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           'AdmissionG4PendingQueue','AdmissionG4PendingBindHead','AdmissionG4PendingDropLocked',
           'AdmissionG4SubmitComputeLocked','AdmissionG4SubmitVirtualEnvelope',
           'AdmissionG3OutputMatchesLocalFor','AdmissionG3OutputAccessibleFor','AdmissionGpuvaG3BeginJobAs',
-          'AdmissionGpuvaG3BeginJob','AdmissionGpuvaG3BeginSuccessorJob')
+          'AdmissionGpuvaG3BeginJob','AdmissionGpuvaG3BeginSuccessorJob','AdmissionGpuvaG3AbortJob')
         functions+='\n'.join(function_body(source,n) for n in names)
         shim=(ROOT/'tests/g4_submit_virtual_replay.c').read_text()
         prefix=shim.split('int main(void) {',1)[0]
@@ -53,6 +53,8 @@ class G4RenderLocalViewReplay(unittest.TestCase):
         }"""
         prefix=prefix.replace(old,local+'\n'+function_body(memory,'AdmissionMemoryRuntimeScanoutView'))
         prefix=prefix.replace('HostPhysicalAddress, Bytes;', 'HostPhysicalAddress, Bytes, PoolBytes;')
+        # rc102 (EXP2045): AdmissionGpuvaG3AbortJob wakes JOB_BEGIN waiters.
+        prefix=prefix.replace('  unsigned SuccessorFence;\n', '  unsigned SuccessorFence;\n  int JobEvent;\n')
         prefix=prefix.replace('static ULONGLONG output_ipa=0x90001000ULL;',
             'static ULONGLONG output_ipa=0x8e4040000ULL;')
         prefix=prefix.replace('static int output_mapped=1;', 'static int output_mapped=1, output_split=0; static ULONGLONG output_va=0x40000000ULL, output_bytes=0x8000ULL;')
@@ -67,6 +69,10 @@ class G4RenderLocalViewReplay(unittest.TestCase):
             'static void AdmissionDwmFrameRecordReject(ADMISSION_CONTEXT *a,void *c,ULONG b,NTSTATUS s){(void)a;(void)c;(void)b;(void)s;}\n'
             'static unsigned long long KeQueryInterruptTime(void){return 1234;}\n'
             'static void AdmissionDwmFrameRecordEnvelope(ADMISSION_CONTEXT *a,void *c,const ADMISSION_DWM_ENVELOPE_RECEIPT *r){(void)a;(void)c;observed_receipt=*r;}\n'
+            '#ifndef IO_NO_INCREMENT\n#define IO_NO_INCREMENT 0\n#endif\n'
+            'static int graph_end_calls;\n'
+            'static int AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *g){(void)g;++graph_end_calls;return 1;}\n'
+            'static void KeSetEvent(int *e,int i,int w){(void)i;(void)w;*e=1;}\n'
             '#include "g4_submit_virtual_functions.inc"')
         setup=shim.split('int main(void) {',1)[1].split('  assert(AdmissionG4SubmitVirtualEnvelope',1)[0]
         ending="""
@@ -127,6 +133,22 @@ class G4RenderLocalViewReplay(unittest.TestCase):
             assert(next==STATUS_SUCCESS && refusal==0u && graph_nested_calls==1);
             assert(state.SuccessorFence==fence && state.SuccessorContext==&context &&
                    state.ActiveFence==fence-1u && state.ActiveProcess==&process);
+            {
+              /* EXP2045: SubmitSuccessor then refused, nothing reached the
+               * firmware: the kick ends the successor's G3 job unrun (its
+               * nested lease, its started scene); the running job keeps
+               * the lease and its own state. */
+              ADMISSION_G3_PRIVATE_SCENE refused, *scenes=process.PrivateScenes;
+              memset(&refused,0,sizeof(refused));
+              refused.Context=&context; refused.Queued=1u; refused.Started=1u;
+              refused.Fence=fence; refused.Next=scenes; process.PrivateScenes=&refused;
+              AdmissionGpuvaG3AbortJob(&adapter,fence);
+              assert(graph_end_calls==1 && state.SuccessorFence==0u &&
+                     state.SuccessorContext==NULL);
+              assert(state.ActiveFence==fence-1u && state.ActiveProcess==&process);
+              assert(!refused.Started && refused.Queued && state.JobEvent);
+              process.PrivateScenes=scenes;
+            }
             /* no kicked entry for that fence: refused before any check */
             state.SuccessorFence=0u; adapter.G4Pending[0].State=AdmissionG4PendingQueued;
             assert(AdmissionGpuvaG3BeginSuccessorJob(&adapter,&context,fence,&refusal)!=STATUS_SUCCESS &&

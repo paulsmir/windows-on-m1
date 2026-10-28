@@ -203,6 +203,54 @@ typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
   unsigned int LastKickStatus; /* NTSTATUS of the failed step (was Reserved) */
 } ADMISSION_JOB_WINDOW_RECEIPT;
 
+/* rc102 (EXP2045): the state at the last failed kick (device value
+ * Wom1JobWindowKickFail, written and flushed by the worker at the failure,
+ * before the TDR it leads to; decoded by agx_gpu_frame_breakdown.py
+ * --kmd-kick-fail). Backend/provider/runtime fields are the shared
+ * enumerations' numeric values. */
+#define ADMISSION_JOB_WINDOW_KICK_FAILURE_VERSION 1u
+/* Flags */
+#define ADMISSION_KICK_FAIL_TERMINAL_PENDING   0x0001u /* backend */
+#define ADMISSION_KICK_FAIL_SUCCESSOR_PENDING  0x0002u /* backend */
+#define ADMISSION_KICK_FAIL_COMPLETION_READY   0x0004u /* queue runtime */
+#define ADMISSION_KICK_FAIL_RECOVERY_PENDING   0x0008u
+#define ADMISSION_KICK_FAIL_CHANNEL_FAILED     0x0010u
+#define ADMISSION_KICK_FAIL_BM_INITIALIZED     0x0020u
+#define ADMISSION_KICK_FAIL_TA_FIRST_RUN       0x0040u
+#define ADMISSION_KICK_FAIL_D3_FIRST_RUN       0x0080u
+#define ADMISSION_KICK_FAIL_G3_ABORTED         0x0100u /* nested lease undone */
+/* BuildStep: how far the KMD build of the successor got (0: not entered,
+ * the provider plan or the platform refused first). */
+#define ADMISSION_KICK_BUILD_RENDER_ENTERED    1u
+#define ADMISSION_KICK_BUILD_RENDER_OVERLAY    2u
+#define ADMISSION_KICK_BUILD_RENDER_STAGED     3u
+#define ADMISSION_KICK_BUILD_RENDER_BUILT      4u
+#define ADMISSION_KICK_BUILD_RENDER_COMPUTE    5u
+#define ADMISSION_KICK_BUILD_RENDER_LEAD       6u
+#define ADMISSION_KICK_BUILD_RENDER_FLUSHED    7u
+#define ADMISSION_KICK_BUILD_COMPUTE_ENTERED   21u
+#define ADMISSION_KICK_BUILD_COMPUTE_STREAM    22u
+#define ADMISSION_KICK_BUILD_COMPUTE_BUILT     23u
+#define ADMISSION_KICK_BUILD_COMPUTE_LEAD      24u
+#define ADMISSION_KICK_BUILD_RELOCATED         30u /* the platform relocate returned */
+typedef struct _ADMISSION_JOB_WINDOW_KICK_FAILURE {
+  unsigned int Version, Bytes;
+  unsigned int Failures;        /* failed kicks so far */
+  unsigned int Fence, RunningFence;
+  unsigned int Line;            /* KMD line of the failed step */
+  unsigned int BeginRefusal;    /* AdmissionGpuvaG3BeginJobAs refusal */
+  unsigned int Status;          /* NTSTATUS of BeginSuccessorJob */
+  unsigned int BackendResult;   /* APPLE_AGX_BACKEND_RUNTIME_RESULT */
+  unsigned int BackendPhase, BackendPendingFence;
+  unsigned int ProviderPhase, ProviderPendingFence, ProviderSuccessorFence;
+  unsigned int SubmitGuard, SubmitRuntimeResult, SuccessorGuard;
+  unsigned int RuntimePhase, RuntimePendingFence, RuntimeSuccessorFence;
+  unsigned int Flags;           /* ADMISSION_KICK_FAIL_* */
+  unsigned int BuildStep;       /* ADMISSION_KICK_BUILD_* */
+  unsigned int RunningKind, NextKind, Barrier; /* ADMISSION_JOB_WINDOW_* */
+  unsigned int JobWordStamp, JobWordSet;       /* sidecar owner at failure */
+} ADMISSION_JOB_WINDOW_KICK_FAILURE;
+
 void AdmissionJobWindowReceiptInitialize(ADMISSION_JOB_WINDOW_RECEIPT *Receipt);
 /* A successor was kicked with this Barrier while InFlight jobs (now) ran. */
 void AdmissionJobWindowReceiptKick(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,

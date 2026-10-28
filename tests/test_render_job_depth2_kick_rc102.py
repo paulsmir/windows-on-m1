@@ -131,6 +131,47 @@ class KickWiring(unittest.TestCase):
         unbind = section(G3.read_text(), "_Use_decl_annotations_ VOID AdmissionG4PendingAheadUnbind(")
         self.assertIn("AdmissionG4PendingKicked", unbind)
 
+    def test_refused_submit_ends_the_successor_g3_job(self):
+        """EXP2045: SubmitSuccessor refused after BeginSuccessorJob; its nested
+        lease and started scene made every reset's private stage fail (0x116).
+        The failure ends its G3 job unrun when no queue work became visible
+        (the reset replay in test_apple_agx_tdr_reset_quiesce proves the
+        reset side), and records the refusal before the fault."""
+        kick = section(WORKER.read_text(), "static BOOLEAN AdmissionJobWindowKickWindows(")
+        failed = kick[kick.index("if (result != AppleAgxBackendRuntimeResultOk) {"):]
+        failed = failed[:failed.index("return TRUE;")]
+        abort = failed.index("AdmissionGpuvaG3AbortJob(adapter, next);")
+        self.assertLess(failed.index("AppleAgxG13QueueProviderFaulted"), abort)
+        self.assertLess(failed.index("AppleAgxG13QueueRuntimeFaulted"), abort)
+        self.assertLess(abort, failed.index("AdmissionJobWindowKickFailedWindows("))
+        self.assertIn("(ULONG)result, flags", failed)
+        helper = section(WORKER.read_text(), "static VOID AdmissionJobWindowKickFailedWindows(")
+        self.assertLess(helper.index("f->BackendResult = result;"),
+                        helper.index("AdmissionJobWindowKickFailureExportWindows(adapter, runtime);"))
+        export = section(WORKER.read_text(), "static VOID AdmissionJobWindowKickFailureExportWindows(")
+        self.assertIn('L"Wom1JobWindowKickFail"', export)
+        self.assertIn("ZwFlushKey(key)", export)
+        reset = section(SCHED.read_text(),
+                        "static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(")
+        self.assertLess(reset.index("AdmissionPlatformRuntimeUnheldKicked(context)"),
+                        reset.index("AdmissionGpuvaG3PrivateReset(context)"))
+
+    def test_idle_queue_refusal_covers_every_successor_kind(self):
+        """PlanSuccessor refuses any successor in a new queue lifetime or
+        before InitBM; refusal 61 must too (not only for renders), or the
+        kick fails after BeginSuccessorJob instead of being refused."""
+        kick = section(WORKER.read_text(), "static BOOLEAN AdmissionJobWindowKickWindows(")
+        idle = kick[kick.index("s.NextNeedsIdle ="):]
+        idle = idle[:idle.index(";")]
+        before = kick[:kick.index("s.NextNeedsIdle =")].rstrip()
+        self.assertFalse(before.endswith(")"), "61 is computed under a kind condition")
+        for term in ("TaFirstRun", "D3FirstRun", "!runtime->Provider.QueueProvider.Runtime.BufferManagerInitialized"):
+            self.assertIn(term, idle)
+        plan = (ROOT / "drivers/apple-agx/shared/src/apple_agx_g13_queue_provider.c").read_text()
+        plan = section(plan, "APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanSuccessor(")
+        for term in ("TaFirstRun", "D3FirstRun", "BufferManagerInitialized"):
+            self.assertIn(term, plan)
+
     def test_new_functions_touch_no_sgx_and_ring_no_doorbell(self):
         text = WORKER.read_text()
         for name in ("static BOOLEAN AdmissionJobWindowKickWindows(",
@@ -171,6 +212,34 @@ int main(void) {
 '''
 
 
+KICK_FAIL_DUMP = r'''
+#include <stdio.h>
+#include <string.h>
+#include "render_job_window.h"
+int main(void) {
+  ADMISSION_JOB_WINDOW_KICK_FAILURE f;
+  const unsigned char *p = (const unsigned char *)&f;
+  unsigned i;
+  memset(&f, 0, sizeof(f));
+  f.Version = ADMISSION_JOB_WINDOW_KICK_FAILURE_VERSION; f.Bytes = sizeof(f);
+  f.Failures = 1u; f.Fence = 0x63u; f.RunningFence = 0x62u; f.Line = 5148u;
+  f.BackendResult = 5u; f.BackendPhase = 3u; f.BackendPendingFence = 0x62u;
+  f.ProviderPhase = 6u; f.ProviderPendingFence = 0x62u; f.SubmitGuard = 8u;
+  f.SubmitRuntimeResult = 3u; f.SuccessorGuard = 7u; f.RuntimePhase = 1u;
+  f.RuntimePendingFence = 0x62u;
+  f.Flags = ADMISSION_KICK_FAIL_BM_INITIALIZED | ADMISSION_KICK_FAIL_G3_ABORTED;
+  f.BuildStep = ADMISSION_KICK_BUILD_RENDER_STAGED;
+  f.RunningKind = ADMISSION_JOB_WINDOW_KIND_COMPUTE;
+  f.NextKind = ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE;
+  f.Barrier = ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_COMPUTE;
+  f.JobWordStamp = 0x62u; f.JobWordSet = 1u;
+  for (i = 0; i < sizeof(f); ++i) printf("%02x", p[i]);
+  putchar('\n');
+  return 0;
+}
+'''
+
+
 class KickReceipts(unittest.TestCase):
     def test_window_receipt_decodes_the_c_struct(self):
         b = load()
@@ -192,6 +261,29 @@ class KickReceipts(unittest.TestCase):
         self.assertEqual((out["adopted"], out["kick_failures"], out["last_kick_failure_line"],
                           out["reset_aborts"], out["last_kicked_fence"]), (3, 1, 5000, 1, 43))
         self.assertEqual((out["begin_successor_refusal"], out["last_kick_status"]), (7, "0xc0000184"))
+
+    def test_kick_failure_record_decodes_the_c_struct(self):
+        b = load()
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "dump.c"
+            exe = Path(directory) / "dump"
+            source.write_text(KICK_FAIL_DUMP)
+            subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra", "-Werror",
+                            "-I", str(RENDER / "include"), str(source), "-o", str(exe)], check=True)
+            raw = bytes.fromhex(subprocess.run([str(exe)], check=True, capture_output=True,
+                                               text=True).stdout.strip())
+        text = (b"Wom1JobWindow 00\nWom1JobWindowKickFail " + raw.hex().encode() + b"\n")
+        out = b.kmd_kick_failure(text)
+        self.assertEqual((out["fence"], out["running_fence"], out["line"]), (0x63, 0x62, 5148))
+        self.assertEqual((out["backend_result"], out["backend_phase"], out["provider_phase"]),
+                         ("image_failed", "submitted", "compute_only_submitted"))
+        self.assertEqual((out["submit_guard"], out["submit_runtime_result"], out["successor_guard"]),
+                         ("runtime", "busy", "build"))
+        self.assertEqual(out["runtime_phase"], "compute_submitted")
+        self.assertEqual(out["flags"], ["bm_initialized", "g3_aborted"])
+        self.assertEqual((out["build_step"], out["running_kind"], out["next_kind"], out["barrier"]),
+                         ("render_staged", "compute", "render_prelude", "compute_on_compute"))
+        self.assertEqual((out["job_word_stamp"], out["job_word_set"]), (0x62, 1))
 
     def test_v4_wired_statistics(self):
         b = load()

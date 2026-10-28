@@ -334,6 +334,11 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONG Depth2LastReported;
   ADMISSION_JOB_WINDOW_RECEIPT Depth2Receipt;
   ADMISSION_JOB_WINDOW_RECEIPT Depth2ReceiptSnapshot;
+  /* rc102 (EXP2045): the kinds of the kicked pair, how far the KMD build
+   * of the successor got, and the Wom1JobWindowKickFail record. */
+  ULONG Depth2KickRunningKind, Depth2KickNextKind;
+  ULONG Depth2BuildStep;
+  ADMISSION_JOB_WINDOW_KICK_FAILURE Depth2KickFailure;
 } ADMISSION_PLATFORM_RUNTIME;
 
 /* rc90 build-ahead runs in the GPUVA G3 worker only (no SUBMIT receipts,
@@ -3054,6 +3059,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   APPLE_AGX_RENDER_COMPUTE_INPUT input;
   APPLE_AGX_RENDER_COMPUTE_OUTPUT output;
   ULONGLONG streamBase, streamBytes, preemption;
+  runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_COMPUTE_ENTERED;
   if (Job == NULL || !(image->G4Compute || image->PresentCompute) ||
       image->BoundFence != fence ||
       image->JobReady || !runtime->Provider.QueueProvider.Config.HasCompute)
@@ -3083,6 +3089,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   }
   if (streamBytes == 0ULL || streamBytes > APPLE_AGX_G4_CDM_STREAM_MAX_BYTES)
     return APPLE_AGX_BACKEND_FALSE;
+  runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_COMPUTE_STREAM;
   RtlZeroMemory(&input, sizeof(input));
   RtlZeroMemory(&output, sizeof(output));
   input.CdmStreamBase = streamBase;
@@ -3125,6 +3132,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   if (!AppleAgxRenderSharedMemoryBuildCompute(
           &runtime->Initdata.RenderSharedMemory, &input, &output))
     return APPLE_AGX_BACKEND_FALSE;
+  runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_COMPUTE_BUILT;
   RtlZeroMemory(Job, sizeof(*Job));
   Job->Kind = AppleAgxBackendJobCompute;
   Job->ComputeWorkAddresses[0] = output.WorkGpuAddress;
@@ -3139,6 +3147,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
       !AdmissionBuildLeadBarrier(runtime, ADMISSION_JOB_WINDOW_QUEUE_COMPUTE,
                                  output.JobWordSet, input.StampValue, Job))
     return APPLE_AGX_BACKEND_FALSE;
+  if (Plan->Successor) runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_COMPUTE_LEAD;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (output.JobWordSet != APPLE_AGX_COMPUTE_JOB_WORD_SET_A)
     AdmissionJobTimingNoteWindows(runtime->Adapter, fence,
@@ -3212,6 +3221,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   if (runtime->Adapter->BackendImage.G4Compute ||
       runtime->Adapter->BackendImage.PresentCompute)
     return AdmissionExternalBuildComputeJob(runtime, Submission, Plan, Job);
+  runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_ENTERED;
   RtlZeroMemory(&staged, sizeof(staged));
   RtlZeroMemory(&bindings, sizeof(bindings));
   RtlZeroMemory(&dynamicView, sizeof(dynamicView));
@@ -3245,6 +3255,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     dynamic = TRUE;
     overlayApplied = TRUE;
   }
+  runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_OVERLAY;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   /* rc83 receipt: the shared builder stamps this fence's sub-intervals. */
   runtime->BuildMarkFence = Submission->Submission.Fence;
@@ -3257,6 +3268,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
           Plan->TaExpectedDonePointer, Plan->D3ExpectedDonePointer,
           Plan->IncludeInitBm, &staged))
     goto BuildFailure;
+  runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_STAGED;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionJobTimingSubWindows(runtime, Submission->Submission.Fence,
       AdmissionJobSubStaged);
@@ -3304,6 +3316,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)) !=
            AdmissionDynamicOverlaySuccess))
     goto BuildFailure;
+  runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_BUILT;
   if(dynamic && dynamicView.Bindings->CommandVersion==
        APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH) {
     const ADMISSION_DYNAMIC_OVERLAY_ENTRY *compute=NULL;
@@ -3396,12 +3409,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     Job->ComputeExpectedDonePointer = Plan->ComputeExpectedDonePointer;
     if (!AdmissionBuildTaComputeBarrier(runtime, &input, &output, Plan, Job))
       goto BuildFailure;
+    runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_COMPUTE;
     /* rc102: a successor's prelude leads its compute queue with the
      * depth-2 Barrier (its TA keeps the D3D-G1b one on the prelude). */
     if (Plan->Successor &&
         !AdmissionBuildLeadBarrier(runtime, ADMISSION_JOB_WINDOW_QUEUE_COMPUTE,
                                    output.JobWordSet, input.StampValue, Job))
       goto BuildFailure;
+    if (Plan->Successor) runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_LEAD;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     AdmissionJobTimingSubWindows(runtime, Submission->Submission.Fence,
         AdmissionJobSubPrelude);
@@ -3421,6 +3436,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
       goto BuildFailure;
     owner->JobWordSet = set;
     owner->JobWordStamp = Submission->Submission.Fence;
+    runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_LEAD;
   }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (dynamic && !APPLE_AGX_WIN32_COMMAND_IS_NATIVE(dynamicView.Bindings->CommandVersion))
@@ -3478,6 +3494,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     }
   }
   runtime->TransportIo.MemoryBarrier(runtime);
+  runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_FLUSHED;
   if (dynamic) {
     runtime->DynamicJob = dynamicView.Job;
     runtime->DynamicStorage = dynamicView.Storage;
@@ -3732,6 +3749,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRelocate(
           runtime->PlatformIo.Context, Arena, ArenaBytes, Roots,
           SubmissionBytes, SubmissionByteCount, Submission, Job))
     return APPLE_AGX_BACKEND_FALSE;
+  runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RELOCATED;
   /* GPU timestamps: the batch the UMD will ask about. */
   image = runtime->Adapter != NULL ? &runtime->Adapter->BackendImage : NULL;
   Job->TimestampPublishVa = image != NULL ? image->TimestampPublishVa : 0ULL;
@@ -4995,14 +5013,83 @@ static BOOLEAN AdmissionJobAheadChainWindows(ADMISSION_CONTEXT *adapter,
   return TRUE;
 }
 
+/* rc102 (EXP2045): Wom1JobWindowKickFail and Wom1JobWindow, written and
+ * flushed now: the TDR this failure leads to may end in a bugcheck before
+ * the next periodic export. PASSIVE (the worker). */
+static VOID AdmissionJobWindowKickFailureExportWindows(
+    ADMISSION_CONTEXT *adapter, ADMISSION_PLATFORM_RUNTIME *runtime) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  if (adapter->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(adapter->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    return;
+  RtlInitUnicodeString(&name, L"Wom1JobWindowKickFail");
+  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &runtime->Depth2KickFailure,
+                      sizeof(runtime->Depth2KickFailure));
+  RtlCopyMemory(&runtime->Depth2ReceiptSnapshot, &runtime->Depth2Receipt,
+                sizeof(runtime->Depth2ReceiptSnapshot));
+  RtlInitUnicodeString(&name, L"Wom1JobWindow");
+  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &runtime->Depth2ReceiptSnapshot,
+                      sizeof(runtime->Depth2ReceiptSnapshot));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 /* rc102: the wired window failed after its decision (a kicked fence the
- * firmware may hold): fail closed, as a failed depth-1 kick does. */
+ * firmware may hold): fail closed, as a failed depth-1 kick does. Line
+ * carries the BeginJobAs refusal in bits 16-23 (LastKickFailure); the
+ * record keeps the backend, provider and queue runtime state at the
+ * failure (EXP2045: SubmitSuccessor refused with no receipt). */
 static VOID AdmissionJobWindowKickFailedWindows(ADMISSION_CONTEXT *adapter,
-    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG line) {
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG line, ULONG fence,
+    ULONG status, ULONG result, ULONG flags) {
+  ADMISSION_JOB_WINDOW_KICK_FAILURE *f = &runtime->Depth2KickFailure;
+  const APPLE_AGX_G13_QUEUE_PROVIDER *provider = &runtime->Provider.QueueProvider;
+  const APPLE_AGX_G13_QUEUE_RUNTIME *queues = &provider->Runtime;
   ++runtime->Depth2Receipt.KickFailures;
   runtime->Depth2Receipt.LastKickFailure = line;
+  runtime->Depth2Receipt.LastKickStatus = status;
+  RtlZeroMemory(f, sizeof(*f));
+  f->Version = ADMISSION_JOB_WINDOW_KICK_FAILURE_VERSION;
+  f->Bytes = (unsigned int)sizeof(*f);
+  f->Failures = runtime->Depth2Receipt.KickFailures;
+  f->Fence = fence;
+  f->RunningFence = runtime->Depth2Running.Fence;
+  f->Line = line & 0xffffu;
+  f->BeginRefusal = (line >> 16) & 0xffu;
+  f->Status = status;
+  f->BackendResult = result;
+  f->BackendPhase = (unsigned int)runtime->Backend.Phase;
+  f->BackendPendingFence = runtime->Backend.PendingSubmission.Submission.Fence;
+  f->ProviderPhase = (unsigned int)provider->Phase;
+  f->ProviderPendingFence = provider->PendingFence;
+  f->ProviderSuccessorFence = provider->SuccessorFence;
+  f->SubmitGuard = provider->LastSubmitGuard;
+  f->SubmitRuntimeResult = provider->LastSubmitRuntimeResult;
+  f->SuccessorGuard = provider->LastSuccessorGuard;
+  f->RuntimePhase = (unsigned int)queues->Phase;
+  f->RuntimePendingFence = queues->PendingFence;
+  f->RuntimeSuccessorFence = queues->Successor.Fence;
+  f->Flags = flags |
+      (runtime->Backend.TerminalPending ? ADMISSION_KICK_FAIL_TERMINAL_PENDING : 0u) |
+      (runtime->Backend.SuccessorPending ? ADMISSION_KICK_FAIL_SUCCESSOR_PENDING : 0u) |
+      (queues->CompletionAvailable ? ADMISSION_KICK_FAIL_COMPLETION_READY : 0u) |
+      (queues->RecoveryPending ? ADMISSION_KICK_FAIL_RECOVERY_PENDING : 0u) |
+      (queues->ChannelRecoveryFailed ? ADMISSION_KICK_FAIL_CHANNEL_FAILED : 0u) |
+      (queues->BufferManagerInitialized ? ADMISSION_KICK_FAIL_BM_INITIALIZED : 0u) |
+      (queues->TaFirstRun ? ADMISSION_KICK_FAIL_TA_FIRST_RUN : 0u) |
+      (queues->D3FirstRun ? ADMISSION_KICK_FAIL_D3_FIRST_RUN : 0u);
+  f->BuildStep = runtime->Depth2BuildStep;
+  f->RunningKind = runtime->Depth2KickRunningKind;
+  f->NextKind = runtime->Depth2KickNextKind;
+  f->Barrier = runtime->Depth2KickBarrier;
+  f->JobWordStamp = runtime->Initdata.RenderSharedMemory.JobWordStamp;
+  f->JobWordSet = runtime->Initdata.RenderSharedMemory.JobWordSet;
   InterlockedCompareExchange(&adapter->SchedulerFaulted,
                              0x40000L | (LONG)(line & 0xffffu), 0);
+  AdmissionJobWindowKickFailureExportWindows(adapter, runtime);
 }
 
 /* rc102 (Wom1JobDepth2Kick, render_job_window.h): job Fence runs alone and
@@ -5063,17 +5150,19 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   s.Capabilities = runtime->Depth2Capabilities;
   s.Running = runtime->Depth2Running;
   /* 61: a new queue lifetime, InitBM or a manager rebind need idle queues
-   * (AdmissionPrepareG4Manager, AppleAgxG13QueueProviderPlanSuccessor). */
-  if (s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER ||
-      s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE)
-    s.NextNeedsIdle =
-        runtime->Provider.QueueProvider.Runtime.TaFirstRun ||
-        runtime->Provider.QueueProvider.Runtime.D3FirstRun ||
-        !runtime->Provider.QueueProvider.Runtime.BufferManagerInitialized ||
-        (image->G4Manager != NULL &&
-         (image->G4Manager->PendingFence != 0u || owner->ManagerFence != 0u ||
-          AppleAgxRenderManagerNeedsBind(owner, &image->G4ManagerKey)))
-        ? 1u : 0u;
+   * (AdmissionPrepareG4Manager, AppleAgxG13QueueProviderPlanSuccessor).
+   * EXP2045: the plan refuses a successor of any kind in a new queue
+   * lifetime or before InitBM, so the decision does too. */
+  s.NextNeedsIdle =
+      runtime->Provider.QueueProvider.Runtime.TaFirstRun ||
+      runtime->Provider.QueueProvider.Runtime.D3FirstRun ||
+      !runtime->Provider.QueueProvider.Runtime.BufferManagerInitialized ||
+      ((s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER ||
+        s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE) &&
+       image->G4Manager != NULL &&
+       (image->G4Manager->PendingFence != 0u || owner->ManagerFence != 0u ||
+        AppleAgxRenderManagerNeedsBind(owner, &image->G4ManagerKey)))
+      ? 1u : 0u;
   /* 62: the job-word set N+1 would use against the one N holds. */
   if (s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_COMPUTE)
     preemption = image->G4ComputeEnvelope.Header.Preemption.Va;
@@ -5094,6 +5183,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
       packet = head->Packet;
       context = head->Context;
       barrier = AdmissionJobWindowBarrier(s.Running.Kind, s.Next.Kind);
+      runtime->Depth2KickRunningKind = s.Running.Kind;
+      runtime->Depth2KickNextKind = s.Next.Kind;
     } else {
       refusal = 63u;
     }
@@ -5111,8 +5202,10 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   runtime->Depth2KickBarrier = barrier;
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseWorker);
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBeginBefore);
+  runtime->Depth2BuildStep = 0u;
   if (context == NULL || context->GpuvaG3Process == NULL) {
-    AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__);
+    AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next,
+                                        0u, 0u, 0u);
     return TRUE;
   }
   {
@@ -5122,8 +5215,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     if (!NT_SUCCESS(begin)) {
       /* rc102 receipt: which BeginJob check refused, and its status. */
       AdmissionJobWindowKickFailedWindows(adapter, runtime,
-          __LINE__ | (beginRefusal << 16));
-      runtime->Depth2Receipt.LastKickStatus = (ULONG)begin;
+          __LINE__ | (beginRefusal << 16), next, (ULONG)begin, 0u, 0u);
       return TRUE;
     }
   }
@@ -5143,9 +5235,21 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   result = AppleAgxBackendRuntimeSubmitSuccessor(&runtime->Backend, &submission);
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBackendAfter);
   if (result != AppleAgxBackendRuntimeResultOk) {
+    ULONG flags = 0u;
     AdmissionBackendSubmitResultWindows(adapter, (ULONG)result,
                                         (ULONG)runtime->Backend.Phase);
-    AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__);
+    /* EXP2045: the successor's nested graph lease and started scene must
+     * not outlive a refusal that left the firmware without its work (the
+     * queue runtime faults only when work became visible): end its G3 job
+     * unrun now, or the reset's private stage quarantines it (0x116). */
+    if (!runtime->Backend.SuccessorPending &&
+        runtime->Provider.QueueProvider.Phase != AppleAgxG13QueueProviderFaulted &&
+        runtime->Provider.QueueProvider.Runtime.Phase != AppleAgxG13QueueRuntimeFaulted) {
+      AdmissionGpuvaG3AbortJob(adapter, next);
+      flags |= ADMISSION_KICK_FAIL_G3_ABORTED;
+    }
+    AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next, 0u,
+                                        (ULONG)result, flags);
     return TRUE;
   }
   AdmissionJobTimingNoteWindows(adapter, next, ADMISSION_JOB_FLAG_DEPTH2_KICKED |
@@ -5174,7 +5278,8 @@ static BOOLEAN AdmissionJobWindowAdoptWindows(ADMISSION_CONTEXT *adapter,
   if (adopted) *Description = adapter->RenderPacket.Description;
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   if (!adopted) {
-    AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__);
+    AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, kicked,
+                                        0u, 0u, 0u);
     return FALSE;
   }
   ++runtime->Depth2Receipt.Adopted;
@@ -7027,6 +7132,34 @@ static ULONG AdmissionPostResumePollFailure(ULONG Source, ULONG Low,
   return (Source << 24) | (AdmissionPostResumePollByte(Ingest) << 16) |
          (AdmissionPostResumePollByte(Drain) << 8) |
          AdmissionPostResumePollByte(Low);
+}
+
+_Use_decl_annotations_ ULONG AdmissionPlatformRuntimeUnheldKicked(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  ULONG kicked;
+  BOOLEAN held;
+  KIRQL oldIrql;
+  if (Context == NULL) return 0u;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL) return 0u;
+  KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+  kicked = AppleAgxSchedulerKickedFence(&Context->Scheduler);
+  held = kicked == 0u ||
+      (runtime->Backend.SuccessorPending &&
+       runtime->Backend.SuccessorSubmission.Submission.Fence == kicked) ||
+      runtime->Backend.PendingSubmission.Submission.Fence == kicked ||
+      runtime->Provider.QueueProvider.SuccessorFence == kicked ||
+      runtime->Provider.QueueProvider.PendingFence == kicked ||
+      runtime->Provider.QueueProvider.Runtime.Successor.Fence == kicked ||
+      runtime->Provider.QueueProvider.Runtime.PendingFence == kicked ||
+      runtime->Provider.QueueProvider.Phase == AppleAgxG13QueueProviderFaulted ||
+      runtime->Provider.QueueProvider.Runtime.Phase == AppleAgxG13QueueRuntimeFaulted ||
+      (AdmissionRenderPacketState(&Context->RenderPacket) ==
+           AdmissionRenderPacketActive &&
+       Context->RenderPacket.Description.Fence == kicked);
+  KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+  return held ? 0u : kicked;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(

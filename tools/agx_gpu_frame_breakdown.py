@@ -630,6 +630,69 @@ def kmd_job_window(data):
                 reset_aborts=aborts, last_kicked_fence=last_kicked)
 
 
+# rc102 (EXP2045): Wom1JobWindowKickFail, ADMISSION_JOB_WINDOW_KICK_FAILURE v1.
+KICK_FAILURE = struct.Struct('<27I')
+KICK_FAILURE_FIELDS = (
+    'version', 'bytes', 'failures', 'fence', 'running_fence', 'line',
+    'begin_refusal', 'status', 'backend_result', 'backend_phase',
+    'backend_pending_fence', 'provider_phase', 'provider_pending_fence',
+    'provider_successor_fence', 'submit_guard', 'submit_runtime_result',
+    'successor_guard', 'runtime_phase', 'runtime_pending_fence',
+    'runtime_successor_fence', 'flags', 'build_step', 'running_kind',
+    'next_kind', 'barrier', 'job_word_stamp', 'job_word_set')
+BACKEND_RESULTS = ('ok', 'invalid_argument', 'invalid_state', 'busy', 'memory_failed',
+                   'image_failed', 'firmware_failed', 'context_failed', 'queue_failed',
+                   'faulted', 'cleanup_failed')
+BACKEND_PHASES = ('stopped', 'starting', 'ready', 'submitted', 'stopping', 'failed')
+PROVIDER_PHASES = ('initialized', 'created', '3d_staged', 'compute_submitted', 'submitted',
+                   'faulted', 'compute_only_submitted')
+RUNTIME_PHASES = ('ready', 'compute_submitted', 'compute_complete', 'submitted',
+                  'completion_pending', 'faulted')
+QUEUE_RESULTS = ('ok', 'invalid_argument', 'invalid_state', 'busy', 'memory_failed',
+                 'transport_failed', 'faulted', 'timed_out', 'cancelled', 'reset_failed')
+SUBMIT_GUARDS = ('none', 'arguments', 'phase_fence', 'd3_match', 'd3_valid', 'ta_valid',
+                 'compute', 'build', 'runtime')
+WINDOW_KINDS = ('none', 'render', 'render_prelude', 'compute', 'present', 'other')
+KICK_FAIL_FLAGS = ((0x1, 'terminal_pending'), (0x2, 'successor_pending'),
+                   (0x4, 'completion_ready'), (0x8, 'recovery_pending'),
+                   (0x10, 'channel_failed'), (0x20, 'bm_initialized'),
+                   (0x40, 'ta_first_run'), (0x80, 'd3_first_run'), (0x100, 'g3_aborted'))
+KICK_BUILD_STEPS = {0: 'not_entered', 1: 'render_entered', 2: 'render_overlay',
+                    3: 'render_staged', 4: 'render_built', 5: 'render_compute',
+                    6: 'render_lead', 7: 'render_flushed', 21: 'compute_entered',
+                    22: 'compute_stream', 23: 'compute_built', 24: 'compute_lead',
+                    30: 'relocated'}
+
+
+def _named(names, value):
+    return names[value] if value < len(names) else value
+
+
+def kmd_kick_failure(data):
+    """rc102 (EXP2045): the state at the last failed depth-2 kick."""
+    raw = _registry_value(data, 'Wom1JobWindowKickFail')
+    f = dict(zip(KICK_FAILURE_FIELDS, KICK_FAILURE.unpack_from(raw, 0)))
+    if f['version'] != 1 or f['bytes'] != KICK_FAILURE.size or len(raw) < KICK_FAILURE.size:
+        raise ValueError('not an ADMISSION_JOB_WINDOW_KICK_FAILURE v1 record')
+    del f['version'], f['bytes']
+    f['status'] = '%#010x' % f['status']
+    f['backend_result'] = _named(BACKEND_RESULTS, f['backend_result'])
+    f['backend_phase'] = _named(BACKEND_PHASES, f['backend_phase'])
+    f['provider_phase'] = _named(PROVIDER_PHASES, f['provider_phase'])
+    f['runtime_phase'] = _named(RUNTIME_PHASES, f['runtime_phase'])
+    for key in ('submit_guard', 'successor_guard'):
+        f[key] = _named(SUBMIT_GUARDS, f[key])
+    # the runtime result only when the runtime refused (else a sub-guard)
+    if f['submit_guard'] == 'runtime':
+        f['submit_runtime_result'] = _named(QUEUE_RESULTS, f['submit_runtime_result'])
+    f['flags'] = [name for bit, name in KICK_FAIL_FLAGS if f['flags'] & bit]
+    f['build_step'] = KICK_BUILD_STEPS.get(f['build_step'], f['build_step'])
+    f['running_kind'] = _named(WINDOW_KINDS, f['running_kind'])
+    f['next_kind'] = _named(WINDOW_KINDS, f['next_kind'])
+    f['barrier'] = BARRIER_CLASSES.get(f['barrier'], 'none')
+    return f
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -641,9 +704,14 @@ def main():
     parser.add_argument('--kmd-poll', help='rc100: decode a Wom1JobPoll snapshot (raw or kmd-receipts text)')
     parser.add_argument('--kmd-poll-before', help='an earlier Wom1JobPoll snapshot of the same boot (deltas)')
     parser.add_argument('--kmd-window', help='rc102: decode a Wom1JobWindow snapshot (raw or kmd-receipts text)')
+    parser.add_argument('--kmd-kick-fail', help='rc102: decode Wom1JobWindowKickFail (raw or kmd-receipts text)')
     parser.add_argument('--jobs', action='store_true',
                         help='rc94: add per-position medians of the most common job sequence')
     args = parser.parse_args()
+    if args.kmd_kick_fail:
+        with open(args.kmd_kick_fail, 'rb') as handle:
+            print(json.dumps(kmd_kick_failure(handle.read()), indent=1))
+        return
     if args.kmd_window:
         with open(args.kmd_window, 'rb') as handle:
             print(json.dumps(kmd_job_window(handle.read()), indent=1))
