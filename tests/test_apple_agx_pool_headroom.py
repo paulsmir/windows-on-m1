@@ -56,7 +56,10 @@ class PoolHeadroomTest(unittest.TestCase):
                   'AdmissionMemoryPoolReclaim', 'AdmissionPoolReclaimWork']
         with tempfile.TemporaryDirectory(prefix='pool-headroom-') as tmp:
             tmp = Path(tmp)
-            (tmp / 'pool_policy.inc').write_text('\n\n'.join(function(source, n) for n in names))
+            defines = re.findall(r'^#define ADMISSION_POOL_(?:SPARE_SLABS|CACHE_SLABS|'
+                                 r'RELEASE_DELAY_MS) .*$', source, re.M)
+            (tmp / 'pool_policy.inc').write_text('\n'.join(defines) + '\n\n' +
+                '\n\n'.join(function(source, n) for n in names))
             exe = tmp / 'headroom'
             flags = ['-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
                      '-I', str(tmp), '-I', str(RENDER / 'include')]

@@ -107,7 +107,7 @@ typedef struct _ADMISSION_POOL_RESERVE_FAILURE {
   unsigned long long PrivateGranules;
 } ADMISSION_POOL_RESERVE_FAILURE;
 
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 10u /* v10: separately pinned native staging */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 11u /* v11: creation cost split, slab cache */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -136,6 +136,22 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
    * even when registry staging coalesces multiple decisions. */
   unsigned long long RefusalCounts[ADMISSION_POOL_REFUSAL_COUNT];
   unsigned long long NativeStagingBytes, TotalPromisedBytes;
+  /* v11 (rc86): where a creation's time goes, in microseconds. SlabAlloc*:
+   * MmAllocatePagesForMdlEx calls (contiguous and chunked attempts, failed
+   * ones included; Windows zeroes the pages inside the call). SlabCheck: the
+   * PFN contiguity/alignment check. SlabFree: MmFreePagesFromMdl. Reserve*:
+   * AdmissionMemoryPoolReserve under the pool lock (slab growth plus the
+   * pressure reclaim); the rest of pfnAllocateCb is VidMm's. CommitUs above
+   * is the window MAP_AT of placements. ReserveNoGrowth: reservations held
+   * or cached slabs covered. LeaseZero*: rc80 TVB lease clears, and clears
+   * skipped because the slot was still Windows-zeroed. SpareLimit/
+   * EmptySlabs: the empty-slab cache; CacheDrops: times it was returned
+   * (pressure or idle). */
+  unsigned long long SlabAllocCalls, SlabAllocUs, SlabAllocUsMax, SlabCheckUs;
+  unsigned long long SlabFreeUs, SlabFreeUsMax;
+  unsigned long long ReserveCalls, ReserveUs, ReserveUsMax, ReserveNoGrowth;
+  unsigned long long LeaseZeroCount, LeaseZeroUs, LeaseZeroSkips;
+  unsigned long long SpareLimit, EmptySlabs, CacheDrops;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.

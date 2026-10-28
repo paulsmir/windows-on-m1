@@ -404,11 +404,12 @@ def decode_omitted_leaves(data):
 
 
 def decode_pool(data):
-    """Preserve v7-v9 prefixes; v10 separates pinned native-ring backing."""
+    """Preserve v7-v10 prefixes; v10 separates pinned native-ring backing;
+    v11 (rc86) appends the creation cost split and the empty-slab cache."""
     if len(data) < 16:
         raise ValueError('truncated Wom1M2PoolDemand header')
     version, size, granule, last_window = struct.unpack_from('<4I', data)
-    if size != {7: 304, 8: 360, 9: 432, 10: 448}.get(version) or len(data) != size or granule != 65536:
+    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576}.get(version) or len(data) != size or granule != 65536:
         raise ValueError('unsupported Wom1M2PoolDemand version, length or granule')
     names = (
         'segment_bytes', 'committed_granules', 'peak_granules', 'commits',
@@ -427,8 +428,9 @@ def decode_pool(data):
                   held_bytes=result['held_granules'] * granule,
                   floor_refusals=None, last_reserve_failure=None, refusal_counts=None,
                   native_staging_bytes=None, total_promised_bytes=None, total_held_bytes=None,
+                  creation_cost=None,
                   event_sample={7: None, 8: 'post_failure', 9: 'admission_decision',
-                                10: 'admission_decision'}[version])
+                                10: 'admission_decision', 11: 'admission_decision'}[version])
     if version >= 8:
         result['floor_refusals'], = struct.unpack_from('<Q', data, 304)
         fields = ('request_bytes', 'reserved_bytes', 'held_bytes', 'committed_bytes',
@@ -452,6 +454,16 @@ def decode_pool(data):
     if version >= 10:
         result['native_staging_bytes'], result['total_promised_bytes'] = struct.unpack_from('<2Q', data, 432)
         result['total_held_bytes'] = result['held_bytes'] + result['native_staging_bytes']
+    if version >= 11:
+        names = ('slab_alloc_calls', 'slab_alloc_us', 'slab_alloc_us_max', 'slab_check_us',
+                 'slab_free_us', 'slab_free_us_max', 'reserve_calls', 'reserve_us',
+                 'reserve_us_max', 'reserve_no_growth', 'lease_zero_count', 'lease_zero_us',
+                 'lease_zero_skips', 'spare_limit_slabs', 'empty_slabs', 'cache_drops')
+        cost = dict(zip(names, struct.unpack_from('<16Q', data, 448)))
+        # Microseconds; Windows zeroes pages inside the allocation call.
+        cost['meaning'] = ('slab_alloc: MmAllocatePagesForMdlEx incl. zeroing; reserve: '
+                           'KMD share of pfnAllocateCb; commit_us: window MAP_AT')
+        result['creation_cost'] = cost
     return result
 
 

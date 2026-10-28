@@ -241,6 +241,14 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   PKEVENT HighMemory, LowMemory;
   ADMISSION_POOL_RESERVE_FAILURE LastReserveFailure, ReserveAttempt;
   ULONGLONG RefusalCounts[ADMISSION_POOL_REFUSAL_COUNT];
+  /* rc86 split of the creation cost (receipt v11): Windows page allocation
+   * (MmAllocatePagesForMdlEx, including its zeroing), the contiguity check,
+   * page return, whole reservations, and TVB lease zeroing. */
+  ULONGLONG SlabAllocCalls, SlabAllocUs, SlabAllocUsMax, SlabCheckUs;
+  ULONGLONG SlabFreeUs, SlabFreeUsMax;
+  ULONGLONG ReserveCalls, ReserveUs, ReserveUsMax;
+  ULONGLONG LeaseZeroCount, LeaseZeroUs, LeaseZeroSkips;
+  ULONGLONG CacheDrops;
 } ADMISSION_POOL_RUNTIME;
 
 static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
@@ -276,12 +284,20 @@ static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
   for (attempt = 0u; attempt < 2u; ++attempt) {
     ULONGLONG i, j;
     PMDL mdl;
+    LARGE_INTEGER start;
+    ULONGLONG us;
     skip.QuadPart = (LONGLONG)(attempt == 0u ? ADMISSION_POOL_SLAB_BYTES
                                              : ADMISSION_POOL_DEMAND_GRANULE);
+    start = KeQueryPerformanceCounter(NULL);
     mdl = MmAllocatePagesForMdlEx(low, high, skip,
         (SIZE_T)ADMISSION_POOL_SLAB_BYTES, MmWriteCombined,
         MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
+    us = AdmissionPoolElapsedUs(start);
+    ++pool->SlabAllocCalls;
+    pool->SlabAllocUs += us;
+    if (us > pool->SlabAllocUsMax) pool->SlabAllocUsMax = us;
     if (mdl == NULL) continue;
+    start = KeQueryPerformanceCounter(NULL);
     frames = MmGetMdlPfnArray(mdl);
     if (MmGetMdlByteCount(mdl) != ADMISSION_POOL_SLAB_BYTES) goto Next;
     for (i = 0ULL; i < ADMISSION_POOL_SLAB_SLOTS; ++i) {
@@ -293,11 +309,13 @@ static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
         if (frames[i * pages + j] != frames[i * pages] + j) goto Next;
       slab->Pa[i] = pa;
     }
+    pool->SlabCheckUs += AdmissionPoolElapsedUs(start);
     slab->Handle = mdl;
     if (attempt == 0u) ++pool->SlabContiguous;
     else ++pool->SlabChunked;
     return slab;
 Next:
+    pool->SlabCheckUs += AdmissionPoolElapsedUs(start);
     MmFreePagesFromMdl(mdl);
     ExFreePool(mdl);
   }
@@ -306,11 +324,16 @@ Next:
 }
 
 static VOID AdmissionPoolFreeSlab(void *Opaque, ADMISSION_POOL_SLAB *Slab) {
+  ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+  LARGE_INTEGER start = KeQueryPerformanceCounter(NULL);
   PMDL mdl = (PMDL)Slab->Handle;
-  UNREFERENCED_PARAMETER(Opaque);
+  ULONGLONG us;
   MmFreePagesFromMdl(mdl);
   ExFreePool(mdl);
   ExFreePoolWithTag(Slab, ADMISSION_POOL_TAG);
+  us = AdmissionPoolElapsedUs(start);
+  pool->SlabFreeUs += us;
+  if (us > pool->SlabFreeUsMax) pool->SlabFreeUsMax = us;
 }
 
 /* Granules [First, First + Count) take slab slots and are mapped (adjacent
@@ -427,6 +450,8 @@ static VOID AdmissionPoolReclaimLocked(ADMISSION_POOL_RUNTIME *Pool) {
     (void)AdmissionPoolDemandReclaimAged(&Pool->Demand, AdmissionPoolNowMs());
   } else {
     ULONGLONG spare = Pool->Slabs.SpareLimit;
+    if (AdmissionPoolSlabHasSurplus(&Pool->Slabs, ADMISSION_POOL_SPARE_SLABS))
+      ++Pool->CacheDrops;
     Pool->Slabs.SpareLimit = 0ULL;
     (void)AdmissionPoolDemandReclaim(&Pool->Demand);
     /* Also trim already-empty slabs, including when there were no candidates. */
@@ -500,6 +525,22 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.LastReserveFailure = pool->LastReserveFailure;
     for (ULONG i = 0u; i < ADMISSION_POOL_REFUSAL_COUNT; ++i)
       receipt.RefusalCounts[i] = pool->RefusalCounts[i];
+    receipt.SlabAllocCalls = pool->SlabAllocCalls;
+    receipt.SlabAllocUs = pool->SlabAllocUs;
+    receipt.SlabAllocUsMax = pool->SlabAllocUsMax;
+    receipt.SlabCheckUs = pool->SlabCheckUs;
+    receipt.SlabFreeUs = pool->SlabFreeUs;
+    receipt.SlabFreeUsMax = pool->SlabFreeUsMax;
+    receipt.ReserveCalls = pool->ReserveCalls;
+    receipt.ReserveUs = pool->ReserveUs;
+    receipt.ReserveUsMax = pool->ReserveUsMax;
+    receipt.ReserveNoGrowth = pool->Slabs.Stats.ReserveNoGrowth;
+    receipt.LeaseZeroCount = pool->LeaseZeroCount;
+    receipt.LeaseZeroUs = pool->LeaseZeroUs;
+    receipt.LeaseZeroSkips = pool->LeaseZeroSkips;
+    receipt.SpareLimit = pool->Slabs.SpareLimit;
+    receipt.EmptySlabs = pool->Slabs.Empty;
+    receipt.CacheDrops = pool->CacheDrops;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
     pool->StagedReserved = pool->Slabs.Reserved;
@@ -560,9 +601,11 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
   ADMISSION_POOL_RUNTIME *pool;
   BOOLEAN reserved;
   ADMISSION_POOL_RESERVE_FAILURE attempt = {0};
-  ULONGLONG slabFailures;
+  ULONGLONG slabFailures, us;
+  LARGE_INTEGER start;
   if (Bytes == 0ULL || AdmissionMemoryPoolLock(Context) == NULL) return TRUE;
   pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+  start = KeQueryPerformanceCounter(NULL);
   /* No policy call for a fully backed promise. If the allocator rejects
    * before MayGrow, its only refusal is checked arithmetic overflow. */
   attempt.HighMemory = attempt.LowMemory = 2u;
@@ -593,6 +636,10 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
   }
   /* First let this reservation reuse held pages; then return only surplus. */
   if (AdmissionPoolShouldReclaim(pool)) AdmissionPoolReclaimLocked(pool);
+  us = AdmissionPoolElapsedUs(start);
+  ++pool->ReserveCalls;
+  pool->ReserveUs += us;
+  if (us > pool->ReserveUsMax) pool->ReserveUsMax = us;
   AdmissionMemoryPoolUnlock(Context);
   return reserved;
 }
@@ -689,6 +736,16 @@ static BOOLEAN AdmissionPoolZeroLease(const ADMISSION_POOL_PRIVATE *Lease) {
   return TRUE;
 }
 
+/* Counters are approximate: lease zeroing runs outside the pool lock. */
+static BOOLEAN AdmissionPoolZeroLeaseTimed(ADMISSION_POOL_RUNTIME *Pool,
+                                           const ADMISSION_POOL_PRIVATE *Lease) {
+  LARGE_INTEGER start = KeQueryPerformanceCounter(NULL);
+  BOOLEAN zeroed = AdmissionPoolZeroLease(Lease);
+  Pool->LeaseZeroUs += AdmissionPoolElapsedUs(start);
+  ++Pool->LeaseZeroCount;
+  return zeroed;
+}
+
 _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolTvbTake(
     ADMISSION_CONTEXT *Context, ADMISSION_POOL_PRIVATE *Lease,
     ULONGLONG *GuestIpa) {
@@ -703,7 +760,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolTvbTake(
   AdmissionMemoryPoolUnlock(Context);
   if (!taken) return FALSE;
   /* The lease is exclusive: its slab cannot be freed while it is live. */
-  if (!AdmissionPoolZeroLease(Lease)) {
+  if (!AdmissionPoolZeroLeaseTimed(pool, Lease)) {
     /* Never GPU-mapped, so it may return unzeroed; a stopped runtime keeps
      * its private slots (AdmissionPoolDemandStop leak path). */
     if (AdmissionMemoryPoolLock(Context) != NULL) {
@@ -722,7 +779,9 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolTvbGive(
   BOOLEAN given;
   if (Lease == NULL || Lease->Slab == NULL) return Lease != NULL;
   /* Process data never returns to the pool: an unzeroed granule stays. */
-  if (Context == NULL || !AdmissionPoolZeroLease(Lease)) {
+  if (Context == NULL || Context->PoolDemand == NULL ||
+      !AdmissionPoolZeroLeaseTimed((ADMISSION_POOL_RUNTIME *)Context->PoolDemand,
+                                   Lease)) {
     if (Context != NULL) InterlockedIncrement(&Context->PoolLeaks);
     return FALSE;
   }

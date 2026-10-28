@@ -26,6 +26,7 @@ typedef int BOOLEAN;
 #define G ADMISSION_POOL_DEMAND_GRANULE
 #define N 128
 
+typedef struct { long long QuadPart; } LARGE_INTEGER;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct {
     ADMISSION_POOL_DEMAND Demand;
@@ -35,6 +36,7 @@ typedef struct {
     ULONGLONG RefusalCounts[ADMISSION_POOL_REFUSAL_COUNT];
     ADMISSION_CONTEXT *Context;
     int WorkQueued, WorkPending, Stopping;
+    ULONGLONG ReserveCalls, ReserveUs, ReserveUsMax, CacheDrops;
 } ADMISSION_POOL_RUNTIME;
 struct _ADMISSION_CONTEXT { ADMISSION_POOL_RUNTIME *PoolDemand; };
 static ADMISSION_POOL_RUNTIME pool;
@@ -57,6 +59,14 @@ static int KeReadStateEvent(int *event) {
     return value;
 }
 static ULONGLONG AdmissionPoolNowMs(void) { return now; }
+static LARGE_INTEGER KeQueryPerformanceCounter(void *frequency) {
+    LARGE_INTEGER value = { (long long)now };
+    (void)frequency;
+    return value;
+}
+static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER start) {
+    return now - (ULONGLONG)start.QuadPart;
+}
 static int InterlockedExchange(int *p, int v) { int old = *p; *p = v; return old; }
 static int InterlockedCompareExchange(int *p, int v, int expected) {
     int old = *p; if (old == expected) *p = v; return old;

@@ -36,7 +36,9 @@ int main(void) {
                    "v8 prefix changed");
     _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, NativeStagingBytes) == 432,
                    "v9 prefix changed");
-    _Static_assert(sizeof(r) == 448, "v10 wire ABI changed");
+    _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, SlabAllocCalls) == 448,
+                   "v10 prefix changed");
+    _Static_assert(sizeof(r) == 576, "v11 wire ABI changed");
     r.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION; r.Bytes = sizeof(r);
     r.GranuleBytes = 65536; r.LastWindowResult = 9;
     r.SegmentBytes = 1409286144ULL;
@@ -61,6 +63,11 @@ int main(void) {
     r.RefusalCounts[2] = 2; r.RefusalCounts[3] = 0;
     r.NativeStagingBytes = 134217728;
     r.TotalPromisedBytes = 134217728 + 201*65536ULL;
+    r.SlabAllocCalls = 70; r.SlabAllocUs = 812345; r.SlabAllocUsMax = 33000;
+    r.SlabCheckUs = 1200; r.SlabFreeUs = 4500; r.SlabFreeUsMax = 90;
+    r.ReserveCalls = 11; r.ReserveUs = 830000; r.ReserveUsMax = 700000;
+    r.ReserveNoGrowth = 6; r.LeaseZeroCount = 3; r.LeaseZeroUs = 300;
+    r.LeaseZeroSkips = 29; r.SpareLimit = 64; r.EmptySlabs = 12; r.CacheDrops = 2;
     return fwrite(&r, sizeof(r), 1, stdout) == 1 ? 0 : 1;
 }
 '''
@@ -72,7 +79,22 @@ int main(void) {
                             str(src), '-o', str(exe)], check=True)
             raw = subprocess.check_output([str(exe)])
         got = decoder.decode_pool(raw)
-        self.assertEqual(got['version'], 10)
+        self.assertEqual(got['version'], 11)
+        cost = got['creation_cost']
+        self.assertEqual((cost['slab_alloc_calls'], cost['slab_alloc_us'],
+                          cost['slab_alloc_us_max'], cost['slab_check_us'],
+                          cost['slab_free_us'], cost['slab_free_us_max'],
+                          cost['reserve_calls'], cost['reserve_us'],
+                          cost['reserve_us_max'], cost['reserve_no_growth'],
+                          cost['lease_zero_count'], cost['lease_zero_us'],
+                          cost['lease_zero_skips'], cost['spare_limit_slabs'],
+                          cost['empty_slabs'], cost['cache_drops']),
+                         (70, 812345, 33000, 1200, 4500, 90, 11, 830000, 700000,
+                          6, 3, 300, 29, 64, 12, 2))
+        v10 = bytearray(raw[:448])
+        struct.pack_into('<II', v10, 0, 10, 448)
+        self.assertIsNone(decoder.decode_pool(v10)['creation_cost'])
+        self.assertEqual(decoder.decode_pool(v10)['native_staging_bytes'], 134217728)
         self.assertEqual(got['native_staging_bytes'], 134217728)
         self.assertEqual(got['total_promised_bytes'], 134217728 + 201*65536)
         self.assertEqual(got['total_held_bytes'], 134217728 + 224*65536)
