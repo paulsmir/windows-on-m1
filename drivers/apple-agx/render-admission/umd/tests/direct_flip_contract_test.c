@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "direct_flip_contract.h"
+#include "apple_agx_fixed_panel_modes.h"
 
 #define TEST_FORMAT_BGRA8888 21u
 
