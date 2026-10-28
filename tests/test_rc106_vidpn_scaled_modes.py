@@ -1013,6 +1013,11 @@ class VidPnScaledModeTests(unittest.TestCase):
         queue = extract(scanout, "AdmissionScanoutQueuePresent")
         self.assertNotIn("APPLE_AGX_SCANOUT_J313", queue)
         self.assertIn("description->Width != Context->CommittedWidth", queue)
+        # EXP2055: 1920x1080 (0x7e9000 bytes) is not a 64 KiB multiple; the
+        # segment translation must get the aligned span or every flip fails.
+        translate = queue[queue.index("AppleAgxLocalSegmentAddressToGpuVa("):]
+        translate = translate[:translate.index("&surface_offset")]
+        self.assertIn("APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL", translate)
 
 
 if __name__ == "__main__":

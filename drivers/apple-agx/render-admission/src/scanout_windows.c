@@ -1185,12 +1185,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &window)) ||
       window.GuestIpaAddress != runtime->Panel.PoolIpa)
     return STATUS_INVALID_ADDRESS;
+  /* EXP2055: a 1920x1080 primary is 7680*1080 = 0x7e9000 bytes, not a
+   * 64 KiB multiple, and the translation refuses unaligned spans
+   * (0xc0000141 on every flip, so the mode set rolled back).  The
+   * allocation itself is 64 KiB-aligned in size and placement. */
   address_result = AppleAgxLocalSegmentAddressToGpuVa(
       ADMISSION_MEMORY_LOCAL_SEGMENT, Args->PrimarySegment,
       Context->Memory.Topology.Local.Base,
       window.Bytes, 0ULL,
       (APPLE_AGX_U64)Args->PrimaryAddress.QuadPart,
-      surface_bytes, 0ULL, &surface_offset);
+      (surface_bytes + (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) &
+          ~(APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL),
+      0ULL, &surface_offset);
   if (address_result != AppleAgxLocalSegmentAddressOk)
     return STATUS_INVALID_ADDRESS;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
