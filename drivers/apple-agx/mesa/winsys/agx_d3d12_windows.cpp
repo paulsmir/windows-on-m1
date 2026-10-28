@@ -20,6 +20,8 @@ extern "C" {
 #endif
 #include "agx_d3d12_view_mapping.h"
 #include "agx_win32_asahi_layout.h"
+#include "agx_win32_asahi_level_upload.h"
+#include "agx_d3d12_level_ring.h"
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
@@ -116,6 +118,16 @@ struct AGX_D3D12_OWNER {
    * surface go through this linear staging texture (GPU copy, then a CPU
    * copy from its map); reused like UploadStaging. */
   struct pipe_resource *DownloadStaging;
+  /* rc103: whole-level uploads (level_upload, agx_d3d12_level_ring.h): the
+   * ring buffer the compute copies read, its used bytes, the cached CPU
+   * scratch the level is tiled into, a failed ring creation (not retried),
+   * and receipt counters */
+  AGX_D3D12_BUFFER LevelRing;
+  unsigned long long LevelRingUsed;
+  void *LevelScratch;
+  unsigned long long LevelScratchBytes;
+  bool LevelRingFailed;
+  UINT LevelUploads, LevelRingDrains;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   /* RC65: the native-staged upload ring BO, its slice metadata, the
    * persistent CPU-visible buffers whose dirty runs may go through it, and
@@ -574,6 +586,10 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   owner->Backend.Closing = 1;
   if (owner->UploadStaging) AgxWin32AsahiResourceRelease(&owner->UploadStaging);
   if (owner->DownloadStaging) AgxWin32AsahiResourceRelease(&owner->DownloadStaging);
+  if (owner->LevelRing.Resource) AgxD3d12OwnerDestroyBuffer(owner, &owner->LevelRing);
+  if (owner->LevelScratch) HeapFree(GetProcessHeap(), 0, owner->LevelScratch);
+  owner->LevelScratch = NULL;
+  owner->LevelScratchBytes = 0;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (owner->UploadRingResource) AgxWin32AsahiResourceRelease(&owner->UploadRingResource);
   if (owner->UploadRing.Scratch) HeapFree(GetProcessHeap(), 0, owner->UploadRing.Scratch);
@@ -2977,6 +2993,104 @@ static bool staged_upload_discard(unsigned long long staging_bytes) {
   }
   return value == 1 && staging_bytes && staging_bytes <= copy_shadow_limit;
 }
+/* rc103 (EXP2037a GravityMark FHD 100k, frame 2->3: 1194 staged uploads,
+ * 1262 submissions, 1.9 s): a CopyTextureRegion that fills a whole level of
+ * a GPU-only (UNMAPPABLE) texture skips the staging blit, whose render pass
+ * flushed the previous level's batch ("Flush writer due to: Blit"). The level
+ * is tiled on the CPU with Asahi's ail_tile into the cached scratch, copied
+ * to a span of the level ring (a persistent CPU-visible buffer, see
+ * agx_d3d12_level_ring.h) and copied into the level by one compute copy on
+ * the context's compute batch, which then stays the texture's only writer.
+ * S_FALSE: not taken, nothing recorded, the caller blits. Lossless-compressed,
+ * shared, linear, depth/stencil, multisampled and partial-level uploads keep
+ * the blit (AgxWin32AsahiLevelUploadBytes). Receipt measure-d3d12-level-upload
+ * {width | height << 16, level | layer << 16, level KiB, ring offset KiB,
+ * ring drains}. */
+static bool level_upload_enabled() {
+  static volatile LONG state; /* 0 unread, 1 on, 2 off */
+  LONG value = state;
+  if (!value) {
+    char flag[2] = {};
+    const DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D12_LEVEL_UPLOAD", flag, sizeof(flag));
+    value = AgxD3d12LevelUploadEnabled(flag, length) ? 1 : 2;
+    InterlockedExchange(&state, value);
+  }
+  return value == 1;
+}
+
+static HRESULT level_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COPY *copy, struct pipe_resource *texture,
+                            struct pipe_resource *buffer, const struct pipe_box &tbox, const struct pipe_box &bbox) {
+  struct pipe_context *pipe = owner->Context;
+  if (owner->LevelRingFailed || copy->ToBuffer || copy->Depth != 1 || tbox.x || tbox.y || tbox.depth != 1 ||
+      tbox.width <= 0 || tbox.height <= 0 || !(texture->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE) ||
+      (texture->bind & PIPE_BIND_SHARED) || !level_upload_enabled())
+    return S_FALSE;
+  const unsigned long long bytes = AgxWin32AsahiLevelUploadBytes(texture, copy->Level, copy->Layer,
+                                                                 static_cast<unsigned>(tbox.width),
+                                                                 static_cast<unsigned>(tbox.height));
+  unsigned long long offset = 0ull;
+  const int place = bytes ? AgxD3d12LevelRingPlace(AGX_D3D12_LEVEL_RING_BYTES, owner->LevelRingUsed, bytes, &offset) : -1;
+  if (place < 0) return S_FALSE;
+  if (!owner->LevelRing.Resource) {
+    if (FAILED(AgxD3d12OwnerCreateBuffer(owner, AGX_D3D12_LEVEL_RING_BYTES, TRUE, &owner->LevelRing)) ||
+        !owner->LevelRing.Cpu) {
+      if (owner->LevelRing.Resource) AgxD3d12OwnerDestroyBuffer(owner, &owner->LevelRing);
+      memset(&owner->LevelRing, 0, sizeof(owner->LevelRing));
+      owner->LevelRingFailed = true;
+      receipt("measure-d3d12-level-upload", E_OUTOFMEMORY, 0u, 0u, 0u, 0u, 0u);
+      return S_FALSE;
+    }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    /* Not an RC65 upload target: a snapshot of its dirty pages at an Execute
+     * start would defer later stores to the span a copy of the same
+     * submission reads (transfer_held skips UploadRingPending slots). Its
+     * stores reach canonical storage by the submission that reads them. */
+    remove_upload_target(owner, static_cast<struct pipe_resource *>(owner->LevelRing.Resource));
+#endif
+    owner->LevelRingUsed = 0ull;
+    offset = 0ull;
+  }
+  if (owner->LevelScratchBytes < bytes) {
+    void *scratch = HeapAlloc(GetProcessHeap(), 0, static_cast<SIZE_T>(bytes));
+    if (!scratch) return S_FALSE;
+    if (owner->LevelScratch) HeapFree(GetProcessHeap(), 0, owner->LevelScratch);
+    owner->LevelScratch = scratch;
+    owner->LevelScratchBytes = bytes;
+  }
+  struct pipe_transfer *btransfer = NULL;
+  void *bmap = pipe->buffer_map(pipe, buffer, 0, PIPE_MAP_READ, &bbox, &btransfer);
+  if (!bmap || !btransfer) {
+    if (btransfer) pipe->buffer_unmap(pipe, btransfer);
+    AgxD3d12OwnerRecordError(owner, DXGI_ERROR_DEVICE_HUNG);
+    return DXGI_ERROR_DEVICE_HUNG;
+  }
+  const int tiled = AgxWin32AsahiTileLevel(texture, copy->Level, owner->LevelScratch, bytes, bmap, copy->Pitch);
+  pipe->buffer_unmap(pipe, btransfer);
+  if (!tiled) return S_FALSE;
+  if (place == 1) {
+    /* Every span may still be read: drain all of this owner's work, then
+     * reuse the ring from its start. */
+    ++owner->LevelRingDrains;
+    const HRESULT hr = AgxD3d12OwnerSubmitAndWait(owner);
+    if (FAILED(hr)) return hr;
+    owner->LevelRingUsed = 0ull;
+    offset = 0ull;
+  }
+  memcpy(static_cast<unsigned char *>(owner->LevelRing.Cpu) + static_cast<size_t>(offset), owner->LevelScratch,
+         static_cast<size_t>(bytes));
+  MemoryBarrier();
+  if (!AgxWin32AsahiCopyToLevel(pipe, texture, copy->Level, copy->Layer,
+                                static_cast<struct pipe_resource *>(owner->LevelRing.Resource), offset, bytes))
+    return S_FALSE; /* nothing reads the span: it is reused as free */
+  owner->LevelRingUsed = AgxD3d12LevelRingAdvance(offset, bytes);
+  ++owner->PendingCopies;
+  ++owner->LevelUploads;
+  receipt("measure-d3d12-level-upload", S_OK, static_cast<UINT>(tbox.width) | (static_cast<UINT>(tbox.height) << 16),
+          copy->Level | (copy->Layer << 16), static_cast<UINT>(bytes >> 10), static_cast<UINT>(offset >> 10),
+          owner->LevelRingDrains);
+  return S_OK;
+}
+
 /* C70/C77: buffer -> compressed or shared texture through the owner's cached linear
  * staging texture: CPU copy into the staging map (linear: no allocation),
  * then a GPU copy into the level. The staging map waits for the previous
@@ -2985,6 +3099,9 @@ static bool staged_upload_discard(unsigned long long staging_bytes) {
 static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COPY *copy, struct pipe_resource *texture,
                              struct pipe_resource *buffer, const struct pipe_box &tbox, const struct pipe_box &bbox,
                              unsigned rows, unsigned long long row) {
+  /* rc103: a whole GPU-only level takes one compute copy instead */
+  const HRESULT level = level_upload(owner, copy, texture, buffer, tbox, bbox);
+  if (level != S_FALSE) return level;
   struct pipe_context *pipe = owner->Context;
   const enum pipe_format raw = bc_staging_format(texture->format);
   const enum pipe_format stage_format = raw == PIPE_FORMAT_NONE ? texture->format : raw;

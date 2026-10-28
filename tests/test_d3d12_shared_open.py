@@ -257,6 +257,12 @@ int main() {
                     'static HRESULT staged_upload(', 'static HRESULT staged_download(',
                     'extern "C" HRESULT AgxD3d12OwnerCopyTexture(']
         funcs='\n'.join(block(owner, signature) for signature in signatures)
+        # rc103: a shared texture never takes the whole-level path (level_upload
+        # refuses PIPE_BIND_SHARED before any work); test_d3d12_level_upload runs it
+        funcs=funcs.replace('static HRESULT staged_upload(', '#define S_FALSE 1\n'
+            'static HRESULT level_upload(AGX_D3D12_OWNER *,const AGX_D3D12_TEXTURE_COPY *,pipe_resource *texture,'
+            'pipe_resource *,const pipe_box &,const pipe_box &) {assert(texture->bind & PIPE_BIND_SHARED);return S_FALSE;}\n'
+            'static HRESULT staged_upload(', 1)
         header=(AGX/'mesa/winsys/agx_d3d12_windows.h').read_text()
         end=header.index('} AGX_D3D12_TEXTURE_COPY;')+len('} AGX_D3D12_TEXTURE_COPY;')
         record=header[header.rfind('typedef struct {',0,end):end]

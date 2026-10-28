@@ -18,8 +18,11 @@ using UINT=unsigned;using HRESULT=int;
 #define E_OUTOFMEMORY (-2)
 #define DXGI_ERROR_DEVICE_HUNG (-3)
 #define SUCCEEDED(x) ((x)>=0)
-struct AGX_D3D12_BUFFER {void *Resource;unsigned long long GpuVa,Bytes;};
-struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingCopies;pipe_screen *Screen;pipe_resource *UploadStaging,*DownloadStaging;};
+struct AGX_D3D12_BUFFER {void *Resource;unsigned long long GpuVa,Bytes;void *Cpu;};
+/* LEVEL_RING_HEADER */
+struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingCopies;pipe_screen *Screen;pipe_resource *UploadStaging,*DownloadStaging;
+ AGX_D3D12_BUFFER LevelRing;unsigned long long LevelRingUsed;void *LevelScratch;unsigned long long LevelScratchBytes;
+ bool LevelRingFailed;UINT LevelUploads,LevelRingDrains;};
 struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}};
 static void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *,HRESULT) {}
 static void receipt(const char *,HRESULT,UINT,UINT,UINT) {}
@@ -30,6 +33,24 @@ static unsigned GetEnvironmentVariableA(const char *name,char *out,unsigned size
  if(n<size){memcpy(out,v,n+1);} return n;
 }
 static LONG InterlockedExchange(volatile LONG *target,LONG value) {const LONG old=*target;*target=value;return old;}
+/* rc103: these copies are not whole levels the native layout admits; the
+ * level path (tests/test_d3d12_level_upload.py) must leave them to the blit. */
+using DWORD=unsigned long;using SIZE_T=size_t;
+#define S_FALSE 1
+#define TRUE 1
+#define FAILED(x) ((x)<0)
+#define MemoryBarrier() ((void)0)
+static unsigned level_queries;
+static uint64_t AgxWin32AsahiLevelUploadBytes(const pipe_resource *,unsigned,unsigned,unsigned,unsigned) {++level_queries;return 0;}
+static int AgxWin32AsahiTileLevel(const pipe_resource *,unsigned,void *,uint64_t,const void *,unsigned) {abort();}
+static int AgxWin32AsahiCopyToLevel(pipe_context *,pipe_resource *,unsigned,unsigned,pipe_resource *,uint64_t,uint64_t) {abort();}
+struct AGX_D3D12_OWNER;
+static HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *,unsigned long long,int,AGX_D3D12_BUFFER *) {abort();}
+static void AgxD3d12OwnerDestroyBuffer(AGX_D3D12_OWNER *,AGX_D3D12_BUFFER *) {abort();}
+static HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *) {abort();}
+static void *GetProcessHeap() {return nullptr;}
+static void *HeapAlloc(void *,unsigned,SIZE_T) {abort();}
+static int HeapFree(void *,unsigned,void *) {abort();}
 /* ACTUAL_COPY_RECORD */
 static bool reserved_texture(pipe_resource *) {return false;}
 static bool compressed_texture(AGX_D3D12_OWNER *,pipe_resource *) {return false;}
@@ -109,5 +130,6 @@ int main() {
   assert(AgxD3d12OwnerCopyTexture(&owner,&c)==E_OUTOFMEMORY);fail_create=false;
  }
  assert(creates==28); /* upload/download cache reused across array layers */
+ assert(level_queries>0); /* every upload asked the level path first */
  puts("BC owner cached staging: PASS");
 }

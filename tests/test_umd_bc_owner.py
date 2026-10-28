@@ -21,12 +21,14 @@ class BcOwner(unittest.TestCase):
             'static unsigned texture_block(enum pipe_format format, unsigned *bw, unsigned *bh) {',
             'static unsigned level_extent(unsigned extent, unsigned level) {', 'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {',
             'static enum pipe_format bc_staging_format(', 'static void gpu_copy_blocks(',
-            'static bool staged_upload_discard(', 'static HRESULT staged_upload(', 'static HRESULT staged_download(',
+            'static bool staged_upload_discard(', 'static bool level_upload_enabled(', 'static HRESULT level_upload(',
+            'static HRESULT staged_upload(', 'static HRESULT staged_download(',
             'extern "C" HRESULT AgxD3d12OwnerCopyTexture('))
         header=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.h').read_text()
         end=header.index('} AGX_D3D12_TEXTURE_COPY;')+len('} AGX_D3D12_TEXTURE_COPY;')
         record=header[header.rfind('typedef struct {',0,end):end]
-        fixture=(ROOT/'tests/umd_bc_owner_fixture.cpp').read_text().replace('/* ACTUAL_COPY_RECORD */',record).replace('/* ACTUAL_OWNER_COPY */',funcs)
+        ring=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_level_ring.h').read_text()
+        fixture=(ROOT/'tests/umd_bc_owner_fixture.cpp').read_text().replace('/* ACTUAL_COPY_RECORD */',record).replace('/* ACTUAL_OWNER_COPY */',funcs).replace('/* LEVEL_RING_HEADER */',ring)
         with tempfile.TemporaryDirectory(prefix='bc-owner-') as tmp:
             src=Path(tmp)/'copy.cpp';exe=Path(tmp)/'copy';src.write_text(fixture)
             libs=[build/p for p in ('src/util/libmesa_util.a','src/util/libmesa_util_simd.a','src/c11/impl/libmesa_util_c11.a','src/util/blake3/libblake3.a')]
