@@ -6114,18 +6114,19 @@ static VOID AdmissionCapturePostResume(ADMISSION_PLATFORM_RUNTIME *runtime,
       if ((pending[index] & 1u) != 0u)
         ++Receipt->PendingStampsActive;
   }
+  /* rc92 (EXP2027): no SGX MMIO here, whatever Wom1GpuFaultInfoRead and
+   * Wom1GpuFaultControlRead say. This runs after the resume, at the end of
+   * a wait that can last TdrDelay with the GPU idle, and the firmware
+   * powers the SGX block down 20 ms after its last work
+   * (apple_agx_regionc.c idle_to_off_delay_ms). The FAULT_INFO load then
+   * took an external abort that m1n1 retried for ever (ELR in this
+   * function, FAR 0x204017030; EXP592 the same for a late sample). Asahi
+   * reads FAULT_INFO only in handle_timeout/handle_fault, before recover();
+   * AdmissionGpuFaultCapture does the same, and Wom1SoftFaultState has the
+   * fault-control registers. */
   Receipt->SgxRead = 0u;
+  Receipt->Sgx17620 = Receipt->Sgx17630 = 0u;
   Receipt->FaultInfo = ADMISSION_GPU_FAULT_INFO_NOT_READ;
-  if (runtime->ReadFaultInfo && runtime->SgxBase != NULL)
-    Receipt->FaultInfo = READ_REGISTER_ULONG64((volatile ULONG64 *)(
-        runtime->SgxBase + ADMISSION_PLATFORM_SGX_FAULT_INFO_OFFSET));
-  if (runtime->ReadFaultControl && runtime->SgxBase != NULL) {
-    Receipt->Sgx17620 = READ_REGISTER_ULONG((volatile ULONG *)(
-        runtime->SgxBase + ADMISSION_PLATFORM_SGX_FAULT_CONTROL_0));
-    Receipt->Sgx17630 = READ_REGISTER_ULONG((volatile ULONG *)(
-        runtime->SgxBase + ADMISSION_PLATFORM_SGX_FAULT_CONTROL_1));
-    Receipt->SgxRead = 1u;
-  }
   Receipt->ComputeRptrRead = 0u;
   if (queue->Config.HasCompute && compute->GpuDonePointer != NULL &&
       compute->CpuWritePointer != NULL) {

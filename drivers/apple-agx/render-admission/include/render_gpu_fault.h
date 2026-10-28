@@ -157,8 +157,12 @@ typedef struct _ADMISSION_GPU_RECOVERY_SNAPSHOT {
  * end of every reset quiescence wait: what the firmware did after it was
  * resumed from a Timeout/Fault, and the optional KMD RecoverChannel
  * (Wom1GpuFaultRecoverChannel=1). Sequential CPU reads of shared memory, not
- * an atomic GPU state. SGX words are read only with Wom1GpuFaultControlRead=1
- * (SgxRead = 1); otherwise they are 0. */
+ * an atomic GPU state. rc92 (EXP2027): no SGX register is read here (the
+ * GPU may be power-gated after the resume; the FAULT_INFO load wedged the
+ * guest), so SgxRead, Sgx17620 and Sgx17630 are 0 and FaultInfo is
+ * ADMISSION_GPU_FAULT_INFO_NOT_READ. FAULT_INFO is in Wom1GpuFault (read at
+ * the event, before resume), the fault-control registers in
+ * Wom1SoftFaultState. */
 #define ADMISSION_GPU_POST_RESUME_VERSION 1u
 #define ADMISSION_GPU_POST_RESUME_FORCE_DISABLED 0u
 #define ADMISSION_GPU_POST_RESUME_FORCE_NOT_REACHED 1u
@@ -169,7 +173,7 @@ typedef struct _ADMISSION_GPU_POST_RESUME_RECEIPT {
   unsigned int Fence, WaitMs;
   unsigned int RegionCFaultControl;     /* RegionC word 0x10fd8 as published */
   unsigned int SgxRead, Sgx17620, Sgx17630;
-  unsigned long long FaultInfo;         /* SGX 0x17030 at the end of the wait */
+  unsigned long long FaultInfo;         /* NOT_READ since rc92 (was SGX 0x17030) */
   unsigned int FirmwareStatus[16];      /* first 64 bytes: halt_count +0x10,
                                            halted +0x20, resume +0x30 */
   unsigned int PendingStampsActive;     /* RegionC pending_stamps with bit 0 */
