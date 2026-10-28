@@ -13,6 +13,17 @@ unsigned int AdmissionJobWindowUsesManager(unsigned int Kind) {
          Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE ? 1u : 0u;
 }
 
+unsigned int AdmissionJobWindowCapabilities(unsigned int Depth2,
+                                            unsigned int CapsSwitch) {
+  return Depth2 && CapsSwitch ? ADMISSION_JOB_WINDOW_CAPS_RC98 : 0u;
+}
+
+unsigned int AdmissionJobWindowSecondSet(unsigned int Kind,
+                                         unsigned int Capabilities) {
+  return AdmissionJobWindowUsesSidecar(Kind) &&
+         (Capabilities & ADMISSION_JOB_WINDOW_CAP_SECOND_SIDECAR) ? 1u : 0u;
+}
+
 static unsigned int window_g4(unsigned int Kind) {
   return Kind == ADMISSION_JOB_WINDOW_KIND_RENDER ||
          Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE ||

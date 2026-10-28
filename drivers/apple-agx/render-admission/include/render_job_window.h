@@ -48,12 +48,33 @@ typedef struct _ADMISSION_JOB_WINDOW_JOB {
   unsigned long long SceneId;       /* private scene of a render, 0 = none */
 } ADMISSION_JOB_WINDOW_JOB;
 
-/* Firmware-side features the window needs for some pairs; each is 0 until
- * implemented and validated on hardware (rc95: all 0). */
+/* Firmware-side features the window needs for some pairs (rc95: all 0).
+ * rc98 implements SECOND_SIDECAR (the sidecar's job-word set B,
+ * apple_agx_render_shared_memory.h), TA_ON_3D and COMPUTE_BARRIER (the
+ * D3D-G1b Barrier encoder on another queue's firmware stamp,
+ * AppleAgxRenderSharedMemoryBuildLeadingBarrier); they are declared only
+ * under Wom1JobDepth2Caps (AdmissionJobWindowCapabilities) until a kicked
+ * window validates them on hardware. LIVE_MANAGER (U1) is not built. */
 #define ADMISSION_JOB_WINDOW_CAP_SECOND_SIDECAR 0x1u  /* U7: sidecar per slot */
 #define ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER 0x2u    /* U1: same-key skip */
 #define ADMISSION_JOB_WINDOW_CAP_TA_ON_3D 0x4u        /* TA Barrier, 3D stamp */
 #define ADMISSION_JOB_WINDOW_CAP_COMPUTE_BARRIER 0x8u /* compute-queue Barrier */
+
+#define ADMISSION_JOB_WINDOW_CAPS_RC98                                       \
+  (ADMISSION_JOB_WINDOW_CAP_SECOND_SIDECAR | ADMISSION_JOB_WINDOW_CAP_TA_ON_3D | \
+   ADMISSION_JOB_WINDOW_CAP_COMPUTE_BARRIER)
+
+/* rc98: the capabilities the KMD declares: ADMISSION_JOB_WINDOW_CAPS_RC98
+ * when Depth2 (Wom1JobDepth2 with Wom1JobBuildAhead) and CapsSwitch
+ * (device value Wom1JobDepth2Caps = 1) are both set, else 0. */
+unsigned int AdmissionJobWindowCapabilities(unsigned int Depth2,
+                                            unsigned int CapsSwitch);
+
+/* rc98: does a sidecar job of this kind use the second job-word set when
+ * SECOND_SIDECAR is declared? Compute jobs and v5 preludes do (each has a
+ * job-owned preemption buffer); others never touch the sidecar's words. */
+unsigned int AdmissionJobWindowSecondSet(unsigned int Kind,
+                                         unsigned int Capabilities);
 
 typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
   unsigned int Enabled;         /* Wom1JobDepth2 and Wom1JobBuildAhead */
