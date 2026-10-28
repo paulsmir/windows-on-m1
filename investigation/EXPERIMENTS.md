@@ -66280,3 +66280,11 @@ EXP2045 HARDWARE BEFORE 2026-10-28T15:25:45Z:
 - Hashes: sys 6852c0d7c67a, UmdArm64 7678ae05c02c, UmdX64 a349da1591a1, Umd32 557c0d251419; manifest 7e152ebf67e3, hardware-manifest dd6bd228bfce; probe2045.sh 523c44c6e5ec (PROBE_LINT_OK); visible recovery rec2045h 0050c424fd687f6f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1.
 - Recovery rec2045h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2045-kick3/run2045.sh.
+
+EXP2045 HARDWARE ACTUAL (2026-10-28): **Kick=1 retest: BeginSuccessorJob now passes; SubmitSuccessor fails and the reset cannot recover (0x116).**
+- The guest bugchecked seconds into HD 50k: the vUART shows an NVMe guest reset, then a PSCI RESET.
+- Wom1GpuReset: 3 resets, 0 succeeded, status c0000483, quiesce **ended**, stage **private**. scheduler_faulted_at_entry = backend_platform_windows.c:5148 (c2577f44): the `AppleAgxBackendRuntimeSubmitSuccessor != Ok` branch after a successful BeginSuccessorJob.
+- Wom1JobWindow (stale): kicks 0, batch {1: 1524}.
+- Verdict:
+  - two rc102 defects for rc102: (A) SubmitSuccessor refuses for a real GravityMark pair; (B) a kick that fails after BeginSuccessorJob leaves the nested G3 lease, so the reset's private stage refuses.
+  - Kick stays off by default (it was only set by switch).
