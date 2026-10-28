@@ -208,6 +208,122 @@ int AdmissionJobWorkerAffinity(const ADMISSION_JOB_WORKER_CORE *Cores,
 #define ADMISSION_JOB_POLL_SPIN_STEP_US 20u
 /* Microseconds to busy-wait before the next poll, or 0 to sleep one tick. */
 unsigned int AdmissionJobPollStallUs(unsigned long long ElapsedUs);
+/* rc100: predicted-sleep completion poll. The J313 is fanless: the CPU and
+ * the GPU share one ~10 W budget, and the rc72 schedule above keeps a
+ * pinned P-core 100 % busy for the first 50 ms of every job (every
+ * GravityMark job is shorter), while the firmware lowers the GPU clock
+ * (EXP2031c: 49 % of the run at 1278 MHz against 92 % cool). The guest
+ * takes no completion interrupt today (rc100 REPORT section 1), so the
+ * worker still polls, but sleeps through the predictable part of a job:
+ *
+ * - a job's key is its context, kind and DMA bytes plus the kind and DMA
+ *   bytes of the context's two previous jobs (a frame's position: EXP2034
+ *   compute jobs all carry 72 DMA bytes, 0.5-13 ms by position);
+ * - its prediction is the SHORTEST of the key's last HISTORY durations: a
+ *   job that ends before the worker wakes costs latency, one that ends
+ *   after it costs only spin, so the predictor errs early;
+ * - the worker sleeps (high-resolution timer) until GUARD before the
+ *   prediction, less the timer's learned lateness, in chunks of at most
+ *   SLEEP_CHUNK so the loop condition (stop, reset, drill) and the RTKit
+ *   drain run at least as often as the old 1 ms tick; then it spins with
+ *   the rc72 step; GUARD is a tenth of the prediction within
+ *   [GUARD_MIN, GUARD_MAX], so the spin stays about 10 % of the job;
+ * - a job outliving prediction + GUARD is polled every OVERRUN_SLEEP
+ *   (spun on, as rc72, without a high-resolution timer);
+ * - a key without two samples spins as rc72 (the
+ *   first frames learn exact durations); from SPIN_WINDOW on, every mode
+ *   sleeps ticks as before (hung GPU awaiting TDR).
+ *
+ * Device value Wom1JobPollSpinUs (REG_DWORD, read at start): absent =
+ * predictive; any value = the rc72 schedule with that spin window
+ * (50000 = the pre-rc100 behaviour, 0 = tick sleeps only). */
+#define ADMISSION_JOB_POLL_VERSION 1u
+#define ADMISSION_JOB_POLL_PREDICTIVE 0xffffffffu
+#define ADMISSION_JOB_POLL_KEYS 64u
+#define ADMISSION_JOB_POLL_HISTORY 4u
+#define ADMISSION_JOB_POLL_CONTEXTS 8u
+#define ADMISSION_JOB_POLL_LATENESS 8u
+#define ADMISSION_JOB_POLL_GUARD_MIN_US 50u
+#define ADMISSION_JOB_POLL_GUARD_MAX_US 300u
+#define ADMISSION_JOB_POLL_SLEEP_CHUNK_US 1000u
+#define ADMISSION_JOB_POLL_MIN_SLEEP_US 100u
+#define ADMISSION_JOB_POLL_OVERRUN_SLEEP_US 100u
+/* Initial timer lateness: a high-resolution EX_TIMER, or a 1 ms tick
+ * (KeDelayExecutionThread fallback). */
+#define ADMISSION_JOB_POLL_HIGHRES_SLACK_US 100u
+#define ADMISSION_JOB_POLL_TICK_SLACK_US 1000u
+#define ADMISSION_JOB_POLL_LATENESS_MAX_US 2000u
+
+/* AdmissionJobPollPlan actions. */
+#define ADMISSION_JOB_POLL_TICK 0u   /* sleep one timer tick (old path) */
+#define ADMISSION_JOB_POLL_SPIN 1u   /* KeStallExecutionProcessor(*Us) */
+#define ADMISSION_JOB_POLL_SLEEP 2u  /* high-resolution sleep of *Us */
+
+/* Header Flags. */
+#define ADMISSION_JOB_POLL_FLAG_HIGHRES 0x1u  /* EX_TIMER allocated */
+
+typedef struct _ADMISSION_JOB_POLL_ENTRY {
+  unsigned long long Key;
+  unsigned int Us[ADMISSION_JOB_POLL_HISTORY];
+  unsigned int Count, Next, Used, Reserved;
+} ADMISSION_JOB_POLL_ENTRY;
+
+typedef struct _ADMISSION_JOB_POLL_CONTEXT {
+  unsigned long long Context;
+  unsigned int Previous[2];
+  unsigned int Used, Reserved;
+} ADMISSION_JOB_POLL_CONTEXT;
+
+/* Cumulative since start (read before and after a run, subtract). JobUs:
+ * kick -> completion seen; SleptUs: measured inside sleeps (the rest of
+ * JobUs is the worker's busy time); Misses: completions seen by the first
+ * poll after a sleep (latency up to that sleep, duration learned as a lower
+ * bound; includes the overrun polls); MissWindowUs: their
+ * last-running-poll-to-seen spans. Spins/Ticks: plans returned. */
+typedef struct _ADMISSION_JOB_POLL_STATS {
+  unsigned long long Jobs, PredictedJobs, Sleeps, Spins, Ticks, Misses;
+  unsigned long long JobUs, SleptUs, SleepRequestedUs, LateUs, LateMaxUs;
+  unsigned long long MissWindowUs;
+} ADMISSION_JOB_POLL_STATS;
+
+typedef struct _ADMISSION_JOB_POLL_STATE {
+  unsigned int Version, Bytes, SpinWindowUs, Flags;
+  unsigned int Clock, LatenessNext;
+  unsigned int Lateness[ADMISSION_JOB_POLL_LATENESS];
+  ADMISSION_JOB_POLL_STATS Stats;
+  ADMISSION_JOB_POLL_CONTEXT Context[ADMISSION_JOB_POLL_CONTEXTS];
+  ADMISSION_JOB_POLL_ENTRY Entry[ADMISSION_JOB_POLL_KEYS];
+} ADMISSION_JOB_POLL_STATE;
+
+/* SpinWindowUs: ADMISSION_JOB_POLL_PREDICTIVE or the rc72 window. */
+void AdmissionJobPollInitialize(ADMISSION_JOB_POLL_STATE *State,
+    unsigned int SpinWindowUs, unsigned int Flags);
+/* A job starts: its key (from the context's two previous jobs), then the
+ * job becomes the context's newest. 0 when State is NULL. */
+unsigned long long AdmissionJobPollBegin(ADMISSION_JOB_POLL_STATE *State,
+    unsigned long long ContextToken, unsigned int Kind, unsigned int DmaBytes);
+/* Predicted duration of Key in microseconds; 0 = no prediction. */
+unsigned int AdmissionJobPollPredict(const ADMISSION_JOB_POLL_STATE *State,
+    unsigned long long Key);
+/* The job of Key (predicted PredictedUs) was seen complete DetectUs after
+ * its kick by a poll that followed a SLEEP (AfterSleep) or a spin step;
+ * LastPollUs: the previous poll, which saw it running. Learns DetectUs
+ * after a spin step (exact within one step), LastPollUs after a sleep (a
+ * lower bound: the predictor errs early), and counts. */
+void AdmissionJobPollFinish(ADMISSION_JOB_POLL_STATE *State,
+    unsigned long long Key, unsigned int PredictedUs,
+    unsigned long long DetectUs, unsigned long long LastPollUs,
+    int AfterSleep);
+/* The timer's lateness the planner subtracts: the largest of the last
+ * LATENESS sleeps' (actual - requested). */
+unsigned int AdmissionJobPollSlackUs(const ADMISSION_JOB_POLL_STATE *State);
+void AdmissionJobPollNoteSleep(ADMISSION_JOB_POLL_STATE *State,
+    unsigned long long RequestedUs, unsigned long long ActualUs);
+/* Next step for a job ElapsedUs after its kick, predicted PredictedUs (0 =
+ * none); a SLEEP never exceeds SleepCapUs (0 = SLEEP_CHUNK). */
+unsigned int AdmissionJobPollPlan(ADMISSION_JOB_POLL_STATE *State,
+    unsigned long long ElapsedUs, unsigned int PredictedUs,
+    unsigned int SleepCapUs, unsigned int *Us);
 unsigned long long AdmissionJobTimingDeltaUs(
     const ADMISSION_JOB_TIMING_STATE *State,
     const ADMISSION_JOB_TIMING_SLOT *Slot,
