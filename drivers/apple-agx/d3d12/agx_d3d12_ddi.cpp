@@ -35,6 +35,13 @@ extern "C" {
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 #include "agx_d3d12_windows.h"
 #include "agx_d3d12_tile_mapping.h"
+#include "agx_d3d12_heap_backing.h"
+static_assert(AGX_D3D12_HEAP_FLAG_BUFFERS == static_cast<unsigned>(D3D12DDI_HEAP_FLAG_BUFFERS), "rc87 heap flag");
+static_assert(AGX_D3D12_HEAP_FLAG_TEXTURES == (static_cast<unsigned>(D3D12DDI_HEAP_FLAG_NON_RT_DS_TEXTURES) |
+                                               static_cast<unsigned>(D3D12DDI_HEAP_FLAG_RT_DS_TEXTURES)),
+              "rc87 heap flags");
+static_assert(AGX_D3D12_CPU_PAGE_NOT_AVAILABLE == static_cast<unsigned>(D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE),
+              "rc87 page property");
 #include "../mesa/dxbc/dxbc_minmax_bits.h"
 #include "agx_d3d12_volume_registry.h"
 #endif
@@ -1765,6 +1772,11 @@ struct AgxD3d12Heap {
     /* C53 T2D: a reserved Texture2D's tiling (tiles[] in its resource tile
      * order); nullptr for buffers */
     struct AGX_TILE_GEOMETRY *geometry;
+    /* rc87 (agx_d3d12_heap_backing.h): a texture-only heap's 64 KiB stub
+     * BO, whose kernel allocation the runtime receives; native stays nullptr
+     * (every user refuses such a heap) until EnsureHeapBacking gives it its
+     * full-size backing for a tile mapping. nullptr for other heaps. */
+    void *stub;
 };
 static UINT64 DescriptorHeapBytes(const AgxD3d12Heap *heap) {
     return heap->descriptor_bytes ? heap->descriptor_bytes : heap->bytes;
@@ -2092,6 +2104,18 @@ static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
         memset(heap, 0, sizeof(*heap));
         return;
     }
+    if (heap->stub) {
+        /* rc87: a deferred heap (never a presentation one); the stub owns the allocation it reported */
+        AGX_D3D12_BUFFER stub = {};
+        stub.Resource = heap->stub;
+        AgxD3d12OwnerDestroyBuffer(static_cast<AGX_D3D12_OWNER *>(device->owner), &stub);
+        heap->stub = nullptr;
+        heap->allocation = 0;
+        if (!heap->native) {
+            memset(heap, 0, sizeof(*heap));
+            return;
+        }
+    }
     if (heap->native) {
         UnregisterHeap(device, heap);
         /* C53 B3: reserved buffers keep the GPU mapping (the owner holds the
@@ -2234,6 +2258,63 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
     return hr;
 }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* rc87 (agx_d3d12_heap_backing.h): a texture-only DEFAULT heap. Placed
+ * textures own their BOs, so the heap gets a 64 KiB stub (the kernel
+ * allocation CheckExistingResourceAllocationInfo reports) instead of its
+ * full-size BO; heap->bytes keeps the size the tile walk bounds by.
+ * Receipt measure-d3d12-heap {3 deferred, bytes/64K, stub allocation?, 0, 0}. */
+static HRESULT CreateDeferredHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0001 &arg, AgxD3d12Heap *heap) {
+    memset(heap, 0, sizeof(*heap));
+    heap->bytes = arg.ByteSize > kVaLimit ? ~0ULL : (arg.ByteSize + kHeapPage - 1) & ~(kHeapPage - 1);
+    AGX_D3D12_OWNER *owner = arg.ByteSize && heap->bytes <= MAXUINT32 ? EnsureOwner(device) : nullptr;
+    AGX_D3D12_BUFFER stub = {};
+    HRESULT hr = owner ? AgxD3d12OwnerCreateBuffer(owner, kHeapPage, FALSE, &stub) : E_OUTOFMEMORY;
+    if (SUCCEEDED(hr)) {
+        heap->stub = stub.Resource;
+        heap->allocation = AgxD3d12OwnerBufferAllocation(owner, &stub);
+        if (!heap->allocation) hr = E_FAIL;
+    }
+    const UINT receipt[] = {3u, static_cast<UINT>(heap->bytes >> 16), heap->allocation != 0 ? 1u : 0u, 0u, 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-heap", hr, receipt, 5);
+    if (FAILED(hr)) ReleaseHeap(device, heap);
+    return hr;
+}
+/* rc87: APPLE_AGX_D3D12_DEFER_TEXTURE_HEAPS=0 restores full-size backing
+ * for comparison */
+static bool DeferTextureHeaps() {
+    static const bool enabled = [] {
+        char value[2] = {};
+        return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_DEFER_TEXTURE_HEAPS", value, sizeof(value)) == 1 &&
+                 value[0] == '0');
+    }();
+    return enabled;
+}
+/* rc87: the full-size backing of a deferred heap, made once when a tile
+ * mapping first names the heap. The lock orders concurrent queues; it is
+ * taken before (never inside) the owner lock. Receipt
+ * measure-d3d12-heap-backing {bytes/64K, VA/64K, VA >> 32}. */
+static SRWLOCK g_heap_backing_lock = SRWLOCK_INIT;
+static HRESULT EnsureHeapBacking(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+    if (!heap || !heap->stub) return S_OK;
+    HRESULT hr = S_OK;
+    AcquireSRWLockExclusive(&g_heap_backing_lock);
+    if (!heap->native) {
+        AGX_D3D12_OWNER *owner = device ? EnsureOwner(device) : nullptr;
+        AGX_D3D12_BUFFER buffer = {};
+        hr = owner && heap->bytes <= MAXUINT32 ? AgxD3d12OwnerCreateBuffer(owner, heap->bytes, FALSE, &buffer)
+                                               : E_OUTOFMEMORY;
+        if (SUCCEEDED(hr)) {
+            heap->native = buffer.Resource;
+            heap->gpuva = buffer.GpuVa;
+            RegisterHeap(device, heap);
+        }
+        const UINT receipt[] = {static_cast<UINT>(heap->bytes >> 16), static_cast<UINT>(heap->gpuva >> 16),
+                                static_cast<UINT>(heap->gpuva >> 32)};
+        AdmissionUmdDiagnostic("measure-d3d12-heap-backing", hr, receipt, 3);
+    }
+    ReleaseSRWLockExclusive(&g_heap_backing_lock);
+    return hr;
+}
 static HRESULT CreateLineResource(AgxD3d12Device *device,const D3D12DDIARG_CREATEHEAP_0001 *heap_arg,
                                    AgxD3d12Heap *heap,const D3D12DDIARG_CREATERESOURCE_0003 *arg,
                                    AgxD3d12Resource *resource) {
@@ -2427,8 +2508,13 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         const UINT64 offset = resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.Offset;
         if (heap) memset(heap, 0, sizeof(*heap));
         memset(resource, 0, sizeof(*resource));
-        const UINT reason = !base || !base->heap ? 1u
-                          : offset > base->heap->bytes || resource_arg->Width > base->heap->bytes - offset ? 6u : 0u;
+        UINT reason = !base || !base->heap ? 1u
+                    : offset > base->heap->bytes || resource_arg->Width > base->heap->bytes - offset ? 6u : 0u;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        /* rc87: tier 1 never places a buffer in a texture-only heap; should
+         * one arrive, it gets the heap's real backing first */
+        if (!reason && FAILED(EnsureHeapBacking(device, base->heap))) reason = 7u;
+#endif
         if (!reason && heap) {
             /* the placed resource's heap object aliases the parent and
              * destroying it releases nothing. The runtime adds the placement
@@ -2554,7 +2640,14 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     const UINT size_receipt[] = {static_cast<UINT>(heap_arg->ByteSize), static_cast<UINT>(heap_arg->ByteSize >> 32),
                                  static_cast<UINT>(sized.ByteSize >> 16)};
     AdmissionUmdDiagnostic("measure-d3d12-committed-size", S_OK, size_receipt, 3);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    HRESULT hr = AgxD3d12HeapDefersBacking(static_cast<unsigned>(sized.Flags), static_cast<unsigned>(sized.CPUPageProperty)) &&
+                         DeferTextureHeaps()
+                     ? CreateDeferredHeap(device, sized, heap)
+                     : CreateHeap(device, sized, heap);
+#else
     HRESULT hr = CreateHeap(device, sized, heap);
+#endif
     if (SUCCEEDED(hr) && resource_arg) {
         resource->heap = heap;
         resource->gpuva = heap->gpuva;
@@ -3557,7 +3650,10 @@ static VOID APIENTRY UpdateTileMappings(D3D12DDI_HCOMMANDQUEUE handle, D3D12DDI_
     AgxD3d12Device *device = queue ? queue->device : nullptr;
     AGX_D3D12_OWNER *owner = device ? static_cast<AGX_D3D12_OWNER *>(device->owner) : nullptr;
     AgxD3d12Heap *reserved = resource ? resource->heap : nullptr;
-    HRESULT hr = owner && reserved && reserved->tiles && (!heap || heap->native) && regions && ranges &&
+    /* rc87: a deferred texture-only heap gets its backing now */
+    const HRESULT backing = owner ? EnsureHeapBacking(device, heap) : S_OK;
+    HRESULT hr = FAILED(backing) ? backing
+               : owner && reserved && reserved->tiles && (!heap || heap->native) && regions && ranges &&
                  regions <= 0x10000u && ranges <= 0x10000u ? S_OK : E_INVALIDARG;
     AGX_TILE_COORD *coord = SUCCEEDED(hr) && starts ? static_cast<AGX_TILE_COORD *>(calloc(regions, sizeof(*coord))) : nullptr;
     AGX_TILE_REGION *size = SUCCEEDED(hr) && sizes ? static_cast<AGX_TILE_REGION *>(calloc(regions, sizeof(*size))) : nullptr;
