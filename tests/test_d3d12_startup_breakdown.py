@@ -55,6 +55,42 @@ class StartupBreakdown(unittest.TestCase):
         self.assertEqual(result['stall_present'], 3)
         self.assertAlmostEqual(result['stall']['seconds'], 3.8, places=6)
 
+    def test_times_frames_align_to_presents_and_load_gap_is_not_scored(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        rc93 (EXP2028 D3D12 HD 50k): the largest present gap (14.8 s,
+        present 29 -> 30) was the app's scene load before frame 0, yet the
+        tool called it the frame 1 -> 2 stall, and the task took the 44 s
+        load for scored time. GravityMark scores frames in a fixed window
+        from frame 0. With a times file the tool must find which present is
+        frame 0 from the gap sequence, mark a load gap as outside the
+        window, report the frame 1 -> 2 and 2 -> 3 phases from the presents
+        that bound them, and size the scored loss against the median frame.
+        """
+        load = [1.0, 1.1, 9.0, 9.1, 9.2]          # 7.9 s load gap before frame 0
+        frame0 = 9.3
+        steady = [frame0 + 0.02, frame0 + 2.02] + [frame0 + 2.02 + 0.02 * i for i in range(1, 40)]
+        lines = presents(load + [frame0] + steady)
+        lines.append(line('bo-create', frame0 + 1.0, 128, 1, 900000, 100000, 0))
+        lines.sort(key=lambda l: int(l.split('qpc=')[1].split()[0]))
+        t0 = 30.0
+        ts = [frame0] + steady
+        times = ['%6d: %12.6f %9.6f 0\n' % (i, t0 + t - frame0, (t - ts[i - 1]) if i else 0.0)
+                 for i, t in enumerate(ts)]
+        result = tool.report(lines, times=times, window_frames=5)
+        self.assertEqual(result['stall_present'], 2)
+        self.assertEqual(result['frame0_present'], 5)
+        self.assertFalse(result['stall_in_scored_window'])
+        self.assertAlmostEqual(result['pre_window']['seconds'], frame0 - 1.0, places=5)
+        f12 = result['frame_1_2']
+        self.assertAlmostEqual(f12['seconds'], 2.0, places=5)
+        self.assertAlmostEqual(f12['buckets']['bo-allocate']['s'], 0.88, places=3)  # interval 0.98 - bind 0.1
+        self.assertAlmostEqual(result['frame_2_3']['seconds'], 0.02, places=5)
+        stall = result['scored_stall']
+        self.assertAlmostEqual(stall['median_frame_s'], 0.02, places=5)
+        self.assertAlmostEqual(stall['excess_s'], 1.98, places=3)
+        self.assertEqual(stall['lost_frames'], 99)
+
     def test_present_thread_buckets_add_up_to_the_wall_time(self):
         lines = presents([1.0])
         lines += [line('d3d12-shader-stats', 2.0, 0, 0, 5),          # 1.0 s compile

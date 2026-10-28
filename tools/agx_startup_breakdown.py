@@ -36,7 +36,17 @@ bound: they include the app's own time between two driver calls).
 Phases:
   load   first receipt .. the present that opens the stall;
   stall  the largest gap between consecutive presents among the first
-         --present-scan presents (the times file's frame 1 -> 2 gap).
+         --present-scan presents. It is NOT necessarily inside the scored
+         window: in EXP2028 (D3D12 HD 50k) it was present 29 -> 30, the
+         app's "Creating Scene" load step 2 s before frame 0.
+With --times (rc93), the times file's frames are aligned to the app's
+presents (the present-gap sequence that best matches the frame-gap
+sequence), and three more phases are reported:
+  pre_window  first receipt .. frame 0 (not scored: GravityMark's window
+              starts at frame 0 and lasts a fixed ~167 s, score = frames);
+  frame_1_2, frame_2_3  the scored first-frame stalls;
+plus 'scored_stall': the seconds the first --window-frames frames spend
+beyond the steady median frame, and the frames that time would have drawn.
 For each phase: the time per bucket (shader translation and compile, PSO,
 resources, BO allocation, GPU VA bind / paging, residency and trims, uploads,
 KMD escapes, GPU submission and waits, other), the shader parts compiled
@@ -321,13 +331,59 @@ def times_gap(lines):
     return {'frame0_s': frames[0][1], 'gap_1_2_s': frames[2][2], 'frames': len(frames)}
 
 
-def report(lines, scan=400, top=12, times=None):
+def times_frames(lines):
+    """[(index, seconds, gap seconds)] of a GravityMark times file."""
+    frames = []
+    for line in lines:
+        m = re.match(r'\s*(\d+):\s+([0-9.]+)\s+([0-9.]+)', line)
+        if m:
+            frames.append((int(m.group(1)), float(m.group(2)), float(m.group(3))))
+    return frames
+
+
+def align_frames(present_qpcs, frames, span=30):
+    """Index of the present that is the times file's frame 0, or None.
+
+    Frame i's gap (frames[i][2], i >= 1) is matched against present gaps
+    (present k + i minus present k + i - 1); the offset k with the smallest
+    total absolute difference over the first `span` frames wins."""
+    n = min(span, len(frames) - 1)
+    if n < 2 or len(present_qpcs) < n + 1:
+        return None
+    gaps = [(present_qpcs[j] - present_qpcs[j - 1]) / QPC_HZ for j in range(1, len(present_qpcs))]
+    best = None
+    for k in range(0, len(present_qpcs) - n):
+        cost = sum(abs(gaps[k + i - 1] - frames[i][2]) for i in range(1, n + 1))
+        if best is None or cost < best[0]:
+            best = (cost, k)
+    return best[1]
+
+
+def scored_stall(frames, count=10):
+    """Seconds the first `count` scored frames spend beyond the median frame
+    of the run, and the frames that time would have drawn."""
+    gaps = sorted(f[2] for f in frames[1:])
+    if not gaps:
+        return None
+    median = gaps[len(gaps) // 2]
+    excess = sum(max(0.0, f[2] - median) for f in frames[1:count + 1])
+    window = frames[-1][1] - frames[0][1]
+    return {'median_frame_s': round(median, 6), 'excess_s': round(excess, 3),
+            'lost_frames': round(excess / median) if median > 0 else None,
+            'window_s': round(window, 3), 'frames': len(frames)}
+
+
+def report(lines, scan=400, top=12, times=None, window_frames=10):
     rows = parse(lines, scan + 1)
     pid = main_pid(rows)
     rows = [r for r in rows if r[3] == pid]
     result = {'pid': pid, 'receipts': len(rows)}
+    frames = None
     if times is not None:
+        times = list(times)
         result['times'] = times_gap(times)
+        frames = times_frames(times)
+        result['scored_stall'] = scored_stall(frames, window_frames)
     if not rows:
         return result
     first = rows[0][0]
@@ -340,6 +396,17 @@ def report(lines, scan=400, top=12, times=None):
     result['stall_starts_s'] = round((a - first) / QPC_HZ, 3)
     result['load'] = summarise(analyse(rows, first - 1, a), top)
     result['stall'] = summarise(analyse(rows, a, b), top)
+    if frames:
+        qpcs = [r[0] for r in rows if r[1] == 'measure-d3d12-present']
+        k = align_frames(qpcs, frames)
+        if k is not None:
+            result['frame0_present'] = k
+            result['frame0_after_first_receipt_s'] = round((qpcs[k] - first) / QPC_HZ, 3)
+            result['stall_in_scored_window'] = k < result['stall_present']
+            result['pre_window'] = summarise(analyse(rows, first - 1, qpcs[k]), top)
+            for name, i in (('frame_1_2', 2), ('frame_2_3', 3)):
+                if k + i < len(qpcs):
+                    result[name] = summarise(analyse(rows, qpcs[k + i - 1], qpcs[k + i]), top)
     return result
 
 
@@ -352,7 +419,16 @@ def table(result):
     if 'stall_present' in result:
         out.append('stall: present %d -> %d, starts %.3f s after the first receipt' %
                    (result['stall_present'] - 1, result['stall_present'], result['stall_starts_s']))
-    for phase in ('load', 'stall'):
+    if 'frame0_present' in result:
+        out.append('frame 0 = present %d, %.3f s after the first receipt; largest present gap %s the '
+                   'scored window' % (result['frame0_present'], result['frame0_after_first_receipt_s'],
+                                     'inside' if result['stall_in_scored_window'] else 'BEFORE'))
+    if result.get('scored_stall'):
+        s = result['scored_stall']
+        out.append('scored window %.3f s, %d frames, median frame %.6f s; first frames lose %.3f s '
+                   '(~%s frames)' % (s['window_s'], s['frames'], s['median_frame_s'], s['excess_s'],
+                                     s['lost_frames']))
+    for phase in ('load', 'stall', 'pre_window', 'frame_1_2', 'frame_2_3'):
         w = result.get(phase)
         if not w:
             continue
@@ -404,13 +480,14 @@ def main(argv=None):
     ap.add_argument('--json', action='store_true')
     ap.add_argument('--present-scan', type=int, default=400)
     ap.add_argument('--top', type=int, default=12)
+    ap.add_argument('--window-frames', type=int, default=10)
     args = ap.parse_args(argv)
     times = None
     if args.times:
         with open(args.times, errors='replace') as f:
             times = f.readlines()
     with open(args.log, errors='replace') as f:
-        result = report(f, args.present_scan, args.top, times)
+        result = report(f, args.present_scan, args.top, times, args.window_frames)
     print(json.dumps(result, indent=1) if args.json else table(result))
     return 0
 
