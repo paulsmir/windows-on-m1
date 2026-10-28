@@ -30,6 +30,13 @@ DISPLAY_FUNCTIONS = (
     "AdmissionFillPanelSignalInfo",
     "AdmissionDisplaySourceModeOffered",
     "AdmissionDisplayScalingCofunctional",
+    "AdmissionFillScaledSignalInfo",
+    "AdmissionDisplayTargetIsNative",
+    "AdmissionDisplayTargetOffered",
+    "AdmissionDisplayIdentityRequested",
+    "AdmissionDisplayPathSupported",
+    "AdmissionDisplayAddTargetMode",
+    "AdmissionDdiRecommendMonitorModes",
     "AdmissionDisplayScalingSupport",
     "AdmissionDisplayFillScalingSupport",
     "AdmissionDisplayAddSourceMode",
@@ -96,7 +103,12 @@ typedef enum { D3DKMDT_PVAM_DIRECT = 1 } PVAM;
 typedef enum { D3DKMDT_CB_SCRGB = 3 } CB;
 typedef enum { D3DKMDT_VSS_OTHER = 255 } VSS;
 typedef enum { D3DDDI_VSSLO_PROGRESSIVE = 1 } VSSLO;
-typedef enum { D3DKMDT_MP_PREFERRED = 1 } MP;
+typedef enum { D3DKMDT_MP_PREFERRED = 1, D3DKMDT_MP_NOTPREFERRED = 2 } MP;
+typedef enum { D3DKMDT_MCO_UNINITIALIZED = 0, D3DKMDT_MCO_DRIVER = 5 } MCO;
+#define D3DKMDT_CB_SRGB 2
+#define STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET ((NTSTATUS)0xC01E0309L)
+#define APPLE_AGX_SCANOUT_J313_WIDTH 2560u
+#define APPLE_AGX_SCANOUT_J313_HEIGHT 1600u
 typedef enum { D3DDDI_GAMMARAMP_DEFAULT = 1, D3DDDI_GAMMARAMP_RGB256x3x16 = 2 } GAMMA;
 typedef enum {
   D3DKMDT_VPPS_UNINITIALIZED = 0, D3DKMDT_VPPS_IDENTITY = 1,
@@ -136,6 +148,27 @@ typedef struct {
 typedef struct {
   UINT Id; D3DKMDT_VIDEO_SIGNAL_INFO VideoSignalInfo; MP Preference;
 } D3DKMDT_VIDPN_TARGET_MODE;
+typedef struct { UINT FirstChannel, SecondChannel, ThirdChannel, FourthChannel; }
+    D3DKMDT_COLOR_COEFF_DYNAMIC_RANGES;
+typedef struct {
+  UINT Id; D3DKMDT_VIDEO_SIGNAL_INFO VideoSignalInfo; int ColorBasis;
+  D3DKMDT_COLOR_COEFF_DYNAMIC_RANGES ColorCoeffDynamicRanges; MCO Origin;
+  MP Preference;
+} D3DKMDT_MONITOR_SOURCE_MODE;
+typedef struct FakeMonitorSet *D3DKMDT_HMONITORSOURCEMODESET;
+typedef struct {
+  NTSTATUS (*pfnCreateNewModeInfo)(D3DKMDT_HMONITORSOURCEMODESET,
+                                   D3DKMDT_MONITOR_SOURCE_MODE **);
+  NTSTATUS (*pfnAddMode)(D3DKMDT_HMONITORSOURCEMODESET,
+                         const D3DKMDT_MONITOR_SOURCE_MODE *);
+  NTSTATUS (*pfnReleaseModeInfo)(D3DKMDT_HMONITORSOURCEMODESET,
+                                 const D3DKMDT_MONITOR_SOURCE_MODE *);
+} DXGK_MONITORSOURCEMODESET_INTERFACE;
+typedef struct {
+  UINT VideoPresentTargetId;
+  D3DKMDT_HMONITORSOURCEMODESET hMonitorSourceModeSet;
+  const DXGK_MONITORSOURCEMODESET_INTERFACE *pMonitorSourceModeSetInterface;
+} DXGKARG_RECOMMENDMONITORMODES;
 typedef struct {
   UINT Identity : 1; UINT Centered : 1; UINT Stretched : 1;
   UINT AspectRatioCenteredMax : 1; UINT Custom : 1;
@@ -240,11 +273,16 @@ typedef struct {
   ADMISSION_CONTEXT *Adapter;
   APPLE_AGX_FIXED_PANEL Panel;
 } ADMISSION_SCANOUT_RUNTIME;
+typedef int32_t LONG;
+static LONG InterlockedIncrement(volatile LONG *p) { return ++*p; }
+static LONG InterlockedExchange(volatile LONG *p, LONG v) { LONG o = *p; *p = v; return o; }
+RECEIPT_STRUCT
 struct _ADMISSION_CONTEXT {
   BOOLEAN Started, DisplayActive, SourceVisible;
   ULONG CommittedWidth, CommittedHeight, CommittedStride;
   D3DDDIFORMAT CommittedFormat;
   ULONG CommittedScaling;
+  ADMISSION_DISPLAY_MODES_RECEIPT DisplayModes;
   void *ScanoutRuntime;
   struct {
     NTSTATUS (*DxgkCbQueryVidPnInterface)(D3DKMDT_HVIDPN, UINT,
@@ -319,7 +357,10 @@ struct FakeSourceSet {
   unsigned count; int pinned; unsigned next_id;
 };
 struct FakeTargetSet {
-  D3DKMDT_VIDPN_TARGET_MODE modes[4]; unsigned count; int pinned;
+  D3DKMDT_VIDPN_TARGET_MODE modes[MAX_MODES]; unsigned count; int pinned;
+};
+struct FakeMonitorSet {
+  D3DKMDT_MONITOR_SOURCE_MODE modes[MAX_MODES]; unsigned count, live;
 };
 struct FakeVidPn {
   D3DKMDT_VIDPN_PRESENT_PATH path;
@@ -394,7 +435,7 @@ static NTSTATUS g_add(D3DKMDT_HVIDPNTARGETMODESET s, const D3DKMDT_VIDPN_TARGET_
   return STATUS_SUCCESS;
 }
 static NTSTATUS g_release(D3DKMDT_HVIDPNTARGETMODESET s, const D3DKMDT_VIDPN_TARGET_MODE *m) {
-  if (m < &s->modes[0] || m >= &s->modes[4]) free((void *)m);
+  if (m < &s->modes[0] || m >= &s->modes[MAX_MODES]) free((void *)m);
   vidpn_of_set->acquired--; return STATUS_SUCCESS;
 }
 static const DXGK_VIDPNTARGETMODESET_INTERFACE target_if = {
@@ -454,6 +495,23 @@ static NTSTATUS query_vidpn(D3DKMDT_HVIDPN v, UINT version,
 }
 
 static ADMISSION_SCANOUT_RUNTIME runtime;
+static NTSTATUS m_new(D3DKMDT_HMONITORSOURCEMODESET s, D3DKMDT_MONITOR_SOURCE_MODE **m) {
+  D3DKMDT_MONITOR_SOURCE_MODE *mode = calloc(1, sizeof(*mode));
+  mode->Id = 500u + s->count; *m = mode; s->live++; return STATUS_SUCCESS;
+}
+static NTSTATUS m_add(D3DKMDT_HMONITORSOURCEMODESET s, const D3DKMDT_MONITOR_SOURCE_MODE *m) {
+  unsigned i;
+  for (i = 0; i < s->count; i++)
+    if (s->modes[i].VideoSignalInfo.ActiveSize.cx == m->VideoSignalInfo.ActiveSize.cx &&
+        s->modes[i].VideoSignalInfo.ActiveSize.cy == m->VideoSignalInfo.ActiveSize.cy)
+      return STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET;
+  s->modes[s->count++] = *m; free((void *)m); s->live--; return STATUS_SUCCESS;
+}
+static NTSTATUS m_release(D3DKMDT_HMONITORSOURCEMODESET s, const D3DKMDT_MONITOR_SOURCE_MODE *m) {
+  free((void *)m); s->live--; return STATUS_SUCCESS;
+}
+static const DXGK_MONITORSOURCEMODESET_INTERFACE monitor_if = { m_new, m_add, m_release };
+
 static ADMISSION_CONTEXT context;
 
 static void start(uint32_t extra_caps) {
@@ -511,6 +569,22 @@ static void pin_source(struct FakeVidPn *v, UINT w, UINT h, ULONG stride,
   v->source->pinned = (int)v->source->count++;
 }
 
+static void pin_target(struct FakeVidPn *v, UINT w, UINT h) {
+  D3DKMDT_VIDPN_TARGET_MODE *m = &v->target->modes[v->target->count];
+  memset(m, 0, sizeof(*m));
+  m->Id = 300u + v->target->count;
+  m->VideoSignalInfo.ActiveSize.cx = w; m->VideoSignalInfo.ActiveSize.cy = h;
+  m->Preference = D3DKMDT_MP_PREFERRED;
+  v->target->pinned = (int)v->target->count++;
+}
+
+static NTSTATUS recommend_monitor_modes(struct FakeMonitorSet *set) {
+  DXGKARG_RECOMMENDMONITORMODES args;
+  memset(&args, 0, sizeof(args));
+  args.hMonitorSourceModeSet = set; args.pMonitorSourceModeSetInterface = &monitor_if;
+  return AdmissionDdiRecommendMonitorModes(&context, &args);
+}
+
 static void done(struct FakeVidPn *v) {
   assert(v->acquired == 0);
   free(v->source); free(v->target); free(v);
@@ -553,6 +627,17 @@ static void test_fixed_broker_offers_only_native(void) {
   assert(v->source->modes[0].Format.Graphics.PixelFormat == D3DDDIFMT_A8R8G8B8);
   assert(v->target->count == 1u &&
          v->target->modes[0].VideoSignalInfo.ActiveSize.cx == 2560u);
+  {
+    /* rc110: without the cap the monitor set is the native signal alone. */
+    struct FakeMonitorSet monitor; memset(&monitor, 0, sizeof(monitor));
+    assert(recommend_monitor_modes(&monitor) == STATUS_SUCCESS);
+    assert(monitor.count == 1u && monitor.live == 0u);
+    assert(monitor.modes[0].VideoSignalInfo.ActiveSize.cx == 2560u);
+    assert(monitor.modes[0].Preference == D3DKMDT_MP_PREFERRED);
+    assert(recommend_monitor_modes(&monitor) == STATUS_SUCCESS);
+    assert(monitor.count == 1u && monitor.live == 0u);
+    assert(context.DisplayModes.LastMonitorModesAdded == 0);
+  }
   s = support_of(v);
   assert(s.Identity && !s.Centered && !s.Stretched && !s.AspectRatioCenteredMax);
   done(v);
@@ -608,7 +693,33 @@ static void test_scaled_broker_offers_modes_and_scaling(void) {
   s = support_of(v);
   assert(s.Identity && s.Centered && s.Stretched && s.AspectRatioCenteredMax &&
          !s.Custom);
-  assert(v->target->count == 1u);
+  /* rc110: one target (and monitor) mode of every offered size; the native
+   * signal is preferred and first, the others not preferred. */
+  assert(v->target->count == 11u);
+  assert(v->target->modes[0].VideoSignalInfo.ActiveSize.cx == 2560u &&
+         v->target->modes[0].Preference == D3DKMDT_MP_PREFERRED);
+  assert(v->target->modes[3].VideoSignalInfo.ActiveSize.cx == 1920u &&
+         v->target->modes[3].VideoSignalInfo.ActiveSize.cy == 1080u &&
+         v->target->modes[3].VideoSignalInfo.TotalSize.cx == 2002u &&
+         v->target->modes[3].Preference == D3DKMDT_MP_NOTPREFERRED);
+  assert(v->target->modes[3].VideoSignalInfo.VSyncFreq.Numerator == 266630000u &&
+         v->target->modes[3].VideoSignalInfo.VSyncFreq.Denominator == 2642u * 1682u);
+  assert(v->target->modes[3].VideoSignalInfo.HSyncFreq.Numerator == 69719u);
+  assert(v->target->modes[3].VideoSignalInfo.PixelRate == 69719ull * 2002ull);
+  assert(context.DisplayModes.LastEnumTargetModes == 11);
+  {
+    struct FakeMonitorSet monitor; memset(&monitor, 0, sizeof(monitor));
+    assert(recommend_monitor_modes(&monitor) == STATUS_SUCCESS);
+    assert(monitor.count == 11u && monitor.live == 0u);
+    assert(monitor.modes[0].Preference == D3DKMDT_MP_PREFERRED);
+    assert(monitor.modes[3].VideoSignalInfo.ActiveSize.cx == 1920u &&
+           monitor.modes[3].Preference == D3DKMDT_MP_NOTPREFERRED &&
+           monitor.modes[3].Origin == D3DKMDT_MCO_DRIVER);
+    assert(context.DisplayModes.LastMonitorModesAdded == 11);
+    /* A second recommendation finds every mode already present. */
+    assert(recommend_monitor_modes(&monitor) == STATUS_SUCCESS);
+    assert(monitor.count == 11u && monitor.live == 0u);
+  }
   done(v);
 
   /* Pinned identity: only the native size is cofunctional. */
@@ -733,8 +844,101 @@ static void test_scaled_commit_and_pinned_validation(void) {
   done(v);
 }
 
+/* rc110: a target pinned at a scaled size (the mode Windows chose from the
+ * monitor set) takes the source of its size with identity scaling; the
+ * panel fits it aspect-ratio-centered. */
+static void test_scaled_target_takes_the_source_of_its_size(void) {
+  struct FakeVidPn *v;
+  D3DKMDT_VIDPN_PRESENT_PATH_SCALING_SUPPORT s;
+
+  start(APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE);
+  /* Unpinned source: only the target's size, both formats. */
+  v = vidpn(D3DKMDT_VPPS_UNPINNED);
+  pin_target(v, 1920u, 1080u);
+  assert(enum_cofunc(v) == STATUS_SUCCESS);
+  assert(v->source->count == 1u);
+  assert(v->source->modes[0].Format.Graphics.PrimSurfSize.cx == 1920u &&
+         v->source->modes[0].Format.Graphics.PrimSurfSize.cy == 1080u &&
+         v->source->modes[0].Format.Graphics.Stride == 7680u);
+  s = support_of(v);
+  assert(s.Identity && !s.Centered && !s.Stretched && !s.AspectRatioCenteredMax);
+  assert(v->target->count == 1u && v->assigned_target == 0);
+  assert(supported(v));
+  done(v);
+
+  /* Pinned source of the target's size: identity commit, ACMax panel fit. */
+  v = vidpn(D3DKMDT_VPPS_IDENTITY);
+  pin_target(v, 1920u, 1080u);
+  pin_source(v, 1920u, 1080u, 7680u, D3DDDIFMT_A8R8G8B8);
+  assert(enum_cofunc(v) == STATUS_SUCCESS);
+  assert(supported(v));
+  assert(commit(v) == STATUS_SUCCESS);
+  assert(context.CommittedWidth == 1920u && context.CommittedHeight == 1080u &&
+         context.CommittedScaling == D3DKMDT_VPPS_IDENTITY);
+  assert(runtime.Panel.Scanout.PresentDestOrigin == (0u | (80u << 16)));
+  assert(runtime.Panel.Scanout.PresentDestSize == (2560u | (1440u << 16)));
+  assert(context.DisplayModes.LastCommitTargetWidth == 1920 &&
+         context.DisplayModes.LastCommitTargetHeight == 1080);
+  done(v);
+
+  /* Not specified resolves to identity as well. */
+  v = vidpn(D3DKMDT_VPPS_NOTSPECIFIED);
+  pin_target(v, 1280u, 720u);
+  pin_source(v, 1280u, 720u, 5120u, D3DDDIFMT_A8R8G8B8);
+  assert(supported(v));
+  assert(commit(v) == STATUS_SUCCESS);
+  assert(context.CommittedWidth == 1280u && context.CommittedScaling == D3DKMDT_VPPS_IDENTITY);
+  assert(runtime.Panel.Scanout.PresentDestOrigin == (0u | (80u << 16)));
+  done(v);
+
+  /* A source of another size, or a non-identity transform, is refused. */
+  v = vidpn(D3DKMDT_VPPS_IDENTITY);
+  pin_target(v, 1920u, 1080u);
+  pin_source(v, 1280u, 720u, 5120u, D3DDDIFMT_A8R8G8B8);
+  assert(!supported(v));
+  assert(commit(v) == STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED);
+  assert(context.CommittedWidth == 1280u);
+  done(v);
+  v = vidpn(D3DKMDT_VPPS_STRETCHED);
+  pin_target(v, 1920u, 1080u);
+  pin_source(v, 1920u, 1080u, 7680u, D3DDDIFMT_A8R8G8B8);
+  assert(!supported(v));
+  assert(commit(v) == STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED);
+  done(v);
+  v = vidpn(D3DKMDT_VPPS_UNPINNED);
+  pin_target(v, 1920u, 1080u);
+  pin_source(v, 2560u, 1600u, 10240u, D3DDDIFMT_A8R8G8B8);
+  assert(enum_cofunc(v) == STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED);
+  done(v);
+  /* A target that is not an offered size. */
+  v = vidpn(D3DKMDT_VPPS_UNPINNED);
+  pin_target(v, 1366u, 768u);
+  assert(enum_cofunc(v) == STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED);
+  assert(!supported(v));
+  done(v);
+
+  /* The native target keeps the rc106 source-scaling rules. */
+  v = vidpn(D3DKMDT_VPPS_NOTSPECIFIED);
+  pin_target(v, 2560u, 1600u);
+  pin_source(v, 1920u, 1080u, 7680u, D3DDDIFMT_A8R8G8B8);
+  assert(supported(v));
+  assert(commit(v) == STATUS_SUCCESS);
+  assert(context.CommittedScaling == D3DKMDT_VPPS_ASPECTRATIOCENTEREDMAX);
+  assert(runtime.Panel.Scanout.PresentDestOrigin == (0u | (80u << 16)));
+  done(v);
+
+  /* Without the cap a scaled target is never offered nor accepted. */
+  start(0u);
+  v = vidpn(D3DKMDT_VPPS_UNPINNED);
+  pin_target(v, 1920u, 1080u);
+  assert(enum_cofunc(v) == STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED);
+  assert(!supported(v));
+  done(v);
+}
+
 int main(void) {
   test_fixed_broker_offers_only_native();
+  test_scaled_target_takes_the_source_of_its_size();
   test_scaled_broker_offers_modes_and_scaling();
   test_scaled_commit_and_pinned_validation();
   return 0;
@@ -762,7 +966,12 @@ class VidPnScaledModeTests(unittest.TestCase):
             extract(display, name) for name in DISPLAY_FUNCTIONS)
         with tempfile.TemporaryDirectory() as tmp:
             program = Path(tmp) / "vidpn.c"
-            program.write_text(SHIM + body + FAKE)
+            header = (KMD / "include" / "render_admission.h").read_text()
+            receipt = re.search(
+                r"typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT \{.*?\} "
+                r"ADMISSION_DISPLAY_MODES_RECEIPT;", header, re.S).group(0)
+            program.write_text(
+                SHIM.replace("RECEIPT_STRUCT", receipt) + body + FAKE)
             binary = Path(tmp) / "vidpn"
             subprocess.run(
                 [os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",

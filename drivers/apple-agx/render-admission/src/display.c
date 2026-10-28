@@ -240,6 +240,105 @@ static VOID AdmissionDisplayFillScalingSupport(
     ScalingSupport->AspectRatioCenteredMax = 1;
 }
 
+/* rc110 (EXP2049): Windows lists the modes of a fixed panel from its monitor
+ * source modes and pins a target mode with that signal; a scaled laptop mode
+ * is therefore also a target (and monitor) mode of its own size, which the
+ * driver fits into the native panel like a panel fitter.  Its signal is the
+ * mode's active size on the panel's blanking and refresh rate. */
+static VOID AdmissionFillScaledSignalInfo(D3DKMDT_VIDEO_SIGNAL_INFO *Signal,
+                                          ULONG Width, ULONG Height) {
+  ULONGLONG hsync;
+  AdmissionFillPanelSignalInfo(Signal);
+  if (Width == APPLE_AGX_SCANOUT_J313_WIDTH &&
+      Height == APPLE_AGX_SCANOUT_J313_HEIGHT)
+    return;
+  Signal->ActiveSize.cx = Width;
+  Signal->ActiveSize.cy = Height;
+  Signal->TotalSize.cx = Width + 82u;
+  Signal->TotalSize.cy = Height + 82u;
+  /* VSyncFreq stays the panel's exact 266630000 / (2642 * 1682) Hz. */
+  hsync = (266630000ULL * (ULONGLONG)Signal->TotalSize.cy) /
+          (2642ULL * 1682ULL);
+  Signal->HSyncFreq.Numerator = (UINT)hsync;
+  Signal->HSyncFreq.Denominator = 1u;
+  Signal->PixelRate = hsync * (ULONGLONG)Signal->TotalSize.cx;
+}
+
+static BOOLEAN AdmissionDisplayTargetIsNative(ULONG Width, ULONG Height) {
+  return Width == APPLE_AGX_SCANOUT_J313_WIDTH &&
+                 Height == APPLE_AGX_SCANOUT_J313_HEIGHT
+             ? TRUE
+             : FALSE;
+}
+
+/* A pinned target mode is the native signal or an offered scaled size. */
+static BOOLEAN AdmissionDisplayTargetOffered(
+    ADMISSION_CONTEXT *Context, CONST D3DKMDT_VIDPN_TARGET_MODE *Target,
+    ULONG *Width, ULONG *Height) {
+  *Width = (ULONG)Target->VideoSignalInfo.ActiveSize.cx;
+  *Height = (ULONG)Target->VideoSignalInfo.ActiveSize.cy;
+  return AdmissionScanoutSourceModeSupported(Context, *Width, *Height,
+                                             *Width * 4u);
+}
+
+/* The path transforms that mean identity for a scaled target: the driver
+ * decides for NOTSPECIFIED / UNPINNED / UNINITIALIZED. */
+static BOOLEAN AdmissionDisplayIdentityRequested(
+    D3DKMDT_VIDPN_PRESENT_PATH_SCALING Scaling) {
+  return Scaling == D3DKMDT_VPPS_IDENTITY ||
+                 Scaling == D3DKMDT_VPPS_NOTSPECIFIED ||
+                 Scaling == D3DKMDT_VPPS_UNPINNED ||
+                 Scaling == D3DKMDT_VPPS_UNINITIALIZED
+             ? TRUE
+             : FALSE;
+}
+
+/* The 0->0 path is supported when: the target is unpinned or native and the
+ * source/scaling pair follows the rc106 rules; or the target is a scaled
+ * size, the source (if pinned) has exactly that size and the transform is
+ * identity. */
+static BOOLEAN AdmissionDisplayPathSupported(
+    ADMISSION_CONTEXT *Context, CONST D3DKMDT_VIDPN_SOURCE_MODE *Source,
+    CONST D3DKMDT_VIDPN_TARGET_MODE *Target,
+    D3DKMDT_VIDPN_PRESENT_PATH_SCALING Scaling) {
+  ULONG targetWidth = 0u, targetHeight = 0u;
+  if (Target != NULL) {
+    if (!AdmissionDisplayTargetOffered(Context, Target, &targetWidth,
+                                       &targetHeight))
+      return FALSE;
+    if (!AdmissionDisplayTargetIsNative(targetWidth, targetHeight)) {
+      if (Source != NULL &&
+          (!AdmissionDisplaySourceModeOffered(Context, Source) ||
+           (ULONG)Source->Format.Graphics.PrimSurfSize.cx != targetWidth ||
+           (ULONG)Source->Format.Graphics.PrimSurfSize.cy != targetHeight))
+        return FALSE;
+      return AdmissionDisplayIdentityRequested(Scaling);
+    }
+  }
+  return AdmissionDisplayScalingCofunctional(Context, Source, Scaling);
+}
+
+static NTSTATUS AdmissionDisplayAddTargetMode(
+    CONST DXGK_VIDPNTARGETMODESET_INTERFACE *TargetSetInterface,
+    D3DKMDT_HVIDPNTARGETMODESET TargetSet, ULONG Width, ULONG Height) {
+  D3DKMDT_VIDPN_TARGET_MODE *targetMode = NULL;
+  NTSTATUS status = TargetSetInterface->pfnCreateNewModeInfo(TargetSet,
+                                                             &targetMode);
+  if (!NT_SUCCESS(status))
+    return status;
+  /* The manager initializes Id and the V1 MinimumVSyncFreq sentinel.
+   * Clearing the whole WDDM2.9+ object turns that sentinel into an
+   * unsupported minimum-refresh request. Only fill our mode fields. */
+  AdmissionFillScaledSignalInfo(&targetMode->VideoSignalInfo, Width, Height);
+  targetMode->Preference = AdmissionDisplayTargetIsNative(Width, Height)
+                               ? D3DKMDT_MP_PREFERRED
+                               : D3DKMDT_MP_NOTPREFERRED;
+  status = TargetSetInterface->pfnAddMode(TargetSet, targetMode);
+  if (!NT_SUCCESS(status))
+    (void)TargetSetInterface->pfnReleaseModeInfo(TargetSet, targetMode);
+  return status;
+}
+
 static NTSTATUS AdmissionDisplayAddSourceMode(
     CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *SourceSetInterface,
     D3DKMDT_HVIDPNSOURCEMODESET SourceSet, ULONG Width, ULONG Height,
@@ -280,8 +379,11 @@ static NTSTATUS AdmissionIsSupportedVidPnImpl(
   CONST D3DKMDT_VIDPN_PRESENT_PATH *path = NULL;
   CONST D3DKMDT_VIDPN_PRESENT_PATH *nextPath = NULL;
   CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *sourceSetInterface = NULL;
+  CONST DXGK_VIDPNTARGETMODESET_INTERFACE *targetSetInterface = NULL;
   CONST D3DKMDT_VIDPN_SOURCE_MODE *pinnedSourceMode = NULL;
+  CONST D3DKMDT_VIDPN_TARGET_MODE *pinnedTargetMode = NULL;
   D3DKMDT_HVIDPNSOURCEMODESET sourceSet = 0;
+  D3DKMDT_HVIDPNTARGETMODESET targetSet = 0;
   D3DKMDT_HVIDPNTOPOLOGY topology = 0;
   NTSTATUS status;
 
@@ -328,14 +430,30 @@ static NTSTATUS AdmissionIsSupportedVidPnImpl(
                                                           &pinnedSourceMode);
     if (!NT_SUCCESS(status))
       goto Exit;
+    /* rc110: a pinned scaled target restricts the source to its size. */
+    status = vidPnInterface->pfnAcquireTargetModeSet(
+        IsSupportedVidPn->hDesiredVidPn, path->VidPnTargetId, &targetSet,
+        &targetSetInterface);
+    if (!NT_SUCCESS(status))
+      goto Exit;
+    status = targetSetInterface->pfnAcquirePinnedModeInfo(targetSet,
+                                                          &pinnedTargetMode);
+    if (!NT_SUCCESS(status))
+      goto Exit;
     status = STATUS_SUCCESS;
-    IsSupportedVidPn->IsVidPnSupported = AdmissionDisplayScalingCofunctional(
-        context, pinnedSourceMode, path->ContentTransformation.Scaling);
+    IsSupportedVidPn->IsVidPnSupported = AdmissionDisplayPathSupported(
+        context, pinnedSourceMode, pinnedTargetMode,
+        path->ContentTransformation.Scaling);
   } else if (NT_SUCCESS(status)) {
     status = STATUS_SUCCESS;
   }
 
 Exit:
+  if (pinnedTargetMode != NULL && targetSetInterface != NULL && targetSet != 0)
+    targetSetInterface->pfnReleaseModeInfo(targetSet, pinnedTargetMode);
+  if (targetSet != 0)
+    vidPnInterface->pfnReleaseTargetModeSet(IsSupportedVidPn->hDesiredVidPn,
+                                            targetSet);
   if (pinnedSourceMode != NULL && sourceSetInterface != NULL && sourceSet != 0)
     sourceSetInterface->pfnReleaseModeInfo(sourceSet, pinnedSourceMode);
   if (sourceSet != 0)
@@ -353,12 +471,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiIsSupportedVidPn(
     DXGKARG_ISSUPPORTEDVIDPN *IsSupportedVidPn) {
   NTSTATUS status =
       AdmissionIsSupportedVidPnImpl(MiniportDeviceContext, IsSupportedVidPn);
-  if (MiniportDeviceContext != NULL && IsSupportedVidPn != NULL)
-    AdmissionDisplayRingRecord((ADMISSION_CONTEXT *)MiniportDeviceContext, 6u,
+  if (MiniportDeviceContext != NULL && IsSupportedVidPn != NULL) {
+    ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+    AdmissionDisplayRingRecord(context, 6u,
                                IsSupportedVidPn->IsVidPnSupported ? 1u : 0u,
                                (ULONG)status,
                                (ULONGLONG)(ULONG_PTR)IsSupportedVidPn->hDesiredVidPn,
                                0ULL);
+    InterlockedIncrement(&context->DisplayModes.IsSupportedCalls);
+    InterlockedExchange(&context->DisplayModes.LastIsSupportedStatus,
+                        (LONG)status);
+    InterlockedExchange(&context->DisplayModes.LastIsSupportedVerdict,
+                        IsSupportedVidPn->IsVidPnSupported ? 1 : 0);
+  }
   return status;
 }
 
@@ -382,9 +507,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
   CONST D3DKMDT_VIDPN_PRESENT_PATH *nextPath = NULL;
   CONST D3DKMDT_VIDPN_SOURCE_MODE *pinnedSourceMode = NULL;
   CONST D3DKMDT_VIDPN_TARGET_MODE *pinnedTargetMode = NULL;
-  D3DKMDT_VIDPN_TARGET_MODE *targetMode = NULL;
   ULONG modeIndex = 0u, modeWidth = 0u, modeHeight = 0u, modeStride = 0u;
-  ULONG offeredModes = 0u, scalingSupport = 0u;
+  ULONG offeredModes = 0u, offeredTargets = 0u, scalingSupport = 0u;
+  ULONG targetWidth = 0u, targetHeight = 0u;
+  BOOLEAN targetScaled = FALSE;
   D3DKMDT_VIDPN_PRESENT_PATH_SCALING resolvedScaling =
       D3DKMDT_VPPS_UNINITIALIZED;
   D3DKMDT_HVIDPNTOPOLOGY topology = 0;
@@ -417,6 +543,29 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
     goto Exit;
   }
 
+  /* rc110: the pinned target first; a scaled target restricts the sources
+   * to its own size with the identity transform. */
+  if (!(EnumCofuncModality->EnumPivotType == D3DKMDT_EPT_VIDPNTARGET &&
+        EnumCofuncModality->EnumPivot.VidPnTargetId == path->VidPnTargetId)) {
+    status = vidPnInterface->pfnAcquireTargetModeSet(
+        EnumCofuncModality->hConstrainingVidPn, path->VidPnTargetId,
+        &targetSet, &targetSetInterface);
+    if (!NT_SUCCESS(status))
+      goto Exit;
+    status = targetSetInterface->pfnAcquirePinnedModeInfo(targetSet,
+                                                          &pinnedTargetMode);
+    if (!NT_SUCCESS(status))
+      goto Exit;
+    if (pinnedTargetMode != NULL) {
+      if (!AdmissionDisplayTargetOffered(context, pinnedTargetMode,
+                                         &targetWidth, &targetHeight)) {
+        status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+        goto Exit;
+      }
+      targetScaled = !AdmissionDisplayTargetIsNative(targetWidth, targetHeight);
+    }
+  }
+
   status = vidPnInterface->pfnAcquireSourceModeSet(
       EnumCofuncModality->hConstrainingVidPn, path->VidPnSourceId,
       &sourceSet, &sourceSetInterface);
@@ -443,15 +592,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
     /* D3D-FS1: DXGI lists R8G8B8A8 display modes only from an A8B8G8R8
      * source mode; offered when the hypervisor scans out RGBA8888.  rc106:
      * a pinned scaling keeps only the modes CommitVidPn would accept with
-     * it (the same resolution IsSupportedVidPn applies). */
+     * it (the same resolution IsSupportedVidPn applies).  rc110: a scaled
+     * target takes the one source of its size. */
     for (modeIndex = 0u;
          AdmissionScanoutSourceModeAt(context, modeIndex, &modeWidth,
                                       &modeHeight, &modeStride);
          ++modeIndex) {
-      if (!AdmissionScanoutResolveScaling(context, modeWidth, modeHeight,
-                                          path->ContentTransformation.Scaling,
-                                          &resolvedScaling))
+      if (targetScaled) {
+        if (modeWidth != targetWidth || modeHeight != targetHeight ||
+            !AdmissionDisplayIdentityRequested(
+                path->ContentTransformation.Scaling))
+          continue;
+      } else if (!AdmissionScanoutResolveScaling(
+                     context, modeWidth, modeHeight,
+                     path->ContentTransformation.Scaling, &resolvedScaling)) {
         continue;
+      }
       status = AdmissionDisplayAddSourceMode(sourceSetInterface, sourceSet,
                                              modeWidth, modeHeight,
                                              modeStride, D3DDDIFMT_A8R8G8B8);
@@ -479,50 +635,37 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
     sourceSetInterface = NULL;
   }
 
-  if (!(EnumCofuncModality->EnumPivotType == D3DKMDT_EPT_VIDPNTARGET &&
-        EnumCofuncModality->EnumPivot.VidPnTargetId == path->VidPnTargetId)) {
-    status = vidPnInterface->pfnAcquireTargetModeSet(
+  if (targetSet != 0 && pinnedTargetMode == NULL) {
+    status = vidPnInterface->pfnReleaseTargetModeSet(
+        EnumCofuncModality->hConstrainingVidPn, targetSet);
+    if (!NT_SUCCESS(status))
+      goto Exit;
+    targetSet = 0;
+    targetSetInterface = NULL;
+    status = vidPnInterface->pfnCreateNewTargetModeSet(
         EnumCofuncModality->hConstrainingVidPn, path->VidPnTargetId,
         &targetSet, &targetSetInterface);
     if (!NT_SUCCESS(status))
       goto Exit;
-    status = targetSetInterface->pfnAcquirePinnedModeInfo(targetSet,
-                                                          &pinnedTargetMode);
+    /* The native signal (preferred) and, with a scaling broker, one target
+     * of every offered size (rc110). */
+    for (modeIndex = 0u;
+         AdmissionScanoutSourceModeAt(context, modeIndex, &modeWidth,
+                                      &modeHeight, &modeStride);
+         ++modeIndex) {
+      status = AdmissionDisplayAddTargetMode(targetSetInterface, targetSet,
+                                             modeWidth, modeHeight);
+      if (!NT_SUCCESS(status))
+        goto Exit;
+      ++offeredTargets;
+    }
+    status = vidPnInterface->pfnAssignTargetModeSet(
+        EnumCofuncModality->hConstrainingVidPn, path->VidPnTargetId,
+        targetSet);
     if (!NT_SUCCESS(status))
       goto Exit;
-    if (pinnedTargetMode == NULL) {
-      status = vidPnInterface->pfnReleaseTargetModeSet(
-          EnumCofuncModality->hConstrainingVidPn, targetSet);
-      if (!NT_SUCCESS(status))
-        goto Exit;
-      targetSet = 0;
-      targetSetInterface = NULL;
-      status = vidPnInterface->pfnCreateNewTargetModeSet(
-          EnumCofuncModality->hConstrainingVidPn, path->VidPnTargetId,
-          &targetSet, &targetSetInterface);
-      if (!NT_SUCCESS(status))
-        goto Exit;
-      status = targetSetInterface->pfnCreateNewModeInfo(targetSet,
-                                                        &targetMode);
-      if (!NT_SUCCESS(status))
-        goto Exit;
-      /* The manager initializes Id and the V1 MinimumVSyncFreq sentinel.
-       * Clearing the whole WDDM2.9+ object turns that sentinel into an
-       * unsupported minimum-refresh request. Only fill our mode fields. */
-      AdmissionFillPanelSignalInfo(&targetMode->VideoSignalInfo);
-      targetMode->Preference = D3DKMDT_MP_PREFERRED;
-      status = targetSetInterface->pfnAddMode(targetSet, targetMode);
-      if (!NT_SUCCESS(status))
-        goto Exit;
-      targetMode = NULL;
-      status = vidPnInterface->pfnAssignTargetModeSet(
-          EnumCofuncModality->hConstrainingVidPn, path->VidPnTargetId,
-          targetSet);
-      if (!NT_SUCCESS(status))
-        goto Exit;
-      targetSet = 0;
-      targetSetInterface = NULL;
-    }
+    targetSet = 0;
+    targetSetInterface = NULL;
   }
 
   {
@@ -530,9 +673,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
     BOOLEAN changed = FALSE;
     if (path->ContentTransformation.Scaling == D3DKMDT_VPPS_UNPINNED) {
       /* rc106: identity for the native source; centered, stretched and
-       * aspect-ratio-centered-max for a smaller one (scaled broker only). */
-      scalingSupport = AdmissionDisplayScalingSupport(context,
-                                                      pinnedSourceMode);
+       * aspect-ratio-centered-max for a smaller one (scaled broker only).
+       * rc110: identity alone against a scaled target of the source's size. */
+      if (targetScaled)
+        scalingSupport =
+            pinnedSourceMode == NULL ||
+                    (AdmissionDisplaySourceModeOffered(context,
+                                                       pinnedSourceMode) &&
+                     (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cx ==
+                         targetWidth &&
+                     (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cy ==
+                         targetHeight)
+                ? (1u << (ULONG)D3DKMDT_VPPS_IDENTITY)
+                : 0u;
+      else
+        scalingSupport = AdmissionDisplayScalingSupport(context,
+                                                        pinnedSourceMode);
       if (scalingSupport == 0u) {
         status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
         goto Exit;
@@ -564,6 +720,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
     status = STATUS_GRAPHICS_VIDPN_TOPOLOGY_NOT_SUPPORTED;
 
 Exit:
+  if (context != NULL && EnumCofuncModality != NULL) {
+    InterlockedIncrement(&context->DisplayModes.EnumCalls);
+    InterlockedExchange(&context->DisplayModes.LastEnumStatus, (LONG)status);
+    InterlockedExchange(&context->DisplayModes.LastEnumPivot,
+                        (LONG)EnumCofuncModality->EnumPivotType);
+    InterlockedExchange(&context->DisplayModes.LastEnumSourceModes,
+                        (LONG)offeredModes);
+    InterlockedExchange(&context->DisplayModes.LastEnumTargetModes,
+                        (LONG)offeredTargets);
+  }
   if (context != NULL && EnumCofuncModality != NULL)
     AdmissionDisplayRingRecord(context, 5u,
         (ULONG)EnumCofuncModality->EnumPivotType |
@@ -574,8 +740,6 @@ Exit:
         pinnedSourceMode != NULL
             ? (ULONGLONG)pinnedSourceMode->Format.Graphics.PixelFormat : 0ULL,
         0ULL);
-  if (targetMode != NULL && targetSetInterface != NULL && targetSet != 0)
-    targetSetInterface->pfnReleaseModeInfo(targetSet, targetMode);
   if (pinnedSourceMode != NULL && sourceSetInterface != NULL && sourceSet != 0)
     sourceSetInterface->pfnReleaseModeInfo(sourceSet, pinnedSourceMode);
   if (pinnedTargetMode != NULL && targetSetInterface != NULL && targetSet != 0)
@@ -647,6 +811,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceVisibility(
           context, SetVidPnSourceVisibility->Visible ? TRUE : FALSE)))
     return STATUS_DEVICE_HARDWARE_ERROR;
   context->SourceVisible = SetVidPnSourceVisibility->Visible ? TRUE : FALSE;
+  InterlockedIncrement(&context->DisplayModes.VisibilityCalls);
+  InterlockedExchange(&context->DisplayModes.LastVisible,
+                      context->SourceVisible ? 1 : 0);
   /* Show a primary that dxgkrnl set while the source was hidden. A busy
    * queue keeps the deferred address for the next visibility change. */
   if (context->SourceVisible)
@@ -661,6 +828,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
   CONST DXGK_VIDPN_INTERFACE *vidPnInterface = NULL;
   CONST DXGK_VIDPNTOPOLOGY_INTERFACE *topologyInterface = NULL;
   CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *sourceSetInterface = NULL;
+  CONST DXGK_VIDPNTARGETMODESET_INTERFACE *targetSetInterface = NULL;
+  CONST D3DKMDT_VIDPN_TARGET_MODE *pinnedTargetMode = NULL;
+  D3DKMDT_HVIDPNTARGETMODESET targetSet = 0;
+  ULONG targetWidth = 0u, targetHeight = 0u;
+  D3DKMDT_VIDPN_PRESENT_PATH_SCALING panelScaling = D3DKMDT_VPPS_UNINITIALIZED;
   CONST D3DKMDT_VIDPN_SOURCE_MODE *pinnedSourceMode = NULL;
   CONST D3DKMDT_VIDPN_PRESENT_PATH *path = NULL;
   D3DKMDT_HVIDPNTOPOLOGY topology = 0;
@@ -729,6 +901,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
                                                         &pinnedSourceMode);
   if (!NT_SUCCESS(status))
     goto Exit;
+  if (pinnedSourceMode != NULL) {
+    InterlockedExchange(&context->DisplayModes.LastCommitWidth,
+        (LONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cx);
+    InterlockedExchange(&context->DisplayModes.LastCommitHeight,
+        (LONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cy);
+    InterlockedExchange(&context->DisplayModes.LastCommitStride,
+        (LONG)pinnedSourceMode->Format.Graphics.Stride);
+    InterlockedExchange(&context->DisplayModes.LastCommitFormat,
+        (LONG)pinnedSourceMode->Format.Graphics.PixelFormat);
+  }
   /* rc106: any offered source mode; the panel target stays native. */
   if (pinnedSourceMode == NULL ||
       !AdmissionDisplaySourceModeOffered(context, pinnedSourceMode)) {
@@ -742,18 +924,57 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
     status = STATUS_GRAPHICS_VIDPN_TOPOLOGY_NOT_SUPPORTED;
     goto Exit;
   }
-  if (!AdmissionScanoutResolveScaling(
-          context, (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cx,
-          (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cy,
-          path->ContentTransformation.Scaling, &scaling)) {
-    status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+  /* rc110: a pinned scaled target (a laptop mode Windows chose by its
+   * signal) takes the source of its size with the identity transform; the
+   * panel fits it aspect-ratio-centered, as the source-scaling path would. */
+  status = vidPnInterface->pfnAcquireTargetModeSet(
+      CommitVidPn->hFunctionalVidPn, path->VidPnTargetId, &targetSet,
+      &targetSetInterface);
+  if (!NT_SUCCESS(status))
     goto Exit;
+  status = targetSetInterface->pfnAcquirePinnedModeInfo(targetSet,
+                                                        &pinnedTargetMode);
+  if (!NT_SUCCESS(status))
+    goto Exit;
+  if (pinnedTargetMode != NULL) {
+    if (!AdmissionDisplayTargetOffered(context, pinnedTargetMode,
+                                       &targetWidth, &targetHeight)) {
+      status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+      goto Exit;
+    }
+    InterlockedExchange(&context->DisplayModes.LastCommitTargetWidth,
+                        (LONG)targetWidth);
+    InterlockedExchange(&context->DisplayModes.LastCommitTargetHeight,
+                        (LONG)targetHeight);
+  }
+  if (pinnedTargetMode != NULL &&
+      !AdmissionDisplayTargetIsNative(targetWidth, targetHeight)) {
+    if ((ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cx !=
+            targetWidth ||
+        (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cy !=
+            targetHeight ||
+        !AdmissionDisplayIdentityRequested(
+            path->ContentTransformation.Scaling)) {
+      status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+      goto Exit;
+    }
+    scaling = D3DKMDT_VPPS_IDENTITY;
+    panelScaling = D3DKMDT_VPPS_ASPECTRATIOCENTEREDMAX;
+  } else {
+    if (!AdmissionScanoutResolveScaling(
+            context, (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cx,
+            (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cy,
+            path->ContentTransformation.Scaling, &scaling)) {
+      status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+      goto Exit;
+    }
+    panelScaling = scaling;
   }
   status = AdmissionScanoutCommit(
       context, (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cx,
       (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cy,
       (ULONG)pinnedSourceMode->Format.Graphics.Stride,
-      pinnedSourceMode->Format.Graphics.PixelFormat, scaling);
+      pinnedSourceMode->Format.Graphics.PixelFormat, panelScaling);
   if (!NT_SUCCESS(status))
     goto Exit;
   context->CommittedWidth =
@@ -763,10 +984,25 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
   context->CommittedStride = (ULONG)pinnedSourceMode->Format.Graphics.Stride;
   context->CommittedFormat = pinnedSourceMode->Format.Graphics.PixelFormat;
   context->CommittedScaling = (ULONG)scaling;
+  InterlockedExchange(&context->DisplayModes.LastCommitScaling, (LONG)scaling);
   context->DisplayActive = TRUE;
   status = STATUS_SUCCESS;
 
 Exit:
+  if (context != NULL && CommitVidPn != NULL) {
+    InterlockedIncrement(&context->DisplayModes.CommitCalls);
+    InterlockedExchange(&context->DisplayModes.LastCommitStatus, (LONG)status);
+    /* Ring kind 8: the commit's status and the geometry now committed. */
+    AdmissionDisplayRingRecord(context, 8u, (ULONG)status,
+        context->CommittedWidth | (context->CommittedHeight << 16), 0ULL,
+        (ULONGLONG)(ULONG_PTR)CommitVidPn->hPrimaryAllocation);
+  }
+  if (pinnedTargetMode != NULL && targetSetInterface != NULL && targetSet != 0)
+    targetSetInterface->pfnReleaseModeInfo(targetSet, pinnedTargetMode);
+  if (targetSet != 0 && vidPnInterface != NULL && CommitVidPn != NULL &&
+      CommitVidPn->hFunctionalVidPn != 0)
+    vidPnInterface->pfnReleaseTargetModeSet(CommitVidPn->hFunctionalVidPn,
+                                            targetSet);
   if (path != NULL && topologyInterface != NULL)
     topologyInterface->pfnReleasePathInfo(topology, path);
   if (pinnedSourceMode != NULL && sourceSetInterface != NULL && sourceSet != 0)
@@ -813,7 +1049,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRecommendMonitorModes(
     CONST DXGKARG_RECOMMENDMONITORMODES *RecommendMonitorModes) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   D3DKMDT_MONITOR_SOURCE_MODE *monitorMode = NULL;
-  NTSTATUS status;
+  ULONG index = 0u, width = 0u, height = 0u, stride = 0u, added = 0u;
+  NTSTATUS status = STATUS_SUCCESS;
 
   if (context == NULL || !context->Started || RecommendMonitorModes == NULL ||
       RecommendMonitorModes->VideoPresentTargetId != 0 ||
@@ -826,32 +1063,52 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRecommendMonitorModes(
               ->pfnReleaseModeInfo == NULL)
     return STATUS_INVALID_PARAMETER;
 
-  status = RecommendMonitorModes->pMonitorSourceModeSetInterface
-               ->pfnCreateNewModeInfo(
-                   RecommendMonitorModes->hMonitorSourceModeSet,
-                   &monitorMode);
-  if (!NT_SUCCESS(status))
-    return status;
-
-  RtlZeroMemory(monitorMode, sizeof(*monitorMode));
-  AdmissionFillPanelSignalInfo(&monitorMode->VideoSignalInfo);
-  monitorMode->Origin = D3DKMDT_MCO_DRIVER;
-  monitorMode->Preference = D3DKMDT_MP_PREFERRED;
-  monitorMode->ColorBasis = D3DKMDT_CB_SRGB;
-  monitorMode->ColorCoeffDynamicRanges.FirstChannel = 8;
-  monitorMode->ColorCoeffDynamicRanges.SecondChannel = 8;
-  monitorMode->ColorCoeffDynamicRanges.ThirdChannel = 8;
-  monitorMode->ColorCoeffDynamicRanges.FourthChannel = 8;
-
-  status = RecommendMonitorModes->pMonitorSourceModeSetInterface->pfnAddMode(
-      RecommendMonitorModes->hMonitorSourceModeSet, monitorMode);
-  if (status == STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET)
-    return STATUS_SUCCESS;
-  if (!NT_SUCCESS(status)) {
-    (void)RecommendMonitorModes->pMonitorSourceModeSetInterface
-        ->pfnReleaseModeInfo(RecommendMonitorModes->hMonitorSourceModeSet,
-                             monitorMode);
+  /* The panel's native signal (preferred) and, with a scaling broker, every
+   * offered laptop size as a monitor mode of its own (rc110): Windows lists
+   * a fixed panel's modes from this set. */
+  for (index = 0u;
+       AdmissionScanoutSourceModeAt(context, index, &width, &height, &stride);
+       ++index) {
+    status = RecommendMonitorModes->pMonitorSourceModeSetInterface
+                 ->pfnCreateNewModeInfo(
+                     RecommendMonitorModes->hMonitorSourceModeSet,
+                     &monitorMode);
+    if (!NT_SUCCESS(status))
+      break;
+    RtlZeroMemory(monitorMode, sizeof(*monitorMode));
+    AdmissionFillScaledSignalInfo(&monitorMode->VideoSignalInfo, width,
+                                  height);
+    monitorMode->Origin = D3DKMDT_MCO_DRIVER;
+    monitorMode->Preference = AdmissionDisplayTargetIsNative(width, height)
+                                  ? D3DKMDT_MP_PREFERRED
+                                  : D3DKMDT_MP_NOTPREFERRED;
+    monitorMode->ColorBasis = D3DKMDT_CB_SRGB;
+    monitorMode->ColorCoeffDynamicRanges.FirstChannel = 8;
+    monitorMode->ColorCoeffDynamicRanges.SecondChannel = 8;
+    monitorMode->ColorCoeffDynamicRanges.ThirdChannel = 8;
+    monitorMode->ColorCoeffDynamicRanges.FourthChannel = 8;
+    status = RecommendMonitorModes->pMonitorSourceModeSetInterface
+                 ->pfnAddMode(RecommendMonitorModes->hMonitorSourceModeSet,
+                              monitorMode);
+    if (!NT_SUCCESS(status)) {
+      /* The mode object is ours to release when it was not added (KMDOD:
+       * also for a mode already in the set, which is not an error). */
+      (void)RecommendMonitorModes->pMonitorSourceModeSetInterface
+          ->pfnReleaseModeInfo(RecommendMonitorModes->hMonitorSourceModeSet,
+                               monitorMode);
+      if (status == STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET) {
+        status = STATUS_SUCCESS;
+        continue;
+      }
+      break;
+    }
+    ++added;
   }
+  InterlockedIncrement(&context->DisplayModes.MonitorModeCalls);
+  InterlockedExchange(&context->DisplayModes.LastMonitorModesStatus,
+                      (LONG)status);
+  InterlockedExchange(&context->DisplayModes.LastMonitorModesAdded,
+                      (LONG)added);
   return status;
 }
 
@@ -987,6 +1244,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
   }
   InterlockedExchange(&context->SourceAddressStatus, (LONG)status);
   InterlockedExchange(&context->SourceAddressStage, 2);
+  InterlockedIncrement(&context->DisplayModes.SourceAddressCalls);
+  InterlockedExchange(&context->DisplayModes.LastSourceAddressStatus,
+                      (LONG)status);
+  if (SetVidPnSourceAddress != NULL)
+    InterlockedExchange(&context->DisplayModes.LastSourceAddressFlags,
+                        (LONG)SetVidPnSourceAddress->Flags.Value);
+  /* Ring kind 7: the flip's status (kind 3 records only its entry). */
+  AdmissionDisplayRingRecord(context, 7u, (ULONG)status,
+      SetVidPnSourceAddress != NULL ? SetVidPnSourceAddress->Flags.Value : 0u,
+      SetVidPnSourceAddress != NULL
+          ? (ULONGLONG)SetVidPnSourceAddress->PrimaryAddress.QuadPart : 0ULL,
+      SetVidPnSourceAddress != NULL
+          ? (ULONGLONG)(ULONG_PTR)SetVidPnSourceAddress->hAllocation : 0ULL);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   {
     ADMISSION_DWM_DDI_EVENT event;
@@ -1122,6 +1392,8 @@ static VOID AdmissionDwmRecordCommit(
     if (context != NULL)                                                      \
       AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, DdiId, 2u,    \
                                 status);                                      \
+    if (context != NULL)                                                      \
+      AdmissionRecordDisplayModes(context);                                  \
     return status;                                                            \
   }
 
