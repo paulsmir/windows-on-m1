@@ -6862,6 +6862,12 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 level_module = importlib.util.module_from_spec(level_spec)
                 level_spec.loader.exec_module(level_module)
                 level_module.project_sources(out, args.project, overlays)
+                # rc105: writer batches submit before their users (APPLE_AGX_D3D12_SUBMIT_ORDER)
+                order_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-submit-order.py'
+                order_spec = importlib.util.spec_from_file_location('native_submit_order', order_script)
+                order_module = importlib.util.module_from_spec(order_spec)
+                order_spec.loader.exec_module(order_module)
+                order_module.project_sources(out, args.project, overlays)
 
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
