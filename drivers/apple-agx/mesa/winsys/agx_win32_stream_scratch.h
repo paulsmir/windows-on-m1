@@ -18,10 +18,11 @@
  * - agx_batch_cleanup runs only after the batch's submission retired (or it
  *   never submitted), so a BO given back to the context is idle and is
  *   handed out again without any further wait;
- * - the context keeps at most AGX_WIN32_STREAM_SPARES BOs and
- *   AGX_WIN32_STREAM_SPARE_BYTES per kind; the rest are released as before.
- *   New BOs are sized by the request rounded up to 1 MiB, and the smallest
- *   retained BO that fits is chosen;
+ * - the context keeps at most AGX_WIN32_STREAM_SPARES BOs per kind and,
+ *   per kind, the larger of AGX_WIN32_STREAM_SPARE_BYTES and the outputs of
+ *   the batch being retired; the rest are released as before. New BOs are
+ *   sized by the request rounded up to 1 MiB, and the smallest retained BO
+ *   that fits is chosen;
  * - the context releases what it retains when it is destroyed.
  */
 #ifndef AGX_WIN32_STREAM_SCRATCH_H
@@ -75,12 +76,28 @@ agx_win32_stream_scratch(struct agx_batch *batch, unsigned kind, size_t bytes,
    return ptr;
 }
 
-/* agx_batch_cleanup, in place of agx_pool_cleanup: the batch has retired. */
+/* agx_batch_cleanup, in place of agx_pool_cleanup: the batch has retired.
+ * rc87 (EXP2017 GravityMark FHD 200k: stream outputs of about 30 MiB, more
+ * than 128 MiB per batch): the fixed 128 MiB cap released part of every
+ * retired batch's outputs, so each later batch created them again -- 1005
+ * "GPU stream scratch create" (14 at 100k), 396 creations of 30 MiB taking
+ * 30 s, 848 steady-state residency trims of 30 MiB, and the released
+ * outputs flooded the 64 MiB winsys BO cache (7722 evictions; 1617 small
+ * creations of at least 10 ms, 31 s). The next batch needs what this one
+ * used, so the cap is at least this batch's own outputs: one batch's worth,
+ * never the whole in-flight window. */
 static inline void
 agx_win32_stream_scratch_retire(struct agx_context *ctx, struct agx_pool *pool,
                                 unsigned kind)
 {
    struct agx_bo **spare = ctx->windows_stream_spare[kind & 1u];
+   uint64_t cap = AGX_WIN32_STREAM_SPARE_BYTES, own = 0;
+   util_dynarray_foreach(&pool->bos, struct agx_bo *, entry) {
+      if (*entry)
+         own += (*entry)->size;
+   }
+   if (own > cap)
+      cap = own;
    util_dynarray_foreach(&pool->bos, struct agx_bo *, entry) {
       struct agx_bo *bo = *entry;
       uint64_t kept = 0;
@@ -91,8 +108,8 @@ agx_win32_stream_scratch_retire(struct agx_context *ctx, struct agx_pool *pool,
          else if (slot == AGX_WIN32_STREAM_SPARES)
             slot = i;
       }
-      if (bo && slot < AGX_WIN32_STREAM_SPARES &&
-          bo->size <= AGX_WIN32_STREAM_SPARE_BYTES - kept)
+      if (bo && slot < AGX_WIN32_STREAM_SPARES && kept <= cap &&
+          bo->size <= cap - kept)
          spare[slot] = bo;
       else
          agx_bo_unreference(pool->dev, bo);

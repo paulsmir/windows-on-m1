@@ -153,49 +153,56 @@ int main(void) {
 '''
 
 
+def run_stream_harness(self, max_count=60000):
+    """Builds the projected stream path into HARNESS and runs it with draws of
+    max_count records (rc87 reuses it for GravityMark FHD 200k)."""
+    with tempfile.TemporaryDirectory(prefix='rc71-stream-scratch-') as tmp:
+        out = project(Path(tmp) / 'native')
+        if out is None:
+            self.skipTest('reference Mesa tree not available')
+        asahi = out / 'src/gallium/drivers/asahi'
+        state_h = (asahi / 'agx_state.h').read_text()
+        batch_c = (asahi / 'agx_batch.c').read_text()
+        pipe_c = (asahi / 'agx_pipe.c').read_text()
+        pool_c = (out / 'src/asahi/lib/pool.c').read_text()
+        emit = (WINSYS / 'agx_win32_indirect_stream_emit.h').read_text()
+        spare = [l for l in state_h.splitlines() if 'windows_stream_spare' in l and l.strip().startswith('struct')]
+        header = WINSYS / 'agx_win32_stream_scratch.h'
+        pool = '#define POOL_SLAB_SIZE (256 * 1024)\n' + '\n'.join(function(pool_c, m) for m in (
+            'static struct agx_bo *\nagx_pool_alloc_backing(', 'void\nagx_pool_init(',
+            'void\nagx_pool_cleanup(', 'struct agx_ptr\nagx_pool_alloc_aligned_with_bo('))
+        init_fn = function(batch_c, 'static void\nagx_batch_init(')
+        init = between(init_fn, '#ifdef APPLE_AGX_GPUVA_WINSYS\n', '   agx_pool_init(&batch->pool,')
+        cleanup_fn = function(batch_c, 'static void\nagx_batch_cleanup(')
+        cleanup = between(cleanup_fn, '   agx_pool_cleanup(&batch->pipeline_pool);\n',
+                          '\n   util_dynarray_fini(&batch->scissor);')
+        draw = between(emit, '   struct agx_bo *vdm_bo = NULL, *usc_bo = NULL;',
+                       '   if (!agx_win32_stream_output_valid(', include_start=True)
+        fini = ('agx_win32_stream_scratch_fini(&ctx);'
+                if 'agx_win32_stream_scratch_fini(ctx);' in pipe_c else '')
+        code = (HARNESS.replace('@@SPARE@@', '\n'.join(spare))
+                .replace('@@HEADER@@', f'#include "{header}"' if header.exists() else '')
+                .replace('@@POOL@@', pool)
+                .replace('@@INIT@@', init)
+                .replace('@@DRAW@@', draw)
+                .replace('@@CLEANUP@@', '  (void)ctx;\n' + cleanup)
+                .replace('@@FINI@@', fini)
+                .replace('stream_draw(batch, 60000u,', 'stream_draw(batch, %uu,' % max_count))
+        src = Path(tmp) / 'harness.c'
+        exe = Path(tmp) / 'harness'
+        src.write_text(code)
+        built = subprocess.run([os.environ.get('CC', 'clang'), '-std=gnu11', '-Wall', '-Wno-unused-function',
+                                '-fsanitize=address,undefined', str(src), '-o', str(exe)],
+                               capture_output=True, text=True)
+        self.assertEqual(built.returncode, 0, built.stderr[-4000:])
+        ran = subprocess.run([str(exe)], capture_output=True, text=True)
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr[-3000:])
+        self.assertIn('RC71 stream scratch: PASS', ran.stdout)
+
+
 class StreamScratch(unittest.TestCase):
     def test_stream_outputs_are_reused_after_their_batch_retires(self):
-        with tempfile.TemporaryDirectory(prefix='rc71-stream-scratch-') as tmp:
-            out = project(Path(tmp) / 'native')
-            if out is None:
-                self.skipTest('reference Mesa tree not available')
-            asahi = out / 'src/gallium/drivers/asahi'
-            state_h = (asahi / 'agx_state.h').read_text()
-            batch_c = (asahi / 'agx_batch.c').read_text()
-            pipe_c = (asahi / 'agx_pipe.c').read_text()
-            pool_c = (out / 'src/asahi/lib/pool.c').read_text()
-            emit = (WINSYS / 'agx_win32_indirect_stream_emit.h').read_text()
-            spare = [l for l in state_h.splitlines() if 'windows_stream_spare' in l and l.strip().startswith('struct')]
-            header = WINSYS / 'agx_win32_stream_scratch.h'
-            pool = '#define POOL_SLAB_SIZE (256 * 1024)\n' + '\n'.join(function(pool_c, m) for m in (
-                'static struct agx_bo *\nagx_pool_alloc_backing(', 'void\nagx_pool_init(',
-                'void\nagx_pool_cleanup(', 'struct agx_ptr\nagx_pool_alloc_aligned_with_bo('))
-            init_fn = function(batch_c, 'static void\nagx_batch_init(')
-            init = between(init_fn, '#ifdef APPLE_AGX_GPUVA_WINSYS\n', '   agx_pool_init(&batch->pool,')
-            cleanup_fn = function(batch_c, 'static void\nagx_batch_cleanup(')
-            cleanup = between(cleanup_fn, '   agx_pool_cleanup(&batch->pipeline_pool);\n',
-                              '\n   util_dynarray_fini(&batch->scissor);')
-            draw = between(emit, '   struct agx_bo *vdm_bo = NULL, *usc_bo = NULL;',
-                           '   if (!agx_win32_stream_output_valid(', include_start=True)
-            fini = ('agx_win32_stream_scratch_fini(&ctx);'
-                    if 'agx_win32_stream_scratch_fini(ctx);' in pipe_c else '')
-            code = (HARNESS.replace('@@SPARE@@', '\n'.join(spare))
-                    .replace('@@HEADER@@', f'#include "{header}"' if header.exists() else '')
-                    .replace('@@POOL@@', pool)
-                    .replace('@@INIT@@', init)
-                    .replace('@@DRAW@@', draw)
-                    .replace('@@CLEANUP@@', '  (void)ctx;\n' + cleanup)
-                    .replace('@@FINI@@', fini))
-            src = Path(tmp) / 'harness.c'
-            exe = Path(tmp) / 'harness'
-            src.write_text(code)
-            built = subprocess.run([os.environ.get('CC', 'clang'), '-std=gnu11', '-Wall', '-Wno-unused-function',
-                                    '-fsanitize=address,undefined', str(src), '-o', str(exe)],
-                                   capture_output=True, text=True)
-            self.assertEqual(built.returncode, 0, built.stderr[-4000:])
-            ran = subprocess.run([str(exe)], capture_output=True, text=True)
-            self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr[-3000:])
-            self.assertIn('RC71 stream scratch: PASS', ran.stdout)
+        run_stream_harness(self)
 
 
 if __name__ == '__main__':
