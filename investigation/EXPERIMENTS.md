@@ -65339,3 +65339,22 @@ EXP2012 HARDWARE BEFORE 2026-10-28T00:49:54Z:
 - Hashes: sys 1c394849af52, UmdArm64 f6534ffc7b25, UmdX64 51d12302955b, Umd32 d1d03a9ad6df; manifest 0a85302d10eb, hardware-manifest f4366eb2f208; probe2012.sh 997c095c76f6 (PROBE_LINT_OK); visible recovery rec2012h 30067c3153ee720b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2012h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2012-job-thread/run2012.sh.
+
+EXP2012 HARDWARE ACTUAL (2026-10-28): **PASS, new best HD**. rc81.
+- HD 50k: **6035 / 36.1 FPS** (EXP2011: 5781). FHD 100k: 3458 / 20.7 FPS (EXP2011: 3550; second arm, idle 2.47 ms).
+- No removal.
+- Breakdown:
+
+  | Run | Frame (ms) | c_kick (ms) | rc_prelude_kick (ms) | Partials | Compute (ms) |
+  |---|---|---|---|---|---|
+  | HD | 25.7 → **24.75** | 2.61 → 1.71 | 2.26 → 2.5 | 0 | — |
+  | FHD | 42.2 | 1.69 | 1.5 | — | 18.4 |
+
+- Wom1JobTiming971 v2 (last 55 jobs, pids 1228/4604): worker_flags thread=1, pinned=1, efficiency_class 1, cores 4. All render builds ran on class 1 and still took **273 µs** median.
+  - So the rc81 core hypothesis is rejected; the render envelope build is intrinsically about 270 µs.
+  - queued_complete_to_kick is 532 µs median.
+- Verdict:
+  - rc81 2281f266 (proof cache) validated: c_kick recovered;
+  - b167fa83 (thread) validated as neutral or positive;
+  - 4c31203f validated (receipt).
+- Next KMD target: the render envelope build (270 µs per render) and the complete-to-kick gap.
