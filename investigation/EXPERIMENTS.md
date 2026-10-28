@@ -65703,3 +65703,18 @@ EXP2026 HARDWARE ACTUAL (2026-10-28): rc90 build-ahead ON (Wom1JobBuildAhead=1).
   - queued_complete_to_kick 76 µs (EXP2012 hot DWM: 532 µs; rc83-era about 240 µs);
   - build 26 µs (prebound).
 - Verdict: rc90 d697ceba, 996a4439, dcea10d1 and 39e7f0fb validated on GravityMark. The TDR drill with the switch on is still pending before default-on.
+
+EXP2027 HARDWARE BEFORE 2026-10-28T07:05:43Z:
+- WHY:
+  - EXP2026: build-ahead works (chained 51/59, queued complete→kick 76 µs, HD +0.7 ms per frame). Before making it the default, a TDR with one job prebound must account for both jobs (rc90 invariant I6).
+  - rc91: D3D11 is bound by per-job latency (about 130 jobs per frame), so build-ahead should help it most.
+- ATOMIC CONTRACT: none; separate arms with one switch set.
+- Expected:
+  - D3D11 above 2334 (EXP2025 cold, same position), median below 70.8 ms;
+  - drill: Wom1GpuReset succeeds, only the drill process gets DEVICE_HUNG, DWM survives, the guest stays alive;
+  - D3D12 HD 50k after the drill at about 6800.
+- Failure criteria: a bugcheck or wedge in the drill, removal of DWM, a wrong image.
+- Recovery: rec2027h, with AT_PROXY if needed.
+- Hashes: sys 6ac55171860a, UmdArm64 ab1ea3c98404, UmdX64 e33bb9c26837, Umd32 32b890a0e2ea; manifest a0ce98cdc7a4, hardware-manifest c3e6829ebf1a; probe2027.sh 00dffb9a1b64 (PROBE_LINT_OK); visible recovery rec2027h 9603a95314a8a735; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobBuildAhead=1 Wom1TdrDrillAllowed=1.
+- Recovery rec2027h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2027-tdr-ahead/run2027.sh.
