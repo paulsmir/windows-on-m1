@@ -65997,3 +65997,19 @@ EXP2035 HARDWARE ACTUAL (2026-10-28): **HD 50k 6957 (best), as the first app aft
   - rc98: capabilities confirmed on hardware;
   - next for depth 2: step 3/4, the two-entry window with batched completion (U4).
   - New production gap: the display mode change (ChangeDisplaySettingsEx to 1920×1080) is not supported by our display path.
+
+EXP2036 HARDWARE BEFORE 2026-10-28T11:33:18Z:
+- WHY: Asahi emits a full-flush CDM barrier 0x600fffff after every dispatch. GravityMark has 174 dispatches per frame, 128 of them in tiny sort/scan chains (pos0 2.44 ms at FHD). The lean word 0x60000168 (USC inval + Unk 5/6/8) is the one Asahi already executes at each compute-batch start.
+- ATOMIC CONTRACT: one variable, an env switch in a fresh process.
+- Expected:
+  - b/c: measure-d3d12-cdm-barriers mode 1 with lean > 0;
+  - pos0+pos2+pos7 exact lower by more than 3% against the paired full arm;
+  - images visually correct (byte identity is impossible: GravityMark frames are time-dependent; EXP2035 a/b differ with identical settings).
+- Failure criteria:
+  - visual corruption (lean bits miss the PBE/texture flush; next step is bisecting with APPLE_AGX_D3D12_LEAN_CDM_BITS);
+  - a fault or removal.
+- WHAT IS STILL UNKNOWN: the meaning of Unk bits 0-2, 4, 7, 9-19; the indirect-grid fetch behind a lean barrier.
+- Recovery: rec2036h.
+- Hashes: sys c774cd911507, UmdArm64 1382b9ac0c88, UmdX64 fd5d394a098f, Umd32 497369955b5e; manifest 0f254dbc8dd0, hardware-manifest e6429c504153; probe2036.sh 0a0ed9708ebf (PROBE_LINT_OK); visible recovery rec2036h 701dbe795637780f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2036h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2036-lean-cdm/run2036.sh.
