@@ -65895,3 +65895,29 @@ EXP2033 HARDWARE BEFORE 2026-10-28T10:23:25Z:
 - Hashes: sys 4da6a70e8b50, UmdArm64 b60d06049dd6, UmdX64 e53d58b50c49, Umd32 c077b21bed82; manifest 5e4d824e7f90, hardware-manifest 5ac7a2bedb9b; probe2033.sh 3b4faedbb792 (PROBE_LINT_OK); visible recovery rec2033h beb0fc49b2b5cb4d; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolConstructLargePages=1.
 - Recovery rec2033h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2033-latency-pages/run2033.sh.
+
+EXP2033 HARDWARE ACTUAL (2026-10-28): **rc93 does not cause the first-app gap; rc96 is neutral; the J313 throttles thermally; a fifth app hit a low-memory refusal (OOM).**
+
+| Arm | Score | Median wall | GPU span | Idle | Notes |
+|---|---|---|---|---|---|
+| a: HD 50k, first app, Wom1PoolConstructLargePages=1 | 6256 | 25.07 ms | 21.68 ms | 3.11 ms | pos5 4.70 ms, pos1 d3 4.30 ms |
+| b: HD, LAT_SCHED=0 | 6080 | 25.47 ms | 21.90 ms | 3.29 ms | pos5 4.66, d3 4.61 |
+| c: HD, LAT on | 6097 | 24.56 ms | 23.69 ms | 0.15 ms | pos5 4.75, d3 4.77 |
+| d: FHD 100k, LAT on | 3577 | | | | |
+| e: FHD, LAT off | **REMOVED** after 35 s | | | | out of memory creating a 512² BC6H cube, then device removed |
+
+- **rc93 vs the first-app gap.** With the old 2 MiB construction, the first app still shows 3.1 ms idle (EXP2031a with rc93: 3.94 ms), so rc93's chunked slabs are not the cause. The analysis goes to rc99.
+- **rc96 latency schedule: no gain on hardware.** Pos5 is 4.66 off vs 4.75 on, scores 6080 vs 6097. It is present in all three UMDs.
+- **Thermal throttling.** Wom1GpuPerf: temperature max 92 °C.
+  - The max-p-state (1278 MHz) share falls from 78.6% (b) to 59.6% (c), and below target rises to 5–11%.
+  - When idle disappears, the GPU span grows (21.7 → 23.7 ms), so wall time stays about 25 ms.
+  - Run-to-run and boot-to-boot noise is dominated by heat: the J313 is fanless.
+- **OOM in arm e.** Wom1M2PoolDemand v13 shows:
+  - reserve_failures 4, all reason low_memory: the Windows low-memory signal was set, so the KMD floor refused (floor_refusals 4);
+  - the last failure was 8 MiB, at reserved 3.10 GB / cap 3.21 GB (49540 of 50176 granules).
+  - Arm d peaked at 3.20 GB without failure. The pool's committed bytes after each app grow 196 → 203 → 232 MB, a possible slow leak or retention.
+  - A production gap: under memory pressure the driver refuses instead of trimming or evicting.
+- Verdict:
+  - rc93 not implicated;
+  - rc96 neutral (keep, default on, kill switch available);
+  - new tasks: thermal/power efficiency (Fable investigation running) and low-memory behaviour / cross-app retention.
