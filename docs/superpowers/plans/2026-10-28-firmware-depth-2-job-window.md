@@ -165,3 +165,36 @@ Revised order (each one hardware variable):
   decision and makes compute jobs and v5 preludes alternate sets at
   depth 1. LIVE_MANAGER is not built. Nothing is kicked early; no path
   publishes a leading Barrier yet (step 3/4).
+
+## rc102 (steps 3-4): the wired window, Wom1JobDepth2Kick = 1
+
+On top of Wom1JobDepth2Caps; default off. EXP2034 decided U4: driver stamps
+are held until the notifier threshold, so a completion is reported by
+event, possibly two jobs at once.
+
+- **Shared layers.** Queue runtime successor slot (observed with every
+  event, promoted by TakeCompletion, complete at once when batched; a
+  recovery retires both jobs and judges each by its own unshared stamps);
+  provider RunSuccessor/PlanSuccessor and one batch for a pair; backend
+  SubmitSuccessor and promotion after the running job's Io.Complete;
+  scheduler KickedFence (kept through a boundary preemption, the newest
+  aborted fence at an engine reset); G3 graph nested job.
+- **KMD.** The poll loop of job N kicks its Prebound successor when the
+  window allows (rc95 refusals + 61 idle queues + 62 job-word sets): the
+  entry turns Kicked under PagingLock+SchedulerLock, G3 BeginSuccessorJob
+  joins N's lease, the build leads the successor's first queue with a
+  Barrier on N's last firmware stamp (3D object 10 behind a render, sidecar
+  0x8780 behind compute) in the successor's own job-word set, and
+  RunSuccessor publishes it. The successor is adopted (activated) inside its
+  own completion when one event ended both, else by the worker after N's
+  report; the worker then polls it without a kick.
+- **Reset.** The quiescence waits for the newest kicked job; both ends are
+  reported through the ordinary completion; a kicked fence the firmware
+  never received is aborted by the engine reset (LastAborted = newest),
+  never resubmitted; never-kicked entries go back to VidSch.
+- **Receipts.** Timing v4 flags DEPTH2_KICKED / DEPTH2_BATCHED / Barrier
+  class; Wom1JobWindow (kicks, max in flight, batch sizes, Barriers,
+  adoptions, kick failures).
+- **rc100.** The poll planner learns no duration from a job whose end was
+  deferred to its successor's or an adopted successor (its poll began after
+  its start); both still count in the Wom1JobPoll statistics.
