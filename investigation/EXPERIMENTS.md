@@ -66368,3 +66368,18 @@ Device switch: Wom1GpuFaultInfoRead=1 (Kick off). GravityMark env: CPU_POOL_MAP 
 - Hashes: sys ef0db509f1d5, UmdArm64 bd60e677199a, UmdX64 c7748b0696b3, Umd32 2b475fe50980; manifest 2130b7144085, hardware-manifest 80a8a8fde055; probe2048.sh d1b03c9d4f21 (PROBE_LINT_OK); visible recovery rec2048h 467e134d0289d1cb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2048h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2048-load-runs/run2048.sh.
+
+EXP2048 HARDWARE ACTUAL (2026-10-28): **Fable load runs: small gain (FHD GPU span −1.1 ms). FHD 100k 4298 (best). Anisotropy is not the main-pass limiter.** All runs used the unified copy.
+
+| Arm | Score | GPU span | Main 3D | bdb1944a | Notes |
+|---|---|---|---|---|---|
+| a: FHD 100k, runs on | **4298** | 35.74 ms | 8.35 ms | 8.58 ms | |
+| b: FHD 100k, runs off | 4238 | 36.80 ms | 8.08 ms | 8.70 ms | |
+| c: HD 50k, runs off | 6847 | | | | |
+| d: HD 50k, runs on (4th app, hotter) | 6722 | | | | |
+| e: FHD 100k, runs on, MAX_ANISOTROPY=1 | 4012 (5th app) | | 8.45 ms | 9.15 ms | |
+
+- The frame is now 8 jobs (CRCRCRCR).
+- **Load runs:** the bdb1944a shader is only 1.4% faster despite about 25% fewer executed instructions offline, so it is not instruction-bound (memory or texture latency). Kept on (default).
+- **Anisotropy:** main 3D is unchanged with aniso 1 (8.45 vs 8.35 ms), so the main pass is not texture-tap bound. The next main-pass candidate is uncompressed render-target layouts (Fable (b)).
+- No removal or fault in 5 apps with the unified copy.
