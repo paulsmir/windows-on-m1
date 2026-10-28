@@ -66628,3 +66628,12 @@ ABBA, FHD 100k windowed:
 - Hashes: sys ea3e42c6b427, UmdArm64 978d675c6861, UmdX64 b46db524e29b, Umd32 71f39de88f6a; manifest e5ee839f568b, hardware-manifest cb2fdee33a49; probe2057.sh 90af29254ea8 (PROBE_LINT_OK); visible recovery rec2057h 3f6f59baa928c796; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2057h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2057-robust-diag/run2057.sh.
+
+EXP2057 HARDWARE ACTUAL (2026-10-29): **D3D buffer robustness is not a lever: ABBA sum default 8200 vs off 8229 (+0.35%, noise).**
+- a default 4267 (25.5); b ROBUST_DIAG=off 4201 (25.1); c off 4028 (24.1); d default 3933 (23.5).
+- Why: at runtime the lighting kernel already compiles to 3543 instructions, 207 halfregs, 512 threads (measure-d3d12-shader-stats). Its views are root descriptors, unchecked since rc75. The offline fixture without root-view masks overstated the checks.
+- No GPU fault and no TDR with "off".
+- Thermal drift within one boot: -8% from run 1 to run 4.
+- Side result (macOS RE, .local/handoff/codex/re-macos-shaders/NOTES.md): the Apple lighting kernel has a similar register count (r106) and keeps its loops. Static counts are not comparable, so per-pass Apple GPU times are needed to locate the gap.
+- The diagnostic switch stays env-only and off by default.
+- Recovery rec2057h.
