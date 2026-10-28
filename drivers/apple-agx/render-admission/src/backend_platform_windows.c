@@ -1,5 +1,6 @@
 #include "render_admission.h"
 #include "render_job_timing.h"
+#include "render_gpu_perf.h"
 #include "render_gpu_recovery_snapshot.h"
 
 /* Fault diagnostics: first nonzero transition stores file tag 4 and
@@ -160,6 +161,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONG BuildMarkFence;
   ADMISSION_FW_TIMING_RING FwTiming;
   ADMISSION_FW_TIMING_RING FwTimingSnapshot;
+  /* rc84: Wom1GpuPerf, the firmware's performance state from HwDataA at
+   * each job completion (JobTimingLock). */
+  ADMISSION_GPU_PERF_STATE GpuPerf;
+  ADMISSION_GPU_PERF_STATE GpuPerfSnapshot;
   /* GPU timestamps of completed jobs, by fence (JobTimingLock). */
   ADMISSION_GPU_TIMESTAMP_RING GpuTimestamps;
   ADMISSION_GPU_COMPLETION_RING GpuCompletions;
@@ -273,6 +278,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * element-wise reads of the template arena and firmware-shared memory in
    * the build and the buffer-manager save (byte-identical result). */
   BOOLEAN BuildDirectReads;
+  /* rc84: device value Wom1GpuPerfReceipt = 0 stops the Wom1GpuPerf
+   * sampling (HwDataA loads at each job completion). */
+  BOOLEAN GpuPerfOff;
 } ADMISSION_PLATFORM_RUNTIME;
 
 C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 184);
@@ -499,6 +507,24 @@ static VOID AdmissionJobTimingPstateWindows(
     if (completion) slot->Firmware3dEnd = word;
     else slot->Firmware3dStart = word;
   }
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+/* rc84 receipt: the live HwDataA performance fields (render_gpu_perf.h)
+ * at every job completion, render and compute alike. The firmware memory
+ * is read before JobTimingLock is taken. */
+static VOID AdmissionGpuPerfSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  const APPLE_AGX_MEMORY_OBJECT *hwdata;
+  ADMISSION_GPU_PERF_SAMPLE sample;
+  KIRQL oldIrql;
+  if (runtime->GpuPerfOff) return;
+  hwdata =
+      &runtime->Initdata.RegionBMemory.Objects[AppleAgxRegionBMemoryHwdataA];
+  if (!AdmissionGpuPerfRead(hwdata->CpuAddress, hwdata->Length,
+                            AdmissionJobQpc(), &sample))
+    return;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  AdmissionGpuPerfRecord(&runtime->GpuPerf, &sample);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
 }
 
@@ -791,6 +817,8 @@ static VOID AdmissionJobTimingExportWindows(
       sizeof(runtime->JobTimingSnapshot));
   RtlCopyMemory(&runtime->FwTimingSnapshot, &runtime->FwTiming,
       sizeof(runtime->FwTimingSnapshot));
+  RtlCopyMemory(&runtime->GpuPerfSnapshot, &runtime->GpuPerf,
+      sizeof(runtime->GpuPerfSnapshot));
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
   status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
       PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
@@ -810,6 +838,11 @@ static VOID AdmissionJobTimingExportWindows(
       RtlInitUnicodeString(&name, L"Wom1FwTiming1112");
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->FwTimingSnapshot, sizeof(runtime->FwTimingSnapshot));
+    }
+    if (NT_SUCCESS(status) && runtime->GpuPerfSnapshot.Samples != 0u) {
+      RtlInitUnicodeString(&name, L"Wom1GpuPerf");
+      status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
+          &runtime->GpuPerfSnapshot, sizeof(runtime->GpuPerfSnapshot));
     }
     ZwClose(key);
   }
@@ -3682,6 +3715,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     AdmissionJobTimingMarkWindows(runtime, Fence, AdmissionJobPhaseJobEnd);
     AdmissionGpuCompletionCaptureWindows(runtime, Fence, Status);
     AdmissionJobTimingFirmwareWindows(runtime, Fence);
+    AdmissionGpuPerfSampleWindows(runtime);
   }
 #endif
   if (adapter == NULL || !adapter->InterfaceValid ||
@@ -5382,6 +5416,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     KeInitializeSpinLock(&runtime->JobTimingLock);
     AdmissionJobTimingInitialize(&runtime->JobTiming,
         (ULONGLONG)frequency.QuadPart);
+    AdmissionGpuPerfInitialize(&runtime->GpuPerf,
+        (ULONGLONG)frequency.QuadPart);
     AdmissionJobTopologyWindows(runtime, NULL, 0u, NULL);
   }
 #endif
@@ -5650,6 +5686,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1PreludeTimestampsOff");
   runtime->BuildDirectReads =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1BuildDirectReads");
+  runtime->GpuPerfOff =
+      AdmissionPlatformSwitchDisabled(Context, L"Wom1GpuPerfReceipt");
   InterlockedExchange(&Context->TdrDrillJobs, 0);
   Context->TdrDrillAllowed =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1TdrDrillAllowed");

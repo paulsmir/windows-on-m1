@@ -21,7 +21,9 @@ The receipt must:
   fields are not live and the histogram is meaningless);
 - keep out-of-range states out of the histograms;
 - keep the decoder's frequency labels equal to the J313 ADT table that
-  the RegionC encoder validates.
+  the RegionC encoder validates;
+- be wired into every job completion, exported with the job-timing
+  receipt, and disabled only by Wom1GpuPerfReceipt = 0.
 """
 from pathlib import Path
 import importlib.util
@@ -221,6 +223,35 @@ class GpuPerfReceipt(unittest.TestCase):
         table = re.search(r"AppleAgxRegionCJ313Frequencies\[7\] = \{(.*?)\};", text, re.S).group(1)
         hz = [int(v) for v in re.findall(r"(\d+)u", table)]
         self.assertEqual(load_decoder().J313_PSTATE_MHZ, [v // 1000000 for v in hz])
+
+    def test_windows_wiring(self):
+        text = BACKEND.read_text()
+        self.assertIn('#include "render_gpu_perf.h"', text)
+        sample = function_body(text, 'AdmissionGpuPerfSampleWindows')
+        self.assertIn('if (runtime->GpuPerfOff) return;', sample)
+        self.assertIn('AppleAgxRegionBMemoryHwdataA', sample)
+        read = sample.index('AdmissionGpuPerfRead(')
+        lock = sample.index('KeAcquireSpinLock(&runtime->JobTimingLock')
+        self.assertLess(read, lock)  # firmware memory is read outside the spin lock
+        self.assertIn('AdmissionGpuPerfRecord(&runtime->GpuPerf', sample[lock:])
+        complete = function_body(text, 'AdmissionBackendComplete')
+        self.assertLess(complete.index('AdmissionJobTimingFirmwareWindows(runtime, Fence);'),
+                        complete.index('AdmissionGpuPerfSampleWindows(runtime);'))
+        start = text.index('AdmissionJobTimingInitialize(&runtime->JobTiming,')
+        self.assertIn('AdmissionGpuPerfInitialize(&runtime->GpuPerf,', text[start:start + 400])
+        self.assertIn('runtime->GpuPerfOff =\n      AdmissionPlatformSwitchDisabled(Context, L"Wom1GpuPerfReceipt");',
+                      text)
+        export = function_body(text, 'AdmissionJobTimingExportWindows')
+        copy = export.index('RtlCopyMemory(&runtime->GpuPerfSnapshot, &runtime->GpuPerf,')
+        # the snapshot is copied while JobTimingLock is held
+        # (with the job-timing snapshot, after the rate-limit early return)
+        held = export.index('runtime->JobTimingExportQpc = before;')
+        release = 'KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);'
+        self.assertLess(held, copy)
+        self.assertEqual(export.find(release, held, copy), -1)
+        self.assertNotEqual(export.find(release, copy), -1)
+        self.assertIn('L"Wom1GpuPerf"', export)
+        self.assertIn('runtime->GpuPerfSnapshot.Samples != 0u', export)
 
 
 if __name__ == "__main__":
