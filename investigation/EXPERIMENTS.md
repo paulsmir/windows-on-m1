@@ -65762,3 +65762,23 @@ EXP2029 HARDWARE ACTUAL (2026-10-28): **not run; the host failed before Windows*
 - Retries (run2029 again, rec2029h AT_PROXY, legacy hidden recovery with a fresh chainload of m1n1 EXP377) failed in hv.init with "secondary CPU startup failed". This is the same state as REC-EXP970A–D, which only a physical SoC power cycle cleared (REC-EXP970E).
 - No driver result. The rc92 checkpoint moves to EXP2030.
 - Open: why the launch-memory check failed on attempt 1. The changing m1n1 base / heap layout is a candidate; this needs an m1n1 owner check.
+
+EXP2030 HARDWARE BEFORE 2026-10-28T09:25:52Z:
+- WHY: rc92 maps the EXP2027 wedge to a power-gated SGX FAULT_INFO read after resume. rc93 measures 20.8 ms per 2 MiB slab first after boot, from Windows large-page construction. rc94 removes the c_empty job (9 → 8 jobs per frame).
+- ATOMIC CONTRACT: none; separate steps with separate receipts and kill switches: rc93 Wom1PoolConstructLargePages=1; rc94 APPLE_AGX_D3D12_UPLOAD_RING_ALONE=1; rc92 by receipt (fault_info NOT_READ, poll_failure).
+- Expected:
+  - a: score ≥ 7000; frame 1→2 bo-allocate < 1 s; scored_stall excess < 7 s; v13 construct_large_pages 0 with fast_misses > 0 and slab_alloc_us/call < 5 ms; c_empty_jobs 0 (signature CRCRCRCR); upload-ring status bit 8 in ≥ 95% of Executes.
+  - c: FHD 100k ≥ 3919.
+  - drill: no DABORT loop at 0x204017030; Wom1GpuReset Succeeded ≥ 1; DWM and guest alive; PostResume fault_info NOT_READ.
+  - b: within 5% of a; images correct.
+- Failure criteria:
+  - chunked_ms_per_slab ≥ 15 ms (rc93 rejected);
+  - wrong image or stale upload (rc94 rejected);
+  - DABORT loop (rc92 rejected);
+  - 0x116 with poll_failure (next offline task);
+  - removal.
+- WHAT IS STILL UNKNOWN: chunked fallback speed with an empty large-page cache; whether each Execute's first command is a plain dispatch; why the EXP2027 reset wait ended with Poll; whether the drill passes on current integration (last PASS EXP1303).
+- Recovery: rec2030h (AT_PROXY if the guest is down).
+- Hashes: sys fcb0bf264f73, UmdArm64 c98cf92cce7c, UmdX64 98ac00626921, Umd32 8c6bb1a47722; manifest b89e8f772b9d, hardware-manifest d140b14155f8; probe2030.sh 1d0f4d7720df (PROBE_LINT_OK); visible recovery rec2030h f393a06b81010ba0; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TdrDrillAllowed=1.
+- Recovery rec2030h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2030-rc93-rc94/run2030.sh.
