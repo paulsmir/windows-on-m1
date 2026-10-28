@@ -65,11 +65,11 @@ static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SR
 struct D3DDDI_MAKERESIDENT { D3DKMT_HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE *AllocationList; const UINT *PriorityList; ULONGLONG PagingFenceValue; };
 struct PROT { UINT Write:1; UINT Execute:1; };
 struct D3DDDI_MAPGPUVIRTUALADDRESS { D3DKMT_HANDLE hPagingQueue; ULONGLONG BaseAddress; D3DKMT_HANDLE hAllocation; ULONGLONG OffsetInPages, SizeInPages; PROT Protection; ULONGLONG VirtualAddress, PagingFenceValue; };
-struct SLOT { uint64_t Token; BOOL Active,Transition,Resident; D3DKMT_HANDLE KernelAllocation; uint64_t CanonicalGpuVa; };
+struct SLOT { uint64_t Token; BOOL Active,Transition,Resident; D3DKMT_HANDLE KernelAllocation; uint64_t CanonicalGpuVa; uint64_t TrimRecency; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct HANDLE_ { void *handle; };
 struct CB { HRESULT (*pfnMakeResidentCb)(void*, D3DDDI_MAKERESIDENT*); HRESULT (*pfnMapGpuVirtualAddressCb)(void*, D3DDDI_MAPGPUVIRTUALADDRESS*); };
-struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[4]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; HANDLE_ RuntimeDevice; D3DKMT_HANDLE PagingQueue; BOOL ScreenClosing,DrawTerminal; uint64_t PagingWaitToken; ADMISSION_UMD_VA_ALIAS VaAliases[4]; UINT VaAliasCount, VaAliasCapacity; };
+struct ADMISSION_UMD_DEVICE { uint64_t NextRenderFence; UINT Magic; SLOT ScreenBuffers[4]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; HANDLE_ RuntimeDevice; D3DKMT_HANDLE PagingQueue; BOOL ScreenClosing,DrawTerminal; uint64_t PagingWaitToken; ADMISSION_UMD_VA_ALIAS VaAliases[4]; UINT VaAliasCount, VaAliasCapacity; };
 static int alias_reserve(ADMISSION_UMD_DEVICE *d, unsigned need) { d->VaAliasCapacity=4; return need<=4; }
 static std::string order; static HRESULT make_hr=E_PENDING;
 static HRESULT make(void*, D3DDDI_MAKERESIDENT *r){ order+="R"; r->PagingFenceValue=9; return make_hr; }
