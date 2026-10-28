@@ -12,13 +12,13 @@ using System.Runtime.InteropServices;
 public static class AgxDisplayProbe {
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
   public struct DEVMODEW {
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)] public byte[] dmDeviceName;
     public ushort dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
     public uint dmFields;
     public int dmPositionX, dmPositionY;
     public uint dmDisplayOrientation, dmDisplayFixedOutput;
     public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)] public byte[] dmFormName;
     public ushort dmLogPixels;
     public uint dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags,
                 dmDisplayFrequency, dmICMMethod, dmICMIntent, dmMediaType,
@@ -32,11 +32,19 @@ public static class AgxDisplayProbe {
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
   public struct DISPLAY_DEVICEW {
     public uint cb;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)] public byte[] DeviceNameRaw;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)] public byte[] DeviceStringRaw;
     public uint StateFlags;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceID;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)] public byte[] DeviceIDRaw;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)] public byte[] DeviceKeyRaw;
+    public string DeviceName { get { return Text(DeviceNameRaw); } }
+    public string DeviceString { get { return Text(DeviceStringRaw); } }
+  }
+  public static string Text(byte[] raw) {
+    if (raw == null) return "";
+    string s = System.Text.Encoding.Unicode.GetString(raw);
+    int z = s.IndexOf('\0');
+    return z >= 0 ? s.Substring(0, z) : s;
   }
   public const uint DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x1, DISPLAY_DEVICE_PRIMARY_DEVICE = 0x4;
   [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -56,13 +64,20 @@ public static class AgxDisplayProbe {
   [DllImport("user32.dll")] public static extern IntPtr GetProcessWindowStation();
   [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
   public static extern bool GetUserObjectInformationW(IntPtr h, int index, System.Text.StringBuilder info, int length, out int needed);
+  // EXP2053: ByValTStr under Add-Type sized DEVMODEW as 188 bytes instead of
+  // 220, so EnumDisplaySettingsW failed with error 203 and every CDS call
+  // with BADPARAM. Raw UTF-16 byte arrays keep the Win32 sizes exact.
+  public const int DevModeSize = 220, DisplayDeviceSize = 840;
   public static DISPLAY_DEVICEW EmptyDevice() {
     DISPLAY_DEVICEW dd = new DISPLAY_DEVICEW();
+    dd.DeviceNameRaw = new byte[64]; dd.DeviceStringRaw = new byte[256];
+    dd.DeviceIDRaw = new byte[256]; dd.DeviceKeyRaw = new byte[256];
     dd.cb = (uint)Marshal.SizeOf(typeof(DISPLAY_DEVICEW));
     return dd;
   }
   public static DEVMODEW Empty() {
     DEVMODEW dm = new DEVMODEW();
+    dm.dmDeviceName = new byte[64]; dm.dmFormName = new byte[64];
     dm.dmSize = (ushort)Marshal.SizeOf(typeof(DEVMODEW));
     return dm;
   }
@@ -88,7 +103,8 @@ $script:lastEnumError=0
 $modes=ModeList $null; $nullEnumError=$script:lastEnumError
 $modesByName=@(); $nameEnumError=0
 if($primary){ $modesByName=ModeList $primary; $nameEnumError=$script:lastEnumError }
-$r=[ordered]@{Tag=$Tag;Session=$session;WindowStation=$winsta.ToString();Devices=$devices;PrimaryDevice=$primary;
+$r=[ordered]@{Tag=$Tag;DevModeSize=[System.Runtime.InteropServices.Marshal]::SizeOf([type][AgxDisplayProbe+DEVMODEW]);
+  DisplayDeviceSize=[System.Runtime.InteropServices.Marshal]::SizeOf([type][AgxDisplayProbe+DISPLAY_DEVICEW]);Session=$session;WindowStation=$winsta.ToString();Devices=$devices;PrimaryDevice=$primary;
   Before=(Current $null);BeforeByName=$(if($primary){Current $primary}else{''});
   ModeCount=$modes.Count;NullEnumError=$nullEnumError;Modes=($modes|Select-Object -Unique);
   ModeCountByName=$modesByName.Count;NameEnumError=$nameEnumError;ModesByName=($modesByName|Select-Object -Unique);
