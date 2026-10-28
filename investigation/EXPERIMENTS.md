@@ -65534,3 +65534,17 @@ EXP2019 HARDWARE BEFORE 2026-10-28T03:53:55Z:
 - Hashes: sys dff14b5d82c9, UmdArm64 dbb3c3b77222, UmdX64 88d139a8486f, Umd32 9d7b10d5ecb1; manifest a63601ae7ab3, hardware-manifest 22d9653a7338; probe2019.sh 8cdf9d56fa66 (PROBE_LINT_OK); visible recovery rec2019h c22dda371c4b4317; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2019h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2019-workset/run2019.sh.
+
+EXP2019 HARDWARE ACTUAL (2026-10-28): **PASS, new best FHD 100k**. rc87.
+- FHD 100k: **3919 / 23.5 FPS** (best was 3636).
+  - First-frame gap 10.6 s (EXP2018: 43.1 s), with **0 trims** in the stall.
+  - Seven `measure-d3d12-heap` status-3 receipts: the deferred texture heaps work, with no removal.
+  - The stall is now resource creation 3.4 s plus BO allocation 5.3 s plus escapes 1.9 s.
+- FHD 200k: 1552 / 8.0 FPS (EXP2016/2018: 1354-1357; EXP2001: 1788).
+  - First-frame gap 13.6 s, median frame 68.7 ms;
+  - but 5 frames over 500 ms sum to 42.9 s;
+  - 2060 trims (48.7 GiB) over the run, 62 trims of 1.64 GiB at startup;
+  - "GPU stream scratch create" 0 (fixed).
+  - The inventory is 3018 MiB, still above the about 2.9 GiB LOCAL budget, so 200k still thrashes in a few giant hitches.
+- Verdict: rc87 fd41c695 and e4a3d411 validated; 243a53bf validated (tool).
+- Next: fit 200k (about 150-300 MiB more), and shorten the remaining 10 s allocation/resource stall.
