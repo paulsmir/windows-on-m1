@@ -160,6 +160,53 @@ int main(void) {
 '''
 
 
+MANAGER = r'''
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+#include "apple_agx_render_shared_memory.h"
+typedef unsigned char BOOLEAN;
+#define TRUE 1
+#define FALSE 0
+/*HELPER*/
+int main(void) {
+  APPLE_AGX_RENDER_SHARED_MEMORY_OWNER owner;
+  APPLE_AGX_RENDER_MANAGER_STATE manager, previous;
+  APPLE_AGX_RENDER_MANAGER_KEY a, b;
+  memset(&owner, 0, sizeof(owner)); memset(&manager, 0, sizeof(manager));
+  memset(&previous, 0, sizeof(previous));
+  memset(&a, 0, sizeof(a)); memset(&b, 0, sizeof(b));
+  a.Owner = b.Owner = 41u; a.Generation = b.Generation = 3u; a.RootIpa = b.RootIpa = 0x60000000ULL;
+  a.Backing[2].Va = 0x9200000ULL; a.Backing[2].Bytes = 0x800000u;
+  b.Backing[2].Va = 0x9200000ULL; b.Backing[2].Bytes = 0x400000u; /* other backed blocks */
+  owner.ManagerKey = a; /* the last render built (before the compute job) */
+  /* EXP2051: the image still holds a's binding; BeginJob will give b's */
+  assert(AdmissionJobWindowManagerNeedsIdle(&owner, TRUE, TRUE, &manager, &b,
+                                            &previous, &a));
+  /* the same scene's binding: no rebind, the pair may kick */
+  assert(!AdmissionJobWindowManagerNeedsIdle(&owner, TRUE, TRUE, &manager, &a,
+                                             &previous, &b));
+  /* no private scene: BeginJob leaves the image's binding (the builder's) */
+  assert(!AdmissionJobWindowManagerNeedsIdle(&owner, TRUE, FALSE, NULL, NULL,
+                                             &previous, &a));
+  assert(AdmissionJobWindowManagerNeedsIdle(&owner, TRUE, FALSE, NULL, NULL,
+                                            &previous, &b));
+  /* the head changed after the lookup: unknown, refuse */
+  assert(AdmissionJobWindowManagerNeedsIdle(&owner, FALSE, TRUE, &manager, &a,
+                                            &previous, &a));
+  /* a pending save or an unsaved build of the manager */
+  manager.PendingFence = 7u;
+  assert(AdmissionJobWindowManagerNeedsIdle(&owner, TRUE, TRUE, &manager, &a,
+                                            &previous, &a));
+  manager.PendingFence = 0u; owner.ManagerFence = 7u;
+  assert(AdmissionJobWindowManagerNeedsIdle(&owner, TRUE, TRUE, &manager, &a,
+                                            &previous, &a));
+  puts("EXP2051_MANAGER_OK");
+  return 0;
+}
+'''
+
+
 def load():
     spec = importlib.util.spec_from_file_location("agx_gpu_frame_breakdown", TOOL)
     module = importlib.util.module_from_spec(spec)
@@ -242,6 +289,49 @@ class Exp2047(unittest.TestCase):
         self.assertEqual((out["fence"], out["build_step"], out["build_refusal"]),
                          (6355, "render_bindings", "manager_backing"))
         self.assertEqual(out["flags"], ["g3_aborted", "unstaged"])
+
+
+class Exp2051(unittest.TestCase):
+    """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP2051: a C->R
+    successor passed refusal 61, then its build refused with manager_bind.
+    BeginJob binds a private render's manager (its scene's key) after the
+    window decision, so 61 compared the image's binding of the previous
+    render. The decision must evaluate the builder's predicate on the
+    binding BeginJob will give (AdmissionGpuvaG3PendingManager; the G4
+    replay proves it equals BeginJob's), and recheck it after BeginJob."""
+
+    def helper(self):
+        text = WORKER.read_text()
+        return section(text, "static BOOLEAN AdmissionJobWindowManagerNeedsIdle(") + "\n}\n"
+
+    def test_decision_uses_the_binding_beginjob_will_give(self):
+        ran = build_run(MANAGER.replace("/*HELPER*/", self.helper()),
+                        [SHARED / "src" / s for s in SHARED_SOURCES])
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+        self.assertIn("EXP2051_MANAGER_OK", ran.stdout)
+
+    def test_pre_fix_predicate_lets_the_exp2051_pair_through(self):
+        # RED: the pre-fix decision read the image's binding only.
+        old = self.helper().replace(
+            "PendingValid ? PendingManager : ImageManager",
+            "((void)PendingValid, (void)PendingManager, ImageManager)").replace(
+            "PendingValid ? PendingKey : ImageKey", "((void)PendingKey, ImageKey)")
+        ran = build_run(MANAGER.replace("/*HELPER*/", old),
+                        [SHARED / "src" / s for s in SHARED_SOURCES])
+        self.assertNotEqual(ran.returncode, 0)
+        self.assertIn("Assertion failed", ran.stderr)
+
+    def test_kick_looks_up_before_and_rechecks_after_beginjob(self):
+        kick = section(WORKER.read_text(), "static BOOLEAN AdmissionJobWindowKickWindows(")
+        lookup = kick.index("AdmissionGpuvaG3PendingManager(adapter,")
+        decide = kick.index("AdmissionJobWindowKickRefusal(&s)")
+        self.assertLess(lookup, kick.index("KeAcquireSpinLock(&adapter->PagingLock"))
+        self.assertLess(lookup, decide)
+        self.assertIn("pendingManagerValid, pendingManager, &pendingKey", kick)
+        begin = kick.index("AdmissionGpuvaG3BeginSuccessorJob(")
+        recheck = kick.index("AdmissionJobWindowManagerNeedsIdle(owner, TRUE, FALSE, NULL, NULL,")
+        self.assertLess(begin, recheck)
+        self.assertLess(recheck, kick.index("AppleAgxBackendRuntimeSubmitSuccessor("))
 
 
 if __name__ == "__main__":

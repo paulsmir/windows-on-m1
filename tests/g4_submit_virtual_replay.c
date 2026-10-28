@@ -1679,7 +1679,30 @@ int main(void) {
   context.GpuvaG3CancelFence=22;
   assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)!=STATUS_SUCCESS);
   context.GpuvaG3CancelFence=0;
-  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)==STATUS_SUCCESS);
+  {
+    /* rc102 (EXP2051): the binding the depth-2 decision proves before
+     * BeginJob is the one BeginJob then gives the image (the image still
+     * holds another render's, as when a C->R successor is decided). */
+    APPLE_AGX_RENDER_MANAGER_STATE *pending=NULL, stale={0};
+    APPLE_AGX_RENDER_MANAGER_KEY key, old_key;
+    memset(&key,0,sizeof(key)); memset(&old_key,0,sizeof(old_key));
+    old_key.Owner=process.Graph.ProcessId; old_key.Generation=99u;
+    adapter.BackendImage.G4Manager=&stale; adapter.BackendImage.G4ManagerKey=old_key;
+    assert(!AdmissionGpuvaG3PendingManager(&adapter,&context,23,&pending,&key));
+    assert(AdmissionGpuvaG3PendingManager(&adapter,&context,22,&pending,&key));
+    assert(pending==&process.FirmwareManager && key.Owner==process.Graph.ProcessId);
+    assert(memcmp(&key.Backing,&old_key.Backing,sizeof(key.Backing))!=0 ||
+           key.Generation!=old_key.Generation);
+    assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)==STATUS_SUCCESS);
+    assert(adapter.BackendImage.G4Manager==pending);
+    assert(adapter.BackendImage.G4ManagerKey.Owner==key.Owner &&
+           adapter.BackendImage.G4ManagerKey.Generation==key.Generation &&
+           adapter.BackendImage.G4ManagerKey.RootIpa==key.RootIpa &&
+           memcmp(adapter.BackendImage.G4ManagerKey.Backing,key.Backing,
+                  sizeof(key.Backing))==0);
+    /* the scene is started now: nothing more for BeginJob to bind */
+    assert(!AdmissionGpuvaG3PendingManager(&adapter,&context,22,&pending,&key));
+  }
   assert(context.GpuvaG3MappingGeneration==process.Graph.MappingGeneration);
   assert(scene.Started);
   assert(adapter.BackendImage.G4Manager==&process.FirmwareManager);

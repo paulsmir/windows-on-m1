@@ -289,6 +289,18 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *Adapter, ULONG Fence);
 NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *Adapter,
                                            ADMISSION_RENDER_CONTEXT *Context,
                                            ULONG Fence, ULONG *Refusal);
+/* rc102 (EXP2051): the buffer-manager binding BeginJob will give the bound
+ * native render of Fence (its private scene's: the process manager, its
+ * key from the scene's lists, heap window and backed blocks). TRUE with
+ * *Manager and *Key when BeginJob will set them; FALSE when it would not
+ * (no private scene for that fence): the image's binding stays. Read-only,
+ * PASSIVE_LEVEL. The depth-2 decision proves the manager-bind need from
+ * this, not from the image's binding of the previous render. */
+BOOLEAN AdmissionGpuvaG3PendingManager(ADMISSION_CONTEXT *Adapter,
+                                       ADMISSION_RENDER_CONTEXT *Context,
+                                       ULONG Fence,
+                                       APPLE_AGX_RENDER_MANAGER_STATE **Manager,
+                                       APPLE_AGX_RENDER_MANAGER_KEY *Key);
 
 #endif
 #endif

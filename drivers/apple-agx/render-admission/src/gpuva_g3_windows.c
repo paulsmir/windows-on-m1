@@ -3931,6 +3931,40 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
                                     &adapter->RenderPacket.Description, NULL);
 }
 
+/* rc102 (EXP2051): gpuva_g3_private.h. The same lookup and key as
+ * AdmissionGpuvaG3BeginJobAs's private-scene branch. */
+BOOLEAN AdmissionGpuvaG3PendingManager(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence,
+    APPLE_AGX_RENDER_MANAGER_STATE **Manager, APPLE_AGX_RENDER_MANAGER_KEY *Key) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_G3_PRIVATE_SCENE *scene = NULL;
+  ADMISSION_BACKEND_IMAGE *image;
+  if (adapter == NULL || context == NULL || fence == 0u || Manager == NULL ||
+      Key == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return FALSE;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  image = &adapter->BackendImage;
+  if (state == NULL || process == NULL || process->State != state)
+    return FALSE;
+  ExAcquireFastMutex(&state->Lock);
+  if (image->G4Native && image->BoundFence == fence && image->G4Lease.SceneId)
+    scene = AdmissionG4FindPrivateScene(process, context, &image->G4Lease,
+                                        fence, TRUE);
+  if (scene != NULL) {
+    RtlZeroMemory(Key, sizeof(*Key));
+    *Manager = &process->FirmwareManager;
+    Key->Owner = process->Graph.ProcessId;
+    Key->Generation = process->PrivateManager.Generation;
+    Key->RootIpa = process->Graph.RootIpa;
+    RtlCopyMemory(Key->Backing, scene->Storage.Ranges, sizeof(Key->Backing));
+    Key->Backing[2].Bytes = scene->HeapBlocks * APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
+  }
+  ExReleaseFastMutex(&state->Lock);
+  return scene != NULL ? TRUE : FALSE;
+}
+
 /* rc102: the successor is the Kicked head entry; its packet describes it
  * (the render packet still holds the running job). */
 NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *adapter,

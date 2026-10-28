@@ -5096,6 +5096,27 @@ static VOID AdmissionJobWindowKickFailedWindows(ADMISSION_CONTEXT *adapter,
   AdmissionJobWindowKickFailureExportWindows(adapter, runtime);
 }
 
+/* rc102 (EXP2051): the builder's manager predicate for a render successor
+ * (AppleAgxRenderSharedMemoryBuildManagedG4Job: a pending manager fence or
+ * a rebind refuses without InitBM), on the binding BeginJob will give it:
+ * its private scene's when it has one (Pending*), else the image's. Not
+ * Same: the head changed since that lookup, so the binding is unknown. */
+static BOOLEAN AdmissionJobWindowManagerNeedsIdle(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner, BOOLEAN Same,
+    BOOLEAN PendingValid, const APPLE_AGX_RENDER_MANAGER_STATE *PendingManager,
+    const APPLE_AGX_RENDER_MANAGER_KEY *PendingKey,
+    const APPLE_AGX_RENDER_MANAGER_STATE *ImageManager,
+    const APPLE_AGX_RENDER_MANAGER_KEY *ImageKey) {
+  const APPLE_AGX_RENDER_MANAGER_STATE *manager =
+      PendingValid ? PendingManager : ImageManager;
+  const APPLE_AGX_RENDER_MANAGER_KEY *key = PendingValid ? PendingKey : ImageKey;
+  if (!Same) return TRUE;
+  return manager != NULL &&
+         (manager->PendingFence != 0u || owner->ManagerFence != 0u ||
+          AppleAgxRenderManagerNeedsBind(owner, key))
+      ? TRUE : FALSE;
+}
+
 /* rc102 (Wom1JobDepth2Kick, render_job_window.h): job Fence runs alone and
  * its successor is Prebound. If the window allows it (the rc95 decision,
  * plus idle-queue needs 61 and the job-word sets 62), kick the successor
@@ -5121,6 +5142,11 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   ULONGLONG preemption = 0ULL;
   APPLE_AGX_U32 stageSequence;
   APPLE_AGX_EXP208_DYNAMIC_RESULT stageDynamic;
+  ULONG pendingFence = 0u;
+  ADMISSION_RENDER_CONTEXT *pendingContext = NULL;
+  APPLE_AGX_RENDER_MANAGER_STATE *pendingManager = NULL;
+  APPLE_AGX_RENDER_MANAGER_KEY pendingKey;
+  BOOLEAN pendingManagerValid = FALSE;
   KIRQL old_irql;
   if (!runtime->JobDepth2Kick || runtime->Depth2KickedFence != 0u ||
       runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted ||
@@ -5129,6 +5155,23 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     return TRUE;
   RtlZeroMemory(&s, sizeof(s));
   RtlZeroMemory(&packet, sizeof(packet));
+  RtlZeroMemory(&pendingKey, sizeof(pendingKey));
+  /* EXP2051: BeginJob binds a private render's buffer manager (its scene's
+   * key), after this decision; the image still holds the previous
+   * render's. Look up the binding BeginJob will give the Prebound head
+   * now (PASSIVE, the G3 lock), so 61 evaluates the builder's predicate. */
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  head = adapter->G4PendingCount != 0u ?
+      &adapter->G4Pending[adapter->G4PendingHead] : NULL;
+  if (head != NULL && head->State == AdmissionG4PendingPrebound &&
+      image->BoundFence == head->Fence && head->Context != NULL) {
+    pendingFence = head->Fence;
+    pendingContext = head->Context;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (pendingFence != 0u)
+    pendingManagerValid = AdmissionGpuvaG3PendingManager(adapter,
+        pendingContext, pendingFence, &pendingManager, &pendingKey);
   AdmissionJobAheadStateWindows(runtime, fence, &ahead);
   KeAcquireSpinLock(&adapter->PagingLock, &old_irql);
   KeAcquireSpinLockAtDpcLevel(&adapter->SchedulerLock);
@@ -5166,9 +5209,11 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
       !runtime->Provider.QueueProvider.Runtime.BufferManagerInitialized ||
       ((s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER ||
         s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE) &&
-       image->G4Manager != NULL &&
-       (image->G4Manager->PendingFence != 0u || owner->ManagerFence != 0u ||
-        AppleAgxRenderManagerNeedsBind(owner, &image->G4ManagerKey)))
+       AdmissionJobWindowManagerNeedsIdle(owner,
+           head != NULL && head->Fence == pendingFence &&
+               head->Context == pendingContext,
+           pendingManagerValid, pendingManager, &pendingKey,
+           image->G4Manager, &image->G4ManagerKey))
       ? 1u : 0u;
   /* 62: the job-word set N+1 would use against the one N holds. */
   if (s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_COMPUTE)
@@ -5225,6 +5270,17 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
           __LINE__ | (beginRefusal << 16), next, (ULONG)begin, 0u, 0u);
       return TRUE;
     }
+  }
+  /* EXP2051: the binding BeginJob just gave must be the one 61 proved
+   * (nothing is built yet: end the G3 job, fail closed). */
+  if ((runtime->Depth2KickNextKind == ADMISSION_JOB_WINDOW_KIND_RENDER ||
+       runtime->Depth2KickNextKind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE) &&
+      AdmissionJobWindowManagerNeedsIdle(owner, TRUE, FALSE, NULL, NULL,
+                                         image->G4Manager, &image->G4ManagerKey)) {
+    AdmissionGpuvaG3AbortJob(adapter, next);
+    AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next, 0u, 0u,
+                                        ADMISSION_KICK_FAIL_G3_ABORTED);
+    return TRUE;
   }
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBeginAfter);
   RtlZeroMemory(&submission, sizeof(submission));
