@@ -66485,3 +66485,12 @@ EXP2052 HARDWARE BEFORE 2026-10-28T20:26:45Z:
 - Hashes: sys df7a46f7661d, UmdArm64 d90a7e3b8763, UmdX64 39ab7d64dd6f, Umd32 1d01c5fd63b8; manifest 66dab85352d4, hardware-manifest e97c5b15eeee; probe2052.sh 90b2a1f46877 (PROBE_LINT_OK); visible recovery rec2052h bcf76bb688f5c15f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1 Wom1JobDepth2KickOn3d=1.
 - Recovery rec2052h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2052-kick-on3d/run2052.sh.
+
+EXP2052 HARDWARE ACTUAL (2026-10-28): **R→C kicks work 3 times, then a hang ends in 0x116. Depth 2 is parked.**
+- Switches: Kick=1 and KickOn3d=1. The guest went down during HD 50k.
+- Wom1JobWindow: kicks 3, adopted 3, max_in_flight 2, compute_on_3d 3, batch {1: 2282, 2: 2}, kick_failures 0.
+- Wom1GpuReset: 3 resets, 0 succeeded, c0000483, quiesce poll, stage quiesce, active 0x18cc.
+- Verdict:
+  - The mechanism works for some pairs.
+  - In GravityMark, eligible pairs are under about 1% of jobs (rc102 estimate; 3 kicks in about 2300 jobs here), so the possible gain is negligible against the hang risk.
+  - Depth 2 is parked; Kick stays off by default. The remaining per-job lever would need R→R with a live manager (U1), which is out of scope for now.
