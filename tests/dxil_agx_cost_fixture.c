@@ -11,9 +11,13 @@
  * usage: dxil_agx_cost_fixture <dxil>|--synthetic-uav-reads=K|--synthetic-local-array=N|
  *        --synthetic-array-samples=N[,heap]|--synthetic-break-loops=N
  *        [--no-d3d-robust] [--assume-in-bounds] [--root-views=UAV,CBV]
- *        [--print-lowered] [--print-nir]
+ *        [--print-lowered] [--print-nir] [--soft-fault|--soft-fault-loads]
  * --root-views: hex masks of the UAV and constant-buffer slots that are
  * D3D12 root descriptors (RC75 dxbc_nir_mark_root_views: left unchecked) 
+ * --soft-fault: Asahi's compiler key with soft faults (set_speculate: every
+ * access-qualified intrinsic and every texture instruction);
+ * --soft-fault-loads: RC82's Windows projection (agx_win32_soft_fault.h:
+ * memory loads only, key soft_fault false)
  * prints one line:
  *   COST stage <s> block <x>x<y>x<z> shared <B> nir-ifs <n> guarded-loads <n>
  *        loads <n> stores <n> txf <n> mem-blocks <n> hot-mem-blocks <n>
@@ -21,7 +25,7 @@
  *        gprs <n> threads <n> scratch <n> spills <n> fills <n> loops <n>
  *        code <n> preamble <n> nir-alu <n> nir-mem <n> nir-tex <n>
  *        nir-shared <n> barriers <n> atomics <n> root-marked <n>
- *        crawl-speculated <n>
+ *        crawl-speculated <n> tex-speculated <n>
  * (RC75 op classes of the final NIR handed to the backend: ALU, device
  * memory, texture/image, threadgroup memory, workgroup barriers, atomics;
  * RC78 crawl-speculated: texture descriptor loads that
@@ -43,6 +47,7 @@
 
 #include "agx_win32_d3d_robustness.h"
 #include "agx_win32_d3d_texture_crawl.h"
+#include "agx_win32_soft_fault.h"
 
 /* Gallium agx_state.c should_lower_robustness for a robust context, minus
  * UBO/SSBO accesses (agx_win32_should_lower_robustness_d3d) */
@@ -318,6 +323,22 @@ count_speculated(nir_shader *nir)
             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
             speculated += intr->intrinsic == nir_intrinsic_load_global_constant &&
                           (nir_intrinsic_access(intr) & ACCESS_CAN_SPECULATE);
+         }
+      }
+   }
+   return speculated;
+}
+
+/* RC82: texture instructions the backend may speculate (before its own
+ * set_speculate; the Windows soft-fault pass must leave them alone) */
+static unsigned
+count_tex_speculated(nir_shader *nir)
+{
+   unsigned speculated = 0;
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            speculated += instr->type == nir_instr_type_tex && nir_instr_as_tex(instr)->can_speculate;
          }
       }
    }
@@ -620,6 +641,7 @@ int
 main(int argc, char **argv)
 {
    bool d3d_robust = true, print_nir = false, print_lowered = false, in_bounds = false;
+   bool soft_fault = false, soft_fault_loads = false;
    unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
       if (sscanf(argv[a], "--root-views=%x,%x", &root_uavs, &root_cbvs) == 2)
@@ -628,6 +650,8 @@ main(int argc, char **argv)
       print_nir |= !strcmp(argv[a], "--print-nir");
       print_lowered |= !strcmp(argv[a], "--print-lowered"); /* after the D3D lowering */
       in_bounds |= !strcmp(argv[a], "--assume-in-bounds");
+      soft_fault |= !strcmp(argv[a], "--soft-fault");
+      soft_fault_loads |= !strcmp(argv[a], "--soft-fault-loads");
    }
    glsl_type_singleton_init_or_ref();
    nir_shader *nir = NULL;
@@ -738,11 +762,14 @@ main(int argc, char **argv)
    NIR_PASS(_, nir, nir_shader_instructions_pass, lower_sysvals, nir_metadata_control_flow, NULL);
    if (print_nir)
       nir_print_shader(nir, stdout);
-   /* J313: G13G (M1), no G13X cluster coherency, no soft fault */
+   /* J313: G13G (M1), no G13X cluster coherency; soft faults per flag */
    const unsigned mem_blocks = memory_blocks(nir);
    struct classes classes = {0};
    count_classes(nir, &classes);
-   struct agx_shader_key key = {.dev = {.needs_g13x_coherency = U_TRISTATE_NO},
+   if (soft_fault_loads)
+      NIR_PASS(_, nir, agx_win32_speculate_soft_fault_loads);
+   const unsigned tex_speculated = count_tex_speculated(nir);
+   struct agx_shader_key key = {.dev = {.needs_g13x_coherency = U_TRISTATE_NO, .soft_fault = soft_fault},
                                 .has_scratch = true, .promote_constants = true, .reserved_preamble = 240};
    struct agx_shader_part part = {0};
    agx_compile_shader_nir(nir, &key, &part);
@@ -750,12 +777,12 @@ main(int argc, char **argv)
    printf("COST stage %s block %ux%ux%u shared %u nir-ifs %u guarded-loads %u loads %u stores %u txf %u mem-blocks %u hot-mem-blocks %u hot-nir %u hot-branches %u "
           "instrs %u alu %u fscib %u ic %u gprs %u threads %u scratch %u spills %u fills %u loops %u code %u "
           "preamble %u nir-alu %u nir-mem %u nir-tex %u nir-shared %u barriers %u atomics %u root-marked %u "
-          "crawl-speculated %u\n",
+          "crawl-speculated %u tex-speculated %u\n",
           mesa_shader_stage_name(MESA_SHADER_COMPUTE), block[0], block[1], block[2], shared, counts.ifs,
           counts.guarded_loads, counts.loads, counts.stores, counts.txf, mem_blocks, hot.memory_blocks, hot.instrs, hot.branches, s->instrs, s->alu, s->fscib, s->ic,
           s->gprs, s->threads, s->scratch, s->spills, s->fills, s->loops, s->code_size, s->preamble_inst,
           classes.alu, classes.mem, classes.tex, classes.shared, classes.barriers, classes.atomics, marked,
-          speculated);
+          speculated, tex_speculated);
    free(part.binary);
    ralloc_free(nir);
    glsl_type_singleton_decref();

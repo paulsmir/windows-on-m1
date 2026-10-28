@@ -986,6 +986,7 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
         save(path,text)
     project_query_timeline(out, save)
     project_d3d_robustness(out,save)
+    project_soft_faults(out,save)
     project_wait_timing(out,save)
 
 
@@ -1144,6 +1145,55 @@ agx_begin_query''')
 }'''
     query = query[:a] + part + query[b:]
     save(qp, query)
+
+
+def project_soft_faults(out,save):
+    """RC82: GPU soft faults (winsys/agx_win32_soft_fault.h).
+
+    The winsys reports DRM_ASAHI_FEATURE_SOFT_FAULTS in params.features only
+    when the KMD reports soft faults active (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS:
+    device value Wom1SoftFaults = 1 and RegionC fault_control 0xb). Asahi's
+    agx_has_soft_fault would then also make the compiler speculate texture
+    instructions (agx_compile.c set_speculate), which the texture unit still
+    faults on, and the vertex prolog read out-of-bounds attributes at address
+    0 (agx_nir_lower_vbo.c), which Windows does not keep unmapped. On Windows
+    it stays false; agx_win32_soft_faults(dev) reads the feature and
+    agx_compile_nir lets the shader's memory loads speculate before
+    agx_compile_shader_nir (where Asahi's set_speculate would run).
+    """
+    dp='src/asahi/lib/agx_device.h';device=(out/dp).read_text()
+    device=replace(device,'''static inline bool
+agx_has_soft_fault(struct agx_device *dev)
+{
+   return (dev->params.features & DRM_ASAHI_FEATURE_SOFT_FAULTS) &&
+          !(dev->debug & AGX_DBG_NOSOFT);
+}''','''/* RC82 (agx_win32_soft_fault.h): the feature as the KMD reported it. */
+static inline bool
+agx_win32_soft_faults(struct agx_device *dev)
+{
+   return (dev->params.features & DRM_ASAHI_FEATURE_SOFT_FAULTS) &&
+          !(dev->debug & AGX_DBG_NOSOFT);
+}
+
+static inline bool
+agx_has_soft_fault(struct agx_device *dev)
+{
+   /* RC82: no texture speculation, no address-0 vertex fetch on Windows. */
+   (void)dev;
+   return false;
+}''')
+    save(dp,device)
+    sp='src/gallium/drivers/asahi/agx_state.c';state=(out/sp).read_text()
+    state=replace(state,'#include "agx_win32_d3d_texture_crawl.h"\n',
+        '#include "agx_win32_d3d_texture_crawl.h"\n#include "agx_win32_soft_fault.h"\n')
+    a,b=function(state,'agx_compile_nir')
+    state=state[:a]+replace(state[a:b],'''   agx_compile_shader_nir(nir, &key, &compiled->b);
+''','''   if (agx_win32_soft_faults(dev))
+      NIR_PASS(_, nir, agx_win32_speculate_soft_fault_loads);
+
+   agx_compile_shader_nir(nir, &key, &compiled->b);
+''')+state[b:]
+    save(sp,state)
 
 
 def project_d3d_robustness(out,save):

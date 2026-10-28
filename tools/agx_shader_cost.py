@@ -27,6 +27,9 @@ Usage:
       descriptor loads allowed into the preamble; set
       APPLE_AGX_D3D_CRAWL_SPECULATE=0 in the environment for Asahi's
       placement).
+      RC82: --soft-fault asahi compiles with Asahi's soft-fault compiler key
+      (every access-qualified intrinsic and texture speculatable);
+      --soft-fault loads with the Windows projection (memory loads only).
 JSON or a table on stdout; nothing is written elsewhere except the fixture
 build directory (--build-dir, default a temporary one).
 """
@@ -177,6 +180,9 @@ def main(argv=None):
     comp.add_argument('--no-d3d-robust', action='store_true')
     comp.add_argument('--assume-in-bounds', action='store_true')
     comp.add_argument('--root-views', help='UAV,CBV hex slot masks of root descriptors')
+    comp.add_argument('--soft-fault', choices=('asahi', 'loads'),
+                      help='RC82: compile as with GPU soft faults (asahi: Mesa set_speculate; '
+                           'loads: the Windows projection, memory loads only)')
     comp.add_argument('--build-dir')
     args = parser.parse_args(argv)
     if args.mode == 'log':
@@ -197,6 +203,9 @@ def main(argv=None):
                                                     ('--assume-in-bounds', args.assume_in_bounds)) if on))])
         if args.root_views:
             variants = [(name, flags + (f'--root-views={args.root_views}',)) for name, flags in variants]
+        if args.soft_fault:
+            sf = '--soft-fault' if args.soft_fault == 'asahi' else '--soft-fault-loads'
+            variants = [(name, flags + (sf,)) for name, flags in variants]
         rows = []
         for path in inputs(args.paths):
             row = {'shader': path.name}
@@ -208,7 +217,7 @@ def main(argv=None):
                                                'hot-mem-blocks', 'hot-branches', 'block', 'shared', 'loops',
                                                'nir-alu', 'nir-mem', 'nir-tex', 'nir-shared', 'barriers',
                                                'atomics', 'root-marked', 'preamble', 'ic',
-                                               'crawl-speculated') if k in c}
+                                               'crawl-speculated', 'tex-speculated') if k in c}
             if len(row) > 1:
                 rows.append(row)
         rows.sort(key=lambda r: r[variants[0][0]]['instrs'], reverse=True)

@@ -42,6 +42,16 @@ loops). With Honeykrisp's nir_opt_loop and nir_opt_if in the frontend tail
 (dxbc_nir_finalize) --synthetic-break-loops=4 must compile to no loop and
 fewer instructions than APPLE_AGX_D3D_CF_OPT=0, with the same ALU and memory
 operations.
+RC82: under GPU soft faults (Wom1SoftFaults, KMD RegionC fault_control
+0xb) the Windows projection lets shader memory loads speculate
+(winsys/agx_win32_soft_fault.h) but not texture instructions, which the
+texture unit still faults on (asahi_drm.h: only shader load/store is
+affected). The descriptor crawls of a heap-indexed array sample
+(--synthetic-array-samples=8,heap, which RC78 must leave in the shader)
+must then run in the preamble exactly as with Asahi's full soft-fault key
+(same instructions, GPRs and preamble), no texture instruction may be marked
+speculatable by the pass, and without the feature the shader must compile
+as before (the pass is the only difference).
 The receipt ranking must join dispatches with their compute statistics by
 the CS hash's low 32 bits, count direct groups and threads, keep indirect
 dispatches as counts, and ignore other processes.
@@ -182,6 +192,23 @@ class CompiledCost(unittest.TestCase):
         heap = self.tool.cost(self.binary, source + ',heap')
         self.assertEqual(heap['crawl-speculated'], 0)
         self.assertEqual(heap, self.tool.cost(self.binary, source + ',heap', env=asahi_rule))
+
+    def test_soft_faults_speculate_loads_but_not_textures(self):
+        source = '--synthetic-array-samples=8,heap'
+        hard = self.tool.cost(self.binary, source)
+        loads = self.tool.cost(self.binary, source, '--soft-fault-loads')
+        asahi = self.tool.cost(self.binary, source, '--soft-fault')
+        self.assertLess(loads['instrs'], hard['instrs'])
+        self.assertGreater(loads['preamble'], hard['preamble'])
+        for key in ('instrs', 'gprs', 'preamble', 'threads'):
+            self.assertEqual(loads[key], asahi[key], key)
+        self.assertEqual(loads['tex-speculated'], hard['tex-speculated'])
+        for key in ('nir-alu', 'nir-mem', 'nir-tex'):
+            self.assertEqual(loads[key], hard[key], key)
+        # an already-speculatable shader is unchanged by the pass
+        bound = '--synthetic-array-samples=8'
+        self.assertEqual(self.tool.cost(self.binary, bound, '--soft-fault-loads')['instrs'],
+                         self.tool.cost(self.binary, bound)['instrs'])
 
     def test_single_pass_loops_fold_into_their_branches(self):
         source = '--synthetic-break-loops=4'
