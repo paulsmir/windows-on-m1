@@ -65875,3 +65875,23 @@ EXP2032 HARDWARE ACTUAL (2026-10-28): **the G4-r3 TDR drill passes, the first PA
 - Verdict:
   - The reset contract holds with build-ahead off.
   - Next: the rc92 arm B (drill with Wom1JobBuildAhead=1) before build-ahead can become the default.
+
+EXP2033 HARDWARE BEFORE 2026-10-28T10:23:25Z:
+- WHY:
+  - (1) In EXP2031 the first app after boot had 3.94 ms idle against 0.15 ms for the third. EXP2028 (no rc93, 2 MiB pages) had 0.11 ms as the first app. Arm a tests whether rc93's chunked slabs cause the first-app CPU gap.
+  - (2) rc96 found bdb1944a at 2.1× its static ALU estimate, with 51 of 83 waits within 2 instructions of their load: latency-exposed. The new schedule moves loads earlier (bdb1944a: waits 83 → 77, mean distance 3.7 → 6.2) with GPRs 207 unchanged.
+- ATOMIC CONTRACT: none; separate steps.
+  - The pages check uses arm a against EXP2031a.
+  - The schedule check uses same-boot pairs b/c and e/d, via the env kill switch in a fresh process.
+- Expected:
+  - (1) if rc93 causes the gap: a idle < 0.5 ms, median about 22.7 ms;
+  - (2) if latency matters: c's pos5 exact < b's 4.9 ms and pos1 d3 lower, beyond 3%; d against e likewise. Images identical; first-frame gap not more than 1 s longer.
+- Failure criteria:
+  - closure build failure (anchors);
+  - a wrong image;
+  - removal or fault.
+- WHAT IS STILL UNKNOWN: graphics-shader effect; whether the loops' dynamic count makes it ALU-bound anyway.
+- Recovery: rec2033h.
+- Hashes: sys 4da6a70e8b50, UmdArm64 b60d06049dd6, UmdX64 e53d58b50c49, Umd32 c077b21bed82; manifest 5e4d824e7f90, hardware-manifest 5ac7a2bedb9b; probe2033.sh 3b4faedbb792 (PROBE_LINT_OK); visible recovery rec2033h beb0fc49b2b5cb4d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolConstructLargePages=1.
+- Recovery rec2033h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2033-latency-pages/run2033.sh.
