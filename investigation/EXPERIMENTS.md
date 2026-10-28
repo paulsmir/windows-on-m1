@@ -66288,3 +66288,26 @@ EXP2045 HARDWARE ACTUAL (2026-10-28): **Kick=1 retest: BeginSuccessorJob now pas
 - Verdict:
   - two rc102 defects for rc102: (A) SubmitSuccessor refuses for a real GravityMark pair; (B) a kick that fails after BeginSuccessorJob leaves the nested G3 lease, so the reset's private stage refuses.
   - Kick stays off by default (it was only set by switch).
+
+EXP2046 HARDWARE BEFORE 2026-10-28T15:49:28Z:
+- rc107: placement census (native query v4) plus UMD rehome of a CPU-visible pool allocation that VidMm moved to segment 0; kill switch APPLE_AGX_CPU_POOL_REHOME=0;
+- rc108: DXIL clip/cull distance sizes via nir_gather_clip_cull_distance_sizes_from_vars plus merge, kill switch APPLE_AGX_DXIL_CLIP_CULL=0; D3D12 BORDER samplers get their built-in border colour.
+Device switch: Wom1GpuFaultInfoRead=1. Order:
+- a: HD 50k, clip on, CPU_POOL_MAP=0, 2 Hz shots;
+- b: HD 50k, CLIP_CULL=0, CPU_POOL_MAP=0, shots;
+- c: FHD 100k with CPU_POOL_MAP unset (unified copy);
+- d: FHD 200k unified.
+- WHY:
+  - (1) rc108: GravityMark's shadow VS write 4 SV_ClipDistance that keep each cascade inside its atlas tile; our DXIL→NIR left clip_distance_array_size 0, so Asahi never enabled clip planes and cascades bled into neighbouring tiles. This gives the polygonal Earth shadows of EXP2044.
+  - (2) rc107: EXP2043 FHD runs died with OOM from the duplicate private staging (0.88 GB). The single copy was blocked since EXP1974 by VidMm's segment-0 republish (LeafAbsent); rc107 pages such allocations back into the pool.
+- ATOMIC CONTRACT: none; separate steps. rc108 is an env A/B in fresh processes; rc107 is judged by its own receipts (measure-cpu-pool-rehome, measure-bo-cpu-access, heap-staging bytes) against EXP2043/EXP2041.
+- Expected:
+  - (1) a: smooth terminator, no polygonal dark regions in the shots; b: the polygons reproduce;
+  - (2) c/d: no OOM, no reject-native-allocation reason 3, no removal; private staging ≈ 0; every rehome receipt S_OK; fewer copy escapes; FHD 200k completes (prior best 2951).
+- Failure criteria:
+  - (1) polygons persist in a;
+  - (2) removal or a rehome E_OUTOFMEMORY (rerun with APPLE_AGX_CPU_POOL_REHOME=0 or CPU_POOL_MAP=0); corrupt textures.
+- Recovery: rec2046h.
+- Hashes: sys 88c4ead14e9f, UmdArm64 b756800f9925, UmdX64 325e63f07fc6, Umd32 aa4770192f6e; manifest 5cd2357f6f80, hardware-manifest 3bfe426ad3e5; probe2046.sh 51ca3d29f435 (PROBE_LINT_OK); visible recovery rec2046h b0cae3804fdb49ab; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2046h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2046-clip-unified/run2046.sh.
