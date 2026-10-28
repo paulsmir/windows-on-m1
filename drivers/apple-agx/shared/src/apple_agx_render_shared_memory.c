@@ -639,6 +639,8 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryInitializeComputeQueue(
       APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+0xc000u);
   zero_bytes(pointers,0x60u);
   put_u32(pointers+0x50u,0x500u);
+  /* rc98: a new queue lifetime starts with set A. */
+  Owner->JobWordSet=APPLE_AGX_COMPUTE_JOB_WORD_SET_A;Owner->JobWordStamp=0u;
   /* A new work queue starts with empty firmware state. */
   zero_bytes((unsigned char *)Owner->Objects[
                  APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress+
@@ -657,7 +659,11 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   const unsigned char *control;
   APPLE_AGX_U64 gpu,stamp,notifier;
   APPLE_AGX_BOOL counted;
+  APPLE_AGX_U32 set;
   if(!Owner||!Input||!Output||!Input->CdmStreamBase||!Input->CdmStreamBytes||
+     Input->JobWordSet>=APPLE_AGX_COMPUTE_JOB_WORD_SET_COUNT||
+     (Input->JobWordSet!=APPLE_AGX_COMPUTE_JOB_WORD_SET_A&&
+      !Input->PreemptionGpuAddress)||
      !Input->Counter||!Input->UscExecutionBase||Input->VmSlot>=0x10u||
      Input->EventNumber>=0x80u||!Input->StampValue||!Input->EventSequence||
      !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR,
@@ -685,14 +691,17 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   if((notifier&7u)||(!counted&&Owner->NotifierComputeCount>=
       ~(APPLE_AGX_U32)0-Owner->NotifierRenderCount))
     return APPLE_AGX_FALSE;
+  set=Input->JobWordSet;
+#define JOB_WORD(OffsetA) APPLE_AGX_COMPUTE_JOB_WORD_OFFSET(set,OffsetA)
   /* Only the job's own words are rebuilt: the statistics, fw stamp and
    * gpu_buf belong to the work queue (Asahi workqueue.rs) and persist. */
   if(!Input->PreemptionGpuAddress)
     zero_bytes(sidecar+APPLE_AGX_COMPUTE_PREEMPT_OFFSET,
                APPLE_AGX_COMPUTE_WORK_OFFSET-APPLE_AGX_COMPUTE_PREEMPT_OFFSET);
-  zero_bytes(sidecar+APPLE_AGX_COMPUTE_WORK_OFFSET,
+  /* The set's RunCompute work and plain microsequence (0x600 bytes). */
+  zero_bytes(sidecar+JOB_WORD(APPLE_AGX_COMPUTE_WORK_OFFSET),
              APPLE_AGX_COMPUTE_STATISTICS_OFFSET-APPLE_AGX_COMPUTE_WORK_OFFSET);
-  micro.WorkGpuAddress=gpu+APPLE_AGX_COMPUTE_WORK_OFFSET;
+  micro.WorkGpuAddress=gpu+JOB_WORD(APPLE_AGX_COMPUTE_WORK_OFFSET);
   micro.StatisticsGpuAddress=gpu+APPLE_AGX_COMPUTE_STATISTICS_OFFSET;
   micro.QueueInfoGpuAddress=Owner->VirtualAddresses[
       APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO];
@@ -704,14 +713,14 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   micro.VmSlot=Input->VmSlot;
   micro.StampValue=Input->StampValue;
   if(Input->Timestamps) {
-    zero_bytes(sidecar+APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET,
-               APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET+APPLE_AGX_G13_TIMESTAMP_BLOCK_BYTES-
-               APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET);
+    zero_bytes(sidecar+JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET),
+               JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET)+APPLE_AGX_G13_TIMESTAMP_BLOCK_BYTES-
+               JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET));
     if(!AppleAgxG13ComputeMicrosequenceBuildTimestamps(&micro,
-        sidecar+APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET))
+        sidecar+JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET)))
       return APPLE_AGX_FALSE;
   } else if(!AppleAgxG13ComputeMicrosequenceBuild(&micro,
-      sidecar+APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET)) return APPLE_AGX_FALSE;
+      sidecar+JOB_WORD(APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET))) return APPLE_AGX_FALSE;
   work.Counter=Input->Counter;work.VmSlot=Input->VmSlot;
   work.NotifierGpuAddress=notifier;
   work.PreemptionGpuAddress=Input->PreemptionGpuAddress ?
@@ -720,13 +729,13 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   work.CdmStreamEnd=Input->CdmStreamBase+Input->CdmStreamBytes;
   work.UscExecutionBase=Input->UscExecutionBase;
   work.MicrosequenceGpuAddress=gpu+(Input->Timestamps ?
-      APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET :
-      APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET);
+      JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET) :
+      JOB_WORD(APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET));
   work.MicrosequenceBytes=Input->Timestamps ?
       APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_TIMESTAMP_BYTES :
       APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES;
   work.TimestampGpuAddress=Input->Timestamps ?
-      gpu+APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET : 0u;
+      gpu+JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET) : 0u;
   work.StampGpuAddress=stamp;
   work.FirmwareStampGpuAddress=gpu+APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET;
   work.StampValue=Input->StampValue;work.StampSlot=Input->EventNumber;
@@ -738,7 +747,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   work.HelperConfig=Input->HelperConfig;
   work.SamplerHeap=Input->SamplerHeap;work.SamplerCount=Input->SamplerCount;
   if(!AppleAgxG13ComputeWorkBuild(&work,
-      sidecar+APPLE_AGX_COMPUTE_WORK_OFFSET)) return APPLE_AGX_FALSE;
+      sidecar+JOB_WORD(APPLE_AGX_COMPUTE_WORK_OFFSET))) return APPLE_AGX_FALSE;
   /* Asahi queue/mod.rs run(): the threshold rises by the job's one
    * notification before the job is kicked; a rebuild is not counted. */
   if(!counted) {
@@ -748,12 +757,50 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   put_u32(threshold,Owner->NotifierRenderCount+Owner->NotifierComputeCount);
   Output->NotifierThreshold=
       Owner->NotifierRenderCount+Owner->NotifierComputeCount;
-  Output->WorkGpuAddress=gpu+APPLE_AGX_COMPUTE_WORK_OFFSET;
+  Output->WorkGpuAddress=gpu+JOB_WORD(APPLE_AGX_COMPUTE_WORK_OFFSET);
   Output->SidecarGpuAddress=gpu;Output->SidecarCpuAddress=sidecar;
   Output->SidecarBytes=0x10000u;
   Output->FirmwareStampGpuAddress=gpu+APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET;
   Output->TimestampCpuAddress=Input->Timestamps ?
-      sidecar+APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET : RENDER_SHARED_NULL;
+      sidecar+JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET) : RENDER_SHARED_NULL;
+  Output->JobWordSet=set;
+  Owner->JobWordSet=set;Owner->JobWordStamp=Input->StampValue;
+#undef JOB_WORD
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxG13BarrierEncode(
+    const APPLE_AGX_RENDER_BARRIER_INPUT *Input,
+    unsigned char Barrier[APPLE_AGX_G13_BARRIER_BYTES]) {
+  if(!Input||!Barrier||!Input->WaitStampGpuAddress||
+     (Input->WaitStampGpuAddress&3u)||!Input->WaitValue||!Input->StampSelf||
+     Input->WaitSlot>=0x80u) return APPLE_AGX_FALSE;
+  zero_bytes(Barrier,APPLE_AGX_G13_BARRIER_BYTES);
+  put_u32(Barrier,APPLE_AGX_G13_BARRIER_TAG);
+  put_u64(Barrier+0x04u,Input->WaitStampGpuAddress);
+  put_u32(Barrier+0x0cu,Input->WaitValue);
+  put_u32(Barrier+0x10u,Input->WaitSlot);
+  put_u32(Barrier+0x14u,Input->StampSelf);
+  /* Asahi's explicit barriers carry uuid 0xffffbbbb; external is 0. */
+  put_u32(Barrier+0x18u,0xffffbbbbu);
+  return APPLE_AGX_TRUE;
+}
+
+static APPLE_AGX_BOOL build_sidecar_barrier(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const APPLE_AGX_RENDER_BARRIER_INPUT *Input, APPLE_AGX_U32 OffsetA,
+    APPLE_AGX_U64 *BarrierGpuAddress) {
+  APPLE_AGX_U32 offset;
+  if(!Owner||!Input||!BarrierGpuAddress||
+     Input->JobWordSet>=APPLE_AGX_COMPUTE_JOB_WORD_SET_COUNT||
+     !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR,
+                         0x10000u,APPLE_AGX_FALSE)) return APPLE_AGX_FALSE;
+  offset=APPLE_AGX_COMPUTE_JOB_WORD_OFFSET(Input->JobWordSet,OffsetA);
+  if(!AppleAgxG13BarrierEncode(Input,(unsigned char *)Owner->Objects[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress+offset))
+    return APPLE_AGX_FALSE;
+  *BarrierGpuAddress=Owner->VirtualAddresses[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+offset;
   return APPLE_AGX_TRUE;
 }
 
@@ -761,27 +808,50 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildComputeBarrier(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const APPLE_AGX_RENDER_BARRIER_INPUT *Input,
     APPLE_AGX_U64 *BarrierGpuAddress) {
-  unsigned char *barrier;
-  if(!Owner||!Input||!BarrierGpuAddress||!Input->WaitStampGpuAddress||
-     (Input->WaitStampGpuAddress&3u)||!Input->WaitValue||!Input->StampSelf||
-     Input->WaitSlot>=0x80u||
-     !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR,
-                         0x10000u,APPLE_AGX_FALSE)) return APPLE_AGX_FALSE;
-  barrier=(unsigned char *)Owner->Objects[
-      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress+
-      APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET;
-  zero_bytes(barrier,APPLE_AGX_G13_BARRIER_BYTES);
-  put_u32(barrier,APPLE_AGX_G13_BARRIER_TAG);
-  put_u64(barrier+0x04u,Input->WaitStampGpuAddress);
-  put_u32(barrier+0x0cu,Input->WaitValue);
-  put_u32(barrier+0x10u,Input->WaitSlot);
-  put_u32(barrier+0x14u,Input->StampSelf);
-  /* Asahi's explicit barriers carry uuid 0xffffbbbb; external is 0. */
-  put_u32(barrier+0x18u,0xffffbbbbu);
-  *BarrierGpuAddress=Owner->VirtualAddresses[
-      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
-      APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET;
-  return APPLE_AGX_TRUE;
+  return build_sidecar_barrier(Owner,Input,APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET,
+                               BarrierGpuAddress);
+}
+
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildLeadingBarrier(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const APPLE_AGX_RENDER_BARRIER_INPUT *Input, APPLE_AGX_U32 Queue,
+    APPLE_AGX_U64 *BarrierGpuAddress) {
+  if(Queue==APPLE_AGX_RENDER_BARRIER_QUEUE_TA)
+    return build_sidecar_barrier(Owner,Input,
+        APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET,BarrierGpuAddress);
+  if(Queue==APPLE_AGX_RENDER_BARRIER_QUEUE_COMPUTE)
+    return build_sidecar_barrier(Owner,Input,
+        APPLE_AGX_COMPUTE_QUEUE_BARRIER_OFFSET,BarrierGpuAddress);
+  return APPLE_AGX_FALSE;
+}
+
+APPLE_AGX_U64 AppleAgxRenderSharedMemoryFirmwareStampAddress(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner, APPLE_AGX_U32 Queue) {
+  APPLE_AGX_U32 index;
+  if(!Owner) return 0u;
+  if(Queue==APPLE_AGX_RENDER_STAMP_QUEUE_COMPUTE)
+    return queue_object_valid(Owner,
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR,0x10000u,
+        APPLE_AGX_FALSE) ? Owner->VirtualAddresses[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
+        APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET : 0u;
+  if(Queue==APPLE_AGX_RENDER_STAMP_QUEUE_TA)
+    index=APPLE_AGX_RENDER_TA_FIRMWARE_STAMP_OBJECT;
+  else if(Queue==APPLE_AGX_RENDER_STAMP_QUEUE_3D)
+    index=APPLE_AGX_RENDER_3D_FIRMWARE_STAMP_OBJECT;
+  else return 0u;
+  return queue_object_valid(Owner,index,4u,APPLE_AGX_FALSE) ?
+      Owner->VirtualAddresses[index]+Owner->ObjectOffsets[index] : 0u;
+}
+
+APPLE_AGX_U32 AppleAgxRenderSharedMemoryNextJobWordSet(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_U32 StampValue, APPLE_AGX_BOOL SecondSet) {
+  if(!Owner||!SecondSet||!Owner->JobWordStamp)
+    return APPLE_AGX_COMPUTE_JOB_WORD_SET_A;
+  if(Owner->JobWordStamp==StampValue) return Owner->JobWordSet;
+  return Owner->JobWordSet==APPLE_AGX_COMPUTE_JOB_WORD_SET_A ?
+      APPLE_AGX_COMPUTE_JOB_WORD_SET_B : APPLE_AGX_COMPUTE_JOB_WORD_SET_A;
 }
 
 /* rc83 receipt: report a build point; timing only. */

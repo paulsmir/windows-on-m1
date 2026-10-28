@@ -46,6 +46,27 @@
  * uuid 0x18, external barrier 0x1c. */
 #define APPLE_AGX_G13_BARRIER_BYTES 0x20u
 #define APPLE_AGX_G13_BARRIER_TAG 4u
+/* rc98 (depth-2 step 2, U7): two job-word sets in the compute sidecar. A
+ * job that uses the sidecar (envelope compute, v5 prelude) builds its
+ * RunCompute work, microsequences, TA Barrier and timestamp block in set A
+ * (the offsets above) or in set B, the same layout APPLE_AGX_COMPUTE_JOB_
+ * WORD_SET_B_DELTA higher, inside the free range 0x9420-0xc000. The
+ * statistics (0x8600), the firmware stamp (0x8780) and gpu_buf (0xc000)
+ * belong to the work queue and stay shared; so does the sidecar's own
+ * preemption buffer (0x0000), which is why set B needs a job-owned one.
+ * Set A is the only set of the default path (JobWordSet 0). */
+#define APPLE_AGX_COMPUTE_JOB_WORD_SET_A 0u
+#define APPLE_AGX_COMPUTE_JOB_WORD_SET_B 1u
+#define APPLE_AGX_COMPUTE_JOB_WORD_SET_COUNT 2u
+#define APPLE_AGX_COMPUTE_JOB_WORD_SET_B_DELTA 0x2000u
+#define APPLE_AGX_COMPUTE_JOB_WORD_SET_FREE_START 0x9420u
+/* rc98: the depth-2 leading Barrier of a compute queue (N+1's prelude or
+ * compute job waiting on N's last firmware stamp), one per set, after the
+ * set's TA Barrier. The TA leading Barrier of a render without a prelude
+ * uses the set's TA Barrier slot (such a render has no prelude Barrier). */
+#define APPLE_AGX_COMPUTE_QUEUE_BARRIER_OFFSET 0x8820u
+#define APPLE_AGX_COMPUTE_JOB_WORD_OFFSET(Set, OffsetA) \
+  ((OffsetA) + ((Set) ? APPLE_AGX_COMPUTE_JOB_WORD_SET_B_DELTA : 0u))
 
 typedef struct _APPLE_AGX_RENDER_COMPUTE_INPUT {
   APPLE_AGX_U64 CdmStreamBase;
@@ -69,6 +90,10 @@ typedef struct _APPLE_AGX_RENDER_COMPUTE_INPUT {
    * sampler_count): APPLE_AGX_G13_COMPUTE_WORK_INPUT SamplerHeap/Count. */
   APPLE_AGX_U64 SamplerHeap;
   APPLE_AGX_U32 SamplerCount;
+  /* rc98: APPLE_AGX_COMPUTE_JOB_WORD_SET_*; zero (set A) is the default
+   * path. Set B requires PreemptionGpuAddress (the sidecar's own
+   * preemption buffer is one). */
+  APPLE_AGX_U32 JobWordSet;
 } APPLE_AGX_RENDER_COMPUTE_INPUT;
 
 typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {
@@ -81,12 +106,30 @@ typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {
   /* The timestamp block (job start, job end, requested start, requested
    * end; APPLE_AGX_G13_TIMESTAMP_BLOCK_BYTES), or NULL. */
   const void *TimestampCpuAddress;
+  /* rc98: the job-word set the build used. */
+  APPLE_AGX_U32 JobWordSet;
 } APPLE_AGX_RENDER_COMPUTE_OUTPUT;
 
 typedef struct _APPLE_AGX_RENDER_BARRIER_INPUT {
   APPLE_AGX_U64 WaitStampGpuAddress;
   APPLE_AGX_U32 WaitValue, WaitSlot, StampSelf;
+  /* rc98: the waiting job's job-word set (0 = set A, the default). */
+  APPLE_AGX_U32 JobWordSet;
 } APPLE_AGX_RENDER_BARRIER_INPUT;
+
+/* rc98: the queue whose firmware stamp a Barrier waits on (Asahi
+ * event.fw_stamp_pointer of the queue's event): TA = template object 9 and
+ * 3D = template object 10 (object 14, the captured 3D-on-TA Barrier, and
+ * the 3D work command at 0x234 point there; never slotted), compute = the
+ * sidecar's work-queue firmware stamp (0x8780). */
+#define APPLE_AGX_RENDER_STAMP_QUEUE_TA 0u
+#define APPLE_AGX_RENDER_STAMP_QUEUE_3D 1u
+#define APPLE_AGX_RENDER_STAMP_QUEUE_COMPUTE 2u
+#define APPLE_AGX_RENDER_TA_FIRMWARE_STAMP_OBJECT 9u
+#define APPLE_AGX_RENDER_3D_FIRMWARE_STAMP_OBJECT 10u
+/* rc98: the queue a depth-2 leading Barrier is published on. */
+#define APPLE_AGX_RENDER_BARRIER_QUEUE_TA 0u
+#define APPLE_AGX_RENDER_BARRIER_QUEUE_COMPUTE 1u
 
 typedef struct _APPLE_AGX_RENDER_RUNTIME_BINDINGS {
   APPLE_AGX_U64 StatsTaOwnerGpuAddress;
@@ -159,6 +202,10 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   /* rc83: cached bounce buffer of one template object read from the
    * write-combined arena in bulk (8 bytes of alignment slack). */
   APPLE_AGX_U64 ArenaBounce[(APPLE_AGX_RENDER_SHARED_MEMORY_BOUNCE_BYTES + 8u) / 8u];
+  /* rc98: the job-word set and stamp of the last successful compute build
+   * (valid when JobWordStamp != 0); cleared with the compute queue. */
+  APPLE_AGX_U32 JobWordSet;
+  APPLE_AGX_U32 JobWordStamp;
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
 
 /* rc83: points of a render build reported through Owner->BuildMark. */
@@ -228,6 +275,36 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildComputeBarrier(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const APPLE_AGX_RENDER_BARRIER_INPUT *Input,
+    APPLE_AGX_U64 *BarrierGpuAddress);
+
+/* rc98: the G13 Barrier work item bytes (Asahi fw/workqueue.rs raw::Barrier,
+ * queue/mod.rs:787-820 explicit vdm/cdm barrier), the encoder of every
+ * Barrier the KMD builds. FALSE for a null/unaligned stamp, a zero value or
+ * self stamp, or a slot >= 0x80. */
+APPLE_AGX_BOOL AppleAgxG13BarrierEncode(
+    const APPLE_AGX_RENDER_BARRIER_INPUT *Input,
+    unsigned char Barrier[APPLE_AGX_G13_BARRIER_BYTES]);
+/* rc98: a queue's firmware stamp VA (APPLE_AGX_RENDER_STAMP_QUEUE_*), the
+ * wait_stamp of a Barrier on that queue's last job; 0 when unavailable. */
+APPLE_AGX_U64 AppleAgxRenderSharedMemoryFirmwareStampAddress(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner, APPLE_AGX_U32 Queue);
+/* rc98: the job-word set a compute build for StampValue uses: set A when
+ * SecondSet is FALSE (the default path); otherwise the set of the last build
+ * for a rebuild of the same stamp, else the other set than the last build,
+ * so two consecutive sidecar jobs (the most a depth-2 window holds) never
+ * share their words. A new compute queue starts with set A. */
+APPLE_AGX_U32 AppleAgxRenderSharedMemoryNextJobWordSet(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_U32 StampValue, APPLE_AGX_BOOL SecondSet);
+/* rc98 (COMPUTE_BARRIER / TA_ON_3D): the depth-2 leading Barrier of N+1's
+ * first queue on N's last firmware stamp, built in N+1's job-word set:
+ * Queue TA uses the set's TA Barrier slot (a render without a prelude),
+ * Queue COMPUTE the set's compute-queue Barrier slot (a compute job or a
+ * v5 prelude). StampSelf is N+1's own stamp on that queue. Not published by
+ * any path yet (no second kick before the depth-2 window, step 3/4). */
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildLeadingBarrier(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const APPLE_AGX_RENDER_BARRIER_INPUT *Input, APPLE_AGX_U32 Queue,
     APPLE_AGX_U64 *BarrierGpuAddress);
 
 /* Refresh the firmware-visible context-0 objects from the dynamically patched
