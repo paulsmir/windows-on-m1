@@ -916,6 +916,22 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
    NIR_PASS(_, nir, nir_split_var_copies);
    NIR_PASS(_, nir, nir_split_per_member_structs);
    NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_shader_in | nir_var_shader_out | nir_var_system_value, NULL);
+   /* RC108 (EXP2044): vk_spirv_to_nir's clip/cull step. spirv_to_nir
+    * declares SV_ClipDistance/SV_CullDistance as compact arrays but leaves
+    * shader_info.clip/cull_distance_array_size at 0; Asahi enables a clip
+    * plane and keeps a clip store only below clip_distance_array_size
+    * (agx_nir_lower_uvs.c:103, 210-217) and wants culls merged behind the
+    * clips in CLIP_DIST0 (agx_nir_lower_uvs.c:112, agx_nir_lower_cull_distance.c).
+    * Without it every DXIL clip distance was dropped: GravityMark's shadow
+    * vertex shaders clip each cascade to its atlas tile, and the geometry
+    * spilled into the neighbouring tiles (straight-edged shadows on the
+    * planet). APPLE_AGX_DXIL_CLIP_CULL=0 restores the old translation, for a
+    * hardware comparison. */
+   const char *clip_cull = getenv("APPLE_AGX_DXIL_CLIP_CULL");
+   if (!clip_cull || strcmp(clip_cull, "0")) {
+      nir_gather_clip_cull_distance_sizes_from_vars(nir);
+      NIR_PASS(_, nir, nir_merge_clip_cull_distance_vars);
+   }
    if (result->stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS(_, nir, nir_lower_terminate_to_demote);
       NIR_PASS(_, nir, nir_lower_halt_to_return);

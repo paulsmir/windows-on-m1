@@ -380,6 +380,39 @@ class DxilToNir(unittest.TestCase):
     def test_register_range_takes_consecutive_slots(self):
         self.parity("par_range_ps")
 
+    def test_clip_distances_size_the_hardware_clip_planes(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? RC108 (EXP2044):
+        # every SV_ClipDistance of a DXIL shader was dropped. spirv_to_nir
+        # leaves shader_info.clip_distance_array_size at 0 (vk_spirv_to_nir
+        # gathers it afterwards, our copy of its tail did not), and Asahi
+        # keeps a clip store and enables a hardware clip plane only below
+        # that size (agx_nir_lower_uvs.c:103, 210-217). GravityMark's shadow
+        # vertex shader 1d135ea4cde9b723 clips each cascade to its atlas tile
+        # with four clip distances; unclipped, the cascades drew into each
+        # other's tiles and the planet showed straight-edged shadows that
+        # changed every frame. The capture is the EXP1969 shader-capture
+        # (DXIL program part as CreateShader receives it).
+        capture = local_tree("experiments", "EXP1969-no-wait", "evidence", "shader-capture",
+                             "1d135ea4cde9b723-s0-r0.bin")
+        if not capture:
+            self.skipTest("EXP1969 shader capture not available")
+
+        def final(env):
+            r = subprocess.run([str(self.dxil), str(capture), "--print-final"], capture_output=True, text=True,
+                               timeout=120, env={**os.environ, **env})
+            self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+            self.assertIn("TRANSLATED", r.stdout)
+            return r.stdout
+
+        fixed = final({})
+        self.assertRegex(fixed, r"(?m)^clip_distance_array_size: 4$")
+        self.assertNotRegex(fixed, r"(?m)^cull_distance_array_size:")
+        stores = re.findall(r"@store_output .*component=(\d), src_type=float32, io location=VARYING_SLOT_CLIP_DIST0",
+                            fixed)
+        self.assertEqual(sorted(stores), ["0", "1", "2", "3"])
+        # the kill switch is the old translation: no clip plane enabled
+        self.assertNotRegex(final({"APPLE_AGX_DXIL_CLIP_CULL": "0"}), r"(?m)^clip_distance_array_size:")
+
 
 if __name__ == "__main__":
     unittest.main()
