@@ -44,6 +44,7 @@ typedef struct {
     ADMISSION_POOL_PRESSURE Pressure; /* rc104 floor wait */
     ULONGLONG ReservedAllocations;
     BOOLEAN StageExact; /* rc104: the worker asks for an exact receipt */
+    ULONGLONG BaseGranules, HeadroomRefusals; /* rc109 headroom floor */
 } ADMISSION_POOL_RUNTIME;
 struct _ADMISSION_CONTEXT { ADMISSION_POOL_RUNTIME *PoolDemand; int PoolLeaks; };
 static ADMISSION_POOL_RUNTIME pool;
@@ -99,7 +100,7 @@ static void AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *ctx) {
  * by the requested step and LowMemory clears once clear_low_at is reached
  * (0: never). Every sleep must happen outside the pool lock. */
 static unsigned sleeps, refs;
-static ULONGLONG clear_low_at, slept_ms;
+static ULONGLONG clear_low_at, slept_ms, set_high_at;
 static int stop_after_sleeps;
 ULONGLONG AdmissionPoolPressureSleep(PKEVENT high_event, ULONGLONG ms) {
     assert(!locked && high_event == &high && ms != 0 && ms <= 50);
@@ -107,6 +108,7 @@ ULONGLONG AdmissionPoolPressureSleep(PKEVENT high_event, ULONGLONG ms) {
     now += ms;
     slept_ms += ms;
     if (clear_low_at && now >= clear_low_at) low = 0;
+    if (set_high_at && now >= set_high_at) high = 1;
     if (stop_after_sleeps && sleeps == (unsigned)stop_after_sleeps) pool.Stopping = 1;
     return ms;
 }
@@ -176,7 +178,9 @@ static void reset(void) {
     low_on_allocation = fail_on_allocation = 0;
     /* The pre-rc104 contract (Wom1PoolPressureWaitMs=0) unless a test opts in. */
     memset(&pool.Pressure, 0, sizeof(pool.Pressure));
-    sleeps = refs = 0; clear_low_at = slept_ms = 0; stop_after_sleeps = 0;
+    sleeps = refs = 0; clear_low_at = slept_ms = set_high_at = 0; stop_after_sleeps = 0;
+    /* No extension (the pre-rc109 segment) unless a test opts in. */
+    pool.BaseGranules = N;
     strict_floor = 0;
 }
 
@@ -709,7 +713,67 @@ static void test_pressure_kill_switch(void) {
     assert(!sleeps && !refs && pool.Slabs.Stats.FloorRefusals == 1);
     assert(!pool.Pressure.Waits && !pool.Pressure.FastFails && !pool.Pressure.TimedOut);
 }
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * rc109: a segment the machine policy enlarged past the default share may
+ * take pages beyond that share only while HighMemoryCondition is set (DWM
+ * keeps the headroom it had at the old size); below the share, neutral memory
+ * still admits (RC53); the refusal waits for HighMemory within the budget,
+ * takes no slab while refused, and is counted apart from the four v9
+ * reasons (an out-of-range RefusalCounts index). A default-size segment
+ * (BaseGranules == ReserveCap) never applies it. */
+static void test_extension_needs_high_memory(void) {
+    reset();
+    pool.BaseGranules = 64; /* two slabs of the 128-granule segment */
+    high = 0; low = 0; /* neutral */
+    assert(AdmissionMemoryPoolReserve(&context, 64 * G));
+    assert(pool.Slabs.Stats.Slabs == 2 && !pool.HeadroomRefusals);
+    assert(!AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(pool.Slabs.Stats.Slabs == 2 && allocations == 2);
+    assert(pool.HeadroomRefusals == 1 && pool.Slabs.Stats.FloorRefusals == 1);
+    assert(pool.LastReserveFailure.Reason == ADMISSION_POOL_REFUSAL_HEADROOM);
+    for (unsigned i = 0; i != ADMISSION_POOL_REFUSAL_COUNT; ++i)
+        assert(pool.RefusalCounts[i] == 0);
+    /* Held slots below the share are reused without growth. */
+    AdmissionMemoryPoolUnreserve(&context, 32 * G);
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    /* HighMemory set: the extension opens. */
+    high = 1;
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(pool.Slabs.Stats.Slabs == 3 && pool.HeadroomRefusals == 1);
+    /* LowMemory still wins over High (the RC53 reason, not headroom). */
+    low = 1;
+    assert(!AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(pool.RefusalCounts[ADMISSION_POOL_REFUSAL_LOW_MEMORY - 1] == 1);
+    assert(pool.HeadroomRefusals == 1);
+    /* With the floor wait, a headroom refusal waits for HighMemory. */
+    low = 0; high = 0;
+    pool.Pressure.BudgetMs = ADMISSION_POOL_PRESSURE_DEFAULT_BUDGET_MS;
+    set_high_at = now + 150;
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(pool.Slabs.Stats.Slabs == 4 && sleeps == 3 && !locked && !refs);
+    assert(pool.HeadroomRefusals == 2 && pool.Pressure.Recovered == 1);
+    /* Never past the budget, then the fast-fail window. */
+    high = 0; set_high_at = 0; sleeps = 0;
+    pool.Slabs.ReserveCap = N + 64; /* room for one more slab */
+    assert(!AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(sleeps == 40 && pool.Pressure.TimedOut == 1 && pool.Slabs.Stats.Slabs == 4);
+    /* The default-size segment: neutral memory admits as before rc109, also
+     * a TVB lease past the whole segment. */
+    reset();
+    high = 0; low = 0;
+    assert(AdmissionMemoryPoolReserve(&context, 128 * G));
+    assert(pool.Slabs.Stats.Slabs == 4 && !pool.HeadroomRefusals);
+    {
+        ADMISSION_POOL_PRIVATE lease = {0};
+        ULONGLONG ipa = 0;
+        assert(AdmissionMemoryPoolTvbTake(&context, &lease, &ipa) && ipa);
+        assert(pool.Slabs.Stats.Slabs == 5 && !pool.HeadroomRefusals);
+        assert(AdmissionMemoryPoolTvbGive(&context, &lease));
+    }
+}
+
 int main(void) {
+    test_extension_needs_high_memory();
     test_tvb_lease_zero_skip();
     test_high_memory_slab_cache();
     test_idle_worker_after_broker_release();

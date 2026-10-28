@@ -282,6 +282,9 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ADMISSION_POOL_GRAPHICS_POLICY Policy;
   ULONG PoolPercent, PolicyFlags;
   ULONGLONG GraphicsShareBytes, BaseSegmentBytes;
+  /* rc109: granules of the default-share size; growth past them needs
+   * HighMemoryCondition (AdmissionPoolMayGrow). */
+  ULONGLONG BaseGranules, HeadroomRefusals;
 } ADMISSION_POOL_RUNTIME;
 
 /* rc88: what one AdmissionPoolAllocSlab call cost, folded into the runtime
@@ -541,6 +544,17 @@ static int AdmissionPoolMayGrow(void *Opaque) {
   decision->Reason = decision->LowMemory == 0u ? ADMISSION_POOL_REFUSAL_NONE :
       (decision->LowMemory == 1u ? ADMISSION_POOL_REFUSAL_LOW_MEMORY :
                                  ADMISSION_POOL_REFUSAL_NO_SIGNAL);
+  /* rc109: the floor scales with the pool. Up to the default share
+   * (BaseGranules, the pre-rc109 segment) the RC53 floor above is the whole
+   * policy. A segment that the machine policy let grow past it may take the
+   * extra pages only while Windows reports plenty of memory
+   * (HighMemoryCondition set): the larger the GPU's part of RAM, the more
+   * headroom DWM keeps (EXP1911 c00001ad under the low floor alone). */
+  if (decision->Reason == ADMISSION_POOL_REFUSAL_NONE &&
+      pool->BaseGranules < pool->Slabs.ReserveCap &&
+      decision->HeldGranules + ADMISSION_POOL_SLAB_SLOTS > pool->BaseGranules &&
+      decision->HighMemory != 1u)
+    decision->Reason = ADMISSION_POOL_REFUSAL_HEADROOM;
   return decision->Reason == ADMISSION_POOL_REFUSAL_NONE;
 }
 
@@ -684,6 +698,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.PolicyMaxPercent = pool->Policy.MaxPercent;
     receipt.PolicyCpuOnlyMiB = pool->Policy.CpuOnlyMiB;
     receipt.PolicyFlags = pool->PolicyFlags;
+    receipt.HeadroomRefusals = pool->HeadroomRefusals;
     pool->StagedPressure = pressure;
     pool->StagedSlabs = pool->Slabs.Stats.Slabs;
     pool->StagedGranules = stats->CommittedGranules;
@@ -775,7 +790,10 @@ static BOOLEAN AdmissionPoolReserveOnce(ADMISSION_CONTEXT *Context,
     if (pool->Slabs.Stats.NewSlabFailures != slabFailures)
       pool->ReserveAttempt.Reason = ADMISSION_POOL_REFUSAL_BACKING;
     pool->LastReserveFailure = pool->ReserveAttempt;
-    ++pool->RefusalCounts[pool->LastReserveFailure.Reason - 1u];
+    if (pool->LastReserveFailure.Reason == ADMISSION_POOL_REFUSAL_HEADROOM)
+      ++pool->HeadroomRefusals;
+    else
+      ++pool->RefusalCounts[pool->LastReserveFailure.Reason - 1u];
     pool->LastReserveFailure.RequestBytes = Bytes;
     pool->LastReserveFailure.ReservedBytes =
         pool->Slabs.Reserved * ADMISSION_POOL_DEMAND_GRANULE;
@@ -798,6 +816,13 @@ static BOOLEAN AdmissionPoolReserveOnce(ADMISSION_CONTEXT *Context,
     pool->LastLargeReserveMs = pool->LastReserveMs;
   AdmissionMemoryPoolUnlock(Context);
   return reserved;
+}
+
+/* rc104: the refusals that wait for the memory manager (rc109: also the
+ * headroom floor of an enlarged segment, which waits for HighMemory). */
+static BOOLEAN AdmissionPoolPressureWaits(ULONG Reason) {
+  return Reason == ADMISSION_POOL_REFUSAL_LOW_MEMORY ||
+         Reason == ADMISSION_POOL_REFUSAL_HEADROOM;
 }
 
 /* rc104: sampled without the pool lock on a referenced event. */
@@ -827,8 +852,10 @@ static ULONGLONG AdmissionPoolPressureSleep(PKEVENT HighMemory, ULONGLONG Ms) {
  * Wom1PoolPressureWaitMs budget is spent (AdmissionPoolPressureNextWait).
  * The floor is unchanged: every attempt runs AdmissionPoolReserveOnce, so no
  * slab is taken while LowMemory is set, and a still-set LowMemory is not
- * retried (one FloorRefusal per dip, not per step). Other refusals (backing,
- * no signal, arithmetic) never wait. Microsoft (DxgkDdiCreateAllocation):
+ * retried (one FloorRefusal per dip, not per step). rc109: a headroom
+ * refusal (growth past the default share without HighMemoryCondition) waits
+ * the same way and is retried once HighMemory is set. Other refusals
+ * (backing, no signal, arithmetic) never wait. Microsoft (DxgkDdiCreateAllocation):
  * STATUS_NO_MEMORY only when memory the call needs cannot be allocated. */
 _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
     ADMISSION_CONTEXT *Context, ULONGLONG Bytes) {
@@ -837,7 +864,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
   ULONGLONG charged = 0ULL, wall = 0ULL, step;
   PKEVENT high = NULL, low = NULL;
   BOOLEAN reserved = AdmissionPoolReserveOnce(Context, Bytes, &reason);
-  if (reserved || reason != ADMISSION_POOL_REFUSAL_LOW_MEMORY) return reserved;
+  if (reserved || !AdmissionPoolPressureWaits(reason)) return reserved;
   for (;;) {
     if (AdmissionMemoryPoolLock(Context) == NULL) break;
     pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
@@ -855,9 +882,13 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
     if (step == 0ULL || low == NULL) break;
     wall += AdmissionPoolPressureSleep(high, step);
     charged += step;
-    if (AdmissionPoolPressureEventSet(low)) continue;
+    /* Retry once the event that refused it has changed. */
+    if (AdmissionPoolPressureEventSet(low) ||
+        (reason == ADMISSION_POOL_REFUSAL_HEADROOM &&
+         !AdmissionPoolPressureEventSet(high)))
+      continue;
     reserved = AdmissionPoolReserveOnce(Context, Bytes, &reason);
-    if (reserved || reason != ADMISSION_POOL_REFUSAL_LOW_MEMORY) break;
+    if (reserved || !AdmissionPoolPressureWaits(reason)) break;
   }
   if (AdmissionMemoryPoolLock(Context) != NULL) {
     pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
@@ -1679,6 +1710,7 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   pool->PoolPercent = percent;
   pool->GraphicsShareBytes = share;
   pool->BaseSegmentBytes = baseBytes;
+  pool->BaseGranules = baseBytes / ADMISSION_POOL_DEMAND_GRANULE;
   pool->Granules = ExAllocatePool2(POOL_FLAG_NON_PAGED,
       (SIZE_T)(count * sizeof(*pool->Granules)), ADMISSION_POOL_TAG);
   pool->Candidates = ExAllocatePool2(POOL_FLAG_NON_PAGED,

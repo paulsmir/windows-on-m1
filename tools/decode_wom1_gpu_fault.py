@@ -455,7 +455,11 @@ def decode_pool(data):
         failure = result['last_reserve_failure']
         if failure is not None:
             reason, _reserved, required, held, cap, private = struct.unpack_from('<2I4Q', data, 360)
-            failure.update(reason=({0: 'none'} | dict(enumerate(reasons, 1))).get(
+            # rc109 (v15): 5 = growth past the default share without HighMemory.
+            named = {0: 'none'} | dict(enumerate(reasons, 1))
+            if version >= 15:
+                named[5] = 'headroom'
+            failure.update(reason=named.get(
                 reason, f'unknown({reason})'), required_granules=required,
                 held_granules=held, reserve_cap_granules=cap, private_granules=private)
     if version >= 10:

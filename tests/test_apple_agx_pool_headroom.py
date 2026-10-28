@@ -74,6 +74,9 @@ class PoolHeadroomTest(unittest.TestCase):
         # rc104: the floor wait wraps one reservation attempt.
         if 'static BOOLEAN AdmissionPoolReserveOnce(' in source:
             names += ['AdmissionPoolReserveOnce', 'AdmissionPoolPressureEventSet']
+        # rc109: the waiting refusal reasons.
+        if 'static BOOLEAN AdmissionPoolPressureWaits(' in source:
+            names.append('AdmissionPoolPressureWaits')
         names += ['AdmissionMemoryPoolExecuted', 'AdmissionMemoryPoolReserve',
                   'AdmissionMemoryPoolUnreserve',
                   'AdmissionMemoryPoolReclaim', 'AdmissionPoolReclaimWork',

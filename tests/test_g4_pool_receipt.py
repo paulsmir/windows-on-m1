@@ -110,8 +110,16 @@ int main(void) {
             system_partition_cpu_only_memory_mib=16384, memory_manager_key=True,
             percentage_set=True, written_after_boot=False, pool_percent_set=True,
             headroom_refusals=6))
+        headroom = bytearray(raw)
+        struct.pack_into('<I', headroom, 360, 5)
+        self.assertEqual(decoder.decode_pool(headroom)['last_reserve_failure']['reason'],
+                         'headroom')
         v14 = bytearray(raw[:704])
         struct.pack_into('<II', v14, 0, 14, 704)
+        struct.pack_into('<I', v14, 360, 5)
+        self.assertEqual(decoder.decode_pool(v14)['last_reserve_failure']['reason'],
+                         'unknown(5)')
+        struct.pack_into('<I', v14, 360, 1)
         self.assertIsNone(decoder.decode_pool(v14)['graphics_policy'])
         self.assertEqual(decoder.decode_pool(v14)['pressure_wait']['budget_ms'], 2000)
         self.assertEqual({k: v for k, v in got['pressure_wait'].items() if k != 'meaning'},

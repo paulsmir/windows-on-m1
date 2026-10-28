@@ -98,6 +98,10 @@ typedef enum _ADMISSION_POOL_PLACE {
 #define ADMISSION_POOL_REFUSAL_BACKING 3u
 #define ADMISSION_POOL_REFUSAL_ARITHMETIC 4u
 #define ADMISSION_POOL_REFUSAL_COUNT 4u
+/* rc109: growth past BaseSegmentBytes (the default-share size) while
+ * HighMemoryCondition is clear or unavailable. Counted in the v15
+ * HeadroomRefusals, not in RefusalCounts (whose v9 layout has 4 entries). */
+#define ADMISSION_POOL_REFUSAL_HEADROOM 5u
 typedef struct _ADMISSION_POOL_RESERVE_FAILURE {
   unsigned long long RequestBytes, ReservedBytes, HeldBytes, CommittedBytes;
   unsigned long long TimeMs;
