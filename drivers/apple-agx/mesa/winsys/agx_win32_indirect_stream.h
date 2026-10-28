@@ -31,7 +31,23 @@ struct agx_win32_stream_params {
     * and including the terminator, so a MaxCount of 60000 with a GPU count
     * of ~150 (RC67 EXP1989) need not launch 60001 work-items. */
    uint32_t threads;
+   /* rc89: the outputs hold this many records (1..max_count), sized from
+    * the GPU counts the context observed instead of MaxCount. The kernel
+    * writes min(count, capacity) records and the terminator, never more. */
+   uint32_t capacity, reserved;
+   /* rc89: AGX_WIN32_STREAM_FEEDBACK_WORDS words the dispatch reports to
+    * (0 = none): see the indices below. */
+   uint64_t feedback;
 } PACKED;
+
+/* rc89 feedback words, written by work-item 0 of each dispatch with
+ * atomics (several dispatches and batches share them): the largest GPU
+ * count clamped to MaxCount, the dispatches whose count exceeded their
+ * capacity (their records past it were not drawn), and all dispatches. */
+#define AGX_WIN32_STREAM_FEEDBACK_MAX_COUNT 0u
+#define AGX_WIN32_STREAM_FEEDBACK_OVERFLOWS 1u
+#define AGX_WIN32_STREAM_FEEDBACK_DISPATCHES 2u
+#define AGX_WIN32_STREAM_FEEDBACK_WORDS 4u
 
 /* RC69 (EXP1987 RC63G): every record must rebind its own USC in the form all
  * native encoders emit (agx_state.c, hk_cmd_draw.c): word 0, word 1, outputs

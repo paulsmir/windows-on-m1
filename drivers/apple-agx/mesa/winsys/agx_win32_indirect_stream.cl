@@ -90,9 +90,20 @@ libagx_win32_indirect_stream(constant struct agx_win32_stream_params *p)
    uint32_t count = p->count ?
       *((constant uint32_t *)(uintptr_t)p->count) : p->max_count;
    count = count < p->max_count ? count : p->max_count;
-   /* rc79: threads == 0 runs one record per work-item (step count + 1).
+   /* rc89: the outputs hold `capacity` records. A larger GPU count is
+    * clamped (the GPU never writes past its outputs) and reported, so the
+    * driver sizes later dispatches for it. */
+   uint32_t records = count < p->capacity ? count : p->capacity;
+   if (first == 0 && p->feedback) {
+      global uint32_t *feedback = (global uint32_t *)(uintptr_t)p->feedback;
+      atomic_max(feedback + AGX_WIN32_STREAM_FEEDBACK_MAX_COUNT, count);
+      if (count > records)
+         atomic_add(feedback + AGX_WIN32_STREAM_FEEDBACK_OVERFLOWS, 1u);
+      atomic_add(feedback + AGX_WIN32_STREAM_FEEDBACK_DISPATCHES, 1u);
+   }
+   /* rc79: threads == 0 runs one record per work-item (step records + 1).
     * The emitter bounds max_count (and so i + step) far below 2^31. */
-   uint32_t step = p->threads ? p->threads : count + 1u;
-   for (uint32_t i = first; i <= count; i += step)
-      agx_win32_stream_record(p, i, count);
+   uint32_t step = p->threads ? p->threads : records + 1u;
+   for (uint32_t i = first; i <= records; i += step)
+      agx_win32_stream_record(p, i, records);
 }

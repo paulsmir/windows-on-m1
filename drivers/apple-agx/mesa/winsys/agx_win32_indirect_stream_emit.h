@@ -264,6 +264,8 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       .c_primitives = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_PRIMITIVES),
       .c_invocations = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_INVOCATIONS),
       .threads = agx_win32_stream_threads(count),
+      /* rc89: the outputs above hold all MaxCount records. */
+      .capacity = count,
    };
    memcpy(params.vs_state, stream->vs_state, sizeof(params.vs_state));
    if (ctx->any_faults)

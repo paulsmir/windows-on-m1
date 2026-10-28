@@ -200,7 +200,7 @@ int main(void) {
   struct agx_win32_stream_params p = {
     .stream = (uintptr_t)stream, .pipelines = (uintptr_t)usc, .continuation = continuation,
     .usc_template = (uintptr_t)tmpl, .arguments = (uintptr_t)args, .count = (uintptr_t)count,
-    .index_buffer = (uintptr_t)indices, .max_count = RC63_MAX, .argument_stride = 20,
+    .index_buffer = (uintptr_t)indices, .max_count = RC63_MAX, .capacity = RC63_MAX, .argument_stride = 20,
     .usc_bytes = usc_bytes, .usc_stride = usc_stride, .params_offset = params_offset,
     .params_uniform = params_uniform, .pipeline_base = (uint32_t)((uintptr_t)usc - shader_base),
     .index_range = 24, .index_size = 4, .restart = 0, .topology = AGX_PRIMITIVE_TRIANGLES,

@@ -4,7 +4,12 @@ VDM records on the GPU, link back at the clamped count without a return stack, a
 USC parameter address for every draw (including negative base vertex and
 nonzero first instance). rc79: a grid smaller than MaxCount + 1 (threads
 striding over the records) must produce byte-identical records, terminator
-and untouched tails, so the dispatch need not scale with MaxCount. Execute the production kernel with the real Mesa
+and untouched tails, so the dispatch need not scale with MaxCount. rc89: the
+outputs hold only `capacity` records (sized from the GPU counts the context
+observed, not from MaxCount); the kernel must write at most `capacity`
+records plus the terminator for any GPU count up to MaxCount (ASan-sized
+outputs, guard bytes checked), and report the clamped GPU count, the
+overflow and the dispatch in its feedback words so the driver can grow. Execute the production kernel with the real Mesa
 pack helpers under ASan/UBSan; no substitute stream encoder is used.
 """
 from pathlib import Path
@@ -30,19 +35,25 @@ static struct { unsigned x; } cl_global_id;
 #undef KERNEL
 #define KERNEL(n) void
 #define atomic_add(p,v) __atomic_fetch_add((p),(v),__ATOMIC_RELAXED)
+#define atomic_max(p,v) __atomic_fetch_max((p),(v),__ATOMIC_RELAXED)
 #include "agx_win32_indirect_stream.cl"
 #undef NDEBUG
 #include <assert.h>
 
-static void run_threads(unsigned indexed, unsigned limit, unsigned value, bool counted,
-                unsigned param_uniform, unsigned threads) {
+static void run_capacity(unsigned indexed, unsigned limit, unsigned value, bool counted,
+                unsigned param_uniform, unsigned threads, unsigned capacity) {
    const unsigned stride=36, usc_stride=128, usc_bytes=80, patch=16;
    unsigned enabled=counted && value<limit ? value : limit;
+   /* rc89: only `capacity` records exist; the rest of the GPU count is
+    * clamped away and reported as an overflow. */
+   unsigned written=enabled<capacity ? enabled : capacity;
    unsigned slot=agx_win32_stream_record_bytes(indexed);
-   unsigned bytes=limit*slot+AGX_VDM_STREAM_LINK_LENGTH;
+   unsigned bytes=capacity*slot+AGX_VDM_STREAM_LINK_LENGTH;
    uint32_t *out=malloc(bytes+32), *args=malloc(stride*limit+64);
-   uint8_t *usc=malloc(usc_stride*limit+32), tmpl[80];
-   memset(out,0xcd,bytes+32); memset(usc,0xab,usc_stride*limit+32);
+   uint8_t *usc=malloc(usc_stride*capacity+32), tmpl[80];
+   uint32_t feedback[AGX_WIN32_STREAM_FEEDBACK_WORDS+1];
+   memset(feedback,0,sizeof(feedback)); feedback[AGX_WIN32_STREAM_FEEDBACK_WORDS]=0x5a5a5a5au;
+   memset(out,0xcd,bytes+32); memset(usc,0xab,usc_stride*capacity+32);
    memset(tmpl,0x12,sizeof(tmpl));
    for(unsigned i=0;i<limit;++i) {
       uint32_t *a=(void *)((uint8_t *)args+i*stride+12);
@@ -67,12 +78,13 @@ static void run_threads(unsigned indexed, unsigned limit, unsigned value, bool c
       /* rc79: 0 = one record per work-item (grid MaxCount + 1); otherwise a
        * grid of `threads` work-items strides over the records. */
       .threads=threads,
+      .capacity=capacity, .feedback=(uintptr_t)feedback,
    };
    /* Reverse work-item order also proves the terminator has no race with slots. */
    for(unsigned i=limit+32;i-- > 0;) {
       cl_global_id.x=i; libagx_win32_indirect_stream(&p);
    }
-   for(unsigned i=0;i<enabled;++i) {
+   for(unsigned i=0;i<written;++i) {
       uint32_t *s=(void *)((uint8_t *)out+i*slot);
       assert(s[0]==p.vs_state[0] && s[1]==p.vs_state[1] &&
              s[2]==p.pipeline_base+i*usc_stride && s[3]==p.vs_state[3] &&
@@ -103,13 +115,22 @@ static void run_threads(unsigned indexed, unsigned limit, unsigned value, bool c
       for(unsigned k=untouched;k<usc_stride;++k)
          assert(usc[i*usc_stride+k]==0xab);
    }
-   assert(out[enabled*slot/4]==0x80000012u);
-   assert(out[enabled*slot/4+1]==0x3456789cu);
-   for(unsigned k=enabled*slot+8;k<bytes+32;++k)
+   assert(out[written*slot/4]==0x80000012u);
+   assert(out[written*slot/4+1]==0x3456789cu);
+   for(unsigned k=written*slot+8;k<bytes+32;++k)
       assert(((uint8_t *)out)[k]==0xcd);
-   for(unsigned k=enabled*usc_stride;k<limit*usc_stride+32;++k)
+   for(unsigned k=written*usc_stride;k<capacity*usc_stride+32;++k)
       assert(usc[k]==0xab);
+   /* rc89: one report per dispatch, whatever the grid. */
+   assert(feedback[AGX_WIN32_STREAM_FEEDBACK_MAX_COUNT]==enabled);
+   assert(feedback[AGX_WIN32_STREAM_FEEDBACK_OVERFLOWS]==(enabled>capacity));
+   assert(feedback[AGX_WIN32_STREAM_FEEDBACK_DISPATCHES]==1);
+   assert(feedback[AGX_WIN32_STREAM_FEEDBACK_WORDS]==0x5a5a5a5au);
    free(out);free(args);free(usc);
+}
+static void run_threads(unsigned indexed, unsigned limit, unsigned value, bool counted,
+                unsigned param_uniform, unsigned threads) {
+   run_capacity(indexed, limit, value, counted, param_uniform, threads, limit);
 }
 static void run(unsigned indexed, unsigned limit, unsigned value, bool counted,
                 unsigned param_uniform) {
@@ -133,6 +154,16 @@ int main(void) {
    run(4,12000,11999,true,12);
    run(2,17,3,true,UINT32_MAX);
    run(0,0,0,true,12);
+   /* rc89: outputs smaller than MaxCount. GPU counts below, at and above
+    * the capacity (up to MaxCount and beyond it), on both grids. */
+   unsigned counts[]={0,1,15,16,17,59999,60000,UINT32_MAX};
+   for(unsigned i=0;i<3;++i)for(unsigned n=0;n<8;++n)for(unsigned t=0;t<2;++t) {
+      run_capacity(indices[i],60000,counts[n],true,12,t?32:0,16);
+      run_capacity(indices[i],60000,counts[n],true,UINT32_MAX,t?7:0,1);
+   }
+   run_capacity(4,60000,0,false,12,0,16);
+   run_capacity(4,60000,0,false,12,1024,16384);
+   run_capacity(2,60000,150,true,12,0,16384);
    return 0;
 }
 '''

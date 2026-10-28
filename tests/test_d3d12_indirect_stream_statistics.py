@@ -21,7 +21,7 @@ static void stats(unsigned mode,unsigned vertices,unsigned instances,unsigned pr
  for(unsigned i=0;i<enabled;++i){args[i*stride/4]=vertices;args[i*stride/4+1]=instances;}
  uint64_t counters[5]={11,13,17,19,23};
  struct agx_win32_stream_params p={.stream=(uintptr_t)out,.pipelines=(uintptr_t)usc,.usc_template=(uintptr_t)tmpl,
- .arguments=(uintptr_t)args,.count=counted?(uintptr_t)&count:0,.max_count=limit,.argument_stride=stride,
+ .arguments=(uintptr_t)args,.count=counted?(uintptr_t)&count:0,.max_count=limit,.capacity=limit,.argument_stride=stride,
  .usc_bytes=8,.usc_stride=64,.params_offset=UINT32_MAX,.index_size=index,.topology=AGX_PRIMITIVE_TRIANGLES,
  .mode=mode,.ia_vertices=(uintptr_t)&counters[0],.ia_primitives=(uintptr_t)&counters[1],
  .vs_invocations=(uintptr_t)&counters[2],.c_primitives=(uintptr_t)&counters[3],.c_invocations=(uintptr_t)&counters[4]};
