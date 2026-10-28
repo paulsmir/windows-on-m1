@@ -156,27 +156,29 @@ int main(int argc,char **argv) {
  pipe_screen screen={};screen.resource_create=create;
  pipe_context pipe={};pipe.texture_map=map;pipe.buffer_map=map;pipe.texture_unmap=unmap;pipe.buffer_unmap=unmap;pipe.blit=blit;
  AGX_D3D12_OWNER owner={};owner.Context=&pipe;owner.Screen=&screen;
- /* 40 GPU-only 1024x1024 BC7 textures: level 0 is 1 MiB, the ring holds 16 */
+ /* 40 GPU-only 1024x1024 BC7 textures per 16 MiB of ring (rc112: 64 MiB on
+  * 64-bit): level 0 is 1 MiB */
+ const unsigned count=40u*static_cast<unsigned>(AGX_D3D12_LEVEL_RING_BYTES>>24);
  std::vector<Store *> textures;std::vector<std::vector<unsigned char>> expected;
- for(unsigned i=0;i<40;i++){textures.push_back(texture(1024,11,1,PIPE_RESOURCE_FLAG_UNMAPPABLE));expected.push_back(textures.back()->data);}
- for(unsigned i=0;i<40;i++)for(unsigned level=0;level<11;level++)assert(upload(&owner,textures[i],level,0,expected[i])==S_OK);
+ for(unsigned i=0;i<count;i++){textures.push_back(texture(1024,11,1,PIPE_RESOURCE_FLAG_UNMAPPABLE));expected.push_back(textures.back()->data);}
+ for(unsigned i=0;i<count;i++)for(unsigned level=0;level<11;level++)assert(upload(&owner,textures[i],level,0,expected[i])==S_OK);
  Store *array=texture(64,7,3,PIPE_RESOURCE_FLAG_UNMAPPABLE);auto array_expected=array->data;
  for(unsigned layer=0;layer<3;layer++)for(unsigned level=0;level<7;level++)assert(upload(&owner,array,level,layer,array_expected)==S_OK);
  run_gpu();
- for(unsigned i=0;i<40;i++)assert(textures[i]->data==expected[i]);
+ for(unsigned i=0;i<count;i++)assert(textures[i]->data==expected[i]);
  assert(array->data==array_expected);
  if(on) {
-  /* one compute copy per level and no blit; 40 x 1.33 MiB of levels drain the
-   * 16 MiB ring 3 times; the ring and the staging texture are created once */
-  assert(blits==0 && copies_recorded==40*11+21 && tiles==copies_recorded && owner.LevelUploads==copies_recorded);
+  /* one compute copy per level and no blit; count x 1.33 MiB of levels drain
+   * the ring 3 times; the ring and the staging texture are created once */
+  assert(blits==0 && copies_recorded==count*11+21 && tiles==copies_recorded && owner.LevelUploads==copies_recorded);
   unsigned long long used=0;unsigned expect=0;
   auto place=[&](size_t bytes){if(used+bytes>AGX_D3D12_LEVEL_RING_BYTES){++expect;used=0;}used=(used+bytes+255)/256*256;};
-  for(unsigned i=0;i<40;i++)for(unsigned level=0;level<11;level++)place(level_bytes(&textures[i]->r,level));
+  for(unsigned i=0;i<count;i++)for(unsigned level=0;level<11;level++)place(level_bytes(&textures[i]->r,level));
   for(unsigned layer=0;layer<3;layer++)for(unsigned level=0;level<7;level++)place(level_bytes(&array->r,level));
   assert(expect==3 && drains==expect && owner.LevelRingDrains==expect && ring_creates==1 && creates==0);
   assert(owner.PendingCopies==copies_recorded);
  } else {
-  assert(blits==40*11+21 && copies_recorded==0 && tiles==0 && ring_creates==0 && drains==0);
+  assert(blits==count*11+21 && copies_recorded==0 && tiles==0 && ring_creates==0 && drains==0);
  }
  /* a partial level, an ineligible layout and a mappable texture keep their paths */
  const unsigned before=blits,recorded=copies_recorded;

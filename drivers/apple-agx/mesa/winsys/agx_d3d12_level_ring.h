@@ -19,7 +19,13 @@
 #ifndef AGX_D3D12_LEVEL_RING_H
 #define AGX_D3D12_LEVEL_RING_H
 
-#define AGX_D3D12_LEVEL_RING_BYTES (16ull * 1024ull * 1024ull)
+/* rc112 (EXP2057a): GravityMark FHD 100k streams 208 MiB of levels inside
+ * its scored window; a 16 MiB ring drained 18 times there, each drain a
+ * SubmitAndWait of about 150 ms (2.7 s of the 9.7 s frame 26->27 stall).
+ * 64 MiB on 64-bit processes; a WOW64 (x86) process keeps 16 MiB of its
+ * address space. */
+#define AGX_D3D12_LEVEL_RING_BYTES \
+  ((sizeof(void *) >= 8 ? 64ull : 16ull) * 1024ull * 1024ull)
 #define AGX_D3D12_LEVEL_RING_ALIGN 256ull
 
 /* Where a level of `bytes` goes in a ring of `capacity` bytes whose first
