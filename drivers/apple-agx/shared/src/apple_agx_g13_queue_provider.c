@@ -184,6 +184,10 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanJob(
       Provider->Phase != AppleAgxG13QueueProviderCreated ||
       Provider->PendingFence != 0u)
     return APPLE_AGX_BACKEND_FALSE;
+  /* rc102 (EXP2039): every field, Successor included, is defined; a stack
+   * candidate copied out field-incomplete made a depth-1 plan a successor
+   * plan and failed the first submit of the boot. */
+  AppleAgxG13ProviderZero(&candidate, (APPLE_AGX_BACKEND_U32)sizeof(candidate));
   candidate.InitializeQueues = Provider->Runtime.TaFirstRun;
   candidate.IncludeInitBm =
       Provider->Runtime.BufferManagerInitialized

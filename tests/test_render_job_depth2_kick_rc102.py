@@ -226,5 +226,78 @@ class KickReceipts(unittest.TestCase):
         self.assertEqual(wired['kick_lead_us']['median_us']['lead'], 600)
 
 
+PLAN_PROBE = r"""
+#include <stdio.h>
+#include <string.h>
+#include "apple_agx_g13_queue_provider.h"
+static APPLE_AGX_BACKEND_U64 ring[3][64];
+static volatile APPLE_AGX_BACKEND_U32 wp[3], dp[3], st[3];
+static APPLE_AGX_BACKEND_BOOL fl(void *c, const void *a, APPLE_AGX_BACKEND_U32 b) { (void)c; (void)a; (void)b; return 1; }
+static void ba(void *c) { (void)c; }
+static APPLE_AGX_BACKEND_BOOL pu(void *c, volatile APPLE_AGX_BACKEND_U32 *a, APPLE_AGX_BACKEND_U32 v) { (void)c; *a = v; return 1; }
+static APPLE_AGX_BACKEND_BOOL rd(void *c, const volatile APPLE_AGX_BACKEND_U32 *a, APPLE_AGX_BACKEND_U32 *v) { (void)c; *v = *a; return 1; }
+static APPLE_AGX_BACKEND_BOOL se(void *c, APPLE_AGX_BACKEND_U32 q, const unsigned char m[APPLE_AGX_G13_RUN_MESSAGE_SIZE]) { (void)c; (void)q; (void)m; return 1; }
+static APPLE_AGX_BACKEND_BOOL qu(void *c, APPLE_AGX_BACKEND_U32 f) { (void)c; (void)f; return 1; }
+static APPLE_AGX_BACKEND_BOOL bu(void *c, const APPLE_AGX_BACKEND_JOB_IMAGE *j, APPLE_AGX_BACKEND_U32 f,
+                                 APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION *s) { (void)c; (void)j; (void)f; (void)s; return 0; }
+/* Dirties the stack the way a kernel thread's stack is dirty. */
+static void scribble(void) { volatile unsigned char junk[4096]; memset((void *)junk, 0xa5, sizeof(junk)); }
+int main(void) {
+  static APPLE_AGX_G13_QUEUE_PROVIDER p;
+  APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG c;
+  APPLE_AGX_G13_QUEUE_RUNTIME_IO io;
+  APPLE_AGX_G13_QUEUE_PROVIDER_IO pio;
+  APPLE_AGX_BACKEND_IO q;
+  APPLE_AGX_G13_QUEUE_JOB_PLAN plan;
+  unsigned i;
+  memset(&c, 0, sizeof(c)); memset(&io, 0, sizeof(io)); memset(&q, 0, sizeof(q));
+  for (i = 0; i < 3; ++i) {
+    APPLE_AGX_G13_QUEUE_BINDING *b = i == 0 ? &c.Ta : i == 1 ? &c.D3 : &c.Compute;
+    b->QueueType = i; b->QueueInfoGpuAddress = 0x1000ULL * (i + 1); b->RingCpuAddress = ring[i];
+    b->RingCapacity = 64u; b->CpuWritePointer = &wp[i]; b->GpuDonePointer = &dp[i];
+    b->Stamp = &st[i]; b->EventNumber = 7u + i;
+  }
+  c.HasCompute = 1; c.TimeoutTicks = 1000ULL;
+  io.FlushForDevice = fl; io.MemoryBarrier = ba; io.PublishU32 = pu; io.ReadU32 = rd;
+  io.SendRunMessage = se; io.Quiesce = qu;
+  pio.Context = &p; pio.BuildSubmission = bu;
+  if (!AppleAgxG13QueueProviderInitialize(&p, &c, &io, &pio)) return 2;
+  q.Context = &p;
+  if (!AppleAgxG13QueueProviderInstall(&q) || !q.Queues.Create(&p)) return 3;
+  scribble();
+  memset(&plan, 0, sizeof(plan));
+  if (!AppleAgxG13QueueProviderPlanJob(&p, &plan)) return 4;
+  printf("successor=%u\n", (unsigned)plan.Successor);
+  return plan.Successor ? 1 : 0;
+}
+"""
+
+
+class PlanIsDeterministic(unittest.TestCase):
+    """EXP2039 (0x116 at boot): AppleAgxG13QueueProviderPlanJob left the
+    rc102 Successor field of its stack candidate unset and copied it out, so
+    the KMD build of an ordinary depth-1 job saw a garbage Successor, tried
+    to build a leading Barrier with no running job and failed the first
+    submit (backend Ready, provider Created, SchedulerFaulted at the submit
+    line). The probe compiles the real provider with uninitialised locals
+    filled with a pattern, as a dirty kernel stack would."""
+
+    def test_depth1_plan_is_never_a_successor_plan(self):
+        shared = ROOT / "drivers/apple-agx/shared"
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "plan.c"
+            exe = Path(directory) / "plan"
+            source.write_text(PLAN_PROBE)
+            subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra", "-Werror",
+                            "-ftrivial-auto-var-init=pattern", "-I", str(shared / "include"),
+                            str(source), str(shared / "src/apple_agx_g13_codec.c"),
+                            str(shared / "src/apple_agx_g13_queue_runtime.c"),
+                            str(shared / "src/apple_agx_g13_queue_provider.c"),
+                            "-o", str(exe)], check=True)
+            ran = subprocess.run([str(exe)], capture_output=True, text=True)
+            self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+            self.assertIn("successor=0", ran.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
