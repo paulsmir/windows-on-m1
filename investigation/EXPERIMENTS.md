@@ -65921,3 +65921,23 @@ EXP2033 HARDWARE ACTUAL (2026-10-28): **rc93 does not cause the first-app gap; r
   - rc93 not implicated;
   - rc96 neutral (keep, default on, kill switch available);
   - new tasks: thermal/power efficiency (Fable investigation running) and low-memory behaviour / cross-app retention.
+
+EXP2034 HARDWARE BEFORE 2026-10-28T10:48:11Z:
+- WHY:
+  - (1) Per-job serialization is ×1.26 of the FHD frame (rc96), and the depth-2 window needs the U4 verdict (are TA/prelude stamps held until the notifier threshold?) plus the refusal histogram per real pair. Wom1JobDepth2 receipt mode measures both with no behaviour change.
+  - (2) Build-ahead (rc90, −0.69 ms/frame in EXP2026) can become the default only after the drill passes with it. EXP2032 passed with build-ahead off.
+- ATOMIC CONTRACT: none; separate steps (receipts, drill) on one switch set.
+- Expected:
+  - depth2.decided ≈ prebound count; refusals mostly 57 (C↔R sidecar), 58 (R→R), some 60;
+  - successor_lead_us > 0; the U4 stamp-lag fields filled;
+  - HD/FHD scores within noise of EXP2026 (build-ahead on);
+  - drill 1 and drill 4 pass as in EXP2032: resets succeeded, last_aborted = the drilled fence, DWM alive.
+- Failure criteria:
+  - a removal or GPU fault with build-ahead;
+  - a drill failure with poll_failure (build-ahead implicated);
+  - FPS clearly below build-ahead EXP2026 (receipt poll cost).
+- WHAT IS STILL UNKNOWN: whether stamps are held by the threshold; whether VidSch delivers N+1 while N runs.
+- Recovery: rec2034h.
+- Hashes: sys 849e0ab17b3d, UmdArm64 4471138fed2b, UmdX64 4fb0b4587161, Umd32 87ebf9bc4905; manifest 89918ea90481, hardware-manifest bba680020266; probe2034.sh e2ca5ae56a18 (PROBE_LINT_OK); visible recovery rec2034h 6f254829445b462f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1TdrDrillAllowed=1.
+- Recovery rec2034h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2034-depth2-receipts/run2034.sh.
