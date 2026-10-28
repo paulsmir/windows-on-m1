@@ -38,6 +38,16 @@ typedef struct _APPLE_AGX_G3_COPY_REQUEST {
 #define APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL 0x102u
 #define APPLE_AGX_G3_NATIVE_QUERY_IDENTITY 0x100u
 #define APPLE_AGX_G3_NATIVE_QUERY_TRANSLATION 0x101u
+/* rc107: read-only placement census of the logical (VidMm) mapping, never a
+ * readiness proof: the batch refuses this version. Reserved and Reserved2
+ * must be zero in. Ready=1 iff every 4-KiB page is a valid page of this
+ * allocation in the native pool segment. Otherwise Reason is IDENTITY (a
+ * valid page of another owner/offset), NOT_POOL (a valid page outside the
+ * pool, e.g. VidMm's segment-0 system backing) or NOT_RESIDENT (only
+ * invalid pages besides pool pages), FailedVa its first page. Reserved2
+ * out = pool pages | (valid non-pool pages << 32). */
+#define APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION 4u
+#define APPLE_AGX_G3_NATIVE_QUERY_NOT_RESIDENT 0x103u
 typedef struct _APPLE_AGX_G3_NATIVE_QUERY {
   APPLE_AGX_U32 Magic, Version, Bytes, Allocation;
   APPLE_AGX_U64 GpuVa, AllocationBytes;

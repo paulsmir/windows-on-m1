@@ -73,6 +73,55 @@ class NativeAllocationGuard(unittest.TestCase):
         funcs = '\n'.join(body(KMD.read_text(), n) for n in ('AdmissionG3CopyPte', 'AdmissionGpuvaG3NativeQueryEscape'))
         self.compile_run(fixture.replace('@@FUNCS@@', funcs), graph=True)
 
+    def test_placement_census_reports_segment_and_is_never_a_proof(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? rc107 (EXP1974):
+        the UMD must tell VidMm's segment-0 republish of a CPU-visible pool
+        allocation from eviction. The v4 census classifies the logical pages
+        (pool, outside the pool, invalid, foreign) without walking or trusting
+        native leaves, and the batch transport refuses it as a proof."""
+        point = ' CHECK(1); assert(sizeof(q)==64);'
+        cases = r'''
+ CHECK(1); assert(sizeof(q)==64);
+ unsigned n0=(va>>12)&8191;
+ q.Version=4;q.Reserved=0;q.Write=0;
+ #define CENSUS(ready,why) do {q.Ready=0;q.FailedVa=0;q.Reason=0;q.Reserved2=0;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)==0);assert(q.Ready==(ready) && q.Reason==(why));assert(!locked && !refs);} while(0)
+ /* The fixture's PTEs are VidMm system pages (segment 0): all outside. */
+ CENSUS(0,APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL);assert(q.FailedVa==va && q.Reserved2==(16ull<<32));
+ for(unsigned i=0;i<16;++i) ptes[n0+i].SegmentId=3;
+ CENSUS(1,0);assert(q.Reserved2==16 && !q.FailedVa);
+ /* Not a proof: an omitted native group does not change the census. */
+ leaves[2].AuxIpa=0;CENSUS(1,0);leaves[2].AuxIpa=ipa+32768;
+ ptes[n0+9].SegmentId=0;CENSUS(0,APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL);
+ assert(q.FailedVa==va+9*4096 && q.Reserved2==(15ull|(1ull<<32)));
+ ptes[n0+9].SegmentId=3;ptes[n0+4].Flags=0;
+ CENSUS(0,APPLE_AGX_G3_NATIVE_QUERY_NOT_RESIDENT);assert(q.FailedVa==va+4*4096 && q.Reserved2==15);
+ ptes[n0+4].Flags=3;++ptes[n0+6].AllocationOffset;
+ CENSUS(0,APPLE_AGX_G3_NATIVE_QUERY_IDENTITY);assert(q.FailedVa==va+6*4096);
+ --ptes[n0+6].AllocationOffset;CENSUS(1,0);
+ /* Input contract: Reserved and Reserved2 zero; same authentication. */
+ q.Reserved=1;q.Ready=0;q.Reason=0;q.FailedVa=0;q.Reserved2=0;
+ assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);q.Reserved=0;
+ q.Reserved2=7;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);q.Reserved2=0;
+ q.Allocation=43;assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0);q.Allocation=42;
+ opened.ReadOnly=1;CENSUS(1,0);opened.ReadOnly=0;
+ /* The batch refuses a census entry outright. */
+ {
+  unsigned char raw[sizeof(APPLE_AGX_G3_NATIVE_QUERY_BATCH)+sizeof(q)]={0};
+  APPLE_AGX_G3_NATIVE_QUERY_BATCH *b=(APPLE_AGX_G3_NATIVE_QUERY_BATCH *)raw;
+  b->Magic=APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC;b->Version=APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION;
+  b->Count=1;b->Bytes=sizeof(raw);
+  q.Ready=0;q.Reason=0;q.FailedVa=0;q.Reserved2=0;memcpy(raw+sizeof(*b),&q,sizeof(q));
+  DXGKARG_ESCAPE be={raw,sizeof(raw),{0},&p,&c,&d};
+  assert(AdmissionGpuvaG3NativeQueryBatchEscape(&a,&be)!=0 && !b->Ready && !locked && !refs);
+ }
+ q.Version=1;q.Write=1;
+'''
+        fixture = KMD_FIXTURE.replace(point, cases)
+        funcs = '\n'.join(body(KMD.read_text(), n) for n in (
+            'AdmissionG3CopyPte', 'AdmissionGpuvaG3NativeQueryEscape',
+            'AdmissionGpuvaG3NativeQueryBatchEscape'))
+        self.compile_run(fixture.replace('@@FUNCS@@', funcs), graph=True)
+
     def test_umd_blocks_before_actual_submit_callback(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Residency alone currently lets a referenced omitted leaf reach the Windows submission callback."""
         text = UMD.read_text()

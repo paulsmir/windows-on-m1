@@ -1462,6 +1462,8 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
   DXGKARGCB_RELEASEHANDLEDATA reference = {0};
   APPLE_AGX_GPUVA_G3_WALK_FAILURE walk = {0};
   ULONGLONG page, end, ipa;
+  ULONGLONG poolPages = 0ULL, otherPages = 0ULL;
+  ULONGLONG firstOther = 0ULL, firstAbsent = 0ULL;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
   if (!adapter || !adapter->Started || !args ||
       KeGetCurrentIrql() != PASSIVE_LEVEL || args->Flags.Value ||
@@ -1477,7 +1479,9 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
        (q.Version != APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION ||
         q.Reserved != APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
        (q.Version != APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION ||
-        q.Reserved > APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY)) ||
+        q.Reserved > APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
+       (q.Version != APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION ||
+        q.Reserved != 0u)) ||
       q.Bytes != sizeof(q) ||
       !q.Allocation || !q.GpuVa || (q.GpuVa & 0xffffULL) ||
       q.GpuVa >= (1ULL << 39) || !q.AllocationBytes ||
@@ -1523,6 +1527,44 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
   /* A well-formed query reports not-ready as data. It is not a failed paging
    * DDI or a failed scheduled submit; the UMD can decline before submission. */
   status = STATUS_SUCCESS;
+  if (q.Version == APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION) {
+    /* rc107: where VidMm's current logical mapping of this allocation
+     * lives. EXP1974 republished a locked CPU-visible pool allocation in
+     * segment 0; the UMD needs to tell that from eviction (invalid pages)
+     * before it asks VidMm to page the allocation back into the pool. No
+     * graph walk, native leaf or token is consulted or issued here. */
+    end = q.GpuVa + q.AllocationBytes;
+    for (page = q.GpuVa; page < end; page += 0x1000ULL) {
+      const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = AdmissionG3CopyPte(p, page);
+      if (!pte || !(pte->Flags & APPLE_AGX_GPUVA_G3_VALID)) {
+        if (!firstAbsent) firstAbsent = page;
+        continue;
+      }
+      if (pte->Allocation != (ULONGLONG)(ULONG_PTR)allocation ||
+          pte->AllocationOffset != page - q.GpuVa) {
+        q.Reason = APPLE_AGX_G3_NATIVE_QUERY_IDENTITY;
+        q.FailedVa = page;
+        goto Output;
+      }
+      if (pte->SegmentId == ADMISSION_MEMORY_POOL_SEGMENT) {
+        ++poolPages;
+      } else {
+        if (!otherPages) firstOther = page;
+        ++otherPages;
+      }
+    }
+    q.Reserved2 = poolPages | (otherPages << 32);
+    if (otherPages) {
+      q.Reason = APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL;
+      q.FailedVa = firstOther;
+    } else if (firstAbsent) {
+      q.Reason = APPLE_AGX_G3_NATIVE_QUERY_NOT_RESIDENT;
+      q.FailedVa = firstAbsent;
+    } else {
+      q.Ready = 1u;
+    }
+    goto Output;
+  }
   if (q.Version == APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION) {
     if (AppleAgxG3NativeCacheHit(&p->NativeReady,
         (ULONGLONG)(ULONG_PTR)allocation, q.GpuVa, q.AllocationBytes,
@@ -1611,6 +1653,9 @@ NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *adapter,
     RtlCopyMemory(&query, entries + i * sizeof(query), sizeof(query));
     if (batch.Version == APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION &&
         query.Version == APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION)
+      return STATUS_INVALID_PARAMETER;
+    /* rc107: a placement census never proves native coverage. */
+    if (query.Version == APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION)
       return STATUS_INVALID_PARAMETER;
     token = query.Reserved2;
     status = AdmissionGpuvaG3NativeQueryEscape(adapter, &single);
