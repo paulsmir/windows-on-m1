@@ -66175,3 +66175,21 @@ EXP2041 HARDWARE ACTUAL (2026-10-28): **six back-to-back apps with no failure. F
   - The rc102 fix 0ee5dfe1 is confirmed (an rc102 package boots and runs, with Kick off).
   - rc104 is not yet hardware-tested (no pressure occurred).
   - FHD best is now 4233.
+
+EXP2042 HARDWARE BEFORE 2026-10-28T13:48:35Z:
+- WHY:
+  - (1) Per-job serialization is ×1.26 of the FHD frame. EXP2039 never reached a kick because of the PlanJob bug (fixed in 0ee5dfe1).
+  - (2) rc103: in EXP2037a frame 2→3, 1194 mip-level uploads were each a render submission (about 1.0 s of 1.9 s).
+- ATOMIC CONTRACT: none; separate steps. Kick is judged against EXP2035/EXP2037 plus its own receipts; level upload is A/B'd by env in a fresh process.
+- Expected:
+  - (1) Wom1JobWindow kicks > 0, max_in_flight 2, batch_sizes[2] > 0, kick_failures 0; no fault or timeout; correct images; FHD/HD at or above EXP2037/EXP2035;
+  - (2) arm a frame_2_3 ≤ 1.3 s, uploads.level ≥ 1000; scored_stall excess at least 0.5 s below arm b; correct textures.
+- Failure criteria:
+  - (1) a Timeout or TDR at the first R→C kick (the 3D stamp is held: unknown 1); the reset should now recover (quiesce unsubmitted/ended);
+  - (2) corrupt textures (set LEVEL_UPLOAD=0);
+  - removal.
+- WHAT IS STILL UNKNOWN: the 3D stamp write timing under a deferred event; whether the ail_tile layout matches GPU-only BC textures on Windows.
+- Recovery: rec2042h (AT_PROXY if down; the minidump first).
+- Hashes: sys d459f6c39beb, UmdArm64 ed3c82b84515, UmdX64 d5e24361b26f, Umd32 31167fbc5131; manifest b5989b9b16a4, hardware-manifest d50048d0f42d; probe2042.sh cbff1628fad4 (PROBE_LINT_OK); visible recovery rec2042h c1459158fc529655; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1.
+- Recovery rec2042h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2042-kick-levels/run2042.sh.
