@@ -128,7 +128,8 @@ int main(int argc,char **argv) {
         # first encoder use. The downstream compiler/packer is a sentinel;
         # nothing in the test inserts a failure guard. Inventory all calls so
         # a new unhandled consumer cannot silently bypass this replay.
-        expected = {'agx_blit.c': 1, 'agx_pipe.c': 2, 'agx_query.c': 1, 'agx_state.c': 1}
+        # agx_blit.c: agx_resource_copy_region and rc103's AgxWin32AsahiCopyToLevel
+        expected = {'agx_blit.c': 2, 'agx_pipe.c': 2, 'agx_query.c': 1, 'agx_state.c': 1}
         for filename, count in expected.items():
             text = (self.out/'src/gallium/drivers/asahi'/filename).read_text()
             starts = list(re.finditer(r'struct agx_batch \*batch = agx_get_compute_batch\([^;]+;', text))
@@ -139,9 +140,11 @@ int main(int argc,char **argv) {
                 stop = text.index('uint64_t indirect = 0;', match.end()) if filename == 'agx_state.c' else text.index('agx_batch_init_state(batch);', match.end())
                 admission = text[match.start():stop]
                 returns_bool = filename == 'agx_query.c'
-                decl = 'static bool caller' if returns_bool else 'static void caller'
-                tail = 'return true;' if returns_bool else ''
-                invoke = 'assert(caller(&ctx) == (mode == 0));' if returns_bool else 'caller(&ctx);'
+                # rc103: the level copy reports a refusal as 0 (its caller blits)
+                returns_int = filename == 'agx_blit.c' and 'AgxWin32AsahiCopyToLevel' in text[:match.start()][-4000:]
+                decl = 'static bool caller' if returns_bool else 'static int caller' if returns_int else 'static void caller'
+                tail = 'return true;' if returns_bool else 'return 1;' if returns_int else ''
+                invoke = ('assert(caller(&ctx) == (mode == 0));' if returns_bool or returns_int else 'caller(&ctx);')
                 self.run_c(filename+str(index), PRELUDE + self.getter + '\n' + decl + r'''(struct agx_context *ctx) {
  struct pipe_context *pctx=&ctx->base,*pipe=&ctx->base;
 ''' + admission + 'agx_batch_init_state(batch);' + tail + r'''

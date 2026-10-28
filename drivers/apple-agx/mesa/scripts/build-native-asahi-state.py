@@ -6856,6 +6856,12 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 lean_module = importlib.util.module_from_spec(lean_spec)
                 lean_spec.loader.exec_module(lean_module)
                 lean_module.project_sources(out, args.project, overlays)
+                # rc103: whole-level texture uploads (APPLE_AGX_D3D12_LEVEL_UPLOAD)
+                level_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-level-upload.py'
+                level_spec = importlib.util.spec_from_file_location('native_level_upload', level_script)
+                level_module = importlib.util.module_from_spec(level_spec)
+                level_spec.loader.exec_module(level_module)
+                level_module.project_sources(out, args.project, overlays)
 
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
