@@ -65294,3 +65294,20 @@ EXP2010 HARDWARE ACTUAL (2026-10-28): **PASS, new best FHD**. rc78 and rc79.
   - rc78 d3043d19 and 14f0229d validated;
   - rc79 2eb56e76, b618de48, 11317098 and 2b0f1130 validated (receipts);
   - 511c0087 implemented (opt-in, untested).
+
+EXP2011 HARDWARE BEFORE 2026-10-28T00:23:10Z:
+- WHY: EXP2010 shows 4 (HD) / 8 (FHD) firmware partial renders per frame in the render-compute jobs. tvb_max_pages is 383/875 against 128 backed (a 4 MiB TVB); rc_ta_ms is 3.89/8.26. Asahi grows the TVB by auto_grow.
+- WINDOWS CONTRACT: a KMD-private 256 MiB reservation (AllowUserModeMapping 0), backed from slab granules outside the VidMm promise and gated by LowMemory.
+- AGX/ASAHI CONTRACT: buffer-manager InitBM with the backed block count; page/block lists for 2080 blocks; growth only while idle.
+- TRANSLATION: growth at idle ACQUIRE/PREPARE from Stats.max_pages, 2x/3x, at most 1024 blocks per step, fail-soft.
+- WHAT IS STILL UNKNOWN: whether the firmware accepts a buffer manager over 32 blocks; the broker cost; the idle point.
+- Expected:
+  - Wom1G3PrivateProcs v2 Blocks about 828 (HD) / 1613 (FHD), refusals 0;
+  - partials → 0; rc_ta_ms lower;
+  - no poison or removal;
+  - score above 5820 / 3371.
+- Failure criteria: a firmware fault or TDR in the render jobs, poison, removal, or a regression.
+- Recovery: rec2011h.
+- Hashes: sys 9b680406568e, UmdArm64 1290146d9da3, UmdX64 3a37126af645, Umd32 2215c1a3d239; manifest 9b055aa1f6f4, hardware-manifest 5f1590de4c64; probe2011.sh 75182a90fd57 (PROBE_LINT_OK); visible recovery rec2011h 390cbe5623b187ba; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2011h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2011-tvb-grow/run2011.sh.
