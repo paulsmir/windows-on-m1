@@ -302,6 +302,11 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * job as its kick left it (the image holds the successor's binding once
    * prebound), whether its decision was noted, the receipts taken. */
   BOOLEAN JobDepth2;
+  /* rc98: device value Wom1JobDepth2Caps = 1, on top of Wom1JobDepth2:
+   * ADMISSION_JOB_WINDOW_CAPS_RC98 (AdmissionJobWindowCapabilities), else
+   * 0. Its SECOND_SIDECAR makes compute jobs and v5 preludes alternate the
+   * sidecar's job-word sets A/B (still depth 1: nothing is kicked early). */
+  ULONG Depth2Capabilities;
   ADMISSION_JOB_WINDOW_JOB Depth2Running;
   BOOLEAN Depth2Noted;
   ULONG Depth2Sampled;
@@ -2933,6 +2938,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   input.EventSequence = fence;
   input.ClientSequence = fence & 0xffu;
   input.PreemptionGpuAddress = preemption;
+  /* rc98: set B only with SECOND_SIDECAR, and never for a present job
+   * (AdmissionJobWindowSecondSet); set A is the default path. */
+  input.JobWordSet = AppleAgxRenderSharedMemoryNextJobWordSet(
+      &runtime->Initdata.RenderSharedMemory, fence,
+      preemption != 0ULL &&
+      AdmissionJobWindowSecondSet(image->PresentCompute ?
+          ADMISSION_JOB_WINDOW_KIND_PRESENT : ADMISSION_JOB_WINDOW_KIND_COMPUTE,
+          runtime->Depth2Capabilities) ? APPLE_AGX_TRUE : APPLE_AGX_FALSE);
   if (!image->PresentCompute) {
     input.HelperProgram = envelope->Compute.Helper.Binary;
     input.HelperArgument = envelope->Compute.Helper.Data;
@@ -2962,6 +2975,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   Job->ComputeExpectedStamp = input.StampValue;
   Job->ComputeExpectedDonePointer = Plan->ComputeExpectedDonePointer;
   Job->ComputeTimestampBlock = output.TimestampCpuAddress;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (output.JobWordSet != APPLE_AGX_COMPUTE_JOB_WORD_SET_A)
+    AdmissionJobTimingNoteWindows(runtime->Adapter, fence,
+                                  ADMISSION_JOB_FLAG_SIDECAR_SET_B);
+#endif
   /* The receipt a refused compute submission records. */
   RtlZeroMemory(build, sizeof(*build));
   build->Valid = APPLE_AGX_BACKEND_TRUE;
@@ -2996,6 +3014,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBuildTaComputeBarrier(
   barrier.WaitValue = Input->StampValue;
   barrier.WaitSlot = Input->EventNumber;
   barrier.StampSelf = Job->TaExpectedStamp;
+  /* rc98: the Barrier lies in its compute work's job-word set. */
+  barrier.JobWordSet = Output->JobWordSet;
   if (!AppleAgxRenderSharedMemoryBuildComputeBarrier(
           &runtime->Initdata.RenderSharedMemory, &barrier, &address))
     return APPLE_AGX_BACKEND_FALSE;
@@ -3182,6 +3202,12 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     input.EventSequence = Submission->Submission.Fence;
     input.ClientSequence = Submission->Submission.Fence & 0xffu;
     input.PreemptionGpuAddress = image->G4PreludePreemption.Va;
+    /* rc98: set B only with SECOND_SIDECAR (AdmissionJobWindowSecondSet). */
+    input.JobWordSet = AppleAgxRenderSharedMemoryNextJobWordSet(
+        &runtime->Initdata.RenderSharedMemory, Submission->Submission.Fence,
+        input.PreemptionGpuAddress != 0ULL &&
+        AdmissionJobWindowSecondSet(ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE,
+            runtime->Depth2Capabilities) ? APPLE_AGX_TRUE : APPLE_AGX_FALSE);
     input.HelperProgram = image->G4PreludeCompute.Helper.Binary;
     input.HelperArgument = image->G4PreludeCompute.Helper.Data;
     input.HelperConfig = image->G4PreludeCompute.Helper.Cfg;
@@ -3315,6 +3341,12 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     if (Plan->IncludeInitBm) flags |= ADMISSION_JOB_FLAG_INIT_BM;
     if (Plan->InitializeQueues) flags |= ADMISSION_JOB_FLAG_INIT_QUEUES;
     if (image->G4Native && image->G4WithCompute) flags |= ADMISSION_JOB_FLAG_PRELUDE;
+    if (image->G4Native && image->G4WithCompute &&
+        runtime->Initdata.RenderSharedMemory.JobWordStamp ==
+            Submission->Submission.Fence &&
+        runtime->Initdata.RenderSharedMemory.JobWordSet !=
+            APPLE_AGX_COMPUTE_JOB_WORD_SET_A)
+      flags |= ADMISSION_JOB_FLAG_SIDECAR_SET_B;
     if ((((staged.TaExpectedStamp >> 8u) ^ 1u) & 1u) != 0u)
       flags |= ADMISSION_JOB_FLAG_SLOT1;
     if (image->G4Manager && runtime->Initdata.RenderSharedMemory.LastBuildRestored)
@@ -4531,11 +4563,15 @@ static VOID AdmissionJobWindowNoteWindows(ADMISSION_CONTEXT *adapter,
   s.PreemptionPhase = ahead.PreemptionPhase;
   s.PagingPending = ahead.PagingPending;
   s.QueuedFence = ahead.QueuedFence;
-  /* The firmware holds N alone (depth 1); no window capability exists. */
+  /* The firmware holds N alone (depth 1). rc98: the capabilities are the
+   * Wom1JobDepth2Caps ones (0 without the switch, as in rc95). */
   s.InFlight = runtime->Depth2Running.Fence == fence &&
       ahead.ActiveFence == fence ? 1u : 0u;
+  s.Capabilities = runtime->Depth2Capabilities;
   s.Running = runtime->Depth2Running;
   refusal = AdmissionJobWindowKickRefusal(&s);
+  if (s.Capabilities != 0u)
+    AdmissionJobTimingNoteWindows(adapter, fence, ADMISSION_JOB_FLAG_DEPTH2_CAPS);
   AdmissionJobAheadNoteRefusalWindows(runtime, fence,
       ADMISSION_JOB_AHEAD_SHIFT_DEPTH2, refusal);
   if (refusal == 0u)
@@ -6090,9 +6126,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
    * is where the depth-2 decision is taken). */
   runtime->JobDepth2 = runtime->JobAhead &&
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2") ? TRUE : FALSE;
+  /* rc98: off unless REG_DWORD 1, and only on top of Wom1JobDepth2. */
+  runtime->Depth2Capabilities = AdmissionJobWindowCapabilities(
+      runtime->JobDepth2 ? 1u : 0u,
+      runtime->JobDepth2 &&
+          AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2Caps") ? 1u : 0u);
 #else
   runtime->JobAhead = FALSE;
   runtime->JobDepth2 = FALSE;
+  runtime->Depth2Capabilities = 0u;
 #endif
   RtlZeroMemory(&runtime->Depth2Running, sizeof(runtime->Depth2Running));
   runtime->Depth2Noted = FALSE;

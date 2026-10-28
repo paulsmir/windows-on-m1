@@ -113,6 +113,11 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
  * could have been kicked to the firmware at once (refusal 0). */
 #define ADMISSION_JOB_FLAG_DEPTH2_ELIGIBLE 0x800u
 #define ADMISSION_JOB_AHEAD_SHIFT_DEPTH2 24u
+/* rc98 (Wom1JobDepth2Caps): the job's compute work (envelope compute or v5
+ * prelude) was built in the sidecar's job-word set B; its depth-2 decision
+ * was taken with the rc98 capabilities declared. */
+#define ADMISSION_JOB_FLAG_SIDECAR_SET_B 0x1000u
+#define ADMISSION_JOB_FLAG_DEPTH2_CAPS 0x2000u
 
 /* Header WorkerFlags: the job worker ran on the dedicated thread; that
  * thread is pinned to the processors of efficiency class (bits 8-15),

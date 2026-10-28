@@ -86,6 +86,10 @@ depth2 gives the depth-2 decision for each job's Prebound successor
 the job's completion, and the TA / compute-prelude stamp lags against their
 done pointers and the completion (U4: a stamp held until the completion is
 gated by the notifier threshold).
+rc98 (Wom1JobDepth2Caps): depth2.with_caps counts decisions taken with the
+rc98 capabilities (second sidecar set, compute-queue and TA-on-3D
+Barriers), sidecar_set_b the jobs whose compute work used job-word set B,
+sidecar_set_a the v5 preludes that used set A.
 The KMD also exports Wom1JobTiming971Hot, the same layout, only
 from a ring whose 64 submissions fall within 500 ms (an application's
 steady state, not the idle desktop after it).
@@ -335,6 +339,10 @@ AHEAD_STEPS = dict(release=0, prebind=8, chain=16)
 # the firmware while this job ran (render_job_window.c refusal in bits 24-31).
 FLAG_DEPTH2_ELIGIBLE = 0x800
 DEPTH2_SHIFT = 24
+# rc98 (Wom1JobDepth2Caps): the job's compute work used the sidecar's
+# job-word set B; its depth-2 decision had the rc98 capabilities declared.
+FLAG_SIDECAR_SET_B = 0x1000
+FLAG_DEPTH2_CAPS = 0x2000
 
 
 def _sub_spans(s, us):
@@ -493,7 +501,11 @@ def _depth2(slots, us):
                 decided=sum(1 for s in slots if s.get('sub_successor_bound')),
                 refusals=dict(sorted(refusals.items())),
                 successor_lead_us=_medians(dict(lead=lead)),
-                stamp_lag_us=_medians(lag), stamp_unseen=unseen)
+                stamp_lag_us=_medians(lag), stamp_unseen=unseen,
+                with_caps=sum(1 for s in slots if s['flags'] & FLAG_DEPTH2_CAPS),
+                sidecar_set_b=sum(1 for s in slots if s['flags'] & FLAG_SIDECAR_SET_B),
+                sidecar_set_a=sum(1 for s in slots if s['flags'] & BUILD_FLAGS['prelude'] and
+                                  not s['flags'] & FLAG_SIDECAR_SET_B))
 
 
 def main():
