@@ -19,7 +19,8 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           'AdmissionGpuvaG3PrivatePreempt','AdmissionGpuvaG3PrivateCancel','AdmissionG4PendingAdmissible',
           'AdmissionG4PendingQueue','AdmissionG4PendingBindHead','AdmissionG4PendingDropLocked',
           'AdmissionG4SubmitComputeLocked','AdmissionG4SubmitVirtualEnvelope',
-          'AdmissionG3OutputMatchesLocal','AdmissionG3OutputAccessible','AdmissionGpuvaG3BeginJob')
+          'AdmissionG3OutputMatchesLocal','AdmissionG3OutputAccessible','AdmissionGpuvaG3BeginJobAs',
+          'AdmissionGpuvaG3BeginJob')
         functions+='\n'.join(function_body(source,n) for n in names)
         shim=(ROOT/'tests/g4_submit_virtual_replay.c').read_text()
         prefix=shim.split('int main(void) {',1)[0]

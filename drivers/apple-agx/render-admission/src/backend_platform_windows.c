@@ -5586,9 +5586,9 @@ AdoptedKicked:
   /* rc102: the job ends when the backend no longer holds it as its pending
    * job (at depth 2 its successor may be pending right after). */
   while (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
+         !drilled &&
          runtime->Backend.PendingSubmission.Submission.Fence ==
              description.Fence &&
-         !drilled &&
          InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
          InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0) {
     APPLE_AGX_BACKEND_U32 drained = 0u;

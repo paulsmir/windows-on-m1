@@ -98,6 +98,9 @@ typedef struct _ADMISSION_G3_STATE {
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
   void *ActiveContext;
   unsigned ActiveFence,PrivateCompletionFence;
+  /* rc102: the depth-2 successor (never set in this replay) */
+  void *SuccessorContext;
+  unsigned SuccessorFence;
   struct {
     APPLE_AGX_G4_PRIVATE_HEADER_V5 Header;
     unsigned char Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
@@ -169,7 +172,8 @@ enum { AdmissionRenderPacketEmpty, AdmissionRenderPacketPrepared,
 typedef enum { AdmissionG4PendingFree = 0, AdmissionG4PendingFilling,
   AdmissionG4PendingQueued, AdmissionG4PendingBinding,
   AdmissionG4PendingDropped = 4,
-  AdmissionG4PendingPrebound = 5 } ADMISSION_G4_PENDING_STATE;
+  AdmissionG4PendingPrebound = 5,
+  AdmissionG4PendingKicked = 6 } ADMISSION_G4_PENDING_STATE;
 typedef struct {
   ADMISSION_G4_PENDING_STATE State;
   ULONG Fence;
@@ -472,6 +476,9 @@ static int AppleAgxGpuvaG3GraphContainsRangeAccessCached(
 static unsigned graph_begin_slot;
 static int AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned slot) { (void)graph;graph_begin_slot=slot;++graph_begin_calls;return 1; }
+/* rc102: a depth-2 successor's BeginJob joins the lease; never here. */
+static int AppleAgxGpuvaG3GraphBeginNestedJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  (void)graph; assert(0); return 0; }
 static int AdmissionBackendImageReleaseSubmission(
     ADMISSION_BACKEND_IMAGE *image, unsigned fence) {
   (void)fence;image->G4Native=0;image->G4Compute=0;image->BoundFence=0;return 1;

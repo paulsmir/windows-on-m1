@@ -61,7 +61,7 @@ class G4SubmitVirtualReplay(unittest.TestCase):
             "AdmissionG4PendingAheadPromoteLocked", "AdmissionG4PendingAheadUnbind",
             "AdmissionG4SubmitComputeLocked",
             "AdmissionG4SubmitVirtualEnvelope",
-            "AdmissionG3OutputMatchesLocal", "AdmissionG3OutputAccessible", "AdmissionGpuvaG3BeginJob", "AdmissionG4SubmitTouch",
+            "AdmissionG3OutputMatchesLocal", "AdmissionG3OutputAccessible", "AdmissionGpuvaG3BeginJobAs", "AdmissionGpuvaG3BeginJob", "AdmissionG4SubmitTouch",
             "AdmissionDdiSubmitCommandVirtualInner",
             "AdmissionDdiSubmitCommandVirtual"))
         functions = function_body(production, "AdmissionG4SubmitRejectDetail") + "\n" + functions

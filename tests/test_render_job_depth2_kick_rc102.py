@@ -71,6 +71,7 @@ class KickWiring(unittest.TestCase):
                       loop[max(0, call - 300):call])
         # the loop ends when the backend no longer holds this job
         self.assertRegex(worker, r"while \(runtime->Backend\.Phase == AppleAgxBackendRuntimeSubmitted &&\s*"
+                                 r"!drilled &&\s*"
                                  r"runtime->Backend\.PendingSubmission\.Submission\.Fence ==\s*"
                                  r"description\.Fence")
 
