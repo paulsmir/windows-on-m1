@@ -52,6 +52,7 @@ HARNESS = r'''
 #define ALIGN_POT(x, a) (((x) + (a) - 1) & ~((a) - 1))
 #define AGX_BO_LOW_VA (1u << 0)
 #define AGX_WIN32_BO_GPU_ONLY (1u << 29)
+#define AGX_BO_WRITEBACK (1u << 3)
 static unsigned util_next_power_of_two(unsigned x) { unsigned p = 1; while (p < x) p <<= 1; return p; }
 struct util_dynarray { void *data; unsigned size, capacity; };
 #define UTIL_DYNARRAY_INIT ((struct util_dynarray){0})
@@ -65,7 +66,7 @@ static void *grow_bytes(struct util_dynarray *d, unsigned n) {
   for (type *elem = (type *)(buf)->data; elem < (type *)((char *)(buf)->data + (buf)->size); ++elem)
 static void util_dynarray_fini(struct util_dynarray *d) { free(d->data); memset(d, 0, sizeof(*d)); }
 struct agx_va { uint64_t addr; };
-struct agx_bo { size_t size; struct agx_va *va; int refcnt; unsigned flags, busy; struct agx_va storage; };
+struct agx_bo { size_t size; struct agx_va *va; int refcnt; unsigned flags, busy; struct agx_va storage; void *cpu; };
 struct agx_ptr { void *cpu; uint64_t gpu; };
 struct agx_device { int unused; };
 struct agx_pool { struct agx_device *dev; struct util_dynarray bos; struct agx_bo *transient_bo;
@@ -77,18 +78,23 @@ struct agx_batch { struct agx_context *ctx; struct agx_pool windows_stream_pool,
 static struct agx_device *agx_device(struct agx_device *d) { return d; }
 static void AgxWin32PerfNote(const char *fmt, ...) { (void)fmt; }
 #define MAX_BOS 8192
-static struct agx_bo *bos[MAX_BOS]; static unsigned created, winsys_releases;
+static struct agx_bo *bos[MAX_BOS]; static unsigned created, winsys_releases, fail_writeback, last_capacity;
 static uint64_t next_va = 0x1100010000ull;
 static struct agx_bo *agx_bo_create(struct agx_device *d, size_t size, unsigned align, unsigned flags, const char *label) {
   (void)d; (void)align; (void)label; assert(created < MAX_BOS && size);
+  if ((flags & AGX_BO_WRITEBACK) && fail_writeback) return NULL;
   struct agx_bo *bo = calloc(1, sizeof(*bo)); assert(bo);
+  /* rc89: only the feedback words are CPU-mapped (writeback). */
+  if (flags & AGX_BO_WRITEBACK) { bo->cpu = malloc(size); assert(bo->cpu); memset(bo->cpu, 0xee, size); }
   bo->size = size; bo->flags = flags; bo->refcnt = 1; bo->va = &bo->storage;
   bo->storage.addr = next_va; next_va += (size + 0xffff) & ~(uint64_t)0xffff;
   bos[created++] = bo; return bo; }
 static void agx_bo_unreference(struct agx_device *d, struct agx_bo *bo) {
   (void)d; if (!bo) return; assert(bo->refcnt > 0 && !bo->busy);
   if (--bo->refcnt == 0) ++winsys_releases; }
-static void *agx_bo_map(struct agx_bo *bo) { (void)bo; assert(!"GPU-only output mapped"); return NULL; }
+static void *agx_bo_map(struct agx_bo *bo) { assert((bo->flags & AGX_BO_WRITEBACK) && "GPU-only output mapped"); return bo->cpu; }
+static unsigned feedback_refs;
+static void agx_batch_add_bo(struct agx_batch *b, struct agx_bo *bo) { (void)b; assert(bo && (bo->flags & AGX_BO_WRITEBACK)); ++feedback_refs; }
 @@HEADER@@
 @@POOL@@
 static struct agx_device device;
@@ -98,11 +104,17 @@ static void batch_init(struct agx_batch *batch) {
 }
 static void stream_draw(struct agx_batch *batch, unsigned count, unsigned record, unsigned tail,
                         unsigned usc_stride, struct agx_bo **vb, struct agx_bo **ub) {
+  struct agx_context *ctx = batch->ctx;
+  /* agx_win32_stream_flush_inputs, APPLE_AGX_D3D12_STREAM_CAPACITY unset */
+  agx_win32_stream_feedback_ensure(ctx);
 @@DRAW@@
   assert(vdm_bo && usc_bo && vdm_bo != usc_bo && vdm.gpu && usc.gpu && !vdm.cpu && !usc.cpu);
   assert(!(vdm.gpu & 255u) && !(usc.gpu & 63u));
-  assert(vdm.gpu - vdm_bo->va->addr + (uint64_t)count * record + tail <= vdm_bo->size);
-  assert(usc.gpu - usc_bo->va->addr + (uint64_t)count * usc_stride <= usc_bo->size);
+  /* rc89: outputs hold `capacity` records (MaxCount until feedback). */
+  assert(capacity && capacity <= count);
+  assert(vdm.gpu - vdm_bo->va->addr + (uint64_t)capacity * record + tail <= vdm_bo->size);
+  assert(usc.gpu - usc_bo->va->addr + (uint64_t)capacity * usc_stride <= usc_bo->size);
+  last_capacity = capacity;
   assert((usc_bo->flags & AGX_BO_LOW_VA) && (vdm_bo->flags & AGX_WIN32_BO_GPU_ONLY) && !(vdm_bo->flags & AGX_BO_LOW_VA));
   *vb = vdm_bo; *ub = usc_bo;
 }
@@ -112,7 +124,9 @@ static void batch_cleanup(struct agx_context *ctx, struct agx_batch *batch) {
 #define CALLS 7u
 #define IN_FLIGHT 4u
 #define BATCHES 300u
-#ifdef FRAME_PATTERN
+#if defined(RC89_CAPACITY)
+@@RC89@@
+#elif defined(FRAME_PATTERN)
 /* rc88 (EXP2019b): a frame records its stream draws in two batches (six
  * draws, then one), FRAME_LAG frames are in flight, and both batches of the
  * oldest frame retire before the next frame records anything. */
@@ -151,10 +165,11 @@ int main(void) {
   printf("created=%u steady_created=%u steady_released=%u winsys_releases=%u live=%u\n",
          created, steady_created, steady_released, winsys_releases, live);
   assert(steady_created == 0 && steady_released == 0);
-  /* Retention never exceeds what the in-flight window itself needed. */
-  assert(created <= 2u * CALLS * FRAME_LAG);
+  /* Retention never exceeds what the in-flight window itself needed
+   * (plus rc89's feedback words). */
+  assert(created <= 2u * CALLS * FRAME_LAG + 1u);
   assert(live == 0 && winsys_releases == created);
-  for (unsigned i = 0; i < created; ++i) free(bos[i]);
+  for (unsigned i = 0; i < created; ++i) { free(bos[i]->cpu); free(bos[i]); }
   puts("RC71 stream scratch: PASS");
   return 0;
 }
@@ -191,9 +206,9 @@ int main(void) {
   printf("created=%u steady_created=%u steady_released=%u winsys_releases=%u live=%u\n",
          created, steady_created, steady_released, winsys_releases, live);
   assert(steady_created == 0 && steady_released == 0);
-  assert(created <= 2u * CALLS * IN_FLIGHT);
+  assert(created <= 2u * CALLS * IN_FLIGHT + 1u);
   assert(live == 0 && winsys_releases == created);
-  for (unsigned i = 0; i < created; ++i) free(bos[i]);
+  for (unsigned i = 0; i < created; ++i) { free(bos[i]->cpu); free(bos[i]); }
   puts("RC71 stream scratch: PASS");
   return 0;
 }
@@ -201,9 +216,11 @@ int main(void) {
 '''
 
 
-def run_stream_harness(self, max_count=60000, defines=()):
+def run_stream_harness(self, max_count=60000, defines=(), main=''):
     """Builds the projected stream path into HARNESS and runs it with draws of
-    max_count records (rc87 reuses it for GravityMark FHD 200k)."""
+    max_count records (rc87 reuses it for GravityMark FHD 200k). rc89: main
+    replaces the harness's main() when RC89_CAPACITY is defined; returns
+    the harness's stdout."""
     with tempfile.TemporaryDirectory(prefix='rc71-stream-scratch-') as tmp:
         out = project(Path(tmp) / 'native')
         if out is None:
@@ -226,7 +243,7 @@ def run_stream_harness(self, max_count=60000, defines=()):
         cleanup = between(cleanup_fn, '   agx_pool_cleanup(&batch->pipeline_pool);\n',
                           '\n   util_dynarray_fini(&batch->scissor);')
         draw = between(emit, '   struct agx_bo *vdm_bo = NULL, *usc_bo = NULL;',
-                       '   if (!agx_win32_stream_output_valid(', include_start=True)
+                       '   if (!capacity || capacity > count ||', include_start=True)
         fini = ('agx_win32_stream_scratch_fini(&ctx);'
                 if 'agx_win32_stream_scratch_fini(ctx);' in pipe_c else '')
         code = (HARNESS.replace('@@SPARE@@', '\n'.join(spare))
@@ -235,6 +252,7 @@ def run_stream_harness(self, max_count=60000, defines=()):
                 .replace('@@INIT@@', init)
                 .replace('@@DRAW@@', draw)
                 .replace('@@CLEANUP@@', '  (void)ctx;\n' + cleanup)
+                .replace('@@RC89@@', main)
                 .replace('@@FINI@@', fini)
                 .replace('stream_draw(batch, 60000u,', 'stream_draw(batch, %uu,' % max_count))
         code = ''.join('#define %s 1\n' % d for d in defines) + code
@@ -248,6 +266,7 @@ def run_stream_harness(self, max_count=60000, defines=()):
         ran = subprocess.run([str(exe)], capture_output=True, text=True)
         self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr[-3000:])
         self.assertIn('RC71 stream scratch: PASS', ran.stdout)
+        return ran.stdout
 
 
 class StreamScratch(unittest.TestCase):

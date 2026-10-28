@@ -66,7 +66,13 @@ def project_sources(out, project, overlays):
    /* RC71: idle stream outputs of retired batches (agx_win32_stream_scratch.h) */
    struct agx_bo *windows_stream_spare[2][16];
    /* rc88: stream output bytes held by unretired batches, and their peak */
-   unsigned long long windows_stream_live[2], windows_stream_peak[2];''')
+   unsigned long long windows_stream_live[2], windows_stream_peak[2];
+   /* rc89: GPU-count feedback words, and what retired batches reported:
+    * largest count, dispatches, dispatches past their capacity */
+   struct agx_bo *windows_stream_feedback;
+   unsigned long long windows_stream_observed, windows_stream_reports, windows_stream_overflows;
+   /* rc89: capacity in records, and stream requests (bytes) since it changed */
+   unsigned long long windows_stream_want, windows_stream_request_min[2], windows_stream_request_max[2];''')
     h=once(h,'struct agx_batch {', '''struct agx_batch {
    /* GPU-produced data only: never CPU-mapped or shadow-published. */
    struct agx_pool windows_stream_pool, windows_stream_usc_pool;''')

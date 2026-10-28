@@ -52,7 +52,8 @@ agx_win32_stream_fallback(struct agx_context *ctx,
  * per call, RC67 EXP1989). APPLE_AGX_D3D12_STREAM_THREADS=N (32..65536)
  * bounds the grid to N work-items that stride over the records; unset,
  * invalid or not smaller than MaxCount + 1 keeps the hardware-validated
- * one-record-per-work-item grid (params.threads 0). Hardware A/B pending. */
+ * one-record-per-work-item grid (params.threads 0). Hardware A/B pending.
+ * rc89: both bounds use the output capacity, not MaxCount. */
 #define AGX_WIN32_STREAM_THREADS_MIN 32u
 #define AGX_WIN32_STREAM_THREADS_MAX 65536u
 static unsigned
@@ -71,6 +72,23 @@ agx_win32_stream_threads(unsigned max_count)
        threads > AGX_WIN32_STREAM_THREADS_MAX || threads >= max_count + 1u)
       return 0;
    return threads;
+}
+
+/* rc89: the context's feedback words (agx_win32_stream_scratch.h) are the
+ * ones the kernel writes. */
+typedef char agx_win32_stream_feedback_layout[
+   AGX_WIN32_STREAM_FB_MAX_COUNT == AGX_WIN32_STREAM_FEEDBACK_MAX_COUNT &&
+   AGX_WIN32_STREAM_FB_OVERFLOWS == AGX_WIN32_STREAM_FEEDBACK_OVERFLOWS &&
+   AGX_WIN32_STREAM_FB_DISPATCHES == AGX_WIN32_STREAM_FEEDBACK_DISPATCHES &&
+   AGX_WIN32_STREAM_FB_WORDS == AGX_WIN32_STREAM_FEEDBACK_WORDS ? 1 : -1];
+
+/* rc89: outputs sized by the GPU counts the context observed (default).
+ * APPLE_AGX_D3D12_STREAM_CAPACITY=0 sizes every output by MaxCount (rc88). */
+static bool
+agx_win32_stream_capacity_enabled(void)
+{
+   const char *value = getenv("APPLE_AGX_D3D12_STREAM_CAPACITY");
+   return !value || value[0] != '0';
 }
 
 /* Register the native query writer and retain its BO for both CDM and
@@ -140,6 +158,9 @@ agx_win32_stream_flush_inputs(struct agx_context *ctx,
    if (in->indirect_draw_count && !ctx->any_faults)
       agx_flush_writer(ctx, agx_resource(in->indirect_draw_count),
                        "Indirect stream count");
+   /* rc89: a BO creation and CPU map, outside graphics batch entry. */
+   if (!ctx->any_faults && agx_win32_stream_capacity_enabled())
+      agx_win32_stream_feedback_ensure(ctx);
    struct agx_batch *batch = ctx->batch;
    if (!ctx->any_faults && batch && !agx_batch_is_compute(batch) &&
        batch->cdm.bo &&
@@ -221,19 +242,26 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
     * They are never CPU-mapped or published. Explicit batch references add
     * them to the submission/residency set; pools retain them until cleanup.
     * RC71: each output is a whole BO the context retains across batches
-    * (agx_win32_stream_scratch.h), at offset 0 of a 64 KiB aligned VA. */
+    * (agx_win32_stream_scratch.h), at offset 0 of a 64 KiB aligned VA.
+    * rc89: they hold `capacity` records (at most MaxCount); the kernel
+    * never writes more, and reports the GPU count to `feedback`. */
    struct agx_bo *vdm_bo = NULL, *usc_bo = NULL;
+   const uint64_t feedback = agx_win32_stream_feedback(batch);
+   const unsigned capacity = agx_win32_stream_capacity(ctx, count, feedback);
    struct agx_ptr vdm = agx_win32_stream_scratch(batch, 0,
-      (size_t)count * record + tail, &vdm_bo);
+      (size_t)capacity * record + tail, &vdm_bo);
    struct agx_ptr usc = agx_win32_stream_scratch(batch, 1,
-      (size_t)count * usc_stride, &usc_bo);
-   if (!agx_win32_stream_output_valid(vdm_bo, vdm.gpu,
-          (uint64_t)count * record + tail, 256) ||
+      (size_t)capacity * usc_stride, &usc_bo);
+   if (!capacity || capacity > count ||
+       !agx_win32_stream_output_valid(vdm_bo, vdm.gpu,
+          (uint64_t)capacity * record + tail, 256) ||
        !agx_win32_stream_output_valid(usc_bo, usc.gpu,
-          (uint64_t)count * usc_stride, 64) ||
+          (uint64_t)capacity * usc_stride, 64) ||
        usc.gpu < dev->shader_base ||
-       usc.gpu - dev->shader_base > UINT32_MAX - (uint64_t)count * usc_stride)
+       usc.gpu - dev->shader_base > UINT32_MAX - (uint64_t)capacity * usc_stride)
       goto fail;
+   if (capacity < count)
+      AgxWin32PerfNote("GPU stream capacity below MaxCount");
    agx_batch_add_bo(batch, vdm_bo);
    agx_batch_add_bo(batch, usc_bo);
    if (ctx->any_faults)
@@ -263,9 +291,8 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       .vs_invocations = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_VS_INVOCATIONS),
       .c_primitives = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_PRIMITIVES),
       .c_invocations = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_INVOCATIONS),
-      .threads = agx_win32_stream_threads(count),
-      /* rc89: the outputs above hold all MaxCount records. */
-      .capacity = count,
+      .threads = agx_win32_stream_threads(capacity),
+      .capacity = capacity, .feedback = feedback,
    };
    memcpy(params.vs_state, stream->vs_state, sizeof(params.vs_state));
    if (ctx->any_faults)
@@ -274,7 +301,7 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
    if (!args || !AgxWin32AsahiBatchComputeEnter(batch))
       goto fail;
    libagx_win32_indirect_stream(batch,
-                                agx_1d(params.threads ? params.threads : count + 1u),
+                                agx_1d(params.threads ? params.threads : capacity + 1u),
                                 AGX_BARRIER_ALL | AGX_PREGFX, args);
    if (!AgxWin32AsahiBatchComputeLeave(batch))
       goto fail;

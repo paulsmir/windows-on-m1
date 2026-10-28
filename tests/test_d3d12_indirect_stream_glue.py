@@ -3,7 +3,11 @@ The GPU stream must admit pipeline statistics, reject unsupported queries/GS/tes
 argument/count writers before graphics, reserve CDM capacity before entry,
 and emit no VDM link on any allocation or launch failure. rc79: the grid is
 MaxCount + 1 unless APPLE_AGX_D3D12_STREAM_THREADS names a valid smaller
-bound, and the bounded grid produces the same records and statistics. Execute production
+bound, and the bounded grid produces the same records and statistics. rc89:
+outputs, grid, terminator and output checks follow the capacity the scratch
+policy returns (not MaxCount), the kernel gets the feedback words, and the
+feedback BO is ensured before graphics entry unless
+APPLE_AGX_D3D12_STREAM_CAPACITY=0. Execute production
 admission/emission and the real kernel; mock only batch/allocator boundaries.
 """
 from pathlib import Path
@@ -102,6 +106,18 @@ static void launch(struct agx_batch *b,struct agx_grid grid,unsigned barrier,uin
  params.stream=(uintptr_t)blocks[allocations-2];params.pipelines=(uintptr_t)blocks[allocations-1];
  for(unsigned i=0;i<grid.count[0];++i){cl_global_id.x=i;libagx_win32_indirect_stream(&params);}
 }
+/* rc89: the capacity policy and feedback words are agx_win32_stream_scratch.h's;
+ * test_d3d12_rc89_stream_capacity.py runs them. Here the policy returns
+ * forced_capacity when feedback exists. */
+#define AGX_WIN32_STREAM_FB_MAX_COUNT 0u
+#define AGX_WIN32_STREAM_FB_OVERFLOWS 1u
+#define AGX_WIN32_STREAM_FB_DISPATCHES 2u
+#define AGX_WIN32_STREAM_FB_WORDS 4u
+static unsigned forced_capacity,feedback_ensures,below_notes;static uint32_t feedback_words[4];
+static void AgxWin32PerfNote(const char *f,...){assert(f);if(strstr(f,"capacity below"))++below_notes;}
+static void agx_win32_stream_feedback_ensure(struct agx_context *c){assert(c);++feedback_ensures;}
+static uint64_t agx_win32_stream_feedback(struct agx_batch *b){assert(b);return forced_capacity?(uintptr_t)feedback_words:0;}
+static unsigned agx_win32_stream_capacity(const struct agx_context *c,unsigned max,uint64_t fb){assert(c);return fb&&forced_capacity<max?forced_capacity:max;}
 /* RC71: production takes each output from agx_win32_stream_scratch
  * (agx_state.h); its reuse is tested in test_rc71_stream_scratch.py. */
 static struct agx_ptr agx_win32_stream_scratch(struct agx_batch *b,unsigned kind,size_t size,struct agx_bo **bo){
@@ -271,6 +287,59 @@ int main(void){
   for(unsigned i=0;i<64;++i){free(blocks[i]);blocks[i]=NULL;}
   free(large);
  }
+ unsetenv("APPLE_AGX_D3D12_STREAM_THREADS");
+ /* rc89: GravityMark-shaped draws (MaxCount 60000) with outputs of 16
+  * records: sized, launched, linked and checked by capacity, never by
+  * MaxCount, for GPU counts below, at and above the capacity. The mock
+  * pool's ASan-sized blocks catch any write past the outputs. */
+ { const unsigned gpu_counts[]={0,3,16,17,150,60000};
+   for(unsigned bounded=0;bounded<2;++bounded)
+   for(unsigned k=0;k<ARRAY_SIZE(gpu_counts);++k){
+    if(bounded)setenv("APPLE_AGX_D3D12_STREAM_THREADS","32",1);else unsetenv("APPLE_AGX_D3D12_STREAM_THREADS");
+    const unsigned records=60000;uint32_t *large=calloc(records,20);assert(large);
+    for(unsigned i=0;i<records;++i){large[5*i]=6;large[5*i+1]=1;large[5*i+3]=i;}
+    struct agx_resource input={{records*20},(uintptr_t)large};
+    struct pipe_draw_indirect_info many={&input.base,&counter.base,0,records,20,0};
+    value=gpu_counts[k];forced_capacity=16;memset(feedback_words,0,sizeof(feedback_words));below_notes=0;
+    fault=0;init(&ctx,&batch,&vs);allocations=reads=launches=entered=leaves=output_refs=0;
+    struct agx_win32_indirect_stream stream={&many,(uintptr_t)tmpl,sizeof(tmpl),8,12,MESA_PRIM_TRIANGLES};native_vs(&stream);
+    struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)large,0x1000,256,AGX_INDEX_SIZE_U32,false);
+    uint8_t *out=vdm+32;
+    assert(agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,out)==out+8);
+    assert(!ctx.any_faults&&ctx.windows_indirect_path==3&&launches==1&&below_notes==1);
+    const struct agx_win32_stream_params *p=blocks[3];
+    assert(p->max_count==records&&p->capacity==16&&p->feedback==(uintptr_t)feedback_words);
+    assert(output_vas[0].size_B==16u*agx_win32_stream_record_bytes(4)+AGX_VDM_STREAM_LINK_LENGTH+AGX_WIN32_STREAM_FETCH_PADDING);
+    assert(output_vas[1].size_B==16u*agx_win32_stream_usc_stride(sizeof(tmpl),true));
+    assert(p->threads==0&&last_grid==17u); /* 32 >= 16 + 1 */
+    unsigned written=value<16?value:16;
+    const uint32_t *tail=(void *)((uint8_t *)blocks[1]+written*agx_win32_stream_record_bytes(4));
+    assert(tail[0]==0x80000012u&&tail[1]==0x34000028u);
+    assert(feedback_words[0]==value&&feedback_words[1]==(value>16)&&feedback_words[2]==1);
+    for(unsigned i=0;i<64;++i){free(blocks[i]);blocks[i]=NULL;}
+    free(large);
+   }
+   unsetenv("APPLE_AGX_D3D12_STREAM_THREADS");
+   /* A bounded grid is a bound below capacity + 1, not below MaxCount + 1. */
+   forced_capacity=4096;setenv("APPLE_AGX_D3D12_STREAM_THREADS","1024",1);
+   { const unsigned records=60000;uint32_t *large=calloc(records,20);assert(large);
+     struct agx_resource input={{records*20},(uintptr_t)large};
+     struct pipe_draw_indirect_info many={&input.base,&counter.base,0,records,20,0};
+     value=5000;fault=0;init(&ctx,&batch,&vs);allocations=reads=launches=entered=leaves=output_refs=0;
+     struct agx_win32_indirect_stream stream={&many,(uintptr_t)tmpl,sizeof(tmpl),8,12,MESA_PRIM_TRIANGLES};native_vs(&stream);
+     struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)large,0x1000,256,AGX_INDEX_SIZE_U32,false);
+     assert(agx_win32_emit_indirect_stream(&batch,&stream,d,AGX_PRIMITIVE_TRIANGLES,vdm+32));
+     const struct agx_win32_stream_params *p=blocks[3];
+     assert(p->capacity==4096&&p->threads==1024&&last_grid==1024);
+     for(unsigned i=0;i<64;++i){free(blocks[i]);blocks[i]=NULL;}
+     free(large); }
+   unsetenv("APPLE_AGX_D3D12_STREAM_THREADS");forced_capacity=0;
+   /* The feedback BO is ensured before graphics entry unless disabled. */
+   feedback_ensures=0;unsetenv("APPLE_AGX_D3D12_STREAM_CAPACITY");fault=0;init(&ctx,&batch,&vs);
+   agx_win32_stream_flush_inputs(&ctx,&in);assert(feedback_ensures==1);
+   setenv("APPLE_AGX_D3D12_STREAM_CAPACITY","0",1);agx_win32_stream_flush_inputs(&ctx,&in);assert(feedback_ensures==1);
+   setenv("APPLE_AGX_D3D12_STREAM_CAPACITY","1",1);agx_win32_stream_flush_inputs(&ctx,&in);assert(feedback_ensures==2);
+   unsetenv("APPLE_AGX_D3D12_STREAM_CAPACITY"); }
  /* rc79: only a decimal 32..65536 below MaxCount + 1 bounds the grid. */
  { const char *bad[]={"","abc","16","31","65537","99999999999","1024x"};
    for(unsigned k=0;k<ARRAY_SIZE(bad);++k){setenv("APPLE_AGX_D3D12_STREAM_THREADS",bad[k],1);
