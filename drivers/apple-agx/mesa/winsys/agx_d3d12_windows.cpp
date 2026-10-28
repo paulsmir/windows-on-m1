@@ -3681,17 +3681,38 @@ static unsigned wrap_mode(unsigned address) {
   default: return PIPE_TEX_WRAP_REPEAT;
   }
 }
+/* RC109 diagnostic: APPLE_AGX_D3D12_MAX_ANISOTROPY=<1..16> caps every
+ * anisotropic sampler's ratio (D3D12 allows 1..16; 16 is the cap D3D
+ * imposes). GravityMark's main gbuffer pass costs ~38 core cycles per
+ * pixel with a ~100-instruction PS and scales with pixels, not asteroids
+ * (EXP2020b/2023a/2026b/2046b frame breakdowns): its three anisotropic
+ * samples per pixel are the remaining per-pixel cost candidate. Read once;
+ * unset, empty or out of range keeps the application's ratio. */
+static unsigned sampler_max_anisotropy_cap(void) {
+  static unsigned cap = 0;
+  if (cap) return cap;
+  char value[8] = {};
+  const DWORD n = GetEnvironmentVariableA("APPLE_AGX_D3D12_MAX_ANISOTROPY", value, sizeof(value));
+  unsigned parsed = 0;
+  for (DWORD i = 0; i < n && i < sizeof(value) - 1; ++i) {
+    if (value[i] < '0' || value[i] > '9') { parsed = 0; break; }
+    parsed = parsed * 10u + static_cast<unsigned>(value[i] - '0');
+  }
+  cap = (n && parsed >= 1u && parsed <= 16u) ? parsed : 16u;
+  return cap;
+}
 static void *create_sampler(struct pipe_context *pipe, const AGX_D3D12_SAMPLER *s) {
   struct pipe_sampler_state state = {};
   const unsigned filter = s->Filter;
   const bool aniso = (filter & 0x40u) != 0;
+  const unsigned aniso_cap = sampler_max_anisotropy_cap();
   state.wrap_s = wrap_mode(s->AddressU);
   state.wrap_t = wrap_mode(s->AddressV);
   state.wrap_r = wrap_mode(s->AddressW);
   state.min_img_filter = aniso || ((filter >> 4) & 3u) ? PIPE_TEX_FILTER_LINEAR : PIPE_TEX_FILTER_NEAREST;
   state.mag_img_filter = aniso || ((filter >> 2) & 3u) ? PIPE_TEX_FILTER_LINEAR : PIPE_TEX_FILTER_NEAREST;
   state.min_mip_filter = aniso || (filter & 3u) ? PIPE_TEX_MIPFILTER_LINEAR : PIPE_TEX_MIPFILTER_NEAREST;
-  state.max_anisotropy = aniso ? (s->MaxAnisotropy > 16 ? 16 : s->MaxAnisotropy) : 0;
+  state.max_anisotropy = aniso ? (s->MaxAnisotropy > aniso_cap ? aniso_cap : s->MaxAnisotropy) : 0;
   if (((filter >> 7) & 3u) == 1u) {
     state.compare_mode = PIPE_TEX_COMPARE_R_TO_TEXTURE;
     state.compare_func = comparison(s->ComparisonFunc);
