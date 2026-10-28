@@ -65558,3 +65558,12 @@ EXP2020 HARDWARE BEFORE 2026-10-28T04:24:26Z:
 - Hashes: sys d1b22b93b356, UmdArm64 06f5bafe8ceb, UmdX64 ee21a652217e, Umd32 23b7194817fa; manifest 479a10907154, hardware-manifest 8a35d5efcc12; probe2020.sh 6bd57032346d (PROBE_LINT_OK); visible recovery rec2020h 5d72ce21fa62241f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2020h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2020-hd-board/run2020.sh.
+
+EXP2020 HARDWARE ACTUAL (2026-10-28): HD measurement on the EXP2019 code.
+- HD 50k: 6209 / 37.2 FPS (EXP2015: 6595).
+  - First-frame gap 8.0 s (EXP2015: 13.0).
+  - Median frame 24.98 ms (EXP2015: 22.68).
+  - GPU span 21.5 ms (EXP2015: 22.0), but **idle 3.27 ms** (EXP2015: 0.12): HD became CPU-bound by about 3 ms per frame.
+  - Waits: draw.render_fence 6.6 → 8.9 ms, other.site2 4.3 → 5.9 ms. FHD has shown about 3 ms idle since EXP2015.
+- HD 100k: **4984 / 29.8 FPS** (EXP1996: 3047; macOS about 9950, a 2.0x gap).
+- Suspect for the HD CPU regression: rc85 c814eb20 (staged discard: a fresh shadow BO per busy upload map). A/B in EXP2021.
