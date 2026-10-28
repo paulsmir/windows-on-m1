@@ -224,6 +224,23 @@ static ID3D12Resource *uav_buffer(ID3D12Device *device) {
     printf("C5 CreateCommittedResource uav hr=0x%08lx\n", (unsigned long)hr);
     return SUCCEEDED(hr) ? buffer : NULL;
 }
+/* rc82 (RC82A): a 64 KiB reserved buffer, one 64 KiB tile left NULL-mapped. */
+#define RC82_SOFT_PROBE_OFFSET 0x8000u
+static ID3D12Resource *reserved_buffer(ID3D12Device *device) {
+    D3D12_RESOURCE_DESC desc = {0};
+    ID3D12Resource *buffer = NULL;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Width = 65536;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR; /* a buffer, also reserved */
+    HRESULT hr = ID3D12Device_CreateReservedResource(device, &desc, D3D12_RESOURCE_STATE_COMMON, NULL,
+                                                     &IID_ID3D12Resource, (void **)&buffer);
+    printf("RC82A CreateReservedResource hr=0x%08lx\n", (unsigned long)hr);
+    return SUCCEEDED(hr) ? buffer : NULL;
+}
 static int compute_dispatch(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence) {
     D3D12_ROOT_PARAMETER parameter = {D3D12_ROOT_PARAMETER_TYPE_UAV};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {1, &parameter};
@@ -575,9 +592,23 @@ static int compute_table(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
  * this is the shader data-read fault a buggy application can make (unlike
  * the rc37 drill's CDM control-stream fault). PASS = this device is removed
  * and the process is alive; run a fresh step (C5D) afterwards. */
+/* rc82 (soft_probe, step RC82A): the soft-fault discriminator. RC77D never
+ * reached the GPU (the UMD refuses a root VA outside every heap at record,
+ * removed=0x887a0020, EXP2009), so here the root SRV t0 names a real
+ * resource: a 64 KiB reserved buffer (one tile, NULL-mapped: the winsys maps
+ * its tile scratch) at its VA + 32 KiB. Root views are unchecked (rc75), so
+ * threads 8192..16383 read the 64 KiB after the reservation, the
+ * never-mapped guard tile every winsys VA range carries
+ * (agx_win32_gpuva.h AGX_WIN32_GPUVA_RANGE_GUARD): a shader data read of an
+ * unmapped page inside a valid-looking range. With soft faults (RegionC
+ * fault_control 0xb; Asahi asahi_drm.h: loads of unmapped memory return
+ * zero) those threads write 0 + 2 * (i + 100), the fence completes, the
+ * device is not removed and the KMD records no Wom1GpuFault event. Hard
+ * faults instead raise a fault event (device removal or a TDR). Threads
+ * below 8192 read the scratch tile (contents not checked, first printed). */
 static int compute_srv_va(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, int high_slots,
-                          UINT64 fault_va) {
-    const char *step = fault_va ? "RC77D" : high_slots ? "C16A" : "C5D";
+                          UINT64 fault_va, int soft_probe) {
+    const char *step = soft_probe ? "RC82A" : fault_va ? "RC77D" : high_slots ? "C16A" : "C5D";
     D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, high_slots ? 126u : 1u, 0, 0};
     D3D12_ROOT_PARAMETER parameters[4] = {{D3D12_ROOT_PARAMETER_TYPE_UAV}, {D3D12_ROOT_PARAMETER_TYPE_SRV},
                                           {D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
@@ -590,7 +621,8 @@ static int compute_srv_va(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D1
     ID3D12DescriptorHeap *heap = NULL;
     ID3D12Resource *cb = high_slots ? committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ) : NULL;
     ID3D12Resource *uav = uav_buffer(device);
-    ID3D12Resource *a = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *a = soft_probe ? reserved_buffer(device)
+                                   : committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
     ID3D12Resource *b = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
     ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
     ID3D12CommandAllocator *allocator = NULL;
@@ -598,18 +630,21 @@ static int compute_srv_va(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D1
     UINT *dwords = NULL;
     unsigned bad = 16384;
     UINT64 value = 0;
+    const int faulting = fault_va != 0 || soft_probe;
     parameters[0].Descriptor.ShaderRegister = high_slots ? 7u : 0u;
     parameters[1].Descriptor.ShaderRegister = high_slots ? 127u : 0u;
     parameters[3].Descriptor.ShaderRegister = 13;
     parameters[2].DescriptorTable.NumDescriptorRanges = 1;
     parameters[2].DescriptorTable.pDescriptorRanges = &range;
     HRESULT hr = uav && a && b && readback && (!high_slots || cb) ? S_OK : E_FAIL;
-    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(a, 0, NULL, (void **)&dwords);
-    if (SUCCEEDED(hr)) {
-        for (unsigned i = 0; i < 16384; ++i) dwords[i] = 3u * i;
-        ID3D12Resource_Unmap(a, 0, NULL);
-        hr = ID3D12Resource_Map(b, 0, NULL, (void **)&dwords);
+    if (SUCCEEDED(hr) && !soft_probe) {
+        hr = ID3D12Resource_Map(a, 0, NULL, (void **)&dwords);
+        if (SUCCEEDED(hr)) {
+            for (unsigned i = 0; i < 16384; ++i) dwords[i] = 3u * i;
+            ID3D12Resource_Unmap(a, 0, NULL);
+        }
     }
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(b, 0, NULL, (void **)&dwords);
     if (SUCCEEDED(hr)) {
         for (unsigned i = 0; i < 16384; ++i) dwords[i] = i + 100u;
         ID3D12Resource_Unmap(b, 0, NULL);
@@ -664,7 +699,8 @@ static int compute_srv_va(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D1
         ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
         ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 0, ID3D12Resource_GetGPUVirtualAddress(uav));
         ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(
-            list, 1, fault_va ? fault_va : ID3D12Resource_GetGPUVirtualAddress(a));
+            list, 1, fault_va ? fault_va
+                     : ID3D12Resource_GetGPUVirtualAddress(a) + (soft_probe ? RC82_SOFT_PROBE_OFFSET : 0u));
         ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 2, gpu_start);
         if (high_slots) ID3D12GraphicsCommandList_SetComputeRootConstantBufferView(list, 3, ID3D12Resource_GetGPUVirtualAddress(cb));
         ID3D12GraphicsCommandList_Dispatch(list, 256, 1, 1);
@@ -678,8 +714,12 @@ static int compute_srv_va(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D1
         ID3D12CommandQueue_ExecuteCommandLists(queue, 1, lists);
         hr = ID3D12CommandQueue_Signal(queue, fence, 7);
         if (fault_va) printf("%s FAULT_DISPATCH va=0x%llx\n", step, (unsigned long long)fault_va);
-        for (int i = 0; i < (fault_va ? 1500 : 300) && (value = ID3D12Fence_GetCompletedValue(fence)) < 7; ++i) {
-            if (fault_va && FAILED(ID3D12Device_GetDeviceRemovedReason(device))) break;
+        if (soft_probe)
+            printf("%s SOFT_DISPATCH va=0x%llx guard=0x%llx\n", step,
+                   (unsigned long long)(ID3D12Resource_GetGPUVirtualAddress(a) + RC82_SOFT_PROBE_OFFSET),
+                   (unsigned long long)(ID3D12Resource_GetGPUVirtualAddress(a) + 65536u));
+        for (int i = 0; i < (faulting ? 1500 : 300) && (value = ID3D12Fence_GetCompletedValue(fence)) < 7; ++i) {
+            if (faulting && FAILED(ID3D12Device_GetDeviceRemovedReason(device))) break;
             Sleep(10);
         }
         printf("%s execute+signal hr=0x%08lx completed %llu\n", step, (unsigned long)hr, (unsigned long long)value);
@@ -692,6 +732,31 @@ static int compute_srv_va(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D1
         bad = SUCCEEDED(hr) && FAILED(removed) ? 0u : 1u;
         hr = E_ABORT; /* skip the readback and the C5D verdict below */
     }
+    if (soft_probe) {
+        const HRESULT removed = device ? ID3D12Device_GetDeviceRemovedReason(device) : E_FAIL;
+        unsigned guard_bad = 8192u;
+        UINT scratch_first = 0u, guard_first = 0u, guard_last = 0u;
+        if (SUCCEEDED(hr) && value == 7 && SUCCEEDED(removed)) {
+            D3D12_RANGE all = {0, 65536};
+            dwords = NULL;
+            if (SUCCEEDED(ID3D12Resource_Map(readback, 0, &all, (void **)&dwords)) && dwords) {
+                /* a = 0 from the unmapped guard tile: 2 * B[i] = 2i + 200 */
+                guard_bad = 0u;
+                for (unsigned i = 8192; i < 16384; ++i) guard_bad += dwords[i] != 2u * i + 200u;
+                scratch_first = dwords[0] - 200u;
+                guard_first = dwords[8192];
+                guard_last = dwords[16383];
+                ID3D12Resource_Unmap(readback, 0, NULL);
+            }
+        }
+        printf("RC82A readback guard_bad=%u guard_first=%u guard_last=%u scratch_a0=%u\n", guard_bad, guard_first,
+               guard_last, scratch_first);
+        printf("AGX_D3D12_RC82A: %s removed=0x%08lx completed=%llu guard_bad=%u\n",
+               SUCCEEDED(hr) && value == 7 && SUCCEEDED(removed) && guard_bad == 0u ? "PASS" : "FAIL",
+               (unsigned long)removed, (unsigned long long)value, guard_bad);
+        bad = SUCCEEDED(hr) && value == 7 && SUCCEEDED(removed) && guard_bad == 0u ? 0u : 1u;
+        hr = E_ABORT; /* skip the C5D readback and verdict below */
+    }
     if (SUCCEEDED(hr) && value == 7) {
         D3D12_RANGE all = {0, 65536};
         dwords = NULL;
@@ -703,7 +768,7 @@ static int compute_srv_va(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D1
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    if (!fault_va)
+    if (!faulting)
         printf("AGX_D3D12_%s: %s\n", step, SUCCEEDED(hr) && value == 7 && bad == 0 ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
@@ -717,10 +782,10 @@ static int compute_srv_va(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D1
     if (b) ID3D12Resource_Release(b);
     if (a) ID3D12Resource_Release(a);
     if (uav) ID3D12Resource_Release(uav);
-    return fault_va ? bad != 0u : !(SUCCEEDED(hr) && bad == 0);
+    return faulting ? bad != 0u : !(SUCCEEDED(hr) && bad == 0);
 }
 static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, int high_slots) {
-    return compute_srv_va(device, queue, fence, high_slots, 0);
+    return compute_srv_va(device, queue, fence, high_slots, 0, 0);
 }
 
 /* C6a (D3D12-C6-graphics.md): a 64x64 RGBA8 render-target texture cleared
@@ -7198,7 +7263,11 @@ static int step_c16a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UIN
 /* rc77: 0x10000 is the VA the rc37 drill proved unmapped (root edge absent,
  * Wom1GpuFaultMapping EXP2005/EXP2007); below every dxgkrnl GPU VA range. */
 static int step_rc77d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
-    (void)b; return compute_srv_va(d, q, f, 0, 0x10000ULL);
+    (void)b; return compute_srv_va(d, q, f, 0, 0x10000ULL, 0);
+}
+/* rc82: the soft-fault discriminator (compute_srv_va soft_probe). */
+static int step_rc82a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) {
+    (void)b; return compute_srv_va(d, q, f, 0, 0, 1);
 }
 static int step_c14nc(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 6); }
 static int step_rc38z(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 14); }
@@ -8111,7 +8180,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"RC43I32Z", step_rc43i32z},
     {"RC43I32O", step_rc43i32o},
     {"RC43I32N", step_rc43i32n},
-    {"C76A", c76_shared_open}, {"RC77D", step_rc77d},
+    {"C76A", c76_shared_open}, {"RC77D", step_rc77d}, {"RC82A", step_rc82a},
     {"C29A", c29_bc1}, {"C30A", step_c30a}, {"C31A", step_c31a}, {"C32A", step_c32a},
     {"C33A", c33_append}, {"C34A", c34_ranges}, {"C35A", step_c35a}, {"C36A", c36_placed_textures},
     {"C37A", step_c37a}, {"C37B", step_c37b}, {"C37C", step_c37c}, {"C37D", step_c37d}, {"C37E", step_c37e},
