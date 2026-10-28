@@ -65396,3 +65396,12 @@ EXP2014 HARDWARE BEFORE 2026-10-28T01:31:19Z:
 - Hashes: sys 673f0f9702db, UmdArm64 305f68493f8f, UmdX64 5d078be010f1, Umd32 9b98ce4fa5c7; manifest 52660f8fa5bb, hardware-manifest 086cc58195f0; probe2014.sh 6cd679342987 (PROBE_LINT_OK); visible recovery rec2014h 7715e17bb21551de; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultControlRead=1 Wom1SoftFaults=1.
 - Recovery rec2014h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2014-soft-faults/run2014.sh.
+
+EXP2014 HARDWARE ACTUAL (2026-10-28): **PASS, new best**. Wom1SoftFaults=1.
+- HD 50k: **6079 / 36.4 FPS** (EXP2013: 6045). FHD 100k: **3615 / 21.6 FPS** (best was 3550; macOS about 7700, a 2.1x gap).
+- measure-soft-faults 1,3,1.
+- bdb1944a hardware stats: 3538 instructions, **207 GPRs, 512 threads** (was 3619 / 215 / 448).
+- Compute: HD 10.0 → 9.34 ms; FHD 18.4 → 17.2 ms.
+- Frame: HD 24.05 ms; FHD 41.0 ms.
+- RC82A PASS with the switch on. No Wom1GpuFault event during GravityMark. No removal.
+- Verdict: rc82 validated; soft faults are made the default (Wom1SoftFaults=0 to disable).
