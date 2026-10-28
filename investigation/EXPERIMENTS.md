@@ -66134,3 +66134,5 @@ EXP2040 HARDWARE BEFORE 2026-10-28T13:00:40Z:
 - Hashes: sys c46e513a80c3, UmdArm64 69e2dc6c8df0, UmdX64 5d33fb8c7a03, Umd32 b0c64ced7f01; manifest 2ddb820956da, hardware-manifest 79ba044ccce6; probe2040.sh c950048502dc (PROBE_LINT_OK); visible recovery rec2040h 4bdc7c2b6603fd9a; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2040h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2040-pool-pressure/run2040.sh.
+
+EXP2040 HARDWARE ACTUAL (2026-10-28): **bugchecked during boot (SSH never up). Same cause as EXP2039.** The package carried rc102 without its fix: `AppleAgxG13QueueProviderPlanJob` left `Plan.Successor` uninitialised, which sends ordinary jobs into the successor build path, so the submit fails, the reset quiesce fails, and the result is 0x116. This happens with Kick off as well. Fixed in 0ee5dfe1. The reset hole is fixed in d4bf810f (quiesce "unsubmitted"). The rc104 checkpoint reruns as EXP2041 (directory name EXP2041-depth2-kick2, kept from the original plan).
