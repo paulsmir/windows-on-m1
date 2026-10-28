@@ -161,9 +161,13 @@ static BOOLEAN AdmissionUmdDescribePrimary(
       CreateResource->pMipInfoList[0].TexelWidth > 8192u ||
       CreateResource->pMipInfoList[0].TexelHeight > 8192u ||
       CreateResource->pMipInfoList[0].TexelDepth != 1u ||
+      /* rc106: a primary must be an offered fixed-panel source mode (the
+       * native 2560x1600 one before it); the KMD commits only those. */
       (CreateResource->pPrimaryDesc != NULL &&
-       (CreateResource->pMipInfoList[0].TexelWidth != 2560u ||
-        CreateResource->pMipInfoList[0].TexelHeight != 1600u)) ||
+       AppleAgxFixedPanelModeIndex(
+           CreateResource->pMipInfoList[0].TexelWidth,
+           CreateResource->pMipInfoList[0].TexelHeight) >=
+           APPLE_AGX_FIXED_PANEL_MODE_COUNT) ||
       CreateResource->Usage != D3D10_DDI_USAGE_DEFAULT || CreateResource->MapFlags ||
       (CreateResource->MiscFlags & ~allowedMiscFlags) ||
       ((CreateResource->MiscFlags &

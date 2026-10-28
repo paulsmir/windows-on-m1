@@ -12,13 +12,16 @@ static int AdmissionUmdDirectFlipResourceValid(
       ExpectedFormat == 0u)
     return 0;
   allocation = &Resource->Allocation;
+  /* rc106: any offered fixed-panel source mode (the native 2560x1600
+   * primary before it); the pair check below still requires the candidate
+   * to match the current primary's geometry, so a swapchain of another size
+   * than the committed mode is never direct-flipped. */
   return AdmissionAllocationDescriptionValid(allocation) &&
                  allocation->Format == ExpectedFormat &&
-                 allocation->Width == 2560u &&
-                 allocation->Height == 1600u &&
-                 allocation->Pitch == 10240u &&
+                 AppleAgxFixedPanelPrimaryGeometryOffered(
+                     allocation->Width, allocation->Height,
+                     allocation->Pitch, allocation->Size) &&
                  allocation->BytesPerPixel == 4u &&
-                 allocation->Size == 0xfa0000ULL &&
                  allocation->CpuVisible == 0u
              ? 1
              : 0;

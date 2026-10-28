@@ -76,8 +76,70 @@ static void test_rejects_invalid_identity_format_and_flags(void) {
       &current, &candidate, 0u, 0u));
 }
 
+/* rc106: every offered fixed-panel mode is an exact resource; a pair of
+ * different modes, a non-offered size and a padded pitch are not. */
+static ADMISSION_UMD_DIRECT_FLIP_RESOURCE mode_resource(unsigned int width,
+                                                        unsigned int height) {
+  ADMISSION_UMD_DIRECT_FLIP_RESOURCE resource = exact_resource();
+  resource.Allocation.Width = width;
+  resource.Allocation.Height = height;
+  resource.Allocation.Pitch = width * 4u;
+  resource.Allocation.Size = (unsigned long long)width * 4u * height;
+  return resource;
+}
+
+static void test_accepts_every_offered_mode_pair_only(void) {
+  ADMISSION_UMD_DIRECT_FLIP_RESOURCE native = exact_resource();
+  ADMISSION_UMD_DIRECT_FLIP_RESOURCE current;
+  ADMISSION_UMD_DIRECT_FLIP_RESOURCE candidate;
+  unsigned int index;
+
+  assert(APPLE_AGX_FIXED_PANEL_MODE_COUNT == 11u);
+  assert(AppleAgxFixedPanelModeIndex(2560u, 1600u) == 0u);
+  for (index = 0u; index < APPLE_AGX_FIXED_PANEL_MODE_COUNT; ++index) {
+    current = mode_resource(AppleAgxFixedPanelModeSizes[index][0],
+                            AppleAgxFixedPanelModeSizes[index][1]);
+    candidate = current;
+    assert(current.Allocation.Pitch % 64u == 0u);
+    assert(AdmissionUmdDirectFlipCompatible(
+        &current, &candidate, 0u, TEST_FORMAT_BGRA8888));
+    /* Another offered mode is not direct-flip compatible with it. */
+    if (index != 0u) {
+      assert(!AdmissionUmdDirectFlipCompatible(
+          &native, &candidate, 0u, TEST_FORMAT_BGRA8888));
+      assert(!AdmissionUmdDirectFlipCompatible(
+          &current, &native, 0u, TEST_FORMAT_BGRA8888));
+    }
+  }
+  current = mode_resource(1920u, 1080u);
+  candidate = current;
+  assert(current.Allocation.Pitch == 7680u);
+  assert(current.Allocation.Size == 0x7e9000ULL);
+  assert(AdmissionUmdDirectFlipCompatible(
+      &current, &candidate, 0u, TEST_FORMAT_BGRA8888));
+  candidate.Allocation.Pitch = 7744u;
+  candidate.Allocation.Size = 7744ULL * 1080u;
+  assert(!AdmissionUmdDirectFlipCompatible(
+      &current, &candidate, 0u, TEST_FORMAT_BGRA8888));
+  candidate = current;
+  candidate.Allocation.Size = 0xfa0000ULL;
+  assert(!AdmissionUmdDirectFlipCompatible(
+      &current, &candidate, 0u, TEST_FORMAT_BGRA8888));
+  current = mode_resource(1366u, 768u);
+  current.Allocation.Pitch = 5504u;
+  current.Allocation.Size = 5504ULL * 768u;
+  candidate = current;
+  assert(!AdmissionUmdDirectFlipCompatible(
+      &current, &candidate, 0u, TEST_FORMAT_BGRA8888));
+  current = mode_resource(1920u, 1088u);
+  candidate = current;
+  assert(!AdmissionUmdDirectFlipCompatible(
+      &current, &candidate, 0u, TEST_FORMAT_BGRA8888));
+}
+
 int main(void) {
   test_accepts_only_the_exact_pair();
   test_rejects_invalid_identity_format_and_flags();
+  test_accepts_every_offered_mode_pair_only();
   return 0;
 }

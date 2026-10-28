@@ -1,6 +1,7 @@
 #ifndef APPLE_AGX_RENDER_UMD_DIRECT_FLIP_CONTRACT_H
 #define APPLE_AGX_RENDER_UMD_DIRECT_FLIP_CONTRACT_H
 
+#include "apple_agx_fixed_panel_modes.h"
 #include "render_allocation.h"
 
 #define ADMISSION_UMD_DIRECT_FLIP_RESOURCE_MAGIC 0x52464455u /* "UDFR" */
