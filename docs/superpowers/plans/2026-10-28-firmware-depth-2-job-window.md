@@ -142,3 +142,26 @@ Revised order (each one hardware variable):
    the older one from its own stamps (if U4 allows) or batched with N+1.
 4. KMD window: G3 lease count for one process, second BeginJob, chain of a
    kicked successor, preempt/reset over both entries (render_job_window.c).
+
+## rc98 (step 2): second sidecar set and the compute-queue Barrier
+
+- **Set B** (`apple_agx_render_shared_memory.h`): the job's RunCompute
+  work, microsequences, TA Barrier, new compute-queue Barrier slot
+  (0x8820) and timestamp block, 0x2000 above set A (0xa000-0xb420, inside
+  the free 0x9420-0xc000). Statistics, firmware stamp, gpu_buf and the
+  sidecar's own preemption buffer stay shared, so set B needs a job-owned
+  preemption buffer. Set A is byte-identical to rc97 (golden digest).
+- **Choice**: `AppleAgxRenderSharedMemoryNextJobWordSet` alternates per new
+  stamp (a rebuild keeps its set; a new compute queue starts with A), so
+  consecutive sidecar jobs never share words. A successor's depth-2
+  leading Barrier is built in the set that call names for its stamp.
+- **Barriers**: `AppleAgxG13BarrierEncode` (the D3D-G1b layout, which
+  reproduces the captured 3D-on-TA Barrier) for TA on a compute or 3D stamp
+  and for the compute queue on a 3D or compute stamp (Asahi uses one
+  raw::Barrier for vdm and cdm barriers). Wait stamps: TA object 9, 3D
+  object 10, compute sidecar 0x8780.
+- **Wiring**: `Wom1JobDepth2Caps = 1` (with Wom1JobDepth2 and build-ahead)
+  declares SECOND_SIDECAR | TA_ON_3D | COMPUTE_BARRIER in the receipt-mode
+  decision and makes compute jobs and v5 preludes alternate sets at
+  depth 1. LIVE_MANAGER is not built. Nothing is kicked early; no path
+  publishes a leading Barrier yet (step 3/4).
