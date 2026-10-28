@@ -1,4 +1,5 @@
 #include "apple_agx_fixed_panel.h"
+#include "apple_agx_fixed_panel_modes.h"
 
 #define APPLE_AGX_FIXED_PANEL_NULL ((void *)0)
 
@@ -88,21 +89,9 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelStart(
   return AppleAgxFixedPanelOk;
 }
 
-/* rc106: common laptop source modes that fit the 16:10 2560x1600 panel.
- * Every width is a multiple of 16 pixels, so the linear stride (Width * 4)
- * meets both the 16-byte allocation pitch and DCP's 64-byte stride rule
- * (m1n1 dcp_iomfb_present_build_v13_5: stride & 63 must be zero). */
-static const APPLE_AGX_SCANOUT_U32 AppleAgxFixedPanelModeSizes[][2] = {
-    {APPLE_AGX_SCANOUT_J313_WIDTH, APPLE_AGX_SCANOUT_J313_HEIGHT},
-    {2048u, 1280u}, {1920u, 1200u}, {1920u, 1080u}, {1680u, 1050u},
-    {1600u, 900u},  {1440u, 900u},  {1280u, 800u},  {1280u, 720u},
-    {1024u, 768u},  {800u, 600u},
-};
-
-#define APPLE_AGX_FIXED_PANEL_MODE_COUNT                                      \
-  ((APPLE_AGX_SCANOUT_U32)(sizeof(AppleAgxFixedPanelModeSizes) /              \
-                           sizeof(AppleAgxFixedPanelModeSizes[0])))
-
+/* rc106: the laptop source modes come from the shared table
+ * (apple_agx_fixed_panel_modes.h), which the UMD's primary and direct-flip
+ * gates use as well; index 0 is the native J313 mode. */
 APPLE_AGX_SCANOUT_U32 AppleAgxFixedPanelSourceModeCount(
     APPLE_AGX_SCANOUT_BOOL Scaled) {
   return Scaled ? APPLE_AGX_FIXED_PANEL_MODE_COUNT : 1u;

@@ -257,7 +257,10 @@ static void qualify(APPLE_AGX_SCANOUT_CLIENT *Client) {
 
 static void test_abi_matches_m1n1_v1_header(void) {
   assert(APPLE_AGX_SCANOUT_MMIO_OFFSET == 0x400ULL);
-  assert(APPLE_AGX_SCANOUT_MMIO_SIZE == 0xa0ULL);
+  assert(APPLE_AGX_SCANOUT_MMIO_SIZE == 0xa8ULL);
+  assert(APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE == (1u << 8u));
+  assert(APPLE_AGX_SCANOUT_REG_DEST_ORIGIN == 0xa0u);
+  assert(APPLE_AGX_SCANOUT_REG_DEST_SIZE == 0xa4u);
   assert(APPLE_AGX_SCANOUT_MAGIC == 0x53584741u);
   assert(APPLE_AGX_SCANOUT_ABI_VERSION == 1u);
   assert(APPLE_AGX_SCANOUT_REG_RECEIPT_SEQUENCE == 0x20u);

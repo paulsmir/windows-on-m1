@@ -10,7 +10,8 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
 #define APPLE_AGX_SCANOUT_TRUE ((APPLE_AGX_SCANOUT_BOOL)1u)
 
 #define APPLE_AGX_SCANOUT_MMIO_OFFSET 0x400u
-#define APPLE_AGX_SCANOUT_MMIO_SIZE 0xa0u
+/* rc106: the window ends after REG_DEST_SIZE (m1n1 codex/m1n1-scaled). */
+#define APPLE_AGX_SCANOUT_MMIO_SIZE 0xa8u
 #define APPLE_AGX_SCANOUT_MAGIC 0x53584741u
 #define APPLE_AGX_SCANOUT_ABI_VERSION_V1 1u
 #define APPLE_AGX_SCANOUT_ABI_VERSION_V2 2u
@@ -25,10 +26,11 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
 #define APPLE_AGX_SCANOUT_CAP_LATCHED_IRQ (1u << 6u)
 /* D3D-FS1: the broker scans out RGBA8888 (DCP 'RGBA') as well as BGRA8888 */
 #define APPLE_AGX_SCANOUT_CAP_RGBA8888 (1u << 7u)
-/* rc106 proposal, absent from m1n1 0d3a75b3: the broker accepts a source
- * smaller than the panel and DCP scales it into the destination rectangle
- * (iomfb swap destination[0]).  The guest writes DEST_ORIGIN/DEST_SIZE and a
- * non-native WIDTH/HEIGHT/STRIDE/SURFACE_SIZE only when this bit is set. */
+/* rc106 (m1n1 codex/m1n1-scaled, absent from 0d3a75b3): the broker accepts
+ * a source smaller than the panel and DCP scales it into the destination
+ * rectangle (iomfb swap destination[0]).  The guest writes
+ * DEST_ORIGIN/DEST_SIZE and a non-native WIDTH/HEIGHT/STRIDE/SURFACE_SIZE
+ * only when this bit is set. */
 #define APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE (1u << 8u)
 #define APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES                              \
   (APPLE_AGX_SCANOUT_CAP_FIXED_J313 | APPLE_AGX_SCANOUT_CAP_BGRA8888 |       \
