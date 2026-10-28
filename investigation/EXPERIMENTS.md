@@ -66326,3 +66326,15 @@ EXP2046 HARDWARE ACTUAL (2026-10-28): **rc108 fixes the Earth shadow flicker (A/
   - rc107 is confirmed at FHD 100k (no private staging, no OOM).
   - FHD 200k needs more than the 3.2 GB segment: the pool size mirrors TotalSystemMemoryAvailableForGraphics (50% of RAM below 32 GB).
   - Next: a larger unified pool (the user's "all RAM like macOS") and a non-fatal rehome failure.
+
+EXP2047 HARDWARE BEFORE 2026-10-28T16:11:13Z:
+- WHY: in EXP2045 SubmitSuccessor refused after BeginSuccessorJob, and the leftover nested lease blocked the reset (0x116). Now the reset should recover, and the new receipt names the refusing build step.
+- ATOMIC CONTRACT: one change on the Kick switch set; the unified copy was validated at FHD 100k in EXP2046.
+- Expected:
+  - best case: kicks > 0, kick_failures 0, max_in_flight 2, no fault, correct image, a lower HD median frame;
+  - else: kick failure with Wom1JobWindowKickFail naming the step, Wom1GpuReset succeeded (no 0x116), guest alive.
+- Failure criteria: a 0x116 or wedge.
+- Recovery: rec2047h.
+- Hashes: sys c989c8f7c19d, UmdArm64 dfde4c4583d0, UmdX64 190d7b24bcd4, Umd32 c20c3f11116b; manifest 829e7f04d08e, hardware-manifest ca97c600f1ef; probe2047.sh a62cb312ea2e (PROBE_LINT_OK); visible recovery rec2047h 1ccbdcbb964980ba; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1.
+- Recovery rec2047h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2047-kick4/run2047.sh.
