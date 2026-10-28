@@ -836,3 +836,10 @@ static void AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *);
 
 /* Read-only display diagnostic is outside the VidMm replay boundary. */
 static NTSTATUS AdmissionScanoutQueryTimeline(ADMISSION_CONTEXT *c, APPLE_AGX_VSYNC_QUERY *q) { (void)c; (void)q; return STATUS_INVALID_PARAMETER; }
+
+/* rc81 BeginJob receipt flags (render_job_timing.h); the job-timing slots
+ * are outside the VidMm replay boundary. */
+#define ADMISSION_JOB_FLAG_MAPPING_UNCHANGED 0x1u
+#define ADMISSION_JOB_FLAG_PRIVATE_SCENE 0x2u
+#define ADMISSION_JOB_FLAG_BEGIN_JOB 0x4u
+static void AdmissionJobTimingNoteWindows(ADMISSION_CONTEXT *c, ULONG f, ULONG flags) { (void)c; (void)f; (void)flags; }

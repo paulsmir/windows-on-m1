@@ -67,6 +67,33 @@ int AdmissionJobTimingTarget(ADMISSION_JOB_TIMING_STATE *state,
   return 1;
 }
 
+unsigned int AdmissionJobTimingCpuValue(unsigned int index,
+    unsigned int efficiency) {
+  if (index > 0xffu || efficiency > 0xffu) return 0u;
+  return index | efficiency << 8 | 0x80000000u;
+}
+
+int AdmissionJobTimingCpu(ADMISSION_JOB_TIMING_STATE *state,
+    unsigned int fence, int complete, unsigned int value) {
+  ADMISSION_JOB_TIMING_SLOT *slot =
+      (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(state, fence);
+  unsigned int *field;
+  if (!slot || !value) return 0;
+  field = complete ? &slot->CpuComplete : &slot->CpuBuild;
+  if (*field) return 0;
+  *field = value;
+  return 1;
+}
+
+int AdmissionJobTimingFlag(ADMISSION_JOB_TIMING_STATE *state,
+    unsigned int fence, unsigned int flag) {
+  ADMISSION_JOB_TIMING_SLOT *slot =
+      (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(state, fence);
+  if (!slot || !flag) return 0;
+  slot->Flags |= flag;
+  return 1;
+}
+
 unsigned long long AdmissionJobTimingDeltaUs(
     const ADMISSION_JOB_TIMING_STATE *state,
     const ADMISSION_JOB_TIMING_SLOT *slot,

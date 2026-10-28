@@ -6,6 +6,7 @@
 #include "apple_agx_g4_preflight.h"
 #include "apple_agx_g13_compute_work.h"
 #include "apple_agx_present_job.h"
+#include "render_job_timing.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
@@ -3713,6 +3714,12 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
       image->G4ManagerKey.Backing[2].Bytes=
           private_scene->HeapBlocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
     }
+    /* rc81 receipt: would the generation alone have proven this reparse
+     * redundant (no page-table update since the submission's parse)? */
+    AdmissionJobTimingNoteWindows(adapter, fence, ADMISSION_JOB_FLAG_BEGIN_JOB |
+        (context->GpuvaG3MappingGeneration == process->Graph.MappingGeneration ?
+             ADMISSION_JOB_FLAG_MAPPING_UNCHANGED : 0u) |
+        (private_scene != NULL ? ADMISSION_JOB_FLAG_PRIVATE_SCENE : 0u));
     /* The graph lock covers fresh range/output validation and JOB_BEGIN.
      * A process-wide epoch also changes for unrelated mappings; it cannot
      * invalidate an otherwise valid job. JOB_BEGIN pins the validated graph. */

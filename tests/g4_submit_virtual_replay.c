@@ -310,6 +310,15 @@ static void AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *a,
     unsigned dma_bytes) {
   (void)a;(void)c;(void)pid;(void)fence;(void)dma_bytes;
 }
+/* rc81 BeginJob receipt flags (render_job_timing.h). */
+#define ADMISSION_JOB_FLAG_MAPPING_UNCHANGED 0x1u
+#define ADMISSION_JOB_FLAG_PRIVATE_SCENE 0x2u
+#define ADMISSION_JOB_FLAG_BEGIN_JOB 0x4u
+static unsigned replay_begin_flags;
+static void AdmissionJobTimingNoteWindows(ADMISSION_CONTEXT *a, unsigned fence,
+    unsigned flags) {
+  (void)a;(void)fence;replay_begin_flags=flags;
+}
 
 static int replay_irql, dispatches, bind_ok=1, compute_preempt_mapped=1;
 static unsigned v5_dma_bytes;

@@ -18,6 +18,12 @@ whose prelude stamps are stale, contribute nothing to the split. The
 measure-gpu-tvb rows carry the process manager's cumulative TVB overflow
 count: a render's partial renders are the increase since the process's
 previous render with a row (none for the first one or after a decrease).
+rc81: the v2 receipt (rc81 render_job_timing.h) adds the worker's processor
+and efficiency class at the build and at completion, the BeginJob flags and
+the header's worker flags; the decoder splits the CPU-bound intervals by
+job kind (a render has a TA kick) and by the class of the processor that ran
+them, counts the BeginJobs that found the mapping generation unchanged, and
+still reads v1 snapshots.
 """
 from pathlib import Path
 import importlib.util
@@ -127,15 +133,23 @@ class GpuFrameBreakdown(unittest.TestCase):
         self.assertAlmostEqual(frames[0]['gpu_span_ms'], 10 + 10)
 
 
-def kmd_snapshot(slots, hz=1000000, version=1):
-    """slots: (fence, pid, {phase: qpc})"""
+def kmd_snapshot(slots, hz=1000000, version=1, worker_flags=0, size=None):
+    """slots: (fence, pid, {phase: qpc}[, (cpu_build, cpu_complete, flags)])"""
     b = load()
-    data = bytearray(struct.pack('<IIIIQQ', version, 32 + 64 * 168, len(slots), 0, hz, 0))
+    slot_bytes = 168 if version == 1 else 184
+    data = bytearray(struct.pack('<IIIIQQ', version, size or 32 + 64 * slot_bytes, len(slots),
+                                 worker_flags, hz, 0))
     for i in range(64):
-        fence, pid, q = slots[i] if i < len(slots) else (0, 0, {})
+        fence, pid, q, *extra = slots[i] if i < len(slots) else (0, 0, {})
         data += struct.pack('<IIIIQQ12Q4QII', fence, pid, 0, 0, 0, 0,
                             *[q.get(p, 0) for p in b.KMD_PHASES], 0, 0, 0, 0, 0, 0)
+        if version != 1:
+            data += struct.pack('<IIII', *(extra[0] if extra else (0, 0, 0)), 0)
     return bytes(data)
+
+
+def cpu(index, efficiency):
+    return index | efficiency << 8 | 1 << 31
 
 
 class PreludeSplit(unittest.TestCase):
@@ -209,10 +223,58 @@ class KmdJobTiming(unittest.TestCase):
         self.assertEqual(m['queued_notify_to_worker'], 800 - 745)
         self.assertEqual(m['queued_complete_to_kick'], 950 - 680)
 
+    def test_v2_splits_kind_and_core_class(self):
+        b = load()
+        def render(fence, at, build, finish, begin=10):
+            return dict(submit=at, worker=at + 1, begin_before=at + 2, begin_after=at + 2 + begin,
+                        backend_before=at + 3 + begin, kick_ta=at + 3 + begin + build - 5,
+                        kick_3d=at + 3 + begin + build - 5, backend_after=at + 3 + begin + build,
+                        complete=at + 500, job_end=at + 500 + finish, notify=at + 540 + finish)
+        def compute(at, build, finish, begin=10):
+            return dict(submit=at, worker=at + 1, begin_before=at + 2, begin_after=at + 2 + begin,
+                        backend_before=at + 3 + begin, backend_after=at + 3 + begin + build,
+                        complete=at + 300, job_end=at + 300 + finish, notify=at + 306 + finish)
+        slow, fast = 0, 1
+        slots = [(1, 7, render(1, 1000, 265, 72, begin=40), (cpu(1, slow), cpu(1, slow), 7)),
+                 (2, 7, render(2, 3000, 70, 19, begin=11), (cpu(5, fast), cpu(5, fast), 5)),
+                 (3, 7, render(3, 5000, 72, 21, begin=12), (cpu(6, fast), cpu(2, slow), 4)),
+                 (4, 7, compute(7000, 5, 8), (cpu(4, fast), cpu(4, fast), 4)),
+                 (5, 7, compute(9000, 6, 30), (0, 0, 0))]
+        out = b.kmd_job_timing(kmd_snapshot(slots, version=2, worker_flags=0x00040103))
+        self.assertEqual(out['version'], 2)
+        self.assertEqual(out['worker_flags'], dict(thread=True, pinned=True, efficiency_class=1, cores=4))
+        kind = out['by_kind']
+        self.assertEqual(kind['render']['samples']['build'], 3)
+        self.assertEqual(kind['render']['median_us']['build'], 72)
+        self.assertEqual(kind['render']['median_us']['complete_to_job_end'], 21)
+        self.assertEqual(kind['compute']['median_us']['build'], 5.5)
+        self.assertEqual(kind['compute']['median_us']['job_end_to_notify'], 6)
+        cls = out['by_core_class']
+        # build and BeginJob by the class at the build, completion by the class at completion
+        self.assertEqual(cls['render'][1]['median_us']['build'], 71)
+        self.assertEqual(cls['render'][0]['median_us']['build'], 265)
+        self.assertEqual(cls['render'][0]['median_us']['begin_job'], 40)
+        self.assertEqual(cls['render'][0]['median_us']['complete_to_job_end'], (72 + 21) / 2)
+        self.assertEqual(cls['render'][1]['median_us']['complete_to_job_end'], 19)
+        self.assertEqual(cls['compute'][1]['samples']['build'], 1)
+        self.assertNotIn(0, cls['compute'])
+        self.assertEqual(out['begin_flags'], dict(begin_jobs=4, mapping_unchanged=2, private_scene=1))
+
+    def test_v1_snapshots_still_decode(self):
+        b = load()
+        first = dict(submit=100, worker=110, begin_before=111, begin_after=190, backend_before=191,
+                     kick_ta=250, backend_after=260, complete=680, job_end=700, notify=745)
+        out = b.kmd_job_timing(kmd_snapshot([(1, 7, first)]))
+        self.assertEqual(out['version'], 1)
+        self.assertEqual(out['by_kind']['render']['median_us']['build'], 69)
+        self.assertNotIn('by_core_class', out)
+
     def test_refuses_another_layout(self):
         b = load()
         with self.assertRaises(ValueError):
-            b.kmd_job_timing(kmd_snapshot([], version=2))
+            b.kmd_job_timing(kmd_snapshot([], version=2, size=32 + 64 * 168))
+        with self.assertRaises(ValueError):
+            b.kmd_job_timing(kmd_snapshot([], version=3))
         with self.assertRaises(ValueError):
             b.kmd_job_timing(kmd_snapshot([])[:100])
 

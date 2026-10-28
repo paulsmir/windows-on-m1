@@ -1,7 +1,9 @@
 #ifndef APPLE_AGX_RENDER_JOB_TIMING_H
 #define APPLE_AGX_RENDER_JOB_TIMING_H
 
-#define ADMISSION_JOB_TIMING_VERSION 1u
+/* v2 (rc81): CpuBuild/CpuComplete/Flags per slot, WorkerFlags in the
+ * header (was Reserved). */
+#define ADMISSION_JOB_TIMING_VERSION 2u
 #define ADMISSION_JOB_TIMING_CAPACITY 64u
 
 typedef enum _ADMISSION_JOB_PHASE {
@@ -28,10 +30,31 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
   unsigned long long FirmwareTaStart, FirmwareTaEnd;
   unsigned long long Firmware3dStart, Firmware3dEnd;
   unsigned int FirmwareValid, Status;
+  /* v2 (rc81): the worker's processor when it began the build
+   * (BackendBefore) and when it observed completion (Complete), as
+   * AdmissionJobTimingCpuValue; 0 = not recorded. */
+  unsigned int CpuBuild, CpuComplete;
+  /* v2: ADMISSION_JOB_FLAG_* noted by BeginJob. */
+  unsigned int Flags, Reserved;
 } ADMISSION_JOB_TIMING_SLOT;
 
+/* Set by BeginJob: BEGIN_JOB always; MAPPING_UNCHANGED when the process
+ * graph's MappingGeneration still equals the one the submission was parsed
+ * and bound against (no page-table update in between); PRIVATE_SCENE for a
+ * render with a private scene, whose access also depends on scene storage
+ * and TVB block counts that the generation does not cover. */
+#define ADMISSION_JOB_FLAG_MAPPING_UNCHANGED 0x1u
+#define ADMISSION_JOB_FLAG_PRIVATE_SCENE 0x2u
+#define ADMISSION_JOB_FLAG_BEGIN_JOB 0x4u
+
+/* Header WorkerFlags: the job worker ran on the dedicated thread; that
+ * thread is pinned to the processors of efficiency class (bits 8-15),
+ * count of them in bits 16-23. */
+#define ADMISSION_JOB_WORKER_THREAD 0x1u
+#define ADMISSION_JOB_WORKER_PINNED 0x2u
+
 typedef struct _ADMISSION_JOB_TIMING_STATE {
-  unsigned int Version, Bytes, Count, Reserved;
+  unsigned int Version, Bytes, Count, WorkerFlags;
   unsigned long long QpcFrequency;
   unsigned long long LastExportQpcTicks;
   ADMISSION_JOB_TIMING_SLOT Slot[ADMISSION_JOB_TIMING_CAPACITY];
@@ -51,6 +74,26 @@ int AdmissionJobTimingDelay(ADMISSION_JOB_TIMING_STATE *State,
     unsigned int Fence);
 int AdmissionJobTimingTarget(ADMISSION_JOB_TIMING_STATE *State,
     unsigned int Fence, unsigned long long Bytes);
+/* Processor index | efficiency class << 8 | 1 << 31; 0 when either does
+ * not fit one byte. */
+unsigned int AdmissionJobTimingCpuValue(unsigned int Index,
+    unsigned int EfficiencyClass);
+/* Complete = 0: CpuBuild, else CpuComplete; the first non-zero value
+ * wins. */
+int AdmissionJobTimingCpu(ADMISSION_JOB_TIMING_STATE *State,
+    unsigned int Fence, int Complete, unsigned int Value);
+int AdmissionJobTimingFlag(ADMISSION_JOB_TIMING_STATE *State,
+    unsigned int Fence, unsigned int Flag);
+
+/* rc81 (EXP2010): one processor core of the topology (a
+ * PROCESSOR_RELATIONSHIP GroupMask) and its efficiency class. */
+typedef struct _ADMISSION_JOB_WORKER_CORE {
+  unsigned long long Mask;
+  unsigned short Group;
+  unsigned char EfficiencyClass;
+  unsigned char Reserved[5];
+} ADMISSION_JOB_WORKER_CORE;
+
 /* EXP1073: completion poll schedule of the job worker. EXP1072: 62 of 63
  * jobs completed inside the first 1 ms sleep after the kick, so detection
  * cost one timer tick (BackendAfter->Complete median 1510 us, minimum

@@ -56,7 +56,16 @@ JSON summary (medians over frames after --skip) on stdout.
 phase, backend_platform_windows.c AdmissionJobTimingMarkWindows) into
 median microseconds per KMD interval; "queued" intervals only count a job
 submitted before the previous job's completion was reported, i.e. one the
-one-job-at-a-time worker kept waiting.
+one-job-at-a-time worker kept waiting. Version 2 (rc81) adds per slot the
+worker's processor (index | efficiency class << 8 | valid << 31) at the
+build and at completion and the BeginJob flags, and the header's worker
+flags (dedicated thread, pinned, pinned class and core count). by_kind
+splits the CPU-bound intervals into render (a TA kick) and compute jobs;
+by_core_class (v2) splits them by the class of the processor that ran them
+(build and BeginJob: CpuBuild, completion to job end: CpuComplete);
+begin_flags counts the BeginJobs that found the process mapping generation
+unchanged since the bind (a skipped reparse would have applied) and those
+of private-scene renders.
 """
 import argparse
 import bisect
@@ -230,30 +239,56 @@ KMD_PHASES = ('submit', 'worker', 'begin_before', 'begin_after', 'backend_before
               'kick_3d', 'backend_after', 'first_progress', 'complete', 'job_end', 'notify')
 KMD_HEADER = struct.Struct('<IIIIQQ')
 KMD_SLOT = struct.Struct('<IIIIQQ12Q4QII')
+KMD_SLOT_V2 = struct.Struct('<IIIIQQ12Q4QIIIIII')
 KMD_SLOTS = 64
+FLAG_MAPPING_UNCHANGED, FLAG_PRIVATE_SCENE, FLAG_BEGIN_JOB = 1, 2, 4
+CPU_INTERVALS = ('begin_job', 'build', 'complete_to_job_end', 'job_end_to_notify')
+
+
+def _medians(spans):
+    return dict(median_us={k: statistics.median(v) for k, v in spans.items() if v},
+                samples={k: len(v) for k, v in spans.items()})
 
 
 def kmd_job_timing(data):
     """Median microseconds per KMD interval of a Wom1JobTiming971 snapshot."""
-    version, size, count, _, hz, _ = KMD_HEADER.unpack_from(data, 0)
-    if version != 1 or size != KMD_HEADER.size + KMD_SLOTS * KMD_SLOT.size or len(data) < size or not hz:
-        raise ValueError('not an ADMISSION_JOB_TIMING_STATE v1 snapshot')
+    version, size, count, worker, hz, _ = KMD_HEADER.unpack_from(data, 0)
+    layout = {1: KMD_SLOT, 2: KMD_SLOT_V2}.get(version)
+    if (layout is None or size != KMD_HEADER.size + KMD_SLOTS * layout.size or
+            len(data) < size or not hz):
+        raise ValueError('not an ADMISSION_JOB_TIMING_STATE v1/v2 snapshot')
     slots = []
     for i in range(KMD_SLOTS):
-        fields = KMD_SLOT.unpack_from(data, KMD_HEADER.size + i * KMD_SLOT.size)
+        fields = layout.unpack_from(data, KMD_HEADER.size + i * layout.size)
         q = dict(zip(KMD_PHASES, fields[6:18]))
         if fields[0] and all(q[p] for p in ('submit', 'worker', 'backend_after', 'complete', 'notify')):
-            slots.append(dict(fence=fields[0], pid=fields[1], **q))
+            cpu_build, cpu_complete, flags = fields[24:27] if version >= 2 else (0, 0, 0)
+            slots.append(dict(fence=fields[0], pid=fields[1], cpu_build=cpu_build,
+                              cpu_complete=cpu_complete, flags=flags, **q))
     slots.sort(key=lambda s: s['submit'])
     us = lambda a, b: (b - a) * 1e6 / hz
     spans = {k: [] for k in ('begin_job', 'build', 'worker_to_kick', 'kick_to_progress',
                              'progress_to_complete', 'complete_to_notify',
                              'queued_notify_to_worker', 'queued_complete_to_kick')}
+    kinds = {kind: {k: [] for k in CPU_INTERVALS} for kind in ('render', 'compute')}
+    classes = {'render': {}, 'compute': {}}
     for prev, s in zip([None] + slots[:-1], slots):
+        kind = 'render' if s['kick_ta'] else 'compute'
+        cpu = {}
         if s['begin_after'] and s['begin_before']:
-            spans['begin_job'].append(us(s['begin_before'], s['begin_after']))
+            cpu['begin_job'] = (us(s['begin_before'], s['begin_after']), s['cpu_build'])
+            spans['begin_job'].append(cpu['begin_job'][0])
         if s['backend_before']:
-            spans['build'].append(us(s['backend_before'], s['backend_after']))
+            cpu['build'] = (us(s['backend_before'], s['backend_after']), s['cpu_build'])
+            spans['build'].append(cpu['build'][0])
+        if s['job_end']:
+            cpu['complete_to_job_end'] = (us(s['complete'], s['job_end']), s['cpu_complete'])
+            cpu['job_end_to_notify'] = (us(s['job_end'], s['notify']), s['cpu_complete'])
+        for name, (value, where) in cpu.items():
+            kinds[kind][name].append(value)
+            if where >> 31:
+                bucket = classes[kind].setdefault(where >> 8 & 0xff, {k: [] for k in CPU_INTERVALS})
+                bucket[name].append(value)
         spans['worker_to_kick'].append(us(s['worker'], s['backend_after']))
         if s['first_progress']:
             spans['kick_to_progress'].append(us(s['backend_after'], s['first_progress']))
@@ -262,9 +297,22 @@ def kmd_job_timing(data):
         if prev is not None and s['submit'] < prev['notify'] <= s['worker']:
             spans['queued_notify_to_worker'].append(us(prev['notify'], s['worker']))
             spans['queued_complete_to_kick'].append(us(prev['complete'], s['backend_after']))
-    return dict(jobs_total=count, slots=len(slots), pids=sorted({s['pid'] for s in slots}),
-                median_us={k: statistics.median(v) for k, v in spans.items() if v},
-                samples={k: len(v) for k, v in spans.items()})
+    out = dict(version=version, jobs_total=count, slots=len(slots),
+               pids=sorted({s['pid'] for s in slots}),
+               median_us={k: statistics.median(v) for k, v in spans.items() if v},
+               samples={k: len(v) for k, v in spans.items()},
+               by_kind={kind: _medians(v) for kind, v in kinds.items()})
+    if version >= 2:
+        out['worker_flags'] = dict(thread=bool(worker & 1), pinned=bool(worker & 2),
+                                   efficiency_class=worker >> 8 & 0xff, cores=worker >> 16 & 0xff)
+        out['by_core_class'] = {kind: {c: _medians(v) for c, v in sorted(buckets.items())}
+                                for kind, buckets in classes.items()}
+        begun = [s for s in slots if s['flags'] & FLAG_BEGIN_JOB]
+        out['begin_flags'] = dict(
+            begin_jobs=len(begun),
+            mapping_unchanged=sum(1 for s in begun if s['flags'] & FLAG_MAPPING_UNCHANGED),
+            private_scene=sum(1 for s in begun if s['flags'] & FLAG_PRIVATE_SCENE))
+    return out
 
 
 def main():
@@ -278,7 +326,7 @@ def main():
     args = parser.parse_args()
     if args.kmd_timing:
         with open(args.kmd_timing, 'rb') as handle:
-            print(json.dumps(kmd_job_timing(handle.read()), indent=1))
+            print(json.dumps(kmd_job_timing(handle.read()), indent=1, default=str))
         return
     if not args.log:
         parser.error('a UMD log or --kmd-timing is required')

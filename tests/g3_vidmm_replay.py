@@ -137,6 +137,7 @@ def generate(revision=None, function_revisions=None):
     parts.append('typedef enum { AdmissionJobPhaseComplete, AdmissionJobPhaseJobEnd, AdmissionJobPhaseNotify } ADMISSION_JOB_PHASE;\n')
     parts.append('static void AdmissionJobTimingMarkWindows(void *, ULONG, ADMISSION_JOB_PHASE) {}\n')
     parts.append('static void AdmissionJobTimingFirmwareWindows(void *, ULONG) {}\n')
+    parts.append('static void AdmissionJobTimingCpuWindows(void *, ULONG, int) {}\n')
     parts.append('#line 1 "hv_agx_retained_platform.c:gpuva_execute"\n')
     parts.append(body(platform, "translate_guest") + "\n")
     parts.append(body(platform, "gpuva_execute") + "\n")

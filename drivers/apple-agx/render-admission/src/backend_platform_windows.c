@@ -16,6 +16,8 @@
 #include "apple_agx_core_topology.h"
 
 #define ADMISSION_PLATFORM_TAG 'pRGA'
+/* rc81: processor indexes with a known efficiency class (J313: 8). */
+#define ADMISSION_JOB_CPU_CLASSES 64u
 #define ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS 500ULL
 #define ADMISSION_OUTPUT_CAPTURE_CHUNK_BYTES 0x40000u
 #define ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US 50u
@@ -148,6 +150,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_JOB_TIMING_STATE JobTiming;
   ADMISSION_JOB_TIMING_STATE JobTimingSnapshot;
   ULONG JobTimingWorkers;
+  /* rc81 receipt: efficiency class + 1 of each processor index (0 =
+   * unknown), from the processor-core topology read at start. */
+  UCHAR JobCpuClass[ADMISSION_JOB_CPU_CLASSES];
   /* QPC of the last receipt export (at most one per two seconds). */
   ULONGLONG JobTimingExportQpc;
   ADMISSION_FW_TIMING_RING FwTiming;
@@ -314,6 +319,97 @@ static VOID AdmissionJobTimingTargetWindows(
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   (void)AdmissionJobTimingTarget(&runtime->JobTiming, fence, bytes);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+/* rc81 receipt: the processor the worker runs on at the build (Complete =
+ * FALSE) or at completion, with its efficiency class (0xff = unknown).
+ * EXP2010: the same job built in 64-84 or 261-273 us, the 3.8x of an
+ * Icestorm against a Firestorm core at m1n1's fixed p-states. */
+static VOID AdmissionJobTimingCpuWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ULONG fence, BOOLEAN complete) {
+  KIRQL oldIrql;
+  ULONG index, efficiency, value;
+  if (runtime == NULL || fence == 0u) return;
+  index = KeGetCurrentProcessorNumberEx(NULL);
+  efficiency = index < ADMISSION_JOB_CPU_CLASSES && runtime->JobCpuClass[index] != 0u
+      ? (ULONG)runtime->JobCpuClass[index] - 1u : 0xffu;
+  value = AdmissionJobTimingCpuValue(index, efficiency);
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  (void)AdmissionJobTimingCpu(&runtime->JobTiming, fence, complete ? 1 : 0,
+                              value);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+VOID AdmissionJobTimingNoteWindows(
+    ADMISSION_CONTEXT *adapter, ULONG fence, ULONG flags) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  KIRQL oldIrql;
+  if (adapter == NULL || fence == 0u) return;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)adapter->PlatformRuntime;
+  if (runtime == NULL) return;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  (void)AdmissionJobTimingFlag(&runtime->JobTiming, fence, flags);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+/* rc81: the processor cores (PROCESSOR_RELATIONSHIP: efficiency class and
+ * group masks; the guest MADT GICC gives Icestorm 0 and Firestorm 1). Fills
+ * JobCpuClass and, when Cores is not NULL, one entry per group mask. PASSIVE
+ * level at start; any failure leaves the classes unknown. */
+static VOID AdmissionJobTopologyWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ADMISSION_JOB_WORKER_CORE *cores, ULONG capacity, ULONG *count) {
+  PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info;
+  ULONG length = 0u, offset;
+  if (count != NULL) *count = 0u;
+  RtlZeroMemory(runtime->JobCpuClass, sizeof(runtime->JobCpuClass));
+  if (KeQueryLogicalProcessorRelationship(NULL, RelationProcessorCore, NULL,
+          &length) != STATUS_INFO_LENGTH_MISMATCH ||
+      length == 0u || length > 0x10000u)
+    return;
+  info = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)ExAllocatePool2(
+      POOL_FLAG_NON_PAGED, length, ADMISSION_PLATFORM_TAG);
+  if (info == NULL) return;
+  if (NT_SUCCESS(KeQueryLogicalProcessorRelationship(NULL,
+          RelationProcessorCore, info, &length))) {
+    const ULONG header = (ULONG)FIELD_OFFSET(
+        SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Processor.GroupMask);
+    for (offset = 0u; length - offset >= header;) {
+      const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *entry =
+          (const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)((PUCHAR)info + offset);
+      USHORT group;
+      if (entry->Size == 0u || entry->Size > length - offset) break;
+      offset += entry->Size;
+      if (entry->Relationship != RelationProcessorCore) continue;
+      for (group = 0u; group < entry->Processor.GroupCount; ++group) {
+        const GROUP_AFFINITY *mask;
+        ULONG bit;
+        if ((SIZE_T)header + ((SIZE_T)group + 1u) * sizeof(GROUP_AFFINITY) >
+            (SIZE_T)entry->Size)
+          break;
+        mask = &entry->Processor.GroupMask[group];
+        if (cores != NULL && count != NULL && *count < capacity) {
+          RtlZeroMemory(&cores[*count], sizeof(cores[*count]));
+          cores[*count].Mask = (ULONGLONG)mask->Mask;
+          cores[*count].Group = mask->Group;
+          cores[*count].EfficiencyClass = entry->Processor.EfficiencyClass;
+          ++*count;
+        }
+        for (bit = 0u; bit < sizeof(KAFFINITY) * 8u; ++bit) {
+          PROCESSOR_NUMBER number;
+          ULONG index;
+          if ((mask->Mask & ((KAFFINITY)1 << bit)) == 0u) continue;
+          RtlZeroMemory(&number, sizeof(number));
+          number.Group = mask->Group;
+          number.Number = (UCHAR)bit;
+          index = KeGetProcessorIndexFromNumber(&number);
+          if (index < ADMISSION_JOB_CPU_CLASSES)
+            runtime->JobCpuClass[index] =
+                (UCHAR)(entry->Processor.EfficiencyClass + 1u);
+        }
+      }
+    }
+  }
+  ExFreePoolWithTag(info, ADMISSION_PLATFORM_TAG);
 }
 
 /* EXP1101 receipt-only: the firmware's GPU performance state from HwDataA
@@ -3447,6 +3543,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   adapter = runtime->Adapter;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionJobTimingMarkWindows(runtime, Fence, AdmissionJobPhaseComplete);
+  AdmissionJobTimingCpuWindows(runtime, Fence, TRUE);
 #endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
   if (InterlockedCompareExchange(&runtime->B1Active, 0, 0) != 0)
@@ -4361,6 +4458,7 @@ static VOID AdmissionPlatformWorker(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionJobTimingMarkWindows(runtime, description.Fence,
       AdmissionJobPhaseBackendBefore);
+  AdmissionJobTimingCpuWindows(runtime, description.Fence, FALSE);
 #endif
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -4969,6 +5067,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     KeInitializeSpinLock(&runtime->JobTimingLock);
     AdmissionJobTimingInitialize(&runtime->JobTiming,
         (ULONGLONG)frequency.QuadPart);
+    AdmissionJobTopologyWindows(runtime, NULL, 0u, NULL);
   }
 #endif
   runtime->Adapter = Context;

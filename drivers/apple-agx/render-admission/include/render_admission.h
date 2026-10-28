@@ -1987,6 +1987,9 @@ BOOLEAN AdmissionPlatformRuntimeQueueable(_In_ ADMISSION_CONTEXT *Context,
 VOID AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *Adapter,
     ADMISSION_RENDER_CONTEXT *RenderContext, ULONG ProcessId,
     ULONG Fence, ULONG DmaBytes);
+/* rc81 receipt: ADMISSION_JOB_FLAG_* of the job's timing slot. */
+VOID AdmissionJobTimingNoteWindows(ADMISSION_CONTEXT *Adapter, ULONG Fence,
+    ULONG Flags);
 #endif
 /* G4-r3 (EXP1296): bound of the reset's wait for the firmware to end the
  * active job; DxgkDdiResetFromTimeout repeats it after a failed engine reset. */

@@ -131,6 +131,7 @@ static void AdmissionJobTimingMarkWindows(void *r, unsigned f, unsigned phase) {
 static void AdmissionGpuCompletionCaptureWindows(ADMISSION_PLATFORM_RUNTIME *r, unsigned f,
     APPLE_AGX_BACKEND_COMPLETION_STATUS status) { (void)r; (void)f; (void)status; }
 static void AdmissionJobTimingFirmwareWindows(void *r, unsigned f) { (void)r; (void)f; }
+static void AdmissionJobTimingCpuWindows(void *r, unsigned f, int c) { (void)r; (void)f; (void)c; }
 static int AdmissionSaveG4Manager(void *r, unsigned f) { (void)r; (void)f; return 1; }
 /* Real graph publication is exercised in the RC40 replay; here its return
  * status verifies that the real completion callback never reports early. */
