@@ -65784,3 +65784,27 @@ EXP2030 HARDWARE BEFORE 2026-10-28T09:25:52Z:
 - Recovery rec2030h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2030-rc93-rc94/run2030.sh.
 
 EXP2029 BEFORE correction (2026-10-28): the BEFORE entry above lacks its hypothesis. launch-exp.sh read the relative before2029.txt after `cd` into the worktree, so the file was not found. The planned text (rc92 checkpoint arm A: drill with build-ahead off, rc92 expectations) is carried in full by the EXP2030 BEFORE. launch-exp now resolves the path and fails closed if the text is missing. The m1n1 image in that entry (0d3a75b3) caused the EXP2029 boot failure. launch-exp now defaults to 075e3980-guestram and refuses an expanded-RAM launch with an image lacking guest-RAM support.
+
+EXP2030 HARDWARE ACTUAL (2026-10-28): **FHD 100k 4097 (best). rc93 confirmed for startup. rc92 confirmed (no wedge; a clean 0x116). The TDR reset itself still fails. HD 50k is 6124, against 6906, and the cause is unresolved.**
+
+| Arm | Score | Median | First frame | Frames 1→2 / 2→3 |
+|---|---|---|---|---|
+| a: D3D12 HD 50k | 6124 / 36.7 FPS (EXP2028 6906) | 25.65 ms (22.66 ms) | 22.2 s (44.4 s) | 5.61 / 1.60 s (6.55 / 2.24 s) |
+| c: FHD 100k | **4097** / 24.5 FPS (EXP2019 3919) | 38.25 ms | 16.9 s | 6.44 / 1.92 s |
+
+- **Arm a in detail** (`agx_gpu_frame_breakdown.py --jobs`):
+  - GPU span is unchanged at 21.69 ms (21.95), and per-position job spans are equal or lower.
+  - Median idle is **3.90 ms** against 0.11 ms, so the loss is a CPU/submit-side gap, not GPU work.
+  - The signature is still CRCRCCRCR: rc94 merged the upload copies into position 4's compute job (`measure-d3d12-upload-merge` joined 1 in 6120 of 6160), but did not remove the job.
+  - Whether rc94 or boot-to-boot variation causes the idle is not separated; the same-boot A/B arms were planned after the drill and did not run.
+- **Drill (baseline, drill 1):**
+  - The guest bugchecked **0x116** (minidump 102826-13250-01: param 3 0xc0000483, param 4 3). This is a reportable failure, not the EXP2027 wedge: no DABORT loop, and the vUART shows an NVMe guest reset, then a PSCI RESET.
+  - Wom1GpuReset v4: 3 resets, 0 succeeded (ResetEngine twice, then ResetFromTimeout). Each was quiesce=poll with wait_ms 0; scheduler_faulted_at_entry is the drill tag (:4910); active fence 0x1d659 not aborted.
+  - Wom1GpuFaultPostResume v2: fault_info not read (rc92), compute rptr = done = write, **poll_failure provider_poll / drain_events / drain_guard 10**.
+  - Analysis goes to rc97.
+- The probe kept running over the recovery boot after GUEST_DOWN (its gate saw the recovery guest), so the GravityMark arm b task was stopped by hand. Arm b is invalid.
+- Verdict:
+  - rc92: confirmed.
+  - rc93: confirmed for the first frame (−22 s) and the scored stall (−1.6 s).
+  - rc94: inconclusive (HD idle regression, to be A/B'd on the same boot).
+  - FHD improved.
