@@ -65623,3 +65623,17 @@ EXP2023 HARDWARE BEFORE 2026-10-28T05:22:18Z:
 - Hashes: sys 4108d43bea2e, UmdArm64 89ccfa2eab2d, UmdX64 4d70c13b1e45, Umd32 0c216273d65f; manifest 069e072fd330, hardware-manifest 4e81206b4782; probe2023.sh e489176003f7 (PROBE_LINT_OK); visible recovery rec2023h 3a76b79824de8ae8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2023h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2023-stream-cap/run2023.sh.
+
+EXP2023 HARDWARE ACTUAL (2026-10-28): **PASS, new best FHD 200k**. rc89.
+- Probes (stream default):
+  - RC89S RUN0-2: count 150, draws 150, EXACT.
+  - RUN3: count 60000, draws 16384, INEXACT (the designed one-execution clamp).
+  - RUN4-5: draws 60000, EXACT.
+  - SMALL PASS, OVERFLOW CLAMPED, REGROWN PASS, RC89S PASS; RC63G PASS, _STATS PASS.
+- FHD 200k: **2951 / 17.6 FPS** (EXP2022: 2393; the user's own macOS on this J313: 2191..4400; leaderboard M1 about 5500).
+  - First-frame gap 9.5 s; median 52.5 ms;
+  - 1 frame over 500 ms (2.2 s), against 6 frames (37 s) in EXP2022;
+  - image correct (306,952 visible).
+- FHD 100k: 3887 (EXP2019: 3919, within noise).
+- Perf notes are not in the refusals-only log, so the capacity overflow count is not directly visible; images and scores show no dropout.
+- Verdict: rc89 722ea908, c30b1c30 and 8b06d685 validated.
