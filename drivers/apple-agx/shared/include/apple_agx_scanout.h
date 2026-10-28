@@ -25,6 +25,11 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
 #define APPLE_AGX_SCANOUT_CAP_LATCHED_IRQ (1u << 6u)
 /* D3D-FS1: the broker scans out RGBA8888 (DCP 'RGBA') as well as BGRA8888 */
 #define APPLE_AGX_SCANOUT_CAP_RGBA8888 (1u << 7u)
+/* rc106 proposal, absent from m1n1 0d3a75b3: the broker accepts a source
+ * smaller than the panel and DCP scales it into the destination rectangle
+ * (iomfb swap destination[0]).  The guest writes DEST_ORIGIN/DEST_SIZE and a
+ * non-native WIDTH/HEIGHT/STRIDE/SURFACE_SIZE only when this bit is set. */
+#define APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE (1u << 8u)
 #define APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES                              \
   (APPLE_AGX_SCANOUT_CAP_FIXED_J313 | APPLE_AGX_SCANOUT_CAP_BGRA8888 |       \
    APPLE_AGX_SCANOUT_CAP_REGISTERED_POOL |                                   \
@@ -75,6 +80,10 @@ typedef enum _APPLE_AGX_SCANOUT_REGISTER {
   APPLE_AGX_SCANOUT_REG_FORMAT = 0x8cu,
   APPLE_AGX_SCANOUT_REG_REQUEST_SEQUENCE = 0x90u,
   APPLE_AGX_SCANOUT_REG_COMMAND = 0x98u,
+  /* CAP_SCALED_SOURCE only: X | Y << 16 and Width | Height << 16 of the
+   * panel rectangle the source is scaled into (MMIO size 0xa8). */
+  APPLE_AGX_SCANOUT_REG_DEST_ORIGIN = 0xa0u,
+  APPLE_AGX_SCANOUT_REG_DEST_SIZE = 0xa4u,
 } APPLE_AGX_SCANOUT_REGISTER;
 
 typedef enum _APPLE_AGX_SCANOUT_COMMAND {
@@ -156,6 +165,14 @@ typedef struct _APPLE_AGX_SCANOUT_CLIENT {
   APPLE_AGX_SCANOUT_BOOL PresentPending;
   /* D3D-FS1: format each present carries (the committed mode's) */
   APPLE_AGX_SCANOUT_U32 PresentFormat;
+  /* rc106: geometry each present carries (the committed mode's); native
+   * J313 unless CAP_SCALED_SOURCE admitted a smaller source. */
+  APPLE_AGX_SCANOUT_U32 PresentWidth;
+  APPLE_AGX_SCANOUT_U32 PresentHeight;
+  APPLE_AGX_SCANOUT_U32 PresentStride;
+  APPLE_AGX_SCANOUT_U64 PresentSurfaceBytes;
+  APPLE_AGX_SCANOUT_U32 PresentDestOrigin;
+  APPLE_AGX_SCANOUT_U32 PresentDestSize;
 } APPLE_AGX_SCANOUT_CLIENT;
 
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutInitialize(

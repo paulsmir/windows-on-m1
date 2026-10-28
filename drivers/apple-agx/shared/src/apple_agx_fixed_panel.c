@@ -88,26 +88,175 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelStart(
   return AppleAgxFixedPanelOk;
 }
 
-APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelCommit(
+/* rc106: common laptop source modes that fit the 16:10 2560x1600 panel.
+ * Every width is a multiple of 16 pixels, so the linear stride (Width * 4)
+ * meets both the 16-byte allocation pitch and DCP's 64-byte stride rule
+ * (m1n1 dcp_iomfb_present_build_v13_5: stride & 63 must be zero). */
+static const APPLE_AGX_SCANOUT_U32 AppleAgxFixedPanelModeSizes[][2] = {
+    {APPLE_AGX_SCANOUT_J313_WIDTH, APPLE_AGX_SCANOUT_J313_HEIGHT},
+    {2048u, 1280u}, {1920u, 1200u}, {1920u, 1080u}, {1680u, 1050u},
+    {1600u, 900u},  {1440u, 900u},  {1280u, 800u},  {1280u, 720u},
+    {1024u, 768u},  {800u, 600u},
+};
+
+#define APPLE_AGX_FIXED_PANEL_MODE_COUNT                                      \
+  ((APPLE_AGX_SCANOUT_U32)(sizeof(AppleAgxFixedPanelModeSizes) /              \
+                           sizeof(AppleAgxFixedPanelModeSizes[0])))
+
+APPLE_AGX_SCANOUT_U32 AppleAgxFixedPanelSourceModeCount(
+    APPLE_AGX_SCANOUT_BOOL Scaled) {
+  return Scaled ? APPLE_AGX_FIXED_PANEL_MODE_COUNT : 1u;
+}
+
+APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelSourceModeAt(
+    APPLE_AGX_SCANOUT_U32 Index, APPLE_AGX_SCANOUT_BOOL Scaled,
+    APPLE_AGX_FIXED_PANEL_SOURCE_MODE *Mode) {
+  APPLE_AGX_SCANOUT_U32 width;
+  APPLE_AGX_SCANOUT_U32 height;
+  if (Mode == APPLE_AGX_FIXED_PANEL_NULL ||
+      Index >= AppleAgxFixedPanelSourceModeCount(Scaled))
+    return APPLE_AGX_SCANOUT_FALSE;
+  width = AppleAgxFixedPanelModeSizes[Index][0];
+  height = AppleAgxFixedPanelModeSizes[Index][1];
+  Mode->Width = width;
+  Mode->Height = height;
+  Mode->Stride = width * 4u;
+  Mode->SurfaceBytes = (APPLE_AGX_SCANOUT_U64)width * 4u * height;
+  return APPLE_AGX_SCANOUT_TRUE;
+}
+
+APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelSourceModeFind(
+    APPLE_AGX_SCANOUT_U32 Width, APPLE_AGX_SCANOUT_U32 Height,
+    APPLE_AGX_SCANOUT_U32 Stride, APPLE_AGX_SCANOUT_BOOL Scaled,
+    APPLE_AGX_FIXED_PANEL_SOURCE_MODE *Mode) {
+  APPLE_AGX_FIXED_PANEL_SOURCE_MODE candidate;
+  APPLE_AGX_SCANOUT_U32 index;
+  for (index = 0u; AppleAgxFixedPanelSourceModeAt(index, Scaled, &candidate);
+       ++index) {
+    if (candidate.Width == Width && candidate.Height == Height &&
+        candidate.Stride == Stride) {
+      if (Mode != APPLE_AGX_FIXED_PANEL_NULL)
+        *Mode = candidate;
+      return APPLE_AGX_SCANOUT_TRUE;
+    }
+  }
+  return APPLE_AGX_SCANOUT_FALSE;
+}
+
+APPLE_AGX_SCANOUT_U32 AppleAgxFixedPanelScalingSupport(
+    APPLE_AGX_SCANOUT_U32 Width, APPLE_AGX_SCANOUT_U32 Height,
+    APPLE_AGX_SCANOUT_BOOL Scaled) {
+  if (!AppleAgxFixedPanelSourceModeFind(Width, Height, Width * 4u, Scaled,
+                                        APPLE_AGX_FIXED_PANEL_NULL))
+    return 0u;
+  if (Width == APPLE_AGX_SCANOUT_J313_WIDTH &&
+      Height == APPLE_AGX_SCANOUT_J313_HEIGHT)
+    return APPLE_AGX_FIXED_PANEL_SCALING_BIT(
+        AppleAgxFixedPanelScalingIdentity);
+  return APPLE_AGX_FIXED_PANEL_SCALING_BIT(
+             AppleAgxFixedPanelScalingCentered) |
+         APPLE_AGX_FIXED_PANEL_SCALING_BIT(
+             AppleAgxFixedPanelScalingStretched) |
+         APPLE_AGX_FIXED_PANEL_SCALING_BIT(
+             AppleAgxFixedPanelScalingAspectRatioCenteredMax);
+}
+
+APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelDestination(
+    APPLE_AGX_SCANOUT_U32 Width, APPLE_AGX_SCANOUT_U32 Height,
+    APPLE_AGX_FIXED_PANEL_SCALING Scaling,
+    APPLE_AGX_FIXED_PANEL_RECT *Rect) {
+  const APPLE_AGX_SCANOUT_U64 panel_width = APPLE_AGX_SCANOUT_J313_WIDTH;
+  const APPLE_AGX_SCANOUT_U64 panel_height = APPLE_AGX_SCANOUT_J313_HEIGHT;
+  APPLE_AGX_SCANOUT_U64 width = Width;
+  APPLE_AGX_SCANOUT_U64 height = Height;
+  if (Rect == APPLE_AGX_FIXED_PANEL_NULL || Width == 0u || Height == 0u ||
+      width > panel_width || height > panel_height)
+    return APPLE_AGX_SCANOUT_FALSE;
+  switch (Scaling) {
+  case AppleAgxFixedPanelScalingIdentity:
+    if (width != panel_width || height != panel_height)
+      return APPLE_AGX_SCANOUT_FALSE;
+    break;
+  case AppleAgxFixedPanelScalingStretched:
+    width = panel_width;
+    height = panel_height;
+    break;
+  case AppleAgxFixedPanelScalingCentered:
+    break;
+  case AppleAgxFixedPanelScalingAspectRatioCenteredMax:
+    /* Largest rectangle with the source aspect ratio, rounded to the
+     * nearest pixel and centred (letterbox or pillarbox bars). */
+    if (width * panel_height >= height * panel_width) {
+      height = (height * panel_width + width / 2u) / width;
+      width = panel_width;
+    } else {
+      width = (width * panel_height + height / 2u) / height;
+      height = panel_height;
+    }
+    break;
+  default:
+    return APPLE_AGX_SCANOUT_FALSE;
+  }
+  Rect->Width = (APPLE_AGX_SCANOUT_U32)width;
+  Rect->Height = (APPLE_AGX_SCANOUT_U32)height;
+  Rect->X = (APPLE_AGX_SCANOUT_U32)((panel_width - width) / 2u);
+  Rect->Y = (APPLE_AGX_SCANOUT_U32)((panel_height - height) / 2u);
+  return APPLE_AGX_SCANOUT_TRUE;
+}
+
+APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelScaledSourceSupported(
+    const APPLE_AGX_FIXED_PANEL *Panel) {
+  return Panel != APPLE_AGX_FIXED_PANEL_NULL && Panel->Started &&
+                 Panel->Scanout.AbiVersion ==
+                     APPLE_AGX_SCANOUT_ABI_VERSION_V2 &&
+                 (Panel->Scanout.Capabilities &
+                  APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE) != 0u
+             ? APPLE_AGX_SCANOUT_TRUE
+             : APPLE_AGX_SCANOUT_FALSE;
+}
+
+APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelCommitMode(
     APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U32 SourceId,
     APPLE_AGX_SCANOUT_U32 TargetId, APPLE_AGX_SCANOUT_U32 Width,
     APPLE_AGX_SCANOUT_U32 Height, APPLE_AGX_SCANOUT_U32 Stride,
-    APPLE_AGX_SCANOUT_U32 Format) {
+    APPLE_AGX_SCANOUT_U32 Format, APPLE_AGX_FIXED_PANEL_SCALING Scaling) {
+  APPLE_AGX_FIXED_PANEL_SOURCE_MODE mode;
+  APPLE_AGX_FIXED_PANEL_RECT rect;
+  APPLE_AGX_SCANOUT_BOOL scaled;
   if (Panel == APPLE_AGX_FIXED_PANEL_NULL || !Panel->Started)
     return AppleAgxFixedPanelInvalidState;
   if (SourceId != APPLE_AGX_FIXED_PANEL_SOURCE_ID ||
       TargetId != APPLE_AGX_FIXED_PANEL_TARGET_ID)
     return AppleAgxFixedPanelInvalidTopology;
-  if (Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
-      Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
-      Stride != APPLE_AGX_SCANOUT_J313_STRIDE ||
+  scaled = AppleAgxFixedPanelScaledSourceSupported(Panel);
+  if (!AppleAgxFixedPanelSourceModeFind(Width, Height, Stride, scaled,
+                                        &mode) ||
+      (AppleAgxFixedPanelScalingSupport(Width, Height, scaled) &
+       APPLE_AGX_FIXED_PANEL_SCALING_BIT(Scaling)) == 0u ||
+      !AppleAgxFixedPanelDestination(Width, Height, Scaling, &rect) ||
       (Format != APPLE_AGX_SCANOUT_FORMAT_BGRA8888 &&
        (Format != APPLE_AGX_SCANOUT_FORMAT_RGBA8888 ||
         (Panel->Scanout.Capabilities & APPLE_AGX_SCANOUT_CAP_RGBA8888) == 0u)))
     return AppleAgxFixedPanelInvalidMode;
   Panel->Scanout.PresentFormat = Format;
+  Panel->Scanout.PresentWidth = mode.Width;
+  Panel->Scanout.PresentHeight = mode.Height;
+  Panel->Scanout.PresentStride = mode.Stride;
+  Panel->Scanout.PresentSurfaceBytes = mode.SurfaceBytes;
+  Panel->Scanout.PresentDestOrigin = rect.X | (rect.Y << 16u);
+  Panel->Scanout.PresentDestSize = rect.Width | (rect.Height << 16u);
   Panel->Committed = APPLE_AGX_SCANOUT_TRUE;
   return AppleAgxFixedPanelOk;
+}
+
+APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelCommit(
+    APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U32 SourceId,
+    APPLE_AGX_SCANOUT_U32 TargetId, APPLE_AGX_SCANOUT_U32 Width,
+    APPLE_AGX_SCANOUT_U32 Height, APPLE_AGX_SCANOUT_U32 Stride,
+    APPLE_AGX_SCANOUT_U32 Format) {
+  return AppleAgxFixedPanelCommitMode(Panel, SourceId, TargetId, Width,
+                                      Height, Stride, Format,
+                                      AppleAgxFixedPanelScalingIdentity);
 }
 
 APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelSetVisible(
@@ -170,7 +319,9 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelQueuePresent(
   if (SegmentId != APPLE_AGX_FIXED_PANEL_SEGMENT_ID)
     return AppleAgxFixedPanelInvalidSegment;
   if ((SegmentOffset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
-      SegmentOffset > Panel->PoolBytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+      Panel->Scanout.PresentSurfaceBytes == 0ULL ||
+      Panel->PoolBytes < Panel->Scanout.PresentSurfaceBytes ||
+      SegmentOffset > Panel->PoolBytes - Panel->Scanout.PresentSurfaceBytes)
     return AppleAgxFixedPanelInvalidSurface;
   /* A WDDM mode set programs the new primary while the source is hidden and
    * shows it on SetVidPnSourceVisibility(TRUE); keep only the latest one. */

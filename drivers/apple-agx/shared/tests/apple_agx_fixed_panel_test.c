@@ -28,6 +28,13 @@ typedef struct _FAKE_BROKER {
   APPLE_AGX_SCANOUT_U64 NowMs;
   APPLE_AGX_SCANOUT_U32 CommandWrites;
   APPLE_AGX_SCANOUT_U32 Format;
+  APPLE_AGX_SCANOUT_U32 Width;
+  APPLE_AGX_SCANOUT_U32 Height;
+  APPLE_AGX_SCANOUT_U32 Stride;
+  APPLE_AGX_SCANOUT_U64 SurfaceSize;
+  APPLE_AGX_SCANOUT_U32 DestOrigin;
+  APPLE_AGX_SCANOUT_U32 DestSize;
+  APPLE_AGX_SCANOUT_U32 DestWrites;
   FAKE_RESPONSE Response;
 } FAKE_BROKER;
 
@@ -104,11 +111,31 @@ static APPLE_AGX_SCANOUT_BOOL write32(void *Context,
     fake->Format = Value;
     return APPLE_AGX_SCANOUT_TRUE;
   }
-  if (reg(Offset) == APPLE_AGX_SCANOUT_REG_WIDTH ||
-      reg(Offset) == APPLE_AGX_SCANOUT_REG_HEIGHT ||
-      reg(Offset) == APPLE_AGX_SCANOUT_REG_STRIDE)
+  switch (reg(Offset)) {
+  case APPLE_AGX_SCANOUT_REG_WIDTH:
+    fake->Width = Value;
     return APPLE_AGX_SCANOUT_TRUE;
-  return APPLE_AGX_SCANOUT_FALSE;
+  case APPLE_AGX_SCANOUT_REG_HEIGHT:
+    fake->Height = Value;
+    return APPLE_AGX_SCANOUT_TRUE;
+  case APPLE_AGX_SCANOUT_REG_STRIDE:
+    fake->Stride = Value;
+    return APPLE_AGX_SCANOUT_TRUE;
+  case APPLE_AGX_SCANOUT_REG_DEST_ORIGIN:
+  case APPLE_AGX_SCANOUT_REG_DEST_SIZE:
+    /* m1n1 0d3a75b3 traps only 0x400..0x49f; these exist only with the
+     * scaled-source capability. */
+    if ((fake->Capabilities & APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE) == 0u)
+      return APPLE_AGX_SCANOUT_FALSE;
+    ++fake->DestWrites;
+    if (reg(Offset) == APPLE_AGX_SCANOUT_REG_DEST_ORIGIN)
+      fake->DestOrigin = Value;
+    else
+      fake->DestSize = Value;
+    return APPLE_AGX_SCANOUT_TRUE;
+  default:
+    return APPLE_AGX_SCANOUT_FALSE;
+  }
 }
 
 static APPLE_AGX_SCANOUT_BOOL write64(void *Context,
@@ -129,6 +156,7 @@ static APPLE_AGX_SCANOUT_BOOL write64(void *Context,
     fake->SurfaceOffset = Value;
     break;
   case APPLE_AGX_SCANOUT_REG_SURFACE_SIZE:
+    fake->SurfaceSize = Value;
     break;
   default:
     return APPLE_AGX_SCANOUT_FALSE;
@@ -451,6 +479,205 @@ static void test_rgba_commit_needs_capability_and_sets_present_format(void) {
   assert(panel.Scanout.PresentFormat == APPLE_AGX_SCANOUT_FORMAT_BGRA8888);
 }
 
+static APPLE_AGX_FIXED_PANEL make_scaled_panel(FAKE_BROKER *fake) {
+  APPLE_AGX_FIXED_PANEL panel;
+  memset(fake, 0, sizeof(*fake));
+  fake->Version = APPLE_AGX_SCANOUT_ABI_VERSION_V2;
+  fake->Capabilities = APPLE_AGX_SCANOUT_V2_PRESENT_CAPABILITIES |
+                       APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE;
+  panel = make_panel(fake);
+  fake->Response = FakeRegister;
+  assert(AppleAgxFixedPanelStart(&panel, 20ULL) == AppleAgxFixedPanelOk);
+  return panel;
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?  m1n1 0d3a75b3 rejects
+ * every PRESENT whose geometry is not 2560x1600/10240 (surface_valid) and
+ * traps no register past 0x49f.  Without CAP_SCALED_SOURCE the guest must
+ * offer only the native mode, refuse a smaller commit, and keep the exact
+ * native register traffic; otherwise a mode change would black the panel. */
+static void test_scaled_modes_need_the_scaled_source_capability(void) {
+  FAKE_BROKER fake;
+  APPLE_AGX_FIXED_PANEL panel = make_v2_panel(&fake);
+  APPLE_AGX_FIXED_PANEL_SOURCE_MODE mode;
+  APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
+
+  assert(AppleAgxFixedPanelScaledSourceSupported(&panel) ==
+         APPLE_AGX_SCANOUT_FALSE);
+  assert(AppleAgxFixedPanelSourceModeCount(APPLE_AGX_SCANOUT_FALSE) == 1u);
+  assert(AppleAgxFixedPanelSourceModeAt(0u, APPLE_AGX_SCANOUT_FALSE, &mode));
+  assert(mode.Width == 2560u && mode.Height == 1600u &&
+         mode.Stride == 10240u &&
+         mode.SurfaceBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
+  assert(!AppleAgxFixedPanelSourceModeAt(1u, APPLE_AGX_SCANOUT_FALSE, &mode));
+  assert(AppleAgxFixedPanelScalingSupport(1920u, 1080u,
+                                          APPLE_AGX_SCANOUT_FALSE) == 0u);
+  assert(AppleAgxFixedPanelCommitMode(
+             &panel, 0u, 0u, 1920u, 1080u, 7680u,
+             APPLE_AGX_SCANOUT_FORMAT_BGRA8888,
+             AppleAgxFixedPanelScalingAspectRatioCenteredMax) ==
+         AppleAgxFixedPanelInvalidMode);
+  assert(AppleAgxFixedPanelQueuePresent(&panel, 2u, 0x1000000ULL,
+                                        &sequence) == AppleAgxFixedPanelOk);
+  assert(fake.Width == 2560u && fake.Height == 1600u &&
+         fake.Stride == 10240u &&
+         fake.SurfaceSize == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
+  assert(fake.DestWrites == 0u);
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?  With the capability a
+ * 1920x1080 commit must reach the broker as its own geometry plus the
+ * aspect-preserving 2560x1440 rectangle at y=80; sending native geometry
+ * would make DCP read 16 MB from a 8 MB primary. */
+static void test_scaled_commit_carries_source_geometry_and_destination(void) {
+  FAKE_BROKER fake;
+  APPLE_AGX_FIXED_PANEL panel = make_scaled_panel(&fake);
+  APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
+
+  assert(AppleAgxFixedPanelScaledSourceSupported(&panel));
+  assert(AppleAgxFixedPanelCommitMode(
+             &panel, 0u, 0u, 1920u, 1080u, 7680u,
+             APPLE_AGX_SCANOUT_FORMAT_BGRA8888,
+             AppleAgxFixedPanelScalingIdentity) ==
+         AppleAgxFixedPanelInvalidMode);
+  assert(AppleAgxFixedPanelCommitMode(
+             &panel, 0u, 0u, 1920u, 1080u, 7936u,
+             APPLE_AGX_SCANOUT_FORMAT_BGRA8888,
+             AppleAgxFixedPanelScalingStretched) ==
+         AppleAgxFixedPanelInvalidMode);
+  assert(AppleAgxFixedPanelCommitMode(
+             &panel, 0u, 0u, 1366u, 768u, 5464u,
+             APPLE_AGX_SCANOUT_FORMAT_BGRA8888,
+             AppleAgxFixedPanelScalingStretched) ==
+         AppleAgxFixedPanelInvalidMode);
+  assert(AppleAgxFixedPanelCommitMode(
+             &panel, 0u, 0u, 1920u, 1080u, 7680u,
+             APPLE_AGX_SCANOUT_FORMAT_BGRA8888,
+             AppleAgxFixedPanelScalingAspectRatioCenteredMax) ==
+         AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelQueuePresent(&panel, 2u, 0x1000000ULL,
+                                        &sequence) == AppleAgxFixedPanelOk);
+  assert(fake.Width == 1920u && fake.Height == 1080u &&
+         fake.Stride == 7680u && fake.SurfaceSize == 7680ULL * 1080u);
+  assert(fake.DestWrites == 2u);
+  assert(fake.DestOrigin == (0u | (80u << 16u)));
+  assert(fake.DestSize == (2560u | (1440u << 16u)));
+
+  /* Native identity on the same broker: full-panel rectangle. */
+  assert(AppleAgxFixedPanelCommitMode(
+             &panel, 0u, 0u, 2560u, 1600u, 10240u,
+             APPLE_AGX_SCANOUT_FORMAT_BGRA8888,
+             AppleAgxFixedPanelScalingStretched) ==
+         AppleAgxFixedPanelInvalidMode);
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u, 10240u,
+                                  APPLE_AGX_SCANOUT_FORMAT_BGRA8888) ==
+         AppleAgxFixedPanelOk);
+  assert(panel.Scanout.PresentSurfaceBytes ==
+         APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
+  assert(panel.Scanout.PresentDestOrigin == 0u);
+  assert(panel.Scanout.PresentDestSize == (2560u | (1600u << 16u)));
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?  The surface bound is the
+ * committed surface, not a native one: a 1280x720 primary VidMm placed in
+ * the last 4 MiB of the pool is valid, a native primary there is not. */
+static void test_surface_bound_follows_the_committed_mode(void) {
+  FAKE_BROKER fake;
+  APPLE_AGX_FIXED_PANEL panel = make_scaled_panel(&fake);
+  APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
+  const APPLE_AGX_SCANOUT_U64 tail = 0x3b800000ULL - 0x400000ULL;
+
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u, 10240u,
+                                  APPLE_AGX_SCANOUT_FORMAT_BGRA8888) ==
+         AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelQueuePresent(&panel, 2u, tail, &sequence) ==
+         AppleAgxFixedPanelInvalidSurface);
+  assert(AppleAgxFixedPanelCommitMode(
+             &panel, 0u, 0u, 1280u, 720u, 5120u,
+             APPLE_AGX_SCANOUT_FORMAT_BGRA8888,
+             AppleAgxFixedPanelScalingCentered) == AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelQueuePresent(&panel, 2u, tail, &sequence) ==
+         AppleAgxFixedPanelOk);
+  assert(fake.SurfaceOffset == tail && fake.SurfaceSize == 5120ULL * 720u);
+  assert(fake.DestOrigin == (640u | (440u << 16u)));
+  assert(fake.DestSize == (1280u | (720u << 16u)));
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?  Every offered source
+ * mode must be scanout-legal (DCP stride & 63 == 0, inside the panel,
+ * unique) and the D3DKMDT scaling rules must hold: identity only at equal
+ * size, centered/stretched/aspect only below it. */
+static void test_mode_table_and_destination_rules(void) {
+  APPLE_AGX_FIXED_PANEL_SOURCE_MODE mode;
+  APPLE_AGX_FIXED_PANEL_SOURCE_MODE other;
+  APPLE_AGX_FIXED_PANEL_RECT rect;
+  APPLE_AGX_SCANOUT_U32 count =
+      AppleAgxFixedPanelSourceModeCount(APPLE_AGX_SCANOUT_TRUE);
+  APPLE_AGX_SCANOUT_U32 i, j;
+  const APPLE_AGX_SCANOUT_U32 scaled_bits =
+      APPLE_AGX_FIXED_PANEL_SCALING_BIT(AppleAgxFixedPanelScalingCentered) |
+      APPLE_AGX_FIXED_PANEL_SCALING_BIT(AppleAgxFixedPanelScalingStretched) |
+      APPLE_AGX_FIXED_PANEL_SCALING_BIT(
+          AppleAgxFixedPanelScalingAspectRatioCenteredMax);
+
+  assert(count >= 8u);
+  for (i = 0u; i < count; ++i) {
+    assert(AppleAgxFixedPanelSourceModeAt(i, APPLE_AGX_SCANOUT_TRUE, &mode));
+    assert(mode.Width <= 2560u && mode.Height <= 1600u);
+    assert(mode.Stride == mode.Width * 4u && (mode.Stride & 63u) == 0u);
+    assert(mode.SurfaceBytes == (APPLE_AGX_SCANOUT_U64)mode.Stride *
+                                    mode.Height);
+    assert(AppleAgxFixedPanelSourceModeFind(mode.Width, mode.Height,
+                                            mode.Stride,
+                                            APPLE_AGX_SCANOUT_TRUE, &other));
+    for (j = 0u; j < i; ++j) {
+      assert(AppleAgxFixedPanelSourceModeAt(j, APPLE_AGX_SCANOUT_TRUE,
+                                            &other));
+      assert(other.Width != mode.Width || other.Height != mode.Height);
+    }
+    if (i == 0u) {
+      assert(mode.Width == 2560u && mode.Height == 1600u);
+      assert(AppleAgxFixedPanelScalingSupport(mode.Width, mode.Height,
+                                              APPLE_AGX_SCANOUT_TRUE) ==
+             APPLE_AGX_FIXED_PANEL_SCALING_BIT(
+                 AppleAgxFixedPanelScalingIdentity));
+    } else {
+      assert(AppleAgxFixedPanelScalingSupport(mode.Width, mode.Height,
+                                              APPLE_AGX_SCANOUT_TRUE) ==
+             scaled_bits);
+    }
+    assert(AppleAgxFixedPanelDestination(
+        mode.Width, mode.Height,
+        AppleAgxFixedPanelScalingAspectRatioCenteredMax, &rect));
+    assert(rect.X + rect.Width <= 2560u && rect.Y + rect.Height <= 1600u);
+    assert(rect.Width == 2560u || rect.Height == 1600u);
+  }
+  assert(AppleAgxFixedPanelSourceModeFind(1920u, 1080u, 7680u,
+                                          APPLE_AGX_SCANOUT_TRUE, &mode));
+  assert(!AppleAgxFixedPanelSourceModeFind(1920u, 1080u, 7680u,
+                                           APPLE_AGX_SCANOUT_FALSE, &mode));
+  /* 4:3 pillarbox: 1024x768 -> 2133x1600 at x=213. */
+  assert(AppleAgxFixedPanelDestination(
+      1024u, 768u, AppleAgxFixedPanelScalingAspectRatioCenteredMax, &rect));
+  assert(rect.X == 213u && rect.Y == 0u && rect.Width == 2133u &&
+         rect.Height == 1600u);
+  /* 16:10 sources fill the panel. */
+  assert(AppleAgxFixedPanelDestination(
+      1680u, 1050u, AppleAgxFixedPanelScalingAspectRatioCenteredMax, &rect));
+  assert(rect.X == 0u && rect.Y == 0u && rect.Width == 2560u &&
+         rect.Height == 1600u);
+  assert(AppleAgxFixedPanelDestination(
+      800u, 600u, AppleAgxFixedPanelScalingStretched, &rect));
+  assert(rect.X == 0u && rect.Y == 0u && rect.Width == 2560u &&
+         rect.Height == 1600u);
+  assert(!AppleAgxFixedPanelDestination(
+      1920u, 1080u, AppleAgxFixedPanelScalingIdentity, &rect));
+  assert(!AppleAgxFixedPanelDestination(
+      2561u, 1600u, AppleAgxFixedPanelScalingCentered, &rect));
+  assert(!AppleAgxFixedPanelDestination(
+      1920u, 1080u, (APPLE_AGX_FIXED_PANEL_SCALING)5, &rect));
+}
+
 int main(void) {
   test_start_registers_exact_pool();
   test_commit_accepts_only_fixed_mode_and_topology();
@@ -463,5 +690,9 @@ int main(void) {
   test_queue_present_accepts_primary_beyond_former_window();
   test_queue_present_while_hidden_is_deferred_until_visible();
   test_rgba_commit_needs_capability_and_sets_present_format();
+  test_scaled_modes_need_the_scaled_source_capability();
+  test_scaled_commit_carries_source_geometry_and_destination();
+  test_surface_bound_follows_the_committed_mode();
+  test_mode_table_and_destination_rules();
   return 0;
 }
