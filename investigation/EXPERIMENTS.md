@@ -65678,3 +65678,17 @@ EXP2025 HARDWARE ACTUAL (2026-10-28): rc91 (prefill off) plus rc90 (compiled in,
 - Verdict:
   - rc91 31953870 validated (partial);
   - rc90 code inert with the switch off (no regression).
+
+EXP2026 HARDWARE BEFORE 2026-10-28T06:48:46Z:
+- WHY: per-job KMD gaps of about 1 ms (render) and 0.3 ms (compute) sit on the critical path. rc90 releases the arena right after the kick, prebinds the successor while N runs, and chains N+1 from the worker.
+- ATOMIC CONTRACT: one switch.
+- Expected:
+  - Wom1JobTiming971(Hot) ahead_flags: released for about all jobs, chained and prebound > 0;
+  - render queued_complete_to_kick (chained) at least about 60 µs below dispatched;
+  - frame median 0.3-0.5 ms lower; identical image;
+  - no removal, TDR or Wom1GpuFault.
+- Failure criteria: any fault or garbage with the switch on; roll back by removing the switch.
+- Recovery: rec2026h.
+- Hashes: sys 271d01aa1b19, UmdArm64 86f3e38b30fd, UmdX64 0c8232e0c1d8, Umd32 f039c4f143bb; manifest 32e84be85290, hardware-manifest f75d7c2cedab; probe2026.sh 21b96d57d3a0 (PROBE_LINT_OK); visible recovery rec2026h 996c3cf0acd9a4e5; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobBuildAhead=1.
+- Recovery rec2026h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2026-build-ahead/run2026.sh.
