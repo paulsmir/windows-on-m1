@@ -66116,3 +66116,21 @@ EXP2039 HARDWARE ACTUAL (2026-10-28): **the wired depth-2 window (Kick=1) bugche
   - rc102 breaks an ordinary submit when Kick=1. Analysis is back with rc102 (evidence in handoff/rc102/exp2039).
   - Second hole: a failed backend submit makes the reset quiesce fail every time, so the result is 0x116 instead of a recovered TDR.
   - Kick stays off (the default).
+
+EXP2040 HARDWARE BEFORE 2026-10-28T13:00:40Z:
+- WHY: in EXP2033 arm e (the 5th app), GravityMark failed with out-of-memory and device removed. The KMD refused 4 reservations on single LowMemory samples while Windows still had about 450 MB available and 3.6 GB of pagefile free.
+- ATOMIC CONTRACT: one change (rc104); the run order reproduces arm e's position.
+- Expected:
+  - every app completes with a score, with no E_OUTOFMEMORY and no removal;
+  - pressure_wait budget_ms 2000; if floor_refusals > 0, then recovered ≥ 1 and failed 0;
+  - DWM alive;
+  - post-app reserved_bytes / reserved_allocations flat after the 2nd app.
+- Failure criteria:
+  - failed > 0 with an OOM (waiting is insufficient; next is the floor or the structural promise cap);
+  - DWM c00001ad or a hang;
+  - removal.
+- WHAT IS STILL UNKNOWN: whether LowMemoryCondition clears within 2 s under load; dxgkrnl lock behaviour during a 2 s CreateAllocation wait.
+- Recovery: rec2040h.
+- Hashes: sys c46e513a80c3, UmdArm64 69e2dc6c8df0, UmdX64 5d33fb8c7a03, Umd32 b0c64ced7f01; manifest 2ddb820956da, hardware-manifest 79ba044ccce6; probe2040.sh c950048502dc (PROBE_LINT_OK); visible recovery rec2040h 4bdc7c2b6603fd9a; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2040h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2040-pool-pressure/run2040.sh.
