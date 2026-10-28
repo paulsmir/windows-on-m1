@@ -3752,6 +3752,15 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       if (adapter == NULL || g3_context == NULL ||
           g3_context->GpuvaG3Process == NULL)
         return APPLE_AGX_BACKEND_FALSE;
+      /* rc97 (EXP2030): a reset poisons the active job's context before its
+       * quiescence poll (AdmissionResetQuiesceActive), and the publication
+       * refuses a poisoned context. Refusing the completion withheld a fence
+       * whose GPU work had finished: the acknowledged event batch failed
+       * every later poll, so every TDR reset failed (0x116). As for a
+       * poisoned process (EXP997), retire the job and write nothing into
+       * the context; its device is reset and its queries are lost. */
+      if (g3_context->GpuvaG3Poisoned)
+        timestampVa = 0ULL;
     }
     /* G2: a compute job ends on its compute stamp, a render job on 3D. The
      * job kind outlives the image binding: a retried completion arrives
