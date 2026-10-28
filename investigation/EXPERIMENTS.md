@@ -65491,3 +65491,21 @@ EXP2017 HARDWARE ACTUAL (2026-10-28): rc85 startup fixes; the memory thrash is c
 - FHD 200k: **988 / 5.9 FPS**. The first-frame gap was only 20.0 s (53 trims, 1.28 GiB), but steady state thrashed: median frame 72.5 ms, p90 362 ms, 55 frames over 500 ms summing to 44.7 s. EXP2016 had 5 frames over 500 ms (4.2 s).
 - Conclusion: the GravityMark FHD working set (about 3.5 GiB at 100k, more at 200k) exceeds the LOCAL budget (about 2.9 GiB, segment 3136 MiB at 50% of 7.2 GB guest RAM). Residency thrash costs both startup and steady state. rc86 (trim recency) is next in EXP2018; the working-set size and budget remain the core issue.
 - Verdict: rc85 c41067f7 (eager PSO) and c814eb20 (staged discard) work as designed; their score effect is masked by the thrash. 6a1d2324 and cf323c59 validated (receipts and tool).
+
+EXP2018 HARDWARE BEFORE 2026-10-28T03:28:43Z:
+- WHY:
+  - rc85/rc86: the slow first-frame stall (25-31 s for a 129 MiB bind) is residency thrash. Segment 3 is full (3136 MiB), the LOCAL budget is about 2.9 GiB, and the FHD working set is about 3.5 GiB. The UMD trim LRU ranked never-submitted fresh slots first, so it evicted the first frame's own resources.
+  - Separately, 128 MiB allocations take 0.7-2.1 s because there is only one spare slab.
+- ATOMIC CONTRACT: none.
+- Expected:
+  - first-frame gap under 25 s;
+  - 129 MiB bind under 1 s;
+  - VIRTUAL_TRANSFER under 5k (Wom1G3PagingProfile);
+  - v11 cache reuse;
+  - DWM faults 0;
+  - FHD 200k well above 1357.
+- Failure criteria: removal, a DWM fault, LowMemory refusals, or a regression.
+- Recovery: rec2018h.
+- Hashes: sys 6514b00d33cf, UmdArm64 bc699e4ddd54, UmdX64 9f2f398b1230, Umd32 3f2f14e26f10; manifest f324c6f82d91, hardware-manifest e59f14604d4f; probe2018.sh da26a54cb069 (PROBE_LINT_OK); visible recovery rec2018h a1f252645eb7092f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2018h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2018-mem-recency/run2018.sh.
