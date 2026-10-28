@@ -65718,3 +65718,14 @@ EXP2027 HARDWARE BEFORE 2026-10-28T07:05:43Z:
 - Hashes: sys 6ac55171860a, UmdArm64 ab1ea3c98404, UmdX64 e33bb9c26837, Umd32 32b890a0e2ea; manifest a0ce98cdc7a4, hardware-manifest c3e6829ebf1a; probe2027.sh 00dffb9a1b64 (PROBE_LINT_OK); visible recovery rec2027h 9603a95314a8a735; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobBuildAhead=1 Wom1TdrDrillAllowed=1.
 - Recovery rec2027h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2027-tdr-ahead/run2027.sh.
+
+EXP2027 HARDWARE ACTUAL (2026-10-28): **TDR drill with build-ahead: the guest wedged inside the hypervisor**.
+- D3D11 HD 10k with build-ahead, first after boot: 2323 (median 70.78 ms, unchanged), so build-ahead does not help D3D11.
+- The G4-r3 TDR drill (`drill 4`) took the guest down (GUEST_DOWN_DURING_FAULT_DRILL 1). The m1n1 vUART shows a guest DABORT_LOWER loop:
+  - FAR **0x204017030** (SGX FAULT_INFO);
+  - ELR 0xfffff801ac444264;
+  - x23 = 0xc0000483 (the reset failure status).
+  So a KMD read of the SGX FAULT_INFO register during the failed reset aborted in the HV. m1n1 did not emulate it, possibly because the GPU was power-gated or the region was unmapped.
+- The arm b GravityMark did not run.
+- run_uefi was killed by the operator script; recovery is rec2027h AT_PROXY.
+- Open: is it caused by build-ahead, or is the drill unrecoverable anyway? Which code reads 0x17030 in the reset path (Wom1GpuFaultInfoRead / rc77 PostResume)? This goes to rc92. Build-ahead stays default off.
