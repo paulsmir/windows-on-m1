@@ -66655,3 +66655,11 @@ Arms: a FHD 100k windowed (first app), b HD 50k.
 - Hashes: sys 2edbc86849d6, UmdArm64 8eaef1a52dce, UmdX64 fd0d2c9bb279, Umd32 85cee1b92e56; manifest 83b841516bdf, hardware-manifest 9059a970f9d8; probe2058.sh 540849649bae (PROBE_LINT_OK); visible recovery rec2058h 9d939be067a7ffdb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2058h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2058-level-ring/run2058.sh.
+
+EXP2058 HARDWARE ACTUAL (2026-10-29): **rc112, the 64 MiB level ring: HD 50k 7051 (best; previous 6957) in second position. In the FHD stall the drains are gone, but the time moved to the CPU tiling.**
+- a FHD 100k first app 4244 (25.4). The frame 26→27 stall is 9.725 s, as before (9.747 s):
+  - escape 2.27 → 0.12 s (the drains);
+  - upload 1.27 → 3.39 s (306 levels, 208 MiB, ≈60 MB/s: ail_tile reading the WC UPLOAD mapping).
+- b HD 50k 7051 (42.2).
+- No submit failures, no transfers.
+- Next: rc113 (63f69f30) copies the WC source into cached memory before ail_tile (EXP2059).
