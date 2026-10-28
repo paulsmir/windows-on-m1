@@ -616,11 +616,17 @@ def kmd_job_window(data):
     kicks, max_in_flight = fields[2], fields[3]
     reported = fields[4:7]
     barriers = fields[7:12]
-    adopted, failures, last_failure, aborts, last_kicked = fields[12:17]
+    adopted, failures, last_failure, aborts, last_kicked, last_status = fields[12:18]
     return dict(kicks=kicks, max_in_flight=max_in_flight,
                 batch_sizes={1: reported[1], 2: reported[2]},
                 barriers={BARRIER_CLASSES[i]: barriers[i] for i in BARRIER_CLASSES},
-                adopted=adopted, kick_failures=failures, last_kick_failure_line=last_failure,
+                adopted=adopted, kick_failures=failures,
+                last_kick_failure_line=last_failure & 0xffff,
+                # rc102 (EXP2042): AdmissionGpuvaG3BeginJobAs refusal (1 active
+                # state, 2 private completion, 3 process poisoned, 4 image
+                # re-proof, 5 context, 6 envelope, 7 output, 8 lease, 9 entry)
+                begin_successor_refusal=last_failure >> 16 & 0xff,
+                last_kick_status='%#010x' % last_status,
                 reset_aborts=aborts, last_kicked_fence=last_kicked)
 
 

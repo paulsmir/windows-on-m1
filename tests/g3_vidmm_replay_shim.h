@@ -600,6 +600,9 @@ static NTSTATUS AdmissionG4SubmitReject(ADMISSION_CONTEXT *a,
 static BOOLEAN AdmissionG3OutputMatchesLocal(ADMISSION_CONTEXT *a,
     APPLE_AGX_GPUVA_G3_GRAPH *g) {(void)a;(void)g;return TRUE;}
 static BOOLEAN AdmissionG3OutputAccessible(ADMISSION_CONTEXT *a,APPLE_AGX_GPUVA_G3_GRAPH *g) {return AdmissionG3OutputMatchesLocal(a,g);}
+/* rc102: BeginJob proves the job's own packet (the same stub). */
+static BOOLEAN AdmissionG3OutputAccessibleFor(ADMISSION_CONTEXT *a,APPLE_AGX_GPUVA_G3_GRAPH *g,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *p) {(void)p;return AdmissionG3OutputMatchesLocal(a,g);}
 typedef ADMISSION_SCANOUT_MEMORY_VIEW ADMISSION_BACKEND_MEMORY_VIEW;
 static unsigned char *local_cpu;
 static ULONGLONG local_ipa=0x10000000ULL;

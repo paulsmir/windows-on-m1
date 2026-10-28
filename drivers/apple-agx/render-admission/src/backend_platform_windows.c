@@ -5001,7 +5001,8 @@ static VOID AdmissionJobWindowKickFailedWindows(ADMISSION_CONTEXT *adapter,
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG line) {
   ++runtime->Depth2Receipt.KickFailures;
   runtime->Depth2Receipt.LastKickFailure = line;
-  InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | (LONG)line, 0);
+  InterlockedCompareExchange(&adapter->SchedulerFaulted,
+                             0x40000L | (LONG)(line & 0xffffu), 0);
 }
 
 /* rc102 (Wom1JobDepth2Kick, render_job_window.h): job Fence runs alone and
@@ -5110,10 +5111,21 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   runtime->Depth2KickBarrier = barrier;
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseWorker);
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBeginBefore);
-  if (context == NULL || context->GpuvaG3Process == NULL ||
-      !NT_SUCCESS(AdmissionGpuvaG3BeginSuccessorJob(adapter, context, next))) {
+  if (context == NULL || context->GpuvaG3Process == NULL) {
     AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__);
     return TRUE;
+  }
+  {
+    ULONG beginRefusal = 0u;
+    NTSTATUS begin = AdmissionGpuvaG3BeginSuccessorJob(adapter, context, next,
+                                                       &beginRefusal);
+    if (!NT_SUCCESS(begin)) {
+      /* rc102 receipt: which BeginJob check refused, and its status. */
+      AdmissionJobWindowKickFailedWindows(adapter, runtime,
+          __LINE__ | (beginRefusal << 16));
+      runtime->Depth2Receipt.LastKickStatus = (ULONG)begin;
+      return TRUE;
+    }
   }
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBeginAfter);
   RtlZeroMemory(&submission, sizeof(submission));

@@ -3236,11 +3236,13 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
   ExReleaseFastMutex(&process->State->Lock);
 }
 
-static BOOLEAN AdmissionG3OutputMatchesLocal(
-    ADMISSION_CONTEXT *adapter, APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+/* rc102: Packet is the job's own description: the render packet's at
+ * depth 1, the kicked entry's for a depth-2 successor (the render packet
+ * still describes the running job then). */
+static BOOLEAN AdmissionG3OutputMatchesLocalFor(
+    ADMISSION_CONTEXT *adapter, APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *packet) {
   ADMISSION_SCANOUT_MEMORY_VIEW view;
-  const ADMISSION_RENDER_PACKET_DESCRIPTION *packet =
-      &adapter->RenderPacket.Description;
   ULONGLONG ipa, offset, position;
   if (packet->DestinationGpuVa == 0ULL ||
       packet->DestinationBytes == 0u ||
@@ -3268,10 +3270,9 @@ static BOOLEAN AdmissionG3OutputMatchesLocal(
 
 /* M2-c: a VA-only destination (outside the local reserve) must still be
  * mapped writable; a local one must still be its recorded local pages. */
-static BOOLEAN AdmissionG3OutputAccessible(
-    ADMISSION_CONTEXT *adapter, APPLE_AGX_GPUVA_G3_GRAPH *graph) {
-  const ADMISSION_RENDER_PACKET_DESCRIPTION *packet =
-      &adapter->RenderPacket.Description;
+static BOOLEAN AdmissionG3OutputAccessibleFor(
+    ADMISSION_CONTEXT *adapter, APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *packet) {
   if (adapter->BackendImage.G4Native &&
       packet->DestinationPhysical == 0ULL &&
       packet->DestinationCpuToken == 0ULL)
@@ -3279,7 +3280,7 @@ static BOOLEAN AdmissionG3OutputAccessible(
         packet->DestinationBytes != 0u &&
         AppleAgxGpuvaG3GraphContainsRangeAccess(graph,
             packet->DestinationGpuVa, packet->DestinationBytes, TRUE);
-  return AdmissionG3OutputMatchesLocal(adapter, graph);
+  return AdmissionG3OutputMatchesLocalFor(adapter, graph, packet);
 }
 
 static ADMISSION_G3_PRIVATE_SCENE *AdmissionG4FindPrivateScene(
@@ -3590,8 +3591,16 @@ Done:
   return injected;
 }
 
+/* Packet: the job's own description (rc102: a successor's is its kicked
+ * entry's). *Refusal (rc102 receipt, may be NULL): 0 begun, 1 the active-
+ * job state (depth 1: another job; successor: not N's process, or a
+ * successor already), 2 a private completion pending, 3 process poisoned,
+ * 4 the bound image's re-proof, 5 context poisoned or another root,
+ * 6 envelope access, 7 output access, 8 the graph lease (JOB_BEGIN). */
 static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
-    ADMISSION_RENDER_CONTEXT *context, ULONG fence, BOOLEAN successor) {
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence, BOOLEAN successor,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *packet, ULONG *Refusal) {
+  ULONG refusal = 0u;
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
   APPLE_AGX_G4_SUBMIT_VIEW g4_view = {0};
@@ -3682,30 +3691,43 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
             context->GpuvaG3DmaBufferBytes)
       g4_valid = FALSE;
   }
-  /* rc102: a successor joins the active job of its own process. */
-  if ((successor ? state->ActiveProcess == process && state->ActiveFence != 0u &&
-                       state->ActiveFence != fence && state->SuccessorFence == 0u
-                 : state->ActiveProcess == NULL) &&
-      !state->PrivateCompletionFence && !process->Poisoned &&
-      g4_valid &&
-      !context->GpuvaG3Poisoned && context->GpuvaG3RootIpa != 0ULL &&
-      context->GpuvaG3RootIpa == process->Graph.RootIpa &&
-      /* A present job's GPU work is in its arena, not its DMA buffer. */
-      (adapter->BackendImage.PresentCompute ? TRUE :
-       adapter->BackendImage.G4Native || adapter->BackendImage.G4Compute ?
-          AdmissionG4LogicalEnvelopeAccess(process,
-              context->GpuvaG3DmaBufferVa,
-              context->GpuvaG3DmaBufferBytes) :
-          AppleAgxGpuvaG3GraphContainsRange(&process->Graph,
-              context->GpuvaG3DmaBufferVa,
-              context->GpuvaG3DmaBufferBytes)) &&
-      /* A compute job has no destination allocation to prove; a present
-       * job's destination was proven above. */
-      (adapter->BackendImage.G4Compute || adapter->BackendImage.PresentCompute ||
-       AdmissionG3OutputAccessible(adapter, &process->Graph)) &&
-      (successor ? AppleAgxGpuvaG3GraphBeginNestedJob(&process->Graph)
-                 : AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
-                       ADMISSION_GPUVA_G3_JOB_VM_SLOT))) {
+  /* rc102: a successor joins the active job of its own process. The same
+   * checks in the same order as before; the first that fails is noted. */
+  if (!(successor ? state->ActiveProcess == process && state->ActiveFence != 0u &&
+                        state->ActiveFence != fence && state->SuccessorFence == 0u
+                  : state->ActiveProcess == NULL))
+    refusal = 1u;
+  else if (state->PrivateCompletionFence)
+    refusal = 2u;
+  else if (process->Poisoned)
+    refusal = 3u;
+  else if (!g4_valid)
+    refusal = 4u;
+  else if (context->GpuvaG3Poisoned || context->GpuvaG3RootIpa == 0ULL ||
+           context->GpuvaG3RootIpa != process->Graph.RootIpa)
+    refusal = 5u;
+  /* A present job's GPU work is in its arena, not its DMA buffer. */
+  else if (!(adapter->BackendImage.PresentCompute ? TRUE :
+             adapter->BackendImage.G4Native || adapter->BackendImage.G4Compute ?
+                AdmissionG4LogicalEnvelopeAccess(process,
+                    context->GpuvaG3DmaBufferVa,
+                    context->GpuvaG3DmaBufferBytes) :
+                AppleAgxGpuvaG3GraphContainsRange(&process->Graph,
+                    context->GpuvaG3DmaBufferVa,
+                    context->GpuvaG3DmaBufferBytes)))
+    refusal = 6u;
+  /* A compute job has no destination allocation to prove; a present job's
+   * destination was proven above. rc102 (EXP2042): the job's own output,
+   * not the running job's packet. */
+  else if (!(adapter->BackendImage.G4Compute || adapter->BackendImage.PresentCompute ||
+             AdmissionG3OutputAccessibleFor(adapter, &process->Graph, packet)))
+    refusal = 7u;
+  else if (!(successor ? AppleAgxGpuvaG3GraphBeginNestedJob(&process->Graph)
+                       : AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
+                             ADMISSION_GPUVA_G3_JOB_VM_SLOT)))
+    refusal = 8u;
+  if (Refusal != NULL) *Refusal = refusal;
+  if (refusal == 0u) {
     if (private_scene) {
       ADMISSION_BACKEND_IMAGE *image=&adapter->BackendImage;
       private_scene->Started=1u;
@@ -3859,12 +3881,35 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
 
 NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
-  return AdmissionGpuvaG3BeginJobAs(adapter, context, fence, FALSE);
+  if (adapter == NULL) return STATUS_INVALID_PARAMETER;
+  return AdmissionGpuvaG3BeginJobAs(adapter, context, fence, FALSE,
+                                    &adapter->RenderPacket.Description, NULL);
 }
 
+/* rc102: the successor is the Kicked head entry; its packet describes it
+ * (the render packet still holds the running job). */
 NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *adapter,
-    ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
-  return AdmissionGpuvaG3BeginJobAs(adapter, context, fence, TRUE);
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence, ULONG *Refusal) {
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  const ADMISSION_G4_PENDING *entry;
+  BOOLEAN found = FALSE;
+  KIRQL old_irql;
+  if (Refusal != NULL) *Refusal = 9u;
+  if (adapter == NULL || context == NULL || fence == 0u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(&packet, sizeof(packet));
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  if (adapter->G4PendingCount != 0u && entry->State == AdmissionG4PendingKicked &&
+      entry->Fence == fence && entry->Context == context) {
+    packet = entry->Packet;
+    found = TRUE;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (!found) return STATUS_INVALID_DEVICE_STATE;
+  return AdmissionGpuvaG3BeginJobAs(adapter, context, fence, TRUE, &packet,
+                                    Refusal);
 }
 
 /* RC40: the graph job still pins this process mapping. Recheck its published

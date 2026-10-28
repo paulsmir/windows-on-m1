@@ -5,7 +5,24 @@ from test_g4_submit_virtual_replay import function_body
 ROOT=Path(__file__).resolve().parents[1]
 class G4RenderLocalViewReplay(unittest.TestCase):
     def test_actual_submit_accepts_high_local_output_without_widening_scanout(self):
+        self._run((ROOT/'drivers/apple-agx/render-admission/src/gpuva_g3_windows.c').read_text())
+
+    def test_successor_output_is_proven_from_its_own_packet(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP2042: the
+        first depth-2 kick (a render behind a running compute job of the same
+        GravityMark process) failed in AdmissionGpuvaG3BeginSuccessorJob,
+        because the output proof read the render packet, which still held
+        the running compute job (no destination). The successful run above
+        includes that state; proving the successor from the render packet
+        again (the pre-fix behaviour) must break it (refusal 7)."""
         source=(ROOT/'drivers/apple-agx/render-admission/src/gpuva_g3_windows.c').read_text()
+        old='AdmissionG3OutputAccessibleFor(adapter, &process->Graph, packet)'
+        self.assertIn(old, source)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self._run(source.replace(old,
+                'AdmissionG3OutputAccessibleFor(adapter, &process->Graph, ((void)packet, &adapter->RenderPacket.Description))'), quiet=True)
+
+    def _run(self, source, quiet=False):
         memory=(ROOT/'drivers/apple-agx/render-admission/src/memory_runtime_windows.c').read_text()
         branches=source.split('/* Branch IDs are a stable diagnostic ABI',1)[1]
         functions='enum {'+branches.split('enum {',1)[1].split('};',1)[0]+'};\n'
@@ -19,8 +36,8 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           'AdmissionGpuvaG3PrivatePreempt','AdmissionGpuvaG3PrivateCancel','AdmissionG4PendingAdmissible',
           'AdmissionG4PendingQueue','AdmissionG4PendingBindHead','AdmissionG4PendingDropLocked',
           'AdmissionG4SubmitComputeLocked','AdmissionG4SubmitVirtualEnvelope',
-          'AdmissionG3OutputMatchesLocal','AdmissionG3OutputAccessible','AdmissionGpuvaG3BeginJobAs',
-          'AdmissionGpuvaG3BeginJob')
+          'AdmissionG3OutputMatchesLocalFor','AdmissionG3OutputAccessibleFor','AdmissionGpuvaG3BeginJobAs',
+          'AdmissionGpuvaG3BeginJob','AdmissionGpuvaG3BeginSuccessorJob')
         functions+='\n'.join(function_body(source,n) for n in names)
         shim=(ROOT/'tests/g4_submit_virtual_replay.c').read_text()
         prefix=shim.split('int main(void) {',1)[0]
@@ -90,6 +107,37 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           fprintf(stderr,"begin=%08x GPU_JOB_BEGIN_calls=%d\\n",(unsigned)begin,graph_begin_calls);
           assert(begin==STATUS_SUCCESS && graph_begin_calls==1);
           assert(state.ActiveProcess==&process && state.ActiveFence==args.SubmissionFenceId);
+          {
+            /* rc102 (EXP2042): the same render as a depth-2 successor behind a
+             * running compute job of its process: the render packet holds the
+             * compute job (no destination), the render is the Kicked head. */
+            ADMISSION_RENDER_PACKET_DESCRIPTION own=adapter.RenderPacket.Description;
+            ADMISSION_RENDER_PACKET_DESCRIPTION running;
+            ULONG fence=args.SubmissionFenceId, refusal=99u;
+            memset(&running,0,sizeof(running));
+            running.Fence=fence-1u; running.Kind=ADMISSION_RENDER_PACKET_KIND_COMPUTE;
+            adapter.RenderPacket.Description=running;
+            adapter.G4PendingHead=0u; adapter.G4PendingCount=1u;
+            adapter.G4Pending[0].State=AdmissionG4PendingKicked;
+            adapter.G4Pending[0].Fence=fence; adapter.G4Pending[0].Context=&context;
+            adapter.G4Pending[0].Packet=own;
+            state.ActiveFence=fence-1u; state.SuccessorFence=0u; state.SuccessorContext=NULL;
+            NTSTATUS next=AdmissionGpuvaG3BeginSuccessorJob(&adapter,&context,fence,&refusal);
+            fprintf(stderr,"successor=%08x refusal=%u nested=%d\\n",(unsigned)next,refusal,graph_nested_calls);
+            assert(next==STATUS_SUCCESS && refusal==0u && graph_nested_calls==1);
+            assert(state.SuccessorFence==fence && state.SuccessorContext==&context &&
+                   state.ActiveFence==fence-1u && state.ActiveProcess==&process);
+            /* no kicked entry for that fence: refused before any check */
+            state.SuccessorFence=0u; adapter.G4Pending[0].State=AdmissionG4PendingQueued;
+            assert(AdmissionGpuvaG3BeginSuccessorJob(&adapter,&context,fence,&refusal)!=STATUS_SUCCESS &&
+                   refusal==9u && graph_nested_calls==1);
+            /* another process's active job: refusal 1 */
+            adapter.G4Pending[0].State=AdmissionG4PendingKicked; state.ActiveProcess=NULL;
+            assert(AdmissionGpuvaG3BeginSuccessorJob(&adapter,&context,fence,&refusal)!=STATUS_SUCCESS &&
+                   refusal==1u && graph_nested_calls==1);
+            adapter.G4PendingCount=0u; adapter.G4Pending[0].State=AdmissionG4PendingFree;
+            adapter.RenderPacket.Description=own;
+          }
           state.ActiveProcess=NULL;state.ActiveFence=0;
           output_ipa+=0x4000ULL;
           assert(AdmissionGpuvaG3BeginJob(&adapter,&context,args.SubmissionFenceId)!=STATUS_SUCCESS);
@@ -97,7 +145,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           adapter.BackendImage.G4Native=0;
           /* M2-f2c: the DCP pool is all of segment 2 (EXP953), so the
            * scanout view the non-native path checks is the local view. */
-          assert(AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
+          assert(AdmissionG3OutputMatchesLocalFor(&adapter,&process.Graph,&adapter.RenderPacket.Description));
           adapter.BackendImage.G4Native=1;
           ADMISSION_SCANOUT_MEMORY_VIEW scanout={0};
           assert(AdmissionMemoryRuntimeScanoutView(&adapter,&scanout)==STATUS_SUCCESS);
@@ -133,19 +181,19 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           adapter.RenderPacket.Description.DestinationGpuVa=output_va;
           adapter.RenderPacket.Description.DestinationPhysical=output_ipa;
           adapter.RenderPacket.Description.DestinationBytes=(ULONG)output_bytes;
-          assert(AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
+          assert(AdmissionG3OutputMatchesLocalFor(&adapter,&process.Graph,&adapter.RenderPacket.Description));
           adapter.BackendImage.G4Native=0;
           /* M2-f2c: the DCP pool is all of segment 2 (EXP953), so the
            * scanout view the non-native path checks is the local view. */
-          assert(AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
+          assert(AdmissionG3OutputMatchesLocalFor(&adapter,&process.Graph,&adapter.RenderPacket.Description));
           /* M2-c: a VA-only destination at BeginJob: mapped writable or not. */
           adapter.BackendImage.G4Native=1;
           adapter.RenderPacket.Description.DestinationPhysical=0;
           adapter.RenderPacket.Description.DestinationCpuToken=0;
           output_va_only=output_va;output_va_only_bytes=(unsigned)output_bytes;
-          assert(AdmissionG3OutputAccessible(&adapter,&process.Graph));
+          assert(AdmissionG3OutputAccessibleFor(&adapter,&process.Graph,&adapter.RenderPacket.Description));
           output_va_only_bytes=0;
-          assert(!AdmissionG3OutputAccessible(&adapter,&process.Graph));
+          assert(!AdmissionG3OutputAccessibleFor(&adapter,&process.Graph,&adapter.RenderPacket.Description));
           puts("high local render admitted through BeginJob; exact935 span and legacy scanout guards checked");return 0;
         }"""
         with tempfile.TemporaryDirectory(prefix='g4-render-local-') as d:
@@ -155,4 +203,5 @@ class G4RenderLocalViewReplay(unittest.TestCase):
               '-Wno-unused-function','-fsanitize=address,undefined','-I',str(d),'-I',str(ROOT/'drivers/apple-agx/shared/include'),'-I',str(ROOT/'drivers/apple-agx/render-admission/include'),
               str(d/'replay.c'),str(ROOT/'drivers/apple-agx/shared/src/apple_agx_g4_submit.c'),
               str(ROOT/'drivers/apple-agx/shared/src/apple_agx_scheduler.c'),'-o',str(exe)],check=True)
-            subprocess.run([str(exe)],check=True,timeout=15)
+            subprocess.run([str(exe)],check=True,timeout=15,
+                           stderr=subprocess.DEVNULL if quiet else None)

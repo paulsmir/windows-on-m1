@@ -283,10 +283,12 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *Adapter, ULONG Fence);
 /* rc102: BeginJob for a job kicked behind the active one: the same
  * re-proof of the bound image under the graph lock, but the job joins the
  * active job's process lease (AppleAgxGpuvaG3GraphBeginNestedJob) as its
- * successor. Refused for another process or with a successor already. */
+ * successor, with its output proven from its own (kicked) entry's packet.
+ * Refused for another process or with a successor already. *Refusal: the
+ * failed check (AdmissionGpuvaG3BeginJobAs; 9 = no kicked entry). */
 NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *Adapter,
                                            ADMISSION_RENDER_CONTEXT *Context,
-                                           ULONG Fence);
+                                           ULONG Fence, ULONG *Refusal);
 
 #endif
 #endif

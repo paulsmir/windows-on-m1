@@ -477,8 +477,9 @@ static unsigned graph_begin_slot;
 static int AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned slot) { (void)graph;graph_begin_slot=slot;++graph_begin_calls;return 1; }
 /* rc102: a depth-2 successor's BeginJob joins the lease; never here. */
+static int graph_nested_calls;
 static int AppleAgxGpuvaG3GraphBeginNestedJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
-  (void)graph; assert(0); return 0; }
+  (void)graph; ++graph_nested_calls; return 1; }
 static int AdmissionBackendImageReleaseSubmission(
     ADMISSION_BACKEND_IMAGE *image, unsigned fence) {
   (void)fence;image->G4Native=0;image->G4Compute=0;image->BoundFence=0;return 1;

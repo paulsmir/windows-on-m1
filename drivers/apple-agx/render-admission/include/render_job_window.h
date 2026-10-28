@@ -195,10 +195,12 @@ typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
   unsigned int Barriers[5];    /* leading Barriers by ADMISSION_JOB_WINDOW_BARRIER_* */
   unsigned int Adopted;        /* kicked successors that became the running job */
   unsigned int KickFailures;   /* a decided kick that failed (scheduler faulted) */
-  unsigned int LastKickFailure;/* the step that failed (KMD line tag) */
+  /* the step that failed: KMD line in bits 0-15, the BeginSuccessorJob
+   * refusal (AdmissionGpuvaG3BeginJobAs) in bits 16-23 */
+  unsigned int LastKickFailure;
   unsigned int ResetAborts;    /* kicked fences a reset aborted */
   unsigned int LastKickedFence;
-  unsigned int Reserved;
+  unsigned int LastKickStatus; /* NTSTATUS of the failed step (was Reserved) */
 } ADMISSION_JOB_WINDOW_RECEIPT;
 
 void AdmissionJobWindowReceiptInitialize(ADMISSION_JOB_WINDOW_RECEIPT *Receipt);

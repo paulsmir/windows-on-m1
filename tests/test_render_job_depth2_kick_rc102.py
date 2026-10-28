@@ -162,7 +162,8 @@ int main(void) {
   AdmissionJobWindowReceiptReported(&r, 1u);
   AdmissionJobWindowReceiptReported(&r, 2u);
   AdmissionJobWindowReceiptReported(&r, 2u);
-  r.Adopted = 3u; r.KickFailures = 1u; r.LastKickFailure = 5000u; r.ResetAborts = 1u;
+  r.Adopted = 3u; r.KickFailures = 1u; r.LastKickFailure = 5000u | (7u << 16);
+  r.ResetAborts = 1u; r.LastKickStatus = 0xc0000184u;
   for (i = 0; i < sizeof(r); ++i) printf("%02x", p[i]);
   putchar('\n');
   return 0;
@@ -190,6 +191,7 @@ class KickReceipts(unittest.TestCase):
                                                compute_on_compute=0))
         self.assertEqual((out["adopted"], out["kick_failures"], out["last_kick_failure_line"],
                           out["reset_aborts"], out["last_kicked_fence"]), (3, 1, 5000, 1, 43))
+        self.assertEqual((out["begin_successor_refusal"], out["last_kick_status"]), (7, "0xc0000184"))
 
     def test_v4_wired_statistics(self):
         b = load()
