@@ -9,6 +9,7 @@ read as running, or a RecoverChannel reported as never sent).
 from pathlib import Path
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -81,7 +82,7 @@ class PostResumeReceipt(unittest.TestCase):
         self.assertEqual(decoded['version'], 2)
         self.assertEqual(decoded['poll_failure'],
                          {'source': 'provider_poll', 'poll_guard': 'drain_events',
-                          'drain_guard': 3, 'ingest_guard': 0xff})
+                          'drain_guard': 'flush_state', 'ingest_guard': 0xff})
         json.dumps(decoded)
 
     def test_v1_receipt_has_no_poll_failure(self):
@@ -93,6 +94,20 @@ class PostResumeReceipt(unittest.TestCase):
         self.assertIsNone(decoded['poll_failure'])
         self.assertEqual(decoder.decode_poll_failure(
             (1 << 24) | 8), {'source': 'rtkit_drain', 'result': 'firmware_crashed'})
+
+    def test_drain_guard_names_match_the_provider_enum(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? A drain guard added
+        # or renumbered in the provider must not be decoded under a stale name
+        # (rc97: EXP2030's guard 10 was the composer's ApplyEvent refusal).
+        header = (ROOT / 'drivers/apple-agx/shared/include/'
+                  'apple_agx_platform_provider.h').read_text()
+        enum = {int(value): re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+                for name, value in re.findall(
+                    r'AppleAgxPlatformDrainGuard(\w+) = (\d+)u', header)}
+        self.assertEqual(decoder.DRAIN_GUARDS, enum)
+        self.assertEqual(decoder.decode_poll_failure(0x2000a02),
+                         {'source': 'provider_poll', 'poll_guard': 'drain_events',
+                          'drain_guard': 'apply_event', 'ingest_guard': 0})
 
 
 if __name__ == '__main__':

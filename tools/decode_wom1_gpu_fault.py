@@ -595,6 +595,11 @@ RTKIT_SESSION_RESULTS = {0: 'ok', 1: 'invalid_argument', 2: 'invalid_state', 3: 
                          6: 'protocol_violation', 7: 'cleanup_failed', 8: 'firmware_crashed'}
 POLL_GUARDS = {0: 'ok', 1: 'invalid', 2: 'drain_events', 3: 'clock', 4: 'timeout_check',
                5: 'timeout_apply'}
+# AppleAgxPlatformDrainGuard* (apple_agx_platform_provider.h). rc97: 10 is the
+# composer refusing an already acknowledged event (EXP2030).
+DRAIN_GUARDS = {0: 'ok', 1: 'invalid', 2: 'binding', 3: 'flush_state', 4: 'read_pointer',
+                5: 'write_pointer', 6: 'pointer_range', 7: 'flush_message',
+                8: 'prepare_event', 9: 'publish_read', 10: 'apply_event'}
 
 
 def decode_poll_failure(value):
@@ -606,7 +611,7 @@ def decode_poll_failure(value):
         return {'source': 'rtkit_drain', 'result': RTKIT_SESSION_RESULTS.get(low, low)}
     if source == 2:
         return {'source': 'provider_poll', 'poll_guard': POLL_GUARDS.get(low, low),
-                'drain_guard': drain, 'ingest_guard': ingest}
+                'drain_guard': DRAIN_GUARDS.get(drain, drain), 'ingest_guard': ingest}
     return {'source': source, 'raw': f'{value:#x}'}
 
 
