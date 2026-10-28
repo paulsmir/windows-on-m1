@@ -36,6 +36,7 @@ extern "C" {
 #include "agx_d3d12_windows.h"
 #include "agx_d3d12_tile_mapping.h"
 #include "agx_d3d12_heap_backing.h"
+#include "agx_d3d12_barrier_stats.h"
 static_assert(AGX_D3D12_HEAP_FLAG_BUFFERS == static_cast<unsigned>(D3D12DDI_HEAP_FLAG_BUFFERS), "rc87 heap flag");
 static_assert(AGX_D3D12_HEAP_FLAG_TEXTURES == (static_cast<unsigned>(D3D12DDI_HEAP_FLAG_NON_RT_DS_TEXTURES) |
                                                static_cast<unsigned>(D3D12DDI_HEAP_FLAG_RT_DS_TEXTURES)),
@@ -4100,6 +4101,9 @@ struct AgxD3d12CommandList {
     struct AgxD3d12IndirectState *indirect_states;
     UINT indirect_state_count, indirect_state_capacity;
     UINT replay;
+    /* rc105 receipt-only: ResourceBarrier kinds since the last Reset
+     * (agx_d3d12_barrier_stats.h), summed into measure-d3d12-barriers */
+    UINT barriers[8]; /* AGX_D3D12_BARRIER_COUNTERS (struct extracted by host tests) */
 };
 /* EXP1363: creating/resetting a list makes the runtime set its default
  * state (topology, viewports, scissors, blend factor, stencil ref, PSO,
@@ -4160,6 +4164,7 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     list->closed = list->commands = 0;
     list->bundle_bytes = 0;
     list->indirect_state_count = 0;
+    memset(list->barriers, 0, sizeof(list->barriers));
     list->state = 0;
     list->pso = nullptr;
     list->compute_root = nullptr;
@@ -6181,8 +6186,21 @@ static VOID APIENTRY ExecuteIndirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOM
 }
 /* Between copies on one queue the owner's libagx copies already carry
  * AGX_BARRIER_ALL and execution completes before the next list; transitions
- * need no AGX work yet. */
-static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST, UINT, const D3D12DDIARG_RESOURCE_BARRIER_0003 *) {}
+ * need no AGX work yet: Asahi's hazard tracking orders batches, and rc105's
+ * submission order check (agx_win32_submit_order.h) submits a writer batch
+ * before any batch that uses its BO. rc105 receipt-only: the barrier kinds
+ * are counted (agx_d3d12_barrier_stats.h). */
+static_assert(sizeof(((AgxD3d12CommandList *)0)->barriers) == AGX_D3D12_BARRIER_COUNTERS * sizeof(UINT),
+              "rc105 barrier counters");
+static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDIARG_RESOURCE_BARRIER_0003 *barriers) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    for (UINT i = 0; list && barriers && i < count; ++i)
+        AgxD3d12BarrierCount(list->barriers, static_cast<unsigned>(barriers[i].Type), static_cast<unsigned>(barriers[i].Flags),
+                             barriers[i].Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION
+                                 ? static_cast<unsigned>(barriers[i].Transition.StateBefore) : 0u,
+                             barriers[i].Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION
+                                 ? static_cast<unsigned>(barriers[i].Transition.StateAfter) : 0u);
+}
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 /* The owner bindings of one stage's slot records: root views and table
  * descriptors (read now, at execution) of the right kind. */
@@ -7068,6 +7086,19 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
                             static_cast<UINT>((submitted.QuadPart - replayed.QuadPart) * 1000000 / hz),
                             AdmissionUmdWaitSerial()};
     AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 5);
+    {
+        /* rc105 receipt-only: the barrier kinds of the executed lists */
+        UINT barriers[AGX_D3D12_BARRIER_COUNTERS] = {};
+        UINT any = 0;
+        for (UINT i = 0; lists && i < count; ++i) {
+            const auto *list = static_cast<const AgxD3d12CommandList *>(lists[i].pDrvPrivate);
+            for (UINT k = 0; list && k < AGX_D3D12_BARRIER_COUNTERS; ++k) {
+                barriers[k] += list->barriers[k];
+                any |= list->barriers[k];
+            }
+        }
+        if (any) AdmissionUmdDiagnostic("measure-d3d12-barriers", S_OK, barriers, AGX_D3D12_BARRIER_COUNTERS);
+    }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (measure) {
         UINT phases[12];
@@ -7653,7 +7684,15 @@ static_assert(std::is_same_v<decltype(&CheckExistingResourceAllocationInfo0022),
 /* C50: the 0033 command-list entries. ResourceBarrier_0022 replaces the
  * aliasing member with ranged barriers; like every barrier here it needs no
  * AGX work. Present_0028 adds a sync-interval override, never requested. */
-static VOID APIENTRY ResourceBarrier0022(D3D12DDI_HCOMMANDLIST, UINT, const D3D12DDIARG_RESOURCE_BARRIER_0022 *) {}
+static VOID APIENTRY ResourceBarrier0022(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDIARG_RESOURCE_BARRIER_0022 *barriers) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    for (UINT i = 0; list && barriers && i < count; ++i)
+        AgxD3d12BarrierCount(list->barriers, static_cast<unsigned>(barriers[i].Type), static_cast<unsigned>(barriers[i].Flags),
+                             barriers[i].Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION
+                                 ? static_cast<unsigned>(barriers[i].Transition.StateBefore) : 0u,
+                             barriers[i].Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION
+                                 ? static_cast<unsigned>(barriers[i].Transition.StateAfter) : 0u);
+}
 static VOID APIENTRY Present0028(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEUE queue,
                                  const D3D12DDIARG_PRESENT_0001 *arg, D3D12DDI_PRESENT_0028 *out) {
     D3D12DDI_PRESENT_0003 legacy = {};
