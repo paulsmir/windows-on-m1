@@ -271,8 +271,13 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   BOOLEAN ConstructLargePages;
   ULONGLONG SlabFastMisses, SlabContiguousUs, SlabChunkedUs;
   /* rc104: the floor wait (AdmissionMemoryPoolReserve; budget from
-   * Wom1PoolPressureWaitMs). */
+   * Wom1PoolPressureWaitMs), live allocations holding a segment-3 promise,
+   * and receipt staging: the pressure counters last staged, the slabs last
+   * staged, and a request from the periodic worker to stage exact values. */
   ADMISSION_POOL_PRESSURE Pressure;
+  ULONGLONG ReservedAllocations;
+  ULONGLONG StagedPressure, StagedSlabs;
+  BOOLEAN StageExact;
 } ADMISSION_POOL_RUNTIME;
 
 /* rc88: what one AdmissionPoolAllocSlab call cost, folded into the runtime
@@ -586,10 +591,19 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
   ULONGLONG reserved = pool->Slabs.Reserved > pool->StagedReserved ?
       pool->Slabs.Reserved - pool->StagedReserved :
       pool->StagedReserved - pool->Slabs.Reserved;
+  ULONGLONG pressure = pool->Pressure.Waits + pool->Pressure.FastFails;
+  /* rc104: the periodic worker stages any change, so the receipt read after
+   * an app has exited holds exact values (EXP2033 compared post-app values
+   * that could each be up to one step stale). */
+  BOOLEAN exact = pool->StageExact &&
+      (moved != 0ULL || reserved != 0ULL ||
+       pool->Slabs.Stats.Slabs != pool->StagedSlabs);
   BOOLEAN stage = moved >= ADMISSION_POOL_DEMAND_RECEIPT_STEP ||
                   reserved >= ADMISSION_POOL_DEMAND_RECEIPT_STEP ||
                   pool->NativeStagingBytes != pool->StagedNativeBytes ||
-                  failures != pool->StagedFailures;
+                  failures != pool->StagedFailures ||
+                  pressure != pool->StagedPressure || exact;
+  pool->StageExact = FALSE;
   if (stage) {
     receipt.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION;
     receipt.Bytes = sizeof(receipt);
@@ -651,6 +665,16 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.SlabContiguousUs = pool->SlabContiguousUs;
     receipt.SlabChunkedUs = pool->SlabChunkedUs;
     receipt.ConstructLargePages = pool->ConstructLargePages ? 1ULL : 0ULL;
+    receipt.PressureBudgetMs = pool->Pressure.BudgetMs;
+    receipt.PressureWaits = pool->Pressure.Waits;
+    receipt.PressureWaitMs = pool->Pressure.WaitMs;
+    receipt.PressureWaitMsMax = pool->Pressure.WaitMsMax;
+    receipt.PressureRecovered = pool->Pressure.Recovered;
+    receipt.PressureFailed = pool->Pressure.TimedOut;
+    receipt.PressureFastFails = pool->Pressure.FastFails;
+    receipt.ReservedAllocations = pool->ReservedAllocations;
+    pool->StagedPressure = pressure;
+    pool->StagedSlabs = pool->Slabs.Stats.Slabs;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
     pool->StagedReserved = pool->Slabs.Reserved;
@@ -749,6 +773,8 @@ static BOOLEAN AdmissionPoolReserveOnce(ADMISSION_CONTEXT *Context,
     pool->LastReserveFailure.CommittedBytes =
         pool->Demand.Stats.CommittedGranules * ADMISSION_POOL_DEMAND_GRANULE;
     *Reason = pool->LastReserveFailure.Reason;
+  } else {
+    ++pool->ReservedAllocations;
   }
   /* First let this reservation reuse held pages; then return only surplus. */
   if (AdmissionPoolShouldReclaim(pool)) AdmissionPoolReclaimLocked(pool);
@@ -838,6 +864,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnreserve(
   ADMISSION_POOL_RUNTIME *pool;
   if (Bytes == 0ULL || AdmissionMemoryPoolLock(Context) == NULL) return;
   pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+  if (pool->ReservedAllocations != 0ULL) --pool->ReservedAllocations;
   AdmissionPoolSlabUnreserve(&pool->Slabs,
       (Bytes + ADMISSION_POOL_DEMAND_GRANULE - 1ULL) /
           ADMISSION_POOL_DEMAND_GRANULE);
@@ -1030,6 +1057,7 @@ static VOID AdmissionPoolReclaimWork(_In_ PDEVICE_OBJECT Device,
         AdmissionPoolSlabUnreserve(&pool->Slabs, 0ULL);
         pool->Slabs.SpareLimit = spare;
       }
+      pool->StageExact = TRUE;
       AdmissionMemoryPoolUnlock(pool->Context);
     }
   }

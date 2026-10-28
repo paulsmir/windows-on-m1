@@ -42,7 +42,9 @@ int main(void) {
                    "v11 prefix changed");
     _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, SlabFastMisses) == 608,
                    "v12 prefix changed");
-    _Static_assert(sizeof(r) == 640, "v13 wire ABI changed");
+    _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, PressureBudgetMs) == 640,
+                   "v13 prefix changed");
+    _Static_assert(sizeof(r) == 704, "v14 wire ABI changed");
     r.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION; r.Bytes = sizeof(r);
     r.GranuleBytes = 65536; r.LastWindowResult = 9;
     r.SegmentBytes = 1409286144ULL;
@@ -76,6 +78,9 @@ int main(void) {
     r.SlabContiguous = 40; r.SlabChunked = 30;
     r.SlabFastMisses = 31; r.SlabContiguousUs = 16000; r.SlabChunkedUs = 90000;
     r.ConstructLargePages = 0;
+    r.PressureBudgetMs = 2000; r.PressureWaits = 5; r.PressureWaitMs = 1450;
+    r.PressureWaitMsMax = 600; r.PressureRecovered = 4; r.PressureFailed = 1;
+    r.PressureFastFails = 2; r.ReservedAllocations = 812;
     return fwrite(&r, sizeof(r), 1, stdout) == 1 ? 0 : 1;
 }
 '''
@@ -87,7 +92,15 @@ int main(void) {
                             str(src), '-o', str(exe)], check=True)
             raw = subprocess.check_output([str(exe)])
         got = decoder.decode_pool(raw)
-        self.assertEqual(got['version'], 13)
+        self.assertEqual(got['version'], 14)
+        self.assertEqual({k: v for k, v in got['pressure_wait'].items() if k != 'meaning'},
+                         dict(budget_ms=2000, waits=5, wait_ms=1450, wait_ms_max=600,
+                              recovered=4, failed=1, fast_fails=2,
+                              reserved_allocations=812))
+        v13 = bytearray(raw[:640])
+        struct.pack_into('<II', v13, 0, 13, 640)
+        self.assertIsNone(decoder.decode_pool(v13)['pressure_wait'])
+        self.assertEqual(decoder.decode_pool(v13)['large_pages']['fast_misses'], 31)
         self.assertEqual({k: v for k, v in got['large_pages'].items() if k != 'meaning'},
                          dict(fast_misses=31, contiguous_us=16000, chunked_us=90000,
                               construct_large_pages=0, contiguous_ms_per_slab=0.4,

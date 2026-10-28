@@ -107,7 +107,7 @@ typedef struct _ADMISSION_POOL_RESERVE_FAILURE {
   unsigned long long PrivateGranules;
 } ADMISSION_POOL_RESERVE_FAILURE;
 
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 13u /* v13: large-page split */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 14u /* v14: floor wait */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -165,6 +165,14 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
    * and 1 when Wom1PoolConstructLargePages=1 restored construction. */
   unsigned long long SlabFastMisses, SlabContiguousUs, SlabChunkedUs;
   unsigned long long ConstructLargePages;
+  /* v14 (rc104): the floor wait (ADMISSION_POOL_PRESSURE; PressureBudgetMs
+   * 0 = Wom1PoolPressureWaitMs kill switch), and the live allocations that
+   * hold a segment-3 promise (ReservedBytes is their total). The periodic
+   * worker also stages any change, so a receipt read once the pool is idle
+   * is exact rather than up to one RECEIPT_STEP stale. */
+  unsigned long long PressureBudgetMs, PressureWaits, PressureWaitMs;
+  unsigned long long PressureWaitMsMax, PressureRecovered, PressureFailed;
+  unsigned long long PressureFastFails, ReservedAllocations;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.

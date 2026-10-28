@@ -42,6 +42,8 @@ typedef struct {
     ULONGLONG LeaseZeroCount, LeaseZeroUs, LeaseZeroSkips;
     ULONGLONG LastLargeReserveMs; /* rc88 prefill trigger */
     ADMISSION_POOL_PRESSURE Pressure; /* rc104 floor wait */
+    ULONGLONG ReservedAllocations;
+    BOOLEAN StageExact; /* rc104: the worker asks for an exact receipt */
 } ADMISSION_POOL_RUNTIME;
 struct _ADMISSION_CONTEXT { ADMISSION_POOL_RUNTIME *PoolDemand; int PoolLeaks; };
 static ADMISSION_POOL_RUNTIME pool;
@@ -182,8 +184,10 @@ static void reset(void) {
 static void worker_tick(void) {
     now += 500;
     pool.WorkQueued = pool.WorkPending = 1;
+    pool.StageExact = FALSE;
     AdmissionPoolReclaimWork(NULL, &pool);
     assert(!locked && !pool.WorkQueued && !pool.WorkPending);
+    assert(pool.StageExact == !pool.Stopping); /* rc104: idle receipts are exact */
 }
 
 /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
@@ -632,6 +636,7 @@ static void test_pressure_wait_recovers(void) {
     assert(pool.Pressure.Waits == 1 && pool.Pressure.Recovered == 1);
     assert(pool.Pressure.WaitMs == 300 && pool.Pressure.WaitMsMax == 300);
     assert(!pool.Pressure.TimedOut && !pool.Pressure.FastFails);
+    assert(pool.ReservedAllocations == 2);
     /* Memory dips again while the creation grows: it keeps waiting within
      * the same budget and the floor still holds. */
     strict_floor = 0;
@@ -640,6 +645,8 @@ static void test_pressure_wait_recovers(void) {
     assert(AdmissionMemoryPoolReserve(&context, 64 * G));
     assert(pool.Slabs.Reserved == 128 && pool.Pressure.Recovered == 2);
     assert(pool.Slabs.Stats.FloorRefusals == 2 && pool.Pressure.Waits == 2);
+    AdmissionMemoryPoolUnreserve(&context, 64 * G);
+    assert(pool.ReservedAllocations == 2);
 }
 
 /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?

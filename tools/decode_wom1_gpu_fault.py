@@ -407,11 +407,12 @@ def decode_pool(data):
     """Preserve v7-v10 prefixes; v10 separates pinned native-ring backing;
     v11 (rc86) appends the creation cost split and the empty-slab cache;
     v12 (rc88) appends the background slab prefill and failed-attempt time;
-    v13 (rc93) appends the large-page cache misses and the per-shape slab time."""
+    v13 (rc93) appends the large-page cache misses and the per-shape slab time;
+    v14 (rc104) appends the floor wait and the live promised allocations."""
     if len(data) < 16:
         raise ValueError('truncated Wom1M2PoolDemand header')
     version, size, granule, last_window = struct.unpack_from('<4I', data)
-    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576, 12: 608, 13: 640}.get(version) or len(data) != size or granule != 65536:
+    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576, 12: 608, 13: 640, 14: 704}.get(version) or len(data) != size or granule != 65536:
         raise ValueError('unsupported Wom1M2PoolDemand version, length or granule')
     names = (
         'segment_bytes', 'committed_granules', 'peak_granules', 'commits',
@@ -433,7 +434,8 @@ def decode_pool(data):
                   creation_cost=None,
                   event_sample={7: None, 8: 'post_failure', 9: 'admission_decision',
                                 10: 'admission_decision', 11: 'admission_decision',
-                                12: 'admission_decision', 13: 'admission_decision'}[version])
+                                12: 'admission_decision', 13: 'admission_decision',
+                                14: 'admission_decision'}[version])
     if version >= 8:
         result['floor_refusals'], = struct.unpack_from('<Q', data, 304)
         fields = ('request_bytes', 'reserved_bytes', 'held_bytes', 'committed_bytes',
@@ -486,6 +488,17 @@ def decode_pool(data):
                             'was empty (then 64 KiB chunks); *_us = successful attempts by shape; '
                             'construct_large_pages 1 = Wom1PoolConstructLargePages kill switch on')
         result['large_pages'] = large
+    result['pressure_wait'] = None
+    if version >= 14:
+        names = ('budget_ms', 'waits', 'wait_ms', 'wait_ms_max', 'recovered', 'failed',
+                 'fast_fails', 'reserved_allocations')
+        wait = dict(zip(names, struct.unpack_from('<8Q', data, 640)))
+        wait['meaning'] = ('rc104: creations refused at the LowMemory floor that waited '
+                           '(budget_ms each, 0 = Wom1PoolPressureWaitMs kill switch), their wall '
+                           'ms, those that then reserved or still failed, floor refusals that '
+                           'skipped the wait in the fast-fail window; reserved_allocations = '
+                           'live allocations holding reserved_bytes')
+        result['pressure_wait'] = wait
     return result
 
 
