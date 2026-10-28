@@ -736,7 +736,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     /* EXP1317: 0/0 until the first power-on read a valid topology. */
     info->CoresPerCluster = context->GpuCoreMask ? context->GpuCoresPerCluster : 0u;
     info->CoreMask = context->GpuCoreMask;
-    /* rc82: Wom1SoftFaults = 1 and RegionC fault_control 0xb. */
+    /* rc82: Wom1SoftFaults not 0 and RegionC fault_control 0xb. */
     info->Features = InterlockedCompareExchange(&context->GpuSoftFaults, 0, 0) != 0
         ? AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS : 0u;
     status = STATUS_SUCCESS;

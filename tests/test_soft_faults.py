@@ -107,7 +107,7 @@ class KmdReport(unittest.TestCase):
 
     def test_receipt_does_not_overwrite_the_switch(self):
         text = PLATFORM.read_text()
-        switch = re.search(r'AdmissionPlatformSwitchEnabled\(Context, L"(Wom1SoftFaults)"\)', text)
+        switch = re.search(r'AdmissionPlatformSwitch(?:Enabled|Disabled)\(Context, L"(Wom1SoftFaults)"\)', text)
         receipt = re.findall(r'RtlInitUnicodeString\(&name, L"(Wom1SoftFault[A-Za-z]*)"\)', text)
         self.assertTrue(switch)
         self.assertEqual(receipt, [decoder.SOFT_FAULTS_NAME])

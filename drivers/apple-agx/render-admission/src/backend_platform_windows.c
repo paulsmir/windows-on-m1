@@ -263,7 +263,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   /* rc79: device value Wom1PreludeTimestampsOff = 1 builds v5 render
    * preludes without the timestamp microsequence (the pre-rc79 job). */
   BOOLEAN PreludeTimestampsOff;
-  /* rc82: device value Wom1SoftFaults = 1 reports soft faults to the UMD
+  /* rc82: soft faults are reported to the UMD unless device value Wom1SoftFaults = 0
    * when RegionC fault_control is 0xb (AdmissionPublishSoftFaults). */
   BOOLEAN SoftFaultsRequested;
 } ADMISSION_PLATFORM_RUNTIME;
@@ -5173,6 +5173,34 @@ static BOOLEAN AdmissionPlatformSwitchEnabled(ADMISSION_CONTEXT *Context,
   return enabled;
 }
 
+/* EXP2014: a default-on feature reads its device value the other way round:
+ * only an explicit REG_DWORD 0 turns it off. */
+static BOOLEAN AdmissionPlatformSwitchDisabled(ADMISSION_CONTEXT *Context,
+                                              PCWSTR ValueName) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, ValueName);
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 0u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
 /* rc82: soft faults (Asahi file.rs:333-335 reports
  * DRM_ASAHI_FEATURE_SOFT_FAULTS exactly when fault_control is 0xb).  The
  * RegionC word is the one the firmware was started with
@@ -5536,8 +5564,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultRecoverChannel");
   runtime->ReadFaultControl =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultControlRead");
+  /* EXP2013/2014 validated soft faults (RC82A, GravityMark), so they are on
+   * unless Wom1SoftFaults = 0. */
   runtime->SoftFaultsRequested =
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1SoftFaults");
+      !AdmissionPlatformSwitchDisabled(Context, L"Wom1SoftFaults");
   InterlockedExchange(&Context->GpuSoftFaults, 0);
   RtlZeroMemory(&runtime->PostResume, sizeof(runtime->PostResume));
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
