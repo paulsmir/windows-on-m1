@@ -289,8 +289,12 @@ static inline unsigned int AppleAgxG4MinTvbBlocks(unsigned int width,
  * agx_tilebuffer.c aligns a sample to 8 bytes and picks the largest utile
  * whose samples fit MAX_BYTES_PER_TILE (32767 bytes). EXP1287: a
  * single-sampled render without colour buffers has a zero-byte sample
- * (Asahi render.rs: no tile-buffer blocks); multisampling always allocates. */
-#define APPLE_AGX_G4_TILE_BUFFER_BYTES 32767u
+ * (Asahi render.rs: no tile-buffer blocks); multisampling always allocates.
+ * rc110: the limit is the 32 KiB of tile memory a compute threadgroup may
+ * allocate, so a 32 B/px single-sampled 32x32 utile (exactly 32768 bytes,
+ * UMD switch APPLE_AGX_TILE_BUFFER_BYTES=32768, winsys/agx_win32_tile_limit.h)
+ * passes; the UMD keeps Asahi's 32767 unless that switch is set. */
+#define APPLE_AGX_G4_TILE_BUFFER_BYTES 32768u
 static inline int AppleAgxG4TileBufferValid(unsigned int sample_bytes,
     unsigned int samples, unsigned int utile_width, unsigned int utile_height) {
   return (sample_bytes || samples == 1u) && (sample_bytes & 7u) == 0u && samples &&

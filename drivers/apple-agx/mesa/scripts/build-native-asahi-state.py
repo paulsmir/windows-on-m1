@@ -5972,6 +5972,14 @@ AgxD3d10ResourceWithinRequiredLimits(
     * vertex 0: hardware probe DrawIndexed drew 240/1024 px, BaseVertex 0. */
    pDevice->restart_index = indexSize == 2u ? 0xffffu : 0xffffffffu;
    pipe_resource_reference(&pDevice->index_buffer, resource->resource);''')
+    # rc110: the tile-buffer byte limit behind APPLE_AGX_TILE_BUFFER_BYTES
+    # (winsys/agx_win32_tile_limit.h); unset, the limit is Asahi's 32767 and
+    # every layout is the unprojected one.
+    change('src/asahi/lib/agx_tilebuffer.c',
+        '573ea8a624dc0d9ab3b35166a2f3a0beb01a133e18d61fb5b22f1132175bcf7e',[
+        ('#define MAX_BYTES_PER_TILE (32768 - 1)',
+         '#include "agx_win32_tile_limit.h"\n'
+         '#define MAX_BYTES_PER_TILE agx_win32_max_bytes_per_tile()')])
     change('src/asahi/lib/agx_device.h',
         'e6ba76e16b2aace0ebf8b1ff2348cb800ad6cc254cef633d490de5bc203bfda3',[
         ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#else\n#include <stddef.h>\n#include "c11/threads.h"\ntypedef ptrdiff_t ssize_t;\n#endif'),

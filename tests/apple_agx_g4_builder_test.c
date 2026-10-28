@@ -312,15 +312,20 @@ int main(void) {
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       /* D3D-G6: a sample is a multiple of 8 bytes and a utile's samples fit
-       * the 32767-byte tile buffer (Mesa agx_tilebuffer.c). */
+       * the tile buffer (Mesa agx_tilebuffer.c: 32767 bytes; rc110: the KMD
+       * accepts the full 32 KiB, so a 32 B/px 32x32 utile passes and 40 B/px
+       * does not). */
       packet.Render.SampleSizeBytes = 24u;
       assert(AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Render.SampleSizeBytes = 12u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
-      packet.Render.SampleSizeBytes = 32u;
+      packet.Render.SampleSizeBytes = 40u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.SampleSizeBytes = 32u;
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Render.UtileHeightPx = 16u;
       assert(AppleAgxG4BindNativeObjects(&view, objects,
