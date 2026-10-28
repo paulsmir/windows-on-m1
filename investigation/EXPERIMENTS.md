@@ -66218,3 +66218,24 @@ EXP2043 HARDWARE BEFORE 2026-10-28T13:58:18Z:
 - Hashes: sys d30bafe8703e, UmdArm64 0c2a2f07d4a4, UmdX64 137fa5823550, Umd32 8b5a3b603e9d; manifest 4e3099a1aaea, hardware-manifest 5cc79c9694c6; probe2043.sh 33777944fd6c (PROBE_LINT_OK); visible recovery rec2043h 9560a208c5d9789f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2043h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2043-level-upload/run2043.sh.
+
+EXP2043 HARDWARE ACTUAL (2026-10-28): **rc103 level upload confirmed at HD (scored stall −1.46 s, correct textures). Both FHD 100k arms failed with OUT OF MEMORY. The cause is the double copy (CPU_POOL_MAP=0), not rc103.**
+
+| Arm | Result | Notes |
+|---|---|---|
+| a: FHD level on | removed at 36 s, out of memory | |
+| b: FHD level off | removed at 31.6 s, out of memory | rc103 not involved |
+| c: HD level on | 6553 | frame 2→3 1.04 s; scored stall 5.49 s (~230 frames); 306+378 level uploads, 11–66 staged |
+| d: HD level off | 6595 | frame 2→3 2.22 s; scored stall 6.95 s (~295 frames) |
+
+- **OOM anatomy** (`decode_umd_memory.py` at the first refusal of arm a):
+  - process private 4.23 GB; available physical 451 MB of 7.22 GB; commit available 3.5 GB;
+  - UMD canonical (GPU pool) 2.99 GB plus **private staging 0.88 GB**: the CPU copies kept because runs use APPLE_AGX_D3D12_CPU_POOL_MAP=0 (rc45 canonical maps disabled since EXP1974);
+  - pool peak 3.18 GB, reserve cap 50176 granules (FHD needed 50321);
+  - Windows LowMemoryCondition set: floor_refusals 29/33;
+  - rc104 waited 2–3 times (budget 2000 ms): recovered 1, failed 1–2, fast_fails 3–6. Waiting is not enough when the system is genuinely full.
+- Earlier FHD runs (EXP2037/2041) peaked at the same 3.2 GB and passed: FHD 100k sits at the edge of the 7.2 GB guest with the double copy, so whether LowMemory fires is luck.
+- Verdict:
+  - rc103: confirmed at HD.
+  - rc104: insufficient alone.
+  - The structural fix is the single CPU/GPU copy: canonical CPU maps, the rc45 default, blocked since EXP1974 because VidMm republishes a mapped canonical allocation into segment 0 without native leaves (rc50 analysis). This goes to rc107.
