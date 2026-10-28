@@ -218,6 +218,24 @@ class GpuPerfReceipt(unittest.TestCase):
         self.assertEqual(len(decoded["ring"]), 32)
         self.assertLess(decoded["ring"][0]["qpc"], decoded["ring"][-1]["qpc"])
 
+    def test_decoder_since_subtracts_an_earlier_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            blob = Path(directory) / "Wom1GpuPerf.bin"
+            build_and_run(self, MODEL, (str(blob),))
+            module = load_decoder()
+            later = module.decode(blob.read_bytes())
+        earlier = dict(later, samples=10, invalid=0, gaps=1, update_changes=1, sampled_ms=60.0,
+                       limited_ms=55.0, limited_count=4,
+                       actual_ms=[0.0] * 4 + [55.0, 0.0, 5.0] + [0.0] * 9,
+                       actual_count=[0] * 16, target_count=[0] * 16, current_count=[0] * 16)
+        delta = module.since(later, earlier)
+        self.assertEqual(delta["samples"], later["samples"] - 10)
+        self.assertAlmostEqual(delta["actual_ms"][6], 46.0, places=3)
+        self.assertAlmostEqual(delta["actual_ms"][4], 0.0, places=3)
+        self.assertEqual(delta["limited_count"], 0)
+        with self.assertRaises(ValueError):
+            module.since(earlier, later)
+
     def test_decoder_frequencies_are_the_j313_table(self):
         text = REGIONC.read_text()
         table = re.search(r"AppleAgxRegionCJ313Frequencies\[7\] = \{(.*?)\};", text, re.S).group(1)

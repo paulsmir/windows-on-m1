@@ -7,7 +7,11 @@ utilization and the firmware's update timestamp. The time between two
 samples goes to the actual state of the second one; intervals longer than
 the gap limit (50 ms) are counted as gaps and add no time.
 
-Usage: agx_gpu_perf_decode.py Wom1GpuPerf.bin [--json]
+Usage: agx_gpu_perf_decode.py Wom1GpuPerf.bin [--since earlier.bin] [--json]
+
+--since subtracts an earlier snapshot of the same boot (counts, ticks and
+gaps), e.g. read before and after one GravityMark run; maxima, temperature
+and the ring stay those of the later snapshot.
 """
 import argparse
 import json
@@ -65,6 +69,19 @@ def decode(blob):
     }
 
 
+def since(later, earlier):
+    """later minus earlier for the cumulative fields of one boot's receipt."""
+    if earlier["samples"] > later["samples"]:
+        raise ValueError("the earlier snapshot has more samples (another boot?)")
+    d = dict(later)
+    for key in ("samples", "invalid", "gaps", "update_changes", "sampled_ms", "limited_ms",
+                "limited_count"):
+        d[key] = later[key] - earlier[key]
+    for key in ("actual_ms", "actual_count", "target_count", "current_count"):
+        d[key] = [a - b for a, b in zip(later[key], earlier[key])]
+    return d
+
+
 def report(d):
     lines = [f"Wom1GpuPerf v{d['version']}: {d['samples']} samples, {d['gaps']} gaps, "
              f"{d['invalid']} invalid, update_ts changed {d['update_changes']} times"]
@@ -94,10 +111,14 @@ def report(d):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("path")
+    parser.add_argument("--since")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     with open(args.path, "rb") as handle:
         decoded = decode(handle.read())
+    if args.since:
+        with open(args.since, "rb") as handle:
+            decoded = since(decoded, decode(handle.read()))
     print(json.dumps(decoded, indent=1) if args.json else report(decoded))
     return 0
 
