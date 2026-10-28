@@ -64,7 +64,9 @@ def project_sources(out, project, overlays):
    unsigned windows_indirect_path, windows_indirect_reason;
    unsigned windows_indirect_encode_us;
    /* RC71: idle stream outputs of retired batches (agx_win32_stream_scratch.h) */
-   struct agx_bo *windows_stream_spare[2][16];''')
+   struct agx_bo *windows_stream_spare[2][16];
+   /* rc88: stream output bytes held by unretired batches, and their peak */
+   unsigned long long windows_stream_live[2], windows_stream_peak[2];''')
     h=once(h,'struct agx_batch {', '''struct agx_batch {
    /* GPU-produced data only: never CPU-mapped or shadow-published. */
    struct agx_pool windows_stream_pool, windows_stream_usc_pool;''')

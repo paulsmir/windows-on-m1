@@ -112,6 +112,53 @@ static void batch_cleanup(struct agx_context *ctx, struct agx_batch *batch) {
 #define CALLS 7u
 #define IN_FLIGHT 4u
 #define BATCHES 300u
+#ifdef FRAME_PATTERN
+/* rc88 (EXP2019b): a frame records its stream draws in two batches (six
+ * draws, then one), FRAME_LAG frames are in flight, and both batches of the
+ * oldest frame retire before the next frame records anything. */
+#define FRAME_LAG 2u
+#define FRAMES 200u
+int main(void) {
+  static struct agx_context ctx; ctx.base.screen = &device;
+  static struct agx_batch batches[FRAME_LAG][2];
+  static struct agx_bo *used[FRAME_LAG][2][2 * CALLS];
+  static const unsigned draws[2] = {CALLS - 1u, 1u};
+  unsigned steady_created = 0, steady_released = 0;
+  for (unsigned f = 0; f < FRAMES + FRAME_LAG; ++f) {
+    unsigned slot = f % FRAME_LAG, before_created = created, before_released = winsys_releases;
+    if (f >= FRAME_LAG)
+      for (unsigned b = 0; b < 2; ++b) {
+        for (unsigned i = 0; i < 2 * draws[b]; ++i) { assert(used[slot][b][i]->busy); used[slot][b][i]->busy = 0; }
+        batch_cleanup(&ctx, &batches[slot][b]);
+      }
+    if (f >= FRAMES) continue;
+    for (unsigned b = 0, c = 0; b < 2; ++b) {
+      struct agx_batch *batch = &batches[slot][b];
+      batch->ctx = &ctx; batch_init(batch);
+      for (unsigned d = 0; d < draws[b]; ++d, ++c) {
+        struct agx_bo *vb, *ub;
+        stream_draw(batch, 60000u, 44u, 0x808u, c == 3 ? 192u : 128u, &vb, &ub);
+        assert(!vb->busy && !ub->busy);
+        vb->busy = ub->busy = 1;
+        used[slot][b][2 * d] = vb; used[slot][b][2 * d + 1] = ub;
+      }
+    }
+    if (f > FRAME_LAG) { steady_created += created - before_created; steady_released += winsys_releases - before_released; }
+  }
+  @@FINI@@
+  unsigned live = 0;
+  for (unsigned i = 0; i < created; ++i) live += bos[i]->refcnt != 0;
+  printf("created=%u steady_created=%u steady_released=%u winsys_releases=%u live=%u\n",
+         created, steady_created, steady_released, winsys_releases, live);
+  assert(steady_created == 0 && steady_released == 0);
+  /* Retention never exceeds what the in-flight window itself needed. */
+  assert(created <= 2u * CALLS * FRAME_LAG);
+  assert(live == 0 && winsys_releases == created);
+  for (unsigned i = 0; i < created; ++i) free(bos[i]);
+  puts("RC71 stream scratch: PASS");
+  return 0;
+}
+#else
 int main(void) {
   static struct agx_context ctx; ctx.base.screen = &device;
   static struct agx_batch batches[IN_FLIGHT];
@@ -150,10 +197,11 @@ int main(void) {
   puts("RC71 stream scratch: PASS");
   return 0;
 }
+#endif
 '''
 
 
-def run_stream_harness(self, max_count=60000):
+def run_stream_harness(self, max_count=60000, defines=()):
     """Builds the projected stream path into HARNESS and runs it with draws of
     max_count records (rc87 reuses it for GravityMark FHD 200k)."""
     with tempfile.TemporaryDirectory(prefix='rc71-stream-scratch-') as tmp:
@@ -166,7 +214,8 @@ def run_stream_harness(self, max_count=60000):
         pipe_c = (asahi / 'agx_pipe.c').read_text()
         pool_c = (out / 'src/asahi/lib/pool.c').read_text()
         emit = (WINSYS / 'agx_win32_indirect_stream_emit.h').read_text()
-        spare = [l for l in state_h.splitlines() if 'windows_stream_spare' in l and l.strip().startswith('struct')]
+        spare = [l for l in state_h.splitlines() if 'windows_stream_' in l and
+                 l.strip().startswith(('struct agx_bo', 'unsigned long long'))]
         header = WINSYS / 'agx_win32_stream_scratch.h'
         pool = '#define POOL_SLAB_SIZE (256 * 1024)\n' + '\n'.join(function(pool_c, m) for m in (
             'static struct agx_bo *\nagx_pool_alloc_backing(', 'void\nagx_pool_init(',
@@ -188,6 +237,7 @@ def run_stream_harness(self, max_count=60000):
                 .replace('@@CLEANUP@@', '  (void)ctx;\n' + cleanup)
                 .replace('@@FINI@@', fini)
                 .replace('stream_draw(batch, 60000u,', 'stream_draw(batch, %uu,' % max_count))
+        code = ''.join('#define %s 1\n' % d for d in defines) + code
         src = Path(tmp) / 'harness.c'
         exe = Path(tmp) / 'harness'
         src.write_text(code)

@@ -19,10 +19,11 @@
  *   never submitted), so a BO given back to the context is idle and is
  *   handed out again without any further wait;
  * - the context keeps at most AGX_WIN32_STREAM_SPARES BOs per kind and,
- *   per kind, the larger of AGX_WIN32_STREAM_SPARE_BYTES and the outputs of
- *   the batch being retired; the rest are released as before. New BOs are
- *   sized by the request rounded up to 1 MiB, and the smallest retained BO
- *   that fits is chosen;
+ *   per kind, the larger of AGX_WIN32_STREAM_SPARE_BYTES and the peak bytes
+ *   unretired batches held at once less what the other unretired batches
+ *   still hold (rc88), so retained plus in-flight outputs never exceed that
+ *   peak; the rest are released as before. New BOs are sized by the request
+ *   rounded up to 1 MiB, and the smallest retained BO that fits is chosen;
  * - the context releases what it retains when it is destroyed.
  */
 #ifndef AGX_WIN32_STREAM_SCRATCH_H
@@ -71,6 +72,9 @@ agx_win32_stream_scratch(struct agx_batch *batch, unsigned kind, size_t bytes,
       AgxWin32PerfNote("GPU stream scratch create");
    }
    util_dynarray_append_typed(&pool->bos, struct agx_bo *, bo);
+   ctx->windows_stream_live[kind] += bo->size;
+   if (ctx->windows_stream_live[kind] > ctx->windows_stream_peak[kind])
+      ctx->windows_stream_peak[kind] = ctx->windows_stream_live[kind];
    *out = bo;
    ptr.gpu = bo->va->addr;
    return ptr;
@@ -84,20 +88,32 @@ agx_win32_stream_scratch(struct agx_batch *batch, unsigned kind, size_t bytes,
  * 30 s, 848 steady-state residency trims of 30 MiB, and the released
  * outputs flooded the 64 MiB winsys BO cache (7722 evictions; 1617 small
  * creations of at least 10 ms, 31 s). The next batch needs what this one
- * used, so the cap is at least this batch's own outputs: one batch's worth,
- * never the whole in-flight window. */
+ * used, so the cap is at least this batch's own outputs.
+ * rc88 (EXP2019b, MaxCount 240000: 1595 creates in 1602 presents, 467
+ * creations of 30 MiB, 11118 BO cache evictions, 1884 steady trims): a frame
+ * spreads its stream draws over several batches that retire back to back,
+ * so spares kept from the first retire left no room under the second
+ * batch's own (smaller) cap and one output per frame was released and
+ * created again. The cap is now the in-flight peak less the outputs other
+ * unretired batches still hold: retained plus in-flight bytes stay within a
+ * peak the window already reached, and the next window finds them. */
 static inline void
 agx_win32_stream_scratch_retire(struct agx_context *ctx, struct agx_pool *pool,
                                 unsigned kind)
 {
    struct agx_bo **spare = ctx->windows_stream_spare[kind & 1u];
+   unsigned long long *live = &ctx->windows_stream_live[kind & 1u];
    uint64_t cap = AGX_WIN32_STREAM_SPARE_BYTES, own = 0;
    util_dynarray_foreach(&pool->bos, struct agx_bo *, entry) {
       if (*entry)
          own += (*entry)->size;
    }
+   *live = *live > own ? *live - own : 0;
    if (own > cap)
       cap = own;
+   if (ctx->windows_stream_peak[kind & 1u] > *live &&
+       ctx->windows_stream_peak[kind & 1u] - *live > cap)
+      cap = ctx->windows_stream_peak[kind & 1u] - *live;
    util_dynarray_foreach(&pool->bos, struct agx_bo *, entry) {
       struct agx_bo *bo = *entry;
       uint64_t kept = 0;
