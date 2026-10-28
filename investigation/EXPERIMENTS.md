@@ -66415,3 +66415,19 @@ EXP2049 HARDWARE ACTUAL (2026-10-28): **the m1n1 scaled-source image boots and i
 - Mode probe: ModeCount 0, even the current mode read as `0x0@0`; TestResult −5 (BADPARAM); DWM alive. The probe may be broken (session/desktop).
 - b: GravityMark `-Fullscreen 1`: `Desktop::setMode(): ChangeDisplaySettingsExW(): failed`, fell back to windowed, 4290.
 - No receipt shows whether the KMD saw CAP_SCALED_SOURCE or which modes it offered. Back to the Fable fullscreen agent for diagnosis plus a display-modes receipt.
+
+EXP2050 HARDWARE BEFORE 2026-10-28T17:15:22Z:
+- WHY: EXP2046d (FHD 200k unified) was removed when the 3136 MiB pool was full (rehome E_OUTOFMEMORY, LeafAbsent). VidMm refuses a PopulatedFromSystemMemory segment above its share − 8 MiB; the share comes from the MemoryManager policy, read at boot.
+- ATOMIC CONTRACT: one change (pool capacity via the policy and rc109).
+- Expected:
+  - v15 segment_bytes 4294967296, graphics_share about 5.4 GB, percentage_set true, written_after_boot false;
+  - adapter starts (no Code 43, no "system policy violated");
+  - FHD 200k completes (prior best 2951); no removal; DWM alive; headroom_refusals/pressure_wait reported.
+- Failure criteria:
+  - adapter start failure (delete the value, reboot);
+  - an OOM from headroom refusals (the floor is too strict);
+  - removal.
+- Recovery: rec2050h. The policy value stays for the next runs unless rolled back.
+- Hashes: sys 9958b70ff297, UmdArm64 3c755f4da488, UmdX64 c860634f01f3, Umd32 5b24f78624b8; manifest b1c442c22986, hardware-manifest 4f8d1adcd42a; probe2050.sh 16cedf89a0bd (PROBE_LINT_OK); visible recovery rec2050h 600faed48ab73dce; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2050h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2050-pool4g/run2050.sh.
