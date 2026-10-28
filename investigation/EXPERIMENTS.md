@@ -65637,3 +65637,13 @@ EXP2023 HARDWARE ACTUAL (2026-10-28): **PASS, new best FHD 200k**. rc89.
 - FHD 100k: 3887 (EXP2019: 3919, within noise).
 - Perf notes are not in the refusals-only log, so the capacity overflow count is not directly visible; images and scores show no dropout.
 - Verdict: rc89 722ea908, c30b1c30 and 8b06d685 validated.
+
+EXP2024 HARDWARE BEFORE 2026-10-28T05:53:10Z:
+- WHY: the shared UMD/KMD paths changed a lot since EXP2000: soft faults by default, TVB growth, the KMD job thread and proof cache, bulk reads, the slab cache and prefill, and stream capacity. Both APIs share the winsys, Asahi Gallium and the KMD.
+- ATOMIC CONTRACT: none; measurement.
+- Expected: D3D11 at least about 2515; OpenGL completes; correct images; no removal.
+- Failure criteria: a regression or a crash.
+- Recovery: rec2024h.
+- Hashes: sys 48f3d480b869, UmdArm64 c493f6d26f7a, UmdX64 b41e1fd5ab15, Umd32 5aed73a13c51; manifest f437e467234e, hardware-manifest 1133c3734893; probe2024.sh 5f0e50da2b10 (PROBE_LINT_OK); visible recovery rec2024h 45efc22ad665abcd; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2024h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2024-regress/run2024.sh.
