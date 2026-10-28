@@ -66526,3 +66526,21 @@ EXP2053 HARDWARE ACTUAL (2026-10-28): **no regression and no crash. Fullscreen s
 - Mode probe: EnumDisplaySettings fails with err 203 and no devices in session 1; CDS_TEST returns -5 (BADPARAM). This is a separate probe issue.
 - Wom1DisplayModesReceipt: BrokerCaps 0x1ff (CAP_SCALED_SOURCE set), ScaledModes 1, MonitorModeCalls 1, LastMonitorModesAdded 1, LastEnumSourceModes 0.
 - Root cause: dxgkrnl calls RecommendMonitorModes once, before the panel is Started. `AdmissionScanoutScaledModes` required Started, so only 2560×1600 was offered. Fix 133154db: decide from the broker ABI and caps read at StartDevice. Retest in EXP2055.
+
+EXP2054 HARDWARE BEFORE 2026-10-28T20:54:11Z:
+- EXP2053 code;
+- d6e356f0: APPLE_AGX_TILE_BUFFER_BYTES picks the tile limit (32768 → 32×32 utiles for the 32 B/px G-buffer); the KMD G4 builder limit is now 32768;
+- 2ad40314: receipts measure-render-tile-layout and texture layout facts.
+Device switch: Wom1GpuFaultInfoRead=1. Unified copy, 4 GiB pool. Order: FHD 100k with 32768 (a), FHD default (b), HD 50k with 32768 (c), HD default (d).
+- WHY: Asahi's MAX_BYTES_PER_TILE is 32767, one byte short, so the main pass renders 4050 tiles of 32×16 instead of 2025 of 32×32. Expected: pos1 3D −0.2 to −0.8 ms.
+- ATOMIC CONTRACT: one env variable in fresh processes.
+- Expected:
+  - a/c: measure-render-tile-layout 32×32;
+  - pos1 d3 lower; partials 0; correct image.
+- Failure criteria:
+  - a fault, garbage tiles, or partials > 0 (the 32767 limit is real);
+  - removal.
+- Recovery: rec2054h.
+- Hashes: sys a47c368ca881, UmdArm64 2c48da5efa0b, UmdX64 fa79a4724d40, Umd32 69032887f1f5; manifest 2f61cb539061, hardware-manifest a46c5ee23b40; probe2054.sh 99b262018dd6 (PROBE_LINT_OK); visible recovery rec2054h 922d03ba682d8a20; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2054h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2054-tile32/run2054.sh.
