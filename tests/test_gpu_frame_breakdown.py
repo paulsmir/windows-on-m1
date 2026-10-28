@@ -134,7 +134,7 @@ class GpuFrameBreakdown(unittest.TestCase):
 
 
 def kmd_snapshot(slots, hz=1000000, version=1, worker_flags=0, size=None):
-    """slots: (fence, pid, {phase: qpc}[, (cpu_build, cpu_complete, flags)[, {sub: qpc}]])"""
+    """slots: (fence, pid, {phase: qpc}[, (cpu_build, cpu_complete, flags[, ahead])[, {sub: qpc}]])"""
     b = load()
     slot_bytes = {1: 168, 2: 184}.get(version, 248)
     data = bytearray(struct.pack('<IIIIQQ', version, size or 32 + 64 * slot_bytes, len(slots),
@@ -144,7 +144,8 @@ def kmd_snapshot(slots, hz=1000000, version=1, worker_flags=0, size=None):
         data += struct.pack('<IIIIQQ12Q4QII', fence, pid, 0, 0, 0, 0,
                             *[q.get(p, 0) for p in b.KMD_PHASES], 0, 0, 0, 0, 0, 0)
         if version != 1:
-            data += struct.pack('<IIII', *(extra[0] if extra else (0, 0, 0)), 0)
+            words = tuple(extra[0]) if extra else (0, 0, 0)
+            data += struct.pack('<IIII', *(words + (0,) * (4 - len(words))))
         if version >= 3:
             sub = extra[1] if len(extra) > 1 else {}
             data += struct.pack('<8Q', *[sub.get(n, 0) for n in b.KMD_SUBS])
@@ -225,6 +226,33 @@ class KmdJobTiming(unittest.TestCase):
         self.assertEqual(out['samples']['queued_notify_to_worker'], 1)
         self.assertEqual(m['queued_notify_to_worker'], 800 - 745)
         self.assertEqual(m['queued_complete_to_kick'], 950 - 680)
+
+    def test_v3_build_ahead_flags_refusals_and_chained_gap(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        The rc90 hardware A/B reads Wom1JobBuildAhead's effect from this
+        decoder: the chained/dispatched split of queued_complete_to_kick and
+        the per-step refusal histograms must come from the slot flags and the
+        AheadRefusals word (render_job_timing.h), not from the old Reserved
+        zero."""
+        b = load()
+        first = dict(submit=100, worker=110, backend_before=191, backend_after=260,
+                     first_progress=600, complete=680, job_end=700, notify=745)
+        # chained: kicked 150 us after the first's completion
+        second = dict(submit=300, worker=760, backend_before=761, backend_after=830,
+                      first_progress=1200, complete=1300, notify=1360)
+        # dispatched (preemption refused the chain): 400 us
+        third = dict(submit=900, worker=1500, backend_before=1501, backend_after=1700,
+                     first_progress=2000, complete=2100, notify=2160)
+        released, prebound, chained = 0x100, 0x200, 0x400
+        out = b.kmd_job_timing(kmd_snapshot([
+            (1, 7, first, (0, 0, released, 0 | 0 << 8 | 0 << 16)),
+            (2, 7, second, (0, 0, released | prebound | chained, 4 << 16)),
+            (3, 7, third, (0, 0, released, 25 << 8))], version=3))
+        m = out['median_us']
+        self.assertEqual(m['queued_complete_to_kick_chained'], 830 - 680)
+        self.assertEqual(m['queued_complete_to_kick_dispatched'], 1700 - 1300)
+        self.assertEqual(out['ahead_flags'], dict(released=3, prebound=1, chained=1))
+        self.assertEqual(out['ahead_refusals'], dict(release={}, prebind={25: 1}, chain={4: 1}))
 
     def test_v2_splits_kind_and_core_class(self):
         b = load()

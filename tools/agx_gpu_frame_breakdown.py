@@ -74,7 +74,13 @@ compute prelude), flush and kick (flushes done -> 3D kick), and of the
 completion split save (Complete -> buffer-manager saved), timestamp (->
 JobEnd), release (JobEnd -> arena released) and notify; build_flags counts
 the InitBM, queue-initialising, prelude, second-slot and restored-manager
-builds. The KMD also exports Wom1JobTiming971Hot, the same layout, only
+builds. rc90 (Wom1JobBuildAhead): ahead_flags counts the jobs whose image
+was released right after their kick, that were bound while their
+predecessor ran, and that the predecessor's worker claimed at its
+completion (no dispatch hop); queued_complete_to_kick is split into
+chained and dispatched jobs; ahead_refusals histograms the
+render_job_ahead.c refusal numbers per step (release, prebind, chain).
+The KMD also exports Wom1JobTiming971Hot, the same layout, only
 from a ring whose 64 submissions fall within 500 ms (an application's
 steady state, not the idle desktop after it).
 """
@@ -256,6 +262,11 @@ KMD_SLOT_V3 = struct.Struct('<IIIIQQ12Q4QIIIIII8Q')
 KMD_SLOTS = 64
 FLAG_MAPPING_UNCHANGED, FLAG_PRIVATE_SCENE, FLAG_BEGIN_JOB = 1, 2, 4
 BUILD_FLAGS = dict(init_bm=0x8, init_queues=0x10, prelude=0x20, slot1=0x40, manager_restored=0x80)
+# rc90 build-ahead (Wom1JobBuildAhead): slot flags and the AheadRefusals word
+# (render_job_ahead.c refusal numbers: release bits 0-7, prebind 8-15, chain
+# 16-23).
+AHEAD_FLAGS = dict(released=0x100, prebound=0x200, chained=0x400)
+AHEAD_STEPS = dict(release=0, prebind=8, chain=16)
 
 
 def _sub_spans(s, us):
@@ -300,15 +311,17 @@ def kmd_job_timing(data):
         fields = layout.unpack_from(data, KMD_HEADER.size + i * layout.size)
         q = dict(zip(KMD_PHASES, fields[6:18]))
         if fields[0] and all(q[p] for p in ('submit', 'worker', 'backend_after', 'complete', 'notify')):
-            cpu_build, cpu_complete, flags = fields[24:27] if version >= 2 else (0, 0, 0)
+            cpu_build, cpu_complete, flags, ahead = fields[24:28] if version >= 2 else (0, 0, 0, 0)
             subs = dict(zip(('sub_' + n for n in KMD_SUBS), fields[28:36])) if version >= 3 else {}
             slots.append(dict(fence=fields[0], pid=fields[1], cpu_build=cpu_build,
-                              cpu_complete=cpu_complete, flags=flags, **q, **subs))
+                              cpu_complete=cpu_complete, flags=flags, ahead=ahead, **q, **subs))
     slots.sort(key=lambda s: s['submit'])
     us = lambda a, b: (b - a) * 1e6 / hz
     spans = {k: [] for k in ('begin_job', 'build', 'worker_to_kick', 'kick_to_progress',
                              'progress_to_complete', 'complete_to_notify',
-                             'queued_notify_to_worker', 'queued_complete_to_kick')}
+                             'queued_notify_to_worker', 'queued_complete_to_kick',
+                             'queued_complete_to_kick_chained',
+                             'queued_complete_to_kick_dispatched')}
     kinds = {kind: {k: [] for k in CPU_INTERVALS} for kind in ('render', 'compute')}
     subs = {}
     classes = {'render': {}, 'compute': {}}
@@ -340,6 +353,9 @@ def kmd_job_timing(data):
         if prev is not None and s['submit'] < prev['notify'] <= s['worker']:
             spans['queued_notify_to_worker'].append(us(prev['notify'], s['worker']))
             spans['queued_complete_to_kick'].append(us(prev['complete'], s['backend_after']))
+            spans['queued_complete_to_kick_chained' if s['flags'] & AHEAD_FLAGS['chained']
+                  else 'queued_complete_to_kick_dispatched'].append(
+                      us(prev['complete'], s['backend_after']))
     out = dict(version=version, jobs_total=count, slots=len(slots),
                pids=sorted({s['pid'] for s in slots}),
                median_us={k: statistics.median(v) for k, v in spans.items() if v},
@@ -359,6 +375,17 @@ def kmd_job_timing(data):
         out['sub_us'] = _medians(subs)
         out['build_flags'] = {name: sum(1 for s in slots if s['flags'] & bit)
                               for name, bit in BUILD_FLAGS.items()}
+        out['ahead_flags'] = {name: sum(1 for s in slots if s['flags'] & bit)
+                              for name, bit in AHEAD_FLAGS.items()}
+        refusals = {}
+        for step, shift in AHEAD_STEPS.items():
+            counts = {}
+            for s in slots:
+                value = s['ahead'] >> shift & 0xff
+                if value:
+                    counts[value] = counts.get(value, 0) + 1
+            refusals[step] = dict(sorted(counts.items()))
+        out['ahead_refusals'] = refusals
     return out
 
 
