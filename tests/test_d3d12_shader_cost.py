@@ -141,12 +141,25 @@ class CompiledCost(unittest.TestCase):
         return robust, unchecked
 
     def test_uav_reads_overlap_and_the_store_is_one_branch(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? RC74: the loads of
+        # a shader must not each sit in their own branch (the backend waits
+        # at every block end). RC109: K independent vec4 reads form one run
+        # behind one test (one branch, one memory block) and the store its
+        # own (RC74); on the in-bounds path the reads stay the K whole
+        # vector loads of the unchecked shader.
         for reads in (1, 4, 8):
             with self.subTest(reads=reads):
                 robust, unchecked = self.costs(f'--synthetic-uav-reads={reads}')
-                self.assertEqual(robust['hot-branches'], 1)
+                self.assertEqual(robust['hot-branches'], 2)
                 self.assertLessEqual(robust['hot-mem-blocks'], unchecked['hot-mem-blocks'] + 1)
                 self.assertEqual((robust['scratch'], robust['spills']), (0, 0))
+                in_bounds = self.tool.cost(self.binary, f'--synthetic-uav-reads={reads}', '--assume-in-bounds')
+                self.assertEqual(in_bounds['loads'], unchecked['loads'])
+                self.assertEqual(in_bounds['hot-branches'], 0)
+                straight = self.tool.cost(self.binary, f'--synthetic-uav-reads={reads}',
+                                          env={'APPLE_AGX_D3D_LOAD_RUNS': '0'})
+                self.assertEqual(straight['hot-branches'], 1)
+                self.assertEqual(straight['loads'], 4 * reads)
 
     def test_indexed_temp_arrays_live_on_the_stack(self):
         asahi_rule = {'APPLE_AGX_D3D_SCRATCH_ARRAYS': '0'}
