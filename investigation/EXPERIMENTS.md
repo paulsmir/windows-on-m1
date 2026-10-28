@@ -65599,3 +65599,9 @@ EXP2022 HARDWARE BEFORE 2026-10-28T04:58:53Z:
 - Hashes: sys e61ff12f5cb3, UmdArm64 d46424f2d4b5, UmdX64 e0312736e823, Umd32 f4769e6ceeba; manifest 85611d637a5f, hardware-manifest 94ff3fd6fcb9; probe2022.sh e346730590f2 (PROBE_LINT_OK); visible recovery rec2022h 3e953b949df250e1; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2022h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2022-prefill/run2022.sh.
+
+EXP2022 HARDWARE ACTUAL (2026-10-28): **PASS, new best FHD 200k**. rc88.
+- FHD 100k: 3913 / 23.4 FPS (EXP2019: 3919). First-frame gap 9.8 s (10.6); stall bo-allocate 2.8 s (5.3): the prefill works.
+- FHD 200k: **2393 / 12.8 FPS** (best was 1788). Inside the user's own macOS range on this J313 (2191..4400); the leaderboard M1 is about 5500.
+- No removal.
+- Verdict: rc88 58e6fa5d (stream peak retention) and 1bb19a45 (prefill) validated; 34a45b53 implemented (opt-in, not run).
