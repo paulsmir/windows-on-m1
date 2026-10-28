@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include "apple_agx_scheduler.h"
 #include "apple_agx_g3_private_storage.h"
+#include "apple_agx_g3_tvb.h"
 #include "apple_agx_render_manager.h"
 #include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_g13_compute_work.h"
@@ -117,6 +118,7 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
 typedef struct _ADMISSION_G3_PROCESS {
   ADMISSION_RENDER_CONTEXT *Contexts;
   ULONGLONG PrivateVa;
+  ULONGLONG TvbVa; /* rc80: 0, no TVB window in this replay */
   APPLE_AGX_G3_PRIVATE_EXTENT PresentArena;
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
   APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;

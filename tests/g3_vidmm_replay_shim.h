@@ -396,7 +396,12 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
 } ADMISSION_G3_PRIVATE_SCENE;
 #define ADMISSION_G3_PRIVATE_SCENE_CACHE 8u
 #define ADMISSION_G3_PROCESS_RECEIPT_SLOTS 16u
-#define ADMISSION_G3_PROCESS_RECEIPT_WORDS (8u + 16u * ADMISSION_G3_PROCESS_RECEIPT_SLOTS)
+#define ADMISSION_G3_PROCESS_RECEIPT_TVB_WORDS 4u
+#define ADMISSION_G3_PROCESS_RECEIPT_WORDS (8u + 16u * ADMISSION_G3_PROCESS_RECEIPT_SLOTS + \
+    ADMISSION_G3_PROCESS_RECEIPT_TVB_WORDS * ADMISSION_G3_PROCESS_RECEIPT_SLOTS)
+#include "apple_agx_g3_tvb.h"
+/* render_pool_slab.h private lease (rc80 TVB granules). */
+typedef struct _ADMISSION_POOL_PRIVATE { void *Slab; unsigned int Slot; } ADMISSION_POOL_PRIVATE;
 
 struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;
@@ -417,6 +422,11 @@ struct _ADMISSION_G3_PROCESS {
   APPLE_AGX_G3_PRIVATE_EXTENT PresentArena;
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
   APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
+  ULONGLONG TvbVa;
+  APPLE_AGX_G3_PRIVATE_EXTENT TvbLeafTables[APPLE_AGX_G3_TVB_LEAVES];
+  ULONGLONG TvbLeafIpa[APPLE_AGX_G3_TVB_LEAVES];
+  ADMISSION_POOL_PRIVATE *TvbLeases;
+  APPLE_AGX_G3_TVB_STATE Tvb;
   ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
   ADMISSION_RENDER_CONTEXT *Contexts;
   HANDLE DxgkProcess;
@@ -624,6 +634,17 @@ static BOOLEAN AdmissionMemoryPoolView(const ADMISSION_CONTEXT *a,ADMISSION_SCAN
 /* M2-f3: a case sets replay_pool_demand (and the adapter's PoolDemand) to run
  * the real granule state machine under the paging code. */
 static ADMISSION_POOL_DEMAND *replay_pool_demand;
+/* rc80 TVB granules: replay hands out distinct 64 KiB-aligned IPAs above
+ * the local reserve; replay_tvb_fail_after refuses the Nth take. */
+static ULONGLONG replay_tvb_next_ipa=0x7000000000ULL;
+static unsigned replay_tvb_live, replay_tvb_takes, replay_tvb_fail_after;
+static BOOLEAN AdmissionMemoryPoolTvbTake(ADMISSION_CONTEXT *a,ADMISSION_POOL_PRIVATE *l,ULONGLONG *ipa) {
+  (void)a;*ipa=0;if(l->Slab)return FALSE;
+  if(replay_tvb_fail_after&&++replay_tvb_takes>=replay_tvb_fail_after)return FALSE;
+  l->Slab=(void *)(uintptr_t)replay_tvb_next_ipa;l->Slot=1u;*ipa=replay_tvb_next_ipa;
+  replay_tvb_next_ipa+=0x10000ULL;++replay_tvb_live;return TRUE;}
+static BOOLEAN AdmissionMemoryPoolTvbGive(ADMISSION_CONTEXT *a,ADMISSION_POOL_PRIVATE *l) {
+  (void)a;if(!l->Slab)return TRUE;l->Slab=NULL;l->Slot=0u;--replay_tvb_live;return TRUE;}
 static ADMISSION_POOL_DEMAND *AdmissionMemoryPoolLock(ADMISSION_CONTEXT *a) {return a&&a->PoolDemand?replay_pool_demand:NULL;}
 static VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *a) {(void)a;}
 static VOID AdmissionMemoryPoolNoteRecord(ADMISSION_CONTEXT *a,ADMISSION_PAGING_RECORD *r) {
@@ -800,6 +821,8 @@ static bool AppleAgxSchedulerDestroyContext(int *s,ADMISSION_SCHEDULER_CONTEXT *
 
 /* Prototypes for cross-file calls inside extracted production functions. */
 static ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(ADMISSION_G3_STATE *,HANDLE);
+static BOOLEAN AdmissionG3TvbRelease(ADMISSION_G3_PROCESS *p);
+static BOOLEAN AdmissionG3TvbReturnLeases(ADMISSION_G3_PROCESS *p);
 static NTSTATUS AdmissionGpuvaG3ResolveTable(ADMISSION_CONTEXT *,const DXGK_PAGETABLEUPDATEADDRESS *,DXGK_PAGETABLEUPDATEMODE,ULONGLONG *);
 static NTSTATUS AdmissionGpuvaG3BrokerTable(ADMISSION_G3_PROCESS *,ULONGLONG,BOOLEAN,ULONGLONG *);
 static NTSTATUS AdmissionGpuvaG3MirrorTable(ADMISSION_G3_PROCESS *,ULONGLONG,PVOID);

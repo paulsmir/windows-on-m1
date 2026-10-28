@@ -35,6 +35,22 @@ class TvbGrowthTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn('g4_tvb_growth_test: PASS', result.stdout)
 
+    def test_kmd_grows_only_at_idle_and_releases_with_the_manager(self):
+        src = (ROOT / 'drivers/apple-agx/render-admission/src/gpuva_g3_windows.c').read_text()
+        grow = src[src.index('static VOID AdmissionG3TvbGrow('):]
+        grow = grow[:grow.index('\n}\n')]
+        self.assertIn('p->Graph.JobInFlight || p->Graph.LeaseToken', grow)
+        retire = src[src.index('BOOLEAN AdmissionGpuvaG3PrivateRetireContext('):]
+        retire = retire[:retire.index('\n}\n')]
+        self.assertLess(retire.index('AdmissionG3TvbRelease(p)'),
+                        retire.index('AdmissionG3PrivateFreeExtent'))
+        destroy = src[src.index('static BOOLEAN AdmissionG3PrivateDestroyStorage('):]
+        destroy = destroy[:destroy.index('\n}\n')]
+        self.assertIn('AdmissionG3TvbReturnLeases(p)', destroy)
+        paging = (ROOT / 'drivers/apple-agx/render-admission/src/gpuva_g3_paging_windows.c').read_text()
+        self.assertNotIn('AppleAgxGpuvaG3GraphCanDetachPrivateRoot(', paging)
+        self.assertNotIn('AppleAgxGpuvaG3GraphAttachPrivate(', paging)
+
 
 if __name__ == '__main__':
     unittest.main()

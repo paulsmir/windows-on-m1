@@ -25,7 +25,7 @@ FUNCTIONS = {
         "AdmissionGpuvaG3BrokerTable", "AdmissionGpuvaG3MirrorTable",
         "AdmissionG3Fnv", "AdmissionG3UscVa", "AdmissionG3TraceUpload", "AdmissionG3VerifyUploads",
         "AdmissionG3CopyPte", "AdmissionG3NativeInvalidate", "AdmissionGpuvaG3NativeQueryEscape", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
-        "AdmissionG3PreparePrivateStorageObserved","AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtentObserved","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateCacheScene","AdmissionG3PrivateTrimCache","AdmissionG3PrivateCachedScene","AdmissionG3PrivateReuseScene","AdmissionG3PrivateEvictCached","AdmissionG3PrivateEvictPressure","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateSlotClear","AdmissionG3PrivateSlotPreempted","AdmissionG3PrivateSlotCancelled","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionG3CapturePrivateFailure","AdmissionG3GrowPrivateHeap","AdmissionG3ManagerWord","AdmissionG3SnapshotProcesses","AdmissionGpuvaG3PrivateEscape",
+        "AdmissionG3PreparePrivateStorageObserved","AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtentObserved","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateCacheScene","AdmissionG3PrivateTrimCache","AdmissionG3PrivateCachedScene","AdmissionG3PrivateReuseScene","AdmissionG3PrivateEvictCached","AdmissionG3PrivateEvictPressure","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateSlotClear","AdmissionG3PrivateSlotPreempted","AdmissionG3PrivateSlotCancelled","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionG3CapturePrivateFailure","AdmissionG3GrowPrivateHeap","AdmissionG3ManagerWord","AdmissionG3TvbUsedPages","AdmissionG3TvbTargetFor","AdmissionG3TvbNowMs","AdmissionG3TvbWantsIdle","AdmissionG3TvbUnmapPages","AdmissionG3TvbEnsureLeaf","AdmissionG3TvbMapBlock","AdmissionG3TvbGrow","AdmissionG3TvbRelease","AdmissionG3TvbReturnLeases","AdmissionG3SnapshotProcesses","AdmissionGpuvaG3PrivateEscape",
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
         "AdmissionG3PresentArenaEnsure", "AdmissionGpuvaG3EnsurePresentArena",
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
@@ -79,6 +79,10 @@ def body(source, name):
 def generate(revision=None, function_revisions=None):
     function_revisions = function_revisions or {}
     parts = ['#include "g3_vidmm_replay_shim.h"\n', body((SRC / 'gpuva_g3_private.h').read_text().replace('static inline ', 'static '), 'AdmissionG3NativeInvalidatePtes') + '\n']
+    for helper in ('AdmissionG3AttachPrivateLeaves', 'AdmissionG3PrivateLeafSet'):
+        private_h = (SRC / 'gpuva_g3_private.h').read_text().replace('static inline ', 'static ')
+        if f' {helper}(' in private_h:
+            parts.append(body(private_h, helper) + '\n')
     if os.environ.get("G3_REPLAY_R144"):
         parts.append(body((SRC / "memory_runtime_windows.c").read_text(),
                           "AdmissionMemoryRuntimeScanoutView") + "\n")

@@ -3,6 +3,7 @@
 
 #include "render_admission.h"
 #include "apple_agx_g3_private_storage.h"
+#include "apple_agx_g3_tvb.h"
 #include "apple_agx_render_manager.h"
 #include "apple_agx_g3_private_abi.h"
 #include "apple_agx_g3_native_cache.h"
@@ -136,7 +137,11 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
 /* EXP1114 receipt-only: 8 header words, then 16 words for each of the 16
  * processes holding the most private units. */
 #define ADMISSION_G3_PROCESS_RECEIPT_SLOTS 16u
-#define ADMISSION_G3_PROCESS_RECEIPT_WORDS (8u + 16u * ADMISSION_G3_PROCESS_RECEIPT_SLOTS)
+/* rc80 (version 2): after the slots, four TVB words per slot
+ * (AdmissionG3SnapshotProcesses). Version-1 offsets are unchanged. */
+#define ADMISSION_G3_PROCESS_RECEIPT_TVB_WORDS 4u
+#define ADMISSION_G3_PROCESS_RECEIPT_WORDS (8u + 16u * ADMISSION_G3_PROCESS_RECEIPT_SLOTS + \
+    ADMISSION_G3_PROCESS_RECEIPT_TVB_WORDS * ADMISSION_G3_PROCESS_RECEIPT_SLOTS)
 
 typedef struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;
@@ -162,6 +167,17 @@ typedef struct _ADMISSION_G3_PROCESS {
   APPLE_AGX_G3_PRIVATE_EXTENT PresentArena;
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
   APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
+  /* rc80 (apple_agx_g3_tvb.h): the 256 MiB TVB window reserved right after
+   * the private window (0 when CreateProcess could not reserve it), its
+   * leaf tables (private-pool extents, registered and linked below the
+   * private middle table), and two slab leases per backed window block
+   * (TvbLeases, NonPaged, allocated at the first window growth). The
+   * manager's Blocks counts the floor plus Tvb.LeaseBlocks. */
+  ULONGLONG TvbVa;
+  APPLE_AGX_G3_PRIVATE_EXTENT TvbLeafTables[APPLE_AGX_G3_TVB_LEAVES];
+  ULONGLONG TvbLeafIpa[APPLE_AGX_G3_TVB_LEAVES];
+  ADMISSION_POOL_PRIVATE *TvbLeases;
+  APPLE_AGX_G3_TVB_STATE Tvb;
   ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
   ADMISSION_RENDER_CONTEXT *Contexts;
   HANDLE DxgkProcess;
@@ -194,6 +210,35 @@ static inline void AdmissionG3NativeInvalidatePtes(ADMISSION_G3_PROCESS *p,
   for (i = first; i < first + count; ++i)
     if (ptes[i].Allocation)
       AppleAgxG3NativeCacheInvalidate(&p->NativeReady, ptes[i].Allocation);
+}
+
+/* Link the private window's leaf, then every registered TVB window leaf,
+ * below the current root (after a root bind or a parent update). */
+static inline BOOLEAN AdmissionG3AttachPrivateLeaves(ADMISSION_G3_PROCESS *p) {
+  UINT i;
+  if (!AppleAgxGpuvaG3GraphAttachPrivate(&p->Graph, p->PrivateVa,
+          p->PrivateMiddleIpa, p->PrivateLeafIpa)) return FALSE;
+  for (i = 0u; i < APPLE_AGX_G3_TVB_LEAVES; ++i)
+    if (p->TvbVa && p->TvbLeafIpa[i] &&
+        !AppleAgxGpuvaG3GraphAttachPrivate(&p->Graph,
+            p->TvbVa + (ULONGLONG)i * APPLE_AGX_G3_TVB_LEAF_BYTES,
+            p->PrivateMiddleIpa, p->TvbLeafIpa[i])) return FALSE;
+  return TRUE;
+}
+
+/* The private leaf set for root parking: entry 0 is the private window. */
+static inline UINT AdmissionG3PrivateLeafSet(const ADMISSION_G3_PROCESS *p,
+    ULONGLONG vas[1u + APPLE_AGX_G3_TVB_LEAVES],
+    ULONGLONG leaves[1u + APPLE_AGX_G3_TVB_LEAVES]) {
+  UINT i, count = 1u;
+  vas[0] = p->PrivateVa;
+  leaves[0] = p->PrivateLeafIpa;
+  for (i = 0u; i < APPLE_AGX_G3_TVB_LEAVES; ++i)
+    if (p->TvbVa && p->TvbLeafIpa[i]) {
+      vas[count] = p->TvbVa + (ULONGLONG)i * APPLE_AGX_G3_TVB_LEAF_BYTES;
+      leaves[count++] = p->TvbLeafIpa[i];
+    }
+  return count;
 }
 
 #define ADMISSION_G3_POISON(Process, File) do { \

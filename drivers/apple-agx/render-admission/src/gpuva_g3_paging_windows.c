@@ -215,26 +215,29 @@ static BOOLEAN AdmissionG3PrepareTableReuse(ADMISSION_G3_PROCESS *process,
   if (process->PrivateLeafIpa) {
     ULONGLONG roots[2] = { table_ipa, process->BootstrapIpa };
     ULONGLONG middles[2] = { 0ULL, 0ULL };
+    ULONGLONG vas[1u + APPLE_AGX_G3_TVB_LEAVES];
+    ULONGLONG leaves[1u + APPLE_AGX_G3_TVB_LEAVES];
     UINT i, rejected;
+    /* rc80: the private branch also holds the TVB window's leaves. */
+    UINT leaf_count = AdmissionG3PrivateLeafSet(process, vas, leaves);
     /* Inspect BOTH roots before detaching either. Refusal must preserve the
      * private mapping and MappingGeneration, including an ordinary parking
      * root whose reserved edge is absent. Re-linking the leaf below the new
      * root must not depend on an allocation after the detach. */
     if (!AppleAgxGpuvaG3GraphReserveNode(graph)) return FALSE;
     for (i = 0u; i < 2u; ++i) {
-      if (!AppleAgxGpuvaG3GraphCanDetachPrivateRoot(graph, process->PrivateVa,
-              roots[i], process->PrivateLeafIpa)) return FALSE;
+      if (!AppleAgxGpuvaG3GraphCanDetachPrivateRootSet(graph, roots[i], vas,
+              leaves, leaf_count)) return FALSE;
       for (entry = graph->Parents; entry; entry = entry->Next)
         if (entry->Ipa == roots[i] &&
             entry->Index == (UINT)(process->PrivateVa >> 36))
           middles[i] = entry->AuxIpa;
     }
     for (i = 0u; i < 2u; ++i)
-      if (!AppleAgxGpuvaG3GraphDetachPrivateRoot(graph, process->PrivateVa,
-              roots[i], process->PrivateLeafIpa)) break;
+      if (!AppleAgxGpuvaG3GraphDetachPrivateRootSet(graph, roots[i], vas,
+              leaves, leaf_count)) break;
     if (i == 2u && AppleAgxGpuvaG3GraphBindRoot(graph, process->BootstrapIpa)) {
-      if (AppleAgxGpuvaG3GraphAttachPrivate(graph, process->PrivateVa,
-              process->PrivateMiddleIpa, process->PrivateLeafIpa)) return TRUE;
+      if (AdmissionG3AttachPrivateLeaves(process)) return TRUE;
       /* The root was relocated; failure to restore private reachability is
        * an incomplete transaction and must not permit a clean retry. */
       graph->Uncertain = 1u;
@@ -1924,8 +1927,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
           STATUS_DEVICE_HARDWARE_ERROR);
     }
     if (NT_SUCCESS(status) && process->PrivateLeafIpa &&
-        !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph, process->PrivateVa,
-            process->PrivateMiddleIpa, process->PrivateLeafIpa)) {
+        !AdmissionG3AttachPrivateLeaves(process)) {
       ADMISSION_G3_POISON(process,2u);
       status = AdmissionG3RejectPaging(&failure,
           AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,

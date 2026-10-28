@@ -250,6 +250,9 @@ static int AdmissionG4GraphAccessTyped(void *opaque, unsigned long long va,
     unsigned int ordinal);
 static int AdmissionG4LogicalEnvelopeAccess(ADMISSION_G3_PROCESS *process,
     unsigned long long va, unsigned int bytes);
+/* rc80 TVB growth (defined after AdmissionG3ManagerWord). */
+static BOOLEAN AdmissionG3TvbRelease(ADMISSION_G3_PROCESS *p);
+static BOOLEAN AdmissionG3TvbReturnLeases(ADMISSION_G3_PROCESS *p);
 
 static void *AdmissionG3AllocateNode(void *opaque, unsigned long long bytes) {
   UNREFERENCED_PARAMETER(opaque);
@@ -608,8 +611,7 @@ static NTSTATUS AdmissionG3PrivateTables(ADMISSION_G3_PROCESS *p,
     *predicate=3u;
   else if (!AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,p->PrivateLeafIpa,2u))
     *predicate=4u;
-  else if (!AppleAgxGpuvaG3GraphAttachPrivate(&p->Graph,p->PrivateVa,
-          p->PrivateMiddleIpa,p->PrivateLeafIpa))
+  else if (!AdmissionG3AttachPrivateLeaves(p))
     *predicate=5u;
   /* The node a later root move needs to re-link the leaf (PrepareTableReuse). */
   else if (!AppleAgxGpuvaG3GraphReserveNode(&p->Graph))
@@ -975,6 +977,8 @@ BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) 
       manager_used=TRUE;
   if (!manager_used && !p->PrivateScenes) {
     UINT extents=AppleAgxG3PrivateManagerExtentCount(&p->PrivateManager);
+    /* rc80: the TVB window blocks end with the manager (graph idle above). */
+    if (!AdmissionG3TvbRelease(p)) goto Done;
     for (i=0;i<extents;++i)
       if (!AdmissionG3PrivateMapExtent(p,&view,
               AppleAgxG3PrivateManagerExtent(&p->PrivateManager,i),FALSE)) {
@@ -1014,6 +1018,12 @@ static BOOLEAN AdmissionG3PrivateDestroyStorage(ADMISSION_G3_PROCESS *p) {
   while (p->PrivateScenes) {
     ADMISSION_G3_PRIVATE_SCENE *scene=p->PrivateScenes;
     p->PrivateScenes=scene->Next;ExFreePoolWithTag(scene,ADMISSION_POOL_TAG);
+  }
+  /* rc80: the same proof covers the TVB window granules. A granule that
+   * could not be zeroed stays held, and so does the lease array. */
+  if (AdmissionG3TvbReturnLeases(p) && p->TvbLeases) {
+    ExFreePoolWithTag(p->TvbLeases,ADMISSION_POOL_TAG);
+    p->TvbLeases=NULL;
   }
   return TRUE;
 }
@@ -2151,6 +2161,198 @@ static ULONG AdmissionG3ManagerWord(const unsigned char *bytes, ULONG offset) {
   return value;
 }
 
+/* rc80 (apple_agx_g3_tvb.h): TVB growth. All below run under State->Lock at
+ * PASSIVE (fast mutex: APC_LEVEL) and map only while this process has no job
+ * or lease (Asahi grows while the buffer manager is idle). */
+
+/* Firmware Stats max_pages of the current manager (Asahi fw/buffer.rs Stats
+ * word 0, saved by AdmissionSaveG4Manager after a joined completion), or 0. */
+static ULONG AdmissionG3TvbUsedPages(const ADMISSION_G3_PROCESS *p) {
+  const APPLE_AGX_RENDER_MANAGER_STATE *m=&p->FirmwareManager;
+  if (!m->Valid || m->PendingFence || !p->PrivateManager.Generation ||
+      m->Key.Owner!=p->Graph.ProcessId ||
+      m->Key.Generation!=p->PrivateManager.Generation) return 0u;
+  return AdmissionG3ManagerWord(m->Stats,0x0u);
+}
+
+static UINT AdmissionG3TvbTargetFor(const ADMISSION_G3_PROCESS *p,
+    UINT size_blocks) {
+  return AppleAgxG3TvbTarget(AdmissionG3TvbUsedPages(p),size_blocks,
+      p->PrivateManager.Blocks,p->TvbVa ? APPLE_AGX_G3_TVB_MAX_BLOCKS :
+                                          APPLE_AGX_G3_TVB_FLOOR_BLOCKS);
+}
+
+static ULONGLONG AdmissionG3TvbNowMs(VOID) {
+  return KeQueryInterruptTime()/10000ULL;
+}
+
+/* A growth step is due: an ACQUIRE that hits a cached scene waits (bounded)
+ * for this process to be idle instead of returning at once. */
+static BOOLEAN AdmissionG3TvbWantsIdle(const ADMISSION_G3_PROCESS *p,
+    UINT size_blocks) {
+  if (!p->PrivateManager.Generation || p->Poisoned || p->Graph.Uncertain ||
+      !p->PrivateLeafIpa) return FALSE;
+  return AppleAgxG3TvbShouldTry(&p->Tvb,AdmissionG3TvbTargetFor(p,size_blocks),
+      p->PrivateManager.Blocks,AdmissionG3TvbNowMs()) ? TRUE : FALSE;
+}
+
+static BOOLEAN AdmissionG3TvbUnmapPages(ADMISSION_G3_PROCESS *p,
+    ULONGLONG leaf_ipa, UINT pte, UINT count) {
+  UINT i;
+  for (i=0u;i<count;++i)
+    if (!AppleAgxGpuvaG3GraphUpdateLeafBacking(&p->Graph,leaf_ipa,pte+i,0ULL,
+            FALSE,AppleAgxGpuvaG3PrivateBacking)) return FALSE;
+  p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES]+=count;
+  return TRUE;
+}
+
+/* A window leaf table: one private-pool unit, zeroed, registered at level 2
+ * and linked below the private middle table (or the root's current one). */
+static UINT AdmissionG3TvbEnsureLeaf(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view, UINT leaf) {
+  if (!p->TvbLeafIpa[leaf]) {
+    APPLE_AGX_G3_PRIVATE_EXTENT *e=&p->TvbLeafTables[leaf];
+    ULONGLONG ipa;
+    if (!e->Generation) {
+      if (!AppleAgxG3PrivateAllocate(&p->State->PrivatePool,p->Graph.ProcessId,
+              0x10000u,e)) return APPLE_AGX_G3_TVB_FAIL_TABLE;
+      RtlZeroMemory((PUCHAR)view->CpuAddress+e->Offset,e->Bytes);
+      KeMemoryBarrier();
+    }
+    ipa=view->GuestIpaAddress+e->Offset;
+    if (!AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,ipa,2u)) {
+      /* An acknowledged refusal registered nothing; keep it if uncertain. */
+      if (!p->Graph.Uncertain) (void)AdmissionG3PrivateFreeExtent(p,view,e);
+      return APPLE_AGX_G3_TVB_FAIL_TABLE;
+    }
+    p->TvbLeafIpa[leaf]=ipa;
+    p->Tvb.Leaves|=1u<<leaf;
+  }
+  if (!AppleAgxGpuvaG3GraphAttachPrivate(&p->Graph,
+          p->TvbVa+(ULONGLONG)leaf*APPLE_AGX_G3_TVB_LEAF_BYTES,
+          p->PrivateMiddleIpa,p->TvbLeafIpa[leaf]))
+    return APPLE_AGX_G3_TVB_FAIL_ATTACH;
+  return APPLE_AGX_G3_TVB_FAIL_NONE;
+}
+
+/* Back window block `block` with two zeroed slab granules and map its eight
+ * 16 KiB pages writable. All or nothing for the block; a failed unmap of a
+ * partial block leaves its granules held and the process poisoned. */
+static UINT AdmissionG3TvbMapBlock(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view, UINT block) {
+  ADMISSION_POOL_PRIVATE *leases;
+  ULONGLONG ipa[APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK]={0};
+  UINT leaf=0u, pte=0u, g, i, reason;
+  if (!AppleAgxG3TvbBlockSlot(block,&leaf,&pte) || !p->TvbLeases)
+    return APPLE_AGX_G3_TVB_FAIL_MAP;
+  reason=AdmissionG3TvbEnsureLeaf(p,view,leaf);
+  if (reason) return reason;
+  leases=&p->TvbLeases[(block-APPLE_AGX_G3_TVB_FLOOR_BLOCKS)*
+                       APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK];
+  for (g=0u;g<APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK;++g)
+    if (!AdmissionMemoryPoolTvbTake(p->State->Adapter,&leases[g],&ipa[g])) {
+      while (g) (void)AdmissionMemoryPoolTvbGive(p->State->Adapter,&leases[--g]);
+      return APPLE_AGX_G3_TVB_FAIL_LEASE;
+    }
+  for (i=0u;i<APPLE_AGX_G3_TVB_GPU_PAGES_PER_BLOCK;++i)
+    if (!AppleAgxGpuvaG3GraphUpdateLeafBacking(&p->Graph,p->TvbLeafIpa[leaf],
+            pte+i,ipa[i/4u]+(ULONGLONG)(i%4u)*0x4000ULL,TRUE,
+            AppleAgxGpuvaG3PrivateBacking)) {
+      if (p->Graph.Uncertain ||
+          !AdmissionG3TvbUnmapPages(p,p->TvbLeafIpa[leaf],pte,i)) {
+        ADMISSION_G3_POISON(p,1u);
+        return APPLE_AGX_G3_TVB_FAIL_MAP;
+      }
+      for (g=0u;g<APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK;++g)
+        (void)AdmissionMemoryPoolTvbGive(p->State->Adapter,&leases[g]);
+      return APPLE_AGX_G3_TVB_FAIL_MAP;
+    }
+  p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_MAPPED_PAGES]+=
+      APPLE_AGX_G3_TVB_GPU_PAGES_PER_BLOCK;
+  return APPLE_AGX_G3_TVB_FAIL_NONE;
+}
+
+/* Asahi queue/render.rs auto_grow + ensure_blocks at a safe point. Fail-soft:
+ * every block mapped before a refusal stays; the render is admitted with the
+ * blocks backed (>= its capped minimum, which the caller still enforces). */
+static VOID AdmissionG3TvbGrow(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view, UINT size_blocks) {
+  APPLE_AGX_G3_PRIVATE_MANAGER *m=&p->PrivateManager;
+  ULONGLONG now=AdmissionG3TvbNowMs();
+  UINT target, step=0u, before, reason=APPLE_AGX_G3_TVB_FAIL_NONE, offset=0u;
+  if (!m->Generation || p->Poisoned || p->Graph.Uncertain ||
+      p->Graph.JobInFlight || p->Graph.LeaseToken || !p->PrivateLeafIpa) return;
+  p->Tvb.LastUsedPages=AdmissionG3TvbUsedPages(p);
+  target=AdmissionG3TvbTargetFor(p,size_blocks);
+  if (!AppleAgxG3TvbShouldTry(&p->Tvb,target,m->Blocks,now)) return;
+  before=m->Blocks;
+  if (m->Blocks<APPLE_AGX_G3_TVB_FLOOR_BLOCKS &&
+      !NT_SUCCESS(AdmissionG3GrowPrivateHeap(p,view,
+          AppleAgxG3TvbStep(m->Blocks,target),&offset)))
+    reason=APPLE_AGX_G3_TVB_FAIL_FLOOR;
+  if (!reason && target>m->Blocks) {
+    step=AppleAgxG3TvbStep(m->Blocks,target);
+    if (!p->TvbVa) reason=APPLE_AGX_G3_TVB_FAIL_NO_WINDOW;
+    else if (!p->TvbLeases) {
+      p->TvbLeases=ExAllocatePool2(POOL_FLAG_NON_PAGED,
+          (SIZE_T)APPLE_AGX_G3_TVB_WINDOW_BLOCKS*
+              APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK*sizeof(*p->TvbLeases),
+          ADMISSION_POOL_TAG);
+      if (!p->TvbLeases) reason=APPLE_AGX_G3_TVB_FAIL_LIST;
+    }
+    while (!reason && m->Blocks<step) {
+      reason=AdmissionG3TvbMapBlock(p,view,m->Blocks);
+      if (!reason) { ++m->Blocks; ++p->Tvb.LeaseBlocks; }
+    }
+    if (!reason && m->Blocks<target) {
+      /* One window step per call; keep the target due for the next one. */
+      AppleAgxG3TvbNoteResult(&p->Tvb,target,before,m->Blocks,reason,now);
+      if (m->Blocks>before) ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_HEAP_GROW];
+      return;
+    }
+  }
+  AppleAgxG3TvbNoteResult(&p->Tvb,target,before,m->Blocks,reason,now);
+  if (m->Blocks>before) ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_HEAP_GROW];
+}
+
+/* Manager teardown (no job or lease of this process): unmap every window
+ * block, newest first, and return its granules. FALSE: the process is
+ * poisoned and the remaining blocks stay mapped and held. */
+static BOOLEAN AdmissionG3TvbRelease(ADMISSION_G3_PROCESS *p) {
+  while (p->Tvb.LeaseBlocks) {
+    UINT block=APPLE_AGX_G3_TVB_FLOOR_BLOCKS+p->Tvb.LeaseBlocks-1u, leaf=0u, pte=0u, g;
+    ADMISSION_POOL_PRIVATE *leases;
+    if (!p->TvbLeases || !AppleAgxG3TvbBlockSlot(block,&leaf,&pte) ||
+        p->Graph.JobInFlight || p->Graph.LeaseToken || p->Graph.Uncertain ||
+        !AdmissionG3TvbUnmapPages(p,p->TvbLeafIpa[leaf],pte,
+            APPLE_AGX_G3_TVB_GPU_PAGES_PER_BLOCK)) {
+      ADMISSION_G3_POISON(p,1u);
+      return FALSE;
+    }
+    leases=&p->TvbLeases[(block-APPLE_AGX_G3_TVB_FLOOR_BLOCKS)*
+                         APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK];
+    for (g=0u;g<APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK;++g)
+      (void)AdmissionMemoryPoolTvbGive(p->State->Adapter,&leases[g]);
+    --p->Tvb.LeaseBlocks;
+    if (p->PrivateManager.Blocks>APPLE_AGX_G3_TVB_FLOOR_BLOCKS)
+      --p->PrivateManager.Blocks;
+  }
+  return TRUE;
+}
+
+/* Process teardown after GraphDestroy revoked every grant: return all
+ * granules. TRUE when none is still held (the lease array may be freed). */
+static BOOLEAN AdmissionG3TvbReturnLeases(ADMISSION_G3_PROCESS *p) {
+  BOOLEAN all=TRUE;
+  UINT i;
+  if (!p->TvbLeases) return TRUE;
+  for (i=0u;i<APPLE_AGX_G3_TVB_WINDOW_BLOCKS*APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK;++i)
+    if (p->TvbLeases[i].Slab &&
+        !AdmissionMemoryPoolTvbGive(p->State->Adapter,&p->TvbLeases[i])) all=FALSE;
+  p->Tvb.LeaseBlocks=0u;
+  return all;
+}
+
 /* EXP1114 receipt-only, under Lock, at most every two seconds: each process's
  * private units and scenes, the largest render it asked storage for, and its
  * saved firmware buffer-manager Stats/Info/BlockControl words (Asahi
@@ -2170,7 +2372,7 @@ static BOOLEAN AdmissionG3SnapshotProcesses(ADMISSION_G3_STATE *state,
   state->ProcessReceiptQpc=now;
   RtlZeroMemory(out,ADMISSION_G3_PROCESS_RECEIPT_WORDS*sizeof(ULONG));
   AppleAgxG3PrivatePoolStats(&state->PrivatePool,0ULL,&stats);
-  out[0]=1u;out[2]=stats.GlobalUnits;out[3]=stats.LargestFreeUnits;
+  out[0]=2u;out[2]=stats.GlobalUnits;out[3]=stats.LargestFreeUnits;
   out[4]=(ULONG)now;out[5]=(ULONG)((ULONGLONG)now>>32);out[6]=(ULONG)frequency.QuadPart;
   for (link=state->Processes.Flink;link!=&state->Processes;link=link->Flink) {
     ADMISSION_G3_PROCESS *p=CONTAINING_RECORD(link,ADMISSION_G3_PROCESS,Link);
@@ -2197,6 +2399,16 @@ static BOOLEAN AdmissionG3SnapshotProcesses(ADMISSION_G3_STATE *state,
     r[12]=AdmissionG3ManagerWord(m->Info,0x28u);r[13]=AdmissionG3ManagerWord(m->Info,0x30u);
     r[14]=AdmissionG3ManagerWord(m->BlockControl,0x0u);
     r[15]=AdmissionG3ManagerWord(m->BlockControl,0x4u);
+    /* rc80 version 2 tail, same slot: window blocks backed | registered leaf
+     * mask << 16 | window reserved << 31; growth steps | refused steps << 16;
+     * last target | last reason << 24; Stats max_pages it was sized from. */
+    r=&out[8u+16u*ADMISSION_G3_PROCESS_RECEIPT_SLOTS+
+           ADMISSION_G3_PROCESS_RECEIPT_TVB_WORDS*slot];
+    r[0]=(p->Tvb.LeaseBlocks&0xffffu)|((p->Tvb.Leaves&0xffu)<<16)|
+         (p->TvbVa ? 0x80000000u : 0u);
+    r[1]=(p->Tvb.Grows&0xffffu)|((p->Tvb.Failures&0xffffu)<<16);
+    r[2]=(p->Tvb.LastTarget&0xffffffu)|((p->Tvb.LastReason&0xffu)<<24);
+    r[3]=p->Tvb.LastUsedPages;
   }
   out[1]=used;out[7]=total;
   return TRUE;
@@ -2220,7 +2432,8 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   UINT required[9]={0}, tablePredicate=0u, mapOffset=0u;
   APPLE_AGX_G3_PRIVATE_POOL_STATS observed={0};
   APPLE_AGX_G3_PRIVATE_PREPARE_DIAGNOSTIC prepare={0};
-  BOOLEAN captured=FALSE, snapshot=FALSE;
+  BOOLEAN captured=FALSE, snapshot=FALSE, growWaited=FALSE;
+  ULONGLONG growDeadline;
   ULONG receipt[ADMISSION_G3_PROCESS_RECEIPT_WORDS], pressure[12];
   ULONG pressureBefore;
 #define PRIVATE_CAPTURE(b,t,o) do { \
@@ -2245,14 +2458,22 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
    * DWM ~1 s per 15.9 s (1236 waits); wake on the job's end instead, with
    * the same 1 ms backstop and a 3 s wall-clock bound. */
   deadline=KeQueryInterruptTime()+3000ULL*10000ULL;
+  /* rc80: a cached scene returns at once unless a TVB growth step is due;
+   * then wait (at most 50 ms) for the idle point growth needs. */
+  growDeadline=KeQueryInterruptTime()+50ULL*10000ULL;
   for (wait_ms=0u;;++wait_ms) {
     KeClearEvent(&state->JobEvent);
     ExAcquireFastMutex(&state->Lock);
     p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
     if (!p || q.Operation==APPLE_AGX_G3_PRIVATE_RELEASE ||
         (!p->Graph.JobInFlight && !p->Graph.LeaseToken) ||
-        KeQueryInterruptTime()>=deadline ||
-        AdmissionG3PrivateCachedScene(p,args->hContext,&q)) break;
+        KeQueryInterruptTime()>=deadline) break;
+    if (AdmissionG3PrivateCachedScene(p,args->hContext,&q)) {
+      if (KeQueryInterruptTime()>=growDeadline ||
+          !AdmissionG3TvbWantsIdle(p,AppleAgxG4TvbBlocksForSize(q.Width,q.Height)))
+        break;
+      growWaited=TRUE;
+    }
     ExReleaseFastMutex(&state->Lock);
     delay.QuadPart=-10000LL;
     (void)KeWaitForSingleObject(&state->JobEvent,Executive,KernelMode,FALSE,&delay);
@@ -2315,6 +2536,17 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     ULONG blocks=AppleAgxG4MinTvbBlocks(q.Width,q.Height);
     if (blocks>p->MaxTvbBlocks) { p->MaxTvbBlocks=blocks;p->MaxShape=q.Width|(q.Height<<16); }
   }
+  /* rc80: grow the TVB while this process is idle (Asahi auto_grow and
+   * ensure_blocks before the scene). A cached hit that waited and still
+   * found the process busy holds the step off instead of waiting again. */
+  if (!p->Graph.JobInFlight && !p->Graph.LeaseToken) {
+    AdmissionG3TvbGrow(p,&view,AppleAgxG4TvbBlocksForSize(q.Width,q.Height));
+    if (p->Poisoned || p->Graph.Uncertain)
+      {status=STATUS_DEVICE_HARDWARE_ERROR;PRIVATE_CAPTURE(14u,2u,NULL);goto Done;}
+  } else if (growWaited)
+    AppleAgxG3TvbNoteResult(&p->Tvb,AdmissionG3TvbTargetFor(p,
+        AppleAgxG4TvbBlocksForSize(q.Width,q.Height)),p->PrivateManager.Blocks,
+        p->PrivateManager.Blocks,APPLE_AGX_G3_TVB_FAIL_BUSY,AdmissionG3TvbNowMs());
   scene=AdmissionG3PrivateCachedScene(p,args->hContext,&q);
   if (scene) {
     if (!AdmissionG3PrivateReuseScene(p,scene,&view))
@@ -2431,6 +2663,10 @@ Done:
 
 /* The private pool's per-process VA window is the reserved span. */
 C_ASSERT(APPLE_AGX_G4_PRIVATE_VA_BYTES == APPLE_AGX_G3_PRIVATE_VA_BYTES);
+/* rc80: the TVB window follows the private window in the same root slot. */
+C_ASSERT((APPLE_AGX_G4_PRIVATE_VA_BASE >> 36) ==
+         ((APPLE_AGX_G4_PRIVATE_VA_BASE + APPLE_AGX_G4_PRIVATE_VA_BYTES +
+           APPLE_AGX_G3_TVB_VA_BYTES - 1ULL) >> 36));
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     PVOID MiniportDeviceContext, DXGKARG_CREATEPROCESS *Args) {
@@ -2500,6 +2736,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     if (!NT_SUCCESS(status)) goto Fail;
     process->PrivateVa = reserve.StartVirtualAddress;
     process->DxgkProcess = Args->hDxgkProcess;
+  }
+  {
+    /* rc80: the TVB window starts where the private window ends, in the same
+     * root slot, so its leaves hang below the same middle table and the heap
+     * stays VA-contiguous (apple_agx_g3_tvb.h). Fail-soft: without it the
+     * heap keeps the 32-block floor. */
+    DXGKARGCB_RESERVEGPUVIRTUALADDRESSRANGE reserve = {0};
+    ULONGLONG base = process->PrivateVa + APPLE_AGX_G3_PRIVATE_VA_BYTES;
+    reserve.hDxgkProcess = Args->hDxgkProcess;
+    reserve.SizeInBytes = APPLE_AGX_G3_TVB_VA_BYTES;
+    reserve.Alignment = (UINT)APPLE_AGX_G3_TVB_LEAF_BYTES;
+    reserve.BaseAddress = base;
+    if (NT_SUCCESS(adapter->Interface.DxgkCbReserveGpuVirtualAddressRange(
+            adapter->Interface.DeviceHandle, &reserve)) &&
+        reserve.StartVirtualAddress == base &&
+        reserve.SizeInBytes >= APPLE_AGX_G3_TVB_VA_BYTES)
+      process->TvbVa = base;
   }
   status = AdmissionG3BootstrapRoot(process);
   if (!NT_SUCCESS(status)) goto Fail;
@@ -2968,9 +3221,7 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
     step = 3u;
   else if (!AppleAgxGpuvaG3GraphBindRoot(&process->Graph, root_ipa)) step = 4u;
   else if (process->PrivateLeafIpa &&
-           !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph,
-               process->PrivateVa, process->PrivateMiddleIpa,
-               process->PrivateLeafIpa)) step = 5u;
+           !AdmissionG3AttachPrivateLeaves(process)) step = 5u;
   if (step != 0u) {
     context->GpuvaG3Poisoned = TRUE;
     /* Step 5 names the AttachPrivate refusal (file 0x20 + reason). */
@@ -3115,10 +3366,14 @@ static int AdmissionG4PrivateGraphAccess(void *opaque, unsigned long long va,
     if (ordinal>=9u || va!=scene->Storage.Ranges[ordinal].Va ||
         bytes!=scene->Storage.Ranges[ordinal].Bytes || !write) return 0;
     /* EXP1115: of the TVB heap window only the backed prefix is mapped and
-     * named to the firmware: the job's count, else the manager's now. */
+     * named to the firmware: the job's count, else the manager's now.
+     * rc80: past the 32-block range the prefix continues into this
+     * process's TVB window (VA-contiguous); prove every named block. */
     if (ordinal==2u) {
       ULONG blocks=scene->HeapBlocks ? scene->HeapBlocks : p->PrivateManager.Blocks;
-      if (!blocks || (ULONGLONG)blocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK>bytes) return 0;
+      if (!blocks || ((ULONGLONG)blocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK>bytes &&
+          (!p->TvbVa || bytes!=APPLE_AGX_G3_TVB_FLOOR_BLOCKS*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK ||
+           va+bytes!=p->TvbVa || blocks>APPLE_AGX_G3_TVB_MAX_BLOCKS))) return 0;
       bytes=blocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
     }
     return AdmissionG4GraphAccess(&p->Graph,va,bytes,write);
@@ -3956,6 +4211,9 @@ static int AdmissionG4GraphAccessTyped(void *opaque, unsigned long long va,
   if (process == NULL) return 0;
   if (bytes && va < process->PrivateVa + APPLE_AGX_G3_PRIVATE_VA_BYTES &&
       va + bytes > process->PrivateVa) return 0;
+  /* rc80: the TVB window is KMD-owned like the private window. */
+  if (bytes && process->TvbVa && va < process->TvbVa + APPLE_AGX_G3_TVB_VA_BYTES &&
+      va + bytes > process->TvbVa) return 0;
   if (kind == AppleAgxG4AccessCpuEnvelope)
     return !write && AdmissionG4LogicalEnvelopeAccess(process, va, bytes);
   return AdmissionG4GraphAccess(&process->Graph, va, bytes, write);
