@@ -65567,3 +65567,13 @@ EXP2020 HARDWARE ACTUAL (2026-10-28): HD measurement on the EXP2019 code.
   - Waits: draw.render_fence 6.6 → 8.9 ms, other.site2 4.3 → 5.9 ms. FHD has shown about 3 ms idle since EXP2015.
 - HD 100k: **4984 / 29.8 FPS** (EXP1996: 3047; macOS about 9950, a 2.0x gap).
 - Suspect for the HD CPU regression: rc85 c814eb20 (staged discard: a fresh shadow BO per busy upload map). A/B in EXP2021.
+
+EXP2021 HARDWARE BEFORE 2026-10-28T04:43:03Z:
+- WHY: EXP2020 HD 50k shows 3.27 ms of GPU idle per frame (EXP2015: 0.12) and a median frame of 24.98 ms against 22.68. The GPU span is unchanged. Between EXP2015 and EXP2019 the per-frame CPU-path change is rc85's staged discard: a fresh shadow BO per busy upload map.
+- ATOMIC CONTRACT: one switch.
+- Expected: if the hypothesis holds, arm b idle about 0.1 ms and median about 22.7 ms, against arm a about 25.
+- Failure criteria: removal.
+- Recovery: rec2021h.
+- Hashes: sys 99fd88b18eb0, UmdArm64 90619085eaf7, UmdX64 c58c0bb0829f, Umd32 37200a98bb1e; manifest 236788becdb7, hardware-manifest 6d8f0caf8dc9; probe2021.sh 8eaf0e243c09 (PROBE_LINT_OK); visible recovery rec2021h 8d122dfdbc728465; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2021h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2021-discard-ab/run2021.sh.
