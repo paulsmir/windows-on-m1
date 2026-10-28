@@ -22,6 +22,9 @@ receipt" attribution). Receipts that carry their own durations refine it:
       includes the residency of the new BO) and the rest;
   measure-d3d12-wait {1, serial, omitted us, flags, 4 x (phase << 8 | site,
       count, us)} (per Execute): the wait sites of that Execute (agx_win32_wait.h);
+  measure-gpuva-map-time {MiB, residency us (MakeResident, its trims and its
+      paging wait), Map us} and measure-gpuva-paging-wait {us, site, fence}
+      (RC85, binds of at least 10 ms): the bind part of the closing interval;
   measure-d3d12-execute {lists, commands, replay us, submit us, serial} and
       measure-d3d12-replay-time {us x 6, count x 6} (draw, dispatch, copy,
       query, indirect, other; agx_d3d12_ddi.cpp ReplayTimingBucket).
@@ -174,7 +177,7 @@ def analyse(rows, start, end, primary=None):
            'other_buckets': defaultdict(int), 'receipts': Counter(),
            'shader': {'parts': 0, 'internal': 0, 'ticks': 0, 'max': 0, 'max_qpc': 0, 'translate': 0},
            'pso': {'count': 0, 'ticks': 0, 'max': 0},
-           'bo': [], 'trims': {'count': 0, 'bytes': 0, 'rounds': 0, 'pending': 0},
+           'bo': [], 'binds': [], 'trims': {'count': 0, 'bytes': 0, 'rounds': 0, 'pending': 0},
            'uploads': {'staged': 0, 'texture_copy': 0, 'bytes_bound': 0, 'recorded': 0, 'ticks': 0},
            'waits': defaultdict(lambda: [0, 0]), 'longest': [], 'threads': Counter(),
            'execute': {'count': 0, 'replay_us': 0, 'submit_us': 0, 'max_us': 0,
@@ -192,7 +195,17 @@ def analyse(rows, start, end, primary=None):
         out['receipts'][name] += 1
         out['threads'][tid] += interval
         buckets = out['buckets'] if tid == primary else out['other_buckets']
-        if name == 'measure-bo-create':
+        if name == 'measure-gpuva-map-time' and len(values) >= 3:
+            bind = min((values[1] + values[2]) * QPC_HZ // 1_000_000, interval)
+            buckets['bo-bind-paging'] += bind
+            buckets['bo-allocate'] += interval - bind
+            out['binds'].append({'at': (qpc - start) / QPC_HZ, 'mib': values[0], 'residency_s': values[1] / 1e6,
+                                 'map_s': values[2] / 1e6, 'map_hr': '%08x' % hr})
+        elif name == 'measure-gpuva-paging-wait':
+            buckets['bo-bind-paging'] += interval
+            if out['binds'] and values:
+                out['binds'][-1]['bind_wait_s'] = values[0] / 1e6
+        elif name == 'measure-bo-create':
             for b, t in split_bo_create(interval, values).items():
                 buckets[b] += t
             if len(values) >= 5:
@@ -279,6 +292,7 @@ def summarise(window, top):
         'uploads': {'staged': u['staged'], 'texture_copy': u['texture_copy'], 'recorded': u['recorded'],
                     's': round(upload_s, 3), 'bytes_upper_bound': u['bytes_bound']},
         'bo_creates': sorted(window['bo'], key=lambda b: -b['bind_s'] - b['allocate_s'])[:top],
+        'binds': sorted(window['binds'], key=lambda b: -(b['residency_s'] + b['map_s'] + b.get('bind_wait_s', 0)))[:top],
         'trims': window['trims'],
         'waits_us': {k: {'count': v[0], 's': round(v[1] / 1e6, 3)}
                      for k, v in sorted(window['waits'].items(), key=lambda kv: -kv[1][1])},
@@ -371,6 +385,10 @@ def table(result):
                        (e['count'], e['replay_s'], e['submit_s'], e['longest_s'],
                         ', '.join('%s %d/%.3f s' % (k, v['count'], v['s'])
                                   for k, v in e['replay_by_kind'].items() if v['count'])))
+        for b in w['binds'][:6]:
+            out.append('  bind %4d MiB at +%.3f s: residency (MakeResident, trims, its paging wait) %.3f s, '
+                       'Map %.3f s, bind paging wait %.3f s' % (b['mib'], b['at'], b['residency_s'], b['map_s'],
+                                                                 b.get('bind_wait_s', 0)))
         if w['waits_us']:
             out.append('  execute waits: ' + ', '.join('%s %d/%.3f s' % (k, v['count'], v['s'])
                                                        for k, v in list(w['waits_us'].items())[:6]))

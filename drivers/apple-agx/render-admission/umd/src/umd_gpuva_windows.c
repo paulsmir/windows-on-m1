@@ -465,6 +465,26 @@ static HRESULT residency_request(ADMISSION_UMD_DEVICE *device,
   return hr;
 }
 
+/* RC85 receipt-only (EXP2000b/2006b/2008b/2015b: one 129 MiB BO bind took
+ * 25-31 s of GravityMark's first frame; measure-bo-create cannot say where):
+ * map_va emits measure-gpuva-map-time {MiB, residency us (resident_before_map:
+ * MakeResident, its trims and its paging-fence wait), MapGpuVirtualAddress
+ * us} when the two took at least 10 ms, and wait_paging, the bind's own
+ * paging-fence wait, measure-gpuva-paging-wait {us, site, fence}. The trims'
+ * receipts (measure-trim, measure-make-resident-trimmed) inside the
+ * residency part mark where MakeResident ended and its paging wait began. */
+static UINT qpc_us(LONGLONG ticks) {
+  LARGE_INTEGER frequency;
+  (void)QueryPerformanceFrequency(&frequency);
+  if (ticks <= 0 || frequency.QuadPart <= 0) return 0u;
+  const ULONGLONG us = (ULONGLONG)ticks * 1000000ull / (ULONGLONG)frequency.QuadPart;
+  return us > 0xffffffffull ? 0xffffffffu : (UINT)us;
+}
+static bool qpc_at_least_10ms(LONGLONG ticks) {
+  LARGE_INTEGER frequency;
+  (void)QueryPerformanceFrequency(&frequency);
+  return frequency.QuadPart > 0 && ticks >= frequency.QuadPart / 100;
+}
 /* EXP1004: VidMm writes invalid PTEs when it maps a non-resident allocation
  * and, for fresh BOs, did not re-send valid ones after the later persistent
  * MakeResident (EXP1001 leaf ring; EXP1003 touch did not repair them). Take
@@ -509,6 +529,8 @@ static int map_va(void *context, uint64_t token, uint64_t va,
       !device->KernelCallbacks->pfnMapGpuVirtualAddressCb) return 0;
   request.hAllocation = allocation_handle(device, token);
   if (!request.hAllocation) return 0;
+  LARGE_INTEGER bind_start = {}, map_start = {}, map_end = {};
+  (void)QueryPerformanceCounter(&bind_start);
   resident_before_map(device, token, request.hAllocation);
   if (device->DrawTerminal) return 3; /* Accepted residency is uncertain. */
   request.hPagingQueue = device->PagingQueue;
@@ -518,9 +540,16 @@ static int map_va(void *context, uint64_t token, uint64_t va,
   request.Protection.Write = (protection & AGX_GPUVA_MAP_WRITE) != 0;
   request.Protection.Execute = (protection & AGX_GPUVA_MAP_EXECUTE) != 0;
   unsigned wait_pfnMapGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitMapGpuVa);
+  (void)QueryPerformanceCounter(&map_start);
   HRESULT hr = device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
+  (void)QueryPerformanceCounter(&map_end);
   AdmissionUmdWaitEnd(wait_pfnMapGpuVirtualAddressCb);
+  if (qpc_at_least_10ms(map_end.QuadPart - bind_start.QuadPart)) {
+    UINT values[3] = {(UINT)(pages >> 8), qpc_us(map_start.QuadPart - bind_start.QuadPart),
+                      qpc_us(map_end.QuadPart - map_start.QuadPart)};
+    AdmissionUmdDiagnostic("measure-gpuva-map-time", hr, values, ARRAYSIZE(values));
+  }
   {
     UINT values[5] = {request.hAllocation != 0u,
                       request.hPagingQueue != 0u, (UINT)pages,
@@ -873,7 +902,15 @@ static int wait_paging(void *context, uint64_t fence) {
   /* Called by the winsys after map_va (bind) or make_resident (submit). */
   uint64_t token = device ? device->PagingWaitToken : 0;
   if (device) device->PagingWaitToken = 0;
-  return wait_paging_at(device, fence, token ? 1u : 5u, token);
+  LARGE_INTEGER start = {}, end = {};
+  (void)QueryPerformanceCounter(&start);
+  const int ok = wait_paging_at(device, fence, token ? 1u : 5u, token);
+  (void)QueryPerformanceCounter(&end);
+  if (qpc_at_least_10ms(end.QuadPart - start.QuadPart)) { /* RC85, see qpc_us */
+    UINT values[3] = {qpc_us(end.QuadPart - start.QuadPart), token ? 1u : 5u, (UINT)fence};
+    AdmissionUmdDiagnostic("measure-gpuva-paging-wait", ok ? S_OK : E_FAIL, values, ARRAYSIZE(values));
+  }
+  return ok;
 }
 
 /* EXP1016 measurement only: DWM CPU read cost of staging inspection versus

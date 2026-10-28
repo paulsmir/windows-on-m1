@@ -13,6 +13,9 @@ must be exact on the receipt ABI it reads:
 - measure-bo-create {MiB, class, allocation us, bind us, association us}
   splits its closing interval into bo-bind-paging and bo-allocate, capped by
   the interval (a receipt can never create more time than elapsed);
+- RC85 measure-gpuva-map-time {MiB, residency us, Map us} charges that much
+  of its interval to the bind and the rest (the allocation before it) to
+  bo-allocate; measure-gpuva-paging-wait is bind time;
 - measure-d3d12-wait packs (phase << 8 | site, count, us) triplets at words
   4..15 and measure-d3d12-replay-time six per-kind us then six counts, in
   the agx_win32_wait.h / ReplayTimingBucket order.
@@ -82,6 +85,18 @@ class StartupBreakdown(unittest.TestCase):
         # a 2 s interval cannot hold a 25 s bind
         capped = tool.split_bo_create(2 * HZ, [129, 1, 700_000, 25_000_000, 0])
         self.assertEqual(capped, {'bo-bind-paging': 2 * HZ, 'bo-allocate': 0, 'resource': 0})
+
+    def test_rc85_bind_split_receipts(self):
+        # allocation 1 s, residency (MakeResident + its paging wait) 22 s + Map 1 s, bind paging wait 3 s
+        lines = presents([1.0]) + [
+            line('gpuva-map-time', 25.0, 129, 22_000_000, 1_000_000),
+            line('gpuva-paging-wait', 28.0, 3_000_000, 1, 77),
+            line('bo-create', 28.5, 129, 1, 1_000_000, 26_000_000, 4_000)] + presents([29.0])
+        window = tool.analyse(tool.parse(lines), int(1.0 * HZ), int(29.0 * HZ))
+        self.assertEqual(window['buckets']['bo-allocate'], 24 * HZ - 23 * HZ)
+        self.assertEqual(window['buckets']['bo-bind-paging'], 23 * HZ + 3 * HZ + HZ // 2)
+        bind = window['binds'][0]
+        self.assertEqual((bind['mib'], bind['residency_s'], bind['map_s'], bind['bind_wait_s']), (129, 22.0, 1.0, 3.0))
 
     def test_execute_wait_and_replay_layouts(self):
         wait = [1, 7, 0, 0,

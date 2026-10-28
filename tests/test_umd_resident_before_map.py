@@ -40,7 +40,11 @@ BODY = r'''
 #include <string>
 #include "umd_va_alias.h"
 typedef int HRESULT; typedef unsigned UINT; typedef unsigned D3DKMT_HANDLE; typedef int BOOL;
-typedef unsigned long long ULONGLONG;
+typedef unsigned long long ULONGLONG; typedef long long LONGLONG;
+union LARGE_INTEGER { LONGLONG QuadPart; };
+static LONGLONG qpc_now;
+static int QueryPerformanceCounter(LARGE_INTEGER *t){ t->QuadPart=qpc_now+=24000; return 1; } /* 1 ms per read */
+static int QueryPerformanceFrequency(LARGE_INTEGER *f){ f->QuadPart=24000000; return 1; }
 #define TRUE 1
 #define FALSE 0
 #define S_OK 0
@@ -148,7 +152,8 @@ int main() {
 
     def run_replay(self, body):
         text = SRC.read_text()
-        funcs = '\n'.join(function(text, n) for n in ('find_slot', 'allocation_handle', 'resident_before_map', 'map_va', 'map_va_at'))
+        funcs = '\n'.join(function(text, n) for n in ('find_slot', 'allocation_handle', 'qpc_us', 'qpc_at_least_10ms',
+                                                    'resident_before_map', 'map_va', 'map_va_at'))
         self.assertIn('resident_before_map', funcs, 'resident-before-map is missing')
         funcs = funcs.replace('auto *slot', 'SLOT *slot')
         with tempfile.TemporaryDirectory() as tmp:
