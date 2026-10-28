@@ -36,6 +36,7 @@ FUNCTIONS = ('static unsigned block_bytes(',
              'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {',
              'static enum pipe_format bc_staging_format(', 'static void gpu_copy_blocks(',
              'static bool staged_upload_discard(', 'static bool level_upload_enabled(',
+             'static bool level_stage_read_enabled(',
              'static HRESULT level_upload(', 'static HRESULT staged_upload(', 'static HRESULT staged_download(',
              'extern "C" HRESULT AgxD3d12OwnerCopyTexture(')
 
@@ -147,14 +148,19 @@ int main(void) {
         create = level.index('AgxD3d12OwnerCreateBuffer(owner, AGX_D3D12_LEVEL_RING_BYTES, TRUE, &owner->LevelRing)')
         remove = level.index('remove_upload_target(owner, static_cast<struct pipe_resource *>(owner->LevelRing.Resource));')
         self.assertLess(create, remove)
-        self.assertLess(remove, level.index('memcpy('))
+        self.assertLess(remove, level.index('memcpy(static_cast<unsigned char *>(owner->LevelRing.Cpu)'))
         self.assertIn('AgxD3d12OwnerSubmitAndWait(owner)', level)
-        self.assertLess(level.index('AgxD3d12OwnerSubmitAndWait(owner)'), level.index('memcpy('))
-        self.assertLess(level.index('memcpy('), level.index('AgxWin32AsahiCopyToLevel('))
+        self.assertLess(level.index('AgxD3d12OwnerSubmitAndWait(owner)'), level.index('memcpy(static_cast<unsigned char *>(owner->LevelRing.Cpu)'))
+        self.assertLess(level.index('memcpy(static_cast<unsigned char *>(owner->LevelRing.Cpu)'), level.index('AgxWin32AsahiCopyToLevel('))
+        # rc113: the write-combined source is copied once into cached memory
+        # before ail_tile reads it
+        self.assertLess(level.index('memcpy(owner->LevelLinear, bmap'), level.index('AgxWin32AsahiTileLevel('))
+        self.assertIn('"APPLE_AGX_D3D12_LEVEL_STAGE_READ"', block(text, 'static bool level_stage_read_enabled('))
         self.assertIn('"APPLE_AGX_D3D12_LEVEL_UPLOAD"', block(text, 'static bool level_upload_enabled('))
         destroy = block(text, 'extern "C" HRESULT AgxD3d12OwnerDestroy(')
         self.assertIn('AgxD3d12OwnerDestroyBuffer(owner, &owner->LevelRing)', destroy)
         self.assertIn('HeapFree(GetProcessHeap(), 0, owner->LevelScratch)', destroy)
+        self.assertIn('HeapFree(GetProcessHeap(), 0, owner->LevelLinear)', destroy)
         self.assertNotIn('getenv', level)
 
 

@@ -21,7 +21,8 @@ class BcOwner(unittest.TestCase):
             'static unsigned texture_block(enum pipe_format format, unsigned *bw, unsigned *bh) {',
             'static unsigned level_extent(unsigned extent, unsigned level) {', 'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {',
             'static enum pipe_format bc_staging_format(', 'static void gpu_copy_blocks(',
-            'static bool staged_upload_discard(', 'static bool level_upload_enabled(', 'static HRESULT level_upload(',
+            'static bool staged_upload_discard(', 'static bool level_upload_enabled(',
+            'static bool level_stage_read_enabled(', 'static HRESULT level_upload(',
             'static HRESULT staged_upload(', 'static HRESULT staged_download(',
             'extern "C" HRESULT AgxD3d12OwnerCopyTexture('))
         header=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.h').read_text()

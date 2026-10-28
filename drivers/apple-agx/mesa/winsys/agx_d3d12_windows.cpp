@@ -127,6 +127,8 @@ struct AGX_D3D12_OWNER {
   unsigned long long LevelRingUsed;
   void *LevelScratch;
   unsigned long long LevelScratchBytes;
+  void *LevelLinear; /* rc113: cached copy of the linear source */
+  unsigned long long LevelLinearBytes;
   bool LevelRingFailed;
   UINT LevelUploads, LevelRingDrains;
 #ifdef APPLE_AGX_GPUVA_WINSYS
@@ -599,6 +601,9 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   if (owner->LevelScratch) HeapFree(GetProcessHeap(), 0, owner->LevelScratch);
   owner->LevelScratch = NULL;
   owner->LevelScratchBytes = 0;
+  if (owner->LevelLinear) HeapFree(GetProcessHeap(), 0, owner->LevelLinear);
+  owner->LevelLinear = NULL;
+  owner->LevelLinearBytes = 0;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (owner->UploadRingResource) AgxWin32AsahiResourceRelease(&owner->UploadRingResource);
   if (owner->UploadRing.Scratch) HeapFree(GetProcessHeap(), 0, owner->UploadRing.Scratch);
@@ -3032,6 +3037,24 @@ static bool level_upload_enabled() {
   return value == 1;
 }
 
+/* rc113 (EXP2058a: the scored stall's 306 whole-level uploads, 208 MiB,
+ * took 3.4 s of CPU, about 60 MB/s): the source is the app's UPLOAD heap,
+ * mapped write-combined, and ail_tile reads it in small scattered accesses,
+ * each an uncached load. One sequential memcpy of the mapped span into a
+ * cached heap buffer first, then ail_tile from there.
+ * APPLE_AGX_D3D12_LEVEL_STAGE_READ=0 tiles from the mapping as before. */
+static bool level_stage_read_enabled() {
+  static volatile LONG state; /* 0 unread, 1 on, 2 off */
+  LONG value = state;
+  if (!value) {
+    char flag[2] = {};
+    const DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D12_LEVEL_STAGE_READ", flag, sizeof(flag));
+    value = length == 1 && flag[0] == '0' ? 2 : 1;
+    InterlockedExchange(&state, value);
+  }
+  return value == 1;
+}
+
 static HRESULT level_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COPY *copy, struct pipe_resource *texture,
                             struct pipe_resource *buffer, const struct pipe_box &tbox, const struct pipe_box &bbox) {
   struct pipe_context *pipe = owner->Context;
@@ -3078,7 +3101,23 @@ static HRESULT level_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COPY
     AgxD3d12OwnerRecordError(owner, DXGI_ERROR_DEVICE_HUNG);
     return DXGI_ERROR_DEVICE_HUNG;
   }
-  const int tiled = AgxWin32AsahiTileLevel(texture, copy->Level, owner->LevelScratch, bytes, bmap, copy->Pitch);
+  const void *linear = bmap;
+  const unsigned long long span = bbox.width > 0 ? static_cast<unsigned long long>(bbox.width) : 0ull;
+  if (span && level_stage_read_enabled()) {
+    if (owner->LevelLinearBytes < span) {
+      void *staged = HeapAlloc(GetProcessHeap(), 0, static_cast<SIZE_T>(span));
+      if (staged) {
+        if (owner->LevelLinear) HeapFree(GetProcessHeap(), 0, owner->LevelLinear);
+        owner->LevelLinear = staged;
+        owner->LevelLinearBytes = span;
+      }
+    }
+    if (owner->LevelLinearBytes >= span) {
+      memcpy(owner->LevelLinear, bmap, static_cast<size_t>(span));
+      linear = owner->LevelLinear;
+    }
+  }
+  const int tiled = AgxWin32AsahiTileLevel(texture, copy->Level, owner->LevelScratch, bytes, linear, copy->Pitch);
   pipe->buffer_unmap(pipe, btransfer);
   if (!tiled) return S_FALSE;
   if (place == 1) {

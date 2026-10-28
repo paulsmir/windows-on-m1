@@ -21,7 +21,7 @@ using UINT=unsigned;using HRESULT=int;
 struct AGX_D3D12_BUFFER {void *Resource;unsigned long long GpuVa,Bytes;void *Cpu;};
 /* LEVEL_RING_HEADER */
 struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingCopies;pipe_screen *Screen;pipe_resource *UploadStaging,*DownloadStaging;
- AGX_D3D12_BUFFER LevelRing;unsigned long long LevelRingUsed;void *LevelScratch;unsigned long long LevelScratchBytes;
+ AGX_D3D12_BUFFER LevelRing;unsigned long long LevelRingUsed;void *LevelScratch;unsigned long long LevelScratchBytes;void *LevelLinear;unsigned long long LevelLinearBytes;
  bool LevelRingFailed;UINT LevelUploads,LevelRingDrains;};
 struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}};
 static void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *,HRESULT) {}
