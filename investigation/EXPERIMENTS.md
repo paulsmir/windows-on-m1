@@ -66431,3 +66431,19 @@ EXP2050 HARDWARE BEFORE 2026-10-28T17:15:22Z:
 - Hashes: sys 9958b70ff297, UmdArm64 3c755f4da488, UmdX64 c860634f01f3, Umd32 5b24f78624b8; manifest b1c442c22986, hardware-manifest 4f8d1adcd42a; probe2050.sh 16cedf89a0bd (PROBE_LINT_OK); visible recovery rec2050h 600faed48ab73dce; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2050h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2050-pool4g/run2050.sh.
+
+EXP2050 HARDWARE ACTUAL (2026-10-28): **a 4 GiB unified pool works. FHD 200k completes with the single copy. FHD 100k 4319 (best).**
+- The guest policy SystemPartitionCommitLimitPercentage = 75 was written before the boot (user-approved; rollback: delete the value and reboot).
+- Wom1M2PoolDemand v15:
+  - segment_bytes 4294967296, graphics_share 5414095872, base 3288334336, extension 1006632960;
+  - percentage_set true, written_after_boot false, headroom_refusals 0.
+- The adapter started normally.
+
+| Arm | Run | Score | Notes |
+|---|---|---|---|
+| a | FHD 100k | **4319** / 25.8 FPS | |
+| b | FHD 200k | 2806 / 16.8 FPS (2nd app) | completed; EXP2046d was removed with OOM at 3.1 GiB |
+| c | HD 50k | 6600 (3rd app) | |
+
+- No removal or fault. rec2050h Preflight PASS.
+- Verdict: rc109 is confirmed. The policy value stays on the guest for later runs.
