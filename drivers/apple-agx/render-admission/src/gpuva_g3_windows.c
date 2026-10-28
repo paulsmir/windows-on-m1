@@ -3970,6 +3970,7 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
   return AdmissionGpuvaG3CompleteJobTimestamp(adapter, NULL, fence, 0ULL, 0ULL);
 }
 
+/* rc102: the job of this fence never reached the firmware (render_admission.h). */
 _Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
     ULONG fence) {
   ADMISSION_G3_STATE *state;
@@ -3982,9 +3983,15 @@ _Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
   process = state->ActiveProcess;
   if (process != NULL &&
       (state->SuccessorFence == fence || state->ActiveFence == fence)) {
-    /* The firmware holds neither job any more (the reset proved it). */
+    ADMISSION_G3_PRIVATE_SCENE *s;
+    /* The reset proved the firmware never received this job (a kicked
+     * successor or an active job whose submit failed): its graph job ends
+     * unrun and its scene was never started on the GPU. */
     if (!AppleAgxGpuvaG3GraphEndJob(&process->Graph))
       ADMISSION_G3_POISON(process,1u);
+    for (s = process->PrivateScenes; s; s = s->Next)
+      if (s->Queued && s->Started && s->Fence == fence && !s->GpuDone)
+        s->Started = 0u;
     if (state->SuccessorFence == fence) {
       state->SuccessorContext = NULL;
       state->SuccessorFence = 0u;

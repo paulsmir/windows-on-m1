@@ -7097,6 +7097,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
       break;
     }
     if (runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted) {
+      /* rc102 (EXP2039): the worker activated the job but its backend
+       * submit was refused before anything reached the firmware: no job
+       * is pending anywhere and the queues are idle. Nothing will end the
+       * packet, and nothing needs to: the engine reset aborts it. */
+      if (runtime->Backend.Phase == AppleAgxBackendRuntimeReady &&
+          runtime->Backend.PendingSubmission.Submission.Fence == 0u &&
+          !runtime->Backend.SuccessorPending &&
+          runtime->Provider.QueueProvider.Phase ==
+              AppleAgxG13QueueProviderCreated &&
+          runtime->Provider.QueueProvider.PendingFence == 0u &&
+          runtime->Provider.QueueProvider.Runtime.PendingFence == 0u &&
+          runtime->Provider.QueueProvider.Runtime.Successor.Fence == 0u) {
+        outcome = AdmissionGpuResetQuiesceUnsubmitted;
+        status = STATUS_SUCCESS;
+        break;
+      }
       outcome = AdmissionGpuResetQuiesceBackend;
       status = STATUS_DEVICE_HARDWARE_ERROR;
       break;

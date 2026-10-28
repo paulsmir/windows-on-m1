@@ -85,7 +85,8 @@ UNIT_HIGH = ('gPM_SP', 'gVDM_CSD_SP', 'gVDM_SSD_SP', 'gVDM_ILF_SP', 'gVDM_TFP_SP
              'gVDM_MMB_SP', 'gCDM_CS_KS0_SP', 'gCDM_CS_KS1_SP', 'gCDM_CS_KS2_SP',
              'gCDM_KS0_SP', 'gCDM_KS1_SP', 'gCDM_KS2_SP', 'gIPP_SP', 'gIPP_CS_SP',
              'gRDE0_SP', 'gRDE1_SP')
-QUIESCE = ('none', 'ended', 'timeout', 'worker', 'poll', 'backend', 'state')
+QUIESCE = ('none', 'ended', 'timeout', 'worker', 'poll', 'backend', 'state',
+           'unsubmitted')
 RESET_STAGES = ('none', 'validate', 'quiesce', 'private', 'paging',
                 'packet-active', 'packet-reset', 'backend-release', 'scheduler', 'complete')
 RESET_ENTRY_NAMES = {1: 'DxgkDdiResetEngine', 2: 'DxgkDdiResetFromTimeout'}

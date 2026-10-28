@@ -541,9 +541,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryEngineStatus(
  * later, packet completed before the engine reset). The owning context is
  * faulted first; dispatch stays frozen (SchedulerFaulted) until the reset
  * succeeds. */
-static NTSTATUS AdmissionResetQuiesceActive(ADMISSION_CONTEXT *Context) {
+static NTSTATUS AdmissionResetQuiesceActive(ADMISSION_CONTEXT *Context,
+                                            ULONG *Unsubmitted) {
   ULONG fence, kicked;
+  NTSTATUS status;
   KIRQL oldIrql;
+  *Unsubmitted = 0u;
   KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
   /* rc102: a successor kicked behind the active job (or left running
    * after the active job was reported) is with the firmware too. */
@@ -571,8 +574,13 @@ static NTSTATUS AdmissionResetQuiesceActive(ADMISSION_CONTEXT *Context) {
 #endif
   InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
-  return AdmissionPlatformRuntimeQuiesceActive(
+  status = AdmissionPlatformRuntimeQuiesceActive(
       Context, fence, ADMISSION_RESET_QUIESCE_TIMEOUT_MS, &Context->GpuReset);
+  /* rc102 (EXP2039): the active job never reached the firmware. */
+  if (NT_SUCCESS(status) &&
+      Context->GpuReset.Quiesce == (ULONG)AdmissionGpuResetQuiesceUnsubmitted)
+    *Unsubmitted = fence;
+  return status;
 }
 
 /* Lock-bearing code stays in .text even when the PASSIVE wrapper is pageable.
@@ -584,6 +592,8 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   ADMISSION_RENDER_CONTEXT *packetContext = NULL;
   ADMISSION_RENDER_PACKET_STATE packetState;
   APPLE_AGX_U32 packetFence = 0u;
+  ULONG unsubmitted = 0u;
+  ADMISSION_RENDER_CONTEXT *unsubmittedContext = NULL;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   APPLE_AGX_U32 kickedAborted = 0u;
 #endif
@@ -598,8 +608,13 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
   context->GpuReset.Stage = AdmissionGpuResetStageQuiesce;
-  if (!NT_SUCCESS(AdmissionResetQuiesceActive(context)))
+  if (!NT_SUCCESS(AdmissionResetQuiesceActive(context, &unsubmitted)))
     return STATUS_DEVICE_HARDWARE_ERROR;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* rc102: the unsubmitted job's graph job ends unrun and its scene was
+   * never touched by the GPU, so the private reset need not quarantine it. */
+  if (unsubmitted != 0u) AdmissionGpuvaG3AbortJob(context, unsubmitted);
+#endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   {
     BOOLEAN privateReset;
@@ -622,6 +637,26 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
   packetState = AdmissionRenderPacketState(&context->RenderPacket);
   context->GpuReset.Stage = AdmissionGpuResetStagePacketActive;
+  /* rc102 (EXP2039): the quiescence proved that the active job never
+   * reached the firmware (its backend submit failed): its packet ends here
+   * and the engine reset aborts its fence (LastAbortedFenceId); it is not
+   * resubmitted (its context is faulted, its submit may fail again). */
+  if (packetState == AdmissionRenderPacketActive && unsubmitted != 0u &&
+      context->RenderPacket.Description.Fence == unsubmitted &&
+      AppleAgxSchedulerActiveFence(&context->Scheduler, 0u, 0u) == unsubmitted) {
+    unsubmittedContext = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+        context->RenderPacket.Description.ContextToken;
+    context->GpuReset.Stage = AdmissionGpuResetStageBackendRelease;
+    if (!AdmissionBackendImageReleaseSubmission(&context->BackendImage,
+                                               unsubmitted) ||
+        !AdmissionRenderPacketReset(&context->RenderPacket, unsubmitted, 1u)) {
+      InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
+      KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+      KeReleaseSpinLock(&context->PagingLock, oldIrql);
+      return STATUS_INVALID_DEVICE_STATE;
+    }
+    packetState = AdmissionRenderPacketState(&context->RenderPacket);
+  }
   if (packetState == AdmissionRenderPacketActive) {
     /* Activated after the quiescence proof above: nothing proves its end. */
     InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
@@ -684,6 +719,15 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (kickedAborted != 0u) AdmissionGpuvaG3AbortJob(context, kickedAborted);
 #endif
+  if (unsubmittedContext != NULL &&
+      unsubmittedContext->Object.FenceOutstanding == unsubmitted) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionGpuvaG3PrivateCancel(unsubmittedContext, unsubmitted, FALSE);
+#endif
+    KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
+    AdmissionContextRetireFence(unsubmittedContext, unsubmitted);
+    KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+  }
   ResetEngine->LastAbortedFenceId = lastAborted;
   if (packetContext != NULL &&
       packetContext->Object.FenceOutstanding == packetFence) {

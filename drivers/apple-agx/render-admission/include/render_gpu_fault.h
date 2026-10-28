@@ -111,6 +111,9 @@ typedef enum _ADMISSION_GPU_RESET_QUIESCE {
   AdmissionGpuResetQuiescePoll,     /* provider or RTKit drain failed */
   AdmissionGpuResetQuiesceBackend,  /* backend left Submitted, job still active */
   AdmissionGpuResetQuiesceState,    /* runtime absent, stopping or resetting */
+  /* rc102 (EXP2039): the active job never reached the firmware (its backend
+   * submit was refused: backend Ready, queues idle); the reset aborts it. */
+  AdmissionGpuResetQuiesceUnsubmitted,
 } ADMISSION_GPU_RESET_QUIESCE;
 
 /* T10: the last operation checked by this reset. On failure this identifies

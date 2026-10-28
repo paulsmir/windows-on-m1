@@ -2248,8 +2248,10 @@ VOID AdmissionG4PendingAheadUnbind(ADMISSION_CONTEXT *);
 BOOLEAN AdmissionG4PendingKickLocked(ADMISSION_CONTEXT *, ULONG Fence);
 BOOLEAN AdmissionG4PendingAdoptLocked(ADMISSION_CONTEXT *, ULONG Fence);
 VOID AdmissionG4PendingAbortKickedLocked(ADMISSION_CONTEXT *);
-/* rc102: a reset aborted the kicked job before its completion: end its
- * graph job (the lease stays with the job still running, if any). */
+/* rc102: a reset proved this fence's job never reached the firmware (a
+ * kicked successor never handed over, or an active job whose submit
+ * failed): end its graph job unrun (the lease stays with a job still
+ * running) and unstart its private scene. PASSIVE_LEVEL. */
 VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *, ULONG Fence);
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *, const DXGKARG_ESCAPE *);
 #endif

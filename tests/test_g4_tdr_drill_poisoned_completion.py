@@ -449,7 +449,9 @@ static void setup(void) {
 static NTSTATUS reset_quiesce(const char *entry) {
   NTSTATUS status;
   RtlZeroMemory(&a.GpuReset, sizeof(a.GpuReset));
-  status = AdmissionResetQuiesceActive(&a);
+  { ULONG unsubmitted = 0u;
+    status = AdmissionResetQuiesceActive(&a, &unsubmitted);
+    assert(unsubmitted == 0u); /* rc102: the drilled job reached the firmware */ }
   if (status != STATUS_SUCCESS)
     printf("RED %s: status %#x quiesce %u wait_ms %u poll_failure %#x backend_phase %u "
            "provider_phase %u poll_guard %u drain_guard %u ingest_guard %u packet %u\n",

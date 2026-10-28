@@ -135,7 +135,7 @@ SHIM = r'''
 #include "render_paging.h"
 #include "render_present.h"
 #include "apple_agx_g4_submit.h"
-#include "apple_agx_g13_queue_runtime.h"
+#include "apple_agx_g13_queue_provider.h"
 #include "apple_agx_rtkit_session.h"
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define _Use_decl_annotations_
@@ -212,7 +212,8 @@ typedef struct {
   ADMISSION_RENDER_CONTEXT *Context;
 } ADMISSION_G4_PENDING;
 typedef struct { int Provider; APPLE_AGX_BACKEND_U32 LastPollGuard, LastDrainGuard;
-  struct { APPLE_AGX_G13_QUEUE_RUNTIME Runtime; APPLE_AGX_BACKEND_U32 LastIngestGuard; } QueueProvider;
+  struct { APPLE_AGX_G13_QUEUE_RUNTIME Runtime; APPLE_AGX_BACKEND_U32 LastIngestGuard;
+           APPLE_AGX_G13_QUEUE_PROVIDER_PHASE Phase; APPLE_AGX_BACKEND_U32 PendingFence; } QueueProvider;
 } APPLE_AGX_PLATFORM_PROVIDER;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct _ADMISSION_PLATFORM_RUNTIME {
@@ -298,7 +299,11 @@ static void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, ULONG f) {
 /* rc102: these replays kick no depth-2 successor (the scheduler holds no
  * kicked fence), so the reset never aborts one. */
 static void AdmissionG4PendingAbortKickedLocked(ADMISSION_CONTEXT *c) { (void)c; assert(0); }
-static void AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *c, ULONG f) { (void)c; (void)f; assert(0); }
+static ULONG g3_aborted_job;
+static void AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *c, ULONG f) {
+  (void)c; assert(!lock_depth && f != 0u); g3_aborted_job = f;
+  /* the real one unstarts the unrun job's scene */
+  if (model_active_scene != NULL && model_active_scene->Fence == f) scene_started = 0; }
 
 /* What AdmissionBackendComplete does when the firmware ends the job
  * (natural completion, or a drop after Timeout/Fault and resume). */
@@ -633,6 +638,31 @@ int main(void) {
   assert(last_recorded.LastAbortedFence == 0xce71cu && paused);
   assert(AdmissionDdiRestartFromTimeout(&adapter) == STATUS_SUCCESS && !paused);
   use_firmware_runtime = 0;
+
+  /* rc102 (EXP2039): the worker activated the job, then its backend submit
+   * failed before the firmware saw anything (backend Ready, provider
+   * Created: SchedulerFaulted at the submit line). Nothing can end the
+   * active packet; the reset must prove the firmware holds no job, abort
+   * the fence (it never ran) and recover, not fail every retry (0x116). */
+  setup(0, 0); adapter.SchedulerFaulted = 0x40000 | 5499;
+  runtime.Backend.Phase = AppleAgxBackendRuntimeReady;
+  runtime.Provider.QueueProvider.Phase = AppleAgxG13QueueProviderCreated;
+  g3_aborted_job = 0u;
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  expect_aborted(&reset);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceUnsubmitted &&
+         last_recorded.Stage == AdmissionGpuResetStageComplete && polls == 0);
+  assert(g3_aborted_job == 0xce71cu && owner.GpuvaG3CancelFence == (LONG)0xce71cu &&
+         !scene_quarantined);
+  /* A backend that still holds work (provider not idle) is not that case. */
+  setup(0, 0); adapter.SchedulerFaulted = 0x40000 | 5499;
+  runtime.Backend.Phase = AppleAgxBackendRuntimeReady;
+  runtime.Provider.QueueProvider.Phase = AppleAgxG13QueueProviderSubmitted;
+  runtime.Provider.QueueProvider.PendingFence = 0xce71cu;
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceBackend);
 
   /* 1. EXP1296: the worker already left (SchedulerFaulted set before the
    * TDR); the firmware drops the job when the reset polls the provider. */
