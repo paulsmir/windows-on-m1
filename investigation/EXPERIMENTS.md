@@ -66029,3 +66029,20 @@ EXP2036 HARDWARE ACTUAL (2026-10-28): **rc101 lean CDM barrier is neutral: no me
 - First app after boot again about 6900 (rc99 holds).
 - Verdict: the barrier-cost hypothesis (Fable §5) is rejected for this workload. Keep the default off; the switch stays for later bisects.
 - Note: the first EXP2037 package failed the WDK build: rc100's `ULONG planUs` passed as `unsigned int*` is C4057, an error under /WX. Fixed in 26d479ec and rebuilt.
+
+EXP2037 HARDWARE BEFORE 2026-10-28T11:58:57Z:
+- WHY: Fable found the KMD worker busy-polling every job on a pinned P-core: KeStallExecutionProcessor(20) for the first 50 ms of every job. The fanless J313 shares about 10 W between CPU and GPU, and the GPU throttles (state-6 share 92% → 49% hot). rc100's host model on EXP2034 job traces: poll busy 1.00 → 0.11–0.14 of GPU time, median detection latency +3–9 µs.
+- ATOMIC CONTRACT: one variable across EXP2037/EXP2038 (the registry switch; the same package).
+- Expected:
+  - Wom1JobPoll: mode predictive, high_resolution_timer true, busy_fraction ≤ 0.20, predicted_share ≥ 0.9, late_mean_us ≤ 100;
+  - queued_complete_to_kick within +50 µs of arm A;
+  - run 3: state-6 share and score ≥ arm A, temp_max not higher.
+- Failure criteria:
+  - SchedulerFaulted, TDR or removal;
+  - high_resolution_timer false;
+  - latency up with no thermal gain.
+- WHAT IS STILL UNKNOWN: high-resolution timer lateness under m1n1; whether guest WFI saves power under m1n1.
+- Recovery: rec2037h.
+- Hashes: sys 1d839055fa72, UmdArm64 e5832f03476d, UmdX64 9270ba6a65d0, Umd32 d52a3e3c879a; manifest 8218c47aee74, hardware-manifest 8dd1b57b4d50; probe2037.sh 71940ad345ff (PROBE_LINT_OK); visible recovery rec2037h c85ffffb26c26e60; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2037h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2037-poll-sleep/run2037.sh.
