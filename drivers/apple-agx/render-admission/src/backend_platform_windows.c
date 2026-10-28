@@ -5465,7 +5465,7 @@ ChainNext:
           (ULONGLONG)(pollNow.QuadPart - pollStart.QuadPart) * 1000000ULL /
               (ULONGLONG)pollFrequency.QuadPart : ~0ULL;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-      ULONG planUs = 0u, sleepCapUs = 0u, action;
+      unsigned int planUs = 0u, sleepCapUs = 0u, action;
 #if ADMISSION_JOB_AHEAD_BUILD
       /* a successor not bound yet is retried at least every 250 us */
       if (runtime->JobAhead && !prebindDone)
