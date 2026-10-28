@@ -6915,6 +6915,8 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             device = list->device;
             auto *owner = static_cast<AGX_D3D12_OWNER *>(device->owner);
             AgxD3d12OwnerRefCommand(owner,i,c+1);
+            /* rc94: deferred upload copies stay ahead of every other command */
+            AgxD3d12OwnerUploadBoundary(owner, command.kind == kCommandDispatch ? 1 : 0);
             if ((command.kind == kCommandClear || command.kind == kCommandClearDepth) && c >= deferred_end) {
                 UINT draw_index = 0;
                 UINT run = ClearAbsorbEnabled() ? DeferredClearRun(list, c, &draw_index) : 0u;
@@ -7030,6 +7032,11 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
         }
 #endif
     }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* rc94: the replay's end (or its failure) submits deferred upload copies */
+    if (queue && queue->device)
+        AgxD3d12OwnerUploadBoundary(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 0);
+#endif
     QueryPerformanceCounter(&replayed);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     FreeDrawScratch(draw_scratch);

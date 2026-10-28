@@ -125,6 +125,13 @@ struct AGX_D3D12_OWNER {
   struct AGX_D3D12_UPLOAD_TARGET { struct pipe_resource *Resource; unsigned long long Token; } *UploadTargets;
   UINT UploadTargetCount, UploadTargetCapacity;
   ADMISSION_UMD_UPLOAD_COPY UploadCopies[ADMISSION_UMD_UPLOAD_RING_COPIES];
+  /* rc94: copies AgxD3d12OwnerStageUploads recorded that wait in the
+   * context's compute batch for the Execute's leading dispatches
+   * (AgxD3d12OwnerUploadBoundary): their count in UploadCopies, the
+   * dispatches that joined them, the stage time and the context's newest
+   * fence before them */
+  UINT UploadDeferred, UploadDeferredCopies, UploadDeferredJoined, UploadDeferredStageUs;
+  unsigned long long UploadDeferredBefore;
 #endif
   /* EXP1822: D3D12 queues and lists are used from several threads (nBody's
    * async compute thread next to its render thread). The pipe_context is not
@@ -4135,6 +4142,9 @@ static UINT qpc_us(LONGLONG ticks) {
   return static_cast<UINT>(ticks * 1000000 / frequency);
 }
 
+#ifdef APPLE_AGX_GPUVA_WINSYS
+static bool upload_deferred_written(const AGX_D3D12_OWNER *owner, const AGX_D3D12_UAV *uavs); /* rc94 */
+#endif
 struct DispatchTiming {
   enum Phase { Bind, Heap, Launch, Unbind };
   AGX_D3D12_OWNER *Owner;
@@ -4170,6 +4180,14 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
                        indirect->Buffer->Bytes))
     return E_INVALIDARG;
   DispatchTiming timing(owner);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* rc94: a plain dispatch joins the Execute's deferred upload copies unless
+   * it may write one of their targets (AgxD3d12OwnerUploadBoundary) */
+  if (owner->UploadDeferred) {
+    if (upload_deferred_written(owner, uavs)) AgxD3d12OwnerUploadBoundary(owner, 2);
+    else ++owner->UploadDeferredJoined;
+  }
+#endif
   struct pipe_context *pipe = owner->Context;
   /* Borrow immutable cached objects, but bind/unbind for every dispatch. */
   void *states[AGX_D3D12_SAMPLER_SLOTS] = {};
@@ -4666,18 +4684,107 @@ extern "C" HRESULT AgxD3d12OwnerDrawWithClears(AGX_D3D12_OWNER *owner, const AGX
  * fallback slots, fallback dirty bytes lo/hi, fallback reasons
  * (umd_upload_ring.h), invalidated slots, 1 accepted | 2 refused | 4 ring
  * disabled, ring used, ring capacity, stage us, flush us}, once per Execute
- * with ring activity or a fallback. */
+ * with ring activity or a fallback.
+ *
+ * rc94 (EXP2028a GravityMark D3D12 HD 50k): that submission was a compute
+ * job of its own every Execute -- 8 us of GPU work behind 0.31 ms of launch
+ * and completion (c_empty), then the Execute's leading compute dispatches
+ * paid a second compute launch (0.24 ms). The copies now stay in the
+ * context's compute batch and the leading dispatches join it: one CDM
+ * stream, Asahi's barrier after every launch (agx_launch_internal), so the
+ * copies still complete before any of them starts. The first command that
+ * is not a plain dispatch, a dispatch that may write a copy target, and the
+ * replay's end submit them (AgxD3d12OwnerUploadBoundary); every later
+ * submission is then ordered after them as before. Status bit 8 of the
+ * receipt: dispatches joined the copies. APPLE_AGX_D3D12_UPLOAD_RING_ALONE=1
+ * restores the RC65 submission. */
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#define AGX_D3D12_UPLOAD_RING_MERGED 8u
+static bool upload_ring_alone() {
+  static const int alone = [] {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_UPLOAD_RING_ALONE", value, sizeof(value)) == 1 &&
+           value[0] == '1' ? 1 : 0;
+  }();
+  return alone != 0;
+}
+static void upload_ring_report(AGX_D3D12_OWNER *owner, UINT status, UINT stage_us, LONGLONG flush_ticks) {
+  const ADMISSION_UMD_UPLOAD_RING *ring = &owner->UploadRing;
+  const UINT values[15] = {1u, ring->Slots, ring->Copies, static_cast<UINT>(ring->Bytes),
+      static_cast<UINT>(ring->Bytes >> 32), ring->Fallbacks, static_cast<UINT>(ring->FallbackBytes),
+      static_cast<UINT>(ring->FallbackBytes >> 32), ring->FallbackReasons, ring->Invalidated,
+      status | (ring->Disabled ? 4u : 0u), ring->Ring.Used, ring->Ring.Capacity,
+      stage_us, qpc_us(flush_ticks)};
+  AdmissionUmdDiagnostic("measure-d3d12-upload-ring", S_OK, values, 15u);
+}
+/* After the submission that carried the copies: accepted when the context's
+ * newest fence passed the one before them and the context is not faulted. */
+static void upload_ring_submitted(AGX_D3D12_OWNER *owner, unsigned long long before, UINT merged,
+                                  UINT stage_us, LONGLONG flush_ticks) {
+  const unsigned long long fence = AgxWin32AsahiContextNewestFence(owner->Context);
+  const int accepted = fence > before && !AgxWin32AsahiContextFaulted(owner->Context);
+  (void)AdmissionUmdGpuvaUploadRingFinish(&owner->Runtime, &owner->UploadRing, accepted, accepted ? fence : 0ull);
+  upload_ring_report(owner, (accepted ? 1u : 2u) | merged, stage_us, flush_ticks);
+}
+/* Whether a dispatch with these slot UAVs and compute heap writes may write
+ * a deferred copy's target. Its submission could not mark that write
+ * (mark_written skips UploadRingPending slots), so it must not share it. */
+static bool upload_deferred_written(const AGX_D3D12_OWNER *owner, const AGX_D3D12_UAV *uavs) {
+  const AGX_D3D12_HEAP_BINDING &heap = owner->PendingHeaps[AGX_D3D12_HEAP_CS];
+  for (UINT c = 0; c < owner->UploadDeferredCopies; ++c) {
+    const void *target = owner->UploadTargets[owner->UploadCopies[c].Target].Resource;
+    for (unsigned u = 0; u < AGX_D3D12_UAV_SLOTS; ++u)
+      if ((uavs[u].Buffer && uavs[u].Buffer->Resource == target) ||
+          (uavs[u].Counter && uavs[u].Counter->Resource == target)) return true;
+    for (unsigned w = 0; heap.Writes && w < heap.WriteCount; ++w)
+      if (heap.Writes[w].Resource == target) return true;
+  }
+  return false;
+}
+#endif
+
+/* rc94: Dispatch 1 before a plain dispatch (it may join deferred copies),
+ * 0 before any other command and at the replay's end, 2 for a dispatch that
+ * may write a copy target. Receipt measure-d3d12-upload-merge {dispatches
+ * joined, copies, 1 when a submission the dispatches caused carried them,
+ * Dispatch}. */
+extern "C" void AgxD3d12OwnerUploadBoundary(AGX_D3D12_OWNER *owner, int dispatch) {
+  OwnerLock lock(owner);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (!owner || !owner->Context || !owner->UploadDeferred) return;
+  const bool submitted = AgxWin32AsahiContextNewestFence(owner->Context) > owner->UploadDeferredBefore;
+  if (!submitted && dispatch == 1 && !AgxWin32AsahiContextFaulted(owner->Context)) return;
+  LONGLONG flush_ticks = 0;
+  if (!submitted) {
+    const LONGLONG flush_start = qpc_now();
+    owner->Context->flush(owner->Context, NULL, 0);
+    flush_ticks = qpc_now() - flush_start;
+  }
+  owner->UploadDeferred = 0u;
+  upload_ring_submitted(owner, owner->UploadDeferredBefore,
+                        owner->UploadDeferredJoined ? AGX_D3D12_UPLOAD_RING_MERGED : 0u,
+                        owner->UploadDeferredStageUs, flush_ticks);
+  const UINT values[4] = {owner->UploadDeferredJoined, owner->UploadDeferredCopies, submitted ? 1u : 0u,
+                          static_cast<UINT>(dispatch)};
+  AdmissionUmdDiagnostic("measure-d3d12-upload-merge", S_OK, values, 4u);
+#endif
+  (void)owner;
+  (void)dispatch;
+}
+
 extern "C" void AgxD3d12OwnerStageUploads(AGX_D3D12_OWNER *owner) {
   OwnerLock lock(owner);
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (!owner || !owner->Context || !owner->UploadRingResource || owner->UploadRing.Disabled ||
       !owner->UploadTargetCount) return;
+  /* rc94: every replay reaches its boundary; never let copies of one
+   * Execute wait into the next one */
+  if (owner->UploadDeferred) AgxD3d12OwnerUploadBoundary(owner, 0);
   ADMISSION_UMD_UPLOAD_RING *ring = &owner->UploadRing;
   const LONGLONG start = qpc_now();
-  LONGLONG flush_ticks = 0;
   ring->Slots = ring->Copies = ring->Fallbacks = ring->FallbackReasons = ring->Invalidated = 0u;
   ring->Bytes = ring->FallbackBytes = 0ull;
-  UINT count = 0u, status = 0u;
+  UINT count = 0u;
   AdmissionUmdGpuvaUploadRingRetire(&owner->Runtime, ring);
   /* Unsubmitted recorded work would share the copy batch. */
   if (owner->PendingDraws || owner->PendingCopies || owner->PendingDispatches) {
@@ -4700,22 +4807,22 @@ extern "C" void AgxD3d12OwnerStageUploads(AGX_D3D12_OWNER *owner) {
                                            0, &box);
     }
     const unsigned long long before = AgxWin32AsahiContextNewestFence(owner->Context);
+    if (!upload_ring_alone()) {
+      owner->UploadDeferred = 1u;
+      owner->UploadDeferredCopies = count;
+      owner->UploadDeferredJoined = 0u;
+      owner->UploadDeferredBefore = before;
+      owner->UploadDeferredStageUs = qpc_us(qpc_now() - start);
+      return;
+    }
     const LONGLONG flush_start = qpc_now();
     owner->Context->flush(owner->Context, NULL, 0);
-    flush_ticks = qpc_now() - flush_start;
-    const unsigned long long fence = AgxWin32AsahiContextNewestFence(owner->Context);
-    const int accepted = fence > before && !AgxWin32AsahiContextFaulted(owner->Context);
-    (void)AdmissionUmdGpuvaUploadRingFinish(&owner->Runtime, ring, accepted, accepted ? fence : 0ull);
-    status = accepted ? 1u : 2u;
+    const LONGLONG flush_ticks = qpc_now() - flush_start;
+    upload_ring_submitted(owner, before, 0u, qpc_us(qpc_now() - start), flush_ticks);
+    return;
   }
-  if (count || ring->Fallbacks || ring->Invalidated || ring->FallbackReasons) {
-    const UINT values[15] = {1u, ring->Slots, ring->Copies, static_cast<UINT>(ring->Bytes),
-        static_cast<UINT>(ring->Bytes >> 32), ring->Fallbacks, static_cast<UINT>(ring->FallbackBytes),
-        static_cast<UINT>(ring->FallbackBytes >> 32), ring->FallbackReasons, ring->Invalidated,
-        status | (ring->Disabled ? 4u : 0u), ring->Ring.Used, ring->Ring.Capacity,
-        qpc_us(qpc_now() - start), qpc_us(flush_ticks)};
-    AdmissionUmdDiagnostic("measure-d3d12-upload-ring", S_OK, values, 15u);
-  }
+  if (ring->Fallbacks || ring->Invalidated || ring->FallbackReasons)
+    upload_ring_report(owner, 0u, qpc_us(qpc_now() - start), 0);
 #else
   (void)owner;
 #endif

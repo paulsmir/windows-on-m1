@@ -300,6 +300,13 @@ int main() {
         self.assertLess(execute.index('AgxD3d12OwnerStageUploads(owner)'), execute.index('ReplayAndSubmit('))
         body = function(owner.replace('extern "C" ', 'static '), 'AgxD3d12OwnerStageUploads')
         self.assertTrue(body, 'missing AgxD3d12OwnerStageUploads')
+        # rc94: with APPLE_AGX_D3D12_UPLOAD_RING_ALONE=1 (upload_ring_alone)
+        # the RC65 order below holds exactly; test_rc94_upload_ring_merge
+        # covers the default, where the leading dispatches join the copies.
+        helpers = [function(owner.replace('extern "C" ', 'static '), name)
+                   for name in ('upload_ring_report', 'upload_ring_submitted', 'AgxD3d12OwnerUploadBoundary')]
+        self.assertTrue(all(helpers), 'missing rc94 upload helpers')
+        body = '\n'.join(helpers + [body])
         body = re.sub(r'(?m)^#(if|ifdef|endif|else).*\n', '', body)
         harness = r'''
 #include <cassert>
@@ -330,8 +337,12 @@ struct AGX_D3D12_OWNER {
   pipe_resource *UploadRingResource; ADMISSION_UMD_UPLOAD_RING UploadRing;
   UPLOAD_TARGET *UploadTargets; UINT UploadTargetCount;
   ADMISSION_UMD_UPLOAD_COPY UploadCopies[ADMISSION_UMD_UPLOAD_RING_COPIES];
+  UINT UploadDeferred, UploadDeferredCopies, UploadDeferredJoined, UploadDeferredStageUs;
+  unsigned long long UploadDeferredBefore;
 };
 struct OwnerLock { explicit OwnerLock(AGX_D3D12_OWNER *) {} };
+#define AGX_D3D12_UPLOAD_RING_MERGED 8u
+static bool upload_ring_alone() { return true; }
 static LONGLONG qpc_now() { return 0; }
 static UINT qpc_us(LONGLONG) { return 0; }
 static unsigned long long AgxWin32AsahiContextNewestFence(pipe_context *) { return newest; }

@@ -49,6 +49,10 @@ void AgxD3d12OwnerMeasureHeapStaging(AGX_D3D12_OWNER *Owner, BOOL Begin);
 /* RC65: under the owner lock at Execute start, before the replay: GPU
  * copies of persistent heaps' dirty runs through the native upload ring. */
 void AgxD3d12OwnerStageUploads(AGX_D3D12_OWNER *Owner);
+/* rc94: under the owner lock, before every replayed command (Dispatch 1 for
+ * a plain dispatch, else 0) and at the replay's end (0): submits the staged
+ * upload copies unless only plain dispatches followed them so far. */
+void AgxD3d12OwnerUploadBoundary(AGX_D3D12_OWNER *Owner, int Dispatch);
 BOOL AgxD3d12OwnerCpuMapIsPrivate(AGX_D3D12_OWNER *Owner, const void *Cpu);
 HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
 /* CpuVisible: the heap's CPU page property is not NOT_AVAILABLE; only such
