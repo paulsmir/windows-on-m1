@@ -65509,3 +65509,11 @@ EXP2018 HARDWARE BEFORE 2026-10-28T03:28:43Z:
 - Hashes: sys 6514b00d33cf, UmdArm64 bc699e4ddd54, UmdX64 9f2f398b1230, Umd32 3f2f14e26f10; manifest f324c6f82d91, hardware-manifest e59f14604d4f; probe2018.sh da26a54cb069 (PROBE_LINT_OK); visible recovery rec2018h a1f252645eb7092f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2018h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2018-mem-recency/run2018.sh.
+
+EXP2018 HARDWARE ACTUAL (2026-10-28): rc86 (trim recency, slab cache, TVB zero skip, receipt v11).
+- FHD 100k: 3394; first-frame gap 43.1 s, of which bo-bind-paging 34.6 s (27 trims, 760 MiB). FHD 200k: 1354 (EXP2016: 1357; EXP2017: 988).
+- The WER event is an unrelated svchost (webthreatdefsvc). No removal.
+- Verdict:
+  - rc86 trim recency does NOT remove the startup thrash: the working set itself exceeds the LOCAL budget;
+  - the slab cache and receipts are kept (neutral or positive).
+- Next: shrink the working set (rc87).
