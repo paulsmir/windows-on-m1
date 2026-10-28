@@ -186,6 +186,12 @@ APPLE_AGX_BOOL AdmissionBackendImageCaptureSnapshot(
 APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmissionRestore(
     ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence);
+/* rc90: TRUE when that release of Fence's binding cannot fail and does not
+ * re-Prepare the arena: a G4 compute or present binding (fields only), or a
+ * G4 render whose snapshot matches (64 KiB restore). */
+APPLE_AGX_BOOL AdmissionBackendImageReleasesWithoutPrepare(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence);
 
 APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(
     ADMISSION_BACKEND_IMAGE *Image);

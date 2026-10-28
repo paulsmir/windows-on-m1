@@ -57,6 +57,8 @@ class G4SubmitVirtualReplay(unittest.TestCase):
             "AdmissionGpuvaG3PrivateCancel", "AdmissionG4PendingAdmissible",
             "AdmissionG4PendingQueue", "AdmissionG4PendingBindHead",
             "AdmissionG4PendingDropLocked",
+            "AdmissionJobAheadFillLocked", "AdmissionG4PendingPrebindHead",
+            "AdmissionG4PendingAheadPromoteLocked", "AdmissionG4PendingAheadUnbind",
             "AdmissionG4SubmitComputeLocked",
             "AdmissionG4SubmitVirtualEnvelope",
             "AdmissionG3OutputMatchesLocal", "AdmissionG3OutputAccessible", "AdmissionGpuvaG3BeginJob", "AdmissionG4SubmitTouch",
@@ -69,9 +71,11 @@ class G4SubmitVirtualReplay(unittest.TestCase):
             binary = tmp / "replay"
             subprocess.run([
                 os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
-                "-Werror", "-fsanitize=address,undefined", "-I", str(tmp),
+                "-Werror", "-fsanitize=address,undefined", "-DREPLAY_JOB_AHEAD", "-I", str(tmp),
                 "-I", str(ROOT / "drivers/apple-agx/shared/include"),
+                "-I", str(ROOT / "drivers/apple-agx/render-admission/include"),
                 str(ROOT / "tests/g4_submit_virtual_replay.c"),
+                str(ROOT / "drivers/apple-agx/render-admission/src/render_job_ahead.c"),
                 str(ROOT / "drivers/apple-agx/shared/src/apple_agx_g4_submit.c"),
                 str(ROOT / "drivers/apple-agx/shared/src/apple_agx_scheduler.c"),
                 "-o", str(binary),

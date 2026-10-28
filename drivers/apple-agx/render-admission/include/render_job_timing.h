@@ -58,7 +58,12 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
    * AdmissionJobTimingCpuValue; 0 = not recorded. */
   unsigned int CpuBuild, CpuComplete;
   /* v2: ADMISSION_JOB_FLAG_* noted by BeginJob (v3: and the build). */
-  unsigned int Flags, Reserved;
+  unsigned int Flags;
+  /* rc90 (was Reserved, same layout): the build-ahead refusals while this
+   * job ran, AdmissionJobAhead*Refusal values: early release in bits 0-7,
+   * the last prebind refusal for its successor in bits 8-15, the chain
+   * refusal at its completion in bits 16-23; 0 = allowed or not tried. */
+  unsigned int AheadRefusals;
   /* v3: ADMISSION_JOB_SUB stamps. */
   unsigned long long Sub[ADMISSION_JOB_SUB_COUNT];
 } ADMISSION_JOB_TIMING_SLOT;
@@ -80,6 +85,15 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
 #define ADMISSION_JOB_FLAG_PRELUDE 0x20u
 #define ADMISSION_JOB_FLAG_SLOT1 0x40u
 #define ADMISSION_JOB_FLAG_MANAGER_RESTORED 0x80u
+/* rc90 build-ahead (Wom1JobBuildAhead): the job's image was released right
+ * after its kick; it was bound while its predecessor ran; the worker that
+ * ran its predecessor claimed it at that completion (no dispatch hop). */
+#define ADMISSION_JOB_FLAG_AHEAD_RELEASED 0x100u
+#define ADMISSION_JOB_FLAG_AHEAD_PREBOUND 0x200u
+#define ADMISSION_JOB_FLAG_AHEAD_CHAINED 0x400u
+#define ADMISSION_JOB_AHEAD_SHIFT_RELEASE 0u
+#define ADMISSION_JOB_AHEAD_SHIFT_PREBIND 8u
+#define ADMISSION_JOB_AHEAD_SHIFT_CHAIN 16u
 
 /* Header WorkerFlags: the job worker ran on the dedicated thread; that
  * thread is pinned to the processors of efficiency class (bits 8-15),
@@ -118,6 +132,10 @@ int AdmissionJobTimingCpu(ADMISSION_JOB_TIMING_STATE *State,
     unsigned int Fence, int Complete, unsigned int Value);
 int AdmissionJobTimingFlag(ADMISSION_JOB_TIMING_STATE *State,
     unsigned int Fence, unsigned int Flag);
+/* rc90: store Refusal (low 8 bits; 0xff when larger) in AheadRefusals at
+ * Shift (ADMISSION_JOB_AHEAD_SHIFT_*), replacing the previous value. */
+int AdmissionJobTimingAheadRefusal(ADMISSION_JOB_TIMING_STATE *State,
+    unsigned int Fence, unsigned int Shift, unsigned int Refusal);
 /* v3: the first stamp of Sub wins. */
 int AdmissionJobTimingSub(ADMISSION_JOB_TIMING_STATE *State,
     unsigned int Fence, ADMISSION_JOB_SUB Sub, unsigned long long Qpc);

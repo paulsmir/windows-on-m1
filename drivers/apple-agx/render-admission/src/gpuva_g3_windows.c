@@ -7,6 +7,7 @@
 #include "apple_agx_g13_compute_work.h"
 #include "apple_agx_present_job.h"
 #include "render_job_timing.h"
+#include "render_job_ahead.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
@@ -4659,7 +4660,10 @@ _Use_decl_annotations_ VOID AdmissionG4PendingDropLocked(
     }
     if (adapter->DispatchedFence == entry->Fence)
       adapter->DispatchedFence = 0u;
-    if (entry->State == AdmissionG4PendingBinding) {
+    /* rc90: a Prebound entry holds the backend image like a Binding one;
+     * the worker that bound it releases the image and frees it. */
+    if (entry->State == AdmissionG4PendingBinding ||
+        entry->State == AdmissionG4PendingPrebound) {
       entry->State = AdmissionG4PendingDropped;
       kept = 1u;
     } else {
@@ -4668,6 +4672,207 @@ _Use_decl_annotations_ VOID AdmissionG4PendingDropLocked(
     }
   }
   adapter->G4PendingCount = kept;
+}
+
+/* rc90 build-ahead (render_job_ahead.h). The decision values mirror the
+ * enums they are compared with. SchedulerFaulted set here: file tag 5. */
+C_ASSERT((UINT)AdmissionG4PendingQueued == ADMISSION_JOB_AHEAD_PENDING_QUEUED);
+C_ASSERT((UINT)AdmissionG4PendingDropped == ADMISSION_JOB_AHEAD_PENDING_DROPPED);
+C_ASSERT((UINT)AdmissionG4PendingPrebound == ADMISSION_JOB_AHEAD_PENDING_PREBOUND);
+C_ASSERT((UINT)AdmissionRenderPacketEmpty == ADMISSION_JOB_AHEAD_PACKET_EMPTY);
+C_ASSERT((UINT)AdmissionRenderPacketActive == ADMISSION_JOB_AHEAD_PACKET_ACTIVE);
+C_ASSERT(AppleAgxPreemptionIdle == 0);
+
+_Use_decl_annotations_ VOID AdmissionJobAheadFillLocked(
+    ADMISSION_CONTEXT *adapter, ADMISSION_JOB_AHEAD_STATE *s) {
+  const ADMISSION_BACKEND_IMAGE *image;
+  const ADMISSION_G4_PENDING *head;
+  if (adapter == NULL || s == NULL) return;
+  image = &adapter->BackendImage;
+  head = &adapter->G4Pending[adapter->G4PendingHead];
+  s->Faulted = InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) != 0
+      ? 1u : 0u;
+  s->PreemptionPhase =
+      (unsigned int)AppleAgxSchedulerPreemptionPhase(&adapter->Scheduler);
+  s->PagingPending =
+      InterlockedCompareExchange(&adapter->PagingPending, 0, 0) != 0 ? 1u : 0u;
+  s->QueuedFence = AppleAgxSchedulerQueuedFence(&adapter->Scheduler, 0u, 0u);
+  s->ActiveFence = AppleAgxSchedulerActiveFence(&adapter->Scheduler, 0u, 0u);
+  s->DispatchedFence = adapter->DispatchedFence;
+  s->PacketState = (unsigned int)AdmissionRenderPacketState(&adapter->RenderPacket);
+  s->PacketFence = adapter->RenderPacket.Description.Fence;
+  s->PendingCount = adapter->G4PendingCount;
+  s->PendingHeadState = adapter->G4PendingCount != 0u ? (unsigned int)head->State : 0u;
+  s->PendingHeadFence = adapter->G4PendingCount != 0u ? head->Fence : 0u;
+  s->ImageBoundFence = image->BoundFence;
+  s->ImageKind = image->BoundFence == 0u ? ADMISSION_JOB_AHEAD_IMAGE_NONE :
+      image->G4Compute ? ADMISSION_JOB_AHEAD_IMAGE_G4_COMPUTE :
+      image->PresentCompute ? ADMISSION_JOB_AHEAD_IMAGE_PRESENT :
+      image->G4Native ? ADMISSION_JOB_AHEAD_IMAGE_G4_RENDER :
+      ADMISSION_JOB_AHEAD_IMAGE_OTHER;
+  s->ImageFastRelease = image->BoundFence != 0u &&
+      AdmissionBackendImageReleasesWithoutPrepare(image,
+          &adapter->BackendSnapshot, image->BoundFence) ? 1u : 0u;
+}
+
+/* rc90 build-ahead: while the running job (State->JobFence, its image
+ * released right after its kick) runs, bind the head pending submission,
+ * the scheduler's next fence, into the free backend image: the same binds
+ * as AdmissionG4PendingBindHead, without the render packet, which still
+ * holds the running job. The context's DMA range and mapping generation
+ * are applied only when the worker promotes the entry (BeginJob of the
+ * running job already read them). A refused or dropped bind leaves the
+ * entry for the ordinary path. */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingPrebindHead(
+    ADMISSION_CONTEXT *adapter, ADMISSION_JOB_AHEAD_STATE *State,
+    ULONG *Refusal) {
+  ADMISSION_G4_PENDING *entry;
+  APPLE_AGX_G4_SUBMIT_VIEW view;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  KIRQL old_irql;
+  ULONG refusal;
+  BOOLEAN bound, dropped, prebound = FALSE;
+  if (Refusal != NULL) *Refusal = 0u;
+  if (adapter == NULL || State == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return FALSE;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  AdmissionJobAheadFillLocked(adapter, State);
+  refusal = AdmissionJobAheadPrebindRefusal(State);
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  if (refusal == 0u && adapter->G4PrebindFence != 0u) refusal = 27u;
+  if (refusal == 0u) {
+    /* Binding: a preemption or reset meanwhile marks it Dropped. */
+    entry->State = AdmissionG4PendingBinding;
+    adapter->G4PrebindFence = entry->Fence;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (Refusal != NULL) *Refusal = refusal;
+  if (refusal != 0u) return FALSE;
+  view = entry->View;
+  view.Native = entry->Native;
+  view.Render = entry->Render;
+  view.Attachments = entry->Attachments;
+  RtlZeroMemory(&binding, sizeof(binding));
+  bound = (entry->Present ?
+      AdmissionBackendImageBindPresentCompute(&adapter->BackendImage,
+          entry->Fence, &entry->PresentJob) :
+      entry->Compute ?
+      AdmissionBackendImageBindG4Compute(&adapter->BackendImage,
+          entry->Fence, &entry->ComputeEnvelope) :
+      AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
+          &entry->Packet, (PVOID)(ULONG_PTR)entry->Packet.DestinationCpuToken,
+          &view, &binding)) ? TRUE : FALSE;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  dropped = entry->State == AdmissionG4PendingDropped ? TRUE : FALSE;
+  if (bound && !dropped) {
+    entry->State = AdmissionG4PendingPrebound;
+    prebound = TRUE;
+  } else {
+    /* As AdmissionG4PendingBindHead: the release of a G4 binding restores
+     * the snapshot; a refused bind left nothing bound (the next bind
+     * re-Prepares the arena). */
+    if (bound)
+      (void)AdmissionBackendImageReleaseSubmissionRestore(
+          &adapter->BackendImage, &adapter->BackendSnapshot, entry->Fence);
+    if (dropped) {
+      entry->State = AdmissionG4PendingFree;
+      entry->Context = NULL;
+      adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+          ADMISSION_G4_PENDING_CAPACITY;
+      --adapter->G4PendingCount;
+    } else {
+      entry->State = AdmissionG4PendingQueued;
+    }
+    adapter->G4PrebindFence = 0u;
+    if (Refusal != NULL) *Refusal = dropped ? 28u : 29u;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  return prebound;
+}
+
+/* rc90 build-ahead: the running job completed; its worker moves the
+ * Prebound head into the empty render packet as Queued, exactly the state
+ * AdmissionG4PendingBindHead leaves (the image already holds the binding). */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingAheadPromoteLocked(
+    ADMISSION_CONTEXT *adapter, ULONG fence) {
+  ADMISSION_G4_PENDING *entry;
+  ADMISSION_RENDER_CONTEXT *context;
+  if (adapter == NULL || fence == 0u || adapter->G4PendingCount == 0u)
+    return FALSE;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  context = entry->Context;
+  if (entry->State != AdmissionG4PendingPrebound || entry->Fence != fence ||
+      adapter->G4PrebindFence != fence || context == NULL ||
+      adapter->BackendImage.BoundFence != fence ||
+      AdmissionRenderPacketState(&adapter->RenderPacket) !=
+          AdmissionRenderPacketEmpty ||
+      AppleAgxSchedulerQueuedFence(&adapter->Scheduler, 0u, 0u) != fence ||
+      !AdmissionRenderPacketPrepare(&adapter->RenderPacket, &entry->Packet))
+    return FALSE;
+  if (!AdmissionRenderPacketQueue(&adapter->RenderPacket, entry->Fence,
+          (ULONGLONG)(ULONG_PTR)context, entry->Packet.PrivateDataToken, 0u,
+          entry->Packet.DmaEnd)) {
+    (void)AdmissionRenderPacketCancelPrepared(&adapter->RenderPacket,
+        (ULONGLONG)(ULONG_PTR)context);
+    return FALSE;
+  }
+  context->GpuvaG3MappingGeneration = entry->MappingGeneration;
+  context->GpuvaG3DmaBufferVa = entry->DmaBufferVa;
+  context->GpuvaG3DmaBufferBytes = entry->DmaBufferBytes;
+  InterlockedIncrement(&adapter->SubmitPath.Binds);
+  entry->State = AdmissionG4PendingFree;
+  entry->Context = NULL;
+  adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+      ADMISSION_G4_PENDING_CAPACITY;
+  --adapter->G4PendingCount;
+  adapter->G4PrebindFence = 0u;
+  return TRUE;
+}
+
+/* rc90 build-ahead: the worker leaves (or does not chain) with an entry
+ * still bound ahead: release the image; a dropped entry is freed (its
+ * context was released by the drop), any other returns to Queued for
+ * AdmissionG4PendingBindHead. PASSIVE_LEVEL, no lock held. */
+_Use_decl_annotations_ VOID AdmissionG4PendingAheadUnbind(
+    ADMISSION_CONTEXT *adapter) {
+  ADMISSION_G4_PENDING *entry;
+  KIRQL old_irql;
+  ULONG fence;
+  BOOLEAN dropped, released;
+  if (adapter == NULL) return;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  fence = adapter->G4PrebindFence;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  if (fence == 0u || adapter->G4PendingCount == 0u || entry->Fence != fence ||
+      (entry->State != AdmissionG4PendingPrebound &&
+       entry->State != AdmissionG4PendingDropped)) {
+    if (fence != 0u)
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x50000L | __LINE__, 0);
+    adapter->G4PrebindFence = 0u;
+    KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+    return;
+  }
+  dropped = entry->State == AdmissionG4PendingDropped ? TRUE : FALSE;
+  if (!dropped) entry->State = AdmissionG4PendingBinding;
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  released = AdmissionBackendImageReleaseSubmissionRestore(
+      &adapter->BackendImage, &adapter->BackendSnapshot, fence) ? TRUE : FALSE;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (dropped || entry->State == AdmissionG4PendingDropped) {
+    entry->State = AdmissionG4PendingFree;
+    entry->Context = NULL;
+    adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+        ADMISSION_G4_PENDING_CAPACITY;
+    --adapter->G4PendingCount;
+  } else {
+    entry->State = AdmissionG4PendingQueued;
+  }
+  adapter->G4PrebindFence = 0u;
+  /* The image could not return to its Prepare state: no later bind can
+   * succeed; the TDR reset recovers. */
+  if (!released)
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x50000L | __LINE__, 0);
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
 }
 
 /* G2: a compute envelope becomes one standalone RunCompute job. It takes

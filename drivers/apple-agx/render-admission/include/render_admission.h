@@ -575,7 +575,10 @@ typedef enum _ADMISSION_G4_PENDING_STATE {
   AdmissionG4PendingFilling, /* reserved by the submitter, not yet counted */
   AdmissionG4PendingQueued,
   AdmissionG4PendingBinding,
-  AdmissionG4PendingDropped,
+  AdmissionG4PendingDropped = 4,
+  /* rc90 build-ahead: bound into the backend image while the previous job
+   * runs; the worker that ran it promotes or unbinds it (G4PrebindFence). */
+  AdmissionG4PendingPrebound = 5,
 } ADMISSION_G4_PENDING_STATE;
 struct _ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G4_PENDING {
@@ -813,6 +816,11 @@ typedef struct _ADMISSION_CONTEXT {
    * ADMISSION_G4_PENDING). The worker binds the head into RenderPacket. */
   ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
   ULONG G4PendingHead, G4PendingCount;
+  /* rc90 build-ahead: fence of the head entry bound (Prebound, or Binding/
+   * Dropped while the worker binds or unbinds it) into BackendImage while
+   * RenderPacket still holds the running job; 0 = none. Worker-owned,
+   * under SchedulerLock. */
+  ULONG G4PrebindFence;
   ADMISSION_SUBMIT_PATH SubmitPath;
   ADMISSION_BACKEND_IMAGE BackendImage;
   /* EXP1105: Prepare image of the objects a G4 job changes. */
@@ -2203,6 +2211,22 @@ BOOLEAN AdmissionG4PendingBindHead(ADMISSION_CONTEXT *);
 /* Phase 5a: drop every pending submission like a queued packet (SchedulerLock
  * held); Preempt selects preemption (resubmitted later) over cancel. */
 VOID AdmissionG4PendingDropLocked(ADMISSION_CONTEXT *, BOOLEAN Preempt);
+/* rc90 build-ahead (render_job_ahead.h). FillLocked: the adapter-side
+ * inputs of a decision (SchedulerLock held; CpuHeadFence needs PagingLock
+ * and is left to the caller). PrebindHead: while the running job whose
+ * image was released runs, bind the head pending submission into the image
+ * (PASSIVE_LEVEL, no lock held; State carries the runtime inputs and
+ * receives the rest; TRUE when an entry is now Prebound). PromoteLocked:
+ * move the Prebound head with this fence into the empty RenderPacket as
+ * Queued (SchedulerLock held). AheadUnbind: release a Prebound (or
+ * dropped) entry's image and return it to Queued or free it. */
+struct _ADMISSION_JOB_AHEAD_STATE;
+VOID AdmissionJobAheadFillLocked(ADMISSION_CONTEXT *,
+    struct _ADMISSION_JOB_AHEAD_STATE *);
+BOOLEAN AdmissionG4PendingPrebindHead(ADMISSION_CONTEXT *,
+    struct _ADMISSION_JOB_AHEAD_STATE *, ULONG *Refusal);
+BOOLEAN AdmissionG4PendingAheadPromoteLocked(ADMISSION_CONTEXT *, ULONG Fence);
+VOID AdmissionG4PendingAheadUnbind(ADMISSION_CONTEXT *);
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *, const DXGKARG_ESCAPE *);
 #endif
 DXGKDDI_COLLECTDBGINFO AdmissionDdiCollectDbgInfo;

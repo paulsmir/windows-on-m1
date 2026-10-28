@@ -706,6 +706,19 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmissionRestore(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AdmissionBackendImageReleasesWithoutPrepare(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence) {
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
+      Image->BoundFence != Fence)
+    return APPLE_AGX_FALSE;
+  if (Image->G4Compute || Image->PresentCompute)
+    return APPLE_AGX_TRUE;
+  return Image->G4Native && snapshot_matches(Snapshot, Image)
+      ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
+}
+
 APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Slot) {
   if (Image == ADMISSION_BACKEND_IMAGE_NULL ||

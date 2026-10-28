@@ -110,6 +110,10 @@ typedef struct {
   APPLE_AGX_BACKEND_RUNTIME Backend;
   unsigned LastFirmwareRecoveryKind;
   ADMISSION_GPU_FAULT_RECEIPT GpuFault;
+  /* rc90 build-ahead (backend_platform_windows.c) */
+  unsigned AheadReleasedFence, AheadFinishedFence;
+  void *AheadManager;
+  BOOLEAN AheadG4Native, AheadFinishedDropped;
 } ADMISSION_PLATFORM_RUNTIME;
 static unsigned notifications, dpcs, released, lock_depth, sync_fail;
 static unsigned timestamp_source_ok=1, timestamp_publish_ok=1;
@@ -176,7 +180,11 @@ static NTSTATUS sync_callback(void *a, BOOLEAN (*fn)(PVOID), PVOID p, unsigned n
 CASES = r'''
 int main(void) {
   const unsigned prior_fences[] = {40u, 0x161du, 0xfffffffeu};
-  unsigned sample, before, mode, rejected;
+  unsigned sample, before, mode, rejected, ahead;
+  /* rc90: ahead = the image was released right after the kick; the
+   * completion must not release it again, and records the finished fence
+   * the worker may chain from. */
+  for (ahead=0; ahead<2; ++ahead)
   for (sample=0; sample<3; ++sample)
   for (before=0; before<2; ++before)
   for (mode=0; mode<11; ++mode)
@@ -191,8 +199,10 @@ int main(void) {
     APPLE_AGX_U32 aborted;
     APPLE_AGX_BACKEND_COMPLETION_STATUS status = mode==0
         ? AppleAgxBackendCompletionSuccess : AppleAgxBackendCompletionDropped;
+    const unsigned expect_release = ahead ? 0u : 1u;
     notifications=dpcs=released=lock_depth=sync_fail=0;
     r.Adapter=&a; r.LastFirmwareRecoveryKind=4;
+    if (ahead) r.AheadReleasedFence=failed;
     a.InterfaceValid=1; a.Interface.DxgkCbNotifyInterrupt=notify;
     a.Interface.DxgkCbQueueDpc=dpc; a.Interface.DxgkCbSynchronizeExecution=sync_callback;
     AppleAgxSchedulerInitialize(&a.Scheduler);
@@ -236,11 +246,13 @@ int main(void) {
     if (mode==2) {
       sync_fail=1;
       assert(!AdmissionBackendComplete(&r,failed,0,0,status));
-      assert(!notifications && released==1 && a.Scheduler.LastAbortedFence==failed);
+      assert(!notifications && released==expect_release && a.Scheduler.LastAbortedFence==failed);
       sync_fail=0; /* retry must not complete the aborted fence or release twice */
     }
     assert(AdmissionBackendComplete(&r,failed,0,0,status));
-    assert(notifications==1 && dpcs==1 && released==1 && !lock_depth);
+    assert(notifications==1 && dpcs==1 && released==expect_release && !lock_depth);
+    assert(!r.AheadReleasedFence && !r.AheadManager);
+    assert(r.AheadFinishedFence==failed && r.AheadFinishedDropped==(mode!=0));
     assert(!culprit.Object.FenceOutstanding && other.Object.FenceOutstanding==next);
     assert(!other.GpuvaG3Poisoned && culprit.GpuvaG3Poisoned==(mode!=0));
     if (mode==0) {
@@ -268,7 +280,7 @@ int main(void) {
     assert(preemption.PreemptionFence==77 && preemption.LastCompletedFence==reported);
     assert(AppleAgxSchedulerCommitBoundaryPreemption(&a.Scheduler,77));
     assert(!AdmissionBackendComplete(&r,failed,0,0,status));
-    assert(notifications==1 && released==1);
+    assert(notifications==1 && released==expect_release);
     assert(AppleAgxSchedulerResetEngine(&a.Scheduler,0,0,&aborted));
     assert(aborted==reported && a.Scheduler.CompletedFence==reported);
     assert(AppleAgxSchedulerQueueResubmittedPagingFence(&a.Scheduler,0,0,next));

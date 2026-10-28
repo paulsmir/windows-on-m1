@@ -482,5 +482,91 @@ class JobAheadModel(unittest.TestCase):
             self.assertIn("PASS", ran.stdout)
 
 
+class JobAheadWiring(unittest.TestCase):
+    """The KMD uses the same decisions, gated by a default-off switch."""
+
+    def assertIn(self, member, container, msg=None):  # keep failures short
+        self.assertTrue(member in container, msg or f"missing: {member!r}")
+
+    def assertNotIn(self, member, container, msg=None):
+        self.assertTrue(member not in container, msg or f"unexpected: {member!r}")
+
+    def assertRegex(self, text, regex, msg=None):
+        self.assertTrue(re.search(regex, text), msg or f"no match: {regex!r}")
+
+    def test_switch_is_default_off_and_gates_every_step(self):
+        text = WORKER.read_text()
+        self.assertIn('AdmissionPlatformSwitchEnabled(Context, L"Wom1JobBuildAhead")', text)
+        self.assertNotIn('AdmissionPlatformSwitchDisabled(Context, L"Wom1JobBuildAhead")', text)
+        for call in ("AdmissionJobAheadReleaseRefusal(", "AdmissionJobAheadChainRefusal("):
+            self.assertIn(call, text)
+        self.assertIn("AdmissionJobAheadPrebindRefusal(", G3.read_text())
+        # every decision input starts from the switch; the KMD fills the
+        # adapter side under SchedulerLock
+        self.assertRegex(text, r"->Enabled\s*=\s*runtime->JobAhead")
+        g3 = G3.read_text()
+        prebind = g3[g3.index("BOOLEAN AdmissionG4PendingPrebindHead("):]
+        prebind = prebind[:prebind.index("\n}\n")]
+        fill = prebind.index("AdmissionJobAheadFillLocked(adapter, State)")
+        self.assertLess(prebind.index("KeAcquireSpinLock(&adapter->SchedulerLock"), fill)
+        self.assertLess(fill, prebind.index("AdmissionJobAheadPrebindRefusal(State)"))
+        worker = text[text.index("static VOID AdmissionPlatformWorker(\n    _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context) {"):]
+        worker = worker[:worker.index("\n}\n")]
+        for step in ("AdmissionJobAheadReleaseWindows(", "AdmissionG4PendingPrebindHead(",
+                     "AdmissionJobAheadChainWindows("):
+            at = worker.index(step)
+            self.assertIn("runtime->JobAhead", worker[max(0, at - 500):at], step)
+
+    def test_completion_and_retire_honour_the_early_release(self):
+        text = WORKER.read_text()
+        complete = text[text.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete("):]
+        complete = complete[:complete.index("\n}\n")]
+        self.assertIn("AheadReleasedFence == Fence", complete)
+        retire = text[text.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire("):]
+        retire = retire[:retire.index("\n}\n")]
+        self.assertIn("AheadReleasedFence == Fence", retire)
+        save = text[text.index("static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager("):]
+        save = save[:save.index("\n}\n")]
+        self.assertIn("AheadManager", save)
+
+    def test_preempt_and_reset_drop_a_prebound_entry_like_a_binding_one(self):
+        g3 = G3.read_text()
+        drop = g3[g3.index("VOID AdmissionG4PendingDropLocked("):]
+        drop = drop[:drop.index("\n}\n")]
+        self.assertRegex(drop, r"AdmissionG4PendingBinding\s*\|\|\s*\n?\s*entry->State == AdmissionG4PendingPrebound")
+        header = ADMISSION_H.read_text()
+        self.assertRegex(header, r"AdmissionG4PendingPrebound\s*=\s*5")
+        self.assertIn("AdmissionG4PendingDropped = 4", header)
+
+    def test_worker_resolves_a_prebound_entry_before_it_finishes(self):
+        text = WORKER.read_text()
+        worker = text[text.index("static VOID AdmissionPlatformWorker(\n    _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context) {"):]
+        worker = worker[:worker.index("\n}\n")]
+        self.assertIn("AdmissionG4PendingAheadUnbind(adapter)", worker)
+        last_unbind = worker.rindex("AdmissionG4PendingAheadUnbind(adapter)")
+        last_finish = worker.rindex("AdmissionPlatformWorkerFinished(runtime);")
+        chain = worker.rindex("AdmissionJobAheadChainWindows(")
+        self.assertLess(chain, last_unbind)
+        self.assertLess(last_unbind, last_finish)
+        # the chain jumps back before the pending bind, after the job's
+        # completion (the poll loop) and the receipts
+        self.assertLess(worker.index("ChainNext:"), worker.index("AdmissionG4PendingBindHead(adapter)"))
+        self.assertLess(worker.index("AppleAgxPlatformProviderPoll("), chain)
+
+    def test_chain_claims_with_the_dispatch_lock_order(self):
+        text = WORKER.read_text()
+        chain = text[text.index("static BOOLEAN AdmissionJobAheadChainWindows("):]
+        chain = chain[:chain.index("\n}\n")]
+        paging = chain.index("KeAcquireSpinLock(&adapter->PagingLock")
+        sched = chain.index("KeAcquireSpinLockAtDpcLevel(&adapter->SchedulerLock)")
+        self.assertLess(paging, sched)
+        self.assertLess(sched, chain.index("AdmissionJobAheadChainRefusal(&s)"))
+        self.assertIn("adapter->DispatchedFence = next", chain)
+        self.assertIn("KeSetEvent(&runtime->SlotEvent", chain)
+
+    def test_new_source_is_in_the_kmd_project(self):
+        self.assertIn(r'<ClCompile Include="src\render_job_ahead.c" />', VCXPROJ.read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

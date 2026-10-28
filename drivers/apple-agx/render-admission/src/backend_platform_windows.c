@@ -1,5 +1,6 @@
 #include "render_admission.h"
 #include "render_job_timing.h"
+#include "render_job_ahead.h"
 #include "render_gpu_perf.h"
 #include "render_gpu_recovery_snapshot.h"
 
@@ -281,7 +282,27 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   /* rc84: device value Wom1GpuPerfReceipt = 0 stops the Wom1GpuPerf
    * sampling (HwDataA loads at each job completion). */
   BOOLEAN GpuPerfOff;
+  /* rc90: device value Wom1JobBuildAhead = 1 (render_job_ahead.h). Worker-
+   * owned: the job whose image was released right after its kick, and the
+   * buffer-manager binding its completion saves (the image's own fields
+   * belong to the next binding by then); the last completion transaction
+   * the worker finished, and whether the firmware dropped that job. */
+  BOOLEAN JobAhead;
+  ULONG AheadReleasedFence;
+  APPLE_AGX_RENDER_MANAGER_STATE *AheadManager;
+  BOOLEAN AheadG4Native;
+  ULONG AheadFinishedFence;
+  BOOLEAN AheadFinishedDropped;
 } ADMISSION_PLATFORM_RUNTIME;
+
+/* rc90 build-ahead runs in the GPUVA G3 worker only (no SUBMIT receipts,
+ * whose per-job locals the chain would have to reset). */
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION) && \
+    !defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#define ADMISSION_JOB_AHEAD_BUILD 1
+#else
+#define ADMISSION_JOB_AHEAD_BUILD 0
+#endif
 
 C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 184);
 C_ASSERT(sizeof(ADMISSION_GPU_SOFT_FAULTS_RECEIPT) == 40);
@@ -408,6 +429,18 @@ VOID AdmissionJobTimingNoteWindows(
   if (runtime == NULL) return;
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   (void)AdmissionJobTimingFlag(&runtime->JobTiming, fence, flags);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+/* rc90 receipt: a build-ahead refusal for this fence's slot. */
+static VOID AdmissionJobAheadNoteRefusalWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence, ULONG shift,
+    ULONG refusal) {
+  KIRQL oldIrql;
+  if (runtime == NULL || fence == 0u) return;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  (void)AdmissionJobTimingAheadRefusal(&runtime->JobTiming, fence, shift,
+                                       refusal);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
 }
 
@@ -2798,9 +2831,19 @@ static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
     ADMISSION_PLATFORM_RUNTIME *runtime, APPLE_AGX_U32 Fence) {
   ADMISSION_BACKEND_IMAGE *image=&runtime->Adapter->BackendImage;
   static const APPLE_AGX_U32 objects[]={1u,20u,21u,22u};
+  APPLE_AGX_RENDER_MANAGER_STATE *manager=image->G4Manager;
+  BOOLEAN native=image->G4Native ? TRUE : FALSE;
+  BOOLEAN bound=image->BoundFence==Fence ? TRUE : FALSE;
   APPLE_AGX_U32 i;
-  if (!image->G4Manager) return APPLE_AGX_BACKEND_TRUE;
-  if (!image->G4Native || image->BoundFence!=Fence ||
+  /* rc90: an image released right after its kick kept its manager binding
+   * here; the image may hold the next job's binding meanwhile. */
+  if (runtime->AheadReleasedFence==Fence) {
+    manager=runtime->AheadManager;
+    native=runtime->AheadG4Native;
+    bound=TRUE;
+  }
+  if (!manager) return APPLE_AGX_BACKEND_TRUE;
+  if (!native || !bound ||
       !runtime->Backend.TaComplete || !runtime->Backend.D3Complete)
     return APPLE_AGX_BACKEND_FALSE;
   for (i=0u;i<RTL_NUMBER_OF(objects);++i) {
@@ -2812,7 +2855,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
   runtime->Initdata.RenderSharedMemory.DirectReads =
       runtime->BuildDirectReads;
   if (!AppleAgxRenderManagerSave(&runtime->Initdata.RenderSharedMemory,
-          image->G4Manager,Fence,runtime->QueueObjects))
+          manager,Fence,runtime->QueueObjects))
     return APPLE_AGX_BACKEND_FALSE;
   AdmissionJobTimingSubWindows(runtime, Fence, AdmissionJobSubSaved);
   return APPLE_AGX_BACKEND_TRUE;
@@ -3830,10 +3873,13 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       return APPLE_AGX_BACKEND_FALSE;
     }
 #else
+    /* rc90: an image released right after its kick has nothing to release;
+     * the image may already hold the next job's binding. */
     if (!AdmissionDynamicOverlayReleaseActive(runtime, Fence) ||
-        !AdmissionBackendImageReleaseSubmissionRestore(
-            &adapter->BackendImage,
-            &adapter->BackendSnapshot, Fence) ||
+        !(runtime->AheadReleasedFence == Fence ||
+          AdmissionBackendImageReleaseSubmissionRestore(
+              &adapter->BackendImage,
+              &adapter->BackendSnapshot, Fence)) ||
         !AdmissionRenderPacketComplete(&adapter->RenderPacket, Fence) ||
         runtime->CompletionContext == NULL ||
         runtime->CompletionContext->Object.FenceOutstanding != Fence) {
@@ -3847,6 +3893,12 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
             AppleAgxCompletionLocalCommitted)) {
       KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
       return APPLE_AGX_BACKEND_FALSE;
+    }
+    /* rc90: the image release point of this completion; a retried
+     * completion now takes the image path, as after a release here. */
+    if (runtime->AheadReleasedFence == Fence) {
+      runtime->AheadReleasedFence = 0u;
+      runtime->AheadManager = NULL;
     }
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     /* rc83 receipt: the arena release is done; stamped after the lock. */
@@ -3910,6 +3962,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       !AppleAgxCompletionTransactionFinish(
           &runtime->Completion, Fence, Node, Engine))
     return APPLE_AGX_BACKEND_FALSE;
+  /* rc90: the completion the worker may chain from (Windows has it). */
+  runtime->AheadFinishedFence = Fence;
+  runtime->AheadFinishedDropped =
+      Status == AppleAgxBackendCompletionDropped ? TRUE : FALSE;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   AdmissionDwmFrameRecordCompletion(adapter, runtime->CompletionContext, Fence);
 #endif
@@ -4136,11 +4192,13 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(
       adapter->RenderPacket.Description.Fence == Fence) {
     render_context = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
         adapter->RenderPacket.Description.ContextToken;
+    /* rc90: an image released right after its kick is already free. */
     if (render_context != NULL &&
         render_context->Object.FenceOutstanding == Fence &&
         AdmissionDynamicOverlayReleaseActive(runtime, Fence) &&
-        AdmissionBackendImageReleaseSubmission(
-            &adapter->BackendImage, Fence) &&
+        (runtime->AheadReleasedFence == Fence ||
+         AdmissionBackendImageReleaseSubmission(
+             &adapter->BackendImage, Fence)) &&
         AdmissionRenderPacketReset(
             &adapter->RenderPacket, Fence,
             state == AdmissionRenderPacketActive ? 1u : 0u) &&
@@ -4151,6 +4209,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(
           state == AdmissionRenderPacketActive ? TRUE : FALSE);
 #endif
       AdmissionContextRetireFence(render_context, Fence);
+      if (runtime->AheadReleasedFence == Fence) {
+        runtime->AheadReleasedFence = 0u;
+        runtime->AheadManager = NULL;
+      }
       retired = TRUE;
     }
   }
@@ -4375,6 +4437,102 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformTdrDrillEscape(
   return STATUS_SUCCESS;
 }
 
+#if ADMISSION_JOB_AHEAD_BUILD
+/* rc90 build-ahead (render_job_ahead.h): the runtime-side inputs of a
+ * decision; AdmissionJobAheadFillLocked adds the adapter side. */
+static VOID AdmissionJobAheadStateWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ULONG fence, ADMISSION_JOB_AHEAD_STATE *s) {
+  RtlZeroMemory(s, sizeof(*s));
+  s->Enabled = runtime->JobAhead ? 1u : 0u;
+  s->Stopping = InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ? 1u : 0u;
+  s->Resetting = InterlockedCompareExchange(&runtime->Resetting, 0, 0) != 0 ? 1u : 0u;
+  s->BackendReady = runtime->BackendStarted &&
+      runtime->Backend.Phase == AppleAgxBackendRuntimeReady ? 1u : 0u;
+  s->ReleasedFence = runtime->AheadReleasedFence;
+  s->JobFence = fence;
+  s->FinishedFence = runtime->AheadFinishedFence;
+  s->FinishedDropped = runtime->AheadFinishedDropped ? 1u : 0u;
+}
+
+/* rc90 step 1: right after the kick, restore the template arena (the
+ * snapshot copy, about 40 us) while the firmware runs the job. The build
+ * already copied the job's per-submission objects into the firmware-shared
+ * queue objects, and in the G4 path no firmware-read object refers to the
+ * arena (render_job_ahead.h). The completion then saves the manager this
+ * job was bound to (AheadManager) and skips the image release. */
+static VOID AdmissionJobAheadReleaseWindows(ADMISSION_CONTEXT *adapter,
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
+  ADMISSION_JOB_AHEAD_STATE s;
+  ADMISSION_BACKEND_IMAGE *image = &adapter->BackendImage;
+  KIRQL old_irql;
+  ULONG refusal;
+  AdmissionJobAheadStateWindows(runtime, fence, &s);
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  AdmissionJobAheadFillLocked(adapter, &s);
+  /* A legacy dynamic overlay is released by the completion. */
+  if (runtime->DynamicOverlayState.Applied != 0u) s.ImageFastRelease = 0u;
+  refusal = AdmissionJobAheadReleaseRefusal(&s);
+  if (refusal == 0u) {
+    runtime->AheadManager = image->G4Manager;
+    runtime->AheadG4Native = image->G4Native ? TRUE : FALSE;
+    runtime->AheadReleasedFence = fence;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (refusal != 0u) {
+    AdmissionJobAheadNoteRefusalWindows(runtime, fence,
+        ADMISSION_JOB_AHEAD_SHIFT_RELEASE, refusal);
+    return;
+  }
+  /* Outside the lock: the image is this job's until its packet completes;
+   * every other binder first prepares an Empty packet. The fast-release
+   * proof above leaves no failure here but a corrupted image. */
+  if (!AdmissionBackendImageReleaseSubmissionRestore(image,
+          &adapter->BackendSnapshot, fence))
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
+  AdmissionJobTimingNoteWindows(adapter, fence, ADMISSION_JOB_FLAG_AHEAD_RELEASED);
+}
+
+/* rc90 step 3: job Fence's completion was reported to Windows. Claim the
+ * scheduler's next fence for this worker if it is the pending head, as
+ * AdmissionDispatchQueuedWork would after the DPC, and promote it when it
+ * was bound ahead. PagingLock before SchedulerLock, as the dispatch. */
+static BOOLEAN AdmissionJobAheadChainWindows(ADMISSION_CONTEXT *adapter,
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence, ULONG chained) {
+  ADMISSION_JOB_AHEAD_STATE s;
+  KIRQL old_irql;
+  ULONG refusal, next = 0u;
+  BOOLEAN prebound = FALSE;
+  AdmissionJobAheadStateWindows(runtime, fence, &s);
+  s.Chained = chained;
+  KeAcquireSpinLock(&adapter->PagingLock, &old_irql);
+  KeAcquireSpinLockAtDpcLevel(&adapter->SchedulerLock);
+  AdmissionJobAheadFillLocked(adapter, &s);
+  s.CpuHeadFence = adapter->CpuQueueCount != 0u ?
+      adapter->CpuQueue[adapter->CpuQueueHead].Fence : 0u;
+  refusal = AdmissionJobAheadChainRefusal(&s);
+  if (refusal == 0u) {
+    next = s.QueuedFence;
+    prebound = s.PendingHeadState == ADMISSION_JOB_AHEAD_PENDING_PREBOUND ? TRUE : FALSE;
+    if (prebound && !AdmissionG4PendingAheadPromoteLocked(adapter, next))
+      refusal = 42u;
+    else
+      adapter->DispatchedFence = next;
+  }
+  KeReleaseSpinLockFromDpcLevel(&adapter->SchedulerLock);
+  KeReleaseSpinLock(&adapter->PagingLock, old_irql);
+  AdmissionJobAheadNoteRefusalWindows(runtime, fence,
+      ADMISSION_JOB_AHEAD_SHIFT_CHAIN, refusal);
+  if (refusal != 0u)
+    return FALSE;
+  AdmissionJobTimingNoteWindows(adapter, next, ADMISSION_JOB_FLAG_AHEAD_CHAINED |
+      (prebound ? ADMISSION_JOB_FLAG_AHEAD_PREBOUND : 0u));
+  /* A pending entry was freed: wake submitters waiting for the slot, as
+   * WorkerFinished would. */
+  KeSetEvent(&runtime->SlotEvent, IO_NO_INCREMENT, FALSE);
+  return TRUE;
+}
+#endif
+
 static VOID AdmissionPlatformWorker(
     _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context) {
   ADMISSION_CONTEXT *adapter = Context;
@@ -4390,6 +4548,13 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN deferred = FALSE;
   BOOLEAN drilled = FALSE;
   LARGE_INTEGER pollStart, pollFrequency;
+#if ADMISSION_JOB_AHEAD_BUILD
+  /* rc90: jobs this invocation chained; the successor of the running job
+   * was bound ahead (or will not be retried); the last prebind refusal. */
+  ULONG chained = 0u;
+  BOOLEAN prebindDone = FALSE;
+  ULONG prebindRefusal = 0u;
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   APPLE_AGX_G13_QUEUE_PROGRESS finalProgress;
 #if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -4437,6 +4602,11 @@ static VOID AdmissionPlatformWorker(
   taTemporal.Bytes = sizeof(taTemporal);
 #endif
 
+#if ADMISSION_JOB_AHEAD_BUILD
+  /* rc90: a chained job starts here, like a dispatched one. */
+ChainNext:
+  ;
+#endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   /* Phase 5a: a submission that queued while the slot was busy is bound
    * here, at PASSIVE_LEVEL, once its fence heads the queue. */
@@ -4478,6 +4648,14 @@ static VOID AdmissionPlatformWorker(
   }
   AdmissionRenderCorrelationWorkerWindows(
       adapter, description.Fence, TRUE, (ULONG)STATUS_PENDING);
+#if ADMISSION_JOB_AHEAD_BUILD
+  /* rc90: the previous job's completion or retire consumed its early
+   * release; a stale mark must never match a later fence. */
+  runtime->AheadReleasedFence = 0u;
+  runtime->AheadManager = NULL;
+  prebindDone = FALSE;
+  prebindRefusal = 0u;
+#endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionJobTimingMarkWindows(runtime, description.Fence,
       AdmissionJobPhaseWorker);
@@ -4637,6 +4815,11 @@ static VOID AdmissionPlatformWorker(
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
+#if ADMISSION_JOB_AHEAD_BUILD
+  /* rc90 step 1: the job is kicked; free its image while it runs. */
+  if (runtime->JobAhead)
+    AdmissionJobAheadReleaseWindows(adapter, runtime, description.Fence);
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionTerminalBegin(runtime, &description);
   if (runtime->DynamicOverlayState.Applied == 1u &&
@@ -4709,6 +4892,25 @@ static VOID AdmissionPlatformWorker(
     LARGE_INTEGER interval;
     InterlockedExchange64(&runtime->LastPollMs,
                           (LONG64)AdmissionPlatformNowMs());
+#if ADMISSION_JOB_AHEAD_BUILD
+    /* rc90 step 2: bind the successor while this job runs (one bind per
+     * job; a refusal is retried at the next poll until it binds, fails or
+     * is dropped). */
+    if (runtime->JobAhead && !prebindDone &&
+        runtime->AheadReleasedFence == description.Fence &&
+        adapter->G4PendingCount != 0u) {
+      ADMISSION_JOB_AHEAD_STATE ahead;
+      ULONG refusal = 0u;
+      AdmissionJobAheadStateWindows(runtime, description.Fence, &ahead);
+      prebindDone = AdmissionG4PendingPrebindHead(adapter, &ahead, &refusal);
+      if (refusal == 28u || refusal == 29u) prebindDone = TRUE;
+      if (refusal != prebindRefusal) {
+        prebindRefusal = refusal;
+        AdmissionJobAheadNoteRefusalWindows(runtime, description.Fence,
+            ADMISSION_JOB_AHEAD_SHIFT_PREBIND, refusal);
+      }
+    }
+#endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     {
       APPLE_AGX_RTKIT_U32 notifications = 0u;
@@ -5012,6 +5214,22 @@ static VOID AdmissionPlatformWorker(
   AdmissionPublishFirmwareRecovery(runtime);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionJobTimingExportWindows(runtime);
+#endif
+#if ADMISSION_JOB_AHEAD_BUILD
+  /* rc90 step 3: N's completion is reported; take N+1 without the
+   * WorkerFinished -> DPC -> dispatch -> job-thread round trip. Otherwise
+   * an entry bound ahead goes back to the ordinary path first. */
+  if (runtime->JobAhead) {
+    if (AdmissionJobAheadChainWindows(adapter, runtime, description.Fence,
+                                      chained)) {
+      ++chained;
+      activated = cancelled = deferred = drilled = FALSE;
+      RtlZeroMemory(&description, sizeof(description));
+      RtlZeroMemory(&submission, sizeof(submission));
+      goto ChainNext;
+    }
+    AdmissionG4PendingAheadUnbind(adapter);
+  }
 #endif
   AdmissionPlatformWorkerFinished(runtime);
 }
@@ -5686,6 +5904,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1PreludeTimestampsOff");
   runtime->BuildDirectReads =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1BuildDirectReads");
+  /* rc90: off unless REG_DWORD 1 (one hardware variable). */
+#if ADMISSION_JOB_AHEAD_BUILD
+  runtime->JobAhead =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1JobBuildAhead");
+#else
+  runtime->JobAhead = FALSE;
+#endif
+  runtime->AheadReleasedFence = runtime->AheadFinishedFence = 0u;
+  runtime->AheadManager = NULL;
+  runtime->AheadG4Native = runtime->AheadFinishedDropped = FALSE;
   runtime->GpuPerfOff =
       AdmissionPlatformSwitchDisabled(Context, L"Wom1GpuPerfReceipt");
   InterlockedExchange(&Context->TdrDrillJobs, 0);

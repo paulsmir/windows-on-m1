@@ -94,6 +94,17 @@ int AdmissionJobTimingFlag(ADMISSION_JOB_TIMING_STATE *state,
   return 1;
 }
 
+int AdmissionJobTimingAheadRefusal(ADMISSION_JOB_TIMING_STATE *state,
+    unsigned int fence, unsigned int shift, unsigned int refusal) {
+  ADMISSION_JOB_TIMING_SLOT *slot =
+      (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(state, fence);
+  if (!slot || shift > 24u) return 0;
+  if (refusal > 0xffu) refusal = 0xffu;
+  slot->AheadRefusals = (slot->AheadRefusals & ~(0xffu << shift)) |
+      (refusal << shift);
+  return 1;
+}
+
 int AdmissionJobTimingSub(ADMISSION_JOB_TIMING_STATE *state,
     unsigned int fence, ADMISSION_JOB_SUB sub, unsigned long long qpc) {
   ADMISSION_JOB_TIMING_SLOT *slot =
