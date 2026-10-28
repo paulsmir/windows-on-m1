@@ -66311,3 +66311,18 @@ Device switch: Wom1GpuFaultInfoRead=1. Order:
 - Hashes: sys 88c4ead14e9f, UmdArm64 b756800f9925, UmdX64 325e63f07fc6, Umd32 aa4770192f6e; manifest 5cd2357f6f80, hardware-manifest 3bfe426ad3e5; probe2046.sh 51ca3d29f435 (PROBE_LINT_OK); visible recovery rec2046h b0cae3804fdb49ab; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2046h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2046-clip-unified/run2046.sh.
+
+EXP2046 HARDWARE ACTUAL (2026-10-28): **rc108 fixes the Earth shadow flicker (A/B proven). rc107's single CPU/GPU copy works at FHD 100k. FHD 200k exceeds the 50%-of-RAM pool.**
+
+| Arm | Score | Notes |
+|---|---|---|
+| a: HD 50k, rc108 clip distances on | 6541 | 2 Hz shots: smooth terminator and ring shadow, no polygonal regions in any frame |
+| b: HD 50k, APPLE_AGX_DXIL_CLIP_CULL=0 | 6678 | the polygons return (frames 24–25: nearly dark planet, then a straight-edged lit region) |
+| c: FHD 100k, CPU_POOL_MAP unset (unified) | **4147** (3rd app) | measure-d3d12-heap-staging upload/download 0, rehome 0, no reject-native; scored stall 6.46 s (EXP2037a 10.62 s) |
+| d: FHD 200k, unified | removed at 24 s | measure-cpu-pool-rehome E_OUTOFMEMORY ×2 (census 0x102 NOT_POOL, 0x2000 pages), then reject-native-allocation reason 3 (32 MiB at 0x11020a0000), reject-batch, first-fault, device removed |
+
+- Verdict:
+  - rc108 is confirmed (root cause: DXIL SV_ClipDistance sizes never set, so shadow cascades bled across the atlas tiles).
+  - rc107 is confirmed at FHD 100k (no private staging, no OOM).
+  - FHD 200k needs more than the 3.2 GB segment: the pool size mirrors TotalSystemMemoryAvailableForGraphics (50% of RAM below 32 GB).
+  - Next: a larger unified pool (the user's "all RAM like macOS") and a non-fatal rehome failure.
