@@ -163,7 +163,14 @@ typedef struct _ADMISSION_GPU_RECOVERY_SNAPSHOT {
  * ADMISSION_GPU_FAULT_INFO_NOT_READ. FAULT_INFO is in Wom1GpuFault (read at
  * the event, before resume), the fault-control registers in
  * Wom1SoftFaultState. */
-#define ADMISSION_GPU_POST_RESUME_VERSION 1u
+#define ADMISSION_GPU_POST_RESUME_VERSION 2u
+/* v2 (rc92): PollFailure (was Reserved, always 0 in v1) names the poll that
+ * ended the wait with the Poll outcome: bits 24-31 source (1 RTKit drain,
+ * 2 provider poll), bits 0-7 the RTKit session result or the provider's
+ * LastPollGuard, bits 8-15 LastDrainGuard, bits 16-23 LastIngestGuard
+ * (each saturated at 0xff); 0 = the wait did not end in a failed poll. */
+#define ADMISSION_GPU_POST_RESUME_POLL_RTKIT 1u
+#define ADMISSION_GPU_POST_RESUME_POLL_PROVIDER 2u
 #define ADMISSION_GPU_POST_RESUME_FORCE_DISABLED 0u
 #define ADMISSION_GPU_POST_RESUME_FORCE_NOT_REACHED 1u
 #define ADMISSION_GPU_POST_RESUME_FORCE_SENT 2u
@@ -181,7 +188,7 @@ typedef struct _ADMISSION_GPU_POST_RESUME_RECEIPT {
   unsigned int ComputeRptrRead, ComputeRptr, ComputeDone, ComputeWrite;
   unsigned int PostEvents, PostEventKindMask, LastPostEventKind;
   unsigned int ForceState, ForceResult, ForceMask, ForceAtMs;
-  unsigned int Reserved;
+  unsigned int PollFailure;             /* v2, ADMISSION_GPU_POST_RESUME_POLL_* */
 } ADMISSION_GPU_POST_RESUME_RECEIPT;
 
 /* rc82: Wom1SoftFaultState, REG_BINARY, written once when the GPU runtime has

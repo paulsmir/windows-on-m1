@@ -543,14 +543,15 @@ def decode_post_resume(data):
         raise ValueError('unsupported Wom1GpuFaultPostResume length')
     version, size, fence, wait_ms, fault_control, sgx_read, r17620, r17630 = \
         struct.unpack_from('<8I', data, 0)
-    if (version, size) != (1, 184):
+    if version not in (1, 2) or size != 184:
         raise ValueError('unsupported Wom1GpuFaultPostResume version')
     fault_info = struct.unpack_from('<Q', data, 32)[0]
     status = struct.unpack_from('<16I', data, 40)
     pending = struct.unpack_from('<I', data, 104)[0]
     region_fault = struct.unpack_from('<6I', data, 108)
     (rptr_read, rptr, done, write, events, kinds, last_kind,
-     force_state, force_result, force_mask, force_at) = struct.unpack_from('<11I', data, 132)
+     force_state, force_result, force_mask, force_at,
+     poll_failure) = struct.unpack_from('<12I', data, 132)
     return {
         'version': version, 'fence': f'{fence:#x}', 'wait_ms': wait_ms,
         'regionc_fault_control': f'{fault_control:#x}',
@@ -571,8 +572,29 @@ def decode_post_resume(data):
                             'pipes': [n for b, n in ((1, 'ta'), (2, '3d'), (4, 'compute'))
                                       if force_mask & b],
                             'at_ms': force_at},
+        'poll_failure': decode_poll_failure(poll_failure) if version >= 2 else None,
         'meaning': 'sequential CPU reads after the firmware resume, not atomic GPU state',
     }
+
+
+RTKIT_SESSION_RESULTS = {0: 'ok', 1: 'invalid_argument', 2: 'invalid_state', 3: 'timeout',
+                         4: 'clock_regression', 5: 'transport_failed',
+                         6: 'protocol_violation', 7: 'cleanup_failed', 8: 'firmware_crashed'}
+POLL_GUARDS = {0: 'ok', 1: 'invalid', 2: 'drain_events', 3: 'clock', 4: 'timeout_check',
+               5: 'timeout_apply'}
+
+
+def decode_poll_failure(value):
+    """rc92 PollFailure (render_gpu_fault.h ADMISSION_GPU_POST_RESUME_POLL_*)."""
+    if value == 0:
+        return None
+    source, ingest, drain, low = value >> 24, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff
+    if source == 1:
+        return {'source': 'rtkit_drain', 'result': RTKIT_SESSION_RESULTS.get(low, low)}
+    if source == 2:
+        return {'source': 'provider_poll', 'poll_guard': POLL_GUARDS.get(low, low),
+                'drain_guard': drain, 'ingest_guard': ingest}
+    return {'source': source, 'raw': f'{value:#x}'}
 
 
 def decode_soft_faults(data):

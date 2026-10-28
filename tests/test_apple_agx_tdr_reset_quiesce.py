@@ -91,6 +91,8 @@ class TdrResetQuiesce(unittest.TestCase):
                     'AdmissionG4PendingDropLocked')) + '\n' +
                 function_body(queue, 'AdmissionCpuQueueSubmit') + '\n' +
                 function_body(scheduler, 'AdmissionCpuQueueReleaseContextsLocked') + '\n' +
+                optional_body(backend, 'AdmissionPostResumePollByte') + '\n' +
+                optional_body(backend, 'AdmissionPostResumePollFailure') + '\n' +
                 optional_body(backend, 'AdmissionPlatformRuntimeQuiesceActive') + '\n' +
                 optional_body(scheduler, 'AdmissionResetQuiesceActive') + '\n' +
                 noinline_body(scheduler, 'AdmissionResetEngineInternal') + '\n' +
@@ -209,7 +211,9 @@ typedef struct {
   ULONG Fence;
   ADMISSION_RENDER_CONTEXT *Context;
 } ADMISSION_G4_PENDING;
-typedef struct { int Provider; struct { APPLE_AGX_G13_QUEUE_RUNTIME Runtime; } QueueProvider; } APPLE_AGX_PLATFORM_PROVIDER;
+typedef struct { int Provider; APPLE_AGX_BACKEND_U32 LastPollGuard, LastDrainGuard;
+  struct { APPLE_AGX_G13_QUEUE_RUNTIME Runtime; APPLE_AGX_BACKEND_U32 LastIngestGuard; } QueueProvider;
+} APPLE_AGX_PLATFORM_PROVIDER;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_CONTEXT *Adapter;
@@ -371,7 +375,10 @@ static BOOLEAN AppleAgxPlatformProviderPoll(APPLE_AGX_PLATFORM_PROVIDER *p,
     APPLE_AGX_BACKEND_U32 max, APPLE_AGX_BACKEND_U32 *drained, APPLE_AGX_BACKEND_U32 *completed) {
   (void)p; (void)max; assert(!lock_depth); assert(!worker_busy);
   *drained = *completed = 0u; ++polls;
-  if (fail_poll) return FALSE;
+  if (fail_poll) {
+    p->LastPollGuard = 2u; p->LastDrainGuard = 3u; p->QueueProvider.LastIngestGuard = 0x1234u;
+    return FALSE;
+  }
   if (use_firmware_runtime) {
     if (ReplayQueuePoll(polls)) model_job_ends();
     sync_queue_runtime(p);
@@ -585,6 +592,10 @@ int main(void) {
       assert(last_recorded.Quiesce == AdmissionGpuResetQuiescePoll &&
              last_recorded.Stage == AdmissionGpuResetStageQuiesce &&
              last_recorded.WaitMs == 0 && last_recorded.Succeeded == 0);
+      /* rc92: the published post-resume receipt names the RTKit drain. */
+      assert((last_post_resume.PollFailure >> 24) == ADMISSION_GPU_POST_RESUME_POLL_RTKIT &&
+             (last_post_resume.PollFailure & 0xffu) != AppleAgxRtkitSessionResultOk &&
+             (last_post_resume.PollFailure & 0xffff00u) == 0u);
       assert(last_recorded.Resets == retry + 1 && polls == 0 &&
              private_resets == 0 && rtkit_stops == 0);
       assert(adapter.Scheduler.ActiveFence == 0xce71cu &&
@@ -738,6 +749,14 @@ int main(void) {
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
   assert(adapter.Scheduler.ActiveFence == 0xce71cu && rtkit_stops == 0 && runtime.Resetting == 0);
   assert(last_recorded.Quiesce == AdmissionGpuResetQuiescePoll);
+  /* rc92: ... and the provider's guards, saturated per byte. */
+  assert(last_post_resume.PollFailure ==
+         ((ADMISSION_GPU_POST_RESUME_POLL_PROVIDER << 24) | (0xffu << 16) | (3u << 8) | 2u));
+  /* The next wait on the same fence starts without the old failure. */
+  fail_poll = 0; drop_at_poll = polls + 1;
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  assert(last_post_resume.PollFailure == 0u);
 
   /* 6. A worker that never leaves: no exclusive poll ownership, no success. */
   setup(1, 0); runtime.Resetting = 0;

@@ -6160,6 +6160,18 @@ static VOID AdmissionPublishPostResume(ADMISSION_PLATFORM_RUNTIME *runtime) {
   ZwClose(key);
 }
 
+/* rc92: Wom1GpuFaultPostResume v2 PollFailure (render_gpu_fault.h). */
+static ULONG AdmissionPostResumePollByte(ULONG Value) {
+  return Value > 0xffu ? 0xffu : Value;
+}
+
+static ULONG AdmissionPostResumePollFailure(ULONG Source, ULONG Low,
+                                            ULONG Drain, ULONG Ingest) {
+  return (Source << 24) | (AdmissionPostResumePollByte(Ingest) << 16) |
+         (AdmissionPostResumePollByte(Drain) << 8) |
+         AdmissionPostResumePollByte(Low);
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
     ADMISSION_CONTEXT *Context, ULONG Fence, ULONG TimeoutMs,
     ADMISSION_GPU_RESET_RECEIPT *Receipt) {
@@ -6204,6 +6216,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
         ? ADMISSION_GPU_POST_RESUME_FORCE_NOT_REACHED
         : ADMISSION_GPU_POST_RESUME_FORCE_DISABLED;
   }
+  /* rc92: which poll ended this wait (EXP2027: Poll outcome, unexplained). */
+  runtime->PostResume.PollFailure = 0u;
   for (;;) {
     APPLE_AGX_BACKEND_U32 drained = 0u;
     APPLE_AGX_BACKEND_U32 completed = 0u;
@@ -6253,9 +6267,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     {
       APPLE_AGX_RTKIT_U32 notifications = 0u;
-      if (AppleAgxRtkitSessionDrainRuntime(&runtime->Rtkit, &runtime->AscIo,
-              APPLE_AGX_RTKIT_RUNTIME_DRAIN_LIMIT, &notifications) !=
-          AppleAgxRtkitSessionResultOk) {
+      APPLE_AGX_RTKIT_SESSION_RESULT drain =
+          AppleAgxRtkitSessionDrainRuntime(&runtime->Rtkit, &runtime->AscIo,
+              APPLE_AGX_RTKIT_RUNTIME_DRAIN_LIMIT, &notifications);
+      if (drain != AppleAgxRtkitSessionResultOk) {
+        runtime->PostResume.PollFailure = AdmissionPostResumePollFailure(
+            ADMISSION_GPU_POST_RESUME_POLL_RTKIT, (ULONG)drain, 0u, 0u);
         outcome = AdmissionGpuResetQuiescePoll;
         status = STATUS_DEVICE_HARDWARE_ERROR;
         break;
@@ -6264,6 +6281,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
 #endif
     if (!AppleAgxPlatformProviderPoll(
             &runtime->Provider, 64u, &drained, &completed)) {
+      runtime->PostResume.PollFailure = AdmissionPostResumePollFailure(
+          ADMISSION_GPU_POST_RESUME_POLL_PROVIDER,
+          (ULONG)runtime->Provider.LastPollGuard,
+          (ULONG)runtime->Provider.LastDrainGuard,
+          (ULONG)runtime->Provider.QueueProvider.LastIngestGuard);
       outcome = AdmissionGpuResetQuiescePoll;
       status = STATUS_DEVICE_HARDWARE_ERROR;
       break;

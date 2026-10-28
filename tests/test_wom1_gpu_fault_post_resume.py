@@ -40,6 +40,7 @@ int main(void) {
   r.PostEvents = 2u; r.PostEventKindMask = (1u << 4) | (1u << 8); r.LastPostEventKind = 8u;
   r.ForceState = ADMISSION_GPU_POST_RESUME_FORCE_SENT; r.ForceResult = 0u;
   r.ForceMask = 4u; r.ForceAtMs = 100u;
+  r.PollFailure = (ADMISSION_GPU_POST_RESUME_POLL_PROVIDER << 24) | (0xffu << 16) | (3u << 8) | 2u;
   fwrite(&r, sizeof(r), 1, stdout);
   return 0;
 }
@@ -77,7 +78,21 @@ class PostResumeReceipt(unittest.TestCase):
                           'last': 'channel_error'})
         self.assertEqual(decoded['recover_channel'],
                          {'state': 'sent', 'result': 'ok', 'pipes': ['compute'], 'at_ms': 100})
+        self.assertEqual(decoded['version'], 2)
+        self.assertEqual(decoded['poll_failure'],
+                         {'source': 'provider_poll', 'poll_guard': 'drain_events',
+                          'drain_guard': 3, 'ingest_guard': 0xff})
         json.dumps(decoded)
+
+    def test_v1_receipt_has_no_poll_failure(self):
+        # rc92: receipts written before v2 kept the word reserved (0).
+        raw = bytearray(184)
+        raw[0:8] = (1).to_bytes(4, 'little') + (184).to_bytes(4, 'little')
+        raw[32:40] = decoder.FAULT_INFO_NOT_READ.to_bytes(8, 'little')
+        decoded = decoder.DECODERS[decoder.POST_RESUME_NAME](bytes(raw))
+        self.assertIsNone(decoded['poll_failure'])
+        self.assertEqual(decoder.decode_poll_failure(
+            (1 << 24) | 8), {'source': 'rtkit_drain', 'result': 'firmware_crashed'})
 
 
 if __name__ == '__main__':
