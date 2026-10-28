@@ -65669,3 +65669,12 @@ EXP2025 HARDWARE BEFORE 2026-10-28T06:32:36Z:
 - Hashes: sys 0c11450aec3e, UmdArm64 a33721ca9de7, UmdX64 bcc6af9e904f, Umd32 89415234efcf; manifest 05e86bb6e07a, hardware-manifest 9a8416cb903a; probe2025.sh a829265570b9 (PROBE_LINT_OK); visible recovery rec2025h b3214f62c7fe2813; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2025h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2025-prefill-off/run2025.sh.
+
+EXP2025 HARDWARE ACTUAL (2026-10-28): rc91 (prefill off) plus rc90 (compiled in, off).
+- D3D11 HD 10k, first after boot: 2334 (EXP2024: 2279, EXP2000: 2529). Frames 1→3: 8.4 s (EXP2024: 11.7, EXP2000: 1.8); median 70.82 ms, unchanged.
+  - So the prefill was only part of the D3D11 loss; the rest goes back to rc91.
+- D3D12 HD 50k: 6660 (within noise of 6595-6783).
+- No removal.
+- Verdict:
+  - rc91 31953870 validated (partial);
+  - rc90 code inert with the switch off (no regression).
