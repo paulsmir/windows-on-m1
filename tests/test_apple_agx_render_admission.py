@@ -322,11 +322,15 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         # unique Id; zeroing a fresh mode duplicated Id 0 for the second
         # source mode (STATUS_GRAPHICS_MODE_ID_MUST_BE_UNIQUE) and the VidPN
         # was never committed. Every zeroed new mode keeps its Id.
+        # rc106: every source mode (each offered size and format) is built
+        # by the one AdmissionDisplayAddSourceMode helper.
         zeroed = re.findall(r"(\w+) = (\w+)->Id;\s*RtlZeroMemory\((\w+), sizeof\(\*\3\)\);\s*\3->Id = \1;", display)
-        self.assertEqual(display.count("RtlZeroMemory(sourceMode, sizeof(*sourceMode));"), 2)
-        self.assertEqual([z for z in zeroed if z[1] == z[2] == 'sourceMode'], [('sourceModeId', 'sourceMode', 'sourceMode')] * 2)
+        self.assertEqual(display.count("RtlZeroMemory(sourceMode, sizeof(*sourceMode));"), 1)
+        self.assertEqual([z for z in zeroed if z[1] == z[2] == 'sourceMode'], [('sourceModeId', 'sourceMode', 'sourceMode')])
+        self.assertEqual(display.count("pfnCreateNewModeInfo(SourceSet, &sourceMode)"), 1)
         self.assertNotIn("RtlZeroMemory(targetMode", display)
-        self.assertIn("Format.Graphics.Stride = 10240", display)
+        self.assertIn("Format.Graphics.Stride = Stride", display)
+        self.assertIn("AdmissionScanoutSourceModeAt(context, modeIndex", display)
         self.assertIn("D3DKMDT_VPPS_IDENTITY", display)
         self.assertIn("D3DKMDT_VPPR_IDENTITY", display)
         self.assertIn("STATUS_GRAPHICS_NO_RECOMMENDED_FUNCTIONAL_VIDPN", display)

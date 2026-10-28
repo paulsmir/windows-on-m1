@@ -535,6 +535,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   context->CommittedHeight = APPLE_AGX_SCANOUT_J313_HEIGHT;
   context->CommittedStride = APPLE_AGX_SCANOUT_J313_STRIDE;
   context->CommittedFormat = D3DDDIFMT_A8R8G8B8;
+  context->CommittedScaling = (ULONG)D3DKMDT_VPPS_IDENTITY;
   /* QueryAdapterInfo cannot run until StartDevice returns. Publish the complete
    * immutable implementation vector only after every runtime owner above has
    * started and the adapter object is live. */

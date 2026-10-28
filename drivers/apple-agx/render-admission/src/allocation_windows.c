@@ -280,15 +280,18 @@ static NTSTATUS AdmissionGetStandardAllocationDriverDataImpl(
         StandardAllocation->pCreateSharedPrimarySurfaceData;
     /* Windows tags/pins the primary. Its backing uses our existing linear
        local-segment allocation, not a new resource or platform owner. */
+    /* rc106: any offered source mode (2560x1600 alone unless the broker
+     * scales); its linear pitch is the mode stride. */
     if (primary == NULL || primary->VidPnSourceId != 0u ||
-        primary->Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
-        primary->Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
         !AdmissionScanoutFormatSupported((ADMISSION_CONTEXT *)Adapter,
                                          primary->Format) ||
         !AdmissionAllocationDescribe(
             primary->Width, primary->Height, 4u,
             (UINT)D3DKMDT_GDISURFACE_TEXTURE, (UINT)primary->Format,
-            0u, &description))
+            0u, &description) ||
+        !AdmissionScanoutSourceModeSupported(
+            (ADMISSION_CONTEXT *)Adapter, primary->Width, primary->Height,
+            description.Pitch))
       return STATUS_INVALID_PARAMETER;
   } else if (StandardAllocation->StandardAllocationType ==
              D3DKMDT_STANDARDALLOCATION_SHADOWSURFACE) {

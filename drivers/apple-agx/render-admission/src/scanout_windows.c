@@ -883,19 +883,107 @@ _Use_decl_annotations_ BOOLEAN AdmissionScanoutFormatSupported(
           APPLE_AGX_SCANOUT_CAP_RGBA8888) != 0u;
 }
 
+/* The shared panel scaling values are the D3DKMDT_VPPS values. */
+C_ASSERT((ULONG)AppleAgxFixedPanelScalingIdentity ==
+         (ULONG)D3DKMDT_VPPS_IDENTITY);
+C_ASSERT((ULONG)AppleAgxFixedPanelScalingCentered ==
+         (ULONG)D3DKMDT_VPPS_CENTERED);
+C_ASSERT((ULONG)AppleAgxFixedPanelScalingStretched ==
+         (ULONG)D3DKMDT_VPPS_STRETCHED);
+C_ASSERT((ULONG)AppleAgxFixedPanelScalingAspectRatioCenteredMax ==
+         (ULONG)D3DKMDT_VPPS_ASPECTRATIOCENTEREDMAX);
+C_ASSERT((ULONG)D3DKMDT_VPPS_UNINITIALIZED == 0u &&
+         (ULONG)D3DKMDT_VPPS_UNPINNED == 254u &&
+         (ULONG)D3DKMDT_VPPS_NOTSPECIFIED == 255u);
+
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutScaledModes(
+    ADMISSION_CONTEXT *Context) {
+#if ADMISSION_DISPLAY_SCALED_MODES
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  return runtime != NULL &&
+                 AppleAgxFixedPanelScaledSourceSupported(&runtime->Panel)
+             ? TRUE
+             : FALSE;
+#else
+  UNREFERENCED_PARAMETER(Context);
+  return FALSE;
+#endif
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutSourceModeAt(
+    ADMISSION_CONTEXT *Context, ULONG Index, ULONG *Width, ULONG *Height,
+    ULONG *Stride) {
+  APPLE_AGX_FIXED_PANEL_SOURCE_MODE mode;
+  *Width = 0u;
+  *Height = 0u;
+  *Stride = 0u;
+  RtlZeroMemory(&mode, sizeof(mode));
+  if (!AppleAgxFixedPanelSourceModeAt(
+          Index,
+          AdmissionScanoutScaledModes(Context) ? APPLE_AGX_SCANOUT_TRUE
+                                               : APPLE_AGX_SCANOUT_FALSE,
+          &mode))
+    return FALSE;
+  *Width = mode.Width;
+  *Height = mode.Height;
+  *Stride = mode.Stride;
+  return TRUE;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutSourceModeSupported(
+    ADMISSION_CONTEXT *Context, ULONG Width, ULONG Height, ULONG Stride) {
+  return AppleAgxFixedPanelSourceModeFind(
+             Width, Height, Stride,
+             AdmissionScanoutScaledModes(Context) ? APPLE_AGX_SCANOUT_TRUE
+                                                  : APPLE_AGX_SCANOUT_FALSE,
+             NULL)
+             ? TRUE
+             : FALSE;
+}
+
+_Use_decl_annotations_ ULONG AdmissionScanoutScalingSupport(
+    ADMISSION_CONTEXT *Context, ULONG Width, ULONG Height) {
+  return AppleAgxFixedPanelScalingSupport(
+      Width, Height,
+      AdmissionScanoutScaledModes(Context) ? APPLE_AGX_SCANOUT_TRUE
+                                           : APPLE_AGX_SCANOUT_FALSE);
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutResolveScaling(
+    ADMISSION_CONTEXT *Context, ULONG Width, ULONG Height,
+    D3DKMDT_VIDPN_PRESENT_PATH_SCALING Requested,
+    D3DKMDT_VIDPN_PRESENT_PATH_SCALING *Resolved) {
+  APPLE_AGX_FIXED_PANEL_SCALING scaling = AppleAgxFixedPanelScalingIdentity;
+  *Resolved = D3DKMDT_VPPS_UNINITIALIZED;
+  if (!AppleAgxFixedPanelResolveScaling(
+          Width, Height,
+          AdmissionScanoutScaledModes(Context) ? APPLE_AGX_SCANOUT_TRUE
+                                               : APPLE_AGX_SCANOUT_FALSE,
+          (APPLE_AGX_SCANOUT_U32)Requested, &scaling))
+    return FALSE;
+  *Resolved = (D3DKMDT_VIDPN_PRESENT_PATH_SCALING)scaling;
+  return TRUE;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutCommit(
     ADMISSION_CONTEXT *Context, ULONG Width, ULONG Height, ULONG Stride,
-    D3DDDIFORMAT Format) {
+    D3DDDIFORMAT Format, D3DKMDT_VIDPN_PRESENT_PATH_SCALING Scaling) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
   if (runtime == NULL)
     return STATUS_DEVICE_NOT_READY;
-  return AppleAgxFixedPanelCommit(
+#if !ADMISSION_DISPLAY_SCALED_MODES
+  if (Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
+      Height != APPLE_AGX_SCANOUT_J313_HEIGHT)
+    return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+#endif
+  return AppleAgxFixedPanelCommitMode(
              &runtime->Panel, 0u, 0u, Width, Height, Stride,
              Format == D3DDDIFMT_A8R8G8B8
                  ? APPLE_AGX_SCANOUT_FORMAT_BGRA8888
                  : Format == D3DDDIFMT_A8B8G8R8
                        ? APPLE_AGX_SCANOUT_FORMAT_RGBA8888
-                       : 0u) == AppleAgxFixedPanelOk
+                       : 0u,
+             (APPLE_AGX_FIXED_PANEL_SCALING)Scaling) == AppleAgxFixedPanelOk
              ? STATUS_SUCCESS
              : STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
 }
@@ -994,6 +1082,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   ADMISSION_SCANOUT_MEMORY_VIEW window;
   APPLE_AGX_U64 surface_offset = 0ULL;
   APPLE_AGX_U64 sequence = 0ULL;
+  ULONGLONG surface_bytes = 0ULL;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   ADMISSION_DISPLAY_OUTPUT_LEASE fallbackCandidate;
   ADMISSION_BACKEND_OUTPUT_VIEW fallbackView;
@@ -1017,12 +1106,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   if (allocation->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC)
     return STATUS_INVALID_HANDLE;
   description = &allocation->Object.Description;
+  /* rc106: the flipped primary has exactly the committed source geometry
+   * (2560x1600 unless a scaled source mode is committed). */
+  surface_bytes = (ULONGLONG)Context->CommittedStride *
+                  Context->CommittedHeight;
   if (!AdmissionAllocationDescriptionValid(description) ||
-      description->Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
-      description->Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
-      description->Pitch != APPLE_AGX_SCANOUT_J313_STRIDE ||
+      !AdmissionScanoutSourceModeSupported(Context, Context->CommittedWidth,
+                                           Context->CommittedHeight,
+                                           Context->CommittedStride) ||
+      description->Width != Context->CommittedWidth ||
+      description->Height != Context->CommittedHeight ||
+      description->Pitch != Context->CommittedStride ||
       description->BytesPerPixel != 4u ||
-      description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
+      description->Size != surface_bytes ||
       description->Format != (UINT)Context->CommittedFormat)
     return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &window)) ||
@@ -1033,7 +1129,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
       Context->Memory.Topology.Local.Base,
       window.Bytes, 0ULL,
       (APPLE_AGX_U64)Args->PrimaryAddress.QuadPart,
-      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0ULL, &surface_offset);
+      surface_bytes, 0ULL, &surface_offset);
   if (address_result != AppleAgxLocalSegmentAddressOk)
     return STATUS_INVALID_ADDRESS;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)

@@ -648,6 +648,8 @@ typedef struct _ADMISSION_CONTEXT {
   ULONG CommittedHeight;
   ULONG CommittedStride;
   D3DDDIFORMAT CommittedFormat;
+  /* rc106: D3DKMDT_VPPS_* transform of the committed source to the panel. */
+  ULONG CommittedScaling;
   volatile LONG SourceAddressStage;
   volatile LONG SourceAddressStatus;
   volatile LONG SourceAddressReceiptState;
@@ -2067,10 +2069,35 @@ NTSTATUS AdmissionScanoutStop(_Inout_ ADMISSION_CONTEXT *Context);
  * out RGBA8888 (APPLE_AGX_SCANOUT_CAP_RGBA8888). */
 BOOLEAN AdmissionScanoutFormatSupported(_In_ ADMISSION_CONTEXT *Context,
                                         _In_ D3DDDIFORMAT Format);
+/* rc106: source modes beside the native one are offered only when the
+ * broker scales (APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE) and this build switch
+ * is on; otherwise the single native 2560x1600 mode is unchanged. */
+#ifndef ADMISSION_DISPLAY_SCALED_MODES
+#define ADMISSION_DISPLAY_SCALED_MODES 1
+#endif
+BOOLEAN AdmissionScanoutScaledModes(_In_ ADMISSION_CONTEXT *Context);
+/* Index 0 is the native mode; FALSE past the last offered mode. */
+BOOLEAN AdmissionScanoutSourceModeAt(_In_ ADMISSION_CONTEXT *Context,
+                                     _In_ ULONG Index, _Out_ ULONG *Width,
+                                     _Out_ ULONG *Height, _Out_ ULONG *Stride);
+BOOLEAN AdmissionScanoutSourceModeSupported(_In_ ADMISSION_CONTEXT *Context,
+                                            _In_ ULONG Width,
+                                            _In_ ULONG Height,
+                                            _In_ ULONG Stride);
+/* Bit (1u << D3DKMDT_VPPS_x) for every scaling cofunctional with a source of
+ * Width x Height; zero when the size is not an offered source mode. */
+ULONG AdmissionScanoutScalingSupport(_In_ ADMISSION_CONTEXT *Context,
+                                     _In_ ULONG Width, _In_ ULONG Height);
+/* The transform a commit applies for a requested D3DKMDT_VPPS value. */
+BOOLEAN AdmissionScanoutResolveScaling(
+    _In_ ADMISSION_CONTEXT *Context, _In_ ULONG Width, _In_ ULONG Height,
+    _In_ D3DKMDT_VIDPN_PRESENT_PATH_SCALING Requested,
+    _Out_ D3DKMDT_VIDPN_PRESENT_PATH_SCALING *Resolved);
 NTSTATUS AdmissionScanoutCommit(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Width, _In_ ULONG Height, _In_ ULONG Stride,
-    _In_ D3DDDIFORMAT Format);
+    _In_ D3DDDIFORMAT Format,
+    _In_ D3DKMDT_VIDPN_PRESENT_PATH_SCALING Scaling);
 NTSTATUS AdmissionScanoutSetVisible(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Visible);
 NTSTATUS AdmissionScanoutQueuePresent(

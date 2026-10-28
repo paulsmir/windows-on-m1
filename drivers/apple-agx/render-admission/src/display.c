@@ -166,6 +166,111 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPointerShape(
 static VOID AdmissionDisplayRingRecord(ADMISSION_CONTEXT *Context, ULONG Kind,
     ULONG Flags, ULONG Detail, ULONGLONG Address, ULONGLONG Allocation);
 
+/* rc106: the panel target keeps its native timing; the source mode set is
+ * the scanout's offered list (native only unless the broker scales).  A
+ * pinned source mode must be one of them. */
+static BOOLEAN AdmissionDisplaySourceModeOffered(
+    ADMISSION_CONTEXT *Context, CONST D3DKMDT_VIDPN_SOURCE_MODE *Mode) {
+  return Mode->Type == D3DKMDT_RMT_GRAPHICS &&
+         Mode->Format.Graphics.VisibleRegionSize.cx ==
+             Mode->Format.Graphics.PrimSurfSize.cx &&
+         Mode->Format.Graphics.VisibleRegionSize.cy ==
+             Mode->Format.Graphics.PrimSurfSize.cy &&
+         AdmissionScanoutSourceModeSupported(
+             Context, (ULONG)Mode->Format.Graphics.PrimSurfSize.cx,
+             (ULONG)Mode->Format.Graphics.PrimSurfSize.cy,
+             (ULONG)Mode->Format.Graphics.Stride) &&
+         AdmissionScanoutFormatSupported(
+             Context, Mode->Format.Graphics.PixelFormat) &&
+         Mode->Format.Graphics.PixelValueAccessMode == D3DKMDT_PVAM_DIRECT;
+}
+
+/* TRUE when Scaling (any D3DKMDT_VPPS value) can be committed with the
+ * pinned source mode, or with some offered mode when none is pinned. */
+static BOOLEAN AdmissionDisplayScalingCofunctional(
+    ADMISSION_CONTEXT *Context, CONST D3DKMDT_VIDPN_SOURCE_MODE *Pinned,
+    D3DKMDT_VIDPN_PRESENT_PATH_SCALING Scaling) {
+  D3DKMDT_VIDPN_PRESENT_PATH_SCALING resolved = D3DKMDT_VPPS_UNINITIALIZED;
+  ULONG index, width, height, stride;
+  if (Pinned != NULL)
+    return AdmissionDisplaySourceModeOffered(Context, Pinned) &&
+           AdmissionScanoutResolveScaling(
+               Context, (ULONG)Pinned->Format.Graphics.PrimSurfSize.cx,
+               (ULONG)Pinned->Format.Graphics.PrimSurfSize.cy, Scaling,
+               &resolved);
+  for (index = 0u;
+       AdmissionScanoutSourceModeAt(Context, index, &width, &height, &stride);
+       ++index) {
+    if (AdmissionScanoutResolveScaling(Context, width, height, Scaling,
+                                       &resolved))
+      return TRUE;
+  }
+  return FALSE;
+}
+
+/* D3DKMDT_VPPS_x support bits of the pinned mode, or of every offered mode
+ * while the source is unpinned (WDK: identity only at equal source and
+ * target size, centered/stretched/aspect-ratio only below it). */
+static ULONG AdmissionDisplayScalingSupport(
+    ADMISSION_CONTEXT *Context, CONST D3DKMDT_VIDPN_SOURCE_MODE *Pinned) {
+  ULONG index, width, height, stride, support = 0u;
+  if (Pinned != NULL)
+    return AdmissionDisplaySourceModeOffered(Context, Pinned)
+               ? AdmissionScanoutScalingSupport(
+                     Context, (ULONG)Pinned->Format.Graphics.PrimSurfSize.cx,
+                     (ULONG)Pinned->Format.Graphics.PrimSurfSize.cy)
+               : 0u;
+  for (index = 0u;
+       AdmissionScanoutSourceModeAt(Context, index, &width, &height, &stride);
+       ++index)
+    support |= AdmissionScanoutScalingSupport(Context, width, height);
+  return support;
+}
+
+static VOID AdmissionDisplayFillScalingSupport(
+    ULONG Support, D3DKMDT_VIDPN_PRESENT_PATH_SCALING_SUPPORT *ScalingSupport) {
+  RtlZeroMemory(ScalingSupport, sizeof(*ScalingSupport));
+  if ((Support & (1u << (ULONG)D3DKMDT_VPPS_IDENTITY)) != 0u)
+    ScalingSupport->Identity = 1;
+  if ((Support & (1u << (ULONG)D3DKMDT_VPPS_CENTERED)) != 0u)
+    ScalingSupport->Centered = 1;
+  if ((Support & (1u << (ULONG)D3DKMDT_VPPS_STRETCHED)) != 0u)
+    ScalingSupport->Stretched = 1;
+  if ((Support & (1u << (ULONG)D3DKMDT_VPPS_ASPECTRATIOCENTEREDMAX)) != 0u)
+    ScalingSupport->AspectRatioCenteredMax = 1;
+}
+
+static NTSTATUS AdmissionDisplayAddSourceMode(
+    CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *SourceSetInterface,
+    D3DKMDT_HVIDPNSOURCEMODESET SourceSet, ULONG Width, ULONG Height,
+    ULONG Stride, D3DDDIFORMAT Format) {
+  D3DKMDT_VIDPN_SOURCE_MODE *sourceMode = NULL;
+  D3DKMDT_VIDEO_PRESENT_SOURCE_MODE_ID sourceModeId = 0;
+  NTSTATUS status =
+      SourceSetInterface->pfnCreateNewModeInfo(SourceSet, &sourceMode);
+  if (!NT_SUCCESS(status))
+    return status;
+  /* EXP1884: the manager assigns each new mode a unique Id; zeroing it
+   * made the second source mode a duplicate (pfnAddMode
+   * STATUS_GRAPHICS_MODE_ID_MUST_BE_UNIQUE) and no VidPN was committed. */
+  sourceModeId = sourceMode->Id;
+  RtlZeroMemory(sourceMode, sizeof(*sourceMode));
+  sourceMode->Id = sourceModeId;
+  sourceMode->Type = D3DKMDT_RMT_GRAPHICS;
+  sourceMode->Format.Graphics.PrimSurfSize.cx = Width;
+  sourceMode->Format.Graphics.PrimSurfSize.cy = Height;
+  sourceMode->Format.Graphics.VisibleRegionSize =
+      sourceMode->Format.Graphics.PrimSurfSize;
+  sourceMode->Format.Graphics.Stride = Stride;
+  sourceMode->Format.Graphics.PixelFormat = Format;
+  sourceMode->Format.Graphics.ColorBasis = D3DKMDT_CB_SCRGB;
+  sourceMode->Format.Graphics.PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
+  status = SourceSetInterface->pfnAddMode(SourceSet, sourceMode);
+  if (!NT_SUCCESS(status))
+    (void)SourceSetInterface->pfnReleaseModeInfo(SourceSet, sourceMode);
+  return status;
+}
+
 static NTSTATUS AdmissionIsSupportedVidPnImpl(
     CONST HANDLE MiniportDeviceContext,
     DXGKARG_ISSUPPORTEDVIDPN *IsSupportedVidPn) {
@@ -174,6 +279,9 @@ static NTSTATUS AdmissionIsSupportedVidPnImpl(
   CONST DXGK_VIDPNTOPOLOGY_INTERFACE *topologyInterface = NULL;
   CONST D3DKMDT_VIDPN_PRESENT_PATH *path = NULL;
   CONST D3DKMDT_VIDPN_PRESENT_PATH *nextPath = NULL;
+  CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *sourceSetInterface = NULL;
+  CONST D3DKMDT_VIDPN_SOURCE_MODE *pinnedSourceMode = NULL;
+  D3DKMDT_HVIDPNSOURCEMODESET sourceSet = 0;
   D3DKMDT_HVIDPNTOPOLOGY topology = 0;
   NTSTATUS status;
 
@@ -209,13 +317,30 @@ static NTSTATUS AdmissionIsSupportedVidPnImpl(
   status = topologyInterface->pfnAcquireNextPathInfo(topology, path,
                                                       &nextPath);
   if (status == STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET) {
+    /* rc106: one 0->0 path; its pinned source mode must be offered and its
+     * pinned scaling cofunctional with that mode. */
+    status = vidPnInterface->pfnAcquireSourceModeSet(
+        IsSupportedVidPn->hDesiredVidPn, path->VidPnSourceId, &sourceSet,
+        &sourceSetInterface);
+    if (!NT_SUCCESS(status))
+      goto Exit;
+    status = sourceSetInterface->pfnAcquirePinnedModeInfo(sourceSet,
+                                                          &pinnedSourceMode);
+    if (!NT_SUCCESS(status))
+      goto Exit;
     status = STATUS_SUCCESS;
-    IsSupportedVidPn->IsVidPnSupported = TRUE;
+    IsSupportedVidPn->IsVidPnSupported = AdmissionDisplayScalingCofunctional(
+        context, pinnedSourceMode, path->ContentTransformation.Scaling);
   } else if (NT_SUCCESS(status)) {
     status = STATUS_SUCCESS;
   }
 
 Exit:
+  if (pinnedSourceMode != NULL && sourceSetInterface != NULL && sourceSet != 0)
+    sourceSetInterface->pfnReleaseModeInfo(sourceSet, pinnedSourceMode);
+  if (sourceSet != 0)
+    vidPnInterface->pfnReleaseSourceModeSet(IsSupportedVidPn->hDesiredVidPn,
+                                            sourceSet);
   if (nextPath != NULL)
     topologyInterface->pfnReleasePathInfo(topology, nextPath);
   if (path != NULL)
@@ -257,9 +382,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
   CONST D3DKMDT_VIDPN_PRESENT_PATH *nextPath = NULL;
   CONST D3DKMDT_VIDPN_SOURCE_MODE *pinnedSourceMode = NULL;
   CONST D3DKMDT_VIDPN_TARGET_MODE *pinnedTargetMode = NULL;
-  D3DKMDT_VIDPN_SOURCE_MODE *sourceMode = NULL;
-  D3DKMDT_VIDEO_PRESENT_SOURCE_MODE_ID sourceModeId = 0;
   D3DKMDT_VIDPN_TARGET_MODE *targetMode = NULL;
+  ULONG modeIndex = 0u, modeWidth = 0u, modeHeight = 0u, modeStride = 0u;
+  ULONG offeredModes = 0u, scalingSupport = 0u;
   D3DKMDT_HVIDPNTOPOLOGY topology = 0;
   D3DKMDT_HVIDPNSOURCEMODESET sourceSet = 0;
   D3DKMDT_HVIDPNTARGETMODESET targetSet = 0;
@@ -313,50 +438,37 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
         &sourceSet, &sourceSetInterface);
     if (!NT_SUCCESS(status))
       goto Exit;
-    status = sourceSetInterface->pfnCreateNewModeInfo(sourceSet, &sourceMode);
-    if (!NT_SUCCESS(status))
-      goto Exit;
-    /* EXP1884: the manager assigns each new mode a unique Id; zeroing it
-     * made the second source mode a duplicate (pfnAddMode
-     * STATUS_GRAPHICS_MODE_ID_MUST_BE_UNIQUE) and no VidPN was committed. */
-    sourceModeId = sourceMode->Id;
-    RtlZeroMemory(sourceMode, sizeof(*sourceMode));
-    sourceMode->Id = sourceModeId;
-    sourceMode->Type = D3DKMDT_RMT_GRAPHICS;
-    sourceMode->Format.Graphics.PrimSurfSize.cx = 2560;
-    sourceMode->Format.Graphics.PrimSurfSize.cy = 1600;
-    sourceMode->Format.Graphics.VisibleRegionSize =
-        sourceMode->Format.Graphics.PrimSurfSize;
-    sourceMode->Format.Graphics.Stride = 10240;
-    sourceMode->Format.Graphics.PixelFormat = D3DDDIFMT_A8R8G8B8;
-    sourceMode->Format.Graphics.ColorBasis = D3DKMDT_CB_SCRGB;
-    sourceMode->Format.Graphics.PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
-    status = sourceSetInterface->pfnAddMode(sourceSet, sourceMode);
-    if (!NT_SUCCESS(status))
-      goto Exit;
-    sourceMode = NULL;
     /* D3D-FS1: DXGI lists R8G8B8A8 display modes only from an A8B8G8R8
-     * source mode; offered when the hypervisor scans out RGBA8888. */
-    if (AdmissionScanoutFormatSupported(context, D3DDDIFMT_A8B8G8R8)) {
-      status = sourceSetInterface->pfnCreateNewModeInfo(sourceSet, &sourceMode);
+     * source mode; offered when the hypervisor scans out RGBA8888.  rc106:
+     * a pinned scaling keeps only the modes it is cofunctional with. */
+    for (modeIndex = 0u;
+         AdmissionScanoutSourceModeAt(context, modeIndex, &modeWidth,
+                                      &modeHeight, &modeStride);
+         ++modeIndex) {
+      if (path->ContentTransformation.Scaling != D3DKMDT_VPPS_UNPINNED &&
+          path->ContentTransformation.Scaling != D3DKMDT_VPPS_UNINITIALIZED &&
+          path->ContentTransformation.Scaling != D3DKMDT_VPPS_NOTSPECIFIED &&
+          ((ULONG)path->ContentTransformation.Scaling >= 32u ||
+           (AdmissionScanoutScalingSupport(context, modeWidth, modeHeight) &
+            (1u << (ULONG)path->ContentTransformation.Scaling)) == 0u))
+        continue;
+      status = AdmissionDisplayAddSourceMode(sourceSetInterface, sourceSet,
+                                             modeWidth, modeHeight,
+                                             modeStride, D3DDDIFMT_A8R8G8B8);
       if (!NT_SUCCESS(status))
         goto Exit;
-      sourceModeId = sourceMode->Id;
-      RtlZeroMemory(sourceMode, sizeof(*sourceMode));
-      sourceMode->Id = sourceModeId;
-      sourceMode->Type = D3DKMDT_RMT_GRAPHICS;
-      sourceMode->Format.Graphics.PrimSurfSize.cx = 2560;
-      sourceMode->Format.Graphics.PrimSurfSize.cy = 1600;
-      sourceMode->Format.Graphics.VisibleRegionSize =
-          sourceMode->Format.Graphics.PrimSurfSize;
-      sourceMode->Format.Graphics.Stride = 10240;
-      sourceMode->Format.Graphics.PixelFormat = D3DDDIFMT_A8B8G8R8;
-      sourceMode->Format.Graphics.ColorBasis = D3DKMDT_CB_SCRGB;
-      sourceMode->Format.Graphics.PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
-      status = sourceSetInterface->pfnAddMode(sourceSet, sourceMode);
-      if (!NT_SUCCESS(status))
-        goto Exit;
-      sourceMode = NULL;
+      if (AdmissionScanoutFormatSupported(context, D3DDDIFMT_A8B8G8R8)) {
+        status = AdmissionDisplayAddSourceMode(
+            sourceSetInterface, sourceSet, modeWidth, modeHeight, modeStride,
+            D3DDDIFMT_A8B8G8R8);
+        if (!NT_SUCCESS(status))
+          goto Exit;
+      }
+      ++offeredModes;
+    }
+    if (offeredModes == 0u) {
+      status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+      goto Exit;
     }
     status = vidPnInterface->pfnAssignSourceModeSet(
         EnumCofuncModality->hConstrainingVidPn, path->VidPnSourceId,
@@ -417,9 +529,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
     D3DKMDT_VIDPN_PRESENT_PATH updatedPath = *path;
     BOOLEAN changed = FALSE;
     if (path->ContentTransformation.Scaling == D3DKMDT_VPPS_UNPINNED) {
-      RtlZeroMemory(&updatedPath.ContentTransformation.ScalingSupport,
-                    sizeof(updatedPath.ContentTransformation.ScalingSupport));
-      updatedPath.ContentTransformation.ScalingSupport.Identity = 1;
+      /* rc106: identity for the native source; centered, stretched and
+       * aspect-ratio-centered-max for a smaller one (scaled broker only). */
+      scalingSupport = AdmissionDisplayScalingSupport(context,
+                                                      pinnedSourceMode);
+      if (scalingSupport == 0u) {
+        status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+        goto Exit;
+      }
+      AdmissionDisplayFillScalingSupport(
+          scalingSupport, &updatedPath.ContentTransformation.ScalingSupport);
       changed = TRUE;
     }
     if (path->ContentTransformation.Rotation == D3DKMDT_VPPR_UNPINNED) {
@@ -455,8 +574,6 @@ Exit:
         pinnedSourceMode != NULL
             ? (ULONGLONG)pinnedSourceMode->Format.Graphics.PixelFormat : 0ULL,
         0ULL);
-  if (sourceMode != NULL && sourceSetInterface != NULL && sourceSet != 0)
-    sourceSetInterface->pfnReleaseModeInfo(sourceSet, sourceMode);
   if (targetMode != NULL && targetSetInterface != NULL && targetSet != 0)
     targetSetInterface->pfnReleaseModeInfo(targetSet, targetMode);
   if (pinnedSourceMode != NULL && sourceSetInterface != NULL && sourceSet != 0)
@@ -548,6 +665,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
   CONST D3DKMDT_VIDPN_PRESENT_PATH *path = NULL;
   D3DKMDT_HVIDPNTOPOLOGY topology = 0;
   D3DKMDT_HVIDPNSOURCEMODESET sourceSet = 0;
+  D3DKMDT_VIDPN_PRESENT_PATH_SCALING scaling = D3DKMDT_VPPS_UNINITIALIZED;
   SIZE_T numberOfPaths = 0;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
 
@@ -611,15 +729,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
                                                         &pinnedSourceMode);
   if (!NT_SUCCESS(status))
     goto Exit;
+  /* rc106: any offered source mode; the panel target stays native. */
   if (pinnedSourceMode == NULL ||
-      pinnedSourceMode->Type != D3DKMDT_RMT_GRAPHICS ||
-      pinnedSourceMode->Format.Graphics.PrimSurfSize.cx != 2560 ||
-      pinnedSourceMode->Format.Graphics.PrimSurfSize.cy != 1600 ||
-      pinnedSourceMode->Format.Graphics.Stride != 10240 ||
-      !AdmissionScanoutFormatSupported(
-          context, pinnedSourceMode->Format.Graphics.PixelFormat) ||
-      pinnedSourceMode->Format.Graphics.PixelValueAccessMode !=
-          D3DKMDT_PVAM_DIRECT) {
+      !AdmissionDisplaySourceModeOffered(context, pinnedSourceMode)) {
     status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
     goto Exit;
   }
@@ -630,17 +742,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
     status = STATUS_GRAPHICS_VIDPN_TOPOLOGY_NOT_SUPPORTED;
     goto Exit;
   }
+  if (!AdmissionScanoutResolveScaling(
+          context, (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cx,
+          (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cy,
+          path->ContentTransformation.Scaling, &scaling)) {
+    status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+    goto Exit;
+  }
   status = AdmissionScanoutCommit(
-      context, pinnedSourceMode->Format.Graphics.PrimSurfSize.cx,
-      pinnedSourceMode->Format.Graphics.PrimSurfSize.cy,
-      pinnedSourceMode->Format.Graphics.Stride,
-      pinnedSourceMode->Format.Graphics.PixelFormat);
+      context, (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cx,
+      (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cy,
+      (ULONG)pinnedSourceMode->Format.Graphics.Stride,
+      pinnedSourceMode->Format.Graphics.PixelFormat, scaling);
   if (!NT_SUCCESS(status))
     goto Exit;
-  context->CommittedWidth = 2560;
-  context->CommittedHeight = 1600;
-  context->CommittedStride = 10240;
+  context->CommittedWidth =
+      (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cx;
+  context->CommittedHeight =
+      (ULONG)pinnedSourceMode->Format.Graphics.PrimSurfSize.cy;
+  context->CommittedStride = (ULONG)pinnedSourceMode->Format.Graphics.Stride;
   context->CommittedFormat = pinnedSourceMode->Format.Graphics.PixelFormat;
+  context->CommittedScaling = (ULONG)scaling;
   context->DisplayActive = TRUE;
   status = STATUS_SUCCESS;
 
@@ -672,9 +794,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiUpdateActiveVidPnPresentPath(
     return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET;
   if (path->GammaRamp.Type != D3DDDI_GAMMARAMP_DEFAULT)
     return STATUS_GRAPHICS_GAMMA_RAMP_NOT_SUPPORTED;
-  if (path->ContentTransformation.Scaling != D3DKMDT_VPPS_IDENTITY &&
-      path->ContentTransformation.Scaling != D3DKMDT_VPPS_NOTSPECIFIED &&
-      path->ContentTransformation.Scaling != D3DKMDT_VPPS_UNINITIALIZED)
+  /* rc106: the active path keeps its committed transform.  Changing it
+   * without a commit would race SetVidPnSourceAddress, which reads the
+   * destination rectangle at DIRQL; a new scaling needs CommitVidPn. */
+  if (path->ContentTransformation.Scaling != D3DKMDT_VPPS_NOTSPECIFIED &&
+      path->ContentTransformation.Scaling != D3DKMDT_VPPS_UNINITIALIZED &&
+      (ULONG)path->ContentTransformation.Scaling != context->CommittedScaling)
     return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
   if (path->ContentTransformation.Rotation != D3DKMDT_VPPR_IDENTITY &&
       path->ContentTransformation.Rotation != D3DKMDT_VPPR_NOTSPECIFIED &&
@@ -852,8 +977,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
   if (SetVidPnSourceAddress != NULL && context->Started &&
       SetVidPnSourceAddress->hAllocation != NULL &&
       SetVidPnSourceAddress->VidPnSourceId == 0 &&
-      context->CommittedWidth == 2560 && context->CommittedHeight == 1600 &&
-      context->CommittedStride == 10240 &&
+      AdmissionScanoutSourceModeSupported(context, context->CommittedWidth,
+                                          context->CommittedHeight,
+                                          context->CommittedStride) &&
       AdmissionScanoutFormatSupported(context, context->CommittedFormat)) {
     if (receipt != NULL)
       receipt->QueueCalled = 1u;
