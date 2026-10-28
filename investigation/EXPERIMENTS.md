@@ -66408,3 +66408,10 @@ Device switch: Wom1GpuFaultInfoRead=1. Order:
 - Hashes: sys c3336d21ca45, UmdArm64 15acfa65b05a, UmdX64 02d7a5fbbb43, Umd32 f7bcee00de64; manifest de7ee2dcb323, hardware-manifest c36f976735a6; probe2049.sh 19f7a6edb3e8 (PROBE_LINT_OK); visible recovery rec2049h 62b56d76cb887b8a; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2049h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2049-fullscreen/run2049.sh.
+
+EXP2049 HARDWARE ACTUAL (2026-10-28): **the m1n1 scaled-source image boots and is native-identical; fullscreen still fails.**
+- m1n1 m1n1-74a4d8f4-scaled. vUART: `scanout ABI v2 enabled` and `display: scanout source 2560x1600 stride 10240 -> panel 2560x1600 at 0,0`.
+- a: FHD 100k windowed 4295, no regression.
+- Mode probe: ModeCount 0, even the current mode read as `0x0@0`; TestResult −5 (BADPARAM); DWM alive. The probe may be broken (session/desktop).
+- b: GravityMark `-Fullscreen 1`: `Desktop::setMode(): ChangeDisplaySettingsExW(): failed`, fell back to windowed, 4290.
+- No receipt shows whether the KMD saw CAP_SCALED_SOURCE or which modes it offered. Back to the Fable fullscreen agent for diagnosis plus a display-modes receipt.
