@@ -66565,3 +66565,14 @@ EXP2055 HARDWARE BEFORE 2026-10-28T21:17:05Z:
 - Hashes: sys 10dfae998774, UmdArm64 120894709cef, UmdX64 12476f15001b, Umd32 08697d66422d; manifest 0da255ed26a9, hardware-manifest aa126faecc15; probe2055.sh 5bfac58065ac (PROBE_LINT_OK); visible recovery rec2055h c11faf7034d6ae39; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2055h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2055-fullscreen3/run2055.sh.
+
+EXP2055 HARDWARE ACTUAL (2026-10-28): **dxgkrnl now commits 1920×1080 (CommitCalls 2, scaling 4 = aspect-ratio), but every flip of the 1920×1080 primary fails with 0xc0000141, so the mode set rolls back. GravityMark falls back to a 1920×1080 window on the 2560×1600 desktop; the user sees it off-centre with the desktop around it.**
+- a FHD 100k windowed 4305 (25.8); b `-Fullscreen 1` 4309 (25.7), with "can't set 1920x1080 mode".
+- Wom1DisplayModesReceipt after b:
+  - LastCommit 1920×1080 stride 7680 BGRA, scaling 4;
+  - SourceAddress LastStatus 0xc0000141 at 0x1505c00000;
+  - GeometryRefusals 0, FormatRefusals 0;
+  - MonitorModeCalls still 1 (the 133154db path is not what gates CDS: the scaled source modes come from cofunctional enumeration).
+- Root cause: `AdmissionScanoutQueuePresent` passes stride×height = 0x7e9000 bytes to `AppleAgxLocalSegmentAddressToGpuVa`, which refuses spans that are not a 64 KiB multiple (Misaligned → STATUS_INVALID_ADDRESS). 2560×1600 = 0xfa0000 is aligned, so the native mode works. Fix d099a808 passes the aligned span; the allocation is 64 KiB-aligned in size and placement.
+- Probe: with exact struct sizes (DEVMODEW 220, DISPLAY_DEVICEW 840), EnumDisplayDevices still returns no devices and EnumDisplaySettings fails with err 203 in console session 1. Open; GravityMark's own CDS reaches the driver.
+- Side observation: 1009 DISPLAY\DEFAULT_MONITOR devnodes have accumulated (one per boot; one is OK).
