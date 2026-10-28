@@ -1594,6 +1594,9 @@ static SIZE_T APIENTRY CalcPrivatePipelineStateSize(D3D12DDI_HDEVICE, const D3D1
                           (hs ? hs->dwords : 0) + (ds ? ds->dwords : 0);
     return offsetof(AgxD3d12PipelineState, cs) + (dwords ? dwords : 1) * sizeof(UINT);
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static void EagerCompilePipeline(AgxD3d12Device *device, AgxD3d12PipelineState *pso, const AgxD3d12RootSignature *root);
+#endif
 static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
     auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
     auto *pso = arg ? static_cast<AgxD3d12PipelineState *>(arg->hDrvPipelineState.pDrvPrivate) : nullptr;
@@ -1651,6 +1654,9 @@ static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE handle, const D3D12
                             static_cast<UINT>(arg->PrimitiveTopologyType), arg->SampleDesc.Count};
     AdmissionUmdDiagnostic("measure-d3d12-pso", S_OK, receipt, 8);
     PublishPsoIdentity(pso, device);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    EagerCompilePipeline(device, pso, static_cast<const AgxD3d12RootSignature *>(arg->hRootSignature.pDrvPrivate));
+#endif
     return S_OK;
 }
 /* CPU-only R1 PSO adapter. The 0010 table is not advertised yet. */
@@ -5314,6 +5320,43 @@ static void *MinmaxVariant(AGX_D3D12_OWNER *owner, AgxD3d12PipelineState *pso, c
     if (v && v->state == 1u) variant = compute ? static_cast<void *>(&v->compute) : static_cast<void *>(&v->graphics);
     ReleaseSRWLockExclusive(&pso->compile_lock);
     return variant;
+}
+/* RC85 (EXP2014b/EXP2015b GravityMark FHD): CreatePipelineState only kept
+ * the tokens, so each PSO was translated and compiled at its first
+ * Dispatch/Draw record -- 77 compute PSOs, 101 compiled parts, 1.4-1.9 s
+ * inside the scored first-frame stall, on the render thread. D3D12 compiles
+ * a PSO against its own root signature (D3D12DDIARG_CREATE_PIPELINE_STATE_0001
+ * hRootSignature; a command list may only use it with a matching one), so
+ * compile here, during the app's (unscored, often multi-threaded) load,
+ * through the same CompileCompute/CompileGraphics and compile_lock the first
+ * record would take; that record then finds the result. The PSO creation
+ * result is unchanged: a refused compile is reported at record time, as
+ * before. No root signature (a deserialized PSO) keeps the lazy compile.
+ * APPLE_AGX_D3D12_EAGER_PSO=0 restores the lazy compile for A/B; receipt
+ * measure-d3d12-pso-eager {compute, microseconds, CS tag} per compile. */
+static bool EagerPsoEnabled() {
+    static volatile LONG state; /* 0 unread, 1 on, 2 off */
+    LONG value = state;
+    if (!value) {
+        char flag[2] = {};
+        value = GetEnvironmentVariableA("APPLE_AGX_D3D12_EAGER_PSO", flag, sizeof(flag)) == 1 && flag[0] == '0' ? 2 : 1;
+        InterlockedExchange(&state, value);
+    }
+    return value == 1;
+}
+static void EagerCompilePipeline(AgxD3d12Device *device, AgxD3d12PipelineState *pso, const AgxD3d12RootSignature *root) {
+    if (!device || !pso || !root || !device->owner || !EagerPsoEnabled()) return;
+    const bool compute = pso->cs_dwords != 0;
+    if (!compute && !pso->vs_dwords) return;
+    LARGE_INTEGER frequency = {}, start = {}, end = {};
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
+    const HRESULT hr = compute ? CompileCompute(device, pso, root) : CompileGraphics(device, pso, root);
+    QueryPerformanceCounter(&end);
+    const LONGLONG hz = frequency.QuadPart ? frequency.QuadPart : 1;
+    const UINT receipt[] = {compute ? 1u : 0u, static_cast<UINT>((end.QuadPart - start.QuadPart) * 1000000 / hz),
+                            pso->cs_tag};
+    AdmissionUmdDiagnostic("measure-d3d12-pso-eager", hr, receipt, 3);
 }
 #endif
 static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINESTATE pso_handle) {
