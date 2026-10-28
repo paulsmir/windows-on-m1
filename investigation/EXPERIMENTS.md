@@ -65808,3 +65808,18 @@ EXP2030 HARDWARE ACTUAL (2026-10-28): **FHD 100k 4097 (best). rc93 confirmed for
   - rc93: confirmed for the first frame (−22 s) and the scored stall (−1.6 s).
   - rc94: inconclusive (HD idle regression, to be A/B'd on the same boot).
   - FHD improved.
+
+EXP2031 HARDWARE BEFORE 2026-10-28T09:48:32Z:
+- WHY: in EXP2030 the HD 50k median rose 22.66 → 25.65 ms with GPU span unchanged and idle 0.11 → 3.90 ms. rc94 changed when upload copies are submitted (deferred into the first compute job), which could delay submission. Boot-to-boot variation is also possible. Same-boot arms d against a/e separate the two.
+- ATOMIC CONTRACT: one variable per arm, an env kill switch in a fresh process; a and e bracket d for drift.
+- Expected:
+  - if rc94 causes it: d median about 22.7 ms with idle < 0.5 ms, while a/e stay about 25.6 ms;
+  - if not: a ≈ d ≈ e;
+  - FHD c about 4000-4100;
+  - the rc95 code is inert (switch off).
+- Failure criteria: removal, GPU fault, build failure of the rc95 KMD code.
+- WHAT IS STILL UNKNOWN: the source of the idle if rc94 is not the cause (present pacing, DWM, the CPU-side query resolve).
+- Recovery: rec2031h.
+- Hashes: sys f12cdedf008f, UmdArm64 78425ec28b1a, UmdX64 16558db5f354, Umd32 a7c31fd692a1; manifest d891a3f5f1f8, hardware-manifest e2449c5fa0c2; probe2031.sh b54b4839dc92 (PROBE_LINT_OK); visible recovery rec2031h 28edf9a0b02c4d95; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2031h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2031-rc94-ab/run2031.sh.
