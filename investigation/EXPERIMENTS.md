@@ -65782,3 +65782,5 @@ EXP2030 HARDWARE BEFORE 2026-10-28T09:25:52Z:
 - Hashes: sys fcb0bf264f73, UmdArm64 c98cf92cce7c, UmdX64 98ac00626921, Umd32 8c6bb1a47722; manifest b89e8f772b9d, hardware-manifest d140b14155f8; probe2030.sh 1d0f4d7720df (PROBE_LINT_OK); visible recovery rec2030h f393a06b81010ba0; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TdrDrillAllowed=1.
 - Recovery rec2030h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2030-rc93-rc94/run2030.sh.
+
+EXP2029 BEFORE correction (2026-10-28): the BEFORE entry above lacks its hypothesis. launch-exp.sh read the relative before2029.txt after `cd` into the worktree, so the file was not found. The planned text (rc92 checkpoint arm A: drill with build-ahead off, rc92 expectations) is carried in full by the EXP2030 BEFORE. launch-exp now resolves the path and fails closed if the text is missing. The m1n1 image in that entry (0d3a75b3) caused the EXP2029 boot failure. launch-exp now defaults to 075e3980-guestram and refuses an expanded-RAM launch with an image lacking guest-RAM support.
