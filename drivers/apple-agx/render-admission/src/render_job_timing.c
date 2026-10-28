@@ -94,6 +94,31 @@ int AdmissionJobTimingFlag(ADMISSION_JOB_TIMING_STATE *state,
   return 1;
 }
 
+int AdmissionJobTimingSub(ADMISSION_JOB_TIMING_STATE *state,
+    unsigned int fence, ADMISSION_JOB_SUB sub, unsigned long long qpc) {
+  ADMISSION_JOB_TIMING_SLOT *slot =
+      (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(state, fence);
+  if (!slot || (int)sub < 0 || sub >= ADMISSION_JOB_SUB_COUNT || !qpc ||
+      slot->Sub[sub]) return 0;
+  slot->Sub[sub] = qpc;
+  return 1;
+}
+
+int AdmissionJobTimingDense(const ADMISSION_JOB_TIMING_STATE *state) {
+  unsigned long long oldest = ~0ull, newest = 0ull, span;
+  unsigned int i;
+  if (!state || !state->QpcFrequency ||
+      state->Count < ADMISSION_JOB_TIMING_CAPACITY) return 0;
+  for (i = 0; i < ADMISSION_JOB_TIMING_CAPACITY; ++i) {
+    unsigned long long submit = state->Slot[i].Qpc[AdmissionJobPhaseSubmit];
+    if (!state->Slot[i].Fence || !submit) return 0;
+    if (submit < oldest) oldest = submit;
+    if (submit > newest) newest = submit;
+  }
+  span = state->QpcFrequency / 1000ull * ADMISSION_JOB_TIMING_HOT_SPAN_MS;
+  return newest - oldest <= span ? 1 : 0;
+}
+
 int AdmissionJobWorkerAffinity(const ADMISSION_JOB_WORKER_CORE *cores,
     unsigned int count, unsigned short *group, unsigned long long *mask) {
   unsigned int i, first = count;

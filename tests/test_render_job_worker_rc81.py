@@ -103,15 +103,17 @@ TIMING = r'''
 int main(void) {
   static ADMISSION_JOB_TIMING_STATE s;
   const ADMISSION_JOB_TIMING_SLOT *slot;
-  /* the decoder's '<IIIIQQ' header and '<IIIIQQ12Q4QIIIIII' v2 slot */
-  assert(ADMISSION_JOB_TIMING_VERSION == 2u);
-  assert(sizeof(ADMISSION_JOB_TIMING_SLOT) == 184u);
+  /* the decoder's '<IIIIQQ' header and '<IIIIQQ12Q4QIIIIII' v2 slot
+   * (rc83 v3 appends the 8Q Sub stamps) */
+  assert(ADMISSION_JOB_TIMING_VERSION == 3u);
+  assert(sizeof(ADMISSION_JOB_TIMING_SLOT) == 248u);
+  assert(offsetof(ADMISSION_JOB_TIMING_SLOT, Sub) == 184u);
   assert(offsetof(ADMISSION_JOB_TIMING_SLOT, CpuBuild) == 168u);
   assert(offsetof(ADMISSION_JOB_TIMING_SLOT, Flags) == 176u);
   assert(offsetof(ADMISSION_JOB_TIMING_STATE, Slot) == 32u);
   assert(offsetof(ADMISSION_JOB_TIMING_STATE, WorkerFlags) == 12u);
   AdmissionJobTimingInitialize(&s, 24000000ull);
-  assert(s.Version == 2u && s.Bytes == sizeof(s) && s.WorkerFlags == 0u);
+  assert(s.Version == 3u && s.Bytes == sizeof(s) && s.WorkerFlags == 0u);
   assert(AdmissionJobTimingBegin(&s, 5u, 7u, 1ull, 64u, 100ull));
   assert(AdmissionJobTimingCpuValue(5u, 1u) == (5u | 1u << 8 | 1u << 31));
   assert(AdmissionJobTimingCpuValue(300u, 0u) == 0u); /* not one byte */

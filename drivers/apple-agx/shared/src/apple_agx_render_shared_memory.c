@@ -672,6 +672,13 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildComputeBarrier(
   return APPLE_AGX_TRUE;
 }
 
+/* rc83 receipt: report a build point; timing only. */
+static void build_mark(const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+                       APPLE_AGX_U32 Point) {
+  if (Owner != RENDER_SHARED_NULL && Owner->BuildMark != RENDER_SHARED_NULL)
+    Owner->BuildMark(Owner->BuildMarkContext, Point);
+}
+
 static APPLE_AGX_BOOL apply_active_relocations(
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_U32 ObjectCount, APPLE_AGX_BOOL InitializePersistent,
@@ -750,6 +757,7 @@ static APPLE_AGX_BOOL build_active_job(
           SourceObjectCount, initialize_persistent, IncludeInitBm,
           job_slot(StagedJob)))
     return APPLE_AGX_FALSE;
+  build_mark(Owner, APPLE_AGX_RENDER_BUILD_MARK_COPIED);
   if (IncludeInitBm) {
     APPLE_AGX_EXP208_RELOCATION_OBJECT *control = &ActiveObjects[20];
     APPLE_AGX_U32 total;
@@ -816,6 +824,7 @@ static APPLE_AGX_BOOL build_active_job(
     put_u32(threshold, render + Owner->NotifierComputeCount);
   }
   *ActiveJob = candidate;
+  build_mark(Owner, APPLE_AGX_RENDER_BUILD_MARK_RELOCATED);
   return APPLE_AGX_TRUE;
 }
 
@@ -938,6 +947,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
       return APPLE_AGX_FALSE;
   }
   restore=Manager->Valid && manager_key_equal(&Manager->Key,Key,APPLE_AGX_FALSE);
+  Owner->LastBuildRestored=restore;
   if (!build_active_job(Owner,TemplateArena,TemplateArenaBytes,SourceObjects,
       SourceObjectCount,ArenaGpuAddress,IncludeInitBm,RuntimeBindings,
       StagedJob,ActiveObjects,ActiveJob,APPLE_AGX_TRUE,InitializeQueues))
@@ -975,6 +985,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
   Owner->ManagerKey=*Key;
   Owner->ManagerFence=Fence;
   Manager->PendingFence=Fence;
+  build_mark(Owner,APPLE_AGX_RENDER_BUILD_MARK_MANAGED);
   return APPLE_AGX_TRUE;
 }
 

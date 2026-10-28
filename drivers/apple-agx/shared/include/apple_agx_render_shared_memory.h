@@ -123,7 +123,19 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   APPLE_AGX_U32 NotifierRenderCount;
   APPLE_AGX_U32 NotifierComputeCount;
   APPLE_AGX_U32 NotifierComputeStamp;
+  /* rc83 receipt: optional progress callback of a render build, Point one
+   * of APPLE_AGX_RENDER_BUILD_MARK_*; NULL (zeroed owner) = none. It only
+   * timestamps and never changes the build. */
+  void (*BuildMark)(void *Context, APPLE_AGX_U32 Point);
+  void *BuildMarkContext;
+  /* The last managed G4 build restored the saved buffer-manager state. */
+  APPLE_AGX_BOOL LastBuildRestored;
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
+
+/* rc83: points of a render build reported through Owner->BuildMark. */
+#define APPLE_AGX_RENDER_BUILD_MARK_COPIED 1u    /* template objects copied */
+#define APPLE_AGX_RENDER_BUILD_MARK_RELOCATED 2u /* relocations, stats, threshold */
+#define APPLE_AGX_RENDER_BUILD_MARK_MANAGED 3u   /* manager state restored */
 
 APPLE_AGX_BOOL AppleAgxRenderManagerNeedsBind(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,

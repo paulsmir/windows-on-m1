@@ -132,6 +132,11 @@ static void AdmissionGpuCompletionCaptureWindows(ADMISSION_PLATFORM_RUNTIME *r, 
     APPLE_AGX_BACKEND_COMPLETION_STATUS status) { (void)r; (void)f; (void)status; }
 static void AdmissionJobTimingFirmwareWindows(void *r, unsigned f) { (void)r; (void)f; }
 static void AdmissionJobTimingCpuWindows(void *r, unsigned f, int c) { (void)r; (void)f; (void)c; }
+/* rc83 receipt v3: the arena-release stamp */
+#define AdmissionJobSubReleased 7
+static unsigned long long AdmissionJobQpc(void) { return 1u; }
+static void AdmissionJobTimingSubAtWindows(void *r, unsigned f, unsigned s, unsigned long long q) {
+  (void)r; (void)f; (void)s; (void)q; }
 static int AdmissionSaveG4Manager(void *r, unsigned f) { (void)r; (void)f; return 1; }
 /* Real graph publication is exercised in the RC40 replay; here its return
  * status verifies that the real completion callback never reports early. */

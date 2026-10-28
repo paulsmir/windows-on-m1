@@ -155,6 +155,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   UCHAR JobCpuClass[ADMISSION_JOB_CPU_CLASSES];
   /* QPC of the last receipt export (at most one per two seconds). */
   ULONGLONG JobTimingExportQpc;
+  /* rc83: the fence whose render build reports its sub-interval stamps
+   * through the shared owner's BuildMark (worker only). */
+  ULONG BuildMarkFence;
   ADMISSION_FW_TIMING_RING FwTiming;
   ADMISSION_FW_TIMING_RING FwTimingSnapshot;
   /* GPU timestamps of completed jobs, by fence (JobTimingLock). */
@@ -319,6 +322,33 @@ static VOID AdmissionJobTimingMarkWindows(
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   (void)AdmissionJobTimingMark(&runtime->JobTiming, fence, phase, qpc);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+/* rc83 receipt v3: a sub-interval stamp (first wins). */
+static VOID AdmissionJobTimingSubAtWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence, ADMISSION_JOB_SUB sub,
+    ULONGLONG qpc) {
+  KIRQL oldIrql;
+  if (runtime == NULL || fence == 0u || qpc == 0u) return;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  (void)AdmissionJobTimingSub(&runtime->JobTiming, fence, sub, qpc);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+static VOID AdmissionJobTimingSubWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence, ADMISSION_JOB_SUB sub) {
+  AdmissionJobTimingSubAtWindows(runtime, fence, sub, AdmissionJobQpc());
+}
+
+/* The shared render builder's progress points (Owner->BuildMark). */
+static void AdmissionRenderBuildMarkWindows(void *Context, APPLE_AGX_U32 Point) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime == NULL) return;
+  AdmissionJobTimingSubWindows(runtime, runtime->BuildMarkFence,
+      Point == APPLE_AGX_RENDER_BUILD_MARK_COPIED ? AdmissionJobSubCopied :
+      Point == APPLE_AGX_RENDER_BUILD_MARK_RELOCATED ? AdmissionJobSubRelocated :
+      Point == APPLE_AGX_RENDER_BUILD_MARK_MANAGED ? AdmissionJobSubManaged :
+      ADMISSION_JOB_SUB_COUNT);
 }
 
 static VOID AdmissionJobTimingDelayWindows(
@@ -764,6 +794,14 @@ static VOID AdmissionJobTimingExportWindows(
     RtlInitUnicodeString(&name, L"Wom1JobTiming971");
     status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
         &runtime->JobTimingSnapshot, sizeof(runtime->JobTimingSnapshot));
+    /* rc83: a dense ring (an application's steady state) is kept apart:
+     * the idle desktop's jobs after it ends never overwrite it. */
+    if (NT_SUCCESS(status) &&
+        AdmissionJobTimingDense(&runtime->JobTimingSnapshot)) {
+      RtlInitUnicodeString(&name, L"Wom1JobTiming971Hot");
+      status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
+          &runtime->JobTimingSnapshot, sizeof(runtime->JobTimingSnapshot));
+    }
     if (NT_SUCCESS(status) && runtime->FwTimingSnapshot.Count != 0u) {
       RtlInitUnicodeString(&name, L"Wom1FwTiming1112");
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
@@ -2734,8 +2772,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
       return APPLE_AGX_BACKEND_FALSE;
   }
   runtime->TransportIo.MemoryBarrier(runtime);
-  return AppleAgxRenderManagerSave(&runtime->Initdata.RenderSharedMemory,
-      image->G4Manager,Fence,runtime->QueueObjects);
+  if (!AppleAgxRenderManagerSave(&runtime->Initdata.RenderSharedMemory,
+          image->G4Manager,Fence,runtime->QueueObjects))
+    return APPLE_AGX_BACKEND_FALSE;
+  AdmissionJobTimingSubWindows(runtime, Fence, AdmissionJobSubSaved);
+  return APPLE_AGX_BACKEND_TRUE;
 }
 #endif
 
@@ -2924,6 +2965,12 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     dynamic = TRUE;
     overlayApplied = TRUE;
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* rc83 receipt: the shared builder stamps this fence's sub-intervals. */
+  runtime->BuildMarkFence = Submission->Submission.Fence;
+  runtime->Initdata.RenderSharedMemory.BuildMark = AdmissionRenderBuildMarkWindows;
+  runtime->Initdata.RenderSharedMemory.BuildMarkContext = runtime;
+#endif
   if (!AdmissionBackendImageStageJob(
           &runtime->Adapter->BackendImage,
           Submission->Submission.Fence, TaEvent, D3Event,
@@ -2931,6 +2978,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
           Plan->IncludeInitBm, &staged))
     goto BuildFailure;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionJobTimingSubWindows(runtime, Submission->Submission.Fence,
+      AdmissionJobSubStaged);
   AdmissionStampCheckWindows(runtime, Plan->InitializeQueues);
 #endif
   if (!AppleAgxInitdataMemoryGetRenderBindings(&runtime->Initdata,
@@ -3061,6 +3110,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     Job->ComputeExpectedDonePointer = Plan->ComputeExpectedDonePointer;
     if (!AdmissionBuildTaComputeBarrier(runtime, &input, &output, Plan, Job))
       goto BuildFailure;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionJobTimingSubWindows(runtime, Submission->Submission.Fence,
+        AdmissionJobSubPrelude);
+#endif
   }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (dynamic && !APPLE_AGX_WIN32_COMMAND_IS_NATIVE(dynamicView.Bindings->CommandVersion))
@@ -3157,9 +3210,30 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     build->ConfigEvent =
         runtime->Provider.QueueProvider.Config.Compute.EventNumber;
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    const ADMISSION_BACKEND_IMAGE *image = &runtime->Adapter->BackendImage;
+    ULONG flags = 0u;
+    AdmissionJobTimingSubWindows(runtime, Submission->Submission.Fence,
+        AdmissionJobSubFlushed);
+    if (Plan->IncludeInitBm) flags |= ADMISSION_JOB_FLAG_INIT_BM;
+    if (Plan->InitializeQueues) flags |= ADMISSION_JOB_FLAG_INIT_QUEUES;
+    if (image->G4Native && image->G4WithCompute) flags |= ADMISSION_JOB_FLAG_PRELUDE;
+    if ((((staged.TaExpectedStamp >> 8u) ^ 1u) & 1u) != 0u)
+      flags |= ADMISSION_JOB_FLAG_SLOT1;
+    if (image->G4Manager && runtime->Initdata.RenderSharedMemory.LastBuildRestored)
+      flags |= ADMISSION_JOB_FLAG_MANAGER_RESTORED;
+    if (flags) AdmissionJobTimingNoteWindows(runtime->Adapter,
+        Submission->Submission.Fence, flags);
+    runtime->BuildMarkFence = 0u;
+  }
+#endif
   return APPLE_AGX_BACKEND_TRUE;
 
 BuildFailure:
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  runtime->BuildMarkFence = 0u;
+#endif
   if (overlayApplied)
     (void)AdmissionDynamicOverlayRelease(
         &runtime->Adapter->BackendImage, dynamicPlan, dynamicView.Job,
@@ -3548,6 +3622,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   BOOLEAN preemption_waiting = FALSE;
   NTSTATUS sync_status;
   KIRQL old_irql;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  ULONGLONG releasedQpc = 0ULL;
+#endif
 
   if (runtime == NULL)
     return APPLE_AGX_BACKEND_FALSE;
@@ -3729,6 +3806,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
       return APPLE_AGX_BACKEND_FALSE;
     }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    /* rc83 receipt: the arena release is done; stamped after the lock. */
+    releasedQpc = AdmissionJobQpc();
+#endif
   }
   if (runtime->Completion.Phase == AppleAgxCompletionLocalCommitted)
     local = AppleAgxCompletionTransactionAdvance(
@@ -3750,6 +3831,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
                              : FALSE;
   }
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionJobTimingSubAtWindows(runtime, Fence, AdmissionJobSubReleased,
+      releasedQpc);
+#endif
   if (!local)
     return APPLE_AGX_BACKEND_FALSE;
 

@@ -2,8 +2,9 @@
 #define APPLE_AGX_RENDER_JOB_TIMING_H
 
 /* v2 (rc81): CpuBuild/CpuComplete/Flags per slot, WorkerFlags in the
- * header (was Reserved). */
-#define ADMISSION_JOB_TIMING_VERSION 2u
+ * header (was Reserved). v3 (rc83): Sub[] build/completion sub-interval
+ * stamps appended to each slot, build flags in Flags. */
+#define ADMISSION_JOB_TIMING_VERSION 3u
 #define ADMISSION_JOB_TIMING_CAPACITY 64u
 
 typedef enum _ADMISSION_JOB_PHASE {
@@ -22,6 +23,28 @@ typedef enum _ADMISSION_JOB_PHASE {
   ADMISSION_JOB_PHASE_COUNT
 } ADMISSION_JOB_PHASE;
 
+/* rc83 (EXP2012: BackendBefore -> Kick3d 266 us, Complete -> JobEnd 77 us
+ * per render job): QPC stamps inside the build and the completion, each
+ * recorded once, 0 = not reached. Build, in order: the backend image
+ * staged the job (AdmissionBackendImageStageJob), the template objects
+ * were copied to the firmware-shared queue objects, relocations/stats/
+ * threshold applied, the buffer-manager state restored (managed G4 only),
+ * the v5 compute prelude built, the flushes done (end of the external
+ * build; Kick3d follows). Completion: the buffer-manager state saved
+ * (AdmissionSaveG4Manager), the arena released (Release*Restore, before
+ * Notify). */
+typedef enum _ADMISSION_JOB_SUB {
+  AdmissionJobSubStaged,
+  AdmissionJobSubCopied,
+  AdmissionJobSubRelocated,
+  AdmissionJobSubManaged,
+  AdmissionJobSubPrelude,
+  AdmissionJobSubFlushed,
+  AdmissionJobSubSaved,
+  AdmissionJobSubReleased,
+  ADMISSION_JOB_SUB_COUNT
+} ADMISSION_JOB_SUB;
+
 typedef struct _ADMISSION_JOB_TIMING_SLOT {
   unsigned int Fence, ProcessId, DmaBytes, DelayCount;
   unsigned long long ContextToken;
@@ -34,8 +57,10 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
    * (BackendBefore) and when it observed completion (Complete), as
    * AdmissionJobTimingCpuValue; 0 = not recorded. */
   unsigned int CpuBuild, CpuComplete;
-  /* v2: ADMISSION_JOB_FLAG_* noted by BeginJob. */
+  /* v2: ADMISSION_JOB_FLAG_* noted by BeginJob (v3: and the build). */
   unsigned int Flags, Reserved;
+  /* v3: ADMISSION_JOB_SUB stamps. */
+  unsigned long long Sub[ADMISSION_JOB_SUB_COUNT];
 } ADMISSION_JOB_TIMING_SLOT;
 
 /* Set by BeginJob: BEGIN_JOB always; MAPPING_UNCHANGED when the process
@@ -46,6 +71,15 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
 #define ADMISSION_JOB_FLAG_MAPPING_UNCHANGED 0x1u
 #define ADMISSION_JOB_FLAG_PRIVATE_SCENE 0x2u
 #define ADMISSION_JOB_FLAG_BEGIN_JOB 0x4u
+/* v3, set by the render build: the job carried the InitBM command, it
+ * (re)initialised the queues, it had a v5 compute prelude, it used the
+ * second copy of the slotted objects, its build restored saved
+ * buffer-manager state. */
+#define ADMISSION_JOB_FLAG_INIT_BM 0x8u
+#define ADMISSION_JOB_FLAG_INIT_QUEUES 0x10u
+#define ADMISSION_JOB_FLAG_PRELUDE 0x20u
+#define ADMISSION_JOB_FLAG_SLOT1 0x40u
+#define ADMISSION_JOB_FLAG_MANAGER_RESTORED 0x80u
 
 /* Header WorkerFlags: the job worker ran on the dedicated thread; that
  * thread is pinned to the processors of efficiency class (bits 8-15),
@@ -84,6 +118,19 @@ int AdmissionJobTimingCpu(ADMISSION_JOB_TIMING_STATE *State,
     unsigned int Fence, int Complete, unsigned int Value);
 int AdmissionJobTimingFlag(ADMISSION_JOB_TIMING_STATE *State,
     unsigned int Fence, unsigned int Flag);
+/* v3: the first stamp of Sub wins. */
+int AdmissionJobTimingSub(ADMISSION_JOB_TIMING_STATE *State,
+    unsigned int Fence, ADMISSION_JOB_SUB Sub, unsigned long long Qpc);
+
+/* rc83: EXP2010-EXP2012 exported Wom1JobTiming971 after the benchmark had
+ * ended, so its 64 slots held DWM's idle-desktop jobs (EXP2012: 54 dwm, 1
+ * explorer, 0 GravityMark; the ring spanned 1.75 s). The export also
+ * keeps Wom1JobTiming971Hot, written only from a dense ring: every slot
+ * used and all 64 submissions within ADMISSION_JOB_TIMING_HOT_SPAN_MS (a
+ * GravityMark HD/FHD frame of 9 jobs at 24-40 FPS fills 64 slots in
+ * 180-300 ms). Returns 1 for a dense ring. */
+#define ADMISSION_JOB_TIMING_HOT_SPAN_MS 500u
+int AdmissionJobTimingDense(const ADMISSION_JOB_TIMING_STATE *State);
 
 /* rc81 (EXP2010): one processor core of the topology (a
  * PROCESSOR_RELATIONSHIP GroupMask) and its efficiency class. */

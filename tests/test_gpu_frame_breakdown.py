@@ -134,9 +134,9 @@ class GpuFrameBreakdown(unittest.TestCase):
 
 
 def kmd_snapshot(slots, hz=1000000, version=1, worker_flags=0, size=None):
-    """slots: (fence, pid, {phase: qpc}[, (cpu_build, cpu_complete, flags)])"""
+    """slots: (fence, pid, {phase: qpc}[, (cpu_build, cpu_complete, flags)[, {sub: qpc}]])"""
     b = load()
-    slot_bytes = 168 if version == 1 else 184
+    slot_bytes = {1: 168, 2: 184}.get(version, 248)
     data = bytearray(struct.pack('<IIIIQQ', version, size or 32 + 64 * slot_bytes, len(slots),
                                  worker_flags, hz, 0))
     for i in range(64):
@@ -145,6 +145,9 @@ def kmd_snapshot(slots, hz=1000000, version=1, worker_flags=0, size=None):
                             *[q.get(p, 0) for p in b.KMD_PHASES], 0, 0, 0, 0, 0, 0)
         if version != 1:
             data += struct.pack('<IIII', *(extra[0] if extra else (0, 0, 0)), 0)
+        if version >= 3:
+            sub = extra[1] if len(extra) > 1 else {}
+            data += struct.pack('<8Q', *[sub.get(n, 0) for n in b.KMD_SUBS])
     return bytes(data)
 
 
@@ -274,7 +277,9 @@ class KmdJobTiming(unittest.TestCase):
         with self.assertRaises(ValueError):
             b.kmd_job_timing(kmd_snapshot([], version=2, size=32 + 64 * 168))
         with self.assertRaises(ValueError):
-            b.kmd_job_timing(kmd_snapshot([], version=3))
+            b.kmd_job_timing(kmd_snapshot([], version=4))
+        with self.assertRaises(ValueError):
+            b.kmd_job_timing(kmd_snapshot([], version=3, size=32 + 64 * 184))
         with self.assertRaises(ValueError):
             b.kmd_job_timing(kmd_snapshot([])[:100])
 

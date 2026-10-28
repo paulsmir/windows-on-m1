@@ -20,6 +20,11 @@ typedef struct {
   } TransportIo;
   APPLE_AGX_EXP208_RELOCATION_OBJECT QueueObjects[76];
 } ADMISSION_PLATFORM_RUNTIME;
+/* rc83 receipt v3: the save's sub-interval stamp */
+#define AdmissionJobSubSaved 6
+static unsigned saved_stamps;
+static void AdmissionJobTimingSubWindows(ADMISSION_PLATFORM_RUNTIME *r, unsigned f, int s) {
+  assert(r && f && s == AdmissionJobSubSaved); ++saved_stamps; }
 static unsigned flushes,fail_flush,barriers;
 static unsigned char Flush(void *c,const void *p,unsigned n) {
   assert(c && p && n);return ++flushes!=fail_flush;

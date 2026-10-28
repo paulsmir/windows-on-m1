@@ -58,6 +58,9 @@ static void RtlInitUnicodeString(UNICODE_STRING *s, const wchar_t *w) { s->Buffe
 static NTSTATUS ZwSetValueKey(HANDLE, UNICODE_STRING *, ULONG, ULONG, const void *, ULONG) { ++sets; return 0; }
 static NTSTATUS ZwFlushKey(HANDLE) { ++flushes; return 0; }
 static void ZwClose(HANDLE) {}
+/* rc83: the hot copy is written only from a dense ring */
+static int dense;
+static int AdmissionJobTimingDense(const JOB_TIMING *) { return dense; }
 @@FUNC@@
 int main() {
   ADMISSION_CONTEXT adapter = {(PDEVICE_OBJECT)1};
@@ -67,6 +70,9 @@ int main() {
   for (int i = 0; i < 15385; ++i) { AdmissionJobTimingExportWindows(&r); qpc += 15600ULL; }
   printf("opens %d sets %d flushes %d\n", opens, sets, flushes);
   assert(opens >= 1 && opens <= 6);
+  assert(sets == 2 * opens); /* timing + fw timing, no hot copy */
+  { int before = sets, o = opens; dense = 1; qpc += 48000000ULL; AdmissionJobTimingExportWindows(&r);
+    assert(opens == o + 1 && sets == before + 3); }
   assert(flushes == 0);
   puts("job timing export rate: PASS");
 }

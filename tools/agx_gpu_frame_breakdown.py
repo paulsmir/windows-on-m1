@@ -65,7 +65,18 @@ by_core_class (v2) splits them by the class of the processor that ran them
 (build and BeginJob: CpuBuild, completion to job end: CpuComplete);
 begin_flags counts the BeginJobs that found the process mapping generation
 unchanged since the bind (a skipped reparse would have applied) and those
-of private-scene renders.
+of private-scene renders. Version 3 (rc83) appends per slot eight QPC
+stamps inside the build and the completion (ADMISSION_JOB_SUB); sub_us
+gives the medians of the render build split stage (BackendBefore ->
+image staged), copy (template objects copied to the firmware-shared
+queue objects), relocate, manager (buffer-manager restore), prelude (v5
+compute prelude), flush and kick (flushes done -> 3D kick), and of the
+completion split save (Complete -> buffer-manager saved), timestamp (->
+JobEnd), release (JobEnd -> arena released) and notify; build_flags counts
+the InitBM, queue-initialising, prelude, second-slot and restored-manager
+builds. The KMD also exports Wom1JobTiming971Hot, the same layout, only
+from a ring whose 64 submissions fall within 500 ms (an application's
+steady state, not the idle desktop after it).
 """
 import argparse
 import bisect
@@ -240,8 +251,35 @@ KMD_PHASES = ('submit', 'worker', 'begin_before', 'begin_after', 'backend_before
 KMD_HEADER = struct.Struct('<IIIIQQ')
 KMD_SLOT = struct.Struct('<IIIIQQ12Q4QII')
 KMD_SLOT_V2 = struct.Struct('<IIIIQQ12Q4QIIIIII')
+KMD_SUBS = ('staged', 'copied', 'relocated', 'managed', 'prelude', 'flushed', 'saved', 'released')
+KMD_SLOT_V3 = struct.Struct('<IIIIQQ12Q4QIIIIII8Q')
 KMD_SLOTS = 64
 FLAG_MAPPING_UNCHANGED, FLAG_PRIVATE_SCENE, FLAG_BEGIN_JOB = 1, 2, 4
+BUILD_FLAGS = dict(init_bm=0x8, init_queues=0x10, prelude=0x20, slot1=0x40, manager_restored=0x80)
+
+
+def _sub_spans(s, us):
+    """rc83 v3: the render build and completion split by the Sub stamps; an
+    unreached stamp (0) is skipped, so each span starts at the last one."""
+    out = {}
+    build = [('stage', 'staged'), ('copy', 'copied'), ('relocate', 'relocated'),
+             ('manager', 'managed'), ('prelude', 'prelude'), ('flush', 'flushed'),
+             ('kick', 'kick_3d')]
+    last = s['backend_before']
+    for name, point in build:
+        at = s.get('sub_' + point) if point != 'kick_3d' else s['kick_3d']
+        if at and last:
+            out[name] = us(last, at)
+            last = at
+    complete = [('save', 'sub_saved'), ('timestamp', 'job_end'), ('release', 'sub_released'),
+                ('notify', 'notify')]
+    last = s['complete']
+    for name, point in complete:
+        at = s.get(point)
+        if at and last:
+            out[name] = us(last, at)
+            last = at
+    return out
 CPU_INTERVALS = ('begin_job', 'build', 'complete_to_job_end', 'job_end_to_notify')
 
 
@@ -253,24 +291,26 @@ def _medians(spans):
 def kmd_job_timing(data):
     """Median microseconds per KMD interval of a Wom1JobTiming971 snapshot."""
     version, size, count, worker, hz, _ = KMD_HEADER.unpack_from(data, 0)
-    layout = {1: KMD_SLOT, 2: KMD_SLOT_V2}.get(version)
+    layout = {1: KMD_SLOT, 2: KMD_SLOT_V2, 3: KMD_SLOT_V3}.get(version)
     if (layout is None or size != KMD_HEADER.size + KMD_SLOTS * layout.size or
             len(data) < size or not hz):
-        raise ValueError('not an ADMISSION_JOB_TIMING_STATE v1/v2 snapshot')
+        raise ValueError('not an ADMISSION_JOB_TIMING_STATE v1/v2/v3 snapshot')
     slots = []
     for i in range(KMD_SLOTS):
         fields = layout.unpack_from(data, KMD_HEADER.size + i * layout.size)
         q = dict(zip(KMD_PHASES, fields[6:18]))
         if fields[0] and all(q[p] for p in ('submit', 'worker', 'backend_after', 'complete', 'notify')):
             cpu_build, cpu_complete, flags = fields[24:27] if version >= 2 else (0, 0, 0)
+            subs = dict(zip(('sub_' + n for n in KMD_SUBS), fields[28:36])) if version >= 3 else {}
             slots.append(dict(fence=fields[0], pid=fields[1], cpu_build=cpu_build,
-                              cpu_complete=cpu_complete, flags=flags, **q))
+                              cpu_complete=cpu_complete, flags=flags, **q, **subs))
     slots.sort(key=lambda s: s['submit'])
     us = lambda a, b: (b - a) * 1e6 / hz
     spans = {k: [] for k in ('begin_job', 'build', 'worker_to_kick', 'kick_to_progress',
                              'progress_to_complete', 'complete_to_notify',
                              'queued_notify_to_worker', 'queued_complete_to_kick')}
     kinds = {kind: {k: [] for k in CPU_INTERVALS} for kind in ('render', 'compute')}
+    subs = {}
     classes = {'render': {}, 'compute': {}}
     for prev, s in zip([None] + slots[:-1], slots):
         kind = 'render' if s['kick_ta'] else 'compute'
@@ -289,6 +329,9 @@ def kmd_job_timing(data):
             if where >> 31:
                 bucket = classes[kind].setdefault(where >> 8 & 0xff, {k: [] for k in CPU_INTERVALS})
                 bucket[name].append(value)
+        if version >= 3 and kind == 'render':
+            for name, value in _sub_spans(s, us).items():
+                subs.setdefault(name, []).append(value)
         spans['worker_to_kick'].append(us(s['worker'], s['backend_after']))
         if s['first_progress']:
             spans['kick_to_progress'].append(us(s['backend_after'], s['first_progress']))
@@ -312,6 +355,10 @@ def kmd_job_timing(data):
             begin_jobs=len(begun),
             mapping_unchanged=sum(1 for s in begun if s['flags'] & FLAG_MAPPING_UNCHANGED),
             private_scene=sum(1 for s in begun if s['flags'] & FLAG_PRIVATE_SCENE))
+    if version >= 3:
+        out['sub_us'] = _medians(subs)
+        out['build_flags'] = {name: sum(1 for s in slots if s['flags'] & bit)
+                              for name, bit in BUILD_FLAGS.items()}
     return out
 
 
@@ -322,7 +369,7 @@ def main():
     parser.add_argument('--skip', type=float, default=0.3,
                         help='fraction of leading frames to drop (load, warm-up)')
     parser.add_argument('--csv')
-    parser.add_argument('--kmd-timing', help='decode a Wom1JobTiming971 registry snapshot instead')
+    parser.add_argument('--kmd-timing', help='decode a Wom1JobTiming971(Hot) registry snapshot instead')
     args = parser.parse_args()
     if args.kmd_timing:
         with open(args.kmd_timing, 'rb') as handle:
