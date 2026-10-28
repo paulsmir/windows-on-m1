@@ -106,16 +106,42 @@ class D3dBufferAccessLowering(unittest.TestCase):
             "ssbo_store_masked_partial": "stores 4x1",
             "ssbo_store_wrapping_offset": "stores"})
 
-    def test_uav_loads_are_straight_line_and_exact_for_every_size(self):
+    def test_uav_loads_are_exact_for_every_size(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? RC74: the AGX
         # backend waits for every outstanding load at the end of a block
         # (agx_insert_waits.c), so the D3D-H6 form (an if/else around each
-        # UAV load) serialised every UAV read of a shader. The straight-line
-        # form must keep D3D's per-component rule: for 1-4 components at
-        # each offset 0..24 and each bound size 0..28, an in-bounds component
-        # reads its own dword and an out-of-bounds one is 0, with no branch
-        # left in the lowered (unfolded) code.
-        self.expect({"ssbo_load_sweep": "wrong 0 ifs 0"})
+        # UAV load) serialised every UAV read of a shader. A lone scalar or
+        # vec2 load keeps the straight-line per-component form; RC109 puts
+        # a lone vec3 or vec4 (a run saving at least two load instructions)
+        # behind one whole-in-bounds test, the vector load on one side and
+        # the per-component form on the other. Both must keep D3D's
+        # per-component rule: for 1-4 components at each offset 0..24 and
+        # each bound size 0..28, an in-bounds component reads its own dword
+        # and an out-of-bounds one is 0. ifs counts the lowered (unfolded)
+        # code: 7 offsets x 8 sizes x the two vector widths.
+        self.expect({"ssbo_load_sweep": "wrong 0 ifs 112"})
+
+    def test_a_run_of_uav_loads_is_exact_for_every_size(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? RC109 tests a run
+        # of loads together (a vec4 at 0 and a vec2 at 24 of one buffer, a
+        # vec4 at 8 of another: one if). For every bound size 0..36 each
+        # load must still read exactly its in-bounds components: the whole
+        # loads when the test holds, else the per-component path of each.
+        self.expect({"ssbo_load_run_sweep": "wrong 0 ifs 10"})
+
+    def test_a_run_ends_at_a_dependent_address_and_at_a_store(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? RC109: a load
+        # whose address comes from the run's values cannot be tested with
+        # them (the test would use a value defined inside the run), and a
+        # load must not move across a store. A (vec4 at 0) and B (vec2 at
+        # 16) form one run; C (address from A and B) starts the next, which
+        # D (vec4 at 32) joins; the store ends it; E (vec4 at 48) is a run of
+        # its own: 3 ifs plus the store's 5 (RC74), and after folding with a
+        # 64-byte bound only C's run keeps its test (1), so D, tested with
+        # C, stays a phi of its two forms (?); A, B and E read their dwords.
+        self.expect({"run_bounds": "8 1 load_ssbo@0 load_ssbo@4 load_ssbo@8 load_ssbo@12 "
+                                   "load_ssbo@16 load_ssbo@20 ? ? ? ? "
+                                   "load_ssbo@48 load_ssbo@52 load_ssbo@56 load_ssbo@60"})
 
     def test_consecutive_uav_stores_write_exactly_their_in_bounds_parts(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? RC74 tests a run

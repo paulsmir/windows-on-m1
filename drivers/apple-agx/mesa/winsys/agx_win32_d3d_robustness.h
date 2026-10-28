@@ -230,6 +230,8 @@ agx_win32_d3d_lower_buffer_access_instr(nir_builder *b, nir_intrinsic_instr *int
    case nir_intrinsic_load_ubo:
       return agx_win32_d3d_lower_load_ubo(b, intr);
    case nir_intrinsic_load_ssbo:
+      if (_mesa_set_search(state->checked, intr))
+         return false;
       return state->branches ? agx_win32_d3d_lower_load_ssbo_branched(b, intr)
                              : agx_win32_d3d_lower_load_ssbo(b, intr);
    case nir_intrinsic_store_ssbo:
@@ -335,17 +337,242 @@ agx_win32_d3d_group_stores(nir_function_impl *impl, struct set *checked)
    return nir_progress(progress, impl, nir_metadata_none);
 }
 
+/* RC109: runs of loads tested together. The straight-line per-component
+ * form above costs, for a vec4, four loads and about six ALU per component
+ * (EXP1969 capture, offline: the per-frame compute shaders compile to 77 %
+ * more instructions with the D3D lowering than unchecked, and the lighting
+ * shader bdb1944a to 18 % more). Here consecutive checked loads of a block
+ * whose addresses do not depend on each other (a run) are tested once for
+ * being wholly in bounds: then they run as written, whole vector loads
+ * back to back (the backend waits at the block end once, for all of them;
+ * loads in a run overlap each other, unlike the D3D-H6 branch per load
+ * RC74 removed); else each takes the per-component path above. A load
+ * whose address depends on a load of the run, or a volatile one, starts
+ * the next run; any instruction with side effects or that may not be
+ * reordered ends a run. Pure instructions between a run's loads that use
+ * the run's values follow the test (their operands are then the phis).
+ * A run must save at least APPLE_AGX_D3D_LOAD_RUNS load instructions
+ * (default 2: a lone vec3 or vec4, or two vec2; 0 disables the runs). */
+#define AGX_WIN32_D3D_LOAD_RUN_MAX 16
+#define AGX_WIN32_D3D_LOAD_RUN_SAVED_DEFAULT 2
+
+struct agx_win32_d3d_load_run {
+   nir_intrinsic_instr *loads[AGX_WIN32_D3D_LOAD_RUN_MAX];
+   unsigned count;
+   unsigned saved; /* load instructions the whole form saves */
+};
+
+/* the run's loads leave a value this instruction uses */
+struct agx_win32_d3d_poison {
+   struct set *defs;
+   bool found;
+};
+
+static inline bool
+agx_win32_d3d_src_poisoned(nir_src *src, void *data)
+{
+   struct agx_win32_d3d_poison *poison = (struct agx_win32_d3d_poison *)data;
+   if (_mesa_set_search(poison->defs, src->ssa))
+      poison->found = true;
+   return !poison->found;
+}
+
+static inline bool
+agx_win32_d3d_add_poisoned(nir_def *def, void *data)
+{
+   _mesa_set_add((struct set *)data, def);
+   return true;
+}
+
+static inline bool
+agx_win32_d3d_uses_run(nir_instr *instr, struct set *poisoned)
+{
+   struct agx_win32_d3d_poison poison;
+   poison.defs = poisoned;
+   poison.found = false;
+   nir_foreach_src(instr, agx_win32_d3d_src_poisoned, &poison);
+   return poison.found;
+}
+
+/* an instruction a run may move past, or that may follow the run's test:
+ * no side effects, no ordering against memory */
+static inline bool
+agx_win32_d3d_pure(const nir_instr *instr)
+{
+   switch (instr->type) {
+   case nir_instr_type_alu:
+   case nir_instr_type_load_const:
+   case nir_instr_type_undef:
+   case nir_instr_type_deref:
+   case nir_instr_type_tex:
+      return true;
+   case nir_instr_type_intrinsic: {
+      const nir_intrinsic_op op = nir_instr_as_intrinsic(instr)->intrinsic;
+      const unsigned flags = nir_intrinsic_infos[op].flags;
+      return (flags & NIR_INTRINSIC_CAN_ELIMINATE) && (flags & NIR_INTRINSIC_CAN_REORDER);
+   }
+   default:
+      return false;
+   }
+}
+
+/* a checked load a run may hold */
+static inline bool
+agx_win32_d3d_run_load(const nir_instr *instr, struct set *checked)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+   const nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   return intr->intrinsic == nir_intrinsic_load_ssbo && !agx_win32_d3d_unchecked(intr) &&
+          !(nir_intrinsic_access(intr) & ACCESS_VOLATILE) &&
+          !_mesa_set_search(checked, intr);
+}
+
+static inline bool
+agx_win32_d3d_in_run(const struct agx_win32_d3d_load_run *run, const nir_instr *instr)
+{
+   for (unsigned i = 0; i < run->count; ++i)
+      if (&run->loads[i]->instr == instr)
+         return true;
+   return false;
+}
+
+static inline void
+agx_win32_d3d_group_load_run(nir_builder *b, const struct agx_win32_d3d_load_run *run,
+                             struct set *checked, struct set *poisoned)
+{
+   nir_intrinsic_instr *first = run->loads[0], *last = run->loads[run->count - 1];
+   /* the instructions between the loads that use the run's values go after
+    * the test, in their order; the others stay (they use nothing of it) */
+   struct util_dynarray moved;
+   util_dynarray_init(&moved, NULL);
+   _mesa_set_clear(poisoned, NULL);
+   for (nir_instr *instr = &first->instr; instr != &last->instr; instr = nir_instr_next(instr)) {
+      if (agx_win32_d3d_in_run(run, instr)) {
+         nir_foreach_def(instr, agx_win32_d3d_add_poisoned, poisoned);
+      } else if (agx_win32_d3d_uses_run(instr, poisoned)) {
+         nir_foreach_def(instr, agx_win32_d3d_add_poisoned, poisoned);
+         util_dynarray_append(&moved, instr);
+      }
+   }
+   /* every address is defined before the last load */
+   b->cursor = nir_after_instr(&last->instr);
+   nir_def *all = nir_imm_true(b);
+   for (unsigned i = 0; i < run->count; ++i) {
+      nir_intrinsic_instr *ld = run->loads[i];
+      nir_def *size = nir_get_ssbo_size(b, 32, ld->src[0].ssa);
+      nir_def *offset = agx_win32_d3d_byte_offset(b, ld);
+      all = nir_iand(b, all, agx_win32_d3d_in_bounds(
+                                b, offset, ld->def.num_components * (ld->def.bit_size / 8), size));
+   }
+   nir_def *whole[AGX_WIN32_D3D_LOAD_RUN_MAX], *split[AGX_WIN32_D3D_LOAD_RUN_MAX];
+   nir_push_if(b, all);
+   for (unsigned i = 0; i < run->count; ++i) {
+      nir_instr *copy = nir_instr_clone(b->shader, &run->loads[i]->instr);
+      nir_builder_instr_insert(b, copy);
+      _mesa_set_add(checked, copy);
+      whole[i] = &nir_instr_as_intrinsic(copy)->def;
+   }
+   nir_push_else(b, NULL);
+   /* unchecked copies: each takes the per-component path in the lowering
+    * below */
+   for (unsigned i = 0; i < run->count; ++i) {
+      nir_instr *copy = nir_instr_clone(b->shader, &run->loads[i]->instr);
+      nir_builder_instr_insert(b, copy);
+      split[i] = &nir_instr_as_intrinsic(copy)->def;
+   }
+   nir_pop_if(b, NULL);
+   for (unsigned i = 0; i < run->count; ++i)
+      nir_def_rewrite_uses(&run->loads[i]->def, nir_if_phi(b, whole[i], split[i]));
+   util_dynarray_foreach(&moved, nir_instr *, instr) {
+      nir_instr_move(b->cursor, *instr);
+      b->cursor = nir_after_instr(*instr);
+   }
+   for (unsigned i = 0; i < run->count; ++i)
+      nir_instr_remove(&run->loads[i]->instr);
+   util_dynarray_fini(&moved);
+}
+
+/* 0 when unset or not a number: no runs */
+static inline unsigned
+agx_win32_d3d_load_run_min_saved(const char *env)
+{
+   if (!env)
+      return AGX_WIN32_D3D_LOAD_RUN_SAVED_DEFAULT;
+   unsigned value = 0;
+   for (; *env; ++env) {
+      if (*env < '0' || *env > '9' || value > 1000)
+         return 0;
+      value = value * 10 + (unsigned)(*env - '0');
+   }
+   return value;
+}
+
+static inline bool
+agx_win32_d3d_group_loads(nir_function_impl *impl, struct set *checked, unsigned min_saved)
+{
+   /* find every run first: grouping splits blocks */
+   struct util_dynarray runs;
+   util_dynarray_init(&runs, NULL);
+   struct set *poisoned = _mesa_pointer_set_create(NULL);
+   nir_foreach_block(block, impl) {
+      struct agx_win32_d3d_load_run run;
+      run.count = 0;
+      run.saved = 0;
+      _mesa_set_clear(poisoned, NULL);
+      nir_foreach_instr(instr, block) {
+         bool close = false, member = false;
+         if (agx_win32_d3d_run_load(instr, checked)) {
+            /* an address from the run's values: the next run */
+            close = run.count == AGX_WIN32_D3D_LOAD_RUN_MAX ||
+                    (run.count && agx_win32_d3d_uses_run(instr, poisoned));
+            member = true;
+         } else if (agx_win32_d3d_pure(instr)) {
+            if (agx_win32_d3d_uses_run(instr, poisoned))
+               nir_foreach_def(instr, agx_win32_d3d_add_poisoned, poisoned);
+            continue;
+         } else {
+            close = true;
+         }
+         if (close) {
+            if (run.count && run.saved >= min_saved)
+               util_dynarray_append(&runs, run);
+            run.count = 0;
+            run.saved = 0;
+            _mesa_set_clear(poisoned, NULL);
+         }
+         if (member) {
+            nir_intrinsic_instr *ld = nir_instr_as_intrinsic(instr);
+            run.loads[run.count++] = ld;
+            run.saved += ld->def.num_components - 1;
+            nir_foreach_def(instr, agx_win32_d3d_add_poisoned, poisoned);
+         }
+      }
+      if (run.count && run.saved >= min_saved)
+         util_dynarray_append(&runs, run);
+   }
+   nir_builder b = nir_builder_create(impl);
+   const bool progress = runs.size != 0;
+   util_dynarray_foreach(&runs, struct agx_win32_d3d_load_run, run)
+      agx_win32_d3d_group_load_run(&b, run, checked, poisoned);
+   _mesa_set_destroy(poisoned, NULL);
+   util_dynarray_fini(&runs);
+   return nir_progress(progress, impl, nir_metadata_none);
+}
+
 /* RC74: adjacent shader-buffer accesses are merged first (Gallium Asahi
  * vectorizes them only after this lowering, when every store sits in its
  * own if), so a vector of in-bounds components costs one test, and runs of
  * stores are tested together. Merging keeps the D3D rule: the lowering
  * tests each merged component. APPLE_AGX_D3D_BUFFER_BRANCHES=1 restores
  * the D3D-H6 form (a branch per load and per store), read when a shader is
- * compiled, for a hardware comparison. */
+ * compiled, for a hardware comparison. RC109: runs of loads
+ * (APPLE_AGX_D3D_LOAD_RUNS, agx_win32_d3d_group_loads). */
 static inline bool
 agx_win32_lower_d3d_buffer_access(nir_shader *nir)
 {
    const char *env = getenv("APPLE_AGX_D3D_BUFFER_BRANCHES");
+   const unsigned min_saved = agx_win32_d3d_load_run_min_saved(getenv("APPLE_AGX_D3D_LOAD_RUNS"));
    struct agx_win32_d3d_lowering state = {NULL, env && env[0] == '1' && !env[1]};
    /* only a shader with shader-buffer loads or stores, which the lowering
     * below then rewrites (an atomic-only shader is left alone) */
@@ -368,8 +595,11 @@ agx_win32_lower_d3d_buffer_access(nir_shader *nir)
       vectorize.callback = agx_win32_d3d_vectorize_cb;
       vectorize.modes = nir_var_mem_ssbo;
       progress |= nir_opt_load_store_vectorize(nir, &vectorize);
-      nir_foreach_function_impl(impl, nir)
+      nir_foreach_function_impl(impl, nir) {
+         if (min_saved)
+            progress |= agx_win32_d3d_group_loads(impl, state.checked, min_saved);
          progress |= agx_win32_d3d_group_stores(impl, state.checked);
+      }
    }
    progress |= nir_shader_intrinsics_pass(nir, agx_win32_d3d_lower_buffer_access_instr,
                                           nir_metadata_none, &state);
