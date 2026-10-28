@@ -65585,3 +65585,17 @@ EXP2021 HARDWARE ACTUAL (2026-10-28): A/B of the HD CPU "regression", on the EXP
   - EXP2020's 3.27 ms idle was run-to-run guest noise: the same code now shows 0.12 ms, and EXP2020's run coincided with a webthreatdefsvc crash/restart in the guest;
   - rc85 staged discard is slightly positive (+3.6%) and is kept.
 - Lesson: one HD run can vary by about 9%. Compare medians and idle, not only the score.
+
+EXP2022 HARDWARE BEFORE 2026-10-28T04:58:53Z:
+- WHY:
+  - EXP2019b: 1595 stream scratch creates and 11118 BO-cache evictions at 200k. GravityMark's stream draws retire back to back, so the rc87 cap released outputs.
+  - EXP2019a: 5.3 s of the 10.6 s stall is Windows page allocation at about 20 ms per slab under the pool lock.
+- ATOMIC CONTRACT: none; two independent changes.
+- Expected:
+  - 100k: v12 PrefillSlabs > 0; stall bo-allocate under 2 s; first-frame gap under 8 s; score at least 3919;
+  - 200k: scratch creates under 50; cache evict under 500; score above 1552.
+- Failure criteria: removal, a DWM fault, LowMemory refusals, or a regression.
+- Recovery: rec2022h.
+- Hashes: sys e61ff12f5cb3, UmdArm64 d46424f2d4b5, UmdX64 e0312736e823, Umd32 f4769e6ceeba; manifest 85611d637a5f, hardware-manifest 94ff3fd6fcb9; probe2022.sh e346730590f2 (PROBE_LINT_OK); visible recovery rec2022h 3e953b949df250e1; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2022h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2022-prefill/run2022.sh.
