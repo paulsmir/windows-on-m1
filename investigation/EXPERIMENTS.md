@@ -65941,3 +65941,17 @@ EXP2034 HARDWARE BEFORE 2026-10-28T10:48:11Z:
 - Hashes: sys 849e0ab17b3d, UmdArm64 4471138fed2b, UmdX64 4fb0b4587161, Umd32 87ebf9bc4905; manifest 89918ea90481, hardware-manifest bba680020266; probe2034.sh e2ca5ae56a18 (PROBE_LINT_OK); visible recovery rec2034h 6f254829445b462f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1TdrDrillAllowed=1.
 - Recovery rec2034h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2034-depth2-receipts/run2034.sh.
+
+EXP2034 HARDWARE ACTUAL (2026-10-28): **the drill passes with build-ahead on, so build-ahead is made the default (4786e3db). The depth-2 receipts answer U4.**
+- HD 50k (first app, build-ahead + Wom1JobDepth2): 6546 / 39.2 FPS. The first-app runs without build-ahead scored 6153–6256.
+- FHD 100k: 3926.
+- **Drill (build-ahead on):** baseline, drill 1 and drill 4 exit 0, both `TDR_DRILL_DONE device hung` (3113.88 and 3028.72 ms). Wom1GpuReset: 2 of 2 succeeded, status 0, quiesce ended, last_aborted = the packet fence (0x1e7e5, 0x1e7fd). PostResume poll_failure null. DWM alive. This is the rc92 arm B PASS.
+- **Depth-2 receipts (Wom1JobTiming971Hot after HD 50k, 53 decisions):**
+  - eligible 6; refusals 57 (shared sidecar) ×38, 60 (no Barrier) ×6, 55 (another process) ×3;
+  - successor_lead median **2.18 ms**;
+  - stamp lag: ta_done→stamp 593 µs, ta_stamp→complete 21 µs, prelude_done→stamp 2.0 ms, prelude_stamp→complete 21 µs; stamp_unseen 0.
+  - **U4 verdict:** the driver stamps are written only about 20 µs before completion, long after the done pointers, so they are held until the job's end. Depth-2 must report N together with N+1 (batched), not by stamp.
+- Verdict:
+  - build-ahead default ON;
+  - the rc98 capabilities target the dominant refusal (57);
+  - next: the Caps=1 arm, plus rc99 (readback reserve).
