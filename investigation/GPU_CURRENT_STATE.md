@@ -1963,3 +1963,32 @@ c2eb9203ab6c75725e3d9754e9b4c8b6dd89116eb6e012c6231dbb82bc3f0744;
 - Bound: GPU timeline. FHD has 0.4 ms of idle in a 63.7 ms frame (`tools/agx_gpu_frame_breakdown.py`).
 - Largest GPU costs: standalone compute (24 ms FHD), main pass (15 ms), render-compute pre-3D (13 ms).
 - Next causal target: shader cost (rc74). The rc73 barrier elision is rejected: GravityMark barriers after almost every dispatch.
+
+## 2026-10-28 GravityMark D3D12 state (EXP2023)
+- Accepted line: integration 6ab1417a / e232def4. It includes:
+  - stream default plus rc89 output capacity;
+  - soft faults by default (rc82, fault_control 0xb);
+  - rc74/75/78 shader cost;
+  - rc76 clear absorb;
+  - rc80 TVB growth;
+  - rc81/83 KMD job path;
+  - rc85-88 startup and memory;
+  - rc87 texture-only heap deferral.
+- Best results:
+
+  | Setting | Score | macOS reference |
+  |---|---|---|
+  | HD 50k | **6783** (EXP2021) | — |
+  | HD 100k | **4984** (EXP2020) | ~9950 |
+  | FHD 100k | **3919** (EXP2019) | ~7700 |
+  | FHD 200k | **2951** (EXP2023) | user's own macOS on this J313: 2191..4400; leaderboard ~5500 |
+
+  This J313 has a 7-core GPU.
+- The score counts frames in a fixed ~167 s window, so the first-frame stall and memory thrash count against it.
+- Remaining known issues:
+  - driver-built CDM control-stream faults still bugcheck 0x116 (EXP2005/2007); app data faults are silent under soft faults;
+  - the FHD working set is close to the about 2.9 GiB LOCAL budget (50% of 7.2 GB guest RAM).
+- Next targets:
+  - per-frame GPU time: lighting kernel bdb1944a, main pass;
+  - per-job overhead (depth-2 job window);
+  - the remaining 9-10 s stall (app work, page allocation).
