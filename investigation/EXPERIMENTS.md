@@ -66544,3 +66544,9 @@ Device switch: Wom1GpuFaultInfoRead=1. Unified copy, 4 GiB pool. Order: FHD 100k
 - Hashes: sys a47c368ca881, UmdArm64 2c48da5efa0b, UmdX64 fa79a4724d40, Umd32 69032887f1f5; manifest 2f61cb539061, hardware-manifest a46c5ee23b40; probe2054.sh 99b262018dd6 (PROBE_LINT_OK); visible recovery rec2054h 922d03ba682d8a20; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2054h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2054-tile32/run2054.sh.
+
+EXP2054 HARDWARE ACTUAL (2026-10-28): **tile 32768 is ahead in both pairs (+3.0% FHD, +1.3% HD), but it always ran first (cooler), so this is not yet a confirmed gain.**
+- a FHD 100k tile 32768 **4335** (25.9 FPS); b FHD 100k default 4209 (25.2).
+- c HD 50k tile 32768 6911 (41.4); d HD 50k default 6822 (40.8).
+- No submit failures, no transfers, guest alive throughout.
+- Verdict: inconclusive because of order. Next: the reversed order (default first), in one experiment with the fullscreen check or after EXP2055.
