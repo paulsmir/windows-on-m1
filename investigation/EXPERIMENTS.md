@@ -66464,3 +66464,9 @@ Device switches: Wom1GpuFaultInfoRead=1, Wom1JobDepth2=1, Wom1JobDepth2Caps=1, W
 - Hashes: sys 0b9a8b4d0e0d, UmdArm64 97ad630508de, UmdX64 ac5299b8d6df, Umd32 4d2ec18d799f; manifest a2dc0c27985d, hardware-manifest 0c9d5107acba; probe2051.sh dffbe8953f6f (PROBE_LINT_OK); visible recovery rec2051h 58da34f9e1f57f1b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1.
 - Recovery rec2051h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2051-kick5/run2051.sh.
+
+EXP2051 HARDWARE ACTUAL (2026-10-28): **depth-2 Kick (C→R only): every kick fails before the firmware with build_refusal manager_bind. The reset always recovers; no hang or bugcheck.**
+- HD 50k: the app was removed at 17 s. FHD 100k: removed at 6 s (PSO creation after the device was lost).
+- Wom1JobWindowKickFail v2: C→R behind compute (fences 6395/6394, then 7655/7654), line 5267, image_failed at build_step render_bindings, **build_refusal manager_bind**; flags g3_aborted and unstaged.
+- Wom1GpuReset: 2/2, then 3/3 succeeded. The rc102 abort and unstage paths are confirmed; the Sequence rollback left no TA-stamp hang.
+- Verdict: the window decision must apply the builder's manager-bind predicate (refusal 61); back to rc102. Kick stays off by default.
