@@ -66203,3 +66203,18 @@ EXP2042 HARDWARE ACTUAL (2026-10-28): **Kick=1: the first depth-2 kick fails at 
   - rc102 Kick is not yet functional (back to rc102 with the receipts);
   - the reset recovery is confirmed;
   - the rc103 level-upload A/B moves to EXP2043 with Kick off.
+
+EXP2043 HARDWARE BEFORE 2026-10-28T13:58:18Z:
+- WHY: rc103 found that in EXP2037a frame 2→3, 1194 whole mip-level uploads were each a u_blitter render submission (about 1.0 s of 1.9 s). The new path tiles on the CPU and issues one compute copy through a 16 MiB level ring.
+- ATOMIC CONTRACT: one variable, an env switch in a fresh process.
+- Expected:
+  - arm a frame_2_3 ≤ 1.3 s, uploads.level ≥ 1000, scored_stall excess at least 0.5 s below b;
+  - arm c frame_2_3 ≤ 1.0 s;
+  - correct asteroid and planet textures.
+- Failure criteria:
+  - corrupt textures (the ail_tile layout does not match GPU-only BC; set LEVEL_UPLOAD=0);
+  - removal.
+- Recovery: rec2043h.
+- Hashes: sys d30bafe8703e, UmdArm64 0c2a2f07d4a4, UmdX64 137fa5823550, Umd32 8b5a3b603e9d; manifest 4e3099a1aaea, hardware-manifest 5cc79c9694c6; probe2043.sh 33777944fd6c (PROBE_LINT_OK); visible recovery rec2043h 9560a208c5d9789f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2043h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2043-level-upload/run2043.sh.
