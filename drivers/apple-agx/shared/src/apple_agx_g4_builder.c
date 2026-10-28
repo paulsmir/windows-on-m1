@@ -234,15 +234,19 @@ static APPLE_AGX_BOOL g4_patch_buffer_manager(
   if (!info || objects[1].Size < 0x8cu ||
       !init || objects[16].Size < 20u ||
       !ctl || objects[20].Size < 8u ||
-      process[2].Bytes % G4_HEAP_BLOCK ||
-      process[0].Bytes < process[2].Bytes / G4_HEAP_BLOCK * 16u ||
-      process[1].Bytes < process[2].Bytes / G4_HEAP_BLOCK * 8u)
+      process[2].Bytes % G4_HEAP_BLOCK)
     return APPLE_AGX_FALSE;
   blocks = backed ? backed : (APPLE_AGX_U32)(process[2].Bytes / G4_HEAP_BLOCK);
   /* Asahi buffer.rs/queue/render.rs: every render gets at least its
-   * min_tvb_blocks; only blocks the KMD backed may be named. */
-  if (blocks > process[2].Bytes / G4_HEAP_BLOCK ||
-      blocks < AppleAgxG4MinTvbBlocks(render->WidthPx, render->HeightPx))
+   * min_tvb_blocks; only blocks the KMD backed may be named. rc80: beyond
+   * the 32-block range the KMD's TVB window continues the heap (the KMD
+   * proves those mappings), up to APPLE_AGX_G4_TVB_HEAP_BLOCKS; the page
+   * and block lists must hold every named block. */
+  if (blocks > (process[2].Bytes / G4_HEAP_BLOCK < APPLE_AGX_G4_TVB_WINDOW_BLOCKS ?
+                process[2].Bytes / G4_HEAP_BLOCK : APPLE_AGX_G4_TVB_HEAP_BLOCKS) ||
+      blocks < AppleAgxG4MinTvbBlocks(render->WidthPx, render->HeightPx) ||
+      process[0].Bytes < (APPLE_AGX_U64)blocks * 16u ||
+      process[1].Bytes < (APPLE_AGX_U64)blocks * 8u)
     return APPLE_AGX_FALSE;
   /* Asahi fw/buffer.rs Info (G13/V13_5), InitBuffer and BlockControl.
    * The page and block lists themselves are written by the KMD. */

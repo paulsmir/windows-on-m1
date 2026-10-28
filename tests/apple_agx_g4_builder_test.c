@@ -507,11 +507,13 @@ int main(void) {
       assert(get64(objects[18].Data + 0x4c8u) == render.IspScissorBase);
       packet.Render.IspOclQryBase = 0ULL;
       /* Dynamic TVB (Asahi buffer.rs ensure_blocks): the KMD backs the first
-       * HeapBlocks of the 32-block window and the buffer manager, InitBM and
+       * HeapBlocks of the heap range and the buffer manager, InitBM and
        * BlockControl describe exactly those blocks. A 1280x720 render needs
-       * min_tvb_blocks = align(ceil(40 * 23 / 128), 8) = 8. */
+       * min_tvb_blocks = align(ceil(40 * 23 / 128), 8) = 8; rc80: past the
+       * 32-block range the KMD's TVB window continues the heap, up to
+       * 32 + 2048 blocks (apple_agx_g3_tvb.h). */
       {
-        static const unsigned int bad[] = {7u, 33u};
+        static const unsigned int bad[] = {7u, APPLE_AGX_G4_TVB_HEAP_BLOCKS + 1u};
         unsigned int i;
         for (i = 0u; i < 2u; ++i) {
           assert(AppleAgxRenderTemplateMaterialize(
@@ -549,6 +551,38 @@ int main(void) {
             (8u | ((unsigned long long)8u << 32)));
         /* The page list and blocks keep the full reserved window. */
         assert(objects[43].GpuVa == ranges[2].Va);
+        /* rc80: a grown heap (Asahi auto_grow to 3 x max_pages: 1104 pages
+         * -> 828 blocks; the whole window) is named exactly, past the floor,
+         * while the declared process range stays the 32-block floor. */
+        {
+          static const unsigned int grown[] = {33u, 828u, APPLE_AGX_G4_TVB_HEAP_BLOCKS};
+          unsigned int j;
+          for (j = 0u; j < 3u; ++j) {
+            unsigned int n = grown[j];
+            assert(AppleAgxRenderTemplateMaterialize(
+                arena, AppleAgxRenderTemplateBytes(), &roots));
+            assert(AppleAgxRenderTemplateBuildRelocationObjectsRebased(
+                arena, AppleAgxRenderTemplateBytes(), 0x800000000ULL,
+                0x1503800000ULL, 0x1503800000ULL,
+                AppleAgxRenderTemplateBytes(), objects,
+                APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &roots));
+            view.HeapBlocks = n;
+            assert(AppleAgxG4BuildTa3d(&view, arena,
+                AppleAgxRenderTemplateBytes(), 1u, objects,
+                APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+            assert(get64(objects[1].Data + 0x24u) ==
+                ((n * 16u) | ((unsigned long long)(n * 4u) << 32)));
+            assert(get64(objects[1].Data + 0x2cu) ==
+                (n | ((unsigned long long)n << 32)));
+            assert((get64(objects[1].Data + 0x48u) & 0xffffffffULL) == n * 4u - 1u);
+            assert(get64(objects[1].Data + 0x84u) ==
+                ((n * 4u) | ((unsigned long long)(n * 4u) << 32)));
+            assert((get64(objects[16].Data + 0x10u) & 0xffffffffULL) == n);
+            assert(get64(objects[20].Data) == (n | ((unsigned long long)n << 32)));
+            assert(objects[43].GpuVa == ranges[2].Va &&
+                   objects[58].GpuVa == ranges[2].Va + 15ULL * 0x20000ULL);
+          }
+        }
         view.HeapBlocks = 0u;
       }
     }

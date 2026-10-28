@@ -18,8 +18,9 @@ int main(void) {
   for(unsigned i=0;i<9;++i) {
     const APPLE_AGX_G3_PRIVATE_EXTENT *e=i<3 ? &manager.Extents[i] : &scenes[0].Extents[i-3];
     for(unsigned j=0;j<e->Bytes;++j) {
-      if(i==0 && j<512) continue;
-      if(i==1 && j<256 && (j%8)<4) continue;
+      /* rc80: the lists name the floor and the TVB window's blocks. */
+      if(i==0 && j<APPLE_AGX_G4_TVB_HEAP_BLOCKS*16u) continue;
+      if(i==1 && j<APPLE_AGX_G4_TVB_HEAP_BLOCKS*8u && (j%8)<4) continue;
       assert(cpu[e->Offset+j]==0);
     }
   }
@@ -32,6 +33,12 @@ int main(void) {
   unsigned *blocks=(unsigned *)(cpu+manager.Extents[1].Offset);
   for(unsigned i=0;i<128;++i) assert(pages[i]==base+i);
   for(unsigned i=0;i<32;++i) assert(blocks[2*i]==base+4*i && blocks[2*i+1]==0);
+  /* rc80: VA order continues past the private window into the TVB window,
+   * so a grown manager never rewrites these firmware-owned lists. */
+  assert(scenes[0].Ranges[2].Va+32u*0x20000u==(1ULL<<36)+APPLE_AGX_G3_PRIVATE_VA_BYTES);
+  for(unsigned i=128;i<APPLE_AGX_G4_TVB_HEAP_BLOCKS*4u;++i) assert(pages[i]==base+i);
+  for(unsigned i=32;i<APPLE_AGX_G4_TVB_HEAP_BLOCKS;++i)
+    assert(blocks[2*i]==base+4*i && blocks[2*i+1]==0);
   /* Firmware-owned manager contents survive a second scene prepare. */
   pages[0]=0x1234;
   assert(AppleAgxG3PrivatePrepare(&pool,1,cpu,1ULL<<36,&r,&manager,&scenes[1]));

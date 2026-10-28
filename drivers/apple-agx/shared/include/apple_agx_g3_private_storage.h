@@ -5,7 +5,9 @@
 #include <string.h>
 
 /* TVB heap blocks are 128 KiB (Asahi buffer.rs BLOCK_SIZE); the process
- * window holds 32, matching AppleAgxG4ProcessRequiredBytes. */
+ * window holds 32, matching AppleAgxG4ProcessRequiredBytes. rc80: the KMD
+ * continues the heap into its TVB window (apple_agx_g3_tvb.h), backed from
+ * slab leases; the lists below already name those blocks. */
 #define APPLE_AGX_G3_PRIVATE_HEAP_BLOCK 0x20000u
 #define APPLE_AGX_G3_PRIVATE_HEAP_BLOCKS 32u
 #define APPLE_AGX_G3_PRIVATE_HEAP_GROWS 8u
@@ -67,7 +69,9 @@ static inline int AppleAgxG3PrivatePrepareObserved(APPLE_AGX_G3_PRIVATE_POOL *po
       va < (1ULL<<25) || va >= (1ULL<<39) || (va&0x01ffffffULL) ||
       !AppleAgxG4ProcessRequiredBytes(render,required) ||
       render->Layers!=1 || render->Samples!=1 ||
-      required[2]!=APPLE_AGX_G3_PRIVATE_HEAP_BLOCKS*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK)
+      required[2]!=APPLE_AGX_G3_PRIVATE_HEAP_BLOCKS*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK ||
+      required[0]<APPLE_AGX_G4_TVB_HEAP_BLOCKS*16u ||
+      required[1]<APPLE_AGX_G4_TVB_HEAP_BLOCKS*8u)
   {
     AppleAgxG3PrivatePrepareFailure(diagnostic,pool,owner,1u,~0u);
     return 0;
@@ -113,9 +117,13 @@ static inline int AppleAgxG3PrivatePrepareObserved(APPLE_AGX_G3_PRIVATE_POOL *po
         va+APPLE_AGX_G3_PRIVATE_HEAP_VA_OFFSET,required[2],0} :
         (APPLE_AGX_G4_PROCESS_RANGE){va+e->VaOffset,e->Bytes,0};
   }
+  /* rc80: the lists name every block the heap can ever hold -- the 32-block
+   * range, then the KMD's TVB window that continues it -- in VA order; Info
+   * names only the backed prefix (g4_patch_buffer_manager), so growth never
+   * rewrites firmware-owned lists. */
   if (fresh) {
     unsigned long long number=s.Ranges[2].Va>>15;
-    unsigned blocks=required[2]/0x20000u;
+    unsigned blocks=APPLE_AGX_G4_TVB_HEAP_BLOCKS;
     unsigned *page_list=(unsigned *)(cpu+m.Extents[0].Offset);
     unsigned *block_list=(unsigned *)(cpu+m.Extents[1].Offset);
     if (number+4ULL*blocks>0xffffffffULL) {
