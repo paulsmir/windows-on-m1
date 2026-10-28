@@ -494,10 +494,10 @@ class JobAheadWiring(unittest.TestCase):
     def assertRegex(self, text, regex, msg=None):
         self.assertTrue(re.search(regex, text), msg or f"no match: {regex!r}")
 
-    def test_switch_is_default_off_and_gates_every_step(self):
+    def test_switch_is_default_on_and_gates_every_step(self):
         text = WORKER.read_text()
-        self.assertIn('AdmissionPlatformSwitchEnabled(Context, L"Wom1JobBuildAhead")', text)
-        self.assertNotIn('AdmissionPlatformSwitchDisabled(Context, L"Wom1JobBuildAhead")', text)
+        self.assertIn('!AdmissionPlatformSwitchDisabled(Context, L"Wom1JobBuildAhead")', text)
+        self.assertNotIn('AdmissionPlatformSwitchEnabled(Context, L"Wom1JobBuildAhead")', text)
         for call in ("AdmissionJobAheadReleaseRefusal(", "AdmissionJobAheadChainRefusal("):
             self.assertIn(call, text)
         self.assertIn("AdmissionJobAheadPrebindRefusal(", G3.read_text())

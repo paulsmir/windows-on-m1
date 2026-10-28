@@ -283,7 +283,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   /* rc84: device value Wom1GpuPerfReceipt = 0 stops the Wom1GpuPerf
    * sampling (HwDataA loads at each job completion). */
   BOOLEAN GpuPerfOff;
-  /* rc90: device value Wom1JobBuildAhead = 1 (render_job_ahead.h). Worker-
+  /* rc90: device value Wom1JobBuildAhead (default on, 0 = off). Worker-
    * owned: the job whose image was released right after its kick, and the
    * buffer-manager binding its completion saves (the image's own fields
    * belong to the next binding by then); the last completion transaction
@@ -6118,10 +6118,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1PreludeTimestampsOff");
   runtime->BuildDirectReads =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1BuildDirectReads");
-  /* rc90: off unless REG_DWORD 1 (one hardware variable). */
+  /* rc90: on by default since EXP2034 (the G4-r3 drill passed with it);
+   * only REG_DWORD 0 turns it off. */
 #if ADMISSION_JOB_AHEAD_BUILD
   runtime->JobAhead =
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1JobBuildAhead");
+      !AdmissionPlatformSwitchDisabled(Context, L"Wom1JobBuildAhead");
   /* rc95: off unless REG_DWORD 1, and only with build-ahead (its prebind
    * is where the depth-2 decision is taken). */
   runtime->JobDepth2 = runtime->JobAhead &&
