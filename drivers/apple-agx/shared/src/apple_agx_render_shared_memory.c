@@ -1,6 +1,7 @@
 #include "apple_agx_render_shared_memory.h"
 #include "apple_agx_exp208_adapter.h"
 #include "apple_agx_relocation.h"
+#include <string.h>
 
 #define RENDER_SHARED_NULL ((void *)0)
 #define RENDER_SHARED_VA_ALIGNMENT 0x8000ULL
@@ -43,6 +44,62 @@ static void copy_shared_bytes(unsigned char *Destination,
     Destination[i] = Source[i];
 }
 
+#if defined(APPLE_AGX_RENDER_SHARED_READ_PROBE)
+APPLE_AGX_RENDER_SHARED_READ_PROBE_COUNTS AppleAgxRenderSharedReadProbe;
+#define READ_PROBE(field, count) (AppleAgxRenderSharedReadProbe.field += (count))
+/* The loads copy_shared_bytes issues from Source (the direct reads). */
+static unsigned long copy_shared_loads(const unsigned char *Destination,
+                                       const unsigned char *Source,
+                                       APPLE_AGX_U32 Bytes) {
+  unsigned long loads = 0u;
+  APPLE_AGX_U32 i = 0u;
+  if ((((APPLE_AGX_U64)Destination ^ (APPLE_AGX_U64)Source) & 7ULL) == 0ULL) {
+    for (; i < Bytes && ((APPLE_AGX_U64)(Destination + i) & 7ULL) != 0ULL; ++i)
+      ++loads;
+    for (; Bytes - i >= 8u; i += 8u) ++loads;
+  }
+  return loads + (Bytes - i);
+}
+#else
+#define READ_PROBE(field, count) ((void)0)
+#endif
+
+/* rc83: reads of firmware-shared (MmNonCached, Device) memory into cached
+ * memory with naturally aligned loads of at most 8 bytes, each a single
+ * transaction (EXP1099: no misaligned wide access). The bytes are those a
+ * byte-wise copy reads; the destination's alignment does not matter. */
+static void read_shared_bytes(unsigned char *Destination,
+                              const unsigned char *Source, APPLE_AGX_U32 Bytes) {
+  APPLE_AGX_U32 i = 0u, k, n;
+  while (i < Bytes) {
+    const APPLE_AGX_U64 at = (APPLE_AGX_U64)(Source + i);
+    APPLE_AGX_U64 word;
+    unsigned char bytes[8];
+    if ((at & 7ULL) == 0ULL && Bytes - i >= 8u) {
+      word = *(const volatile APPLE_AGX_U64 *)(Source + i); n = 8u;
+    } else if ((at & 3ULL) == 0ULL && Bytes - i >= 4u) {
+      word = *(const volatile APPLE_AGX_U32 *)(Source + i); n = 4u;
+    } else {
+      word = *(const volatile unsigned char *)(Source + i); n = 1u;
+    }
+    READ_PROBE(SharedLoads, 1u);
+    /* the loaded value's bytes in memory order (any byte order) */
+    if (n == 8u) {
+      const APPLE_AGX_U64 value = word;
+      const unsigned char *p = (const unsigned char *)&value;
+      for (k = 0u; k < 8u; ++k) bytes[k] = p[k];
+    } else if (n == 4u) {
+      const APPLE_AGX_U32 value = (APPLE_AGX_U32)word;
+      const unsigned char *p = (const unsigned char *)&value;
+      for (k = 0u; k < 4u; ++k) bytes[k] = p[k];
+    } else {
+      bytes[0] = (unsigned char)word;
+    }
+    for (k = 0u; k < n; ++k) Destination[i + k] = bytes[k];
+    i += n;
+  }
+}
+
 static void zero_bytes(void *Address, APPLE_AGX_U64 Bytes) {
   APPLE_AGX_U64 index;
   for (index = 0ULL; index < Bytes; ++index)
@@ -60,6 +117,19 @@ static APPLE_AGX_U32 get_u32(const unsigned char *Address) {
   return (APPLE_AGX_U32)Address[0] | ((APPLE_AGX_U32)Address[1] << 8u) |
          ((APPLE_AGX_U32)Address[2] << 16u) |
          ((APPLE_AGX_U32)Address[3] << 24u);
+}
+
+/* rc83: a 32-bit field of firmware-shared memory; Direct = the pre-rc83
+ * byte-wise read (four transactions). */
+static APPLE_AGX_U32 get_shared_u32(const unsigned char *Address,
+                                    APPLE_AGX_BOOL Direct) {
+  unsigned char value[4];
+  if (Direct) {
+    READ_PROBE(SharedLoads, 4u);
+    return get_u32(Address);
+  }
+  read_shared_bytes(value, Address, 4u);
+  return get_u32(value);
 }
 
 static void put_u64(unsigned char *Address, APPLE_AGX_U64 Value) {
@@ -429,8 +499,32 @@ static APPLE_AGX_U32 job_slot(const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
   return ((Job->TaExpectedStamp >> 8u) ^ 1u) & 1u;
 }
 
+/* rc83: one template object from the write-combined arena to its queue
+ * object. The arena is read once in bulk into the cached bounce buffer
+ * (wide, independent loads; EXP1105's snapshot capture already memcpy's
+ * from it), at the destination's alignment, and copied from there with
+ * aligned stores; DirectReads keeps the pre-rc83 element-wise copy. The
+ * destination bytes are identical. Returns the bytes' cached copy, or NULL
+ * for the direct copy. */
+static const unsigned char *copy_arena_object(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner, unsigned char *Destination,
+    const unsigned char *Source, APPLE_AGX_U32 Bytes) {
+  unsigned char *bounce = (unsigned char *)Owner->ArenaBounce +
+      ((APPLE_AGX_U64)Destination & 7ULL);
+  if (Owner->DirectReads || Bytes > APPLE_AGX_RENDER_SHARED_MEMORY_BOUNCE_BYTES) {
+    READ_PROBE(ArenaLoads, copy_shared_loads(Destination, Source, Bytes));
+    copy_shared_bytes(Destination, Source, Bytes);
+    return RENDER_SHARED_NULL;
+  }
+  memcpy(bounce, Source, Bytes);
+  READ_PROBE(ArenaBulk, 1u);
+  READ_PROBE(ArenaBulkBytes, Bytes);
+  copy_shared_bytes(Destination, bounce, Bytes);
+  return bounce;
+}
+
 static APPLE_AGX_BOOL bind_relocation_objects(
-    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const void *TemplateArena,
     APPLE_AGX_U32 TemplateArenaBytes,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *RelocationObjects,
@@ -448,10 +542,12 @@ static APPLE_AGX_BOOL bind_relocation_objects(
       Slot > 1u)
     return APPLE_AGX_FALSE;
   layouts = AppleAgxRenderTemplateObjectLayouts();
+  Owner->StagedEventCountValid = APPLE_AGX_FALSE;
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT;
        ++index) {
     const unsigned char *source =
         (const unsigned char *)TemplateArena + layouts[index].ArenaOffset;
+    const unsigned char *copied = RENDER_SHARED_NULL;
     APPLE_AGX_U64 delta = 0ULL, other = 0ULL;
     unsigned char *destination;
     if (layouts[index].ArenaOffset > TemplateArenaBytes ||
@@ -466,12 +562,27 @@ static APPLE_AGX_BOOL bind_relocation_objects(
     }
     destination = (unsigned char *)Owner->Objects[index].CpuAddress +
         Owner->ObjectOffsets[index] - delta;
-    if (InitializePersistent || per_submission_object(index, IncludeInitBm))
-      copy_shared_bytes(destination, source, layouts[index].Size);
+    if (InitializePersistent || per_submission_object(index, IncludeInitBm)) {
+      copied = copy_arena_object(Owner, destination, source,
+                                 layouts[index].Size);
+      /* rc83: the threshold below starts from the event_count copied here,
+       * not from a read back of the firmware-shared copy. */
+      if (index == APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD &&
+          copied != RENDER_SHARED_NULL && layouts[index].Size >= 4u) {
+        Owner->StagedEventCount = get_u32(copied);
+        Owner->StagedEventCountValid = APPLE_AGX_TRUE;
+      }
+    }
     /* Queue (re)initialisation seeds both copies alike. */
-    if (InitializePersistent && slotted_object(index))
-      copy_shared_bytes((unsigned char *)Owner->Objects[index].CpuAddress +
-          Owner->ObjectOffsets[index] - other, source, layouts[index].Size);
+    if (InitializePersistent && slotted_object(index)) {
+      unsigned char *second = (unsigned char *)Owner->Objects[index].CpuAddress +
+          Owner->ObjectOffsets[index] - other;
+      if (copied != RENDER_SHARED_NULL &&
+          (((APPLE_AGX_U64)second ^ (APPLE_AGX_U64)destination) & 7ULL) == 0ULL)
+        copy_shared_bytes(second, copied, layouts[index].Size);
+      else
+        (void)copy_arena_object(Owner, second, source, layouts[index].Size);
+    }
     RelocationObjects[index].GpuVa =
         Owner->VirtualAddresses[index] + Owner->ObjectOffsets[index] - delta;
     RelocationObjects[index].PhysicalAddress =
@@ -588,7 +699,8 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   micro.NotifierBufferGpuAddress=notifier+APPLE_AGX_G13_NOTIFIER_BUFFER_OFFSET;
   micro.FirmwareStampGpuAddress=gpu+APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET;
   micro.Counter=Input->Counter;micro.EventSequence=Input->EventSequence;
-  micro.EventGeneration=get_u32(control+APPLE_AGX_G13_NOTIFIER_GENERATION_OFFSET);
+  micro.EventGeneration=get_shared_u32(
+      control+APPLE_AGX_G13_NOTIFIER_GENERATION_OFFSET,Owner->DirectReads);
   micro.VmSlot=Input->VmSlot;
   micro.StampValue=Input->StampValue;
   if(Input->Timestamps) {
@@ -763,10 +875,7 @@ static APPLE_AGX_BOOL build_active_job(
     APPLE_AGX_U32 total;
     if (control->Data == RENDER_SHARED_NULL || control->Size < 8u)
       return APPLE_AGX_FALSE;
-    total = (APPLE_AGX_U32)control->Data[0] |
-            ((APPLE_AGX_U32)control->Data[1] << 8u) |
-            ((APPLE_AGX_U32)control->Data[2] << 16u) |
-            ((APPLE_AGX_U32)control->Data[3] << 24u);
+    total = get_shared_u32(control->Data, Owner->DirectReads);
     if (total == 0u)
       return APPLE_AGX_FALSE;
     put_u32(control->Data + 4u, total);
@@ -817,7 +926,8 @@ static APPLE_AGX_BOOL build_active_job(
       return APPLE_AGX_FALSE;
     if (initialize_persistent)
       Owner->NotifierComputeCount = Owner->NotifierComputeStamp = 0u;
-    render = get_u32(threshold);
+    render = !Owner->DirectReads && Owner->StagedEventCountValid ?
+        Owner->StagedEventCount : get_shared_u32(threshold, APPLE_AGX_TRUE);
     if (render > ~(APPLE_AGX_U32)0 - Owner->NotifierComputeCount)
       return APPLE_AGX_FALSE;
     Owner->NotifierRenderCount = render;
@@ -904,10 +1014,25 @@ APPLE_AGX_BOOL AppleAgxRenderManagerSave(
     return APPLE_AGX_TRUE;
   if (Owner->ManagerFence!=Fence || State->PendingFence!=Fence)
     return APPLE_AGX_FALSE;
-  copy_bytes(State->Info,Objects[1].Data,sizeof(State->Info));
-  copy_bytes(State->BlockControl,Objects[20].Data,sizeof(State->BlockControl));
-  copy_bytes(State->Counter,Objects[21].Data,sizeof(State->Counter));
-  copy_bytes(State->Stats,Objects[22].Data,sizeof(State->Stats));
+  if (Owner->DirectReads) {
+    READ_PROBE(SharedLoads,
+        copy_shared_loads(State->Info,Objects[1].Data,sizeof(State->Info)) +
+        copy_shared_loads(State->BlockControl,Objects[20].Data,sizeof(State->BlockControl)) +
+        copy_shared_loads(State->Counter,Objects[21].Data,sizeof(State->Counter)) +
+        copy_shared_loads(State->Stats,Objects[22].Data,sizeof(State->Stats)));
+    copy_bytes(State->Info,Objects[1].Data,sizeof(State->Info));
+    copy_bytes(State->BlockControl,Objects[20].Data,sizeof(State->BlockControl));
+    copy_bytes(State->Counter,Objects[21].Data,sizeof(State->Counter));
+    copy_bytes(State->Stats,Objects[22].Data,sizeof(State->Stats));
+  } else {
+    /* rc83: State's arrays sit 4 bytes off the objects' 8-byte alignment,
+     * so copy_bytes read all 380 bytes one Device load at a time (EXP2012
+     * Complete -> JobEnd 77 us); aligned word loads read the same bytes. */
+    read_shared_bytes(State->Info,Objects[1].Data,sizeof(State->Info));
+    read_shared_bytes(State->BlockControl,Objects[20].Data,sizeof(State->BlockControl));
+    read_shared_bytes(State->Counter,Objects[21].Data,sizeof(State->Counter));
+    read_shared_bytes(State->Stats,Objects[22].Data,sizeof(State->Stats));
+  }
   State->Key=Owner->ManagerKey;
   State->Valid=APPLE_AGX_TRUE;
   State->SavedFence=Fence;
@@ -963,17 +1088,22 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
       if(n==21u) source=Manager->Counter;
       if(n==22u) source=Manager->Stats;
     }
-    copy_bytes(ActiveObjects[n].Data,source,ActiveObjects[n].Size);
+    /* rc83: a template (arena) source is read in bulk, a saved one is
+     * cached already. */
+    if (source==SourceObjects[n].Data)
+      (void)copy_arena_object(Owner,ActiveObjects[n].Data,source,ActiveObjects[n].Size);
+    else
+      copy_bytes(ActiveObjects[n].Data,source,ActiveObjects[n].Size);
   }
   if (!restore) {
     /* The pinned first-job template counter includes its first commit. */
     put_u32(ActiveObjects[21].Data,0u);
     put_u32(ActiveObjects[20].Data+4u,Key->Backing[2].Bytes/0x20000u);
   }
-  count=(APPLE_AGX_U32)ActiveObjects[21].Data[0] |
-      ((APPLE_AGX_U32)ActiveObjects[21].Data[1]<<8u) |
-      ((APPLE_AGX_U32)ActiveObjects[21].Data[2]<<16u) |
-      ((APPLE_AGX_U32)ActiveObjects[21].Data[3]<<24u);
+  /* rc83: the counter just written (the saved one, or 0 for a new
+   * backing), not a read back of the firmware-shared copy. */
+  count=Owner->DirectReads ? get_shared_u32(ActiveObjects[21].Data,APPLE_AGX_TRUE) :
+      restore ? get_u32(Manager->Counter) : 0u;
   put_u32(ActiveObjects[21].Data,count+1u);
   /* Only refreshed Info/Scene require new relocations. Other work fields were
    * already relocated above; snapshot addresses stay in this context0 slot. */

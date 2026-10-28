@@ -269,6 +269,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   /* rc82: soft faults are reported to the UMD unless device value Wom1SoftFaults = 0
    * when RegionC fault_control is 0xb (AdmissionPublishSoftFaults). */
   BOOLEAN SoftFaultsRequested;
+  /* rc83: device value Wom1BuildDirectReads = 1 keeps the pre-rc83
+   * element-wise reads of the template arena and firmware-shared memory in
+   * the build and the buffer-manager save (byte-identical result). */
+  BOOLEAN BuildDirectReads;
 } ADMISSION_PLATFORM_RUNTIME;
 
 C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 184);
@@ -2772,6 +2776,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
       return APPLE_AGX_BACKEND_FALSE;
   }
   runtime->TransportIo.MemoryBarrier(runtime);
+  runtime->Initdata.RenderSharedMemory.DirectReads =
+      runtime->BuildDirectReads;
   if (!AppleAgxRenderManagerSave(&runtime->Initdata.RenderSharedMemory,
           image->G4Manager,Fence,runtime->QueueObjects))
     return APPLE_AGX_BACKEND_FALSE;
@@ -2929,6 +2935,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   if (runtime == NULL || Submission == NULL || Plan == NULL ||
       Submission->Submission.Fence == 0u)
     return APPLE_AGX_BACKEND_FALSE;
+  runtime->Initdata.RenderSharedMemory.DirectReads =
+      runtime->BuildDirectReads;
   if (runtime->Adapter->BackendImage.G4Compute ||
       runtime->Adapter->BackendImage.PresentCompute)
     return AdmissionExternalBuildComputeJob(runtime, Submission, Plan, Job);
@@ -5640,6 +5648,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultInfoRead");
   runtime->PreludeTimestampsOff =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1PreludeTimestampsOff");
+  runtime->BuildDirectReads =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1BuildDirectReads");
   InterlockedExchange(&Context->TdrDrillJobs, 0);
   Context->TdrDrillAllowed =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1TdrDrillAllowed");

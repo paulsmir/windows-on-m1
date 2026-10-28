@@ -19,6 +19,7 @@ typedef struct {
     void (*MemoryBarrier)(void *);
   } TransportIo;
   APPLE_AGX_EXP208_RELOCATION_OBJECT QueueObjects[76];
+  unsigned char BuildDirectReads; /* rc83 Wom1BuildDirectReads */
 } ADMISSION_PLATFORM_RUNTIME;
 /* rc83 receipt v3: the save's sub-interval stamp */
 #define AdmissionJobSubSaved 6

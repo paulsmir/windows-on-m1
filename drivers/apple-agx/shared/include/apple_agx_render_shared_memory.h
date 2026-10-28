@@ -102,6 +102,26 @@ typedef enum _APPLE_AGX_RENDER_SHARED_MEMORY_RESULT {
   AppleAgxRenderSharedMemoryResultReleaseFailed,
 } APPLE_AGX_RENDER_SHARED_MEMORY_RESULT;
 
+/* rc83 (EXP2012): the per-job build spent 266 us and the completion's
+ * buffer-manager save 77 us in uncached reads: 1527 serial 8-byte loads of
+ * the 12 KiB per-submission template objects from the write-combined
+ * (Normal non-cacheable) arena, and 380 single-byte loads of the manager
+ * objects from MmNonCached (Device) memory, while a compute build of ~4400
+ * Device byte stores and 4 loads took 4-17 us. The largest template object
+ * (GPUWorkQueue.gpu_buf) is 11288 bytes. */
+#define APPLE_AGX_RENDER_SHARED_MEMORY_BOUNCE_BYTES 0x3000u
+
+#if defined(APPLE_AGX_RENDER_SHARED_READ_PROBE)
+/* Host model only: uncached load transactions the builder issued. */
+typedef struct _APPLE_AGX_RENDER_SHARED_READ_PROBE_COUNTS {
+  unsigned long SharedLoads; /* element-wise loads of firmware-shared memory */
+  unsigned long ArenaLoads;  /* element-wise loads of the template arena */
+  unsigned long ArenaBulk;   /* bulk (memcpy) reads of one arena object */
+  unsigned long ArenaBulkBytes;
+} APPLE_AGX_RENDER_SHARED_READ_PROBE_COUNTS;
+extern APPLE_AGX_RENDER_SHARED_READ_PROBE_COUNTS AppleAgxRenderSharedReadProbe;
+#endif
+
 typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   const APPLE_AGX_MEMORY_IO *MemoryIo;
   APPLE_AGX_MEMORY_OBJECT
@@ -130,6 +150,15 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   void *BuildMarkContext;
   /* The last managed G4 build restored the saved buffer-manager state. */
   APPLE_AGX_BOOL LastBuildRestored;
+  /* rc83 A/B: 1 = the pre-rc83 element-wise reads of the template arena
+   * and of firmware-shared memory (device value Wom1BuildDirectReads). */
+  APPLE_AGX_BOOL DirectReads;
+  /* rc83: event_count as the last bind copied it (valid when set). */
+  APPLE_AGX_BOOL StagedEventCountValid;
+  APPLE_AGX_U32 StagedEventCount;
+  /* rc83: cached bounce buffer of one template object read from the
+   * write-combined arena in bulk (8 bytes of alignment slack). */
+  APPLE_AGX_U64 ArenaBounce[(APPLE_AGX_RENDER_SHARED_MEMORY_BOUNCE_BYTES + 8u) / 8u];
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
 
 /* rc83: points of a render build reported through Owner->BuildMark. */
