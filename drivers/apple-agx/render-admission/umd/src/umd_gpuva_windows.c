@@ -2590,10 +2590,24 @@ static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) 
   UINT operation=payload->Operation,width=payload->Width,height=payload->Height,
       utile=(payload->UtileWidth<<8)|payload->UtileHeight,layers=payload->Layers,
       samples=payload->Samples;
+  LARGE_INTEGER scene_start={}, scene_end={};
+  (void)QueryPerformanceCounter(&scene_start);
   unsigned wait_pfnEscapeCb_5=AdmissionUmdWaitBegin(AgxWaitSceneEscape);
   HRESULT hr=device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle,&request);
   AdmissionUmdWaitEnd(wait_pfnEscapeCb_5);
+  (void)QueryPerformanceCounter(&scene_end);
+  /* rc103 receipt-only (EXP2037a: 4 scene escapes took 1.29 s of the scored
+   * frame 1->2 and, without a receipt, were charged to the next one,
+   * measure-touch): a private scene request of at least 10 ms, as
+   * measure-scene-escape {operation, us, width, height, utile w << 8 | h,
+   * layers | samples << 8, result}. Cached ACQUIRE/RELEASE pairs (about
+   * 50 us) stay silent. */
+  if(qpc_at_least_10ms(scene_end.QuadPart-scene_start.QuadPart)) {
+    UINT values[7]={operation,qpc_us(scene_end.QuadPart-scene_start.QuadPart),
+        width,height,utile,layers|(samples<<8),(UINT)hr};
+    AdmissionUmdDiagnostic("measure-scene-escape",hr,values,ARRAYSIZE(values));
+  }
   if(FAILED(hr)) {
     /* EXP873 diagnostic: which private scene request the KMD refused. */
     UINT values[7]={operation,(UINT)hr,width,height,utile,layers,samples};
