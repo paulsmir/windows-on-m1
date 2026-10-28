@@ -66576,3 +66576,25 @@ EXP2055 HARDWARE ACTUAL (2026-10-28): **dxgkrnl now commits 1920×1080 (CommitCa
 - Root cause: `AdmissionScanoutQueuePresent` passes stride×height = 0x7e9000 bytes to `AppleAgxLocalSegmentAddressToGpuVa`, which refuses spans that are not a 64 KiB multiple (Misaligned → STATUS_INVALID_ADDRESS). 2560×1600 = 0xfa0000 is aligned, so the native mode works. Fix d099a808 passes the aligned span; the allocation is 64 KiB-aligned in size and placement.
 - Probe: with exact struct sizes (DEVMODEW 220, DISPLAY_DEVICEW 840), EnumDisplayDevices still returns no devices and EnumDisplaySettings fails with err 203 in console session 1. Open; GravityMark's own CDS reaches the driver.
 - Side observation: 1009 DISPLAY\DEFAULT_MONITOR devnodes have accumulated (one per boot; one is OK).
+
+EXP2056 HARDWARE BEFORE 2026-10-28T21:38:21Z:
+Order:
+- a: FHD 100k windowed, default tile;
+- t: FHD 100k windowed, APPLE_AGX_TILE_BUFFER_BYTES=32768 (reversed from EXP2054);
+- the mode probe;
+- b: FHD 100k `-Fullscreen 1`.
+- WHY: EXP2055 committed 1920×1080, but every flip failed with 0xc0000141. 0x7e9000 bytes is not a 64 KiB multiple, so AppleAgxLocalSegmentAddressToGpuVa refused it as misaligned.
+- ATOMIC CONTRACT: none -- separate steps. The span fix affects only scaled primaries; the tile A/B is a UMD env arm. Each has its own GRAVITYMARK line.
+- Expected:
+  - b sets 1920×1080 with no setMode error, centred and letterboxed (scaling 4) with no desktop visible;
+  - SourceAddress LastStatus 0 at 1920×1080; a score;
+  - t vs a tells whether the EXP2054 gain survives the reversed order.
+- Failure criteria:
+  - the broker refuses the 1920×1080 source (INVALID_SURFACE, frozen flips, TDR);
+  - a black or garbled panel;
+  - exit artifacts;
+  - t ≤ a, which would make the EXP2054 gain an order effect.
+- Recovery: rec2056h.
+- Hashes: sys 81b17892ead6, UmdArm64 3457f56363be, UmdX64 96c24ea36365, Umd32 4f91faab8c31; manifest 1fea54c98eab, hardware-manifest dcafaa0d2a82; probe2056.sh f0c01d14c842 (PROBE_LINT_OK); visible recovery rec2056h 9a7e081785f2803d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2056h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2056-fullscreen4/run2056.sh.
