@@ -19,6 +19,9 @@ static void AppleAgxG13ProviderClearStaged(
       (APPLE_AGX_BACKEND_U32)sizeof(Provider->StagedSubmission));
   Provider->PendingFence = 0u;
   Provider->FailureQuiesced = APPLE_AGX_BACKEND_FALSE;
+  Provider->SuccessorFence = 0u;
+  Provider->SuccessorComputeOnly = APPLE_AGX_BACKEND_FALSE;
+  Provider->ObservedMask = 0u;
 }
 
 static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderNextDone(
@@ -144,8 +147,11 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderTaValid(
       Provider->Runtime.BufferManagerInitialized
           ? 1u
           : APPLE_AGX_BACKEND_QUEUE_WORK_COUNT;
-  /* D3D-G1b: the leading Barrier is one more TA ring entry. */
-  if (Job != APPLE_AGX_G13_PROVIDER_NULL && Job->TaBarrierAddress != 0ULL)
+  /* D3D-G1b: the leading Barrier is one more TA ring entry; rc102: so is
+   * a successor render's depth-2 Barrier (a render with compute work
+   * leads its compute queue instead). */
+  if (Job != APPLE_AGX_G13_PROVIDER_NULL &&
+      (Job->TaBarrierAddress != 0ULL || Job->LeadBarrierAddress != 0ULL))
     ++publicationCount;
   return Job != APPLE_AGX_G13_PROVIDER_NULL &&
          AppleAgxG13ProviderAddressesValid(Job->TaWorkAddresses,
@@ -197,6 +203,39 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanJob(
                                    &candidate.ComputeExpectedDonePointer) ||
       !AppleAgxG13ProviderNextDone(Provider,&Provider->Config.Ta,ta_count+1u,
                                    &candidate.TaBarrierExpectedDonePointer)))
+    return APPLE_AGX_BACKEND_FALSE;
+  *Plan = candidate;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanSuccessor(
+    APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
+    APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan) {
+  APPLE_AGX_G13_QUEUE_JOB_PLAN candidate;
+  if (Provider == APPLE_AGX_G13_PROVIDER_NULL ||
+      Plan == APPLE_AGX_G13_PROVIDER_NULL ||
+      (Provider->Phase != AppleAgxG13QueueProviderSubmitted &&
+       Provider->Phase != AppleAgxG13QueueProviderComputeOnlySubmitted) ||
+      Provider->PendingFence == 0u || Provider->SuccessorFence != 0u ||
+      Provider->Runtime.PendingFence != Provider->PendingFence ||
+      Provider->Runtime.Successor.Fence != 0u ||
+      !Provider->Runtime.BufferManagerInitialized ||
+      Provider->Runtime.TaFirstRun || Provider->Runtime.D3FirstRun)
+    return APPLE_AGX_BACKEND_FALSE;
+  AppleAgxG13ProviderZero(&candidate, (APPLE_AGX_BACKEND_U32)sizeof(candidate));
+  candidate.Successor = APPLE_AGX_BACKEND_TRUE;
+  /* After the running job's entries: TA = its root + the Barrier (the
+   * depth-2 one of a render without compute, or the D3D-G1b one). */
+  if (!AppleAgxG13ProviderNextDone(Provider, &Provider->Config.Ta, 2u,
+                                   &candidate.TaExpectedDonePointer) ||
+      !AppleAgxG13ProviderNextDone(
+          Provider, &Provider->Config.D3, APPLE_AGX_BACKEND_QUEUE_WORK_COUNT,
+          &candidate.D3ExpectedDonePointer))
+    return APPLE_AGX_BACKEND_FALSE;
+  candidate.TaBarrierExpectedDonePointer = candidate.TaExpectedDonePointer;
+  if (Provider->Config.HasCompute &&
+      !AppleAgxG13ProviderNextDone(Provider, &Provider->Config.Compute, 2u,
+                                   &candidate.ComputeExpectedDonePointer))
     return APPLE_AGX_BACKEND_FALSE;
   *Plan = candidate;
   return APPLE_AGX_BACKEND_TRUE;
@@ -339,31 +378,16 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRun3d(
   return APPLE_AGX_BACKEND_TRUE;
 }
 
-static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
-    void *Context, const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
-    APPLE_AGX_BACKEND_U32 Fence) {
-  APPLE_AGX_G13_QUEUE_PROVIDER *provider =
-      (APPLE_AGX_G13_QUEUE_PROVIDER *)Context;
+/* RunTa's publication of a staged render, and rc102's successor render
+ * (Successor: no staged 3D, the lead Barrier first). */
+static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderSubmitRender(
+    APPLE_AGX_G13_QUEUE_PROVIDER *provider, void *Context,
+    const APPLE_AGX_BACKEND_JOB_IMAGE *Job, APPLE_AGX_BACKEND_U32 Fence,
+    APPLE_AGX_BACKEND_BOOL Successor) {
   APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
   APPLE_AGX_G13_QUEUE_RUNTIME_RESULT result;
   APPLE_AGX_BACKEND_U32 index;
-  if (provider == APPLE_AGX_G13_PROVIDER_NULL) return APPLE_AGX_BACKEND_FALSE;
-  provider->LastSubmitGuard=AppleAgxG13SubmitGuardNone;
-  provider->LastSubmitRuntimeResult=0u;
-  AppleAgxG13ProviderZero(
-      &provider->ComputeIdentityDiagnostic.RunTa,
-      (APPLE_AGX_BACKEND_U32)sizeof(provider->ComputeIdentityDiagnostic.RunTa));
 #define SUBMIT_REJECT(g) do { provider->LastSubmitGuard=(g); return APPLE_AGX_BACKEND_FALSE; } while(0)
-  if (Job == APPLE_AGX_G13_PROVIDER_NULL) SUBMIT_REJECT(AppleAgxG13SubmitGuardArguments);
-  if (provider->Phase != AppleAgxG13QueueProvider3dStaged) {
-    provider->LastSubmitRuntimeResult = AppleAgxG13PhaseFenceGuardPhase;
-    SUBMIT_REJECT(AppleAgxG13SubmitGuardPhaseFence);
-  }
-  if (Fence != provider->PendingFence) {
-    provider->LastSubmitRuntimeResult = AppleAgxG13PhaseFenceGuardFence;
-    SUBMIT_REJECT(AppleAgxG13SubmitGuardPhaseFence);
-  }
-  if (!AppleAgxG13Provider3dMatches(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardD3Match);
   if (!AppleAgxG13Provider3dValid(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardD3Valid);
   if (!AppleAgxG13ProviderTaValid(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardTaValid);
   if (Job->ComputeWorkAddressCount != 0u) {
@@ -380,7 +404,8 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
     else if (!compute.JobExpectedStamp)
       subguard = AppleAgxG13ComputeGuardStamp;
     else if (!AppleAgxG13ProviderExpectedDone(
-                 provider, &provider->Config.Compute, 1u,
+                 provider, &provider->Config.Compute,
+                 Job->LeadBarrierAddress != 0ULL ? 2u : 1u,
                  Job->ComputeExpectedDonePointer))
       subguard = AppleAgxG13ComputeGuardDonePointer;
     else if (Job->TaBarrierAddress == 0ULL || (Job->TaBarrierAddress & 0x1fULL))
@@ -400,11 +425,10 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
           provider->ProviderIo.Context, Job, Fence, &submission))
     SUBMIT_REJECT(AppleAgxG13SubmitGuardBuild);
   submission.Fence = Fence;
-  for (index = 0u; index < provider->Staged3d.WorkAddressCount; ++index)
-    submission.D3.GpuAddresses[index] =
-        provider->Staged3d.WorkAddresses[index];
-  submission.D3.GpuAddressCount = provider->Staged3d.WorkAddressCount;
-  submission.D3.ExpectedStamp = provider->Staged3d.ExpectedStamp;
+  for (index = 0u; index < Job->D3WorkAddressCount; ++index)
+    submission.D3.GpuAddresses[index] = Job->D3WorkAddresses[index];
+  submission.D3.GpuAddressCount = Job->D3WorkAddressCount;
+  submission.D3.ExpectedStamp = Job->D3ExpectedStamp;
   if (provider->Runtime.BufferManagerInitialized) {
     /* Omit InitBM only while the selected manager binding remains valid. */
     submission.Ta.GpuAddresses[0] =
@@ -427,6 +451,37 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
     submission.Ta.GpuAddressCount = Job->TaWorkAddressCount;
   }
   submission.Ta.ExpectedStamp = Job->TaExpectedStamp;
+  if (Successor) {
+    /* rc102: the lead Barrier goes first in the queue the job starts on:
+     * compute for a render with compute work, TA otherwise. */
+    APPLE_AGX_G13_WORK_PUBLICATION *lead =
+        Job->ComputeWorkAddressCount != 0u ? &submission.Compute
+                                           : &submission.Ta;
+    const APPLE_AGX_BACKEND_BOOL prepared =
+        lead->PreparedRangeCount != 0u ? APPLE_AGX_BACKEND_TRUE
+                                       : APPLE_AGX_BACKEND_FALSE;
+    if (Job->LeadBarrierAddress == 0ULL || (Job->LeadBarrierAddress & 0x1fULL) ||
+        lead->GpuAddressCount == 0u ||
+        lead->GpuAddressCount >= APPLE_AGX_G13_QUEUE_PUBLISH_MAX ||
+        (prepared && (submission.LeadBarrierRange.Address ==
+                          APPLE_AGX_G13_PROVIDER_NULL ||
+                      submission.LeadBarrierRange.Bytes == 0u ||
+                      lead->PreparedRangeCount != lead->GpuAddressCount)))
+      SUBMIT_REJECT(AppleAgxG13SubmitGuardBuild);
+    for (index = lead->GpuAddressCount; index > 0u; --index) {
+      lead->GpuAddresses[index] = lead->GpuAddresses[index - 1u];
+      if (prepared)
+        lead->PreparedRanges[index] = lead->PreparedRanges[index - 1u];
+    }
+    lead->GpuAddresses[0] = Job->LeadBarrierAddress;
+    ++lead->GpuAddressCount;
+    if (prepared) {
+      lead->PreparedRanges[0].Address = submission.LeadBarrierRange.Address;
+      lead->PreparedRanges[0].Bytes = submission.LeadBarrierRange.Bytes;
+      ++lead->PreparedRangeCount;
+    }
+    submission.Successor = APPLE_AGX_BACKEND_TRUE;
+  }
   if (Job->TaBarrierAddress != 0ULL) {
     /* D3D-G1b: the TA queue leads with the firmware Barrier on the compute
      * stamp. It lives in the compute sidecar, whose prepared range the
@@ -434,9 +489,10 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
     const APPLE_AGX_BACKEND_BOOL prepared =
         submission.Ta.PreparedRangeCount != 0u ? APPLE_AGX_BACKEND_TRUE
                                                : APPLE_AGX_BACKEND_FALSE;
+    const APPLE_AGX_BACKEND_U32 work = Successor ? 1u : 0u;
     if (Job->ComputeWorkAddressCount != 1u ||
-        submission.Compute.GpuAddressCount != 1u ||
-        (prepared && (submission.Compute.PreparedRangeCount != 1u ||
+        submission.Compute.GpuAddressCount != 1u + work ||
+        (prepared && (submission.Compute.PreparedRangeCount != 1u + work ||
                       submission.Ta.PreparedRangeCount !=
                           submission.Ta.GpuAddressCount)) ||
         submission.Ta.GpuAddressCount >= APPLE_AGX_G13_QUEUE_PUBLISH_MAX)
@@ -451,9 +507,9 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
     ++submission.Ta.GpuAddressCount;
     if (prepared) {
       submission.Ta.PreparedRanges[0].Address =
-          submission.Compute.PreparedRanges[0].Address;
+          submission.Compute.PreparedRanges[work].Address;
       submission.Ta.PreparedRanges[0].Bytes =
-          submission.Compute.PreparedRanges[0].Bytes;
+          submission.Compute.PreparedRanges[work].Bytes;
       ++submission.Ta.PreparedRangeCount;
     }
     submission.TaLeadingBarrier = APPLE_AGX_BACKEND_TRUE;
@@ -477,21 +533,134 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
     return APPLE_AGX_BACKEND_FALSE;
   }
   provider->LastSubmitGuard=AppleAgxG13SubmitGuardNone;
+  if (Successor) {
+    provider->SuccessorFence = Fence;
+    provider->SuccessorComputeOnly = APPLE_AGX_BACKEND_FALSE;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
+  provider->ObservedMask = 0u;
   provider->Phase = AppleAgxG13QueueProviderSubmitted;
   return APPLE_AGX_BACKEND_TRUE;
 #undef SUBMIT_REJECT
 }
 
+static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
+    void *Context, const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+    APPLE_AGX_BACKEND_U32 Fence) {
+  APPLE_AGX_G13_QUEUE_PROVIDER *provider =
+      (APPLE_AGX_G13_QUEUE_PROVIDER *)Context;
+  if (provider == APPLE_AGX_G13_PROVIDER_NULL) return APPLE_AGX_BACKEND_FALSE;
+  provider->LastSubmitGuard=AppleAgxG13SubmitGuardNone;
+  provider->LastSubmitRuntimeResult=0u;
+  AppleAgxG13ProviderZero(
+      &provider->ComputeIdentityDiagnostic.RunTa,
+      (APPLE_AGX_BACKEND_U32)sizeof(provider->ComputeIdentityDiagnostic.RunTa));
+#define SUBMIT_REJECT(g) do { provider->LastSubmitGuard=(g); return APPLE_AGX_BACKEND_FALSE; } while(0)
+  if (Job == APPLE_AGX_G13_PROVIDER_NULL || Job->LeadBarrierAddress != 0ULL)
+    SUBMIT_REJECT(AppleAgxG13SubmitGuardArguments);
+  if (provider->Phase != AppleAgxG13QueueProvider3dStaged) {
+    provider->LastSubmitRuntimeResult = AppleAgxG13PhaseFenceGuardPhase;
+    SUBMIT_REJECT(AppleAgxG13SubmitGuardPhaseFence);
+  }
+  if (Fence != provider->PendingFence) {
+    provider->LastSubmitRuntimeResult = AppleAgxG13PhaseFenceGuardFence;
+    SUBMIT_REJECT(AppleAgxG13SubmitGuardPhaseFence);
+  }
+  if (!AppleAgxG13Provider3dMatches(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardD3Match);
+#undef SUBMIT_REJECT
+  return AppleAgxG13ProviderSubmitRender(provider, Context, Job, Fence,
+                                         APPLE_AGX_BACKEND_FALSE);
+}
+
 /* G2: submit a standalone compute job (Kind Compute): one RunCompute work
  * item on the compute queue whose completion is the fence's completion.
  * Accepted only while the queues are idle (no staged or running render). */
+/* G2 (and rc102's compute successor): one RunCompute work item on the
+ * compute queue whose completion is the fence's completion; a successor's
+ * leading Barrier is the entry before it. */
+static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderSubmitCompute(
+    APPLE_AGX_G13_QUEUE_PROVIDER *provider,
+    const APPLE_AGX_BACKEND_JOB_IMAGE *Job, APPLE_AGX_BACKEND_U32 Fence,
+    APPLE_AGX_BACKEND_BOOL Successor) {
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  APPLE_AGX_G13_QUEUE_RUNTIME_RESULT result;
+#define SUBMIT_REJECT(g) do { provider->LastSubmitGuard=(g); return APPLE_AGX_BACKEND_FALSE; } while(0)
+  if (!provider->Config.HasCompute || Job->ComputeWorkAddressCount != 1u ||
+      Job->ComputeWorkAddresses[0] == 0ULL ||
+      Job->ComputeEvent != provider->Config.Compute.EventNumber ||
+      Job->ComputeExpectedStamp == 0u ||
+      (Successor ? Job->LeadBarrierAddress == 0ULL ||
+                       (Job->LeadBarrierAddress & 0x1fULL) != 0ULL
+                 : Job->LeadBarrierAddress != 0ULL) ||
+      !AppleAgxG13ProviderExpectedDone(provider, &provider->Config.Compute,
+                                       Successor ? 2u : 1u,
+                                       Job->ComputeExpectedDonePointer))
+    SUBMIT_REJECT(AppleAgxG13SubmitGuardCompute);
+  AppleAgxG13ProviderZero(&submission,
+                          (APPLE_AGX_BACKEND_U32)sizeof(submission));
+  if (!provider->ProviderIo.BuildSubmission(
+          provider->ProviderIo.Context, Job, Fence, &submission) ||
+      submission.Compute.GpuAddressCount != 1u ||
+      submission.Compute.GpuAddresses[0] != Job->ComputeWorkAddresses[0] ||
+      submission.Ta.GpuAddressCount != 0u || submission.D3.GpuAddressCount != 0u)
+    SUBMIT_REJECT(AppleAgxG13SubmitGuardBuild);
+  if (Successor) {
+    const APPLE_AGX_BACKEND_BOOL prepared =
+        submission.Compute.PreparedRangeCount != 0u ? APPLE_AGX_BACKEND_TRUE
+                                                    : APPLE_AGX_BACKEND_FALSE;
+    if (prepared && (submission.Compute.PreparedRangeCount != 1u ||
+                     submission.LeadBarrierRange.Address ==
+                         APPLE_AGX_G13_PROVIDER_NULL ||
+                     submission.LeadBarrierRange.Bytes == 0u))
+      SUBMIT_REJECT(AppleAgxG13SubmitGuardBuild);
+    submission.Compute.GpuAddresses[1] = submission.Compute.GpuAddresses[0];
+    submission.Compute.GpuAddresses[0] = Job->LeadBarrierAddress;
+    submission.Compute.GpuAddressCount = 2u;
+    if (prepared) {
+      submission.Compute.PreparedRanges[1] = submission.Compute.PreparedRanges[0];
+      submission.Compute.PreparedRanges[0].Address =
+          submission.LeadBarrierRange.Address;
+      submission.Compute.PreparedRanges[0].Bytes =
+          submission.LeadBarrierRange.Bytes;
+      submission.Compute.PreparedRangeCount = 2u;
+    }
+    submission.Successor = APPLE_AGX_BACKEND_TRUE;
+  }
+  submission.Fence = Fence;
+  submission.ComputeOnly = APPLE_AGX_BACKEND_TRUE;
+  result = AppleAgxG13QueueRuntimeSubmitCompute(&provider->Runtime, &submission);
+  if (result != AppleAgxG13QueueRuntimeResultOk) {
+    provider->LastSubmitGuard=AppleAgxG13SubmitGuardRuntime;
+    provider->LastSubmitRuntimeResult=(APPLE_AGX_BACKEND_U32)result;
+    if (provider->Runtime.Phase == AppleAgxG13QueueRuntimeFaulted) {
+      /* The work became visible: the fence is owned by the queue now. */
+      if (!Successor) provider->PendingFence = Fence;
+      provider->FailureQuiesced =
+          result == AppleAgxG13QueueRuntimeResultResetFailed
+              ? APPLE_AGX_BACKEND_FALSE : APPLE_AGX_BACKEND_TRUE;
+      provider->Phase = AppleAgxG13QueueProviderFaulted;
+    }
+    return APPLE_AGX_BACKEND_FALSE;
+  }
+  if (Successor) {
+    provider->SuccessorFence = Fence;
+    provider->SuccessorComputeOnly = APPLE_AGX_BACKEND_TRUE;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
+  provider->PendingFence = Fence;
+  provider->ObservedMask = 0u;
+  provider->Phase = AppleAgxG13QueueProviderComputeOnlySubmitted;
+  return APPLE_AGX_BACKEND_TRUE;
+#undef SUBMIT_REJECT
+}
+
+/* G2: submit a standalone compute job (Kind Compute). Accepted only while
+ * the queues are idle (no staged or running render). */
 static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunCompute(
     void *Context, const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
     APPLE_AGX_BACKEND_U32 Fence) {
   APPLE_AGX_G13_QUEUE_PROVIDER *provider =
       (APPLE_AGX_G13_QUEUE_PROVIDER *)Context;
-  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
-  APPLE_AGX_G13_QUEUE_RUNTIME_RESULT result;
   if (provider == APPLE_AGX_G13_PROVIDER_NULL) return APPLE_AGX_BACKEND_FALSE;
   provider->LastSubmitGuard=AppleAgxG13SubmitGuardNone;
   provider->LastSubmitRuntimeResult=0u;
@@ -504,41 +673,43 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunCompute(
     provider->LastSubmitRuntimeResult = AppleAgxG13PhaseFenceGuardPhase;
     SUBMIT_REJECT(AppleAgxG13SubmitGuardPhaseFence);
   }
-  if (!provider->Config.HasCompute || Job->ComputeWorkAddressCount != 1u ||
-      Job->ComputeWorkAddresses[0] == 0ULL ||
-      Job->ComputeEvent != provider->Config.Compute.EventNumber ||
-      Job->ComputeExpectedStamp == 0u ||
-      !AppleAgxG13ProviderExpectedDone(provider, &provider->Config.Compute, 1u,
-                                       Job->ComputeExpectedDonePointer))
-    SUBMIT_REJECT(AppleAgxG13SubmitGuardCompute);
-  AppleAgxG13ProviderZero(&submission,
-                          (APPLE_AGX_BACKEND_U32)sizeof(submission));
-  if (!provider->ProviderIo.BuildSubmission(
-          provider->ProviderIo.Context, Job, Fence, &submission) ||
-      submission.Compute.GpuAddressCount != 1u ||
-      submission.Compute.GpuAddresses[0] != Job->ComputeWorkAddresses[0] ||
-      submission.Ta.GpuAddressCount != 0u || submission.D3.GpuAddressCount != 0u)
-    SUBMIT_REJECT(AppleAgxG13SubmitGuardBuild);
-  submission.Fence = Fence;
-  submission.ComputeOnly = APPLE_AGX_BACKEND_TRUE;
-  result = AppleAgxG13QueueRuntimeSubmitCompute(&provider->Runtime, &submission);
-  if (result != AppleAgxG13QueueRuntimeResultOk) {
-    provider->LastSubmitGuard=AppleAgxG13SubmitGuardRuntime;
-    provider->LastSubmitRuntimeResult=(APPLE_AGX_BACKEND_U32)result;
-    if (provider->Runtime.Phase == AppleAgxG13QueueRuntimeFaulted) {
-      /* The work became visible: the fence is owned by the queue now. */
-      provider->PendingFence = Fence;
-      provider->FailureQuiesced =
-          result == AppleAgxG13QueueRuntimeResultResetFailed
-              ? APPLE_AGX_BACKEND_FALSE : APPLE_AGX_BACKEND_TRUE;
-      provider->Phase = AppleAgxG13QueueProviderFaulted;
-    }
+#undef SUBMIT_REJECT
+  return AppleAgxG13ProviderSubmitCompute(provider, Job, Fence,
+                                          APPLE_AGX_BACKEND_FALSE);
+}
+
+/* rc102 (depth 2): kick Job behind the running job, in one admission. The
+ * running job keeps PendingFence and the provider phase; the successor
+ * runs once its leading Barrier sees the running job's last stamp. */
+static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunSuccessor(
+    void *Context, const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+    APPLE_AGX_BACKEND_U32 Fence) {
+  APPLE_AGX_G13_QUEUE_PROVIDER *provider =
+      (APPLE_AGX_G13_QUEUE_PROVIDER *)Context;
+  APPLE_AGX_BACKEND_BOOL submitted;
+  if (provider == APPLE_AGX_G13_PROVIDER_NULL) return APPLE_AGX_BACKEND_FALSE;
+  provider->LastSubmitGuard = AppleAgxG13SubmitGuardNone;
+  provider->LastSubmitRuntimeResult = 0u;
+  if (Job == APPLE_AGX_G13_PROVIDER_NULL || Fence == 0u ||
+      Fence == provider->PendingFence || provider->PendingFence == 0u ||
+      provider->SuccessorFence != 0u ||
+      (provider->Phase != AppleAgxG13QueueProviderSubmitted &&
+       provider->Phase != AppleAgxG13QueueProviderComputeOnlySubmitted) ||
+      provider->Runtime.PendingFence != provider->PendingFence) {
+    provider->LastSubmitGuard = AppleAgxG13SubmitGuardPhaseFence;
+    provider->LastSubmitRuntimeResult = AppleAgxG13PhaseFenceGuardPhase;
+    provider->LastSuccessorGuard = AppleAgxG13SubmitGuardPhaseFence;
     return APPLE_AGX_BACKEND_FALSE;
   }
-  provider->PendingFence = Fence;
-  provider->Phase = AppleAgxG13QueueProviderComputeOnlySubmitted;
-  return APPLE_AGX_BACKEND_TRUE;
-#undef SUBMIT_REJECT
+  submitted = Job->Kind == AppleAgxBackendJobCompute
+      ? AppleAgxG13ProviderSubmitCompute(provider, Job, Fence,
+                                         APPLE_AGX_BACKEND_TRUE)
+      : Job->Kind == AppleAgxBackendJobRender &&
+            AppleAgxG13ProviderSubmitRender(provider, Context, Job, Fence,
+                                            APPLE_AGX_BACKEND_TRUE)
+            ? APPLE_AGX_BACKEND_TRUE : APPLE_AGX_BACKEND_FALSE;
+  provider->LastSuccessorGuard = provider->LastSubmitGuard;
+  return submitted;
 }
 
 static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRestoreAfterQuiesce(
@@ -663,6 +834,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderInstall(
   Io->Queues.RunCompute = AppleAgxG13ProviderRunCompute;
   Io->Queues.Stop = AppleAgxG13ProviderStop;
   Io->Queues.Reset = AppleAgxG13ProviderReset;
+  Io->Queues.RunSuccessor = AppleAgxG13ProviderRunSuccessor;
   return APPLE_AGX_BACKEND_TRUE;
 }
 
@@ -672,29 +844,166 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderAppendObservation(
     APPLE_AGX_BACKEND_QUEUE Queue,
     const APPLE_AGX_G13_QUEUE_BINDING *Binding,
     const APPLE_AGX_G13_QUEUE_PENDING *Pending) {
-  APPLE_AGX_BACKEND_OBSERVATION *observation =
-      &Batch->Observations[Batch->ObservationCount++];
+  APPLE_AGX_BACKEND_OBSERVATION *observation;
+  APPLE_AGX_BACKEND_U32 done;
+  if (Batch->ObservationCount >= APPLE_AGX_G13_QUEUE_PROVIDER_MAX_OBSERVATIONS)
+    return APPLE_AGX_BACKEND_FALSE;
+  observation = &Batch->Observations[Batch->ObservationCount++];
   if (!Provider->RuntimeIo.ReadU32(Provider->RuntimeIo.Context,
                                    Binding->Stamp, &observation->Stamp) ||
       !Provider->RuntimeIo.ReadU32(Provider->RuntimeIo.Context,
-                                   Binding->GpuDonePointer,
-                                   &observation->DonePointer)) {
+                                   Binding->GpuDonePointer, &done)) {
     --Batch->ObservationCount;
     return APPLE_AGX_BACKEND_FALSE;
   }
   observation->Queue = Queue;
   observation->Event = Pending->EventNumber;
+  /* rc102: the job's own retirement point. The runtime proved the done
+   * pointer at or past it and not past what was published; with one job
+   * in flight both are the same value, behind a successor the live
+   * pointer may already be the successor's. */
+  observation->DonePointer = Pending->ExpectedDonePointer;
   observation->Status = AppleAgxBackendObservationComplete;
   return APPLE_AGX_BACKEND_TRUE;
+}
+
+/* The running job's completed queues not reported yet (3D, TA, then a
+ * standalone compute job's queue). All = every queue of the job whatever
+ * its record says (a successor a recovery found finished). */
+static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderAppendRunning(
+    APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
+    APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH *Batch, APPLE_AGX_BACKEND_BOOL All) {
+  APPLE_AGX_G13_QUEUE_RUNTIME *runtime = &Provider->Runtime;
+  const APPLE_AGX_BACKEND_U32 d3 = 1u << AppleAgxBackendQueue3d;
+  const APPLE_AGX_BACKEND_U32 ta = 1u << AppleAgxBackendQueueTa;
+  const APPLE_AGX_BACKEND_U32 compute = 1u << AppleAgxBackendQueueCompute;
+  if (Provider->Phase == AppleAgxG13QueueProviderComputeOnlySubmitted) {
+    if ((Provider->ObservedMask & compute) == 0u &&
+        (All || runtime->ComputePending.Complete)) {
+      if (!AppleAgxG13ProviderAppendObservation(
+              Provider, Batch, AppleAgxBackendQueueCompute,
+              &Provider->Config.Compute, &runtime->ComputePending)) {
+        Provider->LastIngestGuard =
+            AppleAgxG13QueueProviderIngestGuardComputeObservation;
+        Provider->Phase = AppleAgxG13QueueProviderFaulted;
+        return APPLE_AGX_BACKEND_FALSE;
+      }
+      Provider->ObservedMask |= compute;
+    }
+    return APPLE_AGX_BACKEND_TRUE;
+  }
+  if ((Provider->ObservedMask & d3) == 0u &&
+      (All || runtime->D3Pending.Complete)) {
+    if (!AppleAgxG13ProviderAppendObservation(
+            Provider, Batch, AppleAgxBackendQueue3d, &Provider->Config.D3,
+            &runtime->D3Pending)) {
+      Provider->LastIngestGuard =
+          AppleAgxG13QueueProviderIngestGuardD3Observation;
+      Provider->Phase = AppleAgxG13QueueProviderFaulted;
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+    Provider->ObservedMask |= d3;
+  }
+  if ((Provider->ObservedMask & ta) == 0u &&
+      (All || runtime->TaPending.Complete)) {
+    if (!AppleAgxG13ProviderAppendObservation(
+            Provider, Batch, AppleAgxBackendQueueTa, &Provider->Config.Ta,
+            &runtime->TaPending)) {
+      Provider->LastIngestGuard =
+          AppleAgxG13QueueProviderIngestGuardTaObservation;
+      Provider->Phase = AppleAgxG13QueueProviderFaulted;
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+    Provider->ObservedMask |= ta;
+  }
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static void AppleAgxG13ProviderAppendStatus(
+    APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH *Batch,
+    APPLE_AGX_BACKEND_OBSERVATION_STATUS Status, APPLE_AGX_BACKEND_BOOL Reset) {
+  if (Reset) Batch->ObservationCount = 0u;
+  AppleAgxG13ProviderZero(&Batch->Observations[Batch->ObservationCount],
+      (APPLE_AGX_BACKEND_U32)sizeof(Batch->Observations[0]));
+  Batch->Observations[Batch->ObservationCount++].Status = Status;
+}
+
+/* Takes the running job's completion when one is available. A successful
+ * one first reports every queue of the job not reported yet: those a
+ * recovery found finished, a batched successor's (rc102). FALSE: none
+ * available, or (provider Faulted) an observation could not be read. */
+static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderTake(
+    APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
+    APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH *Batch,
+    APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION *Completion) {
+  if (!Provider->Runtime.CompletionAvailable)
+    return APPLE_AGX_BACKEND_FALSE;
+  if (Provider->Runtime.Completion.Status == AppleAgxG13QueueCompletionSuccess &&
+      !AppleAgxG13ProviderAppendRunning(Provider, Batch, APPLE_AGX_BACKEND_TRUE))
+    return APPLE_AGX_BACKEND_FALSE;
+  return AppleAgxG13QueueRuntimeTakeCompletion(&Provider->Runtime, Completion);
+}
+
+/* A completion of the running job was taken. Success and Recovered end it
+ * (the provider then accepts the next job, or rc102: its kicked successor
+ * becomes the running job and, when it already ended, is reported in the
+ * same batch right behind it, oldest first). */
+static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderEndRunning(
+    APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
+    APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH *Batch,
+    const APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION *Completion,
+    APPLE_AGX_BACKEND_BOOL FirstOfBatch) {
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION next;
+  if (Completion->Fence != Provider->PendingFence) {
+    Provider->LastIngestGuard =
+        AppleAgxG13QueueProviderIngestGuardCompletionFence;
+    return APPLE_AGX_BACKEND_FALSE;
+  }
+  Batch->CompletedFence = Completion->Fence;
+  ++Batch->CompletedCount;
+  if (Completion->Status == AppleAgxG13QueueCompletionRecovered) {
+    /* Firmware retirement after a resumed Timeout/Fault is proven; the
+     * job ends as dropped and the provider accepts the next submission. */
+    AppleAgxG13ProviderAppendStatus(Batch, AppleAgxBackendObservationRecovered,
+                                    FirstOfBatch);
+  } else if (Completion->Status != AppleAgxG13QueueCompletionSuccess) {
+    AppleAgxG13ProviderAppendStatus(Batch, AppleAgxBackendObservationFault,
+                                    FirstOfBatch);
+    Provider->SuccessorFence = 0u;
+    Provider->FailureQuiesced = APPLE_AGX_BACKEND_TRUE;
+    Provider->Phase = AppleAgxG13QueueProviderFaulted;
+    Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
+  if (Provider->SuccessorFence == 0u ||
+      Provider->Runtime.PendingFence != Provider->SuccessorFence) {
+    AppleAgxG13ProviderClearStaged(Provider);
+    Provider->Phase = AppleAgxG13QueueProviderCreated;
+    Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
+  /* rc102: promoted. */
+  AppleAgxG13ProviderZero(&Provider->Staged3d,
+                          (APPLE_AGX_BACKEND_U32)sizeof(Provider->Staged3d));
+  Provider->PendingFence = Provider->SuccessorFence;
+  Provider->Phase = Provider->SuccessorComputeOnly
+                        ? AppleAgxG13QueueProviderComputeOnlySubmitted
+                        : AppleAgxG13QueueProviderSubmitted;
+  Provider->SuccessorFence = 0u;
+  Provider->SuccessorComputeOnly = APPLE_AGX_BACKEND_FALSE;
+  Provider->ObservedMask = 0u;
+  Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
+  if (!AppleAgxG13ProviderTake(Provider, Batch, &next))
+    return Provider->Phase != AppleAgxG13QueueProviderFaulted
+               ? APPLE_AGX_BACKEND_TRUE : APPLE_AGX_BACKEND_FALSE;
+  return AppleAgxG13ProviderEndRunning(Provider, Batch, &next,
+                                       APPLE_AGX_BACKEND_FALSE);
 }
 
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
     APPLE_AGX_G13_QUEUE_PROVIDER *Provider, const unsigned char *Message,
     APPLE_AGX_BACKEND_U32 MessageBytes,
     APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH *Batch) {
-  APPLE_AGX_BACKEND_BOOL d3WasComplete;
-  APPLE_AGX_BACKEND_BOOL taWasComplete;
-  APPLE_AGX_BACKEND_BOOL computeWasComplete;
   APPLE_AGX_G13_QUEUE_RUNTIME_RESULT result;
   APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
   if (Provider != APPLE_AGX_G13_PROVIDER_NULL) {
@@ -711,9 +1020,6 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
        Provider->Phase != AppleAgxG13QueueProviderComputeOnlySubmitted))
     return APPLE_AGX_BACKEND_FALSE;
   AppleAgxG13ProviderZero(Batch, (APPLE_AGX_BACKEND_U32)sizeof(*Batch));
-  d3WasComplete = Provider->Runtime.D3Pending.Complete;
-  taWasComplete = Provider->Runtime.TaPending.Complete;
-  computeWasComplete = Provider->Runtime.ComputePending.Complete;
   result = AppleAgxG13QueueRuntimeHandleEvent(&Provider->Runtime, Message,
                                               MessageBytes);
   Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardRuntime;
@@ -726,71 +1032,18 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
       Provider->Phase = AppleAgxG13QueueProviderFaulted;
     return APPLE_AGX_BACKEND_FALSE;
   }
-  if (!d3WasComplete && Provider->Runtime.D3Pending.Complete &&
-      !AppleAgxG13ProviderAppendObservation(
-          Provider, Batch, AppleAgxBackendQueue3d, &Provider->Config.D3,
-          &Provider->Runtime.D3Pending)) {
-    Provider->LastIngestGuard =
-        AppleAgxG13QueueProviderIngestGuardD3Observation;
-    Provider->Phase = AppleAgxG13QueueProviderFaulted;
+  /* The running job's queues that completed with this event; a standalone
+   * compute job (G2) reports its compute queue. */
+  if (!AppleAgxG13ProviderAppendRunning(Provider, Batch, APPLE_AGX_BACKEND_FALSE))
     return APPLE_AGX_BACKEND_FALSE;
-  }
-  if (!taWasComplete && Provider->Runtime.TaPending.Complete &&
-      !AppleAgxG13ProviderAppendObservation(
-          Provider, Batch, AppleAgxBackendQueueTa, &Provider->Config.Ta,
-          &Provider->Runtime.TaPending)) {
-    Provider->LastIngestGuard =
-        AppleAgxG13QueueProviderIngestGuardTaObservation;
-    Provider->Phase = AppleAgxG13QueueProviderFaulted;
-    return APPLE_AGX_BACKEND_FALSE;
-  }
-  /* G2: a standalone compute job reports its compute queue. */
-  if (Provider->Phase == AppleAgxG13QueueProviderComputeOnlySubmitted &&
-      !computeWasComplete && Provider->Runtime.ComputePending.Complete &&
-      !AppleAgxG13ProviderAppendObservation(
-          Provider, Batch, AppleAgxBackendQueueCompute,
-          &Provider->Config.Compute, &Provider->Runtime.ComputePending)) {
-    Provider->LastIngestGuard =
-        AppleAgxG13QueueProviderIngestGuardComputeObservation;
-    Provider->Phase = AppleAgxG13QueueProviderFaulted;
-    return APPLE_AGX_BACKEND_FALSE;
-  }
-  if (!AppleAgxG13QueueRuntimeTakeCompletion(&Provider->Runtime, &completion)) {
+  if (!AppleAgxG13ProviderTake(Provider, Batch, &completion)) {
+    if (Provider->Phase == AppleAgxG13QueueProviderFaulted)
+      return APPLE_AGX_BACKEND_FALSE;
     Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
     return APPLE_AGX_BACKEND_TRUE;
   }
-  if (completion.Fence != Provider->PendingFence) {
-    Provider->LastIngestGuard =
-        AppleAgxG13QueueProviderIngestGuardCompletionFence;
-    return APPLE_AGX_BACKEND_FALSE;
-  }
-  Batch->CompletedFence = completion.Fence;
-  if (completion.Status == AppleAgxG13QueueCompletionRecovered) {
-    /* Firmware retirement after a resumed Timeout/Fault is proven; the
-     * job ends as dropped and the provider accepts the next submission. */
-    Batch->ObservationCount = 1u;
-    AppleAgxG13ProviderZero(&Batch->Observations[0],
-        (APPLE_AGX_BACKEND_U32)sizeof(Batch->Observations[0]));
-    Batch->Observations[0].Status = AppleAgxBackendObservationRecovered;
-    AppleAgxG13ProviderClearStaged(Provider);
-    Provider->Phase = AppleAgxG13QueueProviderCreated;
-    Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
-    return APPLE_AGX_BACKEND_TRUE;
-  }
-  if (completion.Status == AppleAgxG13QueueCompletionSuccess) {
-    AppleAgxG13ProviderClearStaged(Provider);
-    Provider->Phase = AppleAgxG13QueueProviderCreated;
-    Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
-    return APPLE_AGX_BACKEND_TRUE;
-  }
-  Batch->ObservationCount = 1u;
-  AppleAgxG13ProviderZero(&Batch->Observations[0],
-      (APPLE_AGX_BACKEND_U32)sizeof(Batch->Observations[0]));
-  Batch->Observations[0].Status = AppleAgxBackendObservationFault;
-  Provider->FailureQuiesced = APPLE_AGX_BACKEND_TRUE;
-  Provider->Phase = AppleAgxG13QueueProviderFaulted;
-  Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
-  return APPLE_AGX_BACKEND_TRUE;
+  return AppleAgxG13ProviderEndRunning(Provider, Batch, &completion,
+                                       APPLE_AGX_BACKEND_TRUE);
 }
 
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderCheckTimeout(
@@ -809,17 +1062,17 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderCheckTimeout(
   AppleAgxG13ProviderZero(Batch, (APPLE_AGX_BACKEND_U32)sizeof(*Batch));
   result = AppleAgxG13QueueRuntimeCheckTimeout(&Provider->Runtime, NowTicks);
   if (result == AppleAgxG13QueueRuntimeResultOk) {
-    if (!AppleAgxG13QueueRuntimeTakeCompletion(&Provider->Runtime, &completion))
-      return APPLE_AGX_BACKEND_TRUE;
+    /* A recovery retired the job (rc102: behind a successor it may have
+     * ended with all its stamps: Success). */
+    if (!AppleAgxG13ProviderTake(Provider, Batch, &completion))
+      return Provider->Phase != AppleAgxG13QueueProviderFaulted
+                 ? APPLE_AGX_BACKEND_TRUE : APPLE_AGX_BACKEND_FALSE;
     if (completion.Fence != Provider->PendingFence ||
-        completion.Status != AppleAgxG13QueueCompletionRecovered)
+        (completion.Status != AppleAgxG13QueueCompletionRecovered &&
+         completion.Status != AppleAgxG13QueueCompletionSuccess))
       return APPLE_AGX_BACKEND_FALSE;
-    Batch->ObservationCount = 1u;
-    Batch->Observations[0].Status = AppleAgxBackendObservationRecovered;
-    Batch->CompletedFence = completion.Fence;
-    AppleAgxG13ProviderClearStaged(Provider);
-    Provider->Phase = AppleAgxG13QueueProviderCreated;
-    return APPLE_AGX_BACKEND_TRUE;
+    return AppleAgxG13ProviderEndRunning(Provider, Batch, &completion,
+                                         APPLE_AGX_BACKEND_TRUE);
   }
   if (result == AppleAgxG13QueueRuntimeResultResetFailed) {
     Provider->FailureQuiesced = APPLE_AGX_BACKEND_FALSE;
@@ -835,6 +1088,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderCheckTimeout(
   Batch->ObservationCount = 1u;
   Batch->Observations[0].Status = AppleAgxBackendObservationTimeout;
   Batch->CompletedFence = completion.Fence;
+  Batch->CompletedCount = 1u;
   Provider->FailureQuiesced = APPLE_AGX_BACKEND_TRUE;
   Provider->Phase = AppleAgxG13QueueProviderFaulted;
   return APPLE_AGX_BACKEND_TRUE;

@@ -92,6 +92,12 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
   unsigned int NextPrebound;
   ADMISSION_JOB_WINDOW_JOB Running; /* N: kicked, its image released */
   ADMISSION_JOB_WINDOW_JOB Next;    /* N+1 */
+  /* rc102: N+1 would start a new queue lifetime, carry InitBM or rebind
+   * the buffer manager (all need idle queues: depth 1). */
+  unsigned int NextNeedsIdle;
+  /* rc102: the sidecar job-word sets of N and N+1 when both use the
+   * sidecar (SetsValid); they must differ. */
+  unsigned int SetsValid, RunningSet, NextSet;
 } ADMISSION_JOB_WINDOW_KICK_STATE;
 
 /* While N runs: may N+1 be kicked now? Refusal values:
@@ -107,6 +113,9 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
  *   the hardware-validated D3D-G1b one (EXP1279+). */
 unsigned int AdmissionJobWindowKickRefusal(
     const ADMISSION_JOB_WINDOW_KICK_STATE *State);
+/* rc102 refusals of the wired window (after 1-60):
+ *   61 N+1 needs idle queues (new queue lifetime, InitBM, manager bind),
+ *   62 N and N+1 would share one sidecar job-word set. */
 
 /* Does a job of this kind use the compute sidecar / the buffer manager? */
 unsigned int AdmissionJobWindowUsesSidecar(unsigned int Kind);
@@ -123,6 +132,13 @@ unsigned int AdmissionJobWindowUsesManager(unsigned int Kind);
 #define ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_COMPUTE 4u
 unsigned int AdmissionJobWindowBarrier(unsigned int RunningKind,
                                        unsigned int NextKind);
+/* rc102: the queue N+1's leading Barrier is published on (it starts there)
+ * and the queue whose firmware stamp it waits on (N's last). */
+#define ADMISSION_JOB_WINDOW_QUEUE_TA 0u
+#define ADMISSION_JOB_WINDOW_QUEUE_3D 1u
+#define ADMISSION_JOB_WINDOW_QUEUE_COMPUTE 2u
+unsigned int AdmissionJobWindowLeadQueue(unsigned int Barrier);
+unsigned int AdmissionJobWindowWaitQueue(unsigned int Barrier);
 
 /* In-flight window: the jobs the firmware holds, oldest first. */
 #define ADMISSION_JOB_WINDOW_ENTRY_FREE 0u
@@ -166,6 +182,33 @@ unsigned int AdmissionJobWindowQuiesceFence(const ADMISSION_JOB_WINDOW *Window);
  * and the number of aborted entries. */
 unsigned int AdmissionJobWindowResetAbort(ADMISSION_JOB_WINDOW *Window,
                                           unsigned int *Aborted);
+
+/* rc102: cumulative receipt of the wired window (device value
+ * Wom1JobWindow, exported with the job timing; decoded by
+ * tools/agx_gpu_frame_breakdown.py --kmd-window). */
+#define ADMISSION_JOB_WINDOW_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
+  unsigned int Version, Bytes;
+  unsigned int Kicks;          /* successors kicked while a job ran */
+  unsigned int MaxInFlight;    /* jobs the firmware held at once */
+  unsigned int Reported[3];    /* reported batches by size: [1], [2] */
+  unsigned int Barriers[5];    /* leading Barriers by ADMISSION_JOB_WINDOW_BARRIER_* */
+  unsigned int Adopted;        /* kicked successors that became the running job */
+  unsigned int KickFailures;   /* a decided kick that failed (scheduler faulted) */
+  unsigned int LastKickFailure;/* the step that failed (KMD line tag) */
+  unsigned int ResetAborts;    /* kicked fences a reset aborted */
+  unsigned int LastKickedFence;
+  unsigned int Reserved;
+} ADMISSION_JOB_WINDOW_RECEIPT;
+
+void AdmissionJobWindowReceiptInitialize(ADMISSION_JOB_WINDOW_RECEIPT *Receipt);
+/* A successor was kicked with this Barrier while InFlight jobs (now) ran. */
+void AdmissionJobWindowReceiptKick(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
+                                   unsigned int Fence, unsigned int Barrier,
+                                   unsigned int InFlight);
+/* Completions reported to Windows by one poll batch (1 or 2). */
+void AdmissionJobWindowReceiptReported(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
+                                       unsigned int Count);
 
 /* rc95 receipt helper: a firmware stamp has reached the expected value
  * (stamps step by 0x100 and wrap; 0 expected is never reached). */

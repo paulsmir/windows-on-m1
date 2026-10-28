@@ -919,10 +919,22 @@ bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   return true;
 }
 
+bool AppleAgxGpuvaG3GraphBeginNestedJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  if (!graph || !graph->Created || graph->Uncertain || !graph->LeaseToken ||
+      !graph->JobInFlight || graph->JobNested) return false;
+  graph->JobNested = 1u;
+  return true;
+}
+
 bool AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   AGX_GPUVA_V5_REQUEST request = {0};
   if (!graph || !graph->JobInFlight || !graph->LeaseToken ||
       graph->Uncertain) return false;
+  /* rc102: the older of two jobs ended; the newer keeps the lease. */
+  if (graph->JobNested) {
+    graph->JobNested = 0u;
+    return true;
+  }
   request.Command = AGX_GPUVA_V5_JOB_END;
   request.Slot = graph->Slot;
   request.Token = graph->LeaseToken;

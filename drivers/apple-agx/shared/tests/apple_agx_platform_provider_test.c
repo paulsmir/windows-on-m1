@@ -143,6 +143,17 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanJob(
   return APPLE_AGX_BACKEND_TRUE;
 }
 
+/* rc102: the platform plans a successor only while a job runs; the
+ * fixtures never run one, so this stub must never be called. */
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanSuccessor(
+    APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
+    APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan) {
+  (void)Provider;
+  (void)Plan;
+  assert(!"unexpected successor plan");
+  return APPLE_AGX_BACKEND_FALSE;
+}
+
 APPLE_AGX_BACKEND_BOOL AppleAgxPlatformComposerInitialize(
     APPLE_AGX_PLATFORM_COMPOSER *Composer,
     const APPLE_AGX_PLATFORM_COMPOSER_CONFIG *Config,

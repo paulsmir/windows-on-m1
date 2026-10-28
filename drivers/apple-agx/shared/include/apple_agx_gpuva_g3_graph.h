@@ -96,6 +96,9 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   APPLE_AGX_GPUVA_G3_NODE *BackingBuckets[APPLE_AGX_GPUVA_G3_BACKING_BUCKETS];
   APPLE_AGX_GPUVA_G3_RANGE_PROOF Proofs[APPLE_AGX_GPUVA_G3_PROOF_ENTRIES];
   unsigned int NextProof;
+  /* rc102 (depth 2): a second job of this process holds the same lease
+   * (JOB_BEGIN pins the graph once; the lease ends with the last job). */
+  unsigned int JobNested;
 } APPLE_AGX_GPUVA_G3_GRAPH;
 
 #ifdef APPLE_AGX_G3_LOOKUP_STATS
@@ -178,6 +181,10 @@ bool AppleAgxGpuvaG3GraphDetachPrivateRootSet(APPLE_AGX_GPUVA_G3_GRAPH *,
 bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned int Slot);
 bool AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *);
+/* rc102: a second job joins the job in flight on the same lease and VM
+ * slot (no broker call); EndJob then ends one job, the lease only with the
+ * last. At most two jobs. */
+bool AppleAgxGpuvaG3GraphBeginNestedJob(APPLE_AGX_GPUVA_G3_GRAPH *);
 bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *);
 
 #endif

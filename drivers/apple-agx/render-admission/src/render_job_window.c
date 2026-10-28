@@ -99,7 +99,46 @@ unsigned int AdmissionJobWindowKickRefusal(
   if (!barrier_available(AdmissionJobWindowBarrier(n->Kind, m->Kind),
                          s->Capabilities))
     return 60u;
+  if (s->NextNeedsIdle) return 61u;
+  if (s->SetsValid && s->RunningSet == s->NextSet) return 62u;
   return 0u;
+}
+
+unsigned int AdmissionJobWindowLeadQueue(unsigned int Barrier) {
+  return Barrier == ADMISSION_JOB_WINDOW_BARRIER_TA_ON_COMPUTE ||
+         Barrier == ADMISSION_JOB_WINDOW_BARRIER_TA_ON_3D
+             ? ADMISSION_JOB_WINDOW_QUEUE_TA : ADMISSION_JOB_WINDOW_QUEUE_COMPUTE;
+}
+
+unsigned int AdmissionJobWindowWaitQueue(unsigned int Barrier) {
+  return Barrier == ADMISSION_JOB_WINDOW_BARRIER_TA_ON_3D ||
+         Barrier == ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D
+             ? ADMISSION_JOB_WINDOW_QUEUE_3D : ADMISSION_JOB_WINDOW_QUEUE_COMPUTE;
+}
+
+void AdmissionJobWindowReceiptInitialize(ADMISSION_JOB_WINDOW_RECEIPT *Receipt) {
+  unsigned char *bytes = (unsigned char *)Receipt;
+  unsigned int i;
+  if (!Receipt) return;
+  for (i = 0u; i < (unsigned int)sizeof(*Receipt); ++i) bytes[i] = 0u;
+  Receipt->Version = ADMISSION_JOB_WINDOW_RECEIPT_VERSION;
+  Receipt->Bytes = (unsigned int)sizeof(*Receipt);
+}
+
+void AdmissionJobWindowReceiptKick(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
+                                   unsigned int Fence, unsigned int Barrier,
+                                   unsigned int InFlight) {
+  if (!Receipt) return;
+  ++Receipt->Kicks;
+  Receipt->LastKickedFence = Fence;
+  if (Barrier < 5u) ++Receipt->Barriers[Barrier];
+  if (InFlight > Receipt->MaxInFlight) Receipt->MaxInFlight = InFlight;
+}
+
+void AdmissionJobWindowReceiptReported(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
+                                       unsigned int Count) {
+  if (!Receipt || Count == 0u) return;
+  ++Receipt->Reported[Count < 3u ? Count : 2u];
 }
 
 void AdmissionJobWindowInitialize(ADMISSION_JOB_WINDOW *Window) {

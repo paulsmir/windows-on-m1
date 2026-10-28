@@ -50,6 +50,7 @@ void AppleAgxSchedulerInitialize(APPLE_AGX_SCHEDULER *Scheduler) {
   Scheduler->PreemptionPending = APPLE_AGX_FALSE;
   Scheduler->Responsive = APPLE_AGX_TRUE;
   Scheduler->PreemptionPhase = AppleAgxPreemptionIdle;
+  Scheduler->KickedFence = 0u;
 }
 
 void AppleAgxSchedulerContextInitialize(
@@ -126,9 +127,14 @@ APPLE_AGX_BOOL AppleAgxSchedulerCanCompleteFence(
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
       Fence == 0u)
     return APPLE_AGX_FALSE;
+  /* rc102: the boundary is the kicked successor; the active fence before
+   * it completes first. */
   if (Scheduler->PreemptionPhase ==
           AppleAgxPreemptionWaitCurrentBoundary &&
-      Fence != Scheduler->PreemptionActiveFence)
+      Fence != Scheduler->PreemptionActiveFence &&
+      !(Scheduler->KickedFence != 0u &&
+        Scheduler->KickedFence == Scheduler->PreemptionActiveFence &&
+        Fence == Scheduler->ActiveFence))
     return APPLE_AGX_FALSE;
   distance = Fence - AppleAgxSchedulerRetiredFence(Scheduler);
   return distance != 0u && distance < 0x80000000u ? APPLE_AGX_TRUE
@@ -304,8 +310,13 @@ APPLE_AGX_BOOL AppleAgxSchedulerActivateFence(
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
       Fence == 0u || Scheduler->QueueCount == 0u || Scheduler->QueuedFence != Fence ||
       Scheduler->ActiveFence != 0u ||
-      AppleAgxSchedulerDispatchBlocked(Scheduler))
+      (Scheduler->KickedFence != 0u && Scheduler->KickedFence != Fence) ||
+      /* rc102: a kicked fence is already with the firmware: a boundary
+       * preemption waits for it like for the active fence. */
+      (AppleAgxSchedulerDispatchBlocked(Scheduler) &&
+       Scheduler->KickedFence != Fence))
     return APPLE_AGX_FALSE;
+  Scheduler->KickedFence = 0u;
   Scheduler->ActiveRejectedAfter = Scheduler->RejectedAfter[Scheduler->QueueHead];
   Scheduler->QueueHead = (Scheduler->QueueHead + 1u) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY;
   --Scheduler->QueueCount;
@@ -313,6 +324,24 @@ APPLE_AGX_BOOL AppleAgxSchedulerActivateFence(
       Scheduler->FenceQueue[Scheduler->QueueHead] : 0u;
   Scheduler->ActiveFence = Fence;
   return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxSchedulerKickQueuedFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence) {
+  if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
+      Fence == 0u || Scheduler->ActiveFence == 0u ||
+      Scheduler->QueueCount == 0u || Scheduler->QueuedFence != Fence ||
+      Scheduler->KickedFence != 0u ||
+      AppleAgxSchedulerDispatchBlocked(Scheduler))
+    return APPLE_AGX_FALSE;
+  Scheduler->KickedFence = Fence;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_U32 AppleAgxSchedulerKickedFence(
+    const APPLE_AGX_SCHEDULER *Scheduler) {
+  return Scheduler == APPLE_AGX_NULL ? 0u : Scheduler->KickedFence;
 }
 
 APPLE_AGX_BOOL AppleAgxSchedulerCompleteActiveFence(
@@ -423,10 +452,25 @@ static void AppleAgxSchedulerPreservePreemptedQueue(APPLE_AGX_SCHEDULER *Schedul
   Scheduler->PreemptedFenceCount = Scheduler->QueueCount + kept;
 }
 
+/* rc102: the kicked queue head leaves the queue before it is preserved
+ * for VidSch (it is never resubmitted); returns it, 0 = none. */
+static APPLE_AGX_U32 AppleAgxSchedulerTakeKicked(APPLE_AGX_SCHEDULER *Scheduler) {
+  APPLE_AGX_U32 kicked = Scheduler->KickedFence;
+  if (kicked == 0u || Scheduler->QueueCount == 0u ||
+      Scheduler->FenceQueue[Scheduler->QueueHead] != kicked)
+    return 0u;
+  Scheduler->QueueHead = (Scheduler->QueueHead + 1u) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY;
+  --Scheduler->QueueCount;
+  Scheduler->QueuedFence = Scheduler->QueueCount != 0u ?
+      Scheduler->FenceQueue[Scheduler->QueueHead] : 0u;
+  return kicked;
+}
+
 APPLE_AGX_BOOL AppleAgxSchedulerBeginBoundaryPreemption(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 PreemptionFence,
     APPLE_AGX_U32 CutoffFence, APPLE_AGX_U32 ActiveFence) {
+  APPLE_AGX_U32 kicked, rejected = 0u;
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
       PreemptionFence == 0u ||
       Scheduler->PreemptionPhase != AppleAgxPreemptionIdle ||
@@ -439,15 +483,28 @@ APPLE_AGX_BOOL AppleAgxSchedulerBeginBoundaryPreemption(
                                     AppleAgxSchedulerRetiredFence(Scheduler)) ||
         !AppleAgxSchedulerFenceAtOrAfter(CutoffFence, ActiveFence))))
     return APPLE_AGX_FALSE;
+  /* rc102: the kicked successor is part of the current boundary: it stays
+   * the only queued fence and the preemption waits for its completion. */
+  if (Scheduler->KickedFence != 0u)
+    rejected = Scheduler->RejectedAfter[Scheduler->QueueHead];
+  kicked = AppleAgxSchedulerTakeKicked(Scheduler);
+  if (Scheduler->KickedFence != 0u && kicked == 0u)
+    return APPLE_AGX_FALSE;
   AppleAgxSchedulerPreservePreemptedQueue(Scheduler);
   Scheduler->QueuedFence = 0u;
   Scheduler->QueueHead = Scheduler->QueueCount = 0u;
+  if (kicked != 0u) {
+    Scheduler->FenceQueue[0] = kicked;
+    Scheduler->RejectedAfter[0] = rejected;
+    Scheduler->QueueCount = 1u;
+    Scheduler->QueuedFence = kicked;
+  }
   Scheduler->PendingPreemptionFence = PreemptionFence;
   Scheduler->PreemptionCutoffFence = CutoffFence;
-  Scheduler->PreemptionActiveFence = ActiveFence;
+  Scheduler->PreemptionActiveFence = kicked != 0u ? kicked : ActiveFence;
   Scheduler->PreemptionLastCompletedFence = Scheduler->CompletedFence;
   Scheduler->PreemptionPending = APPLE_AGX_TRUE;
-  Scheduler->PreemptionPhase = ActiveFence == 0u
+  Scheduler->PreemptionPhase = ActiveFence == 0u && kicked == 0u
                                    ? AppleAgxPreemptionReadyToNotify
                                    : AppleAgxPreemptionWaitCurrentBoundary;
   return APPLE_AGX_TRUE;
@@ -565,11 +622,22 @@ APPLE_AGX_BOOL AppleAgxSchedulerResetEngine(
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
       LastAbortedFence == APPLE_AGX_NULL)
     return APPLE_AGX_FALSE;
-  *LastAbortedFence = Scheduler->ActiveFence != 0u
-                          ? Scheduler->ActiveFence
-                          : AppleAgxSchedulerRetiredFence(Scheduler);
-  if (Scheduler->ActiveFence != 0u)
-    Scheduler->LastAbortedFence = Scheduler->ActiveFence;
+  /* rc102: an unreported kicked successor is the newest fence the
+   * firmware may have run: it is aborted with the active fence (never
+   * handed back to VidSch), and bounds LastAbortedFence. */
+  {
+    APPLE_AGX_U32 rejected = Scheduler->KickedFence != 0u && Scheduler->QueueCount != 0u
+        ? Scheduler->RejectedAfter[Scheduler->QueueHead] : 0u;
+    APPLE_AGX_U32 kicked = AppleAgxSchedulerTakeKicked(Scheduler);
+    if (kicked != 0u && rejected != 0u)
+      Scheduler->ActiveRejectedAfter = rejected;
+    APPLE_AGX_U32 newest = kicked != 0u ? kicked : Scheduler->ActiveFence;
+    *LastAbortedFence = newest != 0u ? newest
+                                     : AppleAgxSchedulerRetiredFence(Scheduler);
+    if (newest != 0u)
+      Scheduler->LastAbortedFence = newest;
+    Scheduler->KickedFence = 0u;
+  }
   AppleAgxSchedulerPreservePreemptedQueue(Scheduler);
   /* The reset caller has proved physical quiescence. Only the software
    * rejected tail advances here; the aborted packet is still not a successful

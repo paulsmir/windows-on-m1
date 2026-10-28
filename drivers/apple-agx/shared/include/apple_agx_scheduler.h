@@ -53,6 +53,11 @@ typedef struct _APPLE_AGX_SCHEDULER {
   APPLE_AGX_BOOL PreemptionPending;
   APPLE_AGX_BOOL Responsive;
   APPLE_AGX_PREEMPTION_PHASE PreemptionPhase;
+  /* rc102 (depth-2 job window): the queue head the firmware already holds
+   * behind the active fence (kicked behind its leading Barrier), 0 = none.
+   * It stays the queued fence until it is activated, but no preemption or
+   * reset may hand it back to VidSch: it may already have run. */
+  APPLE_AGX_U32 KickedFence;
 } APPLE_AGX_SCHEDULER;
 
 void AppleAgxSchedulerInitialize(APPLE_AGX_SCHEDULER *Scheduler);
@@ -104,6 +109,14 @@ APPLE_AGX_BOOL AppleAgxSchedulerAdmitPagingFenceAsPreempted(
 APPLE_AGX_BOOL AppleAgxSchedulerActivateFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+/* rc102: the queued fence was kicked to the firmware behind the active
+ * one. Only the queue head, with a fence active, no other kicked fence and
+ * dispatch not frozen. */
+APPLE_AGX_BOOL AppleAgxSchedulerKickQueuedFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+APPLE_AGX_U32 AppleAgxSchedulerKickedFence(
+    const APPLE_AGX_SCHEDULER *Scheduler);
 APPLE_AGX_BOOL AppleAgxSchedulerCompleteActiveFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);

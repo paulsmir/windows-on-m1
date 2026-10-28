@@ -131,6 +131,22 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION {
    * queue until the submission's compute stamp is written (Asahi
    * queue/mod.rs explicit barrier); only SubmitRenderWithCompute takes it. */
   APPLE_AGX_BACKEND_BOOL TaLeadingBarrier;
+  /* rc102 (depth-2 job window, render_job_window.h): this job is the
+   * successor of the running one and enters the successor slot while the
+   * running job (PendingFence) is still with the firmware. The first entry
+   * of the queue it starts on (TA for a render without compute work,
+   * compute otherwise) is its leading firmware Barrier on the running
+   * job's last firmware stamp, one ring entry more than at depth 1. A
+   * successor render needs the current buffer-manager binding and started
+   * queues (no InitBM, no NewQueue on TA/3D). */
+  APPLE_AGX_BACKEND_BOOL Successor;
+  /* rc102: the prepared range that holds the job's leading Barrier
+   * (APPLE_AGX_BACKEND_JOB_IMAGE LeadBarrierAddress), set by the
+   * submission builder; the provider puts it first in the lead queue. */
+  struct {
+    const void *Address;
+    APPLE_AGX_BACKEND_U32 Bytes;
+  } LeadBarrierRange;
 } APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION;
 
 typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION {
@@ -145,6 +161,25 @@ typedef struct _APPLE_AGX_G13_QUEUE_PENDING {
   APPLE_AGX_BACKEND_BOOL EventSeen;
   APPLE_AGX_BACKEND_BOOL Complete;
 } APPLE_AGX_G13_QUEUE_PENDING;
+
+/* rc102: the job kicked behind the running one (depth 2). Its records are
+ * observed with every event like the running job's; it becomes the
+ * running job when that job's completion is taken (TakeCompletion), and is
+ * then complete at once when the notifier deferred both ends to its own
+ * (U4: batched). VerdictValid: a firmware recovery retired the whole
+ * window; Verdict is Success when every stamp of the successor was
+ * reached, else Recovered (killed with the dropped job). */
+typedef struct _APPLE_AGX_G13_QUEUE_SUCCESSOR {
+  APPLE_AGX_BACKEND_U32 Fence;
+  APPLE_AGX_BACKEND_U64 DeadlineTicks;
+  APPLE_AGX_G13_QUEUE_PENDING TaPending;
+  APPLE_AGX_G13_QUEUE_PENDING D3Pending;
+  APPLE_AGX_G13_QUEUE_PENDING ComputePending;
+  APPLE_AGX_BACKEND_BOOL ComputeTerminal;
+  APPLE_AGX_BACKEND_BOOL ComputeInRender;
+  APPLE_AGX_BACKEND_BOOL VerdictValid;
+  APPLE_AGX_G13_QUEUE_COMPLETION_STATUS Verdict;
+} APPLE_AGX_G13_QUEUE_SUCCESSOR;
 
 typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME {
   APPLE_AGX_G13_QUEUE_RUNTIME_PHASE Phase;
@@ -190,6 +225,13 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME {
    * job); the deadline is recorded, not terminal. */
   APPLE_AGX_BACKEND_BOOL DeadlinePassed;
   APPLE_AGX_BACKEND_U32 DeadlineExpiries;
+  /* rc102: depth-2 successor slot (empty at depth 1) and its receipts:
+   * successors published, promoted to running, and promoted already
+   * complete (a batched pair, U4). */
+  APPLE_AGX_G13_QUEUE_SUCCESSOR Successor;
+  APPLE_AGX_BACKEND_U32 SuccessorKicks;
+  APPLE_AGX_BACKEND_U32 SuccessorPromotions;
+  APPLE_AGX_BACKEND_U32 BatchedPromotions;
 } APPLE_AGX_G13_QUEUE_RUNTIME;
 
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeInitialize(
@@ -231,6 +273,13 @@ AppleAgxG13QueueRuntimeReset(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime);
  * needed). */
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeForceChannelRecovery(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 *Issued);
+/* rc102: is the running job's completion available with its successor
+ * slot occupied? (TakeCompletion then promotes the successor.) */
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeHasSuccessor(
+    const APPLE_AGX_G13_QUEUE_RUNTIME *Runtime);
+/* Takes the running job's completion. rc102: after a Success or Recovered
+ * completion an occupied successor slot becomes the running job (its
+ * completion is available at once when it already ended). */
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeTakeCompletion(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime,
     APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION *Completion);
