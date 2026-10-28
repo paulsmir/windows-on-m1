@@ -88,9 +88,10 @@ BUCKETS = {
         'measure-d3d12-resident-headroom', 'reject-make-resident'),
     'upload': (
         'measure-d3d12-staged-upload', 'measure-d3d12-copy-texture', 'measure-d3d12-texture-copy',
-        'measure-d3d12-reinterpret-copy', 'measure-d3d12-upload-ring', 'measure-d3d12-heap-staging'),
+        'measure-d3d12-reinterpret-copy', 'measure-d3d12-upload-ring', 'measure-d3d12-heap-staging',
+        'measure-d3d12-level-upload'),
     'escape': ('measure-copy-escape-gate', 'measure-copy-escape-class', 'measure-native-ready-cache',
-               'measure-soft-faults'),
+               'measure-soft-faults', 'measure-scene-escape'),
 }
 NAME_BUCKET = {name: bucket for bucket, names in BUCKETS.items() for name in names}
 # Execute-time receipts: command replay, GPU submission and CPU waits on the GPU
@@ -188,7 +189,7 @@ def analyse(rows, start, end, primary=None):
            'shader': {'parts': 0, 'internal': 0, 'ticks': 0, 'max': 0, 'max_qpc': 0, 'translate': 0},
            'pso': {'count': 0, 'ticks': 0, 'max': 0},
            'bo': [], 'binds': [], 'trims': {'count': 0, 'bytes': 0, 'rounds': 0, 'pending': 0},
-           'uploads': {'staged': 0, 'texture_copy': 0, 'bytes_bound': 0, 'recorded': 0, 'ticks': 0},
+           'uploads': {'staged': 0, 'texture_copy': 0, 'level': 0, 'bytes_bound': 0, 'recorded': 0, 'ticks': 0},
            'waits': defaultdict(lambda: [0, 0]), 'longest': [], 'threads': Counter(),
            'execute': {'count': 0, 'replay_us': 0, 'submit_us': 0, 'max_us': 0,
                        'kinds_us': [0] * 6, 'kinds_count': [0] * 6}}
@@ -247,11 +248,14 @@ def analyse(rows, start, end, primary=None):
         elif name == 'measure-make-resident-trimmed':
             out['trims']['rounds'] += values[1] if len(values) > 1 else 0
             out['trims']['pending'] += 1 if hr == 0x8000000A else 0
-        elif name in ('measure-d3d12-staged-upload', 'measure-d3d12-texture-copy'):
+        elif name in ('measure-d3d12-staged-upload', 'measure-d3d12-texture-copy', 'measure-d3d12-level-upload'):
             u = out['uploads']
             u['ticks'] += interval
             if name == 'measure-d3d12-staged-upload':
                 u['staged'] += 1
+            elif name == 'measure-d3d12-level-upload':
+                # rc103: a whole level tiled on the CPU, one compute copy (hr 0); a failed ring is hr != 0
+                u['level'] += 1 if not hr else 0
             else:
                 u['texture_copy'] += 1
                 # {to buffer, width | height << 16, pitch}: pitch x height texel rows bounds the bytes
@@ -299,7 +303,8 @@ def summarise(window, top):
                    'compile_s': round(s['ticks'] / QPC_HZ, 3), 'longest_s': round(s['max'] / QPC_HZ, 3),
                    'translate_s': round(s['translate'] / QPC_HZ, 3)},
         'pso': {'count': p['count'], 's': round(p['ticks'] / QPC_HZ, 3), 'longest_s': round(p['max'] / QPC_HZ, 3)},
-        'uploads': {'staged': u['staged'], 'texture_copy': u['texture_copy'], 'recorded': u['recorded'],
+        'uploads': {'staged': u['staged'], 'texture_copy': u['texture_copy'], 'level': u['level'],
+                    'recorded': u['recorded'],
                     's': round(upload_s, 3), 'bytes_upper_bound': u['bytes_bound']},
         'bo_creates': sorted(window['bo'], key=lambda b: -b['bind_s'] - b['allocate_s'])[:top],
         'binds': sorted(window['binds'], key=lambda b: -(b['residency_s'] + b['map_s'] + b.get('bind_wait_s', 0)))[:top],
@@ -447,8 +452,8 @@ def table(result):
         p = w['pso']
         out.append('  PSOs: %d, %.3f s (longest %.3f s)' % (p['count'], p['s'], p['longest_s']))
         u = w['uploads']
-        out.append('  uploads: %d staged, %d CPU texture copies (<= %.1f MB), %d recorded, %.3f s' %
-                   (u['staged'], u['texture_copy'], u['bytes_upper_bound'] / 1e6, u['recorded'], u['s']))
+        out.append('  uploads: %d staged, %d level, %d CPU texture copies (<= %.1f MB), %d recorded, %.3f s' %
+                   (u['staged'], u['level'], u['texture_copy'], u['bytes_upper_bound'] / 1e6, u['recorded'], u['s']))
         t = w['trims']
         out.append('  trims: %d (%.1f MiB), %d trim rounds, %d E_PENDING make-resident' %
                    (t['count'], t['bytes'] / 2**20, t['rounds'], t['pending']))

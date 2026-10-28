@@ -112,6 +112,22 @@ class StartupBreakdown(unittest.TestCase):
         self.assertEqual(window['other_buckets']['pso'], HZ // 4)
         self.assertEqual(window['pso']['ticks'], 0)  # per-kind times are present-thread wall time
 
+    def test_rc103_scene_escape_and_level_upload_receipts(self):
+        """rc103 (EXP2037a): the 4 slow scene ACQUIREs of frame 1 -> 2 had no
+        receipt, so the next receipt (measure-touch) was charged 1.29 s of
+        residency. measure-scene-escape closes its own interval as an
+        escape; measure-d3d12-level-upload is an upload and is counted."""
+        lines = presents([1.0])
+        lines += [line('scene-escape', 2.3, 1, 1_300_000, 4096, 4096, 0x2010, 0x101, 0),  # 1.3 s escape
+                  line('touch', 2.31, 0x89090000, 1),                                    # 0.01 s residency
+                  line('d3d12-level-upload', 2.5, 0x04000400, 0, 1024, 0, 0)]             # 0.19 s upload
+        lines += presents([3.0])
+        window = tool.analyse(tool.parse(lines), int(1.0 * HZ), int(3.0 * HZ))
+        self.assertEqual(window['buckets']['escape'], int(2.3 * HZ) - int(1.0 * HZ))
+        self.assertEqual(window['buckets']['residency'], int(2.31 * HZ) - int(2.3 * HZ))
+        self.assertEqual(window['buckets']['upload'], int(2.5 * HZ) - int(2.31 * HZ))
+        self.assertEqual(window['uploads']['level'], 1)
+
     def test_bo_create_split_is_capped_by_its_interval(self):
         lines = presents([1.0]) + [line('bo-create', 31.0, 129, 1, 700_000, 25_000_000, 4_000)] + presents([32.0])
         window = tool.analyse(tool.parse(lines), int(1.0 * HZ), int(32.0 * HZ))
