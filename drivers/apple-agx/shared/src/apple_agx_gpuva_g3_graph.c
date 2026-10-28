@@ -60,6 +60,27 @@ static APPLE_AGX_GPUVA_G3_NODE *slot(APPLE_AGX_GPUVA_G3_NODE *table,
   return table && table->Slots ? table->Slots[index] : 0;
 }
 
+/* rc81: drop the range proofs a mutation of TableIpa (0 = topology) can
+ * change; called before every native mutation, with InvalidateNative. */
+static void proof_invalidate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+                             unsigned long long table_ipa) {
+  unsigned int i, k;
+  for (i = 0; i < APPLE_AGX_GPUVA_G3_PROOF_ENTRIES; ++i) {
+    APPLE_AGX_GPUVA_G3_RANGE_PROOF *p = &graph->Proofs[i];
+    if (!p->Valid) continue;
+    if (!table_ipa) { p->Valid = 0u; continue; }
+    for (k = 0; k < p->TableCount; ++k)
+      if (p->LeafTables[k] == table_ipa) { p->Valid = 0u; break; }
+  }
+}
+
+static void native_invalidate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    unsigned long long table_ipa, unsigned int index) {
+  proof_invalidate(graph, table_ipa);
+  if (graph->InvalidateNative)
+    graph->InvalidateNative(graph->InvalidateContext, table_ipa, index);
+}
+
 static bool call_with_response(APPLE_AGX_GPUVA_G3_GRAPH *graph,
                  AGX_GPUVA_V5_REQUEST *request,
                  AGX_GPUVA_V5_RESPONSE *response_out) {
@@ -361,8 +382,7 @@ bool AppleAgxGpuvaG3GraphRegisterTable(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   for (existing = graph->Tables; existing; existing = existing->Next)
     if (existing->Ipa == ipa) break;
   if (existing && existing->Level == level) return true;
-  if (existing && graph->InvalidateNative)
-    graph->InvalidateNative(graph->InvalidateContext, 0ULL, 0u);
+  if (existing) native_invalidate(graph, 0ULL, 0u);
   /* VidMm reuses a freed page-table page at another level (EXP846 0x10E/0xB).
    * Retire the old table only when no parent still links it: clear its own
    * entries, revoke it, then register the page at the new level. */
@@ -401,8 +421,7 @@ bool AppleAgxGpuvaG3GraphBindRoot(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   if (!graph || !graph->Created || graph->Uncertain ||
       !find_table(graph, ipa, 0u) || graph->MappingGeneration == ~0ULL) return false;
   if (graph->RootIpa == ipa) return true;
-  if (graph->InvalidateNative)
-    graph->InvalidateNative(graph->InvalidateContext, 0ULL, 0u);
+  native_invalidate(graph, 0ULL, 0u);
   request.Command = AGX_GPUVA_V5_RELOCATE_ROOT;
   request.TableIpa = ipa;
   if (!call(graph, &request)) return false;
@@ -429,8 +448,7 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   edge = find_edge(graph->Parents, table_ipa, index);
   if (child_ipa && edge && edge->AuxIpa == child_ipa) return true;
   if (!child_ipa && !edge) return true;
-  if (graph->InvalidateNative)
-    graph->InvalidateNative(graph->InvalidateContext, 0ULL, 0u);
+  native_invalidate(graph, 0ULL, 0u);
   if (child_ipa && !edge && !(new_edge = node(graph))) return false;
   request.Command = AGX_GPUVA_V5_UPDATE_PARENT;
   request.TableIpa = table_ipa;
@@ -494,8 +512,7 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   if (guest_ipa && leaf && leaf->AuxIpa == guest_ipa &&
       leaf->Writable == (unsigned)writable && leaf->Kind == kind) return true;
   if (!guest_ipa && !leaf) return true;
-  if (graph->InvalidateNative)
-    graph->InvalidateNative(graph->InvalidateContext, table_ipa, index);
+  native_invalidate(graph, table_ipa, index);
   if (guest_ipa) {
     if (!leaf) {
       new_leaf = node(graph);
@@ -731,6 +748,57 @@ bool AppleAgxGpuvaG3GraphContainsRangeAccess(
   return AppleAgxGpuvaG3GraphInspectRangeAccess(graph, start_va, bytes, write, NULL);
 }
 
+bool AppleAgxGpuvaG3GraphContainsRangeAccessCached(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, unsigned long long start_va,
+    unsigned int bytes, bool write) {
+  APPLE_AGX_GPUVA_G3_RANGE_PROOF candidate;
+  unsigned long long va, end;
+  unsigned int i;
+  if (!bytes || start_va >= (1ULL << 39) ||
+      bytes > (1ULL << 39) - start_va || !graph || !graph->Created ||
+      graph->Uncertain) return false;
+  end = start_va + bytes;
+  if (((end + G3_PAGE - 1u) & ~(G3_PAGE - 1u)) - (start_va & ~(G3_PAGE - 1u)) <
+      (unsigned long long)APPLE_AGX_GPUVA_G3_PROOF_MIN_PAGES * G3_PAGE)
+    return AppleAgxGpuvaG3GraphInspectRangeAccess(graph, start_va, bytes, write, NULL);
+  for (i = 0; i < APPLE_AGX_GPUVA_G3_PROOF_ENTRIES; ++i) {
+    const APPLE_AGX_GPUVA_G3_RANGE_PROOF *p = &graph->Proofs[i];
+    if (p->Valid && p->Va == start_va && p->Bytes == bytes &&
+        p->RootIpa == graph->RootIpa && (p->Write || !write))
+      return true;
+  }
+  memset(&candidate, 0, sizeof(candidate));
+  candidate.Valid = 1u;
+  for (va = start_va & ~(G3_PAGE - 1u); va < end; va += G3_PAGE) {
+    unsigned int ri = (unsigned int)((va >> 36) & 7u);
+    unsigned int mi = (unsigned int)((va >> 25) & 2047u);
+    unsigned int li = (unsigned int)((va >> 14) & 2047u);
+    APPLE_AGX_GPUVA_G3_NODE *root_edge = slot(graph->RootTable, ri);
+    APPLE_AGX_GPUVA_G3_NODE *middle_edge, *leaf;
+    if (!root_edge) return false;
+    middle_edge = slot(root_edge->ChildTable, mi);
+    if (!middle_edge) return false;
+    leaf = slot(middle_edge->ChildTable, li);
+    if (!leaf || !leaf->AuxIpa || (write && !leaf->Writable)) return false;
+    /* the leaf table of this page (consecutive pages share it) */
+    if (!candidate.TableCount ||
+        candidate.LeafTables[candidate.TableCount - 1u] != middle_edge->AuxIpa) {
+      if (candidate.TableCount == APPLE_AGX_GPUVA_G3_PROOF_TABLES)
+        candidate.Valid = 0u;
+      else
+        candidate.LeafTables[candidate.TableCount++] = middle_edge->AuxIpa;
+    }
+  }
+  if (candidate.Valid) {
+    candidate.Va = start_va;
+    candidate.Bytes = bytes;
+    candidate.RootIpa = graph->RootIpa;
+    candidate.Write = write ? 1u : 0u;
+    graph->Proofs[graph->NextProof++ % APPLE_AGX_GPUVA_G3_PROOF_ENTRIES] = candidate;
+  }
+  return true;
+}
+
 /* A private leaf is grafted into the actual current shadow root. VidMm may
  * supply the middle table; only the reserved leaf slot belongs to the KMD. */
 bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *g,
@@ -879,6 +947,7 @@ bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   unsigned int level;
   if (!graph || !graph->Created || graph->Uncertain ||
       graph->LeaseToken || graph->JobInFlight) return false;
+  proof_invalidate(graph, 0ULL);
   while (graph->Leaves) {
     item = graph->Leaves;
     if (!AppleAgxGpuvaG3GraphUpdateLeaf(graph, item->Ipa,

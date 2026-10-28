@@ -49,6 +49,21 @@ typedef struct _APPLE_AGX_GPUVA_G3_NODE {
   struct _APPLE_AGX_GPUVA_G3_NODE *Prev, *HashNext;
 } APPLE_AGX_GPUVA_G3_NODE;
 
+/* rc81 (EXP2011): a successful proof of a large range (at least
+ * APPLE_AGX_GPUVA_G3_PROOF_MIN_PAGES pages, e.g. the grown TVB heap), keyed by
+ * VA, bytes and root, with the leaf tables its walk crossed. Every native
+ * mutation drops it: a topology change (BindRoot, UpdateParent, table
+ * re-registration) all entries, a leaf update the entries that crossed that
+ * leaf table. Used under the caller's graph lock only. */
+#define APPLE_AGX_GPUVA_G3_PROOF_ENTRIES 4u
+#define APPLE_AGX_GPUVA_G3_PROOF_TABLES 16u
+#define APPLE_AGX_GPUVA_G3_PROOF_MIN_PAGES 64u
+typedef struct _APPLE_AGX_GPUVA_G3_RANGE_PROOF {
+  unsigned long long Va, RootIpa;
+  unsigned long long LeafTables[APPLE_AGX_GPUVA_G3_PROOF_TABLES];
+  unsigned int Bytes, Write, Valid, TableCount;
+} APPLE_AGX_GPUVA_G3_RANGE_PROOF;
+
 typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   APPLE_AGX_GPUVA_V5_CLIENT *Client;
   APPLE_AGX_GPUVA_G3_ALLOC Allocate;
@@ -79,6 +94,8 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
    * fresh allocation (AppleAgxGpuvaG3GraphReserveNode). */
   struct _APPLE_AGX_GPUVA_G3_NODE *SpareNode;
   APPLE_AGX_GPUVA_G3_NODE *BackingBuckets[APPLE_AGX_GPUVA_G3_BACKING_BUCKETS];
+  APPLE_AGX_GPUVA_G3_RANGE_PROOF Proofs[APPLE_AGX_GPUVA_G3_PROOF_ENTRIES];
+  unsigned int NextProof;
 } APPLE_AGX_GPUVA_G3_GRAPH;
 
 #ifdef APPLE_AGX_G3_LOOKUP_STATS
@@ -121,6 +138,11 @@ bool AppleAgxGpuvaG3GraphFlush(APPLE_AGX_GPUVA_G3_GRAPH *,
 bool AppleAgxGpuvaG3GraphContainsRange(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned int Bytes);
 bool AppleAgxGpuvaG3GraphContainsRangeAccess(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long StartVa, unsigned int Bytes, bool Write);
+/* AppleAgxGpuvaG3GraphContainsRangeAccess with the proof cache above: the
+ * same answer, O(1) for a repeated large range until a mutation can change
+ * it. Failures are not cached; a read proof never answers a write. */
+bool AppleAgxGpuvaG3GraphContainsRangeAccessCached(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned int Bytes, bool Write);
 /* The leaf edge at (level-2 table, index), or NULL; O(1). */
 const APPLE_AGX_GPUVA_G3_NODE *AppleAgxGpuvaG3GraphLeaf(

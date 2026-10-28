@@ -3997,10 +3997,15 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
       status, (ULONG)status, TRUE);
 }
 
+/* rc81 (EXP2011): G4 parse access runs under the G3 state lock, at submit
+ * and again at BeginJob. A large range (the grown TVB heap: 6624 pages at
+ * 828 blocks) is proven once and then answered from the graph's proof
+ * cache until a mutation of a crossed leaf table or the topology drops it,
+ * so a job's proof no longer scales with the TVB size. */
 static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
                                   unsigned int bytes, int write) {
   APPLE_AGX_GPUVA_G3_GRAPH *graph = (APPLE_AGX_GPUVA_G3_GRAPH *)opaque;
-  return AppleAgxGpuvaG3GraphContainsRangeAccess(
+  return AppleAgxGpuvaG3GraphContainsRangeAccessCached(
       graph, va, bytes, write != 0) ? 1 : 0;
 }
 

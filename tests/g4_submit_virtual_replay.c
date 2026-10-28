@@ -457,6 +457,11 @@ static int AppleAgxGpuvaG3GraphContainsRange(
     APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes) {
   return AppleAgxGpuvaG3GraphContainsRangeAccess(graph, va, bytes, 0);
 }
+/* rc81: the cached proof gives the same answer as the walk. */
+static int AppleAgxGpuvaG3GraphContainsRangeAccessCached(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes, int write) {
+  return AppleAgxGpuvaG3GraphContainsRangeAccess(graph, va, bytes, write);
+}
 static unsigned graph_begin_slot;
 static int AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned slot) { (void)graph;graph_begin_slot=slot;++graph_begin_calls;return 1; }
