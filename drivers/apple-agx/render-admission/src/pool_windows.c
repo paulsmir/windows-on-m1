@@ -278,6 +278,10 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ULONGLONG ReservedAllocations;
   ULONGLONG StagedPressure, StagedSlabs;
   BOOLEAN StageExact;
+  /* rc109: what segment 3 was sized from (receipt v15). */
+  ADMISSION_POOL_GRAPHICS_POLICY Policy;
+  ULONG PoolPercent, PolicyFlags;
+  ULONGLONG GraphicsShareBytes, BaseSegmentBytes;
 } ADMISSION_POOL_RUNTIME;
 
 /* rc88: what one AdmissionPoolAllocSlab call cost, folded into the runtime
@@ -673,6 +677,13 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.PressureFailed = pool->Pressure.TimedOut;
     receipt.PressureFastFails = pool->Pressure.FastFails;
     receipt.ReservedAllocations = pool->ReservedAllocations;
+    receipt.GraphicsShareBytes = pool->GraphicsShareBytes;
+    receipt.BaseSegmentBytes = pool->BaseSegmentBytes;
+    receipt.PoolPercent = pool->PoolPercent;
+    receipt.PolicyPercent = pool->Policy.Percent;
+    receipt.PolicyMaxPercent = pool->Policy.MaxPercent;
+    receipt.PolicyCpuOnlyMiB = pool->Policy.CpuOnlyMiB;
+    receipt.PolicyFlags = pool->PolicyFlags;
     pool->StagedPressure = pressure;
     pool->StagedSlabs = pool->Slabs.Stats.Slabs;
     pool->StagedGranules = stats->CommittedGranules;
@@ -1274,14 +1285,15 @@ static PKEVENT AdmissionPoolOpenEvent(PCWSTR Name) {
  * VidMm page before lifetime reservations consume the entire normal pool.
  * Do not lower ReserveCap alone: paging may use every advertised byte.
  * Default and the T8 growth gate are unchanged. */
-static ULONGLONG AdmissionPoolSegmentBytes(ULONGLONG RamBytes,
-                                          ULONGLONG WindowBytes,
-                                          ULONGLONG BrokerBytes,
-                                          BOOLEAN HalfSize,
-                                          BOOLEAN ThreeQuarter,
-                                          ULONGLONG ApertureReserve) {
-  ULONGLONG bytes = AdmissionPoolDemandSegmentBytesReserve(
-      RamBytes, WindowBytes, BrokerBytes, ApertureReserve);
+static ULONGLONG AdmissionPoolSegmentBytesShare(ULONGLONG RamBytes,
+                                               ULONGLONG WindowBytes,
+                                               ULONGLONG BrokerBytes,
+                                               BOOLEAN HalfSize,
+                                               BOOLEAN ThreeQuarter,
+                                               ULONGLONG ApertureReserve,
+                                               ULONGLONG ShareBytes) {
+  ULONGLONG bytes = AdmissionPoolDemandSegmentBytesShare(
+      RamBytes, WindowBytes, BrokerBytes, ApertureReserve, ShareBytes);
   if (HalfSize && bytes != 0ULL) {
     bytes = (bytes / 2ULL) & ~(ADMISSION_POOL_DEMAND_SIZE_STEP - 1ULL);
     if (bytes < ADMISSION_POOL_DEMAND_MIN_BYTES)
@@ -1297,6 +1309,18 @@ static ULONGLONG AdmissionPoolSegmentBytes(ULONGLONG RamBytes,
       bytes = ADMISSION_POOL_DEMAND_MIN_BYTES;
   }
   return bytes;
+}
+
+/* The pre-rc109 size: the default graphics formula alone. */
+static ULONGLONG AdmissionPoolSegmentBytes(ULONGLONG RamBytes,
+                                          ULONGLONG WindowBytes,
+                                          ULONGLONG BrokerBytes,
+                                          BOOLEAN HalfSize,
+                                          BOOLEAN ThreeQuarter,
+                                          ULONGLONG ApertureReserve) {
+  return AdmissionPoolSegmentBytesShare(RamBytes, WindowBytes, BrokerBytes,
+      HalfSize, ThreeQuarter, ApertureReserve,
+      AdmissionPoolGraphicsShareBytes(RamBytes, NULL));
 }
 
 /* Device key, once at PASSIVE_LEVEL before the segment is published.
@@ -1478,6 +1502,91 @@ static ULONGLONG AdmissionPoolPressureBudgetMs(ADMISSION_CONTEXT *Context) {
   return budget;
 }
 
+/* rc109: one REG_DWORD of an open key; FALSE when absent or another type. */
+static BOOLEAN AdmissionPoolReadDword(HANDLE Key, PCWSTR Name, ULONG *Value) {
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  RtlInitUnicodeString(&name, Name);
+  if (!NT_SUCCESS(ZwQueryValueKey(Key, &name, KeyValuePartialInformation,
+                                  value, sizeof(data.Buffer), &bytes)) ||
+      value->Type != REG_DWORD || value->DataLength != sizeof(ULONG))
+    return FALSE;
+  *Value = *(const ULONG *)value->Data;
+  return TRUE;
+}
+
+/* rc109: the machine policy VidMm sized TotalSystemMemoryAvailableForGraphics
+ * from (render_pool_demand.h; dxgmms2 RVA 0xaa3c8 reads the same values from
+ * the same key, once, when it initializes). VidMm keeps what it read at boot,
+ * so a key written since this boot began (LastWriteTime after
+ * now - interrupt time, which counts sleep) or whose time cannot be read is
+ * marked WrittenAfterBoot: the share then never grows past the default one.
+ * Flags: ADMISSION_POOL_POLICY_FLAG_*. PASSIVE_LEVEL. */
+static VOID AdmissionPoolGraphicsPolicyRead(ADMISSION_POOL_GRAPHICS_POLICY *Policy,
+                                            ULONG *Flags) {
+  UNICODE_STRING path;
+  OBJECT_ATTRIBUTES attributes;
+  HANDLE key = NULL;
+  ULONG value = 0u, bytes = 0u;
+  LARGE_INTEGER now;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_BASIC_INFORMATION) + 64u * sizeof(WCHAR)];
+  } info;
+  PKEY_BASIC_INFORMATION basic = (PKEY_BASIC_INFORMATION)info.Buffer;
+  NTSTATUS status;
+  AdmissionPoolGraphicsPolicyDefault(Policy);
+  *Flags = 0u;
+  RtlInitUnicodeString(&path,
+      L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\"
+      L"GraphicsDrivers\\MemoryManager");
+  InitializeObjectAttributes(&attributes, &path,
+                             OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (!NT_SUCCESS(ZwOpenKey(&key, KEY_QUERY_VALUE, &attributes))) return;
+  *Flags |= ADMISSION_POOL_POLICY_FLAG_KEY;
+  if (AdmissionPoolReadDword(key, L"SystemPartitionCommitLimitPercentage", &value)) {
+    Policy->Percent = value;
+    *Flags |= ADMISSION_POOL_POLICY_FLAG_PERCENT;
+  }
+  if (AdmissionPoolReadDword(key, L"SystemPartitionCommitLimitPercentageMax", &value))
+    Policy->MaxPercent = value;
+  if (AdmissionPoolReadDword(key, L"SystemPartitionCpuOnlyMemory", &value))
+    Policy->CpuOnlyMiB = value;
+  RtlZeroMemory(&info, sizeof(info));
+  status = ZwQueryKey(key, KeyBasicInformation, basic, sizeof(info.Buffer), &bytes);
+  KeQuerySystemTime(&now);
+  if ((!NT_SUCCESS(status) && status != STATUS_BUFFER_OVERFLOW) ||
+      basic->LastWriteTime.QuadPart >=
+          now.QuadPart - (LONGLONG)KeQueryInterruptTime()) {
+    Policy->WrittenAfterBoot = 1u;
+    *Flags |= ADMISSION_POOL_POLICY_FLAG_AFTER_BOOT;
+  }
+  ZwClose(key);
+}
+
+/* rc109: REG_DWORD Wom1PoolPercent (device key, render_pool_demand.h);
+ * absent or not a REG_DWORD: ADMISSION_POOL_PERCENT_DEFAULT; 0: kill switch. */
+static ULONG AdmissionPoolPercent(ADMISSION_CONTEXT *Context, ULONG *Flags) {
+  HANDLE key = NULL;
+  ULONG percent = ADMISSION_POOL_PERCENT_DEFAULT, value = 0u;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return percent;
+  if (AdmissionPoolReadDword(key, L"Wom1PoolPercent", &value)) {
+    percent = value > 100u ? 100u : value;
+    *Flags |= ADMISSION_POOL_POLICY_FLAG_POOL_PERCENT;
+  }
+  ZwClose(key);
+  return percent;
+}
+
 /* RC13: freeze the experimental placement policy before allocation creation. */
 static BOOLEAN AdmissionSysmemSpillEnabled(ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;
@@ -1538,14 +1647,26 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   ADMISSION_POOL_DEMAND_OPS ops;
   ADMISSION_POOL_RUNTIME *pool;
   ULONGLONG ram = AdmissionPoolRamBytes();
-  ULONGLONG bytes = AdmissionPoolSegmentBytes(ram, Window->RequestedBytes,
-      Context->PoolBrokerBytes, AdmissionPoolHalfSizeEnabled(Context),
-      AdmissionPoolThreeQuarterEnabled(Context),
-      AdmissionPoolApertureReserveHalfEnabled(Context) ?
-          ADMISSION_POOL_DEMAND_APERTURE_RESERVE_HALF :
-          ADMISSION_POOL_DEMAND_APERTURE_RESERVE);
-  ULONGLONG count = bytes / ADMISSION_POOL_DEMAND_GRANULE;
+  BOOLEAN halfSize = AdmissionPoolHalfSizeEnabled(Context);
+  BOOLEAN threeQuarter = AdmissionPoolThreeQuarterEnabled(Context);
+  ULONGLONG reserve = AdmissionPoolApertureReserveHalfEnabled(Context) ?
+      ADMISSION_POOL_DEMAND_APERTURE_RESERVE_HALF :
+      ADMISSION_POOL_DEMAND_APERTURE_RESERVE;
+  ADMISSION_POOL_GRAPHICS_POLICY policy;
+  ULONG policyFlags = 0u, percent;
+  ULONGLONG share, baseBytes, bytes, count;
   PHYSICAL_ADDRESS base;
+  /* rc109: the machine policy VidMm enforces bounds Wom1PoolPercent; the
+   * default formula alone (the kill switch) gives the base size. */
+  AdmissionPoolGraphicsPolicyRead(&policy, &policyFlags);
+  percent = AdmissionPoolPercent(Context, &policyFlags);
+  share = AdmissionPoolDemandShareBytes(ram, &policy, percent);
+  baseBytes = AdmissionPoolSegmentBytes(ram, Window->RequestedBytes,
+      Context->PoolBrokerBytes, halfSize, threeQuarter, reserve);
+  bytes = AdmissionPoolSegmentBytesShare(ram, Window->RequestedBytes,
+      Context->PoolBrokerBytes, halfSize, threeQuarter, reserve, share);
+  if (bytes < baseBytes) baseBytes = bytes; /* a lowered machine policy */
+  count = bytes / ADMISSION_POOL_DEMAND_GRANULE;
   if (bytes == 0ULL) {
     Window->Status = ADMISSION_POOL_WINDOW_DEMAND_TOO_SMALL;
     return FALSE;
@@ -1553,6 +1674,11 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   pool = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*pool), ADMISSION_POOL_TAG);
   if (pool == NULL) return FALSE;
   pool->RamBytes = ram;
+  pool->Policy = policy;
+  pool->PolicyFlags = policyFlags;
+  pool->PoolPercent = percent;
+  pool->GraphicsShareBytes = share;
+  pool->BaseSegmentBytes = baseBytes;
   pool->Granules = ExAllocatePool2(POOL_FLAG_NON_PAGED,
       (SIZE_T)(count * sizeof(*pool->Granules)), ADMISSION_POOL_TAG);
   pool->Candidates = ExAllocatePool2(POOL_FLAG_NON_PAGED,

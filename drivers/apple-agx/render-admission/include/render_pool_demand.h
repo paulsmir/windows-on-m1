@@ -107,7 +107,7 @@ typedef struct _ADMISSION_POOL_RESERVE_FAILURE {
   unsigned long long PrivateGranules;
 } ADMISSION_POOL_RESERVE_FAILURE;
 
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 14u /* v14: floor wait */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 15u /* v15: graphics policy */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -173,6 +173,16 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned long long PressureBudgetMs, PressureWaits, PressureWaitMs;
   unsigned long long PressureWaitMsMax, PressureRecovered, PressureFailed;
   unsigned long long PressureFastFails, ReservedAllocations;
+  /* v15 (rc109): the graphics share segment 3 was sized from
+   * (AdmissionPoolDemandShareBytes), the size the default formula alone
+   * gives (Wom1PoolPercent=0, after HalfSize/Fraction), the Wom1PoolPercent
+   * used, the MemoryManager values read (defaults when absent),
+   * ADMISSION_POOL_POLICY_FLAG_*, and growth refused past BaseSegmentBytes
+   * for want of HighMemoryCondition (ADMISSION_POOL_REFUSAL_HEADROOM). */
+  unsigned long long GraphicsShareBytes, BaseSegmentBytes;
+  unsigned int PoolPercent, PolicyPercent, PolicyMaxPercent, PolicyCpuOnlyMiB;
+  unsigned int PolicyFlags, PolicyReserved;
+  unsigned long long HeadroomRefusals;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.
@@ -261,6 +271,13 @@ unsigned long long AdmissionPoolGraphicsShareBytes(
  * (SystemPartitionCommitLimitPercentage) allows it. */
 #define ADMISSION_POOL_PERCENT_DEFAULT 75u
 #define ADMISSION_POOL_PERCENT_KILL 0u
+/* Receipt v15 PolicyFlags: the MemoryManager key exists, it holds
+ * SystemPartitionCommitLimitPercentage, it was written after boot (or its
+ * time is unreadable), the device key holds Wom1PoolPercent. */
+#define ADMISSION_POOL_POLICY_FLAG_KEY 1u
+#define ADMISSION_POOL_POLICY_FLAG_PERCENT 2u
+#define ADMISSION_POOL_POLICY_FLAG_AFTER_BOOT 4u
+#define ADMISSION_POOL_POLICY_FLAG_POOL_PERCENT 8u
 unsigned long long AdmissionPoolDemandShareBytes(
     unsigned long long RamBytes, const ADMISSION_POOL_GRAPHICS_POLICY *Policy,
     unsigned int PoolPercent);

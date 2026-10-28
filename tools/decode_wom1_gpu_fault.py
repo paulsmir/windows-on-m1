@@ -409,11 +409,12 @@ def decode_pool(data):
     v11 (rc86) appends the creation cost split and the empty-slab cache;
     v12 (rc88) appends the background slab prefill and failed-attempt time;
     v13 (rc93) appends the large-page cache misses and the per-shape slab time;
-    v14 (rc104) appends the floor wait and the live promised allocations."""
+    v14 (rc104) appends the floor wait and the live promised allocations;
+    v15 (rc109) appends the graphics policy segment 3 was sized from."""
     if len(data) < 16:
         raise ValueError('truncated Wom1M2PoolDemand header')
     version, size, granule, last_window = struct.unpack_from('<4I', data)
-    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576, 12: 608, 13: 640, 14: 704}.get(version) or len(data) != size or granule != 65536:
+    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576, 12: 608, 13: 640, 14: 704, 15: 752}.get(version) or len(data) != size or granule != 65536:
         raise ValueError('unsupported Wom1M2PoolDemand version, length or granule')
     names = (
         'segment_bytes', 'committed_granules', 'peak_granules', 'commits',
@@ -436,7 +437,7 @@ def decode_pool(data):
                   event_sample={7: None, 8: 'post_failure', 9: 'admission_decision',
                                 10: 'admission_decision', 11: 'admission_decision',
                                 12: 'admission_decision', 13: 'admission_decision',
-                                14: 'admission_decision'}[version])
+                                14: 'admission_decision', 15: 'admission_decision'}[version])
     if version >= 8:
         result['floor_refusals'], = struct.unpack_from('<Q', data, 304)
         fields = ('request_bytes', 'reserved_bytes', 'held_bytes', 'committed_bytes',
@@ -500,6 +501,25 @@ def decode_pool(data):
                            'skipped the wait in the fast-fail window; reserved_allocations = '
                            'live allocations holding reserved_bytes')
         result['pressure_wait'] = wait
+    result['graphics_policy'] = None
+    if version >= 15:
+        share, base = struct.unpack_from('<2Q', data, 704)
+        pool_percent, percent, max_percent, cpu_only, flags, _reserved = struct.unpack_from('<6I', data, 720)
+        headroom, = struct.unpack_from('<Q', data, 744)
+        result['graphics_policy'] = dict(
+            graphics_share_bytes=share, base_segment_bytes=base,
+            extension_bytes=max(result['segment_bytes'] - base, 0),
+            pool_percent=pool_percent,
+            system_partition_commit_limit_percentage=percent,
+            system_partition_commit_limit_percentage_max=max_percent,
+            system_partition_cpu_only_memory_mib=cpu_only,
+            memory_manager_key=bool(flags & 1), percentage_set=bool(flags & 2),
+            written_after_boot=bool(flags & 4), pool_percent_set=bool(flags & 8),
+            headroom_refusals=headroom,
+            meaning=('rc109: segment_bytes = MIN(Wom1PoolPercent of RAM, VidMm share) - aperture '
+                     'reserve, capped by window/broker; base_segment_bytes = the default-formula '
+                     'size (Wom1PoolPercent=0); growth past it needs HighMemoryCondition '
+                     '(headroom_refusals)'))
     return result
 
 

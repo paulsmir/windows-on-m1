@@ -44,7 +44,11 @@ int main(void) {
                    "v12 prefix changed");
     _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, PressureBudgetMs) == 640,
                    "v13 prefix changed");
-    _Static_assert(sizeof(r) == 704, "v14 wire ABI changed");
+    _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, GraphicsShareBytes) == 704,
+                   "v14 prefix changed");
+    _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, HeadroomRefusals) == 744,
+                   "v15 layout changed");
+    _Static_assert(sizeof(r) == 752, "v15 wire ABI changed");
     r.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION; r.Bytes = sizeof(r);
     r.GranuleBytes = 65536; r.LastWindowResult = 9;
     r.SegmentBytes = 1409286144ULL;
@@ -81,6 +85,10 @@ int main(void) {
     r.PressureBudgetMs = 2000; r.PressureWaits = 5; r.PressureWaitMs = 1450;
     r.PressureWaitMsMax = 600; r.PressureRecovered = 4; r.PressureFailed = 1;
     r.PressureFastFails = 2; r.ReservedAllocations = 812;
+    r.GraphicsShareBytes = 5414095872ULL; r.BaseSegmentBytes = 3288334336ULL;
+    r.PoolPercent = 75; r.PolicyPercent = 75; r.PolicyMaxPercent = 80;
+    r.PolicyCpuOnlyMiB = 16384; r.PolicyFlags = 1u | 2u | 8u;
+    r.HeadroomRefusals = 6;
     return fwrite(&r, sizeof(r), 1, stdout) == 1 ? 0 : 1;
 }
 '''
@@ -92,7 +100,20 @@ int main(void) {
                             str(src), '-o', str(exe)], check=True)
             raw = subprocess.check_output([str(exe)])
         got = decoder.decode_pool(raw)
-        self.assertEqual(got['version'], 14)
+        self.assertEqual(got['version'], 15)
+        policy = {k: v for k, v in got['graphics_policy'].items() if k != 'meaning'}
+        self.assertEqual(policy, dict(
+            graphics_share_bytes=5414095872, base_segment_bytes=3288334336,
+            extension_bytes=0, pool_percent=75,
+            system_partition_commit_limit_percentage=75,
+            system_partition_commit_limit_percentage_max=80,
+            system_partition_cpu_only_memory_mib=16384, memory_manager_key=True,
+            percentage_set=True, written_after_boot=False, pool_percent_set=True,
+            headroom_refusals=6))
+        v14 = bytearray(raw[:704])
+        struct.pack_into('<II', v14, 0, 14, 704)
+        self.assertIsNone(decoder.decode_pool(v14)['graphics_policy'])
+        self.assertEqual(decoder.decode_pool(v14)['pressure_wait']['budget_ms'], 2000)
         self.assertEqual({k: v for k, v in got['pressure_wait'].items() if k != 'meaning'},
                          dict(budget_ms=2000, waits=5, wait_ms=1450, wait_ms_max=600,
                               recovered=4, failed=1, fast_fails=2,

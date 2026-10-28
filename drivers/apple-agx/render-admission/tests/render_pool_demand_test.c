@@ -496,6 +496,9 @@ static void test_graphics_policy(void)
     assert(AdmissionPoolDemandSegmentBytesShare(j313, win, broker,
                ADMISSION_POOL_DEMAND_APERTURE_RESERVE,
                AdmissionPoolDemandShareBytes(j313, &policy, 75)) == 2496 * MiB);
+    /* Even with no aperture reserve the 8 MiB margin holds. */
+    assert(AdmissionPoolDemandSegmentBytesShare(8 * GiB, win, 8 * GiB, 0,
+                                                GiB + 4 * MiB) == 960 * MiB);
     /* Unknown RAM keeps the validated 1 GiB. */
     assert(AdmissionPoolDemandSegmentBytesShare(0, win, broker,
                ADMISSION_POOL_DEMAND_APERTURE_RESERVE, 0) == GiB);

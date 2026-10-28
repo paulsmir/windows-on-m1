@@ -115,7 +115,8 @@ int main(void) {
         The opt-in must never enlarge a broker/window/RAM limit or alter default.
         """
         source = (RENDER / 'src/pool_windows.c').read_text()
-        policy = function(source, 'AdmissionPoolSegmentBytes')
+        policy = (function(source, 'AdmissionPoolSegmentBytesShare') + '\n' +
+                  function(source, 'AdmissionPoolSegmentBytes'))
         body = r'''
 #include "render_pool_demand.h"
 #include "render_pool_slab.h"
@@ -233,12 +234,14 @@ int main(void) {
         """
         source = (RENDER / 'src/pool_windows.c').read_text()
         start = function(source, 'AdmissionPoolDemandStart')
-        self.assertIn('ULONGLONG bytes = AdmissionPoolSegmentBytes(', start)
+        # rc109: the published size follows the VidMm-bounded share.
+        self.assertIn('bytes = AdmissionPoolSegmentBytesShare(', start)
+        self.assertIn('halfSize, threeQuarter, reserve, share);', start)
         self.assertIn('AdmissionPoolHalfSizeEnabled(Context)', start)
         self.assertIn('AdmissionPoolThreeQuarterEnabled(Context)', start)
         self.assertIn('AdmissionPoolApertureReserveHalfEnabled(Context) ?', start)
-        self.assertIn('ULONGLONG count = bytes / ADMISSION_POOL_DEMAND_GRANULE;', start)
+        self.assertIn('count = bytes / ADMISSION_POOL_DEMAND_GRANULE;', start)
         self.assertIn('pool->Slabs.ReserveCap = count;', start)
         self.assertIn('Context->PoolBytes = bytes;', start)
-        self.assertLess(start.index('AdmissionPoolSegmentBytes('),
+        self.assertLess(start.index('AdmissionPoolSegmentBytesShare('),
                         start.index('ExAllocatePool2('))
