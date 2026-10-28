@@ -65466,3 +65466,18 @@ EXP2016 HARDWARE ACTUAL (2026-10-28): rc84 Wom1GpuPerf receipt.
   update_ts is live.
 - Conclusion: DVFS reaches and holds the top state during rendering, with no power limiting (8.4 W against a 19.6 W budget). DVFS is not the gap. The J313 GPU has 7 cores (CoreMask 0xfe).
 - Verdict: rc84 1289e570, ee89db79, 4f354e81 and 3c0fcd3e validated (receipt).
+
+EXP2017 HARDWARE BEFORE 2026-10-28T03:13:15Z:
+- WHY: the score counts frames in a fixed window, and the first-frame stall is in it. rc85 decoded the stall:
+  - slow runs: one 129 MiB BC texture bind takes 25-31 s under memory pressure;
+  - always: 1.4-2.2 s of lazy PSO compiles and 1.5-4.2 s of shadow copies.
+- ATOMIC CONTRACT: none; A/B switches APPLE_AGX_D3D12_STAGED_DISCARD=0, APPLE_AGX_D3D12_EAGER_PSO=0.
+- Expected:
+  - measure-d3d12-pso-eager rows in the load phase; no "Shadowing" in the stall;
+  - stall 2.5-5.5 s shorter;
+  - measure-gpuva-map-time / measure-gpuva-paging-wait name the part of any slow bind (FHD 200k is likely to show it).
+- Failure criteria: a wrong image, removal.
+- Recovery: rec2017h.
+- Hashes: sys e6153ce3894e, UmdArm64 d53ab6389c5c, UmdX64 53fcc5380011, Umd32 a659a64dafa3; manifest 77a69f7b098e, hardware-manifest 7958f32e4fac; probe2017.sh ae1d56dfa2cf (PROBE_LINT_OK); visible recovery rec2017h 98d5068458ba1ff2; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2017h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2017-startup/run2017.sh.
