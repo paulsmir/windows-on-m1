@@ -66154,3 +66154,24 @@ EXP2041 HARDWARE BEFORE 2026-10-28T13:17:28Z:
 - Hashes: sys f6d41a8318c2, UmdArm64 07cff3ad1040, UmdX64 9ded44a513bd, Umd32 862de7803cd0; manifest ee5f8b9d06fb, hardware-manifest e0d8941a84d0; probe2041.sh 3447c658305e (PROBE_LINT_OK); visible recovery rec2041h f3c8c78089024270; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2041h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2041-depth2-kick2/run2041.sh.
+
+EXP2041 HARDWARE ACTUAL (2026-10-28): **six back-to-back apps with no failure. FHD 100k 4233 (best). The rc102 PlanJob fix boots. rc104's wait was never triggered.**
+
+| App | Run | Score |
+|---|---|---|
+| a | HD 50k | 6684 |
+| b | FHD 100k | **4233** / 25.3 FPS |
+| c | HD 50k | 6651 |
+| d | FHD 100k | 3997 |
+| e | FHD 100k | 3919 |
+| f | FHD 100k | 3847 |
+
+- No removal and no fault. The 5th app (EXP2033e's position) completed.
+- Wom1M2PoolDemand v14 after each app:
+  - reserve_failures 0, floor_refusals 0, pressure_wait waits 0 (budget 2000 ms): LowMemoryCondition never fired this boot, so rc104's wait was not exercised;
+  - reserved_bytes 201 → 224 → 236 MB, then flat at 236 MB;
+  - reserved_allocations 838 → 908 → 989, then flat: no leak.
+- Verdict:
+  - The rc102 fix 0ee5dfe1 is confirmed (an rc102 package boots and runs, with Kick off).
+  - rc104 is not yet hardware-tested (no pressure occurred).
+  - FHD best is now 4233.
