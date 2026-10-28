@@ -65311,3 +65311,14 @@ EXP2011 HARDWARE BEFORE 2026-10-28T00:23:10Z:
 - Hashes: sys 9b680406568e, UmdArm64 1290146d9da3, UmdX64 3a37126af645, Umd32 2215c1a3d239; manifest 9b055aa1f6f4, hardware-manifest 5f1590de4c64; probe2011.sh 75182a90fd57 (PROBE_LINT_OK); visible recovery rec2011h 390cbe5623b187ba; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2011h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2011-tvb-grow/run2011.sh.
+
+EXP2011 HARDWARE ACTUAL (2026-10-28): **PASS, new best FHD**. rc80 TVB growth.
+- HD 50k: 5781 / 34.6 FPS (EXP2010: 5820). FHD 100k: **3550 / 21.2 FPS** (EXP2010: 3371; macOS about 7700, a 2.2x gap).
+- No removal.
+- HD breakdown, EXP2010 → EXP2011:
+  - partials 4 → **0**;
+  - rc_ta_ms 3.89 → 1.95; render-compute span 6.83 → 5.82;
+  - but c_kick_ms 2.05 → 2.61 and rc_prelude_kick_ms 1.95 → 2.26: the per-job kick grew by about 0.1 ms per job;
+  - net frame 25.93 → 25.69.
+- The per-job cost now scales with the TVB size (suspect: a per-job proof of all heap blocks). Handed to rc81.
+- Verdict: rc80 8c83d4da, 184ce894, 2835ac1b, f927f1ca and 7c1519f2 validated: the firmware accepts a TVB over 32 blocks.
