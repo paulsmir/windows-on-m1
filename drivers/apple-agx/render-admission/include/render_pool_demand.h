@@ -213,6 +213,66 @@ unsigned long long AdmissionPoolDemandSegmentBytesReserve(
     unsigned long long RamBytes, unsigned long long WindowBytes,
     unsigned long long BrokerBytes, unsigned long long ApertureReserve);
 
+/* rc109 (EXP2046: FHD 200k outgrew the 3136 MiB segment). The 50% is not
+ * this driver's choice: the guest's dxgmms2 (26200, sha256 abeb2c41...,
+ * RVA 0xe4438-0xe448c) refuses a PopulatedFromSystemMemory segment larger
+ * than VidMm's shared-system figure less 8 MiB (debug text "Driver
+ * dedicated too much system memory for video, system policy violated.",
+ * STATUS_UNSUCCESSFUL), so the adapter does not start. That figure
+ * (RVA 0x74830) is TotalSystemMemoryAvailableForGraphics less the dedicated
+ * system memory already counted (none before segment 3: segment 2 is
+ * PopulatedByReservedDDRByFirmware). VidMm derives it from machine policy it
+ * reads once, at its own initialization (RVA 0xaa3c8, RtlQueryRegistryValues
+ * on HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\MemoryManager):
+ *   P = SystemPartitionCommitLimitPercentage clamped to [5, 100] (default 50)
+ *   M = MAX(P, MIN(SystemPartitionCommitLimitPercentageMax, 100)) (default 80)
+ *   C = SystemPartitionCpuOnlyMemory, MiB (default 16384)
+ *   Share = MIN(RAM * M%, MAX(RAM - C, RAM * P%))
+ * which is Microsoft's documented formula with the defaults ("Calculating
+ * graphics memory": dedicated system memory "can't be greater than"
+ * TotalSystemMemoryAvailableForGraphics). VidMm's other path (a WIL feature
+ * flag off) is RAM * P%, never larger than the above. */
+#define ADMISSION_POOL_POLICY_PERCENT 50u
+#define ADMISSION_POOL_POLICY_MAX_PERCENT 80u
+#define ADMISSION_POOL_POLICY_CPU_ONLY_MIB 16384u
+#define ADMISSION_POOL_POLICY_MIN_PERCENT 5u
+#define ADMISSION_POOL_POLICY_SEGMENT_MARGIN 0x800000ULL /* dxgmms2: 8 MiB */
+typedef struct _ADMISSION_POOL_GRAPHICS_POLICY {
+  /* Registry values as read (defaults when absent); clamped when used. */
+  unsigned int Percent, MaxPercent, CpuOnlyMiB;
+  /* Nonzero: the MemoryManager key was written after this boot began, so
+   * VidMm may still use older values; the share then never exceeds the
+   * default one. */
+  unsigned int WrittenAfterBoot;
+} ADMISSION_POOL_GRAPHICS_POLICY;
+void AdmissionPoolGraphicsPolicyDefault(ADMISSION_POOL_GRAPHICS_POLICY *Policy);
+/* VidMm's TotalSystemMemoryAvailableForGraphics for Policy (0: defaults). */
+unsigned long long AdmissionPoolGraphicsShareBytes(
+    unsigned long long RamBytes, const ADMISSION_POOL_GRAPHICS_POLICY *Policy);
+
+/* rc109: REG_DWORD Wom1PoolPercent (device key) asks for segment 3 plus the
+ * aperture reserve to cover this percentage of RAM, like macOS letting the
+ * GPU working set reach about 2/3-3/4 of RAM (recommendedMaxWorkingSetSize).
+ * The result never exceeds the share VidMm enforces (above), never falls
+ * below the default share, and 0 is the kill switch: the pre-rc109 size from
+ * the default formula alone. Absent: ADMISSION_POOL_PERCENT_DEFAULT; above
+ * 100: 100. With Windows' default policy (50%) every value gives the
+ * pre-rc109 size; the segment grows only where the machine policy
+ * (SystemPartitionCommitLimitPercentage) allows it. */
+#define ADMISSION_POOL_PERCENT_DEFAULT 75u
+#define ADMISSION_POOL_PERCENT_KILL 0u
+unsigned long long AdmissionPoolDemandShareBytes(
+    unsigned long long RamBytes, const ADMISSION_POOL_GRAPHICS_POLICY *Policy,
+    unsigned int PoolPercent);
+/* As SegmentBytesReserve, from a graphics share (AdmissionPoolDemandShareBytes)
+ * instead of the default formula; the result is at most ShareBytes less
+ * ADMISSION_POOL_POLICY_SEGMENT_MARGIN. RamBytes 0 (unknown) keeps
+ * ADMISSION_POOL_DEMAND_DEFAULT_BYTES. */
+unsigned long long AdmissionPoolDemandSegmentBytesShare(
+    unsigned long long RamBytes, unsigned long long WindowBytes,
+    unsigned long long BrokerBytes, unsigned long long ApertureReserve,
+    unsigned long long ShareBytes);
+
 /* Granules and CandidateList hold Count zeroed entries each. */
 int AdmissionPoolDemandInit(ADMISSION_POOL_DEMAND *Pool,
                             ADMISSION_POOL_GRANULE *Granules,
