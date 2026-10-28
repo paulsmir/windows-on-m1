@@ -249,6 +249,8 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ULONGLONG ReserveCalls, ReserveUs, ReserveUsMax;
   ULONGLONG LeaseZeroCount, LeaseZeroUs, LeaseZeroSkips;
   ULONGLONG CacheDrops;
+  /* rc86: time of the last reservation; the empty-slab cache ages from it. */
+  ULONGLONG LastReserveMs;
 } ADMISSION_POOL_RUNTIME;
 
 static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
@@ -265,6 +267,15 @@ static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
   ((ULONGLONG)ADMISSION_POOL_SLAB_SLOTS * ADMISSION_POOL_DEMAND_GRANULE)
 /* Empty slabs kept for the next commit. */
 #define ADMISSION_POOL_SPARE_SLABS 1ULL
+/* rc86 (EXP2015b: 3116 slabs taken from and 3030 returned to Windows for a
+ * peak of 1632; one 128 MiB creation takes 64 slabs, 0.7-2.1 s): while
+ * HighMemoryCondition is set and LowMemoryCondition clear, keep up to one
+ * 128 MiB creation's worth of empty slabs for the next reservation. The
+ * M2-f7c/RC53 early reclaim drops the whole cache as soon as HighMemory
+ * clears (AdmissionPoolReclaimLocked), and the periodic worker returns it
+ * to ADMISSION_POOL_SPARE_SLABS once no reservation came for
+ * ADMISSION_POOL_RELEASE_DELAY_MS. Promised backing is unchanged. */
+#define ADMISSION_POOL_CACHE_SLABS 64ULL
 C_ASSERT(ADMISSION_POOL_MAX_RUN <= 1024ULL);
 
 /* A 2 MiB slab of fresh zeroed pages: one contiguous 2 MiB chunk when
@@ -546,8 +557,9 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     pool->StagedReserved = pool->Slabs.Reserved;
     pool->StagedNativeBytes = pool->NativeStagingBytes;
   }
-  /* Idle granules wait for the periodic reclaim. */
-  if (pool->Demand.Candidates != 0u &&
+  /* Idle granules and cached empty slabs wait for the periodic reclaim. */
+  if ((pool->Demand.Candidates != 0u ||
+       AdmissionPoolSlabHasSurplus(&pool->Slabs, ADMISSION_POOL_SPARE_SLABS)) &&
       InterlockedCompareExchange(&pool->Stopping, 0, 0) == 0 &&
       InterlockedCompareExchange(&pool->TimerArmed, 1, 0) == 0) {
     LARGE_INTEGER due;
@@ -640,6 +652,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
   ++pool->ReserveCalls;
   pool->ReserveUs += us;
   if (us > pool->ReserveUsMax) pool->ReserveUsMax = us;
+  pool->LastReserveMs = AdmissionPoolNowMs();
   AdmissionMemoryPoolUnlock(Context);
   return reserved;
 }
@@ -652,6 +665,9 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnreserve(
   AdmissionPoolSlabUnreserve(&pool->Slabs,
       (Bytes + ADMISSION_POOL_DEMAND_GRANULE - 1ULL) /
           ADMISSION_POOL_DEMAND_GRANULE);
+  /* rc86: the cache exists only in high memory; under the M2-f7c early
+   * reclaim condition the freed surplus goes back to Windows now. */
+  if (AdmissionPoolShouldReclaim(pool)) AdmissionPoolReclaimLocked(pool);
   AdmissionMemoryPoolUnlock(Context);
 }
 
@@ -819,6 +835,16 @@ static VOID AdmissionPoolReclaimWork(_In_ PDEVICE_OBJECT Device,
       for (ULONGLONG i = 0ULL; i < demand->Candidates; ++i)
         demand->Granules[demand->CandidateList[i]].Busy = 0u;
       AdmissionPoolReclaimLocked(pool);
+      /* rc86: an idle cache goes back to Windows even in high memory. */
+      if (AdmissionPoolNowMs() - pool->LastReserveMs >=
+              ADMISSION_POOL_RELEASE_DELAY_MS &&
+          AdmissionPoolSlabHasSurplus(&pool->Slabs, ADMISSION_POOL_SPARE_SLABS)) {
+        ULONGLONG spare = pool->Slabs.SpareLimit;
+        ++pool->CacheDrops;
+        pool->Slabs.SpareLimit = ADMISSION_POOL_SPARE_SLABS;
+        AdmissionPoolSlabUnreserve(&pool->Slabs, 0ULL);
+        pool->Slabs.SpareLimit = spare;
+      }
       AdmissionMemoryPoolUnlock(pool->Context);
     }
   }
@@ -1114,7 +1140,7 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   pool->HighMemory = AdmissionPoolOpenEvent(L"\\KernelObjects\\HighMemoryCondition");
   pool->LowMemory = AdmissionPoolOpenEvent(L"\\KernelObjects\\LowMemoryCondition");
   pool->Slabs.MayGrow = AdmissionPoolMayGrow;
-  pool->Slabs.SpareLimit = ADMISSION_POOL_SPARE_SLABS;
+  pool->Slabs.SpareLimit = ADMISSION_POOL_CACHE_SLABS;
   /* M2-f5: VidMm never places more than the segment. */
   pool->Slabs.ReserveCap = count;
   /* rc80: TVB window blocks lease raw granules beyond that promise. */

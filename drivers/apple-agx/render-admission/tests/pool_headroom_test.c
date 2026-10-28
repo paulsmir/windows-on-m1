@@ -36,7 +36,7 @@ typedef struct {
     ULONGLONG RefusalCounts[ADMISSION_POOL_REFUSAL_COUNT];
     ADMISSION_CONTEXT *Context;
     int WorkQueued, WorkPending, Stopping;
-    ULONGLONG ReserveCalls, ReserveUs, ReserveUsMax, CacheDrops;
+    ULONGLONG ReserveCalls, ReserveUs, ReserveUsMax, CacheDrops, LastReserveMs;
 } ADMISSION_POOL_RUNTIME;
 struct _ADMISSION_CONTEXT { ADMISSION_POOL_RUNTIME *PoolDemand; };
 static ADMISSION_POOL_RUNTIME pool;
@@ -480,7 +480,56 @@ static void test_over_cap_restore_uses_same_backing(void) {
     assert(allocations == 4 && releases == 4);
     assert(!pool.Slabs.Reserved && !pool.Slabs.Stats.Slabs);
 }
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * rc86 (EXP2015b: 3116 slabs allocated for a 1632-slab peak): in high memory
+ * a destroyed creation's empty slabs must serve the next one without asking
+ * Windows again, bounded by the cache size. The M2-f7c/RC53 early reclaim
+ * must still return every surplus slab as soon as HighMemory clears (on the
+ * destroy itself), an idle cache must age out, and live promises stay. */
+static void test_high_memory_slab_cache(void) {
+    ADMISSION_POOL_PLACEMENT owner = {0};
+    reset();
+    pool.Slabs.SpareLimit = ADMISSION_POOL_CACHE_SLABS;
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));     /* survivor */
+    assert(AdmissionMemoryPoolReserve(&context, 96 * G));
+    assert(AdmissionPoolDemandPlace(&pool.Demand, &owner, 32 * G, 96 * G) ==
+           AdmissionPoolPlaced);
+    assert(allocations == 4);
+    AdmissionPoolDemandUnplace(&pool.Demand, &owner);
+    AdmissionMemoryPoolReclaim(&context);
+    now += pool.Demand.ReleaseDelay;
+    AdmissionMemoryPoolReclaim(&context);                     /* aged out */
+    assert(pool.Demand.Stats.CommittedGranules == 0);
+    AdmissionMemoryPoolUnreserve(&context, 96 * G);
+    assert(releases == 0 && pool.Slabs.Stats.Slabs == 4);     /* cached */
+    assert(AdmissionMemoryPoolReserve(&context, 96 * G));
+    assert(allocations == 4 && pool.Slabs.Stats.ReserveNoGrowth >= 1);
+    /* HighMemory clears: the destroy returns all surplus at once. */
+    high = 0;
+    AdmissionMemoryPoolUnreserve(&context, 96 * G);
+    assert(releases == 3 && pool.Slabs.Stats.Slabs == 1 && pool.Slabs.Reserved == 32);
+    assert(pool.Slabs.SpareLimit == ADMISSION_POOL_CACHE_SLABS && pool.CacheDrops == 1);
+    /* High again: the cache refills from use and ages out when idle. */
+    high = 1;
+    assert(AdmissionMemoryPoolReserve(&context, 96 * G));
+    assert(allocations == 7);
+    AdmissionMemoryPoolUnreserve(&context, 96 * G);
+    assert(pool.Slabs.Stats.Slabs == 4);
+    worker_tick();
+    assert(pool.Slabs.Stats.Slabs == 4);                      /* recent use */
+    now += ADMISSION_POOL_RELEASE_DELAY_MS;
+    worker_tick();
+    assert(pool.Slabs.Stats.Slabs == 1); /* the promised slab is the spare */
+    assert(pool.Slabs.Reserved == 32 && pool.CacheDrops == 2);
+    /* The cache never holds more than its bound of empty slabs. */
+    reset();
+    pool.Slabs.SpareLimit = 2;
+    assert(AdmissionMemoryPoolReserve(&context, 128 * G));
+    AdmissionMemoryPoolUnreserve(&context, 128 * G);
+    assert(pool.Slabs.Stats.Slabs == 2 && releases == 2);
+}
 int main(void) {
+    test_high_memory_slab_cache();
     test_idle_worker_after_broker_release();
     test_idle_worker_keeps_all_release_guards();
     test_event_policy();
