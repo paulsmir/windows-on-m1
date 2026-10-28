@@ -66338,3 +66338,12 @@ EXP2047 HARDWARE BEFORE 2026-10-28T16:11:13Z:
 - Hashes: sys c989c8f7c19d, UmdArm64 dfde4c4583d0, UmdX64 190d7b24bcd4, Umd32 c20c3f11116b; manifest 829e7f04d08e, hardware-manifest ca97c600f1ef; probe2047.sh a62cb312ea2e (PROBE_LINT_OK); visible recovery rec2047h 1ccbdcbb964980ba; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1.
 - Recovery rec2047h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2047-kick4/run2047.sh.
+
+EXP2047 HARDWARE ACTUAL (2026-10-28): **first real depth-2 kick on hardware (max_in_flight 2), then a C→R build failure (recovered) and a later hang (0x116).**
+- HD 50k: the guest went down about 20 s in (NVMe guest reset, then PSCI RESET).
+- Wom1JobWindow: kicks 1, max_in_flight 2, compute_on_3d 1 (an R→C pair kicked), batch {1: 2981}.
+- Wom1JobWindowKickFail: fence 6355 behind 6354, C→R, line 5251, backend image_failed at build_step render_staged; g3_aborted.
+- Wom1GpuReset: 4 resets, 1 succeeded.
+  - The first reset, for the kick failure, succeeded: ended, last_aborted 0x18d3. The rc102 abort path works.
+  - The next three timed out in quiesce on fence 0x1994 (PostResume wait 1000 ms, compute ring idle, no events), then 0x116.
+- Verdict: progress (a kick reached the firmware with 2 jobs in flight). The C→R render build failure and the 0x1994 hang go back to rc102. Kick stays off by default.
