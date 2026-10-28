@@ -583,21 +583,6 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStop(
   }
 
   if (pendingFence != 0u) {
-    if (Runtime->SuccessorPending) {
-      /* rc102: the stopped queues hold neither job any more. */
-      if (!Runtime->Io.Retire(Runtime->Io.Context,
-                              Runtime->SuccessorSubmission.Submission.Fence,
-                              Runtime->SuccessorSubmission.Submission.NodeOrdinal,
-                              Runtime->SuccessorSubmission.Submission.EngineOrdinal)) {
-        Runtime->Phase = AppleAgxBackendRuntimeFailed;
-        return AppleAgxBackendRuntimeResultCleanupFailed;
-      }
-      AppleAgxBackendZero(&Runtime->SuccessorSubmission,
-                          (APPLE_AGX_U32)sizeof(Runtime->SuccessorSubmission));
-      AppleAgxBackendZero(&Runtime->SuccessorJob,
-                          (APPLE_AGX_U32)sizeof(Runtime->SuccessorJob));
-      Runtime->SuccessorPending = APPLE_AGX_FALSE;
-    }
     Runtime->TerminalPending = APPLE_AGX_TRUE;
     Runtime->TerminalCpuFlushed = APPLE_AGX_FALSE;
     Runtime->TerminalStatus = AppleAgxBackendCompletionCancelled;
@@ -608,6 +593,22 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStop(
       Runtime->Phase = AppleAgxBackendRuntimeFailed;
       return AppleAgxBackendRuntimeResultCleanupFailed;
     }
+  }
+  if (Runtime->SuccessorPending) {
+    /* rc102: the stopped queues hold the successor no more either; it is
+     * retired after the job it was kicked behind. */
+    if (!Runtime->Io.Retire(Runtime->Io.Context,
+                            Runtime->SuccessorSubmission.Submission.Fence,
+                            Runtime->SuccessorSubmission.Submission.NodeOrdinal,
+                            Runtime->SuccessorSubmission.Submission.EngineOrdinal)) {
+      Runtime->Phase = AppleAgxBackendRuntimeFailed;
+      return AppleAgxBackendRuntimeResultCleanupFailed;
+    }
+    AppleAgxBackendZero(&Runtime->SuccessorSubmission,
+                        (APPLE_AGX_U32)sizeof(Runtime->SuccessorSubmission));
+    AppleAgxBackendZero(&Runtime->SuccessorJob,
+                        (APPLE_AGX_U32)sizeof(Runtime->SuccessorJob));
+    Runtime->SuccessorPending = APPLE_AGX_FALSE;
   }
 
   if (Runtime->QueuesCreated) {
