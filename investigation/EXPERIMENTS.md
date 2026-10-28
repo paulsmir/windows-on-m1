@@ -65754,3 +65754,11 @@ EXP2029 HARDWARE BEFORE 2026-10-28T07:44:13Z:
 - Hashes: sys 682d67b4793e, UmdArm64 8880a5360a38, UmdX64 69f316d22ad6, Umd32 8162da7126d5; manifest 4b229c80b941, hardware-manifest c5b777084c0e; probe2029.sh 0c78e808c078 (PROBE_LINT_OK); visible recovery rec2029h f538732893d1adb9; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TdrDrillAllowed=1.
 - Recovery rec2029h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2029-tdr-rc92/run2029.sh.
+
+EXP2029 HARDWARE ACTUAL (2026-10-28): **not run; the host failed before Windows**.
+- Attempt 1: m1n1 hv.init raised "AGX G2 power broker mapping failed". The "retained backing guest RAM" line is missing, so the retained launch-memory check in `hv_agx_retained_platform.c` (launch_memory_valid) failed.
+  - The m1n1 base was 0x8040b4000, with the proxy heap at 0x80f00c000..0x81300c000; EXP2028 had 0x805f44000.
+  - Log: EXP2029-tdr-rc92/full-attempt1-broker-fail.log.
+- Retries (run2029 again, rec2029h AT_PROXY, legacy hidden recovery with a fresh chainload of m1n1 EXP377) failed in hv.init with "secondary CPU startup failed". This is the same state as REC-EXP970A–D, which only a physical SoC power cycle cleared (REC-EXP970E).
+- No driver result. The rc92 checkpoint moves to EXP2030.
+- Open: why the launch-memory check failed on attempt 1. The changing m1n1 base / heap layout is a candidate; this needs an m1n1 owner check.
