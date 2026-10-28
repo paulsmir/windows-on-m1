@@ -65358,3 +65358,19 @@ EXP2012 HARDWARE ACTUAL (2026-10-28): **PASS, new best HD**. rc81.
   - b167fa83 (thread) validated as neutral or positive;
   - 4c31203f validated (receipt).
 - Next KMD target: the render envelope build (270 µs per render) and the complete-to-kick gap.
+
+EXP2013 HARDWARE BEFORE 2026-10-28T01:18:26Z:
+- WHY:
+  - Asahi soft faults (fault_control 0xb, already in integration since EXP2007) make shader loads of unmapped memory return 0, which lets Mesa speculate loads;
+  - offline, GravityMark's lighting kernel bdb1944a goes from 215 to 207 GPRs, occupancy from 448 to 512;
+  - whether J313's firmware does this for shader data reads has never been tested (EXP2009's RC77D was refused in the UMD).
+- ATOMIC CONTRACT: none; the probe is a discriminator.
+- Expected:
+  - RC82A PASS removed=0 completed=7 guard_bad=0;
+  - no new Wom1GpuFault; Wom1SoftFaultState RegionC 0xb plus the SGX values;
+  - GravityMark about 6035 (switch off).
+- Failure criteria: a TDR or 0x116 (shader reads hard-fault; do not enable the switch); a G4 refusal (inconclusive).
+- Recovery: rec2013h with AT_PROXY.
+- Hashes: sys b051c3d762a9, UmdArm64 e1bf92365f44, UmdX64 026bd9992351, Umd32 06c300919f08; manifest f5687f45c8ad, hardware-manifest 831e595c5526; probe2013.sh 32543f13d567 (PROBE_LINT_OK); visible recovery rec2013h d2732cdd740fc63b; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultControlRead=1.
+- Recovery rec2013h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2013-soft-probe/run2013.sh.
