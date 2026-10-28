@@ -66105,3 +66105,14 @@ EXP2039 HARDWARE BEFORE 2026-10-28T12:42:42Z:
 - Hashes: sys 095a6a5a69c4, UmdArm64 352b2e29a984, UmdX64 5fcd34e43399, Umd32 81a025e992b7; manifest 4fc4b2546efe, hardware-manifest 342c27924882; probe2039.sh 3cbb4caa745d (PROBE_LINT_OK); visible recovery rec2039h da2cd921c31f1670; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1.
 - Recovery rec2039h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2039-depth2-kick/run2039.sh.
+
+EXP2039 HARDWARE ACTUAL (2026-10-28): **the wired depth-2 window (Kick=1) bugchecks 0x116 during boot. rc102 is rejected for now.**
+- Windows came up but bugchecked before SSH: the vUART shows an NVMe guest reset, then a PSCI RESET. Minidump 102826-14375-01: 0x116, p3 0xc0000483, p4 3.
+- Wom1GpuReset v4: 3 resets, 0 succeeded (ResetEngine ×2, then ResetFromTimeout). Each was quiesce **backend**, wait 0; active fence 0x63, completed 0x62, last_aborted 0.
+- **scheduler_faulted_at_entry = backend_platform_windows.c:5499 (85c9165f):** `AppleAgxBackendRuntimeSubmit` returned non-Ok for an early DWM job, so the depth-1 submit itself failed.
+- PostResume: no events, compute ring 0/0/0, poll_failure null. No Wom1JobWindow or timing receipts were exported.
+- Without Kick (EXP2035, Caps=1) the same boot works.
+- Verdict:
+  - rc102 breaks an ordinary submit when Kick=1. Analysis is back with rc102 (evidence in handoff/rc102/exp2039).
+  - Second hole: a failed backend submit makes the reset quiesce fail every time, so the result is 0x116 instead of a recovered TDR.
+  - Kick stays off (the default).
