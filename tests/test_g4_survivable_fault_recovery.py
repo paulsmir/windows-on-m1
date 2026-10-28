@@ -49,6 +49,10 @@ SHIM = r'''
 #include "apple_agx_submission.h"
 #include "apple_agx_backend_runtime.h"
 #include "render_gpu_fault.h"
+#include "render_job_window.h"
+/* rc102: the receipt of the wired depth-2 window (no successor here). */
+void AdmissionJobWindowReceiptReported(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
+                                       unsigned int Count) { (void)Receipt; (void)Count; }
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define TRUE 1
 #define FALSE 0
@@ -114,6 +118,9 @@ typedef struct {
   unsigned AheadReleasedFence, AheadFinishedFence;
   void *AheadManager;
   BOOLEAN AheadG4Native, AheadFinishedDropped;
+  /* rc102 depth-2 window (none kicked in this replay) */
+  unsigned Depth2KickedFence, Depth2BatchedFence, Depth2LastReported;
+  ADMISSION_JOB_WINDOW_RECEIPT Depth2Receipt;
 } ADMISSION_PLATFORM_RUNTIME;
 static unsigned notifications, dpcs, released, lock_depth, sync_fail;
 static unsigned timestamp_source_ok=1, timestamp_publish_ok=1;

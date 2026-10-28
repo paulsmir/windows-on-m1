@@ -261,7 +261,9 @@ class Depth2CapsWiring(unittest.TestCase):
         self.assertRegex(text, r'runtime->Depth2Capabilities = AdmissionJobWindowCapabilities\(\s*'
                                r'runtime->JobDepth2 \? 1u : 0u,\s*runtime->JobDepth2 &&\s*'
                                r'AdmissionPlatformSwitchEnabled\(Context, L"Wom1JobDepth2Caps"\)')
-        self.assertRegex(text, r'runtime->JobDepth2 = FALSE;\s*\n\s*runtime->Depth2Capabilities = 0u;\s*\n#endif')
+        # rc102: Wom1JobDepth2Kick (the wired window) is cleared with them
+        self.assertRegex(text, r'runtime->JobDepth2 = FALSE;\s*\n\s*runtime->Depth2Capabilities = 0u;\s*\n'
+                               r'\s*runtime->JobDepth2Kick = FALSE;\s*\n#endif')
         # the switch is read after (below) Wom1JobDepth2 in the build-ahead branch
         self.assertLess(text.index('L"Wom1JobDepth2")'), text.index('L"Wom1JobDepth2Caps"'))
 
@@ -273,8 +275,14 @@ class Depth2CapsWiring(unittest.TestCase):
         for forbidden in ('AppleAgxBackendRuntimeSubmit', 'Doorbell', 'BuildLeadingBarrier',
                           'AdmissionG4PendingAheadPromoteLocked', 'AppleAgxSchedulerActivateFence'):
             self.assertNotIn(forbidden, note)
-        # no path publishes a depth-2 leading Barrier yet (step 3/4)
-        self.assertNotIn('AppleAgxRenderSharedMemoryBuildLeadingBarrier', WORKER.read_text())
+        # rc102 (step 3/4): only a successor build publishes a leading
+        # Barrier (AdmissionBuildLeadBarrier, called under Plan->Successor)
+        text = WORKER.read_text()
+        self.assertEqual(text.count('AppleAgxRenderSharedMemoryBuildLeadingBarrier('), 1)
+        self.assertIn('AppleAgxRenderSharedMemoryBuildLeadingBarrier(',
+                      section(text, 'static APPLE_AGX_BACKEND_BOOL AdmissionBuildLeadBarrier('))
+        for call in re.finditer(r'AdmissionBuildLeadBarrier\(runtime', text):
+            self.assertIn('Plan->Successor', text[max(0, call.start() - 700):call.start()])
 
     def test_set_choice_of_the_compute_builds(self):
         text = WORKER.read_text()

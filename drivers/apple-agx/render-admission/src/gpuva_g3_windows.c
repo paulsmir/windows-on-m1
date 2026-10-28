@@ -3590,8 +3590,8 @@ Done:
   return injected;
 }
 
-NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
-    ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
+static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence, BOOLEAN successor) {
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
   APPLE_AGX_G4_SUBMIT_VIEW g4_view = {0};
@@ -3682,7 +3682,11 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
             context->GpuvaG3DmaBufferBytes)
       g4_valid = FALSE;
   }
-  if (state->ActiveProcess == NULL && !state->PrivateCompletionFence && !process->Poisoned &&
+  /* rc102: a successor joins the active job of its own process. */
+  if ((successor ? state->ActiveProcess == process && state->ActiveFence != 0u &&
+                       state->ActiveFence != fence && state->SuccessorFence == 0u
+                 : state->ActiveProcess == NULL) &&
+      !state->PrivateCompletionFence && !process->Poisoned &&
       g4_valid &&
       !context->GpuvaG3Poisoned && context->GpuvaG3RootIpa != 0ULL &&
       context->GpuvaG3RootIpa == process->Graph.RootIpa &&
@@ -3699,8 +3703,9 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
        * job's destination was proven above. */
       (adapter->BackendImage.G4Compute || adapter->BackendImage.PresentCompute ||
        AdmissionG3OutputAccessible(adapter, &process->Graph)) &&
-      AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
-          ADMISSION_GPUVA_G3_JOB_VM_SLOT)) {
+      (successor ? AppleAgxGpuvaG3GraphBeginNestedJob(&process->Graph)
+                 : AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
+                       ADMISSION_GPUVA_G3_JOB_VM_SLOT))) {
     if (private_scene) {
       ADMISSION_BACKEND_IMAGE *image=&adapter->BackendImage;
       private_scene->Started=1u;
@@ -3725,9 +3730,14 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
      * A process-wide epoch also changes for unrelated mappings; it cannot
      * invalidate an otherwise valid job. JOB_BEGIN pins the validated graph. */
     context->GpuvaG3MappingGeneration = process->Graph.MappingGeneration;
-    state->ActiveProcess = process;
-    state->ActiveContext = context;
-    state->ActiveFence = fence;
+    if (successor) {
+      state->SuccessorContext = context;
+      state->SuccessorFence = fence;
+    } else {
+      state->ActiveProcess = process;
+      state->ActiveContext = context;
+      state->ActiveFence = fence;
+    }
     status = STATUS_SUCCESS;
 #ifdef _MSC_VER
     if (adapter->BackendImage.G4Native && g4_valid && g4_view.Render &&
@@ -3847,6 +3857,16 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
   return status;
 }
 
+NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
+  return AdmissionGpuvaG3BeginJobAs(adapter, context, fence, FALSE);
+}
+
+NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
+  return AdmissionGpuvaG3BeginJobAs(adapter, context, fence, TRUE);
+}
+
 /* RC40: the graph job still pins this process mapping. Recheck its published
  * write access and its resident CPU shadow before writing through the native
  * local/pool view; never turn an arbitrary process GPUVA into a CPU pointer. */
@@ -3899,7 +3919,9 @@ BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
   if (state == NULL) return FALSE;
   ExAcquireFastMutex(&state->Lock);
   process = state->ActiveProcess;
-  if (process == NULL && state->LastCompletedFence == fence) {
+  /* A retried completion; rc102: the successor may run meanwhile. */
+  if ((process == NULL || state->ActiveFence != fence) &&
+      state->LastCompletedFence == fence) {
     ExReleaseFastMutex(&state->Lock);
     return TRUE;
   }
@@ -3922,9 +3944,18 @@ BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
       if (s->Queued && s->Started && s->Fence==fence) {
         s->GpuDone=1u;state->PrivateCompletionFence=fence;
       }
-    state->ActiveProcess = NULL;
-    state->ActiveContext = NULL;
-    state->ActiveFence = 0u;
+    if (state->SuccessorFence != 0u) {
+      /* rc102: the job kicked behind it is the active job now; the graph
+       * lease stays with it (GraphEndJob ended only the older job). */
+      state->ActiveContext = state->SuccessorContext;
+      state->ActiveFence = state->SuccessorFence;
+      state->SuccessorContext = NULL;
+      state->SuccessorFence = 0u;
+    } else {
+      state->ActiveProcess = NULL;
+      state->ActiveContext = NULL;
+      state->ActiveFence = 0u;
+    }
     state->LastCompletedFence = fence;
   } else {
     ADMISSION_G3_POISON(process,1u);
@@ -3937,6 +3968,39 @@ BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
 
 BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
   return AdmissionGpuvaG3CompleteJobTimestamp(adapter, NULL, fence, 0ULL, 0ULL);
+}
+
+_Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
+    ULONG fence) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  if (adapter == NULL || fence == 0u || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (state == NULL) return;
+  ExAcquireFastMutex(&state->Lock);
+  process = state->ActiveProcess;
+  if (process != NULL &&
+      (state->SuccessorFence == fence || state->ActiveFence == fence)) {
+    /* The firmware holds neither job any more (the reset proved it). */
+    if (!AppleAgxGpuvaG3GraphEndJob(&process->Graph))
+      ADMISSION_G3_POISON(process,1u);
+    if (state->SuccessorFence == fence) {
+      state->SuccessorContext = NULL;
+      state->SuccessorFence = 0u;
+    } else if (state->SuccessorFence != 0u) {
+      state->ActiveContext = state->SuccessorContext;
+      state->ActiveFence = state->SuccessorFence;
+      state->SuccessorContext = NULL;
+      state->SuccessorFence = 0u;
+    } else {
+      state->ActiveProcess = NULL;
+      state->ActiveContext = NULL;
+      state->ActiveFence = 0u;
+    }
+  }
+  ExReleaseFastMutex(&state->Lock);
+  KeSetEvent(&state->JobEvent, IO_NO_INCREMENT, FALSE);
 }
 
 NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
@@ -4647,7 +4711,10 @@ _Use_decl_annotations_ VOID AdmissionG4PendingDropLocked(
     ADMISSION_G4_PENDING *entry = &adapter->G4Pending[
         (adapter->G4PendingHead + index) % ADMISSION_G4_PENDING_CAPACITY];
     ADMISSION_RENDER_CONTEXT *context = entry->Context;
-    if (entry->State == AdmissionG4PendingDropped) {
+    /* rc102: a kicked entry is with the firmware: it completes (or a reset
+     * aborts it, AdmissionG4PendingAbortKickedLocked). */
+    if (entry->State == AdmissionG4PendingDropped ||
+        entry->State == AdmissionG4PendingKicked) {
       kept = 1u;
       continue;
     }
@@ -4829,6 +4896,103 @@ _Use_decl_annotations_ BOOLEAN AdmissionG4PendingAheadPromoteLocked(
   return TRUE;
 }
 
+/* rc102 (render_admission.h): the Prebound head is kicked behind the
+ * running job. */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingKickLocked(
+    ADMISSION_CONTEXT *adapter, ULONG fence) {
+  ADMISSION_G4_PENDING *entry;
+  ADMISSION_RENDER_CONTEXT *context;
+  if (adapter == NULL || fence == 0u || adapter->G4PendingCount == 0u)
+    return FALSE;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  context = entry->Context;
+  if (entry->State != AdmissionG4PendingPrebound || entry->Fence != fence ||
+      adapter->G4PrebindFence != fence || context == NULL ||
+      adapter->BackendImage.BoundFence != fence ||
+      !AppleAgxSchedulerKickQueuedFence(&adapter->Scheduler, 0u, 0u, fence))
+    return FALSE;
+  context->GpuvaG3MappingGeneration = entry->MappingGeneration;
+  context->GpuvaG3DmaBufferVa = entry->DmaBufferVa;
+  context->GpuvaG3DmaBufferBytes = entry->DmaBufferBytes;
+  entry->State = AdmissionG4PendingKicked;
+  return TRUE;
+}
+
+/* rc102: the kicked head becomes the active packet: the binds and the
+ * activation the dispatch and the worker would do for it (its image and
+ * the firmware already hold it). */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingAdoptLocked(
+    ADMISSION_CONTEXT *adapter, ULONG fence) {
+  ADMISSION_G4_PENDING *entry;
+  ADMISSION_RENDER_CONTEXT *context;
+  if (adapter == NULL || fence == 0u || adapter->G4PendingCount == 0u)
+    return FALSE;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  context = entry->Context;
+  if (entry->State != AdmissionG4PendingKicked || entry->Fence != fence ||
+      context == NULL ||
+      AppleAgxSchedulerKickedFence(&adapter->Scheduler) != fence ||
+      AppleAgxSchedulerActiveFence(&adapter->Scheduler, 0u, 0u) != 0u ||
+      AdmissionRenderPacketState(&adapter->RenderPacket) !=
+          AdmissionRenderPacketEmpty ||
+      !AdmissionRenderPacketPrepare(&adapter->RenderPacket, &entry->Packet))
+    return FALSE;
+  if (!AdmissionRenderPacketQueue(&adapter->RenderPacket, entry->Fence,
+          (ULONGLONG)(ULONG_PTR)context, entry->Packet.PrivateDataToken, 0u,
+          entry->Packet.DmaEnd)) {
+    (void)AdmissionRenderPacketCancelPrepared(&adapter->RenderPacket,
+        (ULONGLONG)(ULONG_PTR)context);
+    return FALSE;
+  }
+  if (!AppleAgxSchedulerActivateFence(&adapter->Scheduler, 0u, 0u, fence) ||
+      !AdmissionRenderPacketActivate(&adapter->RenderPacket, fence)) {
+    /* The packet holds the kicked job; nothing can complete it now. */
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x50000L | __LINE__, 0);
+    return FALSE;
+  }
+  adapter->DispatchedFence = fence;
+  InterlockedIncrement(&adapter->SubmitPath.Binds);
+  entry->State = AdmissionG4PendingFree;
+  entry->Context = NULL;
+  adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+      ADMISSION_G4_PENDING_CAPACITY;
+  --adapter->G4PendingCount;
+  adapter->G4PrebindFence = 0u;
+  return TRUE;
+}
+
+_Use_decl_annotations_ VOID AdmissionG4PendingAbortKickedLocked(
+    ADMISSION_CONTEXT *adapter) {
+  ADMISSION_G4_PENDING *entry;
+  ADMISSION_RENDER_CONTEXT *context;
+  if (adapter == NULL || adapter->G4PendingCount == 0u)
+    return;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  if (entry->State != AdmissionG4PendingKicked)
+    return;
+  context = entry->Context;
+  if (context != NULL &&
+      (context->Object.FenceOutstanding == entry->Fence ||
+       context->GpuvaG3SecondFence == entry->Fence)) {
+    /* It may have run: cancelled, as the aborted active packet's scene. */
+    AdmissionGpuvaG3PrivateCancel(context, entry->Fence, FALSE);
+    AdmissionContextRetireFence(context, entry->Fence);
+  }
+  if (adapter->DispatchedFence == entry->Fence)
+    adapter->DispatchedFence = 0u;
+  /* The image still holds its binding (it was never adopted). */
+  if (adapter->BackendImage.BoundFence == entry->Fence &&
+      !AdmissionBackendImageReleaseSubmission(&adapter->BackendImage,
+                                             entry->Fence))
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x50000L | __LINE__, 0);
+  entry->State = AdmissionG4PendingFree;
+  entry->Context = NULL;
+  adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+      ADMISSION_G4_PENDING_CAPACITY;
+  --adapter->G4PendingCount;
+  adapter->G4PrebindFence = 0u;
+}
+
 /* rc90 build-ahead: the worker leaves (or does not chain) with an entry
  * still bound ahead: release the image; a dropped entry is freed (its
  * context was released by the drop), any other returns to Queued for
@@ -4843,6 +5007,13 @@ _Use_decl_annotations_ VOID AdmissionG4PendingAheadUnbind(
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   fence = adapter->G4PrebindFence;
   entry = &adapter->G4Pending[adapter->G4PendingHead];
+  /* rc102: a kicked entry belongs to the firmware: it is adopted or a
+   * reset aborts it, never unbound. */
+  if (fence != 0u && adapter->G4PendingCount != 0u && entry->Fence == fence &&
+      entry->State == AdmissionG4PendingKicked) {
+    KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+    return;
+  }
   if (fence == 0u || adapter->G4PendingCount == 0u || entry->Fence != fence ||
       (entry->State != AdmissionG4PendingPrebound &&
        entry->State != AdmissionG4PendingDropped)) {

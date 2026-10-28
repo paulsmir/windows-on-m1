@@ -122,6 +122,10 @@ SHIM = r'''
 #include "apple_agx_exp208_relocation.h"
 #include "j313_agx_g2.generated.h"
 #include "render_gpu_fault.h"
+#include "render_job_window.h"
+/* rc102: the receipt of the wired depth-2 window (no successor here). */
+void AdmissionJobWindowReceiptReported(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
+                                       unsigned int Count) { (void)Receipt; (void)Count; }
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define PLATFORM_NULL ((void *)0)
 #define _Use_decl_annotations_
@@ -197,6 +201,7 @@ typedef struct { GRAPH Graph; int Poisoned, CpuOnlyMappings; ADMISSION_G3_PRIVAT
 typedef struct {
   FAST_MUTEX Lock; KEVENT JobEvent; ADMISSION_G3_PROCESS *ActiveProcess; void *ActiveContext;
   ULONG ActiveFence, LastCompletedFence, PrivateCompletionFence;
+  void *SuccessorContext; ULONG SuccessorFence; /* rc102: none here */
 } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_RENDER_CONTEXT {
   struct { unsigned FenceOutstanding; } Object;
@@ -222,6 +227,9 @@ typedef struct _ADMISSION_CONTEXT {
   void *GpuvaG3State;
   void *PlatformRuntime;
   ADMISSION_GPU_RESET_RECEIPT GpuReset;
+  /* rc102: the pending head a kicked successor would be (none here) */
+  struct { unsigned State, Fence; ADMISSION_RENDER_CONTEXT *Context; } G4Pending[2];
+  ULONG G4PendingHead, G4PendingCount;
 } ADMISSION_CONTEXT;
 typedef struct {
   ADMISSION_CONTEXT *Adapter;
@@ -234,6 +242,9 @@ typedef struct {
   unsigned AheadReleasedFence, AheadFinishedFence;
   void *AheadManager;
   BOOLEAN AheadG4Native, AheadFinishedDropped;
+  /* rc102 depth-2 window (none kicked in this replay) */
+  unsigned Depth2KickedFence, Depth2BatchedFence, Depth2LastReported;
+  ADMISSION_JOB_WINDOW_RECEIPT Depth2Receipt;
   APPLE_AGX_EXP208_RELOCATION_OBJECT QueueObjects[30];
   BOOLEAN BackendStarted, RecoverChannelOnStall;
   LONG Stopping, Resetting, FirmwareRecoveries;

@@ -579,6 +579,11 @@ typedef enum _ADMISSION_G4_PENDING_STATE {
   /* rc90 build-ahead: bound into the backend image while the previous job
    * runs; the worker that ran it promotes or unbinds it (G4PrebindFence). */
   AdmissionG4PendingPrebound = 5,
+  /* rc102 depth-2 window: a Prebound entry kicked to the firmware behind
+   * the running job (scheduler KickedFence). Neither a preemption nor a
+   * reset hands it back to VidSch; it becomes the render packet when it
+   * is adopted (AdmissionG4PendingAdoptLocked). */
+  AdmissionG4PendingKicked = 6,
 } ADMISSION_G4_PENDING_STATE;
 struct _ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G4_PENDING {
@@ -2227,6 +2232,22 @@ BOOLEAN AdmissionG4PendingPrebindHead(ADMISSION_CONTEXT *,
     struct _ADMISSION_JOB_AHEAD_STATE *, ULONG *Refusal);
 BOOLEAN AdmissionG4PendingAheadPromoteLocked(ADMISSION_CONTEXT *, ULONG Fence);
 VOID AdmissionG4PendingAheadUnbind(ADMISSION_CONTEXT *);
+/* rc102 (render_job_window.h). KickLocked: the Prebound head with this
+ * fence is being kicked behind the running job: the scheduler's queued
+ * fence becomes its KickedFence, the context gets the entry's DMA range
+ * and mapping generation (its BeginJob reads them), the entry turns
+ * Kicked (PagingLock and SchedulerLock held). AdoptLocked: the kicked
+ * entry becomes the active render packet once the running job's
+ * completion was reported, as dispatch + activation would (SchedulerLock
+ * held). AbortKickedLocked: a reset aborted the kicked fence before it
+ * was adopted: its scene is cancelled, the context released and the
+ * entry freed (it may have run: never resubmitted). */
+BOOLEAN AdmissionG4PendingKickLocked(ADMISSION_CONTEXT *, ULONG Fence);
+BOOLEAN AdmissionG4PendingAdoptLocked(ADMISSION_CONTEXT *, ULONG Fence);
+VOID AdmissionG4PendingAbortKickedLocked(ADMISSION_CONTEXT *);
+/* rc102: a reset aborted the kicked job before its completion: end its
+ * graph job (the lease stays with the job still running, if any). */
+VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *, ULONG Fence);
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *, const DXGKARG_ESCAPE *);
 #endif
 DXGKDDI_COLLECTDBGINFO AdmissionDdiCollectDbgInfo;

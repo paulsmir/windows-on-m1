@@ -227,6 +227,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   volatile LONG FirmwareRecoveries;
   BOOLEAN RecoverChannelOnStall;
   ADMISSION_GPU_POST_RESUME_RECEIPT PostResume;
+  ULONG Depth2KickedFence; /* rc102: the successor kicked behind the job */
 } ADMISSION_PLATFORM_RUNTIME;
 struct _ADMISSION_CONTEXT {
   int SchedulerLock, PagingLock, BackendImage;
@@ -293,6 +294,11 @@ static void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, ULONG f) {
     c->Object.FenceOutstanding = c->GpuvaG3SecondFence; c->GpuvaG3SecondFence = 0u;
   } else if (c->GpuvaG3SecondFence == f) c->GpuvaG3SecondFence = 0u;
 }
+
+/* rc102: these replays kick no depth-2 successor (the scheduler holds no
+ * kicked fence), so the reset never aborts one. */
+static void AdmissionG4PendingAbortKickedLocked(ADMISSION_CONTEXT *c) { (void)c; assert(0); }
+static void AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *c, ULONG f) { (void)c; (void)f; assert(0); }
 
 /* What AdmissionBackendComplete does when the firmware ends the job
  * (natural completion, or a drop after Timeout/Fault and resume). */

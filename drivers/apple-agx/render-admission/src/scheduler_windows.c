@@ -542,22 +542,32 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryEngineStatus(
  * faulted first; dispatch stays frozen (SchedulerFaulted) until the reset
  * succeeds. */
 static NTSTATUS AdmissionResetQuiesceActive(ADMISSION_CONTEXT *Context) {
-  ULONG fence;
+  ULONG fence, kicked;
   KIRQL oldIrql;
   KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+  /* rc102: a successor kicked behind the active job (or left running
+   * after the active job was reported) is with the firmware too. */
+  kicked = AppleAgxSchedulerKickedFence(&Context->Scheduler);
   if (AdmissionRenderPacketState(&Context->RenderPacket) !=
-      AdmissionRenderPacketActive) {
+          AdmissionRenderPacketActive && kicked == 0u) {
     KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
     return STATUS_SUCCESS;
   }
-  fence = Context->RenderPacket.Description.Fence;
+  fence = AdmissionRenderPacketState(&Context->RenderPacket) ==
+          AdmissionRenderPacketActive
+      ? Context->RenderPacket.Description.Fence : kicked;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  {
+  if (AdmissionRenderPacketState(&Context->RenderPacket) ==
+      AdmissionRenderPacketActive) {
     ADMISSION_RENDER_CONTEXT *owner = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
         Context->RenderPacket.Description.ContextToken;
     if (owner != NULL && owner->Object.FenceOutstanding == fence)
       owner->GpuvaG3Poisoned = TRUE;
   }
+  if (kicked != 0u && Context->G4PendingCount != 0u &&
+      Context->G4Pending[Context->G4PendingHead].Fence == kicked &&
+      Context->G4Pending[Context->G4PendingHead].Context != NULL)
+    Context->G4Pending[Context->G4PendingHead].Context->GpuvaG3Poisoned = TRUE;
 #endif
   InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
@@ -574,6 +584,9 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   ADMISSION_RENDER_CONTEXT *packetContext = NULL;
   ADMISSION_RENDER_PACKET_STATE packetState;
   APPLE_AGX_U32 packetFence = 0u;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  APPLE_AGX_U32 kickedAborted = 0u;
+#endif
   BOOLEAN reset;
   KIRQL oldIrql;
 
@@ -637,6 +650,12 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
     }
   }
   context->GpuReset.Stage = AdmissionGpuResetStageScheduler;
+  /* rc102: a kicked fence still not adopted (the backend never handed it
+   * to the firmware, or the quiescence proved its end without one) is
+   * aborted with the engine: newest, never resubmitted. */
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  kickedAborted = AppleAgxSchedulerKickedFence(&context->Scheduler);
+#endif
   reset = AppleAgxSchedulerResetEngine(
               &context->Scheduler, ResetEngine->NodeOrdinal,
               ResetEngine->EngineOrdinal, &lastAborted)
@@ -651,6 +670,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
      * that resubmission fail). */
     AdmissionCpuQueueReleaseContextsLocked(context);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    if (kickedAborted != 0u) AdmissionG4PendingAbortKickedLocked(context);
     AdmissionG4PendingDropLocked(context, TRUE);
 #endif
     context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
@@ -661,6 +681,9 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   KeReleaseSpinLock(&context->PagingLock, oldIrql);
   if (!reset)
     return STATUS_INVALID_DEVICE_STATE;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (kickedAborted != 0u) AdmissionGpuvaG3AbortJob(context, kickedAborted);
+#endif
   ResetEngine->LastAbortedFenceId = lastAborted;
   if (packetContext != NULL &&
       packetContext->Object.FenceOutstanding == packetFence) {

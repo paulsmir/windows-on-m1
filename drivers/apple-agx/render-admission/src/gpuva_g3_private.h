@@ -44,6 +44,11 @@ typedef struct _ADMISSION_G3_STATE {
    * no-reference proof only for the caller's own context's job. */
   ADMISSION_RENDER_CONTEXT *ActiveContext;
   ULONG ActiveFence;
+  /* rc102 depth-2 window: the job kicked behind ActiveFence, of the same
+   * process and graph lease (AdmissionGpuvaG3BeginSuccessorJob); it
+   * becomes the active job when that one completes. */
+  ADMISSION_RENDER_CONTEXT *SuccessorContext;
+  ULONG SuccessorFence;
   ULONG LastCompletedFence;
   ULONG PrivateCompletionFence;
   ADMISSION_OMITTED_LEAVES OmittedLeaves;
@@ -275,6 +280,13 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *Adapter,
                                   ADMISSION_RENDER_CONTEXT *Context,
                                   ULONG Fence);
 BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *Adapter, ULONG Fence);
+/* rc102: BeginJob for a job kicked behind the active one: the same
+ * re-proof of the bound image under the graph lock, but the job joins the
+ * active job's process lease (AppleAgxGpuvaG3GraphBeginNestedJob) as its
+ * successor. Refused for another process or with a successor already. */
+NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *Adapter,
+                                           ADMISSION_RENDER_CONTEXT *Context,
+                                           ULONG Fence);
 
 #endif
 #endif

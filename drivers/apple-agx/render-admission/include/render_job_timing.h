@@ -118,6 +118,16 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
  * was taken with the rc98 capabilities declared. */
 #define ADMISSION_JOB_FLAG_SIDECAR_SET_B 0x1000u
 #define ADMISSION_JOB_FLAG_DEPTH2_CAPS 0x2000u
+/* rc102 (Wom1JobDepth2Kick, the wired depth-2 window; layout still v4):
+ * the job was kicked to the firmware while its predecessor ran (its
+ * BackendAfter is then earlier than the predecessor's Complete), its
+ * completion was reported in the same poll batch as its predecessor's
+ * (U4: the notifier deferred both ends), and the class of its leading
+ * Barrier (ADMISSION_JOB_WINDOW_BARRIER_*) in bits 17-19. */
+#define ADMISSION_JOB_FLAG_DEPTH2_KICKED 0x4000u
+#define ADMISSION_JOB_FLAG_DEPTH2_BATCHED 0x8000u
+#define ADMISSION_JOB_FLAG_DEPTH2_BARRIER_SHIFT 17u
+#define ADMISSION_JOB_FLAG_DEPTH2_BARRIER_MASK 0xe0000u
 
 /* Header WorkerFlags: the job worker ran on the dedicated thread; that
  * thread is pinned to the processors of efficiency class (bits 8-15),
