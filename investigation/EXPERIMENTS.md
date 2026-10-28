@@ -65405,3 +65405,16 @@ EXP2014 HARDWARE ACTUAL (2026-10-28): **PASS, new best**. Wom1SoftFaults=1.
 - Frame: HD 24.05 ms; FHD 41.0 ms.
 - RC82A PASS with the switch on. No Wom1GpuFault event during GravityMark. No removal.
 - Verdict: rc82 validated; soft faults are made the default (Wom1SoftFaults=0 to disable).
+
+EXP2015 HARDWARE BEFORE 2026-10-28T01:54:56Z:
+- WHY: the render job build issues about 1527 serial 8-byte uncached loads from the write-combined arena, and the manager save does 380 single-byte Device loads (about 170-200 ns each), costing 266 µs + 77 µs per render job in slow mode.
+- ATOMIC CONTRACT: none; byte-identical output, a different load pattern only.
+- Expected:
+  - Hot receipt present with GravityMark jobs; render sub `copy` well below 200 µs, build ≤ 100 µs, save ≤ 20 µs;
+  - soft faults active without the switch (measure-soft-faults 1,3,1);
+  - HD at least 6079, FHD at least 3615; image identical; no TDR.
+- Failure criteria: a fault, TDR, or removal.
+- Recovery: rec2015h.
+- Hashes: sys b14ba9e80834, UmdArm64 3542d6775298, UmdX64 3b384ffcd347, Umd32 4ec791de397b; manifest f570d4feb973, hardware-manifest 605ef5536b8d; probe2015.sh 19223e458b73 (PROBE_LINT_OK); visible recovery rec2015h 1f11edb54ca6c636; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2015h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2015-bulk-reads/run2015.sh.
