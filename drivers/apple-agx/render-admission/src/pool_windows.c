@@ -270,6 +270,9 @@ typedef struct _ADMISSION_POOL_RUNTIME {
    * produced a slab, by shape. */
   BOOLEAN ConstructLargePages;
   ULONGLONG SlabFastMisses, SlabContiguousUs, SlabChunkedUs;
+  /* rc104: the floor wait (AdmissionMemoryPoolReserve; budget from
+   * Wom1PoolPressureWaitMs). */
+  ADMISSION_POOL_PRESSURE Pressure;
 } ADMISSION_POOL_RUNTIME;
 
 /* rc88: what one AdmissionPoolAllocSlab call cost, folded into the runtime
@@ -705,13 +708,16 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolForget(
   AdmissionMemoryPoolUnlock(Context);
 }
 
-_Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
-    ADMISSION_CONTEXT *Context, ULONGLONG Bytes) {
+/* One reservation attempt (the whole pre-rc104 AdmissionMemoryPoolReserve).
+ * *Reason: the refusal reason, ADMISSION_POOL_REFUSAL_NONE when reserved. */
+static BOOLEAN AdmissionPoolReserveOnce(ADMISSION_CONTEXT *Context,
+                                        ULONGLONG Bytes, ULONG *Reason) {
   ADMISSION_POOL_RUNTIME *pool;
   BOOLEAN reserved;
   ADMISSION_POOL_RESERVE_FAILURE attempt = {0};
   ULONGLONG slabFailures, us;
   LARGE_INTEGER start;
+  *Reason = ADMISSION_POOL_REFUSAL_NONE;
   if (Bytes == 0ULL || AdmissionMemoryPoolLock(Context) == NULL) return TRUE;
   pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
   start = KeQueryPerformanceCounter(NULL);
@@ -742,6 +748,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
         ADMISSION_POOL_SLAB_SLOTS * ADMISSION_POOL_DEMAND_GRANULE;
     pool->LastReserveFailure.CommittedBytes =
         pool->Demand.Stats.CommittedGranules * ADMISSION_POOL_DEMAND_GRANULE;
+    *Reason = pool->LastReserveFailure.Reason;
   }
   /* First let this reservation reuse held pages; then return only surplus. */
   if (AdmissionPoolShouldReclaim(pool)) AdmissionPoolReclaimLocked(pool);
@@ -753,6 +760,76 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
   if (reserved && Bytes >= ADMISSION_POOL_PREFILL_MIN_BYTES)
     pool->LastLargeReserveMs = pool->LastReserveMs;
   AdmissionMemoryPoolUnlock(Context);
+  return reserved;
+}
+
+/* rc104: sampled without the pool lock on a referenced event. */
+static BOOLEAN AdmissionPoolPressureEventSet(PKEVENT Event) {
+  return Event != NULL && KeReadStateEvent(Event) != 0;
+}
+
+/* rc104: sleeps up to Ms at PASSIVE_LEVEL with no driver lock held, waking
+ * early when HighMemoryCondition is set (Standard Event Objects: drivers may
+ * wait on it); returns the wall milliseconds slept. */
+static ULONGLONG AdmissionPoolPressureSleep(PKEVENT HighMemory, ULONGLONG Ms) {
+  LARGE_INTEGER timeout;
+  ULONGLONG start = AdmissionPoolNowMs();
+  timeout.QuadPart = -(LONGLONG)(Ms * 10000ULL);
+  if (HighMemory != NULL)
+    (void)KeWaitForSingleObject(HighMemory, Executive, KernelMode, FALSE, &timeout);
+  else
+    (void)KeDelayExecutionThread(KernelMode, FALSE, &timeout);
+  return AdmissionPoolNowMs() - start;
+}
+
+/* rc104 (EXP2033 arm e: four creations refused on one LowMemoryCondition
+ * sample each, GravityMark E_OUTOFMEMORY then device removed): a creation
+ * refused at the floor waits, without the pool lock and in
+ * ADMISSION_POOL_PRESSURE_STEP_MS steps, for the memory manager to clear
+ * LowMemoryCondition, then retries; it fails as before once its
+ * Wom1PoolPressureWaitMs budget is spent (AdmissionPoolPressureNextWait).
+ * The floor is unchanged: every attempt runs AdmissionPoolReserveOnce, so no
+ * slab is taken while LowMemory is set, and a still-set LowMemory is not
+ * retried (one FloorRefusal per dip, not per step). Other refusals (backing,
+ * no signal, arithmetic) never wait. Microsoft (DxgkDdiCreateAllocation):
+ * STATUS_NO_MEMORY only when memory the call needs cannot be allocated. */
+_Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
+    ADMISSION_CONTEXT *Context, ULONGLONG Bytes) {
+  ADMISSION_POOL_RUNTIME *pool;
+  ULONG reason = ADMISSION_POOL_REFUSAL_NONE;
+  ULONGLONG charged = 0ULL, wall = 0ULL, step;
+  PKEVENT high = NULL, low = NULL;
+  BOOLEAN reserved = AdmissionPoolReserveOnce(Context, Bytes, &reason);
+  if (reserved || reason != ADMISSION_POOL_REFUSAL_LOW_MEMORY) return reserved;
+  for (;;) {
+    if (AdmissionMemoryPoolLock(Context) == NULL) break;
+    pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+    step = InterlockedCompareExchange(&pool->Stopping, 0, 0) != 0 ? 0ULL :
+        AdmissionPoolPressureNextWait(&pool->Pressure, AdmissionPoolNowMs(),
+                                      charged);
+    if (step != 0ULL && low == NULL && pool->LowMemory != NULL) {
+      /* Hold the events across the unlocked wait. */
+      low = pool->LowMemory;
+      ObReferenceObject(low);
+      high = pool->HighMemory;
+      if (high != NULL) ObReferenceObject(high);
+    }
+    AdmissionMemoryPoolUnlock(Context);
+    if (step == 0ULL || low == NULL) break;
+    wall += AdmissionPoolPressureSleep(high, step);
+    charged += step;
+    if (AdmissionPoolPressureEventSet(low)) continue;
+    reserved = AdmissionPoolReserveOnce(Context, Bytes, &reason);
+    if (reserved || reason != ADMISSION_POOL_REFUSAL_LOW_MEMORY) break;
+  }
+  if (AdmissionMemoryPoolLock(Context) != NULL) {
+    pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+    AdmissionPoolPressureDone(&pool->Pressure, AdmissionPoolNowMs(), charged,
+                              wall, reserved ? 1 : 0);
+    AdmissionMemoryPoolUnlock(Context);
+  }
+  if (high != NULL) ObDereferenceObject(high);
+  if (low != NULL) ObDereferenceObject(low);
   return reserved;
 }
 
@@ -1344,6 +1421,35 @@ static BOOLEAN AdmissionPoolConstructLargePagesEnabled(ADMISSION_CONTEXT *Contex
 }
 
 
+/* rc104: REG_DWORD Wom1PoolPressureWaitMs is the floor-wait budget of one
+ * creation in milliseconds; 0 is the kill switch (refuse on the first
+ * LowMemoryCondition sample, the pre-rc104 behaviour); absent or not a
+ * REG_DWORD keeps ADMISSION_POOL_PRESSURE_DEFAULT_BUDGET_MS; larger values
+ * are clamped to ADMISSION_POOL_PRESSURE_MAX_BUDGET_MS. */
+static ULONGLONG AdmissionPoolPressureBudgetMs(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  ULONGLONG budget = ADMISSION_POOL_PRESSURE_DEFAULT_BUDGET_MS;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return budget;
+  RtlInitUnicodeString(&name, L"Wom1PoolPressureWaitMs");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG))
+    budget = AdmissionPoolPressureBudget((ULONGLONG)*(const ULONG *)value->Data);
+  ZwClose(key);
+  return budget;
+}
+
 /* RC13: freeze the experimental placement policy before allocation creation. */
 static BOOLEAN AdmissionSysmemSpillEnabled(ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;
@@ -1445,6 +1551,7 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   /* rc88: without its work item the pool runs as before, unprefilled. */
   pool->PrefillEnabled = AdmissionPoolPrefillEnabled(Context);
   pool->ConstructLargePages = AdmissionPoolConstructLargePagesEnabled(Context);
+  pool->Pressure.BudgetMs = AdmissionPoolPressureBudgetMs(Context);
   if (pool->PrefillEnabled)
     pool->PrefillWork = IoAllocateWorkItem(Context->PhysicalDeviceObject);
   pool->Demand.ReleaseDelay = ADMISSION_POOL_RELEASE_DELAY_MS;

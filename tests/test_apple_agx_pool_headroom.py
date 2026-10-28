@@ -46,11 +46,34 @@ class PoolHeadroomTest(unittest.TestCase):
         """
         self.run_policy(cpp=True)
 
+    def test_pressure_wait_kill_switch_reaches_the_pool(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        rc104: REG_DWORD Wom1PoolPressureWaitMs=0 must restore the pre-rc104
+        refusal; the value must pass through the same clamp the fixture runs
+        and be latched at pool start, before any creation can wait.
+        """
+        source = (RENDER / 'src/pool_windows.c').read_text()
+        reader = function(source, 'AdmissionPoolPressureBudgetMs')
+        self.assertIn('L"Wom1PoolPressureWaitMs"', reader)
+        self.assertIn('value->Type == REG_DWORD', reader)
+        self.assertIn('AdmissionPoolPressureBudget(', reader)
+        self.assertIn('ADMISSION_POOL_PRESSURE_DEFAULT_BUDGET_MS', reader)
+        self.assertIn('ZwClose(key)', reader)
+        start = function(source, 'AdmissionPoolDemandStart')
+        self.assertIn('pool->Pressure.BudgetMs = AdmissionPoolPressureBudgetMs(Context);',
+                      start)
+        self.assertLess(start.index('AdmissionPoolPressureBudgetMs'),
+                        start.index('Context->PoolDemand = pool;'))
+
     def run_policy(self, cpp=False):
         source = (RENDER / 'src/pool_windows.c').read_text()
         names = ['AdmissionPoolMayGrow', 'AdmissionPoolShouldReclaim']
         if 'static VOID AdmissionPoolReclaimLocked(' in source:
             names.append('AdmissionPoolReclaimLocked')
+        # rc104: the floor wait wraps one reservation attempt.
+        if 'static BOOLEAN AdmissionPoolReserveOnce(' in source:
+            names += ['AdmissionPoolReserveOnce', 'AdmissionPoolPressureEventSet']
         names += ['AdmissionMemoryPoolExecuted', 'AdmissionMemoryPoolReserve',
                   'AdmissionMemoryPoolUnreserve',
                   'AdmissionMemoryPoolReclaim', 'AdmissionPoolReclaimWork',

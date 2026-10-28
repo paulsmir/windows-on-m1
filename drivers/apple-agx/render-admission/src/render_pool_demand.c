@@ -290,3 +290,43 @@ unsigned long long AdmissionPoolDemandSegmentBytesReserve(
   bytes &= ~(ADMISSION_POOL_DEMAND_SIZE_STEP - 1u);
   return bytes < ADMISSION_POOL_DEMAND_MIN_BYTES ? 0u : bytes;
 }
+
+unsigned long long AdmissionPoolPressureBudget(unsigned long long RequestedMs) {
+  return RequestedMs < ADMISSION_POOL_PRESSURE_MAX_BUDGET_MS ?
+      RequestedMs : ADMISSION_POOL_PRESSURE_MAX_BUDGET_MS;
+}
+
+unsigned long long AdmissionPoolPressureNextWait(ADMISSION_POOL_PRESSURE *Pressure,
+                                                 unsigned long long NowMs,
+                                                 unsigned long long ChargedMs) {
+  unsigned long long left;
+  if (Pressure == 0 || Pressure->BudgetMs == 0u ||
+      ChargedMs >= Pressure->BudgetMs)
+    return 0u;
+  /* Only a creation that has not waited yet looks at the window: one that
+   * is already waiting keeps its budget. */
+  if (ChargedMs == 0u && NowMs < Pressure->FastFailUntilMs) {
+    ++Pressure->FastFails;
+    return 0u;
+  }
+  left = Pressure->BudgetMs - ChargedMs;
+  return left < ADMISSION_POOL_PRESSURE_STEP_MS ? left :
+                                                  ADMISSION_POOL_PRESSURE_STEP_MS;
+}
+
+void AdmissionPoolPressureDone(ADMISSION_POOL_PRESSURE *Pressure,
+                               unsigned long long NowMs,
+                               unsigned long long ChargedMs,
+                               unsigned long long WallMs, int Reserved) {
+  if (Pressure == 0 || ChargedMs == 0u) return;
+  ++Pressure->Waits;
+  Pressure->WaitMs += WallMs;
+  if (WallMs > Pressure->WaitMsMax) Pressure->WaitMsMax = WallMs;
+  if (Reserved) {
+    ++Pressure->Recovered;
+    Pressure->FastFailUntilMs = 0u;
+  } else {
+    ++Pressure->TimedOut;
+    Pressure->FastFailUntilMs = NowMs + ADMISSION_POOL_PRESSURE_FAST_FAIL_MS;
+  }
+}

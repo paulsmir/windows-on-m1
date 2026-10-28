@@ -241,4 +241,43 @@ unsigned long long AdmissionPoolDemandReclaim(ADMISSION_POOL_DEMAND *Pool);
 unsigned long long AdmissionPoolDemandReclaimAged(ADMISSION_POOL_DEMAND *Pool,
                                                   unsigned long long Now);
 
+/* rc104 (EXP2033 arm e): a creation refused at the Windows memory floor
+ * (LowMemoryCondition set, ADMISSION_POOL_REFUSAL_LOW_MEMORY) waits for the
+ * memory manager to rebalance, then retries, instead of failing on one
+ * sample. The floor itself is unchanged: no slab is taken while LowMemory is
+ * set, the wait runs without the pool lock, and only that refusal reason
+ * waits (backing, missing signal and arithmetic refusals fail at once).
+ * BudgetMs bounds the wait of one creation (0: never wait, the pre-rc104
+ * behaviour). A creation that waited its whole budget and still failed opens
+ * a FastFail window in which later floor refusals do not wait (a doomed
+ * workload fails in about one budget, not one budget per creation); the
+ * floor is still sampled fresh by every creation, so memory that recovers
+ * inside the window is used at once. All calls under the pool lock. */
+#define ADMISSION_POOL_PRESSURE_STEP_MS 50ULL
+#define ADMISSION_POOL_PRESSURE_DEFAULT_BUDGET_MS 2000ULL
+#define ADMISSION_POOL_PRESSURE_MAX_BUDGET_MS 10000ULL
+#define ADMISSION_POOL_PRESSURE_FAST_FAIL_MS 5000ULL
+typedef struct _ADMISSION_POOL_PRESSURE {
+  unsigned long long BudgetMs;
+  unsigned long long FastFailUntilMs;
+  /* Receipt: creations that waited, their total and longest wait (ms, wall),
+   * those that then reserved, those that still failed (budget spent, or a
+   * later non-floor refusal), and floor refusals that did not wait because
+   * of the FastFail window. */
+  unsigned long long Waits, WaitMs, WaitMsMax, Recovered, TimedOut, FastFails;
+} ADMISSION_POOL_PRESSURE;
+/* Registry value -> budget: 0 stays 0, larger values are clamped. */
+unsigned long long AdmissionPoolPressureBudget(unsigned long long RequestedMs);
+/* The next wait (ms) of a creation that the floor refused after it was
+ * charged ChargedMs of waiting; 0: stop waiting and fail. */
+unsigned long long AdmissionPoolPressureNextWait(ADMISSION_POOL_PRESSURE *Pressure,
+                                                 unsigned long long NowMs,
+                                                 unsigned long long ChargedMs);
+/* End of a creation the floor refused at least once: ChargedMs as above,
+ * WallMs the time it actually slept, Reserved its outcome. */
+void AdmissionPoolPressureDone(ADMISSION_POOL_PRESSURE *Pressure,
+                               unsigned long long NowMs,
+                               unsigned long long ChargedMs,
+                               unsigned long long WallMs, int Reserved);
+
 #endif

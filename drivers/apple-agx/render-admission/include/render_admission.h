@@ -1475,7 +1475,10 @@ VOID AdmissionMemoryPoolForget(_In_opt_ ADMISSION_CONTEXT *Context,
                                _Inout_ ADMISSION_POOL_PLACEMENT *Placement);
 /* M2-f5: CreateAllocation reserves the pages a segment-3 allocation may be
  * placed in (FALSE: Windows has none, the caller returns STATUS_NO_MEMORY);
- * DestroyAllocation ends the reservation. TRUE without a demand pool. */
+ * DestroyAllocation ends the reservation. TRUE without a demand pool.
+ * rc104: a refusal at the LowMemoryCondition floor first waits, with no
+ * driver lock held, up to the Wom1PoolPressureWaitMs budget for the memory
+ * manager to clear it, so the call may block that long. */
 _IRQL_requires_(PASSIVE_LEVEL)
 BOOLEAN AdmissionMemoryPoolReserve(_In_opt_ ADMISSION_CONTEXT *Context,
                                    ULONGLONG Bytes);

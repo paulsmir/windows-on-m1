@@ -27,6 +27,8 @@ typedef int BOOLEAN;
 #define N 128
 
 typedef struct { long long QuadPart; } LARGE_INTEGER;
+typedef unsigned int ULONG;
+typedef int *PKEVENT;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct {
     ADMISSION_POOL_DEMAND Demand;
@@ -39,6 +41,7 @@ typedef struct {
     ULONGLONG ReserveCalls, ReserveUs, ReserveUsMax, CacheDrops, LastReserveMs;
     ULONGLONG LeaseZeroCount, LeaseZeroUs, LeaseZeroSkips;
     ULONGLONG LastLargeReserveMs; /* rc88 prefill trigger */
+    ADMISSION_POOL_PRESSURE Pressure; /* rc104 floor wait */
 } ADMISSION_POOL_RUNTIME;
 struct _ADMISSION_CONTEXT { ADMISSION_POOL_RUNTIME *PoolDemand; int PoolLeaks; };
 static ADMISSION_POOL_RUNTIME pool;
@@ -90,10 +93,30 @@ static ADMISSION_POOL_DEMAND *AdmissionMemoryPoolLock(ADMISSION_CONTEXT *ctx) {
 static void AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *ctx) {
     assert(ctx == &context && locked-- == 1);
 }
+/* rc104: the real wait sleeps on HighMemoryCondition; here time advances
+ * by the requested step and LowMemory clears once clear_low_at is reached
+ * (0: never). Every sleep must happen outside the pool lock. */
+static unsigned sleeps, refs;
+static ULONGLONG clear_low_at, slept_ms;
+static int stop_after_sleeps;
+ULONGLONG AdmissionPoolPressureSleep(PKEVENT high_event, ULONGLONG ms) {
+    assert(!locked && high_event == &high && ms != 0 && ms <= 50);
+    ++sleeps;
+    now += ms;
+    slept_ms += ms;
+    if (clear_low_at && now >= clear_low_at) low = 0;
+    if (stop_after_sleeps && sleeps == (unsigned)stop_after_sleeps) pool.Stopping = 1;
+    return ms;
+}
+__attribute__((unused)) static void ObReferenceObject(PKEVENT event) { assert(event); ++refs; }
+__attribute__((unused)) static void ObDereferenceObject(PKEVENT event) { assert(event && refs); --refs; }
+/* rc104: the floor itself: no Windows page is taken while LowMemory is set. */
+static int strict_floor;
 #include "pool_policy.inc"
 
 static ADMISSION_POOL_SLAB *new_slab(void *opaque) {
     (void)opaque;
+    assert(!strict_floor || !low);
     ++allocations;
     if (fail_new || allocations == fail_on_allocation) return NULL;
     if (allocations == low_on_allocation) low = 1;
@@ -149,6 +172,10 @@ static void reset(void) {
     allocations = releases = unmaps = 0;
     fail_new = clear_low_after_read = 0;
     low_on_allocation = fail_on_allocation = 0;
+    /* The pre-rc104 contract (Wom1PoolPressureWaitMs=0) unless a test opts in. */
+    memset(&pool.Pressure, 0, sizeof(pool.Pressure));
+    sleeps = refs = 0; clear_low_at = slept_ms = 0; stop_after_sleeps = 0;
+    strict_floor = 0;
 }
 
 /* Execute one periodic wake; there is no fake paging completion. */
@@ -585,6 +612,96 @@ static void test_tvb_lease_zero_skip(void) {
     assert(AdmissionMemoryPoolTvbTake(&context, &b, &ipa) && lease_zeroes == 2);
     assert(AdmissionMemoryPoolTvbGive(&context, &b));
 }
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * EXP2033 arm e: GravityMark (5th app of the boot) failed with E_OUTOFMEMORY
+ * and was removed because one creation sampled LowMemoryCondition set and
+ * was refused at once (reserve_failures 4, all low_memory). The memory
+ * manager rebalances within its trim period; a creation must wait for it,
+ * outside the pool lock, and then reserve. The floor stays: no slab is taken
+ * while LowMemory is set, and the creation is refused only once. */
+static void test_pressure_wait_recovers(void) {
+    reset();
+    strict_floor = 1;
+    pool.Pressure.BudgetMs = ADMISSION_POOL_PRESSURE_DEFAULT_BUDGET_MS;
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    high = 0; low = 1; clear_low_at = now + 300;
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(pool.Slabs.Reserved == 64 && allocations == 2 && !locked && !refs);
+    assert(sleeps == 6 && slept_ms == 300);
+    assert(pool.Slabs.Stats.FloorRefusals == 1);
+    assert(pool.Pressure.Waits == 1 && pool.Pressure.Recovered == 1);
+    assert(pool.Pressure.WaitMs == 300 && pool.Pressure.WaitMsMax == 300);
+    assert(!pool.Pressure.TimedOut && !pool.Pressure.FastFails);
+    /* Memory dips again while the creation grows: it keeps waiting within
+     * the same budget and the floor still holds. */
+    strict_floor = 0;
+    low_on_allocation = allocations + 1;
+    clear_low_at = now + 200;
+    assert(AdmissionMemoryPoolReserve(&context, 64 * G));
+    assert(pool.Slabs.Reserved == 128 && pool.Pressure.Recovered == 2);
+    assert(pool.Slabs.Stats.FloorRefusals == 2 && pool.Pressure.Waits == 2);
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * A workload that cannot fit must still fail (STATUS_NO_MEMORY), bounded by
+ * one budget, and not stall one budget per creation; a FastFail window skips
+ * only the wait, never the fresh floor sample. Only the floor waits. */
+static void test_pressure_wait_budget_and_fast_fail(void) {
+    reset();
+    strict_floor = 1;
+    pool.Pressure.BudgetMs = 2000;
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    high = 0; low = 1;
+    assert(!AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(sleeps == 40 && slept_ms == 2000 && !refs && !locked);
+    assert(pool.Pressure.TimedOut == 1 && pool.Pressure.Waits == 1);
+    assert(pool.Slabs.Reserved == 32 && allocations == 1);
+    assert(pool.Pressure.FastFailUntilMs == now + ADMISSION_POOL_PRESSURE_FAST_FAIL_MS);
+    assert(!AdmissionMemoryPoolReserve(&context, G));
+    assert(sleeps == 40 && pool.Pressure.FastFails == 1);
+    low = 0;                                   /* recovered inside the window */
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(sleeps == 40 && allocations == 2);
+    low = 1; now += ADMISSION_POOL_PRESSURE_FAST_FAIL_MS;
+    clear_low_at = now + 100;                  /* window over: waits again */
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(sleeps == 42 && pool.Pressure.Recovered == 1 && !pool.Pressure.FastFailUntilMs);
+    /* Not the floor: a physical allocation failure fails at once. */
+    reset();
+    pool.Pressure.BudgetMs = 2000;
+    fail_new = 1;
+    assert(!AdmissionMemoryPoolReserve(&context, G));
+    assert(!sleeps && pool.LastReserveFailure.Reason == ADMISSION_POOL_REFUSAL_BACKING);
+    /* Nor does a missing signal (fail closed, no wait). */
+    reset();
+    pool.Pressure.BudgetMs = 2000;
+    pool.HighMemory = pool.LowMemory = NULL;
+    assert(!AdmissionMemoryPoolReserve(&context, G));
+    assert(!sleeps && pool.LastReserveFailure.Reason == ADMISSION_POOL_REFUSAL_NO_SIGNAL);
+    /* A stopping pool stops waiting. */
+    reset();
+    pool.Pressure.BudgetMs = 2000;
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    high = 0; low = 1; stop_after_sleeps = 3;
+    assert(!AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(sleeps == 3 && !refs && pool.Pressure.TimedOut == 1);
+    pool.Stopping = 0;
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * Wom1PoolPressureWaitMs=0 must restore the exact pre-rc104 refusal: one
+ * floor sample, no sleep, no event reference, no pressure counters. */
+static void test_pressure_kill_switch(void) {
+    reset();
+    assert(AdmissionPoolPressureBudget(0) == 0);
+    assert(AdmissionPoolPressureBudget(2000) == 2000);
+    assert(AdmissionPoolPressureBudget(~0ULL) == ADMISSION_POOL_PRESSURE_MAX_BUDGET_MS);
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    high = 0; low = 1; clear_low_at = now + 50;
+    assert(!AdmissionMemoryPoolReserve(&context, G));
+    assert(!sleeps && !refs && pool.Slabs.Stats.FloorRefusals == 1);
+    assert(!pool.Pressure.Waits && !pool.Pressure.FastFails && !pool.Pressure.TimedOut);
+}
 int main(void) {
     test_tvb_lease_zero_skip();
     test_high_memory_slab_cache();
@@ -598,6 +715,9 @@ int main(void) {
     test_partial_growth_and_arithmetic_receipts();
     test_serial_restore_and_destruction_shrink();
     test_over_cap_restore_uses_same_backing();
+    test_pressure_wait_recovers();
+    test_pressure_wait_budget_and_fast_fail();
+    test_pressure_kill_switch();
     AdmissionPoolSlabDrain(&pool.Slabs);
     return 0;
 }
