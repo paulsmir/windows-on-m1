@@ -65979,3 +65979,21 @@ Device switches: Wom1GpuFaultInfoRead=1, Wom1JobDepth2=1, Wom1JobDepth2Caps=1. O
 - Hashes: sys 4b46a41e234b, UmdArm64 bc0c5c34da6d, UmdX64 da66980d58ba, Umd32 0f709162aa3c; manifest f4c64aa7c224, hardware-manifest 32e1f5f9c2b2; probe2035.sh 8bad76a6d47d (PROBE_LINT_OK); visible recovery rec2035h 5a6085ea2aa10f81; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1.
 - Recovery rec2035h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2035-caps-readback/run2035.sh.
+
+EXP2035 HARDWARE ACTUAL (2026-10-28): **HD 50k 6957 (best), as the first app after boot. rc99 confirmed. rc98 set B confirmed on the firmware. The fullscreen arm is invalid: our display mode set fails.**
+
+| Arm | Score | Notes |
+|---|---|---|
+| a: HD 50k, first app, readback reserve on, Caps=1 | **6957** / 41.6 FPS | median wall 22.80 ms, GPU span 22.06 ms, **idle 0.16 ms** (first apps before: 3.1–3.9 ms) |
+| b: HD 50k, APPLE_AGX_D3D12_READBACK_RESERVE=0 | 6419 / 38.4 FPS | −8% against a; the race returns |
+| c: FHD 100k windowed (3rd app) | 3842 | |
+| d: FHD 100k `-Fullscreen 1` | 3679 | invalid: `Desktop::setMode(): ChangeDisplaySettingsExW(): failed`, so it ran windowed (4th app, hot) |
+
+- **rc98, Caps=1** (Wom1JobTiming971Hot after a):
+  - depth2 decided 56, eligible 51; refusals only 55 (another process) ×5; no 57 and no 60;
+  - with_caps 56; **sidecar_set_b 23 / set_a 18**: the firmware ran set B job words at depth 1, with no Wom1GpuFault and no removal.
+- Verdict:
+  - rc99: confirmed (reserve default on);
+  - rc98: capabilities confirmed on hardware;
+  - next for depth 2: step 3/4, the two-entry window with batched completion (U4).
+  - New production gap: the display mode change (ChangeDisplaySettingsEx to 1920×1080) is not supported by our display path.
