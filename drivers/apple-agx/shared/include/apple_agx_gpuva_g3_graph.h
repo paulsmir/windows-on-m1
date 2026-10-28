@@ -145,6 +145,14 @@ bool AppleAgxGpuvaG3GraphCanDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *,
 bool AppleAgxGpuvaG3GraphDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long ReservedVa, unsigned long long RootIpa,
     unsigned long long LeafIpa);
+/* rc80: the same for every private leaf of the branch (entry 0 is the
+ * private window's leaf); all VAs share one root slot. */
+bool AppleAgxGpuvaG3GraphCanDetachPrivateRootSet(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long RootIpa, const unsigned long long *ReservedVas,
+    const unsigned long long *LeafIpas, unsigned Count);
+bool AppleAgxGpuvaG3GraphDetachPrivateRootSet(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long RootIpa, const unsigned long long *ReservedVas,
+    const unsigned long long *LeafIpas, unsigned Count);
 bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned int Slot);
 bool AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *);

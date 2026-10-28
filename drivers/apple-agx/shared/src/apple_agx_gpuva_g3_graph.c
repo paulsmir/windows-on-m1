@@ -771,32 +771,57 @@ bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *g,
 }
 
 /* Root parking must ignore only our own private branch, and must preserve
- * every ordinary mapping as a real nonempty-root conflict. */
-bool AppleAgxGpuvaG3GraphCanDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *g,
-    unsigned long long va, unsigned long long root, unsigned long long leaf) {
+ * every ordinary mapping as a real nonempty-root conflict. rc80: the branch
+ * may hold more private leaves (the TVB window) below the same middle table;
+ * entry 0 is the private window's leaf and must be linked, the others may be
+ * absent (they are re-linked after the move). */
+bool AppleAgxGpuvaG3GraphCanDetachPrivateRootSet(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long root, const unsigned long long *vas,
+    const unsigned long long *leaves, unsigned count) {
   APPLE_AGX_GPUVA_G3_NODE *edge, *private_edge;
-  unsigned ri=(unsigned)(va>>36), mi=(unsigned)((va>>25)&2047u);
-  if (!g || g->Uncertain || g->JobInFlight || g->LeaseToken ||
-      va<(1ULL<<25) || va>=(1ULL<<39) || (va&0x1ffffffULL)) return false;
+  unsigned ri, i;
+  if (!g || !vas || !leaves || !count || g->Uncertain || g->JobInFlight ||
+      g->LeaseToken) return false;
+  ri=(unsigned)(vas[0]>>36);
+  for (i=0;i<count;++i)
+    if (vas[i]<(1ULL<<25) || vas[i]>=(1ULL<<39) || (vas[i]&0x1ffffffULL) ||
+        (unsigned)(vas[i]>>36)!=ri || !leaves[i]) return false;
   private_edge=find_edge(g->Parents,root,ri);
   if (!private_edge) {
     for (edge=g->Parents;edge;edge=edge->Next)
       if (edge->Ipa==root) return false;
     return true;
   }
-  for (edge=g->Parents;edge;edge=edge->Next)
-    if ((edge->Ipa==root && edge!=private_edge) ||
-        (edge->Ipa==private_edge->AuxIpa &&
-         (edge->Index!=mi || edge->AuxIpa!=leaf))) return false;
-  edge=find_edge(g->Parents,private_edge->AuxIpa,mi);
-  if (!edge || edge->AuxIpa!=leaf) return false;
+  for (edge=g->Parents;edge;edge=edge->Next) {
+    if (edge->Ipa==root && edge!=private_edge) return false;
+    if (edge->Ipa==private_edge->AuxIpa) {
+      for (i=0;i<count;++i)
+        if (edge->Index==(unsigned)((vas[i]>>25)&2047u) &&
+            edge->AuxIpa==leaves[i]) break;
+      if (i==count) return false;
+    }
+  }
+  edge=find_edge(g->Parents,private_edge->AuxIpa,(unsigned)((vas[0]>>25)&2047u));
+  if (!edge || edge->AuxIpa!=leaves[0]) return false;
   return true;
+}
+
+bool AppleAgxGpuvaG3GraphCanDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long va, unsigned long long root, unsigned long long leaf) {
+  return AppleAgxGpuvaG3GraphCanDetachPrivateRootSet(g,root,&va,&leaf,1u);
+}
+
+bool AppleAgxGpuvaG3GraphDetachPrivateRootSet(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long root, const unsigned long long *vas,
+    const unsigned long long *leaves, unsigned count) {
+  if (!AppleAgxGpuvaG3GraphCanDetachPrivateRootSet(g,root,vas,leaves,count))
+    return false;
+  return AppleAgxGpuvaG3GraphUpdateParent(g,root,(unsigned)(vas[0]>>36),0);
 }
 
 bool AppleAgxGpuvaG3GraphDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *g,
     unsigned long long va, unsigned long long root, unsigned long long leaf) {
-  if (!AppleAgxGpuvaG3GraphCanDetachPrivateRoot(g,va,root,leaf)) return false;
-  return AppleAgxGpuvaG3GraphUpdateParent(g,root,(unsigned)(va>>36),0);
+  return AppleAgxGpuvaG3GraphDetachPrivateRootSet(g,root,&va,&leaf,1u);
 }
 
 bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
