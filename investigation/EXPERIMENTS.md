@@ -66637,3 +66637,21 @@ EXP2057 HARDWARE ACTUAL (2026-10-29): **D3D buffer robustness is not a lever: AB
 - Side result (macOS RE, .local/handoff/codex/re-macos-shaders/NOTES.md): the Apple lighting kernel has a similar register count (r106) and keeps its loops. Static counts are not comparable, so per-pass Apple GPU times are needed to locate the gap.
 - The diagnostic switch stays env-only and off by default.
 - Recovery rec2057h.
+
+EXP2058 HARDWARE BEFORE 2026-10-28T23:47:49Z:
+Arms: a FHD 100k windowed (first app), b HD 50k.
+- WHY: EXP2057a has a 9.75 s scored stall at frame 26→27. Inside it, 306 whole-level uploads (208 MiB) drained the 16 MiB ring 18 times. Each drain is a SubmitAndWait (~150 ms gaps).
+- ATOMIC CONTRACT: one constant. WOW64 keeps 16 MiB.
+- Expected:
+  - ring drains in the stall ≤ 4;
+  - the stall is under 8 s (agx_startup_breakdown);
+  - FHD first-position ≥ EXP2057a 4267 / EXP2056a 4290;
+  - images unchanged.
+- Failure criteria:
+  - ring creation fails (E_OUTOFMEMORY receipt);
+  - a corrupted texture;
+  - no stall change.
+- Recovery: rec2058h.
+- Hashes: sys 2edbc86849d6, UmdArm64 8eaef1a52dce, UmdX64 fd0d2c9bb279, Umd32 85cee1b92e56; manifest 83b841516bdf, hardware-manifest 9059a970f9d8; probe2058.sh 540849649bae (PROBE_LINT_OK); visible recovery rec2058h 9d939be067a7ffdb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2058h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2058-level-ring/run2058.sh.
