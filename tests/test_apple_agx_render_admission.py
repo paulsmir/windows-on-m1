@@ -77,7 +77,11 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("Present->pDmaBuffer != NULL", present)
         self.assertIn("(Present->Flags.Value & ~0x8u) != 0x4u", present)
         self.assertIn("ADMISSION_OPEN_ALLOCATION_MAGIC", present)
-        self.assertIn("adapter->CommittedFormat", present)
+        # rc110 (EXP2049): any broker format on a linear scanout-capable
+        # allocation; the PRESENT carries the primary's own format
+        self.assertIn("ScanoutCapable", present)
+        self.assertIn("AdmissionScanoutFormatSupported(adapter,", present)
+        self.assertNotIn("description->Format != (UINT)adapter->CommittedFormat", present)
         self.assertIn("return STATUS_SUCCESS", present)
 
     def test_render_core_legacy_callback_group_is_complete_but_inert(self):

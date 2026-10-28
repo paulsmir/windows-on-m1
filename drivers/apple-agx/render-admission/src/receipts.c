@@ -2911,6 +2911,41 @@ _Use_decl_annotations_ void AdmissionFlushSourceAddressReceipt(
   }
 }
 
+/* rc110: Wom1DisplayModesReceipt, after every traced display DDI. */
+_Use_decl_annotations_ void AdmissionRecordDisplayModes(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_DISPLAY_MODES_RECEIPT snapshot;
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  RtlCopyMemory(&snapshot, (const VOID *)&Context->DisplayModes,
+                sizeof(snapshot));
+  snapshot.Version = (LONG)ADMISSION_DISPLAY_MODES_RECEIPT_VERSION;
+  snapshot.Bytes = (LONG)sizeof(snapshot);
+  snapshot.BuildSwitch = (LONG)ADMISSION_DISPLAY_SCALED_MODES;
+  {
+    ULONG abi = 0u, caps = 0u;
+    AdmissionScanoutBrokerInfo(Context, &abi, &caps);
+    snapshot.BrokerAbi = (LONG)abi;
+    snapshot.BrokerCaps = (LONG)caps;
+    snapshot.ScaledModes = AdmissionScanoutScaledModes(Context) ? 1 : 0;
+  }
+  snapshot.CommittedWidth = (LONG)Context->CommittedWidth;
+  snapshot.CommittedHeight = (LONG)Context->CommittedHeight;
+  snapshot.CommittedStride = (LONG)Context->CommittedStride;
+  snapshot.CommittedFormat = (LONG)Context->CommittedFormat;
+  snapshot.CommittedScaling = (LONG)Context->CommittedScaling;
+  snapshot.SourceVisible = Context->SourceVisible ? 1 : 0;
+  snapshot.DisplayActive = Context->DisplayActive ? 1 : 0;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1DisplayModesReceipt", &snapshot, sizeof(snapshot));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordDisplayDdi(
     PDEVICE_OBJECT DeviceObject, ULONG DdiId, ULONG Phase, NTSTATUS Status) {
   HANDLE key = NULL;

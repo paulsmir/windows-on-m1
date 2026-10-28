@@ -127,6 +127,12 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelCommitMode(
     APPLE_AGX_SCANOUT_U32 TargetId, APPLE_AGX_SCANOUT_U32 Width,
     APPLE_AGX_SCANOUT_U32 Height, APPLE_AGX_SCANOUT_U32 Stride,
     APPLE_AGX_SCANOUT_U32 Format, APPLE_AGX_FIXED_PANEL_SCALING Scaling);
+/* rc110: the surface format of the next PRESENT (BGRA8888, or RGBA8888 with
+ * CAP_RGBA8888), independent of the committed source mode's pixel format:
+ * dxgkrnl flips an exclusive fullscreen primary in the format the app chose
+ * and the broker scans either.  CommitMode resets it to the committed one. */
+APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelSetPresentFormat(
+    APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U32 Format);
 APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelScaledSourceSupported(
     const APPLE_AGX_FIXED_PANEL *Panel);
 APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelSetVisible(

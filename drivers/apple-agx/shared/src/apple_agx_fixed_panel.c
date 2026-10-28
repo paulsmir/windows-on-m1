@@ -272,6 +272,19 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelCommitMode(
   return AppleAgxFixedPanelOk;
 }
 
+APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelSetPresentFormat(
+    APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U32 Format) {
+  if (Panel == APPLE_AGX_FIXED_PANEL_NULL || !Panel->Started ||
+      !Panel->Committed)
+    return AppleAgxFixedPanelInvalidState;
+  if (Format != APPLE_AGX_SCANOUT_FORMAT_BGRA8888 &&
+      (Format != APPLE_AGX_SCANOUT_FORMAT_RGBA8888 ||
+       (Panel->Scanout.Capabilities & APPLE_AGX_SCANOUT_CAP_RGBA8888) == 0u))
+    return AppleAgxFixedPanelInvalidMode;
+  Panel->Scanout.PresentFormat = Format;
+  return AppleAgxFixedPanelOk;
+}
+
 APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelCommit(
     APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U32 SourceId,
     APPLE_AGX_SCANOUT_U32 TargetId, APPLE_AGX_SCANOUT_U32 Width,

@@ -272,9 +272,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     return STATUS_INVALID_HANDLE;
   }
   description = &source->Allocation->Description;
-  /* rc106: the flip source has the committed source-mode geometry. */
+  /* rc106: the flip source has the committed source-mode geometry.  rc110
+   * (EXP2049): a linear scanout-capable allocation in any broker format,
+   * not necessarily the committed source mode's pixel format. */
   if (!AdmissionAllocationDescriptionValid(description) ||
       adapter == NULL ||
+      !((const ADMISSION_ALLOCATION_HANDLE *)source->Allocation)
+           ->ScanoutCapable ||
       description->Width != adapter->CommittedWidth ||
       description->Height != adapter->CommittedHeight ||
       description->Pitch != adapter->CommittedStride ||
@@ -284,7 +288,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
       !AdmissionScanoutSourceModeSupported(adapter, adapter->CommittedWidth,
                                            adapter->CommittedHeight,
                                            adapter->CommittedStride) ||
-      description->Format != (UINT)adapter->CommittedFormat) {
+      !AdmissionScanoutFormatSupported(adapter,
+                                       (D3DDDIFORMAT)description->Format)) {
     AdmissionRecordPresent(device, Present, 3u,
                             STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)

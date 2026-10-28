@@ -82,8 +82,12 @@ class AppleAgxRenderScanoutTests(unittest.TestCase):
             self.assertNotIn(symbol, interrupt)
         self.assertIn("AppleAgxFixedPanelQueuePresent(", enqueue)
         self.assertIn("ADMISSION_ALLOCATION_OBJECT_MAGIC", enqueue)
-        # D3D-FS1: the flipped primary must be in the committed mode format
-        self.assertIn("Context->CommittedFormat", enqueue)
+        # rc110 (EXP2049): the flipped primary is a linear scanout-capable
+        # allocation in any broker format; the PRESENT carries its format
+        self.assertIn("ScanoutCapable", enqueue)
+        self.assertIn("AdmissionScanoutFormatCode(", enqueue)
+        self.assertIn("AppleAgxFixedPanelSetPresentFormat(", enqueue)
+        self.assertNotIn("description->Format != (UINT)Context->CommittedFormat", enqueue)
         self.assertIn("AppleAgxScanoutConsumeInterrupt(", interrupt)
         self.assertIn("DXGK_INTERRUPT_CRTC_VSYNC", interrupt)
 
@@ -103,7 +107,11 @@ class AppleAgxRenderScanoutTests(unittest.TestCase):
         present = function_body(callbacks, "AdmissionDdiPresent")
 
         self.assertIn("pDmaBuffer != NULL", present)
-        self.assertIn("adapter->CommittedFormat", present)
+        # rc110 (EXP2049): any broker format on a linear scanout-capable
+        # allocation; the PRESENT carries the primary's own format
+        self.assertIn("ScanoutCapable", present)
+        self.assertIn("AdmissionScanoutFormatSupported(adapter,", present)
+        self.assertNotIn("description->Format != (UINT)adapter->CommittedFormat", present)
         self.assertIn("ADMISSION_OPEN_ALLOCATION_MAGIC", present)
         self.assertIn("return STATUS_SUCCESS", present)
 

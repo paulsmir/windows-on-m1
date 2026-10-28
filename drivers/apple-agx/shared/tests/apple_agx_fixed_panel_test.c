@@ -726,7 +726,65 @@ static void test_resolve_scaling_defaults_and_refusals(void) {
   assert(!AppleAgxFixedPanelResolveScaling(1366u, 768u, on, 255u, &scaling));
 }
 
+/* rc110 (EXP2049): the exclusive fullscreen primary dxgkrnl flips may be
+ * RGBA8888 while the committed source mode is BGRA; the present format
+ * follows the flipped surface, within the broker's capabilities. */
+static void test_present_format_follows_the_flipped_surface(void) {
+  FAKE_BROKER fake;
+  APPLE_AGX_FIXED_PANEL panel;
+  APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
+
+  memset(&fake, 0, sizeof(fake));
+  fake.Version = APPLE_AGX_SCANOUT_ABI_VERSION_V2;
+  fake.Capabilities = APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES |
+                      APPLE_AGX_SCANOUT_CAP_REPEATED_PRESENT |
+                      APPLE_AGX_SCANOUT_CAP_LATCHED_RECEIPT |
+                      APPLE_AGX_SCANOUT_CAP_LATCHED_IRQ;
+  panel = make_panel(&fake);
+  fake.Response = FakeRegister;
+  assert(AppleAgxFixedPanelSetPresentFormat(&panel, 1u) ==
+         AppleAgxFixedPanelInvalidState);
+  assert(AppleAgxFixedPanelStart(&panel, 20ULL) == AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelSetPresentFormat(&panel, 1u) ==
+         AppleAgxFixedPanelInvalidState);
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u, 10240u,
+                                  1u) == AppleAgxFixedPanelOk);
+  /* No RGBA8888 capability: refused, the committed format stays. */
+  assert(AppleAgxFixedPanelSetPresentFormat(&panel, 2u) ==
+         AppleAgxFixedPanelInvalidMode);
+  assert(AppleAgxFixedPanelSetPresentFormat(&panel, 3u) ==
+         AppleAgxFixedPanelInvalidMode);
+  assert(panel.Scanout.PresentFormat == 1u);
+
+  memset(&fake, 0, sizeof(fake));
+  fake.Version = APPLE_AGX_SCANOUT_ABI_VERSION_V2;
+  fake.Capabilities = APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES |
+                      APPLE_AGX_SCANOUT_CAP_REPEATED_PRESENT |
+                      APPLE_AGX_SCANOUT_CAP_LATCHED_RECEIPT |
+                      APPLE_AGX_SCANOUT_CAP_LATCHED_IRQ |
+                      APPLE_AGX_SCANOUT_CAP_RGBA8888;
+  panel = make_panel(&fake);
+  fake.Response = FakeRegister;
+  assert(AppleAgxFixedPanelStart(&panel, 20ULL) == AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u, 10240u,
+                                  1u) == AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelSetPresentFormat(&panel, 2u) ==
+         AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelQueuePresent(&panel, 2u, 0x1000000ULL,
+                                        &sequence) == AppleAgxFixedPanelOk);
+  assert(fake.Format == 2u);
+  assert(AppleAgxFixedPanelSetPresentFormat(&panel, 1u) ==
+         AppleAgxFixedPanelOk);
+  /* A new commit resets the present format to the committed one. */
+  assert(AppleAgxFixedPanelSetPresentFormat(&panel, 2u) ==
+         AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u, 10240u,
+                                  1u) == AppleAgxFixedPanelOk);
+  assert(panel.Scanout.PresentFormat == 1u);
+}
+
 int main(void) {
+  test_present_format_follows_the_flipped_surface();
   test_start_registers_exact_pool();
   test_commit_accepts_only_fixed_mode_and_topology();
   test_present_translates_segment_address_without_copy();

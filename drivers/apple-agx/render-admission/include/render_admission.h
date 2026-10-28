@@ -116,6 +116,27 @@ typedef enum _ADMISSION_DISPLAY_DDI_TRACE_ID {
   AdmissionDisplayDdiUpdateMonitorLinkInfo = 12
 } ADMISSION_DISPLAY_DDI_TRACE_ID;
 
+/* rc110 receipt (Wom1DisplayModesReceipt): the display-mode path end to
+ * end, written after every traced display DDI.  Counters are updated at any
+ * IRQL with interlocked operations; the writer runs at PASSIVE_LEVEL. */
+#define ADMISSION_DISPLAY_MODES_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
+  volatile LONG Version, Bytes;
+  volatile LONG BrokerAbi, BrokerCaps, ScaledModes, BuildSwitch;
+  volatile LONG EnumCalls, LastEnumStatus, LastEnumPivot, LastEnumSourceModes;
+  volatile LONG LastEnumTargetModes, LastCommitTargetWidth, LastCommitTargetHeight;
+  volatile LONG IsSupportedCalls, LastIsSupportedStatus, LastIsSupportedVerdict;
+  volatile LONG CommitCalls, LastCommitStatus, LastCommitWidth, LastCommitHeight;
+  volatile LONG LastCommitStride, LastCommitFormat, LastCommitScaling;
+  volatile LONG VisibilityCalls, LastVisible;
+  volatile LONG MonitorModeCalls, LastMonitorModesStatus, LastMonitorModesAdded;
+  volatile LONG SourceAddressCalls, LastSourceAddressStatus, LastSourceAddressFlags;
+  volatile LONG LastSourceAddressFormat, LastSourceAddressWidth, LastSourceAddressHeight;
+  volatile LONG GeometryRefusals, FormatRefusals, LayoutRefusals, DeferredFlips;
+  volatile LONG CommittedWidth, CommittedHeight, CommittedStride, CommittedFormat;
+  volatile LONG CommittedScaling, SourceVisible, DisplayActive;
+} ADMISSION_DISPLAY_MODES_RECEIPT;
+
 typedef enum _ADMISSION_START_STAGE {
   AdmissionStartNone = 0,
   AdmissionStartEntered = 1,
@@ -650,6 +671,7 @@ typedef struct _ADMISSION_CONTEXT {
   D3DDDIFORMAT CommittedFormat;
   /* rc106: D3DKMDT_VPPS_* transform of the committed source to the panel. */
   ULONG CommittedScaling;
+  ADMISSION_DISPLAY_MODES_RECEIPT DisplayModes;
   volatile LONG SourceAddressStage;
   volatile LONG SourceAddressStatus;
   volatile LONG SourceAddressReceiptState;
@@ -950,6 +972,13 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
   /* EXP1060: a classless allocation created with presentation resource data
    * (a swapchain or primary surface); the copy escape may access it. */
   ULONG Presentation;
+  /* rc110 (EXP2049): the only allocations the scanout gates accept: a plain
+   * linear description (the D3D11 UMD's AIL-linear textures, the D3D12
+   * presentation storage and the standard allocations the KMD describes
+   * itself) of a GPU-only 32-bpp GDI-surface texture in a format the broker
+   * scans; never an R105 native resource, whose layout the Mesa layer owns
+   * (twiddled or compressed). */
+  ULONG ScanoutCapable;
   /* Created-with refresh rate reported by DxgkDdiDescribeAllocation. */
   UINT PrimaryRefreshNumerator;
   UINT PrimaryRefreshDenominator;
@@ -1874,6 +1903,7 @@ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(_In_ ADMISSION_CONTEXT *Adapter,
     _In_reads_bytes_(Bytes) const VOID *Command, UINT Bytes,
     _Out_ ULONGLONG *BytesCopied);
 #endif
+void AdmissionRecordDisplayModes(_In_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordDisplayDdi(_In_opt_ PDEVICE_OBJECT DeviceObject,
                                _In_ ULONG DdiId, _In_ ULONG Phase,
                                _In_ NTSTATUS Status);
@@ -2073,6 +2103,13 @@ NTSTATUS AdmissionScanoutStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutStop(_Inout_ ADMISSION_CONTEXT *Context);
 /* D3D-FS1: TRUE for A8R8G8B8, and for A8B8G8R8 when the hypervisor scans
  * out RGBA8888 (APPLE_AGX_SCANOUT_CAP_RGBA8888). */
+/* rc110 receipt: the qualified broker's ABI version and capabilities. */
+VOID AdmissionScanoutBrokerInfo(_In_ ADMISSION_CONTEXT *Context,
+                                _Out_ ULONG *AbiVersion,
+                                _Out_ ULONG *Capabilities);
+/* The broker's format code for a scanout-capable D3DDDIFORMAT, else 0. */
+ULONG AdmissionScanoutFormatCode(_In_ ADMISSION_CONTEXT *Context,
+                                 _In_ D3DDDIFORMAT Format);
 BOOLEAN AdmissionScanoutFormatSupported(_In_ ADMISSION_CONTEXT *Context,
                                         _In_ D3DDDIFORMAT Format);
 /* rc106: source modes beside the native one are offered only when the

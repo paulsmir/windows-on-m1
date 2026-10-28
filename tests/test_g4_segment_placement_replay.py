@@ -56,11 +56,12 @@ enum { STATUS_SUCCESS=0, STATUS_INVALID_PARAMETER=-1,
        STATUS_NO_MEMORY=-4 };
 #define D3DDDIFMT_A8R8G8B8 21u
 #define D3DKMDT_GDISURFACE_TEXTURE 2u
-typedef struct { unsigned Type, Format; uint64_t Size; unsigned CpuVisible, Reserved; }
+typedef struct { unsigned Type, Format; uint64_t Size; unsigned CpuVisible, Reserved,
+                 BytesPerPixel; }
     ADMISSION_ALLOCATION_DESCRIPTION;
 typedef struct { ADMISSION_ALLOCATION_DESCRIPTION Description; } ALLOCATION_OBJECT;
 typedef struct { ALLOCATION_OBJECT Object; unsigned Win32ClassId, Win32Flags;
-                 int WrittenPrimary, Presentation;
+                 int WrittenPrimary, Presentation, ScanoutCapable;
                  unsigned PrimaryRefreshNumerator, PrimaryRefreshDenominator;
                  ULONGLONG PoolReserved; }
     ADMISSION_ALLOCATION_HANDLE;

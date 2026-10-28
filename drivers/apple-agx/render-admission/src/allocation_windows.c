@@ -472,6 +472,17 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   allocation->WrittenPrimary = resourceData != NULL &&
       (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
   allocation->Presentation = resourceData != NULL && classId == 0u;
+  /* rc110 (EXP2049): scanout admits only a plain linear description, never
+   * an R105 native resource (its layout is the Mesa layer's), and only a
+   * GPU-only 32-bpp GDI-surface texture in a broker format. */
+  allocation->ScanoutCapable =
+      !r105Enabled && description->Type == (UINT)D3DKMDT_GDISURFACE_TEXTURE &&
+              description->CpuVisible == 0u &&
+              description->BytesPerPixel == 4u &&
+              AdmissionScanoutFormatSupported(
+                  context, (D3DDDIFORMAT)description->Format)
+          ? 1u
+          : 0u;
   AdmissionPresentResourceRefreshRate(resourceData,
                                       &allocation->PrimaryRefreshNumerator,
                                       &allocation->PrimaryRefreshDenominator);
