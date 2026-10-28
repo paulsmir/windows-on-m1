@@ -99,6 +99,9 @@ int AgxWin32AsahiBufferCopy(struct pipe_context *, struct pipe_resource *,
     APPLE_AGX_U64, struct pipe_resource *, APPLE_AGX_U64, APPLE_AGX_U64);
 void *AgxWin32AsahiBufferCurrentMap(struct pipe_context *, struct pipe_resource *);
 APPLE_AGX_U64 AgxWin32AsahiBufferGpuAddress(struct pipe_resource *);
+/* rc110 receipt-only: tiling | compressed << 4 | compressed modifier << 5 |
+ * layout KiB << 8 (agx_win32_asahi_scene.c) */
+APPLE_AGX_U32 AgxWin32AsahiResourceLayoutFacts(struct pipe_resource *);
 #ifdef APPLE_AGX_GPUVA_WINSYS
 /* C53 B1: reserved buffers over virtual BOs (agx_win32_asahi_bo.h) */
 struct pipe_resource *AgxWin32AsahiCreateReservedBuffer(struct pipe_screen *, APPLE_AGX_U64 Bytes);

@@ -537,6 +537,14 @@ static void owner_gpu_only_map(unsigned token, unsigned flags) {
   const UINT values[] = {token, 0u, flags};
   AdmissionUmdDiagnostic("measure-gpu-only-map", E_INVALIDARG, values, 3u);
 }
+/* rc110 receipt-only: measure-render-tile-layout {sample bytes, samples,
+ * utile width, utile height, render width, render height}, once per distinct
+ * render layout of the process (agx_win32_gpuva_batch.c note_tile_layout):
+ * the utile that APPLE_AGX_TILE_BUFFER_BYTES selected. */
+extern "C" void (*AgxWin32TileLayoutHook)(const uint32_t *values, unsigned count);
+static void owner_tile_layout(const uint32_t *values, unsigned count) {
+  AdmissionUmdDiagnostic("measure-render-tile-layout", S_OK, values, count);
+}
 static void owner_bo_time(unsigned mib, unsigned cls, unsigned create_us, unsigned bind_us, unsigned associate_us) {
   const UINT values[] = {mib, cls, create_us, bind_us, associate_us};
   AdmissionUmdDiagnostic("measure-bo-create", S_OK, values, 5u);
@@ -858,6 +866,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     (void)InitOnceExecuteOnce(&owner_wait_once, owner_wait_init, NULL, NULL);
     AgxWin32BoTimeHook = owner_bo_time;
     AgxWin32GpuOnlyMapHook = owner_gpu_only_map;
+    AgxWin32TileLayoutHook = owner_tile_layout;
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(hr)) create_upload_ring(owner);
@@ -1645,8 +1654,12 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
    * set_shader_images decompresses a written image itself */
   if (height > 0xffffu || layers > 0xffffu) return E_INVALIDARG;
   struct pipe_resource *resource = owner->Screen->resource_create(owner->Screen, &templ);
+  /* rc110: value 4 = AgxWin32AsahiResourceLayoutFacts (tiling, compressed,
+   * layout KiB): whether the texture took Asahi's lossless compression;
+   * value 5 = the pipe binds it was created with. */
   receipt("measure-d3d12-texture", resource ? S_OK : E_OUTOFMEMORY, static_cast<UINT>(templ.format), width | (height << 16),
-          layers | (levels << 16));
+          layers | (levels << 16), resource ? AgxWin32AsahiResourceLayoutFacts(resource) : 0u,
+          static_cast<UINT>(templ.bind) | (templ.flags & PIPE_RESOURCE_FLAG_UNMAPPABLE ? 0x80000000u : 0u));
   if (!resource) return E_OUTOFMEMORY;
   owner_watch_resource(owner,resource,1u);
   texture->Resource = resource;

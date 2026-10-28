@@ -408,6 +408,27 @@ void (*AgxWin32VdmTraceHook)(uint64_t va, const uint32_t *words,
  * sample while clears and copies reach them): the render fields that carry
  * the sample count, for every multisampled render, as submitted. */
 void (*AgxWin32RenderTraceHook)(const uint32_t *values, unsigned count);
+/* rc110 receipt-only: the tile-buffer configuration of every distinct
+ * render layout this process submits (sample bytes, samples, utile width and
+ * height, render width and height), once each: the hardware proof of the
+ * utile APPLE_AGX_TILE_BUFFER_BYTES selects (agx_win32_tile_limit.h). */
+void (*AgxWin32TileLayoutHook)(const uint32_t *values, unsigned count);
+#ifdef _MSC_VER
+#define AGX_WIN32_TILE_LAYOUT_SLOTS 16u
+static uint32_t agx_win32_tile_layouts[AGX_WIN32_TILE_LAYOUT_SLOTS][6];
+static unsigned agx_win32_tile_layout_count;
+static void note_tile_layout(const APPLE_AGX_G4_NATIVE_RENDER *r) {
+  const uint32_t values[6]={r->SampleSizeBytes,r->Samples,r->UtileWidthPx,r->UtileHeightPx,
+      r->WidthPx,r->HeightPx};
+  unsigned i;
+  if(!AgxWin32TileLayoutHook) return;
+  for(i=0;i<agx_win32_tile_layout_count;++i)
+    if(!memcmp(agx_win32_tile_layouts[i],values,sizeof(values))) return;
+  if(agx_win32_tile_layout_count<AGX_WIN32_TILE_LAYOUT_SLOTS)
+    memcpy(agx_win32_tile_layouts[agx_win32_tile_layout_count++],values,sizeof(values));
+  AgxWin32TileLayoutHook(values,6u);
+}
+#endif
 /* EXP1317 receipt-only: every pixel shader whose indexable temporary Asahi
  * lowers to scratch (above 256 bytes) hung the GPU (agx_scratch_smoke n=24,
  * DEVICE_HUNG) with the SGX core topology reported. The fragment helper
@@ -955,6 +976,9 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   native_render.Flags|=1u<<2;
   if(!prepare_process_buffers(b,g,&native_render,ranges)) { fail_site=__LINE__; goto fail; }
 #ifdef _MSC_VER
+  /* rc110 receipt (MSVC only, like the render trace: the host models extract
+   * this function's body without the file-scope helper) */
+  note_tile_layout(&native_render);
   if(AgxWin32RenderTraceHook && native_render.Samples>1) {
     const uint32_t values[14]={native_render.Samples,native_render.SampleSizeBytes,
         native_render.UtileWidthPx|((uint32_t)native_render.UtileHeightPx<<8),

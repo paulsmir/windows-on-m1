@@ -380,6 +380,20 @@ APPLE_AGX_U64 AgxWin32AsahiBufferGpuAddress(struct pipe_resource *resource) {
   struct agx_resource *native=agx_resource(resource);
   return native->bo ? agx_map_gpu(native) : 0;
 }
+/* rc110 receipt-only: {tiling (ail_tiling: 0 linear, 1 GPU tiled), bit 4 the
+ * layout is compressed (ail_layout.compressed), bit 5 the modifier is the
+ * compressed one, bits 8.. the layout size in KiB} of a created resource, so
+ * a log shows whether a render target took Asahi's default lossless
+ * compression (agx_select_best_modifier) without a hardware probe. */
+APPLE_AGX_U32 AgxWin32AsahiResourceLayoutFacts(struct pipe_resource *resource) {
+  if(!resource) return 0;
+  const struct agx_resource *native=agx_resource(resource);
+  const APPLE_AGX_U64 kib=native->layout.size_B>>10;
+  return ((APPLE_AGX_U32)native->layout.tiling & 0xfu) |
+         (native->layout.compressed ? 0x10u : 0u) |
+         (ail_is_drm_modifier_compressed(native->modifier) ? 0x20u : 0u) |
+         (APPLE_AGX_U32)((kib>0xffffffull ? 0xffffffull : kib)<<8);
+}
 int AgxWin32AsahiResourceBusy(struct pipe_context *ctx,struct pipe_resource *resource) {
   if(!ctx || !resource || resource->screen!=ctx->screen) return 1;
   struct agx_context *native=agx_context(ctx);
