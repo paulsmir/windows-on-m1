@@ -59,6 +59,9 @@ HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
  * buffers get the persistent CPU mapping (Buffer->Cpu, NULL otherwise). */
 HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *Owner, unsigned long long Bytes, BOOL CpuVisible,
                                   AGX_D3D12_BUFFER *Buffer);
+/* rc99: mark the BOs created next as READBACK-heap storage (native
+ * readback reserve). Hold AgxD3d12OwnerLock from TRUE to FALSE. */
+void AgxD3d12OwnerSetReadbackIntent(AGX_D3D12_OWNER *Owner, BOOL Readback);
 /* Receipt-only persistent pointer and API MapHeap/UnmapHeap observations. */
 void AgxD3d12OwnerRecordHeapMap(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Buffer, BOOL Map);
 void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *Owner, HRESULT Error);

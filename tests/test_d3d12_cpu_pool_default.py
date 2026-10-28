@@ -120,7 +120,9 @@ class D3d12CpuPoolDefault(unittest.TestCase):
         prefix = prefix.replace("#include <cassert>", "#include <cassert>\n#include <cstdio>\n#include <cstdint>")
         prefix = prefix.replace("using UINT=unsigned;", "using ULONGLONG=unsigned long long;\nusing UINT=unsigned;")
         prefix = prefix.replace("BOOL ScreenClosing,DrawTerminal,HeapStaging,DirectCpuPool;",
-                                "BOOL ScreenClosing,DrawTerminal,HeapStaging,DirectCpuPool,NativeStagingDisabled;")
+                                "BOOL ScreenClosing,DrawTerminal,HeapStaging,DirectCpuPool,NativeStagingDisabled;\n"
+                                " UINT NativeReadbackReserve; /* rc99 */\n"
+                                "#define ADMISSION_UMD_NATIVE_READBACK_RESERVE (2u<<20)\n")
         prefix = prefix.replace("struct CB {", "static int lock_unused() {return 1;}\nstatic int unlock_unused() {return 1;}\nstruct CB {")
         prefix = prefix.replace("HRESULT (*pfnDeallocateCb)(void*,D3DDDICB_DEALLOCATE*);",
                                 "HRESULT (*pfnDeallocateCb)(void*,D3DDDICB_DEALLOCATE*); int (*pfnLockCb)(); int (*pfnUnlockCb)();")

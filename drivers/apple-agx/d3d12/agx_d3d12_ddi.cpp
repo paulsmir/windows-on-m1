@@ -2165,7 +2165,19 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
      * kernel allocation below; copies refuse such heaps. */
     if (AGX_D3D12_OWNER *owner = arg.ByteSize && heap->bytes <= MAXUINT32 ? EnsureOwner(device) : nullptr) {
         AGX_D3D12_BUFFER buffer = {};
+        /* rc99 (EXP2031): a READBACK heap on private staging made every
+         * submission that writes it complete and download synchronously
+         * (4.1 ms of GPU idle per HD frame); it may take the native reserve. */
+        const BOOL readback = arg.CPUPageProperty == D3D12DDI_CPU_PAGE_PROPERTY_WRITE_BACK;
+        if (readback) {
+            AgxD3d12OwnerLock(owner);
+            AgxD3d12OwnerSetReadbackIntent(owner, TRUE);
+        }
         HRESULT native = AgxD3d12OwnerCreateBuffer(owner, heap->bytes, heap->cpu_visible, &buffer);
+        if (readback) {
+            AgxD3d12OwnerSetReadbackIntent(owner, FALSE);
+            AgxD3d12OwnerUnlock(owner);
+        }
         if (SUCCEEDED(native)) {
             heap->native = buffer.Resource;
             heap->gpuva = buffer.GpuVa;

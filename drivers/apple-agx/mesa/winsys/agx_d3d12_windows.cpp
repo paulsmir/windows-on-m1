@@ -801,6 +801,13 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     owner->Runtime.NativeStagingDisabled =
         GetEnvironmentVariableA("APPLE_AGX_D3D12_NATIVE_STAGING", native_staging,
                                 sizeof(native_staging)) == 1 && native_staging[0] == '0';
+    /* rc99: READBACK heaps keep a native reserve (umd_native_arena.h);
+     * exact 0 restores the RC64 first-come placement for comparison. */
+    char readback_reserve[2] = {};
+    owner->Runtime.NativeReadbackReserve =
+        GetEnvironmentVariableA("APPLE_AGX_D3D12_READBACK_RESERVE", readback_reserve,
+                                sizeof(readback_reserve)) == 1 && readback_reserve[0] == '0'
+            ? 0u : ADMISSION_UMD_NATIVE_READBACK_RESERVE;
 #endif
     owner->Owner.Device = &owner->Runtime;
     owner->Owner.Backend = &owner->Backend;
@@ -890,6 +897,19 @@ extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned lo
   buffer->Bytes = bytes;
   owner_cpu_pointer(owner, buffer, AdmissionCpuOwnerPointer);
   return S_OK;
+}
+
+/* rc99: the BOs created while the intent is set are READBACK-heap storage
+ * (GPU-written, CPU-read), which may take the native readback reserve. The
+ * caller holds the owner lock from setting to clearing it, so no other
+ * thread's BO creation sees it. */
+extern "C" void AgxD3d12OwnerSetReadbackIntent(AGX_D3D12_OWNER *owner, BOOL readback) {
+  OwnerLock lock(owner);
+#if defined(APPLE_AGX_GPUVA_WINSYS) && defined(APPLE_AGX_NATIVE_STAGING)
+  if (owner) owner->Runtime.NativeReadbackIntent = readback ? TRUE : FALSE;
+#else
+  (void)readback;
+#endif
 }
 
 extern "C" HRESULT AgxD3d12OwnerCreateReservedBuffer(AGX_D3D12_OWNER *owner, unsigned long long bytes,
