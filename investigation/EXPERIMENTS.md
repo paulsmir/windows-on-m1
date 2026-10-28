@@ -65322,3 +65322,20 @@ EXP2011 HARDWARE ACTUAL (2026-10-28): **PASS, new best FHD**. rc80 TVB growth.
   - net frame 25.93 → 25.69.
 - The per-job cost now scales with the TVB size (suspect: a per-job proof of all heap blocks). Handed to rc81.
 - Verdict: rc80 8c83d4da, 184ce894, 2835ac1b, f927f1ca and 7c1519f2 validated: the firmware accepts a TVB over 32 blocks.
+
+EXP2012 HARDWARE BEFORE 2026-10-28T00:49:54Z:
+- WHY:
+  - EXP2011: the TVB growth removed the partials, but c_kick_ms rose 2.05 → 2.61 and rc_prelude_kick_ms 1.95 → 2.26, because the TVB heap proof walks every backed page (6624+) twice per render under state->Lock;
+  - render builds are bimodal (265 vs 64-84 µs), probably Icestorm against Firestorm cores.
+- ATOMIC CONTRACT: none; two independent changes, each with a device switch (Wom1JobThreadOff, Wom1JobThreadAnyCore) and receipts.
+- Expected:
+  - Wom1JobTiming971 v2 worker_flags pinned, class 1;
+  - render build ≤ 90 µs;
+  - c_kick_ms ≤ 2.05, rc_prelude_kick_ms ≤ 1.95;
+  - HD frame ≤ 24 ms;
+  - score above 5820 (HD) and 3550 (FHD); no TDR or poison.
+- Failure criteria: a TDR, a hang (worker thread), removal, or a regression.
+- Recovery: rec2012h.
+- Hashes: sys 1c394849af52, UmdArm64 f6534ffc7b25, UmdX64 51d12302955b, Umd32 d1d03a9ad6df; manifest 0a85302d10eb, hardware-manifest f4366eb2f208; probe2012.sh 997c095c76f6 (PROBE_LINT_OK); visible recovery rec2012h 30067c3153ee720b; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2012h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2012-job-thread/run2012.sh.
