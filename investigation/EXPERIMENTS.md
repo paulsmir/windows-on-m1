@@ -65381,3 +65381,18 @@ EXP2013 HARDWARE ACTUAL (2026-10-28): **soft faults confirmed for shader data re
 - Wom1SoftFaultState: RegionC 0xb; SGX 0x17620 = 8, 0x17630 = 8.
 - So under fault_control 0xb (rc77) the firmware handles shader data reads as Asahi/macOS soft faults: app OOB data reads are silent. Only driver-built control-stream faults remain fatal (EXP2005/2007).
 - Verdict: rc82 f687c5e5 validated; prerequisite for Wom1SoftFaults=1 met.
+
+EXP2014 HARDWARE BEFORE 2026-10-28T01:31:19Z:
+- WHY: EXP2013 RC82A showed that shader reads of unmapped memory return 0 with no fault event under fault_control 0xb. With the feature reported, Mesa speculates memory loads only (no textures, no address-0 vertex fixup). Offline, bdb1944a goes from 215 to 207 GPRs and occupancy from 448 to 512; 44 kernels change.
+- ATOMIC CONTRACT: one switch.
+- Expected:
+  - Wom1SoftFaultState active 1; UMD measure-soft-faults 1,3,1;
+  - bdb1944a stats 207 GPRs / 512 threads;
+  - RC82A PASS;
+  - no new Wom1GpuFault events during GravityMark; correct image;
+  - HD above 6045, FHD above 3550.
+- Failure criteria: GPU faults, removal, a wrong image, or a regression.
+- Recovery: rec2014h; drop the switch.
+- Hashes: sys 673f0f9702db, UmdArm64 305f68493f8f, UmdX64 5d078be010f1, Umd32 9b98ce4fa5c7; manifest 52660f8fa5bb, hardware-manifest 086cc58195f0; probe2014.sh 6cd679342987 (PROBE_LINT_OK); visible recovery rec2014h 7715e17bb21551de; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultControlRead=1 Wom1SoftFaults=1.
+- Recovery rec2014h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2014-soft-faults/run2014.sh.
