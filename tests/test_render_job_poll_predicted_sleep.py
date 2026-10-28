@@ -256,6 +256,37 @@ class JobPollPredictedSleep(unittest.TestCase):
     def test_planner_invariants(self):
         build_and_run(self, INVARIANTS)
 
+    def test_worker_wiring(self):
+        """The G3 worker plans every poll with AdmissionJobPollPlan, sleeps on
+        the high-resolution timer (bounded wait), learns at the loop exit
+        from the start of the poll that saw the completion, reads the kill
+        switch Wom1JobPollSpinUs, deletes the timer once no worker runs and
+        exports Wom1JobPoll; the non-G3 worker keeps the rc72 schedule."""
+        text = WORKER.read_text()
+        plan = text.index("action = AdmissionJobPollPlan(&runtime->JobPoll")
+        loop = text.rindex("while (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&", 0, plan)
+        self.assertIn("pollIteration = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;",
+                      text[loop:plan])
+        body = text[plan:plan + 1500]
+        self.assertRegex(body, r"ADMISSION_JOB_POLL_SPIN\) \{\s*pollAfterSleep = FALSE;\s*"
+                               r"KeStallExecutionProcessor\(planUs\);\s*continue;")
+        self.assertIn("AdmissionJobPollSleepWindows(runtime, planUs", body)
+        self.assertIn("#else\n      ULONG stallUs = AdmissionJobPollStallUs(elapsedUs);", body)
+        finish = text.index("AdmissionJobPollFinish(&runtime->JobPoll", plan)
+        self.assertLess(finish, text.index("AdmissionRenderCorrelationWorkerWindows(\n      adapter, description.Fence, FALSE", plan))
+        sleep = text[text.index("static NTSTATUS AdmissionJobPollSleepWindows("):]
+        sleep = sleep[:sleep.index("\n}\n")]
+        self.assertIn("timeout.QuadPart = interval.QuadPart - 20000LL;", sleep)
+        self.assertIn("ExCancelTimer(runtime->JobPollTimer, NULL)", sleep)
+        self.assertIn("KeDelayExecutionThread(KernelMode, FALSE, &interval)", sleep)
+        self.assertIn('AdmissionPlatformDwordValue(Context, L"Wom1JobPollSpinUs", &spinUs)', text)
+        self.assertIn("ExAllocateTimer(AdmissionJobPollTimerCallback,\n          runtime, EX_TIMER_HIGH_RESOLUTION)", text)
+        destroy = text[text.index("static NTSTATUS AdmissionPlatformDestroy("):]
+        self.assertLess(destroy.index("Runtime->JobThreadObject = NULL;"),
+                        destroy.index("ExDeleteTimer(Runtime->JobPollTimer, TRUE, TRUE, NULL)"))
+        self.assertIn('RtlInitUnicodeString(&name, L"Wom1JobPoll");', text)
+        self.assertIsNone(re.search(r"#include\s*<std", text))
+
 
 if __name__ == "__main__":
     unittest.main()

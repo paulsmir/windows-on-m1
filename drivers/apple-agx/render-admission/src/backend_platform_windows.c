@@ -175,6 +175,13 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONGLONG ComputeTsCommandVa, ComputeTsWords[4];
   ULONG FwTs1Fence, FwTs1Polls;
   ULONGLONG FwTs1Kick, FwTs1First, FwTs1FirstQpc;
+  /* rc100: predicted-sleep completion poll (render_job_timing.h), worker
+   * only; its high-resolution timer signals JobPollTimerEvent (NULL: the
+   * sleeps fall back to KeDelayExecutionThread). Wom1JobPoll receipt. */
+  ADMISSION_JOB_POLL_STATE JobPoll;
+  ADMISSION_JOB_POLL_STATE JobPollSnapshot;
+  PEX_TIMER JobPollTimer;
+  KEVENT JobPollTimerEvent;
 #endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
   volatile LONG B1Active;
@@ -870,6 +877,9 @@ static VOID AdmissionJobTimingExportWindows(
   RtlCopyMemory(&runtime->GpuPerfSnapshot, &runtime->GpuPerf,
       sizeof(runtime->GpuPerfSnapshot));
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+  /* rc100: the poll state is the worker's own (this is the worker). */
+  RtlCopyMemory(&runtime->JobPollSnapshot, &runtime->JobPoll,
+      sizeof(runtime->JobPollSnapshot));
   status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
       PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
   if (NT_SUCCESS(status)) {
@@ -894,11 +904,88 @@ static VOID AdmissionJobTimingExportWindows(
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->GpuPerfSnapshot, sizeof(runtime->GpuPerfSnapshot));
     }
+    if (NT_SUCCESS(status) && runtime->JobPollSnapshot.Version != 0u) {
+      RtlInitUnicodeString(&name, L"Wom1JobPoll");
+      status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
+          &runtime->JobPollSnapshot, sizeof(runtime->JobPollSnapshot));
+    }
     ZwClose(key);
   }
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   runtime->JobTiming.LastExportQpcTicks = AdmissionJobQpc() - before;
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+/* rc100: the poll timer's expiry (DISPATCH_LEVEL) wakes the worker. */
+static EXT_CALLBACK AdmissionJobPollTimerCallback;
+static VOID AdmissionJobPollTimerCallback(PEX_TIMER Timer, PVOID Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = (ADMISSION_PLATFORM_RUNTIME *)Context;
+  UNREFERENCED_PARAMETER(Timer);
+  if (runtime != NULL)
+    KeSetEvent(&runtime->JobPollTimerEvent, IO_NO_INCREMENT, FALSE);
+}
+
+/* rc100: the job's poll key (its context and DMA bytes as the submission
+ * recorded them in the timing ring, its kind) and prediction; 0 in the
+ * rc72 mode or when the ring no longer holds the fence. */
+static ULONGLONG AdmissionJobPollBeginWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *description,
+    ULONG *predictedUs) {
+  const ADMISSION_JOB_TIMING_SLOT *slot;
+  ULONGLONG context = 0ULL, key;
+  ULONG dmaBytes = 0u;
+  BOOLEAN found = FALSE;
+  KIRQL oldIrql;
+  *predictedUs = 0u;
+  if (runtime->JobPoll.SpinWindowUs != ADMISSION_JOB_POLL_PREDICTIVE)
+    return 0ULL;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  slot = AdmissionJobTimingFind(&runtime->JobTiming, description->Fence);
+  if (slot != NULL) {
+    context = slot->ContextToken;
+    dmaBytes = slot->DmaBytes;
+    found = TRUE;
+  }
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+  if (!found)
+    return 0ULL;
+  key = AdmissionJobPollBegin(&runtime->JobPoll, context, description->Kind,
+                              dmaBytes);
+  *predictedUs = AdmissionJobPollPredict(&runtime->JobPoll, key);
+  return key;
+}
+
+/* rc100: sleep about Us microseconds at PASSIVE_LEVEL on the
+ * high-resolution timer (KeDelayExecutionThread, tick-rounded, without
+ * one); the wait is bounded so a lost expiry cannot hold the worker. */
+static NTSTATUS AdmissionJobPollSleepWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG us,
+    LARGE_INTEGER frequency) {
+  LARGE_INTEGER before, after, interval;
+  NTSTATUS status;
+  before = KeQueryPerformanceCounter(NULL);
+  interval.QuadPart = -(LONGLONG)us * 10LL;
+  if (runtime->JobPollTimer != NULL) {
+    LARGE_INTEGER timeout;
+    KeClearEvent(&runtime->JobPollTimerEvent);
+    (void)ExSetTimer(runtime->JobPollTimer, interval.QuadPart, 0LL, NULL);
+    timeout.QuadPart = interval.QuadPart - 20000LL;
+    status = KeWaitForSingleObject(&runtime->JobPollTimerEvent, Executive,
+                                   KernelMode, FALSE, &timeout);
+    if (status == STATUS_TIMEOUT) {
+      (void)ExCancelTimer(runtime->JobPollTimer, NULL);
+      status = STATUS_SUCCESS;
+    }
+  } else {
+    status = KeDelayExecutionThread(KernelMode, FALSE, &interval);
+  }
+  after = KeQueryPerformanceCounter(NULL);
+  if (frequency.QuadPart > 0)
+    AdmissionJobPollNoteSleep(&runtime->JobPoll, us,
+        (ULONGLONG)(after.QuadPart - before.QuadPart) * 1000000ULL /
+            (ULONGLONG)frequency.QuadPart);
+  return status;
 }
 #endif
 
@@ -4763,6 +4850,15 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN deferred = FALSE;
   BOOLEAN drilled = FALSE;
   LARGE_INTEGER pollStart, pollFrequency;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* rc100: this job's poll key and prediction, the elapsed time of the
+   * last poll that saw it running, whether a sleep followed that poll. */
+  ULONGLONG pollKey = 0ULL;
+  ULONG pollPredictedUs = 0u;
+  ULONGLONG pollLastUs = 0ULL;
+  BOOLEAN pollAfterSleep = FALSE;
+  ULONGLONG pollIteration = 0ULL;
+#endif
 #if ADMISSION_JOB_AHEAD_BUILD
   /* rc90: jobs this invocation chained; the successor of the running job
    * was bound ahead (or will not be retried); the last prebind refusal. */
@@ -5094,6 +5190,11 @@ ChainNext:
 
   pollStart = KeQueryPerformanceCounter(&pollFrequency);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  pollKey = AdmissionJobPollBeginWindows(runtime, &description,
+                                         &pollPredictedUs);
+  pollLastUs = 0ULL;
+  pollAfterSleep = FALSE;
+  pollIteration = (ULONGLONG)pollStart.QuadPart;
   runtime->FwTs1Fence = description.Fence;
   runtime->FwTs1Polls = 0u;
   runtime->FwTs1Kick = AdmissionFwTs1Read(runtime);
@@ -5115,6 +5216,11 @@ ChainNext:
     LARGE_INTEGER interval;
     InterlockedExchange64(&runtime->LastPollMs,
                           (LONG64)AdmissionPlatformNowMs());
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    /* rc100: the poll that sees the completion started here (the
+     * completion's own processing is not job time). */
+    pollIteration = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+#endif
 #if ADMISSION_JOB_AHEAD_BUILD
     /* rc90 step 2: bind the successor while this job runs; a refusal is
      * retried at the next poll until it binds, fails or is dropped. */
@@ -5351,15 +5457,46 @@ ChainNext:
       break;
     {
       /* EXP1073/rc72: poll jobs at a fine step for the spin window, then
-       * sleep ticks. */
+       * sleep ticks. rc100 (AdmissionJobPollPlan): sleep through the
+       * predicted part of the job first; Wom1JobPollSpinUs restores the
+       * rc72 schedule. */
       LARGE_INTEGER pollNow = KeQueryPerformanceCounter(NULL);
-      ULONG stallUs = AdmissionJobPollStallUs(pollFrequency.QuadPart > 0 ?
+      ULONGLONG elapsedUs = pollFrequency.QuadPart > 0 ?
           (ULONGLONG)(pollNow.QuadPart - pollStart.QuadPart) * 1000000ULL /
-              (ULONGLONG)pollFrequency.QuadPart : ~0ULL);
+              (ULONGLONG)pollFrequency.QuadPart : ~0ULL;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+      ULONG planUs = 0u, sleepCapUs = 0u, action;
+#if ADMISSION_JOB_AHEAD_BUILD
+      /* a successor not bound yet is retried at least every 250 us */
+      if (runtime->JobAhead && !prebindDone)
+        sleepCapUs = 250u;
+#endif
+      pollLastUs = elapsedUs;
+      action = AdmissionJobPollPlan(&runtime->JobPoll, elapsedUs,
+                                    pollPredictedUs, sleepCapUs, &planUs);
+      if (action == ADMISSION_JOB_POLL_SPIN) {
+        pollAfterSleep = FALSE;
+        KeStallExecutionProcessor(planUs);
+        continue;
+      }
+      if (action == ADMISSION_JOB_POLL_SLEEP) {
+        pollAfterSleep = TRUE;
+        if (!NT_SUCCESS(AdmissionJobPollSleepWindows(runtime, planUs,
+                                                     pollFrequency))) {
+          InterlockedCompareExchange(&adapter->SchedulerFaulted,
+              0x40000L | __LINE__, 0);
+          break;
+        }
+        continue;
+      }
+      pollAfterSleep = TRUE;
+#else
+      ULONG stallUs = AdmissionJobPollStallUs(elapsedUs);
       if (stallUs != 0u) {
         KeStallExecutionProcessor(stallUs);
         continue;
       }
+#endif
     }
     interval.QuadPart = -10000LL;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -5371,6 +5508,16 @@ ChainNext:
       break;
     }
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* rc100: learn the job's duration, count the poll (Wom1JobPoll). */
+  if (runtime->Backend.Phase == AppleAgxBackendRuntimeReady && !drilled &&
+      pollFrequency.QuadPart > 0 &&
+      pollIteration >= (ULONGLONG)pollStart.QuadPart)
+    AdmissionJobPollFinish(&runtime->JobPoll, pollKey, pollPredictedUs,
+        (pollIteration - (ULONGLONG)pollStart.QuadPart) *
+            1000000ULL / (ULONGLONG)pollFrequency.QuadPart,
+        pollLastUs, pollAfterSleep ? 1 : 0);
+#endif
   if (runtime->Backend.Phase != AppleAgxBackendRuntimeReady &&
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0)
@@ -5649,6 +5796,13 @@ static NTSTATUS AdmissionPlatformDestroy(
     ObDereferenceObject(Runtime->JobThreadObject);
     Runtime->JobThreadObject = NULL;
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* rc100: no worker runs any more (a later one would sleep on ticks). */
+  if (Runtime->JobPollTimer != NULL) {
+    (void)ExDeleteTimer(Runtime->JobPollTimer, TRUE, TRUE, NULL);
+    Runtime->JobPollTimer = NULL;
+  }
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (Runtime->CompletedOutput.Phase != AdmissionCompletedOutputEmpty &&
       !AdmissionCompletedOutputAbort(
@@ -5759,6 +5913,37 @@ static BOOLEAN AdmissionPlatformSwitchDisabled(ADMISSION_CONTEXT *Context,
   ZwClose(key);
   return enabled;
 }
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* rc100: a REG_DWORD device value; FALSE (Value unchanged) when absent or
+ * of another type. */
+static BOOLEAN AdmissionPlatformDwordValue(ADMISSION_CONTEXT *Context,
+                                           PCWSTR ValueName, ULONG *Value) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN found = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, ValueName);
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG)) {
+    *Value = *(const ULONG *)value->Data;
+    found = TRUE;
+  }
+  ZwClose(key);
+  return found;
+}
+#endif
 
 /* rc82: soft faults (Asahi file.rs:333-335 reports
  * DRM_ASAHI_FEATURE_SOFT_FAULTS exactly when fault_control is 0xb).  The
@@ -6145,6 +6330,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->AheadG4Native = runtime->AheadFinishedDropped = FALSE;
   runtime->GpuPerfOff =
       AdmissionPlatformSwitchDisabled(Context, L"Wom1GpuPerfReceipt");
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* rc100: Wom1JobPollSpinUs absent = the predicted-sleep poll on a
+   * high-resolution timer (tick sleeps if none can be allocated); any
+   * REG_DWORD = the rc72 schedule with that spin window (50000 = the
+   * pre-rc100 behaviour). */
+  {
+    ULONG spinUs = ADMISSION_JOB_POLL_PREDICTIVE;
+    ULONG flags = 0u;
+    (void)AdmissionPlatformDwordValue(Context, L"Wom1JobPollSpinUs", &spinUs);
+    KeInitializeEvent(&runtime->JobPollTimerEvent, SynchronizationEvent,
+                      FALSE);
+    runtime->JobPollTimer = NULL;
+    if (spinUs == ADMISSION_JOB_POLL_PREDICTIVE) {
+      runtime->JobPollTimer = ExAllocateTimer(AdmissionJobPollTimerCallback,
+          runtime, EX_TIMER_HIGH_RESOLUTION);
+      if (runtime->JobPollTimer != NULL)
+        flags |= ADMISSION_JOB_POLL_FLAG_HIGHRES;
+    }
+    AdmissionJobPollInitialize(&runtime->JobPoll, spinUs, flags);
+  }
+#endif
   InterlockedExchange(&Context->TdrDrillJobs, 0);
   Context->TdrDrillAllowed =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1TdrDrillAllowed");
