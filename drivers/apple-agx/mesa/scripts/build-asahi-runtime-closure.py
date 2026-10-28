@@ -276,6 +276,24 @@ def prepare_unsigned_bitfield_header(units, out):
     return relocated, destination, provenance
 
 
+def prepare_latency_schedule(units, include):
+    """RC96: project agx_compiler.h, agx_pressure_schedule.c and agx_compile.c
+    in the compiler-evidence directory (APPLE_AGX_LATENCY_SCHED=0 restores the
+    pinned compiler at run time). Both units must be ones the closure
+    compiles from that directory."""
+    script = Path(__file__).with_name('native-asahi-latency-schedule.py')
+    spec = importlib.util.spec_from_file_location('native_latency_schedule', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    names = {p.name: p for p in units}
+    for name in ('agx_pressure_schedule.c', 'agx_compile.c'):
+        if names.get(name) != include / name:
+            raise RuntimeError('RC96 latency schedule: ' + name + ' is not compiled beside the projected header')
+    hashes = module.project_directory(include)
+    return {'script': str(script), 'script_sha256': sha256(script),
+            'files': {name: {'before_sha256': b, 'after_sha256': a} for name, (b, a) in hashes.items()}}
+
+
 def compile_command(compiler, flags, includes, source, obj):
     command = [compiler, *flags, *('/I' + str(p) for p in includes),
                '/c', source, '/Fo' + str(obj)]
@@ -477,6 +495,10 @@ def main():
         compiler_units, bitfield_include, bitfield_transform = prepare_unsigned_bitfield_header(
             compiler_units, out)
         manifest['compiler_unsigned_bitfield_transform'] = bitfield_transform
+        # RC96: latency-aware scheduling, on the units and header just placed
+        # side by side (native-asahi-latency-schedule.py)
+        manifest['compiler_latency_schedule_transform'] = prepare_latency_schedule(
+            compiler_units, bitfield_include)
         libraries = []
         for relative in LIBRARIES:
             library = build / relative
