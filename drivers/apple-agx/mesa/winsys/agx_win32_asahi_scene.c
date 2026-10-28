@@ -70,7 +70,15 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(AGX_WIN32_ASAHI_BACKEND 
    * (dwmcore.dll_003d8800 removed the device on both shader paths). */
   params.num_cores_per_cluster=windows->Info.CoresPerCluster;
   params.core_masks[0]=windows->Info.CoreMask;
-  params.features=0; /* Optional soft faults are deliberately not enabled. */
+  /* RC82: Asahi reports DRM_ASAHI_FEATURE_SOFT_FAULTS when the kernel runs
+   * the firmware with fault_control 0xb (file.rs:333-335). The KMD reports
+   * it only with the device value Wom1SoftFaults = 1 and the published
+   * RegionC word 0xb (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS); otherwise no
+   * optional feature is enabled. The projected agx_has_soft_fault stays
+   * false; the feature reaches the compiler as agx_win32_soft_faults
+   * (agx_win32_soft_fault.h: shader memory loads may speculate). */
+  params.features=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS) ?
+      DRM_ASAHI_FEATURE_SOFT_FAULTS : 0;
   if(windows->Info.PageBytes!=AIL_PAGESIZE) return NULL;
   struct pipe_screen *screen=AgxWin32AsahiScreenCreate(backend,windows,owners,owner,batches,&params);
   if(screen) {

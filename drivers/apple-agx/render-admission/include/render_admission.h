@@ -831,6 +831,9 @@ typedef struct _ADMISSION_CONTEXT {
   ULONG GpuIdRegisters[5];
   ULONG GpuCoresPerCluster;
   ULONG GpuCoreMask;
+  /* rc82: nonzero while the started runtime reports soft faults to the UMD
+   * (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS, receipt Wom1SoftFaultState). */
+  volatile LONG GpuSoftFaults;
   volatile LONG FeatureReadyMask;
   /* EXP1321 receipt-only: broker failure count last staged (Wom1G3BrokerFailures). */
   volatile LONG64 G3BrokerFailuresStaged;

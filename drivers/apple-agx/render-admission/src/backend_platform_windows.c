@@ -263,9 +263,13 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   /* rc79: device value Wom1PreludeTimestampsOff = 1 builds v5 render
    * preludes without the timestamp microsequence (the pre-rc79 job). */
   BOOLEAN PreludeTimestampsOff;
+  /* rc82: device value Wom1SoftFaults = 1 reports soft faults to the UMD
+   * when RegionC fault_control is 0xb (AdmissionPublishSoftFaults). */
+  BOOLEAN SoftFaultsRequested;
 } ADMISSION_PLATFORM_RUNTIME;
 
 C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 184);
+C_ASSERT(sizeof(ADMISSION_GPU_SOFT_FAULTS_RECEIPT) == 40);
 /* RegionC fault_control (apple_agx_regionc.c), fault_info (Asahi FaultInfo,
  * 0x18 bytes after unk_117bc) and the SGX registers fault_control bits 0
  * and 1 set (Asahi fw/initdata.rs:1154-1155). */
@@ -5169,6 +5173,52 @@ static BOOLEAN AdmissionPlatformSwitchEnabled(ADMISSION_CONTEXT *Context,
   return enabled;
 }
 
+/* rc82: soft faults (Asahi file.rs:333-335 reports
+ * DRM_ASAHI_FEATURE_SOFT_FAULTS exactly when fault_control is 0xb).  The
+ * RegionC word is the one the firmware was started with
+ * (apple_agx_regionc.c writes 0xb); it is read back from the published
+ * RegionC rather than assumed, so a builder that writes another value
+ * cannot leave the UMD speculating under hard faults.  Called once, after
+ * the backend started (firmware initialized, GPU powered), before the UMD
+ * can query the device (DXGKQAITYPE_UMDRIVERPRIVATE after StartDevice). */
+static VOID AdmissionPublishSoftFaults(ADMISSION_CONTEXT *Context,
+                                       ADMISSION_PLATFORM_RUNTIME *runtime) {
+  const APPLE_AGX_MEMORY_OBJECT *regionC =
+      &runtime->Initdata.DataObjects[AppleAgxInitdataMemoryRegionC];
+  ADMISSION_GPU_SOFT_FAULTS_RECEIPT receipt;
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = ADMISSION_GPU_SOFT_FAULTS_VERSION;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Requested = runtime->SoftFaultsRequested ? 1u : 0u;
+  KeMemoryBarrier();
+  if (regionC->CpuAddress != NULL &&
+      ADMISSION_REGIONC_FAULT_CONTROL_OFFSET + sizeof(ULONG) <= regionC->Length) {
+    receipt.RegionCFaultControl = *(const volatile ULONG *)(
+        (const UCHAR *)regionC->CpuAddress + ADMISSION_REGIONC_FAULT_CONTROL_OFFSET);
+    receipt.RegionCRead = 1u;
+  }
+  if (runtime->ReadFaultControl && runtime->SgxBase != NULL && runtime->Powered) {
+    receipt.Sgx17620 = READ_REGISTER_ULONG((volatile ULONG *)(
+        runtime->SgxBase + ADMISSION_PLATFORM_SGX_FAULT_CONTROL_0));
+    receipt.Sgx17630 = READ_REGISTER_ULONG((volatile ULONG *)(
+        runtime->SgxBase + ADMISSION_PLATFORM_SGX_FAULT_CONTROL_1));
+    receipt.SgxRead = 1u;
+  }
+  receipt.Active = receipt.Requested && receipt.RegionCRead &&
+      receipt.RegionCFaultControl == ADMISSION_GPU_SOFT_FAULTS_FAULT_CONTROL;
+  InterlockedExchange(&Context->GpuSoftFaults, receipt.Active ? 1 : 0);
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    return;
+  RtlInitUnicodeString(&name, L"Wom1SoftFaultState");
+  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     ADMISSION_CONTEXT *Context) {
   ADMISSION_PLATFORM_RUNTIME *runtime;
@@ -5486,6 +5536,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultRecoverChannel");
   runtime->ReadFaultControl =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultControlRead");
+  runtime->SoftFaultsRequested =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1SoftFaults");
+  InterlockedExchange(&Context->GpuSoftFaults, 0);
   RtlZeroMemory(&runtime->PostResume, sizeof(runtime->PostResume));
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
   KeInitializeEvent(&runtime->SlotEvent, NotificationEvent, FALSE);
@@ -5518,6 +5571,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   status=STATUS_DEVICE_HARDWARE_ERROR; /* stop before automatic Windows workloads */
   goto Fail;
 #endif
+  AdmissionPublishSoftFaults(Context, runtime);
   AdmissionJobThreadStart(Context, runtime);
   runtime->WorkItem = IoAllocateWorkItem(Context->PhysicalDeviceObject);
   if (runtime->WorkItem == NULL) {
@@ -5559,6 +5613,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   return STATUS_SUCCESS;
 
 Fail:
+  InterlockedExchange(&Context->GpuSoftFaults, 0);
   {
     NTSTATUS cleanup=AdmissionPlatformDestroy(runtime);
 #ifdef APPLE_AGX_BACKEND_QUALIFICATION
@@ -5583,6 +5638,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
   runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
   if (runtime == NULL)
     return STATUS_SUCCESS;
+  InterlockedExchange(&Context->GpuSoftFaults, 0);
   status = AdmissionPlatformDestroy(runtime);
   if (!NT_SUCCESS(status))
     return status;

@@ -143,5 +143,15 @@ int main(void) {
   fake.Info = make_info();
   fake.Info.BootGeneration = 0u;
   assert(!AgxWin32DeviceInfoValid(&fake.Info));
+  /* rc82: the soft-fault feature is accepted; an unknown feature bit or a
+   * nonzero reserved word (a newer or corrupt KMD) is not. */
+  fake.Info = make_info();
+  fake.Info.Features = AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS;
+  assert(AgxWin32DeviceInfoValid(&fake.Info));
+  fake.Info.Features = AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS << 1;
+  assert(!AgxWin32DeviceInfoValid(&fake.Info));
+  fake.Info = make_info();
+  fake.Info.Reserved = 1u;
+  assert(!AgxWin32DeviceInfoValid(&fake.Info));
   return 0;
 }

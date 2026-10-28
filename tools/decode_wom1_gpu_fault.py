@@ -17,6 +17,10 @@ Receipts (REG_BINARY under the APPL0002 device key):
                         fault_info, compute rptr/done/write, events received
                         while recovery was pending and the optional KMD
                         RecoverChannel (Wom1GpuFaultRecoverChannel).
+  Wom1SoftFaultState    v1, 40 bytes (rc82): at GPU runtime start, whether the
+                        KMD reports soft faults to the UMD (Wom1SoftFaults=1
+                        and RegionC fault_control 0xb), with SGX 0x17620/
+                        0x17630 (Wom1GpuFaultControlRead).
   Wom1G4OmittedLeaves   v1, 2976 bytes: eight historical successful leaf
                         updates, allocation/PID/VA spans and exact 16 KiB
                         omission bitmap. A match is historical evidence,
@@ -61,8 +65,10 @@ MAPPING_NAME = 'Wom1GpuFaultMapping'
 MAPPING_LAST_NAME = 'Wom1GpuFaultMappingLast'
 # rc77: firmware state at the end of each reset quiescence wait.
 POST_RESUME_NAME = 'Wom1GpuFaultPostResume'
+# rc82: whether the KMD reports soft faults to the UMD (Wom1SoftFaults = 1).
+SOFT_FAULTS_NAME = 'Wom1SoftFaultState'
 NAMES = (FAULT_NAME, RESET_NAME, RECOVERY_NAME, OMITTED_NAME, MAPPING_NAME, MAPPING_LAST_NAME,
-         POST_RESUME_NAME)
+         POST_RESUME_NAME, SOFT_FAULTS_NAME)
 RAW_NAMES = NAMES + (POOL_NAME,)
 
 FAULT_INFO_NOT_READ = 0xacce5515abad1dea
@@ -548,10 +554,28 @@ def decode_post_resume(data):
     }
 
 
+def decode_soft_faults(data):
+    if len(data) != 40:
+        raise ValueError('unsupported Wom1SoftFaultState length')
+    (version, size, requested, regionc_read, fault_control, active,
+     sgx_read, r17620, r17630, _reserved) = struct.unpack_from('<10I', data, 0)
+    if (version, size) != (1, 40):
+        raise ValueError('unsupported Wom1SoftFaultState version')
+    return {
+        'version': version, 'requested': bool(requested),
+        'regionc_fault_control': f'{fault_control:#x}' if regionc_read else None,
+        'active': bool(active),
+        'sgx_fault_control': ({'0x17620': f'{r17620:#x}', '0x17630': f'{r17630:#x}'}
+                              if sgx_read else None),
+        'meaning': 'active = Wom1SoftFaults=1 and RegionC fault_control 0xb; '
+                   'the UMD then reports DRM_ASAHI_FEATURE_SOFT_FAULTS to Mesa',
+    }
+
+
 DECODERS = {MAPPING_NAME: decode_fault_mapping, MAPPING_LAST_NAME: decode_fault_mapping,
             OMITTED_NAME: decode_omitted_leaves, FAULT_NAME: decode_fault, RESET_NAME: decode_reset,
             RECOVERY_NAME: decode_recovery, POOL_NAME: decode_pool,
-            POST_RESUME_NAME: decode_post_resume}
+            POST_RESUME_NAME: decode_post_resume, SOFT_FAULTS_NAME: decode_soft_faults}
 
 
 def read_receipts(path):

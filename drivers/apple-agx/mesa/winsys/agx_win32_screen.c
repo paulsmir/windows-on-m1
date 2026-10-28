@@ -32,7 +32,10 @@ int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info) {
       (Info->CoreMask == 0u ? Info->CoresPerCluster != 0u :
        (Info->CoresPerCluster == 0u || Info->CoresPerCluster > 32u ||
         (Info->CoresPerCluster < 32u &&
-         (Info->CoreMask >> Info->CoresPerCluster) != 0u))))
+         (Info->CoreMask >> Info->CoresPerCluster) != 0u))) ||
+      /* rc82: only features this UMD knows, and no reserved bits. */
+      (Info->Features & ~AGX_WIN32_DEVICE_FEATURES_KNOWN) != 0u ||
+      Info->Reserved != 0u)
     return 0;
   for (index = 0u; index < Info->ClassCount; ++index) {
     const AGX_WIN32_BUFFER_CLASS_INFO *entry = &Info->Classes[index];

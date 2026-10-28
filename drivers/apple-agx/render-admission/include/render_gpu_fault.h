@@ -180,6 +180,26 @@ typedef struct _ADMISSION_GPU_POST_RESUME_RECEIPT {
   unsigned int Reserved;
 } ADMISSION_GPU_POST_RESUME_RECEIPT;
 
+/* rc82: Wom1SoftFaultState, REG_BINARY, written once when the GPU runtime has
+ * started: whether the KMD reports soft faults to the UMD
+ * (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS).  Active = Requested (device value
+ * Wom1SoftFaults = 1) and the RegionC fault_control word, read back from the
+ * published RegionC, is 0xb (Asahi file.rs:333-335).  The SGX fault-control
+ * registers the firmware programs from that word (Asahi fw/initdata.rs:
+ * 1154-1155: bit 0 -> 0x17620, bit 1 -> 0x17630) are read only with
+ * Wom1GpuFaultControlRead = 1 (SgxRead = 1); otherwise they are 0. */
+#define ADMISSION_GPU_SOFT_FAULTS_VERSION 1u
+#define ADMISSION_GPU_SOFT_FAULTS_FAULT_CONTROL 0xbu
+typedef struct _ADMISSION_GPU_SOFT_FAULTS_RECEIPT {
+  unsigned int Version, Bytes;
+  unsigned int Requested;            /* Wom1SoftFaults = 1 */
+  unsigned int RegionCRead;          /* RegionC mapped and word in range */
+  unsigned int RegionCFaultControl;  /* RegionC word 0x10fd8 as published */
+  unsigned int Active;               /* reported to the UMD */
+  unsigned int SgxRead, Sgx17620, Sgx17630;
+  unsigned int Reserved;
+} ADMISSION_GPU_SOFT_FAULTS_RECEIPT;
+
 typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned int Version, Bytes;
   unsigned int Resets, Succeeded;

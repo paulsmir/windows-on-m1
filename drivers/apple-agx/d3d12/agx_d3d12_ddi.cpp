@@ -8365,6 +8365,15 @@ extern "C" HRESULT APIENTRY OpenAdapter12(D3D12DDIARG_OPENADAPTER *arg) {
             SUCCEEDED(arg->pAdapterCallbacks->pfnQueryAdapterInfoCb(arg->hRTAdapter.handle, &query)) &&
             AgxWin32DeviceInfoValid(&adapter_object.info);
     }
+    {
+        /* rc82: the KMD's soft-fault report (Wom1SoftFaults = 1 and RegionC
+         * fault_control 0xb); with bit 0 the winsys gives Mesa
+         * DRM_ASAHI_FEATURE_SOFT_FAULTS and shader memory loads speculate. */
+        const UINT soft[] = {static_cast<UINT>(adapter_object.info_valid),
+                             adapter_object.info_valid ? adapter_object.info.Version : 0u,
+                             adapter_object.info_valid ? adapter_object.info.Features : 0u};
+        AdmissionUmdDiagnostic("measure-soft-faults", S_OK, soft, 3);
+    }
     arg->hAdapter.pDrvPrivate = &adapter_object;
     FillD3D12DDI_ADAPTERFUNCS(*arg->pAdapterFuncs);
     return S_OK;
