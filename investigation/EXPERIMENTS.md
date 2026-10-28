@@ -65839,3 +65839,26 @@ EXP2031 HARDWARE ACTUAL (2026-10-28): **rc94 is not the cause of the HD idle; th
   - rc94 kept (neutral or better).
   - The HD regression since EXP2028 is a first-app-after-boot CPU-side gap. Candidate: rc93's 64 KiB-chunked slabs for the first app, against the 2 MiB pages EXP2028 got (CPU TLB / mapping cost on upload writes). Next: EXP2033 first app with Wom1PoolConstructLargePages=1.
   - The rc95 KMD code built under MSVC/WDK (PACKAGE_BUILD_PASS) and stayed inert.
+
+EXP2032 HARDWARE BEFORE 2026-10-28T10:11:37Z:
+- WHY: in EXP2030 the reset quiescence failed at once: provider_poll / drain_events / drain guard 10 = apply_event. rc97 traces the cause:
+  1. AdmissionResetQuiesceActive poisons the active context.
+  2. AdmissionBackendComplete then asks AdmissionGpuvaG3CompleteJobTimestamp to publish the RC40 end timestamp.
+  3. The publication refuses a poisoned context, the completion is refused, and every later reset re-applies the same refused observation.
+  This regression came with RC40 6fbe9ce6, after the EXP1303 PASS. Host replay: the EXP2030 receipt state is RED on the base and GREEN with the fix.
+- ATOMIC CONTRACT: one change; each drill step has its own exit code and log; the reset history is decoded per entry.
+- WINDOWS CONTRACT: DxgkDdiResetEngine succeeds and reports LastAbortedFence = the drilled fence; the drilled app sees DEVICE_HUNG; DWM survives.
+- Expected:
+  - drill 1: TDR_DRILL_DONE device hung; Wom1GpuReset succeeded == resets ≥ 1, status 0, quiesce ended, stage complete; last_aborted = the drilled fence; PostResume poll_failure null; no bugcheck.
+  - drill 4: the same, with succeeded growing.
+  - HD 50k after the drill: about 6100-6500.
+- Failure criteria:
+  - apply_event again (another AdmissionBackendComplete refusal);
+  - quiesce ended but status ≠ 0 (the post-quiescence path);
+  - 0x116 with quiesce timeout;
+  - DWM loss.
+- WHAT IS STILL UNKNOWN: the post-quiescence reset path on hardware since EXP1303; whether DEVICE_HUNG reaches the drilled process given rc63's deferred preemption; build-ahead combined with the drill (a later arm).
+- Recovery: rec2032h.
+- Hashes: sys 59064cb6f470, UmdArm64 5f9f5d843202, UmdX64 89a2e55424c2, Umd32 376d15e903c3; manifest e2de54781a00, hardware-manifest 2d170016f6e1; probe2032.sh cbca0ff89c64 (PROBE_LINT_OK); visible recovery rec2032h 5d6db602e806308d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TdrDrillAllowed=1.
+- Recovery rec2032h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2032-tdr-rc97/run2032.sh.
