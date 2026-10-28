@@ -65434,3 +65434,19 @@ EXP2015 HARDWARE ACTUAL (2026-10-28): rc83 bulk reads plus soft faults by defaul
 
   The FHD 2015 regression is entirely this stall (43 s against 19 s). Handed to rc85.
 - Verdict: rc83 00e6ae22 and 14f3b425 validated; a5afc01c (soft faults default) validated.
+
+EXP2016 HARDWARE BEFORE 2026-10-28T02:50:13Z:
+- WHY:
+  - rc84 shows our perf-state tables match Asahi T8103 and the end-of-run rings reached state 6 (1278 MHz). The steady-state share and any power or thermal limiting on the fanless J313 are unmeasured;
+  - this J313 has a 7-core GPU;
+  - FHD 200k has not been measured since EXP2001 (1788).
+- ATOMIC CONTRACT: none; receipt only.
+- Expected:
+  - Wom1GpuPerf update_changes > 0; state-6 share at least 90%; limited share about 0;
+  - FHD 200k well above 1788;
+  - FHD 100k about 3615 (subject to the startup stall).
+- Failure criteria: removal or a regression.
+- Recovery: rec2016h.
+- Hashes: sys c8d651ee756c, UmdArm64 310d48b6de57, UmdX64 93c957c92053, Umd32 b00f7dd97e10; manifest 3264f1108b20, hardware-manifest b9a4bc5cec5b; probe2016.sh f027b83422fe (PROBE_LINT_OK); visible recovery rec2016h 04fa368bdd57da04; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2016h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2016-gpuperf/run2016.sh.
