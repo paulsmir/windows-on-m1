@@ -66550,3 +66550,18 @@ EXP2054 HARDWARE ACTUAL (2026-10-28): **tile 32768 is ahead in both pairs (+3.0%
 - c HD 50k tile 32768 6911 (41.4); d HD 50k default 6822 (40.8).
 - No submit failures, no transfers, guest alive throughout.
 - Verdict: inconclusive because of order. Next: the reversed order (default first), in one experiment with the fullscreen check or after EXP2055.
+
+EXP2055 HARDWARE BEFORE 2026-10-28T21:17:05Z:
+**m1n1 m1n1-74a4d8f4-scaled** (CAP_SCALED_SOURCE). Device switch: Wom1GpuFaultInfoRead=1. Order: a FHD 100k windowed; mode probe (list, 1920×1080 for 10 s, restore); b FHD 100k `-Fullscreen 1`.
+- WHY: EXP2053's receipt showed MonitorModeCalls 1 / LastMonitorModesAdded 1. dxgkrnl asks once, before the panel is Started, and the scaled-mode decision required Started.
+- ATOMIC CONTRACT: one change (when scaled monitor modes are offered); commit/flip still require a started panel; native traffic is unchanged.
+- Expected:
+  - receipt LastMonitorModesAdded > 1;
+  - the probe lists more than one mode, and 1920×1080 applies and restores;
+  - GravityMark fullscreen sets 1920×1080 with no setMode error and gives a score;
+  - windowed ≈ 4300.
+- Failure criteria: still only 1 mode; broker INVALID_SURFACE / frozen flips / TDR; black or garbled panel; artifacts on exit.
+- Recovery: rec2055h.
+- Hashes: sys 10dfae998774, UmdArm64 120894709cef, UmdX64 12476f15001b, Umd32 08697d66422d; manifest 0da255ed26a9, hardware-manifest aa126faecc15; probe2055.sh 5bfac58065ac (PROBE_LINT_OK); visible recovery rec2055h c11faf7034d6ae39; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2055h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2055-fullscreen3/run2055.sh.
