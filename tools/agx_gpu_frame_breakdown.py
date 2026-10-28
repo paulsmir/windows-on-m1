@@ -93,6 +93,13 @@ sidecar_set_a the v5 preludes that used set A.
 The KMD also exports Wom1JobTiming971Hot, the same layout, only
 from a ring whose 64 submissions fall within 500 ms (an application's
 steady state, not the idle desktop after it).
+rc102 (Wom1JobDepth2Kick, the wired depth-2 window, still v4): depth2.kicked
+counts jobs kicked while their predecessor ran, kicks_while_busy those whose
+kick (backend_after) precedes the predecessor's completion (proof that two
+jobs were in flight), max_in_flight, batch_sizes the reported completions by
+batch (2 = the pair the deferred notifier ended together, U4) and barriers
+the leading Barrier classes. --kmd-window decodes the cumulative
+Wom1JobWindow receipt.
 rc100: --kmd-poll decodes Wom1JobPoll (the completion poll: predictive or
 rc72 mode, busy_fraction = job time not asleep, sleeps and timer lateness,
 completions first seen after a sleep); --kmd-poll-before subtracts an
@@ -347,6 +354,12 @@ DEPTH2_SHIFT = 24
 # job-word set B; its depth-2 decision had the rc98 capabilities declared.
 FLAG_SIDECAR_SET_B = 0x1000
 FLAG_DEPTH2_CAPS = 0x2000
+# rc102 (Wom1JobDepth2Kick): kicked behind its predecessor, reported in its
+# predecessor's batch, leading Barrier class in bits 17-19.
+FLAG_DEPTH2_KICKED = 0x4000
+FLAG_DEPTH2_BATCHED = 0x8000
+DEPTH2_BARRIER_SHIFT = 17
+BARRIER_CLASSES = {1: 'ta_on_compute', 2: 'ta_on_3d', 3: 'compute_on_3d', 4: 'compute_on_compute'}
 
 
 def _sub_spans(s, us):
@@ -501,7 +514,23 @@ def _depth2(slots, us):
                 unseen[queue] += 1
             if stamp:
                 lag[queue + '_stamp_to_complete'].append(us(stamp, s['complete']))
-    return dict(eligible=sum(1 for s in slots if s['flags'] & FLAG_DEPTH2_ELIGIBLE),
+    by_fence = {s['fence']: s for s in slots}
+    kicked = [s for s in slots if s['flags'] & FLAG_DEPTH2_KICKED]
+    busy = [s for s in kicked if (s['fence'] - 1) in by_fence and
+            s['backend_after'] < by_fence[s['fence'] - 1]['complete']]
+    batched = sum(1 for s in slots if s['flags'] & FLAG_DEPTH2_BATCHED)
+    barriers = {}
+    for s in kicked:
+        name = BARRIER_CLASSES.get(s['flags'] >> DEPTH2_BARRIER_SHIFT & 7, 'none')
+        barriers[name] = barriers.get(name, 0) + 1
+    wired = dict(kicked=len(kicked), kicks_while_busy=len(busy),
+                 max_in_flight=2 if busy else 1,
+                 batch_sizes={1: len(slots) - 2 * batched, 2: batched},
+                 barriers=dict(sorted(barriers.items())),
+                 kick_lead_us=_medians(dict(lead=[
+                     us(s['backend_after'], by_fence[s['fence'] - 1]['complete']) for s in busy])))
+    return dict(wired=wired,
+                eligible=sum(1 for s in slots if s['flags'] & FLAG_DEPTH2_ELIGIBLE),
                 decided=sum(1 for s in slots if s.get('sub_successor_bound')),
                 refusals=dict(sorted(refusals.items())),
                 successor_lead_us=_medians(dict(lead=lead)),
@@ -573,6 +602,28 @@ def kmd_job_poll(data, before=None):
     return out
 
 
+# rc102: Wom1JobWindow, ADMISSION_JOB_WINDOW_RECEIPT (render_job_window.h) v1.
+WINDOW_RECEIPT = struct.Struct('<IIII3I5IIIIIII')
+
+
+def kmd_job_window(data):
+    """rc102 cumulative receipt of the wired depth-2 window."""
+    raw = _registry_value(data, 'Wom1JobWindow')
+    fields = WINDOW_RECEIPT.unpack_from(raw, 0)
+    version, size = fields[0], fields[1]
+    if version != 1 or size != WINDOW_RECEIPT.size or len(raw) < size:
+        raise ValueError('not an ADMISSION_JOB_WINDOW_RECEIPT v1 snapshot')
+    kicks, max_in_flight = fields[2], fields[3]
+    reported = fields[4:7]
+    barriers = fields[7:12]
+    adopted, failures, last_failure, aborts, last_kicked = fields[12:17]
+    return dict(kicks=kicks, max_in_flight=max_in_flight,
+                batch_sizes={1: reported[1], 2: reported[2]},
+                barriers={BARRIER_CLASSES[i]: barriers[i] for i in BARRIER_CLASSES},
+                adopted=adopted, kick_failures=failures, last_kick_failure_line=last_failure,
+                reset_aborts=aborts, last_kicked_fence=last_kicked)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -583,9 +634,14 @@ def main():
     parser.add_argument('--kmd-timing', help='decode a Wom1JobTiming971(Hot) registry snapshot instead')
     parser.add_argument('--kmd-poll', help='rc100: decode a Wom1JobPoll snapshot (raw or kmd-receipts text)')
     parser.add_argument('--kmd-poll-before', help='an earlier Wom1JobPoll snapshot of the same boot (deltas)')
+    parser.add_argument('--kmd-window', help='rc102: decode a Wom1JobWindow snapshot (raw or kmd-receipts text)')
     parser.add_argument('--jobs', action='store_true',
                         help='rc94: add per-position medians of the most common job sequence')
     args = parser.parse_args()
+    if args.kmd_window:
+        with open(args.kmd_window, 'rb') as handle:
+            print(json.dumps(kmd_job_window(handle.read()), indent=1))
+        return
     if args.kmd_poll:
         with open(args.kmd_poll, 'rb') as handle:
             data = handle.read()
