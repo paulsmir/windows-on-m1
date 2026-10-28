@@ -65862,3 +65862,16 @@ EXP2032 HARDWARE BEFORE 2026-10-28T10:11:37Z:
 - Hashes: sys 59064cb6f470, UmdArm64 5f9f5d843202, UmdX64 89a2e55424c2, Umd32 376d15e903c3; manifest e2de54781a00, hardware-manifest 2d170016f6e1; probe2032.sh cbca0ff89c64 (PROBE_LINT_OK); visible recovery rec2032h 5d6db602e806308d; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TdrDrillAllowed=1.
 - Recovery rec2032h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2032-tdr-rc97/run2032.sh.
+
+EXP2032 HARDWARE ACTUAL (2026-10-28): **the G4-r3 TDR drill passes, the first PASS since EXP1303. rc97 is confirmed and rc92 is reconfirmed.**
+- Drill runs:
+  - baseline exited 0;
+  - drill 1: DRAW removed 0x887a0006 after 2052.76 ms, `TDR_DRILL_DONE device hung`, exit 0;
+  - drill 4: removed 0x887a0006 after 3029.85 ms, `TDR_DRILL_DONE device hung`, exit 0.
+- Wom1GpuReset v4: resets 2, succeeded 2. Both entries are DxgkDdiResetEngine with status 0, quiesce ended, wait 0 ms, stage complete, last_aborted equal to the packet fence (0x10f3, 0x110b).
+- Wom1GpuFaultPostResume v2: poll_failure null, fault_info not read.
+- DWM (pid 1224) and explorer kept their PIDs since boot; no bugcheck and no 0x116.
+- GravityMark D3D12 HD 50k after the drill (first GravityMark app of the boot): 6243 / 37.4 FPS, no removal. Rendering after the resets is healthy.
+- Verdict:
+  - The reset contract holds with build-ahead off.
+  - Next: the rc92 arm B (drill with Wom1JobBuildAhead=1) before build-ahead can become the default.
