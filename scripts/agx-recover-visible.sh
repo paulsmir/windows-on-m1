@@ -135,11 +135,22 @@ echo "PRE_DISABLE_RECEIPTS $(wc -l < "$R/kmd-receipts-pre-disable.txt" | tr -d '
 for f in "$W/scripts/agx-recovery-disable-service.ps1" "$R/disable-visible.ps1" "$R/cleanup-visible.ps1"; do
   perl -e 'alarm 60; exec @ARGV' "$T/airscp" "$f" "pavel@192.168.1.37:C:/Users/pavel/EXP$X/cleanup$X/" >/dev/null || { echo VISIBLE_COPY_FAILED "$f"; exit 3; }
 done
-ssh_long "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\disable-visible.ps1" | tee "$R/visible-disable-output.txt"
-grep -q 'AGX_RECOVERY_DISABLE_SERVICE: PASS' "$R/visible-disable-output.txt"
-ssh_bounded 'shutdown /r /t 3'
-wait_cycle "$owners"
-launch_normal disabled
+# EXP2056: a recovery interrupted after the disable (the air was rebooted to
+# macOS) left the guest disabled-visible with its receipt; the disable script
+# never overwrites a receipt, so a rerun failed. Resume at the cleanup only
+# when the receipt exists and the guest is already Code 32, service Stopped
+# and Start=4; the running owner then stands in for the normal launch.
+resume=$(ssh_bounded 'powershell -NoProfile -Command "$d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); $s=Get-CimInstance Win32_SystemDriver -Filter \"Name='"'"'AppleAgxAdmission'"'"'\"; if((Test-Path C:\Users\pavel\EXP'"$X"'\cleanup'"$X"'\visible-disable.json) -and $d.Count -eq 1 -and [int]$d[0].Problem -eq 32 -and $s.State -eq \"Stopped\" -and (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission).Start -eq 4){\"RESUME_DISABLED_VISIBLE\"}"' 2>/dev/null | tr -d '\r' || true)
+if [ "$resume" = RESUME_DISABLED_VISIBLE ] && [ "$owners" != NO_HOST_OWNER ]; then
+  echo RESUME_DISABLED_VISIBLE | tee "$R/visible-resume.txt"
+  normal_pid=$owners
+else
+  ssh_long "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\disable-visible.ps1" | tee "$R/visible-disable-output.txt"
+  grep -q 'AGX_RECOVERY_DISABLE_SERVICE: PASS' "$R/visible-disable-output.txt"
+  ssh_bounded 'shutdown /r /t 3'
+  wait_cycle "$owners"
+  launch_normal disabled
+fi
 # rc1: a guest hang/bugcheck during the workload left no app logs (EXP1939 had no gm1939a UMD log, so the
 # faulting resource could not be identified). They are still on the guest disk here; copy them before cleanup.
 mkdir -p "$R/app-logs"
