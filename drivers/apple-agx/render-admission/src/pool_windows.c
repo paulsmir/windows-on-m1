@@ -947,7 +947,8 @@ static VOID AdmissionPoolReclaimDpc(_In_ PKDPC Dpc, _In_opt_ PVOID Opaque,
  * exceed the cache the rc86 policy already keeps (SpareLimit empty slabs),
  * Trim and the pressure reclaim treat them as any cached slab, and the
  * periodic worker still returns the cache after RELEASE_DELAY idle.
- * Allowed only while the switch is on (Wom1PoolPrefill, default on), the
+ * Allowed only while the switch is on (Wom1PoolPrefill=1; rc91: off by
+ * default, see AdmissionPoolPrefillEnabled), the
  * pool runs, HighMemoryCondition is set and LowMemoryCondition clear (the
  * cache's own condition), a creation of at least
  * ADMISSION_POOL_PREFILL_MIN_BYTES reserved within the cache's idle delay,
@@ -1239,9 +1240,16 @@ static BOOLEAN AdmissionPoolApertureReserveHalfEnabled(ADMISSION_CONTEXT *Contex
   return enabled;
 }
 
-/* rc88: only REG_DWORD Wom1PoolPrefill=0 turns the background slab
- * prefill off; absent or other values keep it on. */
-static BOOLEAN AdmissionPoolPrefillDisabled(ADMISSION_CONTEXT *Context) {
+/* rc88 background slab prefill; rc91: opt-in, only REG_DWORD
+ * Wom1PoolPrefill=1 turns it on, absent or other values keep it off.
+ * Its work item shares the system DelayedWorkQueue with the paging worker
+ * (AdmissionPagingQueueActive). Wom1G3PagingProfile DispatchToWorker max
+ * was 7.8-20 ms in every receipt EXP2015-EXP2021 and 1.06-1.55 s in every
+ * one since the prefill (EXP2022-EXP2024, about the prefill's longest
+ * MmAllocatePagesForMdlEx call); VidMm residency waits on those packets,
+ * and GravityMark D3D11 creates its large resources inside the scored
+ * window (EXP2024: first frames 1.8 s -> 11.7 s, 2529 -> 2279). */
+static BOOLEAN AdmissionPoolPrefillEnabled(ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;
   UNICODE_STRING name;
   ULONG bytes = 0u;
@@ -1260,7 +1268,7 @@ static BOOLEAN AdmissionPoolPrefillDisabled(ADMISSION_CONTEXT *Context) {
   if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
                                  value, sizeof(data.Buffer), &bytes)) &&
       value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
-      *(const ULONG *)value->Data == 0u)
+      *(const ULONG *)value->Data == 1u)
     enabled = TRUE;
   ZwClose(key);
   return enabled;
@@ -1365,7 +1373,7 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
     return FALSE;
   }
   /* rc88: without its work item the pool runs as before, unprefilled. */
-  pool->PrefillEnabled = AdmissionPoolPrefillDisabled(Context) ? FALSE : TRUE;
+  pool->PrefillEnabled = AdmissionPoolPrefillEnabled(Context);
   if (pool->PrefillEnabled)
     pool->PrefillWork = IoAllocateWorkItem(Context->PhysicalDeviceObject);
   pool->Demand.ReleaseDelay = ADMISSION_POOL_RELEASE_DELAY_MS;

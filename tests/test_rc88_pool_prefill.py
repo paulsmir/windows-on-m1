@@ -131,15 +131,26 @@ class PoolPrefill(unittest.TestCase):
         policy = function(POOL.read_text(), 'AdmissionPoolPrefillAllowed')
         build_and_run(self, POLICY_HARNESS.replace('@@POLICY@@', policy))
 
-    def test_only_dword_zero_disables_the_prefill(self):
+    def test_prefill_is_opt_in(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 
-        Wom1PoolPrefill is an off switch: only REG_DWORD 0 disables it;
-        absent, mistyped or other values keep the default, and every opened
-        key is closed.
+        rc91: the prefill work item and the paging worker
+        (AdmissionPagingQueueActive) share the system DelayedWorkQueue. While
+        the prefill's MmAllocatePagesForMdlEx calls run (up to 1.6 s each),
+        queued paging packets wait to start: Wom1G3PagingProfile
+        DispatchToWorker max was 7.8-20 ms in every receipt EXP2015-EXP2021
+        and 1.06-1.55 s in every one since rc88 (EXP2022-EXP2024; EXP2024
+        10.5 s total). VidMm residency waits on those packets, so GravityMark
+        D3D11's first frames grew from 1.8 s to 11.7 s (2529 -> 2279).
+        The prefill must therefore be off unless REG_DWORD Wom1PoolPrefill=1
+        asks for it (absent, mistyped or other values: off), every opened key
+        is closed, and the pool start uses that reader.
         """
-        residency_limit.PoolResidencyLimit.check_registry_reader(self, 'AdmissionPoolPrefillDisabled',
-                                                 'Wom1PoolPrefill', 0)
+        residency_limit.PoolResidencyLimit.check_registry_reader(self, 'AdmissionPoolPrefillEnabled',
+                                                 'Wom1PoolPrefill', 1)
+        start = POOL.read_text()
+        self.assertIn('pool->PrefillEnabled = AdmissionPoolPrefillEnabled(Context);', start)
+        self.assertNotIn('AdmissionPoolPrefillDisabled', start)
 
     def test_worker_allocates_without_the_lock_and_stop_drains_it(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
