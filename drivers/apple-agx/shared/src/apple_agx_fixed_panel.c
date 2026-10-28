@@ -129,7 +129,7 @@ APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelSourceModeFind(
     APPLE_AGX_SCANOUT_U32 Width, APPLE_AGX_SCANOUT_U32 Height,
     APPLE_AGX_SCANOUT_U32 Stride, APPLE_AGX_SCANOUT_BOOL Scaled,
     APPLE_AGX_FIXED_PANEL_SOURCE_MODE *Mode) {
-  APPLE_AGX_FIXED_PANEL_SOURCE_MODE candidate;
+  APPLE_AGX_FIXED_PANEL_SOURCE_MODE candidate = {0u, 0u, 0u, 0ULL};
   APPLE_AGX_SCANOUT_U32 index;
   for (index = 0u; AppleAgxFixedPanelSourceModeAt(index, Scaled, &candidate);
        ++index) {
@@ -159,6 +159,36 @@ APPLE_AGX_SCANOUT_U32 AppleAgxFixedPanelScalingSupport(
              AppleAgxFixedPanelScalingStretched) |
          APPLE_AGX_FIXED_PANEL_SCALING_BIT(
              AppleAgxFixedPanelScalingAspectRatioCenteredMax);
+}
+
+APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelResolveScaling(
+    APPLE_AGX_SCANOUT_U32 Width, APPLE_AGX_SCANOUT_U32 Height,
+    APPLE_AGX_SCANOUT_BOOL Scaled, APPLE_AGX_SCANOUT_U32 Requested,
+    APPLE_AGX_FIXED_PANEL_SCALING *Resolved) {
+  APPLE_AGX_SCANOUT_U32 support =
+      AppleAgxFixedPanelScalingSupport(Width, Height, Scaled);
+  APPLE_AGX_FIXED_PANEL_SCALING scaling = AppleAgxFixedPanelScalingIdentity;
+  if (Resolved == APPLE_AGX_FIXED_PANEL_NULL || support == 0u)
+    return APPLE_AGX_SCANOUT_FALSE;
+  APPLE_AGX_SCANOUT_BOOL native =
+      (support & APPLE_AGX_FIXED_PANEL_SCALING_BIT(
+                     AppleAgxFixedPanelScalingIdentity)) != 0u
+          ? APPLE_AGX_SCANOUT_TRUE
+          : APPLE_AGX_SCANOUT_FALSE;
+  if (Requested == 0u || Requested == 254u || Requested == 255u)
+    scaling = native ? AppleAgxFixedPanelScalingIdentity
+                     : AppleAgxFixedPanelScalingAspectRatioCenteredMax;
+  else if (Requested >= (APPLE_AGX_SCANOUT_U32)AppleAgxFixedPanelScalingIdentity &&
+           Requested <= (APPLE_AGX_SCANOUT_U32)
+                            AppleAgxFixedPanelScalingAspectRatioCenteredMax)
+    scaling = native ? AppleAgxFixedPanelScalingIdentity
+                     : (APPLE_AGX_FIXED_PANEL_SCALING)Requested;
+  else
+    return APPLE_AGX_SCANOUT_FALSE;
+  if ((support & APPLE_AGX_FIXED_PANEL_SCALING_BIT(scaling)) == 0u)
+    return APPLE_AGX_SCANOUT_FALSE;
+  *Resolved = scaling;
+  return APPLE_AGX_SCANOUT_TRUE;
 }
 
 APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelDestination(
@@ -220,8 +250,8 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelCommitMode(
     APPLE_AGX_SCANOUT_U32 TargetId, APPLE_AGX_SCANOUT_U32 Width,
     APPLE_AGX_SCANOUT_U32 Height, APPLE_AGX_SCANOUT_U32 Stride,
     APPLE_AGX_SCANOUT_U32 Format, APPLE_AGX_FIXED_PANEL_SCALING Scaling) {
-  APPLE_AGX_FIXED_PANEL_SOURCE_MODE mode;
-  APPLE_AGX_FIXED_PANEL_RECT rect;
+  APPLE_AGX_FIXED_PANEL_SOURCE_MODE mode = {0u, 0u, 0u, 0ULL};
+  APPLE_AGX_FIXED_PANEL_RECT rect = {0u, 0u, 0u, 0u};
   APPLE_AGX_SCANOUT_BOOL scaled;
   if (Panel == APPLE_AGX_FIXED_PANEL_NULL || !Panel->Started)
     return AppleAgxFixedPanelInvalidState;
@@ -229,7 +259,11 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelCommitMode(
       TargetId != APPLE_AGX_FIXED_PANEL_TARGET_ID)
     return AppleAgxFixedPanelInvalidTopology;
   scaled = AppleAgxFixedPanelScaledSourceSupported(Panel);
-  if (!AppleAgxFixedPanelSourceModeFind(Width, Height, Stride, scaled,
+  if ((APPLE_AGX_SCANOUT_U32)Scaling <
+          (APPLE_AGX_SCANOUT_U32)AppleAgxFixedPanelScalingIdentity ||
+      (APPLE_AGX_SCANOUT_U32)Scaling >
+          (APPLE_AGX_SCANOUT_U32)AppleAgxFixedPanelScalingAspectRatioCenteredMax ||
+      !AppleAgxFixedPanelSourceModeFind(Width, Height, Stride, scaled,
                                         &mode) ||
       (AppleAgxFixedPanelScalingSupport(Width, Height, scaled) &
        APPLE_AGX_FIXED_PANEL_SCALING_BIT(Scaling)) == 0u ||

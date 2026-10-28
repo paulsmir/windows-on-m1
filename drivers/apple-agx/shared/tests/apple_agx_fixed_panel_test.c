@@ -563,6 +563,17 @@ static void test_scaled_commit_carries_source_geometry_and_destination(void) {
   assert(fake.DestOrigin == (0u | (80u << 16u)));
   assert(fake.DestSize == (2560u | (1440u << 16u)));
 
+  /* Out-of-range scaling values (D3DKMDT unpinned/custom) are refused. */
+  assert(AppleAgxFixedPanelCommitMode(
+             &panel, 0u, 0u, 1920u, 1080u, 7680u,
+             APPLE_AGX_SCANOUT_FORMAT_BGRA8888,
+             (APPLE_AGX_FIXED_PANEL_SCALING)254) ==
+         AppleAgxFixedPanelInvalidMode);
+  assert(AppleAgxFixedPanelCommitMode(
+             &panel, 0u, 0u, 1920u, 1080u, 7680u,
+             APPLE_AGX_SCANOUT_FORMAT_BGRA8888,
+             (APPLE_AGX_FIXED_PANEL_SCALING)5) ==
+         AppleAgxFixedPanelInvalidMode);
   /* Native identity on the same broker: full-panel rectangle. */
   assert(AppleAgxFixedPanelCommitMode(
              &panel, 0u, 0u, 2560u, 1600u, 10240u,
@@ -678,6 +689,43 @@ static void test_mode_table_and_destination_rules(void) {
       1920u, 1080u, (APPLE_AGX_FIXED_PANEL_SCALING)5, &rect));
 }
 
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?  A commit whose
+ * scaling is unpinned or "not specified" must still get a legal transform
+ * (identity at native size, aspect-preserving below it); a native commit
+ * keeps accepting every geometric scaling as identity (pre-rc106 behaviour);
+ * a pinned identity on a smaller source or a custom scaling is refused. */
+static void test_resolve_scaling_defaults_and_refusals(void) {
+  APPLE_AGX_FIXED_PANEL_SCALING scaling = AppleAgxFixedPanelScalingCentered;
+  const APPLE_AGX_SCANOUT_BOOL on = APPLE_AGX_SCANOUT_TRUE;
+  const APPLE_AGX_SCANOUT_U32 defaults[] = {0u, 254u, 255u};
+  unsigned i;
+  for (i = 0u; i < sizeof(defaults) / sizeof(defaults[0]); ++i) {
+    assert(AppleAgxFixedPanelResolveScaling(2560u, 1600u, on, defaults[i],
+                                            &scaling));
+    assert(scaling == AppleAgxFixedPanelScalingIdentity);
+    assert(AppleAgxFixedPanelResolveScaling(1920u, 1080u, on, defaults[i],
+                                            &scaling));
+    assert(scaling == AppleAgxFixedPanelScalingAspectRatioCenteredMax);
+    assert(!AppleAgxFixedPanelResolveScaling(
+        1920u, 1080u, APPLE_AGX_SCANOUT_FALSE, defaults[i], &scaling));
+  }
+  assert(AppleAgxFixedPanelResolveScaling(1920u, 1080u, on, 3u, &scaling));
+  assert(scaling == AppleAgxFixedPanelScalingStretched);
+  assert(!AppleAgxFixedPanelResolveScaling(1920u, 1080u, on, 1u, &scaling));
+  for (i = 1u; i <= 4u; ++i) {
+    scaling = AppleAgxFixedPanelScalingCentered;
+    assert(AppleAgxFixedPanelResolveScaling(2560u, 1600u, on, i, &scaling));
+    assert(scaling == AppleAgxFixedPanelScalingIdentity);
+    scaling = AppleAgxFixedPanelScalingCentered;
+    assert(AppleAgxFixedPanelResolveScaling(
+        2560u, 1600u, APPLE_AGX_SCANOUT_FALSE, i, &scaling));
+    assert(scaling == AppleAgxFixedPanelScalingIdentity);
+  }
+  assert(!AppleAgxFixedPanelResolveScaling(2560u, 1600u, on, 5u, &scaling));
+  assert(!AppleAgxFixedPanelResolveScaling(1920u, 1080u, on, 5u, &scaling));
+  assert(!AppleAgxFixedPanelResolveScaling(1366u, 768u, on, 255u, &scaling));
+}
+
 int main(void) {
   test_start_registers_exact_pool();
   test_commit_accepts_only_fixed_mode_and_topology();
@@ -694,5 +742,6 @@ int main(void) {
   test_scaled_commit_carries_source_geometry_and_destination();
   test_surface_bound_follows_the_committed_mode();
   test_mode_table_and_destination_rules();
+  test_resolve_scaling_defaults_and_refusals();
   return 0;
 }

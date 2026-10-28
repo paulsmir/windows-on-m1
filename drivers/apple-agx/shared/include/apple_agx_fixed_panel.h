@@ -50,6 +50,18 @@ APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelSourceModeFind(
 APPLE_AGX_SCANOUT_U32 AppleAgxFixedPanelScalingSupport(
     APPLE_AGX_SCANOUT_U32 Width, APPLE_AGX_SCANOUT_U32 Height,
     APPLE_AGX_SCANOUT_BOOL Scaled);
+/* The scaling a commit applies.  Requested is a D3DKMDT_VPPS value: 0
+ * (uninitialized), 254 (unpinned) and 255 (not specified) let the driver
+ * choose (identity at native size, aspect-ratio-centered-max below it, the
+ * laptop default).  Below native size 2-4 are applied as requested.  At
+ * native size 1-4 all describe the same full-panel transform and resolve to
+ * identity: the native commit accepted every one of them before rc106 and a
+ * persisted display configuration may still pin one.  Custom (5) and any
+ * other value are refused. */
+APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelResolveScaling(
+    APPLE_AGX_SCANOUT_U32 Width, APPLE_AGX_SCANOUT_U32 Height,
+    APPLE_AGX_SCANOUT_BOOL Scaled, APPLE_AGX_SCANOUT_U32 Requested,
+    APPLE_AGX_FIXED_PANEL_SCALING *Resolved);
 /* The panel rectangle a Width x Height source occupies under Scaling. */
 APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelDestination(
     APPLE_AGX_SCANOUT_U32 Width, APPLE_AGX_SCANOUT_U32 Height,
