@@ -66087,3 +66087,21 @@ EXP2038 HARDWARE ACTUAL (2026-10-28): **control for rc100 (Wom1JobPollSpinUs=500
   - On a warm machine rc100 keeps the GPU at its top clock 18 points longer and scores 2.5–2.6% higher; it is neutral cold.
   - rc100 stays the default.
   - Remaining: the 17% poll busy and about 410 µs timer lateness. The proper fix is the completion interrupt (AIC 578 → vINTID 887, already routed by m1n1; it needs ACPI publication plus a KMD ISR).
+
+EXP2039 HARDWARE BEFORE 2026-10-28T12:42:42Z:
+- WHY: per-job serialization is ×1.26 of the FHD frame (rc96, Fable). EXP2035 showed 51 of 56 pairs eligible, a successor lead median of 2.18 ms, and set B executed without fault. Expected gain: about min(lead, 0.5 ms) per pair, 2–3 ms per frame.
+- ATOMIC CONTRACT: one change (the Kick switch on top of the EXP2035 switch set).
+- Expected:
+  - Wom1JobWindow kicks > 0, max_in_flight 2, batch_sizes[2] > 0, adopted ≈ kicks, kick_failures 0;
+  - timing depth2.wired kicks_while_busy > 0; barriers compute_on_3d and ta_on_compute;
+  - no fault, timeout or TDR; correct image;
+  - HD median frame below EXP2035a's 22.80 ms.
+- Failure criteria:
+  - a firmware Timeout or TDR at the first kicked R→C pair. Unknown 1: the 3D stamp may be held with the deferred event. Set Kick off; the next task is to kick only after N's own end;
+  - kick_failures > 0;
+  - an image difference.
+- WHAT IS STILL UNKNOWN: the 3D stamp write timing; killed-command notifier accounting; the Flag event's queue bits.
+- Recovery: rec2039h (AT_PROXY if down; the minidump first).
+- Hashes: sys 095a6a5a69c4, UmdArm64 352b2e29a984, UmdX64 5fcd34e43399, Umd32 81a025e992b7; manifest 4fc4b2546efe, hardware-manifest 342c27924882; probe2039.sh 3cbb4caa745d (PROBE_LINT_OK); visible recovery rec2039h da2cd921c31f1670; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1.
+- Recovery rec2039h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2039-depth2-kick/run2039.sh.
