@@ -226,6 +226,27 @@ int main(void) {
 '''
 
 
+RECEIPT = r'''
+#include <stdio.h>
+#include "render_job_timing.h"
+int main(void) {
+  ADMISSION_JOB_POLL_STATE st;
+  unsigned long long key;
+  unsigned us;
+  AdmissionJobPollInitialize(&st, ADMISSION_JOB_POLL_PREDICTIVE, ADMISSION_JOB_POLL_FLAG_HIGHRES);
+  key = AdmissionJobPollBegin(&st, 7u, 1u, 72u);
+  AdmissionJobPollFinish(&st, key, 0u, 4000u, 3990u, 0);
+  AdmissionJobPollFinish(&st, key, 0u, 4000u, 3990u, 0);
+  (void)AdmissionJobPollPlan(&st, 10u, 4000u, 0u, &us);
+  AdmissionJobPollNoteSleep(&st, 1000u, 1040u);
+  AdmissionJobPollNoteSleep(&st, 1000u, 1010u);
+  AdmissionJobPollFinish(&st, key, 4000u, 4000u, 3700u, 1);
+  fwrite(&st, sizeof(st), 1, stdout);
+  return 0;
+}
+'''
+
+
 def build_and_run(test, program, warm=1, binary=False):
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "model.c"
@@ -255,6 +276,24 @@ class JobPollPredictedSleep(unittest.TestCase):
 
     def test_planner_invariants(self):
         build_and_run(self, INVARIANTS)
+
+    def test_wom1_job_poll_receipt_decodes(self):
+        """The decoder's layout equals ADMISSION_JOB_POLL_STATE v1 (a wrong
+        offset would misreport the poll's busy fraction on hardware)."""
+        import agx_gpu_frame_breakdown as tool
+        raw = build_and_run(self, RECEIPT, binary=True)
+        self.assertEqual(len(raw), tool.POLL_BYTES)
+        out = tool.kmd_job_poll(raw)
+        self.assertEqual(out["mode"], "predictive")
+        self.assertTrue(out["high_resolution_timer"])
+        self.assertEqual((out["jobs"], out["predicted_jobs"], out["sleeps"], out["spins"]), (3, 1, 2, 0))
+        self.assertEqual((out["job_us"], out["slept_us"], out["late_max_us"]), (12000, 2050, 40))
+        self.assertEqual((out["seen_after_sleep"], out["seen_after_sleep_window_us"], out["keys"]), (1, 300, 1))
+        self.assertEqual(out["busy_fraction"], round(9950 / 12000, 4))
+        self.assertEqual(out["slack_us"], 100)
+        text = ("Wom1Other = 1\nWom1JobPoll " + raw.hex() + "\n").encode()
+        delta = tool.kmd_job_poll(text, before=raw)
+        self.assertEqual((delta["jobs"], delta["job_us"]), (0, 0))
 
     def test_worker_wiring(self):
         """The G3 worker plans every poll with AdmissionJobPollPlan, sleeps on

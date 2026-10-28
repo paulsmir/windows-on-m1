@@ -93,6 +93,10 @@ sidecar_set_a the v5 preludes that used set A.
 The KMD also exports Wom1JobTiming971Hot, the same layout, only
 from a ring whose 64 submissions fall within 500 ms (an application's
 steady state, not the idle desktop after it).
+rc100: --kmd-poll decodes Wom1JobPoll (the completion poll: predictive or
+rc72 mode, busy_fraction = job time not asleep, sleeps and timer lateness,
+completions first seen after a sleep); --kmd-poll-before subtracts an
+earlier snapshot of the same boot (one benchmark run).
 """
 import argparse
 import bisect
@@ -508,6 +512,67 @@ def _depth2(slots, us):
                                   not s['flags'] & FLAG_SIDECAR_SET_B))
 
 
+# rc100: Wom1JobPoll, ADMISSION_JOB_POLL_STATE (render_job_timing.h) v1.
+POLL_HEADER = struct.Struct('<IIIIII8I')
+POLL_STATS = ('jobs', 'predicted_jobs', 'sleeps', 'spins', 'ticks', 'seen_after_sleep',
+              'job_us', 'slept_us', 'sleep_requested_us', 'late_us', 'late_max_us',
+              'seen_after_sleep_window_us')
+POLL_STATS_STRUCT = struct.Struct('<12Q')
+POLL_CONTEXT = struct.Struct('<QIIII')
+POLL_ENTRY = struct.Struct('<Q4IIIII')
+POLL_CONTEXTS, POLL_KEYS = 8, 64
+POLL_BYTES = POLL_HEADER.size + POLL_STATS_STRUCT.size + POLL_CONTEXTS * POLL_CONTEXT.size + \
+    POLL_KEYS * POLL_ENTRY.size
+POLL_PREDICTIVE = 0xffffffff
+
+
+def _registry_value(data, name):
+    """Raw bytes, or the hex of `name` in a kmd-receipts text dump."""
+    try:
+        text = data.decode('ascii')
+    except UnicodeDecodeError:
+        return data
+    for line in text.splitlines():
+        if line.startswith(name + ' '):
+            return bytes.fromhex(line.split()[1])
+    raise ValueError(name + ' not found')
+
+
+def kmd_job_poll(data, before=None):
+    """rc100 completion-poll receipt: mode, CPU busy fraction of the poll
+    (job time not spent asleep), sleeps and their lateness, completions seen
+    by the first poll after a sleep. `before`: an earlier snapshot of the
+    same boot; the counters are then the run's differences."""
+    def stats(raw):
+        raw = _registry_value(raw, 'Wom1JobPoll')
+        version, size, spin, flags, _, _, *lateness = POLL_HEADER.unpack_from(raw, 0)
+        if version != 1 or size != POLL_BYTES or len(raw) < size:
+            raise ValueError('not an ADMISSION_JOB_POLL_STATE v1 snapshot')
+        values = dict(zip(POLL_STATS, POLL_STATS_STRUCT.unpack_from(raw, POLL_HEADER.size)))
+        keys = sum(1 for i in range(POLL_KEYS) if POLL_ENTRY.unpack_from(
+            raw, POLL_HEADER.size + POLL_STATS_STRUCT.size + POLL_CONTEXTS * POLL_CONTEXT.size +
+            i * POLL_ENTRY.size)[0])
+        return spin, flags, lateness, values, keys
+    spin, flags, lateness, now, keys = stats(data)
+    if before is not None:
+        old = stats(before)[3]
+        now = {k: (v if k == 'late_max_us' else v - old[k]) for k, v in now.items()}
+    jobs, job_us = now['jobs'], now['job_us']
+    out = dict(mode='predictive' if spin == POLL_PREDICTIVE else 'rc72 spin %u us' % spin,
+               high_resolution_timer=bool(flags & 1), keys=keys, slack_us=max(lateness), **now)
+    if job_us:
+        out['busy_fraction'] = round((job_us - min(now['slept_us'], job_us)) / job_us, 4)
+    if jobs:
+        out['predicted_share'] = round(now['predicted_jobs'] / jobs, 4)
+        out['seen_after_sleep_share'] = round(now['seen_after_sleep'] / jobs, 4)
+    if now['sleeps']:
+        out['late_mean_us'] = round(now['late_us'] / now['sleeps'], 1)
+    if now['seen_after_sleep']:
+        out['seen_after_sleep_window_mean_us'] = round(
+            now['seen_after_sleep_window_us'] / now['seen_after_sleep'], 1)
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -516,9 +581,20 @@ def main():
                         help='fraction of leading frames to drop (load, warm-up)')
     parser.add_argument('--csv')
     parser.add_argument('--kmd-timing', help='decode a Wom1JobTiming971(Hot) registry snapshot instead')
+    parser.add_argument('--kmd-poll', help='rc100: decode a Wom1JobPoll snapshot (raw or kmd-receipts text)')
+    parser.add_argument('--kmd-poll-before', help='an earlier Wom1JobPoll snapshot of the same boot (deltas)')
     parser.add_argument('--jobs', action='store_true',
                         help='rc94: add per-position medians of the most common job sequence')
     args = parser.parse_args()
+    if args.kmd_poll:
+        with open(args.kmd_poll, 'rb') as handle:
+            data = handle.read()
+        before = None
+        if args.kmd_poll_before:
+            with open(args.kmd_poll_before, 'rb') as handle:
+                before = handle.read()
+        print(json.dumps(kmd_job_poll(data, before), indent=1))
+        return
     if args.kmd_timing:
         with open(args.kmd_timing, 'rb') as handle:
             print(json.dumps(kmd_job_timing(handle.read()), indent=1, default=str))
