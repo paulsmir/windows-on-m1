@@ -66494,3 +66494,28 @@ EXP2052 HARDWARE ACTUAL (2026-10-28): **R→C kicks work 3 times, then a hang en
   - The mechanism works for some pairs.
   - In GravityMark, eligible pairs are under about 1% of jobs (rc102 estimate; 3 kicks in about 2300 jobs here), so the possible gain is negligible against the hang risk.
   - Depth 2 is parked; Kick stays off by default. The remaining per-job lever would need R→R with a live manager (U1), which is out of scope for now.
+
+EXP2053 HARDWARE BEFORE 2026-10-28T20:36:49Z:
+- EXP2048 code;
+- rc106 guest VidPN modes;
+- Fable fable-fs-kmd: the shared mode table, scanout window 0xa8, UMD primary/direct-flip gates for offered modes;
+- rc102 86d05b5d: refusal 64, sequence rollback, KickFail v2.
+**m1n1 changes to m1n1-74a4d8f4-scaled** (codex/m1n1-scaled on 075e3980 guestram): the broker advertises CAP_SCALED_SOURCE, accepts a non-native source with the DEST_ORIGIN/DEST_SIZE rectangle, and DCP swap destination[0] carries it with a black background.
+Device switch: Wom1GpuFaultInfoRead=1. Order:
+- a: FHD 100k windowed (regression, unified copy);
+- the mode probe: list, then 1920×1080 for 10 s with restore;
+- b: GravityMark FHD 100k `-Fullscreen 1`.
+- WHY: ChangeDisplaySettingsExW(1920x1080) failed in EXP2035, because the KMD offered only 2560×1600 and m1n1's broker rejected other geometry.
+- ATOMIC CONTRACT: two components of one feature (m1n1 broker and guest modes); native traffic is byte-identical.
+- Expected:
+  - boot and desktop at 2560×1600, with the vUART line `display: scanout source 2560x1600 stride 10240 -> panel 2560x1600 at 0,0`;
+  - the probe lists 11 modes; 1920×1080 applies (vUART `-> panel 2560x1440 at 0,80`), then restores;
+  - fullscreen GravityMark runs with no setMode failure and gives a score.
+- Failure criteria:
+  - broker INVALID_SURFACE with frozen flips, then a TDR;
+  - DCP rejecting the swap (black panel);
+  - a garbled image.
+- Recovery: rec2053h.
+- Hashes: sys 15edb80dfd84, UmdArm64 dd02cc967248, UmdX64 5d8abf9a9d22, Umd32 482f0fb07e25; manifest 128973414890, hardware-manifest c8dde937f841; probe2053.sh d4ca7250477c (PROBE_LINT_OK); visible recovery rec2053h 39ad1055c5cb5797; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2053h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2053-fullscreen2/run2053.sh.
