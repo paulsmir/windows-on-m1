@@ -466,6 +466,8 @@ agx_win32_d3d_group_load_run(nir_builder *b, const struct agx_win32_d3d_load_run
                                 b, offset, ld->def.num_components * (ld->def.bit_size / 8), size));
    }
    nir_def *whole[AGX_WIN32_D3D_LOAD_RUN_MAX], *split[AGX_WIN32_D3D_LOAD_RUN_MAX];
+   memset(whole, 0, sizeof(whole));
+   memset(split, 0, sizeof(split));
    nir_push_if(b, all);
    for (unsigned i = 0; i < run->count; ++i) {
       nir_instr *copy = nir_instr_clone(b->shader, &run->loads[i]->instr);
@@ -517,8 +519,7 @@ agx_win32_d3d_group_loads(nir_function_impl *impl, struct set *checked, unsigned
    struct set *poisoned = _mesa_pointer_set_create(NULL);
    nir_foreach_block(block, impl) {
       struct agx_win32_d3d_load_run run;
-      run.count = 0;
-      run.saved = 0;
+      memset(&run, 0, sizeof(run));
       _mesa_set_clear(poisoned, NULL);
       nir_foreach_instr(instr, block) {
          bool close = false, member = false;
@@ -537,8 +538,7 @@ agx_win32_d3d_group_loads(nir_function_impl *impl, struct set *checked, unsigned
          if (close) {
             if (run.count && run.saved >= min_saved)
                util_dynarray_append(&runs, run);
-            run.count = 0;
-            run.saved = 0;
+            memset(&run, 0, sizeof(run));
             _mesa_set_clear(poisoned, NULL);
          }
          if (member) {
