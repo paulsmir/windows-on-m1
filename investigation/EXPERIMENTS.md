@@ -65450,3 +65450,19 @@ EXP2016 HARDWARE BEFORE 2026-10-28T02:50:13Z:
 - Hashes: sys c8d651ee756c, UmdArm64 310d48b6de57, UmdX64 93c957c92053, Umd32 b00f7dd97e10; manifest 3264f1108b20, hardware-manifest b9a4bc5cec5b; probe2016.sh f027b83422fe (PROBE_LINT_OK); visible recovery rec2016h 04fa368bdd57da04; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2016h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2016-gpuperf/run2016.sh.
+
+EXP2016 HARDWARE ACTUAL (2026-10-28): rc84 Wom1GpuPerf receipt.
+- FHD 200k: 1357 / 7.2 FPS (EXP2001: 1788).
+  - The median frame improved (73.5 vs 78.6 ms), but the first-frame stall was **50.3 s** (EXP2001: 19.8 s): the memory-pressure stall from rc85.
+  - Without the stall about 2270 is expected (the user's own macOS on this J313: 2191..4400).
+- FHD 100k: **3636 / 21.8 FPS**, new best.
+- Wom1GpuPerf, decoded with `--since` between snapshots:
+
+  | Arm | State 6 (1278 MHz) | Below target | Temperature | Max avg power |
+  |---|---|---|---|---|
+  | FHD 200k (incl. a 50 s stall) | 60.7% of 125 s | 21.3% | 55-82 °C | 8.1 W |
+  | FHD 100k | **86.4%** (state 1 9%, mostly load/idle) | **0.3%** | 55-92 °C | 8.4 W |
+
+  update_ts is live.
+- Conclusion: DVFS reaches and holds the top state during rendering, with no power limiting (8.4 W against a 19.6 W budget). DVFS is not the gap. The J313 GPU has 7 cores (CoreMask 0xfe).
+- Verdict: rc84 1289e570, ee89db79, 4f354e81 and 3c0fcd3e validated (receipt).
