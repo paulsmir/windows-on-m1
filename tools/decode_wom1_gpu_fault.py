@@ -406,11 +406,12 @@ def decode_omitted_leaves(data):
 def decode_pool(data):
     """Preserve v7-v10 prefixes; v10 separates pinned native-ring backing;
     v11 (rc86) appends the creation cost split and the empty-slab cache;
-    v12 (rc88) appends the background slab prefill and failed-attempt time."""
+    v12 (rc88) appends the background slab prefill and failed-attempt time;
+    v13 (rc93) appends the large-page cache misses and the per-shape slab time."""
     if len(data) < 16:
         raise ValueError('truncated Wom1M2PoolDemand header')
     version, size, granule, last_window = struct.unpack_from('<4I', data)
-    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576, 12: 608}.get(version) or len(data) != size or granule != 65536:
+    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576, 12: 608, 13: 640}.get(version) or len(data) != size or granule != 65536:
         raise ValueError('unsupported Wom1M2PoolDemand version, length or granule')
     names = (
         'segment_bytes', 'committed_granules', 'peak_granules', 'commits',
@@ -432,7 +433,7 @@ def decode_pool(data):
                   creation_cost=None,
                   event_sample={7: None, 8: 'post_failure', 9: 'admission_decision',
                                 10: 'admission_decision', 11: 'admission_decision',
-                                12: 'admission_decision'}[version])
+                                12: 'admission_decision', 13: 'admission_decision'}[version])
     if version >= 8:
         result['floor_refusals'], = struct.unpack_from('<Q', data, 304)
         fields = ('request_bytes', 'reserved_bytes', 'held_bytes', 'committed_bytes',
@@ -473,6 +474,18 @@ def decode_pool(data):
         prefill['meaning'] = ('slabs a work item added to the empty-slab cache outside the '
                               'pool lock; slab_fail_us: unusable MmAllocatePagesForMdlEx calls')
         result['prefill'] = prefill
+    result['large_pages'] = None
+    if version >= 13:
+        names = ('fast_misses', 'contiguous_us', 'chunked_us', 'construct_large_pages')
+        large = dict(zip(names, struct.unpack_from('<4Q', data, 608)))
+        large['contiguous_ms_per_slab'] = (round(large['contiguous_us'] / result['slab_contiguous'] / 1000, 3)
+                                           if result['slab_contiguous'] else None)
+        large['chunked_ms_per_slab'] = (round(large['chunked_us'] / result['slab_chunked'] / 1000, 3)
+                                        if result['slab_chunked'] else None)
+        large['meaning'] = ('rc93: fast_misses = 2 MiB attempts refused because the large-page cache '
+                            'was empty (then 64 KiB chunks); *_us = successful attempts by shape; '
+                            'construct_large_pages 1 = Wom1PoolConstructLargePages kill switch on')
+        result['large_pages'] = large
     return result
 
 

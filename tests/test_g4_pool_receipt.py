@@ -40,7 +40,9 @@ int main(void) {
                    "v10 prefix changed");
     _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, PrefillSlabs) == 576,
                    "v11 prefix changed");
-    _Static_assert(sizeof(r) == 608, "v12 wire ABI changed");
+    _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, SlabFastMisses) == 608,
+                   "v12 prefix changed");
+    _Static_assert(sizeof(r) == 640, "v13 wire ABI changed");
     r.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION; r.Bytes = sizeof(r);
     r.GranuleBytes = 65536; r.LastWindowResult = 9;
     r.SegmentBytes = 1409286144ULL;
@@ -71,6 +73,9 @@ int main(void) {
     r.ReserveNoGrowth = 6; r.LeaseZeroCount = 3; r.LeaseZeroUs = 300;
     r.LeaseZeroSkips = 29; r.SpareLimit = 64; r.EmptySlabs = 12; r.CacheDrops = 2;
     r.PrefillSlabs = 41; r.PrefillUs = 917000; r.PrefillDiscards = 3; r.SlabFailUs = 52000;
+    r.SlabContiguous = 40; r.SlabChunked = 30;
+    r.SlabFastMisses = 31; r.SlabContiguousUs = 16000; r.SlabChunkedUs = 90000;
+    r.ConstructLargePages = 0;
     return fwrite(&r, sizeof(r), 1, stdout) == 1 ? 0 : 1;
 }
 '''
@@ -82,7 +87,15 @@ int main(void) {
                             str(src), '-o', str(exe)], check=True)
             raw = subprocess.check_output([str(exe)])
         got = decoder.decode_pool(raw)
-        self.assertEqual(got['version'], 12)
+        self.assertEqual(got['version'], 13)
+        self.assertEqual({k: v for k, v in got['large_pages'].items() if k != 'meaning'},
+                         dict(fast_misses=31, contiguous_us=16000, chunked_us=90000,
+                              construct_large_pages=0, contiguous_ms_per_slab=0.4,
+                              chunked_ms_per_slab=3.0))
+        v12 = bytearray(raw[:608])
+        struct.pack_into('<II', v12, 0, 12, 608)
+        self.assertIsNone(decoder.decode_pool(v12)['large_pages'])
+        self.assertEqual(decoder.decode_pool(v12)['prefill']['slab_fail_us'], 52000)
         self.assertEqual({k: v for k, v in got['prefill'].items() if k != 'meaning'},
                          dict(prefill_slabs=41, prefill_us=917000, prefill_discards=3,
                               slab_fail_us=52000))

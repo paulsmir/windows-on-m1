@@ -263,6 +263,13 @@ typedef struct _ADMISSION_POOL_RUNTIME {
    * (an app loading), not DWM's steady small ones. */
   ULONGLONG LastLargeReserveMs;
   ULONGLONG PrefillUs, PrefillDiscards, PrefillFailures, SlabFailUs;
+  /* rc93: Wom1PoolConstructLargePages=1 lets the 2 MiB attempt construct
+   * large pages (the pre-rc93 call); default FALSE (AdmissionPoolSlabAttemptFlags).
+   * SlabFastMisses: 2 MiB attempts refused because Windows' large-page cache
+   * was empty; SlabContiguousUs/SlabChunkedUs: time of the attempts that
+   * produced a slab, by shape. */
+  BOOLEAN ConstructLargePages;
+  ULONGLONG SlabFastMisses, SlabContiguousUs, SlabChunkedUs;
 } ADMISSION_POOL_RUNTIME;
 
 /* rc88: what one AdmissionPoolAllocSlab call cost, folded into the runtime
@@ -270,6 +277,7 @@ typedef struct _ADMISSION_POOL_RUNTIME {
 typedef struct _ADMISSION_POOL_SLAB_COST {
   ULONGLONG Calls, Us, UsMax, CheckUs, FailUs;
   ULONGLONG Contiguous, Chunked;
+  ULONGLONG FastMisses, ContiguousUs, ChunkedUs;
 } ADMISSION_POOL_SLAB_COST;
 
 static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
@@ -301,10 +309,30 @@ static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
 #define ADMISSION_POOL_PREFILL_MIN_BYTES 0x1000000ULL /* 16 MiB */
 C_ASSERT(ADMISSION_POOL_MAX_RUN <= 1024ULL);
 
+/* rc93: MmAllocatePagesForMdlEx flags of slab attempt `Attempt` (0: one
+ * 2 MiB chunk, 1: 32 x 64 KiB chunks). A 2 MiB-aligned 2 MiB chunk is an
+ * ARM64 large page. Microsoft (MmAllocatePagesForMdlEx, Flags): without
+ * MM_ALLOCATE_FAST_LARGE_PAGES, once the large page cache is exhausted the
+ * call "attempts to construct additional large pages, which may take a long
+ * time"; with it the call is served from that cache or fails. The flag must
+ * come with MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS and SkipBytes a multiple of
+ * the large page size, so only attempt 0 carries it. EXP2028 arm a (first
+ * app after boot): 1402 slab calls, 29.2 s, 20.8 ms each, against 0.4 ms at
+ * boot and 1.7 ms for the next app reusing returned 2 MiB runs. A refused
+ * attempt 0 falls back to attempt 1 as before (EXP2028: 86 chunked slabs).
+ * Never MM_DONT_ZERO_ALLOCATION: the pages reach user mode. */
+static ULONG AdmissionPoolSlabAttemptFlags(ULONG Attempt,
+                                           BOOLEAN ConstructLargePages) {
+  ULONG flags = MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED;
+  if (Attempt == 0u && !ConstructLargePages) flags |= MM_ALLOCATE_FAST_LARGE_PAGES;
+  return flags;
+}
+
 /* A 2 MiB slab of fresh zeroed pages: one contiguous 2 MiB chunk when
  * Windows has one (EXP1259: one contiguous 1 GiB took 374 ms), else 32
  * 64 KiB-aligned 64 KiB chunks (EXP1246). */
-static ADMISSION_POOL_SLAB *AdmissionPoolAllocSlab(ADMISSION_POOL_SLAB_COST *Cost) {
+static ADMISSION_POOL_SLAB *AdmissionPoolAllocSlab(ADMISSION_POOL_SLAB_COST *Cost,
+                                                   BOOLEAN ConstructLargePages) {
   const ULONGLONG pages = ADMISSION_POOL_DEMAND_GRANULE / PAGE_SIZE;
   PHYSICAL_ADDRESS low, high, skip;
   ADMISSION_POOL_SLAB *slab;
@@ -326,13 +354,14 @@ static ADMISSION_POOL_SLAB *AdmissionPoolAllocSlab(ADMISSION_POOL_SLAB_COST *Cos
     start = KeQueryPerformanceCounter(NULL);
     mdl = MmAllocatePagesForMdlEx(low, high, skip,
         (SIZE_T)ADMISSION_POOL_SLAB_BYTES, MmWriteCombined,
-        MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
+        AdmissionPoolSlabAttemptFlags(attempt, ConstructLargePages));
     us = AdmissionPoolElapsedUs(start);
     ++Cost->Calls;
     Cost->Us += us;
     if (us > Cost->UsMax) Cost->UsMax = us;
     if (mdl == NULL) {
       Cost->FailUs += us;
+      if (attempt == 0u && !ConstructLargePages) ++Cost->FastMisses;
       continue;
     }
     start = KeQueryPerformanceCounter(NULL);
@@ -349,8 +378,13 @@ static ADMISSION_POOL_SLAB *AdmissionPoolAllocSlab(ADMISSION_POOL_SLAB_COST *Cos
     }
     Cost->CheckUs += AdmissionPoolElapsedUs(start);
     slab->Handle = mdl;
-    if (attempt == 0u) ++Cost->Contiguous;
-    else ++Cost->Chunked;
+    if (attempt == 0u) {
+      ++Cost->Contiguous;
+      Cost->ContiguousUs += us;
+    } else {
+      ++Cost->Chunked;
+      Cost->ChunkedUs += us;
+    }
     return slab;
 Next:
     Cost->CheckUs += AdmissionPoolElapsedUs(start);
@@ -372,13 +406,16 @@ static VOID AdmissionPoolAddSlabCost(ADMISSION_POOL_RUNTIME *Pool,
   Pool->SlabFailUs += Cost->FailUs;
   Pool->SlabContiguous += Cost->Contiguous;
   Pool->SlabChunked += Cost->Chunked;
+  Pool->SlabFastMisses += Cost->FastMisses;
+  Pool->SlabContiguousUs += Cost->ContiguousUs;
+  Pool->SlabChunkedUs += Cost->ChunkedUs;
 }
 
 /* ADMISSION_POOL_SLABS.NewSlab: called with the pool lock held. */
 static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
   ADMISSION_POOL_SLAB_COST cost = {0};
-  ADMISSION_POOL_SLAB *slab = AdmissionPoolAllocSlab(&cost);
+  ADMISSION_POOL_SLAB *slab = AdmissionPoolAllocSlab(&cost, pool->ConstructLargePages);
   AdmissionPoolAddSlabCost(pool, &cost);
   return slab;
 }
@@ -607,6 +644,10 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.PrefillUs = pool->PrefillUs;
     receipt.PrefillDiscards = pool->PrefillDiscards + pool->PrefillFailures;
     receipt.SlabFailUs = pool->SlabFailUs;
+    receipt.SlabFastMisses = pool->SlabFastMisses;
+    receipt.SlabContiguousUs = pool->SlabContiguousUs;
+    receipt.SlabChunkedUs = pool->SlabChunkedUs;
+    receipt.ConstructLargePages = pool->ConstructLargePages ? 1ULL : 0ULL;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
     pool->StagedReserved = pool->Slabs.Reserved;
@@ -999,7 +1040,7 @@ static VOID AdmissionPoolPrefillWork(_In_ PDEVICE_OBJECT Device,
     ExReleaseFastMutex(&pool->Lock);
     if (!wanted) break;
     start = KeQueryPerformanceCounter(NULL);
-    slab = AdmissionPoolAllocSlab(&cost);
+    slab = AdmissionPoolAllocSlab(&cost, pool->ConstructLargePages);
     ExAcquireFastMutex(&pool->Lock);
     AdmissionPoolAddSlabCost(pool, &cost);
     pool->PrefillUs += AdmissionPoolElapsedUs(start);
@@ -1274,6 +1315,35 @@ static BOOLEAN AdmissionPoolPrefillEnabled(ADMISSION_CONTEXT *Context) {
   return enabled;
 }
 
+/* rc93 kill switch: only REG_DWORD Wom1PoolConstructLargePages=1 lets the
+ * 2 MiB slab attempt construct large pages (the pre-rc93 flags); absent or
+ * other values keep MM_ALLOCATE_FAST_LARGE_PAGES. */
+static BOOLEAN AdmissionPoolConstructLargePagesEnabled(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1PoolConstructLargePages");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
+
 /* RC13: freeze the experimental placement policy before allocation creation. */
 static BOOLEAN AdmissionSysmemSpillEnabled(ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;
@@ -1374,6 +1444,7 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   }
   /* rc88: without its work item the pool runs as before, unprefilled. */
   pool->PrefillEnabled = AdmissionPoolPrefillEnabled(Context);
+  pool->ConstructLargePages = AdmissionPoolConstructLargePagesEnabled(Context);
   if (pool->PrefillEnabled)
     pool->PrefillWork = IoAllocateWorkItem(Context->PhysicalDeviceObject);
   pool->Demand.ReleaseDelay = ADMISSION_POOL_RELEASE_DELAY_MS;

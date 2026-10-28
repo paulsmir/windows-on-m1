@@ -107,7 +107,7 @@ typedef struct _ADMISSION_POOL_RESERVE_FAILURE {
   unsigned long long PrivateGranules;
 } ADMISSION_POOL_RESERVE_FAILURE;
 
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 12u /* v12: slab prefill */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 13u /* v13: large-page split */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -158,6 +158,13 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
    * MmAllocatePagesForMdlEx calls whose result was not a usable slab (a
    * refused or non-contiguous 2 MiB attempt before its 64 KiB fallback). */
   unsigned long long PrefillSlabs, PrefillUs, PrefillDiscards, SlabFailUs;
+  /* v13 (rc93): 2 MiB attempts refused at once because Windows' large-page
+   * cache was empty (MM_ALLOCATE_FAST_LARGE_PAGES), the time of the attempts
+   * that produced a slab by shape (2 MiB contiguous, 32 x 64 KiB chunked;
+   * microseconds, so per-slab cost = Us / SlabContiguous or SlabChunked),
+   * and 1 when Wom1PoolConstructLargePages=1 restored construction. */
+  unsigned long long SlabFastMisses, SlabContiguousUs, SlabChunkedUs;
+  unsigned long long ConstructLargePages;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.
