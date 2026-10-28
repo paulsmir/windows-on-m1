@@ -66519,3 +66519,10 @@ Device switch: Wom1GpuFaultInfoRead=1. Order:
 - Hashes: sys 15edb80dfd84, UmdArm64 dd02cc967248, UmdX64 5d8abf9a9d22, Umd32 482f0fb07e25; manifest 128973414890, hardware-manifest c8dde937f841; probe2053.sh d4ca7250477c (PROBE_LINT_OK); visible recovery rec2053h 39ad1055c5cb5797; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2053h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2053-fullscreen2/run2053.sh.
+
+EXP2053 HARDWARE ACTUAL (2026-10-28): **no regression and no crash. Fullscreen still has no 1920×1080 mode; root cause found (the monitor modes are offered before the panel starts).**
+- a: FHD 100k windowed **4307** (25.8 FPS); pool peak 3058 MiB of 4096, no reserve/commit failures.
+- b: FHD 100k `-Fullscreen 1`: `ChangeDisplaySettingsExW` fails ("can't set 1920x1080 mode"), and GravityMark continues at the native mode: **4513** (27.0 FPS). Guest alive afterwards; no exit artifacts or reboot (the EXP2049 failure is fixed).
+- Mode probe: EnumDisplaySettings fails with err 203 and no devices in session 1; CDS_TEST returns -5 (BADPARAM). This is a separate probe issue.
+- Wom1DisplayModesReceipt: BrokerCaps 0x1ff (CAP_SCALED_SOURCE set), ScaledModes 1, MonitorModeCalls 1, LastMonitorModesAdded 1, LastEnumSourceModes 0.
+- Root cause: dxgkrnl calls RecommendMonitorModes once, before the panel is Started. `AdmissionScanoutScaledModes` required Started, so only 2560×1600 was offered. Fix 133154db: decide from the broker ABI and caps read at StartDevice. Retest in EXP2055.
