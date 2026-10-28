@@ -65749,3 +65749,8 @@ EXP2028 HARDWARE ACTUAL (2026-10-28): **D3D12 HD 50k 6906 (best); D3D11 warm 244
   - The remaining gap to EXP2000 is per-frame: 70.86 ms against 69.02 ms, and frames 1→3 took 1.82 s there.
 - The guest stayed alive and there were no removals.
 - Verdict: rc91 confirmed. The D3D11 cold-start cost is Windows first-touch page allocation, not the driver.
+
+EXP2029 HARDWARE BEFORE 2026-10-28T07:44:13Z:
+- Hashes: sys 682d67b4793e, UmdArm64 8880a5360a38, UmdX64 69f316d22ad6, Umd32 8162da7126d5; manifest 4b229c80b941, hardware-manifest c5b777084c0e; probe2029.sh 0c78e808c078 (PROBE_LINT_OK); visible recovery rec2029h f538732893d1adb9; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TdrDrillAllowed=1.
+- Recovery rec2029h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2029-tdr-rc92/run2029.sh.
