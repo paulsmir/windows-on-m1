@@ -116,5 +116,69 @@ class UmdResidencyTrim(unittest.TestCase):
         self.assertTrue('restore_residency(' in prepare,
                         'CPU download of a trimmed slot skips residency')
 
+RECENCY = r"""
+#include "umd_residency_trim.h"
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+  ADMISSION_UMD_TRIM_SLOT s[3];
+  unsigned chosen[3];
+  unsigned long long covered;
+  memset(s, 0, sizeof(s));
+  for (unsigned i = 0; i < 3; ++i) {
+    s[i].Active = 1; s[i].Resident = 1; s[i].KernelAllocation = 0x40000000u + i;
+    s[i].Bytes = 128ull << 20;
+  }
+  /* Slot 0: drawn at fence 40, idle since. Slot 1: just created and made
+   * resident for its upload (never submitted) while fence 41 was next.
+   * Slot 2: drawn at 45 (after slot 1's residency). */
+  s[0].LastUseFence = AdmissionUmdTrimRecency(40, 12);
+  s[1].LastUseFence = AdmissionUmdTrimRecency(0, 41);
+  s[2].LastUseFence = AdmissionUmdTrimRecency(45, 41);
+  assert(AdmissionUmdTrimChoose(s, 3, 1, chosen, &covered) == 1 && chosen[0] == 0);
+  assert(AdmissionUmdTrimChoose(s, 3, 200ull << 20, chosen, &covered) == 2);
+  assert(chosen[0] == 0 && chosen[1] == 1);
+  puts("rc86 trim recency: PASS");
+  return 0;
+}
+"""
+
+
+class UmdTrimRecency(unittest.TestCase):
+    def test_new_residency_is_not_least_recent(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        rc86 (EXP2015b: 124 trims, 787 MiB, in GravityMark's first frame):
+        LastUseFence is 0 for a slot created and made resident but not yet
+        submitted, so the LRU trim chose exactly the resources the app was
+        about to upload into or draw with; their restore then evicted the
+        next new one. A slot made resident after its last submission must
+        rank after every merely idle slot, and every residency site must
+        stamp it.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'recency.c'
+            binary = Path(directory) / 'recency'
+            source.write_text(RECENCY)
+            subprocess.run([os.environ.get('CC', 'clang'), '-std=c11', '-Wall',
+                            '-Wextra', '-Werror', '-I', str(UMD / 'include'),
+                            str(source), '-o', str(binary)], check=True)
+            result = subprocess.run([str(binary)], check=True,
+                                    capture_output=True, text=True)
+            self.assertIn('PASS', result.stdout)
+        text = (UMD / 'src/umd_gpuva_windows.c').read_text()
+        import re
+        sites = [m.start() for m in re.finditer(r'Resident\s*=\s*TRUE', text)]
+        self.assertTrue(sites, 'no residency site found')
+        for at in sites:
+            window = text[at:at + 160]
+            self.assertIn('TrimRecency=device->NextRenderFence+1u', window,
+                          'residency site without a trim recency stamp: ' +
+                          text[max(0, at - 80):at + 40])
+        self.assertIn('AdmissionUmdTrimRecency(slot->LastUseFence,slot->TrimRecency)',
+                      text, 'trim view ignores the residency recency')
+
+
 if __name__ == '__main__':
     unittest.main()

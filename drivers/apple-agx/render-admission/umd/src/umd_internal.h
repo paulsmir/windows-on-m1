@@ -130,6 +130,11 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   /* EXP1093: render fence of the latest submission that holds this slot; an
    * upload into it waits for that fence while another submission holds it. */
   UINT64 LastUseFence;
+  /* rc86: residency trim recency. Set to the next render fence when the
+   * slot takes its residency reference (creation map, submission, restore):
+   * a slot made resident after its last submission is about to be used and
+   * must not rank as the least recently used one (umd_residency_trim.h). */
+  UINT64 TrimRecency;
   /* RC65: the upload-ring GPU copy of this slot's snapshot is recorded and
    * its submission not yet accepted. That copy writes bytes the staging
    * already holds: it neither marks the slot GpuWritten nor lets the same

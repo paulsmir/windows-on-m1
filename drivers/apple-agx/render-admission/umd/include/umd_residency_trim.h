@@ -19,6 +19,18 @@ typedef struct _ADMISSION_UMD_TRIM_SLOT {
   unsigned long long Bytes, LastUseFence;
 } ADMISSION_UMD_TRIM_SLOT;
 
+/* rc86 (EXP2015b: 124 trims, 787 MiB, in GravityMark's first frame): the
+ * LRU key of a slot. LastUseFence is the last submission that held the slot;
+ * a slot created, mapped or restored since then has 0 or an old fence, yet
+ * it was made resident because it is about to be used (an upload or the
+ * next draw). ResidentFence is the next render fence at that moment, so
+ * such a slot ranks with the next submission, after every slot that has
+ * merely been idle. */
+static inline unsigned long long AdmissionUmdTrimRecency(
+    unsigned long long LastUseFence, unsigned long long ResidentFence) {
+  return LastUseFence > ResidentFence ? LastUseFence : ResidentFence;
+}
+
 /* Rounds of trim + retry for one residency request. */
 #define ADMISSION_UMD_TRIM_ROUNDS 16u
 

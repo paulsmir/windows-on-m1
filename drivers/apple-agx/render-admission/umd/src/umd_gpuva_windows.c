@@ -344,7 +344,8 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
       v->KmtResidencyHeld=slot->KmtResidencyHeld;
       v->SubmissionHolds=slot->SubmissionHolds;v->SourceHolds=slot->SourceHolds;
       v->KernelAllocation=slot->KernelAllocation;
-      v->Bytes=slot->Bytes;v->LastUseFence=slot->LastUseFence;
+      v->Bytes=slot->Bytes;
+      v->LastUseFence=AdmissionUmdTrimRecency(slot->LastUseFence,slot->TrimRecency);
     }
     count=AdmissionUmdTrimChoose(view,n,want,chosen,&covered);
     for(UINT i=0;i<count;++i) {
@@ -505,7 +506,9 @@ static void resident_before_map(ADMISSION_UMD_DEVICE *device, uint64_t token,
   if(FAILED(hr) && hr!=E_PENDING) return;
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   slot=find_slot(device,token);
-  if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
+  if(slot && slot->KernelAllocation==handle) {
+    slot->Resident=TRUE;slot->TrimRecency=device->NextRenderFence+1u;
+  }
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   /* Resident owns the accepted reference, not proof that paging finished.
    * Keep it for teardown, but never let a failed/missing fence turn into the
@@ -796,7 +799,7 @@ static int make_resident(void *context, const uint64_t *tokens,
       auto *slot=&device->ScreenBuffers[j];
       if(slot->Active && !slot->Resident &&
          slot->KernelAllocation==handles[i])
-        {slot->Resident=TRUE;break;}
+        {slot->Resident=TRUE;slot->TrimRecency=device->NextRenderFence+1u;break;}
     }
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   AcquireSRWLockShared(&device->ScreenBufferLock);
@@ -1247,6 +1250,7 @@ static int replace_canonical(ADMISSION_UMD_DEVICE *device,
   if(ok) {
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
     slot->KernelAllocation=fresh;slot->Resident=TRUE;
+    slot->TrimRecency=device->NextRenderFence+1u;
     AdmissionUmdStagingInvalidate(&slot->Sync);
     AdmissionUmdStagingChunksInvalidate(&slot->Chunks);
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
@@ -1990,7 +1994,9 @@ static int restore_residency(ADMISSION_UMD_DEVICE *device, uint64_t token) {
   }
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   slot=find_slot(device,token);
-  if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
+  if(slot && slot->KernelAllocation==handle) {
+    slot->Resident=TRUE;slot->TrimRecency=device->NextRenderFence+1u;
+  }
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   if((hr==E_PENDING && !request.PagingFenceValue) ||
       (request.PagingFenceValue &&
