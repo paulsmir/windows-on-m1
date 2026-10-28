@@ -66609,3 +66609,22 @@ EXP2056 HARDWARE ACTUAL (2026-10-28): **fullscreen works: GravityMark sets 1920�
   - restored 2560×1600 visible.
 - WER 1: SystemSettings.exe (Windows.UI.Xaml.dll, 0xc000027b) during the mode switch. Not GravityMark and not the driver; noted.
 - Mode probe: still no GDI devices or modes (err 203, CDS_TEST -5) from the scheduled task. Open, probe-only.
+
+EXP2057 HARDWARE BEFORE 2026-10-28T23:09:16Z:
+ABBA, FHD 100k windowed:
+- a: default;
+- b: APPLE_AGX_D3D_ROBUST_DIAG=off;
+- c: APPLE_AGX_D3D_ROBUST_DIAG=off;
+- d: default.
+- WHY: the macOS Metal cache of GravityMark's lighting kernel (Apple 0xc1b40) has 62 mostly-vec4 device loads and few selects. Our 806ee7b1bdb1944a has 399 loads (302 scalar) with a bounds test each.
+  - Offline with the D3D lowering off: 5371 → 3583 instructions, 399 → 88 loads, 223 → 207 halfregs, occupancy 448 → 512.
+  - Metal performs no bounds checks.
+- ATOMIC CONTRACT: diagnostic only. The default arms are byte-identical to EXP2056 behaviour; "off" is not D3D-conformant (out-of-bounds UBO/SSBO reads are not zeroed; soft faults keep unmapped reads at 0).
+- Expected: b+c vs a+d shows the robustness share of the frame. More than 5% justifies a cheaper conformant scheme (root-view exemption, per-vector tests, hoisted limits).
+- Failure criteria:
+  - GPU faults or a TDR with "off" (a shader reads past its views);
+  - an image difference in the gm*-image.png captures.
+- Recovery: rec2057h.
+- Hashes: sys ea3e42c6b427, UmdArm64 978d675c6861, UmdX64 b46db524e29b, Umd32 71f39de88f6a; manifest e5ee839f568b, hardware-manifest cb2fdee33a49; probe2057.sh 90af29254ea8 (PROBE_LINT_OK); visible recovery rec2057h 3f6f59baa928c796; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2057h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2057-robust-diag/run2057.sh.
