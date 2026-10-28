@@ -66063,3 +66063,13 @@ EXP2037 HARDWARE ACTUAL (2026-10-28): **rc100 predicted-sleep poll works on hard
   - rc100 implemented and live; poll CPU busy reduced about 5.7×.
   - The thermal effect is pending the same-package control EXP2038 (Wom1JobPollSpinUs=50000).
   - Next for rc100: account for the 400 µs timer lateness, or use the AIC 578 → vINTID 887 completion interrupt.
+
+EXP2038 HARDWARE BEFORE 2026-10-28T12:18:35Z:
+- WHY: EXP2037 (rc100 default) shows poll busy_fraction 0.17, a high-resolution timer, timer lateness 411–418 µs, FHD 4150 / 4044 / 3895, and the state-6 share 93.5 / 77.3 / 64.0%. The control shows whether the predicted-sleep poll changes the throttling or the scores.
+- ATOMIC CONTRACT: one variable (the registry switch).
+- Expected: busy_fraction ≈ 1.0 (mode spin); if rc100 helps thermally, run 2/3 state-6 shares and scores are lower than in EXP2037.
+- Failure criteria: removal or fault.
+- Recovery: rec2038h.
+- Hashes: sys a1f50373837f, UmdArm64 9338067f9a1e, UmdX64 e2c242ea2bc4, Umd32 ed0c4bc72ca0; manifest 7b64c04042ba, hardware-manifest 71813f53963c; probe2038.sh 6d16e8c6d760 (PROBE_LINT_OK); visible recovery rec2038h dab68d805714fcbb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobPollSpinUs=50000.
+- Recovery rec2038h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2038-poll-spin/run2038.sh.
