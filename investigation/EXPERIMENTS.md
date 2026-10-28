@@ -65955,3 +65955,27 @@ EXP2034 HARDWARE ACTUAL (2026-10-28): **the drill passes with build-ahead on, so
   - build-ahead default ON;
   - the rc98 capabilities target the dominant refusal (57);
   - next: the Caps=1 arm, plus rc99 (readback reserve).
+
+EXP2035 HARDWARE BEFORE 2026-10-28T11:08:50Z:
+- build-ahead default on (4786e3db);
+- rc98 (second sidecar set and depth-2 Barrier encoders);
+- rc99 (2 MiB native readback reserve at the top of arena 0 for READBACK heaps, kill switch APPLE_AGX_D3D12_READBACK_RESERVE=0).
+Device switches: Wom1GpuFaultInfoRead=1, Wom1JobDepth2=1, Wom1JobDepth2Caps=1. Order: HD 50k first after boot (a), HD 50k with reserve off (b), FHD 100k windowed (c), FHD 100k fullscreen (d).
+- WHY:
+  - (1) rc99: the 3.8 ms per-frame idle comes from GravityMark's four 512 KiB READBACK heaps racing for the last ~1 MiB of the native arenas. A heap that falls back to private staging forces a synchronous 512 KiB download (1 QUERY + 8 DOWNLOAD escapes, 3.2 ms) in finish_submission. Inside each run, frames with a download have 4.2 ms idle and frames without have 0.2 ms.
+  - (2) rc98: Caps=1 should turn the dominant depth-2 refusal 57 into eligible pairs and make envelope compute/prelude jobs alternate sidecar sets A/B on the firmware, at depth 1.
+  - (3) Fable: DWM composes the 1920×1080 window every frame (pos6 launch 1.94 ms, 0.87 of it foreign); fullscreen may remove that.
+- ATOMIC CONTRACT: none; separate steps. rc99 is A/B'd by env in a fresh process (a vs b); rc98 Caps has its own receipt fields; fullscreen is a setting change.
+- Expected:
+  - (1) arm a: no download frames, idle < 0.5 ms, median ≤ 23.4 ms, score ≥ 6650; arm b: the race returns (download frames are possible);
+  - (2) depth2 refusals with no 57/60, sidecar_set_b > 0 and sidecar_set_a > 0, no fault, image unchanged;
+  - (3) d: pos6 foreign share about 0 and a score above c.
+- Failure criteria:
+  - a fault or timeout on SIDECAR_SET_B jobs (rc98 rejected; set Caps off);
+  - a wrong image;
+  - removal.
+- WHAT IS STILL UNKNOWN: whether the firmware accepts set B words; other apps' readback sizes.
+- Recovery: rec2035h.
+- Hashes: sys 4b46a41e234b, UmdArm64 bc0c5c34da6d, UmdX64 da66980d58ba, Umd32 0f709162aa3c; manifest f4c64aa7c224, hardware-manifest 32e1f5f9c2b2; probe2035.sh 8bad76a6d47d (PROBE_LINT_OK); visible recovery rec2035h 5a6085ea2aa10f81; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1.
+- Recovery rec2035h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2035-caps-readback/run2035.sh.
