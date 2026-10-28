@@ -66193,3 +66193,13 @@ EXP2042 HARDWARE BEFORE 2026-10-28T13:48:35Z:
 - Hashes: sys d459f6c39beb, UmdArm64 ed3c82b84515, UmdX64 d5e24361b26f, Umd32 31167fbc5131; manifest b5989b9b16a4, hardware-manifest d50048d0f42d; probe2042.sh cbff1628fad4 (PROBE_LINT_OK); visible recovery rec2042h c1459158fc529655; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1JobDepth2Kick=1.
 - Recovery rec2042h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2042-kick-levels/run2042.sh.
+
+EXP2042 HARDWARE ACTUAL (2026-10-28): **Kick=1: the first depth-2 kick fails at BeginSuccessorJob; the TDR recovers. Stopped after two arms; the level-upload A/B is invalid.**
+- Arm a (FHD, level on) was removed at 10.6 s; arm b (FHD, level off) at 6.0 s. Both are device removed through a TDR, and the guest stayed alive.
+- Wom1JobWindow: kicks 0, batch_sizes {1: 3179, 2: 0}, **kick_failures 1, last_kick_failure_line 5115**. At 19a8a7b3, line 5115 is the post-decision check: `context`, `GpuvaG3Process` or `AdmissionGpuvaG3BeginSuccessorJob` failed.
+- **Wom1GpuReset: 1 of 1 succeeded,** status 0, quiesce ended, last_aborted 0x157c. The d4bf810f / rc97 reset path recovers a failed kick on hardware.
+- The probe was stopped manually after arm b; the rest of the run was skipped.
+- Verdict:
+  - rc102 Kick is not yet functional (back to rc102 with the receipts);
+  - the reset recovery is confirmed;
+  - the rc103 level-upload A/B moves to EXP2043 with Kick off.
