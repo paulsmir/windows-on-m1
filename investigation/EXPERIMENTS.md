@@ -65548,3 +65548,13 @@ EXP2019 HARDWARE ACTUAL (2026-10-28): **PASS, new best FHD 100k**. rc87.
   - The inventory is 3018 MiB, still above the about 2.9 GiB LOCAL budget, so 200k still thrashes in a few giant hitches.
 - Verdict: rc87 fd41c695 and e4a3d411 validated; 243a53bf validated (tool).
 - Next: fit 200k (about 150-300 MiB more), and shorten the remaining 10 s allocation/resource stall.
+
+EXP2020 HARDWARE BEFORE 2026-10-28T04:24:26Z:
+- WHY: the hardware is idle while rc88 is offline. This refreshes the HD numbers after rc76-rc87; the last HD 100k was 3047 (EXP1996).
+- ATOMIC CONTRACT: none; measurement.
+- Expected: HD 50k about 6600 or more; HD 100k well above 3047.
+- Failure criteria: removal.
+- Recovery: rec2020h.
+- Hashes: sys d1b22b93b356, UmdArm64 06f5bafe8ceb, UmdX64 ee21a652217e, Umd32 23b7194817fa; manifest 479a10907154, hardware-manifest 8a35d5efcc12; probe2020.sh 6bd57032346d (PROBE_LINT_OK); visible recovery rec2020h 5d72ce21fa62241f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2020h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2020-hd-board/run2020.sh.
