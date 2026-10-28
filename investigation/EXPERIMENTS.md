@@ -66251,3 +66251,15 @@ EXP2044 HARDWARE BEFORE 2026-10-28T15:09:08Z:
 - Hashes: sys bdc96bb441ac, UmdArm64 ccf7a13148c1, UmdX64 6b585049e0c9, Umd32 372a3ed761da; manifest cfb1ef49bbbf, hardware-manifest 077e92820cc1; probe2044.sh 7767b3b20000 (PROBE_LINT_OK); visible recovery rec2044h 7a14c61eb8cdda0d; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2044h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2044-flicker/run2044.sh.
+
+EXP2044 HARDWARE ACTUAL (2026-10-28): **the Earth flicker is captured in screenshots: hard-edged polygonal shadow/terminator regions on the planet that change from frame to frame. It is not a submit-order hazard.**
+- Arms: a HD 50k with the rc105 submit-order guard: 6585; b guard off (APPLE_AGX_D3D12_SUBMIT_ORDER=0): 6730.
+- 2 Hz full-screen captures, 120 per arm (`gm2044{a,b}-shots/`).
+  - Frames 18–20 of arm b show the planet with a straight-edged dark region, then fully lit, then almost fully dark.
+  - Arm a frames 22–26 show the same straight edges.
+  - Montages are in `.local/handoff/codex/rc108/`.
+- "Submit order" perf notes: 0 in both arms, so there were no batch inversions.
+- `measure-d3d12-barriers` per Execute: 245 transitions, 349 UAV, RT→read 5, DEPTH_WRITE→read 3, UAV→read 55.
+- Verdict:
+  - The rc105 guard is kept (harmless; no inversions seen).
+  - The flicker is a shading defect, most likely in the Texture2DArray shadow-atlas path (DSV/SRV array slices, a comparison sampler, or BORDER colour, since border_color_format is never set). This goes to rc108.
