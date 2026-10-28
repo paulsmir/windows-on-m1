@@ -66013,3 +66013,19 @@ EXP2036 HARDWARE BEFORE 2026-10-28T11:33:18Z:
 - Hashes: sys c774cd911507, UmdArm64 1382b9ac0c88, UmdX64 fd5d394a098f, Umd32 497369955b5e; manifest 0f254dbc8dd0, hardware-manifest e6429c504153; probe2036.sh 0a0ed9708ebf (PROBE_LINT_OK); visible recovery rec2036h 701dbe795637780f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2036h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2036-lean-cdm/run2036.sh.
+
+EXP2036 HARDWARE ACTUAL (2026-10-28): **rc101 lean CDM barrier is neutral: no measurable compute gain. Images are correct.**
+
+| Arm | Score | Compute exact pos0 / pos2 / pos5 / pos7 |
+|---|---|---|
+| a: HD 50k full | 6913 (first app) | 1.023 / 1.251 / 4.762 / 1.335 ms |
+| b: HD 50k lean | 6940 (second app) | 1.042 / 1.258 / 4.608 / 1.329 ms |
+| c: FHD 100k lean | 3886 | 2.917 / 2.986 / 8.648 / 2.314 ms |
+| d: FHD 100k full (4th app, hotter) | 3789 | 2.977 / 3.164 / 8.979 / 2.352 ms |
+
+- Receipt `measure-d3d12-cdm-barriers`: lean mode 1, word 0x60000168, 154 lean / 83 full per submit; full mode 0 lean / 237 full.
+- HD images are visually identical and correct, with no corruption.
+- FHD lean is within 2–6% of full; the full arm ran later and hotter, so the difference is within thermal noise.
+- First app after boot again about 6900 (rc99 holds).
+- Verdict: the barrier-cost hypothesis (Fable §5) is rejected for this workload. Keep the default off; the switch stays for later bisects.
+- Note: the first EXP2037 package failed the WDK build: rc100's `ULONG planUs` passed as `unsigned int*` is C4057, an error under /WX. Fixed in 26d479ec and rebuilt.
