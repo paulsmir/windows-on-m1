@@ -65374,3 +65374,10 @@ EXP2013 HARDWARE BEFORE 2026-10-28T01:18:26Z:
 - Hashes: sys b051c3d762a9, UmdArm64 e1bf92365f44, UmdX64 026bd9992351, Umd32 06c300919f08; manifest f5687f45c8ad, hardware-manifest 831e595c5526; probe2013.sh 32543f13d567 (PROBE_LINT_OK); visible recovery rec2013h d2732cdd740fc63b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuFaultControlRead=1.
 - Recovery rec2013h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2013-soft-probe/run2013.sh.
+
+EXP2013 HARDWARE ACTUAL (2026-10-28): **soft faults confirmed for shader data reads**.
+- GravityMark D3D12 HD 50k (rc82 present, Wom1SoftFaults off): 6045 / 36.2 FPS (EXP2012: 6035).
+- RC82A: **PASS removed=0 completed=7 guard_bad=0**. A compute shader read of the unmapped 64 KiB guard tile (VA 0x11001a0000) returned 0. There was no device removal, no TDR, and no Wom1GpuFault event in the receipts.
+- Wom1SoftFaultState: RegionC 0xb; SGX 0x17620 = 8, 0x17630 = 8.
+- So under fault_control 0xb (rc77) the firmware handles shader data reads as Asahi/macOS soft faults: app OOB data reads are silent. Only driver-built control-stream faults remain fatal (EXP2005/2007).
+- Verdict: rc82 f687c5e5 validated; prerequisite for Wom1SoftFaults=1 met.
