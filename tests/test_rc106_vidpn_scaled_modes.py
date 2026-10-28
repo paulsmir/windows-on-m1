@@ -571,6 +571,14 @@ static void test_fixed_broker_offers_only_native(void) {
   assert(context.CommittedWidth == 2560u &&
          context.CommittedScaling == D3DKMDT_VPPS_IDENTITY);
   done(v);
+
+  /* A persisted non-identity pin keeps the native mode, as before rc106. */
+  v = vidpn(D3DKMDT_VPPS_ASPECTRATIOCENTEREDMAX);
+  assert(supported(v));
+  assert(enum_cofunc(v) == STATUS_SUCCESS);
+  assert(v->source->count == 1u &&
+         v->source->modes[0].Format.Graphics.PrimSurfSize.cx == 2560u);
+  done(v);
 }
 
 /* With the scaled broker: the full laptop list with unique Ids (EXP1884),
@@ -611,13 +619,12 @@ static void test_scaled_broker_offers_modes_and_scaling(void) {
     assert(v->source->modes[i].Format.Graphics.PrimSurfSize.cx == 2560u);
   done(v);
 
-  /* Pinned stretched: every size but the native one. */
+  /* Pinned stretched: every size; the native one commits as identity
+   * (CommitVidPn accepted it before rc106, so the set must keep it). */
   v = vidpn(D3DKMDT_VPPS_STRETCHED);
   assert(enum_cofunc(v) == STATUS_SUCCESS);
   assert(v->source->count ==
-         2u * (AppleAgxFixedPanelSourceModeCount(APPLE_AGX_SCANOUT_TRUE) - 1u));
-  for (i = 0; i < v->source->count; ++i)
-    assert(v->source->modes[i].Format.Graphics.PrimSurfSize.cx != 2560u);
+         2u * AppleAgxFixedPanelSourceModeCount(APPLE_AGX_SCANOUT_TRUE));
   done(v);
 
   /* Pinned custom: no cofunctional source mode. */

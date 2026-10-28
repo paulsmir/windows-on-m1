@@ -385,6 +385,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
   D3DKMDT_VIDPN_TARGET_MODE *targetMode = NULL;
   ULONG modeIndex = 0u, modeWidth = 0u, modeHeight = 0u, modeStride = 0u;
   ULONG offeredModes = 0u, scalingSupport = 0u;
+  D3DKMDT_VIDPN_PRESENT_PATH_SCALING resolvedScaling =
+      D3DKMDT_VPPS_UNINITIALIZED;
   D3DKMDT_HVIDPNTOPOLOGY topology = 0;
   D3DKMDT_HVIDPNSOURCEMODESET sourceSet = 0;
   D3DKMDT_HVIDPNTARGETMODESET targetSet = 0;
@@ -440,17 +442,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
       goto Exit;
     /* D3D-FS1: DXGI lists R8G8B8A8 display modes only from an A8B8G8R8
      * source mode; offered when the hypervisor scans out RGBA8888.  rc106:
-     * a pinned scaling keeps only the modes it is cofunctional with. */
+     * a pinned scaling keeps only the modes CommitVidPn would accept with
+     * it (the same resolution IsSupportedVidPn applies). */
     for (modeIndex = 0u;
          AdmissionScanoutSourceModeAt(context, modeIndex, &modeWidth,
                                       &modeHeight, &modeStride);
          ++modeIndex) {
-      if (path->ContentTransformation.Scaling != D3DKMDT_VPPS_UNPINNED &&
-          path->ContentTransformation.Scaling != D3DKMDT_VPPS_UNINITIALIZED &&
-          path->ContentTransformation.Scaling != D3DKMDT_VPPS_NOTSPECIFIED &&
-          ((ULONG)path->ContentTransformation.Scaling >= 32u ||
-           (AdmissionScanoutScalingSupport(context, modeWidth, modeHeight) &
-            (1u << (ULONG)path->ContentTransformation.Scaling)) == 0u))
+      if (!AdmissionScanoutResolveScaling(context, modeWidth, modeHeight,
+                                          path->ContentTransformation.Scaling,
+                                          &resolvedScaling))
         continue;
       status = AdmissionDisplayAddSourceMode(sourceSetInterface, sourceSet,
                                              modeWidth, modeHeight,
