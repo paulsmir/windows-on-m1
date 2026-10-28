@@ -66598,3 +66598,14 @@ Order:
 - Hashes: sys 81b17892ead6, UmdArm64 3457f56363be, UmdX64 96c24ea36365, Umd32 4f91faab8c31; manifest 1fea54c98eab, hardware-manifest dcafaa0d2a82; probe2056.sh f0c01d14c842 (PROBE_LINT_OK); visible recovery rec2056h 9a7e081785f2803d; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2056h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2056-fullscreen4/run2056.sh.
+
+EXP2056 HARDWARE ACTUAL (2026-10-28): **fullscreen works: GravityMark sets 1920×1080, and m1n1 scans it out centred as `display: scanout source 1920x1080 stride 7680 -> panel 2560x1440 at 0,80`. The tile 32768 gain was an order effect.**
+- a FHD 100k windowed, default tile: 4290 (25.7).
+- t FHD 100k windowed, tile 32768 (second): 4178 (25.0). EXP2054 had tile first 4335 vs 4209. Whichever arm runs first wins by about 3% (thermal). Verdict: tile 32768 rejected; A/B comparisons must alternate order or repeat.
+- b FHD 100k `-Fullscreen 1` (third, hottest): **4035** (24.1). No setMode error.
+- Wom1DisplayModesReceipt after b:
+  - CommitCalls 3 (1920×1080 in, 2560×1600 restored at exit);
+  - SourceAddress 13890 calls, LastStatus 0, all refusal counters 0;
+  - restored 2560×1600 visible.
+- WER 1: SystemSettings.exe (Windows.UI.Xaml.dll, 0xc000027b) during the mode switch. Not GravityMark and not the driver; noted.
+- Mode probe: still no GDI devices or modes (err 203, CDS_TEST -5) from the scheduled task. Open, probe-only.
