@@ -65418,3 +65418,19 @@ EXP2015 HARDWARE BEFORE 2026-10-28T01:54:56Z:
 - Hashes: sys b14ba9e80834, UmdArm64 3542d6775298, UmdX64 3b384ffcd347, Umd32 4ec791de397b; manifest f570d4feb973, hardware-manifest 605ef5536b8d; probe2015.sh 19223e458b73 (PROBE_LINT_OK); visible recovery rec2015h 1f11edb54ca6c636; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2015h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2015-bulk-reads/run2015.sh.
+
+EXP2015 HARDWARE ACTUAL (2026-10-28): rc83 bulk reads plus soft faults by default.
+- HD 50k: **6595 / 39.5 FPS**, new best (EXP2014: 6079). Frame 24.05 → 22.76 ms; c_kick 1.75 → 1.48; rc_prelude_kick 2.49 → 2.05.
+- FHD 100k: 3390 (EXP2014: 3615), but the median frame is unchanged (41.02 vs 41.04 ms).
+- measure-soft-faults 1,3,1 without the switch.
+- **Finding: the GravityMark score equals the number of frames presented in a fixed ~167 s window that starts at app start.** For example, gm2014b has 3616 frames and scores 3615; gm2015b has 3391 frames and scores 3390. So the first-frame stall (load and compile) counts against the score.
+- First-frame gaps in the times files:
+
+  | Runs | First-frame gap |
+  |---|---|
+  | HD | 10-15 s |
+  | FHD, usually | 16-20 s |
+  | FHD outliers: gm2000b, 2006b, 2008b, 2015b | 43-56 s |
+
+  The FHD 2015 regression is entirely this stall (43 s against 19 s). Handed to rc85.
+- Verdict: rc83 00e6ae22 and 14f3b425 validated; a5afc01c (soft faults default) validated.
