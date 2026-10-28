@@ -31,7 +31,6 @@ class DisplayableResourceTests(unittest.TestCase):
 #include <assert.h>
 #include <string.h>
 #include "direct_flip_contract.h"
-#include "apple_agx_fixed_panel_modes.h"
 typedef int BOOLEAN;
 typedef unsigned UINT;
 #define TRUE 1

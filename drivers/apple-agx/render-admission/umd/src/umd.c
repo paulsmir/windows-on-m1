@@ -15,7 +15,6 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(pop)
 
 #include "direct_flip_contract.h"
-#include "apple_agx_fixed_panel_modes.h"
 #include "umd_internal.h"
 
 #if defined(APPLE_AGX_UMD_NATIVE_FRONTEND)

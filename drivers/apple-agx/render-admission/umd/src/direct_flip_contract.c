@@ -1,5 +1,4 @@
 #include "direct_flip_contract.h"
-#include "apple_agx_fixed_panel_modes.h"
 
 static int AdmissionUmdDirectFlipResourceValid(
     const ADMISSION_UMD_DIRECT_FLIP_RESOURCE *Resource,
