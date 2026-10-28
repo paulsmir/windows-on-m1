@@ -131,6 +131,7 @@ static void AdmissionJobTimingMarkWindows(void *r, unsigned f, unsigned phase) {
 static void AdmissionGpuCompletionCaptureWindows(ADMISSION_PLATFORM_RUNTIME *r, unsigned f,
     APPLE_AGX_BACKEND_COMPLETION_STATUS status) { (void)r; (void)f; (void)status; }
 static void AdmissionJobTimingFirmwareWindows(void *r, unsigned f) { (void)r; (void)f; }
+static void AdmissionGpuPerfSampleWindows(void *r) { (void)r; }
 static void AdmissionJobTimingCpuWindows(void *r, unsigned f, int c) { (void)r; (void)f; (void)c; }
 /* rc83 receipt v3: the arena-release stamp */
 #define AdmissionJobSubReleased 7
