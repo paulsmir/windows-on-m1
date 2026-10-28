@@ -7900,25 +7900,46 @@ static void rc63_quad(UINT q, float out[8]) {
     out[0] = x0; out[1] = y0; out[2] = x0; out[3] = y1;
     out[4] = x1; out[5] = y0; out[6] = x1; out[7] = y1;
 }
-static unsigned rc63_bad_pixels(const unsigned char *rows, UINT *first) {
+/* rc89: record r < n covers pixel r % 4096 first, so pixel p shows texel p
+ * when p < n and keeps the red clear colour otherwise. */
+static unsigned rc63_bad_pixels_n(const unsigned char *rows, UINT *first, UINT n) {
+    static const unsigned char red[4] = {255u, 0u, 0u, 255u};
     unsigned bad = 0;
     *first = RC63_PIXELS;
     for (UINT p = 0; p < RC63_PIXELS; ++p) {
         unsigned char want[4];
         const unsigned char *px = rows + (p / 64u) * 256u + (p % 64u) * 4u;
-        rc63_texel(p, want);
+        if (p < n) rc63_texel(p, want); else memcpy(want, red, sizeof(want));
         if (memcmp(px, want, 4)) { if (!bad) *first = p; ++bad; }
     }
     return bad;
 }
-static int rc63_statistics_ok(const D3D12_QUERY_DATA_PIPELINE_STATISTICS *q) {
-    const UINT64 draws = RC63_MAX;
+static unsigned rc63_bad_pixels(const unsigned char *rows, UINT *first) {
+    return rc63_bad_pixels_n(rows, first, RC63_MAX);
+}
+static int rc63_statistics_ok_n(const D3D12_QUERY_DATA_PIPELINE_STATISTICS *q, UINT n) {
+    const UINT64 draws = n;
     return q->IAVertices == 6u * draws && q->IAPrimitives == 2u * draws && q->VSInvocations == 6u * draws &&
-           q->CInvocations == 2u * draws && q->CPrimitives == 2u * draws && q->PSInvocations != 0 &&
+           q->CInvocations == 2u * draws && q->CPrimitives == 2u * draws && (q->PSInvocations != 0) == (n != 0) &&
            !q->GSInvocations && !q->GSPrimitives && !q->HSInvocations && !q->DSInvocations && !q->CSInvocations;
 }
-static int rc63_gravitymark_stream(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
-    const char *step = "RC63G";
+static int rc63_statistics_ok(const D3D12_QUERY_DATA_PIPELINE_STATISTICS *q) {
+    return rc63_statistics_ok_n(q, RC63_MAX);
+}
+/* One GPU-counted execution of the RC63G shape and what it showed. */
+struct rc63_run {
+    UINT count;          /* the GPU count the run copies, <= RC63_MAX */
+    HRESULT hr;
+    unsigned bad;        /* pixels that differ from a complete draw of count */
+    UINT first;
+    UINT64 draws;        /* IAVertices / 6: records the GPU drew */
+    int pixels_ok, statistics_ok, statistics_read;
+};
+/* Builds the RC63G scene once and executes it once per run, each run with
+ * its own GPU count (RC63G: one run of RC63_MAX; RC89S: several on one
+ * device, so the driver's stream capacity state carries across runs). */
+static HRESULT rc63_stream_runs(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base,
+                                const char *step, struct rc63_run *runs, UINT run_count) {
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0}, depth_desc = {0}, tex_desc = {0};
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
@@ -7954,10 +7975,7 @@ static int rc63_gravitymark_stream(ID3D12Device *device, ID3D12CommandQueue *que
     D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0}, dsv = {0}, srv_cpu = {0};
     D3D12_GPU_DESCRIPTOR_HANDLE srv_gpu = {0};
     unsigned char *bytes = NULL;
-    unsigned bad = RC63_PIXELS;
-    UINT first = RC63_PIXELS;
-    int pixels_ok = 0, statistics_ok = 0;
-    HRESULT hr = upload && readback && results ? S_OK : E_FAIL;
+    HRESULT hr = upload && readback && results && runs && run_count ? S_OK : E_FAIL;
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     desc.Width = 64;
     desc.Height = 64;
@@ -7977,7 +7995,7 @@ static int rc63_gravitymark_stream(ID3D12Device *device, ID3D12CommandQueue *que
     if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&bytes);
     if (SUCCEEDED(hr) && !bytes) hr = E_FAIL;
     if (SUCCEEDED(hr)) {
-        const UINT indices[6] = {0, 1, 2, 2, 1, 3}, count = RC63_MAX;
+        const UINT indices[6] = {0, 1, 2, 2, 1, 3}, count = runs[0].count;
         for (UINT i = 0; i < RC63_PIXELS; ++i) {
             float quad[8];
             rc63_texel(i, bytes + RC63_TEXELS + (i / 64u) * 256u + (i % 64u) * 4u);
@@ -7993,8 +8011,9 @@ static int rc63_gravitymark_stream(ID3D12Device *device, ID3D12CommandQueue *que
         }
         memcpy(bytes + RC63_COUNT, &count, sizeof(count));
         ID3D12Resource_Unmap(upload, 0, NULL);
-        printf("%s MaxCount=%u count=%u stride=20 index-bytes=4 depth=D32 ps-srv=1 statistics=1 "
-               "per-record base-vertex/start-instance=1 upload=%u\n", step, RC63_MAX, count, RC63_UPLOAD_BYTES);
+        printf("%s MaxCount=%u count=%u runs=%u stride=20 index-bytes=4 depth=D32 ps-srv=1 statistics=1 "
+               "per-record base-vertex/start-instance=1 upload=%u\n", step, RC63_MAX, count, run_count,
+               RC63_UPLOAD_BYTES);
         gpu_args = c21_buffer(device, D3D12_HEAP_TYPE_DEFAULT, RC63_GPU_COUNT + 256u, D3D12_RESOURCE_FLAG_NONE,
                               D3D12_RESOURCE_STATE_COPY_DEST);
         if (!gpu_args) hr = E_FAIL;
@@ -8070,7 +8089,27 @@ static int rc63_gravitymark_stream(ID3D12Device *device, ID3D12CommandQueue *que
     if (SUCCEEDED(hr))
         hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
                                                  &IID_ID3D12CommandAllocator, (void **)&allocator);
-    if (SUCCEEDED(hr))
+    for (UINT run = 0; run < run_count; ++run) {
+    struct rc63_run *r = &runs[run];
+    r->hr = hr;
+    r->bad = RC63_PIXELS;
+    r->first = RC63_PIXELS;
+    r->draws = 0;
+    r->pixels_ok = r->statistics_ok = r->statistics_read = 0;
+    if (SUCCEEDED(hr) && run) {
+        /* rc89: the next GPU count, through the same upload copy. */
+        const UINT count = r->count;
+        bytes = NULL;
+        hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&bytes);
+        if (SUCCEEDED(hr) && !bytes) hr = E_FAIL;
+        if (SUCCEEDED(hr)) {
+            memcpy(bytes + RC63_COUNT, &count, sizeof(count));
+            ID3D12Resource_Unmap(upload, 0, NULL);
+        }
+        if (SUCCEEDED(hr)) hr = ID3D12CommandAllocator_Reset(allocator);
+        if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, pso);
+    }
+    if (SUCCEEDED(hr) && !run)
         hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
                                             &IID_ID3D12GraphicsCommandList, (void **)&list);
     if (SUCCEEDED(hr)) {
@@ -8097,8 +8136,13 @@ static int rc63_gravitymark_stream(ID3D12Device *device, ID3D12CommandQueue *que
         back = up;
         back.pResource = readback;
         back.PlacedFootprint.Offset = 0;
-        ID3D12GraphicsCommandList_CopyTextureRegion(list, &tex_loc, 0, 0, 0, &up, NULL);
-        transition(list, texture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        if (!run) {
+            ID3D12GraphicsCommandList_CopyTextureRegion(list, &tex_loc, 0, 0, 0, &up, NULL);
+            transition(list, texture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        } else {
+            transition(list, gpu_args, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, D3D12_RESOURCE_STATE_COPY_DEST);
+            transition(list, target, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        }
         ID3D12GraphicsCommandList_CopyBufferRegion(list, gpu_args, 0, upload, RC63_RECORDS, RC63_MAX * 20u);
         ID3D12GraphicsCommandList_CopyBufferRegion(list, gpu_args, RC63_GPU_COUNT, upload, RC63_COUNT, 4);
         transition(list, gpu_args, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
@@ -8119,17 +8163,18 @@ static int rc63_gravitymark_stream(ID3D12Device *device, ID3D12CommandQueue *que
         ID3D12GraphicsCommandList_ResolveQueryData(list, statistics, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0, 1, results, 0);
         transition(list, target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
         ID3D12GraphicsCommandList_CopyTextureRegion(list, &back, 0, 0, 0, &target_loc, NULL);
-        hr = run_list(queue, fence, list, base + 1, step);
+        hr = run_list(queue, fence, list, base + 1 + run, step);
     }
     if (SUCCEEDED(hr)) {
         D3D12_RANGE all = {0, 16384};
         bytes = NULL;
         if (SUCCEEDED(ID3D12Resource_Map(readback, 0, &all, (void **)&bytes)) && bytes) {
             const unsigned char *px;
-            bad = rc63_bad_pixels(bytes, &first);
-            px = bytes + (first % RC63_PIXELS / 64u) * 256u + (first % RC63_PIXELS % 64u) * 4u;
-            printf("%s readback bad=%u first=%u got=%u,%u,%u,%u\n", step, bad, first, px[0], px[1], px[2], px[3]);
-            pixels_ok = bad == 0;
+            r->bad = rc63_bad_pixels_n(bytes, &r->first, r->count);
+            px = bytes + (r->first % RC63_PIXELS / 64u) * 256u + (r->first % RC63_PIXELS % 64u) * 4u;
+            printf("%s run=%u count=%u readback bad=%u first=%u got=%u,%u,%u,%u\n", step, run, r->count, r->bad,
+                   r->first, px[0], px[1], px[2], px[3]);
+            r->pixels_ok = r->bad == 0;
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
@@ -8137,15 +8182,17 @@ static int rc63_gravitymark_stream(ID3D12Device *device, ID3D12CommandQueue *que
         const D3D12_QUERY_DATA_PIPELINE_STATISTICS *q = NULL;
         D3D12_RANGE all = {0, sizeof(*q)};
         if (SUCCEEDED(ID3D12Resource_Map(results, 0, &all, (void **)&q)) && q) {
-            statistics_ok = rc63_statistics_ok(q);
-            printf("%s statistics IA=%llu/%llu VS=%llu clip=%llu/%llu PS=%llu CS=%llu expected-draws=%u\n", step,
-                   q->IAVertices, q->IAPrimitives, q->VSInvocations, q->CInvocations, q->CPrimitives,
-                   q->PSInvocations, q->CSInvocations, RC63_MAX);
+            r->statistics_ok = rc63_statistics_ok_n(q, r->count);
+            r->statistics_read = 1;
+            r->draws = q->IAVertices / 6u;
+            printf("%s run=%u statistics IA=%llu/%llu VS=%llu clip=%llu/%llu PS=%llu CS=%llu expected-draws=%u\n",
+                   step, run, q->IAVertices, q->IAPrimitives, q->VSInvocations, q->CInvocations, q->CPrimitives,
+                   q->PSInvocations, q->CSInvocations, r->count);
             ID3D12Resource_Unmap(results, 0, NULL);
         }
     }
-    printf("AGX_D3D12_RC63G: %s\n", SUCCEEDED(hr) && pixels_ok ? "PASS" : "FAIL");
-    printf("AGX_D3D12_RC63G_STATS: %s\n", SUCCEEDED(hr) && statistics_ok ? "PASS" : "FAIL");
+    r->hr = hr;
+    }
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (pso) ID3D12PipelineState_Release(pso);
@@ -8164,14 +8211,63 @@ static int rc63_gravitymark_stream(ID3D12Device *device, ID3D12CommandQueue *que
     if (results) ID3D12Resource_Release(results);
     if (readback) ID3D12Resource_Release(readback);
     if (upload) ID3D12Resource_Release(upload);
-    return !(SUCCEEDED(hr) && pixels_ok && statistics_ok);
+    return hr;
+}
+static int rc63_gravitymark_stream(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    struct rc63_run run = {RC63_MAX};
+    HRESULT hr = rc63_stream_runs(device, queue, fence, base, "RC63G", &run, 1);
+    printf("AGX_D3D12_RC63G: %s\n", SUCCEEDED(hr) && run.pixels_ok ? "PASS" : "FAIL");
+    printf("AGX_D3D12_RC63G_STATS: %s\n", SUCCEEDED(hr) && run.statistics_ok ? "PASS" : "FAIL");
+    return !(SUCCEEDED(hr) && run.pixels_ok && run.statistics_ok);
+}
+/* RC89S (rc89 stream capacity): the RC63G shape (MaxCount 60000, GPU-copied
+ * count) executed six times on one device. The driver sizes stream outputs
+ * by MaxCount until a retired batch reported a GPU count, then by
+ * max(16384, the power of two >= 4 x the largest count); a larger count is
+ * clamped to the capacity (only `capacity` records drawn, overflow counted)
+ * and sizes the later draws. Runs: 150, 150, 150 (warm-up, then outputs of
+ * 16384 records), 60000 (overflow: 16384 records with the default policy,
+ * all 60000 with APPLE_AGX_D3D12_STREAM_CAPACITY=0 or a run that still saw
+ * MaxCount), 60000, 60000 (regrown to MaxCount: exact). Records 0..4095
+ * already cover every pixel, so a clamped run keeps its pixels and only the
+ * statistics show the 16384 drawn records. */
+#define RC89_RUNS 6u
+#define RC89_SMALL 150u
+#define RC89_CAPACITY_FLOOR 16384u
+static int rc89_run_exact(const struct rc63_run *r) {
+    return SUCCEEDED(r->hr) && r->pixels_ok && r->statistics_ok;
+}
+/* 0 FAIL, 1 SIZED (all records drawn), 2 CLAMPED (exactly the floor). */
+static int rc89_overflow_kind(const struct rc63_run *r) {
+    if (!SUCCEEDED(r->hr) || !r->pixels_ok || !r->statistics_read) return 0;
+    if (r->statistics_ok) return 1;
+    return r->draws == RC89_CAPACITY_FLOOR ? 2 : 0;
+}
+static int rc89_stream_capacity(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    struct rc63_run runs[RC89_RUNS] = {{RC89_SMALL}, {RC89_SMALL}, {RC89_SMALL}, {RC63_MAX}, {RC63_MAX}, {RC63_MAX}};
+    HRESULT hr = rc63_stream_runs(device, queue, fence, base, "RC89S", runs, RC89_RUNS);
+    int small_ok = 1, overflow, regrown_ok;
+    for (UINT i = 0; i < RC89_RUNS; ++i)
+        printf("AGX_D3D12_RC89S_RUN%u: count=%u draws=%llu bad=%u hr=0x%08lx %s\n", i, runs[i].count,
+               (unsigned long long)runs[i].draws, runs[i].bad, (unsigned long)runs[i].hr,
+               rc89_run_exact(&runs[i]) ? "EXACT" : "INEXACT");
+    for (UINT i = 0; i < 3u; ++i) small_ok &= rc89_run_exact(&runs[i]);
+    overflow = rc89_overflow_kind(&runs[3]);
+    /* Run 4 may still see run 3's capacity if that batch had not retired;
+     * run 5 must be exact. */
+    regrown_ok = rc89_overflow_kind(&runs[4]) != 0 && rc89_run_exact(&runs[5]);
+    printf("AGX_D3D12_RC89S_SMALL: %s\n", small_ok ? "PASS" : "FAIL");
+    printf("AGX_D3D12_RC89S_OVERFLOW: %s\n", overflow == 2 ? "CLAMPED" : overflow == 1 ? "SIZED" : "FAIL");
+    printf("AGX_D3D12_RC89S_REGROWN: %s\n", regrown_ok ? "PASS" : "FAIL");
+    printf("AGX_D3D12_RC89S: %s\n", SUCCEEDED(hr) && small_ok && overflow && regrown_ok ? "PASS" : "FAIL");
+    return !(SUCCEEDED(hr) && small_ok && overflow && regrown_ok);
 }
 static int step_rc57c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 base) { return draw_triangle(d, q, f, base, 23); }
 static int step_rc57u(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 base) { return draw_triangle(d, q, f, base, 24); }
 static int step_rc57m(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 base) { return draw_triangle(d, q, f, base, 25); }
 static int step_rc59g(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 base) { return draw_triangle(d, q, f, base, 26); }
 static const struct { const char *name; probe_step step; } named_steps[] = {
-    {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g}, {"RC63G", rc63_gravitymark_stream},
+    {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g}, {"RC63G", rc63_gravitymark_stream}, {"RC89S", rc89_stream_capacity},
     {"RC44D", step_rc44d}, {"RC44I", step_rc44i},
     {"RC38Z", step_rc38z}, {"RC38N", step_rc38n}, {"RC38I", step_rc38i},
     {"RC43I16Z", step_rc43i16z},

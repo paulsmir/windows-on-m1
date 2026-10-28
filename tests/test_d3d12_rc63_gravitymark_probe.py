@@ -25,6 +25,7 @@ MODEL = r'''
 #include <string.h>
 typedef unsigned UINT;
 typedef uint64_t UINT64;
+typedef long HRESULT;
 typedef struct {UINT64 IAVertices,IAPrimitives,VSInvocations,GSInvocations,GSPrimitives,
  CInvocations,CPrimitives,PSInvocations,HSInvocations,DSInvocations,CSInvocations;}
  D3D12_QUERY_DATA_PIPELINE_STATISTICS;
@@ -139,9 +140,15 @@ class Rc63GravityMarkProbe(unittest.TestCase):
     def test_probe_pixels_depend_on_every_record_argument(self):
         source = PROBE.read_text()
         begin = source.index('#define RC63_MAX')
-        helpers = source[begin:source.index('static int rc63_gravitymark_stream(', begin)]
-        step = source[source.index('static int rc63_gravitymark_stream('):]
+        # rc89: the RC63G scene runs in rc63_stream_runs (RC89S runs it
+        # several times); RC63G is its single MaxCount run.
+        helpers = source[begin:source.index('static HRESULT rc63_stream_runs(', begin)]
+        step = source[source.index('static HRESULT rc63_stream_runs('):]
         step = step[:step.index('\n}\n')]
+        wrapper = source[source.index('static int rc63_gravitymark_stream('):]
+        wrapper = wrapper[:wrapper.index('\n}\n')]
+        self.assertIn('struct rc63_run run = {RC63_MAX};', wrapper)
+        self.assertIn('rc63_stream_runs(device, queue, fence, base, "RC63G", &run, 1)', wrapper)
         # The hardware step must issue exactly the modeled shape.
         for needle in ('ExecuteIndirect(list, signature, RC63_MAX, gpu_args, 0, gpu_args, RC63_GPU_COUNT)',
                        'D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1}',
@@ -149,7 +156,7 @@ class Rc63GravityMarkProbe(unittest.TestCase):
                        'D3D12_COMMAND_SIGNATURE_DESC sd = {20u,',
                        'D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT',
                        'BeginQuery(list, statistics, D3D12_QUERY_TYPE_PIPELINE_STATISTICS',
-                       'rc63_bad_pixels(bytes, &first)', 'rc63_statistics_ok(q)'):
+                       'rc63_bad_pixels_n(bytes, &r->first, r->count)', 'rc63_statistics_ok_n(q, r->count)'):
             self.assertIn(needle, step)
         self.assertLess(step.index('BeginQuery'), step.index('ExecuteIndirect'))
         self.assertLess(step.index('ExecuteIndirect'), step.index('EndQuery'))

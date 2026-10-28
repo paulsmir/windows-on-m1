@@ -33,6 +33,7 @@ MODEL = r'''
 #include <sys/mman.h>
 typedef unsigned UINT;
 typedef uint64_t UINT64;
+typedef long HRESULT;
 typedef struct {UINT64 IAVertices,IAPrimitives,VSInvocations,GSInvocations,GSPrimitives,
  CInvocations,CPrimitives,PSInvocations,HSInvocations,DSInvocations,CSInvocations;}
  D3D12_QUERY_DATA_PIPELINE_STATISTICS;
@@ -233,7 +234,8 @@ class Rc69StreamDrawParams(unittest.TestCase):
         build = local_tree('accelerated-desktop-ad03', 'mesa-build')
         source = PROBE.read_text()
         begin = source.index('#define RC63_MAX')
-        helpers = source[begin:source.index('static int rc63_gravitymark_stream(', begin)]
+        # rc89: the RC63G scene now runs from rc63_stream_runs.
+        helpers = source[begin:source.index('static HRESULT rc63_stream_runs(', begin)]
         prelude = PROGRAM[:PROGRAM.index('static void run(')].replace(
             '#include "agx_win32_indirect_stream.cl"',
             '#include "agx_win32_indirect_stream.cl"\n#undef NDEBUG\n#include <assert.h>')
