@@ -65605,3 +65605,21 @@ EXP2022 HARDWARE ACTUAL (2026-10-28): **PASS, new best FHD 200k**. rc88.
 - FHD 200k: **2393 / 12.8 FPS** (best was 1788). Inside the user's own macOS range on this J313 (2191..4400); the leaderboard M1 is about 5500.
 - No removal.
 - Verdict: rc88 58e6fa5d (stream peak retention) and 1bb19a45 (prefill) validated; 34a45b53 implemented (opt-in, not run).
+
+EXP2023 HARDWARE BEFORE 2026-10-28T05:22:18Z:
+- WHY:
+  - EXP2022 200k: 2393 points, but 6 frames over 500 ms (37 s) of residency thrash. The working set is about 300-400 MiB over the about 2931 MiB LOCAL budget.
+  - Stream outputs sized by MaxCount (240000) take about 300 MiB per frame at 200k; real counts are far smaller.
+- ATOMIC CONTRACT: one policy plus a kernel clamp; kill switch APPLE_AGX_D3D12_STREAM_CAPACITY=0.
+- KNOWN RISK: a count exceeding the current capacity draws only capacity records for one execution (perf note "GPU stream capacity overflow").
+- Expected:
+  - RC89S SMALL PASS, OVERFLOW CLAMPED, REGROWN PASS; RC63G PASS;
+  - in GravityMark, capacity overflow 0;
+  - 200k: frames over 500 ms about 0; score above 2393;
+  - 100k at least 3919;
+  - correct images.
+- Failure criteria: removal, a visual dropout, overflows in steady state, or a regression.
+- Recovery: rec2023h.
+- Hashes: sys 4108d43bea2e, UmdArm64 89ccfa2eab2d, UmdX64 4d70c13b1e45, Umd32 0c216273d65f; manifest 069e072fd330, hardware-manifest 4e81206b4782; probe2023.sh e489176003f7 (PROBE_LINT_OK); visible recovery rec2023h 3a76b79824de8ae8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2023h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2023-stream-cap/run2023.sh.
