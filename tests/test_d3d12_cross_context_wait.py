@@ -129,6 +129,7 @@ template<class T> static void AdmissionUmdGpuCompletionDrain(T*,unsigned long lo
 static void receipt(const char*,HRESULT,UINT,UINT,UINT){}
 static unsigned long long AgxWin32AsahiContextNewestFence(pipe_context*){return newest;}
 static int AgxWin32AsahiContextFaulted(pipe_context*){return faulted;}
+static void AgxWin32AsahiContextCdmBarriers(pipe_context*,UINT out[4]){out[0]=out[1]=out[2]=out[3]=0;} // rc101 receipt
 static int AgxWin32AsahiContextRetire(pipe_context*,unsigned ms){assert(ms==5000);calls.push_back(3);return retired;}
 static HRESULT AgxD3d12QueueWaitForOwner(void*,HANDLE device,HANDLE context,unsigned object,unsigned long long value){
  assert(device==(HANDLE)1 && context==(HANDLE)2 && object==7 && value==newest);

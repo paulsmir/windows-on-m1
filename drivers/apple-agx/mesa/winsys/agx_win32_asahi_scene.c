@@ -626,6 +626,22 @@ void AgxWin32AsahiBatchWriteResources(struct pipe_context *pctx, struct pipe_res
 APPLE_AGX_U64 AgxWin32AsahiContextNewestFence(struct pipe_context *ctx) {
   return ctx ? AgxWin32AsahiNewestFence(agx_context(ctx)) : 0u;
 }
+/* rc101 receipt-only: the lean CDM barrier mode and word, and the barriers
+ * left lean and full since the last call (agx_win32_cdm_barrier.h). */
+void AgxWin32AsahiContextCdmBarriers(struct pipe_context *ctx, APPLE_AGX_U32 out[4]) {
+  memset(out,0,4*sizeof(*out));
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(!ctx) return;
+  struct agx_context *n=agx_context(ctx);
+  out[0]=n->windows_cdm_barriers[2];
+  out[1]=n->windows_cdm_barriers[3];
+  out[2]=n->windows_cdm_barriers[0];
+  out[3]=n->windows_cdm_barriers[1];
+  n->windows_cdm_barriers[0]=n->windows_cdm_barriers[1]=0;
+#else
+  (void)ctx;
+#endif
+}
 void AgxWin32AsahiContextRetireDiagnostic(struct pipe_context *ctx,
     APPLE_AGX_U32 state[12]) {
   memset(state,0,12*sizeof(*state));

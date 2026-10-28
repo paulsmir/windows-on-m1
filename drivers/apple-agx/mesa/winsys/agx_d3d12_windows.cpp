@@ -4890,6 +4890,11 @@ static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
   const UINT dispatch[] = {owner->TimedDispatches, qpc_us(owner->DispatchTicks[0]),
       qpc_us(owner->DispatchTicks[1]), qpc_us(owner->DispatchTicks[2]), qpc_us(owner->DispatchTicks[3])};
   AdmissionUmdDiagnostic("measure-d3d12-dispatch-time", S_OK, dispatch, 5u);
+  /* rc101: {lean mode, lean word, barriers left lean, full barriers} since
+   * the last submit */
+  UINT cdm_barriers[4];
+  AgxWin32AsahiContextCdmBarriers(owner->Context, cdm_barriers);
+  AdmissionUmdDiagnostic("measure-d3d12-cdm-barriers", S_OK, cdm_barriers, 4u);
   memset(owner->DispatchTicks, 0, sizeof(owner->DispatchTicks));
   owner->TimedDispatches = 0;
   const UINT fences[] = {static_cast<UINT>(fence - owner->ReportedFence), static_cast<UINT>(fence)};

@@ -133,6 +133,10 @@ void AgxWin32AsahiContextDiagnostic(struct pipe_context *,
  * submitted << 9 and fence (8 values), then any_faults, backend Failed,
  * held | terminal << 1 | last refused line << 8, held render fence. */
 APPLE_AGX_U64 AgxWin32AsahiContextNewestFence(struct pipe_context *);
+/* rc101 receipt-only: {APPLE_AGX_D3D12_LEAN_CDM_BARRIER mode, last lean
+ * word, barriers left lean, full barriers} since the last call, which resets
+ * the counts. */
+void AgxWin32AsahiContextCdmBarriers(struct pipe_context *, APPLE_AGX_U32 Out[4]);
 /* D3D12 C47: a texture view's packed descriptor for a descriptor heap */
 APPLE_AGX_U64 AgxWin32AsahiResourceLayoutKey(struct pipe_resource *);
 int AgxWin32AsahiTextureDescriptor(struct pipe_context *, struct pipe_resource *,
