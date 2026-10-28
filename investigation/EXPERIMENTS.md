@@ -65577,3 +65577,11 @@ EXP2021 HARDWARE BEFORE 2026-10-28T04:43:03Z:
 - Hashes: sys 99fd88b18eb0, UmdArm64 90619085eaf7, UmdX64 c58c0bb0829f, Umd32 37200a98bb1e; manifest 236788becdb7, hardware-manifest 6d8f0caf8dc9; probe2021.sh 8eaf0e243c09 (PROBE_LINT_OK); visible recovery rec2021h 8d122dfdbc728465; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2021h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2021-discard-ab/run2021.sh.
+
+EXP2021 HARDWARE ACTUAL (2026-10-28): A/B of the HD CPU "regression", on the EXP2020 code.
+- Arm a, default: HD 50k **6783 / 40.6 FPS**, new best. Frame 22.85 ms, GPU span 22.06, idle 0.12.
+- Arm b, APPLE_AGX_D3D12_STAGED_DISCARD=0: 6548 / 39.2 FPS.
+- Conclusion:
+  - EXP2020's 3.27 ms idle was run-to-run guest noise: the same code now shows 0.12 ms, and EXP2020's run coincided with a webthreatdefsvc crash/restart in the guest;
+  - rc85 staged discard is slightly positive (+3.6%) and is kept.
+- Lesson: one HD run can vary by about 9%. Compare medians and idle, not only the score.
