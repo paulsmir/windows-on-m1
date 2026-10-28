@@ -66046,3 +66046,20 @@ EXP2037 HARDWARE BEFORE 2026-10-28T11:58:57Z:
 - Hashes: sys 1d839055fa72, UmdArm64 e5832f03476d, UmdX64 9270ba6a65d0, Umd32 d52a3e3c879a; manifest 8218c47aee74, hardware-manifest 8dd1b57b4d50; probe2037.sh 71940ad345ff (PROBE_LINT_OK); visible recovery rec2037h c85ffffb26c26e60; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2037h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2037-poll-sleep/run2037.sh.
+
+EXP2037 HARDWARE ACTUAL (2026-10-28): **rc100 predicted-sleep poll works on hardware. FHD 100k 4150 (best). Throttling still occurs.**
+
+| Run | Score | State-6 (1278 MHz) share | temp max |
+|---|---|---|---|
+| 1 | **4150** / 24.8 FPS | 93.5% | 91 °C |
+| 2 | 4044 | 77.3% | 87 °C at the end |
+| 3 | 3895 | 64.0% | 89 °C |
+
+- Wom1JobPoll (run 1): mode predictive, high_resolution_timer true, **busy_fraction 0.174** (rc72 ≈ 1.0), predicted_share 0.998, seen_after_sleep_share 0.108.
+  - late_mean_us 411 is above the model's 100 µs: the m1n1 virtual timer is late. Run 3: busy 0.176, late 418 µs.
+- No fault and no removal.
+- Earlier hot FHD runs without rc100: 3577–3842 as the 3rd/4th app.
+- Verdict:
+  - rc100 implemented and live; poll CPU busy reduced about 5.7×.
+  - The thermal effect is pending the same-package control EXP2038 (Wom1JobPollSpinUs=50000).
+  - Next for rc100: account for the 400 µs timer lateness, or use the AIC 578 → vINTID 887 completion interrupt.
