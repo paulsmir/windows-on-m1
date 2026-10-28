@@ -66136,3 +66136,21 @@ EXP2040 HARDWARE BEFORE 2026-10-28T13:00:40Z:
 - Recovery rec2040h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2040-pool-pressure/run2040.sh.
 
 EXP2040 HARDWARE ACTUAL (2026-10-28): **bugchecked during boot (SSH never up). Same cause as EXP2039.** The package carried rc102 without its fix: `AppleAgxG13QueueProviderPlanJob` left `Plan.Successor` uninitialised, which sends ordinary jobs into the successor build path, so the submit fails, the reset quiesce fails, and the result is 0x116. This happens with Kick off as well. Fixed in 0ee5dfe1. The reset hole is fixed in d4bf810f (quiesce "unsubmitted"). The rc104 checkpoint reruns as EXP2041 (directory name EXP2041-depth2-kick2, kept from the original plan).
+
+EXP2041 HARDWARE BEFORE 2026-10-28T13:17:28Z:
+- WHY: in EXP2033 arm e (the 5th app), GravityMark failed with out-of-memory and device removed. The KMD refused 4 reservations on single LowMemory samples while Windows still had about 450 MB available and 3.6 GB of pagefile free.
+- ATOMIC CONTRACT: one change (rc104); the run order reproduces arm e's position.
+- Expected:
+  - every app completes with a score, with no E_OUTOFMEMORY and no removal;
+  - pressure_wait budget_ms 2000; if floor_refusals > 0, then recovered ≥ 1 and failed 0;
+  - DWM alive;
+  - post-app reserved_bytes / reserved_allocations flat after the 2nd app.
+- Failure criteria:
+  - failed > 0 with an OOM (waiting is insufficient; next is the floor or the structural promise cap);
+  - DWM c00001ad or a hang;
+  - removal.
+- WHAT IS STILL UNKNOWN: whether LowMemoryCondition clears within 2 s under load; dxgkrnl lock behaviour during a 2 s CreateAllocation wait.
+- Recovery: rec2041h.
+- Hashes: sys f6d41a8318c2, UmdArm64 07cff3ad1040, UmdX64 9ded44a513bd, Umd32 862de7803cd0; manifest ee5f8b9d06fb, hardware-manifest e0d8941a84d0; probe2041.sh 3447c658305e (PROBE_LINT_OK); visible recovery rec2041h f3c8c78089024270; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2041h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2041-depth2-kick2/run2041.sh.
