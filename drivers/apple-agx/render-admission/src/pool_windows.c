@@ -775,8 +775,13 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolTvbTake(
     taken = TRUE;
   AdmissionMemoryPoolUnlock(Context);
   if (!taken) return FALSE;
-  /* The lease is exclusive: its slab cannot be freed while it is live. */
-  if (!AdmissionPoolZeroLeaseTimed(pool, Lease)) {
+  /* The lease is exclusive: its slab cannot be freed while it is live.
+   * rc86: a clean slot still holds the zeroed pages Windows supplied
+   * (MmAllocatePagesForMdlEx without MM_DONT_ZERO_ALLOCATION) and was never
+   * mapped since; clearing it again only costs a map and 64 KiB of stores. */
+  if (Lease->Zero) {
+    ++pool->LeaseZeroSkips;
+  } else if (!AdmissionPoolZeroLeaseTimed(pool, Lease)) {
     /* Never GPU-mapped, so it may return unzeroed; a stopped runtime keeps
      * its private slots (AdmissionPoolDemandStop leak path). */
     if (AdmissionMemoryPoolLock(Context) != NULL) {
@@ -785,6 +790,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolTvbTake(
     }
     return FALSE;
   }
+  /* From here the owner exposes the slot; it is no longer known zero. */
+  Lease->Zero = 0u;
   *GuestIpa = Lease->Slab->Pa[Lease->Slot];
   return TRUE;
 }
@@ -803,6 +810,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolTvbGive(
   }
   if (AdmissionMemoryPoolLock(Context) == NULL) return FALSE;
   pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+  /* Zeroed just now: the slot goes back clean. */
+  Lease->Zero = 1u;
   given = AdmissionPoolSlabGivePrivate(&pool->Slabs, Lease) != 0;
   AdmissionMemoryPoolUnlock(Context);
   return given;

@@ -37,10 +37,20 @@ typedef struct {
     ADMISSION_CONTEXT *Context;
     int WorkQueued, WorkPending, Stopping;
     ULONGLONG ReserveCalls, ReserveUs, ReserveUsMax, CacheDrops, LastReserveMs;
+    ULONGLONG LeaseZeroCount, LeaseZeroUs, LeaseZeroSkips;
 } ADMISSION_POOL_RUNTIME;
-struct _ADMISSION_CONTEXT { ADMISSION_POOL_RUNTIME *PoolDemand; };
+struct _ADMISSION_CONTEXT { ADMISSION_POOL_RUNTIME *PoolDemand; int PoolLeaks; };
 static ADMISSION_POOL_RUNTIME pool;
-static ADMISSION_CONTEXT context = { &pool };
+static ADMISSION_CONTEXT context = { &pool, 0 };
+typedef ADMISSION_POOL_PRIVATE *PADMISSION_POOL_PRIVATE;
+static unsigned lease_zeroes, fail_zero;
+/* The real clear maps the slot's pages; here it only counts and can fail. */
+static BOOLEAN AdmissionPoolZeroLease(const ADMISSION_POOL_PRIVATE *lease) {
+    assert(lease && lease->Slab);
+    ++lease_zeroes;
+    return !fail_zero;
+}
+static int InterlockedIncrement(int *p) { return ++*p; }
 static ADMISSION_POOL_GRANULE granules[N];
 static unsigned long long candidates[N];
 static ADMISSION_POOL_SLAB *backing[N];
@@ -86,7 +96,11 @@ static ADMISSION_POOL_SLAB *new_slab(void *opaque) {
     ++allocations;
     if (fail_new || allocations == fail_on_allocation) return NULL;
     if (allocations == low_on_allocation) low = 1;
-    return (ADMISSION_POOL_SLAB *)calloc(1, sizeof(ADMISSION_POOL_SLAB));
+    ADMISSION_POOL_SLAB *slab =
+        (ADMISSION_POOL_SLAB *)calloc(1, sizeof(ADMISSION_POOL_SLAB));
+    for (unsigned i = 0; slab && i != ADMISSION_POOL_SLAB_SLOTS; ++i)
+        slab->Pa[i] = 0x800000000ULL + allocations * 0x200000ULL + i * G;
+    return slab;
 }
 static void free_slab(void *opaque, ADMISSION_POOL_SLAB *slab) {
     (void)opaque;
@@ -127,6 +141,9 @@ static void reset(void) {
     pool.HighMemory = &high;
     pool.LowMemory = &low;
     pool.Context = &context;
+    context.PoolLeaks = 0;
+    lease_zeroes = fail_zero = 0;
+    pool.Slabs.PrivateCap = 64;
     high = 1; low = 0; now = 100;
     allocations = releases = unmaps = 0;
     fail_new = clear_low_after_read = 0;
@@ -528,7 +545,47 @@ static void test_high_memory_slab_cache(void) {
     AdmissionMemoryPoolUnreserve(&context, 128 * G);
     assert(pool.Slabs.Stats.Slabs == 2 && releases == 2);
 }
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * rc86: a TVB lease may skip its clear only on a slot that still holds the
+ * zeroed pages Windows supplied. A slot that served a placement, or a lease
+ * whose return clear failed, must be cleared (or never reused); a lease the
+ * GPU used must never come back marked zero without being cleared. */
+static void test_tvb_lease_zero_skip(void) {
+    ADMISSION_POOL_PRIVATE a = {0}, b = {0}, c = {0};
+    ULONGLONG ipa = 0;
+    reset();
+    assert(AdmissionMemoryPoolTvbTake(&context, &a, &ipa) && ipa);
+    assert(lease_zeroes == 0 && pool.LeaseZeroSkips == 1 && a.Zero == 0);
+    assert(AdmissionMemoryPoolTvbGive(&context, &a));        /* clears first */
+    assert(lease_zeroes == 1 && !a.Slab);
+    assert(AdmissionMemoryPoolTvbTake(&context, &b, &ipa));  /* clean again */
+    assert(lease_zeroes == 1 && pool.LeaseZeroSkips == 2);
+    assert(AdmissionMemoryPoolTvbGive(&context, &b) && lease_zeroes == 2);
+    /* Every slot served placements: each lease is cleared before use. */
+    reset();
+    assert(AdmissionPoolSlabTake(&pool.Slabs, 32, backing, slots));
+    for (unsigned i = 0; i != 32; ++i)
+        AdmissionPoolSlabGive(&pool.Slabs, backing[i], slots[i]);
+    assert(AdmissionMemoryPoolTvbTake(&context, &a, &ipa));
+    assert(lease_zeroes == 1 && pool.LeaseZeroSkips == 0 && a.Zero == 0);
+    /* A failed clear on return keeps the slot out of the pool for good. */
+    fail_zero = 1;
+    assert(!AdmissionMemoryPoolTvbGive(&context, &a));
+    assert(a.Slab && context.PoolLeaks == 1 && pool.Slabs.PrivateCount == 1);
+    /* A failed clear on take returns the dirty slot without marking it. */
+    reset();
+    assert(AdmissionPoolSlabTake(&pool.Slabs, 32, backing, slots));
+    for (unsigned i = 0; i != 32; ++i)
+        AdmissionPoolSlabGive(&pool.Slabs, backing[i], slots[i]);
+    fail_zero = 1;
+    assert(!AdmissionMemoryPoolTvbTake(&context, &c, &ipa) && !c.Slab && !ipa);
+    fail_zero = 0;
+    b.Slab = NULL; b.Slot = b.Zero = 0;
+    assert(AdmissionMemoryPoolTvbTake(&context, &b, &ipa) && lease_zeroes == 2);
+    assert(AdmissionMemoryPoolTvbGive(&context, &b));
+}
 int main(void) {
+    test_tvb_lease_zero_skip();
     test_high_memory_slab_cache();
     test_idle_worker_after_broker_release();
     test_idle_worker_keeps_all_release_guards();

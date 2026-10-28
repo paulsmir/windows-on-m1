@@ -53,7 +53,9 @@ class PoolHeadroomTest(unittest.TestCase):
             names.append('AdmissionPoolReclaimLocked')
         names += ['AdmissionMemoryPoolExecuted', 'AdmissionMemoryPoolReserve',
                   'AdmissionMemoryPoolUnreserve',
-                  'AdmissionMemoryPoolReclaim', 'AdmissionPoolReclaimWork']
+                  'AdmissionMemoryPoolReclaim', 'AdmissionPoolReclaimWork',
+                  'AdmissionPoolZeroLeaseTimed', 'AdmissionMemoryPoolTvbTake',
+                  'AdmissionMemoryPoolTvbGive']
         with tempfile.TemporaryDirectory(prefix='pool-headroom-') as tmp:
             tmp = Path(tmp)
             defines = re.findall(r'^#define ADMISSION_POOL_(?:SPARE_SLABS|CACHE_SLABS|'
