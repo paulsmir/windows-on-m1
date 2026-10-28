@@ -6850,6 +6850,12 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 query_group_module = importlib.util.module_from_spec(query_group_spec)
                 query_group_spec.loader.exec_module(query_group_module)
                 query_group_module.project_sources(out, args.project, overlays)
+                # rc101: lean CDM barriers (APPLE_AGX_D3D12_LEAN_CDM_BARRIER)
+                lean_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-lean-cdm-barrier.py'
+                lean_spec = importlib.util.spec_from_file_location('native_lean_cdm_barrier', lean_script)
+                lean_module = importlib.util.module_from_spec(lean_spec)
+                lean_spec.loader.exec_module(lean_module)
+                lean_module.project_sources(out, args.project, overlays)
 
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
