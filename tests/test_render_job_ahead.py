@@ -512,10 +512,17 @@ class JobAheadWiring(unittest.TestCase):
         self.assertLess(fill, prebind.index("AdmissionJobAheadPrebindRefusal(State)"))
         worker = text[text.index("static VOID AdmissionPlatformWorker(\n    _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context) {"):]
         worker = worker[:worker.index("\n}\n")]
-        for step in ("AdmissionJobAheadReleaseWindows(", "AdmissionG4PendingPrebindHead(",
+        for step in ("AdmissionJobAheadReleaseWindows(", "AdmissionJobAheadPrebindWindows(",
                      "AdmissionJobAheadChainWindows("):
-            at = worker.index(step)
-            self.assertIn("runtime->JobAhead", worker[max(0, at - 500):at], step)
+            self.assertIn(step, worker)
+            for match in re.finditer(re.escape(step), worker):
+                at = match.start()
+                self.assertIn("runtime->JobAhead", worker[max(0, at - 500):at], step)
+        # the prebind tries right after the kick (before a TDR drill leaves
+        # the job) and at every poll
+        self.assertEqual(worker.count("AdmissionJobAheadPrebindWindows("), 2)
+        self.assertLess(worker.index("AdmissionJobAheadPrebindWindows("),
+                        worker.index("AdmissionTdrDrillTake("))
 
     def test_completion_and_retire_honour_the_early_release(self):
         text = WORKER.read_text()

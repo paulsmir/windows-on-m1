@@ -4492,6 +4492,28 @@ static VOID AdmissionJobAheadReleaseWindows(ADMISSION_CONTEXT *adapter,
   AdmissionJobTimingNoteWindows(adapter, fence, ADMISSION_JOB_FLAG_AHEAD_RELEASED);
 }
 
+/* rc90 step 2: while job Fence (its image released) runs, bind the head
+ * pending submission into the image once. Done stops the retries after a
+ * bind, a refused bind (29) or a dropped one (28); a refusal is noted in
+ * the job's receipt when it changes. */
+static VOID AdmissionJobAheadPrebindWindows(ADMISSION_CONTEXT *adapter,
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence, BOOLEAN *Done,
+    ULONG *LastRefusal) {
+  ADMISSION_JOB_AHEAD_STATE ahead;
+  ULONG refusal = 0u;
+  if (*Done || runtime->AheadReleasedFence != fence ||
+      adapter->G4PendingCount == 0u)
+    return;
+  AdmissionJobAheadStateWindows(runtime, fence, &ahead);
+  *Done = AdmissionG4PendingPrebindHead(adapter, &ahead, &refusal);
+  if (refusal == 28u || refusal == 29u) *Done = TRUE;
+  if (refusal != *LastRefusal) {
+    *LastRefusal = refusal;
+    AdmissionJobAheadNoteRefusalWindows(runtime, fence,
+        ADMISSION_JOB_AHEAD_SHIFT_PREBIND, refusal);
+  }
+}
+
 /* rc90 step 3: job Fence's completion was reported to Windows. Claim the
  * scheduler's next fence for this worker if it is the pending head, as
  * AdmissionDispatchQueuedWork would after the DPC, and promote it when it
@@ -4816,9 +4838,14 @@ ChainNext:
     return;
   }
 #if ADMISSION_JOB_AHEAD_BUILD
-  /* rc90 step 1: the job is kicked; free its image while it runs. */
-  if (runtime->JobAhead)
+  /* rc90 steps 1-2: the job is kicked; free its image while it runs and
+   * bind an already pending successor at once (also before a TDR drill
+   * leaves the job, so the drill covers a reset with one job bound). */
+  if (runtime->JobAhead) {
     AdmissionJobAheadReleaseWindows(adapter, runtime, description.Fence);
+    AdmissionJobAheadPrebindWindows(adapter, runtime, description.Fence,
+                                    &prebindDone, &prebindRefusal);
+  }
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionTerminalBegin(runtime, &description);
@@ -4893,23 +4920,11 @@ ChainNext:
     InterlockedExchange64(&runtime->LastPollMs,
                           (LONG64)AdmissionPlatformNowMs());
 #if ADMISSION_JOB_AHEAD_BUILD
-    /* rc90 step 2: bind the successor while this job runs (one bind per
-     * job; a refusal is retried at the next poll until it binds, fails or
-     * is dropped). */
-    if (runtime->JobAhead && !prebindDone &&
-        runtime->AheadReleasedFence == description.Fence &&
-        adapter->G4PendingCount != 0u) {
-      ADMISSION_JOB_AHEAD_STATE ahead;
-      ULONG refusal = 0u;
-      AdmissionJobAheadStateWindows(runtime, description.Fence, &ahead);
-      prebindDone = AdmissionG4PendingPrebindHead(adapter, &ahead, &refusal);
-      if (refusal == 28u || refusal == 29u) prebindDone = TRUE;
-      if (refusal != prebindRefusal) {
-        prebindRefusal = refusal;
-        AdmissionJobAheadNoteRefusalWindows(runtime, description.Fence,
-            ADMISSION_JOB_AHEAD_SHIFT_PREBIND, refusal);
-      }
-    }
+    /* rc90 step 2: bind the successor while this job runs; a refusal is
+     * retried at the next poll until it binds, fails or is dropped. */
+    if (runtime->JobAhead)
+      AdmissionJobAheadPrebindWindows(adapter, runtime, description.Fence,
+                                      &prebindDone, &prebindRefusal);
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     {
