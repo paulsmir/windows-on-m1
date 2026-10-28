@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 #include <memory>
@@ -57,6 +58,13 @@ static HRESULT copy_reserved_texture(AGX_D3D12_OWNER*,const AGX_D3D12_TEXTURE_CO
 static bool compressed_texture(AGX_D3D12_OWNER*,pipe_resource*) {return false;}
 static void AgxWin32AsahiResourceRelease(pipe_resource **r) {*r=nullptr;}
 static void receipt(const char*,HRESULT,UINT,UINT,UINT) {}
+static void receipt(const char*,HRESULT,UINT,UINT,UINT,UINT,UINT) {}
+using LONG=long;
+static unsigned GetEnvironmentVariableA(const char *name,char *out,unsigned size) {
+ const char *v=getenv(name);if(!v)return 0;const unsigned n=static_cast<unsigned>(strlen(v));
+ if(n<size){memcpy(out,v,n+1);} return n;
+}
+static LONG InterlockedExchange(volatile LONG *target,LONG value) {const LONG old=*target;*target=value;return old;}
 struct Storage {
  pipe_resource resource={};
  std::shared_ptr<std::vector<unsigned char>> allocation;
@@ -65,7 +73,7 @@ struct Storage {
  pipe_transfer transfer={};
 };
 static std::vector<std::unique_ptr<Storage>> storage;
-static unsigned shared_maps, copies, map_failure;
+static unsigned shared_maps, copies, map_failure, staging_usage;
 static bool create_failure;
 static Storage &memory(pipe_resource *r) {
  for(auto &s:storage) if(&s->resource==r)return *s;
@@ -84,7 +92,7 @@ static pipe_resource *create_staging(pipe_screen*,const pipe_resource *p) {
  if(create_failure)return nullptr;
  return &make_storage(p->width0,p->height0,p->width0*4,p->bind,p->format).resource;
 }
-static void *texture_map(pipe_context*,pipe_resource *r,unsigned level,unsigned,const pipe_box *box,pipe_transfer **t) {
+static void *texture_map(pipe_context*,pipe_resource *r,unsigned level,unsigned usage,const pipe_box *box,pipe_transfer **t) {
  assert(level==0);auto &s=memory(r);s.transfer.stride=s.stride;s.transfer.layer_stride=s.stride*r->height0;
  *t=map_failure==2?nullptr:&s.transfer;
  if(map_failure==1)return nullptr;
@@ -93,7 +101,7 @@ static void *texture_map(pipe_context*,pipe_resource *r,unsigned level,unsigned,
   ++shared_maps;
   if(s.shadow.empty())s.shadow=*s.allocation; // agx_bo_map caches the native map
   bytes=&s.shadow;
- }
+ } else staging_usage=usage; // the owner's cached upload staging
  return bytes->data()+box->y*s.stride+box->x*4;
 }
 static void *buffer_map(pipe_context*,pipe_resource *r,unsigned,unsigned,const pipe_box *box,pipe_transfer **t) {
@@ -158,6 +166,10 @@ int main() {
    printf("shared width=%u format=%u pass=%u mismatches=%u pending=%u\n",width,format,pass,bad,owner.PendingCopies);fflush(stdout);
    assert(!bad && owner.PendingCopies==pass+1 && !shared_maps);
    assert(*producer.allocation==expected);
+   // RC85: the upload rewrites the box it reads back; its staging (256 KiB here) maps discard
+   // unless APPLE_AGX_D3D12_STAGED_DISCARD=0
+   assert((staging_usage&PIPE_MAP_WRITE) &&
+          !!(staging_usage&PIPE_MAP_DISCARD_WHOLE_RESOURCE)==!getenv("APPLE_AGX_D3D12_STAGED_DISCARD"));
    std::fill(readback.allocation->begin(),readback.allocation->end(),0xcd);
    auto d=c;d.Texture=&opened;d.Buffer=&down;d.ToBuffer=1;d.X=d.Y=0;d.Width=width;d.Height=29;
    assert(AgxD3d12OwnerCopyTexture(&reader,&d)==S_OK);
@@ -172,7 +184,15 @@ int main() {
    assert(AgxD3d12OwnerCopyTexture(&owner,&c)==DXGI_ERROR_DEVICE_HUNG);
    assert(*producer.allocation==expected && copies==count && owner.PendingCopies==pending);
   }
-  map_failure=0;owner.UploadStaging=nullptr;create_failure=true;
+  map_failure=0;
+  {
+   // RC85: above Asahi's 6 MiB copy-shadow bound the staging keeps the plain (waiting) map
+   auto &large=make_storage(2048,1024,2048*4,PIPE_BIND_SAMPLER_VIEW,pf);
+   owner.UploadStaging=&large.resource;staging_usage=0;
+   assert(AgxD3d12OwnerCopyTexture(&owner,&c)==S_OK);
+   assert((staging_usage&PIPE_MAP_WRITE) && !(staging_usage&PIPE_MAP_DISCARD_WHOLE_RESOURCE));
+  }
+  owner.UploadStaging=nullptr;create_failure=true;
   assert(AgxD3d12OwnerCopyTexture(&owner,&c)==E_OUTOFMEMORY);create_failure=false;
  }
  puts("PASS shared private-data/layout/content round trip; two writes, subrects, map failures");

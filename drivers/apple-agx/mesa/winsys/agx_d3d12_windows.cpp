@@ -2926,10 +2926,35 @@ static bool compressed_texture(AGX_D3D12_OWNER *owner, struct pipe_resource *tex
          (layout.Flags & AGX_WIN32_ASAHI_LAYOUT_COMPRESSED) != 0u;
 }
 
+/* RC85 (EXP2014/EXP2015 GravityMark FHD first frame: 1301-1543 staged
+ * uploads, 1.5-3.9 s of TransferMap waits): the staging map of the next
+ * upload finds the previous upload's GPU copy still reading the staging, so
+ * Asahi agx_prepare_for_map shadows it with a copy (agx_shadow needs_copy:
+ * a new BO plus a CPU copy of the whole staging, perf "Shadowing N bytes on
+ * the CPU", up to MAX_SHADOW_BYTES = 6 MiB each), and the copy dirties the
+ * whole new BO for the copy escape. An upload reads back only the box it has
+ * just written, so the old contents are dead: map with
+ * PIPE_MAP_DISCARD_WHOLE_RESOURCE (agx_shadow without a copy). Above Asahi's
+ * copy bound keep the plain map (a busy map then waits instead of creating
+ * a staging-sized BO per upload). APPLE_AGX_D3D12_STAGED_DISCARD=0 restores
+ * the plain map for A/B; measure-d3d12-staged-upload values 4 and 5 carry
+ * the discard flag and the staging KiB. */
+static bool staged_upload_discard(unsigned long long staging_bytes) {
+  const unsigned long long copy_shadow_limit = 6ull * 1024u * 1024u; /* agx_pipe.c MAX_SHADOW_BYTES */
+  static volatile LONG state; /* 0 unread, 1 on, 2 off */
+  LONG value = state;
+  if (!value) {
+    char flag[2] = {};
+    value = GetEnvironmentVariableA("APPLE_AGX_D3D12_STAGED_DISCARD", flag, sizeof(flag)) == 1 && flag[0] == '0' ? 2 : 1;
+    InterlockedExchange(&state, value);
+  }
+  return value == 1 && staging_bytes && staging_bytes <= copy_shadow_limit;
+}
 /* C70/C77: buffer -> compressed or shared texture through the owner's cached linear
  * staging texture: CPU copy into the staging map (linear: no allocation),
  * then a GPU copy into the level. The staging map waits for the previous
- * upload's GPU read; the region copy is recorded in replay order. */
+ * upload's GPU read (RC85: or discards the staging, see above); the region
+ * copy is recorded in replay order. */
 static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COPY *copy, struct pipe_resource *texture,
                              struct pipe_resource *buffer, const struct pipe_box &tbox, const struct pipe_box &bbox,
                              unsigned rows, unsigned long long row) {
@@ -2966,7 +2991,12 @@ static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COP
   owner_watch_resource(owner,buffer,7u);
 
   struct pipe_transfer *stransfer = NULL, *btransfer = NULL;
-  void *smap = pipe->texture_map(pipe, staging, 0, PIPE_MAP_WRITE, &sbox, &stransfer);
+  unsigned staging_bw = 0, staging_bh = 0; /* uncompressed: 1 x 1 blocks */
+  const unsigned long long staging_bytes = static_cast<unsigned long long>(staging->width0) * staging->height0 *
+                                           texture_block(staging->format, &staging_bw, &staging_bh);
+  const bool discard = staged_upload_discard(staging_bytes);
+  void *smap = pipe->texture_map(pipe, staging, 0, PIPE_MAP_WRITE | (discard ? PIPE_MAP_DISCARD_WHOLE_RESOURCE : 0u),
+                                 &sbox, &stransfer);
   void *bmap = smap ? pipe->buffer_map(pipe, buffer, 0, PIPE_MAP_READ, &bbox, &btransfer) : NULL;
   HRESULT hr = smap && stransfer && bmap && btransfer ? S_OK : DXGI_ERROR_DEVICE_HUNG;
   for (unsigned y = 0; SUCCEEDED(hr) && y < rows; ++y)
@@ -2981,7 +3011,7 @@ static HRESULT staged_upload(AGX_D3D12_OWNER *owner, const AGX_D3D12_TEXTURE_COP
   }
   AgxD3d12OwnerRecordError(owner, hr);
   receipt("measure-d3d12-staged-upload", hr, copy->Width | (copy->Height << 16), copy->Level,
-          staging->width0 | (staging->height0 << 16));
+          staging->width0 | (staging->height0 << 16), discard ? 1u : 0u, static_cast<UINT>(staging_bytes >> 10));
   return hr;
 }
 

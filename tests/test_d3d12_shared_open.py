@@ -1,5 +1,6 @@
 """C76 executes the existing producer and the new shared-allocation decoder."""
 from pathlib import Path
+import os
 import re
 import subprocess
 import tempfile
@@ -234,6 +235,10 @@ int main() {
         shadow. Execute production copy translation and wire decode with two
         resource views of one allocation. A shared upload must record GPU work,
         preserve decoded pitch/format and publish both writes without BO teardown.
+        RC85: the owner's upload staging is mapped PIPE_MAP_DISCARD_WHOLE_RESOURCE
+        (Asahi shadows a busy staging without copying its dead contents; EXP2015b
+        paid 1301 whole-staging CPU copies in the first frame) unless it exceeds
+        Asahi's 6 MiB copy-shadow bound or APPLE_AGX_D3D12_STAGED_DISCARD=0.
         Gallium storage callbacks stand in for hardware; this is not a GPU test.
         """
         from test_d3d12_view_mapping import block
@@ -248,6 +253,7 @@ int main() {
                     'static unsigned texture_block(',
                     'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {',
                     'static enum pipe_format bc_staging_format(', 'static void gpu_copy_blocks(',
+                    'static bool staged_upload_discard(',
                     'static HRESULT staged_upload(', 'static HRESULT staged_download(',
                     'extern "C" HRESULT AgxD3d12OwnerCopyTexture(']
         funcs='\n'.join(block(owner, signature) for signature in signatures)
@@ -275,4 +281,8 @@ int main() {
                 capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
             result=subprocess.run([str(exe)],capture_output=True,text=True,timeout=30)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            # RC85 A/B switch: the plain staging map
+            env=dict(os.environ,APPLE_AGX_D3D12_STAGED_DISCARD='0')
+            result=subprocess.run([str(exe)],capture_output=True,text=True,timeout=30,env=env)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)

@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 #include "pipe/p_context.h"
@@ -22,6 +23,13 @@ struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingCopies;pipe_screen
 struct OwnerLock {explicit OwnerLock(AGX_D3D12_OWNER *) {}};
 static void AgxD3d12OwnerRecordError(AGX_D3D12_OWNER *,HRESULT) {}
 static void receipt(const char *,HRESULT,UINT,UINT,UINT) {}
+static void receipt(const char *,HRESULT,UINT,UINT,UINT,UINT,UINT) {}
+using LONG=long;
+static unsigned GetEnvironmentVariableA(const char *name,char *out,unsigned size) {
+ const char *v=getenv(name);if(!v)return 0;const unsigned n=static_cast<unsigned>(strlen(v));
+ if(n<size){memcpy(out,v,n+1);} return n;
+}
+static LONG InterlockedExchange(volatile LONG *target,LONG value) {const LONG old=*target;*target=value;return old;}
 /* ACTUAL_COPY_RECORD */
 static bool reserved_texture(pipe_resource *) {return false;}
 static bool compressed_texture(AGX_D3D12_OWNER *,pipe_resource *) {return false;}
@@ -41,8 +49,11 @@ static size_t offset(pipe_resource *r,unsigned level,unsigned x,unsigned y,unsig
  return ((z*h+y)*w+x)*util_format_get_blocksize(r->format);
 }
 static pipe_transfer tr[4];static unsigned next_tr;
-static void *map(pipe_context *,pipe_resource *r,unsigned level,unsigned,const pipe_box *box,pipe_transfer **t) {
+static void *map(pipe_context *,pipe_resource *r,unsigned level,unsigned usage,const pipe_box *box,pipe_transfer **t) {
  assert(!(r->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE));++maps;
+ // RC85: the cached UINT upload staging (256 x 256 blocks, 1 MiB here) is written
+ // whole-resource-discard: its old contents are dead
+ if(r->target!=PIPE_BUFFER && (usage&PIPE_MAP_WRITE)) assert(usage&PIPE_MAP_DISCARD_WHOLE_RESOURCE);
  if(fail_map){*t=nullptr;return nullptr;}
  *t=&tr[next_tr++%4];**t={};
  (*t)->stride=r->target==PIPE_BUFFER?r->width0:r->width0*util_format_get_blocksize(r->format);

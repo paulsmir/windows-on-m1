@@ -2,6 +2,8 @@
 Actual CopyTextureRegion upload/readback must use cached CPU-visible UINT
 staging and GPU block copies, never map the BC BO, preserve pitch padding,
 array layers and 2x2 tails, and propagate staging failures.
+RC85: the upload staging map discards the whole staging (no Asahi shadow
+copy of its dead contents) within Asahi's 6 MiB copy-shadow bound.
 """
 from pathlib import Path
 import subprocess
@@ -19,7 +21,7 @@ class BcOwner(unittest.TestCase):
             'static unsigned texture_block(enum pipe_format format, unsigned *bw, unsigned *bh) {',
             'static unsigned level_extent(unsigned extent, unsigned level) {', 'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {',
             'static enum pipe_format bc_staging_format(', 'static void gpu_copy_blocks(',
-            'static HRESULT staged_upload(', 'static HRESULT staged_download(',
+            'static bool staged_upload_discard(', 'static HRESULT staged_upload(', 'static HRESULT staged_download(',
             'extern "C" HRESULT AgxD3d12OwnerCopyTexture('))
         header=(ROOT/'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.h').read_text()
         end=header.index('} AGX_D3D12_TEXTURE_COPY;')+len('} AGX_D3D12_TEXTURE_COPY;')
