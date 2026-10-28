@@ -3,8 +3,9 @@
 
 /* v2 (rc81): CpuBuild/CpuComplete/Flags per slot, WorkerFlags in the
  * header (was Reserved). v3 (rc83): Sub[] build/completion sub-interval
- * stamps appended to each slot, build flags in Flags. */
-#define ADMISSION_JOB_TIMING_VERSION 3u
+ * stamps appended to each slot, build flags in Flags. v4 (rc95): five more
+ * Sub stamps (the depth-2 receipts below) appended; v3 offsets unchanged. */
+#define ADMISSION_JOB_TIMING_VERSION 4u
 #define ADMISSION_JOB_TIMING_CAPACITY 64u
 
 typedef enum _ADMISSION_JOB_PHASE {
@@ -42,6 +43,18 @@ typedef enum _ADMISSION_JOB_SUB {
   AdmissionJobSubFlushed,
   AdmissionJobSubSaved,
   AdmissionJobSubReleased,
+  /* v4 (rc95, Wom1JobDepth2 receipt mode): while this job ran, its
+   * successor became Prebound (the earliest a depth-2 kick could happen);
+   * the first poll that saw this job's TA done pointer reach its expected
+   * value and the TA stamp reach its expected stamp; the same for the
+   * compute prelude of a render with one (done pointer, stamp). A stamp
+   * that lags its done pointer until the whole job completes is held back
+   * by the notifier threshold (U4). */
+  AdmissionJobSubSuccessorBound,
+  AdmissionJobSubTaDone,
+  AdmissionJobSubTaStamp,
+  AdmissionJobSubPreludeDone,
+  AdmissionJobSubPreludeStamp,
   ADMISSION_JOB_SUB_COUNT
 } ADMISSION_JOB_SUB;
 
@@ -62,7 +75,9 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
   /* rc90 (was Reserved, same layout): the build-ahead refusals while this
    * job ran, AdmissionJobAhead*Refusal values: early release in bits 0-7,
    * the last prebind refusal for its successor in bits 8-15, the chain
-   * refusal at its completion in bits 16-23; 0 = allowed or not tried. */
+   * refusal at its completion in bits 16-23; 0 = allowed or not tried.
+   * rc95: bits 24-31 the depth-2 kick refusal for its Prebound successor
+   * (AdmissionJobWindowKickRefusal; FLAG_DEPTH2_ELIGIBLE when 0). */
   unsigned int AheadRefusals;
   /* v3: ADMISSION_JOB_SUB stamps. */
   unsigned long long Sub[ADMISSION_JOB_SUB_COUNT];
@@ -94,6 +109,10 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
 #define ADMISSION_JOB_AHEAD_SHIFT_RELEASE 0u
 #define ADMISSION_JOB_AHEAD_SHIFT_PREBIND 8u
 #define ADMISSION_JOB_AHEAD_SHIFT_CHAIN 16u
+/* rc95 (Wom1JobDepth2 receipt mode): the successor bound while this job ran
+ * could have been kicked to the firmware at once (refusal 0). */
+#define ADMISSION_JOB_FLAG_DEPTH2_ELIGIBLE 0x800u
+#define ADMISSION_JOB_AHEAD_SHIFT_DEPTH2 24u
 
 /* Header WorkerFlags: the job worker ran on the dedicated thread; that
  * thread is pinned to the processors of efficiency class (bits 8-15),

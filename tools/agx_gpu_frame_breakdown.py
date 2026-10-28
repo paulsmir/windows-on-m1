@@ -80,6 +80,12 @@ predecessor ran, and that the predecessor's worker claimed at its
 completion (no dispatch hop); queued_complete_to_kick is split into
 chained and dispatched jobs; ahead_refusals histograms the
 render_job_ahead.c refusal numbers per step (release, prebind, chain).
+Version 4 (rc95, Wom1JobDepth2 receipt mode) appends five Sub stamps;
+depth2 gives the depth-2 decision for each job's Prebound successor
+(eligible count, render_job_window.c refusals), the lead from that bind to
+the job's completion, and the TA / compute-prelude stamp lags against their
+done pointers and the completion (U4: a stamp held until the completion is
+gated by the notifier threshold).
 The KMD also exports Wom1JobTiming971Hot, the same layout, only
 from a ring whose 64 submissions fall within 500 ms (an application's
 steady state, not the idle desktop after it).
@@ -313,6 +319,10 @@ KMD_SLOT = struct.Struct('<IIIIQQ12Q4QII')
 KMD_SLOT_V2 = struct.Struct('<IIIIQQ12Q4QIIIIII')
 KMD_SUBS = ('staged', 'copied', 'relocated', 'managed', 'prelude', 'flushed', 'saved', 'released')
 KMD_SLOT_V3 = struct.Struct('<IIIIQQ12Q4QIIIIII8Q')
+# rc95 v4: five more Sub stamps (Wom1JobDepth2 receipt mode), v3 offsets kept.
+KMD_SUBS_V4 = KMD_SUBS + ('successor_bound', 'ta_done', 'ta_stamp', 'prelude_done',
+                          'prelude_stamp')
+KMD_SLOT_V4 = struct.Struct('<IIIIQQ12Q4QIIIIII13Q')
 KMD_SLOTS = 64
 FLAG_MAPPING_UNCHANGED, FLAG_PRIVATE_SCENE, FLAG_BEGIN_JOB = 1, 2, 4
 BUILD_FLAGS = dict(init_bm=0x8, init_queues=0x10, prelude=0x20, slot1=0x40, manager_restored=0x80)
@@ -321,6 +331,10 @@ BUILD_FLAGS = dict(init_bm=0x8, init_queues=0x10, prelude=0x20, slot1=0x40, mana
 # 16-23).
 AHEAD_FLAGS = dict(released=0x100, prebound=0x200, chained=0x400)
 AHEAD_STEPS = dict(release=0, prebind=8, chain=16)
+# rc95 (Wom1JobDepth2 receipt mode): the successor could have been kicked to
+# the firmware while this job ran (render_job_window.c refusal in bits 24-31).
+FLAG_DEPTH2_ELIGIBLE = 0x800
+DEPTH2_SHIFT = 24
 
 
 def _sub_spans(s, us):
@@ -356,17 +370,19 @@ def _medians(spans):
 def kmd_job_timing(data):
     """Median microseconds per KMD interval of a Wom1JobTiming971 snapshot."""
     version, size, count, worker, hz, _ = KMD_HEADER.unpack_from(data, 0)
-    layout = {1: KMD_SLOT, 2: KMD_SLOT_V2, 3: KMD_SLOT_V3}.get(version)
+    layout = {1: KMD_SLOT, 2: KMD_SLOT_V2, 3: KMD_SLOT_V3, 4: KMD_SLOT_V4}.get(version)
     if (layout is None or size != KMD_HEADER.size + KMD_SLOTS * layout.size or
             len(data) < size or not hz):
-        raise ValueError('not an ADMISSION_JOB_TIMING_STATE v1/v2/v3 snapshot')
+        raise ValueError('not an ADMISSION_JOB_TIMING_STATE v1/v2/v3/v4 snapshot')
+    sub_names = KMD_SUBS_V4 if version >= 4 else KMD_SUBS
     slots = []
     for i in range(KMD_SLOTS):
         fields = layout.unpack_from(data, KMD_HEADER.size + i * layout.size)
         q = dict(zip(KMD_PHASES, fields[6:18]))
         if fields[0] and all(q[p] for p in ('submit', 'worker', 'backend_after', 'complete', 'notify')):
             cpu_build, cpu_complete, flags, ahead = fields[24:28] if version >= 2 else (0, 0, 0, 0)
-            subs = dict(zip(('sub_' + n for n in KMD_SUBS), fields[28:36])) if version >= 3 else {}
+            subs = (dict(zip(('sub_' + n for n in sub_names), fields[28:28 + len(sub_names)]))
+                    if version >= 3 else {})
             slots.append(dict(fence=fields[0], pid=fields[1], cpu_build=cpu_build,
                               cpu_complete=cpu_complete, flags=flags, ahead=ahead, **q, **subs))
     slots.sort(key=lambda s: s['submit'])
@@ -440,7 +456,44 @@ def kmd_job_timing(data):
                     counts[value] = counts.get(value, 0) + 1
             refusals[step] = dict(sorted(counts.items()))
         out['ahead_refusals'] = refusals
+    if version >= 4:
+        out['depth2'] = _depth2(slots, us)
     return out
+
+
+def _depth2(slots, us):
+    """rc95 v4 (Wom1JobDepth2 receipt mode). eligible/refusals: the depth-2
+    decision for each job's Prebound successor (render_job_window.c);
+    successor_lead_us: from that bind to the job's completion, the time a
+    depth-2 kick would have had the successor in the firmware already.
+    stamp_lag_us (U4): TA and prelude stamps against their done pointers and
+    the job's completion; a stamp that waits for the completion is held by
+    the notifier threshold, so a depth-2 job N would be seen only once N+1
+    ended. stamp_unseen counts jobs whose done pointer was seen but whose
+    stamp was not before the poll that completed the job (the same
+    verdict: held until the threshold)."""
+    refusals, unseen = {}, dict(ta=0, prelude=0)
+    lead, lag = [], {k: [] for k in ('ta_done_to_stamp', 'ta_stamp_to_complete',
+                                     'prelude_done_to_stamp', 'prelude_stamp_to_complete')}
+    for s in slots:
+        value = s['ahead'] >> DEPTH2_SHIFT & 0xff
+        if value:
+            refusals[value] = refusals.get(value, 0) + 1
+        if s.get('sub_successor_bound'):
+            lead.append(us(s['sub_successor_bound'], s['complete']))
+        for queue in ('ta', 'prelude'):
+            done, stamp = s.get('sub_%s_done' % queue), s.get('sub_%s_stamp' % queue)
+            if done and stamp:
+                lag[queue + '_done_to_stamp'].append(us(done, stamp))
+            elif done:
+                unseen[queue] += 1
+            if stamp:
+                lag[queue + '_stamp_to_complete'].append(us(stamp, s['complete']))
+    return dict(eligible=sum(1 for s in slots if s['flags'] & FLAG_DEPTH2_ELIGIBLE),
+                decided=sum(1 for s in slots if s.get('sub_successor_bound')),
+                refusals=dict(sorted(refusals.items())),
+                successor_lead_us=_medians(dict(lead=lead)),
+                stamp_lag_us=_medians(lag), stamp_unseen=unseen)
 
 
 def main():

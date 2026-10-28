@@ -81,9 +81,13 @@ int main(void) {
   static ADMISSION_JOB_TIMING_STATE s;
   const ADMISSION_JOB_TIMING_SLOT *slot;
   unsigned i;
-  /* decoder '<IIIIQQ12Q4QIIIIII8Q' */
-  assert(ADMISSION_JOB_TIMING_VERSION == 3u && ADMISSION_JOB_SUB_COUNT == 8);
-  assert(sizeof(ADMISSION_JOB_TIMING_SLOT) == 248u);
+  /* decoder '<IIIIQQ12Q4QIIIIII8Q' (v3), rc95 v4 '...13Q': the v3 stamps
+   * keep their indices, five are appended */
+  assert(ADMISSION_JOB_TIMING_VERSION == 4u && ADMISSION_JOB_SUB_COUNT == 13);
+  assert(sizeof(ADMISSION_JOB_TIMING_SLOT) == 288u);
+  assert(AdmissionJobSubSuccessorBound == 8 && AdmissionJobSubTaDone == 9 &&
+         AdmissionJobSubTaStamp == 10 && AdmissionJobSubPreludeDone == 11 &&
+         AdmissionJobSubPreludeStamp == 12);
   assert(offsetof(ADMISSION_JOB_TIMING_SLOT, Flags) == 176u);
   assert(offsetof(ADMISSION_JOB_TIMING_SLOT, Sub) == 184u);
   assert(AdmissionJobSubStaged == 0 && AdmissionJobSubCopied == 1 &&

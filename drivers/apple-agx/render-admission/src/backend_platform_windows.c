@@ -1,6 +1,7 @@
 #include "render_admission.h"
 #include "render_job_timing.h"
 #include "render_job_ahead.h"
+#include "render_job_window.h"
 #include "render_gpu_perf.h"
 #include "render_gpu_recovery_snapshot.h"
 
@@ -293,6 +294,17 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN AheadG4Native;
   ULONG AheadFinishedFence;
   BOOLEAN AheadFinishedDropped;
+  /* rc95: device value Wom1JobDepth2 = 1, with Wom1JobBuildAhead
+   * (render_job_window.h). Receipt mode: nothing is kicked early yet; the
+   * worker records, per job, the depth-2 decision for its Prebound
+   * successor and when the job's TA and prelude done pointers and stamps
+   * first reached their expected values (U4). Worker-owned: the running
+   * job as its kick left it (the image holds the successor's binding once
+   * prebound), whether its decision was noted, the receipts taken. */
+  BOOLEAN JobDepth2;
+  ADMISSION_JOB_WINDOW_JOB Depth2Running;
+  BOOLEAN Depth2Noted;
+  ULONG Depth2Sampled;
 } ADMISSION_PLATFORM_RUNTIME;
 
 /* rc90 build-ahead runs in the GPUVA G3 worker only (no SUBMIT receipts,
@@ -4454,6 +4466,131 @@ static VOID AdmissionJobAheadStateWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
   s->FinishedDropped = runtime->AheadFinishedDropped ? 1u : 0u;
 }
 
+/* rc95 (render_job_window.h): what the bound image runs on the firmware,
+ * for the context that owns it (SchedulerLock held, or the image owner). */
+static VOID AdmissionJobWindowDescribeLocked(const ADMISSION_BACKEND_IMAGE *image,
+    const ADMISSION_RENDER_CONTEXT *context, ULONG fence,
+    ADMISSION_JOB_WINDOW_JOB *job) {
+  RtlZeroMemory(job, sizeof(*job));
+  job->Fence = fence;
+  job->Kind = image->BoundFence != fence ? ADMISSION_JOB_WINDOW_KIND_NONE :
+      image->G4Compute ? ADMISSION_JOB_WINDOW_KIND_COMPUTE :
+      image->PresentCompute ? ADMISSION_JOB_WINDOW_KIND_PRESENT :
+      image->G4Native ? (image->G4WithCompute ?
+          ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE : ADMISSION_JOB_WINDOW_KIND_RENDER) :
+      ADMISSION_JOB_WINDOW_KIND_OTHER;
+  job->Process = context != NULL ?
+      (unsigned long long)(ULONG_PTR)context->GpuvaG3Process : 0ULL;
+  job->SceneId = image->G4Native ? image->G4Lease.SceneId : 0ULL;
+}
+
+/* rc95 receipt mode: job Fence runs alone and its successor was just bound
+ * ahead. Would depth 2 kick the successor now? The refusal goes to bits
+ * 24-31 of Fence's AheadRefusals (FLAG_DEPTH2_ELIGIBLE when 0), the time to
+ * Sub SuccessorBound. Nothing is kicked. PagingLock before SchedulerLock,
+ * as the chain. */
+static VOID AdmissionJobWindowNoteWindows(ADMISSION_CONTEXT *adapter,
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
+  ADMISSION_JOB_AHEAD_STATE ahead;
+  ADMISSION_JOB_WINDOW_KICK_STATE s;
+  const ADMISSION_G4_PENDING *head;
+  ULONGLONG qpc = AdmissionJobQpc();
+  KIRQL old_irql;
+  ULONG refusal;
+  runtime->Depth2Noted = TRUE;
+  RtlZeroMemory(&s, sizeof(s));
+  AdmissionJobAheadStateWindows(runtime, fence, &ahead);
+  KeAcquireSpinLock(&adapter->PagingLock, &old_irql);
+  KeAcquireSpinLockAtDpcLevel(&adapter->SchedulerLock);
+  AdmissionJobAheadFillLocked(adapter, &ahead);
+  s.CpuHeadFence = adapter->CpuQueueCount != 0u ?
+      adapter->CpuQueue[adapter->CpuQueueHead].Fence : 0u;
+  head = adapter->G4PendingCount != 0u ?
+      &adapter->G4Pending[adapter->G4PendingHead] : NULL;
+  if (head != NULL) {
+    s.NextPrebound = head->State == AdmissionG4PendingPrebound &&
+        adapter->BackendImage.BoundFence == head->Fence ? 1u : 0u;
+    AdmissionJobWindowDescribeLocked(&adapter->BackendImage, head->Context,
+                                     head->Fence, &s.Next);
+  }
+  KeReleaseSpinLockFromDpcLevel(&adapter->SchedulerLock);
+  KeReleaseSpinLock(&adapter->PagingLock, old_irql);
+  s.Enabled = runtime->JobDepth2 && runtime->JobAhead ? 1u : 0u;
+  s.Stopping = ahead.Stopping;
+  s.Resetting = ahead.Resetting;
+  s.Faulted = ahead.Faulted;
+  s.PreemptionPhase = ahead.PreemptionPhase;
+  s.PagingPending = ahead.PagingPending;
+  s.QueuedFence = ahead.QueuedFence;
+  /* The firmware holds N alone (depth 1); no window capability exists. */
+  s.InFlight = runtime->Depth2Running.Fence == fence &&
+      ahead.ActiveFence == fence ? 1u : 0u;
+  s.Running = runtime->Depth2Running;
+  refusal = AdmissionJobWindowKickRefusal(&s);
+  AdmissionJobAheadNoteRefusalWindows(runtime, fence,
+      ADMISSION_JOB_AHEAD_SHIFT_DEPTH2, refusal);
+  if (refusal == 0u)
+    AdmissionJobTimingNoteWindows(adapter, fence,
+                                  ADMISSION_JOB_FLAG_DEPTH2_ELIGIBLE);
+  AdmissionJobTimingSubAtWindows(runtime, fence,
+                                 AdmissionJobSubSuccessorBound, qpc);
+}
+
+/* rc95 receipt mode (U4): the first poll at which one queue of job Fence
+ * reached its expected done pointer and its expected stamp. Read only, the
+ * same shared words AppleAgxG13QueueProviderQueryProgress reads. */
+static VOID AdmissionJobDepth2SampleQueue(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ULONG fence, const APPLE_AGX_G13_QUEUE_RUNTIME *queue,
+    const APPLE_AGX_G13_QUEUE_BINDING *binding,
+    const APPLE_AGX_G13_QUEUE_PENDING *pending, ULONG bit,
+    ADMISSION_JOB_SUB done, ADMISSION_JOB_SUB stamp, ULONGLONG qpc) {
+  APPLE_AGX_BACKEND_U32 value = 0u;
+  if ((runtime->Depth2Sampled & bit) == 0u && binding->GpuDonePointer != NULL &&
+      queue->Io.ReadU32(queue->Io.Context, binding->GpuDonePointer, &value) &&
+      value == pending->ExpectedDonePointer) {
+    runtime->Depth2Sampled |= bit;
+    AdmissionJobTimingSubAtWindows(runtime, fence, done, qpc);
+  }
+  if ((runtime->Depth2Sampled & (bit << 1)) == 0u && binding->Stamp != NULL &&
+      queue->Io.ReadU32(queue->Io.Context, binding->Stamp, &value) &&
+      AdmissionJobWindowStampReached(value, pending->ExpectedStamp)) {
+    runtime->Depth2Sampled |= bit << 1;
+    AdmissionJobTimingSubAtWindows(runtime, fence, stamp, qpc);
+  }
+}
+
+#define ADMISSION_DEPTH2_SAMPLED_TA 0x1u
+#define ADMISSION_DEPTH2_SAMPLED_PRELUDE 0x4u
+#define ADMISSION_DEPTH2_SAMPLED_ALL 0xfu
+
+static VOID AdmissionJobDepth2SampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ULONG fence) {
+  const APPLE_AGX_G13_QUEUE_RUNTIME *queue =
+      &runtime->Provider.QueueProvider.Runtime;
+  ULONGLONG qpc;
+  if (runtime->Depth2Sampled == ADMISSION_DEPTH2_SAMPLED_ALL ||
+      queue->PendingFence != fence || queue->Io.ReadU32 == NULL ||
+      (queue->Phase != AppleAgxG13QueueRuntimeSubmitted &&
+       queue->Phase != AppleAgxG13QueueRuntimeComputeSubmitted))
+    return;
+  qpc = AdmissionJobQpc();
+  if (queue->ComputeTerminal)
+    runtime->Depth2Sampled |= ADMISSION_DEPTH2_SAMPLED_TA |
+                              (ADMISSION_DEPTH2_SAMPLED_TA << 1);
+  else
+    AdmissionJobDepth2SampleQueue(runtime, fence, queue, &queue->Config.Ta,
+        &queue->TaPending, ADMISSION_DEPTH2_SAMPLED_TA, AdmissionJobSubTaDone,
+        AdmissionJobSubTaStamp, qpc);
+  if (queue->ComputeInRender && queue->Config.HasCompute)
+    AdmissionJobDepth2SampleQueue(runtime, fence, queue,
+        &queue->Config.Compute, &queue->ComputePending,
+        ADMISSION_DEPTH2_SAMPLED_PRELUDE, AdmissionJobSubPreludeDone,
+        AdmissionJobSubPreludeStamp, qpc);
+  else
+    runtime->Depth2Sampled |= ADMISSION_DEPTH2_SAMPLED_PRELUDE |
+                              (ADMISSION_DEPTH2_SAMPLED_PRELUDE << 1);
+}
+
 /* rc90 step 1: right after the kick, restore the template arena (the
  * snapshot copy, about 40 us) while the firmware runs the job. The build
  * already copied the job's per-submission objects into the firmware-shared
@@ -4476,6 +4613,12 @@ static VOID AdmissionJobAheadReleaseWindows(ADMISSION_CONTEXT *adapter,
     runtime->AheadManager = image->G4Manager;
     runtime->AheadG4Native = image->G4Native ? TRUE : FALSE;
     runtime->AheadReleasedFence = fence;
+    /* rc95: N as the firmware runs it; the image is the successor's next. */
+    if (runtime->JobDepth2)
+      AdmissionJobWindowDescribeLocked(image,
+          (const ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+              adapter->RenderPacket.Description.ContextToken,
+          fence, &runtime->Depth2Running);
   }
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   if (refusal != 0u) {
@@ -4501,12 +4644,17 @@ static VOID AdmissionJobAheadPrebindWindows(ADMISSION_CONTEXT *adapter,
     ULONG *LastRefusal) {
   ADMISSION_JOB_AHEAD_STATE ahead;
   ULONG refusal = 0u;
+  BOOLEAN bound;
   if (*Done || runtime->AheadReleasedFence != fence ||
       adapter->G4PendingCount == 0u)
     return;
   AdmissionJobAheadStateWindows(runtime, fence, &ahead);
-  *Done = AdmissionG4PendingPrebindHead(adapter, &ahead, &refusal);
+  bound = AdmissionG4PendingPrebindHead(adapter, &ahead, &refusal);
+  *Done = bound;
   if (refusal == 28u || refusal == 29u) *Done = TRUE;
+  /* rc95 receipt mode: the depth-2 decision at the earliest point. */
+  if (bound && runtime->JobDepth2 && !runtime->Depth2Noted)
+    AdmissionJobWindowNoteWindows(adapter, runtime, fence);
   if (refusal != *LastRefusal) {
     *LastRefusal = refusal;
     AdmissionJobAheadNoteRefusalWindows(runtime, fence,
@@ -4677,6 +4825,9 @@ ChainNext:
   runtime->AheadManager = NULL;
   prebindDone = FALSE;
   prebindRefusal = 0u;
+  RtlZeroMemory(&runtime->Depth2Running, sizeof(runtime->Depth2Running));
+  runtime->Depth2Noted = FALSE;
+  runtime->Depth2Sampled = 0u;
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionJobTimingMarkWindows(runtime, description.Fence,
@@ -4925,6 +5076,9 @@ ChainNext:
     if (runtime->JobAhead)
       AdmissionJobAheadPrebindWindows(adapter, runtime, description.Fence,
                                       &prebindDone, &prebindRefusal);
+    /* rc95 receipt mode: TA/prelude done pointers and stamps (U4). */
+    if (runtime->JobDepth2)
+      AdmissionJobDepth2SampleWindows(runtime, description.Fence);
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     {
@@ -5923,9 +6077,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 #if ADMISSION_JOB_AHEAD_BUILD
   runtime->JobAhead =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobBuildAhead");
+  /* rc95: off unless REG_DWORD 1, and only with build-ahead (its prebind
+   * is where the depth-2 decision is taken). */
+  runtime->JobDepth2 = runtime->JobAhead &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2") ? TRUE : FALSE;
 #else
   runtime->JobAhead = FALSE;
+  runtime->JobDepth2 = FALSE;
 #endif
+  RtlZeroMemory(&runtime->Depth2Running, sizeof(runtime->Depth2Running));
+  runtime->Depth2Noted = FALSE;
+  runtime->Depth2Sampled = 0u;
   runtime->AheadReleasedFence = runtime->AheadFinishedFence = 0u;
   runtime->AheadManager = NULL;
   runtime->AheadG4Native = runtime->AheadFinishedDropped = FALSE;
