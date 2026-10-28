@@ -66239,3 +66239,15 @@ EXP2043 HARDWARE ACTUAL (2026-10-28): **rc103 level upload confirmed at HD (scor
   - rc103: confirmed at HD.
   - rc104: insufficient alone.
   - The structural fix is the single CPU/GPU copy: canonical CPU maps, the rc45 default, blocked since EXP1974 because VidMm republishes a mapped canonical allocation into segment 0 without native leaves (rc50 analysis). This goes to rc107.
+
+EXP2044 HARDWARE BEFORE 2026-10-28T15:09:08Z:
+- WHY: the user saw the Earth flicker as if its shadows were wrong. rc105 found no proven untracked hazard, but Asahi flushes open batches in slot order, so a writer left open behind a reader would read the previous frame's data transiently.
+- ATOMIC CONTRACT: one env variable in a fresh process.
+- Expected:
+  - b: inversion count > 0 together with visible Earth flicker in the screenshot series, while a shows 0 inversions and no flicker → hazard proven;
+  - 0 inversions in both arms → the cause lies outside the UMD order (KMD cache invalidation between jobs, residency trims; next task).
+- Failure criteria: removal or a fault.
+- Recovery: rec2044h.
+- Hashes: sys bdc96bb441ac, UmdArm64 ccf7a13148c1, UmdX64 6b585049e0c9, Umd32 372a3ed761da; manifest cfb1ef49bbbf, hardware-manifest 077e92820cc1; probe2044.sh 7767b3b20000 (PROBE_LINT_OK); visible recovery rec2044h 7a14c61eb8cdda0d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2044h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2044-flicker/run2044.sh.
