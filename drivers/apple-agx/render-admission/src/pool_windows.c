@@ -295,7 +295,9 @@ static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
   for (attempt = 0u; attempt < 2u; ++attempt) {
     ULONGLONG i, j;
     PMDL mdl;
-    LARGE_INTEGER start;
+    /* Initialized for MSVC /W4 C4701: Next is reached only after the
+     * check started, but by goto. */
+    LARGE_INTEGER start = {0};
     ULONGLONG us;
     skip.QuadPart = (LONGLONG)(attempt == 0u ? ADMISSION_POOL_SLAB_BYTES
                                              : ADMISSION_POOL_DEMAND_GRANULE);
