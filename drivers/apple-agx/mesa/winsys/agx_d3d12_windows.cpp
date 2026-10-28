@@ -19,6 +19,7 @@ extern "C" {
 #include "../dxil/agx_owned_nir_handoff.h"
 #endif
 #include "agx_d3d12_view_mapping.h"
+#include "agx_win32_sampler_border.h"
 #include "agx_win32_asahi_layout.h"
 #include "agx_win32_asahi_level_upload.h"
 #include "agx_d3d12_level_ring.h"
@@ -3699,7 +3700,15 @@ static void *create_sampler(struct pipe_context *pipe, const AGX_D3D12_SAMPLER *
   state.min_lod = s->MinLod;
   state.max_lod = s->MaxLod;
   for (unsigned i = 0; i < 4; ++i) state.border_color.f[i] = s->BorderColor[i];
-  return pipe->create_sampler_state(pipe, &state);
+  void *cso = pipe->create_sampler_state(pipe, &state);
+  /* RC108: without border_color_format Asahi packs transparent black for
+   * every BORDER sampler; the AGX sampler holds opaque black and white
+   * itself (agx_win32_sampler_border.h). Other colours keep transparent
+   * black: a custom border is packed per view format. */
+  const unsigned border = AgxWin32SamplerBorderColour(s->AddressU, s->AddressV, s->AddressW, s->BorderColor);
+  if (cso && border != AGX_WIN32_BORDER_TRANSPARENT_BLACK && border != AGX_WIN32_BORDER_OTHER)
+    AgxWin32AsahiSamplerSetBorder(cso, border);
+  return cso;
 }
 
 /* Asahi copies and packs this state at creation; it holds no resource or

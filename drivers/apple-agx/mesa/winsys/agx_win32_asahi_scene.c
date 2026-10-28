@@ -10,6 +10,7 @@
 #ifdef APPLE_AGX_GPUVA_WINSYS
 #include "agx_win32_sparse.h"
 #endif
+#include "agx_win32_sampler_border.h" /* RC108: after agx_pack.h */
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -456,6 +457,15 @@ int AgxWin32AsahiSamplerDescriptor(void *cso, void *out, APPLE_AGX_U16 *bias, in
   *bias=so->lod_bias_as_fp16;
   *custom_border=so->uses_custom_border;
   return 1;
+}
+/* D3D12 RC108: a sampler CSO's built-in border colour
+ * (agx_win32_sampler_border.h), in the form slots bind and the form the
+ * sampler heap takes; a custom border keeps Asahi's own packing */
+void AgxWin32AsahiSamplerSetBorder(void *cso, unsigned colour) {
+  struct agx_sampler_state *so=cso;
+  if(!so || so->uses_custom_border || colour>AGX_WIN32_BORDER_OPAQUE_WHITE) return;
+  AgxWin32SamplerSetBorder(&so->desc,colour);
+  AgxWin32SamplerSetBorder(&so->desc_without_custom_border,colour);
 }
 void AgxWin32AsahiSetDrawBindings(struct pipe_context *pctx,
     int (*bindings)(void *), void *data) {

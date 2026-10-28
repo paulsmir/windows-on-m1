@@ -152,6 +152,8 @@ int AgxWin32AsahiImageDescriptors(struct pipe_context *, const struct pipe_image
 unsigned AgxWin32AsahiPbeDescriptorBytes(void);
 unsigned AgxWin32AsahiSamplerDescriptorBytes(void);
 int AgxWin32AsahiSamplerDescriptor(void *Cso, void *Out, APPLE_AGX_U16 *Bias, int *CustomBorder);
+/* D3D12 RC108: a sampler CSO's built-in border colour (agx_win32_sampler_border.h) */
+void AgxWin32AsahiSamplerSetBorder(void *Cso, unsigned Colour);
 int AgxWin32AsahiBatchSamplerHandles(struct pipe_context *, int Compute, const void *Packed, unsigned Stride,
     unsigned Count, APPLE_AGX_U16 *Handles);
 void AgxWin32AsahiNullPbeDescriptor(void *Out);
