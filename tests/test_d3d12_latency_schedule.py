@@ -21,7 +21,9 @@ Invariants:
 """
 import importlib.util
 import os
+import re
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -98,6 +100,91 @@ class Projection(unittest.TestCase):
                         text.index('prepare_latency_schedule(\n            compiler_units, bitfield_include)'))
         self.assertLess(text.index('prepare_latency_schedule(\n            compiler_units, bitfield_include)'),
                         text.index('del bitfield_include'))
+
+
+def last_main_listing(dump):
+    """The last post-RA listing (physical registers) of the dump."""
+    lines = dump.split('\n')
+    starts = [i for i, line in enumerate(lines) if line.startswith('block0 {')]
+    sections = [lines[a:b] for a, b in zip(starts, starts[1:] + [len(lines)])]
+    sections = [s for s in sections if any('$r' in line for line in s)]
+    return [line.strip() for line in sections[-1] if line.startswith('   ') and not line.strip().startswith('}')]
+
+
+def load_wait_distances(listing):
+    """Per wait: instructions since the oldest memory/texture load it covers."""
+    distances, first, index = [], None, 0
+    for line in listing:
+        if line.startswith('wait'):
+            if first is not None:
+                distances.append(index - first)
+            first = None
+            continue
+        if first is None and re.search(r'= (device_load|texture_sample|texture_load|image_load)\b', line):
+            first = index
+        index += 1
+    return distances
+
+
+class Compiled(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tool = load(ROOT / 'tools/agx_shader_cost.py', 'agx_shader_cost')
+        cls.tmp = tempfile.TemporaryDirectory(prefix='latency-schedule-')
+        try:
+            pinned, projected = Path(cls.tmp.name) / 'pinned', Path(cls.tmp.name) / 'projected'
+            pinned.mkdir()
+            projected.mkdir()
+            cls.pinned = cls.tool.build(pinned, pinned=True)
+            cls.projected = cls.tool.build(projected) if cls.pinned else None
+        except Exception:
+            cls.tmp.cleanup()
+            raise
+        if not cls.pinned or not cls.projected:
+            cls.tmp.cleanup()
+            raise unittest.SkipTest('host Mesa / dxil-spirv trees not available')
+        capture = local('experiments', 'EXP1969-no-wait', 'evidence', 'shader-capture', '806ee7b1bdb1944a-s5-r0.bin')
+        cls.sources = [('--synthetic-uav-reads=8', '--no-d3d-robust'), ('--synthetic-uav-reads=8',),
+                       ('--synthetic-array-samples=4',), ('--synthetic-local-array=32',), (str(FIXTURE),)]
+        if capture:
+            cls.sources.append((str(capture), '--root-views=e,3', '--soft-fault-loads'))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def cost(self, binary, source, target=None):
+        env = {'APPLE_AGX_LATENCY_SCHED': target} if target is not None else {}
+        result = self.tool.cost(binary, source[0], *source[1:], env=env)
+        self.assertTrue(result, source)
+        return result
+
+    def test_kill_switch_is_the_pinned_compiler(self):
+        for source in self.sources:
+            with self.subTest(source=source):
+                self.assertEqual(self.cost(self.projected, source, '0'), self.cost(self.pinned, source))
+
+    def test_latency_never_costs_occupancy_spills_or_scratch(self):
+        for source in self.sources:
+            with self.subTest(source=source):
+                pinned, latency = self.cost(self.pinned, source), self.cost(self.projected, source)
+                self.assertGreaterEqual(latency['threads'], pinned['threads'])
+                for key in ('spills', 'fills', 'scratch'):
+                    self.assertLessEqual(latency[key], pinned[key], key)
+                self.assertLessEqual(latency['instrs'], pinned['instrs'] + pinned['instrs'] // 32)
+
+    def test_independent_loads_issue_ahead_of_their_uses(self):
+        source = ('--synthetic-uav-reads=8', '--no-d3d-robust')
+        dumps = {}
+        for name, binary in (('pinned', self.pinned), ('latency', self.projected)):
+            run = subprocess.run([str(binary), *source], capture_output=True, text=True, timeout=300,
+                                 env={**os.environ, 'AGX_MESA_DEBUG': 'shaders'})
+            self.assertEqual(run.returncode, 0, run.stderr[-2000:])
+            dumps[name] = load_wait_distances(last_main_listing(run.stdout))
+        self.assertEqual(len(dumps['pinned']), 7)
+        self.assertTrue(all(d <= 3 for d in dumps['pinned']), dumps['pinned'])
+        self.assertLessEqual(len(dumps['latency']), 2, dumps['latency'])
+        self.assertGreaterEqual(min(dumps['latency']), 8, dumps['latency'])
 
 
 if __name__ == '__main__':

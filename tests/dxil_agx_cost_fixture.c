@@ -25,7 +25,7 @@
  *        gprs <n> threads <n> scratch <n> spills <n> fills <n> loops <n>
  *        code <n> preamble <n> nir-alu <n> nir-mem <n> nir-tex <n>
  *        nir-shared <n> barriers <n> atomics <n> root-marked <n>
- *        crawl-speculated <n> tex-speculated <n>
+ *        crawl-speculated <n> tex-speculated <n> binary-fnv <hex>
  * (RC75 op classes of the final NIR handed to the backend: ALU, device
  * memory, texture/image, threadgroup memory, workgroup barriers, atomics;
  * RC78 crawl-speculated: texture descriptor loads that
@@ -637,6 +637,17 @@ synthetic_break_loops(unsigned count)
    return b.shader;
 }
 
+/* RC96: FNV-1a of the shader binary, so equal compiles can be compared
+ * byte for byte (APPLE_AGX_LATENCY_SCHED=0 against the pinned compiler) */
+static unsigned
+binary_fnv(const void *data, unsigned size)
+{
+   unsigned h = 2166136261u;
+   for (unsigned i = 0; i < size; ++i)
+      h = (h ^ ((const unsigned char *)data)[i]) * 16777619u;
+   return h;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -777,12 +788,12 @@ main(int argc, char **argv)
    printf("COST stage %s block %ux%ux%u shared %u nir-ifs %u guarded-loads %u loads %u stores %u txf %u mem-blocks %u hot-mem-blocks %u hot-nir %u hot-branches %u "
           "instrs %u alu %u fscib %u ic %u gprs %u threads %u scratch %u spills %u fills %u loops %u code %u "
           "preamble %u nir-alu %u nir-mem %u nir-tex %u nir-shared %u barriers %u atomics %u root-marked %u "
-          "crawl-speculated %u tex-speculated %u\n",
+          "crawl-speculated %u tex-speculated %u binary-fnv %08x\n",
           mesa_shader_stage_name(MESA_SHADER_COMPUTE), block[0], block[1], block[2], shared, counts.ifs,
           counts.guarded_loads, counts.loads, counts.stores, counts.txf, mem_blocks, hot.memory_blocks, hot.instrs, hot.branches, s->instrs, s->alu, s->fscib, s->ic,
           s->gprs, s->threads, s->scratch, s->spills, s->fills, s->loops, s->code_size, s->preamble_inst,
           classes.alu, classes.mem, classes.tex, classes.shared, classes.barriers, classes.atomics, marked,
-          speculated, tex_speculated);
+          speculated, tex_speculated, binary_fnv(part.binary, part.info.binary_size));
    free(part.binary);
    ralloc_free(nir);
    glsl_type_singleton_decref();

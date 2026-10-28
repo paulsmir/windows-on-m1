@@ -114,9 +114,43 @@ def rank_log(lines):
     return dict(pid=pid, shaders=len(stats), tagged_dispatch_shaders=len(dispatch), ranking=table)
 
 
-def build(out_dir):
+def projected_compiler(build_tree, mesa, out, flags):
+    """RC96: the Windows build projects agx_compiler.h, agx_pressure_schedule.c
+    and agx_compile.c through mesa/scripts/native-asahi-latency-schedule.py.
+    Compile the projected sources (next to the projected header, which their
+    quoted includes find first) with the fixture's flags; linked ahead of
+    libasahi_compiler.a, their archive members are not loaded, so offline
+    costs are the Windows compiler's."""
+    import importlib.util
+    script = ROOT / 'drivers/apple-agx/mesa/scripts/native-asahi-latency-schedule.py'
+    spec = importlib.util.spec_from_file_location('native_latency_schedule', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    objects = []
+    projected = out / 'rc96-compiler'
+    projected.mkdir(exist_ok=True)
+    for path, project in module.FILES.items():
+        source = projected / Path(path).name
+        source.write_text(project((mesa / path).read_text()))
+        if source.suffix != '.c':
+            continue
+        obj = source.with_suffix('.o')
+        # the projected agx_compiler.h must win every quoted include, also
+        # those of the generated agx_builder.h: its directory goes first
+        r = subprocess.run(['clang', '-I', str(projected), *flags, '-I', str(build_tree / 'src/asahi/compiler'),
+                            '-I', str(mesa / 'src/asahi/compiler'), '-c', str(source), '-o', str(obj)],
+                           capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError(f'projected {path}: ' + r.stderr[-3000:])
+        objects.append(str(obj))
+    return objects
+
+
+def build(out_dir, pinned=False):
     """Build tests/dxil_agx_cost_fixture.c against the host Mesa and
-    dxil-spirv trees (the test_dxil_to_nir layout); None without them."""
+    dxil-spirv trees (the test_dxil_to_nir layout); None without them.
+    RC96: with the Windows compiler projection (projected_compiler) unless
+    pinned (the host build's unmodified libasahi_compiler.a)."""
     sys.path.insert(0, str(TESTS))
     from test_dxbc_to_nir import local_tree, host_flags, DXBC, HOST_LIBS, CXX_RUNTIME, BREW_LINK
     from test_dxil_to_nir import MESA_LIBS, DXIL
@@ -137,7 +171,8 @@ def build(out_dir):
     dlibs = [str(p) for p in sorted(archives.glob('*.a'))]
     link = ['-L/opt/homebrew/opt/zstd/lib', '-lzstd', '-lz', '-lpthread', *HOST_LIBS]
     binary = out / 'dxil_agx_cost_fixture'
-    subprocess.run(['clang', *common, str(TESTS / 'dxil_agx_cost_fixture.c'), str(DXIL / 'agx_dxil_to_nir.c'),
+    compiler = [] if pinned else projected_compiler(build_tree, mesa, out, common)
+    subprocess.run(['clang', *common, str(TESTS / 'dxil_agx_cost_fixture.c'), *compiler, str(DXIL / 'agx_dxil_to_nir.c'),
                     str(DXIL / 'agx_dxil_program.c'), str(DXBC / 'dxbc_to_nir.c'), str(DXBC / 'dxbc_parse.c'),
                     str(DXBC / 'dxbc_minmax.c'), str(out / 'checked.o'), '-o', str(binary), *libs, *dlibs, *dlibs,
                     *link, CXX_RUNTIME, *BREW_LINK, '-lSPIRV-Tools-shared'], check=True, capture_output=True)
