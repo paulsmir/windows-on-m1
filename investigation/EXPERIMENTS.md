@@ -65823,3 +65823,19 @@ EXP2031 HARDWARE BEFORE 2026-10-28T09:48:32Z:
 - Hashes: sys f12cdedf008f, UmdArm64 78425ec28b1a, UmdX64 16558db5f354, Umd32 a7c31fd692a1; manifest d891a3f5f1f8, hardware-manifest e2449c5fa0c2; probe2031.sh b54b4839dc92 (PROBE_LINT_OK); visible recovery rec2031h 28edf9a0b02c4d95; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2031h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2031-rc94-ab/run2031.sh.
+
+EXP2031 HARDWARE ACTUAL (2026-10-28): **rc94 is not the cause of the HD idle; the first app after boot is slow. Run-to-run noise is large.**
+
+| Arm | Score | Median wall | GPU span | Idle |
+|---|---|---|---|---|
+| a: HD 50k, first after boot | 6153 | 25.53 ms | 21.61 ms | **3.94 ms** |
+| d: HD 50k, rc94 off (UPLOAD_RING_ALONE=1) | 6520 | 24.66 ms | 21.55 ms | 2.35 ms |
+| e: HD 50k, rc94 on, repeat | **6756** | 23.30 ms | 22.53 ms | **0.15 ms** |
+| c: FHD 100k | 3740 (EXP2030: 4097) | | | |
+
+- Idle falls with run order (a > d > e), independent of rc94: e, with rc94 on, beats d.
+- GPU work is unchanged across arms (c_work 9.2–9.3 ms, main 3D 5.1–5.2 ms).
+- Verdict:
+  - rc94 kept (neutral or better).
+  - The HD regression since EXP2028 is a first-app-after-boot CPU-side gap. Candidate: rc93's 64 KiB-chunked slabs for the first app, against the 2 MiB pages EXP2028 got (CPU TLB / mapping cost on upload writes). Next: EXP2033 first app with Wom1PoolConstructLargePages=1.
+  - The rc95 KMD code built under MSVC/WDK (PACKAGE_BUILD_PASS) and stayed inert.
