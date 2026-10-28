@@ -66347,3 +66347,24 @@ EXP2047 HARDWARE ACTUAL (2026-10-28): **first real depth-2 kick on hardware (max
   - The first reset, for the kick failure, succeeded: ended, last_aborted 0x18d3. The rc102 abort path works.
   - The next three timed out in quiesce on fence 0x1994 (PostResume wait 1000 ms, compute ring idle, no events), then 0x116.
 - Verdict: progress (a kick reached the firmware with 2 jobs in flight). The C→R render build failure and the 0x1994 hang go back to rc102. Kick stays off by default.
+
+EXP2048 HARDWARE BEFORE 2026-10-28T16:32:17Z:
+- EXP2047 code;
+- Fable 7e104210: consecutive checked load_ssbo in a block form runs tested once, then whole vector loads, else the per-component D3D-exact form; kill switch APPLE_AGX_D3D_LOAD_RUNS=0;
+- e84f8ae2: APPLE_AGX_D3D12_MAX_ANISOTROPY diagnostic cap;
+- e3219f3d and 20421b1b.
+Device switch: Wom1GpuFaultInfoRead=1 (Kick off). GravityMark env: CPU_POOL_MAP unset (unified copy). Order (alternating against heat): FHD 100k runs on (a), FHD runs off (b), HD 50k off (c), HD on (d), FHD on with MAX_ANISOTROPY=1 (e).
+- WHY: the robust load lowering split every checked UAV load into one scalar load per component with its own bounds test. Offline, executed instructions of the per-frame compute fall about 20% (bdb1944a 4985 → 3783 executed); graphics stages also fall (asteroid VS 1195 → 549, gbuffer PS 629 → 265, planet PS 17602 → 8525). Main-pass 3D scales with pixels, not asteroids (FHD 8.8 ms), so arm e tests whether it is texture-tap bound (aniso 16).
+- ATOMIC CONTRACT: none; separate steps through env variables in fresh processes.
+- Expected:
+  - a vs b: pos5 exact ≥ 10% lower, score +4–8%, image correct;
+  - d vs c: about +5%;
+  - e: pos1 d3 drop ≥ 2 ms means texture-bound.
+- Failure criteria:
+  - an image difference or corruption in runs-on arms (keep LOAD_RUNS=0 as the default);
+  - occupancy loss (gprs > 208);
+  - removal.
+- Recovery: rec2048h.
+- Hashes: sys ef0db509f1d5, UmdArm64 bd60e677199a, UmdX64 c7748b0696b3, Umd32 2b475fe50980; manifest 2130b7144085, hardware-manifest 80a8a8fde055; probe2048.sh d1b03c9d4f21 (PROBE_LINT_OK); visible recovery rec2048h 467e134d0289d1cb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2048h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2048-load-runs/run2048.sh.
