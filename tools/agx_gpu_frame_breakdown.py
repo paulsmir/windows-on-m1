@@ -252,6 +252,60 @@ def analyze(lines, skip=0.3):
     return frames, summary
 
 
+def positions(lines, skip=0.3):
+    """rc94 --jobs: medians per job position of the frames with the most
+    common job sequence (R render, C compute). A job's launch is its compute
+    kick, or a render's prelude kick (lo -> prelude start); to_ta is a
+    render's lo -> TA end (launch, prelude and TA). late: submitted (KMD
+    SubmitCommand) no earlier than the previous own job's completion, so
+    nothing of it could be built while that job ran. foreign: the completion
+    sequence skipped a number, i.e. another process's job (the ring is per
+    adapter, AdmissionGpuCompletionRead filters by process) completed between
+    the previous own job and this one."""
+    pid, hz, jobs, presents = parse(lines)
+    timeline(jobs, hz)
+    previous = {j['seq']: p for p, j in zip([None] + jobs[:-1], jobs)}
+    by_cmp = sorted(jobs, key=lambda j: j['cmp'])
+    keys = [j['cmp'] for j in by_cmp]
+    first = int(len(presents) * skip)
+    framed = []
+    for a, b in zip(presents[first:-1], presents[first + 1:]):
+        js = by_cmp[bisect.bisect_left(keys, a):bisect.bisect_left(keys, b)]
+        if js:
+            framed.append((''.join('R' if j['kind'] == RENDER else 'C' for j in js), js))
+    counts = {}
+    for sig, _ in framed:
+        counts[sig] = counts.get(sig, 0) + 1
+    if not counts:
+        return dict(signature='', frames=0, of_frames=0, positions=[])
+    signature = max(counts, key=lambda s: (counts[s], s))
+    ms = lambda q: q * 1e3 / hz
+    cols = [dict() for _ in signature]
+    for sig, js in framed:
+        if sig != signature:
+            continue
+        for c, j in zip(cols, js):
+            p = previous[j['seq']]
+            values = dict(span=j['span'], detect=j['detect'],
+                          late=1.0 if p is not None and j['sub'] >= p['cmp'] else 0.0,
+                          foreign=1.0 if p is not None and j['seq'] - p['seq'] > 1 else 0.0)
+            if j['kind'] == COMPUTE:
+                values.update(exact=j['exact'], launch=j['kick'])
+            else:
+                values.update(d3=j['d3'], launch=j['prelude_kick'], prelude=j['prelude'], ta=j['ta'],
+                              to_ta=ms(j['ta_q'] - j['lo']) if j['ta_q'] is not None else None)
+            for k, v in values.items():
+                if v is not None:
+                    c.setdefault(k, []).append(v)
+    out = []
+    for kind, c in zip(signature, cols):
+        row_ = dict(kind=kind)
+        for k, v in c.items():
+            row_[k] = statistics.mean(v) if k in ('late', 'foreign') else statistics.median(v)
+        out.append(row_)
+    return dict(signature=signature, frames=counts[signature], of_frames=len(framed), positions=out)
+
+
 KMD_PHASES = ('submit', 'worker', 'begin_before', 'begin_after', 'backend_before', 'kick_ta',
               'kick_3d', 'backend_after', 'first_progress', 'complete', 'job_end', 'notify')
 KMD_HEADER = struct.Struct('<IIIIQQ')
@@ -397,6 +451,8 @@ def main():
                         help='fraction of leading frames to drop (load, warm-up)')
     parser.add_argument('--csv')
     parser.add_argument('--kmd-timing', help='decode a Wom1JobTiming971(Hot) registry snapshot instead')
+    parser.add_argument('--jobs', action='store_true',
+                        help='rc94: add per-position medians of the most common job sequence')
     args = parser.parse_args()
     if args.kmd_timing:
         with open(args.kmd_timing, 'rb') as handle:
@@ -405,7 +461,10 @@ def main():
     if not args.log:
         parser.error('a UMD log or --kmd-timing is required')
     with open(args.log, errors='ignore') as handle:
-        frames, summary = analyze(handle, args.skip)
+        lines = [line for line in handle if line.startswith(('measure-gpu-', 'measure-d3d12-present'))]
+    frames, summary = analyze(lines, args.skip)
+    if args.jobs:
+        summary['jobs_by_position'] = positions(lines, args.skip)
     if args.csv and frames:
         with open(args.csv, 'w', newline='') as out:
             writer = csv.DictWriter(out, fieldnames=list(frames[0]))

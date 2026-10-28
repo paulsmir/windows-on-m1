@@ -24,6 +24,10 @@ the header's worker flags; the decoder splits the CPU-bound intervals by
 job kind (a render has a TA kick) and by the class of the processor that ran
 them, counts the BeginJobs that found the mapping generation unchanged, and
 still reads v1 snapshots.
+rc94 (--jobs): per-position medians use only the frames of the most common
+job sequence; a job is late when the KMD received it no earlier than the
+previous own job's completion and foreign when another process's completion
+took a sequence number in between.
 """
 from pathlib import Path
 import importlib.util
@@ -122,6 +126,30 @@ class GpuFrameBreakdown(unittest.TestCase):
         self.assertEqual(g['c_work_jobs'], 0)
         self.assertAlmostEqual(g['idle_ms'], 100 - 20 - 5)
         self.assertEqual(g['c_kick_jobs'], 0)  # job 8's start is stale
+
+    def test_positions_late_and_foreign_jobs(self):
+        b = load()
+        log = [present(0)]
+        log += job(1, 2, 1, 5, start=2, end=5)                         # C: launch 1
+        log += job(2, 1, 3, 20, end=20, ta_end=12)                     # R queued: lo 5
+        log += [prelude(2, 6, 7)]
+        log += [present(30)]
+        log += job(3, 2, 15, 35, start=21.5, end=35)                   # C queued: lo 20, launch 1.5
+        log += job(5, 1, 36, 50, end=50, ta_end=40)                    # R late, seq 4 foreign
+        log += [prelude(5, 38, 39)]
+        log += [present(60)]
+        log += job(6, 1, 61, 70, end=70, ta_end=65)                    # another sequence (R only)
+        log += [present(90)]
+        out = b.positions(log, skip=0)
+        self.assertEqual((out['signature'], out['frames'], out['of_frames']), ('CR', 2, 3))
+        c, r = out['positions']
+        self.assertEqual((c['kind'], r['kind']), ('C', 'R'))
+        self.assertAlmostEqual(c['launch'], (1 + 1.5) / 2)
+        self.assertAlmostEqual(r['launch'], (1 + 2) / 2)                # 6 - 5, 38 - 36
+        self.assertAlmostEqual(r['late'], 0.5)
+        self.assertAlmostEqual(r['foreign'], 0.5)
+        self.assertAlmostEqual(c['late'], 0.0)
+        self.assertAlmostEqual(r['to_ta'], (7 + 4) / 2)
 
     def test_failed_job_has_no_firmware_time(self):
         b = load()
