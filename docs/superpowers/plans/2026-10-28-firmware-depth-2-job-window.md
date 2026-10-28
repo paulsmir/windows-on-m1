@@ -79,3 +79,66 @@ fragment barrier on the vertex stamp, `queue/render.rs:355-373`).
 Recovery for every step: the standard GPU-visible baseline and rollback
 (recNNNNh/recover.sh, durable preflight). A queue reset reinitialises the
 stamps and rings (TaFirstRun) and must clear both in-flight entries.
+
+## rc95 findings (offline, source only) and the revised order
+
+Sources: Asahi `workqueue.rs`, `queue/mod.rs`, `queue/render.rs`,
+`gpu.rs`, `event.rs`, `buffer.rs` (`.local/reference/asahi-linux-asahi`,
+G13 V13.5, the J313 firmware); this tree at rc94.
+
+- **Order without the CPU.** N+1's first queue leads with a firmware
+  Barrier on N's last stamp (Asahi explicit `vdm_barrier`/`cdm_barrier`,
+  `queue/mod.rs:787-820`). Windows' in-order node semantics stay exactly
+  depth 1; only the KMD work and the kick latency leave the critical path.
+  The TA Barrier on a compute stamp is hardware-validated (D3D-G1b).
+- **U2 (second doorbell while busy): answered by source.**
+  `JobSubmission::run` publishes the new wptr and sends RunWorkQueue with
+  `is_new = false` whatever the queue still holds (`workqueue.rs:500-531`,
+  `gpu.rs:1101-1126`); `can_submit` checks only free slots and ring space
+  (`workqueue.rs:391-394`).
+- **U4 (completion accounting): the notifier threshold defers N's event.**
+  Asahi raises the threshold by the job's notification count when the job
+  runs (`queue/mod.rs:284-330`, `notification_count = 2*nr_render +
+  nr_compute`, `:741`); the firmware raises the event only at the
+  threshold (EXP1278 deadlock). Our builds write the threshold absolutely
+  (`apple_agx_render_shared_memory.c:918-934` render, `:742-750` compute), so
+  N+1's build moves it past N: N's event arrives when N+1 ends. Our
+  completion requires the event (`apple_agx_g13_queue_runtime.c:554`,
+  `apple_agx_g13_codec.c:175`). Asahi's `signal()` completes every command
+  whose driver stamp reached its value (`workqueue.rs:852-940`). Unknown:
+  whether the driver stamp itself waits for the threshold (EXP1213 saw a
+  compute done pointer advance with stamp 0, off the notifier). The rc95
+  receipt mode measures it on the default depth-1 path: a render's TA
+  (1 of its 2 notifications) and a prelude (1 of 3) end before their
+  threshold is reached.
+- **U5 (fault with two outstanding).** Asahi marks every pending stamp
+  record (`gpu.rs:1004-1040`, culprit slot -> error, others Killed) and
+  resumes (`gpu.rs:1059-1095`); later queue entries keep running. Our model
+  covers both outcomes (N+1 runs after the drop, or is killed with it).
+- **U6 (slot reuse).** Asahi frees a command's objects when `signal()`
+  sees its stamp (`workqueue.rs:910-916`). With depth 2 and parity slots,
+  N+2 is built only after N is reported.
+- **U7 (compute sidecar).** G4 compute jobs and v5 preludes use the
+  envelope's preemption buffer (`backend_platform_windows.c:2919`,
+  `:3184`); a job owns only the sidecar's work (0x8000), microsequence
+  (0x8400), TA barrier (0x8800) and timestamp (0x9000-0x9420) words.
+  A second set fits in the free 0x9420-0xc000 range of object 39; the
+  statistics, firmware stamp and gpu_buf stay shared (work-queue owned).
+- **U1 is rarely needed.** Each private-scene render's manager key carries
+  its scene storage (`gpuva_g3_windows.c:3705-3716`), and the GravityMark
+  frame alternates compute and render (CRCRCRCR after rc94). Render ->
+  render pairs need the same scene; compute <-> render pairs share no
+  manager objects.
+- **VidSch gating.** sub(N) ~ cmp(N-2) + 50 us (rc94): when N is kicked,
+  N+1 is (about) submitted and N+2 is not. Depth 2 is the deepest window
+  VidSch fills; a depth-2 window always has N+1 to kick.
+
+Revised order (each one hardware variable):
+1. rc95: decisions + window model (`render_job_window.c`) and receipt mode
+   (`Wom1JobDepth2`, timing v4): pair classes, refusals, successor lead,
+   TA/prelude stamp lags. Decides U4 and which capability unlocks the most.
+2. Second sidecar job-word set (U7) and the compute-queue Barrier.
+3. Queue runtime/provider/backend: two outstanding entries, completion of
+   the older one from its own stamps (if U4 allows) or batched with N+1.
+4. KMD window: G3 lease count for one process, second BeginJob, chain of a
+   kicked successor, preempt/reset over both entries (render_job_window.c).
