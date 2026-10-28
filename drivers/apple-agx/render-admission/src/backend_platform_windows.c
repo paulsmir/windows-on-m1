@@ -190,6 +190,15 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   volatile LONG WorkersActive;
   volatile LONG Stopping;
   volatile LONG Resetting;
+  /* rc81: the dedicated job worker thread (NULL: the work item runs the
+   * worker). JobThreadRequest is set before JobThreadWake, so no request
+   * is lost; JobThreadAffinity.Mask 0 = not pinned. */
+  PVOID JobThreadObject;
+  KEVENT JobThreadWake;
+  KEVENT JobThreadExited;
+  volatile LONG JobThreadRequest;
+  volatile LONG JobThreadStop;
+  GROUP_AFFINITY JobThreadAffinity;
   volatile LONG64 LastProgressMs;
   APPLE_AGX_G13_QUEUE_PROGRESS Progress;
   BOOLEAN ProgressValid;
@@ -267,6 +276,10 @@ C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 184);
  * wait (ADMISSION_RESET_QUIESCE_TIMEOUT_MS), after the firmware has had the
  * whole TdrDelay since its resume to retire the job itself. */
 #define ADMISSION_FORCE_CHANNEL_AFTER_MS 100u
+
+/* rc81: the job thread's priority, that of the DelayedWorkQueue system
+ * worker threads whose work item ran the job worker before. */
+#define ADMISSION_JOB_THREAD_PRIORITY 12
 
 /* 1 ms in 100-ns units (ExSetTimerResolution). */
 #define ADMISSION_PLATFORM_TIMER_RESOLUTION 10000u
@@ -4872,6 +4885,115 @@ static VOID AdmissionPlatformWorker(
   AdmissionPlatformWorkerFinished(runtime);
 }
 
+/* rc81 (EXP2010): the job worker on a dedicated system thread instead of
+ * an IoQueueWorkItem(DelayedWorkQueue) per job: no queue hop between a
+ * job's completion and the next job's kick, and the thread can be kept on
+ * the performance cores. The same 3.8x of every CPU-bound KMD interval
+ * (render build 64-84 vs 261-273 us, completion to job end 18-27 vs 72-77
+ * us) appeared whenever the work item ran on an Icestorm core. Pinning
+ * only restricts where the unchanged worker runs; its busy-poll keeps one
+ * vCPU busy while a job runs, as before (rc72). */
+static VOID AdmissionJobThread(PVOID Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = (ADMISSION_PLATFORM_RUNTIME *)Context;
+  GROUP_AFFINITY previous;
+  BOOLEAN pinned = FALSE;
+  if (runtime == NULL) {
+    PsTerminateSystemThread(STATUS_INVALID_PARAMETER);
+    return;
+  }
+  RtlZeroMemory(&previous, sizeof(previous));
+  (void)KeSetPriorityThread(KeGetCurrentThread(), ADMISSION_JOB_THREAD_PRIORITY);
+  if (runtime->JobThreadAffinity.Mask != 0u) {
+    KeSetSystemGroupAffinityThread(&runtime->JobThreadAffinity, &previous);
+    pinned = TRUE;
+  }
+  for (;;) {
+    (void)KeWaitForSingleObject(&runtime->JobThreadWake, Executive,
+                                KernelMode, FALSE, NULL);
+    /* A request is consumed before a stop is honoured; Destroy stops the
+     * thread only once the worker is idle. */
+    if (InterlockedExchange(&runtime->JobThreadRequest, 0) != 0)
+      AdmissionPlatformWorker(runtime->Adapter->PhysicalDeviceObject,
+                              runtime->Adapter);
+    if (InterlockedCompareExchange(&runtime->JobThreadStop, 0, 0) != 0)
+      break;
+  }
+  if (pinned)
+    KeRevertToUserGroupAffinityThread(&previous);
+  KeSetEvent(&runtime->JobThreadExited, IO_NO_INCREMENT, FALSE);
+  PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+/* rc81: start the job thread at runtime start, before the work item that
+ * makes the runtime submittable. Device values (read once): Wom1JobThreadOff
+ * = 1 keeps the work item; Wom1JobThreadAnyCore = 1 starts the thread
+ * unpinned. A topology without two efficiency classes is not pinned; any
+ * failure leaves the work item as the worker. */
+static BOOLEAN AdmissionPlatformSwitchEnabled(ADMISSION_CONTEXT *Context,
+                                             PCWSTR ValueName);
+static VOID AdmissionJobThreadStart(ADMISSION_CONTEXT *Context,
+    ADMISSION_PLATFORM_RUNTIME *runtime) {
+  OBJECT_ATTRIBUTES attributes;
+  HANDLE thread = NULL;
+  NTSTATUS status;
+  ULONG efficiency = 0u, cores = 0u;
+  runtime->JobThreadObject = NULL;
+  KeInitializeEvent(&runtime->JobThreadWake, SynchronizationEvent, FALSE);
+  KeInitializeEvent(&runtime->JobThreadExited, NotificationEvent, FALSE);
+  InterlockedExchange(&runtime->JobThreadRequest, 0);
+  InterlockedExchange(&runtime->JobThreadStop, 0);
+  RtlZeroMemory(&runtime->JobThreadAffinity, sizeof(runtime->JobThreadAffinity));
+  if (AdmissionPlatformSwitchEnabled(Context, L"Wom1JobThreadOff"))
+    return;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (!AdmissionPlatformSwitchEnabled(Context, L"Wom1JobThreadAnyCore")) {
+    ADMISSION_JOB_WORKER_CORE topology[32];
+    ULONG count = 0u, index;
+    USHORT group = 0u;
+    ULONGLONG mask = 0ULL;
+    AdmissionJobTopologyWindows(runtime, topology, (ULONG)RTL_NUMBER_OF(topology),
+                                &count);
+    if (AdmissionJobWorkerAffinity(topology, count, &group, &mask)) {
+      runtime->JobThreadAffinity.Group = group;
+      runtime->JobThreadAffinity.Mask = (KAFFINITY)mask;
+      for (index = 0u; index < count; ++index)
+        if (topology[index].EfficiencyClass > efficiency)
+          efficiency = topology[index].EfficiencyClass;
+      for (index = 0u; index < 64u; ++index)
+        if (mask & (1ULL << index)) ++cores;
+    }
+  }
+#endif
+  InitializeObjectAttributes(&attributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+  status = PsCreateSystemThread(&thread, THREAD_ALL_ACCESS, &attributes,
+                                NULL, NULL, AdmissionJobThread, runtime);
+  if (!NT_SUCCESS(status))
+    return;
+  status = ObReferenceObjectByHandle(thread, SYNCHRONIZE, *PsThreadType,
+                                     KernelMode, &runtime->JobThreadObject,
+                                     NULL);
+  if (!NT_SUCCESS(status)) {
+    /* Without the object Destroy could not wait for it: stop it now (it
+     * has no request: the runtime is not submittable yet). */
+    runtime->JobThreadObject = NULL;
+    InterlockedExchange(&runtime->JobThreadStop, 1);
+    KeSetEvent(&runtime->JobThreadWake, IO_NO_INCREMENT, FALSE);
+    (void)KeWaitForSingleObject(&runtime->JobThreadExited, Executive,
+                                KernelMode, FALSE, NULL);
+  }
+  (void)ZwClose(thread);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (runtime->JobThreadObject != NULL)
+    runtime->JobTiming.WorkerFlags = ADMISSION_JOB_WORKER_THREAD |
+        (runtime->JobThreadAffinity.Mask != 0u ?
+             ADMISSION_JOB_WORKER_PINNED | (efficiency & 0xffu) << 8 |
+                 (cores & 0xffu) << 16 : 0u);
+#else
+  UNREFERENCED_PARAMETER(efficiency);
+  UNREFERENCED_PARAMETER(cores);
+#endif
+}
+
 _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeSubmit(
     ADMISSION_CONTEXT *Context) {
   KIRQL oldIrql;
@@ -4891,8 +5013,16 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeSubmit(
   }
   KeClearEvent(&runtime->WorkIdle);
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
-  IoQueueWorkItem(runtime->WorkItem, AdmissionPlatformWorker,
-                  DelayedWorkQueue, Context);
+  if (runtime->JobThreadObject != NULL) {
+    /* rc81: the dedicated thread runs the worker. WorkScheduled admits one
+     * request at a time; a successor dispatched from the worker's finished
+     * path is taken by the same thread without a work-item hop. */
+    InterlockedExchange(&runtime->JobThreadRequest, 1);
+    KeSetEvent(&runtime->JobThreadWake, IO_NO_INCREMENT, FALSE);
+  } else {
+    IoQueueWorkItem(runtime->WorkItem, AdmissionPlatformWorker,
+                    DelayedWorkQueue, Context);
+  }
   return TRUE;
 }
 
@@ -4941,6 +5071,20 @@ static NTSTATUS AdmissionPlatformDestroy(
     Runtime->WorkItem = NULL;
     KeReleaseSpinLock(&Runtime->Adapter->SchedulerLock, oldIrql);
     IoFreeWorkItem(workItem);
+  }
+  if (Runtime->JobThreadObject != NULL) {
+    /* rc81: Stopping refuses new requests and the worker is idle (the
+     * WorkIdle wait above, or never submittable); wait for the thread
+     * itself so no driver code runs after Destroy. */
+    if (InterlockedCompareExchange(&Runtime->WorkScheduled, 0, 0) != 0 ||
+        InterlockedCompareExchange(&Runtime->WorkersActive, 0, 0) != 0)
+      return STATUS_DEVICE_BUSY;
+    InterlockedExchange(&Runtime->JobThreadStop, 1);
+    KeSetEvent(&Runtime->JobThreadWake, IO_NO_INCREMENT, FALSE);
+    (void)KeWaitForSingleObject(Runtime->JobThreadObject, Executive,
+                                KernelMode, FALSE, NULL);
+    ObDereferenceObject(Runtime->JobThreadObject);
+    Runtime->JobThreadObject = NULL;
   }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (Runtime->CompletedOutput.Phase != AdmissionCompletedOutputEmpty &&
@@ -5374,6 +5518,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   status=STATUS_DEVICE_HARDWARE_ERROR; /* stop before automatic Windows workloads */
   goto Fail;
 #endif
+  AdmissionJobThreadStart(Context, runtime);
   runtime->WorkItem = IoAllocateWorkItem(Context->PhysicalDeviceObject);
   if (runtime->WorkItem == NULL) {
     status = STATUS_INSUFFICIENT_RESOURCES;

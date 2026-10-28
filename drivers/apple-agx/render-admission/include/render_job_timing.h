@@ -93,6 +93,14 @@ typedef struct _ADMISSION_JOB_WORKER_CORE {
   unsigned char EfficiencyClass;
   unsigned char Reserved[5];
 } ADMISSION_JOB_WORKER_CORE;
+/* The job worker's processors (EXP2010: the CPU-bound build, completion
+ * and BeginJob took 3.8x longer on an Icestorm, efficiency class 0, than on
+ * a Firestorm, class 1, core): every core of the highest efficiency class
+ * in the processor group of the first such core; returns 1 with *Group and
+ * *Mask. Returns 0 and leaves them unchanged (do not pin) for no cores, one
+ * class only, or no processor in the top class. */
+int AdmissionJobWorkerAffinity(const ADMISSION_JOB_WORKER_CORE *Cores,
+    unsigned int Count, unsigned short *Group, unsigned long long *Mask);
 
 /* EXP1073: completion poll schedule of the job worker. EXP1072: 62 of 63
  * jobs completed inside the first 1 ms sleep after the kick, so detection

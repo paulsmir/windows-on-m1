@@ -94,6 +94,30 @@ int AdmissionJobTimingFlag(ADMISSION_JOB_TIMING_STATE *state,
   return 1;
 }
 
+int AdmissionJobWorkerAffinity(const ADMISSION_JOB_WORKER_CORE *cores,
+    unsigned int count, unsigned short *group, unsigned long long *mask) {
+  unsigned int i, first = count;
+  unsigned int lowest = 0x100u, highest = 0u;
+  unsigned long long selected = 0ull;
+  if (!cores || !count || !group || !mask) return 0;
+  for (i = 0; i < count; ++i) {
+    unsigned int efficiency = cores[i].EfficiencyClass;
+    if (!cores[i].Mask) continue;
+    if (efficiency < lowest) lowest = efficiency;
+    if (efficiency > highest) highest = efficiency;
+  }
+  if (lowest == 0x100u || lowest == highest) return 0;
+  for (i = 0; i < count; ++i)
+    if (cores[i].Mask && cores[i].EfficiencyClass == highest) {
+      if (first == count) first = i;
+      if (cores[i].Group == cores[first].Group) selected |= cores[i].Mask;
+    }
+  if (first == count || !selected) return 0;
+  *group = cores[first].Group;
+  *mask = selected;
+  return 1;
+}
+
 unsigned long long AdmissionJobTimingDeltaUs(
     const ADMISSION_JOB_TIMING_STATE *state,
     const ADMISSION_JOB_TIMING_SLOT *slot,

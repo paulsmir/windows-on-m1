@@ -142,7 +142,184 @@ int main(void) {
 '''
 
 
+THREAD_SHIM = r'''
+#include <assert.h>
+#include <stddef.h>
+#include <string.h>
+#define _Use_decl_annotations_
+#define _In_
+#define _In_opt_
+#define TRUE 1
+#define FALSE 0
+#define IO_NO_INCREMENT 0
+#define DelayedWorkQueue 1
+#define Executive 0
+#define KernelMode 0
+#define STATUS_SUCCESS 0
+#define STATUS_INVALID_PARAMETER 1
+#define AppleAgxBackendRuntimeReady 2
+#define ADMISSION_JOB_THREAD_PRIORITY_EXPECTED 12
+#define VOID void
+typedef int BOOLEAN; typedef int LONG; typedef int KIRQL; typedef int NTSTATUS;
+typedef unsigned long long KAFFINITY; typedef void *PVOID;
+typedef struct { int Signaled; } KEVENT;
+typedef struct { KAFFINITY Mask; unsigned short Group; } GROUP_AFFINITY;
+typedef struct { int Unused; } DEVICE_OBJECT, *PDEVICE_OBJECT;
+typedef struct _ADMISSION_CONTEXT {
+  int SchedulerLock; void *PlatformRuntime; PDEVICE_OBJECT PhysicalDeviceObject;
+} ADMISSION_CONTEXT;
+typedef struct {
+  ADMISSION_CONTEXT *Adapter; struct { int Phase; } Backend; void *WorkItem;
+  KEVENT WorkIdle; volatile LONG WorkScheduled, Stopping, Resetting;
+  PVOID JobThreadObject; KEVENT JobThreadWake, JobThreadExited;
+  volatile LONG JobThreadRequest, JobThreadStop; GROUP_AFFINITY JobThreadAffinity;
+} ADMISSION_PLATFORM_RUNTIME;
+static int locks, work_items, workers, pinned_calls, reverted, terminated, priority, waits;
+static int pinned_now, stop_on_block, nested_submits;
+static ADMISSION_PLATFORM_RUNTIME *rt;
+static void KeAcquireSpinLock(int *l, KIRQL *i) { (void)l; *i = 2; assert(!locks); ++locks; }
+static void KeReleaseSpinLock(int *l, KIRQL i) { (void)l; (void)i; assert(locks == 1); --locks; }
+static LONG InterlockedCompareExchange(volatile LONG *p, LONG v, LONG e) { LONG o = *p; if (o == e) *p = v; return o; }
+static LONG InterlockedExchange(volatile LONG *p, LONG v) { LONG o = *p; *p = v; return o; }
+static void KeClearEvent(KEVENT *e) { e->Signaled = 0; }
+static LONG KeSetEvent(KEVENT *e, int n, BOOLEAN w) {
+  (void)n; (void)w; assert(!locks);
+  /* no lost wakeup: a wake of the job thread is preceded by its request or stop */
+  if (e == &rt->JobThreadWake) assert(rt->JobThreadRequest || rt->JobThreadStop);
+  if (e == &rt->JobThreadExited) assert(!pinned_now && !terminated);
+  e->Signaled = 1; return 0;
+}
+static NTSTATUS KeWaitForSingleObject(void *o, int r, int m, BOOLEAN a, void *t) {
+  KEVENT *e = (KEVENT *)o; (void)r; (void)m; (void)a; (void)t; ++waits;
+  assert(e == &rt->JobThreadWake && !locks);
+  if (!e->Signaled) {
+    /* the thread would block: the model's Destroy stops it now */
+    assert(stop_on_block);
+    rt->JobThreadStop = 1; e->Signaled = 1;
+  }
+  e->Signaled = 0; /* SynchronizationEvent */
+  return STATUS_SUCCESS;
+}
+static void IoQueueWorkItem(void *w, void *f, int q, void *c) { (void)w; (void)f; assert(q == DelayedWorkQueue && c == rt->Adapter); ++work_items; }
+static void *KeGetCurrentThread(void) { return &priority; }
+static LONG KeSetPriorityThread(void *t, LONG p) { assert(t == &priority); priority = p; return 8; }
+static void KeSetSystemGroupAffinityThread(GROUP_AFFINITY *a, GROUP_AFFINITY *p) {
+  assert(a == &rt->JobThreadAffinity && a->Mask == 0xf0u && p); ++pinned_calls; pinned_now = 1; p->Mask = 0xffu; p->Group = 0; }
+static void KeRevertToUserGroupAffinityThread(GROUP_AFFINITY *p) { assert(p->Mask == 0xffu && pinned_now); pinned_now = 0; ++reverted; }
+static void PsTerminateSystemThread(NTSTATUS s) { assert(s == STATUS_SUCCESS); ++terminated; }
+static void RtlZeroMemory(void *p, size_t n) { memset(p, 0, n); }
+static BOOLEAN AdmissionPlatformRuntimeSubmit(ADMISSION_CONTEXT *Context);
+/* The worker: its finished path clears WorkScheduled and dispatches the
+ * queued successor (AdmissionPlatformWorkerFinished -> AdmissionDispatchQueuedWork). */
+static void AdmissionPlatformWorker(PDEVICE_OBJECT d, PVOID c) {
+  assert(d == rt->Adapter->PhysicalDeviceObject && c == rt->Adapter);
+  assert(rt->WorkScheduled == 1 && !rt->JobThreadRequest);
+  assert(pinned_now == (rt->JobThreadAffinity.Mask != 0) && priority == ADMISSION_JOB_THREAD_PRIORITY_EXPECTED);
+  ++workers;
+  rt->WorkScheduled = 0;
+  if (nested_submits) { --nested_submits; assert(AdmissionPlatformRuntimeSubmit(rt->Adapter)); }
+}
+'''
+
+THREAD_CASES = r'''
+static void reset(ADMISSION_CONTEXT *a, ADMISSION_PLATFORM_RUNTIME *r, int thread, KAFFINITY mask) {
+  static int object;
+  memset(a, 0, sizeof(*a)); memset(r, 0, sizeof(*r)); rt = r;
+  static DEVICE_OBJECT device; a->PhysicalDeviceObject = &device;
+  a->PlatformRuntime = r; r->Adapter = a; r->WorkItem = r; r->WorkIdle.Signaled = 1;
+  r->Backend.Phase = AppleAgxBackendRuntimeReady; r->JobThreadObject = thread ? &object : NULL;
+  r->JobThreadAffinity.Mask = mask;
+  work_items = workers = pinned_calls = reverted = terminated = priority = waits = 0;
+  pinned_now = stop_on_block = nested_submits = 0;
+}
+int main(void) {
+  ADMISSION_CONTEXT a; ADMISSION_PLATFORM_RUNTIME r;
+  /* no dedicated thread: the work item stays the worker */
+  reset(&a, &r, 0, 0);
+  assert(AdmissionPlatformRuntimeSubmit(&a) && work_items == 1 && !r.JobThreadWake.Signaled);
+  assert(r.WorkScheduled == 1 && !r.WorkIdle.Signaled);
+  assert(!AdmissionPlatformRuntimeSubmit(&a) && work_items == 1); /* one at a time */
+  /* dedicated thread: no work item; request then wake */
+  reset(&a, &r, 1, 0xf0u);
+  assert(AdmissionPlatformRuntimeSubmit(&a) && !work_items);
+  assert(r.JobThreadRequest == 1 && r.JobThreadWake.Signaled && r.WorkScheduled == 1);
+  assert(!AdmissionPlatformRuntimeSubmit(&a));
+  /* the successor dispatched from inside the worker runs next on the same
+   * thread; three jobs, then the thread blocks and is stopped */
+  nested_submits = 2; stop_on_block = 1;
+  AdmissionJobThread(&r);
+  assert(workers == 3 && !work_items && terminated == 1 && r.JobThreadExited.Signaled);
+  assert(pinned_calls == 1 && reverted == 1 && !pinned_now);
+  assert(!r.JobThreadRequest && waits == 4);
+  /* a stop raced with a pending request: the request still runs once */
+  reset(&a, &r, 1, 0);
+  assert(AdmissionPlatformRuntimeSubmit(&a));
+  r.JobThreadStop = 1;
+  AdmissionJobThread(&r);
+  assert(workers == 1 && terminated == 1 && !pinned_calls && !reverted && waits == 1);
+  /* refused while stopping or resetting, or not ready */
+  reset(&a, &r, 1, 0); r.Stopping = 1; assert(!AdmissionPlatformRuntimeSubmit(&a));
+  reset(&a, &r, 1, 0); r.Resetting = 1; assert(!AdmissionPlatformRuntimeSubmit(&a));
+  reset(&a, &r, 1, 0); r.WorkItem = NULL; assert(!AdmissionPlatformRuntimeSubmit(&a));
+  assert(!r.JobThreadWake.Signaled && !r.JobThreadRequest);
+  return 0;
+}
+'''
+
+
+class JobWorkerThread(unittest.TestCase):
+    def test_thread_runs_each_request_once_without_work_item_hop(self):
+        source = BACKEND.read_text()
+        priority = re.search(r"#define ADMISSION_JOB_THREAD_PRIORITY (\d+)", source)
+        self.assertIsNotNone(priority, "missing ADMISSION_JOB_THREAD_PRIORITY")
+        # DelayedWorkQueue threads, which ran the worker before, run at 12.
+        self.assertEqual(priority.group(1), "12")
+        functions = "\n".join(function_body(source, name) for name in
+                              ("AdmissionPlatformRuntimeSubmit", "AdmissionJobThread"))
+        functions = functions.replace("ADMISSION_JOB_THREAD_PRIORITY",
+                                      "ADMISSION_JOB_THREAD_PRIORITY_EXPECTED")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "thread.c"
+            exe = Path(directory) / "thread"
+            path.write_text(THREAD_SHIM + functions + THREAD_CASES)
+            built = subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
+                                    "-Werror", "-fsanitize=address,undefined", str(path), "-o", str(exe)],
+                                   capture_output=True, text=True)
+            self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
+            ran = subprocess.run([str(exe)], capture_output=True, text=True)
+            self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+
+    def test_destroy_stops_the_idle_thread_and_waits_for_the_thread_object(self):
+        destroy = function_body(BACKEND.read_text(), "AdmissionPlatformDestroy")
+        idle = destroy.index("KeWaitForSingleObject(&Runtime->WorkIdle")
+        stop = destroy.index("InterlockedExchange(&Runtime->JobThreadStop, 1)")
+        self.assertLess(idle, stop)
+        tail = destroy[stop:]
+        self.assertRegex(tail, r"KeSetEvent\(&Runtime->JobThreadWake")
+        self.assertRegex(tail, r"KeWaitForSingleObject\(Runtime->JobThreadObject")
+        self.assertIn("ObDereferenceObject(Runtime->JobThreadObject)", tail)
+        # the busy check guards the stop (a retried Destroy must not strand a job)
+        block = destroy[destroy.rindex("if (Runtime->JobThreadObject != NULL)", 0, stop):stop]
+        self.assertIn("WorkScheduled", block)
+        self.assertIn("STATUS_DEVICE_BUSY", block)
+
+    def test_start_pins_only_from_the_topology_and_falls_back_to_the_work_item(self):
+        start = function_body(BACKEND.read_text(), "AdmissionJobThreadStart")
+        self.assertIn('L"Wom1JobThreadOff"', start)
+        self.assertIn('L"Wom1JobThreadAnyCore"', start)
+        self.assertIn("AdmissionJobWorkerAffinity(", start)
+        self.assertIn("PsCreateSystemThread(", start)
+        self.assertIn("ObReferenceObjectByHandle(", start)
+        # a thread that cannot be referenced is stopped and waited for, never leaked
+        failed = start[start.index("ObReferenceObjectByHandle("):]
+        self.assertIn("KeWaitForSingleObject(&runtime->JobThreadExited", failed)
+        self.assertIn("ZwClose(", failed)
+
+
 class JobWorkerHelpers(unittest.TestCase):
+    def test_affinity_selects_the_highest_efficiency_class(self):
+        build_and_run(self, AFFINITY)
+
     def test_timing_v2_records_processor_and_begin_flags(self):
         build_and_run(self, TIMING)
 
