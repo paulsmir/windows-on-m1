@@ -179,6 +179,18 @@ unsigned long long AdmissionPoolDemandSegmentBytes(unsigned long long RamBytes,
 unsigned long long AdmissionPoolDemandSegmentBytesEx(unsigned long long RamBytes,
                                                      unsigned long long WindowBytes,
                                                      unsigned long long BrokerBytes);
+/* rc88: as Ex, with ApertureReserve in place of
+ * ADMISSION_POOL_DEMAND_APERTURE_RESERVE. The shared system memory left to
+ * the aperture (NON_LOCAL group: TotalSystemMemoryAvailableForGraphics less
+ * the PopulatedFromSystemMemory segments) shrinks by what segment 3 gains.
+ * ADMISSION_POOL_DEMAND_APERTURE_RESERVE_HALF is the only other reserve
+ * pool_windows.c uses (Wom1PoolApertureReserveHalf=1): it keeps the native
+ * staging cap (64 MiB, a quarter of the aperture CommitLimit) under half of
+ * the NON_LOCAL budget VidMm derives from it (EXP1264: 90% of the group). */
+#define ADMISSION_POOL_DEMAND_APERTURE_RESERVE_HALF 0x8000000ULL /* 128 MiB */
+unsigned long long AdmissionPoolDemandSegmentBytesReserve(
+    unsigned long long RamBytes, unsigned long long WindowBytes,
+    unsigned long long BrokerBytes, unsigned long long ApertureReserve);
 
 /* Granules and CandidateList hold Count zeroed entries each. */
 int AdmissionPoolDemandInit(ADMISSION_POOL_DEMAND *Pool,

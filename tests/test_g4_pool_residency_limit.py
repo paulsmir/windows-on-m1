@@ -137,28 +137,43 @@ static int may_grow(void *ctx) { (void)ctx; return high; }
 int main(void) {
     const ULONGLONG m = 1ULL << 20;
     /* Independent arithmetic: 5988/2 - 256, aligned down to 64 = 2688. */
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 0, 0) == 2688*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 1, 0) == 1344*m);
-    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 0, 0) == 1024*m);
-    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 1, 0) == 512*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 1024*m, 1, 0) == 384*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 640*m, 4608*m, 1, 0) == 320*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 576*m, 4608*m, 1, 0) == 256*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 256*m, 4608*m, 1, 0) == 256*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 255*m, 4608*m, 1, 0) == 0);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 256*m, 1, 0) == 0);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 0, 1) == 2016*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 0, 0, 256*m) == 2688*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 1, 0, 256*m) == 1344*m);
+    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 0, 0, 256*m) == 1024*m);
+    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 1, 0, 256*m) == 512*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 1024*m, 1, 0, 256*m) == 384*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 640*m, 4608*m, 1, 0, 256*m) == 320*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 576*m, 4608*m, 1, 0, 256*m) == 256*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 256*m, 4608*m, 1, 0, 256*m) == 256*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 255*m, 4608*m, 1, 0, 256*m) == 0);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 256*m, 1, 0, 256*m) == 0);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 0, 1, 256*m) == 2016*m);
     /* HalfSize remains the conservative winner if both switches are set. */
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 1, 1) == 1344*m);
-    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 0, 1) == 768*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 640*m, 4608*m, 0, 1) == 480*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 256*m, 4608*m, 0, 1) == 256*m);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 255*m, 4608*m, 0, 1) == 0);
-    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 1024*m, 0, 1) == 576*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 1, 1, 256*m) == 1344*m);
+    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 0, 1, 256*m) == 768*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 640*m, 4608*m, 0, 1, 256*m) == 480*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 256*m, 4608*m, 0, 1, 256*m) == 256*m);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 255*m, 4608*m, 0, 1, 256*m) == 0);
+    assert(AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 1024*m, 0, 1, 256*m) == 576*m);
+    /* rc88: Wom1PoolApertureReserveHalf moves 128 MiB of the 50% share from
+     * the aperture reserve to segment 3: J313 expanded RAM (6884.4 MiB,
+     * EXP2019 Wom1M2PoolDemand v11) 3442.2 - 256 -> 3136 MiB, - 128 -> 3264
+     * MiB; never above the window or the broker table, and the fractions
+     * still apply to the larger bound. */
+    assert(AdmissionPoolSegmentBytes(7218794496ULL, 4608*m, 4608*m, 0, 0, 256*m) == 3136*m);
+    assert(AdmissionPoolSegmentBytes(7218794496ULL, 4608*m, 4608*m, 0, 0, 128*m) == 3264*m);
+    assert(AdmissionPoolSegmentBytes(7218794496ULL, 3200*m, 4608*m, 0, 0, 128*m) == 3200*m);
+    assert(AdmissionPoolSegmentBytes(7218794496ULL, 4608*m, 3456*m, 0, 0, 128*m) == 3200*m);
+    assert(AdmissionPoolSegmentBytes(7218794496ULL, 4608*m, 4608*m, 1, 0, 128*m) == 1600*m);
+    assert(AdmissionPoolSegmentBytes(0, 4096*m, 4608*m, 0, 0, 128*m) == 1024*m);
+    assert(AdmissionPoolDemandSegmentBytesEx(7218794496ULL, 4608*m, 4608*m) ==
+           AdmissionPoolDemandSegmentBytesReserve(7218794496ULL, 4608*m, 4608*m,
+                                                  ADMISSION_POOL_DEMAND_APERTURE_RESERVE));
+    assert(ADMISSION_POOL_DEMAND_APERTURE_RESERVE_HALF == 128*m);
     /* Use the real sizing result as the reservation cap, as pool start does. */
     ADMISSION_POOL_SLABS pool = {0};
     pool.NewSlab = alloc_slab; pool.FreeSlab = free_slab; pool.MayGrow = may_grow;
-    pool.ReserveCap = AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 0, 1) /
+    pool.ReserveCap = AdmissionPoolSegmentBytes(6279270400ULL, 4096*m, 4608*m, 0, 1, 256*m) /
                       ADMISSION_POOL_DEMAND_GRANULE;
     assert(pool.ReserveCap == 32256);
     /* A physical allocation failure rolls back only the attempted promise. */
@@ -198,6 +213,17 @@ int main(void) {
                            check=True)
             subprocess.run([str(exe)], check=True, timeout=10)
 
+    def test_only_dword_one_halves_the_aperture_reserve(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        rc88: a missing, mistyped or non-one Wom1PoolApertureReserveHalf must
+        keep the 256 MiB aperture reserve (and so the NON_LOCAL budget the
+        native staging arenas and DWM's aperture surfaces live in); only an
+        explicit DWORD 1 moves 128 MiB to segment 3. Every key is closed.
+        """
+        self.check_registry_reader('AdmissionPoolApertureReserveHalfEnabled',
+                                   'Wom1PoolApertureReserveHalf')
+
     def test_start_uses_one_bound_for_backing_and_vidmm(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 
@@ -210,6 +236,7 @@ int main(void) {
         self.assertIn('ULONGLONG bytes = AdmissionPoolSegmentBytes(', start)
         self.assertIn('AdmissionPoolHalfSizeEnabled(Context)', start)
         self.assertIn('AdmissionPoolThreeQuarterEnabled(Context)', start)
+        self.assertIn('AdmissionPoolApertureReserveHalfEnabled(Context) ?', start)
         self.assertIn('ULONGLONG count = bytes / ADMISSION_POOL_DEMAND_GRANULE;', start)
         self.assertIn('pool->Slabs.ReserveCap = count;', start)
         self.assertIn('Context->PoolBytes = bytes;', start)

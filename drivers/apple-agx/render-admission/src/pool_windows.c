@@ -974,9 +974,10 @@ static ULONGLONG AdmissionPoolSegmentBytes(ULONGLONG RamBytes,
                                           ULONGLONG WindowBytes,
                                           ULONGLONG BrokerBytes,
                                           BOOLEAN HalfSize,
-                                          BOOLEAN ThreeQuarter) {
-  ULONGLONG bytes = AdmissionPoolDemandSegmentBytesEx(
-      RamBytes, WindowBytes, BrokerBytes);
+                                          BOOLEAN ThreeQuarter,
+                                          ULONGLONG ApertureReserve) {
+  ULONGLONG bytes = AdmissionPoolDemandSegmentBytesReserve(
+      RamBytes, WindowBytes, BrokerBytes, ApertureReserve);
   if (HalfSize && bytes != 0ULL) {
     bytes = (bytes / 2ULL) & ~(ADMISSION_POOL_DEMAND_SIZE_STEP - 1ULL);
     if (bytes < ADMISSION_POOL_DEMAND_MIN_BYTES)
@@ -1048,6 +1049,39 @@ static BOOLEAN AdmissionPoolThreeQuarterEnabled(ADMISSION_CONTEXT *Context) {
   return enabled;
 }
 
+/* rc88: the LOCAL budget VidMm reports is 85% of segments 2 + 3 (EXP1264:
+ * 1788 of 2104 MiB; EXP1274: 2550 of 3000 MiB), about 2931 MiB on J313
+ * (312 + 3136 MiB), below the GravityMark FHD 200k working set. Only
+ * REG_DWORD Wom1PoolApertureReserveHalf=1 moves 128 MiB of the 50%-of-RAM
+ * graphics share from the aperture's shared system memory to segment 3
+ * (3136 -> 3264 MiB on 6884 MiB of RAM: LOCAL budget about +109 MiB,
+ * NON_LOCAL budget about 275 -> 160 MiB). Default and invalid values keep
+ * the 256 MiB reserve. */
+static BOOLEAN AdmissionPoolApertureReserveHalfEnabled(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1PoolApertureReserveHalf");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
 /* RC13: freeze the experimental placement policy before allocation creation. */
 static BOOLEAN AdmissionSysmemSpillEnabled(ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;
@@ -1110,7 +1144,10 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   ULONGLONG ram = AdmissionPoolRamBytes();
   ULONGLONG bytes = AdmissionPoolSegmentBytes(ram, Window->RequestedBytes,
       Context->PoolBrokerBytes, AdmissionPoolHalfSizeEnabled(Context),
-      AdmissionPoolThreeQuarterEnabled(Context));
+      AdmissionPoolThreeQuarterEnabled(Context),
+      AdmissionPoolApertureReserveHalfEnabled(Context) ?
+          ADMISSION_POOL_DEMAND_APERTURE_RESERVE_HALF :
+          ADMISSION_POOL_DEMAND_APERTURE_RESERVE);
   ULONGLONG count = bytes / ADMISSION_POOL_DEMAND_GRANULE;
   PHYSICAL_ADDRESS base;
   if (bytes == 0ULL) {

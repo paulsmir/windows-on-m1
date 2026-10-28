@@ -261,6 +261,13 @@ unsigned long long AdmissionPoolDemandSegmentBytes(unsigned long long RamBytes,
 unsigned long long AdmissionPoolDemandSegmentBytesEx(unsigned long long RamBytes,
                                                      unsigned long long WindowBytes,
                                                      unsigned long long BrokerBytes) {
+  return AdmissionPoolDemandSegmentBytesReserve(RamBytes, WindowBytes, BrokerBytes,
+                                                ADMISSION_POOL_DEMAND_APERTURE_RESERVE);
+}
+
+unsigned long long AdmissionPoolDemandSegmentBytesReserve(
+    unsigned long long RamBytes, unsigned long long WindowBytes,
+    unsigned long long BrokerBytes, unsigned long long ApertureReserve) {
   const unsigned long long sixteen = 16ULL << 30;
   unsigned long long broker = BrokerBytes ? BrokerBytes
                                           : ADMISSION_POOL_DEMAND_BROKER_BYTES;
@@ -276,8 +283,8 @@ unsigned long long AdmissionPoolDemandSegmentBytesEx(unsigned long long RamBytes
     unsigned long long above = RamBytes > sixteen ? RamBytes - sixteen : 0u;
     unsigned long long avail = above > half ? above : half;
     if (avail > eighty) avail = eighty;
-    if (avail <= ADMISSION_POOL_DEMAND_APERTURE_RESERVE) return 0u;
-    bytes = avail - ADMISSION_POOL_DEMAND_APERTURE_RESERVE;
+    if (avail <= ApertureReserve) return 0u;
+    bytes = avail - ApertureReserve;
   }
   if (bytes > cap) bytes = cap;
   bytes &= ~(ADMISSION_POOL_DEMAND_SIZE_STEP - 1u);
