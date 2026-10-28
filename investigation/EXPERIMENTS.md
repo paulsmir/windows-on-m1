@@ -65739,3 +65739,13 @@ EXP2028 HARDWARE BEFORE 2026-10-28T07:25:59Z:
 - Hashes: sys 631289d52c83, UmdArm64 06f6ff3b7cab, UmdX64 7438702e424f, Umd32 ea45d18b52d9; manifest 2c96a4352159, hardware-manifest c259b9fbf147; probe2028.sh 508e45ac71d5 (PROBE_LINT_OK); visible recovery rec2028h f5195badbfcd0786; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2028h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2028-d3d11-warm/run2028.sh.
+
+EXP2028 HARDWARE ACTUAL (2026-10-28): **D3D12 HD 50k 6906 (best); D3D11 warm 2449. rc91's cold-boot hypothesis is confirmed.**
+- D3D12 HD 50k: 6906 / 41.3 FPS (EXP2026 6803, EXP2023 6595); median 22.66 ms.
+  - First frame at 44.4 s, then a 6.55 s stall on frame 1→2 and 2.24 s on 2→3.
+  - So about 53 s of the 167 s window go to startup: the next score lever.
+- D3D11 HD 10k, second app after boot: 2449 / 14.7 FPS (cold EXP2025 2334, EXP2000 2529); median 70.86 ms.
+  - First frame at 12.7 s; frames 1→3 take 2.22 s (expected under 3 s).
+  - The remaining gap to EXP2000 is per-frame: 70.86 ms against 69.02 ms, and frames 1→3 took 1.82 s there.
+- The guest stayed alive and there were no removals.
+- Verdict: rc91 confirmed. The D3D11 cold-start cost is Windows first-touch page allocation, not the driver.
