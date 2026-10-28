@@ -65481,3 +65481,13 @@ EXP2017 HARDWARE BEFORE 2026-10-28T03:13:15Z:
 - Hashes: sys e6153ce3894e, UmdArm64 d53ab6389c5c, UmdX64 53fcc5380011, Umd32 a659a64dafa3; manifest 77a69f7b098e, hardware-manifest 7958f32e4fac; probe2017.sh ae1d56dfa2cf (PROBE_LINT_OK); visible recovery rec2017h 98d5068458ba1ff2; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2017h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2017-startup/run2017.sh.
+
+EXP2017 HARDWARE ACTUAL (2026-10-28): rc85 startup fixes; the memory thrash is confirmed by the new receipts.
+- FHD 100k: 3459 / 19.2 FPS. The first-frame gap was 43.5 s:
+  - the 129 MiB BC texture bind took 27.9 s, of which 18.4 s was residency (MakeResident, 41 trims of 659 MiB, its paging wait);
+  - a further 9.1 s paging wait;
+  - compile in the stall is only 0.06 s (eager PSOs work);
+  - the TransferMap shadowing is gone, but 3516 CPU texture copies took 3.4 s.
+- FHD 200k: **988 / 5.9 FPS**. The first-frame gap was only 20.0 s (53 trims, 1.28 GiB), but steady state thrashed: median frame 72.5 ms, p90 362 ms, 55 frames over 500 ms summing to 44.7 s. EXP2016 had 5 frames over 500 ms (4.2 s).
+- Conclusion: the GravityMark FHD working set (about 3.5 GiB at 100k, more at 200k) exceeds the LOCAL budget (about 2.9 GiB, segment 3136 MiB at 50% of 7.2 GB guest RAM). Residency thrash costs both startup and steady state. rc86 (trim recency) is next in EXP2018; the working-set size and budget remain the core issue.
+- Verdict: rc85 c41067f7 (eager PSO) and c814eb20 (staged discard) work as designed; their score effect is masked by the thrash. 6a1d2324 and cf323c59 validated (receipts and tool).
