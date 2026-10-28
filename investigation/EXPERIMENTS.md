@@ -66383,3 +66383,28 @@ EXP2048 HARDWARE ACTUAL (2026-10-28): **Fable load runs: small gain (FHD GPU spa
 - **Load runs:** the bdb1944a shader is only 1.4% faster despite about 25% fewer executed instructions offline, so it is not instruction-bound (memory or texture latency). Kept on (default).
 - **Anisotropy:** main 3D is unchanged with aniso 1 (8.45 vs 8.35 ms), so the main pass is not texture-tap bound. The next main-pass candidate is uncompressed render-target layouts (Fable (b)).
 - No removal or fault in 5 apps with the unified copy.
+
+EXP2049 HARDWARE BEFORE 2026-10-28T16:58:53Z:
+- EXP2048 code;
+- rc106 guest VidPN modes;
+- Fable fable-fs-kmd: the shared mode table, scanout window 0xa8, UMD primary/direct-flip gates for offered modes;
+- rc102 86d05b5d: refusal 64, sequence rollback, KickFail v2.
+**m1n1 changes to m1n1-74a4d8f4-scaled** (codex/m1n1-scaled on 075e3980 guestram): the broker advertises CAP_SCALED_SOURCE, accepts a non-native source with the DEST_ORIGIN/DEST_SIZE rectangle, and DCP swap destination[0] carries it with a black background.
+Device switch: Wom1GpuFaultInfoRead=1. Order:
+- a: FHD 100k windowed (regression, unified copy);
+- the mode probe: list, then 1920×1080 for 10 s with restore;
+- b: GravityMark FHD 100k `-Fullscreen 1`.
+- WHY: ChangeDisplaySettingsExW(1920x1080) failed in EXP2035, because the KMD offered only 2560×1600 and m1n1's broker rejected other geometry.
+- ATOMIC CONTRACT: two components of one feature (m1n1 broker and guest modes); native traffic is byte-identical.
+- Expected:
+  - boot and desktop at 2560×1600, with the vUART line `display: scanout source 2560x1600 stride 10240 -> panel 2560x1600 at 0,0`;
+  - the probe lists 11 modes; 1920×1080 applies (vUART `-> panel 2560x1440 at 0,80`), then restores;
+  - fullscreen GravityMark runs with no setMode failure and gives a score.
+- Failure criteria:
+  - broker INVALID_SURFACE with frozen flips, then a TDR;
+  - DCP rejecting the swap (black panel);
+  - a garbled image.
+- Recovery: rec2049h.
+- Hashes: sys c3336d21ca45, UmdArm64 15acfa65b05a, UmdX64 02d7a5fbbb43, Umd32 f7bcee00de64; manifest de7ee2dcb323, hardware-manifest c36f976735a6; probe2049.sh 19f7a6edb3e8 (PROBE_LINT_OK); visible recovery rec2049h 62b56d76cb887b8a; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2049h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2049-fullscreen/run2049.sh.
