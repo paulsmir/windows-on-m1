@@ -1668,22 +1668,32 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     {
     ADMISSION_G3_PAGING_WAIT_RECEIPT at;
     ULONGLONG wait_start = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    /* rc117 (EXP2064: 15309 UPDATE_PAGE_TABLE builds took 15.2 s, about
+     * 1 ms each, mostly 1 ms timer sleeps that wake late): wake on
+     * state->JobEvent, which CompleteJob sets (EXP1138, as the copy
+     * escape waits), with a 1 ms backstop; the bound is wall-clock. */
+    ULONGLONG deadline = KeQueryInterruptTime() +
+        (ULONGLONG)job_wait_limit_ms * 10000ULL;
+    BOOLEAN timed_out = FALSE;
     RtlZeroMemory(&at, sizeof(at));
     for (wait_ms = 0u;; ++wait_ms) {
+      KeClearEvent(&state->JobEvent);
       ExAcquireFastMutex(&state->Lock);
       process = AdmissionGpuvaG3FindProcess(state, args->FlushTlb.hProcess);
+      timed_out = KeQueryInterruptTime() >= deadline ? TRUE : FALSE;
       if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
           (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
-          wait_ms >= job_wait_limit_ms)
+          timed_out)
         break;
       if (wait_ms == 0u) AdmissionG3SnapPagingWait(state, process, &at);
       ExReleaseFastMutex(&state->Lock);
-      delay.QuadPart = -10000LL; /* 1 ms */
-      (void)KeDelayExecutionThread(KernelMode, FALSE, &delay);
+      delay.QuadPart = -10000LL; /* 1 ms backstop */
+      (void)KeWaitForSingleObject(&state->JobEvent, Executive, KernelMode,
+                                  FALSE, &delay);
     }
     AdmissionG3NotePagingWait(adapter, 2u, wait_ms,
         (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart - wait_start,
-        (BOOLEAN)(wait_ms >= job_wait_limit_ms), &at);
+        timed_out, &at);
     }
     address.GpuPhysical = args->FlushTlb.RootPageTableAddress;
     status = AdmissionGpuvaG3ResolveTable(adapter, &address,
@@ -1808,22 +1818,32 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   {
   ADMISSION_G3_PAGING_WAIT_RECEIPT at;
   ULONGLONG wait_start = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  /* rc117 (EXP2064: 15309 UPDATE_PAGE_TABLE builds took 15.2 s, about
+   * 1 ms each, mostly 1 ms timer sleeps that wake late): wake on
+   * state->JobEvent, which CompleteJob sets (EXP1138, as the copy
+   * escape waits), with a 1 ms backstop; the bound is wall-clock. */
+  ULONGLONG deadline = KeQueryInterruptTime() +
+      (ULONGLONG)job_wait_limit_ms * 10000ULL;
+  BOOLEAN timed_out = FALSE;
   RtlZeroMemory(&at, sizeof(at));
   for (wait_ms = 0u;; ++wait_ms) {
+    KeClearEvent(&state->JobEvent);
     ExAcquireFastMutex(&state->Lock);
     process = AdmissionGpuvaG3FindProcess(state, update->hProcess);
+    timed_out = KeQueryInterruptTime() >= deadline ? TRUE : FALSE;
     if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
         (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
-        wait_ms >= job_wait_limit_ms)
+        timed_out)
       break;
     if (wait_ms == 0u) AdmissionG3SnapPagingWait(state, process, &at);
     ExReleaseFastMutex(&state->Lock);
-    delay.QuadPart = -10000LL; /* 1 ms */
-    (void)KeDelayExecutionThread(KernelMode, FALSE, &delay);
+    delay.QuadPart = -10000LL; /* 1 ms backstop */
+    (void)KeWaitForSingleObject(&state->JobEvent, Executive, KernelMode,
+                                FALSE, &delay);
   }
   AdmissionG3NotePagingWait(adapter, 1u, wait_ms,
       (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart - wait_start,
-      (BOOLEAN)(wait_ms >= job_wait_limit_ms), &at);
+      timed_out, &at);
   }
   RtlCopyMemory(unpublished_before, state->UnpublishedGroups,
                 sizeof(unpublished_before));

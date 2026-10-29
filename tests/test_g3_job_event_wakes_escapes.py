@@ -12,6 +12,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "drivers/apple-agx/render-admission/src/gpuva_g3_windows.c"
+PAGING = ROOT / "drivers/apple-agx/render-admission/src/gpuva_g3_paging_windows.c"
 
 
 def function(text, name):
@@ -40,6 +41,17 @@ class JobEventWakesEscapes(unittest.TestCase):
             self.assertNotIn("wait_ms>=3000u", body, name)
         private = function(text, "AdmissionGpuvaG3PrivateEscape")
         self.assertNotIn("KeDelayExecutionThread", private)
+
+    def test_paging_waits_block_on_the_event(self):
+        """rc117 (EXP2064): UPDATE_PAGE_TABLE and FLUSH_TLB builds waited for
+        the process's job with 1 ms timer sleeps (15309 builds, 15.2 s). Both
+        waits must wake on JobEvent, with the 3 s bound in wall-clock time."""
+        body = function(PAGING.read_text(), "AdmissionGpuvaG3BuildPagingBuffer")
+        self.assertNotIn("KeDelayExecutionThread", body)
+        self.assertEqual(body.count("KeClearEvent(&state->JobEvent);"), 2)
+        self.assertEqual(body.count("KeWaitForSingleObject(&state->JobEvent"), 2)
+        self.assertEqual(body.count("KeQueryInterruptTime() >= deadline"), 2)
+        self.assertNotIn("wait_ms >= job_wait_limit_ms", body)
 
 
 if __name__ == "__main__":
