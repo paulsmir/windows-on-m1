@@ -66813,3 +66813,12 @@ Arms: a D3D11 HD 10k first app, b D3D12 HD 50k, c D3D12 FHD 100k.
 - Hashes: sys 84c0485d26a3, UmdArm64 0d9841eeaca0, UmdX64 da4ff68a4025, Umd32 708993f47744; manifest 997473fd00f2, hardware-manifest 72a61e4e0708; probe2064.sh e2256058b170 (PROBE_LINT_OK); visible recovery rec2064h f2357d24b2ec2980; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2064h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2064-poll-fix/run2064.sh.
+
+EXP2064 HARDWARE ACTUAL (2026-10-29): **rc116 validated with the default predicted poll. D3D11 is restored and D3D12 HD 50k sets a new best.**
+- a D3D11 HD 10k first app: **2483** (14.9 FPS), median 69.1 ms. EXP2061/2062 had 2018-2064 at 83-84 ms; the rc72 spin in EXP2063a gave 2462.
+- b D3D12 HD 50k (second position): **7262** (43.5), best (previous 7051).
+- c D3D12 FHD 100k (third position): 4231 (25.3). Third-position runs before: 4035 (EXP2056b fullscreen) and 4301 (EXP2063c, spin poll).
+- Wom1JobPoll over all three arms:
+  - 469k jobs, 218k sleeps;
+  - Misses 699 with a 0.85 s miss window (EXP2061a, one D3D11 arm: 62k misses, 33 s).
+- No submit failures, no transfers. rc115 again holds memory across D3D11 → D3D12.
