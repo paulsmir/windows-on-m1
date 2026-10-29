@@ -66857,3 +66857,13 @@ Arms: a D3D12 FHD 100k first app, b D3D12 HD 50k.
 - Hashes: sys d982ce7571a7, UmdArm64 68aa7238bef8, UmdX64 b07eb9eac150, Umd32 823dc36a8dd8; manifest 85c379dbb1a6, hardware-manifest e3d89c32216a; probe2066.sh 0704f281b25e (PROBE_LINT_OK); visible recovery rec2066h dd6475a60eda2071; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2066h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2066-batch-deps/run2066.sh.
+
+EXP2066 HARDWARE ACTUAL (2026-10-29): **measure-batch-deps: GravityMark's frame is a strict chain. Only one pair in eight is data-independent, so compute/render overlap could save at most about 2 ms per frame. The macOS gap is per-pass GPU speed.**
+- a FHD 100k first app 4355 (EXP2065 4361: the receipt costs nothing). b HD 50k 7316 (43.8), best.
+- 26.4k steady-state batches in submission order RCRCRCRC. Per position, dependence on the previous 1..4 batches:
+  - R0 1110, C1 1111, R2 1111, C3 1111;
+  - R4 1000, C5 0111, R6 1001, C7 1101.
+  - Only C5 does not depend on its predecessor R4. Every C→R depends (1 of 13159 independent); R→C is 25% independent, which is this position.
+  - The Bloom sets can only over-report conflicts.
+- Verdict: the overlap ceiling is about one compute job (≤2 ms of 36 ms). The FHD frame needs about 26 ms of pure pass work where macOS takes 22.5 ms in total, so the passes themselves are slower: main render 3D 8.3 ms and the lighting compute 8.6 ms.
+- Next: check whether the main pass loses AGX hidden-surface removal (discard, depth or sample-mask writes, side effects, or our flags).
