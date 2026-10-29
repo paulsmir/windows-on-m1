@@ -66663,3 +66663,18 @@ EXP2058 HARDWARE ACTUAL (2026-10-29): **rc112, the 64 MiB level ring: HD 50k 705
 - b HD 50k 7051 (42.2).
 - No submit failures, no transfers.
 - Next: rc113 (63f69f30) copies the WC source into cached memory before ail_tile (EXP2059).
+
+EXP2059 HARDWARE BEFORE 2026-10-29T00:03:45Z:
+Arms: a FHD 100k windowed (first app), b HD 50k.
+- WHY: in EXP2058a the stall is unchanged at 9.73 s. The ring drains are gone (escape 2.27 → 0.12 s), but the upload bucket grew to 3.39 s for 306 levels / 208 MiB (≈60 MB/s): ail_tile's scattered loads from the app's WC UPLOAD heap mapping.
+- ATOMIC CONTRACT: one change in level_upload. Tiling output is byte-identical.
+- Expected:
+  - stall upload under 1 s;
+  - stall under 7.5 s;
+  - FHD first-position above 4290;
+  - images unchanged.
+- Failure criteria: no change (the reads are not the cost), or a corrupted texture.
+- Recovery: rec2059h.
+- Hashes: sys f3fe0b9706d0, UmdArm64 a05d7f1d347b, UmdX64 4aeafd5b2737, Umd32 f76a7f34f7fb; manifest cde816f06747, hardware-manifest eef93542f2ec; probe2059.sh dfe5417df4c7 (PROBE_LINT_OK); visible recovery rec2059h 71102708c9a91a14; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2059h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2059-level-stage/run2059.sh.
