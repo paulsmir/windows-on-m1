@@ -66689,3 +66689,24 @@ EXP2059 HARDWARE ACTUAL (2026-10-29): **rc113 validated: the cached staging read
 - b HD 50k 7039 (42.1), second position (EXP2058b 7051).
 - The score gain from a 1.4 s shorter stall (about 0.8%) is inside the thermal noise of first-position runs (4244-4290).
 - Next: memory. bo-allocate plus bind is 5.5 s of the stall. rc114 0c12b393 with Wom1PoolPrefill=1 is EXP2060.
+
+EXP2060 HARDWARE BEFORE 2026-10-29T00:19:50Z:
+Arms: a D3D12 FHD 100k (first app), b D3D11 HD 10k.
+- WHY: EXP2059a stall 8.29 s, of which bo-allocate 3.23 s and bo-bind-paging 2.24 s (Windows page allocation, MmAllocatePagesForMdlEx).
+  - The rc88 prefill cut bo-allocate in EXP2022 (5.3 → 2.8 s).
+  - rc91 disabled it because its DelayedWorkQueue item delayed the paging worker on the same queue (DispatchToWorker max 1.06-1.55 s), hurting D3D11 (2529 → 2279).
+  - rc114 moves the paging worker to CriticalWorkQueue.
+- ATOMIC CONTRACT: rc114 is one queue change; the prefill is the existing rc88 code behind its switch.
+- Expected:
+  - Wom1M2PoolDemand PrefillSlabs > 0;
+  - Wom1G3PagingProfile DispatchToWorker max under 50 ms;
+  - D3D12 stall bo-allocate under 2 s, stall under 7 s, FHD first-position above 4254;
+  - D3D11 HD 10k ≥ 2334, its first frames under 8.4 s.
+- Failure criteria:
+  - DispatchToWorker max still above 1 s;
+  - D3D11 below 2279;
+  - any TDR.
+- Recovery: rec2060h.
+- Hashes: sys 5de864ec0665, UmdArm64 4cdde3ea8d45, UmdX64 11faa98fc99a, Umd32 0bcec823bafc; manifest 1ec0615b1142, hardware-manifest 099695cbb405; probe2060.sh 18e8a5b49c41 (PROBE_LINT_OK); visible recovery rec2060h ba99b5217f223ebb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolPrefill=1.
+- Recovery rec2060h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2060-prefill/run2060.sh.
