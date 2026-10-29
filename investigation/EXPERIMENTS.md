@@ -66844,3 +66844,16 @@ EXP2065 HARDWARE ACTUAL (2026-10-29): **rc117 validated: paging builds wake on J
 - b D3D12 HD 50k: **7269** (43.5), best.
 - c D3D11 HD 10k, third position: **2495** (14.9), best.
 - No submit failures, no transfers, no TDR.
+
+EXP2066 HARDWARE BEFORE 2026-10-29T05:17:38Z:
+Arms: a D3D12 FHD 100k first app, b D3D12 HD 50k.
+- WHY: the FHD frame is 36.1 ms with the GPU busy 35.7 ms. Shader work alone is about 26 ms against macOS's whole 22.5 ms frame on this J313, so Metal overlaps work, and we run one job at a time.
+  - rc95/rc102 measured firmware eligibility (barrier classes), never data dependencies.
+  - This receipt counts the pairs (and the R/C mix) whose buffers do not conflict. That bounds what compute-render overlap could gain before building it.
+- ATOMIC CONTRACT: receipt-only. One extra BO-handle pass per batch under MSVC.
+- Expected: scores within noise of EXP2065 (4361 / 7269). Then a histogram of the per-position conflict masks in the CRCRCRCR frame.
+- Failure criteria: a score drop of more than 2% (receipt cost), or no measure-batch-deps lines.
+- Recovery: rec2066h.
+- Hashes: sys d982ce7571a7, UmdArm64 68aa7238bef8, UmdX64 b07eb9eac150, Umd32 823dc36a8dd8; manifest 85c379dbb1a6, hardware-manifest e3d89c32216a; probe2066.sh 0704f281b25e (PROBE_LINT_OK); visible recovery rec2066h dd6475a60eda2071; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2066h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2066-batch-deps/run2066.sh.
