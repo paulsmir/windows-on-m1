@@ -66737,3 +66737,15 @@ Arms: a D3D11 HD 10k (first app), b D3D12 FHD 100k.
 - Hashes: sys a055ddacf85d, UmdArm64 0b8e5446d6df, UmdX64 ea737f5e0081, Umd32 e0176be26f08; manifest 6721d97ff3a3, hardware-manifest 96b8753d3e0e; probe2061.sh cf9cf37746c6 (PROBE_LINT_OK); visible recovery rec2061h 9ba7cfa50b143e50; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2061h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2061-d3d11-check/run2061.sh.
+
+EXP2061 HARDWARE ACTUAL (2026-10-29): **the D3D11 drop is not the prefill. D3D12 FHD 100k after a D3D11 run fails with E_OUTOFMEMORY (device removed).**
+- a D3D11 HD 10k first app, no prefill: 2018 (12.1 FPS); EXP2025 2334. Arm scripts since rc107 lack APPLE_AGX_D3D12_CPU_POOL_MAP=0, which EXP2025/2028 set (EXP2062 tests it).
+- b D3D12 FHD 100k (second, after D3D11): REMOVED at 24.6 s: "D3D12::error(): out of memory, can't create buffer".
+  - measure-memory-refusal: a 9 MiB allocate-callback with process canonical 3.02 GiB, system available physical 877 MiB of 7.2 GiB, commit available 4.5 GiB.
+  - Wom1M2PoolDemand: peakreserved 3015 of 4096 MiB, reservefail 4, all floor refusals (none newslab). This is the rc109 headroom rule: past BaseGranules the pool grows only while HighMemoryCondition is set.
+  - D3D12 FHD first in a boot had enough headroom (EXP2053-2060). After D3D11 it did not.
+- Open issue (production): a large app must not be removed while Windows only reports neutral memory. Options:
+  - reclaim and wait longer in the neutral zone;
+  - a bounded extra headroom;
+  - trimming standby before refusing.
+  Avoid the D3D11 → D3D12-FHD order in perf experiments until fixed.
