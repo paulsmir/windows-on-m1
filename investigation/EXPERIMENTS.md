@@ -66749,3 +66749,18 @@ EXP2061 HARDWARE ACTUAL (2026-10-29): **the D3D11 drop is not the prefill. D3D12
   - a bounded extra headroom;
   - trimming standby before refusing.
   Avoid the D3D11 → D3D12-FHD order in perf experiments until fixed.
+
+EXP2062 HARDWARE BEFORE 2026-10-29T00:48:09Z:
+Arms:
+- a: D3D11 HD 10k, first app, APPLE_AGX_D3D12_CPU_POOL_MAP=0 (as in the EXP2025/EXP2028 arm scripts);
+- b: D3D11 HD 10k, second, unset (the rc107 default, as in EXP2060b/EXP2061a).
+- WHY:
+  - EXP2061a D3D11 first app without the prefill: 2018. EXP2060b: 2066, median 83 ms. EXP2025: 2334, median 70.8 ms. The prefill is not the cause.
+  - The only arm-script difference since EXP2028 is the CPU_POOL_MAP=0 line, which the rc107 runs dropped for the unified copy. The owner's DirectCpuPool (agx_d3d12_windows.cpp) is shared by the D3D11 path.
+- ATOMIC CONTRACT: one environment variable. The order bias (about 3%) is far below the 15% gap.
+- Expected: if the environment is the cause, a ≈ 2330 with a median of about 71 ms and b ≈ 2000 with about 83 ms.
+- Failure criteria: a stays at about 83 ms. Then bisect the code with older packages.
+- Recovery: rec2062h.
+- Hashes: sys eeefcc61fee1, UmdArm64 0432bc8c8943, UmdX64 de3bd76ab0af, Umd32 b27ef40b3aba; manifest 32f5695ce65c, hardware-manifest 37fe33b58888; probe2062.sh 4dded84bcbd4 (PROBE_LINT_OK); visible recovery rec2062h 5558a255b8bc5e91; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2062h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2062-d3d11-poolmap/run2062.sh.
