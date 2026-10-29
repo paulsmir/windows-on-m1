@@ -66800,3 +66800,16 @@ EXP2063 HARDWARE ACTUAL (2026-10-29): **the D3D11 regression is rc100's predicte
   - 62k misses with a 538 us average detection delay, 33 s of the run.
   - The overrun branch slept 100 us at a time on a timer that wakes about 0.5 ms late.
 - Fix rc116 7531647c: an overrunning job is spun on while the learned lateness exceeds ADMISSION_JOB_POLL_HIGHRES_SLACK_US. Next, EXP2064 with no switch.
+
+EXP2064 HARDWARE BEFORE 2026-10-29T01:22:22Z:
+Arms: a D3D11 HD 10k first app, b D3D12 HD 50k, c D3D12 FHD 100k.
+- WHY: in EXP2063 the rc72 spin gave D3D11 2462 (median 69.2 ms) against 2018-2066 with rc100. In EXP2061a, Wom1JobPoll shows 62k overrun sleeps of 100 us waking 428 us late.
+- ATOMIC CONTRACT: one branch condition in AdmissionJobPollPlan.
+- Expected:
+  - a ≥ 2400 with a median under 71 ms; Wom1JobPoll Misses far below 62k;
+  - b ≈ 7000; c ≈ 4200 (third position) and completes.
+- Failure criteria: a stays about 2050; D3D12 drops more than 3% against same-position runs.
+- Recovery: rec2064h.
+- Hashes: sys 84c0485d26a3, UmdArm64 0d9841eeaca0, UmdX64 da4ff68a4025, Umd32 708993f47744; manifest 997473fd00f2, hardware-manifest 72a61e4e0708; probe2064.sh e2256058b170 (PROBE_LINT_OK); visible recovery rec2064h f2357d24b2ec2980; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2064h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2064-poll-fix/run2064.sh.
