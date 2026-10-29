@@ -194,6 +194,17 @@ int main(void) {
     if (t + slack + 400u < pred - 300u) assert(action == ADMISSION_JOB_POLL_SLEEP);
     if (t > pred - 300u && t < pred + 300u) assert(action == ADMISSION_JOB_POLL_SPIN);
   }
+  /* rc116 (EXP2061a): a timer that wakes late (learned lateness above the
+   * high-resolution slack) makes the overrun sleep cost more than it
+   * saves: the overrunning job is spun on */
+  {
+    ADMISSION_JOB_POLL_STATE late;
+    unsigned int i;
+    AdmissionJobPollInitialize(&late, ADMISSION_JOB_POLL_PREDICTIVE, ADMISSION_JOB_POLL_FLAG_HIGHRES);
+    for (i = 0; i < ADMISSION_JOB_POLL_LATENESS; ++i) AdmissionJobPollNoteSleep(&late, 100u, 530u);
+    assert(AdmissionJobPollPlan(&late, 1100u, 1000u, 0u, &us) == ADMISSION_JOB_POLL_SPIN);
+    assert(us == ADMISSION_JOB_POLL_SPIN_STEP_US);
+  }
   /* a sleep cap (prebind retry) bounds every sleep */
   assert(AdmissionJobPollPlan(&st, 0u, 13000u, 250u, &us) == ADMISSION_JOB_POLL_SLEEP && us == 250u);
   /* the guard is a tenth of short jobs: a 1 ms job sleeps, a 200 us one spins */

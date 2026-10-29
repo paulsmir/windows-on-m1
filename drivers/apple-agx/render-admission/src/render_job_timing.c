@@ -449,8 +449,14 @@ unsigned int AdmissionJobPollPlan(ADMISSION_JOB_POLL_STATE *state,
   }
   /* A tick-rounded sleep (no high-resolution timer) costs up to a tick of
    * latency: an overrunning job is spun instead. */
+  /* rc116 (EXP2061a, D3D11 HD 10k: 297k jobs of 389 us average; 62k
+   * overrun sleeps of 100 us each woke 428 us late, a 538 us average miss,
+   * 33 s of a 180 s run; the rc72 spin gave 2462 against 2018): an overrun
+   * sleeps only while the timer's learned lateness is within the high-
+   * resolution slack, else it is spun. */
   if (elapsedUs < (unsigned long long)predictedUs + guard ||
-      !(state->Flags & ADMISSION_JOB_POLL_FLAG_HIGHRES)) {
+      !(state->Flags & ADMISSION_JOB_POLL_FLAG_HIGHRES) ||
+      slack > ADMISSION_JOB_POLL_HIGHRES_SLACK_US) {
     *us = ADMISSION_JOB_POLL_SPIN_STEP_US;
     return poll_count(state, ADMISSION_JOB_POLL_SPIN);
   }
