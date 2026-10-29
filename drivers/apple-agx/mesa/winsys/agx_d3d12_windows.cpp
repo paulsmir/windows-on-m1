@@ -547,6 +547,12 @@ extern "C" void (*AgxWin32TileLayoutHook)(const uint32_t *values, unsigned count
 static void owner_tile_layout(const uint32_t *values, unsigned count) {
   AdmissionUmdDiagnostic("measure-render-tile-layout", S_OK, values, count);
 }
+/* rc118 receipt-only: measure-batch-deps {kind (1 render, 2 compute),
+ * conflict mask (agx_win32_batch_deps.h), reads, writes} per batch. */
+extern "C" void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count);
+static void owner_batch_deps(const uint32_t *values, unsigned count) {
+  AdmissionUmdDiagnostic("measure-batch-deps", S_OK, values, count);
+}
 static void owner_bo_time(unsigned mib, unsigned cls, unsigned create_us, unsigned bind_us, unsigned associate_us) {
   const UINT values[] = {mib, cls, create_us, bind_us, associate_us};
   AdmissionUmdDiagnostic("measure-bo-create", S_OK, values, 5u);
@@ -872,6 +878,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     AgxWin32BoTimeHook = owner_bo_time;
     AgxWin32GpuOnlyMapHook = owner_gpu_only_map;
     AgxWin32TileLayoutHook = owner_tile_layout;
+    AgxWin32BatchDepsHook = owner_batch_deps;
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(hr)) create_upload_ring(owner);

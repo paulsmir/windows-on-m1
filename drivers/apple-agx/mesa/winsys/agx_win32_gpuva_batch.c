@@ -413,6 +413,27 @@ void (*AgxWin32RenderTraceHook)(const uint32_t *values, unsigned count);
  * height, render width and height), once each: the hardware proof of the
  * utile APPLE_AGX_TILE_BUFFER_BYTES selects (agx_win32_tile_limit.h). */
 void (*AgxWin32TileLayoutHook)(const uint32_t *values, unsigned count);
+/* rc118 receipt-only (agx_win32_batch_deps.h): measure-batch-deps {kind,
+ * conflict mask, reads, writes} per submitted batch (MSVC only, like the
+ * render trace: the host models extract the submit bodies alone). */
+void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count);
+#ifdef _MSC_VER
+#include "agx_win32_batch_deps.h"
+static AGX_WIN32_BATCH_DEPS batch_deps;
+static void note_batch_deps(struct agx_batch *batch, unsigned kind) {
+  int h;
+  if(!AgxWin32BatchDepsHook) return;
+  AgxWin32BatchDepsBegin(&batch_deps,kind);
+  AGX_BATCH_FOREACH_BO_HANDLE(batch,h)
+    AgxWin32BatchDepsAdd(&batch_deps,(unsigned)h,
+        agx_writer_get(batch->ctx,(unsigned)h)==batch);
+  {
+    const unsigned reads=batch_deps.Current.Reads,writes=batch_deps.Current.Writes;
+    const uint32_t values[4]={kind,AgxWin32BatchDepsCommit(&batch_deps),reads,writes};
+    AgxWin32BatchDepsHook(values,4u);
+  }
+}
+#endif
 #ifdef _MSC_VER
 #define AGX_WIN32_TILE_LAYOUT_SLOTS 16u
 static uint32_t agx_win32_tile_layouts[AGX_WIN32_TILE_LAYOUT_SLOTS][6];
@@ -1116,6 +1137,9 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   }
   if(!publish_shadows(batch)) { fail_site=__LINE__; goto fail; }
   capture_render_addresses(batch,render);
+#ifdef _MSC_VER
+  note_batch_deps(batch,1u);
+#endif
   capture_native_refs(batch);
   capture_compute_addresses(batch,compute);
   b->Gpuva.Validation=b->ValidateRefs ? &g->Expected : NULL;
@@ -1235,6 +1259,9 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
     if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
   }
   if(!publish_shadows(batch)) { fail_site=__LINE__; goto fail; }
+#ifdef _MSC_VER
+  note_batch_deps(batch,2u);
+#endif
   capture_native_refs(batch);
   capture_compute_addresses(batch,compute);
   b->Gpuva.Validation=b->ValidateRefs ? &g->Expected : NULL;
