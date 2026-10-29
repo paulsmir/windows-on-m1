@@ -66710,3 +66710,17 @@ Arms: a D3D12 FHD 100k (first app), b D3D11 HD 10k.
 - Hashes: sys 5de864ec0665, UmdArm64 4cdde3ea8d45, UmdX64 11faa98fc99a, Umd32 0bcec823bafc; manifest 1ec0615b1142, hardware-manifest 099695cbb405; probe2060.sh 18e8a5b49c41 (PROBE_LINT_OK); visible recovery rec2060h ba99b5217f223ebb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PoolPrefill=1.
 - Recovery rec2060h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2060-prefill/run2060.sh.
+
+EXP2060 HARDWARE ACTUAL (2026-10-29): **prefill with rc114: no net gain on D3D12, and D3D11 is worse. Wom1PoolPrefill stays off.**
+- a D3D12 FHD 100k first app 4241 (25.4). Stall 8.15 s (EXP2059 8.29):
+  - bo-allocate 3.23 → 2.08 s;
+  - bo-bind-paging 2.24 → 3.54 s.
+- Wom1G3PagingProfile, against EXP2059:
+  - DispatchToWorker max 217.8 ms (19.3 ms without the prefill; 1.06-1.55 s in rc91 on DelayedWorkQueue);
+  - Worker max 223 ms (21 ms).
+  - CriticalWorkQueue removes most of the queueing, but the worker body itself slows (memory-manager contention with the prefill's MmAllocatePagesForMdlEx).
+- b D3D11 HD 10k (second position) 2066 (12.4 FPS). First frames 2.7 s (fine), but the steady median frame is 83.1 ms (EXP2025 70.8 ms).
+- Verdict:
+  - prefill rejected again;
+  - rc114 is in the package but not yet isolated.
+- Next, EXP2061 without the switch, D3D11 first: separates the prefill from rc114 and the other changes since EXP2025.
