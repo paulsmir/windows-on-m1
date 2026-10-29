@@ -66678,3 +66678,14 @@ Arms: a FHD 100k windowed (first app), b HD 50k.
 - Hashes: sys f3fe0b9706d0, UmdArm64 a05d7f1d347b, UmdX64 4aeafd5b2737, Umd32 f76a7f34f7fb; manifest cde816f06747, hardware-manifest eef93542f2ec; probe2059.sh dfe5417df4c7 (PROBE_LINT_OK); visible recovery rec2059h 71102708c9a91a14; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2059h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2059-level-stage/run2059.sh.
+
+EXP2059 HARDWARE ACTUAL (2026-10-29): **rc113 validated: the cached staging read cuts the stall's upload from 3.39 s to 0.48 s; FHD stall 9.73 → 8.29 s.**
+- a FHD 100k first app 4254 (25.5). Stall 8.294 s:
+  - bo-allocate 3.23 s;
+  - bo-bind-paging 2.24 s;
+  - escape 1.43 s;
+  - upload 0.48 s;
+  - resource 0.47 s.
+- b HD 50k 7039 (42.1), second position (EXP2058b 7051).
+- The score gain from a 1.4 s shorter stall (about 0.8%) is inside the thermal noise of first-position runs (4244-4290).
+- Next: memory. bo-allocate plus bind is 5.5 s of the stall. rc114 0c12b393 with Wom1PoolPrefill=1 is EXP2060.
