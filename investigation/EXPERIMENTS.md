@@ -66764,3 +66764,7 @@ Arms:
 - Hashes: sys eeefcc61fee1, UmdArm64 0432bc8c8943, UmdX64 de3bd76ab0af, Umd32 b27ef40b3aba; manifest 32f5695ce65c, hardware-manifest 37fe33b58888; probe2062.sh 4dded84bcbd4 (PROBE_LINT_OK); visible recovery rec2062h 5558a255b8bc5e91; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2062h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2062-d3d11-poolmap/run2062.sh.
+
+EXP2062 HARDWARE ACTUAL (2026-10-29): **CPU_POOL_MAP is not the D3D11 cause: a =0 (first) 2039, b default (second) 2064.**
+- Both arms are at the EXP2060/2061 level (2018-2066); EXP2025/2028 reached 2334/2449.
+- Next: EXP2063 bisects rc100 (Wom1JobPollSpinUs=50000) and rc109 load runs (APPLE_AGX_D3D_LOAD_RUNS=0), and checks rc115.
