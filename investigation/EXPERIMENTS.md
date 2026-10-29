@@ -66768,3 +66768,23 @@ Arms:
 EXP2062 HARDWARE ACTUAL (2026-10-29): **CPU_POOL_MAP is not the D3D11 cause: a =0 (first) 2039, b default (second) 2064.**
 - Both arms are at the EXP2060/2061 level (2018-2066); EXP2025/2028 reached 2334/2449.
 - Next: EXP2063 bisects rc100 (Wom1JobPollSpinUs=50000) and rc109 load runs (APPLE_AGX_D3D_LOAD_RUNS=0), and checks rc115.
+
+EXP2063 HARDWARE BEFORE 2026-10-29T01:03:21Z:
+Arms:
+- a: D3D11 HD 10k, first app;
+- b: D3D11 HD 10k with APPLE_AGX_D3D_LOAD_RUNS=0;
+- c: D3D12 FHD 100k after the two D3D11 runs.
+- WHY:
+  - D3D11 HD 10k fell from 2334/2449 (EXP2025/2028, median 70.8 ms) to 2018-2066 (EXP2060-2062, median 83-84 ms). Not the prefill (EXP2061), not CPU_POOL_MAP (EXP2062a 2039). The CPU-side flush reasons are identical, so the gap is on the GPU or job timing.
+  - Shared-path changes since EXP2028 with kill switches: rc100 (predicted-sleep job poll; many small D3D11 jobs could oversleep) and rc109 load runs (D3D robustness lowering, shared with D3D11).
+  - c repeats EXP2061b's OOM order with rc115 (512 MiB neutral headroom).
+- ATOMIC CONTRACT: none -- separate steps. a vs EXP2061a/2062a isolates rc100; b vs a isolates load runs; c tests rc115.
+- Expected:
+  - if rc100 is the cause, a has a median of about 71 ms and scores about 2330;
+  - if load runs are, b improves over a;
+  - c completes with no E_OUTOFMEMORY.
+- Failure criteria: a TDR; c removed again.
+- Recovery: rec2063h.
+- Hashes: sys f6cc3638b0de, UmdArm64 bf55a08e6963, UmdX64 8f139028044a, Umd32 2a8229bfdfdf; manifest 600d373a69ac, hardware-manifest 2b6049ac750e; probe2063.sh 806f3f092192 (PROBE_LINT_OK); visible recovery rec2063h 4e2e36d33f5c4378; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobPollSpinUs=50000.
+- Recovery rec2063h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2063-d3d11-bisect/run2063.sh.
