@@ -343,6 +343,9 @@ unsigned long long AdmissionPoolDemandReclaimAged(ADMISSION_POOL_DEMAND *Pool,
  * floor is still sampled fresh by every creation, so memory that recovers
  * inside the window is used at once. All calls under the pool lock. */
 #define ADMISSION_POOL_PRESSURE_STEP_MS 50ULL
+/* rc115: growth past the default share allowed while Windows reports
+ * neutral memory (neither HighMemory nor LowMemoryCondition set). */
+#define ADMISSION_POOL_NEUTRAL_HEADROOM 0x20000000ULL /* 512 MiB */
 #define ADMISSION_POOL_PRESSURE_DEFAULT_BUDGET_MS 2000ULL
 #define ADMISSION_POOL_PRESSURE_MAX_BUDGET_MS 10000ULL
 #define ADMISSION_POOL_PRESSURE_FAST_FAIL_MS 5000ULL

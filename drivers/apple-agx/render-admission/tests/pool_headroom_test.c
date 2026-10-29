@@ -45,6 +45,7 @@ typedef struct {
     ULONGLONG ReservedAllocations;
     BOOLEAN StageExact; /* rc104: the worker asks for an exact receipt */
     ULONGLONG BaseGranules, HeadroomRefusals; /* rc109 headroom floor */
+    ULONGLONG NeutralHeadroomGranules; /* rc115 */
 } ADMISSION_POOL_RUNTIME;
 struct _ADMISSION_CONTEXT { ADMISSION_POOL_RUNTIME *PoolDemand; int PoolLeaks; };
 static ADMISSION_POOL_RUNTIME pool;
@@ -757,6 +758,25 @@ static void test_extension_needs_high_memory(void) {
     pool.Slabs.ReserveCap = N + 64; /* room for one more slab */
     assert(!AdmissionMemoryPoolReserve(&context, 32 * G));
     assert(sleeps == 40 && pool.Pressure.TimedOut == 1 && pool.Slabs.Stats.Slabs == 4);
+    /* rc115: neutral memory grows NeutralHeadroomGranules past the share,
+     * then waits for HighMemory; LowMemory still refuses inside it. */
+    reset();
+    pool.BaseGranules = 64;
+    pool.NeutralHeadroomGranules = 32; /* one slab */
+    high = 0; low = 0;
+    assert(AdmissionMemoryPoolReserve(&context, 64 * G));
+    assert(AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(pool.Slabs.Stats.Slabs == 3 && !pool.HeadroomRefusals);
+    assert(!AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(pool.HeadroomRefusals == 1 && pool.Slabs.Stats.Slabs == 3);
+    reset();
+    pool.BaseGranules = 64;
+    pool.NeutralHeadroomGranules = 32;
+    high = 0; low = 0;
+    assert(AdmissionMemoryPoolReserve(&context, 64 * G));
+    low = 1;
+    assert(!AdmissionMemoryPoolReserve(&context, 32 * G));
+    assert(pool.RefusalCounts[ADMISSION_POOL_REFUSAL_LOW_MEMORY - 1] == 1);
     /* The default-size segment: neutral memory admits as before rc109, also
      * a TVB lease past the whole segment. */
     reset();

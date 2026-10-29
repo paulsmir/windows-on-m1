@@ -285,6 +285,8 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   /* rc109: granules of the default-share size; growth past them needs
    * HighMemoryCondition (AdmissionPoolMayGrow). */
   ULONGLONG BaseGranules, HeadroomRefusals;
+  /* rc115: growth past BaseGranules allowed in neutral memory. */
+  ULONGLONG NeutralHeadroomGranules;
 } ADMISSION_POOL_RUNTIME;
 
 /* rc88: what one AdmissionPoolAllocSlab call cost, folded into the runtime
@@ -550,9 +552,17 @@ static int AdmissionPoolMayGrow(void *Opaque) {
    * extra pages only while Windows reports plenty of memory
    * (HighMemoryCondition set): the larger the GPU's part of RAM, the more
    * headroom DWM keeps (EXP1911 c00001ad under the low floor alone). */
+  /* rc115 (EXP2061b: GravityMark D3D12 FHD 100k after a D3D11 run was
+   * removed with E_OUTOFMEMORY at 3015 MiB reserved; Windows reported
+   * neither High nor Low memory, available physical 877 MiB): in that
+   * neutral state the segment may still grow ADMISSION_POOL_NEUTRAL_HEADROOM
+   * past the default share; only beyond it does growth wait for
+   * HighMemoryCondition. LowMemoryCondition still refuses every slab. */
   if (decision->Reason == ADMISSION_POOL_REFUSAL_NONE &&
       pool->BaseGranules < pool->Slabs.ReserveCap &&
-      decision->HeldGranules + ADMISSION_POOL_SLAB_SLOTS > pool->BaseGranules &&
+      decision->HeldGranules + ADMISSION_POOL_SLAB_SLOTS >
+          pool->BaseGranules + (decision->HighMemory == 0u
+              ? pool->NeutralHeadroomGranules : 0ULL) &&
       decision->HighMemory != 1u)
     decision->Reason = ADMISSION_POOL_REFUSAL_HEADROOM;
   return decision->Reason == ADMISSION_POOL_REFUSAL_NONE;
@@ -1711,6 +1721,8 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   pool->GraphicsShareBytes = share;
   pool->BaseSegmentBytes = baseBytes;
   pool->BaseGranules = baseBytes / ADMISSION_POOL_DEMAND_GRANULE;
+  pool->NeutralHeadroomGranules =
+      ADMISSION_POOL_NEUTRAL_HEADROOM / ADMISSION_POOL_DEMAND_GRANULE;
   pool->Granules = ExAllocatePool2(POOL_FLAG_NON_PAGED,
       (SIZE_T)(count * sizeof(*pool->Granules)), ADMISSION_POOL_TAG);
   pool->Candidates = ExAllocatePool2(POOL_FLAG_NON_PAGED,
