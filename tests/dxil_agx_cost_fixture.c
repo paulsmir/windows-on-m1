@@ -703,6 +703,10 @@ main(int argc, char **argv)
        * compile: their I/O lowering is Gallium's) */
       if (d3d_robust)
          NIR_PASS(_, nir, agx_win32_lower_d3d_buffer_access);
+      /* rc119: inspect graphics stages too (discard, depth/sample-mask
+       * writes, side effects that cost AGX hidden-surface removal). */
+      if (print_nir || print_lowered)
+         nir_print_shader(nir, stdout);
       struct hot hot = {0};
       count_hot(&nir_shader_get_entrypoint(nir)->body, &hot);
       printf("NIRCOST stage %s hot-mem-blocks %u hot-nir %u hot-branches %u\n", mesa_shader_stage_name(nir->info.stage),
