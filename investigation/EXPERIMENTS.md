@@ -66867,3 +66867,5 @@ EXP2066 HARDWARE ACTUAL (2026-10-29): **measure-batch-deps: GravityMark's frame 
   - The Bloom sets can only over-report conflicts.
 - Verdict: the overlap ceiling is about one compute job (≤2 ms of 36 ms). The FHD frame needs about 26 ms of pure pass work where macOS takes 22.5 ms in total, so the passes themselves are slower: main render 3D 8.3 ms and the lighting compute 8.6 ms.
 - Next: check whether the main pass loses AGX hidden-surface removal (discard, depth or sample-mask writes, side effects, or our flags).
+
+EXP2067 NOT RUN (2026-10-29): the diagnostic (AGX_MESA_DEBUG=shaders, HD 50k) was prepared and then cancelled before launch at the user's request. The guest stays clean (package absent).
