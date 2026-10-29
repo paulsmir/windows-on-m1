@@ -66724,3 +66724,16 @@ EXP2060 HARDWARE ACTUAL (2026-10-29): **prefill with rc114: no net gain on D3D12
   - prefill rejected again;
   - rc114 is in the package but not yet isolated.
 - Next, EXP2061 without the switch, D3D11 first: separates the prefill from rc114 and the other changes since EXP2025.
+
+EXP2061 HARDWARE BEFORE 2026-10-29T00:35:54Z:
+Arms: a D3D11 HD 10k (first app), b D3D12 FHD 100k.
+- WHY: EXP2060 changed two things for D3D11 at once (the prefill switch, rc114), and many shared changes since EXP2025 (unified copy rc107, rc109, tile, DXIL changes) were never measured on D3D11.
+- ATOMIC CONTRACT: no new code. EXP2060's package without the prefill switch.
+- Expected:
+  - if the prefill caused it, D3D11 median about 71 ms and score ≥ 2300;
+  - otherwise the median stays about 83 ms, pointing at rc114 or an earlier shared change. Bisect next with older packages.
+- Failure criteria: a TDR or GPU fault.
+- Recovery: rec2061h.
+- Hashes: sys a055ddacf85d, UmdArm64 0b8e5446d6df, UmdX64 ea737f5e0081, Umd32 e0176be26f08; manifest 6721d97ff3a3, hardware-manifest 96b8753d3e0e; probe2061.sh cf9cf37746c6 (PROBE_LINT_OK); visible recovery rec2061h 9ba7cfa50b143e50; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2061h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2061-d3d11-check/run2061.sh.
