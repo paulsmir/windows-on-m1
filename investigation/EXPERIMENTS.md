@@ -66788,3 +66788,15 @@ Arms:
 - Hashes: sys f6cc3638b0de, UmdArm64 bf55a08e6963, UmdX64 8f139028044a, Umd32 2a8229bfdfdf; manifest 600d373a69ac, hardware-manifest 2b6049ac750e; probe2063.sh 806f3f092192 (PROBE_LINT_OK); visible recovery rec2063h 4e2e36d33f5c4378; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobPollSpinUs=50000.
 - Recovery rec2063h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2063-d3d11-bisect/run2063.sh.
+
+EXP2063 HARDWARE ACTUAL (2026-10-29): **the D3D11 regression is rc100's predicted-sleep poll; rc115 fixes the D3D12-after-D3D11 OOM.**
+- Boot switch Wom1JobPollSpinUs=50000 (the rc72 spin).
+- a D3D11 HD 10k first app: **2462** (14.7 FPS); with rc100's poll 2018-2066.
+- b D3D11 with APPLE_AGX_D3D_LOAD_RUNS=0: 2478, so load runs are not the cause.
+- c D3D12 FHD 100k after two D3D11 runs: **4301** (25.7), completed. EXP2061b was removed with E_OUTOFMEMORY. rc115 validated, and with the spin poll in third position.
+- Cause, from Wom1JobPoll in EXP2061a:
+  - 297k jobs of 389 us average;
+  - 74.9k sleeps, which asked for 8.1 s in total and lasted 40.2 s (428 us average lateness);
+  - 62k misses with a 538 us average detection delay, 33 s of the run.
+  - The overrun branch slept 100 us at a time on a timer that wakes about 0.5 ms late.
+- Fix rc116 7531647c: an overrunning job is spun on while the learned lateness exceeds ADMISSION_JOB_POLL_HIGHRES_SLACK_US. Next, EXP2064 with no switch.
