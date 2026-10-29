@@ -66822,3 +66822,17 @@ EXP2064 HARDWARE ACTUAL (2026-10-29): **rc116 validated with the default predict
   - 469k jobs, 218k sleeps;
   - Misses 699 with a 0.85 s miss window (EXP2061a, one D3D11 arm: 62k misses, 33 s).
 - No submit failures, no transfers. rc115 again holds memory across D3D11 → D3D12.
+
+EXP2065 HARDWARE BEFORE 2026-10-29T04:18:50Z:
+Arms: a D3D12 FHD 100k first app, b D3D12 HD 50k, c D3D11 HD 10k.
+- WHY: in EXP2064, Wom1G3PagingProfile op 11 (UPDATE_PAGE_TABLE) shows 15309 builds and 15.2 s (994 us average, 112 ms max), with 648 PTEs per build. Builds for a process with a job in flight polled in 1 ms timer sleeps that wake late (rc116: about 0.5 ms lateness). VidMm's binds wait on these packets (stall bo-bind-paging 2.2 s at FHD).
+- ATOMIC CONTRACT: one wait mechanism in two loops. The same event the copy and private escapes already use.
+- Expected:
+  - op 11 average under 200 us;
+  - FHD stall bo-bind-paging under 1.2 s, stall under 7.5 s, FHD first-position ≥ 4254;
+  - HD 50k ≥ 7262 (same position); D3D11 ≈ 2400+ (third position).
+- Failure criteria: no change in op 11 time (the wait is not the cost), or any TDR or paging timeout.
+- Recovery: rec2065h.
+- Hashes: sys e8e598ed0034, UmdArm64 b383dce25e73, UmdX64 82e134c01354, Umd32 485cb566e10e; manifest adefcc00d8ea, hardware-manifest bf8f75dfb56f; probe2065.sh b2fdff6ac5e8 (PROBE_LINT_OK); visible recovery rec2065h 469c9296f5cbac64; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2065h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2065-paging-event/run2065.sh.
