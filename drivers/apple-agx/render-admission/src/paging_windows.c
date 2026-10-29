@@ -420,8 +420,12 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
 #endif
 }
 
+/* rc114: CriticalWorkQueue, not DelayedWorkQueue. VidMm residency waits on
+ * these packets, and a DelayedWorkQueue item queues behind the pool prefill
+ * (rc88) and the reclaim, whose MmAllocatePagesForMdlEx calls run up to
+ * 1.5 s (rc91: DispatchToWorker max 1.06-1.55 s with the prefill on). */
 _Use_decl_annotations_ void AdmissionPagingQueueActive(ADMISSION_CONTEXT *Context) {
-  IoQueueWorkItem(Context->PagingWorkItem, AdmissionPagingWorker, DelayedWorkQueue, Context);
+  IoQueueWorkItem(Context->PagingWorkItem, AdmissionPagingWorker, CriticalWorkQueue, Context);
 }
 
 _Use_decl_annotations_ void AdmissionPagingUpdateIdleLocked(ADMISSION_CONTEXT *Context) {
