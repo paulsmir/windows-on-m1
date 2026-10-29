@@ -66836,3 +66836,11 @@ Arms: a D3D12 FHD 100k first app, b D3D12 HD 50k, c D3D11 HD 10k.
 - Hashes: sys e8e598ed0034, UmdArm64 b383dce25e73, UmdX64 82e134c01354, Umd32 485cb566e10e; manifest adefcc00d8ea, hardware-manifest bf8f75dfb56f; probe2065.sh b2fdff6ac5e8 (PROBE_LINT_OK); visible recovery rec2065h 469c9296f5cbac64; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2065h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2065-paging-event/run2065.sh.
+
+EXP2065 HARDWARE ACTUAL (2026-10-29): **rc117 validated: paging builds wake on JobEvent. FHD 100k 4361 is a new best.**
+- a D3D12 FHD 100k first app: **4361** (26.1 FPS; previous best 4335).
+  - Stall 7.84 s (EXP2059 8.29): bo-bind-paging 2.24 → 1.04 s, bo-allocate 2.65 s, resource 2.60 s, upload 1.10 s.
+  - Wom1G3PagingProfile after a: UPDATE_PAGE_TABLE 13100 builds, 6.9 s, 527 us average (EXP2064 994 us). The rest is the real wait for the process's GPU job.
+- b D3D12 HD 50k: **7269** (43.5), best.
+- c D3D11 HD 10k, third position: **2495** (14.9), best.
+- No submit failures, no transfers, no TDR.
