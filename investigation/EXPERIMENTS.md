@@ -66950,3 +66950,14 @@ EXP2069 HARDWARE ACTUAL (2026-11-02): **rc120 rejected (reverted in 6d79752b): s
   - sin 64 against 24, rcp 199 against 79, floor 65 against 31, texture 79 against 52.
   - The transcendental surplus is already in our frontend NIR (32 fsin + 32 fcos + 204 frcp, all distinct and inside loops; 38 loops against Apple's 19 while). This is consistent with DXC having unrolled an outer loop that Metal kept, so the static counts overstate the dynamic gap. RA swaps, the missing fp16 and the spills are real per-execution costs.
 - Verdict: per-pass Apple GPU time is needed to decide which difference matters.
+
+EXP2070 HARDWARE BEFORE 2026-11-02T12:25:43Z:
+Arm a: D3D12 HD 50k with APPLE_AGX_D3D12_SHADER_DUMP_DIR and APPLE_AGX_D3D12_SHADER_DUMP_ALL=1. The probe zips the capture and fetches it.
+- WHY: the register allocator's swap overhead is the largest driver-side gap to Apple in the full-screen PS (EXP2067: 22.5% xor). The offline fixture compiles only compute through the backend. The compute shaders with the same mechanism (f22befa7 64.6% xor, 144a46de 42%, 62568917 38%) are not in the EXP1969 capture. Capturing them gives an offline test bed for allocator changes; a first parked attempt, rc122 RA packing, was neutral to negative on the captured lighting kernel.
+- ATOMIC CONTRACT: diagnostic only (dump writes at compile time). The score is not comparable.
+- Expected: CAPTURE_FETCHED with *-s5-r0.bin files for f22befa7, 144a46de and 62568917, and the s4 71405b87.
+- Failure criteria: an empty capture or a fetch failure.
+- Recovery: rec2070h.
+- Hashes: sys 0b55f111700b, UmdArm64 0739b21680c7, UmdX64 0cc7881487ca, Umd32 0409dbfdd7c3; manifest 16a59bfd345c, hardware-manifest 2d38facb01f2; probe2070.sh 53e7b114908a (PROBE_LINT_OK); visible recovery rec2070h bec3cc4ec1e177ad; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2070h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2070-shader-capture/run2070.sh.
