@@ -67142,3 +67142,9 @@ Arms: a FHD 100k -temporal 0, b HD 100k -temporal 0. Controls: EXP2075a 4487 (FH
 - Hashes: sys f8388666a96f, UmdArm64 dd5c5c9db010, UmdX64 38a646534b8f, Umd32 19db3934e4e4; manifest 1b10c8bb5bae, hardware-manifest b2364d779db8; probe2079.sh 17cf450d4a97 (PROBE_LINT_OK); visible recovery rec2079h 70171af1e60783a4; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1.
 - Recovery rec2079h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2079-mgr-slots/run2079.sh.
+
+EXP2079 HARDWARE ACTUAL (2026-11-02): **rc124 with Wom1ManagerSlots=1 runs cleanly: no TDR, fault or WER, correct images; scores equal to the controls: FHD 100k T0 4539 (control 4487), HD 100k T0 5619 (controls 5656-5696).**
+- Expected vs actual: clean and correct as expected; scores equal or slightly higher expected, equal within noise; render build time lower expected, 147.8 us vs 145 us control (unchanged: the 380-byte restore was cheap).
+- Per job identical to EXP2075a (C4 8.59, R1 7.89 ms); Wom1JobTiming971 render begin 38 us, build 148 us, kick->progress 356 us.
+- Limitation: no receipt records whether a build reused a live slot, so the slot path is shown only indirectly (switch set, no fault). Next: a slot receipt, then the queue-ahead steps of the Asahi model.
+- Recovery rec2079h.
