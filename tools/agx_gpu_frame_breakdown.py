@@ -340,7 +340,8 @@ KMD_SUBS_V4 = KMD_SUBS + ('successor_bound', 'ta_done', 'ta_stamp', 'prelude_don
 KMD_SLOT_V4 = struct.Struct('<IIIIQQ12Q4QIIIIII13Q')
 KMD_SLOTS = 64
 FLAG_MAPPING_UNCHANGED, FLAG_PRIVATE_SCENE, FLAG_BEGIN_JOB = 1, 2, 4
-BUILD_FLAGS = dict(init_bm=0x8, init_queues=0x10, prelude=0x20, slot1=0x40, manager_restored=0x80)
+BUILD_FLAGS = dict(init_bm=0x8, init_queues=0x10, prelude=0x20, slot1=0x40, manager_restored=0x80,
+                   manager_live=0x100000, manager_rebind=0x200000)
 # rc90 build-ahead (Wom1JobBuildAhead): slot flags and the AheadRefusals word
 # (render_job_ahead.c refusal numbers: release bits 0-7, prebind 8-15, chain
 # 16-23).

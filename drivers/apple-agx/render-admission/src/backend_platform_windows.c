@@ -291,6 +291,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * to its own firmware buffer slot (render_shared_memory ManagerSlotCount
    * 4); 0 or absent keeps the single slot 0. */
   BOOLEAN ManagerSlots;
+  BOOLEAN ManagerReceipt;
   /* rc84: device value Wom1GpuPerfReceipt = 0 stops the Wom1GpuPerf
    * sampling (HwDataA loads at each job completion). */
   BOOLEAN GpuPerfOff;
@@ -3562,6 +3563,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
       flags |= ADMISSION_JOB_FLAG_SIDECAR_SET_B;
     if ((((staged.TaExpectedStamp >> 8u) ^ 1u) & 1u) != 0u)
       flags |= ADMISSION_JOB_FLAG_SLOT1;
+    flags |= AdmissionJobTimingManagerFlags(runtime->ManagerReceipt,
+        image->G4Manager != NULL,
+        runtime->Initdata.RenderSharedMemory.ManagerSlotLive);
     if (image->G4Manager && runtime->Initdata.RenderSharedMemory.LastBuildRestored)
       flags |= ADMISSION_JOB_FLAG_MANAGER_RESTORED;
     if (flags) AdmissionJobTimingNoteWindows(runtime->Adapter,
@@ -6915,6 +6919,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1PreludeTimestampsOff");
   runtime->BuildDirectReads =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1BuildDirectReads");
+  runtime->ManagerReceipt =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerReceipt");
   runtime->ManagerSlots =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerSlots");
   /* rc90: on by default since EXP2034 (the G4-r3 drill passed with it);

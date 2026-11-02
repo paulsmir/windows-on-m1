@@ -129,6 +129,13 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
 #define ADMISSION_JOB_FLAG_DEPTH2_BARRIER_SHIFT 17u
 #define ADMISSION_JOB_FLAG_DEPTH2_BARRIER_MASK 0xe0000u
 
+/* q1: opt-in Wom1ManagerReceipt; successful managed builds only. Restored
+ * (0x80) is an independent subset of rebind, not a third exclusive class. */
+#define ADMISSION_JOB_FLAG_MANAGER_LIVE 0x100000u
+#define ADMISSION_JOB_FLAG_MANAGER_REBIND 0x200000u
+unsigned int AdmissionJobTimingManagerFlags(unsigned int Enabled,
+    unsigned int Managed, unsigned int Live);
+
 /* Header WorkerFlags: the job worker ran on the dedicated thread; that
  * thread is pinned to the processors of efficiency class (bits 8-15),
  * count of them in bits 16-23. */
