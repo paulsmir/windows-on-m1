@@ -316,7 +316,8 @@ class JobTimingV3(unittest.TestCase):
         self.assertEqual(m['release'], 35)
         self.assertEqual(m['notify'], 5)
         self.assertEqual(out['build_flags'],
-                         dict(init_bm=1, init_queues=0, prelude=2, slot1=2, manager_restored=3))
+                         dict(init_bm=1, init_queues=0, prelude=2, slot1=2, manager_restored=3,
+                              manager_live=0, manager_rebind=0))
         self.assertEqual(out['by_kind']['render']['median_us']['build'], 275)
 
 

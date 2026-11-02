@@ -227,6 +227,16 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   APPLE_AGX_RENDER_MANAGER_KEY SlotKey[APPLE_AGX_RENDER_MANAGER_SLOTS];
   APPLE_AGX_BOOL SlotBound[APPLE_AGX_RENDER_MANAGER_SLOTS];
   APPLE_AGX_U32 SlotUse[APPLE_AGX_RENDER_MANAGER_SLOTS];
+  /* q1: depth-one opt-in. No process pointers retained in a slot. Evict
+   * synchronizes Objects for CPU reads and stores a snapshot by Key under
+   * the process registry lock; FALSE leaves the slot dirty and bound. */
+  APPLE_AGX_BOOL ManagerSaveOnEvict;
+  APPLE_AGX_U32 ManagerBuildCounter; /* rollback of a proven unpublished build */
+  APPLE_AGX_U32 SlotDirtyFence[APPLE_AGX_RENDER_MANAGER_SLOTS];
+  APPLE_AGX_BOOL (*ManagerEvict)(void *Context,
+      const APPLE_AGX_RENDER_MANAGER_KEY *Key, APPLE_AGX_U32 Fence,
+      const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects);
+  void *ManagerEvictContext;
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
 
 #define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_FENCE    1u  /* Owner->ManagerFence */
@@ -235,6 +245,7 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
 #define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_BIND     4u  /* rebind without InitBM */
 #define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_BACKING  5u  /* backing vs objects 41-43 */
 #define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_RELOCATE 6u  /* Info/Scene relocation */
+#define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_SNAPSHOT 7u /* eviction/snapshot not safe */
 #define APPLE_AGX_RENDER_BUILD_REFUSAL_JOB_ARGUMENTS    10u /* build_active_job inputs */
 #define APPLE_AGX_RENDER_BUILD_REFUSAL_STAGED_JOB       11u /* staged job fields */
 #define APPLE_AGX_RENDER_BUILD_REFUSAL_RUNTIME_BINDINGS 12u
@@ -248,6 +259,24 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
 #define APPLE_AGX_RENDER_BUILD_MARK_COPIED 1u    /* template objects copied */
 #define APPLE_AGX_RENDER_BUILD_MARK_RELOCATED 2u /* relocations, stats, threshold */
 #define APPLE_AGX_RENDER_BUILD_MARK_MANAGED 3u   /* manager state restored */
+
+/* Caller serializes against submission and has proved joined completion.
+ * Drain fails with any manager job pending. Used before queue reinit/destroy. */
+/* Terminal dropped work is not a restorable snapshot; cancel is ONLY for
+ * a build that was never published to firmware. Both require the exact fence. */
+APPLE_AGX_BOOL AppleAgxRenderManagerAbort(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_MANAGER_STATE *State, APPLE_AGX_U32 Fence);
+APPLE_AGX_BOOL AppleAgxRenderManagerCancelBuild(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_MANAGER_STATE *State, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects);
+APPLE_AGX_BOOL AppleAgxRenderManagerDrain(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner);
+/* Objects have been synchronized for CPU access; no pending GPU writer. */
+APPLE_AGX_BOOL AppleAgxRenderManagerSnapshot(APPLE_AGX_RENDER_MANAGER_STATE *State,
+    const APPLE_AGX_RENDER_MANAGER_KEY *Key, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects, APPLE_AGX_BOOL DirectReads);
+/* Under the process registry lock; an obsolete key is safely discarded. */
+APPLE_AGX_BOOL AppleAgxRenderManagerAcceptSnapshot(APPLE_AGX_RENDER_MANAGER_STATE *State,
+    const APPLE_AGX_RENDER_MANAGER_STATE *Snapshot);
 
 APPLE_AGX_BOOL AppleAgxRenderManagerNeedsBind(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,

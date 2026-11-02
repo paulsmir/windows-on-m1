@@ -178,6 +178,10 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryDestroy(
     return AppleAgxRenderSharedMemoryResultInvalidArgument;
   if (!Owner->Initialized)
     return AppleAgxRenderSharedMemoryResultOk;
+  /* Default path unchanged. An opt-in resident snapshot cannot be lost
+   * through teardown or a reset which rebuilds the memory owner. */
+  if (Owner->ManagerSaveOnEvict && !AppleAgxRenderManagerDrain(Owner))
+    return AppleAgxRenderSharedMemoryResultReleaseFailed;
   while (Owner->ObjectCount != 0u) {
     APPLE_AGX_U32 index = Owner->ObjectCount - 1u;
     APPLE_AGX_MEMORY_OBJECT *object = &Owner->Objects[index];
@@ -1156,19 +1160,11 @@ static APPLE_AGX_BOOL manager_objects_valid(
       Objects[22].Data && Objects[22].Size==64u;
 }
 
-APPLE_AGX_BOOL AppleAgxRenderManagerSave(
-    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
-    APPLE_AGX_RENDER_MANAGER_STATE *State, APPLE_AGX_U32 Fence,
-    const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects) {
-  if (!Owner || !State || !Fence || !manager_objects_valid(Objects))
-    return APPLE_AGX_FALSE;
-  if (!Owner->ManagerFence && !State->PendingFence && State->Valid &&
-      State->SavedFence==Fence &&
-      manager_key_equal(&Owner->ManagerKey,&State->Key,APPLE_AGX_TRUE))
-    return APPLE_AGX_TRUE;
-  if (Owner->ManagerFence!=Fence || State->PendingFence!=Fence)
-    return APPLE_AGX_FALSE;
-  if (Owner->DirectReads) {
+APPLE_AGX_BOOL AppleAgxRenderManagerSnapshot(APPLE_AGX_RENDER_MANAGER_STATE *State,
+    const APPLE_AGX_RENDER_MANAGER_KEY *Key, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects, APPLE_AGX_BOOL DirectReads) {
+  if (!State || !Key || !Fence || !manager_objects_valid(Objects)) return APPLE_AGX_FALSE;
+  if (DirectReads) {
     READ_PROBE(SharedLoads,
         copy_shared_loads(State->Info,Objects[1].Data,sizeof(State->Info)) +
         copy_shared_loads(State->BlockControl,Objects[20].Data,sizeof(State->BlockControl)) +
@@ -1187,10 +1183,136 @@ APPLE_AGX_BOOL AppleAgxRenderManagerSave(
     read_shared_bytes(State->Counter,Objects[21].Data,sizeof(State->Counter));
     read_shared_bytes(State->Stats,Objects[22].Data,sizeof(State->Stats));
   }
-  State->Key=Owner->ManagerKey;
+  State->Key=*Key;
   State->Valid=APPLE_AGX_TRUE;
   State->SavedFence=Fence;
   State->PendingFence=0u;
+  State->Resident=APPLE_AGX_FALSE;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxRenderManagerAcceptSnapshot(APPLE_AGX_RENDER_MANAGER_STATE *State,
+    const APPLE_AGX_RENDER_MANAGER_STATE *Snapshot) {
+  if (!State || !Snapshot || !Snapshot->Valid || Snapshot->Resident ||
+      Snapshot->PendingFence) return APPLE_AGX_FALSE;
+  /* A process can grow/recreate its manager while an old slot is cached.
+   * An eviction of that old key must not replace the new manager state. */
+  if (!manager_key_equal(&State->Key,&Snapshot->Key,APPLE_AGX_TRUE))
+    return APPLE_AGX_TRUE;
+  if (State->PendingFence) return APPLE_AGX_FALSE;
+  if (State->Resident) {
+    if (State->SavedFence!=Snapshot->SavedFence) return APPLE_AGX_FALSE;
+    *State=*Snapshot;
+  }
+  return APPLE_AGX_TRUE;
+}
+
+static APPLE_AGX_BOOL evict_manager_slot(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+                                        APPLE_AGX_U32 Slot) {
+  APPLE_AGX_EXP208_RELOCATION_OBJECT objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT] = {{0}};
+  const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts = AppleAgxRenderTemplateObjectLayouts();
+  APPLE_AGX_U32 i;
+  if (!Owner->SlotDirtyFence[Slot]) return APPLE_AGX_TRUE;
+  if (Owner->ManagerFence || !Owner->ManagerEvict || !Owner->SlotBound[Slot])
+    return APPLE_AGX_FALSE;
+  for (i=0u;i<4u;++i) {
+    APPLE_AGX_U32 n=manager_slot_objects[i];
+    if (!Owner->Objects[n].CpuAddress ||
+        Owner->ObjectOffsets[n] > Owner->Objects[n].Length ||
+        layouts[n].Size > Owner->Objects[n].Length-Owner->ObjectOffsets[n])
+      return APPLE_AGX_FALSE;
+    objects[n].Data=(unsigned char *)Owner->Objects[n].CpuAddress+Owner->ObjectOffsets[n];
+    objects[n].Size=layouts[n].Size;
+    objects[n].GpuVa=Owner->VirtualAddresses[n]+Owner->ObjectOffsets[n];
+  }
+  if (!select_manager_slot(Owner,objects,Slot) ||
+      !Owner->ManagerEvict(Owner->ManagerEvictContext,&Owner->SlotKey[Slot],
+                          Owner->SlotDirtyFence[Slot],objects))
+    return APPLE_AGX_FALSE;
+  Owner->SlotDirtyFence[Slot]=0u;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxRenderManagerDrain(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner) {
+  APPLE_AGX_U32 s;
+  if (!Owner || Owner->ManagerFence) return APPLE_AGX_FALSE;
+  for (s=1u;s<APPLE_AGX_RENDER_MANAGER_SLOTS;++s)
+    if (!evict_manager_slot(Owner,s)) return APPLE_AGX_FALSE;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxRenderManagerAbort(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_MANAGER_STATE *State, APPLE_AGX_U32 Fence) {
+  if (!Owner || !State || !Fence) return APPLE_AGX_FALSE;
+  if (!Owner->ManagerFence && !State->PendingFence && !State->Valid &&
+      !State->Resident && State->SavedFence==Fence &&
+      manager_key_equal(&Owner->ManagerKey,&State->Key,APPLE_AGX_TRUE))
+    return APPLE_AGX_TRUE;
+  if (Owner->ManagerFence!=Fence || State->PendingFence!=Fence ||
+      Owner->ManagerSlot>=APPLE_AGX_RENDER_MANAGER_SLOTS) return APPLE_AGX_FALSE;
+  Owner->SlotBound[Owner->ManagerSlot]=APPLE_AGX_FALSE;
+  Owner->SlotDirtyFence[Owner->ManagerSlot]=0u;
+  Owner->ManagerFence=0u;
+  State->Key=Owner->ManagerKey;
+  State->Valid=State->Resident=APPLE_AGX_FALSE;
+  /* Invalid terminal record: permits an exact dropped-completion retry,
+   * never qualifies for restore (Valid is false). */
+  State->SavedFence=Fence;
+  State->PendingFence=0u;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxRenderManagerCancelBuild(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_MANAGER_STATE *State, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects) {
+  if (!Owner || !State || !Fence || Owner->ManagerFence!=Fence ||
+      State->PendingFence!=Fence || Owner->ManagerSlot>=APPLE_AGX_RENDER_MANAGER_SLOTS ||
+      !manager_objects_valid(Objects)) return APPLE_AGX_FALSE;
+  if (Owner->ManagerSlotLive) {
+    /* No GPU access has occurred. Live Info/BlockControl/Stats were not
+     * written by this build; undo its sole manager mutation (Counter). */
+    put_u32(Objects[21].Data,Owner->ManagerBuildCounter);
+  } else {
+    /* The victim was snapshotted before replacement; require restore on
+     * the next use instead of claiming unsubmitted bytes are live. */
+    Owner->SlotBound[Owner->ManagerSlot]=APPLE_AGX_FALSE;
+    Owner->SlotDirtyFence[Owner->ManagerSlot]=0u;
+  }
+  State->PendingFence=0u;
+  Owner->ManagerFence=0u;
+  Owner->ManagerKey=State->Key;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxRenderManagerSave(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_MANAGER_STATE *State, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects) {
+  if (!Owner || !State || !Fence || !manager_objects_valid(Objects))
+    return APPLE_AGX_FALSE;
+  if (!Owner->ManagerFence && !State->PendingFence && State->Valid &&
+      State->SavedFence==Fence &&
+      manager_key_equal(&Owner->ManagerKey,&State->Key,APPLE_AGX_TRUE))
+    return APPLE_AGX_TRUE;
+  if (Owner->ManagerFence!=Fence || State->PendingFence!=Fence)
+    return APPLE_AGX_FALSE;
+  if (Owner->ManagerSaveOnEvict && manager_slot_count(Owner) > 1u &&
+      Owner->ManagerEvict && Owner->ManagerSlot > 0u &&
+      Owner->ManagerSlot < manager_slot_count(Owner)) {
+    /* Stats drives rc80 TVB growth and must remain current each completion.
+     * All other mutable bytes stay in the slot until an idle eviction. */
+    read_shared_bytes(State->Stats,Objects[22].Data,sizeof(State->Stats));
+    State->Key=Owner->ManagerKey;
+    State->Valid=APPLE_AGX_TRUE;
+    State->Resident=APPLE_AGX_TRUE;
+    State->SavedFence=Fence;
+    State->PendingFence=0u;
+    Owner->SlotDirtyFence[Owner->ManagerSlot]=Fence;
+  } else {
+    if (!AppleAgxRenderManagerSnapshot(State,&Owner->ManagerKey,Fence,
+                                      Objects,Owner->DirectReads))
+      return APPLE_AGX_FALSE;
+  }
   Owner->ManagerFence=0u;
   return APPLE_AGX_TRUE;
 }
@@ -1224,11 +1346,18 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
       !manager_objects_valid(SourceObjects) || !ActiveObjects ||
       !SourceObjects[13].Data || SourceObjects[13].Size!=72u)
     MANAGED_REFUSE(MANAGER_KEY);
+  if (Manager->Resident && !manager_key_equal(&Manager->Key,Key,APPLE_AGX_TRUE)) {
+    APPLE_AGX_U32 previous=bound_manager_slot(Owner,&Manager->Key);
+    if (previous==~0u || !evict_manager_slot(Owner,previous))
+      MANAGED_REFUSE(MANAGER_SNAPSHOT);
+  }
   if (manager_slot_count(Owner) > 1u) {
     /* rc124: the key's bound slot keeps its firmware-owned state; otherwise
      * a free slot, else the least recently used one, is (re)bound. A queue
      * (re)initialisation forgets every binding. */
     APPLE_AGX_U32 s, n = manager_slot_count(Owner);
+    if (InitializeQueues && !AppleAgxRenderManagerDrain(Owner))
+      MANAGED_REFUSE(MANAGER_SNAPSHOT);
     if (InitializeQueues)
       for (s = 0u; s < APPLE_AGX_RENDER_MANAGER_SLOTS; ++s) Owner->SlotBound[s] = APPLE_AGX_FALSE;
     slot = bound_manager_slot(Owner, Key);
@@ -1250,8 +1379,15 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
         Key->Backing[i].Va!=SourceObjects[object].GpuVa)
       MANAGED_REFUSE(MANAGER_BACKING);
   }
+  /* Preserve a victim before build_active_job can overwrite any slot bytes.
+   * A forced InitBM of the current key needs the same snapshot as eviction. */
+  if (!live && !evict_manager_slot(Owner,slot)) MANAGED_REFUSE(MANAGER_SNAPSHOT);
+  if (!live && Manager->Resident) MANAGED_REFUSE(MANAGER_SNAPSHOT);
   restore=!live && Manager->Valid && manager_key_equal(&Manager->Key,Key,APPLE_AGX_FALSE);
   Owner->LastBuildRestored=restore;
+  /* Once replacement starts, the victim binding must never identify the
+   * replacement's bytes, including on a late relocation failure. */
+  if (!live) Owner->SlotBound[slot]=APPLE_AGX_FALSE;
   if (!build_active_job(Owner,TemplateArena,TemplateArenaBytes,SourceObjects,
       SourceObjectCount,ArenaGpuAddress,IncludeInitBm,RuntimeBindings,
       StagedJob,ActiveObjects,ActiveJob,APPLE_AGX_TRUE,InitializeQueues,slot))
@@ -1291,16 +1427,21 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
    * already relocated above; snapshot addresses stay in this context0 slot. */
   relocations=AppleAgxRenderTemplateRelocations();
   for (i=0u;i<AppleAgxRenderTemplateRelocationCount();++i)
-    if ((relocations[i].SourceObject==1u || relocations[i].SourceObject==13u) &&
-        !AppleAgxApplyRelocations(ActiveObjects,SourceObjectCount,&relocations[i],1u))
+    if (((!live && relocations[i].SourceObject==1u) || relocations[i].SourceObject==13u) &&
+        !AppleAgxApplyRelocations(ActiveObjects,SourceObjectCount,&relocations[i],1u)) {
+      if (live) put_u32(ActiveObjects[21].Data,count);
       MANAGED_REFUSE(MANAGER_RELOCATE);
+    }
   if (manager_slot_count(Owner) > 1u) {
-    if (!write_manager_slot(ActiveObjects,IncludeInitBm,slot))
+    if (!write_manager_slot(ActiveObjects,IncludeInitBm,slot)) {
+      if (live) put_u32(ActiveObjects[21].Data,count);
       MANAGED_REFUSE(MANAGER_RELOCATE);
+    }
     Owner->SlotKey[slot]=*Key;
     Owner->SlotBound[slot]=APPLE_AGX_TRUE;
     Owner->SlotUse[slot]=++Owner->ManagerSlotClock;
   }
+  Owner->ManagerBuildCounter=count;
   Owner->ManagerSlot=slot;
   Owner->ManagerSlotLive=live;
 #undef MANAGED_REFUSE

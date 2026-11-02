@@ -14,6 +14,9 @@ typedef struct _APPLE_AGX_RENDER_MANAGER_STATE {
   unsigned char Info[188], BlockControl[64], Counter[64], Stats[64];
   APPLE_AGX_U32 PendingFence, SavedFence;
   APPLE_AGX_BOOL Valid;
+  /* Full snapshot is resident in a firmware slot; only Stats is current
+   * here until eviction. Never restore the other arrays while Resident. */
+  APPLE_AGX_BOOL Resident;
 } APPLE_AGX_RENDER_MANAGER_STATE;
 
 #endif

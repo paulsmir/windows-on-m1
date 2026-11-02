@@ -1,7 +1,7 @@
 #ifndef G3_VIDMM_REPLAY_SHIM_H
 #define G3_VIDMM_REPLAY_SHIM_H
 /* Shared-memory retirement boundary is exercised by R153 callback replay. */
-#define AdmissionSaveG4Manager(r,f) ((void)(r),(void)(f),1)
+#define AdmissionSaveG4Manager(r,f,s) ((void)(r),(void)(f),(void)(s),1)
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>

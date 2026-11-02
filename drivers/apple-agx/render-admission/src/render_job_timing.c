@@ -464,3 +464,9 @@ unsigned int AdmissionJobPollPlan(ADMISSION_JOB_POLL_STATE *state,
       ADMISSION_JOB_POLL_OVERRUN_SLEEP_US : sleepCapUs;
   return ADMISSION_JOB_POLL_SLEEP;
 }
+
+unsigned int AdmissionJobTimingManagerFlags(unsigned int Enabled,
+    unsigned int Managed, unsigned int Live) {
+  if (!Enabled || !Managed) return 0u;
+  return Live ? ADMISSION_JOB_FLAG_MANAGER_LIVE : ADMISSION_JOB_FLAG_MANAGER_REBIND;
+}

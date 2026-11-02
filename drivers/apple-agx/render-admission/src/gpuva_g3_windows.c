@@ -3931,6 +3931,26 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
                                     &adapter->RenderPacket.Description, NULL);
 }
 
+/* q1: eviction retains keys, not process pointers, across process teardown. */
+BOOLEAN AdmissionGpuvaG3StoreManagerSnapshot(ADMISSION_CONTEXT *adapter,
+    const APPLE_AGX_RENDER_MANAGER_STATE *snapshot) {
+  ADMISSION_G3_STATE *state;
+  PLIST_ENTRY link;
+  BOOLEAN ok=TRUE;
+  if (!adapter || !snapshot || KeGetCurrentIrql()!=PASSIVE_LEVEL) return FALSE;
+  state=(ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (!state) return TRUE; /* registry already destroyed; no owner to restore */
+  ExAcquireFastMutex(&state->Lock);
+  for (link=state->Processes.Flink;link!=&state->Processes;link=link->Flink) {
+    ADMISSION_G3_PROCESS *p=CONTAINING_RECORD(link,ADMISSION_G3_PROCESS,Link);
+    if (p->Graph.ProcessId!=snapshot->Key.Owner) continue;
+    ok=AppleAgxRenderManagerAcceptSnapshot(&p->FirmwareManager,snapshot) ? TRUE : FALSE;
+    break;
+  }
+  ExReleaseFastMutex(&state->Lock);
+  return ok;
+}
+
 /* rc102 (EXP2051): gpuva_g3_private.h. The same lookup and key as
  * AdmissionGpuvaG3BeginJobAs's private-scene branch. */
 BOOLEAN AdmissionGpuvaG3PendingManager(ADMISSION_CONTEXT *adapter,

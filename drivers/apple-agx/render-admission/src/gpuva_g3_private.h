@@ -296,6 +296,10 @@ NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *Adapter,
  * (no private scene for that fence): the image's binding stays. Read-only,
  * PASSIVE_LEVEL. The depth-2 decision proves the manager-bind need from
  * this, not from the image's binding of the previous render. */
+/* q1: resolve an idle manager snapshot by process key, never by a retained
+ * process pointer. A destroyed/obsolete owner needs no saved state. */
+BOOLEAN AdmissionGpuvaG3StoreManagerSnapshot(ADMISSION_CONTEXT *Adapter,
+    const APPLE_AGX_RENDER_MANAGER_STATE *Snapshot);
 BOOLEAN AdmissionGpuvaG3PendingManager(ADMISSION_CONTEXT *Adapter,
                                        ADMISSION_RENDER_CONTEXT *Context,
                                        ULONG Fence,
