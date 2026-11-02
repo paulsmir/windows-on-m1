@@ -67201,3 +67201,9 @@ Arms: a FHD 100k -temporal 0, b HD 100k -temporal 0. Control: EXP2081 (same swit
 - Hashes: sys dc80eee6f098, UmdArm64 3e05aef48872, UmdX64 e8b33d11ce88, Umd32 92ee5c64658b; manifest 496cc395204c, hardware-manifest bc3fb597fbc4; probe2082.sh ba90021b403a (PROBE_LINT_OK); visible recovery rec2082h d1eb0a29a8c4fdc6; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1ManagerReceipt=1 Wom1ManagerSaveOnEvict=1.
 - Recovery rec2082h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2082-save-evict/run2082.sh.
+
+EXP2082 HARDWARE ACTUAL (2026-11-02): **Wom1ManagerSaveOnEvict works at depth one: no fault, partials 0, correct images; complete->job_end 17-18 -> 10.3 us per render; FHD 100k T0 4557, HD 100k T0 5679 (EXP2081 4528 / 5675).**
+- Receipt: manager_live 54, rebind 0, restored 0; TVB max pages 864 (FHD) / 766 (HD) as before; failed jobs 0.
+- Expected vs actual: clean, no partial growth, live as EXP2081, saving below 0.1 ms per frame: all confirmed.
+- Design step 2's hardware unknown (the firmware manager stays valid without a per-render CPU snapshot) is answered: yes, for app + DWM alternation over a full run.
+- Next: design steps 3-4 on the q3 R/C probe before any GravityMark depth-2 run.
