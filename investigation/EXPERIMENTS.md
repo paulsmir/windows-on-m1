@@ -67311,3 +67311,18 @@ EXP2087 HARDWARE ACTUAL (2026-11-02): **probe-side FAIL before the pair again, o
 - Cause: the KMD captures render Start/End from QueueObjects[28]/[29] (backend_platform_windows.c:775), parity-slotted objects that can already point at the next build's copy under Wom1JobBuildAhead, so Start can come from another job. This is a real KMD timestamp defect (render start of the completion API) to fix separately; the probe now bounds Start by the previous retired End at depth one (e10080ba).
 - Expected vs actual: PASS/INCONCLUSIVE expected; probe calibration failure (queue not exercised).
 - Recovery rec2087h. Next: EXP2088 with the bounded calibration.
+
+EXP2088 HARDWARE BEFORE 2026-11-02T20:44:15Z:
+Switches (as EXP2085): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
+- WHY THIS HYPOTHESIS:
+  1. EXP2085: Q3RC PASS bad=0 but kicks 0 and no RC progress value: the 64x64 single-triangle render likely ended before the compute submission reached the KMD.
+  2. EXP2086: the probe stopped before the pair because its calibration required exactly one retired record per completion page (DWM jobs and preludes retire in the same window); Wom1RcDecisions over the boot: 66 no pending successor 24201, 58 SceneId mismatch 2201, 4 preemption 109, 55 other process 97.
+- ATOMIC CONTRACT: probe workload and receipts only; same switches and admission policy as EXP2085.
+- WHAT IS STILL UNKNOWN: whether the restricted R->C pair is admitted when R runs 5-10 ms, and whether the firmware 3D stamp advances with C's threshold published.
+- Expected PASS: probe prints R duration 5-10 ms and Q3RC PASS bad=0; Wom1JobWindow kicks >= 1, max_in_flight 2, compute-on-3D barrier; agx_rc_progress.py reports published-progress for the probe PID/QPC window; both fences once, in order, Status 0; no reset.
+- INCONCLUSIVE: no kick again: Wom1RcDecisions must name the refusal (this run then identifies the gate), or R shorter than 5 ms.
+- FAIL: wrong output, stall to the deadline, fence errors, reset, 0x116.
+- Recovery: rec2088h.
+- Hashes: sys 9d7f647a0e41, UmdArm64 8251d6887204, UmdX64 3387016c49bf, Umd32 a9ede763d7dc; manifest aa2da14a9bbe, hardware-manifest 2d2aa2349dbf; probe2088.sh 1bea69d5251b (PROBE_LINT_OK); visible recovery rec2088h e91cda6706491687; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
+- Recovery rec2088h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2088-q3rc-overlap3/run2088.sh.
