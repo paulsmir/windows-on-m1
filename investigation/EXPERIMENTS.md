@@ -67596,3 +67596,17 @@ EXP2099 HARDWARE ACTUAL (2026-11-03): **q12 depth-two recovery drill, successor 
 - Later work: Q3RR PASS bad=0, Q3RCR PASS bad=0; kicks 1881, kick_failures 0, reset_aborts 0; G4 failure none; EventDrain none; pipeline rc 0.
 - Expected vs actual: all PASS criteria met. Verdict confirmed. With EXP2098 both synthetic two-flight terminal orders are validated. Remaining q12 gates (real firmware fault/hang at depth one with the depth-two mask, natural preemption) are not yet run; decision: run the GravityMark measurement gate now (non-destructive, recovery proven) and run those gates before depth two can become a default.
 - Recovery rec2099h.
+
+EXP2100 HARDWARE BEFORE 2026-11-02T23:22:23Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1 (no drill switches). Steps: GravityMark D3D12 FHD 100k temporal 0, then HD 100k temporal 0 (gm-run.ps1, ValidateRefs 0 as EXP2075), receipts after each.
+- WHY THIS HYPOTHESIS:
+  1. EXP2075: the frame is 8 serialized jobs C R C R C R C R with ~4.5 ms of launch gaps per frame (about 0.3 ms per compute, 0.5-0.6 ms per render job) at depth one.
+  2. EXP2096-2099: all three frame classes (compute-on-3D, TA-on-3D, TA-on-compute) are admitted on hardware without resets, and both two-flight recovery orders pass.
+- ATOMIC CONTRACT: the accepted depth-two mask as one configuration; the control EXP2101 differs only by Wom1JobDepth2=0 with the same source.
+- WHAT IS STILL UNKNOWN: how many GravityMark successors are pending when their predecessor runs (reason 66 shows many idle polls), so the realised gain is unknown.
+- Expected: GravityMark completes at both resolutions with no reset, no G4 failure, desktop alive; admitted pairs in the thousands with all three classes; score above EXP2075 (FHD 4487, HD 5696) by at most the launch-gap upper bound (~0.3 ms x pending computes + ~0.55 ms x pending renders per frame; if all 7 successors overlapped, about -3 ms of a 28 ms HD frame, ~+10%).
+- FAIL: crash, reset, TDR, G4 rejection, visible corruption, DWM loss, or a score regression beyond noise.
+- Recovery: rec2100h.
+- Hashes: sys b0354d1e2e98, UmdArm64 bd56f392d7da, UmdX64 1cfb7f7d1574, Umd32 058e1cdbf8a4; manifest a12c4ff95a28, hardware-manifest ef70598c50c6; probe2100.sh c48300bcbc9f (PROBE_LINT_OK); visible recovery rec2100h 9b2065c5cff89267; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2100h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2100-gm-depth2/run2100.sh.
