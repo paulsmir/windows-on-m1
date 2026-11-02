@@ -67326,3 +67326,12 @@ Switches (as EXP2085): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhe
 - Hashes: sys 9d7f647a0e41, UmdArm64 8251d6887204, UmdX64 3387016c49bf, Umd32 a9ede763d7dc; manifest aa2da14a9bbe, hardware-manifest 2d2aa2349dbf; probe2088.sh 1bea69d5251b (PROBE_LINT_OK); visible recovery rec2088h e91cda6706491687; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
 - Recovery rec2088h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2088-q3rc-overlap3/run2088.sh.
+
+EXP2088 HARDWARE ACTUAL (2026-11-02): **design step (b) PASS: the first restricted R->C depth-two pair ran on hardware with firmware progress under the published threshold, and retired in order.**
+- Q3RC: PASS bad=0; calibration still ended at 1 instance (render Start word stale in every record: start constant 1164929715/1165024949 while End advances, so the bound includes GPU idle; the KMD timestamp defect is with Codex q5).
+- Wom1JobWindow: kicks 1, max_in_flight 2, batch {1: 2988, 2: 1}, barriers compute_on_3d 1, adopted 1, kick_failures 0, reset_aborts 0, last kicked fence 6499.
+- Wom1RcProgress (pid 10064, pair QPC window): pair render 6498 / compute 6499, evidence published-progress. Stages: compute published (threshold 5110 -> 5111, compute wptr 2 -> 4) while render ran (render done 1266/1268); render firmware stamp advanced 1024063744 -> 1024064000 with the threshold published; render done 1268/1268, then compute 4/4; terminal records 6498 then 6499, Status 0 each.
+- Compute finished about 0.05 ms after the render (qpc 1460196694 -> 1460197762 = 0.044 ms at 24 MHz), against about 0.3 ms launch per compute job at depth one.
+- Wom1RcDecisions over the boot: admitted (0) 1, 66 no pending successor 20504, 58 SceneId mismatch 1932, 55 other process 109, 4 preemption 101, 68: 23.
+- Expected vs actual: every preregistered PASS criterion met. The notifier-cycle hypothesis for EXP2052 is rejected for the restricted R->C pair (commit-time publication). Per the design, this unblocks step (c): resident-manager-key R/R admission, typed same-process queues and step-5 suffix recovery, each with bounded probes before any GravityMark run.
+- Recovery rec2088h.
