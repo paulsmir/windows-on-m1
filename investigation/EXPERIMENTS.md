@@ -67382,3 +67382,18 @@ EXP2090 HARDWARE ACTUAL (2026-11-02): **q6 step 1b PASS: Wom1Depth2General=1 (su
 - Guest alive after both steps, G4 none, pipeline rc 0.
 - Expected vs actual: all PASS criteria met. Additional evidence: ~2400 R->R pairs per boot (mostly DWM) are candidates for step 3 (Wom1Depth2TaOn3d). Verdict confirmed. Next: EXP2091 step 2, single variable Wom1Depth2TaOnCompute=1.
 - Recovery rec2090h.
+
+EXP2091 HARDWARE BEFORE 2026-11-02T21:29:00Z:
+Switches: EXP2090 set + Wom1Depth2TaOnCompute=1. Steps: only Q3RC, then only Q3RCR.
+- WHY THIS HYPOTHESIS:
+  1. EXP2089/EXP2090 (conditional on 2090 PASS) proved the general owner and R->C on hardware; Q3RCR's C->R pair was serialized because its class was off.
+  2. Asahi queue/mod.rs uses the TA-on-compute barrier (wait for the compute stamp before TA) for exactly this ordering; q6 implemented it behind this sub-switch only.
+- ATOMIC CONTRACT: none -- single sub-switch.
+- WHAT IS STILL UNKNOWN: whether the firmware honours the TA-on-compute barrier for an inter-job successor (prior validation was intra-submission only), and whether the 64-word compute is long enough for the render to be pending. Q3RCR outputs are independent (blue does not read the compute words), so ordering is proven only by the typed stamps, not by output bytes.
+- Expected PASS: Q3RCR PASS bad=0; typed Wom1RcProgress pair C->R (running_kind compute, barrier TA-on-compute) with published-progress, ordered exact Status 0 reports; Wom1JobWindow ta_on_compute >= 1 (or the matching typed counter); Q3RC unchanged; no reset.
+- INCONCLUSIVE: outputs PASS but no admitted C->R pair (compute finished before R was pending).
+- FAIL: wrong green/compute/blue output, deadline, lost/misordered fence, reset, 0x116.
+- Recovery: rec2091h.
+- Hashes: sys e2b65d8138ab, UmdArm64 3b899e818402, UmdX64 2f70d5a410b4, Umd32 94fc42dbbdfd; manifest 3a8c9b1d8e75, hardware-manifest c1c6bfa4f37d; probe2091.sh c2740aba1ef1 (PROBE_LINT_OK); visible recovery rec2091h 2f1bd08704b8800d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2091h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2091-depth2-taoncompute/run2091.sh.
