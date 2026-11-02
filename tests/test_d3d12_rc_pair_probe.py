@@ -127,7 +127,7 @@ int main(void){
         body=function('q3_sequence')
         self.assertIn('q3_calibrate_render(',body)
         self.assertLess(body.index('q3_calibrate_render('),body.index('/* Initialize measured resources'))
-        self.assertIn('q3_record_sequence(lists, roots, rtv, rtv2, vertices, vertices2, uav, instances, mode)',body)
+        self.assertIn('q3_record_sequence(lists, roots, rtv, rtv2, vertices, vertices2, uav, instances, mode, iterations)',body)
         calibrate=function('q3_calibrate_render')
         self.assertIn('q3_render_duration(',calibrate)
         self.assertNotIn('EndQuery(',calibrate)
@@ -252,7 +252,7 @@ int main(void){unsigned instances=0;int o=0;
             for field in fields.split():
                 checks.append(f'_Static_assert(__builtin_offsetof({canonical},{field})==__builtin_offsetof({probe},{field}),"{field} offset");')
                 checks.append(f'_Static_assert(sizeof((({canonical}*)0)->{field})==sizeof((({probe}*)0)->{field}),"{field} size");')
-        for name in ['GPU_TIMESTAMP_QUERY_MAGIC','GPU_COMPLETION_VERSION','GPU_COMPLETION_PAGE','GPU_TIMESTAMP_RENDER']:
+        for name in ['GPU_TIMESTAMP_QUERY_MAGIC','GPU_COMPLETION_VERSION','GPU_COMPLETION_PAGE','GPU_TIMESTAMP_RENDER','GPU_TIMESTAMP_COMPUTE']:
             checks.append(f'_Static_assert(ADMISSION_{name}==Q3_{name},"{name}");')
         with tempfile.TemporaryDirectory() as d:
             c=Path(d)/'abi.c'

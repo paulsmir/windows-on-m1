@@ -8,6 +8,7 @@
 #define Q3_GPU_COMPLETION_VERSION 3u
 #define Q3_GPU_COMPLETION_PAGE 32u
 #define Q3_GPU_TIMESTAMP_RENDER 1u
+#define Q3_GPU_TIMESTAMP_COMPUTE 2u
 typedef struct _Q3_GPU_COMPLETION {
   unsigned long long Sequence, CommandVa, SubmitQpc, CompleteQpc;
   unsigned long long Start, End, TaStart, TaEnd;
