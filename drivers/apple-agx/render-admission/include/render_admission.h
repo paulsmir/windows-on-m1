@@ -1593,6 +1593,10 @@ NTSTATUS AdmissionPresentSubmitVirtual(_In_ ADMISSION_CONTEXT *Adapter,
     _In_ ADMISSION_RENDER_CONTEXT *Context,
     _In_ const DXGKARG_SUBMITCOMMANDVIRTUAL *Args);
 #endif
+/* Failure evidence is required in normal builds as well as qualification. */
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordEventDrain(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 BOOLEAN AdmissionSubmitTraceBegin(_In_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_SUBMITCOMMAND *Args, ULONG PrivateStage,
@@ -1681,9 +1685,6 @@ VOID AdmissionRecordTaTemporal(_In_opt_ ADMISSION_CONTEXT *Context,
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordKTrace(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_KTRACE_RECEIPT *Receipt);
-_IRQL_requires_(PASSIVE_LEVEL)
-VOID AdmissionRecordEventDrain(_In_opt_ ADMISSION_CONTEXT *Context,
-    _In_ const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt);
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordQueueFaultSnapshot(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot);
@@ -1861,11 +1862,6 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Receipt);                                                           \
   } while (0)
 #define AdmissionRecordKTrace(Context, Receipt)                                \
-  do {                                                                         \
-    (void)(Context);                                                           \
-    (void)(Receipt);                                                           \
-  } while (0)
-#define AdmissionRecordEventDrain(Context, Receipt)                            \
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Receipt);                                                           \
