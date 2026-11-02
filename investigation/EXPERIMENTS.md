@@ -67045,3 +67045,16 @@ EXP2074 HARDWARE ACTUAL (2026-11-02): **f224b4dc restores the lighting kernel's 
 - Expected vs actual: PS 6678 (as expected); lighting binary equal to off (as expected); C4 equal to b expected, actual 8.82 (a) / 8.66 (b) / 8.89 (c): rejected; main 3D -0.3 ms expected, actual 7.86 (a) / 8.11 (b) / 8.04 (c); score +1% expected, actual equal within the 1-3% run-to-run spread.
 - Remaining C4 cost: small per-frame kernels compiled wider under rc123 (97ae4b02 and e5ffd902 79 -> 87 halfregs, 5 dispatches per frame; 7626aaca and ee6509b6 +19 instructions). Fix 926c5754: the reservation applies only when the pinned allocation fills the register file (255 halfregs); offline every smaller function compiles bit-identically to APPLE_AGX_RA_WEB=0, the PS and heavy compute keep their gains. Not run alone (expected +0.5%, below the noise); it rides with the next experiment.
 - Next: the per-job launch gaps (about 5 ms of 36 ms) via the Asahi queue model, investigation/analysis/ASAHI-QUEUE-MODEL-2026-11-02.md step 1.
+
+EXP2075 HARDWARE BEFORE 2026-11-02T14:58:13Z:
+Arms: a FHD 100k -temporal 0 (first), b HD 100k -temporal 0, c FHD 100k -temporal 1 (control).
+- WHY THIS HYPOTHESIS:
+  1. macOS 15.7.8 on this J313 (2026-11-02, same command line as gm-run.ps1, Metal): -temporal 1 FHD 100k 4397 / 26.2 FPS with the GPU 100% active at 1278 MHz (powermetrics); -temporal 0 7814 / 46.8 FPS. The user's 7416 (FHD) and 9739 (HD) were temporal off.
+  2. Every Windows arm so far passed -temporal 1: FHD 100k 4331-4405, equal to macOS in that mode.
+- ATOMIC CONTRACT: benchmark setting only (the driver is unchanged against EXP2074 except 926c5754, a compiler choice proven bit-identical offline below 255 halfregs).
+- Expected: a 7000-7800 (macOS 7814); b 8500-9700 (macOS 9739); c about 4400 (macOS 4397). Without temporal AA the frame is about half the GPU work, so our per-job launch gaps (about 5 ms per frame) weigh more: a below macOS by a larger fraction than c.
+- Failure criteria: TDR, WER, image corruption; c outside 4250-4450.
+- Recovery: rec2075h.
+- Hashes: sys b92d341e98d9, UmdArm64 ec7e3b1feff9, UmdX64 84c81cdfe1ab, Umd32 3f6637b8b6b0; manifest 942d49351cd7, hardware-manifest f8a8f62f509a; probe2075.sh a06ea0676234 (PROBE_LINT_OK); visible recovery rec2075h a25f4abfb7d56c96; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2075h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2075-temporal/run2075.sh.
