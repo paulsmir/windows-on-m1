@@ -66869,3 +66869,14 @@ EXP2066 HARDWARE ACTUAL (2026-10-29): **measure-batch-deps: GravityMark's frame 
 - Next: check whether the main pass loses AGX hidden-surface removal (discard, depth or sample-mask writes, side effects, or our flags).
 
 EXP2067 NOT RUN (2026-10-29): the diagnostic (AGX_MESA_DEBUG=shaders, HD 50k) was prepared and then cancelled before launch at the user's request. The guest stays clean (package absent).
+
+EXP2067 HARDWARE BEFORE 2026-11-02T11:23:39Z:
+Arm a: D3D12 HD 50k with AGX_MESA_DEBUG=shaders. Mesa's agx_compile prints every compiled shader's NIR and AGX code to stdout, which gm-run keeps in gm2067a-out.txt.
+- WHY: the heaviest pixel shader (runtime stats: 8285 instructions, 255 halfregs, 384 threads, 111 spills, 72 B scratch, 37 loops) against Apple's largest fragment shader (3453 instructions, r127, 52 textures, 19 loops). Its code is needed to see where the extra 4800 instructions and the spills come from: texture descriptor crawls, D3D sampler emulation, cube lowering, conversions. The offline fixture cannot run Gallium's fragment I/O lowering.
+- ATOMIC CONTRACT: diagnostic only. The score is not comparable (printing at compile time).
+- Expected: gm2067a-out.txt holds AGX listings, including a fragment shader with about 8285 instructions.
+- Failure criteria: no listings (the UMD build lacks agx_print or stdout is lost), or a crash in the print path.
+- Recovery: rec2067h.
+- Hashes: sys 4696b50259f3, UmdArm64 bb36a00ed0fc, UmdX64 2b83cf664ac9, Umd32 7c4b870468d4; manifest 3b7ffb591654, hardware-manifest b7dd0017800f; probe2067.sh 52a47e31da5e (PROBE_LINT_OK); visible recovery rec2067h 0fa247aed50b311b; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2067h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2067-agx-disasm/run2067.sh.
