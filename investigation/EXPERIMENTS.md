@@ -67182,3 +67182,8 @@ Arms: a FHD 100k -temporal 0, b HD 100k -temporal 0.
 - Hashes: sys 9187856bd9ef, UmdArm64 6644330cca0c, UmdX64 d387ddb823e2, Umd32 4eb2691b138c; manifest 6b2759c7ed4c, hardware-manifest 3f10ed4d389c; probe2081.sh aa05310e487d (PROBE_LINT_OK); visible recovery rec2081h 9a8c545320177416; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1ManagerReceipt=1.
 - Recovery rec2081h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2081-mgr-receipt/run2081.sh.
+
+EXP2081 HARDWARE ACTUAL (2026-11-02): **rc124 live slots proven: Wom1JobTiming971 build_flags manager_live 55-60, manager_rebind 0-1, manager_restored 0 in the receipt window; FHD 100k T0 4528, HD 100k T0 5675; no fault.**
+- Expected vs actual: live builds the large majority (55-60 of about 60: confirmed); rebinds only at warm-up/eviction (0-1, with the matching single InitBM: confirmed); scores as EXP2079 (4539/5619: confirmed).
+- Render build 142-146 us, begin_job 11-38 us (as before: the copies were cheap; slots are the precondition for queuing).
+- Merged after the run: Codex q2 (e0a97d56, e8ea5757: Wom1NotifierFlight, default off; staged notifier published at queue commit, per-flight storage records). Next: EXP2082, Wom1ManagerSaveOnEvict at depth one (design step 2).
