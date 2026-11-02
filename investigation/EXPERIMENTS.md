@@ -67452,3 +67452,18 @@ EXP2093 HARDWARE ACTUAL (2026-11-02): **q6 step 2 rerun INCONCLUSIVE: with a cal
 - G4 submit failure none; guest alive; pipeline rc 0.
 - Expected vs actual: expected a typed C->R pair (ta_on_compute >= 1); actual none in two probes with a 6 ms predecessor, so "compute too short" is now unlikely; the reason is still unrecorded. Verdict INCONCLUSIVE. Second evidence-limited run on this boundary: per AGENTS.md the next step is offline source analysis of the C->R admission path (Codex q9), not another receipt-only hardware run.
 - Recovery rec2093h.
+
+EXP2094 HARDWARE BEFORE 2026-11-02T22:13:36Z:
+Switches (as EXP2092): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1. Steps: only Q3RR, then only Q3RCR.
+- WHY THIS HYPOTHESIS:
+  1. EXP2092: the first two G4 Prepare rejections (branch 10, 0xc000000d) of the series appeared only once R->R depth two kept two packets retained (1264-1760 kicks); Q3RR then hit its deadline.
+  2. q8 source analysis: general mode retains two context fence slots / pending entries while VidSch was allowed an unbounded node queue; HwQueuePacketCap=2 (WDK DXGK_VIDSCHCAPS) keeps a third packet upstream.
+- ATOMIC CONTRACT: q8 cap (behaviour) + q8b receipt (behaviour-neutral diagnostics, required to make the outcome falsifiable). Switches unchanged.
+- WHAT IS STILL UNKNOWN: which Prepare predicate rejected in EXP2092; whether the cap removes it; whether the TA-on-3D barrier is correct for the probe pair.
+- Expected PASS: G4_SUBMIT_FAILURE none; Q3RR PASS bad=0 with a typed R->R pair (TA-on-3D) published-progress, exact Status 0 order, ta_on_3d >= 1; Q3RCR PASS; no reset; desktop alive.
+- If Prepare recurs: FAIL for the cap, and G4_PREPARE_V4 mask/site names the next causal boundary (q8 DESIGN table).
+- INCONCLUSIVE: outputs PASS and no failure but no retained probe R->R pair.
+- Recovery: rec2094h.
+- Hashes: sys d6cd4911a7d6, UmdArm64 5f71f99f8ce3, UmdX64 e085909e4152, Umd32 5f01243ea6cf; manifest 9c6e65a68358, hardware-manifest e054bab7c746; probe2094.sh 40370a1852ba (PROBE_LINT_OK); visible recovery rec2094h deaae315d551b583; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1.
+- Recovery rec2094h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2094-rr-cap/run2094.sh.
