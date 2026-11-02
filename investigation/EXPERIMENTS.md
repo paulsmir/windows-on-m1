@@ -67405,3 +67405,18 @@ EXP2091 HARDWARE ACTUAL (2026-11-02): **q6 step 2 INCONCLUSIVE: Wom1Depth2TaOnCo
 - Expected vs actual: expected a typed C->R pair with ta_on_compute >= 1; actual none. Preregistered INCONCLUSIVE branch: most likely the 64-word compute retires before the blue render reaches the KMD (no pending successor), but the overwritten ring cannot distinguish that from a typed refusal. No safety regression (no reset, exact outputs).
 - Next: Codex q7 makes the Q3RCR compute a bounded multi-ms loop with exact output and keeps per-PID decision records from being evicted by reason-66 polls; step 3 (EXP2092, Wom1Depth2TaOn3d=1 with TaOnCompute absent) proceeds independently because its predecessor is the calibrated long render.
 - Recovery rec2091h.
+
+EXP2092 HARDWARE BEFORE 2026-11-02T21:41:36Z:
+Switches: EXP2090 set + Wom1Depth2TaOn3d=1 (Wom1Depth2TaOnCompute absent: EXP2091 INCONCLUSIVE, not accepted). Steps: only Q3RR, then only Q3RCR (adjacent-class regression).
+- WHY THIS HYPOTHESIS:
+  1. EXP2090: with General=1 every former SceneId refusal became reason 64 for same-key render->render pairs (2448 per boot, DWM pid 1228, barrier 2 TA-on-3D): the only remaining gate is this class switch.
+  2. EXP2088-2091: R->C pairs with the same long calibrated render as predecessor were admitted every time, so Q3RR's predecessor is long enough for the second render to be pending.
+- ATOMIC CONTRACT: none -- single sub-switch.
+- WHAT IS STILL UNKNOWN: whether the firmware TA-on-3D barrier orders a successor render after a different scene's 3D in the same resident manager slot without InitBM/rebind, and whether DWM stays correct with ~2400 R->R pairs per boot now admitted.
+- Expected PASS: Q3RR PASS bad=0 (green and blue exact); typed pair render->render barrier TA-on-3D, published-progress, reports Status 0 in exact order; Wom1JobWindow ta_on_3d >= 1, max_in_flight 2, no InitBM/rebind for the pair; reason 64 count falls sharply; Q3RCR still PASS; desktop alive, no reset, no DWM fault.
+- INCONCLUSIVE: outputs PASS without an admitted R->R pair for the probe PID.
+- FAIL: wrong output, deadline, lost/misordered fence, reset, 0x116, DWM corruption or crash.
+- Recovery: rec2092h.
+- Hashes: sys 2af7554d2958, UmdArm64 52e8bd263dd0, UmdX64 63c88768522f, Umd32 a66cd30ccd7d; manifest 99ebd8e69431, hardware-manifest fe348fe41905; probe2092.sh 1e10dd2e6aae (PROBE_LINT_OK); visible recovery rec2092h e7ca9b33dde94e8d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1.
+- Recovery rec2092h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2092-depth2-taon3d/run2092.sh.
