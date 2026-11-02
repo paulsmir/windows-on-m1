@@ -67107,3 +67107,17 @@ EXP2077 HARDWARE ACTUAL (2026-11-02): **inside the 7.17 ms segment the cost is i
 - Expected vs actual: radix sort 2-3 ms expected, 0.79 actual (rejected); tiny/indirect 3-4 ms expected, about 0.6 actual (rejected). The per-dispatch overhead hypothesis is rejected.
 - Offline check: the D3D bounds checks are not the cause on hardware (2308298b compiles to 2553 instructions on hardware, as without robustness offline).
 - Next: EXP2078 splits the 2.91 and 1.48 ms pieces per kernel.
+
+EXP2078 HARDWARE BEFORE 2026-11-02T15:52:26Z:
+Arms: a HD 100k -temporal 0 with APPLE_AGX_D3D12_SPLIT_TAGS=53aff18d,a4452d43,7aa43c6c,9e9aea5a,9f0d0b9d,b74fd86e,97efffb3,b1db88bf; b without (control).
+- WHY THIS HYPOTHESIS:
+  1. EXP2077: the per-asteroid compute job is dominated by two pieces: [7b9fa104 .. e242737c] 2.91 ms (holding 2308298b53aff18d: 2553 instructions on hardware, 32-thread groups, 6 barriers, indirect grid) and [7626aaca .. de951f8f] 1.48 ms (six indirect kernels of about 2000 instructions with atomics); per-dispatch overhead was ruled out (48-dispatch radix sort 0.79 ms, tiny chain 0.12 ms).
+  2. An estimate of 100k threads x 2553 instructions is about 0.2 ms of ALU at full occupancy, so a 2.9 ms piece points at occupancy or latency (32-thread groups), but which kernel holds the time is unmeasured.
+- ATOMIC CONTRACT: diagnostic only (score of a not comparable).
+- WINDOWS/AGX CONTRACT: unchanged. TRANSLATION: none. WHAT IS STILL UNKNOWN: the time of each heavy kernel.
+- Expected: the piece starting at 53aff18d (2308298b) at least 1.5 ms; the others 0.2-0.5 ms each; b about 5700.
+- Failure criteria: TDR, WER, corruption; no extra jobs in a.
+- Recovery: rec2078h.
+- Hashes: sys 17dbf8077532, UmdArm64 d55c9775e83a, UmdX64 688df64444c1, Umd32 a2b84c433603; manifest 865ca3643c05, hardware-manifest 042ed6301135; probe2078.sh c593df27d88f (PROBE_LINT_OK); visible recovery rec2078h 6a8c4c831418696b; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2078h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2078-split3/run2078.sh.
