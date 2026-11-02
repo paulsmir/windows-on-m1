@@ -67565,3 +67565,12 @@ Switches: EXP2096 accepted mask (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1J
 - Hashes: sys 137d8ca31f01, UmdArm64 9ec305012007, UmdX64 88d6fc4cec5a, Umd32 7a53069d7567; manifest a04a3a91899f, hardware-manifest c4597eff6cdd; probe2098.sh fc2a5fc7450f (PROBE_LINT_OK); visible recovery rec2098h 14488e6c72008f49; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1TdrDrillAllowed=1 Wom1Depth2Drill=1.
 - Recovery rec2098h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2098-drill-head/run2098.sh.
+
+EXP2098 HARDWARE ACTUAL (2026-11-03): **q12 depth-two recovery drill, head mode: PASS. A TDR injected at the head of a published render->render pair reported both original fences dropped exactly once, one successful engine reset, and the desktop and later depth-two work stayed healthy.**
+- Wom1Depth2Drill read back 0 (consumed), Wom1TdrDrillAllowed 1.
+- Wom1Depth2DrillReceipt v1/164: mode 1, attempts 1, pair PID 1232 (DWM), flights 1/2, running render, next render, barrier 2 (TA-on-3D); bracketed outstanding endpoints: expected done 80/82, observed done 78/78/78, write 82/82/82; ReportedCount 2, WDDM fences 235, 236 in order with statuses [5,5]; ReportOverflow 0; queue receipt v1/92 target 1 released 1, head/next 235/236, both pipes 3D, TerminalCount 2, fences 235/236, statuses [4,4].
+- Wom1GpuReset: resets 1, succeeded 1, DxgkDdiResetEngine status 0, SchedulerFaulted 0x417ef (backend_platform_windows.c:6127, the drill stop), completed 0xea, last aborted 0xec (=236), quiesce ended, wait 0 ms; no further reset for the rest of the boot. System 4101 events 0. DWM running after the drill.
+- Later fresh work: Q3RR PASS bad=0, Q3RCR PASS bad=0; kicks 1936 (ta_on_3d 1935, compute_on_3d 1), kick_failures 0, reset_aborts 0; G4 failure none, EventDrain none; guest alive; pipeline rc 0.
+- Expected vs actual: every preregistered PASS criterion met (statuses [5,5]/[4,4], exact fences, one bounded reset, DWM alive, later probes PASS). Desktop/USB/RDP were not inspected separately (SSH and DWM process only). Verdict confirmed.
+- Next: EXP2099 successor mode (Wom1Depth2Drill=2) as its own run.
+- Recovery rec2098h.
