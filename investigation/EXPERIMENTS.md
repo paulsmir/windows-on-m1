@@ -67467,3 +67467,14 @@ Switches (as EXP2092): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhe
 - Hashes: sys d6cd4911a7d6, UmdArm64 5f71f99f8ce3, UmdX64 e085909e4152, Umd32 5f01243ea6cf; manifest 9c6e65a68358, hardware-manifest e054bab7c746; probe2094.sh 40370a1852ba (PROBE_LINT_OK); visible recovery rec2094h deaae315d551b583; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1.
 - Recovery rec2094h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2094-rr-cap/run2094.sh.
+
+EXP2094 HARDWARE ACTUAL (2026-11-02): **q6 step 3 rerun FAIL: R->R (TA-on-3D) depth two causes repeated provider DrainEvents poll failures and DxgkDdiResetEngine (5 resets per boot); the G4 Prepare rejections are their downstream symptom, not queue capacity.**
+- Q3RR: PASS bad=0 (pid 9800); Wom1JobWindow after Q3RR: kicks 991, max_in_flight 2, ta_on_3d 991, adopted 991, kick_failures 0, reset_aborts 0; decisions admitted 991, no reason 64. No probe-PID RcProgress pair retained (ring overwritten 905/1061; q9 coalescing not in this package).
+- Q3RCR: PASS bad=0 (pid 9584).
+- Wom1G4SubmitFailure v4 (first of total 3): branch 10, site 4 (immediate), mask 0x102 = immediate path + SchedulerFaulted, fence 467, pending 0/2, packet empty, scheduler faulted 0x4180d, preemption Idle. The q8 HwQueuePacketCap=2 hypothesis is rejected as the EXP2092 cause: capacity was free.
+- Wom1GpuReset v4: resets 5, succeeded 5, DxgkDdiResetEngine at 20.8 s, 23.6 s, 26.2 s, 29.3 s and 63.6 s after start (last aborted fences 0x1d4, 0x33e, 0x3bc, 0x64f, 0x15fa); every entry has SchedulerFaulted 0x4180d = backend_platform_windows.c:6157 (AppleAgxPlatformProviderPoll failed), last_poll_guard 2 = AppleAgxPlatformPollGuardDrainEvents, backend phase 2, provider phase 1, firmware_recoveries 0.
+- Wom1GpuReset is present only in the R->R runs (EXP2092 and EXP2094) and absent in EXP2089-2091 and EXP2093 (same series, TA-on-3D off). Wom1EventDrainReceipt is absent from both the service and the device key, so the rejected event is unrecorded.
+- Guest alive, desktop recovered after each reset, pipeline rc 0.
+- Expected vs actual: expected no G4 failure and a typed R->R pair; actual 5 engine resets caused by event-drain failure under R->R depth two. Verdict FAIL for Wom1Depth2TaOn3d; it stays off. The cap commit (q8) is kept as harmless but unproven; record it as not addressing this defect.
+- Next: Codex q10 traces which firmware event ingest guard rejects with two renders of one resident manager slot in flight and why Wom1EventDrainReceipt is not exported; C->R (EXP2095) proceeds independently with TA-on-3D off.
+- Recovery rec2094h.
