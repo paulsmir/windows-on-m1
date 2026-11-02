@@ -66988,3 +66988,13 @@ EXP2071 HARDWARE ACTUAL (2026-11-02): **rc122 is active on hardware but does not
 - The full-screen PS is unchanged at 8285 instructions, 255 halfregs, 111 spills. Main 3D 8.34 ms (8.25-8.40 before).
 - Score: a 4342 (rc122, first position), b 4405 (APPLE_AGX_RA_PACK=0, second). With only small static changes to dispatched shaders, the gap is run-to-run spread (first-position FHD has varied 4241-4372), not a measured rc122 cost. The verdict waits for the PS.
 - Next: EXP2072 listings show the PS's variants.
+
+EXP2072 HARDWARE BEFORE 2026-11-02T12:57:31Z:
+Arm a: HD 50k with AGX_MESA_DEBUG=shaders. Every compiled variant prints: pinned, the latency ladder and packed.
+- WHY: EXP2071a shows rc122 active on hardware for compute (b6ed2427 3743 → 3040 instructions, as offline), but the full-screen PS is unchanged at 8285 instructions, 255 halfregs, 111 spills. Either its packed variant was rejected by agx_win32_pack_keeps (not fewer instructions, or more spills or fewer threads), or fragment functions do not reach agx_win32_compile_function's pack step. The listings of all its variants distinguish the two.
+- ATOMIC CONTRACT: diagnostic only. The score is not comparable.
+- Expected: for 71405b87, the instruction counts of each variant listing, and whether a packed listing exists.
+- Recovery: rec2072h.
+- Hashes: sys 13d3c1508704, UmdArm64 4c9cc56db92e, UmdX64 5f5b479a942b, Umd32 3f06e1574460; manifest 1eec2bc9defd, hardware-manifest 207eae8efd3b; probe2072.sh 4b7656d85935 (PROBE_LINT_OK); visible recovery rec2072h 9552d3502f1432bf; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2072h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2072-pack-disasm/run2072.sh.
