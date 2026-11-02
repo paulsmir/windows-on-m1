@@ -5463,6 +5463,36 @@ static bool EagerPsoEnabled() {
     }
     return value == 1;
 }
+/* rc125 diagnostic: APPLE_AGX_D3D12_SPLIT_TAGS=hex[,hex...] (up to 8 CS
+ * tags, the 6th value of measure-d3d12-dispatch) ends the batch before each
+ * dispatch of those shaders, so each piece of a compute job becomes its own
+ * KMD job with its own firmware time (agx_gpu_frame_breakdown.py --jobs).
+ * Unset: no effect. Adds one job launch per split. */
+static bool SplitBeforeTag(UINT tag) {
+    static volatile LONG state; /* 0 unread, 1 read */
+    static UINT tags[8];
+    static UINT count;
+    if (!state) {
+        char text[128] = {};
+        const DWORD n = GetEnvironmentVariableA("APPLE_AGX_D3D12_SPLIT_TAGS", text, sizeof(text));
+        UINT c = 0;
+        if (n && n < sizeof(text)) {
+            const char *s = text;
+            while (*s && c < 8) {
+                char *end = nullptr;
+                const unsigned long v = strtoul(s, &end, 16);
+                if (end == s) break;
+                tags[c++] = static_cast<UINT>(v);
+                s = *end == ',' ? end + 1 : end;
+            }
+        }
+        count = c;
+        InterlockedExchange(&state, 1);
+    }
+    for (UINT i = 0; i < count; ++i)
+        if (tags[i] == tag) return true;
+    return false;
+}
 static void EagerCompilePipeline(AgxD3d12Device *device, AgxD3d12PipelineState *pso, const AgxD3d12RootSignature *root) {
     if (!device || !pso || !root || !device->owner || !EagerPsoEnabled()) return;
     const bool compute = pso->cs_dwords != 0;
@@ -6551,6 +6581,7 @@ static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const
     AGX_D3D12_BUFFER args = {}, count = {};
     AGX_D3D12_INDIRECT indirect;
     OwnerIndirect(dispatch.indirect, &args, &count, &indirect);
+    if (dispatch.pso && SplitBeforeTag(dispatch.pso->cs_tag)) AgxD3d12OwnerSplitBatch(owner);
     const HRESULT hr = AgxD3d12OwnerDispatch(owner, pipeline, bind.uavs, bind.cbvs, bind.srvs, bind.samplers,
                                              dispatch.groups[0], dispatch.groups[1], dispatch.groups[2],
                                              indirect.Buffer ? &indirect : nullptr);

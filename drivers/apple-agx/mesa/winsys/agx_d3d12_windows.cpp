@@ -4389,6 +4389,12 @@ struct DispatchTiming {
   ~DispatchTiming() { Mark(Unbind); }
 };
 
+extern "C" void AgxD3d12OwnerSplitBatch(AGX_D3D12_OWNER *owner) {
+  OwnerLock lock(owner);
+  if (owner && owner->Context && !AgxWin32AsahiContextFaulted(owner->Context))
+    owner->Context->flush(owner->Context, NULL, 0);
+}
+
 extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12_COMPUTE *compute,
                                          const AGX_D3D12_UAV uavs[AGX_D3D12_UAV_SLOTS],
                                          const AGX_D3D12_CBV cbvs[AGX_D3D12_CBV_SLOTS],

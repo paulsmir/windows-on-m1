@@ -608,6 +608,10 @@ HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *Owner);
 /* C83: caller holds the owner lock across replay.
  * Flush then queue a GPU wait, or CPU-retire on unavailable/failed GPU wait. */
 HRESULT AgxD3d12OwnerSubmitForQueue(AGX_D3D12_OWNER *Owner, HANDLE Context);
+/* rc125 diagnostic (APPLE_AGX_D3D12_SPLIT_TAGS): ends the current batch so
+ * the next command starts a new KMD job; the firmware times each job.
+ * Caller holds the owner lock across replay. */
+void AgxD3d12OwnerSplitBatch(AGX_D3D12_OWNER *Owner);
 
 #ifdef __cplusplus
 }
