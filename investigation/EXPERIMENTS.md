@@ -67100,3 +67100,10 @@ Arms: a HD 100k -temporal 0 with APPLE_AGX_D3D12_SPLIT_TAGS=a3da7f9d,39e0399a,03
 - Hashes: sys 699cbb247ace, UmdArm64 c8d08b923f28, UmdX64 52207aff3193, Umd32 83ffb6793248; manifest 3ea64fc09c71, hardware-manifest fd9d19b96d8c; probe2077.sh 8776817fb210 (PROBE_LINT_OK); visible recovery rec2077h 57e81e18fc3c6363; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2077h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2077-split2/run2077.sh.
+
+EXP2077 HARDWARE ACTUAL (2026-11-02): **inside the 7.17 ms segment the cost is in a few heavy kernels, not in per-dispatch overhead: the 48-dispatch radix sort takes 0.79 ms, about 20 tiny/indirect dispatches 0.12 ms.**
+- a (split at 8 tags) 4910, 19 jobs per frame; b 5675 (control).
+- Pieces (median ms, frame order): [981f .. 094e] 1.34; radix sort [a3da7f9d + 8 passes] 0.79; [39e0399a/93891b99/7bc49152, 391 groups each] 1.51; [03b52dfc tiny chain] 0.12; [39e0/9389/7bc4 indirect] 0.00; [7b9fa104 (128 groups), 2308298b53aff18d (indirect, 32-thread groups, 2553 instructions on hardware), 9ec8addfa4452d43, 97ae4b027aa43c6c (16 groups + 4 indirect), 1f27c6349e9aea5a, 5fa7c58c4cb32fe4, 594b0a256324d3a8, 08f519db905a276c, e242737cc78e81b6] 2.91; [cfb56a6a indirect sort] 0.10; [7626aaca65b3a258, 289fbf2f9f0d0b9d, e415b41eb74fd86e, a8260e4297efffb3, 6cf11e8ab1db88bf, de951f8f520e6881, about 2000 instructions each with atomics, indirect] 1.48; [546c0c9a tail] 0.37. Sum 8.62 = C4.
+- Expected vs actual: radix sort 2-3 ms expected, 0.79 actual (rejected); tiny/indirect 3-4 ms expected, about 0.6 actual (rejected). The per-dispatch overhead hypothesis is rejected.
+- Offline check: the D3D bounds checks are not the cause on hardware (2308298b compiles to 2553 instructions on hardware, as without robustness offline).
+- Next: EXP2078 splits the 2.91 and 1.48 ms pieces per kernel.
