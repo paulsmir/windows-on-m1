@@ -141,6 +141,34 @@ uniform32(nir_builder *b, nir_def *index, unsigned table)
                                    .align_mul = 4);
 }
 
+static unsigned
+fixture_type_size(const struct glsl_type *type, bool bindless)
+{
+   (void)bindless;
+   return glsl_count_attribute_slots(type, false);
+}
+
+/* stand-in for Gallium agx_nir_lower_fs_output_to_epilog (colour
+ * outputs become epilog register exports; layout of agx_abi.h) */
+#define FIXTURE_FOUT_COLOUR(rt) (2 * (4 + (4 * (rt))))
+static bool
+lower_fs_outputs(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   (void)data;
+   if (intr->intrinsic != nir_intrinsic_store_output)
+      return false;
+   nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
+   if (sem.location < FRAG_RESULT_DATA0)
+      return false;
+   const unsigned loc = sem.location - FRAG_RESULT_DATA0 + nir_src_as_uint(intr->src[1]);
+   b->cursor = nir_instr_remove(&intr->instr);
+   nir_def *vec = intr->src[0].ssa;
+   const unsigned comp = nir_intrinsic_component(intr), stride = vec->bit_size / 16;
+   u_foreach_bit(c, nir_intrinsic_write_mask(intr))
+      nir_export_agx(b, nir_channel(b, vec, c), .base = FIXTURE_FOUT_COLOUR(loc) + (comp + c) * stride);
+   return true;
+}
+
 /* stand-in for Gallium agx_nir_lower_sysvals */
 static bool
 lower_sysvals(nir_builder *b, nir_instr *instr, void *data)
@@ -185,6 +213,10 @@ lower_sysvals(nir_builder *b, nir_instr *instr, void *data)
       break;
    case nir_intrinsic_load_num_workgroups:
       value = nir_load_preamble(b, 3, 32, .base = 0);
+      break;
+   case nir_intrinsic_load_is_first_fan_agx:
+      /* rc123 FS: a draw uniform, as Gallium's */
+      value = nir_ine_imm(b, nir_load_preamble(b, 1, 16, .base = 8), 0);
       break;
    case nir_intrinsic_bindless_image_agx:
       /* D3D12 C47 heap handles (DXBC_HEAP_HANDLE_MARK): the heap mirror */
@@ -652,13 +684,14 @@ int
 main(int argc, char **argv)
 {
    bool d3d_robust = true, print_nir = false, print_lowered = false, in_bounds = false;
-   bool soft_fault = false, soft_fault_loads = false;
+   bool soft_fault = false, soft_fault_loads = false, fs_backend = false;
    unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
       if (sscanf(argv[a], "--root-views=%x,%x", &root_uavs, &root_cbvs) == 2)
          continue;
       d3d_robust &= strcmp(argv[a], "--no-d3d-robust") != 0;
       print_nir |= !strcmp(argv[a], "--print-nir");
+      fs_backend |= !strcmp(argv[a], "--fs-backend"); /* rc123: FS through the backend */
       print_lowered |= !strcmp(argv[a], "--print-lowered"); /* after the D3D lowering */
       in_bounds |= !strcmp(argv[a], "--assume-in-bounds");
       soft_fault |= !strcmp(argv[a], "--soft-fault");
@@ -698,7 +731,8 @@ main(int argc, char **argv)
       }
       nir = r.nir;
    }
-   if (nir->info.stage != MESA_SHADER_COMPUTE) {
+   const bool fragment = fs_backend && nir->info.stage == MESA_SHADER_FRAGMENT;
+   if (nir->info.stage != MESA_SHADER_COMPUTE && !fragment) {
       /* other stages: the D3D lowering's in-bounds path only (no backend
        * compile: their I/O lowering is Gallium's) */
       if (d3d_robust)
@@ -743,6 +777,15 @@ main(int argc, char **argv)
    count_hot(&nir_shader_get_entrypoint(nir)->body, &hot);
    NIR_PASS(_, nir, nir_lower_robust_access, gl_part_of_d3d_robustness, NULL);
    NIR_PASS(_, nir, agx_nir_lower_texture_early, true);
+   if (fragment) {
+      /* agx_shader_initialize: I/O lowering (fp16 varyings: see rc123) */
+      NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out, fixture_type_size,
+               nir_lower_io_lower_64bit_to_32 | nir_lower_io_use_interpolated_input_intrinsics);
+      nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+      const uint64_t flat = nir->info.inputs_read & ~nir->info.linear_varyings & ~nir->info.perspective_varyings;
+      NIR_PASS(_, nir, nir_lower_mediump_io, nir_var_shader_in | nir_var_shader_out,
+               ~(flat | agx_gather_texcoords(nir)), false);
+   }
    NIR_PASS(_, nir, nir_lower_tex, &(nir_lower_tex_options){.lower_index_to_offset = true});
    NIR_PASS(_, nir, nir_opt_constant_folding);
    NIR_PASS(_, nir, nir_shader_instructions_pass, bind_resources, nir_metadata_control_flow, NULL);
@@ -772,6 +815,14 @@ main(int argc, char **argv)
    const unsigned speculated = count_speculated(nir);
    NIR_PASS(_, nir, nir_lower_ssbo, NULL);
    agx_preprocess_nir(nir);
+   if (fragment) {
+      /* agx_state.c agx_compile_variant, FRAGMENT */
+      NIR_PASS(_, nir, agx_nir_lower_discard_zs_emit);
+      NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_fs_outputs, nir_metadata_control_flow, NULL);
+      NIR_PASS(_, nir, agx_nir_lower_sample_mask);
+      /* agx_compile_variant */
+      NIR_PASS(_, nir, agx_nir_lower_interpolation);
+   }
 
    /* agx_compile_nir */
    NIR_PASS(_, nir, nir_shader_instructions_pass, lower_sysvals, nir_metadata_control_flow, NULL);
@@ -793,7 +844,7 @@ main(int argc, char **argv)
           "instrs %u alu %u fscib %u ic %u gprs %u threads %u scratch %u spills %u fills %u loops %u code %u "
           "preamble %u nir-alu %u nir-mem %u nir-tex %u nir-shared %u barriers %u atomics %u root-marked %u "
           "crawl-speculated %u tex-speculated %u binary-fnv %08x\n",
-          mesa_shader_stage_name(MESA_SHADER_COMPUTE), block[0], block[1], block[2], shared, counts.ifs,
+          mesa_shader_stage_name(fragment ? MESA_SHADER_FRAGMENT : MESA_SHADER_COMPUTE), block[0], block[1], block[2], shared, counts.ifs,
           counts.guarded_loads, counts.loads, counts.stores, counts.txf, mem_blocks, hot.memory_blocks, hot.instrs, hot.branches, s->instrs, s->alu, s->fscib, s->ic,
           s->gprs, s->threads, s->scratch, s->spills, s->fills, s->loops, s->code_size, s->preamble_inst,
           classes.alu, classes.mem, classes.tex, classes.shared, classes.barriers, classes.atomics, marked,
