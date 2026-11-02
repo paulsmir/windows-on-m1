@@ -66908,3 +66908,13 @@ Arm a: D3D12 FHD 100k first app.
 - Hashes: sys c32b85069cd8, UmdArm64 f30585374ed8, UmdX64 eadcdd7e4544, Umd32 fd022d72d072; manifest 6c08a826bdca, hardware-manifest 0ef05956f8b5; probe2068.sh 0c825793aec9 (PROBE_LINT_OK); visible recovery rec2068h 1eb5e6bd4b1dde98; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2068h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2068-ps-draws/run2068.sh.
+
+EXP2068 HARDWARE ACTUAL (2026-11-02): **the heaviest PS (71405b87 / tag 56e2cea9) is drawn once per frame: it is the full-screen pass. FHD 100k 4372 (best).**
+- a FHD 100k first app: 4372 (26.2).
+- Steady-state direct draws per frame by PS tag:
+  - 59351205 ×4;
+  - e17b536e ×2;
+  - fa88b38b, 8ebb9a9c, 5cf5ea58, 52669b33, bf31f405, **56e2cea9**, 10f243e9 ×1 each.
+  - The asteroids go through ExecuteIndirect.
+- The main render job's 0.24 ms TA / 8.25 ms 3D profile fits a full-screen pass of this 8285-instruction, 111-spill shader.
+- Next: rc120 a9aead37 (sink reorderable buffer loads in fragment shaders), EXP2069.
