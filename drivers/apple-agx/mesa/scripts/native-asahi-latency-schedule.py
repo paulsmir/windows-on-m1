@@ -506,7 +506,11 @@ agx_win32_compile_function(nir_shader *nir, nir_function_impl *impl, struct agx_
 
    /* RC123: the pinned schedule with phi-web reservation (same spills and
     * fills: RA only). Kept as the baseline when strictly smaller. */
-   const unsigned web = agx_win32_ra_web_bit();
+   /* RC123 (EXP2074): only a function whose pinned allocation fills the
+    * register file reserves; below that, phi copies are rare and the
+    * reservation only widened small kernels (97ae4b02/e5ffd902 79 -> 87
+    * halfregs, C4 +0.25 ms). */
+   const unsigned web = pinned.stats.gprs >= 255u ? agx_win32_ra_web_bit() : 0u;
    unsigned base_target = 0;
    if (web) {
       binary->size = start;
