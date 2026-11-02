@@ -66967,3 +66967,17 @@ EXP2070 HARDWARE ACTUAL (2026-11-02): **DXIL capture of all 243 GravityMark shad
 - The capture includes f22befa7, 144a46de, 62568917 (the compute shaders with high swap overhead), 806ee7b1, eb6ce860 and the full-screen PS 71405b87.
 - Bench (ra-bench.sh on the five compute captures): pinned 17855 instructions, 21510 xor lines, 8380 mov, 145 spills.
 - rc122 09a2910a (packed narrow allocation variant): 16092 instructions (-9.9%); lighting and eb6ce860 unchanged. → EXP2071.
+
+EXP2071 HARDWARE BEFORE 2026-11-02T12:42:09Z:
+Arms: a FHD 100k (rc122, first), b FHD 100k with APPLE_AGX_RA_PACK=0 (second, control).
+- WHY THIS HYPOTHESIS:
+  1. EXP2067 listing: the full-screen PS spends 1914 xor and 575 mov on the allocator's live-range splits, and most xor runs sit before vector destinations (device_load xyzw, texture, iterproj). find_regs_simple is first fit from register 0.
+  2. Offline bench on the EXP2070 capture (f22befa7, 144a46de, 62568917, 806ee7b1, eb6ce860): xor 21510 → 10380; instructions 17855 → 16092 (-9.9%); 144a46de -22%, 62568917 -18%, f22befa7 -11%; the lighting kernel and eb6ce860 unchanged (variant rejected); threads and spills unchanged.
+  3. The PS cannot be compiled offline (no fragment backend in the fixture), so its stats are the hardware discriminator.
+- ATOMIC CONTRACT: one compiler behaviour, with the pinned compile kept whenever the packed one is not strictly smaller.
+- Expected: arm a's stage-4 PS stats below 8285 instructions (b reproduces about 8285); main-pass 3D below 8.25 ms; a above b by more than the about 3% order effect.
+- Failure criteria: identical PS stats, any image difference, any TDR.
+- Recovery: rec2071h.
+- Hashes: sys 0d1741b64aa0, UmdArm64 15781a6820b7, UmdX64 a196840bca82, Umd32 948840433e18; manifest d734a33cfd29, hardware-manifest c06c09a2b81b; probe2071.sh 480267cc1171 (PROBE_LINT_OK); visible recovery rec2071h 8ce2ffb59a16e8fe; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2071h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2071-ra-pack/run2071.sh.
