@@ -124,6 +124,7 @@ SHIM = retire_source() + r'''
 #include "j313_agx_g2.generated.h"
 #include "render_gpu_fault.h"
 #include "render_job_window.h"
+#include "render_rc_progress.h"
 /* rc102: the receipt of the wired depth-2 window (no successor here). */
 void AdmissionJobWindowReceiptReported(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
                                        unsigned int Count) { (void)Receipt; (void)Count; }
@@ -253,7 +254,13 @@ typedef struct {
   ADMISSION_GPU_POST_RESUME_RECEIPT PostResume;
   int Rtkit, AscIo;
   struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
+  ADMISSION_RC_SAMPLE RcCurrent;
 } ADMISSION_PLATFORM_RUNTIME;
+/* Read-only GPU diagnostic is tested with real mapped words in test_render_rc_progress. */
+static void AdmissionRcSampleWindows(ADMISSION_PLATFORM_RUNTIME *r, unsigned stage,
+                                     unsigned fence, unsigned status) {
+ (void)r; (void)stage; (void)fence; (void)status;
+}
 
 static unsigned notifications, lock_depth, end_calls, published;
 static ULONGLONG now_ms = 506748u;
