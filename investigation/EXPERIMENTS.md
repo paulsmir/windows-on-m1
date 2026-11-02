@@ -66961,3 +66961,9 @@ Arm a: D3D12 HD 50k with APPLE_AGX_D3D12_SHADER_DUMP_DIR and APPLE_AGX_D3D12_SHA
 - Hashes: sys 0b55f111700b, UmdArm64 0739b21680c7, UmdX64 0cc7881487ca, Umd32 0409dbfdd7c3; manifest 16a59bfd345c, hardware-manifest 2d38facb01f2; probe2070.sh 53e7b114908a (PROBE_LINT_OK); visible recovery rec2070h bec3cc4ec1e177ad; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2070h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2070-shader-capture/run2070.sh.
+
+EXP2070 HARDWARE ACTUAL (2026-11-02): **DXIL capture of all 243 GravityMark shaders fetched (agx-capture-2070.zip, 1.0 MB): the offline test bed for the register allocator.**
+- a HD 50k with SHADER_DUMP_ALL: 7196. Not comparable.
+- The capture includes f22befa7, 144a46de, 62568917 (the compute shaders with high swap overhead), 806ee7b1, eb6ce860 and the full-screen PS 71405b87.
+- Bench (ra-bench.sh on the five compute captures): pinned 17855 instructions, 21510 xor lines, 8380 mov, 145 spills.
+- rc122 09a2910a (packed narrow allocation variant): 16092 instructions (-9.9%); lighting and eb6ce860 unchanged. → EXP2071.
