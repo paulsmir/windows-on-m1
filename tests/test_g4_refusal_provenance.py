@@ -23,6 +23,7 @@ class RefusalProvenance(unittest.TestCase):
                       'AdmissionRecordG4SubmitFailure')
         program = r'''
 #include <assert.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <wchar.h>
@@ -54,16 +55,21 @@ static void ZwClose(HANDLE key) { assert(key);++closes; }
 int main(void) {
   ADMISSION_CONTEXT ctx={0}; ctx.PhysicalDeviceObject=&ctx;
   ctx.G4SubmitFailureClaim=ctx.G4BindRefusalClaim=2; ctx.G4SubmitFailureCount=7;
-  ctx.G4SubmitFailure.Version=3; ctx.G4SubmitFailure.Bytes=sizeof(saved);
+  ctx.G4SubmitFailure.Version=4; ctx.G4SubmitFailure.Bytes=sizeof(saved);
   ctx.G4SubmitFailure.LogicalAllocation[2]=0x1234;
+  ctx.G4SubmitFailure.PrepareMask=0x86cd; ctx.G4SubmitFailure.PrepareSite=3;
+  ctx.G4SubmitFailure.PrepareEntryState=1;
   ctx.G4SubmitFailure.TrackFound=1; ctx.G4SubmitFailure.Track.ClassId=3;
   AdmissionRecordG4SubmitFailure(&ctx);
   assert(writes==1 && binds==1 && flushes==1 && closes==1);
-  assert(saved.Version==3 && saved.Bytes==392 && saved.TotalFailures==7);
+  assert(saved.Version==4 && saved.Bytes==456 && saved.TotalFailures==7);
+  assert(saved.PrepareMask==0x86cd && saved.PrepareSite==3 && saved.PrepareEntryState==1);
+  assert(offsetof(struct _ADMISSION_G4_SUBMIT_FAILURE, PrepareMask)==392);
+  assert(offsetof(struct _ADMISSION_G4_SUBMIT_FAILURE, PrepareEntryState)==452);
   assert(saved.LogicalAllocation[2]==0x1234 && saved.Track.ClassId==3);
   --ctx.G4SubmitFailure.Bytes; AdmissionRecordG4SubmitFailure(&ctx);
   assert(writes==1 && binds==1);
-  ctx.G4SubmitFailure.Bytes=sizeof(saved); ctx.G4SubmitFailure.Version=2;
+  ctx.G4SubmitFailure.Bytes=sizeof(saved); ctx.G4SubmitFailure.Version=3;
   AdmissionRecordG4SubmitFailure(&ctx); assert(writes==1 && binds==1);
 }
 '''

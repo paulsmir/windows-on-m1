@@ -754,6 +754,14 @@ typedef struct _ADMISSION_CONTEXT {
     ULONGLONG LogicalAllocation[4], LogicalAllocationOffset[4];
     ULONG TrackFound, OwnerOsProcessId;
     ADMISSION_G3_ALLOC_TRACK Track;
+    /* Version 4: Prepare rejection snapshot; v3 prefix stays byte-identical.
+     * PrepareMask/Site are the stable ABI in gpuva_g3_windows.c. */
+    ULONG PrepareMask, PrepareSite, PrepareFence, PrepareFenceOutstanding;
+    ULONG PrepareSecondFence, PreparePendingCount, PreparePendingCapacity;
+    ULONG PrepareTail, PrepareTailState, PreparePacketState;
+    ULONG PrepareSchedulerFaulted, PreparePreemptionPhase;
+    ULONG PrepareSchedulerQueueCount, PrepareSchedulerQueueCapacity;
+    ULONG PrepareSchedulerLastSubmittedFence, PrepareEntryState;
   } G4SubmitFailure;
   /* EXP1210 receipt-only (Wom1G4PreemptOverlap): DxgkDdiPreemptCommand calls
    * and those that arrived while a DxgkDdiSubmitCommandVirtual call was still

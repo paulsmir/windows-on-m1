@@ -152,7 +152,33 @@ enum {
   AdmissionG4RejectLegacyShape = 13,
   AdmissionG4RejectLegacyPacket = 14,
   AdmissionG4RejectLegacySubmit = 15,
-  AdmissionG4RejectStatus = 16
+  AdmissionG4RejectStatus = 16,
+  /* Version 4 PrepareMask: path/result bits and observed predicates.
+   * Queue reason bits are meaningful only with QueueRefused. */
+  AdmissionG4PrepareDeferred = 0x1u,
+  AdmissionG4PrepareImmediate = 0x2u,
+  AdmissionG4PrepareAdmissible = 0x4u,
+  AdmissionG4PrepareFenceOutstanding = 0x8u,
+  AdmissionG4PrepareSecondFence = 0x10u,
+  AdmissionG4PreparePendingFull = 0x20u,
+  AdmissionG4PrepareTailBusy = 0x40u,
+  AdmissionG4PreparePacketBusy = 0x80u,
+  AdmissionG4PrepareFaulted = 0x100u,
+  AdmissionG4PrepareQueueAttempted = 0x200u,
+  AdmissionG4PrepareQueueRefused = 0x400u,
+  AdmissionG4PrepareEntryChanged = 0x800u,
+  AdmissionG4PrepareInvalidShape = 0x1000u,
+  AdmissionG4PreparePacketRefused = 0x2000u,
+  AdmissionG4PrepareQueueFull = 0x4000u,
+  AdmissionG4PreparePreemptionBlocked = 0x8000u,
+  AdmissionG4PrepareZeroFence = 0x10000u,
+  AdmissionG4PrepareFenceNotAfter = 0x20000u,
+  AdmissionG4PrepareInvalidEngine = 0x40000u,
+  /* PrepareSite values, independent of render versus compute. */
+  AdmissionG4PrepareShape = 1u,
+  AdmissionG4PrepareReserve = 2u,
+  AdmissionG4PreparePublish = 3u,
+  AdmissionG4PreparePacket = 4u
 };
 
 static NTSTATUS AdmissionG4SubmitRejectDetail(
@@ -167,7 +193,7 @@ static NTSTATUS AdmissionG4SubmitRejectDetail(
           &adapter->G4SubmitFailure;
       RtlZeroMemory(first, sizeof(*first));
       if (detail != NULL) *first = *detail;
-      first->Version = 3u;
+      first->Version = 4u;
       first->Bytes = sizeof(*first);
       first->Branch = branch;
       first->Status = (ULONG)status;
@@ -4674,6 +4700,71 @@ static BOOLEAN AdmissionG4PendingAdmissible(ADMISSION_CONTEXT *adapter,
   return admissible;
 }
 
+/* Receipt only. Caller holds SchedulerLock at the failing decision, before
+ * rollback. The Admissible bit records the original path selection; never
+ * re-run PendingAdmissible here (it also checks runtime state outside this
+ * lock). Raw state flags are observations, not all causal on every path. */
+static VOID AdmissionG4CapturePrepareLocked(ADMISSION_CONTEXT *adapter,
+    const ADMISSION_RENDER_CONTEXT *context,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *args, ULONG site, ULONG mask,
+    struct _ADMISSION_G4_SUBMIT_FAILURE *detail) {
+  ULONG tail, distance;
+  if (detail == NULL) return;
+  tail = (adapter->G4PendingHead + adapter->G4PendingCount) %
+      ADMISSION_G4_PENDING_CAPACITY;
+  detail->PrepareSite = site;
+  detail->PrepareFence = args->SubmissionFenceId;
+  detail->PrepareFenceOutstanding = context->Object.FenceOutstanding;
+  detail->PrepareSecondFence = context->GpuvaG3SecondFence;
+  detail->PreparePendingCount = adapter->G4PendingCount;
+  detail->PreparePendingCapacity = ADMISSION_G4_PENDING_CAPACITY;
+  detail->PrepareTail = tail;
+  detail->PrepareTailState = (ULONG)adapter->G4Pending[tail].State;
+  detail->PreparePacketState = (ULONG)AdmissionRenderPacketState(&adapter->RenderPacket);
+  detail->PrepareSchedulerFaulted = (ULONG)InterlockedCompareExchange(
+      &adapter->SchedulerFaulted, 0, 0);
+  detail->PreparePreemptionPhase = (ULONG)adapter->Scheduler.PreemptionPhase;
+  detail->PrepareSchedulerQueueCount = adapter->Scheduler.QueueCount;
+  detail->PrepareSchedulerQueueCapacity = APPLE_AGX_SCHEDULER_QUEUE_CAPACITY;
+  detail->PrepareSchedulerLastSubmittedFence = adapter->Scheduler.LastSubmittedFence;
+  detail->PrepareEntryState = 0u; /* Set by the publish caller, if applicable. */
+  if (detail->PrepareFenceOutstanding != 0u)
+    mask |= AdmissionG4PrepareFenceOutstanding;
+  if (detail->PrepareSecondFence != 0u)
+    mask |= AdmissionG4PrepareSecondFence;
+  if (detail->PreparePendingCount >= ADMISSION_G4_PENDING_CAPACITY)
+    mask |= AdmissionG4PreparePendingFull;
+  if (detail->PrepareTailState != (ULONG)AdmissionG4PendingFree)
+    mask |= AdmissionG4PrepareTailBusy;
+  if (detail->PreparePacketState != AdmissionRenderPacketEmpty)
+    mask |= AdmissionG4PreparePacketBusy;
+  if (detail->PrepareSchedulerFaulted != 0u)
+    mask |= AdmissionG4PrepareFaulted;
+  if ((mask & AdmissionG4PrepareQueueRefused) != 0u) {
+    /* Mirror QueueFence's read-only predicates; do not call it a second
+     * time. Regression cases compare these with the real scheduler. */
+    if (!AppleAgxSchedulerValidateEngine(&adapter->Scheduler, 0u, 0u))
+      mask |= AdmissionG4PrepareInvalidEngine;
+    if (args->SubmissionFenceId == 0u)
+      mask |= AdmissionG4PrepareZeroFence;
+    if (adapter->Scheduler.QueueCount >= APPLE_AGX_SCHEDULER_QUEUE_CAPACITY)
+      mask |= AdmissionG4PrepareQueueFull;
+    if (adapter->Scheduler.PreemptionPhase != AppleAgxPreemptionIdle &&
+        adapter->Scheduler.PreemptionPhase != AppleAgxPreemptionNotificationClaimed)
+      mask |= AdmissionG4PreparePreemptionBlocked;
+    distance = args->SubmissionFenceId - adapter->Scheduler.LastSubmittedFence;
+    if (distance == 0u || distance >= 0x80000000u)
+      mask |= AdmissionG4PrepareFenceNotAfter;
+  }
+  if (site == AdmissionG4PreparePacket &&
+      detail->PreparePacketState == AdmissionRenderPacketEmpty &&
+      detail->PreparePendingCount == 0u &&
+      detail->PrepareFenceOutstanding == 0u &&
+      detail->PrepareSchedulerFaulted == 0u)
+    mask |= AdmissionG4PreparePacketRefused;
+  detail->PrepareMask = mask;
+}
+
 /* Phase 5a: copy a validated submission into the tail pending entry and
  * queue its fence. The entry is reserved under SchedulerLock, filled outside
  * it, and published with the fence; the worker binds it in order. */
@@ -4685,14 +4776,15 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     const APPLE_AGX_G4_SUBMIT_VIEW *view,
     const APPLE_AGX_G4_COMPUTE_ENVELOPE *compute,
     const ADMISSION_PRESENT_COMPUTE *present,
-    ULONGLONG mapping_generation) {
+    ULONGLONG mapping_generation,
+    struct _ADMISSION_G4_SUBMIT_FAILURE *detail) {
   ADMISSION_G4_PENDING *entry = NULL;
   KIRQL old_irql;
   ULONG slot;
   BOOLEAN queued = FALSE;
   /* G2: exactly one of a render view, a compute envelope or a present. */
-  if (compute != NULL && present != NULL) return FALSE;
-  if (compute != NULL || present != NULL ?
+  if ((compute != NULL && present != NULL) ||
+      (compute != NULL || present != NULL ?
       (view != NULL || private_scene != NULL ||
        packet->Kind != ADMISSION_RENDER_PACKET_KIND_COMPUTE) :
       (view == NULL || view->Native == NULL || view->Render == NULL ||
@@ -4700,8 +4792,16 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
        view->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
        view->RenderBytes != sizeof(APPLE_AGX_G4_NATIVE_RENDER) ||
        view->CommandBytes == 0u ||
-       view->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES))
+       view->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES))) {
+    if (detail != NULL) {
+      KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+      AdmissionG4CapturePrepareLocked(adapter, context, args,
+          AdmissionG4PrepareShape, AdmissionG4PrepareDeferred |
+          AdmissionG4PrepareAdmissible | AdmissionG4PrepareInvalidShape, detail);
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+    }
     return FALSE;
+  }
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   slot = (adapter->G4PendingHead + adapter->G4PendingCount) %
       ADMISSION_G4_PENDING_CAPACITY;
@@ -4717,6 +4817,10 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     else
       context->GpuvaG3SecondFence = args->SubmissionFenceId;
   }
+  if (entry == NULL)
+    AdmissionG4CapturePrepareLocked(adapter, context, args,
+        AdmissionG4PrepareReserve,
+        AdmissionG4PrepareDeferred | AdmissionG4PrepareAdmissible, detail);
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   if (entry == NULL)
     return FALSE;
@@ -4757,6 +4861,13 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     ++adapter->G4PendingCount;
     queued = TRUE;
   } else {
+    AdmissionG4CapturePrepareLocked(adapter, context, args,
+        AdmissionG4PreparePublish, AdmissionG4PrepareDeferred |
+        AdmissionG4PrepareAdmissible |
+        (entry->State == AdmissionG4PendingFilling ?
+            AdmissionG4PrepareQueueAttempted | AdmissionG4PrepareQueueRefused :
+            AdmissionG4PrepareEntryChanged), detail);
+    if (detail != NULL) detail->PrepareEntryState = (ULONG)entry->State;
     entry->State = AdmissionG4PendingFree;
     entry->Context = NULL;
     AdmissionContextRetireFence(context, args->SubmissionFenceId);
@@ -5249,13 +5360,13 @@ static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
   packet.DmaEnd = view.CommandBytes;
   if (deferred) {
     if (AdmissionG4PendingQueue(adapter, state, context, NULL, args,
-            &packet, NULL, &envelope, NULL, mapping_generation)) {
+            &packet, NULL, &envelope, NULL, mapping_generation, &detail)) {
       InterlockedIncrement(&adapter->SubmitPath.Deferred);
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;
     }
-    return AdmissionG4SubmitReject(adapter, context, args,
-        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE, &detail);
   }
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
@@ -5267,10 +5378,13 @@ static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
     context->Object.FenceOutstanding = args->SubmissionFenceId;
     prepared = TRUE;
   }
+  if (!prepared)
+    AdmissionG4CapturePrepareLocked(adapter, context, args,
+        AdmissionG4PreparePacket, AdmissionG4PrepareImmediate, &detail);
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   if (!prepared)
-    return AdmissionG4SubmitReject(adapter, context, args,
-        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE, &detail);
   if (!AdmissionBackendImageBindG4Compute(&adapter->BackendImage,
           args->SubmissionFenceId, &envelope)) {
     AdmissionG4RecordBindRefusal(adapter, 1u, args->SubmissionFenceId);
@@ -5435,7 +5549,7 @@ static NTSTATUS AdmissionG3SubmitPresentComputeInner(ADMISSION_CONTEXT *adapter,
   packet.DmaEnd = (ULONG)sizeof(present);
   if (deferred) {
     if (AdmissionG4PendingQueue(adapter, state, context, NULL, args,
-            &packet, NULL, NULL, &present, mapping_generation)) {
+            &packet, NULL, NULL, &present, mapping_generation, NULL)) {
       InterlockedIncrement(&adapter->SubmitPath.Deferred);
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;
@@ -5776,14 +5890,14 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
         TRUE, &detail);
   if (deferred) {
     if (AdmissionG4PendingQueue(adapter, state, context, private_scene, args,
-            &packet, &view, NULL, NULL, mapping_generation)) {
+            &packet, &view, NULL, NULL, mapping_generation, &detail)) {
       InterlockedIncrement(&adapter->SubmitPath.Deferred);
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;
     }
     AdmissionG4PrivateUnqueue(process,private_scene,args->SubmissionFenceId);
-    return AdmissionG4SubmitReject(adapter, context, args,
-        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE, &detail);
   }
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
@@ -5795,11 +5909,14 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     context->Object.FenceOutstanding = args->SubmissionFenceId;
     prepared = TRUE;
   }
+  if (!prepared)
+    AdmissionG4CapturePrepareLocked(adapter, context, args,
+        AdmissionG4PreparePacket, AdmissionG4PrepareImmediate, &detail);
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   if (!prepared) {
     AdmissionG4PrivateUnqueue(process,private_scene,args->SubmissionFenceId);
-    return AdmissionG4SubmitReject(adapter, context, args,
-        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE, &detail);
   }
   if (!AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
           &packet, (PVOID)(ULONG_PTR)packet.DestinationCpuToken,

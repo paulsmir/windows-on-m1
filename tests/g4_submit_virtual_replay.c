@@ -230,6 +230,14 @@ typedef struct {
     ULONGLONG LogicalAllocation[4], LogicalAllocationOffset[4];
     ULONG TrackFound, OwnerOsProcessId;
     ADMISSION_G3_ALLOC_TRACK Track;
+    /* Version 4: Prepare rejection snapshot; v3 prefix stays byte-identical.
+     * PrepareMask/Site are the stable ABI in gpuva_g3_windows.c. */
+    ULONG PrepareMask, PrepareSite, PrepareFence, PrepareFenceOutstanding;
+    ULONG PrepareSecondFence, PreparePendingCount, PreparePendingCapacity;
+    ULONG PrepareTail, PrepareTailState, PreparePacketState;
+    ULONG PrepareSchedulerFaulted, PreparePreemptionPhase;
+    ULONG PrepareSchedulerQueueCount, PrepareSchedulerQueueCapacity;
+    ULONG PrepareSchedulerLastSubmittedFence, PrepareEntryState;
   } G4SubmitFailure;
   /* EXP1210 receipt-only overlap counters (AdmissionDdiSubmitCommandVirtual). */
   volatile int G4SubmitVirtualInFlight, G4SubmitVirtualFence, G4SubmitVirtualFlags;
@@ -1412,7 +1420,7 @@ int main(void) {
     assert(adapter.G4SubmitFailure.LogicalAllocationOffset[i] == 0x8000ULL + i * 0x1000ULL);
   }
   assert(adapter.G4SubmitFailureCount == 131);
-  assert(adapter.G4SubmitFailure.Version == 3u);
+  assert(adapter.G4SubmitFailure.Version == 4u);
   assert(adapter.G4SubmitFailure.TrackFound == 1u);
   assert(adapter.G4SubmitFailure.Track.ClassId == 2u);
   assert(adapter.G4SubmitFailure.Track.AllocationBytes == 0x20000ULL);

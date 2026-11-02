@@ -41,7 +41,7 @@ def replay_functions(production):
         "AdmissionG4SnapshotFailure", "AdmissionG4OutputInLocal", "AdmissionG4ResolveOutput",
         "AdmissionG4PreflightLocked", "AdmissionGpuvaG4PreflightEscape",
         "AdmissionGpuvaG3PrivateCancel", "AdmissionG4PendingAdmissible",
-        "AdmissionG4PendingQueue", "AdmissionG4PendingBindHead",
+        "AdmissionG4CapturePrepareLocked", "AdmissionG4PendingQueue", "AdmissionG4PendingBindHead",
         "AdmissionG4PendingDropLocked",
         "AdmissionJobAheadFillLocked", "AdmissionG4PendingPrebindHead",
         "AdmissionG4PendingAheadPromoteLocked", "AdmissionG4PendingAheadUnbind",
