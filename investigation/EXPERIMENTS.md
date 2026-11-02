@@ -67209,3 +67209,18 @@ EXP2082 HARDWARE ACTUAL (2026-11-02): **Wom1ManagerSaveOnEvict works at depth on
 - Next: design steps 3-4 on the q3 R/C probe before any GravityMark depth-2 run.
 
 EXP2083 BUILD FAILURE (2026-11-02, first package, commit 1812e031): the WDK ARM64 build of AppleAgxRenderAdmission failed: backend_platform_windows.c(2681): C4242 APPLE_AGX_U64 -> ULONG in AdmissionRcObject (Codex q3 receipt), C2220 warning as error. No hardware run. Fix e89f0d18 (64-bit offset parameter); the experiment was repackaged as EXP2083 from e89f0d18 (the failed directory kept as EXP2083-q3rc-nf0.buildfail). Lesson for Codex tasks: host tests do not run MSVC /W4 /WX on KMD code; ask for a cast audit of new KMD code.
+
+EXP2083 HARDWARE BEFORE 2026-11-02T18:56:14Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 (Kick, KickOn3d, RcDepth2, ManagerSaveOnEvict, NotifierFlight absent = 0).
+Run: `agx_d3d12_probe_e2083_arm64.exe only Q3RC` (fresh device, render then compute without a CPU wait, exact 4096-pixel and 64-word checks, 15 s watchdog), then KMD receipts.
+- WHY THIS HYPOTHESIS:
+  1. Codex q2 moved notifier publication to queue commit (Wom1NotifierFlight) to remove the likely EXP2052 notifier cycle; q3 added the bounded R/C probe and Wom1RcReceipt. The design requires a depth-one serial-equivalence A/B (this run off, EXP2084 on) before any depth-two kick.
+  2. EXP2081/2082: slots and receipts run cleanly on GravityMark.
+- ATOMIC CONTRACT: this run is the control of the NotifierFlight A/B (only NotifierFlight changes in EXP2084).
+- WHAT IS STILL UNKNOWN: whether the probe behaves serially and passes on hardware with the depth-2 infrastructure armed but not kicking.
+- Expected: Q3RC PASS, clean process exit, no timeout/removal/reset, ordered exact fences in Wom1JobTiming971, no depth-two kicks (Wom1JobWindow kicks 0); Wom1RcProgress may be empty at depth one.
+- Failure criteria: Q3RC FAIL or crash, timeout, device removal, TDR, misordered fences, any depth-two kick.
+- Recovery: rec2083h.
+- Hashes: sys 2b854ce2b863, UmdArm64 d172df8253a8, UmdX64 c2d2af2c6de9, Umd32 bec936fa122d; manifest baabd3ec2848, hardware-manifest d71e7dc576ab; probe2083.sh d6fd55094b72 (PROBE_LINT_OK); visible recovery rec2083h 0756e61bc5b38ddb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1.
+- Recovery rec2083h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2083-q3rc-nf0/run2083.sh.
