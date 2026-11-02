@@ -2,6 +2,7 @@
 #include "render_job_timing.h"
 #include "render_job_ahead.h"
 #include "render_job_window.h"
+#include "render_rc_progress.h"
 #include "render_gpu_perf.h"
 #include "render_gpu_recovery_snapshot.h"
 
@@ -345,6 +346,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONG Depth2BuildStep;
   ULONG Depth2KickClasses; /* AdmissionJobWindowKickClasses */
   ADMISSION_JOB_WINDOW_KICK_FAILURE Depth2KickFailure;
+  BOOLEAN RcReceiptEnabled, RcDepth2, RcExportPending;
+  ADMISSION_RC_SAMPLE RcCurrent;
+  ADMISSION_RC_RECEIPT RcReceipt;
 } ADMISSION_PLATFORM_RUNTIME;
 
 /* rc90 build-ahead runs in the GPUVA G3 worker only (no SUBMIT receipts,
@@ -887,11 +891,12 @@ static VOID AdmissionJobTimingExportWindows(
   /* EXP1117-EXP1119: every 16th job this export (registry set and flush,
    * 0.76-1.13 ms) ran before the worker released the render slot, ~37 times
    * a second. Export at most every two seconds and never flush: the probe
-   * reads the live values. */
+   * reads the live values. Opt-in Q3 changes bypass this throttle so a
+   * short probe exports its final pair without waiting for another job. */
   before = AdmissionJobQpc();
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   ++runtime->JobTimingWorkers;
-  if (runtime->JobTimingExportQpc != 0ULL &&
+  if (!runtime->RcExportPending && runtime->JobTimingExportQpc != 0ULL &&
       before - runtime->JobTimingExportQpc <
           2ULL * runtime->JobTiming.QpcFrequency) {
     KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
@@ -944,6 +949,12 @@ static VOID AdmissionJobTimingExportWindows(
       RtlInitUnicodeString(&name, L"Wom1JobWindow");
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->Depth2ReceiptSnapshot, sizeof(runtime->Depth2ReceiptSnapshot));
+    }
+    if (NT_SUCCESS(status) && runtime->RcReceiptEnabled && runtime->RcReceipt.Count) {
+      RtlInitUnicodeString(&name, L"Wom1RcProgress");
+      status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
+          &runtime->RcReceipt, sizeof(runtime->RcReceipt));
+      if (NT_SUCCESS(status)) runtime->RcExportPending = FALSE;
     }
     ZwClose(key);
   }
@@ -2635,6 +2646,56 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportReadU32(
   return APPLE_AGX_BACKEND_TRUE;
 }
 
+/* Q3 receipt sampling runs on the existing serialized worker, using the same
+ * validated coherent transport reads as queue completion. It never publishes,
+ * waits, or allocates. Full receipt saturates and records lost samples. */
+static const volatile APPLE_AGX_U32 *AdmissionRcObject(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner, ULONG index, ULONG offset) {
+  if (index >= owner->ObjectCount || !owner->Objects[index].CpuAddress ||
+      owner->Objects[index].Length < sizeof(APPLE_AGX_U32) ||
+      offset > owner->Objects[index].Length - sizeof(APPLE_AGX_U32)) return NULL;
+  return (const volatile APPLE_AGX_U32 *)
+      ((const unsigned char *)owner->Objects[index].CpuAddress + offset);
+}
+static VOID AdmissionRcSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ULONG stage, ULONG terminalFence, ULONG status) {
+  APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner = &runtime->Initdata.RenderSharedMemory;
+  const APPLE_AGX_G13_QUEUE_RUNTIME *q = &runtime->Provider.QueueProvider.Runtime;
+  ADMISSION_RC_SAMPLE s;
+  const volatile APPLE_AGX_U32 *words[11];
+  ULONGLONG qpc;
+  ULONG i;
+  if (!runtime->RcReceiptEnabled || !runtime->RcCurrent.RFence) return;
+  s = runtime->RcCurrent; /* zero-initialized at pair begin */
+  s.Stage=stage; s.TerminalFence=terminalFence; s.Status=status;
+  s.RenderCount=owner->NotifierRenderCount; s.ComputeCount=owner->NotifierComputeCount;
+  for(i=0u;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i) {
+    const APPLE_AGX_NOTIFIER_FLIGHT *f=&owner->Flights[i];
+    if(f->Fence==s.RFence) { s.RFlight=i+1u;s.RSlot=f->RenderSlot; }
+    if(f->Fence==s.CFence) {
+      s.CFlight=i+1u;s.CSet=f->SidecarSet;
+      s.CFlags=(f->Published ? 1u:0u)|(f->Visible ? 2u:0u);
+      s.EventCount=f->EventCount;s.PreviousThreshold=f->PreviousThreshold;
+    }
+  }
+  words[0]=AdmissionRcObject(owner,12u,owner->ObjectOffsets[12u]);
+  words[1]=AdmissionRcObject(owner,39u,APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET);
+  words[2]=AdmissionRcObject(owner,10u,owner->ObjectOffsets[10u]);
+  words[3]=q->Config.D3.Stamp; /* explicitly DRIVER evidence only */
+  words[4]=AdmissionRcObject(owner,9u,owner->ObjectOffsets[9u]);
+  words[5]=q->Config.Ta.CpuWritePointer; words[6]=q->Config.Ta.GpuDonePointer;
+  words[7]=q->Config.D3.CpuWritePointer; words[8]=q->Config.D3.GpuDonePointer;
+  words[9]=q->Config.Compute.CpuWritePointer; words[10]=q->Config.Compute.GpuDonePointer;
+  qpc=AdmissionJobQpc();s.QpcLow=(unsigned int)qpc;s.QpcHigh=(unsigned int)(qpc>>32);
+  AdmissionRcRead(&s,words,AdmissionTransportReadU32,runtime);
+  {
+    unsigned int count=runtime->RcReceipt.Count, overflow=runtime->RcReceipt.Overflow;
+    AdmissionRcAppend(&runtime->RcReceipt,&s);
+    if(count!=runtime->RcReceipt.Count || overflow!=runtime->RcReceipt.Overflow)
+      runtime->RcExportPending=TRUE;
+  }
+}
+
 /* EXP1075 kernel dump: after a firmware Timeout event (kind 4) the FW status
  * read halt_count=1, halted=1, resume=0. Nothing resumed the firmware, the job
  * never completed, and the TDR reset (an RTKit stop the halted firmware cannot
@@ -3091,6 +3152,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBuildLeadBarrier(
               : APPLE_AGX_RENDER_BARRIER_QUEUE_COMPUTE,
           &address))
     return APPLE_AGX_BACKEND_FALSE;
+  if (runtime->RcReceiptEnabled && runtime->RcCurrent.CFence != 0u) {
+    runtime->RcCurrent.WaitLow = (unsigned int)barrier.WaitStampGpuAddress;
+    runtime->RcCurrent.WaitHigh = (unsigned int)(barrier.WaitStampGpuAddress >> 32);
+    runtime->RcCurrent.WaitValue = barrier.WaitValue;
+  }
   Job->LeadBarrierAddress = address;
   return APPLE_AGX_BACKEND_TRUE;
 }
@@ -3220,6 +3286,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   build->JobExpectedDonePointer = Job->ComputeExpectedDonePointer;
   build->WorkAddress = Job->ComputeWorkAddresses[0];
   build->ConfigEvent = input.EventNumber;
+  if (Plan->Successor && runtime->RcCurrent.CFence == fence) {
+    runtime->RcCurrent.ExpectedC = input.StampValue;
+    AdmissionRcSampleWindows(runtime, ADMISSION_RC_BUILT, 0u, 0u);
+  }
   return APPLE_AGX_BACKEND_TRUE;
 }
 
@@ -4328,7 +4398,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
           &runtime->Completion, Fence, Node, Engine))
     return APPLE_AGX_BACKEND_FALSE;
   /* rc90: the completion the worker may chain from (Windows has it). */
+  if (Fence == runtime->RcCurrent.RFence || Fence == runtime->RcCurrent.CFence)
+    AdmissionRcSampleWindows(runtime, ADMISSION_RC_REPORTED, Fence, (ULONG)Status);
   AppleAgxRenderFlightRetire(&runtime->Initdata.RenderSharedMemory,Fence);
+  if (Fence == runtime->RcCurrent.CFence) runtime->RcCurrent.RFence = 0u;
   runtime->AheadFinishedFence = Fence;
   /* rc102: one report; a batched successor turns it into a pair. A
    * kicked successor that ended leaves the window. */
@@ -5108,6 +5181,11 @@ static VOID AdmissionJobWindowKickFailureExportWindows(
   (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &runtime->Depth2ReceiptSnapshot,
                       sizeof(runtime->Depth2ReceiptSnapshot));
   (void)ZwFlushKey(key);
+  if (runtime->RcReceiptEnabled && runtime->RcReceipt.Count) {
+    RtlInitUnicodeString(&name, L"Wom1RcProgress");
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY,
+        &runtime->RcReceipt, sizeof(runtime->RcReceipt));
+  }
   ZwClose(key);
 }
 
@@ -5300,6 +5378,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
         : APPLE_AGX_COMPUTE_JOB_WORD_SET_A;
   }
   refusal = AdmissionJobWindowKickRefusal(&s);
+  if (!refusal && !AdmissionRcPairAllowed(runtime->RcDepth2, s.Running.Kind, s.Next.Kind))
+    refusal = 65u; /* restricted Q3 checkpoint, no new pair classes */
   if (refusal == 0u) {
     next = s.Next.Fence;
     if (AdmissionG4PendingKickLocked(adapter, next)) {
@@ -5320,6 +5400,16 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     /* Preemption, paging and a not yet Prebound successor may clear. */
     return refusal == 4u || refusal == 52u || refusal == 53u ||
            refusal == 54u ? FALSE : TRUE;
+  if (runtime->RcReceiptEnabled && s.Running.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER &&
+      s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_COMPUTE) {
+    RtlZeroMemory(&runtime->RcCurrent, sizeof(runtime->RcCurrent));
+    runtime->RcCurrent.RFence = fence; runtime->RcCurrent.CFence = next;
+    runtime->RcCurrent.ExpectedR = runtime->Backend.PendingJob.D3ExpectedStamp;
+    if (context && context->GpuvaG3Process)
+      runtime->RcCurrent.ProcessId = (unsigned int)
+          ((ADMISSION_G3_PROCESS *)context->GpuvaG3Process)->OsProcessId;
+    AdmissionRcSampleWindows(runtime, ADMISSION_RC_BEFORE_BUILD, 0u, 0u);
+  } else RtlZeroMemory(&runtime->RcCurrent, sizeof(runtime->RcCurrent));
   /* The kick: the fence is the scheduler's kicked fence from here on. */
   runtime->Depth2KickedFence = next;
   runtime->Depth2KickBarrier = barrier;
@@ -5369,6 +5459,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   stageSequence = image->Sequence;
   stageDynamic = image->Dynamic;
   result = AppleAgxBackendRuntimeSubmitSuccessor(&runtime->Backend, &submission);
+  AdmissionRcSampleWindows(runtime, result == AppleAgxBackendRuntimeResultOk ?
+      ADMISSION_RC_SUBMITTED : ADMISSION_RC_FAILED, 0u, (ULONG)result);
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBackendAfter);
   if (result != AppleAgxBackendRuntimeResultOk) {
     ULONG flags = 0u;
@@ -5872,6 +5964,7 @@ AdoptedKicked:
     if (runtime->JobAhead)
       AdmissionJobAheadPrebindWindows(adapter, runtime, description.Fence,
                                       &prebindDone, &prebindRefusal);
+    AdmissionRcSampleWindows(runtime, ADMISSION_RC_POLL, 0u, 0u);
     /* rc95 receipt mode: TA/prelude done pointers and stamps (U4). */
     if (runtime->JobDepth2)
       AdmissionJobDepth2SampleWindows(runtime, description.Fence);
@@ -6989,6 +7082,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerReceipt");
   runtime->ManagerSlots =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerSlots");
+  runtime->RcDepth2 = runtime->RcReceiptEnabled = runtime->RcExportPending = FALSE;
   /* rc90: on by default since EXP2034 (the G4-r3 drill passed with it);
    * only REG_DWORD 0 turns it off. */
 #if ADMISSION_JOB_AHEAD_BUILD
@@ -7003,6 +7097,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       runtime->JobDepth2 ? 1u : 0u,
       runtime->JobDepth2 &&
           AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2Caps") ? 1u : 0u);
+  runtime->RcDepth2 = AdmissionPlatformSwitchEnabled(Context, L"Wom1RcDepth2");
+  runtime->RcReceiptEnabled = runtime->RcDepth2 ||
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1RcReceipt");
   /* rc102: off unless REG_DWORD 1, and only with the rc98 capabilities
    * (the second sidecar set and the compute-queue Barrier it kicks). */
   runtime->JobDepth2Kick = runtime->Depth2Capabilities != 0u &&
@@ -7012,6 +7109,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->Depth2KickClasses = AdmissionJobWindowKickClasses(
       runtime->JobDepth2Kick &&
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2KickOn3d") ? 1u : 0u);
+  if (runtime->RcDepth2) {
+    runtime->JobDepth2Kick = runtime->Initdata.RenderSharedMemory.NotifierFlight &&
+        runtime->Depth2Capabilities != 0u ? TRUE : FALSE;
+    runtime->Depth2KickClasses = 1u << ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D;
+  }
 #else
   runtime->JobAhead = FALSE;
   runtime->JobDepth2 = FALSE;
@@ -7027,6 +7129,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->Initdata.RenderSharedMemory.ManagerEvict = AdmissionEvictG4Manager;
   runtime->Initdata.RenderSharedMemory.ManagerEvictContext = runtime;
 #endif
+  RtlZeroMemory(&runtime->RcCurrent, sizeof(runtime->RcCurrent));
+  RtlZeroMemory(&runtime->RcReceipt, sizeof(runtime->RcReceipt));
   runtime->Depth2KickedFence = runtime->Depth2KickBarrier = 0u;
   runtime->Depth2BatchedFence = runtime->Depth2LastReported = 0u;
   AdmissionJobWindowReceiptInitialize(&runtime->Depth2Receipt);
