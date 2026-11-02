@@ -67492,3 +67492,12 @@ Switches (as EXP2093): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhe
 - Hashes: sys b6a05f7684ab, UmdArm64 eaa6a8039332, UmdX64 c2ced1de7065, Umd32 35d14fbc2c01; manifest 68dcbd3af095, hardware-manifest dc9a87316129; probe2095.sh 538f5852ad20 (PROBE_LINT_OK); visible recovery rec2095h 105f06dde17ccbf7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2095h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2095-cr-coalesce/run2095.sh.
+
+EXP2095 HARDWARE ACTUAL (2026-11-02): **C->R refusal identified: the render successor never reaches the KMD while the compute runs (reason 66 retained for the probe PID); the hold is upstream of admission, at the D3D12 queue's GPU wait on the owner fence.**
+- Q3CR: PASS bad=0, compute 65536 iterations, c_only 5.964 ms; pid 7732. Retained decision (q9 coalescing): reason 66 "no pending successor", count 1021, predecessor fences 4448..5033, no other reason for the PID; kicks 0.
+- Q3RCR: PASS bad=0 (pid 464); retained decisions: reason 0 allowed R->C 7120 -> 7121 (compute-on-3D, published-progress, exact order Status 0) and reason 66 x855; no C->R.
+- UMD trace (tool-q3cr-umd.log): each Execute logs measure-render-fence then measure-d3d12-queue-wait with ordered=1 (submit_owner, agx_d3d12_windows.cpp around :5082: AgxD3d12QueueWaitForOwner on RenderSyncObject at the owner's newest fence) and returns in about 50 us; the next Execute's batch is therefore held by the OS queue until the previous owner fence signals. R->C still pairs, so the hold is asymmetric between render and compute owner fences (unexplained).
+- No Wom1GpuReset, G4 failure none, guest alive, pipeline rc 0.
+- Expected vs actual: expected a C->R pair or a named refusal; actual the named refusal (66) proving no pending successor, with the UMD queue wait as the upstream cause. Verdict: confirmed cause location; TA-on-compute admission itself remains untested on hardware.
+- Next: Codex q11 explains the render/compute asymmetry of the owner-fence queue wait and designs a Windows-correct ordering that lets a dependent submission reach the KMD while its predecessor runs (the KMD barrier provides GPU ordering), with the WDDM sync-object contract.
+- Recovery rec2095h.
