@@ -66935,3 +66935,18 @@ Arms: a FHD 100k (rc120 on, first), b FHD 100k with APPLE_AGX_SINK_LOADS=0 and A
 - Hashes: sys e6738e2f5c52, UmdArm64 75f99723b043, UmdX64 8c5afa903f3a, Umd32 3a9d83a13919; manifest cad9ea1feabc, hardware-manifest 6e354d010d53; probe2069.sh da16aaea41fb (PROBE_LINT_OK); visible recovery rec2069h d090ab135da95da0; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2069h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2069-ps-sink/run2069.sh.
+
+EXP2069 HARDWARE ACTUAL (2026-11-02): **rc120 rejected (reverted in 6d79752b): sinking loads made the full-screen PS worse.**
+- a (rc120 on, first): 4309 (25.8). PS stats 8467 instructions (8285 without), 255 halfregs, 384 threads, 111 spills, 104 fills, 37 loops. Main pass 3D 8.40 ms (8.25-8.29 before).
+- b (off, second): 4356 (26.1).
+- Pressure profile (EXP2067 pre-RA AIR, linear liveness): the peak is about 294 halfregs. Live there:
+  - 56 split components: 36 from device_load, 18 from iterproj varyings computed at the top and used about 4700 lines later;
+  - 34 phis;
+  - about 45 ALU values.
+- Comparison with Apple's largest fragment shader (3453 instructions) against ours (8428 in the final binary):
+  - RA overhead ~1914 xor + ~575 mov, against 62 movs/220 mov_imm for Apple;
+  - spills 237 against 62;
+  - Apple uses 132 fp16 ops, we use none;
+  - sin 64 against 24, rcp 199 against 79, floor 65 against 31, texture 79 against 52.
+  - The transcendental surplus is already in our frontend NIR (32 fsin + 32 fcos + 204 frcp, all distinct and inside loops; 38 loops against Apple's 19 while). This is consistent with DXC having unrolled an outer loop that Metal kept, so the static counts overstate the dynamic gap. RA swaps, the missing fp16 and the spills are real per-execution costs.
+- Verdict: per-pass Apple GPU time is needed to decide which difference matters.
