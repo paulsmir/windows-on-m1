@@ -181,3 +181,27 @@ class RcDecode(unittest.TestCase):
         failed=decode([first,r_done,second,dict(c_done,Status=5),last_done])
         self.assertEqual(failed[0]['reported'][-1]['status'],5)
         self.assertEqual(failed[1]['reported'][0]['status'],5)
+
+    def test_v3_idle_ring_is_independent_and_both_rings_are_decoded(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        The v3 reserved ring must expose idle observations/overwrites without
+        obscuring retained probe decisions or misreading archived v2 bytes.
+        """
+        spec=importlib.util.spec_from_file_location('rc',TOOL)
+        m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+        hist=[0]*72;hist[64]=1;hist[66]=30000
+        probe=[64,7,99,100,42,1,10,0,10,0,3,1,1]
+        idle=[66,0,300,0,43,30000,11,0,30010,0,0,0,0]
+        data=(struct.pack('<5I',3,8640,1,1,0)+struct.pack('<72I',*hist)+
+              struct.pack('<13I',*probe)+bytes(127*52)+struct.pack('<3I',1,1,0)+
+              struct.pack('<13I',*idle)+bytes(31*52))
+        out=m.decode_decisions(data,42,5,15)
+        self.assertEqual(len(out['decisions']),1)
+        self.assertEqual(out['decisions'][0]['reason'],64)
+        self.assertEqual(out['histogram']['66']['count'],30000)
+        self.assertEqual(out['histogram']['66']['last_retained']['process_id'],43)
+        self.assertEqual(out['idle_overwritten'],0)
+        self.assertEqual(m.decode_decisions(data,43,20,30)['decisions'][0]['count'],30000)
+        for offset,value in [(6964,33),(6968,32),(6972,1),(6976,64),(308,66)]:
+            bad=bytearray(data);struct.pack_into('<I',bad,offset,value)
+            with self.assertRaises(ValueError):m.decode_decisions(bad,42)

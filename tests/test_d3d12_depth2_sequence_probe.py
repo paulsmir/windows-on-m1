@@ -78,7 +78,7 @@ int main(void) {
 #include <assert.h>
 #include <string.h>
 typedef unsigned UINT;
-'''+function('q3_fill_vertices')+'\n'+function('q3_bad_sequence_outputs')+r'''
+'''+ '#include "'+str(PROBE.with_name('agx_d3d12_probe_q3_compute.h'))+'"\n'+function('q3_fill_vertices')+'\n'+function('q3_bad_sequence_outputs')+r'''
 int main(void) {
  unsigned char green[16384],blue[16384],v[65536];UINT words[64];unsigned i;
  for(i=0;i<4096;++i) {
@@ -86,14 +86,14 @@ int main(void) {
   blue[4*i]=blue[4*i+1]=0;blue[4*i+2]=blue[4*i+3]=255;
  }
  for(i=0;i<64;++i) words[i]=i*3+7;
- assert(!q3_bad_sequence_outputs(green,blue,words,1));
- assert(!q3_bad_sequence_outputs(green,blue,0,0));
- assert(q3_bad_sequence_outputs(blue,green,words,1));
+ assert(!q3_bad_sequence_outputs(green,blue,words,1,0));
+ assert(!q3_bad_sequence_outputs(green,blue,0,0,0));
+ assert(q3_bad_sequence_outputs(blue,green,words,1,0));
  for(i=0;i<16384;++i) {
-  green[i]^=1;assert(q3_bad_sequence_outputs(green,blue,words,1)==1);green[i]^=1;
-  blue[i]^=1;assert(q3_bad_sequence_outputs(green,blue,words,1)==1);blue[i]^=1;
+  green[i]^=1;assert(q3_bad_sequence_outputs(green,blue,words,1,0)==1);green[i]^=1;
+  blue[i]^=1;assert(q3_bad_sequence_outputs(green,blue,words,1,0)==1);blue[i]^=1;
  }
- for(i=0;i<64;++i) {words[i]^=1;assert(q3_bad_sequence_outputs(green,blue,words,1)==1);words[i]^=1;}
+ for(i=0;i<64;++i) {words[i]^=1;assert(q3_bad_sequence_outputs(green,blue,words,1,0)==1);words[i]^=1;}
  for(unsigned color=0;color<2;++color) {
   q3_fill_vertices(v,color);const float *f=(const float *)v;
   for(i=0;i<4;++i) {assert(f[6*i+2]==0 && f[6*i+3]==(color?0:1));assert(f[6*i+4]==(color?1:0) && f[6*i+5]==1);}
@@ -119,31 +119,34 @@ typedef int ID3D12GraphicsCommandList,ID3D12RootSignature,ID3D12Resource,D3D12_C
 static int mode, renders, dispatches, phase;
 static void q3_record_render(ID3D12GraphicsCommandList *l,ID3D12RootSignature *r,D3D12_CPU_DESCRIPTOR_HANDLE h,ID3D12Resource *v,UINT n) {
  assert(*r==10 && n==7500);
- if(!renders) {assert(*l==0 && h==20 && *v==30 && !phase);phase=1;}
- else {assert(mode && *l==(mode==1?2:1) && h==21 && *v==31);assert(phase==(mode==1?5:1));phase=6;}
+ if(!renders && mode!=3) {assert(*l==0 && h==20 && *v==30 && !phase);phase=1;}
+ else {assert(mode && *l==(mode==1?2:1) && h==21 && *v==31);assert(phase==(mode==2?1:5));phase=6;}
  ++renders;
 }
 static void transition(ID3D12GraphicsCommandList *l,ID3D12Resource *u,int before,int after) {
- assert(mode!=2 && *l==1 && *u==40 && before==0 && after==8 && phase==1);phase=2;
+ assert(mode!=2 && *l==(mode==3?0:1) && *u==40 && before==0 && after==8 && phase==(mode==3?0:1));phase=2;
 }
 static void ID3D12GraphicsCommandList_SetComputeRootSignature(ID3D12GraphicsCommandList *l,ID3D12RootSignature *r) {
- assert(*l==1 && *r==11 && phase==2);phase=3;
+ assert(*l==(mode==3?0:1) && *r==11 && phase==2);phase=3;
 }
 static UINT64 ID3D12Resource_GetGPUVirtualAddress(ID3D12Resource *u) {assert(*u==40);return 4000;}
 static void ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(ID3D12GraphicsCommandList *l,UINT index,UINT64 va) {
- assert(*l==1 && index==0 && va==4000 && phase==3);phase=4;
+ assert(*l==(mode==3?0:1) && index==0 && va==4000 && phase==3);phase=4;
+}
+static void ID3D12GraphicsCommandList_SetComputeRoot32BitConstant(ID3D12GraphicsCommandList *l,UINT index,UINT value,UINT offset) {
+ assert(*l==(mode==3?0:1) && index==1 && value==7500 && offset==0 && phase==4);phase=7;
 }
 static void ID3D12GraphicsCommandList_Dispatch(ID3D12GraphicsCommandList *l,UINT x,UINT y,UINT z) {
- assert(*l==1 && x==1 && y==1 && z==1 && phase==4);phase=5;++dispatches;
+ assert(*l==(mode==3?0:1) && x==1 && y==1 && z==1 && phase==(mode?7:4));phase=5;++dispatches;
 }
-'''+function('q3_record_sequence')+r'''
+'''+function('q3_record_compute')+'\n'+function('q3_record_sequence')+r'''
 int main(void) {
  int a=0,b=1,c=2,r=10,cr=11,v=30,v2=31,u=40;
  ID3D12GraphicsCommandList *lists[]={&a,&b,&c};ID3D12RootSignature *roots[]={&r,&cr};
- for(mode=0;mode<3;++mode) {
+ for(mode=0;mode<4;++mode) {
   renders=dispatches=phase=0;
-  q3_record_sequence(lists,roots,20,21,&v,&v2,&u,7500,mode);
-  assert(renders==(mode?2:1) && dispatches==(mode==2?0:1));
+  q3_record_sequence(lists,roots,20,21,&v,&v2,&u,7500,mode,mode?7500:0);
+  assert(renders==((mode==1 || mode==2)?2:1) && dispatches==(mode==2?0:1));
  }
 }
 ''')
