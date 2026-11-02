@@ -66880,3 +66880,17 @@ Arm a: D3D12 HD 50k with AGX_MESA_DEBUG=shaders. Mesa's agx_compile prints every
 - Hashes: sys 4696b50259f3, UmdArm64 bb36a00ed0fc, UmdX64 2b83cf664ac9, Umd32 7c4b870468d4; manifest 3b7ffb591654, hardware-manifest b7dd0017800f; probe2067.sh 52a47e31da5e (PROBE_LINT_OK); visible recovery rec2067h 0fa247aed50b311b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2067h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2067-agx-disasm/run2067.sh.
+
+EXP2067 HARDWARE ACTUAL (2026-11-02): **diagnostic AGX listings captured; the register allocator shuffles heavily in shaders at 255 GPRs, but the worst ones are never dispatched.**
+- Boot from Running proxy: launch-normal2 failed until /tmp/agx-lld-dir/ld.lld was restored (the host /tmp had been wiped).
+- a HD 50k with AGX_MESA_DEBUG=shaders: 7114 (42.6). Not comparable (printing at compile).
+- gm2067a-out.txt is 47.8 MB: 379 shader sections, 63 fragment.
+- Share of xor triples (RA parallel-copy cycle swaps) and movs in the final code:
+  - CS f22befa7 (6062 instructions, 255 GPRs): 64.6% xor, 16.3% mov;
+  - 144a46de: 42% xor, 26% mov;
+  - 62568917: 38% xor, 17% mov;
+  - the big PS 71405b87 (8285 instructions, 111 spills, 37 loops): 22.5% xor, 7.4% mov, 2.7% stack;
+  - the lighting CS bdb1944a (207 GPRs): 1.7% xor.
+- Mechanism (f22befa7 NIR): a loop body `if (c) { recompute 65 scalars } else {}` merges 65 phis. Under full pressure the phi-web coalescing fails, giving runs of up to 144 xors per iteration.
+- EXP2066a dispatch receipts: f22befa7, 144a46de and 62568917 are compiled eagerly (pso-eager) but dispatched 0 times in the scored run, so they do not affect the score. The big PS is unattributed (draw receipts lacked the PS).
+- Next: EXP2068 (rc119 bcf2b795, PS tag in measure-d3d12-draw).
