@@ -67065,3 +67065,17 @@ EXP2075 HARDWARE ACTUAL (2026-11-02): **like for like with macOS, the gap is rea
 - Per job (median ms, a FHD / b HD): C0 2.27/1.15, R1 7.97/4.29, C2 1.47/0.69, R3 0.58/0.35, C4 8.59/8.62, R5 0.83/0.84, C6 2.02/1.99, R7 1.07/0.71; wall 34.7/28.4 ms; launch gaps about 4-5 ms.
 - C4 does not depend on resolution: it is per-asteroid work, a third of the HD frame (macOS HD frame about 17 ms in total). Per frame about 170 dispatches (most 1-3 groups; a 12-pass radix sort of 6 kernels) with 236 CDM barriers per submit.
 - Recovery rec2075h. Next: EXP2076, rc125 split diagnostic to time the pieces of C4.
+
+EXP2076 HARDWARE BEFORE 2026-11-02T15:20:45Z:
+Arms: a HD 100k -temporal 0 with APPLE_AGX_D3D12_SPLIT_TAGS=981fb673,ecb5fd57,a3da7f9d,369f607b,bdb1944a,5e7db638,c5af950a,17de760d (once-per-frame milestones in frame order); b the same without the split (control).
+- WHY THIS HYPOTHESIS:
+  1. EXP2075: the compute job C4 takes 8.6 ms at both FHD and HD (per-asteroid work), a third of the 28.4 ms HD frame; macOS renders the whole HD frame in about 17 ms.
+  2. The frame holds about 170 dispatches, most of 1-3 thread groups (a 12-pass radix sort of 6 kernels and indirect chains), with 236 CDM barriers per submit; EXP2036 showed lean barrier bits do not help, so the cost per drained barrier versus the lighting kernel bdb1944a (160x90 groups) is the open question.
+- ATOMIC CONTRACT: diagnostic only; arm a adds about 8 job launches per frame (score not comparable).
+- WINDOWS CONTRACT: none changed. AGX/ASAHI CONTRACT: none changed. TRANSLATION: none. WHAT IS STILL UNKNOWN: the GPU time of each piece of C4 (the firmware times each job).
+- Expected: arm a shows more jobs per frame; the segment holding the radix sort (a3da7f9d .. 369f607b) takes at least 3 ms with almost no arithmetic; the lighting segment (bdb1944a) 2-4 ms; the sum of pieces close to b's C4 plus the added launches. Arm b reproduces EXP2075b (about 5700).
+- Failure criteria: TDR, WER, image corruption in either arm; no extra jobs in arm a (the switch did not take effect).
+- Recovery: rec2076h.
+- Hashes: sys d602c80e2aea, UmdArm64 8888f10dee3b, UmdX64 dd8a2cec4888, Umd32 2a778172f871; manifest bf2425a36ee5, hardware-manifest 970adc3cb6d6; probe2076.sh 5dd66aea4900 (PROBE_LINT_OK); visible recovery rec2076h e68d60c0406a3b3e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2076h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2076-split/run2076.sh.
