@@ -532,27 +532,32 @@ agx_win32_compile_function(nir_shader *nir, nir_function_impl *impl, struct agx_
                               MAX2(first / 4, 1u) | AGX_WIN32_LATENCY_TIGHT};
    unsigned chosen_target = base_target;
    struct agx_shader_info chosen = pinned;
-   for (unsigned i = 0; i < ARRAY_SIZE(ladder); ++i) {
-      binary->size = start;
-      *out = before;
-      unsigned blocks = 0;
-      /* RC123: every non-pinned variant reserves pending phi-web registers */
-      const unsigned target = ladder[i] | web;
-      const unsigned variant = agx_compile_function_nir(nir, impl, key, binary, out, target, &blocks);
-      if (!blocks)
-         break; /* the pinned compile itself */
-      if (agx_win32_latency_keeps(out, &pinned)) {
-         /* keep this variant as the one to beat */
-         chosen_target = target;
-         chosen = *out;
-         offset = variant;
-         bytes = binary->size - start;
-         void *kept = realloc(code, bytes ? bytes : 1);
-         if (!kept)
-            break;
-         code = kept;
-         memcpy(code, (uint8_t *)binary->data + start, bytes);
-         break;
+   bool kept_variant = false;
+   for (unsigned i = 0; i < ARRAY_SIZE(ladder) && !kept_variant; ++i) {
+      /* RC123: each step with phi-web reservation first; when that variant
+       * is rejected (reservation can widen the footprint and cost
+       * occupancy), the same step without it (EXP2073 lighting kernel) */
+      for (unsigned w = 0; w < (web ? 2u : 1u) && !kept_variant; ++w) {
+         binary->size = start;
+         *out = before;
+         unsigned blocks = 0;
+         const unsigned target = ladder[i] | (w ? 0u : web);
+         const unsigned variant = agx_compile_function_nir(nir, impl, key, binary, out, target, &blocks);
+         if (!blocks)
+            break; /* the pinned compile itself */
+         if (agx_win32_latency_keeps(out, &pinned)) {
+            /* keep this variant as the one to beat */
+            kept_variant = true;
+            chosen_target = target;
+            chosen = *out;
+            offset = variant;
+            bytes = binary->size - start;
+            void *kept = realloc(code, bytes ? bytes : 1);
+            if (!kept)
+               break;
+            code = kept;
+            memcpy(code, (uint8_t *)binary->data + start, bytes);
+         }
       }
    }
 
