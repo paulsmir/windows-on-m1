@@ -67335,3 +67335,18 @@ EXP2088 HARDWARE ACTUAL (2026-11-02): **design step (b) PASS: the first restrict
 - Wom1RcDecisions over the boot: admitted (0) 1, 66 no pending successor 20504, 58 SceneId mismatch 1932, 55 other process 109, 4 preemption 101, 68: 23.
 - Expected vs actual: every preregistered PASS criterion met. The notifier-cycle hypothesis for EXP2052 is rejected for the restricted R->C pair (commit-time publication). Per the design, this unblocks step (c): resident-manager-key R/R admission, typed same-process queues and step-5 suffix recovery, each with bounded probes before any GravityMark run.
 - Recovery rec2088h.
+
+EXP2089 HARDWARE BEFORE 2026-11-02T21:11:30Z:
+Switches (as EXP2088): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1. Steps: only Q3RC, then only Q3RCR.
+- WHY THIS HYPOTHESIS:
+  1. EXP2088 PASS: restricted R->C admitted (kicks 1, max_in_flight 2, published-progress), exact fences 6498/6499.
+  2. The candidate adds q5 (render timestamp capture from the job's own parity copy) and q6 (general admission behind an absent switch); q6 DESIGN step 1 requires the same candidate with General=0 to reproduce EXP2088 before General=1.
+- ATOMIC CONTRACT: package code only (q5+q6 merged); switches identical to EXP2088; the new probe step Q3RCR is an additional bounded observation.
+- WHAT IS STILL UNKNOWN: whether the merged q5/q6 code is behaviour-neutral with General absent on hardware; whether Q3RCR's three-list exact outputs pass at legacy admission (C->R must stay serialized).
+- Expected PASS: Q3RC PASS bad=0 with typed v2 Wom1RcProgress published-progress for R->C as in EXP2088; Q3RCR PASS bad=0 (green/64 words 3*i+7/blue), R->C may be admitted, C->R refused (no TA-on-compute class), ordered exact fences, no reset; render calibration Start no longer stale if q5 owns it.
+- INCONCLUSIVE: outputs PASS but no admitted R->C pair (no pending successor).
+- FAIL: wrong output, deadline, duplicate/lost/misordered fence, reset, 0x116.
+- Recovery: rec2089h.
+- Hashes: sys 50ff501f5d22, UmdArm64 e18c5122331b, UmdX64 d898af4baffb, Umd32 416320e7e46f; manifest 376f799bc2df, hardware-manifest 1fb4261f4996; probe2089.sh f2ed74bd2915 (PROBE_LINT_OK); visible recovery rec2089h 2e674cbad9c124b8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
+- Recovery rec2089h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2089-depth2-g0/run2089.sh.
