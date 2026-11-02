@@ -22,6 +22,9 @@ opt-in start-time soft-fault receipt. AdmissionCapturePostResume runs after
 the resume, at the end of a wait that can last a whole TdrDelay with the GPU
 idle, so it reads firmware-shared memory only.
 
+Q13 also requires the reset receipt to retain RTKit crash/message metadata and
+both published job identities, without treating a GPU address as a CPU pointer.
+
 The real AdmissionCapturePostResume is compiled with both opt-in switches on
 and MMIO accessors that abort, as the hardware did.
 """
@@ -95,6 +98,8 @@ SHIM = r'''
 #include "apple_agx_initdata_memory.h"
 #include "apple_agx_g13_queue_runtime.h"
 #include "render_gpu_fault.h"
+#include "apple_agx_rtkit_session.h"
+#include "render_job_window.h"
 #define VOID void
 typedef uint32_t ULONG;
 typedef uint64_t ULONG64;
@@ -107,6 +112,7 @@ typedef struct {
 typedef struct {
   struct { struct { APPLE_AGX_G13_QUEUE_RUNTIME Runtime; } QueueProvider; } Provider;
   struct { APPLE_AGX_MEMORY_OBJECT DataObjects[APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT]; } Initdata;
+  APPLE_AGX_RTKIT_SESSION Rtkit;
   BOOLEAN ReadFaultInfo, ReadFaultControl;
   volatile UCHAR *SgxBase;
   MODEL_TRANSPORT_IO TransportIo;
@@ -163,8 +169,30 @@ int main(void) {
   runtime.ReadFaultInfo = 1; runtime.ReadFaultControl = 1;
   runtime.SgxBase = (volatile UCHAR *)0x204000000ull;
   runtime.TransportIo.ReadU32 = read_u32;
+  runtime.Rtkit.Running = runtime.Rtkit.CpuReady = 1;
+  runtime.Rtkit.CrashlogReplySent = runtime.Rtkit.CrashlogCrashed = 1;
+  runtime.Rtkit.ReceivedCount = 73; runtime.Rtkit.LastRxEndpoint = 1;
+  runtime.Rtkit.LastRxPayload = 0x10000000004000ULL;
+  runtime.Rtkit.InboxAtFailureValid = 1;
+  runtime.Rtkit.InboxControlAtFailure = 0x220;
+  runtime.Rtkit.CrashlogGpuAddress = 0xa0001234000ULL;
+  runtime.Rtkit.CrashlogCapacityBytes = 0x4000;
+  runtime.Rtkit.CrashlogRequestedBytes = 0x1000;
+  queue->PendingFence = 0x182a; queue->ComputeInRender = 1;
+  queue->Successor.Fence = 0x182b; queue->Successor.ComputeTerminal = 1;
+  memset(&receipt.Rtkit, 0xa5, sizeof(receipt.Rtkit));
   AdmissionCapturePostResume(&runtime, 0x4f2u, 2003u, &receipt);
-  assert(receipt.Version == ADMISSION_GPU_POST_RESUME_VERSION);
+  assert(receipt.Rtkit.Captured == 1 && receipt.Rtkit.Crashed == 1);
+  assert(receipt.Rtkit.LastEndpoint == 1 && receipt.Rtkit.ReceivedCount == 73);
+  assert(receipt.Rtkit.LastPayload == runtime.Rtkit.LastRxPayload);
+  assert(receipt.Rtkit.Running && receipt.Rtkit.CpuReady && receipt.Rtkit.CrashlogReplySent);
+  assert(receipt.Rtkit.MailboxValid == 1 && receipt.Rtkit.Inbox == 0x220);
+  assert(receipt.Rtkit.Outbox == 0 && receipt.Rtkit.CrashlogCapacity == 0x4000 &&
+         receipt.Rtkit.CrashlogRequested == 0x1000 &&
+         receipt.Rtkit.CrashlogGpuAddress == runtime.Rtkit.CrashlogGpuAddress);
+  assert(receipt.Rtkit.HeadFence == 0x182a && receipt.Rtkit.NextFence == 0x182b &&
+         receipt.Rtkit.HeadKind == 2 && receipt.Rtkit.NextKind == 3);
+  assert(receipt.Version == 3u); /* Q13: RTKit/pair evidence must be exported. */
   assert(receipt.Bytes == sizeof(receipt));
   assert(receipt.Fence == 0x4f2u && receipt.WaitMs == 2003u);
   assert(receipt.FaultInfo == ADMISSION_GPU_FAULT_INFO_NOT_READ);
@@ -202,7 +230,7 @@ class PostResumeNoSgxMmio(unittest.TestCase):
             program.write_text(body)
             binary = Path(tmp) / 'post_resume'
             subprocess.run([os.environ.get('CC', 'clang'), '-std=c11', '-Wall', '-Wextra',
-                            '-Werror', '-Wno-unused-function',
+                            '-Werror', '-Wno-unused-function', '-ftrivial-auto-var-init=pattern',
                             '-fsanitize=address,undefined',
                             '-I', str(RENDER / 'include'), '-I', str(SHARED / 'include'),
                             str(program), '-o', str(binary)], check=True)

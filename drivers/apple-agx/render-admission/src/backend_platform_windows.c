@@ -365,7 +365,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
 #define ADMISSION_JOB_AHEAD_BUILD 0
 #endif
 
-C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 184);
+C_ASSERT(sizeof(ADMISSION_GPU_RTKIT_SNAPSHOT) == 80);
+C_ASSERT(FIELD_OFFSET(ADMISSION_GPU_POST_RESUME_RECEIPT, Rtkit) == 184);
+C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 264);
 C_ASSERT(sizeof(ADMISSION_GPU_SOFT_FAULTS_RECEIPT) == 40);
 /* RegionC fault_control (apple_agx_regionc.c), fault_info (Asahi FaultInfo,
  * 0x18 bytes after unk_117bc) and the SGX registers fault_control bits 0
@@ -7525,6 +7527,7 @@ static VOID AdmissionCapturePostResume(ADMISSION_PLATFORM_RUNTIME *runtime,
       &runtime->Initdata.DataObjects[AppleAgxInitdataMemoryRegionC];
   const APPLE_AGX_G13_QUEUE_BINDING *compute = &queue->Config.Compute;
   APPLE_AGX_BACKEND_U32 value;
+  ADMISSION_GPU_RTKIT_SNAPSHOT rtkit = {0};
   ULONG index;
   Receipt->Version = ADMISSION_GPU_POST_RESUME_VERSION;
   Receipt->Bytes = sizeof(*Receipt);
@@ -7591,6 +7594,38 @@ static VOID AdmissionCapturePostResume(ADMISSION_PLATFORM_RUNTIME *runtime,
   Receipt->PostEvents = queue->PostRecoveryEvents;
   Receipt->PostEventKindMask = queue->PostRecoveryKindMask;
   Receipt->LastPostEventKind = queue->LastPostRecoveryKind;
+  /* Q13/EXP2100: PollFailure alone says FirmwareCrashed, but loses the
+   * mailbox payload and the still-published pair. Copy CPU-owned metadata
+   * while Resetting owns the idle worker. No ASC/SGX/crashlog reads: the
+   * retained crashlog GPU address is NOT a Windows pointer or a stop proof. */
+  rtkit.Captured = 1u;
+  rtkit.Running = runtime->Rtkit.Running ? 1u : 0u;
+  rtkit.CpuReady = runtime->Rtkit.CpuReady ? 1u : 0u;
+  rtkit.CrashlogReplySent = runtime->Rtkit.CrashlogReplySent ? 1u : 0u;
+  rtkit.Crashed = runtime->Rtkit.CrashlogCrashed ? 1u : 0u;
+  rtkit.ReceivedCount = runtime->Rtkit.ReceivedCount;
+  rtkit.LastEndpoint = runtime->Rtkit.LastRxEndpoint;
+  rtkit.LastPayload = runtime->Rtkit.LastRxPayload;
+  rtkit.MailboxValid = (runtime->Rtkit.InboxAtFailureValid ? 1u : 0u) |
+                      (runtime->Rtkit.OutboxAtFailureValid ? 2u : 0u);
+  if (runtime->Rtkit.InboxAtFailureValid)
+    rtkit.Inbox = runtime->Rtkit.InboxControlAtFailure;
+  if (runtime->Rtkit.OutboxAtFailureValid)
+    rtkit.Outbox = runtime->Rtkit.OutboxControlAtFailure;
+  rtkit.CrashlogGpuAddress = runtime->Rtkit.CrashlogGpuAddress;
+  rtkit.CrashlogCapacity = runtime->Rtkit.CrashlogCapacityBytes;
+  rtkit.CrashlogRequested = runtime->Rtkit.CrashlogRequestedBytes;
+  rtkit.HeadFence = queue->PendingFence;
+  rtkit.NextFence = queue->Successor.Fence;
+  if (rtkit.HeadFence != 0u)
+    rtkit.HeadKind = queue->ComputeTerminal ? ADMISSION_JOB_WINDOW_KIND_COMPUTE :
+        queue->ComputeInRender ? ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE :
+                                 ADMISSION_JOB_WINDOW_KIND_RENDER;
+  if (rtkit.NextFence != 0u)
+    rtkit.NextKind = queue->Successor.ComputeTerminal ? ADMISSION_JOB_WINDOW_KIND_COMPUTE :
+        queue->Successor.ComputeInRender ? ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE :
+                                           ADMISSION_JOB_WINDOW_KIND_RENDER;
+  Receipt->Rtkit = rtkit;
 }
 
 static VOID AdmissionPublishPostResume(ADMISSION_PLATFORM_RUNTIME *runtime) {

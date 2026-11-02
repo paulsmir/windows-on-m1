@@ -10,13 +10,15 @@ Receipts (REG_BINARY under the APPL0002 device key):
                         adds timing and the last 8 resets; v3 adds reset stages;
                         v4 adds before/after quiesce queue retirement samples.
   Wom1FirmwareRecovery  8 dwords (EXP1075/G4-recovery).
-  Wom1GpuFaultPostResume v1, 184 bytes (rc77): at the end of each reset
+  Wom1GpuFaultPostResume v1/v2 184, v3 264 bytes (rc77/Q13): at the end of each reset
                         wait, RegionC fault_control, SGX 0x17620/0x17630
                         (Wom1GpuFaultControlRead), FAULT_INFO, the first 64
                         firmware-status bytes, live pending stamps, RegionC
                         fault_info, compute rptr/done/write, events received
                         while recovery was pending and the optional KMD
-                        RecoverChannel (Wom1GpuFaultRecoverChannel).
+                        RecoverChannel (Wom1GpuFaultRecoverChannel). v3 adds
+                        CPU-owned RTKit state and both pending job identities;
+                        LastRx is not necessarily the cause of a transport error.
   Wom1SoftFaultState    v1, 40 bytes (rc82): at GPU runtime start, whether the
                         KMD reports soft faults to the UMD (Wom1SoftFaults=1
                         and RegionC fault_control 0xb), with SGX 0x17620/
@@ -590,11 +592,11 @@ RUNTIME_RESULTS = {0: 'ok'}
 
 
 def decode_post_resume(data):
-    if len(data) != 184:
+    if len(data) not in (184, 264):
         raise ValueError('unsupported Wom1GpuFaultPostResume length')
     version, size, fence, wait_ms, fault_control, sgx_read, r17620, r17630 = \
         struct.unpack_from('<8I', data, 0)
-    if version not in (1, 2) or size != 184:
+    if (version, size) not in ((1, 184), (2, 184), (3, 264)) or size != len(data):
         raise ValueError('unsupported Wom1GpuFaultPostResume version')
     fault_info = struct.unpack_from('<Q', data, 32)[0]
     status = struct.unpack_from('<16I', data, 40)
@@ -624,7 +626,30 @@ def decode_post_resume(data):
                                       if force_mask & b],
                             'at_ms': force_at},
         'poll_failure': decode_poll_failure(poll_failure) if version >= 2 else None,
-        'meaning': 'sequential CPU reads after the firmware resume, not atomic GPU state',
+        'rtkit': decode_rtkit_snapshot(data[184:]) if version == 3 else None,
+        'meaning': 'sequential reset observations; a resume or successful recovery is not implied',
+    }
+
+
+def decode_rtkit_snapshot(data):
+    (captured, running, ready, reply, crashed, received, endpoint, valid,
+     inbox, outbox, capacity, requested, head, next_fence, head_kind, next_kind,
+     payload, address) = struct.unpack('<16I2Q', data)
+    if not captured:
+        return None
+    kinds = {0: 'absent', 1: 'render', 2: 'render_prelude', 3: 'compute'}
+    return {
+        'running': bool(running), 'cpu_ready': bool(ready),
+        'crashlog_reply_sent': bool(reply), 'crashed': bool(crashed),
+        'received_count': received, 'last_endpoint': endpoint,
+        'last_payload': f'{payload:#x}',
+        'inbox': f'{inbox:#x}' if valid & 1 else None,
+        'outbox': f'{outbox:#x}' if valid & 2 else None,
+        'crashlog_gpu_address': f'{address:#x}',
+        'crashlog_capacity': capacity, 'crashlog_requested': requested,
+        'head_fence': f'{head:#x}', 'next_fence': f'{next_fence:#x}',
+        'head_kind': kinds.get(head_kind, head_kind),
+        'next_kind': kinds.get(next_kind, next_kind),
     }
 
 

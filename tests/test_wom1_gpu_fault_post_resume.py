@@ -1,7 +1,7 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 rc77: Wom1GpuFaultPostResume is the only evidence of what the firmware did
 after it was resumed from an MMU fault (EXP2005/EXP2007 left no such record).
-The KMD struct (render_gpu_fault.h, C_ASSERT 184 bytes) and the offline
+The KMD struct (render_gpu_fault.h, C_ASSERT 264 bytes) and the offline
 decoder must agree field by field; a silent offset drift would turn the next
 hardware run's receipt into wrong conclusions (for example a halted firmware
 read as running, or a RecoverChannel reported as never sent).
@@ -28,7 +28,7 @@ int main(void) {
   ADMISSION_GPU_POST_RESUME_RECEIPT r;
   unsigned i;
   memset(&r, 0, sizeof(r));
-  if (sizeof(r) != 184) return 1;
+  if (sizeof(r) != 264) return 1;
   r.Version = ADMISSION_GPU_POST_RESUME_VERSION; r.Bytes = sizeof(r);
   r.Fence = 0x16160u; r.WaitMs = 1001u; r.RegionCFaultControl = 0xbu;
   r.SgxRead = 1u; r.Sgx17620 = 0x11u; r.Sgx17630 = 0x22u;
@@ -42,6 +42,14 @@ int main(void) {
   r.ForceState = ADMISSION_GPU_POST_RESUME_FORCE_SENT; r.ForceResult = 0u;
   r.ForceMask = 4u; r.ForceAtMs = 100u;
   r.PollFailure = (ADMISSION_GPU_POST_RESUME_POLL_PROVIDER << 24) | (0xffu << 16) | (3u << 8) | 2u;
+  r.Rtkit.Captured = 1; r.Rtkit.Running = r.Rtkit.CpuReady = 1;
+  r.Rtkit.CrashlogReplySent = r.Rtkit.Crashed = 1;
+  r.Rtkit.ReceivedCount = 73; r.Rtkit.LastEndpoint = 1;
+  r.Rtkit.LastPayload = 1ULL << 52; r.Rtkit.MailboxValid = 1;
+  r.Rtkit.Inbox = 0x220; r.Rtkit.CrashlogGpuAddress = 0xa0001234000ULL;
+  r.Rtkit.CrashlogCapacity = 0x4000; r.Rtkit.CrashlogRequested = 0x1000;
+  r.Rtkit.HeadFence = 0x182a; r.Rtkit.NextFence = 0x182b;
+  r.Rtkit.HeadKind = 2; r.Rtkit.NextKind = 3;
   fwrite(&r, sizeof(r), 1, stdout);
   return 0;
 }
@@ -79,11 +87,27 @@ class PostResumeReceipt(unittest.TestCase):
                           'last': 'channel_error'})
         self.assertEqual(decoded['recover_channel'],
                          {'state': 'sent', 'result': 'ok', 'pipes': ['compute'], 'at_ms': 100})
-        self.assertEqual(decoded['version'], 2)
+        self.assertEqual(decoded['version'], 3)
+        self.assertEqual(decoded['rtkit'], {
+            'running': True, 'cpu_ready': True, 'crashlog_reply_sent': True,
+            'crashed': True, 'received_count': 73, 'last_endpoint': 1,
+            'last_payload': '0x10000000000000', 'inbox': '0x220', 'outbox': None,
+            'crashlog_gpu_address': '0xa0001234000', 'crashlog_capacity': 0x4000,
+            'crashlog_requested': 0x1000, 'head_fence': '0x182a',
+            'next_fence': '0x182b', 'head_kind': 'render_prelude', 'next_kind': 'compute'})
         self.assertEqual(decoded['poll_failure'],
                          {'source': 'provider_poll', 'poll_guard': 'drain_events',
                           'drain_guard': 'flush_state', 'ingest_guard': 0xff})
         json.dumps(decoded)
+        for version in (1, 2):
+            legacy = bytearray(raw[:184])
+            legacy[:8] = version.to_bytes(4, 'little') + (184).to_bytes(4, 'little')
+            self.assertIsNone(decoder.decode_post_resume(legacy)['rtkit'])
+        missing = bytearray(raw); missing[184:188] = bytes(4)
+        self.assertIsNone(decoder.decode_post_resume(missing)['rtkit'])
+        for bad in (raw[:-1], raw + bytes(8), raw[:184], bytes(264)):
+            with self.assertRaises(ValueError):
+                decoder.decode_post_resume(bad)
 
     def test_v1_receipt_has_no_poll_failure(self):
         # rc92: receipts written before v2 kept the word reserved (0).

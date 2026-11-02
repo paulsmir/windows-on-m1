@@ -166,7 +166,7 @@ typedef struct _ADMISSION_GPU_RECOVERY_SNAPSHOT {
  * ADMISSION_GPU_FAULT_INFO_NOT_READ. FAULT_INFO is in Wom1GpuFault (read at
  * the event, before resume), the fault-control registers in
  * Wom1SoftFaultState. */
-#define ADMISSION_GPU_POST_RESUME_VERSION 2u
+#define ADMISSION_GPU_POST_RESUME_VERSION 3u
 /* v2 (rc92): PollFailure (was Reserved, always 0 in v1) names the poll that
  * ended the wait with the Poll outcome: bits 24-31 source (1 RTKit drain,
  * 2 provider poll), bits 0-7 the RTKit session result or the provider's
@@ -178,6 +178,18 @@ typedef struct _ADMISSION_GPU_RECOVERY_SNAPSHOT {
 #define ADMISSION_GPU_POST_RESUME_FORCE_NOT_REACHED 1u
 #define ADMISSION_GPU_POST_RESUME_FORCE_SENT 2u
 #define ADMISSION_GPU_POST_RESUME_FORCE_REFUSED 3u
+/* Q13: CPU-owned RTKit/session and queue identity at reset. Captured=0 is
+ * unknown (v1/v2). LastRx is the last received message, NOT necessarily the
+ * cause of a transport error. No crashlog pointer is dereferenced. Kinds use
+ * render_job_window.h: 0 absent, 1 render, 2 render+prelude, 3 compute. */
+typedef struct _ADMISSION_GPU_RTKIT_SNAPSHOT {
+  unsigned int Captured, Running, CpuReady, CrashlogReplySent;
+  unsigned int Crashed, ReceivedCount, LastEndpoint, MailboxValid;
+  unsigned int Inbox, Outbox, CrashlogCapacity, CrashlogRequested;
+  unsigned int HeadFence, NextFence, HeadKind, NextKind;
+  unsigned long long LastPayload, CrashlogGpuAddress;
+} ADMISSION_GPU_RTKIT_SNAPSHOT;
+
 typedef struct _ADMISSION_GPU_POST_RESUME_RECEIPT {
   unsigned int Version, Bytes;
   unsigned int Fence, WaitMs;
@@ -192,6 +204,7 @@ typedef struct _ADMISSION_GPU_POST_RESUME_RECEIPT {
   unsigned int PostEvents, PostEventKindMask, LastPostEventKind;
   unsigned int ForceState, ForceResult, ForceMask, ForceAtMs;
   unsigned int PollFailure;             /* v2, ADMISSION_GPU_POST_RESUME_POLL_* */
+  ADMISSION_GPU_RTKIT_SNAPSHOT Rtkit;    /* v3, 80-byte CPU-only suffix */
 } ADMISSION_GPU_POST_RESUME_RECEIPT;
 
 /* rc82: Wom1SoftFaultState, REG_BINARY, written once when the GPU runtime has
