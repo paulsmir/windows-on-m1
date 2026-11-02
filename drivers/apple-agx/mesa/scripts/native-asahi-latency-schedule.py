@@ -373,7 +373,9 @@ CONTEXT = '''   /* Promoted constants. These will be appended to the binary at t
 #define AGX_WIN32_LATENCY_DISTANCE 0xffu
 #define AGX_WIN32_LATENCY_TIGHT    0x100u
 /* RC122: allocate narrow values packed (agx_register_allocate.c) */
-#define AGX_WIN32_RA_PACK          0x200u'''
+#define AGX_WIN32_RA_PACK          0x200u
+/* RC123: reserve pending phi-web registers (agx_register_allocate.c) */
+#define AGX_WIN32_RA_WEB           0x400u'''
 
 
 def project_compiler_h(text):
@@ -445,6 +447,18 @@ agx_win32_ra_pack_enabled(void)
    return enabled != 0;
 }
 
+/* RC123: APPLE_AGX_RA_WEB=0 disables phi-web reservation. Read once. */
+static unsigned
+agx_win32_ra_web_bit(void)
+{
+   static int enabled = -1;
+   if (enabled < 0) {
+      const char *env = getenv("APPLE_AGX_RA_WEB");
+      enabled = !(env && env[0] == '0' && !env[1]);
+   }
+   return enabled ? AGX_WIN32_RA_WEB : 0u;
+}
+
 static bool
 agx_win32_latency_keeps(const struct agx_shader_info *variant, const struct agx_shader_info *pinned)
 {
@@ -483,29 +497,53 @@ agx_win32_compile_function(nir_shader *nir, nir_function_impl *impl, struct agx_
    const struct agx_shader_info before = *out;
    const unsigned start = binary->size;
    unsigned offset = agx_compile_function_nir(nir, impl, key, binary, out, 0, NULL);
-   const struct agx_shader_info pinned = *out;
+   struct agx_shader_info pinned = *out;
    unsigned bytes = binary->size - start;
    void *code = malloc(bytes ? bytes : 1);
    if (!code)
       return offset;
    memcpy(code, (uint8_t *)binary->data + start, bytes);
 
+   /* RC123: the pinned schedule with phi-web reservation (same spills and
+    * fills: RA only). Kept as the baseline when strictly smaller. */
+   const unsigned web = agx_win32_ra_web_bit();
+   unsigned base_target = 0;
+   if (web) {
+      binary->size = start;
+      *out = before;
+      const unsigned webbed = agx_compile_function_nir(nir, impl, key, binary, out, web, NULL);
+      if (agx_win32_pack_keeps(out, &pinned)) {
+         const unsigned webbed_bytes = binary->size - start;
+         void *kept = realloc(code, webbed_bytes ? webbed_bytes : 1);
+         if (kept) {
+            code = kept;
+            bytes = webbed_bytes;
+            memcpy(code, (uint8_t *)binary->data + start, bytes);
+            pinned = *out;
+            offset = webbed;
+            base_target = web;
+         }
+      }
+   }
+
    /* the full distance within the occupancy step of the pinned demand, then
     * shorter distances within the pinned demand itself */
    const unsigned ladder[] = {first, MAX2(first / 2, 1u) | AGX_WIN32_LATENCY_TIGHT,
                               MAX2(first / 4, 1u) | AGX_WIN32_LATENCY_TIGHT};
-   unsigned chosen_target = 0;
+   unsigned chosen_target = base_target;
    struct agx_shader_info chosen = pinned;
    for (unsigned i = 0; i < ARRAY_SIZE(ladder); ++i) {
       binary->size = start;
       *out = before;
       unsigned blocks = 0;
-      const unsigned variant = agx_compile_function_nir(nir, impl, key, binary, out, ladder[i], &blocks);
+      /* RC123: every non-pinned variant reserves pending phi-web registers */
+      const unsigned target = ladder[i] | web;
+      const unsigned variant = agx_compile_function_nir(nir, impl, key, binary, out, target, &blocks);
       if (!blocks)
          break; /* the pinned compile itself */
       if (agx_win32_latency_keeps(out, &pinned)) {
          /* keep this variant as the one to beat */
-         chosen_target = ladder[i];
+         chosen_target = target;
          chosen = *out;
          offset = variant;
          bytes = binary->size - start;
@@ -597,10 +635,71 @@ find_regs_simple(struct ra_ctx *rctx, enum ra_class cls, unsigned count,
    for (unsigned reg = 0; reg + count <= rctx->bound[cls]; reg += align) {'''
 
 
+# RC123: phi-web reservation. A phi web (a phi and its sources) takes the
+# register of its first allocated member; a later member defined in another
+# branch gets that register only if it is still free there. Under full
+# pressure, first-fit has usually handed it to an unrelated temporary, so the
+# member lands elsewhere and the phi becomes a parallel copy at the block end,
+# where crossed assignments become swaps (3 xor each). EXP2072 + the rc123
+# fixture: the full-screen PS's post-RA growth (7066 -> 9991 instructions) is
+# 1323 phi-copy instructions, 806 swaps. Each block now first keeps ordinary
+# values off the registers of assigned webs whose members are not yet
+# defined, within the registers already in use (no footprint growth), falling
+# back to plain first fit. Only non-pinned variants (AGX_WIN32_RA_WEB, set on
+# the latency ladder) reserve, so the keep rule still guards occupancy and
+# APPLE_AGX_LATENCY_SCHED=0 stays the pinned compiler. APPLE_AGX_RA_WEB=0
+# disables it.
+RA_WEB_FIELD_ANCHOR = '''   struct phi_web_node *phi_web;
+'''
+RA_WEB_FIELD = RA_WEB_FIELD_ANCHOR + '''   /* RC123: registers of assigned phi webs with undefined members */
+   BITSET_WORD *win32_web_reserved;
+'''
+RA_WEB_BLOCK_ANCHOR = '''   reserve_live_in(rctx);
+'''
+RA_WEB_BLOCK = RA_WEB_BLOCK_ANCHOR + '''
+   /* RC123 (native-asahi-latency-schedule.py): phi-web reservation */
+   BITSET_DECLARE(win32_web_reserved, AGX_NUM_REGS) = {0};
+   rctx->win32_web_reserved = NULL;
+   if (rctx->shader->windows_latency_target & AGX_WIN32_RA_WEB) {
+      agx_foreach_block(rctx->shader, web_block) {
+         agx_foreach_phi_in_block(web_block, phi) {
+            agx_foreach_ssa_src(phi, s) {
+               const unsigned v = phi->src[s].value;
+               if (phi->src[s].memory || BITSET_TEST(rctx->visited, v) || rctx->classes[v] != RA_GPR)
+                  continue;
+               const struct phi_web_node *node = &rctx->phi_web[phi_web_find(rctx->phi_web, v)];
+               if (node->assigned && node->reg + rctx->ncomps[v] <= AGX_NUM_REGS)
+                  BITSET_SET_COUNT(win32_web_reserved, node->reg, rctx->ncomps[v]);
+            }
+         }
+      }
+      rctx->win32_web_reserved = win32_web_reserved;
+   }
+'''
+RA_WEB_FIND_ANCHOR = '''   if ((rctx->shader->windows_latency_target & AGX_WIN32_RA_PACK) && cls == RA_GPR && count < 8) {'''
+RA_WEB_FIND = '''   /* RC123: keep registers promised to pending phi webs free if possible,
+    * within the registers already used (no footprint, so no occupancy cost) */
+   if (rctx->win32_web_reserved && cls == RA_GPR) {
+      const unsigned limit = MIN2(rctx->bound[cls], *rctx->count[cls]);
+      for (unsigned reg = 0; reg + count <= limit; reg += align) {
+         if (!BITSET_TEST_COUNT(rctx->used_regs[cls], reg, count) &&
+             !BITSET_TEST_COUNT(rctx->win32_web_reserved, reg, count)) {
+            *out = reg;
+            return true;
+         }
+      }
+   }
+''' + RA_WEB_FIND_ANCHOR
+
+
 def project_ra(text):
     if 'RC122' in text:
         raise RuntimeError('agx_register_allocate.c already projected')
-    return once(text, RA_ANCHOR, RA)
+    text = once(text, RA_ANCHOR, RA)
+    text = once(text, RA_WEB_FIELD_ANCHOR, RA_WEB_FIELD)
+    text = once(text, RA_WEB_BLOCK_ANCHOR, RA_WEB_BLOCK)
+    text = once(text, RA_WEB_FIND_ANCHOR, RA_WEB_FIND)
+    return text
 
 
 FILES = {
