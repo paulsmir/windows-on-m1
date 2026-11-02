@@ -67264,3 +67264,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobD
 - Hashes: sys b7ad9cc3d145, UmdArm64 26d1890bac4e, UmdX64 39a24ddfac60, Umd32 1688c88fbec6; manifest 2596a9d5d438, hardware-manifest 3c91451d806e; probe2085.sh 32e842981024 (PROBE_LINT_OK); visible recovery rec2085h 8b8199fe746e70d1; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
 - Recovery rec2085h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2085-q3rc-depth2/run2085.sh.
+
+EXP2085 HARDWARE ACTUAL (2026-11-02): **INCONCLUSIVE by the preregistered criteria: Q3RC PASS bad=0 and the guest stayed alive, but no successor was kicked: Wom1JobWindow kicks 0, max_in_flight 0, batch sizes {1: 2042, 2: 0}, no Wom1RcProgress value written.**
+- Wom1RcDepth2=1 armed the restricted kick path (JobDepth2Kick from NotifierFlight + capabilities, classes compute-on-3D only), so the decision ran but never admitted the pair; Wom1JobWindow v1 has no refusal histogram, so the refusal reason is unknown.
+- Most likely: the measured render (one fullscreen triangle into 64x64) finishes before the compute submission reaches the KMD, so no successor is queued while R runs (the design's "no successor queued" case).
+- Per the design: adjust only the probe workload/sampling in a new preregistered experiment; no GravityMark depth-two run. Codex q4: a render long enough to overlap (5-10 ms) and a refusal histogram in the receipt.
+- Recovery rec2085h.
