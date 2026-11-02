@@ -67350,3 +67350,12 @@ Switches (as EXP2088): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhe
 - Hashes: sys 50ff501f5d22, UmdArm64 e18c5122331b, UmdX64 d898af4baffb, Umd32 416320e7e46f; manifest 376f799bc2df, hardware-manifest 1fb4261f4996; probe2089.sh f2ed74bd2915 (PROBE_LINT_OK); visible recovery rec2089h 2e674cbad9c124b8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
 - Recovery rec2089h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2089-depth2-g0/run2089.sh.
+
+EXP2089 HARDWARE ACTUAL (2026-11-02): **q6 step 1a PASS: merged q5+q6 code with Wom1Depth2General absent reproduces EXP2088; Q3RCR three-list exact outputs PASS.**
+- Q3RC: PASS bad=0; Wom1RcProgress pid 9540: pair 6379 -> 6380 (R->C, barrier compute-on-3D), evidence published-progress. Calibration render Start still stale (start 1200930398 constant while End advances; r_only 127 ms bogus), as predicted: the stale Start is firmware-side, q5 fixed only parity ownership.
+- Q3RCR: PASS bad=0 (green, 64 words 3*i+7, blue); pid 9644 pair 8599 -> 8600 R->C published-progress, reported 8599 Status 0 then 8600 Status 0, exact_report_order true. No C->R pair (class not admitted at legacy admission, as expected).
+- Wom1JobWindow after Q3RCR: kicks 2, max_in_flight 2, compute_on_3d 2, ta_on_3d 0, adopted 2, kick_failures 0, reset_aborts 0.
+- Wom1RcDecisions over the boot: admitted 2, 66 30139, 58 2567, 55 122, 4 116, 68 24.
+- Guest alive after both steps, G4 submit failure none, pipeline rc 0.
+- Expected vs actual: every PASS criterion met; Start-word expectation ("maybe fresh") not met, now attributed to firmware. Verdict confirmed. Next: EXP2090 step 1b, single variable Wom1Depth2General=1.
+- Recovery rec2089h.
