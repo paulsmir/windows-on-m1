@@ -50,3 +50,32 @@ class RcDecode(unittest.TestCase):
         only=m.decode(wire([warm1,warm2,measured1,measured2]),42,100,130)
         self.assertEqual(len(only['pairs']),1)
         self.assertEqual(only['pairs'][0]['evidence'],'inconclusive')
+
+    def test_empty_progress_and_decision_attribution(self):
+        spec=importlib.util.spec_from_file_location('rc',TOOL)
+        m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+        empty=struct.pack('<4I',1,18448,0,0)+bytes(18432)
+        self.assertEqual(m.decode(empty,42)['sample_state'],'no sample')
+        self.assertTrue(hasattr(m,'decode_decisions'))
+        size=20+72*4+128*40
+        def wire(records,overwritten=0,next_index=None):
+            hist=[0]*72
+            for r in records: hist[r[0]]+=r[5]
+            return (struct.pack('<5I',1,size,len(records),len(records) if next_index is None else next_index,overwritten)+
+                    struct.pack('<72I',*hist)+b''.join(struct.pack('<10I',*r) for r in records)+bytes((128-len(records))*40))
+        # Same-process warmup excluded; overlapping interval explicitly partial.
+        r=[[66,0,99,0,42,5,10,0,20,0],[68,29,101,102,42,3,100,0,120,0],
+           [65,0,201,202,43,1,110,0,110,0]]
+        out=m.decode_decisions(wire(r),42,105,130)
+        self.assertEqual(len(out['decisions']),1)
+        self.assertEqual(out['decisions'][0]['render_fence'],101)
+        self.assertEqual(out['decisions'][0]['detail'],29)
+        self.assertTrue(out['decisions'][0]['partial_interval'])
+        self.assertEqual(out['histogram']['66']['count'],5)
+        with self.assertRaises(ValueError):m.decode_decisions(wire(r)[:-1],42)
+        with self.assertRaises(ValueError):m.decode_decisions(wire(r,next_index=128),42)
+        full=[[66,0,i,0,42,1,i,0,i,0] for i in range(128)]
+        wrapped=m.decode_decisions(wire(full,5,5),42)
+        self.assertEqual(wrapped['decisions'][0]['render_fence'],5)
+        self.assertEqual(wrapped['decisions'][-1]['render_fence'],4)
+        self.assertEqual(wrapped['overwritten'],5)

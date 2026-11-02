@@ -27,6 +27,55 @@ typedef struct _ADMISSION_RC_RECEIPT {
   ADMISSION_RC_SAMPLE Samples[ADMISSION_RC_SAMPLES];
 } ADMISSION_RC_RECEIPT;
 
+/* Q4 decisions are observational: 0 allowed, 1..65 existing policy,
+ * 66 no pending head, 67 running image not released, 68 prebind not ready
+ * (Detail = prebind refusal), 69 backend already has/no longer needs a kick,
+ * 70 kick disabled, 71 unknown future reason. Ring keeps recent transitions;
+ * repeated identical decisions coalesce, histogram counts every observation. */
+#define ADMISSION_RC_REASONS 72u
+#define ADMISSION_RC_DECISIONS_COUNT 128u
+typedef struct _ADMISSION_RC_DECISION {
+  unsigned int Reason, Detail, RFence, CFence, ProcessId, Count;
+  unsigned int FirstLow, FirstHigh, LastLow, LastHigh;
+} ADMISSION_RC_DECISION;
+typedef struct _ADMISSION_RC_DECISIONS {
+  unsigned int Version, Bytes, Count, Next, Overwritten;
+  unsigned int Histogram[ADMISSION_RC_REASONS];
+  ADMISSION_RC_DECISION Records[ADMISSION_RC_DECISIONS_COUNT];
+} ADMISSION_RC_DECISIONS;
+/* Storage is zeroed by the owner before initialization. Empty progress is a
+ * valid v1 record (Count=0), not an absent registry value. */
+static __inline void AdmissionRcInitialize(ADMISSION_RC_RECEIPT *r) {
+  r->Version=1u; r->Bytes=(unsigned int)sizeof(*r);
+}
+static __inline void AdmissionRcDecisionsInitialize(ADMISSION_RC_DECISIONS *r) {
+  r->Version=1u; r->Bytes=(unsigned int)sizeof(*r);
+}
+static __inline void AdmissionRcDecision(ADMISSION_RC_DECISIONS *r,
+    unsigned int reason, unsigned int detail, unsigned int rf,
+    unsigned int cf, unsigned int pid, unsigned long long qpc) {
+  ADMISSION_RC_DECISION *s;
+  if(reason>=ADMISSION_RC_REASONS) reason=ADMISSION_RC_REASONS-1u;
+  if(r->Histogram[reason]!=~0u) ++r->Histogram[reason];
+  if(r->Count) {
+    s=&r->Records[(r->Next+ADMISSION_RC_DECISIONS_COUNT-1u)%ADMISSION_RC_DECISIONS_COUNT];
+    if(s->Reason==reason && s->Detail==detail && s->RFence==rf &&
+       s->CFence==cf && s->ProcessId==pid) {
+      if(s->Count!=~0u) ++s->Count;
+      s->LastLow=(unsigned int)qpc;s->LastHigh=(unsigned int)(qpc>>32);
+      return;
+    }
+  }
+  s=&r->Records[r->Next];
+  s->Reason=reason;s->Detail=detail;s->RFence=rf;s->CFence=cf;
+  s->ProcessId=pid;s->Count=1u;
+  s->FirstLow=s->LastLow=(unsigned int)qpc;
+  s->FirstHigh=s->LastHigh=(unsigned int)(qpc>>32);
+  r->Next=(r->Next+1u)%ADMISSION_RC_DECISIONS_COUNT;
+  if(r->Count<ADMISSION_RC_DECISIONS_COUNT) ++r->Count;
+  else if(r->Overwritten!=~0u) ++r->Overwritten;
+}
+
 typedef unsigned char (*ADMISSION_RC_READ)(void *, const volatile unsigned int *, unsigned int *);
 static __inline void AdmissionRcRead(ADMISSION_RC_SAMPLE *s,
     const volatile unsigned int *const p[11], ADMISSION_RC_READ read, void *ctx) {

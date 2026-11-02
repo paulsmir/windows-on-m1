@@ -82,14 +82,54 @@ def decode(data, pid, qpc_begin=0, qpc_end=(1 << 64)-1):
         pair.pop('negative')
         pair['exact_report_order'] = [v['fence'] for v in pair['reported']] == [pair['render_fence'], pair['compute_fence']]
     return dict(version=version, count=count, overflow=overflow, process_id=pid,
+                sample_state="no sample" if not count else "sampled",
                 qpc_begin=qpc_begin, qpc_end=qpc_end,
                 verdict='evidence-only; require Q3RC outputs, exact successful retire order and no reset',
                 pairs=list(pairs.values()))
 
 
+# 1..65 keep the stable render_job_window / Q3 refusal numbering.
+DECISION_NAMES = {0: 'allowed', 66: 'no pending successor',
+    67: 'running image not released', 68: 'prebind not ready (see detail)',
+    69: 'backend kick guard', 70: 'kick disabled', 71: 'unknown reason'}
+
+
+def decode_decisions(data, pid, qpc_begin=0, qpc_end=(1 << 64)-1):
+    size = 20 + 72*4 + 128*40
+    if len(data) != size:
+        raise ValueError('expected complete 5428-byte v1 decisions receipt')
+    version, length, count, next_index, overwritten = struct.unpack_from('<5I', data)
+    if (version != 1 or length != size or count > 128 or next_index >= 128 or
+        (count < 128 and (next_index != count or overwritten))):
+        raise ValueError('invalid decisions header')
+    hist = struct.unpack_from('<72I', data, 20)
+    records = []
+    latest = {}
+    for i in range(count):
+        index = (next_index+i) % 128 if count == 128 else i
+        reason, detail, rf, cf, process, observations, lo, hi, endlo, endhi = struct.unpack_from('<10I', data, 308+index*40)
+        first, last = lo | hi << 32, endlo | endhi << 32
+        if reason >= 72 or not observations or first > last:
+            raise ValueError('invalid decision record')
+        r = dict(reason=reason, meaning=DECISION_NAMES.get(reason, 'admission refusal'),
+                 detail=detail, render_fence=rf, compute_fence=cf, process_id=process,
+                 count=observations, first_qpc=first, last_qpc=last)
+        latest[str(reason)] = r
+        if process == pid and last >= qpc_begin and first <= qpc_end:
+            r = dict(r, partial_interval=first < qpc_begin or last > qpc_end)
+            records.append(r)
+    return dict(version=version, sample_state='no decision' if not count else 'sampled',
+                overwritten=overwritten, process_id=pid, qpc_begin=qpc_begin, qpc_end=qpc_end,
+                histogram={str(i): dict(count=n, last_retained=latest.get(str(i)))
+                           for i,n in enumerate(hist) if n},
+                decisions=records,
+                note='Histogram is device-wide. Filtered records are bounded; partial counts include observations outside the interval. Missing/overwritten evidence is inconclusive.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('receipt', type=Path)
+    parser.add_argument('--decisions', type=Path, help='optional raw Wom1RcDecisions value')
     parser.add_argument('--pid', type=int, required=True)
     parser.add_argument('--qpc-begin', type=int, required=True)
     parser.add_argument('--qpc-end', type=int, required=True)
@@ -98,6 +138,9 @@ def main():
         parser.error('invalid QPC interval')
     try:
         result = decode(args.receipt.read_bytes(), args.pid, args.qpc_begin, args.qpc_end)
+        if args.decisions:
+            result['kick_decisions'] = decode_decisions(args.decisions.read_bytes(), args.pid,
+                                                       args.qpc_begin, args.qpc_end)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     print(json.dumps(result, indent=2))

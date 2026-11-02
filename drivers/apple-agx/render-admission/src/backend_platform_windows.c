@@ -349,6 +349,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN RcReceiptEnabled, RcDepth2, RcExportPending;
   ADMISSION_RC_SAMPLE RcCurrent;
   ADMISSION_RC_RECEIPT RcReceipt;
+  ADMISSION_RC_DECISIONS RcDecisions;
+  unsigned int RcDecisionPid;
 } ADMISSION_PLATFORM_RUNTIME;
 
 /* rc90 build-ahead runs in the GPUVA G3 worker only (no SUBMIT receipts,
@@ -878,6 +880,23 @@ static VOID AdmissionJobTimingFirmwareWindows(
   AdmissionFwTimingCaptureWindows(runtime, fence);
 }
 
+/* Worker-owned, PASSIVE only. Each value is attempted independently; an
+ * unrelated timing-value failure must not hide the Q4 diagnostic. */
+static VOID AdmissionRcExportWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+                                      HANDLE key) {
+  UNICODE_STRING name;
+  NTSTATUS progress, decisions;
+  if (!runtime->RcReceiptEnabled) return;
+  RtlInitUnicodeString(&name, L"Wom1RcProgress");
+  progress = ZwSetValueKey(key, &name, 0u, REG_BINARY,
+      &runtime->RcReceipt, sizeof(runtime->RcReceipt));
+  RtlInitUnicodeString(&name, L"Wom1RcDecisions");
+  decisions = ZwSetValueKey(key, &name, 0u, REG_BINARY,
+      &runtime->RcDecisions, sizeof(runtime->RcDecisions));
+  if (NT_SUCCESS(progress) && NT_SUCCESS(decisions))
+    runtime->RcExportPending = FALSE;
+}
+
 static VOID AdmissionJobTimingExportWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime) {
   HANDLE key = NULL;
@@ -950,12 +969,7 @@ static VOID AdmissionJobTimingExportWindows(
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->Depth2ReceiptSnapshot, sizeof(runtime->Depth2ReceiptSnapshot));
     }
-    if (NT_SUCCESS(status) && runtime->RcReceiptEnabled && runtime->RcReceipt.Count) {
-      RtlInitUnicodeString(&name, L"Wom1RcProgress");
-      status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
-          &runtime->RcReceipt, sizeof(runtime->RcReceipt));
-      if (NT_SUCCESS(status)) runtime->RcExportPending = FALSE;
-    }
+    AdmissionRcExportWindows(runtime, key);
     ZwClose(key);
   }
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
@@ -5181,11 +5195,7 @@ static VOID AdmissionJobWindowKickFailureExportWindows(
   (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &runtime->Depth2ReceiptSnapshot,
                       sizeof(runtime->Depth2ReceiptSnapshot));
   (void)ZwFlushKey(key);
-  if (runtime->RcReceiptEnabled && runtime->RcReceipt.Count) {
-    RtlInitUnicodeString(&name, L"Wom1RcProgress");
-    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY,
-        &runtime->RcReceipt, sizeof(runtime->RcReceipt));
-  }
+  AdmissionRcExportWindows(runtime, key);
   ZwClose(key);
 }
 
@@ -5266,6 +5276,34 @@ static BOOLEAN AdmissionJobWindowManagerNeedsIdle(
       ? TRUE : FALSE;
 }
 
+/* The worker alone changes these receipts. The running G3 process is held
+ * by its active job; no new lifetime or scheduler action is introduced. */
+static VOID AdmissionRcDecisionWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ULONG reason, ULONG detail, ULONG fence, ULONG next) {
+  if (!runtime->RcReceiptEnabled) return;
+  AdmissionRcDecision(&runtime->RcDecisions, (unsigned int)reason,
+      (unsigned int)detail, (unsigned int)fence, (unsigned int)next,
+      runtime->RcDecisionPid,
+      AdmissionJobQpc());
+  runtime->RcExportPending = TRUE;
+}
+
+/* Record why the caller cannot even reach KickRefusal. Snapshot the pending
+ * head under the same lock as the real decision; never prebind/kick here. */
+static VOID AdmissionRcSkippedKickWindows(ADMISSION_CONTEXT *adapter,
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence, ULONG prebindRefusal) {
+  ULONG next = 0u, reason;
+  KIRQL oldIrql;
+  if (!runtime->RcReceiptEnabled) return;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
+  if (adapter->G4PendingCount != 0u)
+    next = adapter->G4Pending[adapter->G4PendingHead].Fence;
+  KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
+  reason = !runtime->JobDepth2Kick ? 70u : !next ? 66u :
+      runtime->AheadReleasedFence != fence ? 67u : 68u;
+  AdmissionRcDecisionWindows(runtime, reason, prebindRefusal, fence, next);
+}
+
 /* rc102 (Wom1JobDepth2Kick, render_job_window.h): job Fence runs alone and
  * its successor is Prebound. If the window allows it (the rc95 decision,
  * plus idle-queue needs 61 and the job-word sets 62), kick the successor
@@ -5276,7 +5314,7 @@ static BOOLEAN AdmissionJobWindowManagerNeedsIdle(
  * it to the firmware (RunSuccessor). Returns TRUE when the decision is
  * final for this job (kicked, failed, or refused for good). */
 static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
-    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence, ULONG prebindRefusal) {
   ADMISSION_JOB_AHEAD_STATE ahead;
   ADMISSION_JOB_WINDOW_KICK_STATE s;
   const ADMISSION_G4_PENDING *head;
@@ -5300,8 +5338,11 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   if (!runtime->JobDepth2Kick || runtime->Depth2KickedFence != 0u ||
       runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted ||
       runtime->Backend.PendingSubmission.Submission.Fence != fence ||
-      runtime->Backend.SuccessorPending)
+      runtime->Backend.SuccessorPending) {
+    AdmissionRcDecisionWindows(runtime, 69u, 0u, fence,
+                                runtime->Depth2KickedFence);
     return TRUE;
+  }
   RtlZeroMemory(&s, sizeof(s));
   RtlZeroMemory(&packet, sizeof(packet));
   RtlZeroMemory(&pendingKey, sizeof(pendingKey));
@@ -5394,6 +5435,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   }
   KeReleaseSpinLockFromDpcLevel(&adapter->SchedulerLock);
   KeReleaseSpinLock(&adapter->PagingLock, old_irql);
+  AdmissionRcDecisionWindows(runtime, refusal, prebindRefusal, fence, s.Next.Fence);
   AdmissionJobAheadNoteRefusalWindows(runtime, fence,
       ADMISSION_JOB_AHEAD_SHIFT_DEPTH2, refusal);
   if (refusal != 0u)
@@ -5683,6 +5725,14 @@ ChainNext:
     runtime->Depth2KickedFence = 0u;
   /* rc102: an adopted successor starts its per-job state here too. */
 AdoptedJob:
+  runtime->RcDecisionPid = 0u;
+  if (runtime->RcReceiptEnabled) {
+    const ADMISSION_RENDER_CONTEXT *rcContext =
+        (const ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)description.ContextToken;
+    if (rcContext != NULL && rcContext->GpuvaG3Process != NULL)
+      runtime->RcDecisionPid = (unsigned int)
+          ((const ADMISSION_G3_PROCESS *)rcContext->GpuvaG3Process)->OsProcessId;
+  }
   /* rc90: the previous job's completion or retire consumed its early
    * release; a stale mark must never match a later fence. */
   runtime->AheadReleasedFence = 0u;
@@ -5971,8 +6021,11 @@ AdoptedKicked:
     /* rc102: kick the Prebound successor behind this job (Wom1JobDepth2Kick). */
     if (runtime->JobDepth2Kick && prebindDone && !kickDone) {
       kickDone = AdmissionJobWindowKickWindows(adapter, runtime,
-                                               description.Fence);
+                                               description.Fence, prebindRefusal);
       if (runtime->Depth2KickedFence != 0u) kickedBehind = TRUE;
+    } else if (!kickDone) {
+      AdmissionRcSkippedKickWindows(adapter, runtime, description.Fence,
+                                     prebindRefusal);
     }
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -7131,6 +7184,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 #endif
   RtlZeroMemory(&runtime->RcCurrent, sizeof(runtime->RcCurrent));
   RtlZeroMemory(&runtime->RcReceipt, sizeof(runtime->RcReceipt));
+  AdmissionRcInitialize(&runtime->RcReceipt);
+  RtlZeroMemory(&runtime->RcDecisions, sizeof(runtime->RcDecisions));
+  AdmissionRcDecisionsInitialize(&runtime->RcDecisions);
+  runtime->RcExportPending = runtime->RcReceiptEnabled;
   runtime->Depth2KickedFence = runtime->Depth2KickBarrier = 0u;
   runtime->Depth2BatchedFence = runtime->Depth2LastReported = 0u;
   AdmissionJobWindowReceiptInitialize(&runtime->Depth2Receipt);
