@@ -3,6 +3,7 @@
 #include "render_job_ahead.h"
 #include "render_job_window.h"
 #include "render_rc_progress.h"
+#include "render_depth2_drill.h"
 #include "render_gpu_perf.h"
 #include "render_gpu_recovery_snapshot.h"
 
@@ -347,6 +348,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONG Depth2KickClasses; /* AdmissionJobWindowKickClasses */
   ADMISSION_JOB_WINDOW_KICK_FAILURE Depth2KickFailure;
   BOOLEAN RcReceiptEnabled, RcDepth2, RcExportPending;
+  ADMISSION_DEPTH2_DRILL_RECEIPT Depth2Drill;
   BOOLEAN Depth2General;
   ADMISSION_RC_SAMPLE RcCurrent;
   ADMISSION_RC_RECEIPT RcReceipt;
@@ -878,12 +880,25 @@ static VOID AdmissionJobTimingFirmwareWindows(
   AdmissionFwTimingCaptureWindows(runtime, fence);
 }
 
+/* Pinned drill evidence is independent of timing-ring churn. Serialized by
+ * the worker, or reset after WorkIdle; no MMIO and no registry work at DIRQL. */
+static VOID AdmissionDepth2DrillExportWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+                                             HANDLE key) {
+  UNICODE_STRING name;
+  if (!runtime->Depth2Drill.Mode) return;
+  runtime->Depth2Drill.Queue = runtime->Provider.QueueProvider.Runtime.Drill;
+  RtlInitUnicodeString(&name, L"Wom1Depth2DrillReceipt");
+  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY,
+      &runtime->Depth2Drill, (ULONG)sizeof(runtime->Depth2Drill));
+}
+
 /* Worker-owned, PASSIVE only. Each value is attempted independently; an
  * unrelated timing-value failure must not hide the Q4 diagnostic. */
 static VOID AdmissionRcExportWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
                                       HANDLE key) {
   UNICODE_STRING name;
   NTSTATUS progress, decisions;
+  AdmissionDepth2DrillExportWindows(runtime, key);
   if (!runtime->RcReceiptEnabled) return;
   RtlInitUnicodeString(&name, L"Wom1RcProgress");
   progress = ZwSetValueKey(key, &name, 0u, REG_BINARY,
@@ -2677,6 +2692,11 @@ static VOID AdmissionRcSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
   const volatile APPLE_AGX_U32 *words[11];
   ULONGLONG qpc;
   ULONG i;
+  if (stage == ADMISSION_RC_REPORTED) {
+    AdmissionDepth2DrillReport(&runtime->Depth2Drill,
+        (unsigned int)terminalFence, (unsigned int)status);
+    if (runtime->Depth2Drill.Mode) runtime->RcExportPending = TRUE;
+  }
   if (!runtime->RcReceiptEnabled || !runtime->RcCurrent.RFence) return;
   s = runtime->RcCurrent; /* zero-initialized at pair begin */
   s.Stage=stage; s.TerminalFence=terminalFence; s.Status=status;
@@ -4795,6 +4815,47 @@ static VOID AdmissionPublishFirmwareRecovery(
   ZwClose(key);
 }
 
+#if ADMISSION_JOB_AHEAD_BUILD
+/* Runs immediately after a successful successor kick, before any poll. The
+ * next eligible pair may belong to DWM; attribution is retained, never guessed.
+ * A missed window is bounded to 64 observations and does not stall anything. */
+static BOOLEAN AdmissionDepth2DrillTakeWindows(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  ADMISSION_DEPTH2_DRILL_RECEIPT *d = &runtime->Depth2Drill;
+  APPLE_AGX_G13_QUEUE_RUNTIME *q = &runtime->Provider.QueueProvider.Runtime;
+  const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner = &runtime->Initdata.RenderSharedMemory;
+  ULONG i, headFlight = 0u, nextFlight = 0u;
+  ULONGLONG qpc;
+  if (!d->Mode || d->Attempts >= 64u || q->Drill.Target ||
+      !runtime->Depth2General || !runtime->Adapter->TdrDrillAllowed ||
+      !runtime->Backend.SuccessorPending || !runtime->Depth2KickedFence)
+    return FALSE;
+  ++d->Attempts;
+  runtime->RcExportPending = TRUE;
+  if (q->PendingFence != runtime->Backend.PendingSubmission.Submission.Fence ||
+      q->Successor.Fence != runtime->Depth2KickedFence ||
+      q->Successor.Fence != runtime->Backend.SuccessorSubmission.Submission.Fence)
+    return FALSE;
+  for (i = 0u; i < APPLE_AGX_NOTIFIER_FLIGHT_COUNT; ++i) {
+    const APPLE_AGX_NOTIFIER_FLIGHT *f = &owner->Flights[i];
+    if (!f->Published || !f->Visible) continue;
+    if (f->Fence == q->PendingFence) headFlight = i + 1u;
+    if (f->Fence == q->Successor.Fence) nextFlight = i + 1u;
+  }
+  if (!headFlight || !nextFlight || headFlight == nextFlight ||
+      !AppleAgxG13QueueRuntimeDrillArm(q, d->Mode))
+    return FALSE;
+  qpc = AdmissionJobQpc();
+  d->QpcLow = (unsigned int)qpc; d->QpcHigh = (unsigned int)(qpc >> 32);
+  d->HeadFlight = (unsigned int)headFlight; d->NextFlight = (unsigned int)nextFlight;
+  d->ProcessId = runtime->RcCurrent.ProcessId;
+  d->RunningKind = runtime->RcCurrent.RunningKind;
+  d->NextKind = runtime->RcCurrent.NextKind;
+  d->Barrier = runtime->RcCurrent.Barrier;
+  d->Queue = q->Drill;
+  return TRUE;
+}
+#endif
+
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 /* G4-r3 TDR drill: TRUE for a job of the armed process; consumes one. */
 static BOOLEAN AdmissionTdrDrillTake(ADMISSION_CONTEXT *Adapter,
@@ -6061,6 +6122,12 @@ AdoptedKicked:
       AdmissionRcSkippedKickWindows(adapter, runtime, description.Fence,
                                      prebindRefusal);
     }
+    if (AdmissionDepth2DrillTakeWindows(runtime)) {
+      drilled = TRUE;
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
+      AdmissionJobTimingExportWindows(runtime);
+      break; /* reset owns both published jobs; no worker poll */
+    }
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     {
@@ -6745,6 +6812,35 @@ static BOOLEAN AdmissionPlatformSwitchEnabled(ADMISSION_CONTEXT *Context,
   return enabled;
 }
 
+/* One-shot persisted arm. A failed clear/flush never enables injection.
+ * Only the devnode is authoritative; no service-key fallback can rearm it. */
+static ULONG AdmissionDepth2DrillConsumeWindows(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u, mode = 0u, zero = 0u;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value = (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE | KEY_SET_VALUE, &key)))
+    return 0u;
+  RtlInitUnicodeString(&name, L"Wom1Depth2Drill");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+          value, (ULONG)sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG)) {
+    mode = *(const ULONG *)value->Data;
+    if (mode != 1u && mode != 2u) mode = 0u;
+    if (mode && (!NT_SUCCESS(ZwSetValueKey(key, &name, 0u, REG_DWORD,
+            &zero, (ULONG)sizeof(zero))) || !NT_SUCCESS(ZwFlushKey(key))))
+      mode = 0u;
+  }
+  ZwClose(key);
+  return mode;
+}
+
 /* EXP2014: a default-on feature reads its device value the other way round:
  * only an explicit REG_DWORD 0 turns it off. */
 static BOOLEAN AdmissionPlatformSwitchDisabled(ADMISSION_CONTEXT *Context,
@@ -7279,6 +7375,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   InterlockedExchange(&Context->TdrDrillJobs, 0);
   Context->TdrDrillAllowed =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1TdrDrillAllowed");
+  RtlZeroMemory(&runtime->Depth2Drill, sizeof(runtime->Depth2Drill));
+  runtime->Depth2Drill.Version = 1u;
+  runtime->Depth2Drill.Bytes = (unsigned int)sizeof(runtime->Depth2Drill);
+  if (runtime->Depth2General && Context->TdrDrillAllowed)
+    runtime->Depth2Drill.Mode = (unsigned int)AdmissionDepth2DrillConsumeWindows(Context);
   Context->GpuFaultDrillAllowed =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultDrillAllowed");
   runtime->RecoverChannelOnStall =
@@ -7498,6 +7599,9 @@ static VOID AdmissionPublishPostResume(ADMISSION_PLATFORM_RUNTIME *runtime) {
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
     return;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionDepth2DrillExportWindows(runtime, key);
+#endif
   RtlInitUnicodeString(&name, L"Wom1GpuFaultPostResume");
   (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &runtime->PostResume,
                       sizeof(runtime->PostResume));
@@ -7577,6 +7681,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
     status = STATUS_DEVICE_BUSY;
     goto Exit;
   }
+  (void)AppleAgxG13QueueRuntimeDrillRelease(&runtime->Provider.QueueProvider.Runtime);
   if (Receipt != NULL)
     AdmissionGpuRecoverySnapshot(&runtime->Provider.QueueProvider.Runtime,
                                  &Receipt->RetirementBefore);

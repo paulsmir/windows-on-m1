@@ -99,6 +99,7 @@ int main(void) {
 #include "render_job_window.h"
 #include "apple_agx_render_shared_memory.h"
 #include "apple_agx_g13_queue_runtime.h"
+#include "render_depth2_drill.h"
 #include "render_rc_progress.h"
 #include <assert.h>
 #include <string.h>
@@ -111,6 +112,7 @@ typedef struct {
  struct {APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory;} Initdata;
  struct {struct {APPLE_AGX_G13_QUEUE_RUNTIME Runtime;} QueueProvider;} Provider;
  unsigned RcReceiptEnabled, RcExportPending;
+ ADMISSION_DEPTH2_DRILL_RECEIPT Depth2Drill;
  ADMISSION_RC_SAMPLE RcCurrent;
  ADMISSION_RC_RECEIPT RcReceipt;
 } ADMISSION_PLATFORM_RUNTIME;
