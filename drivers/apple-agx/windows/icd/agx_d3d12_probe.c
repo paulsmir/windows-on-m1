@@ -3,6 +3,8 @@
 #include <dxgi1_2.h>
 #include <dxgi1_4.h>
 #include <d3d12.h>
+#include <d3dkmthk.h>
+#include "agx_d3d12_probe_completion.h"
 #include <d3d12sdklayers.h>
 #include <stdio.h>
 #include <string.h>
@@ -8335,6 +8337,146 @@ static DWORD WINAPI q3_watchdog(LPVOID unused) {
     TerminateProcess(GetCurrentProcess(), 1);
     return 0;
 }
+/* Keep one draw and one render batch. More identical fullscreen instances
+ * increase raster/fragment work without changing its exactly green output. */
+static void q3_record_render(ID3D12GraphicsCommandList *list,
+    ID3D12RootSignature *root, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
+    ID3D12Resource *vertices, UINT instances) {
+    D3D12_VIEWPORT vp = {0,0,64,64,0,1};
+    D3D12_RECT scissor = {0,0,64,64};
+    D3D12_VERTEX_BUFFER_VIEW vb = {0};
+    vb.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(vertices);
+    vb.SizeInBytes = 4u * 6u * (UINT)sizeof(float);
+    vb.StrideInBytes = 6u * (UINT)sizeof(float);
+    ID3D12GraphicsCommandList_SetGraphicsRootSignature(list, root);
+    ID3D12GraphicsCommandList_OMSetRenderTargets(list, 1, &rtv, FALSE, NULL);
+    ID3D12GraphicsCommandList_RSSetViewports(list, 1, &vp);
+    ID3D12GraphicsCommandList_RSSetScissorRects(list, 1, &scissor);
+    ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    ID3D12GraphicsCommandList_IASetVertexBuffers(list, 0, 1, &vb);
+    ID3D12GraphicsCommandList_DrawInstanced(list, 4, instances, 0, 0);
+}
+static UINT q3_next_instances(UINT instances, double ms) {
+    double scale, next;
+    if (!(ms > 0.0)) return instances;
+    scale = 7.5 / ms;
+    if (scale > 4.0) scale = 4.0;
+    if (scale < 0.25) scale = 0.25;
+    next = (double)instances * scale;
+    if (next < 1.0) return 1;
+    if (next > 262144.0) return 262144;
+    return (UINT)next;
+}
+/* Existing read-only, caller-PID-filtered completion escape. No hardware
+ * access flag, kernel device/context, new ABI or admission path is needed. */
+static HRESULT q3_completions(ID3D12Device *device, UINT64 cursor,
+                              Q3_GPU_COMPLETION_QUERY *query) {
+    typedef NTSTATUS (APIENTRY *Q3_OPEN)(D3DKMT_OPENADAPTERFROMLUID *);
+    typedef NTSTATUS (APIENTRY *Q3_ESCAPE)(const D3DKMT_ESCAPE *);
+    typedef NTSTATUS (APIENTRY *Q3_CLOSE)(const D3DKMT_CLOSEADAPTER *);
+    HMODULE gdi = LoadLibraryA("gdi32.dll");
+    Q3_OPEN open_adapter;
+    Q3_ESCAPE escape;
+    Q3_CLOSE close_adapter;
+    D3DKMT_OPENADAPTERFROMLUID open = {0};
+    D3DKMT_ESCAPE request = {0};
+    D3DKMT_CLOSEADAPTER close = {0};
+    NTSTATUS status;
+    if (!gdi) return E_FAIL;
+    open_adapter = (Q3_OPEN)(void *)GetProcAddress(gdi, "D3DKMTOpenAdapterFromLuid");
+    escape = (Q3_ESCAPE)(void *)GetProcAddress(gdi, "D3DKMTEscape");
+    close_adapter = (Q3_CLOSE)(void *)GetProcAddress(gdi, "D3DKMTCloseAdapter");
+    if (!open_adapter || !escape || !close_adapter) { FreeLibrary(gdi); return E_FAIL; }
+    ID3D12Device_GetAdapterLuid(device, &open.AdapterLuid);
+    status = open_adapter(&open);
+    if (status < 0) { FreeLibrary(gdi); return E_FAIL; }
+    memset(query, 0, sizeof(*query));
+    query->Magic = Q3_GPU_TIMESTAMP_QUERY_MAGIC;
+    query->Version = Q3_GPU_COMPLETION_VERSION;
+    query->Bytes = (UINT)sizeof(*query);
+    query->Cursor = cursor;
+    request.hAdapter = open.hAdapter;
+    request.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
+    request.pPrivateDriverData = query;
+    request.PrivateDriverDataSize = (UINT)sizeof(*query);
+    status = escape(&request);
+    close.hAdapter = open.hAdapter;
+    (void)close_adapter(&close);
+    FreeLibrary(gdi);
+    return status >= 0 && query->Count <= Q3_GPU_COMPLETION_PAGE ? S_OK : E_FAIL;
+}
+/* API timestamp deltas on this driver include CPU replay/submit latency.
+ * Use the completed render's firmware 3D start/end, never its QPC span. */
+static int q3_render_duration(const Q3_GPU_COMPLETION_QUERY *q,
+    UINT64 cursor, UINT64 missing, UINT pid, UINT64 begin,
+    UINT64 previous_end, double *ms) {
+    const Q3_GPU_COMPLETION *r = &q->Record[0];
+    if (!q->Frequency || q->Count != 1 || q->Lost || q->Reset ||
+        q->MissingTiming != missing || q->Cursor != q->Newest ||
+        r->Sequence <= cursor || r->ProcessId != pid || !r->Fence ||
+        r->Kind != Q3_GPU_TIMESTAMP_RENDER || r->Status ||
+        r->SubmitQpc < begin || r->CompleteQpc < r->SubmitQpc ||
+        !r->Start || r->End <= r->Start || r->Start < previous_end ||
+        r->PreludeStart || r->PreludeEnd) return 0;
+    *ms = 1000.0 * (double)(r->End-r->Start) / (double)q->Frequency;
+    return 1;
+}
+/* Separate retired R-only warm-up; measured R/C contains no timing query.
+ * Only an actually measured instance count is carried into the pair. */
+static HRESULT q3_calibrate_render(ID3D12Device *device, ID3D12CommandQueue *queue,
+    ID3D12Fence *fence, ID3D12GraphicsCommandList *list,
+    ID3D12CommandAllocator *allocator, ID3D12PipelineState *pso,
+    ID3D12RootSignature *root, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
+    ID3D12Resource *vertices, UINT64 base, UINT *instances) {
+    Q3_GPU_COMPLETION_QUERY records = {0};
+    UINT64 cursor, missing, previous_end = 0;
+    HRESULT hr = q3_completions(device, 0, &records);
+    double ms = 0.0;
+    *instances = 1024;
+    if (FAILED(hr)) {
+        puts("Q3RC r_only_gpu_ms=unavailable source=firmware-completion");
+        return hr;
+    }
+    /* Skip every earlier job, including warm-up. The API below only reads
+     * already completed work; no wait or producer is hidden in this query. */
+    cursor = records.Newest; missing = records.MissingTiming;
+    for (unsigned i = 0; i < records.Count; ++i)
+        if (records.Record[i].End > previous_end) previous_end = records.Record[i].End;
+    for (unsigned attempt = 0; attempt < 8 && SUCCEEDED(hr); ++attempt) {
+        LARGE_INTEGER begin = {0};
+        QueryPerformanceCounter(&begin);
+        ID3D12GraphicsCommandList_SetPipelineState(list, pso);
+        q3_record_render(list, root, rtv, vertices, *instances);
+        hr = run_list(queue, fence, list, base + attempt, "Q3RC R-only calibration");
+        if (FAILED(hr)) {
+            puts("AGX_D3D12_Q3RC: FAIL calibration-submit");
+            TerminateProcess(GetCurrentProcess(), 1);
+            return hr;
+        }
+        hr = q3_completions(device, cursor, &records);
+        if (SUCCEEDED(hr) && !q3_render_duration(&records, cursor, missing,
+            (UINT)GetCurrentProcessId(), (UINT64)begin.QuadPart, previous_end, &ms)) hr = E_FAIL;
+        if (FAILED(hr)) {
+            puts("Q3RC r_only_gpu_ms=unavailable source=firmware-completion invalid-or-missing-record");
+            break;
+        }
+        cursor = records.Cursor; previous_end = records.Record[0].End;
+        hr = ID3D12CommandAllocator_Reset(allocator);
+        if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, NULL);
+        printf("Q3RC calibration=%u instances=%u r_only_gpu_ms=%.3f source=firmware-3d fence=%u sequence=%llu start=%llu end=%llu tick_hz=%llu\n",
+            attempt, *instances, ms, records.Record[0].Fence,
+            (unsigned long long)records.Record[0].Sequence,
+            (unsigned long long)records.Record[0].Start, (unsigned long long)records.Record[0].End,
+            (unsigned long long)records.Frequency);
+        if (FAILED(hr) || (ms >= 5.0 && ms <= 10.0) || attempt == 7) break;
+        UINT next = q3_next_instances(*instances, ms);
+        if (next == *instances) break;
+        *instances = next;
+    }
+    printf("Q3RC render_instances=%u r_only_gpu_ms=%.3f duration=%s target_ms=5-10\n",
+        *instances, ms, FAILED(hr) ? "invalid" : ms >= 5.0 && ms <= 10.0 ? "in-target" : "outside-target");
+    return hr;
+}
 static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
                       ID3D12Fence *fence, UINT64 base) {
     ID3D12Resource *vertices = NULL, *texture = NULL, *uav = NULL, *readback = NULL;
@@ -8355,6 +8497,7 @@ static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
     unsigned char *bytes = NULL;
     unsigned bad = ~0u;
     int submitted = 0;
+    UINT instances = 1024;
     HRESULT hr = S_OK;
     /* The diagnostic is opt-in, and the watchdog covers setup and teardown too. */
     printf("Q3RC pid=%lu app_fences=%llu,%llu overlap=UNVERIFIED watchdog_ms=15000\n",
@@ -8436,6 +8579,11 @@ static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
         if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT,
             allocators[i], i < 2 ? psos[i] : NULL, &IID_ID3D12GraphicsCommandList, (void **)&lists[i]);
     }
+    if (SUCCEEDED(hr) && g_warp) {
+        instances = 32768; /* API/output control only; no Apple firmware. */
+        puts("Q3RC r_only_gpu_ms=unavailable source=warp-control duration=unverified");
+    } else if (SUCCEEDED(hr)) hr = q3_calibrate_render(device, queue, fence, lists[2],
+        allocators[2], psos[0], roots[0], rtv, vertices, base - 16, &instances);
     if (SUCCEEDED(hr)) {
         /* Initialize measured resources to wrong values, then retire setup. */
         const FLOAT red[4] = {1,0,0,1};
@@ -8449,17 +8597,7 @@ static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
         if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(lists[2], allocators[2], NULL);
     }
     if (SUCCEEDED(hr)) {
-        D3D12_VIEWPORT vp = {0,0,64,64,0,1}; D3D12_RECT scissor = {0,0,64,64};
-        D3D12_VERTEX_BUFFER_VIEW vb = {0};
-        vb.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(vertices);
-        vb.SizeInBytes = 4 * 6 * sizeof(float); vb.StrideInBytes = 6 * sizeof(float);
-        ID3D12GraphicsCommandList_SetGraphicsRootSignature(lists[0], roots[0]);
-        ID3D12GraphicsCommandList_OMSetRenderTargets(lists[0], 1, &rtv, FALSE, NULL);
-        ID3D12GraphicsCommandList_RSSetViewports(lists[0], 1, &vp);
-        ID3D12GraphicsCommandList_RSSetScissorRects(lists[0], 1, &scissor);
-        ID3D12GraphicsCommandList_IASetPrimitiveTopology(lists[0], D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-        ID3D12GraphicsCommandList_IASetVertexBuffers(lists[0], 0, 1, &vb);
-        ID3D12GraphicsCommandList_DrawInstanced(lists[0], 4, 1, 0, 0);
+        q3_record_render(lists[0], roots[0], rtv, vertices, instances);
         transition(lists[1], uav, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         ID3D12GraphicsCommandList_SetComputeRootSignature(lists[1], roots[1]);
         ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(lists[1], 0, ID3D12Resource_GetGPUVirtualAddress(uav));
@@ -8497,7 +8635,7 @@ static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("AGX_D3D12_Q3RC: %s bad=%u overlap=UNVERIFIED receipts=Wom1RcProgress,Wom1JobWindow,Wom1JobTiming971\n",
+    printf("AGX_D3D12_Q3RC: %s bad=%u overlap=UNVERIFIED receipts=Wom1RcProgress,Wom1RcDecisions,Wom1JobWindow,Wom1JobTiming971\n",
         SUCCEEDED(hr) && !bad ? "PASS" : "FAIL", bad);
     fflush(stdout);
     for (unsigned i = 0; i < 3; ++i) {
