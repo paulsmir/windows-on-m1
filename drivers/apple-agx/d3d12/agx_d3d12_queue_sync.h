@@ -16,4 +16,10 @@ static inline HRESULT AgxD3d12QueueWaitForOwner(const D3DDDI_DEVICECALLBACKS *k,
     wait.MonitoredFenceValueArray = &value;
     return k->pfnWaitForSynchronizationObjectFromGpuCb(device, &wait);
 }
+/* Q11: a proven completed value can discharge the outgoing edge without
+ * another VidSch packet. Never interpret a device-removal sentinel as success.
+ * The caller obtains this value atomically from its own completion cache. */
+static inline bool AgxD3d12OwnerFenceComplete(UINT64 completed, UINT64 value) {
+    return value != 0 && completed != ~static_cast<UINT64>(0) && completed >= value;
+}
 #endif

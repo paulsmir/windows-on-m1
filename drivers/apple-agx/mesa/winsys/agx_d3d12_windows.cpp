@@ -60,6 +60,7 @@ struct AGX_D3D12_OWNER {
   const D3DDDI_DEVICECALLBACKS *Kernel;
   HANDLE RuntimeDevice;
   HANDLE KernelContext;
+  bool QueueWaitCompleted;
   AGX_D3D12_ERROR_CALLBACK Error;
   void *ErrorContext;
   UINT PendingCopies;
@@ -821,6 +822,10 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
   }
   if (SUCCEEDED(hr)) {
 #ifdef APPLE_AGX_GPUVA_WINSYS
+    char completed_wait[2] = {};
+    owner->QueueWaitCompleted =
+        GetEnvironmentVariableA("APPLE_AGX_D3D12_QUEUE_WAIT_COMPLETED", completed_wait,
+                                sizeof(completed_wait)) == 1 && completed_wait[0] == '1';
     char heap_staging[2] = {};
     owner->Runtime.HeapStaging =
         !(GetEnvironmentVariableA("APPLE_AGX_D3D12_HEAP_STAGING", heap_staging, sizeof(heap_staging)) == 1 &&
@@ -5079,9 +5084,22 @@ static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
   const unsigned long long fence = AgxWin32AsahiContextNewestFence(owner->Context);
   const int faulted = AgxWin32AsahiContextFaulted(owner->Context);
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  const HRESULT wait = !faulted && context
+  /* This cache records completed values, not submitted values. Reading the
+   * writable cache with an interlocked operation is also safe on x86; the
+   * OS's read-only monitored mapping must never be used with an RMW. */
+  const unsigned long long completed = !faulted && context && owner->QueueWaitCompleted
+      ? static_cast<unsigned long long>(InterlockedCompareExchange64(
+            &owner->Runtime.RenderCompletedFence, 0, 0)) : 0ull;
+  const bool already_complete = AgxD3d12OwnerFenceComplete(completed, fence);
+  const HRESULT wait = already_complete ? S_OK : !faulted && context
       ? AgxD3d12QueueWaitForOwner(owner->Kernel, owner->RuntimeDevice, context, owner->Runtime.RenderSyncObject, fence)
       : S_FALSE;
+  if (context && owner->QueueWaitCompleted) {
+    const UINT values[] = {already_complete ? 1u : 0u,
+        static_cast<UINT>(fence), static_cast<UINT>(fence >> 32),
+        static_cast<UINT>(completed), static_cast<UINT>(completed >> 32)};
+    AdmissionUmdDiagnostic("measure-d3d12-queue-completed", wait, values, 5);
+  }
 #else
   const HRESULT wait = S_FALSE;
 #endif
