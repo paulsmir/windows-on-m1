@@ -67270,3 +67270,18 @@ EXP2085 HARDWARE ACTUAL (2026-11-02): **INCONCLUSIVE by the preregistered criter
 - Most likely: the measured render (one fullscreen triangle into 64x64) finishes before the compute submission reaches the KMD, so no successor is queued while R runs (the design's "no successor queued" case).
 - Per the design: adjust only the probe workload/sampling in a new preregistered experiment; no GravityMark depth-two run. Codex q4: a render long enough to overlap (5-10 ms) and a refusal histogram in the receipt.
 - Recovery rec2085h.
+
+EXP2086 HARDWARE BEFORE 2026-11-02T20:24:04Z:
+Switches (as EXP2085): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
+- WHY THIS HYPOTHESIS:
+  1. EXP2085: Q3RC PASS bad=0 but kicks 0 and no RC progress value: the 64x64 single-triangle render likely ended before the compute submission reached the KMD.
+  2. Codex q4: RC progress was only exported after a kick admission (so its absence was expected), and refusals before admission were not recorded; both are now exported (Wom1RcDecisions, explicit "no sample").
+- ATOMIC CONTRACT: probe workload and receipts only; same switches and admission policy as EXP2085.
+- WHAT IS STILL UNKNOWN: whether the restricted R->C pair is admitted when R runs 5-10 ms, and whether the firmware 3D stamp advances with C's threshold published.
+- Expected PASS: probe prints R duration 5-10 ms and Q3RC PASS bad=0; Wom1JobWindow kicks >= 1, max_in_flight 2, compute-on-3D barrier; agx_rc_progress.py reports published-progress for the probe PID/QPC window; both fences once, in order, Status 0; no reset.
+- INCONCLUSIVE: no kick again: Wom1RcDecisions must name the refusal (this run then identifies the gate), or R shorter than 5 ms.
+- FAIL: wrong output, stall to the deadline, fence errors, reset, 0x116.
+- Recovery: rec2086h.
+- Hashes: sys 3e8ab7d10ef6, UmdArm64 a4090a0e2613, UmdX64 55f9b10cb85e, Umd32 f9bb391ebc94; manifest c4aa1b8ab621, hardware-manifest 95c59b592176; probe2086.sh 0322d79378de (PROBE_LINT_OK); visible recovery rec2086h f6e9f971f75b37a5; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
+- Recovery rec2086h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2086-q3rc-overlap/run2086.sh.
