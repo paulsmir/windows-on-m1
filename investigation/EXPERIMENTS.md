@@ -67027,3 +67027,16 @@ EXP2073 HARDWARE ACTUAL (2026-11-02): **rc123 shrinks the full-screen PS 8285 ->
 - Compute shaders on hardware (a vs EXP2071b): f22befa7 6062 -> 5260, 144a46de 3743 -> 2827, 62568917 2752 -> 2265.
 - Frame structure: one job at a time, launch gaps of about 4.3 ms per 36 ms frame (0.3-0.6 ms per job) plus a late DWM-ordered compute job (0.95). macOS (Asahi protocol) queues many jobs per firmware ring and resolves dependencies in firmware.
 - Recovery rec2073h PASS. Next: EXP2074 with f224b4dc (ABA), then the Asahi queueing model.
+
+EXP2074 HARDWARE BEFORE 2026-11-02T13:48:08Z:
+Arms: a FHD 100k rc123 on (first), b FHD 100k APPLE_AGX_RA_WEB=0 (second), c FHD 100k rc123 on (third).
+- WHY THIS HYPOTHESIS:
+  1. EXP2073: rc123 cut the PS 8285 -> 6678 and the main 3D job 8.15 -> 7.8-7.9 ms, but the lighting job C4 rose 8.59 -> 8.80/8.87 ms.
+  2. Offline: with rc123 the lighting kernel 806ee7b1 lost every latency variant (448 threads); with f224b4dc it compiles to the same binary as APPLE_AGX_RA_WEB=0 (fnv 8f5b185a), while the PS keeps 16506 -> 11431 and the corpus -5.4%.
+- ATOMIC CONTRACT: one compiler selection rule (retry a rejected step without the reservation).
+- Expected: PS about 6678 in a/c; C4 equal to b (about 8.6 ms); main 3D -0.3 ms in a/c; score a and c about 1% above b (0.3 ms of 36 ms), within noise of the order effect. A small, honest gain: the main pass is not issue-bound.
+- Failure criteria: C4 in a/c above b by more than 0.1 ms, PS stats not 6678, image difference, TDR or WER.
+- Recovery: rec2074h.
+- Hashes: sys e02cf60838b3, UmdArm64 c91f0c4a7229, UmdX64 480fc5657313, Umd32 64a17cdd4d9a; manifest d229684704af, hardware-manifest 2299e003410e; probe2074.sh dc70dde21ea1 (PROBE_LINT_OK); visible recovery rec2074h d88ef4df6dfec66f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2074h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2074-ra-web2/run2074.sh.
