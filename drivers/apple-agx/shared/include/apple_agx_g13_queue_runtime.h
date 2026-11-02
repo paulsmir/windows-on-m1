@@ -191,8 +191,21 @@ typedef struct _APPLE_AGX_G13_QUEUE_SUCCESSOR {
   APPLE_AGX_G13_QUEUE_COMPLETION_STATUS Verdict;
 } APPLE_AGX_G13_QUEUE_SUCCESSOR;
 
+/* Q12: pinned software completion-stall evidence, one pair per runtime.
+ * No GPU command or firmware state is modified. All fields are 32-bit wire
+ * words; status values are APPLE_AGX_G13_QUEUE_COMPLETION_STATUS. */
+typedef struct _APPLE_AGX_G13_DEPTH2_DRILL {
+  APPLE_AGX_BACKEND_U32 Version, Bytes, Target, Released;
+  APPLE_AGX_BACKEND_U32 HeadFence, NextFence;
+  APPLE_AGX_BACKEND_U32 Pipe[2], ExpectedDone[2], ExpectedStamp[2];
+  /* head, successor, head again: outstanding at the final bracket read. */
+  APPLE_AGX_BACKEND_U32 Done[3], Write[3];
+  APPLE_AGX_BACKEND_U32 TerminalCount, TerminalFence[2], TerminalStatus[2];
+} APPLE_AGX_G13_DEPTH2_DRILL;
+
 typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME {
   APPLE_AGX_G13_QUEUE_RUNTIME_PHASE Phase;
+  APPLE_AGX_G13_DEPTH2_DRILL Drill;
   APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG Config;
   APPLE_AGX_G13_QUEUE_RUNTIME_IO Io;
   APPLE_AGX_BACKEND_U32 PendingFence;
@@ -272,6 +285,14 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCancel(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 Fence);
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT
 AppleAgxG13QueueRuntimeReset(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime);
+/* Worker-serialized, diagnostic only. Target 1=head, 2=successor; invalid,
+ * stale, already retired or second arms are rejected. Release is called only
+ * after Resetting has stopped the worker. Poll still proves physical retirement. */
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeDrillArm(
+    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 Target);
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeDrillRelease(
+    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime);
+
 /* rc77 (EXP2005/EXP2007): after a Timeout/Fault was recovered (firmware
  * resumed) and a queue of the pending job still has done != write, publish
  * Asahi's RecoverChannel (fw/channels.rs:187) once per unretired pipe with
