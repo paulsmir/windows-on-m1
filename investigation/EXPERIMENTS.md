@@ -67040,3 +67040,8 @@ Arms: a FHD 100k rc123 on (first), b FHD 100k APPLE_AGX_RA_WEB=0 (second), c FHD
 - Hashes: sys e02cf60838b3, UmdArm64 c91f0c4a7229, UmdX64 480fc5657313, Umd32 64a17cdd4d9a; manifest d229684704af, hardware-manifest 2299e003410e; probe2074.sh dc70dde21ea1 (PROBE_LINT_OK); visible recovery rec2074h d88ef4df6dfec66f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2074h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2074-ra-web2/run2074.sh.
+
+EXP2074 HARDWARE ACTUAL (2026-11-02): **f224b4dc restores the lighting kernel's binary (3543 as with rc123 off), but the C4 job stays slower; scores equal within noise: a 4331 (on), b 4337 (off), c 4210 (on, third position, every job slower).**
+- Expected vs actual: PS 6678 (as expected); lighting binary equal to off (as expected); C4 equal to b expected, actual 8.82 (a) / 8.66 (b) / 8.89 (c): rejected; main 3D -0.3 ms expected, actual 7.86 (a) / 8.11 (b) / 8.04 (c); score +1% expected, actual equal within the 1-3% run-to-run spread.
+- Remaining C4 cost: small per-frame kernels compiled wider under rc123 (97ae4b02 and e5ffd902 79 -> 87 halfregs, 5 dispatches per frame; 7626aaca and ee6509b6 +19 instructions). Fix 926c5754: the reservation applies only when the pinned allocation fills the register file (255 halfregs); offline every smaller function compiles bit-identically to APPLE_AGX_RA_WEB=0, the PS and heavy compute keep their gains. Not run alone (expected +0.5%, below the noise); it rides with the next experiment.
+- Next: the per-job launch gaps (about 5 ms of 36 ms) via the Asahi queue model, investigation/analysis/ASAHI-QUEUE-MODEL-2026-11-02.md step 1.
