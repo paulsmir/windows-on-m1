@@ -67229,3 +67229,18 @@ EXP2083 HARDWARE ACTUAL (2026-11-02): **Q3RC passes at depth one with Wom1Notifi
 - Package built from c009e010 after two build failures (C4242, then builder disk full: 444 old builder EXP/X86B directories removed, 38 GB freed, 49 GB free).
 - Expected vs actual: PASS, clean exit, no timeout/removal/reset, no kick: all confirmed.
 - Next: EXP2084, the same with Wom1NotifierFlight=1 (only change).
+
+EXP2084 HARDWARE BEFORE 2026-11-02T19:25:59Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 (Kick, KickOn3d, RcDepth2, ManagerSaveOnEvict absent = 0).
+Run: `agx_d3d12_probe_e2083_arm64.exe only Q3RC` (fresh device, render then compute without a CPU wait, exact 4096-pixel and 64-word checks, 15 s watchdog), then KMD receipts.
+- WHY THIS HYPOTHESIS:
+  1. Codex q2 moved notifier publication to queue commit (Wom1NotifierFlight) to remove the likely EXP2052 notifier cycle; q3 added the bounded R/C probe and Wom1RcReceipt. The design requires a depth-one serial-equivalence A/B (this run off, EXP2084 on) before any depth-two kick.
+  2. EXP2081/2082: slots and receipts run cleanly on GravityMark.
+- ATOMIC CONTRACT: only Wom1NotifierFlight changes against EXP2083 (control: Q3RC PASS bad=0, fences 101/102, overlap UNVERIFIED as expected at depth one).
+- WHAT IS STILL UNKNOWN: whether the probe behaves serially and passes on hardware with the depth-2 infrastructure armed but not kicking.
+- Expected: Q3RC PASS, clean process exit, no timeout/removal/reset, ordered exact fences in Wom1JobTiming971, no depth-two kicks (Wom1JobWindow kicks 0); Wom1RcProgress may be empty at depth one.
+- Failure criteria: Q3RC FAIL or crash, timeout, device removal, TDR, misordered fences, any depth-two kick.
+- Recovery: rec2084h.
+- Hashes: sys 6eb02cf73310, UmdArm64 41e3196b2214, UmdX64 665547048e5c, Umd32 8667c641a0f9; manifest 3881991a6831, hardware-manifest ff0efdd14697; probe2084.sh a2172275b58d (PROBE_LINT_OK); visible recovery rec2084h 39c3cd96578581ca; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1.
+- Recovery rec2084h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2084-q3rc-nf1/run2084.sh.
