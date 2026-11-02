@@ -67079,3 +67079,10 @@ Arms: a HD 100k -temporal 0 with APPLE_AGX_D3D12_SPLIT_TAGS=981fb673,ecb5fd57,a3
 - Hashes: sys d602c80e2aea, UmdArm64 8888f10dee3b, UmdX64 dd8a2cec4888, Umd32 2a778172f871; manifest bf2425a36ee5, hardware-manifest 970adc3cb6d6; probe2076.sh 5dd66aea4900 (PROBE_LINT_OK); visible recovery rec2076h e68d60c0406a3b3e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2076h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2076-split/run2076.sh.
+
+EXP2076 HARDWARE ACTUAL (2026-11-02): **the per-asteroid compute cost is a chain of about 105 small dispatches (radix sort + tiny/indirect kernels), not the lighting kernel: 7.17 ms; bdb1944a takes 1.06 ms.**
+- a (split at 8 tags) 4896 (15 jobs per frame, signature CCRCCCRCCRCCRCC); b (no split) 5694, as EXP2075b 5696.
+- Frame order (one Execute, 193 commands): [981fb673 ... e4d8b786] 0.55 ms, [ecb5fd57, 094e0b94 x2] 0.85, [a3da7f9d, 8 radix passes of ba44473b/c78e81b6/2ad80d8f/b5c046a1/219c5f89/8b9ae450 (1-196 groups), 39e0399a/93891b99/7bc49152 (391), about 50 tiny or indirect dispatches] 7.17 ms, asteroid render (TA 1.92), [fc968f7a chain] 1.14, [369f607b chain] 0.78, [bdb1944a] 1.06, then the screen-space passes.
+- Expected vs actual: radix-sort segment at least 3 ms (7.17 with the tiny chain: confirmed); lighting 2-4 ms (1.06: rejected).
+- About 68 us per dispatch in the 7.17 ms segment, many dispatches of 1-4 groups: per-dispatch overhead (barrier drain, launch, indirect) is the suspect.
+- Next: EXP2077 splits that segment at 7 tags.
