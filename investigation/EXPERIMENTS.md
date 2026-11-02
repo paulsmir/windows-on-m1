@@ -67121,3 +67121,10 @@ Arms: a HD 100k -temporal 0 with APPLE_AGX_D3D12_SPLIT_TAGS=53aff18d,a4452d43,7a
 - Hashes: sys 17dbf8077532, UmdArm64 d55c9775e83a, UmdX64 688df64444c1, Umd32 a2b84c433603; manifest 865ca3643c05, hardware-manifest 042ed6301135; probe2078.sh c593df27d88f (PROBE_LINT_OK); visible recovery rec2078h 6a8c4c831418696b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2078h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2078-split3/run2078.sh.
+
+EXP2078 HARDWARE ACTUAL (2026-11-02): **the heavy kernel is 97ae4b027aa43c6c (5 indirect launches per frame: 0.05/0.15/2.04/0.53/0.00 ms), not 2308298b (0.05 ms); a8260e4297efffb3 0.94 ms.**
+- a (split per kernel) 4755, 23 jobs; b 5656 (control).
+- Expected vs actual: 2308298b at least 1.5 ms expected, 0.05 actual (rejected).
+- 97ae4b02 (hardware 1310 instructions, 128-thread groups): a traversal loop with a shared-memory stack (202 local loads, 79 local stores) appending results through global atomics on one counter address; nir_opt_uniform_atomics is already applied (one atomic per SIMD group after get_sr_coverage), so no compiler defect is visible.
+- macOS Metal cache (274 kernels, applegpu): only 11 atomic instructions in total and no kernel with this traversal/atomic shape; the Metal path of GravityMark appears to implement this stage differently. Both APIs report "Fetch Mode" and "Rasterization Mode"; Windows reports Video Memory 312 MB, macOS 5.33 GB.
+- Next: the driver-owned lever, per-job launch gaps (4-5 ms per frame): rc124 manager slots on hardware first (firmware unknown U1).
