@@ -67187,3 +67187,17 @@ EXP2081 HARDWARE ACTUAL (2026-11-02): **rc124 live slots proven: Wom1JobTiming97
 - Expected vs actual: live builds the large majority (55-60 of about 60: confirmed); rebinds only at warm-up/eviction (0-1, with the matching single InitBM: confirmed); scores as EXP2079 (4539/5619: confirmed).
 - Render build 142-146 us, begin_job 11-38 us (as before: the copies were cheap; slots are the precondition for queuing).
 - Merged after the run: Codex q2 (e0a97d56, e8ea5757: Wom1NotifierFlight, default off; staged notifier published at queue commit, per-flight storage records). Next: EXP2082, Wom1ManagerSaveOnEvict at depth one (design step 2).
+
+EXP2082 HARDWARE BEFORE 2026-11-02T18:23:19Z:
+Arms: a FHD 100k -temporal 0, b HD 100k -temporal 0. Control: EXP2081 (same switches without SaveOnEvict): 4528 / 5675.
+- WHY THIS HYPOTHESIS:
+  1. EXP2081: rc124 live slots are used for 55-60 of about 60 render builds, so a resident manager's full state does not need a CPU snapshot after every render.
+  2. The per-render save (ManagerFence) is what blocks building a same-manager successor before the previous render completes (EXP2051 manager_bind; q1 DESIGN step 2).
+- ATOMIC CONTRACT: one switch (deferred snapshot); Stats are still refreshed on every completion for TVB growth.
+- WINDOWS/AGX CONTRACT: unchanged. WHAT IS STILL UNKNOWN: whether the firmware manager stays valid without a per-render CPU snapshot across app/DWM alternation and graceful exit (design step 2 hardware unknown).
+- Expected: no TDR, fault or WER; correct images; no TVB overflow/partials growth; manager_live as EXP2081; scores within noise of EXP2081 (saving below 0.1 ms per frame).
+- Failure criteria: fault/TDR, corrupted geometry, partial renders, manager_restored/rebind counts rising without eviction.
+- Recovery: rec2082h.
+- Hashes: sys dc80eee6f098, UmdArm64 3e05aef48872, UmdX64 e8b33d11ce88, Umd32 92ee5c64658b; manifest 496cc395204c, hardware-manifest bc3fb597fbc4; probe2082.sh ba90021b403a (PROBE_LINT_OK); visible recovery rec2082h d1eb0a29a8c4fdc6; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1ManagerReceipt=1 Wom1ManagerSaveOnEvict=1.
+- Recovery rec2082h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2082-save-evict/run2082.sh.
