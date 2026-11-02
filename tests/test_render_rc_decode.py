@@ -205,3 +205,46 @@ class RcDecode(unittest.TestCase):
         for offset,value in [(6964,33),(6968,32),(6972,1),(6976,64),(308,66)]:
             bad=bytearray(data);struct.pack_into('<I',bad,offset,value)
             with self.assertRaises(ValueError):m.decode_decisions(bad,42)
+
+    def test_v4_real_producer_retains_fence_endpoints_and_partial_counts(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        A v4 aggregate spans changing fences and interleaved observations.
+        Decode actual C wire bytes without claiming an exact-pair history or
+        attributing the entire count to a narrower QPC filter; keep v1-v3 ABI.
+        """
+        import subprocess
+        import tempfile
+        spec=importlib.util.spec_from_file_location('rc',TOOL)
+        m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+        with tempfile.TemporaryDirectory() as d:
+            c=Path(d)/'t.c';exe=Path(d)/'t'
+            c.write_text(r'''#include "render_rc_progress.h"
+#include <stdio.h>
+int main(void) {
+ ADMISSION_RC_DECISIONS r={0};AdmissionRcDecisionsInitialize(&r);
+ AdmissionRcDecisionTyped(&r,0,0,99,100,42,10,3,1,1);
+ AdmissionRcDecisionTyped(&r,64,0,200,201,123,11,1,1,2);
+ AdmissionRcDecisionTyped(&r,0,0,101,102,42,20,3,1,1);
+ AdmissionRcDecision(&r,66,0,300,0,123,21);
+ AdmissionRcDecision(&r,66,0,301,0,123,22);
+ return fwrite(&r,1,sizeof(r),stdout)==sizeof(r) ? 0:1;
+}
+''')
+            subprocess.run(['clang','-std=c11','-Wall','-Wextra','-Werror',
+                '-Wconversion','-ftrivial-auto-var-init=pattern','-I',
+                str(ROOT/'drivers/apple-agx/render-admission/include'),str(c),
+                '-o',str(exe)],check=True)
+            data=subprocess.check_output([str(exe)])
+        out=m.decode_decisions(data,42,15,25)
+        self.assertEqual(out['version'],4)
+        self.assertEqual(len(out['decisions']),1)
+        r=out['decisions'][0]
+        self.assertEqual((r['first_predecessor_fence'],r['first_successor_fence']), (99,100))
+        self.assertEqual((r['last_predecessor_fence'],r['last_successor_fence']), (101,102))
+        self.assertEqual((r['count'],r['first_qpc'],r['last_qpc'],r['partial_interval']), (2,10,20,True))
+        self.assertEqual(m.decode_decisions(data,42,21,25)['decisions'],[])
+        idle=m.decode_decisions(data,123)['decisions'][-1]
+        self.assertEqual((idle['first_predecessor_fence'],idle['last_predecessor_fence'],idle['count']), (300,301,2))
+        for offset,value in [(7988,33),(7992,32),(7996,1),(8000,64),(308,66)]:
+            bad=bytearray(data);struct.pack_into('<I',bad,offset,value)
+            with self.assertRaises(ValueError):m.decode_decisions(bad,42)
