@@ -410,6 +410,21 @@ static void AppleAgxPlatformQueueMemoryBarrier(void *Context) {
         provider->CallerQueueRuntimeIo.Context);
 }
 
+static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformPreparePublish(void *Context,
+    APPLE_AGX_BACKEND_U32 Fence) {
+  APPLE_AGX_PLATFORM_PROVIDER *p=Context;
+  return AppleAgxRenderFlightPublish(p->RenderSharedMemory,Fence);
+}
+static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformFinishPublish(void *Context,
+    APPLE_AGX_BACKEND_U32 Fence, APPLE_AGX_BACKEND_BOOL Visible) {
+  APPLE_AGX_PLATFORM_PROVIDER *p=Context;
+  if(Visible) {
+    AppleAgxRenderFlightVisible(p->RenderSharedMemory,Fence);
+    return APPLE_AGX_BACKEND_TRUE;
+  }
+  return AppleAgxRenderFlightCancel(p->RenderSharedMemory,Fence);
+}
+
 static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueuePublishU32(
     void *Context, volatile APPLE_AGX_BACKEND_U32 *Address,
     APPLE_AGX_BACKEND_U32 Value) {
@@ -489,21 +504,19 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformRenderRelocate(
       Submission == PLATFORM_NULL || Job == PLATFORM_NULL)
     return APPLE_AGX_BACKEND_FALSE;
   if (provider->ExternalRenderReady) {
+    APPLE_AGX_BACKEND_BOOL built;
     AppleAgxPlatformZero(&plan, (APPLE_AGX_BACKEND_U32)sizeof(plan));
-    /* rc102: a job built while another runs is that job's successor
-     * (depth 2); at depth 1 the queues are idle here. */
-    return (provider->QueueProvider.PendingFence != 0u
-                ? AppleAgxG13QueueProviderPlanSuccessor(
-                      &provider->QueueProvider, &plan)
-                : AppleAgxG13QueueProviderPlanJob(
-                      &provider->QueueProvider, &plan)) &&
-                   provider->ExternalRender.BuildJob(
-                       provider->ExternalRender.Context, SubmissionBytes,
-                       SubmissionByteCount, Submission,
-                       provider->EventPair.Ta, provider->EventPair.D3,
-                       &plan, Job)
-               ? APPLE_AGX_BACKEND_TRUE
-               : APPLE_AGX_BACKEND_FALSE;
+    if (!(provider->QueueProvider.PendingFence != 0u
+                ? AppleAgxG13QueueProviderPlanSuccessor(&provider->QueueProvider, &plan)
+                : AppleAgxG13QueueProviderPlanJob(&provider->QueueProvider, &plan)) ||
+        !AppleAgxRenderFlightBegin(provider->RenderSharedMemory,Submission->Submission.Fence))
+      return APPLE_AGX_BACKEND_FALSE;
+    built=provider->ExternalRender.BuildJob(
+        provider->ExternalRender.Context, SubmissionBytes, SubmissionByteCount,
+        Submission, provider->EventPair.Ta, provider->EventPair.D3, &plan, Job);
+    if (!built)
+      (void)AppleAgxRenderFlightCancel(provider->RenderSharedMemory,Submission->Submission.Fence);
+    return built;
   }
 #if defined(APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY)
   return APPLE_AGX_BACKEND_FALSE;
@@ -756,6 +769,12 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
   queue_io.ReadU32 = AppleAgxPlatformQueueReadU32;
   queue_io.SendRunMessage = AppleAgxPlatformQueueSendRunMessage;
   queue_io.Quiesce = AppleAgxPlatformQueueQuiesce;
+  if (Provider->RenderSharedMemory->NotifierFlight) {
+    queue_io.PreparePublish = AppleAgxPlatformPreparePublish;
+    queue_io.FinishPublish = AppleAgxPlatformFinishPublish;
+    Provider->RenderSharedMemory->NotifierFlush = AppleAgxPlatformQueueFlushForDevice;
+    Provider->RenderSharedMemory->NotifierFlushContext = Provider;
+  }
   queue_io.Recover = AppleAgxPlatformQueueRecover;
   queue_io.RecoverChannel = AppleAgxPlatformQueueRecoverChannel;
   AppleAgxPlatformZero(&provider_io,

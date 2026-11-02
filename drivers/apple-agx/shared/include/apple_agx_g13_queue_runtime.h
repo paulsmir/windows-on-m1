@@ -53,12 +53,14 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG {
   APPLE_AGX_BACKEND_U64 TimeoutTicks;
 } APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG;
 
+#define APPLE_AGX_G13_NOTIFIER_COMMIT 1
 typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_IO {
   void *Context;
   APPLE_AGX_BACKEND_BOOL (*FlushForDevice)(void *Context,
                                            const void *Address,
                                            APPLE_AGX_BACKEND_U32 Bytes);
   void (*MemoryBarrier)(void *Context);
+  /* FALSE guarantees no store occurred (Windows validates before writing). */
   APPLE_AGX_BACKEND_BOOL (*PublishU32)(
       void *Context, volatile APPLE_AGX_BACKEND_U32 *Address,
       APPLE_AGX_BACKEND_U32 Value);
@@ -68,6 +70,12 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_IO {
   APPLE_AGX_BACKEND_BOOL (*SendRunMessage)(
       void *Context, APPLE_AGX_BACKEND_U32 QueueType,
       const unsigned char Message[APPLE_AGX_G13_RUN_MESSAGE_SIZE]);
+  /* Optional transaction: after all work/ring flushes, before the first
+   * cpu_wptr. Finish(FALSE) restores an unpublished build; TRUE retains it.
+   * A failed restore is fatal, never permission to reuse the slot. */
+  APPLE_AGX_BACKEND_BOOL (*PreparePublish)(void *Context, APPLE_AGX_BACKEND_U32 Fence);
+  APPLE_AGX_BACKEND_BOOL (*FinishPublish)(void *Context, APPLE_AGX_BACKEND_U32 Fence,
+                                         APPLE_AGX_BACKEND_BOOL Visible);
   /*
    * Success means the platform has synchronously stopped this fence and made
    * both queue pointer mappings safe to rebase. It must not return before the

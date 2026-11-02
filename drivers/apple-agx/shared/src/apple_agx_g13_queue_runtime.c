@@ -145,6 +145,11 @@ static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13SuccessorFailure(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime,
     APPLE_AGX_G13_QUEUE_RUNTIME_RESULT Result,
     APPLE_AGX_BACKEND_BOOL VisibleToFirmware) {
+  if (Runtime->Io.FinishPublish && !Runtime->Io.FinishPublish(
+          Runtime->Io.Context, Runtime->Successor.Fence, VisibleToFirmware)) {
+    Runtime->Phase = AppleAgxG13QueueRuntimeFaulted;
+    return AppleAgxG13QueueRuntimeResultResetFailed;
+  }
   if (VisibleToFirmware) {
     if (!Runtime->Io.Quiesce(Runtime->Io.Context, Runtime->PendingFence)) {
       Runtime->Phase = AppleAgxG13QueueRuntimeFaulted;
@@ -264,6 +269,11 @@ static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13SubmitFailure(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime,
     APPLE_AGX_G13_QUEUE_RUNTIME_RESULT Result,
     APPLE_AGX_BACKEND_BOOL VisibleToFirmware) {
+  if (Runtime->Io.FinishPublish && !Runtime->Io.FinishPublish(
+          Runtime->Io.Context, Runtime->PendingFence, VisibleToFirmware)) {
+    Runtime->Phase = AppleAgxG13QueueRuntimeFaulted;
+    return AppleAgxG13QueueRuntimeResultResetFailed;
+  }
   if (VisibleToFirmware) {
     if (!Runtime->Io.Quiesce(Runtime->Io.Context, Runtime->PendingFence)) {
       Runtime->Phase = AppleAgxG13QueueRuntimeFaulted;
@@ -327,6 +337,9 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitCompute(
         APPLE_AGX_G13_RING_SLOT_SIZE))
       return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultMemoryFailed);
   }
+  if (Runtime->Io.PreparePublish && !Runtime->Io.PreparePublish(
+          Runtime->Io.Context, Submission->Fence))
+    return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultMemoryFailed);
   Runtime->Io.MemoryBarrier(Runtime->Io.Context);
   if(!Runtime->Io.PublishU32(Runtime->Io.Context,
       Runtime->Config.Compute.CpuWritePointer,publication.NextWritePointer))
@@ -336,6 +349,9 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitCompute(
   if(!Runtime->Io.SendRunMessage(Runtime->Io.Context,
       (APPLE_AGX_BACKEND_U32)AppleAgxG13QueueCompute,message))
     return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultTransportFailed);
+  if (Runtime->Io.FinishPublish && !Runtime->Io.FinishPublish(
+          Runtime->Io.Context, Submission->Fence, APPLE_AGX_BACKEND_TRUE))
+    return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultResetFailed);
 #undef SUBMIT_FAIL
   compute->EventNumber=Runtime->Config.Compute.EventNumber;
   compute->ExpectedStamp=Submission->Compute.ExpectedStamp;
@@ -461,6 +477,9 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitRenderWithComput
                             &ta_publication))
     return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultMemoryFailed);
 
+  if (Runtime->Io.PreparePublish && !Runtime->Io.PreparePublish(
+          Runtime->Io.Context, Submission->Fence))
+    return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultMemoryFailed);
   Runtime->Io.MemoryBarrier(Runtime->Io.Context);
   if (!Runtime->Io.PublishU32(Runtime->Io.Context,
                               Runtime->Config.Compute.CpuWritePointer,
@@ -488,6 +507,9 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitRenderWithComput
           joined.Messages[1]))
     return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultTransportFailed);
 
+  if (Runtime->Io.FinishPublish && !Runtime->Io.FinishPublish(
+          Runtime->Io.Context, Submission->Fence, APPLE_AGX_BACKEND_TRUE))
+    return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultResetFailed);
 #undef SUBMIT_FAIL
   compute->EventNumber = Runtime->Config.Compute.EventNumber;
   compute->ExpectedStamp = Submission->Compute.ExpectedStamp;
@@ -607,6 +629,9 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmit(
       return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultMemoryFailed);
   }
 
+  if (Runtime->Io.PreparePublish && !Runtime->Io.PreparePublish(
+          Runtime->Io.Context, Submission->Fence))
+    return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultMemoryFailed);
   Runtime->Io.MemoryBarrier(Runtime->Io.Context);
   if (!Runtime->Io.PublishU32(Runtime->Io.Context,
                               Runtime->Config.D3.CpuWritePointer,
@@ -627,6 +652,9 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmit(
           joined.Messages[1]))
     return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultTransportFailed);
 
+  if (Runtime->Io.FinishPublish && !Runtime->Io.FinishPublish(
+          Runtime->Io.Context, Submission->Fence, APPLE_AGX_BACKEND_TRUE))
+    return SUBMIT_FAIL(AppleAgxG13QueueRuntimeResultResetFailed);
 #undef SUBMIT_FAIL
   d3->EventNumber = Runtime->Config.D3.EventNumber;
   d3->ExpectedStamp = Submission->D3.ExpectedStamp;
