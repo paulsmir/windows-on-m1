@@ -67168,3 +67168,17 @@ EXP2080 HARDWARE ACTUAL (2026-11-02): **K1 shared-load scheduling has no measura
 - Expected vs actual: traversal at least 5% below both controls expected; actual b between the controls: rejected. One render job (position 1) was shorter in b (2.93 vs 3.35/3.39 ms) without a change in frame time.
 - Verdict: keep APPLE_AGX_LOCAL_LOAD_SCHED off by default. Shared-load latency is not what bounds the traversal; the remaining candidates (atomics round trips, divergence, device-load latency) belong to the application's algorithm.
 - Merged meanwhile: Codex q1 (79191153 Wom1ManagerReceipt, 28172739 Wom1ManagerSaveOnEvict, both default off; DESIGN in .local/handoff/codex/q1-firmware-queue). Next: EXP2081, rc124 slots with the live-slot receipt.
+
+EXP2081 HARDWARE BEFORE 2026-11-02T18:04:10Z:
+Arms: a FHD 100k -temporal 0, b HD 100k -temporal 0.
+- WHY THIS HYPOTHESIS:
+  1. EXP2079 ran rc124 cleanly but no receipt proved that render builds reused a live slot.
+  2. Codex q1 DESIGN step 1: the receipt flags each render build as live (bound slot reused), rebind or restored in Wom1JobTiming971 (decoder build_flags manager_live / manager_rebind / manager_restored).
+- ATOMIC CONTRACT: the receipt switch is measurement only; slots as in EXP2079.
+- WINDOWS/AGX CONTRACT: as EXP2079. WHAT IS STILL UNKNOWN: the steady-state fraction of live builds with the app and DWM alternating (hardware unknown 1 of the design).
+- Expected: build_flags manager_live > 0 and the large majority of render builds; manager_rebind only at warm-up or eviction; restored a subset of rebind; scores as EXP2079 (FHD about 4500, HD about 5600); no fault.
+- Failure criteria: manager_live 0 (slots not used), TDR, fault, image corruption.
+- Recovery: rec2081h.
+- Hashes: sys 9187856bd9ef, UmdArm64 6644330cca0c, UmdX64 d387ddb823e2, Umd32 4eb2691b138c; manifest 6b2759c7ed4c, hardware-manifest 3f10ed4d389c; probe2081.sh aa05310e487d (PROBE_LINT_OK); visible recovery rec2081h 9a8c545320177416; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1ManagerReceipt=1.
+- Recovery rec2081h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2081-mgr-receipt/run2081.sh.
