@@ -123,15 +123,15 @@ def decode_decisions(data, pid, qpc_begin=0, qpc_end=(1 << 64)-1):
     if len(data) < 20:
         raise ValueError('truncated decisions header')
     version, length, count, next_index, overwritten = struct.unpack_from('<5I', data)
-    stride = {1: 40, 2: 52, 3: 52}.get(version)
-    expected_size = 8640 if version == 3 else 308 + 128*(stride or 0)
+    stride = {1: 40, 2: 52, 3: 52, 4: 60}.get(version)
+    expected_size = (308 + 160*stride + 12) if version in (3, 4) else 308 + 128*(stride or 0)
     if stride is None or length != len(data) or length != expected_size:
         raise ValueError('invalid decisions header')
     rings = [(308, 128, count, next_index, overwritten, False)]
     idle_overwritten = 0
-    if version == 3:
-        idle_count, idle_next, idle_overwritten = struct.unpack_from('<3I', data, 6964)
-        rings.append((6976, 32, idle_count, idle_next, idle_overwritten, True))
+    if version >= 3:
+        idle_count, idle_next, idle_overwritten = struct.unpack_from('<3I', data, 308 + 128*stride)
+        rings.append((320 + 128*stride, 32, idle_count, idle_next, idle_overwritten, True))
     entries = []
     for offset, capacity, used, position, lost, idle in rings:
         if (used > capacity or position >= capacity or
@@ -140,12 +140,12 @@ def decode_decisions(data, pid, qpc_begin=0, qpc_end=(1 << 64)-1):
         for i in range(used):
             index = (position+i) % capacity if used == capacity else i
             words = struct.unpack_from('<%dI' % (stride//4), data, offset+index*stride)
-            if version == 3 and (words[0] == 66) != idle:
+            if version >= 3 and (words[0] == 66) != idle:
                 raise ValueError('decision in wrong ring')
             entries.append(words)
     # Across rings there is no append order. Use observation QPC explicitly;
     # coalesced records remain intervals, not a total order of every poll.
-    if version == 3:
+    if version >= 3:
         entries.sort(key=lambda w: (w[9], w[8], w[7], w[6]))
     hist = struct.unpack_from('<72I', data, 20)
     records = []
@@ -160,7 +160,10 @@ def decode_decisions(data, pid, qpc_begin=0, qpc_end=(1 << 64)-1):
                  detail=detail, render_fence=rf, compute_fence=cf, process_id=process,
                  predecessor_fence=rf, successor_fence=cf,
                  running_kind=running, next_kind=successor, barrier=barrier,
-                 count=observations, first_qpc=first, last_qpc=last)
+                 count=observations, first_qpc=first, last_qpc=last,
+                 first_predecessor_fence=rf, first_successor_fence=cf,
+                 last_predecessor_fence=words[13] if version >= 4 else rf,
+                 last_successor_fence=words[14] if version >= 4 else cf)
         latest[str(reason)] = r
         if process == pid and last >= qpc_begin and first <= qpc_end:
             r = dict(r, partial_interval=first < qpc_begin or last > qpc_end)
@@ -170,7 +173,7 @@ def decode_decisions(data, pid, qpc_begin=0, qpc_end=(1 << 64)-1):
                 histogram={str(i): dict(count=n, last_retained=latest.get(str(i)))
                            for i,n in enumerate(hist) if n},
                 decisions=records,
-                note='Histogram is device-wide. V3 overwritten counts non-idle records; idle_overwritten counts reason 66. Filtered records are bounded; partial counts include observations outside the interval. Missing/overwritten evidence is inconclusive.')
+                note='Histogram is device-wide. V3/v4 overwritten counts non-idle records; idle_overwritten counts reason 66. V4 aggregates by reason/detail/PID/kinds/barrier across fences: only first/last pairs survive, with whole-interval counts, not per-pair proof. Partial intervals include observations outside the filter. Distinct identities can still overflow; missing evidence is inconclusive.')
 
 
 def main():

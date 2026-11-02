@@ -39,7 +39,7 @@ static unsigned calls,fail;
 static void RtlInitUnicodeString(UNICODE_STRING *n,const wchar_t *v){*n=v;}
 static int ZwSetValueKey(HANDLE k,UNICODE_STRING *n,unsigned z,unsigned t,void *p,unsigned long bytes){
  (void)k;(void)z;assert(t==3);++calls;
- unsigned *h=p;assert(h[0]==(!wcscmp(*n,L"Wom1RcProgress")?2u:3u) && h[1]==bytes);
+ unsigned *h=p;assert(h[0]==(!wcscmp(*n,L"Wom1RcProgress")?2u:4u) && h[1]==bytes);
  if(!wcscmp(*n,L"Wom1RcProgress")) assert(h[2]==0 && bytes==19984);
  return calls==fail ? -1:0;
 }
@@ -65,9 +65,9 @@ int main(void){ADMISSION_RC_DECISIONS r={0};
  assert(r.IdleRecords[0].RFence==99 && r.IdleRecords[0].CFence==0 && r.IdleRecords[0].ProcessId==123);
  AdmissionRcDecision(&r,68,29,99,100,123,20);
  assert(r.Count==1 && r.Records[0].Detail==29);
- for(unsigned i=0;i<128;++i) AdmissionRcDecision(&r,65,0,200+i,201+i,124,30+i);
+ for(unsigned i=0;i<128;++i) AdmissionRcDecision(&r,65,0,200+i,201+i,124+i,30+i);
  assert(r.Count==128 && r.Overwritten==1);
- r.Histogram[65]=~0u;AdmissionRcDecision(&r,65,0,327,328,124,200);
+ r.Histogram[65]=~0u;AdmissionRcDecision(&r,65,0,327,328,251,200);
  assert(r.Histogram[65]==~0u);
  AdmissionRcDecision(&r,999,0,1,2,1,201);assert(r.Histogram[71]==1);
 }
@@ -146,34 +146,75 @@ int main(void) {
 }
 ''')
 
+    def test_all_reasons_survive_interleaved_changing_fence_flood(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        EXP2093 lost probe decisions to changing-fence reason-64 DWM records.
+        Stress 30000 repeats: every reason must aggregate by identity even when
+        another identity intervenes, retaining first/last fences and counts.
+        """
+        self.build(r'''#include "render_rc_progress.h"
+#include <assert.h>
+int main(void) {
+ ADMISSION_RC_DECISIONS r={0};AdmissionRcDecisionsInitialize(&r);
+ AdmissionRcDecisionTyped(&r,0,0,99,100,42,1,3,1,1);
+ for(unsigned i=0;i<30000;++i) {
+   AdmissionRcDecisionTyped(&r,64,0,200+i,201+i,123,2+2*i,1,1,2);
+   AdmissionRcDecisionTyped(&r,4,0,200+i,201+i,123,3+2*i,1,1,2);
+ }
+ assert(r.Count==3 && !r.Overwritten && r.Records[0].ProcessId==42);
+ assert(r.Histogram[64]==30000 && r.Histogram[4]==30000);
+ assert(r.Records[1].RFence==200 && r.Records[1].CFence==201);
+ assert(r.Records[1].Count==30000 && r.Records[1].FirstLow==2);
+ assert(r.Records[1].LastLow==60000);
+ assert(r.Records[1].LastRFence==30199 && r.Records[1].LastCFence==30200);
+ /* Each component of the key must separate records. */
+ AdmissionRcDecisionTyped(&r,64,1,1,2,123,60002,1,1,2);
+ AdmissionRcDecisionTyped(&r,64,0,1,2,124,60003,1,1,2);
+ AdmissionRcDecisionTyped(&r,64,0,1,2,123,60004,3,1,2);
+ AdmissionRcDecisionTyped(&r,64,0,1,2,123,60005,1,3,2);
+ AdmissionRcDecisionTyped(&r,64,0,1,2,123,60006,1,1,1);
+ assert(r.Count==8);
+ for(unsigned reason=0;reason<72;++reason) {
+   ADMISSION_RC_DECISIONS all={0};AdmissionRcDecisionsInitialize(&all);
+   AdmissionRcDecisionTyped(&all,reason,7,10,11,42,1,3,1,1);
+   AdmissionRcDecisionTyped(&all,reason,8,20,21,42,2,3,1,1);
+   AdmissionRcDecisionTyped(&all,reason,7,30,31,42,3,3,1,1);
+   ADMISSION_RC_DECISION *s=reason==66 ? all.IdleRecords:all.Records;
+   assert(s[0].Count==2 && s[0].RFence==10 && s[0].CFence==11);
+   assert(s[0].LastLow==3 && all.Histogram[reason]==3);
+   assert(s[0].LastRFence==30 && s[0].LastCFence==31);
+ }
+}
+''')
+
     def test_idle_ring_wrap_coalescing_and_saturation(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
-        Reserving idle storage must preserve exact pair identity, every histogram
+        Reserving idle storage must preserve semantic identity, every histogram
         increment, bounded wrap and saturated counters rather than wrap to zero.
         """
         self.build(r'''#include "render_rc_progress.h"
 #include <assert.h>
 int main(void) {
  ADMISSION_RC_DECISIONS r={0};AdmissionRcDecisionsInitialize(&r);
- assert(r.Version==3 && r.Bytes==8640);
- for(unsigned i=0;i<40;++i) AdmissionRcDecision(&r,66,0,i+1,0,43,i+1);
+ assert(r.Version==4 && r.Bytes==9920);
+ for(unsigned i=0;i<40;++i) AdmissionRcDecision(&r,66,0,i+1,0,43+i,i+1);
  assert(r.IdleCount==32 && r.IdleNext==8 && r.IdleOverwritten==8);
  assert(!r.Count && !r.Overwritten && r.Histogram[66]==40);
- AdmissionRcDecision(&r,66,0,40,0,43,41);
+ AdmissionRcDecision(&r,66,0,40,0,82,41);
  assert(r.IdleRecords[7].Count==2 && r.IdleRecords[7].LastLow==41);
  r.IdleRecords[7].Count=~0u;r.Histogram[66]=~0u;
- AdmissionRcDecision(&r,66,0,40,0,43,42);
+ AdmissionRcDecision(&r,66,0,40,0,82,42);
  assert(r.IdleRecords[7].Count==~0u && r.Histogram[66]==~0u);
- r.IdleOverwritten=~0u;AdmissionRcDecision(&r,66,0,41,0,43,43);
+ r.IdleOverwritten=~0u;AdmissionRcDecision(&r,66,0,41,0,83,43);
  assert(r.IdleOverwritten==~0u && r.IdleNext==9);
 }
 ''')
         with tempfile.TemporaryDirectory() as d:
             c=Path(d)/'abi.c'
             c.write_text('#include "render_rc_progress.h"\n'
-                '_Static_assert(sizeof(ADMISSION_RC_DECISIONS)==8640,"size");\n'
-                '_Static_assert(__builtin_offsetof(ADMISSION_RC_DECISIONS,IdleCount)==6964,"append");\n'
-                '_Static_assert(__builtin_offsetof(ADMISSION_RC_DECISIONS,IdleRecords)==6976,"records");\n')
+                '_Static_assert(sizeof(ADMISSION_RC_DECISIONS)==9920,"size");\n'
+                '_Static_assert(__builtin_offsetof(ADMISSION_RC_DECISIONS,IdleCount)==7988,"append");\n'
+                '_Static_assert(__builtin_offsetof(ADMISSION_RC_DECISIONS,IdleRecords)==8000,"records");\n')
             for target in ['i686-pc-windows-msvc','x86_64-pc-windows-msvc','aarch64-pc-windows-msvc']:
                 subprocess.run(['clang','-target',target,'-std=c11','-Werror','-Wconversion',
                     '-fsyntax-only','-I',str(INC),str(c)],check=True)

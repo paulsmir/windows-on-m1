@@ -35,8 +35,8 @@ typedef struct _ADMISSION_RC_RECEIPT {
 /* Q4 decisions are observational: 0 allowed, 1..65 existing policy,
  * 66 no pending head, 67 running image not released, 68 prebind not ready
  * (Detail = prebind refusal), 69 backend already has/no longer needs a kick,
- * 70 kick disabled, 71 unknown future reason. Ring keeps recent transitions;
- * repeated identical decisions coalesce, histogram counts every observation. */
+ * 70 kick disabled, 71 unknown future reason. Rings retain bounded semantic
+ * identities; histogram counts every observation, including evicted identities. */
 #define ADMISSION_RC_REASONS 72u
 #define ADMISSION_RC_DECISIONS_COUNT 128u
 #define ADMISSION_RC_IDLE_COUNT 32u
@@ -44,14 +44,17 @@ typedef struct _ADMISSION_RC_DECISION {
   unsigned int Reason, Detail, RFence, CFence, ProcessId, Count;
   unsigned int FirstLow, FirstHigh, LastLow, LastHigh;
   unsigned int RunningKind, NextKind, Barrier;
+  /* v4: RFence/CFence are the first observed pair, these are the last.
+   * Intermediate pairs are not retained and counts are interval totals. */
+  unsigned int LastRFence, LastCFence;
 } ADMISSION_RC_DECISION;
 typedef struct _ADMISSION_RC_DECISIONS {
   unsigned int Version, Bytes, Count, Next, Overwritten;
   unsigned int Histogram[ADMISSION_RC_REASONS];
   ADMISSION_RC_DECISION Records[ADMISSION_RC_DECISIONS_COUNT];
-  /* v3: reason 66 cannot overwrite non-idle decisions, even when fences
-   * change on every poll. Each ring coalesces only identical observations.
-   * Histogram is unchanged and counts both rings, including overwritten data. */
+  /* v3 partition retained in v4: idle polls cannot evict other reasons.
+   * v4 coalesces every retained identity regardless of fences or adjacency.
+   * Distinct identities can still overflow; overwritten counts those losses. */
   unsigned int IdleCount, IdleNext, IdleOverwritten;
   ADMISSION_RC_DECISION IdleRecords[ADMISSION_RC_IDLE_COUNT];
 } ADMISSION_RC_DECISIONS;
@@ -61,14 +64,14 @@ static __inline void AdmissionRcInitialize(ADMISSION_RC_RECEIPT *r) {
   r->Version=2u; r->Bytes=(unsigned int)sizeof(*r);
 }
 static __inline void AdmissionRcDecisionsInitialize(ADMISSION_RC_DECISIONS *r) {
-  r->Version=3u; r->Bytes=(unsigned int)sizeof(*r);
+  r->Version=4u; r->Bytes=(unsigned int)sizeof(*r);
 }
 static __inline void AdmissionRcDecisionTyped(ADMISSION_RC_DECISIONS *r,
     unsigned int reason, unsigned int detail, unsigned int rf,
     unsigned int cf, unsigned int pid, unsigned long long qpc,
     unsigned int running, unsigned int next, unsigned int barrier) {
   ADMISSION_RC_DECISION *s, *records;
-  unsigned int *count, *position, *overwritten, capacity;
+  unsigned int *count, *position, *overwritten, capacity, i;
   if(reason>=ADMISSION_RC_REASONS) reason=ADMISSION_RC_REASONS-1u;
   if(r->Histogram[reason]!=~0u) ++r->Histogram[reason];
   records=reason==66u ? r->IdleRecords:r->Records;
@@ -76,18 +79,20 @@ static __inline void AdmissionRcDecisionTyped(ADMISSION_RC_DECISIONS *r,
   position=reason==66u ? &r->IdleNext:&r->Next;
   overwritten=reason==66u ? &r->IdleOverwritten:&r->Overwritten;
   capacity=reason==66u ? ADMISSION_RC_IDLE_COUNT:ADMISSION_RC_DECISIONS_COUNT;
-  if(*count) {
-    s=&records[(*position+capacity-1u)%capacity];
-    if(s->Reason==reason && s->Detail==detail && s->RFence==rf &&
-       s->CFence==cf && s->ProcessId==pid && s->RunningKind==running &&
+  for(i=0u;i<*count;++i) {
+    s=&records[i];
+    if(s->Reason==reason && s->Detail==detail &&
+       s->ProcessId==pid && s->RunningKind==running &&
        s->NextKind==next && s->Barrier==barrier) {
       if(s->Count!=~0u) ++s->Count;
+      s->LastRFence=rf;s->LastCFence=cf;
       s->LastLow=(unsigned int)qpc;s->LastHigh=(unsigned int)(qpc>>32);
       return;
     }
   }
   s=&records[*position];
-  s->Reason=reason;s->Detail=detail;s->RFence=rf;s->CFence=cf;
+  s->Reason=reason;s->Detail=detail;s->RFence=s->LastRFence=rf;
+  s->CFence=s->LastCFence=cf;
   s->ProcessId=pid;s->Count=1u;
   s->RunningKind=running;s->NextKind=next;s->Barrier=barrier;
   s->FirstLow=s->LastLow=(unsigned int)qpc;
