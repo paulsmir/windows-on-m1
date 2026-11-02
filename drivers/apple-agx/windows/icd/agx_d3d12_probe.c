@@ -8438,12 +8438,25 @@ static int q3_render_duration(const Q3_GPU_COMPLETION_QUERY *q,
         puts("");
         return 0;
     }
-    if (r->CompleteQpc < r->SubmitQpc || !r->Start || r->End <= r->Start || r->Start < previous_end) {
-        printf("Q3RC calibration-reject span start=%llu end=%llu previous_end=%llu\n",
-            (unsigned long long)r->Start, (unsigned long long)r->End, (unsigned long long)previous_end);
-        return 0;
+    {
+        /* EXP2087: the render Start word can belong to another job (objects
+         * 28/29 are parity-slotted and may already point at the next build's
+         * copy); at depth one this render cannot start before the previous
+         * retired job's End, so that bounds Start (duration overestimated by
+         * at most one launch gap). */
+        UINT64 start = r->Start;
+        if (previous_end && (start == 0 || start < previous_end)) {
+            printf("Q3RC calibration-bounded start=%llu previous_end=%llu\n",
+                (unsigned long long)r->Start, (unsigned long long)previous_end);
+            start = previous_end;
+        }
+        if (r->CompleteQpc < r->SubmitQpc || !start || r->End <= start) {
+            printf("Q3RC calibration-reject span start=%llu end=%llu previous_end=%llu\n",
+                (unsigned long long)r->Start, (unsigned long long)r->End, (unsigned long long)previous_end);
+            return 0;
+        }
+        *ms = 1000.0 * (double)(r->End-start) / (double)q->Frequency;
     }
-    *ms = 1000.0 * (double)(r->End-r->Start) / (double)q->Frequency;
     return (int)(r - q->Record) + 1; /* 1-based index of the record used */
 }
 /* Separate retired R-only warm-up; measured R/C contains no timing query.

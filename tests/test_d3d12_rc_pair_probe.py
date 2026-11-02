@@ -169,7 +169,8 @@ int main(void){
  assert(q3_render_duration(&q,10,0,42,100,6000,&ms)==2 && ms==1.0);
  q.Count=1;
  r->Status=1;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));r->Status=0;
- r->Start=5999;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));r->Start=6100;
+ r->Start=5999;assert(q3_render_duration(&q,10,0,42,100,6000,&ms) && ms==7.1);r->Start=6100;
+ r->End=5900;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));r->End=13100;
  r->Sequence=10;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));r->Sequence=11;
  r->Kind=2;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));r->Kind=1;
  assert(!q3_render_duration(&q,10,0,43,100,6000,&ms));
