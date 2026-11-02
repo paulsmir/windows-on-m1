@@ -67207,3 +67207,5 @@ EXP2082 HARDWARE ACTUAL (2026-11-02): **Wom1ManagerSaveOnEvict works at depth on
 - Expected vs actual: clean, no partial growth, live as EXP2081, saving below 0.1 ms per frame: all confirmed.
 - Design step 2's hardware unknown (the firmware manager stays valid without a per-render CPU snapshot) is answered: yes, for app + DWM alternation over a full run.
 - Next: design steps 3-4 on the q3 R/C probe before any GravityMark depth-2 run.
+
+EXP2083 BUILD FAILURE (2026-11-02, first package, commit 1812e031): the WDK ARM64 build of AppleAgxRenderAdmission failed: backend_platform_windows.c(2681): C4242 APPLE_AGX_U64 -> ULONG in AdmissionRcObject (Codex q3 receipt), C2220 warning as error. No hardware run. Fix e89f0d18 (64-bit offset parameter); the experiment was repackaged as EXP2083 from e89f0d18 (the failed directory kept as EXP2083-q3rc-nf0.buildfail). Lesson for Codex tasks: host tests do not run MSVC /W4 /WX on KMD code; ask for a cast audit of new KMD code.
