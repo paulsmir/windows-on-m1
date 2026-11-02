@@ -66894,3 +66894,17 @@ EXP2067 HARDWARE ACTUAL (2026-11-02): **diagnostic AGX listings captured; the re
 - Mechanism (f22befa7 NIR): a loop body `if (c) { recompute 65 scalars } else {}` merges 65 phis. Under full pressure the phi-web coalescing fails, giving runs of up to 144 xors per iteration.
 - EXP2066a dispatch receipts: f22befa7, 144a46de and 62568917 are compiled eagerly (pso-eager) but dispatched 0 times in the scored run, so they do not affect the score. The big PS is unattributed (draw receipts lacked the PS).
 - Next: EXP2068 (rc119 bcf2b795, PS tag in measure-d3d12-draw).
+
+EXP2068 HARDWARE BEFORE 2026-11-02T11:41:33Z:
+Arm a: D3D12 FHD 100k first app.
+- WHY: EXP2067's AGX listings show register-allocator swap overhead (xor triples) at 255 GPRs.
+  - The three worst compute shaders (f22befa7, 144a46de, 62568917; 38-65% xor) are compiled eagerly but never dispatched (0 dispatches in EXP2066a), so they do not affect the score.
+  - The heaviest pixel shader 71405b87/56e2cea9 (8285 instructions, 111 spills, 22% xor) has no draw attribution.
+  - This receipt tells which pixel shaders the scored frames draw, and how often, before any compiler work.
+- ATOMIC CONTRACT: receipt-only, one extra value.
+- Expected: about 4355; draw counts per PS tag per frame.
+- Failure criteria: a score drop of more than 2%, or ps_tag 0 on most draws.
+- Recovery: rec2068h.
+- Hashes: sys c32b85069cd8, UmdArm64 f30585374ed8, UmdX64 eadcdd7e4544, Umd32 fd022d72d072; manifest 6c08a826bdca, hardware-manifest 0ef05956f8b5; probe2068.sh 0c825793aec9 (PROBE_LINT_OK); visible recovery rec2068h 1eb5e6bd4b1dde98; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2068h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2068-ps-draws/run2068.sh.
