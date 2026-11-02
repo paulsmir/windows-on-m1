@@ -490,9 +490,44 @@ CALL = '''      unsigned offset =
          agx_win32_compile_function(nir, impl, key, &binary, &out->info);'''
 
 
+# rc120 (EXP2067/2068): GravityMark's full-screen PS 71405b87 (drawn once
+# per frame) compiled to 8285 instructions, 255 halfregs, 111 spills and
+# 22.5% xor swaps: 14 vector buffer loads stayed live for over 30% of the
+# shader. Speculatable loads are hoisted out of branches
+# (nir_opt_peephole_select) and merged at the earliest position
+# (nir_opt_load_store_vectorize); the late nir_opt_sink cannot move them
+# back because agx_nir_lower_address turns them into load_agx, which
+# nir_opt_sink does not know. Sink them while they are still load_global or
+# load_ubo; only loads marked ACCESS_CAN_REORDER move (the D3D lowering marks
+# a read-only load in a shader that writes no buffer or image,
+# agx_win32_d3d_sink_loads). Fragment shaders only (a compute kernel lost
+# occupancy). APPLE_AGX_SINK_LOADS=0 restores the pinned order.
+SINK_ANCHOR = '''   NIR_PASS(_, nir, agx_nir_lower_address);
+'''
+SINK = '''   {
+      /* RC120 (native-asahi-latency-schedule.py): sink reorderable loads
+       * to their uses before they become load_agx. */
+      const char *sink = getenv("APPLE_AGX_SINK_LOADS");
+      /* fragment shaders only: in compute kernels the hoisted loads hide
+       * latency, and sinking them cost GravityMark's lighting kernel its
+       * occupancy (512 -> 448 threads, test_d3d12_latency_schedule) */
+      if (nir->info.stage == MESA_SHADER_FRAGMENT &&
+          (!sink || sink[0] != '0' || sink[1])) {
+         const nir_move_options sink_loads =
+            nir_move_load_global | nir_move_load_ubo | nir_move_const_undef |
+            nir_move_comparisons | nir_move_copies | nir_move_alu;
+         NIR_PASS(_, nir, nir_opt_sink, sink_loads);
+         NIR_PASS(_, nir, nir_opt_move, sink_loads);
+      }
+   }
+   NIR_PASS(_, nir, agx_nir_lower_address);
+'''
+
+
 def project_compile(text):
     if 'agx_win32_compile_function' in text:
         raise RuntimeError('agx_compile.c already projected')
+    text = once(text, SINK_ANCHOR, SINK)
     text = once(text, FUNCTION_ANCHOR, FUNCTION)
     text = once(text, CTX_ANCHOR, CTX)
     text = once(text, RETURN_ANCHOR, RETURN)
