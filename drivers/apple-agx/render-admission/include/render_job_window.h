@@ -54,7 +54,8 @@ typedef struct _ADMISSION_JOB_WINDOW_JOB {
  * D3D-G1b Barrier encoder on another queue's firmware stamp,
  * AppleAgxRenderSharedMemoryBuildLeadingBarrier); they are declared only
  * under Wom1JobDepth2Caps (AdmissionJobWindowCapabilities) until a kicked
- * window validates them on hardware. LIVE_MANAGER (U1) is not built. */
+ * window validates them on hardware. Q6 declares LIVE_MANAGER only under
+ * Wom1Depth2General after enabling exact same-slot lifetime ownership. */
 #define ADMISSION_JOB_WINDOW_CAP_SECOND_SIDECAR 0x1u  /* U7: sidecar per slot */
 #define ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER 0x2u    /* U1: same-key skip */
 #define ADMISSION_JOB_WINDOW_CAP_TA_ON_3D 0x4u        /* TA Barrier, 3D stamp */
@@ -102,6 +103,8 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
    * (1 << ADMISSION_JOB_WINDOW_BARRIER_*); 0 = no restriction (the rc95
    * receipt mode). Refusal 64 otherwise. */
   unsigned int KickClasses;
+  /* Q6 opt-in: caller proves the pending key equals the running live slot. */
+  unsigned int General, SameManagerSlot;
 } ADMISSION_JOB_WINDOW_KICK_STATE;
 
 /* While N runs: may N+1 be kicked now? Refusal values:
@@ -111,8 +114,8 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
  *   fence, 54 a paging/CPU packet runs or heads the queue,
  *   55 another process (one VM slot), 56 a present or legacy job,
  *   57 both use the compute sidecar (U7), 58 render after render with
- *   another manager binding (scene), 59 render after render with the same
- *   scene (U1), 60 the pair's Barrier is not available (TA on a 3D stamp,
+ *   another manager binding (legacy SceneId; Q6 live-slot key), 59 missing
+ *   live-manager capability (U1), 60 the pair's Barrier is not available (TA on a 3D stamp,
  *   or any compute-queue Barrier). The TA Barrier on a compute stamp is
  *   the hardware-validated D3D-G1b one (EXP1279+). */
 unsigned int AdmissionJobWindowKickRefusal(
@@ -122,6 +125,8 @@ unsigned int AdmissionJobWindowKickRefusal(
  * Wom1JobDepth2KickOn3d = 1) adds those waiting on N's 3D stamp (R->R,
  * R->C), whose end the notifier may defer behind N+1's (U4). */
 unsigned int AdmissionJobWindowKickClasses(unsigned int On3d);
+unsigned int AdmissionJobWindowGeneralClasses(unsigned int TaOnCompute,
+    unsigned int TaOn3d, unsigned int ComputeOnCompute);
 /* rc102 refusals of the wired window (after 1-60):
  *   61 N+1 needs idle queues (new queue lifetime, InitBM, manager bind),
  *   62 N and N+1 would share one sidecar job-word set,
