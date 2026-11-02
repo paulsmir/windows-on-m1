@@ -331,3 +331,87 @@ REVIEW R40: DEFER — historical hardware/firmware/G3 bring-up item outside Q11 
 REVIEW R37: DEFER — historical hardware/firmware/G3 bring-up item outside Q11 offline queue-completion scope; no related behavior changed.
 
 REVIEW R64: DEFER — historical hardware/firmware/G3 bring-up item outside Q11 offline queue-completion scope; no related behavior changed.
+
+## Q11b: warm the measured C→R successor (offline follow-up)
+
+The probe now warms the actual blue render before `Q3RC init` in Q3CR and
+Q3RCR. Setup list/allocator 3 draws one instance with the measured graphics
+PSO/root, `vertices2` and `rtv2` (which names `texture2`). Two sequential
+passes each use `run_list` to wait for the exact application fence before
+resetting that allocator/list. Their fences are base-2 and base-1; compute
+calibration uses at most base-8, init uses base, and measured work starts at
+base+1. Failure stops setup; an uncertain submit terminates the probe without
+releasing potentially outstanding resources. WARP follows the same setup.
+The measured submission helpers and driver ordering are unchanged.
+
+The first pass exercises first-use resource/state setup; the second exercises
+reuse after retirement. This bounded second pass is a precaution justified
+by the existing PagingFence and PoolMapEscape costs, not a claim that the
+trace proves one warm-up insufficient or two sufficient. Reused render
+resources can still incur per-batch mapping, eviction or scene preparation.
+Q3CR's supplied trace has 33.678 ms replay, with 15.963 ms PagingFence and
+10.819 ms PoolMapEscape (`tool-q3cr-umd.log:584,586,588`). Those buckets must
+be measured again. No sleep, residency override or skipped wait is added.
+
+The existing initialization remains **after both warm-ups**: it resets rtv2
+to red and CPU-retires setup. Consequently, stale warm-up blue cannot pass
+if the measured successor is omitted. All original exact compute/green/blue
+output checks remain. The regression executes the real warm-up helper with
+COM boundary fakes, injects submit/allocator/list failures in either pass,
+and executes the real output oracle against red sentinel data.
+
+This is application resource preparation. The probe owns setup/lifetimes
+and the sentinel; UMD/VidMm own replay/residency, KMD/firmware own native
+admission and ordering. Hardware initialization, IRQs, DMA, power, firmware
+and recovery contracts are unchanged. Source references: probe
+`run_list`, `q3_record_render`, `q3_calibrate_compute`, `q3_sequence`;
+Asahi `agx_state.c:4862,5556` (`agx_draw_vbo` and its registration); pinned
+SDK 26100 `d3d12.h:5297,7043` (allocator/list Reset). Microsoft requires GPU
+completion before allocator reset, which the exact-fence wait supplies.
+[Allocator Reset](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12commandallocator-reset),
+[ExecuteCommandLists ordering](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12commandqueue-executecommandlists).
+
+### Read the next measured interval
+
+The probe prints `successor_execute=2` for Q3CR or `=3` for Q3RCR (1-based),
+the successor application fence, and `successor_umd_replay_us=unavailable
+source=umd-trace`. This is deliberate: D3D12 exposes no internal UMD replay
+measurement. Read the following existing receipts for the same PID and the
+selected Execute inside `pair_qpc_begin`/`pair_qpc_end`:
+
+- `measure-d3d12-execute`: payload `{lists, commands, replay_us, submit_us,
+  serial}`; payload integers in the trace are hexadecimal.
+- `measure-d3d12-replay-window`: `{start, replayed, submitted, hz}`, each a
+  low/high 32-bit pair. Replay duration is `(replayed-start)/hz` seconds;
+  submit duration is `(submitted-replayed)/hz`. UMD source:
+  `agx_d3d12_ddi.cpp:7122-7157`.
+- `measure-d3d12-wait`: join the Execute serial; draw-phase `0x402` is
+  PagingFence and `0x41c` is PoolMapEscape. Compare these costs with the cold
+  trace above, including each warm-up's preceding receipts.
+- Match actual successor KMD admission and its predecessor completion using
+  PID, submitted work/fences and compatible timestamps. UMD replay-window
+  end and application Execute return are not themselves KMD admission proof.
+
+The new guidance prints before the pair QPC interval; nothing is added
+between measured Execute calls. Retain untruncated logs. The first line of
+`measure-d3d12-execute` is not necessarily the measured sequence: calibrations,
+initialization and both warm-ups precede it.
+
+Smallest integration checkpoint: same driver package/switches as the intended
+Q3 test, `Wom1Depth2TaOnCompute=1`, TaOn3d off, run `only Q3CR` then `only
+Q3RCR`. Change only this probe preparation. PASS requires exact outputs and
+successful original fences, typed C→R publication while C is live, retained
+R→C behavior and no reset/removal. Output PASS with reason66/no typed interval
+remains INCONCLUSIVE for overlap. If paging/map costs remain, this falsifies
+the sufficiency of this warm-up; use the new measured buckets to identify
+the remaining preparation, not another unsupported wait deletion. Recovery
+belongs to the integration owner's preregistered exact-package cleanup.
+No hardware, guest, builder or package operations were performed for q11b;
+actual native MSVC builds and hardware timing remain unknown.
+
+Offline verification: 20 focused probe tests pass, including fresh-stage
+full-probe Windows-target syntax checks on x86/x64/ARM64. Required full
+baseline: `ran 810 tests in 326 modules; 6 failing, 6 known, 0 NEW, 0 FIXED`,
+`BASELINE_OK`. Two new regressions were RED before the helper/call existed
+and GREEN afterward. Independent review found no blockers. Native MSVC
+build/link and hardware validation remain integration gates.

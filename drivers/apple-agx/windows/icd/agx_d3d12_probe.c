@@ -8679,6 +8679,28 @@ static HRESULT q3_compute_shader(ID3D12Device *device,
     if (compiler) FreeLibrary(compiler);
     return hr;
 }
+/* Exercise the exact blue successor, then its reuse after retirement. The
+ * caller must reset its output to the red sentinel after these depth-one
+ * passes. Completion proves safe reuse, not absence of future paging. */
+static HRESULT q3_warm_successor(ID3D12CommandQueue *queue, ID3D12Fence *fence,
+    ID3D12GraphicsCommandList *list, ID3D12CommandAllocator *allocator,
+    ID3D12PipelineState *pso, ID3D12RootSignature *root,
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv, ID3D12Resource *vertices, UINT64 base) {
+    HRESULT hr = S_OK;
+    for (UINT pass = 0; pass < 2 && SUCCEEDED(hr); ++pass) {
+        ID3D12GraphicsCommandList_SetPipelineState(list, pso);
+        q3_record_render(list, root, rtv, vertices, 1);
+        hr = run_list(queue, fence, list, base + pass, "Q3 successor warm-up");
+        if (FAILED(hr)) {
+            puts("Q3 successor warm-up failed; setup may still be outstanding");
+            TerminateProcess(GetCurrentProcess(), 1);
+            return hr;
+        }
+        hr = ID3D12CommandAllocator_Reset(allocator);
+        if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, NULL);
+    }
+    return hr;
+}
 static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
                       ID3D12Fence *fence, UINT64 base, int mode) {
     ID3D12Resource *vertices = NULL, *texture = NULL, *uav = NULL, *readback = NULL;
@@ -8820,6 +8842,9 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
         } else hr = q3_calibrate_compute(device, queue, fence, lists[3], allocators[3],
             psos[1], roots[1], uav, base - 16, name, &iterations);
     }
+    if (SUCCEEDED(hr) && (mode == 1 || mode == 3))
+        hr = q3_warm_successor(queue, fence, lists[3], allocators[3],
+            psos[0], roots[0], rtv2, vertices2, base - 2);
     if (SUCCEEDED(hr)) {
         /* Initialize measured resources to wrong values, then retire setup. */
         const FLOAT red[4] = {1,0,0,1};
@@ -8835,6 +8860,18 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
         if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(lists[3], allocators[3], NULL);
     }
     if (SUCCEEDED(hr)) {
+        if (mode == 1 || mode == 3) {
+            /* Internal replay/prepare and kernel admission are not exposed
+             * by the D3D12 API. Join the existing UMD/KMD trace, not CPU
+             * Execute wall time. Keep this output outside the pair window. */
+            printf("%s successor_execute=%u successor_app_fence=%llu warm_passes=2 successor_umd_replay_us=unavailable source=umd-trace\n",
+                name, count, (unsigned long long)(base + count));
+            puts("Q3 successor timing: within pair_qpc_begin/end and pid, select successor_execute (1-based); "
+                "measure-d3d12-execute={lists,commands,replay_us,submit_us,serial}; "
+                "measure-d3d12-replay-window={start,replayed,submitted,hz} (lo/hi pairs); "
+                "measure-d3d12-wait: draw PagingFence=0x402 PoolMapEscape=0x41c. "
+                "KMD admission before predecessor completion and typed Wom1RcProgress are required for overlap.");
+        }
         q3_record_sequence(lists, roots, rtv, rtv2, vertices, vertices2, uav, instances, mode, iterations);
         LARGE_INTEGER pair_begin = {0}, pair_end = {0}, qpc_frequency = {0};
         QueryPerformanceFrequency(&qpc_frequency);
