@@ -45,12 +45,18 @@ eligible (3 kicks in about 2300 jobs) and hung (0x116). Parked.
 | jobs given to firmware | many per queue (ring of 127) | one at a time |
 | compute vs render | separate sub-queues, firmware barriers | one serial stream |
 | ordering | firmware stamps + Barrier commands | CPU observes completion, then kicks |
-| buffer manager | one per render queue, shared; scene per job | per-job key, save/restore around each job |
+| buffer manager | one per render queue, its firmware objects owned by that queue for its lifetime | per-process manager memory (page list, block list, TVB heap: `apple_agx_g3_private_storage.h`, key = process + those 3 ranges), but ONE set of firmware manager objects {1,20,21,22,13} per adapter, restored before and saved after every render job (they are swapped between DWM and the app) |
 
-The depth-2 attempt failed on the manager key, which Asahi does not have.
-Hypothesis: adopting Asahi's ownership (one persistent manager per render
-queue, a per-job scene, separate compute sub-queue, firmware barriers)
-removes the eligibility limit and the per-job CPU turnaround.
+Correction (same day): the manager key is already per process, as in Asahi;
+it does not change between GravityMark's render jobs. What blocks a
+successor render is the save/restore protocol around the single shared
+object set: a render successor cannot be built while the previous render's
+manager save is pending (`AdmissionJobWindowManagerNeedsIdle`, refusal 61,
+EXP2051 manager_bind). Asahi has no save/restore: each queue's buffer objects
+stay firmware-owned.
+Hypothesis: per-context firmware manager objects (no save/restore), a
+separate compute sub-queue and firmware barriers remove the per-job CPU
+turnaround.
 
 ## WHAT IS STILL UNKNOWN
 
