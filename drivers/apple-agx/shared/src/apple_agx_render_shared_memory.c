@@ -14,6 +14,8 @@
 #define RENDER_SHARED_NATIVE_COMMAND_END 0xffffffa040000000ULL
 
 
+static APPLE_AGX_BOOL flights_idle(const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *);
+
 static APPLE_AGX_BOOL queue_object_valid(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *,APPLE_AGX_U32,
     APPLE_AGX_U64,APPLE_AGX_BOOL);
@@ -180,6 +182,7 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryDestroy(
     return AppleAgxRenderSharedMemoryResultOk;
   /* Default path unchanged. An opt-in resident snapshot cannot be lost
    * through teardown or a reset which rebuilds the memory owner. */
+  if (!flights_idle(Owner)) return AppleAgxRenderSharedMemoryResultReleaseFailed;
   if (Owner->ManagerSaveOnEvict && !AppleAgxRenderManagerDrain(Owner))
     return AppleAgxRenderSharedMemoryResultReleaseFailed;
   while (Owner->ObjectCount != 0u) {
@@ -461,6 +464,103 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
   return Owner->LastResult;
 }
 
+/* q2: no firmware stores at begin/build. Only the commit path publishes.
+ * Counts in Owner are speculative until Visible; cancellation restores them. */
+static APPLE_AGX_NOTIFIER_FLIGHT *building_flight(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o) {
+  return o && o->NotifierFlight && o->BuildingFlight &&
+      o->BuildingFlight <= APPLE_AGX_NOTIFIER_FLIGHT_COUNT ?
+      &o->Flights[o->BuildingFlight-1u] : RENDER_SHARED_NULL;
+}
+static APPLE_AGX_BOOL reserve_sidecar(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o,
+                                     APPLE_AGX_U32 set) {
+  APPLE_AGX_U32 i;
+  APPLE_AGX_NOTIFIER_FLIGHT *f=building_flight(o);
+  if(!o->NotifierFlight) return APPLE_AGX_TRUE;
+  if(!f || f->Published || set>=APPLE_AGX_COMPUTE_JOB_WORD_SET_COUNT ||
+      (f->HasSidecar && f->SidecarSet!=set)) return APPLE_AGX_FALSE;
+  for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i)
+    if(&o->Flights[i]!=f && o->Flights[i].Fence &&
+        o->Flights[i].HasSidecar && o->Flights[i].SidecarSet==set)
+      return APPLE_AGX_FALSE;
+  f->HasSidecar=APPLE_AGX_TRUE; f->SidecarSet=set;
+  return APPLE_AGX_TRUE;
+}
+static unsigned char *notifier_threshold(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o) {
+  return (unsigned char *)o->Objects[12].CpuAddress+o->ObjectOffsets[12];
+}
+static APPLE_AGX_BOOL flights_idle(const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o) {
+  APPLE_AGX_U32 i;
+  if (!o || !o->NotifierFlight) return APPLE_AGX_TRUE;
+  for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i)
+    if(o->Flights[i].Fence) return APPLE_AGX_FALSE;
+  return APPLE_AGX_TRUE;
+}
+APPLE_AGX_BOOL AppleAgxRenderFlightBegin(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o, APPLE_AGX_U32 fence) {
+  APPLE_AGX_U32 i;
+  APPLE_AGX_NOTIFIER_FLIGHT *f;
+  if (!o) return APPLE_AGX_FALSE;
+  if (!o->NotifierFlight) return APPLE_AGX_TRUE;
+  if (!fence || o->BuildingFlight || !queue_object_valid(o,12,4,APPLE_AGX_FALSE) ||
+      ((APPLE_AGX_U64)notifier_threshold(o) & 3ULL))
+    return APPLE_AGX_FALSE;
+  for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i)
+    if(o->Flights[i].Fence==fence) return APPLE_AGX_FALSE;
+  for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i) if(!o->Flights[i].Fence) break;
+  if(i==APPLE_AGX_NOTIFIER_FLIGHT_COUNT) return APPLE_AGX_FALSE;
+  f=&o->Flights[i]; zero_bytes(f,sizeof(*f));
+  f->Fence=fence; f->PreviousThreshold=get_shared_u32(notifier_threshold(o),o->DirectReads);
+  f->EventCount=f->PreviousThreshold;
+  f->RenderCount=o->NotifierRenderCount; f->ComputeCount=o->NotifierComputeCount;
+  f->ComputeStamp=o->NotifierComputeStamp; f->WordSet=o->JobWordSet; f->WordStamp=o->JobWordStamp;
+  o->BuildingFlight=i+1u;
+  return APPLE_AGX_TRUE;
+}
+APPLE_AGX_BOOL AppleAgxRenderFlightPublish(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o, APPLE_AGX_U32 fence) {
+  APPLE_AGX_NOTIFIER_FLIGHT *f;
+  if (!o) return APPLE_AGX_FALSE;
+  if (!o->NotifierFlight) return APPLE_AGX_TRUE;
+  f=building_flight(o);
+  if(!f || f->Fence!=fence || f->Visible || (!f->EpochReset &&
+      f->EventCount<f->RenderCount+f->ComputeCount))
+    return APPLE_AGX_FALSE;
+  f->Published=APPLE_AGX_TRUE; /* even a failed flush needs restoration */
+  /* The live firmware reader must observe one complete count, including
+   * at byte carries. Begin checked alignment; Windows is little-endian. */
+  *(volatile APPLE_AGX_U32 *)notifier_threshold(o)=f->EventCount;
+  return !o->NotifierFlush || o->NotifierFlush(o->NotifierFlushContext,notifier_threshold(o),4u);
+}
+APPLE_AGX_BOOL AppleAgxRenderFlightCancel(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o, APPLE_AGX_U32 fence) {
+  APPLE_AGX_NOTIFIER_FLIGHT *f;
+  if (!o) return APPLE_AGX_FALSE;
+  if (!o->NotifierFlight) return APPLE_AGX_TRUE;
+  f=building_flight(o);
+  if(!f || f->Fence!=fence || f->Visible) return APPLE_AGX_FALSE;
+  if(f->Published) {
+    *(volatile APPLE_AGX_U32 *)notifier_threshold(o)=f->PreviousThreshold;
+    if(o->NotifierFlush && !o->NotifierFlush(o->NotifierFlushContext,notifier_threshold(o),4u))
+      return APPLE_AGX_FALSE; /* retain on uncertain restoration */
+  }
+  o->NotifierRenderCount=f->RenderCount; o->NotifierComputeCount=f->ComputeCount;
+  o->NotifierComputeStamp=f->ComputeStamp; o->JobWordSet=f->WordSet; o->JobWordStamp=f->WordStamp;
+  zero_bytes(f,sizeof(*f)); o->BuildingFlight=0;
+  return APPLE_AGX_TRUE;
+}
+void AppleAgxRenderFlightVisible(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o, APPLE_AGX_U32 fence) {
+  APPLE_AGX_NOTIFIER_FLIGHT *f=building_flight(o);
+  if(f && f->Fence==fence && f->Published) { f->Visible=APPLE_AGX_TRUE; o->BuildingFlight=0; }
+}
+void AppleAgxRenderFlightStopped(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o) {
+  if(!o || !o->NotifierFlight) return;
+  zero_bytes(o->Flights,sizeof(o->Flights)); o->BuildingFlight=0;
+}
+void AppleAgxRenderFlightRetire(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o, APPLE_AGX_U32 fence) {
+  APPLE_AGX_U32 i;
+  if(!o || !o->NotifierFlight) return;
+  for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i)
+    if(o->Flights[i].Fence==fence && o->Flights[i].Visible)
+      zero_bytes(&o->Flights[i],sizeof(o->Flights[i]));
+}
+
 /* Objects the CPU rewrites for every job. The TA/3D stamps (9, 10, 26, 27)
  * are not among them: as in Asahi event.rs and m1n1 render.py the CPU seeds
  * them when the queues are (re)initialised and the firmware alone writes
@@ -566,6 +666,8 @@ static APPLE_AGX_BOOL bind_relocation_objects(
     }
     destination = (unsigned char *)Owner->Objects[index].CpuAddress +
         Owner->ObjectOffsets[index] - delta;
+    if (Owner->NotifierFlight && index == 12u && building_flight(Owner))
+      destination = (unsigned char *)&building_flight(Owner)->EventCount;
     if (InitializePersistent || per_submission_object(index, IncludeInitBm)) {
       copied = copy_arena_object(Owner, destination, source,
                                  layouts[index].Size);
@@ -603,6 +705,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBindRelocationObjects(
     APPLE_AGX_U32 TemplateArenaBytes,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *RelocationObjects,
     APPLE_AGX_U32 RelocationObjectCapacity) {
+  if (!flights_idle(Owner)) return APPLE_AGX_FALSE;
   if (!bind_relocation_objects(
           Owner, TemplateArena, TemplateArenaBytes, RelocationObjects,
           RelocationObjectCapacity, APPLE_AGX_TRUE, APPLE_AGX_TRUE, 0u))
@@ -618,6 +721,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryInitializeComputeQueue(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner) {
   unsigned char *info,*pointers;
   const unsigned char *ta;
+  if(!flights_idle(Owner)) return APPLE_AGX_FALSE;
   if(!Owner||!Owner->Initialized||!Owner->Built||
      Owner->ObjectCount!=APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT||
      !queue_object_valid(Owner,3u,184u,APPLE_AGX_TRUE)||
@@ -690,12 +794,18 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   threshold=(unsigned char *)Owner->Objects[
       APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD].CpuAddress+
       Owner->ObjectOffsets[APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD];
+  if (Owner->NotifierFlight) {
+    APPLE_AGX_NOTIFIER_FLIGHT *f=building_flight(Owner);
+    if(!f || f->Published) return APPLE_AGX_FALSE;
+    threshold=(unsigned char *)&f->EventCount;
+  }
   counted=Owner->NotifierComputeStamp==Input->StampValue ?
       APPLE_AGX_TRUE : APPLE_AGX_FALSE;
   if((notifier&7u)||(!counted&&Owner->NotifierComputeCount>=
       ~(APPLE_AGX_U32)0-Owner->NotifierRenderCount))
     return APPLE_AGX_FALSE;
   set=Input->JobWordSet;
+  if(!reserve_sidecar(Owner,set)) return APPLE_AGX_FALSE;
 #define JOB_WORD(OffsetA) APPLE_AGX_COMPUTE_JOB_WORD_OFFSET(set,OffsetA)
   /* Only the job's own words are rebuilt: the statistics, fw stamp and
    * gpu_buf belong to the work queue (Asahi workqueue.rs) and persist. */
@@ -799,6 +909,7 @@ static APPLE_AGX_BOOL build_sidecar_barrier(
      Input->JobWordSet>=APPLE_AGX_COMPUTE_JOB_WORD_SET_COUNT||
      !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR,
                          0x10000u,APPLE_AGX_FALSE)) return APPLE_AGX_FALSE;
+  if(!reserve_sidecar(Owner,Input->JobWordSet)) return APPLE_AGX_FALSE;
   offset=APPLE_AGX_COMPUTE_JOB_WORD_OFFSET(Input->JobWordSet,OffsetA);
   if(!AppleAgxG13BarrierEncode(Input,(unsigned char *)Owner->Objects[
       APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress+offset))
@@ -851,11 +962,22 @@ APPLE_AGX_U64 AppleAgxRenderSharedMemoryFirmwareStampAddress(
 APPLE_AGX_U32 AppleAgxRenderSharedMemoryNextJobWordSet(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     APPLE_AGX_U32 StampValue, APPLE_AGX_BOOL SecondSet) {
-  if(!Owner||!SecondSet||!Owner->JobWordStamp)
-    return APPLE_AGX_COMPUTE_JOB_WORD_SET_A;
-  if(Owner->JobWordStamp==StampValue) return Owner->JobWordSet;
-  return Owner->JobWordSet==APPLE_AGX_COMPUTE_JOB_WORD_SET_A ?
-      APPLE_AGX_COMPUTE_JOB_WORD_SET_B : APPLE_AGX_COMPUTE_JOB_WORD_SET_A;
+  APPLE_AGX_U32 set=APPLE_AGX_COMPUTE_JOB_WORD_SET_A, i;
+  if(Owner && SecondSet && Owner->JobWordStamp)
+    set=Owner->JobWordStamp==StampValue ? Owner->JobWordSet : Owner->JobWordSet^1u;
+  if(Owner && Owner->NotifierFlight && Owner->BuildingFlight &&
+      Owner->BuildingFlight<=APPLE_AGX_NOTIFIER_FLIGHT_COUNT) {
+    const APPLE_AGX_NOTIFIER_FLIGHT *f=&Owner->Flights[Owner->BuildingFlight-1u];
+    if(f->HasSidecar) return f->SidecarSet;
+    /* Preserve the legacy depth-one choice, including SECOND_SIDECAR.
+     * Only a pinned other flight can force the alternate set. */
+    for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i)
+      if(&Owner->Flights[i]!=f && Owner->Flights[i].Fence &&
+          Owner->Flights[i].HasSidecar && Owner->Flights[i].SidecarSet==set) {
+        set^=1u; break;
+      }
+  }
+  return set;
 }
 
 /* rc83 receipt: report a build point; timing only. */
@@ -989,6 +1111,18 @@ static APPLE_AGX_BOOL build_active_job(
   for (index = 0u; index < SourceObjectCount; ++index)
     ActiveObjects[index] = SourceObjects[index];
   initialize_persistent = InitializeQueues;
+  if (Owner->NotifierFlight) {
+    APPLE_AGX_NOTIFIER_FLIGHT *f=building_flight(Owner);
+    if(!f || f->Published) BUILD_REFUSE(BIND);
+    for(index=0;index<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++index) {
+      const APPLE_AGX_NOTIFIER_FLIGHT *other=&Owner->Flights[index];
+      if(other!=f && other->Fence && (InitializeQueues ||
+          (other->HasRender && other->RenderSlot==job_slot(StagedJob))))
+        BUILD_REFUSE(BIND);
+    }
+    f->EpochReset=InitializeQueues;
+    f->HasRender=APPLE_AGX_TRUE; f->RenderSlot=job_slot(StagedJob);
+  }
   if (!bind_relocation_objects(
           Owner, TemplateArena, TemplateArenaBytes, ActiveObjects,
           SourceObjectCount, initialize_persistent, IncludeInitBm,
