@@ -67541,3 +67541,12 @@ Switches: accepted EXP2096 mask (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1J
 - Hashes: sys b12508f23cb4, UmdArm64 e4729cc6ce13, UmdX64 4a89110ccca6, Umd32 b3fcf2d2c6b8; manifest 26dfb7528beb, hardware-manifest d268bed379fe; probe2097.sh 978417457509 (PROBE_LINT_OK); visible recovery rec2097h 1fb9c6b4f3141bcc; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2097h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2097-cr-warm/run2097.sh.
+
+EXP2097 HARDWARE ACTUAL (2026-11-02): **q6 step 2 PASS: with the successor warmed (q11b) the compute->render pair is admitted under the TA-on-compute barrier, on the accepted mask, with no reset.**
+- Q3CR: PASS bad=0 (pid 5508), compute 65536 iterations 5.965 ms, successor warmed twice; retained decision reason 0 allowed, running_kind 3 (compute), next_kind 1 (render), barrier 1 TA-on-compute, 4702 -> 4703. ta_on_compute 1 after Q3CR (kicks 1180, ta_on_3d 1179).
+- Q3RCR: PASS bad=0 (pid 7152); retained reason 0 C->R 6835 -> 6836 barrier 1; after Q3RCR kicks 1627, ta_on_compute 2, ta_on_3d 1625, compute_on_3d 0, kick_failures 0, reset_aborts 0.
+- Wom1GpuReset, Wom1EventDrainReceipt, Wom1G4SubmitFailure absent; guest alive; pipeline rc 0.
+- Limitation as EXP2096: no typed RcProgress stamp sample retained for the probe pair; the probe outputs are independent, so GPU ordering is shown by admission + exact retirement, not by bracketed stamps.
+- Expected vs actual: all PASS criteria met; the EXP2095 cause (cold successor, q11 correction) is confirmed by its removal. Accepted classes: compute-on-3D, TA-on-3D, TA-on-compute. Compute-on-compute untested.
+- Next: q12 depth-two recovery drills (control Mode 0 is covered by EXP2096/2097; Head Mode=1, then Successor Mode=2, each its own run), then the GravityMark gate.
+- Recovery rec2097h.
