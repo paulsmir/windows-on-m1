@@ -8410,16 +8410,41 @@ static HRESULT q3_completions(ID3D12Device *device, UINT64 cursor,
 static int q3_render_duration(const Q3_GPU_COMPLETION_QUERY *q,
     UINT64 cursor, UINT64 missing, UINT pid, UINT64 begin,
     UINT64 previous_end, double *ms) {
-    const Q3_GPU_COMPLETION *r = &q->Record[0];
-    if (!q->Frequency || q->Count != 1 || q->Lost || q->Reset ||
-        q->MissingTiming != missing || q->Cursor != q->Newest ||
-        r->Sequence <= cursor || r->ProcessId != pid || !r->Fence ||
-        r->Kind != Q3_GPU_TIMESTAMP_RENDER || r->Status ||
-        r->SubmitQpc < begin || r->CompleteQpc < r->SubmitQpc ||
-        !r->Start || r->End <= r->Start || r->Start < previous_end ||
-        r->PreludeStart || r->PreludeEnd) return 0;
+    /* EXP2086: other processes' jobs (DWM) and a render's compute prelude
+     * complete in the same window, so pick this process's newest retired
+     * render after the cursor instead of requiring exactly one record; the
+     * 3D span (Start..End) excludes the prelude. Each refusal is printed. */
+    const Q3_GPU_COMPLETION *r = NULL;
+    unsigned i;
+    (void)missing;
+    if (!q->Frequency || q->Lost || q->Reset) {
+        printf("Q3RC calibration-reject query freq=%llu lost=%llu reset=%u count=%u\n",
+            (unsigned long long)q->Frequency, (unsigned long long)q->Lost, q->Reset, q->Count);
+        return 0;
+    }
+    for (i = 0; i < q->Count; ++i) {
+        const Q3_GPU_COMPLETION *c = &q->Record[i];
+        if (c->Sequence <= cursor || c->ProcessId != pid || !c->Fence ||
+            c->Kind != Q3_GPU_TIMESTAMP_RENDER || c->Status || c->SubmitQpc < begin)
+            continue;
+        if (!r || c->Sequence > r->Sequence) r = c;
+    }
+    if (!r) {
+        printf("Q3RC calibration-reject no-match count=%u pid=%u", q->Count, pid);
+        for (i = 0; i < q->Count; ++i)
+            printf(" [seq=%llu pid=%u kind=%u status=%u fence=%u]",
+                (unsigned long long)q->Record[i].Sequence, q->Record[i].ProcessId,
+                q->Record[i].Kind, q->Record[i].Status, q->Record[i].Fence);
+        puts("");
+        return 0;
+    }
+    if (r->CompleteQpc < r->SubmitQpc || !r->Start || r->End <= r->Start || r->Start < previous_end) {
+        printf("Q3RC calibration-reject span start=%llu end=%llu previous_end=%llu\n",
+            (unsigned long long)r->Start, (unsigned long long)r->End, (unsigned long long)previous_end);
+        return 0;
+    }
     *ms = 1000.0 * (double)(r->End-r->Start) / (double)q->Frequency;
-    return 1;
+    return (int)(r - q->Record) + 1; /* 1-based index of the record used */
 }
 /* Separate retired R-only warm-up; measured R/C contains no timing query.
  * Only an actually measured instance count is carried into the pair. */
@@ -8430,6 +8455,7 @@ static HRESULT q3_calibrate_render(ID3D12Device *device, ID3D12CommandQueue *que
     ID3D12Resource *vertices, UINT64 base, UINT *instances) {
     Q3_GPU_COMPLETION_QUERY records = {0};
     UINT64 cursor, missing, previous_end = 0;
+    int used = 0;
     HRESULT hr = q3_completions(device, 0, &records);
     double ms = 0.0;
     *instances = 1024;
@@ -8454,19 +8480,19 @@ static HRESULT q3_calibrate_render(ID3D12Device *device, ID3D12CommandQueue *que
             return hr;
         }
         hr = q3_completions(device, cursor, &records);
-        if (SUCCEEDED(hr) && !q3_render_duration(&records, cursor, missing,
-            (UINT)GetCurrentProcessId(), (UINT64)begin.QuadPart, previous_end, &ms)) hr = E_FAIL;
+        if (SUCCEEDED(hr) && !(used = q3_render_duration(&records, cursor, missing,
+            (UINT)GetCurrentProcessId(), (UINT64)begin.QuadPart, previous_end, &ms))) hr = E_FAIL;
         if (FAILED(hr)) {
             puts("Q3RC r_only_gpu_ms=unavailable source=firmware-completion invalid-or-missing-record");
             break;
         }
-        cursor = records.Cursor; previous_end = records.Record[0].End;
+        cursor = records.Cursor; previous_end = records.Record[used - 1].End;
         hr = ID3D12CommandAllocator_Reset(allocator);
         if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, NULL);
         printf("Q3RC calibration=%u instances=%u r_only_gpu_ms=%.3f source=firmware-3d fence=%u sequence=%llu start=%llu end=%llu tick_hz=%llu\n",
-            attempt, *instances, ms, records.Record[0].Fence,
-            (unsigned long long)records.Record[0].Sequence,
-            (unsigned long long)records.Record[0].Start, (unsigned long long)records.Record[0].End,
+            attempt, *instances, ms, records.Record[used - 1].Fence,
+            (unsigned long long)records.Record[used - 1].Sequence,
+            (unsigned long long)records.Record[used - 1].Start, (unsigned long long)records.Record[used - 1].End,
             (unsigned long long)records.Frequency);
         if (FAILED(hr) || (ms >= 5.0 && ms <= 10.0) || attempt == 7) break;
         UINT next = q3_next_instances(*instances, ms);

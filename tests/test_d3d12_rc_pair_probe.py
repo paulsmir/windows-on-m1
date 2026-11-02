@@ -140,12 +140,17 @@ int main(void){
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
         A 7 ms API timestamp span with only 1 ms of GPU work must not satisfy
         calibration. Only a unique new successful render's firmware start/end
-        counts; reject lost/reset, foreign, missing, stale or ambiguous records.
+        counts; reject lost/reset, foreign-only, failed, stale or wrong-kind
+        records. EXP2086: DWM jobs and preludes retire in the same window on
+        hardware, so a foreign record beside ours is accepted (ours is used) and
+        of two of ours the newest is used.
         """
         self.assertIn('static int q3_render_duration(',PROBE.read_text())
         header=PROBE.with_name('agx_d3d12_probe_completion.h')
         self.build('#include "'+str(header)+'"\n'+r'''
 #include <assert.h>
+#include <stdio.h>
+#include <stddef.h>
 typedef unsigned long long UINT64;typedef unsigned UINT;
 '''+function('q3_render_duration')+r'''
 int main(void){
@@ -158,8 +163,11 @@ int main(void){
  r->Start=6100;r->End=13100;assert(q3_render_duration(&q,10,0,42,100,6000,&ms) && ms==7.0);
  q.Lost=1;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));q.Lost=0;
  q.Reset=1;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));q.Reset=0;
- q.MissingTiming=1;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));q.MissingTiming=0;
- q.Count=2;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));q.Count=1;
+ q.Count=2;q.Record[1]=*r;q.Record[1].ProcessId=77;q.Record[1].Sequence=12;
+ assert(q3_render_duration(&q,10,0,42,100,6000,&ms)==1 && ms==7.0);
+ q.Record[1].ProcessId=42;q.Record[1].Start=13200;q.Record[1].End=14200;
+ assert(q3_render_duration(&q,10,0,42,100,6000,&ms)==2 && ms==1.0);
+ q.Count=1;
  r->Status=1;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));r->Status=0;
  r->Start=5999;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));r->Start=6100;
  r->Sequence=10;assert(!q3_render_duration(&q,10,0,42,100,6000,&ms));r->Sequence=11;
