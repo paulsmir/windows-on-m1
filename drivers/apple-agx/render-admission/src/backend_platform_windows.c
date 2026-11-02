@@ -2650,7 +2650,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportReadU32(
  * validated coherent transport reads as queue completion. It never publishes,
  * waits, or allocates. Full receipt saturates and records lost samples. */
 static const volatile APPLE_AGX_U32 *AdmissionRcObject(
-    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner, ULONG index, ULONG offset) {
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner, ULONG index, APPLE_AGX_U64 offset) {
   if (index >= owner->ObjectCount || !owner->Objects[index].CpuAddress ||
       owner->Objects[index].Length < sizeof(APPLE_AGX_U32) ||
       offset > owner->Objects[index].Length - sizeof(APPLE_AGX_U32)) return NULL;
