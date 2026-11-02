@@ -1545,6 +1545,9 @@ struct AgxD3d12PipelineState {
      * measure-d3d12-shader-stats HASH_LO of its compiled statistics), set by
      * the first compile; 0 before */
     UINT cs_tag;
+    /* rc119 receipt-only: the same tag of the PS tokens, set by the first
+     * graphics compile; the 7th measure-d3d12-draw value */
+    UINT ps_tag;
     UINT cs[1]; /* the CS program, then the VS, the PS, the GS (C27), the HS and the DS (C37) */
 };
 static void PublishPsoIdentity(AgxD3d12PipelineState *pso, AgxD3d12Device *device) {
@@ -5111,6 +5114,9 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
         return result;
     }
     AGX_D3D12_OWNER *owner = EnsureOwner(device);
+    if (pso->ps_dwords >= 2)
+        pso->ps_tag = static_cast<UINT>(agx_win32_shader_hash(pso->cs + pso->cs_dwords + pso->vs_dwords,
+                                                              static_cast<size_t>(pso->ps_dwords) * sizeof(UINT)));
     AGX_D3D12_GRAPHICS_DESC &desc = pso->owner_desc; /* C65V: kept for the min/max variant */
     memset(&desc, 0, sizeof(desc));
     RootViews(root, &pso->root_views);
@@ -5983,8 +5989,9 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
         refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                               stage.visibility, &bind_slot->dispatch);
     }
-    const UINT receipt[] = {refusal, vertices, instances, list->rtvs, list->topology, indexed ? list->index_size : 0u};
-    AdmissionUmdDiagnostic("measure-d3d12-draw", refusal ? E_NOTIMPL : S_OK, receipt, 6);
+    const UINT receipt[] = {refusal, vertices, instances, list->rtvs, list->topology, indexed ? list->index_size : 0u,
+                            pso ? pso->ps_tag : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-draw", refusal ? E_NOTIMPL : S_OK, receipt, 7);
     if (refusal) {
         list->commands = first_slot;
         ListError(list, refusal == 3u ? E_INVALIDARG : E_NOTIMPL);
