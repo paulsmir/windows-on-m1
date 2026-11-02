@@ -1170,6 +1170,14 @@ static APPLE_AGX_BOOL build_active_job(
           RuntimeBindings->Stats3dOwnerGpuAddress +
               APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET);
   candidate = *StagedJob;
+  for (index = 0u; index < 8u; ++index) {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *timestamp =
+        &ActiveObjects[28u + index];
+    if (timestamp->Data == RENDER_SHARED_NULL ||
+        timestamp->Size != sizeof(APPLE_AGX_U64))
+      BUILD_REFUSE(STATS);
+    candidate.RenderTimestampPointers[index] = timestamp->Data;
+  }
   candidate.TaWorkAddresses[0] =
       ActiveObjects[APPLE_AGX_EXP208_TA_INITBM_OBJECT].GpuVa;
   candidate.TaWorkAddresses[1] =

@@ -186,7 +186,8 @@ class TdrDrillSetB(unittest.TestCase):
             [extract(gpuva, n) for n in (
                 'AdmissionG3PublishTimestampLocked', 'AdmissionGpuvaG3CompleteJobTimestamp')] +
             [extract(backend, n) for n in (
-                'AdmissionGpuTimestampEndNanoseconds', 'AdmissionNotifyCompletionAtInterrupt',
+                'AdmissionRenderTimestampPair', 'AdmissionGpuTimestampEndNanoseconds',
+                'AdmissionNotifyCompletionAtInterrupt',
                 'AdmissionBackendComplete', 'AdmissionPostResumePollByte',
                 'AdmissionPostResumePollFailure', 'AdmissionPlatformRuntimeQuiesceActive')] +
             [extract(scheduler, 'AdmissionResetQuiesceActive'), CASES])

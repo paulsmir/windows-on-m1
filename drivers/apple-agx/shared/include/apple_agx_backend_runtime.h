@@ -116,6 +116,11 @@ typedef struct _APPLE_AGX_BACKEND_JOB_IMAGE {
    * record's PreludeStart/PreludeEnd (every other reader requires Kind
    * Compute). */
   const void *ComputeTimestampBlock;
+  /* This render's parity copy of template objects 28..35: 3D, TA,
+   * user 3D and user TA start/end pairs. Bound by the shared builder,
+   * retained with PendingJob/SuccessorJob until completion is reported.
+   * The mutable relocation table may already name a successor's copy. */
+  const void *RenderTimestampPointers[8];
   /* GPU timestamps: the G4 envelope's command (DMA buffer) GPU VA, which
    * the UMD names its batch by; 0 for jobs without a G4 envelope. */
   APPLE_AGX_U64 CommandVa;

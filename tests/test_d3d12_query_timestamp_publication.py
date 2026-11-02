@@ -131,7 +131,8 @@ int main(void) {
 
     def test_firmware_end_conversion_and_completion_wiring(self):
         source = (RENDER / "src/backend_platform_windows.c").read_text()
-        extract = function_body(source, "AdmissionGpuTimestampEndNanoseconds")
+        extract = (function_body(source, "AdmissionRenderTimestampPair") +
+                   function_body(source, "AdmissionGpuTimestampEndNanoseconds"))
         run_c(CONVERSION_TYPES + extract + CONVERSION_CASES)
         # This is a wiring invariant; the executed completion test above checks stores.
         complete = body(source, "AdmissionBackendComplete")
@@ -251,10 +252,8 @@ typedef struct { long long QuadPart; } LARGE_INTEGER;
 #define TRUE 1
 #define FALSE 0
 #define RtlCopyMemory memcpy
-#define AppleAgxBackendJobCompute 1
-#define AppleAgxBackendJobRender 2
-typedef struct { int Kind; const void *ComputeTimestampBlock; ULONGLONG TimestampEndNs; } APPLE_AGX_BACKEND_JOB_IMAGE;
-typedef struct { const void *Data; unsigned Size; } APPLE_AGX_EXP208_RELOCATION_OBJECT;
+#include "apple_agx_backend_runtime.h"
+typedef unsigned int ULONG;
 typedef struct { struct { APPLE_AGX_BACKEND_JOB_IMAGE PendingJob; } Backend; APPLE_AGX_EXP208_RELOCATION_OBJECT QueueObjects[30]; } ADMISSION_PLATFORM_RUNTIME;
 static long long clock_frequency = 24000000;
 static LARGE_INTEGER KeQueryPerformanceCounter(LARGE_INTEGER *f) { if(f) f->QuadPart=clock_frequency; return (LARGE_INTEGER){1}; }
@@ -268,11 +267,13 @@ int main(void) {
  ticks[1]=0;
  assert(AdmissionGpuTimestampEndNanoseconds(&r,&ns) && ns==1000000041ULL);
  r.Backend.PendingJob.TimestampEndNs=0;ticks[1]=24000001;
- r.Backend.PendingJob.Kind=AppleAgxBackendJobRender;r.QueueObjects[29].Data=&ticks[1];r.QueueObjects[29].Size=8;
+ r.Backend.PendingJob.Kind=AppleAgxBackendJobRender;
+ r.Backend.PendingJob.RenderTimestampPointers[0]=&ticks[0];
+ r.Backend.PendingJob.RenderTimestampPointers[1]=&ticks[1];
  assert(AdmissionGpuTimestampEndNanoseconds(&r,&ns) && ns==1000000041ULL);
  r.Backend.PendingJob.TimestampEndNs=0;
- r.QueueObjects[29].Size=4;assert(!AdmissionGpuTimestampEndNanoseconds(&r,&ns));
- r.QueueObjects[29].Size=8;clock_frequency=0;assert(!AdmissionGpuTimestampEndNanoseconds(&r,&ns));
+ r.Backend.PendingJob.RenderTimestampPointers[1]=NULL;assert(!AdmissionGpuTimestampEndNanoseconds(&r,&ns));
+ r.Backend.PendingJob.RenderTimestampPointers[1]=&ticks[1];clock_frequency=0;assert(!AdmissionGpuTimestampEndNanoseconds(&r,&ns));
  clock_frequency=24000000;ticks[1]=0;assert(!AdmissionGpuTimestampEndNanoseconds(&r,&ns));
  ticks[1]=~0ULL;assert(!AdmissionGpuTimestampEndNanoseconds(&r,&ns));
  return 0;
