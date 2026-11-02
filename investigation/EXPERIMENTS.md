@@ -67244,3 +67244,7 @@ Run: `agx_d3d12_probe_e2083_arm64.exe only Q3RC` (fresh device, render then comp
 - Hashes: sys 6eb02cf73310, UmdArm64 41e3196b2214, UmdX64 665547048e5c, Umd32 8667c641a0f9; manifest 3881991a6831, hardware-manifest ff0efdd14697; probe2084.sh a2172275b58d (PROBE_LINT_OK); visible recovery rec2084h 39c3cd96578581ca; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1.
 - Recovery rec2084h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2084-q3rc-nf1/run2084.sh.
+
+EXP2084 HARDWARE ACTUAL (2026-11-02): **Q3RC passes at depth one with Wom1NotifierFlight=1: `AGX_D3D12_Q3RC: PASS bad=0 overlap=UNVERIFIED`, fences 101/102 in order, clean exit, guest alive; no kick.**
+- Expected vs actual: identical to the EXP2083 control except the switch: confirmed. Design hardware step (a) passes: commit-time notifier publication is serially equivalent on hardware.
+- Next: EXP2085, design step (b), Wom1RcDepth2=1 (restricted R->C depth two), preregistered PASS / INCONCLUSIVE / FAIL criteria.
