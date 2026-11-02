@@ -67478,3 +67478,17 @@ EXP2094 HARDWARE ACTUAL (2026-11-02): **q6 step 3 rerun FAIL: R->R (TA-on-3D) de
 - Expected vs actual: expected no G4 failure and a typed R->R pair; actual 5 engine resets caused by event-drain failure under R->R depth two. Verdict FAIL for Wom1Depth2TaOn3d; it stays off. The cap commit (q8) is kept as harmless but unproven; record it as not addressing this defect.
 - Next: Codex q10 traces which firmware event ingest guard rejects with two renders of one resident manager slot in flight and why Wom1EventDrainReceipt is not exported; C->R (EXP2095) proceeds independently with TA-on-3D off.
 - Recovery rec2094h.
+
+EXP2095 HARDWARE BEFORE 2026-11-02T22:23:00Z:
+Switches (as EXP2093): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOnCompute=1 (TaOn3d absent: EXP2094 FAIL). Steps: only Q3CR, then only Q3RCR.
+- WHY THIS HYPOTHESIS:
+  1. EXP2093: with a 5.96 ms compute predecessor the C->R pair never kicked, but every probe-PID decision was evicted by changing-fence reason-64 records.
+  2. q9: the C->R kick path is reachable in source (no render-only caller gate); the remaining fork (66 no pending head / 67 release / 68 incomplete prebind with detail / 69 kick guard / UMD CPU wait) is distinguished by one retained probe record, which the semantic coalescing (RED->GREEN) now preserves.
+- ATOMIC CONTRACT: diagnostic storage only (q9 coalescing) plus the already-merged q8 general-mode cap; switches identical to EXP2093.
+- WHAT IS STILL UNKNOWN: the C->R refusal reason.
+- Expected: Q3CR/Q3RCR PASS bad=0; either a typed C->R pair with ta_on_compute >= 1 (PASS) or a retained probe-PID decision naming the refusal (INCONCLUSIVE with cause, which selects the next fix); no Wom1GpuReset, G4 failure none.
+- FAIL: wrong output, deadline, reset, G4 rejection, 0x116.
+- Recovery: rec2095h.
+- Hashes: sys b6a05f7684ab, UmdArm64 eaa6a8039332, UmdX64 c2ced1de7065, Umd32 35d14fbc2c01; manifest 68dcbd3af095, hardware-manifest dc9a87316129; probe2095.sh 538f5852ad20 (PROBE_LINT_OK); visible recovery rec2095h 105f06dde17ccbf7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2095h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2095-cr-coalesce/run2095.sh.
