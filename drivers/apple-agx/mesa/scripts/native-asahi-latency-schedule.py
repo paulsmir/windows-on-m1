@@ -33,6 +33,11 @@ agx_compiler.h: agx_context gains the target and the reordered-block count
 
 APPLE_AGX_LATENCY_SCHED=0 restores the pinned compiler; =N (1..64) makes N
 the first target (default 16). Read once per process.
+
+K1: APPLE_AGX_LOCAL_LOAD_SCHED=1 also spaces shared-memory loads from their
+consumers. Default off pending hardware timing: local_load has no scoreboard
+but still has a dependent-use latency. This changes only ready-node selection
+within the existing dependency graph and retains every post-RA keep guard.
 """
 
 ANCHOR_NODE = '''   /* Instruction this node represents */
@@ -66,10 +71,25 @@ LATENCY = r'''/* RC96 (native-asahi-latency-schedule.py): latency-aware second p
  * ctx->windows_latency_target: the distance, plus AGX_WIN32_LATENCY_TIGHT to
  * bound the live size by the first pass's demand itself instead of its
  * occupancy step. */
+/* K1: opt in shared-load latency scheduling. No change to memory ordering,
+ * barriers, or wait insertion. Exact value 1 only, read once per process. */
+static bool
+agx_win32_local_load_latency(void)
+{
+   static int enabled = -1;
+   if (enabled < 0) {
+      const char *env = getenv("APPLE_AGX_LOCAL_LOAD_SCHED");
+      enabled = env && env[0] == '1' && !env[1];
+   }
+   return enabled != 0;
+}
+
 static bool
 agx_win32_long_latency(const agx_instr *I)
 {
    switch (I->op) {
+   case AGX_OPCODE_LOCAL_LOAD:
+      return agx_win32_local_load_latency();
    case AGX_OPCODE_DEVICE_LOAD:
    case AGX_OPCODE_TEXTURE_SAMPLE:
    case AGX_OPCODE_TEXTURE_LOAD:

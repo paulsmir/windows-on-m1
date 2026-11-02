@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -174,6 +175,61 @@ class Compiled(unittest.TestCase):
                 for key in ('spills', 'fills', 'scratch'):
                     self.assertLessEqual(latency[key], pinned[key], key)
                 self.assertLessEqual(latency['instrs'], pinned['instrs'] + pinned['instrs'] // 32)
+
+    def test_opt_in_shared_loads_issue_ahead_of_their_uses(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        The latency classifier omits local_load, leaving independent shared
+        reads adjacent to their consumers even when scheduling is enabled.
+        The opt-in must separate reads without removing stores or the barrier,
+        and must preserve the existing compiler binary when disabled.
+        """
+        source = ('--synthetic-shared-reads=8', '--no-d3d-robust')
+        results, distances = {}, {}
+        for setting in ('0', '1'):
+            env = {'APPLE_AGX_LOCAL_LOAD_SCHED': setting, 'APPLE_AGX_RA_PACK': '0'}
+            results[setting] = self.tool.cost(self.projected, source[0], *source[1:], env=env)
+            run = subprocess.run([str(self.projected), *source, '--print-selected'],
+                                 capture_output=True, text=True, env={**os.environ, **env}, timeout=300)
+            self.assertEqual(run.returncode, 0, run.stderr[-2000:])
+            # Inspect only the retained binary. AGX_MESA_DEBUG also prints
+            # rejected variants and the preamble, which cannot prove this.
+            main = run.stdout.split('SELECTED MAIN BEGIN\n')[1].split('SELECTED MAIN END')[0]
+            listing = [m.groups() for m in re.finditer(
+                r'^\s*[0-9a-f]+:\s+[0-9a-f]+\s+(\S+)\s*(.*)$', main, re.M)]
+            ds = []
+            for i, (op, args) in enumerate(listing):
+                if op != 'lload':
+                    continue
+                dest = args.split(',')[0].lstrip('$^')
+                for j in range(i + 1, len(listing)):
+                    if dest in re.findall(r'\br\d+[lh]?\b', listing[j][1].partition(',')[2]):
+                        ds.append(j - i)
+                        break
+            self.assertEqual(len(ds), 8)
+            stores = [i for i, (op, _) in enumerate(listing) if op == 'lstore']
+            loads = [i for i, (op, _) in enumerate(listing) if op == 'lload']
+            barriers = [i for i, (op, _) in enumerate(listing) if op == 'barrier']
+            self.assertEqual(len(stores), 8)
+            self.assertEqual(len(barriers), 1)
+            self.assertLess(max(stores), barriers[0])
+            self.assertLess(barriers[0], min(loads))
+            distances[setting] = ds
+        self.assertGreater(sum(distances['1']), sum(distances['0']), distances)
+        self.assertNotEqual(results['1']['binary-fnv'], results['0']['binary-fnv'])
+        self.assertGreaterEqual(results['1']['threads'], results['0']['threads'])
+        for key in ('spills', 'fills', 'scratch'):
+            self.assertLessEqual(results['1'][key], results['0'][key])
+        with patch.dict(os.environ):
+            os.environ.pop('APPLE_AGX_LOCAL_LOAD_SCHED', None)
+            default = self.tool.cost(self.projected, source[0], *source[1:], env={'APPLE_AGX_RA_PACK': '0'})
+        self.assertEqual(default, results['0'])
+        for value in ('', '2', '10', 'true'):
+            invalid = self.tool.cost(self.projected, source[0], *source[1:],
+                                     env={'APPLE_AGX_RA_PACK': '0', 'APPLE_AGX_LOCAL_LOAD_SCHED': value})
+            self.assertEqual(invalid, results['0'], value)
+        disabled = self.tool.cost(self.projected, source[0], *source[1:],
+                                  env={'APPLE_AGX_LATENCY_SCHED': '0', 'APPLE_AGX_LOCAL_LOAD_SCHED': '1'})
+        self.assertEqual(disabled, self.tool.cost(self.pinned, source[0], *source[1:]))
 
     def test_independent_loads_issue_ahead_of_their_uses(self):
         source = ('--synthetic-uav-reads=8', '--no-d3d-robust')

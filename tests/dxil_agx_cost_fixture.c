@@ -9,9 +9,9 @@
  * the backend's own; uniform numbering is not.
  *
  * usage: dxil_agx_cost_fixture <dxil>|--synthetic-uav-reads=K|--synthetic-local-array=N|
- *        --synthetic-array-samples=N[,heap]|--synthetic-break-loops=N
+ *        --synthetic-array-samples=N[,heap]|--synthetic-break-loops=N|--synthetic-shared-reads=K
  *        [--no-d3d-robust] [--assume-in-bounds] [--root-views=UAV,CBV]
- *        [--print-lowered] [--print-nir] [--soft-fault|--soft-fault-loads]
+ *        [--print-lowered] [--print-nir] [--print-selected] [--soft-fault|--soft-fault-loads]
  * --root-views: hex masks of the UAV and constant-buffer slots that are
  * D3D12 root descriptors (RC75 dxbc_nir_mark_root_views: left unchecked) 
  * --soft-fault: Asahi's compiler key with soft faults (set_speculate: every
@@ -44,6 +44,7 @@
 #include "nir_builder.h"
 #include "asahi/compiler/agx_compile.h"
 #include "asahi/compiler/agx_nir.h"
+#include "asahi/isa/disasm.h"
 
 #include "agx_win32_d3d_robustness.h"
 #include "agx_win32_d3d_texture_crawl.h"
@@ -549,6 +550,34 @@ synthetic_uav_reads(unsigned reads)
    return b.shader;
 }
 
+/* Independent shared-memory reads with real producer stores and a group
+ * barrier. Rotate the lane index so the reads require shared memory. */
+static nir_shader *
+synthetic_shared_reads(unsigned reads)
+{
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "k1-shared-reads");
+   b.shader->info.internal = false;
+   b.shader->info.workgroup_size[0] = 64;
+   b.shader->info.workgroup_size[1] = b.shader->info.workgroup_size[2] = 1;
+   b.shader->info.shared_size = 64 * 4 * reads;
+   b.shader->info.num_ssbos = 1;
+   nir_def *lane = nir_load_local_invocation_index(&b);
+   for (unsigned k = 0; k < reads; ++k)
+      nir_store_shared(&b, nir_u2f32(&b, nir_iadd_imm(&b, lane, k)),
+                       nir_iadd_imm(&b, nir_imul_imm(&b, lane, 4), k * 256),
+                       .write_mask = 1, .align_mul = 4);
+   nir_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_WORKGROUP,
+               .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_shared);
+   nir_def *offset = nir_imul_imm(&b, nir_iand_imm(&b, nir_iadd_imm(&b, lane, 1), 63), 4);
+   nir_def *sum = nir_imm_float(&b, 0);
+   for (unsigned k = 0; k < reads; ++k)
+      sum = nir_fadd(&b, sum, nir_load_shared(&b, 1, 32, nir_iadd_imm(&b, offset, k * 256), .align_mul = 4));
+   nir_store_ssbo(&b, sum, nir_imm_int(&b, 0), nir_imul_imm(&b, lane, 4),
+                  .write_mask = 1, .access = ACCESS_NON_READABLE, .align_mul = 4);
+   nir_shader_gather_info(b.shader, nir_shader_get_entrypoint(b.shader));
+   return b.shader;
+}
+
 /* --synthetic-local-array=N: an indexable temp of N dwords (DXBC x#, a
  * DXIL alloca) filled from u0 and read at a per-thread index, through the
  * frontend tail (dxbc_nir_finalize) as every translated shader */
@@ -684,13 +713,14 @@ int
 main(int argc, char **argv)
 {
    bool d3d_robust = true, print_nir = false, print_lowered = false, in_bounds = false;
-   bool soft_fault = false, soft_fault_loads = false, fs_backend = false;
+   bool soft_fault = false, soft_fault_loads = false, fs_backend = false, print_selected = false;
    unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
       if (sscanf(argv[a], "--root-views=%x,%x", &root_uavs, &root_cbvs) == 2)
          continue;
       d3d_robust &= strcmp(argv[a], "--no-d3d-robust") != 0;
       print_nir |= !strcmp(argv[a], "--print-nir");
+      print_selected |= !strcmp(argv[a], "--print-selected");
       fs_backend |= !strcmp(argv[a], "--fs-backend"); /* rc123: FS through the backend */
       print_lowered |= !strcmp(argv[a], "--print-lowered"); /* after the D3D lowering */
       in_bounds |= !strcmp(argv[a], "--assume-in-bounds");
@@ -703,6 +733,8 @@ main(int argc, char **argv)
    unsigned reads = 0;
    if (argc > 1 && sscanf(argv[1], "--synthetic-uav-reads=%u", &reads) == 1 && reads && reads <= 64) {
       nir = synthetic_uav_reads(reads);
+   } else if (argc > 1 && sscanf(argv[1], "--synthetic-shared-reads=%u", &reads) == 1 && reads && reads <= 32) {
+      nir = synthetic_shared_reads(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-local-array=%u", &reads) == 1 && reads && reads <= 256) {
       nir = synthetic_local_array(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-array-samples=%u", &reads) == 1 && reads && reads <= 16) {
@@ -839,6 +871,11 @@ main(int argc, char **argv)
                                 .has_scratch = true, .promote_constants = true, .reserved_preamble = 240};
    struct agx_shader_part part = {0};
    agx_compile_shader_nir(nir, &key, &part);
+   if (print_selected) {
+      puts("SELECTED MAIN BEGIN");
+      agx2_disassemble((uint8_t *)part.binary + part.info.main_offset, part.info.main_size, stdout);
+      puts("SELECTED MAIN END");
+   }
    const struct agx2_stats *s = &part.info.stats;
    printf("COST stage %s block %ux%ux%u shared %u nir-ifs %u guarded-loads %u loads %u stores %u txf %u mem-blocks %u hot-mem-blocks %u hot-nir %u hot-branches %u "
           "instrs %u alu %u fscib %u ic %u gprs %u threads %u scratch %u spills %u fills %u loops %u code %u "
