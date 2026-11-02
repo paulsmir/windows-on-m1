@@ -67291,3 +67291,18 @@ EXP2086 HARDWARE ACTUAL (2026-11-02): **probe-side FAIL before the measured pair
 - New evidence from Wom1RcDecisions over the boot (all processes): refusal 66 "no pending successor" 24201, 58 "SceneId differs with one manager slot" 2201 (render_job_window.c:104, obsolete with rc124 slots: design step 4), 4 preemption pending 109, 55 different process 97, 68: 2. Wom1RcProgress exported "no sample" as designed.
 - Expected vs actual: PASS/INCONCLUSIVE expected; actual probe calibration failure (neither; the queue was not exercised).
 - Recovery rec2086h. Next: EXP2087, the same with the calibration fix.
+
+EXP2087 HARDWARE BEFORE 2026-11-02T20:34:45Z:
+Switches (as EXP2085): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
+- WHY THIS HYPOTHESIS:
+  1. EXP2085: Q3RC PASS bad=0 but kicks 0 and no RC progress value: the 64x64 single-triangle render likely ended before the compute submission reached the KMD.
+  2. EXP2086: the probe stopped before the pair because its calibration required exactly one retired record per completion page (DWM jobs and preludes retire in the same window); Wom1RcDecisions over the boot: 66 no pending successor 24201, 58 SceneId mismatch 2201, 4 preemption 109, 55 other process 97.
+- ATOMIC CONTRACT: probe workload and receipts only; same switches and admission policy as EXP2085.
+- WHAT IS STILL UNKNOWN: whether the restricted R->C pair is admitted when R runs 5-10 ms, and whether the firmware 3D stamp advances with C's threshold published.
+- Expected PASS: probe prints R duration 5-10 ms and Q3RC PASS bad=0; Wom1JobWindow kicks >= 1, max_in_flight 2, compute-on-3D barrier; agx_rc_progress.py reports published-progress for the probe PID/QPC window; both fences once, in order, Status 0; no reset.
+- INCONCLUSIVE: no kick again: Wom1RcDecisions must name the refusal (this run then identifies the gate), or R shorter than 5 ms.
+- FAIL: wrong output, stall to the deadline, fence errors, reset, 0x116.
+- Recovery: rec2087h.
+- Hashes: sys f40daa541c36, UmdArm64 f28427de3e04, UmdX64 61c5f242326f, Umd32 7fecd900c0f0; manifest e68b8df89128, hardware-manifest 03b4852323f4; probe2087.sh 99a22fd0f73f (PROBE_LINT_OK); visible recovery rec2087h f5763f29439ea4e9; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
+- Recovery rec2087h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2087-q3rc-overlap2/run2087.sh.
