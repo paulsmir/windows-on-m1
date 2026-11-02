@@ -289,7 +289,7 @@ static void AdmissionGpuPerfSampleWindows(void *r) { (void)r; }
 static unsigned long long AdmissionJobQpc(void) { return 1u; }
 static void AdmissionJobTimingSubAtWindows(void *r, unsigned f, unsigned s, unsigned long long q) {
   (void)r; (void)f; (void)s; (void)q; }
-static int AdmissionSaveG4Manager(void *r, unsigned f) { (void)r; (void)f; return 1; }
+static int AdmissionSaveG4Manager(void *r, unsigned f, APPLE_AGX_BACKEND_COMPLETION_STATUS status) { (void)r; (void)f; (void)status; return 1; }
 static int AdmissionDynamicOverlayReleaseActive(void *r, unsigned f) { (void)r; (void)f; return 1; }
 static int AdmissionBackendImageReleaseSubmissionRestore(void *a, void *s, unsigned f) {
   (void)a; (void)s; (void)f; return 1; }

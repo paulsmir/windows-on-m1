@@ -2967,8 +2967,47 @@ static APPLE_AGX_BACKEND_BOOL AdmissionPrepareG4Manager(
 }
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
+/* BackendRuntimeSubmit stays Ready after a pre-publication failure, including
+ * Run3d's atomic refusal. RunTa failure instead becomes Failed and cannot be
+ * cancelled here. Require both queue owners to confirm no accepted fence. */
+static APPLE_AGX_BOOL AdmissionCancelUnpublishedManager(
     ADMISSION_PLATFORM_RUNTIME *runtime, APPLE_AGX_U32 Fence) {
+  APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner=&runtime->Initdata.RenderSharedMemory;
+  APPLE_AGX_G13_QUEUE_PROVIDER *provider=&runtime->Provider.QueueProvider;
+  if (!owner->ManagerSaveOnEvict || owner->ManagerFence!=Fence)
+    return APPLE_AGX_TRUE;
+  if (runtime->Backend.Phase!=AppleAgxBackendRuntimeReady ||
+      runtime->Backend.SuccessorPending ||
+      provider->Phase!=AppleAgxG13QueueProviderCreated || provider->PendingFence ||
+      provider->SuccessorFence || provider->Runtime.PendingFence ||
+      provider->Runtime.Phase!=AppleAgxG13QueueRuntimeReady)
+    return APPLE_AGX_FALSE;
+  return AppleAgxRenderManagerCancelBuild(owner,runtime->Adapter->BackendImage.G4Manager,
+                                         Fence,runtime->QueueObjects);
+}
+
+/* q1: called only for a completed dirty slot, before overwriting it. The
+ * lookup takes the G3 registry lock, so process teardown cannot leave a
+ * dangling slot pointer. No retained pointer to process-owned state. */
+static APPLE_AGX_BOOL AdmissionEvictG4Manager(void *Context,
+    const APPLE_AGX_RENDER_MANAGER_KEY *Key, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects) {
+  ADMISSION_PLATFORM_RUNTIME *runtime=Context;
+  APPLE_AGX_RENDER_MANAGER_STATE snapshot={0};
+  static const APPLE_AGX_U32 ids[]={1u,20u,21u,22u};
+  APPLE_AGX_U32 i;
+  if (!runtime || KeGetCurrentIrql()!=PASSIVE_LEVEL) return APPLE_AGX_FALSE;
+  for (i=0u;i<RTL_NUMBER_OF(ids);++i)
+    if (!runtime->TransportIo.FlushForCpu(runtime,Objects[ids[i]].Data,Objects[ids[i]].Size))
+      return APPLE_AGX_FALSE;
+  runtime->TransportIo.MemoryBarrier(runtime);
+  return AppleAgxRenderManagerSnapshot(&snapshot,Key,Fence,Objects,runtime->BuildDirectReads) &&
+      AdmissionGpuvaG3StoreManagerSnapshot(runtime->Adapter,&snapshot);
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
+    ADMISSION_PLATFORM_RUNTIME *runtime, APPLE_AGX_U32 Fence,
+    APPLE_AGX_BACKEND_COMPLETION_STATUS Status) {
   ADMISSION_BACKEND_IMAGE *image=&runtime->Adapter->BackendImage;
   static const APPLE_AGX_U32 objects[]={1u,20u,21u,22u};
   APPLE_AGX_RENDER_MANAGER_STATE *manager=image->G4Manager;
@@ -2986,8 +3025,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
   if (!native || !bound ||
       !runtime->Backend.TaComplete || !runtime->Backend.D3Complete)
     return APPLE_AGX_BACKEND_FALSE;
+  if (runtime->Initdata.RenderSharedMemory.ManagerSaveOnEvict &&
+      Status!=AppleAgxBackendCompletionSuccess)
+    return AppleAgxRenderManagerAbort(&runtime->Initdata.RenderSharedMemory,manager,Fence);
   for (i=0u;i<RTL_NUMBER_OF(objects);++i) {
     APPLE_AGX_EXP208_RELOCATION_OBJECT *object=&runtime->QueueObjects[objects[i]];
+    /* Stats remains current for TVB growth and completion receipts. */
+    if (runtime->Initdata.RenderSharedMemory.ManagerSaveOnEvict && objects[i]!=22u)
+      continue;
     if (!runtime->TransportIo.FlushForCpu(runtime,object->Data,object->Size))
       return APPLE_AGX_BACKEND_FALSE;
   }
@@ -3577,6 +3622,13 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
 
 BuildFailure:
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* This callback has not returned a built job: no queue publication has
+   * occurred. Release only this exact unpublished manager transaction. */
+  if (runtime->Initdata.RenderSharedMemory.ManagerSaveOnEvict &&
+      runtime->Initdata.RenderSharedMemory.ManagerFence==Submission->Submission.Fence)
+    (void)AppleAgxRenderManagerCancelBuild(&runtime->Initdata.RenderSharedMemory,
+        runtime->Adapter->BackendImage.G4Manager,Submission->Submission.Fence,
+        runtime->QueueObjects);
   runtime->BuildMarkFence = 0u;
 #endif
   if (overlayApplied)
@@ -4057,7 +4109,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
         ((runtime->Backend.PendingJob.Kind == AppleAgxBackendJobCompute ?
               !runtime->Backend.ComputeComplete :
               (!runtime->Backend.TaComplete || !runtime->Backend.D3Complete)) ||
-         !AdmissionSaveG4Manager(runtime, Fence) ||
+         !AdmissionSaveG4Manager(runtime, Fence, Status) ||
          (timestampVa &&
           !AdmissionGpuTimestampEndNanoseconds(runtime, &timestampEnd)) ||
          !AdmissionGpuvaG3CompleteJobTimestamp(adapter, g3_context, Fence,
@@ -5673,6 +5725,10 @@ AdoptedJob:
 #endif
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (result!=AppleAgxBackendRuntimeResultOk)
+    (void)AdmissionCancelUnpublishedManager(runtime,submission.Submission.Fence);
+#endif
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionJobTimingMarkWindows(runtime, description.Fence,
       AdmissionJobPhaseBackendAfter);
 #endif
@@ -6952,6 +7008,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->Depth2Capabilities = 0u;
   runtime->JobDepth2Kick = FALSE;
 #endif
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* q1: independently test manager persistence at depth one. Combining it
+   * with the parked rc102 early-kick path is deliberately not admitted. */
+  runtime->Initdata.RenderSharedMemory.ManagerSaveOnEvict =
+      runtime->ManagerSlots && !runtime->JobDepth2Kick &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerSaveOnEvict");
+  runtime->Initdata.RenderSharedMemory.ManagerEvict = AdmissionEvictG4Manager;
+  runtime->Initdata.RenderSharedMemory.ManagerEvictContext = runtime;
+#endif
   runtime->Depth2KickedFence = runtime->Depth2KickBarrier = 0u;
   runtime->Depth2BatchedFence = runtime->Depth2LastReported = 0u;
   AdmissionJobWindowReceiptInitialize(&runtime->Depth2Receipt);
@@ -7802,6 +7867,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaB1RunFirmware(
   InterlockedExchange(&runtime->B1Completed, 0);
   InterlockedExchange(&runtime->B1Active, 1);
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (result!=AppleAgxBackendRuntimeResultOk)
+    (void)AdmissionCancelUnpublishedManager(runtime,submission.Submission.Fence);
+#endif
   AdmissionGpuvaB1RecordRetirement(Context, Owner, AdmissionB1RetireSubmit,
       result == AppleAgxBackendRuntimeResultOk ? STATUS_SUCCESS :
           STATUS_DEVICE_HARDWARE_ERROR, 0u, 0ULL, 0ULL);
