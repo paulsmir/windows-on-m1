@@ -67086,3 +67086,17 @@ EXP2076 HARDWARE ACTUAL (2026-11-02): **the per-asteroid compute cost is a chain
 - Expected vs actual: radix-sort segment at least 3 ms (7.17 with the tiny chain: confirmed); lighting 2-4 ms (1.06: rejected).
 - About 68 us per dispatch in the 7.17 ms segment, many dispatches of 1-4 groups: per-dispatch overhead (barrier drain, launch, indirect) is the suspect.
 - Next: EXP2077 splits that segment at 7 tags.
+
+EXP2077 HARDWARE BEFORE 2026-11-02T15:36:32Z:
+Arms: a HD 100k -temporal 0 with APPLE_AGX_D3D12_SPLIT_TAGS=a3da7f9d,39e0399a,03b52dfc,7b9fa104,cfb56a6a,65b3a258,546c0c9a,369f607b; b the same without the split (control).
+- WHY THIS HYPOTHESIS:
+  1. EXP2076a: the segment [a3da7f9d .. asteroid render] takes 7.17 ms of a 28.4 ms HD frame; the lighting kernel bdb1944a only 1.06 ms.
+  2. The segment holds about 105 dispatches: 8 radix passes of 6 kernels (1-196 groups), three 391-group kernels, and about 50 dispatches of 1-4 groups or indirect: about 68 us per dispatch.
+- ATOMIC CONTRACT: diagnostic only (score of a not comparable).
+- WINDOWS/AGX CONTRACT: unchanged. TRANSLATION: none. WHAT IS STILL UNKNOWN: whether the time is the radix passes' work or the per-dispatch cost of tiny and indirect dispatches.
+- Expected: [a3da7f9d .. 39e0399a) radix sort 2-3 ms; the tiny/indirect pieces [03b52dfc .. 546c0c9a) 3-4 ms in total with almost no work; b reproduces about 5700.
+- Failure criteria: TDR, WER, corruption; no extra jobs in a.
+- Recovery: rec2077h.
+- Hashes: sys 699cbb247ace, UmdArm64 c8d08b923f28, UmdX64 52207aff3193, Umd32 83ffb6793248; manifest 3ea64fc09c71, hardware-manifest fd9d19b96d8c; probe2077.sh 8776817fb210 (PROBE_LINT_OK); visible recovery rec2077h 57e81e18fc3c6363; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2077h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2077-split2/run2077.sh.
