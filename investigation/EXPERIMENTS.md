@@ -67550,3 +67550,18 @@ EXP2097 HARDWARE ACTUAL (2026-11-02): **q6 step 2 PASS: with the successor warme
 - Expected vs actual: all PASS criteria met; the EXP2095 cause (cold successor, q11 correction) is confirmed by its removal. Accepted classes: compute-on-3D, TA-on-3D, TA-on-compute. Compute-on-compute untested.
 - Next: q12 depth-two recovery drills (control Mode 0 is covered by EXP2096/2097; Head Mode=1, then Successor Mode=2, each its own run), then the GravityMark gate.
 - Recovery rec2097h.
+
+EXP2098 HARDWARE BEFORE 2026-11-02T23:02:44Z:
+Switches: EXP2096 accepted mask (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1; TaOnCompute off per q12) + Wom1TdrDrillAllowed=1 + Wom1Depth2Drill=1. Steps: 30 s boot window, drill evidence snapshot, then only Q3RR and only Q3RCR as later fresh work.
+- WHY THIS HYPOTHESIS:
+  1. EXP2096/2097: depth two runs ~1600-1700 pairs per boot with no reset, but no recovery has been exercised with two jobs published.
+  2. The legacy TDR drill selects before the successor kick (q12 source inventory), so it cannot prove two in flight; q12's selector arms only after bracketed published endpoints of both flights.
+- ATOMIC CONTRACT: Wom1Depth2Drill=1 with its required Wom1TdrDrillAllowed=1 (the selector refuses without it).
+- WHAT IS STILL UNKNOWN: whether Windows TDR + our reset/quiesce report both original fences dropped exactly once, retire both flights before reuse, and leave DWM and later work healthy.
+- Expected PASS: Wom1Depth2Drill read back 0 (consumed); Wom1Depth2DrillReceipt v1/164: Mode 1, two distinct flights, ReportedCount 2, WDDM statuses [5,5], queue statuses [4,4], fences equal to words 22/23, ReportOverflow 0, queue TerminalCount 2; Wom1GpuReset one bounded reset that succeeded; DWM running; Q3RR and Q3RCR PASS afterwards; guest/SSH alive.
+- INCONCLUSIVE: no receipt (no pair armed within 30 s or Attempts 64 with Target 0), or stale/malformed receipt.
+- FAIL: wrong/missing/duplicate fence, statuses other than above, failed reset, sustained black desktop or repeated DWM crash, bugcheck, failed later probes.
+- Recovery: rec2098h (dump-first if the guest is lost; check SSH and proxy before asking for physical action).
+- Hashes: sys 137d8ca31f01, UmdArm64 9ec305012007, UmdX64 88d6fc4cec5a, Umd32 7a53069d7567; manifest a04a3a91899f, hardware-manifest c4597eff6cdd; probe2098.sh fc2a5fc7450f (PROBE_LINT_OK); visible recovery rec2098h 14488e6c72008f49; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1TdrDrillAllowed=1 Wom1Depth2Drill=1.
+- Recovery rec2098h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2098-drill-head/run2098.sh.
