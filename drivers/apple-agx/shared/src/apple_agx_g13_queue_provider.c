@@ -1018,12 +1018,42 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
   }
   if (Provider == APPLE_AGX_G13_PROVIDER_NULL ||
       Message == APPLE_AGX_G13_PROVIDER_NULL ||
-      Batch == APPLE_AGX_G13_PROVIDER_NULL ||
-      (Provider->Phase != AppleAgxG13QueueProviderSubmitted &&
-       Provider->Phase != AppleAgxG13QueueProviderComputeSubmitted &&
-       Provider->Phase != AppleAgxG13QueueProviderComputeOnlySubmitted))
+      Batch == APPLE_AGX_G13_PROVIDER_NULL)
     return APPLE_AGX_BACKEND_FALSE;
   AppleAgxG13ProviderZero(Batch, (APPLE_AGX_BACKEND_U32)sizeof(*Batch));
+  if (Provider->Phase == AppleAgxG13QueueProviderCreated) {
+    APPLE_AGX_G13_EVENT event;
+    APPLE_AGX_BACKEND_U32 number;
+    /* Flags signal queue progress, not a particular job. Shared stamps may
+     * retire both renders on the first of two already queued notifications.
+     * Asahi workqueue::signal likewise permits no pending commands. Drain
+     * the remaining owned Flag without manufacturing another completion;
+     * faults, handler messages and foreign slots still require diagnosis. */
+    if (Provider->PendingFence != 0u || Provider->SuccessorFence != 0u ||
+        Provider->Runtime.Phase != AppleAgxG13QueueRuntimeReady ||
+        Provider->Runtime.PendingFence != 0u ||
+        Provider->Runtime.Successor.Fence != 0u ||
+        Provider->Runtime.CompletionAvailable ||
+        !AppleAgxG13DecodeEvent(Message, MessageBytes, &event) ||
+        event.Kind != (APPLE_AGX_BACKEND_U32)AppleAgxG13EventFlag)
+      return APPLE_AGX_BACKEND_FALSE;
+    for (number = 0u; number < APPLE_AGX_G13_EVENT_COUNT; ++number) {
+      if (AppleAgxG13EventHasNumber(&event, number) &&
+          number != Provider->Config.Ta.EventNumber &&
+          number != Provider->Config.D3.EventNumber &&
+          (!Provider->Config.HasCompute ||
+           number != Provider->Config.Compute.EventNumber))
+        return APPLE_AGX_BACKEND_FALSE;
+    }
+    Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
+    Provider->LastIngestRuntimeResult =
+        (APPLE_AGX_BACKEND_U32)AppleAgxG13QueueRuntimeResultOk;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
+  if (Provider->Phase != AppleAgxG13QueueProviderSubmitted &&
+      Provider->Phase != AppleAgxG13QueueProviderComputeSubmitted &&
+      Provider->Phase != AppleAgxG13QueueProviderComputeOnlySubmitted)
+    return APPLE_AGX_BACKEND_FALSE;
   result = AppleAgxG13QueueRuntimeHandleEvent(&Provider->Runtime, Message,
                                               MessageBytes);
   Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardRuntime;
