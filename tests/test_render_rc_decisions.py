@@ -39,7 +39,7 @@ static unsigned calls,fail;
 static void RtlInitUnicodeString(UNICODE_STRING *n,const wchar_t *v){*n=v;}
 static int ZwSetValueKey(HANDLE k,UNICODE_STRING *n,unsigned z,unsigned t,void *p,unsigned long bytes){
  (void)k;(void)z;assert(t==3);++calls;
- unsigned *h=p;assert(h[0]==2 && h[1]==bytes);
+ unsigned *h=p;assert(h[0]==(!wcscmp(*n,L"Wom1RcProgress")?2u:3u) && h[1]==bytes);
  if(!wcscmp(*n,L"Wom1RcProgress")) assert(h[2]==0 && bytes==19984);
  return calls==fail ? -1:0;
 }
@@ -61,12 +61,12 @@ int main(void){ADMISSION_PLATFORM_RUNTIME r={0};
 int main(void){ADMISSION_RC_DECISIONS r={0};
  AdmissionRcDecisionsInitialize(&r);
  for(unsigned i=0;i<5;++i) AdmissionRcDecision(&r,66,0,99,0,123,10+i);
- assert(r.Histogram[66]==5 && r.Count==1 && r.Records[0].Count==5);
- assert(r.Records[0].RFence==99 && r.Records[0].CFence==0 && r.Records[0].ProcessId==123);
+ assert(r.Histogram[66]==5 && r.IdleCount==1 && r.IdleRecords[0].Count==5);
+ assert(r.IdleRecords[0].RFence==99 && r.IdleRecords[0].CFence==0 && r.IdleRecords[0].ProcessId==123);
  AdmissionRcDecision(&r,68,29,99,100,123,20);
- assert(r.Count==2 && r.Records[1].Detail==29);
+ assert(r.Count==1 && r.Records[0].Detail==29);
  for(unsigned i=0;i<128;++i) AdmissionRcDecision(&r,65,0,200+i,201+i,124,30+i);
- assert(r.Count==128 && r.Overwritten==2);
+ assert(r.Count==128 && r.Overwritten==1);
  r.Histogram[65]=~0u;AdmissionRcDecision(&r,65,0,327,328,124,200);
  assert(r.Histogram[65]==~0u);
  AdmissionRcDecision(&r,999,0,1,2,1,201);assert(r.Histogram[71]==1);
@@ -126,3 +126,54 @@ int main(void) {
  assert(r.Count==3 && !r.Records[2].RunningKind && !r.Records[2].Barrier);
 }
 ''')
+
+    def test_probe_decisions_survive_foreign_idle_flood(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        EXP2091 lost every probe decision to reason-66 DWM polls. Changing
+        background fences must not evict a probe admission or typed refusal.
+        """
+        self.build(r'''#include "render_rc_progress.h"
+#include <assert.h>
+int main(void) {
+ ADMISSION_RC_DECISIONS r={0};AdmissionRcDecisionsInitialize(&r);
+ AdmissionRcDecisionTyped(&r,64,7,99,100,42,1,3,1,1);
+ AdmissionRcDecisionTyped(&r,0,0,101,102,42,2,3,1,1);
+ for(unsigned i=0;i<30000;++i) AdmissionRcDecision(&r,66,0,200+i,0,123,3+i);
+ unsigned found=0;
+ for(unsigned i=0;i<r.Count;++i) if(r.Records[i].ProcessId==42) ++found;
+ assert(found==2 && r.Histogram[66]==30000 && r.Histogram[64]==1 && r.Histogram[0]==1);
+ assert(r.Records[0].Reason==64 && r.Records[0].Barrier==1 && r.Records[1].Reason==0);
+}
+''')
+
+    def test_idle_ring_wrap_coalescing_and_saturation(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Reserving idle storage must preserve exact pair identity, every histogram
+        increment, bounded wrap and saturated counters rather than wrap to zero.
+        """
+        self.build(r'''#include "render_rc_progress.h"
+#include <assert.h>
+int main(void) {
+ ADMISSION_RC_DECISIONS r={0};AdmissionRcDecisionsInitialize(&r);
+ assert(r.Version==3 && r.Bytes==8640);
+ for(unsigned i=0;i<40;++i) AdmissionRcDecision(&r,66,0,i+1,0,43,i+1);
+ assert(r.IdleCount==32 && r.IdleNext==8 && r.IdleOverwritten==8);
+ assert(!r.Count && !r.Overwritten && r.Histogram[66]==40);
+ AdmissionRcDecision(&r,66,0,40,0,43,41);
+ assert(r.IdleRecords[7].Count==2 && r.IdleRecords[7].LastLow==41);
+ r.IdleRecords[7].Count=~0u;r.Histogram[66]=~0u;
+ AdmissionRcDecision(&r,66,0,40,0,43,42);
+ assert(r.IdleRecords[7].Count==~0u && r.Histogram[66]==~0u);
+ r.IdleOverwritten=~0u;AdmissionRcDecision(&r,66,0,41,0,43,43);
+ assert(r.IdleOverwritten==~0u && r.IdleNext==9);
+}
+''')
+        with tempfile.TemporaryDirectory() as d:
+            c=Path(d)/'abi.c'
+            c.write_text('#include "render_rc_progress.h"\n'
+                '_Static_assert(sizeof(ADMISSION_RC_DECISIONS)==8640,"size");\n'
+                '_Static_assert(__builtin_offsetof(ADMISSION_RC_DECISIONS,IdleCount)==6964,"append");\n'
+                '_Static_assert(__builtin_offsetof(ADMISSION_RC_DECISIONS,IdleRecords)==6976,"records");\n')
+            for target in ['i686-pc-windows-msvc','x86_64-pc-windows-msvc','aarch64-pc-windows-msvc']:
+                subprocess.run(['clang','-target',target,'-std=c11','-Werror','-Wconversion',
+                    '-fsyntax-only','-I',str(INC),str(c)],check=True)

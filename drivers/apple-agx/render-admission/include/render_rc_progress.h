@@ -39,6 +39,7 @@ typedef struct _ADMISSION_RC_RECEIPT {
  * repeated identical decisions coalesce, histogram counts every observation. */
 #define ADMISSION_RC_REASONS 72u
 #define ADMISSION_RC_DECISIONS_COUNT 128u
+#define ADMISSION_RC_IDLE_COUNT 32u
 typedef struct _ADMISSION_RC_DECISION {
   unsigned int Reason, Detail, RFence, CFence, ProcessId, Count;
   unsigned int FirstLow, FirstHigh, LastLow, LastHigh;
@@ -48,6 +49,11 @@ typedef struct _ADMISSION_RC_DECISIONS {
   unsigned int Version, Bytes, Count, Next, Overwritten;
   unsigned int Histogram[ADMISSION_RC_REASONS];
   ADMISSION_RC_DECISION Records[ADMISSION_RC_DECISIONS_COUNT];
+  /* v3: reason 66 cannot overwrite non-idle decisions, even when fences
+   * change on every poll. Each ring coalesces only identical observations.
+   * Histogram is unchanged and counts both rings, including overwritten data. */
+  unsigned int IdleCount, IdleNext, IdleOverwritten;
+  ADMISSION_RC_DECISION IdleRecords[ADMISSION_RC_IDLE_COUNT];
 } ADMISSION_RC_DECISIONS;
 /* Storage is zeroed by the owner before initialization. Empty progress is a
  * valid v2 record (Count=0), not an absent registry value. */
@@ -55,17 +61,23 @@ static __inline void AdmissionRcInitialize(ADMISSION_RC_RECEIPT *r) {
   r->Version=2u; r->Bytes=(unsigned int)sizeof(*r);
 }
 static __inline void AdmissionRcDecisionsInitialize(ADMISSION_RC_DECISIONS *r) {
-  r->Version=2u; r->Bytes=(unsigned int)sizeof(*r);
+  r->Version=3u; r->Bytes=(unsigned int)sizeof(*r);
 }
 static __inline void AdmissionRcDecisionTyped(ADMISSION_RC_DECISIONS *r,
     unsigned int reason, unsigned int detail, unsigned int rf,
     unsigned int cf, unsigned int pid, unsigned long long qpc,
     unsigned int running, unsigned int next, unsigned int barrier) {
-  ADMISSION_RC_DECISION *s;
+  ADMISSION_RC_DECISION *s, *records;
+  unsigned int *count, *position, *overwritten, capacity;
   if(reason>=ADMISSION_RC_REASONS) reason=ADMISSION_RC_REASONS-1u;
   if(r->Histogram[reason]!=~0u) ++r->Histogram[reason];
-  if(r->Count) {
-    s=&r->Records[(r->Next+ADMISSION_RC_DECISIONS_COUNT-1u)%ADMISSION_RC_DECISIONS_COUNT];
+  records=reason==66u ? r->IdleRecords:r->Records;
+  count=reason==66u ? &r->IdleCount:&r->Count;
+  position=reason==66u ? &r->IdleNext:&r->Next;
+  overwritten=reason==66u ? &r->IdleOverwritten:&r->Overwritten;
+  capacity=reason==66u ? ADMISSION_RC_IDLE_COUNT:ADMISSION_RC_DECISIONS_COUNT;
+  if(*count) {
+    s=&records[(*position+capacity-1u)%capacity];
     if(s->Reason==reason && s->Detail==detail && s->RFence==rf &&
        s->CFence==cf && s->ProcessId==pid && s->RunningKind==running &&
        s->NextKind==next && s->Barrier==barrier) {
@@ -74,15 +86,15 @@ static __inline void AdmissionRcDecisionTyped(ADMISSION_RC_DECISIONS *r,
       return;
     }
   }
-  s=&r->Records[r->Next];
+  s=&records[*position];
   s->Reason=reason;s->Detail=detail;s->RFence=rf;s->CFence=cf;
   s->ProcessId=pid;s->Count=1u;
   s->RunningKind=running;s->NextKind=next;s->Barrier=barrier;
   s->FirstLow=s->LastLow=(unsigned int)qpc;
   s->FirstHigh=s->LastHigh=(unsigned int)(qpc>>32);
-  r->Next=(r->Next+1u)%ADMISSION_RC_DECISIONS_COUNT;
-  if(r->Count<ADMISSION_RC_DECISIONS_COUNT) ++r->Count;
-  else if(r->Overwritten!=~0u) ++r->Overwritten;
+  *position=(*position+1u)%capacity;
+  if(*count<capacity) ++*count;
+  else if(*overwritten!=~0u) ++*overwritten;
 }
 
 /* Legacy caller has no class evidence. Zero remains explicitly unknown. */
