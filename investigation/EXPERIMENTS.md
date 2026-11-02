@@ -67574,3 +67574,18 @@ EXP2098 HARDWARE ACTUAL (2026-11-03): **q12 depth-two recovery drill, head mode:
 - Expected vs actual: every preregistered PASS criterion met (statuses [5,5]/[4,4], exact fences, one bounded reset, DWM alive, later probes PASS). Desktop/USB/RDP were not inspected separately (SSH and DWM process only). Verdict confirmed.
 - Next: EXP2099 successor mode (Wom1Depth2Drill=2) as its own run.
 - Recovery rec2098h.
+
+EXP2099 HARDWARE BEFORE 2026-11-02T23:13:04Z:
+Switches: as EXP2098 with Wom1Depth2Drill=2 (single variable 1 -> 2). Steps: 30 s boot window, drill evidence snapshot, then only Q3RR and only Q3RCR.
+- WHY THIS HYPOTHESIS:
+  1. EXP2098 PASS: head-mode drill on a DWM R->R pair reported [5,5]/[4,4], one reset, healthy later work.
+  2. The successor case is the distinct path: the head must be reported successful and only the kicked successor dropped, with no reuse before terminal retirement (q6 fault-suffix rule, q12 selector).
+- ATOMIC CONTRACT: none -- single drill mode value.
+- WHAT IS STILL UNKNOWN: whether the successor-only drop reports head success and successor dropped exactly once with recovery.
+- Expected PASS: drill value consumed (0); receipt mode 2, two distinct flights, ReportedCount 2, WDDM statuses [0,5], queue statuses [0,4], fences equal to head/next, overflow 0, TerminalCount 2; one successful reset; DWM running; Q3RR/Q3RCR PASS.
+- INCONCLUSIVE: no receipt / stale / Attempts 64 with Target 0; a genuine firmware fault during the run.
+- FAIL: wrong/missing/duplicate fence or statuses, failed reset, persistent black desktop, repeated DWM crash, bugcheck, failed later probes.
+- Recovery: rec2099h.
+- Hashes: sys 6bface22ebef, UmdArm64 fbe4f605a201, UmdX64 91cca8556617, Umd32 68c558aaf3be; manifest c3d8a7c1e424, hardware-manifest cf55b2f2c9a0; probe2099.sh ff380030a31a (PROBE_LINT_OK); visible recovery rec2099h 87584c86b9343cc8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1TdrDrillAllowed=1 Wom1Depth2Drill=2.
+- Recovery rec2099h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2099-drill-succ/run2099.sh.
