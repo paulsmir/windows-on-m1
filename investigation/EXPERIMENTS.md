@@ -67444,3 +67444,11 @@ Switches (as EXP2091): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhe
 - Hashes: sys aab7206cfd34, UmdArm64 27b44dc052db, UmdX64 73320f4f3e09, Umd32 d35f43b5078b; manifest 41ed5ab9c636, hardware-manifest 1fda7cc4c412; probe2093.sh c7459f35a944 (PROBE_LINT_OK); visible recovery rec2093h 8e83a3d49e4b5bd0; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2093h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2093-cr-rerun/run2093.sh.
+
+EXP2093 HARDWARE ACTUAL (2026-11-02): **q6 step 2 rerun INCONCLUSIVE: with a calibrated 5.96 ms compute predecessor the C->R pair was still never kicked; the refusal evidence was displaced again, now by reason-64 records.**
+- Q3CR: PASS bad=0, compute_iterations 65536, c_only_gpu_ms 5.965 (firmware-compute own timestamps, in target 5-10); pid 10388. Wom1JobWindow after Q3CR: kicks 0 for the whole boot so far; no RcProgress pair.
+- Q3RCR: PASS bad=0, same 5.964 ms compute; pid 8536 only the R->C pair 9719 -> 9720 (published-progress, exact order Status 0). After Q3RCR: kicks 1, compute_on_3d 1, ta_on_compute 0.
+- Wom1RcDecisions v3: non-idle ring overwritten 2565 (idle 1460), zero retained records for either probe PID; histogram admitted 1, 64 2595 (DWM R->R, TA-on-3D off), 66 31951, 4 104, 55 83, 68 21. q7 separated reason 66 but repeated reason-64 records with changing fences still evict the probe.
+- G4 submit failure none; guest alive; pipeline rc 0.
+- Expected vs actual: expected a typed C->R pair (ta_on_compute >= 1); actual none in two probes with a 6 ms predecessor, so "compute too short" is now unlikely; the reason is still unrecorded. Verdict INCONCLUSIVE. Second evidence-limited run on this boundary: per AGENTS.md the next step is offline source analysis of the C->R admission path (Codex q9), not another receipt-only hardware run.
+- Recovery rec2093h.
