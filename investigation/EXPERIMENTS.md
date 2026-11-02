@@ -66981,3 +66981,10 @@ Arms: a FHD 100k (rc122, first), b FHD 100k with APPLE_AGX_RA_PACK=0 (second, co
 - Hashes: sys 0d1741b64aa0, UmdArm64 15781a6820b7, UmdX64 a196840bca82, Umd32 948840433e18; manifest d734a33cfd29, hardware-manifest c06c09a2b81b; probe2071.sh 480267cc1171 (PROBE_LINT_OK); visible recovery rec2071h 8ce2ffb59a16e8fe; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2071h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2071-ra-pack/run2071.sh.
+
+EXP2071 HARDWARE ACTUAL (2026-11-02): **rc122 is active on hardware but does not reach the full-screen PS. FHD 100k: rc122 4342 (first) against control 4405 (second, best). The difference is within run-to-run spread.**
+- The heavy undispatched compute shaders shrink as offline: b6ed2427 3743 → 3040, 62568917 2752 → 2430; threads and spills unchanged.
+- Dispatched shaders that changed: 008c2d25 (-3), 6b1bbe13 (-6), 7626aaca (-3), 97ae4b02 (-2), de951f8f (-2), ee6509b6 (-13) instructions. All run at 832-1024 threads (low pressure).
+- The full-screen PS is unchanged at 8285 instructions, 255 halfregs, 111 spills. Main 3D 8.34 ms (8.25-8.40 before).
+- Score: a 4342 (rc122, first position), b 4405 (APPLE_AGX_RA_PACK=0, second). With only small static changes to dispatched shaders, the gap is run-to-run spread (first-position FHD has varied 4241-4372), not a measured rc122 cost. The verdict waits for the PS.
+- Next: EXP2072 listings show the PS's variants.
