@@ -75,3 +75,28 @@ turnaround.
 2. Hardware unknown 1 as one variable: shared manager at depth 1.
 3. macOS hv trace of GravityMark Metal (needs a macOS boot to fetch the
    kernelcache).
+
+## Step 1 design: persistent manager objects (no copy-in / copy-out)
+
+Source: `apple_agx_render_shared_memory.c` `AppleAgxRenderSharedMemoryBuildManagedG4Job`
+(:1123-1200) copies objects {1 Info, 20 BlockControl, 21 Counter, 22 Stats}
+from the saved `APPLE_AGX_RENDER_MANAGER_STATE` (or the template) into the
+job's active objects, increments Counter, and `AppleAgxRenderManagerSave`
+(:1083-1118) reads them back after completion. N+1's manager input is N's
+output, so N+1 cannot be built before N completes.
+
+Asahi: `buffer.rs` allocates the buffer's firmware info/block control/counter/
+stats once per buffer; every render job's scene points at them
+(`queue/render.rs:573 scene.weak_buffer_pointer()`); the firmware updates them
+in place; the kernel never copies them.
+
+Translation: allocate objects 1/20/21/22 once per process manager (beside the
+page list, block list and heap it already owns), point each render job's
+relocations at that persistent copy, drop the copy-in/save. DWM gets its own
+set. Object 13 (scene) stays per job. Counter: Asahi increments per job in the
+firmware-visible copy at submit; we keep +1 per job, written at build.
+
+Checkpoint (one variable, depth 1): GravityMark HD 50k + FHD 100k with
+persistent manager objects on/off; pass = identical image, partials 0, no
+Timeout/TDR, Counter monotonic; this removes the save (rc83 77 us) and the
+restore from every render job and is the precondition for queuing N+1.
