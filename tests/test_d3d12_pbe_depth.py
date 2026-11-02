@@ -77,7 +77,7 @@ class ActualPbeDepth(unittest.TestCase):
             commands = [
                 [str(cc), '-DC24_SELECTED_SOURCE="' + str(out / 'selected-state.inc') + '"', *flags, '-c', str(out / 'descriptor.c'), '-o', str(out / 'descriptor.o')],
                 [str(cc), *flags, '-c', str(out / 'view.c'), '-o', str(out / 'view.o')],
-                [str(cc) + '++', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk',
+                [str(cc) + '++', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk',
                  '-fsanitize=address,undefined', '-Wl,-dead_strip', str(out / 'descriptor.o'), str(out / 'view.o'),
                  *[str(build / n) for n in config['libs']], '-L/opt/homebrew/opt/zstd/lib', '-lzstd', '-lz', '-lpthread', '-o', str(out / 'check')],
                 [str(out / 'check')],

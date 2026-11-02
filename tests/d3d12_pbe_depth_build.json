@@ -103,7 +103,7 @@
   ],
   "flags": [
     "-isysroot",
-    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
     "-Isrc/gallium/drivers/asahi/libasahi.a.p",
     "-Isrc/gallium/drivers/asahi",
     "-I../../reference/mesa/src/gallium/drivers/asahi",
