@@ -66918,3 +66918,20 @@ EXP2068 HARDWARE ACTUAL (2026-11-02): **the heaviest PS (71405b87 / tag 56e2cea9
   - The asteroids go through ExecuteIndirect.
 - The main render job's 0.24 ms TA / 8.25 ms 3D profile fits a full-screen pass of this 8285-instruction, 111-spill shader.
 - Next: rc120 a9aead37 (sink reorderable buffer loads in fragment shaders), EXP2069.
+
+EXP2069 HARDWARE BEFORE 2026-11-02T11:59:44Z:
+Arms: a FHD 100k (rc120 on, first), b FHD 100k with APPLE_AGX_SINK_LOADS=0 and APPLE_AGX_D3D_SINK_LOADS=0 (off, second).
+- WHY THIS HYPOTHESIS:
+  1. EXP2068: the full-screen PS 56e2cea9 (71405b87) is drawn once per frame. Its runtime stats (EXP2066): 8285 instructions, 255 halfregs, 384 threads, 111 spills. The 0.24 ms TA / 8.25 ms 3D main pass fits a full-screen pass.
+  2. EXP2067 final NIR: 14 vector buffer loads live over more than 30% of the shader (%49: defined at line 52, first used at line 7792). Speculatable loads are hoisted (peephole_select, vectorize), and the late nir_opt_sink cannot move load_agx.
+  3. AGX listing: 22.5% xor (RA swaps), 7.4% mov, 2.7% stack, so register pressure is the cost. Apple's largest fragment shader is 3453 instructions.
+- ATOMIC CONTRACT: one compiler behaviour (load placement in fragment shaders). Compute is byte-identical (test_d3d12_latency_schedule: the kill switch equals pinned; no occupancy loss).
+- Expected:
+  - arm a measure-d3d12-shader-stats for the stage-4 8285 shader: fewer instructions, spills and GPRs, more threads;
+  - main-pass 3D time below 8.25 ms (agx_gpu_frame_breakdown);
+  - a ≥ 4372 (b is the same-boot control, second position).
+- Failure criteria: identical PS stats (the loads are not what holds registers), a worse PS, or a rendering difference in gm2069a-image.png.
+- Recovery: rec2069h.
+- Hashes: sys e6738e2f5c52, UmdArm64 75f99723b043, UmdX64 8c5afa903f3a, Umd32 3a9d83a13919; manifest cad9ea1feabc, hardware-manifest 6e354d010d53; probe2069.sh da16aaea41fb (PROBE_LINT_OK); visible recovery rec2069h d090ab135da95da0; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2069h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2069-ps-sink/run2069.sh.
