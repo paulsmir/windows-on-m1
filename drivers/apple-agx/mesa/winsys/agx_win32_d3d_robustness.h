@@ -568,81 +568,6 @@ agx_win32_d3d_group_loads(nir_function_impl *impl, struct set *checked, unsigned
  * the D3D-H6 form (a branch per load and per store), read when a shader is
  * compiled, for a hardware comparison. RC109: runs of loads
  * (APPLE_AGX_D3D_LOAD_RUNS, agx_win32_d3d_group_loads). */
-/* rc120 (EXP2067/2068): GravityMark's full-screen PS 71405b87, drawn once
- * per frame, compiled to 8285 instructions at 255 halfregs with 111 spills
- * and 22.5% xor swaps (Apple's largest fragment shader: 3453). DXIL loads
- * its buffer constants at the top: 14 vector loads stay live for over 30% of
- * the shader (one is defined at line 52 and first used at line 7792 of
- * 7813). Asahi's late nir_opt_sink (agx_compile.c move_all) cannot move them
- * by then: they are load_agx, which nir_opt_sink does not know, and their
- * access lacks ACCESS_CAN_REORDER. Here they are still load_ubo/load_ssbo:
- * mark the read-only ones reorderable when the shader writes no buffer or
- * image (D3D: reading an SRV that the same shader writes is undefined) and
- * sink them, with their bounds tests, to their uses.
- * APPLE_AGX_D3D_SINK_LOADS=0 keeps the DXIL order. */
-static inline bool
-agx_win32_d3d_sink_loads(nir_shader *nir)
-{
-   const char *env = getenv("APPLE_AGX_D3D_SINK_LOADS");
-   /* fragment shaders only (agx_compile.c RC120: a compute kernel lost
-    * occupancy when its loads were sunk) */
-   if (nir->info.stage != MESA_SHADER_FRAGMENT || (env && env[0] == '0' && !env[1]))
-      return false;
-   bool writes = false;
-   nir_foreach_function_impl(impl, nir) {
-      nir_foreach_block(block, impl) {
-         nir_foreach_instr(instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-            switch (nir_instr_as_intrinsic(instr)->intrinsic) {
-            case nir_intrinsic_store_ssbo:
-            case nir_intrinsic_store_global:
-            case nir_intrinsic_ssbo_atomic:
-            case nir_intrinsic_ssbo_atomic_swap:
-            case nir_intrinsic_global_atomic:
-            case nir_intrinsic_global_atomic_swap:
-            case nir_intrinsic_image_store:
-            case nir_intrinsic_image_deref_store:
-            case nir_intrinsic_bindless_image_store:
-            case nir_intrinsic_image_atomic:
-            case nir_intrinsic_image_deref_atomic:
-            case nir_intrinsic_bindless_image_atomic:
-               writes = true;
-               break;
-            default:
-               break;
-            }
-         }
-      }
-   }
-   bool marked = false;
-   nir_foreach_function_impl(impl, nir) {
-      nir_foreach_block(block, impl) {
-         nir_foreach_instr(instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-            if (intr->intrinsic != nir_intrinsic_load_ssbo &&
-                intr->intrinsic != nir_intrinsic_load_ubo)
-               continue;
-            const enum gl_access_qualifier access = nir_intrinsic_access(intr);
-            if (access & (ACCESS_VOLATILE | ACCESS_COHERENT | ACCESS_CAN_REORDER))
-               continue;
-            if (intr->intrinsic == nir_intrinsic_load_ssbo &&
-                (writes || !(access & ACCESS_NON_WRITEABLE)))
-               continue;
-            nir_intrinsic_set_access(intr, access | ACCESS_CAN_REORDER);
-            marked = true;
-         }
-      }
-   }
-   bool progress = false;
-   NIR_PASS(progress, nir, nir_opt_sink,
-            nir_move_const_undef | nir_move_load_ubo | nir_move_load_ssbo |
-               nir_move_comparisons | nir_move_copies | nir_move_alu);
-   return progress || marked;
-}
-
 static inline bool
 agx_win32_lower_d3d_buffer_access(nir_shader *nir)
 {
@@ -685,7 +610,6 @@ agx_win32_lower_d3d_buffer_access(nir_shader *nir)
    progress |= nir_shader_intrinsics_pass(nir, agx_win32_d3d_lower_buffer_access_instr,
                                           nir_metadata_none, &state);
    _mesa_set_destroy(state.checked, NULL);
-   progress |= agx_win32_d3d_sink_loads(nir);
    return progress;
 }
 
