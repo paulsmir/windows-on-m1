@@ -67058,3 +67058,10 @@ Arms: a FHD 100k -temporal 0 (first), b HD 100k -temporal 0, c FHD 100k -tempora
 - Hashes: sys b92d341e98d9, UmdArm64 ec7e3b1feff9, UmdX64 84c81cdfe1ab, Umd32 3f6637b8b6b0; manifest 942d49351cd7, hardware-manifest f8a8f62f509a; probe2075.sh a06ea0676234 (PROBE_LINT_OK); visible recovery rec2075h a25f4abfb7d56c96; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2075h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2075-temporal/run2075.sh.
+
+EXP2075 HARDWARE ACTUAL (2026-11-02): **like for like with macOS, the gap is real: FHD 100k temporal off 4487 (macOS 7814, 57%), HD 100k temporal off 5696 (macOS 9739, 58%); control FHD temporal on 4299 (macOS 4397).**
+- Expected vs actual: a 7000-7800 expected, 4487 actual: rejected; b 8500-9700 expected, 5696: rejected; c about 4400 expected, 4299 (third position): as expected.
+- Temporal AA costs macOS about 17 ms per FHD frame (38.1 -> 21.4 ms) but us 1.3 ms (C2 2.77 -> 1.47 ms), so equal temporal-on scores were not parity (the same-day "parity" note is withdrawn).
+- Per job (median ms, a FHD / b HD): C0 2.27/1.15, R1 7.97/4.29, C2 1.47/0.69, R3 0.58/0.35, C4 8.59/8.62, R5 0.83/0.84, C6 2.02/1.99, R7 1.07/0.71; wall 34.7/28.4 ms; launch gaps about 4-5 ms.
+- C4 does not depend on resolution: it is per-asteroid work, a third of the HD frame (macOS HD frame about 17 ms in total). Per frame about 170 dispatches (most 1-3 groups; a 12-pass radix sort of 6 kernels) with 236 CDM barriers per submit.
+- Recovery rec2075h. Next: EXP2076, rc125 split diagnostic to time the pieces of C4.
