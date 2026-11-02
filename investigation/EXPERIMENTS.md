@@ -67397,3 +67397,11 @@ Switches: EXP2090 set + Wom1Depth2TaOnCompute=1. Steps: only Q3RC, then only Q3R
 - Hashes: sys e2b65d8138ab, UmdArm64 3b899e818402, UmdX64 2f70d5a410b4, Umd32 94fc42dbbdfd; manifest 3a8c9b1d8e75, hardware-manifest c1c6bfa4f37d; probe2091.sh c2740aba1ef1 (PROBE_LINT_OK); visible recovery rec2091h 2f1bd08704b8800d; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2091h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2091-depth2-taoncompute/run2091.sh.
+
+EXP2091 HARDWARE ACTUAL (2026-11-02): **q6 step 2 INCONCLUSIVE: Wom1Depth2TaOnCompute=1 produced no C->R pair; the refusal reason was lost to decision-ring overwrite.**
+- Q3RC: PASS bad=0; pid 10116 pair 5269 -> 5270 R->C published-progress, exact order Status 0.
+- Q3RCR: PASS bad=0 (outputs exact); pid 10356 only the R->C pair 6916 -> 6917 (published-progress, exact order Status 0); no C->R pair. Wom1JobWindow after Q3RCR: kicks 2, max_in_flight 2, compute_on_3d 2, ta_on_compute 0, ta_on_3d 0, kick_failures 0, reset_aborts 0.
+- Wom1RcDecisions: overwritten 3390, zero retained records for pid 10356 (DWM reason-66 polls evict the probe's records); histogram admitted 2, 66 24455, 64 2218, 55 86, 4 96, 68 54.
+- Expected vs actual: expected a typed C->R pair with ta_on_compute >= 1; actual none. Preregistered INCONCLUSIVE branch: most likely the 64-word compute retires before the blue render reaches the KMD (no pending successor), but the overwritten ring cannot distinguish that from a typed refusal. No safety regression (no reset, exact outputs).
+- Next: Codex q7 makes the Q3RCR compute a bounded multi-ms loop with exact output and keeps per-PID decision records from being evicted by reason-66 polls; step 3 (EXP2092, Wom1Depth2TaOn3d=1 with TaOnCompute absent) proceeds independently because its predecessor is the calibrated long render.
+- Recovery rec2091h.
