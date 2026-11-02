@@ -67429,3 +67429,18 @@ EXP2092 HARDWARE ACTUAL (2026-11-02): **q6 step 3 FAIL: Q3RR hit the 15 s proces
 - Expected vs actual: expected Q3RR PASS with a typed R->R pair; actual deadline plus two G4 Prepare rejections. Source: gpuva_g3_windows.c:5250-5273 / 5778-5803 reject with branch 10 when the deferred pending queue refuses (AdmissionG4PendingAdmissible/Queue: per-context FenceOutstanding+GpuvaG3SecondFence both set, or G4PendingCount == ADMISSION_G4_PENDING_CAPACITY 2) and the immediate packet path is not empty. Hypothesis: admitted R->R depth two keeps jobs/pending entries occupied longer, so a submission arrives with no capacity and is failed instead of waited for; the failed fence never signals. Verdict FAIL (rejection of a valid submission). Wom1Depth2TaOn3d stays off.
 - Next: Codex q8 proves the rejecting condition from source and fixes the capacity/ordering contract (a valid submission must never fail for transient capacity), with a regression test; then repeat step 3.
 - Recovery rec2092h.
+
+EXP2093 HARDWARE BEFORE 2026-11-02T21:57:55Z:
+Switches (as EXP2091): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOnCompute=1 (TaOn3d absent: EXP2092 FAIL). Steps: only Q3CR, then only Q3RCR.
+- WHY THIS HYPOTHESIS:
+  1. EXP2091: no C->R pair with the 64-word compute; decision records of the probe PID overwritten 3390 times, so the reason was unknown.
+  2. q7: the compute predecessor is now a calibrated 5-10 ms bounded recurrence with an exact oracle (Q3CR submits C then blue R directly), and reason-66 polls no longer evict the probe's decisions.
+- ATOMIC CONTRACT: probe workload + decision-ring layout (diagnostic storage only, admission unchanged); switches identical to EXP2091.
+- WHAT IS STILL UNKNOWN: whether the firmware honours the inter-job TA-on-compute barrier; whether the G4 Prepare rejection seen with R->R (EXP2092) also occurs for C->R.
+- Expected PASS: Q3CR prints C-only duration 5-10 ms and PASS bad=0 (64 exact recurrence words + blue); typed pair compute->render, barrier TA-on-compute, published-progress, exact Status 0 order; ta_on_compute >= 1; probe-PID decisions retained (no idle overwrite of them); Q3RCR PASS; G4 submit failure none; no reset.
+- INCONCLUSIVE: outputs PASS but no admitted C->R pair, with the retained decision naming why.
+- FAIL: wrong output, deadline, G4 rejection, lost/misordered fence, reset, 0x116.
+- Recovery: rec2093h.
+- Hashes: sys aab7206cfd34, UmdArm64 27b44dc052db, UmdX64 73320f4f3e09, Umd32 d35f43b5078b; manifest 41ed5ab9c636, hardware-manifest 1fda7cc4c412; probe2093.sh c7459f35a944 (PROBE_LINT_OK); visible recovery rec2093h 8e83a3d49e4b5bd0; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2093h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2093-cr-rerun/run2093.sh.
