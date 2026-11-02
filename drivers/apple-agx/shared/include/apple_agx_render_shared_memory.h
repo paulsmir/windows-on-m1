@@ -165,6 +165,9 @@ typedef struct _APPLE_AGX_RENDER_SHARED_READ_PROBE_COUNTS {
 extern APPLE_AGX_RENDER_SHARED_READ_PROBE_COUNTS AppleAgxRenderSharedReadProbe;
 #endif
 
+/* rc124: firmware buffer-manager slots the owner can keep bound. */
+#define APPLE_AGX_RENDER_MANAGER_SLOTS 4u
+
 typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   const APPLE_AGX_MEMORY_IO *MemoryIo;
   APPLE_AGX_MEMORY_OBJECT
@@ -210,6 +213,20 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
    * APPLE_AGX_RENDER_BUILD_REFUSAL_* (0 = it did not refuse). Diagnostic
    * only (Wom1JobWindowKickFail). */
   APPLE_AGX_U32 LastBuildRefusal;
+  /* rc124 (Asahi buffer.rs BufferManager, NUM_BUFFERS 127): firmware
+   * buffer-manager slots. Slot s keeps its own buffer-manager objects
+   * {1 Info, 20 BlockControl, 21 Counter, 22 Stats} below the originals in
+   * their pages, and its number in WorkCommandInitBM/TA and StartTA/3D. A
+   * key bound to a slot stays firmware-owned there: its next job needs no
+   * InitBM and no restore. ManagerSlotCount 0 or 1 is the single slot 0
+   * (pre-rc124); the Windows build sets it from Wom1ManagerSlots. */
+  APPLE_AGX_U32 ManagerSlotCount;
+  APPLE_AGX_U32 ManagerSlot;      /* slot of the last managed build */
+  APPLE_AGX_U32 ManagerSlotClock; /* LRU clock */
+  APPLE_AGX_BOOL ManagerSlotLive; /* the last build reused a bound slot */
+  APPLE_AGX_RENDER_MANAGER_KEY SlotKey[APPLE_AGX_RENDER_MANAGER_SLOTS];
+  APPLE_AGX_BOOL SlotBound[APPLE_AGX_RENDER_MANAGER_SLOTS];
+  APPLE_AGX_U32 SlotUse[APPLE_AGX_RENDER_MANAGER_SLOTS];
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
 
 #define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_FENCE    1u  /* Owner->ManagerFence */

@@ -287,6 +287,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * element-wise reads of the template arena and firmware-shared memory in
    * the build and the buffer-manager save (byte-identical result). */
   BOOLEAN BuildDirectReads;
+  /* rc124: device value Wom1ManagerSlots = 1 binds each buffer-manager key
+   * to its own firmware buffer slot (render_shared_memory ManagerSlotCount
+   * 4); 0 or absent keeps the single slot 0. */
+  BOOLEAN ManagerSlots;
   /* rc84: device value Wom1GpuPerfReceipt = 0 stops the Wom1GpuPerf
    * sampling (HwDataA loads at each job completion). */
   BOOLEAN GpuPerfOff;
@@ -2989,6 +2993,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
   runtime->TransportIo.MemoryBarrier(runtime);
   runtime->Initdata.RenderSharedMemory.DirectReads =
       runtime->BuildDirectReads;
+  runtime->Initdata.RenderSharedMemory.ManagerSlotCount =
+      runtime->ManagerSlots ? APPLE_AGX_RENDER_MANAGER_SLOTS : 0u;
   if (!AppleAgxRenderManagerSave(&runtime->Initdata.RenderSharedMemory,
           manager,Fence,runtime->QueueObjects))
     return APPLE_AGX_BACKEND_FALSE;
@@ -3219,6 +3225,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     return APPLE_AGX_BACKEND_FALSE;
   runtime->Initdata.RenderSharedMemory.DirectReads =
       runtime->BuildDirectReads;
+  runtime->Initdata.RenderSharedMemory.ManagerSlotCount =
+      runtime->ManagerSlots ? APPLE_AGX_RENDER_MANAGER_SLOTS : 0u;
   if (runtime->Adapter->BackendImage.G4Compute ||
       runtime->Adapter->BackendImage.PresentCompute)
     return AdmissionExternalBuildComputeJob(runtime, Submission, Plan, Job);
@@ -6907,6 +6915,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1PreludeTimestampsOff");
   runtime->BuildDirectReads =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1BuildDirectReads");
+  runtime->ManagerSlots =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerSlots");
   /* rc90: on by default since EXP2034 (the G4-r3 drill passed with it);
    * only REG_DWORD 0 turns it off. */
 #if ADMISSION_JOB_AHEAD_BUILD

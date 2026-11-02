@@ -901,6 +901,50 @@ static APPLE_AGX_BOOL apply_active_relocations(
   return APPLE_AGX_TRUE;
 }
 
+/* rc124: the buffer-manager objects a firmware buffer slot owns, and the
+ * WorkCommandInitBM/TA and StartTA/Start3D fields that name the slot
+ * (m1n1 cmdqueue.py/microsequence.py V13_5; Asahi fw/buffer.rs InitBuffer,
+ * fw/vertex.rs, fw/microseq.rs buffer_slot). */
+static const APPLE_AGX_U32 manager_slot_objects[4]={1u,20u,21u,22u};
+
+/* Slot s's copy of a manager object sits s steps below the original in its
+ * page; a step keeps the original's alignment modulo 64 bytes. */
+static APPLE_AGX_U64 manager_slot_delta(const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+                                        APPLE_AGX_U32 Index, APPLE_AGX_U32 Size,
+                                        APPLE_AGX_U32 Slot) {
+  APPLE_AGX_U64 delta = (APPLE_AGX_U64)Slot * align_up((APPLE_AGX_U64)Size, 0x40ULL);
+  return delta <= Owner->ObjectOffsets[Index] ? delta : ~0ULL;
+}
+
+static APPLE_AGX_BOOL select_manager_slot(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+                                          APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+                                          APPLE_AGX_U32 Slot) {
+  APPLE_AGX_U32 i;
+  if (Slot == 0u) return APPLE_AGX_TRUE;
+  if (Slot >= APPLE_AGX_RENDER_MANAGER_SLOTS) return APPLE_AGX_FALSE;
+  for (i = 0u; i < 4u; ++i) {
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *object = &ActiveObjects[manager_slot_objects[i]];
+    APPLE_AGX_U64 delta = manager_slot_delta(Owner, manager_slot_objects[i], object->Size, Slot);
+    if (delta == ~0ULL || object->Data == RENDER_SHARED_NULL) return APPLE_AGX_FALSE;
+    object->Data -= delta;
+    object->GpuVa -= delta;
+    object->PhysicalAddress -= delta;
+  }
+  return APPLE_AGX_TRUE;
+}
+
+static APPLE_AGX_BOOL write_manager_slot(APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+                                         APPLE_AGX_BOOL IncludeInitBm, APPLE_AGX_U32 Slot) {
+  if (ActiveObjects[19u].Size < 0x24u || ActiveObjects[15u].Size < 0x5cu ||
+      ActiveObjects[17u].Size < 0x48u || (IncludeInitBm && ActiveObjects[16u].Size < 0x0cu))
+    return APPLE_AGX_FALSE;
+  if (IncludeInitBm) put_u32(ActiveObjects[16u].Data + 0x08u, Slot); /* InitBM.buffer_mgr_slot */
+  put_u64(ActiveObjects[19u].Data + 0x1cu, Slot); /* WorkCommandTA.buffer_mgr_slot */
+  put_u32(ActiveObjects[15u].Data + 0x58u, Slot); /* Start3DCmd.buffer_mgr_slot */
+  put_u64(ActiveObjects[17u].Data + 0x40u, Slot); /* StartTACmd.buffer_mgr_slot */
+  return APPLE_AGX_TRUE;
+}
+
 static APPLE_AGX_BOOL build_active_job(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const void *TemplateArena, APPLE_AGX_U32 TemplateArenaBytes,
@@ -911,7 +955,8 @@ static APPLE_AGX_BOOL build_active_job(
     const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob,
-    APPLE_AGX_BOOL G4Native, APPLE_AGX_BOOL InitializeQueues) {
+    APPLE_AGX_BOOL G4Native, APPLE_AGX_BOOL InitializeQueues,
+    APPLE_AGX_U32 ManagerSlot) {
   APPLE_AGX_BACKEND_JOB_IMAGE candidate;
   APPLE_AGX_U32 index;
   APPLE_AGX_BOOL initialize_persistent;
@@ -945,8 +990,13 @@ static APPLE_AGX_BOOL build_active_job(
           SourceObjectCount, initialize_persistent, IncludeInitBm,
           job_slot(StagedJob)))
     BUILD_REFUSE(BIND);
+  /* rc124: before any relocation reads the manager objects' addresses */
+  if (!select_manager_slot(Owner, ActiveObjects, ManagerSlot))
+    BUILD_REFUSE(BIND);
   build_mark(Owner, APPLE_AGX_RENDER_BUILD_MARK_COPIED);
-  if (IncludeInitBm) {
+  /* rc124: a managed build into slot s > 0 writes BlockControl itself
+   * (restored or template, then the backed block count) */
+  if (IncludeInitBm && ManagerSlot == 0u) {
     APPLE_AGX_EXP208_RELOCATION_OBJECT *control = &ActiveObjects[20];
     APPLE_AGX_U32 total;
     if (control->Data == RENDER_SHARED_NULL || control->Size < 8u)
@@ -1015,6 +1065,12 @@ static APPLE_AGX_BOOL build_active_job(
 #undef BUILD_REFUSE
 }
 
+/* rc124: an unmanaged build uses slot 0's manager objects as its own. */
+static APPLE_AGX_BOOL unbind_manager_slot0(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner) {
+  Owner->SlotBound[0] = APPLE_AGX_FALSE;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const void *TemplateArena, APPLE_AGX_U32 TemplateArenaBytes,
@@ -1027,7 +1083,8 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob) {
   return build_active_job(Owner, TemplateArena, TemplateArenaBytes,
       SourceObjects, SourceObjectCount, ArenaGpuAddress, IncludeInitBm,
-      RuntimeBindings, StagedJob, ActiveObjects, ActiveJob, APPLE_AGX_FALSE, IncludeInitBm);
+      RuntimeBindings, StagedJob, ActiveObjects, ActiveJob, APPLE_AGX_FALSE, IncludeInitBm, 0u) &&
+      unbind_manager_slot0(Owner);
 }
 
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveG4Job(
@@ -1042,7 +1099,8 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveG4Job(
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob) {
   return build_active_job(Owner, TemplateArena, TemplateArenaBytes,
       SourceObjects, SourceObjectCount, ArenaGpuAddress, IncludeInitBm,
-      RuntimeBindings, StagedJob, ActiveObjects, ActiveJob, APPLE_AGX_TRUE, IncludeInitBm);
+      RuntimeBindings, StagedJob, ActiveObjects, ActiveJob, APPLE_AGX_TRUE, IncludeInitBm, 0u) &&
+      unbind_manager_slot0(Owner);
 }
 
 static void copy_bytes(unsigned char *Destination, const unsigned char *Source,
@@ -1064,11 +1122,30 @@ static APPLE_AGX_BOOL manager_key_equal(
   return APPLE_AGX_TRUE;
 }
 
+/* rc124: managed builds use slots 1..count-1; slot 0 stays with the
+ * unmanaged builds (template default). Returns the slot bound to Key, or
+ * ~0u. */
+static APPLE_AGX_U32 manager_slot_count(const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner) {
+  return Owner->ManagerSlotCount > APPLE_AGX_RENDER_MANAGER_SLOTS ?
+      APPLE_AGX_RENDER_MANAGER_SLOTS : Owner->ManagerSlotCount;
+}
+
+static APPLE_AGX_U32 bound_manager_slot(const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+                                        const APPLE_AGX_RENDER_MANAGER_KEY *Key) {
+  APPLE_AGX_U32 s, n = manager_slot_count(Owner);
+  for (s = 1u; s < n; ++s)
+    if (Owner->SlotBound[s] && manager_key_equal(&Owner->SlotKey[s], Key, APPLE_AGX_TRUE))
+      return s;
+  return ~0u;
+}
+
 APPLE_AGX_BOOL AppleAgxRenderManagerNeedsBind(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const APPLE_AGX_RENDER_MANAGER_KEY *Key) {
-  return !Owner || !Key || !Key->Owner || !Key->Generation ||
-      !manager_key_equal(&Owner->ManagerKey,Key,APPLE_AGX_TRUE);
+  if (!Owner || !Key || !Key->Owner || !Key->Generation) return APPLE_AGX_TRUE;
+  if (manager_slot_count(Owner) > 1u)
+    return bound_manager_slot(Owner, Key) == ~0u;
+  return !manager_key_equal(&Owner->ManagerKey,Key,APPLE_AGX_TRUE);
 }
 
 static APPLE_AGX_BOOL manager_objects_valid(
@@ -1131,8 +1208,8 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
     const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob) {
-  APPLE_AGX_BOOL restore;
-  APPLE_AGX_U32 i,count;
+  APPLE_AGX_BOOL restore, live = APPLE_AGX_FALSE;
+  APPLE_AGX_U32 i,count,slot = 0u;
   const APPLE_AGX_EXP208_RELOCATION *relocations;
   static const APPLE_AGX_U32 objects[]={1u,20u,21u,22u,13u};
 #define MANAGED_REFUSE(code) do { \
@@ -1147,7 +1224,25 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
       !manager_objects_valid(SourceObjects) || !ActiveObjects ||
       !SourceObjects[13].Data || SourceObjects[13].Size!=72u)
     MANAGED_REFUSE(MANAGER_KEY);
-  if (AppleAgxRenderManagerNeedsBind(Owner,Key) && !IncludeInitBm)
+  if (manager_slot_count(Owner) > 1u) {
+    /* rc124: the key's bound slot keeps its firmware-owned state; otherwise
+     * a free slot, else the least recently used one, is (re)bound. A queue
+     * (re)initialisation forgets every binding. */
+    APPLE_AGX_U32 s, n = manager_slot_count(Owner);
+    if (InitializeQueues)
+      for (s = 0u; s < APPLE_AGX_RENDER_MANAGER_SLOTS; ++s) Owner->SlotBound[s] = APPLE_AGX_FALSE;
+    slot = bound_manager_slot(Owner, Key);
+    if (slot != ~0u) {
+      live = !IncludeInitBm;
+    } else {
+      slot = 1u;
+      for (s = 1u; s < n; ++s) {
+        if (!Owner->SlotBound[s]) { slot = s; break; }
+        if (Owner->SlotUse[s] < Owner->SlotUse[slot]) slot = s;
+      }
+    }
+    if (!live && !IncludeInitBm) MANAGED_REFUSE(MANAGER_BIND);
+  } else if (AppleAgxRenderManagerNeedsBind(Owner,Key) && !IncludeInitBm)
     MANAGED_REFUSE(MANAGER_BIND);
   for (i=0u;i<3u;++i) {
     APPLE_AGX_U32 object=i==0u?41u:(i==1u?42u:43u);
@@ -1155,17 +1250,20 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
         Key->Backing[i].Va!=SourceObjects[object].GpuVa)
       MANAGED_REFUSE(MANAGER_BACKING);
   }
-  restore=Manager->Valid && manager_key_equal(&Manager->Key,Key,APPLE_AGX_FALSE);
+  restore=!live && Manager->Valid && manager_key_equal(&Manager->Key,Key,APPLE_AGX_FALSE);
   Owner->LastBuildRestored=restore;
   if (!build_active_job(Owner,TemplateArena,TemplateArenaBytes,SourceObjects,
       SourceObjectCount,ArenaGpuAddress,IncludeInitBm,RuntimeBindings,
-      StagedJob,ActiveObjects,ActiveJob,APPLE_AGX_TRUE,InitializeQueues))
+      StagedJob,ActiveObjects,ActiveJob,APPLE_AGX_TRUE,InitializeQueues,slot))
     return APPLE_AGX_FALSE;
   /* Restore manager-owned mutable state, never queue-owned bytes. Scene13 is
    * a new render pass even when the same buffer manager stays bound. */
   for (i=0u;i<sizeof(objects)/sizeof(objects[0]);++i) {
     APPLE_AGX_U32 n=objects[i];
     const unsigned char *source=SourceObjects[n].Data;
+    /* rc124: a live slot's manager objects are the firmware's; only the
+     * scene (13) is new */
+    if (live && n!=13u) continue;
     if (restore) {
       if(n==1u) source=Manager->Info;
       if(n==20u) source=Manager->BlockControl;
@@ -1179,14 +1277,14 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
     else
       copy_bytes(ActiveObjects[n].Data,source,ActiveObjects[n].Size);
   }
-  if (!restore) {
+  if (!restore && !live) {
     /* The pinned first-job template counter includes its first commit. */
     put_u32(ActiveObjects[21].Data,0u);
     put_u32(ActiveObjects[20].Data+4u,Key->Backing[2].Bytes/0x20000u);
   }
   /* rc83: the counter just written (the saved one, or 0 for a new
    * backing), not a read back of the firmware-shared copy. */
-  count=Owner->DirectReads ? get_shared_u32(ActiveObjects[21].Data,APPLE_AGX_TRUE) :
+  count=Owner->DirectReads || live ? get_shared_u32(ActiveObjects[21].Data,APPLE_AGX_TRUE) :
       restore ? get_u32(Manager->Counter) : 0u;
   put_u32(ActiveObjects[21].Data,count+1u);
   /* Only refreshed Info/Scene require new relocations. Other work fields were
@@ -1196,6 +1294,15 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
     if ((relocations[i].SourceObject==1u || relocations[i].SourceObject==13u) &&
         !AppleAgxApplyRelocations(ActiveObjects,SourceObjectCount,&relocations[i],1u))
       MANAGED_REFUSE(MANAGER_RELOCATE);
+  if (manager_slot_count(Owner) > 1u) {
+    if (!write_manager_slot(ActiveObjects,IncludeInitBm,slot))
+      MANAGED_REFUSE(MANAGER_RELOCATE);
+    Owner->SlotKey[slot]=*Key;
+    Owner->SlotBound[slot]=APPLE_AGX_TRUE;
+    Owner->SlotUse[slot]=++Owner->ManagerSlotClock;
+  }
+  Owner->ManagerSlot=slot;
+  Owner->ManagerSlotLive=live;
 #undef MANAGED_REFUSE
   Owner->ManagerKey=*Key;
   Owner->ManagerFence=Fence;
