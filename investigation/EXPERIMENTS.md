@@ -67501,3 +67501,17 @@ EXP2095 HARDWARE ACTUAL (2026-11-02): **C->R refusal identified: the render succ
 - Expected vs actual: expected a C->R pair or a named refusal; actual the named refusal (66) proving no pending successor, with the UMD queue wait as the upstream cause. Verdict: confirmed cause location; TA-on-compute admission itself remains untested on hardware.
 - Next: Codex q11 explains the render/compute asymmetry of the owner-fence queue wait and designs a Windows-correct ordering that lets a dependent submission reach the KMD while its predecessor runs (the KMD barrier provides GPU ordering), with the WDDM sync-object contract.
 - Recovery rec2095h.
+
+EXP2096 HARDWARE BEFORE 2026-11-02T22:33:56Z:
+Switches (as EXP2094): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1. Steps: only Q3RR, then only Q3RCR.
+- WHY THIS HYPOTHESIS:
+  1. EXP2094: 5 engine resets, each SchedulerFaulted at backend_platform_windows.c:6157 with poll guard DrainEvents, only in runs with TA-on-3D.
+  2. q10 host replay with the real poll/drain/provider/runtime reproduces exactly that guard and phases (poll 2, provider 1, backend 2) when both renders' terminal Flags are queued before one CPU poll; the fix accepts only an owned decoded Flag on an idle provider.
+- ATOMIC CONTRACT: drain fix (behaviour) + EventDrain export (diagnostic, so a remaining failure names its message); switches unchanged.
+- WHAT IS STILL UNKNOWN: whether the EXP2094 rejected message was that Flag (payload was not exported).
+- Expected PASS: no Wom1GpuReset, G4 failure none, Wom1EventDrainReceipt absent; Q3RR PASS bad=0 with ta_on_3d >= 1 and a retained probe R->R decision; Q3RCR PASS; desktop alive.
+- FAIL: any engine reset or DrainEvents failure (then Wom1EventDrainReceipt names the message), wrong output, deadline.
+- Recovery: rec2096h.
+- Hashes: sys 52876885f18f, UmdArm64 692bb4c5c0a1, UmdX64 be8f8f8cf4b4, Umd32 527f5f33e58e; manifest 1980cf9a3d1f, hardware-manifest bc10faee95b6; probe2096.sh d60ba7d01060 (PROBE_LINT_OK); visible recovery rec2096h aea726d99bc2117f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1.
+- Recovery rec2096h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2096-rr-drainfix/run2096.sh.
