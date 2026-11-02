@@ -67374,3 +67374,11 @@ Switches: EXP2089 set + Wom1Depth2General=1. Steps: only Q3RC, then only Q3RCR.
 - Hashes: sys d0cd2deaaade, UmdArm64 5ba69625874e, UmdX64 cd74af25a0ba, Umd32 95ffd5f05855; manifest 993073ead777, hardware-manifest 650eb37cdab3; probe2090.sh 269bb77a6f65 (PROBE_LINT_OK); visible recovery rec2090h b6c26f8be4c2d543; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1.
 - Recovery rec2090h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2090-depth2-g1/run2090.sh.
+
+EXP2090 HARDWARE ACTUAL (2026-11-02): **q6 step 1b PASS: Wom1Depth2General=1 (sub-switches absent) keeps R->C, keeps C->R serialized, and moves every SceneId refusal to a typed disabled-class refusal.**
+- Q3RC: PASS bad=0; pid 6828 pair 6371 -> 6372 R->C compute-on-3D, published-progress, reports 6371/6372 Status 0, exact order. Wom1JobWindow: kicks 1, max_in_flight 2, compute_on_3d 1, adopted 1, kick_failures 0, reset_aborts 0.
+- Q3RCR: PASS bad=0; pid 9800 pair 9296 -> 9297 R->C published-progress, exact order Status 0; no C->R pair. After Q3RCR: kicks 2, max_in_flight 2, compute_on_3d 2, ta_on_compute 0, ta_on_3d 0, compute_on_compute 0.
+- Wom1RcDecisions over the boot: admitted 2, 66 27275, 64 (admission refusal) 2448, 55 75, 4 69, 68 21; **58 SceneId mismatch 0** (EXP2089: 2567). Last retained 64: DWM pid 1228, render 9976 -> render 9977, running_kind 1, next_kind 1, barrier 2 (TA-on-3D): same-slot R->R pairs now pass the resident manager key check and are refused only by the disabled TA-on-3D class.
+- Guest alive after both steps, G4 none, pipeline rc 0.
+- Expected vs actual: all PASS criteria met. Additional evidence: ~2400 R->R pairs per boot (mostly DWM) are candidates for step 3 (Wom1Depth2TaOn3d). Verdict confirmed. Next: EXP2091 step 2, single variable Wom1Depth2TaOnCompute=1.
+- Recovery rec2090h.
