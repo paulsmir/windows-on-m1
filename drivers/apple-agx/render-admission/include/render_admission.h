@@ -754,6 +754,14 @@ typedef struct _ADMISSION_CONTEXT {
     ULONGLONG LogicalAllocation[4], LogicalAllocationOffset[4];
     ULONG TrackFound, OwnerOsProcessId;
     ADMISSION_G3_ALLOC_TRACK Track;
+    /* Version 4: Prepare rejection snapshot; v3 prefix stays byte-identical.
+     * PrepareMask/Site are the stable ABI in gpuva_g3_windows.c. */
+    ULONG PrepareMask, PrepareSite, PrepareFence, PrepareFenceOutstanding;
+    ULONG PrepareSecondFence, PreparePendingCount, PreparePendingCapacity;
+    ULONG PrepareTail, PrepareTailState, PreparePacketState;
+    ULONG PrepareSchedulerFaulted, PreparePreemptionPhase;
+    ULONG PrepareSchedulerQueueCount, PrepareSchedulerQueueCapacity;
+    ULONG PrepareSchedulerLastSubmittedFence, PrepareEntryState;
   } G4SubmitFailure;
   /* EXP1210 receipt-only (Wom1G4PreemptOverlap): DxgkDdiPreemptCommand calls
    * and those that arrived while a DxgkDdiSubmitCommandVirtual call was still
@@ -2021,6 +2029,8 @@ BOOLEAN AdmissionPlatformRuntimeReadyEx(
     _In_ ADMISSION_CONTEXT *Context, _Out_opt_ ULONG *FailedPredicate);
 BOOLEAN AdmissionPlatformRuntimeReady(
     _Inout_ ADMISSION_CONTEXT *Context);
+/* General depth two retains two packets per context, including kicked work. */
+BOOLEAN AdmissionPlatformRuntimeGeneralDepth2(_In_opt_ ADMISSION_CONTEXT *Context);
 /* EXP1014: bounded wait until the runtime is ready and the render slot is
  * empty; transient busy states are backpressure, not malformed input. */
 VOID AdmissionPlatformRuntimeSlotChanged(_In_opt_ ADMISSION_CONTEXT *Context);

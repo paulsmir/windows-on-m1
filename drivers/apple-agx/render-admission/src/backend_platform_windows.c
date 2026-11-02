@@ -7851,6 +7851,15 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
   return AdmissionPlatformRuntimeReadyEx(Context, NULL);
 }
 
+/* Q8: publish the node packet bound from the fully gated runtime mode,
+ * not from the requested registry switch. Fixed for this adapter start. */
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeGeneralDepth2(
+    ADMISSION_CONTEXT *Context) {
+  const ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL
+      ? (const ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
+  return runtime != NULL && runtime->Depth2General ? TRUE : FALSE;
+}
+
 _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeQueueable(
     ADMISSION_CONTEXT *Context, BOOLEAN *WorkerBusy) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL

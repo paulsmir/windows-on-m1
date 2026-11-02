@@ -30,6 +30,30 @@ def function_body(source, name):
     return source[source.rfind("\n", 0, match.start()) + 1:pos]
 
 
+def replay_functions(production):
+    branches = production.split("/* Branch IDs are a stable diagnostic ABI", 1)[1]
+    branches = "enum {" + branches.split("enum {", 1)[1].split("};", 1)[0] + "};"
+    functions = branches + "\n" + "\n".join(function_body(production, name) for name in (
+        "AdmissionG4SubmitReject", "AdmissionGpuvaG3PrivatePreempt",
+        "AdmissionG3PrivateSlotPreempted", "AdmissionG3PrivateSlotCancelled",
+        "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
+        "AdmissionG4GraphAccessTyped", "AdmissionG3PresentSurfaceBytes", "AdmissionG3PresentAccessible", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4ResubmissionRefusal","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
+        "AdmissionG4SnapshotFailure", "AdmissionG4OutputInLocal", "AdmissionG4ResolveOutput",
+        "AdmissionG4PreflightLocked", "AdmissionGpuvaG4PreflightEscape",
+        "AdmissionGpuvaG3PrivateCancel", "AdmissionG4PendingAdmissible",
+        "AdmissionG4CapturePrepareLocked", "AdmissionG4PendingQueue", "AdmissionG4PendingBindHead",
+        "AdmissionG4PendingDropLocked",
+        "AdmissionJobAheadFillLocked", "AdmissionG4PendingPrebindHead",
+        "AdmissionG4PendingAheadPromoteLocked", "AdmissionG4PendingAheadUnbind",
+        "AdmissionG4SubmitComputeLocked",
+        "AdmissionG4SubmitVirtualEnvelope",
+        "AdmissionG3OutputMatchesLocalFor", "AdmissionG3OutputAccessibleFor", "AdmissionGpuvaG3BeginJobAs", "AdmissionGpuvaG3BeginJob", "AdmissionGpuvaG3PendingManager", "AdmissionG4SubmitTouch",
+        "AdmissionDdiSubmitCommandVirtualInner",
+        "AdmissionDdiSubmitCommandVirtual"))
+    functions = function_body(production, "AdmissionG4SubmitRejectDetail") + "\n" + functions
+    return functions
+
+
 class G4SubmitVirtualReplay(unittest.TestCase):
     def test_64k_replacement_overwrites_old_cpu_shadow(self):
         # M2-a: 64K updates publish their 4K envelope over the old shadow
@@ -44,27 +68,7 @@ class G4SubmitVirtualReplay(unittest.TestCase):
         paging metadata without borrowing a collided/foreign process record;
         the submission must still fail before any GPU dispatch.
         """
-        production = SOURCE.read_text()
-        branches = production.split("/* Branch IDs are a stable diagnostic ABI", 1)[1]
-        branches = "enum {" + branches.split("enum {", 1)[1].split("};", 1)[0] + "};"
-        functions = branches + "\n" + "\n".join(function_body(production, name) for name in (
-            "AdmissionG4SubmitReject", "AdmissionGpuvaG3PrivatePreempt",
-            "AdmissionG3PrivateSlotPreempted", "AdmissionG3PrivateSlotCancelled",
-            "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
-            "AdmissionG4GraphAccessTyped", "AdmissionG3PresentSurfaceBytes", "AdmissionG3PresentAccessible", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4ResubmissionRefusal","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
-            "AdmissionG4SnapshotFailure", "AdmissionG4OutputInLocal", "AdmissionG4ResolveOutput",
-            "AdmissionG4PreflightLocked", "AdmissionGpuvaG4PreflightEscape",
-            "AdmissionGpuvaG3PrivateCancel", "AdmissionG4PendingAdmissible",
-            "AdmissionG4PendingQueue", "AdmissionG4PendingBindHead",
-            "AdmissionG4PendingDropLocked",
-            "AdmissionJobAheadFillLocked", "AdmissionG4PendingPrebindHead",
-            "AdmissionG4PendingAheadPromoteLocked", "AdmissionG4PendingAheadUnbind",
-            "AdmissionG4SubmitComputeLocked",
-            "AdmissionG4SubmitVirtualEnvelope",
-            "AdmissionG3OutputMatchesLocalFor", "AdmissionG3OutputAccessibleFor", "AdmissionGpuvaG3BeginJobAs", "AdmissionGpuvaG3BeginJob", "AdmissionGpuvaG3PendingManager", "AdmissionG4SubmitTouch",
-            "AdmissionDdiSubmitCommandVirtualInner",
-            "AdmissionDdiSubmitCommandVirtual"))
-        functions = function_body(production, "AdmissionG4SubmitRejectDetail") + "\n" + functions
+        functions = replay_functions(SOURCE.read_text())
         with tempfile.TemporaryDirectory(prefix="g4-submit-virtual-") as tmp:
             tmp = Path(tmp)
             (tmp / "g4_submit_virtual_functions.inc").write_text(functions)

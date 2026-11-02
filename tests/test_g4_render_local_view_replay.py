@@ -34,7 +34,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           'AdmissionG4SnapshotFailure','AdmissionG4OutputInLocal','AdmissionG4ResolveOutput',
           'AdmissionG4PreflightLocked','AdmissionGpuvaG4PreflightEscape',
           'AdmissionGpuvaG3PrivatePreempt','AdmissionGpuvaG3PrivateCancel','AdmissionG4PendingAdmissible',
-          'AdmissionG4PendingQueue','AdmissionG4PendingBindHead','AdmissionG4PendingDropLocked',
+          'AdmissionG4CapturePrepareLocked', 'AdmissionG4PendingQueue','AdmissionG4PendingBindHead','AdmissionG4PendingDropLocked',
           'AdmissionG4SubmitComputeLocked','AdmissionG4SubmitVirtualEnvelope',
           'AdmissionG3OutputMatchesLocalFor','AdmissionG3OutputAccessibleFor','AdmissionGpuvaG3BeginJobAs',
           'AdmissionGpuvaG3BeginJob','AdmissionGpuvaG3BeginSuccessorJob','AdmissionGpuvaG3AbortJob')
