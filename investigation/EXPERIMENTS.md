@@ -67019,3 +67019,11 @@ Arms: a FHD 100k rc123 on (first), b FHD 100k APPLE_AGX_RA_WEB=0 (control, secon
 - Hashes: sys 01492b24c0dd, UmdArm64 7ea821fb5429, UmdX64 d6eb0a4a71ae, Umd32 1389497880b4; manifest 25071cd7ddc4, hardware-manifest 8c57b11e02e9; probe2073.sh ebfe987bde10 (PROBE_LINT_OK); visible recovery rec2073h 4b5c41437539b944; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2073h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2073-ra-web/run2073.sh.
+
+EXP2073 HARDWARE ACTUAL (2026-11-02): **rc123 shrinks the full-screen PS 8285 -> 6678 on hardware (-19.4%, as predicted), but the score does not rise: a 4326 (on), b 4393 (off), c 4318 (on).**
+- Expected vs actual: PS 6600-7000 expected, 6678 actual (spills 111, 384 threads unchanged). Main 3D below 7.5 ms expected, actual 8.15 (b) -> 7.89 / 7.80 ms (a / c): only -0.3 ms for -19% instructions, so the main pass is not issue-bound. Score +3-6% expected, actual -1.6%: rejected.
+- Per job (median ms, b / a / c): C0 2.32/2.30/2.39, R1 8.15/7.89/7.80, C2 2.77/2.76/2.79, C4 (lighting) 8.59/8.80/8.87, C6 2.01/2.07/2.09; wall 36.26/36.22/37.49.
+- Cause of the C4 loss (offline, fixture --root-views=e,3 --soft-fault-loads): with the reservation in every ladder step, 806ee7b1 drops to 448 threads in all steps, every latency variant is rejected, and the kernel falls back to the pinned schedule. Fix f224b4dc: a rejected step is retried without the reservation; the lighting kernel then compiles to the same binary as with APPLE_AGX_RA_WEB=0.
+- Compute shaders on hardware (a vs EXP2071b): f22befa7 6062 -> 5260, 144a46de 3743 -> 2827, 62568917 2752 -> 2265.
+- Frame structure: one job at a time, launch gaps of about 4.3 ms per 36 ms frame (0.3-0.6 ms per job) plus a late DWM-ordered compute job (0.95). macOS (Asahi protocol) queues many jobs per firmware ring and resolves dependencies in firmware.
+- Recovery rec2073h PASS. Next: EXP2074 with f224b4dc (ABA), then the Asahi queueing model.
