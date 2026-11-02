@@ -67162,3 +67162,9 @@ Arms (all HD 100k -temporal 0, APPLE_AGX_D3D12_SPLIT_TAGS as EXP2078): a LOCAL_L
 - Hashes: sys 19e047d55244, UmdArm64 a9b0a6247ec0, UmdX64 a0fbb79b6a96, Umd32 c13a1acf552e; manifest 397bf76897d9, hardware-manifest a0fb694fc6a5; probe2080.sh 1913e24e9450 (PROBE_LINT_OK); visible recovery rec2080h 2f7b710b77b8dab8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2080h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2080-local-sched/run2080.sh.
+
+EXP2080 HARDWARE ACTUAL (2026-11-02): **K1 shared-load scheduling has no measurable effect: the traversal launch 2.06 / 2.02 / 1.98 ms (a off / b on / c off), scores 4759 / 4874 / 4871, frame wall 33.64 / 33.46 / 33.43 ms.**
+- The switch took effect (97ae4b02 87 halfregs with it, 79 without; 1310 instructions both).
+- Expected vs actual: traversal at least 5% below both controls expected; actual b between the controls: rejected. One render job (position 1) was shorter in b (2.93 vs 3.35/3.39 ms) without a change in frame time.
+- Verdict: keep APPLE_AGX_LOCAL_LOAD_SCHED off by default. Shared-load latency is not what bounds the traversal; the remaining candidates (atomics round trips, divergence, device-load latency) belong to the application's algorithm.
+- Merged meanwhile: Codex q1 (79191153 Wom1ManagerReceipt, 28172739 Wom1ManagerSaveOnEvict, both default off; DESIGN in .local/handoff/codex/q1-firmware-queue). Next: EXP2081, rc124 slots with the live-slot receipt.
