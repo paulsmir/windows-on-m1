@@ -67128,3 +67128,17 @@ EXP2078 HARDWARE ACTUAL (2026-11-02): **the heavy kernel is 97ae4b027aa43c6c (5 
 - 97ae4b02 (hardware 1310 instructions, 128-thread groups): a traversal loop with a shared-memory stack (202 local loads, 79 local stores) appending results through global atomics on one counter address; nir_opt_uniform_atomics is already applied (one atomic per SIMD group after get_sr_coverage), so no compiler defect is visible.
 - macOS Metal cache (274 kernels, applegpu): only 11 atomic instructions in total and no kernel with this traversal/atomic shape; the Metal path of GravityMark appears to implement this stage differently. Both APIs report "Fetch Mode" and "Rasterization Mode"; Windows reports Video Memory 312 MB, macOS 5.33 GB.
 - Next: the driver-owned lever, per-job launch gaps (4-5 ms per frame): rc124 manager slots on hardware first (firmware unknown U1).
+
+EXP2079 HARDWARE BEFORE 2026-11-02T16:08:54Z:
+Arms: a FHD 100k -temporal 0, b HD 100k -temporal 0. Controls: EXP2075a 4487 (FHD T0), EXP2078b 5656 / EXP2075b 5696 (HD T0), same code with the switch off.
+- WHY THIS HYPOTHESIS:
+  1. EXP2075-2078: per-job launch gaps cost 4-5 ms of a 28-35 ms frame and are the largest driver-owned item; Asahi queues jobs in firmware rings (investigation/analysis/ASAHI-QUEUE-MODEL-2026-11-02.md).
+  2. The single adapter-wide set of buffer-manager objects forces a restore before and a save after every render job and blocked the depth-2 window (EXP2051 manager_bind). Asahi gives each buffer its own firmware slot (buffer.rs NUM_BUFFERS 127).
+- ATOMIC CONTRACT: one switch; the slot number fields (WorkCommandInitBM 0x08, WorkCommandTA 0x1c, StartTA 0x40, Start3D 0x58) and the slot copies of objects 1/20/21/22 are one indivisible firmware contract (m1n1 V13_5 structures): a slot number without its own objects, or the reverse, is inconsistent.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: buffer slots 1-3 with their own Info/BlockControl/Counter/Stats; InitBM only on (re)bind. TRANSLATION: a manager key (process + backing) binds a slot. WHAT IS STILL UNKNOWN: whether this firmware accepts slots other than 0 and live reuse without restore (U1).
+- Expected: no TDR or fault; images correct; scores equal to the controls or slightly higher (no restore/save copies); fewer InitBM jobs in Wom1JobTiming971.
+- Failure criteria: TDR, GPU fault, corrupted asteroids/TVB (partials, missing geometry), WER.
+- Recovery: rec2079h.
+- Hashes: sys f8388666a96f, UmdArm64 dd5c5c9db010, UmdX64 38a646534b8f, Umd32 19db3934e4e4; manifest 1b10c8bb5bae, hardware-manifest b2364d779db8; probe2079.sh 17cf450d4a97 (PROBE_LINT_OK); visible recovery rec2079h 70171af1e60783a4; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1.
+- Recovery rec2079h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2079-mgr-slots/run2079.sh.
