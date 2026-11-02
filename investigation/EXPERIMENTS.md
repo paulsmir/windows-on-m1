@@ -67515,3 +67515,12 @@ Switches (as EXP2094): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhe
 - Hashes: sys 52876885f18f, UmdArm64 692bb4c5c0a1, UmdX64 be8f8f8cf4b4, Umd32 527f5f33e58e; manifest 1980cf9a3d1f, hardware-manifest bc10faee95b6; probe2096.sh d60ba7d01060 (PROBE_LINT_OK); visible recovery rec2096h aea726d99bc2117f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1.
 - Recovery rec2096h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2096-rr-drainfix/run2096.sh.
+
+EXP2096 HARDWARE ACTUAL (2026-11-02): **q6 step 3 PASS: with the q10 paired-retirement drain fix, render->render depth two (TA-on-3D) runs with zero engine resets, zero G4 failures and zero event-drain failures.**
+- Q3RR: PASS bad=0 (pid 8428); retained probe decision reason 0 allowed, render->render (running_kind 1, next_kind 1, barrier 2 TA-on-3D), count 2 (4573 -> 4574 .. 4576 -> 4577). After Q3RR: kicks 1198, max_in_flight 2, ta_on_3d 1198, adopted 1198, kick_failures 0, reset_aborts 0.
+- Q3RCR: PASS bad=0 (pid 9748); retained reason 0 R->C 7143 -> 7144 (compute-on-3D). After Q3RCR: kicks 1690 (ta_on_3d 1689, compute_on_3d 1), kick_failures 0, reset_aborts 0.
+- Wom1GpuReset, Wom1EventDrainReceipt and Wom1G4SubmitFailure all absent (EXP2094: 5 resets, 3 G4 failures). Guest alive, pipeline rc 0.
+- Limitation: no typed RcProgress published-progress sample was retained for the probe PIDs (the progress ring is displaced by ~1700 DWM pairs), so the firmware overlap of the probe pair is shown by admission+kick, exact outputs and absent faults, not by a bracketed stamp sample.
+- Expected vs actual: all preregistered PASS criteria met. Verdict confirmed; the EXP2094 resets are attributed to the q10 defect (fix removes them under the same switches). Accepted classes: compute-on-3D, TA-on-3D. TA-on-compute is blocked upstream (EXP2095, Codex q11).
+- Next: q6 step 5 (two-in-flight fault/TDR/preemption recovery drills) before the first GravityMark gate; Codex q12 prepares the bounded drill plan from existing tools.
+- Recovery rec2096h.
