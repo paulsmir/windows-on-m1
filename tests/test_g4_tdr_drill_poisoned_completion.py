@@ -536,5 +536,10 @@ int main(void) {
 }
 '''
 
+# Q12: the legacy provider shim still executes the production no-op release
+# for an unarmed runtime; do not substitute a fabricated reset verdict.
+SHIM += '\n' + extract((SHARED / 'src/apple_agx_g13_queue_runtime.c').read_text(),
+                        'AppleAgxG13QueueRuntimeDrillRelease')
+
 if __name__ == '__main__':
     unittest.main()
