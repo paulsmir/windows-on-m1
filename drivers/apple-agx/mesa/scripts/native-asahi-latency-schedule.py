@@ -371,7 +371,9 @@ CONTEXT = '''   /* Promoted constants. These will be appended to the binary at t
 } agx_context;
 
 #define AGX_WIN32_LATENCY_DISTANCE 0xffu
-#define AGX_WIN32_LATENCY_TIGHT    0x100u'''
+#define AGX_WIN32_LATENCY_TIGHT    0x100u
+/* RC122: allocate narrow values packed (agx_register_allocate.c) */
+#define AGX_WIN32_RA_PACK          0x200u'''
 
 
 def project_compiler_h(text):
@@ -429,6 +431,20 @@ agx_win32_latency_first_target(void)
    return (unsigned)target;
 }
 
+/* RC122 (native-asahi-latency-schedule.py): APPLE_AGX_RA_PACK=0 never tries
+ * the packed allocation; otherwise each function also compiles with it and
+ * keeps it only when agx_win32_pack_keeps accepts it. */
+static bool
+agx_win32_ra_pack_enabled(void)
+{
+   static int enabled = -1;
+   if (enabled < 0) {
+      const char *env = getenv("APPLE_AGX_RA_PACK");
+      enabled = !(env && env[0] == '0' && !env[1]);
+   }
+   return enabled != 0;
+}
+
 static bool
 agx_win32_latency_keeps(const struct agx_shader_info *variant, const struct agx_shader_info *pinned)
 {
@@ -444,6 +460,18 @@ agx_win32_latency_keeps(const struct agx_shader_info *variant, const struct agx_
  * reordered no block is the pinned compile itself). The
  * function's output is its binary bytes and *out, so restoring both restores
  * the pinned compile. */
+/* RC122: whether the packed allocation of the same variant is kept: fewer
+ * instructions, and no occupancy, spill, fill or scratch cost. */
+static bool
+agx_win32_pack_keeps(const struct agx_shader_info *packed, const struct agx_shader_info *chosen)
+{
+   const struct agx2_stats *v = &packed->stats, *c = &chosen->stats;
+   return v->threads >= c->threads && v->spills <= c->spills && v->fills <= c->fills &&
+          v->scratch <= c->scratch && packed->scratch_size <= chosen->scratch_size &&
+          packed->preamble_scratch_size <= chosen->preamble_scratch_size &&
+          v->instrs < c->instrs;
+}
+
 static unsigned
 agx_win32_compile_function(nir_shader *nir, nir_function_impl *impl, struct agx_shader_key *key,
                            struct util_dynarray *binary, struct agx_shader_info *out)
@@ -454,9 +482,9 @@ agx_win32_compile_function(nir_shader *nir, nir_function_impl *impl, struct agx_
 
    const struct agx_shader_info before = *out;
    const unsigned start = binary->size;
-   const unsigned offset = agx_compile_function_nir(nir, impl, key, binary, out, 0, NULL);
+   unsigned offset = agx_compile_function_nir(nir, impl, key, binary, out, 0, NULL);
    const struct agx_shader_info pinned = *out;
-   const unsigned bytes = binary->size - start;
+   unsigned bytes = binary->size - start;
    void *code = malloc(bytes ? bytes : 1);
    if (!code)
       return offset;
@@ -466,20 +494,46 @@ agx_win32_compile_function(nir_shader *nir, nir_function_impl *impl, struct agx_
     * shorter distances within the pinned demand itself */
    const unsigned ladder[] = {first, MAX2(first / 2, 1u) | AGX_WIN32_LATENCY_TIGHT,
                               MAX2(first / 4, 1u) | AGX_WIN32_LATENCY_TIGHT};
+   unsigned chosen_target = 0;
+   struct agx_shader_info chosen = pinned;
    for (unsigned i = 0; i < ARRAY_SIZE(ladder); ++i) {
       binary->size = start;
       *out = before;
       unsigned blocks = 0;
       const unsigned variant = agx_compile_function_nir(nir, impl, key, binary, out, ladder[i], &blocks);
-      if (!blocks || agx_win32_latency_keeps(out, &pinned)) {
+      if (!blocks)
+         break; /* the pinned compile itself */
+      if (agx_win32_latency_keeps(out, &pinned)) {
+         /* keep this variant as the one to beat */
+         chosen_target = ladder[i];
+         chosen = *out;
+         offset = variant;
+         bytes = binary->size - start;
+         void *kept = realloc(code, bytes ? bytes : 1);
+         if (!kept)
+            break;
+         code = kept;
+         memcpy(code, (uint8_t *)binary->data + start, bytes);
+         break;
+      }
+   }
+
+   /* RC122: the same variant with packed narrow allocations */
+   if (agx_win32_ra_pack_enabled()) {
+      binary->size = start;
+      *out = before;
+      unsigned blocks = 0;
+      const unsigned packed = agx_compile_function_nir(nir, impl, key, binary, out,
+                                                       chosen_target | AGX_WIN32_RA_PACK, &blocks);
+      if (agx_win32_pack_keeps(out, &chosen)) {
          free(code);
-         return variant;
+         return packed;
       }
    }
 
    binary->size = start;
    memcpy(util_dynarray_grow_bytes(binary, 1, bytes), code, bytes);
-   *out = pinned;
+   *out = chosen;
    free(code);
    return offset;
 }
@@ -500,10 +554,60 @@ def project_compile(text):
     return text
 
 
+# rc122 (EXP2067/2069): in GravityMark's full-screen PS (255 halfregs) the
+# allocator spends 1914 xor (swap triples) and ~575 mov on live-range splits.
+# Most runs sit right before a vector destination (device_load xyzw,
+# texture_sample, iterproj): find_regs_simple is first-fit from register 0, so
+# 2-halfreg scalars land in fully free aligned blocks, and a 4- or 8-halfreg
+# vector then finds no aligned hole and evicts (assign_regs_by_copying).
+# Apple's largest fragment shader: 220 mov/mov_imm, no swaps. For a
+# destination narrower than 8 halfregs, first take a free aligned slot inside
+# an 8-halfreg block that is already partly used, keeping whole blocks for
+# vectors; otherwise first fit as before. Each function is compiled with and
+# without packing (agx_win32_compile_function) and the packed binary is kept
+# only with fewer instructions at no occupancy, spill or scratch cost.
+# APPLE_AGX_RA_PACK=0 never tries it; APPLE_AGX_LATENCY_SCHED=0 is the pinned
+# compiler.
+RA_ANCHOR = '''static bool
+find_regs_simple(struct ra_ctx *rctx, enum ra_class cls, unsigned count,
+                 unsigned align, unsigned *out)
+{
+   for (unsigned reg = 0; reg + count <= rctx->bound[cls]; reg += align) {'''
+RA = '''#include <stdlib.h>
+
+static bool
+find_regs_simple(struct ra_ctx *rctx, enum ra_class cls, unsigned count,
+                 unsigned align, unsigned *out)
+{
+   /* RC122 (native-asahi-latency-schedule.py): pack narrow values into
+    * partly used 8-halfreg blocks so aligned vector holes survive. */
+   if ((rctx->shader->windows_latency_target & AGX_WIN32_RA_PACK) && cls == RA_GPR && count < 8) {
+      const unsigned size = 8;
+      for (unsigned block = 0; block + size <= rctx->bound[cls]; block += size) {
+         if (!BITSET_TEST_COUNT(rctx->used_regs[cls], block, size))
+            continue; /* a whole free block: keep it for a vector */
+         for (unsigned reg = block; reg + count <= block + size; reg += align) {
+            if (!BITSET_TEST_COUNT(rctx->used_regs[cls], reg, count)) {
+               *out = reg;
+               return true;
+            }
+         }
+      }
+   }
+   for (unsigned reg = 0; reg + count <= rctx->bound[cls]; reg += align) {'''
+
+
+def project_ra(text):
+    if 'RC122' in text:
+        raise RuntimeError('agx_register_allocate.c already projected')
+    return once(text, RA_ANCHOR, RA)
+
+
 FILES = {
     'src/asahi/compiler/agx_compiler.h': project_compiler_h,
     'src/asahi/compiler/agx_pressure_schedule.c': project_schedule,
     'src/asahi/compiler/agx_compile.c': project_compile,
+    'src/asahi/compiler/agx_register_allocate.c': project_ra,
 }
 
 

@@ -286,7 +286,7 @@ def prepare_latency_schedule(units, include):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     names = {p.name: p for p in units}
-    for name in ('agx_pressure_schedule.c', 'agx_compile.c'):
+    for name in ('agx_pressure_schedule.c', 'agx_compile.c', 'agx_register_allocate.c'):
         if names.get(name) != include / name:
             raise RuntimeError('RC96 latency schedule: ' + name + ' is not compiled beside the projected header')
     hashes = module.project_directory(include)
