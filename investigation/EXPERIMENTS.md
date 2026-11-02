@@ -67610,3 +67610,11 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobD
 - Hashes: sys b0354d1e2e98, UmdArm64 bd56f392d7da, UmdX64 1cfb7f7d1574, Umd32 058e1cdbf8a4; manifest a12c4ff95a28, hardware-manifest ef70598c50c6; probe2100.sh c48300bcbc9f (PROBE_LINT_OK); visible recovery rec2100h 9b2065c5cff89267; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2100h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2100-gm-depth2/run2100.sh.
+
+EXP2100 HARDWARE ACTUAL (2026-11-03): **GravityMark depth-two gate FAIL: about 30 s into GravityMark D3D12 FHD 100k temporal 0 with the accepted mask (compute-on-3D, TA-on-3D, TA-on-compute) the guest bugchecked 0x116 VIDEO_TDR_FAILURE; our ResetFromTimeout failed.**
+- Pipeline: GUEST_DOWN_DURING_GRAVITYMARK at poll 6; console: HV NVMe guest reset then PSCI RESET (dump write + reboot); no receipts or screenshots captured before the crash.
+- System event 1001: bugcheck 0x00000116 (0xffffc20e81146010, 0xfffff800ae611ec0, 0xffffffffc0000483, 0x3); MEMORY.DMP (895968173 bytes, sha256 prefix 2181b525e3ca49fb59ee) and minidump 110326-14296-01.dmp (prefix 79347ddb9b54ff6cac16) copied to evidence/dump/.
+- cdb round 0 (mismatched-PDB tolerant): SYMBOL_NAME AppleAgxRenderAdmission!AdmissionDdiResetFromTimeoutStatus+0, FAILURE_BUCKET 0x116_IMAGE_AppleAgxRenderAdmission.sys, Arg3 0xc0000483 STATUS_DEVICE_HARDWARE_ERROR: a GPU timeout occurred and DxgkDdiResetFromTimeout reported failure.
+- Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2100h -> Verdict PASS, package absent, RECOVERY_DONE.
+- Expected vs actual: expected GravityMark completion with no reset and a score above EXP2075; actual GPU hang + failed timeout recovery. The synthetic drills (EXP2098/2099) only exercised the KMD-side stall; a real GPU hang under depth two (and the ResetFromTimeout path) is not covered. Verdict FAIL; depth two stays off for applications. EXP2101 (control) not run.
+- Next: Codex q13 analyses the dump (why the GPU hung under the mask, which pair/class, why ResetFromTimeout returned 0xc0000483), max two cdb rounds.
