@@ -67359,3 +67359,18 @@ EXP2089 HARDWARE ACTUAL (2026-11-02): **q6 step 1a PASS: merged q5+q6 code with 
 - Guest alive after both steps, G4 submit failure none, pipeline rc 0.
 - Expected vs actual: every PASS criterion met; Start-word expectation ("maybe fresh") not met, now attributed to firmware. Verdict confirmed. Next: EXP2090 step 1b, single variable Wom1Depth2General=1.
 - Recovery rec2089h.
+
+EXP2090 HARDWARE BEFORE 2026-11-02T21:20:10Z:
+Switches: EXP2089 set + Wom1Depth2General=1. Steps: only Q3RC, then only Q3RCR.
+- WHY THIS HYPOTHESIS:
+  1. EXP2088 proved the compute-on-3D R->C instance under the restricted RcDepth2 path; q6 general mode includes compute-on-3D by default and replaces SceneId equality (refusal 58, ~2000 per boot) with the resident manager key.
+  2. Single variable vs EXP2089: the General switch; all new barrier classes stay off, so only the admission owner changes, not the barrier set.
+- ATOMIC CONTRACT: Wom1Depth2General itself enables SaveOnEvict semantics, LIVE_MANAGER, typed receipts and AbortFaultSuffix (q6 DESIGN "Final admission and lifetime"): they are one owner and are not separately switchable.
+- WHAT IS STILL UNKNOWN: whether the general admission owner reproduces the R->C proof on hardware and keeps C->R serialized with its class off; whether DWM traffic stays clean with same-slot scene admission.
+- Expected PASS: Q3RC PASS bad=0 with typed v2 published-progress R->C (class compute-on-3D); Q3RCR PASS bad=0, R->C admitted at most, C->R refused with a typed disabled-class decision; ordered exact fences; no reset; desktop alive.
+- INCONCLUSIVE: outputs PASS without an admitted pair.
+- FAIL: wrong output, deadline, lost/duplicate/misordered fence, reset, 0x116, DWM fault.
+- Recovery: rec2090h.
+- Hashes: sys d0cd2deaaade, UmdArm64 5ba69625874e, UmdX64 cd74af25a0ba, Umd32 95ffd5f05855; manifest 993073ead777, hardware-manifest 650eb37cdab3; probe2090.sh 269bb77a6f65 (PROBE_LINT_OK); visible recovery rec2090h b6c26f8be4c2d543; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1.
+- Recovery rec2090h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2090-depth2-g1/run2090.sh.
