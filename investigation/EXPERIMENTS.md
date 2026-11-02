@@ -67306,3 +67306,8 @@ Switches (as EXP2085): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhe
 - Hashes: sys f40daa541c36, UmdArm64 f28427de3e04, UmdX64 61c5f242326f, Umd32 7fecd900c0f0; manifest e68b8df89128, hardware-manifest 03b4852323f4; probe2087.sh 99a22fd0f73f (PROBE_LINT_OK); visible recovery rec2087h f5763f29439ea4e9; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
 - Recovery rec2087h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2087-q3rc-overlap2/run2087.sh.
+
+EXP2087 HARDWARE ACTUAL (2026-11-02): **probe-side FAIL before the pair again, one step further: the calibration found this process's render record (c206e11a works) but rejected its span: start=1155188448 end=2153782404 (about 41 s at 24 MHz) with previous_end=2152300738; guest alive, no reset.**
+- Cause: the KMD captures render Start/End from QueueObjects[28]/[29] (backend_platform_windows.c:775), parity-slotted objects that can already point at the next build's copy under Wom1JobBuildAhead, so Start can come from another job. This is a real KMD timestamp defect (render start of the completion API) to fix separately; the probe now bounds Start by the previous retired End at depth one (e10080ba).
+- Expected vs actual: PASS/INCONCLUSIVE expected; probe calibration failure (queue not exercised).
+- Recovery rec2087h. Next: EXP2088 with the bounded calibration.
