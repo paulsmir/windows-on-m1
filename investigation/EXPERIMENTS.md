@@ -67224,3 +67224,8 @@ Run: `agx_d3d12_probe_e2083_arm64.exe only Q3RC` (fresh device, render then comp
 - Hashes: sys 2b854ce2b863, UmdArm64 d172df8253a8, UmdX64 c2d2af2c6de9, Umd32 bec936fa122d; manifest baabd3ec2848, hardware-manifest d71e7dc576ab; probe2083.sh d6fd55094b72 (PROBE_LINT_OK); visible recovery rec2083h 0756e61bc5b38ddb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1.
 - Recovery rec2083h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2083-q3rc-nf0/run2083.sh.
+
+EXP2083 HARDWARE ACTUAL (2026-11-02): **Q3RC passes at depth one with Wom1NotifierFlight=0: `AGX_D3D12_Q3RC: PASS bad=0 overlap=UNVERIFIED`, fences 101/102 in order, clean exit, guest alive; no depth-two kick (no Wom1JobWindow), Wom1RcProgress empty as the design expects at depth one.**
+- Package built from c009e010 after two build failures (C4242, then builder disk full: 444 old builder EXP/X86B directories removed, 38 GB freed, 49 GB free).
+- Expected vs actual: PASS, clean exit, no timeout/removal/reset, no kick: all confirmed.
+- Next: EXP2084, the same with Wom1NotifierFlight=1 (only change).
