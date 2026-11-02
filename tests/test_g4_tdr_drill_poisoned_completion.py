@@ -37,6 +37,7 @@ import re
 import subprocess
 import tempfile
 import unittest
+from test_notifier_flight import retire_source
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED = ROOT / 'drivers/apple-agx/shared'
@@ -109,7 +110,7 @@ class TdrDrillPoisonedCompletion(unittest.TestCase):
                         quiesce.index('AdmissionPlatformRuntimeQuiesceActive('))
 
 
-SHIM = r'''
+SHIM = retire_source() + r'''
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -251,6 +252,7 @@ typedef struct {
   KEVENT WorkIdle;
   ADMISSION_GPU_POST_RESUME_RECEIPT PostResume;
   int Rtkit, AscIo;
+  struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
 } ADMISSION_PLATFORM_RUNTIME;
 
 static unsigned notifications, lock_depth, end_calls, published;
@@ -421,6 +423,9 @@ static void setup(void) {
   r.Backend.Io.Complete = AdmissionBackendComplete;
   r.Backend.Io.Memory.FlushForCpu = flush_cpu;
   r.Backend.ArenaCpuAddress = arena; r.Backend.ArenaBytes = sizeof(arena);
+  r.Initdata.RenderSharedMemory.NotifierFlight=1;
+  r.Initdata.RenderSharedMemory.Flights[0].Fence=DRILL_FENCE;
+  r.Initdata.RenderSharedMemory.Flights[0].Visible=1;
   r.Backend.PendingSubmission.Submission.Fence = DRILL_FENCE;
   r.Backend.PendingJob.Kind = AppleAgxBackendJobRender;
   r.Backend.PendingJob.TaEvent = TA_EVENT; r.Backend.PendingJob.D3Event = D3_EVENT;
@@ -505,6 +510,7 @@ int main(void) {
    * poisoned context. */
   assert(notifications == 1u && observed.InterruptType == DXGK_INTERRUPT_DMA_COMPLETED &&
          observed.DmaCompleted.SubmissionFenceId == DRILL_FENCE);
+  assert(!r.Initdata.RenderSharedMemory.Flights[0].Fence);
   assert(end_calls == 1u && !published && s.LastCompletedFence == DRILL_FENCE && !s.ActiveProcess);
   memcpy(&written, local_bytes + 8, 8);
   assert(written == 0u);

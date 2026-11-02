@@ -168,7 +168,22 @@ extern APPLE_AGX_RENDER_SHARED_READ_PROBE_COUNTS AppleAgxRenderSharedReadProbe;
 /* rc124: firmware buffer-manager slots the owner can keep bound. */
 #define APPLE_AGX_RENDER_MANAGER_SLOTS 4u
 
+#define APPLE_AGX_NOTIFIER_FLIGHT_COUNT 2u
+typedef struct _APPLE_AGX_NOTIFIER_FLIGHT {
+  APPLE_AGX_U32 Fence, EventCount, PreviousThreshold;
+  APPLE_AGX_U32 RenderCount, ComputeCount, ComputeStamp, WordSet, WordStamp;
+  APPLE_AGX_U32 RenderSlot, SidecarSet;
+  APPLE_AGX_BOOL HasRender, HasSidecar, Published, Visible, EpochReset;
+} APPLE_AGX_NOTIFIER_FLIGHT;
+
 typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
+  /* q2: serialized build/commit, two exact-fence lifetime records. Render
+   * parity and sidecar selection are separately retained in each record. */
+  APPLE_AGX_BOOL NotifierFlight;
+  APPLE_AGX_U32 BuildingFlight; /* index + 1, zero when no build */
+  APPLE_AGX_NOTIFIER_FLIGHT Flights[APPLE_AGX_NOTIFIER_FLIGHT_COUNT];
+  APPLE_AGX_BOOL (*NotifierFlush)(void *Context, const void *Address, APPLE_AGX_U32 Bytes);
+  void *NotifierFlushContext;
   const APPLE_AGX_MEMORY_IO *MemoryIo;
   APPLE_AGX_MEMORY_OBJECT
       Objects[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
@@ -238,6 +253,16 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
       const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects);
   void *ManagerEvictContext;
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
+
+/* Cancel is valid only before a queue pointer was published. Retire requires
+ * joined terminal completion or a synchronous proof that firmware stopped. */
+APPLE_AGX_BOOL AppleAgxRenderFlightBegin(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *, APPLE_AGX_U32 Fence);
+APPLE_AGX_BOOL AppleAgxRenderFlightPublish(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *, APPLE_AGX_U32 Fence);
+APPLE_AGX_BOOL AppleAgxRenderFlightCancel(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *, APPLE_AGX_U32 Fence);
+void AppleAgxRenderFlightVisible(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *, APPLE_AGX_U32 Fence);
+/* Only after a synchronous firmware/ASC stop, including failed submissions. */
+void AppleAgxRenderFlightStopped(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *);
+void AppleAgxRenderFlightRetire(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *, APPLE_AGX_U32 Fence);
 
 #define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_FENCE    1u  /* Owner->ManagerFence */
 #define APPLE_AGX_RENDER_BUILD_REFUSAL_MANAGER_PENDING  2u  /* Manager->PendingFence */

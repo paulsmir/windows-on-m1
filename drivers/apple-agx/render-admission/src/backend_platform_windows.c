@@ -2494,13 +2494,12 @@ static unsigned char AdmissionFirmwareStopAsc(
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   if (runtime == NULL)
     return 0u;
-  if (runtime->Rtkit.Running == APPLE_AGX_RTKIT_FALSE)
-    return 1u;
-  return AppleAgxRtkitSessionStop(
-             &runtime->Rtkit, &runtime->AscIo, DeadlineMs) ==
-                 AppleAgxRtkitSessionResultOk
-             ? 1u
-             : 0u;
+  if (runtime->Rtkit.Running != APPLE_AGX_RTKIT_FALSE &&
+      AppleAgxRtkitSessionStop(&runtime->Rtkit, &runtime->AscIo, DeadlineMs) !=
+          AppleAgxRtkitSessionResultOk)
+    return 0u;
+  AppleAgxRenderFlightStopped(&runtime->Initdata.RenderSharedMemory);
+  return 1u;
 }
 
 static unsigned char AdmissionFirmwareEndpoint(
@@ -2974,6 +2973,7 @@ static APPLE_AGX_BOOL AdmissionCancelUnpublishedManager(
     ADMISSION_PLATFORM_RUNTIME *runtime, APPLE_AGX_U32 Fence) {
   APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner=&runtime->Initdata.RenderSharedMemory;
   APPLE_AGX_G13_QUEUE_PROVIDER *provider=&runtime->Provider.QueueProvider;
+  (void)AppleAgxRenderFlightCancel(owner,Fence);
   if (!owner->ManagerSaveOnEvict || owner->ManagerFence!=Fence)
     return APPLE_AGX_TRUE;
   if (runtime->Backend.Phase!=AppleAgxBackendRuntimeReady ||
@@ -3530,6 +3530,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
        ++index) {
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
         &runtime->QueueObjects[index];
+    /* q2: object 12 is a per-flight CPU staging word. The shared DMA word
+     * is flushed only by PreparePublish at the queue commit boundary. */
+    if (runtime->Initdata.RenderSharedMemory.NotifierFlight &&
+        index == APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD)
+      continue;
     if (object->Data == NULL || object->Size == 0u ||
         !runtime->TransportIo.FlushForDevice(
             runtime, object->Data, object->Size))
@@ -4323,6 +4328,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
           &runtime->Completion, Fence, Node, Engine))
     return APPLE_AGX_BACKEND_FALSE;
   /* rc90: the completion the worker may chain from (Windows has it). */
+  AppleAgxRenderFlightRetire(&runtime->Initdata.RenderSharedMemory,Fence);
   runtime->AheadFinishedFence = Fence;
   /* rc102: one report; a batched successor turns it into a pair. A
    * kicked successor that ended leaves the window. */
@@ -4603,6 +4609,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(
   }
 #endif
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (retired) AppleAgxRenderFlightRetire(&runtime->Initdata.RenderSharedMemory,Fence);
   return retired ? APPLE_AGX_BACKEND_TRUE : APPLE_AGX_BACKEND_FALSE;
 }
 
@@ -5365,6 +5372,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBackendAfter);
   if (result != AppleAgxBackendRuntimeResultOk) {
     ULONG flags = 0u;
+    (void)AppleAgxRenderFlightCancel(&runtime->Initdata.RenderSharedMemory,next);
     AdmissionBackendSubmitResultWindows(adapter, (ULONG)result,
                                         (ULONG)runtime->Backend.Phase);
     /* EXP2045: the successor's nested graph lease and started scene must
@@ -6930,6 +6938,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionExternalBuildJob;
   runtime->ProviderConfig.ExternalRender.ResolvePreparedRange =
       AdmissionExternalResolveRange;
+  runtime->Initdata.RenderSharedMemory.NotifierFlight =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1NotifierFlight");
   if (!AppleAgxPlatformProviderInitialize(
           &runtime->Provider, &runtime->ProviderConfig,
           &runtime->PlatformIo)) {

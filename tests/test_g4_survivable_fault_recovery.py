@@ -14,6 +14,7 @@ import re
 import subprocess
 import tempfile
 import unittest
+from test_notifier_flight import retire_source
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED = ROOT / 'drivers/apple-agx/shared'
@@ -41,7 +42,7 @@ class SurvivableFaultRecovery(unittest.TestCase):
             subprocess.run([str(binary)], check=True)
 
 
-SHIM = r'''
+SHIM = retire_source() + r'''
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
@@ -121,6 +122,7 @@ typedef struct {
   /* rc102 depth-2 window (none kicked in this replay) */
   unsigned Depth2KickedFence, Depth2BatchedFence, Depth2LastReported;
   ADMISSION_JOB_WINDOW_RECEIPT Depth2Receipt;
+  struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
 } ADMISSION_PLATFORM_RUNTIME;
 static unsigned notifications, dpcs, released, lock_depth, sync_fail;
 static unsigned timestamp_source_ok=1, timestamp_publish_ok=1;
