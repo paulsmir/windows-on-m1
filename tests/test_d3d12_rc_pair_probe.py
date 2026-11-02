@@ -85,7 +85,7 @@ int main(void) {
     def test_named_only_watchdog_and_separate_readback(self):
         text=PROBE.read_text()
         self.assertIn('{"Q3RC", q3_rc_pair}', text)
-        body=function('q3_rc_pair')
+        body=function('q3_sequence')
         self.assertIn('q3_submit_pair(', body)
         self.assertLess(body.index('q3_submit_pair('),body.index('CopyTextureRegion('))
         self.assertIn('q3_bad_outputs(', body)
@@ -124,10 +124,10 @@ int main(void){
  assert(q3_next_instances(1024,0.0)==1024);
 }
 ''')
-        body=function('q3_rc_pair')
+        body=function('q3_sequence')
         self.assertIn('q3_calibrate_render(',body)
         self.assertLess(body.index('q3_calibrate_render('),body.index('/* Initialize measured resources'))
-        self.assertIn('q3_record_render(lists[0], roots[0], rtv, vertices, instances)',body)
+        self.assertIn('q3_record_sequence(lists, roots, rtv, rtv2, vertices, vertices2, uav, instances, mode)',body)
         calibrate=function('q3_calibrate_render')
         self.assertIn('q3_render_duration(',calibrate)
         self.assertNotIn('EndQuery(',calibrate)
@@ -265,7 +265,7 @@ int main(void){unsigned instances=0;int o=0;
         The existing WARP API/output control cannot provide Apple's private
         completion escape. Keep it usable, explicitly without GPU timing proof.
         """
-        body=function('q3_rc_pair')
+        body=function('q3_sequence')
         self.assertIn('if (SUCCEEDED(hr) && g_warp)',body)
         self.assertIn('r_only_gpu_ms=unavailable source=warp-control',body)
         self.assertIn('else if (SUCCEEDED(hr)) hr = q3_calibrate_render',body)

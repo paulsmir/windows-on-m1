@@ -7304,10 +7304,10 @@ static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step ste
     ID3D12CommandQueue *queue = NULL;
     ID3D12Fence *fence = NULL;
     D3D12_COMMAND_QUEUE_DESC desc = {D3D12_COMMAND_LIST_TYPE_DIRECT};
-    if (!strcmp(name, "Q3RC")) {
-        HANDLE watchdog = CreateThread(NULL, 0, q3_watchdog, NULL, 0, NULL);
+    if (!strcmp(name, "Q3RC") || !strcmp(name, "Q3RCR") || !strcmp(name, "Q3RR")) {
+        HANDLE watchdog = CreateThread(NULL, 0, q3_watchdog, (LPVOID)name, 0, NULL);
         if (!watchdog) {
-            puts("AGX_D3D12_Q3RC: FAIL watchdog-create"); fflush(stdout);
+            printf("AGX_D3D12_%s: FAIL watchdog-create\n", name); fflush(stdout);
             TerminateProcess(GetCurrentProcess(), 1); return 1;
         }
         CloseHandle(watchdog); /* lives until forced process exit below */
@@ -7317,11 +7317,11 @@ static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step ste
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateFence(device, 0, D3D12_FENCE_FLAG_NONE, &IID_ID3D12Fence, (void **)&fence);
     printf("%s fresh device/queue/fence hr=0x%08lx\n", name, (unsigned long)hr);
     int failed = FAILED(hr) ? 1 : step(device, queue, fence, 0);
-    if (!strcmp(name, "Q3RC")) {
-        if (FAILED(hr)) puts("AGX_D3D12_Q3RC: FAIL fresh-device");
+    if (!strcmp(name, "Q3RC") || !strcmp(name, "Q3RCR") || !strcmp(name, "Q3RR")) {
+        if (FAILED(hr)) printf("AGX_D3D12_%s: FAIL fresh-device\n", name);
         if (g_warp && device) dump_debug_messages(device, name);
         fflush(stdout);
-        /* Q3RC is a standalone process step. Never enter unbounded COM/DLL
+        /* Q3 modes are standalone process steps. Never enter unbounded COM/DLL
          * teardown after a timeout, device removal, or even successful readback. */
         TerminateProcess(GetCurrentProcess(), failed ? 1u : 0u);
         return failed;
@@ -8317,6 +8317,43 @@ static HRESULT q3_submit_pair(ID3D12CommandQueue *queue, ID3D12Fence *fence,
     }
     return hr;
 }
+/* Two or three independently recorded lists; close all before exposing any. */
+static HRESULT q3_submit_sequence(ID3D12CommandQueue *queue, ID3D12Fence *fence,
+    ID3D12GraphicsCommandList **lists, UINT count, UINT64 base, int *submitted) {
+    ULONGLONG start = GetTickCount64();
+    *submitted = 0;
+    if (count < 2 || count > 3) return E_FAIL;
+    for (UINT i = 0; i < count; ++i) {
+        HRESULT hr = ID3D12GraphicsCommandList_Close(lists[i]);
+        if (FAILED(hr)) return hr;
+    }
+    for (UINT i = 0; i < count; ++i) {
+        ID3D12CommandList *list = (ID3D12CommandList *)lists[i];
+        HRESULT hr;
+        *submitted = 1;
+        ID3D12CommandQueue_ExecuteCommandLists(queue, 1, &list);
+        hr = ID3D12CommandQueue_Signal(queue, fence, base + i + 1);
+        if (FAILED(hr)) return hr;
+    }
+    /* No CPU wait, Map or readback until every measured list is submitted. */
+    for (;;) {
+        UINT64 value = ID3D12Fence_GetCompletedValue(fence);
+        if (value == ~(UINT64)0) return E_FAIL;
+        if (value == base + count) return S_OK;
+        if (GetTickCount64() - start >= 3000) return E_FAIL;
+        Sleep(1);
+    }
+}
+static void q3_fill_vertices(unsigned char *bytes, int blue) {
+    const float data[4][6] = {{-1,-1,0,1,0,1},{-1,1,0,1,0,1},
+                             {1,-1,0,1,0,1},{1,1,0,1,0,1}};
+    memset(bytes, 0, 65536);
+    memcpy(bytes, data, sizeof(data));
+    if (blue) {
+        float *v = (float *)bytes;
+        for (UINT i = 0; i < 4; ++i) { v[6*i+3] = 0; v[6*i+4] = 1; }
+    }
+}
 static unsigned q3_bad_outputs(const unsigned char *pixels, const UINT *words) {
     unsigned bad = 0;
     for (unsigned i = 0; i < 64 * 64; ++i) {
@@ -8328,12 +8365,30 @@ static unsigned q3_bad_outputs(const unsigned char *pixels, const UINT *words) {
     for (unsigned i = 0; i < 64; ++i) bad += words[i] != i * 3u + 7u;
     return bad;
 }
+/* NULL words in R/R: validate both renders without inventing compute work. */
+static unsigned q3_bad_sequence_outputs(const unsigned char *green,
+    const unsigned char *blue, const UINT *words, int compute) {
+    unsigned bad = 0;
+    for (UINT i = 0; i < 64 * 64; ++i) {
+        bad += green[4*i] != 0;
+        bad += green[4*i+1] != 255;
+        bad += green[4*i+2] != 0;
+        bad += green[4*i+3] != 255;
+        bad += blue[4*i] != 0;
+        bad += blue[4*i+1] != 0;
+        bad += blue[4*i+2] != 255;
+        bad += blue[4*i+3] != 255;
+    }
+    if (compute)
+        for (UINT i = 0; i < 64; ++i) bad += words[i] != i * 3u + 7u;
+    return bad;
+}
 static DWORD WINAPI q3_watchdog(LPVOID unused) {
-    (void)unused;
+    const char *name = (const char *)unused;
     Sleep(15000);
     /* stdout was made unbuffered by main. A blocked D3D call cannot turn this
      * deadline into an unbounded COM or DLL cleanup wait. */
-    puts("AGX_D3D12_Q3RC: FAIL process-deadline");
+    printf("AGX_D3D12_%s: FAIL process-deadline\n", name);
     TerminateProcess(GetCurrentProcess(), 1);
     return 0;
 }
@@ -8355,6 +8410,19 @@ static void q3_record_render(ID3D12GraphicsCommandList *list,
     ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     ID3D12GraphicsCommandList_IASetVertexBuffers(list, 0, 1, &vb);
     ID3D12GraphicsCommandList_DrawInstanced(list, 4, instances, 0, 0);
+}
+static void q3_record_sequence(ID3D12GraphicsCommandList **lists,
+    ID3D12RootSignature **roots, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv2, ID3D12Resource *vertices,
+    ID3D12Resource *vertices2, ID3D12Resource *uav, UINT instances, int mode) {
+    q3_record_render(lists[0], roots[0], rtv, vertices, instances);
+    if (mode != 2) {
+        transition(lists[1], uav, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(lists[1], roots[1]);
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(lists[1], 0, ID3D12Resource_GetGPUVirtualAddress(uav));
+        ID3D12GraphicsCommandList_Dispatch(lists[1], 1, 1, 1);
+    }
+    if (mode) q3_record_render(lists[mode == 1 ? 2 : 1], roots[0], rtv2, vertices2, instances);
 }
 static UINT q3_next_instances(UINT instances, double ms) {
     double scale, next;
@@ -8516,18 +8584,23 @@ static HRESULT q3_calibrate_render(ID3D12Device *device, ID3D12CommandQueue *que
         *instances, ms, FAILED(hr) ? "invalid" : ms >= 5.0 && ms <= 10.0 ? "in-target" : "outside-target");
     return hr;
 }
-static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
-                      ID3D12Fence *fence, UINT64 base) {
+static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
+                      ID3D12Fence *fence, UINT64 base, int mode) {
     ID3D12Resource *vertices = NULL, *texture = NULL, *uav = NULL, *readback = NULL;
+    /* mode 0: R/C; mode 1: R/C/R; mode 2: R/R. */
+    const char *name = mode == 1 ? "Q3RCR" : mode == 2 ? "Q3RR" : "Q3RC";
+    const UINT count = mode == 1 ? 3u : 2u;
+    ID3D12Resource *vertices2 = NULL, *texture2 = NULL;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv2 = {0};
     ID3D12RootSignature *roots[2] = {NULL, NULL};
     ID3D12PipelineState *psos[2] = {NULL, NULL};
-    ID3D12CommandAllocator *allocators[3] = {NULL, NULL, NULL};
-    ID3D12GraphicsCommandList *lists[3] = {NULL, NULL, NULL};
+    ID3D12CommandAllocator *allocators[4] = {NULL, NULL, NULL, NULL};
+    ID3D12GraphicsCommandList *lists[4] = {NULL, NULL, NULL, NULL};
     ID3D12DescriptorHeap *rtv_heap = NULL;
     D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0};
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0};
-    D3D12_DESCRIPTOR_HEAP_DESC hd = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1};
+    D3D12_DESCRIPTOR_HEAP_DESC hd = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2};
     D3D12_GRAPHICS_PIPELINE_STATE_DESC gp = {0};
     D3D12_COMPUTE_PIPELINE_STATE_DESC cp = {0};
     D3D12_INPUT_ELEMENT_DESC elements[2] = {
@@ -8539,8 +8612,10 @@ static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
     UINT instances = 1024;
     HRESULT hr = S_OK;
     /* The diagnostic is opt-in, and the watchdog covers setup and teardown too. */
-    printf("Q3RC pid=%lu app_fences=%llu,%llu overlap=UNVERIFIED watchdog_ms=15000\n",
-        GetCurrentProcessId(), (unsigned long long)(base+101), (unsigned long long)(base+102));
+    printf("%s pid=%lu app_fences=%llu,%llu", name, GetCurrentProcessId(),
+        (unsigned long long)(base+101), (unsigned long long)(base+102));
+    if (count == 3) printf(",%llu", (unsigned long long)(base+103));
+    puts(" overlap=UNVERIFIED watchdog_ms=15000");
     fflush(stdout);
     /* Warm native render and compute queues/manager separately at depth one.
      * These use different resources, so stale warmup outputs cannot pass. */
@@ -8555,13 +8630,19 @@ static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
     }
     if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(vertices, 0, NULL, (void **)&bytes);
     if (SUCCEEDED(hr) && bytes) {
-        /* A fullscreen triangle strip; all pixels have exact RGBA green. */
-        const float data[4][6] = {{-1,-1,0,1,0,1},{-1,1,0,1,0,1},
-                                  {1,-1,0,1,0,1},{1,1,0,1,0,1}};
-        memset(bytes, 0, 65536);
-        memcpy(bytes, data, sizeof(data));
+        q3_fill_vertices(bytes, 0);
         ID3D12Resource_Unmap(vertices, 0, NULL);
     } else if (SUCCEEDED(hr)) hr = E_FAIL;
+    if (SUCCEEDED(hr) && mode) {
+        vertices2 = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+        if (!vertices2) hr = E_FAIL;
+        bytes = NULL;
+        if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(vertices2, 0, NULL, (void **)&bytes);
+        if (SUCCEEDED(hr) && bytes) {
+            q3_fill_vertices(bytes, 1);
+            ID3D12Resource_Unmap(vertices2, 0, NULL);
+        } else if (SUCCEEDED(hr)) hr = E_FAIL;
+    }
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     desc.Width = desc.Height = 64;
     desc.DepthOrArraySize = desc.MipLevels = 1;
@@ -8570,10 +8651,17 @@ static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
     desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE,
         &desc, D3D12_RESOURCE_STATE_RENDER_TARGET, NULL, &IID_ID3D12Resource, (void **)&texture);
+    if (SUCCEEDED(hr) && mode) hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE,
+        &desc, D3D12_RESOURCE_STATE_RENDER_TARGET, NULL, &IID_ID3D12Resource, (void **)&texture2);
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &hd, &IID_ID3D12DescriptorHeap, (void **)&rtv_heap);
     if (SUCCEEDED(hr)) {
         ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(rtv_heap, &rtv);
         ID3D12Device_CreateRenderTargetView(device, texture, NULL, rtv);
+        if (mode) {
+            rtv2 = rtv;
+            rtv2.ptr += ID3D12Device_GetDescriptorHandleIncrementSize(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+            ID3D12Device_CreateRenderTargetView(device, texture2, NULL, rtv2);
+        }
     }
     for (unsigned i = 0; i < 2 && SUCCEEDED(hr); ++i) {
         ID3DBlob *blob = NULL, *errors = NULL;
@@ -8612,45 +8700,43 @@ static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
     cp.CS.pShaderBytecode = g_agx_d3d12_probe_cs; cp.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs);
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateGraphicsPipelineState(device, &gp, &IID_ID3D12PipelineState, (void **)&psos[0]);
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateComputePipelineState(device, &cp, &IID_ID3D12PipelineState, (void **)&psos[1]);
-    for (unsigned i = 0; i < 3 && SUCCEEDED(hr); ++i) {
+    for (unsigned i = 0; i < 4 && SUCCEEDED(hr); ++i) {
         hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
             &IID_ID3D12CommandAllocator, (void **)&allocators[i]);
         if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT,
-            allocators[i], i < 2 ? psos[i] : NULL, &IID_ID3D12GraphicsCommandList, (void **)&lists[i]);
+            allocators[i], i == 3 ? NULL : (i == 1 && mode != 2 ? psos[1] : psos[0]), &IID_ID3D12GraphicsCommandList, (void **)&lists[i]);
     }
     if (SUCCEEDED(hr) && g_warp) {
         instances = 32768; /* API/output control only; no Apple firmware. */
-        puts("Q3RC r_only_gpu_ms=unavailable source=warp-control duration=unverified");
-    } else if (SUCCEEDED(hr)) hr = q3_calibrate_render(device, queue, fence, lists[2],
-        allocators[2], psos[0], roots[0], rtv, vertices, base - 16, &instances);
+        printf("%s r_only_gpu_ms=unavailable source=warp-control duration=unverified\n", name);
+    } else if (SUCCEEDED(hr)) hr = q3_calibrate_render(device, queue, fence, lists[3],
+        allocators[3], psos[0], roots[0], rtv, vertices, base - 16, &instances);
     if (SUCCEEDED(hr)) {
         /* Initialize measured resources to wrong values, then retire setup. */
         const FLOAT red[4] = {1,0,0,1};
-        ID3D12GraphicsCommandList_ClearRenderTargetView(lists[2], rtv, red, 0, NULL);
-        transition(lists[2], uav, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
-        ID3D12GraphicsCommandList_CopyBufferRegion(lists[2], uav, 0, vertices, 256, 256);
-        transition(lists[2], uav, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        hr = run_list(queue, fence, lists[2], base, "Q3RC init");
-        if (FAILED(hr)) { printf("AGX_D3D12_Q3RC: FAIL init\n"); fflush(stdout); TerminateProcess(GetCurrentProcess(), 1); }
-        hr = ID3D12CommandAllocator_Reset(allocators[2]);
-        if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(lists[2], allocators[2], NULL);
+        ID3D12GraphicsCommandList_ClearRenderTargetView(lists[3], rtv, red, 0, NULL);
+        if (mode) ID3D12GraphicsCommandList_ClearRenderTargetView(lists[3], rtv2, red, 0, NULL);
+        transition(lists[3], uav, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
+        ID3D12GraphicsCommandList_CopyBufferRegion(lists[3], uav, 0, vertices, 256, 256);
+        transition(lists[3], uav, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        hr = run_list(queue, fence, lists[3], base, "Q3RC init");
+        if (FAILED(hr)) { printf("AGX_D3D12_%s: FAIL init\n", name); fflush(stdout); TerminateProcess(GetCurrentProcess(), 1); }
+        hr = ID3D12CommandAllocator_Reset(allocators[3]);
+        if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(lists[3], allocators[3], NULL);
     }
     if (SUCCEEDED(hr)) {
-        q3_record_render(lists[0], roots[0], rtv, vertices, instances);
-        transition(lists[1], uav, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        ID3D12GraphicsCommandList_SetComputeRootSignature(lists[1], roots[1]);
-        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(lists[1], 0, ID3D12Resource_GetGPUVirtualAddress(uav));
-        ID3D12GraphicsCommandList_Dispatch(lists[1], 1, 1, 1);
+        q3_record_sequence(lists, roots, rtv, rtv2, vertices, vertices2, uav, instances, mode);
         LARGE_INTEGER pair_begin = {0}, pair_end = {0}, qpc_frequency = {0};
         QueryPerformanceFrequency(&qpc_frequency);
         QueryPerformanceCounter(&pair_begin);
-        printf("Q3RC pair_qpc_begin=%llu qpc_frequency=%llu\n",
-            (unsigned long long)pair_begin.QuadPart, (unsigned long long)qpc_frequency.QuadPart);
-        hr = q3_submit_pair(queue, fence, lists[0], lists[1], base, &submitted);
+        printf("%s pair_qpc_begin=%llu qpc_frequency=%llu\n",
+            name, (unsigned long long)pair_begin.QuadPart, (unsigned long long)qpc_frequency.QuadPart);
+        if (mode) hr = q3_submit_sequence(queue, fence, lists, count, base, &submitted);
+        else hr = q3_submit_pair(queue, fence, lists[0], lists[1], base, &submitted);
         QueryPerformanceCounter(&pair_end);
-        printf("Q3RC pair_qpc_end=%llu\n", (unsigned long long)pair_end.QuadPart);
+        printf("%s pair_qpc_end=%llu\n", name, (unsigned long long)pair_end.QuadPart);
         if (FAILED(hr) && submitted) {
-            printf("AGX_D3D12_Q3RC: FAIL pair-timeout-or-submit hr=0x%08lx\n", (unsigned long)hr);
+            printf("AGX_D3D12_%s: FAIL pair-timeout-or-submit hr=0x%08lx\n", name, (unsigned long)hr);
             fflush(stdout); TerminateProcess(GetCurrentProcess(), 1); /* no Release of outstanding work */
         }
     }
@@ -8661,23 +8747,31 @@ static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
         dst.PlacedFootprint.Footprint.Format = desc.Format;
         dst.PlacedFootprint.Footprint.Width = dst.PlacedFootprint.Footprint.Height = 64;
         dst.PlacedFootprint.Footprint.Depth = 1; dst.PlacedFootprint.Footprint.RowPitch = 256;
-        transition(lists[2], texture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        transition(lists[2], uav, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        ID3D12GraphicsCommandList_CopyTextureRegion(lists[2], &dst, 0, 0, 0, &src, NULL);
-        ID3D12GraphicsCommandList_CopyBufferRegion(lists[2], readback, 16384, uav, 0, 256);
-        hr = run_list(queue, fence, lists[2], base + 3, "Q3RC readback");
-        if (FAILED(hr)) { printf("AGX_D3D12_Q3RC: FAIL readback\n"); fflush(stdout); TerminateProcess(GetCurrentProcess(), 1); }
-        D3D12_RANGE range = {0, 16640}; bytes = NULL;
+        transition(lists[3], texture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        transition(lists[3], uav, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyTextureRegion(lists[3], &dst, 0, 0, 0, &src, NULL);
+        if (mode) {
+            src.pResource = texture2;
+            dst.PlacedFootprint.Offset = 16384;
+            transition(lists[3], texture2, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            ID3D12GraphicsCommandList_CopyTextureRegion(lists[3], &dst, 0, 0, 0, &src, NULL);
+        }
+        if (mode != 2) ID3D12GraphicsCommandList_CopyBufferRegion(lists[3], readback, mode ? 32768 : 16384, uav, 0, 256);
+        hr = run_list(queue, fence, lists[3], base + count + 1, "Q3 sequence readback");
+        if (FAILED(hr)) { printf("AGX_D3D12_%s: FAIL readback\n", name); fflush(stdout); TerminateProcess(GetCurrentProcess(), 1); }
+        D3D12_RANGE range = {0, mode ? 33024 : 16640}; bytes = NULL;
         hr = ID3D12Resource_Map(readback, 0, &range, (void **)&bytes);
         if (SUCCEEDED(hr) && bytes) {
-            bad = q3_bad_outputs(bytes, (const UINT *)(bytes + 16384));
+            bad = mode ? q3_bad_sequence_outputs(bytes, bytes + 16384,
+                (const UINT *)(bytes + 32768), mode != 2) :
+                q3_bad_outputs(bytes, (const UINT *)(bytes + 16384));
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("AGX_D3D12_Q3RC: %s bad=%u overlap=UNVERIFIED receipts=Wom1RcProgress,Wom1RcDecisions,Wom1JobWindow,Wom1JobTiming971\n",
-        SUCCEEDED(hr) && !bad ? "PASS" : "FAIL", bad);
+    printf("AGX_D3D12_%s: %s bad=%u overlap=UNVERIFIED receipts=Wom1RcProgress,Wom1RcDecisions,Wom1JobWindow,Wom1JobTiming971\n",
+        name, SUCCEEDED(hr) && !bad ? "PASS" : "FAIL", bad);
     fflush(stdout);
-    for (unsigned i = 0; i < 3; ++i) {
+    for (unsigned i = 0; i < 4; ++i) {
         if (lists[i]) ID3D12GraphicsCommandList_Release(lists[i]);
         if (allocators[i]) ID3D12CommandAllocator_Release(allocators[i]);
         if (i < 2 && psos[i]) ID3D12PipelineState_Release(psos[i]);
@@ -8688,10 +8782,24 @@ static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
     if (readback) ID3D12Resource_Release(readback);
     if (uav) ID3D12Resource_Release(uav);
     if (vertices) ID3D12Resource_Release(vertices);
+    if (vertices2) ID3D12Resource_Release(vertices2);
+    if (texture2) ID3D12Resource_Release(texture2);
     return !(SUCCEEDED(hr) && !bad);
 }
+static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
+    ID3D12Fence *fence, UINT64 base) {
+    return q3_sequence(device, queue, fence, base, 0);
+}
+static int q3_rcr(ID3D12Device *device, ID3D12CommandQueue *queue,
+    ID3D12Fence *fence, UINT64 base) {
+    return q3_sequence(device, queue, fence, base, 1);
+}
+static int q3_rr(ID3D12Device *device, ID3D12CommandQueue *queue,
+    ID3D12Fence *fence, UINT64 base) {
+    return q3_sequence(device, queue, fence, base, 2);
+}
 static const struct { const char *name; probe_step step; } named_steps[] = {
-    {"Q3RC", q3_rc_pair},
+    {"Q3RC", q3_rc_pair}, {"Q3RCR", q3_rcr}, {"Q3RR", q3_rr},
     {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g}, {"RC63G", rc63_gravitymark_stream}, {"RC89S", rc89_stream_capacity},
     {"RC44D", step_rc44d}, {"RC44I", step_rc44i},
     {"RC38Z", step_rc38z}, {"RC38N", step_rc38n}, {"RC38I", step_rc38i},
