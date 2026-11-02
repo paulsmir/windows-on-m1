@@ -67285,3 +67285,9 @@ Switches (as EXP2085): Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhe
 - Hashes: sys 3e8ab7d10ef6, UmdArm64 a4090a0e2613, UmdX64 55f9b10cb85e, Umd32 f9bb391ebc94; manifest c4aa1b8ab621, hardware-manifest 95c59b592176; probe2086.sh 0322d79378de (PROBE_LINT_OK); visible recovery rec2086h f6e9f971f75b37a5; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
 - Recovery rec2086h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2086-q3rc-overlap/run2086.sh.
+
+EXP2086 HARDWARE ACTUAL (2026-11-02): **probe-side FAIL before the measured pair: the Q3RC calibration rejected the firmware completion records (`r_only_gpu_ms=unavailable ... invalid-or-missing-record`, `AGX_D3D12_Q3RC: FAIL bad=4294967295`); guest alive, no reset, no kick from the probe.**
+- Cause: q3_render_duration required exactly one retired record per page and no prelude; DWM jobs and render preludes retire in the same window. Fix c206e11a selects this process's newest successful render and prints each rejection.
+- New evidence from Wom1RcDecisions over the boot (all processes): refusal 66 "no pending successor" 24201, 58 "SceneId differs with one manager slot" 2201 (render_job_window.c:104, obsolete with rc124 slots: design step 4), 4 preemption pending 109, 55 different process 97, 68: 2. Wom1RcProgress exported "no sample" as designed.
+- Expected vs actual: PASS/INCONCLUSIVE expected; actual probe calibration failure (neither; the queue was not exercised).
+- Recovery rec2086h. Next: EXP2087, the same with the calibration fix.
