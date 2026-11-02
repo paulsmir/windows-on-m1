@@ -2021,6 +2021,8 @@ BOOLEAN AdmissionPlatformRuntimeReadyEx(
     _In_ ADMISSION_CONTEXT *Context, _Out_opt_ ULONG *FailedPredicate);
 BOOLEAN AdmissionPlatformRuntimeReady(
     _Inout_ ADMISSION_CONTEXT *Context);
+/* General depth two retains two packets per context, including kicked work. */
+BOOLEAN AdmissionPlatformRuntimeGeneralDepth2(_In_opt_ ADMISSION_CONTEXT *Context);
 /* EXP1014: bounded wait until the runtime is ready and the render slot is
  * empty; transient busy states are backpressure, not malformed input. */
 VOID AdmissionPlatformRuntimeSlotChanged(_In_opt_ ADMISSION_CONTEXT *Context);

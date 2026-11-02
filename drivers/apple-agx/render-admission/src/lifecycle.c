@@ -780,6 +780,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1u;
         caps->SchedulingCaps.MultiEngineAware = 1u;
         caps->SchedulingCaps.PreemptionAware = 1u;
+        /* Q8: a kicked successor still owns a pending entry and the
+         * context's second fence. Bound VidSch's entire node to the two
+         * packets we can retain, including active/kicked work. This is a
+         * DMA packet limit, not MaxQueuedFlipOnVSync or a HWQueue count.
+         * General absent preserves the zeroed legacy caps byte for byte. */
+        if (AdmissionPlatformRuntimeGeneralDepth2(context))
+          caps->SchedulingCaps.HwQueuePacketCap = 2u;
         caps->PreemptionCaps.GraphicsPreemptionGranularity =
             D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY;
         caps->PreemptionCaps.ComputePreemptionGranularity =
