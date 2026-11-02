@@ -39,8 +39,8 @@ static unsigned calls,fail;
 static void RtlInitUnicodeString(UNICODE_STRING *n,const wchar_t *v){*n=v;}
 static int ZwSetValueKey(HANDLE k,UNICODE_STRING *n,unsigned z,unsigned t,void *p,unsigned long bytes){
  (void)k;(void)z;assert(t==3);++calls;
- unsigned *h=p;assert(h[0]==1 && h[1]==bytes);
- if(!wcscmp(*n,L"Wom1RcProgress")) assert(h[2]==0 && bytes==18448);
+ unsigned *h=p;assert(h[0]==2 && h[1]==bytes);
+ if(!wcscmp(*n,L"Wom1RcProgress")) assert(h[2]==0 && bytes==19984);
  return calls==fail ? -1:0;
 }
 '''+body+r'''
@@ -78,8 +78,8 @@ int main(void){ADMISSION_RC_DECISIONS r={0};
         self.assertIn('AdmissionRcSkippedKickWindows(adapter, runtime,',text)
         kick=text[text.index('static BOOLEAN AdmissionJobWindowKickWindows('):]
         kick=kick[:kick.index('\n}')]
-        self.assertIn('AdmissionRcDecisionWindows(runtime, refusal,',kick)
-        self.assertLess(kick.index('AdmissionRcDecisionWindows(runtime, refusal,'),
+        self.assertIn('AdmissionRcDecisionTyped(&runtime->RcDecisions,',kick)
+        self.assertLess(kick.index('AdmissionRcDecisionTyped(&runtime->RcDecisions,'),
                         kick.index('if (refusal != 0u)'))
         self.assertIn('AdmissionRcInitialize(&runtime->RcReceipt)',text)
         self.assertNotIn('runtime->RcReceiptEnabled && runtime->RcReceipt.Count',text)
@@ -104,5 +104,25 @@ int main(void){ADMISSION_RC_DECISIONS r={0};
         must retain that reason even when it proceeds to the kick decision.
         """
         text=WORKER.read_text()
-        self.assertIn('AdmissionRcDecisionWindows(runtime, refusal, prebindRefusal,',text)
+        self.assertIn('(unsigned int)prebindRefusal,(unsigned int)fence,s.Next.Fence,',text)
         self.assertIn('description.Fence, prebindRefusal);',text)
+
+    def test_typed_decision_coalescing_requires_identical_classes(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Equal fence IDs with a different pair class cannot be merged into the
+        same diagnostic observation; zero-initialized classes stay unknown.
+        """
+        self.build(r'''#include "render_rc_progress.h"
+#include <assert.h>
+int main(void) {
+ ADMISSION_RC_DECISIONS r={0};AdmissionRcDecisionsInitialize(&r);
+ AdmissionRcDecisionTyped(&r,0,0,99,100,42,10,1,3,3);
+ AdmissionRcDecisionTyped(&r,0,0,99,100,42,11,1,3,3);
+ assert(r.Count==1 && r.Records[0].Count==2);
+ AdmissionRcDecisionTyped(&r,0,0,99,100,42,12,3,1,1);
+ assert(r.Count==2 && r.Records[1].RunningKind==3 && r.Records[1].NextKind==1);
+ assert(r.Records[1].Barrier==1 && r.Histogram[0]==3);
+ AdmissionRcDecision(&r,0,0,99,100,42,13);
+ assert(r.Count==3 && !r.Records[2].RunningKind && !r.Records[2].Barrier);
+}
+''')

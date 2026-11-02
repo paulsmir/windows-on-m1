@@ -79,3 +79,105 @@ class RcDecode(unittest.TestCase):
         self.assertEqual(wrapped['decisions'][0]['render_fence'],5)
         self.assertEqual(wrapped['decisions'][-1]['render_fence'],4)
         self.assertEqual(wrapped['overwritten'],5)
+
+    def test_typed_pair_classes_and_stamp_domains(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        R/C evidence must not certify TA or prelude waits by reusing the old
+        render/compute stamp meanings, or combine observations across classes.
+        """
+        spec=importlib.util.spec_from_file_location('rc',TOOL)
+        m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+        def sample(running, successor, barrier, observed):
+            s=dict(Stage=4,RFence=99,CFence=100,ExpectedR=0x200,ExpectedC=0x300,
+                ProcessId=42,Valid=8191,RFlight=1,CFlight=2,CFlags=3,
+                WaitLow=4096,WaitValue=0x200,EventCount=5,PreviousThreshold=4,
+                RunningKind=running,NextKind=successor,Barrier=barrier,
+                Words=[5,0x100,observed,0,0,0,0,0,0,0,0,0x100,5])
+            return s
+        def wire(samples):
+            packed=b''.join(struct.pack('<39I',*[s.get(n,0) for n in m.FIELDS],
+                *s['Words'],s['RunningKind'],s['NextKind'],s['Barrier']) for s in samples)
+            return struct.pack('<4I',2,19984,len(samples),0)+packed+bytes(19968-len(packed))
+        for running,next_kind,barrier in [(1,3,3),(3,1,1),(1,1,2),(2,1,2),
+                                         (1,2,3),(3,2,4),(3,3,4),(2,2,3)]:
+            before=sample(running,next_kind,barrier,0x100)
+            after=sample(running,next_kind,barrier,0x200)
+            out=m.decode(wire([before,after]),42)['pairs'][0]
+            self.assertEqual(out['evidence'],'published-progress')
+            self.assertEqual(out['running_kind'],running)
+            self.assertEqual(out['next_kind'],next_kind)
+            self.assertEqual(out['barrier'],barrier)
+            self.assertIn('successor_first_fw_before',out['samples'][0]['values'])
+            for changed in [dict(after,Barrier=0),dict(after,RunningKind=0),
+                            dict(after,CFlight=0),dict(after,CFlight=1),dict(after,RFlight=2),
+                            dict(after,CFlight=3),dict(after,RFlight=3),dict(after,WaitValue=0x100)]:
+                self.assertTrue(all(p['evidence']=='inconclusive'
+                    for p in m.decode(wire([before,changed]),42)['pairs']))
+            moved=after['Words'][:];moved[11]=0x300
+            out=m.decode(wire([before,dict(after,Words=moved)]),42)
+            self.assertEqual(out['pairs'][0]['evidence'],'inconclusive')
+        for flights in [(1,1),(2,2),(0,2),(1,0),(3,2),(1,3)]:
+            invalid_before=dict(sample(1,1,2,0x100),RFlight=flights[0],CFlight=flights[1])
+            invalid_after=dict(sample(1,1,2,0x200),RFlight=flights[0],CFlight=flights[1])
+            self.assertEqual(m.decode(wire([invalid_before,invalid_after]),42)['pairs'][0]['evidence'],
+                             'inconclusive')
+        # A distinct exact flight or emitted barrier address starts a new domain.
+        a=sample(1,1,2,0x100);b=sample(1,1,2,0x200)
+        for changed in [dict(b,CFlight=3),dict(b,RFlight=3),dict(b,WaitLow=8192)]:
+            self.assertEqual(m.decode(wire([a,changed]),42)['pairs'][0]['evidence'],'inconclusive')
+
+    def test_typed_decisions_preserve_pair_identity(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Admission diagnostics must retain actual classes instead of labelling
+        every predecessor render and every successor compute.
+        """
+        spec=importlib.util.spec_from_file_location('rc',TOOL)
+        m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+        size=20+72*4+128*52
+        hist=[0]*72;hist[0]=1
+        record=[0,0,99,100,42,1,10,0,10,0,3,1,1]
+        data=(struct.pack('<5I',2,size,1,1,0)+struct.pack('<72I',*hist)+
+              struct.pack('<13I',*record)+bytes(127*52))
+        out=m.decode_decisions(data,42)['decisions'][0]
+        self.assertEqual((out['running_kind'],out['next_kind'],out['barrier']),(3,1,1))
+        self.assertEqual((out['predecessor_fence'],out['successor_fence']),(99,100))
+
+    def test_chained_pairs_join_each_original_terminal_once(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Adopting C as the head of C/R replaces RcCurrent before C's terminal;
+        the earlier R/C pair must still join C, without hiding duplicate reports.
+        """
+        spec=importlib.util.spec_from_file_location('rc',TOOL)
+        m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+        def sample(rf,cf,running,next_kind,barrier,**extra):
+            return dict(Stage=3,RFence=rf,CFence=cf,ExpectedR=rf*256,
+                RunningKind=running,NextKind=next_kind,Barrier=barrier,
+                ProcessId=42,QpcLow=100,Words=[0]*13,**extra)
+        first=sample(99,100,1,3,3)
+        second=sample(100,101,3,1,1)
+        r_done=dict(first,Stage=6,TerminalFence=99,Status=0)
+        c_done=dict(second,Stage=6,TerminalFence=100,Status=0)
+        last_done=dict(second,Stage=6,TerminalFence=101,Status=0)
+        def wire(samples):
+            packed=b''.join(struct.pack('<39I',*[s.get(n,0) for n in m.FIELDS],
+                *s['Words'],s['RunningKind'],s['NextKind'],s['Barrier']) for s in samples)
+            return struct.pack('<4I',2,19984,len(samples),0)+packed+bytes(19968-len(packed))
+        def decode(samples):
+            return m.decode(wire(samples),42,90,110)['pairs']
+        samples=[first,r_done,second,c_done,last_done]
+        pairs=decode(samples)
+        self.assertEqual([p['exact_report_order'] for p in pairs],[True,True])
+        self.assertEqual([[r['fence'] for r in p['reported']] for p in pairs],
+                         [[99,100],[100,101]])
+        for altered in [samples+[c_done], [first,second,c_done,last_done],
+                        [first,r_done,second,last_done],
+                        [first,r_done,second,dict(c_done,ProcessId=43),last_done],
+                        [first,r_done,second,dict(c_done,QpcLow=111),last_done],
+                        [first,second,c_done,r_done,last_done]]:
+            self.assertFalse(decode(altered)[0]['exact_report_order'])
+        # A stale matching terminal before pair capture is not part of the pair.
+        stale=dict(c_done,RFence=97,CFence=98,ExpectedR=97*256)
+        self.assertTrue(all(p['exact_report_order'] for p in decode([stale]+samples)[1:]))
+        failed=decode([first,r_done,second,dict(c_done,Status=5),last_done])
+        self.assertEqual(failed[0]['reported'][-1]['status'],5)
+        self.assertEqual(failed[1]['reported'][0]['status'],5)
