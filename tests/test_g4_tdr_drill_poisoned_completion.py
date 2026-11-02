@@ -80,7 +80,8 @@ class TdrDrillPoisonedCompletion(unittest.TestCase):
             [extract(gpuva, n) for n in (
                 'AdmissionG3PublishTimestampLocked', 'AdmissionGpuvaG3CompleteJobTimestamp')] +
             [extract(backend, n) for n in (
-                'AdmissionGpuTimestampEndNanoseconds', 'AdmissionNotifyCompletionAtInterrupt',
+                'AdmissionRenderTimestampPair', 'AdmissionGpuTimestampEndNanoseconds',
+                'AdmissionNotifyCompletionAtInterrupt',
                 'AdmissionBackendComplete', 'AdmissionPostResumePollByte',
                 'AdmissionPostResumePollFailure', 'AdmissionPlatformRuntimeQuiesceActive')] +
             [extract(scheduler, 'AdmissionResetQuiesceActive'), CASES])
@@ -384,6 +385,7 @@ static ADMISSION_G3_PROCESS process;
 static ADMISSION_RENDER_CONTEXT drilled;
 static unsigned char event_state[J313_AGX_G2_CHANNEL_STATE_STRIDE];
 static unsigned char event_ring[APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT * APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+static const ULONGLONG firmware_start = 24000000ULL;
 static ULONGLONG firmware_end = 24000001ULL; /* ticks: 1000000041 ns */
 static unsigned char arena[64];
 
@@ -424,7 +426,8 @@ static void setup(void) {
                                          ADMISSION_MEMORY_LOCAL_SEGMENT};
 
   r.Adapter = &a; r.BackendStarted = 1; r.WorkIdle.Signaled = 1;
-  r.QueueObjects[29].Data = (unsigned char *)&firmware_end; r.QueueObjects[29].Size = sizeof(firmware_end);
+  r.Backend.PendingJob.RenderTimestampPointers[0] = &firmware_start;
+  r.Backend.PendingJob.RenderTimestampPointers[1] = &firmware_end;
   r.Backend.Phase = AppleAgxBackendRuntimeSubmitted;
   r.Backend.Io.Context = &r;
   r.Backend.Io.Complete = AdmissionBackendComplete;

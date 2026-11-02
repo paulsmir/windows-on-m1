@@ -655,6 +655,22 @@ static ULONGLONG AdmissionFwTs1Read(ADMISSION_PLATFORM_RUNTIME *runtime) {
   return (ULONGLONG)word[0] | ((ULONGLONG)word[1] << 32);
 }
 
+/* Read a pair only from the completed job's retained parity copy. The
+ * worker owns this job until report/flight retirement; a successor build
+ * can rebind QueueObjects but cannot reuse these bytes in that lifetime.
+ * Missing storage leaves both outputs untouched, never half a pair. */
+static BOOLEAN AdmissionRenderTimestampPair(
+    const APPLE_AGX_BACKEND_JOB_IMAGE *job, ULONG first,
+    ULONGLONG *start, ULONGLONG *end) {
+  if (job->Kind == AppleAgxBackendJobCompute || first >= 8u ||
+      (first & 1u) != 0u || job->RenderTimestampPointers[first] == NULL ||
+      job->RenderTimestampPointers[first + 1u] == NULL)
+    return FALSE;
+  RtlCopyMemory(start, job->RenderTimestampPointers[first], sizeof(*start));
+  RtlCopyMemory(end, job->RenderTimestampPointers[first + 1u], sizeof(*end));
+  return TRUE;
+}
+
 static VOID AdmissionFwTimingCaptureWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
   ADMISSION_FW_TIMING_ENTRY entry;
@@ -667,12 +683,9 @@ static VOID AdmissionFwTimingCaptureWindows(
   ULONG index;
   RtlZeroMemory(&entry, sizeof(entry));
   entry.Fence = fence;
-  for (index = 0u; index < 8u; ++index) {
-    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
-        &runtime->QueueObjects[28u + index];
-    if (object->Data != NULL && object->Size == sizeof(ULONGLONG))
-      RtlCopyMemory(&entry.Timestamps[index], object->Data, sizeof(ULONGLONG));
-  }
+  for (index = 0u; index < 8u; index += 2u)
+    (void)AdmissionRenderTimestampPair(&runtime->Backend.PendingJob, index,
+        &entry.Timestamps[index], &entry.Timestamps[index + 1u]);
   if (taWork->Data != NULL && taWork->Size >= ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET +
           sizeof(entry.TaTail))
     RtlCopyMemory(entry.TaTail, (const UCHAR *)taWork->Data +
@@ -727,9 +740,8 @@ static BOOLEAN AdmissionGpuTimestampEndNanoseconds(
     RtlCopyMemory(&end, (const UCHAR *)job->ComputeTimestampBlock + 8u,
                   sizeof(end));
   } else {
-    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object = &runtime->QueueObjects[29u];
-    if (object->Data == NULL || object->Size != sizeof(end)) return FALSE;
-    RtlCopyMemory(&end, object->Data, sizeof(end));
+    ULONGLONG start;
+    if (!AdmissionRenderTimestampPair(job, 0u, &start, &end)) return FALSE;
   }
   (void)KeQueryPerformanceCounter(&qpcFrequency);
   if (!end || qpcFrequency.QuadPart <= 0) return FALSE;
@@ -772,12 +784,7 @@ static VOID AdmissionGpuTimestampCaptureWindows(
     RtlCopyMemory(&gpuEnd, block + 0x08u, sizeof(gpuEnd));
     kind = ADMISSION_GPU_TIMESTAMP_COMPUTE;
   } else {
-    const APPLE_AGX_EXP208_RELOCATION_OBJECT *s = &runtime->QueueObjects[28u];
-    const APPLE_AGX_EXP208_RELOCATION_OBJECT *e = &runtime->QueueObjects[29u];
-    if (s->Data == NULL || e->Data == NULL || s->Size != sizeof(start) ||
-        e->Size != sizeof(gpuEnd)) return;
-    RtlCopyMemory(&start, s->Data, sizeof(start));
-    RtlCopyMemory(&gpuEnd, e->Data, sizeof(gpuEnd));
+    if (!AdmissionRenderTimestampPair(job, 0u, &start, &gpuEnd)) return;
     kind = ADMISSION_GPU_TIMESTAMP_RENDER;
   }
   if (job->CommandVa == 0u) return;
@@ -812,15 +819,8 @@ static VOID AdmissionGpuCompletionCaptureWindows(
         RtlCopyMemory(&record.End, (const UCHAR *)job->ComputeTimestampBlock + 8u, sizeof(record.End));
       }
     } else {
-      const ULONG ids[4] = {28u, 29u, ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_START,
-                                     ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END};
-      ULONGLONG *values[4] = {&record.Start, &record.End, &record.TaStart, &record.TaEnd};
-      ULONG i;
-      for (i = 0; i < 4u; ++i) {
-        const APPLE_AGX_EXP208_RELOCATION_OBJECT *object = &runtime->QueueObjects[ids[i]];
-        if (object->Data && object->Size == sizeof(ULONGLONG))
-          RtlCopyMemory(values[i], object->Data, sizeof(ULONGLONG));
-      }
+      (void)AdmissionRenderTimestampPair(job, 0u, &record.Start, &record.End);
+      (void)AdmissionRenderTimestampPair(job, 2u, &record.TaStart, &record.TaEnd);
       /* rc79: the buffer-manager Stats AdmissionSaveG4Manager just flushed
        * for the CPU (max_pages 0x0, overflow_count 0x8). */
       {
@@ -855,27 +855,24 @@ static VOID AdmissionGpuCompletionCaptureWindows(
 
 static VOID AdmissionJobTimingFirmwareWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
-  const APPLE_AGX_EXP208_RELOCATION_OBJECT *start, *end;
   ADMISSION_JOB_TIMING_SLOT *slot;
   KIRQL oldIrql;
   ULONGLONG taStart, taEnd;
   AdmissionGpuTimestampCaptureWindows(runtime, fence);
-  start = &runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_START];
-  end = &runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END];
-  if (start->Data == NULL || end->Data == NULL ||
-      start->Size != sizeof(taStart) || end->Size != sizeof(taEnd)) return;
-  RtlCopyMemory(&taStart, start->Data, sizeof(taStart));
-  RtlCopyMemory(&taEnd, end->Data, sizeof(taEnd));
-  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
-  slot = (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(
-      &runtime->JobTiming, fence);
-  if (slot != NULL) {
-    slot->FirmwareTaStart = taStart;
-    slot->FirmwareTaEnd = taEnd;
-    slot->FirmwareValid = (taStart != 0u ? 1u : 0u) |
-        (taEnd != 0u ? 2u : 0u);
+  if (AdmissionRenderTimestampPair(&runtime->Backend.PendingJob, 2u,
+                                   &taStart, &taEnd)) {
+    KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+    slot = (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(
+        &runtime->JobTiming, fence);
+    if (slot != NULL) {
+      slot->FirmwareTaStart = taStart;
+      slot->FirmwareTaEnd = taEnd;
+      slot->FirmwareValid = (taStart != 0u ? 1u : 0u) |
+          (taEnd != 0u ? 2u : 0u);
+    }
+    KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
   }
-  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+  /* Pstate is an independent observation for compute completions too. */
   AdmissionJobTimingPstateWindows(runtime, fence, TRUE);
   AdmissionFwTimingCaptureWindows(runtime, fence);
 }

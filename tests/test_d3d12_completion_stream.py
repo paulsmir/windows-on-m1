@@ -137,25 +137,25 @@ class CompletionCapture(unittest.TestCase):
         """
         from test_d3d12_owner_allocation_failure import function
         text=(ROOT/'drivers/apple-agx/render-admission/src/backend_platform_windows.c').read_text()
-        capture=function(text,'static VOID AdmissionGpuCompletionCaptureWindows(')
+        capture=(function(text,'static BOOLEAN AdmissionRenderTimestampPair(') +
+                 function(text,'static VOID AdmissionGpuCompletionCaptureWindows('))
         self.assertIn('MissingTiming',capture,'Missing submit slots silently lose telemetry')
         pre=r'''
 #include <assert.h>
 #include <string.h>
 #include "render_job_timing.h"
+#include "apple_agx_backend_runtime.h"
+typedef unsigned char BOOLEAN;
+#define TRUE 1
+#define FALSE 0
 typedef void VOID;typedef unsigned ULONG;typedef unsigned char UCHAR;
 typedef unsigned long long ULONGLONG;typedef int KIRQL;
-typedef unsigned APPLE_AGX_BACKEND_COMPLETION_STATUS;
-#define AppleAgxBackendCompletionSuccess 0
-#define AppleAgxBackendJobCompute 2
 #define ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_START 30
 #define ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END 31
 #define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_MISC 22u
 #define RtlCopyMemory memcpy
 #define KeAcquireSpinLock(l,i) ((void)(l),(void)(i))
 #define KeReleaseSpinLock(l,i) ((void)(l),(void)(i))
-typedef struct {unsigned Kind;ULONGLONG CommandVa;const void *ComputeTimestampBlock;} APPLE_AGX_BACKEND_JOB_IMAGE;
-typedef struct {void *Data;unsigned Size;} APPLE_AGX_EXP208_RELOCATION_OBJECT;
 typedef struct {
  struct {APPLE_AGX_BACKEND_JOB_IMAGE PendingJob;} Backend;
  ADMISSION_JOB_TIMING_STATE JobTiming;ADMISSION_GPU_COMPLETION_RING GpuCompletions;
@@ -168,7 +168,7 @@ int main(void){
  ULONGLONG comp[2]={120,190},render[4]={140,190,110,170};
  ADMISSION_GPU_COMPLETION_QUERY q={0};
  unsigned i;
- r.Backend.PendingJob.Kind=2;r.Backend.PendingJob.CommandVa=99;
+ r.Backend.PendingJob.Kind=AppleAgxBackendJobCompute;r.Backend.PendingJob.CommandVa=99;
  r.Backend.PendingJob.ComputeTimestampBlock=comp;
  AdmissionJobTimingInitialize(&r.JobTiming,1000);
  AdmissionGpuCompletionCaptureWindows(&r,1,0);
@@ -180,10 +180,10 @@ int main(void){
  AdmissionGpuCompletionRead(&r.GpuCompletions,7,&q);
  assert(q.Count==1 && q.MissingTiming==1 && q.Record[0].Start==120 && q.Record[0].CompleteQpc==200);
  assert(q.Record[0].SubmitQpc==100 && q.Record[0].End==190);
- r.Backend.PendingJob.Kind=1;
+ r.Backend.PendingJob.Kind=AppleAgxBackendJobRender;
  /* Render images start from a zeroed staged job: no prelude block. */
  r.Backend.PendingJob.ComputeTimestampBlock=0;
- for(i=0;i<4;i++){r.QueueObjects[28+i].Data=&render[i];r.QueueObjects[28+i].Size=8;}
+ for(i=0;i<4;i++) r.Backend.PendingJob.RenderTimestampPointers[i]=&render[i];
  assert(AdmissionJobTimingBegin(&r.JobTiming,2,7,42,4096,100));
  assert(AdmissionJobTimingMark(&r.JobTiming,2,AdmissionJobPhaseComplete,201));
  AdmissionGpuCompletionCaptureWindows(&r,2,0);
@@ -197,7 +197,7 @@ int main(void){
   * 0x0, overflow_count 0x8) the completion just flushed for the CPU. */
  { unsigned stats[16]={0};
    stats[0]=2148;stats[2]=12078;
-   r.QueueObjects[22].Data=stats;r.QueueObjects[22].Size=64;
+   r.QueueObjects[22].Data=(unsigned char *)stats;r.QueueObjects[22].Size=64;
    assert(AdmissionJobTimingBegin(&r.JobTiming,5,7,42,4096,100));
    assert(AdmissionJobTimingMark(&r.JobTiming,5,AdmissionJobPhaseComplete,204));
    AdmissionGpuCompletionCaptureWindows(&r,5,0);
@@ -231,7 +231,7 @@ int main(void){
 '''
         with tempfile.TemporaryDirectory() as td:
             p=Path(td);(p/'test.c').write_text(code)
-            z=subprocess.run(['clang','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I',str(INC),str(p/'test.c'),str(SRC),'-o',str(p/'test')],capture_output=True,text=True)
+            z=subprocess.run(['clang','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-ftrivial-auto-var-init=pattern','-I',str(INC),'-I',str(ROOT/'drivers/apple-agx/shared/include'),str(p/'test.c'),str(SRC),'-o',str(p/'test')],capture_output=True,text=True)
             self.assertEqual(z.returncode,0,z.stderr)
             z=subprocess.run([str(p/'test')],capture_output=True,text=True)
             self.assertEqual(z.returncode,0,z.stderr)
