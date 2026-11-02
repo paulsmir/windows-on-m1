@@ -1,10 +1,11 @@
 #ifndef APPLE_AGX_RENDER_RC_PROGRESS_H
 #define APPLE_AGX_RENDER_RC_PROGRESS_H
 
-/* Q3: bounded read-only diagnostic. All wire fields are little-endian U32;
+/* Q6 v2: bounded read-only diagnostic. All wire fields are little-endian U32;
  * no pointers, native alignment, CRT, or firmware writes in this record.
- * Words: threshold before, compute FW before, 3D FW, 3D driver, TA FW,
- * TA wptr/done, 3D wptr/done, compute wptr/done, compute FW after,
+ * Words: threshold before, successor FIRST-queue FW before, predecessor
+ * LAST-queue FW, predecessor driver, TA FW,
+ * TA wptr/done, 3D wptr/done, compute wptr/done, successor FIRST-queue FW after,
  * threshold after. Bracketing avoids calling a moving snapshot overlap. */
 #define ADMISSION_RC_SAMPLES 128u
 #define ADMISSION_RC_BEFORE_BUILD 1u
@@ -21,6 +22,10 @@ typedef struct _ADMISSION_RC_SAMPLE {
   unsigned int WaitLow, WaitHigh, WaitValue, QpcLow, QpcHigh, ProcessId;
   unsigned int TerminalFence, Status, Valid;
   unsigned int Words[13];
+  /* v2 append: ADMISSION_JOB_WINDOW_KIND/BARRIER values. R/C-named fields
+   * above denote predecessor/successor. ExpectedC is the FIRST-queue target,
+   * including compute prelude or TA, never a later 3D completion target. */
+  unsigned int RunningKind, NextKind, Barrier;
 } ADMISSION_RC_SAMPLE;
 typedef struct _ADMISSION_RC_RECEIPT {
   unsigned int Version, Bytes, Count, Overflow;
@@ -37,6 +42,7 @@ typedef struct _ADMISSION_RC_RECEIPT {
 typedef struct _ADMISSION_RC_DECISION {
   unsigned int Reason, Detail, RFence, CFence, ProcessId, Count;
   unsigned int FirstLow, FirstHigh, LastLow, LastHigh;
+  unsigned int RunningKind, NextKind, Barrier;
 } ADMISSION_RC_DECISION;
 typedef struct _ADMISSION_RC_DECISIONS {
   unsigned int Version, Bytes, Count, Next, Overwritten;
@@ -44,23 +50,25 @@ typedef struct _ADMISSION_RC_DECISIONS {
   ADMISSION_RC_DECISION Records[ADMISSION_RC_DECISIONS_COUNT];
 } ADMISSION_RC_DECISIONS;
 /* Storage is zeroed by the owner before initialization. Empty progress is a
- * valid v1 record (Count=0), not an absent registry value. */
+ * valid v2 record (Count=0), not an absent registry value. */
 static __inline void AdmissionRcInitialize(ADMISSION_RC_RECEIPT *r) {
-  r->Version=1u; r->Bytes=(unsigned int)sizeof(*r);
+  r->Version=2u; r->Bytes=(unsigned int)sizeof(*r);
 }
 static __inline void AdmissionRcDecisionsInitialize(ADMISSION_RC_DECISIONS *r) {
-  r->Version=1u; r->Bytes=(unsigned int)sizeof(*r);
+  r->Version=2u; r->Bytes=(unsigned int)sizeof(*r);
 }
-static __inline void AdmissionRcDecision(ADMISSION_RC_DECISIONS *r,
+static __inline void AdmissionRcDecisionTyped(ADMISSION_RC_DECISIONS *r,
     unsigned int reason, unsigned int detail, unsigned int rf,
-    unsigned int cf, unsigned int pid, unsigned long long qpc) {
+    unsigned int cf, unsigned int pid, unsigned long long qpc,
+    unsigned int running, unsigned int next, unsigned int barrier) {
   ADMISSION_RC_DECISION *s;
   if(reason>=ADMISSION_RC_REASONS) reason=ADMISSION_RC_REASONS-1u;
   if(r->Histogram[reason]!=~0u) ++r->Histogram[reason];
   if(r->Count) {
     s=&r->Records[(r->Next+ADMISSION_RC_DECISIONS_COUNT-1u)%ADMISSION_RC_DECISIONS_COUNT];
     if(s->Reason==reason && s->Detail==detail && s->RFence==rf &&
-       s->CFence==cf && s->ProcessId==pid) {
+       s->CFence==cf && s->ProcessId==pid && s->RunningKind==running &&
+       s->NextKind==next && s->Barrier==barrier) {
       if(s->Count!=~0u) ++s->Count;
       s->LastLow=(unsigned int)qpc;s->LastHigh=(unsigned int)(qpc>>32);
       return;
@@ -69,11 +77,29 @@ static __inline void AdmissionRcDecision(ADMISSION_RC_DECISIONS *r,
   s=&r->Records[r->Next];
   s->Reason=reason;s->Detail=detail;s->RFence=rf;s->CFence=cf;
   s->ProcessId=pid;s->Count=1u;
+  s->RunningKind=running;s->NextKind=next;s->Barrier=barrier;
   s->FirstLow=s->LastLow=(unsigned int)qpc;
   s->FirstHigh=s->LastHigh=(unsigned int)(qpc>>32);
   r->Next=(r->Next+1u)%ADMISSION_RC_DECISIONS_COUNT;
   if(r->Count<ADMISSION_RC_DECISIONS_COUNT) ++r->Count;
   else if(r->Overwritten!=~0u) ++r->Overwritten;
+}
+
+/* Legacy caller has no class evidence. Zero remains explicitly unknown. */
+static __inline void AdmissionRcDecision(ADMISSION_RC_DECISIONS *r,
+    unsigned int reason, unsigned int detail, unsigned int rf,
+    unsigned int cf, unsigned int pid, unsigned long long qpc) {
+  AdmissionRcDecisionTyped(r,reason,detail,rf,cf,pid,qpc,0u,0u,0u);
+}
+/* Stable wire values mirror render_job_window.h; presentation/unknown jobs
+ * are not proof classes. Validation does not enable any admission class. */
+static __inline unsigned int AdmissionRcTypedPair(unsigned int running,
+    unsigned int next, unsigned int barrier) {
+  unsigned int render=running==1u || running==2u;
+  unsigned int expected;
+  if ((!render && running!=3u) || (next!=1u && next!=2u && next!=3u)) return 0u;
+  expected=next==1u ? (render ? 2u:1u) : (render ? 3u:4u);
+  return barrier==expected;
 }
 
 typedef unsigned char (*ADMISSION_RC_READ)(void *, const volatile unsigned int *, unsigned int *);
@@ -91,10 +117,14 @@ static __inline unsigned int AdmissionRcReached(unsigned int a,unsigned int b) {
   return b && a-b<0x80000000u;
 }
 /* 1 = firmware reached during staging; 2 = reached after publication while
- * C still pending. Neither proves a transition without an earlier negative
- * sample of THIS pair. Missing/overflowed samples yield no experiment PASS. */
+ * successor first queue still pending. Neither proves a transition without
+ * an earlier negative sample of THIS pair. Missing/overflowed samples yield no experiment PASS. */
 static __inline unsigned int AdmissionRcEvidence(const ADMISSION_RC_SAMPLE *s) {
-  if(s->Valid!=0x1fffu || !s->RFence || !s->CFence || !s->ExpectedC ||
+  if(!AdmissionRcTypedPair(s->RunningKind,s->NextKind,s->Barrier) ||
+     s->Valid!=0x1fffu || !s->RFence || !s->CFence || !s->ExpectedC ||
+     !s->RFlight || s->RFlight>2u || !s->CFlight || s->CFlight>2u ||
+     s->RFlight==s->CFlight || s->WaitValue!=s->ExpectedR ||
+     (!s->WaitLow && !s->WaitHigh) ||
      s->Words[0]!=s->Words[12] ||
      !AdmissionRcReached(s->Words[2],s->ExpectedR) ||
      AdmissionRcReached(s->Words[1],s->ExpectedC) ||
@@ -106,11 +136,18 @@ static __inline unsigned int AdmissionRcEvidence(const ADMISSION_RC_SAMPLE *s) {
 static __inline void AdmissionRcAppend(ADMISSION_RC_RECEIPT *r,
                                        const ADMISSION_RC_SAMPLE *s) {
   unsigned int i;
-  r->Version=1u;r->Bytes=(unsigned int)sizeof(*r);
+  r->Version=2u;r->Bytes=(unsigned int)sizeof(*r);
   if(r->Count && s->Stage==ADMISSION_RC_POLL) {
     const ADMISSION_RC_SAMPLE *last=&r->Samples[r->Count-1u];
     if(last->Stage==s->Stage && last->RFence==s->RFence && last->CFence==s->CFence &&
-       last->Valid==s->Valid && last->CFlags==s->CFlags) {
+       last->Valid==s->Valid && last->CFlags==s->CFlags &&
+       last->RunningKind==s->RunningKind && last->NextKind==s->NextKind &&
+       last->Barrier==s->Barrier && last->ExpectedR==s->ExpectedR &&
+       last->ExpectedC==s->ExpectedC && last->RFlight==s->RFlight &&
+       last->CFlight==s->CFlight && last->WaitLow==s->WaitLow &&
+       last->WaitHigh==s->WaitHigh && last->WaitValue==s->WaitValue &&
+       last->EventCount==s->EventCount && last->PreviousThreshold==s->PreviousThreshold &&
+       last->ProcessId==s->ProcessId) {
       for(i=0u;i<13u && last->Words[i]==s->Words[i];++i) {}
       if(i==13u) return;
     }

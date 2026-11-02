@@ -347,6 +347,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONG Depth2KickClasses; /* AdmissionJobWindowKickClasses */
   ADMISSION_JOB_WINDOW_KICK_FAILURE Depth2KickFailure;
   BOOLEAN RcReceiptEnabled, RcDepth2, RcExportPending;
+  BOOLEAN Depth2General;
   ADMISSION_RC_SAMPLE RcCurrent;
   ADMISSION_RC_RECEIPT RcReceipt;
   ADMISSION_RC_DECISIONS RcDecisions;
@@ -2690,9 +2691,16 @@ static VOID AdmissionRcSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
     }
   }
   words[0]=AdmissionRcObject(owner,12u,owner->ObjectOffsets[12u]);
-  words[1]=AdmissionRcObject(owner,39u,APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET);
-  words[2]=AdmissionRcObject(owner,10u,owner->ObjectOffsets[10u]);
-  words[3]=q->Config.D3.Stamp; /* explicitly DRIVER evidence only */
+  /* v2: successor FIRST queue brackets predecessor LAST queue progress.
+   * A prelude starts on compute, even though the render finishes on 3D. */
+  words[1]=s.NextKind == ADMISSION_JOB_WINDOW_KIND_RENDER ?
+      AdmissionRcObject(owner,9u,owner->ObjectOffsets[9u]) :
+      AdmissionRcObject(owner,39u,APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET);
+  words[2]=s.RunningKind == ADMISSION_JOB_WINDOW_KIND_COMPUTE ?
+      AdmissionRcObject(owner,39u,APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET) :
+      AdmissionRcObject(owner,10u,owner->ObjectOffsets[10u]);
+  words[3]=s.RunningKind == ADMISSION_JOB_WINDOW_KIND_COMPUTE ?
+      q->Config.Compute.Stamp : q->Config.D3.Stamp; /* DRIVER evidence only */
   words[4]=AdmissionRcObject(owner,9u,owner->ObjectOffsets[9u]);
   words[5]=q->Config.Ta.CpuWritePointer; words[6]=q->Config.Ta.GpuDonePointer;
   words[7]=q->Config.D3.CpuWritePointer; words[8]=q->Config.D3.GpuDonePointer;
@@ -3102,6 +3110,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
     return AppleAgxRenderManagerAbort(&runtime->Initdata.RenderSharedMemory,manager,Fence);
   for (i=0u;i<RTL_NUMBER_OF(objects);++i) {
     APPLE_AGX_EXP208_RELOCATION_OBJECT *object=&runtime->QueueObjects[objects[i]];
+    if (runtime->Initdata.RenderSharedMemory.ManagerDepth2 &&
+        runtime->Initdata.RenderSharedMemory.ManagerSecondFence) continue;
     /* Stats remains current for TVB growth and completion receipts. */
     if (runtime->Initdata.RenderSharedMemory.ManagerSaveOnEvict && objects[i]!=22u)
       continue;
@@ -3704,6 +3714,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     runtime->BuildMarkFence = 0u;
   }
 #endif
+  if (Plan->Successor && runtime->RcCurrent.CFence == Submission->Submission.Fence) {
+    runtime->RcCurrent.ExpectedC = Job->ComputeWorkAddressCount ?
+        Job->ComputeExpectedStamp : Job->TaExpectedStamp;
+    AdmissionRcSampleWindows(runtime, ADMISSION_RC_BUILT, 0u, 0u);
+  }
   return APPLE_AGX_BACKEND_TRUE;
 
 BuildFailure:
@@ -3711,7 +3726,8 @@ BuildFailure:
   /* This callback has not returned a built job: no queue publication has
    * occurred. Release only this exact unpublished manager transaction. */
   if (runtime->Initdata.RenderSharedMemory.ManagerSaveOnEvict &&
-      runtime->Initdata.RenderSharedMemory.ManagerFence==Submission->Submission.Fence)
+      (runtime->Initdata.RenderSharedMemory.ManagerFence==Submission->Submission.Fence ||
+       runtime->Initdata.RenderSharedMemory.ManagerSecondFence==Submission->Submission.Fence))
     (void)AppleAgxRenderManagerCancelBuild(&runtime->Initdata.RenderSharedMemory,
         runtime->Adapter->BackendImage.G4Manager,Submission->Submission.Fence,
         runtime->QueueObjects);
@@ -5267,6 +5283,7 @@ static BOOLEAN AdmissionJobWindowManagerNeedsIdle(
       PendingValid ? PendingManager : ImageManager;
   const APPLE_AGX_RENDER_MANAGER_KEY *key = PendingValid ? PendingKey : ImageKey;
   if (!Same) return TRUE;
+  if (AppleAgxRenderManagerCanShare(owner,manager,key)) return FALSE;
   return manager != NULL &&
          (manager->PendingFence != 0u || owner->ManagerFence != 0u ||
           AppleAgxRenderManagerNeedsBind(owner, key))
@@ -5385,6 +5402,11 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
       AppleAgxSchedulerKickedFence(&adapter->Scheduler) == 0u ? 1u : 0u;
   s.Capabilities = runtime->Depth2Capabilities;
   s.KickClasses = runtime->Depth2KickClasses;
+  s.General = runtime->Depth2General ? 1u : 0u;
+  s.SameManagerSlot = pendingManagerValid && head != NULL &&
+      head->Fence == pendingFence && head->Context == pendingContext &&
+      owner->ManagerFence == fence &&
+      AppleAgxRenderManagerCanShare(owner,pendingManager,&pendingKey) ? 1u : 0u;
   s.Running = runtime->Depth2Running;
   /* 61: a new queue lifetime, InitBM or a manager rebind need idle queues
    * (AdmissionPrepareG4Manager, AppleAgxG13QueueProviderPlanSuccessor).
@@ -5416,7 +5438,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
         : APPLE_AGX_COMPUTE_JOB_WORD_SET_A;
   }
   refusal = AdmissionJobWindowKickRefusal(&s);
-  if (!refusal && !AdmissionRcPairAllowed(runtime->RcDepth2, s.Running.Kind, s.Next.Kind))
+  if (!refusal && !runtime->Depth2General &&
+      !AdmissionRcPairAllowed(runtime->RcDepth2, s.Running.Kind, s.Next.Kind))
     refusal = 65u; /* restricted Q3 checkpoint, no new pair classes */
   if (refusal == 0u) {
     next = s.Next.Fence;
@@ -5432,18 +5455,28 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   }
   KeReleaseSpinLockFromDpcLevel(&adapter->SchedulerLock);
   KeReleaseSpinLock(&adapter->PagingLock, old_irql);
-  AdmissionRcDecisionWindows(runtime, refusal, prebindRefusal, fence, s.Next.Fence);
+  if (runtime->RcReceiptEnabled) {
+    AdmissionRcDecisionTyped(&runtime->RcDecisions,(unsigned int)refusal,
+        (unsigned int)prebindRefusal,(unsigned int)fence,s.Next.Fence,
+        runtime->RcDecisionPid,AdmissionJobQpc(),s.Running.Kind,s.Next.Kind,
+        AdmissionJobWindowBarrier(s.Running.Kind,s.Next.Kind));
+    runtime->RcExportPending = TRUE;
+  }
   AdmissionJobAheadNoteRefusalWindows(runtime, fence,
       ADMISSION_JOB_AHEAD_SHIFT_DEPTH2, refusal);
   if (refusal != 0u)
     /* Preemption, paging and a not yet Prebound successor may clear. */
     return refusal == 4u || refusal == 52u || refusal == 53u ||
            refusal == 54u ? FALSE : TRUE;
-  if (runtime->RcReceiptEnabled && s.Running.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER &&
-      s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_COMPUTE) {
+  if (runtime->RcReceiptEnabled) {
     RtlZeroMemory(&runtime->RcCurrent, sizeof(runtime->RcCurrent));
     runtime->RcCurrent.RFence = fence; runtime->RcCurrent.CFence = next;
-    runtime->RcCurrent.ExpectedR = runtime->Backend.PendingJob.D3ExpectedStamp;
+    runtime->RcCurrent.RunningKind = s.Running.Kind;
+    runtime->RcCurrent.NextKind = s.Next.Kind;
+    runtime->RcCurrent.Barrier = (unsigned int)barrier;
+    runtime->RcCurrent.ExpectedR = s.Running.Kind == ADMISSION_JOB_WINDOW_KIND_COMPUTE ?
+        runtime->Backend.PendingJob.ComputeExpectedStamp :
+        runtime->Backend.PendingJob.D3ExpectedStamp;
     if (context && context->GpuvaG3Process)
       runtime->RcCurrent.ProcessId = (unsigned int)
           ((ADMISSION_G3_PROCESS *)context->GpuvaG3Process)->OsProcessId;
@@ -5512,7 +5545,11 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
      * unrun now, or the reset's private stage quarantines it (0x116). */
     if (!runtime->Backend.SuccessorPending &&
         runtime->Provider.QueueProvider.Phase != AppleAgxG13QueueProviderFaulted &&
-        runtime->Provider.QueueProvider.Runtime.Phase != AppleAgxG13QueueRuntimeFaulted) {
+        runtime->Provider.QueueProvider.Runtime.Phase != AppleAgxG13QueueRuntimeFaulted &&
+        (!runtime->Depth2General || !image->G4Manager ||
+         (owner->ManagerFence != next && owner->ManagerSecondFence != next) ||
+         AppleAgxRenderManagerCancelBuild(owner,image->G4Manager,next,
+                                          runtime->QueueObjects))) {
       AdmissionGpuvaG3AbortJob(adapter, next);
       flags |= ADMISSION_KICK_FAIL_G3_ABORTED;
       /* EXP2047: a render staged for it gives its stamp sequence back
@@ -7133,6 +7170,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->ManagerSlots =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerSlots");
   runtime->RcDepth2 = runtime->RcReceiptEnabled = runtime->RcExportPending = FALSE;
+  runtime->Depth2General = FALSE;
   /* rc90: on by default since EXP2034 (the G4-r3 drill passed with it);
    * only REG_DWORD 0 turns it off. */
 #if ADMISSION_JOB_AHEAD_BUILD
@@ -7164,6 +7202,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
         runtime->Depth2Capabilities != 0u ? TRUE : FALSE;
     runtime->Depth2KickClasses = 1u << ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D;
   }
+  /* Q6: all prerequisites are mandatory, and every unvalidated barrier
+   * class has its own switch. Broad rc102 switches cannot widen this mask. */
+  runtime->Depth2General = runtime->ManagerSlots &&
+      runtime->Initdata.RenderSharedMemory.NotifierFlight &&
+      runtime->Depth2Capabilities != 0u &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2General") ? TRUE : FALSE;
+  if (runtime->Depth2General) {
+    runtime->JobDepth2Kick = TRUE;
+    runtime->RcReceiptEnabled = TRUE;
+    runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER;
+    runtime->Depth2KickClasses = AdmissionJobWindowGeneralClasses(
+        AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2TaOnCompute") ? 1u : 0u,
+        AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2TaOn3d") ? 1u : 0u,
+        AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2ComputeOnCompute") ? 1u : 0u);
+  }
 #else
   runtime->JobAhead = FALSE;
   runtime->JobDepth2 = FALSE;
@@ -7171,11 +7224,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->JobDepth2Kick = FALSE;
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  /* q1: independently test manager persistence at depth one. Combining it
-   * with the parked rc102 early-kick path is deliberately not admitted. */
+  /* q1 persistence stays serial with legacy kick switches. Q6 owns the
+   * explicit same-slot two-user exception and always enables persistence. */
   runtime->Initdata.RenderSharedMemory.ManagerSaveOnEvict =
-      runtime->ManagerSlots && !runtime->JobDepth2Kick &&
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerSaveOnEvict");
+      runtime->Depth2General || (runtime->ManagerSlots && !runtime->JobDepth2Kick &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerSaveOnEvict"));
+  runtime->Initdata.RenderSharedMemory.ManagerDepth2 = runtime->Depth2General;
+  /* Provider preparation already copied QueueConfig. Runtime initialization
+   * occurs at BackendStart/Create below; update its retained config now. */
+  runtime->Provider.QueueProvider.Config.AbortFaultSuffix = runtime->Depth2General;
   runtime->Initdata.RenderSharedMemory.ManagerEvict = AdmissionEvictG4Manager;
   runtime->Initdata.RenderSharedMemory.ManagerEvictContext = runtime;
 #endif

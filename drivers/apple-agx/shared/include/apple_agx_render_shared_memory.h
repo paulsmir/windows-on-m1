@@ -196,6 +196,12 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   APPLE_AGX_RENDER_SHARED_MEMORY_RESULT LastResult;
   APPLE_AGX_RENDER_MANAGER_KEY ManagerKey;
   APPLE_AGX_U32 ManagerFence;
+  /* Q6: bounded exact users of the same resident slot. ManagerFence remains
+   * the oldest-user busy summary consumed by legacy lifetime checks. */
+  APPLE_AGX_BOOL ManagerDepth2;
+  APPLE_AGX_U32 ManagerSecondFence;
+  APPLE_AGX_BOOL ManagerPoisoned;
+  APPLE_AGX_U32 ManagerTerminalFence[2];
   /* The notifier threshold counts every notifying command since the
    * queue was initialised (Asahi notification_count = 2 * render +
    * compute): the render part is the last render job's 2 * sequence (its
@@ -242,7 +248,8 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   APPLE_AGX_RENDER_MANAGER_KEY SlotKey[APPLE_AGX_RENDER_MANAGER_SLOTS];
   APPLE_AGX_BOOL SlotBound[APPLE_AGX_RENDER_MANAGER_SLOTS];
   APPLE_AGX_U32 SlotUse[APPLE_AGX_RENDER_MANAGER_SLOTS];
-  /* q1: depth-one opt-in. No process pointers retained in a slot. Evict
+  /* q1: save-on-eviction; Q6 retains all exact same-slot users. No process
+   * pointers retained in a slot. Evict
    * synchronizes Objects for CPU reads and stores a snapshot by Key under
    * the process registry lock; FALSE leaves the slot dirty and bound. */
   APPLE_AGX_BOOL ManagerSaveOnEvict;
@@ -302,6 +309,12 @@ APPLE_AGX_BOOL AppleAgxRenderManagerSnapshot(APPLE_AGX_RENDER_MANAGER_STATE *Sta
 /* Under the process registry lock; an obsolete key is safely discarded. */
 APPLE_AGX_BOOL AppleAgxRenderManagerAcceptSnapshot(APPLE_AGX_RENDER_MANAGER_STATE *State,
     const APPLE_AGX_RENDER_MANAGER_STATE *Snapshot);
+
+/* True only for a retained same-key live manager with room for one user. */
+APPLE_AGX_BOOL AppleAgxRenderManagerCanShare(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const APPLE_AGX_RENDER_MANAGER_STATE *State,
+    const APPLE_AGX_RENDER_MANAGER_KEY *Key);
 
 APPLE_AGX_BOOL AppleAgxRenderManagerNeedsBind(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,

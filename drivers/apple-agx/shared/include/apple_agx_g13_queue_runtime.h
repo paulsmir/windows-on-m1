@@ -50,6 +50,8 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG {
   APPLE_AGX_G13_QUEUE_BINDING D3;
   APPLE_AGX_G13_QUEUE_BINDING Compute;
   APPLE_AGX_BACKEND_BOOL HasCompute;
+  /* Q6: dependent work after an unproven/dropped head cannot succeed. */
+  APPLE_AGX_BACKEND_BOOL AbortFaultSuffix;
   APPLE_AGX_BACKEND_U64 TimeoutTicks;
 } APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG;
 

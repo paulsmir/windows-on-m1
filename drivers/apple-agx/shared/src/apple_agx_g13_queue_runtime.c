@@ -873,6 +873,11 @@ static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13PollRecovery(
               0x80000000u)
         reached = APPLE_AGX_BACKEND_FALSE;
     }
+    /* A later stamp proves execution, not correct inputs after a dropped
+     * predecessor. General depth two aborts that dependent suffix after all
+     * published queue endpoints retired; never reuse bytes on resume alone. */
+    if (Runtime->Config.AbortFaultSuffix && !head_reached)
+      reached = APPLE_AGX_BACKEND_FALSE;
     Runtime->Successor.VerdictValid = APPLE_AGX_BACKEND_TRUE;
     Runtime->Successor.Verdict = reached ? AppleAgxG13QueueCompletionSuccess
                                          : AppleAgxG13QueueCompletionRecovered;

@@ -71,6 +71,17 @@ unsigned int AdmissionJobWindowKickClasses(unsigned int On3d) {
   return classes;
 }
 
+unsigned int AdmissionJobWindowGeneralClasses(unsigned int TaOnCompute,
+    unsigned int TaOn3d, unsigned int ComputeOnCompute) {
+  /* EXP2088 proves only compute-on-3D with commit-time notifier publication.
+   * The other classes need independent bounded hardware gates. */
+  unsigned int classes = 1u << ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D;
+  if (TaOnCompute) classes |= 1u << ADMISSION_JOB_WINDOW_BARRIER_TA_ON_COMPUTE;
+  if (TaOn3d) classes |= 1u << ADMISSION_JOB_WINDOW_BARRIER_TA_ON_3D;
+  if (ComputeOnCompute) classes |= 1u << ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_COMPUTE;
+  return classes;
+}
+
 unsigned int AdmissionJobWindowKickRefusal(
     const ADMISSION_JOB_WINDOW_KICK_STATE *s) {
   const ADMISSION_JOB_WINDOW_JOB *n, *m;
@@ -99,9 +110,11 @@ unsigned int AdmissionJobWindowKickRefusal(
     return 57u;
   if (AdmissionJobWindowUsesManager(n->Kind) &&
       AdmissionJobWindowUsesManager(m->Kind)) {
-    /* One firmware manager slot: the live objects 1/20/21/22/13 of N's
-     * binding cannot be restored for another binding while N runs. */
-    if (n->SceneId == 0ULL || m->SceneId != n->SceneId) return 58u;
+    /* Legacy admission uses SceneId. Q6 instead requires the complete
+     * resident-slot key and exact pending owner; scene objects are per flight.
+     * Neither path permits restoring another manager while N runs. */
+    if (s->General ? !s->SameManagerSlot :
+        (n->SceneId == 0ULL || m->SceneId != n->SceneId)) return 58u;
     if (!(s->Capabilities & ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER))
       return 59u;
   }
