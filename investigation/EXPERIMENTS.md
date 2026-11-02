@@ -67248,3 +67248,19 @@ Run: `agx_d3d12_probe_e2083_arm64.exe only Q3RC` (fresh device, render then comp
 EXP2084 HARDWARE ACTUAL (2026-11-02): **Q3RC passes at depth one with Wom1NotifierFlight=1: `AGX_D3D12_Q3RC: PASS bad=0 overlap=UNVERIFIED`, fences 101/102 in order, clean exit, guest alive; no kick.**
 - Expected vs actual: identical to the EXP2083 control except the switch: confirmed. Design hardware step (a) passes: commit-time notifier publication is serially equivalent on hardware.
 - Next: EXP2085, design step (b), Wom1RcDepth2=1 (restricted R->C depth two), preregistered PASS / INCONCLUSIVE / FAIL criteria.
+
+EXP2085 HARDWARE BEFORE 2026-11-02T19:56:32Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 (Kick, KickOn3d, ManagerSaveOnEvict absent).
+- WHY THIS HYPOTHESIS:
+  1. EXP2083/EXP2084: Q3RC PASS bad=0 at depth one with NotifierFlight off and on; no kick, clean exit.
+  2. Codex q2/q3: the staged notifier is published only at queue commit (g13_queue_runtime.c:340, before cpu_wptr), which removes the build-time threshold rise the q1 analysis ranked as the likely EXP2052 cycle; Wom1RcProgress reads the firmware 3D stamp (object 10) apart from the driver stamp.
+  3. EXP2052 hung after R->C kicks without evidence separating delayed notification from a firmware/barrier cycle; this run is the bounded discriminator the design requires before any application run.
+- ATOMIC CONTRACT: only Wom1RcDepth2 changes against EXP2084 (it admits only native R->C compute-on-3D and enables the receipt).
+- WINDOWS CONTRACT: one completion per original fence, reported only when its work is terminal. AGX/ASAHI CONTRACT: compute queued behind the 3D stamp barrier while 3D runs (Asahi Barrier on stamps). WHAT IS STILL UNKNOWN: whether this firmware advances the 3D stamp while the compute job's threshold is published (the EXP2052 question).
+- Expected (PASS): Q3RC PASS bad=0; agx_rc_progress.py on Wom1RcProgress (probe PID and QPC window) reports published-progress; Wom1JobWindow Kicks increased, MaxInFlight 2, barrier class compute-on-3D; both Windows fences once, in order, Status 0; no reset/fault/removal.
+- INCONCLUSIVE: no successor queued, R finished before the first published sample, missed interval, read failure, overflow, stale receipt or missing fence records: do not run GravityMark; adjust only the probe workload/sampling in a new experiment.
+- Failure criteria (FAIL): wrong output, firmware/barrier stall to the deadline, dropped/duplicate/misordered fence, reset or failed quiesce, 0x116.
+- Recovery: rec2085h (collect receipts first; at proxy AGX_RECOVERY_ALLOW_AT_PROXY=1).
+- Hashes: sys b7ad9cc3d145, UmdArm64 26d1890bac4e, UmdX64 39a24ddfac60, Umd32 1688c88fbec6; manifest 2596a9d5d438, hardware-manifest 3c91451d806e; probe2085.sh 32e842981024 (PROBE_LINT_OK); visible recovery rec2085h 8b8199fe746e70d1; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1.
+- Recovery rec2085h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2085-q3rc-depth2/run2085.sh.
