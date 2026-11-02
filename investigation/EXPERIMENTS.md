@@ -67148,3 +67148,17 @@ EXP2079 HARDWARE ACTUAL (2026-11-02): **rc124 with Wom1ManagerSlots=1 runs clean
 - Per job identical to EXP2075a (C4 8.59, R1 7.89 ms); Wom1JobTiming971 render begin 38 us, build 148 us, kick->progress 356 us.
 - Limitation: no receipt records whether a build reused a live slot, so the slot path is shown only indirectly (switch set, no fault). Next: a slot receipt, then the queue-ahead steps of the Asahi model.
 - Recovery rec2079h.
+
+EXP2080 HARDWARE BEFORE 2026-11-02T17:44:07Z:
+Arms (all HD 100k -temporal 0, APPLE_AGX_D3D12_SPLIT_TAGS as EXP2078): a LOCAL_LOAD_SCHED=0, b =1, c =0.
+- WHY THIS HYPOTHESIS:
+  1. EXP2078: the traversal kernel 97ae4b027aa43c6c costs 2.04 ms on its third launch of five (about 2.8 ms per frame).
+  2. Codex K1 (investigation/analysis/K1-asteroid-compute.md): local_load has no scoreboard (agx_opcodes.py), and the latency scheduler ignored it; offline the retained executable has 82 shared loads consumed within 2 instructions, 24 with the switch; instructions 1334, waits 61, atomics 6 and the 1024-thread register tier unchanged.
+- ATOMIC CONTRACT: one compiler switch (environment), same package.
+- WINDOWS/AGX CONTRACT: unchanged; ordering of memory, atomics and barriers preserved (scheduler DAG unchanged). WHAT IS STILL UNKNOWN: whether local-load latency is a material share of the traversal time (versus atomics, divergence or device-load latency).
+- Expected: arm b's third 97ae4b02 launch at least 5% below both a and c (reference 2.04 ms); other kernels and the image unchanged. Modest odds: Codex rates the speedup unmeasured.
+- Failure criteria: TDR, WER, image corruption; controls a and c differ by 5% or more (inconclusive).
+- Recovery: rec2080h.
+- Hashes: sys 19e047d55244, UmdArm64 a9b0a6247ec0, UmdX64 a0fbb79b6a96, Umd32 c13a1acf552e; manifest 397bf76897d9, hardware-manifest a0fb694fc6a5; probe2080.sh 1913e24e9450 (PROBE_LINT_OK); visible recovery rec2080h 2f7b710b77b8dab8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2080h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2080-local-sched/run2080.sh.
