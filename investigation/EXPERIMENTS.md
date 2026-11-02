@@ -67004,3 +67004,18 @@ EXP2072 HARDWARE ACTUAL (2026-11-02): **the packed PS variant exists and is reje
 - 71405b87 (FRAGMENT section, 4.3 MB): three compiles, each pre-RA 6171 lines with 24 xor. Post-RA: pinned 8438 (1914 xor, 238 stack ops), latency variant 8287 (1911 xor, 217 stack, chosen), packed 8606 (2223 xor, 217 stack): agx_win32_pack_keeps rejects it (more instructions). Max register r127: no free 8-halfreg block to pack into.
 - Expected vs actual: expected either a rejected packed listing or no packed listing; actual: packed listing present and worse. The hypothesis "packing helps the PS" is rejected.
 - Offline follow-up (fixture --fs-backend, 89c6af1c): the PS compiles through the backend with the same pathology (no-robust: pre-RA 7066, post-RA 9991, 2442 xor). Per-site copy counts: all of the growth is phi parallel copies at branch joins (806 swaps x 3 xor + 517 mov); evictions 20 copies; spill-target slack (8..64 halfregs) gains at most 2.4%. Cause: phi webs lose their register to first-fit temporaries in the other branch. rc123 e4da359b reserves pending web registers: PS 16506 -> 11431 (robust), compute 144a46de 4241 -> 3290, corpus of 206 captured shaders -5.4%, spills/fills/threads unchanged. -> EXP2073.
+
+EXP2073 HARDWARE BEFORE 2026-11-02T13:26:10Z:
+Arms: a FHD 100k rc123 on (first), b FHD 100k APPLE_AGX_RA_WEB=0 (control, second), c FHD 100k rc123 on (third). ABA brackets the about 3% position effect.
+- WHY THIS HYPOTHESIS:
+  1. EXP2072 listing: the full-screen PS 71405b87 grows from 6171 to 8287 lines in register allocation (1911 xor, 217 stack ops); the packed variant does not help (8606).
+  2. Offline fixture --fs-backend (89c6af1c), per-site copy counts: the whole growth is phi parallel copies at branch joins (806 swaps x 3 xor + 517 mov); evictions 20 copies; spill-target slack gains at most 2.4%.
+  3. rc123 offline: PS 9988 -> 7812 (no-robust) and 16506 -> 11431 (robust), swaps 806 -> 90; compute 144a46de -22%, corpus -5.4%; spills, fills, threads unchanged; RA validation on; kill switch and occupancy tests OK.
+- ATOMIC CONTRACT: one allocator behaviour (pending phi-web reservation), applied only in variants that the existing keep rules accept against the pinned compile.
+- WINDOWS CONTRACT: none changed (compiler internal). AGX/ASAHI CONTRACT: same ISA, same register count bound, RA validated. TRANSLATION: n/a. WHAT IS STILL UNKNOWN: how much of the main 3D pass time (8.3 ms) the removed xor/mov cost on hardware.
+- Expected: arms a and c: PS 71405b87 stats about 6600-7000 instructions (from 8285), same 384 threads and 111 spills; main 3D pass below 7.5 ms; score a and c above b by 3-6% (about 4550-4650 vs about 4400). Arm b reproduces 8285 instructions.
+- Failure criteria: PS stats unchanged in a/c, any image difference, TDR, WER, or a and c not both above b.
+- Recovery: rec2073h.
+- Hashes: sys 01492b24c0dd, UmdArm64 7ea821fb5429, UmdX64 d6eb0a4a71ae, Umd32 1389497880b4; manifest 25071cd7ddc4, hardware-manifest 8c57b11e02e9; probe2073.sh ebfe987bde10 (PROBE_LINT_OK); visible recovery rec2073h 4b5c41437539b944; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2073h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2073-ra-web/run2073.sh.
