@@ -67526,3 +67526,18 @@ EXP2096 HARDWARE ACTUAL (2026-11-02): **q6 step 3 PASS: with the q10 paired-reti
 - Recovery rec2096h.
 
 EXP2095 CORRECTION (2026-11-02, offline, Codex q11): the "hold at the D3D12 queue's GPU wait on the owner fence" attribution in EXP2095 ACTUAL is not supported. Both render and compute use one owner context and one monitored completion object; the outgoing wait is queued on the application queue context. In the measured Q3CR pair (tool-q3cr-umd.log) the blue render spent 33.678 ms in CPU replay (PagingFence 15.963 ms + PoolMapEscape 10.819 ms) and reached the native submission about 27 ms after the 6 ms compute completed: the successor was not pending because its first-use preparation was cold (vertices2/texture2 first touched in the measured sequence). The reason-66 finding stands; the cause is the probe's cold successor. Follow-up: q11b warms the successor at depth one before the measured pair.
+
+EXP2097 HARDWARE BEFORE 2026-11-02T22:52:43Z:
+Switches: accepted EXP2096 mask (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1) + Wom1Depth2TaOnCompute=1. Steps: only Q3CR, then only Q3RCR.
+- WHY THIS HYPOTHESIS:
+  1. EXP2095: the probe PID's only retained decision was reason 66 (no pending successor) during a 5.96 ms compute.
+  2. q11 trace analysis: the successor render spent 33.7 ms in CPU replay (PagingFence 15.96 ms + PoolMapEscape 10.82 ms, first use of vertices2/texture2) and reached the KMD ~27 ms after the compute finished; q11b warms exactly those resources twice at depth one.
+- ATOMIC CONTRACT: driver variable = Wom1Depth2TaOnCompute on top of the accepted mask (it was on in EXP2091/2093/2095 without effect because no C->R successor was ever pending); probe warm-up is the measurement fix.
+- WHAT IS STILL UNKNOWN: whether the firmware honours the inter-job TA-on-compute barrier.
+- Expected PASS: Q3CR PASS bad=0 with a retained probe decision reason 0, running compute, next render, barrier 1 (TA-on-compute); ta_on_compute >= 1; the successor's measure-d3d12-execute replay well under the 5.96 ms compute; exact ordered fences; no Wom1GpuReset/G4 failure/EventDrain; Q3RCR PASS.
+- INCONCLUSIVE: reason 66 again with a warm (short) replay -> the remaining delay is elsewhere (named by the trace).
+- FAIL: wrong output (render before compute is not visible in outputs), deadline, reset, G4 rejection, 0x116.
+- Recovery: rec2097h.
+- Hashes: sys b12508f23cb4, UmdArm64 e4729cc6ce13, UmdX64 4a89110ccca6, Umd32 b3fcf2d2c6b8; manifest 26dfb7528beb, hardware-manifest d268bed379fe; probe2097.sh 978417457509 (PROBE_LINT_OK); visible recovery rec2097h 1fb9c6b4f3141bcc; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2097h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2097-cr-warm/run2097.sh.
