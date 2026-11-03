@@ -68596,3 +68596,14 @@ Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite (defaults); probe "only MEM
 - Hashes: sys 798030f67179, UmdArm64 da839f6d2706, UmdX64 e7f0f7301f02, Umd32 185b5889c8d3; manifest fad16a4b037c, hardware-manifest 21291d94eee9; probe2144.sh e284a708e4ff (PROBE_LINT_OK); visible recovery rec2144h 4b66c4f938175815; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2144h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2144-memlat/run2144.sh.
+
+EXP2144 HARDWARE ACTUAL (2026-11-03T22:54:46Z): **dependent-load latency steps up between 16 MiB and 64 MiB: TLB reach / page-walk cost, not DRAM.**
+- Suite 119/0. MEMBW run 1 / run 2: stream 63.50 / 57.87 GB/s; chase ns per dependent load (1024 threads): 16 KiB 221/209, 64 KiB 288/285, 256 KiB 317/468, 1 MiB 567/1203, 4 MiB 1089/1376, 16 MiB 1486/1442, 64 MiB 4622/5168.
+- Interpretation: 16 MiB and 64 MiB are both beyond the 8 MiB SLC, so DRAM latency is the same; the extra ~3.4 us at 64 MiB (4096 16-KiB pages vs 1024) is the cost of TLB misses (3-level UAT walk) with 1024 concurrent misses. Asahi uses the same 3-level 16-KiB layout (pgtable.rs UAT_LEVELS 3), so the miss cost may be hardware behaviour; queueing vs per-miss cost is still unknown.
+- Verdict: confirmed (latency step located). Next: EXP2145 in the same boot, probe e2145 adds the same chase with 32 threads.
+
+EXP2145 HARDWARE BEFORE 2026-11-03T22:54:46Z:
+Same boot as EXP2144 (package 30.0.2144.0). Probe e2145 (MEMBW with 1024- and 32-thread chases), "only MEMBW" once, run directly over SSH.
+- WHY THIS HYPOTHESIS: EXP2144 places the 64 MiB latency step at the TLB reach; with 1024 concurrent misses the per-load figure mixes walk cost and walker queueing. 32 threads (one SIMD group) bound the queueing.
+- Expected: 32-thread 64 MiB latency well below 4.6 us if queueing dominates (hardware-inherent, like macOS); about equal if each walk is slow (then the page-table placement/attributes are the next suspect).
+- Recovery: rec2144h.
