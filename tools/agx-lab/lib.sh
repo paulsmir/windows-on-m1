@@ -23,7 +23,7 @@ BH_WIN=${AGX_BUILDER_HOME//\//\\}
 
 # Option arrays (macOS /bin/bash is 3.2: plain arrays only).
 _guest_opts() {
-  SSH_OPTS=(-i "$AGX_GUEST_KEY" -o BatchMode=yes -o ConnectTimeout="${1:-7}"
+  SSH_OPTS=(-i "$AGX_GUEST_KEY" -o BatchMode=yes -o ConnectTimeout="${1:-7}" -o ServerAliveInterval=5 -o ServerAliveCountMax=3
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$AGX_GUEST_KNOWN_HOSTS")
 }
 _builder_opts() { SSH_OPTS=(-i "$AGX_BUILDER_KEY" -o BatchMode=yes -o ConnectTimeout="${1:-10}"); }
