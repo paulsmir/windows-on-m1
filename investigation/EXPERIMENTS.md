@@ -67887,3 +67887,5 @@ EXP2114 HARDWARE ACTUAL (2026-11-03): **q21 early batch reclamation (APPLE_AGX_D
 - Expected vs actual: expected next_submit < head_complete and a gain up to ~7%; actual no change in the hold and +0.5-0.6% (noise). Verdict rejected: early reclamation is not the cause of the hold; option stays off.
 - Next: Codex q21b re-attributes the hold with the EXP2114 trace.
 - Recovery rec2114h.
+
+USER PERMISSION (2026-11-03): per AGENTS.md "G2 m1n1 implementation and hardware runs require explicit user permission", the user authorised (chat, option "offline and hardware") an m1n1 broker extension so that GPU-VA map publication need not wait for a running job of the same process (q22: the broker refuses page-table updates while the process has a running job; ~0.5 ms before each GravityMark render). Scope: Codex q22b implements the broker + KMD change offline on its own m1n1 branch from 075e3980 with tests; Claude runs hardware with the standard recovery and the current last-good m1n1 (075e3980 guestram) as AGX_M1N1_LASTGOOD.
