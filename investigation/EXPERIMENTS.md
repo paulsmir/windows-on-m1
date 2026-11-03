@@ -68232,3 +68232,16 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1. St
 - Expected: suite 119/0; prev compute end -> prelude start median falls well below 0.58 ms for paired renders; score rises if the idle shrinks (up to ~+7 %).
 - FAIL: firmware crash (EXP2118 class) -> recovery; idle unchanged -> latency is barrier wake (firmware/m1n1).
 - Recovery: rec2129h.
+
+EXP2129 HARDWARE BEFORE 2026-11-03T14:05:49Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1. Steps: suite; GravityMark HD 100k T0 (UMD trace, MESA_SHADER_CACHE_DISABLE=true).
+- WHY THIS HYPOTHESIS: (1) EXP2128: GravityMark compute -> render pairs are refused for depth two with 5 (prelude unproven), and KickTa -> TA start is ~0.75 ms, of which prev compute end -> prelude start is 0.577 ms (EXP2126); (2) render -> compute pairs, which are kicked early, show ~0.013 ms idle (G1); (3) EXP2120 validated prelude pairs (no firmware crash); EXP2121 saw no score gain but recorded no stage timestamps.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: prelude on the compute queue with the q23 queue-event stamps (EXP2120). TRANSLATION: existing switch.
+- ATOMIC CONTRACT: single switch (Wom1Depth2Prelude gates admission + q23 stamps together, EXP2118/2120).
+- WHAT IS STILL UNKNOWN: whether the firmware's start latency is hidden by an early kick or is a barrier wake cost.
+- Expected: suite 119/0; prev compute end -> prelude start median falls well below 0.58 ms for paired renders; score rises if the idle shrinks (up to ~+7 %).
+- FAIL: firmware crash (EXP2118 class) -> recovery; idle unchanged -> latency is barrier wake (firmware/m1n1).
+- Recovery: rec2129h.
+- Hashes: sys 3ea20045a46e, UmdArm64 224b6cfe5da4, UmdX64 8195467c73be, Umd32 6fa234342bd4; manifest 2fd956aff240, hardware-manifest b9342fa1469c; probe2129.sh b9bd40b67c5d (PROBE_LINT_OK); visible recovery rec2129h 2163fa0e22a636c7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1.
+- Recovery rec2129h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2129-prelude-pairs/run2129.sh.
