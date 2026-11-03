@@ -67902,3 +67902,10 @@ Switches: Wom1GpuFaultInfoRead=1 only. Steps: only Q3PC, then GravityMark HD/FHD
 - Hashes: sys 7a6401143258, UmdArm64 f4f41c2740a9, UmdX64 5446c5042bef, Umd32 b21a40abd80e; manifest f6ed32141c5d, hardware-manifest 394faa3836f8; probe2115.sh 3a7777e781b3 (PROBE_LINT_OK); visible recovery rec2115h ce49915e46a17137; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2115h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2115-m1n1-q22-compat/run2115.sh.
+
+EXP2115 HARDWARE ACTUAL (2026-11-03): **q22b compatibility PASS: the new m1n1 7cce5a0e (sha256 936cbd03...) boots and is behaviour-neutral with the KMD feature off.**
+- Boot/launch normal on the new m1n1; Q3PC exact outputs PASS, hold unchanged as expected (head 5398 submit 1508717173 / complete 1509266943, next 5399 submit 1509278295 = 0.47 ms after head_complete).
+- GravityMark HD 100k temporal 0: 5989, 35.8 FPS (EXP2114 on m1n1 075e3980: 5977). FHD: 4840, 29.0 FPS (EXP2114: 4830). Normal exits, WER 0; no reset, no G4 failure; pipeline rc 0.
+- Expected vs actual: all criteria met (scores within noise, hold unchanged with the feature off). Verdict confirmed.
+- Next: EXP2116 enables Wom1LiveAdditivePaging=1 on the same m1n1.
+- Recovery rec2115h (last-good m1n1 075e3980).
