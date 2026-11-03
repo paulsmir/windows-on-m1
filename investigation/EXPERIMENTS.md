@@ -67659,3 +67659,16 @@ EXP2103 HARDWARE ACTUAL (2026-11-03): **same-source depth-one control: depth two
 - EXP2075 (HD 5696, FHD 4487) ran with only Wom1GpuFaultInfoRead=1; EXP2103 additionally has Wom1ManagerSlots, JobDepth2Caps, RcReceipt, NotifierFlight, RcDepth2, Depth2General (+ sub-switches, inert at JobDepth2=0) and the q5-q15 code. Either these switches or the code cost about 8% (HD) at depth one.
 - Expected vs actual: expected depth one within noise of EXP2075; actual -8% HD / -1.9% FHD. Verdict: depth two (non-prelude classes) is a real but small gain; a depth-one regression is introduced by the current configuration and must be isolated (next: current code with only Wom1GpuFaultInfoRead=1).
 - Recovery rec2103h.
+
+EXP2104 HARDWARE BEFORE 2026-11-03T00:44:17Z:
+Switches: EXP2102 mask (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1), Wom1Depth2Prelude absent. Step: only Q3PC.
+- WHY THIS HYPOTHESIS: EXP2100 crashed the firmware on a prelude-render -> compute pair; before opening the gate (EXP2105+) the probe must be shown to produce exactly that candidate pair (typed reason 5 for its PID, kinds prelude-render/compute, barrier compute-on-3D) with exact outputs at depth one.
+- ATOMIC CONTRACT: probe only; driver identical in behaviour to EXP2102.
+- WHAT IS STILL UNKNOWN: whether the pipeline-statistics trigger produces a prelude render on hardware and a pending compute successor.
+- Expected PASS: Q3PC PASS bad=0; retained probe-PID decision reason 5 (prelude unproven) with running kind prelude-render and next kind compute; no kick for that pair; no reset.
+- INCONCLUSIVE: no reason-5 record for the PID (no prelude or no pending successor) -> the probe does not reproduce the EXP2100 topology.
+- FAIL: wrong output, deadline, reset.
+- Recovery: rec2104h.
+- Hashes: sys da52a244f233, UmdArm64 2fbdddfe45ed, UmdX64 4a73a0baaf96, Umd32 22acbd49c464; manifest 4d83176519fe, hardware-manifest 932c83982925; probe2104.sh 586aad6cd3ed (PROBE_LINT_OK); visible recovery rec2104h af59292bbc71a4c4; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2104h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2104-q3pc-gate/run2104.sh.
