@@ -84,10 +84,10 @@ class Projection(unittest.TestCase):
             for relative in self.module.FILES:
                 shutil.copy2(self.mesa / relative, include / Path(relative).name)
             units = [include / 'agx_compile.c', include / 'agx_pressure_schedule.c',
-                     include / 'agx_register_allocate.c']
+                     include / 'agx_register_allocate.c', include / 'agx_insert_waits.c']
             provenance = closure.prepare_latency_schedule(units, include)
             self.assertEqual(set(provenance['files']), {'agx_compiler.h', 'agx_compile.c', 'agx_pressure_schedule.c',
-                                                        'agx_register_allocate.c'})
+                                                        'agx_register_allocate.c', 'agx_insert_waits.c'})
             for entry in provenance['files'].values():
                 self.assertNotEqual(entry['before_sha256'], entry['after_sha256'])
             self.assertIn('agx_win32_compile_function', (include / 'agx_compile.c').read_text())

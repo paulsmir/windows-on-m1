@@ -804,11 +804,189 @@ def project_ra(text):
     return text
 
 
+WAITS_ANCHOR = r'''void
+agx_insert_waits(agx_context *ctx)
+{
+   agx_foreach_block(ctx, block) {
+      if (agx_compiler_debug & AGX_DBG_WAIT)
+         agx_insert_waits_trivial(ctx, block);
+      else
+         agx_insert_waits_local(ctx, block);
+   }
+}'''
+
+# W1 (G1/EXP2122): agx_insert_waits_local drains every scoreboard slot at the
+# end of each non-exit block ("This should be optimized"), so no load stays in
+# flight across a branch or loop edge. Opt-in APPLE_AGX_WAIT_GLOBAL=1 carries
+# the slot state (pending registers and message count) across blocks: the
+# entry state of a block is the union over its predecessors, iterated to a
+# fixed point; waits are inserted only before a read or overwrite of a
+# pending register, before a barrier, on slot overflow, as in the local pass.
+# No fixed point within the bound -> the local pass for the whole shader.
+WAITS = r'''/* W1: opt-in cross-block scoreboard state (APPLE_AGX_WAIT_GLOBAL=1). */
+static bool
+agx_win32_wait_global(void)
+{
+   static int enabled = -1;
+   if (enabled < 0) {
+      const char *env = getenv("APPLE_AGX_WAIT_GLOBAL");
+      enabled = env && env[0] == '1' && !env[1];
+   }
+   return enabled != 0;
+}
+
+static void
+agx_win32_wait_merge(struct slot *into, const struct slot *from)
+{
+   for (unsigned slot = 0; slot < 2; ++slot) {
+      BITSET_OR(into[slot].writes, into[slot].writes, from[slot].writes);
+      if (from[slot].nr_pending > into[slot].nr_pending)
+         into[slot].nr_pending = from[slot].nr_pending;
+   }
+}
+
+/* The local pass's per-instruction rules from a given entry state; inserts
+ * waits only when insert is set, never drains at the block end. */
+static void
+agx_win32_wait_block(agx_context *ctx, agx_block *block, struct slot *slots,
+                     bool insert)
+{
+   agx_foreach_instr_in_block_safe(block, I) {
+      uint8_t wait_mask = 0;
+
+      agx_foreach_src(I, s) {
+         if (I->src[s].type != AGX_INDEX_REGISTER)
+            continue;
+         unsigned nr_read = agx_index_size_16(I->src[s]);
+         for (unsigned slot = 0; slot < 2; ++slot) {
+            if (BITSET_TEST_COUNT(slots[slot].writes, I->src[s].value, nr_read))
+               wait_mask |= BITSET_BIT(slot);
+         }
+      }
+
+      agx_foreach_dest(I, d) {
+         if (I->dest[d].type != AGX_INDEX_REGISTER)
+            continue;
+         unsigned nr_writes = agx_index_size_16(I->dest[d]);
+         for (unsigned slot = 0; slot < 2; ++slot) {
+            if (BITSET_TEST_COUNT(slots[slot].writes, I->dest[d].value,
+                                  nr_writes))
+               wait_mask |= BITSET_BIT(slot);
+         }
+      }
+
+      if (I->op == AGX_OPCODE_THREADGROUP_BARRIER ||
+          I->op == AGX_OPCODE_MEMORY_BARRIER) {
+         for (unsigned slot = 0; slot < 2; ++slot) {
+            if (slots[slot].nr_pending)
+               wait_mask |= BITSET_BIT(slot);
+         }
+      }
+
+      if (instr_is_async(I)) {
+         for (unsigned slot = 0; slot < 2; ++slot) {
+            if (slots[slot].nr_pending == 0) {
+               I->scoreboard = slot;
+               break;
+            }
+         }
+      }
+
+      if (instr_is_async(I) &&
+          slots[I->scoreboard].nr_pending >= AGX_MAX_PENDING)
+         wait_mask |= BITSET_BIT(I->scoreboard);
+
+      u_foreach_bit(slot, wait_mask) {
+         if (insert) {
+            agx_builder b = agx_init_builder(ctx, agx_before_instr(I));
+            agx_wait(&b, slot);
+         }
+         BITSET_ZERO(slots[slot].writes);
+         slots[slot].nr_pending = 0;
+      }
+
+      if (instr_is_async(I)) {
+         agx_foreach_dest(I, d) {
+            if (agx_is_null(I->dest[d]))
+               continue;
+            assert(I->dest[d].type == AGX_INDEX_REGISTER);
+            BITSET_SET_COUNT(slots[I->scoreboard].writes, I->dest[d].value,
+                             agx_index_size_16(I->dest[d]));
+         }
+         slots[I->scoreboard].nr_pending++;
+      }
+   }
+}
+
+static bool
+agx_win32_insert_waits_global(agx_context *ctx)
+{
+   unsigned n = ctx->num_blocks;
+   struct slot (*in)[2] = calloc(n ? n : 1, sizeof(*in));
+   struct slot (*out)[2] = calloc(n ? n : 1, sizeof(*out));
+   bool changed = true;
+   if (!in || !out) {
+      free(in);
+      free(out);
+      return false;
+   }
+
+   for (unsigned iter = 0; changed && iter < 64; ++iter) {
+      changed = false;
+      agx_foreach_block(ctx, block) {
+         struct slot state[2];
+         memset(state, 0, sizeof(state));
+         agx_foreach_predecessor(block, pred)
+            agx_win32_wait_merge(state, out[(*pred)->index]);
+         memcpy(in[block->index], state, sizeof(state));
+         agx_win32_wait_block(ctx, block, state, false);
+         if (memcmp(state, out[block->index], sizeof(state))) {
+            memcpy(out[block->index], state, sizeof(state));
+            changed = true;
+         }
+      }
+   }
+
+   if (!changed) {
+      agx_foreach_block(ctx, block) {
+         struct slot state[2];
+         memcpy(state, in[block->index], sizeof(state));
+         agx_win32_wait_block(ctx, block, state, true);
+      }
+   }
+   free(in);
+   free(out);
+   return !changed;
+}
+
+void
+agx_insert_waits(agx_context *ctx)
+{
+   if (!(agx_compiler_debug & AGX_DBG_WAIT) && agx_win32_wait_global() &&
+       agx_win32_insert_waits_global(ctx))
+      return;
+
+   agx_foreach_block(ctx, block) {
+      if (agx_compiler_debug & AGX_DBG_WAIT)
+         agx_insert_waits_trivial(ctx, block);
+      else
+         agx_insert_waits_local(ctx, block);
+   }
+}'''
+
+
+def project_waits(text):
+    if '#include <stdlib.h>' not in text:
+        text = text.replace('#include "agx_builder.h"', '#include <stdlib.h>\n#include <string.h>\n#include "agx_builder.h"', 1)
+    return once(text, WAITS_ANCHOR, WAITS)
+
+
 FILES = {
     'src/asahi/compiler/agx_compiler.h': project_compiler_h,
     'src/asahi/compiler/agx_pressure_schedule.c': project_schedule,
     'src/asahi/compiler/agx_compile.c': project_compile,
     'src/asahi/compiler/agx_register_allocate.c': project_ra,
+    'src/asahi/compiler/agx_insert_waits.c': project_waits,
 }
 
 
