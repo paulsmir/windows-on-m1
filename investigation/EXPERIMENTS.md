@@ -68068,3 +68068,11 @@ Switches: Wom1GpuFaultInfoRead=1 only (defaults). Steps: full default D3D12 prob
 - Hashes: sys 0c5d2a6325d2, UmdArm64 4418e052fd68, UmdX64 5df367c95659, Umd32 580e76a09dd8; manifest b5d9cab34062, hardware-manifest dca36abbd09d; probe2123.sh c49e034fc4dc (PROBE_LINT_OK); visible recovery rec2123h f0446c8d42461c83; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2123h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2123-wait-global/run2123.sh.
+
+EXP2123 HARDWARE ACTUAL (2026-11-03): **W1 v1 (APPLE_AGX_WAIT_GLOBAL=1, e2620021) FAIL: it miscompiles execution-masked control flow.**
+- D3D12 suite with W1: 115 PASS / 4 FAIL -- C19A-D (cube-map sampling in a graphics PSO): wrong colour channels (e.g. C19A face 2 got 255,31,43,165 expected 63,31,43,165; 388/4096 pixels bad), all other steps PASS.
+- GravityMark HD with W1: device removed after ~30 s (D3D12::error(): device removed; present failed), killed at 47 s, WER 0.
+- GravityMark HD control (no W1, MESA_SHADER_CACHE_DISABLE=true): Score 5970, 35.7 FPS, but TIMEOUT KILLED at 315 s (results printed; the uncached start-up pushed the run past gm-run's 300 s timeout).
+- Root cause (offline): AGX control flow is execution-masked; the block laid out before a block also runs into it (then -> else with no CFG edge), so pending async writes of the layout-previous block were not in the merged entry state -> missing write-after-write/read-after-write waits. Fixed in 759e43e6 (merge the layout predecessor too); offline waits bd595520 28->17, f405bd5f 6->3, a6e5a25c 25->21, traversal 120->109.
+- Verdict: W1 v1 rejected; v2 to be validated (suite first).
+- Recovery rec2123h.
