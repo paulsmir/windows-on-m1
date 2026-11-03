@@ -178,8 +178,8 @@ class Compiled(unittest.TestCase):
 
     def test_input_remat_is_opt_in_and_removes_planet_spills(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
-        RC124 (APPLE_AGX_REMAT_INPUTS=1) re-issues interpolated inputs far
-        from their def. Unset, every source compiles as before; on the
+        RC124 (APPLE_AGX_REMAT_INPUTS=1, =2 also read-only global loads)
+        re-issues pure values far from their def. Unset, every source compiles as before; on the
         GravityMark HD 100k full-screen PS (EXP2139 capture) it must cut
         spills without occupancy or instruction growth."""
         for source in self.sources:
@@ -197,6 +197,11 @@ class Compiled(unittest.TestCase):
         self.assertGreaterEqual(remat['threads'], base['threads'])
         self.assertLess(remat['spills'], base['spills'] // 2)
         self.assertLess(remat['instrs'], base['instrs'])
+        loads = self.tool.cost(self.projected, str(planet), *args, env={'APPLE_AGX_REMAT_INPUTS': '2'})
+        self.assertTrue(loads)
+        self.assertGreaterEqual(loads['threads'], base['threads'])
+        self.assertEqual(loads['spills'], 0)
+        self.assertLess(loads['instrs'], remat['instrs'])
 
     def test_opt_in_shared_loads_issue_ahead_of_their_uses(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?

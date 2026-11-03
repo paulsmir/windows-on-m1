@@ -685,25 +685,32 @@ agx_win32_mem_vectorize_cb(unsigned align_mul, unsigned align_offset,
 # the outermost such loop (the input is loop invariant). Offline (EXP2139
 # capture): 296 -> 258 halfregs demand, 152 -> 29 spills, 7335 -> 6597
 # instructions; the other 240 GravityMark shaders are unchanged. Runs after
-# the last CSE so the clones stay.
-# Opt-in: APPLE_AGX_REMAT_INPUTS=1.
+# the last CSE so the clones stay. APPLE_AGX_REMAT_INPUTS=2 also re-issues
+# global loads (load_agx/load_constant_agx after agx_nir_lower_address) whose
+# whole address tree is pure (constants, ALU, preamble uniforms, varying
+# coefficients), only in shaders without stores, atomics or barriers: no write
+# in the draw can change the value. Offline: 296 -> 246 halfregs, spills 0,
+# 7335 -> 6421 instructions; the other 30 captured pixel shaders unchanged.
+# Opt-in: APPLE_AGX_REMAT_INPUTS=1 or 2.
 REMAT = r'''/* RC124: fragment interpolated-input rematerialization (opt-in). */
 #define AGX_WIN32_REMAT_DISTANCE 256
+#define AGX_WIN32_REMAT_BUDGET 16
 
-static bool
-agx_win32_remat_inputs_enabled(void)
+/* 1: interpolated inputs; 2: also loads of read-only global memory */
+static unsigned
+agx_win32_remat_level(void)
 {
-   static int enabled = -1;
-   if (enabled < 0) {
+   static int level = -1;
+   if (level < 0) {
       const char *env = getenv("APPLE_AGX_REMAT_INPUTS");
-      enabled = env && env[0] == '1' && !env[1];
+      level = env && (env[0] == '1' || env[0] == '2') && !env[1] ? env[0] - '0' : 0;
    }
-   return enabled != 0;
+   return (unsigned)level;
 }
 
 /* The block a clone for a use in `at` goes to: `at` itself, or the block
  * before the outermost loop around `at` that does not contain `def_block`
- * (an interpolated input is loop invariant, and the def dominates it). */
+ * (every rematerialized value is loop invariant, and the def dominates it). */
 static nir_block *
 agx_win32_remat_target(nir_block *def_block, nir_block *at)
 {
@@ -721,69 +728,164 @@ agx_win32_remat_target(nir_block *def_block, nir_block *at)
    return outer ? nir_cf_node_as_block(nir_cf_node_prev(outer)) : at;
 }
 
+/* A value is pure when it and everything it is computed from can be
+ * evaluated again anywhere it dominates with the same result: constants,
+ * ALU, preamble uniforms, barycentrics, varying coefficients and pixel
+ * interpolation, and (level 2, shaders without memory writes) global loads.
+ * At most `budget` non-constant instructions. */
+static bool
+agx_win32_remat_pure(nir_def *def, bool loads, unsigned *budget)
+{
+   nir_instr *instr = nir_def_instr(def);
+   if (instr->type == nir_instr_type_load_const)
+      return true;
+   if (!*budget)
+      return false;
+   --*budget;
+   if (instr->type == nir_instr_type_alu) {
+      nir_alu_instr *alu = nir_instr_as_alu(instr);
+      for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; ++i) {
+         if (!agx_win32_remat_pure(alu->src[i].src.ssa, loads, budget))
+            return false;
+      }
+      return true;
+   }
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_preamble:
+   case nir_intrinsic_load_barycentric_pixel:
+   case nir_intrinsic_load_coefficients_agx:
+   case nir_intrinsic_load_interpolated_input:
+      break;
+   case nir_intrinsic_load_global:
+   case nir_intrinsic_load_global_constant:
+   case nir_intrinsic_load_agx:
+   case nir_intrinsic_load_constant_agx:
+      if (!loads)
+         return false;
+      break;
+   default:
+      return false;
+   }
+   for (unsigned i = 0; i < nir_intrinsic_infos[intr->intrinsic].num_srcs; ++i) {
+      if (!agx_win32_remat_pure(intr->src[i].ssa, loads, budget))
+         return false;
+   }
+   return true;
+}
+
+struct agx_win32_remat_block {
+   struct hash_table *clones; /* original def -> clone in this block */
+   nir_instr *last;           /* clones go after the previous clone */
+};
+
+static nir_def *
+agx_win32_remat_clone(nir_shader *nir, struct agx_win32_remat_block *state,
+                      nir_cursor first, nir_def *def)
+{
+   struct hash_entry *entry = _mesa_hash_table_search(state->clones, def);
+   if (entry)
+      return entry->data;
+   nir_instr *instr = nir_def_instr(def);
+   nir_def *srcs[NIR_MAX_VEC_COMPONENTS * 4];
+   unsigned count = 0;
+   if (instr->type == nir_instr_type_alu) {
+      nir_alu_instr *alu = nir_instr_as_alu(instr);
+      for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; ++i)
+         srcs[count++] = agx_win32_remat_clone(nir, state, first, alu->src[i].src.ssa);
+   } else if (instr->type == nir_instr_type_intrinsic) {
+      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+      for (unsigned i = 0; i < nir_intrinsic_infos[intr->intrinsic].num_srcs; ++i)
+         srcs[count++] = agx_win32_remat_clone(nir, state, first, intr->src[i].ssa);
+   }
+   nir_instr *copy = nir_instr_clone(nir, instr);
+   nir_instr_insert(state->last ? nir_after_instr(state->last) : first, copy);
+   state->last = copy;
+   if (copy->type == nir_instr_type_alu) {
+      for (unsigned i = 0; i < count; ++i)
+         nir_src_rewrite(&nir_instr_as_alu(copy)->src[i].src, srcs[i]);
+   } else if (copy->type == nir_instr_type_intrinsic) {
+      for (unsigned i = 0; i < count; ++i)
+         nir_src_rewrite(&nir_instr_as_intrinsic(copy)->src[i], srcs[i]);
+   }
+   nir_def *result = nir_instr_def(copy);
+   _mesa_hash_table_insert(state->clones, def, result);
+   return result;
+}
+
 static bool
 agx_win32_remat_inputs(nir_shader *nir)
 {
-   if (nir->info.stage != MESA_SHADER_FRAGMENT || !agx_win32_remat_inputs_enabled())
+   const unsigned level = agx_win32_remat_level();
+   if (nir->info.stage != MESA_SHADER_FRAGMENT || !level)
       return false;
    bool progress = false;
    nir_foreach_function_impl(impl, nir) {
-      nir_index_instrs(impl);
+      bool read_only = level >= 2;
       nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
-            nir_intrinsic_instr *load = nir_instr_as_intrinsic(instr);
-            if (load->intrinsic != nir_intrinsic_load_interpolated_input ||
-                !nir_src_is_const(load->src[1]))
+            /* conservative: any store, atomic or barrier (agx_nir_lower_address
+             * has already turned global stores into store_agx) */
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            const char *name = nir_intrinsic_infos[intr->intrinsic].name;
+            if (nir_intrinsic_writes_external_memory(intr) || !strncmp(name, "store_", 6) ||
+                strstr(name, "atomic") || strstr(name, "barrier"))
+               read_only = false;
+         }
+      }
+      void *mem = ralloc_context(NULL);
+      /* keyed by block, | 1 for clones at a loop predecessor's end */
+      struct hash_table *blocks = _mesa_pointer_hash_table_create(mem);
+      nir_index_instrs(impl);
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic || !instr->index)
                continue;
-            nir_intrinsic_instr *bary = nir_src_as_intrinsic(load->src[0]);
-            if (!bary || bary->intrinsic != nir_intrinsic_load_barycentric_pixel)
+            nir_intrinsic_instr *root = nir_instr_as_intrinsic(instr);
+            if (root->intrinsic != nir_intrinsic_load_interpolated_input &&
+                root->intrinsic != nir_intrinsic_load_global &&
+                root->intrinsic != nir_intrinsic_load_global_constant &&
+                root->intrinsic != nir_intrinsic_load_agx &&
+                root->intrinsic != nir_intrinsic_load_constant_agx)
                continue;
-            nir_foreach_use_safe(src, &load->def) {
+            unsigned budget = AGX_WIN32_REMAT_BUDGET;
+            if (!agx_win32_remat_pure(&root->def, read_only, &budget))
+               continue;
+            nir_foreach_use_safe(src, &root->def) {
                if (nir_src_is_if(src))
                   continue;
                nir_instr *user = nir_src_use_instr(src);
-               if (user->type == nir_instr_type_phi ||
+               if (user->type == nir_instr_type_phi || !user->index ||
                    user->index < instr->index + AGX_WIN32_REMAT_DISTANCE)
                   continue;
                nir_block *at = agx_win32_remat_target(block, user->block);
                if (at == block)
                   continue;
-               /* one clone per block: reuse a clone made for an earlier use */
-               nir_intrinsic_instr *clone = NULL;
-               nir_foreach_instr(other, at) {
-                  if (other->type != nir_instr_type_intrinsic || other->pass_flags != 1)
-                     continue;
-                  nir_intrinsic_instr *candidate = nir_instr_as_intrinsic(other);
-                  if (candidate->intrinsic == nir_intrinsic_load_interpolated_input &&
-                      nir_intrinsic_base(candidate) == nir_intrinsic_base(load) &&
-                      nir_intrinsic_component(candidate) == nir_intrinsic_component(load) &&
-                      candidate->num_components == load->num_components &&
-                      nir_src_as_uint(candidate->src[1]) == nir_src_as_uint(load->src[1]))
-                     clone = candidate;
+               /* a use block gets its clones at its start, a loop's
+                * predecessor block at its end */
+               const bool start = at == user->block;
+               void *key = (void *)((uintptr_t)at | (start ? 0 : 1));
+               struct hash_entry *entry = _mesa_hash_table_search(blocks, key);
+               struct agx_win32_remat_block *state;
+               if (entry) {
+                  state = entry->data;
+               } else {
+                  state = rzalloc(mem, struct agx_win32_remat_block);
+                  state->clones = _mesa_pointer_hash_table_create(mem);
+                  _mesa_hash_table_insert(blocks, key, state);
                }
-               if (!clone) {
-                  /* a use block gets the clone at its start, a loop's
-                   * predecessor block at its end */
-                  nir_cursor cursor = at == user->block ? nir_after_phis(at) : nir_after_block(at);
-                  nir_instr *new_bary = nir_instr_clone(nir, &bary->instr);
-                  new_bary->pass_flags = 1;
-                  nir_instr_insert(cursor, new_bary);
-                  nir_instr *new_load = nir_instr_clone(nir, &load->instr);
-                  new_load->pass_flags = 1;
-                  nir_instr_insert(nir_after_instr(new_bary), new_load);
-                  clone = nir_instr_as_intrinsic(new_load);
-                  nir_src_rewrite(&clone->src[0], &nir_instr_as_intrinsic(new_bary)->def);
-               }
-               nir_src_rewrite(src, &clone->def);
+               nir_def *clone = agx_win32_remat_clone(nir, state,
+                  start ? nir_after_phis(at) : nir_after_block(at), &root->def);
+               nir_src_rewrite(src, clone);
                progress = true;
             }
          }
       }
-      nir_foreach_block(block, impl)
-         nir_foreach_instr(instr, block)
-            instr->pass_flags = 0;
+      ralloc_free(mem);
       nir_progress(progress, impl, nir_metadata_control_flow);
    }
    return progress;
