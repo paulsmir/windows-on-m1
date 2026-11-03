@@ -41,6 +41,14 @@ struct job {
    char *error;
 };
 
+
+/* M16: exactly "1" in APPLE_AGX_DXIL_MIN16 selects native 16-bit min precision. */
+static bool agx_dxil_min16_native(void)
+{
+   const char *env = getenv("APPLE_AGX_DXIL_MIN16");
+   return env && env[0] == '1' && !env[1];
+}
+
 static void
 refuse(struct job *job, enum agx_dxil_nir_status status, const char *what, const dxil_spv_d3d_binding *b)
 {
@@ -858,6 +866,16 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
       const dxil_spv_option_typed_uav_read_without_format typed = {{DXIL_SPV_OPTION_TYPED_UAV_READ_WITHOUT_FORMAT},
                                                                    DXIL_SPV_TRUE};
       r = agx_checked_option(converter, &typed.base);
+   }
+   if (r == DXIL_SPV_SUCCESS && agx_dxil_min16_native()) {
+      /* M16: DXIL minimum-precision types (HLSL min16float/min16int, which
+       * GravityMark's Tellusim emits for half) as native 16-bit SPIR-V;
+       * AGX has 16-bit ALUs (Asahi lowers mediump to fp16). D3D lets the
+       * driver run them at any precision >= 16 bits; the caps then report
+       * D3D12DDI_SHADER_MIN_PRECISION_16_BIT. Opt-in until hardware validates. */
+      const dxil_spv_option_min_precision_native_16bit min16 = {{DXIL_SPV_OPTION_MIN_PRECISION_NATIVE_16BIT},
+                                                                 DXIL_SPV_TRUE};
+      r = agx_checked_option(converter, &min16.base);
    }
    if (r == DXIL_SPV_SUCCESS)
       r = agx_checked_run(converter);

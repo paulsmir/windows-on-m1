@@ -177,6 +177,20 @@ static BOOL TiledTier2() {
     return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && (value[0] == '0' || value[0] == '1'));
 }
 
+/* M16: exactly "1" in APPLE_AGX_D3D12_MIN16_CAPS reports 16-bit minimum
+ * precision (D3D12_FEATURE_DATA_D3D12_OPTIONS::MinPrecisionSupport). Legal
+ * with fp32 execution: min-precision operations may run at any precision of
+ * at least 16 bits. GravityMark's Tellusim maps half to min16float. */
+static D3D12DDI_SHADER_MIN_PRECISION MinPrecisionCaps() {
+    static const D3D12DDI_SHADER_MIN_PRECISION caps = [] {
+        char value[3] = {};
+        return GetEnvironmentVariableA("APPLE_AGX_D3D12_MIN16_CAPS", value, sizeof(value)) == 1 && value[0] == '1'
+                   ? D3D12DDI_SHADER_MIN_PRECISION_16_BIT
+                   : D3D12DDI_SHADER_MIN_PRECISION_NONE;
+    }();
+    return caps;
+}
+
 static bool ShaderModel6Enabled() {
     static const bool enabled = [] {
         char value[2] = {};
@@ -515,7 +529,7 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
          * CoreMask 0xfe, seven) */
         if (ShaderModel6Enabled() && arg->DataSize >= sizeof(D3D12DDI_SHADER_CAPS_0012)) {
             hr = Answer<D3D12DDI_SHADER_CAPS_0012>(arg, [](auto &d) {
-                d.MinPrecision = D3D12DDI_SHADER_MIN_PRECISION_NONE;
+                d.MinPrecision = MinPrecisionCaps();
                 d.TypedUAVLoadAdditionalFormats = kTypedUavLoads;
                 d.ROVs = RovEnabled(); /* EXP1889: SM 6 processes take this answer */
                 d.WaveOps = TRUE;
@@ -528,7 +542,7 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
             break;
         }
         hr = Answer<D3D12DDI_SHADER_CAPS_0003>(arg, [](auto &d) {
-            d.MinPrecision = D3D12DDI_SHADER_MIN_PRECISION_NONE;
+            d.MinPrecision = MinPrecisionCaps();
             d.Doubles = FALSE; d.ShaderSpecifiedStencilRef = FALSE;
             d.TypedUAVLoadAdditionalFormats = kTypedUavLoads; d.ROVs = RovEnabled();
         });

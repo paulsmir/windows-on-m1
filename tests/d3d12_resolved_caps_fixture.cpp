@@ -33,6 +33,7 @@ enum D3D12DDI_SHADER_MODEL {D3D12DDI_SHADER_MODEL_5_1_RELEASE_0011=0x50015,D3D12
 struct D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 {UINT *pNumShaderModelsSupported;D3D12DDI_SHADER_MODEL *pShaderModelsSupported;};
 static bool ShaderModel6Enabled(){return false;}
 static int RovEnabled(){return 0;}
+static int MinPrecisionCaps(){return D3D12DDI_SHADER_MIN_PRECISION_NONE;} /* M16 default */
 static int ConservativeRasterEnabled(){return 0;}
 static int ProfileLevel(){return kProfileLevel;}
 static int TiledEnabled(){return 0;}
