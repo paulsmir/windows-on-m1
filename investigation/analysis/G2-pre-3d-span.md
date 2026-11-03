@@ -72,3 +72,16 @@ per-job objects (13-19, 28-35) and a third compute-sidecar job-word set, so N+2 
 event is still pending. Next: measure the free space below each slotted object in its 16 KiB page (slot_delta layout,
 apple_agx_render_shared_memory.c) and the sidecar layout, then design ADMISSION_JOB_WINDOW_DEPTH 3 with RED/GREEN window
 tests.
+
+### Depth-three feasibility (offline, scratchpad slotfit.c over the template layouts)
+- Slotted render objects: each sits at the end of its 16 KiB page; copies that fit below it: 13 BufferThing 227, 14 Barrier 512,
+  15/17 microsequences 4, 16 InitBM 512, 18 WorkCommand3D 6, 19 WorkCommandTA 10, 28-35 timestamps 2048 -> a third copy fits
+  (assuming the space below the second copy is unused; verify against the mapping/packing before implementation).
+- Compute sidecar (object 39): set A ends at 0x9420, set B = +0x2000 inside the free range 0x9420-0xc000; gpu_buf at 0xc000.
+  A set C does not fit: it needs its own allocation plus a job-owned 32 KiB preemption buffer (as set B).
+- Slot choice is stamp parity today (job_slot: ((TaExpectedStamp >> 8) ^ 1) & 1) -> needs a slot index that cycles over three.
+- Window: ADMISSION_JOB_WINDOW_DEPTH 2, KickRefusal requires InFlight == 1 -> InFlight <= 2 with per-pair barrier classes for
+  N+2 against N+1, and flight/notifier accounting for three published jobs.
+Estimated benefit: the ~0.4 ms unhidden boundary after each pair (EXP2131 render -> compute) ~4 % of GPU time.
+Plan: (1) window state machine + RED/GREEN tests (pure C, render_job_window.c); (2) slot modulo three + layout test;
+(3) sidecar set C allocation; (4) receipts; (5) one hardware gate behind a new switch (Wom1JobDepth3).
