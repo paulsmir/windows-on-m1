@@ -68252,3 +68252,12 @@ EXP2129 HARDWARE ACTUAL (2026-11-03): **prelude pairs shrink render -> compute i
 - Verdict: partially confirmed: early kicks hide the start latency for the render -> compute class; the compute -> render-prelude class still pays ~0.59 ms (either not admitted as a pair, or the latency is the TA-queue barrier wake). Note EXP2121's 'no gain' was measured with a different same-boot control; this run's +1.3 % against five separate boots is near noise and needs an A/B before a default change.
 - Next: EXP2130 = EXP2129 + Wom1JobDiagnostics=1 with live rings: depth-two flags and refusal codes of the compute -> prelude-render successors.
 - Recovery rec2129h.
+
+EXP2130 HARDWARE BEFORE 2026-11-03T14:13:26Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1JobDiagnostics=1.
+- WHY THIS HYPOTHESIS: (1) EXP2129: prelude pairs cut render -> compute idle 0.351 -> 0.065 ms but compute -> prelude start stayed 0.590 ms; (2) EXP2128 (pairs off): those successors were refused with 5 (prelude unproven) and kicked ~0.2 ms after Complete, then ~0.6 ms to firmware start.
+- ATOMIC CONTRACT: single diagnostic switch added to EXP2129.
+- WHAT IS STILL UNKNOWN: whether compute -> prelude-render pairs are now kicked early (DEPTH2_KICKED, KickTa before prev Complete) and still wait ~0.59 ms (barrier wake in firmware), or are refused with another code.
+- Expected: suite 119/0; live rings with GravityMark jobs; per compute -> prelude-render pair: flags, refusal code and KickTa relative to prev Complete.
+- FAIL: no live ring; firmware fault.
+- Recovery: rec2130h.
