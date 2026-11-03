@@ -1826,7 +1826,9 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3Node(
   }
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject,
       PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
-  WriteBinary(key, L"Wom1G3Node0", &receipt, sizeof(receipt));
+  /* Keep the CPU paging node from overwriting the render-node evidence. */
+  WriteBinary(key, NodeOrdinal == 1u ? L"Wom1G3Node1" : L"Wom1G3Node0",
+              &receipt, sizeof(receipt));
   (void)ZwFlushKey(key);
   ZwClose(key);
 }

@@ -34,6 +34,9 @@ typedef struct _APPLE_AGX_GPUVA_V5_CLIENT {
     unsigned long long MaxTicks[APPLE_AGX_GPUVA_V5_TIMED_COMMANDS];
     unsigned long long FailureCount;
     APPLE_AGX_GPUVA_V5_FAILURE Failures[APPLE_AGX_GPUVA_V5_FAILURE_RING];
+    /* Q22c discovery receipt only; no extra query and no admission input. */
+    unsigned int LiveAdditiveQueried, LiveAdditiveAnswered;
+    AGX_GPUVA_V5_RESPONSE LiveAdditiveCaps;
 } APPLE_AGX_GPUVA_V5_CLIENT;
 
 bool AppleAgxGpuvaV5ClientInit(APPLE_AGX_GPUVA_V5_CLIENT *,

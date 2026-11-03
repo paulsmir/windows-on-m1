@@ -413,8 +413,39 @@ static BOOLEAN AdmissionLiveAdditivePagingRequested(ADMISSION_CONTEXT *Context) 
   return enabled;
 }
 
+/* PASSIVE_LEVEL startup only, before process creation. Accepted means the
+ * capability enabled adapter topology; each process still negotiates later.
+ * QWORDs: version, bytes, requested, queried, answered, status (UINT_MAX if
+ * unanswered), flags, caps, extension ABI, accepted, paging node, epoch. */
+static VOID AdmissionG3RecordLiveAdditiveState(ADMISSION_CONTEXT *Context,
+    BOOLEAN Requested, const APPLE_AGX_GPUVA_V5_CLIENT *Client) {
+  ULONGLONG value[12] = {0};
+  UNICODE_STRING name;
+  HANDLE key = NULL;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      Context->PhysicalDeviceObject == NULL) return;
+  value[0] = 1u;
+  value[1] = sizeof(value);
+  value[2] = Requested ? 1u : 0u;
+  value[3] = Client->LiveAdditiveQueried;
+  value[4] = Client->LiveAdditiveAnswered;
+  value[5] = Client->LiveAdditiveAnswered ? Client->LiveAdditiveCaps.Status : ~0u;
+  value[6] = Client->LiveAdditiveCaps.Flags;
+  value[7] = Client->LiveAdditiveCaps.Reserved[0];
+  value[8] = Client->LiveAdditiveCaps.Reserved[1];
+  value[9] = Context->LiveAdditivePaging;
+  value[10] = Context->ObjectAdapter.PagingNode;
+  value[11] = Client->Epoch;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  RtlInitUnicodeString(&name, L"Wom1LiveAdditiveState");
+  (void)ZwSetValueKey(key, &name, 0, REG_BINARY, value, sizeof(value));
+  ZwClose(key);
+}
+
 NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
   ADMISSION_G3_STATE *state;
+  BOOLEAN liveRequested;
   AGX_GPUVA_V5_REQUEST probe = {0};
   AGX_GPUVA_V5_RESPONSE response = {0};
   if (context == NULL || context->GpuvaG3State != NULL ||
@@ -444,9 +475,11 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
     ExFreePoolWithTag(state, ADMISSION_POOL_TAG);
     return STATUS_NOT_SUPPORTED;
   }
-  context->LiveAdditivePaging = AdmissionLiveAdditivePagingRequested(context) &&
+  liveRequested = AdmissionLiveAdditivePagingRequested(context);
+  context->LiveAdditivePaging = liveRequested &&
       AppleAgxGpuvaV5ClientHasLiveAdditive(&state->Client) ? 1u : 0u;
   context->ObjectAdapter.PagingNode = context->LiveAdditivePaging;
+  AdmissionG3RecordLiveAdditiveState(context, liveRequested, &state->Client);
   AdmissionG3AttachMailbox(state);
   context->GpuvaG3State = state;
   return STATUS_SUCCESS;

@@ -104,7 +104,7 @@ int main(void) {
 #include <stdlib.h>
 #include <string.h>
 #include "apple_agx_gpuva_broker_v5_client.h"
-typedef int NTSTATUS;
+typedef int NTSTATUS, BOOLEAN;
 typedef struct { void *GpuvaG3State; int SysmemGpuMap,LiveRequested; unsigned LiveAdditivePaging; struct {unsigned PagingNode;} ObjectAdapter; } ADMISSION_CONTEXT;
 typedef struct { ADMISSION_CONTEXT *Adapter; int Lock,JobEvent,Processes;
  APPLE_AGX_GPUVA_V5_CLIENT Client; } ADMISSION_G3_STATE;
@@ -134,6 +134,8 @@ bool AppleAgxGpuvaV5ClientCall(APPLE_AGX_GPUVA_V5_CLIENT *c,const AGX_GPUVA_V5_R
 bool AppleAgxGpuvaV5ClientHasSysmem(APPLE_AGX_GPUVA_V5_CLIENT *c) {(void)c;++queries;return supported;}
 bool AppleAgxGpuvaV5ClientHasLiveAdditive(APPLE_AGX_GPUVA_V5_CLIENT *c) {(void)c;++live_queries;return live_supported;}
 static void AdmissionG3AttachMailbox(ADMISSION_G3_STATE *s) {(void)s;++attached;}
+static void AdmissionG3RecordLiveAdditiveState(ADMISSION_CONTEXT *a,int requested,
+ const APPLE_AGX_GPUVA_V5_CLIENT *c) {(void)a;(void)requested;(void)c;}
 ''' + start + r'''
 int main(void) {
  ADMISSION_CONTEXT c={0};
