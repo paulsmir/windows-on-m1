@@ -67819,3 +67819,11 @@ Steps: GravityMark D3D12 HD 100k temporal 0, FHD 100k temporal 0, then the full 
 - Hashes: sys f1e394c651df, UmdArm64 e3b2dd95fd6c, UmdX64 3989cfbdc8f5, Umd32 aad576c0b244; manifest 599abec41cec, hardware-manifest ba060bf50344; probe2111.sh 6d58f28e9133 (PROBE_LINT_OK); visible recovery rec2111h 8471a624ee30c646; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2111h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2111-defaults/run2111.sh.
+
+EXP2111 HARDWARE ACTUAL (2026-11-03): **q20 defaults PASS: with no AGX switches (only Wom1GpuFaultInfoRead=1) and no UMD env, the driver reproduces the EXP2108 configuration.**
+- GravityMark HD 100k temporal 0: Score 5747, 34.4 FPS (EXP2108 explicit config: 5771, -0.4%; depth-one level ~5600 not observed). FHD: Score 4641, 27.8 FPS (EXP2108: 4665, -0.5%).
+- Full default D3D12 probe suite: 119 PASS, 0 FAIL (+ the in-probe C21E skip), as EXP2109.
+- No reset, no G4 failure; guest alive; pipeline rc 0.
+- Expected vs actual: all preregistered criteria met (+-1% of EXP2108, suite 119/0). Verdict confirmed: depth two (non-prelude), diagnostics off and submission window 16 are now the validated defaults.
+- Next: run the D3D12 suite with APPLE_AGX_SHARED_LOAD_VECTORIZE=1, then make it the default; Codex k3 on the next C4 compiler win.
+- Recovery rec2111h.
