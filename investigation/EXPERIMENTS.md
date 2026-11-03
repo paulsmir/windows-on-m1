@@ -68332,3 +68332,11 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom
 - Hashes: sys 6b64aa3c2ab0, UmdArm64 4f3937cfe36f, UmdX64 cd8096839b50, Umd32 ce22db474d1d; manifest b025442246fe, hardware-manifest 7b8ddc2061cd; probe2132.sh 716bab3f72b3 (PROBE_LINT_OK); visible recovery rec2132h ae8f52e2adaef0c5; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1 Wom1JobDiagnostics=1.
 - Recovery rec2132h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2132-c2c-ring/run2132.sh.
+
+EXP2132 HARDWARE ACTUAL (2026-11-03): **with compute-on-compute on, almost every boundary is paired, but the window is released only after the whole pair: the boundary after each pair pays the firmware start latency again.**
+- Expected: suite 119/0; live rings; refusal codes of the render -> compute successors. Actual: suite 119 PASS / 0 FAIL; GravityMark HD Score 6159 / 36.9 FPS (diagnostics + live fetches, EXP2131 6242 without), WER 0; live rings with GravityMark jobs (KMD pid 1904).
+- live-10: successors kicked early with predecessor refusal 0: 28; not kicked, refusal 0: 21 (+7 with ahead-low 0x40000), refusal 55 (DWM): 7. Pattern: pairs (0x2d05/0x2f05 job + early-kicked 0x8d027/0x8d067/0x2c0x7 successor); the next pair's first job is kicked 70-90 us after the previous pair's completion.
+- live-18: within a pair Complete(N+1) - Complete(N) median 29 us (n 25, min 13) -- the KMD observes N's completion together with N+1's (U4-style deferred notification); the next unpaired job is kicked a median 152 us after the pair's Complete and then waits ~0.4 ms for the firmware start (EXP2131 render -> compute 0.398 ms).
+- Verdict: confirmed: depth two (InFlight == 1 before a kick) with coupled pair completions makes every other boundary unhidden. The refusal is not a code, the successor simply cannot be kicked while the pair is in flight.
+- Next (KMD design, offline first): release N from the window when its firmware stamp (not the deferred notifier) shows completion, so N+2 can be kicked as a pair with N+1 while N+1 runs; or a depth-three window. Derive from the Asahi/m1n1 queue-event contract before any hardware run.
+- Recovery rec2132h.
