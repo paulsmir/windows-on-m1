@@ -16,6 +16,8 @@ void main(uint3 id : SV_DispatchThreadID)
         for (uint i = id.x; i < count16; i += threads)
             acc ^= src.Load4(i * 16);
     } else {
+        if (id.x >= threads)
+            return;
         uint node = first + (id.x * 4099u) % lines;
         for (uint s = 0; s < steps; ++s)
             node = src.Load(node * 64u);

@@ -9148,7 +9148,9 @@ static HRESULT membw_run(ID3D12CommandQueue *queue, ID3D12Fence *fence, HANDLE e
 
 static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
     enum { BYTES = 128u << 20, LINES = BYTES / 64u, STREAM_THREADS = 65536u, CHASE_THREADS = 1024u, CHASE_STEPS = 512u,
-           REGIONS = 7 };
+           REGIONS = 7, CASES = 1 + 2 * REGIONS };
+    /* cases 1..7: 1024 chasing threads; 8..14: 32 (one SIMD group), so
+     * queueing of concurrent misses can be told from the miss cost itself */
     static const UINT region_kib[REGIONS] = {16u, 64u, 256u, 1024u, 4096u, 16384u, 65536u};
     UINT region_first[REGIONS];
     D3D12_ROOT_PARAMETER params[3] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_SRV},
@@ -9167,12 +9169,12 @@ static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *
     ID3D12GraphicsCommandList *list = NULL;
     HANDLE event = CreateEventA(NULL, FALSE, FALSE, NULL);
     UINT64 signal = base;
-    double best[1 + REGIONS][2];
+    double best[CASES][2];
     UINT *words = NULL;
     HRESULT hr = upload && src && outv && event ? S_OK : E_FAIL;
     params[0].Constants.ShaderRegister = 0;
     params[0].Constants.Num32BitValues = 6;
-    for (UINT m = 0; m < 1u + REGIONS; ++m) best[m][0] = best[m][1] = 1e30;
+    for (UINT m = 0; m < CASES; ++m) best[m][0] = best[m][1] = 1e30;
     params[1].Descriptor.ShaderRegister = 0;
     params[2].Descriptor.ShaderRegister = 0;
     if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&words);
@@ -9225,13 +9227,14 @@ static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *
         printf("MEMBW upload copy %.3f ms hr=0x%08lx\n", ms, (unsigned long)hr);
     }
     for (UINT rep = 0; rep < 3u && SUCCEEDED(hr); ++rep) {
-        for (UINT m = 0; m < 1u + REGIONS && SUCCEEDED(hr); ++m) {
+        for (UINT m = 0; m < CASES && SUCCEEDED(hr); ++m) {
             const UINT mode = m ? 1u : 0u;
+            const UINT region = m ? (m - 1u) % REGIONS : 0u;
             for (UINT k = 0; k < 2u && SUCCEEDED(hr); ++k) {
                 const UINT dispatches = k ? 11u : 1u;
-                const UINT threads = mode ? CHASE_THREADS : STREAM_THREADS;
-                const UINT constants[6] = {BYTES / 16u, mode, CHASE_STEPS, threads, m ? region_first[m - 1u] : 0u,
-                                           m ? region_kib[m - 1u] * 1024u / 64u : 1u};
+                const UINT threads = !mode ? STREAM_THREADS : m > REGIONS ? 32u : CHASE_THREADS;
+                const UINT constants[6] = {BYTES / 16u, mode, CHASE_STEPS, threads, m ? region_first[region] : 0u,
+                                           m ? region_kib[region] * 1024u / 64u : 1u};
                 double ms = 0.0;
                 hr = ID3D12CommandAllocator_Reset(allocator);
                 if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, pso);
@@ -9240,7 +9243,7 @@ static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *
                 ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list, 0, 6, constants, 0);
                 ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(list, 1, ID3D12Resource_GetGPUVirtualAddress(src));
                 ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 2, ID3D12Resource_GetGPUVirtualAddress(outv));
-                for (UINT d = 0; d < dispatches; ++d) ID3D12GraphicsCommandList_Dispatch(list, threads / 256u, 1, 1);
+                for (UINT d = 0; d < dispatches; ++d) ID3D12GraphicsCommandList_Dispatch(list, (threads + 255u) / 256u, 1, 1);
                 hr = membw_run(queue, fence, event, list, ++signal, &ms);
                 if (ms < best[m][k]) best[m][k] = ms;
                 printf("MEMBW rep %u case %u dispatches %u %.3f ms hr=0x%08lx\n", rep, m, dispatches, ms, (unsigned long)hr);
@@ -9251,10 +9254,11 @@ static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *
         const double stream_ms = (best[0][1] - best[0][0]) / 10.0;
         printf("MEMBW_STREAM_GBPS %.2f (%.3f ms per 128 MiB pass)\n",
                stream_ms > 0.0 ? (double)BYTES / (stream_ms * 1e6) : 0.0, stream_ms);
-        for (UINT r = 0; r < REGIONS; ++r) {
-            const double chase_ms = (best[1u + r][1] - best[1u + r][0]) / 10.0;
-            printf("MEMBW_CHASE_NS %u KiB %.1f (%u threads x %u dependent loads, %.3f ms per dispatch)\n", region_kib[r],
-                   chase_ms > 0.0 ? chase_ms * 1e6 / CHASE_STEPS : 0.0, CHASE_THREADS, CHASE_STEPS, chase_ms);
+        for (UINT m = 1; m < CASES; ++m) {
+            const double chase_ms = (best[m][1] - best[m][0]) / 10.0;
+            printf("MEMBW_CHASE_NS %u KiB %.1f (%u threads x %u dependent loads, %.3f ms per dispatch)\n",
+                   region_kib[(m - 1u) % REGIONS], chase_ms > 0.0 ? chase_ms * 1e6 / CHASE_STEPS : 0.0,
+                   m > REGIONS ? 32u : (UINT)CHASE_THREADS, CHASE_STEPS, chase_ms);
         }
     }
     printf("AGX_D3D12_MEMBW: %s\n", SUCCEEDED(hr) ? "PASS" : "FAIL");
