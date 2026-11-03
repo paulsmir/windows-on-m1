@@ -67735,3 +67735,11 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobD
 - Hashes: sys 7913ff34a3f8, UmdArm64 bf0eb4177aee, UmdX64 75e5924303eb, Umd32 f44c34bc0ca8; manifest 42bf4ff15d52, hardware-manifest d56952bdd93f; probe2107.sh 7b68d9b16ada (PROBE_LINT_OK); visible recovery rec2107h c9a7a3525f8bb1c2; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2107h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2107-gm-nodiag-d2/run2107.sh.
+
+EXP2107 HARDWARE ACTUAL (2026-11-03): **q17 checkpoint 2: depth two without diagnostic overhead is a small net gain over the same-mask depth one: HD +1.4%, FHD +0.5%; stable.**
+- HD 100k temporal 0: Score 5674, 34.0 FPS (EXP2106 depth one, same mask: 5598 -> +1.4%; EXP2105 minimal: 5613 -> +1.1%).
+- FHD 100k temporal 0: Score 4656, 27.9 FPS (EXP2106: 4634 -> +0.5%; EXP2105: 4584 -> +1.6%).
+- Both exited normally, WER 0; no reset, no G4 failure; guest alive; pipeline rc 0. Kick counts not exported (diagnostics off by design).
+- Expected vs actual: expected HD ~5750-5900 / FHD ~4650-4750; actual below the HD range (gain within about 2x run-to-run noise). The earlier +4.8% (EXP2102 vs 2103) was partly the receipt export overhead being masked. Verdict: depth two with non-prelude classes is safe but gains little; most successors are either prelude pairs (gated) or not pending (q18/q19: the UMD blocks ~17 ms per frame on RenderFence CPU waits, so successors rarely reach the KMD early).
+- Next: Codex q19 removes avoidable UMD RenderFence waits (query resolve, draw, submit); depth two can only pay off once successors are submitted early.
+- Recovery rec2107h.
