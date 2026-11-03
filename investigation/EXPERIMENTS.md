@@ -67640,3 +67640,15 @@ EXP2102 HARDWARE ACTUAL (2026-11-03): **GravityMark completes with depth two whe
 - Comparison (different package): EXP2075 depth one HD 5696, FHD 4487 -> HD -3.5%, FHD +0.2%. A same-source depth-one control (EXP2103, Wom1JobDepth2=0) is required before any verdict on gain.
 - Expected vs actual: crash-free completion and reason-5 refusals as expected (prelude hypothesis supported: no crash with prelude pairs refused); expected gain not observed. About 83% of candidate pairs (32669 of 39522) carry a prelude, so the prelude path dominates the possible benefit; with only non-prelude pairs admitted the gain is at most noise.
 - Recovery rec2102h.
+
+EXP2103 HARDWARE BEFORE 2026-11-03T00:28:59Z:
+Switches: as EXP2102 except Wom1JobDepth2=0 (q12 GravityMark gate: JobDepth2 0 vs 1 is the single variable; at 0 general admission and depth-two caps are not effective). Steps: GravityMark D3D12 HD 100k temporal 0, then FHD 100k temporal 0.
+- WHY THIS HYPOTHESIS: EXP2102 (depth two, prelude pairs refused) scored HD 5494 / FHD 4497 vs an older-package depth-one baseline (EXP2075 HD 5696 / FHD 4487); the merged q5-q14 changes may shift depth-one performance, so the gain can only be judged against the same source.
+- ATOMIC CONTRACT: none -- single switch.
+- WHAT IS STILL UNKNOWN: depth-one score of the current source.
+- Expected: both complete; kicks 0; scores within noise of EXP2075. If depth one is clearly above EXP2102 (e.g. HD > 5600), depth two with only non-prelude pairs costs performance and the cause must be found before further enabling.
+- FAIL: crash/reset at depth one (would be a regression of q5-q14 code).
+- Recovery: rec2103h.
+- Hashes: sys 347574eb463f, UmdArm64 b17a72bbed29, UmdX64 c516d9dd11fa, Umd32 44c9c3edf28b; manifest c525cec5582f, hardware-manifest e4b02aeac161; probe2103.sh 5af41cbc6096 (PROBE_LINT_OK); visible recovery rec2103h b5bb8ebc7c97e11e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=0 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2103h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2103-gm-depth1-ctl/run2103.sh.
