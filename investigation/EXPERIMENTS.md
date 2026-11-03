@@ -67839,3 +67839,7 @@ Switches: Wom1GpuFaultInfoRead=1 only (defaults). UMD env for the probe: APPLE_A
 - Hashes: sys eb76df873abe, UmdArm64 247df21b0520, UmdX64 f18e1cdec762, Umd32 02fdcf9bf2a2; manifest 8e15e7447da9, hardware-manifest fc9ddd6907ec; probe2112.sh 33a31caefdec (PROBE_LINT_OK); visible recovery rec2112h c843ea23b2d650fd; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2112h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2112-suite-sharedvec/run2112.sh.
+
+EXP2112 HARDWARE ACTUAL (2026-11-03): **full D3D12 probe suite with APPLE_AGX_SHARED_LOAD_VECTORIZE=1 on the q20 defaults: 119 PASS, 0 FAIL (+ C21E skip); no reset, no G4 failure; pipeline rc 0.**
+- Expected vs actual: expected 119/0; met. Verdict confirmed: shared-load vectorization is correct across the suite and gave +3% GravityMark (EXP2110) -> eligible as the default.
+- Recovery rec2112h.
