@@ -68531,3 +68531,13 @@ Same boot as EXP2138/2139. Four arms GravityMark D3D12 HD 100k -temporal 0 PERF 
 - Expected: a/d ~38 FPS; b/c higher by the PS cost; planet missing in b/c (diagnostic).
 - Decision rule: saving >= 1.5 ms/frame -> PS register pressure is the next target; < 0.5 ms -> close it.
 - FAIL: hang/device removal -> rec2138h. Recovery: rec2138h.
+
+EXP2138 HARDWARE ACTUAL (2026-11-03T20:17:37Z): **inconclusive (diagnostic did not match): suite 119/0; a default 37.97 FPS, b NULL_PS=71405b87 38.09 FPS (no-significant-change, 4/4 blocks); arm b's heaviest fragment shader stats unchanged (6677 instrs / 255 GPRs / 111 spills), i.e. the HD 50k hash does not exist at HD 100k (EXP2139).**
+- The pipeline used the EXP2137 probe twin (2 arms) instead of the ABBA probe; WER 0, no GPU fault, images not captured (PERF).
+- Verdict: superseded by EXP2140.
+
+EXP2140 HARDWARE ACTUAL (2026-11-03T20:17:37Z): **the full-screen planet PS 428487da costs ~1.57 ms/frame at HD 100k (+6.4% FPS when nulled).**
+- Expected: a/d ~38 FPS; b/c higher by the PS cost. Actual (PERF 10+60 s): a 38.82, b 40.81, c 41.13, d 38.18 FPS; A mean 38.50 vs B mean 40.97 = +6.4%, 25.97 -> 24.41 ms/frame; compare a->b faster 7/8 blocks, d->c faster 8/8; b/c shader-stats show the nulled PS (633 instrs / 127 GPRs / 0 spills) vs 6677/255/111 in a/d -- the diagnostic applied. WER 0, all arms closed at 102 s.
+- Interpretation: the saving is an upper bound for any compiler improvement of this shader (the null still runs 633 instructions plus the pass). Reaching Metal (9739, ~+56%) needs much more than this PS; still the largest single fragment item measured.
+- Decision rule (>= 1.5 ms) met: register pressure/spills of 428487da is a valid next compiler target, ceiling ~6%. Rank against C4 compute (7.7 ms) before committing effort.
+- Verdict: confirmed (measurement). Recovery rec2138h.
