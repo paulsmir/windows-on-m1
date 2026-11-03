@@ -35,6 +35,11 @@ typedef void VOID;typedef int HANDLE,NTSTATUS;typedef const wchar_t *UNICODE_STR
 #define NT_SUCCESS(x) ((x)>=0)
 typedef struct {unsigned RcReceiptEnabled,RcExportPending;
  ADMISSION_RC_RECEIPT RcReceipt;ADMISSION_RC_DECISIONS RcDecisions;} ADMISSION_PLATFORM_RUNTIME;
+/* The independent drill exporter is covered by test_g4_depth2_drill_windows.
+ * This fixture has no armed drill and exercises only RC registry writes. */
+static void AdmissionDepth2DrillExportWindows(ADMISSION_PLATFORM_RUNTIME *r,HANDLE k) {
+ (void)r;(void)k;
+}
 static unsigned calls,fail;
 static void RtlInitUnicodeString(UNICODE_STRING *n,const wchar_t *v){*n=v;}
 static int ZwSetValueKey(HANDLE k,UNICODE_STRING *n,unsigned z,unsigned t,void *p,unsigned long bytes){
