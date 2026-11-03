@@ -67632,3 +67632,11 @@ Switches: as EXP2100 (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhea
 - Hashes: sys 85533ba76764, UmdArm64 240e312a4c24, UmdX64 c632c8064f06, Umd32 a4c311c575ed; manifest 5e2c4fd2f765, hardware-manifest 68aebbfa6a1a; probe2102.sh 092565afac67 (PROBE_LINT_OK); visible recovery rec2102h 076f5b0a3a49697d; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2102h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2102-gm-prelude-gate/run2102.sh.
+
+EXP2102 HARDWARE ACTUAL (2026-11-03): **GravityMark completes with depth two when prelude-bearing pairs are refused (q14 gate): no firmware crash, no reset; but no measurable speed-up.**
+- HD 100k temporal 0: Score 5494, 32.9 FPS, exit after 193 s, WER 0. Receipts after HD: kicks 6853 (ta_on_compute 5476, ta_on_3d 1339, compute_on_3d 38), max_in_flight 2, kick_failures 0, reset_aborts 0; decisions: admitted 6853, 5 prelude-unproven 32669, 66 no pending successor 159772, 55 4166, 4 638, 68 106.
+- FHD 100k temporal 0: Score 4497, 26.9 FPS, exit after 188 s, WER 0.
+- Wom1GpuReset, Wom1G4SubmitFailure, Wom1EventDrainReceipt absent after both; guest alive; pipeline rc 0.
+- Comparison (different package): EXP2075 depth one HD 5696, FHD 4487 -> HD -3.5%, FHD +0.2%. A same-source depth-one control (EXP2103, Wom1JobDepth2=0) is required before any verdict on gain.
+- Expected vs actual: crash-free completion and reason-5 refusals as expected (prelude hypothesis supported: no crash with prelude pairs refused); expected gain not observed. About 83% of candidate pairs (32669 of 39522) carry a prelude, so the prelude path dominates the possible benefit; with only non-prelude pairs admitted the gain is at most noise.
+- Recovery rec2102h.
