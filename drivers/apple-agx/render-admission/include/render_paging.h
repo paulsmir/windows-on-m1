@@ -29,6 +29,10 @@ typedef struct _ADMISSION_PAGING_MARKER {
   unsigned int Reserved;
 } ADMISSION_PAGING_MARKER;
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4201) /* nameless union, as in WDK headers */
+#endif
 typedef struct _ADMISSION_PAGING_RECORD {
   ADMISSION_PAGING_MARKER Header;
   /* Same-size union: virtual records do not execute the physical plan.
@@ -50,6 +54,9 @@ typedef struct _ADMISSION_PAGING_RECORD {
   /* M2-f3: encode order of virtual records (physical records keep 0). */
   unsigned long long Seq;
 } ADMISSION_PAGING_RECORD;
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 int AdmissionPagingFenceCanSubmit(unsigned int LastSubmitted,
                                   unsigned int Candidate,
