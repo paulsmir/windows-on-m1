@@ -68519,3 +68519,15 @@ Same boot as EXP2138 (package 30.0.2138.0, HEAD 5b1910f1 source, m1n1 075e3980).
 - WHY THIS HYPOTHESIS: (1) EXP2138 arm b (APPLE_AGX_D3D12_NULL_PS=71405b8756e2cea9) shows the same heaviest fragment stats as arm a (6677 instrs / 255 GPRs / 111 spills), so the diagnostic did not match; (2) getenv in the DXIL path works on hardware (APPLE_AGX_DXIL_CLIP_CULL=0, rc108); (3) the 71405b87 capture came from HD 50k (EXP2070), and GravityMark compiles shaders at run time, so the 100k shader bytes (hash) may differ.
 - Expected: the heaviest s4 capture at HD 100k has a hash other than 71405b8756e2cea9 (confirms the mismatch); diagnostic only, score not comparable.
 - FAIL: hang/device removal -> rec2138h. Recovery: rec2138h.
+
+EXP2139 HARDWARE ACTUAL (2026-11-03T20:08:27Z): **confirmed: at HD 100k the heaviest PS is 428487dae22a5191 (59572 bytes), not 71405b87 (59616 bytes, HD 50k capture).**
+- Expected: different hash. Actual: FAST run closed at 57 s, WER 0; 241 captures (.local/experiments/EXP2138-nullps/evidence/EXP2139-capture); offline 428487da: 7335 instrs / 255 GPRs / 384 threads / 152 spills; with APPLE_AGX_D3D12_NULL_PS=428487dae22a5191: 741 / 127 / 832 / 0.
+- Consequence: EXP2138 arm b did not apply the diagnostic (a vs b 37.97 vs 38.09 FPS = the control); EXP2138 measures nothing about the planet PS. GravityMark compiles shaders per run configuration, so a capture is valid only for its asteroid count/resolution.
+- Verdict: confirmed. Next: EXP2140 same boot, ABBA with the correct hash.
+
+EXP2140 HARDWARE BEFORE 2026-11-03T20:08:27Z:
+Same boot as EXP2138/2139. Four arms GravityMark D3D12 HD 100k -temporal 0 PERF ABBA: a default, b APPLE_AGX_D3D12_NULL_PS=428487dae22a5191, c same, d default.
+- WHY THIS HYPOTHESIS: (1) the heaviest PS at HD 100k (428487da, full-screen pass per EXP2068 attribution of its 50k twin) has 255 GPRs, 384 threads, 152 spills; (2) EXP2139 confirmed the correct hash and that the diagnostic removes 90% of its code offline; (3) the planet pass cost decides whether register pressure in this PS is the next target.
+- Expected: a/d ~38 FPS; b/c higher by the PS cost; planet missing in b/c (diagnostic).
+- Decision rule: saving >= 1.5 ms/frame -> PS register pressure is the next target; < 0.5 ms -> close it.
+- FAIL: hang/device removal -> rec2138h. Recovery: rec2138h.
