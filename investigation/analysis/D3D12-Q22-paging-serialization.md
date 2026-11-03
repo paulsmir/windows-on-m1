@@ -209,3 +209,106 @@ plus known C21E skip, GravityMark HD/FHD 100k temporal0 versus EXP2110
 5949/4803 with images and uncensored paging evidence, and exact-package
 rollback to ordinary GPU-visible Code28 after collection. No hardware run
 is justified by these test/analysis commits alone.
+
+## Q22b: negotiated broker publication and independent paging (2026-11-03)
+
+This follow-up supersedes the earlier implementation-status conclusion, not
+its measurements. TASK.md Follow-up q22b explicitly authorizes the offline
+m1n1 broker extension. Neither hardware nor the Windows guest was accessed.
+
+The candidate is default off through device REG_DWORD
+`Wom1LiveAdditivePaging=1`, cached in `AdmissionGpuvaG3Start`. A successful
+optional broker capability query is also required. Wire version 6 and its
+128/64-byte request/response layout remain unchanged. Command 17 QUERY_CAPS
+returns capability value 2 and extension ABI 1; command 19 NEGOTIATE_LIVE
+selects that capability for one process generation (Token=2 or 0,
+AllocationGeneration=1, other payload fields zero). Old firmware's refusal
+keeps the new KMD on the legacy one-node path. Old KMD never negotiates and
+retains the existing broker guards. Process creation negotiates before
+exposure; graph destruction/recreation clears permission.
+
+The m1n1 owner validates the actual native descriptor as zero before live
+publication. Its existing full-native-leaf/parent/backing validators remain
+mandatory. It uses the existing table synchronization and ASID invalidation
+sequence for every leased owner slot. Destructive updates remain blocked
+through every live job, including depth two. Overflow is refused before a
+store. Failure after a live store always taints, even after successful
+rollback, because transient GPU observation cannot be disproved.
+
+KMD `AdmissionG3LiveUpdate` preflights all entries while holding the G3 mutex.
+It admits complete fresh native local/pool mappings and new parent edges,
+along with all-invalid initialization of genuinely new non-root tables.
+Partial/system groups, native-staging omissions, existing/reused initial
+updates, root relocation and destructive updates retain the joined wait.
+Fresh parent self-references are rejected before any publication. A later
+failure after acknowledged live publication retains PendingPtes and backing
+references and quarantines the graph/process instead of destructively
+rolling back mappings a running job may have observed.
+
+Enabled topology has node 0 for render/present and node 1 for CPU paging.
+Each node has a separate scheduler/fence queue; a shared CPU work slot is
+explicitly tagged with its owning node. The same numeric fence on the two
+nodes is not the same completion. Context creation, metadata, submission,
+query, completion/fault/preemption notification, reset and stop route the
+external node explicitly. Adapter reset gates dispatch across both node
+resets. A monitored-fence-only paging packet can finish during an unrelated
+render. Fills/transfers wait for all jobs/leases and hold the G3 mutex through
+memory mutation, preventing a new job from racing the copy. Queued
+destructive paging can delay a following map on its own paging queue.
+Separate callback lifetime protects the complete worker tail, and G3 stop
+drains the new CPU borrowers before freeing their state.
+
+Source owners:
+
+- Shared `apple_agx_gpuva_broker_v5.h`, `_client.c` and
+  `apple_agx_gpuva_g3_graph.c`: ABI, capability/owner negotiation, graph guards
+  and reference lifetime.
+- KMD `gpuva_g3_paging_windows.c`: whole-update classification, joined waits,
+  publication and failure containment.
+- KMD `work_queue_windows.c`, `paging_windows.c`, `scheduler_windows.c`:
+  distinct fence streams, worker ownership, mutation exclusion and reset.
+- KMD `callbacks.c`, `objects.c`, `lifecycle.c`, `gpuva_g3_windows.c`:
+  topology/context/submission and startup/teardown integration.
+- m1n1 `hv_agx_gpuva_v5.c`, `_mmio.c`, `hv_agx_retained_platform.c`: native
+  publication authentication and existing UAT visibility/invalidation owner.
+
+The real KMD host fixture compiles BuildPagingBuffer, its paging helper
+closure, shared graph/client and the candidate broker/retained dispatch.
+Fresh leaf/table/parent updates run with both jobs live and zero waits;
+destructive unmap waits through both retirements. A two-group update with a
+second-group invalidation failure proves error/quarantine and retained
+candidate/backing references. Removing the wait bypass or retention assignment
+fails the corresponding assertion. Separate fixtures execute actual queue,
+worker/notify/DPC/stop and node-1 control branches, including equal fence IDs
+and both worker/DPC orders. OS services, MMIO backing and thread scheduling
+remain modeled; these tests do not establish Windows or AGX runtime success.
+
+Native WDK `/W4 /WX`, full x86/x64/ARM64 UMD links and a complete firmware link
+remain integration gates. The three changed m1n1 C objects compile with
+LLVM 22.1.8 and AGX_LOCAL_RESERVE_V2=1/IOMFB_FULL_OWNER=1. The broader m1n1
+host suite stops at unchanged asc_tx_gate_test identity-variable warnings in
+that compiler; targeted broker suites pass. Detailed commands, logs, review
+findings and final baseline result are preserved in the task handoff report.
+
+Integration must use a newly built/hash-recorded candidate as AGX_M1N1 and
+the preserved 075e3980 full-owner artifact as AGX_M1N1_LASTGOOD (SHA-256
+452ab29fd81b10dc026605ea6f64830dd1963a1ec2de299dbd1eb3fe97a171fd).
+Preregister Q3PC with exact output, path3/reason0 and IA1048576/524288,
+requiring head_submit < next_submit < head_complete without reset/removal.
+Then run the D3D12 suite and matched GravityMark HD/FHD 100k temporal0 versus
+EXP2110 scores 5949/4803, collect evidence, and use the established exact-package
+rollback. These are future integration gates; no performance gain or hardware
+validation is claimed by this offline change.
+
+Final offline baseline (candidate broker selected through Q22_M1N1_SOURCE):
+
+```
+ran 855 tests in 340 modules; 6 failing, 6 known, 0 NEW, 0 FIXED
+BASELINE_OK
+```
+
+The first full run exposed ten extraction-shim/import failures. Updating those
+fixtures preserved their behavior checks; the affected eight modules then
+passed 24 tests, followed by the full result above. The six existing baseline
+failures and known_failures.txt were not changed. Independent broker and KMD
+reviews passed after their reported lifetime/preflight findings were fixed.

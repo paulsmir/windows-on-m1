@@ -4,7 +4,8 @@ Q22 must not 'fix' a fresh-map wait by publishing through a busy v5 broker or
 retiring a later node-0 paging fence before its render predecessor. Exercise
 the real broker and KMD queue, including a disjoint new leaf, another owner,
 destructive updates, idle leases, publication failure and fence ordering.
-These are current-contract guards, not a claim of concurrent paging support.
+The negotiated-extension runner additionally executes the real wire/broker
+compatibility and live-publication cases from the selected m1n1 source tree.
 """
 from pathlib import Path
 import os
@@ -140,6 +141,24 @@ int main(void) {
 
 
 class PagingSerialization(unittest.TestCase):
+    def test_negotiated_broker_live_publication(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        Negotiated fresh publication must succeed before job retirement,
+        while legacy clients and destructive updates retain their guards.
+        Use Q22_M1N1_SOURCE for an independently checked-out broker candidate.
+        """
+        source = Path(os.environ.get('Q22_M1N1_SOURCE', str(M1N1)))
+        runner = source / 'tests/run_gpuva_live_tests.py'
+        if not runner.is_file():
+            self.skipTest('negotiated m1n1 source unavailable; set Q22_M1N1_SOURCE')
+        env = dict(os.environ, AGX_SHARED_ROOT=str(ROOT))
+        import sys
+        run = subprocess.run([sys.executable, str(runner)], env=env,
+                             capture_output=True, text=True, timeout=120)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn('hv_agx_gpuva_live_test PASS', run.stdout)
+
     def compile_run(self, source, sources, includes):
         with tempfile.TemporaryDirectory(prefix='q22-paging-') as tmp:
             tmp = Path(tmp)
