@@ -68047,3 +68047,9 @@ Switches: Wom1GpuFaultInfoRead=1 only. Arms: a HD 100k temporal 0 with APPLE_AGX
 - Hashes: sys 06808edfcb14, UmdArm64 94e3df421d6c, UmdX64 627b4effba9b, Umd32 b9d919a39046; manifest 1cfaff0720a4, hardware-manifest 1a4e8ee1d30d; probe2122.sh 2ef83b11dea1 (PROBE_LINT_OK); visible recovery rec2122h 1a83a1cd227a455c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2122h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2122-kernel-split/run2122.sh.
+
+EXP2122 HARDWARE ACTUAL (2026-11-03): **per-kernel split on the current code: shared-load vectorization took the traversal kernel's heavy launch from 2.04 to 1.42 ms; the rest of the asteroid compute is unchanged, and its largest remaining parts are the 391-group trio (~1.5 ms), the leading kernels [981f..094e] (~1.3 ms) and the six indirect atomic kernels (~1.5 ms).**
+- a (split, EXP2078 tags) 5007 / 30.0 FPS, 23 jobs/frame, signature CCCCCCCCRCCRCRCRCCCCCCC (cyclic shift of EXP2078's); median wall 32.4 ms. b (HD control) as reported in run2122.out.
+- Aligned with EXP2078 (offset 12): traversal 97ae4b02 3rd launch 2.036 -> 1.420 ms (-0.62); all other C0 pieces within +-0.05 ms; the first C0 piece before tag 53aff18d is 3.686 ms = [981f..094e] 1.34 + radix 0.79 + trio 1.51 + tiny 0.12 (EXP2077 composition).
+- Expected vs actual: traversal below 2.04 ms (met). Verdict: confirms the vectorization gain is in the traversal kernel; next compiler targets by measured time: trio 39e0399a/93891b99/7bc49152 (1.51 ms; k3: 59 waits vs Apple's 28 for the same algorithm), the leading kernels (1.34 ms), the indirect atomic kernels (~1.5 ms), radix (0.79 ms).
+- Recovery rec2122h.
