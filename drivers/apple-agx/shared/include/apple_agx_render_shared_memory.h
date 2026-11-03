@@ -67,12 +67,16 @@
 #define APPLE_AGX_COMPUTE_QUEUE_BARRIER_OFFSET 0x8820u
 #define APPLE_AGX_COMPUTE_JOB_WORD_OFFSET(Set, OffsetA) \
   ((OffsetA) + ((Set) ? APPLE_AGX_COMPUTE_JOB_WORD_SET_B_DELTA : 0u))
+/* Asahi event.rs: queue event values advance in 0x100 units. */
+#define APPLE_AGX_COMPUTE_STAMP_INCREMENT 0x100u
 
 typedef struct _APPLE_AGX_RENDER_COMPUTE_INPUT {
   APPLE_AGX_U64 CdmStreamBase;
   APPLE_AGX_U32 CdmStreamBytes;
   APPLE_AGX_U64 Counter;
   APPLE_AGX_U64 UscExecutionBase;
+  /* StampValue remains the caller's identity for deduplication/sidecar
+   * ownership. Use the output StampValue for firmware waits/completion. */
   APPLE_AGX_U32 VmSlot,EventNumber,StampValue,EventSequence,ClientSequence;
   /* G2: the CDM context-store buffer in the job's own VM, as Asahi
    * allocates it from the user VM (queue/compute.rs ualloc); at least
@@ -108,6 +112,8 @@ typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {
   const void *TimestampCpuAddress;
   /* rc98: the job-word set the build used. */
   APPLE_AGX_U32 JobWordSet;
+  /* Firmware endpoint; may differ from the input's original fence identity. */
+  APPLE_AGX_U32 StampValue;
 } APPLE_AGX_RENDER_COMPUTE_OUTPUT;
 
 typedef struct _APPLE_AGX_RENDER_BARRIER_INPUT {
@@ -172,6 +178,7 @@ extern APPLE_AGX_RENDER_SHARED_READ_PROBE_COUNTS AppleAgxRenderSharedReadProbe;
 typedef struct _APPLE_AGX_NOTIFIER_FLIGHT {
   APPLE_AGX_U32 Fence, EventCount, PreviousThreshold;
   APPLE_AGX_U32 RenderCount, ComputeCount, ComputeStamp, WordSet, WordStamp;
+  APPLE_AGX_U32 ComputeQueueStamp;
   APPLE_AGX_U32 RenderSlot, SidecarSet;
   APPLE_AGX_BOOL HasRender, HasSidecar, Published, Visible, EpochReset;
 } APPLE_AGX_NOTIFIER_FLIGHT;
@@ -210,6 +217,10 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   APPLE_AGX_U32 NotifierRenderCount;
   APPLE_AGX_U32 NotifierComputeCount;
   APPLE_AGX_U32 NotifierComputeStamp;
+  /* Q23: opt-in queue event units, independent of Windows fence values.
+   * NotifierComputeStamp and JobWordStamp retain their raw fence identity. */
+  APPLE_AGX_BOOL ComputeQueueStamps;
+  APPLE_AGX_U32 ComputeQueueStamp;
   /* rc83 receipt: optional progress callback of a render build, Point one
    * of APPLE_AGX_RENDER_BUILD_MARK_*; NULL (zeroed owner) = none. It only
    * timestamps and never changes the build. */

@@ -512,6 +512,7 @@ APPLE_AGX_BOOL AppleAgxRenderFlightBegin(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o
   f->EventCount=f->PreviousThreshold;
   f->RenderCount=o->NotifierRenderCount; f->ComputeCount=o->NotifierComputeCount;
   f->ComputeStamp=o->NotifierComputeStamp; f->WordSet=o->JobWordSet; f->WordStamp=o->JobWordStamp;
+  f->ComputeQueueStamp=o->ComputeQueueStamp;
   o->BuildingFlight=i+1u;
   return APPLE_AGX_TRUE;
 }
@@ -542,6 +543,7 @@ APPLE_AGX_BOOL AppleAgxRenderFlightCancel(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *
   }
   o->NotifierRenderCount=f->RenderCount; o->NotifierComputeCount=f->ComputeCount;
   o->NotifierComputeStamp=f->ComputeStamp; o->JobWordSet=f->WordSet; o->JobWordStamp=f->WordStamp;
+  o->ComputeQueueStamp=f->ComputeQueueStamp;
   zero_bytes(f,sizeof(*f)); o->BuildingFlight=0;
   return APPLE_AGX_TRUE;
 }
@@ -749,6 +751,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryInitializeComputeQueue(
   put_u32(pointers+0x50u,0x500u);
   /* rc98: a new queue lifetime starts with set A. */
   Owner->JobWordSet=APPLE_AGX_COMPUTE_JOB_WORD_SET_A;Owner->JobWordStamp=0u;
+  Owner->ComputeQueueStamp=0u;
   /* A new work queue starts with empty firmware state. */
   zero_bytes((unsigned char *)Owner->Objects[
                  APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress+
@@ -767,7 +770,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   const unsigned char *control;
   APPLE_AGX_U64 gpu,stamp,notifier;
   APPLE_AGX_BOOL counted;
-  APPLE_AGX_U32 set;
+  APPLE_AGX_U32 set,queueStamp;
   if(!Owner||!Input||!Output||!Input->CdmStreamBase||!Input->CdmStreamBytes||
      Input->JobWordSet>=APPLE_AGX_COMPUTE_JOB_WORD_SET_COUNT||
      (Input->JobWordSet!=APPLE_AGX_COMPUTE_JOB_WORD_SET_A&&
@@ -799,8 +802,21 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
     if(!f || f->Published) return APPLE_AGX_FALSE;
     threshold=(unsigned char *)&f->EventCount;
   }
-  counted=Owner->NotifierComputeStamp==Input->StampValue ?
+  /* Queue initialization invalidates the event even if a raw fence is
+   * reused. A duplicate within the same lifetime keeps its event value. */
+  counted=Owner->NotifierComputeStamp==Input->StampValue &&
+      (!Owner->ComputeQueueStamps || Owner->ComputeQueueStamp!=0u) ?
       APPLE_AGX_TRUE : APPLE_AGX_FALSE;
+  queueStamp=Input->StampValue;
+  if(Owner->ComputeQueueStamps) {
+    queueStamp=Owner->ComputeQueueStamp;
+    if(!counted) {
+      queueStamp+=APPLE_AGX_COMPUTE_STAMP_INCREMENT;
+      /* Zero is reserved by the command/barrier validators. At wrap the
+       * next nonzero event is still ahead in signed modular arithmetic. */
+      if(!queueStamp) queueStamp=APPLE_AGX_COMPUTE_STAMP_INCREMENT;
+    }
+  }
   if((notifier&7u)||(!counted&&Owner->NotifierComputeCount>=
       ~(APPLE_AGX_U32)0-Owner->NotifierRenderCount))
     return APPLE_AGX_FALSE;
@@ -825,7 +841,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   micro.EventGeneration=get_shared_u32(
       control+APPLE_AGX_G13_NOTIFIER_GENERATION_OFFSET,Owner->DirectReads);
   micro.VmSlot=Input->VmSlot;
-  micro.StampValue=Input->StampValue;
+  micro.StampValue=queueStamp;
   if(Input->Timestamps) {
     zero_bytes(sidecar+JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET),
                JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET)+APPLE_AGX_G13_TIMESTAMP_BLOCK_BYTES-
@@ -852,7 +868,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
       gpu+JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET) : 0u;
   work.StampGpuAddress=stamp;
   work.FirmwareStampGpuAddress=gpu+APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET;
-  work.StampValue=Input->StampValue;work.StampSlot=Input->EventNumber;
+  work.StampValue=queueStamp;work.StampSlot=Input->EventNumber;
   work.EventControlIndex=Input->EventNumber;
   work.EventSequence=Input->EventSequence;
   work.ClientSequence=Input->ClientSequence;
@@ -878,6 +894,8 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   Output->TimestampCpuAddress=Input->Timestamps ?
       sidecar+JOB_WORD(APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET) : RENDER_SHARED_NULL;
   Output->JobWordSet=set;
+  Output->StampValue=queueStamp;
+  if(Owner->ComputeQueueStamps) Owner->ComputeQueueStamp=queueStamp;
   Owner->JobWordSet=set;Owner->JobWordStamp=Input->StampValue;
 #undef JOB_WORD
   return APPLE_AGX_TRUE;

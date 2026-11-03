@@ -3335,14 +3335,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   Job->ComputeWorkAddresses[0] = output.WorkGpuAddress;
   Job->ComputeWorkAddressCount = 1u;
   Job->ComputeEvent = input.EventNumber;
-  Job->ComputeExpectedStamp = input.StampValue;
+  Job->ComputeExpectedStamp = output.StampValue;
   Job->ComputeExpectedDonePointer = Plan->ComputeExpectedDonePointer;
   Job->ComputeTimestampBlock = output.TimestampCpuAddress;
   /* rc102: a successor leads its compute queue with its Barrier, in its
    * own job-word set (never the running job's). */
   if (Plan->Successor &&
       !AdmissionBuildLeadBarrier(runtime, ADMISSION_JOB_WINDOW_QUEUE_COMPUTE,
-                                 output.JobWordSet, input.StampValue, Job))
+                                 output.JobWordSet, output.StampValue, Job))
     return APPLE_AGX_BACKEND_FALSE;
   if (Plan->Successor) runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_COMPUTE_LEAD;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -3385,7 +3385,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBuildTaComputeBarrier(
   APPLE_AGX_U64 address = 0ULL;
   RtlZeroMemory(&barrier, sizeof(barrier));
   barrier.WaitStampGpuAddress = Output->FirmwareStampGpuAddress;
-  barrier.WaitValue = Input->StampValue;
+  barrier.WaitValue = Output->StampValue;
   barrier.WaitSlot = Input->EventNumber;
   barrier.StampSelf = Job->TaExpectedStamp;
   /* rc98: the Barrier lies in its compute work's job-word set. */
@@ -3550,7 +3550,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     Job->ComputeWorkAddresses[0]=output.WorkGpuAddress;
     Job->ComputeWorkAddressCount=1u;
     Job->ComputeEvent=input.EventNumber;
-    Job->ComputeExpectedStamp=input.StampValue;
+    Job->ComputeExpectedStamp=output.StampValue;
     Job->ComputeExpectedDonePointer=Plan->ComputeExpectedDonePointer;
     if(!AdmissionBuildTaComputeBarrier(runtime,&input,&output,Plan,Job))
       goto BuildFailure;
@@ -3611,7 +3611,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     Job->ComputeWorkAddresses[0] = output.WorkGpuAddress;
     Job->ComputeWorkAddressCount = 1u;
     Job->ComputeEvent = input.EventNumber;
-    Job->ComputeExpectedStamp = input.StampValue;
+    Job->ComputeExpectedStamp = output.StampValue;
     Job->ComputeExpectedDonePointer = Plan->ComputeExpectedDonePointer;
     if (!AdmissionBuildTaComputeBarrier(runtime, &input, &output, Plan, Job))
       goto BuildFailure;
@@ -3620,7 +3620,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
      * depth-2 Barrier (its TA keeps the D3D-G1b one on the prelude). */
     if (Plan->Successor &&
         !AdmissionBuildLeadBarrier(runtime, ADMISSION_JOB_WINDOW_QUEUE_COMPUTE,
-                                   output.JobWordSet, input.StampValue, Job))
+                                   output.JobWordSet, output.StampValue, Job))
       goto BuildFailure;
     if (Plan->Successor) runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_LEAD;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -7368,6 +7368,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->Depth2Capabilities = 0u;
   runtime->JobDepth2Kick = FALSE;
 #endif
+  /* Q23: use one queue event sequence for every compute user from startup.
+   * Admission and firmware units share the existing default-off opt-in. */
+  runtime->Initdata.RenderSharedMemory.ComputeQueueStamps = runtime->Depth2Prelude;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   /* q1 persistence stays serial with legacy kick switches. Q6 owns the
    * explicit same-slot two-user exception and always enables persistence. */
