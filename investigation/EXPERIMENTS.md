@@ -68028,3 +68028,10 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1 Wom1RcReceipt=1. Steps: Gra
 - Hashes: sys 480546881b19, UmdArm64 14a532bab515, UmdX64 8b3e1cd18c04, Umd32 fe00e321e4c6; manifest aecf7c0e77d1, hardware-manifest 9fdb2fe41132; probe2121.sh 22c02e7953ff (PROBE_LINT_OK); visible recovery rec2121h bfa03fbe249989ad; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1 Wom1RcReceipt=1.
 - Recovery rec2121h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2121-prelude-receipts/run2121.sh.
+
+EXP2121 HARDWARE ACTUAL (2026-11-03): **with prelude pairs allowed (q23 stamps) GravityMark admits 4x more depth-two pairs, but the frame does not get faster: overlapping successors does not hide the inter-job gaps.**
+- Wom1RcDecisions after HD (Wom1Depth2Prelude=1, Wom1RcReceipt=1): admitted 27347 (EXP2102 with prelude refused: 6853), reason 5 (prelude unproven) 0, 64 class-disabled 16171 (last: compute -> prelude render, barrier 4 = compute-on-compute, sub-switch off), 55 5489, 4 896, 68 1246, 66 no pending successor 200697. ~27347 pairs / ~6400 frames = ~4 overlapped successors per frame.
+- Scores (not comparable to receipt-off runs by design): HD 5987, FHD 4776; no crash, no reset, no G4 failure; pipeline rc 0.
+- Expected vs actual: expected reason 5 ~0 and several times more admissions (met); the receipt-off EXP2120 already showed no score change with these admissions (+0.7%/+0.0%). Verdict: admission now works for prelude pairs, but kick-ahead of a pending successor does not shorten the GravityMark frame -> the ~0.5 ms per-job gaps are not CPU kick latency that depth two can hide (likely firmware/GPU job switch or completion signalling). Further depth-two classes (compute-on-compute, 16171 refusals) are not expected to pay off by this evidence.
+- Next: re-target GPU execution (C4 compute 7.7 ms, main 3D pass 4.9 ms) and measure the true GPU-side job switch cost from firmware timestamps.
+- Recovery rec2121h.
