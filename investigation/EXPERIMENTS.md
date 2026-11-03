@@ -67691,3 +67691,11 @@ Switches: Wom1GpuFaultInfoRead=1 only. Steps: GravityMark D3D12 HD 100k temporal
 - Hashes: sys 36f99c268bcb, UmdArm64 910e30f962e2, UmdX64 df7092852599, Umd32 d517510bee14; manifest 960135682143, hardware-manifest 08da3767b78e; probe2105.sh 130cbc2ac135 (PROBE_LINT_OK); visible recovery rec2105h 21b722d8877120d7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2105h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2105-gm-minimal/run2105.sh.
+
+EXP2105 HARDWARE ACTUAL (2026-11-03): **current source with only Wom1GpuFaultInfoRead=1 restores depth-one performance: the ~7% loss of EXP2103 comes from the depth-two infrastructure switches, not from the code.**
+- HD 100k temporal 0: Score 5613, 33.6 FPS (EXP2103 with the depth-two switch set at JobDepth2=0: 5244, -6.6%; EXP2102 depth two: 5494, -2.1%; EXP2075 older source: 5696, -1.5%).
+- FHD 100k temporal 0: Score 4584, 27.4 FPS (EXP2103: 4401, -4.0%; EXP2102: 4497, -1.9%; EXP2075: 4487, +2.2%).
+- Both exited normally, WER 0; no reset; guest alive; pipeline rc 0.
+- Expected vs actual: preregistered branch "HD near 5650-5700 -> switches cost the loss" observed (5613, within ~1.5% of EXP2075). Verdict: the current depth-two configuration is a net regression against plain depth one (HD -2.1%, FHD -1.9%); depth two's own gain (+4.8%/+2.2% vs EXP2103) is smaller than the infrastructure overhead.
+- Next: Codex q17 ranks per-poll/per-job costs of each switch and makes diagnostics zero-cost by default; confirm with the EXP2103 set without diagnostics.
+- Recovery rec2105h.
