@@ -454,6 +454,28 @@ static int unit_checks(void) {
       AdmissionJobWindowBarrier(K_C, K_RP) != ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_COMPUTE ||
       AdmissionJobWindowBarrier(K_P, K_R) != ADMISSION_JOB_WINDOW_BARRIER_NONE) return 14;
   if (AdmissionJobWindowKickRefusal(NULL) != 99u) return 15;
+  {
+    /* P1: a present pairs as a compute job only with CAP_PRESENT_PAIRS,
+     * never with another present; the pure Barrier stays NONE. */
+    const unsigned caps = ADMISSION_JOB_WINDOW_CAPS_RC98 | ADMISSION_JOB_WINDOW_CAP_PRESENT_PAIRS;
+    static const unsigned pairs[4][2] = {{K_R, K_P}, {K_RP, K_P}, {K_P, K_C}, {K_P, K_P}};
+    for (unsigned i = 0; i < 4; ++i) {
+      ADMISSION_JOB_WINDOW_KICK_STATE k = {0};
+      k.Enabled = 1u; k.InFlight = 1u; k.NextPrebound = 1u; k.QueuedFence = 2u;
+      k.Running.Fence = 1u; k.Running.Kind = pairs[i][0]; k.Running.Process = 1u;
+      k.Next.Fence = 2u; k.Next.Kind = pairs[i][1]; k.Next.Process = 1u;
+      k.Capabilities = ADMISSION_JOB_WINDOW_CAPS_RC98;
+      if (AdmissionJobWindowKickRefusal(&k) != 56u) return 16;
+      k.Capabilities = caps;
+      if (AdmissionJobWindowKickRefusal(&k) != (i == 3u ? 56u : 0u)) return 17;
+    }
+    if (AdmissionJobWindowBarrierEx(K_R, K_P, caps) != ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D ||
+        AdmissionJobWindowBarrierEx(K_P, K_C, caps) != ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_COMPUTE ||
+        AdmissionJobWindowBarrierEx(K_P, K_R, caps) != ADMISSION_JOB_WINDOW_BARRIER_TA_ON_COMPUTE ||
+        AdmissionJobWindowBarrierEx(K_R, K_P, ADMISSION_JOB_WINDOW_CAPS_RC98) != ADMISSION_JOB_WINDOW_BARRIER_NONE ||
+        !AdmissionJobWindowSecondSet(K_P, caps) ||
+        AdmissionJobWindowSecondSet(K_P, ADMISSION_JOB_WINDOW_CAPS_RC98)) return 18;
+  }
   return 0;
 }
 

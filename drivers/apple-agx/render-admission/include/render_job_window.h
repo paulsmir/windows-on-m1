@@ -60,6 +60,12 @@ typedef struct _ADMISSION_JOB_WINDOW_JOB {
 #define ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER 0x2u    /* U1: same-key skip */
 #define ADMISSION_JOB_WINDOW_CAP_TA_ON_3D 0x4u        /* TA Barrier, 3D stamp */
 #define ADMISSION_JOB_WINDOW_CAP_COMPUTE_BARRIER 0x8u /* compute-queue Barrier */
+/* P1 (EXP2131 budget: the R7 -> present -> C0 span is ~1.7 ms per frame):
+ * the KMD present compute job joins the window as a compute job on its
+ * own (second) sidecar set. Declared only under Wom1Depth2Present = 1 on
+ * top of the general depth-two mode; never two presents in one window
+ * (one present arena per process, AppleAgxPresentBuild). */
+#define ADMISSION_JOB_WINDOW_CAP_PRESENT_PAIRS 0x10u
 
 #define ADMISSION_JOB_WINDOW_CAPS_RC98                                       \
   (ADMISSION_JOB_WINDOW_CAP_SECOND_SIDECAR | ADMISSION_JOB_WINDOW_CAP_TA_ON_3D | \
@@ -155,6 +161,11 @@ unsigned int AdmissionJobWindowUsesManager(unsigned int Kind);
 #define ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_COMPUTE 4u
 unsigned int AdmissionJobWindowBarrier(unsigned int RunningKind,
                                        unsigned int NextKind);
+/* P1: as AdmissionJobWindowBarrier, with a present job taken as a compute
+ * job when Capabilities declare ADMISSION_JOB_WINDOW_CAP_PRESENT_PAIRS. */
+unsigned int AdmissionJobWindowBarrierEx(unsigned int RunningKind,
+                                         unsigned int NextKind,
+                                         unsigned int Capabilities);
 /* rc102: the queue N+1's leading Barrier is published on (it starts there)
  * and the queue whose firmware stamp it waits on (N's last). */
 #define ADMISSION_JOB_WINDOW_QUEUE_TA 0u

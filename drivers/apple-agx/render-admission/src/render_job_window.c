@@ -18,9 +18,15 @@ unsigned int AdmissionJobWindowCapabilities(unsigned int Depth2,
   return Depth2 && CapsSwitch ? ADMISSION_JOB_WINDOW_CAPS_RC98 : 0u;
 }
 
+/* P1: the kind the window treats a job as. */
+static unsigned int window_kind(unsigned int Kind, unsigned int Capabilities) {
+  return Kind == ADMISSION_JOB_WINDOW_KIND_PRESENT &&
+         (Capabilities & ADMISSION_JOB_WINDOW_CAP_PRESENT_PAIRS)
+      ? ADMISSION_JOB_WINDOW_KIND_COMPUTE : Kind;
+}
 unsigned int AdmissionJobWindowSecondSet(unsigned int Kind,
                                          unsigned int Capabilities) {
-  return AdmissionJobWindowUsesSidecar(Kind) &&
+  return AdmissionJobWindowUsesSidecar(window_kind(Kind, Capabilities)) &&
          (Capabilities & ADMISSION_JOB_WINDOW_CAP_SECOND_SIDECAR) ? 1u : 0u;
 }
 
@@ -46,6 +52,12 @@ unsigned int AdmissionJobWindowBarrier(unsigned int RunningKind,
                     : ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D;
 }
 
+unsigned int AdmissionJobWindowBarrierEx(unsigned int RunningKind,
+                                         unsigned int NextKind,
+                                         unsigned int Capabilities) {
+  return AdmissionJobWindowBarrier(window_kind(RunningKind, Capabilities),
+                                   window_kind(NextKind, Capabilities));
+}
 static unsigned int barrier_available(unsigned int Barrier,
                                       unsigned int Capabilities) {
   switch (Barrier) {
@@ -85,6 +97,7 @@ unsigned int AdmissionJobWindowGeneralClasses(unsigned int TaOnCompute,
 unsigned int AdmissionJobWindowKickRefusal(
     const ADMISSION_JOB_WINDOW_KICK_STATE *s) {
   const ADMISSION_JOB_WINDOW_JOB *n, *m;
+  unsigned int nk, mk;
   if (!s) return 99u;
   if (!s->Enabled) return 1u;
   if (s->Stopping || s->Resetting) return 2u;
@@ -95,6 +108,8 @@ unsigned int AdmissionJobWindowKickRefusal(
   if (s->PreemptionPhase != 0u) return 4u;
   n = &s->Running;
   m = &s->Next;
+  nk = window_kind(n->Kind, s->Capabilities);
+  mk = window_kind(m->Kind, s->Capabilities);
   if (s->InFlight != 1u || n->Fence == 0u) return 50u;
   if (s->WindowPoisoned) return 51u;
   if (!s->NextPrebound || m->Fence == 0u || m->Fence == n->Fence) return 52u;
@@ -103,15 +118,18 @@ unsigned int AdmissionJobWindowKickRefusal(
   if (s->PagingPending ||
       (s->CpuHeadFence != 0u && s->CpuHeadFence == m->Fence)) return 54u;
   if (n->Process == 0ULL || m->Process != n->Process) return 55u;
-  if (!window_g4(n->Kind) || !window_g4(m->Kind)) return 56u;
+  if (!window_g4(nk) || !window_g4(mk)) return 56u;
+  /* P1: one present arena per process */
+  if (n->Kind == ADMISSION_JOB_WINDOW_KIND_PRESENT &&
+      m->Kind == ADMISSION_JOB_WINDOW_KIND_PRESENT) return 56u;
   /* EXP2100: the proven barrier classes cover only no-prelude instances.
    * A prelude uses compute as well as TA/3D, on either side of the pair. */
   if (s->General && !s->Prelude &&
       (n->Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE ||
        m->Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE))
     return ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_UNPROVEN;
-  if (AdmissionJobWindowUsesSidecar(n->Kind) &&
-      AdmissionJobWindowUsesSidecar(m->Kind) &&
+  if (AdmissionJobWindowUsesSidecar(nk) &&
+      AdmissionJobWindowUsesSidecar(mk) &&
       !(s->Capabilities & ADMISSION_JOB_WINDOW_CAP_SECOND_SIDECAR))
     return 57u;
   if (AdmissionJobWindowUsesManager(n->Kind) &&
@@ -124,12 +142,12 @@ unsigned int AdmissionJobWindowKickRefusal(
     if (!(s->Capabilities & ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER))
       return 59u;
   }
-  if (!barrier_available(AdmissionJobWindowBarrier(n->Kind, m->Kind),
+  if (!barrier_available(AdmissionJobWindowBarrier(nk, mk),
                          s->Capabilities))
     return 60u;
   /* rc102 (EXP2047): a class the wired window was not switched on for. */
   if (s->KickClasses != 0u &&
-      !(s->KickClasses & (1u << AdmissionJobWindowBarrier(n->Kind, m->Kind))))
+      !(s->KickClasses & (1u << AdmissionJobWindowBarrier(nk, mk))))
     return 64u;
   if (s->NextNeedsIdle) return 61u;
   if (s->SetsValid && s->RunningSet == s->NextSet) return 62u;

@@ -5535,6 +5535,12 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     preemption = image->G4ComputeEnvelope.Header.Preemption.Va;
   else if (s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE)
     preemption = image->G4PreludePreemption.Va;
+  else if (s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_PRESENT &&
+           AdmissionJobWindowSecondSet(ADMISSION_JOB_WINDOW_KIND_PRESENT,
+                                       runtime->Depth2Capabilities))
+    /* P1: the present arena's preemption buffer (AppleAgxPresentBuild) is
+     * never zero; only the set choice depends on it. */
+    preemption = image->Present.Arena.Va;
   if (owner->JobWordStamp != 0u && owner->JobWordStamp == fence &&
       s.Next.Kind != ADMISSION_JOB_WINDOW_KIND_NONE) {
     s.SetsValid = 1u;
@@ -5552,7 +5558,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     if (AdmissionG4PendingKickLocked(adapter, next)) {
       packet = head->Packet;
       context = head->Context;
-      barrier = AdmissionJobWindowBarrier(s.Running.Kind, s.Next.Kind);
+      barrier = AdmissionJobWindowBarrierEx(s.Running.Kind, s.Next.Kind,
+                                            runtime->Depth2Capabilities);
       runtime->Depth2KickRunningKind = s.Running.Kind;
       runtime->Depth2KickNextKind = s.Next.Kind;
     } else {
@@ -5565,7 +5572,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     AdmissionRcDecisionTyped(&runtime->RcDecisions,(unsigned int)refusal,
         (unsigned int)prebindRefusal,(unsigned int)fence,s.Next.Fence,
         runtime->RcDecisionPid,AdmissionJobQpc(),s.Running.Kind,s.Next.Kind,
-        AdmissionJobWindowBarrier(s.Running.Kind,s.Next.Kind));
+        AdmissionJobWindowBarrierEx(s.Running.Kind,s.Next.Kind,
+                                    runtime->Depth2Capabilities));
     runtime->RcExportPending = TRUE;
   }
   AdmissionJobAheadNoteRefusalWindows(runtime, fence,
@@ -5580,7 +5588,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     runtime->RcCurrent.RunningKind = s.Running.Kind;
     runtime->RcCurrent.NextKind = s.Next.Kind;
     runtime->RcCurrent.Barrier = (unsigned int)barrier;
-    runtime->RcCurrent.ExpectedR = s.Running.Kind == ADMISSION_JOB_WINDOW_KIND_COMPUTE ?
+    runtime->RcCurrent.ExpectedR = s.Running.Kind == ADMISSION_JOB_WINDOW_KIND_COMPUTE ||
+        s.Running.Kind == ADMISSION_JOB_WINDOW_KIND_PRESENT ?
         runtime->Backend.PendingJob.ComputeExpectedStamp :
         runtime->Backend.PendingJob.D3ExpectedStamp;
     if (context && context->GpuvaG3Process)
@@ -7370,6 +7379,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
         !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2TaOnCompute") ? 1u : 0u,
         !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2TaOn3d") ? 1u : 0u,
         !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2ComputeOnCompute") ? 1u : 0u);
+    /* P1: the KMD present compute job joins the window only with
+     * REG_DWORD Wom1Depth2Present = 1 (render_job_window.h). */
+    if (AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2Present"))
+      runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_PRESENT_PAIRS;
   }
 #else
   runtime->JobAhead = FALSE;
