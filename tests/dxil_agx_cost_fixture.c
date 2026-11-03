@@ -613,6 +613,96 @@ synthetic_shared_adjacent(unsigned mode)
    return b.shader;
 }
 
+/* K3: one invocation publishes known bytes. Keep every read observable in
+ * an SSBO so the retained compiler output and optimized NIR can be checked.
+ * Modes: dense, barrier split, holes, overlap, masked, atomic, aliasing read,
+ * 16-bit and 8-bit stores. This is a compiler oracle, not a GPU emulator. */
+static nir_shader *
+synthetic_shared_stores(unsigned mode)
+{
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "k3-shared-stores");
+   b.shader->info.internal = false;
+   b.shader->info.workgroup_size[0] = 1;
+   b.shader->info.workgroup_size[1] = b.shader->info.workgroup_size[2] = 1;
+   b.shader->info.shared_size = 128;
+   b.shader->info.num_ssbos = 1;
+   unsigned bits = mode == 7 ? 16 : mode == 8 ? 8 : 32;
+   for (unsigned k = 0; k < 8; ++k) {
+      if (mode == 1 && k == 3)
+         nir_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_WORKGROUP,
+                     .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_shared);
+      if ((mode == 5 || mode == 6) && k == 3) {
+         nir_def *old = mode == 5 ?
+            nir_shared_atomic(&b, 32, nir_imm_int(&b, 0), nir_imm_int(&b, 7), .atomic_op = nir_atomic_op_iadd) :
+            nir_load_shared(&b, 1, 32, nir_imm_int(&b, 0), .align_mul = 4);
+         nir_store_ssbo(&b, old, nir_imm_int(&b, 0), nir_imm_int(&b, 64),
+                        .write_mask = 1, .access = ACCESS_NON_READABLE, .align_mul = 4);
+      }
+      nir_store_shared(&b, nir_imm_intN_t(&b, 0x40 + k, bits),
+                       nir_imm_int(&b, k * (mode == 2 ? 8 : bits / 8)),
+                       .write_mask = 1, .align_mul = bits / 8);
+   }
+   if (mode == 3 || mode == 6)
+      nir_store_shared(&b, nir_imm_int(&b, 0xabcd), nir_imm_int(&b, 0),
+                       .write_mask = 1, .align_mul = 4);
+   if (mode == 4)
+      nir_store_shared(&b, nir_imm_ivec4(&b, 0x81, 0xdead, 0x83, 0xbeef), nir_imm_int(&b, 0),
+                       .write_mask = 5, .align_mul = 4);
+   nir_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_WORKGROUP,
+               .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_shared);
+   for (unsigned k = 0; k < 8; ++k) {
+      nir_def *value = nir_load_shared(&b, 1, bits,
+         nir_imm_int(&b, k * (mode == 2 ? 8 : bits / 8)), .align_mul = bits / 8);
+      nir_store_ssbo(&b, nir_u2u32(&b, value), nir_imm_int(&b, 0), nir_imm_int(&b, k * 4),
+                     .write_mask = 1, .access = ACCESS_NON_READABLE, .align_mul = 4);
+   }
+   nir_shader_gather_info(b.shader, nir_shader_get_entrypoint(b.shader));
+   return b.shader;
+}
+
+/* Emit the actual optimized NIR's shared-memory operations, including values
+ * and masks, for a byte-addressed Python oracle. Fail rather than invent a
+ * value when a fixture stops being constant. Backend code shape is checked
+ * separately in the retained executable. */
+static unsigned
+shared_oracle_constant(nir_def *def, unsigned component)
+{
+   nir_scalar s = nir_scalar_resolved(def, component);
+   if (!nir_scalar_is_const(s)) {
+      fputs("nonconstant shared oracle operand\n", stderr);
+      exit(3);
+   }
+   return nir_scalar_as_uint(s);
+}
+
+static void
+print_shared_oracle(nir_shader *nir)
+{
+   nir_foreach_block(block, nir_shader_get_entrypoint(nir)) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         if (intr->intrinsic == nir_intrinsic_store_shared) {
+            printf("ORACLE_STORE %u %u %u", shared_oracle_constant(intr->src[1].ssa, 0),
+                   intr->src[0].ssa->bit_size, nir_intrinsic_write_mask(intr));
+            for (unsigned c = 0; c < intr->num_components; ++c)
+               printf(" %u", shared_oracle_constant(intr->src[0].ssa, c));
+            puts("");
+         } else if (intr->intrinsic == nir_intrinsic_load_shared) {
+            printf("ORACLE_LOAD %u %u %u\n", shared_oracle_constant(intr->src[0].ssa, 0),
+                   intr->def.bit_size, intr->def.num_components);
+         } else if (intr->intrinsic == nir_intrinsic_shared_atomic) {
+            assert(nir_intrinsic_atomic_op(intr) == nir_atomic_op_iadd);
+            printf("ORACLE_ADD %u %u\n", shared_oracle_constant(intr->src[0].ssa, 0),
+                   shared_oracle_constant(intr->src[1].ssa, 0));
+         } else if (intr->intrinsic == nir_intrinsic_barrier) {
+            puts("ORACLE_BARRIER");
+         }
+      }
+   }
+}
+
 /* --synthetic-local-array=N: an indexable temp of N dwords (DXBC x#, a
  * DXIL alloca) filled from u0 and read at a per-thread index, through the
  * frontend tail (dxbc_nir_finalize) as every translated shader */
@@ -749,6 +839,7 @@ main(int argc, char **argv)
 {
    bool d3d_robust = true, print_nir = false, print_lowered = false, in_bounds = false;
    bool soft_fault = false, soft_fault_loads = false, fs_backend = false, print_selected = false;
+   bool shared_store_oracle = false;
    unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
       if (sscanf(argv[a], "--root-views=%x,%x", &root_uavs, &root_cbvs) == 2)
@@ -772,6 +863,9 @@ main(int argc, char **argv)
       nir = synthetic_shared_reads(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-shared-adjacent=%u", &reads) == 1 && reads <= 3) {
       nir = synthetic_shared_adjacent(reads);
+   } else if (argc > 1 && sscanf(argv[1], "--synthetic-shared-stores=%u", &reads) == 1 && reads <= 8) {
+      nir = synthetic_shared_stores(reads);
+      shared_store_oracle = true;
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-local-array=%u", &reads) == 1 && reads && reads <= 256) {
       nir = synthetic_local_array(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-array-samples=%u", &reads) == 1 && reads && reads <= 16) {
@@ -908,6 +1002,8 @@ main(int argc, char **argv)
                                 .has_scratch = true, .promote_constants = true, .reserved_preamble = 240};
    struct agx_shader_part part = {0};
    agx_compile_shader_nir(nir, &key, &part);
+   if (shared_store_oracle)
+      print_shared_oracle(nir);
    if (print_selected) {
       puts("SELECTED MAIN BEGIN");
       agx2_disassemble((uint8_t *)part.binary + part.info.main_offset, part.info.main_size, stdout);

@@ -25,7 +25,7 @@ class SharedLoadVectorize(unittest.TestCase):
 
     def compile(self, setting, mode=0):
         env = dict(os.environ)
-        for key in ('APPLE_AGX_SHARED_LOAD_VECTORIZE', 'APPLE_AGX_LOCAL_LOAD_SCHED',
+        for key in ('APPLE_AGX_SHARED_LOAD_VECTORIZE', 'APPLE_AGX_SHARED_STORE_VECTORIZE', 'APPLE_AGX_LOCAL_LOAD_SCHED',
                     'APPLE_AGX_LATENCY_SCHED', 'APPLE_AGX_RA_PACK', 'APPLE_AGX_RA_WEB',
                     'AGX_MESA_DEBUG'):
             env.pop(key, None)
