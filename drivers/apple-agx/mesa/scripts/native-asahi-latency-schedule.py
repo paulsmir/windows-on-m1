@@ -932,12 +932,19 @@ agx_win32_insert_waits_global(agx_context *ctx)
    }
 
    for (unsigned iter = 0; changed && iter < 64; ++iter) {
+      agx_block *layout_prev = NULL;
       changed = false;
       agx_foreach_block(ctx, block) {
          struct slot state[2];
          memset(state, 0, sizeof(state));
          agx_foreach_predecessor(block, pred)
             agx_win32_wait_merge(state, out[(*pred)->index]);
+         /* EXP2123 (C19A-D): AGX control flow is execution-masked, so the
+          * block laid out before this one also runs into it (then -> else
+          * with no CFG edge); its pending writes are live here too. */
+         if (layout_prev)
+            agx_win32_wait_merge(state, out[layout_prev->index]);
+         layout_prev = block;
          memcpy(in[block->index], state, sizeof(state));
          agx_win32_wait_block(ctx, block, state, false);
          if (memcmp(state, out[block->index], sizeof(state))) {
