@@ -67799,3 +67799,11 @@ Switches: as EXP2108. UMD env (GravityMark wrapper): APPLE_AGX_D3D12_SUBMISSION_
 - Hashes: sys 410e906432bf, UmdArm64 e498642e60bb, UmdX64 449160d4e93b, Umd32 12b359ecb9d2; manifest d8235f7a4fdb, hardware-manifest e93140540838; probe2110.sh 50b4c72bdc61 (PROBE_LINT_OK); visible recovery rec2110h 32d1e6468913ba1e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2110h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2110-gm-shared-vec/run2110.sh.
+
+EXP2110 HARDWARE ACTUAL (2026-11-03): **k2 shared-load vectorization (APPLE_AGX_SHARED_LOAD_VECTORIZE=1) PASS: +3.1% HD, +3.0% FHD, correct images. New best.**
+- HD 100k temporal 0: Score 5949, 35.6 FPS (EXP2108 same config without the option: 5771 -> +3.1%; EXP2075: 5696 -> +4.4%).
+- FHD 100k temporal 0: Score 4803, 28.7 FPS (EXP2108: 4665 -> +3.0%; EXP2075: 4487 -> +7.0%).
+- Final HD frame visually identical to EXP2108 (Visible 154,798 vs 154,738; same scene and composition); both runs exited normally, WER 0; no reset, no G4 failure; guest alive; pipeline rc 0.
+- Expected vs actual: expected +1-3% if the traversal kernel is shared-load bound; actual +3.0-3.1% at both resolutions (resolution-independent, as expected for the C4 compute). Verdict confirmed: the traversal kernel is load-issue bound; compiler work on C4 kernels is the productive lever.
+- Next: EXP2111 validates the q20 defaults without switches; then make shared-load vectorization the default after the D3D12 suite runs with it; Codex k3 continues on the C4 kernels.
+- Recovery rec2110h.
