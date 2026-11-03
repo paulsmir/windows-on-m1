@@ -255,12 +255,12 @@ class Depth2CapsModel(unittest.TestCase):
 
 
 class Depth2CapsWiring(unittest.TestCase):
-    def test_switch_is_default_off_and_needs_depth2(self):
+    def test_switch_is_default_on_and_needs_depth2(self):
         text = WORKER.read_text()
         self.assertEqual(text.count('L"Wom1JobDepth2Caps"'), 1)
         self.assertRegex(text, r'runtime->Depth2Capabilities = AdmissionJobWindowCapabilities\(\s*'
                                r'runtime->JobDepth2 \? 1u : 0u,\s*runtime->JobDepth2 &&\s*'
-                               r'AdmissionPlatformSwitchEnabled\(Context, L"Wom1JobDepth2Caps"\)')
+                               r'!AdmissionPlatformSwitchDisabled\(Context, L"Wom1JobDepth2Caps"\)')
         # rc102: Wom1JobDepth2Kick (the wired window) is cleared with them
         self.assertRegex(text, r'runtime->JobDepth2 = FALSE;\s*\n\s*runtime->Depth2Capabilities = 0u;\s*\n'
                                r'\s*runtime->JobDepth2Kick = FALSE;\s*\n#endif')

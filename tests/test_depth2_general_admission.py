@@ -103,7 +103,8 @@ static unsigned char AdmissionPlatformSwitchEnabled(void *c,const wchar_t *n) {
  (void)c;return (switches & mask(n)) != 0;
 }
 static unsigned char AdmissionPlatformSwitchDisabled(void *c,const wchar_t *n) {
- (void)c;(void)n;return 0;
+ /* Explicit zero for absent mask bits preserves this legacy fixture. */
+ (void)c;return wcscmp(n,L"Wom1JobBuildAhead") && !(switches & mask(n));
 }
 static APPLE_AGX_BOOL AdmissionEvictG4Manager(void *c,const APPLE_AGX_RENDER_MANAGER_KEY *k,
  APPLE_AGX_U32 f,const APPLE_AGX_EXP208_RELOCATION_OBJECT *o) {

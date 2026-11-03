@@ -9,7 +9,7 @@ compute-prelude done pointers and stamps reached their expected values.
 (b) answers U4: the notifier threshold counts every kicked job, so if the
 firmware also holds a job's driver stamp until the threshold is reached, a
 depth-2 N would be seen only when N+1 ends. The test catches:
-  - the switch on by default, without build-ahead, or a receipt path that
+  - the switch enabled despite its opt-out or without build-ahead, or a receipt path that
     kicks, publishes or rings anything (receipt mode must not change what
     the firmware gets);
   - a sampler that records a stamp or done pointer before it reached the
@@ -49,11 +49,11 @@ def section(text, start):
 
 
 class Depth2Wiring(unittest.TestCase):
-    def test_switch_is_default_off_and_needs_build_ahead(self):
+    def test_switch_is_default_on_and_needs_build_ahead(self):
         text = WORKER.read_text()
         self.assertRegex(text, r'runtime->JobDepth2 = runtime->JobAhead &&\s*\n\s*'
-                               r'AdmissionPlatformSwitchEnabled\(Context, L"Wom1JobDepth2"\)')
-        self.assertNotIn('AdmissionPlatformSwitchDisabled(Context, L"Wom1JobDepth2")', text)
+                               r'!AdmissionPlatformSwitchDisabled\(Context, L"Wom1JobDepth2"\)')
+        self.assertNotIn('AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2")', text)
         self.assertRegex(text, r"#else\s*\n\s*runtime->JobAhead = FALSE;\s*\n\s*runtime->JobDepth2 = FALSE;")
 
     def test_receipt_mode_kicks_nothing(self):

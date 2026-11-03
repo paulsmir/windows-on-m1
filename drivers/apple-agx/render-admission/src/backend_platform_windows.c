@@ -289,9 +289,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * element-wise reads of the template arena and firmware-shared memory in
    * the build and the buffer-manager save (byte-identical result). */
   BOOLEAN BuildDirectReads;
-  /* rc124: device value Wom1ManagerSlots = 1 binds each buffer-manager key
-   * to its own firmware buffer slot (render_shared_memory ManagerSlotCount
-   * 4); 0 or absent keeps the single slot 0. */
+  /* rc124: bind each buffer-manager key to its own firmware slot
+   * (ManagerSlotCount 4). Q20 defaults on; DWORD 0 keeps single slot 0. */
   BOOLEAN ManagerSlots;
   BOOLEAN ManagerReceipt;
   /* rc84: device value Wom1GpuPerfReceipt = 0 stops the Wom1GpuPerf
@@ -7260,7 +7259,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->ProviderConfig.ExternalRender.ResolvePreparedRange =
       AdmissionExternalResolveRange;
   runtime->Initdata.RenderSharedMemory.NotifierFlight =
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1NotifierFlight");
+      !AdmissionPlatformSwitchDisabled(Context, L"Wom1NotifierFlight");
   if (!AppleAgxPlatformProviderInitialize(
           &runtime->Provider, &runtime->ProviderConfig,
           &runtime->PlatformIo)) {
@@ -7309,7 +7308,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->ManagerReceipt =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerReceipt");
   runtime->ManagerSlots =
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerSlots");
+      !AdmissionPlatformSwitchDisabled(Context, L"Wom1ManagerSlots");
   runtime->JobDiagnostics =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDiagnostics");
   runtime->RcDepth2 = runtime->RcReceiptEnabled = runtime->RcExportPending = FALSE;
@@ -7320,16 +7319,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 #if ADMISSION_JOB_AHEAD_BUILD
   runtime->JobAhead =
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1JobBuildAhead");
-  /* rc95: off unless REG_DWORD 1, and only with build-ahead (its prebind
-   * is where the depth-2 decision is taken). */
+  /* Q20: EXP2096-2109 accepted defaults; only REG_DWORD 0 opts out.
+   * Build-ahead remains required: its prebind takes the depth-2 decision. */
   runtime->JobDepth2 = runtime->JobAhead &&
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2") ? TRUE : FALSE;
-  /* rc98: off unless REG_DWORD 1, and only on top of Wom1JobDepth2. */
+      !AdmissionPlatformSwitchDisabled(Context, L"Wom1JobDepth2") ? TRUE : FALSE;
+  /* rc98 capabilities default on only on top of effective JobDepth2. */
   runtime->Depth2Capabilities = AdmissionJobWindowCapabilities(
       runtime->JobDepth2 ? 1u : 0u,
       runtime->JobDepth2 &&
-          AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2Caps") ? 1u : 0u);
-  runtime->RcDepth2 = AdmissionPlatformSwitchEnabled(Context, L"Wom1RcDepth2");
+          !AdmissionPlatformSwitchDisabled(Context, L"Wom1JobDepth2Caps") ? 1u : 0u);
+  /* General subsumes this R/C-only policy; retain it for General=0. */
+  runtime->RcDepth2 = !AdmissionPlatformSwitchDisabled(Context, L"Wom1RcDepth2");
   runtime->RcReceiptEnabled =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1RcReceipt");
   /* rc102: off unless REG_DWORD 1, and only with the rc98 capabilities
@@ -7346,20 +7346,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
         runtime->Depth2Capabilities != 0u ? TRUE : FALSE;
     runtime->Depth2KickClasses = 1u << ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D;
   }
-  /* Q6: all prerequisites are mandatory, and every unvalidated barrier
-   * class has its own switch. Broad rc102 switches cannot widen this mask. */
+  /* Q20: accepted non-prelude classes default on with every Q6 prerequisite.
+   * Prelude and C/C stay opt-in; broad rc102 knobs cannot widen this mask. */
   runtime->Depth2General = runtime->ManagerSlots &&
       runtime->Initdata.RenderSharedMemory.NotifierFlight &&
       runtime->Depth2Capabilities != 0u &&
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2General") ? TRUE : FALSE;
+      !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2General") ? TRUE : FALSE;
   if (runtime->Depth2General) {
     runtime->Depth2Prelude =
         AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2Prelude");
     runtime->JobDepth2Kick = TRUE;
     runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER;
     runtime->Depth2KickClasses = AdmissionJobWindowGeneralClasses(
-        AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2TaOnCompute") ? 1u : 0u,
-        AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2TaOn3d") ? 1u : 0u,
+        !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2TaOnCompute") ? 1u : 0u,
+        !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2TaOn3d") ? 1u : 0u,
         AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2ComputeOnCompute") ? 1u : 0u);
   }
 #else
