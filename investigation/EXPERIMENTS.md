@@ -67922,3 +67922,11 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1LiveAdditivePaging=1. Steps: only Q3PC, the
 - Hashes: sys e3a487e3c318, UmdArm64 63fe3662ce28, UmdX64 5f831431184a, Umd32 da757d932844; manifest 2da1aecfe6a0, hardware-manifest 8ca96e47b60c; probe2116.sh 8455bc95a9bb (PROBE_LINT_OK); visible recovery rec2116h f3db0c0a4868e01e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1LiveAdditivePaging=1.
 - Recovery rec2116h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2116-live-paging/run2116.sh.
+
+EXP2116 HARDWARE ACTUAL (2026-11-03): **q22b live additive paging INCONCLUSIVE: the switch reached the KMD but the feature did not activate (no broker capability seen); hold and scores unchanged.**
+- Booted m1n1 confirmed 936cbd03 (manifest). Receipts: `Wom1LiveAdditivePaging = 1` present on the device key, but only `Wom1G3Node0` exists (no second/paging node), i.e. context->LiveAdditivePaging stayed 0 (gpuva_g3_windows.c:447: requested AND AppleAgxGpuvaV5ClientHasLiveAdditive). UMD trace: paging queue created on node 0; measure-gpuva-paging-wait 0x4b5b us (~19.3 ms) ending 0.22 ms after head_complete.
+- Q3PC: exact outputs PASS, INCONCLUSIVE; head 2242 submit 1461106415 / complete 1461587810, next 2243 submit 1461596481 (0.36 ms after).
+- GravityMark HD: 5931, 35.5 FPS; FHD: 4779, 28.6 FPS (EXP2115 5989/4840 -> -1.0%/-1.3%, about noise). No reset, no G4 failure; pipeline rc 0.
+- Expected vs actual: expected the hold removed; actual feature inactive -> the experiment did not test the hypothesis. Verdict INCONCLUSIVE.
+- Next: Codex q22c finds why the KMD did not see the broker capability with the booted m1n1 (capability report path, build/profile gating, discovery ordering) and adds a receipt for the negotiation result.
+- Recovery rec2116h.
