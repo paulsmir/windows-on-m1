@@ -68420,3 +68420,10 @@ Steps (one boot, separate observable arms): suite; a FAST HD + MIN16_CAPS + DXIL
 - Hashes: sys ebbef357e238, UmdArm64 0b1e7162bbe6, UmdX64 1e99173f3c09, Umd32 0b00209837a5; manifest 509b1e7122ab, hardware-manifest 8c8d1edf1952; probe2135.sh e7178b69cb33 (PROBE_LINT_OK); visible recovery rec2135h f579322ce4744deb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2135h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2135-min16/run2135.sh.
+
+EXP2135 HARDWARE ACTUAL (2026-11-03): **M16 rejected: GravityMark D3D12 does not change its shaders under 16-bit minimum-precision caps; within-boot run order moves scores by ~3 %.**
+- Expected: a capture with min-precision shaders; b ~ control; c above control. Actual: suite 119 PASS / 0 FAIL. a FAST (first hardware FAST run): TIMEOUT CLOSED at 58 s as designed, 721 frames in the 5+20 s window, 36.1 FPS, no removal; the capture directory stayed empty (not pre-created), but the shader-stats hashes equal the baseline ones (bdb1944a 806ee7b1bdb1944a ...). b FULL MIN16_CAPS 6270 / 37.5; c FULL MIN16_CAPS + DXIL_MIN16 6285 / 37.6; d FULL control 6064 / 36.3; WER 0, G4_SUBMIT_FAILURE none, images not inspected for b-d beyond completion.
+- The compiled shader set is identical in b, c and d (hash set 443b7a1a69f1): the caps do not make Tellusim emit min16 on D3D12 (its min16float strings serve another path), so native 16-bit lowering has nothing to act on. d's deficit sits in the first and last two of eight blocks (+2-3 ms/frame, middle blocks equal): order/thermal or foreign work, not the switches.
+- Verdict: rejected (no shader change). Both switches stay default off (harmless, documented). Process lesson: within one boot the 4th arm ran 3 % slower than arms 2-3; A/B arms must be order-balanced (ABBA) before small differences are believed (ITERATION_WORKFLOW).
+- Next: compiler cost of the heaviest fragment shader 71405b87 (planet: 7436 instrs, 255 GPRs, 158 spills / 150 fills, 435 xor + 668 mov copies, 384 threads) and the R1/C4 budget.
+- Recovery rec2135h.
