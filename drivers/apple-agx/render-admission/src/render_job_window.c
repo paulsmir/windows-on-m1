@@ -104,6 +104,12 @@ unsigned int AdmissionJobWindowKickRefusal(
       (s->CpuHeadFence != 0u && s->CpuHeadFence == m->Fence)) return 54u;
   if (n->Process == 0ULL || m->Process != n->Process) return 55u;
   if (!window_g4(n->Kind) || !window_g4(m->Kind)) return 56u;
+  /* EXP2100: the proven barrier classes cover only no-prelude instances.
+   * A prelude uses compute as well as TA/3D, on either side of the pair. */
+  if (s->General && !s->Prelude &&
+      (n->Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE ||
+       m->Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE))
+    return ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_UNPROVEN;
   if (AdmissionJobWindowUsesSidecar(n->Kind) &&
       AdmissionJobWindowUsesSidecar(m->Kind) &&
       !(s->Capabilities & ADMISSION_JOB_WINDOW_CAP_SECOND_SIDECAR))

@@ -24,7 +24,7 @@ def model_source():
     src = src.replace('% 64u', '% APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT')
     src = src.replace('  s.Enabled = 1; s.Resetting',
         '  s.General = (w->caps & ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER) != 0;\n'
-        '  s.SameManagerSlot = s.General;\n  s.Enabled = 1; s.Resetting')
+        '  s.Prelude = 1; s.SameManagerSlot = s.General;\n  s.Enabled = 1; s.Resetting')
     src = src.replace('if (AdmissionJobWindowUsesManager(w->job[a].kind) &&',
         'if (!(w->caps & ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER) &&\n      AdmissionJobWindowUsesManager(w->job[a].kind) &&')
     platform=(SHARED/'src/apple_agx_platform_provider.c').read_text()

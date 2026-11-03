@@ -350,6 +350,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN RcReceiptEnabled, RcDepth2, RcExportPending;
   ADMISSION_DEPTH2_DRILL_RECEIPT Depth2Drill;
   BOOLEAN Depth2General;
+  BOOLEAN Depth2Prelude;
   ADMISSION_RC_SAMPLE RcCurrent;
   ADMISSION_RC_RECEIPT RcReceipt;
   ADMISSION_RC_DECISIONS RcDecisions;
@@ -5466,6 +5467,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   s.Capabilities = runtime->Depth2Capabilities;
   s.KickClasses = runtime->Depth2KickClasses;
   s.General = runtime->Depth2General ? 1u : 0u;
+  s.Prelude = runtime->Depth2Prelude ? 1u : 0u;
   s.SameManagerSlot = pendingManagerValid && head != NULL &&
       head->Fence == pendingFence && head->Context == pendingContext &&
       owner->ManagerFence == fence &&
@@ -7269,6 +7271,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerSlots");
   runtime->RcDepth2 = runtime->RcReceiptEnabled = runtime->RcExportPending = FALSE;
   runtime->Depth2General = FALSE;
+  runtime->Depth2Prelude = FALSE;
   /* rc90: on by default since EXP2034 (the G4-r3 drill passed with it);
    * only REG_DWORD 0 turns it off. */
 #if ADMISSION_JOB_AHEAD_BUILD
@@ -7307,6 +7310,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       runtime->Depth2Capabilities != 0u &&
       AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2General") ? TRUE : FALSE;
   if (runtime->Depth2General) {
+    runtime->Depth2Prelude =
+        AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2Prelude");
     runtime->JobDepth2Kick = TRUE;
     runtime->RcReceiptEnabled = TRUE;
     runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER;

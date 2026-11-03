@@ -105,10 +105,16 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
   unsigned int KickClasses;
   /* Q6 opt-in: caller proves the pending key equals the running live slot. */
   unsigned int General, SameManagerSlot;
+  /* Q14: unproven prelude pairs require Wom1Depth2Prelude=1 in general mode. */
+  unsigned int Prelude;
 } ADMISSION_JOB_WINDOW_KICK_STATE;
+
+/* Previously unused policy reason; keep all existing wire values and layout. */
+#define ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_UNPROVEN 5u
 
 /* While N runs: may N+1 be kicked now? Refusal values:
  *   1 disabled, 2 stopping/resetting, 3 scheduler faulted, 4 preemption,
+ *   5 general-mode prelude pair not explicitly enabled,
  *   50 window not exactly {N}, 51 window poisoned (a dropped job),
  *   52 no Prebound successor, 53 successor is not the scheduler's next
  *   fence, 54 a paging/CPU packet runs or heads the queue,

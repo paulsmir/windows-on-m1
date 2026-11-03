@@ -32,7 +32,8 @@ typedef struct _ADMISSION_RC_RECEIPT {
   ADMISSION_RC_SAMPLE Samples[ADMISSION_RC_SAMPLES];
 } ADMISSION_RC_RECEIPT;
 
-/* Q4 decisions are observational: 0 allowed, 1..65 existing policy,
+/* Q4 decisions are observational: 0 allowed, 1..65 policy (Q14 adds
+ * 5 prelude unproven; no receipt layout or existing reason changes),
  * 66 no pending head, 67 running image not released, 68 prebind not ready
  * (Detail = prebind refusal), 69 backend already has/no longer needs a kick,
  * 70 kick disabled, 71 unknown future reason. Rings retain bounded semantic

@@ -20,7 +20,7 @@ int main(void) {
   s.Running.SceneId=20; s.Next.SceneId=21;
   s.Capabilities=ADMISSION_JOB_WINDOW_CAPS_RC98 | ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER;
   assert(AdmissionJobWindowKickRefusal(&s)==58); /* legacy */
-  s.General=1; s.SameManagerSlot=1;
+  s.General=1; s.Prelude=1; s.SameManagerSlot=1;
   s.KickClasses=AdmissionJobWindowGeneralClasses(0,0,0);
   assert(AdmissionJobWindowKickRefusal(&s)==64); /* R/R not proven */
   s.KickClasses=AdmissionJobWindowGeneralClasses(0,1,0);
@@ -94,7 +94,7 @@ static unsigned mask(const wchar_t *name) {
  const wchar_t *names[]={L"Wom1ManagerSlots",L"Wom1JobDepth2",L"Wom1JobDepth2Caps",
  L"Wom1Depth2General",L"Wom1Depth2TaOnCompute",L"Wom1Depth2TaOn3d",
  L"Wom1Depth2ComputeOnCompute",L"Wom1RcDepth2",L"Wom1JobDepth2Kick",
- L"Wom1JobDepth2KickOn3d",L"Wom1ManagerSaveOnEvict",L"Wom1RcReceipt"};
+ L"Wom1JobDepth2KickOn3d",L"Wom1ManagerSaveOnEvict",L"Wom1RcReceipt",L"Wom1Depth2Prelude"};
  for(unsigned i=0;i<sizeof(names)/sizeof(names[0]);++i)
   if(!wcscmp(name,names[i])) return 1u<<i;
  return 0;
@@ -110,7 +110,7 @@ static APPLE_AGX_BOOL AdmissionEvictG4Manager(void *c,const APPLE_AGX_RENDER_MAN
  (void)c;(void)k;(void)f;(void)o;return 1;
 }
 typedef struct {
- unsigned char ManagerSlots,RcDepth2,RcReceiptEnabled,RcExportPending,Depth2General;
+ unsigned char ManagerSlots,RcDepth2,RcReceiptEnabled,RcExportPending,Depth2General,Depth2Prelude;
  unsigned char JobAhead,JobDepth2,JobDepth2Kick;
  unsigned Depth2Capabilities,Depth2KickClasses;
  struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
@@ -123,6 +123,7 @@ int main(void) {
  Runtime r={0}; r.Initdata.RenderSharedMemory.NotifierFlight=1;
  switches=15; configure(&r,0);
  assert(r.Depth2General && r.JobDepth2Kick && r.RcReceiptEnabled);
+ assert(!r.Depth2Prelude);
  assert(r.Initdata.RenderSharedMemory.ManagerDepth2 && r.Initdata.RenderSharedMemory.ManagerSaveOnEvict);
  assert(r.Provider.QueueProvider.Config.AbortFaultSuffix);
  assert(r.Depth2KickClasses==(1u<<3));
@@ -134,6 +135,12 @@ int main(void) {
  memset(&r,0,sizeof(r));switches=15;configure(&r,0);assert(!r.Depth2General);
  memset(&r,0,sizeof(r));r.Initdata.RenderSharedMemory.NotifierFlight=1;
  switches=127;configure(&r,0);assert(r.Depth2KickClasses==30);
+ switches=127|(1u<<12);configure(&r,0);assert(r.Depth2Prelude);
+ switches=127;configure(&r,0);assert(!r.Depth2Prelude); /* no stale opt-in */
+ for(unsigned i=0;i<4;++i) {
+  switches=(15u & ~(1u<<i)) | (1u<<12);configure(&r,0);
+  assert(!r.Depth2General && !r.Depth2Prelude);
+ }
  /* Broad legacy knobs cannot bypass the Q6 typed mask. */
  switches=15|(1u<<8)|(1u<<9);configure(&r,0);assert(r.Depth2KickClasses==(1u<<3));
  return 0;

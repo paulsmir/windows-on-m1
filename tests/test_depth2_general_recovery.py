@@ -21,7 +21,7 @@ class GeneralRecovery(unittest.TestCase):
         # in the new pair matrix, whose manager lifetime is separately tested.
         source=source.replace('  s.Enabled = 1; s.Resetting',
             '  s.General = (w->caps & ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER) != 0;\n'
-            '  s.SameManagerSlot = s.General;\n  s.Enabled = 1; s.Resetting')
+            '  s.Prelude = 1; s.SameManagerSlot = s.General;\n  s.Enabled = 1; s.Resetting')
         source=source.replace('if (AdmissionJobWindowUsesManager(w->job[a].kind) &&',
             'if (!(w->caps & ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER) &&\n      AdmissionJobWindowUsesManager(w->job[a].kind) &&')
         source=source.replace('int main(void) {',r'''
