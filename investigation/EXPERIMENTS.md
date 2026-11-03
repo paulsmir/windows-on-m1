@@ -67765,3 +67765,15 @@ EXP2108 HARDWARE ACTUAL (2026-11-03): **q19 UMD submission window 16 (APPLE_AGX_
 - Expected vs actual: expected HD 5674-5800 / FHD 4656-4750 -> HD in range near the top, FHD at the bottom. Verdict confirmed (small): the window removes CPU blocking that matters at HD (more CPU-bound) and not at FHD (GPU-execution-bound). The remaining 1.69x (HD 9739/5771) and 1.67x (FHD 7814/4665) gap to macOS is GPU execution time, not submission.
 - Next: (1) promotion gate for the accepted configuration (depth two non-prelude mask + window 16) on the D3D12 smoke/regression suite before any default change; (2) GPU-execution comparison (asteroid compute/traversal kernels) as the main lever.
 - Recovery rec2108h.
+
+EXP2109 HARDWARE BEFORE 2026-11-03T02:13:01Z:
+Switches: as EXP2108 (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1).
+- WHY THIS HYPOTHESIS: EXP2096-2108 validated the configuration only on Q3 probes, drills and GravityMark; before it can become a default, the broad D3D12 feature suite must show no regression.
+- ATOMIC CONTRACT: configuration under test as a whole (no new code).
+- WHAT IS STILL UNKNOWN: whether any D3D12 feature step behaves differently with depth two / window 16.
+- Expected: all steps PASS except known failures (MSAA-related); no reset, no G4 failure, guest alive. Any FAIL is rerun on the minimal depth-one configuration to classify it as a depth-two regression or pre-existing.
+- FAIL: crash, reset, or a step that fails only with this configuration.
+- Recovery: rec2109h.
+- Hashes: sys 3edfa0f7188f, UmdArm64 8ed1178944a8, UmdX64 60e9ea3db33e, Umd32 bc940b24d73b; manifest fdb309b75659, hardware-manifest c080581bc911; probe2109.sh 6280546c85a2 (PROBE_LINT_OK); visible recovery rec2109h 60a0184d00e5c509; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2109h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2109-suite-depth2/run2109.sh.
