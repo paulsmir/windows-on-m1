@@ -67618,3 +67618,17 @@ EXP2100 HARDWARE ACTUAL (2026-11-03): **GravityMark depth-two gate FAIL: about 3
 - Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2100h -> Verdict PASS, package absent, RECOVERY_DONE.
 - Expected vs actual: expected GravityMark completion with no reset and a score above EXP2075; actual GPU hang + failed timeout recovery. The synthetic drills (EXP2098/2099) only exercised the KMD-side stall; a real GPU hang under depth two (and the ResetFromTimeout path) is not covered. Verdict FAIL; depth two stays off for applications. EXP2101 (control) not run.
 - Next: Codex q13 analyses the dump (why the GPU hung under the mask, which pair/class, why ResetFromTimeout returned 0xc0000483), max two cdb rounds.
+
+EXP2102 HARDWARE BEFORE 2026-11-03T00:13:31Z:
+Switches: as EXP2100 (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1), Wom1Depth2Prelude absent. Steps: GravityMark D3D12 HD 100k temporal 0 first, then FHD 100k temporal 0; receipts after each.
+- WHY THIS HYPOTHESIS:
+  1. EXP2100: RTKit FirmwareCrashed with the pair prelude-render 0x182a -> compute 0x182b (compute-on-3D) in flight; every hardware-proven pair (EXP2088-2099) had no prelude.
+  2. q14 source analysis: the prelude and the successor compute share the firmware compute queue while the successor waits on the predecessor's 3D stamp; prelude-bearing pairs are the only unproven admitted topology.
+- ATOMIC CONTRACT: single variable vs EXP2100 = refusal of prelude-bearing pairs (q14 default gate); q13 adds diagnostics only.
+- WHAT IS STILL UNKNOWN: whether non-prelude pairs alone keep the firmware alive in GravityMark, and how many pairs remain admissible there.
+- Expected PASS: both resolutions complete with no RTKit crash, no reset/TDR, no G4 failure, desktop alive; reason-5 refusals > 0 (prelude pairs refused); admitted pairs > 0; score vs EXP2075 (HD 5696, FHD 4487) measured, gain bounded by the overlapped non-prelude successors.
+- FAIL: firmware crash, 0x116, reset, corruption. If a crash recurs without any prelude pair in flight, the prelude hypothesis is rejected.
+- Recovery: rec2102h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest resets at proxy; dump first).
+- Hashes: sys 85533ba76764, UmdArm64 240e312a4c24, UmdX64 c632c8064f06, Umd32 a4c311c575ed; manifest 5e2c4fd2f765, hardware-manifest 68aebbfa6a1a; probe2102.sh 092565afac67 (PROBE_LINT_OK); visible recovery rec2102h 076f5b0a3a49697d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2102h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2102-gm-prelude-gate/run2102.sh.
