@@ -74,6 +74,13 @@ int main(void)''')
         ran=build_run(source,[SHARED/'src'/n for n in SHARED_SOURCES])
         self.assertEqual(ran.returncode,0,ran.stdout+ran.stderr)
 
+    def test_prelude_and_compute_on_compute_default_on(self):
+        # EXP2129-2133: both default on; only an explicit REG_DWORD 0 opts out.
+        text=(RENDER/'src/backend_platform_windows.c').read_text()
+        for name in ('Wom1Depth2Prelude','Wom1Depth2ComputeOnCompute'):
+            self.assertIn('!AdmissionPlatformSwitchDisabled(Context, L"%s")'%name,text)
+            self.assertNotIn('AdmissionPlatformSwitchEnabled(Context, L"%s")'%name,text)
+
     def test_actual_switches_reach_retained_queue_config(self):
         text=WORKER.read_text()
         start=text.index('  runtime->ManagerSlots =')

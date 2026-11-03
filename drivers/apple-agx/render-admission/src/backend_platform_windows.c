@@ -7354,20 +7354,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     runtime->Depth2KickClasses = 1u << ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D;
   }
   /* Q20: accepted non-prelude classes default on with every Q6 prerequisite.
-   * Prelude and C/C stay opt-in; broad rc102 knobs cannot widen this mask. */
+   * EXP2129-2133: prelude pairs and the compute-on-compute class (compute N ->
+   * prelude render N+1) default on too (HD 6242, FHD 4920, suite 119/0);
+   * REG_DWORD 0 turns either off. Broad rc102 knobs cannot widen this mask. */
   runtime->Depth2General = runtime->ManagerSlots &&
       runtime->Initdata.RenderSharedMemory.NotifierFlight &&
       runtime->Depth2Capabilities != 0u &&
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2General") ? TRUE : FALSE;
   if (runtime->Depth2General) {
     runtime->Depth2Prelude =
-        AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2Prelude");
+        !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2Prelude");
     runtime->JobDepth2Kick = TRUE;
     runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER;
     runtime->Depth2KickClasses = AdmissionJobWindowGeneralClasses(
         !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2TaOnCompute") ? 1u : 0u,
         !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2TaOn3d") ? 1u : 0u,
-        AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2ComputeOnCompute") ? 1u : 0u);
+        !AdmissionPlatformSwitchDisabled(Context, L"Wom1Depth2ComputeOnCompute") ? 1u : 0u);
   }
 #else
   runtime->JobAhead = FALSE;
