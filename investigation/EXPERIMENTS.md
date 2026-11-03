@@ -67989,3 +67989,9 @@ Switches: Wom1GpuFaultInfoRead=1 only. Harness: gm-run-notrace.ps1 = gm-run.ps1 
 - Hashes: sys d0601a28979d, UmdArm64 5fafb27a2f44, UmdX64 1c48e6e678df, Umd32 c6b12c042b20; manifest 323a3ebef4c5, hardware-manifest 729c8fbcb111; probe2119.sh eff64e0392a2 (PROBE_LINT_OK); visible recovery rec2119h e7da0091af31bda7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2119h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2119-gm-notrace/run2119.sh.
+
+EXP2119 HARDWARE ACTUAL (2026-11-03): **UMD diagnostic trace OFF (c1 CPU/disk hypothesis): no measurable effect; the trace is not a cost.**
+- HD 100k temporal 0: Score 5934, 35.5 FPS; FHD: Score 4850, 29.0 FPS (traced references on the same defaults: EXP2117 5970/4819, EXP2115 5989/4840, EXP2114 5977/4830) -> HD -0.6% / FHD +0.4%, within run-to-run noise. Normal exits, WER 0; no reset, no G4 failure; pipeline rc 0.
+- Pipeline incident: after the ordered restart the wait loop hung 55 min on one guest ssh session established during the reboot (ConnectTimeout bounds only the connect); killed the exact ssh PID 18984, the run continued. Fixed in agx-lab lib.sh (10de20bf, ServerAliveInterval=5/CountMax=3).
+- Expected vs actual: expected a gain if the synchronous trace were on the CPU-bound path; actual none. Verdict rejected: trace I/O is not part of the gap; CPU frequency (P-state 12) and P-core worker were already in place (c1). Remaining c1 candidate (m1n1 IOMFB_QUIET_SUCCESS) is low-expected; not prioritised.
+- Recovery rec2119h.
