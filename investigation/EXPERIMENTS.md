@@ -67934,3 +67934,15 @@ EXP2116 HARDWARE ACTUAL (2026-11-03): **q22b live additive paging INCONCLUSIVE: 
 EXP2116 CORRECTION (2026-11-03, offline, Codex q22c): the "feature did not activate" reading of EXP2116 ACTUAL is wrong. The KMD wrote every node receipt under the name Wom1G3Node0, so node 1 overwrote node 0; the saved Wom1G3Node0 is NodeOrdinal 1 (COPY engine, GpuMmu), the paging profile records 1 QUERY_CAPS and 25 NEGOTIATE_LIVE calls, and the "0" in the UMD paging-queue line is PhysicalAdapterIndex. Live additive paging WAS active. The hold remained because a CPU-side UPDATE_PAGE_TABLE wait of 19.0777 ms on head fence 2242 (ending ~35 us after head completion) was not eligible for live publication; the rejecting condition is not identified by the current receipts. Verdict for EXP2116 changes from INCONCLUSIVE (inactive) to: feature active, hypothesis "fresh additive maps are the hold" REJECTED for this update; next target is the specific non-additive update. q22c (e01b3df2) fixes the node receipt names and adds Wom1LiveAdditiveState.
 
 EXP2117 BUILD FAIL (2026-11-03): WDK ARM64 KMD compile stopped on render_paging.h(39,4) warning C4201 (nameless struct/union, from q22d ecf4e0e3) treated as error. No hardware run. Fixed with a local #pragma warning(disable:4201) push/pop around ADMISSION_PAGING_RECORD (the WDK-header idiom); live paging/receipt tests OK. Rebuilt under the same ID; the failed build directory is kept as EXP2117-live-refusal.buildfail. Process note: the q22b/q22d code was only clang-checked offline; two consecutive MSVC-only /W4 failures (C4242, C4201).
+
+EXP2117 HARDWARE BEFORE 2026-11-03T08:10:06Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1LiveAdditivePaging=1. Steps: only Q3PC (+ KMD receipts), then GravityMark HD/FHD 100k temporal 0.
+- WHY THIS HYPOTHESIS: EXP2116 (q22c correction): live additive paging was active, yet a 19.08 ms CPU-side UPDATE_PAGE_TABLE wait on the Q3PC head blocked the successor; q22d lists the candidate guards (occupied/reused mapping state, partial 16 KiB group, system/aperture/native-staging backing) but no receipt names the refusing one.
+- ATOMIC CONTRACT: receipt only (behaviour-neutral); switches identical to EXP2116.
+- WHAT IS STILL UNKNOWN: which guard refuses live publication for the successor's bind.
+- Expected: Wom1LiveAdditiveState shows accepted/negotiated; Wom1G3LivePagingWait ring holds the Q3PC refusal with a named reason code, VA/span and PTE shape; GravityMark within noise of EXP2116 (5931/4779) and its histogram ranks the reasons in a real workload.
+- FAIL: crash/reset or receipt absent (then INCONCLUSIVE).
+- Recovery: rec2117h (last-good m1n1 075e3980).
+- Hashes: sys 0d9e7659d7f1, UmdArm64 8e09259a9288, UmdX64 6a67620d50da, Umd32 52a703dfb94a; manifest 5f5d6e7bd8a5, hardware-manifest 777fedc7e475; probe2117.sh c93dfd7000ac (PROBE_LINT_OK); visible recovery rec2117h ad7e68e572b783f7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1LiveAdditivePaging=1.
+- Recovery rec2117h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2117-live-refusal/run2117.sh.
