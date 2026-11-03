@@ -474,6 +474,23 @@ static void owner_backend_fail(unsigned site) { owner_batch_refusal(4u, site, 0u
  * reported every 512 messages, every 64 presents and at owner destruction,
  * so a short run (GravityMark D3D12: 29 frames) keeps its tail. */
 extern "C" void (*AgxWin32PerfHook)(const char *message);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* Q19: enlarge tracking only, never GPU execution depth. Configure both
+ * owners after screen/GPUVA initialization, before any D3D12 submission. */
+static void configure_submission_window(AGX_D3D12_OWNER *owner) {
+  static_assert(AGX_GPUVA_IN_FLIGHT == AGX_SUBMISSION_WINDOW_DEFAULT,
+                "winsys default submission window");
+  static_assert(ADMISSION_UMD_IN_FLIGHT_SETS == AGX_SUBMISSION_WINDOW_DEFAULT,
+                "runtime default submission window");
+  char value[2] = {};
+  const unsigned limit =
+      GetEnvironmentVariableA("APPLE_AGX_D3D12_SUBMISSION_WINDOW", value, sizeof(value)) == 1 && value[0] == '1'
+          ? AGX_SUBMISSION_WINDOW_MAX : AGX_SUBMISSION_WINDOW_DEFAULT;
+  owner->Backend.Gpuva.SubmissionWindow = limit;
+  owner->Runtime.SubmissionWindow = limit;
+}
+#endif
+
 /* Publish the immutable diagnostic bridge before the first owner can
  * Execute. Later owner creation must not race active native hook readers. */
 static INIT_ONCE owner_wait_once = INIT_ONCE_STATIC_INIT;
@@ -869,6 +886,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     if (!owner->Context) hr = E_OUTOFMEMORY;
     install_shader_stats(owner->Context);
 #ifdef APPLE_AGX_GPUVA_WINSYS
+    configure_submission_window(owner);
     char validate[2]={},refuse[2]={};
     owner->Backend.ValidateRefs=GetEnvironmentVariableA("APPLE_AGX_UMD_VALIDATE_REFS",validate,2)==1 && validate[0]=='1';
     owner->Backend.Gpuva.RefRefuse=GetEnvironmentVariableA("APPLE_AGX_UMD_VALIDATE_REFS_REFUSE",refuse,2)==1 && refuse[0]=='1';

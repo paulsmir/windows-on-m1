@@ -754,11 +754,11 @@ static int make_resident(void *context, const uint64_t *tokens,
   for(unsigned i=0;valid && i<count;++i) {
     auto *slot=find_slot(device,tokens[i]);
     /* EXP1093: only the other submissions still in flight may hold it
-     * (EXP1203: at most ADMISSION_UMD_IN_FLIGHT_SETS - 1; the winsys
+     * (Q19: at most the selected window minus one; the winsys
      * retires the oldest one before a new submission). */
     valid=slot && !slot->Transition && !slot->CopyHeld &&
         !slot->SourceHolds &&
-        slot->SubmissionHolds<ADMISSION_UMD_IN_FLIGHT_SETS &&
+        slot->SubmissionHolds<AgxSubmissionWindowLimit(device->SubmissionWindow) &&
         (slot->StagingAllocation || slot->PrivateStaging || slot->Direct ||
          slot->SystemDirect) &&
         slot->CanonicalGpuVa &&

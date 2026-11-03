@@ -239,7 +239,7 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
       !command || !command->Bound || !command_bytes ||
       command_bytes > command->Bytes || !private_data || !private_bytes ||
       !completion || (written_count && !written) || written_count > count ||
-      space->Terminal || space->OlderCount == AGX_GPUVA_IN_FLIGHT - 1u)
+      space->Terminal || space->OlderCount >= AgxSubmissionWindowLimit(space->SubmissionWindow) - 1u)
     return gpuva_refuse(space, __LINE__);
   handles = malloc((size_t)count * sizeof(*handles));
   if (!handles) return gpuva_refuse(space, __LINE__);
