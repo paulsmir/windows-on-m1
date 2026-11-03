@@ -68304,3 +68304,10 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom
 - Hashes: sys 558bf519c728, UmdArm64 a230122e098d, UmdX64 59ae018fb784, Umd32 5c9eb61f33bb; manifest 3c659f5b322c, hardware-manifest 7e2786b558ba; probe2131.sh a57e1f66d4d5 (PROBE_LINT_OK); visible recovery rec2131h 9809184a1b6b009e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1.
 - Recovery rec2131h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2131-compute-on-compute/run2131.sh.
+
+EXP2131 HARDWARE ACTUAL (2026-11-03): **compute-on-compute pairs remove the compute -> prelude-render start latency: GravityMark HD 6242 (best HD score so far), class safe on the suite and GravityMark.**
+- Expected: suite 119/0; compute -> prelude start ~0.59 -> ~0.07 ms; score up to +5-7 % over 6069; image correct; FAIL on firmware crash/reset. Actual: suite 119 PASS / 0 FAIL; GravityMark HD 100k T0 Score 6242 / 37.4 FPS (EXP2129 6069: +2.9 %; EXP2124-2128 5964-5999: about +4 %), image correct, WER 0, G4_SUBMIT_FAILURE none, no reset.
+- Stage receipts (gm2131a-umd.log vs EXP2129): prev compute end -> prelude start median 0.590 -> 0.063 ms (p90 1.089 -> 0.071, n 18356); compute -> TA idle total 7.6 % -> 3.0 % of GPU time (median 0.710 -> 0.188 ms). New regression: render -> compute start gap median 0.065 -> 0.398 ms (0.3-0.5 ms bin 3 % -> 81 %, n 19240), i.e. the render -> compute pairs EXP2129 gained are now mostly lost (about 4 % of GPU time).
+- Verdict: confirmed for the compute-on-compute class (first hardware gate, no fault). Not yet a default: FHD, a same-boot A/B and the render -> compute regression are open.
+- Next: EXP2132 = EXP2131 + Wom1JobDiagnostics=1 with live rings: refusal codes of the render -> compute successors now (hypothesis: window/sidecar-set conflicts 50/61/62 when every job is paired).
+- Recovery rec2131h.
