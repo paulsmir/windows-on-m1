@@ -612,11 +612,11 @@ CALL = '''      unsigned offset =
 
 
 # K2: the pinned vectorizer already handles shared aliasing and barriers, and
-# the AGX emitter supports dense local-load masks. Keep shared stores out: its
-# store emitter does not handle arbitrary write masks. This is independent of
+# the AGX emitter supports dense local-load masks. K3 separately opts in dense
+# 32-bit stores: the emitter does not handle arbitrary write masks. Independent of
 # K1's scheduling experiment (EXP2080 found no timing gain from load spacing).
-SHARED_VECTORIZE = r'''/* K2: opt-in compute shared-load vectorization. No holes,
- * stores, barrier changes or shader-specific admission. Read once per process. */
+SHARED_VECTORIZE = r'''/* K2/K3: independent compute shared-load/store options.
+ * No holes, barrier changes or shader-specific admission. Read once per process. */
 static bool
 agx_win32_shared_load_vectorize(void)
 {
@@ -629,13 +629,40 @@ agx_win32_shared_load_vectorize(void)
 }
 
 static bool
+agx_win32_shared_store_vectorize(void)
+{
+   static int enabled = -1;
+   if (enabled < 0) {
+      const char *env = getenv("APPLE_AGX_SHARED_STORE_VECTORIZE");
+      enabled = env && env[0] == '1' && !env[1];
+   }
+   return enabled != 0;
+}
+
+static bool
 agx_win32_mem_vectorize_cb(unsigned align_mul, unsigned align_offset,
                           unsigned bit_size, unsigned num_components,
                           int64_t hole_size, nir_intrinsic_instr *low,
                           nir_intrinsic_instr *high, void *data)
 {
    if (low->intrinsic == nir_intrinsic_store_shared ||
-       high->intrinsic == nir_intrinsic_store_shared)
+       high->intrinsic == nir_intrinsic_store_shared) {
+      /* Full masks and no gap imply a dense union, including overlaps. NIR
+       * preserves the last writer and checks intervening reads/atomics and
+       * barriers. Keep the emitter's dense-mask assumption valid without
+       * introducing bit-size reinterpretation or sparse writes here. */
+      if (!agx_win32_shared_store_vectorize() ||
+          low->intrinsic != nir_intrinsic_store_shared ||
+          high->intrinsic != nir_intrinsic_store_shared ||
+          bit_size != 32 || nir_src_bit_size(low->src[0]) != 32 ||
+          nir_src_bit_size(high->src[0]) != 32 ||
+          nir_intrinsic_write_mask(low) != BITFIELD_MASK(low->num_components) ||
+          nir_intrinsic_write_mask(high) != BITFIELD_MASK(high->num_components))
+         return false;
+   }
+   if ((low->intrinsic == nir_intrinsic_load_shared ||
+        high->intrinsic == nir_intrinsic_load_shared) &&
+       !agx_win32_shared_load_vectorize())
       return false;
    return agx_mem_vectorize_cb(align_mul, align_offset, bit_size,
                                num_components, hole_size, low, high, data);
@@ -659,7 +686,8 @@ def project_compile(text):
                 '''               .modes = nir_var_mem_global | nir_var_mem_constant |
                         nir_var_shader_temp |
                         ((nir->info.stage == MESA_SHADER_COMPUTE &&
-                          agx_win32_shared_load_vectorize()) ? nir_var_mem_shared : 0),
+                          (agx_win32_shared_load_vectorize() ||
+                           agx_win32_shared_store_vectorize())) ? nir_var_mem_shared : 0),
                .callback = agx_win32_mem_vectorize_cb,''')
     return text
 
