@@ -68128,3 +68128,15 @@ EXP2125 HARDWARE ACTUAL (2026-11-03): **update_ts alone does not revive TA start
 - Verdict: hypothesis "the firmware writes the start through update_ts" rejected.
 - Offline follow-up: the compute path (whose starts advance) encodes the same Timestamp ops but zeroes its timestamp block for every job; the render timestamp objects 28-35 are copied from the template only when queues are initialized (bind_relocation_objects, InitializePersistent) and never refreshed in steady state -- two slot copies, two stale values, matching EXP1112. New hypothesis: the firmware writes the start stamp only into a zero slot. Next: EXP2126 = same switch + zero TA start/end objects 30/31 per build (one added variable).
 - Recovery rec2125h.
+
+EXP2126 HARDWARE BEFORE 2026-11-03T13:18:29Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1. Steps as EXP2125.
+- WHY THIS HYPOTHESIS: (1) EXP2125: update_ts alone left TaStart at 2 distinct values over 24269 render jobs; (2) the compute path encodes the same Timestamp ops, zeroes its stamp block every job, and its starts advance (EXP1342/G1); (3) render stamp objects 28-35 are refreshed from the template only on queue initialization (bind_relocation_objects), i.e. two slot copies -> two stale values (EXP1112, EXP2125).
+- WINDOWS CONTRACT: none (receipt only).
+- AGX/ASAHI CONTRACT: Asahi allocates fresh (zeroed) RenderTimestamps per job (fw/job.rs), Timestamp ops as EXP2125.
+- TRANSLATION: build_active_job zeroes ActiveObjects[30/31] (8 bytes each) when the switch is on; RED/GREEN steady-state rebuild test.
+- ATOMIC CONTRACT: one added variable vs EXP2125 (zeroing), same switch.
+- WHAT IS STILL UNKNOWN: whether the firmware's start write is conditional on a zero slot.
+- Expected: suite 119/0; GravityMark correct, score within noise (5994-5999); TaStart distinct for nearly every render job, prev end <= TaStart <= TaEnd; then the compute->TA idle distribution answers G2.
+- FAIL: firmware fault/reset or score drop (harmful); TaStart still stale (rejected).
+- Recovery: rec2126h.
