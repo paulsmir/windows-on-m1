@@ -67713,3 +67713,11 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobD
 - Hashes: sys 7bb2338dbf0a, UmdArm64 2e04caf7c5d2, UmdX64 0d53800b93e5, Umd32 feba3d80df8e; manifest b16342f39c04, hardware-manifest ed3cb2a852f5; probe2106.sh 87902dbc5d29 (PROBE_LINT_OK); visible recovery rec2106h 87645af314eb0b8e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=0 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2106h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2106-gm-nodiag-d1/run2106.sh.
+
+EXP2106 HARDWARE ACTUAL (2026-11-03): **q17 checkpoint 1 PASS: with job diagnostics off, the EXP2103 functional mask at depth one is as fast as the minimal configuration.**
+- HD 100k temporal 0: Score 5598, 33.5 FPS (EXP2103 same mask + RcReceipt: 5244 -> +6.8%; EXP2105 minimal: 5613, -0.3%).
+- FHD 100k temporal 0: Score 4634, 27.7 FPS (EXP2103: 4401 -> +5.3%; EXP2105: 4584, +1.1%).
+- Both exited normally, WER 0; no G4 failure; guest alive; pipeline rc 0.
+- Expected vs actual: preregistered HD 5600-5700 / FHD 4500-4600 met. Verdict confirmed: the depth-one loss was the receipt export path (q17), not ManagerSlots/NotifierFlight.
+- Next: EXP2107, same package switch set with Wom1JobDepth2=1 (q17 checkpoint 2).
+- Recovery rec2106h.
