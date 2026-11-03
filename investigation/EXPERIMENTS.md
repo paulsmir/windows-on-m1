@@ -67955,3 +67955,17 @@ EXP2117 HARDWARE ACTUAL (2026-11-03): **q22d refusal receipt PASS as a discrimin
 - Expected vs actual: expected a named reason (met: CpuMutation = fill/transfer gate excluding concurrent jobs). Verdict: the Q3PC successor hold is a cold-path fresh-allocation zero-fill held behind the running job; the GravityMark ~0.5 ms pre-render gaps are NOT paging waits (only ~0.05 waits/frame). Live additive paging (q22b) is therefore not a GravityMark lever; it stays default off.
 - Next: GravityMark's remaining scheduling lever is the prelude-pair depth-two crash (EXP2100). Run the known reproducer (GravityMark with Wom1Depth2Prelude=1) once with the q15 PostResume v4 stamps to give the crash analysis both flights' stamps.
 - Recovery rec2117h (last-good m1n1 075e3980).
+
+EXP2118 HARDWARE BEFORE 2026-11-03T08:26:28Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1 (all other depth-two classes are defaults). Steps: GravityMark D3D12 HD 100k temporal 0 (FHD only if HD survives).
+- WHY THIS HYPOTHESIS:
+  1. EXP2100: RTKit FirmwareCrashed with a prelude-render -> compute pair in flight (0x116); EXP2102: refusing prelude pairs removed the crash, but ~83% of candidate pairs carry a prelude; EXP2110/2117 budget: ~4.4 ms/frame of launch gaps before prelude renders are not paging waits.
+  2. q15 ranked hypothesis: compute-stamp sequencing (raw fences vs Asahi 0x100 increments) with the prelude and the successor compute sharing the firmware compute queue; q15 PostResume v4 records both flights' expected TA/3D/compute stamps and event slots, which EXP2100 did not have.
+- ATOMIC CONTRACT: single switch (prelude opt-in).
+- WHAT IS STILL UNKNOWN: the stamp/queue state at the crash.
+- Expected: GravityMark HD crashes within ~1 min with 0x116 (RTKit FirmwareCrashed); recovery from proxy; PostResume v4 (registry or dump) shows both flights' expected/observed stamps; dump analysed by Codex. If no crash in a full HD run, the EXP2100 crash was not caused by prelude pairs alone (hypothesis rejected) and the score shows the prelude gain.
+- FAIL: unrecoverable machine state (no proxy/recovery).
+- Recovery: rec2118h with AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest resets at proxy; dump first (save full.log, fetch MEMORY.DMP).
+- Hashes: sys 380f962cc294, UmdArm64 efdf988f7f81, UmdX64 b760f1a86ed4, Umd32 b88c0e612c02; manifest 058a7f243e9b, hardware-manifest e39654e34395; probe2118.sh 59f1d3ff415a (PROBE_LINT_OK); visible recovery rec2118h 37c501c7a0c8a5da; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1.
+- Recovery rec2118h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2118-prelude-repro/run2118.sh.
