@@ -164,6 +164,24 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
       }
    }
    return -1;''')
+    # Q21: BatchBegin's completed-batch cleanup follows pool/encoder creation.
+    # Return those BOs to the existing cache before allocating a new batch,
+    # while preserving active-key reuse and every pending completion fence.
+    s=replace(s, '   /* Look for a free batch */', '''#ifdef APPLE_AGX_GPUVA_WINSYS
+   AGX_WIN32_ASAHI_BACKEND *backend =
+      (AGX_WIN32_ASAHI_BACKEND *)agx_device(ctx->base.screen)->windows_private;
+   if (backend && backend->ReclaimBeforeBatch) {
+      /* Poll(0) only reclaims proven completion; never synchronize a pending
+       * render to make room here. Cleanup also snapshots queries/timestamps.
+       * Keep the pass bounded even if a future cleanup changes its result. */
+      for (unsigned reclaimed = 0; reclaimed < AGX_MAX_BATCHES; ++reclaimed) {
+         if (agx_cleanup_batches(ctx) < 0)
+            break;
+      }
+   }
+#endif
+
+   /* Look for a free batch */''')
     a,b=function(s,'agx_get_in_sync');start=s.rfind('static int',0,a)
     s=s[:start]+'#ifndef _WIN32\n'+s[start:b]+'\n#endif\n'+s[b:]
     s=body(s,'agx_batch_submit','''   /* G2: a compute-only batch submits its compute command alone.

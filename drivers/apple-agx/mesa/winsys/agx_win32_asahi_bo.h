@@ -80,6 +80,8 @@ typedef struct {
   APPLE_AGX_U32 HandleMapCap, HandleMapCount;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   AGX_WIN32_GPUVA_SPACE Gpuva;
+  /* Q21: D3D12 opt-in; return completed batch BOs before new allocations. */
+  unsigned ReclaimBeforeBatch;
   unsigned ValidateRefs;
   AGX_WIN32_REF RefOrigin;
   unsigned char RefRoots[6][3][128]; /* Mesa stage, CBV/SRV/UAV, shader slot; root+1 */

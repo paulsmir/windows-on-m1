@@ -490,6 +490,14 @@ static void configure_submission_window(AGX_D3D12_OWNER *owner) {
   owner->Backend.Gpuva.SubmissionWindow = limit;
   owner->Runtime.SubmissionWindow = limit;
 }
+/* Q21: reclaim completed native batches before allocating the next one's
+ * pools/encoder. A fresh residency operation can otherwise wait for a newer
+ * job even though reusable completed storage is still held by old batches. */
+static void configure_batch_reclaim(AGX_D3D12_OWNER *owner) {
+  char value[2] = {};
+  owner->Backend.ReclaimBeforeBatch =
+      GetEnvironmentVariableA("APPLE_AGX_D3D12_RECLAIM_BEFORE_BATCH", value, sizeof(value)) == 1 && value[0] == '1';
+}
 #endif
 
 /* Publish the immutable diagnostic bridge before the first owner can
@@ -888,6 +896,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     install_shader_stats(owner->Context);
 #ifdef APPLE_AGX_GPUVA_WINSYS
     configure_submission_window(owner);
+    configure_batch_reclaim(owner);
     char validate[2]={},refuse[2]={};
     owner->Backend.ValidateRefs=GetEnvironmentVariableA("APPLE_AGX_UMD_VALIDATE_REFS",validate,2)==1 && validate[0]=='1';
     owner->Backend.Gpuva.RefRefuse=GetEnvironmentVariableA("APPLE_AGX_UMD_VALIDATE_REFS_REFUSE",refuse,2)==1 && refuse[0]=='1';
