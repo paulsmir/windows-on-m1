@@ -67652,3 +67652,10 @@ Switches: as EXP2102 except Wom1JobDepth2=0 (q12 GravityMark gate: JobDepth2 0 v
 - Hashes: sys 347574eb463f, UmdArm64 b17a72bbed29, UmdX64 c516d9dd11fa, Umd32 44c9c3edf28b; manifest c525cec5582f, hardware-manifest e4b02aeac161; probe2103.sh 5af41cbc6096 (PROBE_LINT_OK); visible recovery rec2103h b5bb8ebc7c97e11e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=0 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2103h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2103-gm-depth1-ctl/run2103.sh.
+
+EXP2103 HARDWARE ACTUAL (2026-11-03): **same-source depth-one control: depth two (EXP2102, prelude pairs refused) is faster by +4.8% (HD) and +2.2% (FHD); but the depth-one score of this configuration is ~8% below EXP2075.**
+- HD 100k temporal 0: Score 5244, 31.4 FPS (EXP2102 depth two: 5494 -> +4.8%). FHD 100k temporal 0: Score 4401, 26.3 FPS (EXP2102: 4497 -> +2.2%). Both exited normally, WER 0; no reset, no G4 failure; guest alive; pipeline rc 0.
+- Single run each; run-to-run noise of earlier controls was about +-0.5% (EXP2075 series HD 5650-5700, FHD 4487-4557).
+- EXP2075 (HD 5696, FHD 4487) ran with only Wom1GpuFaultInfoRead=1; EXP2103 additionally has Wom1ManagerSlots, JobDepth2Caps, RcReceipt, NotifierFlight, RcDepth2, Depth2General (+ sub-switches, inert at JobDepth2=0) and the q5-q15 code. Either these switches or the code cost about 8% (HD) at depth one.
+- Expected vs actual: expected depth one within noise of EXP2075; actual -8% HD / -1.9% FHD. Verdict: depth two (non-prelude classes) is a real but small gain; a depth-one regression is introduced by the current configuration and must be isolated (next: current code with only Wom1GpuFaultInfoRead=1).
+- Recovery rec2103h.
