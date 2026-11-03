@@ -578,6 +578,41 @@ synthetic_shared_reads(unsigned reads)
    return b.shader;
 }
 
+/* K2: dense per-lane words, read from lane zero after publication. Mode 1
+ * splits reads with a barrier, 2 leaves holes, 3 uses a dynamic lane address
+ * whose 16-bit wrap prevents the current vectorizer proving adjacency. */
+static nir_shader *
+synthetic_shared_adjacent(unsigned mode)
+{
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "k2-shared-adjacent");
+   b.shader->info.internal = false;
+   b.shader->info.workgroup_size[0] = 64;
+   b.shader->info.workgroup_size[1] = b.shader->info.workgroup_size[2] = 1;
+   b.shader->info.shared_size = 4096;
+   b.shader->info.num_ssbos = 1;
+   nir_def *lane = nir_load_local_invocation_index(&b);
+   nir_def *base = nir_imul_imm(&b, lane, 64);
+   for (unsigned k = 0; k < 16; ++k)
+      nir_store_shared(&b, nir_iadd_imm(&b, lane, k), nir_iadd_imm(&b, base, k * 4),
+                       .write_mask = 1, .align_mul = 4);
+   nir_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_WORKGROUP,
+               .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_shared);
+   base = mode == 3 ? nir_imul_imm(&b, nir_iand_imm(&b, nir_iadd_imm(&b, lane, 1), 63), 64)
+                    : nir_imm_int(&b, 0);
+   nir_def *sum = nir_imm_int(&b, 0);
+   for (unsigned k = 0; k < 8; ++k) {
+      if (mode == 1 && k == 3)
+         nir_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_WORKGROUP,
+                     .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_shared);
+      sum = nir_iadd(&b, sum, nir_load_shared(&b, 1, 32,
+         nir_iadd_imm(&b, base, k * (mode == 2 ? 8 : 4)), .align_mul = 4));
+   }
+   nir_store_ssbo(&b, sum, nir_imm_int(&b, 0), nir_imul_imm(&b, lane, 4),
+                  .write_mask = 1, .access = ACCESS_NON_READABLE, .align_mul = 4);
+   nir_shader_gather_info(b.shader, nir_shader_get_entrypoint(b.shader));
+   return b.shader;
+}
+
 /* --synthetic-local-array=N: an indexable temp of N dwords (DXBC x#, a
  * DXIL alloca) filled from u0 and read at a per-thread index, through the
  * frontend tail (dxbc_nir_finalize) as every translated shader */
@@ -735,6 +770,8 @@ main(int argc, char **argv)
       nir = synthetic_uav_reads(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-shared-reads=%u", &reads) == 1 && reads && reads <= 32) {
       nir = synthetic_shared_reads(reads);
+   } else if (argc > 1 && sscanf(argv[1], "--synthetic-shared-adjacent=%u", &reads) == 1 && reads <= 3) {
+      nir = synthetic_shared_adjacent(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-local-array=%u", &reads) == 1 && reads && reads <= 256) {
       nir = synthetic_local_array(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-array-samples=%u", &reads) == 1 && reads && reads <= 16) {

@@ -611,6 +611,39 @@ CALL = '''      unsigned offset =
          agx_win32_compile_function(nir, impl, key, &binary, &out->info);'''
 
 
+# K2: the pinned vectorizer already handles shared aliasing and barriers, and
+# the AGX emitter supports dense local-load masks. Keep shared stores out: its
+# store emitter does not handle arbitrary write masks. This is independent of
+# K1's scheduling experiment (EXP2080 found no timing gain from load spacing).
+SHARED_VECTORIZE = r'''/* K2: opt-in compute shared-load vectorization. No holes,
+ * stores, barrier changes or shader-specific admission. Read once per process. */
+static bool
+agx_win32_shared_load_vectorize(void)
+{
+   static int enabled = -1;
+   if (enabled < 0) {
+      const char *env = getenv("APPLE_AGX_SHARED_LOAD_VECTORIZE");
+      enabled = env && env[0] == '1' && !env[1];
+   }
+   return enabled != 0;
+}
+
+static bool
+agx_win32_mem_vectorize_cb(unsigned align_mul, unsigned align_offset,
+                          unsigned bit_size, unsigned num_components,
+                          int64_t hole_size, nir_intrinsic_instr *low,
+                          nir_intrinsic_instr *high, void *data)
+{
+   if (low->intrinsic == nir_intrinsic_store_shared ||
+       high->intrinsic == nir_intrinsic_store_shared)
+      return false;
+   return agx_mem_vectorize_cb(align_mul, align_offset, bit_size,
+                               num_components, hole_size, low, high, data);
+}
+
+'''
+
+
 def project_compile(text):
     if 'agx_win32_compile_function' in text:
         raise RuntimeError('agx_compile.c already projected')
@@ -618,6 +651,16 @@ def project_compile(text):
     text = once(text, CTX_ANCHOR, CTX)
     text = once(text, RETURN_ANCHOR, RETURN)
     text = once(text, CALL_ANCHOR, CALL)
+    text = once(text, 'static void\nagx_optimize_nir(',
+                SHARED_VECTORIZE + 'static void\nagx_optimize_nir(')
+    text = once(text, '''               .modes = nir_var_mem_global | nir_var_mem_constant |
+                        nir_var_shader_temp,
+               .callback = agx_mem_vectorize_cb,''',
+                '''               .modes = nir_var_mem_global | nir_var_mem_constant |
+                        nir_var_shader_temp |
+                        ((nir->info.stage == MESA_SHADER_COMPUTE &&
+                          agx_win32_shared_load_vectorize()) ? nir_var_mem_shared : 0),
+               .callback = agx_win32_mem_vectorize_cb,''')
     return text
 
 
