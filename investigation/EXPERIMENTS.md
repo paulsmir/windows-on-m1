@@ -68122,3 +68122,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1. Steps: full default D3
 - Hashes: sys 36154a15a380, UmdArm64 c5c338068c53, UmdX64 488a774b5cf0, Umd32 b6589b2a1fa4; manifest b9b30d6dfc78, hardware-manifest 80cf2acb67c3; probe2125.sh af715c83885c (PROBE_LINT_OK); visible recovery rec2125h 6a05c75c88949d2e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1.
 - Recovery rec2125h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2125-ta-start/run2125.sh.
+
+EXP2125 HARDWARE ACTUAL (2026-11-03): **update_ts alone does not revive TA start stamps; the patch is harmless.**
+- Expected: suite 119/0; GravityMark correct image, score within noise of EXP2124; measure-gpu-stages TaStart distinct per render job. Actual: suite 119 PASS / 0 FAIL; GravityMark HD 100k T0 Score 5994 / 35.9 FPS (EXP2124: 5999 / 5994), image correct, WER 0, G4_SUBMIT_FAILURE none, PIPELINE_RC 0; switch confirmed (SWITCHES_SET Wom1TaStartTimestamps=1). TaStart still stale: suite 375 render jobs / 2 distinct values, GravityMark 24269 render jobs / 2 distinct (prev end -> TaStart median -205 s, i.e. old slot values).
+- Verdict: hypothesis "the firmware writes the start through update_ts" rejected.
+- Offline follow-up: the compute path (whose starts advance) encodes the same Timestamp ops but zeroes its timestamp block for every job; the render timestamp objects 28-35 are copied from the template only when queues are initialized (bind_relocation_objects, InitializePersistent) and never refreshed in steady state -- two slot copies, two stale values, matching EXP1112. New hypothesis: the firmware writes the start stamp only into a zero slot. Next: EXP2126 = same switch + zero TA start/end objects 30/31 per build (one added variable).
+- Recovery rec2125h.
