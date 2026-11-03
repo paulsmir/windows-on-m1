@@ -68367,3 +68367,12 @@ EXP2133 HARDWARE ACTUAL (2026-11-03): **compute-on-compute + prelude pairs hold 
 - Verdict: confirmed. Together with EXP2129 (prelude pairs, suite 119/0, HD 6069), EXP2131 (HD 6242) and EXP2132 (suite 119/0): Wom1Depth2Prelude and Wom1Depth2ComputeOnCompute qualify as defaults (opt-out = REG_DWORD 0).
 - Next: default flip in the KMD (one change, both switches: compute-on-compute pairs are prelude pairs, so ComputeOnCompute without Prelude admits nothing new -- ATOMIC), then EXP2134 HD + FHD with no switches.
 - Recovery rec2133h.
+
+EXP2134 HARDWARE BEFORE 2026-11-03T15:11:21Z:
+Switches: Wom1GpuFaultInfoRead=1 only.
+- WHY THIS HYPOTHESIS: EXP2129-2133 with the switches set: HD 6242, FHD 4920, suite 119/0 (x4), no firmware fault; the flip makes the switch-free package behave as those runs.
+- ATOMIC CONTRACT: one change (both defaults; compute-on-compute pairs are prelude pairs).
+- WHAT IS STILL UNKNOWN: none beyond run-to-run noise (validation run).
+- Expected: suite 119/0; HD ~6240 (>= 6150), FHD ~4920 (>= 4880), images correct.
+- FAIL: crash/reset; HD < 6100 or FHD < 4860 (default not applied) -> check the receipt path.
+- Recovery: rec2134h.
