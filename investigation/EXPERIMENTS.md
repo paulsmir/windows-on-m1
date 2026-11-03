@@ -68245,3 +68245,10 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1. St
 - Hashes: sys 3ea20045a46e, UmdArm64 224b6cfe5da4, UmdX64 8195467c73be, Umd32 6fa234342bd4; manifest 2fd956aff240, hardware-manifest b9342fa1469c; probe2129.sh b9bd40b67c5d (PROBE_LINT_OK); visible recovery rec2129h 2163fa0e22a636c7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1.
 - Recovery rec2129h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2129-prelude-pairs/run2129.sh.
+
+EXP2129 HARDWARE ACTUAL (2026-11-03): **prelude pairs shrink render -> compute idle (0.35 -> 0.065 ms) and give the best HD score today (6069), but compute -> render-prelude idle stays ~0.59 ms.**
+- Expected: suite 119/0; prev compute end -> prelude start well below 0.58 ms; score up if idle shrinks. Actual: suite 119 PASS / 0 FAIL (no firmware crash); GravityMark HD 100k T0 Score 6069 / 36.3 FPS (EXP2124-2128: 5964-5999 -> about +1.3 %), image correct, WER 0, G4_SUBMIT_FAILURE none, PIPELINE_RC 0.
+- Stage receipts (gm2129a-umd.log vs EXP2126): render -> compute start gap median 0.351 -> 0.065 ms (0.3-0.5 ms bin 92 % -> 3 %; <0.1 ms 5 % -> 96 %, n 20644 / 24243); compute -> prelude start median 0.577 -> 0.590 ms (p90 0.665 -> 1.089, n 15268 / 12228); prelude 0.069 ms, prelude end -> TA 0.063 ms (unchanged); compute -> TA total 7.6 % of GPU time (EXP2126 8.2 %).
+- Verdict: partially confirmed: early kicks hide the start latency for the render -> compute class; the compute -> render-prelude class still pays ~0.59 ms (either not admitted as a pair, or the latency is the TA-queue barrier wake). Note EXP2121's 'no gain' was measured with a different same-boot control; this run's +1.3 % against five separate boots is near noise and needs an A/B before a default change.
+- Next: EXP2130 = EXP2129 + Wom1JobDiagnostics=1 with live rings: depth-two flags and refusal codes of the compute -> prelude-render successors.
+- Recovery rec2129h.
