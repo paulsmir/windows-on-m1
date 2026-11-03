@@ -68053,3 +68053,4 @@ EXP2122 HARDWARE ACTUAL (2026-11-03): **per-kernel split on the current code: sh
 - Aligned with EXP2078 (offset 12): traversal 97ae4b02 3rd launch 2.036 -> 1.420 ms (-0.62); all other C0 pieces within +-0.05 ms; the first C0 piece before tag 53aff18d is 3.686 ms = [981f..094e] 1.34 + radix 0.79 + trio 1.51 + tiny 0.12 (EXP2077 composition).
 - Expected vs actual: traversal below 2.04 ms (met). Verdict: confirms the vectorization gain is in the traversal kernel; next compiler targets by measured time: trio 39e0399a/93891b99/7bc49152 (1.51 ms; k3: 59 waits vs Apple's 28 for the same algorithm), the leading kernels (1.34 ms), the indirect atomic kernels (~1.5 ms), radix (0.79 ms).
 - Recovery rec2122h.
+- EXP2122 b (HD control, no split, defaults incl. shared-load vectorization, trace on): Score 6052, 36.2 FPS (best HD so far; EXP2110 5949, EXP2119 5934, EXP2120 5973 -- spread ~2%).
