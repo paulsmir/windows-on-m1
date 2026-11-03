@@ -68427,3 +68427,15 @@ EXP2135 HARDWARE ACTUAL (2026-11-03): **M16 rejected: GravityMark D3D12 does not
 - Verdict: rejected (no shader change). Both switches stay default off (harmless, documented). Process lesson: within one boot the 4th arm ran 3 % slower than arms 2-3; A/B arms must be order-balanced (ABBA) before small differences are believed (ITERATION_WORKFLOW).
 - Next: compiler cost of the heaviest fragment shader 71405b87 (planet: 7436 instrs, 255 GPRs, 158 spills / 150 fills, 435 xor + 668 mov copies, 384 threads) and the R1/C4 budget.
 - Recovery rec2135h.
+
+EXP2136 HARDWARE BEFORE 2026-11-03T17:50:57Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1GpuPrivateCached=1. Steps: suite; GravityMark HD FULL (first arm) then FHD FULL, -temporal 0, MESA_SHADER_CACHE_DISABLE=true.
+- WHY THIS HYPOTHESIS: (1) C4 compute kernels run ~50x slower than the ALU bound (trio: ~42 M instructions/frame in 1.51 ms, EXP2077/2122 split) -> memory/atomic-latency bound; (2) every user leaf is PROT_GPU_SHARED (MEMATTR 2, "GPU shared/coherent" in Asahi pgtable.rs), also for GPU-only pool memory; Asahi's cached mode (MEMATTR 0) is "cached noncoherent" (needs explicit invalidation), so coherent accesses may bypass the GPU's own caching; (3) C0 runs at the ALU peak, so the remaining gap is concentrated in memory-bound passes.
+- WINDOWS CONTRACT: unchanged (VidMm sees the same segments; only the UAT attribute of GPU-only allocations changes).
+- AGX/ASAHI CONTRACT: Asahi uses MEMATTR_CACHED only with firmware AP; unmapping cached memory needs a FwCtl cache invalidation (mmu.rs), which this build does NOT issue -> measurement only, never production.
+- TRANSLATION: KMD marks leaves of allocations with CpuVisible=0, not Presentation, not WrittenPrimary (pool/local segments only) with UPDATE_LEAF Flags bit 4; the experiment broker encodes AppleAgxUatGpuPrivateReadWrite/ReadOnly; m1n1 console receipt GPUVA-GC.
+- ATOMIC CONTRACT: m1n1 capability + KMD switch are one feature (either alone does nothing).
+- WHAT IS STILL UNKNOWN: whether MEMATTR 0 changes GPU cache behaviour/performance at all, and stale-data effects without invalidation.
+- Expected: GPUVA-GC receipts in full.log; suite 119/0; if the hypothesis holds a large HD/FHD gain (several % or more); images correct.
+- FAIL: corruption, GPU fault, device removal, hang -> recovery with the visible profile (m1n1 075e3980); no gain -> hypothesis rejected.
+- Recovery: rec2136h.
