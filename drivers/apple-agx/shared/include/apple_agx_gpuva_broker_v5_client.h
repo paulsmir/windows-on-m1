@@ -49,5 +49,6 @@ bool AppleAgxGpuvaV5ClientAttachMailbox(APPLE_AGX_GPUVA_V5_CLIENT *,
 bool AppleAgxGpuvaV5ClientDetachMailbox(APPLE_AGX_GPUVA_V5_CLIENT *);
 /* Optional extension, after epoch discovery; never treats a failed query as
  * support. Does not allocate/register memory or change placement. */
+bool AppleAgxGpuvaV5ClientHasLiveAdditive(APPLE_AGX_GPUVA_V5_CLIENT *);
 bool AppleAgxGpuvaV5ClientHasSysmem(APPLE_AGX_GPUVA_V5_CLIENT *);
 #endif

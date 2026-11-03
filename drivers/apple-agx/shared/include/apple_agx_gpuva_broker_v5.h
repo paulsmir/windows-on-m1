@@ -23,6 +23,12 @@
 #define AGX_GPUVA_V5_CAP_SYSMEM 1ULL
 #define AGX_GPUVA_V5_SYSMEM_PAGE_BYTES 0x4000u
 
+/* Q22b: optional live additive publication, negotiated per process. The
+ * broker authenticates empty native descriptors and acknowledges table
+ * visibility plus ASID invalidation before reporting success. */
+#define AGX_GPUVA_V5_CAP_LIVE_ADDITIVE 2ULL
+#define AGX_GPUVA_V5_LIVE_ABI 1u
+
 enum {
     AGX_GPUVA_V5_CREATE = 1,
     AGX_GPUVA_V5_REGISTER_TABLE,
@@ -46,6 +52,10 @@ enum {
     /* Process/generation, AllocationGeneration, AuxIpa only; exclusive.
      * UPDATE_LEAF and REVOKE_BACKING retain their existing semantics. */
     AGX_GPUVA_V5_REGISTER_SYSMEM_BACKING,
+    /* ProcessId/ProcessGeneration identify the owner; Token is the requested
+     * capability (LIVE_ADDITIVE or zero), AllocationGeneration is LIVE_ABI.
+     * All other payload fields are zero. Negotiation requires no live jobs. */
+    AGX_GPUVA_V5_NEGOTIATE_LIVE,
 };
 
 typedef struct _AGX_GPUVA_V5_REQUEST {

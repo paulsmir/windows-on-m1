@@ -83,6 +83,7 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   APPLE_AGX_GPUVA_G3_NODE *Tables, *Parents, *Leaves, *Backings;
   APPLE_AGX_GPUVA_G3_NODE *RootTable;
   unsigned int LastStatus, Created, Uncertain, JobInFlight, Slot;
+  unsigned int LiveAdditive;
   APPLE_AGX_GPUVA_G3_NODE *TableHint;
   /* EXP1053 receipt-only: last AttachPrivate refusal (0 none, 1 state,
    * 2 job in flight, 3 lease, 4 VA, 5 middle table, 6 leaf table,
@@ -110,6 +111,7 @@ bool AppleAgxGpuvaG3GraphInit(APPLE_AGX_GPUVA_G3_GRAPH *,
     APPLE_AGX_GPUVA_V5_CLIENT *, unsigned long long ProcessId,
     unsigned long long ProcessGeneration, APPLE_AGX_GPUVA_G3_ALLOC,
     APPLE_AGX_GPUVA_G3_FREE, void *MemoryContext);
+bool AppleAgxGpuvaG3GraphNegotiateLive(APPLE_AGX_GPUVA_G3_GRAPH *, bool);
 bool AppleAgxGpuvaG3GraphCreate(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long RootIpa, bool Paging);
 bool AppleAgxGpuvaG3GraphRegisterTable(APPLE_AGX_GPUVA_G3_GRAPH *,

@@ -222,7 +222,46 @@ static void private_attach_is_idempotent_while_busy(void) {
   assert(AppleAgxGpuvaG3GraphDestroy(&graph));
 }
 
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * Permission is per created owner, never inherited after destroy/recreate;
+ * live graphs may add only previously absent native entries. */
+static void live_negotiation_lifecycle(void) {
+  struct fixture f = {0};
+  APPLE_AGX_GPUVA_V5_CLIENT client;
+  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier, 0};
+  APPLE_AGX_GPUVA_G3_GRAPH g;
+  f.bulk = 1u;
+  assert(AppleAgxGpuvaV5ClientInit(&client, &io));
+  assert(AppleAgxGpuvaG3GraphInit(&g, &client, 1, 1, allocate, release, 0));
+  assert(AppleAgxGpuvaG3GraphCreate(&g, 0x10000000ULL, false));
+  assert(!g.LiveAdditive);
+  assert(AppleAgxGpuvaG3GraphRegisterTable(&g, 0x10004000ULL, 1));
+  assert(AppleAgxGpuvaG3GraphRegisterTable(&g, 0x10008000ULL, 2));
+  g.JobInFlight = 1;
+  assert(!AppleAgxGpuvaG3GraphUpdateParent(&g, 0x10000000ULL, 0, 0x10004000ULL));
+  assert(!AppleAgxGpuvaG3GraphNegotiateLive(&g, true));
+  g.JobInFlight = 0;
+  assert(AppleAgxGpuvaG3GraphNegotiateLive(&g, true));
+  assert(f.request.Command == AGX_GPUVA_V5_NEGOTIATE_LIVE && f.request.Token == 2 &&
+         f.request.AllocationGeneration == 1 && !f.request.Flags);
+  g.JobInFlight = 1;
+  assert(AppleAgxGpuvaG3GraphUpdateParent(&g, 0x10000000ULL, 0, 0x10004000ULL));
+  assert(AppleAgxGpuvaG3GraphUpdateParent(&g, 0x10004000ULL, 0, 0x10008000ULL));
+  assert(AppleAgxGpuvaG3GraphUpdateLeaf(&g, 0x10008000ULL, 0, 0x20000000ULL, true));
+  assert(!AppleAgxGpuvaG3GraphUpdateLeaf(&g, 0x10008000ULL, 0, 0, false));
+  assert(!AppleAgxGpuvaG3GraphUpdateLeaf(&g, 0x10008000ULL, 0, 0x20004000ULL, true));
+  assert(!AppleAgxGpuvaG3GraphUpdateParent(&g, 0x10004000ULL, 0, 0));
+  assert(!AppleAgxGpuvaG3GraphRegisterTable(&g, 0x10008000ULL, 1));
+  g.JobInFlight = 0;
+  assert(AppleAgxGpuvaG3GraphDestroy(&g));
+  assert(!g.LiveAdditive);
+  assert(AppleAgxGpuvaG3GraphCreate(&g, 0x10000000ULL, false));
+  assert(!g.LiveAdditive);
+  assert(AppleAgxGpuvaG3GraphDestroy(&g));
+}
+
 int main(void) {
+  live_negotiation_lifecycle();
   struct fixture f = {0};
   APPLE_AGX_GPUVA_V5_CLIENT client;
   APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier, 0};

@@ -105,6 +105,19 @@ static bool call(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   return call_with_response(graph, request, 0);
 }
 
+bool AppleAgxGpuvaG3GraphNegotiateLive(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+                                        bool enable) {
+  AGX_GPUVA_V5_REQUEST q = {0};
+  if (!graph || !graph->Created || graph->Uncertain || graph->JobInFlight)
+    return false;
+  q.Command = AGX_GPUVA_V5_NEGOTIATE_LIVE;
+  q.Token = enable ? AGX_GPUVA_V5_CAP_LIVE_ADDITIVE : 0ULL;
+  q.AllocationGeneration = AGX_GPUVA_V5_LIVE_ABI;
+  if (!call(graph, &q)) return false;
+  graph->LiveAdditive = enable ? 1u : 0u;
+  return true;
+}
+
 static APPLE_AGX_GPUVA_G3_NODE *find_table(
     APPLE_AGX_GPUVA_G3_GRAPH *graph, unsigned long long ipa,
     unsigned int level) {
@@ -320,6 +333,7 @@ bool AppleAgxGpuvaG3GraphCreate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   graph->RootTable = root;
   graph->RootIpa = root_ipa;
   graph->Created = 1u;
+  graph->LiveAdditive = 0u;
   return true;
 }
 
@@ -382,6 +396,7 @@ bool AppleAgxGpuvaG3GraphRegisterTable(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   for (existing = graph->Tables; existing; existing = existing->Next)
     if (existing->Ipa == ipa) break;
   if (existing && existing->Level == level) return true;
+  if (existing && graph->JobInFlight) return false;
   if (existing) native_invalidate(graph, 0ULL, 0u);
   /* VidMm reuses a freed page-table page at another level (EXP846 0x10E/0xB).
    * Retire the old table only when no parent still links it: clear its own
@@ -421,6 +436,7 @@ bool AppleAgxGpuvaG3GraphBindRoot(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   if (!graph || !graph->Created || graph->Uncertain ||
       !find_table(graph, ipa, 0u) || graph->MappingGeneration == ~0ULL) return false;
   if (graph->RootIpa == ipa) return true;
+  if (graph->JobInFlight) return false;
   native_invalidate(graph, 0ULL, 0u);
   request.Command = AGX_GPUVA_V5_RELOCATE_ROOT;
   request.TableIpa = ipa;
@@ -437,7 +453,7 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   AGX_GPUVA_V5_REQUEST request = {0};
   APPLE_AGX_GPUVA_G3_NODE *parent, *edge, *new_edge = 0, *child = 0;
   if (!graph || !graph->Created || graph->Uncertain) return false;
-  if (graph->JobInFlight || graph->MappingGeneration == ~0ULL) return false;
+  if (graph->MappingGeneration == ~0ULL) return false;
   parent = find_table(graph, table_ipa, 0u);
   if (!parent) parent = find_table(graph, table_ipa, 1u);
   if (child_ipa && parent)
@@ -446,6 +462,9 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       (child_ipa && !child))
     return false;
   edge = find_edge(graph->Parents, table_ipa, index);
+  if (graph->LiveAdditive && !child_ipa && !edge) return true;
+  if (graph->JobInFlight && (!graph->LiveAdditive || edge || !child_ipa))
+    return false;
   if (child_ipa && edge && edge->AuxIpa == child_ipa) return true;
   if (!child_ipa && !edge) return true;
   native_invalidate(graph, 0ULL, 0u);
@@ -500,7 +519,7 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   APPLE_AGX_GPUVA_G3_NODE *old_backing = 0, *table;
   bool new_backing = false;
   if (unavailable) *unavailable = false;
-  if (!graph || !graph->Created || graph->Uncertain || graph->JobInFlight ||
+  if (!graph || !graph->Created || graph->Uncertain ||
       graph->MappingGeneration == ~0ULL ||
       (kind != AppleAgxGpuvaG3LocalBacking && kind != AppleAgxGpuvaG3SystemBacking &&
        kind != AppleAgxGpuvaG3PrivateBacking) ||
@@ -509,6 +528,9 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   /* table->Slots[index] is the Leaves edge (table_ipa, index): set on insert,
    * cleared before removal, freed only with the retired table. */
   leaf = slot(table, index);
+  if (graph->LiveAdditive && !guest_ipa && !leaf) return true;
+  if (graph->JobInFlight && (!graph->LiveAdditive || leaf || !guest_ipa))
+    return false;
   if (guest_ipa && leaf && leaf->AuxIpa == guest_ipa &&
       leaf->Writable == (unsigned)writable && leaf->Kind == kind) return true;
   if (!guest_ipa && !leaf) return true;
@@ -999,6 +1021,7 @@ bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   if (graph->SpareNode) graph->Free(graph->MemoryContext, graph->SpareNode);
   graph->SpareNode = 0;
   graph->Created = 0u;
+  graph->LiveAdditive = 0u;
   graph->RootIpa = 0ULL;
   graph->RootTable = 0;
   return true;
