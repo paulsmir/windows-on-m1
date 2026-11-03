@@ -1720,7 +1720,7 @@ static BOOLEAN AdmissionG3LiveUpdate(ADMISSION_G3_PROCESS *Process,
       if ((ipa & 0x3fffULL) ||
           (broker && AppleAgxGpuvaG3GraphLeaf(&Process->Graph, broker, (first + i) / 4u)))
         return FALSE;
-      group = ipa; segment = (UINT)pte->Segment; writable = pte->ReadOnly;
+      group = ipa; segment = (UINT)pte->Segment; writable = (UINT)pte->ReadOnly;
       if (!AppleAgxGpuvaG3TableSpanWithinLocal(
           segment == ADMISSION_MEMORY_POOL_SEGMENT ? pool.GuestIpaAddress : view.GuestIpaAddress,
           segment == ADMISSION_MEMORY_POOL_SEGMENT ? pool.Bytes : view.Bytes,
