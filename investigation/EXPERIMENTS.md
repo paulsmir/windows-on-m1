@@ -68577,3 +68577,11 @@ Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite (defaults); probe "only MEM
 - Hashes: sys f41df810832b, UmdArm64 844b9e6f10cc, UmdX64 572826488a63, Umd32 ec91489eaff5; manifest 3809b0f02053, hardware-manifest 7364799a43da; probe2143.sh fe0ec8545a70 (PROBE_LINT_OK); visible recovery rec2143h 3a175beb380524f2; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2143h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2143-membw/run2143.sh.
+
+EXP2143 HARDWARE ACTUAL (2026-11-03T22:36:43Z): **RC124 level 2 default validated (HD FULL 6380, FHD +1.9 % vs control, suite 119/0, image correct); MEMBW: stream bandwidth healthy (61.35 GB/s) but dependent-load latency ~4.9 us.**
+- Suite 119 PASS / 0 FAIL (defaults, RC124 on).
+- MEMBW (64 MiB, min of three, 11 minus 1 dispatches): stream 61.35 GB/s (1.094 ms per 64 MiB pass; M1 peak 68.25 GB/s) -> no systemic bandwidth deficit. Chase: 1024 threads x 512 dependent loads over a random cycle of 64-byte lines = 2.50 ms per dispatch = ~4.9 us per dependent load (individual list times noisy: rep 2 slower, a first-rep warm-up).
+- GravityMark HD 100k T0 FULL (default): Score 6380 / 38.2 FPS (EXP2134 6257; EXP2142 e 6333), image correct, WER 0; shader-stats 6029/231/0 (RC124 applied).
+- FHD PERF: b default 33.30, c REMAT=0 32.63, d default 33.17 FPS: defaults +1.9 %; compare c->b inconclusive (6/8), c->d faster (7/8). FHD does not regress.
+- Verdict: RC124 default accepted. MEMBW: bandwidth excluded as a cause; the latency figure is far above a typical GPU DRAM latency (~0.5-1 us) and needs a footprint curve (cache/TLB/DRAM split) before any conclusion.
+- Next: MEMLAT footprint sweep (16 KiB .. 64 MiB, same chase) to locate the latency step; recovery rec2143h.
