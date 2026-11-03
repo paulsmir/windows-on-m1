@@ -178,26 +178,29 @@ class Compiled(unittest.TestCase):
 
     def test_input_remat_is_opt_in_and_removes_planet_spills(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
-        RC124 (APPLE_AGX_REMAT_INPUTS=1, =2 also read-only global loads)
-        re-issues pure values far from their def. Unset, every source compiles as before; on the
+        RC124 (default level 2 = inputs and read-only global loads, =1
+        inputs only) re-issues pure values far from their def. With
+        APPLE_AGX_REMAT_INPUTS=0 every source compiles as before; on the
         GravityMark HD 100k full-screen PS (EXP2139 capture) it must cut
         spills without occupancy or instruction growth."""
         for source in self.sources:
             with self.subTest(source=source):
-                self.assertEqual(self.tool.cost(self.projected, source[0], *source[1:], env={}),
+                self.assertEqual(self.tool.cost(self.projected, source[0], *source[1:],
+                                                env={'APPLE_AGX_REMAT_INPUTS': '0'}),
                                  self.cost(self.projected, source))
         planet = local('experiments', 'EXP2138-nullps', 'evidence', 'EXP2139-capture', 'capture',
                        '428487dae22a5191-s4-r0.bin')
         if not planet:
             self.skipTest('EXP2139 capture not available')
         args = ('--fs-backend', '--assume-in-bounds')
-        base = self.tool.cost(self.projected, str(planet), *args, env={})
+        base = self.tool.cost(self.projected, str(planet), *args, env={'APPLE_AGX_REMAT_INPUTS': '0'})
         remat = self.tool.cost(self.projected, str(planet), *args, env={'APPLE_AGX_REMAT_INPUTS': '1'})
         self.assertTrue(base and remat)
         self.assertGreaterEqual(remat['threads'], base['threads'])
         self.assertLess(remat['spills'], base['spills'] // 2)
         self.assertLess(remat['instrs'], base['instrs'])
         loads = self.tool.cost(self.projected, str(planet), *args, env={'APPLE_AGX_REMAT_INPUTS': '2'})
+        self.assertEqual(self.tool.cost(self.projected, str(planet), *args, env={}), loads)
         self.assertTrue(loads)
         self.assertGreaterEqual(loads['threads'], base['threads'])
         self.assertEqual(loads['spills'], 0)

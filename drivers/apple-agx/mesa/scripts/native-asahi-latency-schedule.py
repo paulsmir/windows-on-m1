@@ -691,19 +691,25 @@ agx_win32_mem_vectorize_cb(unsigned align_mul, unsigned align_offset,
 # coefficients), only in shaders without stores, atomics or barriers: no write
 # in the draw can change the value. Offline: 296 -> 246 halfregs, spills 0,
 # 7335 -> 6421 instructions; the other 30 captured pixel shaders unchanged.
-# Opt-in: APPLE_AGX_REMAT_INPUTS=1 or 2.
+# Default level 2 (EXP2142: +0.9 % HD, suite 119/0); APPLE_AGX_REMAT_INPUTS=0
+# restores the pre-RC124 compiler, =1 inputs only.
 REMAT = r'''/* RC124: fragment interpolated-input rematerialization (opt-in). */
 #define AGX_WIN32_REMAT_DISTANCE 256
 #define AGX_WIN32_REMAT_BUDGET 16
 
-/* 1: interpolated inputs; 2: also loads of read-only global memory */
+/* 1: interpolated inputs; 2 (default since EXP2142): also loads of
+ * read-only global memory; exactly "0" disables, "1" keeps inputs only. */
 static unsigned
 agx_win32_remat_level(void)
 {
    static int level = -1;
    if (level < 0) {
       const char *env = getenv("APPLE_AGX_REMAT_INPUTS");
-      level = env && (env[0] == '1' || env[0] == '2') && !env[1] ? env[0] - '0' : 0;
+      level = env && env[0] >= '0' && env[0] <= '2' && !env[1] ? env[0] - '0' : 2;
+      /* APPLE_AGX_LATENCY_SCHED=0 stays the pinned compiler */
+      const char *pinned = getenv("APPLE_AGX_LATENCY_SCHED");
+      if (pinned && pinned[0] == '0' && !pinned[1])
+         level = 0;
    }
    return (unsigned)level;
 }
