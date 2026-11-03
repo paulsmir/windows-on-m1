@@ -67699,3 +67699,17 @@ EXP2105 HARDWARE ACTUAL (2026-11-03): **current source with only Wom1GpuFaultInf
 - Expected vs actual: preregistered branch "HD near 5650-5700 -> switches cost the loss" observed (5613, within ~1.5% of EXP2075). Verdict: the current depth-two configuration is a net regression against plain depth one (HD -2.1%, FHD -1.9%); depth two's own gain (+4.8%/+2.2% vs EXP2103) is smaller than the infrastructure overhead.
 - Next: Codex q17 ranks per-poll/per-job costs of each switch and makes diagnostics zero-cost by default; confirm with the EXP2103 set without diagnostics.
 - Recovery rec2105h.
+
+EXP2106 HARDWARE BEFORE 2026-11-03T01:17:13Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=0 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1 (Wom1RcReceipt and Wom1JobDiagnostics absent). Steps: GravityMark D3D12 HD 100k temporal 0, then FHD.
+- WHY THIS HYPOTHESIS:
+  1. EXP2103 (this mask + RcReceipt, depth one) HD 5244 vs EXP2105 (only GpuFaultInfoRead) HD 5613 on the same source.
+  2. q17 source audit: skipped-kick decisions dirtied receipts every poll and bypassed the 2 s export throttle (~240 registry exports/s); General/caps are ineffective at depth one.
+- ATOMIC CONTRACT: diagnostics off (RcReceipt removed from the switch set + q17 code that stops forcing it); functional switches unchanged.
+- WHAT IS STILL UNKNOWN: how much of the 7% the exports explain vs ManagerSlots/NotifierFlight.
+- Expected: HD near 5600-5700, FHD near 4500-4600 (EXP2105 4584). If HD stays near 5244, diagnostics are rejected as the cause; isolate ManagerSlots vs NotifierFlight next.
+- FAIL: crash/reset/corruption.
+- Recovery: rec2106h.
+- Hashes: sys 7bb2338dbf0a, UmdArm64 2e04caf7c5d2, UmdX64 0d53800b93e5, Umd32 feba3d80df8e; manifest b16342f39c04, hardware-manifest ed3cb2a852f5; probe2106.sh 87902dbc5d29 (PROBE_LINT_OK); visible recovery rec2106h 87645af314eb0b8e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=0 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2106h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2106-gm-nodiag-d1/run2106.sh.
