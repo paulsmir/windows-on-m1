@@ -15,6 +15,13 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   (EXP2129-2134: compute -> prelude start 0.59 -> 0.063 ms). Receipts: Wom1TaStartTimestamps (TA starts valid, EXP2126).
 - Closed (hardware): W1 waits (EXP2124), D3D robustness (EXP2057), K1 spacing (EXP2080), per-dispatch overhead (EXP2077),
   trace I/O (EXP2119), update_ts alone (EXP2125), prebuild of unpaired successors (build ~5 us, EXP2132 ring).
+- Closed 2026-11-03 evening: 16-bit min precision (EXP2135: Tellusim emits no min16 on D3D12 under 16-bit caps;
+  switches APPLE_AGX_D3D12_MIN16_CAPS / APPLE_AGX_DXIL_MIN16 stay off); GPU-private cached UAT leaves (EXP2137 + correction:
+  MEMATTR 0 for GPU-only memory gives HD 6240 / FHD 4857 = no change; experiment m1n1 ed6fd218 + Wom1GpuPrivateCached
+  stay experimental, no FwCtl invalidation, one engine reset seen). Within-boot run order moves scores ~3 % (EXP2135):
+  use ABBA for A/B.
+- Next compiler targets: planet PS 71405b87 (7436 instrs, 255 GPRs, 158 spills/150 fills, 435 xor + 668 mov copies,
+  384 threads); C4 kernels are memory/latency-bound (trio ~42 M instrs in 1.51 ms) for reasons other than UAT attributes.
 - GPU budget per frame, current defaults (EXP2131 HD medians, scratchpad budget.py): C4 compute 7.70 ms; R1 3D 2.99
   (FHD 4.91); R5 TA 1.78 + 3D 0.80; C0 1.72 (FHD 3.34, = bdb1944a full-screen compute: 921600 threads x 3543 instrs,
   207 GPRs -> 512 threads, fp32 only); C6 1.55; R7 TA 0.74 + 3D 0.82; C2 0.68; idle before each compute 4 x 0.40 ms.
