@@ -68376,3 +68376,15 @@ Switches: Wom1GpuFaultInfoRead=1 only.
 - Expected: suite 119/0; HD ~6240 (>= 6150), FHD ~4920 (>= 4880), images correct.
 - FAIL: crash/reset; HD < 6100 or FHD < 4860 (default not applied) -> check the receipt path.
 - Recovery: rec2134h.
+
+EXP2134 HARDWARE BEFORE 2026-11-03T15:17:37Z:
+Switches: Wom1GpuFaultInfoRead=1 only.
+- WHY THIS HYPOTHESIS: EXP2129-2133 with the switches set: HD 6242, FHD 4920, suite 119/0 (x4), no firmware fault; the flip makes the switch-free package behave as those runs.
+- ATOMIC CONTRACT: one change (both defaults; compute-on-compute pairs are prelude pairs).
+- WHAT IS STILL UNKNOWN: none beyond run-to-run noise (validation run).
+- Expected: suite 119/0; HD ~6240 (>= 6150), FHD ~4920 (>= 4880), images correct.
+- FAIL: crash/reset; HD < 6100 or FHD < 4860 (default not applied) -> check the receipt path.
+- Recovery: rec2134h.
+- Hashes: sys 360c4be72265, UmdArm64 e932c8eab6f8, UmdX64 2753956bcdbd, Umd32 ab02ff8cbfc3; manifest 5ffdfa3adb16, hardware-manifest eda1192d2ecc; probe2134.sh 8c895aeac571 (PROBE_LINT_OK); visible recovery rec2134h 66d3af969c84f21f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2134h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2134-d2-default/run2134.sh.
