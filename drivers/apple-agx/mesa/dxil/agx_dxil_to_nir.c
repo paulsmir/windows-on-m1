@@ -776,6 +776,41 @@ agx_dxil_nir_xfb(struct nir_shader *nir, const struct dxbc_nir_xfb *xfb)
    return 1;
 }
 
+/* DIAG (measurement only, default off): APPLE_AGX_D3D12_NULL_PS=<16 hex
+ * digits> names one pixel shader by the shader-dump FNV-1a 64 hash of its
+ * DXIL program part (agx_d3d12_windows.cpp dump_shader_input); that shader
+ * then discards every fragment, so its work is dead code and the frame-time
+ * difference measures its cost. Never for a score. */
+static void
+agx_dxil_diag_null_fragment(nir_shader *nir, const void *data, size_t bytes)
+{
+   const char *want = getenv("APPLE_AGX_D3D12_NULL_PS");
+   if (!want || strlen(want) != 16 || nir->info.stage != MESA_SHADER_FRAGMENT)
+      return;
+   uint64_t hash = 0xcbf29ce484222325ull;
+   for (size_t i = 0; i < bytes; ++i)
+      hash = (hash ^ ((const unsigned char *)data)[i]) * 0x100000001b3ull;
+   char have[17];
+   snprintf(have, sizeof(have), "%016llx", (unsigned long long)hash);
+   if (strcmp(have, want))
+      return;
+   /* Drop every output write; dead-code elimination then deletes the
+    * computation that only fed the outputs. Measurement only. */
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic) continue;
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         if (intr->intrinsic == nir_intrinsic_store_output ||
+             (intr->intrinsic == nir_intrinsic_store_deref &&
+              nir_deref_mode_is(nir_src_as_deref(intr->src[0]), nir_var_shader_out)))
+            nir_instr_remove(instr);
+      }
+   }
+   nir_progress(true, impl, nir_metadata_none);
+}
+
+
 enum agx_dxil_nir_status
 agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDING_KIND_COUNT],
                 const struct nir_shader_compiler_options *options, struct agx_dxil_nir_result *result)
@@ -1039,6 +1074,7 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
    }
    nir->info.separate_shader = true;
    result->bindings = job->map;
+   agx_dxil_diag_null_fragment(nir, data, bytes);
    result->nir = nir;
    status = AGX_DXIL_NIR_OK;
 done:
