@@ -28,6 +28,7 @@
 #include "agx_d3d12_probe_cs_cb_dxil.h"
 #include "agx_d3d12_probe_cs_wave_dxil.h"
 #include "agx_d3d12_probe_cs_c49.h"
+#include "agx_d3d12_probe_cs_membw.h"
 #include "agx_d3d12_probe_vs_dxil.h"
 #include "agx_d3d12_probe_ps_dxil.h"
 #include "agx_d3d12_probe_ps_c57.h"
@@ -9118,7 +9119,144 @@ static int q3_cp(ID3D12Device *device, ID3D12CommandQueue *queue,
     ID3D12Fence *fence, UINT64 base) {
     return q3_sequence(device, queue, fence, base, 5);
 }
+/* MEMBW (diagnostic, named step only): GPU memory throughput and dependent-
+ * load latency in one compute PSO over a 64 MiB DEFAULT buffer holding a
+ * random cycle of 64-byte lines (word 0 = next line). Each measurement is
+ * the time of a list with 11 dispatches minus one with 1 dispatch (minimum of
+ * three, event wait, no Sleep polling), so submission cost cancels out.
+ * Reference: M1 LPDDR4X-4266 peak 68.25 GB/s. Prints MEMBW_STREAM_GBPS and
+ * MEMBW_CHASE_NS; PASS = every list completed. */
+static HRESULT membw_run(ID3D12CommandQueue *queue, ID3D12Fence *fence, HANDLE event,
+                         ID3D12GraphicsCommandList *list, UINT64 signal, double *ms) {
+    LARGE_INTEGER t0, t1, f;
+    HRESULT hr = ID3D12GraphicsCommandList_Close(list);
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&t0);
+    if (SUCCEEDED(hr)) {
+        ID3D12CommandList *lists[] = {(ID3D12CommandList *)list};
+        ID3D12CommandQueue_ExecuteCommandLists(queue, 1, lists);
+        hr = ID3D12CommandQueue_Signal(queue, fence, signal);
+    }
+    if (SUCCEEDED(hr)) hr = ID3D12Fence_SetEventOnCompletion(fence, signal, event);
+    if (SUCCEEDED(hr) && WaitForSingleObject(event, 10000) != WAIT_OBJECT_0) hr = E_FAIL;
+    QueryPerformanceCounter(&t1);
+    *ms = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)f.QuadPart;
+    return SUCCEEDED(hr) && ID3D12Fence_GetCompletedValue(fence) >= signal ? S_OK : E_FAIL;
+}
+
+static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    enum { BYTES = 64u << 20, LINES = BYTES / 64u, STREAM_THREADS = 65536u, CHASE_THREADS = 1024u, CHASE_STEPS = 512u };
+    D3D12_ROOT_PARAMETER params[3] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_SRV},
+                                      {D3D12_ROOT_PARAMETER_TYPE_UAV}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {3, params, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12Resource *upload = c21_buffer(device, D3D12_HEAP_TYPE_UPLOAD, BYTES, D3D12_RESOURCE_FLAG_NONE,
+                                        D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *src = c21_buffer(device, D3D12_HEAP_TYPE_DEFAULT, BYTES, D3D12_RESOURCE_FLAG_NONE,
+                                     D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12Resource *outv = uav_buffer(device);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    HANDLE event = CreateEventA(NULL, FALSE, FALSE, NULL);
+    UINT64 signal = base;
+    double best[2][2] = {{1e30, 1e30}, {1e30, 1e30}};
+    UINT *words = NULL;
+    HRESULT hr = upload && src && outv && event ? S_OK : E_FAIL;
+    params[0].Constants.ShaderRegister = 0;
+    params[0].Constants.Num32BitValues = 4;
+    params[1].Descriptor.ShaderRegister = 0;
+    params[2].Descriptor.ShaderRegister = 0;
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&words);
+    if (SUCCEEDED(hr) && words) {
+        /* Sattolo: one cycle over all lines */
+        UINT *next = (UINT *)malloc(LINES * sizeof(UINT));
+        UINT seed = 2463534242u;
+        if (!next) hr = E_OUTOFMEMORY;
+        for (UINT i = 0; next && i < LINES; ++i) next[i] = i;
+        for (UINT i = LINES - 1u; next && i > 0u; --i) {
+            UINT j;
+            seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+            j = seed % i;
+            { UINT v = next[i]; next[i] = next[j]; next[j] = v; }
+        }
+        for (UINT i = 0; next && i < LINES; ++i) {
+            words[i * 16u] = next[i];
+            for (UINT k = 1; k < 16u; ++k) words[i * 16u + k] = i ^ (k * 0x9e3779b9u);
+        }
+        free(next);
+        ID3D12Resource_Unmap(upload, 0, NULL);
+    }
+    if (SUCCEEDED(hr)) hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob), ID3D10Blob_GetBufferSize(blob),
+                                              &IID_ID3D12RootSignature, (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_membw;
+        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_membw);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator,
+                                                 (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        double ms = 0.0;
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, src, 0, upload, 0, BYTES);
+        transition(list, src, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        hr = membw_run(queue, fence, event, list, ++signal, &ms);
+        printf("MEMBW upload copy %.3f ms hr=0x%08lx\n", ms, (unsigned long)hr);
+    }
+    for (UINT rep = 0; rep < 3u && SUCCEEDED(hr); ++rep) {
+        for (UINT mode = 0; mode < 2u && SUCCEEDED(hr); ++mode) {
+            for (UINT k = 0; k < 2u && SUCCEEDED(hr); ++k) {
+                const UINT dispatches = k ? 11u : 1u;
+                const UINT threads = mode ? CHASE_THREADS : STREAM_THREADS;
+                const UINT constants[4] = {BYTES / 16u, mode, CHASE_STEPS, threads};
+                double ms = 0.0;
+                hr = ID3D12CommandAllocator_Reset(allocator);
+                if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, pso);
+                if (FAILED(hr)) break;
+                ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+                ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list, 0, 4, constants, 0);
+                ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(list, 1, ID3D12Resource_GetGPUVirtualAddress(src));
+                ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 2, ID3D12Resource_GetGPUVirtualAddress(outv));
+                for (UINT d = 0; d < dispatches; ++d) ID3D12GraphicsCommandList_Dispatch(list, threads / 256u, 1, 1);
+                hr = membw_run(queue, fence, event, list, ++signal, &ms);
+                if (ms < best[mode][k]) best[mode][k] = ms;
+                printf("MEMBW rep %u mode %u dispatches %u %.3f ms hr=0x%08lx\n", rep, mode, dispatches, ms, (unsigned long)hr);
+            }
+        }
+    }
+    if (SUCCEEDED(hr)) {
+        const double stream_ms = (best[0][1] - best[0][0]) / 10.0;
+        const double chase_ms = (best[1][1] - best[1][0]) / 10.0;
+        printf("MEMBW_STREAM_GBPS %.2f (%.3f ms per 64 MiB pass)\n",
+               stream_ms > 0.0 ? (double)BYTES / (stream_ms * 1e6) : 0.0, stream_ms);
+        printf("MEMBW_CHASE_NS %.1f (%u threads x %u dependent loads, %.3f ms per dispatch)\n",
+               chase_ms > 0.0 ? chase_ms * 1e6 / CHASE_STEPS : 0.0, CHASE_THREADS, CHASE_STEPS, chase_ms);
+    }
+    printf("AGX_D3D12_MEMBW: %s\n", SUCCEEDED(hr) ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (outv) ID3D12Resource_Release(outv);
+    if (src) ID3D12Resource_Release(src);
+    if (upload) ID3D12Resource_Release(upload);
+    if (event) CloseHandle(event);
+    return !SUCCEEDED(hr);
+}
+
 static const struct { const char *name; probe_step step; } named_steps[] = {
+    {"MEMBW", mem_bw},
     {"Q3PC", q3_pc}, {"Q3CP", q3_cp},
     {"Q3CR", q3_cr}, {"Q3RC", q3_rc_pair}, {"Q3RCR", q3_rcr}, {"Q3RR", q3_rr},
     {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g}, {"RC63G", rc63_gravitymark_stream}, {"RC89S", rc89_stream_capacity},
