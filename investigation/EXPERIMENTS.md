@@ -68107,3 +68107,18 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1. Steps: full default D3
 - Expected: suite 119/0; GravityMark completes with a correct image, score within noise of EXP2124 (5994-5999); measure-gpu-stages TaStart distinct for (nearly) every render job and previous-job end <= TaStart <= TaEnd.
 - FAIL: firmware fault/reset, any suite FAIL or score drop beyond noise (patch harmful); TaStart still stale (hypothesis rejected, no harm).
 - Recovery: rec2125h.
+
+EXP2125 HARDWARE BEFORE 2026-11-03T13:09:02Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1. Steps: full default D3D12 suite; GravityMark HD 100k -temporal 0 (MESA_SHADER_CACHE_DISABLE=true, timeout 420 s, as EXP2124 arm b).
+- WHY THIS HYPOTHESIS: (1) G2/K2: ~3.3 ms/frame of the render span before 3D is unattributed (kick + prelude + possible compute->TA idle) and cannot be measured: in EXP2124 gm2124b-umd.log 24k render jobs carry only 2 distinct non-zero TaStart values (stale slot copies) while TaEnd changes every job; (2) the captured template's start/end Timestamp ops both leave update_ts = 0xdeadbeef, while Asahi points them at &timestamp_pointers.start_addr / end_addr.
+- WINDOWS CONTRACT: none (receipt only, no DDI change).
+- AGX/ASAHI CONTRACT: Timestamp op (0x19, flag bit 31 = start) fields command_time, ts_pointers, update_ts, work_queue, user_ts_pointers, unk_ts (fw/microseq.rs); start op before WaitForIdle(Vertex), end op after it (queue/render.rs:1036-1070).
+- TRANSLATION: build_active_job copies the relocated ts_pointers into update_ts (start) and +8 (end) of active object 17 (ops at 0x18c/0x1cc); default off unchanged (unit test).
+- ATOMIC CONTRACT: single device switch, TA pair only (3D pair unchanged).
+- WHAT IS STILL UNKNOWN: whether the G13 V13_5 firmware uses update_ts for the start write (hardware-only).
+- Expected: suite 119/0; GravityMark completes with a correct image, score within noise of EXP2124 (5994-5999); measure-gpu-stages TaStart distinct for (nearly) every render job and previous-job end <= TaStart <= TaEnd.
+- FAIL: firmware fault/reset, any suite FAIL or score drop beyond noise (patch harmful); TaStart still stale (hypothesis rejected, no harm).
+- Recovery: rec2125h.
+- Hashes: sys 36154a15a380, UmdArm64 c5c338068c53, UmdX64 488a774b5cf0, Umd32 b6589b2a1fa4; manifest b9b30d6dfc78, hardware-manifest 80cf2acb67c3; probe2125.sh af715c83885c (PROBE_LINT_OK); visible recovery rec2125h 6a05c75c88949d2e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1.
+- Recovery rec2125h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2125-ta-start/run2125.sh.
