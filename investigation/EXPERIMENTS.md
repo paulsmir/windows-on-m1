@@ -67843,3 +67843,18 @@ Switches: Wom1GpuFaultInfoRead=1 only (defaults). UMD env for the probe: APPLE_A
 EXP2112 HARDWARE ACTUAL (2026-11-03): **full D3D12 probe suite with APPLE_AGX_SHARED_LOAD_VECTORIZE=1 on the q20 defaults: 119 PASS, 0 FAIL (+ C21E skip); no reset, no G4 failure; pipeline rc 0.**
 - Expected vs actual: expected 119/0; met. Verdict confirmed: shared-load vectorization is correct across the suite and gave +3% GravityMark (EXP2110) -> eligible as the default.
 - Recovery rec2112h.
+
+EXP2113 HARDWARE BEFORE 2026-11-03T03:14:31Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1RcReceipt=1 (decisions needed; everything else default). Step: only Q3PC.
+- WHY THIS HYPOTHESIS:
+  1. EXP2104: the old Q3PC render carried a prelude but its compute successor reached the KMD 13.8 ms after the render completed (11.1 ms paging fence), so no candidate pair formed.
+  2. q16: GravityMark's preludes come from GPU-generated counted ExecuteIndirect; the new probe uses that path with bounded render work and reports INCONCLUSIVE unless the successor was submitted before the predecessor completed. EXP2110 frame budget: all GravityMark renders carry preludes and their launch gaps cost ~4.4 ms/frame, so this topology is the main scheduling lever.
+- ATOMIC CONTRACT: probe only.
+- WHAT IS STILL UNKNOWN: whether the probe produces a pending prelude-render -> compute candidate on hardware.
+- Expected PASS: Q3PC PASS with the submit-before-complete evidence and a retained probe-PID reason-5 (prelude unproven) decision, kinds prelude-render -> compute, barrier compute-on-3D; no reset.
+- INCONCLUSIVE: no reason-5 record or no submit-before-complete evidence.
+- FAIL: wrong output, deadline, reset.
+- Recovery: rec2113h.
+- Hashes: sys b6b33046c332, UmdArm64 a80e5714070d, UmdX64 5424d1111594, Umd32 c840a4fd0795; manifest 1736602d6d46, hardware-manifest c553b4e0f025; probe2113.sh e77bbb529c99 (PROBE_LINT_OK); visible recovery rec2113h a4c4a85aaa581996; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1RcReceipt=1.
+- Recovery rec2113h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2113-q3pc-indirect/run2113.sh.
