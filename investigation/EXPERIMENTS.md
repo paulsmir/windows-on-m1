@@ -67909,3 +67909,16 @@ EXP2115 HARDWARE ACTUAL (2026-11-03): **q22b compatibility PASS: the new m1n1 7c
 - Expected vs actual: all criteria met (scores within noise, hold unchanged with the feature off). Verdict confirmed.
 - Next: EXP2116 enables Wom1LiveAdditivePaging=1 on the same m1n1.
 - Recovery rec2115h (last-good m1n1 075e3980).
+
+EXP2116 HARDWARE BEFORE 2026-11-03T07:12:05Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1LiveAdditivePaging=1. Steps: only Q3PC, then GravityMark HD/FHD 100k temporal 0.
+- WHY THIS HYPOTHESIS:
+  1. EXP2114/q21b: the successor after an ExecuteIndirect render waits 21.56 ms on a fresh GPU-VA map paging fence, equal to the running render; q22: the broker refuses page-table publication while the process has a running job and CPU paging shares node 0 with rendering.
+  2. q22b: negotiated broker capability publishes into verified-empty native entries with TLB sync while jobs run, and the KMD signals such paging on an independent CPU paging node; EXP2115 proved the new m1n1 neutral with the feature off.
+- ATOMIC CONTRACT: single KMD switch (capability negotiation with the already-booted m1n1 is part of it).
+- WHAT IS STILL UNKNOWN: whether fresh maps are the only hold before prelude renders and how much of GravityMark's ~0.5 ms pre-render gap disappears.
+- Expected: Q3PC exact outputs with head_submit < next_submit < head_complete (topology PASS or a pending pair); GravityMark HD/FHD above EXP2115 (5989/4840), up to ~+7%; no reset, no GPU fault, no corruption.
+- FAIL: wrong output, MMU fault, reset, hang, corruption, score below EXP2115 beyond noise. Recovery rec2116h with last-good m1n1 075e3980 (dump-first if the guest is lost).
+- Hashes: sys e3a487e3c318, UmdArm64 63fe3662ce28, UmdX64 5f831431184a, Umd32 da757d932844; manifest 2da1aecfe6a0, hardware-manifest 8ca96e47b60c; probe2116.sh 8455bc95a9bb (PROBE_LINT_OK); visible recovery rec2116h f3db0c0a4868e01e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1LiveAdditivePaging=1.
+- Recovery rec2116h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2116-live-paging/run2116.sh.
