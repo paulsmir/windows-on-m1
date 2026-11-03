@@ -41,3 +41,23 @@ Recovery: the normal visible profile; no score change is expected (diagnostic on
 Zeroing the TA start/end stamp objects per build revives TA starts (the firmware writes the start only into a zero slot).
 GravityMark HD: compute -> TA idle median 0.695 ms per boundary, 8.2 % of GPU time (~2.5 ms/frame), although the render
 was submitted ~1.8 ms before the compute ended. Next: kick-QPC split (EXP2127).
+
+## EXP2129-2132: depth-two classes and the remaining boundary
+- Prelude pairs (EXP2129): render -> compute idle 0.351 -> 0.065 ms; compute-on-compute (EXP2131): compute -> prelude start
+  0.59 -> 0.063 ms, GravityMark HD 6242 (best). But with every second boundary paired, the boundary after each pair regressed
+  to ~0.4 ms (EXP2131 render -> compute 0.398 ms).
+- EXP2132 ring: within a pair the KMD sees Complete(N) only ~29 us before Complete(N+1): the notifier threshold (object 12)
+  counts every kicked job, so N's event is deferred to N+1's end (U4, render_job_window.h). The worker's completion test is
+  event-driven (AppleAgxG13ObserveQueue / AppleAgxG13CompletionSatisfiedWindow), so N leaves the window only with N+1 and
+  N+2 can never be kicked behind N+1.
+
+## Next design (offline, before any hardware run)
+Goal: retire N from the window when its own completion stamp is written, kick N+2 behind the still-running N+1.
+Questions to settle from Asahi/m1n1 source first:
+1. Asahi event model: does Asahi get one event per stamp (event channel slot/value) even with the notifier threshold raised per
+   job, i.e. is U4 an artefact of our notifier use? (queue/mod.rs, event.rs, channel.rs)
+2. After FinalizeCompute/Finalize3D writes the stamp, which firmware ops still read the job's microsequence/work objects
+   (RetireStamp, statistics, event signalling)? N+2 reuses N's slot copy (objects 13-19, 28-35, sidecar set).
+3. If the stamp is not a safe release point, a third slot copy (depth-three object sets) instead of early retirement.
+WINDOWS CONTRACT: dxgkrnl fences may be signalled per job as soon as the job is complete (DXGK_INTERRUPT_DMA_COMPLETED order
+preserved). WHAT IS STILL UNKNOWN: items 1-2.
