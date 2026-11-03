@@ -68140,3 +68140,18 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1. Steps as EXP2125.
 - Expected: suite 119/0; GravityMark correct, score within noise (5994-5999); TaStart distinct for nearly every render job, prev end <= TaStart <= TaEnd; then the compute->TA idle distribution answers G2.
 - FAIL: firmware fault/reset or score drop (harmful); TaStart still stale (rejected).
 - Recovery: rec2126h.
+
+EXP2126 HARDWARE BEFORE 2026-11-03T13:24:33Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1. Steps as EXP2125.
+- WHY THIS HYPOTHESIS: (1) EXP2125: update_ts alone left TaStart at 2 distinct values over 24269 render jobs; (2) the compute path encodes the same Timestamp ops, zeroes its stamp block every job, and its starts advance (EXP1342/G1); (3) render stamp objects 28-35 are refreshed from the template only on queue initialization (bind_relocation_objects), i.e. two slot copies -> two stale values (EXP1112, EXP2125).
+- WINDOWS CONTRACT: none (receipt only).
+- AGX/ASAHI CONTRACT: Asahi allocates fresh (zeroed) RenderTimestamps per job (fw/job.rs), Timestamp ops as EXP2125.
+- TRANSLATION: build_active_job zeroes ActiveObjects[30/31] (8 bytes each) when the switch is on; RED/GREEN steady-state rebuild test.
+- ATOMIC CONTRACT: one added variable vs EXP2125 (zeroing), same switch.
+- WHAT IS STILL UNKNOWN: whether the firmware's start write is conditional on a zero slot.
+- Expected: suite 119/0; GravityMark correct, score within noise (5994-5999); TaStart distinct for nearly every render job, prev end <= TaStart <= TaEnd; then the compute->TA idle distribution answers G2.
+- FAIL: firmware fault/reset or score drop (harmful); TaStart still stale (rejected).
+- Recovery: rec2126h.
+- Hashes: sys 1522181026fc, UmdArm64 696f8f5712f5, UmdX64 fe47d37babd7, Umd32 494ed5d36681; manifest 9aeb67fc90a4, hardware-manifest a41cb8a34e8b; probe2126.sh fc25b498dd42 (PROBE_LINT_OK); visible recovery rec2126h aabf100e7fa959bb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1.
+- Recovery rec2126h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2126-ta-zero/run2126.sh.
