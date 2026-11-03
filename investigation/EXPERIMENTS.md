@@ -68498,3 +68498,18 @@ EXP2137 HARDWARE ACTUAL (2026-11-03): **GC active but low coverage: no gain (HD 
 - Recovery rec2137h (back to m1n1 075e3980).
 
 EXP2137 CORRECTION (2026-11-03, offline): the low-coverage reading in EXP2137 ACTUAL is unsupported. D3D12 default heaps (CPU_PAGE_PROPERTY_NOT_AVAILABLE) create their buffers with cpu_visible = FALSE (agx_d3d12_ddi.cpp:2177/2194) -> PIPE_RESOURCE_FLAG_UNMAPPABLE -> AGX_WIN32_BO_GPU_ONLY -> CpuVisible = 0, i.e. exactly the allocations the KMD marks private. The ~190k-leaf estimate used the start-up pool peak (2986 MiB); the steady GravityMark pool is 202-305 MiB committed/peak in EXP2136/2137 receipts, about 13-19k 16-KiB leaves, which is consistent with a single GPUVA-GC line (< 65537 publications) even at full coverage. Revised verdict: rejected with moderate confidence -- mapping GravityMark's GPU-only memory MEMATTR 0 (cached non-coherent) instead of 2 does not change HD/FHD performance (6240/4857 vs 6257/4862). The C4 kernels' memory-bound behaviour is not explained by the UAT memory attribute. A coverage receipt would turn this into high confidence; not worth an engine-reset risk without new evidence.
+
+EXP2138 HARDWARE BEFORE 2026-11-03T19:40:18Z:
+Switches: Wom1GpuFaultInfoRead=1. Steps: suite; GravityMark D3D12 HD 100k -temporal 0 PERF x4 ABBA: a default, b APPLE_AGX_D3D12_NULL_PS=71405b8756e2cea9, c same as b, d default; MESA_SHADER_CACHE_DISABLE=true. No FHD (measurement only, no default change).
+- WHY THIS HYPOTHESIS: (1) R1 3D is 2.99 ms of the HD GPU frame (EXP2131 split) and the planet PS 71405b87 is the largest fragment shader in the GravityMark corpus (7436 instructions, 255 GPRs, 384 threads, 158 spills / 150 fills offline, EXP2070 capture); (2) it covers the planet's screen area every frame, so occupancy loss from 255 GPRs + scratch traffic could be a large share of R1; (3) before fixing its spills/copies in the compiler, the frame cost must be known (fix-scope rule).
+- WINDOWS CONTRACT: unchanged (UMD environment variable only; D3D12 PSO creation, root signature and outputs unchanged except the null arm writes no color for this PS).
+- AGX/ASAHI CONTRACT: unchanged; the null arm compiles the PS with its output stores removed (offline: 741 instructions, 127 GPRs, 0 spills).
+- TRANSLATION: none (measurement).
+- WHAT IS STILL UNKNOWN: the planet PS share of the HD frame on hardware (GPU time vs the 0.2-0.4 ms per-pass overheads).
+- Expected: suite 119/0; a/d PERF FPS ~37.4 (EXP2134); b/c FPS higher by the planet PS cost; planet missing/garbled in b/c images (expected, diagnostic); no GPU fault.
+- Decision rule: (b+c)-(a+d) frame-time saving >= 1.5 ms -> planet PS optimisation (spills/occupancy) is the next target; < 0.5 ms -> close the planet PS as a bottleneck.
+- FAIL: GPU fault, device removal, hang -> recovery rec2138h.
+- Recovery: rec2138h.
+- Hashes: sys 77f5fb47dad8, UmdArm64 2923b6e7e91b, UmdX64 b047418bb1dd, Umd32 94cf6f38c22e; manifest 16e8c80e738a, hardware-manifest a2f1e9c92692; probe2138.sh 12154fec165e (PROBE_LINT_OK); visible recovery rec2138h 0cde0aecb6ce7686; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2138h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2138-nullps/run2138.sh.
