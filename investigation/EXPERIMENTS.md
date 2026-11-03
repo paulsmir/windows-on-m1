@@ -67807,3 +67807,15 @@ EXP2110 HARDWARE ACTUAL (2026-11-03): **k2 shared-load vectorization (APPLE_AGX_
 - Expected vs actual: expected +1-3% if the traversal kernel is shared-load bound; actual +3.0-3.1% at both resolutions (resolution-independent, as expected for the C4 compute). Verdict confirmed: the traversal kernel is load-issue bound; compiler work on C4 kernels is the productive lever.
 - Next: EXP2111 validates the q20 defaults without switches; then make shared-load vectorization the default after the D3D12 suite runs with it; Codex k3 continues on the C4 kernels.
 - Recovery rec2110h.
+
+EXP2111 HARDWARE BEFORE 2026-11-03T02:43:34Z:
+Steps: GravityMark D3D12 HD 100k temporal 0, FHD 100k temporal 0, then the full default D3D12 probe suite.
+- WHY THIS HYPOTHESIS: q20 changed absent-value defaults to the EXP2108 configuration (validated EXP2096-2109); a no-switch run must reproduce EXP2108.
+- ATOMIC CONTRACT: none -- defaults only; shared-load vectorization is NOT enabled (env absent).
+- WHAT IS STILL UNKNOWN: native build of the default-resolution code and its runtime equivalence.
+- Expected: GravityMark HD ~5771, FHD ~4665 (EXP2108, +-1%); suite 119 PASS + 1 SKIP, 0 FAIL; no reset.
+- FAIL: scores at the depth-one level (~5600/4630: defaults not applied), any suite FAIL, crash/reset.
+- Recovery: rec2111h.
+- Hashes: sys f1e394c651df, UmdArm64 e3b2dd95fd6c, UmdX64 3989cfbdc8f5, Umd32 aad576c0b244; manifest 599abec41cec, hardware-manifest ba060bf50344; probe2111.sh 6d58f28e9133 (PROBE_LINT_OK); visible recovery rec2111h 8471a624ee30c646; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2111h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2111-defaults/run2111.sh.
