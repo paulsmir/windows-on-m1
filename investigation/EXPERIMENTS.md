@@ -67757,3 +67757,11 @@ Switches: as EXP2107 (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhea
 - Hashes: sys 28db07f70708, UmdArm64 92c14d947d83, UmdX64 30d1546dd113, Umd32 f3d5a6ff8f55; manifest bd0f50d1dc3b, hardware-manifest 117b85ba1694; probe2108.sh c309563761d3 (PROBE_LINT_OK); visible recovery rec2108h 765df7b1744b7b96; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2108h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2108-gm-subwindow/run2108.sh.
+
+EXP2108 HARDWARE ACTUAL (2026-11-03): **q19 UMD submission window 16 (APPLE_AGX_D3D12_SUBMISSION_WINDOW=1) on depth two: HD +1.7%, FHD +0.2%; stable. Best current-source scores.**
+- HD 100k temporal 0: Score 5771, 34.5 FPS (EXP2107 same config, window 4: 5674 -> +1.7%; EXP2106 depth one: 5598 -> +3.1%; EXP2075: 5696 -> +1.3%).
+- FHD 100k temporal 0: Score 4665, 27.9 FPS (EXP2107: 4656 -> +0.2%; EXP2106: 4634 -> +0.7%).
+- Both exited normally, WER 0; no reset, no G4 failure; guest alive; pipeline rc 0.
+- Expected vs actual: expected HD 5674-5800 / FHD 4656-4750 -> HD in range near the top, FHD at the bottom. Verdict confirmed (small): the window removes CPU blocking that matters at HD (more CPU-bound) and not at FHD (GPU-execution-bound). The remaining 1.69x (HD 9739/5771) and 1.67x (FHD 7814/4665) gap to macOS is GPU execution time, not submission.
+- Next: (1) promotion gate for the accepted configuration (depth two non-prelude mask + window 16) on the D3D12 smoke/regression suite before any default change; (2) GPU-execution comparison (asteroid compute/traversal kernels) as the main lever.
+- Recovery rec2108h.
