@@ -68291,3 +68291,16 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom
 - Expected: suite 119/0; compute -> prelude start median falls from ~0.59 ms toward ~0.07 ms; GravityMark HD rises by up to ~5-7 % over EXP2129's 6069; image correct.
 - FAIL: firmware crash/reset/device removal (class unsafe -> keep off); idle unchanged.
 - Recovery: rec2131h.
+
+EXP2131 HARDWARE BEFORE 2026-11-03T14:32:13Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1. Steps: suite; GravityMark HD 100k T0 (UMD trace, stage receipts).
+- WHY THIS HYPOTHESIS: (1) EXP2130: the compute -> prelude-render successors are refused with 64 (compute-on-compute class disabled, barrier 4) and then wait ~0.59 ms (EXP2129) for the firmware to start the prelude; (2) EXP2129: enabling pairs for the other prelude classes cut their idle 0.351 -> 0.065 ms; (3) compute -> TA idle is 7.6 % of GPU time.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: N+1's prelude on the compute queue waits on N's compute stamp (Barrier, q23 queue-event units); same sidecar rules (SECOND_SIDECAR declared). TRANSLATION: existing AdmissionJobWindowGeneralClasses switch.
+- ATOMIC CONTRACT: single class switch.
+- WHAT IS STILL UNKNOWN: firmware behaviour of a compute-queue Barrier on the compute queue's own previous stamp (untested class).
+- Expected: suite 119/0; compute -> prelude start median falls from ~0.59 ms toward ~0.07 ms; GravityMark HD rises by up to ~5-7 % over EXP2129's 6069; image correct.
+- FAIL: firmware crash/reset/device removal (class unsafe -> keep off); idle unchanged.
+- Recovery: rec2131h.
+- Hashes: sys 558bf519c728, UmdArm64 a230122e098d, UmdX64 59ae018fb784, Umd32 5c9eb61f33bb; manifest 3c659f5b322c, hardware-manifest 7e2786b558ba; probe2131.sh a57e1f66d4d5 (PROBE_LINT_OK); visible recovery rec2131h 9809184a1b6b009e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1.
+- Recovery rec2131h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2131-compute-on-compute/run2131.sh.
