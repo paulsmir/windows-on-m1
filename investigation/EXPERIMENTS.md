@@ -68585,3 +68585,14 @@ EXP2143 HARDWARE ACTUAL (2026-11-03T22:36:43Z): **RC124 level 2 default validate
 - FHD PERF: b default 33.30, c REMAT=0 32.63, d default 33.17 FPS: defaults +1.9 %; compare c->b inconclusive (6/8), c->d faster (7/8). FHD does not regress.
 - Verdict: RC124 default accepted. MEMBW: bandwidth excluded as a cause; the latency figure is far above a typical GPU DRAM latency (~0.5-1 us) and needs a footprint curve (cache/TLB/DRAM split) before any conclusion.
 - Next: MEMLAT footprint sweep (16 KiB .. 64 MiB, same chase) to locate the latency step; recovery rec2143h.
+
+EXP2144 HARDWARE BEFORE 2026-11-03T22:48:01Z:
+Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite (defaults); probe "only MEMBW" twice.
+- WHY THIS HYPOTHESIS: (1) EXP2143: a 64 MiB dependent-load chase costs ~4.9 us per load although stream bandwidth is healthy (61.35 GB/s); typical GPU DRAM latency is ~0.5-1 us; (2) the C4 kernels are latency bound (EXP2122/K3) at full register occupancy; (3) the footprint curve decides between cache/DRAM (gradual) and TLB/page-walk (step at the TLB reach) causes, which point to different layers (compiler/wait insertion vs UAT/m1n1).
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (diagnostic only).
+- WHAT IS STILL UNKNOWN: per-footprint latency; reproducibility of the 4.9 us figure.
+- Expected: AGX_D3D12_MEMBW PASS twice; latency rising with footprint; a step of several us between the TLB reach and 64 MiB would point to page walks; already-high latency at 16 KiB would point to the load path itself (waits/issue), not memory.
+- FAIL: GPU fault/hang -> rec2144h. Recovery: rec2144h.
+- Hashes: sys 798030f67179, UmdArm64 da839f6d2706, UmdX64 e7f0f7301f02, Umd32 185b5889c8d3; manifest fad16a4b037c, hardware-manifest 21291d94eee9; probe2144.sh e284a708e4ff (PROBE_LINT_OK); visible recovery rec2144h 4b66c4f938175815; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2144h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2144-memlat/run2144.sh.
