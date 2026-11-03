@@ -388,6 +388,31 @@ static BOOLEAN AdmissionSysmemGpuMapRequested(ADMISSION_CONTEXT *Context) {
   return enabled;
 }
 
+static BOOLEAN AdmissionLiveAdditivePagingRequested(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1LiveAdditivePaging");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
 NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
   ADMISSION_G3_STATE *state;
   AGX_GPUVA_V5_REQUEST probe = {0};
@@ -419,6 +444,9 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
     ExFreePoolWithTag(state, ADMISSION_POOL_TAG);
     return STATUS_NOT_SUPPORTED;
   }
+  context->LiveAdditivePaging = AdmissionLiveAdditivePagingRequested(context) &&
+      AppleAgxGpuvaV5ClientHasLiveAdditive(&state->Client) ? 1u : 0u;
+  context->ObjectAdapter.PagingNode = context->LiveAdditivePaging;
   AdmissionG3AttachMailbox(state);
   context->GpuvaG3State = state;
   return STATUS_SUCCESS;
@@ -432,6 +460,10 @@ NTSTATUS AdmissionGpuvaG3Stop(ADMISSION_CONTEXT *context) {
 #endif
   state = (ADMISSION_G3_STATE *)context->GpuvaG3State;
   if (state == NULL) return STATUS_SUCCESS;
+  /* Lifecycle tears down G3 before ordinary paging. Live CPU workers borrow
+   * this state: stop admission and drain their complete callbacks first. */
+  if (context->LiveAdditivePaging &&
+      !NT_SUCCESS(AdmissionPagingStop(context))) return STATUS_DEVICE_BUSY;
   ExAcquireFastMutex(&state->Lock);
   if (state->ProcessCount != 0u || !IsListEmpty(&state->Processes) ||
       state->ActiveProcess != NULL) {
@@ -2869,6 +2901,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     status = STATUS_DEVICE_HARDWARE_ERROR;
     goto Fail;
   }
+  if (adapter->LiveAdditivePaging &&
+      !AppleAgxGpuvaG3GraphNegotiateLive(&process->Graph, true)) {
+    /* A topology already exposed to VidMm cannot change per process. */
+    if (!AppleAgxGpuvaG3GraphDestroy(&process->Graph)) {
+      ADMISSION_G3_POISON(process,1u);
+      InsertTailList(&state->Processes, &process->Link);
+      ++state->ProcessCount;
+      ExReleaseFastMutex(&state->Lock);
+      return STATUS_DEVICE_HARDWARE_ERROR;
+    }
+    ExReleaseFastMutex(&state->Lock);
+    status = STATUS_NOT_SUPPORTED;
+    goto Fail;
+  }
   InsertTailList(&state->Processes, &process->Link);
   ++state->ProcessCount;
   ExReleaseFastMutex(&state->Lock);
@@ -4207,7 +4253,8 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
       args->DmaBufferPrivateDataSize == 0u ||
       args->DmaBufferPrivateDataSize % sizeof(ADMISSION_PAGING_RECORD) != 0u ||
       (args->Flags.Value & ~(1u << 7u)) != pagingFlags.Value ||
-      args->NodeOrdinal != 0u ||
+      args->NodeOrdinal != adapter->LiveAdditivePaging ||
+      context->Object.NodeOrdinal != args->NodeOrdinal ||
       args->EngineOrdinal != 0u || args->SubmissionFenceId == 0u ||
       KeGetCurrentIrql() > DISPATCH_LEVEL)
     return AdmissionG4SubmitReject(adapter, context, args,
@@ -6110,7 +6157,7 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
       Args->hContext == NULL || Args->DmaBufferVirtualAddress == 0ULL ||
       Args->DmaBufferSize == 0u ||
       Args->pDmaBufferPrivateData == NULL ||
-      Args->NodeOrdinal != 0u ||
+      Args->NodeOrdinal != (Args->Flags.Paging ? adapter->LiveAdditivePaging : 0u) ||
       Args->EngineOrdinal != 0u || Args->SubmissionFenceId == 0u ||
       KeGetCurrentIrql() > DISPATCH_LEVEL)
     return AdmissionG4SubmitReject(adapter, NULL, Args,
@@ -6118,7 +6165,8 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
   context = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
   if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device == NULL ||
-      context->Object.Device->Adapter != &adapter->ObjectAdapter)
+      context->Object.Device->Adapter != &adapter->ObjectAdapter ||
+      context->Object.NodeOrdinal != Args->NodeOrdinal)
     return AdmissionG4SubmitReject(adapter, NULL, Args,
         AdmissionG4RejectContext, STATUS_INVALID_PARAMETER, 0u, FALSE);
   if ((context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
@@ -6216,11 +6264,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
    * never releases a GPU job, fabricates an interrupt or clears a fault. */
   if (status != STATUS_SUCCESS) {
     if (overlap != NULL && Args != NULL &&
-        Args->NodeOrdinal == 0u && Args->EngineOrdinal == 0u &&
+        Args->NodeOrdinal <= overlap->LiveAdditivePaging && Args->EngineOrdinal == 0u &&
         InterlockedCompareExchange(&overlap->SchedulerInitialized, 0, 0) != 0) {
       KIRQL oldIrql;
       KeAcquireSpinLock(&overlap->SchedulerLock, &oldIrql);
-      (void)AppleAgxSchedulerRejectFence(&overlap->Scheduler, 0u, 0u,
+      (void)AppleAgxSchedulerRejectFence(Args->NodeOrdinal ?
+          &overlap->PagingScheduler : &overlap->Scheduler, 0u, 0u,
                                         Args->SubmissionFenceId);
       KeReleaseSpinLock(&overlap->SchedulerLock, oldIrql);
     }

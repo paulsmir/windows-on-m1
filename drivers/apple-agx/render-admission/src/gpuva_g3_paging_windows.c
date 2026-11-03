@@ -356,6 +356,7 @@ static NTSTATUS AdmissionG3UpdateParent(
   ExFreePoolWithTag(old_children, ADMISSION_POOL_TAG);
   return result;
 Rollback:
+  if (applied && process->Graph.JobInFlight) process->Graph.Uncertain = 1u;
   while (applied && !process->Graph.Uncertain) {
     --applied;
     if (!AppleAgxGpuvaG3GraphUpdateParent(&process->Graph, table_ipa,
@@ -748,8 +749,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   PVOID native_binding = AdmissionG3NativeStagingBinding(update->hAllocation);
   BOOLEAN native_noted = FALSE;
 #endif
-  if (process->Graph.JobInFlight || process->Graph.LeaseToken)
-    return STATUS_DEVICE_BUSY;
+  if ((process->Graph.JobInFlight || process->Graph.LeaseToken) &&
+      !process->Graph.LiveAdditive) return STATUS_DEVICE_BUSY;
   if (process->Graph.MappingGeneration == MAXULONGLONG ||
       update->NumPageTableEntries == 0u || update->StartIndex >= limit ||
       update->NumPageTableEntries > limit - update->StartIndex ||
@@ -925,6 +926,7 @@ static NTSTATUS AdmissionG3UpdateLeaf(
           complete ? ipa : 0ULL, STATUS_DEVICE_HARDWARE_ERROR);
       /* Restore all acknowledged publications before returning failure.
        * Uncertain TLB state retains both sets of mapping/grant references. */
+      if (published && process->Graph.JobInFlight) process->Graph.Uncertain = 1u;
       while (published && !process->Graph.Uncertain) {
         --published;
         if (!AppleAgxGpuvaG3GraphUpdateLeafBacking(&process->Graph, table_ipa,
@@ -1440,7 +1442,7 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(
       record->Bytes == 0u ||
       record->Bytes > (AdmissionPagingContiguousRun(record) ?
           ADMISSION_PAGING_LOCAL_RUN_MAX : 0x1000u) ||
-      KeGetCurrentIrql() != PASSIVE_LEVEL)
+      KeGetCurrentIrql() > APC_LEVEL)
     return STATUS_INVALID_PARAMETER;
   status = AdmissionMemoryRuntimeLocalView(adapter, &view);
   if (!NT_SUCCESS(status)) return status;
@@ -1597,6 +1599,140 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBufferChecked(ADMISSION_CONTEXT *adapter,
   return STATUS_SUCCESS;
 }
 
+/* Pure preflight, under state->Lock. A whole update must be additive before
+ * any table registration, pool placement, mapping acquisition or PTE store.
+ * Unsupported shapes retain the ordinary joined-completion path. */
+static BOOLEAN AdmissionG3LiveTable(ADMISSION_G3_PROCESS *Process,
+    ULONGLONG Original, UINT Level, ULONGLONG *Broker,
+    ADMISSION_G3_TABLE_SHADOW **Shadow) {
+  APPLE_AGX_GPUVA_G3_NODE *table;
+  ADMISSION_G3_TABLE_SHADOW *s;
+  *Broker = 0ULL;
+  *Shadow = NULL;
+  for (s = Process->TableShadows; s; s = s->Next)
+    if (s->OriginalIpa == Original) {
+      if (s->PendingPtes) return FALSE;
+      *Broker = s->BrokerIpa;
+      *Shadow = s;
+      break;
+    }
+  if (!*Broker) return TRUE; /* fresh shadow, registration still authenticates */
+  for (table = Process->Graph.Tables; table; table = table->Next)
+    if (table->Ipa == *Broker && table->Level != Level) return FALSE;
+  return TRUE;
+}
+
+static BOOLEAN AdmissionG3LiveUpdate(ADMISSION_G3_PROCESS *Process,
+    ULONGLONG Original, const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *Update,
+    ADMISSION_CONTEXT *Adapter) {
+  ADMISSION_SCANOUT_MEMORY_VIEW view = {0}, pool = {0};
+  ADMISSION_G3_TABLE_SHADOW *shadow;
+  APPLE_AGX_GPUVA_G3_NODE *edge;
+  ULONGLONG broker, previous = 0ULL, group = 0ULL;
+  UINT i, scale, first, count, segment = 0u, writable = 0u;
+  if (!Process || !Process->Graph.LiveAdditive || Process->Poisoned ||
+      Process->Graph.Uncertain || Process->CpuOnlyMappings ||
+      Update->Flags.NotifyEviction || !Update->NumPageTableEntries ||
+      !Update->pPageTableEntries || Update->PageTableLevel > 2u ||
+      !AdmissionG3LiveTable(Process, Original, 2u - Update->PageTableLevel,
+                           &broker, &shadow) ||
+      !NT_SUCCESS(AdmissionMemoryRuntimeLocalView(Adapter, &view))) return FALSE;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  /* Native staging can intentionally omit otherwise valid local groups. */
+  if (AdmissionG3NativeStagingBinding(Update->hAllocation)) return FALSE;
+#endif
+  if (Process->Graph.MappingGeneration > MAXULONGLONG -
+      (32ULL * Update->NumPageTableEntries + 1ULL)) return FALSE;
+  if (Original < view.GuestIpaAddress || view.Bytes < 0x4000ULL ||
+      Original - view.GuestIpaAddress > view.Bytes - 0x4000ULL) return FALSE;
+  if (Update->PageTableLevel == 0u) {
+    ULONGLONG step = Update->Flags.Use64KBPages ? 0x10000ULL : 0x1000ULL;
+    if ((Update->FirstPteVirtualAddress & (step - 1ULL)) ||
+        Update->FirstPteVirtualAddress >= (1ULL << 39) ||
+        (ULONGLONG)Update->NumPageTableEntries * step >
+            (1ULL << 39) - Update->FirstPteVirtualAddress) return FALSE;
+  }
+  /* VidMm initializes new non-root tables to invalid before adding entries.
+   * No old shadow/descriptor exists and graph no-ops issue no broker store. */
+  if (!broker && Update->Flags.InitialUpdate && Update->PageTableLevel < 2u) {
+    for (i = 0u; i < Update->NumPageTableEntries; ++i)
+      if (Update->pPageTableEntries[
+          AppleAgxGpuvaG3PteInputIndex(i, Update->Flags.Repeat)].Valid) break;
+    if (i == Update->NumPageTableEntries) return TRUE;
+  }
+  if (Update->PageTableLevel != 0u) {
+    if (Update->PageTableLevel == 2u && broker != Process->Graph.RootIpa)
+      return FALSE; /* root selection is destructive */
+    for (i = 0u; i < Update->NumPageTableEntries; ++i) {
+      const DXGK_PTE *pte = &Update->pPageTableEntries[
+          AppleAgxGpuvaG3PteInputIndex(i, Update->Flags.Repeat)];
+      DXGK_PAGETABLEUPDATEADDRESS address = {0};
+      ULONGLONG child, childBroker;
+      ADMISSION_G3_TABLE_SHADOW *childShadow;
+      if (!pte->Valid || (pte->Flags & ~(1ULL << 17)) !=
+          (1ULL | ((ULONGLONG)ADMISSION_MEMORY_LOCAL_SEGMENT << 5)) ||
+          (Update->PageTableLevel == 2u && pte->PageTablePageSize) ||
+          !AppleAgxGpuvaG3PteAddressBytes(pte->PageTableAddress, &child)) return FALSE;
+      address.GpuPhysical.SegmentId = (UINT)pte->Segment;
+      address.GpuPhysical.SegmentOffset = child;
+      if (!NT_SUCCESS(AdmissionGpuvaG3ResolveTable(Adapter, &address,
+              DXGK_PAGETABLEUPDATE_GPU_PHYSICAL, &child)) || child == Original ||
+          !AdmissionG3LiveTable(Process, child, 3u - Update->PageTableLevel,
+                               &childBroker, &childShadow)) return FALSE;
+      for (edge = Process->Graph.Parents; edge; edge = edge->Next)
+        if (edge->Ipa == broker && edge->Index == Update->StartIndex + i)
+          return FALSE;
+    }
+    return TRUE;
+  }
+  scale = Update->Flags.Use64KBPages ? 16u : 1u;
+  first = Update->StartIndex * scale;
+  count = Update->NumPageTableEntries * scale;
+  /* A partial group can replace a neighboring logical owner's native leaf.
+   * Keep it on the legacy path even when its supplied PTE is fresh. */
+  if ((first & 3u) || (count & 3u) || first >= 8192u || count > 8192u - first ||
+      (Update->FirstPteVirtualAddress & ((ULONGLONG)scale * 0x1000ULL - 1ULL)) ||
+      Update->FirstPteVirtualAddress >= (1ULL << 39) ||
+      (ULONGLONG)count * 0x1000ULL > (1ULL << 39) - Update->FirstPteVirtualAddress ||
+      Update->AllocationOffsetInBytes > MAXULONGLONG - (ULONGLONG)count * 0x1000ULL)
+    return FALSE;
+  (void)AdmissionMemoryPoolView(Adapter, &pool);
+  for (i = 0u; i < count; ++i) {
+    const DXGK_PTE *pte = &Update->pPageTableEntries[
+        AppleAgxGpuvaG3PteInputIndex(i / scale, Update->Flags.Repeat)];
+    ULONGLONG offset, ipa;
+    if (shadow && ((shadow->LogicalPtes && shadow->LogicalPtes[first + i].Flags) ||
+                   (shadow->ResidentPtes && shadow->ResidentPtes[first + i].Flags))) return FALSE;
+    if (!pte->Valid || pte->Zero || pte->CacheCoherent || pte->NoExecute ||
+        pte->LargePage || pte->PhysicalAdapterIndex || pte->PageTablePageSize ||
+        pte->SystemReserved0 || pte->Reserved ||
+        !AppleAgxGpuvaG3PteAddressBytes(pte->PageAddress, &offset) ||
+        (pte->Segment != ADMISSION_MEMORY_LOCAL_SEGMENT &&
+         pte->Segment != ADMISSION_MEMORY_POOL_SEGMENT) ||
+        (pte->Segment == ADMISSION_MEMORY_POOL_SEGMENT ?
+          AppleAgxGpuvaG3ResolvePoolPage(offset, pool.GuestIpaAddress, pool.Bytes, &ipa) :
+          AppleAgxGpuvaG3ResolvePageAddress((UINT)pte->Segment, offset,
+            ADMISSION_MEMORY_LOCAL_SEGMENT, view.GuestIpaAddress, view.Bytes, &ipa)) != AppleAgxGpuvaG3Ok ||
+        ipa > MAXULONGLONG - (ULONGLONG)scale * 0x1000ULL ||
+        (scale == 16u && (ipa & 0xffffULL))) return FALSE;
+    ipa += (ULONGLONG)(i % scale) * 0x1000ULL;
+    if ((i & 3u) == 0u) {
+      if ((ipa & 0x3fffULL) ||
+          (broker && AppleAgxGpuvaG3GraphLeaf(&Process->Graph, broker, (first + i) / 4u)))
+        return FALSE;
+      group = ipa; segment = (UINT)pte->Segment; writable = pte->ReadOnly;
+      if (!AppleAgxGpuvaG3TableSpanWithinLocal(
+          segment == ADMISSION_MEMORY_POOL_SEGMENT ? pool.GuestIpaAddress : view.GuestIpaAddress,
+          segment == ADMISSION_MEMORY_POOL_SEGMENT ? pool.Bytes : view.Bytes,
+          group, 0x4000ULL)) return FALSE;
+    } else if (ipa != previous + 0x1000ULL || pte->Segment != segment ||
+               pte->ReadOnly != writable) return FALSE;
+    previous = ipa;
+  }
+  /* The complete group proof above covers all implied native slots. */
+  return TRUE;
+}
+
 NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
                                             DXGKARG_BUILDPAGINGBUFFER *args) {
   ADMISSION_G3_STATE *state;
@@ -1610,7 +1746,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   ULONGLONG groups_before[8], groups_after[8];
   ULONG shapes_before;
   BOOLEAN unpublished_changed = FALSE, leaf64k_changed = FALSE,
-          groups_changed = FALSE;
+          groups_changed = FALSE, live_update = FALSE;
   ADMISSION_SCANOUT_MEMORY_VIEW view;
   APPLE_AGX_GPUVA_G3_NODE *table;
   ULONGLONG *table_words;
@@ -1683,7 +1819,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       timed_out = KeQueryInterruptTime() >= deadline ? TRUE : FALSE;
       if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
           (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
-          timed_out)
+          process->Graph.LiveAdditive || timed_out)
         break;
       if (wait_ms == 0u) AdmissionG3SnapPagingWait(state, process, &at);
       ExReleaseFastMutex(&state->Lock);
@@ -1830,10 +1966,11 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     KeClearEvent(&state->JobEvent);
     ExAcquireFastMutex(&state->Lock);
     process = AdmissionGpuvaG3FindProcess(state, update->hProcess);
+    live_update = AdmissionG3LiveUpdate(process, original_table_ipa, update, adapter);
     timed_out = KeQueryInterruptTime() >= deadline ? TRUE : FALSE;
     if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
         (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
-        timed_out)
+        live_update || timed_out)
       break;
     if (wait_ms == 0u) AdmissionG3SnapPagingWait(state, process, &at);
     ExReleaseFastMutex(&state->Lock);
@@ -1856,7 +1993,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     AdmissionG3RecordLeafEarly(state, update,
         process == NULL ? 3u : process->Poisoned ? 4u : 5u, status);
     ExAcquireFastMutex(&state->Lock);
-  } else if (process->Graph.JobInFlight || process->Graph.LeaseToken) {
+  } else if (!live_update && (process->Graph.JobInFlight || process->Graph.LeaseToken)) {
     status = STATUS_DEVICE_BUSY;
     if (update->PageTableLevel == 0u)
       AdmissionG3RecordLeaf(process, table_ipa, update, status);

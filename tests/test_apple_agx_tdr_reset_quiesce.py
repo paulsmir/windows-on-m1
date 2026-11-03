@@ -261,7 +261,10 @@ struct _ADMISSION_CONTEXT {
   KEVENT PagingIdle;
   ULONG CpuQueueHead, CpuQueueCount, DispatchedFence;
   ADMISSION_CPU_PACKET CpuQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
-  APPLE_AGX_SCHEDULER Scheduler;
+  APPLE_AGX_SCHEDULER Scheduler, PagingScheduler;
+  ULONG LiveAdditivePaging, PagingActiveNode, PagingNodeHead, PagingNodeCount, PagingNodeDispatchedFence;
+  LONG PagingAdapterResetting;
+  ADMISSION_CPU_PACKET PagingNodeQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
   ULONG G4PendingHead, G4PendingCount;
@@ -270,7 +273,7 @@ struct _ADMISSION_CONTEXT {
 };
 typedef struct { UINT NodeOrdinal, EngineOrdinal, LastAbortedFenceId; } DXGKARG_RESETENGINE;
 typedef struct {
-  HANDLE hContext; UINT SubmissionFenceId;
+  HANDLE hContext; UINT SubmissionFenceId; UINT NodeOrdinal;
   struct { UINT Paging : 1, Resubmission : 1; } Flags;
 } DXGKARG_SUBMITCOMMAND;
 

@@ -83,6 +83,11 @@ int main(void) {
             self, 'AdmissionSysmemGpuMapRequested', 'Wom1SysmemGpuMap',
             source=(RENDER / 'src/gpuva_g3_windows.c').read_text())
 
+    def test_live_switch_only_dword_one_enables_probe(self):
+        policy.PoolResidencyLimit.check_registry_reader(
+            self, 'AdmissionLiveAdditivePagingRequested', 'Wom1LiveAdditivePaging',
+            source=(RENDER / 'src/gpuva_g3_windows.c').read_text())
+
     def test_switch_is_read_inside_g3_start_before_negotiation(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Pool startup is
         later than G3 startup; reading this switch there silently skips it."""
@@ -100,7 +105,7 @@ int main(void) {
 #include <string.h>
 #include "apple_agx_gpuva_broker_v5_client.h"
 typedef int NTSTATUS;
-typedef struct { void *GpuvaG3State; int SysmemGpuMap; } ADMISSION_CONTEXT;
+typedef struct { void *GpuvaG3State; int SysmemGpuMap,LiveRequested; unsigned LiveAdditivePaging; struct {unsigned PagingNode;} ObjectAdapter; } ADMISSION_CONTEXT;
 typedef struct { ADMISSION_CONTEXT *Adapter; int Lock,JobEvent,Processes;
  APPLE_AGX_GPUVA_V5_CLIENT Client; } ADMISSION_G3_STATE;
 #define PASSIVE_LEVEL 0
@@ -114,8 +119,9 @@ typedef struct { ADMISSION_CONTEXT *Adapter; int Lock,JobEvent,Processes;
 #define NotificationEvent 0
 #define FALSE 0
 #define RtlZeroMemory(p,n) memset(p,0,n)
-static int irql, allocated, freed, queries, attached, supported;
+static int irql, allocated, freed, queries, attached, supported,live_supported,live_queries;
 static int KeGetCurrentIrql(void) {return irql;}
+static int AdmissionLiveAdditivePagingRequested(ADMISSION_CONTEXT *c) {assert(irql==0);return c->LiveRequested;}
 static int AdmissionSysmemGpuMapRequested(ADMISSION_CONTEXT *c) {assert(irql==0);return c->SysmemGpuMap;}
 static void *ExAllocatePool2(int flags,size_t bytes,int tag) {(void)flags;(void)tag;++allocated;return malloc(bytes);}
 static void ExFreePoolWithTag(void *p,int tag) {(void)tag;++freed;free(p);}
@@ -126,11 +132,13 @@ static int AdmissionGpuvaV5ClientOpen(ADMISSION_CONTEXT *c,APPLE_AGX_GPUVA_V5_CL
 bool AppleAgxGpuvaV5ClientCall(APPLE_AGX_GPUVA_V5_CLIENT *c,const AGX_GPUVA_V5_REQUEST *q,AGX_GPUVA_V5_RESPONSE *r)
 {(void)c;assert(q->Command==AGX_GPUVA_V5_CREATE);r->Status=2;r->Epoch=7;return true;}
 bool AppleAgxGpuvaV5ClientHasSysmem(APPLE_AGX_GPUVA_V5_CLIENT *c) {(void)c;++queries;return supported;}
+bool AppleAgxGpuvaV5ClientHasLiveAdditive(APPLE_AGX_GPUVA_V5_CLIENT *c) {(void)c;++live_queries;return live_supported;}
 static void AdmissionG3AttachMailbox(ADMISSION_G3_STATE *s) {(void)s;++attached;}
 ''' + start + r'''
 int main(void) {
  ADMISSION_CONTEXT c={0};
  assert(AdmissionGpuvaG3Start(&c)==0 && !queries && attached==1);
+ assert(!live_queries&&!c.LiveAdditivePaging&&!c.ObjectAdapter.PagingNode);
  free(c.GpuvaG3State);c.GpuvaG3State=NULL;c.SysmemGpuMap=1;
  assert(AdmissionGpuvaG3Start(&c)==STATUS_NOT_SUPPORTED);
  assert(queries==1 && attached==1 && freed==1 && !c.GpuvaG3State);
@@ -138,6 +146,11 @@ int main(void) {
  assert(AdmissionGpuvaG3Start(&c)==0 && queries==2 && attached==2);
  free(c.GpuvaG3State);c.GpuvaG3State=NULL;irql=1;
  assert(AdmissionGpuvaG3Start(&c)==STATUS_INVALID_DEVICE_STATE && allocated==3);
+ irql=0;c.LiveRequested=1;
+ assert(AdmissionGpuvaG3Start(&c)==0 && live_queries==1 && !c.LiveAdditivePaging && !c.ObjectAdapter.PagingNode);
+ free(c.GpuvaG3State);c.GpuvaG3State=NULL;live_supported=1;
+ assert(AdmissionGpuvaG3Start(&c)==0 && live_queries==2 && c.LiveAdditivePaging==1 && c.ObjectAdapter.PagingNode==1);
+ free(c.GpuvaG3State);
  return 0;
 }
 ''')

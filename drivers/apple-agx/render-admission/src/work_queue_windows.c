@@ -4,6 +4,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
     ADMISSION_CONTEXT *Context, const DXGKARG_SUBMITCOMMAND *Args,
     ULONG Kind, const VOID *Data, UINT Bytes) {
   ADMISSION_CPU_PACKET *packet;
+  APPLE_AGX_SCHEDULER *scheduler;
+  ADMISSION_CPU_PACKET *queue;
+  ULONG *head, *count, node;
   ADMISSION_RENDER_CONTEXT *presentContext = NULL;
   ADMISSION_PRESENT_BLT_COMMAND presentCommand;
   KIRQL oldIrql;
@@ -28,6 +31,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
         return STATUS_INVALID_PARAMETER;
     }
   }
+  node = Kind == ADMISSION_CPU_PACKET_PAGING && Context->LiveAdditivePaging ? 1u : 0u;
+  if (Args->NodeOrdinal != node) return STATUS_INVALID_PARAMETER;
+  scheduler = node ? &Context->PagingScheduler : &Context->Scheduler;
+  queue = node ? Context->PagingNodeQueue : Context->CpuQueue;
+  head = node ? &Context->PagingNodeHead : &Context->CpuQueueHead;
+  count = node ? &Context->PagingNodeCount : &Context->CpuQueueCount;
   KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
   KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
   queued = preempted = FALSE;
@@ -44,18 +53,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
       (paging ||
        InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) == 0) &&
       (presentContext == NULL || presentContext->Object.FenceOutstanding == 0u) &&
-      Context->CpuQueueCount < APPLE_AGX_SCHEDULER_QUEUE_CAPACITY) {
+      *count < APPLE_AGX_SCHEDULER_QUEUE_CAPACITY) {
     if (paging && Args->Flags.Resubmission)
       queued = AppleAgxSchedulerQueueResubmittedPagingFence(
-          &Context->Scheduler, 0u, 0u, Args->SubmissionFenceId);
+          scheduler, 0u, 0u, Args->SubmissionFenceId);
     if (!queued)
-      queued = AppleAgxSchedulerQueueFence(&Context->Scheduler, 0u, 0u,
+      queued = AppleAgxSchedulerQueueFence(scheduler, 0u, 0u,
                                            Args->SubmissionFenceId);
     /* An unclaimed boundary preemption refuses admission; the packet joins
      * that preemption instead and Windows resubmits it after DMA_PREEMPTED. */
     if (!queued && paging)
       preempted = AppleAgxSchedulerAdmitPagingFenceAsPreempted(
-          &Context->Scheduler, 0u, 0u, Args->SubmissionFenceId,
+          scheduler, 0u, 0u, Args->SubmissionFenceId,
           Args->Flags.Resubmission ? TRUE : FALSE);
   }
   if (preempted) {
@@ -70,7 +79,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
     KeReleaseSpinLock(&Context->PagingLock, oldIrql);
     return STATUS_DEVICE_BUSY;
   }
-  packet = &Context->CpuQueue[(Context->CpuQueueHead + Context->CpuQueueCount) %
+  packet = &queue[(*head + *count) %
       APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   packet->Fence = Args->SubmissionFenceId;
   packet->SubmitQpc = KeQueryPerformanceCounter(NULL).QuadPart;
@@ -80,7 +89,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
   if (presentContext != NULL)
     presentContext->Object.FenceOutstanding = Args->SubmissionFenceId;
   if (Bytes != 0u) RtlCopyMemory(&packet->Data, Data, Bytes);
-  ++Context->CpuQueueCount;
+  ++*count;
   if (Kind == ADMISSION_CPU_PACKET_PAGING) {
     LONG records = (LONG)(Bytes / sizeof(ADMISSION_PAGING_RECORD));
     LONG before, after;
@@ -102,22 +111,41 @@ _Use_decl_annotations_ void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *Conte
   KIRQL oldIrql;
   ULONG fence, attempt = 0u;
   BOOLEAN cpu = FALSE, render = FALSE;
+  ULONG node = 0u;
+  APPLE_AGX_SCHEDULER *scheduler;
+  ADMISSION_CPU_PACKET *queue;
+  ULONG *head, *count, *dispatched;
   if (Context == NULL || !Context->Started ||
       InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0 ||
-      InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) != 0)
+      InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) != 0 ||
+      InterlockedCompareExchange(&Context->PagingAdapterResetting, 0, 0) != 0)
     return;
 Retry:
   cpu = render = FALSE;
   KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
   KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
-  fence = AppleAgxSchedulerQueuedFence(&Context->Scheduler, 0u, 0u);
-  if (fence != 0u && Context->DispatchedFence == 0u &&
+  /* One CPU slot owns records/present storage until worker and DPC retire.
+   * Node1 can retire paging while node0 GPU work remains active. */
+  node = Context->LiveAdditivePaging && Context->PagingNodeCount != 0u &&
       InterlockedCompareExchange(&Context->PagingPending, 0, 0) == 0 &&
-      AppleAgxSchedulerActiveFence(&Context->Scheduler, 0u, 0u) == 0u &&
-      !AppleAgxSchedulerDispatchBlocked(&Context->Scheduler)) {
-    packet = Context->CpuQueueCount != 0u ? &Context->CpuQueue[Context->CpuQueueHead] : NULL;
+      InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) == 0 ? 1u : 0u;
+  scheduler = node ? &Context->PagingScheduler : &Context->Scheduler;
+  queue = node ? Context->PagingNodeQueue : Context->CpuQueue;
+  head = node ? &Context->PagingNodeHead : &Context->CpuQueueHead;
+  count = node ? &Context->PagingNodeCount : &Context->CpuQueueCount;
+  dispatched = node ? &Context->PagingNodeDispatchedFence : &Context->DispatchedFence;
+  fence = AppleAgxSchedulerQueuedFence(scheduler, 0u, 0u);
+  if (fence != 0u && *dispatched == 0u &&
+      (InterlockedCompareExchange(&Context->PagingPending, 0, 0) == 0 ||
+       Context->PagingActiveNode != node) &&
+      AppleAgxSchedulerActiveFence(scheduler, 0u, 0u) == 0u &&
+      !AppleAgxSchedulerDispatchBlocked(scheduler)) {
+    packet = *count != 0u ? &queue[*head] : NULL;
     if (packet != NULL && packet->Fence == fence &&
-        AppleAgxSchedulerActivateFence(&Context->Scheduler, 0u, 0u, fence)) {
+        InterlockedCompareExchange(&Context->PagingPending, 0, 0) == 0 &&
+        InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) == 0 &&
+        InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) == 0 &&
+        AppleAgxSchedulerActivateFence(scheduler, 0u, 0u, fence)) {
       Context->PagingRecordCount = 0u;
       Context->PresentCopyBytes = 0u;
       Context->PresentCopyContext = NULL;
@@ -133,20 +161,21 @@ Retry:
       if (packet->Kind == ADMISSION_CPU_PACKET_PAGING)
         AdmissionPagingProfileAdd(Context->PagingProfile.QueueToDispatch,
                                   Context->PagingDispatchQpc - packet->SubmitQpc);
-      Context->CpuQueueHead = (Context->CpuQueueHead + 1u) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY;
-      --Context->CpuQueueCount;
+      *head = (*head + 1u) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY;
+      --*count;
+      Context->PagingActiveNode = node;
       Context->PagingFence = fence;
       Context->PagingCompletionStatus = STATUS_PENDING;
-      Context->DispatchedFence = fence;
+      *dispatched = fence;
       InterlockedExchange(&Context->PagingPending, 1);
       cpu = TRUE;
-    } else if ((AdmissionRenderPacketState(&Context->RenderPacket) == AdmissionRenderPacketQueued &&
+    } else if (!node && ((AdmissionRenderPacketState(&Context->RenderPacket) == AdmissionRenderPacketQueued &&
                 Context->RenderPacket.Description.Fence == fence) ||
                /* Phase 5a: the worker binds a pending head into the empty slot. */
                (AdmissionRenderPacketState(&Context->RenderPacket) == AdmissionRenderPacketEmpty &&
                 Context->G4PendingCount != 0u &&
                 Context->G4Pending[Context->G4PendingHead].State == AdmissionG4PendingQueued &&
-                Context->G4Pending[Context->G4PendingHead].Fence == fence)) {
+                Context->G4Pending[Context->G4PendingHead].Fence == fence))) {
       Context->DispatchedFence = fence;
       render = TRUE;
     }
@@ -185,7 +214,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionPagingQuiescent(ADMISSION_CONTEXT *Conte
   KIRQL oldIrql;
   KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
   quiescent = Context->PagingRecordsUnsubmitted == 0 &&
-      Context->CpuQueueCount == 0u &&
+      Context->CpuQueueCount == 0u && Context->PagingNodeCount == 0u &&
+      InterlockedCompareExchange(&Context->PagingCallbacksActive, 0, 0) == 0 &&
       InterlockedCompareExchange(&Context->PagingPending, 0, 0) == 0 &&
       InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) == 0;
   KeReleaseSpinLock(&Context->PagingLock, oldIrql);

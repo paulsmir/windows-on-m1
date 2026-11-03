@@ -56,7 +56,7 @@ typedef struct { ULONGLONG AuxIpa; UINT Writable, Kind; } APPLE_AGX_GPUVA_G3_NOD
 enum { AppleAgxGpuvaG3SystemBacking, AppleAgxGpuvaG3LocalBacking,
        AdmissionG3PagingFailureLeafGraph };
 typedef struct {
-  UINT JobInFlight, LeaseToken, Uncertain, LastStatus;
+  UINT JobInFlight, LeaseToken, Uncertain, LastStatus, LiveAdditive;
   ULONGLONG MappingGeneration, ProcessId;
   APPLE_AGX_GPUVA_G3_NODE Leaf, OtherLeaves[2];
   UINT Mappings, Publications;

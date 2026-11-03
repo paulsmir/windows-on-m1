@@ -37,7 +37,7 @@ typedef int KIRQL;
 #define _ReturnAddress() ((void *)0)
 #define DISPATCH_LEVEL 2
 typedef void *HANDLE;
-typedef union { unsigned Value; struct { unsigned Other:1, Present:1, Other2:5, Resubmission:1, Reserved:24; }; } REPLAY_FLAGS;
+typedef union { unsigned Value; struct { unsigned Paging:1, Present:1, Other2:5, Resubmission:1, Reserved:24; }; } REPLAY_FLAGS;
 typedef REPLAY_FLAGS DXGK_SUBMITCOMMANDFLAGS;
 #define PASSIVE_LEVEL 0
 #define TRUE 1
@@ -145,7 +145,7 @@ typedef struct { void *Adapter; } REPLAY_DEVICE;
 typedef struct { REPLAY_DEVICE Object; } ADMISSION_DEVICE;
 #define CONTAINING_RECORD(p,t,f) ((t*)((char*)(p)-offsetof(t,f)))
 typedef struct {
-  unsigned Flags, Magic;
+  unsigned Flags, Magic, NodeOrdinal;
   REPLAY_DEVICE *Device;
   unsigned FenceOutstanding;
 } ADMISSION_OBJECT_CONTEXT;
@@ -243,7 +243,8 @@ typedef struct {
   volatile int G4SubmitVirtualInFlight, G4SubmitVirtualFence, G4SubmitVirtualFlags;
   struct { volatile int Preemptions, Overlaps, Submissions, Resubmissions; } G4PreemptOverlap;
   int SchedulerLock, SchedulerFaulted, SchedulerInitialized, RuntimeReady, RuntimeQueueable;
-  APPLE_AGX_SCHEDULER Scheduler;
+  APPLE_AGX_SCHEDULER Scheduler, PagingScheduler;
+  ULONG LiveAdditivePaging;
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
   ULONG G4PendingHead, G4PendingCount, DispatchedFence;

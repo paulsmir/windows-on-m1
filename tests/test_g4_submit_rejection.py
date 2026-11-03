@@ -26,7 +26,7 @@ typedef void *HANDLE;
 #define AdmissionG4RejectStatus 16
 struct args {void *hContext;unsigned SubmissionFenceId,NodeOrdinal,EngineOrdinal;struct {unsigned Value,Present,Resubmission;} Flags;};
 typedef struct args DXGKARG_SUBMITCOMMANDVIRTUAL;
-typedef struct {LONG G4SubmitVirtualInFlight,G4SubmitVirtualFence,G4SubmitVirtualFlags,SchedulerInitialized;struct {LONG Resubmissions,Submissions;} G4PreemptOverlap;int SchedulerLock;APPLE_AGX_SCHEDULER Scheduler;} ADMISSION_CONTEXT;
+typedef struct {LONG G4SubmitVirtualInFlight,G4SubmitVirtualFence,G4SubmitVirtualFlags,SchedulerInitialized;struct {LONG Resubmissions,Submissions;} G4PreemptOverlap;int SchedulerLock;APPLE_AGX_SCHEDULER Scheduler, PagingScheduler;ULONG LiveAdditivePaging;} ADMISSION_CONTEXT;
 static NTSTATUS inner_status;static unsigned diagnostics,downstream;
 static LONG InterlockedIncrement(LONG *v){return ++*v;}static LONG InterlockedDecrement(LONG *v){return --*v;}
 static LONG InterlockedExchange(LONG *v,LONG n){LONG old=*v;*v=n;return old;}

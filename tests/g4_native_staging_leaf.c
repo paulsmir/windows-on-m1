@@ -91,7 +91,7 @@ enum { AppleAgxGpuvaG3SystemBacking, AppleAgxGpuvaG3LocalBacking,
        AdmissionG3PagingFailureLeafGraph };
 #define GROUPS 2048u
 typedef struct {
-  UINT JobInFlight, LeaseToken, Uncertain, LastStatus;
+  UINT JobInFlight, LeaseToken, Uncertain, LastStatus, LiveAdditive;
   ULONGLONG MappingGeneration, ProcessId;
   APPLE_AGX_GPUVA_G3_NODE Leaves[GROUPS];
   UINT Mappings, Publications;

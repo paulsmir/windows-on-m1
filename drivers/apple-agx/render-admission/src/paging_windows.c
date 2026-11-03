@@ -254,6 +254,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
 typedef struct _ADMISSION_PAGING_NOTIFICATION {
   ADMISSION_CONTEXT *Context;
   UINT Fence;
+  ULONG Node;
   NTSTATUS Status;
   ULONGLONG FaultVa;
   ULONG FaultWrite;
@@ -275,7 +276,7 @@ static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
   if (NT_SUCCESS(notification->Status)) {
     data.InterruptType = DXGK_INTERRUPT_DMA_COMPLETED;
     data.DmaCompleted.SubmissionFenceId = notification->Fence;
-    data.DmaCompleted.NodeOrdinal = 0u;
+    data.DmaCompleted.NodeOrdinal = notification->Node;
     data.DmaCompleted.EngineOrdinal = 0u;
   } else {
     /* DMA_FAULTED is reserved. WDDM also uses PAGE_FAULTED for a
@@ -291,7 +292,7 @@ static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
     data.DmaPageFaulted.PageFaultFlags = notification->FaultWrite
         ? DXGK_PAGE_FAULT_WRITE : (DXGK_PAGE_FAULT_FLAGS)0;
     data.DmaPageFaulted.FaultedVirtualAddress = notification->FaultVa;
-    data.DmaPageFaulted.NodeOrdinal = 0u;
+    data.DmaPageFaulted.NodeOrdinal = notification->Node;
     data.DmaPageFaulted.EngineOrdinal = 0u;
     data.DmaPageFaulted.PageTableLevel = 0u;
     if (notification->FaultVa == 0ULL) {
@@ -303,7 +304,8 @@ static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
   context->Interface.DxgkCbNotifyInterrupt(
       context->Interface.DeviceHandle, &data);
   context->PagingNotifyQpc = KeQueryPerformanceCounter(NULL).QuadPart;
-  if (InterlockedCompareExchange(&context->PresentTransferState, 2, 2) == 2 &&
+  if (notification->Node == 0u &&
+      InterlockedCompareExchange(&context->PresentTransferState, 2, 2) == 2 &&
       context->PresentTransferReceipt.Fence == notification->Fence) {
     context->PresentTransferReceipt.NotifyInterrupt = 1u;
     InterlockedExchange(&context->PresentTransferState, 3);
@@ -321,31 +323,74 @@ static BOOLEAN AdmissionPagingRecordTerminal(ADMISSION_CONTEXT *Context,
     UINT Fence, NTSTATUS Status) {
   BOOLEAN completed;
   KIRQL oldIrql;
-  if (NT_SUCCESS(Status))
+  APPLE_AGX_SCHEDULER *scheduler;
+  if (Context != NULL && Context->PagingActiveNode == 0u && NT_SUCCESS(Status))
     return AdmissionSchedulerRecordCompletion(Context, Fence);
   if (Context == NULL || Fence == 0u ||
       InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0)
     return FALSE;
   KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
-  completed = AppleAgxSchedulerFaultActiveFence(&Context->Scheduler,
-      0u, 0u, Fence) ? TRUE : FALSE;
-  if (completed && Context->DispatchedFence == Fence)
+  scheduler = Context->PagingActiveNode ? &Context->PagingScheduler : &Context->Scheduler;
+  completed = (NT_SUCCESS(Status) ?
+      AppleAgxSchedulerCompleteActiveFence(scheduler, 0u, 0u, Fence) :
+      AppleAgxSchedulerFaultActiveFence(scheduler, 0u, 0u, Fence)) ? TRUE : FALSE;
+  if (completed && Context->PagingActiveNode && Context->PagingNodeDispatchedFence == Fence)
+    Context->PagingNodeDispatchedFence = 0u;
+  if (completed && !Context->PagingActiveNode && Context->DispatchedFence == Fence)
     Context->DispatchedFence = 0u;
-  if (completed && AppleAgxSchedulerPreemptionPhase(&Context->Scheduler) ==
+  if (completed && AppleAgxSchedulerPreemptionPhase(scheduler) ==
           AppleAgxPreemptionWaitCurrentBoundary)
     completed = AppleAgxSchedulerObserveBoundaryCompletion(
-        &Context->Scheduler, 0u, 0u, Fence) ? TRUE : FALSE;
+        scheduler, 0u, 0u, Fence) ? TRUE : FALSE;
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
   if (!completed)
     InterlockedCompareExchange(&Context->SchedulerFaulted, 0x20000L | __LINE__, 0);
   return completed;
 }
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* Same mutex as BeginJobAs and copy escapes: retain it through the CPU
+ * writes, closing the idle-observation/new-GPU-job race. No spinlock held. */
+static NTSTATUS AdmissionPagingAcquireMutation(ADMISSION_CONTEXT *Context,
+                                               BOOLEAN *Held) {
+  ADMISSION_G3_STATE *state = (ADMISSION_G3_STATE *)Context->GpuvaG3State;
+  ULONGLONG deadline;
+  ULONG i;
+  LARGE_INTEGER delay;
+  *Held = FALSE;
+  if (!Context->LiveAdditivePaging || Context->PagingActiveNode == 0u)
+    return STATUS_SUCCESS;
+  for (i = 0u; i < Context->PagingRecordCount; ++i)
+    if (Context->PagingRecords[i].Kind != AdmissionPagingMonitoredFence) break;
+  if (i == Context->PagingRecordCount) return STATUS_SUCCESS;
+  if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
+  deadline = KeQueryInterruptTime() + 30000000ULL;
+  for (;;) {
+    PLIST_ENTRY link;
+    BOOLEAN busy = FALSE;
+    KeClearEvent(&state->JobEvent);
+    ExAcquireFastMutex(&state->Lock);
+    for (link = state->Processes.Flink; link != &state->Processes; link = link->Flink) {
+      ADMISSION_G3_PROCESS *p = CONTAINING_RECORD(link, ADMISSION_G3_PROCESS, Link);
+      if (p->Graph.JobInFlight || p->Graph.LeaseToken) { busy = TRUE; break; }
+    }
+    if (!busy) { *Held = TRUE; return STATUS_SUCCESS; }
+    ExReleaseFastMutex(&state->Lock);
+    if (KeQueryInterruptTime() >= deadline) return STATUS_DEVICE_BUSY;
+    delay.QuadPart = -10000LL;
+    (void)KeWaitForSingleObject(&state->JobEvent, Executive, KernelMode, FALSE, &delay);
+  }
+}
+#endif
+
 static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
                                   _In_opt_ PVOID Opaque) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Opaque;
   ADMISSION_PAGING_NOTIFICATION notification;
   BOOLEAN synchronized = FALSE;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  BOOLEAN mutationHeld = FALSE;
+#endif
   NTSTATUS status = STATUS_SUCCESS;
   ULONG index;
   ULONGLONG copiedBytes = 0ULL;
@@ -360,12 +405,16 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   if (context->PagingDispatchQpc != 0)
     AdmissionPagingProfileAdd(context->PagingProfile.DispatchToWorker,
                               workerStart - context->PagingDispatchQpc);
+  InterlockedIncrement(&context->PagingCallbacksActive);
   InterlockedIncrement(&context->PagingWorkersActive);
   context->PresentCopyFaultVa = 0ULL;
   context->PresentCopyFaultWrite = 0u;
   if (context->PresentCopyBytes != 0u)
     status = AdmissionMemoryRuntimeExecutePresent(context,
         context->PresentCopyCommand, context->PresentCopyBytes, &copiedBytes);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (NT_SUCCESS(status)) status = AdmissionPagingAcquireMutation(context, &mutationHeld);
+#endif
   for (index = 0u; NT_SUCCESS(status) && index < context->PagingRecordCount; ++index) {
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     if (context->PagingRecords[index].Kind != AdmissionPagingPhysical)
@@ -380,6 +429,10 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
     if (context->PagingRecords[index].Seq > executedSeq)
       executedSeq = context->PagingRecords[index].Seq;
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (mutationHeld)
+    ExReleaseFastMutex(&((ADMISSION_G3_STATE *)context->GpuvaG3State)->Lock);
+#endif
   if (context->PresentCopyBytes != 0u)
     AdmissionRecordPresentTransfer(context, context->PagingFence,
         context->PresentCopyCommand, context->PresentCopyBytes, copiedBytes, status);
@@ -388,12 +441,15 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
      * packet for recovery; do not notify a fence belonging to other work. */
     context->PagingCompletionStatus = STATUS_INVALID_DEVICE_STATE;
     InterlockedDecrement(&context->PagingWorkersActive);
+    InterlockedDecrement(&context->PagingCallbacksActive);
     return;
   }
   context->PagingCompletionStatus = status;
   AdmissionPagingProfileAdd(context->PagingProfile.Worker,
       KeQueryPerformanceCounter(NULL).QuadPart - workerStart);
+  RtlZeroMemory(&notification, sizeof(notification));
   notification.Context = context;
+  notification.Node = context->PagingActiveNode;
   notification.Fence = context->PagingFence;
   notification.Status = status;
   notification.FaultVa = context->PresentCopyBytes != 0u &&
@@ -402,6 +458,10 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   status = context->Interface.DxgkCbSynchronizeExecution(
       context->Interface.DeviceHandle, AdmissionPagingNotifyAtInterrupt,
       &notification, 0u, &synchronized);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* M2-f3: after the fence is signalled; the batch ran in record order. */
+  if (executedSeq != 0ULL) AdmissionMemoryPoolExecuted(context, executedSeq);
+#endif
   KeAcquireSpinLock(&context->PagingLock, &oldIrql);
   if (!NT_SUCCESS(status) || !synchronized) {
     InterlockedCompareExchange(&context->SchedulerFaulted, 0x20000L | __LINE__, 0);
@@ -414,10 +474,12 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   InterlockedDecrement(&context->PagingWorkersActive);
   AdmissionPagingUpdateIdleLocked(context);
   KeReleaseSpinLock(&context->PagingLock, oldIrql);
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  /* M2-f3: after the fence is signalled; the batch ran in record order. */
-  if (executedSeq != 0ULL) AdmissionMemoryPoolExecuted(context, executedSeq);
-#endif
+  AdmissionSchedulerWorkerFinished(context);
+  AdmissionDispatchQueuedWork(context);
+  KeAcquireSpinLock(&context->PagingLock, &oldIrql);
+  InterlockedDecrement(&context->PagingCallbacksActive);
+  AdmissionPagingUpdateIdleLocked(context);
+  KeReleaseSpinLock(&context->PagingLock, oldIrql);
 }
 
 /* rc114: CriticalWorkQueue, not DelayedWorkQueue. VidMm residency waits on
@@ -429,9 +491,10 @@ _Use_decl_annotations_ void AdmissionPagingQueueActive(ADMISSION_CONTEXT *Contex
 }
 
 _Use_decl_annotations_ void AdmissionPagingUpdateIdleLocked(ADMISSION_CONTEXT *Context) {
-  if (Context->CpuQueueCount == 0u &&
+  if (Context->CpuQueueCount == 0u && Context->PagingNodeCount == 0u &&
       InterlockedCompareExchange(&Context->PagingPending, 0, 0) == 0 &&
       InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) == 0 &&
+      InterlockedCompareExchange(&Context->PagingCallbacksActive, 0, 0) == 0 &&
       InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) == 0 &&
       InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) == 0)
     KeSetEvent(&Context->PagingIdle, IO_NO_INCREMENT, FALSE);
@@ -465,6 +528,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStart(
   Context->PagingRecordCount = 0u;
   Context->PresentCopyBytes = 0u;
   Context->CpuQueueHead = Context->CpuQueueCount = Context->DispatchedFence = 0u;
+  Context->PagingNodeHead = Context->PagingNodeCount = Context->PagingNodeDispatchedFence = 0u;
+  Context->PagingActiveNode = 0u;
   Context->PagingFence = 0u;
   Context->PagingLastSubmittedFence = 0u;
   Context->PagingLastCompletedFence = 0u;
@@ -473,6 +538,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStart(
   InterlockedExchange(&Context->PagingStopping, 0);
   InterlockedExchange(&Context->PagingDpcPending, 0);
   InterlockedExchange(&Context->PagingWorkersActive, 0);
+  InterlockedExchange(&Context->PagingCallbacksActive, 0);
   InterlockedExchange(&Context->PagingDpcsActive, 0);
   if (!AdmissionMemoryMarkPagingReady(&Context->Memory)) {
     IoFreeWorkItem(Context->PagingWorkItem);
@@ -504,9 +570,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStop(
                                  FALSE, &timeout);
   KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
   if (!NT_SUCCESS(status) ||
-      Context->CpuQueueCount != 0u ||
+      Context->CpuQueueCount != 0u || Context->PagingNodeCount != 0u ||
       InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) != 0 ||
+      InterlockedCompareExchange(&Context->PagingCallbacksActive, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) != 0) {
     KeReleaseSpinLock(&Context->PagingLock, oldIrql);
@@ -552,7 +619,8 @@ _Use_decl_annotations_ VOID AdmissionPagingDpc(
    * active DPC counter still prevents teardown while notification is running. */
   AdmissionPagingUpdateIdleLocked(Context);
   KeReleaseSpinLock(&Context->PagingLock, oldIrql);
-  if (InterlockedCompareExchange(&Context->PresentTransferState, 3, 3) == 3 &&
+  if (Context->PagingActiveNode == 0u &&
+      InterlockedCompareExchange(&Context->PresentTransferState, 3, 3) == 3 &&
       Context->PresentTransferReceipt.Fence == completedFence) {
     Context->PresentTransferReceipt.NotifyDpc = 1u;
     InterlockedExchange(&Context->PresentTransferState, 4);
@@ -616,7 +684,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommand(
     return status;
   }
   if (!context->Started || Args->Flags.Reserved != 0u ||
-      Args->NodeOrdinal != 0u || Args->EngineOrdinal != 0u ||
+      Args->NodeOrdinal != context->LiveAdditivePaging || Args->EngineOrdinal != 0u ||
       Args->SubmissionFenceId == 0u ||
       context->PagingWorkItem == NULL ||
       Args->pDmaBufferPrivateData == NULL ||

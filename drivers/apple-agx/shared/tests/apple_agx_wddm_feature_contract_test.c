@@ -98,8 +98,15 @@ static void test_invalid_identity_and_reserved_bits_fail_atomically(void) {
   input.NodeCount = 0u;
   assert_invalid_without_output_mutation(&input);
   input = all_ready();
-  input.NodeCount = 2u;
+  input.NodeCount = 3u;
   assert_invalid_without_output_mutation(&input);
+  /* Q22b has two fully implemented nodes; unsupported counts stay invalid. */
+  input = all_ready();
+  input.NodeCount = 2u;
+  { APPLE_AGX_WDDM_FEATURE_OUTPUT output = {0};
+    assert(AppleAgxWddmFeatureContractEvaluate(&input, &output) ==
+           AppleAgxWddmFeatureContractReady);
+  }
   input = all_ready();
   input.ReadyMask |= 0x80000000u;
   assert_invalid_without_output_mutation(&input);

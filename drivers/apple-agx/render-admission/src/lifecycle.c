@@ -763,7 +763,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       featureInput.Size = sizeof(featureInput);
       featureInput.WddmMajor = 3u;
       featureInput.WddmMinor = 0u;
-      featureInput.NodeCount = 1u;
+      featureInput.NodeCount = context->LiveAdditivePaging ? 2u : 1u;
       featureInput.ReadyMask = (ULONG)InterlockedCompareExchange(
           &context->FeatureReadyMask, 0, 0);
       featureResult = AppleAgxWddmFeatureContractEvaluate(
@@ -816,8 +816,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
               model.VirtualAddressingSupported;
           caps->MemoryManagementCaps.GpuMmuSupported =
               model.AdapterGpuMmuSupported;
-          caps->MemoryManagementCaps.PagingNode = model.PagingNode;
-          caps->GpuEngineTopology.NbAsymetricProcessingNodes = model.NodeCount;
+          caps->MemoryManagementCaps.PagingNode = context->LiveAdditivePaging ? 1u : model.PagingNode;
+          caps->GpuEngineTopology.NbAsymetricProcessingNodes = context->LiveAdditivePaging ? 2u : model.NodeCount;
         }
 #endif
         status = STATUS_SUCCESS;

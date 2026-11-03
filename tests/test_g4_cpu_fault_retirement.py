@@ -40,7 +40,7 @@ typedef int BOOLEAN,NTSTATUS,KIRQL;typedef int32_t LONG;typedef unsigned UINT;
 #define STATUS_INVALID_DEVICE_STATE ((int)0xc0000184u)
 #define ADMISSION_SCHEDULER_NODE 0u
 #define ADMISSION_SCHEDULER_ENGINE 0u
-typedef struct {APPLE_AGX_SCHEDULER Scheduler;int SchedulerLock,SchedulerInitialized,SchedulerFaulted,PagingCompletionStatus,PagingWorkersActive,PagingPending;unsigned DispatchedFence,PagingFence;} ADMISSION_CONTEXT;
+typedef struct {APPLE_AGX_SCHEDULER Scheduler, PagingScheduler;unsigned PagingActiveNode,PagingNodeDispatchedFence;int SchedulerLock,SchedulerInitialized,SchedulerFaulted,PagingCompletionStatus,PagingWorkersActive,PagingCallbacksActive,PagingPending;unsigned DispatchedFence,PagingFence;} ADMISSION_CONTEXT;
 static int InterlockedCompareExchange(int *p,int v,int c){int old=*p;if(old==c)*p=v;return old;}
 static void KeAcquireSpinLock(int *p,int *old){assert(!*p);*p=1;*old=0;}
 static void KeReleaseSpinLock(int *p,int old){assert(*p&&!old);*p=0;}
@@ -81,7 +81,7 @@ int main(void){
         source += '\nstatic void worker_gate(ADMISSION_CONTEXT *context, NTSTATUS status){\n'
         source += decision + '\n++notifications;--context->PagingWorkersActive;}\n'
         source += '''static int terminal(ADMISSION_CONTEXT *c,NTSTATUS status){
- unsigned before=notifications;++c->PagingWorkersActive;worker_gate(c,status);
+ unsigned before=notifications;++c->PagingWorkersActive;++c->PagingCallbacksActive;worker_gate(c,status);
  return notifications!=before;}\n''' + cases
         with tempfile.TemporaryDirectory() as td:
             p = Path(td);(p/'test.c').write_text(source)

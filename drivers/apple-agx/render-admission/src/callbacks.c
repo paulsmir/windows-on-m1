@@ -512,8 +512,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
                               ObjectAdapter);
   KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
   if (!AppleAgxSchedulerCreateContext(
-          &adapter->Scheduler, &context->SchedulerContext,
-          Args->NodeOrdinal, Args->EngineAffinity)) {
+          Args->NodeOrdinal ? &adapter->PagingScheduler : &adapter->Scheduler,
+          &context->SchedulerContext, 0u, Args->EngineAffinity)) {
     KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
     (void)AdmissionObjectsDestroyContext(&context->Object);
     if (generationClaimed)
@@ -530,7 +530,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
     if (!NT_SUCCESS(status)) {
       KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
       (void)AppleAgxSchedulerDestroyContext(
-          &adapter->Scheduler, &context->SchedulerContext);
+          context->Object.NodeOrdinal ? &adapter->PagingScheduler : &adapter->Scheduler,
+          &context->SchedulerContext);
       KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
       (void)AdmissionObjectsDestroyContext(&context->Object);
       ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
@@ -544,6 +545,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
 #endif
 
   RtlZeroMemory(&Args->ContextInfo, sizeof(Args->ContextInfo));
+  Args->ContextInfo.PagingCompanionNodeId = adapter->LiveAdditivePaging;
   Args->ContextInfo.DmaBufferSize = ADMISSION_DMA_BUFFER_SIZE;
   Args->ContextInfo.DmaBufferSegmentSet = Args->Flags.VirtualAddressing
       ? (1u << (ADMISSION_MEMORY_APERTURE_SEGMENT - 1u))
@@ -592,7 +594,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
     return STATUS_DEVICE_BUSY;
   }
   if (!AppleAgxSchedulerDestroyContext(
-          &adapter->Scheduler, &context->SchedulerContext)) {
+          context->Object.NodeOrdinal ? &adapter->PagingScheduler : &adapter->Scheduler,
+          &context->SchedulerContext)) {
     KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
     return STATUS_DEVICE_BUSY;
   }
@@ -637,11 +640,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetNodeMetadata(
 
   if (context == NULL || NodeMetadata == NULL)
     return STATUS_INVALID_PARAMETER;
-  if (NodeOrdinal != 0)
+  if (NodeOrdinal > context->LiveAdditivePaging)
     return STATUS_INVALID_PARAMETER;
 
   RtlZeroMemory(NodeMetadata, sizeof(*NodeMetadata));
-  NodeMetadata->EngineType = DXGK_ENGINE_TYPE_3D;
+  NodeMetadata->EngineType = NodeOrdinal ? DXGK_ENGINE_TYPE_COPY : DXGK_ENGINE_TYPE_3D;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (context->GpuvaG3State != NULL) {
     APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
@@ -649,7 +652,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetNodeMetadata(
                                          ADMISSION_GPUVA_G1B_PAGE_PROFILE);
     if (!AdmissionGpuvaG3DeclarationReady(context))
       return STATUS_INVALID_DEVICE_STATE;
-    NodeMetadata->GpuMmuSupported =
+    NodeMetadata->GpuMmuSupported = NodeOrdinal ? 1u :
         (model.NodeGpuMmuMask & (1u << NodeOrdinal)) != 0u;
     NodeMetadata->IoMmuSupported =
         (model.NodeIoMmuMask & (1u << NodeOrdinal)) != 0u;
@@ -657,7 +660,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetNodeMetadata(
 #endif
   status = RtlStringCchCopyW(NodeMetadata->FriendlyName,
                              RTL_NUMBER_OF(NodeMetadata->FriendlyName),
-                             L"Apple AGX 3D node");
+                             NodeOrdinal ? L"Apple AGX CPU paging" : L"Apple AGX 3D node");
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptNodeMetadata, status);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)

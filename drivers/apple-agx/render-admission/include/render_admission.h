@@ -841,12 +841,19 @@ typedef struct _ADMISSION_CONTEXT {
   NTSTATUS PagingCompletionStatus;
   volatile LONG PagingPending;
   volatile LONG PagingWorkersActive, PagingDpcsActive;
+  volatile LONG PagingCallbacksActive; /* includes final dispatch/retry tail */
   volatile LONG PagingStopping;
   volatile LONG PagingDpcPending;
   volatile LONG MemoryStartStage;
   volatile LONG MemoryStartStatus;
   KSPIN_LOCK SchedulerLock;
   APPLE_AGX_SCHEDULER Scheduler;
+  /* Q22b: independent external node1, local scheduler node0. */
+  APPLE_AGX_SCHEDULER PagingScheduler;
+  ULONG LiveAdditivePaging, PagingActiveNode;
+  volatile LONG PagingAdapterResetting;
+  ULONG PagingNodeHead, PagingNodeCount, PagingNodeDispatchedFence;
+  ADMISSION_CPU_PACKET PagingNodeQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   ADMISSION_RENDER_PACKET RenderPacket;
   /* Phase 5a: validated G4 submissions of other contexts waiting for the
    * render slot, oldest first, under SchedulerLock (see

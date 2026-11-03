@@ -81,8 +81,8 @@ typedef struct {ADMISSION_G4_PENDING_STATE State; ULONG Fence;} ADMISSION_G4_PEN
 typedef struct {volatile LONG64 QueueToDispatch[3];} ADMISSION_PAGING_PROFILE;
 typedef struct _ADMISSION_CONTEXT {
  int Started, PagingLock, SchedulerLock, PagingIdle;
- volatile LONG SchedulerInitialized, SchedulerFaulted, PagingStopping, PagingPending;
- volatile LONG PagingWorkersActive, PagingRecordsUnsubmitted;
+ volatile LONG SchedulerInitialized, SchedulerFaulted, PagingAdapterResetting, PagingStopping, PagingPending;
+ volatile LONG PagingWorkersActive, PagingCallbacksActive, PagingDpcsActive, PagingRecordsUnsubmitted;
  void *PagingWorkItem;
  ULONG CpuQueueHead, CpuQueueCount, DispatchedFence, PresentCopyBytes, PagingRecordCount;
  ULONG PagingFence, G4PendingCount, G4PendingHead;
@@ -90,6 +90,9 @@ typedef struct _ADMISSION_CONTEXT {
  LONGLONG PagingDispatchQpc;
  ADMISSION_RENDER_CONTEXT *PresentCopyContext;
  ADMISSION_PAGING_PROFILE PagingProfile;
+ ULONG LiveAdditivePaging, PagingActiveNode, PagingNodeHead, PagingNodeCount, PagingNodeDispatchedFence;
+ APPLE_AGX_SCHEDULER PagingScheduler;
+ ADMISSION_CPU_PACKET PagingNodeQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
  APPLE_AGX_SCHEDULER Scheduler;
  ADMISSION_RENDER_PACKET RenderPacket;
  ADMISSION_G4_PENDING G4Pending[2];
@@ -97,7 +100,7 @@ typedef struct _ADMISSION_CONTEXT {
  UCHAR PresentCopyCommand[4096];
  ADMISSION_PAGING_RECORD PagingRecords[64];
 } ADMISSION_CONTEXT;
-typedef struct {void *hContext; unsigned SubmissionFenceId; struct {unsigned Resubmission:1;} Flags;} DXGKARG_SUBMITCOMMAND;
+typedef struct {void *hContext; unsigned SubmissionFenceId; struct {unsigned Resubmission:1;} Flags; unsigned NodeOrdinal;} DXGKARG_SUBMITCOMMAND;
 static int lock_depth, cpu_launches;
 static LONG InterlockedCompareExchange(volatile LONG *p, LONG value, LONG expected){LONG old=*p;if(old==expected)*p=value;return old;}
 static LONG InterlockedExchange(volatile LONG *p, LONG value){LONG old=*p;*p=value;return old;}
@@ -123,7 +126,7 @@ static ADMISSION_CONTEXT *fresh(void){
  return c;
 }
 static NTSTATUS paging(ADMISSION_CONTEXT *c,unsigned fence,unsigned resubmission){
- DXGKARG_SUBMITCOMMAND a={NULL,fence,{0}};a.Flags.Resubmission=resubmission;
+ DXGKARG_SUBMITCOMMAND a={NULL,fence,{0},0};a.Flags.Resubmission=resubmission;
  NTSTATUS s=AdmissionCpuQueueSubmit(c,&a,ADMISSION_CPU_PACKET_PAGING,record,sizeof(record));
  assert(!lock_depth);return s;
 }
@@ -150,7 +153,7 @@ int main(void){
  assert(!AdmissionPagingQuiescent(c));
  AdmissionDispatchQueuedWork(c);assert(cpu_launches==0&&c->CpuQueueCount==1);
  { /* Present stays a fallible device refusal while frozen. */
-   unsigned char blt[4]={1};DXGKARG_SUBMITCOMMAND p={NULL,0xbf30,{0}};
+   unsigned char blt[4]={1};DXGKARG_SUBMITCOMMAND p={NULL,0xbf30,{0},0};
    assert(AdmissionCpuQueueSubmit(c,&p,ADMISSION_CPU_PACKET_PRESENT,blt,sizeof(blt))==STATUS_DEVICE_BUSY);
    assert(c->CpuQueueCount==1&&c->Scheduler.LastSubmittedFence==0xbf2f); }
  /* TDR engine reset keeps the held fence resubmittable with its old ID. */

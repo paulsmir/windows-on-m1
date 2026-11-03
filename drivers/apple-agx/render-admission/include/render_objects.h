@@ -30,6 +30,7 @@ typedef struct _ADMISSION_OBJECT_ADAPTER {
   unsigned int Magic;
   unsigned int Started;
   unsigned int DeviceCount;
+  unsigned int PagingNode;
 } ADMISSION_OBJECT_ADAPTER;
 
 typedef struct _ADMISSION_OBJECT_DEVICE {

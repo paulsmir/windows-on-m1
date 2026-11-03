@@ -61,13 +61,13 @@ typedef struct {void *DeviceHandle;NTSTATUS (*DxgkCbSynchronizeExecution)(void*,
  void (*DxgkCbNotifyInterrupt)(void*,DXGKARGCB_NOTIFY_INTERRUPT_DATA*);BOOLEAN (*DxgkCbQueueDpc)(void*);} INTERFACE;
 typedef struct {int PagingLock,SchedulerLock,InterfaceValid;volatile LONG SchedulerInitialized,SchedulerFaulted,SchedulerDpcPending;
  volatile LONG PagingPending,PagingDpcPending,PagingDpcsActive;unsigned DispatchedFence,CpuQueueHead,CpuQueueCount;
- int BackendImage;PACKET RenderPacket;INTERFACE Interface;APPLE_AGX_SCHEDULER Scheduler;
+ int BackendImage;PACKET RenderPacket;INTERFACE Interface;APPLE_AGX_SCHEDULER Scheduler, PagingScheduler; ULONG LiveAdditivePaging, PagingActiveNode, PagingNodeHead, PagingNodeCount; LONG PagingWorkersActive;
  ULONG PreemptBeganMs,PreemptBeganFence;volatile LONG PreemptRefusals;} ADMISSION_CONTEXT;
-typedef struct {ADMISSION_CONTEXT *Context;APPLE_AGX_PREEMPTION Preemption;} ADMISSION_PREEMPTION_NOTIFICATION;
+typedef struct {ADMISSION_CONTEXT *Context;APPLE_AGX_PREEMPTION Preemption; ULONG Node;} ADMISSION_PREEMPTION_NOTIFICATION;
 static ADMISSION_CONTEXT *current;
 static int locks,injectAfterUnlock,injectInsideNotify,interrupts,dpcs,dispatches,syncFails;
 VOID AdmissionSchedulerWorkerFinished(ADMISSION_CONTEXT *);
-static BOOLEAN AdmissionSchedulerTryNotifyPreemption(ADMISSION_CONTEXT *);
+static BOOLEAN AdmissionSchedulerTryNotifyPreemption(ADMISSION_CONTEXT *, ULONG);
 static LONG InterlockedCompareExchange(volatile LONG *p,LONG v,LONG e){LONG old=*p;if(old==e)*p=v;return old;}
 static LONG InterlockedExchange(volatile LONG *p,LONG v){LONG old=*p;*p=v;return old;}
 static void KeAcquireSpinLock(int *p,KIRQL *i){(void)p;assert(!locks);*i=2;locks=1;}
@@ -107,7 +107,7 @@ static void notify(void *d,DXGKARGCB_NOTIFY_INTERRUPT_DATA *data){
  if(injectInsideNotify){
   injectInsideNotify=0;
   assert(AppleAgxSchedulerPreemptionPhase(&a->Scheduler)==AppleAgxPreemptionNotificationClaimed);
-  assert(AdmissionSchedulerTryNotifyPreemption(a));
+  assert(AdmissionSchedulerTryNotifyPreemption(a,0u));
   assert(interrupts==1 && a->Scheduler.PreemptionPending);
  }
 }
@@ -145,7 +145,7 @@ int main(void){
  assert(a.SchedulerFaulted==fault); /* deferral is not a second fault */
  /* The other notifiers (worker exit, DPC retry) defer the same way. */
  AdmissionSchedulerWorkerFinished(&a);
- assert(AdmissionSchedulerTryNotifyPreemption(&a));
+ assert(AdmissionSchedulerTryNotifyPreemption(&a,0u));
  assert(!interrupts && a.Scheduler.PreemptionPhase==AppleAgxPreemptionReadyToNotify);
  /* A second request while the first is outstanding is still refused as
   * before (one preemption at a time); the original code is kept. */

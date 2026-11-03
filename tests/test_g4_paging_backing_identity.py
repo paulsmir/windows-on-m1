@@ -74,6 +74,7 @@ typedef struct {LONGLONG QuadPart;} PHYSICAL_ADDRESS;
 #define RtlMoveMemory memmove
 #define UNREFERENCED_PARAMETER(p) ((void)(p))
 #define PASSIVE_LEVEL 0
+#define APC_LEVEL 1
 #define MmCached 1
 static int KeGetCurrentIrql(void) {return 0;}
 static void KeMemoryBarrier(void) {}
