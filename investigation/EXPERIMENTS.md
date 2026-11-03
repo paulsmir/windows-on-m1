@@ -67995,3 +67995,17 @@ EXP2119 HARDWARE ACTUAL (2026-11-03): **UMD diagnostic trace OFF (c1 CPU/disk hy
 - Pipeline incident: after the ordered restart the wait loop hung 55 min on one guest ssh session established during the reboot (ConnectTimeout bounds only the connect); killed the exact ssh PID 18984, the run continued. Fixed in agx-lab lib.sh (10de20bf, ServerAliveInterval=5/CountMax=3).
 - Expected vs actual: expected a gain if the synchronous trace were on the CPU-bound path; actual none. Verdict rejected: trace I/O is not part of the gap; CPU frequency (P-state 12) and P-core worker were already in place (c1). Remaining c1 candidate (m1n1 IOMFB_QUIET_SUCCESS) is low-expected; not prioritised.
 - Recovery rec2119h.
+
+EXP2120 HARDWARE BEFORE 2026-11-03T10:03:25Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1. Steps: GravityMark D3D12 HD 100k temporal 0, then FHD.
+- WHY THIS HYPOTHESIS:
+  1. EXP2118: prelude pairs crash the firmware within ~30 s (reproducible, same as EXP2100).
+  2. q23 dump analysis (EXP2118): compute ring order is prelude, successor wait-on-3D barrier, successor compute -- consistent with Asahi -- but the prelude and the successor used adjacent raw Windows fences 0x1829/0x182a as firmware stamps, while Asahi advances queue events in 0x100 units; the fix allocates firmware stamps in 0x100 units independently of Windows fences (RED->GREEN, default-off equivalence 262160 bytes identical).
+- ATOMIC CONTRACT: Wom1Depth2Prelude=1 is one indivisible switch for prelude admission + queue-unit stamps (q23 gates them together).
+- WHAT IS STILL UNKNOWN: whether the stamp units were the firmware assertion's cause.
+- Expected PASS: no crash in a full HD and FHD run; scores above the EXP2119 control (5934/4850) if prelude pairs overlap (~83% of candidate pairs; up to ~2 ms/frame).
+- FAIL: 0x116 / firmware crash again (stamp-unit hypothesis rejected), or corruption.
+- Recovery: rec2120h; AGX_RECOVERY_ALLOW_AT_PROXY=1 if the guest resets at proxy; dump first.
+- Hashes: sys b23bb70f192c, UmdArm64 e8dd9e7df3b9, UmdX64 a751d34ba9d4, Umd32 db460ab7f583; manifest db068af58742, hardware-manifest 2f4c48f20021; probe2120.sh acd39103c805 (PROBE_LINT_OK); visible recovery rec2120h 7328265eeab42d02; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1.
+- Recovery rec2120h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2120-prelude-stamps/run2120.sh.
