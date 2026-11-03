@@ -28,6 +28,9 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   global-load trees) after the last CSE. EXP2142: planet PS 6677/255/111 spills -> 6029/231/0 on hardware, +0.9 % HD PERF
   ABBA, FULL 6333, suite 119/0, image correct. Pending: default on after an HD+FHD FULL check. Level 3 (ALU roots) gave
   nothing offline (long-lived ALU values depend on textures). Remaining PS lever: occupancy (231 > 208 halfregs).
+- Memory path measured (MEMBW probe step, EXP2143-2145): stream 58-63 GB/s (M1 peak 68.25); dependent miss over 64 MiB
+  ~1.3 us single, ~5 us with 1024 concurrent misses (TLB-miss queueing, hardware). Memory is not the C4 gap. RC124
+  level 2 is the default since 69464750 (EXP2143: HD FULL 6380 best, FHD +1.9 %). GravityMark uses one DIRECT queue.
 - Next by size: render -> compute boundary idle ~0.4 ms x 4 per frame (EXP2142 a: gap->start 0.37-0.40 ms before every
   compute) -> depth-three job window (analysis/G2-pre-3d-span.md "Depth-three feasibility"); C4 compute 7.6 ms.
 - Next compiler targets: planet PS 428487da register pressure (ceiling 1.57 ms); C4 kernels are memory/latency-bound (trio ~42 M instrs in 1.51 ms) for reasons other than UAT attributes.

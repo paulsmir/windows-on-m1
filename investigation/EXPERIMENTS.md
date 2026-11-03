@@ -68607,3 +68607,8 @@ Same boot as EXP2144 (package 30.0.2144.0). Probe e2145 (MEMBW with 1024- and 32
 - WHY THIS HYPOTHESIS: EXP2144 places the 64 MiB latency step at the TLB reach; with 1024 concurrent misses the per-load figure mixes walk cost and walker queueing. 32 threads (one SIMD group) bound the queueing.
 - Expected: 32-thread 64 MiB latency well below 4.6 us if queueing dominates (hardware-inherent, like macOS); about equal if each walk is slow (then the page-table placement/attributes are the next suspect).
 - Recovery: rec2144h.
+
+EXP2145 HARDWARE ACTUAL (2026-11-03T22:56:12Z): **the 64 MiB latency step is queueing of concurrent TLB misses, not a slow walk: 32 threads 1.27 us vs 1024 threads 5.08 us.**
+- Probe e2145 (MEMBW, live EXP2144 boot): stream 55.45 GB/s; 32-thread chase ns: 16 KiB 163, 64 KiB 364, 256 KiB 537, 4 MiB 1111, 16 MiB 1078, 64 MiB 1273 (1 MiB case negative: noisy minimum); 1024-thread chase: 16 KiB 318 .. 16 MiB 1368, 64 MiB 5077. PASS.
+- Interpretation: a single dependent miss over 64 MiB costs ~1.3 us (DRAM + walk, ~0.2 us above 16 MiB); with 1024 simultaneous misses the walker/miss throughput (~1024 misses per 5 us) dominates. Same 16-KiB 3-level UAT as Asahi/macOS, so this is hardware behaviour, not a defect of our mapping. GravityMark creates one DIRECT queue (one measure-d3d12-queue receipt), so compute/render overlap across its barriers is not available either.
+- Verdict: memory path healthy (bandwidth ~60 GB/s, miss cost normal): closes the memory hypothesis for the C4 gap. Recovery rec2144h.
