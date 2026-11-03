@@ -67969,3 +67969,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1 (all other depth-two classe
 - Hashes: sys 380f962cc294, UmdArm64 efdf988f7f81, UmdX64 b760f1a86ed4, Umd32 b88c0e612c02; manifest 058a7f243e9b, hardware-manifest e39654e34395; probe2118.sh 59f1d3ff415a (PROBE_LINT_OK); visible recovery rec2118h 37c501c7a0c8a5da; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1.
 - Recovery rec2118h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2118-prelude-repro/run2118.sh.
+
+EXP2118 HARDWARE ACTUAL (2026-11-03): **the prelude-pair firmware crash reproduces on the first try: Wom1Depth2Prelude=1 + GravityMark HD -> 0x116 within ~30 s, identical to EXP2100.**
+- Pipeline: GUEST_DOWN_DURING_GRAVITYMARK at poll 6; console: HV NVMe guest reset #1 then PSCI RESET (dump + reboot); no receipts captured before the crash.
+- System event 1001: 0x00000116 (0xffffe089d7bdc2a0, 0xfffff801584a1ec0, 0xffffffffc0000483, 0x3). MEMORY.DMP 886552766 bytes (sha256 prefix da586243b1a9626d0b05cbc5) and minidump 110326-17000-01.dmp (e911b3c1b6d02239b348c47d) in evidence/dump/.
+- Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2118h -> RECOVERY_DONE.
+- Expected vs actual: crash expected and reproduced; the q15 PostResume v4 (both flights' expected TA/3D/compute stamps and event slots) is in the kernel dump. Verdict: prelude pairs alone are sufficient to crash the firmware in GravityMark (confirmed). Next: Codex q23 analyses the dump (the builder PDB matches this package).
