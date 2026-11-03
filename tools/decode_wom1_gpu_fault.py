@@ -10,7 +10,7 @@ Receipts (REG_BINARY under the APPL0002 device key):
                         adds timing and the last 8 resets; v3 adds reset stages;
                         v4 adds before/after quiesce queue retirement samples.
   Wom1FirmwareRecovery  8 dwords (EXP1075/G4-recovery).
-  Wom1GpuFaultPostResume v1/v2 184, v3 264 bytes (rc77/Q13): at the end of each reset
+  Wom1GpuFaultPostResume v1/v2 184, v3 264, v4 312 bytes (rc77/Q13/Q15): at the end of each reset
                         wait, RegionC fault_control, SGX 0x17620/0x17630
                         (Wom1GpuFaultControlRead), FAULT_INFO, the first 64
                         firmware-status bytes, live pending stamps, RegionC
@@ -592,11 +592,11 @@ RUNTIME_RESULTS = {0: 'ok'}
 
 
 def decode_post_resume(data):
-    if len(data) not in (184, 264):
+    if len(data) not in (184, 264, 312):
         raise ValueError('unsupported Wom1GpuFaultPostResume length')
     version, size, fence, wait_ms, fault_control, sgx_read, r17620, r17630 = \
         struct.unpack_from('<8I', data, 0)
-    if (version, size) not in ((1, 184), (2, 184), (3, 264)) or size != len(data):
+    if (version, size) not in ((1, 184), (2, 184), (3, 264), (4, 312)) or size != len(data):
         raise ValueError('unsupported Wom1GpuFaultPostResume version')
     fault_info = struct.unpack_from('<Q', data, 32)[0]
     status = struct.unpack_from('<16I', data, 40)
@@ -626,7 +626,12 @@ def decode_post_resume(data):
                                       if force_mask & b],
                             'at_ms': force_at},
         'poll_failure': decode_poll_failure(poll_failure) if version >= 2 else None,
-        'rtkit': decode_rtkit_snapshot(data[184:]) if version == 3 else None,
+        'queue_stamps': {name: {'expected': struct.unpack_from('<I', data, 264 + i*4)[0],
+                               'event': struct.unpack_from('<I', data, 288 + i*4)[0]}
+                         for i, name in enumerate(('head_ta', 'head_3d', 'head_compute',
+                                                   'next_ta', 'next_3d', 'next_compute'))}
+                        if version >= 4 else None,
+        'rtkit': decode_rtkit_snapshot(data[184:264]) if version >= 3 else None,
         'meaning': 'sequential reset observations; a resume or successful recovery is not implied',
     }
 

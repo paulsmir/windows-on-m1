@@ -192,7 +192,7 @@ int main(void) {
          receipt.Rtkit.CrashlogGpuAddress == runtime.Rtkit.CrashlogGpuAddress);
   assert(receipt.Rtkit.HeadFence == 0x182a && receipt.Rtkit.NextFence == 0x182b &&
          receipt.Rtkit.HeadKind == 2 && receipt.Rtkit.NextKind == 3);
-  assert(receipt.Version == 3u); /* Q13: RTKit/pair evidence must be exported. */
+  assert(receipt.Version == 4u); /* Q13: RTKit/pair evidence must be exported. */
   assert(receipt.Bytes == sizeof(receipt));
   assert(receipt.Fence == 0x4f2u && receipt.WaitMs == 2003u);
   assert(receipt.FaultInfo == ADMISSION_GPU_FAULT_INFO_NOT_READ);

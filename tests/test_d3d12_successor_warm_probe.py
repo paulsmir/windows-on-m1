@@ -82,7 +82,13 @@ int main(void) {
         self.assertIn('lists[3]', call)
         self.assertIn('allocators[3]', call)
         self.assertIn('psos[0], roots[0], rtv2, vertices2, base - 2', call)
-        self.assertIn('if (SUCCEEDED(hr) && (mode == 1 || mode == 3))', body[start-75:start])
+        self.assertIn('if (SUCCEEDED(hr) && !prelude && (mode == 1 || mode == 3))', body[start-85:start])
+        # Prelude modes warm the same blue bindings with their query active.
+        prelude = body.index('q3_warm_prelude(')
+        self.assertIn('if (SUCCEEDED(hr) && prelude)', body[prelude-65:prelude])
+        self.assertIn('mode == 3 ? rtv2 : rtv, mode == 3 ? vertices2 : vertices',
+                      body[prelude:body.index(';', prelude)])
+        self.assertLess(prelude, body.index('/* Initialize measured resources'))
         self.assertLess(body.index('q3_calibrate_compute('), start)
         init = body.index('/* Initialize measured resources')
         self.assertLess(start, init)
