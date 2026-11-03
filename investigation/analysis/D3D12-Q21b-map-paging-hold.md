@@ -1,7 +1,9 @@
 # Q21b: EXP2114 blocks on a new Encoder BO's map paging fence
 
-Continuation of [Q21](D3D12-Q21-indirect-hold.md), from branch commit
-`9ece9f2c1d0578c86b287409f7e841b3165c2358`. This is the task's permitted
+Continuation of [Q21](D3D12-Q21-indirect-hold.md), whose prior report ends at
+`9ece9f2c1d0578c86b287409f7e841b3165c2358`. The follow-up starting snapshot is
+`8e5d9dd05deac8cf885e2f8d4f48151778655139`, after the integration owner's
+pre-existing Q21 CHANGES rows and EXP2114 BEFORE entry. This is the task's permitted
 **required-wait finding**, not a driver fix or a hardware validation. The
 earlier reclamation change remains default off. No additional switch, driver
 change, probe change, package, firmware change or hardware run is introduced.
@@ -18,8 +20,10 @@ Inputs are the supplied `exp2114/tool-q3pc-{std.txt,umd.log}` in
 `.local/handoff/codex/q21-indirect-hold`. `decode-exp2114.py` in that handoff
 reproduces `q21b-timing.json`, including line numbers, hashes, decoded words
 and assertions on ordering. PID10668, TID10660, QPC frequency 24 MHz. The
-reclaim option being enabled is supplied by TASK.md; these logs do not contain
-an independent configuration receipt or package hash.
+reclaim option being enabled is supplied by TASK.md and the EXP2114 BEFORE
+entry; these logs do not contain an independent configuration receipt or
+package hash. The BEFORE entry supplies intended artifact-hash prefixes, not
+a runtime identity check performed by this task.
 
 | Boundary | QPC / decoded value | Evidence |
 |---|---:|---|
