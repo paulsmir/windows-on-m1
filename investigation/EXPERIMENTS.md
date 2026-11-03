@@ -68361,3 +68361,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom
 - Hashes: sys 817e23032151, UmdArm64 8437bbcf7506, UmdX64 b41417dd7297, Umd32 0a1b9eb1bf85; manifest 32a04d65760f, hardware-manifest 98f9be4f11a8; probe2133.sh d106b754366a (PROBE_LINT_OK); visible recovery rec2133h cf3b0a0361d82818; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1.
 - Recovery rec2133h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2133-c2c-fhd/run2133.sh.
+
+EXP2133 HARDWARE ACTUAL (2026-11-03): **compute-on-compute + prelude pairs hold at FHD: 4920 (defaults 4819-4851), image correct.**
+- Expected: suite 119/0; FHD correct; score ~2-3 % above the FHD defaults. Actual: suite 119 PASS / 0 FAIL; GravityMark FHD 100k T0 Score 4920 / 29.4 FPS (+1.5-2 % over 4819-4851), image correct, WER 0, no reset; compute -> prelude start median 0.063 ms (n 14426), compute -> TA idle 3.2 % of GPU time.
+- Verdict: confirmed. Together with EXP2129 (prelude pairs, suite 119/0, HD 6069), EXP2131 (HD 6242) and EXP2132 (suite 119/0): Wom1Depth2Prelude and Wom1Depth2ComputeOnCompute qualify as defaults (opt-out = REG_DWORD 0).
+- Next: default flip in the KMD (one change, both switches: compute-on-compute pairs are prelude pairs, so ComputeOnCompute without Prelude admits nothing new -- ATOMIC), then EXP2134 HD + FHD with no switches.
+- Recovery rec2133h.
