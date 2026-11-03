@@ -67946,3 +67946,12 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1LiveAdditivePaging=1. Steps: only Q3PC (+ K
 - Hashes: sys 0d9e7659d7f1, UmdArm64 8e09259a9288, UmdX64 6a67620d50da, Umd32 52a703dfb94a; manifest 5f5d6e7bd8a5, hardware-manifest 777fedc7e475; probe2117.sh c93dfd7000ac (PROBE_LINT_OK); visible recovery rec2117h ad7e68e572b783f7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1LiveAdditivePaging=1.
 - Recovery rec2117h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2117-live-refusal/run2117.sh.
+
+EXP2117 HARDWARE ACTUAL (2026-11-03): **q22d refusal receipt PASS as a discriminator: every live-path refusal in the Q3PC boot was CpuMutation (virtual FILL of a fresh allocation); in GravityMark steady state live paging waits are rare and do not explain the pre-render launch gaps.**
+- Q3PC: exact outputs, INCONCLUSIVE topology (head 2247 submit 1479738905 / complete 1480252612; next 2248 submit 1480266045 = 0.56 ms after).
+- Wom1G3LivePagingWait after Q3PC: total 325 events, histogram CpuMutation 325 (100%); retained entries: operation 9 (virtual FILL), VA 0x2410000, 64-256 KiB, waits 0.2-0.7 ms, exit idle. The Q3PC-window event was overwritten (309), but the cumulative histogram has no other reason.
+- After GravityMark HD: total 669 (+344 during ~190 s / ~6400 frames = ~0.05 per frame), histogram CpuMutation 573, NativeStaging 96; ring entries physical-worker op 0x105, waits 0.04-0.67 ms.
+- GravityMark HD 5970 / 35.7 FPS, FHD 4819 / 28.8 FPS (EXP2116 5931/4779; EXP2115 5989/4840); no reset, no G4 failure; pipeline rc 0.
+- Expected vs actual: expected a named reason (met: CpuMutation = fill/transfer gate excluding concurrent jobs). Verdict: the Q3PC successor hold is a cold-path fresh-allocation zero-fill held behind the running job; the GravityMark ~0.5 ms pre-render gaps are NOT paging waits (only ~0.05 waits/frame). Live additive paging (q22b) is therefore not a GravityMark lever; it stays default off.
+- Next: GravityMark's remaining scheduling lever is the prelude-pair depth-two crash (EXP2100). Run the known reproducer (GravityMark with Wom1Depth2Prelude=1) once with the q15 PostResume v4 stamps to give the crash analysis both flights' stamps.
+- Recovery rec2117h (last-good m1n1 075e3980).
