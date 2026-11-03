@@ -67827,3 +67827,15 @@ EXP2111 HARDWARE ACTUAL (2026-11-03): **q20 defaults PASS: with no AGX switches 
 - Expected vs actual: all preregistered criteria met (+-1% of EXP2108, suite 119/0). Verdict confirmed: depth two (non-prelude), diagnostics off and submission window 16 are now the validated defaults.
 - Next: run the D3D12 suite with APPLE_AGX_SHARED_LOAD_VECTORIZE=1, then make it the default; Codex k3 on the next C4 compiler win.
 - Recovery rec2111h.
+
+EXP2112 HARDWARE BEFORE 2026-11-03T03:00:24Z:
+Switches: Wom1GpuFaultInfoRead=1 only (defaults). UMD env for the probe: APPLE_AGX_SHARED_LOAD_VECTORIZE=1.
+- WHY THIS HYPOTHESIS: EXP2110 +3% GravityMark with correct images; the option changes compute shaders broadly (any adjacent shared loads), so the full feature suite must stay clean.
+- ATOMIC CONTRACT: none -- single compiler option.
+- WHAT IS STILL UNKNOWN: correctness of vectorized shared loads across the suite's compute shaders.
+- Expected: 119 PASS, 0 FAIL (+ C21E skip), no reset.
+- FAIL: any step that fails only with the option.
+- Recovery: rec2112h.
+- Hashes: sys eb76df873abe, UmdArm64 247df21b0520, UmdX64 f18e1cdec762, Umd32 02fdcf9bf2a2; manifest 8e15e7447da9, hardware-manifest fc9ddd6907ec; probe2112.sh 33a31caefdec (PROBE_LINT_OK); visible recovery rec2112h c843ea23b2d650fd; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2112h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2112-suite-sharedvec/run2112.sh.
