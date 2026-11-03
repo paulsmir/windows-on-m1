@@ -67866,3 +67866,17 @@ EXP2113 HARDWARE ACTUAL (2026-11-03): **q16 Q3PC (counted ExecuteIndirect prelud
 - Expected vs actual: expected a pending prelude pair (reason 5); actual the successor submission is held until the head render completes, with a fixed ~0.7 ms delay -- the signature of a CPU-side wait on the ExecuteIndirect render before the next Execute returns/submits. The same hold would explain the ~0.5 ms launch gap before every GravityMark render (all of them carry ExecuteIndirect preludes; EXP2110 budget ~4.4 ms/frame of launches).
 - Next: Codex q21 finds the UMD/KMD wait between an ExecuteIndirect render and the next submission (trace tool-q3pc-umd.log) and removes it if not required by the D3D12 contract.
 - Recovery rec2113h.
+
+EXP2114 HARDWARE BEFORE 2026-11-03T03:43:57Z:
+Switches: Wom1GpuFaultInfoRead=1 only (defaults). UMD env for both steps: APPLE_AGX_D3D12_RECLAIM_BEFORE_BATCH=1.
+- WHY THIS HYPOTHESIS:
+  1. EXP2113: the compute successor was submitted only 0.68 ms after the ExecuteIndirect render completed; q21 trace: 21.97 ms inside fresh BO residency preparation before the successor's submission.
+  2. q21 source: new batch pools/encoders allocate before completed batches release reusable BOs, forcing fresh allocations and residency work; the fix reclaims completed batches first (RED->GREEN).
+- ATOMIC CONTRACT: single UMD option; both steps measure it (Q3PC = mechanism, GravityMark = effect).
+- WHAT IS STILL UNKNOWN: whether the residency time is the hold (callback vs paging fence) and how much of GravityMark's ~0.5 ms pre-render launch gap it explains.
+- Expected: Q3PC exact outputs with next_submit < head_complete (pending pair now formed; reason 5 is not exported without receipts); GravityMark HD/FHD >= EXP2110 (5949/4803), up to the q21 conditional bound of ~2.1 ms/frame (~+7%).
+- FAIL: wrong output, corruption, crash/reset, or scores below EXP2110 beyond noise.
+- Recovery: rec2114h.
+- Hashes: sys c8495a2dc739, UmdArm64 1fb290d5aa18, UmdX64 e40c59ad1363, Umd32 868d0f0f52d7; manifest 902510a28c6f, hardware-manifest 774bbda61563; probe2114.sh 2e6625c690c3 (PROBE_LINT_OK); visible recovery rec2114h 7491172d32519d10; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2114h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2114-reclaim/run2114.sh.
