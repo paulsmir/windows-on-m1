@@ -68261,3 +68261,15 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom
 - Expected: suite 119/0; live rings with GravityMark jobs; per compute -> prelude-render pair: flags, refusal code and KickTa relative to prev Complete.
 - FAIL: no live ring; firmware fault.
 - Recovery: rec2130h.
+
+EXP2130 HARDWARE BEFORE 2026-11-03T14:19:22Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1JobDiagnostics=1.
+- WHY THIS HYPOTHESIS: (1) EXP2129: prelude pairs cut render -> compute idle 0.351 -> 0.065 ms but compute -> prelude start stayed 0.590 ms; (2) EXP2128 (pairs off): those successors were refused with 5 (prelude unproven) and kicked ~0.2 ms after Complete, then ~0.6 ms to firmware start.
+- ATOMIC CONTRACT: single diagnostic switch added to EXP2129.
+- WHAT IS STILL UNKNOWN: whether compute -> prelude-render pairs are now kicked early (DEPTH2_KICKED, KickTa before prev Complete) and still wait ~0.59 ms (barrier wake in firmware), or are refused with another code.
+- Expected: suite 119/0; live rings with GravityMark jobs; per compute -> prelude-render pair: flags, refusal code and KickTa relative to prev Complete.
+- FAIL: no live ring; firmware fault.
+- Recovery: rec2130h.
+- Hashes: sys c88585d12146, UmdArm64 f17bb77eb2c6, UmdX64 426b9b35a7dd, Umd32 4da086ece981; manifest 9d9f308248f7, hardware-manifest e92c8fb12277; probe2130.sh 038e9d65976a (PROBE_LINT_OK); visible recovery rec2130h 8fb069c4484f2670; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1JobDiagnostics=1.
+- Recovery rec2130h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2130-prelude-ring/run2130.sh.
