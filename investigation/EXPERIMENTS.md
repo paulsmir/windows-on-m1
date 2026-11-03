@@ -68612,3 +68612,16 @@ EXP2145 HARDWARE ACTUAL (2026-11-03T22:56:12Z): **the 64 MiB latency step is que
 - Probe e2145 (MEMBW, live EXP2144 boot): stream 55.45 GB/s; 32-thread chase ns: 16 KiB 163, 64 KiB 364, 256 KiB 537, 4 MiB 1111, 16 MiB 1078, 64 MiB 1273 (1 MiB case negative: noisy minimum); 1024-thread chase: 16 KiB 318 .. 16 MiB 1368, 64 MiB 5077. PASS.
 - Interpretation: a single dependent miss over 64 MiB costs ~1.3 us (DRAM + walk, ~0.2 us above 16 MiB); with 1024 simultaneous misses the walker/miss throughput (~1024 misses per 5 us) dominates. Same 16-KiB 3-level UAT as Asahi/macOS, so this is hardware behaviour, not a defect of our mapping. GravityMark creates one DIRECT queue (one measure-d3d12-queue receipt), so compute/render overlap across its barriers is not available either.
 - Verdict: memory path healthy (bandwidth ~60 GB/s, miss cost normal): closes the memory hypothesis for the C4 gap. Recovery rec2144h.
+
+EXP2146 HARDWARE BEFORE 2026-11-03T23:45:52Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Present=1. Steps: D3D12 suite; GravityMark D3D12 HD 100k -temporal 0: a FULL (score + image), b PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2131 timeline: every frame one job outside GravityMark's 8-job cycle (the KMD present compute job) sits between R7 and the next C0, and the R7 -> C0 span costs median 1.72 ms / mean 1.89 ms per frame (~7 %); (2) a non-paired boundary costs ~0.4 ms (EXP2131 gap->start), and refusal 56 keeps the present job out of the window; (3) its pairs map onto hardware-accepted barrier classes: R7 -> present = compute-on-3D (EXP2088), present -> C0 = compute-on-compute (EXP2131).
+- WINDOWS CONTRACT: unchanged (present packet completion order and fence semantics are the KMD's; only the firmware start of the present job moves earlier behind R7).
+- AGX/ASAHI CONTRACT: the present job is a compute job (AppleAgxRenderSharedMemoryBuildCompute) with a leading compute Barrier on R7's 3D stamp; its sidecar job words use the second set (SECOND_SIDECAR, rc98); one present arena per process -> no present/present pair.
+- WHAT IS STILL UNKNOWN: whether the present packet reaches the KMD while R7 runs (VidSch), and firmware acceptance of a present job as a pair successor.
+- Expected: suite 119/0; R7 -> C0 span median drops by up to ~0.4 ms; HD FULL above EXP2143 6380 by ~1-2 %; correct image; no GPU fault.
+- FAIL: GPU fault/firmware crash/hang, wrong image -> rec2146h, switch stays off.
+- Recovery: rec2146h.
+- Hashes: sys cdc2faea2dff, UmdArm64 03fd82fa0aca, UmdX64 6e4a21708a1f, Umd32 6ecec7fb64ac; manifest 643a34b4b70e, hardware-manifest 76e0481490a3; probe2146.sh aba6c71b7e0b (PROBE_LINT_OK); visible recovery rec2146h 4363b8a3940fd84a; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Present=1.
+- Recovery rec2146h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2146-present/run2146.sh.
