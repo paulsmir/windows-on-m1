@@ -68388,3 +68388,10 @@ Switches: Wom1GpuFaultInfoRead=1 only.
 - Hashes: sys 360c4be72265, UmdArm64 e932c8eab6f8, UmdX64 2753956bcdbd, Umd32 ab02ff8cbfc3; manifest 5ffdfa3adb16, hardware-manifest eda1192d2ecc; probe2134.sh 8c895aeac571 (PROBE_LINT_OK); visible recovery rec2134h 66d3af969c84f21f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2134h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2134-d2-default/run2134.sh.
+
+EXP2134 HARDWARE ACTUAL (2026-11-03): **default flip validated: switch-free package gives HD 6257 (best) and FHD 4862.**
+- Expected: suite 119/0; HD ~6240 (>= 6150); FHD ~4920 (>= 4880); images correct; FAIL below 6100 / 4860. Actual: suite 119 PASS / 0 FAIL; HD 100k T0 Score 6257 / 37.4 FPS (EXP2131 with switches 6242); FHD 100k T0 Score 4862 / 29.1 FPS (EXP2133 4920; old defaults 4819-4851), images correct, WER 0, G4_SUBMIT_FAILURE none, PIPELINE_RC 0.
+- The defaults are in effect without switches: compute -> prelude start median 0.063 ms (HD) / 0.064 ms (FHD), as with the switches. FHD (second run of the boot, after HD) has 17 % of render -> compute gaps > 1 ms (HD 2 %), i.e. external interference/thermals in that run; it misses the 4880 expectation by 0.4 % but stays above the old defaults.
+- Verdict: confirmed (HD), FHD within noise of the old defaults -> default kept. Change CHG-dbd498a8 validated by EXP2134.
+- Next: depth-three window (G2 plan) for the remaining ~0.4 ms render -> compute boundary after each pair.
+- Recovery rec2134h.
