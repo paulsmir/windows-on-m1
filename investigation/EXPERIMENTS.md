@@ -67672,3 +67672,10 @@ Switches: EXP2102 mask (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAh
 - Hashes: sys da52a244f233, UmdArm64 2fbdddfe45ed, UmdX64 4a73a0baaf96, Umd32 22acbd49c464; manifest 4d83176519fe, hardware-manifest 932c83982925; probe2104.sh 586aad6cd3ed (PROBE_LINT_OK); visible recovery rec2104h af59292bbc71a4c4; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1RcReceipt=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2104h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2104-q3pc-gate/run2104.sh.
+
+EXP2104 HARDWARE ACTUAL (2026-11-03): **Q3PC control INCONCLUSIVE: exact outputs, but the probe did not produce the EXP2100 topology (no prelude-unproven decision for its PID).**
+- Q3PC: PASS bad=0 (pid 5652), required_pair RP/C barrier 3, prelude=statistics, warm passes 2, ia_vertices 4/4, ia_primitives 2/2; pair QPC window 0.28 s.
+- Retained decisions for the PID: only reason 66 (no pending successor). Device histogram: admitted 1565 (all ta_on_3d, DWM), 66 20248, 55 81, 4 72, 68 4, 58 1; no reason 5 at all. No reset, G4 failure none.
+- Expected vs actual: expected a retained reason-5 record (prelude-render -> compute candidate); actual none, so either the pipeline-statistics path does not create a KMD prelude render or the compute successor was not pending. Verdict INCONCLUSIVE; the gate is not opened on this probe.
+- Next: Codex q16 explains from source + this run's UMD trace why no prelude pair formed; GravityMark (EXP2100) remains the only known reproducer.
+- Recovery rec2104h.
