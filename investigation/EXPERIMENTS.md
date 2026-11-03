@@ -68513,3 +68513,9 @@ Switches: Wom1GpuFaultInfoRead=1. Steps: suite; GravityMark D3D12 HD 100k -tempo
 - Hashes: sys 77f5fb47dad8, UmdArm64 2923b6e7e91b, UmdX64 b047418bb1dd, Umd32 94cf6f38c22e; manifest 16e8c80e738a, hardware-manifest a2f1e9c92692; probe2138.sh 12154fec165e (PROBE_LINT_OK); visible recovery rec2138h 0cde0aecb6ce7686; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2138h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2138-nullps/run2138.sh.
+
+EXP2139 HARDWARE BEFORE 2026-11-03T20:06:57Z:
+Same boot as EXP2138 (package 30.0.2138.0, HEAD 5b1910f1 source, m1n1 075e3980). One arm: GravityMark D3D12 HD 100k -temporal 0 FAST with APPLE_AGX_D3D12_SHADER_DUMP_DIR=C:\Users\pavel\agx-capture-2139 and SHADER_DUMP_ALL=1; fetch the s4 captures.
+- WHY THIS HYPOTHESIS: (1) EXP2138 arm b (APPLE_AGX_D3D12_NULL_PS=71405b8756e2cea9) shows the same heaviest fragment stats as arm a (6677 instrs / 255 GPRs / 111 spills), so the diagnostic did not match; (2) getenv in the DXIL path works on hardware (APPLE_AGX_DXIL_CLIP_CULL=0, rc108); (3) the 71405b87 capture came from HD 50k (EXP2070), and GravityMark compiles shaders at run time, so the 100k shader bytes (hash) may differ.
+- Expected: the heaviest s4 capture at HD 100k has a hash other than 71405b8756e2cea9 (confirms the mismatch); diagnostic only, score not comparable.
+- FAIL: hang/device removal -> rec2138h. Recovery: rec2138h.
