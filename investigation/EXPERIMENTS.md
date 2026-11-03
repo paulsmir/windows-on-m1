@@ -68076,3 +68076,15 @@ EXP2123 HARDWARE ACTUAL (2026-11-03): **W1 v1 (APPLE_AGX_WAIT_GLOBAL=1, e2620021
 - Root cause (offline): AGX control flow is execution-masked; the block laid out before a block also runs into it (then -> else with no CFG edge), so pending async writes of the layout-previous block were not in the merged entry state -> missing write-after-write/read-after-write waits. Fixed in 759e43e6 (merge the layout predecessor too); offline waits bd595520 28->17, f405bd5f 6->3, a6e5a25c 25->21, traversal 120->109.
 - Verdict: W1 v1 rejected; v2 to be validated (suite first).
 - Recovery rec2123h.
+
+EXP2124 HARDWARE BEFORE 2026-11-03T11:34:08Z:
+Switches: Wom1GpuFaultInfoRead=1 only. Steps: full default D3D12 suite with APPLE_AGX_WAIT_GLOBAL=1; GravityMark HD arm a with W1, arm b control; MESA_SHADER_CACHE_DISABLE=true in both arms; gm-run timeout 420 s (EXP2123's uncached control hit 300 s); poll window 90 x 5 s.
+- WHY THIS HYPOTHESIS: EXP2123 W1 v1 failed C19A-D and removed the device; root cause: execution-masked control flow makes the layout-previous block fall through without a CFG edge. v2 merges that block's exit state (offline waits still reduced: trio 28/6/25 -> 17/3/21, traversal 120 -> 109).
+- ATOMIC CONTRACT: single compiler option.
+- WHAT IS STILL UNKNOWN: whether any other hazard class is missed, and the speed effect.
+- Expected: suite 119 PASS / 0 FAIL; GravityMark arm a completes with correct image and scores >= arm b.
+- FAIL: any suite FAIL, device removal, corruption, reset.
+- Recovery: rec2124h.
+- Hashes: sys 5226640066c5, UmdArm64 0628c60f66bc, UmdX64 0f897c4f68eb, Umd32 68e1b089b81e; manifest 5004847a1c53, hardware-manifest bf80e6413cbb; probe2124.sh 02afa95f41ae (PROBE_LINT_OK); visible recovery rec2124h 5aa732da7e8f979a; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2124h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2124-wait-global2/run2124.sh.
