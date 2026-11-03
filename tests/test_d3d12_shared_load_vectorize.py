@@ -55,8 +55,10 @@ class SharedLoadVectorize(unittest.TestCase):
         self.assertEqual(len(self.loads(new)), 2, 'adjacent shared loads remain scalar')
         self.assertEqual(self.load_words(self.loads(new)), 8, 'all eight dwords must be read')
         self.assertNotEqual(on, off)
-        for value in (None, '', '2', '10', 'true'):
-            self.assertEqual(self.compile(value)[0], off, value)
+        # Default on (EXP2110/2112): only exactly "0" opts out.
+        for value in (None, '', '1', '2', '10', 'true'):
+            self.assertEqual(self.compile(value)[0], on, value)
+        self.assertEqual(self.compile('0')[0], off)
         for instructions in (old, new):
             stores = [i for i, (op, _) in enumerate(instructions) if op == 'lstore']
             barriers = [i for i, (op, _) in enumerate(instructions) if op == 'barrier']

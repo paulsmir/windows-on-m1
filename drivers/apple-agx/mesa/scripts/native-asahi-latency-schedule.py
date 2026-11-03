@@ -622,8 +622,10 @@ agx_win32_shared_load_vectorize(void)
 {
    static int enabled = -1;
    if (enabled < 0) {
+      /* Default on since EXP2110/2112 (+3% GravityMark, suite 119/0);
+       * exactly "0" restores scalar shared loads. */
       const char *env = getenv("APPLE_AGX_SHARED_LOAD_VECTORIZE");
-      enabled = env && env[0] == '1' && !env[1];
+      enabled = !(env && env[0] == '0' && !env[1]);
    }
    return enabled != 0;
 }
