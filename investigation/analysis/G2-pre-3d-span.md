@@ -61,3 +61,14 @@ Questions to settle from Asahi/m1n1 source first:
 3. If the stamp is not a safe release point, a third slot copy (depth-three object sets) instead of early retirement.
 WINDOWS CONTRACT: dxgkrnl fences may be signalled per job as soon as the job is complete (DXGK_INTERRUPT_DMA_COMPLETED order
 preserved). WHAT IS STILL UNKNOWN: items 1-2.
+
+### Answer to question 1 (Asahi source)
+Asahi queue/mod.rs:281-330: the notifier threshold is raised per job at run(); back-to-back jobs on one queue "are signalled
+together" (case 3). U4 is inherent firmware behaviour, not our defect. Asahi does not suffer from it because drm_sched hands
+the firmware every runnable job (no depth limit) and each job has its own freshly allocated firmware objects; it never reuses
+a job's objects before that job's (possibly deferred) event. Consequence: early retirement on the stamp would go beyond the
+Asahi contract (question 2 stays open and risky). The contract-preserving fix is a deeper window: a third copy of the
+per-job objects (13-19, 28-35) and a third compute-sidecar job-word set, so N+2 can be kicked behind N+1 while N's deferred
+event is still pending. Next: measure the free space below each slotted object in its 16 KiB page (slot_delta layout,
+apple_agx_render_shared_memory.c) and the sidecar layout, then design ADMISSION_JOB_WINDOW_DEPTH 3 with RED/GREEN window
+tests.
