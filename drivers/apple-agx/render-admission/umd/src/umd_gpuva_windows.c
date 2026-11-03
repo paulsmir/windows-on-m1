@@ -856,6 +856,19 @@ static int wait_object(ADMISSION_UMD_DEVICE *device,
       !device->KernelCallbacks->pfnWaitForSynchronizationObjectFromCpuCb)
     return 0;
 #if defined(_WIN64)
+  /* Q18: CreatePagingQueue supplies a read-only monitored-fence mapping.
+   * Observing completion satisfies the same dependency as the callback;
+   * Resident alone does not. Never modify this page or the render cache.
+   * Keep the callback on x86 (a plain 64-bit load can tear), on removal,
+   * and whenever paging is still pending. */
+  if (device->PagingWaitCompleted && object == device->PagingSyncObject &&
+      device->PagingFenceAddress && !device->DrawTerminal &&
+      (((ULONG_PTR)device->PagingFenceAddress & 7u) == 0u)) {
+    uint64_t completed = (uint64_t)ReadAcquire64(
+        (const volatile LONG64 *)device->PagingFenceAddress);
+    if (completed != UINT64_MAX && completed >= fence)
+      return 1;
+  }
   /* The monitored fence has a read-only CPU mapping. Acquire its completed
    * value without entering Windows when the condition is already satisfied.
    * Keep runtime waits on x86, where a plain 64-bit load can tear. */

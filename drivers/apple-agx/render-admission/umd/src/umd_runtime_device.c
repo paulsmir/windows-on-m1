@@ -444,6 +444,14 @@ AdmissionUmdRuntimeErrorCallback(const D3D10DDIARG_CREATEDEVICE *Args,
  * to the D3D12 command queue and is never destroyed here: BorrowedContext). */
 static HRESULT AdmissionUmdRuntimeDeviceAttach(ADMISSION_UMD_DEVICE *device) {
   HRESULT result;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  {
+    char option[2] = {0};
+    device->PagingWaitCompleted =
+        GetEnvironmentVariableA("APPLE_AGX_PAGING_WAIT_COMPLETED", option,
+                                sizeof(option)) == 1u && option[0] == '1';
+  }
+#endif
   {
     D3DDDICB_CREATEPAGINGQUEUE pagingQueue;
     ZeroMemory(&pagingQueue, sizeof(pagingQueue));
