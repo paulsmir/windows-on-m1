@@ -36,3 +36,8 @@ Smallest checkpoint: receipt-only KMD patch setting update_ts as Asahi does for 
 then check that TA start advances per job and lies between the previous job's end and TA end.
 WHAT IS STILL UNKNOWN: whether update_ts is the field the firmware uses for the start write.
 Recovery: the normal visible profile; no score change is expected (diagnostic only).
+
+## Result (EXP2126)
+Zeroing the TA start/end stamp objects per build revives TA starts (the firmware writes the start only into a zero slot).
+GravityMark HD: compute -> TA idle median 0.695 ms per boundary, 8.2 % of GPU time (~2.5 ms/frame), although the render
+was submitted ~1.8 ms before the compute ended. Next: kick-QPC split (EXP2127).

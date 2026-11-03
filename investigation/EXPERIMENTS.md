@@ -68155,3 +68155,10 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1. Steps as EXP2125.
 - Hashes: sys 1522181026fc, UmdArm64 696f8f5712f5, UmdX64 fe47d37babd7, Umd32 494ed5d36681; manifest 9aeb67fc90a4, hardware-manifest a41cb8a34e8b; probe2126.sh fc25b498dd42 (PROBE_LINT_OK); visible recovery rec2126h aabf100e7fa959bb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1.
 - Recovery rec2126h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2126-ta-zero/run2126.sh.
+
+EXP2126 HARDWARE ACTUAL (2026-11-03): **TA start stamps revived (zero-slot hypothesis confirmed); GravityMark loses ~8% of GPU time idle before TA after compute, with the render already submitted.**
+- Expected: suite 119/0; score within noise; TaStart distinct per render job. Actual: suite 119 PASS / 0 FAIL; GravityMark HD 100k T0 Score 5969 / 35.7 FPS (EXP2124/2125: 5994-5999, -0.4 %, within ~1 % noise), image correct, WER 0, G4_SUBMIT_FAILURE none, PIPELINE_RC 0. TaStart distinct: suite 375/375, GravityMark 24170/24170 (EXP2125: 2).
+- Measured (gm2126a-umd.log, scratchpad tastart.py / talate.py, firmware 24 MHz clock): TA duration median 0.174 ms (p90 1.79); compute -> TA idle n=21245 median 0.695 ms (p10 0.251, p90 0.779), total 15.1 s of 183.6 s GPU timeline = 8.2 % (~2.5 ms/frame at 35.7 FPS); render -> TA idle n=252, 2.2 %. 21202 of those renders were submitted (UMD/KMD SubmitQpc on the firmware clock) a median 1.83 ms BEFORE the preceding compute ended, yet still waited 0.695 ms: the idle is on the KMD -> m1n1 -> firmware start path, not late CPU submission. Contrast G1: render -> compute idle median 0.013 ms.
+- Verdict: confirmed. Answers G2: most of the ~3.3 ms "kick + prelude" span is a ~0.7 ms start latency at each compute -> render boundary.
+- Next: EXP2127 = same + Wom1JobDiagnostics=1 (kick QPC per job) to split the 0.7 ms into completion detection, KMD kick and firmware start.
+- Recovery rec2126h.
