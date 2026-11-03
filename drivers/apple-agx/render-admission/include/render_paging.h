@@ -31,7 +31,12 @@ typedef struct _ADMISSION_PAGING_MARKER {
 
 typedef struct _ADMISSION_PAGING_RECORD {
   ADMISSION_PAGING_MARKER Header;
-  APPLE_AGX_PHYSICAL_PAGING_PLAN Plan;
+  /* Same-size union: virtual records do not execute the physical plan.
+   * Retain input addresses for diagnostics without changing packet capacity. */
+  union {
+    APPLE_AGX_PHYSICAL_PAGING_PLAN Plan;
+    struct { unsigned long long SourceVa, DestinationVa; } Virtual;
+  };
   void *SystemMdl;
   unsigned int Kind;
   unsigned int SourceSegment;

@@ -355,7 +355,9 @@ static NTSTATUS AdmissionPagingAcquireMutation(ADMISSION_CONTEXT *Context,
                                                BOOLEAN *Held) {
   ADMISSION_G3_STATE *state = (ADMISSION_G3_STATE *)Context->GpuvaG3State;
   ULONGLONG deadline;
-  ULONG i;
+  ULONG i, iterations = 0u;
+  ADMISSION_G3_LIVE_WAIT_ENTRY entry = {0};
+  NTSTATUS result;
   LARGE_INTEGER delay;
   *Held = FALSE;
   if (!Context->LiveAdditivePaging || Context->PagingActiveNode == 0u)
@@ -374,12 +376,47 @@ static NTSTATUS AdmissionPagingAcquireMutation(ADMISSION_CONTEXT *Context,
       ADMISSION_G3_PROCESS *p = CONTAINING_RECORD(link, ADMISSION_G3_PROCESS, Link);
       if (p->Graph.JobInFlight || p->Graph.LeaseToken) { busy = TRUE; break; }
     }
-    if (!busy) { *Held = TRUE; return STATUS_SUCCESS; }
+    if (!busy) { *Held = TRUE; result = STATUS_SUCCESS; break; }
+    if (iterations == 0u) {
+      ADMISSION_G3_PROCESS *p = CONTAINING_RECORD(link, ADMISSION_G3_PROCESS, Link);
+      LARGE_INTEGER frequency;
+      entry.Qpc = (ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
+      entry.QpcFrequency = (ULONGLONG)frequency.QuadPart;
+      entry.ProcessId = p->Graph.ProcessId;
+      entry.ActiveProcessId = state->ActiveProcess ? state->ActiveProcess->Graph.ProcessId : 0ULL;
+      entry.ActiveFence = state->ActiveFence;
+      entry.CompletedFence = state->LastCompletedFence;
+      entry.JobState = (p->Graph.JobInFlight ? 1u : 0u) |
+          (p->Graph.LeaseToken ? 2u : 0u) | (p->Graph.JobNested ? 4u : 0u);
+    }
     ExReleaseFastMutex(&state->Lock);
-    if (KeQueryInterruptTime() >= deadline) return STATUS_DEVICE_BUSY;
+    if (KeQueryInterruptTime() >= deadline) { result = STATUS_DEVICE_BUSY; break; }
     delay.QuadPart = -10000LL;
+    ++iterations;
     (void)KeWaitForSingleObject(&state->JobEvent, Executive, KernelMode, FALSE, &delay);
   }
+  if (iterations != 0u) {
+    entry.EndQpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    entry.Iterations = iterations;
+    entry.Exit = *Held ? AdmissionLiveWaitIdle : AdmissionLiveWaitTimeout;
+    entry.Reason = entry.LastReason = AdmissionLiveWaitCpuMutation;
+    entry.Index = ~0ULL;
+    /* One event per destructive encoded record held by this packet gate.
+     * Monitored fences alone bypass it and are not mutation events. */
+    for (i = 0u; i < Context->PagingRecordCount; ++i) {
+      const ADMISSION_PAGING_RECORD *r = &Context->PagingRecords[i];
+      if (r->Kind == AdmissionPagingMonitoredFence) continue;
+      entry.Operation = r->Kind == AdmissionPagingPhysical ? 0x100u + r->Plan.Kind :
+          r->Kind == AdmissionPagingVirtualFill ? DXGK_OPERATION_VIRTUAL_FILL :
+          DXGK_OPERATION_VIRTUAL_TRANSFER;
+      entry.AddressKind = r->Kind == AdmissionPagingPhysical ? 2u : 1u;
+      entry.Va = r->Kind == AdmissionPagingPhysical ? r->Plan.LocalOffset : r->Virtual.DestinationVa;
+      entry.SourceVa = r->Kind == AdmissionPagingPhysical ? r->Plan.SecondLocalOffset : r->Virtual.SourceVa;
+      entry.RangeBytes = r->Kind == AdmissionPagingPhysical ? r->Plan.Bytes : r->Bytes;
+      AdmissionRecordG3LiveWait(Context, &entry);
+    }
+  }
+  return result;
 }
 #endif
 

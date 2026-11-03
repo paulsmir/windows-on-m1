@@ -32,6 +32,7 @@ int main(void) {
   APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier,0};
   DXGK_PTE leaf[8]={0}, parent={0}, zeros[4]={0};
   unsigned i, before;
+  ADMISSION_G3_LIVE_WAIT_ENTRY detail={0};
   ULONGLONG leaf_broker=0, root_broker=0;
   assert(a&&state&&p);
   assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
@@ -71,9 +72,9 @@ int main(void) {
   DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE parent_update={0};
   parent_update.PageTableLevel=1;parent_update.NumPageTableEntries=2;
   parent_update.pPageTableEntries=parents;
-  assert(!AdmissionG3LiveUpdate(p,local_ipa+0x10000,&parent_update,a));
+  assert(AdmissionG3LiveUpdateReason(p,local_ipa+0x10000,&parent_update,a,&detail)!=AdmissionLiveWaitEligible);
   parents[1].PageTableAddress=20;
-  assert(!AdmissionG3LiveUpdate(p,local_ipa+0x14000,&parent_update,a));
+  assert(AdmissionG3LiveUpdateReason(p,local_ipa+0x14000,&parent_update,a,&detail)!=AdmissionLiveWaitEligible);
   /* A completely new table and parent edge are additive too. */
   assert(map_update(a,p,0,0xc000,0,4,zeros)==0);
   assert(replay_delay_calls==before && p->Graph.JobNested);
@@ -87,10 +88,10 @@ int main(void) {
   DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE update={0};
   update.NumPageTableEntries=8;update.pPageTableEntries=mixed;update.StartIndex=8;
   update.FirstPteVirtualAddress=0x8000;
-  assert(!AdmissionG3LiveUpdate(p,local_ipa+0x8000,&update,a));
+  assert(AdmissionG3LiveUpdateReason(p,local_ipa+0x8000,&update,a,&detail)!=AdmissionLiveWaitEligible);
   update.NumPageTableEntries=1;update.pPageTableEntries=leaf;update.StartIndex=9;
   update.FirstPteVirtualAddress=0x9000;
-  assert(!AdmissionG3LiveUpdate(p,local_ipa+0x8000,&update,a));
+  assert(AdmissionG3LiveUpdateReason(p,local_ipa+0x8000,&update,a,&detail)!=AdmissionLiveWaitEligible);
   /* Fault isolation intentionally exits the quarantined child without freeing
    * retained backing. Parent checks child assertions and cleans its own graph. */
   pid_t child=fork();assert(child>=0);

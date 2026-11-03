@@ -192,20 +192,7 @@ typedef struct { UINT Operation, DmaSize, DmaBufferPrivateDataSize,
     DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL TransferVirtual;
     DXGK_BUILDPAGINGBUFFER_SIGNALMONITOREDFENCE SignalMonitoredFence; };
 } DXGKARG_BUILDPAGINGBUFFER;
-enum { AdmissionPagingPhysical=0, AdmissionPagingVirtualFill=1,
-       AdmissionPagingVirtualTransfer=2, AdmissionPagingMonitoredFence=3 };
-typedef struct { UINT Magic,Version,RecordBytes,Reserved; } ADMISSION_PAGING_MARKER;
-enum { AppleAgxPhysicalPagingUpload=1, AppleAgxPhysicalPagingDownload=2,
-       AppleAgxPhysicalPagingLocalCopy=3, AppleAgxPhysicalPagingFill=4,
-       AppleAgxPhysicalPagingDiscard=5 };
-typedef struct { UINT Kind; ULONGLONG LocalOffset,SecondLocalOffset,
-  SystemOffset,Bytes; UINT FillPattern; } APPLE_AGX_PHYSICAL_PAGING_PLAN;
-typedef struct { ADMISSION_PAGING_MARKER Header; APPLE_AGX_PHYSICAL_PAGING_PLAN Plan;
-  void *SystemMdl; UINT Kind,SourceSegment,DestinationSegment,PatternOffset;
-  ULONGLONG SourceIpa,DestinationIpa; UINT Bytes,FillPattern;
-  ULONGLONG FenceValue;
-  ULONGLONG Seq;
-} ADMISSION_PAGING_RECORD;
+#include "../drivers/apple-agx/render-admission/include/render_paging.h"
 #define ADMISSION_PAGING_MAGIC 0x504d4152u
 #define ADMISSION_PAGING_VERSION 1u
 #define ADMISSION_PAGING_LOCAL_SEGMENT 2u
@@ -846,3 +833,5 @@ static NTSTATUS AdmissionScanoutQueryTimeline(ADMISSION_CONTEXT *c, APPLE_AGX_VS
 #define ADMISSION_JOB_FLAG_PRIVATE_SCENE 0x2u
 #define ADMISSION_JOB_FLAG_BEGIN_JOB 0x4u
 static void AdmissionJobTimingNoteWindows(ADMISSION_CONTEXT *c, ULONG f, ULONG flags) { (void)c; (void)f; (void)flags; }
+
+#include "g4_live_wait_capture.h"

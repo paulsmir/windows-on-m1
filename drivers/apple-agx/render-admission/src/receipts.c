@@ -2072,7 +2072,8 @@ enum {
   AdmissionPagingReceiptPoolDemand = 128u,
   AdmissionPagingReceiptOmittedLeaves = 512u,
   AdmissionPagingReceiptBrokerFailures = 256u,
-  AdmissionPagingReceiptNativePteRefusal = 2048u
+  AdmissionPagingReceiptNativePteRefusal = 2048u,
+  AdmissionPagingReceiptLiveWait = 4096u
 };
 typedef struct _ADMISSION_PAGING_RECEIPTS {
   KSPIN_LOCK Lock;
@@ -2090,6 +2091,10 @@ typedef struct _ADMISSION_PAGING_RECEIPTS {
   ADMISSION_G3_BROKER_FAILURES Broker;
   ADMISSION_OMITTED_LEAVES Omitted;
   ADMISSION_NATIVE_PTE_REFUSAL NativePteRefusal;
+  ADMISSION_G3_LIVE_WAIT_RECEIPT LiveWait;
+  /* Only the serial worker writes this snapshot. Keep the 3912-byte buffer
+   * off the kernel stack; publishers touch LiveWait under Lock only. */
+  ADMISSION_G3_LIVE_WAIT_RECEIPT LiveWaitSnapshot;
 } ADMISSION_PAGING_RECEIPTS;
 
 static IO_WORKITEM_ROUTINE AdmissionPagingReceiptWorker;
@@ -2124,6 +2129,16 @@ static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
     else if (Kind == AdmissionPagingReceiptNativePteRefusal)
       RtlCopyMemory(&receipts->NativePteRefusal, Data,
                     sizeof(receipts->NativePteRefusal));
+    else if (Kind == AdmissionPagingReceiptLiveWait) {
+      const ADMISSION_G3_LIVE_WAIT_ENTRY *entry = (const ADMISSION_G3_LIVE_WAIT_ENTRY *)Data;
+      ADMISSION_G3_LIVE_WAIT_RECEIPT *r = &receipts->LiveWait;
+      ULONG slot = (ULONG)(r->Total % ADMISSION_LIVE_WAIT_ENTRIES);
+      r->Version = 1u; r->Bytes = sizeof(*r);
+      if (r->Total >= ADMISSION_LIVE_WAIT_ENTRIES) ++r->Overwritten;
+      r->Entries[slot] = *entry;
+      r->Entries[slot].Sequence = ++r->Total;
+      if (entry->Reason < AdmissionLiveWaitReasonCount) ++r->Histogram[entry->Reason];
+    }
     receipts->Dirty |= Kind;
     if (InterlockedCompareExchange(&receipts->Queued, 1, 0) == 0) {
       KeClearEvent(&receipts->Idle);
@@ -2174,6 +2189,9 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     KIRQL oldIrql;
     KeAcquireSpinLock(&receipts->Lock, &oldIrql);
     dirty = receipts->Dirty;
+    if (dirty & AdmissionPagingReceiptLiveWait)
+      RtlCopyMemory(&receipts->LiveWaitSnapshot, &receipts->LiveWait,
+                    sizeof(receipts->LiveWaitSnapshot));
     receipts->Dirty = 0u;
     RtlCopyMemory(&flush, &receipts->Flush, sizeof(flush));
     RtlCopyMemory(&failure, &receipts->Failure, sizeof(failure));
@@ -2193,6 +2211,9 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
       return;
     }
     KeReleaseSpinLock(&receipts->Lock, oldIrql);
+    if (dirty & AdmissionPagingReceiptLiveWait)
+      AdmissionPagingReceiptWrite(context, L"Wom1G3LivePagingWait",
+          &receipts->LiveWaitSnapshot, sizeof(receipts->LiveWaitSnapshot), FALSE);
     if (dirty & AdmissionPagingReceiptDdiStatus)
       AdmissionWriteDdiStatuses(context);
     if (dirty & AdmissionPagingReceiptOmittedLeaves)
@@ -2386,6 +2407,12 @@ _Use_decl_annotations_ void AdmissionRecordG3Poison(
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
   WriteBinary(key, L"Wom1G3Poison", value, sizeof(value));
   ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordG3LiveWait(
+    ADMISSION_CONTEXT *Context, const ADMISSION_G3_LIVE_WAIT_ENTRY *Entry) {
+  if (Context == NULL || Entry == NULL || Entry->Iterations == 0ULL) return;
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptLiveWait, Entry);
 }
 
 _Use_decl_annotations_ void AdmissionRecordG3PagingWait(

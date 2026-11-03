@@ -497,6 +497,8 @@ typedef struct _ADMISSION_ALLOCATION_LIFE {
 } ADMISSION_ALLOCATION_LIFE;
 /* EXP987 receipt-only: R155/R165 BuildPagingBuffer waits for a process's
  * in-flight job. Snapshot of the condition when the wait began. */
+#include "render_live_paging_wait.h"
+
 typedef struct _ADMISSION_G3_PAGING_WAIT_RECEIPT {
   ULONG Version, Bytes, Waits, Timeouts;
   ULONGLONG TotalIterations, TotalTicks, QpcFrequency;
@@ -1391,6 +1393,8 @@ void AdmissionRecordG4PreemptOverlap(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG3LiveWait(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_G3_LIVE_WAIT_ENTRY *Entry);
 VOID AdmissionPagingProfileAdd(_Inout_ volatile LONG64 *Triplet, LONGLONG Ticks);
 /* Caller at PASSIVE_LEVEL outside the paging path; Client may be NULL. */
 void AdmissionRecordPagingProfile(_In_opt_ ADMISSION_CONTEXT *Context,
