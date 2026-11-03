@@ -68054,3 +68054,17 @@ EXP2122 HARDWARE ACTUAL (2026-11-03): **per-kernel split on the current code: sh
 - Expected vs actual: traversal below 2.04 ms (met). Verdict: confirms the vectorization gain is in the traversal kernel; next compiler targets by measured time: trio 39e0399a/93891b99/7bc49152 (1.51 ms; k3: 59 waits vs Apple's 28 for the same algorithm), the leading kernels (1.34 ms), the indirect atomic kernels (~1.5 ms), radix (0.79 ms).
 - Recovery rec2122h.
 - EXP2122 b (HD control, no split, defaults incl. shared-load vectorization, trace on): Score 6052, 36.2 FPS (best HD so far; EXP2110 5949, EXP2119 5934, EXP2120 5973 -- spread ~2%).
+
+EXP2123 HARDWARE BEFORE 2026-11-03T11:16:59Z:
+Switches: Wom1GpuFaultInfoRead=1 only (defaults). Steps: full default D3D12 probe suite with APPLE_AGX_WAIT_GLOBAL=1; GravityMark HD 100k temporal 0 arm a with APPLE_AGX_WAIT_GLOBAL=1, arm b HD control without; MESA_SHADER_CACHE_DISABLE=true in both GravityMark arms so arm b cannot reuse arm a's binaries.
+- WHY THIS HYPOTHESIS:
+  1. G1/EXP2122: the frame is GPU-execution bound; the BVH trio (1.51 ms) and the traversal kernel (1.42 ms) are latency bound; k3: the trio issues 59 waits vs Apple's 28 for the same algorithm.
+  2. Mesa's agx_insert_waits_local drains every scoreboard slot at each non-exit block end ("This should be optimized"); W1 carries slot state across blocks (fixed point, local fallback): offline waits bd595520 28->15, f405bd5f 6->3, a6e5a25c 25->15 (Apple 14/4/10), traversal 120->82, a8260e42 144->126, all other instructions unchanged.
+- ATOMIC CONTRACT: single compiler option.
+- WHAT IS STILL UNKNOWN: hardware correctness of the cross-block hazard tracking and the stall reduction it buys.
+- Expected: suite 119 PASS / 0 FAIL; arm a above arm b (gain if waits stall the BVH/traversal kernels; upper bound ~1-2 ms/frame); correct images.
+- FAIL: any suite FAIL, corruption, GPU fault/reset, or arm a below arm b beyond noise.
+- Recovery: rec2123h.
+- Hashes: sys 0c5d2a6325d2, UmdArm64 4418e052fd68, UmdX64 5df367c95659, Umd32 580e76a09dd8; manifest b5d9cab34062, hardware-manifest dca36abbd09d; probe2123.sh c49e034fc4dc (PROBE_LINT_OK); visible recovery rec2123h f0446c8d42461c83; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2123h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2123-wait-global/run2123.sh.
