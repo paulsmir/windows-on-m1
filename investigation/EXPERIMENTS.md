@@ -68563,3 +68563,17 @@ EXP2142 HARDWARE ACTUAL (2026-11-03T22:08:31Z): **RC124 level 2 applies on hardw
 - Interpretation: removing 111 spills saves ~0.2 ms of the planet PS's 1.57 ms (EXP2140); the rest of its cost is arithmetic at 384-thread occupancy (231 halfregs > 208).
 - Verdict: confirmed (small). Next: make level 2 the default with an HD+FHD FULL validation; occupancy (<= 208 halfregs -> 512 threads) is the remaining lever in this shader.
 - Recovery rec2142h.
+
+EXP2143 HARDWARE BEFORE 2026-11-03T22:22:04Z:
+Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite (defaults); probe "only MEMBW"; GravityMark D3D12 100k -temporal 0: a HD FULL default (score + image); FHD PERF b default, c APPLE_AGX_REMAT_INPUTS=0, d default; MESA_SHADER_CACHE_DISABLE=true.
+- ATOMIC CONTRACT: none -- separate steps: the default flip changes only pixel-shader compilation (GravityMark arms, suite); MEMBW is a compute-only diagnostic with its own AGX_D3D12_MEMBW line.
+- WHY THIS HYPOTHESIS (default flip): EXP2142 level 2: +0.9 % HD PERF ABBA, FULL 6333, suite 119/0, image correct; FHD not yet measured (user rule: FHD must not regress).
+- WHY THIS HYPOTHESIS (MEMBW): (1) the C4 compute kernels (7.6 ms/frame) run ~40-50x below their ALU bound and are statically within 1.0-1.6x of Apple's instruction counts for the same roles (K3); (2) a memory-attribute change (EXP2137) did not move them; (3) no GPU memory-throughput or latency measurement exists on this stack, so a systemic memory-path deficit (vs the M1's 68.25 GB/s peak) is neither confirmed nor excluded.
+- WINDOWS CONTRACT: unchanged (MEMBW uses root SRV/UAV/constants and standard Dispatch).
+- WHAT IS STILL UNKNOWN: achieved GPU stream bandwidth and dependent-load latency on our UAT/UMA mapping; FHD effect of RC124.
+- Expected: suite 119/0; MEMBW PASS with stream >= ~50 GB/s if the memory path is healthy (much lower -> systemic memory deficit, the next target); HD FULL ~6300 with correct image; FHD b/d vs c within noise or faster.
+- FAIL: suite FAIL, wrong image, FHD default below control beyond noise (revert default), GPU fault/hang -> recovery rec2143h.
+- Recovery: rec2143h.
+- Hashes: sys f41df810832b, UmdArm64 844b9e6f10cc, UmdX64 572826488a63, Umd32 ec91489eaff5; manifest 3809b0f02053, hardware-manifest 7364799a43da; probe2143.sh fe0ec8545a70 (PROBE_LINT_OK); visible recovery rec2143h 3a175beb380524f2; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2143h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2143-membw/run2143.sh.
