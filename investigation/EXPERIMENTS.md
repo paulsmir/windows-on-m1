@@ -68095,3 +68095,15 @@ EXP2124 HARDWARE ACTUAL (2026-11-03): **W1 v2 (APPLE_AGX_WAIT_GLOBAL=1, 759e43e6
 - Verdict: correctness confirmed; performance hypothesis rejected. W1 stays opt-in (APPLE_AGX_WAIT_GLOBAL=1), default unchanged.
 - Next: the per-kernel cost is not wait count; measure issue/ALU and memory cost of the BVH trio and leading kernels offline (agx_shader_cost) before another compiler change.
 - Recovery rec2124h.
+
+EXP2125 HARDWARE BEFORE 2026-11-03T13:03:13Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1. Steps: full default D3D12 suite; GravityMark HD 100k -temporal 0 (MESA_SHADER_CACHE_DISABLE=true, timeout 420 s, as EXP2124 arm b).
+- WHY THIS HYPOTHESIS: (1) G2/K2: ~3.3 ms/frame of the render span before 3D is unattributed (kick + prelude + possible compute->TA idle) and cannot be measured: in EXP2124 gm2124b-umd.log 24k render jobs carry only 2 distinct non-zero TaStart values (stale slot copies) while TaEnd changes every job; (2) the captured template's start/end Timestamp ops both leave update_ts = 0xdeadbeef, while Asahi points them at &timestamp_pointers.start_addr / end_addr.
+- WINDOWS CONTRACT: none (receipt only, no DDI change).
+- AGX/ASAHI CONTRACT: Timestamp op (0x19, flag bit 31 = start) fields command_time, ts_pointers, update_ts, work_queue, user_ts_pointers, unk_ts (fw/microseq.rs); start op before WaitForIdle(Vertex), end op after it (queue/render.rs:1036-1070).
+- TRANSLATION: build_active_job copies the relocated ts_pointers into update_ts (start) and +8 (end) of active object 17 (ops at 0x18c/0x1cc); default off unchanged (unit test).
+- ATOMIC CONTRACT: single device switch, TA pair only (3D pair unchanged).
+- WHAT IS STILL UNKNOWN: whether the G13 V13_5 firmware uses update_ts for the start write (hardware-only).
+- Expected: suite 119/0; GravityMark completes with a correct image, score within noise of EXP2124 (5994-5999); measure-gpu-stages TaStart distinct for (nearly) every render job and previous-job end <= TaStart <= TaEnd.
+- FAIL: firmware fault/reset, any suite FAIL or score drop beyond noise (patch harmful); TaStart still stale (hypothesis rejected, no harm).
+- Recovery: rec2125h.
