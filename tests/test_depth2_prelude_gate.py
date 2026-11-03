@@ -67,7 +67,7 @@ int main(void) {
 #define TRUE 1
 static unsigned long long AdmissionJobQpc(void) { return 10; }
 int main(void) {
- struct { ADMISSION_RC_DECISIONS RcDecisions; unsigned RcDecisionPid,RcExportPending; }
+ struct { ADMISSION_RC_DECISIONS RcDecisions; unsigned RcDecisionPid,RcExportPending,Depth2Capabilities; }
  storage={0}, *runtime=&storage;
  runtime->RcDecisionPid=42;
  AdmissionRcDecisionsInitialize(&runtime->RcDecisions);
