@@ -105,7 +105,7 @@ int main(void) {
 #include <string.h>
 #include "apple_agx_gpuva_broker_v5_client.h"
 typedef int NTSTATUS, BOOLEAN;
-typedef struct { void *GpuvaG3State; int SysmemGpuMap,LiveRequested; unsigned LiveAdditivePaging; struct {unsigned PagingNode;} ObjectAdapter; } ADMISSION_CONTEXT;
+typedef struct { void *GpuvaG3State; int SysmemGpuMap,LiveRequested; unsigned LiveAdditivePaging; unsigned GpuPrivateCached; struct {unsigned PagingNode;} ObjectAdapter; } ADMISSION_CONTEXT;
 typedef struct { ADMISSION_CONTEXT *Adapter; int Lock,JobEvent,Processes;
  APPLE_AGX_GPUVA_V5_CLIENT Client; } ADMISSION_G3_STATE;
 #define PASSIVE_LEVEL 0
@@ -123,6 +123,8 @@ static int irql, allocated, freed, queries, attached, supported,live_supported,l
 static int KeGetCurrentIrql(void) {return irql;}
 static int AdmissionLiveAdditivePagingRequested(ADMISSION_CONTEXT *c) {assert(irql==0);return c->LiveRequested;}
 static int AdmissionSysmemGpuMapRequested(ADMISSION_CONTEXT *c) {assert(irql==0);return c->SysmemGpuMap;}
+/* GC: never requested in this fixture; the && keeps the caps query away. */
+static int AdmissionGpuPrivateCachedRequested(ADMISSION_CONTEXT *c) {assert(irql==0);(void)c;return 0;}
 static void *ExAllocatePool2(int flags,size_t bytes,int tag) {(void)flags;(void)tag;++allocated;return malloc(bytes);}
 static void ExFreePoolWithTag(void *p,int tag) {(void)tag;++freed;free(p);}
 static void ExInitializeFastMutex(int *p) {*p=1;}
@@ -132,6 +134,8 @@ static int AdmissionGpuvaV5ClientOpen(ADMISSION_CONTEXT *c,APPLE_AGX_GPUVA_V5_CL
 bool AppleAgxGpuvaV5ClientCall(APPLE_AGX_GPUVA_V5_CLIENT *c,const AGX_GPUVA_V5_REQUEST *q,AGX_GPUVA_V5_RESPONSE *r)
 {(void)c;assert(q->Command==AGX_GPUVA_V5_CREATE);r->Status=2;r->Epoch=7;return true;}
 bool AppleAgxGpuvaV5ClientHasSysmem(APPLE_AGX_GPUVA_V5_CLIENT *c) {(void)c;++queries;return supported;}
+/* GC: must not be queried while Wom1GpuPrivateCached is not requested. */
+bool AppleAgxGpuvaV5ClientHasPrivateCached(APPLE_AGX_GPUVA_V5_CLIENT *c) {(void)c;assert(0);return false;}
 bool AppleAgxGpuvaV5ClientHasLiveAdditive(APPLE_AGX_GPUVA_V5_CLIENT *c) {(void)c;++live_queries;return live_supported;}
 static void AdmissionG3AttachMailbox(ADMISSION_G3_STATE *s) {(void)s;++attached;}
 static void AdmissionG3RecordLiveAdditiveState(ADMISSION_CONTEXT *a,int requested,

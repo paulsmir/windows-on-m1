@@ -729,6 +729,21 @@ static VOID AdmissionG3NativeStagingRebase(PVOID binding,
 }
 #endif
 
+/* GC (opt-in, Wom1GpuPrivateCached): a GPU-only allocation the CPU never
+ * maps and the display never scans out; hAllocation is the KMD's own pointer
+ * (validated as in the shape receipt above) or the leaf stays coherent. */
+static BOOLEAN AdmissionG3LeafGpuPrivate(
+    const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update) {
+  const ULONGLONG allocation = (ULONGLONG)(ULONG_PTR)update->hAllocation;
+  const ADMISSION_ALLOCATION_HANDLE *handle =
+      (const ADMISSION_ALLOCATION_HANDLE *)(ULONG_PTR)allocation;
+  return handle != NULL &&
+         (allocation & (ULONGLONG)(sizeof(ULONG_PTR) - 1u)) == 0ULL &&
+         handle->Object.Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC &&
+         !handle->Object.Description.CpuVisible && !handle->Presentation &&
+         !handle->WrittenPrimary ? TRUE : FALSE;
+}
+
 static NTSTATUS AdmissionG3UpdateLeaf(
     ADMISSION_G3_PROCESS *process, ULONGLONG table_ipa,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
@@ -743,6 +758,7 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   UINT limit = update->Flags.Use64KBPages ? 512u : 8192u;
   ULONGLONG step = (ULONGLONG)scale * 0x1000ULL;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
+  const bool gpu_private = AdmissionG3LeafGpuPrivate(update) ? true : false;
 #ifdef APPLE_AGX_NATIVE_STAGING
   /* pSystemMem is a separate runtime input: the private token alone cannot
    * prove that VidMm mapped the authenticated native bytes. */
@@ -902,12 +918,13 @@ static NTSTATUS AdmissionG3UpdateLeaf(
 #endif
     bool unavailable = false;
     BOOLEAN refused = FALSE;
-    BOOLEAN updated = AppleAgxGpuvaG3GraphTryLeafBacking(&process->Graph, table_ipa,
+    BOOLEAN updated = AppleAgxGpuvaG3GraphTryLeafBackingEx(&process->Graph, table_ipa,
         first_group + i, complete ? ipa : 0ULL,
         complete && (flags & APPLE_AGX_GPUVA_G3_WRITE),
         ADMISSION_G3_FRAME_SEGMENT(segment) ? AppleAgxGpuvaG3SystemBacking :
                                               AppleAgxGpuvaG3LocalBacking,
-        &unavailable);
+        &unavailable,
+        !ADMISSION_G3_FRAME_SEGMENT(segment) && gpu_private);
     if (!updated && unavailable) {
       /* VidMm's logical mapping may be CPU-only under the retained broker
        * contract. Retire any previous GPU leaf before acknowledging it. */

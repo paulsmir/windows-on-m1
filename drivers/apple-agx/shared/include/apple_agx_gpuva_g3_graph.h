@@ -44,6 +44,9 @@ typedef struct _APPLE_AGX_GPUVA_G3_NODE {
   unsigned int Index, Level, References, Writable;
   unsigned int SystemRetired;
   unsigned int Retained; /* backing kept with no references (EXP1125) */
+  /* GC (opt-in): the leaf was published GPU-private cached (UPDATE_LEAF
+   * Flags bit AGX_GPUVA_V5_LEAF_PRIVATE_CACHED). */
+  unsigned int PrivateCached;
   APPLE_AGX_GPUVA_G3_FRAME *Frame;
   APPLE_AGX_GPUVA_G3_BACKING_KIND Kind;
   struct _APPLE_AGX_GPUVA_G3_NODE *Prev, *HashNext;
@@ -84,6 +87,9 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   APPLE_AGX_GPUVA_G3_NODE *RootTable;
   unsigned int LastStatus, Created, Uncertain, JobInFlight, Slot;
   unsigned int LiveAdditive;
+  /* GC (opt-in, device value Wom1GpuPrivateCached = 1 with a broker that
+   * advertises the capability): publish GPU-only allocations cached. */
+  unsigned int PrivateCached;
   APPLE_AGX_GPUVA_G3_NODE *TableHint;
   /* EXP1053 receipt-only: last AttachPrivate refusal (0 none, 1 state,
    * 2 job in flight, 3 lease, 4 VA, 5 middle table, 6 leaf table,
@@ -134,6 +140,11 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long TableIpa, unsigned int Index,
     unsigned long long GuestIpa, bool Writable,
     APPLE_AGX_GPUVA_G3_BACKING_KIND Kind, bool *Unavailable);
+/* GC: as TryLeafBacking; gpu_private marks an allocation the CPU never maps. */
+bool AppleAgxGpuvaG3GraphTryLeafBackingEx(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long TableIpa, unsigned int Index,
+    unsigned long long GuestIpa, bool Writable,
+    APPLE_AGX_GPUVA_G3_BACKING_KIND Kind, bool *Unavailable, bool gpu_private);
 bool AppleAgxGpuvaG3MappingAcquire(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long GuestIpa);
 void AppleAgxGpuvaG3MappingRelease(APPLE_AGX_GPUVA_G3_GRAPH *,

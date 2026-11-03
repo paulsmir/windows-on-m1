@@ -13,7 +13,7 @@ typedef struct {const wchar_t *text;} UNICODE_STRING;
 typedef struct {ULONG TitleIndex,Type,DataLength;UCHAR Data[1];}
     KEY_VALUE_PARTIAL_INFORMATION,*PKEY_VALUE_PARTIAL_INFORMATION;
 typedef struct {void *PhysicalDeviceObject,*GpuvaG3State;
-    ULONG LiveAdditivePaging;struct {ULONG PagingNode;} ObjectAdapter;}
+    ULONG LiveAdditivePaging;ULONG GpuPrivateCached;struct {ULONG PagingNode;} ObjectAdapter;}
     ADMISSION_CONTEXT;
 typedef struct {ADMISSION_CONTEXT *Adapter;int Lock,JobEvent,Processes;
     APPLE_AGX_GPUVA_V5_CLIENT Client;} ADMISSION_G3_STATE;
@@ -50,6 +50,7 @@ static NTSTATUS ZwQueryValueKey(HANDLE key,UNICODE_STRING *name,int which,
     PKEY_VALUE_PARTIAL_INFORMATION v,size_t cap,ULONG *bytes) {
     assert(key && which==2 && cap>=16);
     if (!wcscmp(name->text,L"Wom1SysmemGpuMap")) return -1;
+    if (!wcscmp(name->text,L"Wom1GpuPrivateCached")) return -1; /* GC switch absent */
     assert(!wcscmp(name->text,L"Wom1LiveAdditivePaging"));
     v->Type=registry_type;v->DataLength=registry_length;
     memcpy(v->Data,&registry_value,4);*bytes=16;return query_result;

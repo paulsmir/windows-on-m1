@@ -80,6 +80,8 @@ static struct hv_agx_gpuva_v5_wire gpuva_v5_wire;
             source += function(platform, 'gpuva_execute') + '\n#undef gpuva_v5\n'
             kmd = (RENDER / 'src/gpuva_g3_windows.c').read_text()
             names = ['AdmissionSysmemGpuMapRequested', 'AdmissionLiveAdditivePagingRequested']
+            if 'static BOOLEAN AdmissionGpuPrivateCachedRequested(' in kmd:
+                names.append('AdmissionGpuPrivateCachedRequested')  # GC experiment switch
             if 'static VOID AdmissionG3RecordLiveAdditiveState(' in kmd:
                 names.append('AdmissionG3RecordLiveAdditiveState')
             names.append('AdmissionGpuvaG3Start')

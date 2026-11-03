@@ -413,6 +413,32 @@ static BOOLEAN AdmissionLiveAdditivePagingRequested(ADMISSION_CONTEXT *Context) 
   return enabled;
 }
 
+/* GC (experiment): device value Wom1GpuPrivateCached = 1. */
+static BOOLEAN AdmissionGpuPrivateCachedRequested(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1GpuPrivateCached");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
 /* PASSIVE_LEVEL startup only, before process creation. Accepted means the
  * capability enabled adapter topology; each process still negotiates later.
  * QWORDs: version, bytes, requested, queried, answered, status (UINT_MAX if
@@ -480,6 +506,11 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
       AppleAgxGpuvaV5ClientHasLiveAdditive(&state->Client) ? 1u : 0u;
   context->ObjectAdapter.PagingNode = context->LiveAdditivePaging;
   AdmissionG3RecordLiveAdditiveState(context, liveRequested, &state->Client);
+  /* GC (experiment, measurement only): GPU-only allocations as cached
+   * leaves; the broker refuses the leaf bit unless it advertises it. */
+  context->GpuPrivateCached =
+      AdmissionGpuPrivateCachedRequested(context) &&
+      AppleAgxGpuvaV5ClientHasPrivateCached(&state->Client) ? 1u : 0u;
   AdmissionG3AttachMailbox(state);
   context->GpuvaG3State = state;
   return STATUS_SUCCESS;
@@ -2934,6 +2965,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     status = STATUS_DEVICE_HARDWARE_ERROR;
     goto Fail;
   }
+  process->Graph.PrivateCached = adapter->GpuPrivateCached ? 1u : 0u;
   if (adapter->LiveAdditivePaging &&
       !AppleAgxGpuvaG3GraphNegotiateLive(&process->Graph, true)) {
     /* A topology already exposed to VidMm cannot change per process. */

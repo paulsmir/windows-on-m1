@@ -514,7 +514,17 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned long long table_ipa, unsigned int index,
     unsigned long long guest_ipa, bool writable,
     APPLE_AGX_GPUVA_G3_BACKING_KIND kind, bool *unavailable) {
+  return AppleAgxGpuvaG3GraphTryLeafBackingEx(graph, table_ipa, index,
+      guest_ipa, writable, kind, unavailable, false);
+}
+
+bool AppleAgxGpuvaG3GraphTryLeafBackingEx(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    unsigned long long table_ipa, unsigned int index,
+    unsigned long long guest_ipa, bool writable,
+    APPLE_AGX_GPUVA_G3_BACKING_KIND kind, bool *unavailable, bool gpu_private) {
   AGX_GPUVA_V5_REQUEST request = {0};
+  /* GC: cached only when the graph opted in and the leaf maps memory. */
+  const unsigned cached = graph && graph->PrivateCached && gpu_private && guest_ipa ? 1u : 0u;
   APPLE_AGX_GPUVA_G3_NODE *leaf, *new_leaf = 0, *backing = 0;
   APPLE_AGX_GPUVA_G3_NODE *old_backing = 0, *table;
   bool new_backing = false;
@@ -532,7 +542,8 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   if (graph->JobInFlight && (!graph->LiveAdditive || leaf || !guest_ipa))
     return false;
   if (guest_ipa && leaf && leaf->AuxIpa == guest_ipa &&
-      leaf->Writable == (unsigned)writable && leaf->Kind == kind) return true;
+      leaf->Writable == (unsigned)writable && leaf->Kind == kind &&
+      leaf->PrivateCached == cached) return true;
   if (!guest_ipa && !leaf) return true;
   native_invalidate(graph, table_ipa, index);
   if (guest_ipa) {
@@ -605,7 +616,7 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   request.Command = AGX_GPUVA_V5_UPDATE_LEAF;
   request.TableIpa = table_ipa;
   request.Index = index;
-  request.Flags = 15u;
+  request.Flags = 15u | (cached ? AGX_GPUVA_V5_LEAF_PRIVATE_CACHED : 0u);
   if (guest_ipa) {
     request.AllocationGeneration = backing->Generation;
     request.ValidMask = 15u;
@@ -638,6 +649,7 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       leaf->Kind = kind;
       leaf->Generation = backing->Generation;
       leaf->Writable = writable ? 1u : 0u;
+      leaf->PrivateCached = cached;
       if (old_backing != backing &&
           !revoke_unused_backing(graph, old_backing)) return false;
     } else {
@@ -647,6 +659,7 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       new_leaf->Generation = backing->Generation;
       new_leaf->Index = index;
       new_leaf->Writable = writable ? 1u : 0u;
+      new_leaf->PrivateCached = cached;
       push_node(&graph->Leaves, new_leaf);
       table->Slots[index] = new_leaf;
       reuse_backing(graph, backing);

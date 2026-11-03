@@ -123,6 +123,13 @@ static int AppleAgxGpuvaG3GraphTryLeafBacking(GRAPH *g, ULONGLONG table,
   if (fail_publication) {g->LastStatus=17;return 0;}
   return AppleAgxGpuvaG3GraphUpdateLeafBacking(g,table,index,ipa,write,kind);
 }
+/* GC: the fixture keeps every leaf coherent (no GPU-private cached leaf). */
+static int AppleAgxGpuvaG3GraphTryLeafBackingEx(GRAPH *g, ULONGLONG table,
+    UINT index, ULONGLONG ipa, bool write, UINT kind, bool *unavailable, bool gpu_private) {
+  (void)gpu_private;
+  return AppleAgxGpuvaG3GraphTryLeafBacking(g,table,index,ipa,write,kind,unavailable);
+}
+static BOOLEAN AdmissionG3LeafGpuPrivate(const void *update) {(void)update;return FALSE;}
 static NTSTATUS AdmissionG3RejectPaging(ADMISSION_G3_PAGING_FAILURE *f,
     UINT branch, UINT index, const DXGK_PTE *pte, ULONGLONG ipa, NTSTATUS status) {
   (void)f;(void)branch;(void)index;(void)pte;(void)ipa; return status;

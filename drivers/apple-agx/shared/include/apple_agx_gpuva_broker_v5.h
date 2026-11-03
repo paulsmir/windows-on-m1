@@ -27,6 +27,8 @@
  * broker authenticates empty native descriptors and acknowledges table
  * visibility plus ASID invalidation before reporting success. */
 #define AGX_GPUVA_V5_CAP_LIVE_ADDITIVE 2ULL
+/* GC (experiment): UPDATE_LEAF accepts AGX_GPUVA_V5_LEAF_PRIVATE_CACHED. */
+#define AGX_GPUVA_V5_CAP_PRIVATE_CACHED 4ULL
 #define AGX_GPUVA_V5_LIVE_ABI 1u
 
 enum {
@@ -57,6 +59,13 @@ enum {
      * All other payload fields are zero. Negotiation requires no live jobs. */
     AGX_GPUVA_V5_NEGOTIATE_LIVE,
 };
+
+/* GC (experiment, m1n1 AGX_GPUVA_PRIVATE_CACHED builds only): UPDATE_LEAF
+ * Flags bit 4 asks for a GPU-private cached (MEMATTR 0) leaf instead of the
+ * shared/coherent one; the low four bits stay the update mask. A broker
+ * without the capability rejects the bit (Flags > 15). Unmaps do not issue
+ * the Asahi FwCtl cache invalidation: measurement only, not production. */
+#define AGX_GPUVA_V5_LEAF_PRIVATE_CACHED 0x10u
 
 typedef struct _AGX_GPUVA_V5_REQUEST {
     unsigned int Version, Bytes, Command, Flags;

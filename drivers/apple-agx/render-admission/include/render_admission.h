@@ -853,6 +853,8 @@ typedef struct _ADMISSION_CONTEXT {
   /* Q22b: independent external node1, local scheduler node0. */
   APPLE_AGX_SCHEDULER PagingScheduler;
   ULONG LiveAdditivePaging, PagingActiveNode;
+  /* GC (experiment): Wom1GpuPrivateCached = 1 and the broker capability. */
+  ULONG GpuPrivateCached;
   volatile LONG PagingAdapterResetting;
   ULONG PagingNodeHead, PagingNodeCount, PagingNodeDispatchedFence;
   ADMISSION_CPU_PACKET PagingNodeQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
