@@ -68349,3 +68349,15 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom
 - Expected: suite 119/0; FHD correct image; score above the FHD defaults (~4800-4850) by ~2-3 %.
 - FAIL: crash/reset/corruption; FHD not above defaults.
 - Recovery: rec2133h.
+
+EXP2133 HARDWARE BEFORE 2026-11-03T14:59:29Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1.
+- WHY THIS HYPOTHESIS: EXP2131 HD 6242 (+2.9 % vs EXP2129, ~+4 % vs defaults) with compute -> prelude start 0.59 -> 0.063 ms; the removed idle is resolution-independent, so FHD should gain about the same absolute frame time (~1 ms of ~35 ms).
+- ATOMIC CONTRACT: single change vs EXP2131 = resolution.
+- WHAT IS STILL UNKNOWN: FHD stability of the class and its gain.
+- Expected: suite 119/0; FHD correct image; score above the FHD defaults (~4800-4850) by ~2-3 %.
+- FAIL: crash/reset/corruption; FHD not above defaults.
+- Recovery: rec2133h.
+- Hashes: sys 817e23032151, UmdArm64 8437bbcf7506, UmdX64 b41417dd7297, Umd32 0a1b9eb1bf85; manifest 32a04d65760f, hardware-manifest 98f9be4f11a8; probe2133.sh d106b754366a (PROBE_LINT_OK); visible recovery rec2133h cf3b0a0361d82818; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1.
+- Recovery rec2133h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2133-c2c-fhd/run2133.sh.
