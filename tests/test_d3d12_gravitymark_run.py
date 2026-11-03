@@ -65,5 +65,37 @@ class GravityMarkRun(unittest.TestCase):
         self.assertIn('DimensionsSpecified=$sized', source)
 
 
+    def test_full_mode_keeps_the_official_benchmark_command(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        PERF/FAST are short closed runs of the same benchmark; FULL must stay
+        the official one (EXP2134: HD 6257 / FHD 4862 baseline): default mode
+        FULL, the GravityMark argument list unchanged, the timeout replaced
+        only for PERF/FAST and only when -Timeout is not passed explicitly.
+        """
+        source = RUNNER.read_text()
+        self.assertIn("[ValidateSet('FULL','PERF','FAST')][string]$Mode='FULL'", source)
+        self.assertIn("$a=@('-temporal',\"$Temporal\",'-fps','1','-info','1','-benchmark','1',"
+                      "'-close','1','-count','1',\"-$Api\",'-asteroids',\"$Asteroids\",'-times',"
+                      "\"$d\\$Tag-times.txt\",'-image',\"$d\\$Tag-image.png\")", source)
+        self.assertIn("if($Mode -ne 'FULL' -and -not $PSBoundParameters.ContainsKey('Timeout'))"
+                      "{$Timeout=$modeTimeout[$Mode]}", source)
+        self.assertRegex(source, r'\$modeTimeout=@\{FULL=\$Timeout;PERF=100;FAST=55\}')
+        self.assertEqual(source.count('$a+='), 2, 'modes must not add GravityMark arguments')
+
+    def test_short_modes_report_a_normal_close_as_success(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        A PERF/FAST run ends at its timeout by design; the result file must
+        say so machine-readably instead of looking like a hang, while FULL
+        still requires a normal benchmark exit.
+        """
+        source = RUNNER.read_text()
+        self.assertIn("$ok = if($Mode -eq 'FULL'){ $state -like 'EXIT *' } else "
+                      "{ $state -eq 'TIMEOUT CLOSED' -or $state -like 'EXIT *' }", source)
+        self.assertIn('-mode.json', source)
+        self.assertIn('Mode=$Mode;Timeout=$Timeout', source)
+
+
 if __name__ == '__main__':
     unittest.main()
