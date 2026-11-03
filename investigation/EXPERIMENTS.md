@@ -68320,3 +68320,15 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom
 - Expected: suite 119/0; live rings with GravityMark jobs; refusal histogram for unpaired render -> compute successors.
 - FAIL: no ring; firmware fault.
 - Recovery: rec2132h.
+
+EXP2132 HARDWARE BEFORE 2026-11-03T14:45:53Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1 Wom1JobDiagnostics=1.
+- WHY THIS HYPOTHESIS: EXP2131: compute -> prelude start 0.59 -> 0.063 ms but render -> compute start gap 0.065 -> 0.398 ms (81 % in 0.3-0.5 ms); with every successor paired, a third job may be refused (window not {N} 50, needs idle 61, same sidecar set 62).
+- ATOMIC CONTRACT: single diagnostic switch on top of EXP2131.
+- WHAT IS STILL UNKNOWN: the refusal code of render -> compute successors in the EXP2131 configuration.
+- Expected: suite 119/0; live rings with GravityMark jobs; refusal histogram for unpaired render -> compute successors.
+- FAIL: no ring; firmware fault.
+- Recovery: rec2132h.
+- Hashes: sys 6b64aa3c2ab0, UmdArm64 4f3937cfe36f, UmdX64 cd8096839b50, Umd32 ce22db474d1d; manifest b025442246fe, hardware-manifest 7b8ddc2061cd; probe2132.sh 716bab3f72b3 (PROBE_LINT_OK); visible recovery rec2132h ae8f52e2adaef0c5; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1 Wom1JobDiagnostics=1.
+- Recovery rec2132h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2132-c2c-ring/run2132.sh.
