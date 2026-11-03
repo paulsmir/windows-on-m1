@@ -145,6 +145,15 @@ int main(void) {
  o->Flights[1].Fence=100;o->Flights[1].SidecarSet=1;
  o->Flights[1].EventCount=5;o->Flights[1].PreviousThreshold=4;
  o->Flights[1].Visible=o->Flights[1].Published=1;
+ r.Depth2Drill.Mode=1;r.Depth2Drill.Queue.HeadFence=99;r.Depth2Drill.Queue.NextFence=100;
+ AdmissionRcSampleWindows(&r,ADMISSION_RC_REPORTED,99,0);
+ assert(r.RcExportPending && r.Depth2Drill.ReportedCount==1 && !reads);
+ r.RcExportPending=0;
+ AdmissionRcSampleWindows(&r,ADMISSION_RC_REPORTED,101,0);
+ assert(!r.RcExportPending && !reads); /* unrelated later job */
+ AdmissionRcSampleWindows(&r,ADMISSION_RC_REPORTED,100,0);
+ assert(r.RcExportPending && r.Depth2Drill.ReportedCount==2 && !reads);
+ r.RcExportPending=0; r.Depth2Drill.Mode=0;
  AdmissionRcSampleWindows(&r,ADMISSION_RC_POLL,0,0);assert(!reads && !r.RcReceipt.Count);
  r.RcReceiptEnabled=1;AdmissionRcSampleWindows(&r,ADMISSION_RC_POLL,0,0);
  assert(reads==13 && r.RcReceipt.Count==1 && r.RcExportPending);

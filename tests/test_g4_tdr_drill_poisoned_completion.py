@@ -247,6 +247,7 @@ typedef struct {
   BOOLEAN AheadG4Native, AheadFinishedDropped;
   /* rc102 depth-2 window (none kicked in this replay) */
   unsigned Depth2KickedFence, Depth2BatchedFence, Depth2LastReported;
+  unsigned JobDiagnostics; /* default-off: recovery must not depend on receipts */
   ADMISSION_JOB_WINDOW_RECEIPT Depth2Receipt;
   APPLE_AGX_EXP208_RELOCATION_OBJECT QueueObjects[30];
   BOOLEAN BackendStarted, RecoverChannelOnStall;

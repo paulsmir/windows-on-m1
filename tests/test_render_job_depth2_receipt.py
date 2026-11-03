@@ -81,7 +81,7 @@ class Depth2Wiring(unittest.TestCase):
     def test_decision_and_sampler_are_gated_by_the_switch(self):
         text = WORKER.read_text()
         prebind = section(text, "static VOID AdmissionJobAheadPrebindWindows(")
-        self.assertRegex(prebind, r"if \(bound && runtime->JobDepth2 && !runtime->Depth2Noted\)\s*\n\s*"
+        self.assertRegex(prebind, r"if \(bound && runtime->JobDiagnostics && runtime->JobDepth2 && !runtime->Depth2Noted\)\s*\n\s*"
                                   r"AdmissionJobWindowNoteWindows\(adapter, runtime, fence\);")
         release = section(text, "static VOID AdmissionJobAheadReleaseWindows(")
         at = release.index("AdmissionJobWindowDescribeLocked(")
@@ -91,7 +91,7 @@ class Depth2Wiring(unittest.TestCase):
         worker = section(text, "static VOID AdmissionPlatformWorker(\n    _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context) {")
         self.assertEqual(worker.count("AdmissionJobDepth2SampleWindows("), 1)
         at = worker.index("AdmissionJobDepth2SampleWindows(")
-        self.assertIn("if (runtime->JobDepth2)", worker[at - 80:at])
+        self.assertIn("if (runtime->JobDiagnostics && runtime->JobDepth2)", worker[at - 90:at])
         # inside the poll loop, and the per-job state starts clean
         self.assertLess(worker.index("while (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted"), at)
         reset = worker.index("runtime->Depth2Sampled = 0u;")

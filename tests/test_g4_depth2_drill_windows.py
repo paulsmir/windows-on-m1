@@ -149,16 +149,19 @@ int main(void){ADMISSION_CONTEXT a={(void *)2};
 typedef void VOID;typedef void *HANDLE;typedef uint32_t ULONG;
 typedef const wchar_t *UNICODE_STRING;
 typedef struct {
+ unsigned RcReceiptEnabled,RcExportPending;
  ADMISSION_DEPTH2_DRILL_RECEIPT Depth2Drill;
  struct {struct {APPLE_AGX_G13_QUEUE_RUNTIME Runtime;} QueueProvider;} Provider;
 } ADMISSION_PLATFORM_RUNTIME;
-static ADMISSION_DEPTH2_DRILL_RECEIPT saved;static unsigned writes;
+static ADMISSION_DEPTH2_DRILL_RECEIPT saved;static unsigned writes,fail;
+#define NT_SUCCESS(s) ((s)>=0)
+#define FALSE 0
 static void RtlInitUnicodeString(UNICODE_STRING *n,const wchar_t *s){*n=s;}
 #define REG_BINARY 3u
 static int ZwSetValueKey(HANDLE k,UNICODE_STRING *n,unsigned a,unsigned type,void *data,ULONG size){
  (void)k;(void)a;assert(type==REG_BINARY && size==164);
  assert(wcscmp(*n,L"Wom1Depth2DrillReceipt")==0);
- memcpy(&saved,data,size);++writes;return 0;
+ memcpy(&saved,data,size);++writes;return fail ? -1:0;
 }
 '''+extract(src,'AdmissionDepth2DrillExportWindows')+r'''
 int main(void) {
@@ -174,7 +177,10 @@ int main(void) {
  /* Later DWM work changes live pending IDs, not the pinned record. */
  r.Provider.QueueProvider.Runtime.PendingFence=70;
  r.Provider.QueueProvider.Runtime.Successor.Fence=71;
- AdmissionDepth2DrillExportWindows(&r,(void *)1);
+ r.RcExportPending=1;fail=1;
+ AdmissionDepth2DrillExportWindows(&r,(void *)1);assert(r.RcExportPending);
+ fail=0;writes=0;
+ AdmissionDepth2DrillExportWindows(&r,(void *)1);assert(!r.RcExportPending);
  assert(writes==1 && saved.Queue.HeadFence==20 && saved.Queue.NextFence==21 &&
         saved.ReportFence[0]==20 && saved.ReportFence[1]==21 && saved.Queue.TerminalCount==2);
 }
