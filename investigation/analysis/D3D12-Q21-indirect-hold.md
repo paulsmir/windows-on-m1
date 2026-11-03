@@ -4,6 +4,12 @@ Offline base `2fa2598e28815ad7752b711616b1e3070777d7fd`. The implemented
 change is default off and has no hardware verdict. Handoff `q21-indirect-hold`
 contains DESIGN.md, raw input hashes, decoded receipts, verification and REPORT.md.
 
+Follow-up: [Q21b / EXP2114](D3D12-Q21b-map-paging-hold.md) shows that enabling
+early reclamation did not remove the measured hold. Its successor instead
+spends 21.560 ms on a fresh Encoder BO's map paging fence. The original
+EXP2113 findings below are preserved; the follow-up distinguishes the two
+wait stages and explains why the current mapping dependency must remain.
+
 ## What the trace establishes
 
 EXP2113's head already uses a GPU-generated counted indirect stream. Its
