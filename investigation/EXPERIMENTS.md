@@ -68192,3 +68192,12 @@ EXP2127 HARDWARE ACTUAL (2026-11-03): **first KMD split of the render start late
 - Verdict: inconclusive for GravityMark: the kick -> TA start latency is large for these renders but may include GPU wake from idle.
 - Next: EXP2128 = same switches, snapshot Wom1JobTiming971 (exported every 2 s) DURING GravityMark (~60 s and ~120 s) to measure KickTa -> TA start and prev Complete -> KickTa on GravityMark's own compute -> render boundaries.
 - Recovery rec2127h.
+
+EXP2128 HARDWARE BEFORE 2026-11-03T13:47:06Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1.
+- WHY THIS HYPOTHESIS: (1) EXP2126/2127: GravityMark compute -> TA idle median 0.70 ms (7-8 % of GPU time) with the render already submitted; (2) EXP2127's Hot ring held only non-GravityMark renders (no compute jobs): KickTa -> firmware TA start 409 us, worker -> KickTa 165 us -- possibly including GPU wake from idle.
+- WINDOWS/AGX CONTRACT: unchanged (receipts only). ATOMIC CONTRACT: single change = snapshot timing.
+- WHAT IS STILL UNKNOWN: for GravityMark, the shares of prev compute Complete -> KickTa (KMD build/kick after completion) and KickTa -> TA start (m1n1/firmware).
+- Expected: suite 119/0, GravityMark ~5970-5999, two live rings with alternating compute/render jobs of GravityMark.
+- FAIL: no live ring or no compute jobs in it (method fails); firmware fault.
+- Recovery: rec2128h.
