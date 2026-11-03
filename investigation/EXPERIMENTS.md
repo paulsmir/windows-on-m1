@@ -67880,3 +67880,10 @@ Switches: Wom1GpuFaultInfoRead=1 only (defaults). UMD env for both steps: APPLE_
 - Hashes: sys c8495a2dc739, UmdArm64 1fb290d5aa18, UmdX64 e40c59ad1363, Umd32 868d0f0f52d7; manifest 902510a28c6f, hardware-manifest 774bbda61563; probe2114.sh 2e6625c690c3 (PROBE_LINT_OK); visible recovery rec2114h 7491172d32519d10; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2114h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2114-reclaim/run2114.sh.
+
+EXP2114 HARDWARE ACTUAL (2026-11-03): **q21 early batch reclamation (APPLE_AGX_D3D12_RECLAIM_BEFORE_BATCH=1): neutral. The ExecuteIndirect hold remains; GravityMark within noise of EXP2110.**
+- Q3PC: exact outputs PASS, probe verdict INCONCLUSIVE; head_fence 5118, next_fence 5120, head_submit 1456749188, head_complete 1457265108 (21.5 ms), next_submit 1457309134 = 1.83 ms AFTER head_complete (EXP2113: 0.68 ms after).
+- GravityMark HD 100k temporal 0: 5977, 35.8 FPS (EXP2110: 5949 -> +0.5%); FHD: 4830, 28.9 FPS (EXP2110: 4803 -> +0.6%). Both normal exits, WER 0; no reset, no G4 failure; pipeline rc 0. Note: EXP2114 also has the shared-load vectorization and q20 defaults built in (same effective configuration as EXP2110 except the option).
+- Expected vs actual: expected next_submit < head_complete and a gain up to ~7%; actual no change in the hold and +0.5-0.6% (noise). Verdict rejected: early reclamation is not the cause of the hold; option stays off.
+- Next: Codex q21b re-attributes the hold with the EXP2114 trace.
+- Recovery rec2114h.
