@@ -68213,3 +68213,12 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1.
 - Hashes: sys cc5b3e9bf126, UmdArm64 409f202deaa2, UmdX64 64bd8db2473a, Umd32 cf0053b0fe28; manifest 3a68b157e838, hardware-manifest 8315716b4b03; probe2128.sh 9734813d181d (PROBE_LINT_OK); visible recovery rec2128h 3564c5a74c374a42; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1.
 - Recovery rec2128h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2128-kick-live/run2128.sh.
+
+EXP2128 HARDWARE ACTUAL (2026-11-03): **GravityMark's own KMD ring: the compute -> render latency is after the kick; the KMD side is ~0.2 ms.**
+- Expected: suite 119/0; GravityMark ~5970-5999; live rings with GravityMark compute/render jobs. Actual: suite 119 PASS / 0 FAIL; GravityMark HD 100k T0 Score 5964 / 35.7 FPS (diagnostics on, within noise), WER 0; live rings at loop i=10/18 held 31 compute + 26 render jobs of GravityMark (KMD pid 3972) each.
+- compute -> render pairs (n=24 / 29): render submitted a median 2.1 / 1.3 ms before the compute's KMD Complete; prev Complete -> worker 28 / 30 us; worker -> KickTa 185 / 190 us; prev Complete -> KickTa 202 / 228 us; KickTa -> firmware TA start 729 / 771 us (p10 554 / 605, p90 791 / 841).
+- Offline on EXP2126 (scratchpad prelude.py, measure-gpu-prelude): of the compute -> TA idle, prev compute end -> render prelude start 0.577 ms (p10 0.541, p90 0.665), prelude 0.063 ms, prelude end -> TA start 0.063 ms (n=15268 prelude renders; 5977 without prelude stamps).
+- Depth-two refusal of these renders: 5 (= ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_UNPROVEN, Wom1Depth2Prelude off) and 0x37 (55, another process).
+- Verdict: confirmed: ~0.6 ms between the KMD kick and the firmware starting the render's compute prelude dominates; KMD build/kick after completion adds ~0.2 ms.
+- Next: EXP2129 = EXP2126 switches + Wom1Depth2Prelude=1 (q23-validated prelude pairs): does an early kick remove the 0.58 ms prev end -> prelude start (EXP2121 admitted 4x more pairs without speed-up but had no stage receipts)?
+- Recovery rec2128h.
