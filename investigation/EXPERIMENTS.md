@@ -68222,3 +68222,13 @@ EXP2128 HARDWARE ACTUAL (2026-11-03): **GravityMark's own KMD ring: the compute 
 - Verdict: confirmed: ~0.6 ms between the KMD kick and the firmware starting the render's compute prelude dominates; KMD build/kick after completion adds ~0.2 ms.
 - Next: EXP2129 = EXP2126 switches + Wom1Depth2Prelude=1 (q23-validated prelude pairs): does an early kick remove the 0.58 ms prev end -> prelude start (EXP2121 admitted 4x more pairs without speed-up but had no stage receipts)?
 - Recovery rec2128h.
+
+EXP2129 HARDWARE BEFORE 2026-11-03T14:00:03Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1. Steps: suite; GravityMark HD 100k T0 (UMD trace, MESA_SHADER_CACHE_DISABLE=true).
+- WHY THIS HYPOTHESIS: (1) EXP2128: GravityMark compute -> render pairs are refused for depth two with 5 (prelude unproven), and KickTa -> TA start is ~0.75 ms, of which prev compute end -> prelude start is 0.577 ms (EXP2126); (2) render -> compute pairs, which are kicked early, show ~0.013 ms idle (G1); (3) EXP2120 validated prelude pairs (no firmware crash); EXP2121 saw no score gain but recorded no stage timestamps.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: prelude on the compute queue with the q23 queue-event stamps (EXP2120). TRANSLATION: existing switch.
+- ATOMIC CONTRACT: single switch (Wom1Depth2Prelude gates admission + q23 stamps together, EXP2118/2120).
+- WHAT IS STILL UNKNOWN: whether the firmware's start latency is hidden by an early kick or is a barrier wake cost.
+- Expected: suite 119/0; prev compute end -> prelude start median falls well below 0.58 ms for paired renders; score rises if the idle shrinks (up to ~+7 %).
+- FAIL: firmware crash (EXP2118 class) -> recovery; idle unchanged -> latency is barrier wake (firmware/m1n1).
+- Recovery: rec2129h.
