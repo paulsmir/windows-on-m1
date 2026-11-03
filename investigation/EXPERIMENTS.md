@@ -68016,3 +68016,15 @@ EXP2120 HARDWARE ACTUAL (2026-11-03): **q23 queue-event compute stamps FIX the p
 - Expected vs actual: no crash (met, crash fixed: stamp-unit hypothesis confirmed by removal); expected gain up to ~2 ms/frame not observed. Verdict: crash fix CONFIRMED; performance effect not demonstrated.
 - Next: EXP2121 same switch with Wom1RcReceipt=1 (diagnostic only; scores not comparable) to count admitted prelude pairs (reason 0 vs other refusals).
 - Recovery rec2120h.
+
+EXP2121 HARDWARE BEFORE 2026-11-03T10:19:25Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1 Wom1RcReceipt=1. Steps: GravityMark HD then FHD 100k temporal 0 (receipts after each).
+- WHY THIS HYPOTHESIS: EXP2120 removed the crash but gave +0.7%/+0.0%; diagnostics off hid whether prelude pairs were admitted. EXP2102 (prelude refused) had 32669 reason-5 refusals and 6853 admitted pairs per HD run.
+- ATOMIC CONTRACT: diagnostic switch only.
+- WHAT IS STILL UNKNOWN: admitted-pair counts with prelude allowed, and the remaining refusal reasons.
+- Expected: reason-5 count ~0, admitted pairs several times EXP2102's 6853 (if successors are pending), else the decisions name the next blocker (e.g. 66 no pending successor dominating -> successors arrive late, not an admission problem); no crash.
+- FAIL: crash/reset.
+- Recovery: rec2121h (AGX_RECOVERY_ALLOW_AT_PROXY=1 if needed, dump first).
+- Hashes: sys 480546881b19, UmdArm64 14a532bab515, UmdX64 8b3e1cd18c04, Umd32 fe00e321e4c6; manifest aecf7c0e77d1, hardware-manifest 9fdb2fe41132; probe2121.sh 22c02e7953ff (PROBE_LINT_OK); visible recovery rec2121h bfa03fbe249989ad; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1 Wom1RcReceipt=1.
+- Recovery rec2121h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2121-prelude-receipts/run2121.sh.
