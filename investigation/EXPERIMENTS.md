@@ -67679,3 +67679,15 @@ EXP2104 HARDWARE ACTUAL (2026-11-03): **Q3PC control INCONCLUSIVE: exact outputs
 - Expected vs actual: expected a retained reason-5 record (prelude-render -> compute candidate); actual none, so either the pipeline-statistics path does not create a KMD prelude render or the compute successor was not pending. Verdict INCONCLUSIVE; the gate is not opened on this probe.
 - Next: Codex q16 explains from source + this run's UMD trace why no prelude pair formed; GravityMark (EXP2100) remains the only known reproducer.
 - Recovery rec2104h.
+
+EXP2105 HARDWARE BEFORE 2026-11-03T00:52:46Z:
+Switches: Wom1GpuFaultInfoRead=1 only. Steps: GravityMark D3D12 HD 100k temporal 0, then FHD 100k temporal 0.
+- WHY THIS HYPOTHESIS: EXP2103 (current source, depth-one with ManagerSlots/NotifierFlight/RcReceipt/RcDepth2/General...) scored HD 5244 vs EXP2075 HD 5696 (older source, only GpuFaultInfoRead); the 8% must come from those switches or from the q1-q15 code.
+- ATOMIC CONTRACT: none -- configuration returns to the EXP2075 switch set on current source.
+- WHAT IS STILL UNKNOWN: whether code or switches cost the 8%.
+- Expected: if HD is near 5650-5700, the switches cost the 8% (then bisect them, RcReceipt sampling first); if HD stays near 5244, the regression is in code (then bisect commits).
+- FAIL: crash/reset.
+- Recovery: rec2105h.
+- Hashes: sys 36f99c268bcb, UmdArm64 910e30f962e2, UmdX64 df7092852599, Umd32 d517510bee14; manifest 960135682143, hardware-manifest 08da3767b78e; probe2105.sh 130cbc2ac135 (PROBE_LINT_OK); visible recovery rec2105h 21b722d8877120d7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2105h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2105-gm-minimal/run2105.sh.
