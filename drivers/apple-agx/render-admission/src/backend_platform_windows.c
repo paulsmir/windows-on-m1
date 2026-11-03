@@ -368,7 +368,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
 
 C_ASSERT(sizeof(ADMISSION_GPU_RTKIT_SNAPSHOT) == 80);
 C_ASSERT(FIELD_OFFSET(ADMISSION_GPU_POST_RESUME_RECEIPT, Rtkit) == 184);
-C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 264);
+C_ASSERT(sizeof(ADMISSION_GPU_POST_RESUME_RECEIPT) == 312);
 C_ASSERT(sizeof(ADMISSION_GPU_SOFT_FAULTS_RECEIPT) == 40);
 /* RegionC fault_control (apple_agx_regionc.c), fault_info (Asahi FaultInfo,
  * 0x18 bytes after unk_117bc) and the SGX registers fault_control bits 0
@@ -7631,6 +7631,22 @@ static VOID AdmissionCapturePostResume(ADMISSION_PLATFORM_RUNTIME *runtime,
         queue->Successor.ComputeInRender ? ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE :
                                            ADMISSION_JOB_WINDOW_KIND_RENDER;
   Receipt->Rtkit = rtkit;
+  for (index = 0u; index < 6u; ++index) {
+    const APPLE_AGX_G13_QUEUE_PENDING *pending;
+    ULONG kind = index < 3u ? rtkit.HeadKind : rtkit.NextKind;
+    Receipt->ExpectedStamps[index] = Receipt->EventSlots[index] = 0u;
+    if (kind == 0u || (index % 3u == 2u
+        ? kind == ADMISSION_JOB_WINDOW_KIND_RENDER
+        : kind == ADMISSION_JOB_WINDOW_KIND_COMPUTE)) continue;
+    if (index < 3u)
+      pending = index == 0u ? &queue->TaPending : index == 1u
+          ? &queue->D3Pending : &queue->ComputePending;
+    else
+      pending = index == 3u ? &queue->Successor.TaPending : index == 4u
+          ? &queue->Successor.D3Pending : &queue->Successor.ComputePending;
+    Receipt->ExpectedStamps[index] = pending->ExpectedStamp;
+    Receipt->EventSlots[index] = pending->EventNumber;
+  }
 }
 
 static VOID AdmissionPublishPostResume(ADMISSION_PLATFORM_RUNTIME *runtime) {

@@ -1,7 +1,7 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 rc77: Wom1GpuFaultPostResume is the only evidence of what the firmware did
 after it was resumed from an MMU fault (EXP2005/EXP2007 left no such record).
-The KMD struct (render_gpu_fault.h, C_ASSERT 264 bytes) and the offline
+The KMD struct (render_gpu_fault.h, C_ASSERT 312 bytes) and the offline
 decoder must agree field by field; a silent offset drift would turn the next
 hardware run's receipt into wrong conclusions (for example a halted firmware
 read as running, or a RecoverChannel reported as never sent).
@@ -28,7 +28,7 @@ int main(void) {
   ADMISSION_GPU_POST_RESUME_RECEIPT r;
   unsigned i;
   memset(&r, 0, sizeof(r));
-  if (sizeof(r) != 264) return 1;
+  if (sizeof(r) != 312) return 1;
   r.Version = ADMISSION_GPU_POST_RESUME_VERSION; r.Bytes = sizeof(r);
   r.Fence = 0x16160u; r.WaitMs = 1001u; r.RegionCFaultControl = 0xbu;
   r.SgxRead = 1u; r.Sgx17620 = 0x11u; r.Sgx17630 = 0x22u;
@@ -50,6 +50,7 @@ int main(void) {
   r.Rtkit.CrashlogCapacity = 0x4000; r.Rtkit.CrashlogRequested = 0x1000;
   r.Rtkit.HeadFence = 0x182a; r.Rtkit.NextFence = 0x182b;
   r.Rtkit.HeadKind = 2; r.Rtkit.NextKind = 3;
+  for(i=0;i<6;++i) {r.ExpectedStamps[i]=0x182a+i;r.EventSlots[i]=i%3;}
   fwrite(&r, sizeof(r), 1, stdout);
   return 0;
 }
@@ -87,7 +88,9 @@ class PostResumeReceipt(unittest.TestCase):
                           'last': 'channel_error'})
         self.assertEqual(decoded['recover_channel'],
                          {'state': 'sent', 'result': 'ok', 'pipes': ['compute'], 'at_ms': 100})
-        self.assertEqual(decoded['version'], 3)
+        self.assertEqual(decoded['version'], 4)
+        for i, name in enumerate(('head_ta','head_3d','head_compute','next_ta','next_3d','next_compute')):
+            self.assertEqual(decoded['queue_stamps'][name], {'expected':0x182a+i,'event':i%3})
         self.assertEqual(decoded['rtkit'], {
             'running': True, 'cpu_ready': True, 'crashlog_reply_sent': True,
             'crashed': True, 'received_count': 73, 'last_endpoint': 1,
@@ -103,6 +106,10 @@ class PostResumeReceipt(unittest.TestCase):
             legacy = bytearray(raw[:184])
             legacy[:8] = version.to_bytes(4, 'little') + (184).to_bytes(4, 'little')
             self.assertIsNone(decoder.decode_post_resume(legacy)['rtkit'])
+        legacy = bytearray(raw[:264])
+        legacy[:8] = (3).to_bytes(4, 'little') + (264).to_bytes(4, 'little')
+        self.assertEqual(decoder.decode_post_resume(legacy)['rtkit'], decoded['rtkit'])
+        self.assertIsNone(decoder.decode_post_resume(legacy)['queue_stamps'])
         missing = bytearray(raw); missing[184:188] = bytes(4)
         self.assertIsNone(decoder.decode_post_resume(missing)['rtkit'])
         for bad in (raw[:-1], raw + bytes(8), raw[:184], bytes(264)):

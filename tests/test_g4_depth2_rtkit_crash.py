@@ -61,7 +61,18 @@ static void crash_pair(unsigned head, unsigned next, unsigned paired) {
     r.TransportIo.ReadU32=read_u32; /* shared words, no MMIO */
     memset(&receipt,0xa5,sizeof(receipt));
     AdmissionCapturePostResume(&r,2,0,&receipt);
-    assert(receipt.Version==3 && receipt.Bytes==264);
+    assert(receipt.Version==4 && receipt.Bytes==312);
+    /* Q15: wire suffix has head then successor, each TA/3D/compute
+     * expected stamps followed by their event slots. No synthetic drill. */
+    const unsigned *stamps=(const unsigned *)((const unsigned char *)&receipt+264);
+    const APPLE_AGX_G13_QUEUE_PENDING *pending[]={&q->TaPending,&q->D3Pending,
+      &q->ComputePending,&q->Successor.TaPending,&q->Successor.D3Pending,&q->Successor.ComputePending};
+    for(unsigned j=0;j<6;++j) {
+      unsigned kind=j<3?head:(paired?next:0);
+      unsigned active=kind && (j%3==2 ? kind!=K_R : kind!=K_C);
+      assert(stamps[j]==(active?pending[j]->ExpectedStamp:0));
+      assert(stamps[6+j]==(active?pending[j]->EventNumber:0));
+    }
     assert(receipt.Rtkit.Captured && receipt.Rtkit.Crashed &&
            receipt.Rtkit.LastEndpoint==1 && receipt.Rtkit.LastPayload==(1ULL<<52));
     assert(receipt.Rtkit.ReceivedCount==1 && receipt.Rtkit.MailboxValid==3);
@@ -74,6 +85,8 @@ static void crash_pair(unsigned head, unsigned next, unsigned paired) {
   AdmissionCapturePostResume(&r,0,0,&receipt);
   ADMISSION_GPU_RTKIT_SNAPSHOT expected={0};expected.Captured=1;
   assert(!memcmp(&receipt.Rtkit,&expected,sizeof(expected)));
+  const unsigned *empty=(const unsigned *)((const unsigned char *)&receipt+264);
+  for(unsigned j=0;j<12;++j) assert(!empty[j]);
 }
 int main(void) {
   for(unsigned head=K_R;head<=K_C;++head)
