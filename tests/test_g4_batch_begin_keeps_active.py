@@ -341,7 +341,7 @@ int main(void) {
         submit = body(space, "AgxWin32GpuvaSubmit")
         # A submission without a free older slot is refused; the newest set
         # becomes an older one on every path that installs a new Held.
-        self.assertIn("space->OlderCount == AGX_GPUVA_IN_FLIGHT - 1u)", submit)
+        self.assertIn("space->OlderCount >= AgxSubmissionWindowLimit(space->SubmissionWindow) - 1u)", submit)
         self.assertEqual(submit.count("gpuva_shift(space);"), submit.count("space->Held = handles;"))
         self.assertIn("space->OlderCount ||", body(space, "AgxWin32GpuvaUnbind"))
         # The UMD lets a slot join a submission while fewer than the depth

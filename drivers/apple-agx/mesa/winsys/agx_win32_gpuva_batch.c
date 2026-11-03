@@ -532,14 +532,15 @@ static struct agx_batch *submitted_at(struct agx_batch *batch,uint64_t fence) {
  * and that batch later retires by the same fence. */
 static int retire_held(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
   /* EXP1203: room is needed only when every older slot is taken. */
-  if(b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u) return 1;
+  const unsigned limit=AgxSubmissionWindowLimit(b->Gpuva.SubmissionWindow);
+  if(b->Gpuva.OlderCount<limit-1u) return 1;
   uint64_t oldest=b->Gpuva.Older[0].Fence;
   struct agx_batch *old=submitted_at(batch,oldest);
   unsigned wait_token=AgxWin32WaitBegin(AgxWaitInflightSlot);
   int retired=old ? AgxWin32AsahiBatchPoll(old,1000) :
                    AgxWin32GpuvaRetire(&b->Gpuva,oldest);
   AgxWin32WaitEnd(wait_token);
-  return retired && b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u;
+  return retired && b->Gpuva.OlderCount<limit-1u;
 }
 
 int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {

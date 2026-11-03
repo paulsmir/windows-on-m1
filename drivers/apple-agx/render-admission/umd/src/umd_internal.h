@@ -31,8 +31,10 @@
  * equals AGX_GPUVA_IN_FLIGHT (agx_win32_gpuva.h). When a submission is
  * built at most ADMISSION_UMD_IN_FLIGHT_SETS - 1 others are in flight (the
  * winsys retires the oldest first), so a slot may join it while fewer than
- * ADMISSION_UMD_IN_FLIGHT_SETS sets hold it. */
+ * ADMISSION_UMD_IN_FLIGHT_SETS sets hold it. Q19 selects a matching larger
+ * bound in both owners with AgxSubmissionWindowLimit. */
 #define ADMISSION_UMD_IN_FLIGHT_SETS 4u
+#include "../../../mesa/winsys/agx_win32_submission_window.h"
 /* EXP1061: live slots stay below ScreenBufferHighWater (FreeSlot hands out
  * the lowest free index), so a scan costs the peak live count, not capacity. */
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device) ((Device)->ScreenBufferHighWater)
@@ -219,6 +221,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
 #ifdef APPLE_AGX_GPUVA_WINSYS
   /* Q18: opt-in read-only proof before a paging CPU wait; pending work waits. */
   BOOL PagingWaitCompleted;
+  UINT SubmissionWindow; /* Q19: same bound as Backend.Gpuva, set before replay */
   D3DKMT_HANDLE RenderSyncObject;
   volatile UINT64 *RenderFenceAddress;
   UINT64 NextRenderFence;

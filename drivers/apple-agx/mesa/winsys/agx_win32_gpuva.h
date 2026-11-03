@@ -2,6 +2,7 @@
 #define AGX_WIN32_GPUVA_H
 
 #include <stdint.h>
+#include "agx_win32_submission_window.h"
 #include "apple_agx_g3_private_abi.h"
 
 #ifdef __cplusplus
@@ -10,9 +11,8 @@ extern "C" {
 
 #define AGX_GPUVA_MAP_WRITE 1u
 #define AGX_GPUVA_MAP_EXECUTE 2u
-/* EXP1203: submissions that may be in flight at once (the newest included).
- * Must equal ADMISSION_UMD_IN_FLIGHT_SETS (umd_internal.h): the UMD lets a
- * slot join a new submission while fewer than this many sets hold it. */
+/* Default submissions in flight (newest included). Q19 configures the
+ * same bounded window in the winsys and runtime hold admission. */
 #define AGX_GPUVA_IN_FLIGHT 4u
 
 /* Host-testable boundary around WDDM callbacks. Return 0 on failure, 1 for
@@ -92,7 +92,8 @@ typedef struct {
    * AGX_GPUVA_IN_FLIGHT submissions in flight (was two): CS 1.6 submits
    * three per frame, so with two every frame waited for its own previous
    * submission. A submission needs a free older slot. */
-  AGX_WIN32_GPUVA_SET Older[AGX_GPUVA_IN_FLIGHT - 1u];
+  AGX_WIN32_GPUVA_SET Older[AGX_SUBMISSION_WINDOW_MAX - 1u];
+  unsigned SubmissionWindow; /* zero/default: four; opt-in: sixteen */
   unsigned OlderCount;
   unsigned Terminal;
   unsigned LastFailure; /* diagnostic: source line of the last refused call */

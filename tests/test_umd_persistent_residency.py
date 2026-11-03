@@ -73,6 +73,7 @@ static void ReleaseSRWLockExclusive(SRWLOCK*l){assert(*l==-1);*l=0;}
 static void AcquireSRWLockShared(SRWLOCK*l){assert(*l>=0);++*l;}
 static void ReleaseSRWLockShared(SRWLOCK*l){assert(*l>0);--*l;}
 #include "umd_residency_trim.h"
+#include "../../../mesa/winsys/agx_win32_submission_window.h"
 struct D3DDDI_MAKERESIDENT { struct { UINT CantTrimFurther, MustSucceed; } Flags; HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; const UINT*PriorityList; ULONGLONG PagingFenceValue; ULONGLONG NumBytesToTrim; };
 struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,Mapped,Resident,Borrowed,KmtResidencyHeld,HeapStaging; UINT SourceHolds,SubmissionHolds;
   D3DKMT_HANDLE KernelAllocation,StagingAllocation; unsigned char *PrivateStaging; uint64_t CanonicalGpuVa,Bytes,LastUseFence; uint64_t TrimRecency; void*NativeBo; void*NativeMapRelease; };
@@ -89,7 +90,7 @@ static HRESULT ev(HANDLE,const D3DDDICB_EVICT*e){if(before_evict)before_evict();
   last_evicted_count=e->NumAllocations;for(UINT i=0;i<e->NumAllocations;++i)last_evicted[i]=e->AllocationList[i];return evict_result;}
 static void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
 struct CB { HRESULT(*pfnMakeResidentCb)(HANDLE,D3DDDI_MAKERESIDENT*); HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); };
-struct ADMISSION_UMD_DEVICE { HRESULT GpuvaFailure; UINT Magic; SLOT ScreenBuffers[16]; uint64_t NextRenderFence; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing,BorrowedContext; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
+struct ADMISSION_UMD_DEVICE { UINT SubmissionWindow; HRESULT GpuvaFailure; UINT Magic; SLOT ScreenBuffers[16]; uint64_t NextRenderFence; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing,BorrowedContext; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
 static void va_record(const void*,UINT,unsigned long long,D3DKMT_HANDLE,unsigned long long,unsigned long long,HRESULT){}
 #define ADMISSION_UMD_WATCH_WINDOWS
 #include "umd_va_watch.h"

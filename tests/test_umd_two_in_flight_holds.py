@@ -92,7 +92,7 @@ class TwoInFlightHolds(unittest.TestCase):
         resident = flat(function(text, 'make_resident'))
         # EXP1203: fewer than ADMISSION_UMD_IN_FLIGHT_SETS in-flight sets may hold a
         # slot that joins a new submission (EXP1093 depth 2: at most one).
-        self.assertIn('slot->SubmissionHolds<ADMISSION_UMD_IN_FLIGHT_SETS', resident)
+        self.assertIn('slot->SubmissionHolds<AgxSubmissionWindowLimit(device->SubmissionWindow)', resident)
         self.assertIn('slot->CopyHeld=TRUE;++slot->SubmissionHolds;', resident)
         transfer = flat(function(text, 'transfer_slot'))
         wait = transfer.index('if(!download&&slot->SubmissionHolds>1u&&slot->LastUseFence&&'
