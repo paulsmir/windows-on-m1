@@ -67743,3 +67743,17 @@ EXP2107 HARDWARE ACTUAL (2026-11-03): **q17 checkpoint 2: depth two without diag
 - Expected vs actual: expected HD ~5750-5900 / FHD ~4650-4750; actual below the HD range (gain within about 2x run-to-run noise). The earlier +4.8% (EXP2102 vs 2103) was partly the receipt export overhead being masked. Verdict: depth two with non-prelude classes is safe but gains little; most successors are either prelude pairs (gated) or not pending (q18/q19: the UMD blocks ~17 ms per frame on RenderFence CPU waits, so successors rarely reach the KMD early).
 - Next: Codex q19 removes avoidable UMD RenderFence waits (query resolve, draw, submit); depth two can only pay off once successors are submitted early.
 - Recovery rec2107h.
+
+EXP2108 HARDWARE BEFORE 2026-11-03T01:52:32Z:
+Switches: as EXP2107 (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1). UMD env: APPLE_AGX_D3D12_SUBMISSION_WINDOW=1. Steps: GravityMark D3D12 HD 100k temporal 0, then FHD.
+- WHY THIS HYPOTHESIS:
+  1. q18 (EXP2105 traces): ~17 ms/frame of UMD CPU waits on RenderFence (draw 9.7, query-resolve 5.4, submit 2.1 ms HD).
+  2. q19: at least 6.2 ms (HD) / 8.4 ms (FHD) per frame comes from the 4-entry submission window blocking the 5th submission on the oldest fence; query resolves already run on the GPU.
+- ATOMIC CONTRACT: single UMD variable (window 4 -> 16 with matching allocation-hold limit, one indivisible q19 invariant).
+- WHAT IS STILL UNKNOWN: how much of the CPU wait overlaps GPU work (q19 estimate 0-2%), and whether more submissions in flight let depth two find pending successors.
+- Expected: no correctness or stability change; HD 5674-5800, FHD 4656-4750 (vs EXP2107). No gain -> GravityMark is GPU-execution-bound at depth two.
+- FAIL: crash, reset, corruption, device removal, or score below EXP2107 beyond noise.
+- Recovery: rec2108h.
+- Hashes: sys 28db07f70708, UmdArm64 92c14d947d83, UmdX64 30d1546dd113, Umd32 f3d5a6ff8f55; manifest bd0f50d1dc3b, hardware-manifest 117b85ba1694; probe2108.sh c309563761d3 (PROBE_LINT_OK); visible recovery rec2108h 765df7b1744b7b96; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2108h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2108-gm-subwindow/run2108.sh.
