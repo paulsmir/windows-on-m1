@@ -68201,3 +68201,15 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1.
 - Expected: suite 119/0, GravityMark ~5970-5999, two live rings with alternating compute/render jobs of GravityMark.
 - FAIL: no live ring or no compute jobs in it (method fails); firmware fault.
 - Recovery: rec2128h.
+
+EXP2128 HARDWARE BEFORE 2026-11-03T13:53:01Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1.
+- WHY THIS HYPOTHESIS: (1) EXP2126/2127: GravityMark compute -> TA idle median 0.70 ms (7-8 % of GPU time) with the render already submitted; (2) EXP2127's Hot ring held only non-GravityMark renders (no compute jobs): KickTa -> firmware TA start 409 us, worker -> KickTa 165 us -- possibly including GPU wake from idle.
+- WINDOWS/AGX CONTRACT: unchanged (receipts only). ATOMIC CONTRACT: single change = snapshot timing.
+- WHAT IS STILL UNKNOWN: for GravityMark, the shares of prev compute Complete -> KickTa (KMD build/kick after completion) and KickTa -> TA start (m1n1/firmware).
+- Expected: suite 119/0, GravityMark ~5970-5999, two live rings with alternating compute/render jobs of GravityMark.
+- FAIL: no live ring or no compute jobs in it (method fails); firmware fault.
+- Recovery: rec2128h.
+- Hashes: sys cc5b3e9bf126, UmdArm64 409f202deaa2, UmdX64 64bd8db2473a, Umd32 cf0053b0fe28; manifest 3a68b157e838, hardware-manifest 8315716b4b03; probe2128.sh 9734813d181d (PROBE_LINT_OK); visible recovery rec2128h 3564c5a74c374a42; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1.
+- Recovery rec2128h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2128-kick-live/run2128.sh.
