@@ -71,6 +71,8 @@ struct ADMISSION_UMD_DEVICE {
   struct { uintptr_t handle; } RuntimeDevice;
   D3DKMT_HANDLE PagingSyncObject, RenderSyncObject;
   volatile UINT64 *RenderFenceAddress;
+  volatile UINT64 *PagingFenceAddress;
+  BOOL PagingWaitCompleted;
   int ScreenBufferLock;
   ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[2];
   UINT ScreenBufferHighWater;
@@ -301,7 +303,8 @@ class RenderFenceFastpath(unittest.TestCase):
             executable = Path(directory) / 'fence'
             source.write_text(PRELUDE.replace('@@FUNCTIONS@@', bodies) + main)
             command = ['clang++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
-                       '-Wno-unused-function', '-fsanitize=address,undefined']
+                       '-Wno-unused-function', '-ftrivial-auto-var-init=pattern',
+                       '-fsanitize=address,undefined']
             if win64:
                 command += ['-D_WIN64=1']
             built = subprocess.run(command + [str(source), '-o', str(executable)],
@@ -331,6 +334,136 @@ class RenderFenceFastpath(unittest.TestCase):
         read-only 64-bit load. This is branch coverage, not a native ABI build.
         """
         self.replay(X86_FALLBACK, False)
+
+    def test_completed_paging_is_opt_in_and_never_completes_render(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Redundant paging
+        callbacks can be skipped only on a full-width read-only completion
+        proof; pending/terminal/error paths and render-cache isolation remain.
+        """
+        main = r'''
+int main() {
+  ADMISSION_UMD_DEVICE d;
+  const uint64_t target = (UINT64_C(1) << 40) + 5;
+  reset(&d); expected_object = d.PagingSyncObject;
+  d.PagingFenceAddress = &signalled; signalled = target;
+  update_mapping = false;
+  assert(wait_object(&d, expected_object, target)); // default off
+  assert(waits == 1 && reads == 0 && d.RenderCompletedFence == 0);
+  d.PagingWaitCompleted = TRUE;
+  waits = starts = ends = 0;
+  assert(wait_object(&d, expected_object, target));
+#ifdef _WIN64
+  assert(waits == 0 && reads == 1 && starts == 0 && ends == 0);
+  assert(d.RenderCompletedFence == 0);
+  for (unsigned mode = 0; mode < 7; ++mode) {
+    reset(&d); expected_object = d.PagingSyncObject; update_mapping = false;
+    d.PagingWaitCompleted = TRUE; d.PagingFenceAddress = &signalled;
+    signalled = target; fail_wait = true;
+    alignas(8) unsigned char unaligned[16] = {};
+    if (mode == 0) signalled = target - 1;
+    if (mode == 1) signalled = 5; // low word is not a completion proof
+    if (mode == 2) signalled = UINT64_MAX;
+    if (mode == 3) d.DrawTerminal = TRUE;
+    if (mode == 4) d.PagingFenceAddress = nullptr;
+    if (mode == 5) d.PagingFenceAddress = (volatile UINT64 *)(unaligned + 1);
+    if (mode == 6) expected_object = 11; // different timeline
+    assert(!wait_object(&d, expected_object, target));
+    assert(waits == 1 && starts == 1 && ends == 1 && d.RenderCompletedFence == 0);
+    if (mode >= 3) assert(reads == 0);
+  }
+  // Read-only OS mappings must never be passed to an interlocked RMW.
+  const size_t bytes = (size_t)sysconf(_SC_PAGESIZE);
+  auto *mapping = (UINT64 *)mmap(nullptr, bytes, PROT_READ | PROT_WRITE,
+                                MAP_PRIVATE | MAP_ANON, -1, 0);
+  assert(mapping != MAP_FAILED); *mapping = target + 9;
+  assert(mprotect(mapping, bytes, PROT_READ) == 0);
+  reset(&d); expected_object = d.PagingSyncObject; update_mapping = false;
+  d.PagingWaitCompleted = TRUE; d.PagingFenceAddress = mapping;
+  assert(wait_object(&d, expected_object, target) && waits == 0);
+  assert(d.RenderCompletedFence == 0 && *mapping == target + 9);
+  assert(!wait_object(&d, expected_object, 0));
+  d.KernelCallbacks = nullptr;
+  assert(!wait_object(&d, expected_object, target));
+  assert(munmap(mapping, bytes) == 0);
+#else
+  assert(waits == 1 && reads == 0 && d.RenderCompletedFence == 0);
+#endif
+  puts("Q18 paging completion proof: PASS");
+}
+'''
+        self.replay(main, True)
+        self.replay(main, False)
+
+    def test_paging_option_requires_exact_one_at_attach(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? A missing,
+        truncated or malformed environment value must never enable Q18.
+        Execute the production attach prefix, not a second option parser.
+        """
+        text = (SOURCE.parent / 'umd_runtime_device.c').read_text()
+        attach = function(text, 'AdmissionUmdRuntimeDeviceAttach')
+        prefix = attach[:attach.index('  {\n    D3DDDICB_CREATEPAGINGQUEUE')]
+        source = r'''
+#include <cassert>
+#include <cstring>
+using HRESULT = int;
+struct ADMISSION_UMD_DEVICE { int PagingWaitCompleted; };
+static const char *option;
+static unsigned GetEnvironmentVariableA(const char *name, char *out, unsigned bytes) {
+  assert(strcmp(name, "APPLE_AGX_PAGING_WAIT_COMPLETED") == 0 && bytes == 2);
+  if (!option) return 0;
+  unsigned length = (unsigned)strlen(option);
+  if (length >= bytes) return length + 1;
+  memcpy(out, option, length + 1); return length;
+}
+''' + prefix + '(void)result; return 0; }\n' + r'''
+int main() {
+  const char *values[] = {nullptr, "", "0", "1", "11", "true", " 1", "1 "};
+  for (const char *value : values) {
+    option = value;
+    ADMISSION_UMD_DEVICE d = {1};
+    assert(AdmissionUmdRuntimeDeviceAttach(&d) == 0);
+    assert(d.PagingWaitCompleted == (value && strcmp(value, "1") == 0));
+  }
+}
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            (path / 'option.cpp').write_text(source)
+            built = subprocess.run(['clang++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
+                                    '-ftrivial-auto-var-init=pattern', '-DAPPLE_AGX_GPUVA_WINSYS',
+                                    str(path / 'option.cpp'), '-o', str(path / 'option')],
+                                   capture_output=True, text=True)
+            self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
+            subprocess.run([str(path / 'option')], check=True)
+
+    def test_changed_translation_units_on_windows_targets(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Compile both
+        changed production TUs with pinned Windows types and actual intrinsics,
+        including the x86 fallback, so host substitutes cannot hide ABI errors.
+        This is clang syntax checking, not MSVC linking or a package build.
+        """
+        sdk = ROOT / '.local/reference/winsdk26100'
+        if not (sdk / 'msvc/vcruntime.h').exists():
+            self.skipTest('pinned SDK/MSVC headers absent')
+        agx = ROOT / 'drivers/apple-agx'
+        includes = [sdk / p for p in ('um', 'shared', 'ucrt', 'msvc')]
+        includes += [agx / p for p in ('render-admission/umd/include',
+                     'render-admission/include', 'shared/include', 'mesa/winsys')]
+        for target in ('i686', 'x86_64', 'aarch64'):
+            for filename, language in (('umd_gpuva_windows.c', 'c++'),
+                                       ('umd_runtime_device.c', 'c')):
+                with self.subTest(target=target, file=filename):
+                    command = ['clang', '-target', target + '-pc-windows-msvc',
+                               '-x', language, '-std=c++17' if language == 'c++' else '-std=c11',
+                               '-fms-extensions', '-fms-compatibility', '-fsyntax-only',
+                               '-Wno-ignored-attributes', '-Wno-ignored-pragma-intrinsic',
+                               '-Wno-nonportable-include-path', '-Wno-pragma-pack',
+                               '-DAPPLE_AGX_GPUVA_WINSYS=1']
+                    for path in includes:
+                        command += ['-I', str(path)]
+                    result = subprocess.run(command + [str(SOURCE.parent / filename)],
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == '__main__':

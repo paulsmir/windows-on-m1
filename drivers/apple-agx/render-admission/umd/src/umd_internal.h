@@ -217,6 +217,8 @@ typedef struct _ADMISSION_UMD_DEVICE {
   D3DKMT_HANDLE PagingSyncObject;
   volatile UINT64 *PagingFenceAddress;
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  /* Q18: opt-in read-only proof before a paging CPU wait; pending work waits. */
+  BOOL PagingWaitCompleted;
   D3DKMT_HANDLE RenderSyncObject;
   volatile UINT64 *RenderFenceAddress;
   UINT64 NextRenderFence;
