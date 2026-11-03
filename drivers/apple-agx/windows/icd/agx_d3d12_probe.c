@@ -7305,7 +7305,7 @@ static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step ste
     ID3D12CommandQueue *queue = NULL;
     ID3D12Fence *fence = NULL;
     D3D12_COMMAND_QUEUE_DESC desc = {D3D12_COMMAND_LIST_TYPE_DIRECT};
-    if (!strcmp(name, "Q3RC") || !strcmp(name, "Q3RCR") || !strcmp(name, "Q3RR") || !strcmp(name, "Q3CR")) {
+    if (!strcmp(name, "Q3RC") || !strcmp(name, "Q3RCR") || !strcmp(name, "Q3RR") || !strcmp(name, "Q3CR") || !strcmp(name, "Q3PC") || !strcmp(name, "Q3CP")) {
         HANDLE watchdog = CreateThread(NULL, 0, q3_watchdog, (LPVOID)name, 0, NULL);
         if (!watchdog) {
             printf("AGX_D3D12_%s: FAIL watchdog-create\n", name); fflush(stdout);
@@ -7318,7 +7318,7 @@ static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step ste
     if (SUCCEEDED(hr)) hr = ID3D12Device_CreateFence(device, 0, D3D12_FENCE_FLAG_NONE, &IID_ID3D12Fence, (void **)&fence);
     printf("%s fresh device/queue/fence hr=0x%08lx\n", name, (unsigned long)hr);
     int failed = FAILED(hr) ? 1 : step(device, queue, fence, 0);
-    if (!strcmp(name, "Q3RC") || !strcmp(name, "Q3RCR") || !strcmp(name, "Q3RR") || !strcmp(name, "Q3CR")) {
+    if (!strcmp(name, "Q3RC") || !strcmp(name, "Q3RCR") || !strcmp(name, "Q3RR") || !strcmp(name, "Q3CR") || !strcmp(name, "Q3PC") || !strcmp(name, "Q3CP")) {
         if (FAILED(hr)) printf("AGX_D3D12_%s: FAIL fresh-device\n", name);
         if (g_warp && device) dump_debug_messages(device, name);
         fflush(stdout);
@@ -8413,6 +8413,24 @@ static void q3_record_render(ID3D12GraphicsCommandList *list,
     ID3D12GraphicsCommandList_IASetVertexBuffers(list, 0, 1, &vb);
     ID3D12GraphicsCommandList_DrawInstanced(list, 4, instances, 0, 0);
 }
+/* An active IA statistics query makes agx_ia_update allocate the render
+ * batch's CDM prelude. EndQuery only detaches it; resolve is deferred. */
+static void q3_record_prelude(ID3D12GraphicsCommandList *list,
+    ID3D12RootSignature *root, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
+    ID3D12Resource *vertices, UINT instances, ID3D12QueryHeap *queries, UINT index) {
+    ID3D12GraphicsCommandList_BeginQuery(list, queries, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
+    q3_record_render(list, root, rtv, vertices, instances);
+    ID3D12GraphicsCommandList_EndQuery(list, queries, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
+}
+static unsigned q3_bad_statistics(const D3D12_QUERY_DATA_PIPELINE_STATISTICS *s, UINT instances) {
+    const UINT64 vertices = (UINT64)instances * 4u, primitives = (UINT64)instances * 2u;
+    /* PS invocations are rasterizer-dependent and are not a prelude oracle. */
+    return (s->IAVertices != vertices) + (s->IAPrimitives != primitives) +
+        (s->VSInvocations != vertices) + (s->CInvocations != primitives) +
+        (s->CPrimitives != primitives) + (s->GSInvocations != 0) +
+        (s->GSPrimitives != 0) + (s->HSInvocations != 0) +
+        (s->DSInvocations != 0) + (s->CSInvocations != 0);
+}
 static void q3_record_compute(ID3D12GraphicsCommandList *list,
     ID3D12RootSignature *root, ID3D12Resource *uav, UINT iterations) {
     ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
@@ -8701,11 +8719,43 @@ static HRESULT q3_warm_successor(ID3D12CommandQueue *queue, ID3D12Fence *fence,
     }
     return hr;
 }
+/* Warm both exact endpoints and query slot serially twice. One extra warmup
+ * instance makes a stale query result distinguishable. Caller restores sentinels. */
+static HRESULT q3_warm_prelude(ID3D12CommandQueue *queue, ID3D12Fence *fence,
+    ID3D12GraphicsCommandList *list, ID3D12CommandAllocator *allocator,
+    ID3D12PipelineState **psos, ID3D12RootSignature **roots,
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv, ID3D12Resource *vertices,
+    ID3D12Resource *uav, ID3D12QueryHeap *queries, UINT instances,
+    UINT iterations, int compute_warmed, UINT64 base) {
+    HRESULT hr = S_OK;
+    for (UINT pass = 0; pass < 2 && SUCCEEDED(hr); ++pass) {
+        ID3D12GraphicsCommandList_SetPipelineState(list, psos[0]);
+        q3_record_prelude(list, roots[0], rtv, vertices, instances + 1u, queries, 0);
+        hr = run_list(queue, fence, list, base + 2*pass, "Q3 prelude warm-up");
+        if (FAILED(hr)) { TerminateProcess(GetCurrentProcess(), 1); return hr; }
+        hr = ID3D12CommandAllocator_Reset(allocator);
+        if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, psos[1]);
+        if (FAILED(hr)) return hr;
+        if (pass || compute_warmed)
+            transition(list, uav, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        q3_record_compute(list, roots[1], uav, iterations);
+        hr = run_list(queue, fence, list, base + 2*pass + 1, "Q3 compute warm-up");
+        if (FAILED(hr)) { TerminateProcess(GetCurrentProcess(), 1); return hr; }
+        hr = ID3D12CommandAllocator_Reset(allocator);
+        if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, NULL);
+    }
+    return hr;
+}
 static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
                       ID3D12Fence *fence, UINT64 base, int mode) {
     ID3D12Resource *vertices = NULL, *texture = NULL, *uav = NULL, *readback = NULL;
+    /* Modes 4/5 add a query prelude to the render of R/C or C/R. */
+    const int prelude = mode == 4 || mode == 5;
+    if (prelude) mode = mode == 4 ? 0 : 3;
+    ID3D12QueryHeap *queries = NULL;
+    D3D12_QUERY_HEAP_DESC qd = {D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS, 1, 0};
     /* mode 0: R/C; mode 1: R/C/R; mode 2: R/R; mode 3: C/R. */
-    const char *name = mode == 1 ? "Q3RCR" : mode == 2 ? "Q3RR" : mode == 3 ? "Q3CR" : "Q3RC";
+    const char *name = prelude ? (mode == 3 ? "Q3CP" : "Q3PC") : mode == 1 ? "Q3RCR" : mode == 2 ? "Q3RR" : mode == 3 ? "Q3CR" : "Q3RC";
     const UINT count = mode == 1 ? 3u : 2u;
     ID3D12Resource *vertices2 = NULL, *texture2 = NULL;
     D3D12_CPU_DESCRIPTOR_HANDLE rtv2 = {0};
@@ -8734,6 +8784,9 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
     if (count == 3) printf(",%llu", (unsigned long long)(base+103));
     puts(" overlap=UNVERIFIED watchdog_ms=15000");
     fflush(stdout);
+    if (prelude) printf("%s required_pair=%s required_barrier=%u prelude=statistics warm_passes=2\n",
+        name, mode == 3 ? "C/RP" : "RP/C", mode == 3 ? 4u : 3u);
+    if (prelude) hr = ID3D12Device_CreateQueryHeap(device, &qd, &IID_ID3D12QueryHeap, (void **)&queries);
     /* Warm native render and compute queues/manager separately at depth one.
      * These use different resources, so stale warmup outputs cannot pass. */
     if (SUCCEEDED(hr) && draw_triangle(device, queue, fence, base, 0)) hr = E_FAIL;
@@ -8842,18 +8895,24 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
         } else hr = q3_calibrate_compute(device, queue, fence, lists[3], allocators[3],
             psos[1], roots[1], uav, base - 16, name, &iterations);
     }
-    if (SUCCEEDED(hr) && (mode == 1 || mode == 3))
+    if (SUCCEEDED(hr) && !prelude && (mode == 1 || mode == 3))
         hr = q3_warm_successor(queue, fence, lists[3], allocators[3],
             psos[0], roots[0], rtv2, vertices2, base - 2);
+    if (SUCCEEDED(hr) && prelude)
+        hr = q3_warm_prelude(queue, fence, lists[3], allocators[3], psos, roots,
+            mode == 3 ? rtv2 : rtv, mode == 3 ? vertices2 : vertices,
+            uav, queries, instances, iterations, mode == 3 && !g_warp, base - 6);
     if (SUCCEEDED(hr)) {
         /* Initialize measured resources to wrong values, then retire setup. */
         const FLOAT red[4] = {1,0,0,1};
         ID3D12GraphicsCommandList_ClearRenderTargetView(lists[3], rtv, red, 0, NULL);
         if (mode) ID3D12GraphicsCommandList_ClearRenderTargetView(lists[3], rtv2, red, 0, NULL);
-        transition(lists[3], uav, ((mode == 1 || mode == 3) && !g_warp) ?
+        transition(lists[3], uav, (prelude || ((mode == 1 || mode == 3) && !g_warp)) ?
             D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
         ID3D12GraphicsCommandList_CopyBufferRegion(lists[3], uav, 0, vertices, 256, 256);
         transition(lists[3], uav, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        if (prelude) ID3D12GraphicsCommandList_CopyBufferRegion(lists[3], readback, 49152,
+            vertices, 512, sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS));
         hr = run_list(queue, fence, lists[3], base, "Q3RC init");
         if (FAILED(hr)) { printf("AGX_D3D12_%s: FAIL init\n", name); fflush(stdout); TerminateProcess(GetCurrentProcess(), 1); }
         hr = ID3D12CommandAllocator_Reset(allocators[3]);
@@ -8872,7 +8931,13 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
                 "measure-d3d12-wait: draw PagingFence=0x402 PoolMapEscape=0x41c. "
                 "KMD admission before predecessor completion and typed Wom1RcProgress are required for overlap.");
         }
-        q3_record_sequence(lists, roots, rtv, rtv2, vertices, vertices2, uav, instances, mode, iterations);
+        if (prelude) {
+            UINT r = mode == 3 ? 1u : 0u, c = 1u - r;
+            q3_record_prelude(lists[r], roots[0], mode == 3 ? rtv2 : rtv,
+                mode == 3 ? vertices2 : vertices, instances, queries, 0);
+            transition(lists[c], uav, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            q3_record_compute(lists[c], roots[1], uav, iterations);
+        } else q3_record_sequence(lists, roots, rtv, rtv2, vertices, vertices2, uav, instances, mode, iterations);
         LARGE_INTEGER pair_begin = {0}, pair_end = {0}, qpc_frequency = {0};
         QueryPerformanceFrequency(&qpc_frequency);
         QueryPerformanceCounter(&pair_begin);
@@ -8904,14 +8969,24 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
             ID3D12GraphicsCommandList_CopyTextureRegion(lists[3], &dst, 0, 0, 0, &src, NULL);
         }
         if (mode != 2) ID3D12GraphicsCommandList_CopyBufferRegion(lists[3], readback, mode ? 32768 : 16384, uav, 0, 256);
+        if (prelude) ID3D12GraphicsCommandList_ResolveQueryData(lists[3], queries,
+            D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0, 1, readback, 49152);
         hr = run_list(queue, fence, lists[3], base + count + 1, "Q3 sequence readback");
         if (FAILED(hr)) { printf("AGX_D3D12_%s: FAIL readback\n", name); fflush(stdout); TerminateProcess(GetCurrentProcess(), 1); }
-        D3D12_RANGE range = {0, mode ? 33024 : 16640}; bytes = NULL;
+        D3D12_RANGE range = {0, prelude ? 49152 + sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS) : mode ? 33024 : 16640}; bytes = NULL;
         hr = ID3D12Resource_Map(readback, 0, &range, (void **)&bytes);
         if (SUCCEEDED(hr) && bytes) {
             bad = mode ? q3_bad_sequence_outputs(mode == 3 ? NULL : bytes, bytes + 16384,
                 (const UINT *)(bytes + 32768), mode != 2, iterations) :
                 q3_bad_outputs(bytes, (const UINT *)(bytes + 16384));
+            if (prelude) {
+                const D3D12_QUERY_DATA_PIPELINE_STATISTICS *stats =
+                    (const D3D12_QUERY_DATA_PIPELINE_STATISTICS *)(bytes + 49152);
+                bad += q3_bad_statistics(stats, instances);
+                printf("%s ia_vertices=%llu expected=%llu ia_primitives=%llu expected=%llu\n",
+                    name, (unsigned long long)stats->IAVertices, (unsigned long long)instances*4,
+                    (unsigned long long)stats->IAPrimitives, (unsigned long long)instances*2);
+            }
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
@@ -8929,6 +9004,7 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
     if (readback) ID3D12Resource_Release(readback);
     if (uav) ID3D12Resource_Release(uav);
     if (vertices) ID3D12Resource_Release(vertices);
+    if (queries) ID3D12QueryHeap_Release(queries);
     if (vertices2) ID3D12Resource_Release(vertices2);
     if (texture2) ID3D12Resource_Release(texture2);
     return !(SUCCEEDED(hr) && !bad);
@@ -8949,7 +9025,16 @@ static int q3_rr(ID3D12Device *device, ID3D12CommandQueue *queue,
     ID3D12Fence *fence, UINT64 base) {
     return q3_sequence(device, queue, fence, base, 2);
 }
+static int q3_pc(ID3D12Device *device, ID3D12CommandQueue *queue,
+    ID3D12Fence *fence, UINT64 base) {
+    return q3_sequence(device, queue, fence, base, 4);
+}
+static int q3_cp(ID3D12Device *device, ID3D12CommandQueue *queue,
+    ID3D12Fence *fence, UINT64 base) {
+    return q3_sequence(device, queue, fence, base, 5);
+}
 static const struct { const char *name; probe_step step; } named_steps[] = {
+    {"Q3PC", q3_pc}, {"Q3CP", q3_cp},
     {"Q3CR", q3_cr}, {"Q3RC", q3_rc_pair}, {"Q3RCR", q3_rcr}, {"Q3RR", q3_rr},
     {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g}, {"RC63G", rc63_gravitymark_stream}, {"RC89S", rc89_stream_capacity},
     {"RC44D", step_rc44d}, {"RC44I", step_rc44i},
