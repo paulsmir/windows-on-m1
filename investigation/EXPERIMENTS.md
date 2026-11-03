@@ -68454,3 +68454,10 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1GpuPrivateCached=1. Steps: suite; GravityMa
 - Hashes: sys 4cd144308432, UmdArm64 1a412eecdf30, UmdX64 c4696a17b4da, Umd32 d7c878756c39; manifest e744ed7a50c9, hardware-manifest ef4dc3bf7e0b; probe2136.sh 85aa3fccc6c5 (PROBE_LINT_OK); visible recovery rec2136h a1fc1695d2c34f06; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuPrivateCached=1.
 - Recovery rec2136h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2136-gpu-cached/run2136.sh.
+
+EXP2136 HARDWARE ACTUAL (2026-11-03): **inconclusive (setup): the GC feature never activated and both GravityMark arms did not start.**
+- First launch refused before any guest change: LAUNCH_2136_FAIL m1n1-image-lacks-expanded-guest-ram (launch-exp.sh needs m1n1-build-info.json next to the image; added, relaunched).
+- Relaunch: m1n1 936a67a3 (sha256 3a7a837d) booted, switches set (Wom1GpuFaultInfoRead=1 Wom1GpuPrivateCached=1), suite 119 PASS / 0 FAIL, GPU_RESET none, G4_SUBMIT_FAILURE none; but no GPUVA-GC receipt in full.log: the broker's MMIO wire executes only CREATE..ATTACH_MAILBOX, so QUERY_CAPS never reached the broker, the KMD saw no capability and kept every leaf coherent (fail-safe as designed). Both GravityMark arms printed nothing: C:\Users\pavel\EXP2136\arm-task.ps1 did not exist on the guest (the EXP2135 copy did), so no task was armed.
+- Verdict: inconclusive; the experiment m1n1 with the feature off ran the suite cleanly.
+- Fixes: m1n1 ed6fd218 (wire passes QUERY_CAPS under the flag; mmio and broker tests pass with and without the flag), probe copies arm-task.ps1 if missing. Next: EXP2137 = same with m1n1 ed6fd218.
+- Recovery rec2136h.
