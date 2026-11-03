@@ -8396,9 +8396,9 @@ static DWORD WINAPI q3_watchdog(LPVOID unused) {
 }
 /* Keep one draw and one render batch. More identical fullscreen instances
  * increase raster/fragment work without changing its exactly green output. */
-static void q3_record_render(ID3D12GraphicsCommandList *list,
+static void q3_bind_render(ID3D12GraphicsCommandList *list,
     ID3D12RootSignature *root, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
-    ID3D12Resource *vertices, UINT instances) {
+    ID3D12Resource *vertices) {
     D3D12_VIEWPORT vp = {0,0,64,64,0,1};
     D3D12_RECT scissor = {0,0,64,64};
     D3D12_VERTEX_BUFFER_VIEW vb = {0};
@@ -8411,15 +8411,34 @@ static void q3_record_render(ID3D12GraphicsCommandList *list,
     ID3D12GraphicsCommandList_RSSetScissorRects(list, 1, &scissor);
     ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     ID3D12GraphicsCommandList_IASetVertexBuffers(list, 0, 1, &vb);
+}
+static void q3_record_render(ID3D12GraphicsCommandList *list,
+    ID3D12RootSignature *root, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
+    ID3D12Resource *vertices, UINT instances) {
+    q3_bind_render(list, root, rtv, vertices);
     ID3D12GraphicsCommandList_DrawInstanced(list, 4, instances, 0, 0);
 }
-/* An active IA statistics query makes agx_ia_update allocate the render
- * batch's CDM prelude. EndQuery only detaches it; resolve is deferred. */
+/* Two legal DRAW records, count=1. Ignoring the count changes exact statistics.
+ * The caller only updates this upload after all previous users have retired. */
+static HRESULT q3_set_prelude_arguments(ID3D12Resource *vertices, UINT instances) {
+    unsigned char *bytes = NULL;
+    const UINT args[] = {4, instances, 0, 0, 4, 1, 0, 0, 1};
+    HRESULT hr = ID3D12Resource_Map(vertices, 0, NULL, (void **)&bytes);
+    if (FAILED(hr)) return hr;
+    if (!bytes) return E_FAIL;
+    memcpy(bytes + 2048, args, sizeof(args));
+    ID3D12Resource_Unmap(vertices, 0, NULL);
+    return S_OK;
+}
+/* Counted ExecuteIndirect selects GravityMark's GPU-generated VDM path, whose
+ * CDM producer is part of this render. Statistics are an output oracle; they
+ * are not proof that the indirect stream path or depth-two admission ran. */
 static void q3_record_prelude(ID3D12GraphicsCommandList *list,
     ID3D12RootSignature *root, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
-    ID3D12Resource *vertices, UINT instances, ID3D12QueryHeap *queries, UINT index) {
+    ID3D12Resource *vertices, ID3D12CommandSignature *signature, ID3D12QueryHeap *queries, UINT index) {
     ID3D12GraphicsCommandList_BeginQuery(list, queries, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
-    q3_record_render(list, root, rtv, vertices, instances);
+    q3_bind_render(list, root, rtv, vertices);
+    ID3D12GraphicsCommandList_ExecuteIndirect(list, signature, 2, vertices, 2048, vertices, 2080);
     ID3D12GraphicsCommandList_EndQuery(list, queries, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
 }
 static unsigned q3_bad_statistics(const D3D12_QUERY_DATA_PIPELINE_STATISTICS *s, UINT instances) {
@@ -8498,6 +8517,40 @@ static HRESULT q3_completions(ID3D12Device *device, UINT64 cursor,
     (void)close_adapter(&close);
     FreeLibrary(gdi);
     return status >= 0 && query->Count <= Q3_GPU_COMPLETION_PAGE ? S_OK : E_FAIL;
+}
+/* QPCs are CPU KMD enqueue/complete boundaries, not firmware GPU durations.
+ * Require exactly the measured R and C, a real prelude, and N+1 submitted
+ * before N completes. Typed reason-5/admission receipts remain the final gate. */
+static int q3_prelude_pending(const Q3_GPU_COMPLETION_QUERY *q,
+    UINT64 cursor, UINT64 missing, UINT pid, UINT64 begin, UINT64 end, int compute_first) {
+    const Q3_GPU_COMPLETION *render = NULL, *compute = NULL, *head, *next;
+    if (!q->Frequency || q->Lost || q->Reset || q->Count > Q3_GPU_COMPLETION_PAGE ||
+        q->Cursor < q->Newest || q->MissingTiming != missing) return 0;
+    for (UINT i = 0; i < q->Count; ++i) {
+        const Q3_GPU_COMPLETION *r = &q->Record[i];
+        if (r->Sequence <= cursor || r->ProcessId != pid ||
+            r->SubmitQpc < begin || r->SubmitQpc > end) continue;
+        if (r->Status || !r->Fence || r->CompleteQpc <= r->SubmitQpc ||
+            r->CompleteQpc > end) return 0;
+        if (r->Kind == Q3_GPU_TIMESTAMP_RENDER) {
+            if (render) return 0;
+            render = r;
+        } else if (r->Kind == Q3_GPU_TIMESTAMP_COMPUTE) {
+            if (compute) return 0;
+            compute = r;
+        } else return 0;
+    }
+    if (!render || !compute || !render->PreludeStart ||
+        render->PreludeEnd <= render->PreludeStart || render->Fence == compute->Fence)
+        return 0;
+    head = compute_first ? compute : render;
+    next = compute_first ? render : compute;
+    printf("Q3 topology head_fence=%u next_fence=%u head_submit=%llu head_complete=%llu next_submit=%llu next_complete=%llu prelude_start=%llu prelude_end=%llu\n",
+        head->Fence, next->Fence, (unsigned long long)head->SubmitQpc,
+        (unsigned long long)head->CompleteQpc, (unsigned long long)next->SubmitQpc,
+        (unsigned long long)next->CompleteQpc, (unsigned long long)render->PreludeStart,
+        (unsigned long long)render->PreludeEnd);
+    return next->SubmitQpc > head->SubmitQpc && next->SubmitQpc < head->CompleteQpc;
 }
 /* API timestamp deltas on this driver include CPU replay/submit latency.
  * Use the completed render's firmware 3D start/end, never its QPC span. */
@@ -8725,12 +8778,12 @@ static HRESULT q3_warm_prelude(ID3D12CommandQueue *queue, ID3D12Fence *fence,
     ID3D12GraphicsCommandList *list, ID3D12CommandAllocator *allocator,
     ID3D12PipelineState **psos, ID3D12RootSignature **roots,
     D3D12_CPU_DESCRIPTOR_HANDLE rtv, ID3D12Resource *vertices,
-    ID3D12Resource *uav, ID3D12QueryHeap *queries, UINT instances,
+    ID3D12Resource *uav, ID3D12QueryHeap *queries, ID3D12CommandSignature *signature, UINT instances,
     UINT iterations, int compute_warmed, UINT64 base) {
-    HRESULT hr = S_OK;
+    HRESULT hr = q3_set_prelude_arguments(vertices, instances + 1u);
     for (UINT pass = 0; pass < 2 && SUCCEEDED(hr); ++pass) {
         ID3D12GraphicsCommandList_SetPipelineState(list, psos[0]);
-        q3_record_prelude(list, roots[0], rtv, vertices, instances + 1u, queries, 0);
+        q3_record_prelude(list, roots[0], rtv, vertices, signature, queries, 0);
         hr = run_list(queue, fence, list, base + 2*pass, "Q3 prelude warm-up");
         if (FAILED(hr)) { TerminateProcess(GetCurrentProcess(), 1); return hr; }
         hr = ID3D12CommandAllocator_Reset(allocator);
@@ -8744,15 +8797,19 @@ static HRESULT q3_warm_prelude(ID3D12CommandQueue *queue, ID3D12Fence *fence,
         hr = ID3D12CommandAllocator_Reset(allocator);
         if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, NULL);
     }
+    if (SUCCEEDED(hr)) hr = q3_set_prelude_arguments(vertices, instances);
     return hr;
 }
 static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
                       ID3D12Fence *fence, UINT64 base, int mode) {
     ID3D12Resource *vertices = NULL, *texture = NULL, *uav = NULL, *readback = NULL;
-    /* Modes 4/5 add a query prelude to the render of R/C or C/R. */
+    /* Modes 4/5 use a counted-indirect prelude render in R/C or C/R. */
     const int prelude = mode == 4 || mode == 5;
     if (prelude) mode = mode == 4 ? 0 : 3;
     ID3D12QueryHeap *queries = NULL;
+    ID3D12CommandSignature *signature = NULL;
+    Q3_GPU_COMPLETION_QUERY topology = {0};
+    int pending = 0;
     D3D12_QUERY_HEAP_DESC qd = {D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS, 1, 0};
     /* mode 0: R/C; mode 1: R/C/R; mode 2: R/R; mode 3: C/R. */
     const char *name = prelude ? (mode == 3 ? "Q3CP" : "Q3PC") : mode == 1 ? "Q3RCR" : mode == 2 ? "Q3RR" : mode == 3 ? "Q3CR" : "Q3RC";
@@ -8784,9 +8841,15 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
     if (count == 3) printf(",%llu", (unsigned long long)(base+103));
     puts(" overlap=UNVERIFIED watchdog_ms=15000");
     fflush(stdout);
-    if (prelude) printf("%s required_pair=%s required_barrier=%u prelude=statistics warm_passes=2\n",
+    if (prelude) printf("%s required_pair=%s required_barrier=%u prelude=counted-indirect max_count=2 count=1 statistics=oracle warm_passes=2\n",
         name, mode == 3 ? "C/RP" : "RP/C", mode == 3 ? 4u : 3u);
-    if (prelude) hr = ID3D12Device_CreateQueryHeap(device, &qd, &IID_ID3D12QueryHeap, (void **)&queries);
+    if (prelude) {
+        D3D12_INDIRECT_ARGUMENT_DESC arg = {D3D12_INDIRECT_ARGUMENT_TYPE_DRAW};
+        D3D12_COMMAND_SIGNATURE_DESC sd = {16, 1, &arg, 0};
+        hr = ID3D12Device_CreateCommandSignature(device, &sd, NULL,
+            &IID_ID3D12CommandSignature, (void **)&signature);
+        if (SUCCEEDED(hr)) hr = ID3D12Device_CreateQueryHeap(device, &qd, &IID_ID3D12QueryHeap, (void **)&queries);
+    }
     /* Warm native render and compute queues/manager separately at depth one.
      * These use different resources, so stale warmup outputs cannot pass. */
     if (SUCCEEDED(hr) && draw_triangle(device, queue, fence, base, 0)) hr = E_FAIL;
@@ -8879,7 +8942,14 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
         if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT,
             allocators[i], i == 3 ? NULL : (i == (mode == 3 ? 0u : 1u) && mode != 2 ? psos[1] : psos[0]), &IID_ID3D12GraphicsCommandList, (void **)&lists[i]);
     }
-    if (SUCCEEDED(hr) && mode == 3) {
+    if (SUCCEEDED(hr) && prelude && mode != 3) {
+        /* EXP2104 substituted a previous job's End for a stale render Start:
+         * CPU gaps looked like GPU time and shrank R to one instance. Use a
+         * bounded workload here; qualify pending via KMD QPCs after the pair. */
+        instances = 262144;
+        printf("%s render_instances=%u duration=unverified source=fixed-bounded pending=required\n", name, instances);
+    }
+    else if (SUCCEEDED(hr) && mode == 3) {
         instances = 1; /* C is the calibrated predecessor; R need only finish. */
         printf("%s render_instances=1 r_only_gpu_ms=unavailable source=successor-only\n", name);
     }
@@ -8901,7 +8971,7 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
     if (SUCCEEDED(hr) && prelude)
         hr = q3_warm_prelude(queue, fence, lists[3], allocators[3], psos, roots,
             mode == 3 ? rtv2 : rtv, mode == 3 ? vertices2 : vertices,
-            uav, queries, instances, iterations, mode == 3 && !g_warp, base - 6);
+            uav, queries, signature, instances, iterations, mode == 3 && !g_warp, base - 6);
     if (SUCCEEDED(hr)) {
         /* Initialize measured resources to wrong values, then retire setup. */
         const FLOAT red[4] = {1,0,0,1};
@@ -8918,8 +8988,9 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
         hr = ID3D12CommandAllocator_Reset(allocators[3]);
         if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(lists[3], allocators[3], NULL);
     }
+    if (SUCCEEDED(hr) && prelude && !g_warp) hr = q3_completions(device, 0, &topology);
     if (SUCCEEDED(hr)) {
-        if (mode == 1 || mode == 3) {
+        if (prelude || mode == 1 || mode == 3) {
             /* Internal replay/prepare and kernel admission are not exposed
              * by the D3D12 API. Join the existing UMD/KMD trace, not CPU
              * Execute wall time. Keep this output outside the pair window. */
@@ -8934,7 +9005,7 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
         if (prelude) {
             UINT r = mode == 3 ? 1u : 0u, c = 1u - r;
             q3_record_prelude(lists[r], roots[0], mode == 3 ? rtv2 : rtv,
-                mode == 3 ? vertices2 : vertices, instances, queries, 0);
+                mode == 3 ? vertices2 : vertices, signature, queries, 0);
             transition(lists[c], uav, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             q3_record_compute(lists[c], roots[1], uav, iterations);
         } else q3_record_sequence(lists, roots, rtv, rtv2, vertices, vertices2, uav, instances, mode, iterations);
@@ -8950,6 +9021,15 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
         if (FAILED(hr) && submitted) {
             printf("AGX_D3D12_%s: FAIL pair-timeout-or-submit hr=0x%08lx\n", name, (unsigned long)hr);
             fflush(stdout); TerminateProcess(GetCurrentProcess(), 1); /* no Release of outstanding work */
+        }
+        if (SUCCEEDED(hr) && prelude && !g_warp) {
+            UINT64 cursor = topology.Newest, missing = topology.MissingTiming;
+            HRESULT th = q3_completions(device, cursor, &topology);
+            pending = SUCCEEDED(th) && q3_prelude_pending(&topology, cursor, missing,
+                (UINT)GetCurrentProcessId(), (UINT64)pair_begin.QuadPart,
+                (UINT64)pair_end.QuadPart, mode == 3);
+            printf("%s pending_successor=%s topology=%s\n", name,
+                pending ? "yes" : "unproven", pending ? "candidate-receipts-required" : "INCONCLUSIVE");
         }
     }
     if (SUCCEEDED(hr)) {
@@ -8990,7 +9070,11 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
-    printf("AGX_D3D12_%s: %s bad=%u overlap=UNVERIFIED receipts=Wom1RcProgress,Wom1RcDecisions,Wom1JobWindow,Wom1JobTiming971\n",
+    if (prelude && SUCCEEDED(hr) && !bad && !pending) {
+        printf("AGX_D3D12_%s: INCONCLUSIVE exact_outputs=PASS pending-prelude-pair=unproven\n", name);
+        hr = S_FALSE;
+    }
+    else printf("AGX_D3D12_%s: %s bad=%u overlap=UNVERIFIED receipts=Wom1RcProgress,Wom1RcDecisions,Wom1JobWindow,Wom1JobTiming971\n",
         name, SUCCEEDED(hr) && !bad ? "PASS" : "FAIL", bad);
     fflush(stdout);
     for (unsigned i = 0; i < 4; ++i) {
@@ -9005,9 +9089,10 @@ static int q3_sequence(ID3D12Device *device, ID3D12CommandQueue *queue,
     if (uav) ID3D12Resource_Release(uav);
     if (vertices) ID3D12Resource_Release(vertices);
     if (queries) ID3D12QueryHeap_Release(queries);
+    if (signature) ID3D12CommandSignature_Release(signature);
     if (vertices2) ID3D12Resource_Release(vertices2);
     if (texture2) ID3D12Resource_Release(texture2);
-    return !(SUCCEEDED(hr) && !bad);
+    return !(hr == S_OK && !bad);
 }
 static int q3_rc_pair(ID3D12Device *device, ID3D12CommandQueue *queue,
     ID3D12Fence *fence, UINT64 base) {
