@@ -47,7 +47,7 @@ typedef union {unsigned Value; struct {unsigned Paging:1,Present:1,RedirectedPre
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct {int Token;} ADMISSION_OBJECT_ADAPTER;
 typedef struct {ADMISSION_OBJECT_ADAPTER *Adapter;} DEVICE;
-typedef struct {unsigned Magic,Flags; DEVICE *Device;} OBJECT_CONTEXT;
+typedef struct {unsigned Magic,Flags,NodeOrdinal; DEVICE *Device;} OBJECT_CONTEXT;
 typedef struct {OBJECT_CONTEXT Object; void *GpuvaG3Process; unsigned GpuvaG3Poisoned;
   ULONGLONG GpuvaG3RootIpa;} ADMISSION_RENDER_CONTEXT;
 typedef struct {HANDLE hContext;ULONGLONG DmaBufferVirtualAddress;UINT DmaBufferSize;
@@ -55,7 +55,7 @@ typedef struct {HANDLE hContext;ULONGLONG DmaBufferVirtualAddress;UINT DmaBuffer
   UINT SubmissionFenceId,NodeOrdinal,EngineOrdinal;DXGK_SUBMITCOMMANDFLAGS Flags;}
   DXGKARG_SUBMITCOMMANDVIRTUAL;
 typedef DXGKARG_SUBMITCOMMANDVIRTUAL DXGKARG_SUBMITCOMMAND;
-struct _ADMISSION_CONTEXT {int Started;ADMISSION_OBJECT_ADAPTER ObjectAdapter;APPLE_AGX_SCHEDULER Scheduler;
+struct _ADMISSION_CONTEXT {int Started;ULONG LiveAdditivePaging;ADMISSION_OBJECT_ADAPTER ObjectAdapter;APPLE_AGX_SCHEDULER Scheduler;
   ULONG LastBranch;UINT QueueCalls;DXGK_SUBMITCOMMANDFLAGS LastQueueFlags;};
 #define ADMISSION_OBJECT_CONTEXT_MAGIC 0x434f4152u
 static unsigned KeGetCurrentIrql(void) {return PASSIVE_LEVEL;}
