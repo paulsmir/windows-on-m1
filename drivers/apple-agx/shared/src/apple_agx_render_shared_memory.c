@@ -140,6 +140,35 @@ static void put_u64(unsigned char *Address, APPLE_AGX_U64 Value) {
     Address[index] = (unsigned char)((Value >> (index * 8u)) & 0xffu);
 }
 
+/* G2: the TA microsequence (template object 17) holds a start (flag 1)
+ * and an end Timestamp op at 0x18c/0x1cc: header, command_time,
+ * ts_pointers, update_ts. Asahi sets update_ts to &ts_pointers->start_addr
+ * and &ts_pointers->end_addr; ts_pointers is already relocated here. */
+#define TA_TIMESTAMP_START_OP 0x18cu
+#define TA_TIMESTAMP_END_OP 0x1ccu
+static APPLE_AGX_U64 plain_u64(const unsigned char *Address) {
+  APPLE_AGX_U64 value = 0u;
+  APPLE_AGX_U32 index;
+  for (index = 0u; index < 8u; ++index)
+    value |= (APPLE_AGX_U64)Address[index] << (index * 8u);
+  return value;
+}
+
+static APPLE_AGX_BOOL patch_ta_timestamp_update(unsigned char *Micro,
+                                                APPLE_AGX_U64 Size) {
+  APPLE_AGX_U64 start, end;
+  if (Micro == RENDER_SHARED_NULL || Size < TA_TIMESTAMP_END_OP + 0x1cu ||
+      (APPLE_AGX_U32)plain_u64(Micro + TA_TIMESTAMP_START_OP) != 0x80000019u ||
+      (APPLE_AGX_U32)plain_u64(Micro + TA_TIMESTAMP_END_OP) != 0x00000019u)
+    return APPLE_AGX_FALSE;
+  start = plain_u64(Micro + TA_TIMESTAMP_START_OP + 0xcu);
+  end = plain_u64(Micro + TA_TIMESTAMP_END_OP + 0xcu);
+  if (!start || start != end) return APPLE_AGX_FALSE;
+  put_u64(Micro + TA_TIMESTAMP_START_OP + 0x14u, start);
+  put_u64(Micro + TA_TIMESTAMP_END_OP + 0x14u, end + 8u);
+  return APPLE_AGX_TRUE;
+}
+
 static APPLE_AGX_BOOL runtime_bindings_valid(
     const APPLE_AGX_RENDER_RUNTIME_BINDINGS *Bindings) {
   if (Bindings == RENDER_SHARED_NULL ||
@@ -1187,6 +1216,10 @@ static APPLE_AGX_BOOL build_active_job(
   put_u64(ActiveObjects[15u].Data + 604u,
           RuntimeBindings->Stats3dOwnerGpuAddress +
               APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET);
+  if (Owner != RENDER_SHARED_NULL && Owner->TaStartTimestamps &&
+      !patch_ta_timestamp_update(ActiveObjects[17u].Data,
+                                 ActiveObjects[17u].Size))
+    BUILD_REFUSE(STATS);
   candidate = *StagedJob;
   for (index = 0u; index < 8u; ++index) {
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *timestamp =

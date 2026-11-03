@@ -226,6 +226,10 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
    * timestamps and never changes the build. */
   void (*BuildMark)(void *Context, APPLE_AGX_U32 Point);
   void *BuildMarkContext;
+  /* G2 receipt (device value Wom1TaStartTimestamps): point the TA
+   * microsequence's Timestamp ops at their start/end pointer fields
+   * (Asahi queue/render.rs update_ts); default off keeps 0xdeadbeef. */
+  APPLE_AGX_BOOL TaStartTimestamps;
   /* The last managed G4 build restored the saved buffer-manager state. */
   APPLE_AGX_BOOL LastBuildRestored;
   /* rc83 A/B: 1 = the pre-rc83 element-wise reads of the template arena

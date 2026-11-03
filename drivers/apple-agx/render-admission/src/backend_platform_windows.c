@@ -282,6 +282,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   /* rc79: device value Wom1PreludeTimestampsOff = 1 builds v5 render
    * preludes without the timestamp microsequence (the pre-rc79 job). */
   BOOLEAN PreludeTimestampsOff;
+  /* G2: device value Wom1TaStartTimestamps = 1 points the TA Timestamp
+   * ops' update_ts at their start/end pointers (receipt only). */
+  BOOLEAN TaStartTimestamps;
   /* rc82: soft faults are reported to the UMD unless device value Wom1SoftFaults = 0
    * when RegionC fault_control is 0xb (AdmissionPublishSoftFaults). */
   BOOLEAN SoftFaultsRequested;
@@ -3466,6 +3469,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
       runtime->JobDiagnostics ? AdmissionRenderBuildMarkWindows : NULL;
   runtime->Initdata.RenderSharedMemory.BuildMarkContext = runtime;
 #endif
+  runtime->Initdata.RenderSharedMemory.TaStartTimestamps =
+      runtime->TaStartTimestamps ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
   if (!AdmissionBackendImageStageJob(
           &runtime->Adapter->BackendImage,
           Submission->Submission.Fence, TaEvent, D3Event,
@@ -7303,6 +7308,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultInfoRead");
   runtime->PreludeTimestampsOff =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1PreludeTimestampsOff");
+  runtime->TaStartTimestamps =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1TaStartTimestamps");
   runtime->BuildDirectReads =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1BuildDirectReads");
   runtime->ManagerReceipt =
