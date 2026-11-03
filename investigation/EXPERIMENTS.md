@@ -67891,3 +67891,14 @@ EXP2114 HARDWARE ACTUAL (2026-11-03): **q21 early batch reclamation (APPLE_AGX_D
 USER PERMISSION (2026-11-03): per AGENTS.md "G2 m1n1 implementation and hardware runs require explicit user permission", the user authorised (chat, option "offline and hardware") an m1n1 broker extension so that GPU-VA map publication need not wait for a running job of the same process (q22: the broker refuses page-table updates while the process has a running job; ~0.5 ms before each GravityMark render). Scope: Codex q22b implements the broker + KMD change offline on its own m1n1 branch from 075e3980 with tests; Claude runs hardware with the standard recovery and the current last-good m1n1 (075e3980 guestram) as AGX_M1N1_LASTGOOD.
 
 EXP2115 BUILD FAIL (2026-11-03): package build stopped in the WDK ARM64 KMD compile: gpuva_g3_paging_windows.c(1723,64) warning C4242 ('=': ULONGLONG -> UINT) treated as error (/W4 /WX) in the q22b live-paging code (`writable = pte->ReadOnly`). No hardware run. Fixed with an explicit (UINT) cast of the one-bit field; tests test_g4_live_publication (with Q22_M1N1_SOURCE pointing at the q22 m1n1 tree), test_g4_paging_serialization, test_kmd_no_user_crt_headers OK. EXP2115 is rebuilt under the same ID; the failed build directory is kept as EXP2115-m1n1-q22-compat.buildfail.
+
+EXP2115 HARDWARE BEFORE 2026-11-03T06:56:29Z:
+Switches: Wom1GpuFaultInfoRead=1 only. Steps: only Q3PC, then GravityMark HD/FHD 100k temporal 0.
+- WHY THIS HYPOTHESIS: user-authorised G2 broker change (2026-11-03); before enabling the feature, the new m1n1 must be behaviour-neutral with an old-path KMD (q22b compatibility matrix: new firmware + legacy KMD keeps legacy behaviour).
+- ATOMIC CONTRACT: m1n1 binary + KMD code with the feature off (capability not negotiated).
+- WHAT IS STILL UNKNOWN: whether the full-owner m1n1 build from the scratch layout boots and runs identically.
+- Expected: boot and recovery as usual; Q3PC exact outputs with the hold unchanged (next_submit after head_complete); GravityMark HD ~5950-5980, FHD ~4800-4830 (EXP2110/2114); no reset.
+- FAIL: boot failure, hang, reset, regression beyond noise. Recovery: rec2115h with AGX_M1N1_LASTGOOD=075e3980 (dump-first if lost).
+- Hashes: sys 7a6401143258, UmdArm64 f4f41c2740a9, UmdX64 5446c5042bef, Umd32 b21a40abd80e; manifest f6ed32141c5d, hardware-manifest 394faa3836f8; probe2115.sh 3a7777e781b3 (PROBE_LINT_OK); visible recovery rec2115h ce49915e46a17137; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2115h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2115-m1n1-q22-compat/run2115.sh.
