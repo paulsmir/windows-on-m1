@@ -68340,3 +68340,12 @@ EXP2132 HARDWARE ACTUAL (2026-11-03): **with compute-on-compute on, almost every
 - Verdict: confirmed: depth two (InFlight == 1 before a kick) with coupled pair completions makes every other boundary unhidden. The refusal is not a code, the successor simply cannot be kicked while the pair is in flight.
 - Next (KMD design, offline first): release N from the window when its firmware stamp (not the deferred notifier) shows completion, so N+2 can be kicked as a pair with N+1 while N+1 runs; or a depth-three window. Derive from the Asahi/m1n1 queue-event contract before any hardware run.
 - Recovery rec2132h.
+
+EXP2133 HARDWARE BEFORE 2026-11-03T14:53:16Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1.
+- WHY THIS HYPOTHESIS: EXP2131 HD 6242 (+2.9 % vs EXP2129, ~+4 % vs defaults) with compute -> prelude start 0.59 -> 0.063 ms; the removed idle is resolution-independent, so FHD should gain about the same absolute frame time (~1 ms of ~35 ms).
+- ATOMIC CONTRACT: single change vs EXP2131 = resolution.
+- WHAT IS STILL UNKNOWN: FHD stability of the class and its gain.
+- Expected: suite 119/0; FHD correct image; score above the FHD defaults (~4800-4850) by ~2-3 %.
+- FAIL: crash/reset/corruption; FHD not above defaults.
+- Recovery: rec2133h.
