@@ -68009,3 +68009,10 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1. Steps: GravityMark D3D12 H
 - Hashes: sys b23bb70f192c, UmdArm64 e8dd9e7df3b9, UmdX64 a751d34ba9d4, Umd32 db460ab7f583; manifest db068af58742, hardware-manifest 2f4c48f20021; probe2120.sh acd39103c805 (PROBE_LINT_OK); visible recovery rec2120h 7328265eeab42d02; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Prelude=1.
 - Recovery rec2120h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2120-prelude-stamps/run2120.sh.
+
+EXP2120 HARDWARE ACTUAL (2026-11-03): **q23 queue-event compute stamps FIX the prelude-pair firmware crash: GravityMark HD and FHD complete with Wom1Depth2Prelude=1 (EXP2118 crashed in ~30 s with the same switch). No score gain yet.**
+- HD 100k temporal 0: Score 5973, 35.8 FPS; FHD: Score 4851, 29.0 FPS (EXP2119 control, prelude off, same harness: 5934/4850 -> +0.7% / +0.0%). Normal exits, WER 0; no Wom1GpuReset, no G4 failure; pipeline rc 0.
+- Diagnostics are off by default, so kick/decision receipts were not exported; whether prelude pairs were actually admitted is not shown by this run.
+- Expected vs actual: no crash (met, crash fixed: stamp-unit hypothesis confirmed by removal); expected gain up to ~2 ms/frame not observed. Verdict: crash fix CONFIRMED; performance effect not demonstrated.
+- Next: EXP2121 same switch with Wom1RcReceipt=1 (diagnostic only; scores not comparable) to count admitted prelude pairs (reason 0 vs other refusals).
+- Recovery rec2120h.
