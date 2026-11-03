@@ -1216,10 +1216,20 @@ static APPLE_AGX_BOOL build_active_job(
   put_u64(ActiveObjects[15u].Data + 604u,
           RuntimeBindings->Stats3dOwnerGpuAddress +
               APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET);
-  if (Owner != RENDER_SHARED_NULL && Owner->TaStartTimestamps &&
-      !patch_ta_timestamp_update(ActiveObjects[17u].Data,
-                                 ActiveObjects[17u].Size))
-    BUILD_REFUSE(STATS);
+  if (Owner != RENDER_SHARED_NULL && Owner->TaStartTimestamps) {
+    if (!patch_ta_timestamp_update(ActiveObjects[17u].Data,
+                                   ActiveObjects[17u].Size) ||
+        ActiveObjects[30u].Data == RENDER_SHARED_NULL ||
+        ActiveObjects[30u].Size != sizeof(APPLE_AGX_U64) ||
+        ActiveObjects[31u].Data == RENDER_SHARED_NULL ||
+        ActiveObjects[31u].Size != sizeof(APPLE_AGX_U64))
+      BUILD_REFUSE(STATS);
+    /* EXP2125: update_ts alone left TA starts stale. The compute path,
+     * whose starts advance, zeroes its timestamp block for every job
+     * (build_compute_job); the TA start/end objects 30/31 never were. */
+    put_u64(ActiveObjects[30u].Data, 0u);
+    put_u64(ActiveObjects[31u].Data, 0u);
+  }
   candidate = *StagedJob;
   for (index = 0u; index < 8u; ++index) {
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *timestamp =
