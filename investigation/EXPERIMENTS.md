@@ -68281,3 +68281,13 @@ EXP2130 HARDWARE ACTUAL (2026-11-03): **with prelude pairs on, the compute -> pr
 - Verdict: confirmed: the remaining ~0.59 ms compute -> prelude-render idle belongs to the disabled compute-on-compute class.
 - Next: EXP2131 = EXP2129 switches + Wom1Depth2ComputeOnCompute=1 (first hardware gate of the class).
 - Recovery rec2130h.
+
+EXP2131 HARDWARE BEFORE 2026-11-03T14:26:19Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1. Steps: suite; GravityMark HD 100k T0 (UMD trace, stage receipts).
+- WHY THIS HYPOTHESIS: (1) EXP2130: the compute -> prelude-render successors are refused with 64 (compute-on-compute class disabled, barrier 4) and then wait ~0.59 ms (EXP2129) for the firmware to start the prelude; (2) EXP2129: enabling pairs for the other prelude classes cut their idle 0.351 -> 0.065 ms; (3) compute -> TA idle is 7.6 % of GPU time.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: N+1's prelude on the compute queue waits on N's compute stamp (Barrier, q23 queue-event units); same sidecar rules (SECOND_SIDECAR declared). TRANSLATION: existing AdmissionJobWindowGeneralClasses switch.
+- ATOMIC CONTRACT: single class switch.
+- WHAT IS STILL UNKNOWN: firmware behaviour of a compute-queue Barrier on the compute queue's own previous stamp (untested class).
+- Expected: suite 119/0; compute -> prelude start median falls from ~0.59 ms toward ~0.07 ms; GravityMark HD rises by up to ~5-7 % over EXP2129's 6069; image correct.
+- FAIL: firmware crash/reset/device removal (class unsafe -> keep off); idle unchanged.
+- Recovery: rec2131h.
