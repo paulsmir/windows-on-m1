@@ -68395,3 +68395,14 @@ EXP2134 HARDWARE ACTUAL (2026-11-03): **default flip validated: switch-free pack
 - Verdict: confirmed (HD), FHD within noise of the old defaults -> default kept. Change CHG-dbd498a8 validated by EXP2134.
 - Next: depth-three window (G2 plan) for the remaining ~0.4 ms render -> compute boundary after each pair.
 - Recovery rec2134h.
+
+EXP2135 HARDWARE BEFORE 2026-11-03T17:01:06Z:
+Steps (one boot, separate observable arms): suite; a FAST HD + MIN16_CAPS + DXIL capture; b FULL HD MIN16_CAPS; c FULL HD MIN16_CAPS + DXIL_MIN16; d FULL HD control. HD 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true.
+- WHY THIS HYPOTHESIS: (1) Tellusim_arm64.dll maps its half types to HLSL min16float (strings min16float/min16float4x4/min16int); GravityMark compiles at runtime (ships dxcompiler.dll); (2) our caps report MinPrecision NONE and none of 243 captured GravityMark shaders contains a min-precision type; (3) C0 bdb1944a runs at the ALU peak (921600 threads x 3543 instrs in 1.72 ms, fp32 only), so 16-bit ALU work is the only route to Metal-like pixel cost.
+- WINDOWS CONTRACT: D3D12 MinPrecisionSupport (D3D12DDI_SHADER_CAPS MinPrecision) allows min-precision math at any precision >= 16 bits; reporting 16_BIT with fp32 execution (arm b) is legal; arm c executes it at 16 bits.
+- AGX/ASAHI CONTRACT: AGX has native fp16/i16 ALUs and 16-bit registers (Asahi lowers mediump to fp16). TRANSLATION: dxil-spirv DXIL_SPV_OPTION_MIN_PRECISION_NATIVE_16BIT -> 16-bit SPIR-V -> NIR f16.
+- ATOMIC CONTRACT: none across arms (separate env per arm); caps+native16 in arm c is the cap's documented behaviour.
+- WHAT IS STILL UNKNOWN: whether GravityMark emits min16 under the 16-bit caps, and the correctness of the 16-bit path end to end.
+- Expected: suite 119/0; a: capture holds min-precision shaders, no device removal; b: score ~ control (+-1 %); c: correct image and score above control (target several %); d ~6257.
+- FAIL: device removal/TDR/corrupt image in b or c (switch stays off); a capture without min16 (hypothesis rejected).
+- Recovery: rec2135h.
