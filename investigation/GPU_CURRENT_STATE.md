@@ -8,6 +8,26 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-11-03 18:00Z -- GRAVITYMARK HD 6257 / FHD 4862 (EXP2134, defaults); TARGET macOS HD 9739
+- Baseline (switch-free package, dbd498a8 defaults): EXP2134 HD 100k -temporal 0 = 6257 / 37.4 FPS, FHD 4862 / 29.1 FPS,
+  suite 119/0. Compare only at -temporal 0 (macOS HD 9739 = ~17.2 ms/frame; ours ~26.7 ms).
+- Accepted today: shared-load vectorization (EXP2110), prelude pairs + compute-on-compute depth-two class on by default
+  (EXP2129-2134: compute -> prelude start 0.59 -> 0.063 ms). Receipts: Wom1TaStartTimestamps (TA starts valid, EXP2126).
+- Closed (hardware): W1 waits (EXP2124), D3D robustness (EXP2057), K1 spacing (EXP2080), per-dispatch overhead (EXP2077),
+  trace I/O (EXP2119), update_ts alone (EXP2125), prebuild of unpaired successors (build ~5 us, EXP2132 ring).
+- GPU budget per frame, current defaults (EXP2131 HD medians, scratchpad budget.py): C4 compute 7.70 ms; R1 3D 2.99
+  (FHD 4.91); R5 TA 1.78 + 3D 0.80; C0 1.72 (FHD 3.34, = bdb1944a full-screen compute: 921600 threads x 3543 instrs,
+  207 GPRs -> 512 threads, fp32 only); C6 1.55; R7 TA 0.74 + 3D 0.82; C2 0.68; idle before each compute 4 x 0.40 ms.
+- Remaining idle (1.6 ms/frame) needs completion that does not wait for the deferred notifier event (U4: the event is
+  deferred until every kicked job ends, Asahi queue/mod.rs:306); deeper pipelining (depth three or early retirement)
+  therefore needs stamp-based completion: architectural, see analysis/G2-pre-3d-span.md. rc95 ring receipts: TA done
+  pointers visible ~300 us before Complete, stamps only 20-40 us before (inconclusive whether stamps are written late or
+  not polled).
+- Execution is the main gap: ~21.6 ms of GPU work vs Metal's whole 17.2 ms frame. Next targets by ms: C4 kernels
+  (traversal 7aa43c6c/97ae4b02, trio, indirect atomics), R1 fragment shaders, C0 bdb1944a.
+- Workflow (analysis/ITERATION_WORKFLOW.md): agx_gravitymark_run.ps1 -Mode FAST|PERF|FULL, tools/agx_gm_perf.py
+  (PERF = 10 + 60 s window), tools/agx_iterate.py plan. Launch: m1n1 075e3980 expanded RAM, Wom1GpuFaultInfoRead=1.
+
 ## CURRENT 2026-10-26 14:00Z -- GRAVITYMARK IS CPU<->GPU SYNC-BOUND (EXP1968); TARGET >= 3000 POINTS
 - User target: GravityMark D3D12 score >= 3000 (native M1 Metal is about 9,950 / 60 FPS at 100k asteroids, 720p). We are at 750-800 / 4.5-4.8 FPS at 2k-10k asteroids. 2k and 10k run at the same speed.
 - Stable package: EXP1967/EXP1968 (integration ff298b99). Counted ExecuteIndirect uses the count-bounded native path (CPU count read, path=2 reason 7). The GPU-generated VDM stream is opt-in (APPLE_AGX_D3D12_GPU_INDIRECT_STREAM=1): EXP1966 hit 0x119, and rc38 fixed the fence accounting and the links, but this is not hardware-validated. rc32 is removed.

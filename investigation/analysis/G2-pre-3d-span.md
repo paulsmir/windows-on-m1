@@ -85,3 +85,12 @@ tests.
 Estimated benefit: the ~0.4 ms unhidden boundary after each pair (EXP2131 render -> compute) ~4 % of GPU time.
 Plan: (1) window state machine + RED/GREEN tests (pure C, render_job_window.c); (2) slot modulo three + layout test;
 (3) sidecar set C allocation; (4) receipts; (5) one hardware gate behind a new switch (Wom1JobDepth3).
+
+## EXP2134 state and the completion constraint (2026-11-03)
+- Current idle: render -> compute boundaries after each pair ~0.40 ms x 4 per frame (EXP2131 budget), ~6 % of the frame.
+- KMD part is small: prev pair Complete -> kick 76-233 us, build ~5 us (EXP2132 rings); the rest is firmware start.
+- The notifier event of a pipelined job is deferred until all kicked jobs end (U4; Asahi signals back-to-back jobs
+  together). Any deeper pipelining keeps the window non-empty and so suppresses events: completion would have to come
+  from stamps/done pointers. rc95 samples: TA done ~300 us before Complete; TA/prelude stamps first seen only 20-40 us
+  before Complete (also for pair heads) -> inconclusive (late stamp write vs no polling). Stopped after one offline pass
+  (AGENTS anti-loop); the next step needs a receipt that polls the head's stamp at a fixed short period.
