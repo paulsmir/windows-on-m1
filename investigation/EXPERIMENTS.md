@@ -68273,3 +68273,11 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom
 - Hashes: sys c88585d12146, UmdArm64 f17bb77eb2c6, UmdX64 426b9b35a7dd, Umd32 4da086ece981; manifest 9d9f308248f7, hardware-manifest e92c8fb12277; probe2130.sh 038e9d65976a (PROBE_LINT_OK); visible recovery rec2130h 8fb069c4484f2670; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1JobDiagnostics=1.
 - Recovery rec2130h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2130-prelude-ring/run2130.sh.
+
+EXP2130 HARDWARE ACTUAL (2026-11-03): **with prelude pairs on, the compute -> prelude-render successors are refused with 64 (compute-on-compute class disabled) and kicked ~0.2-0.3 ms after Complete.**
+- Expected: suite 119/0; live rings with GravityMark jobs; flags/refusal per compute -> prelude-render pair. Actual: suite 119 PASS / 0 FAIL; GravityMark HD Score 5930 / 35.5 FPS (diagnostics + live ring fetches; not a performance arm), WER 0; live rings at i=10/18 with GravityMark jobs (KMD pid 3244).
+- Ring live-18: successor kicked early (DEPTH2_KICKED) with predecessor refusal 0: 35; not kicked, refusal 64: 14; refusal 55 (other process): 7; not kicked, refusal 0: 7. Unpaired successors: prev Complete -> KickTa median 310 us. Ring live-10 shows the frame pattern: every prelude render (flags 0x3f27/0x3f67) follows a depth-two-kicked job whose AheadRefusals = 64 and is kicked ~200 us after that job's Complete; KickTa -> TA start ~0.6 ms.
+- Consistent with EXP2121's Wom1RcDecisions (64 class-disabled 16171, barrier 4 = compute-on-compute). EXP2121 concluded this class would not pay; EXP2129 now shows the paired classes cut their idle 0.35 -> 0.065 ms, so that conclusion is superseded for this class.
+- Verdict: confirmed: the remaining ~0.59 ms compute -> prelude-render idle belongs to the disabled compute-on-compute class.
+- Next: EXP2131 = EXP2129 switches + Wom1Depth2ComputeOnCompute=1 (first hardware gate of the class).
+- Recovery rec2130h.
