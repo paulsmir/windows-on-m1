@@ -68555,3 +68555,11 @@ Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite with APPLE_AGX_REMAT_INPUTS
 - Hashes: sys f0b867ce6521, UmdArm64 d27c6e72f19f, UmdX64 2c6c71926fb9, Umd32 75da467f82bc; manifest 5b7de2bf81f9, hardware-manifest 719df68588e4; probe2142.sh 04c78fc14ea0 (PROBE_LINT_OK); visible recovery rec2142h 699abcb61f497914; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2142h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2142-remat2/run2142.sh.
+
+EXP2142 HARDWARE ACTUAL (2026-11-03T22:08:31Z): **RC124 level 2 applies on hardware and removes the planet PS spills: small gain (+0.9 % PERF ABBA, FULL 6333), image correct, suite 119/0.**
+- Expected: suite 119/0; b/c faster than a/d by up to ~0.5 ms/frame; image correct. Actual: suite 119 PASS / 0 FAIL (with APPLE_AGX_REMAT_INPUTS=2); shader-stats receipts: heaviest PS 6677 instrs / 255 halfregs / 111 spills in a/d, 6029 / 231 / 0 in b/c/e (applied).
+- PERF (10+60 s): a 38.66, b 38.57, c 39.06, d 38.29 FPS; A 38.47 vs B 38.82 = +0.9 % (0.23 ms/frame); compare a->b no-significant-change (5/8), d->c faster (7/8).
+- e (remat, FULL): Score 6333 / 37.9 FPS (EXP2134 default 6257; different boot), image correct (planet, atmosphere, asteroids), WER 0, no GPU fault.
+- Interpretation: removing 111 spills saves ~0.2 ms of the planet PS's 1.57 ms (EXP2140); the rest of its cost is arithmetic at 384-thread occupancy (231 halfregs > 208).
+- Verdict: confirmed (small). Next: make level 2 the default with an HD+FHD FULL validation; occupancy (<= 208 halfregs -> 512 threads) is the remaining lever in this shader.
+- Recovery rec2142h.
