@@ -68541,3 +68541,17 @@ EXP2140 HARDWARE ACTUAL (2026-11-03T20:17:37Z): **the full-screen planet PS 4284
 - Interpretation: the saving is an upper bound for any compiler improvement of this shader (the null still runs 633 instructions plus the pass). Reaching Metal (9739, ~+56%) needs much more than this PS; still the largest single fragment item measured.
 - Decision rule (>= 1.5 ms) met: register pressure/spills of 428487da is a valid next compiler target, ceiling ~6%. Rank against C4 compute (7.7 ms) before committing effort.
 - Verdict: confirmed (measurement). Recovery rec2138h.
+
+EXP2142 HARDWARE BEFORE 2026-11-03T21:43:11Z:
+Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite with APPLE_AGX_REMAT_INPUTS=2; GravityMark D3D12 HD 100k -temporal 0 PERF ABBA (a default, b/c remat, d default), then e remat FULL (score + image); MESA_SHADER_CACHE_DISABLE=true.
+- WHY THIS HYPOTHESIS: (1) EXP2140: the full-screen PS 428487da costs 1.57 ms/frame (+6.4 % when nulled); (2) offline it needs 296 halfregs against 256 and spills 152 values; at the peak ~27 live 32-bit values are interpolated inputs loaded at the top and used thousands of instructions later; (3) RC124 level 2 offline: demand 246 (< 256), spills 152 -> 0, instructions 7335 -> 6421 (-12.5 %), the other 30 captured pixel shaders unchanged.
+- WINDOWS CONTRACT: unchanged (D3D12 PS semantics: an interpolated input is a pure function of barycentrics and coefficients; re-issuing it returns the same value).
+- AGX/ASAHI CONTRACT: agx_compile.c lowers load_interpolated_input(load_barycentric_pixel) to iter/iterproj from the coefficient registers, valid anywhere in the shader; clones run after the last nir_opt_cse.
+- TRANSLATION: compiler-internal (NIR pass agx_win32_remat_inputs in agx_optimize_nir).
+- WHAT IS STILL UNKNOWN: hardware cost of the re-issued iter/device loads vs the removed spills/fills; image correctness. EXP2141 (level 1 package 31e314d8) was built but superseded before launch.
+- Expected: suite 119/0; b/c faster than a/d by up to ~0.5 ms/frame (+1-2 %); e score above EXP2134 6257 by a similar share; image correct; no GPU fault.
+- FAIL: any suite FAIL, wrong image, device removal, or no gain -> keep default off.
+- Recovery: rec2142h.
+- Hashes: sys f0b867ce6521, UmdArm64 d27c6e72f19f, UmdX64 2c6c71926fb9, Umd32 75da467f82bc; manifest 5b7de2bf81f9, hardware-manifest 719df68588e4; probe2142.sh 04c78fc14ea0 (PROBE_LINT_OK); visible recovery rec2142h 699abcb61f497914; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2142h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2142-remat2/run2142.sh.
