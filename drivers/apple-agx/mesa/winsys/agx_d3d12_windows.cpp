@@ -475,8 +475,9 @@ static void owner_backend_fail(unsigned site) { owner_batch_refusal(4u, site, 0u
  * so a short run (GravityMark D3D12: 29 frames) keeps its tail. */
 extern "C" void (*AgxWin32PerfHook)(const char *message);
 #ifdef APPLE_AGX_GPUVA_WINSYS
-/* Q19: enlarge tracking only, never GPU execution depth. Configure both
- * owners after screen/GPUVA initialization, before any D3D12 submission. */
+/* Q20/EXP2108-2109: sixteen tracked submissions by default, exact "0"
+ * restores four. Configure both owners together before D3D12 submission.
+ * this does not change GPU execution depth or other frontends' defaults. */
 static void configure_submission_window(AGX_D3D12_OWNER *owner) {
   static_assert(AGX_GPUVA_IN_FLIGHT == AGX_SUBMISSION_WINDOW_DEFAULT,
                 "winsys default submission window");
@@ -484,8 +485,8 @@ static void configure_submission_window(AGX_D3D12_OWNER *owner) {
                 "runtime default submission window");
   char value[2] = {};
   const unsigned limit =
-      GetEnvironmentVariableA("APPLE_AGX_D3D12_SUBMISSION_WINDOW", value, sizeof(value)) == 1 && value[0] == '1'
-          ? AGX_SUBMISSION_WINDOW_MAX : AGX_SUBMISSION_WINDOW_DEFAULT;
+      GetEnvironmentVariableA("APPLE_AGX_D3D12_SUBMISSION_WINDOW", value, sizeof(value)) == 1 && value[0] == '0'
+          ? AGX_SUBMISSION_WINDOW_DEFAULT : AGX_SUBMISSION_WINDOW_MAX;
   owner->Backend.Gpuva.SubmissionWindow = limit;
   owner->Runtime.SubmissionWindow = limit;
 }

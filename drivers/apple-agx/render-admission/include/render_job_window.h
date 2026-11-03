@@ -1,8 +1,8 @@
 #ifndef APPLE_AGX_RENDER_JOB_WINDOW_H
 #define APPLE_AGX_RENDER_JOB_WINDOW_H
 
-/* rc95 firmware depth-2 job window (device value Wom1JobDepth2 = 1, default
- * off; needs Wom1JobBuildAhead = 1).
+/* Firmware depth-2 job window (Q20: default on, Wom1JobDepth2 = 0 opts
+ * out; still requires effective Wom1JobBuildAhead).
  *
  * Depth 2: job N+1 is built and kicked to the firmware queues while N runs.
  * Windows order is kept by the firmware itself: N+1's first queue leads
@@ -103,7 +103,7 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
    * (1 << ADMISSION_JOB_WINDOW_BARRIER_*); 0 = no restriction (the rc95
    * receipt mode). Refusal 64 otherwise. */
   unsigned int KickClasses;
-  /* Q6 opt-in: caller proves the pending key equals the running live slot. */
+  /* Q6 general mode: caller proves the pending key equals the running live slot. */
   unsigned int General, SameManagerSlot;
   /* Q14: unproven prelude pairs require Wom1Depth2Prelude=1 in general mode. */
   unsigned int Prelude;

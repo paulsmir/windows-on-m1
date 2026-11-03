@@ -154,7 +154,7 @@ int main(void) {
 }
 """)
 
-    def test_exact_switch_configures_both_owners(self):
+    def test_exact_zero_opts_out_both_owners(self):
         configure = body((WINSYS/'agx_d3d12_windows.cpp').read_text(),
                          'configure_submission_window')
         code = r"""
@@ -175,10 +175,10 @@ static unsigned GetEnvironmentVariableA(const char *name,char *out,unsigned capa
 }
 """ + configure + r"""
 int main() {
- const char *cases[]={nullptr,"","0","1","16","01","true","1 ","-1"};
+ const char *cases[]={nullptr,"","0","1","16","01","true","1 ","-1","00","0 "," 0"};
  for(const char *value:cases) {
   setting=value; AGX_D3D12_OWNER owner={};configure_submission_window(&owner);
-  unsigned expected=value && !strcmp(value,"1")?16:4;
+  unsigned expected=value && !strcmp(value,"0")?4:16;
   assert(owner.Backend.Gpuva.SubmissionWindow==expected);
   assert(owner.Runtime.SubmissionWindow==expected);
  }
