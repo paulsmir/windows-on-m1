@@ -68088,3 +68088,10 @@ Switches: Wom1GpuFaultInfoRead=1 only. Steps: full default D3D12 suite with APPL
 - Hashes: sys 5226640066c5, UmdArm64 0628c60f66bc, UmdX64 0f897c4f68eb, Umd32 68e1b089b81e; manifest 5004847a1c53, hardware-manifest bf80e6413cbb; probe2124.sh 02afa95f41ae (PROBE_LINT_OK); visible recovery rec2124h 5aa732da7e8f979a; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2124h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2124-wait-global2/run2124.sh.
+
+EXP2124 HARDWARE ACTUAL (2026-11-03): **W1 v2 (APPLE_AGX_WAIT_GLOBAL=1, 759e43e6) correct; speed effect neutral.**
+- Expected: suite 119/0; arm a completes with correct image and scores >= arm b. Actual: suite 119 PASS / 0 FAIL (C19A-D now PASS); arm a W1 Score 5999 / 35.9 FPS (187-192 s, WER 0); arm b control Score 5994 / 35.9 FPS; both images correct and indistinguishable; G4_SUBMIT_FAILURE none; guest alive after every step; PIPELINE_RC 0.
+- Interpretation: W1 v2 is correct on the suite and GravityMark, but +0.08 % is inside run-to-run noise (~1 %). The removed block-end drains (trio 28/6/25 -> 17/3/21, traversal 120 -> 109) were not on the critical path: the waited-on loads complete before the next consumer anyway, so the frame time is not wait-bound.
+- Verdict: correctness confirmed; performance hypothesis rejected. W1 stays opt-in (APPLE_AGX_WAIT_GLOBAL=1), default unchanged.
+- Next: the per-kernel cost is not wait count; measure issue/ALU and memory cost of the BVH trio and leading kernels offline (agx_shader_cost) before another compiler change.
+- Recovery rec2124h.
