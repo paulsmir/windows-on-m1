@@ -67785,3 +67785,17 @@ EXP2109 HARDWARE ACTUAL (2026-11-03): **promotion regression gate PASS: the full
 - Recovery rec2109h.
 
 DECISION (2026-11-03, offline, after EXP2109): the q12 "real firmware fault/hang" gate is not depth-two specific. EXP2007 (depth one, rc37 GPU fault probe) already ended in 0x116 with ResetFromTimeout 0xc0000483, the same signature as EXP2100; real GPU faults are a pre-existing unrecoverable class on this platform (shader-read faults are handled by Wom1SoftFaults since EXP2013-2015), while the CPU-side TDR drills pass at depth one (EXP2032/2034) and with two flights (EXP2098/2099). Prelude-bearing pairs, the only depth-two topology that produced a firmware crash (EXP2100), stay refused by default (q14). Therefore the accepted configuration (depth two with compute-on-3D, TA-on-3D, TA-on-compute; diagnostics off; UMD submission window 16) is eligible to become the default: EXP2096-2099 probes/drills, EXP2102/2107/2108 GravityMark HD+FHD, EXP2109 full D3D12 suite 119/119 PASS. Next: Codex q20 makes it the default with explicit opt-out switches, then a no-switch validation run.
+
+EXP2110 HARDWARE BEFORE 2026-11-03T02:28:13Z:
+Switches: as EXP2108. UMD env (GravityMark wrapper): APPLE_AGX_D3D12_SUBMISSION_WINDOW=1, APPLE_AGX_SHARED_LOAD_VECTORIZE=1. Steps: GravityMark D3D12 HD 100k temporal 0, then FHD.
+- WHY THIS HYPOTHESIS:
+  1. k2 budget: C4 asteroid compute ~8.6 ms/frame is the largest resolution-independent region; the traversal kernel 97ae4b027aa43c6c (~2.8 ms) dominates it.
+  2. Offline compile: shared loads 202 -> 70, instructions 1334 -> 1201, code 9774 -> 8588 bytes, registers and thread ceiling unchanged; other C4 kernels byte-identical.
+- ATOMIC CONTRACT: single compiler option.
+- WHAT IS STILL UNKNOWN: whether the traversal kernel is shared-load bound on hardware.
+- Expected: correct images (no visual corruption), no reset; HD and FHD up by up to ~(traversal saving) -- if the kernel is load-bound, ~0.3-0.8 ms/frame -> +1-3%; no change means it is bound elsewhere.
+- FAIL: corruption, crash, reset, score below EXP2108 beyond noise.
+- Recovery: rec2110h.
+- Hashes: sys 410e906432bf, UmdArm64 e498642e60bb, UmdX64 449160d4e93b, Umd32 12b359ecb9d2; manifest d8235f7a4fdb, hardware-manifest e93140540838; probe2110.sh 50b4c72bdc61 (PROBE_LINT_OK); visible recovery rec2110h 32d1e6468913ba1e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2110h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2110-gm-shared-vec/run2110.sh.
