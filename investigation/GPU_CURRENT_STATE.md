@@ -20,8 +20,11 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   MEMATTR 0 for GPU-only memory gives HD 6240 / FHD 4857 = no change; experiment m1n1 ed6fd218 + Wom1GpuPrivateCached
   stay experimental, no FwCtl invalidation, one engine reset seen). Within-boot run order moves scores ~3 % (EXP2135):
   use ABBA for A/B.
-- Next compiler targets: planet PS 71405b87 (7436 instrs, 255 GPRs, 158 spills/150 fills, 435 xor + 668 mov copies,
-  384 threads); C4 kernels are memory/latency-bound (trio ~42 M instrs in 1.51 ms) for reasons other than UAT attributes.
+- Planet PS measured (EXP2140, APPLE_AGX_D3D12_NULL_PS ABBA): at HD 100k the full-screen PS is 428487dae22a5191
+  (the 71405b87 capture is HD 50k: GravityMark shader bytes depend on the run config; EXP2138 was inert, EXP2139 capture
+  .local/experiments/EXP2138-nullps/evidence/EXP2139-capture). Nulling it saves 1.57 ms/frame (+6.4 % FPS) = about half
+  of R1 3D and the ceiling for any work on it (7335 instrs, 255 GPRs, 384 threads, 152 spills offline).
+- Next compiler targets: planet PS 428487da register pressure (ceiling 1.57 ms); C4 kernels are memory/latency-bound (trio ~42 M instrs in 1.51 ms) for reasons other than UAT attributes.
 - GPU budget per frame, current defaults (EXP2131 HD medians, scratchpad budget.py): C4 compute 7.70 ms; R1 3D 2.99
   (FHD 4.91); R5 TA 1.78 + 3D 0.80; C0 1.72 (FHD 3.34, = bdb1944a full-screen compute: 921600 threads x 3543 instrs,
   207 GPRs -> 512 threads, fp32 only); C6 1.55; R7 TA 0.74 + 3D 0.82; C2 0.68; idle before each compute 4 x 0.40 ms.
