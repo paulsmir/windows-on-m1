@@ -67858,3 +67858,11 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1RcReceipt=1 (decisions needed; everything e
 - Hashes: sys b6b33046c332, UmdArm64 a80e5714070d, UmdX64 5424d1111594, Umd32 c840a4fd0795; manifest 1736602d6d46, hardware-manifest c553b4e0f025; probe2113.sh e77bbb529c99 (PROBE_LINT_OK); visible recovery rec2113h a4c4a85aaa581996; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1RcReceipt=1.
 - Recovery rec2113h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2113-q3pc-indirect/run2113.sh.
+
+EXP2113 HARDWARE ACTUAL (2026-11-03): **q16 Q3PC (counted ExecuteIndirect prelude render -> compute) INCONCLUSIVE, but it localises the cause: the successor is submitted only after the prelude render completes.**
+- Q3PC: exact outputs PASS (pid 8404, prelude=counted-indirect max_count 2 count 1, render_instances 262144 fixed-bounded, warm passes 2); probe verdict `INCONCLUSIVE exact_outputs=PASS pending-prelude-pair=unproven`.
+- Topology line: head_fence 3974, next_fence 3976, head_submit 1501688139, head_complete 1502219516 (render ~22.1 ms), next_submit 1502235783 (0.68 ms AFTER head_complete), next_complete 1502253873; prelude_start/end 2281264672/2281265850 (~0.05 ms).
+- Retained probe-PID decision: only reason 66 (no pending successor) x3065; no reason 5; no reset, no G4 failure.
+- Expected vs actual: expected a pending prelude pair (reason 5); actual the successor submission is held until the head render completes, with a fixed ~0.7 ms delay -- the signature of a CPU-side wait on the ExecuteIndirect render before the next Execute returns/submits. The same hold would explain the ~0.5 ms launch gap before every GravityMark render (all of them carry ExecuteIndirect preludes; EXP2110 budget ~4.4 ms/frame of launches).
+- Next: Codex q21 finds the UMD/KMD wait between an ExecuteIndirect render and the next submission (trace tool-q3pc-umd.log) and removes it if not required by the D3D12 contract.
+- Recovery rec2113h.
