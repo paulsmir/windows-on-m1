@@ -68035,3 +68035,15 @@ EXP2121 HARDWARE ACTUAL (2026-11-03): **with prelude pairs allowed (q23 stamps) 
 - Expected vs actual: expected reason 5 ~0 and several times more admissions (met); the receipt-off EXP2120 already showed no score change with these admissions (+0.7%/+0.0%). Verdict: admission now works for prelude pairs, but kick-ahead of a pending successor does not shorten the GravityMark frame -> the ~0.5 ms per-job gaps are not CPU kick latency that depth two can hide (likely firmware/GPU job switch or completion signalling). Further depth-two classes (compute-on-compute, 16171 refusals) are not expected to pay off by this evidence.
 - Next: re-target GPU execution (C4 compute 7.7 ms, main 3D pass 4.9 ms) and measure the true GPU-side job switch cost from firmware timestamps.
 - Recovery rec2121h.
+
+EXP2122 HARDWARE BEFORE 2026-11-03T10:47:19Z:
+Switches: Wom1GpuFaultInfoRead=1 only. Arms: a HD 100k temporal 0 with APPLE_AGX_D3D12_SPLIT_TAGS=53aff18d,a4452d43,7aa43c6c,9e9aea5a,9f0d0b9d,b74fd86e,97efffb3,b1db88bf (EXP2078 tags: one job per heavy C0 kernel); b HD without split (control). UMD trace on (gm-run.ps1) for tools/agx_gpu_frame_breakdown.py.
+- WHY THIS HYPOTHESIS: G1 (96afb412): the frame is GPU-execution bound and ~80% of the HD gap to macOS is resolution-independent; C0 (~7.7 ms) is the largest item; EXP2078 per-kernel times predate shared-load vectorization (+3%), so the current top kernel is unknown.
+- ATOMIC CONTRACT: diagnostic only (score of a not comparable).
+- WHAT IS STILL UNKNOWN: current per-kernel GPU time inside C0.
+- Expected: traversal 97ae4b02 below its EXP2078 2.04 ms; ranking of a8260e42 / trio / radix; b ~5970.
+- FAIL: TDR, WER, corruption.
+- Recovery: rec2122h.
+- Hashes: sys 06808edfcb14, UmdArm64 94e3df421d6c, UmdX64 627b4effba9b, Umd32 b9d919a39046; manifest 1cfaff0720a4, hardware-manifest 1a4e8ee1d30d; probe2122.sh 2ef83b11dea1 (PROBE_LINT_OK); visible recovery rec2122h 1a83a1cd227a455c; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2122h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2122-kernel-split/run2122.sh.
