@@ -68185,3 +68185,10 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1. S
 - Hashes: sys 8e3547f7529c, UmdArm64 3059b06df058, UmdX64 6fd7ba0e40da, Umd32 07ff1c44592c; manifest d57b4a0d739d, hardware-manifest 4143d86d4fa4; probe2127.sh 814b8367aa79 (PROBE_LINT_OK); visible recovery rec2127h 000f86f2c78aa68e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1.
 - Recovery rec2127h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2127-kick-split/run2127.sh.
+
+EXP2127 HARDWARE ACTUAL (2026-11-03): **first KMD split of the render start latency: kick -> firmware TA start ~0.41 ms, but the captured ring is not GravityMark's.**
+- Expected: suite 119/0; GravityMark correct; Hot ring with GravityMark jobs. Actual: suite 119 PASS / 0 FAIL; GravityMark HD Score 5980 / 35.8 FPS (diagnostics cost within noise), WER 0, G4_SUBMIT_FAILURE none; compute -> TA idle reproduced (median 0.698 ms, 7.2 % of GPU time, n=20951).
+- Wom1JobTiming971Hot (rcpt2127/): 64 slots, 57 complete, all render, KMD ProcessId 10756/5128 -- no compute jobs, so not GravityMark's alternating compute/render stream (UMD pid 3084); likely DWM/post-run work. For these renders: submit -> worker 86 us, worker -> KickTa 165 us (build 150 us), KickTa -> firmware TA start median 409 us (p10 392, p90 566; firmware->QPC offset = max(fw end - Complete), so slightly over-estimated by the minimum detection latency).
+- Verdict: inconclusive for GravityMark: the kick -> TA start latency is large for these renders but may include GPU wake from idle.
+- Next: EXP2128 = same switches, snapshot Wom1JobTiming971 (exported every 2 s) DURING GravityMark (~60 s and ~120 s) to measure KickTa -> TA start and prev Complete -> KickTa on GravityMark's own compute -> render boundaries.
+- Recovery rec2127h.
