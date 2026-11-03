@@ -673,6 +673,131 @@ agx_win32_mem_vectorize_cb(unsigned align_mul, unsigned align_offset,
 '''
 
 
+# RC124 (EXP2140): GravityMark's full-screen PS 428487da needs 296 halfregs
+# against 256 and spills 152 values. At the peak about 27 of ~190 live 32-bit
+# values are interpolated inputs loaded at the top (nir_opt_sink places a load
+# at the dominator of all uses) and used again thousands of instructions later.
+# An interpolated input is a pure function of its barycentric and the
+# varying coefficients, so it can be issued again where it is used: for a use
+# in another block more than AGX_WIN32_REMAT_DISTANCE instructions after the
+# def, clone the barycentric and the load at that block's start, or, for a use
+# inside a loop that does not contain the def, at the end of the block before
+# the outermost such loop (the input is loop invariant). Offline (EXP2139
+# capture): 296 -> 258 halfregs demand, 152 -> 29 spills, 7335 -> 6597
+# instructions; the other 240 GravityMark shaders are unchanged. Runs after
+# the last CSE so the clones stay.
+# Opt-in: APPLE_AGX_REMAT_INPUTS=1.
+REMAT = r'''/* RC124: fragment interpolated-input rematerialization (opt-in). */
+#define AGX_WIN32_REMAT_DISTANCE 256
+
+static bool
+agx_win32_remat_inputs_enabled(void)
+{
+   static int enabled = -1;
+   if (enabled < 0) {
+      const char *env = getenv("APPLE_AGX_REMAT_INPUTS");
+      enabled = env && env[0] == '1' && !env[1];
+   }
+   return enabled != 0;
+}
+
+/* The block a clone for a use in `at` goes to: `at` itself, or the block
+ * before the outermost loop around `at` that does not contain `def_block`
+ * (an interpolated input is loop invariant, and the def dominates it). */
+static nir_block *
+agx_win32_remat_target(nir_block *def_block, nir_block *at)
+{
+   nir_cf_node *outer = NULL;
+   for (nir_cf_node *node = at->cf_node.parent; node; node = node->parent) {
+      if (node->type != nir_cf_node_loop)
+         continue;
+      bool contains_def = false;
+      for (nir_cf_node *d = def_block->cf_node.parent; d; d = d->parent)
+         contains_def |= d == node;
+      if (contains_def)
+         break;
+      outer = node;
+   }
+   return outer ? nir_cf_node_as_block(nir_cf_node_prev(outer)) : at;
+}
+
+static bool
+agx_win32_remat_inputs(nir_shader *nir)
+{
+   if (nir->info.stage != MESA_SHADER_FRAGMENT || !agx_win32_remat_inputs_enabled())
+      return false;
+   bool progress = false;
+   nir_foreach_function_impl(impl, nir) {
+      nir_index_instrs(impl);
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *load = nir_instr_as_intrinsic(instr);
+            if (load->intrinsic != nir_intrinsic_load_interpolated_input ||
+                !nir_src_is_const(load->src[1]))
+               continue;
+            nir_intrinsic_instr *bary = nir_src_as_intrinsic(load->src[0]);
+            if (!bary || bary->intrinsic != nir_intrinsic_load_barycentric_pixel)
+               continue;
+            nir_foreach_use_safe(src, &load->def) {
+               if (nir_src_is_if(src))
+                  continue;
+               nir_instr *user = nir_src_use_instr(src);
+               if (user->type == nir_instr_type_phi ||
+                   user->index < instr->index + AGX_WIN32_REMAT_DISTANCE)
+                  continue;
+               nir_block *at = agx_win32_remat_target(block, user->block);
+               if (at == block)
+                  continue;
+               /* one clone per block: reuse a clone made for an earlier use */
+               nir_intrinsic_instr *clone = NULL;
+               nir_foreach_instr(other, at) {
+                  if (other->type != nir_instr_type_intrinsic || other->pass_flags != 1)
+                     continue;
+                  nir_intrinsic_instr *candidate = nir_instr_as_intrinsic(other);
+                  if (candidate->intrinsic == nir_intrinsic_load_interpolated_input &&
+                      nir_intrinsic_base(candidate) == nir_intrinsic_base(load) &&
+                      nir_intrinsic_component(candidate) == nir_intrinsic_component(load) &&
+                      candidate->num_components == load->num_components &&
+                      nir_src_as_uint(candidate->src[1]) == nir_src_as_uint(load->src[1]))
+                     clone = candidate;
+               }
+               if (!clone) {
+                  /* a use block gets the clone at its start, a loop's
+                   * predecessor block at its end */
+                  nir_cursor cursor = at == user->block ? nir_after_phis(at) : nir_after_block(at);
+                  nir_instr *new_bary = nir_instr_clone(nir, &bary->instr);
+                  new_bary->pass_flags = 1;
+                  nir_instr_insert(cursor, new_bary);
+                  nir_instr *new_load = nir_instr_clone(nir, &load->instr);
+                  new_load->pass_flags = 1;
+                  nir_instr_insert(nir_after_instr(new_bary), new_load);
+                  clone = nir_instr_as_intrinsic(new_load);
+                  nir_src_rewrite(&clone->src[0], &nir_instr_as_intrinsic(new_bary)->def);
+               }
+               nir_src_rewrite(src, &clone->def);
+               progress = true;
+            }
+         }
+      }
+      nir_foreach_block(block, impl)
+         nir_foreach_instr(instr, block)
+            instr->pass_flags = 0;
+      nir_progress(progress, impl, nir_metadata_control_flow);
+   }
+   return progress;
+}
+
+'''
+REMAT_PASS_ANCHOR = '''   NIR_PASS(_, nir, nir_opt_move, move_all);
+   NIR_PASS(progress, nir, nir_lower_all_phis_to_scalar);'''
+REMAT_PASS = '''   NIR_PASS(_, nir, nir_opt_move, move_all);
+   /* RC124 (native-asahi-latency-schedule.py): after the last CSE */
+   NIR_PASS(_, nir, agx_win32_remat_inputs);
+   NIR_PASS(progress, nir, nir_lower_all_phis_to_scalar);'''
+
+
 def project_compile(text):
     if 'agx_win32_compile_function' in text:
         raise RuntimeError('agx_compile.c already projected')
@@ -681,7 +806,8 @@ def project_compile(text):
     text = once(text, RETURN_ANCHOR, RETURN)
     text = once(text, CALL_ANCHOR, CALL)
     text = once(text, 'static void\nagx_optimize_nir(',
-                SHARED_VECTORIZE + 'static void\nagx_optimize_nir(')
+                SHARED_VECTORIZE + REMAT + 'static void\nagx_optimize_nir(')
+    text = once(text, REMAT_PASS_ANCHOR, REMAT_PASS)
     text = once(text, '''               .modes = nir_var_mem_global | nir_var_mem_constant |
                         nir_var_shader_temp,
                .callback = agx_mem_vectorize_cb,''',
