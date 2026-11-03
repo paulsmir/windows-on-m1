@@ -67721,3 +67721,17 @@ EXP2106 HARDWARE ACTUAL (2026-11-03): **q17 checkpoint 1 PASS: with job diagnost
 - Expected vs actual: preregistered HD 5600-5700 / FHD 4500-4600 met. Verdict confirmed: the depth-one loss was the receipt export path (q17), not ManagerSlots/NotifierFlight.
 - Next: EXP2107, same package switch set with Wom1JobDepth2=1 (q17 checkpoint 2).
 - Recovery rec2106h.
+
+EXP2107 HARDWARE BEFORE 2026-11-03T01:32:25Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1. Steps: GravityMark D3D12 HD 100k temporal 0, then FHD.
+- WHY THIS HYPOTHESIS:
+  1. EXP2102 vs EXP2103 (both with the receipt overhead): depth two +4.8% HD / +2.2% FHD from non-prelude pairs (6853 kicks per HD run).
+  2. EXP2106: without diagnostics the depth-one baseline of this mask is HD 5598 / FHD 4634.
+- ATOMIC CONTRACT: none -- single switch Wom1JobDepth2.
+- WHAT IS STILL UNKNOWN: whether the depth-two gain survives without the receipt overhead (it may have partly hidden the export cost).
+- Expected: HD ~5750-5900, FHD ~4650-4750; no crash/reset (prelude gate on). Kick counts are not exported (diagnostics off); score is the verdict.
+- FAIL: crash, reset, corruption, or score below EXP2106.
+- Recovery: rec2107h.
+- Hashes: sys 7913ff34a3f8, UmdArm64 bf0eb4177aee, UmdX64 75e5924303eb, Umd32 f44c34bc0ca8; manifest 42bf4ff15d52, hardware-manifest d56952bdd93f; probe2107.sh 7b68d9b16ada (PROBE_LINT_OK); visible recovery rec2107h c9a7a3525f8bb1c2; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
+- Recovery rec2107h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2107-gm-nodiag-d2/run2107.sh.
