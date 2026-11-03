@@ -68172,3 +68172,16 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1. S
 - Expected: suite 119/0; GravityMark correct (score may drop a few % from diagnostics); Hot ring with GravityMark render jobs carrying Complete/KickTa QPC and FirmwareTaStart.
 - FAIL: firmware fault/reset; missing ring.
 - Recovery: rec2127h.
+
+EXP2127 HARDWARE BEFORE 2026-11-03T13:38:41Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1. Steps: suite; GravityMark HD 100k T0; then Wom1JobTiming971Hot / Wom1JobTiming971 / Wom1FwTiming1112 fetched (rcpt2127.ps1).
+- WHY THIS HYPOTHESIS: (1) EXP2126: compute -> TA idle median 0.695 ms, 8.2 % of GPU time, with the render submitted ~1.8 ms before the compute ended; (2) EXP2012 rc83: BackendBefore -> Kick3d 266 us per render build and Complete -> JobEnd 77 us -- if the render's build/kick follows the compute's completion on the KMD worker, these are on the critical path.
+- WINDOWS CONTRACT: none. AGX/ASAHI CONTRACT: none changed. TRANSLATION: none (receipts).
+- ATOMIC CONTRACT: single diagnostic switch.
+- WHAT IS STILL UNKNOWN: which of compute end -> KMD Complete, Complete -> KickTa (build), KickTa -> firmware TA start holds the 0.7 ms.
+- Expected: suite 119/0; GravityMark correct (score may drop a few % from diagnostics); Hot ring with GravityMark render jobs carrying Complete/KickTa QPC and FirmwareTaStart.
+- FAIL: firmware fault/reset; missing ring.
+- Recovery: rec2127h.
+- Hashes: sys 8e3547f7529c, UmdArm64 3059b06df058, UmdX64 6fd7ba0e40da, Umd32 07ff1c44592c; manifest d57b4a0d739d, hardware-manifest 4143d86d4fa4; probe2127.sh 814b8367aa79 (PROBE_LINT_OK); visible recovery rec2127h 000f86f2c78aa68e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1.
+- Recovery rec2127h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2127-kick-split/run2127.sh.
