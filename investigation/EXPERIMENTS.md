@@ -68162,3 +68162,13 @@ EXP2126 HARDWARE ACTUAL (2026-11-03): **TA start stamps revived (zero-slot hypot
 - Verdict: confirmed. Answers G2: most of the ~3.3 ms "kick + prelude" span is a ~0.7 ms start latency at each compute -> render boundary.
 - Next: EXP2127 = same + Wom1JobDiagnostics=1 (kick QPC per job) to split the 0.7 ms into completion detection, KMD kick and firmware start.
 - Recovery rec2126h.
+
+EXP2127 HARDWARE BEFORE 2026-11-03T13:33:02Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1JobDiagnostics=1. Steps: suite; GravityMark HD 100k T0; then Wom1JobTiming971Hot / Wom1JobTiming971 / Wom1FwTiming1112 fetched (rcpt2127.ps1).
+- WHY THIS HYPOTHESIS: (1) EXP2126: compute -> TA idle median 0.695 ms, 8.2 % of GPU time, with the render submitted ~1.8 ms before the compute ended; (2) EXP2012 rc83: BackendBefore -> Kick3d 266 us per render build and Complete -> JobEnd 77 us -- if the render's build/kick follows the compute's completion on the KMD worker, these are on the critical path.
+- WINDOWS CONTRACT: none. AGX/ASAHI CONTRACT: none changed. TRANSLATION: none (receipts).
+- ATOMIC CONTRACT: single diagnostic switch.
+- WHAT IS STILL UNKNOWN: which of compute end -> KMD Complete, Complete -> KickTa (build), KickTa -> firmware TA start holds the 0.7 ms.
+- Expected: suite 119/0; GravityMark correct (score may drop a few % from diagnostics); Hot ring with GravityMark render jobs carrying Complete/KickTa QPC and FirmwareTaStart.
+- FAIL: firmware fault/reset; missing ring.
+- Recovery: rec2127h.
