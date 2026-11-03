@@ -68490,3 +68490,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1GpuPrivateCached=1. Steps: suite; GravityMa
 - Hashes: sys 2112e90e7a8d, UmdArm64 e7345c04a3e5, UmdX64 1483abe8b1a1, Umd32 9832f0ecb63e; manifest 1bec24b405ba, hardware-manifest 73167f4c2122; probe2137.sh 029d9dbc76f5 (PROBE_LINT_OK); visible recovery rec2137h a49ad72d8e93a964; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1GpuPrivateCached=1.
 - Recovery rec2137h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2137-gpu-cached2/run2137.sh.
+
+EXP2137 HARDWARE ACTUAL (2026-11-03): **GC active but low coverage: no gain (HD 6240, FHD 4857), one engine reset; hypothesis not tested at full coverage.**
+- Expected: GPUVA-GC receipts; suite 119/0; large gain if the hypothesis holds. Actual: m1n1 ed6fd218 booted; full.log "GPUVA-GC: private cached leaves 1" -- the feature is live, but no second line, i.e. fewer than 65537 cached leaf publications in the whole boot (GravityMark's pool peaks near 3 GB = ~190k leaves); suite 119 PASS / 0 FAIL; ARM_TASK True; GravityMark HD 100k T0 6240 / 37.3 FPS (baseline EXP2134 6257), FHD 4857 / 29.1 (4862); HD image correct; WER 0; G4_SUBMIT_FAILURE none; GPU_RESET: one ENGINE reset, recovered (fence 0x54b, an early fence: boot/suite time, not GravityMark).
+- Interpretation: only allocations described CpuVisible=0 (and not presentation) were cached; GravityMark's working set is evidently CPU-visible under our UMA allocation policy, so the change touched a small part of its memory. The new engine reset is a warning consistent with the missing cache invalidation.
+- Verdict: inconclusive for the memory hypothesis (coverage too low), feature stays off (default). Do not repeat at full coverage without (a) a coverage receipt (cached vs coherent leaf counts by segment) and (b) the Asahi FwCtl cache invalidation on unmap.
+- Recovery rec2137h (back to m1n1 075e3980).
