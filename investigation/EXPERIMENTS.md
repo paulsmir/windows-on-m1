@@ -68311,3 +68311,12 @@ EXP2131 HARDWARE ACTUAL (2026-11-03): **compute-on-compute pairs remove the comp
 - Verdict: confirmed for the compute-on-compute class (first hardware gate, no fault). Not yet a default: FHD, a same-boot A/B and the render -> compute regression are open.
 - Next: EXP2132 = EXP2131 + Wom1JobDiagnostics=1 with live rings: refusal codes of the render -> compute successors now (hypothesis: window/sidecar-set conflicts 50/61/62 when every job is paired).
 - Recovery rec2131h.
+
+EXP2132 HARDWARE BEFORE 2026-11-03T14:39:42Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1TaStartTimestamps=1 Wom1Depth2Prelude=1 Wom1Depth2ComputeOnCompute=1 Wom1JobDiagnostics=1.
+- WHY THIS HYPOTHESIS: EXP2131: compute -> prelude start 0.59 -> 0.063 ms but render -> compute start gap 0.065 -> 0.398 ms (81 % in 0.3-0.5 ms); with every successor paired, a third job may be refused (window not {N} 50, needs idle 61, same sidecar set 62).
+- ATOMIC CONTRACT: single diagnostic switch on top of EXP2131.
+- WHAT IS STILL UNKNOWN: the refusal code of render -> compute successors in the EXP2131 configuration.
+- Expected: suite 119/0; live rings with GravityMark jobs; refusal histogram for unpaired render -> compute successors.
+- FAIL: no ring; firmware fault.
+- Recovery: rec2132h.
