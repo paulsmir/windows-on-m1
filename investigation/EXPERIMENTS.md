@@ -67975,3 +67975,17 @@ EXP2118 HARDWARE ACTUAL (2026-11-03): **the prelude-pair firmware crash reproduc
 - System event 1001: 0x00000116 (0xffffe089d7bdc2a0, 0xfffff801584a1ec0, 0xffffffffc0000483, 0x3). MEMORY.DMP 886552766 bytes (sha256 prefix da586243b1a9626d0b05cbc5) and minidump 110326-17000-01.dmp (e911b3c1b6d02239b348c47d) in evidence/dump/.
 - Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2118h -> RECOVERY_DONE.
 - Expected vs actual: crash expected and reproduced; the q15 PostResume v4 (both flights' expected TA/3D/compute stamps and event slots) is in the kernel dump. Verdict: prelude pairs alone are sufficient to crash the firmware in GravityMark (confirmed). Next: Codex q23 analyses the dump (the builder PDB matches this package).
+
+EXP2119 HARDWARE BEFORE 2026-11-03T08:52:41Z:
+Switches: Wom1GpuFaultInfoRead=1 only. Harness: gm-run-notrace.ps1 = gm-run.ps1 without APPLE_AGX_UMD_TRACE_FILE and APPLE_AGX_UMD_TRACE_SYNC (no UMD trace file); otherwise identical (same scene, resolution, timeout, env). Steps: HD then FHD 100k temporal 0.
+- WHY THIS HYPOTHESIS:
+  1. c1 (user-requested CPU/disk analysis): every GravityMark run since EXP1920 wrote ~350 UMD trace records per frame to a file with APPLE_AGX_UMD_TRACE_SYNC=1 (synchronous write per line) on the CPU-bound submission path; production use has no trace.
+  2. q19 showed HD is partly CPU-bound (window 16 gave HD +1.7%, FHD +0.2%); CPU P-state 12 and the P-core KMD worker are already in place, so the trace I/O is the largest remaining measurable CPU/disk item.
+- ATOMIC CONTRACT: single harness variable (trace off); driver unchanged.
+- WHAT IS STILL UNKNOWN: the trace's cost per frame.
+- Expected: HD and FHD above the traced reference (EXP2117: 5970/4819; EXP2115: 5989/4840); a gain mainly at HD if the cost is CPU-side. No change = trace cost negligible.
+- FAIL: crash/reset or lower scores beyond noise.
+- Recovery: rec2119h.
+- Hashes: sys d0601a28979d, UmdArm64 5fafb27a2f44, UmdX64 1c48e6e678df, Umd32 c6b12c042b20; manifest 323a3ebef4c5, hardware-manifest 729c8fbcb111; probe2119.sh eff64e0392a2 (PROBE_LINT_OK); visible recovery rec2119h e7da0091af31bda7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2119h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2119-gm-notrace/run2119.sh.
