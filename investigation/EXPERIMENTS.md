@@ -67777,3 +67777,9 @@ Switches: as EXP2108 (Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhea
 - Hashes: sys 3edfa0f7188f, UmdArm64 8ed1178944a8, UmdX64 60e9ea3db33e, Umd32 bc940b24d73b; manifest fdb309b75659, hardware-manifest c080581bc911; probe2109.sh 6280546c85a2 (PROBE_LINT_OK); visible recovery rec2109h 60a0184d00e5c509; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1ManagerSlots=1 Wom1JobBuildAhead=1 Wom1JobDepth2=1 Wom1JobDepth2Caps=1 Wom1NotifierFlight=1 Wom1RcDepth2=1 Wom1Depth2General=1 Wom1Depth2TaOn3d=1 Wom1Depth2TaOnCompute=1.
 - Recovery rec2109h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2109-suite-depth2/run2109.sh.
+
+EXP2109 HARDWARE ACTUAL (2026-11-03): **promotion regression gate PASS: the full default D3D12 probe suite runs clean on the best configuration (depth two non-prelude mask, diagnostics off, UMD submission window 16).**
+- tool-suite: 120 AGX_D3D12_ result lines in 40 s: 119 PASS, 0 FAIL, 1 SKIP (C21E "known UNCOMPLETED baseline", pre-existing skip in the probe itself); last steps ROOTC/ROOTG PASS; no PROBE_CRASH.
+- Wom1GpuReset and Wom1G4SubmitFailure absent; guest alive; pipeline rc 0.
+- Expected vs actual: expected all steps PASS except known failures; actual all PASS (the previously known MSAA failure did not appear in this probe build's default set). Verdict confirmed. Remaining before a default change: the q12 real-fault/hang gates at depth one with this mask, and a DWM/desktop soak.
+- Recovery rec2109h.
