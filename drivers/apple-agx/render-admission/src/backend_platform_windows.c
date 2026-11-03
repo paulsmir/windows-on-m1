@@ -347,6 +347,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONG Depth2BuildStep;
   ULONG Depth2KickClasses; /* AdmissionJobWindowKickClasses */
   ADMISSION_JOB_WINDOW_KICK_FAILURE Depth2KickFailure;
+  /* Diagnostic switches never follow functional depth/window switches. */
+  BOOLEAN JobDiagnostics;
   BOOLEAN RcReceiptEnabled, RcDepth2, RcExportPending;
   ADMISSION_DEPTH2_DRILL_RECEIPT Depth2Drill;
   BOOLEAN Depth2General;
@@ -415,6 +417,8 @@ static VOID AdmissionJobTimingMarkWindows(
   KIRQL oldIrql;
   ULONGLONG qpc;
   if (runtime == NULL || fence == 0u) return;
+  /* Complete and Submit identity feed UMD records and predictive polling. */
+  if (!runtime->JobDiagnostics && phase != AdmissionJobPhaseComplete) return;
   qpc = AdmissionJobQpc();
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   (void)AdmissionJobTimingMark(&runtime->JobTiming, fence, phase, qpc);
@@ -427,6 +431,7 @@ static VOID AdmissionJobTimingSubAtWindows(
     ULONGLONG qpc) {
   KIRQL oldIrql;
   if (runtime == NULL || fence == 0u || qpc == 0u) return;
+  if (!runtime->JobDiagnostics) return;
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   (void)AdmissionJobTimingSub(&runtime->JobTiming, fence, sub, qpc);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
@@ -434,6 +439,7 @@ static VOID AdmissionJobTimingSubAtWindows(
 
 static VOID AdmissionJobTimingSubWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence, ADMISSION_JOB_SUB sub) {
+  if (runtime == NULL || !runtime->JobDiagnostics) return;
   AdmissionJobTimingSubAtWindows(runtime, fence, sub, AdmissionJobQpc());
 }
 
@@ -451,6 +457,7 @@ static void AdmissionRenderBuildMarkWindows(void *Context, APPLE_AGX_U32 Point) 
 static VOID AdmissionJobTimingDelayWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
   KIRQL oldIrql;
+  if (!runtime->JobDiagnostics) return;
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   (void)AdmissionJobTimingDelay(&runtime->JobTiming, fence);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
@@ -460,6 +467,7 @@ static VOID AdmissionJobTimingTargetWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence,
     ULONGLONG bytes) {
   KIRQL oldIrql;
+  if (!runtime->JobDiagnostics) return;
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   (void)AdmissionJobTimingTarget(&runtime->JobTiming, fence, bytes);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
@@ -474,6 +482,7 @@ static VOID AdmissionJobTimingCpuWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
   KIRQL oldIrql;
   ULONG index, efficiency, value;
   if (runtime == NULL || fence == 0u) return;
+  if (!runtime->JobDiagnostics) return;
   index = KeGetCurrentProcessorNumberEx(NULL);
   efficiency = index < ADMISSION_JOB_CPU_CLASSES && runtime->JobCpuClass[index] != 0u
       ? (ULONG)runtime->JobCpuClass[index] - 1u : 0xffu;
@@ -491,6 +500,7 @@ VOID AdmissionJobTimingNoteWindows(
   if (adapter == NULL || fence == 0u) return;
   runtime = (ADMISSION_PLATFORM_RUNTIME *)adapter->PlatformRuntime;
   if (runtime == NULL) return;
+  if (!runtime->JobDiagnostics) return;
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   (void)AdmissionJobTimingFlag(&runtime->JobTiming, fence, flags);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
@@ -502,6 +512,7 @@ static VOID AdmissionJobAheadNoteRefusalWindows(
     ULONG refusal) {
   KIRQL oldIrql;
   if (runtime == NULL || fence == 0u) return;
+  if (!runtime->JobDiagnostics) return;
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   (void)AdmissionJobTimingAheadRefusal(&runtime->JobTiming, fence, shift,
                                        refusal);
@@ -596,7 +607,9 @@ static VOID AdmissionJobTimingPstateWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence, BOOLEAN completion) {
   ADMISSION_JOB_TIMING_SLOT *slot;
   KIRQL oldIrql;
-  ULONGLONG word = AdmissionJobTimingPstateWord(runtime);
+  ULONGLONG word;
+  if (!runtime->JobDiagnostics) return;
+  word = AdmissionJobTimingPstateWord(runtime);
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   slot = (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(
       &runtime->JobTiming, fence);
@@ -615,6 +628,7 @@ static VOID AdmissionGpuPerfSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime) {
   ADMISSION_GPU_PERF_SAMPLE sample;
   KIRQL oldIrql;
   if (runtime->GpuPerfOff) return;
+  if (!runtime->JobDiagnostics) return;
   hwdata =
       &runtime->Initdata.RegionBMemory.Objects[AppleAgxRegionBMemoryHwdataA];
   if (!AdmissionGpuPerfRead(hwdata->CpuAddress, hwdata->Length,
@@ -635,7 +649,7 @@ static VOID AdmissionStampCheckWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
       &runtime->Adapter->BackendImage.Dynamic;
   ULONG index, mask = 0u, value;
   KIRQL oldIrql;
-  if (initializeQueues) return;
+  if (!runtime->JobDiagnostics || initializeQueues) return;
   for (index = 0u; index < 4u; ++index) {
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
         &runtime->QueueObjects[objects[index]];
@@ -773,15 +787,17 @@ static VOID AdmissionGpuTimestampCaptureWindows(
   if (job->Kind == AppleAgxBackendJobCompute) {
     const UCHAR *block = (const UCHAR *)job->ComputeTimestampBlock;
     if (job->CommandVa == 0u) return; /* present blits have no envelope */
-    KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
-    runtime->ComputeTsFence = fence;
-    runtime->ComputeTsRequested = block != NULL ? 1u : 0u;
-    runtime->ComputeTsCommandVa = job->CommandVa;
-    if (block != NULL)
-      RtlCopyMemory(runtime->ComputeTsWords, block, sizeof(runtime->ComputeTsWords));
-    else
-      RtlZeroMemory(runtime->ComputeTsWords, sizeof(runtime->ComputeTsWords));
-    KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+    if (runtime->JobDiagnostics) {
+      KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+      runtime->ComputeTsFence = fence;
+      runtime->ComputeTsRequested = block != NULL ? 1u : 0u;
+      runtime->ComputeTsCommandVa = job->CommandVa;
+      if (block != NULL)
+        RtlCopyMemory(runtime->ComputeTsWords, block, sizeof(runtime->ComputeTsWords));
+      else
+        RtlZeroMemory(runtime->ComputeTsWords, sizeof(runtime->ComputeTsWords));
+      KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+    }
     if (block == NULL) return;
     /* EXP1342: the G13 firmware writes the job's own timestamps
      * (timestamp_pointers, block 0x00/0x08: e.g. 144 ms for a 144 ms
@@ -865,6 +881,7 @@ static VOID AdmissionJobTimingFirmwareWindows(
   KIRQL oldIrql;
   ULONGLONG taStart, taEnd;
   AdmissionGpuTimestampCaptureWindows(runtime, fence);
+  if (!runtime->JobDiagnostics) return;
   if (AdmissionRenderTimestampPair(&runtime->Backend.PendingJob, 2u,
                                    &taStart, &taEnd)) {
     KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
@@ -891,8 +908,10 @@ static VOID AdmissionDepth2DrillExportWindows(ADMISSION_PLATFORM_RUNTIME *runtim
   if (!runtime->Depth2Drill.Mode) return;
   runtime->Depth2Drill.Queue = runtime->Provider.QueueProvider.Runtime.Drill;
   RtlInitUnicodeString(&name, L"Wom1Depth2DrillReceipt");
-  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY,
-      &runtime->Depth2Drill, (ULONG)sizeof(runtime->Depth2Drill));
+  if (NT_SUCCESS(ZwSetValueKey(key, &name, 0u, REG_BINARY,
+          &runtime->Depth2Drill, (ULONG)sizeof(runtime->Depth2Drill))) &&
+      !runtime->RcReceiptEnabled)
+    runtime->RcExportPending = FALSE;
 }
 
 /* Worker-owned, PASSIVE only. Each value is attempted independently; an
@@ -920,7 +939,9 @@ static VOID AdmissionJobTimingExportWindows(
   NTSTATUS status;
   KIRQL oldIrql;
   ULONGLONG before;
-  if (runtime == NULL || runtime->Adapter == NULL ||
+  if (runtime == NULL ||
+      (!runtime->JobDiagnostics && !runtime->RcReceiptEnabled && !runtime->Depth2Drill.Mode) ||
+      runtime->Adapter == NULL ||
       runtime->Adapter->PhysicalDeviceObject == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return;
   /* EXP1117-EXP1119: every 16th job this export (registry set and flush,
@@ -928,6 +949,16 @@ static VOID AdmissionJobTimingExportWindows(
    * a second. Export at most every two seconds and never flush: the probe
    * reads the live values. Opt-in Q3 changes bypass this throttle so a
    * short probe exports its final pair without waiting for another job. */
+  if (!runtime->JobDiagnostics) {
+    if (!runtime->RcExportPending) return;
+    status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
+        PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
+    if (NT_SUCCESS(status)) {
+      AdmissionRcExportWindows(runtime, key);
+      ZwClose(key);
+    }
+    return;
+  }
   before = AdmissionJobQpc();
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   ++runtime->JobTimingWorkers;
@@ -2695,10 +2726,14 @@ static VOID AdmissionRcSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
   const volatile APPLE_AGX_U32 *words[11];
   ULONGLONG qpc;
   ULONG i;
-  if (stage == ADMISSION_RC_REPORTED) {
+  if (stage == ADMISSION_RC_REPORTED && runtime->Depth2Drill.Mode) {
+    unsigned int count = runtime->Depth2Drill.ReportedCount;
+    unsigned int overflow = runtime->Depth2Drill.ReportOverflow;
     AdmissionDepth2DrillReport(&runtime->Depth2Drill,
         (unsigned int)terminalFence, (unsigned int)status);
-    if (runtime->Depth2Drill.Mode) runtime->RcExportPending = TRUE;
+    if (count != runtime->Depth2Drill.ReportedCount ||
+        overflow != runtime->Depth2Drill.ReportOverflow)
+      runtime->RcExportPending = TRUE;
   }
   if (!runtime->RcReceiptEnabled || !runtime->RcCurrent.RFence) return;
   s = runtime->RcCurrent; /* zero-initialized at pair begin */
@@ -3428,7 +3463,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   /* rc83 receipt: the shared builder stamps this fence's sub-intervals. */
   runtime->BuildMarkFence = Submission->Submission.Fence;
-  runtime->Initdata.RenderSharedMemory.BuildMark = AdmissionRenderBuildMarkWindows;
+  runtime->Initdata.RenderSharedMemory.BuildMark =
+      runtime->JobDiagnostics ? AdmissionRenderBuildMarkWindows : NULL;
   runtime->Initdata.RenderSharedMemory.BuildMarkContext = runtime;
 #endif
   if (!AdmissionBackendImageStageJob(
@@ -4184,11 +4220,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     if (!batched)
       return APPLE_AGX_BACKEND_FALSE;
     runtime->Depth2BatchedFence = Fence;
-    ++runtime->Depth2Receipt.Adopted;
+    if (runtime->JobDiagnostics) ++runtime->Depth2Receipt.Adopted;
     AdmissionJobTimingNoteWindows(adapter, Fence,
                                   ADMISSION_JOB_FLAG_DEPTH2_BATCHED);
     /* The running job's report was the first of this batch. */
-    if (runtime->Depth2Receipt.Reported[1] != 0u &&
+    if (runtime->JobDiagnostics && runtime->Depth2Receipt.Reported[1] != 0u &&
         runtime->Depth2LastReported != 0u) {
       --runtime->Depth2Receipt.Reported[1];
       ++runtime->Depth2Receipt.Reported[2];
@@ -4387,7 +4423,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     }
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     /* rc83 receipt: the arena release is done; stamped after the lock. */
-    releasedQpc = AdmissionJobQpc();
+    if (runtime->JobDiagnostics) releasedQpc = AdmissionJobQpc();
 #endif
   }
   if (runtime->Completion.Phase == AppleAgxCompletionLocalCommitted)
@@ -4460,7 +4496,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   if (runtime->Depth2BatchedFence == Fence) {
     runtime->Depth2LastReported = 0u;
   } else {
-    AdmissionJobWindowReceiptReported(&runtime->Depth2Receipt, 1u);
+    if (runtime->JobDiagnostics)
+      AdmissionJobWindowReceiptReported(&runtime->Depth2Receipt, 1u);
     runtime->Depth2LastReported = Fence;
   }
   runtime->AheadFinishedDropped =
@@ -5202,7 +5239,7 @@ static VOID AdmissionJobAheadPrebindWindows(ADMISSION_CONTEXT *adapter,
   *Done = bound;
   if (refusal == 28u || refusal == 29u) *Done = TRUE;
   /* rc95 receipt mode: the depth-2 decision at the earliest point. */
-  if (bound && runtime->JobDepth2 && !runtime->Depth2Noted)
+  if (bound && runtime->JobDiagnostics && runtime->JobDepth2 && !runtime->Depth2Noted)
     AdmissionJobWindowNoteWindows(adapter, runtime, fence);
   if (refusal != *LastRefusal) {
     *LastRefusal = refusal;
@@ -5533,7 +5570,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     /* Preemption, paging and a not yet Prebound successor may clear. */
     return refusal == 4u || refusal == 52u || refusal == 53u ||
            refusal == 54u ? FALSE : TRUE;
-  if (runtime->RcReceiptEnabled) {
+  if (runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode) {
     RtlZeroMemory(&runtime->RcCurrent, sizeof(runtime->RcCurrent));
     runtime->RcCurrent.RFence = fence; runtime->RcCurrent.CFence = next;
     runtime->RcCurrent.RunningKind = s.Running.Kind;
@@ -5632,7 +5669,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   AdmissionJobTimingNoteWindows(adapter, next, ADMISSION_JOB_FLAG_DEPTH2_KICKED |
       ((barrier << ADMISSION_JOB_FLAG_DEPTH2_BARRIER_SHIFT) &
        ADMISSION_JOB_FLAG_DEPTH2_BARRIER_MASK));
-  AdmissionJobWindowReceiptKick(&runtime->Depth2Receipt, next, barrier, 2u);
+  if (runtime->JobDiagnostics)
+    AdmissionJobWindowReceiptKick(&runtime->Depth2Receipt, next, barrier, 2u);
   return TRUE;
 }
 
@@ -5659,7 +5697,7 @@ static BOOLEAN AdmissionJobWindowAdoptWindows(ADMISSION_CONTEXT *adapter,
                                         0u, 0u, 0u);
     return FALSE;
   }
-  ++runtime->Depth2Receipt.Adopted;
+  if (runtime->JobDiagnostics) ++runtime->Depth2Receipt.Adopted;
   runtime->Depth2KickedFence = 0u;
   return TRUE;
 }
@@ -6079,7 +6117,7 @@ AdoptedKicked:
   pollIteration = (ULONGLONG)pollStart.QuadPart;
   runtime->FwTs1Fence = description.Fence;
   runtime->FwTs1Polls = 0u;
-  runtime->FwTs1Kick = AdmissionFwTs1Read(runtime);
+  runtime->FwTs1Kick = runtime->JobDiagnostics ? AdmissionFwTs1Read(runtime) : 0ULL;
   runtime->FwTs1First = 0ULL;
   runtime->FwTs1FirstQpc = 0ULL;
   /* G4-r3 TDR drill: leave as a failed poll would; the job stays with the
@@ -6113,16 +6151,17 @@ AdoptedKicked:
     if (runtime->JobAhead)
       AdmissionJobAheadPrebindWindows(adapter, runtime, description.Fence,
                                       &prebindDone, &prebindRefusal);
-    AdmissionRcSampleWindows(runtime, ADMISSION_RC_POLL, 0u, 0u);
+    if (runtime->RcReceiptEnabled)
+      AdmissionRcSampleWindows(runtime, ADMISSION_RC_POLL, 0u, 0u);
     /* rc95 receipt mode: TA/prelude done pointers and stamps (U4). */
-    if (runtime->JobDepth2)
+    if (runtime->JobDiagnostics && runtime->JobDepth2)
       AdmissionJobDepth2SampleWindows(runtime, description.Fence);
     /* rc102: kick the Prebound successor behind this job (Wom1JobDepth2Kick). */
     if (runtime->JobDepth2Kick && prebindDone && !kickDone) {
       kickDone = AdmissionJobWindowKickWindows(adapter, runtime,
                                                description.Fence, prebindRefusal);
       if (runtime->Depth2KickedFence != 0u) kickedBehind = TRUE;
-    } else if (!kickDone) {
+    } else if (runtime->RcReceiptEnabled && !kickDone) {
       AdmissionRcSkippedKickWindows(adapter, runtime, description.Fence,
                                      prebindRefusal);
     }
@@ -6326,7 +6365,8 @@ AdoptedKicked:
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     /* EXP1113 receipt-only: the TA start timestamp lives in ts1 only until
      * the TA end overwrites it; keep the first change seen while polling. */
-    if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
+    if (runtime->JobDiagnostics &&
+        runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
         runtime->FwTs1Fence == description.Fence && runtime->FwTs1First == 0ULL) {
       ULONGLONG ts1 = AdmissionFwTs1Read(runtime);
       ++runtime->FwTs1Polls;
@@ -6493,7 +6533,8 @@ AdoptedKicked:
   }
   AdmissionPublishFirmwareRecovery(runtime);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  AdmissionJobTimingExportWindows(runtime);
+  if (runtime->JobDiagnostics || runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode)
+    AdmissionJobTimingExportWindows(runtime);
 #endif
 #if ADMISSION_JOB_AHEAD_BUILD
   /* rc90 step 3: N's completion is reported; take N+1 without the
@@ -7269,6 +7310,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerReceipt");
   runtime->ManagerSlots =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1ManagerSlots");
+  runtime->JobDiagnostics =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDiagnostics");
   runtime->RcDepth2 = runtime->RcReceiptEnabled = runtime->RcExportPending = FALSE;
   runtime->Depth2General = FALSE;
   runtime->Depth2Prelude = FALSE;
@@ -7287,7 +7330,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       runtime->JobDepth2 &&
           AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDepth2Caps") ? 1u : 0u);
   runtime->RcDepth2 = AdmissionPlatformSwitchEnabled(Context, L"Wom1RcDepth2");
-  runtime->RcReceiptEnabled = runtime->RcDepth2 ||
+  runtime->RcReceiptEnabled =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1RcReceipt");
   /* rc102: off unless REG_DWORD 1, and only with the rc98 capabilities
    * (the second sidecar set and the compute-queue Barrier it kicks). */
@@ -7313,7 +7356,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     runtime->Depth2Prelude =
         AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2Prelude");
     runtime->JobDepth2Kick = TRUE;
-    runtime->RcReceiptEnabled = TRUE;
     runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER;
     runtime->Depth2KickClasses = AdmissionJobWindowGeneralClasses(
         AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2TaOnCompute") ? 1u : 0u,

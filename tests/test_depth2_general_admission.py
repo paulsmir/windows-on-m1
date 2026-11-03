@@ -94,7 +94,7 @@ static unsigned mask(const wchar_t *name) {
  const wchar_t *names[]={L"Wom1ManagerSlots",L"Wom1JobDepth2",L"Wom1JobDepth2Caps",
  L"Wom1Depth2General",L"Wom1Depth2TaOnCompute",L"Wom1Depth2TaOn3d",
  L"Wom1Depth2ComputeOnCompute",L"Wom1RcDepth2",L"Wom1JobDepth2Kick",
- L"Wom1JobDepth2KickOn3d",L"Wom1ManagerSaveOnEvict",L"Wom1RcReceipt",L"Wom1Depth2Prelude"};
+ L"Wom1JobDepth2KickOn3d",L"Wom1ManagerSaveOnEvict",L"Wom1RcReceipt",L"Wom1Depth2Prelude",L"Wom1JobDiagnostics"};
  for(unsigned i=0;i<sizeof(names)/sizeof(names[0]);++i)
   if(!wcscmp(name,names[i])) return 1u<<i;
  return 0;
@@ -111,7 +111,7 @@ static APPLE_AGX_BOOL AdmissionEvictG4Manager(void *c,const APPLE_AGX_RENDER_MAN
 }
 typedef struct {
  unsigned char ManagerSlots,RcDepth2,RcReceiptEnabled,RcExportPending,Depth2General,Depth2Prelude;
- unsigned char JobAhead,JobDepth2,JobDepth2Kick;
+ unsigned char JobAhead,JobDepth2,JobDepth2Kick,JobDiagnostics;
  unsigned Depth2Capabilities,Depth2KickClasses;
  struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
  struct { struct {APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG Config;} QueueProvider;} Provider;
@@ -122,7 +122,16 @@ static void configure(Runtime *runtime,void *Context) {
 int main(void) {
  Runtime r={0}; r.Initdata.RenderSharedMemory.NotifierFlight=1;
  switches=15; configure(&r,0);
- assert(r.Depth2General && r.JobDepth2Kick && r.RcReceiptEnabled);
+ assert(r.Depth2General && r.JobDepth2Kick && !r.RcReceiptEnabled && !r.JobDiagnostics);
+ switches=15|(1u<<13);configure(&r,0);
+ assert(r.JobDiagnostics && !r.RcReceiptEnabled && r.JobDepth2Kick);
+ switches=15;configure(&r,0);assert(!r.JobDiagnostics);
+ /* Functional modes must not silently turn on per-poll diagnostics. */
+ switches=15|(1u<<7); configure(&r,0); assert(!r.RcReceiptEnabled);
+ switches=15|(1u<<11); configure(&r,0); assert(r.RcReceiptEnabled);
+ switches=(1u<<7); configure(&r,0); assert(!r.JobDepth2 && !r.RcReceiptEnabled);
+ switches=(1u<<11); configure(&r,0); assert(!r.JobDepth2 && r.RcReceiptEnabled);
+ switches=15; configure(&r,0);
  assert(!r.Depth2Prelude);
  assert(r.Initdata.RenderSharedMemory.ManagerDepth2 && r.Initdata.RenderSharedMemory.ManagerSaveOnEvict);
  assert(r.Provider.QueueProvider.Config.AbortFaultSuffix);
