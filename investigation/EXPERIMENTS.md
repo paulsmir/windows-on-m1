@@ -68784,3 +68784,7 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1PresentTimestamps=1. Steps: D3D12 suite; Gr
 - Hashes: sys 8a65a17e9db1, UmdArm64 1b799a6ff1c4, UmdX64 a8d9fba3ddff, Umd32 3b2506bc0c14; manifest b39797d217e1, hardware-manifest 00a5e097f9a1; probe2154.sh 73f7b814a8a6 (PROBE_LINT_OK); visible recovery rec2154h c62dede07a3992cb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PresentTimestamps=1.
 - Recovery rec2154h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2154-presentts/run2154.sh.
+
+EXP2154 HARDWARE ACTUAL (2026-11-04T11:16:35Z): **T1 present timestamps INCONCLUSIVE: Wom1PresentTs was never written (export gate bug); FHD FULL first arm 5128 (best FHD, confirms the arm-position effect), HD PERF 38.88 FPS, HD FULL 6202 (third arm, present timestamp microsequence on), suite 119/0.**
+- Cause: AdmissionJobTimingExportWindows is called from the completion path only when JobDiagnostics, RcReceiptEnabled or the drill is set; the T1 switch was missing there (fixed 94a0249b, offline-untestable registry path).
+- Next: EXP2155 = the fix, HD PERF timeline first.
