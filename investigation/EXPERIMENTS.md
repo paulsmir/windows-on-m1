@@ -69087,3 +69087,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1. Ste
 - Hashes: sys dc89821cc12b, UmdArm64 9a3dfc990582, UmdX64 5cec44ba5f8f, Umd32 e425b0590fe2; manifest f40aeb987588, hardware-manifest 3fac9a6901c2; probe2171.sh fe44841bd456 (PROBE_LINT_OK); visible recovery rec2171h aaa493962a5ab32c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
 - Recovery rec2171h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2171-m1n1split2/run2171.sh.
+
+EXP2171 HARDWARE ACTUAL (2026-11-04T22:38:28Z): **m1n1 broker-lock split + V1 retained slots with GravityMark: the process-switch begin cost is gone (35 non-successor begins, none > 100 us, mean 8.4 us; EXP2167 158-219 us; only one v5 long wait, v5<-none@bhl), but HD PERF is 39.073 FPS (EXP2165 39.208 with the deployed m1n1): no measurable frame-rate gain.**
+- Suite 119/0, ARM_TASK True, GravityMark arm ran (timeout close, PERF). Remaining long waits: scanout<-none@bhl x12, scanout<-service@broker x8.
+- Mid-arm ring: the DWM job's Submit -> Worker is 0.67-2.94 ms (after GravityMark's fence 37215, a record with no phases); the post-DWM span is no longer dominated by the begin.
+- Verdict: split CONFIRMED functionally (lease cost removed), performance hypothesis REJECTED (the ~0.2 ms/frame did not show as FPS within noise). The split m1n1 stays experimental (not lastgood). Next causal target: the DWM job's Submit -> Worker wait (worker blocked behind GravityMark's preceding packet).
+- Recovery: rec2171h.
