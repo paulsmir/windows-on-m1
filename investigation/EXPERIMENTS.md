@@ -69112,3 +69112,15 @@ EXP2172 HARDWARE ACTUAL (2026-11-04T23:39:20Z): **Preemption is not a cost: Wom1
 - Correction to the P1 analysis premise: the DWM 0.67-2.94 ms submit->worker wait was seen only with the split m1n1; with the deployed m1n1 the post-preemption path costs ~0.1 ms.
 - Verdict: preemption hypotheses REJECTED; split m1n1 gives the expected ~0.2 ms per frame on normal frames but adds occasional ~3 ms DWM stalls (cause unknown, 2 of 5 sampled frames) -> split stays experimental, not lastgood. Next: characterise the split-only stalls with more frames (larger ring) before any further m1n1 change.
 - Recovery: rec2172h.
+
+EXP2173 HARDWARE BEFORE 2026-11-04T23:51:23Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2171: 2 of 5 sampled frames had the DWM kick 3.2-3.7 ms after GravityMark's completion (split m1n1 only); (2) EXP2167/EXP2172 with the deployed m1n1 show no such frames (14/14 frames 1.16-1.38 ms); (3) more frames plus the preemption trace and BROKERLOCK lines can locate the stall (submit, worker pickup, begin, or hypervisor).
+- WINDOWS CONTRACT / AGX CONTRACT: as EXP2171.
+- WHAT IS STILL UNKNOWN: frequency and stage of the split-only stalls.
+- Expected: ~20 frames; stall frames identified by stage.
+- Failure criteria: hang, broker taint, TDR, suite regression.
+- Recovery: rec2173h.
+- Hashes: sys c23de770a4dd, UmdArm64 a7637b930d00, UmdX64 f916bd63ddb3, Umd32 1dad5ad32a30; manifest 9018aeacfa7d, hardware-manifest 306268ecc22a; probe2173.sh 4bca02957c5b (PROBE_LINT_OK); visible recovery rec2173h 8bf1ad9cae1e39e7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
+- Recovery rec2173h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2173-splitstall/run2173.sh.
