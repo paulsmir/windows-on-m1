@@ -68731,3 +68731,17 @@ EXP2151 HARDWARE ACTUAL (2026-11-04T09:19:51Z): **N2 with the template generatio
 - Verdict REJECTED (Wom1Depth2Notifiers stays off). Per AGENTS three failed fixes on one mechanism: stop. A per-job notification needs a second Asahi Queue (own notifier_list, TA/3D/compute work queues and cross-queue Barriers) -- architectural, not queued now.
 - Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2151h/recover.sh -> RECOVERY_DONE.
 - Next: GPU execution time (21.6 ms of work vs Metal's 17.2 ms frame) using the Metal oracle (.local/metal-oracle).
+
+EXP2152 HARDWARE BEFORE 2026-11-04T09:40:58Z:
+Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD FULL, b HD PERF, c HD PERF MASK=0, d HD PERF, e HD PERF MASK=0 (ABBA), f FHD FULL.
+- WHY THIS HYPOTHESIS: (1) Metal oracle: the macOS compile of the C4 traversal kernel (m187) loads node data as xyzw vectors with 17 waits in its loop; ours (97ae4b02, 2.8 ms/frame, EXP2078) has 34 waits and scalar loads; (2) our lowered NIR forms offsets as (i & 0x3fffffff) * 4, which hides adjacency from nir_opt_load_store_vectorize; (3) offline the identity removal cuts the compute corpus 77100 -> 74281 instructions (-3.7 %), traversal 1168 -> 1116, with the mask kept only where it is not an identity (test_dxil_index_masks).
+- WINDOWS CONTRACT: unchanged (32-bit buffer byte addressing).
+- AGX/ASAHI CONTRACT: unchanged (load_ssbo lowering, vectorizer).
+- TRANSLATION: (x & M) * 2^s -> x * 2^s when M keeps the low 32 - s bits (exact in 32-bit arithmetic).
+- WHAT IS STILL UNKNOWN: the frame-time effect (static instructions only).
+- Expected: suite 119/0; correct image; HD PERF default >= MASK=0 on both ABBA pairs; HD FULL >= 6433; FHD >= 5091.
+- FAIL: wrong image/suite failure (miscompile) or a slower default -> MASK default flipped back.
+- Recovery: rec2152h.
+- Hashes: sys 8df508fb5852, UmdArm64 50f02e485e73, UmdX64 73aff879a417, Umd32 390788852de0; manifest 6bc4616ec2c4, hardware-manifest 4ef315238c00; probe2152.sh b7053b7271e8 (PROBE_LINT_OK); visible recovery rec2152h 235b5192a7a2f9a8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2152h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2152-indexmask/run2152.sh.
