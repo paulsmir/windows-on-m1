@@ -68753,3 +68753,17 @@ EXP2152 HARDWARE ACTUAL (2026-11-04T10:00:10Z): **M1 index-mask removal CONFIRME
 - Verdict: CONFIRMED for HD (f5dcae3a default on); FHD INCONCLUSIVE.
 - Recovery: guest reboot + AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2152h/recover.sh.
 - Next: FHD ABBA with the next experiment's package.
+
+EXP2153 HARDWARE BEFORE 2026-11-04T10:21:41Z:
+Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD FULL, b-e HD PERF ABBA (default, LICM=0, default, LICM=0), f FHD PERF default, g FHD PERF LICM=0, h FHD FULL.
+- WHY THIS HYPOTHESIS: (1) Metal oracle: the macOS planet PS (m245) ray-march loop bodies are 224-318 bytes (45 instructions, 1 wait); ours were 390-480 bytes (67 instructions, 2 loads, 3 waits) because the D3D layer-clamp descriptor crawl of the array sample runs on every iteration; (2) the planet PS costs 1.57 ms/frame (EXP2140); (3) Asahi never runs nir_opt_licm, while the crawl loads are load_global_constant (CAN_REORDER), so offline LICM empties the loops of crawl loads (45-58 instructions, 1 wait), with no occupancy change in any captured shader (3 cold shaders gain 1-9 spills, none dispatched by GravityMark).
+- WINDOWS CONTRACT: descriptors referenced by a draw do not change while it executes (D3D12, including DESCRIPTORS_VOLATILE).
+- AGX/ASAHI CONTRACT: agx_nir_lower_texture's crawls read the descriptor; nir_opt_licm moves only instructions of blocks dominating the loop exit.
+- TRANSLATION: nir_opt_licm(nir, NULL) after agx_nir_lower_texture and RC78 in agx_shader_initialize.
+- WHAT IS STILL UNKNOWN: the frame effect (static loop size only).
+- Expected: suite 119/0; correct images; HD PERF default > LICM=0 on both pairs (up to ~1.5 %); FHD PERF default >= LICM=0; HD FULL >= 6390.
+- FAIL: wrong image, suite failure, or slower default -> LICM default off.
+- Recovery: rec2153h.
+- Hashes: sys 30b28a3ae956, UmdArm64 561b84999568, UmdX64 9c50ce27cc69, Umd32 92a6527f75c6; manifest f6ae02a5edaf, hardware-manifest 7e22a71415aa; probe2153.sh 5c1e26b3b77f (PROBE_LINT_OK); visible recovery rec2153h bc00129d61481c84; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2153h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2153-licm/run2153.sh.
