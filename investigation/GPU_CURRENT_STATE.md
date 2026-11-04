@@ -17,7 +17,14 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 - New tool: Metal oracle .local/metal-oracle (Apple's AGX binaries of all 274 GravityMark functions, applegpu listings).
   C0 bdb1944a = Apple m164 (1913 vs our 3543 instrs, same register use; the gap is already in the DXIL: 32 vs 12 sin/cos);
   C4 traversal 97ae4b02 ~ Apple m187 (1214 vs 1177 instrs): C4's cost is execution, not code size.
-- Next: execution time of C4 (7.7 ms) and R1 against the oracle.
+- Accepted (defaults): M1 f5dcae3a identity index masks dropped (EXP2152: HD PERF ABBA +0.7 % both pairs); M3 7c8d834f
+  non-speculative LICM after texture crawls (EXP2153: HD neutral, FHD PERF +0.9 %; HD FULL 6439 best). FHD FULL falls
+  with arm position (5091 3rd, 4865 6th, 4736 8th): run FHD FULL first.
+- Workload finding (oracle): GravityMark's D3D12 DXIL is heavier than its Metal code before our compiler sees it (C0:
+  32 vs 12 sin/cos; planet PS: 64 vs 24 sin/cos, 228 vs 137 loads, outer loops unrolled by dxc). macOS 9739 is not an
+  equal-work target; driver-owned remainder: boundaries (~1.6 ms/frame, needs a second Asahi Queue or depth-K window)
+  and latency hiding (C4 traversal: 34 waits / loop vs Apple 17, mean load->wait 6.4 vs 15 instructions).
+- Next: C4 traversal wait placement (scheduler) against oracle m187.
 
 ## CURRENT 2026-11-03 18:00Z -- GRAVITYMARK HD 6257 / FHD 4862 (EXP2134, defaults); TARGET macOS HD 9739
 - Baseline (switch-free package, dbd498a8 defaults): EXP2134 HD 100k -temporal 0 = 6257 / 37.4 FPS, FHD 4862 / 29.1 FPS,
