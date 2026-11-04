@@ -68821,3 +68821,15 @@ EXP2156 HARDWARE ACTUAL (2026-11-04T11:49:56Z): **The foreign job in GravityMark
 - Wom1JobTiming971Hot (63 jobs, snapshot right after the HD PERF arm, 38.455 FPS with diagnostics): GravityMark pid 9552 alternates R/C (fences 52154-52183), pid 11156 (DWM) inserts one render job after every R7 (52161, 52170, 52179: every 9th fence). DWM render kick -> complete median 646 us (n 6); GravityMark compute / render kick -> complete medians 5.8 / 6.0 ms (pairs).
 - The window refuses DWM pairs: cross-process (refusal 55) and render/render with different manager keys (58), so R7 -> DWM and DWM -> C0 are both unpaired boundaries (~0.4 ms each).
 - Verdict: CONFIRMED (span = DWM job 0.65 + 2 boundaries). Two driver-owned levers: (1) cross-process pairs (DWM behind R7, C0 behind DWM: needs a resident second manager slot and a cross-VM pair class), (2) DWM's composition cost (0.65 ms for a full-desktop target; dirty-rect tile scope unknown).
+
+EXP2157 HARDWARE BEFORE 2026-11-04T14:00:57Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2156 ring: only DWM render jobs spend long between the manager save and JobEnd (1672, 102, 692, 624, 2453, 9 us) while GravityMark jobs take 9-24 us on the same path; (2) that section is AdmissionGpuvaG3CompleteJobTimestamp under the global G3 fast mutex (timestamp publish + GraphEndJob, V5 JOB_END/RELEASE mean 7 us), so the variable part is most likely waiting for that lock; (3) the following GravityMark C0 is kicked only after DWM's Notify (0.3 ms later), so R7 done -> C0 kick is 1.4-2.9 ms per frame.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (lock wrappers only time the same ExAcquire/ExReleaseFastMutex calls; export throttled to 2 s).
+- WHAT IS STILL UNKNOWN: whether DWM's completion waits for the G3 lock, and which site (paging UpdatePageTable / FlushTlb, escape, begin-job re-parse) holds it.
+- Expected: Wom1G3LockProfileHot with the completion site (gpuva_g3_windows.c CompleteJobTimestamp) in the long-wait ring and a named holder; or no long wait there (then the time is inside the section: publish/EndJob).
+- Failure criteria: suite regressions (119/0 expected), HD PERF more than 2 % below EXP2156 (38.46 FPS with diagnostics), any TDR.
+- Recovery: rec2157h.
+- Hashes: sys 709f62e8b297, UmdArm64 cc18d7ff75cb, UmdX64 aa5c89c8bf40, Umd32 10ecc1b40872; manifest 2682a2f5c947, hardware-manifest cd4f2d45a4b9; probe2157.sh e31aba487d71 (PROBE_LINT_OK); visible recovery rec2157h ade1edbb4aa614fd; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
+- Recovery rec2157h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2157-lockprof/run2157.sh.
