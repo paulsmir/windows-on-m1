@@ -68674,3 +68674,17 @@ EXP2148 HARDWARE ACTUAL (2026-11-04T07:50:20Z): **N1 own notification FAIL: lost
 - Expected vs actual: expected each pair job to notify at its own end; actual a render head whose threshold had been raised late (deferred behind 0x102) never raised its completion event. This is the BEFORE "== semantics" outcome: the firmware notifies only when the processed count reaches the threshold at a job's end, not when a later threshold write is already below the count. Verdict REJECTED (7103ae65 stays off; Wom1Depth2OwnNotify default off).
 - Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2148h/recover.sh -> VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
 - Next: per-job notifier objects (Asahi: each Queue owns its notifier and threshold), so a successor's threshold never covers the head; the threshold can then be raised before the kick as Asahi requires.
+
+EXP2149 HARDWARE BEFORE 2026-11-04T08:14:04Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Notifiers=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD FULL (score + image), b HD PERF, c FHD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2148: the firmware notifies only when a notifier's processed count equals its threshold at a job's end, so one shared threshold cannot serve both jobs of a pair (U4); (2) Asahi queue/mod.rs: separate queues have separate notifier thresholds and do not block each other; (3) EXP2147: completing the head at its own end removed the boundary gap (0.40 -> 0.07 ms, +3.5-6 % FPS).
+- WINDOWS CONTRACT: DXGK_INTERRUPT_DMA_COMPLETED for N at N's own completion event, fence order; HwQueuePacketCap 2 unchanged.
+- AGX/ASAHI CONTRACT: a notifier (threshold pointer, generation, cur_count, state) per queue; threshold raised before the kick; resources released on the event.
+- TRANSLATION: flight k+1 uses the notifier flight k does not; copy 1 below object 11 with its own threshold word (8 bytes below object 12) and generation+1; each threshold counts only its notifier's jobs (render: event_count delta, compute: 1).
+- WHAT IS STILL UNKNOWN: whether the firmware accepts two notifiers on the same work queues / JobList; the achieved boundary reduction.
+- Expected: suite 119/0; gap before unpaired compute below 0.4 ms; HD FULL above 6380 (+3-6 %); FHD no regression; correct images; no GPU fault or reset.
+- FAIL: TDR/0x116, lost completion, firmware crash, GPU fault, wrong image -> rec2149h, switch stays off.
+- Recovery: rec2149h.
+- Hashes: sys 0e614b601a85, UmdArm64 480baecceae0, UmdX64 088ec43babf4, Umd32 dbbf4d47dc79; manifest d08624355009, hardware-manifest e1f3400ebc67; probe2149.sh 280505394e0a (PROBE_LINT_OK); visible recovery rec2149h 158a1105f90b99c9; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Notifiers=1.
+- Recovery rec2149h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2149-notifiers/run2149.sh.
