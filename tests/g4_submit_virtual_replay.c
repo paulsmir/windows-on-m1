@@ -33,9 +33,6 @@ typedef size_t SIZE_T;
 typedef unsigned char *PUCHAR;
 typedef void *PVOID;
 typedef int KIRQL;
-/* L2 step 1: the per-process lock and rundown (single-threaded replay). */
-typedef struct { int Held; } KGUARDED_MUTEX;
-typedef struct { int Refs, Down; } EX_RUNDOWN_REF;
 #define _Use_decl_annotations_
 #define _ReturnAddress() ((void *)0)
 #define DISPATCH_LEVEL 2
@@ -100,8 +97,7 @@ typedef struct _ADMISSION_G3_STATE {
   int Lock;
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
   void *ActiveContext;
-  unsigned ActiveFence,PrivateCompletionFence,LastCompletedFence;
-  int JobEvent;
+  unsigned ActiveFence,PrivateCompletionFence;
   /* rc102: the depth-2 successor (never set in this replay) */
   void *SuccessorContext;
   unsigned SuccessorFence;
@@ -139,8 +135,6 @@ typedef struct _ADMISSION_G3_PROCESS {
   unsigned Poisoned;
   unsigned PoisonSite, PoisonBrokerStatus;
   unsigned char CpuOnlyMappings;
-  KGUARDED_MUTEX Lock;
-  EX_RUNDOWN_REF Rundown;
 } ADMISSION_G3_PROCESS;
 #define ADMISSION_G3_POISON(Process, File) do { \
     (Process)->Poisoned = 1u; \
@@ -358,25 +352,8 @@ static void __attribute__((unused)) AdmissionRenderCorrelationSubmitFailureWindo
 static void *__attribute__((unused)) PsGetCurrentProcessId(void) { return (void *)(uintptr_t)1234; }
 static APPLE_AGX_G4_PROCESS_RANGE ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
 static int KeGetCurrentIrql(void) { return replay_irql; }
-/* Locks never block here: acquiring a held lock is a replay deadlock. L2
- * lock rank: a process lock (P) is never awaited while the state lock (G)
- * is held; a try-acquire never waits, so it is exempt. */
-static int replay_fast_held, replay_p_contended;
-static void ExAcquireFastMutex(int *lock) { assert(!*lock); *lock = 1; ++replay_fast_held; }
-static void ExReleaseFastMutex(int *lock) { assert(*lock); *lock = 0; --replay_fast_held; }
-static void __attribute__((unused)) KeAcquireGuardedMutex(KGUARDED_MUTEX *m) {
-  assert(!replay_fast_held); assert(!m->Held); m->Held = 1; }
-static BOOLEAN __attribute__((unused)) KeTryToAcquireGuardedMutex(KGUARDED_MUTEX *m) {
-  if (m->Held) { ++replay_p_contended; return FALSE; } m->Held = 1; return TRUE; }
-static void __attribute__((unused)) KeReleaseGuardedMutex(KGUARDED_MUTEX *m) {
-  assert(m->Held); m->Held = 0; }
-static BOOLEAN __attribute__((unused)) ExAcquireRundownProtection(EX_RUNDOWN_REF *r) {
-  if (r->Down) return FALSE; ++r->Refs; return TRUE; }
-static void __attribute__((unused)) ExReleaseRundownProtection(EX_RUNDOWN_REF *r) {
-  assert(r->Refs > 0); --r->Refs; }
-#define IO_NO_INCREMENT 0
-static void __attribute__((unused)) KeSetEvent(int *event, int increment, BOOLEAN wait) {
-  (void)increment; (void)wait; *event = 1; }
+static void ExAcquireFastMutex(int *lock) { assert(!*lock); *lock = 1; }
+static void ExReleaseFastMutex(int *lock) { assert(*lock); *lock = 0; }
 static void KeAcquireSpinLock(int *lock, KIRQL *irql) {
   assert(!*lock);*lock=1;*irql=0;
 }
@@ -500,18 +477,11 @@ static int AppleAgxGpuvaG3GraphContainsRange(
     APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes) {
   return AppleAgxGpuvaG3GraphContainsRangeAccess(graph, va, bytes, 0);
 }
-/* rc81: the cached proof gives the same answer as the walk. L2: a one-shot
- * hook runs inside a parse access (what another thread can do meanwhile). */
-static void (*access_hook)(void);
+/* rc81: the cached proof gives the same answer as the walk. */
 static int AppleAgxGpuvaG3GraphContainsRangeAccessCached(
     APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes, int write) {
-  if (access_hook) access_hook();
   return AppleAgxGpuvaG3GraphContainsRangeAccess(graph, va, bytes, write);
 }
-/* L2: CompleteJobTimestamp (no timestamp publication in this replay). */
-static int graph_end_calls;
-static int __attribute__((unused)) AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
-  (void)graph; ++graph_end_calls; return 1; }
 static unsigned graph_begin_slot;
 static int AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned slot) { (void)graph;graph_begin_slot=slot;++graph_begin_calls;return 1; }
@@ -591,10 +561,6 @@ static ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(ADMISSION_G3_STATE *s,H
  assert(s->Lock);return h==s->Process ? s->Process : NULL;
 }
 static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {(void)p;return TRUE;}
-static BOOLEAN __attribute__((unused)) AdmissionG3PublishTimestampLocked(
-    ADMISSION_CONTEXT *adapter, ADMISSION_G3_PROCESS *process, ULONGLONG va,
-    ULONGLONG end_ns) {
-  (void)adapter; (void)process; (void)va; (void)end_ns; return FALSE; }
 /* The Python driver inserts the unmodified production KMD functions here. */
 /* R162 upload re-hash is evidence-only and compiled out in production. */
 #if ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB
@@ -1149,24 +1115,6 @@ static void render_compute_cases(ADMISSION_CONTEXT *adapter,
   v5_dma_bytes = 0u;
 }
 
-/* L2 step 1: a job completion of another process (DWM) arrives while this
- * process's preflight is inside its parse. */
-static ADMISSION_CONTEXT *l2_adapter;
-static ADMISSION_G3_STATE *l2_state;
-static ADMISSION_G3_PROCESS *l2_process;
-static int l2_hook_ran;
-static void l2_foreign_completion(void) {
-  access_hook = NULL;
-  ++l2_hook_ran;
-  /* The parse holds its own process lock, never the adapter-wide lock. */
-  assert(!l2_state->Lock && l2_process->Lock.Held);
-  /* A completion of the parsing process itself would contend for its P. */
-  assert(!KeTryToAcquireGuardedMutex(&l2_process->Lock));
-  /* The foreign completion takes its own P and G without waiting. */
-  assert(AdmissionGpuvaG3CompleteJobTimestamp(l2_adapter, NULL, 91u, 0ULL, 0ULL));
-  assert(!l2_state->Lock && l2_process->Lock.Held);
-}
-
 static void compute_cases(ADMISSION_CONTEXT *adapter, ADMISSION_G3_STATE *state,
     ADMISSION_RENDER_CONTEXT *context) {
   APPLE_AGX_G4_COMPUTE_ENVELOPE e = {0};
@@ -1203,49 +1151,6 @@ static void compute_cases(ADMISSION_CONTEXT *adapter, ADMISSION_G3_STATE *state,
     ((APPLE_AGX_G4_COMPUTE_ENVELOPE *)q.Private)->Compute.CdmCtrlStreamEnd=0;
     assert(AdmissionG4PreflightLocked(adapter,context->GpuvaG3Process,context,&q)==STATUS_INVALID_PARAMETER);
     assert(q.ParseResult==AppleAgxG4ParseInvalid && dispatches==dispatch_before);
-  }
-  {
-    /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP2157: a foreign
-     * completion waited up to 4.4 ms on the adapter-wide G3 lock held by
-     * GravityMark's preflight parse. The parse must hold only its own
-     * process lock; another process's completion must not wait for it. */
-    static ADMISSION_G3_PROCESS dwm;
-    APPLE_AGX_G4_PREFLIGHT q = {0};
-    DXGKARG_ESCAPE esc = {0};
-    int contended = replay_p_contended;
-    memset(&dwm, 0, sizeof(dwm));
-    dwm.State = state; dwm.Graph.Created = 1u; dwm.OsProcessId = 99u;
-    l2_adapter = adapter; l2_state = state;
-    l2_process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
-    state->ActiveProcess = &dwm; state->ActiveContext = NULL;
-    state->ActiveFence = 91u; state->LastCompletedFence = 0u;
-    q.Magic = APPLE_AGX_G4_PREFLIGHT_MAGIC;
-    q.Version = APPLE_AGX_G4_PREFLIGHT_VERSION; q.Bytes = sizeof(q);
-    q.CommandVa = args.DmaBufferVirtualAddress; q.CommandBytes = args.DmaBufferSize;
-    q.PrivateBytes = sizeof(e); memcpy(q.Private, &e, sizeof(e));
-    esc.hContext = context; esc.hDevice = context->Object.Device;
-    esc.hKmdProcessHandle = context->GpuvaG3Process;
-    esc.pPrivateDriverData = &q; esc.PrivateDriverDataSize = sizeof(q);
-    l2_hook_ran = 0;
-    access_hook = l2_foreign_completion;
-    assert(AdmissionGpuvaG4PreflightEscape(adapter, &esc) == STATUS_SUCCESS);
-    assert(q.Ready && q.ParseResult == AppleAgxG4ParseOk && l2_hook_ran == 1);
-    assert(!state->ActiveProcess && !state->ActiveFence &&
-           state->LastCompletedFence == 91u && state->JobEvent);
-    assert(replay_p_contended == contended + 1);
-    assert(!state->Lock && !replay_fast_held && !l2_process->Lock.Held &&
-           !l2_process->Rundown.Refs && !dwm.Lock.Held);
-    /* A process being destroyed (run down) is not parsed. */
-    l2_process->Rundown.Down = 1;
-    memset(&q, 0, sizeof(q));
-    q.Magic = APPLE_AGX_G4_PREFLIGHT_MAGIC;
-    q.Version = APPLE_AGX_G4_PREFLIGHT_VERSION; q.Bytes = sizeof(q);
-    q.CommandVa = args.DmaBufferVirtualAddress; q.CommandBytes = args.DmaBufferSize;
-    q.PrivateBytes = sizeof(e); memcpy(q.Private, &e, sizeof(e));
-    assert(AdmissionGpuvaG4PreflightEscape(adapter, &esc) == STATUS_SUCCESS);
-    assert(!q.Ready && q.Status == (ULONG)STATUS_INVALID_DEVICE_STATE && !q.ParseResult);
-    l2_process->Rundown.Down = 0;
-    puts("L2 foreign completion during preflight parse: PASS");
   }
   assert(AdmissionG4SubmitVirtualEnvelope(adapter, context, &args) == STATUS_SUCCESS);
   assert(adapter->RenderPacket.State == AdmissionRenderPacketQueued &&

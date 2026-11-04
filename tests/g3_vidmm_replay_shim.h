@@ -118,26 +118,6 @@ typedef int FAST_MUTEX;
 static KIRQL replay_irql;
 static void ExAcquireFastMutex(FAST_MUTEX *m) {(void)m;assert(replay_irql==PASSIVE_LEVEL);replay_irql=1;}
 static void ExReleaseFastMutex(FAST_MUTEX *m) {(void)m;assert(replay_irql==1);replay_irql=PASSIVE_LEVEL;}
-/* L2 step 1 lock rank: the process lock P (rank 1) is never awaited while
- * the state lock G (rank 2, the only fast mutex: replay_irql 1) is held; a
- * try-acquire never waits and is exempt. A guarded mutex saves no IRQL, so
- * its release order is free. Waits run with no lock held (see below). */
-typedef struct { int Held; } KGUARDED_MUTEX;
-typedef struct { int Refs, Down; } EX_RUNDOWN_REF;
-static int replay_p_held;
-static void KeInitializeGuardedMutex(KGUARDED_MUTEX *m) { m->Held=0; }
-static void KeAcquireGuardedMutex(KGUARDED_MUTEX *m) {
-  assert(replay_irql==PASSIVE_LEVEL); assert(!m->Held); m->Held=1; ++replay_p_held; }
-static BOOLEAN KeTryToAcquireGuardedMutex(KGUARDED_MUTEX *m) {
-  if (m->Held) return FALSE; m->Held=1; ++replay_p_held; return TRUE; }
-static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m) { assert(m->Held); m->Held=0; --replay_p_held; }
-static void ExInitializeRundownProtection(EX_RUNDOWN_REF *r) { r->Refs=r->Down=0; }
-static void ExReInitializeRundownProtection(EX_RUNDOWN_REF *r) { assert(r->Down && !r->Refs); r->Down=0; }
-static BOOLEAN ExAcquireRundownProtection(EX_RUNDOWN_REF *r) { if (r->Down) return FALSE; ++r->Refs; return TRUE; }
-static void ExReleaseRundownProtection(EX_RUNDOWN_REF *r) { assert(r->Refs>0); --r->Refs; }
-/* Single-threaded: a reference still held here would never drain. */
-static void ExWaitForRundownProtectionRelease(EX_RUNDOWN_REF *r) {
-  assert(replay_irql==PASSIVE_LEVEL && !replay_p_held && !r->Refs); r->Down=1; }
 static void KeAcquireSpinLock(int *m,KIRQL *i) {(void)m;*i=0;}
 static void KeReleaseSpinLock(int *m,KIRQL i) {(void)m;(void)i;}
 static KIRQL KeGetCurrentIrql(void) { return replay_irql; }
@@ -151,7 +131,7 @@ static unsigned replay_delay_calls; static void (*replay_delay_hook)(void);
 static unsigned long long replay_interrupt_time;
 static unsigned long long KeQueryInterruptTime(void) { return replay_interrupt_time; }
 static NTSTATUS KeDelayExecutionThread(KPROCESSOR_MODE m, BOOLEAN a, LARGE_INTEGER *i) {
-  (void)m;(void)a;assert(i && i->QuadPart<0);assert(replay_irql==PASSIVE_LEVEL && !replay_p_held);
+  (void)m;(void)a;assert(i && i->QuadPart<0);assert(replay_irql==PASSIVE_LEVEL);
   replay_interrupt_time+=(unsigned long long)(-i->QuadPart);
   ++replay_delay_calls; if(replay_delay_hook) replay_delay_hook(); return 0; }
 /* EXP1138: the G3 job event; a timed wait behaves like the old delay. */
@@ -441,8 +421,6 @@ struct _ADMISSION_G3_PROCESS {
   BOOLEAN Poisoned;
   ULONG PoisonSite, PoisonBrokerStatus;
   BOOLEAN CpuOnlyMappings;
-  KGUARDED_MUTEX Lock;
-  EX_RUNDOWN_REF Rundown;
 };
 #define ADMISSION_G3_POISON(Process, File) do { \
     (Process)->Poisoned = TRUE; \

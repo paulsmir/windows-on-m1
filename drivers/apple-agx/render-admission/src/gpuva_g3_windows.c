@@ -22,7 +22,7 @@
 VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *Adapter,
     const ADMISSION_GPU_FAULT_EVENT *Event, ADMISSION_GPU_FAULT_MAPPING *Receipt) {
   ADMISSION_G3_STATE *state;
-  ADMISSION_G3_PROCESS *process, *locked = NULL;
+  ADMISSION_G3_PROCESS *process;
   ADMISSION_RENDER_CONTEXT *context;
   ADMISSION_G3_TABLE_SHADOW *shadow;
   const APPLE_AGX_GPUVA_G3_NODE *leaf;
@@ -47,12 +47,6 @@ VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *Adapter,
   process = state->ActiveProcess;
   if (process == NULL || state->ActiveFence != Event->Fence ||
       !(Event->Flags & ADMISSION_GPU_FAULT_JOB_KNOWN)) goto Done;
-  /* L2: the graph walk below needs the process lock; never wait for it. */
-  if (!KeTryToAcquireGuardedMutex(&process->Lock)) {
-    Receipt->Status = AdmissionGpuFaultMappingBusy;
-    goto Done;
-  }
-  locked = process;
   for (context = process->Contexts; context != NULL;
        context = context->GpuvaG3NextContext)
     if ((ULONGLONG)(ULONG_PTR)context == Event->ContextToken) break;
@@ -144,7 +138,6 @@ Done:
     }
   }
   ExReleaseFastMutex(&state->Lock);
-  if (locked != NULL) KeReleaseGuardedMutex(&locked->Lock);
 }
 
 /* Branch IDs are a stable diagnostic ABI for Wom1G4SubmitFailure. */
@@ -319,29 +312,6 @@ ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(
       return process;
   }
   return NULL;
-}
-
-/* L2 step 1 (gpuva_g3_private.h): never wait for a process lock under the
- * state lock. The try is non-blocking, so it cannot invert the order. */
-BOOLEAN AdmissionG3LockFoundProcess(ADMISSION_G3_STATE *state,
-    ADMISSION_G3_PROCESS *process, BOOLEAN *dropped) {
-  if (dropped != NULL) *dropped = FALSE;
-  if (KeTryToAcquireGuardedMutex(&process->Lock)) return TRUE;
-  if (!ExAcquireRundownProtection(&process->Rundown)) return FALSE;
-  ExReleaseFastMutex(&state->Lock);
-  KeAcquireGuardedMutex(&process->Lock);
-  ExAcquireFastMutex(&state->Lock);
-  /* P and G held: DestroyProcess cannot unlink or free the process now. */
-  ExReleaseRundownProtection(&process->Rundown);
-  if (dropped != NULL) *dropped = TRUE;
-  return TRUE;
-}
-
-ADMISSION_G3_PROCESS *AdmissionG3FindLockedProcess(
-    ADMISSION_G3_STATE *state, HANDLE handle) {
-  ADMISSION_G3_PROCESS *process = AdmissionGpuvaG3FindProcess(state, handle);
-  return process != NULL &&
-      AdmissionG3LockFoundProcess(state, process, NULL) ? process : NULL;
 }
 
 /* Start-time receipt only (PASSIVE_LEVEL, never on the paging path):
@@ -913,19 +883,11 @@ static BOOLEAN AdmissionG3PrivateEvictPressure(ADMISSION_G3_PROCESS *p,
           !s->Submitting && !s->Quarantined &&
           (!oldest || s->CachedAt<oldest->CachedAt)) oldest=s;
     if (!oldest) continue;
-    /* L2: the release mutates the victim's graph and scenes, which needs its
-     * process lock. The caller holds G: never wait for it; a victim busy in
-     * its own preflight parse is skipped like one with a job in flight. */
-    if (!KeTryToAcquireGuardedMutex(&owner->Lock)) continue;
     AppleAgxG3PrivatePoolStats(&p->State->PrivatePool,p->Graph.ProcessId,&before);
     /* This retains the victim's graph/root/owner through leaf invalidation,
      * backing revoke, zeroing and generation-checked free. Failure quarantines
      * that owner in the existing release path; never try a different victim. */
-    if (!AdmissionG3PrivateReleaseScene(owner,oldest,view)) {
-      KeReleaseGuardedMutex(&owner->Lock);
-      return FALSE;
-    }
-    KeReleaseGuardedMutex(&owner->Lock);
+    if (!AdmissionG3PrivateReleaseScene(owner,oldest,view)) return FALSE;
     AppleAgxG3PrivatePoolStats(&p->State->PrivatePool,p->Graph.ProcessId,&after);
     ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_PRESSURE];
     p->State->PrivatePressure[0]=1u;
@@ -1052,14 +1014,10 @@ BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *adapter) {
   for (link=state->Processes.Flink;link!=&state->Processes;link=link->Flink) {
     ADMISSION_G3_PROCESS *p=CONTAINING_RECORD(link,ADMISSION_G3_PROCESS,Link);
     ADMISSION_G3_PRIVATE_SCENE *s;
-    /* L2: P before the scene writes. A busy P drops G (p stays listed, so
-     * link stays valid); a process being destroyed has no queued scene. */
-    if (!AdmissionG3LockFoundProcess(state,p,NULL)) continue;
     for (s=p->PrivateScenes;s;s=s->Next)
       if (s->Queued && s->Started) {
         s->Quarantined=1u;ADMISSION_G3_POISON(p,1u);safe=FALSE;
       }
-    KeReleaseGuardedMutex(&p->Lock);
   }
   ExReleaseFastMutex(&state->Lock);
   return safe; /* No GPU stop/TLB proof exists for an active private reset. */
@@ -1076,7 +1034,6 @@ BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *adapter,
   if (!adapter || !fence || KeGetCurrentIrql()!=PASSIVE_LEVEL) return FALSE;
   p=(ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
   if (p->State->Adapter!=adapter) return FALSE;
-  KeAcquireGuardedMutex(&p->Lock);
   ExAcquireFastMutex(&p->State->Lock);
   /* EXP997: a reclaim failure (poisoned process, quarantined scene) keeps the
    * scene's storage but must not withhold a fence whose GPU work finished.
@@ -1106,7 +1063,6 @@ Done:
   poison_site=p->Poisoned ? p->PoisonSite : 0u;
   poison_status=p->PoisonBrokerStatus;
   ExReleaseFastMutex(&p->State->Lock);
-  KeReleaseGuardedMutex(&p->Lock);
 #ifdef _MSC_VER
   if (poison_site) AdmissionRecordG3Poison(adapter, poison_site, p->OsProcessId,
                                            poison_status);
@@ -1124,7 +1080,6 @@ BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) 
   if (!context || !context->GpuvaG3Process) return TRUE;
   if (KeGetCurrentIrql()!=PASSIVE_LEVEL) return FALSE;
   p=(ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
-  KeAcquireGuardedMutex(&p->Lock);
   ExAcquireFastMutex(&p->State->Lock);
   context->GpuvaG3Closing=TRUE;
   if (!AdmissionG3PrivateReap(p)) goto Done;
@@ -1169,7 +1124,6 @@ BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) 
   ok=TRUE;
 Done:
   ExReleaseFastMutex(&p->State->Lock);
-  KeReleaseGuardedMutex(&p->Lock);
   return ok;
 }
 
@@ -1448,7 +1402,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
   map.Allocation = request.Allocation;
   map.CanonicalGpuVa = request.CanonicalGpuVa;
   ExAcquireFastMutex(&state->Lock);
-  process = AdmissionG3FindLockedProcess(state, args->hKmdProcessHandle);
+  process = AdmissionGpuvaG3FindProcess(state, args->hKmdProcessHandle);
   for (context = process ? process->Contexts : NULL;
        context != NULL && (HANDLE)context != args->hContext;
        context = context->GpuvaG3NextContext) {}
@@ -1486,7 +1440,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
     }
   }
   ExReleaseFastMutex(&state->Lock);
-  if (process != NULL) KeReleaseGuardedMutex(&process->Lock);
   if (haveSystemLeaves)
     AdmissionG3WriteDwmSystemLeaves(adapter, &systemLeaves);
   if (valid) {
@@ -1674,7 +1627,7 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
     goto Release;
   }
   ExAcquireFastMutex(&state->Lock);
-  p = AdmissionG3FindLockedProcess(state, args->hKmdProcessHandle);
+  p = AdmissionGpuvaG3FindProcess(state, args->hKmdProcessHandle);
   if (!p || p->Poisoned || p->CpuOnlyMappings || !p->Graph.Created ||
       p->Graph.Uncertain) goto Unlock;
   for (context = p->Contexts; context && (HANDLE)context != args->hContext;
@@ -1787,7 +1740,6 @@ Output:
   RtlCopyMemory(args->pPrivateDriverData, &q, sizeof(q));
 Unlock:
   ExReleaseFastMutex(&state->Lock);
-  if (p) KeReleaseGuardedMutex(&p->Lock);
 Release:
   if (reference.ReleaseHandle) adapter->Interface.DxgkCbReleaseHandleData(reference);
   return status;
@@ -1967,7 +1919,7 @@ RetryPagingQuiescence:
   for(;;++wait_ms) {
     KeClearEvent(&state->JobEvent);
     ExAcquireFastMutex(&state->Lock);
-    p=AdmissionG3FindLockedProcess(state,args->hKmdProcessHandle);
+    p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
     /* R161 (EXP874): an UPLOAD/DOWNLOAD also waits until every built paging
      * FILL/TRANSFER ran; otherwise it writes the new placement and a later
      * transfer overwrites it (or it reads the placement before the move). */
@@ -1984,8 +1936,6 @@ RetryPagingQuiescence:
        KeQueryInterruptTime()>=deadline) break;
     if(gate==APPLE_AGX_G3_COPY_GATE_WAIT) outcome|=APPLE_AGX_G3_COPY_RESULT_WAITED;
     ExReleaseFastMutex(&state->Lock);
-    /* L2: completion takes this process lock; wait with neither held. */
-    KeReleaseGuardedMutex(&p->Lock);
     /* EXP1138: wake when this process's job ends (1 ms backstop for the
      * paging-quiescence condition, which has no event). */
     delay.QuadPart=-10000LL;
@@ -2028,7 +1978,6 @@ RetryPagingQuiescence:
      KeQueryInterruptTime()<deadline) {
     strict=TRUE;
     ExReleaseFastMutex(&state->Lock);
-    KeReleaseGuardedMutex(&p->Lock);
     goto RetryPagingQuiescence;
   }
   COPY_REJECT_IF(gate==APPLE_AGX_G3_COPY_GATE_WAIT && state->ActiveProcess==p, 42u, STATUS_DEVICE_BUSY, Unlock);
@@ -2043,7 +1992,6 @@ RetryPagingQuiescence:
     if(pagingReady) pagingReady=AdmissionPagingQuiescent(adapter);
     if(!pagingReady && KeQueryInterruptTime()<deadline) {
       ExReleaseFastMutex(&state->Lock);
-      KeReleaseGuardedMutex(&p->Lock);
       delay.QuadPart=-10000LL;
       (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
       ++wait_ms;
@@ -2276,7 +2224,6 @@ Unlock:
   }
 #endif
   ExReleaseFastMutex(&state->Lock);
-  if(p) KeReleaseGuardedMutex(&p->Lock);
 Release:
   if(reference.ReleaseHandle) adapter->Interface.DxgkCbReleaseHandleData(reference);
 Free:
@@ -2691,7 +2638,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   for (wait_ms=0u;;++wait_ms) {
     KeClearEvent(&state->JobEvent);
     ExAcquireFastMutex(&state->Lock);
-    p=AdmissionG3FindLockedProcess(state,args->hKmdProcessHandle);
+    p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
     if (!p || q.Operation==APPLE_AGX_G3_PRIVATE_RELEASE ||
         (!p->Graph.JobInFlight && !p->Graph.LeaseToken) ||
         KeQueryInterruptTime()>=deadline) break;
@@ -2702,8 +2649,6 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
       growWaited=TRUE;
     }
     ExReleaseFastMutex(&state->Lock);
-    /* L2: completion takes this process lock; wait with neither held. */
-    KeReleaseGuardedMutex(&p->Lock);
     delay.QuadPart=-10000LL;
     (void)KeWaitForSingleObject(&state->JobEvent,Executive,KernelMode,FALSE,&delay);
   }
@@ -2883,7 +2828,6 @@ Done:
   snapshot=AdmissionG3SnapshotProcesses(state,receipt);
   RtlCopyMemory(pressure,state->PrivatePressure,sizeof(pressure));
   ExReleaseFastMutex(&state->Lock);
-  if (p) KeReleaseGuardedMutex(&p->Lock);
   if (pressure[1]!=pressureBefore) AdmissionRecordG3PrivatePressure(adapter,pressure,sizeof(pressure));
   if (captured) AdmissionRecordG3PrivateFailure(adapter);
   if (snapshot) AdmissionRecordG3PrivateProcesses(adapter,receipt,sizeof(receipt));
@@ -2918,9 +2862,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
                             ADMISSION_POOL_TAG);
   if (process == NULL) return STATUS_INSUFFICIENT_RESOURCES;
   RtlZeroMemory(process, sizeof(*process));
-  /* L2: both before the process is listed (InsertTailList below). */
-  KeInitializeGuardedMutex(&process->Lock);
-  ExInitializeRundownProtection(&process->Rundown);
   process->OsProcessId = HandleToULong(PsGetCurrentProcessId());
   process->State = state;
   process->Magic = ADMISSION_G3_PROCESS_MAGIC;
@@ -3145,33 +3086,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
     ExReleaseFastMutex(&state->Lock);
     return STATUS_INVALID_HANDLE;
   }
-  /* L2: refuse what the checks below refuse without side effects (GraphDestroy
-   * refuses a leased or running graph first) before running the process
-   * down, so a busy process never fails a concurrent lookup. */
-  {
-    ADMISSION_G3_PRIVATE_SCENE *s;
-    BOOLEAN busy = process->DeviceRefs || process->ContextRefs ||
-#ifdef APPLE_AGX_NATIVE_STAGING
-        process->NativeMapRefs ||
-#endif
-        process->Graph.Uncertain ||
-        (process->Graph.Created &&
-         (process->Graph.LeaseToken || process->Graph.JobInFlight)) ? TRUE : FALSE;
-    for (s=process->PrivateScenes;s;s=s->Next)
-      if (s->Queued || s->Quarantined) busy = TRUE;
-    ExReleaseFastMutex(&state->Lock);
-    if (busy) return STATUS_DEVICE_BUSY;
-  }
-  /* Only this DDI frees the process. Wait, with no lock held, for every
-   * lookup that dropped G under a rundown reference (each is bounded by one
-   * escape or paging operation); later lookups fail. */
-  ExWaitForRundownProtectionRelease(&process->Rundown);
-  KeAcquireGuardedMutex(&process->Lock);
-  ExAcquireFastMutex(&state->Lock);
   {
     ADMISSION_G3_PRIVATE_SCENE *s;
     for (s=process->PrivateScenes;s;s=s->Next)
-      if (s->Queued || s->Quarantined) goto Busy;
+      if (s->Queued || s->Quarantined) {
+        ExReleaseFastMutex(&state->Lock);return STATUS_DEVICE_BUSY;
+      }
   }
   if (process->DeviceRefs || process->ContextRefs ||
 #ifdef APPLE_AGX_NATIVE_STAGING
@@ -3179,12 +3099,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
 #endif
       process->Graph.Uncertain ||
       (process->Graph.Created &&
-       !AppleAgxGpuvaG3GraphDestroy(&process->Graph))) goto Busy;
-  if (!AdmissionG3PrivateDestroyStorage(process)) goto Busy;
+       !AppleAgxGpuvaG3GraphDestroy(&process->Graph))) {
+    ExReleaseFastMutex(&state->Lock);
+    return STATUS_DEVICE_BUSY;
+  }
+  if (!AdmissionG3PrivateDestroyStorage(process)) {
+    ExReleaseFastMutex(&state->Lock);
+    return STATUS_DEVICE_BUSY;
+  }
   while (process->TableShadows != NULL) {
     ADMISSION_G3_TABLE_SHADOW *entry = process->TableShadows;
     if (AppleAgxMemoryRelease(&process->Io, &entry->Memory) !=
-        AppleAgxMemoryResultOk) goto Busy;
+        AppleAgxMemoryResultOk) {
+      ExReleaseFastMutex(&state->Lock);
+      return STATUS_DEVICE_BUSY;
+    }
     process->TableShadows = entry->Next;
     {
       ULONG bucket = (ULONG)((entry->BrokerIpa >> 14) ^
@@ -3208,24 +3137,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
   }
   if (process->BootstrapRoot.AllocationHandle != NULL &&
       AppleAgxMemoryRelease(&process->Io, &process->BootstrapRoot) !=
-          AppleAgxMemoryResultOk) goto Busy;
+          AppleAgxMemoryResultOk) {
+    ExReleaseFastMutex(&state->Lock);
+    return STATUS_DEVICE_BUSY;
+  }
   RemoveEntryList(&process->Link);
   --state->ProcessCount;
   process->Magic = 0u;
   ExReleaseFastMutex(&state->Lock);
-  /* Unlisted and run down: no other thread can reach this lock now. */
-  KeReleaseGuardedMutex(&process->Lock);
 #ifdef APPLE_AGX_NATIVE_STAGING
   AdmissionNativeStagingDestroyProcess(adapter, process);
 #endif
   ExFreePoolWithTag(process, ADMISSION_POOL_TAG);
   return STATUS_SUCCESS;
-Busy:
-  /* The process stays listed and usable: admit lookups again. */
-  ExReInitializeRundownProtection(&process->Rundown);
-  ExReleaseFastMutex(&state->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
-  return STATUS_DEVICE_BUSY;
 }
 
 NTSTATUS AdmissionGpuvaG3AttachDevice(ADMISSION_CONTEXT *adapter,
@@ -3324,7 +3248,6 @@ NTSTATUS AdmissionGpuvaG3EnsurePresentArena(ADMISSION_RENDER_CONTEXT *context) {
   BOOLEAN made;
   if (context == NULL || context->GpuvaG3Process == NULL) return STATUS_SUCCESS;
   process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
-  KeAcquireGuardedMutex(&process->Lock);
   ExAcquireFastMutex(&process->State->Lock);
   made = process->PresentArena.Generation == 0u;
   status = AdmissionG3PresentArenaEnsure(process, &predicate);
@@ -3343,7 +3266,6 @@ NTSTATUS AdmissionGpuvaG3EnsurePresentArena(ADMISSION_RENDER_CONTEXT *context) {
   receipt[6] = (ULONG)((process->PresentArena.Generation ?
       process->PrivateVa + process->PresentArena.VaOffset : 0ULL) >> 32);
   ExReleaseFastMutex(&process->State->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
   if (made || !NT_SUCCESS(status))
     AdmissionRecordG2PresentArena(process->State->Adapter, receipt);
   return status;
@@ -3355,12 +3277,10 @@ NTSTATUS AdmissionGpuvaG3AttachContext(ADMISSION_RENDER_CONTEXT *context,
   if (context == NULL || device == NULL) return STATUS_INVALID_PARAMETER;
   process = (ADMISSION_G3_PROCESS *)device->GpuvaG3Process;
   if (process == NULL) return STATUS_SUCCESS;
-  KeAcquireGuardedMutex(&process->Lock);
   ExAcquireFastMutex(&process->State->Lock);
   if (process->Poisoned || process->Graph.Uncertain ||
       process->ContextRefs == MAXULONG) {
     ExReleaseFastMutex(&process->State->Lock);
-    KeReleaseGuardedMutex(&process->Lock);
     return STATUS_INVALID_DEVICE_STATE;
   }
   ++process->ContextRefs;
@@ -3368,7 +3288,6 @@ NTSTATUS AdmissionGpuvaG3AttachContext(ADMISSION_RENDER_CONTEXT *context,
   context->GpuvaG3NextContext = process->Contexts;
   process->Contexts = context;
   ExReleaseFastMutex(&process->State->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
   return STATUS_SUCCESS;
 }
 
@@ -3376,7 +3295,6 @@ VOID AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *context) {
   ADMISSION_G3_PROCESS *process;
   if (context == NULL || context->GpuvaG3Process == NULL) return;
   process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
-  KeAcquireGuardedMutex(&process->Lock);
   ExAcquireFastMutex(&process->State->Lock);
   {
     ADMISSION_RENDER_CONTEXT **link = &process->Contexts;
@@ -3387,7 +3305,6 @@ VOID AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *context) {
   context->GpuvaG3NextContext = NULL;
   context->GpuvaG3Process = NULL;
   ExReleaseFastMutex(&process->State->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
 }
 
 NTSTATUS AdmissionGpuvaG3ResolveTable(
@@ -3464,11 +3381,9 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
   if (process == NULL || Args->NumEntries != 8u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) {
     if (process != NULL && KeGetCurrentIrql() == PASSIVE_LEVEL) {
-      KeAcquireGuardedMutex(&process->Lock);
       ExAcquireFastMutex(&process->State->Lock);
       AdmissionG3RecordSetRootSeen(process, context, 0ULL);
       ExReleaseFastMutex(&process->State->Lock);
-      KeReleaseGuardedMutex(&process->Lock);
     }
     context->GpuvaG3Poisoned = TRUE;
     return;
@@ -3478,15 +3393,12 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
   if (!NT_SUCCESS(AdmissionGpuvaG3ResolveTable(
           adapter, &address, DXGK_PAGETABLEUPDATE_GPU_PHYSICAL,
           &root_ipa))) {
-    KeAcquireGuardedMutex(&process->Lock);
     ExAcquireFastMutex(&process->State->Lock);
     AdmissionG3RecordSetRootSeen(process, context, 0ULL);
     ExReleaseFastMutex(&process->State->Lock);
-    KeReleaseGuardedMutex(&process->Lock);
     context->GpuvaG3Poisoned = TRUE;
     return;
   }
-  KeAcquireGuardedMutex(&process->Lock);
   ExAcquireFastMutex(&process->State->Lock);
   /* EXP1052 receipt-only: the same short-circuit order, with the failing
    * step encoded in the poison site's file field (0x11..0x15). */
@@ -3509,7 +3421,6 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
   }
   AdmissionG3RecordSetRootSeen(process, context, root_ipa);
   ExReleaseFastMutex(&process->State->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
 }
 
 /* rc102: Packet is the job's own description: the render packet's at
@@ -3680,7 +3591,6 @@ static BOOLEAN AdmissionG4PrivateGeometry(ADMISSION_G3_PRIVATE_SCENE *scene,
 static VOID AdmissionG4PrivateUnqueue(ADMISSION_G3_PROCESS *p,
     ADMISSION_G3_PRIVATE_SCENE *scene, ULONG fence) {
   if (!scene) return;
-  KeAcquireGuardedMutex(&p->Lock);
   ExAcquireFastMutex(&p->State->Lock);
   if (scene->Queued && scene->Fence==fence && !scene->Started) {
     scene->Submitting=0;
@@ -3702,7 +3612,6 @@ static VOID AdmissionG4PrivateUnqueue(ADMISSION_G3_PROCESS *p,
     }
   }
   ExReleaseFastMutex(&p->State->Lock);
-  KeReleaseGuardedMutex(&p->Lock);
 }
 
 BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *context) {
@@ -3712,13 +3621,11 @@ BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *context) {
   if (!context || !context->GpuvaG3Process) return FALSE;
   if (KeGetCurrentIrql()!=PASSIVE_LEVEL) return TRUE;
   p=(ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
-  KeAcquireGuardedMutex(&p->Lock);
   ExAcquireFastMutex(&p->State->Lock);
   (void)AdmissionG3PrivateReap(p);
   for (s=p->PrivateScenes;s;s=s->Next)
     if (s->Context==context && (s->Queued || s->Quarantined)) {busy=TRUE;break;}
   ExReleaseFastMutex(&p->State->Lock);
-  KeReleaseGuardedMutex(&p->Lock);
   return busy;
 }
 
@@ -3897,7 +3804,6 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
   if (state == NULL || process == NULL || process->State != state ||
       process->CpuOnlyMappings)
     return STATUS_INVALID_DEVICE_STATE;
-  KeAcquireGuardedMutex(&process->Lock);
   ExAcquireFastMutex(&state->Lock);
 #if ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB
   AdmissionG3VerifyUploads(adapter,state,process);
@@ -4156,7 +4062,6 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
     status = STATUS_DEVICE_HARDWARE_ERROR;
   }
   ExReleaseFastMutex(&state->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
 #ifdef _MSC_VER
   if (KeGetCurrentIrql() == PASSIVE_LEVEL) AdmissionRecordG4DrawSnapshot(adapter);
 #endif
@@ -4183,10 +4088,7 @@ BOOLEAN AdmissionGpuvaG3StoreManagerSnapshot(ADMISSION_CONTEXT *adapter,
   for (link=state->Processes.Flink;link!=&state->Processes;link=link->Flink) {
     ADMISSION_G3_PROCESS *p=CONTAINING_RECORD(link,ADMISSION_G3_PROCESS,Link);
     if (p->Graph.ProcessId!=snapshot->Key.Owner) continue;
-    /* L2: P for the write; a process being destroyed needs no state. */
-    if (!AdmissionG3LockFoundProcess(state,p,NULL)) break;
     ok=AppleAgxRenderManagerAcceptSnapshot(&p->FirmwareManager,snapshot) ? TRUE : FALSE;
-    KeReleaseGuardedMutex(&p->Lock);
     break;
   }
   ExReleaseFastMutex(&state->Lock);
@@ -4210,7 +4112,6 @@ BOOLEAN AdmissionGpuvaG3PendingManager(ADMISSION_CONTEXT *adapter,
   image = &adapter->BackendImage;
   if (state == NULL || process == NULL || process->State != state)
     return FALSE;
-  KeAcquireGuardedMutex(&process->Lock);
   ExAcquireFastMutex(&state->Lock);
   if (image->G4Native && image->BoundFence == fence && image->G4Lease.SceneId)
     scene = AdmissionG4FindPrivateScene(process, context, &image->G4Lease,
@@ -4225,7 +4126,6 @@ BOOLEAN AdmissionGpuvaG3PendingManager(ADMISSION_CONTEXT *adapter,
     Key->Backing[2].Bytes = scene->HeapBlocks * APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
   }
   ExReleaseFastMutex(&state->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
   return scene != NULL ? TRUE : FALSE;
 }
 
@@ -4334,27 +4234,13 @@ BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
     ULONGLONG timestampEndNs) {
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
-  BOOLEAN complete, dropped;
+  BOOLEAN complete;
   if (adapter == NULL || fence == 0u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return FALSE;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   if (state == NULL) return FALSE;
   ExAcquireFastMutex(&state->Lock);
-  /* L2: the completing job's process lock (P) before its graph and scenes.
-   * Another process's preflight parse holds only its own P, so a foreign
-   * completion never waits for it. A busy P (this process's own parse)
-   * drops G: then re-check that this fence is still the active job. */
-  for (;;) {
-    process = state->ActiveProcess;
-    if (process == NULL || state->ActiveFence != fence) break;
-    if (!AdmissionG3LockFoundProcess(state, process, &dropped)) {
-      process = NULL; /* never for a leased graph: DestroyProcess refuses it */
-      break;
-    }
-    if (!dropped ||
-        (state->ActiveProcess == process && state->ActiveFence == fence)) break;
-    KeReleaseGuardedMutex(&process->Lock);
-  }
+  process = state->ActiveProcess;
   /* A retried completion; rc102: the successor may run meanwhile. */
   if ((process == NULL || state->ActiveFence != fence) &&
       state->LastCompletedFence == fence) {
@@ -4371,7 +4257,6 @@ BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
        !AdmissionG3PublishTimestampLocked(adapter, process, timestampVa,
                                          timestampEndNs))) {
     ExReleaseFastMutex(&state->Lock);
-    KeReleaseGuardedMutex(&process->Lock);
     return FALSE;
   }
   complete = AppleAgxGpuvaG3GraphEndJob(&process->Graph) ? TRUE : FALSE;
@@ -4398,7 +4283,6 @@ BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
     ADMISSION_G3_POISON(process,1u);
   }
   ExReleaseFastMutex(&state->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
   /* EXP1138: wake escapes waiting for this process's job to end. */
   if (complete) KeSetEvent(&state->JobEvent, IO_NO_INCREMENT, FALSE);
   return complete;
@@ -4413,29 +4297,14 @@ _Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
     ULONG fence) {
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
-  BOOLEAN dropped;
   if (adapter == NULL || fence == 0u || KeGetCurrentIrql() != PASSIVE_LEVEL)
     return;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   if (state == NULL) return;
   ExAcquireFastMutex(&state->Lock);
-  /* L2: as CompleteJobTimestamp, P of the active process first. */
-  for (;;) {
-    process = state->ActiveProcess;
-    if (process == NULL ||
-        (state->SuccessorFence != fence && state->ActiveFence != fence)) {
-      process = NULL;
-      break;
-    }
-    if (!AdmissionG3LockFoundProcess(state, process, &dropped)) {
-      process = NULL; /* never for a leased graph: DestroyProcess refuses it */
-      break;
-    }
-    if (!dropped || (state->ActiveProcess == process &&
-        (state->SuccessorFence == fence || state->ActiveFence == fence))) break;
-    KeReleaseGuardedMutex(&process->Lock);
-  }
-  if (process != NULL) {
+  process = state->ActiveProcess;
+  if (process != NULL &&
+      (state->SuccessorFence == fence || state->ActiveFence == fence)) {
     ADMISSION_G3_PRIVATE_SCENE *s;
     /* The reset proved the firmware never received this job (a kicked
      * successor or an active job whose submit failed): its graph job ends
@@ -4460,7 +4329,6 @@ _Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
     }
   }
   ExReleaseFastMutex(&state->Lock);
-  if (process != NULL) KeReleaseGuardedMutex(&process->Lock);
   KeSetEvent(&state->JobEvent, IO_NO_INCREMENT, FALSE);
 }
 
@@ -4678,7 +4546,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
       ADMISSION_POOL_TAG);
   if (scratch == NULL)
     return STATUS_INSUFFICIENT_RESOURCES;
-  KeAcquireGuardedMutex(&process->Lock);
   ExAcquireFastMutex(&process->State->Lock);
   RtlZeroMemory(&destinationWalk, sizeof(destinationWalk));
   completed = !process->Poisoned && !process->Graph.Uncertain &&
@@ -4738,7 +4605,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
 #endif
   KeMemoryBarrier();
   ExReleaseFastMutex(&process->State->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
   ExFreePoolWithTag(scratch, ADMISSION_POOL_TAG);
   return completed ? STATUS_SUCCESS :
       NT_SUCCESS(copy.Status) ? STATUS_INVALID_ADDRESS : copy.Status;
@@ -5066,7 +4932,6 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     ULONGLONG mapping_generation,
     struct _ADMISSION_G4_SUBMIT_FAILURE *detail) {
   ADMISSION_G4_PENDING *entry = NULL;
-  ADMISSION_G3_PROCESS *owner;
   KIRQL old_irql;
   ULONG slot;
   BOOLEAN queued = FALSE;
@@ -5140,10 +5005,6 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     RtlCopyMemory(entry->Render, view->Render, sizeof(entry->Render));
     RtlCopyMemory(entry->Native, view->Native, view->CommandBytes);
   }
-  /* L2: the scene fields below are process-owned (P, then G). */
-  owner = private_scene != NULL ?
-      (ADMISSION_G3_PROCESS *)context->GpuvaG3Process : NULL;
-  if (owner != NULL) KeAcquireGuardedMutex(&owner->Lock);
   ExAcquireFastMutex(&state->Lock);
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (entry->State == AdmissionG4PendingFilling &&
@@ -5169,7 +5030,6 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     private_scene->ResumeFence=0u;private_scene->Submitting=0u;
   }
   ExReleaseFastMutex(&state->Lock);
-  if (owner != NULL) KeReleaseGuardedMutex(&owner->Lock);
   return queued;
 }
 
@@ -5606,8 +5466,8 @@ _Use_decl_annotations_ VOID AdmissionG4PendingAheadUnbind(
  * order, preemption, reset and TDR) but binds no destination and no private
  * scene: its stores are process-VM accesses that the GPU MMU confines to
  * this process's VM slot, as for Asahi drm_asahi_cmd_compute. Called with
- * the process lock and state->Lock held after the envelope-state and
- * graph-root checks; releases both. */
+ * state->Lock held after the envelope-state and graph-root checks; releases
+ * the lock. */
 static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
     ADMISSION_G3_STATE *state, ADMISSION_G3_PROCESS *process,
     ADMISSION_RENDER_CONTEXT *context,
@@ -5637,7 +5497,6 @@ static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
   if (result != AppleAgxG4ParseOk)
     AdmissionG4SnapshotFailure(process, &failure, &detail);
   ExReleaseFastMutex(&state->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
   if (result != AppleAgxG4ParseOk)
     return AdmissionG4SubmitRejectDetail(adapter, context, args,
         AdmissionG4RejectParse, STATUS_INVALID_PARAMETER, (ULONG)result,
@@ -5808,7 +5667,6 @@ static NTSTATUS AdmissionG3SubmitPresentComputeInner(ADMISSION_CONTEXT *adapter,
   deferred = AdmissionG4PendingAdmissible(adapter, context);
   if (!deferred && !AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, NULL))
     ADMISSION_PRESENT_CPU(5u);
-  KeAcquireGuardedMutex(&process->Lock);
   ExAcquireFastMutex(&state->Lock);
   /* The arena is made once and never moves until the process ends. */
   if (process->PresentArena.Generation) {
@@ -5828,12 +5686,10 @@ static NTSTATUS AdmissionG3SubmitPresentComputeInner(ADMISSION_CONTEXT *adapter,
       !AdmissionG3PresentAccessible(process, &present)) {
     ULONG why = process->PresentArena.Generation ? 7u : 6u;
     ExReleaseFastMutex(&state->Lock);
-    KeReleaseGuardedMutex(&process->Lock);
     ADMISSION_PRESENT_CPU(why);
   }
   mapping_generation = process->Graph.MappingGeneration;
   ExReleaseFastMutex(&state->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
   RtlZeroMemory(&packet, sizeof(packet));
   packet.Kind = ADMISSION_RENDER_PACKET_KIND_COMPUTE;
   packet.Fence = args->SubmissionFenceId;
@@ -6030,15 +5886,12 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
 #undef ADMISSION_G4_REJECTS
   RtlZeroMemory(&packet, sizeof(packet));
   RtlZeroMemory(&binding, sizeof(binding));
-  /* L2 step 1: P, then G; this parse still holds G (step 2 moves it). */
-  KeAcquireGuardedMutex(&process->Lock);
   ExAcquireFastMutex(&state->Lock);
   /* A deferred job binds and begins only after the worker has reported the
    * previous private completion, so only the immediate path checks it here. */
   if (context->GpuvaG3RootIpa != process->Graph.RootIpa ||
       process->Graph.Uncertain || (!deferred && state->PrivateCompletionFence)) {
     ExReleaseFastMutex(&state->Lock);
-    KeReleaseGuardedMutex(&process->Lock);
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectRoot, STATUS_INVALID_PARAMETER, 0u, TRUE);
   }
@@ -6107,7 +5960,6 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
           detail.LogicalFlags[3] = AdmissionRenderPacketState(&adapter->RenderPacket);
         }
         ExReleaseFastMutex(&state->Lock);
-        KeReleaseGuardedMutex(&process->Lock);
         return AdmissionG4SubmitRejectDetail(adapter,context,args,
             AdmissionG4RejectEnvelopeState,STATUS_INVALID_PARAMETER,0u,TRUE,&detail);
       }
@@ -6185,7 +6037,6 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     }
   }
   ExReleaseFastMutex(&state->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
   if (result != AppleAgxG4ParseOk)
     return AdmissionG4SubmitRejectDetail(adapter, context, args,
         AdmissionG4RejectParse, STATUS_INVALID_PARAMETER, (ULONG)result,
@@ -6230,7 +6081,6 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
   rollbackBranch = AdmissionG4RejectQueue;
-  KeAcquireGuardedMutex(&process->Lock);
   ExAcquireFastMutex(&state->Lock);
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketQueue(&adapter->RenderPacket,
@@ -6249,7 +6099,6 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     private_scene->ResumeFence=0u;private_scene->Submitting=0u;
   }
   ExReleaseFastMutex(&state->Lock);
-  KeReleaseGuardedMutex(&process->Lock);
   if (!queued) goto Rollback;
   InterlockedIncrement(&adapter->SubmitPath.Immediate);
   AdmissionDispatchQueuedWork(adapter);
@@ -6273,9 +6122,7 @@ Rollback:
       rollbackBranch, STATUS_INVALID_PARAMETER, 0u, TRUE);
 }
 
-/* Caller holds the process lock (P, L2 step 1) and not the state lock: every
- * writer of what this reads (graph, proof cache, shadows, scenes, contexts,
- * manager) holds P. Validate immutable submission
+/* Caller holds the process graph mutex. Validate immutable submission
  * inputs without reserving a scheduler/private-fence slot or binding an image.
  * Context root installation and slot availability belong to scheduled submit. */
 static NTSTATUS AdmissionG4PreflightLocked(ADMISSION_CONTEXT *adapter,
@@ -6358,35 +6205,25 @@ NTSTATUS AdmissionGpuvaG4PreflightEscape(ADMISSION_CONTEXT *adapter,
       q.Failure.Kind || q.Failure.Ordinal || q.Failure.Va ||
       q.Failure.Bytes || q.Failure.Write) return STATUS_INVALID_PARAMETER;
   q.Status = (ULONG)STATUS_INVALID_DEVICE_STATE;
-  /* L2 step 1: the state lock (G) only finds the process and pins it; the
-   * parse runs under the process lock (P) alone, so another process's job
-   * completion or BeginJob never waits for it. The result is advisory:
-   * Submit and BeginJob re-prove under their own locks. */
   ExAcquireFastMutex(&state->Lock);
   process = AdmissionGpuvaG3FindProcess(state, args->hKmdProcessHandle);
-  if (process && !ExAcquireRundownProtection(&process->Rundown)) process = NULL;
-  ExReleaseFastMutex(&state->Lock);
-  if (!process) goto Output;
-  KeAcquireGuardedMutex(&process->Lock);
-  if (process->Poisoned || process->CpuOnlyMappings ||
+  if (!process || process->Poisoned || process->CpuOnlyMappings ||
       !process->Graph.Created || process->Graph.Uncertain ||
-      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0)) goto Unlock;
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0)) goto Output;
   for (context = process->Contexts; context && (HANDLE)context != args->hContext;
        context = context->GpuvaG3NextContext) {}
   if (!context || !context->Win32Transport || context->GpuvaG3Closing ||
       context->GpuvaG3Poisoned || !context->Object.Device ||
       !(context->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) ||
-      (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM | ADMISSION_CONTEXT_GDI))) goto Unlock;
+      (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM | ADMISSION_CONTEXT_GDI))) goto Output;
   device = CONTAINING_RECORD(context->Object.Device, ADMISSION_DEVICE, Object);
   if ((HANDLE)device != args->hDevice ||
-      device->Object.Adapter != &adapter->ObjectAdapter) goto Unlock;
+      device->Object.Adapter != &adapter->ObjectAdapter) goto Output;
   /* R147: SetRoot is only guaranteed before scheduled execution. */
   q.Status = (ULONG)AdmissionG4PreflightLocked(adapter, process, context, &q);
   q.Ready = q.Status == (ULONG)STATUS_SUCCESS;
-Unlock:
-  KeReleaseGuardedMutex(&process->Lock);
-  ExReleaseRundownProtection(&process->Rundown);
 Output:
+  ExReleaseFastMutex(&state->Lock);
   RtlCopyMemory(args->pPrivateDriverData, &q, sizeof(q));
   return STATUS_SUCCESS;
 }

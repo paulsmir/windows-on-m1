@@ -82,9 +82,8 @@ typedef struct {int Lock;} ADMISSION_G3_STATE;
 typedef struct NODE {struct NODE *Next;ULONGLONG Ipa,AuxIpa;UINT Index;} APPLE_AGX_GPUVA_G3_NODE;
 typedef struct SHADOW {struct SHADOW *Next;ULONGLONG BrokerIpa;
  APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes;} ADMISSION_G3_TABLE_SHADOW;
-typedef struct {int Held;} KGUARDED_MUTEX;
 typedef struct {struct {int Created,Uncertain;APPLE_AGX_GPUVA_G3_NODE *Parents;} Graph;
- ADMISSION_G3_TABLE_SHADOW *TableShadows;KGUARDED_MUTEX Lock;} ADMISSION_G3_PROCESS;
+ ADMISSION_G3_TABLE_SHADOW *TableShadows;} ADMISSION_G3_PROCESS;
 typedef struct {void *Adapter;} DEVICE;
 typedef struct {struct {UINT Magic;DEVICE *Device;} Object;
  ADMISSION_G3_PROCESS *GpuvaG3Process;int GpuvaG3Poisoned;ULONGLONG GpuvaG3RootIpa;
@@ -110,9 +109,6 @@ static void FreePrivateSlab(void *ctx,ADMISSION_POOL_SLAB *slab){
 static unsigned encoded;
 static void ExAcquireFastMutex(int *p){assert(!*p);*p=1;}
 static void ExReleaseFastMutex(int *p){assert(*p);*p=0;}
-/* L2 step 1: the per-process lock (P), never re-entered. */
-static void KeAcquireGuardedMutex(KGUARDED_MUTEX *m){assert(!m->Held);m->Held=1;}
-static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m){assert(m->Held);m->Held=0;}
 static NTSTATUS AdmissionG3SnapshotAperture(ADMISSION_CONTEXT *a,ULONGLONG *i,UINT *s){
  (void)a;(void)i;assert(*s==0 || *s==2);return 0;}
 static void AdmissionMemoryPoolNoteRecord(ADMISSION_CONTEXT *a,ADMISSION_PAGING_RECORD *r){(void)a;(void)r;}
@@ -133,7 +129,7 @@ int main(void){
  APPLE_AGX_GPUVA_G3_NODE middle={NULL,2,3,0},root={&middle,1,2,0};
  static APPLE_AGX_GPUVA_G3_LOGICAL_PTE ptes[8192];
  ADMISSION_G3_TABLE_SHADOW table={NULL,3,ptes};
- ADMISSION_G3_PROCESS p={{1,0,&root},&table,{0}};
+ ADMISSION_G3_PROCESS p={{1,0,&root},&table};
  ADMISSION_RENDER_CONTEXT c={{123,&d},&p,0,1};
  unsigned char dma[4096];ADMISSION_PAGING_RECORD records[16],fill;
  ADMISSION_POOL_SLABS slabs={0};ADMISSION_POOL_PRIVATE leases[2]={{0}};

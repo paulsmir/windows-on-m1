@@ -305,16 +305,6 @@ typedef struct _ADMISSION_G3_PROCESS {
   ULONG PoisonSite;
   /* EXP1030: broker status (graph LastStatus) when first poisoned. */
   ULONG PoisonBrokerStatus;
-  /* L2 step 1: the process lock (P). Lock order P -> state Lock (G): P is
-   * never awaited while G is held (AdmissionG3LockFoundProcess). Every
-   * writer of process-owned state (graph and its proof cache, table
-   * shadows, private scenes, contexts, managers) holds P and G; the G4
-   * preflight parse holds P only. A guarded mutex, not a FAST_MUTEX: these
-   * files remap every fast mutex onto the state Lock (F5). Rundown keeps a
-   * process found under G alive while G is dropped; DestroyProcess waits
-   * for it with no lock held. */
-  KGUARDED_MUTEX Lock;
-  EX_RUNDOWN_REF Rundown;
 } ADMISSION_G3_PROCESS;
 
 /* Logical identity can change even when a native leaf is byte-identical.
@@ -371,17 +361,6 @@ NTSTATUS AdmissionG3PreparePrivateStorage(
     APPLE_AGX_G3_PRIVATE_MANAGER *Manager, APPLE_AGX_G3_PRIVATE_SCENE *Scene);
 
 ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(
-    ADMISSION_G3_STATE *State, HANDLE ProcessHandle);
-/* L2 step 1: State->Lock (G) is held and Process was found under it (list,
- * handle or ActiveProcess). Takes Process->Lock (P) too. A free P is taken
- * in place (G held throughout); a busy P is awaited with G dropped under a
- * rundown reference and G is retaken (*Dropped TRUE: re-read any other
- * state read under G; Process itself stays listed). FALSE: Process is being
- * destroyed (G held, P not taken). */
-BOOLEAN AdmissionG3LockFoundProcess(ADMISSION_G3_STATE *State,
-    ADMISSION_G3_PROCESS *Process, BOOLEAN *Dropped);
-/* FindProcess, then AdmissionG3LockFoundProcess (G held): NULL or P held. */
-ADMISSION_G3_PROCESS *AdmissionG3FindLockedProcess(
     ADMISSION_G3_STATE *State, HANDLE ProcessHandle);
 NTSTATUS AdmissionGpuvaG3ResolveTable(
     ADMISSION_CONTEXT *Adapter, const DXGK_PAGETABLEUPDATEADDRESS *Address,
