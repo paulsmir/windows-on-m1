@@ -69105,3 +69105,10 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1. Steps: D3D12 suite; Gravi
 - Hashes: sys 22adaa567ea6, UmdArm64 c9cdc9c845d4, UmdX64 9bf8fb79a08a, Umd32 a337a1bafa84; manifest ed9ec098d914, hardware-manifest 0aaab40f66c6; probe2172.sh 55b2fc6459cf (PROBE_LINT_OK); visible recovery rec2172h 591b0c6f27a4867d; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
 - Recovery rec2172h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2172-preempt/run2172.sh.
+
+EXP2172 HARDWARE ACTUAL (2026-11-04T23:39:20Z): **Preemption is not a cost: Wom1PreemptTrace (3085 preemptions, 32 in ring) shows PreemptCommand -> DMA_PREEMPTED 0.3-4 ms = the running GravityMark job finishing at its DMA-buffer boundary (deferral worker|cmd-phase|cmd-dispatched), then notify -> commit 2-3 us, commit -> DWM submit 3-20 us, submit -> worker pickup 44-104 us (one 2029 us outlier), no AwaitWork waits. H1/H2/H3 all REJECTED.**
+- Suite 119/0; HD PERF 39.038 FPS (deployed m1n1 075e3980, retained slots off); ARM_TASK True.
+- Frame span R7 done -> next C0 kick from the mid-arm job rings: EXP2172 median 1249 us (1164-1266, all frames), EXP2167 (deployed m1n1 + retained slots) 1265 us (1215-1383), EXP2171 (split m1n1 + retained slots) 1005-1140 us on 3 of 5 frames but 4088/4596 us on 2 frames (DWM kick 3.2-3.7 ms after the GravityMark completion).
+- Correction to the P1 analysis premise: the DWM 0.67-2.94 ms submit->worker wait was seen only with the split m1n1; with the deployed m1n1 the post-preemption path costs ~0.1 ms.
+- Verdict: preemption hypotheses REJECTED; split m1n1 gives the expected ~0.2 ms per frame on normal frames but adds occasional ~3 ms DWM stalls (cause unknown, 2 of 5 sampled frames) -> split stays experimental, not lastgood. Next: characterise the split-only stalls with more frames (larger ring) before any further m1n1 change.
+- Recovery: rec2172h.
