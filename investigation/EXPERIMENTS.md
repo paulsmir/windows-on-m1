@@ -68631,3 +68631,16 @@ EXP2146 HARDWARE ACTUAL (2026-11-04T00:03:41Z): **P1 present pairs inert: the R7
 - Interpretation: the present packet cannot be paired with R7 because VidSch hands the KMD job N+1 only when N-1 completes (sub(N) ~ cmp(N-2), rc94), and C6's completion is deferred to R7's end by the notifier (U4). The same mechanism leaves every boundary after a pair unhidden. Offline confirmation: the rc102 model shows the CPU-visible queue stamp is published with the notifier event, while the firmware queue stamp (objects 9/10, sidecar 0x8780) is written at the job's end.
 - Verdict: rejected as a standalone change (switch stays off); superseded by S1 (b054b8b8, stamp-based completion of the pair head), which makes the next packet available while N+1 runs.
 - Recovery rec2146h.
+
+EXP2147 HARDWARE BEFORE 2026-11-04T00:10:13Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2StampComplete=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD FULL (score + image), b HD PERF, c FHD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2146: pairing the present job changed nothing because the next packet arrives only after the pair's successor ends (VidSch sub(N) ~ cmp(N-2), U4 notifier deferral); (2) EXP2131/2143: every boundary after a pair costs ~0.4 ms and the R7 -> C0 span 1.7 ms per frame; (3) the firmware queue stamp, which the successor's leading Barrier already waits on (hardware-validated depth-two classes), is written at the job's end, before the deferred event.
+- WINDOWS CONTRACT: DXGK_INTERRUPT_DMA_COMPLETED for N when N's work is finished (stamps and done pointers), in fence order; N+1 stays in flight.
+- AGX/ASAHI CONTRACT: Asahi: "the job's stamp decides" (workqueue/event); after FinalizeX writes the stamp only RetireStamp remains in N's microsequence; N+2 reuses N's slot copies only after VidSch, prebind and build (hundreds of us later).
+- WHAT IS STILL UNKNOWN: whether firmware reads N's slot objects after its stamp (object reuse by N+2), and the achieved boundary reduction.
+- Expected: suite 119/0; gap before unpaired compute jobs below 0.4 ms and the R7 -> C0 span shorter; HD FULL above 6396 (up to ~+8 %); FHD no regression; correct images; no GPU fault.
+- FAIL: GPU fault, firmware crash (0x116), hang, wrong image -> rec2147h, switch stays off.
+- Recovery: rec2147h.
+- Hashes: sys 47206ecc4bd3, UmdArm64 cb8d30d9b068, UmdX64 043b4b86788e, Umd32 751d413bf27f; manifest f839977c1f67, hardware-manifest 50e8b7e5c43a; probe2147.sh f133e567ccdc (PROBE_LINT_OK); visible recovery rec2147h 998fd32324880235; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2StampComplete=1.
+- Recovery rec2147h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2147-stamp/run2147.sh.
