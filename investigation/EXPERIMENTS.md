@@ -68773,3 +68773,14 @@ EXP2153 HARDWARE ACTUAL (2026-11-04T10:44:55Z): **M3 LICM: HD neutral (PERF ABBA
 - FHD FULL falls with its position in the run: EXP2150 5091 (3rd arm), EXP2152 4865 (6th), EXP2153 4736 (8th), while every ABBA pair favours the default: an order/thermal effect, not a regression. Next runs put FHD FULL first.
 - Expected vs actual: expected HD up to +1.5 %; actual HD within noise (the per-iteration crawl loads were hidden by occupancy and cache), FHD +0.9 % where the planet PS weighs more. Verdict: KEPT default on (no measured cost, FHD gain); HD INCONCLUSIVE.
 - Next: one FHD FULL first + HD FULL in the next package to re-anchor full scores.
+
+EXP2154 HARDWARE BEFORE 2026-11-04T11:03:25Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1PresentTimestamps=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FULL (first, re-anchors the FHD score), b HD PERF (timeline), c HD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2131/2146/2147: the R7 -> C0 span costs 1.6-1.7 ms per frame (~7 %) and stayed 1.59 ms even when S1 removed the notifier gaps, so most of it is not a boundary gap; (2) the present job is one compute job per frame (KMD present compute, one 32-bit pixel per thread) whose duration was never measured; (3) its destination is a DWM/primary surface whose mapping cost is unknown.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged; the present job runs the timestamp microsequence (as every UMD compute job does).
+- WHAT IS STILL UNKNOWN: the present job's firmware duration and the gaps around it.
+- Expected: suite 119/0; Wom1PresentTs filled; split of the R7 -> C0 span into gap, present duration, gap (receipt + gm2154b-umd.log stages on the same GPU clock).
+- Recovery: rec2154h.
+- Hashes: sys 8a65a17e9db1, UmdArm64 1b799a6ff1c4, UmdX64 a8d9fba3ddff, Umd32 3b2506bc0c14; manifest b39797d217e1, hardware-manifest 00a5e097f9a1; probe2154.sh 73f7b814a8a6 (PROBE_LINT_OK); visible recovery rec2154h c62dede07a3992cb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PresentTimestamps=1.
+- Recovery rec2154h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2154-presentts/run2154.sh.
