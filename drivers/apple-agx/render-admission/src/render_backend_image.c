@@ -155,6 +155,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
     return APPLE_AGX_FALSE;
   }
   Image->Binding = candidate;
+  Image->JobVmSlot = 0u;
   Image->BoundFence = Packet->Fence;
   *Binding = candidate;
   return APPLE_AGX_TRUE;
@@ -237,6 +238,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindDynamicSubmission(
     return APPLE_AGX_FALSE;
   }
   Image->Binding = candidate;
+  Image->JobVmSlot = 0u;
   Image->BoundFence = Packet->Fence;
   *Binding = candidate;
   return APPLE_AGX_TRUE;
@@ -284,7 +286,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
   Image->NativeWidth=Native->SurfaceWidth;
   Image->NativeHeight=Native->SurfaceHeight;
   Image->NativePitch=Native->SurfacePitch;
-  Image->Binding=candidate; Image->BoundFence=Packet->Fence;
+  Image->Binding=candidate; Image->JobVmSlot=0u; Image->BoundFence=Packet->Fence;
   *Binding=candidate;
   return APPLE_AGX_TRUE;
 }
@@ -394,6 +396,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
       (AppleAgxG4ColorBytes(View->ColorFormat) ?
        AppleAgxG4ColorBytes(View->ColorFormat) : 4u);
   Image->Binding = candidate;
+  Image->JobVmSlot = 0u;
   Image->BoundFence = Packet->Fence;
   Image->BindFailure = 0u;
   *Binding = candidate;
@@ -415,6 +418,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Compute(
   Image->TimestampPublishVa =
       AppleAgxG4TimestampPublishVa(&Envelope->Compute.Timestamps);
   AdmissionBackendBindingZero(&Image->Binding);
+  Image->JobVmSlot = 0u;
   Image->G4Compute = APPLE_AGX_TRUE;
   Image->BoundFence = Fence;
   return APPLE_AGX_TRUE;
@@ -434,6 +438,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindPresentCompute(
   memcpy(&Image->Present, Present, sizeof(*Present));
   Image->TimestampPublishVa = 0ULL;
   AdmissionBackendBindingZero(&Image->Binding);
+  Image->JobVmSlot = 0u;
   Image->PresentCompute = APPLE_AGX_TRUE;
   Image->BoundFence = Fence;
   return APPLE_AGX_TRUE;
@@ -727,6 +732,17 @@ APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
   Image->Pristine = APPLE_AGX_FALSE;
   return AppleAgxRenderTemplateSelectVmSlot(
       Image->ArenaCpuAddress, Image->ArenaCapacity, Slot);
+}
+
+APPLE_AGX_BOOL AdmissionBackendImageRetargetVmSlot(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence) {
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
+      Image->BoundFence != Fence || Image->G4Compute || Image->PresentCompute)
+    return APPLE_AGX_FALSE;
+  if (Image->JobVmSlot == 0u) return APPLE_AGX_TRUE;
+  return AppleAgxRenderTemplateRetargetVmSlot(Image->ArenaCpuAddress,
+      Image->ArenaCapacity, Image->JobVmSlot, 0);
 }
 
 APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(

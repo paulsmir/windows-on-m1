@@ -8,6 +8,10 @@
 typedef struct _APPLE_AGX_RENDER_MANAGER_KEY {
   APPLE_AGX_U64 Owner, Generation, RootIpa;
   APPLE_AGX_G4_PROCESS_RANGE Backing[3];
+  /* V1: the VM slot (InitBM context_id) the manager was bound in. Compared
+   * with RootIpa: a slot change rebinds (InitBM), restoring the same
+   * manager's saved state like a root move. */
+  APPLE_AGX_U64 VmSlot;
 } APPLE_AGX_RENDER_MANAGER_KEY;
 typedef struct _APPLE_AGX_RENDER_MANAGER_STATE {
   APPLE_AGX_RENDER_MANAGER_KEY Key;

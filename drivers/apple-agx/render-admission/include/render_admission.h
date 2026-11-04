@@ -855,6 +855,9 @@ typedef struct _ADMISSION_CONTEXT {
   ULONG LiveAdditivePaging, PagingActiveNode;
   /* GC (experiment): Wom1GpuPrivateCached = 1 and the broker capability. */
   ULONG GpuPrivateCached;
+  /* V1 (experiment): Wom1G3RetainedSlots = 1 (REG_DWORD), read once at
+   * start: per-process VM slots kept between jobs (gpuva_g3_private.h). */
+  ULONG G3RetainedSlots;
   volatile LONG PagingAdapterResetting;
   ULONG PagingNodeHead, PagingNodeCount, PagingNodeDispatchedFence;
   ADMISSION_CPU_PACKET PagingNodeQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];

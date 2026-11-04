@@ -1447,7 +1447,8 @@ static APPLE_AGX_BOOL manager_key_equal(
     const APPLE_AGX_RENDER_MANAGER_KEY *b, APPLE_AGX_BOOL Root) {
   APPLE_AGX_U32 i;
   if (a->Owner != b->Owner || a->Generation != b->Generation ||
-      (Root && a->RootIpa != b->RootIpa)) return APPLE_AGX_FALSE;
+      (Root && (a->RootIpa != b->RootIpa || a->VmSlot != b->VmSlot)))
+    return APPLE_AGX_FALSE;
   for (i=0u;i<3u;++i)
     if (a->Backing[i].Va != b->Backing[i].Va ||
         a->Backing[i].Bytes != b->Backing[i].Bytes ||

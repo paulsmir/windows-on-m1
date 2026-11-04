@@ -1018,6 +1018,10 @@ BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *adapter) {
       if (s->Queued && s->Started) {
         s->Quarantined=1u;ADMISSION_G3_POISON(p,1u);safe=FALSE;
       }
+    /* V1: after a reset no idle process keeps a slot (the baseline state). */
+    if (!p->Graph.Uncertain && !AppleAgxGpuvaG3GraphReleaseRetained(&p->Graph)) {
+      ADMISSION_G3_POISON(p,1u);safe=FALSE;
+    }
   }
   ExReleaseFastMutex(&state->Lock);
   return safe; /* No GPU stop/TLB proof exists for an active private reset. */
@@ -2971,6 +2975,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     goto Fail;
   }
   process->Graph.PrivateCached = adapter->GpuPrivateCached ? 1u : 0u;
+  /* V1: with Wom1G3RetainedSlots the process keeps its VM slot between
+   * jobs; without it the graph stays unattached (lease per job). */
+  if (adapter->G3RetainedSlots &&
+      AppleAgxGpuvaG3SlotsEnable(&state->Slots, ADMISSION_G3_RETAINED_SLOT_COUNT))
+    process->Graph.SlotTable = &state->Slots;
   if (adapter->LiveAdditivePaging &&
       !AppleAgxGpuvaG3GraphNegotiateLive(&process->Graph, true)) {
     /* A topology already exposed to VidMm cannot change per process. */
@@ -3953,12 +3962,17 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
       image->G4ManagerKey.Owner=process->Graph.ProcessId;
       image->G4ManagerKey.Generation=process->PrivateManager.Generation;
       image->G4ManagerKey.RootIpa=process->Graph.RootIpa;
+      image->G4ManagerKey.VmSlot=process->Graph.Slot;
       RtlCopyMemory(image->G4ManagerKey.Backing,private_scene->Storage.Ranges,
           sizeof(image->G4ManagerKey.Backing));
       /* A different backed block count is a different manager: InitBM. */
       image->G4ManagerKey.Backing[2].Bytes=
           private_scene->HeapBlocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
     }
+    /* V1: the builders put the leased slot into this job's firmware
+     * commands (compute, prelude, present VmSlot; render context_id). */
+    if (process->Graph.SlotTable)
+      adapter->BackendImage.JobVmSlot = process->Graph.Slot;
     /* rc81 receipt: would the generation alone have proven this reparse
      * redundant (no page-table update since the submission's parse)? */
     AdmissionJobTimingNoteWindows(adapter, fence, ADMISSION_JOB_FLAG_BEGIN_JOB |
@@ -4168,6 +4182,9 @@ BOOLEAN AdmissionGpuvaG3PendingManager(ADMISSION_CONTEXT *adapter,
     Key->Owner = process->Graph.ProcessId;
     Key->Generation = process->PrivateManager.Generation;
     Key->RootIpa = process->Graph.RootIpa;
+    /* V1: the successor joins this process's lease; an unleased process
+     * (0) cannot match, so the decision stays conservative. */
+    Key->VmSlot = process->Graph.LeaseToken ? process->Graph.Slot : 0u;
     RtlCopyMemory(Key->Backing, scene->Storage.Ranges, sizeof(Key->Backing));
     Key->Backing[2].Bytes = scene->HeapBlocks * APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
   }
@@ -4362,7 +4379,9 @@ _Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
     /* The reset proved the firmware never received this job (a kicked
      * successor or an active job whose submit failed): its graph job ends
      * unrun and its scene was never started on the GPU. */
-    if (!AppleAgxGpuvaG3GraphEndJob(&process->Graph))
+    /* V1: an aborted job leaves no retained lease (reset baseline). */
+    if (!AppleAgxGpuvaG3GraphEndJob(&process->Graph) ||
+        !AppleAgxGpuvaG3GraphReleaseRetained(&process->Graph))
       ADMISSION_G3_POISON(process,1u);
     for (s = process->PrivateScenes; s; s = s->Next)
       if (s->Queued && s->Started && s->Fence == fence && !s->GpuDone)

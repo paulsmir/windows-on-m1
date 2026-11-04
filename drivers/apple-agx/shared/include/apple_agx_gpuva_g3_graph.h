@@ -73,6 +73,30 @@ typedef struct _APPLE_AGX_GPUVA_G3_RANGE_PROOF {
   unsigned int Bytes, Write, Valid, TableCount;
 } APPLE_AGX_GPUVA_G3_RANGE_PROOF;
 
+/* V1 (device value Wom1G3RetainedSlots = 1): retained per-process VM slots.
+ * One table per adapter, serialized by the same lock as the graphs. A graph
+ * attached to an enabled table (Count != 0) keeps its lease after its last
+ * job (EndJob sends JOB_END only); BeginJob of a leased graph sends JOB_BEGIN
+ * only, otherwise it leases the graph's preferred slot, else the least
+ * recently used free slot, else steals the least recently used idle lease
+ * (never one with a job). Every translation change of a leased idle graph
+ * releases the lease first (rule R): UPDATE_LEAF/UPDATE_PARENT/RELOCATE_ROOT/
+ * DESTROY run unleased, as without the table. Slots 1..Count, Count <= 15
+ * (the G13 builders refuse VmSlot >= 16). Unattached graphs or Count == 0:
+ * every job leases the caller's slot and EndJob releases it (the baseline). */
+#define APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX 15u
+struct _APPLE_AGX_GPUVA_G3_GRAPH;
+typedef struct _APPLE_AGX_GPUVA_G3_SLOTS {
+  struct _APPLE_AGX_GPUVA_G3_GRAPH *Owner[APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX + 1u];
+  unsigned long long LastUse[APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX + 1u];
+  unsigned long long Clock;
+  unsigned int Count;
+  /* Bit s: slot s is never leased again (a refused LEASE, a failed steal). */
+  unsigned int Quarantined;
+  /* Receipt-only counters. */
+  unsigned long long Leases, Reuses, Steals, Releases;
+} APPLE_AGX_GPUVA_G3_SLOTS;
+
 typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   APPLE_AGX_GPUVA_V5_CLIENT *Client;
   APPLE_AGX_GPUVA_G3_ALLOC Allocate;
@@ -112,6 +136,10 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   /* rc102 (depth 2): a second job of this process holds the same lease
    * (JOB_BEGIN pins the graph once; the lease ends with the last job). */
   unsigned int JobNested;
+  /* V1: the retained slot table (NULL: baseline) and the slot this graph
+   * leased last (Asahi's bind token; 0 none). */
+  APPLE_AGX_GPUVA_G3_SLOTS *SlotTable;
+  unsigned int PreferredSlot;
 } APPLE_AGX_GPUVA_G3_GRAPH;
 
 #ifdef APPLE_AGX_G3_LOOKUP_STATS
@@ -197,9 +225,22 @@ bool AppleAgxGpuvaG3GraphCanDetachPrivateRootSet(APPLE_AGX_GPUVA_G3_GRAPH *,
 bool AppleAgxGpuvaG3GraphDetachPrivateRootSet(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long RootIpa, const unsigned long long *ReservedVas,
     const unsigned long long *LeafIpas, unsigned Count);
+/* Slot: the VM slot to lease without an enabled slot table (1..62). With
+ * one, the table picks the graph's slot (Graph.Slot after success). */
 bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned int Slot);
+/* Ends the job; releases the lease unless the graph retains it (V1). */
 bool AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *);
+/* V1: RELEASE a lease held with no job in flight (true when none is held;
+ * false with a job, an Uncertain graph or a refused RELEASE, which makes
+ * the graph Uncertain). */
+bool AppleAgxGpuvaG3GraphReleaseIdle(APPLE_AGX_GPUVA_G3_GRAPH *);
+/* V1 rule R: as ReleaseIdle for a graph that retains its lease and has no
+ * job in flight; true and nothing sent otherwise (the baseline). */
+bool AppleAgxGpuvaG3GraphReleaseRetained(APPLE_AGX_GPUVA_G3_GRAPH *);
+/* V1: enable a zeroed table with slots 1..Count (1..15); false otherwise
+ * or when already enabled with another count. */
+bool AppleAgxGpuvaG3SlotsEnable(APPLE_AGX_GPUVA_G3_SLOTS *, unsigned int Count);
 /* rc102: a second job joins the job in flight on the same lease and VM
  * slot (no broker call); EndJob then ends one job, the lease only with the
  * last. At most two jobs. */

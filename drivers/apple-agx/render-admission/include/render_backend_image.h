@@ -65,6 +65,10 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_G4_PROCESS_RANGE G4PreludePreemption;
   APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;
   APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
+  /* V1 (Wom1G3RetainedSlots): the VM slot BeginJob leased for the bound
+   * job, set under the G3 lock; 0 (the baseline, every bind clears it):
+   * the builders use ADMISSION_GPUVA_G3_JOB_VM_SLOT. */
+  APPLE_AGX_U32 JobVmSlot;
   APPLE_AGX_U32 NativeWidth, NativeHeight, NativePitch;
   APPLE_AGX_EXP208_RELOCATION_OBJECT NativeOriginalOutput;
   /* G2: a standalone compute job keeps only its validated envelope; the
@@ -173,6 +177,10 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
  * is an arena write outside any submission, so it clears Pristine. */
 APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Slot);
+/* V1: before a bound render job is staged, rewrite the arena's context_id
+ * fields to JobVmSlot (TRUE and nothing written when JobVmSlot is 0). */
+APPLE_AGX_BOOL AdmissionBackendImageRetargetVmSlot(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence);
 /* Objects a G4 job can change: the CPU writes the command objects (< 36)
  * and the relocation fields of 41, 42 and 63; the GPU reaches only the
  * arena-backed GBM objects 36..40. Every other relocation target is rebound

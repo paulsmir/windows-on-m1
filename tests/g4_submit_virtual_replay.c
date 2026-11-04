@@ -78,6 +78,10 @@ typedef struct {
   unsigned Created, Uncertain;
   ULONGLONG MappingGeneration;
   unsigned AllowProcessRanges;
+  /* V1: lease state BeginJob reads (no retained slot table: baseline). */
+  ULONGLONG LeaseToken;
+  unsigned Slot;
+  void *SlotTable;
 } APPLE_AGX_GPUVA_G3_GRAPH;
 #define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
 /* EXP982: last valid leaf mapping per VidMm allocation handle. */
@@ -200,6 +204,7 @@ typedef struct {
   APPLE_AGX_G4_PROCESS_RANGE G4PreludePreemption;
   APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;
   APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
+  unsigned JobVmSlot;
   unsigned G4Compute;
   APPLE_AGX_G4_COMPUTE_ENVELOPE G4ComputeEnvelope;
   unsigned PresentCompute;
@@ -1176,7 +1181,19 @@ static void compute_cases(ADMISSION_CONTEXT *adapter, ADMISSION_G3_STATE *state,
   assert(AdmissionGpuvaG3BeginJob(adapter, context, 40u) == STATUS_SUCCESS);
   assert(graph_begin_calls == begin_before + 1 &&
          graph_begin_slot == ADMISSION_GPUVA_G3_JOB_VM_SLOT);
+  /* V1: without a retained slot table the builders keep the baseline slot. */
+  assert(adapter->BackendImage.JobVmSlot == 0u);
   state->ActiveProcess = NULL; state->ActiveFence = 0u;
+  {
+    /* V1: with one, the slot the graph leased reaches the compute builder. */
+    ADMISSION_G3_PROCESS *p = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+    static int retained_table;
+    p->Graph.SlotTable = &retained_table; p->Graph.Slot = 3u;
+    assert(AdmissionGpuvaG3BeginJob(adapter, context, 40u) == STATUS_SUCCESS);
+    assert(adapter->BackendImage.JobVmSlot == 3u);
+    p->Graph.SlotTable = NULL; p->Graph.Slot = 0u;
+    state->ActiveProcess = NULL; state->ActiveFence = 0u;
+  }
   assert(AppleAgxSchedulerActivateFence(&adapter->Scheduler, 0u, 0u, 40u));
   assert(AppleAgxSchedulerCompleteActiveFence(&adapter->Scheduler, 0u, 0u, 40u));
   adapter->RenderPacket.State = AdmissionRenderPacketEmpty;

@@ -72,6 +72,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
             '#ifndef IO_NO_INCREMENT\n#define IO_NO_INCREMENT 0\n#endif\n'
             'static int graph_end_calls;\n'
             'static int AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *g){(void)g;++graph_end_calls;return 1;}\n'
+            'static int AppleAgxGpuvaG3GraphReleaseRetained(APPLE_AGX_GPUVA_G3_GRAPH *g){(void)g;return 1;}\n'
             'static void KeSetEvent(int *e,int i,int w){(void)i;(void)w;*e=1;}\n'
             '#include "g4_submit_virtual_functions.inc"')
         setup=shim.split('int main(void) {',1)[1].split('  assert(AdmissionG4SubmitVirtualEnvelope',1)[0]

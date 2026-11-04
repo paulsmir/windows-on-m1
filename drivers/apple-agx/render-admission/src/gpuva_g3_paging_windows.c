@@ -210,8 +210,11 @@ static BOOLEAN AdmissionG3PrepareTableReuse(ADMISSION_G3_PROCESS *process,
   APPLE_AGX_GPUVA_G3_NODE *entry;
   BOOLEAN bootstrap_found = FALSE;
   if (table_ipa != graph->RootIpa || level == 0u) return TRUE;
+  /* V1 rule R: a retained idle lease is released before the root moves
+   * (RELOCATE_ROOT is refused while the owner holds any slot). */
   if (!initial_update || table_ipa == process->BootstrapIpa ||
-      graph->JobInFlight || graph->LeaseToken || graph->Slot ||
+      graph->JobInFlight || !AppleAgxGpuvaG3GraphReleaseRetained(graph) ||
+      graph->LeaseToken || graph->Slot ||
       graph->Uncertain) return FALSE;
   for (entry = graph->Tables; entry; entry = entry->Next)
     if (entry->Ipa == process->BootstrapIpa && entry->Level == 0u)

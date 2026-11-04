@@ -60,6 +60,10 @@ typedef struct _ADMISSION_G3_BEGIN_SPLITS {
   ADMISSION_G3_BEGIN_SPLIT Ring[ADMISSION_G3_BEGIN_SPLIT_RING];
 } ADMISSION_G3_BEGIN_SPLITS;
 
+/* V1 (Wom1G3RetainedSlots = 1): VM slots 1..4 are retained per process
+ * (apple_agx_gpuva_g3_graph.h, APPLE_AGX_GPUVA_G3_SLOTS); first run K = 4. */
+#define ADMISSION_G3_RETAINED_SLOT_COUNT 4u
+
 typedef struct _ADMISSION_G3_STATE {
   ADMISSION_CONTEXT *Adapter;
   FAST_MUTEX Lock;
@@ -138,6 +142,8 @@ typedef struct _ADMISSION_G3_STATE {
   ADMISSION_G3_LOCK_PROFILE LockProfileSnapshot;
   ULONGLONG BeginLeaseStart, BeginLeaseEnd;
   ADMISSION_G3_BEGIN_SPLITS BeginSplits, BeginSplitsSnapshot;
+  /* V1: the retained slot table, under Lock; Count 0 = baseline. */
+  APPLE_AGX_GPUVA_G3_SLOTS Slots;
 } ADMISSION_G3_STATE;
 
 static __inline ADMISSION_G3_LOCK_SITE *AdmissionG3LockSiteSlot(

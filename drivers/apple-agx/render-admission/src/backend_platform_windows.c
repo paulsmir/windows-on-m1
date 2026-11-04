@@ -3349,7 +3349,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   input.CdmStreamBytes = (APPLE_AGX_U32)streamBytes;
   input.Counter = fence;
   input.UscExecutionBase = APPLE_AGX_G4_USC_EXECUTION_BASE;
-  input.VmSlot = ADMISSION_GPUVA_G3_JOB_VM_SLOT;
+  /* V1: the slot BeginJob leased for this job (0: the baseline slot). */
+  input.VmSlot = image->JobVmSlot ? image->JobVmSlot :
+      ADMISSION_GPUVA_G3_JOB_VM_SLOT;
   input.EventNumber =
       runtime->Provider.QueueProvider.Config.Compute.EventNumber;
   input.StampValue = fence;
@@ -3526,6 +3528,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
 #endif
   runtime->Initdata.RenderSharedMemory.TaStartTimestamps =
       runtime->TaStartTimestamps ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
+  /* V1: the render template's seven context_id fields (InitBM, TA, 3D)
+   * name the VM slot BeginJob leased for this job. */
+  if (!AdmissionBackendImageRetargetVmSlot(&runtime->Adapter->BackendImage,
+          Submission->Submission.Fence))
+    goto BuildFailure;
   if (!AdmissionBackendImageStageJob(
           &runtime->Adapter->BackendImage,
           Submission->Submission.Fence, TaEvent, D3Event,
@@ -3639,7 +3646,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     input.CdmStreamBytes = (APPLE_AGX_U32)streamBytes;
     input.Counter = Submission->Submission.Fence;
     input.UscExecutionBase = APPLE_AGX_G4_USC_EXECUTION_BASE;
-    input.VmSlot = ADMISSION_GPUVA_G3_JOB_VM_SLOT;
+    input.VmSlot = image->JobVmSlot ? image->JobVmSlot :
+        ADMISSION_GPUVA_G3_JOB_VM_SLOT;
     input.EventNumber = runtime->Provider.QueueProvider.Config.Compute.EventNumber;
     input.StampValue = Submission->Submission.Fence;
     input.EventSequence = Submission->Submission.Fence;
@@ -7385,6 +7393,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDiagnostics");
   runtime->PresentTsEnabled =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1PresentTimestamps");
+  /* V1: off (0, absent) keeps one VM slot leased per job and released at
+   * its end; 1 retains per-process slots (read before G3 start). */
+  Context->G3RetainedSlots =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1G3RetainedSlots") ? 1u : 0u;
   runtime->RcDepth2 = runtime->RcReceiptEnabled = runtime->RcExportPending = FALSE;
   runtime->Depth2General = FALSE;
   runtime->Depth2Prelude = FALSE;
