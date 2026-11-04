@@ -69075,3 +69075,15 @@ EXP2169 CORRECTION (2026-11-04T22:25:37Z): the GravityMark arm did NOT run (prob
 EXP2170 HARDWARE ACTUAL (2026-11-04T22:25:37Z): **m1n1 broker-lock split (550c7f23, AGX_BROKER_LOCK_SPLIT=1) boots and runs the D3D12 suite 119/0 with no hang and no broker taint; no v5<-service long waits (remaining long waits: scanout<-none@bhl 205-634 us); non-successor BeginJob graph stage mean 10.9 us, none > 100 us. GravityMark arm did not run (same ARM_TASK False defect), so no FPS.**
 - Verdict: split functionally CONFIRMED on hardware (suite + desktop); performance UNMEASURED. Probe fixed for EXP2171 (uploads arm-task.ps1 from the Mac, aborts if missing). Next: EXP2171 = EXP2170 repeated with the GravityMark arm.
 - Recovery: rec2170h.
+
+EXP2171 HARDWARE BEFORE 2026-11-04T22:32:08Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF (+ mid-arm receipts).
+- WHY THIS HYPOTHESIS: (1) EXP2169: V5 calls wait 117-244 us for broker_lock held by the scanout service step (v5<-service@broker); (2) m1n1 source: the service step and scanout touch no V5 state; V5's shared state (gpuva_v5, root_owner, slot page) is now guarded by v5_lock, taken after broker_lock by every other user; (3) host tests pass with and without the flag.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (hypervisor-internal locking).
+- WHAT IS STILL UNKNOWN: hardware behaviour of the new lock order (deadlock or a missed shared state would show as a hang or a broker taint).
+- Expected: no v5<-service long waits; post-DWM begin graph stage <= 20 us (EXP2167: 158-219 us); HD PERF > EXP2169; suite 119/0.
+- Failure criteria: hang, broker taint, TDR, GPU fault, suite regression.
+- Recovery: rec2171h (visible profile with m1n1 075e3980).
+- Hashes: sys dc89821cc12b, UmdArm64 9a3dfc990582, UmdX64 5cec44ba5f8f, Umd32 e425b0590fe2; manifest f40aeb987588, hardware-manifest 3fac9a6901c2; probe2171.sh fe44841bd456 (PROBE_LINT_OK); visible recovery rec2171h aaa493962a5ab32c; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
+- Recovery rec2171h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2171-m1n1split2/run2171.sh.
