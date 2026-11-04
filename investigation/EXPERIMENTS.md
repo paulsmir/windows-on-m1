@@ -68694,3 +68694,14 @@ EXP2149 HARDWARE ACTUAL (2026-11-04T08:21:22Z): **N2 two notifiers FAIL: same si
 - Expected vs actual: expected each job to notify at its own end on its own notifier; actual a lone render's completion event never arrived. Two different notifier changes failing identically at the same boot point leaves two causes: (a) each switch is wrong, or (b) the shared code of 7103ae65/1e4f43db changed the default path. Verdict REJECTED for the switch as built; cause INCONCLUSIVE.
 - Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2149h/recover.sh -> RECOVERY_DONE.
 - Next: EXP2150 control -- the same code with no notifier switch (Wom1GpuFaultInfoRead=1 only). PASS isolates the switches; the same failure points at the shared code.
+
+EXP2150 HARDWARE BEFORE 2026-11-04T08:30:02Z:
+Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD FULL, b HD PERF, c FHD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2148 (N1) and EXP2149 (N2) failed identically (lone render head never completes during the ordered restart, same PSCI ELR); (2) both commits also touched the default notifier-flight code (Begin/Publish/Cancel/build threshold), which EXP2147 and earlier never ran; (3) offline the default path is byte-identical in tests, so only hardware can exclude a shared regression.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged from EXP2147 (default depth-two, batched pair completion).
+- WHAT IS STILL UNKNOWN: whether the shared code or the switches cause the lost completion.
+- Expected: boot, suite 119/0, HD FULL ~6380, FHD ~4920 -> the switches own the defect. FAIL (same lost completion) -> the shared code regressed the default path; bisect 7103ae65 vs 1e4f43db offline first.
+- Recovery: rec2150h.
+- Hashes: sys 85613453d970, UmdArm64 13c4dcfd3268, UmdX64 7d04ebbb4b97, Umd32 d7f7f7e7d858; manifest 124bb2f3f62a, hardware-manifest 00634e0aeb23; probe2150.sh 46161708fdf2 (PROBE_LINT_OK); visible recovery rec2150h 63db9d9b9be8af8e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
+- Recovery rec2150h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2150-control/run2150.sh.
