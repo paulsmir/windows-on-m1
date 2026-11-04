@@ -68963,3 +68963,8 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 (as EXP2163). Steps: D3D12
 - Hashes: sys 3401c86c9806, UmdArm64 0b00d3f4ea61, UmdX64 41c4fdd8f518, Umd32 96be4867b9a1; manifest cdcee1646ad0, hardware-manifest 569d73a65a88; probe2164.sh cd6f7512240b (PROBE_LINT_OK); visible recovery rec2164h 53d03f4ca48ef5d7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
 - Recovery rec2164h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2164-v1off/run2164.sh.
+
+EXP2164 HARDWARE ACTUAL (2026-11-04T19:59:14Z): **V1 code with Wom1G3RetainedSlots off: no functional regression (suite 119/0, no TDR/GPU fault/paging timeout); HD PERF 38.907 FPS vs 39.288 (EXP2163), -1.0 %, at the edge of run-to-run noise (39.29-39.44 over EXP2158-2163).**
+- Mid-arm BeginSplit: process-switch leases unchanged (9 > 100 us, mean 221 us), as expected with the switch off.
+- Verdict: switch-off path ACCEPTED functionally; the -1.0 % is not proven (single run, no ABBA) and is re-checked against the switch-on run in the same package.
+- Recovery: rec2164h.
