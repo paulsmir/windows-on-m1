@@ -68767,3 +68767,9 @@ Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite; GravityMark D3D12 100k -te
 - Hashes: sys 30b28a3ae956, UmdArm64 561b84999568, UmdX64 9c50ce27cc69, Umd32 92a6527f75c6; manifest f6ae02a5edaf, hardware-manifest 7e22a71415aa; probe2153.sh 5c1e26b3b77f (PROBE_LINT_OK); visible recovery rec2153h bc00129d61481c84; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2153h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2153-licm/run2153.sh.
+
+EXP2153 HARDWARE ACTUAL (2026-11-04T10:44:55Z): **M3 LICM: HD neutral (PERF ABBA 38.90 vs 38.94, 38.79 vs 38.63 FPS), FHD PERF +0.9 % (32.86 vs 32.56, one pair); suite 119/0; HD FULL 6439 (best FULL), images within control variation; FHD FULL 4736 as the eighth arm.**
+- b/d default 38.898 / 38.788 FPS, c/e APPLE_AGX_D3D_LICM=0 38.940 / 38.634 (equal 60 s windows); f FHD default 32.860 (median 32.09 ms), g LICM=0 32.557 (32.29 ms).
+- FHD FULL falls with its position in the run: EXP2150 5091 (3rd arm), EXP2152 4865 (6th), EXP2153 4736 (8th), while every ABBA pair favours the default: an order/thermal effect, not a regression. Next runs put FHD FULL first.
+- Expected vs actual: expected HD up to +1.5 %; actual HD within noise (the per-iteration crawl loads were hidden by occupancy and cache), FHD +0.9 % where the planet PS weighs more. Verdict: KEPT default on (no measured cost, FHD gain); HD INCONCLUSIVE.
+- Next: one FHD FULL first + HD FULL in the next package to re-anchor full scores.
