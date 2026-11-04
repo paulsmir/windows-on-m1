@@ -68666,3 +68666,11 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2OwnNotify=1. Steps: D3D12 suite; Grav
 - Hashes: sys dc31f2a74bc4, UmdArm64 a5c23f4b7caa, UmdX64 cbfa71e1b758, Umd32 c5072aa7f169; manifest 861ba357b8ea, hardware-manifest fa218a17d9b0; probe2148.sh 8a7f2086f387 (PROBE_LINT_OK); visible recovery rec2148h c26e6b1eda762659; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2OwnNotify=1.
 - Recovery rec2148h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2148-ownnotify/run2148.sh.
+
+EXP2148 HARDWARE ACTUAL (2026-11-04T07:50:20Z): **N1 own notification FAIL: lost completion during the ordered restart into the full profile, reset from timeout, PSCI SYSTEM_RESET before the D3D12 suite.**
+- Boot: stage PASS, ordered restart, DWM presenting (dcp swap_id 9-13), NVMe guest reset, then PSCI RESET (x0 0x84000009) -- the guest never reached the probe (evidence/EXP2148/full-at-reset.log).
+- Wom1GpuReset v4: reason 3, ResetFromTimeout 0xc0000483, active fence 0x103, completed 0x102, wait 1001 ms.
+- Wom1GpuFaultPostResume v4: Rtkit Crashed 0 (firmware alive), head fence 0x103 kind 1 (render), no successor, no post-resume events, PollFailure 0.
+- Expected vs actual: expected each pair job to notify at its own end; actual a render head whose threshold had been raised late (deferred behind 0x102) never raised its completion event. This is the BEFORE "== semantics" outcome: the firmware notifies only when the processed count reaches the threshold at a job's end, not when a later threshold write is already below the count. Verdict REJECTED (7103ae65 stays off; Wom1Depth2OwnNotify default off).
+- Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2148h/recover.sh -> VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
+- Next: per-job notifier objects (Asahi: each Queue owns its notifier and threshold), so a successor's threshold never covers the head; the threshold can then be raised before the kick as Asahi requires.
