@@ -69040,3 +69040,15 @@ Switches: Wom1G3RetainedSlots=1 only. Steps: D3D12 suite; GravityMark D3D12 100k
 EXP2168 HARDWARE ACTUAL (2026-11-04T21:40:52Z): **V1 retained slots on, production profile: FHD FULL 5200 (first arm; best was 5145, +1.1 %), HD FULL 6475 (best 6524, -0.75 %).** Suite 119/0, wer 0 both arms.
 - Expected vs actual: expected >= bests within noise; actual FHD new best, HD within single-run noise (EXP2153-2159 HD spread ~1.5 %). Verdict: no regression; V1 stays opt-in until an ABBA HD comparison and the m1n1 broker-lock fix are measured.
 - Recovery: rec2168h.
+
+EXP2169 HARDWARE BEFORE 2026-11-04T21:47:44Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF (+ mid-arm receipts).
+- WHY THIS HYPOTHESIS: (1) EXP2167: with a held lease, the first V5 JOB_BEGIN after DWM's job takes 158-219 us (normally ~6 us); (2) m1n1 source: V5 MMIO runs under bhl and broker_lock, broker_lock is also held by the scanout service step (DCP present/poll) after exception exit; (3) only timing inside m1n1 separates bhl waits from broker_lock waits.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (receipt-only m1n1 build; rebuilt with the documented toolchain, base rebuild hash differs from the deployed one by toolchain drift).
+- WHAT IS STILL UNKNOWN: whether the V5 delay is bhl (another vCPU's exception) or broker_lock held by the scanout service step.
+- Expected: BROKERLOCK lines with v5 wait/bhl totals and LONG entries v5<-service@broker or v5<-none@bhl.
+- Failure criteria: boot failure (lastgood relaunch), TDR, suite regression.
+- Recovery: rec2169h (visible profile with m1n1 075e3980).
+- Hashes: sys 3cbac6982f10, UmdArm64 ab66688b1225, UmdX64 1d0033b70517, Umd32 2b2d2f85f6ba; manifest 87e9937a8193, hardware-manifest da1f38e46e32; probe2169.sh 36452d271531 (PROBE_LINT_OK); visible recovery rec2169h 31dfd6c2f79547e2; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
+- Recovery rec2169h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2169-m1n1diag/run2169.sh.
