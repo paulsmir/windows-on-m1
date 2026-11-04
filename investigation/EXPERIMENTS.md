@@ -69069,3 +69069,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1. Ste
 - Hashes: sys ff6f0007b54c, UmdArm64 e622dc06594b, UmdX64 e5e31a0265d5, Umd32 783130831a09; manifest a238a313ec23, hardware-manifest 9de2f5d2cf6f; probe2170.sh 177a4ab29503 (PROBE_LINT_OK); visible recovery rec2170h 944a122ccebf8d66; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
 - Recovery rec2170h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2170-m1n1split/run2170.sh.
+
+EXP2169 CORRECTION (2026-11-04T22:25:37Z): the GravityMark arm did NOT run (probe "ARM_TASK False": the template copied C:\Users\pavel\EXP2135\arm-task.ps1, deleted by guest-prune); the BROKERLOCK evidence (v5<-service@broker 117-244 us) comes from the D3D12 suite and desktop periods, not GravityMark frames. The mechanism stands; the GravityMark per-frame attribution is inferred, not measured.
+
+EXP2170 HARDWARE ACTUAL (2026-11-04T22:25:37Z): **m1n1 broker-lock split (550c7f23, AGX_BROKER_LOCK_SPLIT=1) boots and runs the D3D12 suite 119/0 with no hang and no broker taint; no v5<-service long waits (remaining long waits: scanout<-none@bhl 205-634 us); non-successor BeginJob graph stage mean 10.9 us, none > 100 us. GravityMark arm did not run (same ARM_TASK False defect), so no FPS.**
+- Verdict: split functionally CONFIRMED on hardware (suite + desktop); performance UNMEASURED. Probe fixed for EXP2171 (uploads arm-task.ps1 from the Mac, aborts if missing). Next: EXP2171 = EXP2170 repeated with the GravityMark arm.
+- Recovery: rec2170h.
