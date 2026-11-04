@@ -47,6 +47,19 @@ typedef struct _ADMISSION_G3_LOCK_PROFILE {
   ADMISSION_G3_LOCK_EVENT Holds[ADMISSION_G3_LOCK_RING];
 } ADMISSION_G3_LOCK_PROFILE;
 
+/* L1b receipt-only (with the lock profile): QPC stamps inside BeginJobAs:
+ * lock acquired, re-parse done, graph begin (lease) start/end, release. */
+#define ADMISSION_G3_BEGIN_SPLIT_RECEIPT 1
+#define ADMISSION_G3_BEGIN_SPLIT_RING 64u
+typedef struct _ADMISSION_G3_BEGIN_SPLIT {
+  ULONG Fence, Successor, Refusal, Native;
+  ULONGLONG Acquired, Parsed, LeaseStart, LeaseEnd, Released;
+} ADMISSION_G3_BEGIN_SPLIT;
+typedef struct _ADMISSION_G3_BEGIN_SPLITS {
+  ULONG Version, Bytes, Next, Reserved;
+  ADMISSION_G3_BEGIN_SPLIT Ring[ADMISSION_G3_BEGIN_SPLIT_RING];
+} ADMISSION_G3_BEGIN_SPLITS;
+
 typedef struct _ADMISSION_G3_STATE {
   ADMISSION_CONTEXT *Adapter;
   FAST_MUTEX Lock;
@@ -123,6 +136,8 @@ typedef struct _ADMISSION_G3_STATE {
   ULONGLONG LockAcquiredQpc;
   ADMISSION_G3_LOCK_PROFILE LockProfile;
   ADMISSION_G3_LOCK_PROFILE LockProfileSnapshot;
+  ULONGLONG BeginLeaseStart, BeginLeaseEnd;
+  ADMISSION_G3_BEGIN_SPLITS BeginSplits, BeginSplitsSnapshot;
 } ADMISSION_G3_STATE;
 
 static __inline ADMISSION_G3_LOCK_SITE *AdmissionG3LockSiteSlot(

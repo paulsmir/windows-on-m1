@@ -3780,12 +3780,27 @@ Done:
   return injected;
 }
 
+/* L1b: the graph begin (V5 LEASE + JOB_BEGIN) timed for the begin split. */
+static bool AdmissionG3TimedGraphBeginJob(ADMISSION_G3_STATE *state,
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, unsigned int slot) {
+  bool ok;
+  const BOOLEAN on = state->LockProfile.Enabled ? TRUE : FALSE;
+  if (on) state->BeginLeaseStart = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  ok = AppleAgxGpuvaG3GraphBeginJob(graph, slot);
+  if (on) state->BeginLeaseEnd = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  return ok;
+}
+
 /* Packet: the job's own description (rc102: a successor's is its kicked
  * entry's). *Refusal (rc102 receipt, may be NULL): 0 begun, 1 the active-
  * job state (depth 1: another job; successor: not N's process, or a
  * successor already), 2 a private completion pending, 3 process poisoned,
  * 4 the bound image's re-proof, 5 context poisoned or another root,
  * 6 envelope access, 7 output access, 8 the graph lease (JOB_BEGIN). */
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+/* L1b: inside BeginJobAs only, the graph begin is the timed one. */
+#define AppleAgxGpuvaG3GraphBeginJob(g, s) AdmissionG3TimedGraphBeginJob(state, (g), (s))
+#endif
 static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, ULONG fence, BOOLEAN successor,
     const ADMISSION_RENDER_PACKET_DESCRIPTION *packet, ULONG *Refusal) {
@@ -3796,6 +3811,9 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
   BOOLEAN g4_valid = TRUE;
   ADMISSION_G3_PRIVATE_SCENE *private_scene = NULL;
   NTSTATUS status = STATUS_INVALID_DEVICE_STATE;
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+  ADMISSION_G3_BEGIN_SPLIT split = {0};
+#endif
   if (adapter == NULL || context == NULL || fence == 0u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return STATUS_INVALID_PARAMETER;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
@@ -3805,6 +3823,12 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
       process->CpuOnlyMappings)
     return STATUS_INVALID_DEVICE_STATE;
   ExAcquireFastMutex(&state->Lock);
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+  if (state->LockProfile.Enabled) {
+    split.Acquired = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    state->BeginLeaseStart = state->BeginLeaseEnd = 0ULL;
+  }
+#endif
 #if ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB
   AdmissionG3VerifyUploads(adapter,state,process);
 #endif
@@ -3880,6 +3904,10 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
             context->GpuvaG3DmaBufferBytes)
       g4_valid = FALSE;
   }
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+  if (state->LockProfile.Enabled)
+    split.Parsed = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+#endif
   /* rc102: a successor joins the active job of its own process. The same
    * checks in the same order as before; the first that fails is noted. */
   if (!(successor ? state->ActiveProcess == process && state->ActiveFence != 0u &&
@@ -4061,12 +4089,30 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
     ADMISSION_G3_POISON(process,1u);
     status = STATUS_DEVICE_HARDWARE_ERROR;
   }
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+  if (state->LockProfile.Enabled && split.Acquired) {
+    ADMISSION_G3_BEGIN_SPLIT *e = &state->BeginSplits.Ring[
+        state->BeginSplits.Next++ % ADMISSION_G3_BEGIN_SPLIT_RING];
+    split.Fence = fence; split.Successor = successor ? 1u : 0u;
+    split.Refusal = refusal;
+    split.Native = adapter->BackendImage.G4Native ? 1u :
+        adapter->BackendImage.G4Compute ? 2u :
+        adapter->BackendImage.PresentCompute ? 3u : 0u;
+    split.LeaseStart = state->BeginLeaseStart;
+    split.LeaseEnd = state->BeginLeaseEnd;
+    split.Released = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    *e = split;
+  }
+#endif
   ExReleaseFastMutex(&state->Lock);
 #ifdef _MSC_VER
   if (KeGetCurrentIrql() == PASSIVE_LEVEL) AdmissionRecordG4DrawSnapshot(adapter);
 #endif
   return status;
 }
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+#undef AppleAgxGpuvaG3GraphBeginJob
+#endif
 
 NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
@@ -4217,10 +4263,17 @@ VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *adapter, HANDLE key,
   }
   RtlCopyMemory(&state->LockProfileSnapshot, &state->LockProfile,
                 sizeof(state->LockProfileSnapshot));
+  state->BeginSplits.Version = 1u;
+  state->BeginSplits.Bytes = sizeof(state->BeginSplits);
+  RtlCopyMemory(&state->BeginSplitsSnapshot, &state->BeginSplits,
+                sizeof(state->BeginSplitsSnapshot));
   ExReleaseFastMutex(&state->Lock);
   RtlInitUnicodeString(&name, L"Wom1G3LockProfile");
   (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &state->LockProfileSnapshot,
                       sizeof(state->LockProfileSnapshot));
+  RtlInitUnicodeString(&name, L"Wom1G3BeginSplit");
+  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &state->BeginSplitsSnapshot,
+                      sizeof(state->BeginSplitsSnapshot));
   if (dense) {
     RtlInitUnicodeString(&name, L"Wom1G3LockProfileHot");
     (void)ZwSetValueKey(key, &name, 0u, REG_BINARY,
