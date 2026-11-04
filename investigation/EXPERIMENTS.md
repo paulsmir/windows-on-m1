@@ -68944,3 +68944,10 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1. Steps: D3D12 suite; Gravi
 - Hashes: sys 79ab0093a6f3, UmdArm64 1d91c6bc702d, UmdX64 6828c2a059c6, Umd32 1165cd183484; manifest bac012f2422f, hardware-manifest e46bf2a03f2d; probe2163.sh e91c2c7bb905 (PROBE_LINT_OK); visible recovery rec2163h fd49fd496665ce53; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
 - Recovery rec2163h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2163-beginsplit/run2163.sh.
+
+EXP2163 HARDWARE ACTUAL (2026-11-04T18:42:19Z): **The post-DWM BeginJob cost is the VM-slot lease: AppleAgxGpuvaG3GraphBeginJob (V5 LEASE + JOB_BEGIN) takes 160-272 us for the first GravityMark job after DWM's job (and ~195 us for DWM's own render after GravityMark), 8-19 us otherwise; re-parse and checks are 0-37 us.**
+- Suite 119/0, HD PERF 39.288 FPS (diagnostics). Wom1G3BeginSplit (mid-arm): lease 195/243/160/242/236/272/201 us on the process-switch begins; successors (nested) 0-2 us.
+- Wom1G3PagingProfile V5 timings (mid-arm -> after): LEASE mean 41.7 -> 45.7 us (max 2.67 ms), JOB_BEGIN 5.4, JOB_END 4.9, RELEASE 5.3 us. LEASE = slot write + TLBI ASIDE1OS + DSB OSH (m1n1 hv_agx_retained_platform.c gpuva_invalidate) + read-back; the DSB OSH waits for the GPU's DVM acknowledgement.
+- Every GravityMark <-> DWM switch re-leases the single slot 1 (ADMISSION_GPUVA_G3_JOB_VM_SLOT), twice per frame.
+- Verdict: CONFIRMED (cause located). Next (design first): per-process retained VM slots (GravityMark keeps slot 1, DWM slot 2), no per-frame lease/TLBI; the same change is the prerequisite for cross-process depth-two pairs.
+- Recovery: rec2163h.
