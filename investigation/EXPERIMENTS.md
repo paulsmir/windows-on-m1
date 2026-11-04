@@ -68688,3 +68688,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Notifiers=1. Steps: D3D12 suite; Grav
 - Hashes: sys 0e614b601a85, UmdArm64 480baecceae0, UmdX64 088ec43babf4, Umd32 dbbf4d47dc79; manifest d08624355009, hardware-manifest e1f3400ebc67; probe2149.sh 280505394e0a (PROBE_LINT_OK); visible recovery rec2149h 158a1105f90b99c9; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Notifiers=1.
 - Recovery rec2149h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2149-notifiers/run2149.sh.
+
+EXP2149 HARDWARE ACTUAL (2026-11-04T08:21:22Z): **N2 two notifiers FAIL: same signature as EXP2148 -- lost completion of a lone render head during the ordered restart, reset from timeout, PSCI reset before the suite.**
+- Wom1GpuReset v4: reason 3, ResetFromTimeout 0xc0000483, active fence 0xde, completed 0xdd, wait 1001 ms. PostResume: Rtkit Crashed 0, head 0xde kind 1 (render), no successor, PollFailure 0. PSCI RESET ELR offset identical to EXP2148 (evidence/EXP2149/full-at-reset.log).
+- Expected vs actual: expected each job to notify at its own end on its own notifier; actual a lone render's completion event never arrived. Two different notifier changes failing identically at the same boot point leaves two causes: (a) each switch is wrong, or (b) the shared code of 7103ae65/1e4f43db changed the default path. Verdict REJECTED for the switch as built; cause INCONCLUSIVE.
+- Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2149h/recover.sh -> RECOVERY_DONE.
+- Next: EXP2150 control -- the same code with no notifier switch (Wom1GpuFaultInfoRead=1 only). PASS isolates the switches; the same failure points at the shared code.
