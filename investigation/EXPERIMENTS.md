@@ -68909,3 +68909,8 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 (as EXP2158). Steps: D3D12
 - Hashes: sys 8c4fa5bb23d4, UmdArm64 0df40534dd78, UmdX64 520ef390b027, Umd32 c64279b868af; manifest bc714ba92a99, hardware-manifest c27509e64489; probe2161.sh 535784aeb884 (PROBE_LINT_OK); visible recovery rec2161h 69924f5b8cd528ed; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
 - Recovery rec2161h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2161-proofrange/run2161.sh.
+
+EXP2161 HARDWARE ACTUAL (2026-11-04T18:01:45Z): **INCONCLUSIVE for L3-P1b: suite 119/0, HD PERF 39.443 FPS (EXP2158 39.375, within noise); the receipts were taken after the GravityMark arm and both the job ring and the lock profile Hot copies were overwritten by the desktop's jobs, so the post-DWM BeginJob could not be measured.**
+- Lock profile totals since boot: BeginJobAs :3807 31995 x 34.9 us (EXP2158 37.8), preflight :6208 13.1 us, submit :5889 11.1 us. If the post-DWM BeginJob had fallen from ~200 to ~20 us, :3807's total hold would have dropped by ~0.5 s; it dropped ~0.08 s: weak evidence against the hypothesis.
+- Verdict: INCONCLUSIVE (measurement window). L3-P1b stays (sound, no regression). Next: EXP2162 = same package, the probe snapshots the receipts 45 s into the HD PERF arm.
+- Recovery: rec2161h.
