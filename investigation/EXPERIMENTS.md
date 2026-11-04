@@ -68705,3 +68705,9 @@ Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite; GravityMark D3D12 100k -te
 - Hashes: sys 85613453d970, UmdArm64 13c4dcfd3268, UmdX64 7d04ebbb4b97, Umd32 d7f7f7e7d858; manifest 124bb2f3f62a, hardware-manifest 00634e0aeb23; probe2150.sh 46161708fdf2 (PROBE_LINT_OK); visible recovery rec2150h 63db9d9b9be8af8e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2150h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2150-control/run2150.sh.
+
+EXP2150 HARDWARE ACTUAL (2026-11-04T08:59:55Z): **Control PASS: the N1/N2 package without a notifier switch boots, suite 119/0, HD FULL 6433 (best; EXP2143 6380), FHD FULL 5091, WER 0.**
+- a HD 100k T0 FULL: Score 6433, image saved (gm2150a-image.png); b HD PERF 38.34 FPS (10 + 60 s window, median frame 26.6 ms); c FHD FULL: Score 5091.
+- Expected vs actual: expected the default path unchanged; actual PASS. The lost completion of EXP2148/EXP2149 belongs to the switches (each job notifying alone), not to the shared code. Verdict CONFIRMED (shared code safe); N1/N2 remain rejected.
+- Recovery: guest reboot + rec2150h/recover.sh -> RECOVERY_DONE.
+- Next: offline -- why a successor that notifies on its own is never completed (both switches fail the same way).
