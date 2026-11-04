@@ -68860,3 +68860,14 @@ EXP2158 HARDWARE ACTUAL (2026-11-04T15:29:26Z): **L3-P1 cut the parse lock holds
 - Expected vs actual: expected lower holds and >= 38.52 FPS; actual both, larger than expected on submit (the cached colour-target proof).
 - Verdict: CONFIRMED; L3-P1 accepted (default, no switch). Next: L3-P2 (BeginJob re-parse via image-keyed generation) and the L2 lock split; an HD/FHD FULL score check of the new default.
 - Recovery: rec2158h.
+
+EXP2159 HARDWARE BEFORE 2026-11-04T15:37:29Z:
+Switches: none. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FULL (first arm), b HD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2158: HD PERF +2.2 % with diagnostics from shorter G3 lock holds; (2) scores are measured only in FULL runs, FHD first because its score falls with arm position (EXP2153/2154); (3) best so far HD 6439 (EXP2153), FHD 5128 (EXP2154 first arm).
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged.
+- WHAT IS STILL UNKNOWN: the FULL scores with L3-P1.
+- Expected: FHD > 5128, HD > 6439 (about +2 %).
+- Failure criteria: suite regressions vs 119/0, TDR, image errors, a score below the EXP2150 control (HD 6433 / FHD 5091).
+- Recovery: rec2159h.
+- Hashes: sys 1d59d8fb6b0c, UmdArm64 84c74c4056b4, UmdX64 01d6dfc2b30c, Umd32 07a85cd5b7d1; manifest c5e6dc1b3ce2, hardware-manifest 5a56d1358343; probe2159.sh c0128e942131 (PROBE_LINT_OK); visible recovery rec2159h 739ce9dbfeefa4a6; m1n1 0d3a75b3.
+- Recovery rec2159h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2159-scores/run2159.sh.
