@@ -661,7 +661,7 @@ static NTSTATUS AdmissionG3PreparePrivateStorageObserved(ADMISSION_G3_PROCESS *p
   ADMISSION_BACKEND_MEMORY_VIEW view;
   NTSTATUS status;
   if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
-      process->Graph.JobInFlight || process->Graph.LeaseToken)
+      process->Graph.JobInFlight)
     return STATUS_INVALID_DEVICE_STATE;
   status = AdmissionMemoryRuntimePrivateView(process->State->Adapter, &view);
   if (!NT_SUCCESS(status)) return status;
@@ -755,7 +755,7 @@ static BOOLEAN AdmissionG3PrivateReleaseScene(ADMISSION_G3_PROCESS *p,
   ADMISSION_G3_PRIVATE_SCENE **link=&p->PrivateScenes;
   UINT i;
   if (scene->Queued || scene->Submitting || scene->Quarantined || p->Graph.Uncertain ||
-      p->Graph.JobInFlight || p->Graph.LeaseToken) return FALSE;
+      p->Graph.JobInFlight) return FALSE;
   for (i=0;i<6;++i)
     if (!AdmissionG3PrivateMapExtent(p,view,&scene->Storage.Extents[i],FALSE)) {
       scene->Quarantined=1u;ADMISSION_G3_POISON(p,1u);return FALSE;
@@ -876,7 +876,7 @@ static BOOLEAN AdmissionG3PrivateEvictPressure(ADMISSION_G3_PROCESS *p,
     ADMISSION_G3_PRIVATE_SCENE *s,*oldest=NULL;
     APPLE_AGX_G3_PRIVATE_POOL_STATS before,after;
     if (owner==p || owner->Poisoned || !owner->Graph.Created ||
-        owner->Graph.Uncertain || owner->Graph.JobInFlight || owner->Graph.LeaseToken)
+        owner->Graph.Uncertain || owner->Graph.JobInFlight)
       continue;
     for (s=owner->PrivateScenes;s;s=s->Next)
       if (s->Cached && s->Reported && s->ReleaseRequested && !s->Queued &&
@@ -997,7 +997,7 @@ static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {
     if (s->ReleaseRequested && !s->Queued && !s->Cached && AdmissionG3PrivateCacheScene(p,s))
       ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_CACHED_REAP];
     if (s->ReleaseRequested && !s->Queued && !AdmissionG3PrivateCacheScene(p,s) &&
-        !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
+        !p->Graph.JobInFlight &&
         !AdmissionG3PrivateReleaseScene(p,s,&view)) return FALSE;
   }
   return !p->Poisoned && !p->Graph.Uncertain;
@@ -1094,7 +1094,7 @@ BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) 
     if (s->Queued || s->Quarantined) goto Done;
   }
   if (!p->PrivateManager.Generation) {ok=TRUE;goto Done;}
-  if (p->Graph.JobInFlight || p->Graph.LeaseToken ||
+  if (p->Graph.JobInFlight ||
       !NT_SUCCESS(AdmissionMemoryRuntimePrivateView(p->State->Adapter,&view))) goto Done;
   for (s=p->PrivateScenes;s;s=next) {
     next=s->Next;
@@ -1928,7 +1928,7 @@ RetryPagingQuiescence:
      * RC68: a job of the caller's own context does not conflict when the
      * UMD proved that no submission which may still run holds the slot. */
     gate=p ? AppleAgxG3CopyJobGate(q->Operation,strict ? 0u : q->Reserved,
-        state->ActiveProcess==p || p->Graph.JobInFlight || p->Graph.LeaseToken,
+        state->ActiveProcess==p || p->Graph.JobInFlight,
         state->ActiveProcess==p && state->ActiveContext==(ADMISSION_RENDER_CONTEXT *)args->hContext,
         FALSE) : APPLE_AGX_G3_COPY_GATE_WAIT;
     if(!p || (gate!=APPLE_AGX_G3_COPY_GATE_WAIT &&
@@ -1970,7 +1970,7 @@ RetryPagingQuiescence:
   /* RC68: the proof never covers a presentation allocation (present and
    * flip work reads it outside the UMD holds): wait as before. */
   gate=AppleAgxG3CopyJobGate(q->Operation,strict ? 0u : q->Reserved,
-      state->ActiveProcess==p || p->Graph.JobInFlight || p->Graph.LeaseToken,
+      state->ActiveProcess==p || p->Graph.JobInFlight,
       state->ActiveProcess==p && state->ActiveContext==(ADMISSION_RENDER_CONTEXT *)args->hContext,
       allocation->Presentation!=0u);
   if(gate==APPLE_AGX_G3_COPY_GATE_WAIT && !strict &&
@@ -2309,7 +2309,7 @@ static NTSTATUS AdmissionG3GrowPrivateHeap(ADMISSION_G3_PROCESS *p,
   APPLE_AGX_G3_PRIVATE_MANAGER *m=&p->PrivateManager;
   APPLE_AGX_G3_PRIVATE_EXTENT *grown;
   UINT previous=m->Blocks;
-  if (p->Graph.JobInFlight || p->Graph.LeaseToken) return STATUS_DEVICE_BUSY;
+  if (p->Graph.JobInFlight) return STATUS_DEVICE_BUSY;
   if (!AppleAgxG3PrivateGrowHeap(&p->State->PrivatePool,p->Graph.ProcessId,
           (unsigned char *)view->CpuAddress,m,blocks,&grown))
     return STATUS_INSUFFICIENT_RESOURCES;
@@ -2455,7 +2455,7 @@ static VOID AdmissionG3TvbGrow(ADMISSION_G3_PROCESS *p,
   ULONGLONG now=AdmissionG3TvbNowMs();
   UINT target, step=0u, before, reason=APPLE_AGX_G3_TVB_FAIL_NONE, offset=0u;
   if (!m->Generation || p->Poisoned || p->Graph.Uncertain ||
-      p->Graph.JobInFlight || p->Graph.LeaseToken || !p->PrivateLeafIpa) return;
+      p->Graph.JobInFlight || !p->PrivateLeafIpa) return;
   p->Tvb.LastUsedPages=AdmissionG3TvbUsedPages(p);
   target=AdmissionG3TvbTargetFor(p,size_blocks);
   if (!AppleAgxG3TvbShouldTry(&p->Tvb,target,m->Blocks,now)) return;
@@ -2497,7 +2497,7 @@ static BOOLEAN AdmissionG3TvbRelease(ADMISSION_G3_PROCESS *p) {
     UINT block=APPLE_AGX_G3_TVB_FLOOR_BLOCKS+p->Tvb.LeaseBlocks-1u, leaf=0u, pte=0u, g;
     ADMISSION_POOL_PRIVATE *leases;
     if (!p->TvbLeases || !AppleAgxG3TvbBlockSlot(block,&leaf,&pte) ||
-        p->Graph.JobInFlight || p->Graph.LeaseToken || p->Graph.Uncertain ||
+        p->Graph.JobInFlight || p->Graph.Uncertain ||
         !AdmissionG3TvbUnmapPages(p,p->TvbLeafIpa[leaf],pte,
             APPLE_AGX_G3_TVB_GPU_PAGES_PER_BLOCK)) {
       ADMISSION_G3_POISON(p,1u);
@@ -2640,7 +2640,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     ExAcquireFastMutex(&state->Lock);
     p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
     if (!p || q.Operation==APPLE_AGX_G3_PRIVATE_RELEASE ||
-        (!p->Graph.JobInFlight && !p->Graph.LeaseToken) ||
+        !p->Graph.JobInFlight ||
         KeQueryInterruptTime()>=deadline) break;
     if (AdmissionG3PrivateCachedScene(p,args->hContext,&q)) {
       if (KeQueryInterruptTime()>=growDeadline ||
@@ -2666,7 +2666,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
    * bounded quiescence wait timed out. The broker also checks owner jobs. */
   if (q.Operation!=APPLE_AGX_G3_PRIVATE_RELEASE &&
       !AdmissionG3PrivateCachedScene(p,args->hContext,&q) &&
-      (p->Graph.JobInFlight || p->Graph.LeaseToken))
+      p->Graph.JobInFlight)
     {status=STATUS_DEVICE_BUSY;PRIVATE_CAPTURE(7u,~0u,NULL);goto Done;}
   if (!AdmissionG3PrivateReap(p)) {status=STATUS_DEVICE_HARDWARE_ERROR;PRIVATE_CAPTURE(3u,~0u,NULL);goto Done;}
   status=AdmissionMemoryRuntimePrivateView(adapter,&view);
@@ -2690,7 +2690,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     else if (AdmissionG3PrivateCacheScene(p,scene))
       ++state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE];
     if (scene->Queued || scene->Submitting || scene->Cached ||
-        p->Graph.JobInFlight || p->Graph.LeaseToken)
+        p->Graph.JobInFlight)
       { status=STATUS_SUCCESS;goto Done; }
     status=AdmissionG3PrivateReleaseScene(p,scene,&view) ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;
     goto Done;
@@ -2713,7 +2713,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   /* rc80: grow the TVB while this process is idle (Asahi auto_grow and
    * ensure_blocks before the scene). A cached hit that waited and still
    * found the process busy holds the step off instead of waiting again. */
-  if (!p->Graph.JobInFlight && !p->Graph.LeaseToken) {
+  if (!p->Graph.JobInFlight) {
     AdmissionG3TvbGrow(p,&view,AppleAgxG4TvbBlocksForSize(q.Width,q.Height));
     if (p->Poisoned || p->Graph.Uncertain)
       {status=STATUS_DEVICE_HARDWARE_ERROR;PRIVATE_CAPTURE(14u,2u,NULL);goto Done;}
@@ -3198,7 +3198,7 @@ static NTSTATUS AdmissionG3PresentArenaEnsure(ADMISSION_G3_PROCESS *p,
   *predicate = 0u;
   if (p->PresentArena.Generation) return STATUS_SUCCESS;
   if (p->Poisoned || p->Graph.Uncertain || p->Graph.JobInFlight ||
-      p->Graph.LeaseToken || p->CpuOnlyMappings) {
+      p->CpuOnlyMappings) {
     *predicate = 10u;
     return STATUS_DEVICE_BUSY;
   }
@@ -3764,7 +3764,7 @@ BOOLEAN AdmissionGpuvaG3FaultDrillApply(ADMISSION_CONTEXT *adapter,
   if (process->Poisoned || process->CpuOnlyMappings || !process->Graph.Created ||
       process->Graph.Uncertain || !process->Graph.JobInFlight ||
       !process->Graph.RootTable || !process->Graph.RootIpa || !process->Graph.LeaseToken ||
-      process->Graph.Slot != ADMISSION_GPUVA_G3_JOB_VM_SLOT ||
+      process->Graph.Slot == 0u ||
       AppleAgxGpuvaG3GraphInspectRangeAccess(&process->Graph, faultVa, 64u,
           FALSE, &walk) ||
       /* NoRoot means an absent root EDGE here, with RootTable proven above. */

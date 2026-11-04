@@ -770,7 +770,7 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   PVOID native_binding = AdmissionG3NativeStagingBinding(update->hAllocation);
   BOOLEAN native_noted = FALSE;
 #endif
-  if ((process->Graph.JobInFlight || process->Graph.LeaseToken) &&
+  if (process->Graph.JobInFlight &&
       !process->Graph.LiveAdditive) return STATUS_DEVICE_BUSY;
   if (process->Graph.MappingGeneration == MAXULONGLONG ||
       update->NumPageTableEntries == 0u || update->StartIndex >= limit ||
@@ -1881,7 +1881,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       process = AdmissionGpuvaG3FindProcess(state, args->FlushTlb.hProcess);
       timed_out = KeQueryInterruptTime() >= deadline ? TRUE : FALSE;
       if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
-          (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
+          !process->Graph.JobInFlight ||
           process->Graph.LiveAdditive || timed_out)
         break;
       if (wait_ms == 0u) {
@@ -1906,7 +1906,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
           AdmissionLiveWaitEligible : AdmissionLiveWaitDisabled;
       firstWait.Exit = process == NULL || process->Poisoned || process->Graph.Uncertain ?
           AdmissionLiveWaitInvalid :
-          (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ? AdmissionLiveWaitIdle :
+          !process->Graph.JobInFlight ? AdmissionLiveWaitIdle :
           process->Graph.LiveAdditive ? AdmissionLiveWaitAdmitted : AdmissionLiveWaitTimeout;
       AdmissionRecordG3LiveWait(adapter, &firstWait);
     }
@@ -2055,7 +2055,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     live_update = liveReason == AdmissionLiveWaitEligible ? TRUE : FALSE;
     timed_out = KeQueryInterruptTime() >= deadline ? TRUE : FALSE;
     if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
-        (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
+        !process->Graph.JobInFlight ||
         live_update || timed_out)
       break;
     if (wait_ms == 0u) {
@@ -2091,7 +2091,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     firstWait.LastReason = liveReason;
     firstWait.Exit = process == NULL || process->Poisoned || process->Graph.Uncertain ?
         AdmissionLiveWaitInvalid :
-        (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ? AdmissionLiveWaitIdle :
+        !process->Graph.JobInFlight ? AdmissionLiveWaitIdle :
         live_update ? AdmissionLiveWaitAdmitted : AdmissionLiveWaitTimeout;
     AdmissionRecordG3LiveWait(adapter, &firstWait);
   }
@@ -2110,7 +2110,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     AdmissionG3RecordLeafEarly(state, update,
         process == NULL ? 3u : process->Poisoned ? 4u : 5u, status);
     ExAcquireFastMutex(&state->Lock);
-  } else if (!live_update && (process->Graph.JobInFlight || process->Graph.LeaseToken)) {
+  } else if (!live_update && process->Graph.JobInFlight) {
     status = STATUS_DEVICE_BUSY;
     if (update->PageTableLevel == 0u)
       AdmissionG3RecordLeaf(process, table_ipa, update, status);

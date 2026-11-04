@@ -379,7 +379,7 @@ static NTSTATUS AdmissionPagingAcquireMutation(ADMISSION_CONTEXT *Context,
     ExAcquireFastMutex(&state->Lock);
     for (link = state->Processes.Flink; link != &state->Processes; link = link->Flink) {
       ADMISSION_G3_PROCESS *p = CONTAINING_RECORD(link, ADMISSION_G3_PROCESS, Link);
-      if (p->Graph.JobInFlight || p->Graph.LeaseToken) { busy = TRUE; break; }
+      if (p->Graph.JobInFlight) { busy = TRUE; break; }
     }
     if (!busy) { *Held = TRUE; result = STATUS_SUCCESS; break; }
     if (iterations == 0u) {

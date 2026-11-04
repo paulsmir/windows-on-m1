@@ -39,7 +39,8 @@ class TvbGrowthTests(unittest.TestCase):
         src = (ROOT / 'drivers/apple-agx/render-admission/src/gpuva_g3_windows.c').read_text()
         grow = src[src.index('static VOID AdmissionG3TvbGrow('):]
         grow = grow[:grow.index('\n}\n')]
-        self.assertIn('p->Graph.JobInFlight || p->Graph.LeaseToken', grow)
+        # V1 step 0: an idle retained lease is not GPU work (JobInFlight).
+        self.assertIn('p->Graph.JobInFlight || !p->PrivateLeafIpa', grow)
         retire = src[src.index('BOOLEAN AdmissionGpuvaG3PrivateRetireContext('):]
         retire = retire[:retire.index('\n}\n')]
         self.assertLess(retire.index('AdmissionG3TvbRelease(p)'),

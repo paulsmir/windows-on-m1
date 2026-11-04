@@ -67,7 +67,7 @@ int main(void) {
  AppleAgxG3PrivatePoolStats(&st.PrivatePool,1,&failure);
  assert(failure.GlobalUnits==1024 && !failure.LargestFreeUnits && failure.OwnerUnits==24);
  assert(!AppleAgxG3PrivateAllocate(&st.PrivatePool,1,0x10000u,&wanted));
- p[1].Graph.JobInFlight=1;p[2].Graph.LeaseToken=1;p[3].Poisoned=1;s[4].Queued=1;
+ p[1].Graph.JobInFlight=1;p[2].Graph.JobInFlight=1;p[3].Poisoned=1;s[4].Queued=1;
  /* Only owner6 is idle and safe; caller owns no cached scene. */
  assert(AdmissionG3PrivateEvictPressure(&p[0],&view,0x10000u,&failure));
  assert(s[5].Released && !s[1].Released && !s[2].Released && !s[3].Released && !s[4].Released);
@@ -91,7 +91,7 @@ int main(void) {
  assert(AdmissionG3PrivateEvictPressure(&p[0],&view,32*0x10000u,&failure));
  assert(s[1].Released && AppleAgxG3PrivateAllocate(&st.PrivatePool,1,32*0x10000u,&wanted));
  /* Quarantine, submission and nonexistent graph cannot be reclaimed. */
- p[2].Graph.LeaseToken=0;s[2].Submitting=1;s[4].Queued=0;s[4].Quarantined=1;
+ p[2].Graph.JobInFlight=0;s[2].Submitting=1;s[4].Queued=0;s[4].Quarantined=1;
  failure.LargestFreeUnits=0;
  assert(!AdmissionG3PrivateEvictPressure(&p[0],&view,0x10000u,&failure));
  s[2].Submitting=0;p[2].Graph.Created=0;
