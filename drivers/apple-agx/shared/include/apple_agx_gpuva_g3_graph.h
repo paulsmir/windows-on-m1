@@ -58,7 +58,10 @@ typedef struct _APPLE_AGX_GPUVA_G3_NODE {
  * mutation drops it: a topology change (BindRoot, UpdateParent, table
  * re-registration) all entries, a leaf update the entries that crossed that
  * leaf table. Used under the caller's graph lock only. */
-#define APPLE_AGX_GPUVA_G3_PROOF_ENTRIES 4u
+/* L3-P1 (EXP2157): a render job proves more than four large ranges per
+ * parse (TVB heap, colour/depth targets, ...); 4 round-robin entries
+ * missed on every pass. */
+#define APPLE_AGX_GPUVA_G3_PROOF_ENTRIES 32u
 #define APPLE_AGX_GPUVA_G3_PROOF_TABLES 16u
 #define APPLE_AGX_GPUVA_G3_PROOF_MIN_PAGES 64u
 typedef struct _APPLE_AGX_GPUVA_G3_RANGE_PROOF {

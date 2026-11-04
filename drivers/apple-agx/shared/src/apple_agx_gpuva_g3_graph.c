@@ -829,7 +829,12 @@ bool AppleAgxGpuvaG3GraphContainsRangeAccessCached(
     candidate.Bytes = bytes;
     candidate.RootIpa = graph->RootIpa;
     candidate.Write = write ? 1u : 0u;
-    graph->Proofs[graph->NextProof++ % APPLE_AGX_GPUVA_G3_PROOF_ENTRIES] = candidate;
+    /* an invalidated entry first; otherwise the oldest insertion */
+    for (i = 0; i < APPLE_AGX_GPUVA_G3_PROOF_ENTRIES; ++i)
+      if (!graph->Proofs[i].Valid) break;
+    if (i == APPLE_AGX_GPUVA_G3_PROOF_ENTRIES)
+      i = graph->NextProof++ % APPLE_AGX_GPUVA_G3_PROOF_ENTRIES;
+    graph->Proofs[i] = candidate;
   }
   return true;
 }

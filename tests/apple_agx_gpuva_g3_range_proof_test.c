@@ -128,6 +128,13 @@ int main(void) {
   assert(proof(&graph, 0x8000000ULL, 0x1000000u, true, &ok) <= 4u && ok);
   assert(proof(&graph, 0x4000ULL, 0x4000u, true, &ok) >= 1u && ok);
   assert(proof(&graph, 0x4000ULL, 0x4000u, true, &ok) >= 1u && ok);
+  /* L3-P1 (EXP2157): one render job proves more than four large ranges
+   * (TVB heap, render targets, ...) at preflight, submit and BeginJob;
+   * a cycle of six ranges must hit on its second round. */
+  for (unsigned k = 0; k < 6u; ++k)
+    (void)proof(&graph, 0x400000ULL * k, 0x200000u, true, &ok);
+  for (unsigned k = 0; k < 6u; ++k)
+    assert(proof(&graph, 0x400000ULL * k, 0x200000u, true, &ok) <= 4u && ok);
   /* an uncertain graph proves nothing, cached or not */
   graph.Uncertain = 1u;
   assert(proof(&graph, va, bytes, true, &ok) <= 4u && !ok);

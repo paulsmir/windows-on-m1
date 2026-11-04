@@ -3465,7 +3465,9 @@ static BOOLEAN AdmissionG3OutputAccessibleFor(
       packet->DestinationCpuToken == 0ULL)
     return packet->DestinationGpuVa != 0ULL &&
         packet->DestinationBytes != 0u &&
-        AppleAgxGpuvaG3GraphContainsRangeAccess(graph,
+        /* L3-P1: the parse proved this target moments ago; the cached
+         * proof answers exactly as the walk (graph mutations drop it). */
+        AppleAgxGpuvaG3GraphContainsRangeAccessCached(graph,
             packet->DestinationGpuVa, packet->DestinationBytes, TRUE);
   return AdmissionG3OutputMatchesLocalFor(adapter, graph, packet);
 }
@@ -4769,7 +4771,7 @@ static BOOLEAN AdmissionG4ResolveOutput(
     packet->DestinationCpuToken =
         (ULONGLONG)(ULONG_PTR)((PUCHAR)local->CpuAddress + (SIZE_T)offset);
     packet->DestinationPhysical = local->HostPhysicalAddress + offset;
-  } else if (AppleAgxGpuvaG3GraphContainsRangeAccess(&process->Graph,
+  } else if (AppleAgxGpuvaG3GraphContainsRangeAccessCached(&process->Graph,
                  attachment->Pointer, (UINT)attachment->Size, TRUE)) {
     packet->DestinationCpuToken = 0ULL;
     packet->DestinationPhysical = 0ULL;
