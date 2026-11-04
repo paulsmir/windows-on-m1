@@ -68625,3 +68625,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Present=1. Steps: D3D12 suite; Gravit
 - Hashes: sys cdc2faea2dff, UmdArm64 03fd82fa0aca, UmdX64 6e4a21708a1f, Umd32 6ecec7fb64ac; manifest 643a34b4b70e, hardware-manifest 76e0481490a3; probe2146.sh aba6c71b7e0b (PROBE_LINT_OK); visible recovery rec2146h 4363b8a3940fd84a; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Present=1.
 - Recovery rec2146h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2146-present/run2146.sh.
+
+EXP2146 HARDWARE ACTUAL (2026-11-04T00:03:41Z): **P1 present pairs inert: the R7 -> C0 span is unchanged (median 1.68 vs 1.71 ms), HD FULL 6396 (EXP2143 6380), suite 119/0, image correct.**
+- Expected: span down by up to ~0.4 ms. Actual: gm2146a span median 1.681 / mean 1.854 ms (EXP2143 a 1.714 / 1.874), gm2146b PERF 1.697 / 1.835; one non-GravityMark sequence per frame as before; WER 0, no GPU fault.
+- Interpretation: the present packet cannot be paired with R7 because VidSch hands the KMD job N+1 only when N-1 completes (sub(N) ~ cmp(N-2), rc94), and C6's completion is deferred to R7's end by the notifier (U4). The same mechanism leaves every boundary after a pair unhidden. Offline confirmation: the rc102 model shows the CPU-visible queue stamp is published with the notifier event, while the firmware queue stamp (objects 9/10, sidecar 0x8780) is written at the job's end.
+- Verdict: rejected as a standalone change (switch stays off); superseded by S1 (b054b8b8, stamp-based completion of the pair head), which makes the next packet available while N+1 runs.
+- Recovery rec2146h.
