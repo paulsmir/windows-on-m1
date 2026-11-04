@@ -6596,7 +6596,8 @@ AdoptedKicked:
   }
   AdmissionPublishFirmwareRecovery(runtime);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  if (runtime->JobDiagnostics || runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode)
+  if (runtime->JobDiagnostics || runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode ||
+      runtime->PresentTsEnabled)
     AdmissionJobTimingExportWindows(runtime);
 #endif
 #if ADMISSION_JOB_AHEAD_BUILD
