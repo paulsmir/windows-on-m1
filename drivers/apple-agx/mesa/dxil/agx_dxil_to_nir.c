@@ -810,6 +810,78 @@ agx_dxil_diag_null_fragment(nir_shader *nir, const void *data, size_t bytes)
    nir_progress(true, impl, nir_metadata_none);
 }
 
+/* M1: the DXIL translation forms buffer byte offsets as (i & M) * 2^s with
+ * M = 0xffffffff >> s (dxil-spirv's index-to-byte conversion). In 32-bit
+ * arithmetic the multiply drops the top s bits anyway, so the mask is an
+ * identity: x * 2^s. Left in place it hides the adjacency of (i + k) * 2^s
+ * from nir_opt_load_store_vectorize, so four consecutive words load as four
+ * scalar loads, each with its own wait (GravityMark C4 traversal 97ae4b02:
+ * 15 scalar loads in the loop vs the macOS compile's vector loads).
+ * APPLE_AGX_DXIL_INDEX_MASK=0 keeps the masks (measurement control). */
+static unsigned
+agx_dxil_shift_of(nir_alu_instr *alu, unsigned *other)
+{
+   for (unsigned i = 0; i < 2; ++i) {
+      if (!nir_src_is_const(alu->src[i].src))
+         continue;
+      uint64_t c = nir_src_comp_as_uint(alu->src[i].src, alu->src[i].swizzle[0]);
+      if (alu->op == nir_op_ishl) {
+         if (i != 1 || c == 0 || c >= 32) return 0;
+         *other = 0;
+         return (unsigned)c;
+      }
+      if (c < 2 || (c & (c - 1)) || c > 0x80000000ull)
+         continue;
+      *other = 1 - i;
+      return (unsigned)util_logbase2_64(c);
+   }
+   return 0;
+}
+
+static bool
+agx_dxil_drop_index_mask_instr(nir_builder *b, nir_alu_instr *alu, void *data)
+{
+   (void)b; (void)data;
+   if ((alu->op != nir_op_amul && alu->op != nir_op_imul && alu->op != nir_op_ishl) ||
+       alu->def.bit_size != 32 || alu->def.num_components != 1)
+      return false;
+   unsigned other = 0, shift = agx_dxil_shift_of(alu, &other);
+   if (!shift)
+      return false;
+   nir_instr *def_instr = nir_def_instr(alu->src[other].src.ssa);
+   if (def_instr->type != nir_instr_type_alu)
+      return false;
+   nir_alu_instr *mask = nir_instr_as_alu(def_instr);
+   if (mask->op != nir_op_iand || mask->def.bit_size != 32)
+      return false;
+   const uint32_t need = 0xffffffffu >> shift;
+   for (unsigned i = 0; i < 2; ++i) {
+      if (!nir_src_is_const(mask->src[i].src))
+         continue;
+      const uint32_t m = (uint32_t)nir_src_comp_as_uint(
+         mask->src[i].src, mask->src[i].swizzle[alu->src[other].swizzle[0]]);
+      if ((m & need) != need)
+         continue;
+      nir_scalar keep = nir_scalar_chase_alu_src(
+         nir_get_scalar(&mask->def, alu->src[other].swizzle[0]), 1 - i);
+      nir_alu_src_rewrite_scalar(&alu->src[other], keep);
+      return true;
+   }
+   return false;
+}
+
+void
+agx_dxil_drop_index_masks(nir_shader *nir)
+{
+   const char *off = getenv("APPLE_AGX_DXIL_INDEX_MASK");
+   if (off && off[0] == '0')
+      return;
+   bool progress = false;
+   NIR_PASS(progress, nir, nir_shader_alu_pass, agx_dxil_drop_index_mask_instr,
+            nir_metadata_control_flow, NULL);
+   if (progress)
+      NIR_PASS(_, nir, nir_opt_dce);
+}
 
 enum agx_dxil_nir_status
 agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDING_KIND_COUNT],
@@ -1074,6 +1146,7 @@ agx_dxil_to_nir(const void *data, size_t bytes, const uint32_t limits[DXBC_BINDI
    }
    nir->info.separate_shader = true;
    result->bindings = job->map;
+   agx_dxil_drop_index_masks(nir);
    agx_dxil_diag_null_fragment(nir, data, bytes);
    result->nir = nir;
    status = AGX_DXIL_NIR_OK;

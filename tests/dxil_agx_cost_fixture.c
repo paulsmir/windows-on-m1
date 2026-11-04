@@ -550,6 +550,43 @@ synthetic_uav_reads(unsigned reads)
    return b.shader;
 }
 
+/* M1: four index-to-byte conversions; agx_dxil_drop_index_masks must drop
+ * the mask exactly when it keeps the low 32 - s bits of a * 2^s. Prints
+ * "MASK <case> dropped|kept" per store and exits. */
+static int
+selftest_index_masks(void)
+{
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "m1-index-masks");
+   b.shader->info.num_ssbos = 1;
+   nir_def *x = nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
+   nir_def *v[4];
+   v[0] = nir_amul(&b, nir_iand_imm(&b, x, 0x3fffffff), nir_imm_int(&b, 4));  /* drop */
+   v[1] = nir_imul(&b, nir_iand_imm(&b, x, 0x0fffffff), nir_imm_int(&b, 4));  /* keep: bits 28-29 */
+   v[2] = nir_ishl(&b, nir_iand_imm(&b, x, 0x1fffffff), nir_imm_int(&b, 3));  /* drop */
+   v[3] = nir_imul(&b, nir_imm_int(&b, 8), nir_iand_imm(&b, x, 0x3fffffff));  /* drop: covers 0x1fffffff */
+   for (unsigned i = 0; i < 4; ++i)
+      nir_store_ssbo(&b, v[i], nir_imm_int(&b, 0), nir_imm_int(&b, 4 * i), .write_mask = 1,
+                     .access = ACCESS_NON_READABLE, .align_mul = 4, .align_offset = 0);
+   agx_dxil_drop_index_masks(b.shader);
+   unsigned i = 0;
+   nir_foreach_block(block, nir_shader_get_entrypoint(b.shader)) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic ||
+             nir_instr_as_intrinsic(instr)->intrinsic != nir_intrinsic_store_ssbo)
+            continue;
+         nir_alu_instr *mul = nir_instr_as_alu(nir_def_instr(nir_instr_as_intrinsic(instr)->src[0].ssa));
+         bool masked = false;
+         for (unsigned k = 0; k < 2; ++k) {
+            nir_instr *src = nir_def_instr(mul->src[k].src.ssa);
+            masked |= src->type == nir_instr_type_alu && nir_instr_as_alu(src)->op == nir_op_iand;
+         }
+         printf("MASK %u %s\n", i++, masked ? "kept" : "dropped");
+      }
+   }
+   ralloc_free(b.shader);
+   return i == 4 ? 0 : 3;
+}
+
 /* Independent shared-memory reads with real producer stores and a group
  * barrier. Rotate the lane index so the reads require shared memory. */
 static nir_shader *
@@ -854,6 +891,8 @@ main(int argc, char **argv)
       soft_fault_loads |= !strcmp(argv[a], "--soft-fault-loads");
    }
    glsl_type_singleton_init_or_ref();
+   if (argc > 1 && !strcmp(argv[1], "--selftest-index-masks"))
+      return selftest_index_masks();
    nir_shader *nir = NULL;
    void *bytes = NULL;
    unsigned reads = 0;

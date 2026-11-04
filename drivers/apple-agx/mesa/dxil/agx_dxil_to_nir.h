@@ -54,6 +54,11 @@ enum agx_dxil_nir_status agx_dxil_to_nir(const void *data, size_t bytes,
                                          const struct nir_shader_compiler_options *options,
                                          struct agx_dxil_nir_result *result);
 
+/* M1: rewrites (x & M) * 2^s (amul, imul or ishl) to x * 2^s when M keeps the
+ * low 32 - s bits (an identity in 32-bit arithmetic); run by agx_dxil_to_nir
+ * unless APPLE_AGX_DXIL_INDEX_MASK=0. */
+void agx_dxil_drop_index_masks(struct nir_shader *nir);
+
 /* C39 for DXIL: nir_xfb_info for a translated vertex or geometry shader
  * from the D3D stream-output declaration, as the DXBC translator builds it
  * (stream 0; register r captured from VARYING_SLOT_POS when the output
