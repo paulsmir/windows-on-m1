@@ -69124,3 +69124,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1. Ste
 - Hashes: sys c23de770a4dd, UmdArm64 a7637b930d00, UmdX64 f916bd63ddb3, Umd32 1dad5ad32a30; manifest 9018aeacfa7d, hardware-manifest 306268ecc22a; probe2173.sh 4bca02957c5b (PROBE_LINT_OK); visible recovery rec2173h 8bf1ad9cae1e39e7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
 - Recovery rec2173h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2173-splitstall/run2173.sh.
+
+EXP2173 HARDWARE ACTUAL (2026-11-04T23:57:45Z): **Missed worker wakeup after a preemption commit (H3 confirmed): DWM's submit arrives 13-17 us after the commit, but the worker picks it up 1.6-16.9 ms later while the GPU is idle (e.g. fence 29550: GravityMark 29549 done at +92.49 ms, DWM kicked at +109.66 ms, nothing ran in between).**
+- Suite 119/0, HD PERF 38.984 FPS (split m1n1 + retained slots). Three mid-arm snapshots (iterations 8/12/16): mid8 frames: 1045/1133/17900/11218/1113/1434 us R7-done -> C0 kick; mid12: 981-1374 us; Wom1PreemptTrace (mid8): 4 of 32 preemptions with sub>pick 1588/2753/16869/10067 us, all claim passive / path immediate / no AwaitWork.
+- EXP2172 (deployed m1n1, no retained slots) showed the same pattern once (2029 us of 32): a KMD defect, more frequent in this configuration. 10-17 ms matches the Windows timer period (a backstop wake, not the submit's wake).
+- Verdict: CONFIRMED. Next: find and fix the lost wakeup between the preemption commit (AdmissionSchedulerTryNotifyPreemption -> AdmissionDispatchQueuedWork) and the next SubmitCommandVirtual's dispatch, with a deterministic RED test.
+- Recovery: rec2173h.
