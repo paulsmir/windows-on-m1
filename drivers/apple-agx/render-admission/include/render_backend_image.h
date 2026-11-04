@@ -178,9 +178,11 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
 APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Slot);
 /* V1: before a bound render job is staged, rewrite the arena's context_id
- * fields to JobVmSlot (TRUE and nothing written when JobVmSlot is 0). */
+ * fields to JobVmSlot, or to DefaultSlot when JobVmSlot is 0 (the job ran
+ * without a retained lease). DefaultSlot 0 (switch off): nothing written. */
 APPLE_AGX_BOOL AdmissionBackendImageRetargetVmSlot(
-    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence);
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 DefaultSlot);
 /* Objects a G4 job can change: the CPU writes the command objects (< 36)
  * and the relocation fields of 41, 42 and 63; the GPU reaches only the
  * arena-backed GBM objects 36..40. Every other relocation target is rebound

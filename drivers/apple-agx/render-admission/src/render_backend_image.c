@@ -735,14 +735,17 @@ APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
 }
 
 APPLE_AGX_BOOL AdmissionBackendImageRetargetVmSlot(
-    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence) {
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 DefaultSlot) {
+  APPLE_AGX_U32 slot;
   if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
       Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
       Image->BoundFence != Fence || Image->G4Compute || Image->PresentCompute)
     return APPLE_AGX_FALSE;
-  if (Image->JobVmSlot == 0u) return APPLE_AGX_TRUE;
+  slot = Image->JobVmSlot ? Image->JobVmSlot : DefaultSlot;
+  if (slot == 0u) return APPLE_AGX_TRUE;
   return AppleAgxRenderTemplateRetargetVmSlot(Image->ArenaCpuAddress,
-      Image->ArenaCapacity, Image->JobVmSlot, 0);
+      Image->ArenaCapacity, slot, 0);
 }
 
 APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(

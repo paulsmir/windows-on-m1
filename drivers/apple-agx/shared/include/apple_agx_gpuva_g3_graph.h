@@ -81,20 +81,30 @@ typedef struct _APPLE_AGX_GPUVA_G3_RANGE_PROOF {
  * recently used free slot, else steals the least recently used idle lease
  * (never one with a job). Every translation change of a leased idle graph
  * releases the lease first (rule R): UPDATE_LEAF/UPDATE_PARENT/RELOCATE_ROOT/
- * DESTROY run unleased, as without the table. Slots 1..Count, Count <= 15
- * (the G13 builders refuse VmSlot >= 16). Unattached graphs or Count == 0:
- * every job leases the caller's slot and EndJob releases it (the baseline). */
+ * DESTROY run unleased, as without the table. Slots First..First+Count-1,
+ * at most slot 15 (the G13 builders refuse VmSlot >= 16). The KMD starts at
+ * slot 2 so that slot 1 keeps its baseline meaning (leased per job only,
+ * zero TTBR when idle) for any job that ran without a table lease.
+ * Unattached graphs or Count == 0: every job leases the caller's slot and
+ * EndJob releases it (the baseline). */
 #define APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX 15u
+/* A quarantined slot is tried again after this many table clock ticks
+ * (two per retained job): a refused LEASE has no broker side effect. */
+#define APPLE_AGX_GPUVA_G3_QUARANTINE_RETRY 4096u
 struct _APPLE_AGX_GPUVA_G3_GRAPH;
 typedef struct _APPLE_AGX_GPUVA_G3_SLOTS {
   struct _APPLE_AGX_GPUVA_G3_GRAPH *Owner[APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX + 1u];
   unsigned long long LastUse[APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX + 1u];
+  /* Clock value at which slot s was quarantined. */
+  unsigned long long QuarantinedAt[APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX + 1u];
   unsigned long long Clock;
-  unsigned int Count;
-  /* Bit s: slot s is never leased again (a refused LEASE, a failed steal). */
+  unsigned int First, Count;
+  /* Bit s: slot s is not leased (a refused LEASE, a failed steal) until
+   * APPLE_AGX_GPUVA_G3_QUARANTINE_RETRY ticks have passed. */
   unsigned int Quarantined;
-  /* Receipt-only counters. */
-  unsigned long long Leases, Reuses, Steals, Releases;
+  /* Receipt-only counters (Quarantines: slots put into quarantine;
+   * Recovered: quarantines that expired for a retry). */
+  unsigned long long Leases, Reuses, Steals, Releases, Quarantines, Recovered;
 } APPLE_AGX_GPUVA_G3_SLOTS;
 
 typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
@@ -238,9 +248,10 @@ bool AppleAgxGpuvaG3GraphReleaseIdle(APPLE_AGX_GPUVA_G3_GRAPH *);
 /* V1 rule R: as ReleaseIdle for a graph that retains its lease and has no
  * job in flight; true and nothing sent otherwise (the baseline). */
 bool AppleAgxGpuvaG3GraphReleaseRetained(APPLE_AGX_GPUVA_G3_GRAPH *);
-/* V1: enable a zeroed table with slots 1..Count (1..15); false otherwise
- * or when already enabled with another count. */
-bool AppleAgxGpuvaG3SlotsEnable(APPLE_AGX_GPUVA_G3_SLOTS *, unsigned int Count);
+/* V1: enable a zeroed table with slots First..First+Count-1 (First >= 1,
+ * last <= 15); false otherwise or when already enabled differently. */
+bool AppleAgxGpuvaG3SlotsEnable(APPLE_AGX_GPUVA_G3_SLOTS *, unsigned int First,
+                                unsigned int Count);
 /* rc102: a second job joins the job in flight on the same lease and VM
  * slot (no broker call); EndJob then ends one job, the lease only with the
  * last. At most two jobs. */

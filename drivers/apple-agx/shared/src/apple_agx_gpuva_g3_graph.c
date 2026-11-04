@@ -121,11 +121,33 @@ static bool retained(const APPLE_AGX_GPUVA_G3_GRAPH *graph) {
 }
 
 bool AppleAgxGpuvaG3SlotsEnable(APPLE_AGX_GPUVA_G3_SLOTS *table,
-                                unsigned int count) {
-  if (!table || !count || count > APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX)
+                                unsigned int first, unsigned int count) {
+  if (!table || !first || !count || first > APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX ||
+      count > APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX + 1u - first)
     return false;
-  if (table->Count) return table->Count == count;
+  if (table->Count) return table->First == first && table->Count == count;
+  table->First = first;
   table->Count = count;
+  return true;
+}
+
+static bool slot_in_table(const APPLE_AGX_GPUVA_G3_SLOTS *table, unsigned int s) {
+  return s >= table->First && s - table->First < table->Count;
+}
+
+static void slot_quarantine(APPLE_AGX_GPUVA_G3_SLOTS *table, unsigned int s) {
+  if (!(table->Quarantined & (1u << s))) ++table->Quarantines;
+  table->Quarantined |= 1u << s;
+  table->QuarantinedAt[s] = table->Clock;
+}
+
+/* Not quarantined, or quarantined long enough ago to be tried again. */
+static bool slot_usable(APPLE_AGX_GPUVA_G3_SLOTS *table, unsigned int s) {
+  if (!(table->Quarantined & (1u << s))) return true;
+  if (table->Clock - table->QuarantinedAt[s] < APPLE_AGX_GPUVA_G3_QUARANTINE_RETRY)
+    return false;
+  table->Quarantined &= ~(1u << s);
+  ++table->Recovered;
   return true;
 }
 
@@ -167,23 +189,22 @@ bool AppleAgxGpuvaG3GraphReleaseRetained(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
 static unsigned int slot_pick(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   APPLE_AGX_GPUVA_G3_SLOTS *table = graph->SlotTable;
   APPLE_AGX_GPUVA_G3_GRAPH *owner;
-  unsigned int s = graph->PreferredSlot, pick = 0u;
-  if (s && s <= table->Count && !table->Owner[s] &&
-      !(table->Quarantined & (1u << s))) return s;
-  for (s = 1u; s <= table->Count; ++s)
-    if (!table->Owner[s] && !(table->Quarantined & (1u << s)) &&
+  unsigned int s = graph->PreferredSlot, pick = 0u, end = table->First + table->Count;
+  if (slot_in_table(table, s) && !table->Owner[s] && slot_usable(table, s)) return s;
+  for (s = table->First; s < end; ++s)
+    if (!table->Owner[s] && slot_usable(table, s) &&
         (!pick || table->LastUse[s] < table->LastUse[pick])) pick = s;
   if (pick) return pick;
-  for (s = 1u; s <= table->Count; ++s) {
+  for (s = table->First; s < end; ++s) {
     owner = table->Owner[s];
-    if (owner && owner != graph && !(table->Quarantined & (1u << s)) &&
+    if (owner && owner != graph && slot_usable(table, s) &&
         owner->LeaseToken && owner->Slot == s && !owner->JobInFlight &&
         !owner->JobNested && !owner->Uncertain &&
         (!pick || table->LastUse[s] < table->LastUse[pick])) pick = s;
   }
   if (!pick) return 0u;
   if (!AppleAgxGpuvaG3GraphReleaseIdle(table->Owner[pick])) {
-    table->Quarantined |= 1u << pick;
+    slot_quarantine(table, pick);
     return 0u;
   }
   ++table->Steals;
@@ -1038,7 +1059,7 @@ static bool begin_retained(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   unsigned int attempt, slot;
   if (!graph->Created || graph->Uncertain || graph->JobInFlight) return false;
   if (graph->LeaseToken) {
-    if (!graph->Slot || graph->Slot > table->Count ||
+    if (!slot_in_table(table, graph->Slot) ||
         table->Owner[graph->Slot] != graph) return false;
     ++table->Reuses;
   }
@@ -1051,7 +1072,7 @@ static bool begin_retained(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
       if (!graph->Uncertain && graph->LastStatus == 0u) graph->Uncertain = 1u;
       if (graph->Uncertain || (graph->LastStatus != 3u && graph->LastStatus != 4u))
         return false;
-      table->Quarantined |= 1u << slot;
+      slot_quarantine(table, slot);
       continue;
     }
     graph->LeaseToken = response.Token;

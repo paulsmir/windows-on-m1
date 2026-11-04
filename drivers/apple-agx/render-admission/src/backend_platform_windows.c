@@ -296,6 +296,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * (ManagerSlotCount 4). Q20 defaults on; DWORD 0 keeps single slot 0. */
   BOOLEAN ManagerSlots;
   BOOLEAN ManagerReceipt;
+  /* V1 (Wom1G3RetainedSlots, worker only): the VM slot of the running
+   * depth-1 job (a successor shares it), and the slot the template
+   * (unmanaged) buffer manager's InitBM context_id last named (0 unknown). */
+  APPLE_AGX_U32 RunningVmSlot, UnmanagedInitBmSlot;
   /* rc84: device value Wom1GpuPerfReceipt = 0 stops the Wom1GpuPerf
    * sampling (HwDataA loads at each job completion). */
   BOOLEAN GpuPerfOff;
@@ -3158,6 +3162,45 @@ static APPLE_AGX_BACKEND_BOOL AdmissionPrepareG4Manager(
       AppleAgxG13QueueProviderRequireInitBm(&runtime->Provider.QueueProvider);
 }
 
+/* V1 (Wom1G3RetainedSlots): an unmanaged render (no private-scene buffer
+ * manager) reuses the template buffer manager, whose queue InitBM copy --
+ * with its context_id -- is refreshed only when the plan includes InitBM.
+ * With retained slots consecutive unmanaged renders may run in different
+ * VM slots: re-issue InitBM when the slot differs from the one the last
+ * unmanaged InitBM named. A managed InitBM makes that slot unknown. Switch
+ * off: nothing changes. */
+static APPLE_AGX_BACKEND_BOOL AdmissionPrepareUnmanagedInitBm(
+    ADMISSION_PLATFORM_RUNTIME *runtime) {
+  ADMISSION_BACKEND_IMAGE *image=&runtime->Adapter->BackendImage;
+  APPLE_AGX_U32 slot;
+  if (!runtime->Adapter->G3RetainedSlots) return APPLE_AGX_BACKEND_TRUE;
+  slot=image->JobVmSlot ? image->JobVmSlot : ADMISSION_GPUVA_G3_JOB_VM_SLOT;
+  runtime->RunningVmSlot=slot;
+  if (image->G4Compute || image->PresentCompute) return APPLE_AGX_BACKEND_TRUE;
+  if (image->G4Manager) {
+    if (!runtime->Provider.QueueProvider.Runtime.BufferManagerInitialized)
+      runtime->UnmanagedInitBmSlot=0u;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
+  if (runtime->Provider.QueueProvider.Runtime.BufferManagerInitialized &&
+      runtime->UnmanagedInitBmSlot!=slot &&
+      !AppleAgxG13QueueProviderRequireInitBm(&runtime->Provider.QueueProvider))
+    return APPLE_AGX_BACKEND_FALSE;
+  runtime->UnmanagedInitBmSlot=slot;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+/* V1: refusal 61 term -- an unmanaged render successor (no pending private
+ * manager) would run in the running job's slot on a template buffer
+ * manager initialised for another slot; PlanSuccessor cannot add InitBM. */
+static BOOLEAN AdmissionUnmanagedInitBmStale(
+    const ADMISSION_PLATFORM_RUNTIME *runtime, ULONG kind, BOOLEAN managed) {
+  return runtime->Adapter->G3RetainedSlots && !managed &&
+      (kind == ADMISSION_JOB_WINDOW_KIND_RENDER ||
+       kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE) &&
+      runtime->UnmanagedInitBmSlot != runtime->RunningVmSlot ? TRUE : FALSE;
+}
+
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 /* BackendRuntimeSubmit stays Ready after a pre-publication failure, including
  * Run3d's atomic refusal. RunTa failure instead becomes Failed and cannot be
@@ -3531,7 +3574,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   /* V1: the render template's seven context_id fields (InitBM, TA, 3D)
    * name the VM slot BeginJob leased for this job. */
   if (!AdmissionBackendImageRetargetVmSlot(&runtime->Adapter->BackendImage,
-          Submission->Submission.Fence))
+          Submission->Submission.Fence,
+          runtime->Adapter->G3RetainedSlots ? ADMISSION_GPUVA_G3_JOB_VM_SLOT : 0u))
     goto BuildFailure;
   if (!AdmissionBackendImageStageJob(
           &runtime->Adapter->BackendImage,
@@ -5585,6 +5629,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
       runtime->Provider.QueueProvider.Runtime.TaFirstRun ||
       runtime->Provider.QueueProvider.Runtime.D3FirstRun ||
       !runtime->Provider.QueueProvider.Runtime.BufferManagerInitialized ||
+      AdmissionUnmanagedInitBmStale(runtime, s.Next.Kind, pendingManagerValid) ||
       ((s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER ||
         s.Next.Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE) &&
        AdmissionJobWindowManagerNeedsIdle(owner,
@@ -6076,7 +6121,8 @@ AdoptedJob:
     }
   }
 #endif
-  if (!AdmissionPrepareG4Manager(runtime)) {
+  if (!AdmissionPrepareG4Manager(runtime) ||
+      !AdmissionPrepareUnmanagedInitBm(runtime)) {
     InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
     AdmissionPlatformWorkerFinished(runtime);
     return;

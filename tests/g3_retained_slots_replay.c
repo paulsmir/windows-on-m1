@@ -26,11 +26,12 @@ static struct hv_agx_gpuva_v5_wire gpuva_v5_wire;
 #undef gpuva_v5
 #include "apple_agx_gpuva_g3_graph.h"
 
-#define LOG_MAX 4096u
+#define LOG_MAX 8192u
 static struct fixture *F;
 static struct {
   unsigned lease, release, begin, end, leaf, parent, relocate, flush, destroy;
   unsigned max_slot, refused_lease;
+  unsigned lease_slot[64];
 } N;
 static unsigned log_count;
 static unsigned log_entry[LOG_MAX];
@@ -61,7 +62,7 @@ static void observe(void *context, const AGX_GPUVA_V5_REQUEST *q,
     if (q->Slot > N.max_slot) N.max_slot = q->Slot;
   }
   switch (q->Command) {
-  case AGX_GPUVA_V5_LEASE: ++N.lease; break;
+  case AGX_GPUVA_V5_LEASE: ++N.lease; ++N.lease_slot[q->Slot]; break;
   case AGX_GPUVA_V5_RELEASE: ++N.release; break;
   case AGX_GPUVA_V5_JOB_END: ++N.end; break;
   case AGX_GPUVA_V5_FLUSH_TLB: ++N.flush; break;
@@ -192,7 +193,8 @@ static void retained_two_processes(void) {
   APPLE_AGX_GPUVA_G3_SLOTS table;
   unsigned i, aslot, bslot, inv_a, inv_b, inv_total, leaves;
   memset(&table, 0, sizeof(table));
-  assert(AppleAgxGpuvaG3SlotsEnable(&table, 4u));
+  /* The KMD's table: slots 2..5; slot 1 stays the baseline per-job slot. */
+  assert(AppleAgxGpuvaG3SlotsEnable(&table, 2u, 4u));
   open_broker();
   setup(&a, 1u, P_ROOT, P_L1, P_L2, P_DATA, &table);
   setup(&b, 2u, Q_ROOT, Q_L1, Q_L2, Q_DATA, &table);
@@ -203,7 +205,7 @@ static void retained_two_processes(void) {
   assert(N.lease == 2u && N.release == 0u && N.begin == 200u && N.end == 200u);
   assert(total_invalidations() == inv_total + 2u);
   aslot = a.Slot; bslot = b.Slot;
-  assert(aslot && bslot && aslot != bslot && aslot <= 4u && bslot <= 4u);
+  assert(aslot >= 2u && bslot >= 2u && aslot != bslot && aslot <= 5u && bslot <= 5u);
   assert(table.Owner[aslot] == &a && table.Owner[bslot] == &b);
   assert(a.LeaseToken && b.LeaseToken && table.Reuses == 198u);
   /* A held lease with a job in flight is never released. */
@@ -260,7 +262,7 @@ static void retained_two_processes(void) {
   assert(N.destroy == 1u && N.release == 1u && !table.Owner[bslot]);
   assert(AppleAgxGpuvaG3GraphDestroy(&a));
   assert(N.destroy == 2u && N.release == 2u && !table.Owner[aslot]);
-  assert(N.max_slot <= 4u);
+  assert(N.max_slot <= 5u);
 }
 
 /* Allocator: preferred slot, LRU free slot, LRU steal of an idle lease
@@ -269,41 +271,44 @@ static void allocator(void) {
   APPLE_AGX_GPUVA_G3_GRAPH a, b, c;
   APPLE_AGX_GPUVA_G3_SLOTS table;
   memset(&table, 0, sizeof(table));
-  assert(!AppleAgxGpuvaG3SlotsEnable(&table, 0u));
-  assert(!AppleAgxGpuvaG3SlotsEnable(&table, 16u) && !table.Count);
-  assert(AppleAgxGpuvaG3SlotsEnable(&table, 2u));
-  assert(AppleAgxGpuvaG3SlotsEnable(&table, 2u) &&
-         !AppleAgxGpuvaG3SlotsEnable(&table, 4u) && table.Count == 2u);
+  assert(!AppleAgxGpuvaG3SlotsEnable(&table, 2u, 0u));
+  assert(!AppleAgxGpuvaG3SlotsEnable(&table, 0u, 2u));
+  assert(!AppleAgxGpuvaG3SlotsEnable(&table, 1u, 16u) && !table.Count);
+  assert(!AppleAgxGpuvaG3SlotsEnable(&table, 14u, 3u) && !table.Count);
+  assert(AppleAgxGpuvaG3SlotsEnable(&table, 2u, 2u));
+  assert(AppleAgxGpuvaG3SlotsEnable(&table, 2u, 2u) &&
+         !AppleAgxGpuvaG3SlotsEnable(&table, 2u, 4u) &&
+         !AppleAgxGpuvaG3SlotsEnable(&table, 1u, 2u) && table.Count == 2u);
   open_broker();
   setup(&a, 1u, P_ROOT, 0, 0, 0, &table);
   setup(&b, 2u, Q_ROOT, 0, 0, 0, &table);
   setup(&c, 3u, P_ROOT2, 0, 0, 0, &table);
   job(&a); job(&b);
-  assert(a.Slot == 1u && b.Slot == 2u);
+  assert(a.Slot == 2u && b.Slot == 3u);
   /* C steals the least recently used idle lease (A's). */
   reset_counts();
   job(&c);
-  assert(c.Slot == 1u && !a.LeaseToken && table.Steals == 1u);
+  assert(c.Slot == 2u && !a.LeaseToken && table.Steals == 1u);
   assert(N.release == 1u && N.lease == 1u);
   /* B's job in flight is never stolen, although its slot is the least
-   * recently used: A takes C's idle slot 1. */
+   * recently used: A takes C's idle slot 2. */
   assert(AppleAgxGpuvaG3GraphBeginJob(&b, 1u));
   job(&c);
-  assert(table.LastUse[2] < table.LastUse[1]);
+  assert(table.LastUse[3] < table.LastUse[2]);
   reset_counts();
   job(&a);
-  assert(a.Slot == 1u && !c.LeaseToken && b.LeaseToken && b.Slot == 2u);
+  assert(a.Slot == 2u && !c.LeaseToken && b.LeaseToken && b.Slot == 3u);
   /* Every slot busy: BeginJob fails cleanly, nothing is sent. */
   assert(AppleAgxGpuvaG3GraphBeginJob(&a, 1u));
   reset_counts();
   assert(!AppleAgxGpuvaG3GraphBeginJob(&c, 1u) && !c.Uncertain);
   assert(log_count == 0u && !c.LeaseToken);
   assert(AppleAgxGpuvaG3GraphEndJob(&a) && AppleAgxGpuvaG3GraphEndJob(&b));
-  /* C's preferred slot (1, last leased) is free again after A releases. */
+  /* C's preferred slot (2, last leased) is free again after A releases. */
   assert(AppleAgxGpuvaG3GraphReleaseIdle(&a) && !a.LeaseToken);
   job(&c);
-  assert(c.Slot == 1u && c.PreferredSlot == 1u);
-  assert(N.max_slot <= 2u && !table.Quarantined);
+  assert(c.Slot == 2u && c.PreferredSlot == 2u);
+  assert(N.max_slot <= 3u && !table.Quarantined && !N.lease_slot[1]);
   assert(AppleAgxGpuvaG3GraphDestroy(&a) && AppleAgxGpuvaG3GraphDestroy(&b) &&
          AppleAgxGpuvaG3GraphDestroy(&c));
 }
@@ -311,20 +316,39 @@ static void allocator(void) {
 static void quarantine(void) {
   APPLE_AGX_GPUVA_G3_GRAPH a, b, c;
   APPLE_AGX_GPUVA_G3_SLOTS table;
+  unsigned i;
   memset(&table, 0, sizeof(table));
-  assert(AppleAgxGpuvaG3SlotsEnable(&table, 4u));
+  assert(AppleAgxGpuvaG3SlotsEnable(&table, 2u, 4u));
   open_broker();
   setup(&a, 1u, P_ROOT, 0, 0, 0, &table);
   setup(&b, 2u, Q_ROOT, 0, 0, 0, &table);
   setup(&c, 3u, P_ROOT2, 0, 0, 0, &table);
   job(&a); job(&b);
-  /* Slot 3 is not clean (OWNERSHIP): quarantined, slot 4 used instead. */
-  F->slots[3][0] = UINT64_C(0x123400000001);
+  assert(a.Slot == 2u && b.Slot == 3u);
+  /* Slot 4 is not clean (OWNERSHIP): quarantined, slot 5 used instead. */
+  F->slots[4][0] = UINT64_C(0x123400000001);
   reset_counts();
   job(&c);
-  assert(N.refused_lease == 1u && N.lease == 1u && c.Slot == 4u);
-  assert((table.Quarantined & (1u << 3)) && !c.Uncertain);
-  assert(N.max_slot <= 4u);
+  assert(N.refused_lease == 1u && N.lease == 1u && c.Slot == 5u);
+  assert((table.Quarantined & (1u << 4)) && table.Quarantines == 1u && !c.Uncertain);
+  /* Inside the retry window the quarantine holds, even when preferred. */
+  assert(AppleAgxGpuvaG3GraphReleaseIdle(&c));
+  c.PreferredSlot = 4u;
+  reset_counts();
+  job(&c);
+  assert(c.Slot == 5u && N.refused_lease == 0u && (table.Quarantined & (1u << 4)));
+  /* After APPLE_AGX_GPUVA_G3_QUARANTINE_RETRY ticks a now clean slot is
+   * leased again (bounded recovery, counted). */
+  reset_counts();
+  for (i = 0; i < APPLE_AGX_GPUVA_G3_QUARANTINE_RETRY / 2u; ++i) job(&a);
+  F->slots[4][0] = 0;
+  assert(AppleAgxGpuvaG3GraphReleaseIdle(&c));
+  c.PreferredSlot = 4u;
+  reset_counts();
+  job(&c);
+  assert(c.Slot == 4u && N.lease == 1u && !(table.Quarantined & (1u << 4)));
+  assert(table.Quarantines == 1u && table.Recovered == 1u);
+  assert(!N.lease_slot[1] && N.max_slot <= 5u);
 }
 
 int main(void) {

@@ -2978,7 +2978,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   /* V1: with Wom1G3RetainedSlots the process keeps its VM slot between
    * jobs; without it the graph stays unattached (lease per job). */
   if (adapter->G3RetainedSlots &&
-      AppleAgxGpuvaG3SlotsEnable(&state->Slots, ADMISSION_G3_RETAINED_SLOT_COUNT))
+      AppleAgxGpuvaG3SlotsEnable(&state->Slots, ADMISSION_G3_RETAINED_FIRST_SLOT,
+                                 ADMISSION_G3_RETAINED_SLOT_COUNT))
     process->Graph.SlotTable = &state->Slots;
   if (adapter->LiveAdditivePaging &&
       !AppleAgxGpuvaG3GraphNegotiateLive(&process->Graph, true)) {
@@ -4263,6 +4264,10 @@ VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *adapter, HANDLE key,
   ADMISSION_G3_STATE *state;
   UNICODE_STRING name;
   LARGE_INTEGER frequency;
+  /* V1 receipt (Wom1G3RetainedSlots only): QWORDs version, bytes, first
+   * slot, count, quarantined mask, leases, reuses, steals, releases,
+   * quarantines, recovered quarantines, clock. */
+  ULONGLONG slots[12];
   if (adapter == NULL || key == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
     return;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
@@ -4284,7 +4289,17 @@ VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *adapter, HANDLE key,
   state->BeginSplits.Bytes = sizeof(state->BeginSplits);
   RtlCopyMemory(&state->BeginSplitsSnapshot, &state->BeginSplits,
                 sizeof(state->BeginSplitsSnapshot));
+  slots[0] = 1u; slots[1] = sizeof(slots);
+  slots[2] = state->Slots.First; slots[3] = state->Slots.Count;
+  slots[4] = state->Slots.Quarantined; slots[5] = state->Slots.Leases;
+  slots[6] = state->Slots.Reuses; slots[7] = state->Slots.Steals;
+  slots[8] = state->Slots.Releases; slots[9] = state->Slots.Quarantines;
+  slots[10] = state->Slots.Recovered; slots[11] = state->Slots.Clock;
   ExReleaseFastMutex(&state->Lock);
+  if (slots[3]) {
+    RtlInitUnicodeString(&name, L"Wom1G3RetainedSlotsReceipt");
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, slots, sizeof(slots));
+  }
   RtlInitUnicodeString(&name, L"Wom1G3LockProfile");
   (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &state->LockProfileSnapshot,
                       sizeof(state->LockProfileSnapshot));

@@ -60,8 +60,13 @@ typedef struct _ADMISSION_G3_BEGIN_SPLITS {
   ADMISSION_G3_BEGIN_SPLIT Ring[ADMISSION_G3_BEGIN_SPLIT_RING];
 } ADMISSION_G3_BEGIN_SPLITS;
 
-/* V1 (Wom1G3RetainedSlots = 1): VM slots 1..4 are retained per process
- * (apple_agx_gpuva_g3_graph.h, APPLE_AGX_GPUVA_G3_SLOTS); first run K = 4. */
+/* V1 (Wom1G3RetainedSlots = 1): VM slots 2..5 are retained per process
+ * (apple_agx_gpuva_g3_graph.h, APPLE_AGX_GPUVA_G3_SLOTS); first run K = 4.
+ * Slot 1 (ADMISSION_GPUVA_G3_JOB_VM_SLOT) keeps its baseline meaning: only
+ * an unattached graph leases it, per job, so its TTBR is zero when idle and
+ * a job that ran without a lease (JobVmSlot 0) never reaches another
+ * process's retained translation. */
+#define ADMISSION_G3_RETAINED_FIRST_SLOT 2u
 #define ADMISSION_G3_RETAINED_SLOT_COUNT 4u
 
 typedef struct _ADMISSION_G3_STATE {
