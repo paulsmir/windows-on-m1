@@ -68951,3 +68951,15 @@ EXP2163 HARDWARE ACTUAL (2026-11-04T18:42:19Z): **The post-DWM BeginJob cost is 
 - Every GravityMark <-> DWM switch re-leases the single slot 1 (ADMISSION_GPUVA_G3_JOB_VM_SLOT), twice per frame.
 - Verdict: CONFIRMED (cause located). Next (design first): per-process retained VM slots (GravityMark keeps slot 1, DWM slot 2), no per-frame lease/TLBI; the same change is the prerequisite for cross-process depth-two pairs.
 - Recovery: rec2163h.
+
+EXP2164 HARDWARE BEFORE 2026-11-04T19:53:40Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 (as EXP2163). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF (+ mid-arm receipts).
+- WHY THIS HYPOTHESIS: (1) step 0 replaces ~25 "JobInFlight || LeaseToken" checks, claimed equivalent with leases released at job end (independent review: no behaviour change found); (2) step 1 is inert with the switch off (no slot table attached), except the render template context_id retarget, which writes nothing for slot 0/1; (3) a switch-off run isolates these from the switch-on experiment.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged with the switch off (slot 1, lease per job as today).
+- WHAT IS STILL UNKNOWN: whether the hardware sees any difference from step 0's changed checks.
+- Expected: suite 119/0; HD PERF within noise of EXP2163 (39.29 FPS, diagnostics); BeginSplit lease times as EXP2163; no GPU faults, no paging-wait timeouts.
+- Failure criteria: any suite regression, TDR, bugcheck, GPU fault, paging-wait timeout.
+- Recovery: rec2164h.
+- Hashes: sys 3401c86c9806, UmdArm64 0b00d3f4ea61, UmdX64 41c4fdd8f518, Umd32 96be4867b9a1; manifest cdcee1646ad0, hardware-manifest 569d73a65a88; probe2164.sh cd6f7512240b (PROBE_LINT_OK); visible recovery rec2164h 53d03f4ca48ef5d7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
+- Recovery rec2164h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2164-v1off/run2164.sh.
