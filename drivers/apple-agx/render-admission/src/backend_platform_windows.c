@@ -7411,6 +7411,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2StampComplete") ? TRUE : FALSE;
   runtime->Provider.QueueProvider.Config.StampCompletion =
       runtime->Initdata.RenderSharedMemory.StampCompletion;
+  /* N1: each job of a pair notifies at its own end (Wom1Depth2OwnNotify
+   * = 1): the successor's threshold is written when the head retires.
+   * Completion stays event-driven (Asahi workqueue signal()). */
+  runtime->Initdata.RenderSharedMemory.OwnNotify =
+      runtime->Depth2General &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2OwnNotify") ? TRUE : FALSE;
   runtime->Initdata.RenderSharedMemory.ManagerEvict = AdmissionEvictG4Manager;
   runtime->Initdata.RenderSharedMemory.ManagerEvictContext = runtime;
 #endif

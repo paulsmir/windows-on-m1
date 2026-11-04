@@ -181,6 +181,9 @@ typedef struct _APPLE_AGX_NOTIFIER_FLIGHT {
   APPLE_AGX_U32 ComputeQueueStamp;
   APPLE_AGX_U32 RenderSlot, SidecarSet;
   APPLE_AGX_BOOL HasRender, HasSidecar, Published, Visible, EpochReset;
+  /* N1: published while an earlier flight was still unreported; its
+   * threshold is written when that flight retires (OwnNotify). */
+  APPLE_AGX_BOOL Deferred;
 } APPLE_AGX_NOTIFIER_FLIGHT;
 
 typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
@@ -208,6 +211,14 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   APPLE_AGX_BOOL ManagerDepth2;
   /* S1: queue config StampCompletion (Wom1Depth2StampComplete) */
   APPLE_AGX_BOOL StampCompletion;
+  /* N1 (Wom1Depth2OwnNotify, Asahi queue/mod.rs run()): the notifier
+   * threshold covers only the jobs whose predecessors have reported, so
+   * each job of a depth-2 pair raises its own notification at its end
+   * instead of the head's being deferred to the successor's end (U4).
+   * Deferred/Released count the deferred publications and their writes;
+   * FlushFailures the late writes whose flush failed. */
+  APPLE_AGX_BOOL OwnNotify;
+  APPLE_AGX_U32 OwnNotifyDeferred, OwnNotifyReleased, OwnNotifyFlushFailures;
   APPLE_AGX_U32 ManagerSecondFence;
   APPLE_AGX_BOOL ManagerPoisoned;
   APPLE_AGX_U32 ManagerTerminalFence[2];

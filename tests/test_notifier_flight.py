@@ -54,6 +54,12 @@ class NotifierFlight(unittest.TestCase):
     def test_build_does_not_publish(self):
         self.run_fixture(EXERCISE)
 
+    def test_own_notify_defers_successor_threshold(self):
+        # N1: a successor published while its head is unreported must not
+        # raise the threshold (the head would notify only at the successor's
+        # end, U4); the head's retirement writes it, a cancel never does.
+        self.run_fixture(OWN_NOTIFY)
+
     def run_fixture(self, exercise, needle=None):
         source=(SHARED/'tests/apple_agx_render_shared_memory_test.c').read_text()
         source=source.replace('int main(void)', 'static unsigned fail_flush;\nstatic APPLE_AGX_BOOL test_flush(void *ctx,const void *p,APPLE_AGX_U32 n) { (void)ctx;(void)p;(void)n;return !fail_flush; }\nint main(void)')
@@ -67,6 +73,59 @@ class NotifierFlight(unittest.TestCase):
                 '-I',str(SHARED/'include'),str(c),
                 *[str(SHARED/'src'/n) for n in SHARED_SOURCES],'-o',str(binary)],check=True)
             subprocess.run([str(binary)],check=True)
+
+OWN_NOTIFY = r'''
+    {
+      unsigned char *threshold=(unsigned char *)owner.Objects[12].CpuAddress+owner.ObjectOffsets[12];
+      unsigned saved_set=input.JobWordSet, saved_stamp=input.StampValue;
+      unsigned before=read_u32(threshold);
+      APPLE_AGX_RENDER_SHARED_MEMORY_OWNER saved_owner=owner;
+      owner.NotifierFlight=1; owner.OwnNotify=1;
+      input.PreemptionGpuAddress=0x1500100000ULL;
+      owner.NotifierFlush=test_flush; owner.NotifierFlushContext=0;
+      assert(AppleAgxRenderFlightBegin(&owner,77));
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      assert(AppleAgxRenderFlightPublish(&owner,77));
+      assert(read_u32(threshold)==1 && owner.OwnNotifyDeferred==0);
+      AppleAgxRenderFlightVisible(&owner,77);
+      assert(AppleAgxRenderFlightBegin(&owner,78));
+      input.StampValue++;
+      input.JobWordSet=AppleAgxRenderSharedMemoryNextJobWordSet(&owner,input.StampValue,1);
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      assert(output.NotifierThreshold==2);
+      assert(AppleAgxRenderFlightPublish(&owner,78));
+      assert(read_u32(threshold)==1 && owner.OwnNotifyDeferred==1); /* deferred */
+      assert(AppleAgxRenderFlightCancel(&owner,78));
+      assert(read_u32(threshold)==1 && owner.NotifierComputeCount==1);
+      assert(AppleAgxRenderFlightBegin(&owner,78));
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      assert(AppleAgxRenderFlightPublish(&owner,78));
+      AppleAgxRenderFlightVisible(&owner,78);
+      assert(read_u32(threshold)==1);
+      AppleAgxRenderFlightRetire(&owner,999); /* wrong fence releases nothing */
+      assert(read_u32(threshold)==1 && owner.OwnNotifyReleased==0);
+      fail_flush=1;
+      AppleAgxRenderFlightRetire(&owner,77);  /* head reported: successor's own count */
+      fail_flush=0;
+      assert(read_u32(threshold)==2 && owner.OwnNotifyReleased==1);
+      assert(owner.OwnNotifyFlushFailures==1 && !owner.Flights[1].Deferred);
+      AppleAgxRenderFlightRetire(&owner,78);
+      assert(read_u32(threshold)==2 && owner.OwnNotifyReleased==1);
+      /* a successor published after its head retired writes at once */
+      assert(AppleAgxRenderFlightBegin(&owner,79));
+      input.StampValue++;
+      input.JobWordSet=AppleAgxRenderSharedMemoryNextJobWordSet(&owner,input.StampValue,1);
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      assert(AppleAgxRenderFlightPublish(&owner,79));
+      assert(read_u32(threshold)==3 && owner.OwnNotifyDeferred==2); /* incl. the cancelled one */
+      AppleAgxRenderFlightVisible(&owner,79);
+      AppleAgxRenderFlightRetire(&owner,79);
+      owner=saved_owner; /* counts, sets and flights as before the block */
+      memcpy(threshold,&before,4);
+      input.JobWordSet=saved_set; input.StampValue=saved_stamp;
+      input.PreemptionGpuAddress=0;
+    }
+'''
 
 FLIGHTS = r'''
     {

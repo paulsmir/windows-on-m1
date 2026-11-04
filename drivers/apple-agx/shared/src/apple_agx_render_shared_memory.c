@@ -545,6 +545,15 @@ APPLE_AGX_BOOL AppleAgxRenderFlightBegin(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o
   o->BuildingFlight=i+1u;
   return APPLE_AGX_TRUE;
 }
+/* N1: another flight is published and not yet retired. */
+static APPLE_AGX_BOOL other_flight_live(const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o,
+                                        const APPLE_AGX_NOTIFIER_FLIGHT *f) {
+  APPLE_AGX_U32 i;
+  for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i)
+    if(&o->Flights[i]!=f && o->Flights[i].Fence && o->Flights[i].Published)
+      return APPLE_AGX_TRUE;
+  return APPLE_AGX_FALSE;
+}
 APPLE_AGX_BOOL AppleAgxRenderFlightPublish(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o, APPLE_AGX_U32 fence) {
   APPLE_AGX_NOTIFIER_FLIGHT *f;
   if (!o) return APPLE_AGX_FALSE;
@@ -554,6 +563,13 @@ APPLE_AGX_BOOL AppleAgxRenderFlightPublish(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER 
       f->EventCount<f->RenderCount+f->ComputeCount))
     return APPLE_AGX_FALSE;
   f->Published=APPLE_AGX_TRUE; /* even a failed flush needs restoration */
+  /* N1: an earlier unreported flight keeps the threshold at its own count,
+   * so its notification fires at its own end; this one is written when
+   * that flight retires (AppleAgxRenderFlightRetire). */
+  if (o->OwnNotify && !f->EpochReset && other_flight_live(o,f)) {
+    f->Deferred=APPLE_AGX_TRUE; ++o->OwnNotifyDeferred;
+    return APPLE_AGX_TRUE;
+  }
   /* The live firmware reader must observe one complete count, including
    * at byte carries. Begin checked alignment; Windows is little-endian. */
   *(volatile APPLE_AGX_U32 *)notifier_threshold(o)=f->EventCount;
@@ -565,7 +581,8 @@ APPLE_AGX_BOOL AppleAgxRenderFlightCancel(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *
   if (!o->NotifierFlight) return APPLE_AGX_TRUE;
   f=building_flight(o);
   if(!f || f->Fence!=fence || f->Visible) return APPLE_AGX_FALSE;
-  if(f->Published) {
+  /* N1: a deferred threshold was never written. */
+  if(f->Published && !f->Deferred) {
     *(volatile APPLE_AGX_U32 *)notifier_threshold(o)=f->PreviousThreshold;
     if(o->NotifierFlush && !o->NotifierFlush(o->NotifierFlushContext,notifier_threshold(o),4u))
       return APPLE_AGX_FALSE; /* retain on uncertain restoration */
@@ -584,12 +601,36 @@ void AppleAgxRenderFlightStopped(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o) {
   if(!o || !o->NotifierFlight) return;
   zero_bytes(o->Flights,sizeof(o->Flights)); o->BuildingFlight=0;
 }
+/* N1: a published flight other than f that is not itself deferred. With
+ * cumulative counts a deferred flight is younger than every written one. */
+static APPLE_AGX_BOOL other_flight_live_older(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o,
+    const APPLE_AGX_NOTIFIER_FLIGHT *f) {
+  APPLE_AGX_U32 i;
+  for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i)
+    if(&o->Flights[i]!=f && o->Flights[i].Fence && o->Flights[i].Published &&
+       !o->Flights[i].Deferred)
+      return APPLE_AGX_TRUE;
+  return APPLE_AGX_FALSE;
+}
 void AppleAgxRenderFlightRetire(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o, APPLE_AGX_U32 fence) {
   APPLE_AGX_U32 i;
   if(!o || !o->NotifierFlight) return;
   for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i)
     if(o->Flights[i].Fence==fence && o->Flights[i].Visible)
       zero_bytes(&o->Flights[i],sizeof(o->Flights[i]));
+  /* N1: the oldest deferred flight whose predecessors all retired now
+   * raises the threshold to its count (cumulative, so never lowered). */
+  if(o->OwnNotify)
+    for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i) {
+      APPLE_AGX_NOTIFIER_FLIGHT *f=&o->Flights[i];
+      if(!f->Fence || !f->Deferred || other_flight_live_older(o,f)) continue;
+      f->Deferred=APPLE_AGX_FALSE; ++o->OwnNotifyReleased;
+      *(volatile APPLE_AGX_U32 *)notifier_threshold(o)=f->EventCount;
+      if(o->NotifierFlush &&
+         !o->NotifierFlush(o->NotifierFlushContext,notifier_threshold(o),4u))
+        ++o->OwnNotifyFlushFailures;
+    }
 }
 
 /* Objects the CPU rewrites for every job. The TA/3D stamps (9, 10, 26, 27)
