@@ -7417,6 +7417,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->Initdata.RenderSharedMemory.OwnNotify =
       runtime->Depth2General &&
       AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2OwnNotify") ? TRUE : FALSE;
+  /* N2: two notifiers, consecutive flights on different ones, so each job
+   * of a pair notifies at its own end (Wom1Depth2Notifiers = 1). */
+  runtime->Initdata.RenderSharedMemory.TwoNotifiers =
+      runtime->Depth2General && runtime->Initdata.RenderSharedMemory.NotifierFlight &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2Notifiers") ? TRUE : FALSE;
   runtime->Initdata.RenderSharedMemory.ManagerEvict = AdmissionEvictG4Manager;
   runtime->Initdata.RenderSharedMemory.ManagerEvictContext = runtime;
 #endif

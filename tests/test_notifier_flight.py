@@ -48,6 +48,11 @@ class NotifierFlight(unittest.TestCase):
     def test_render_parity_and_all_owned_objects(self):
         self.run_fixture(RENDER, '  arena[layouts[0].ArenaOffset] = 0x5au;')
 
+    def test_two_notifiers_render_relocations(self):
+        # N2: the second flight's render work commands and microsequences
+        # point at notifier copy 1, and its threshold is its own count.
+        self.run_fixture(RENDER_TWO, '  arena[layouts[0].ArenaOffset] = 0x5au;')
+
     def test_flight_bytes_and_lifetime(self):
         self.run_fixture(FLIGHTS)
 
@@ -59,6 +64,13 @@ class NotifierFlight(unittest.TestCase):
         # raise the threshold (the head would notify only at the successor's
         # end, U4); the head's retirement writes it, a cancel never does.
         self.run_fixture(OWN_NOTIFY)
+
+    def test_two_notifiers_alternate_with_own_thresholds(self):
+        # N2: a successor flight signals the other notifier, whose threshold
+        # counts only its jobs, so the head's threshold equals the head's
+        # count (firmware notifies on equality, EXP2148); copy 1 is seeded
+        # with its own threshold pointer and generation.
+        self.run_fixture(TWO_NOTIFIERS)
 
     def run_fixture(self, exercise, needle=None):
         source=(SHARED/'tests/apple_agx_render_shared_memory_test.c').read_text()
@@ -73,6 +85,59 @@ class NotifierFlight(unittest.TestCase):
                 '-I',str(SHARED/'include'),str(c),
                 *[str(SHARED/'src'/n) for n in SHARED_SOURCES],'-o',str(binary)],check=True)
             subprocess.run([str(binary)],check=True)
+
+TWO_NOTIFIERS = r'''
+    {
+      unsigned char *t0=(unsigned char *)owner.Objects[12].CpuAddress+owner.ObjectOffsets[12];
+      unsigned char *t1=t0-8;
+      unsigned char *n0=(unsigned char *)owner.Objects[11].CpuAddress+owner.ObjectOffsets[11];
+      unsigned char *n1=n0-0xb0;
+      unsigned saved_set=input.JobWordSet, saved_stamp=input.StampValue, before=read_u32(t0);
+      APPLE_AGX_RENDER_SHARED_MEMORY_OWNER saved_owner=owner;
+      APPLE_AGX_U64 t1va=owner.VirtualAddresses[12]+owner.ObjectOffsets[12]-8;
+      owner.TwoNotifiers=1;
+      assert(AppleAgxRenderSharedMemoryBindRelocationObjects(&owner,arena,
+          APPLE_AGX_EXP208_ARENA_BYTES,objects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert(objects[11].GpuVa==owner.VirtualAddresses[11]+owner.ObjectOffsets[11]);
+      assert(read_u32(t1)==0 && read_u32(n1+8)==read_u32(n0+8)+1u);
+      assert(read_u32(n1)==(unsigned)t1va && read_u32(n1+4)==(unsigned)(t1va>>32));
+      owner.NotifierFlight=1;
+      input.PreemptionGpuAddress=0x1500100000ULL;
+      memcpy(t0,&before,4);
+      assert(AppleAgxRenderFlightBegin(&owner,77));
+      assert(owner.Flights[0].Notifier==0);
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      assert(output.NotifierThreshold==1);
+      assert(AppleAgxRenderFlightPublish(&owner,77));
+      AppleAgxRenderFlightVisible(&owner,77);
+      assert(read_u32(t0)==1 && read_u32(t1)==0);
+      assert(AppleAgxRenderFlightBegin(&owner,78));
+      assert(owner.Flights[1].Notifier==1);
+      input.StampValue++;
+      input.JobWordSet=AppleAgxRenderSharedMemoryNextJobWordSet(&owner,input.StampValue,1);
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      assert(output.NotifierThreshold==1); /* its own notifier's count */
+      assert(AppleAgxRenderFlightPublish(&owner,78));
+      assert(read_u32(t0)==1 && read_u32(t1)==1); /* head's threshold untouched */
+      assert(AppleAgxRenderFlightCancel(&owner,78));
+      assert(read_u32(t1)==0 && owner.NotifierTotal[1]==0 && owner.NotifierTotal[0]==1);
+      assert(AppleAgxRenderFlightBegin(&owner,78));
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      assert(AppleAgxRenderFlightPublish(&owner,78));
+      AppleAgxRenderFlightVisible(&owner,78);
+      AppleAgxRenderFlightRetire(&owner,77);
+      assert(AppleAgxRenderFlightBegin(&owner,79)); /* 78 live on 1 -> 0 */
+      assert(owner.Flights[0].Notifier==0);
+      input.StampValue++;
+      input.JobWordSet=AppleAgxRenderSharedMemoryNextJobWordSet(&owner,input.StampValue,1);
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      assert(AppleAgxRenderFlightPublish(&owner,79));
+      assert(read_u32(t0)==2 && read_u32(t1)==1);
+      assert(owner.NotifierUses[0]==2 && owner.NotifierUses[1]==2);
+      owner=saved_owner; memcpy(t0,&before,4);
+      input.JobWordSet=saved_set; input.StampValue=saved_stamp; input.PreemptionGpuAddress=0;
+    }
+'''
 
 OWN_NOTIFY = r'''
     {
@@ -255,6 +320,46 @@ RENDER = r'''
     for(i=0;i<40;++i) { memcpy(owner.Objects[i].CpuAddress,backup[i],owner.Objects[i].Length);free(backup[i]); }
     owner=old; staged_job=old_job;
 #undef RBUILD
+  }
+'''
+
+RENDER_TWO = r'''
+  {
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER old=owner;
+    APPLE_AGX_BACKEND_JOB_IMAGE old_job=staged_job;
+    unsigned char *backup[40];
+    const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *lay=AppleAgxRenderTemplateObjectLayouts();
+    unsigned char *t0=(unsigned char *)owner.Objects[12].CpuAddress+owner.ObjectOffsets[12];
+    APPLE_AGX_U64 n0=owner.VirtualAddresses[11]+owner.ObjectOffsets[11], n1=n0-0xb0;
+    unsigned i, ec, saved_ec=read_u32(arena+lay[12].ArenaOffset);
+    for(i=0;i<40;++i) {
+      backup[i]=malloc(owner.Objects[i].Length);
+      assert(backup[i]); memcpy(backup[i],owner.Objects[i].CpuAddress,owner.Objects[i].Length);
+    }
+#define RBUILD(init) AppleAgxRenderSharedMemoryBuildActiveJob(&owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,source_objects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,0x1500800000ULL,init,&bindings,&staged_job,active_objects,&active_job)
+#define U64AT(o,off) ((APPLE_AGX_U64)read_u32(active_objects[o].Data+(off)) | ((APPLE_AGX_U64)read_u32(active_objects[o].Data+(off)+4)<<32))
+    owner.NotifierFlight=1; owner.TwoNotifiers=1;
+    assert(AppleAgxRenderFlightBegin(&owner,80));
+    assert(RBUILD(1));
+    ec=read_u32(arena+lay[12].ArenaOffset);
+    assert(active_objects[11].GpuVa==n0 && U64AT(18,32)==n0 && U64AT(19,20)==n0);
+    assert(U64AT(15,420)==n0+168 && U64AT(17,384)==n0+168);
+    assert(AppleAgxRenderFlightPublish(&owner,80));
+    assert(read_u32(t0)==ec && owner.NotifierTotal[0]==ec);
+    AppleAgxRenderFlightVisible(&owner,80);
+    assert(AppleAgxRenderFlightBegin(&owner,81) && owner.Flights[1].Notifier==1);
+    staged_job.TaExpectedStamp+=0x100; staged_job.D3ExpectedStamp+=0x100;
+    { unsigned v=ec+2; memcpy(arena+lay[12].ArenaOffset,&v,4); }
+    assert(RBUILD(0));
+    assert(active_objects[11].GpuVa==n1 && U64AT(18,32)==n1 && U64AT(19,20)==n1);
+    assert(U64AT(15,420)==n1+168 && U64AT(17,384)==n1+168);
+    assert(AppleAgxRenderFlightPublish(&owner,81));
+    assert(read_u32(t0)==ec && read_u32(t0-8)==2 && owner.NotifierTotal[1]==2);
+    memcpy(arena+lay[12].ArenaOffset,&saved_ec,4);
+    for(i=0;i<40;++i) { memcpy(owner.Objects[i].CpuAddress,backup[i],owner.Objects[i].Length);free(backup[i]); }
+    owner=old; staged_job=old_job;
+#undef RBUILD
+#undef U64AT
   }
 '''
 

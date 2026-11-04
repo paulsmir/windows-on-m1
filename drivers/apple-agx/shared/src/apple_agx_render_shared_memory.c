@@ -517,6 +517,22 @@ static APPLE_AGX_BOOL reserve_sidecar(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o,
 static unsigned char *notifier_threshold(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o) {
   return (unsigned char *)o->Objects[12].CpuAddress+o->ObjectOffsets[12];
 }
+/* N2: notifier k's copy of object 11 (notifier) or 12 (threshold) lies this
+ * many bytes below the template object in the same page: right below the
+ * 0xb0-byte notifier at its alignment, 8 bytes below the threshold word. */
+static APPLE_AGX_U64 notifier_copy_delta(const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o,
+                                         APPLE_AGX_U32 Index, APPLE_AGX_U32 k) {
+  APPLE_AGX_U64 offset, alignment;
+  if (!k) return 0ULL;
+  if (Index == 12u) return 8ULL;
+  offset = o->ObjectOffsets[11];
+  alignment = offset ? (offset & (~offset + 1ULL)) : 0x1000ULL;
+  if (alignment > 0x1000ULL) alignment = 0x1000ULL;
+  return align_up(APPLE_AGX_G13_NOTIFIER_BYTES, alignment);
+}
+static unsigned char *threshold_word(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o, APPLE_AGX_U32 k) {
+  return notifier_threshold(o)-notifier_copy_delta(o,12u,k);
+}
 static APPLE_AGX_BOOL flights_idle(const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o) {
   APPLE_AGX_U32 i;
   if (!o || !o->NotifierFlight) return APPLE_AGX_TRUE;
@@ -537,7 +553,16 @@ APPLE_AGX_BOOL AppleAgxRenderFlightBegin(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o
   for(i=0;i<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++i) if(!o->Flights[i].Fence) break;
   if(i==APPLE_AGX_NOTIFIER_FLIGHT_COUNT) return APPLE_AGX_FALSE;
   f=&o->Flights[i]; zero_bytes(f,sizeof(*f));
-  f->Fence=fence; f->PreviousThreshold=get_shared_u32(notifier_threshold(o),o->DirectReads);
+  /* N2: the other live flight's notifier is busy until it reports. */
+  if(o->TwoNotifiers) {
+    APPLE_AGX_U32 j;
+    if(o->ObjectOffsets[11] < notifier_copy_delta(o,11u,1u) ||
+       o->ObjectOffsets[12] < 8u) return APPLE_AGX_FALSE;
+    for(j=0;j<APPLE_AGX_NOTIFIER_FLIGHT_COUNT;++j)
+      if(j!=i && o->Flights[j].Fence) f->Notifier=o->Flights[j].Notifier^1u;
+  }
+  f->PreviousTotal=o->NotifierTotal[f->Notifier];
+  f->Fence=fence; f->PreviousThreshold=get_shared_u32(threshold_word(o,f->Notifier),o->DirectReads);
   f->EventCount=f->PreviousThreshold;
   f->RenderCount=o->NotifierRenderCount; f->ComputeCount=o->NotifierComputeCount;
   f->ComputeStamp=o->NotifierComputeStamp; f->WordSet=o->JobWordSet; f->WordStamp=o->JobWordStamp;
@@ -560,7 +585,8 @@ APPLE_AGX_BOOL AppleAgxRenderFlightPublish(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER 
   if (!o->NotifierFlight) return APPLE_AGX_TRUE;
   f=building_flight(o);
   if(!f || f->Fence!=fence || f->Visible || (!f->EpochReset &&
-      f->EventCount<f->RenderCount+f->ComputeCount))
+      (o->TwoNotifiers ? f->EventCount<f->PreviousTotal :
+       f->EventCount<f->RenderCount+f->ComputeCount)))
     return APPLE_AGX_FALSE;
   f->Published=APPLE_AGX_TRUE; /* even a failed flush needs restoration */
   /* N1: an earlier unreported flight keeps the threshold at its own count,
@@ -572,8 +598,10 @@ APPLE_AGX_BOOL AppleAgxRenderFlightPublish(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER 
   }
   /* The live firmware reader must observe one complete count, including
    * at byte carries. Begin checked alignment; Windows is little-endian. */
-  *(volatile APPLE_AGX_U32 *)notifier_threshold(o)=f->EventCount;
-  return !o->NotifierFlush || o->NotifierFlush(o->NotifierFlushContext,notifier_threshold(o),4u);
+  ++o->NotifierUses[f->Notifier&1u];
+  *(volatile APPLE_AGX_U32 *)threshold_word(o,f->Notifier)=f->EventCount;
+  return !o->NotifierFlush ||
+      o->NotifierFlush(o->NotifierFlushContext,threshold_word(o,f->Notifier),4u);
 }
 APPLE_AGX_BOOL AppleAgxRenderFlightCancel(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o, APPLE_AGX_U32 fence) {
   APPLE_AGX_NOTIFIER_FLIGHT *f;
@@ -583,10 +611,12 @@ APPLE_AGX_BOOL AppleAgxRenderFlightCancel(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *
   if(!f || f->Fence!=fence || f->Visible) return APPLE_AGX_FALSE;
   /* N1: a deferred threshold was never written. */
   if(f->Published && !f->Deferred) {
-    *(volatile APPLE_AGX_U32 *)notifier_threshold(o)=f->PreviousThreshold;
-    if(o->NotifierFlush && !o->NotifierFlush(o->NotifierFlushContext,notifier_threshold(o),4u))
+    *(volatile APPLE_AGX_U32 *)threshold_word(o,f->Notifier)=f->PreviousThreshold;
+    if(o->NotifierFlush && !o->NotifierFlush(o->NotifierFlushContext,
+        threshold_word(o,f->Notifier),4u))
       return APPLE_AGX_FALSE; /* retain on uncertain restoration */
   }
+  o->NotifierTotal[f->Notifier&1u]=f->PreviousTotal;
   o->NotifierRenderCount=f->RenderCount; o->NotifierComputeCount=f->ComputeCount;
   o->NotifierComputeStamp=f->ComputeStamp; o->JobWordSet=f->WordSet; o->JobWordStamp=f->WordStamp;
   o->ComputeQueueStamp=f->ComputeQueueStamp;
@@ -626,9 +656,9 @@ void AppleAgxRenderFlightRetire(APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *o, APPLE_A
       APPLE_AGX_NOTIFIER_FLIGHT *f=&o->Flights[i];
       if(!f->Fence || !f->Deferred || other_flight_live_older(o,f)) continue;
       f->Deferred=APPLE_AGX_FALSE; ++o->OwnNotifyReleased;
-      *(volatile APPLE_AGX_U32 *)notifier_threshold(o)=f->EventCount;
+      *(volatile APPLE_AGX_U32 *)threshold_word(o,f->Notifier)=f->EventCount;
       if(o->NotifierFlush &&
-         !o->NotifierFlush(o->NotifierFlushContext,notifier_threshold(o),4u))
+         !o->NotifierFlush(o->NotifierFlushContext,threshold_word(o,f->Notifier),4u))
         ++o->OwnNotifyFlushFailures;
     }
 }
@@ -736,6 +766,16 @@ static APPLE_AGX_BOOL bind_relocation_objects(
       delta = Slot ? below : 0ULL;
       other = Slot ? 0ULL : below;
     }
+    /* N2: objects 11/12 of the building flight's notifier. A queue
+     * (re)initialisation binds notifier 0 and seeds copy 1 below. */
+    if (Owner->TwoNotifiers && (index == 11u || index == 12u)) {
+      const APPLE_AGX_NOTIFIER_FLIGHT *bf = building_flight(Owner);
+      APPLE_AGX_U32 k = bf ? bf->Notifier : 0u;
+      if ((InitializePersistent && k) ||
+          notifier_copy_delta(Owner, index, 1u) > Owner->ObjectOffsets[index])
+        return APPLE_AGX_FALSE;
+      delta = notifier_copy_delta(Owner, index, k);
+    }
     destination = (unsigned char *)Owner->Objects[index].CpuAddress +
         Owner->ObjectOffsets[index] - delta;
     if (Owner->NotifierFlight && index == 12u && building_flight(Owner))
@@ -750,6 +790,25 @@ static APPLE_AGX_BOOL bind_relocation_objects(
         Owner->StagedEventCount = get_u32(copied);
         Owner->StagedEventCountValid = APPLE_AGX_TRUE;
       }
+    }
+    /* N2: notifier 1 starts as the template notifier with its own
+     * threshold (count 0) and generation (Asahi: unique per notifier). */
+    if (InitializePersistent && Owner->TwoNotifiers && index == 11u) {
+      unsigned char *second = destination - notifier_copy_delta(Owner, 11u, 1u);
+      (void)copy_arena_object(Owner, second, source, layouts[index].Size);
+      put_u64(second, Owner->VirtualAddresses[12] + Owner->ObjectOffsets[12] - 8ULL);
+      put_u32(second + APPLE_AGX_G13_NOTIFIER_GENERATION_OFFSET,
+              get_u32(source + APPLE_AGX_G13_NOTIFIER_GENERATION_OFFSET) + 1u);
+      if (Owner->NotifierFlush &&
+          !Owner->NotifierFlush(Owner->NotifierFlushContext, second, layouts[index].Size))
+        return APPLE_AGX_FALSE;
+    }
+    if (InitializePersistent && Owner->TwoNotifiers && index == 12u) {
+      unsigned char *word = threshold_word(Owner, 1u);
+      *(volatile APPLE_AGX_U32 *)word = 0u;
+      Owner->NotifierTotal[0] = Owner->NotifierTotal[1] = 0u;
+      if (Owner->NotifierFlush && !Owner->NotifierFlush(Owner->NotifierFlushContext, word, 4u))
+        return APPLE_AGX_FALSE;
     }
     /* Queue (re)initialisation seeds both copies alike. */
     if (InitializePersistent && slotted_object(index)) {
@@ -840,7 +899,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   const unsigned char *control;
   APPLE_AGX_U64 gpu,stamp,notifier;
   APPLE_AGX_BOOL counted;
-  APPLE_AGX_U32 set,queueStamp;
+  APPLE_AGX_U32 set,queueStamp,nk;
   if(!Owner||!Input||!Output||!Input->CdmStreamBase||!Input->CdmStreamBytes||
      Input->JobWordSet>=APPLE_AGX_COMPUTE_JOB_WORD_SET_COUNT||
      (Input->JobWordSet!=APPLE_AGX_COMPUTE_JOB_WORD_SET_A&&
@@ -864,6 +923,15 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   control=(const unsigned char *)Owner->Objects[
       APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER].CpuAddress+
       Owner->ObjectOffsets[APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER];
+  /* N2: the building flight's notifier (copy 1 lies below object 11). */
+  nk=0u;
+  if(Owner->TwoNotifiers) {
+    const APPLE_AGX_NOTIFIER_FLIGHT *bf=building_flight(Owner);
+    if(!bf) return APPLE_AGX_FALSE;
+    nk=bf->Notifier&1u;
+    notifier-=notifier_copy_delta(Owner,11u,nk);
+    control-=notifier_copy_delta(Owner,11u,nk);
+  }
   threshold=(unsigned char *)Owner->Objects[
       APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD].CpuAddress+
       Owner->ObjectOffsets[APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD];
@@ -950,13 +1018,16 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
       sidecar+JOB_WORD(APPLE_AGX_COMPUTE_WORK_OFFSET))) return APPLE_AGX_FALSE;
   /* Asahi queue/mod.rs run(): the threshold rises by the job's one
    * notification before the job is kicked; a rebuild is not counted. */
+  if(Owner->TwoNotifiers && !counted &&
+     Owner->NotifierTotal[nk]==~(APPLE_AGX_U32)0) return APPLE_AGX_FALSE;
   if(!counted) {
     ++Owner->NotifierComputeCount;
     Owner->NotifierComputeStamp=Input->StampValue;
+    if(Owner->TwoNotifiers) ++Owner->NotifierTotal[nk];
   }
-  put_u32(threshold,Owner->NotifierRenderCount+Owner->NotifierComputeCount);
-  Output->NotifierThreshold=
+  Output->NotifierThreshold=Owner->TwoNotifiers ? Owner->NotifierTotal[nk] :
       Owner->NotifierRenderCount+Owner->NotifierComputeCount;
+  put_u32(threshold,Output->NotifierThreshold);
   Output->WorkGpuAddress=gpu+JOB_WORD(APPLE_AGX_COMPUTE_WORK_OFFSET);
   Output->SidecarGpuAddress=gpu;Output->SidecarCpuAddress=sidecar;
   Output->SidecarBytes=0x10000u;
@@ -1298,14 +1369,28 @@ static APPLE_AGX_BOOL build_active_job(
         ActiveObjects[APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD].Size <
             4u)
       BUILD_REFUSE(THRESHOLD);
+    APPLE_AGX_U32 previous = initialize_persistent ? 0u : Owner->NotifierRenderCount;
     if (initialize_persistent)
       Owner->NotifierComputeCount = Owner->NotifierComputeStamp = 0u;
     render = !Owner->DirectReads && Owner->StagedEventCountValid ?
         Owner->StagedEventCount : get_shared_u32(threshold, APPLE_AGX_TRUE);
     if (render > ~(APPLE_AGX_U32)0 - Owner->NotifierComputeCount)
       BUILD_REFUSE(THRESHOLD);
-    Owner->NotifierRenderCount = render;
-    put_u32(threshold, render + Owner->NotifierComputeCount);
+    if (Owner->TwoNotifiers) {
+      /* N2: this job's notifications (event_count advances by them) join
+       * its flight's notifier only. */
+      const APPLE_AGX_NOTIFIER_FLIGHT *bf = building_flight(Owner);
+      APPLE_AGX_U32 k = bf ? bf->Notifier & 1u : 0u;
+      if (!bf || render < previous ||
+          render - previous > ~(APPLE_AGX_U32)0 - Owner->NotifierTotal[k])
+        BUILD_REFUSE(THRESHOLD);
+      Owner->NotifierTotal[k] += render - previous;
+      Owner->NotifierRenderCount = render;
+      put_u32(threshold, Owner->NotifierTotal[k]);
+    } else {
+      Owner->NotifierRenderCount = render;
+      put_u32(threshold, render + Owner->NotifierComputeCount);
+    }
   }
   *ActiveJob = candidate;
   build_mark(Owner, APPLE_AGX_RENDER_BUILD_MARK_RELOCATED);

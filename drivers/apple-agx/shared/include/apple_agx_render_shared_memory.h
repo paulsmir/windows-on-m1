@@ -184,6 +184,9 @@ typedef struct _APPLE_AGX_NOTIFIER_FLIGHT {
   /* N1: published while an earlier flight was still unreported; its
    * threshold is written when that flight retires (OwnNotify). */
   APPLE_AGX_BOOL Deferred;
+  /* N2: the notifier the flight's jobs signal (0 = template object 11,
+   * 1 = its copy below; TwoNotifiers) and that notifier's count at Begin. */
+  APPLE_AGX_U32 Notifier, PreviousTotal;
 } APPLE_AGX_NOTIFIER_FLIGHT;
 
 typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
@@ -219,6 +222,16 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
    * FlushFailures the late writes whose flush failed. */
   APPLE_AGX_BOOL OwnNotify;
   APPLE_AGX_U32 OwnNotifyDeferred, OwnNotifyReleased, OwnNotifyFlushFailures;
+  /* N2 (Wom1Depth2Notifiers, Asahi queue/mod.rs: each queue owns a notifier
+   * and threshold): two notifiers, consecutive flights on different ones,
+   * so a successor's threshold never covers its head and every job raises
+   * its own notification at its end (the firmware notifies when the
+   * processed count equals the threshold, EXP2148). Copy 1 sits right
+   * below object 11 (notifier) and 8 bytes below object 12 (threshold) in
+   * the same pages. NotifierTotal[k]: notifications of notifier k's jobs
+   * in this queue lifetime (its threshold); NotifierUses[k]: flights. */
+  APPLE_AGX_BOOL TwoNotifiers;
+  APPLE_AGX_U32 NotifierTotal[2], NotifierUses[2];
   APPLE_AGX_U32 ManagerSecondFence;
   APPLE_AGX_BOOL ManagerPoisoned;
   APPLE_AGX_U32 ManagerTerminalFence[2];
