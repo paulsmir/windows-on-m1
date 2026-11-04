@@ -106,4 +106,21 @@ agx_win32_speculate_texture_crawls(nir_shader *nir, unsigned descriptors)
    return progress;
 }
 
+/* M3: Asahi never runs nir_opt_licm, so a texture descriptor crawl with a
+ * loop-invariant handle (load_global_constant, CAN_REORDER by definition)
+ * runs on every iteration of the loop around its sample (GravityMark planet
+ * PS 428487da: the layer-clamp crawl inside its ray-march loops, 2 loads and
+ * 3 waits of a 67-instruction body; the macOS compile has none in the loop).
+ * Non-speculative LICM moves only instructions of blocks that dominate the
+ * loop exit, whose sources are defined before the loop.
+ * APPLE_AGX_D3D_LICM=0 keeps Asahi's placement (measurement control). */
+static inline bool
+agx_win32_hoist_loop_invariants(nir_shader *nir)
+{
+   const char *env = getenv("APPLE_AGX_D3D_LICM");
+   if (env && env[0] == '0' && !env[1])
+      return false;
+   return nir_opt_licm(nir, NULL);
+}
+
 #endif

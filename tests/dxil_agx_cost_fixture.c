@@ -824,6 +824,65 @@ synthetic_array_samples(unsigned samples, bool heap)
    return b.shader;
 }
 
+/* --synthetic-loop-samples=N: M3, the shape of GravityMark's planet PS
+ * ray-march loops: a do-while loop of a runtime trip count (u1[0]) whose body samples
+ * one Texture2DArray (heap handle, constant index) at a varying layer, so
+ * every iteration clamps the layer through a descriptor crawl of the same
+ * descriptor. Repeated N times (independent loops). */
+static nir_shader *
+synthetic_loop_samples(unsigned loops)
+{
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "m3-loop-samples");
+   b.shader->info.internal = false;
+   b.shader->info.workgroup_size[0] = b.shader->info.workgroup_size[1] = 8;
+   b.shader->info.workgroup_size[2] = 1;
+   b.shader->info.num_ssbos = 2;
+   nir_variable *sampler = nir_variable_create(b.shader, nir_var_uniform, glsl_bare_sampler_type(), "s0");
+   sampler->data.binding = 0;
+   BITSET_SET(b.shader->info.samplers_used, 0);
+   nir_def *id = nir_load_global_invocation_id(&b, 32);
+   nir_def *x = nir_channel(&b, id, 0);
+   nir_def *u = nir_fmul_imm(&b, nir_u2f32(&b, x), 1.0 / 64.0);
+   nir_def *count = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 1), nir_imm_int(&b, 0),
+                                  .access = ACCESS_NON_WRITEABLE, .align_mul = 4, .align_offset = 0);
+   nir_def *sum = nir_imm_float(&b, 0.0f);
+   for (unsigned l = 0; l < loops; ++l) {
+      nir_variable *i = nir_local_variable_create(b.impl, glsl_uint_type(), "i");
+      nir_variable *acc = nir_local_variable_create(b.impl, glsl_float_type(), "acc");
+      nir_store_var(&b, i, nir_imm_int(&b, 0), 1);
+      nir_store_var(&b, acc, sum, 1);
+      nir_push_loop(&b);
+      {
+         nir_def *iv = nir_load_var(&b, i);
+         nir_tex_instr *tex = nir_tex_instr_create(b.shader, 3);
+         tex->op = nir_texop_txl;
+         tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
+         tex->is_array = true;
+         tex->coord_components = 3;
+         tex->dest_type = nir_type_float32;
+         tex->texture_index = 0;
+         tex->sampler_index = 0;
+         tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord, nir_vec3(&b, u, u, nir_u2f32(&b, iv)));
+         tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_float(&b, 0.0f));
+         tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_texture_handle,
+                                           nir_bindless_image_agx(&b, nir_imm_int(&b, 64 + 24 * l), .desc_set = DXBC_HEAP_HANDLE_MARK));
+         nir_def_init(&tex->instr, &tex->def, 4, 32);
+         nir_builder_instr_insert(&b, &tex->instr);
+         nir_store_var(&b, acc, nir_fadd(&b, nir_load_var(&b, acc), nir_channel(&b, &tex->def, 0)), 1);
+         nir_store_var(&b, i, nir_iadd_imm(&b, iv, 1), 1);
+         /* do-while: the exit test ends the body, as in the planet PS */
+         nir_break_if(&b, nir_uge(&b, nir_iadd_imm(&b, iv, 1), count));
+      }
+      nir_pop_loop(&b, NULL);
+      sum = nir_load_var(&b, acc);
+   }
+   nir_store_ssbo(&b, sum, nir_imm_int(&b, 0), nir_amul_imm(&b, x, 4), .write_mask = 1,
+                  .access = ACCESS_NON_READABLE, .align_mul = 4, .align_offset = 0);
+   nir_lower_vars_to_ssa(b.shader);
+   nir_shader_gather_info(b.shader, nir_shader_get_entrypoint(b.shader));
+   return b.shader;
+}
+
 /* --synthetic-break-loops=N: RC78, the single-pass loops dxil-spirv emits
  * to structure early exits (GravityMark's lighting kernel keeps 3 of them
  * through Asahi's optimizations): N times
@@ -909,6 +968,8 @@ main(int argc, char **argv)
       nir = synthetic_local_array(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-array-samples=%u", &reads) == 1 && reads && reads <= 16) {
       nir = synthetic_array_samples(reads, strstr(argv[1], ",heap") != NULL);
+   } else if (argc > 1 && sscanf(argv[1], "--synthetic-loop-samples=%u", &reads) == 1 && reads && reads <= 8) {
+      nir = synthetic_loop_samples(reads);
    } else if (argc > 1 && sscanf(argv[1], "--synthetic-break-loops=%u", &reads) == 1 && reads && reads <= 16) {
       nir = synthetic_break_loops(reads);
    } else {
@@ -1014,6 +1075,8 @@ main(int argc, char **argv)
    /* RC78: the D3D context's crawl placement (native projection) */
    if (d3d_robust)
       NIR_PASS(_, nir, agx_win32_speculate_texture_crawls, descriptors);
+   /* M3: loop-invariant descriptor crawls leave their loops (native projection) */
+   NIR_PASS(_, nir, agx_win32_hoist_loop_invariants);
    const unsigned speculated = count_speculated(nir);
    NIR_PASS(_, nir, nir_lower_ssbo, NULL);
    agx_preprocess_nir(nir);

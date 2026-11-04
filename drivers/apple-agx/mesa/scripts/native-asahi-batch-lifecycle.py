@@ -1290,6 +1290,9 @@ agx_win32_should_lower_robustness_d3d(const nir_intrinsic_instr *intr,
    if (d3d_robust)
       NIR_PASS(_, nir, agx_win32_speculate_texture_crawls,
                so->info.nr_bindful_textures + 2 * so->info.nr_bindful_images);
+   /* M3: loop-invariant descriptor crawls (and their address math) leave
+    * their loops; non-speculative (winsys/agx_win32_d3d_texture_crawl.h) */
+   NIR_PASS(_, nir, agx_win32_hoist_loop_invariants);
 ''')
     call='   agx_shader_initialize(dev, so, nir, ctx->support_lod_bias, ctx->robust);'
     if state.count(call)!=2:
