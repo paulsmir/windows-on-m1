@@ -68988,3 +68988,17 @@ EXP2165 HARDWARE ACTUAL (2026-11-04T20:25:10Z): **V1 retained slots ON work on h
 - Different vm slots on consecutive jobs of one shared queue run correctly on this firmware (the open question of the design).
 - Verdict: CONFIRMED mechanism, PARTIAL effect. Next: EXP2166 with a release-reason receipt (rule-R caller line) to find GravityMark's per-frame translation change.
 - Recovery: rec2165h.
+
+EXP2166 HARDWARE BEFORE 2026-11-04T20:32:33Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 (same as EXP2165). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF (+ mid-arm receipts).
+- WHY THIS HYPOTHESIS: (1) EXP2163: each GravityMark <-> DWM switch re-leases slot 1 (V5 LEASE = slot write + TLBI ASIDE1OS + DSB OSH), 160-272 us, twice per frame; (2) m1n1 supports concurrent owners on slots 1..63 and invalidates an owner's leased slots on every leaf/parent update; Asahi keeps a VM's slot across jobs (mmu.rs Uat::bind, slotalloc); (3) offline real-broker replay: two alternating processes take 2 leases in total.
+- WINDOWS CONTRACT: unchanged (VidMm page-table/flush DDIs; leases are released before any translation change of an idle process).
+- AGX/ASAHI CONTRACT: firmware commands carry the job's vm slot (render template context_id, compute/prelude/present VmSlot); slots 2..5 retained per process; slot 1 keeps its per-job meaning.
+- TRANSLATION: process -> preferred retained slot; BeginJob = JOB_BEGIN while leased; mapping change of an idle leased process = RELEASE first; buffer manager re-InitBM on slot change.
+- WHAT IS STILL UNKNOWN: which translation change releases GravityMark's retained slot between frames (EXP2165: releases 1444 ~ leases 1447).
+- Expected: Wom1G3RetainedSlotsReceipt v2 names one dominant rule-R caller line; otherwise as EXP2165.
+- Failure criteria: any GPU fault, TDR, bugcheck, image corruption, suite regression, quarantine count > 0.
+- Recovery: rec2166h.
+- Hashes: sys 14980f166944, UmdArm64 5f26507782d2, UmdX64 cc8580f2f788, Umd32 5d004a37ed38; manifest 7cde644aef80, hardware-manifest 24ee9291e5ac; probe2166.sh bb60cbf77357 (PROBE_LINT_OK); visible recovery rec2166h 20e28cb9981e0d1d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
+- Recovery rec2166h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2166-v1reason/run2166.sh.
