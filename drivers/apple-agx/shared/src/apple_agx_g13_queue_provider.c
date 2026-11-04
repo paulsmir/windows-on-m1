@@ -860,6 +860,16 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderAppendObservation(
     --Batch->ObservationCount;
     return APPLE_AGX_BACKEND_FALSE;
   }
+  /* S1: a job ended on its firmware stamp reports that value while its
+   * event (and the published Stamp) is still deferred. */
+  if (Provider->Runtime.Config.StampCompletion &&
+      Binding->FirmwareStamp != APPLE_AGX_G13_PROVIDER_NULL) {
+    APPLE_AGX_BACKEND_U32 firmware;
+    if (Provider->RuntimeIo.ReadU32(Provider->RuntimeIo.Context,
+                                    Binding->FirmwareStamp, &firmware) &&
+        (APPLE_AGX_BACKEND_U32)(firmware - observation->Stamp) < 0x80000000u)
+      observation->Stamp = firmware;
+  }
   observation->Queue = Queue;
   observation->Event = Pending->EventNumber;
   /* rc102: the job's own retirement point. The runtime proved the done

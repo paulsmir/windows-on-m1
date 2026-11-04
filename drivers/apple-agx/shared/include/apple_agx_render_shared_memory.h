@@ -206,6 +206,8 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   /* Q6: bounded exact users of the same resident slot. ManagerFence remains
    * the oldest-user busy summary consumed by legacy lifetime checks. */
   APPLE_AGX_BOOL ManagerDepth2;
+  /* S1: queue config StampCompletion (Wom1Depth2StampComplete) */
+  APPLE_AGX_BOOL StampCompletion;
   APPLE_AGX_U32 ManagerSecondFence;
   APPLE_AGX_BOOL ManagerPoisoned;
   APPLE_AGX_U32 ManagerTerminalFence[2];

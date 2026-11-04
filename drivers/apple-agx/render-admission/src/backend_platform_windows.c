@@ -7403,6 +7403,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   /* Provider preparation already copied QueueConfig. Runtime initialization
    * occurs at BackendStart/Create below; update its retained config now. */
   runtime->Provider.QueueProvider.Config.AbortFaultSuffix = runtime->Depth2General;
+  /* S1: a pair head ends on its own stamps (Wom1Depth2StampComplete = 1),
+   * so VidSch's next packet (sub(N+2) waits for cmp(N)) arrives while N+1
+   * runs instead of after it. Default off until hardware validation. */
+  runtime->Initdata.RenderSharedMemory.StampCompletion =
+      runtime->Depth2General &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2StampComplete") ? TRUE : FALSE;
+  runtime->Provider.QueueProvider.Config.StampCompletion =
+      runtime->Initdata.RenderSharedMemory.StampCompletion;
   runtime->Initdata.RenderSharedMemory.ManagerEvict = AdmissionEvictG4Manager;
   runtime->Initdata.RenderSharedMemory.ManagerEvictContext = runtime;
 #endif

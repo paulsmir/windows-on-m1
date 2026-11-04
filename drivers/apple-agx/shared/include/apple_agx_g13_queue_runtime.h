@@ -42,6 +42,10 @@ typedef struct _APPLE_AGX_G13_QUEUE_BINDING {
   volatile APPLE_AGX_BACKEND_U32 *CpuWritePointer;
   volatile APPLE_AGX_BACKEND_U32 *GpuDonePointer;
   volatile APPLE_AGX_BACKEND_U32 *Stamp;
+  /* S1: the firmware queue stamp FinalizeTA/3D/Compute write at the job's
+   * end (the value a successor's leading Barrier waits on); Stamp above
+   * is published with the notifier event. NULL = not available. */
+  volatile APPLE_AGX_BACKEND_U32 *FirmwareStamp;
   APPLE_AGX_BACKEND_U32 EventNumber;
 } APPLE_AGX_G13_QUEUE_BINDING;
 
@@ -52,6 +56,10 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG {
   APPLE_AGX_BACKEND_BOOL HasCompute;
   /* Q6: dependent work after an unproven/dropped head cannot succeed. */
   APPLE_AGX_BACKEND_BOOL AbortFaultSuffix;
+  /* S1 (U4): while a successor is kicked, the notifier defers the running
+   * job's event to the successor's end; its own stamps and done pointers
+   * (Asahi: "the job's stamp decides") then end it at the next poll. */
+  APPLE_AGX_BACKEND_BOOL StampCompletion;
   APPLE_AGX_BACKEND_U64 TimeoutTicks;
 } APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG;
 

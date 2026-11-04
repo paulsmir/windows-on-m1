@@ -1848,6 +1848,23 @@ static APPLE_AGX_BOOL queue_config(
   Config->Compute.Stamp=(volatile APPLE_AGX_U32 *)((unsigned char *)
       Owner->Objects[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress+0x80u);
   Config->Compute.EventNumber=2u;
+  /* S1: the firmware queue stamps (objects 9/10, sidecar 0x8780) */
+  Config->Ta.FirmwareStamp = queue_object_valid(Owner,
+      APPLE_AGX_RENDER_TA_FIRMWARE_STAMP_OBJECT, 4u, Prepared) ?
+      (volatile APPLE_AGX_U32 *)((unsigned char *)Owner->Objects[
+          APPLE_AGX_RENDER_TA_FIRMWARE_STAMP_OBJECT].CpuAddress +
+          Owner->ObjectOffsets[APPLE_AGX_RENDER_TA_FIRMWARE_STAMP_OBJECT]) : RENDER_SHARED_NULL;
+  Config->D3.FirmwareStamp = queue_object_valid(Owner,
+      APPLE_AGX_RENDER_3D_FIRMWARE_STAMP_OBJECT, 4u, Prepared) ?
+      (volatile APPLE_AGX_U32 *)((unsigned char *)Owner->Objects[
+          APPLE_AGX_RENDER_3D_FIRMWARE_STAMP_OBJECT].CpuAddress +
+          Owner->ObjectOffsets[APPLE_AGX_RENDER_3D_FIRMWARE_STAMP_OBJECT]) : RENDER_SHARED_NULL;
+  Config->Compute.FirmwareStamp = queue_object_valid(Owner,
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR, 0x10000u, Prepared) ?
+      (volatile APPLE_AGX_U32 *)((unsigned char *)Owner->Objects[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress +
+          APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET) : RENDER_SHARED_NULL;
+  Config->StampCompletion = Owner->StampCompletion;
   Config->AbortFaultSuffix = Owner->ManagerDepth2;
   Config->TimeoutTicks = TimeoutTicks;
   return APPLE_AGX_TRUE;

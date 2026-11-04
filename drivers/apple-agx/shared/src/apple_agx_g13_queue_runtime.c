@@ -1242,6 +1242,58 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
   return AppleAgxG13QueueRuntimeResultOk;
 }
 
+/* S1: one queue of the running job, ended on its firmware stamp: the
+ * value the job's Finalize writes at its end and a successor's Barrier
+ * waits on. AppleAgxG13CompletionSatisfiedWindow still requires the done
+ * pointer at or past the job's ring entries. A read failure leaves the
+ * job to its (deferred) event. */
+static APPLE_AGX_BACKEND_BOOL AppleAgxG13HeadQueueEnded(
+    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime,
+    const APPLE_AGX_G13_QUEUE_BINDING *Binding,
+    APPLE_AGX_G13_QUEUE_PENDING *Pending) {
+  APPLE_AGX_G13_EVENT event;
+  APPLE_AGX_BACKEND_U32 stamp, done, write;
+  if (Pending->Complete) return APPLE_AGX_BACKEND_TRUE;
+  if (Binding->FirmwareStamp == APPLE_AGX_G13_QUEUE_RUNTIME_NULL ||
+      Pending->EventNumber >= APPLE_AGX_G13_EVENT_COUNT ||
+      !Runtime->Io.ReadU32(Runtime->Io.Context, Binding->FirmwareStamp, &stamp) ||
+      !Runtime->Io.ReadU32(Runtime->Io.Context, Binding->GpuDonePointer, &done) ||
+      !Runtime->Io.ReadU32(Runtime->Io.Context, Binding->CpuWritePointer, &write))
+    return APPLE_AGX_BACKEND_FALSE;
+  AppleAgxG13QueueRuntimeZero(&event, (APPLE_AGX_BACKEND_U32)sizeof(event));
+  event.Kind = (APPLE_AGX_BACKEND_U32)AppleAgxG13EventFlag;
+  event.Firing[Pending->EventNumber / 64u] = 1ULL << (Pending->EventNumber % 64u);
+  if (!AppleAgxG13CompletionSatisfiedWindow(&event, Pending->EventNumber, stamp,
+          Pending->ExpectedStamp, done, Pending->ExpectedDonePointer, write,
+          Binding->RingCapacity))
+    return APPLE_AGX_BACKEND_FALSE;
+  Pending->Complete = APPLE_AGX_BACKEND_TRUE;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static void AppleAgxG13PollHeadStamps(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
+  if (Runtime->Phase == AppleAgxG13QueueRuntimeComputeSubmitted) {
+    if (Runtime->ComputeTerminal &&
+        AppleAgxG13HeadQueueEnded(Runtime, &Runtime->Config.Compute,
+                                  &Runtime->ComputePending))
+      AppleAgxG13SetCompletion(Runtime, AppleAgxG13QueueCompletionSuccess);
+    return;
+  }
+  if (Runtime->Phase != AppleAgxG13QueueRuntimeSubmitted) return;
+  /* every queue is evaluated (each records its own end) */
+  {
+    APPLE_AGX_BACKEND_BOOL d3 = AppleAgxG13HeadQueueEnded(Runtime,
+        &Runtime->Config.D3, &Runtime->D3Pending);
+    APPLE_AGX_BACKEND_BOOL ta = AppleAgxG13HeadQueueEnded(Runtime,
+        &Runtime->Config.Ta, &Runtime->TaPending);
+    APPLE_AGX_BACKEND_BOOL co = !Runtime->ComputeInRender ||
+        AppleAgxG13HeadQueueEnded(Runtime, &Runtime->Config.Compute,
+                                  &Runtime->ComputePending);
+    if (d3 && ta && co)
+      AppleAgxG13SetCompletion(Runtime, AppleAgxG13QueueCompletionSuccess);
+  }
+}
+
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCheckTimeout(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime,
     APPLE_AGX_BACKEND_U64 NowTicks) {
@@ -1257,6 +1309,11 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCheckTimeout(
     return AppleAgxG13PollRecovery(Runtime);
   if (AppleAgxG13DrillPending(Runtime))
     return AppleAgxG13PollDrill(Runtime);
+  if (Runtime->Config.StampCompletion && Runtime->Successor.Fence != 0u) {
+    AppleAgxG13PollHeadStamps(Runtime);
+    if (Runtime->CompletionAvailable)
+      return AppleAgxG13QueueRuntimeResultOk;
+  }
   if ((APPLE_AGX_BACKEND_U64)(NowTicks - Runtime->DeadlineTicks) >=
       (1ULL << 63))
     return AppleAgxG13QueueRuntimeResultOk;

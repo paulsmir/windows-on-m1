@@ -439,6 +439,7 @@ static void init(world *w, const char *name) {
     b->RingCpuAddress = w->ring[q]; b->RingCapacity = RING;
     b->CpuWritePointer = &w->write[q]; b->GpuDonePointer = &w->done[q];
     b->Stamp = &w->stamp[q]; b->EventNumber = EVENT_NUMBER[q];
+    b->FirmwareStamp = (volatile APPLE_AGX_BACKEND_U32 *)&w->fwstamp[q];
   }
   config.HasCompute = APPLE_AGX_BACKEND_TRUE; config.TimeoutTicks = 1000000ULL;
   memset(&rio, 0, sizeof(rio));

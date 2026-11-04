@@ -171,11 +171,38 @@ static void boundaries(void) {
   p->Config.HasCompute=1;assert(AppleAgxG13QueueProviderIngestEvent(p,msg,sizeof(msg),&b));
   put64(msg+4,0);assert(AppleAgxG13QueueProviderIngestEvent(p,msg,sizeof(msg),&b));
 }
+/* S1: with StampCompletion the pair head is reported from its own stamps
+ * while the successor still runs (its event is deferred, U4); without it
+ * the head waits for the successor's end. Both drain without faults. */
+static void stamp_head(unsigned enabled, unsigned successor) {
+  world *w=&W;start(w,"s1-stamp-head");
+  w->caps |= ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER;
+  add(w,K_R,OUT_OK,7);run(w,20);assert(w->nr==1 && !w->violations);
+  w->platform.QueueProvider.Config.StampCompletion=enabled;
+  w->platform.QueueProvider.Runtime.Config.StampCompletion=enabled;
+  add(w,K_R,OUT_OK,7);add(w,successor,OUT_OK,7);
+  w->plan[w->nplan-1].dur=20u; /* the successor outlives the head */
+  vidsch(w);dispatch(w);
+  kick_successor(w);++w->now;kick_successor(w);
+  assert(w->kicked_behind[3] && w->win.Count==2);
+  for(unsigned i=0;i<40 && in_firmware(w)!=1;++i){++w->now;firmware(w);}
+  assert(in_firmware(w)==1); /* the head ended, the successor runs */
+  poll(w);++w->now;poll(w);
+  if(enabled) assert(w->nr==2 && w->rep[1]==2);
+  else assert(w->nr==1);
+  assert(!w->faulted && !w->violations && !w->resets);
+  for(unsigned i=0;i<60;++i){++w->now;firmware(w);}
+  poll(w);poll(w);
+  assert(w->nr==3 && w->rep[2]==3 && !w->faulted && !w->violations && !w->resets);
+  add(w,K_R,OUT_OK,7);run(w,30);finish(w);
+  assert(w->nr==4 && !w->violations && !w->resets);
+}
 int main(void) {
   for(unsigned k=K_R;k<=K_C;k+=K_C-K_R)
     for(unsigned order=0;order<2;++order)
       for(unsigned merged=0;merged<2;++merged)pair(k,order,merged);
   boundaries();
+  for(unsigned e=0;e<2;++e){stamp_head(e,K_R);stamp_head(e,K_C);}
   puts("Q10_RR_EVENT_DRAIN_OK");
 }
 '''
