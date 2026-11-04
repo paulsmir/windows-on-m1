@@ -68800,3 +68800,8 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1PresentTimestamps=1. Steps: D3D12 suite; Gr
 - Hashes: sys dfd46058536e, UmdArm64 86a2d0a30c57, UmdX64 ab5f1ee924e6, Umd32 80b28ac5b4c8; manifest 0cf478a38cc8, hardware-manifest dce778939c78; probe2155.sh ff4053270f9f (PROBE_LINT_OK); visible recovery rec2155h 2350b9e4b9f28844; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PresentTimestamps=1.
 - Recovery rec2155h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2155-presentts2/run2155.sh.
+
+EXP2155 HARDWARE ACTUAL (2026-11-04T11:34:47Z): **T1: no KMD present compute job ran during the whole boot (Wom1PresentTs exported, count 0): the job between GravityMark's R7 and the next C0 is not a KMD present blit but another process's job (DWM composition; desktop and GravityMark present by flip).**
+- a HD PERF 39.095 FPS (present timestamps armed, inert); b HD FULL 6361 (second arm); suite 119/0.
+- Expected vs actual: expected a present duration split; actual the present compute path is unused in this configuration (flip model), so the R7 -> C0 span (1.6-1.7 ms) is DWM's frame work plus its two boundaries. Verdict: hypothesis "present blit cost" REJECTED; T1 stays an inert opt-in.
+- Next: EXP2156 Wom1JobDiagnostics=1 (Wom1JobTiming971 ring: per-fence pid and firmware TA/3D times) to measure the DWM job.
