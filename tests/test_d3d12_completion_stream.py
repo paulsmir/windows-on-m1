@@ -160,7 +160,11 @@ typedef struct {
  struct {APPLE_AGX_BACKEND_JOB_IMAGE PendingJob;} Backend;
  ADMISSION_JOB_TIMING_STATE JobTiming;ADMISSION_GPU_COMPLETION_RING GpuCompletions;
  int JobTimingLock;APPLE_AGX_EXP208_RELOCATION_OBJECT QueueObjects[32];
+ BOOLEAN PresentTsEnabled;
+ struct {ULONG Version,Bytes,Head,Count;
+  struct {ULONG ProcessId,Fence;ULONGLONG Start,End;} Ring[8];} PresentTs;
 } ADMISSION_PLATFORM_RUNTIME;
+#define RTL_NUMBER_OF(a) (sizeof(a)/sizeof((a)[0]))
 '''
         code=pre+capture+r'''
 int main(void){
