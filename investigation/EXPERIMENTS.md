@@ -69024,3 +69024,15 @@ EXP2167 HARDWARE ACTUAL (2026-11-04T20:58:16Z): **Retained slots hold in steady 
 - Suite 119/0. m1n1 source (read only): every V5 MMIO call runs under hv_agx_power_mmio.c broker_lock, shared with the scanout broker MMIO (DWM flip), the pool window and the power broker; the power broker is idle during the run (receipt sequence constant), RR/FW-IO windows are start-up only in the KMD.
 - Verdict: the post-DWM cost is the first broker call after DWM's job (hypothesis: broker_lock contention or HV-side delay), not the lease/TLBI. Distinguishing it needs timing inside m1n1 (not allowed without explicit permission).
 - Recovery: rec2167h.
+
+EXP2168 HARDWARE BEFORE 2026-11-04T21:30:00Z:
+Switches: Wom1G3RetainedSlots=1 only. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FULL (first arm), b HD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2165-2167: retained slots cut V5 leases ~10x and hold in steady state, no GPU faults; (2) EXP2165 HD PERF +0.8 % over the switch-off run with diagnostics; (3) scores are only measured in FULL runs, FHD first (arm-position effect).
+- WINDOWS CONTRACT / AGX CONTRACT: as EXP2165 (per-job vm slot, slots 2..5 retained).
+- WHAT IS STILL UNKNOWN: the FULL-score effect without diagnostics.
+- Expected: FHD >= 5145, HD >= 6524 (EXP2159 bests), within noise or slightly better.
+- Failure criteria: suite regressions, TDR, GPU fault, image errors, scores below EXP2150 control (HD 6433 / FHD 5091).
+- Recovery: rec2168h.
+- Hashes: sys 59d40dd310fd, UmdArm64 703246a6997c, UmdX64 e2078b0d2ca3, Umd32 bb39bbd7a6a6; manifest b9c3c80b801a, hardware-manifest f8a8d181fb91; probe2168.sh 63ad00485de0 (PROBE_LINT_OK); visible recovery rec2168h 6231e58c421b2ba3; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1G3RetainedSlots=1.
+- Recovery rec2168h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2168-v1scores/run2168.sh.
