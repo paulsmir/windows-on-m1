@@ -8,6 +8,7 @@
 #include "apple_agx_present_job.h"
 #include "render_job_timing.h"
 #include "render_job_ahead.h"
+#include "render_preempt_trace.h"
 /* L1 receipt-only lock profile: every fast mutex in this file is the G3
  * state Lock (gpuva_g3_private.h). */
 #define ADMISSION_G3_LOCK_FILE 1u
@@ -5946,6 +5947,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   /* Phase 5a: while the render slot holds another context's job, queue
    * instead of waiting on dxgkrnl's VidSch worker thread. */
   deferred = AdmissionG4PendingAdmissible(adapter, context);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceSubmitPath(adapter, args->SubmissionFenceId, deferred);
+#endif
   if (ADMISSION_G4_REJECTS(1u, KeGetCurrentIrql() != PASSIVE_LEVEL) ||
       ADMISSION_G4_REJECTS(2u, state == NULL) ||
       ADMISSION_G4_REJECTS(3u, process == NULL) ||
@@ -6376,6 +6380,12 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
     AdmissionJobTimingStartWindows(adapter, context,
         ((ADMISSION_G3_PROCESS *)context->GpuvaG3Process)->OsProcessId,
         Args->SubmissionFenceId, Args->DmaBufferSize);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  if (context->GpuvaG3Process != NULL)
+    AdmissionPreemptTraceSubmit(adapter,
+        ((ADMISSION_G3_PROCESS *)context->GpuvaG3Process)->OsProcessId,
+        Args->SubmissionFenceId, Args->Flags.Resubmission ? TRUE : FALSE);
+#endif
 #if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   InterlockedIncrement((volatile LONG *)&adapter->BltProbe.VirtualSubmitCalls);
 #endif

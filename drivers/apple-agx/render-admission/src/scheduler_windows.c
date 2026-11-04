@@ -1,4 +1,5 @@
 #include "render_admission.h"
+#include "render_preempt_trace.h"
 
 /* Fault diagnostics: first nonzero transition stores file tag 1 and
  * source line. Consumers retain zero/nonzero semantics; reset clears it. */
@@ -64,6 +65,11 @@ static BOOLEAN AdmissionNotifyPreemptionAtInterrupt(_In_ PVOID Opaque) {
   data.DmaPreempted.EngineOrdinal = ADMISSION_SCHEDULER_ENGINE;
   context->Interface.DxgkCbNotifyInterrupt(
       context->Interface.DeviceHandle, &data);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceNotified(context, notification->Node,
+      notification->Preemption.PreemptionFence,
+      notification->Preemption.LastCompletedFence);
+#endif
   InterlockedExchange(&context->SchedulerDpcPending, 1);
   (void)context->Interface.DxgkCbQueueDpc(
       context->Interface.DeviceHandle);
@@ -97,6 +103,9 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
        (InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) != 0 ||
         (InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 &&
          InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) == 0)))) {
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+    AdmissionPreemptTraceDefer(Context, Node, ADMISSION_PREEMPT_WHY_BUSY);
+#endif
     KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
     return TRUE; /* Accepted and deferred; WorkerFinished retries. */
   }
@@ -108,6 +117,9 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
   if (phase == AppleAgxPreemptionIdle ||
       phase == AppleAgxPreemptionNotificationClaimed ||
       phase == AppleAgxPreemptionWaitCurrentBoundary) {
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+    AdmissionPreemptTraceDefer(Context, Node, ADMISSION_PREEMPT_WHY_PHASE(phase));
+#endif
     KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
     return TRUE;
   }
@@ -123,6 +135,9 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
    * unreported, so that timeout fires; AppleAgxSchedulerResetEngine clears
    * it, the reset clears SchedulerFaulted, and VidSch resubmits. */
   if (InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) != 0) {
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+    AdmissionPreemptTraceDefer(Context, Node, ADMISSION_PREEMPT_DEFER_FAULTED);
+#endif
     KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
     return TRUE; /* Deferred to the TDR engine reset; not a new fault. */
   }
@@ -130,9 +145,17 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
                 scheduler, &notification.Preemption)
                 ? TRUE
                 : FALSE;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  if (!claimed)
+    AdmissionPreemptTraceDefer(Context, Node, ADMISSION_PREEMPT_DEFER_NO_CLAIM);
+#endif
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
   if (!claimed)
     return FALSE;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceClaim(Context, Node,
+      notification.Preemption.PreemptionFence);
+#endif
 
   status = Context->Interface.DxgkCbSynchronizeExecution(
       Context->Interface.DeviceHandle, AdmissionNotifyPreemptionAtInterrupt,
@@ -149,6 +172,11 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
                 ? TRUE
                 : FALSE;
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  if (claimed)
+    AdmissionPreemptTraceCommitted(Context, Node,
+        notification.Preemption.PreemptionFence);
+#endif
   if (!claimed)
     InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
   else
@@ -173,6 +201,9 @@ _Use_decl_annotations_ VOID AdmissionSchedulerWorkerFinished(
        InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) != 0 ||
        InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) != 0);
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  if (retry) AdmissionPreemptTraceRetry(Context, ADMISSION_PREEMPT_RETRY_WORKER);
+#endif
   if (retry)
     (void)AdmissionSchedulerTryNotifyPreemption(Context, 0u);
   if (Context->LiveAdditivePaging)
@@ -317,6 +348,11 @@ _Use_decl_annotations_ VOID AdmissionSchedulerDpc(
   cpuUnreported = InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 &&
       InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) == 0 &&
       InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) == 0;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  if (phase == AppleAgxPreemptionReadyToNotify && !cpuUnreported &&
+      (reservedFence == 0u || renderFence == reservedFence))
+    AdmissionPreemptTraceRetry(Context, ADMISSION_PREEMPT_RETRY_DPC);
+#endif
   if (phase == AppleAgxPreemptionReadyToNotify && !cpuUnreported &&
       (reservedFence == 0u || renderFence == reservedFence))
     (void)AdmissionSchedulerTryNotifyPreemption(Context, 0u);
@@ -449,6 +485,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
     if (began) (void)AdmissionSchedulerTryNotifyPreemption(context, 1u);
     return STATUS_SUCCESS;
   }
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceEnter(context, PreemptCommand->PreemptionFenceId);
+#endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   /* EXP1210 receipt-only: does a preemption request arrive while a
    * DxgkDdiSubmitCommandVirtual call is still inside the driver? */
@@ -504,6 +543,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
   }
   context->PreemptBeganMs = (ULONG)(KeQueryInterruptTime() / 10000ull);
   context->PreemptBeganFence = PreemptCommand->PreemptionFenceId;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceBeginLocked(context, PreemptCommand->PreemptionFenceId,
+      cutoffFence, activeFence, queuedFence);
+#endif
   AdmissionCpuQueueReleaseContextsLocked(context);
   context->CpuQueueHead = context->CpuQueueCount = 0u;
   if (activeFence == 0u && queuedFence != 0u && context->DispatchedFence == queuedFence)
@@ -532,10 +575,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
       (InterlockedCompareExchange(&context->PagingPending, 0, 0) == 0 ||
        InterlockedCompareExchange(&context->PagingDpcPending, 0, 0) != 0 ||
        InterlockedCompareExchange(&context->PagingDpcsActive, 0, 0) != 0);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceDecideLocked(context, notifyNow);
+#endif
   KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
   KeReleaseSpinLockFromDpcLevel(&context->PagingLock);
   if (notifyNow && !AdmissionSchedulerTryNotifyPreemption(context, 0u))
     InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceExit(context, PreemptCommand->PreemptionFenceId);
+#endif
   return STATUS_SUCCESS;
 }
 

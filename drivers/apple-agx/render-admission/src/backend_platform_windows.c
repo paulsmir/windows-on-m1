@@ -6,6 +6,7 @@
 #include "render_depth2_drill.h"
 #include "render_gpu_perf.h"
 #include "render_gpu_recovery_snapshot.h"
+#include "render_preempt_trace.h"
 
 /* Fault diagnostics: first nonzero transition stores file tag 4 and
  * source line. Consumers retain zero/nonzero semantics; reset clears it. */
@@ -371,6 +372,16 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_RC_RECEIPT RcReceipt;
   ADMISSION_RC_DECISIONS RcDecisions;
   unsigned int RcDecisionPid;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  /* P1 receipt-only (Wom1JobDiagnostics): render_preempt_trace.h. Current
+   * is 1 + the ring index of the latest preemption (0 = none); the threads
+   * of its PreemptCommand and first submit match the later stamps. */
+  ADMISSION_PREEMPT_TRACE PreemptTrace;
+  ADMISSION_PREEMPT_TRACE PreemptTraceSnapshot;
+  volatile LONG PreemptTraceCurrent, PreemptTraceSequence;
+  PVOID PreemptTraceCommandThread[ADMISSION_PREEMPT_TRACE_CAPACITY];
+  PVOID PreemptTraceSubmitThread[ADMISSION_PREEMPT_TRACE_CAPACITY];
+#endif
 } ADMISSION_PLATFORM_RUNTIME;
 
 /* rc90 build-ahead runs in the GPUVA G3 worker only (no SUBMIT receipts,
@@ -409,6 +420,282 @@ static ULONGLONG AdmissionJobQpc(VOID) {
   return (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
 }
 
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+/* P1 receipt-only (render_preempt_trace.h). Every hook runs where the
+ * existing code already runs, at any IRQL up to DIRQL (the DMA_PREEMPTED
+ * callback), some under SchedulerLock: QPC, plain and interlocked writes
+ * only, no lock, no allocation. Off unless Wom1JobDiagnostics. */
+static ADMISSION_PREEMPT_EVENT *AdmissionPreemptTraceCurrent(
+    ADMISSION_CONTEXT *Context, ADMISSION_PLATFORM_RUNTIME **Runtime,
+    ULONG *Index) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL
+      ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
+  LONG current;
+  if (runtime == NULL || !runtime->JobDiagnostics) return NULL;
+  current = InterlockedCompareExchange(&runtime->PreemptTraceCurrent, 0, 0);
+  if (current <= 0 || (ULONG)current > ADMISSION_PREEMPT_TRACE_CAPACITY)
+    return NULL;
+  if (Runtime != NULL) *Runtime = runtime;
+  if (Index != NULL) *Index = (ULONG)current - 1u;
+  return &runtime->PreemptTrace.Events[(ULONG)current - 1u];
+}
+
+/* First stamp wins. */
+static VOID AdmissionPreemptTraceStamp(ULONGLONG *Field) {
+  (void)InterlockedCompareExchange64((volatile LONG64 *)Field,
+                                     (LONG64)AdmissionJobQpc(), 0);
+}
+
+/* The current event, when it is the boundary of PreemptionFence. */
+static ADMISSION_PREEMPT_EVENT *AdmissionPreemptTraceMatch(
+    ADMISSION_CONTEXT *Context, ULONG Node, ULONG PreemptionFence,
+    ADMISSION_PLATFORM_RUNTIME **Runtime, ULONG *Index) {
+  ADMISSION_PREEMPT_EVENT *e;
+  if (Node != 0u) return NULL;
+  e = AdmissionPreemptTraceCurrent(Context, Runtime, Index);
+  return e != NULL && e->PreemptionFence == PreemptionFence ? e : NULL;
+}
+
+static VOID AdmissionPreemptTraceDeferEvent(ADMISSION_PREEMPT_EVENT *e,
+                                            ULONG Bits) {
+  const ULONGLONG qpc = AdmissionJobQpc();
+  (void)InterlockedCompareExchange64((volatile LONG64 *)&e->FirstDeferQpc,
+                                     (LONG64)qpc, 0);
+  e->LastDeferQpc = qpc;
+  (void)InterlockedOr((volatile LONG *)&e->DeferMask, (LONG)Bits);
+  (void)InterlockedIncrement((volatile LONG *)&e->DeferCount);
+}
+
+VOID AdmissionPreemptTraceEnter(ADMISSION_CONTEXT *Context,
+                                ULONG PreemptionFence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL
+      ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
+  ADMISSION_PREEMPT_EVENT *e;
+  ULONGLONG qpc;
+  LONG sequence;
+  ULONG index;
+  if (runtime == NULL || !runtime->JobDiagnostics) return;
+  qpc = AdmissionJobQpc();
+  sequence = InterlockedIncrement(&runtime->PreemptTraceSequence);
+  index = ((ULONG)sequence - 1u) % ADMISSION_PREEMPT_TRACE_CAPACITY;
+  /* Late stamps of the previous boundary stop at its event. */
+  InterlockedExchange(&runtime->PreemptTraceCurrent, 0);
+  e = &runtime->PreemptTrace.Events[index];
+  RtlZeroMemory(e, sizeof(*e));
+  e->EnterQpc = qpc;
+  e->PreemptionFence = PreemptionFence;
+  runtime->PreemptTraceCommandThread[index] = (PVOID)KeGetCurrentThread();
+  runtime->PreemptTraceSubmitThread[index] = NULL;
+  runtime->PreemptTrace.Count = (ULONG)sequence;
+  runtime->PreemptTrace.Next =
+      (ULONG)sequence % ADMISSION_PREEMPT_TRACE_CAPACITY;
+  InterlockedExchange(&runtime->PreemptTraceCurrent, (LONG)index + 1);
+}
+
+/* SchedulerLock held, before anything is dropped. */
+VOID AdmissionPreemptTraceBeginLocked(ADMISSION_CONTEXT *Context,
+    ULONG PreemptionFence, ULONG CutoffFence, ULONG ActiveFence,
+    ULONG DroppedFence) {
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceMatch(Context, 0u, PreemptionFence, NULL, NULL);
+  if (e == NULL) return;
+  e->CutoffFence = CutoffFence;
+  e->ActiveFence = ActiveFence;
+  e->DroppedFence = DroppedFence;
+  e->PendingDropped = Context->G4PendingCount;
+  e->PendingHeadFence = Context->G4PendingCount != 0u &&
+          Context->G4PendingHead < ADMISSION_G4_PENDING_CAPACITY
+      ? Context->G4Pending[Context->G4PendingHead].Fence : 0u;
+  e->CpuDropped = Context->CpuQueueCount;
+  e->DecideFlags |= ADMISSION_PREEMPT_DECIDE_ENTERED;
+}
+
+/* SchedulerLock held: the inputs of PreemptCommand's notifyNow. */
+VOID AdmissionPreemptTraceDecideLocked(ADMISSION_CONTEXT *Context,
+                                       BOOLEAN NotifyNow) {
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceCurrent(Context, NULL, NULL);
+  ULONG flags, defer = 0u;
+  BOOLEAN pagingPending, pagingDpcPending, pagingDpcsActive;
+  if (e == NULL || (e->DecideFlags & ADMISSION_PREEMPT_DECIDE_ENTERED) == 0u)
+    return;
+  pagingPending = InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0;
+  pagingDpcPending =
+      InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) != 0;
+  pagingDpcsActive =
+      InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) != 0;
+  e->DecidePhase = (ULONG)AppleAgxSchedulerPreemptionPhase(&Context->Scheduler);
+  e->DecideDispatchedFence = Context->DispatchedFence;
+  flags = (NotifyNow ? ADMISSION_PREEMPT_DECIDE_NOTIFY_NOW : 0u) |
+      (pagingPending ? ADMISSION_PREEMPT_DECIDE_PAGING_PENDING : 0u) |
+      (pagingDpcPending ? ADMISSION_PREEMPT_DECIDE_PAGING_DPC_PENDING : 0u) |
+      (pagingDpcsActive ? ADMISSION_PREEMPT_DECIDE_PAGING_DPCS_ACTIVE : 0u) |
+      (AdmissionPlatformRenderWorkerScheduled(Context)
+           ? ADMISSION_PREEMPT_DECIDE_WORKER_SCHEDULED : 0u);
+  e->DecideFlags |= flags;
+  if (NotifyNow) return;
+  if (e->DecidePhase != (ULONG)AppleAgxPreemptionReadyToNotify)
+    defer |= ADMISSION_PREEMPT_DEFER_CMD_PHASE;
+  if (Context->DispatchedFence != 0u)
+    defer |= ADMISSION_PREEMPT_DEFER_CMD_DISPATCHED;
+  if (pagingPending && !pagingDpcPending && !pagingDpcsActive)
+    defer |= ADMISSION_PREEMPT_DEFER_CMD_PAGING;
+  AdmissionPreemptTraceDeferEvent(e, defer);
+}
+
+VOID AdmissionPreemptTraceExit(ADMISSION_CONTEXT *Context,
+                               ULONG PreemptionFence) {
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceMatch(Context, 0u, PreemptionFence, NULL, NULL);
+  if (e != NULL) AdmissionPreemptTraceStamp(&e->ExitQpc);
+}
+
+/* A TryNotify(node 0) that returned "accepted and deferred". */
+VOID AdmissionPreemptTraceDefer(ADMISSION_CONTEXT *Context, ULONG Node,
+                                ULONG Why) {
+  ADMISSION_PREEMPT_EVENT *e;
+  ULONG bits = Why;
+  if (Node != 0u) return;
+  e = AdmissionPreemptTraceCurrent(Context, NULL, NULL);
+  /* After the commit a TryNotify is a no-op, not a deferral. */
+  if (e == NULL || e->CommitQpc != 0u) return;
+  if (Why == ADMISSION_PREEMPT_WHY_BUSY)
+    bits = AdmissionPlatformRenderWorkerScheduled(Context)
+        ? ADMISSION_PREEMPT_DEFER_WORKER : ADMISSION_PREEMPT_DEFER_PAGING;
+  else if ((Why & 0xffff0000u) == ADMISSION_PREEMPT_WHY_PHASE(0u))
+    bits = (Why & 0xffffu) == (ULONG)AppleAgxPreemptionIdle
+        ? ADMISSION_PREEMPT_DEFER_IDLE
+        : (Why & 0xffffu) == (ULONG)AppleAgxPreemptionNotificationClaimed
+        ? ADMISSION_PREEMPT_DEFER_CLAIMED : ADMISSION_PREEMPT_DEFER_BOUNDARY;
+  AdmissionPreemptTraceDeferEvent(e, bits);
+}
+
+VOID AdmissionPreemptTraceRetry(ADMISSION_CONTEXT *Context, ULONG Source) {
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceCurrent(Context, NULL, NULL);
+  ULONG shift = Source == ADMISSION_PREEMPT_RETRY_DPC ? 8u : 0u;
+  if (e == NULL || e->CommitQpc != 0u) return;
+  AdmissionPreemptTraceStamp(Source == ADMISSION_PREEMPT_RETRY_DPC
+                                 ? &e->DpcRetryQpc : &e->WorkerRetryQpc);
+  if (((e->RetryCount >> shift) & 0xffu) != 0xffu)
+    (void)InterlockedExchangeAdd((volatile LONG *)&e->RetryCount,
+                                 (LONG)(1u << shift));
+}
+
+VOID AdmissionPreemptTraceClaim(ADMISSION_CONTEXT *Context, ULONG Node,
+                                ULONG PreemptionFence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = NULL;
+  ULONG index = 0u, source;
+  const KIRQL irql = KeGetCurrentIrql();
+  ADMISSION_PREEMPT_EVENT *e = AdmissionPreemptTraceMatch(
+      Context, Node, PreemptionFence, &runtime, &index);
+  if (e == NULL) return;
+  AdmissionPreemptTraceStamp(&e->ClaimQpc);
+  source = e->ExitQpc == 0u &&
+          runtime->PreemptTraceCommandThread[index] ==
+              (PVOID)KeGetCurrentThread()
+      ? ADMISSION_PREEMPT_CLAIM_COMMAND
+      : irql == PASSIVE_LEVEL ? ADMISSION_PREEMPT_CLAIM_PASSIVE
+                              : ADMISSION_PREEMPT_CLAIM_DISPATCH;
+  e->ClaimSource = source | ((ULONG)irql << 8);
+}
+
+/* DIRQL (DxgkCbSynchronizeExecution), after DxgkCbNotifyInterrupt. */
+VOID AdmissionPreemptTraceNotified(ADMISSION_CONTEXT *Context, ULONG Node,
+    ULONG PreemptionFence, ULONG LastCompletedFence) {
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceMatch(Context, Node, PreemptionFence, NULL, NULL);
+  if (e == NULL) return;
+  AdmissionPreemptTraceStamp(&e->NotifyQpc);
+  e->NotifyLastCompletedFence = LastCompletedFence;
+}
+
+VOID AdmissionPreemptTraceCommitted(ADMISSION_CONTEXT *Context, ULONG Node,
+                                    ULONG PreemptionFence) {
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceMatch(Context, Node, PreemptionFence, NULL, NULL);
+  if (e != NULL) AdmissionPreemptTraceStamp(&e->CommitQpc);
+}
+
+/* DxgkDdiSubmitCommandVirtual, where the job-timing Submit stamp is. */
+VOID AdmissionPreemptTraceSubmit(ADMISSION_CONTEXT *Context,
+    ULONG ProcessId, ULONG Fence, BOOLEAN Resubmission) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = NULL;
+  ULONG index = 0u;
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceCurrent(Context, &runtime, &index);
+  LONG ordinal;
+  if (e == NULL || Fence == 0u) return;
+  ordinal = InterlockedIncrement((volatile LONG *)&e->SubmitCount);
+  if (Resubmission) {
+    if (InterlockedCompareExchange((volatile LONG *)&e->ResubmitFence,
+                                   (LONG)Fence, 0) == 0)
+      AdmissionPreemptTraceStamp(&e->ResubmitQpc);
+    return;
+  }
+  if (InterlockedCompareExchange((volatile LONG *)&e->SubmitFence,
+                                 (LONG)Fence, 0) != 0)
+    return;
+  AdmissionPreemptTraceStamp(&e->SubmitQpc);
+  e->SubmitPid = ProcessId;
+  e->SubmitOrdinal = (ULONG)ordinal;
+  runtime->PreemptTraceSubmitThread[index] = (PVOID)KeGetCurrentThread();
+}
+
+/* The envelope's Phase 5a decision for that submit. */
+VOID AdmissionPreemptTraceSubmitPath(ADMISSION_CONTEXT *Context, ULONG Fence,
+                                     BOOLEAN Deferred) {
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceCurrent(Context, NULL, NULL);
+  if (e == NULL || Fence == 0u || e->SubmitFence != Fence) return;
+  (void)InterlockedOr((volatile LONG *)&e->SubmitFlags,
+      (LONG)(Deferred ? ADMISSION_PREEMPT_SUBMIT_DEFERRED
+                      : ADMISSION_PREEMPT_SUBMIT_IMMEDIATE));
+}
+
+/* AwaitWork belongs to that submit when it runs on the submit's thread and
+ * no other submit has entered since. */
+static ADMISSION_PREEMPT_EVENT *AdmissionPreemptTraceAwaitEvent(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = NULL;
+  ULONG index = 0u;
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceCurrent(Context, &runtime, &index);
+  if (e == NULL || e->SubmitFence == 0u ||
+      e->SubmitCount != e->SubmitOrdinal ||
+      runtime->PreemptTraceSubmitThread[index] != (PVOID)KeGetCurrentThread())
+    return NULL;
+  return e;
+}
+
+VOID AdmissionPreemptTraceAwaitEnter(ADMISSION_CONTEXT *Context) {
+  ADMISSION_PREEMPT_EVENT *e = AdmissionPreemptTraceAwaitEvent(Context);
+  if (e != NULL) AdmissionPreemptTraceStamp(&e->AwaitEnterQpc);
+}
+
+VOID AdmissionPreemptTraceAwaitExit(ADMISSION_CONTEXT *Context,
+    LONGLONG WaitStartQpc, ULONG FirstReason, ULONG Reason) {
+  ADMISSION_PREEMPT_EVENT *e = AdmissionPreemptTraceAwaitEvent(Context);
+  if (e == NULL || e->AwaitEnterQpc == 0u || e->AwaitExitQpc != 0u) return;
+  e->AwaitWaitQpc = (ULONGLONG)WaitStartQpc;
+  e->AwaitFirstReason = FirstReason;
+  e->AwaitResult = Reason;
+  AdmissionPreemptTraceStamp(&e->AwaitExitQpc);
+}
+
+/* The job worker's Worker phase stamp of Fence. */
+static VOID AdmissionPreemptTracePickup(ADMISSION_PLATFORM_RUNTIME *runtime,
+                                        ULONG Fence) {
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceCurrent(runtime->Adapter, NULL, NULL);
+  if (e == NULL) return;
+  if (InterlockedCompareExchange((volatile LONG *)&e->FirstPickupFence,
+                                 (LONG)Fence, 0) == 0)
+    AdmissionPreemptTraceStamp(&e->FirstPickupQpc);
+  if (e->SubmitFence == Fence) AdmissionPreemptTraceStamp(&e->PickupQpc);
+}
+#endif
+
 VOID AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, ULONG pid, ULONG fence,
     ULONG dmaBytes) {
@@ -437,6 +724,9 @@ static VOID AdmissionJobTimingMarkWindows(
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   (void)AdmissionJobTimingMark(&runtime->JobTiming, fence, phase, qpc);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  if (phase == AdmissionJobPhaseWorker) AdmissionPreemptTracePickup(runtime, fence);
+#endif
 }
 
 /* rc83 receipt v3: a sub-interval stamp (first wins). */
@@ -1075,6 +1365,18 @@ static VOID AdmissionJobTimingExportWindows(
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->Depth2ReceiptSnapshot, sizeof(runtime->Depth2ReceiptSnapshot));
     }
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+    /* P1: attempted on its own; the live ring is copied unlocked (its
+     * writers take no lock), a torn event is a diagnostic artefact. */
+    if (runtime->PreemptTrace.Count != 0u) {
+      RtlCopyMemory(&runtime->PreemptTraceSnapshot, &runtime->PreemptTrace,
+          sizeof(runtime->PreemptTraceSnapshot));
+      RtlInitUnicodeString(&name, L"Wom1PreemptTrace");
+      (void)ZwSetValueKey(key, &name, 0u, REG_BINARY,
+          &runtime->PreemptTraceSnapshot,
+          (ULONG)sizeof(runtime->PreemptTraceSnapshot));
+    }
+#endif
     AdmissionRcExportWindows(runtime, key);
     ZwClose(key);
   }
@@ -7437,6 +7739,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1ManagerSlots");
   runtime->JobDiagnostics =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDiagnostics");
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  {
+    LARGE_INTEGER frequency;
+    (void)KeQueryPerformanceCounter(&frequency);
+    InterlockedExchange(&runtime->PreemptTraceCurrent, 0);
+    InterlockedExchange(&runtime->PreemptTraceSequence, 0);
+    RtlZeroMemory(&runtime->PreemptTrace, sizeof(runtime->PreemptTrace));
+    runtime->PreemptTrace.Version = ADMISSION_PREEMPT_TRACE_VERSION;
+    runtime->PreemptTrace.Bytes = (ULONG)sizeof(runtime->PreemptTrace);
+    runtime->PreemptTrace.QpcFrequency = (ULONGLONG)frequency.QuadPart;
+  }
+#endif
   runtime->PresentTsEnabled =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1PresentTimestamps");
   /* V1: off (0, absent) keeps one VM slot leased per job and released at
@@ -8258,6 +8572,9 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
   ULONG reason = 0u, firstReason = 0u;
   LONGLONG waitStart = 0;
   slice.QuadPart = -100000LL; /* 10 ms backstop */
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceAwaitEnter(Context);
+#endif
   for (;;) {
     /* Clear before testing: a release after the test sets it again. */
     if (runtime != NULL)
@@ -8304,6 +8621,9 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
       (void)InterlockedCompareExchange64(&Context->SubmitPath.MaxWaitQpc,
                                          waited, maxWait);
   }
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceAwaitExit(Context, waitStart, firstReason, reason);
+#endif
   if (FailedPredicate != NULL) *FailedPredicate = reason;
   return reason == 0u;
 }
