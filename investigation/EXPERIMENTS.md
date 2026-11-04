@@ -68889,3 +68889,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 (as EXP2157/2158). Steps: 
 - Hashes: sys 56a7645270e0, UmdArm64 e63aaedb82ec, UmdX64 5349bb6b8d3c, Umd32 fdaa5e4075bb; manifest 2f2ca11a3c9d, hardware-manifest 0e3167d571ac; probe2160.sh 2f9e0ffcd7c8 (PROBE_LINT_OK); visible recovery rec2160h a7f62dbe38ce3aaf; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
 - Recovery rec2160h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2160-locksplit/run2160.sh.
+
+EXP2160 HARDWARE ACTUAL (2026-11-04T16:47:09Z): **REJECTED: the L2 per-process lock package bugchecked during boot: 0x113 VIDEO_DXGKRNL_FATAL_ERROR subtype 0x10 in dxgkrnl!ADAPTER_RENDER::DdiBuildPagingBuffer (our BuildPagingBuffer returned a status dxgkrnl does not allow), from dxgmms2!VIDMM_GLOBAL::InitPagingProcessVaSpace -> UpdatePageTable.**
+- Bugcheck 0x113 (0x10, ffffb8093a2374a0, 0, 1), 2026-11-04 16:38Z, minidump evidence/crash/110426-19578-01.dmp, cdb output .local/handoff/codex/exp2160-crash/cdb-output-1.txt; PSCI reset ELR fffff801b4235138; boot log evidence/full-crash.log. No suite or GravityMark step ran.
+- Expected vs actual: expected a normal boot and suite 119/0; actual the first UPDATE_PAGE_TABLE for VidMm's paging process failed under the new locking.
+- Verdict: REJECTED. L2 step 1 (32d363ef) and its review fix (4a740709) reverted (6bcae831, 70e740da); defaults stay L3-P1 (EXP2158/EXP2159). Before any retry: an offline replay of InitPagingProcessVaSpace's UPDATE_PAGE_TABLE through the L2 lookup must reproduce the failing status.
+- Recovery: rec2160h (at-proxy) RECOVERY_DONE.
