@@ -8,6 +8,13 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-11-04 16:00Z -- BEST HD 6524 / FHD 5145 (EXP2159, defaults incl. L3-P1)
+- EXP2157 (L1 lock profile): DWM's completion waited 0.14-4.4 ms for the adapter-wide G3 lock held by GravityMark's
+  preflight parse; every job is parsed 3x under that lock. L3-P1 (2bf8248d, 32-entry proof cache + cached output checks)
+  cut preflight/submit holds 92/149 -> 15/12 us (EXP2158, HD PERF +2.2 %). Remaining waiter: BeginJobAs (~38 us/job).
+- Next: L2 per-process lock split (investigation/analysis/L2-g3-lock-split.md, step 1 in review), L3-P2 BeginJob
+  re-parse elision (analysis/L3-g4-parse-cost.md). Always watch recovery with a notifying waiter.
+
 ## CURRENT 2026-11-04 12:00Z -- R7 -> C0 SPAN EXPLAINED (EXP2155/EXP2156)
 - No KMD present blit runs (flip model, EXP2155). The span is one DWM render job per GravityMark frame (pid 11156,
   kick -> complete 0.65 ms) plus two unpaired boundaries (~0.4 ms each): the depth-two window refuses cross-process
