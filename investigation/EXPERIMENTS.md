@@ -68914,3 +68914,15 @@ EXP2161 HARDWARE ACTUAL (2026-11-04T18:01:45Z): **INCONCLUSIVE for L3-P1b: suite
 - Lock profile totals since boot: BeginJobAs :3807 31995 x 34.9 us (EXP2158 37.8), preflight :6208 13.1 us, submit :5889 11.1 us. If the post-DWM BeginJob had fallen from ~200 to ~20 us, :3807's total hold would have dropped by ~0.5 s; it dropped ~0.08 s: weak evidence against the hypothesis.
 - Verdict: INCONCLUSIVE (measurement window). L3-P1b stays (sound, no regression). Next: EXP2162 = same package, the probe snapshots the receipts 45 s into the HD PERF arm.
 - Recovery: rec2161h.
+
+EXP2162 HARDWARE BEFORE 2026-11-04T18:10:17Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 (as EXP2158). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF; receipts snapshot ~60 s into the arm (kmd-receipts mid-a).
+- WHY THIS HYPOTHESIS: (1) EXP2158 ring: the GravityMark compute job that follows DWM's job each frame spends ~200 us in BeginJob (207/209/196 us) while every other job takes 2-18 us, and the V5 LEASE averages 10.6 us, so the time is the re-parse; (2) source: a leaf change anywhere in a 32 MiB leaf table dropped every proof crossing that table (proof_invalidate matched tables only), and GravityMark remaps upload/dynamic pages between frames (52732 paging builds); (3) offline: the out-of-range keep / in-range drop test is RED before, GREEN after.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged; the cached proof answers exactly as the walk (a changed page inside the range still drops it).
+- WHAT IS STILL UNKNOWN: whether GravityMark's per-frame leaf changes are outside the proven ranges.
+- Expected: BeginJob of the post-DWM compute job falls from ~200 us toward ~20 us; R7 -> C0 kick span shorter than EXP2158 (~1.2 ms); HD PERF >= 39.38 FPS.
+- Failure criteria: suite regressions vs 119/0, GPU faults, TDR, image errors; no change in the post-DWM BeginJob (hypothesis rejected).
+- Recovery: rec2162h.
+- Hashes: sys 43fcbc846bd2, UmdArm64 89872ad030eb, UmdX64 0004926fbdbb, Umd32 d1247704d8b2; manifest 55ab43088654, hardware-manifest f2169dde1a83; probe2162.sh 43604912ba99 (PROBE_LINT_OK); visible recovery rec2162h 9fcb0d206103bf61; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
+- Recovery rec2162h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2162-proofmid/run2162.sh.
