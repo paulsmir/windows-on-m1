@@ -69019,3 +69019,8 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 (sam
 - Hashes: sys f16aa3ba506b, UmdArm64 892f0bbfcc55, UmdX64 dea6f94e5af4, Umd32 6d65488771ee; manifest f5cdb962cded, hardware-manifest 6fbc5e4a41ed; probe2167.sh 24a7d94d5fff (PROBE_LINT_OK); visible recovery rec2167h 647e42c18f21ae71; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
 - Recovery rec2167h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2167-v1kind/run2167.sh.
+
+EXP2167 HARDWARE ACTUAL (2026-11-04T20:58:16Z): **Retained slots hold in steady state (mid-arm -> end: +18 releases, +5239 reuses; releases were start-up/suite leaf changes: system map 1049, private map 237, unmaps 197), yet GravityMark's first job after DWM still spends 158-219 us in the graph-begin stage, which with a held lease is only the V5 JOB_BEGIN call (usually ~6 us).**
+- Suite 119/0. m1n1 source (read only): every V5 MMIO call runs under hv_agx_power_mmio.c broker_lock, shared with the scanout broker MMIO (DWM flip), the pool window and the power broker; the power broker is idle during the run (receipt sequence constant), RR/FW-IO windows are start-up only in the KMD.
+- Verdict: the post-DWM cost is the first broker call after DWM's job (hypothesis: broker_lock contention or HV-side delay), not the lease/TLBI. Distinguishing it needs timing inside m1n1 (not allowed without explicit permission).
+- Recovery: rec2167h.
