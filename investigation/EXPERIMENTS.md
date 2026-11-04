@@ -68877,3 +68877,15 @@ EXP2159 HARDWARE ACTUAL (2026-11-04T15:48:20Z): **New bests with L3-P1 default: 
 - Expected vs actual: expected FHD > 5128 and HD > 6439 (~+2 %); actual +0.3 % FHD, +1.3 % HD (single runs; FHD at the first-arm position as EXP2154).
 - Verdict: CONFIRMED (no regression, new best scores). Next: L2 lock split step 1 (in review), L3-P2 BeginJob re-parse elision.
 - Recovery: rec2159h.
+
+EXP2160 HARDWARE BEFORE 2026-11-04T16:27:16Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 (as EXP2157/2158). Steps: D3D12 suite (process create/destroy churn); GravityMark D3D12 100k -temporal 0: a HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2157: a foreign completion waited 0.14-4.4 ms behind preflight under the single G3 lock; (2) EXP2158: P1 shortened but did not remove the contention (preflight still holds G 15 us mean, 3.2 ms max); (3) offline: the foreign-completion-during-parse replay now completes without waiting, rank-checked stubs, review found no deadlock or use-after-free.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged; same validation, different lock scope (preflight under its own process lock).
+- WHAT IS STILL UNKNOWN: kernel behaviour of the new lock order and rundown under real dxgkrnl/DWM concurrency; the FPS effect beyond P1.
+- Expected: no hang/bugcheck/TDR; suite 119/0; preflight site absent from G holds (its parse now under P); HD PERF >= 39.38 FPS (EXP2158).
+- Failure criteria: any deadlock (guest hang), bugcheck, TDR, suite regression, FPS below EXP2158 by more than 2 %.
+- Recovery: rec2160h.
+- Hashes: sys 56a7645270e0, UmdArm64 e63aaedb82ec, UmdX64 5349bb6b8d3c, Umd32 fdaa5e4075bb; manifest 2f2ca11a3c9d, hardware-manifest 0e3167d571ac; probe2160.sh 2f9e0ffcd7c8 (PROBE_LINT_OK); visible recovery rec2160h a7f62dbe38ce3aaf; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
+- Recovery rec2160h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2160-locksplit/run2160.sh.
