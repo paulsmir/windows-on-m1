@@ -68711,3 +68711,17 @@ EXP2150 HARDWARE ACTUAL (2026-11-04T08:59:55Z): **Control PASS: the N1/N2 packag
 - Expected vs actual: expected the default path unchanged; actual PASS. The lost completion of EXP2148/EXP2149 belongs to the switches (each job notifying alone), not to the shared code. Verdict CONFIRMED (shared code safe); N1/N2 remain rejected.
 - Recovery: guest reboot + rec2150h/recover.sh -> RECOVERY_DONE.
 - Next: offline -- why a successor that notifies on its own is never completed (both switches fail the same way).
+
+EXP2151 HARDWARE BEFORE 2026-11-04T09:12:46Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Notifiers=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD FULL, b HD PERF, c FHD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2150: the same code without the switch passes (HD 6433), so the lost completion belongs to N2 itself; (2) Asahi fw/microseq.rs + queue/render.rs: StartVertex/StartFragment carry event_generation = the queue notifier's generation, and our render microsequences are captured with notifier 0's generation, while EXP2149 gave copy 1 generation + 1; (3) EXP2149's lost job was a render head (kind 1), the first job to signal copy 1 in a pair.
+- WINDOWS CONTRACT: unchanged from EXP2149.
+- AGX/ASAHI CONTRACT: a job's Start/Finalize generation matches the notifier it signals.
+- TRANSLATION: copy 1 keeps the template generation (compute microsequences already read the generation from the chosen notifier).
+- WHAT IS STILL UNKNOWN: whether the firmware accepts two notifiers with the same generation on one JobList; the boundary reduction.
+- Expected: suite 119/0; gaps before unpaired compute below 0.4 ms; HD FULL above 6433 (+3-6 %); FHD >= 5091; correct images; no reset.
+- FAIL: lost completion / TDR / firmware crash -> rec2151h, switch off; the remaining cause is the firmware's single-notifier assumption (next: two notifiers need separate JobLists / work queues).
+- Recovery: rec2151h.
+- Hashes: sys 0079ab6f99b5, UmdArm64 bb1f7b201c39, UmdX64 d6c888d435b3, Umd32 80827b585356; manifest 9a7b79950d0e, hardware-manifest e9782408fd3d; probe2151.sh f811cb5f251b (PROBE_LINT_OK); visible recovery rec2151h 980b3c360deb8385; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Notifiers=1.
+- Recovery rec2151h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2151-notifiers-gen/run2151.sh.
