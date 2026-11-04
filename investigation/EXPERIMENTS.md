@@ -69052,3 +69052,8 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1. Ste
 - Hashes: sys 3cbac6982f10, UmdArm64 ab66688b1225, UmdX64 1d0033b70517, Umd32 2b2d2f85f6ba; manifest 87e9937a8193, hardware-manifest da1f38e46e32; probe2169.sh 36452d271531 (PROBE_LINT_OK); visible recovery rec2169h 31dfd6c2f79547e2; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
 - Recovery rec2169h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2169-m1n1diag/run2169.sh.
+
+EXP2169 HARDWARE ACTUAL (2026-11-04T22:02:35Z): **Cause confirmed inside m1n1: the post-DWM V5 call waits for broker_lock held by the scanout service step (hv_agx_scanout_service_run_once, DCP present/poll): BROKERLOCK-LONG entries v5<-service@broker 117-244 us (36 long waits, 30 of them v5<-service); bhl waits are small (v5 b max 6-31 us).**
+- Diagnostic m1n1 (exp/m1n1-brokerlock 550c7f23, split=0, macho 5cc5287b) booted; suite 119/0. During GravityMark: v5 30k-48k calls per 10 s, v5 wait max 162-244 us; service step ~45-69k runs per 10 s, hold max 254-920 us.
+- Verdict: CONFIRMED (scanout service step holds broker_lock across DCP work and blocks V5). Next: EXP2170 = AGX_BROKER_LOCK_SPLIT=1 build (V5 under its own v5_lock), single change.
+- Recovery: rec2169h.
