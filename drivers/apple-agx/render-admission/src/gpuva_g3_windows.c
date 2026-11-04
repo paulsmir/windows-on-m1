@@ -893,8 +893,7 @@ static BOOLEAN AdmissionG3PrivateEvictPressure(ADMISSION_G3_PROCESS *p,
     ADMISSION_BACKEND_MEMORY_VIEW *view, UINT failedBytes,
     const APPLE_AGX_G3_PRIVATE_POOL_STATS *failed) {
   LIST_ENTRY *link;
-  UINT units, retries=0u;
-  BOOLEAN busy;
+  UINT units;
   if (!failedBytes || failedBytes>(8u<<20)) return FALSE; /* allocator hard limit */
   units=(failedBytes+APPLE_AGX_G3_PRIVATE_UNIT-1u)/APPLE_AGX_G3_PRIVATE_UNIT;
   if (AdmissionG3PrivateEvictCached(p,view)) return TRUE;
@@ -902,8 +901,6 @@ static BOOLEAN AdmissionG3PrivateEvictPressure(ADMISSION_G3_PROCESS *p,
       failed->OwnerUnits>APPLE_AGX_G3_PROCESS_UNITS ||
       units>APPLE_AGX_G3_PROCESS_UNITS-failed->OwnerUnits ||
       failed->LargestFreeUnits>=units) return FALSE;
-Rescan:
-  busy=FALSE;
   for (link=p->State->Processes.Flink;link!=&p->State->Processes;link=link->Flink) {
     ADMISSION_G3_PROCESS *owner=CONTAINING_RECORD(link,ADMISSION_G3_PROCESS,Link);
     ADMISSION_G3_PRIVATE_SCENE *s,*oldest=NULL;
@@ -919,7 +916,7 @@ Rescan:
     /* L2: the release mutates the victim's graph and scenes, which needs its
      * process lock. The caller holds G: never wait for it; a victim busy in
      * its own preflight parse is skipped like one with a job in flight. */
-    if (!KeTryToAcquireGuardedMutex(&owner->Lock)) { busy=TRUE; continue; }
+    if (!KeTryToAcquireGuardedMutex(&owner->Lock)) continue;
     AppleAgxG3PrivatePoolStats(&p->State->PrivatePool,p->Graph.ProcessId,&before);
     /* This retains the victim's graph/root/owner through leaf invalidation,
      * backing revoke, zeroing and generation-checked free. Failure quarantines
@@ -944,21 +941,6 @@ Rescan:
     p->State->PrivatePressure[10]=(ULONG)(owner->Graph.RootIpa>>32);
     p->State->PrivatePressure[11]=after.LargestFreeUnits;
     return TRUE;
-  }
-  /* L2 review: before the split an idle victim was always evictable (its
-   * preflight held G). A victim busy only in its own parse (mean ~15 us,
-   * EXP2158) is retried: drop G -- never wait for a foreign P with G held --
-   * keep the requester's P, sleep 100 us, retake G and rescan (the list and
-   * the victims may have changed). Bounded to 50 tries (~5 ms). */
-  if (busy && retries++<50u) {
-    LARGE_INTEGER delay;
-    ADMISSION_G3_STATE *state=p->State;
-    ExReleaseFastMutex(&state->Lock);
-    delay.QuadPart=-1000LL; /* 100 us */
-    (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
-    ExAcquireFastMutex(&state->Lock);
-    if (p->Poisoned || p->Graph.Uncertain) return FALSE;
-    goto Rescan;
   }
   return FALSE;
 }
