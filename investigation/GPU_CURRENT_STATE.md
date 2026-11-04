@@ -8,6 +8,16 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-11-05 01:30Z -- BEST HD 6524 (EXP2159) / FHD 5200 (EXP2168, V1 on)
+- Per-frame idle between GravityMark's R7 and next C0 ~1.25 ms (deployed m1n1): DWM submit 70 us + DWM begin/build
+  ~250 us (lease ~200) + DWM GPU 0.64 ms + C0 begin ~300 us (lease ~200).
+- V1 retained VM slots (Wom1G3RetainedSlots, default off): works on hardware (EXP2165-2168, no faults), leases ~10x
+  fewer; the remaining post-DWM V5 call cost was broker_lock held by m1n1's scanout service step (EXP2169).
+- m1n1 split build (exp/m1n1-brokerlock 550c7f23, AGX_BROKER_LOCK_SPLIT=1; user-approved experiment, NOT lastgood):
+  removes that wait (EXP2170/2171) but 2 of 5 sampled frames showed 3-4 ms DWM stalls -> no FPS gain yet.
+- Rejected: preemption-path cost (EXP2172), steady-state VidMm migration (M3), L2 lock split (EXP2160 bugcheck).
+- Probe rule: upload arm-task.ps1 from the Mac; check ARM_TASK and gm*-done.txt (EXP2169/2170 skipped the game).
+
 ## CURRENT 2026-11-04 19:30Z -- BEST HD 6524 / FHD 5145 (EXP2159); NEXT: V1 RETAINED VM SLOTS
 - EXP2163 (L1b split): the remaining process-switch cost is the V5 LEASE (slot write + TLBI ASIDE1OS + DSB OSH), 160-272 us
   per switch, twice per frame (GravityMark <-> DWM share slot 1). Design: analysis/V1-retained-vm-slots.md (per-process
