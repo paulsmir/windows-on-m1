@@ -39,6 +39,7 @@ def replay_functions(production):
         "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
         "AdmissionG4GraphAccessTyped", "AdmissionG3PresentSurfaceBytes", "AdmissionG3PresentAccessible", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4ResubmissionRefusal","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
         "AdmissionG4SnapshotFailure", "AdmissionG4OutputInLocal", "AdmissionG4ResolveOutput",
+        "AdmissionG3LockFoundProcess", "AdmissionGpuvaG3CompleteJobTimestamp",
         "AdmissionG4PreflightLocked", "AdmissionGpuvaG4PreflightEscape",
         "AdmissionGpuvaG3PrivateCancel", "AdmissionG4PendingAdmissible",
         "AdmissionG4CapturePrepareLocked", "AdmissionG4PendingQueue", "AdmissionG4PendingBindHead",

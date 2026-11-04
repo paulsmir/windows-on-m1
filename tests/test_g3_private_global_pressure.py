@@ -27,15 +27,20 @@ typedef struct SCENE {struct SCENE *Next; CONTEXT *Context;
 } ADMISSION_G3_PRIVATE_SCENE;
 typedef struct STATE {LIST_ENTRY Processes; ULONGLONG PrivateStats[16];
  ULONG PrivatePressure[12]; APPLE_AGX_G3_PRIVATE_POOL PrivatePool;} ADMISSION_G3_STATE;
+/* L2 step 1: the per-process lock; a victim's is only tried (G held). */
+typedef struct {int Held;} KGUARDED_MUTEX;
+static BOOLEAN KeTryToAcquireGuardedMutex(KGUARDED_MUTEX *m) { if(m->Held) return FALSE; m->Held=1; return TRUE; }
+static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m) { assert(m->Held); m->Held=0; }
 typedef struct PROC {LIST_ENTRY Link; ADMISSION_G3_STATE *State;
  ADMISSION_G3_PRIVATE_SCENE *PrivateScenes; int Poisoned; ULONG OsProcessId;
  struct {int Uncertain,JobInFlight,LeaseToken,Created; ULONGLONG ProcessId,RootIpa;} Graph;
+ KGUARDED_MUTEX Lock;
 } ADMISSION_G3_PROCESS;
 typedef struct {int unused;} ADMISSION_BACKEND_MEMORY_VIEW;
 static int refuse_release;
 static BOOLEAN AdmissionG3PrivateReleaseScene(ADMISSION_G3_PROCESS *p,
  ADMISSION_G3_PRIVATE_SCENE *s,ADMISSION_BACKEND_MEMORY_VIEW *v) {
- (void)v; if(refuse_release) return FALSE;
+ (void)v; assert(p->Lock.Held); if(refuse_release) return FALSE;
  assert(!p->Poisoned && !p->Graph.Uncertain && !p->Graph.JobInFlight && !p->Graph.LeaseToken);
  assert(s->Cached && s->Reported && s->ReleaseRequested && !s->Queued && !s->Submitting && !s->Quarantined);
  assert(AppleAgxG3PrivateFree(&p->State->PrivatePool,p->Graph.ProcessId,&s->Extent));
@@ -68,8 +73,15 @@ int main(void) {
  assert(failure.GlobalUnits==1024 && !failure.LargestFreeUnits && failure.OwnerUnits==24);
  assert(!AppleAgxG3PrivateAllocate(&st.PrivatePool,1,0x10000u,&wanted));
  p[1].Graph.JobInFlight=1;p[2].Graph.LeaseToken=1;p[3].Poisoned=1;s[4].Queued=1;
+ p[0].Lock.Held=1; /* the requester's escape holds its own lock */
+ /* L2: an owner busy in its own parse is skipped, never awaited. */
+ p[5].Lock.Held=1;
+ assert(!AdmissionG3PrivateEvictPressure(&p[0],&view,0x10000u,&failure));
+ assert(!s[5].Released && p[5].Lock.Held && !st.PrivatePressure[1]);
+ p[5].Lock.Held=0;
  /* Only owner6 is idle and safe; caller owns no cached scene. */
  assert(AdmissionG3PrivateEvictPressure(&p[0],&view,0x10000u,&failure));
+ assert(!p[5].Lock.Held);
  assert(s[5].Released && !s[1].Released && !s[2].Released && !s[3].Released && !s[4].Released);
  assert(AppleAgxG3PrivateAllocate(&st.PrivatePool,1,0x10000u,&wanted));
  assert(st.PrivatePressure[1]==1 && st.PrivatePressure[2]==100 && st.PrivatePressure[3]==105);

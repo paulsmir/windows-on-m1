@@ -32,6 +32,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           'AdmissionG4FindPrivateScene','AdmissionG4FindPrivateResubmission','AdmissionG4ResubmissionRefusal',
           'AdmissionG4PrivateGraphAccess','AdmissionG4PrivateGeometry','AdmissionG4PrivateUnqueue',
           'AdmissionG4SnapshotFailure','AdmissionG4OutputInLocal','AdmissionG4ResolveOutput',
+          'AdmissionG3LockFoundProcess','AdmissionGpuvaG3CompleteJobTimestamp',
           'AdmissionG4PreflightLocked','AdmissionGpuvaG4PreflightEscape',
           'AdmissionGpuvaG3PrivatePreempt','AdmissionGpuvaG3PrivateCancel','AdmissionG4PendingAdmissible',
           'AdmissionG4CapturePrepareLocked', 'AdmissionG4PendingQueue','AdmissionG4PendingBindHead','AdmissionG4PendingDropLocked',
@@ -53,8 +54,6 @@ class G4RenderLocalViewReplay(unittest.TestCase):
         }"""
         prefix=prefix.replace(old,local+'\n'+function_body(memory,'AdmissionMemoryRuntimeScanoutView'))
         prefix=prefix.replace('HostPhysicalAddress, Bytes;', 'HostPhysicalAddress, Bytes, PoolBytes;')
-        # rc102 (EXP2045): AdmissionGpuvaG3AbortJob wakes JOB_BEGIN waiters.
-        prefix=prefix.replace('  unsigned SuccessorFence;\n', '  unsigned SuccessorFence;\n  int JobEvent;\n')
         prefix=prefix.replace('static ULONGLONG output_ipa=0x90001000ULL;',
             'static ULONGLONG output_ipa=0x8e4040000ULL;')
         prefix=prefix.replace('static int output_mapped=1;', 'static int output_mapped=1, output_split=0; static ULONGLONG output_va=0x40000000ULL, output_bytes=0x8000ULL;')
@@ -69,10 +68,6 @@ class G4RenderLocalViewReplay(unittest.TestCase):
             'static void AdmissionDwmFrameRecordReject(ADMISSION_CONTEXT *a,void *c,ULONG b,NTSTATUS s){(void)a;(void)c;(void)b;(void)s;}\n'
             'static unsigned long long KeQueryInterruptTime(void){return 1234;}\n'
             'static void AdmissionDwmFrameRecordEnvelope(ADMISSION_CONTEXT *a,void *c,const ADMISSION_DWM_ENVELOPE_RECEIPT *r){(void)a;(void)c;observed_receipt=*r;}\n'
-            '#ifndef IO_NO_INCREMENT\n#define IO_NO_INCREMENT 0\n#endif\n'
-            'static int graph_end_calls;\n'
-            'static int AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *g){(void)g;++graph_end_calls;return 1;}\n'
-            'static void KeSetEvent(int *e,int i,int w){(void)i;(void)w;*e=1;}\n'
             '#include "g4_submit_virtual_functions.inc"')
         setup=shim.split('int main(void) {',1)[1].split('  assert(AdmissionG4SubmitVirtualEnvelope',1)[0]
         ending="""

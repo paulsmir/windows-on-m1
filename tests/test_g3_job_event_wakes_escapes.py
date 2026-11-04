@@ -30,6 +30,24 @@ class JobEventWakesEscapes(unittest.TestCase):
         signal = body.index("KeSetEvent(&state->JobEvent")
         self.assertLess(unlock, signal)
 
+    def test_job_waits_hold_no_process_lock(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? L2 step 1: job
+        completion takes the completing process's lock (P) before the state
+        lock. A JobEvent wait that keeps P deadlocks against that completion
+        until the 3 s bound, so every wait loop drops P with the state lock."""
+        sources = ((SRC, "AdmissionGpuvaG3PrivateEscape"), (SRC, "AdmissionGpuvaG3CopyEscape"),
+                   (PAGING, "AdmissionGpuvaG3BuildPagingBuffer"))
+        waits = 0
+        for path, name in sources:
+            body = function(path.read_text(), name)
+            for m in re.finditer(r"KeWaitForSingleObject\(&state->JobEvent", body):
+                loop = body[body.rindex("KeClearEvent(&state->JobEvent);", 0, m.start()):m.start()]
+                self.assertIn("AdmissionG3FindLockedProcess(", loop, name)
+                tail = loop[loop.rindex("ExReleaseFastMutex(&state->Lock);"):]
+                self.assertIn("KeReleaseGuardedMutex(&", tail, name)
+                waits += 1
+        self.assertEqual(waits, 4)
+
     def test_job_waits_block_on_the_event_with_wall_clock_bounds(self):
         text = SRC.read_text()
         for name in ("AdmissionGpuvaG3PrivateEscape", "AdmissionGpuvaG3CopyEscape"):

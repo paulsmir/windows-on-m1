@@ -44,7 +44,8 @@ typedef int NTSTATUS, BOOLEAN; typedef unsigned char *PUCHAR;
 #define RtlZeroMemory(p,n) memset(p,0,n)
 #define RtlCopyMemory memcpy
 typedef struct {int Lock;} ADMISSION_G3_STATE;
-typedef struct {int unused;} ADMISSION_G3_PROCESS;
+typedef struct {int Held;} KGUARDED_MUTEX;
+typedef struct {KGUARDED_MUTEX Lock;} ADMISSION_G3_PROCESS;
 typedef struct {void *Adapter;} DEVICE;
 typedef struct {struct {UINT Magic;DEVICE *Device;} Object;
  ADMISSION_G3_PROCESS *GpuvaG3Process;int GpuvaG3Poisoned;ULONGLONG GpuvaG3RootIpa;
@@ -61,6 +62,9 @@ static unsigned encoded;
 static int capacity_test;
 static void ExAcquireFastMutex(int *p){assert(!*p);*p=1;}
 static void ExReleaseFastMutex(int *p){assert(*p);*p=0;}
+/* L2 step 1: the per-process lock (P), never re-entered. */
+static void KeAcquireGuardedMutex(KGUARDED_MUTEX *m){assert(!m->Held);m->Held=1;}
+static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m){assert(m->Held);m->Held=0;}
 static NTSTATUS AdmissionG3ResolveLogicalVa(ADMISSION_G3_PROCESS *p,ULONGLONG root,
  ULONGLONG va,int write,ULONGLONG *ipa,UINT *segment){
  (void)p;(void)root;(void)write;

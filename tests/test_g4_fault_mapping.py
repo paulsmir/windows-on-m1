@@ -51,6 +51,12 @@ static int ExTryToAcquireFastMutex(int *m) {
   (void)m; assert(!locked); if(busy) return 0; locked=1; return 1;
 }
 static void ExReleaseFastMutex(int *m) { (void)m; assert(locked); locked=0; }
+/* L2 step 1: the process lock is only tried under the state lock. */
+typedef struct { int Held; } KGUARDED_MUTEX;
+static int KeTryToAcquireGuardedMutex(KGUARDED_MUTEX *m) {
+  assert(locked); if(m->Held) return 0; m->Held=1; return 1;
+}
+static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m) { assert(m->Held); m->Held=0; }
 typedef struct _ADMISSION_RENDER_CONTEXT {
   struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext;
 } ADMISSION_RENDER_CONTEXT;
@@ -65,6 +71,7 @@ typedef struct {
   ADMISSION_G3_TABLE_SHADOW *TableShadowBrokerBuckets[256];
   ULONG OsProcessId, CpuOnlyMappings;
   ADMISSION_GPU_FAULT_DRILL FaultDrill;
+  KGUARDED_MUTEX Lock;
 } ADMISSION_G3_PROCESS;
 @@LEAF_TYPES@@
 typedef struct { int Lock; ADMISSION_G3_PROCESS *ActiveProcess; void *ActiveContext; ULONG ActiveFence;
@@ -109,6 +116,10 @@ int main(int argc, char **argv) {
   e.Flags=0; AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r); assert(!r.Version);
   e.Flags=14; busy=1; AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);
   assert(r.Status==AdmissionGpuFaultMappingBusy); busy=0; memset(&r,0,sizeof(r));
+  /* L2: the active process's own parse holds its lock: busy, never a wait. */
+  p.Lock.Held=1; AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);
+  assert(r.Status==AdmissionGpuFaultMappingBusy && !locked && !p.FaultDrill.FaultInfo);
+  p.Lock.Held=0; memset(&r,0,sizeof(r));
   irql=1; AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);
   assert(r.Status==AdmissionGpuFaultMappingUnavailable); irql=0; memset(&r,0,sizeof(r));
   ++e.Fence; AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);
@@ -131,7 +142,7 @@ int main(int argc, char **argv) {
   assert(r.Status==AdmissionGpuFaultMappingNoShadow); shadow.LogicalPtes=ptes;
   memset(&r,0,sizeof(r)); AdmissionGpuvaG3CaptureFaultMapping(&adapter,&e,&r);
   assert(r.Status==AdmissionGpuFaultMappingCaptured && !r.NativePresent);
-  assert(r.FaultVa==va && r.Ptes[1].Allocation==0xabc001 && !locked);
+  assert(r.FaultVa==va && r.Ptes[1].Allocation==0xabc001 && !locked && !p.Lock.Held);
   assert(r.Ptes[3].GuestIpa==0xa00006000ULL && r.MappingGeneration==1234);
   @@HISTORY_CASES@@
   FILE *f=fopen(argv[1],"wb"); assert(f && fwrite(&r,sizeof(r),1,f)==1); fclose(f);

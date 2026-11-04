@@ -115,6 +115,7 @@ int main(void) {
     def test_actual_completion_publishes_before_release_and_fails_closed(self):
         source = (RENDER / "src/gpuva_g3_windows.c").read_text()
         functions = "\n".join(function_body(source, name) for name in (
+            "AdmissionG3LockFoundProcess",
             "AdmissionG3PublishTimestampLocked", "AdmissionGpuvaG3CompleteJobTimestamp",
             "AdmissionGpuvaG3CompleteJob"))
         run_c(COMPLETION_TYPES + functions + COMPLETION_CASES)
@@ -173,7 +174,11 @@ typedef struct { void *CpuAddress; ULONGLONG GuestIpaAddress, Bytes; } ADMISSION
 typedef struct { int JobInFlight, Uncertain; ULONGLONG LeaseToken; } GRAPH;
 typedef struct _ADMISSION_RENDER_CONTEXT { void *GpuvaG3Process; int GpuvaG3Poisoned; } ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE { struct _ADMISSION_G3_PRIVATE_SCENE *Next; unsigned Queued, Started, Fence, GpuDone; } ADMISSION_G3_PRIVATE_SCENE;
-typedef struct { GRAPH Graph; int Poisoned, CpuOnlyMappings; ADMISSION_G3_PRIVATE_SCENE *PrivateScenes; } ADMISSION_G3_PROCESS;
+/* L2 step 1: the per-process lock (P) and its rundown. */
+typedef struct { int Held; } KGUARDED_MUTEX;
+typedef struct { int Refs, Down; } EX_RUNDOWN_REF;
+typedef struct { GRAPH Graph; int Poisoned, CpuOnlyMappings; ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
+  KGUARDED_MUTEX Lock; EX_RUNDOWN_REF Rundown; } ADMISSION_G3_PROCESS;
 typedef struct { int Lock, JobEvent; ADMISSION_G3_PROCESS *ActiveProcess; void *ActiveContext; ULONG ActiveFence, LastCompletedFence, PrivateCompletionFence;
   void *SuccessorContext; ULONG SuccessorFence; /* rc102: none here */ } ADMISSION_G3_STATE;
 typedef struct { void *GpuvaG3State; } ADMISSION_CONTEXT;
@@ -185,6 +190,12 @@ static ADMISSION_G3_STATE *live_state;
 static unsigned KeGetCurrentIrql(void) { return irql; }
 static void ExAcquireFastMutex(int *lock) { assert(!*lock); *lock = 1; }
 static void ExReleaseFastMutex(int *lock) { assert(*lock); *lock = 0; }
+/* P is never awaited under G (lock rank); a try never waits. */
+static void KeAcquireGuardedMutex(KGUARDED_MUTEX *m) { assert(!live_state->Lock && !m->Held); m->Held = 1; }
+static BOOLEAN KeTryToAcquireGuardedMutex(KGUARDED_MUTEX *m) { if (m->Held) return FALSE; m->Held = 1; return TRUE; }
+static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m) { assert(m->Held); m->Held = 0; }
+static BOOLEAN ExAcquireRundownProtection(EX_RUNDOWN_REF *r) { if (r->Down) return FALSE; ++r->Refs; return TRUE; }
+static void ExReleaseRundownProtection(EX_RUNDOWN_REF *r) { assert(r->Refs > 0); --r->Refs; }
 static void KeMemoryBarrier(void) { assert(live_state->Lock); ++barriers; }
 static void KeSetEvent(int *event, int increment, int wait) { (void)event;(void)increment;(void)wait; ++wakes; }
 static int AdmissionMemoryRuntimeLocalView(ADMISSION_CONTEXT *a, ADMISSION_SCANOUT_MEMORY_VIEW *v) { (void)a; *v = (ADMISSION_SCANOUT_MEMORY_VIEW){local_bytes,0x100000, sizeof(local_bytes)}; return 0; }
@@ -211,6 +222,7 @@ int main(void) {
  setup(&a,&s,&p,&c);
  assert(AdmissionGpuvaG3CompleteJobTimestamp(&a,&c,7,0x1234500008ULL,expected));
  assert(end_calls==1 && barriers>=1 && wakes==1 && !s.ActiveProcess && s.LastCompletedFence==7);
+ assert(!s.Lock && !p.Lock.Held && !p.Rundown.Refs);
  /* A completion retry must not reread mappings or republish an already freed BO. */
  pte_ok=access_ok=translate_ok=0;
  assert(AdmissionGpuvaG3CompleteJobTimestamp(&a,&c,7,0x1234500008ULL,expected));
@@ -229,6 +241,7 @@ int main(void) {
    }
    assert(!AdmissionGpuvaG3CompleteJobTimestamp(&a,&c,fence,va,value));
    assert(!end_calls && !wakes && s.ActiveProcess==&p && !s.LastCompletedFence);
+   assert(!s.Lock && !p.Lock.Held);
    ULONGLONG observed=0;memcpy(&observed,local_bytes+8,8);assert(!observed);
  }
  setup(&a,&s,&p,&c);pte.SegmentId=3;pte.GuestIpa=0x200000;translated=0x200008;
@@ -238,6 +251,7 @@ int main(void) {
  setup(&a,&s,&p,&c);end_ok=0;
  assert(!AdmissionGpuvaG3CompleteJobTimestamp(&a,&c,7,0x1234500008ULL,expected));
  assert(p.Poisoned && s.ActiveProcess==&p && !s.LastCompletedFence);
+ assert(!s.Lock && !p.Lock.Held);
  return 0;
 }
 '''

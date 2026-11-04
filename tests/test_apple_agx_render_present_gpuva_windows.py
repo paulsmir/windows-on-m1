@@ -78,11 +78,13 @@ typedef struct _APPLE_AGX_GPUVA_G3_LOGICAL_PTE {
 } APPLE_AGX_GPUVA_G3_LOGICAL_PTE;
 #define APPLE_AGX_GPUVA_G3_VALID 1u
 #define APPLE_AGX_GPUVA_G3_WRITE 2u
+typedef struct { int Held; } KGUARDED_MUTEX; /* L2 step 1: process lock */
 typedef struct _ADMISSION_G3_PROCESS {
   ADMISSION_G3_STATE *State;
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
   int Poisoned;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE ResidentPtes[8];
+  KGUARDED_MUTEX Lock;
 } ADMISSION_G3_PROCESS;
 typedef struct {
   void *CpuAddress;
@@ -103,6 +105,8 @@ static void *ExAllocatePool2(unsigned flags,size_t bytes,unsigned tag){(void)fla
 static void ExFreePoolWithTag(void *pointer,unsigned tag){(void)tag;free(pointer);}
 static void ExAcquireFastMutex(int *lock){assert(!*lock);*lock=1;}
 static void ExReleaseFastMutex(int *lock){assert(*lock);*lock=0;}
+static void KeAcquireGuardedMutex(KGUARDED_MUTEX *m){assert(!m->Held);m->Held=1;}
+static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m){assert(m->Held);m->Held=0;}
 static int AdmissionMemoryPoolView(ADMISSION_CONTEXT *context,
     ADMISSION_SCANOUT_MEMORY_VIEW *view){(void)context;memset(view,0,sizeof(*view));return 0;}
 static NTSTATUS AdmissionMemoryRuntimeLocalView(ADMISSION_CONTEXT *context,

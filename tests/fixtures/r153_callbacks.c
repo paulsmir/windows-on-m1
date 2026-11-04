@@ -13,8 +13,16 @@ typedef struct _LIST_ENTRY { struct _LIST_ENTRY *Flink, *Blink; } LIST_ENTRY, *P
 static void ExAcquireFastMutex(unsigned *lock) { assert(!*lock); *lock=1; }
 static void ExReleaseFastMutex(unsigned *lock) { assert(*lock); *lock=0; }
 typedef struct { unsigned Lock; LIST_ENTRY Processes; } ADMISSION_G3_STATE;
+/* L2 step 1: the per-process lock (P); a listed process is locked in
+ * place when free (the state lock stays held). */
+typedef struct { unsigned Held; } KGUARDED_MUTEX;
 typedef struct { LIST_ENTRY Link; struct { unsigned long long ProcessId; } Graph;
-    APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager; } ADMISSION_G3_PROCESS;
+    APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager; KGUARDED_MUTEX Lock; } ADMISSION_G3_PROCESS;
+static BOOLEAN AdmissionG3LockFoundProcess(ADMISSION_G3_STATE *s, ADMISSION_G3_PROCESS *p,
+    BOOLEAN *dropped) {
+  assert(s->Lock && !p->Lock.Held); p->Lock.Held=1; if (dropped) *dropped=FALSE; return TRUE;
+}
+static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m) { assert(m->Held); m->Held=0; }
 #define RTL_NUMBER_OF(a) (sizeof(a)/sizeof((a)[0]))
 typedef struct {
   APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;

@@ -55,7 +55,8 @@ typedef enum { DXGK_OPERATION_TRANSFER = 0, DXGK_OPERATION_DISCARD_CONTENT = 2,
   DXGK_OPERATION_FLUSH_TLB = 12, DXGK_OPERATION_VIRTUAL_FILL = 13 } DXGK_BUILDPAGINGBUFFER_OPERATION;
 struct UPT { HANDLE hProcess; }; struct FT { HANDLE hProcess; };
 struct DXGKARG_BUILDPAGINGBUFFER { DXGK_BUILDPAGINGBUFFER_OPERATION Operation; UPT UpdatePageTable; FT FlushTlb; };
-struct ADMISSION_G3_PROCESS { BOOLEAN Poisoned; ULONG PoisonSite; };
+struct KGUARDED_MUTEX { int Held; };
+struct ADMISSION_G3_PROCESS { BOOLEAN Poisoned; ULONG PoisonSite; KGUARDED_MUTEX Lock; };
 struct ADMISSION_G3_STATE { int Lock; ADMISSION_G3_PROCESS *only; HANDLE handle; };
 struct ADMISSION_CONTEXT { void *GpuvaG3State; volatile LONG G3PagingContractCompletions, G3PagingContractLastStatus; };
 #define ADMISSION_G3_POISON(Process, File) do { (Process)->Poisoned = TRUE; if (!(Process)->PoisonSite) (Process)->PoisonSite = ((ULONG)(File) << 16) | 1u; } while (0)
@@ -64,6 +65,10 @@ static void ExAcquireFastMutex(int*){} static void ExReleaseFastMutex(int*){}
 static LONG InterlockedIncrement(volatile LONG *p){ return ++*p; }
 static LONG InterlockedExchange(volatile LONG *p, LONG v){ LONG o=*p; *p=v; return o; }
 static ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(ADMISSION_G3_STATE *s, HANDLE h){ return h==s->handle ? s->only : NULL; }
+/* L2 step 1: the poison is a process-owned write, under its lock. */
+static ADMISSION_G3_PROCESS *AdmissionG3FindLockedProcess(ADMISSION_G3_STATE *s, HANDLE h){
+  ADMISSION_G3_PROCESS *p=AdmissionGpuvaG3FindProcess(s,h); if(p){ assert(!p->Lock.Held); p->Lock.Held=1; } return p; }
+static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m){ assert(m->Held); m->Held=0; }
 static NTSTATUS inner_status;
 static NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT*, DXGKARG_BUILDPAGINGBUFFER*){ return inner_status; }
 static void AdmissionRecordPagingInternalStatus(ADMISSION_CONTEXT*, const DXGKARG_BUILDPAGINGBUFFER*, NTSTATUS){}

@@ -78,6 +78,7 @@ class TdrDrillPoisonedCompletion(unittest.TestCase):
                 'AppleAgxPlatformTransportValid', 'AppleAgxPlatformProviderDrainEvents',
                 'AppleAgxPlatformProviderPoll')] +
             [extract(gpuva, n) for n in (
+                'AdmissionG3LockFoundProcess',
                 'AdmissionG3PublishTimestampLocked', 'AdmissionGpuvaG3CompleteJobTimestamp')] +
             [extract(backend, n) for n in (
                 'AdmissionRenderTimestampPair', 'AdmissionGpuTimestampEndNanoseconds',
@@ -200,7 +201,11 @@ typedef struct { int JobInFlight, Uncertain; ULONGLONG LeaseToken; } GRAPH;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   struct _ADMISSION_G3_PRIVATE_SCENE *Next; unsigned Queued, Started, Fence, GpuDone;
 } ADMISSION_G3_PRIVATE_SCENE;
-typedef struct { GRAPH Graph; int Poisoned, CpuOnlyMappings; ADMISSION_G3_PRIVATE_SCENE *PrivateScenes; } ADMISSION_G3_PROCESS;
+/* L2 step 1: the per-process lock (P) and its rundown. */
+typedef struct { int Held; } KGUARDED_MUTEX;
+typedef struct { int Refs, Down; } EX_RUNDOWN_REF;
+typedef struct { GRAPH Graph; int Poisoned, CpuOnlyMappings; ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
+  KGUARDED_MUTEX Lock; EX_RUNDOWN_REF Rundown; } ADMISSION_G3_PROCESS;
 typedef struct {
   FAST_MUTEX Lock; KEVENT JobEvent; ADMISSION_G3_PROCESS *ActiveProcess; void *ActiveContext;
   ULONG ActiveFence, LastCompletedFence, PrivateCompletionFence;
@@ -284,6 +289,11 @@ static LARGE_INTEGER KeQueryPerformanceCounter(LARGE_INTEGER *f) {
   if (f) f->QuadPart = 24000000; return (LARGE_INTEGER){1}; }
 static void ExAcquireFastMutex(FAST_MUTEX *lock) { assert(!*lock); *lock = 1; }
 static void ExReleaseFastMutex(FAST_MUTEX *lock) { assert(*lock); *lock = 0; }
+static void KeAcquireGuardedMutex(KGUARDED_MUTEX *m) { assert(!live_state->Lock && !m->Held); m->Held = 1; }
+static int KeTryToAcquireGuardedMutex(KGUARDED_MUTEX *m) { if (m->Held) return 0; m->Held = 1; return 1; }
+static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m) { assert(m->Held); m->Held = 0; }
+static int ExAcquireRundownProtection(EX_RUNDOWN_REF *r) { if (r->Down) return 0; ++r->Refs; return 1; }
+static void ExReleaseRundownProtection(EX_RUNDOWN_REF *r) { assert(r->Refs > 0); --r->Refs; }
 static void KeMemoryBarrier(void) { assert(live_state->Lock); }
 static void KeSetEvent(KEVENT *e, int i, int w) { (void)i; (void)w; e->Signaled = 1; }
 static unsigned AdmissionRenderPacketState(PACKET *p) { return p->State; }

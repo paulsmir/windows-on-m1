@@ -49,7 +49,11 @@ typedef struct { FAST_MUTEX Lock; ADMISSION_CONTEXT *Adapter; ULONG PrivateCompl
 typedef struct _ADMISSION_RENDER_CONTEXT { void *GpuvaG3Process; volatile LONG GpuvaG3PrivateFence, GpuvaG3PrivateFence2; } ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE { struct _ADMISSION_G3_PRIVATE_SCENE *Next; ADMISSION_RENDER_CONTEXT *Context;
   ULONG Fence, ResumeFence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined; } ADMISSION_G3_PRIVATE_SCENE;
-typedef struct { ADMISSION_G3_STATE *State; ADMISSION_G3_PRIVATE_SCENE *PrivateScenes; BOOLEAN Poisoned; ULONG PoisonSite, PoisonBrokerStatus, OsProcessId; } ADMISSION_G3_PROCESS;
+/* L2 step 1: the per-process lock (P), taken before the state lock. */
+typedef struct { int held; } KGUARDED_MUTEX;
+static void KeAcquireGuardedMutex(KGUARDED_MUTEX *m){assert(!m->held);m->held=1;}
+static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m){assert(m->held);m->held=0;}
+typedef struct { ADMISSION_G3_STATE *State; ADMISSION_G3_PRIVATE_SCENE *PrivateScenes; BOOLEAN Poisoned; ULONG PoisonSite, PoisonBrokerStatus, OsProcessId; KGUARDED_MUTEX Lock; } ADMISSION_G3_PROCESS;
 static int reaps;
 static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p){++reaps;return !p->Poisoned;}
 @@FUNC@@

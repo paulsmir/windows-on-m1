@@ -243,8 +243,11 @@ typedef struct _CTX { struct _CTX *GpuvaG3NextContext; struct { void *Device; } 
  UINT Win32Transport,GpuvaG3Closing,GpuvaG3Poisoned; ULONGLONG GpuvaG3RootIpa; } ADMISSION_RENDER_CONTEXT;
 typedef struct _SHADOW { struct _SHADOW *NextBroker; ULONGLONG BrokerIpa;
  APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ResidentPtes; } ADMISSION_G3_TABLE_SHADOW;
+/* L2 step 1: the per-process lock, taken by the found-process lookup. */
+typedef struct { int Held; } KGUARDED_MUTEX;
 typedef struct { APPLE_AGX_GPUVA_G3_GRAPH Graph; APPLE_AGX_G3_NATIVE_CACHE NativeReady; UINT Poisoned,CpuOnlyMappings;
- ADMISSION_RENDER_CONTEXT *Contexts; ADMISSION_G3_TABLE_SHADOW *TableShadowBrokerBuckets[256]; } ADMISSION_G3_PROCESS;
+ ADMISSION_RENDER_CONTEXT *Contexts; ADMISSION_G3_TABLE_SHADOW *TableShadowBrokerBuckets[256];
+ KGUARDED_MUTEX Lock; } ADMISSION_G3_PROCESS;
 typedef struct { int Lock; ADMISSION_G3_PROCESS *Process; } ADMISSION_G3_STATE;
 typedef struct { UINT hObject,Type; struct { UINT DeviceSpecific; } Flags; } DXGKARGCB_GETHANDLEDATA;
 typedef struct { UINT Type; void *ReleaseHandle; } DXGKARGCB_RELEASEHANDLEDATA;
@@ -263,6 +266,11 @@ static void release(DXGKARGCB_RELEASEHANDLEDATA r) { assert(r.ReleaseHandle==&op
 static ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(ADMISSION_G3_STATE *s,HANDLE h) {
  assert(locked); return h==s->Process ? s->Process : NULL;
 }
+static ADMISSION_G3_PROCESS *AdmissionG3FindLockedProcess(ADMISSION_G3_STATE *s,HANDLE h) {
+ ADMISSION_G3_PROCESS *p=AdmissionGpuvaG3FindProcess(s,h);
+ if(p){assert(!p->Lock.Held);p->Lock.Held=1;} return p;
+}
+static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m) { assert(m->Held); m->Held=0; }
 @@FUNCS@@
 static APPLE_AGX_GPUVA_G3_NODE root,middle,table,re,me,leaves[4];
 static APPLE_AGX_GPUVA_G3_NODE *rs[8],*ms[2048],*ls[2048];

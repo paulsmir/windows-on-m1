@@ -1298,6 +1298,7 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
       record.PatternOffset = (UINT)offset;
       record.FenceValue = args->SignalMonitoredFence.MonitoredFenceValue;
     }
+    KeAcquireGuardedMutex(&process->Lock);
     ExAcquireFastMutex(&state->Lock);
     status = AdmissionG3ResolveLogicalVa(process, context->GpuvaG3RootIpa,
         dst, TRUE,
@@ -1308,6 +1309,7 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
           context->GpuvaG3RootIpa, src, FALSE,
           &record.SourceIpa, &record.SourceSegment);
     ExReleaseFastMutex(&state->Lock);
+    KeReleaseGuardedMutex(&process->Lock);
     if (!NT_SUCCESS(status)) return status;
     if (record.Kind == AdmissionPagingVirtualTransfer) {
       /* VidMm's "local" is any memory segment: 2 and (M2-f2) 3. */
@@ -1340,6 +1342,7 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
     if (AdmissionPagingContiguousRun(&record) &&
         (record.Kind != AdmissionPagingVirtualTransfer ||
          ((src ^ dst) & 0xfffULL) == 0ULL)) {
+      KeAcquireGuardedMutex(&process->Lock);
       ExAcquireFastMutex(&state->Lock);
       while (offset + bytes < total && bytes < ADMISSION_PAGING_LOCAL_RUN_MAX) {
         ULONGLONG next_ipa;
@@ -1364,6 +1367,7 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
         bytes += chunk;
       }
       ExReleaseFastMutex(&state->Lock);
+      KeReleaseGuardedMutex(&process->Lock);
       record.Bytes = bytes;
     }
     /* M2-f3: segment-3 pages this record names stay committed until it has
@@ -1625,10 +1629,11 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBufferChecked(ADMISSION_CONTEXT *adapter,
   state = adapter != NULL ? (ADMISSION_G3_STATE *)adapter->GpuvaG3State : NULL;
   if (state != NULL && KeGetCurrentIrql() == PASSIVE_LEVEL) {
     ExAcquireFastMutex(&state->Lock);
-    process = AdmissionGpuvaG3FindProcess(state, handle);
+    process = AdmissionG3FindLockedProcess(state, handle);
     if (process != NULL && !process->Poisoned)
       ADMISSION_G3_POISON(process, 0x26u);
     ExReleaseFastMutex(&state->Lock);
+    if (process != NULL) KeReleaseGuardedMutex(&process->Lock);
   }
   if (adapter != NULL) {
     (void)InterlockedIncrement(&adapter->G3PagingContractCompletions);
@@ -1878,7 +1883,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     for (wait_ms = 0u;; ++wait_ms) {
       KeClearEvent(&state->JobEvent);
       ExAcquireFastMutex(&state->Lock);
-      process = AdmissionGpuvaG3FindProcess(state, args->FlushTlb.hProcess);
+      process = AdmissionG3FindLockedProcess(state, args->FlushTlb.hProcess);
       timed_out = KeQueryInterruptTime() >= deadline ? TRUE : FALSE;
       if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
           (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
@@ -1895,6 +1900,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
         firstWait.AddressKind = 1u; firstWait.Index = ~0ULL;
       }
       ExReleaseFastMutex(&state->Lock);
+      /* L2: completion takes this process lock; wait with neither held. */
+      KeReleaseGuardedMutex(&process->Lock);
       delay.QuadPart = -10000LL; /* 1 ms backstop */
       (void)KeWaitForSingleObject(&state->JobEvent, Executive, KernelMode,
                                   FALSE, &delay);
@@ -1973,6 +1980,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       status = STATUS_DEVICE_HARDWARE_ERROR;
     }
     ExReleaseFastMutex(&state->Lock);
+    if (process != NULL) KeReleaseGuardedMutex(&process->Lock);
     AdmissionRecordGpuvaG3Flush(adapter, &receipt);
     AdmissionRecordGpuvaG3BrokerFailures(adapter, &state->Client);
     AdmissionRecordG3PagingWait(adapter);
@@ -2050,7 +2058,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   for (wait_ms = 0u;; ++wait_ms) {
     KeClearEvent(&state->JobEvent);
     ExAcquireFastMutex(&state->Lock);
-    process = AdmissionGpuvaG3FindProcess(state, update->hProcess);
+    process = AdmissionG3FindLockedProcess(state, update->hProcess);
     liveReason = AdmissionG3LiveUpdateReason(process, original_table_ipa, update, adapter, &detail);
     live_update = liveReason == AdmissionLiveWaitEligible ? TRUE : FALSE;
     timed_out = KeQueryInterruptTime() >= deadline ? TRUE : FALSE;
@@ -2081,6 +2089,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       firstWait.AddressKind = 1u;
     }
     ExReleaseFastMutex(&state->Lock);
+    /* L2: completion takes this process lock; wait with neither held. */
+    KeReleaseGuardedMutex(&process->Lock);
     delay.QuadPart = -10000LL; /* 1 ms backstop */
     (void)KeWaitForSingleObject(&state->JobEvent, Executive, KernelMode,
                                 FALSE, &delay);
@@ -2233,6 +2243,7 @@ PagingDone:
   if (state->SystemShapesGeneration != shapes_before)
     AdmissionRecordGpuvaG3SystemShapes(adapter, state->SystemShapes);
   ExReleaseFastMutex(&state->Lock);
+  if (process != NULL) KeReleaseGuardedMutex(&process->Lock);
   if (unpublished_changed)
     AdmissionRecordGpuvaG3UnpublishedGroups(adapter, unpublished_after);
   if (leaf64k_changed)

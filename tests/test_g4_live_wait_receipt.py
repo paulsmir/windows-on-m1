@@ -34,7 +34,7 @@ class LiveWaitReceipt(unittest.TestCase):
             for name in ('AdmissionG3NativeInvalidatePtes','AdmissionG3AttachPrivateLeaves','AdmissionG3PrivateLeafSet'):
                 parts.append(replay.body(private,name))
             windows=(SRC/'gpuva_g3_windows.c').read_text()
-            for name in ('AdmissionG3AllocateNode','AdmissionG3FreeNode','AdmissionGpuvaG3FindProcess',
+            for name in ('AdmissionG3AllocateNode','AdmissionG3FreeNode','AdmissionGpuvaG3FindProcess','AdmissionG3LockFoundProcess','AdmissionG3FindLockedProcess',
                          'AdmissionGpuvaG3BrokerTable','AdmissionGpuvaG3MirrorTable','AdmissionGpuvaG3ResolveTable'):
                 parts.append(replay.body(windows,name))
             paging=(SRC/'gpuva_g3_paging_windows.c').read_text()

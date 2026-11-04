@@ -184,6 +184,7 @@ class TdrDrillSetB(unittest.TestCase):
                 'AppleAgxPlatformTransportValid', 'AppleAgxPlatformProviderDrainEvents',
                 'AppleAgxPlatformProviderPoll')] +
             [extract(gpuva, n) for n in (
+                'AdmissionG3LockFoundProcess',
                 'AdmissionG3PublishTimestampLocked', 'AdmissionGpuvaG3CompleteJobTimestamp')] +
             [extract(backend, n) for n in (
                 'AdmissionRenderTimestampPair', 'AdmissionGpuTimestampEndNanoseconds',

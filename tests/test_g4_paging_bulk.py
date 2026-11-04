@@ -60,7 +60,7 @@ int main(void){
  APPLE_AGX_GPUVA_G3_NODE middle={NULL,2,3,0},root={&middle,1,2,0};
  static APPLE_AGX_GPUVA_G3_LOGICAL_PTE ptes[8192];
  ADMISSION_G3_TABLE_SHADOW table={NULL,3,ptes};
- ADMISSION_G3_PROCESS p={{1,0,&root},&table};
+ ADMISSION_G3_PROCESS p={{1,0,&root},&table,{0}};
  ADMISSION_RENDER_CONTEXT c={{123,&d},&p,0,1};
  unsigned char dma[4096];ADMISSION_PAGING_RECORD records[64];
  const UINT bytes=0x402001;
