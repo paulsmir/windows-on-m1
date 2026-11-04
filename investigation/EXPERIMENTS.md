@@ -68968,3 +68968,17 @@ EXP2164 HARDWARE ACTUAL (2026-11-04T19:59:14Z): **V1 code with Wom1G3RetainedSlo
 - Mid-arm BeginSplit: process-switch leases unchanged (9 > 100 us, mean 221 us), as expected with the switch off.
 - Verdict: switch-off path ACCEPTED functionally; the -1.0 % is not proven (single run, no ABBA) and is re-checked against the switch-on run in the same package.
 - Recovery: rec2164h.
+
+EXP2165 HARDWARE BEFORE 2026-11-04T20:13:27Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 (single change vs EXP2164). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF (+ mid-arm receipts).
+- WHY THIS HYPOTHESIS: (1) EXP2163: each GravityMark <-> DWM switch re-leases slot 1 (V5 LEASE = slot write + TLBI ASIDE1OS + DSB OSH), 160-272 us, twice per frame; (2) m1n1 supports concurrent owners on slots 1..63 and invalidates an owner's leased slots on every leaf/parent update; Asahi keeps a VM's slot across jobs (mmu.rs Uat::bind, slotalloc); (3) offline real-broker replay: two alternating processes take 2 leases in total.
+- WINDOWS CONTRACT: unchanged (VidMm page-table/flush DDIs; leases are released before any translation change of an idle process).
+- AGX/ASAHI CONTRACT: firmware commands carry the job's vm slot (render template context_id, compute/prelude/present VmSlot); slots 2..5 retained per process; slot 1 keeps its per-job meaning.
+- TRANSLATION: process -> preferred retained slot; BeginJob = JOB_BEGIN while leased; mapping change of an idle leased process = RELEASE first; buffer manager re-InitBM on slot change.
+- WHAT IS STILL UNKNOWN: firmware behaviour for consecutive jobs with different vm slots on one shared queue (never exercised by Asahi on one queue); initial TTBR of slots 2..5 (zero expected).
+- Expected: process-switch lease stage <= 20 us (EXP2164: 221 us); LEASE count far below EXP2164; suite 119/0; no GPU faults; HD PERF >= EXP2164 + ~1 %.
+- Failure criteria: any GPU fault, TDR, bugcheck, image corruption, suite regression, quarantine count > 0.
+- Recovery: rec2165h.
+- Hashes: sys 8b4ab580db40, UmdArm64 5bc53fc5c07d, UmdX64 bfb6d3f223d3, Umd32 0439a3a29387; manifest 5d39c83a1c11, hardware-manifest c4afb46e5938; probe2165.sh 6b7b6fd7dc24 (PROBE_LINT_OK); visible recovery rec2165h 0fa26b84a41c3d95; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
+- Recovery rec2165h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2165-v1on/run2165.sh.
