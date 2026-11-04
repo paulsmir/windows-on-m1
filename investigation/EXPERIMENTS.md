@@ -68897,3 +68897,15 @@ EXP2160 HARDWARE ACTUAL (2026-11-04T16:47:09Z): **REJECTED: the L2 per-process l
 - Recovery: rec2160h (at-proxy) RECOVERY_DONE.
 
 EXP2160 CORRECTION (2026-11-04T16:54:53Z) to the ACTUAL above: root cause found offline (investigation/analysis/L2-exp2160-bugcheck.md). 0x113 subtype 0x10 with P3=0/P4=1 is dxgkrnl's DDI IRQL check (entry PASSIVE, exit APC), not a bad status: since Windows 8 guarded mutexes are implemented as fast mutexes (Microsoft Learn, "Fast Mutexes and Guarded Mutexes"), so each saves the previous IRQL. 32d363ef try-acquired P under G and released G before P (gpuva_g3_paging_windows.c UPDATE_PAGE_TABLE path), returning to dxgkrnl at APC_LEVEL; the same pattern exists at ~10 other sites. The test shim assumed a guarded mutex saves no IRQL. A retry needs (1) a shim that saves/restores IRQL for both mutex kinds with an exit-IRQL assertion (RED at 32d363ef), (2) one acquisition order everywhere (pin with rundown, drop G, take P, retake G) so releases are LIFO.
+
+EXP2161 HARDWARE BEFORE 2026-11-04T17:55:35Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 (as EXP2158). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2158 ring: the GravityMark compute job that follows DWM's job each frame spends ~200 us in BeginJob (207/209/196 us) while every other job takes 2-18 us, and the V5 LEASE averages 10.6 us, so the time is the re-parse; (2) source: a leaf change anywhere in a 32 MiB leaf table dropped every proof crossing that table (proof_invalidate matched tables only), and GravityMark remaps upload/dynamic pages between frames (52732 paging builds); (3) offline: the out-of-range keep / in-range drop test is RED before, GREEN after.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged; the cached proof answers exactly as the walk (a changed page inside the range still drops it).
+- WHAT IS STILL UNKNOWN: whether GravityMark's per-frame leaf changes are outside the proven ranges.
+- Expected: BeginJob of the post-DWM compute job falls from ~200 us toward ~20 us; R7 -> C0 kick span shorter than EXP2158 (~1.2 ms); HD PERF >= 39.38 FPS.
+- Failure criteria: suite regressions vs 119/0, GPU faults, TDR, image errors; no change in the post-DWM BeginJob (hypothesis rejected).
+- Recovery: rec2161h.
+- Hashes: sys 8c4fa5bb23d4, UmdArm64 0df40534dd78, UmdX64 520ef390b027, Umd32 c64279b868af; manifest bc714ba92a99, hardware-manifest c27509e64489; probe2161.sh 535784aeb884 (PROBE_LINT_OK); visible recovery rec2161h 69924f5b8cd528ed; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
+- Recovery rec2161h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2161-proofrange/run2161.sh.
