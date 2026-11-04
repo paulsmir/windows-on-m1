@@ -351,6 +351,14 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_JOB_WINDOW_KICK_FAILURE Depth2KickFailure;
   /* Diagnostic switches never follow functional depth/window switches. */
   BOOLEAN JobDiagnostics;
+  /* T1 (Wom1PresentTimestamps = 1, diagnostic): KMD present compute jobs
+   * record their firmware start/end (the GPU timestamp clock of the UMD's
+   * measure-gpu-stages) in a ring exported as Wom1PresentTs. */
+  BOOLEAN PresentTsEnabled;
+  struct {
+    ULONG Version, Bytes, Count, Head;
+    struct { ULONG ProcessId, Fence; ULONGLONG Start, End; } Ring[512];
+  } PresentTs;
   BOOLEAN RcReceiptEnabled, RcDepth2, RcExportPending;
   ADMISSION_DEPTH2_DRILL_RECEIPT Depth2Drill;
   BOOLEAN Depth2General;
@@ -830,7 +838,24 @@ static VOID AdmissionGpuCompletionCaptureWindows(
   const ADMISSION_JOB_TIMING_SLOT *slot;
   ADMISSION_GPU_COMPLETION record = {0};
   KIRQL oldIrql;
-  if (!job->CommandVa) return; /* internal present blit, not a UMD batch */
+  if (!job->CommandVa) {
+    /* internal present blit, not a UMD batch; T1 records its firmware span */
+    if (runtime->PresentTsEnabled && job->Kind == AppleAgxBackendJobCompute &&
+        job->ComputeTimestampBlock && status == AppleAgxBackendCompletionSuccess) {
+      ULONG i;
+      KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+      i = runtime->PresentTs.Head++ % RTL_NUMBER_OF(runtime->PresentTs.Ring);
+      slot = AdmissionJobTimingFind(&runtime->JobTiming, fence);
+      runtime->PresentTs.Ring[i].ProcessId = slot ? slot->ProcessId : 0u;
+      runtime->PresentTs.Ring[i].Fence = fence;
+      RtlCopyMemory(&runtime->PresentTs.Ring[i].Start, job->ComputeTimestampBlock, 8u);
+      RtlCopyMemory(&runtime->PresentTs.Ring[i].End,
+                    (const UCHAR *)job->ComputeTimestampBlock + 8u, 8u);
+      ++runtime->PresentTs.Count;
+      KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+    }
+    return;
+  }
   record.CommandVa = job->CommandVa;
   record.Fence = fence;
   record.Status = status == AppleAgxBackendCompletionSuccess ? 0u : 1u;
@@ -942,7 +967,8 @@ static VOID AdmissionJobTimingExportWindows(
   KIRQL oldIrql;
   ULONGLONG before;
   if (runtime == NULL ||
-      (!runtime->JobDiagnostics && !runtime->RcReceiptEnabled && !runtime->Depth2Drill.Mode) ||
+      (!runtime->JobDiagnostics && !runtime->RcReceiptEnabled && !runtime->Depth2Drill.Mode &&
+       !runtime->PresentTsEnabled) ||
       runtime->Adapter == NULL ||
       runtime->Adapter->PhysicalDeviceObject == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return;
@@ -951,6 +977,28 @@ static VOID AdmissionJobTimingExportWindows(
    * a second. Export at most every two seconds and never flush: the probe
    * reads the live values. Opt-in Q3 changes bypass this throttle so a
    * short probe exports its final pair without waiting for another job. */
+  if (!runtime->JobDiagnostics && runtime->PresentTsEnabled) {
+    /* T1: the present ring at most every two seconds */
+    LARGE_INTEGER frequency;
+    const ULONGLONG now = (ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
+    if (runtime->JobTimingExportQpc != 0ULL &&
+        now - runtime->JobTimingExportQpc < 2ULL * (ULONGLONG)frequency.QuadPart &&
+        !runtime->RcExportPending)
+      return;
+    runtime->JobTimingExportQpc = now;
+    runtime->PresentTs.Version = 1u;
+    runtime->PresentTs.Bytes = sizeof(runtime->PresentTs);
+    status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
+        PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
+    if (NT_SUCCESS(status)) {
+      RtlInitUnicodeString(&name, L"Wom1PresentTs");
+      (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &runtime->PresentTs,
+                          sizeof(runtime->PresentTs));
+      if (runtime->RcExportPending) AdmissionRcExportWindows(runtime, key);
+      ZwClose(key);
+    }
+    return;
+  }
   if (!runtime->JobDiagnostics) {
     if (!runtime->RcExportPending) return;
     status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
@@ -3323,6 +3371,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
      * start/end (EXP1341: a D3D TIMESTAMP may attach to the batch only
      * after a barrier flush submitted it, so no request reaches the KMD). */
     input.Timestamps = 1u;
+  } else if (runtime->PresentTsEnabled) {
+    input.Timestamps = 1u; /* T1 */
   }
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (!image->PresentCompute)
@@ -7327,6 +7377,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1ManagerSlots");
   runtime->JobDiagnostics =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDiagnostics");
+  runtime->PresentTsEnabled =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1PresentTimestamps");
   runtime->RcDepth2 = runtime->RcReceiptEnabled = runtime->RcExportPending = FALSE;
   runtime->Depth2General = FALSE;
   runtime->Depth2Prelude = FALSE;
