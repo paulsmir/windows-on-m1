@@ -1043,6 +1043,11 @@ static VOID AdmissionJobTimingExportWindows(
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->JobTimingSnapshot, sizeof(runtime->JobTimingSnapshot));
     }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    /* L1: the G3 lock profile, with a hot copy beside the dense ring. */
+    AdmissionGpuvaG3LockProfileExport(runtime->Adapter, key,
+        AdmissionJobTimingDense(&runtime->JobTimingSnapshot) ? TRUE : FALSE);
+#endif
     if (NT_SUCCESS(status) && runtime->FwTimingSnapshot.Count != 0u) {
       RtlInitUnicodeString(&name, L"Wom1FwTiming1112");
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,

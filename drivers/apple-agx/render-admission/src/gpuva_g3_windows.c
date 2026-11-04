@@ -8,6 +8,11 @@
 #include "apple_agx_present_job.h"
 #include "render_job_timing.h"
 #include "render_job_ahead.h"
+/* L1 receipt-only lock profile: every fast mutex in this file is the G3
+ * state Lock (gpuva_g3_private.h). */
+#define ADMISSION_G3_LOCK_FILE 1u
+#define ExAcquireFastMutex(m) ADMISSION_G3_PROFILED_ACQUIRE(m)
+#define ExReleaseFastMutex(m) ADMISSION_G3_PROFILED_RELEASE(m)
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
@@ -4186,6 +4191,40 @@ static BOOLEAN AdmissionG3PublishTimestampLocked(ADMISSION_CONTEXT *adapter,
   RtlCopyMemory((PUCHAR)view.CpuAddress + (SIZE_T)offset, &endNs, sizeof(endNs));
   KeMemoryBarrier();
   return TRUE;
+}
+
+VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *adapter, HANDLE key,
+    BOOLEAN dense) {
+  ADMISSION_G3_STATE *state;
+  UNICODE_STRING name;
+  LARGE_INTEGER frequency;
+  if (adapter == NULL || key == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (state == NULL) return;
+  (void)KeQueryPerformanceCounter(&frequency);
+  /* Raw lock: this export is not one of the profiled sites. */
+  ExAcquireFastMutex(&state->Lock);
+  if (!state->LockProfile.Enabled) {
+    state->LockProfile.Version = 1u;
+    state->LockProfile.Bytes = sizeof(state->LockProfile);
+    state->LockProfile.QpcFrequency = (ULONGLONG)frequency.QuadPart;
+    /* 100 us */
+    state->LockProfile.ThresholdTicks = (ULONGLONG)frequency.QuadPart / 10000ULL;
+    state->LockProfile.Enabled = 1u;
+  }
+  RtlCopyMemory(&state->LockProfileSnapshot, &state->LockProfile,
+                sizeof(state->LockProfileSnapshot));
+  ExReleaseFastMutex(&state->Lock);
+  RtlInitUnicodeString(&name, L"Wom1G3LockProfile");
+  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &state->LockProfileSnapshot,
+                      sizeof(state->LockProfileSnapshot));
+  if (dense) {
+    RtlInitUnicodeString(&name, L"Wom1G3LockProfileHot");
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY,
+                        &state->LockProfileSnapshot,
+                        sizeof(state->LockProfileSnapshot));
+  }
 }
 
 BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,

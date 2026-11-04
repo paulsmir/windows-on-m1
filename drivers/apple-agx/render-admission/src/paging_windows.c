@@ -4,6 +4,11 @@
  * source line. Consumers retain zero/nonzero semantics; reset clears it. */
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "gpuva_g3_private.h"
+/* L1 receipt-only lock profile: every fast mutex in this file is the G3
+ * state Lock (gpuva_g3_private.h). */
+#define ADMISSION_G3_LOCK_FILE 3u
+#define ExAcquireFastMutex(m) ADMISSION_G3_PROFILED_ACQUIRE(m)
+#define ExReleaseFastMutex(m) ADMISSION_G3_PROFILED_RELEASE(m)
 #endif
 
 static NTSTATUS AdmissionEncodePaging(

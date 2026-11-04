@@ -24,6 +24,29 @@ typedef struct _ADMISSION_G3_UPLOAD_TRACE {
   ULONG Bytes, Hash, GpuHash, Checks;
 } ADMISSION_G3_UPLOAD_TRACE;
 
+/* L1 receipt-only (Wom1JobDiagnostics): wait and hold time of the G3 lock per
+ * acquisition site ((file << 16) | line), and the latest long waits (with the
+ * site that held the lock when the waiter arrived) and long holds. Written
+ * under the lock itself; exported with the job timing (2 s throttle). */
+#define ADMISSION_G3_LOCK_SITES 128u
+#define ADMISSION_G3_LOCK_RING 64u
+typedef struct _ADMISSION_G3_LOCK_SITE {
+  ULONG Site, Reserved;
+  ULONGLONG Count, WaitTicks, WaitMax, HoldTicks, HoldMax;
+} ADMISSION_G3_LOCK_SITE;
+typedef struct _ADMISSION_G3_LOCK_EVENT {
+  ULONGLONG Qpc, Ticks;
+  ULONG Site, OtherSite;
+} ADMISSION_G3_LOCK_EVENT;
+typedef struct _ADMISSION_G3_LOCK_PROFILE {
+  ULONG Version, Bytes, Enabled, Dropped;
+  ULONGLONG QpcFrequency, ThresholdTicks;
+  ULONG NextWait, NextHold;
+  ADMISSION_G3_LOCK_SITE Sites[ADMISSION_G3_LOCK_SITES];
+  ADMISSION_G3_LOCK_EVENT Waits[ADMISSION_G3_LOCK_RING];
+  ADMISSION_G3_LOCK_EVENT Holds[ADMISSION_G3_LOCK_RING];
+} ADMISSION_G3_LOCK_PROFILE;
+
 typedef struct _ADMISSION_G3_STATE {
   ADMISSION_CONTEXT *Adapter;
   FAST_MUTEX Lock;
@@ -94,7 +117,86 @@ typedef struct _ADMISSION_G3_STATE {
     APPLE_AGX_G4_PRIVATE_HEADER_V5 Header;
     unsigned char Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   } G4ReparseV5;
+  /* L1 receipt-only: see ADMISSION_G3_LOCK_PROFILE. Owner fields are
+   * written while the lock is held. */
+  volatile LONG LockOwnerSite;
+  ULONGLONG LockAcquiredQpc;
+  ADMISSION_G3_LOCK_PROFILE LockProfile;
+  ADMISSION_G3_LOCK_PROFILE LockProfileSnapshot;
 } ADMISSION_G3_STATE;
+
+static __inline ADMISSION_G3_LOCK_SITE *AdmissionG3LockSiteSlot(
+    ADMISSION_G3_LOCK_PROFILE *p, ULONG site) {
+  ULONG i = (site * 2654435761u) >> 25, n;
+  for (n = 0u; n < ADMISSION_G3_LOCK_SITES;
+       ++n, i = (i + 1u) & (ADMISSION_G3_LOCK_SITES - 1u)) {
+    if (p->Sites[i].Site == site) return &p->Sites[i];
+    if (p->Sites[i].Site == 0u) { p->Sites[i].Site = site; return &p->Sites[i]; }
+  }
+  ++p->Dropped;
+  return NULL;
+}
+
+static __inline VOID AdmissionG3LockAt(ADMISSION_G3_STATE *s, ULONG site) {
+  ULONGLONG start = 0ULL, now;
+  LONG holder = 0;
+  ADMISSION_G3_LOCK_SITE *slot;
+  if (s->LockProfile.Enabled) {
+    start = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    holder = s->LockOwnerSite;
+  }
+  ExAcquireFastMutex(&s->Lock);
+  s->LockOwnerSite = (LONG)site;
+  s->LockAcquiredQpc = 0ULL;
+  if (!s->LockProfile.Enabled) return;
+  now = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  s->LockAcquiredQpc = now;
+  slot = AdmissionG3LockSiteSlot(&s->LockProfile, site);
+  if (slot == NULL || start == 0ULL || now < start) return;
+  ++slot->Count;
+  slot->WaitTicks += now - start;
+  if (now - start > slot->WaitMax) slot->WaitMax = now - start;
+  if (now - start >= s->LockProfile.ThresholdTicks) {
+    ADMISSION_G3_LOCK_EVENT *e = &s->LockProfile.Waits[
+        s->LockProfile.NextWait++ % ADMISSION_G3_LOCK_RING];
+    e->Qpc = now; e->Ticks = now - start;
+    e->Site = site; e->OtherSite = (ULONG)holder;
+  }
+}
+
+static __inline VOID AdmissionG3UnlockAt(ADMISSION_G3_STATE *s) {
+  ULONG site = (ULONG)s->LockOwnerSite;
+  ULONGLONG acquired = s->LockAcquiredQpc, now, hold;
+  ADMISSION_G3_LOCK_SITE *slot;
+  s->LockOwnerSite = 0;
+  s->LockAcquiredQpc = 0ULL;
+  if (s->LockProfile.Enabled && acquired != 0ULL && site != 0u) {
+    now = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    hold = now >= acquired ? now - acquired : 0ULL;
+    slot = AdmissionG3LockSiteSlot(&s->LockProfile, site);
+    if (slot != NULL) {
+      slot->HoldTicks += hold;
+      if (hold > slot->HoldMax) slot->HoldMax = hold;
+    }
+    if (hold >= s->LockProfile.ThresholdTicks) {
+      ADMISSION_G3_LOCK_EVENT *e = &s->LockProfile.Holds[
+          s->LockProfile.NextHold++ % ADMISSION_G3_LOCK_RING];
+      e->Qpc = now; e->Ticks = hold; e->Site = site; e->OtherSite = 0u;
+    }
+  }
+  ExReleaseFastMutex(&s->Lock);
+}
+
+static __inline ADMISSION_G3_STATE *AdmissionG3LockState(FAST_MUTEX *m) {
+  return CONTAINING_RECORD(m, ADMISSION_G3_STATE, Lock);
+}
+/* A file whose every fast mutex is the G3 state Lock defines
+ * ADMISSION_G3_LOCK_FILE after its last #include and maps ExAcquireFastMutex /
+ * ExReleaseFastMutex to these (the source keeps the plain WDK calls). */
+#define ADMISSION_G3_PROFILED_ACQUIRE(m) AdmissionG3LockAt( \
+    AdmissionG3LockState(m), (ADMISSION_G3_LOCK_FILE << 16) | (ULONG)__LINE__)
+#define ADMISSION_G3_PROFILED_RELEASE(m) \
+    AdmissionG3UnlockAt(AdmissionG3LockState(m))
 enum {
   ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS,
   ADMISSION_G3_PRIVATE_STAT_TRIM, ADMISSION_G3_PRIVATE_STAT_PRESSURE,

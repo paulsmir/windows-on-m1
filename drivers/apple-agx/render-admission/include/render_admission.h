@@ -2296,6 +2296,10 @@ BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *);
 BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *,
     ADMISSION_RENDER_CONTEXT *, ULONG Fence, ULONGLONG TimestampVa,
     ULONGLONG TimestampEndNs);
+/* L1 receipt-only: enables the G3 lock profile on its first call and writes
+ * Wom1G3LockProfile (and Wom1G3LockProfileHot when Dense) into Key. */
+VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *, HANDLE Key,
+    BOOLEAN Dense);
 /* noinline: its _ReturnAddress names the cancelling path (receipt). */
 __declspec(noinline) VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *, ULONG, BOOLEAN);
 VOID AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *, ULONG);
