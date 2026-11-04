@@ -69,7 +69,8 @@ class NotifierFlight(unittest.TestCase):
         # N2: a successor flight signals the other notifier, whose threshold
         # counts only its jobs, so the head's threshold equals the head's
         # count (firmware notifies on equality, EXP2148); copy 1 is seeded
-        # with its own threshold pointer and generation.
+        # with its own threshold pointer and the template generation that the
+        # captured render microsequences carry (EXP2149).
         self.run_fixture(TWO_NOTIFIERS)
 
     def run_fixture(self, exercise, needle=None):
@@ -99,7 +100,7 @@ TWO_NOTIFIERS = r'''
       assert(AppleAgxRenderSharedMemoryBindRelocationObjects(&owner,arena,
           APPLE_AGX_EXP208_ARENA_BYTES,objects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       assert(objects[11].GpuVa==owner.VirtualAddresses[11]+owner.ObjectOffsets[11]);
-      assert(read_u32(t1)==0 && read_u32(n1+8)==read_u32(n0+8)+1u);
+      assert(read_u32(t1)==0 && read_u32(n1+8)==read_u32(n0+8)); /* template generation */
       assert(read_u32(n1)==(unsigned)t1va && read_u32(n1+4)==(unsigned)(t1va>>32));
       owner.NotifierFlight=1;
       input.PreemptionGpuAddress=0x1500100000ULL;

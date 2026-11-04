@@ -792,13 +792,14 @@ static APPLE_AGX_BOOL bind_relocation_objects(
       }
     }
     /* N2: notifier 1 starts as the template notifier with its own
-     * threshold (count 0) and generation (Asahi: unique per notifier). */
+     * threshold (count 0). It keeps the template generation: the captured
+     * render microsequences carry it (Asahi StartVertex/StartFragment
+     * event_generation = the queue's notifier generation), and EXP2149's
+     * generation + 1 lost a render job's notification. */
     if (InitializePersistent && Owner->TwoNotifiers && index == 11u) {
       unsigned char *second = destination - notifier_copy_delta(Owner, 11u, 1u);
       (void)copy_arena_object(Owner, second, source, layouts[index].Size);
       put_u64(second, Owner->VirtualAddresses[12] + Owner->ObjectOffsets[12] - 8ULL);
-      put_u32(second + APPLE_AGX_G13_NOTIFIER_GENERATION_OFFSET,
-              get_u32(source + APPLE_AGX_G13_NOTIFIER_GENERATION_OFFSET) + 1u);
       if (Owner->NotifierFlush &&
           !Owner->NotifierFlush(Owner->NotifierFlushContext, second, layouts[index].Size))
         return APPLE_AGX_FALSE;
