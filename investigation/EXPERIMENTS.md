@@ -69036,3 +69036,7 @@ Switches: Wom1G3RetainedSlots=1 only. Steps: D3D12 suite; GravityMark D3D12 100k
 - Hashes: sys 59d40dd310fd, UmdArm64 703246a6997c, UmdX64 e2078b0d2ca3, Umd32 bb39bbd7a6a6; manifest b9c3c80b801a, hardware-manifest f8a8d181fb91; probe2168.sh 63ad00485de0 (PROBE_LINT_OK); visible recovery rec2168h 6231e58c421b2ba3; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1G3RetainedSlots=1.
 - Recovery rec2168h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2168-v1scores/run2168.sh.
+
+EXP2168 HARDWARE ACTUAL (2026-11-04T21:40:52Z): **V1 retained slots on, production profile: FHD FULL 5200 (first arm; best was 5145, +1.1 %), HD FULL 6475 (best 6524, -0.75 %).** Suite 119/0, wer 0 both arms.
+- Expected vs actual: expected >= bests within noise; actual FHD new best, HD within single-run noise (EXP2153-2159 HD spread ~1.5 %). Verdict: no regression; V1 stays opt-in until an ABBA HD comparison and the m1n1 broker-lock fix are measured.
+- Recovery: rec2168h.
