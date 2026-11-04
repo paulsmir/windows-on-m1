@@ -8,6 +8,15 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-11-04 19:30Z -- BEST HD 6524 / FHD 5145 (EXP2159); NEXT: V1 RETAINED VM SLOTS
+- EXP2163 (L1b split): the remaining process-switch cost is the V5 LEASE (slot write + TLBI ASIDE1OS + DSB OSH), 160-272 us
+  per switch, twice per frame (GravityMark <-> DWM share slot 1). Design: analysis/V1-retained-vm-slots.md (per-process
+  retained slots, release-before-mutate, switch Wom1G3RetainedSlots).
+- Rejected today: L2 lock split (EXP2160 bugcheck 0x113_10: non-LIFO guarded/fast mutex release returned at APC_LEVEL;
+  reverted), L3-P1b as the cause of the post-DWM BeginJob (kept, neutral), steady-state VidMm migration (M3 analysis:
+  census op 9 = VIRTUAL_FILL of new BOs during the first ~2 s; zero paging from 25.7 s to 71.3 s).
+- Probe habit: snapshot receipts mid-arm (kmd-receipts mid-a at iteration 12); after-arm dumps are overwritten by the desktop.
+
 ## CURRENT 2026-11-04 16:00Z -- BEST HD 6524 / FHD 5145 (EXP2159, defaults incl. L3-P1)
 - EXP2157 (L1 lock profile): DWM's completion waited 0.14-4.4 ms for the adapter-wide G3 lock held by GravityMark's
   preflight parse; every job is parsed 3x under that lock. L3-P1 (2bf8248d, 32-entry proof cache + cached output checks)
