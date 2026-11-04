@@ -68932,3 +68932,15 @@ EXP2162 HARDWARE ACTUAL (2026-11-04T18:26:25Z): **L3-P1b hypothesis REJECTED: wi
 - m1n1 source (read only): LEASE/JOB_BEGIN are constant-time slot writes (+TLB invalidate on lease), not graph-sized, so the time is inside our BeginJobAs body.
 - Verdict: REJECTED for the proof-invalidation cause; L3-P1b kept (sound, neutral). Next: EXP2163 with the L1b BeginJobAs stage split.
 - Recovery: rec2162h.
+
+EXP2163 HARDWARE BEFORE 2026-11-04T18:35:13Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF (+ mid-arm receipts).
+- WHY THIS HYPOTHESIS: (1) EXP2162: the GravityMark compute job after DWM's job holds the G3 lock in BeginJobAs ~255 us (DWM's 36 us); (2) m1n1 LEASE/JOB_BEGIN are constant-time, the re-parse should hit the proof cache; (3) only a per-stage split inside BeginJobAs can distinguish re-parse, checks and graph begin.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (receipt only).
+- WHAT IS STILL UNKNOWN: which BeginJobAs stage holds the ~255 us.
+- Expected: Wom1G3BeginSplit entries for the post-DWM compute job with one dominant stage.
+- Failure criteria: suite regressions, TDR, FPS drop > 2 % vs EXP2162.
+- Recovery: rec2163h.
+- Hashes: sys 79ab0093a6f3, UmdArm64 1d91c6bc702d, UmdX64 6828c2a059c6, Umd32 1165cd183484; manifest bac012f2422f, hardware-manifest e46bf2a03f2d; probe2163.sh e91c2c7bb905 (PROBE_LINT_OK); visible recovery rec2163h fd49fd496665ce53; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
+- Recovery rec2163h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2163-beginsplit/run2163.sh.
