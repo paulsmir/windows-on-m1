@@ -69057,3 +69057,15 @@ EXP2169 HARDWARE ACTUAL (2026-11-04T22:02:35Z): **Cause confirmed inside m1n1: t
 - Diagnostic m1n1 (exp/m1n1-brokerlock 550c7f23, split=0, macho 5cc5287b) booted; suite 119/0. During GravityMark: v5 30k-48k calls per 10 s, v5 wait max 162-244 us; service step ~45-69k runs per 10 s, hold max 254-920 us.
 - Verdict: CONFIRMED (scanout service step holds broker_lock across DCP work and blocks V5). Next: EXP2170 = AGX_BROKER_LOCK_SPLIT=1 build (V5 under its own v5_lock), single change.
 - Recovery: rec2169h.
+
+EXP2170 HARDWARE BEFORE 2026-11-04T22:08:45Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF (+ mid-arm receipts).
+- WHY THIS HYPOTHESIS: (1) EXP2169: V5 calls wait 117-244 us for broker_lock held by the scanout service step (v5<-service@broker); (2) m1n1 source: the service step and scanout touch no V5 state; V5's shared state (gpuva_v5, root_owner, slot page) is now guarded by v5_lock, taken after broker_lock by every other user; (3) host tests pass with and without the flag.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (hypervisor-internal locking).
+- WHAT IS STILL UNKNOWN: hardware behaviour of the new lock order (deadlock or a missed shared state would show as a hang or a broker taint).
+- Expected: no v5<-service long waits; post-DWM begin graph stage <= 20 us (EXP2167: 158-219 us); HD PERF > EXP2169; suite 119/0.
+- Failure criteria: hang, broker taint, TDR, GPU fault, suite regression.
+- Recovery: rec2170h (visible profile with m1n1 075e3980).
+- Hashes: sys ff6f0007b54c, UmdArm64 e622dc06594b, UmdX64 e5e31a0265d5, Umd32 783130831a09; manifest a238a313ec23, hardware-manifest 9de2f5d2cf6f; probe2170.sh 177a4ab29503 (PROBE_LINT_OK); visible recovery rec2170h 944a122ccebf8d66; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
+- Recovery rec2170h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2170-m1n1split/run2170.sh.
