@@ -68816,3 +68816,8 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1. Steps: D3D12 suite; Gravi
 - Hashes: sys b675bb0c8e5e, UmdArm64 6b47f0c772d5, UmdX64 77028ba70e64, Umd32 96d7c53df808; manifest a4b92bb23ba6, hardware-manifest 4fe830a858a9; probe2156.sh 0c1b08526fab (PROBE_LINT_OK); visible recovery rec2156h ed3bcae6408e53b4; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
 - Recovery rec2156h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2156-jobtiming/run2156.sh.
+
+EXP2156 HARDWARE ACTUAL (2026-11-04T11:49:56Z): **The foreign job in GravityMark's R7 -> C0 span is one DWM render job per frame: kick -> complete median 0.65 ms; the rest of the 1.6-1.7 ms span are the two unpaired boundaries around it.**
+- Wom1JobTiming971Hot (63 jobs, snapshot right after the HD PERF arm, 38.455 FPS with diagnostics): GravityMark pid 9552 alternates R/C (fences 52154-52183), pid 11156 (DWM) inserts one render job after every R7 (52161, 52170, 52179: every 9th fence). DWM render kick -> complete median 646 us (n 6); GravityMark compute / render kick -> complete medians 5.8 / 6.0 ms (pairs).
+- The window refuses DWM pairs: cross-process (refusal 55) and render/render with different manager keys (58), so R7 -> DWM and DWM -> C0 are both unpaired boundaries (~0.4 ms each).
+- Verdict: CONFIRMED (span = DWM job 0.65 + 2 boundaries). Two driver-owned levers: (1) cross-process pairs (DWM behind R7, C0 behind DWM: needs a resident second manager slot and a cross-VM pair class), (2) DWM's composition cost (0.65 ms for a full-desktop target; dirty-rect tile scope unknown).
