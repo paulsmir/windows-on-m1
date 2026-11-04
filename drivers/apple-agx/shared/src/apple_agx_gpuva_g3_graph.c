@@ -664,7 +664,10 @@ bool AppleAgxGpuvaG3GraphTryLeafBackingEx(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       leaf->Writable == (unsigned)writable && leaf->Kind == kind &&
       leaf->PrivateCached == cached) return true;
   if (!guest_ipa && !leaf) return true;
-  if (!AppleAgxGpuvaG3GraphReleaseRetained(graph)) return false;
+  /* V1 receipt: site = line | kind << 16 | gpu_private << 20 | unmap << 21 */
+  if (!AppleAgxGpuvaG3GraphReleaseRetainedAt(graph, (unsigned int)__LINE__ |
+          ((unsigned int)kind << 16) | ((gpu_private ? 1u : 0u) << 20) |
+          ((guest_ipa ? 0u : 1u) << 21))) return false;
   native_invalidate(graph, table_ipa, index);
   if (guest_ipa) {
     if (!leaf) {

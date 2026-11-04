@@ -69002,3 +69002,6 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 (sam
 - Hashes: sys 14980f166944, UmdArm64 5f26507782d2, UmdX64 cc8580f2f788, Umd32 5d004a37ed38; manifest 7cde644aef80, hardware-manifest 24ee9291e5ac; probe2166.sh bb60cbf77357 (PROBE_LINT_OK); visible recovery rec2166h 20e28cb9981e0d1d; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
 - Recovery rec2166h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2166-v1reason/run2166.sh.
+
+EXP2166 HARDWARE ACTUAL (2026-11-04T20:43:09Z): **Rule-R releases of retained slots come from leaf changes: AppleAgxGpuvaG3GraphTryLeafBackingEx (graph.c:667) 1680 of 1695 releases; UpdateParent (:588) 9.** Suite 119/0; receipt v2 (mid): leases 1698, reuses 11435, steals 6, releases 1695, quarantines 0. Next: EXP2167 splits the leaf releases by backing kind / KMD-private / unmap.
+- Recovery: rec2166h.
