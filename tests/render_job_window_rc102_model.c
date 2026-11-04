@@ -78,6 +78,10 @@ typedef struct world {
   ADMISSION_JOB_WINDOW_RECEIPT rec;
   unsigned char arena[64], dma[16];
   unsigned notified_total; /* threshold the builds wrote */
+  /* MODEL_OWN_NOTIFY (N2): a notifier per job, consecutive in-flight jobs
+   * on different ones; each notifier's threshold counts its own jobs. */
+  unsigned nthr[2], ncount[2], npend[2], nheld[2][NQ], nheld_valid[2][NQ];
+  unsigned jobn[MAXF + 1], lastk;
   unsigned depth2;          /* Wom1JobDepth2Kick */
   unsigned caps;
   unsigned faulted, resetting, preempt, paging, prebound_at;
@@ -133,7 +137,26 @@ static void send_event(world *w, unsigned kind, unsigned long long bits) {
   if (kind == (unsigned)AppleAgxG13EventFlag) { put64(m + 4, bits); put64(m + 12, 0ULL); }
   if (kind == (unsigned)AppleAgxG13EventTimeout) { put64(m + 4, ++w->timeout_counter); put32(m + 12, 0u); }
 }
-static void notify(world *w, unsigned q, unsigned stamp) {
+#ifdef MODEL_OWN_NOTIFY
+static void notify_own(world *w, unsigned q, unsigned stamp, unsigned fence) {
+  unsigned k = w->jobn[fence] & 1u;
+  ++w->ncount[k];
+  w->npend[k] |= 1u << q;
+  if (stamp) { w->nheld[k][q] = stamp; w->nheld_valid[k][q] = 1; }
+  if (w->ncount[k] == w->nthr[k]) {
+    unsigned long long bits = 0ULL;
+    unsigned i;
+    for (i = 0; i < NQ; ++i) {
+      if (w->nheld_valid[k][i]) { w->stamp[i] = w->nheld[k][i]; w->nheld_valid[k][i] = 0; }
+      if (w->npend[k] & (1u << i)) bits |= 1ULL << EVENT_NUMBER[i];
+    }
+    w->npend[k] = 0;
+    send_event(w, (unsigned)AppleAgxG13EventFlag, bits);
+  }
+}
+#define notify(w, q, s) notify_own(w, q, s, it->fence)
+#endif
+__attribute__((unused)) static void notify_shared(world *w, unsigned q, unsigned stamp) {
   ++w->count;
   w->pending_bits |= 1u << q;
   if (stamp) { w->held[q] = stamp; w->held_valid[q] = 1; }
@@ -148,6 +171,9 @@ static void notify(world *w, unsigned q, unsigned stamp) {
     send_event(w, (unsigned)AppleAgxG13EventFlag, bits);
   }
 }
+#ifndef MODEL_OWN_NOTIFY
+#define notify(w, q, s) notify_shared(w, q, s)
+#endif
 static unsigned in_firmware(world *w) {
   unsigned q, seen[MAXF + 1], n = 0;
   memset(seen, 0, sizeof(seen));
@@ -376,6 +402,13 @@ static APPLE_AGX_BOOL be_relocate(void *c, void *a, APPLE_AGX_U32 ab,
   /* Asahi run(): the threshold counts every kicked job's notifications. */
   w->notified_total += job_notifications(kind);
   w->threshold = w->notified_total;
+#ifdef MODEL_OWN_NOTIFY
+  {
+    unsigned k = successor ? w->lastk ^ 1u : 0u;
+    w->jobn[fence] = k; w->lastk = k;
+    w->nthr[k] += job_notifications(kind);
+  }
+#endif
   return APPLE_AGX_TRUE;
 }
 static APPLE_AGX_BOOL be_publish(void *c) { (void)c; return APPLE_AGX_TRUE; }
