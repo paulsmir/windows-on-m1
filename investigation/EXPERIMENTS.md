@@ -68788,3 +68788,15 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1PresentTimestamps=1. Steps: D3D12 suite; Gr
 EXP2154 HARDWARE ACTUAL (2026-11-04T11:16:35Z): **T1 present timestamps INCONCLUSIVE: Wom1PresentTs was never written (export gate bug); FHD FULL first arm 5128 (best FHD, confirms the arm-position effect), HD PERF 38.88 FPS, HD FULL 6202 (third arm, present timestamp microsequence on), suite 119/0.**
 - Cause: AdmissionJobTimingExportWindows is called from the completion path only when JobDiagnostics, RcReceiptEnabled or the drill is set; the T1 switch was missing there (fixed 94a0249b, offline-untestable registry path).
 - Next: EXP2155 = the fix, HD PERF timeline first.
+
+EXP2155 HARDWARE BEFORE 2026-11-04T11:25:21Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1PresentTimestamps=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF (timeline), b HD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2131/2146/2147: the R7 -> C0 span costs 1.6-1.7 ms per frame (~7 %) and stayed 1.59 ms even when S1 removed the notifier gaps, so most of it is not a boundary gap; (2) the present job is one compute job per frame (KMD present compute, one 32-bit pixel per thread) whose duration was never measured; (3) its destination is a DWM/primary surface whose mapping cost is unknown.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged; the present job runs the timestamp microsequence (as every UMD compute job does).
+- WHAT IS STILL UNKNOWN: the present job's firmware duration and the gaps around it.
+- Expected: suite 119/0; Wom1PresentTs filled; split of the R7 -> C0 span into gap, present duration, gap (receipt + gm2154b-umd.log stages on the same GPU clock).
+- Recovery: rec2155h.
+- EXP2154 wrote no ring (export gate); this run repeats the measurement with the gate fixed.
+- Hashes: sys dfd46058536e, UmdArm64 86a2d0a30c57, UmdX64 ab5f1ee924e6, Umd32 80b28ac5b4c8; manifest 0cf478a38cc8, hardware-manifest dce778939c78; probe2155.sh ff4053270f9f (PROBE_LINT_OK); visible recovery rec2155h 2350b9e4b9f28844; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1PresentTimestamps=1.
+- Recovery rec2155h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2155-presentts2/run2155.sh.
