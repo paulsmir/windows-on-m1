@@ -69093,3 +69093,15 @@ EXP2171 HARDWARE ACTUAL (2026-11-04T22:38:28Z): **m1n1 broker-lock split + V1 re
 - Mid-arm ring: the DWM job's Submit -> Worker is 0.67-2.94 ms (after GravityMark's fence 37215, a record with no phases); the post-DWM span is no longer dominated by the begin.
 - Verdict: split CONFIRMED functionally (lease cost removed), performance hypothesis REJECTED (the ~0.2 ms/frame did not show as FPS within noise). The split m1n1 stays experimental (not lastgood). Next causal target: the DWM job's Submit -> Worker wait (worker blocked behind GravityMark's preceding packet).
 - Recovery: rec2171h.
+
+EXP2172 HARDWARE BEFORE 2026-11-04T23:32:32Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF (+ mid-arm receipts).
+- WHY THIS HYPOTHESIS: (1) EXP2171 ring: DWM's render job waits 0.67-2.94 ms from submit to worker pickup after GravityMark fence 37215, a submit-only slot; (2) P1 analysis: that fence is GravityMark's queued render dropped by DxgkDdiPreemptCommand (37214's chain refusal 4 = preemption pending), and the GPU idles from 37214's notify to DWM's pickup; (3) DWM jobs without a preceding drop are picked up in 49-123 us.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (receipt only).
+- WHAT IS STILL UNKNOWN: which of H1 (DMA_PREEMPTED deferred, dispatch blocked until commit), H2 (DWM submit waits in AwaitWork for the dropped slot), H3 (missed wakeup) covers the gap.
+- Expected: Wom1PreemptTrace events with the gap inside one span (cmd>ntfy, ntfy>cmt, cmt>sub, sub>pick or AwaitWork).
+- Failure criteria: suite regression, TDR/0x119, FPS drop > 2 % vs EXP2163-class runs (~39.3).
+- Recovery: rec2172h.
+- Hashes: sys 22adaa567ea6, UmdArm64 c9cdc9c845d4, UmdX64 9bf8fb79a08a, Umd32 a337a1bafa84; manifest ed9ec098d914, hardware-manifest 0aaab40f66c6; probe2172.sh 55b2fc6459cf (PROBE_LINT_OK); visible recovery rec2172h 591b0c6f27a4867d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
+- Recovery rec2172h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2172-preempt/run2172.sh.
