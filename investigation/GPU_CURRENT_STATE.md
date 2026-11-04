@@ -8,6 +8,13 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-11-04 12:00Z -- R7 -> C0 SPAN EXPLAINED (EXP2155/EXP2156)
+- No KMD present blit runs (flip model, EXP2155). The span is one DWM render job per GravityMark frame (pid 11156,
+  kick -> complete 0.65 ms) plus two unpaired boundaries (~0.4 ms each): the depth-two window refuses cross-process
+  pairs (refusal 55) and render/render pairs with a different manager key (58).
+- Driver-owned levers: (1) cross-process pairs (needs a cross-VM pair class and a resident second manager slot);
+  (2) DWM composition cost (0.65 ms; check render-target size and tile load/store scope).
+
 ## CURRENT 2026-11-04 10:30Z -- BEST HD 6433 / FHD 5091 (EXP2150 control, defaults); NOTIFIER LINE CLOSED
 - Best defaults: EXP2150 (package 827f7342, switch-free): HD 100k T0 FULL 6433, HD PERF 38.34 FPS, FHD FULL 5091, suite 119/0.
 - Closed today (hardware): S1 stamp completion (EXP2147, +3.5-6 % then firmware crash: early release of slot/sidecar
