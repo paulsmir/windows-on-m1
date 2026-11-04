@@ -25,12 +25,24 @@ typedef struct SCENE {struct SCENE *Next; CONTEXT *Context;
  unsigned Cached,Queued,Submitting,Quarantined,Reported,ReleaseRequested;
  ULONGLONG CachedAt; APPLE_AGX_G3_PRIVATE_EXTENT Extent; int Released;
 } ADMISSION_G3_PRIVATE_SCENE;
+typedef struct {int Held;} FAST_MUTEX_;
 typedef struct STATE {LIST_ENTRY Processes; ULONGLONG PrivateStats[16];
- ULONG PrivatePressure[12]; APPLE_AGX_G3_PRIVATE_POOL PrivatePool;} ADMISSION_G3_STATE;
+ ULONG PrivatePressure[12]; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; FAST_MUTEX_ Lock;} ADMISSION_G3_STATE;
 /* L2 step 1: the per-process lock; a victim's is only tried (G held). */
 typedef struct {int Held;} KGUARDED_MUTEX;
 static BOOLEAN KeTryToAcquireGuardedMutex(KGUARDED_MUTEX *m) { if(m->Held) return FALSE; m->Held=1; return TRUE; }
 static void KeReleaseGuardedMutex(KGUARDED_MUTEX *m) { assert(m->Held); m->Held=0; }
+/* L2 review: a busy victim is retried with G dropped (never awaited with G
+ * held); the stub sleep frees the victim after `free_after` sleeps. */
+typedef FAST_MUTEX_ FAST_MUTEX;
+typedef struct {long long QuadPart;} LARGE_INTEGER;
+enum {KernelMode};
+static FAST_MUTEX *g_lock; static int sleeps, free_after=-1; static KGUARDED_MUTEX *busy_victim;
+static void ExReleaseFastMutex(FAST_MUTEX *m) { assert(m->Held); m->Held=0; }
+static void ExAcquireFastMutex(FAST_MUTEX *m) { assert(!m->Held); m->Held=1; }
+static long KeDelayExecutionThread(int mode,int alertable,LARGE_INTEGER *d) {
+ (void)mode;(void)alertable;(void)d; assert(g_lock && !g_lock->Held); ++sleeps;
+ if (busy_victim && sleeps==free_after) busy_victim->Held=0; return 0; }
 typedef struct PROC {LIST_ENTRY Link; ADMISSION_G3_STATE *State;
  ADMISSION_G3_PRIVATE_SCENE *PrivateScenes; int Poisoned; ULONG OsProcessId;
  struct {int Uncertain,JobInFlight,LeaseToken,Created; ULONGLONG ProcessId,RootIpa;} Graph;
@@ -74,14 +86,20 @@ int main(void) {
  assert(!AppleAgxG3PrivateAllocate(&st.PrivatePool,1,0x10000u,&wanted));
  p[1].Graph.JobInFlight=1;p[2].Graph.LeaseToken=1;p[3].Poisoned=1;s[4].Queued=1;
  p[0].Lock.Held=1; /* the requester's escape holds its own lock */
- /* L2: an owner busy in its own parse is skipped, never awaited. */
+ g_lock=&st.Lock; st.Lock.Held=1; /* the caller holds G */
+ /* L2: an owner that stays busy in its own parse is never awaited with G
+  * held; the bounded retry gives up (G dropped only around each sleep). */
  p[5].Lock.Held=1;
  assert(!AdmissionG3PrivateEvictPressure(&p[0],&view,0x10000u,&failure));
  assert(!s[5].Released && p[5].Lock.Held && !st.PrivatePressure[1]);
+ assert(sleeps==50 && st.Lock.Held);
  p[5].Lock.Held=0;
+ /* L2 review: an owner whose parse ends during the retry is evicted. */
+ p[5].Lock.Held=1; busy_victim=&p[5].Lock; sleeps=0; free_after=3;
  /* Only owner6 is idle and safe; caller owns no cached scene. */
  assert(AdmissionG3PrivateEvictPressure(&p[0],&view,0x10000u,&failure));
- assert(!p[5].Lock.Held);
+ assert(!p[5].Lock.Held && sleeps==3 && st.Lock.Held);
+ busy_victim=NULL;
  assert(s[5].Released && !s[1].Released && !s[2].Released && !s[3].Released && !s[4].Released);
  assert(AppleAgxG3PrivateAllocate(&st.PrivatePool,1,0x10000u,&wanted));
  assert(st.PrivatePressure[1]==1 && st.PrivatePressure[2]==100 && st.PrivatePressure[3]==105);
