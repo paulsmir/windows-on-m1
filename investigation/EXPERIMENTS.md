@@ -68982,3 +68982,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 (sin
 - Hashes: sys 8b4ab580db40, UmdArm64 5bc53fc5c07d, UmdX64 bfb6d3f223d3, Umd32 0439a3a29387; manifest 5d39c83a1c11, hardware-manifest c4afb46e5938; probe2165.sh 6b7b6fd7dc24 (PROBE_LINT_OK); visible recovery rec2165h 0fa26b84a41c3d95; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
 - Recovery rec2165h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2165-v1on/run2165.sh.
+
+EXP2165 HARDWARE ACTUAL (2026-11-04T20:25:10Z): **V1 retained slots ON work on hardware (no GPU fault, no quarantine, suite 119/0); leases fell ~10x (1172 vs ~12630 by mid-arm) and DWM keeps its slot (DWM begin lease 6 us), but GravityMark's compute job after DWM still re-leases (240-251 us): GravityMark's lease is released by rule R between frames.**
+- HD PERF 39.208 FPS (EXP2164 switch off 38.907, +0.8 %; EXP2163 39.288). Wom1G3RetainedSlotsReceipt (mid): first 2, count 4, leases 1447, reuses 10843, steals 8, releases 1444, quarantines 0.
+- Different vm slots on consecutive jobs of one shared queue run correctly on this firmware (the open question of the design).
+- Verdict: CONFIRMED mechanism, PARTIAL effect. Next: EXP2166 with a release-reason receipt (rule-R caller line) to find GravityMark's per-frame translation change.
+- Recovery: rec2165h.

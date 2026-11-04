@@ -178,9 +178,19 @@ bool AppleAgxGpuvaG3GraphReleaseIdle(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
 /* Rule R: every translation change of a graph retaining an idle lease runs
  * after RELEASE (TTBR cleared, slot invalidated), as in the baseline where
  * no lease outlives a job; the next LEASE writes the TTBR and invalidates. */
-bool AppleAgxGpuvaG3GraphReleaseRetained(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+bool AppleAgxGpuvaG3GraphReleaseRetainedAt(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+                                           unsigned int site) {
+  APPLE_AGX_GPUVA_G3_SLOTS *table;
+  unsigned int i;
   if (!graph) return false;
   if (!retained(graph) || !graph->LeaseToken || graph->JobInFlight) return true;
+  table = graph->SlotTable;
+  for (i = 0; i < 8u; ++i)
+    if (table->ReleaseSite[i] == site || !table->ReleaseSite[i]) {
+      table->ReleaseSite[i] = site;
+      ++table->ReleaseSiteCount[i];
+      break;
+    }
   return AppleAgxGpuvaG3GraphReleaseIdle(graph);
 }
 

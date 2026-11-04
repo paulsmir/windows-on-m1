@@ -4266,8 +4266,10 @@ VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *adapter, HANDLE key,
   LARGE_INTEGER frequency;
   /* V1 receipt (Wom1G3RetainedSlots only): QWORDs version, bytes, first
    * slot, count, quarantined mask, leases, reuses, steals, releases,
-   * quarantines, recovered quarantines, clock. */
-  ULONGLONG slots[12];
+   * quarantines, recovered quarantines, clock; v2: 8 release source lines
+   * and their counts. */
+  ULONGLONG slots[28];
+  ULONG site;
   if (adapter == NULL || key == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
     return;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
@@ -4289,7 +4291,11 @@ VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *adapter, HANDLE key,
   state->BeginSplits.Bytes = sizeof(state->BeginSplits);
   RtlCopyMemory(&state->BeginSplitsSnapshot, &state->BeginSplits,
                 sizeof(state->BeginSplitsSnapshot));
-  slots[0] = 1u; slots[1] = sizeof(slots);
+  slots[0] = 2u; slots[1] = sizeof(slots);
+  for (site = 0u; site < 8u; ++site) {
+    slots[12u + site] = state->Slots.ReleaseSite[site];
+    slots[20u + site] = state->Slots.ReleaseSiteCount[site];
+  }
   slots[2] = state->Slots.First; slots[3] = state->Slots.Count;
   slots[4] = state->Slots.Quarantined; slots[5] = state->Slots.Leases;
   slots[6] = state->Slots.Reuses; slots[7] = state->Slots.Steals;

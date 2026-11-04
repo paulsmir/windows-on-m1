@@ -105,6 +105,9 @@ typedef struct _APPLE_AGX_GPUVA_G3_SLOTS {
   /* Receipt-only counters (Quarantines: slots put into quarantine;
    * Recovered: quarantines that expired for a retry). */
   unsigned long long Leases, Reuses, Steals, Releases, Quarantines, Recovered;
+  /* V1 receipt: rule-R releases by caller source line (first 8 lines). */
+  unsigned int ReleaseSite[8];
+  unsigned long long ReleaseSiteCount[8];
 } APPLE_AGX_GPUVA_G3_SLOTS;
 
 typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
@@ -247,7 +250,11 @@ bool AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *);
 bool AppleAgxGpuvaG3GraphReleaseIdle(APPLE_AGX_GPUVA_G3_GRAPH *);
 /* V1 rule R: as ReleaseIdle for a graph that retains its lease and has no
  * job in flight; true and nothing sent otherwise (the baseline). */
-bool AppleAgxGpuvaG3GraphReleaseRetained(APPLE_AGX_GPUVA_G3_GRAPH *);
+bool AppleAgxGpuvaG3GraphReleaseRetainedAt(APPLE_AGX_GPUVA_G3_GRAPH *,
+                                           unsigned int site);
+/* V1 receipt: the caller's line names the rule-R release reason. */
+#define AppleAgxGpuvaG3GraphReleaseRetained(g) \
+  AppleAgxGpuvaG3GraphReleaseRetainedAt((g), (unsigned int)__LINE__)
 /* V1: enable a zeroed table with slots First..First+Count-1 (First >= 1,
  * last <= 15); false otherwise or when already enabled differently. */
 bool AppleAgxGpuvaG3SlotsEnable(APPLE_AGX_GPUVA_G3_SLOTS *, unsigned int First,
