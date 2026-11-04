@@ -62,21 +62,31 @@ static APPLE_AGX_GPUVA_G3_NODE *slot(APPLE_AGX_GPUVA_G3_NODE *table,
 
 /* rc81: drop the range proofs a mutation of TableIpa (0 = topology) can
  * change; called before every native mutation, with InvalidateNative. */
+/* L3-P1b: a leaf change (table_ipa, index) alters only the page at
+ * LeafVaBase[k] + index * 16 KiB for each segment k the proof recorded for
+ * that table (every page of a proof is in a recorded segment); index ~0u
+ * means unknown and drops every proof crossing the table. */
 static void proof_invalidate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
-                             unsigned long long table_ipa) {
+                             unsigned long long table_ipa, unsigned int index) {
   unsigned int i, k;
   for (i = 0; i < APPLE_AGX_GPUVA_G3_PROOF_ENTRIES; ++i) {
     APPLE_AGX_GPUVA_G3_RANGE_PROOF *p = &graph->Proofs[i];
     if (!p->Valid) continue;
     if (!table_ipa) { p->Valid = 0u; continue; }
-    for (k = 0; k < p->TableCount; ++k)
-      if (p->LeafTables[k] == table_ipa) { p->Valid = 0u; break; }
+    for (k = 0; k < p->TableCount; ++k) {
+      unsigned long long page;
+      if (p->LeafTables[k] != table_ipa) continue;
+      if (index >= 2048u) { p->Valid = 0u; break; }
+      page = p->LeafVaBase[k] + (unsigned long long)index * G3_PAGE;
+      if (page + G3_PAGE > (p->Va & ~(unsigned long long)(G3_PAGE - 1u)) &&
+          page < p->Va + p->Bytes) { p->Valid = 0u; break; }
+    }
   }
 }
 
 static void native_invalidate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned long long table_ipa, unsigned int index) {
-  proof_invalidate(graph, table_ipa);
+  proof_invalidate(graph, table_ipa, index);
   if (graph->InvalidateNative)
     graph->InvalidateNative(graph->InvalidateContext, table_ipa, index);
 }
@@ -816,12 +826,16 @@ bool AppleAgxGpuvaG3GraphContainsRangeAccessCached(
     leaf = slot(middle_edge->ChildTable, li);
     if (!leaf || !leaf->AuxIpa || (write && !leaf->Writable)) return false;
     /* the leaf table of this page (consecutive pages share it) */
+    /* L3-P1b: a new segment per (leaf table, 32 MiB VA base) pair */
     if (!candidate.TableCount ||
-        candidate.LeafTables[candidate.TableCount - 1u] != middle_edge->AuxIpa) {
+        candidate.LeafTables[candidate.TableCount - 1u] != middle_edge->AuxIpa ||
+        candidate.LeafVaBase[candidate.TableCount - 1u] != (va & ~((1ULL << 25) - 1u))) {
       if (candidate.TableCount == APPLE_AGX_GPUVA_G3_PROOF_TABLES)
         candidate.Valid = 0u;
-      else
+      else {
+        candidate.LeafVaBase[candidate.TableCount] = va & ~((1ULL << 25) - 1u);
         candidate.LeafTables[candidate.TableCount++] = middle_edge->AuxIpa;
+      }
     }
   }
   if (candidate.Valid) {
@@ -999,7 +1013,7 @@ bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   unsigned int level;
   if (!graph || !graph->Created || graph->Uncertain ||
       graph->LeaseToken || graph->JobInFlight) return false;
-  proof_invalidate(graph, 0ULL);
+  proof_invalidate(graph, 0ULL, ~0u);
   while (graph->Leaves) {
     item = graph->Leaves;
     if (!AppleAgxGpuvaG3GraphUpdateLeaf(graph, item->Ipa,

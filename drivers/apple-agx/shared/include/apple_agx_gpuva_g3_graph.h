@@ -67,6 +67,9 @@ typedef struct _APPLE_AGX_GPUVA_G3_NODE {
 typedef struct _APPLE_AGX_GPUVA_G3_RANGE_PROOF {
   unsigned long long Va, RootIpa;
   unsigned long long LeafTables[APPLE_AGX_GPUVA_G3_PROOF_TABLES];
+  /* L3-P1b: the 32 MiB-aligned VA at which LeafTables[k] maps this range;
+   * a leaf change outside the proven pages keeps the proof. */
+  unsigned long long LeafVaBase[APPLE_AGX_GPUVA_G3_PROOF_TABLES];
   unsigned int Bytes, Write, Valid, TableCount;
 } APPLE_AGX_GPUVA_G3_RANGE_PROOF;
 

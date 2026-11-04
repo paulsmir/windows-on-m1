@@ -135,6 +135,16 @@ int main(void) {
     (void)proof(&graph, 0x400000ULL * k, 0x200000u, true, &ok);
   for (unsigned k = 0; k < 6u; ++k)
     assert(proof(&graph, 0x400000ULL * k, 0x200000u, true, &ok) <= 4u && ok);
+  /* L3-P1b: a leaf change in a proven leaf table but outside the proven
+   * range (another allocation's page in the same 32 MiB table, e.g. a
+   * per-frame upload remap) keeps the proof; inside the range drops it. */
+  (void)proof(&graph, 0x400000ULL * 7u, 0x200000u, true, &ok);
+  assert(proof(&graph, 0x400000ULL * 7u, 0x200000u, true, &ok) <= 4u && ok);
+  assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph, table_ipa(0), 2000u, 0x72000000ULL, true));
+  assert(proof(&graph, 0x400000ULL * 7u, 0x200000u, true, &ok) <= 4u && ok);
+  /* page 7*256+3 is inside [7*256, 7*256+128) */
+  assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph, table_ipa(0), 7u * 256u + 3u, 0x73000000ULL, true));
+  assert(proof(&graph, 0x400000ULL * 7u, 0x200000u, true, &ok) > 4u && ok);
   /* an uncertain graph proves nothing, cached or not */
   graph.Uncertain = 1u;
   assert(proof(&graph, va, bytes, true, &ok) <= 4u && !ok);
