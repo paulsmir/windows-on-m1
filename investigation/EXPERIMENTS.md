@@ -68841,3 +68841,15 @@ EXP2157 HARDWARE ACTUAL (2026-11-04T14:13:31Z): **DWM's completion waits for the
 - Every GravityMark job is parsed three times under the one adapter-wide G3 lock (preflight, submit, BeginJob re-parse), and DWM's completion (another process) serializes behind those parses while the GPU idles.
 - Verdict: CONFIRMED (lock contention, holder identified). The fix belongs to the KMD G3 locking (owner of the violated contract: a completion must not wait for another process's validation). Candidates, offline first: (1) graph-scoped locking so a process's parse does not exclude other processes' completions; (2) cheaper parses (range-proof cache hit rate, MAPPING_UNCHANGED re-parse elision with the kernel copy unchanged). Preflight stays (validation gate).
 - Recovery: rec2157h.
+
+EXP2158 HARDWARE BEFORE 2026-11-04T15:23:45Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 (as EXP2157). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2157: preflight (mean 92 us, max 8.3 ms), submit (149 us) and BeginJob (42 us) parses hold the G3 lock, and DWM's completion waits 0.14-4.4 ms behind the preflight; (2) source (L3 analysis): the 4-entry round-robin proof cache cannot hold the >4 large ranges of one render job, and the colour target is re-walked uncached ~6 times per job; (3) offline six-range cycle test: 0 hits before, all hits after.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged; every check runs, cached answers equal the walk (mutations drop crossed proofs).
+- WHAT IS STILL UNKNOWN: the real hit rate and saved hold time on GravityMark's streams.
+- Expected: lock profile hold means of :6206/:5887/:3805-region sites lower than EXP2157 (92/149/42 us), fewer/shorter completion waits; HD PERF >= 38.52 FPS (diagnostics on).
+- Failure criteria: suite regressions vs 119/0, any TDR / GPU fault, image errors.
+- Recovery: rec2158h.
+- Hashes: sys 617b8bb839f7, UmdArm64 3e8031399d68, UmdX64 c2e8bb3f6389, Umd32 6f29b7e58e57; manifest 74121e75cf55, hardware-manifest 5ecd4ef53da8; probe2158.sh efc18a22f8d4 (PROBE_LINT_OK); visible recovery rec2158h 1e3a832d9b61d539; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
+- Recovery rec2158h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2158-proofcache/run2158.sh.
