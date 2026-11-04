@@ -68853,3 +68853,10 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 (as EXP2157). Steps: D3D12
 - Hashes: sys 617b8bb839f7, UmdArm64 3e8031399d68, UmdX64 c2e8bb3f6389, Umd32 6f29b7e58e57; manifest 74121e75cf55, hardware-manifest 5ecd4ef53da8; probe2158.sh efc18a22f8d4 (PROBE_LINT_OK); visible recovery rec2158h 1e3a832d9b61d539; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
 - Recovery rec2158h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2158-proofcache/run2158.sh.
+
+EXP2158 HARDWARE ACTUAL (2026-11-04T15:29:26Z): **L3-P1 cut the parse lock holds 6-12x: preflight mean 92 -> 14.8 us, submit 149 -> 12.4 us; HD PERF 38.52 -> 39.38 FPS (+2.2 %, same diagnostics as EXP2157); completion no longer in the long-wait ring.**
+- Suite 119/0. HD PERF 39.375 FPS (2361 frames, skip 10 s, 60 s window).
+- Wom1G3LockProfileHot: PreflightEscape :6208 31774 x 14.8 us (max 3.2 ms); SubmitVirtualEnvelope :5889 32347 x 12.4 us (max 0.95 ms); BeginJobAs :3807 31767 x 37.8 us; CompleteJobTimestamp :4242 not among the last long waits. Remaining long waits: PrivateEscape :2640 and SubmitVirtualEnvelope :5889 behind BeginJobAs :3807 (25 of 41), NativeReady :1267 behind paging :2052 (13).
+- Expected vs actual: expected lower holds and >= 38.52 FPS; actual both, larger than expected on submit (the cached colour-target proof).
+- Verdict: CONFIRMED; L3-P1 accepted (default, no switch). Next: L3-P2 (BeginJob re-parse via image-keyed generation) and the L2 lock split; an HD/FHD FULL score check of the new default.
+- Recovery: rec2158h.
