@@ -69005,3 +69005,17 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 (sam
 
 EXP2166 HARDWARE ACTUAL (2026-11-04T20:43:09Z): **Rule-R releases of retained slots come from leaf changes: AppleAgxGpuvaG3GraphTryLeafBackingEx (graph.c:667) 1680 of 1695 releases; UpdateParent (:588) 9.** Suite 119/0; receipt v2 (mid): leases 1698, reuses 11435, steals 6, releases 1695, quarantines 0. Next: EXP2167 splits the leaf releases by backing kind / KMD-private / unmap.
 - Recovery: rec2166h.
+
+EXP2167 HARDWARE BEFORE 2026-11-04T20:50:13Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 (same as EXP2165). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF (+ mid-arm receipts).
+- WHY THIS HYPOTHESIS: (1) EXP2163: each GravityMark <-> DWM switch re-leases slot 1 (V5 LEASE = slot write + TLBI ASIDE1OS + DSB OSH), 160-272 us, twice per frame; (2) m1n1 supports concurrent owners on slots 1..63 and invalidates an owner's leased slots on every leaf/parent update; Asahi keeps a VM's slot across jobs (mmu.rs Uat::bind, slotalloc); (3) offline real-broker replay: two alternating processes take 2 leases in total.
+- WINDOWS CONTRACT: unchanged (VidMm page-table/flush DDIs; leases are released before any translation change of an idle process).
+- AGX/ASAHI CONTRACT: firmware commands carry the job's vm slot (render template context_id, compute/prelude/present VmSlot); slots 2..5 retained per process; slot 1 keeps its per-job meaning.
+- TRANSLATION: process -> preferred retained slot; BeginJob = JOB_BEGIN while leased; mapping change of an idle leased process = RELEASE first; buffer manager re-InitBM on slot change.
+- WHAT IS STILL UNKNOWN: which kind of leaf change (KMD-private scene storage vs VidMm local/system, map vs unmap) releases GravityMark's slot each frame (EXP2166: TryLeafBackingEx 1680 of 1695).
+- Expected: Wom1G3RetainedSlotsReceipt v2 names one dominant rule-R caller line; otherwise as EXP2165.
+- Failure criteria: any GPU fault, TDR, bugcheck, image corruption, suite regression, quarantine count > 0.
+- Recovery: rec2167h.
+- Hashes: sys f16aa3ba506b, UmdArm64 892f0bbfcc55, UmdX64 dea6f94e5af4, Umd32 6d65488771ee; manifest f5cdb962cded, hardware-manifest 6fbc5e4a41ed; probe2167.sh 24a7d94d5fff (PROBE_LINT_OK); visible recovery rec2167h 647e42c18f21ae71; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1.
+- Recovery rec2167h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2167-v1kind/run2167.sh.
