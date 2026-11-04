@@ -68745,3 +68745,11 @@ Switches: Wom1GpuFaultInfoRead=1. Steps: D3D12 suite; GravityMark D3D12 100k -te
 - Hashes: sys 8df508fb5852, UmdArm64 50f02e485e73, UmdX64 73aff879a417, Umd32 390788852de0; manifest 6bc4616ec2c4, hardware-manifest 4ef315238c00; probe2152.sh b7053b7271e8 (PROBE_LINT_OK); visible recovery rec2152h 235b5192a7a2f9a8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1.
 - Recovery rec2152h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2152-indexmask/run2152.sh.
+
+EXP2152 HARDWARE ACTUAL (2026-11-04T10:00:10Z): **M1 index-mask removal CONFIRMED on HD: PERF ABBA default 39.22 / 39.04 vs MASK=0 38.92 / 38.77 FPS (+0.7 % in both pairs, equal 60 s windows); suite 119/0; HD FULL 6390, image correct; FHD FULL 4865 (last arm, no ABBA: inconclusive).**
+- a HD FULL 6390 (EXP2150 6433; within-boot order moves FULL ~3 %); image diff vs EXP2150 mean 5.6 / 4.1 % pixels > 32, same order as control vs control (EXP2143 vs EXP2150: 4.4 / 3.1 %), visual check correct.
+- b/d default 39.215 / 39.038 FPS (median frame 25.94 / 26.09 ms); c/e APPLE_AGX_DXIL_INDEX_MASK=0 38.919 / 38.765 (26.31 / 26.10 ms).
+- f FHD FULL 4865 after five arms (EXP2150 5091 as the third arm; EXP2134 4862): needs an FHD ABBA pair before any regression claim.
+- Verdict: CONFIRMED for HD (f5dcae3a default on); FHD INCONCLUSIVE.
+- Recovery: guest reboot + AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2152h/recover.sh.
+- Next: FHD ABBA with the next experiment's package.
