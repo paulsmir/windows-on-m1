@@ -68871,3 +68871,9 @@ Switches: none. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FU
 - Recovery: rec2159h.
 - Hashes: sys 1d59d8fb6b0c, UmdArm64 84c74c4056b4, UmdX64 01d6dfc2b30c, Umd32 07a85cd5b7d1; manifest c5e6dc1b3ce2, hardware-manifest 5a56d1358343; probe2159.sh c0128e942131 (PROBE_LINT_OK); visible recovery rec2159h 739ce9dbfeefa4a6; m1n1 0d3a75b3.
 - Recovery rec2159h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2159-scores/run2159.sh.
+
+EXP2159 HARDWARE ACTUAL (2026-11-04T15:48:20Z): **New bests with L3-P1 default: FHD FULL 5145 (first arm; best was 5128), HD FULL 6524 (best was 6439, +1.3 %).**
+- Suite 119/0. a FHD FULL 5145 (191 s, wer 0), b HD FULL 6524 (187 s, wer 0). Images vs EXP2154 a/c: mean diff 5.7 / 3.0, >32: 4.0 % / 1.9 % (control-vs-control noise ~4.4 / 3.1 %).
+- Expected vs actual: expected FHD > 5128 and HD > 6439 (~+2 %); actual +0.3 % FHD, +1.3 % HD (single runs; FHD at the first-arm position as EXP2154).
+- Verdict: CONFIRMED (no regression, new best scores). Next: L2 lock split step 1 (in review), L3-P2 BeginJob re-parse elision.
+- Recovery: rec2159h.
