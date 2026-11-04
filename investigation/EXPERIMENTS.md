@@ -68725,3 +68725,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1Depth2Notifiers=1. Steps: D3D12 suite; Grav
 - Hashes: sys 0079ab6f99b5, UmdArm64 bb1f7b201c39, UmdX64 d6c888d435b3, Umd32 80827b585356; manifest 9a7b79950d0e, hardware-manifest e9782408fd3d; probe2151.sh f811cb5f251b (PROBE_LINT_OK); visible recovery rec2151h 980b3c360deb8385; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1Depth2Notifiers=1.
 - Recovery rec2151h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2151-notifiers-gen/run2151.sh.
+
+EXP2151 HARDWARE ACTUAL (2026-11-04T09:19:51Z): **N2 with the template generation FAIL: identical lost completion (lone render head 0x108, completed 0x107, ResetFromTimeout 0xc0000483, firmware alive) during the ordered restart.**
+- Expected vs actual: expected the generation fix to restore copy-1 notifications; actual no change. With EXP2148 (deferred threshold) and EXP2149 (copy 1, generation + 1) this is the third notifier variant that loses the notification of the first job that must notify on its own while its predecessor already notified. Offline the real state machine with per-job notification (rc102 model, MODEL_OWN_NOTIFY) loses nothing in the normal flow, so the KMD handles separate notifications; the firmware does not raise the second notifier on the shared work queues / JobList (Asahi only ever has one notifier per notifier_list).
+- Verdict REJECTED (Wom1Depth2Notifiers stays off). Per AGENTS three failed fixes on one mechanism: stop. A per-job notification needs a second Asahi Queue (own notifier_list, TA/3D/compute work queues and cross-queue Barriers) -- architectural, not queued now.
+- Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2151h/recover.sh -> RECOVERY_DONE.
+- Next: GPU execution time (21.6 ms of work vs Metal's 17.2 ms frame) using the Metal oracle (.local/metal-oracle).
