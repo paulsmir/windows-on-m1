@@ -68926,3 +68926,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 (as EXP2158). Steps: D3D12
 - Hashes: sys 43fcbc846bd2, UmdArm64 89872ad030eb, UmdX64 0004926fbdbb, Umd32 d1247704d8b2; manifest 55ab43088654, hardware-manifest f2169dde1a83; probe2162.sh 43604912ba99 (PROBE_LINT_OK); visible recovery rec2162h 9fcb0d206103bf61; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
 - Recovery rec2162h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2162-proofmid/run2162.sh.
+
+EXP2162 HARDWARE ACTUAL (2026-11-04T18:26:25Z): **L3-P1b hypothesis REJECTED: with the mid-arm snapshot the GravityMark compute job after DWM still spends 108-398 us in BeginJob (median ~230 us; DWM's own BeginJob 36-39 us), and BeginJobAs :3807 is the long holder (36 long holds, mean 255 us).**
+- Suite 119/0, HD PERF 39.296 FPS (EXP2161 39.443, EXP2158 39.375: noise). R7 -> C0 kick span ~1.1-1.2 ms (DWM done -> C0 kick 266 us).
+- m1n1 source (read only): LEASE/JOB_BEGIN are constant-time slot writes (+TLB invalidate on lease), not graph-sized, so the time is inside our BeginJobAs body.
+- Verdict: REJECTED for the proof-invalidation cause; L3-P1b kept (sound, neutral). Next: EXP2163 with the L1b BeginJobAs stage split.
+- Recovery: rec2162h.
