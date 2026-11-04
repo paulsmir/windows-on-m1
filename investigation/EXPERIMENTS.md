@@ -68805,3 +68805,14 @@ EXP2155 HARDWARE ACTUAL (2026-11-04T11:34:47Z): **T1: no KMD present compute job
 - a HD PERF 39.095 FPS (present timestamps armed, inert); b HD FULL 6361 (second arm); suite 119/0.
 - Expected vs actual: expected a present duration split; actual the present compute path is unused in this configuration (flip model), so the R7 -> C0 span (1.6-1.7 ms) is DWM's frame work plus its two boundaries. Verdict: hypothesis "present blit cost" REJECTED; T1 stays an inert opt-in.
 - Next: EXP2156 Wom1JobDiagnostics=1 (Wom1JobTiming971 ring: per-fence pid and firmware TA/3D times) to measure the DWM job.
+
+EXP2156 HARDWARE BEFORE 2026-11-04T11:43:35Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2155: no KMD present blit ran, so the one job per frame between R7 and C0 belongs to another process (DWM composition, flip model); (2) the span costs 1.6-1.7 ms/frame (~7 %) and survived S1's gap removal; (3) Wom1JobTiming971 records each fence's process and firmware TA/3D times, DWM's jobs included.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (diagnostic receipts only; export throttled to 2 s).
+- WHAT IS STILL UNKNOWN: the DWM job's GPU duration and whether it is one render job per GravityMark frame.
+- Expected: Wom1JobTiming971Hot with GravityMark and DWM fences; DWM job TA/3D durations.
+- Recovery: rec2156h.
+- Hashes: sys b675bb0c8e5e, UmdArm64 6b47f0c772d5, UmdX64 77028ba70e64, Umd32 96d7c53df808; manifest a4b92bb23ba6, hardware-manifest 4fe830a858a9; probe2156.sh 0c1b08526fab (PROBE_LINT_OK); visible recovery rec2156h ed3bcae6408e53b4; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1.
+- Recovery rec2156h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2156-jobtiming/run2156.sh.
