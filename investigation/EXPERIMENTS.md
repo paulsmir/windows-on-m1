@@ -69251,3 +69251,17 @@ EXP2181 HARDWARE ACTUAL (2026-11-05T03:07:10Z): **The default path engages: with
 - EXP2180's A-level scores were run-to-run noise. All B-behaviour runs (EXP2177, 2178, 2180, 2181): FHD mean 5200, HD 6456; A runs (EXP2176, 2179): FHD 5150, HD 6385 -> +1.0 % / +1.1 %.
 - Verdict: defaults CONFIRMED active and kept. The m1n1 broker-lock split (exp/m1n1-brokerlock 550c7f23, macho 1c35a20b) becomes the working launch m1n1 and lastgood; m1n1 075e3980 stays the emergency fallback.
 - Recovery: rec2181h.
+
+EXP2182 HARDWARE BEFORE 2026-11-05T09:42:29Z:
+Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true in every arm: a HD FULL (M1b on), b-e HD PERF ABBA (on, APPLE_AGX_DXIL_INDEX_MASK_ADD=0, =0, on), f FHD FULL (on).
+- WHY THIS HYPOTHESIS: (1) offline C4 traversal (2.8 ms/frame) loop: 23 device loads vs Apple m187 15; dxc's ((i & M) + k) * 4 element offsets keep node words scalar (M1 removed only (i & M) * 4); (2) M1b offline: 60 of 182 compute captures change, -897 instructions, C4 loop loads 23 -> 21, loop instructions 579 -> 568, one occupancy loss (e415b41e 896 -> 832 threads); (3) M1 (same mechanism) gave +0.7 % HD PERF in both ABBA pairs (EXP2152).
+- WINDOWS CONTRACT: unchanged (32-bit buffer byte addressing; robustness checks see the same 32-bit offset).
+- AGX/ASAHI CONTRACT: unchanged (load_ssbo lowering, nir_opt_load_store_vectorize).
+- TRANSLATION: ((x & M) + y) * 2^s -> (x + y) * 2^s when M keeps the low 32 - s bits (exact mod 2^32).
+- ATOMIC CONTRACT: none -- one compiler rewrite, controlled per arm by environment.
+- WHAT IS STILL UNKNOWN: the frame-time effect (static counts only); whether the one occupancy loss matters.
+- Expected: suite 119/0; correct images; on-arms HD PERF >= off-arms in both ABBA pairs (+0.3..1 %); HD FULL >= ~6450; FHD no regression (>= ~5150).
+- Failure criteria: wrong image / GPU fault / suite regression (miscompile) -> rejected and default-off; on < off in both pairs -> rejected.
+- Recovery: rec2182h.
+- Hashes: sys 74e57528767d, UmdArm64 042d487f7b9d, UmdX64 1913e762c307, Umd32 4811b6cffb85; manifest c42c2fe57ee5, hardware-manifest c226b20af450; probe2182.sh 8aea197fbb43 (PROBE_LINT_OK); visible recovery rec2182h e7266d3a2598375c; m1n1 0d3a75b3.
+- Recovery rec2182h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2182-m1b/run2182.sh.
