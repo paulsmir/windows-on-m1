@@ -69320,3 +69320,16 @@ EXP2184 HARDWARE ACTUAL (2026-11-05T11:14:54Z): **Q2c H0 FAIL (KMD refusal, not 
 - Interpretation: the firmware accepted the second Queue's NotifierList/Notifier/GpuContextData and delivered compute completions (Q1 not rejected); a KMD job-start precondition (queue provider/runtime phase, pending fence, CompletionAvailable or manager state) was false. Not yet separated: Q2c accounting vs the untested depth-one + retained-slot path.
 - Verdict: INCONCLUSIVE for Q1 (firmware side looks accepted); KMD refusal cause unknown. Wom1ComputeOwnQueue stays off.
 - Next: 1ca7adee makes the refusal name its failing term (SchedulerFaulted 0x40000 | line of the false term); rerun the same switches once with it. Recovery: rec2184h -> RECOVERY_DONE.
+
+EXP2185 HARDWARE BEFORE 2026-11-05T11:56:29Z:
+Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: a HD FULL (APPLE_AGX_RA_GROUPS=1), b-g HD PERF: 1, off, 2, 2, off, 1 (pairs b/c, g/f for =1; d/c, e/f for =2).
+- WHY THIS HYPOTHESIS: (1) EXP2183: C4 is not bound by dependent-load latency; (2) C4 analysis: the a826 family (1.48 ms/frame, 256-thread groups, 111-127 halfregs) keeps 3 resident groups (agx_performance.c occupancy table: 104 -> 1024, 112 -> 896, 128 -> 832 threads), 104 halfregs would keep 4; Mesa's agx_ra never targets the whole-group tier; (3) offline: =1 raises 5 shaders (7626aaca 896 -> 1024 threads, +4.5 % instrs), =2 raises 20 (a8260e42 0.94 ms: 832 -> 1024 threads at +45 % instrs, 18 spills).
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (Mesa spilling to scratch, as used by Asahi when demand exceeds the bound).
+- TRANSLATION: compute functions with a fixed workgroup size: bound = agx_max_registers_for_occupancy((groups + 1) * W) when below the demand; variant kept only with more threads.
+- ATOMIC CONTRACT: none -- one compiler option, two levels, per arm by environment.
+- WHAT IS STILL UNKNOWN: whether C4's a826 kernels are occupancy-bound; whether spill traffic eats the gain.
+- Expected: suite 119/0; correct images; =1 >= off (+0..0.5 %, few shaders); =2: if occupancy-bound, faster than off despite +45 % instrs in a8260e42; otherwise slower (then C4 is throughput-bound on memory/atomics).
+- Failure criteria: wrong image / fault / suite regression -> rejected; =1 <= off and =2 < off -> occupancy lever rejected.
+- Recovery: rec2185h.
+- Hashes: sys 876ab01cf9d5, UmdArm64 8b1fdeea5b59, UmdX64 48bbee92956f, Umd32 85ba54ca769f; manifest 25e499a95cb3, hardware-manifest f87f26d2d77b; probe2185.sh df6d21bec60e (PROBE_LINT_OK); visible recovery rec2185h 98172baf8e056a01; m1n1 0d3a75b3.
+- Recovery rec2185h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2185-o1/run2185.sh.
