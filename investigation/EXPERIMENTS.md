@@ -69333,3 +69333,11 @@ Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABL
 - Recovery: rec2185h.
 - Hashes: sys 876ab01cf9d5, UmdArm64 8b1fdeea5b59, UmdX64 48bbee92956f, Umd32 85ba54ca769f; manifest 25e499a95cb3, hardware-manifest f87f26d2d77b; probe2185.sh df6d21bec60e (PROBE_LINT_OK); visible recovery rec2185h 98172baf8e056a01; m1n1 0d3a75b3.
 - Recovery rec2185h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2185-o1/run2185.sh.
+
+EXP2185 HARDWARE ACTUAL (2026-11-05T12:17:16Z): **O1 REJECTED: one-more-workgroup register bound does not shorten the frame (=1 +0.52 / +0.25 % frame time, =2 +3.55 / +0.36 %).**
+- First launch attempt failed at prepare: the rec2184h normal-absent recovery guest hung (no ping/SSH, console silent 20 min) and the package copy to the guest was truncated (prepare hash FAIL lines). The stale normal launcher (relative run_uefi.py path, not selectable by agx-select-exact-launcher.py) was terminated by exact PID, the air returned to proxy, AT_PROXY recovery booted the experiment profile without the package and stopped in agx-recovery-disable-service.ps1 (no bound service); ecfb9ae5 adds the package-absent resume to agx-recover-visible.sh (RESUME_PACKAGE_ABSENT -> RECOVERY_DONE). Second launch ran normally.
+- Suite 119 PASS / 0 FAIL; WER 0 in all seven arms; guest alive throughout. a HD FULL (=1): 6592.
+- HD PERF (10 + 60 s): b =1 40.238, c off 40.448, d =2 39.061, e =2 39.888, f off 40.032, g =1 39.934 FPS. =1 vs off: +0.52 % / +0.25 % frame time (no significant change); =2 vs off: +3.55 % (inconclusive) / +0.36 %.
+- Expected vs actual: if the a826 family were occupancy-bound, =2 (832 -> 1024 threads at +45 % instructions) would be faster; it is slower or equal. Together with EXP2183 (load latency) C4 is bound neither by dependent-load latency nor by occupancy; remaining candidates: memory throughput / atomics.
+- Verdict: REJECTED (O1 7a549e9b stays opt-in, APPLE_AGX_RA_GROUPS unset). Evidence .local/experiments/EXP2185-o1/evidence.
+- Recovery: rec2185h. Next: EXP2186 Q2c H0 rerun with the job-start refusal line diagnostic (1ca7adee).
