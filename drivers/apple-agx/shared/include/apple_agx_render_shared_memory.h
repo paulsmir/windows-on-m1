@@ -67,6 +67,41 @@
 #define APPLE_AGX_COMPUTE_QUEUE_BARRIER_OFFSET 0x8820u
 #define APPLE_AGX_COMPUTE_JOB_WORD_OFFSET(Set, OffsetA) \
   ((OffsetA) + ((Set) ? APPLE_AGX_COMPUTE_JOB_WORD_SET_B_DELTA : 0u))
+/* Q2c H0 (Wom1ComputeOwnQueue, default off): the compute work queue's own
+ * Asahi Queue identity (queue/mod.rs Queue::new): a NotifierList, a
+ * Threshold, a Notifier and a GpuContextData of its own, instead of sharing
+ * the render Queue's JobList (object 23), notifier 11, threshold 12 and
+ * GPUContextData (object 0). They lie in the compute sidecar's free tail,
+ * after gpu_buf (Asahi workqueue.rs: 0x2c18 bytes at 0xc000, ending at
+ * 0xec18), 0x40-aligned, inside APPLE_AGX_COMPUTE_OWN_FIRST/END_OFFSET.
+ * The sidecar is zeroed from the statistics up at every compute queue
+ * lifetime, then the objects are seeded:
+ *   NotifierList (fw/event.rs): list_head.prev 0, .next = &list_head,
+ *     unkptr_10 0 (the template JobList has the same shape);
+ *   Threshold: a u64, 0;
+ *   GpuContextData (fw/workqueue.rs Default): 0xff at 0x00, 0x01 and 0x1e,
+ *     1 at 0x05, 2 at 0x23 (the template object 0 bytes);
+ *   Notifier: threshold pointer, generation = notifier 11's generation +
+ *     APPLE_AGX_COMPUTE_OWN_GENERATION_DELTA (Asahi: generation = queue id,
+ *     distinct per Queue), cur_count 0, unk_10 0x50, state zero with
+ *     unk_buf (0xa8) all 0xff (V >= 13_0B4; the template notifier).
+ * The compute QueueInfo (object 36) points at them: notifier_list at 0x10
+ * and gpu_context at 0xa4. Asahi QueueInfo is packed(1) and G13 V13_5 has
+ * unk_84_0 (V >= 13_2 && G < G14X), so gpu_context follows unk_9c at 0xa4,
+ * not 0xa0: the template's QueueInfo relocation at 164 names object 0. */
+#define APPLE_AGX_COMPUTE_GPU_BUFFER_BYTES 0x2c18u
+#define APPLE_AGX_COMPUTE_OWN_FIRST_OFFSET 0xf000u
+#define APPLE_AGX_COMPUTE_OWN_LIST_OFFSET 0xf000u
+#define APPLE_AGX_COMPUTE_OWN_THRESHOLD_OFFSET 0xf040u
+#define APPLE_AGX_COMPUTE_OWN_CONTEXT_OFFSET 0xf080u
+#define APPLE_AGX_COMPUTE_OWN_NOTIFIER_OFFSET 0xf100u
+#define APPLE_AGX_COMPUTE_OWN_END_OFFSET 0xf1c0u
+#define APPLE_AGX_COMPUTE_OWN_GENERATION_DELTA 1u
+#define APPLE_AGX_NOTIFIER_LIST_BYTES 0x18u
+#define APPLE_AGX_THRESHOLD_BYTES 8u
+#define APPLE_AGX_GPU_CONTEXT_DATA_BYTES 0x40u
+#define APPLE_AGX_QUEUE_INFO_NOTIFIER_LIST_OFFSET 0x10u
+#define APPLE_AGX_QUEUE_INFO_GPU_CONTEXT_OFFSET 0xa4u
 /* Asahi event.rs: queue event values advance in 0x100 units. */
 #define APPLE_AGX_COMPUTE_STAMP_INCREMENT 0x100u
 
@@ -187,6 +222,13 @@ typedef struct _APPLE_AGX_NOTIFIER_FLIGHT {
   /* N2: the notifier the flight's jobs signal (0 = template object 11,
    * 1 = its copy below; TwoNotifiers) and that notifier's count at Begin. */
   APPLE_AGX_U32 Notifier, PreviousTotal;
+  /* Q2c (ComputeOwnQueue): the flight's compute jobs signal the compute
+   * Queue's notifier; EventCountB stages its threshold, PreviousThresholdB
+   * is that threshold at Begin. HasCompute: a compute build joined the
+   * flight. DeferredB/WroteB: the B threshold was deferred (N1) or written
+   * by Publish. EventCount/Deferred are then the render Queue's (A). */
+  APPLE_AGX_U32 EventCountB, PreviousThresholdB;
+  APPLE_AGX_BOOL HasCompute, DeferredB, WroteB;
 } APPLE_AGX_NOTIFIER_FLIGHT;
 
 typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
@@ -300,6 +342,15 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
       const APPLE_AGX_RENDER_MANAGER_KEY *Key, APPLE_AGX_U32 Fence,
       const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects);
   void *ManagerEvictContext;
+  /* Q2c H0 (REG_DWORD Wom1ComputeOwnQueue = 1; default off: every byte as
+   * before): the compute work queue is its own Asahi Queue (see
+   * APPLE_AGX_COMPUTE_OWN_*). Threshold 12 (A) then counts the render
+   * notifications only (2 per render job, its event_count) and the compute
+   * Queue's threshold (B) the compute ones (1 per compute job,
+   * NotifierComputeCount, reset with the compute queue lifetime only).
+   * Set before AppleAgxRenderSharedMemoryInitializeComputeQueue; never
+   * together with TwoNotifiers (N2 shares the render notifier list). */
+  APPLE_AGX_BOOL ComputeOwnQueue;
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
 
 /* Cancel is valid only before a queue pointer was published. Retire requires
