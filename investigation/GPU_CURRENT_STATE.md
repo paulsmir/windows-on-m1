@@ -8,6 +8,20 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-11-05 17:30Z -- GOAL FHD >= 7814 (user protocol 2026-11-05); Q2c + F1 WORKS; FHD best 5396
+- Goal (user): GravityMark D3D12 1920x1080, 100k asteroids, -temporal 0, windowed, same GravityMark build as macOS, >= 7814 in
+  three consecutive pre-agreed FULL FHD runs after a fresh boot; correct image, no fault/TDR/reset/removal, full suite.
+  macOS reference: 7814 / 46.8 FPS on this J313 (macOS 15.7.8, Metal, 2026-11-02, powermetrics 1278 MHz 100 % active).
+- Measured (GravityMark's own FPS, Time 167 s): FHD 5268 / 31.5 FPS (EXP2183, L4 opt-in arm), 5396 / 32.3 FPS (EXP2190, Q2c on,
+  first arm) -> ~31.0 ms vs 21.4 ms: -9.6 ms/frame (-31 %) still needed. FULL score and PERF window are separate metrics.
+- Accepted defaults: M1b (EXP2182). Rejected: L4 (EXP2183), O1 (EXP2185), G1 (EXP2188, reverted). Opt-in validated, flip pending:
+  Q2c Wom1ComputeOwnQueue + F1 (EXP2189: compute kick delay 1.69 -> 1.03 ms/frame HD; EXP2190 FHD 5396; EXP2191 = off control).
+- EXP2184/2186/2187 correction: refusal = provider phase (line 3547), cause = backend ended render-with-compute on TA+3D (F1 fix).
+- Protocol: one variable per run, ABBA or cross-boot pairs with identical arm order (FHD first: position/heat drift ~1.5-2 %),
+  accept only by repeatable frame time; owner of each cost named (app/DXIL, UMD/compiler, KMD, m1n1, firmware, DWM).
+- Next: finish Q2c control (EXP2191) -> FHD frame budget on the accepted package (receipt run) -> largest measured item.
+  Metal per-pass timing needs a macOS boot (Instruments Metal System Trace): asked from the user once.
+
 ## CURRENT 2026-11-05 07:00Z -- DEFAULTS: retained VM slots + unpinned job thread (10fd111e); WORKING m1n1 = broker-lock split
 - Working/lastgood m1n1: .local/experiments/m1n1-brokerlock-split/m1n1-g2-abi6-iomfb-owner-brokerlock-split.macho
   (exp/m1n1-brokerlock 550c7f23, AGX_BROKER_LOCK_SPLIT=1, sha 1c35a20b; user-approved). Emergency: m1n1-075e3980-guestram.
