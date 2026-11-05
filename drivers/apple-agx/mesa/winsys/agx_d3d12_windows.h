@@ -72,6 +72,8 @@ void AgxD3d12OwnerJobDrawRange(const void *Heap, unsigned long long Lo, unsigned
 void AgxD3d12OwnerJobBarrierRange(unsigned Type, unsigned Id, const void *Heap, unsigned long long Lo,
                                   unsigned long long Hi);
 void AgxD3d12OwnerJobResolveRange(const void *Heap, unsigned long long Lo, unsigned long long Hi);
+/* OV5 receipt: the active dispatch accesses [Lo, Hi) of Heap (Flags bit 0: may write) */
+void AgxD3d12OwnerJobDispatchRange(const void *Heap, unsigned long long Lo, unsigned long long Hi, unsigned Flags);
 /* OV4 (opt-in APPLE_AGX_D3D12_OV4=1 with the OV2 feature): after a barrier
  * is fed between commands, submit the open compute batch when that barrier
  * is the first to order the last render's accesses (AgxD3d12JobSplitHere) */

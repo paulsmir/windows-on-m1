@@ -6668,7 +6668,38 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
     }
     return AgxD3d12OwnerSetHeap(owner, stage, &h.binding);
 }
+/* sink: AgxD3d12OwnerJobDrawRange (a render) or AgxD3d12OwnerJobDispatchRange
+ * (OV5: a compute batch); flags bit 0 = may write (UAV), AGX_D3D12_JOB_VERTEX
+ * = a vertex-stage access */
+typedef void (*JobRangeSink)(const void *, unsigned long long, unsigned long long, unsigned);
+static void JobDescriptorRange(JobRangeSink sink, const AgxD3d12Descriptor *v, unsigned flags) {
+    if (!v || !v->heap) return;
+    sink(v->heap, v->bytes ? v->offset : 0ull, v->bytes ? v->offset + v->bytes : ~0ull, flags);
+}
+static void JobHeapRange(JobRangeSink sink, const AgxD3d12Heap *heap, UINT64 offset, UINT64 bytes, unsigned flags) {
+    if (!heap) return;
+    sink(heap, offset, bytes ? offset + bytes : ~0ull, flags);
+}
+static void JobStageRanges(JobRangeSink sink, const AgxD3d12Dispatch &b, unsigned stage) {
+    for (UINT u = 0; u < kUavSlots; ++u) {
+        JobDescriptorRange(sink, b.uav_descriptor[u], 1u | stage);
+        JobHeapRange(sink, b.uav_heap[u], b.uav_offset[u], 0, 1u | stage);
+    }
+    for (UINT t = 0; t < kSrvSlots; ++t) {
+        JobDescriptorRange(sink, b.srv_descriptor[t], stage);
+        JobHeapRange(sink, b.srv_heap[t], b.srv_offset[t], 0, stage);
+    }
+    for (UINT c = 0; c < kCbSlots; ++c) {
+        JobDescriptorRange(sink, b.cb_descriptor[c], stage);
+        JobHeapRange(sink, b.cb_heap[c], b.cb_offset[c], 0, stage);
+    }
+}
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
+    if (AgxD3d12OwnerJobBarriersEnabled()) { /* OV5 receipt: the compute batch's accesses */
+        JobStageRanges(AgxD3d12OwnerJobDispatchRange, dispatch, 0u);
+        JobHeapRange(AgxD3d12OwnerJobDispatchRange, dispatch.indirect.args, dispatch.indirect.args_offset, 0, 0u);
+        JobHeapRange(AgxD3d12OwnerJobDispatchRange, dispatch.indirect.count, dispatch.indirect.count_offset, 0, 0u);
+    }
     AgxD3d12OwnerBindings bind;
     OwnerBindings(dispatch, &bind);
     AgxD3d12HeapScratch *heap = nullptr;
@@ -6790,48 +6821,28 @@ struct AgxD3d12ClearAbsorbStats {
  * access -- targets, absorbed clears, vertex/index/indirect/stream-output
  * buffers, the VS/PS views (UAVs marked); root views and buffers without a
  * size run to the heap's end; optional stages are not placed (unknown). */
-static void JobDescriptorRange(const AgxD3d12Descriptor *v, unsigned uav) {
-    if (!v || !v->heap) return;
-    AgxD3d12OwnerJobDrawRange(v->heap, v->bytes ? v->offset : 0ull, v->bytes ? v->offset + v->bytes : ~0ull, uav);
-}
-static void JobHeapRange(const AgxD3d12Heap *heap, UINT64 offset, UINT64 bytes, unsigned uav) {
-    if (!heap) return;
-    AgxD3d12OwnerJobDrawRange(heap, offset, bytes ? offset + bytes : ~0ull, uav);
-}
-static void JobStageRanges(const AgxD3d12Dispatch &b) {
-    for (UINT u = 0; u < kUavSlots; ++u) {
-        JobDescriptorRange(b.uav_descriptor[u], 1u);
-        JobHeapRange(b.uav_heap[u], b.uav_offset[u], 0, 1u);
-    }
-    for (UINT t = 0; t < kSrvSlots; ++t) {
-        JobDescriptorRange(b.srv_descriptor[t], 0u);
-        JobHeapRange(b.srv_heap[t], b.srv_offset[t], 0, 0u);
-    }
-    for (UINT c = 0; c < kCbSlots; ++c) {
-        JobDescriptorRange(b.cb_descriptor[c], 0u);
-        JobHeapRange(b.cb_heap[c], b.cb_offset[c], 0, 0u);
-    }
-}
 static void JobDrawRanges(const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional, const AgxD3d12Command *clears,
                           UINT clear_count) {
-    if (optional.gs || optional.hs || optional.ds) AgxD3d12OwnerJobDrawRange(nullptr, 0, 0, 1u);
-    for (UINT r = 0; r < d.rtvs && r < 8u; ++r) JobDescriptorRange(&d.rtv[r], 0u);
-    if (d.dsv.kind) JobDescriptorRange(&d.dsv, 0u);
+    const JobRangeSink sink = AgxD3d12OwnerJobDrawRange;
+    const unsigned vertex = AGX_D3D12_JOB_VERTEX;
+    if (optional.gs || optional.hs || optional.ds) sink(nullptr, 0, 0, 1u | vertex);
+    for (UINT r = 0; r < d.rtvs && r < 8u; ++r) JobDescriptorRange(sink, &d.rtv[r], 0u);
+    if (d.dsv.kind) JobDescriptorRange(sink, &d.dsv, 0u);
     for (UINT k = 0; clears && k < clear_count; ++k) {
-        if (clears[k].kind == kCommandClearDepth) JobDescriptorRange(&clears[k].clear_depth.dsv, 0u);
-        else if (clears[k].kind == kCommandClear) JobDescriptorRange(&clears[k].clear.rtv, 0u);
-        else AgxD3d12OwnerJobDrawRange(nullptr, 0, 0, 0u);
+        if (clears[k].kind == kCommandClearDepth) JobDescriptorRange(sink, &clears[k].clear_depth.dsv, 0u);
+        else if (clears[k].kind == kCommandClear) JobDescriptorRange(sink, &clears[k].clear.rtv, 0u);
+        else sink(nullptr, 0, 0, 0u);
     }
-    for (UINT v = 0; v < kVertexBuffers; ++v) JobHeapRange(d.vb[v].heap, d.vb[v].offset, 0, 0u);
-    if (d.index_size) JobHeapRange(d.index_heap, d.index_offset, 0, 0u);
-    JobHeapRange(d.indirect.args, d.indirect.args_offset, 0, 0u);
-    JobHeapRange(d.indirect.count, d.indirect.count_offset, 0, 0u);
+    for (UINT v = 0; v < kVertexBuffers; ++v) JobHeapRange(sink, d.vb[v].heap, d.vb[v].offset, 0, vertex);
+    if (d.index_size) JobHeapRange(sink, d.index_heap, d.index_offset, 0, vertex);
+    JobHeapRange(sink, d.indirect.args, d.indirect.args_offset, 0, vertex);
+    JobHeapRange(sink, d.indirect.count, d.indirect.count_offset, 0, vertex);
     for (UINT t = 0; t < kSoTargets; ++t) {
-        JobHeapRange(d.so[t].heap, d.so[t].offset, d.so[t].size, 1u);
-        JobHeapRange(d.so[t].filled, d.so[t].filled_offset, 0, 1u);
+        JobHeapRange(sink, d.so[t].heap, d.so[t].offset, d.so[t].size, 1u | vertex);
+        JobHeapRange(sink, d.so[t].filled, d.so[t].filled_offset, 0, 1u | vertex);
     }
-    JobStageRanges(d.vs_bind);
-    JobStageRanges(d.ps_bind);
+    JobStageRanges(sink, d.vs_bind, vertex);
+    JobStageRanges(sink, d.ps_bind, 0u);
 }
 static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional,
                                                 AgxD3d12DrawScratch *scratch, const AgxD3d12Command *clears = nullptr,

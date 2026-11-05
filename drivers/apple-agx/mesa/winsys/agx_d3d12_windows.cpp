@@ -654,6 +654,9 @@ static UINT owner_ov2_reason[8], owner_ov2_sequence, owner_ov2_pairs, owner_ov2_
  * | its dispatches, and the foreign command kinds (bit kind, 31 driver
  * work) between the render and that batch */
 static UINT owner_ov2_prefix[4], owner_ov2_kinds[4];
+/* OV5 receipt: per execution, AgxD3d12JobRenderTaRefusal of its first eight
+ * render-after-compute batches as nibbles, and their count */
+static UINT owner_ov5_sequence, owner_ov5_renders;
 /* OV4 (opt-in APPLE_AGX_D3D12_OV4=1, only with the OV2 feature) */
 static BOOL owner_ov4(void) {
   static const BOOL enabled = [] {
@@ -668,7 +671,7 @@ static void owner_ov2_receipt_locked(void) {
   UINT any = 0;
   for (unsigned i = 0; i < 8u; ++i) any |= owner_ov2_reason[i];
   if (any && AdmissionUmdMeasureEnabled()) {
-    UINT values[22];
+    UINT values[24];
     for (unsigned i = 0; i < 8u; ++i) values[i] = owner_ov2_reason[i];
     values[8] = owner_ov2_sequence;
     values[9] = owner_ov2_pairs;
@@ -680,12 +683,15 @@ static void owner_ov2_receipt_locked(void) {
     }
     values[20] = owner_ov4_splits;
     values[21] = owner_ov4() ? 1u : 0u;
-    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 22u);
+    values[22] = owner_ov5_sequence;
+    values[23] = owner_ov5_renders;
+    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 24u);
   }
   for (unsigned i = 0; i < 8u; ++i) owner_ov2_reason[i] = 0;
   owner_ov2_sequence = owner_ov2_pairs = owner_ov2_range_sequence = 0;
   for (unsigned i = 0; i < 4u; ++i) owner_ov2_prefix[i] = owner_ov2_kinds[i] = 0;
   owner_ov4_splits = 0;
+  owner_ov5_sequence = owner_ov5_renders = 0;
 }
 extern "C" void AgxD3d12OwnerJobDrawRange(const void *heap, unsigned long long lo, unsigned long long hi,
                                           unsigned uav) {
@@ -697,6 +703,12 @@ extern "C" void AgxD3d12OwnerJobBarrierRange(unsigned type, unsigned id, const v
                                              unsigned long long hi) {
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
   AgxD3d12JobBarrierRange(&owner_job_barriers, type, id, heap, lo, hi);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+extern "C" void AgxD3d12OwnerJobDispatchRange(const void *heap, unsigned long long lo, unsigned long long hi,
+                                              unsigned flags) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobBarrierDispatchRange(&owner_job_barriers, heap, lo, hi, flags & 1u);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
 extern "C" void AgxD3d12OwnerJobResolveRange(const void *heap, unsigned long long lo, unsigned long long hi) {
@@ -764,8 +776,16 @@ static unsigned owner_job_values_valid;
 extern "C" unsigned (*AgxWin32BatchKindHook)(unsigned kind);
 static unsigned owner_batch_kind(unsigned kind) {
   unsigned independent = 0u;
+  /* winsys: kind | 0x100 for a render batch with a CDM prelude */
+  const unsigned prelude = (kind >> 8) & 1u;
+  kind &= 0xffu;
   if (!AgxD3d12OwnerJobBarriersEnabled()) return 0u;
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  if (kind == 1u && AgxWin32Ov2Feature && owner_job_barriers.PreviousKind == 2u) {
+    const unsigned ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude);
+    if (owner_ov5_renders < 8u) owner_ov5_sequence |= (ta & 0xfu) << (4u * owner_ov5_renders);
+    ++owner_ov5_renders;
+  }
   if (kind == 2u && AgxWin32Ov2Feature) {
     const unsigned reason = AgxD3d12JobBarrierRefusal(&owner_job_barriers);
     const unsigned ranged = AgxD3d12JobBarrierRefusalRanges(&owner_job_barriers);

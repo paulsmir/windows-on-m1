@@ -540,5 +540,71 @@ int main(void) {
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         self.assertIn('if (!owner || !AgxWin32Ov2Feature || !owner_ov4()) return;', owner)
 
+    def test_ov5_render_ta_verdict(self):
+        """EXP2201: Metal starts R16's vertex/TA work while c15 runs, though
+        c15 writes R16's color attachment, and orders only the 3D stage.
+        The OV5 verdict (receipt) must free a render's TA exactly when no
+        vertex-stage access of it conflicts with the compute batch before it
+        (the compute's UAV writes vs any vertex access, any compute access vs
+        a vertex-stage write), never for a render with a compute prelude
+        (it queues behind the compute), unplaceable accesses, driver work, a
+        global UAV barrier with UAVs on both sides, or a render after a
+        render."""
+        code = r"""
+#include <stdio.h>
+#include "agx_d3d12_job_barriers.h"
+static AGX_D3D12_JOB_BARRIERS j;
+static unsigned values[AGX_D3D12_JOB_BARRIER_VALUES];
+static int U, S, V;
+enum { VX = AGX_D3D12_JOB_VERTEX };
+static unsigned run(int mode) {
+  AgxD3d12JobBarriersInit(&j); AgxD3d12JobBarrierExecution(&j, 1);
+  AgxD3d12JobBarrierBegin(&j, 2);                    /* C: writes U, reads S */
+  AgxD3d12JobBarrierDispatchRange(&j, &U, 0, 64, 1);
+  AgxD3d12JobBarrierDispatchRange(&j, &S, 0, 64, 0);
+  AgxD3d12JobBarrierEnd(&j);
+  if (mode == 6) AgxD3d12JobBarrierForeign(&j);
+  if (mode == 7) { AgxD3d12JobBarrierAdd(&j, 2, 0, 0, 0, 0); AgxD3d12JobBarrierRange(&j, 2, 0, 0, 0, 0); }
+  AgxD3d12JobBarrierBegin(&j, 5);                    /* R: reads V at vertex, renders into U */
+  if (mode != 2) AgxD3d12JobBarrierBatch(&j, 2u, values); /* C submitted by R's first draw */
+  AgxD3d12JobBarrierDrawRange(&j, &V, 0, 64, VX);
+  AgxD3d12JobBarrierDrawRange(&j, &U, 0, 64, 0);     /* the c15 -> R16 attachment */
+  if (mode == 1) AgxD3d12JobBarrierDrawRange(&j, &U, 32, 48, VX);       /* vertex read of C's write */
+  if (mode == 3) AgxD3d12JobBarrierDrawRange(&j, &S, 0, 16, 1u | VX);   /* stream-out into what C read */
+  if (mode == 4) AgxD3d12JobBarrierDrawRange(&j, 0, 0, 0, VX);
+  if (mode == 5) AgxD3d12JobBarrierDrawRange(&j, &S, 0, 16, VX);        /* vertex read of what C read */
+  if (mode == 7) AgxD3d12JobBarrierDrawRange(&j, &V, 128, 192, 1u);     /* a PS UAV */
+  AgxD3d12JobBarrierEnd(&j);
+  AgxD3d12JobBarrierBegin(&j, 2);                    /* the next C submits R */
+  {
+    unsigned r = AgxD3d12JobRenderTaRefusal(&j, mode == 9);
+    AgxD3d12JobBarrierBatch(&j, 1u, values);
+    AgxD3d12JobBarrierEnd(&j);
+    return r;
+  }
+}
+int main(void) {
+  const int modes[] = {0, 1, 2, 3, 4, 5, 6, 7, 9};
+  for (unsigned i = 0; i < sizeof(modes) / sizeof(modes[0]); ++i) printf("%d %u\n", modes[i], run(modes[i]));
+  return 0;
+}
+"""
+        ran = build_run(code, [], [D3D12])
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+        self.assertEqual(ran.stdout.split('\n')[:-1], [
+            '0 0',    # c15 -> R16: writes only a fragment-stage target
+            '1 10',   # vertex-stage read of the compute's UAV write
+            '2 2',    # the previous batch was not a compute batch
+            '3 10',   # vertex-stage write (stream-out) over what the compute read
+            '4 11',   # an unplaceable vertex access
+            '5 0',    # vertex read of what the compute only read
+            '6 11',   # driver work in the compute batch: its writes are unplaced
+            '7 12',   # global UAV barrier, UAVs on both sides
+            '9 9'])   # a compute prelude
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        self.assertIn('const unsigned ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude);', owner)
+        batch = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c').read_text()
+        self.assertIn('AgxWin32BatchKindHook(1u | (batch->cdm.bo ? 0x100u : 0u));', batch)
+
 if __name__ == '__main__':
     unittest.main()

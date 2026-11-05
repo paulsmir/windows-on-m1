@@ -1146,7 +1146,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   if(!publish_shadows(batch)) { fail_site=__LINE__; goto fail; }
   capture_render_addresses(batch,render);
 #ifdef _MSC_VER
-  if(AgxWin32BatchKindHook) (void)AgxWin32BatchKindHook(1u);
+  /* OV5 receipt: 0x100 = the render has a CDM prelude (it queues on compute) */
+  if(AgxWin32BatchKindHook) (void)AgxWin32BatchKindHook(1u | (batch->cdm.bo ? 0x100u : 0u));
   note_batch_deps(batch,1u);
 #endif
   capture_native_refs(batch);
