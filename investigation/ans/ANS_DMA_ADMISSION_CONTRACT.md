@@ -23,7 +23,7 @@ HYPOTHESIS (explicitly unproven).
 | `mu/Silicon/Apple/T810XFamilyPkg/Library/MemoryInitPeiLib/MemoryInitPeiLib.c` | Mu reserves framebuffer, CPU-stack carveouts, RAM disk, low DRAM window; no generic ADT carveout import |
 | `investigation/EXPERIMENTS.md` EXP464 | OBSERVED: GPU context0 TTBR0/1 = `0x9d71a8000/0x9d71a0000` — inside GUEST_RAM; shows tables of other IOMMUs do live in that window |
 | Asahi Linux `AsahiLinux/linux` branch `asahi` @ `6ba0637d1ed9a2e3639dd3fc9eca6cd0483a6434` (fetched 2026-11-05, read-only, scratch copy outside repo): `drivers/nvme/host/apple.c` sha256 `aa43ad90…ed339`, `drivers/soc/apple/sart.c` `9de8b3fc…08ff`, `arch/arm64/boot/dts/apple/t8103.dtsi` `ba73aa7f…fce7` | t8103 `nvme@27bcc0000` (`apple,t8103-nvme-ans2`) has **no `iommus`**, only `apple,sart = <&sart>` (`sart: iommu@27bc50000`, `apple,t8103-sart`), IRQ AIC 590, mailbox `0x277408000` IRQs 583-586, power domains `ps_ans2` + `ps_apcie_st`; `dma_set_mask_and_coherent(64)` (apple.c:1537); SART only for RTKit shmem (apple.c:268-306); NVMMU constants identical to m1n1 native (TCB_STAT `0x28120`); TCB dma_flags FROM_DEVICE=bit0, TO_DEVICE=bit1 (apple.c:107-108); `apple,t8103-sart` → SARTv2 (sart.c:355-356). apple.c:85-103 documents the intended model: a higher exception level owns the NVMMU, shadow-copies PRPs and verifies they do not point at kernel text/data/page tables before programming the TCB — exactly the EL2 broker design here. |
-| macOS 15.7.8 kernelcache: IONVMeFamily, AppleSART, AppleT8020DART, IODARTFamily | see §6 (RE notes, file `side-session-notes/.../ans-macos-re-2026-11-06.md`) |
+| macOS 15.7.8 kernelcache: IONVMeFamily, AppleSART, AppleT8020DART, IODARTFamily | not completed, no claims used (§6) |
 | Microsoft StorPort docs (listed in `drivers/storage/appleans/windows/NATIVE_PATH.md`) | Windows owns SRB, SG list and guest DMA addresses; no IOMMU contract is required by StorPort |
 
 ## 2. What "DART_TABLES" actually protects
@@ -137,7 +137,14 @@ census verdict is exactly the input that Mu change needs.
 
 ## 6. macOS RE (behaviour reference)
 
-See the separate RE notes; summary is merged in `investigation/ANS_CURRENT_STATE.md`.
+NOT COMPLETED in this phase: the delegated kernelcache pass (IONVMeFamily,
+AppleSART, AppleT8020DART, IODARTFamily) produced no written findings, so no
+RE claim is used anywhere in this contract. Nothing in §2-§5 depends on it:
+the DART-less ANS, NVMMU/TCB, SART and EL2-shadow-PRP model are all
+established by m1n1 source and Asahi apple.c/sart.c/t8103.dtsi, and the one
+remaining unknown (retained TTBR PAs) is a live measurement that RE could not
+supply anyway. Raw extracted segments (outside the repo, untracked):
+`/private/tmp/claude-502/-Volumes-pwdev-public-windows/4032a384-7ac0-4eac-947b-1e9c2e2df44e/scratchpad/re/`.
 
 ## 7. Smallest falsifiable hardware checkpoint
 

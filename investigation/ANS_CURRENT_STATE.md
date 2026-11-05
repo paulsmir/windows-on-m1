@@ -57,6 +57,7 @@ No flag is cleared by assertion; the policy still rejects any flagged region.
    merged line before running it; then ANS002 QUERY/CLAIM, ANS003 admin queue,
    ANS004 Identify, READ — each needs the §3 admission GREEN first.
 5. Asahi apple.c/sart.c/t8103.dtsi cross-check done (contract §1, §4); re-pin before ANS003.
+6. macOS kext RE not completed (contract §6); not required by the current design.
 
 ## Unchanged constraints
 
