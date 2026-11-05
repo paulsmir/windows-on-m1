@@ -69615,3 +69615,19 @@ EXP2199 HARDWARE ACTUAL (2026-11-05T21:22:40Z): **CONFIRMED (diagnostic): the OV
 - measure-d3d12-ov2-refusal: 3085 rows; 3070 identical: per-reason counts 0,0,1,1,3,0,0,0 (reason 2 previous-not-render 1 = the frame's first C; reason 3 gap barriers 1; reason 4 DrawUav 3), first-eight nibbles 0x3444, compute-after-render 4. The other 15 rows are startup / double frames.
 - Interpretation: three of four R->C pairs per frame are refused only by the UMD's DrawUav rule (a graphics UAV binding in the preceding render); the D3D12 contract orders UAV accesses only through an application UAV barrier or state transition, which these gaps lack (EXP2193). The fourth pair is a real application dependency. Upper bound for OV2 on GravityMark: 3 of 4 pairs per frame.
 - Verdict: CONFIRMED diagnostic; no behaviour change. Next: (1) resource-level check offline that C3/C5/C7 do not read what R2/R4/R6 write without a barrier (BO overlap may be placed-heap granularity); (2) macOS mtlhazard run (what GravityMark-Metal declares in the same gaps); (3) if both agree, OV2 rule: drop DrawUav when the gap has no barrier (Windows contract), one-variable hardware run. Recovery rec2199h.
+
+EXP2200 HARDWARE BEFORE 2026-11-05T21:49:26Z:
+Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: a FHD FULL R=1 (first arm, image check), c HD PERF R=0, d HD PERF R=1 (KMD receipts at poll 12), e HD PERF R=1, f HD PERF R=0 (ABBA). Arms with R=0 are also the proof step: measure-d3d12-ov2-refusal value 10 reports the ranges-rule verdict with the switch off.
+- WHY THIS HYPOTHESIS: (1) EXP2199: 3070 of 3085 ECLs refuse C3/C5/C7 only by reason 4 (DrawUav); (2) EXP2193: 0 application barriers in those R->C gaps; (3) macOS kext RE (bdd176dd1): Apple orders encoders per resource (read/write usage, fences, events) and never on the previous encoder as such, which is how it overlaps ~4.3 ms per FHD frame (EXP2192).
+- WINDOWS CONTRACT: D3D12 orders work across draws and dispatches only through ResourceBarrier: transitions/aliasing order all prior accesses of the named subresource; UAV barriers order UAV accesses of the named resource (all UAV accesses when global); unnamed accesses of different commands are unordered.
+- AGX/ASAHI CONTRACT: unchanged; an OV2-flagged compute job may start while the previous render runs; the KMD waives only the COMPUTE_ON_3D lead of the same context and process.
+- TRANSLATION: flag C independent when no barrier between R's last draw and C's last dispatch names a heap range R accessed (unplaceable and resolve-destination ranges always order).
+- ATOMIC CONTRACT: none -- one env switch compared pairwise inside one boot.
+- WHAT IS STILL UNKNOWN: whether GravityMark's barriers inside C3/C5/C7 (~125/19/11) name R's ranges (value 10); whether sizeless views make the rule conservative (they order, safe); the gain.
+- Expected: suite 119/0; R=0 arms value 8 = 0x3444, value 10 ideally 0 nibbles for C3/C5/C7; R=1 arms Wom1Ov2Receipt Waived ~3 per frame, HD PERF > 40.81 (EXP2196) and > the R=0 arms; correct FHD image; no fault, TDR or WER.
+- Failure criteria: value 10 shows 8 on C3/C5/C7 (then R=1 arms equal R=0, OV2 closed for GravityMark); R=1 slower, faulty, or wrong image -> rejected; rec2200h.
+- Recovery: rec2200h (recover.sh directly on the running guest, no manual reboot).
+- Probe: agx_d3d12_probe_e2200_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c, probe source unchanged).
+- Hashes: sys 9687d9f6977f, UmdArm64 3df09771e447, UmdX64 397c435c8e8f, Umd32 705e629bd08e; manifest 3c4c3f7a2ce8, hardware-manifest f2c0203ff5b3; probe2200.sh a5118c8aa46e (PROBE_LINT_OK); visible recovery rec2200h 5ed4833bbd7645ae; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
+- Recovery rec2200h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2200-ov2-ranges/run2200.sh.
