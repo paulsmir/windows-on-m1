@@ -69465,3 +69465,16 @@ EXP2192 MACOS METAL REFERENCE TIMING (2026-11-05T16:17:14Z; recorded after the r
 - New fact: Apple overlaps render and compute encoders that have no dependency (2.3 ms/frame HD, 4.3 ms FHD); our KMD serializes every render<->compute boundary with a firmware Barrier.
 - Evidence: .local/experiments/MACOS-20261105-metal-timing (csv, sources, outputs). Kernelcache for RE: .local/reference/macos-kernelcache-j313-15.7.8/kernelcache.im4p (sha256 7bdc57d3c583caf3...; com.apple.AGXG13G 329.2 loaded).
 - Next: current FHD per-job budget on the Q2c default package (receipt run), then the largest matched gaps: render/compute overlap where D3D12 permits it, C4.
+
+EXP2193 HARDWARE BEFORE 2026-11-05T16:47:19Z:
+Switches: Wom1RcReceipt=1 Wom1JobDiagnostics=1 (receipts only). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0 with APPLE_AGX_D3D12_JOB_BARRIERS=1: a FHD FULL (KMD receipts at poll 12), b HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2192: Apple overlaps lighting compute (~C0) with the main render pass (~R1) every frame (4.3 ms FHD); (2) RE: macOS emits cross-queue barriers only for real dependencies; D3D12's are the application's ResourceBarrier calls, which our UMD only counts; (3) EXP2189 job window: only 1633 ta_on_compute kicks by mid-run vs ~4 C->R boundaries per frame, so most C->R successors are refused (prelude gate 5 / 61 suspected).
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (receipts only).
+- ATOMIC CONTRACT: none (diagnostics).
+- WHAT IS STILL UNKNOWN: the barriers GravityMark records between C0 and R1 (and other boundaries); the refusal reason per boundary class.
+- Expected: suite 119/0; measure-d3d12-job-barriers lines per batch; Wom1RcDecisions histogram with reasons per pair kind; scores near defaults (receipt cost small).
+- Failure criteria: missing receipts; any reset/fault (diagnostic must be inert).
+- Recovery: rec2193h.
+- Hashes: sys 54c979de5ecc, UmdArm64 2c07947b261e, UmdX64 5ced683e8839, Umd32 aa2cd4ce9cfe; manifest 95caaec7a111, hardware-manifest b68f418f50ba; probe2193.sh 4eee011fe6b3 (PROBE_LINT_OK); visible recovery rec2193h 8fff2f9badabed4a; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1RcReceipt=1 Wom1JobDiagnostics=1.
+- Recovery rec2193h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2193-ov1-receipt/run2193.sh.
