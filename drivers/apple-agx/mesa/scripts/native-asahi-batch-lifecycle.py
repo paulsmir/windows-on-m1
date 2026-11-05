@@ -1293,6 +1293,9 @@ agx_win32_should_lower_robustness_d3d(const nir_intrinsic_instr *intr,
    /* M3: loop-invariant descriptor crawls (and their address math) leave
     * their loops; non-speculative (winsys/agx_win32_d3d_texture_crawl.h) */
    NIR_PASS(_, nir, agx_win32_hoist_loop_invariants);
+   /* L4: loop-invariant constant-buffer loads under soft faults
+    * (winsys/agx_win32_soft_fault.h, APPLE_AGX_D3D_LICM_CONST=1) */
+   NIR_PASS(_, nir, agx_win32_hoist_constant_loads, agx_win32_soft_faults(dev));
 ''')
     call='   agx_shader_initialize(dev, so, nir, ctx->support_lod_bias, ctx->robust);'
     if state.count(call)!=2:

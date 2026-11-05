@@ -553,6 +553,77 @@ synthetic_uav_reads(unsigned reads)
 /* M1: four index-to-byte conversions; agx_dxil_drop_index_masks must drop
  * the mask exactly when it keeps the low 32 - s bits of a * 2^s. Prints
  * "MASK <case> dropped|kept" per store and exits. */
+/* L4: a loop whose constant-buffer address comes from groupshared memory,
+ * the load inside a conditional (as in C4's traversal).  Case 0: the loop
+ * stores no shared memory -> load_shared and the constant load leave the
+ * loop.  Case 1: the loop stores shared memory -> both stay.  Prints
+ * "LICMCONST <case> shared-in-loop <n> const-in-loop <n>". */
+static unsigned
+count_in_loops(struct exec_list *list, bool in_loop, nir_intrinsic_op op)
+{
+   unsigned n = 0;
+   foreach_list_typed(nir_cf_node, node, node, list) {
+      if (node->type == nir_cf_node_block) {
+         if (!in_loop)
+            continue;
+         nir_foreach_instr(instr, nir_cf_node_as_block(node))
+            n += instr->type == nir_instr_type_intrinsic && nir_instr_as_intrinsic(instr)->intrinsic == op;
+      } else if (node->type == nir_cf_node_if) {
+         n += count_in_loops(&nir_cf_node_as_if(node)->then_list, in_loop, op);
+         n += count_in_loops(&nir_cf_node_as_if(node)->else_list, in_loop, op);
+      } else {
+         n += count_in_loops(&nir_cf_node_as_loop(node)->body, true, op);
+      }
+   }
+   return n;
+}
+
+static int
+selftest_const_licm(void)
+{
+   for (unsigned c = 0; c < 2; ++c) {
+      nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "l4-const-licm");
+      b.shader->info.num_ssbos = 1;
+      b.shader->info.shared_size = 64;
+      nir_def *x = nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
+      nir_def *cb = nir_imm_int64(&b, 0x100000);
+      nir_variable *i = nir_local_variable_create(b.impl, glsl_uint_type(), "i");
+      nir_variable *acc = nir_local_variable_create(b.impl, glsl_uint_type(), "acc");
+      nir_store_var(&b, i, nir_imm_int(&b, 0), 1);
+      nir_store_var(&b, acc, nir_imm_int(&b, 0), 1);
+      nir_push_loop(&b);
+      {
+         nir_def *iv = nir_load_var(&b, i);
+         nir_push_if(&b, nir_ine_imm(&b, nir_iand_imm(&b, nir_iadd(&b, iv, x), 1), 0));
+         {
+            nir_def *s = nir_load_shared(&b, 1, 32, nir_imm_int(&b, 48), .align_mul = 4);
+            nir_def *addr = nir_iadd(&b, cb, nir_u2u64(&b, nir_imul_imm(&b, nir_iadd_imm(&b, nir_imul_imm(&b, s, 57), 48), 4)));
+            nir_def *v = nir_load_global_constant(&b, 1, 32, addr, .align_mul = 4);
+            nir_store_var(&b, acc, nir_iadd(&b, nir_load_var(&b, acc), v), 1);
+         }
+         nir_pop_if(&b, NULL);
+         if (c == 1)
+            nir_store_shared(&b, iv, nir_imm_int(&b, 48), .align_mul = 4);
+         nir_store_var(&b, i, nir_iadd_imm(&b, iv, 1), 1);
+         nir_break_if(&b, nir_uge_imm(&b, nir_iadd_imm(&b, iv, 1), 8));
+      }
+      nir_pop_loop(&b, NULL);
+      nir_store_ssbo(&b, nir_load_var(&b, acc), nir_imm_int(&b, 0), nir_amul_imm(&b, x, 4), .write_mask = 1,
+                     .access = ACCESS_NON_READABLE, .align_mul = 4, .align_offset = 0);
+      nir_lower_vars_to_ssa(b.shader);
+      nir_opt_dce(b.shader);
+      nir_metadata_require(b.impl, nir_metadata_block_index | nir_metadata_dominance);
+      agx_win32_hoist_constant_loads(b.shader, true);
+      nir_validate_shader(b.shader, "l4");
+      struct exec_list *body = &nir_shader_get_entrypoint(b.shader)->body;
+      printf("LICMCONST %u shared-in-loop %u const-in-loop %u\n", c,
+             count_in_loops(body, false, nir_intrinsic_load_shared),
+             count_in_loops(body, false, nir_intrinsic_load_global_constant));
+      ralloc_free(b.shader);
+   }
+   return 0;
+}
+
 static int
 selftest_index_masks(void)
 {
@@ -963,6 +1034,8 @@ main(int argc, char **argv)
       soft_fault_loads |= !strcmp(argv[a], "--soft-fault-loads");
    }
    glsl_type_singleton_init_or_ref();
+   if (argc > 1 && !strcmp(argv[1], "--selftest-const-licm"))
+      return selftest_const_licm();
    if (argc > 1 && !strcmp(argv[1], "--selftest-index-masks"))
       return selftest_index_masks();
    nir_shader *nir = NULL;
@@ -1090,6 +1163,8 @@ main(int argc, char **argv)
       NIR_PASS(_, nir, agx_win32_speculate_texture_crawls, descriptors);
    /* M3: loop-invariant descriptor crawls leave their loops (native projection) */
    NIR_PASS(_, nir, agx_win32_hoist_loop_invariants);
+   /* L4 (native projection: agx_win32_soft_faults(dev)) */
+   NIR_PASS(_, nir, agx_win32_hoist_constant_loads, soft_fault_loads);
    const unsigned speculated = count_speculated(nir);
    NIR_PASS(_, nir, nir_lower_ssbo, NULL);
    agx_preprocess_nir(nir);
