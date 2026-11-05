@@ -308,7 +308,8 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitCompute(
      !Submission->Fence || !Submission->NowTicks ||
      !AppleAgxG13WorkValid(&Submission->Compute) ||
      Submission->Compute.GpuAddressCount!=(successor ? 2u : 1u) ||
-     !Submission->ComputeOnly || Submission->TaLeadingBarrier)
+     !Submission->ComputeOnly || Submission->TaLeadingBarrier ||
+     Submission->D3LeadingBarrier)
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
   if(!AppleAgxG13PrepareQueue(Runtime,&Runtime->Config.Compute,
        &Submission->Compute,Runtime->ComputeFirstRun,Submission->Timestamp,
@@ -410,7 +411,7 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitRenderWithComput
    * its TA keeps the D3D-G1b Barrier on its own compute. */
   if (!Runtime->Config.HasCompute || Submission->Fence == 0u ||
       Submission->NowTicks == 0ULL || Submission->ComputeOnly ||
-      !Submission->TaLeadingBarrier ||
+      !Submission->TaLeadingBarrier || Submission->D3LeadingBarrier ||
       !AppleAgxG13WorkValid(&Submission->Ta) ||
       !AppleAgxG13WorkValid(&Submission->D3) ||
       !AppleAgxG13WorkValid(&Submission->Compute) ||
@@ -554,12 +555,15 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmit(
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
   successor = Submission->Successor ? APPLE_AGX_BACKEND_TRUE
                                     : APPLE_AGX_BACKEND_FALSE;
-  /* rc102: a successor render leads its TA queue with its Barrier. */
+  /* rc102: a successor render leads its TA queue with its Barrier; OV5
+   * drill: its 3D queue too, one 3D entry more. */
   if (Submission->Fence == 0u || Submission->NowTicks == 0ULL ||
       Submission->TaLeadingBarrier ||
+      (Submission->D3LeadingBarrier && !successor) ||
       !AppleAgxG13WorkValid(&Submission->Ta) ||
       !AppleAgxG13WorkValid(&Submission->D3) ||
-      Submission->D3.GpuAddressCount != APPLE_AGX_BACKEND_QUEUE_WORK_COUNT ||
+      Submission->D3.GpuAddressCount != APPLE_AGX_BACKEND_QUEUE_WORK_COUNT +
+          (Submission->D3LeadingBarrier ? 1u : 0u) ||
       Submission->Ta.GpuAddressCount !=
           (Runtime->BufferManagerInitialized ? 1u
                                              : APPLE_AGX_BACKEND_QUEUE_WORK_COUNT) +

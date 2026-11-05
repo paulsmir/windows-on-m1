@@ -178,7 +178,8 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformLeadBarrierRange(
   const APPLE_AGX_MEMORY_OBJECT *sidecar;
   APPLE_AGX_BACKEND_U64 sidecar_va;
   if (Job->LeadBarrierAddress == 0ULL)
-    return APPLE_AGX_BACKEND_TRUE;
+    return Job->D3LeadBarrierAddress == 0ULL ? APPLE_AGX_BACKEND_TRUE
+                                             : APPLE_AGX_BACKEND_FALSE;
   if (Provider->RenderSharedMemory == PLATFORM_NULL)
     return APPLE_AGX_BACKEND_FALSE;
   sidecar = &Provider->RenderSharedMemory->Objects[
@@ -191,6 +192,14 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformLeadBarrierRange(
     return APPLE_AGX_BACKEND_FALSE;
   Submission->LeadBarrierRange.Address = sidecar->CpuAddress;
   Submission->LeadBarrierRange.Bytes = 0x10000u;
+  /* OV5 drill: the 3D lead Barrier lies in the same sidecar. */
+  if (Job->D3LeadBarrierAddress != 0ULL) {
+    if (Job->D3LeadBarrierAddress < sidecar_va ||
+        Job->D3LeadBarrierAddress - sidecar_va >= 0x10000u)
+      return APPLE_AGX_BACKEND_FALSE;
+    Submission->D3LeadBarrierRange.Address = sidecar->CpuAddress;
+    Submission->D3LeadBarrierRange.Bytes = 0x10000u;
+  }
   return APPLE_AGX_BACKEND_TRUE;
 }
 

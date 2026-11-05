@@ -134,6 +134,11 @@ typedef struct _APPLE_AGX_BACKEND_JOB_IMAGE {
    * job starts on (TA for a render without compute work, compute
    * otherwise); zero for every job kicked at depth 1. */
   APPLE_AGX_U64 LeadBarrierAddress;
+  /* OV5 drill (Wom1Ov5FragWaitDrill, default off): a successor render
+   * without compute work whose TA leads with its Barrier on the running
+   * compute job also leads its 3D queue with a Barrier on the same compute
+   * stamp (satisfied on arrival: the TA already waited); zero otherwise. */
+  APPLE_AGX_U64 D3LeadBarrierAddress;
 } APPLE_AGX_BACKEND_JOB_IMAGE;
 
 typedef struct _APPLE_AGX_BACKEND_OBSERVATION {
