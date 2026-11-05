@@ -7634,6 +7634,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   }
   RtlCopyMemory(runtime->QueueObjects, Context->BackendImage.Objects,
                 sizeof(runtime->QueueObjects));
+  /* Q2c H0: the compute work queue is its own Asahi Queue (own notifier
+   * list, notifier, threshold, GPU context) with REG_DWORD
+   * Wom1ComputeOwnQueue = 1; default off keeps every firmware byte. Read
+   * here because InitializeComputeQueue below seeds those objects. */
+  runtime->Initdata.RenderSharedMemory.ComputeOwnQueue =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1ComputeOwnQueue") ? TRUE : FALSE;
   if (!AppleAgxRenderSharedMemoryBindRelocationObjects(
           &runtime->Initdata.RenderSharedMemory,
           Context->BackendImage.ArenaCpuAddress,
@@ -7935,9 +7941,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       runtime->Depth2General &&
       AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2OwnNotify") ? TRUE : FALSE;
   /* N2: two notifiers, consecutive flights on different ones, so each job
-   * of a pair notifies at its own end (Wom1Depth2Notifiers = 1). */
+   * of a pair notifies at its own end (Wom1Depth2Notifiers = 1). Never
+   * with Q2c (Wom1ComputeOwnQueue): N2 shares the render notifier list. */
   runtime->Initdata.RenderSharedMemory.TwoNotifiers =
       runtime->Depth2General && runtime->Initdata.RenderSharedMemory.NotifierFlight &&
+      !runtime->Initdata.RenderSharedMemory.ComputeOwnQueue &&
       AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2Notifiers") ? TRUE : FALSE;
   runtime->Initdata.RenderSharedMemory.ManagerEvict = AdmissionEvictG4Manager;
   runtime->Initdata.RenderSharedMemory.ManagerEvictContext = runtime;
