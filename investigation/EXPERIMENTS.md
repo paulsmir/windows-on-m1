@@ -69374,3 +69374,9 @@ Switches: Wom1ComputeOwnQueue=1 Wom1JobDiagnostics=1 (receipts). Steps: D3D12 su
 - Hashes: sys c9a264ed0a91, UmdArm64 460c8e5a5034, UmdX64 8f279e6c09d7, Umd32 1574f101cca8; manifest e80d980acd63, hardware-manifest 570a2e03ff30; probe2187.sh 12618958f869 (PROBE_LINT_OK); visible recovery rec2187h 9c50712d1130e3f7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1ComputeOwnQueue=1 Wom1JobDiagnostics=1.
 - Recovery rec2187h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2187-q2c-d2/run2187.sh.
+
+EXP2187 HARDWARE ACTUAL (2026-11-05T13:49:25Z): **Q2c on the default depth-two path FAILS the same way: reset before the suite, SchedulerFaulted 0x40ddb = backend_platform_windows.c:3547 (ManagerFence pending at job start); Q2c is implicated, not the depth-one path.**
+- Switches Wom1ComputeOwnQueue=1 Wom1JobDiagnostics=1 (depth two default). m1n1 console: NVMe guest reset, PSCI RESET, no firmware crash; RTKit crashlog not crashed. Wom1GpuReset v4: ResetEngine x2 + ResetFromTimeout 0xc0000483, all at line 3547; packet active 0x1e22, completed 0x1e21. Job ring snapshot (Wom1JobTiming971) predates the failure (last fences ~7600), so it does not show the failing pair.
+- Interpretation: with the compute work queue on its own Queue, a render's buffer-manager save is left pending (Owner->ManagerFence) when the next job starts, at depth one and two alike; the firmware side (second NotifierList/Notifier/GpuContextData) keeps working.
+- Verdict: REJECTED as implemented (Wom1ComputeOwnQueue stays off); a KMD accounting defect in the Q2c path, root cause under offline analysis.
+- Recovery rec2187h -> RECOVERY_DONE. Next: offline root cause + RED test before any rerun; meanwhile EXP2188 G1 ABBA.
