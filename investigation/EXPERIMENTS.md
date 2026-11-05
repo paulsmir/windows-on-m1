@@ -69265,3 +69265,13 @@ Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABL
 - Recovery: rec2182h.
 - Hashes: sys 74e57528767d, UmdArm64 042d487f7b9d, UmdX64 1913e762c307, Umd32 4811b6cffb85; manifest c42c2fe57ee5, hardware-manifest c226b20af450; probe2182.sh 8aea197fbb43 (PROBE_LINT_OK); visible recovery rec2182h e7266d3a2598375c; m1n1 0d3a75b3.
 - Recovery rec2182h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2182-m1b/run2182.sh.
+
+EXP2182 HARDWARE ACTUAL (2026-11-05T10:03:34Z): **M1b CONFIRMED: HD FULL 6628 (new best), HD PERF ABBA on vs APPLE_AGX_DXIL_INDEX_MASK_ADD=0 faster in both pairs.**
+- Suite 119 PASS / 0 FAIL. GravityMark D3D12 100k -temporal 0, uncached shaders in every arm, WER 0 in all six arms, guest alive throughout.
+- a HD FULL (on): 6628 / 39.7 FPS (previous best 6581, EXP2175); image correct (Visible 154,789, same scene as EXP2108/2181).
+- HD PERF (10 + 60 s window, tools/agx_gm_perf.py): b on 40.218, c off 39.972, d off 39.138, e on 40.179 FPS. Pair c->b frame time -0.61 % (7/8 blocks faster, below the 1 % noise floor), pair d->e -2.59 % (7/8 faster, verdict faster). Mean on 40.20 vs off 39.56 (+1.6 %).
+- f FHD FULL (on, 6th arm): 5116. FHD FULL falls with arm position (EXP2153: 5091 3rd, 4865 6th), so this is not a regression signal; next FHD check runs FHD first.
+- Expected vs actual: expected on >= off in both pairs (+0.3..1 %) -> actual +0.6 / +2.6 %; HD FULL expected >= ~6450 -> 6628.
+- Verdict: CONFIRMED. M1b stays default on (46050827). Evidence .local/experiments/EXP2182-m1b/evidence/EXP2182 (gm2182{b,c,d,e}-perf.json beside it).
+- Recovery: rec2182h (reboot + AGX_RECOVERY_ALLOW_AT_PROXY=1 recover.sh).
+- Next: L4 constant-load LICM (5cf2cf2b, APPLE_AGX_D3D_LICM_CONST=1 opt-in) under the same ABBA design, FHD FULL first.
