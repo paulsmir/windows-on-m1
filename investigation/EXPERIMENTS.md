@@ -69353,3 +69353,9 @@ Switches: Wom1ComputeOwnQueue=1 Wom1Depth2General=0 (same as EXP2184). Steps: D3
 - Hashes: sys 54c66d2f6340, UmdArm64 dcd74b20ad4e, UmdX64 0ad2764bccde, Umd32 1f526a13d29a; manifest 0488dc87c5c8, hardware-manifest 926d9204037d; probe2186.sh 510ed91c7a60 (PROBE_LINT_OK); visible recovery rec2186h 49826b56431df8a7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1ComputeOwnQueue=1 Wom1Depth2General=0.
 - Recovery rec2186h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2186-q2c/run2186.sh.
+
+EXP2186 HARDWARE ACTUAL (2026-11-05T13:02:05Z): **Q2c H0 rerun: same reset before the suite; the diagnostic names the term: SchedulerFaulted 0x40ddb = backend_platform_windows.c:3547 (1ca7adee) = RenderSharedMemory.ManagerFence != 0 at the next job's start.**
+- m1n1 console: NVMe guest reset, PSCI RESET; no firmware crash. Wom1GpuReset v4: ResetEngine (first entry scheduler state line 537, status 0) then ResetEngine/ResetFromTimeout 0xc0000483 with SchedulerFaulted 0x40ddb; packet active 0x1938, completed 0x1937, job_age 0, poll_age ~2.4 s.
+- Meaning: the previous render's buffer-manager save (AppleAgxRenderManagerSave, depth-one path: ManagerDepth2 = Depth2General = 0) did not clear ManagerFence before the next job; AdmissionPrepareG4Manager refuses a job while a manager save is pending.
+- Not separated: EXP2184/2186 changed two variables relative to the defaults (Q2c on and depth two off); the depth-one manager-save path has not run since the retained-slot / depth-two defaults.
+- Verdict: cause located at the KMD manager-save boundary; Q2c not yet implicated. Next: EXP2187 Q2c alone on the default depth-two path (Wom1ComputeOwnQueue=1 only, the single variable vs defaults), with Wom1JobDiagnostics=1 for the boundary timing. Recovery rec2186h -> RECOVERY_DONE.
