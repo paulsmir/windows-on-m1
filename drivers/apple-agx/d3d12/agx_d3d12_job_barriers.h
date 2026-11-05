@@ -49,6 +49,9 @@ typedef struct AGX_D3D12_JOB_BARRIERS {
    * a render was submitted (the next compute batch would hold work from
    * before that render). */
   unsigned ForeignSince, DispatchesPending, EarlyDispatch;
+  /* OV3: the active non-dispatch command adds no work to the next compute
+   * batch (a resolve deferred into a later render's prelude) */
+  unsigned ActiveLocal;
 } AGX_D3D12_JOB_BARRIERS;
 
 /* a 32-bit identity of a D3D12DDI_HRESOURCE pDrvPrivate value; 0 = null */
@@ -78,6 +81,7 @@ static inline void AgxD3d12JobBarriersInit(AGX_D3D12_JOB_BARRIERS *j) {
   j->Unknown = 1u;
   j->ForeignSince = j->DispatchesPending = 0u;
   j->EarlyDispatch = 1u;
+  j->ActiveLocal = 0u;
 }
 
 /* type 0 transition, 1 aliasing, 2 UAV (id 0 = global), 3 0022 ranged
@@ -119,12 +123,30 @@ static inline void AgxD3d12JobBarrierBegin(AGX_D3D12_JOB_BARRIERS *j, unsigned k
   j->Before = j->Open;
   AgxD3d12JobBarrierSetClear(&j->Open);
   j->Active = kind ? kind : 0xffu;
+  j->ActiveLocal = 0u;
   /* OV2: command kinds 2 dispatch, 5 draw (agx_d3d12_ddi.cpp kCommand*) */
   if (kind == 2u) ++j->DispatchesPending;
   else if (kind != 5u) ++j->ForeignSince;
 }
 
-static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) { j->Active = 0u; }
+static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) { j->Active = j->ActiveLocal = 0u; }
+
+/* the active command's work is foreign to a compute batch after all */
+static inline unsigned AgxD3d12JobBarrierForeignActive(const AGX_D3D12_JOB_BARRIERS *j) {
+  return j->Active && j->Active != 2u && j->Active != 5u && !j->ActiveLocal ? 1u : 0u;
+}
+
+/* OV3: the active command puts no work into the next compute batch (call
+ * before its owner work submits anything) */
+static inline void AgxD3d12JobBarrierLocal(AGX_D3D12_JOB_BARRIERS *j) {
+  if (!AgxD3d12JobBarrierForeignActive(j)) return;
+  j->ActiveLocal = 1u;
+  if (j->ForeignSince) --j->ForeignSince;
+}
+
+/* OV3: owner work outside any command (a deferred resolve copied the
+ * native way) joins the current compute batch */
+static inline void AgxD3d12JobBarrierForeign(AGX_D3D12_JOB_BARRIERS *j) { ++j->ForeignSince; }
 
 /* a batch of kind (1 render, 2 compute) is submitted: values {kind,
  * previous kind, barriers, transitions, UAV, aliasing, OR StateBefore,
@@ -153,7 +175,7 @@ static inline void AgxD3d12JobBarrierBatch(AGX_D3D12_JOB_BARRIERS *j, unsigned k
    * the next batch, a dispatch trigger belongs to it. */
   if (kind == 1u) {
     j->EarlyDispatch = j->DispatchesPending > (j->Active == 2u ? 1u : 0u) ? 1u : 0u;
-    j->ForeignSince = (j->Active && j->Active != 2u && j->Active != 5u) ? 1u : 0u;
+    j->ForeignSince = AgxD3d12JobBarrierForeignActive(j);
   } else {
     j->EarlyDispatch = 0u;
     j->ForeignSince = 0u;
@@ -197,7 +219,7 @@ static inline unsigned AgxD3d12JobBarrierIndependent(const AGX_D3D12_JOB_BARRIER
   /* the active command (a draw or other work that submits this batch
    * lazily) comes after it */
   foreign = j->ForeignSince;
-  if (j->Active && j->Active != 2u && j->Active != 5u && foreign) --foreign;
+  if (AgxD3d12JobBarrierForeignActive(j) && foreign) --foreign;
   if (foreign) return 0u;
   if (after->NonUav > j->NonUavSince) return 0u;
   inside = j->NonUavSince - after->NonUav;

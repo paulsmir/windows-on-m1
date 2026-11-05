@@ -119,4 +119,77 @@ AgxWin32AsahiQueryGroupBegin(struct pipe_context *pctx, unsigned type,
    return 1;
 }
 
+/* OV3 needs the projected agx_query.c (agx_win32_asahi_batch.h is included
+ * there before this header; the RC67 host model includes this one alone). */
+#ifdef AGX_WIN32_ASAHI_BATCH_H
+/* OV3: a D3D12 pipeline-statistics resolve whose GPU copy runs in the CDM
+ * prelude of a later render batch instead of the compute batch after the
+ * render that wrote the query (agx_get_query_result_resource_gpu), so that
+ * compute batch stays independent of that render (OV2).
+ *
+ * Step 1, at ResolveQueryData: submit the query's writers now, as the native
+ * GPU resolve does. Step 2, after a later draw: append the copy to the CDM of
+ * the current render batch, which has at least one draw and is not itself a
+ * writer or reader of the query. The prelude runs before that render's TA and
+ * after every render and compute job submitted before it (Asahi compute
+ * barriers 0/0; the KMD window's COMPUTE_ON_3D / COMPUTE_ON_COMPUTE lead
+ * barrier), so the copy reads the finished statistics. The batch becomes a
+ * reader of the query like the native resolve (Begin then moves the group to
+ * fresh storage) and a writer of the destination range.
+ * FlushWriters: 0 = not a GPU-resolved statistic; resolve the native way.
+ * IntoRender: 1 = copied; 0 = no render batch with a draw now (keep it);
+ * -1 = this batch cannot take it (resolve the native way). */
+int AgxWin32AsahiQueryResolveFlushWriters(struct pipe_context *, struct pipe_query *);
+int AgxWin32AsahiQueryResolveIntoRender(struct pipe_context *, struct pipe_query *,
+                                        struct pipe_resource *, unsigned);
+
+int
+AgxWin32AsahiQueryResolveFlushWriters(struct pipe_context *pctx, struct pipe_query *pq)
+{
+   struct agx_context *ctx = agx_context(pctx);
+   struct agx_query *query = (struct agx_query *)pq;
+   if (!ctx || !query || query->type != PIPE_QUERY_PIPELINE_STATISTICS_SINGLE ||
+       !query->bo || !query->ptr.gpu)
+      return 0;
+   flush_query_writers(ctx, query, "Deferred query resolve");
+   return 1;
+}
+
+int
+AgxWin32AsahiQueryResolveIntoRender(struct pipe_context *pctx, struct pipe_query *pq,
+                                    struct pipe_resource *prsrc, unsigned offset)
+{
+   struct agx_context *ctx = agx_context(pctx);
+   struct agx_query *query = (struct agx_query *)pq;
+   struct agx_batch *batch = ctx ? ctx->batch : NULL;
+   if (!ctx || ctx->any_faults || !batch || agx_batch_is_compute(batch) || !batch->draws)
+      return 0;
+   if (!query || !prsrc || query->type != PIPE_QUERY_PIPELINE_STATISTICS_SINGLE ||
+       !query->bo || !query->ptr.gpu ||
+       offset > prsrc->width0 || prsrc->width0 - offset < sizeof(uint64_t))
+      return -1;
+   /* a batch that writes (or already reads) the query would copy before the
+    * statistics it accumulates are final */
+   unsigned idx = agx_batch_idx(batch);
+   if (query->writer_generation[idx] == ctx->batches.generation[idx])
+      return -1;
+   if (!batch->cdm.bo) {
+      batch->cdm = agx_encoder_allocate(batch, agx_device(ctx->base.screen));
+      if (!batch->cdm.bo)
+         return -1;
+   }
+   struct agx_resource *rsrc = agx_resource(prsrc);
+   agx_add_query_to_batch(batch, query);
+   agx_batch_writes_range(batch, rsrc, offset, sizeof(uint64_t));
+   /* the writes may have flushed batches that use the destination, never
+    * this one (it neither reads nor writes it yet) */
+   if (ctx->batch != batch)
+      return -1;
+   libagx_copy_query_gl(batch, agx_1d(1), AGX_BARRIER_ALL | AGX_PREGFX,
+                        query->ptr.gpu, agx_map_gpu(rsrc) + offset,
+                        PIPE_QUERY_TYPE_U64, 0);
+   return 1;
+}
+
+#endif /* AGX_WIN32_ASAHI_BATCH_H */
 #endif

@@ -38,6 +38,9 @@ extern "C" {
 #include "util/u_simple_shaders.h"
 #include "agx_win32_shader_stats.h"
 #include "util/u_debug.h"
+/* OV3 (agx_d3d12_windows.h AgxD3d12OwnerResolve*): host tests that slice
+ * single owner functions compile them without this switch */
+#define AGX_D3D12_OWNER_OV3 1
 
 /* The D3D10 frontend's DXGI -> pipe format table (gallium/frontends/d3d10umd
  * Format.cpp, linked in the native runtime archive). */
@@ -66,6 +69,18 @@ struct AGX_D3D12_OWNER {
   void *ErrorContext;
   UINT PendingCopies;
   UINT PendingDispatches;
+  /* OV3: pipeline-statistics resolves whose copies wait for the next draw's
+   * render batch (AgxD3d12OwnerResolveAfterDraw). Only inside one
+   * ExecuteCommandLists whose barriers are all logged; the replay keeps the
+   * destinations alive. Counters are receipt-only. */
+  struct {
+    struct pipe_query *Query;
+    struct pipe_resource *Resource;
+    unsigned Offset;
+  } DeferredResolve[64];
+  UINT DeferredResolves;
+  bool ResolveDefer;
+  UINT ResolveDeferred, ResolveIntoRender, ResolveDrained, ResolveDrainReasons;
   LONGLONG DispatchTicks[4];
   UINT TimedDispatches;
   /* Immutable CPU descriptors only. Bindings and batch handles are never cached. */
@@ -629,6 +644,19 @@ extern "C" void AgxD3d12OwnerJobCommand(unsigned kind) {
   else AgxD3d12JobBarrierEnd(&owner_job_barriers);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
+/* OV3 accounting (agx_d3d12_job_barriers.h) */
+static void owner_job_local(void) {
+  if (!AgxD3d12OwnerJobBarriersEnabled()) return;
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobBarrierLocal(&owner_job_barriers);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+static void owner_job_foreign(void) {
+  if (!AgxD3d12OwnerJobBarriersEnabled()) return;
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobBarrierForeign(&owner_job_barriers);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
 /* OV1/OV2: every submitted batch (winsys AgxWin32BatchKindHook, before a
  * compute envelope is composed): the accounting advances; for a compute
  * batch the result says whether it is independent of the render before it
@@ -699,6 +727,9 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   BOOL consumed = FALSE;
   HRESULT hr = S_OK;
   if (owner->Context) {
+#if defined(AGX_D3D12_OWNER_OV3)
+    owner_resolve_drain(owner, kResolveDrainUnflushed); /* OV3 */
+#endif
     owner->Context->flush(owner->Context, NULL, 0);
     if (!AgxWin32AsahiContextRetire(owner->Context, 5000u)) return HRESULT_FROM_WIN32(ERROR_BUSY);
     if (owner->PendingPresentations) (void)collect_presentations(owner);
@@ -2525,6 +2556,16 @@ extern "C" HRESULT AgxD3d12OwnerQuery(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HE
   if ((heap->Type == 0 && type > 1u) || (heap->Type == 1 && (type != 2u || begin)) || (heap->Type == 2 && type != 3u))
     return E_INVALIDARG;
   if (heap->Type == 2) {
+#if defined(AGX_D3D12_OWNER_OV3)
+    /* OV3: a deferred copy must read this index's statistics before they
+     * are reset or accumulate again */
+    for (UINT i = 0; i < owner->DeferredResolves; ++i)
+      for (unsigned s = 0; s < heap->Slots; ++s)
+        if (owner->DeferredResolve[i].Query && owner->DeferredResolve[i].Query == heap->Query[index * heap->Slots + s]) {
+          owner_resolve_drain(owner, kResolveDrainQuery);
+          break;
+        }
+#endif
 #ifdef APPLE_AGX_GPUVA_WINSYS
     /* RC67 (EXP1988: 64 KiB QUERY escapes are the main copy cost): the 11
      * statistics of one index share one BO, reset as a unit before Begin.
@@ -2549,6 +2590,79 @@ extern "C" HRESULT AgxD3d12OwnerQuery(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HE
   return S_OK;
 }
 
+#if defined(AGX_D3D12_OWNER_OV3)
+/* OV3 drain reasons (bit numbers of ResolveDrainReasons) */
+enum : unsigned { kResolveDrainEnd = 0u, kResolveDrainNative = 1u, kResolveDrainBarrier = 2u, kResolveDrainQuery = 3u,
+                  kResolveDrainRefused = 4u, kResolveDrainPresent = 5u, kResolveDrainUnflushed = 6u };
+/* OV3: the deferred copies the native way (the current compute batch, which
+ * therefore depends on the renders before it -- foreign to OV2) */
+static void owner_resolve_drain(AGX_D3D12_OWNER *owner, unsigned reason) {
+  if (!owner || !owner->DeferredResolves) return;
+  struct pipe_context *pipe = owner->Context;
+  owner->ResolveDrainReasons |= 1u << reason;
+  ++owner->ResolveDrained;
+  owner_job_foreign();
+  for (UINT i = 0; i < owner->DeferredResolves; ++i) {
+    if (pipe && !AgxWin32AsahiContextFaulted(pipe))
+      pipe->get_query_result_resource(pipe, owner->DeferredResolve[i].Query, PIPE_QUERY_WAIT, PIPE_QUERY_TYPE_U64, 0,
+                                      owner->DeferredResolve[i].Resource, owner->DeferredResolve[i].Offset);
+    owner->DeferredResolve[i] = {};
+  }
+  owner->DeferredResolves = 0;
+  ++owner->PendingDispatches;
+}
+
+/* OV3 (agx_d3d12_windows.h) */
+extern "C" void AgxD3d12OwnerResolveExecution(AGX_D3D12_OWNER *owner, int begin, unsigned known) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Context) return;
+  owner_resolve_drain(owner, kResolveDrainEnd);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  owner->ResolveDefer = begin && known && AgxWin32Ov2Feature && AgxD3d12OwnerJobBarriersEnabled();
+#else
+  owner->ResolveDefer = false;
+#endif
+  if (!begin && (owner->ResolveDeferred || owner->ResolveDrained) && AdmissionUmdMeasureEnabled())
+    receipt("measure-d3d12-resolve-defer", S_OK, owner->ResolveDeferred, owner->ResolveIntoRender,
+            owner->ResolveDrained, owner->ResolveDrainReasons, 0u);
+  if (!begin) owner->ResolveDeferred = owner->ResolveIntoRender = owner->ResolveDrained = owner->ResolveDrainReasons = 0;
+}
+
+extern "C" void AgxD3d12OwnerResolveBarrier(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *heap) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->DeferredResolves) return;
+  bool hit = !heap || !heap->Resource;
+  for (UINT i = 0; !hit && i < owner->DeferredResolves; ++i)
+    hit = owner->DeferredResolve[i].Resource == heap->Resource;
+  if (hit) owner_resolve_drain(owner, kResolveDrainBarrier);
+}
+
+extern "C" void AgxD3d12OwnerResolveAfterDraw(AGX_D3D12_OWNER *owner) {
+  OwnerLock lock(owner);
+  if (!owner || !owner->Context || !owner->DeferredResolves) return;
+  struct pipe_context *pipe = owner->Context;
+  UINT done = 0;
+  int status = 0;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  while (done < owner->DeferredResolves &&
+         (status = AgxWin32AsahiQueryResolveIntoRender(pipe, owner->DeferredResolve[done].Query,
+                                                       owner->DeferredResolve[done].Resource,
+                                                       owner->DeferredResolve[done].Offset)) == 1)
+    ++done;
+#else
+  (void)pipe;
+#endif
+  owner->ResolveIntoRender += done;
+  for (UINT i = done; i < owner->DeferredResolves; ++i) owner->DeferredResolve[i - done] = owner->DeferredResolve[i];
+  owner->DeferredResolves -= done;
+  /* status 0: no render batch with a draw now (a dispatch-only
+   * ExecuteIndirect): the rest waits. -1: this batch cannot take one (a
+   * user of that query): keep the order, copy the rest the native way. */
+  if (status < 0) owner_resolve_drain(owner, kResolveDrainRefused);
+}
+
+#endif
+
 extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HEAP *heap, unsigned type,
                                                unsigned start, unsigned count, const AGX_D3D12_BUFFER *dst,
                                                unsigned long long offset) {
@@ -2566,6 +2680,43 @@ extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12
   struct pipe_context *pipe = owner->Context;
   if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
   struct pipe_resource *resource = static_cast<struct pipe_resource *>(dst->Resource);
+#if defined(AGX_D3D12_OWNER_OV3)
+  /* OV3: every statistic of every query waits for the next draw's render
+   * batch; the query writers are submitted now, as the native resolve does */
+  const UINT capacity = static_cast<UINT>(sizeof(owner->DeferredResolve) / sizeof(owner->DeferredResolve[0]));
+  bool defer = heap->Type == 2 && heap->Slots == values && owner->ResolveDefer && count &&
+               static_cast<unsigned long long>(count) * values <= capacity - owner->DeferredResolves;
+  for (unsigned i = 0; defer && i < count * values; ++i) defer = heap->Query[start * heap->Slots + i] != NULL;
+  if (defer) {
+    owner_job_local();
+    for (unsigned i = 0; i < count; ++i) {
+      for (unsigned v = 0; v < values; ++v) {
+        struct pipe_query *q = heap->Query[(start + i) * heap->Slots + v];
+        const unsigned at = static_cast<unsigned>(offset + (static_cast<unsigned long long>(i) * values + v) * 8u);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+        const int flushed = AgxWin32AsahiQueryResolveFlushWriters(pipe, q);
+#else
+        const int flushed = 0;
+#endif
+        if (!flushed) {
+          /* not a GPU-resolved statistic after all: native, and foreign */
+          owner_job_foreign();
+          pipe->get_query_result_resource(pipe, q, PIPE_QUERY_WAIT, PIPE_QUERY_TYPE_U64, 0, resource, at);
+          ++owner->PendingDispatches;
+        } else {
+          owner->DeferredResolve[owner->DeferredResolves].Query = q;
+          owner->DeferredResolve[owner->DeferredResolves].Resource = resource;
+          owner->DeferredResolve[owner->DeferredResolves].Offset = at;
+          ++owner->DeferredResolves;
+        }
+        if (AgxWin32AsahiContextFaulted(pipe)) return owner_failure(owner, DXGI_ERROR_DEVICE_HUNG);
+      }
+    }
+    ++owner->ResolveDeferred;
+    return S_OK;
+  }
+  owner_resolve_drain(owner, kResolveDrainNative);
+#endif
   static const UINT64 zero = 0;
   for (unsigned i = 0; i < count; ++i) {
     for (unsigned v = 0; v < values; ++v) {
@@ -2606,6 +2757,9 @@ extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *pre
     blit.filter = PIPE_TEX_FILTER_NEAREST;
     owner->Context->blit(owner->Context, &blit);
   }
+#if defined(AGX_D3D12_OWNER_OV3)
+  owner_resolve_drain(owner, kResolveDrainPresent); /* OV3 */
+#endif
   InterlockedIncrement(&owner_presents);
   HRESULT hr = AgxWin32AsahiContextFlushForPresent(owner->Context) ? S_OK : owner_failure(owner, E_FAIL);
 #ifdef APPLE_AGX_GPUVA_WINSYS
@@ -5176,6 +5330,9 @@ extern "C" void AgxD3d12OwnerStageUploads(AGX_D3D12_OWNER *owner) {
 static HRESULT submit_owner(AGX_D3D12_OWNER *owner, HANDLE context) {
   OwnerLock lock(owner);
   if (!owner || !owner->Context) return E_INVALIDARG;
+#if defined(AGX_D3D12_OWNER_OV3)
+  owner_resolve_drain(owner, kResolveDrainUnflushed); /* OV3: normally empty (replay end) */
+#endif
   if (owner->PendingDraws) {
     /* drop the draw bindings so they never outlive the heaps */
     struct pipe_framebuffer_state empty = {};

@@ -78,3 +78,29 @@ Extracted kernel collection, symbol dumps and annotated disassembly: .local/refe
   barrier that names the destination (D3D12: the destination may only be read after a barrier); e.g. emit pending
   resolve copies as their own compute job after C, ordered behind both R (3D stamp) and C. Needs a KMD rule so that
   job waits for R when C was independent.
+
+## OV3: pipeline-statistics resolve copies in the next render's prelude (2026-11-05, offline)
+- WINDOWS CONTRACT: ResolveQueryData writes the destination in COPY_DEST; nothing may read it before a barrier that
+  transitions it (or an aliasing barrier on its heap), and the CPU sees it only after the queue's fence. A later
+  Begin/End on the same index must not change the resolved values.
+- AGX/ASAHI CONTRACT: agx_get_query_result_resource_gpu = flush_query_writers + libagx_copy_query_gl in a compute batch
+  (agx_query.c ~463-498); a render batch's CDM is the compute prelude the TA waits for (D3D-G1). Asahi prelude header
+  barriers 0/0 wait for every earlier render and compute submission; the KMD window gives a prelude successor the
+  COMPUTE_ON_3D (behind a render) or COMPUTE_ON_COMPUTE lead Barrier (render_job_window.c AdmissionJobWindowBarrier,
+  backend rc102), and a prelude render is never OV2-flagged, so the copy reads finished statistics.
+- TRANSLATION (default off: only with the OV2 device feature, i.e. Wom1Ov2NoHazardLead=1 on Q2c, and only in
+  executions whose barriers are all logged): ResolveQueryData of a PIPELINE_STATISTICS heap submits the query writers
+  now (AgxWin32AsahiQueryResolveFlushWriters) and keeps the 11 copies per query in the owner; after the next draw
+  command (direct or ExecuteIndirect) they go into that draw's render batch CDM with AGX_BARRIER_ALL|AGX_PREGFX
+  (AgxWin32AsahiQueryResolveIntoRender: the batch has a draw, is not a writer/reader of the query, becomes its reader
+  and the destination's writer). Copies still pending go the native way (and the next compute batch is then foreign
+  to OV2) at: a transition/aliasing/ranged barrier on the destination heap (or with an unknown heap), a Begin/End of a
+  pending query, a non-deferred resolve, the replay end, present and destroy. The OV2 accumulator treats a deferred
+  resolve as local (ActiveLocal): the compute batch after R stays independent.
+- Cost: no extra job when the next render already has a prelude (RC67 IA statistics put one there while a statistics
+  query is active; EXP2193 had ~3 prelude renders of 4 per frame); else one prelude on that render, which already
+  waits for C by its own barriers.
+- WHAT IS STILL UNKNOWN: whether the R->C overlap then appears on hardware and what it buys (macOS FHD overlap 4.3 ms);
+  receipt measure-d3d12-resolve-defer {deferred, into-render, drained, drain reasons} plus Wom1Ov2Receipt waived/refused.
+- Checkpoint: one FHD FULL + HD arms with Wom1Ov2NoHazardLead=1 against a cross-boot switch-off control; correct image,
+  query values plausible (GravityMark shows its statistics), no fault/TDR.

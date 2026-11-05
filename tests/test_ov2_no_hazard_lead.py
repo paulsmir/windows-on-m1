@@ -74,11 +74,15 @@ static unsigned scenario_ex(unsigned known, unsigned uav_draw, unsigned gap, uns
   AgxD3d12JobBarrierEnd(&j);
   AgxD3d12JobBarrierBegin(&j, DRAW); AgxD3d12JobBarrierEnd(&j);
   if (gap) AgxD3d12JobBarrierAdd(&j, gap == 1 ? TRANSITION : UAV, 0, 4, 8, 77);
-  if (resolve_trigger) { /* ResolveQueryData flushes R and copies into C */
+  if (resolve_trigger) { /* ResolveQueryData flushes R and copies into C;
+                           * 2/3: OV3 defers the copy (3: then drains it
+                           * the native way into C) */
     AgxD3d12JobBarrierBegin(&j, QUERY);
+    if (resolve_trigger >= 2u) AgxD3d12JobBarrierLocal(&j);
     AgxD3d12JobBarrierBatch(&j, 1u, values);
     AgxD3d12JobBarrierEnd(&j);
     AgxD3d12JobBarrierBegin(&j, DISPATCH);
+    if (resolve_trigger == 3u) AgxD3d12JobBarrierForeign(&j);
   } else {
     AgxD3d12JobBarrierBegin(&j, DISPATCH);        /* C's first dispatch */
     AgxD3d12JobBarrierBatch(&j, 1u, values);      /* R submitted */
@@ -108,6 +112,9 @@ int main(void) {
   printf("unknown %u\n", scenario(0, 0, 0, 9, 0));
   printf("after_compute_render %u\n", scenario(1, 0, 0, 9, 1));
   printf("resolve_trigger %u\n", scenario_ex(1, 0, 0, 9, 0, 1, 0, 0));
+  printf("resolve_deferred %u\n", scenario_ex(1, 0, 0, 9, 0, 2, 0, 0));
+  printf("resolve_drained %u\n", scenario_ex(1, 0, 0, 9, 0, 3, 0, 0));
+  printf("resolve_deferred_unknown %u\n", scenario_ex(0, 0, 0, 9, 0, 2, 0, 0));
   printf("copy_inside %u\n", scenario_ex(1, 0, 0, 9, 0, 0, 1, 0));
   printf("early_dispatch %u\n", scenario_ex(1, 0, 0, 9, 0, 0, 0, 1));
   /* compute after compute is never independent of a render */
@@ -181,7 +188,8 @@ class Ov2NoHazardLead(unittest.TestCase):
             'base': '1', 'inside_uav': '1', 'inside_transition': '0', 'inside_aliasing': '0',
             'gap_transition': '0', 'gap_uav': '0', 'render_uav': '0', 'unknown': '0',
             'after_compute_render': '1', 'compute_after_compute': '0', 'fresh': '0',
-            'resolve_trigger': '0', 'copy_inside': '0', 'early_dispatch': '0'})
+            'resolve_trigger': '0', 'copy_inside': '0', 'early_dispatch': '0',
+            'resolve_deferred': '1', 'resolve_drained': '0', 'resolve_deferred_unknown': '0'})
 
     def test_kmd_waiver_decision(self):
         ran = build_run(KMD_RULE, [RENDER / 'src/render_job_window.c'],
@@ -204,6 +212,39 @@ class Ov2NoHazardLead(unittest.TestCase):
         batch = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c').read_text()
         self.assertEqual(batch.count('DRM_ASAHI_BARRIER_NONE : 0,0);'), 1)
         self.assertIn('AgxWin32BatchKindHook(2u) &&\n      AgxWin32Ov2Feature', batch)
+
+    def test_ov3_resolve_deferral_wiring(self):
+        """OV3: a deferred pipeline-statistics copy must still land before
+        anything can observe the destination or reset the query: a barrier on
+        its heap, a Begin/End of a pending query, the replay's end, present
+        and destroy copy it the native way (foreign to OV2), and only
+        executions whose barriers are all replayed defer at all."""
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        self.assertIn('owner->ResolveDefer = begin && known && AgxWin32Ov2Feature && '
+                      'AgxD3d12OwnerJobBarriersEnabled();', owner)
+        self.assertIn('bool defer = heap->Type == 2 && heap->Slots == values && owner->ResolveDefer', owner)
+        for reason in ('kResolveDrainEnd', 'kResolveDrainNative', 'kResolveDrainBarrier',
+                       'kResolveDrainQuery', 'kResolveDrainRefused', 'kResolveDrainPresent'):
+            self.assertIn('owner_resolve_drain(owner, %s)' % reason, owner)
+        self.assertEqual(owner.count('owner_resolve_drain(owner, kResolveDrainUnflushed)'), 2)
+        drain = owner[owner.index('static void owner_resolve_drain('):]
+        drain = drain[:drain.index('\n}\n')]
+        self.assertIn('owner_job_foreign();', drain)
+        self.assertLess(owner.index('owner_job_local();'),
+                        owner.index('AgxWin32AsahiQueryResolveFlushWriters(pipe, q)'))
+        ddi = (D3D12 / 'agx_d3d12_ddi.cpp').read_text()
+        self.assertEqual(ddi.count('ReplayResolveBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), r);'), 2)
+        self.assertIn('AgxD3d12OwnerResolveExecution(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 1, known);', ddi)
+        self.assertLess(ddi.index('AgxD3d12OwnerResolveExecution(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 0, 0);'),
+                        ddi.index('AgxD3d12OwnerUploadBoundary(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 0);'))
+        self.assertIn('command.kind == kCommandDraw || command.kind == kCommandIndirectExpand))\n'
+                      '                AgxD3d12OwnerResolveAfterDraw(owner);', ddi)
+        group = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_query_group.h').read_text()
+        into = group[group.index('AgxWin32AsahiQueryResolveIntoRender(struct pipe_context *pctx'):]
+        self.assertIn('agx_batch_is_compute(batch) || !batch->draws', into)
+        self.assertIn('query->writer_generation[idx] == ctx->batches.generation[idx]', into)
+        self.assertLess(into.index('agx_add_query_to_batch(batch, query);'), into.index('libagx_copy_query_gl('))
+        self.assertIn('AGX_BARRIER_ALL | AGX_PREGFX', into)
 
 
 if __name__ == '__main__':

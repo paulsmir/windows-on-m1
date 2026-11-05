@@ -66,6 +66,19 @@ void AgxD3d12OwnerJobCommand(unsigned Kind);
  * ExecuteCommandLists (Known = 0: some barrier was not logged) */
 void AgxD3d12OwnerJobDrawUav(void);
 void AgxD3d12OwnerJobExecution(unsigned Known);
+/* OV3 (with the OV2 device feature): a pipeline-statistics ResolveQueryData
+ * submits the query writers and keeps its copies until the next draw, which
+ * puts them in its render batch's compute prelude, so the compute batch after
+ * the render that wrote the statistics stays independent of it. The replay
+ * brackets each ExecuteCommandLists (Begin = 1 with Known as for
+ * JobExecution; Begin = 0 at its end copies any left the native way), calls
+ * ResolveAfterDraw after every draw command and ResolveBarrier for every
+ * transition, aliasing or ranged barrier (Heap: the barrier resource's heap,
+ * NULL when unknown) -- a barrier on a pending destination copies the
+ * native way. */
+void AgxD3d12OwnerResolveExecution(AGX_D3D12_OWNER *Owner, int Begin, unsigned Known);
+void AgxD3d12OwnerResolveBarrier(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Heap);
+void AgxD3d12OwnerResolveAfterDraw(AGX_D3D12_OWNER *Owner);
 BOOL AgxD3d12OwnerCpuMapIsPrivate(AGX_D3D12_OWNER *Owner, const void *Cpu);
 HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
 /* CpuVisible: the heap's CPU page property is not NOT_AVAILABLE; only such

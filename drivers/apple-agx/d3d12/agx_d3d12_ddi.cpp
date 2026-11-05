@@ -6261,7 +6261,21 @@ static_assert(sizeof(((AgxD3d12CommandList *)0)->barriers) == AGX_D3D12_BARRIER_
  * it to the owner before the command at position; never replayed) */
 struct AgxD3d12JobBarrierRecord {
     UINT position, type, flags, before, after, id;
+    const AgxD3d12Heap *heap; /* OV3: the barrier resource's heap (null: none or unknown) */
 };
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* OV3: a barrier on a deferred resolve's destination copies it the native
+ * way first. A UAV barrier never names a COPY_DEST destination. */
+static void ReplayResolveBarrier(AGX_D3D12_OWNER *owner, const AgxD3d12JobBarrierRecord &r) {
+    if (!owner || r.type == 2u) return;
+    if (r.heap && r.heap->native) {
+        const AGX_D3D12_BUFFER heap = HeapBuffer(r.heap);
+        AgxD3d12OwnerResolveBarrier(owner, &heap);
+    } else {
+        AgxD3d12OwnerResolveBarrier(owner, nullptr);
+    }
+}
+#endif
 template<class Barrier> static void RecordJobBarriers(AgxD3d12CommandList *list, UINT count, const Barrier *barriers) {
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (!list || !barriers || !count) return;
@@ -6308,6 +6322,7 @@ template<class Barrier> static void RecordJobBarriers(AgxD3d12CommandList *list,
             if (r.type == 3u) resource = b.Ranged.hResource.pDrvPrivate;
         }
         r.id = AgxD3d12JobBarrierId(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(resource)));
+        r.heap = resource ? static_cast<const AgxD3d12Resource *>(resource)->heap : nullptr;
     }
 #else
     (void)list;
@@ -7073,6 +7088,9 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             if (l && l->job_barriers_lost) known = 0;
         }
         AgxD3d12OwnerJobExecution(known);
+        /* OV3: resolves defer only when every barrier is replayed */
+        if (queue && queue->device)
+            AgxD3d12OwnerResolveExecution(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 1, known);
     }
 #endif
     for (UINT i = 0; lists && i < count; ++i) {
@@ -7088,6 +7106,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             for (; job_barrier < list->job_barrier_count && list->job_barriers[job_barrier].position <= c; ++job_barrier) {
                 const AgxD3d12JobBarrierRecord &r = list->job_barriers[job_barrier];
                 AgxD3d12OwnerJobBarrier(r.type, r.flags, r.before, r.after, r.id);
+                ReplayResolveBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), r);
             }
             AdmissionUmdWaitSetPhase(command.kind == kCommandDraw ? AgxWaitPhaseDraw :
                 command.kind == kCommandDispatch || command.kind == kCommandIndirectExpand ?
@@ -7214,6 +7233,9 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
                 hr = ReplayDispatch(owner, command.dispatch);
             }
             if (job_command) AgxD3d12OwnerJobCommand(0);
+            /* OV3: the draw's render batch takes the deferred resolve copies */
+            if (SUCCEEDED(hr) && (command.kind == kCommandDraw || command.kind == kCommandIndirectExpand))
+                AgxD3d12OwnerResolveAfterDraw(owner);
             if (measure) {
                 LARGE_INTEGER command_end;
                 QueryPerformanceCounter(&command_end);
@@ -7225,10 +7247,14 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
         for (; SUCCEEDED(hr) && job_barrier < list->job_barrier_count; ++job_barrier) {
             const AgxD3d12JobBarrierRecord &r = list->job_barriers[job_barrier];
             AgxD3d12OwnerJobBarrier(r.type, r.flags, r.before, r.after, r.id);
+            ReplayResolveBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), r);
         }
 #endif
     }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* OV3: copies still deferred at the replay's end, the native way */
+    if (queue && queue->device)
+        AgxD3d12OwnerResolveExecution(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 0, 0);
     /* rc94: the replay's end (or its failure) submits deferred upload copies */
     if (queue && queue->device)
         AgxD3d12OwnerUploadBoundary(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 0);
