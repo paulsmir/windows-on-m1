@@ -69662,3 +69662,8 @@ Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -tem
 - Hashes: sys f9a5aa4c2c78, UmdArm64 bd29ad721e94, UmdX64 10df9bd2c15a, Umd32 398cccc0738e; manifest d522a876d343, hardware-manifest 6ecb51f65d70; probe2202.sh 9f1aac4fc028 (PROBE_LINT_OK); visible recovery rec2202h e09e35108e33e6a3; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
 - Recovery rec2202h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2202-ov5-receipt/run2202.sh.
+
+EXP2202 HARDWARE ACTUAL (2026-11-05T22:47:49Z): **INCONCLUSIVE for the OV5 verdict (receipt lost: AdmissionUmdDiagnostic dropped the 24-value measure-d3d12-ov2-refusal, cap 16); CONFIRMED for dbaf4b68: Wom1Ov2Receipt Waived 0 (mid12 6711/0, after-d 10013/0, all Refused[3]).**
+- Suite 119 PASS / 0 FAIL; WER 0; GPU_RESET none; guest alive. d HD PERF OV3B=1 39.873 FPS.
+- gm2202d-umd.log: no measure-d3d12-ov2-refusal rows at all (EXP2200 had them with 12 values); every other receipt kind present. Root cause in umd_runtime_device.c (Count > 16u -> drop); fixed in ab2ea6db with test_umd_diagnostic_value_cap (RED 26 > 16).
+- Verdict: dbaf4b68 C9 correction CONFIRMED on hardware (no waived pair left); OV5 eligibility still unmeasured. Next: EXP2203 = the same arm on a package with ab2ea6db and ba402eb6 (feature 0x4 off), values 12-25. Recovery rec2202h.
