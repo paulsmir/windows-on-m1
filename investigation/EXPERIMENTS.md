@@ -69585,3 +69585,12 @@ Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -tem
 - Hashes: sys 2b0b47a72e1e, UmdArm64 b8ae7d0ad6e6, UmdX64 e527c81a06d9, Umd32 7a98034f5794; manifest d5b4bc90409b, hardware-manifest fcda94eb527d; probe2198.sh 706fea9a250e (PROBE_LINT_OK); visible recovery rec2198h 580f343a7e8a26db; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
 - Recovery rec2198h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2198-ov3b/run2198.sh.
+
+EXP2198 HARDWARE ACTUAL (2026-11-05T21:02:30Z): **OV3b CONFIRMED vs OV3 (+6.5 % HD PERF inside one boot) but OV2 still does not overlap: KMD waived 2 of 54634 (mid12) / 4 of 78666 (after-d) COMPUTE_ON_3D pairs, all others refused reason 3 (N+1 not flagged independent by the UMD). Net vs EXP2196 (no OV2 feature): -1.7 %.**
+- Suite 119 PASS / 0 FAIL; WER 0; GPU_RESET none; guest alive after every arm. UMD features 00000003.
+- a FHD FULL OV3B=1 5284 (EXP2196 5370, EXP2197 5346); b HD FULL OV3B=1 6577 (6713, 6504).
+- HD PERF (10 + 60 s): c OV3B=0 37.663, d OV3B=1 40.099, e OV3B=1 40.009, f OV3B=0 37.559 FPS. Pairs c->d +6.5 %, f->e +6.5 % (ABBA, same boot). EXP2196 control 40.808 / 40.714.
+- resolve-defer: OV3B=0 arms 3 / 33 / 0 / 0 / 0 (deferred 3, into_render 33); OV3B=1 arms 3 / 0x16 (22) / 1 / 1 / 1 (into_render 22, drained 1, reason 1 = end of replay, field 5 = OV3b on).
+- Wom1Ov2Receipt (u32): mid12-d (1, 56, Considered 54634, Waived 2, Refused[0..6] 0,0,0,54632,0,0,0, LastFence 148335); after-d (1, 56, 78666, 4, ..., Refused[3] 78662). Between the two snapshots (arms d/e/f): +24032 pairs considered, +2 waived.
+- Interpretation: OV3b removes OV3's extra preludes (the EXP2197 regression), but the OV2 waiver itself practically never applies because the UMD independence rule does not flag the compute successors. The remaining -1.7 % vs EXP2196 is cross-boot and inside the noise band of the OV2-on profile (receipt export ~1 ms / 2 s); no overlap gain exists to measure.
+- Verdict: OV3b CONFIRMED as the correct OV3 (no new preludes); OV2+OV3b REJECTED as a default for now (no gain; Wom1Ov2NoHazardLead stays off). Next: the OV2 session determines offline why the UMD flags ~0 of ~45 R->C pairs per frame (UMD independence rule vs GravityMark's barrier/resource pattern) before any further OV2 hardware run. Recovery rec2198h.
