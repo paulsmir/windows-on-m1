@@ -69667,3 +69667,18 @@ EXP2202 HARDWARE ACTUAL (2026-11-05T22:47:49Z): **INCONCLUSIVE for the OV5 verdi
 - Suite 119 PASS / 0 FAIL; WER 0; GPU_RESET none; guest alive. d HD PERF OV3B=1 39.873 FPS.
 - gm2202d-umd.log: no measure-d3d12-ov2-refusal rows at all (EXP2200 had them with 12 values); every other receipt kind present. Root cause in umd_runtime_device.c (Count > 16u -> drop); fixed in ab2ea6db with test_umd_diagnostic_value_cap (RED 26 > 16).
 - Verdict: dbaf4b68 C9 correction CONFIRMED on hardware (no waived pair left); OV5 eligibility still unmeasured. Next: EXP2203 = the same arm on a package with ab2ea6db and ba402eb6 (feature 0x4 off), values 12-25. Recovery rec2202h.
+
+EXP2203 HARDWARE BEFORE 2026-11-05T22:53:45Z:
+Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: d HD PERF APPLE_AGX_D3D12_OV3B=1 (KMD receipts at poll 12). One arm, diagnostic.
+- WHY THIS HYPOTHESIS: (1) EXP2201 macOS: Apple overlaps compute->render only (c15->R16 1.95 ms, c19->R20 1.45 ms FHD), at the TA stage (R16 depends on c15 only through its colour attachment); (2) our C7->R8 is prelude-free under OV3b (EXP2198), so it is the first OV5 candidate; (3) EXP2202 lost the receipt to the 16-value cap (ab2ea6db, test_umd_diagnostic_value_cap).
+- WINDOWS CONTRACT: unchanged (receipt only).
+- AGX/ASAHI CONTRACT: unchanged.
+- ATOMIC CONTRACT: none -- receipts only, no behaviour change.
+- WHAT IS STILL UNKNOWN: value 22 per render-after-compute (expected R2/R4/R6 = 9 prelude, R8 = 0 if C7's writes miss R8's vertex inputs); values 12-15 OV4 prefixes; values 16-19 C3 foreign kinds (bit 11 IndirectExpand?).
+- Expected: suite 119/0; receipt rows with value 23 ~4 per frame ECL; Wom1Ov2Receipt Waived ~0; FPS ~40.2.
+- Failure criteria: no receipt rows, any fault/TDR/WER -> rec2203h.
+- Recovery: rec2203h (recover.sh directly on the running guest, no manual reboot).
+- Probe: agx_d3d12_probe_e2203_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c, probe source unchanged).
+- Hashes: sys 3115aba5c84c, UmdArm64 5eb3cfd3f10d, UmdX64 dec9d5a9a580, Umd32 9b91d2f33056; manifest 4b025cec0fa2, hardware-manifest a7b1bccac611; probe2203.sh bd1bb1a9cf7c (PROBE_LINT_OK); visible recovery rec2203h c07de847d7dc8fea; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
+- Recovery rec2203h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2203-ov5-receipt2/run2203.sh.
