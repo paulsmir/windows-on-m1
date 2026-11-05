@@ -41,6 +41,11 @@ extern "C" {
 /* OV3 (agx_d3d12_windows.h AgxD3d12OwnerResolve*): host tests that slice
  * single owner functions compile them without this switch */
 #define AGX_D3D12_OWNER_OV3 1
+/* OV3 drain reasons (bit numbers of ResolveDrainReasons) */
+enum : unsigned { kResolveDrainEnd = 0u, kResolveDrainNative = 1u, kResolveDrainBarrier = 2u, kResolveDrainQuery = 3u,
+                  kResolveDrainRefused = 4u, kResolveDrainPresent = 5u, kResolveDrainUnflushed = 6u };
+/* declared ahead of its first use in AgxD3d12OwnerDestroy (x86 clang build) */
+static void owner_resolve_drain /* forward */ (AGX_D3D12_OWNER *, unsigned);
 
 /* The D3D10 frontend's DXGI -> pipe format table (gallium/frontends/d3d10umd
  * Format.cpp, linked in the native runtime archive). */
@@ -2591,9 +2596,6 @@ extern "C" HRESULT AgxD3d12OwnerQuery(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HE
 }
 
 #if defined(AGX_D3D12_OWNER_OV3)
-/* OV3 drain reasons (bit numbers of ResolveDrainReasons) */
-enum : unsigned { kResolveDrainEnd = 0u, kResolveDrainNative = 1u, kResolveDrainBarrier = 2u, kResolveDrainQuery = 3u,
-                  kResolveDrainRefused = 4u, kResolveDrainPresent = 5u, kResolveDrainUnflushed = 6u };
 /* OV3: the deferred copies the native way (the current compute batch, which
  * therefore depends on the renders before it -- foreign to OV2) */
 static void owner_resolve_drain(AGX_D3D12_OWNER *owner, unsigned reason) {
