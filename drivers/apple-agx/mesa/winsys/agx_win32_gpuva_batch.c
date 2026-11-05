@@ -417,6 +417,13 @@ void (*AgxWin32TileLayoutHook)(const uint32_t *values, unsigned count);
  * conflict mask, reads, writes} per submitted batch (MSVC only, like the
  * render trace: the host models extract the submit bodies alone). */
 void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count);
+/* OV1/OV2 (agx_d3d12_job_barriers.h): every submitted batch, kind 1 render /
+ * 2 compute, before a compute envelope is composed; nonzero for a compute
+ * batch the D3D12 owner proved independent of the render submitted just
+ * before it (only while the KMD reports
+ * AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE). */
+unsigned (*AgxWin32BatchKindHook)(unsigned kind);
+extern volatile unsigned AgxWin32Ov2Feature;
 #ifdef _MSC_VER
 #include "agx_win32_batch_deps.h"
 static AGX_WIN32_BATCH_DEPS batch_deps;
@@ -1139,6 +1146,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   if(!publish_shadows(batch)) { fail_site=__LINE__; goto fail; }
   capture_render_addresses(batch,render);
 #ifdef _MSC_VER
+  if(AgxWin32BatchKindHook) (void)AgxWin32BatchKindHook(1u);
   note_batch_deps(batch,1u);
 #endif
   capture_native_refs(batch);
@@ -1220,7 +1228,16 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   if(!g->Preemption || !g->Command || !AgxWin32AsahiGpuvaBo(b,g->Preemption) ||
      !AgxWin32AsahiGpuvaBo(b,g->Command)) { fail_site=__LINE__; goto fail; }
   memset(&envelope,0,sizeof(envelope));
+  /* OV2: an independent compute job names no wait on the render subqueue
+   * (Asahi DRM_ASAHI_BARRIER_NONE); the KMD admits it only under the device
+   * feature and then waives its depth-two lead Barrier's wait. */
+#ifdef _MSC_VER
+  command_header=agx_cmd_header(true,
+      AgxWin32BatchKindHook && AgxWin32BatchKindHook(2u) &&
+      AgxWin32Ov2Feature ? DRM_ASAHI_BARRIER_NONE : 0,0);
+#else
   command_header=agx_cmd_header(true,0,0);
+#endif
   memcpy(&envelope.Native,&command_header,sizeof(envelope.Native));
   memcpy(&envelope.Compute,compute,sizeof(envelope.Compute));
   strip_timestamps(&envelope.Compute.Timestamps);

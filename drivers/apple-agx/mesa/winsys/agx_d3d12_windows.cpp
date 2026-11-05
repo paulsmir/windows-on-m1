@@ -584,7 +584,15 @@ extern "C" void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count)
  * set; the replay then feeds the recorded barriers (ReplayAndSubmit). */
 static SRWLOCK owner_job_barriers_lock = SRWLOCK_INIT;
 static AGX_D3D12_JOB_BARRIERS owner_job_barriers;
-extern "C" BOOL AgxD3d12OwnerJobBarriersEnabled(void) {
+static INIT_ONCE owner_job_barriers_once = INIT_ONCE_STATIC_INIT;
+static BOOL CALLBACK owner_job_barriers_init(PINIT_ONCE, PVOID, PVOID *) {
+  AgxD3d12JobBarriersInit(&owner_job_barriers);
+  return TRUE;
+}
+/* OV2: set by the screen when the KMD reports
+ * AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE (agx_win32_asahi_scene.c) */
+extern "C" volatile unsigned AgxWin32Ov2Feature;
+static BOOL owner_job_receipt_enabled(void) {
   static const BOOL enabled = [] {
     char value[2] = {};
     return GetEnvironmentVariableA("APPLE_AGX_D3D12_JOB_BARRIERS", value, sizeof(value)) == 1 && value[0] == '1' &&
@@ -593,6 +601,21 @@ extern "C" BOOL AgxD3d12OwnerJobBarriersEnabled(void) {
                : FALSE;
   }();
   return enabled;
+}
+/* OV1 receipt or OV2 pairing: barriers are logged and fed */
+extern "C" BOOL AgxD3d12OwnerJobBarriersEnabled(void) {
+  InitOnceExecuteOnce(&owner_job_barriers_once, owner_job_barriers_init, NULL, NULL);
+  return owner_job_receipt_enabled() || AgxWin32Ov2Feature ? TRUE : FALSE;
+}
+extern "C" void AgxD3d12OwnerJobDrawUav(void) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobBarrierDrawUav(&owner_job_barriers);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+extern "C" void AgxD3d12OwnerJobExecution(unsigned known) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobBarrierExecution(&owner_job_barriers, known);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
 extern "C" void AgxD3d12OwnerJobBarrier(unsigned type, unsigned flags, unsigned before, unsigned after,
                                         unsigned id) {
@@ -606,14 +629,35 @@ extern "C" void AgxD3d12OwnerJobCommand(unsigned kind) {
   else AgxD3d12JobBarrierEnd(&owner_job_barriers);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
+/* OV1/OV2: every submitted batch (winsys AgxWin32BatchKindHook, before a
+ * compute envelope is composed): the accounting advances; for a compute
+ * batch the result says whether it is independent of the render before it
+ * (only with the device feature). The receipt values wait for the
+ * measure-batch-deps hook of the same batch. */
+static UINT owner_job_values[AGX_D3D12_JOB_BARRIER_VALUES];
+static unsigned owner_job_values_valid;
+extern "C" unsigned (*AgxWin32BatchKindHook)(unsigned kind);
+static unsigned owner_batch_kind(unsigned kind) {
+  unsigned independent = 0u;
+  if (!AgxD3d12OwnerJobBarriersEnabled()) return 0u;
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  if (kind == 2u && AgxWin32Ov2Feature)
+    independent = AgxD3d12JobBarrierIndependent(&owner_job_barriers);
+  AgxD3d12JobBarrierBatch(&owner_job_barriers, kind, owner_job_values);
+  owner_job_values_valid = 1u;
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+  return independent;
+}
 static void owner_batch_deps(const uint32_t *values, unsigned count) {
   AdmissionUmdDiagnostic("measure-batch-deps", S_OK, values, count);
-  if (!count || !AgxD3d12OwnerJobBarriersEnabled()) return;
+  if (!count || !owner_job_receipt_enabled()) return;
   UINT job[AGX_D3D12_JOB_BARRIER_VALUES];
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
-  AgxD3d12JobBarrierBatch(&owner_job_barriers, values[0], job);
+  const unsigned valid = owner_job_values_valid;
+  memcpy(job, owner_job_values, sizeof(job));
+  owner_job_values_valid = 0u;
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
-  AdmissionUmdDiagnostic("measure-d3d12-job-barriers", S_OK, job, AGX_D3D12_JOB_BARRIER_VALUES);
+  if (valid) AdmissionUmdDiagnostic("measure-d3d12-job-barriers", S_OK, job, AGX_D3D12_JOB_BARRIER_VALUES);
 }
 static void owner_bo_time(unsigned mib, unsigned cls, unsigned create_us, unsigned bind_us, unsigned associate_us) {
   const UINT values[] = {mib, cls, create_us, bind_us, associate_us};
@@ -947,6 +991,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     AgxWin32GpuOnlyMapHook = owner_gpu_only_map;
     AgxWin32TileLayoutHook = owner_tile_layout;
     AgxWin32BatchDepsHook = owner_batch_deps;
+    AgxWin32BatchKindHook = owner_batch_kind; /* OV1/OV2 */
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(hr)) create_upload_ring(owner);

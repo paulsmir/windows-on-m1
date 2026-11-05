@@ -4127,6 +4127,9 @@ struct AgxD3d12CommandList {
      * AgxD3d12OwnerJobBarriersEnabled (capacity kept across Reset) */
     struct AgxD3d12JobBarrierRecord *job_barriers;
     UINT job_barrier_count, job_barrier_capacity;
+    /* OV2: a ResourceBarrier of this recording was not logged (logging off
+     * when recorded, or the log could not grow): its executions never pair */
+    UINT job_barriers_lost;
 };
 /* EXP1363: creating/resetting a list makes the runtime set its default
  * state (topology, viewports, scissors, blend factor, stencil ref, PSO,
@@ -4192,6 +4195,7 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     list->indirect_state_count = 0;
     memset(list->barriers, 0, sizeof(list->barriers));
     list->job_barrier_count = 0;
+    list->job_barriers_lost = 0;
     list->state = 0;
     list->pso = nullptr;
     list->compute_root = nullptr;
@@ -6260,15 +6264,25 @@ struct AgxD3d12JobBarrierRecord {
 };
 template<class Barrier> static void RecordJobBarriers(AgxD3d12CommandList *list, UINT count, const Barrier *barriers) {
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-    if (!list || !barriers || !count || !AgxD3d12OwnerJobBarriersEnabled()) return;
-    if (count > kListCommands || list->job_barrier_count > kListCommands - count) return;
+    if (!list || !barriers || !count) return;
+    if (!AgxD3d12OwnerJobBarriersEnabled()) {
+        list->job_barriers_lost = 1; /* OV2: unknown, never pairs */
+        return;
+    }
+    if (count > kListCommands || list->job_barrier_count > kListCommands - count) {
+        list->job_barriers_lost = 1;
+        return;
+    }
     if (list->job_barrier_count + count > list->job_barrier_capacity) {
         UINT capacity = list->job_barrier_capacity ? list->job_barrier_capacity : 64u;
         while (capacity < list->job_barrier_count + count) capacity *= 2u;
         void *grown = list->job_barriers
                           ? HeapReAlloc(GetProcessHeap(), 0, list->job_barriers, capacity * sizeof(AgxD3d12JobBarrierRecord))
                           : HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(AgxD3d12JobBarrierRecord));
-        if (!grown) return; /* receipt only: the list records on */
+        if (!grown) { /* the list records on; OV2 treats it as unknown */
+            list->job_barriers_lost = 1;
+            return;
+        }
         list->job_barriers = static_cast<AgxD3d12JobBarrierRecord *>(grown);
         list->job_barrier_capacity = capacity;
     }
@@ -6855,6 +6869,15 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     AgxD3d12OwnerBindings &vs_bind = scratch->vs_bind, &ps_bind = scratch->ps_bind;
     OwnerBindings(d.vs_bind, &vs_bind);
     OwnerBindings(d.ps_bind, &ps_bind);
+    /* OV2: a draw that may write a UAV (any graphics UAV slot, or an optional
+     * stage) keeps the next compute job dependent on this render. */
+    if (AgxD3d12OwnerJobBarriersEnabled()) {
+        bool uav = optional.gs || optional.hs || optional.ds;
+        for (UINT u = 0; !uav && u < kUavSlots; ++u)
+            uav = d.vs_bind.uav_descriptor[u] || d.vs_bind.uav_heap[u] ||
+                  d.ps_bind.uav_descriptor[u] || d.ps_bind.uav_heap[u];
+        if (uav) AgxD3d12OwnerJobDrawUav();
+    }
     StageBindings(vs_bind, &draw.Vs);
     StageBindings(ps_bind, &draw.Ps); /* C13: graphics UAVs bind per stage too */
     if (optional.gs) OwnerStageBindings(*optional.gs, &scratch->gs_bind, &draw.Gs); /* C27 */
@@ -7041,6 +7064,16 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
     AgxD3d12DrawScratch *draw_scratch = nullptr; /* EXP1838: one per execution */
     AgxD3d12ClearAbsorbStats absorb = {}; /* rc76 */
     AgxD3d12OwnerRefCommand(static_cast<AGX_D3D12_OWNER *>(queue->device->owner),0,0);
+    if (job_receipt) {
+        /* OV2: a new execution; it pairs only when every list's barriers
+         * were logged */
+        UINT known = 1;
+        for (UINT i = 0; lists && i < count; ++i) {
+            const auto *l = static_cast<const AgxD3d12CommandList *>(lists[i].pDrvPrivate);
+            if (l && l->job_barriers_lost) known = 0;
+        }
+        AgxD3d12OwnerJobExecution(known);
+    }
 #endif
     for (UINT i = 0; lists && i < count; ++i) {
         auto *list = static_cast<AgxD3d12CommandList *>(lists[i].pDrvPrivate);

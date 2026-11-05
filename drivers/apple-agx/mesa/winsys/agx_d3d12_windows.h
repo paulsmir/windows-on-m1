@@ -62,6 +62,10 @@ void AgxD3d12OwnerUploadBoundary(AGX_D3D12_OWNER *Owner, int Dispatch);
 BOOL AgxD3d12OwnerJobBarriersEnabled(void);
 void AgxD3d12OwnerJobBarrier(unsigned Type, unsigned Flags, unsigned Before, unsigned After, unsigned Id);
 void AgxD3d12OwnerJobCommand(unsigned Kind);
+/* OV2 (agx_d3d12_job_barriers.h): a draw that may write a UAV; a new
+ * ExecuteCommandLists (Known = 0: some barrier was not logged) */
+void AgxD3d12OwnerJobDrawUav(void);
+void AgxD3d12OwnerJobExecution(unsigned Known);
 BOOL AgxD3d12OwnerCpuMapIsPrivate(AGX_D3D12_OWNER *Owner, const void *Cpu);
 HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
 /* CpuVisible: the heap's CPU page property is not NOT_AVAILABLE; only such

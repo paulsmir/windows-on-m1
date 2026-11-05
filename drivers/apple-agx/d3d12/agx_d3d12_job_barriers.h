@@ -24,6 +24,7 @@
 
 typedef struct AGX_D3D12_JOB_BARRIER_SET {
   unsigned Count, Transitions, Uav, GlobalUav, Aliasing;
+  unsigned NonUav; /* OV2: every barrier but a UAV barrier */
   unsigned StateBefore, StateAfter, Flags;
   unsigned Ids, IdHash, IdOverflow;
   unsigned Id[AGX_D3D12_JOB_BARRIER_IDS];
@@ -35,6 +36,12 @@ typedef struct AGX_D3D12_JOB_BARRIERS {
   unsigned Active;                  /* command kind in owner work, 0 none */
   unsigned Total;                   /* every barrier since the last batch */
   unsigned PreviousKind;
+  /* OV2 (AgxD3d12JobBarrierIndependent): transitions/aliasing/ranged since
+   * the last batch, the gap after the last batch when it was a render (else
+   * ~0u), UAV-binding draws (running count and its values at the last two
+   * batches), whether the last render may have bound a UAV, and whether this
+   * ExecuteCommandLists' barriers are incompletely known. */
+  unsigned NonUavSince, GapAfterRender, UavDraws, UavDrawsBase[2], RenderUav, Unknown;
 } AGX_D3D12_JOB_BARRIERS;
 
 /* a 32-bit identity of a D3D12DDI_HRESOURCE pDrvPrivate value; 0 = null */
@@ -47,7 +54,7 @@ static inline unsigned AgxD3d12JobBarrierId(unsigned long long pointer) {
 
 static inline void AgxD3d12JobBarrierSetClear(AGX_D3D12_JOB_BARRIER_SET *s) {
   unsigned i;
-  s->Count = s->Transitions = s->Uav = s->GlobalUav = s->Aliasing = 0u;
+  s->Count = s->Transitions = s->Uav = s->GlobalUav = s->Aliasing = s->NonUav = 0u;
   s->StateBefore = s->StateAfter = s->Flags = 0u;
   s->Ids = s->IdHash = s->IdOverflow = 0u;
   for (i = 0; i < AGX_D3D12_JOB_BARRIER_IDS; ++i) s->Id[i] = 0u;
@@ -57,6 +64,11 @@ static inline void AgxD3d12JobBarriersInit(AGX_D3D12_JOB_BARRIERS *j) {
   AgxD3d12JobBarrierSetClear(&j->Before);
   AgxD3d12JobBarrierSetClear(&j->Open);
   j->Active = j->Total = j->PreviousKind = 0u;
+  j->NonUavSince = 0u;
+  j->GapAfterRender = ~0u;
+  j->UavDraws = j->UavDrawsBase[0] = j->UavDrawsBase[1] = 0u;
+  j->RenderUav = 1u;
+  j->Unknown = 1u;
 }
 
 /* type 0 transition, 1 aliasing, 2 UAV (id 0 = global), 3 0022 ranged
@@ -68,6 +80,10 @@ static inline void AgxD3d12JobBarrierAdd(AGX_D3D12_JOB_BARRIERS *j, unsigned typ
   ++j->Total;
   ++s->Count;
   s->Flags |= flags;
+  if (type != 2u) {
+    ++s->NonUav;
+    ++j->NonUavSince;
+  }
   if (type == 0u) {
     ++s->Transitions;
     s->StateBefore |= before;
@@ -120,9 +136,43 @@ static inline void AgxD3d12JobBarrierBatch(AGX_D3D12_JOB_BARRIERS *j, unsigned k
   values[10] = s->GlobalUav;
   values[11] = (j->Active & 0xffu) | (s->IdOverflow << 8) | ((s->Flags & 0xfu) << 16);
   values[12] = j->Total;
+  /* OV2 state for the next batch */
+  j->GapAfterRender = kind == 1u ? s->Count : ~0u;
+  if (kind == 1u) j->RenderUav = j->UavDraws != j->UavDrawsBase[0] ? 1u : 0u;
+  j->UavDrawsBase[0] = j->UavDrawsBase[1];
+  j->UavDrawsBase[1] = j->UavDraws;
+  j->NonUavSince = 0u;
   AgxD3d12JobBarrierSetClear(s);
   j->Total = 0u;
   j->PreviousKind = kind;
+}
+
+/* OV2: a draw bound a UAV (its writes may be read by the next compute job
+ * after a UAV barrier inside that job). */
+static inline void AgxD3d12JobBarrierDrawUav(AGX_D3D12_JOB_BARRIERS *j) { ++j->UavDraws; }
+
+/* OV2: a new ExecuteCommandLists starts; Known = 0 when a list's barriers
+ * were not all logged (the whole execution then never pairs). */
+static inline void AgxD3d12JobBarrierExecution(AGX_D3D12_JOB_BARRIERS *j, unsigned known) {
+  j->PreviousKind = 0u;
+  j->GapAfterRender = ~0u;
+  j->Unknown = known ? 0u : 1u;
+}
+static inline void AgxD3d12JobBarrierPoison(AGX_D3D12_JOB_BARRIERS *j) { j->Unknown = 1u; }
+
+/* OV2: the compute batch now being submitted is independent of the render
+ * batch submitted just before it under D3D12 rules: same execution, that
+ * render was the previous batch, no barrier between them, no barrier but UAV
+ * barriers inside the compute batch, and the render bound no UAV. Call before
+ * AgxD3d12JobBarrierBatch for the compute batch. Any doubt -> 0. */
+static inline unsigned AgxD3d12JobBarrierIndependent(const AGX_D3D12_JOB_BARRIERS *j) {
+  const AGX_D3D12_JOB_BARRIER_SET *after = j->Active ? &j->Before : &j->Open;
+  unsigned inside;
+  if (j->Unknown || j->PreviousKind != 1u || j->GapAfterRender != 0u || j->RenderUav)
+    return 0u;
+  if (after->NonUav > j->NonUavSince) return 0u;
+  inside = j->NonUavSince - after->NonUav;
+  return inside == 0u ? 1u : 0u;
 }
 
 #endif

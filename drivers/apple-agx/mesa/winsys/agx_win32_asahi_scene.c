@@ -15,6 +15,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+/* OV2: AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE of the device the
+ * screen was created for (read by the D3D12 owner and the batch submit). */
+volatile unsigned AgxWin32Ov2Feature;
 
 struct pipe_screen *AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *,AGX_WIN32_SCREEN *,
     const AGX_WIN32_ASAHI_OWNER_OPS *,void *,const AGX_WIN32_ASAHI_BATCH_OPS *,
@@ -80,6 +83,8 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(AGX_WIN32_ASAHI_BACKEND 
    * (agx_win32_soft_fault.h: shader memory loads may speculate). */
   params.features=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS) ?
       DRM_ASAHI_FEATURE_SOFT_FAULTS : 0;
+  /* OV2: the KMD admits independent compute envelopes (VdmBarrier NONE) */
+  AgxWin32Ov2Feature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE) ? 1u : 0u;
   if(windows->Info.PageBytes!=AIL_PAGESIZE) return NULL;
   struct pipe_screen *screen=AgxWin32AsahiScreenCreate(backend,windows,owners,owner,batches,&params);
   if(screen) {

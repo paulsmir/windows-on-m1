@@ -148,7 +148,11 @@ int main(void) {
   fake.Info = make_info();
   fake.Info.Features = AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS;
   assert(AgxWin32DeviceInfoValid(&fake.Info));
-  fake.Info.Features = AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS << 1;
+  /* OV2: the independent-subqueue feature is known too */
+  fake.Info.Features = AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS |
+                       AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE;
+  assert(AgxWin32DeviceInfoValid(&fake.Info));
+  fake.Info.Features = AGX_WIN32_DEVICE_FEATURES_KNOWN + 1u;
   assert(!AgxWin32DeviceInfoValid(&fake.Info));
   fake.Info = make_info();
   fake.Info.Reserved = 1u;

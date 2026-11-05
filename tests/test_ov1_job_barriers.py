@@ -125,6 +125,7 @@ struct AgxD3d12CommandList {
     UINT commands;
     struct AgxD3d12JobBarrierRecord *job_barriers;
     UINT job_barrier_count, job_barrier_capacity;
+    UINT job_barriers_lost; /* OV2 */
 };
 /* RECORDER */
 static void check(bool ok) { if (!ok) std::abort(); }
@@ -144,9 +145,13 @@ int main() {
     old[3].UAV.hResource.pDrvPrivate = &r3;
     list.commands = 7;
     RecordJobBarriers(&list, 4, old);
-    check(list.job_barrier_count == 0 && list.commands == 7 && !list.job_barriers);
+    /* OV2: barriers recorded while logging is off make the list unknown */
+    check(list.job_barrier_count == 0 && list.commands == 7 && !list.job_barriers &&
+          list.job_barriers_lost == 1);
+    list.job_barriers_lost = 0;
     enabled = 1;
     RecordJobBarriers(&list, 4, old);
+    check(list.job_barriers_lost == 0);
     check(list.commands == 7 && list.job_barrier_count == 4);
     const AgxD3d12JobBarrierRecord *r = list.job_barriers;
     check(r[0].position == 7 && r[0].type == 0 && r[0].before == 0x4 && r[0].after == 0x40 &&
