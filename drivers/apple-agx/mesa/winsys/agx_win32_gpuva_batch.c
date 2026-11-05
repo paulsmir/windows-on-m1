@@ -424,6 +424,13 @@ void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count);
  * AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE). */
 unsigned (*AgxWin32BatchKindHook)(unsigned kind);
 extern volatile unsigned AgxWin32Ov2Feature;
+/* OV5: read-only, before the render packet is built: nonzero when the
+ * D3D12 owner proved the render's vertex/TA work independent of the compute
+ * batch submitted just before it (prelude: the packet has a compute command;
+ * the owner never flags those) -- only while the KMD reports
+ * AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT. */
+unsigned (*AgxWin32RenderTaHook)(unsigned prelude);
+extern volatile unsigned AgxWin32Ov5Feature;
 #ifdef _MSC_VER
 #include "agx_win32_batch_deps.h"
 static AGX_WIN32_BATCH_DEPS batch_deps;
@@ -1040,7 +1047,13 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
        !append_native(&packet,&compute_command,sizeof(compute_command))) { fail_site=__LINE__; goto fail; }
   }
   if(!append_attachments(batch,&packet)) { fail_site=__LINE__; goto fail; }
+  /* OV5: a TA-independent plain render names no compute-subqueue wait
+   * (the KMD moves that wait to its 3D ring) */
   command_header=compute ? agx_cmd_header(false,DRM_ASAHI_BARRIER_NONE,1) :
+#ifdef _MSC_VER
+                 AgxWin32Ov5Feature && AgxWin32RenderTaHook && AgxWin32RenderTaHook(0u) ?
+                           agx_cmd_header(false,0,DRM_ASAHI_BARRIER_NONE) :
+#endif
                            agx_cmd_header(false,0,0);
   if(!append_native(&packet,&command_header,sizeof(command_header)) ||
      !append_native(&packet,&native_render,sizeof(native_render))) { fail_site=__LINE__; goto fail; }

@@ -605,6 +605,14 @@ int main(void) {
         self.assertIn('const unsigned ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude);', owner)
         batch = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c').read_text()
         self.assertIn('AgxWin32BatchKindHook(1u | (batch->cdm.bo ? 0x100u : 0u));', batch)
+        # the flag: only a plain render (no compute command), only with the KMD feature
+        self.assertIn('command_header=compute ? agx_cmd_header(false,DRM_ASAHI_BARRIER_NONE,1) :\n'
+                      '#ifdef _MSC_VER\n'
+                      '                 AgxWin32Ov5Feature && AgxWin32RenderTaHook && AgxWin32RenderTaHook(0u) ?\n'
+                      '                           agx_cmd_header(false,0,DRM_ASAHI_BARRIER_NONE) :', batch)
+        self.assertIn('ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude) == 0u ? 1u : 0u;', owner)
+        info = (SHARED / 'include/apple_agx_win32_device_info.h').read_text()
+        self.assertIn('#define AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT 0x4u', info)
 
 if __name__ == '__main__':
     unittest.main()

@@ -47,8 +47,17 @@ typedef enum _AGX_WIN32_BUFFER_FLAGS {
  * (Wom1ComputeOwnQueue, compute on its own Asahi Queue); the KMD parser
  * refuses NONE without it. */
 #define AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE 0x2u
+/* OV5 (investigation/analysis/OV1-render-compute-overlap.md): a render
+ * packet without a compute prelude command may carry render-header
+ * CdmBarrier = APPLE_AGX_G4_BARRIER_NONE when the D3D12 UMD proved its
+ * vertex/TA work independent of the compute job submitted just before it;
+ * the KMD then drops the TA-ring compute-stamp Barrier and puts it at the
+ * head of the render's 3D ring entry (the 3D still waits). Published only
+ * behind its own KMD switch; the parser refuses the flag without it. */
+#define AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT 0x4u
 #define AGX_WIN32_DEVICE_FEATURES_KNOWN \
-  (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS | AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE)
+  (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS | AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE | \
+   AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT)
 
 typedef struct _AGX_WIN32_BUFFER_CLASS_INFO {
   APPLE_AGX_U32 ClassId;

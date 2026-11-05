@@ -657,6 +657,8 @@ static UINT owner_ov2_prefix[4], owner_ov2_kinds[4];
 /* OV5 receipt: per execution, AgxD3d12JobRenderTaRefusal of its first eight
  * render-after-compute batches as nibbles, and their count */
 static UINT owner_ov5_sequence, owner_ov5_renders;
+static UINT owner_ov5_flagged; /* renders sent with the OV5 flag */
+extern "C" volatile unsigned AgxWin32Ov5Feature;
 /* OV4 (opt-in APPLE_AGX_D3D12_OV4=1, only with the OV2 feature) */
 static BOOL owner_ov4(void) {
   static const BOOL enabled = [] {
@@ -671,7 +673,7 @@ static void owner_ov2_receipt_locked(void) {
   UINT any = 0;
   for (unsigned i = 0; i < 8u; ++i) any |= owner_ov2_reason[i];
   if (any && AdmissionUmdMeasureEnabled()) {
-    UINT values[24];
+    UINT values[26];
     for (unsigned i = 0; i < 8u; ++i) values[i] = owner_ov2_reason[i];
     values[8] = owner_ov2_sequence;
     values[9] = owner_ov2_pairs;
@@ -685,13 +687,15 @@ static void owner_ov2_receipt_locked(void) {
     values[21] = owner_ov4() ? 1u : 0u;
     values[22] = owner_ov5_sequence;
     values[23] = owner_ov5_renders;
-    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 24u);
+    values[24] = owner_ov5_flagged;
+    values[25] = AgxWin32Ov5Feature ? 1u : 0u;
+    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 26u);
   }
   for (unsigned i = 0; i < 8u; ++i) owner_ov2_reason[i] = 0;
   owner_ov2_sequence = owner_ov2_pairs = owner_ov2_range_sequence = 0;
   for (unsigned i = 0; i < 4u; ++i) owner_ov2_prefix[i] = owner_ov2_kinds[i] = 0;
   owner_ov4_splits = 0;
-  owner_ov5_sequence = owner_ov5_renders = 0;
+  owner_ov5_sequence = owner_ov5_renders = owner_ov5_flagged = 0;
 }
 extern "C" void AgxD3d12OwnerJobDrawRange(const void *heap, unsigned long long lo, unsigned long long hi,
                                           unsigned uav) {
@@ -774,6 +778,18 @@ static void owner_job_foreign(void) {
 static UINT owner_job_values[AGX_D3D12_JOB_BARRIER_VALUES];
 static unsigned owner_job_values_valid;
 extern "C" unsigned (*AgxWin32BatchKindHook)(unsigned kind);
+extern "C" unsigned (*AgxWin32RenderTaHook)(unsigned prelude);
+/* OV5 (winsys AgxWin32RenderTaHook): the render about to be submitted may
+ * run its TA while the compute batch before it runs (read-only) */
+static unsigned owner_render_ta(unsigned prelude) {
+  unsigned ta = 0u;
+  if (!AgxWin32Ov5Feature || !AgxD3d12OwnerJobBarriersEnabled()) return 0u;
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude) == 0u ? 1u : 0u;
+  if (ta) ++owner_ov5_flagged;
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+  return ta;
+}
 static unsigned owner_batch_kind(unsigned kind) {
   unsigned independent = 0u;
   /* winsys: kind | 0x100 for a render batch with a CDM prelude */
@@ -1158,6 +1174,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     AgxWin32TileLayoutHook = owner_tile_layout;
     AgxWin32BatchDepsHook = owner_batch_deps;
     AgxWin32BatchKindHook = owner_batch_kind; /* OV1/OV2 */
+    AgxWin32RenderTaHook = owner_render_ta;   /* OV5 */
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(hr)) create_upload_ring(owner);
