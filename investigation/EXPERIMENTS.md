@@ -69160,3 +69160,8 @@ Switches: Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1. Steps: D3D12 suite; Grav
 - Hashes: sys 8de93c58430d, UmdArm64 de697cc27652, UmdX64 1d92d19eb2f2, Umd32 df275022c780; manifest 25c499dde6d6, hardware-manifest be1ed2ccd8fa; probe2175.sh 9599f6699b81 (PROBE_LINT_OK); visible recovery rec2175h 5b528e9b1fee3cb8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1.
 - Recovery rec2175h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2175-stackscores/run2175.sh.
+
+EXP2175 HARDWARE ACTUAL (2026-11-05T00:45:31Z): **New bests with the combined stack (experimental m1n1 broker-lock split + Wom1G3RetainedSlots=1 + Wom1JobThreadAnyCore=1, production profile): FHD FULL 5266 (first arm; best 5200, +1.3 %), HD FULL 6581 (best 6524, +0.9 %).**
+- Suite 119/0, ARM_TASK True, wer 0 both arms. Images: FHD mean diff 1.7 / >32 0.9 % vs EXP2168; HD 6.0 / 4.3 % vs EXP2159 (final score screen, content correct on inspection; asteroid positions differ).
+- Verdict: CONFIRMED (single runs; both resolutions above previous bests). The m1n1 split is an experimental build (user-approved), not lastgood; the KMD switches stay opt-in until a decision on defaults.
+- Recovery: rec2175h.

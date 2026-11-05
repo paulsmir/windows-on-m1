@@ -8,6 +8,14 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-11-05 03:00Z -- BEST HD 6581 / FHD 5266 (EXP2175, combined stack)
+- Stack: experimental m1n1 exp/m1n1-brokerlock 550c7f23 AGX_BROKER_LOCK_SPLIT=1 (macho 1c35a20b, user-approved, not
+  lastgood) + Wom1G3RetainedSlots=1 + Wom1JobThreadAnyCore=1. Frame idle R7->C0 ~1.0 ms (was ~1.25).
+- EXP2173/2174: with the job thread pinned to P cores, 4/32 post-preemption pickups took 1.6-17 ms (late wake of an idle
+  pinned vCPU, recovered at ~vsync); unpinned: 0/96. Wom1PreemptTrace v2 (KeSetEvent/wake stamps) is in the package.
+- Open: one 21 ms outlier (EXP2174 mid12); make the stack default (needs a decision on m1n1 lastgood and the pinning
+  default); root cause of the late pinned wake (m1n1 vGIC/WFI or Windows scheduling).
+
 ## CURRENT 2026-11-05 01:30Z -- BEST HD 6524 (EXP2159) / FHD 5200 (EXP2168, V1 on)
 - Per-frame idle between GravityMark's R7 and next C0 ~1.25 ms (deployed m1n1): DWM submit 70 us + DWM begin/build
   ~250 us (lease ~200) + DWM GPU 0.64 ms + C0 begin ~300 us (lease ~200).
