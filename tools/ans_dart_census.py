@@ -165,6 +165,9 @@ def main(argv=None):
     receipt['boot_args'] = dict(phys_base=hex(u.ba.phys_base), mem_size=hex(u.ba.mem_size),
                                 top_of_kernel_data=hex(u.ba.top_of_kernel_data))
     receipt['adt_sha256'] = hashlib.sha256(adt.build()).hexdigest()
+    sart = adt['/arm-io/sart-ans']
+    receipt['sart_ans'] = dict(base=hex(sart.get_reg(0)[0]),
+                               version=repr(getattr(sart, 'sart_version', None)))  # ADT only
     data = (json.dumps(receipt, indent=2) + '\n').encode()
     a.output.parent.mkdir(parents=True, exist_ok=True)
     with a.output.open('xb') as f:
