@@ -69517,3 +69517,9 @@ Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABL
 - Recovery: rec2195h.
 - Hashes: sys 4a58ca613b00, UmdArm64 5cd3759e61b1, UmdX64 eac28d6ccb77, Umd32 fbbe3749f69d; manifest 5f410f4ca878, hardware-manifest 045620ed490c; probe2195.sh 69bc1e6e3454 (PROBE_LINT_OK); visible recovery rec2195h 68c4997645b64b46; m1n1 0d3a75b3.
 - Recovery rec2195h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2195-t1-ie1a/run2195.sh.
+
+EXP2195 HARDWARE ACTUAL (2026-11-05T18:15:01Z): **T1 and IE1a REJECTED (correct, no gain): HD PERF frame time T1 -0.09 % / +1.25 %, IE1a +1.29 % / +0.55 % vs off arms.**
+- Suite 119 PASS / 0 FAIL; WER 0; guest alive; no reset. a FHD FULL with both on: 5310 (clean run, correct completion).
+- HD PERF (10 + 60 s): b off 40.706, c T1 40.744, d IE1a 40.189, e IE1a 40.889, f T1 40.607, g off 41.113 FPS. Pairs b->c -0.09 % (no change), g->f +1.25 % (slower, 1/8 blocks faster), b->d +1.29 % (inconclusive), g->e +0.55 % (no change).
+- Interpretation: T1's 27-41 fewer static instructions in G-buffer/C0/planet do not show at frame level; IE1a's extra compute job per prelude render costs at least what the in-job prelude cost (render now waits on a separate compute job's stamp).
+- Verdict: both REJECTED as defaults; stay opt-in (APPLE_AGX_D3D_MAX_LAYER, APPLE_AGX_D3D12_EXPAND_AHEAD unset). Evidence .local/experiments/EXP2195-t1-ie1a/evidence. Recovery rec2195h. Next: EXP2196 OV2+OV3.
