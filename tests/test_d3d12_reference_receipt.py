@@ -1,5 +1,5 @@
 """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
-The first ref violation must fit AdmissionUmdDiagnostic's 16-word wire limit;
+The first ref violation (16 words) must fit AdmissionUmdDiagnostic's wire limit (32 since ab2ea6db);
 otherwise both requested lines silently disappear. Preserve list/slot/root,
 64-bit VA/allocation/object/Execute, length, and registration path.
 """
@@ -13,7 +13,7 @@ W=ROOT/'drivers/apple-agx/mesa/winsys'
 class ReferenceReceipt(unittest.TestCase):
     def test_receipt_fits_real_sink(self):
         sink=(ROOT/'drivers/apple-agx/render-admission/umd/src/umd_runtime_device.c').read_text()
-        self.assertIn('Count > 16u',sink)
+        self.assertIn('Count > 32u',sink)  # ab2ea6db: cap 16 -> 32
         code=r'''
 #include "agx_win32_gpuva.h"
 #include <cassert>
