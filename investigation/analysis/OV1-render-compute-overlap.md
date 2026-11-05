@@ -49,3 +49,19 @@ Extracted kernel collection, symbol dumps and annotated disassembly: .local/refe
 - Consequence for us: Q2c already gives compute its own Queue; the missing piece is emitting the cross-queue Barrier
   only for real dependencies. For D3D12 the dependency source is the application's ResourceBarrier calls (Windows
   contract), not BO identity.
+
+## Designs (offline, 2026-11-05)
+- OV2 (KMD): for a flagged independent pair keep the successor's lead Barrier but wait on the stamp value already in
+  memory (satisfied at arrival; no validation changes); flag through the existing Asahi per-command header field
+  (APPLE_AGX_G4_NATIVE_HEADER CdmBarrier/VdmBarrier = 0xffff = DRM_ASAHI_BARRIER_NONE), gated by a new device feature
+  bit; UMD rule v1: both jobs in one barrier-free epoch of the same ECL/context, every driver-internal GPU operation an
+  epoch break. Completion when the successor ends first is already handled (runtime BatchedPromotions, in-order
+  DMA_COMPLETED). Switch Wom1Ov2NoHazardLead.
+- Blocker found: R1/R5/R7 are counted-ExecuteIndirect renders whose v5 prelude (libagx indirect-stream expansion,
+  agx_win32_indirect_stream_emit.h) runs on the compute queue; prelude pairs are allowed by default since Q20, but with
+  Q2c the prelude queues behind C0 on the compute FIFO, so R1 cannot start before C0 ends even without a Barrier.
+- IE1a (UMD only): emit the expansion as its own compute batch right before the render (render becomes a plain v3
+  render); IE1b: submit that expansion ahead of C0 and let R1 wait on its stamp (needs OV2's per-job dependency).
+- Alternative (KMD, Apple-like): a second compute Queue for preludes (macOS keeps up to 3 compute work queues per
+  command queue), so a prelude never queues behind an independent compute job.
+- Decision waits on EXP2193 (barriers per boundary; refusal reasons per pair kind).
