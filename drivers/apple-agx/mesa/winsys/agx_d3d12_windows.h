@@ -65,6 +65,13 @@ void AgxD3d12OwnerJobCommand(unsigned Kind);
 /* OV2 (agx_d3d12_job_barriers.h): a draw that may write a UAV; a new
  * ExecuteCommandLists (Known = 0: some barrier was not logged) */
 void AgxD3d12OwnerJobDrawUav(void);
+/* OV2 ranges (agx_d3d12_job_barriers.h): the active draw accesses [Lo, Hi)
+ * of Heap (an AgxD3d12Heap identity; NULL = unplaceable), the barrier just
+ * fed names [Lo, Hi) of Heap, a resolve writes [Lo, Hi) of Heap */
+void AgxD3d12OwnerJobDrawRange(const void *Heap, unsigned long long Lo, unsigned long long Hi, unsigned Uav);
+void AgxD3d12OwnerJobBarrierRange(unsigned Type, unsigned Id, const void *Heap, unsigned long long Lo,
+                                  unsigned long long Hi);
+void AgxD3d12OwnerJobResolveRange(const void *Heap, unsigned long long Lo, unsigned long long Hi);
 void AgxD3d12OwnerJobExecution(unsigned Known);
 /* OV3 (with the OV2 device feature): a pipeline-statistics ResolveQueryData
  * submits the query writers and keeps its copies until the next draw, which

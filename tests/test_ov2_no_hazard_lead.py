@@ -347,5 +347,92 @@ int main(void) {
         self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D12_OV3B", option, sizeof(option)) == 1 && option[0] == \'1\'',
                       owner)
 
+    def test_ov2_ranges_rule(self):
+        """EXP2199: C3/C5/C7 were refused only by DrawUav (their render bound
+        a UAV). D3D12 orders a render's accesses before later work only
+        through barriers naming them: the opt-in ranges rule must refuse
+        exactly when a barrier between the render's last draw and the
+        compute batch's last dispatch names a range the render accessed (UAV
+        barriers: a range it accessed through a UAV; global UAV barriers: any
+        UAV access), or something it cannot place; barriers after the
+        compute's last dispatch order later work and must not count."""
+        code = r"""
+#include <stdio.h>
+#include "agx_d3d12_job_barriers.h"
+enum { DRAW = 5, DISPATCH = 2, QUERY = 9, TRANSITION = 0, UAV = 2 };
+static AGX_D3D12_JOB_BARRIERS j;
+static unsigned values[AGX_D3D12_JOB_BARRIER_VALUES];
+static int A, B, C, D;
+static void barrier(unsigned type, unsigned id, const void *heap, unsigned long long lo, unsigned long long hi) {
+  AgxD3d12JobBarrierAdd(&j, type, 0, 0, 0, id);
+  AgxD3d12JobBarrierRange(&j, type, id, heap, lo, hi);
+}
+/* mode: which barrier (or access) the case adds */
+static void run(int mode) {
+  AgxD3d12JobBarriersInit(&j);
+  AgxD3d12JobBarrierExecution(&j, 1);
+  if (mode == 10) AgxD3d12JobBarrierResolveRange(&j, &D, 0, 64);
+  AgxD3d12JobBarrierBegin(&j, DRAW);                 /* R: writes UAV A, reads C */
+  AgxD3d12JobBarrierDrawRange(&j, &A, 0, 100, 1);
+  AgxD3d12JobBarrierDrawRange(&j, &C, 0, 100, 0);
+  if (mode == 9) AgxD3d12JobBarrierDrawRange(&j, 0, 0, 0, 0);
+  AgxD3d12JobBarrierDrawUav(&j);
+  AgxD3d12JobBarrierEnd(&j);
+  if (mode == 8) barrier(TRANSITION, 5, &A, 0, 10);  /* R -> C gap */
+  AgxD3d12JobBarrierBegin(&j, QUERY);                /* deferred resolve submits R */
+  AgxD3d12JobBarrierLocal(&j);
+  AgxD3d12JobBarrierBatch(&j, 1u, values);
+  AgxD3d12JobBarrierEnd(&j);
+  barrier(TRANSITION, 1, &B, 0, 50);                 /* C's own resources */
+  AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierEnd(&j);
+  barrier(UAV, 2, &B, 0, 50);
+  if (mode == 1) barrier(TRANSITION, 3, &A, 50, 60);
+  if (mode == 2) barrier(UAV, 3, &A, 0, 100);
+  if (mode == 3) barrier(UAV, 4, &C, 0, 100);
+  if (mode == 4) barrier(UAV, 0, 0, 0, 0);
+  if (mode == 5) barrier(TRANSITION, 3, &A, 200, 300);
+  if (mode == 6) barrier(TRANSITION, 3, 0, 0, 0);
+  if (mode == 10) barrier(TRANSITION, 6, &D, 0, 64);
+  AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierEnd(&j);
+  if (mode == 7) barrier(TRANSITION, 3, &A, 0, 100); /* after C's last dispatch */
+  barrier(TRANSITION, 7, &A, 0, 100);                /* C -> next R gap (always) */
+  AgxD3d12JobBarrierBegin(&j, DRAW);                 /* next R submits C */
+  printf("%d %u %u\n", mode, AgxD3d12JobBarrierRefusal(&j), AgxD3d12JobBarrierRefusalRanges(&j));
+  AgxD3d12JobBarrierBatch(&j, 2u, values);
+}
+int main(void) {
+  for (int m = 0; m <= 10; ++m) run(m);
+  /* a render without UAV access: a global UAV barrier does not order it */
+  AgxD3d12JobBarriersInit(&j); AgxD3d12JobBarrierExecution(&j, 1);
+  AgxD3d12JobBarrierBegin(&j, DRAW); AgxD3d12JobBarrierDrawRange(&j, &C, 0, 100, 0); AgxD3d12JobBarrierEnd(&j);
+  AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierBatch(&j, 1u, values); AgxD3d12JobBarrierEnd(&j);
+  barrier(UAV, 0, 0, 0, 0);
+  AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierEnd(&j);
+  AgxD3d12JobBarrierBegin(&j, DRAW);
+  printf("global_no_uav %u\n", AgxD3d12JobBarrierRefusalRanges(&j));
+  return 0;
+}
+"""
+        ran = build_run(code, [], [D3D12])
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+        self.assertEqual(ran.stdout.split('\n')[:-1], [
+            '0 4 0',    # GravityMark shape: only DrawUav refused it
+            '1 4 8',    # transition overlapping R's UAV range inside C
+            '2 4 8',    # UAV barrier on R's UAV range
+            '3 4 0',    # UAV barrier on a range R only read
+            '4 4 8',    # global UAV barrier after a UAV-accessing render
+            '5 4 0',    # transition on A outside R's range
+            '6 4 8',    # barrier on an unknown resource
+            '7 4 0',    # after C's last dispatch: orders later work only
+            '8 3 8',    # R -> C gap barrier on R's range
+            '9 4 8',    # an access the tracker could not place
+            '10 4 8',   # a resolve destination OV3 may copy in R's prelude
+            'global_no_uav 0'])
+        ddi = (D3D12 / 'agx_d3d12_ddi.cpp').read_text()
+        self.assertEqual(ddi.count('AgxD3d12OwnerJobBarrierRange(r.type, r.id, r.heap, r.lo, r.hi);'), 2)
+        self.assertIn('JobDrawRanges(d, optional, clears, clear_count);', ddi)
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        self.assertIn('independent = (owner_ov2_ranges() ? ranged : reason) == 0u ? 1u : 0u;', owner)
+
 if __name__ == '__main__':
     unittest.main()

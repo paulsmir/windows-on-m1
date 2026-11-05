@@ -120,8 +120,8 @@ static void *HeapReAlloc(void *, unsigned, void *p, size_t n) { return std::real
 static BOOL enabled;
 static BOOL AgxD3d12OwnerJobBarriersEnabled() { return enabled; }
 static constexpr UINT kListCommands = 1u << 20;
-struct AgxD3d12Heap { int id; };
-struct AgxD3d12Resource { AgxD3d12Heap *heap; };
+struct AgxD3d12Heap { int id; UINT64 gpuva; };
+struct AgxD3d12Resource { AgxD3d12Heap *heap; UINT64 gpuva, bytes; };
 struct AgxD3d12JobBarrierRecord;
 struct AgxD3d12CommandList {
     UINT commands;
@@ -132,8 +132,8 @@ struct AgxD3d12CommandList {
 /* RECORDER */
 static void check(bool ok) { if (!ok) std::abort(); }
 int main() {
-    AgxD3d12Heap h1 = {1}, h2 = {2};
-    AgxD3d12Resource r1 = {&h1}, r2 = {&h2}, r3 = {nullptr};
+    AgxD3d12Heap h1 = {1, 0x10000}, h2 = {2, 0x40000};
+    AgxD3d12Resource r1 = {&h1, 0x10400, 0x100}, r2 = {&h2, 0x40000, 0}, r3 = {nullptr, 0, 0};
     AgxD3d12CommandList list = {};
     D3D12DDIARG_RESOURCE_BARRIER_0003 old[4] = {};
     old[0].Type = D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -164,6 +164,8 @@ int main() {
     check(r[3].flags == 2 && r[3].id == AgxD3d12JobBarrierId((uintptr_t)&r3));
     /* OV3: the heap a resolve destination is matched by */
     check(r[0].heap == &h1 && r[1].heap == nullptr && r[2].heap == &h2 && r[3].heap == nullptr);
+    /* OV2 ranges: the resource's bytes in its heap (no size: to the end) */
+    check(r[0].lo == 0x400 && r[0].hi == 0x500 && r[2].lo == 0 && r[2].hi == ~0ull);
     D3D12DDIARG_RESOURCE_BARRIER_0022 ranged[70] = {};
     for (int i = 0; i < 70; ++i) {
         ranged[i].Type = D3D12DDI_RESOURCE_BARRIER_TYPE_0022_RANGED;

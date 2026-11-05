@@ -6262,6 +6262,7 @@ static_assert(sizeof(((AgxD3d12CommandList *)0)->barriers) == AGX_D3D12_BARRIER_
 struct AgxD3d12JobBarrierRecord {
     UINT position, type, flags, before, after, id;
     const AgxD3d12Heap *heap; /* OV3: the barrier resource's heap (null: none or unknown) */
+    UINT64 lo, hi;            /* OV2 ranges: the resource's bytes in that heap */
 };
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 /* OV3: a barrier on a deferred resolve's destination copies it the native
@@ -6323,6 +6324,11 @@ template<class Barrier> static void RecordJobBarriers(AgxD3d12CommandList *list,
         }
         r.id = AgxD3d12JobBarrierId(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(resource)));
         r.heap = resource ? static_cast<const AgxD3d12Resource *>(resource)->heap : nullptr;
+        if (r.heap) {
+            const auto *res = static_cast<const AgxD3d12Resource *>(resource);
+            r.lo = res->gpuva - r.heap->gpuva;
+            r.hi = res->bytes ? r.lo + res->bytes : ~0ull;
+        }
     }
 #else
     (void)list;
@@ -6780,6 +6786,53 @@ static UINT DeferredClearRun(const AgxD3d12CommandList *list, UINT c, UINT *draw
 struct AgxD3d12ClearAbsorbStats {
     UINT immediate, deferred, absorbed, absorbed_draws, fallback_draws, reasons;
 };
+/* OV2 ranges (agx_d3d12_job_barriers.h): every heap range the draw may
+ * access -- targets, absorbed clears, vertex/index/indirect/stream-output
+ * buffers, the VS/PS views (UAVs marked); root views and buffers without a
+ * size run to the heap's end; optional stages are not placed (unknown). */
+static void JobDescriptorRange(const AgxD3d12Descriptor *v, unsigned uav) {
+    if (!v || !v->heap) return;
+    AgxD3d12OwnerJobDrawRange(v->heap, v->bytes ? v->offset : 0ull, v->bytes ? v->offset + v->bytes : ~0ull, uav);
+}
+static void JobHeapRange(const AgxD3d12Heap *heap, UINT64 offset, UINT64 bytes, unsigned uav) {
+    if (!heap) return;
+    AgxD3d12OwnerJobDrawRange(heap, offset, bytes ? offset + bytes : ~0ull, uav);
+}
+static void JobStageRanges(const AgxD3d12Dispatch &b) {
+    for (UINT u = 0; u < kUavSlots; ++u) {
+        JobDescriptorRange(b.uav_descriptor[u], 1u);
+        JobHeapRange(b.uav_heap[u], b.uav_offset[u], 0, 1u);
+    }
+    for (UINT t = 0; t < kSrvSlots; ++t) {
+        JobDescriptorRange(b.srv_descriptor[t], 0u);
+        JobHeapRange(b.srv_heap[t], b.srv_offset[t], 0, 0u);
+    }
+    for (UINT c = 0; c < kCbSlots; ++c) {
+        JobDescriptorRange(b.cb_descriptor[c], 0u);
+        JobHeapRange(b.cb_heap[c], b.cb_offset[c], 0, 0u);
+    }
+}
+static void JobDrawRanges(const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional, const AgxD3d12Command *clears,
+                          UINT clear_count) {
+    if (optional.gs || optional.hs || optional.ds) AgxD3d12OwnerJobDrawRange(nullptr, 0, 0, 1u);
+    for (UINT r = 0; r < d.rtvs && r < 8u; ++r) JobDescriptorRange(&d.rtv[r], 0u);
+    if (d.dsv.kind) JobDescriptorRange(&d.dsv, 0u);
+    for (UINT k = 0; clears && k < clear_count; ++k) {
+        if (clears[k].kind == kCommandClearDepth) JobDescriptorRange(&clears[k].clear_depth.dsv, 0u);
+        else if (clears[k].kind == kCommandClear) JobDescriptorRange(&clears[k].clear.rtv, 0u);
+        else AgxD3d12OwnerJobDrawRange(nullptr, 0, 0, 0u);
+    }
+    for (UINT v = 0; v < kVertexBuffers; ++v) JobHeapRange(d.vb[v].heap, d.vb[v].offset, 0, 0u);
+    if (d.index_size) JobHeapRange(d.index_heap, d.index_offset, 0, 0u);
+    JobHeapRange(d.indirect.args, d.indirect.args_offset, 0, 0u);
+    JobHeapRange(d.indirect.count, d.indirect.count_offset, 0, 0u);
+    for (UINT t = 0; t < kSoTargets; ++t) {
+        JobHeapRange(d.so[t].heap, d.so[t].offset, d.so[t].size, 1u);
+        JobHeapRange(d.so[t].filled, d.so[t].filled_offset, 0, 1u);
+    }
+    JobStageRanges(d.vs_bind);
+    JobStageRanges(d.ps_bind);
+}
 static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional,
                                                 AgxD3d12DrawScratch *scratch, const AgxD3d12Command *clears = nullptr,
                                                 UINT clear_count = 0, AgxD3d12ClearAbsorbStats *stats = nullptr) {
@@ -6892,6 +6945,7 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
             uav = d.vs_bind.uav_descriptor[u] || d.vs_bind.uav_heap[u] ||
                   d.ps_bind.uav_descriptor[u] || d.ps_bind.uav_heap[u];
         if (uav) AgxD3d12OwnerJobDrawUav();
+        JobDrawRanges(d, optional, clears, clear_count);
     }
     StageBindings(vs_bind, &draw.Vs);
     StageBindings(ps_bind, &draw.Ps); /* C13: graphics UAVs bind per stage too */
@@ -7106,6 +7160,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             for (; job_barrier < list->job_barrier_count && list->job_barriers[job_barrier].position <= c; ++job_barrier) {
                 const AgxD3d12JobBarrierRecord &r = list->job_barriers[job_barrier];
                 AgxD3d12OwnerJobBarrier(r.type, r.flags, r.before, r.after, r.id);
+                AgxD3d12OwnerJobBarrierRange(r.type, r.id, r.heap, r.lo, r.hi);
                 ReplayResolveBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), r);
             }
             AdmissionUmdWaitSetPhase(command.kind == kCommandDraw ? AgxWaitPhaseDraw :
@@ -7197,6 +7252,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
                 auto *queries = static_cast<AGX_D3D12_QUERY_HEAP *>(q.heap->owner);
                 if (q.op == kQueryResolve) {
                     AGX_D3D12_BUFFER dst = HeapBuffer(q.dst);
+                    if (job_receipt) AgxD3d12OwnerJobResolveRange(q.dst, q.dst_offset, ~0ull);
                     hr = AgxD3d12OwnerResolveQueries(owner, queries, q.type, q.index, q.count, &dst, q.dst_offset);
                 } else {
                     hr = AgxD3d12OwnerQuery(owner, queries, q.type, q.index, q.op == kQueryBegin);
@@ -7247,6 +7303,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
         for (; SUCCEEDED(hr) && job_barrier < list->job_barrier_count; ++job_barrier) {
             const AgxD3d12JobBarrierRecord &r = list->job_barriers[job_barrier];
             AgxD3d12OwnerJobBarrier(r.type, r.flags, r.before, r.after, r.id);
+            AgxD3d12OwnerJobBarrierRange(r.type, r.id, r.heap, r.lo, r.hi);
             ReplayResolveBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), r);
         }
 #endif
