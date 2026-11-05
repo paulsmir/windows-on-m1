@@ -69234,3 +69234,15 @@ Switches: none. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FU
 EXP2180 HARDWARE ACTUAL (2026-11-05T02:49:32Z): **Default package (8e0b2914, flip 10fd111e verified in source.zip) with the split m1n1 (BROKERLOCK split=1 in full.log), no switches: FHD FULL 5130, HD FULL 6415, suite 119/0 -- A-level, not the B means (5228 / 6510).**
 - Verdict: INCONCLUSIVE: either the default path does not engage or this is a low single run. Next: EXP2181 same package + Wom1JobDiagnostics=1 to verify from receipts that retained slots (Wom1G3RetainedSlotsReceipt) and the unpinned thread (job-timing WorkerFlags) are active by default. Split m1n1 not promoted to lastgood yet.
 - Recovery: rec2180h.
+
+EXP2181 HARDWARE BEFORE 2026-11-05T02:56:02Z:
+Switches: Wom1JobDiagnostics=1 (receipts only; no feature switch). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FULL (first arm), b HD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2176-2179 ABBA: B (split + both switches) +1.5 % FHD / +2.0 % HD over A; (2) the defaults now select B's KMD behaviour without switches; (3) a switch-free run proves the default path (not only the switch path).
+- WINDOWS CONTRACT / AGX CONTRACT: as EXP2177/2178.
+- WHAT IS STILL UNKNOWN: whether retained slots and the unpinned job thread are active without their switches (EXP2180 scored A-level).
+- Expected: FHD ~5228, HD ~6510 (B means), suite 119/0.
+- Failure criteria: scores at A level (~5150 / ~6385) would mean the defaults did not take effect; suite regression, TDR, hang.
+- Recovery: rec2181h.
+- Hashes: sys c76e7c972e3c, UmdArm64 12c9f4b609d8, UmdX64 b3e3b717e9ae, Umd32 a9b92b24e2df; manifest f82e5690873a, hardware-manifest f79a6f95a7f2; probe2181.sh bcac38c2e5b5 (PROBE_LINT_OK); visible recovery rec2181h 270683cd93bce961; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1.
+- Recovery rec2181h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2181-defcheck/run2181.sh.
