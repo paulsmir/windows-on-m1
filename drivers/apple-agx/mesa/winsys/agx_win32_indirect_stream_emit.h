@@ -110,6 +110,35 @@ agx_win32_stream_cdm_bytes(void)
           AGX_CDM_BARRIER_LENGTH;
 }
 
+/* IE1a (agx_win32_expand_ahead.h): an expansion batch takes another launch
+ * only with room for two, the bound the prelude keeps in a render's CDM, so
+ * agx_launch_internal never flushes it from inside the entered draw. */
+static bool
+agx_win32_expand_room(const struct agx_batch *expand)
+{
+   return expand->cdm.bo && expand->cdm.current && expand->cdm.end &&
+          (size_t)(expand->cdm.end - expand->cdm.current) >
+             2u * agx_win32_stream_cdm_bytes();
+}
+
+/* IE1a: before graphics batch entry, give the render batch the draw will
+ * use an expansion batch with room. Batches are opened or flushed only
+ * here; agx_get_batch is the call agx_draw_vbo makes next. */
+static void
+agx_win32_expand_prepare(struct agx_context *ctx)
+{
+   struct agx_batch *render = agx_get_batch(ctx);
+   if (!render || ctx->any_faults)
+      return;
+   struct agx_batch *expand = agx_win32_expand_linked(render);
+   if (expand && !agx_win32_expand_room(expand)) {
+      agx_flush_batch_for_reason(ctx, expand, "Expand ahead CDM capacity");
+      expand = NULL;
+   }
+   if (!expand && !ctx->any_faults)
+      (void)agx_win32_expand_open(ctx, render);
+}
+
 /* The generated stream is not CPU-readable by the KMD validator. Prove the
  * complete writable output, including VDM fetch padding, before launching its
  * producer. Windows process mappings use 39 bits even though VDM links encode
@@ -167,6 +196,8 @@ agx_win32_stream_flush_inputs(struct agx_context *ctx,
        (size_t)(batch->cdm.end - batch->cdm.current) <=
           2u * agx_win32_stream_cdm_bytes())
       agx_flush_batch_for_reason(ctx, batch, "Indirect stream CDM capacity");
+   if (!ctx->any_faults && agx_win32_expand_ahead_allowed(ctx))
+      agx_win32_expand_prepare(ctx);
 }
 
 /* The captured block must be the complete native VS update that
@@ -223,6 +254,14 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
        count > (UINT32_MAX - 16383u) / usc_stride)
       goto fail;
 
+   /* IE1a (agx_win32_expand_ahead.h): the expansion batch opened before
+    * entry, if any; without one, or without room, the prelude stays. */
+   struct agx_batch *expand = agx_win32_expand_ahead_allowed(ctx) ?
+      agx_win32_expand_linked(batch) : NULL;
+   if (expand && !agx_win32_expand_room(expand))
+      expand = NULL;
+   struct agx_batch *const launcher = expand ? expand : batch;
+   if (!expand) {
    /* A graphics batch's CDM is pre-raster work, exactly as for native GS.
     * Never allow agx_launch_internal to auto-submit while this draw is entered. */
    if (!batch->cdm.bo)
@@ -231,12 +270,33 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
        (size_t)(batch->cdm.end - batch->cdm.current) <=
           2u * agx_win32_stream_cdm_bytes())
       goto fail;
+   }
 
    agx_batch_reads(batch, agx_resource(in->buffer));
    if (in->indirect_draw_count)
       agx_batch_reads(batch, agx_resource(in->indirect_draw_count));
    if (ctx->any_faults)
       return NULL;
+   /* IE1a: E reads the arguments and count as well. Their writers were
+    * flushed before entry (agx_win32_stream_flush_inputs), so E only lists
+    * them: agx_batch_reads could flush R itself (the writer of a shared heap
+    * BO) from inside its own draw. R's pipeline pool is a CPU shadow that is
+    * published only when R submits; E runs first, so it reads the USC
+    * template from a copy in its own pool. */
+   uint64_t usc_template = stream->usc_template;
+   if (expand) {
+      agx_batch_add_bo(expand, agx_resource(in->buffer)->bo);
+      if (in->indirect_draw_count)
+         agx_batch_add_bo(expand, agx_resource(in->indirect_draw_count)->bo);
+      const void *bytes = agx_win32_expand_template_cpu(batch, usc_template,
+                                                       stream->usc_bytes);
+      usc_template = bytes ? agx_pool_upload_aligned(&expand->pool, bytes,
+                                                      stream->usc_bytes, 64) : 0;
+      if (ctx->any_faults)
+         return NULL;
+      if (!usc_template)
+         goto fail;
+   }
 
    /* Output-only batch pools use writable General BOs, including USC low VA.
     * They are never CPU-mapped or published. Explicit batch references add
@@ -266,11 +326,20 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
    agx_batch_add_bo(batch, usc_bo);
    if (ctx->any_faults)
       return NULL;
+   /* IE1a: E writes R's outputs and the feedback words; R retires both. */
+   if (expand) {
+      agx_batch_add_bo(expand, vdm_bo);
+      agx_batch_add_bo(expand, usc_bo);
+      if (feedback)
+         agx_batch_add_bo(expand, ctx->windows_stream_feedback);
+      if (ctx->any_faults)
+         return NULL;
+   }
 
    struct agx_win32_stream_params params = {
       .stream = vdm.gpu, .pipelines = usc.gpu,
       .continuation = continuation,
-      .usc_template = stream->usc_template,
+      .usc_template = usc_template,
       .arguments = draw.b.ptr,
       .count = in->indirect_draw_count ?
          agx_map_gpu(agx_resource(in->indirect_draw_count)) +
@@ -297,16 +366,25 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
    memcpy(params.vs_state, stream->vs_state, sizeof(params.vs_state));
    if (ctx->any_faults)
       return NULL;
-   uint64_t args = agx_pool_upload_aligned(&batch->pool, &params, sizeof(params), 8);
-   if (!args || !AgxWin32AsahiBatchComputeEnter(batch))
+   uint64_t args = agx_pool_upload_aligned(&launcher->pool, &params, sizeof(params), 8);
+   if (!args || !AgxWin32AsahiBatchComputeEnter(launcher))
       goto fail;
-   libagx_win32_indirect_stream(batch,
+   /* IE1a: the prelude's barrier less AGX_PREGFX (no graphics shares E).
+    * Gallium's agx_launch_precomp ignores both; agx_launch_internal ends
+    * this internal launch with the full CDM barrier in either batch, and the
+    * KMD's compute -> render barrier orders R's VDM fetch after E ends. */
+   libagx_win32_indirect_stream(launcher,
                                 agx_1d(params.threads ? params.threads : capacity + 1u),
-                                AGX_BARRIER_ALL | AGX_PREGFX, args);
-   if (!AgxWin32AsahiBatchComputeLeave(batch))
+                                expand ? AGX_BARRIER_ALL : AGX_BARRIER_ALL | AGX_PREGFX,
+                                args);
+   if (!AgxWin32AsahiBatchComputeLeave(launcher))
       goto fail;
    if (ctx->any_faults)
       return NULL;
+   if (expand) {
+      ++expand->windows_expand_dispatches;
+      AgxWin32PerfNote("GPU stream expand ahead");
+   }
 
    ctx->windows_indirect_path = 3;
    return (uint8_t *)agx_vdm_jump((uint32_t *)out, vdm.gpu);

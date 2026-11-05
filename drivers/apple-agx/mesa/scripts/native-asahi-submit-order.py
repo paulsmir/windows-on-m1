@@ -20,6 +20,9 @@ ORDER = '''   if (!agx_batch_is_active(batch) || agx_batch_is_submitted(batch)) 
    /* rc105 (agx_win32_submit_order.h): an open writer of a BO this batch
     * uses was recorded before it; submit that writer first. */
    {
+      /* IE1a (agx_win32_expand_ahead.h): a render's expansion batch is
+       * submitted before it; an empty expansion batch is reset instead. */
+      if (agx_win32_expand_flush_first(ctx, batch)) { AgxWin32WaitEnd(wait_token); return; }
       uint8_t writers[AGX_MAX_BATCHES];
       const unsigned enforce = agx_win32_submit_order_mode();
       const unsigned found = agx_win32_submit_order_writers(

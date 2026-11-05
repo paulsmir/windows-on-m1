@@ -24,7 +24,7 @@ PRELUDE = PROGRAM[:PROGRAM.index('static void run(')].replace(
 GLUE = r'''
 #include "gallium/include/pipe/p_defines.h"
 struct pipe_resource {unsigned width0;};
-struct agx_resource {struct pipe_resource base;uint64_t gpu;};
+struct agx_resource {struct pipe_resource base;uint64_t gpu;struct agx_bo *bo;};
 struct pipe_draw_info {unsigned mode,index_size;bool has_user_indices,primitive_restart;};
 struct pipe_draw_indirect_info {struct pipe_resource *buffer,*indirect_draw_count;unsigned offset,draw_count,stride,indirect_draw_count_offset;};
 struct shader {struct {unsigned system_values_read[16];} info;};
@@ -43,8 +43,17 @@ struct agx_context {
  void *occlusion_query,*time_elapsed,*cond_query,*tf_any_overflow;
  void *pipeline_statistics[12],*prims_generated[4],*tf_prims_generated[4],*tf_overflow[4];
  struct agx_batch *batch;unsigned windows_indirect_path;
+ struct agx_bo *windows_stream_feedback;
 };
-struct agx_batch {struct agx_context *ctx;struct agx_pool pool,windows_stream_pool,windows_stream_usc_pool;struct agx_encoder cdm,vdm;};
+struct agx_batch {struct agx_context *ctx;struct agx_pool pool,windows_stream_pool,windows_stream_usc_pool;struct agx_encoder cdm,vdm;
+ /* IE1a (agx_win32_expand_ahead.h); test_active/test_submitted model the batch bitsets */
+ struct agx_batch *windows_expand,*windows_expand_owner;unsigned windows_expand_dispatches;bool test_active,test_submitted;};
+#define AGX_MAX_BATCHES 128
+static bool agx_batch_is_active(struct agx_batch *b){return b->test_active;}
+static bool agx_batch_is_submitted(struct agx_batch *b){return b->test_submitted;}
+static void agx_batch_reset(struct agx_context *c,struct agx_batch *b);
+static void agx_flush_batch(struct agx_context *c,struct agx_batch *b);
+static struct agx_batch *agx_get_batch(struct agx_context *c);
 static struct agx_device dev;
 static unsigned allocations,fault,reads,launches,entered,leaves,writer_flushes,capacity_flushes,output_refs;
 static struct agx_bo output_bos[2];
@@ -61,7 +70,7 @@ static unsigned agx_usc_addr(struct agx_device *d,uint64_t a){assert(a>=d->shade
 static bool agx_needs_passthrough_gs(struct agx_context *c,const struct pipe_draw_info *i,void *in,bool *xfb){(void)c;(void)i;(void)in;(void)xfb;return passthrough;}
 static bool agx_batch_is_compute(struct agx_batch *b){(void)b;return false;}
 static void agx_flush_writer(struct agx_context *c,struct agx_resource *r,const char *s){assert(r&&s);++writer_flushes;if(fault==8)c->any_faults=true;}
-static void agx_flush_batch_for_reason(struct agx_context *c,struct agx_batch *b,const char *s){assert(c==b->ctx&&s);++capacity_flushes;}
+static void agx_flush_batch_for_reason(struct agx_context *c,struct agx_batch *b,const char *s){assert(c==b->ctx&&s);++capacity_flushes;if(b->windows_expand_owner)agx_flush_batch(c,b);}
 static void AgxWin32AsahiMarkContextFault(struct agx_context *c,unsigned line){assert(line);c->any_faults=true;}
 static struct agx_encoder agx_encoder_allocate(struct agx_batch *b,struct agx_device *d){assert(b&&d==&dev);if(fault==7)return (struct agx_encoder){0};return (struct agx_encoder){cdm,cdm,cdm+sizeof(cdm)};}
 static void agx_batch_reads(struct agx_batch *b,struct agx_resource *r){assert(r);++reads;if(fault==9)b->ctx->any_faults=true;}
@@ -95,7 +104,7 @@ static struct agx_ptr agx_pool_alloc_aligned_with_bo(struct agx_pool *pool,size_
  p.cpu=NULL;return p;
 }
 static void agx_batch_add_bo(struct agx_batch *b,struct agx_bo *bo){assert(bo==&output_bos[output_refs++ % 2]);if(fault==10)b->ctx->any_faults=true;}
-static uint64_t agx_pool_upload_aligned(struct agx_pool *pool,void *data,size_t size,unsigned alignment){struct agx_ptr p=agx_pool_alloc_aligned(pool,size,alignment);if(p.cpu)memcpy(p.cpu,data,size);return p.gpu;}
+static uint64_t agx_pool_upload_aligned(struct agx_pool *pool,const void *data,size_t size,unsigned alignment){struct agx_ptr p=agx_pool_alloc_aligned(pool,size,alignment);if(p.cpu)memcpy(p.cpu,data,size);return p.gpu;}
 static bool AgxWin32AsahiBatchComputeEnter(struct agx_batch *b){assert(b);if(fault==4)return false;++entered;return true;}
 static bool AgxWin32AsahiBatchComputeLeave(struct agx_batch *b){assert(b&&entered==1);++leaves;return fault!=6;}
 static unsigned last_grid;
@@ -123,6 +132,30 @@ static unsigned agx_win32_stream_capacity(const struct agx_context *c,unsigned m
 static struct agx_ptr agx_win32_stream_scratch(struct agx_batch *b,unsigned kind,size_t size,struct agx_bo **bo){
  return agx_pool_alloc_aligned_with_bo(kind?&b->windows_stream_usc_pool:&b->windows_stream_pool,size,kind?64:256,bo);}
 #define libagx_win32_indirect_stream launch
+/* IE1a: off unless APPLE_AGX_D3D12_EXPAND_AHEAD=1; the projected batch
+ * functions are modelled here (test_d3d12_indirect_stream_projection.py). */
+#include "agx_win32_expand_ahead.h"
+static unsigned get_batches,expand_opens,template_copies,batch_resets;
+static struct agx_batch *expand_next,*flush_log[16];static unsigned flushes,aborts,fail_expand_flush;
+static struct agx_batch *agx_get_batch(struct agx_context *c){++get_batches;return c->batch;}
+struct agx_batch *agx_win32_expand_open(struct agx_context *c,struct agx_batch *r){
+ assert(c==r->ctx);++expand_opens;if(!expand_next)return NULL;
+ expand_next->windows_expand_owner=r;r->windows_expand=expand_next;return expand_next;}
+const void *agx_win32_expand_template_cpu(struct agx_batch *r,uint64_t va,size_t n){
+ assert(r&&!r->windows_expand_owner&&va&&n);++template_copies;return (const void *)(uintptr_t)va;}
+static void agx_batch_reset(struct agx_context *c,struct agx_batch *b){
+ (void)c;assert(b->test_active);++batch_resets;b->test_active=false;agx_win32_expand_cleanup(c,b);}
+/* The projected agx_flush_batch: its rc105 block starts with the hook; a
+ * faulted context aborts the batch (never submits it); a failed expansion
+ * submission faults the context (1) or, modelled defect, stays open (2). */
+static void agx_flush_batch(struct agx_context *c,struct agx_batch *b){
+ if(!b->test_active||b->test_submitted)return;
+ if(agx_win32_expand_flush_first(c,b))return;
+ if(c->any_faults){++aborts;b->test_active=false;return;}
+ if(b->windows_expand_owner&&fail_expand_flush==1){c->any_faults=true;++aborts;b->test_active=false;return;}
+ if(b->windows_expand_owner&&fail_expand_flush==2)return;
+ assert(flushes<16);flush_log[flushes++]=b;
+ b->test_active=false;b->test_submitted=true;}
 #include "agx_win32_indirect_stream_emit.h"
 
 /* RC69: the complete native VS block agx_encode_state captured for the template. */
