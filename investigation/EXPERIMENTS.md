@@ -69631,3 +69631,10 @@ Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -tem
 - Hashes: sys 9687d9f6977f, UmdArm64 3df09771e447, UmdX64 397c435c8e8f, Umd32 705e629bd08e; manifest 3c4c3f7a2ce8, hardware-manifest f2c0203ff5b3; probe2200.sh a5118c8aa46e (PROBE_LINT_OK); visible recovery rec2200h 5ed4833bbd7645ae; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
 - Recovery rec2200h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2200-ov2-ranges/run2200.sh.
+
+EXP2200 HARDWARE ACTUAL (2026-11-05T22:05:43Z): **OV2 ranges REJECTED (no gain): the resource-level rule frees only C9 (Waived ~1 per frame); C5/C7 are ordered by barriers inside C that name R's ranges (reason 8), C3 by foreign owner work (reason 6). HD PERF R=1 40.102 / 40.106 vs R=0 40.203 / 40.452 FPS.**
+- Suite 119 PASS / 0 FAIL; WER 0; GPU_RESET none; guest alive after every arm. a FHD FULL R=1 5324 (correct completion).
+- measure-d3d12-ov2-refusal (all arms, >99 % of rows): value 8 = 0x3444 (old rule), value 10 = 0x0886 (ranges rule: C3 6, C5 8, C7 8, C9 0), value 11 = switch state.
+- Wom1Ov2Receipt: mid12-d Considered 33938, Waived 6970, Refused[3] 26968; after-d 58141 / 10769 / 47372 (waivers only in the R=1 arms, ~1 per frame).
+- Interpretation: under the D3D12 barrier rules C5 and C7 genuinely depend on R4/R6 -- but only from the barrier inside C onward; our C is one compute job, so the whole job waits. C9 overlaps legally but saves nothing measurable. C3's foreign owner work (driver-internal work between R2 and C3) is the remaining refusal.
+- Verdict: REJECTED; APPLE_AGX_D3D12_OV2_RANGES stays off. Next: (1) macOS mtlhazard + per-dispatch timing (does Metal split these compute encoders before the dependent dispatches, i.e. is Apple's overlap the independent prefix of C?); (2) if so, OV4 = split a compute batch at its first barrier naming the preceding render's ranges, prefix flagged independent. No recovery yet: the J313 boots macOS next (recovery AT_PROXY afterwards).
