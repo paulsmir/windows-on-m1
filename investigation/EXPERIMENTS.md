@@ -69523,3 +69523,17 @@ EXP2195 HARDWARE ACTUAL (2026-11-05T18:15:01Z): **T1 and IE1a REJECTED (correct,
 - HD PERF (10 + 60 s): b off 40.706, c T1 40.744, d IE1a 40.189, e IE1a 40.889, f T1 40.607, g off 41.113 FPS. Pairs b->c -0.09 % (no change), g->f +1.25 % (slower, 1/8 blocks faster), b->d +1.29 % (inconclusive), g->e +0.55 % (no change).
 - Interpretation: T1's 27-41 fewer static instructions in G-buffer/C0/planet do not show at frame level; IE1a's extra compute job per prelude render costs at least what the in-job prelude cost (render now waits on a separate compute job's stamp).
 - Verdict: both REJECTED as defaults; stay opt-in (APPLE_AGX_D3D_MAX_LAYER, APPLE_AGX_D3D12_EXPAND_AHEAD unset). Evidence .local/experiments/EXP2195-t1-ie1a/evidence. Recovery rec2195h. Next: EXP2196 OV2+OV3.
+
+EXP2196 HARDWARE BEFORE 2026-11-05T18:27:33Z:
+Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: a FHD FULL (first arm), b HD FULL, c HD PERF, d HD PERF (KMD receipts at poll 12). Cross-boot switch-off control EXP2197 with the same arms.
+- WHY THIS HYPOTHESIS: (1) EXP2192: Apple overlaps independent render and compute (4.3 ms FHD); (2) EXP2193: R->C boundaries carry no application barrier; the only dependency is the driver's ResolveQueryData GPU copy placed in the next compute batch, which OV3 defers into the following render's prelude; (3) the compute successors are already kicked at depth two with a lead Barrier on the render's 3D stamp, which OV2 satisfies on arrival for UMD-proven independent pairs.
+- WINDOWS CONTRACT: D3D12 barrier rules (no barrier = may overlap); query results still resolved before any consumer (deferred copy ordered behind C on the compute FIFO and behind R on the render FIFO); DMA_COMPLETED in fence order.
+- AGX/ASAHI CONTRACT: compute on its own Asahi Queue (Q2c); satisfied cross-queue Barrier; render and compute run concurrently.
+- ATOMIC CONTRACT: OV2 waiver + OV3 deferral together (OV2 alone never fires on GravityMark because of the resolve copy; OV3 alone changes nothing without the waiver).
+- WHAT IS STILL UNKNOWN: whether the firmware runs TA/3D on A concurrently with CDM on B; USC contention; resolve results correctness under deferral; FPS effect.
+- Expected: suite 119/0; correct images; measure-d3d12-ov2 shows independent R->C pairs, measure-d3d12-resolve-defer counts deferrals; FHD > 5400, HD PERF > 40.7 vs EXP2197 control.
+- Failure criteria: wrong image, GPU fault, TDR, lost completion, query errors -> rec2196h, switch stays off.
+- Recovery: rec2196h (AT_PROXY after a reset; save full.log first).
+- Hashes: sys 412a9c723bb8, UmdArm64 95bc27defe59, UmdX64 7c441209d4cb, Umd32 085162200de5; manifest 80e01dfcd5e0, hardware-manifest 763ce464e54c; probe2196.sh de9de55a3c2a (PROBE_LINT_OK); visible recovery rec2196h 562d813dfb5b3d2f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
+- Recovery rec2196h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2196-ov3/run2196.sh.
