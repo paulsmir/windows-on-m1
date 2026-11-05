@@ -69230,3 +69230,7 @@ Switches: none. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FU
 - Recovery: rec2180h.
 - Hashes: sys 5ccdc2655254, UmdArm64 dae40bff121c, UmdX64 40d348fbeb27, Umd32 30e6f4c4dbae; manifest 83c7cfcc6be5, hardware-manifest 0b54e08c0e41; probe2180.sh fc3f98317c2b (PROBE_LINT_OK); visible recovery rec2180h 29a6b875ab5cc62b; m1n1 0d3a75b3.
 - Recovery rec2180h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2180-defaults/run2180.sh.
+
+EXP2180 HARDWARE ACTUAL (2026-11-05T02:49:32Z): **Default package (8e0b2914, flip 10fd111e verified in source.zip) with the split m1n1 (BROKERLOCK split=1 in full.log), no switches: FHD FULL 5130, HD FULL 6415, suite 119/0 -- A-level, not the B means (5228 / 6510).**
+- Verdict: INCONCLUSIVE: either the default path does not engage or this is a low single run. Next: EXP2181 same package + Wom1JobDiagnostics=1 to verify from receipts that retained slots (Wom1G3RetainedSlotsReceipt) and the unpinned thread (job-timing WorkerFlags) are active by default. Split m1n1 not promoted to lastgood yet.
+- Recovery: rec2180h.
