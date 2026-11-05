@@ -213,6 +213,19 @@ class Ov2NoHazardLead(unittest.TestCase):
         self.assertEqual(batch.count('DRM_ASAHI_BARRIER_NONE : 0,0);'), 1)
         self.assertIn('AgxWin32BatchKindHook(2u) &&\n      AgxWin32Ov2Feature', batch)
 
+    def test_start_publishes_feature_after_reset(self):
+        """EXP2196: RuntimeStart set GpuIndependentSubqueue from Ov2Enabled and
+        then zeroed it again with the soft-fault reset, so the UMD never saw
+        the OV2 device feature. The last write on the success path before
+        'return STATUS_SUCCESS' must publish Ov2Enabled, not 0."""
+        src = (ROOT / 'drivers/apple-agx/render-admission/src/backend_platform_windows.c').read_text()
+        start = src.index('NTSTATUS AdmissionPlatformRuntimeStart(')
+        body = src[start:src.index('\nFail:', start)]
+        reset = body.rindex('InterlockedExchange(&Context->GpuSoftFaults, 0);')
+        after = body.index('GpuIndependentSubqueue', reset)
+        line = body[body.rindex('\n', 0, after):body.index('\n', after)]
+        self.assertIn('runtime->Ov2Enabled ? 1 : 0', line)
+
     def test_ov3_resolve_deferral_wiring(self):
         """OV3: a deferred pipeline-statistics copy must still land before
         anything can observe the destination or reset the query: a barrier on

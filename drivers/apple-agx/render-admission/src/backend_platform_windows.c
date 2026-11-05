@@ -8100,7 +8100,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->SoftFaultsRequested =
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1SoftFaults");
   InterlockedExchange(&Context->GpuSoftFaults, 0);
+#if defined(ADMISSION_OV2_ON)
+  /* EXP2196: this reset ran after the OV2 enable above and hid the
+   * device feature from the UMD; publish it here, at the end of start. */
+  InterlockedExchange(&Context->GpuIndependentSubqueue, runtime->Ov2Enabled ? 1 : 0);
+#else
   InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
+#endif
   RtlZeroMemory(&runtime->PostResume, sizeof(runtime->PostResume));
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
   KeInitializeEvent(&runtime->SlotEvent, NotificationEvent, FALSE);
