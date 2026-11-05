@@ -69130,3 +69130,15 @@ EXP2173 HARDWARE ACTUAL (2026-11-04T23:57:45Z): **Missed worker wakeup after a p
 - EXP2172 (deployed m1n1, no retained slots) showed the same pattern once (2029 us of 32): a KMD defect, more frequent in this configuration. 10-17 ms matches the Windows timer period (a backstop wake, not the submit's wake).
 - Verdict: CONFIRMED. Next: find and fix the lost wakeup between the preemption commit (AdmissionSchedulerTryNotifyPreemption -> AdmissionDispatchQueuedWork) and the next SubmitCommandVirtual's dispatch, with a deterministic RED test.
 - Recovery: rec2173h.
+
+EXP2174 HARDWARE BEFORE 2026-11-05T00:17:34Z:
+Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2173: 4 of 32 post-preemption DWM pickups took 1.6-16.9 ms with the GPU idle, capped near one vsync period; (2) source pass (subagent): no lost wake in the KMD, KeSetEvent(JobThreadWake) is issued, the next recovery is the vsync DPC; (3) the job thread is pinned to the performance cores: a late wake of an idle pinned vCPU (vGIC/WFI path) would change with an unpinned thread.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (thread affinity only).
+- WHAT IS STILL UNKNOWN: whether the delayed pickups depend on the job thread's pinning.
+- Expected: if pinning-related, no pickup > 1 ms in the preemption trace; otherwise unchanged frequency.
+- Failure criteria: suite regression, TDR, FPS drop > 2 %.
+- Recovery: rec2174h.
+- Hashes: sys 8ea202f9e55a, UmdArm64 d4bb83e1f7e3, UmdX64 ec85d2e561d0, Umd32 d2656a204df7; manifest b67248d41816, hardware-manifest ae658dfb5d41; probe2174.sh b8a23b002c55 (PROBE_LINT_OK); visible recovery rec2174h 7ca168a9943aacce; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1.
+- Recovery rec2174h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2174-anycore/run2174.sh.
