@@ -44491,3 +44491,16 @@ the bench in use — GPU launcher PID 31128 `run_uefi.py` from
 /dev/cu.usbmodemC02HDNCCQ6L41/43. Not interrupted. Run only when the machine is
 at `Running proxy` between GPU runs, by agreement with the GPU session.
 Preregistration above is unchanged.
+
+### ANSDART001 — slot agreement (2026-11-05T23:45Z)
+
+Bench owner fork 6 (local_8fb8f1f9) will create the slot after its EXP2205: guest
+shut down to m1n1 `Running proxy`, endpoints checked, then message "ANSDART001
+SLOT OPEN". ANS session runs the census once, replies DONE/FAILED, never starts
+run_uefi; fork 6 then runs its AT_PROXY recovery. On any error: stop, reply, no retry.
+Profile facts from fork 6 (EXP2204 full.log): expanded guest RAM base 0x818000000,
+proxy heap 0x80f10c000..0x81310c000, m1n1 dump phys_base 0x850000000, running m1n1
+.local/experiments/m1n1-brokerlock-split/m1n1-g2-abi6-iomfb-owner-brokerlock-split.macho
+(original checkout). Census --guest-ram-base 0x818000000; the raw TTBR/L1/L2 list
+will also be reclassified offline against 0x850000000.
+User approval recorded in the entry above (commit 5f27a75af).
