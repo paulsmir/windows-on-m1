@@ -434,5 +434,111 @@ int main(void) {
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         self.assertIn('independent = (owner_ov2_ranges() ? ranged : reason) == 0u ? 1u : 0u;', owner)
 
+    def test_drained_copies_stay_foreign_across_a_render_submit(self):
+        """EXP2200: the resolve drained at the replay's end copies into the
+        open compute batch (C9) while R8 is still open; R8's submission then
+        reset ForeignSince, so C9 -- which reads R6's statistics -- was
+        flagged independent of R8 (reason 0, Waived ~1/frame). Driver work
+        put into the open compute batch must keep that batch foreign until
+        the compute batch itself is submitted."""
+        code = r"""
+#include <stdio.h>
+#include "agx_d3d12_job_barriers.h"
+static AGX_D3D12_JOB_BARRIERS j;
+static unsigned values[AGX_D3D12_JOB_BARRIER_VALUES];
+static int A;
+int main(void) {
+  AgxD3d12JobBarriersInit(&j);
+  AgxD3d12JobBarrierExecution(&j, 1);
+  AgxD3d12JobBarrierBegin(&j, 5); AgxD3d12JobBarrierDrawRange(&j, &A, 0, 64, 0); AgxD3d12JobBarrierEnd(&j);
+  AgxD3d12JobBarrierForeign(&j);          /* end-of-replay drain into the open compute batch */
+  AgxD3d12JobBarrierBatch(&j, 1u, values); /* R8 submitted by the final flush */
+  printf("%u %u\n", AgxD3d12JobBarrierRefusal(&j), AgxD3d12JobBarrierRefusalRanges(&j));
+  AgxD3d12JobBarrierBatch(&j, 2u, values); /* C9 */
+  /* the next compute batch is clean again */
+  AgxD3d12JobBarrierBegin(&j, 5); AgxD3d12JobBarrierEnd(&j);
+  AgxD3d12JobBarrierBegin(&j, 2); AgxD3d12JobBarrierBatch(&j, 1u, values); AgxD3d12JobBarrierEnd(&j);
+  AgxD3d12JobBarrierBegin(&j, 5);
+  printf("%u\n", AgxD3d12JobBarrierRefusalRanges(&j));
+  return 0;
+}
+"""
+        ran = build_run(code, [], [D3D12])
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+        self.assertEqual(ran.stdout.split('\n')[:-1], ['6 6', '0'])
+
+    def test_ov4_split_at_the_first_ordering_barrier(self):
+        """OV4: a compute batch may be split only at the first barrier that
+        orders the preceding render's accesses, only after at least one of
+        its dispatches, and only when that prefix is independent under the
+        ranges rule. The prefix is judged without the splitting barrier
+        (independent), the rest follows a compute batch (reason 2: never
+        flagged, so it keeps its lead). EXP2200 receipt values 12-15 then
+        report the prefix length of each compute-after-render batch."""
+        code = r"""
+#include <stdio.h>
+#include "agx_d3d12_job_barriers.h"
+static AGX_D3D12_JOB_BARRIERS j;
+static unsigned values[AGX_D3D12_JOB_BARRIER_VALUES];
+static int A, B;
+static void barrier(unsigned type, unsigned id, const void *heap, unsigned long long lo, unsigned long long hi) {
+  AgxD3d12JobBarrierAdd(&j, type, 0, 0, 0, id);
+  AgxD3d12JobBarrierRange(&j, type, id, heap, lo, hi);
+}
+static void dispatch(void) { AgxD3d12JobBarrierBegin(&j, 2); AgxD3d12JobBarrierEnd(&j); }
+/* R (reads A), its submission by C's first dispatch */
+static void prologue(int foreign) {
+  AgxD3d12JobBarriersInit(&j); AgxD3d12JobBarrierExecution(&j, 1);
+  AgxD3d12JobBarrierBegin(&j, 5); AgxD3d12JobBarrierDrawRange(&j, &A, 0, 64, 0); AgxD3d12JobBarrierEnd(&j);
+  if (foreign) AgxD3d12JobBarrierForeign(&j); /* driver work (a drained resolve) in the open compute batch */
+  AgxD3d12JobBarrierBegin(&j, 2); AgxD3d12JobBarrierBatch(&j, 1u, values); AgxD3d12JobBarrierEnd(&j);
+}
+int main(void) {
+  /* three dispatches (one in the prologue), an unrelated barrier between them, then a barrier on A */
+  prologue(0);
+  dispatch();
+  barrier(0, 1, &B, 0, 16);
+  printf("unrelated %u\n", AgxD3d12JobSplitHere(&j));
+  dispatch();
+  barrier(0, 2, &A, 0, 64);
+  printf("ordering %u prefix %u\n", AgxD3d12JobSplitHere(&j), AgxD3d12JobRangePrefix(&j));
+  printf("prefix_reason %u\n", AgxD3d12JobBarrierRefusalRanges(&j));
+  AgxD3d12JobBarrierBatch(&j, 2u, values);       /* the split submits the prefix */
+  dispatch();                                     /* the rest */
+  AgxD3d12JobBarrierBegin(&j, 5);
+  printf("suffix_reason %u split %u\n", AgxD3d12JobBarrierRefusalRanges(&j), AgxD3d12JobSplitHere(&j));
+  AgxD3d12JobBarrierBatch(&j, 2u, values);
+  AgxD3d12JobBarrierEnd(&j);
+  /* a barrier on A before any dispatch of C: nothing to split off */
+  AgxD3d12JobBarriersInit(&j); AgxD3d12JobBarrierExecution(&j, 1);
+  AgxD3d12JobBarrierBegin(&j, 5); AgxD3d12JobBarrierDrawRange(&j, &A, 0, 64, 0); AgxD3d12JobBarrierEnd(&j);
+  barrier(0, 2, &A, 0, 64);
+  printf("gap %u\n", AgxD3d12JobSplitHere(&j));
+  /* driver work in the compute batch since the render: never */
+  prologue(1);
+  barrier(0, 2, &A, 0, 64);
+  printf("foreign %u\n", AgxD3d12JobSplitHere(&j));
+  /* the receipt's prefix of a batch the ordering barrier ends after 3 of 4
+   * dispatches (no split: OV4 off) */
+  prologue(0);
+  dispatch(); dispatch();
+  barrier(2, 3, &A, 0, 64);                       /* UAV barrier on a read range: not ordering */
+  barrier(0, 2, &A, 0, 64);
+  dispatch();
+  AgxD3d12JobBarrierBegin(&j, 5);
+  printf("receipt %u of %u\n", AgxD3d12JobRangePrefix(&j), j.DispatchesSince);
+  return 0;
+}
+"""
+        ran = build_run(code, [], [D3D12])
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+        self.assertEqual(ran.stdout.split('\n')[:-1], [
+            'unrelated 0', 'ordering 1 prefix 3', 'prefix_reason 0', 'suffix_reason 2 split 0',
+            'gap 0', 'foreign 0', 'receipt 3 of 4'])
+        ddi = (D3D12 / 'agx_d3d12_ddi.cpp').read_text()
+        self.assertEqual(ddi.count('AgxD3d12OwnerJobSplit(static_cast<AGX_D3D12_OWNER *>(list->device->owner)); /* OV4 */'), 2)
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        self.assertIn('if (!owner || !AgxWin32Ov2Feature || !owner_ov4()) return;', owner)
+
 if __name__ == '__main__':
     unittest.main()

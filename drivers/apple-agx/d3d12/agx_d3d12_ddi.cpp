@@ -7162,6 +7162,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
                 AgxD3d12OwnerJobBarrier(r.type, r.flags, r.before, r.after, r.id);
                 AgxD3d12OwnerJobBarrierRange(r.type, r.id, r.heap, r.lo, r.hi);
                 ReplayResolveBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), r);
+                AgxD3d12OwnerJobSplit(static_cast<AGX_D3D12_OWNER *>(list->device->owner)); /* OV4 */
             }
             AdmissionUmdWaitSetPhase(command.kind == kCommandDraw ? AgxWaitPhaseDraw :
                 command.kind == kCommandDispatch || command.kind == kCommandIndirectExpand ?
@@ -7305,6 +7306,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             AgxD3d12OwnerJobBarrier(r.type, r.flags, r.before, r.after, r.id);
             AgxD3d12OwnerJobBarrierRange(r.type, r.id, r.heap, r.lo, r.hi);
             ReplayResolveBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), r);
+            AgxD3d12OwnerJobSplit(static_cast<AGX_D3D12_OWNER *>(list->device->owner)); /* OV4 */
         }
 #endif
     }

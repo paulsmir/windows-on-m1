@@ -43,6 +43,7 @@ typedef struct AGX_D3D12_JOB_RANGE {
 typedef struct AGX_D3D12_JOB_RANGE_SET {
   unsigned Count, Overflow, Uav;
   AGX_D3D12_JOB_RANGE R[AGX_D3D12_JOB_RANGES];
+  unsigned At[AGX_D3D12_JOB_RANGES]; /* Post: dispatches ended before the entry */
 } AGX_D3D12_JOB_RANGE_SET;
 typedef struct AGX_D3D12_JOB_BARRIERS {
   AGX_D3D12_JOB_BARRIER_SET Before; /* the gap before the active command */
@@ -74,6 +75,12 @@ typedef struct AGX_D3D12_JOB_BARRIERS {
    * render's prelude, so every render after them counts as writing them */
   AGX_D3D12_JOB_RANGE_SET Resolved;
   unsigned PostCommitted, PostCommittedOverflow;
+  /* EXP2200: driver work put into the open compute batch (a drained
+   * resolve) keeps that batch foreign until it is submitted, even across a
+   * render batch submitted before it; the command kinds (bit kind) and
+   * driver work (bit 31) since the last render batch; dispatches ended
+   * since the last batch (OV4 prefix receipt) */
+  unsigned ComputeForeign, ForeignKinds, DispatchesSince;
 } AGX_D3D12_JOB_BARRIERS;
 static inline void AgxD3d12JobRangeClear(AGX_D3D12_JOB_RANGE_SET *s) { s->Count = s->Overflow = s->Uav = 0u; }
 /* append [lo, hi) of heap (merged into an entry of the same heap and kind
@@ -150,6 +157,7 @@ static inline void AgxD3d12JobBarriersInit(AGX_D3D12_JOB_BARRIERS *j) {
   j->ForeignSince = j->DispatchesPending = 0u;
   j->EarlyDispatch = 1u;
   j->ActiveLocal = 0u;
+  j->ComputeForeign = j->ForeignKinds = j->DispatchesSince = 0u;
   AgxD3d12JobRangesReset(j);
 }
 
@@ -195,7 +203,10 @@ static inline void AgxD3d12JobBarrierBegin(AGX_D3D12_JOB_BARRIERS *j, unsigned k
   j->ActiveLocal = 0u;
   /* OV2: command kinds 2 dispatch, 5 draw (agx_d3d12_ddi.cpp kCommand*) */
   if (kind == 2u) ++j->DispatchesPending;
-  else if (kind != 5u) ++j->ForeignSince;
+  else if (kind != 5u) {
+    ++j->ForeignSince;
+    j->ForeignKinds |= 1u << (kind & 31u);
+  }
 }
 
 static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) {
@@ -212,6 +223,7 @@ static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) {
     AgxD3d12JobRangeClear(&j->Post);
     j->PostCommitted = j->PostCommittedOverflow = 0u;
   } else if (j->Active == 2u) {
+    ++j->DispatchesSince;
     j->PostCommitted = j->Post.Count;
     j->PostCommittedOverflow = j->Post.Overflow;
   }
@@ -233,10 +245,14 @@ static inline void AgxD3d12JobBarrierResolveRange(AGX_D3D12_JOB_BARRIERS *j, con
 static inline void AgxD3d12JobBarrierRange(AGX_D3D12_JOB_BARRIERS *j, unsigned type, unsigned id, const void *heap,
                                            unsigned long long lo, unsigned long long hi) {
   if (type == 2u && !id) {
-    AgxD3d12JobRangeAdd(&j->Post, (const void *)1, 0ull, 0ull, 2u);
-    return;
+    heap = (const void *)1;
+    lo = hi = 0ull;
   }
-  AgxD3d12JobRangeAdd(&j->Post, heap, lo, hi, type == 2u ? 1u : 0u);
+  {
+    const unsigned before = j->Post.Count;
+    AgxD3d12JobRangeAdd(&j->Post, heap, lo, hi, type == 2u ? (id ? 1u : 2u) : 0u);
+    if (j->Post.Count > before) j->Post.At[before] = j->DispatchesSince;
+  }
 }
 
 /* the active command's work is foreign to a compute batch after all */
@@ -254,7 +270,11 @@ static inline void AgxD3d12JobBarrierLocal(AGX_D3D12_JOB_BARRIERS *j) {
 
 /* OV3: owner work outside any command (a deferred resolve copied the
  * native way) joins the current compute batch */
-static inline void AgxD3d12JobBarrierForeign(AGX_D3D12_JOB_BARRIERS *j) { ++j->ForeignSince; }
+static inline void AgxD3d12JobBarrierForeign(AGX_D3D12_JOB_BARRIERS *j) {
+  ++j->ForeignSince;
+  j->ComputeForeign = 1u;
+  j->ForeignKinds |= 1u << 31;
+}
 
 /* a batch of kind (1 render, 2 compute) is submitted: values {kind,
  * previous kind, barriers, transitions, UAV, aliasing, OR StateBefore,
@@ -284,11 +304,18 @@ static inline void AgxD3d12JobBarrierBatch(AGX_D3D12_JOB_BARRIERS *j, unsigned k
   if (kind == 1u) {
     j->EarlyDispatch = j->DispatchesPending > (j->Active == 2u ? 1u : 0u) ? 1u : 0u;
     j->ForeignSince = AgxD3d12JobBarrierForeignActive(j);
+    /* the receipt's kinds: only those between this render and the next
+     * compute batch (and the driver work still in the open compute batch) */
+    j->ForeignKinds = (j->ComputeForeign ? 1u << 31 : 0u) |
+                      (j->ForeignSince ? 1u << (j->Active & 31u) : 0u);
   } else {
     j->EarlyDispatch = 0u;
     j->ForeignSince = 0u;
+    j->ComputeForeign = 0u;
+    j->ForeignKinds = 0u;
   }
   j->DispatchesPending = j->Active == 2u ? 1u : 0u;
+  j->DispatchesSince = 0u;
   j->GapAfterRender = kind == 1u ? s->Count : ~0u;
   if (kind == 1u) j->RenderUav = j->UavDraws != j->UavDrawsBase[0] ? 1u : 0u;
   if (kind == 1u) {
@@ -335,7 +362,7 @@ static inline unsigned AgxD3d12JobBarrierRefusal(const AGX_D3D12_JOB_BARRIERS *j
    * lazily) comes after it */
   foreign = j->ForeignSince;
   if (AgxD3d12JobBarrierForeignActive(j) && foreign) --foreign;
-  if (foreign) return 6u;
+  if (foreign || j->ComputeForeign) return 6u;
   if (after->NonUav > j->NonUavSince) return 7u;
   return j->NonUavSince - after->NonUav == 0u ? 0u : 7u;
 }
@@ -344,23 +371,44 @@ static inline unsigned AgxD3d12JobBarrierRefusal(const AGX_D3D12_JOB_BARRIERS *j
  * work: a global UAV barrier when the render accessed a UAV, a UAV barrier
  * on a range the render accessed through a UAV, any other barrier on a
  * range the render accessed at all. Unknown or overflowing sets order. */
-static inline unsigned AgxD3d12JobRangeOrdered(const AGX_D3D12_JOB_BARRIERS *j) {
+/* the first of the first Limit Post barriers that orders the last
+ * render's accesses: its index, Limit when none, 0 with unknown sets */
+static inline unsigned AgxD3d12JobRangeFirstOrdering(const AGX_D3D12_JOB_BARRIERS *j, unsigned limit,
+                                                     unsigned limit_overflow) {
   unsigned b, r;
-  if (j->PostCommittedOverflow || j->RangeLast.Overflow) return 1u;
-  for (b = 0; b < j->PostCommitted && b < j->Post.Count; ++b) {
+  if (limit_overflow || j->RangeLast.Overflow) return 0u;
+  for (b = 0; b < limit && b < j->Post.Count; ++b) {
     const AGX_D3D12_JOB_RANGE *x = &j->Post.R[b];
     if (x->Uav == 2u) {
-      if (j->RangeLast.Uav) return 1u;
+      if (j->RangeLast.Uav) return b;
       continue;
     }
     for (r = 0; r < j->RangeLast.Count; ++r) {
       const AGX_D3D12_JOB_RANGE *y = &j->RangeLast.R[r];
       if (y->Heap != x->Heap || x->Lo >= y->Hi || y->Lo >= x->Hi) continue;
       if (x->Uav == 1u && !y->Uav) continue;
-      return 1u;
+      return b;
     }
   }
-  return 0u;
+  return limit;
+}
+/* OV2 ranges: a barrier between the last render's last draw and this
+ * compute batch's last dispatch orders the render's accesses before later
+ * work: a global UAV barrier when the render accessed a UAV, a UAV barrier
+ * on a range the render accessed through a UAV, any other barrier on a
+ * range the render accessed at all. Unknown or overflowing sets order. */
+static inline unsigned AgxD3d12JobRangeOrdered(const AGX_D3D12_JOB_BARRIERS *j) {
+  if (j->PostCommittedOverflow || j->RangeLast.Overflow) return 1u;
+  return AgxD3d12JobRangeFirstOrdering(j, j->PostCommitted, 0u) < j->PostCommitted ? 1u : 0u;
+}
+/* OV4 receipt: the dispatches of the compute batch before the first barrier
+ * that orders the last render's accesses (all of them when none does; 0
+ * when the sets are unknown) */
+static inline unsigned AgxD3d12JobRangePrefix(const AGX_D3D12_JOB_BARRIERS *j) {
+  unsigned b;
+  if (j->PostCommittedOverflow || j->RangeLast.Overflow) return 0u;
+  b = AgxD3d12JobRangeFirstOrdering(j, j->PostCommitted, 0u);
+  return b < j->PostCommitted && b < j->Post.Count ? j->Post.At[b] : j->DispatchesSince;
 }
 /* OV2 ranges rule (opt-in): reasons 1, 2, 5 and 6 as below; 8 = a barrier
  * since the render orders its accesses (AgxD3d12JobRangeOrdered), which
@@ -374,8 +422,20 @@ static inline unsigned AgxD3d12JobBarrierRefusalRanges(const AGX_D3D12_JOB_BARRI
   if (j->EarlyDispatch) return 5u;
   foreign = j->ForeignSince;
   if (AgxD3d12JobBarrierForeignActive(j) && foreign) --foreign;
-  if (foreign) return 6u;
+  if (foreign || j->ComputeForeign) return 6u;
   return AgxD3d12JobRangeOrdered(j) ? 8u : 0u;
+}
+/* OV4 (opt-in): split the open compute batch here -- the barrier just fed
+ * (between commands) is the first to order the last render's accesses,
+ * the batch has dispatches since that render and those are independent of
+ * it under the ranges rule. The owner then submits the batch (the prefix,
+ * flagged independent: this barrier is not yet committed); the rest of the
+ * compute work follows in a new batch behind it (reason 2: never flagged). */
+static inline unsigned AgxD3d12JobSplitHere(const AGX_D3D12_JOB_BARRIERS *j) {
+  if (j->Active || !j->DispatchesSince || !j->Post.Count) return 0u;
+  if (AgxD3d12JobBarrierRefusalRanges(j) != 0u) return 0u;
+  if (j->Post.Overflow) return 1u; /* an unplaceable barrier orders too */
+  return AgxD3d12JobRangeFirstOrdering(j, j->Post.Count, 0u) < j->Post.Count ? 1u : 0u;
 }
 /* OV2: the compute batch now being submitted is independent of the render
  * batch submitted just before it under D3D12 rules: same execution, that

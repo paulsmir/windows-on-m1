@@ -649,20 +649,43 @@ static BOOL owner_ov2_ranges(void) {
   return enabled;
 }
 static UINT owner_ov2_reason[8], owner_ov2_sequence, owner_ov2_pairs, owner_ov2_range_sequence;
+/* EXP2200 follow-up, per the first four compute-after-render batches: the
+ * dispatches before the first barrier ordering the render's accesses << 16
+ * | its dispatches, and the foreign command kinds (bit kind, 31 driver
+ * work) between the render and that batch */
+static UINT owner_ov2_prefix[4], owner_ov2_kinds[4];
+/* OV4 (opt-in APPLE_AGX_D3D12_OV4=1, only with the OV2 feature) */
+static BOOL owner_ov4(void) {
+  static const BOOL enabled = [] {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_OV4", value, sizeof(value)) == 1 && value[0] == '1' ? TRUE
+                                                                                                         : FALSE;
+  }();
+  return enabled;
+}
+static UINT owner_ov4_splits;
 static void owner_ov2_receipt_locked(void) {
   UINT any = 0;
   for (unsigned i = 0; i < 8u; ++i) any |= owner_ov2_reason[i];
   if (any && AdmissionUmdMeasureEnabled()) {
-    UINT values[12];
+    UINT values[22];
     for (unsigned i = 0; i < 8u; ++i) values[i] = owner_ov2_reason[i];
     values[8] = owner_ov2_sequence;
     values[9] = owner_ov2_pairs;
     values[10] = owner_ov2_range_sequence;
     values[11] = owner_ov2_ranges() ? 1u : 0u;
-    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 12u);
+    for (unsigned i = 0; i < 4u; ++i) {
+      values[12 + i] = owner_ov2_prefix[i];
+      values[16 + i] = owner_ov2_kinds[i];
+    }
+    values[20] = owner_ov4_splits;
+    values[21] = owner_ov4() ? 1u : 0u;
+    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 22u);
   }
   for (unsigned i = 0; i < 8u; ++i) owner_ov2_reason[i] = 0;
   owner_ov2_sequence = owner_ov2_pairs = owner_ov2_range_sequence = 0;
+  for (unsigned i = 0; i < 4u; ++i) owner_ov2_prefix[i] = owner_ov2_kinds[i] = 0;
+  owner_ov4_splits = 0;
 }
 extern "C" void AgxD3d12OwnerJobDrawRange(const void *heap, unsigned long long lo, unsigned long long hi,
                                           unsigned uav) {
@@ -680,6 +703,25 @@ extern "C" void AgxD3d12OwnerJobResolveRange(const void *heap, unsigned long lon
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
   AgxD3d12JobBarrierResolveRange(&owner_job_barriers, heap, lo, hi);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+extern "C" void AgxD3d12OwnerJobSplit(AGX_D3D12_OWNER *owner) {
+  OwnerLock lock(owner);
+  if (!owner || !AgxWin32Ov2Feature || !owner_ov4()) return;
+  if (!owner->Context || AgxWin32AsahiContextFaulted(owner->Context)) return;
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  const unsigned split = AgxD3d12JobSplitHere(&owner_job_barriers);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+  /* the submission re-enters the accounting (owner_batch_kind): the
+   * prefix is judged without the barrier just fed */
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (split && AgxWin32AsahiFlushComputeBatch(owner->Context)) {
+    AcquireSRWLockExclusive(&owner_job_barriers_lock);
+    ++owner_ov4_splits;
+    ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+  }
+#else
+  (void)split;
+#endif
 }
 extern "C" void AgxD3d12OwnerJobExecution(unsigned known) {
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
@@ -733,6 +775,13 @@ static unsigned owner_batch_kind(unsigned kind) {
       if (owner_ov2_pairs < 8u) {
         owner_ov2_sequence |= (reason & 0xfu) << (4u * owner_ov2_pairs);
         owner_ov2_range_sequence |= (ranged & 0xfu) << (4u * owner_ov2_pairs);
+        if (owner_ov2_pairs < 4u) {
+          const unsigned prefix = AgxD3d12JobRangePrefix(&owner_job_barriers);
+          const unsigned total = owner_job_barriers.DispatchesSince;
+          owner_ov2_prefix[owner_ov2_pairs] = ((prefix > 0xffffu ? 0xffffu : prefix) << 16) |
+                                              (total > 0xffffu ? 0xffffu : total);
+          owner_ov2_kinds[owner_ov2_pairs] = owner_job_barriers.ForeignKinds;
+        }
       }
       ++owner_ov2_pairs;
     }

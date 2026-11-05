@@ -183,6 +183,8 @@ int AgxWin32AsahiQueryGroupBegin(struct pipe_context *, unsigned Type,
 int AgxWin32AsahiQueryResolveFlushWriters(struct pipe_context *, struct pipe_query *Query);
 int AgxWin32AsahiQueryResolveIntoRender(struct pipe_context *, struct pipe_query *Query,
     struct pipe_resource *Resource, unsigned Offset, int ExistingPrelude);
+/* OV4: submit the open compute batch (1 = submitted, 0 = none or a fault) */
+int AgxWin32AsahiFlushComputeBatch(struct pipe_context *);
 int AgxWin32AsahiContextFlushForPresent(struct pipe_context *);
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *);
 

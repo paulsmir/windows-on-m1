@@ -769,6 +769,14 @@ struct pipe_resource *AgxWin32AsahiStreamOutputOffset(struct pipe_stream_output_
 int AgxWin32AsahiContextFaulted(struct pipe_context *ctx) {
   return !ctx || agx_context(ctx)->any_faults;
 }
+/* OV4: submit the open compute batch now (a split at a barrier) */
+int AgxWin32AsahiFlushComputeBatch(struct pipe_context *ctx) {
+  struct agx_context *native=ctx ? agx_context(ctx) : NULL;
+  struct agx_batch *batch=native ? native->batch : NULL;
+  if(!batch || native->any_faults || !agx_batch_is_compute(batch) || !agx_batch_is_active(batch)) return 0;
+  agx_flush_batch_for_reason(native,batch,"OV4 compute split");
+  return !native->any_faults;
+}
 int AgxWin32AsahiContextFlushForPresent(struct pipe_context *ctx) {
   if(!ctx) return 0;
   struct agx_context *native=agx_context(ctx);
