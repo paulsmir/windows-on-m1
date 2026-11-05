@@ -36,6 +36,21 @@
  * Running a speculated load on a path the shader would not take reads
  * either mapped memory of the same process VM (the value is discarded) or
  * an unmapped page (zero, no fault, under soft faults).
+ *
+ * T2 (2026-11, offline): the vertex prolog therefore keeps AGX_ROBUSTNESS_D3D
+ * with soft_fault false: el = oob ? 0 : el (no read past the bound buffer,
+ * none of another allocation) and memory = oob ? 0 : memory (the D3D zero),
+ * oob = attrib_clamp < el with the clamp computed once per draw on the CPU
+ * (agx_calculate_vbo_clamp).  On the AGX backend the compare fuses into the
+ * selects: one csel per loaded component over GL (vec4 prolog 10 -> 14).  No
+ * cheaper exact form exists in the compiler alone: Asahi's soft-fault form
+ * (base = oob ? 0 : base, no clamp) needs every address below the 32-bit
+ * element offset's reach (64 GiB) unmapped, which Windows does not reserve;
+ * redirecting to the zero page needs its 64-bit VA as two more prolog
+ * uniforms (no saving); redirecting to a reserved never-mapped 64 GiB hole
+ * would need a fixed-VA winsys reservation, a prolog key tied to the KMD
+ * feature and a hardware check that reserved, unmapped PTEs soft-fault to 0.
+ * Even Asahi's form is not a consistent win here (vec4+vec4+uvec4 37 -> 38).
  */
 #ifndef AGX_WIN32_SOFT_FAULT_H
 #define AGX_WIN32_SOFT_FAULT_H
