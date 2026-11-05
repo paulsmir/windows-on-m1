@@ -7660,8 +7660,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
    * list, notifier, threshold, GPU context) with REG_DWORD
    * Wom1ComputeOwnQueue = 1; default off keeps every firmware byte. Read
    * here because InitializeComputeQueue below seeds those objects. */
+  /* Default on since EXP2189-2191 (FHD +3.5 %, HD +4.3 % cross-boot with
+   * F1); REG_DWORD Wom1ComputeOwnQueue = 0 restores the shared Queue. */
   runtime->Initdata.RenderSharedMemory.ComputeOwnQueue =
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1ComputeOwnQueue") ? TRUE : FALSE;
+      !AdmissionPlatformSwitchDisabled(Context, L"Wom1ComputeOwnQueue") ? TRUE : FALSE;
   if (!AppleAgxRenderSharedMemoryBindRelocationObjects(
           &runtime->Initdata.RenderSharedMemory,
           Context->BackendImage.ArenaCpuAddress,

@@ -449,7 +449,8 @@ class ComputeOwnQueue(unittest.TestCase):
 
     def test_switch_read_before_compute_queue_init_and_excludes_n2(self):
         src = WORKER.read_text()
-        read = src.index('ComputeOwnQueue =\n      AdmissionPlatformSwitchEnabled(Context, L"Wom1ComputeOwnQueue")')
+        # default on since EXP2191: only an explicit REG_DWORD 0 disables it
+        read = src.index('ComputeOwnQueue =\n      !AdmissionPlatformSwitchDisabled(Context, L"Wom1ComputeOwnQueue")')
         init = src.index('AppleAgxRenderSharedMemoryInitializeComputeQueue(')
         self.assertEqual(src.count('AppleAgxRenderSharedMemoryInitializeComputeQueue('), 1)
         bind = src.rindex('AppleAgxRenderSharedMemoryBindRelocationObjects(', 0, init)
