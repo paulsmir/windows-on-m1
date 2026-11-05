@@ -44504,3 +44504,16 @@ proxy heap 0x80f10c000..0x81310c000, m1n1 dump phys_base 0x850000000, running m1
 (original checkout). Census --guest-ram-base 0x818000000; the raw TTBR/L1/L2 list
 will also be reclassified offline against 0x850000000.
 User approval recorded in the entry above (commit 5f27a75af).
+
+### ANSDART001 — tool revision before the run (2026-11-05T23:47Z, supersedes the tool hash above)
+
+Census tool revised at fe3b7388650d196421051dbb89a87e5543f3423d: DART power falls back to the gates of
+`iommu-parent` consumers; mixed gate state = unknown (not read). New
+`tools/ans_dart_census.py` sha256 c78339a5ebea54331bf1177078c04c3f4dc1db5d609e5701c0499842f33a7948; 8 offline cases GREEN; dry run of
+main() against a fake proxy/ADT passed. Interpreter: shared
+/Volumes/pwdev/public_windows/proxyenv/bin/python (construct 2.10.70, pyserial 3.5,
+identical to the frozen ANS proxy-env receipt; nothing installed). The private
+`.local/ans-native/proxy-env` venv no longer exists (receipts only).
+Command at slot: M1N1DEVICE=<live endpoint> /Volumes/pwdev/public_windows/proxyenv/bin/python
+tools/ans_dart_census.py --confirm-experiment ANSDART001 --guest-ram-base 0x818000000
+--output .local/ans-native/ANSDART001/census.json
