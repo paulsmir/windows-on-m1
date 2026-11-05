@@ -69148,3 +69148,15 @@ EXP2174 HARDWARE ACTUAL (2026-11-05T00:23:47Z): **Unpinning the job thread (Wom1
 - Interpretation: the job thread pinned to the performance cores is sometimes woken late (KeSetEvent issued, thread runs only at the next interrupt, ~vsync); with an unpinned thread the scheduler runs it on a running vCPU. Owner: the idle-vCPU wake path (m1n1 vGIC/WFI) or Windows scheduling on this topology; the KMD pinning (rc81) exposes it.
 - Verdict: CONFIRMED (pinning-dependent). Next: FULL scores of the combined stack; then decide the pinning default and the m1n1 wake investigation.
 - Recovery: rec2174h.
+
+EXP2175 HARDWARE BEFORE 2026-11-05T00:34:31Z:
+Switches: Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FULL (first arm), b HD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2174: R7-done -> C0-kick ~1.0 ms on 19/20 frames vs ~1.25 ms baseline, HD PERF 39.45 FPS (best diagnostic run); (2) EXP2171/2173: without unpinning the split stack had 1.6-17 ms pickup stalls; (3) scores are only comparable in FULL runs, FHD first.
+- WINDOWS CONTRACT / AGX CONTRACT: as EXP2174.
+- WHAT IS STILL UNKNOWN: FULL-score effect of the stack without diagnostics.
+- Expected: HD > 6524 and FHD >= 5200 (about +1-2 %).
+- Failure criteria: suite regression, TDR, hang, image errors, scores below the EXP2150 control.
+- Recovery: rec2175h.
+- Hashes: sys 8de93c58430d, UmdArm64 de697cc27652, UmdX64 1d92d19eb2f2, Umd32 df275022c780; manifest 25c499dde6d6, hardware-manifest be1ed2ccd8fa; probe2175.sh 9599f6699b81 (PROBE_LINT_OK); visible recovery rec2175h 5b528e9b1fee3cb8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1.
+- Recovery rec2175h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2175-stackscores/run2175.sh.
