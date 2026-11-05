@@ -69400,3 +69400,18 @@ EXP2188 HARDWARE ACTUAL (2026-11-05T14:14:58Z): **G1 REJECTED (neutral): HD PERF
 - Expected vs actual: expected on >= off (+0..0.8 %); actual equal within noise. Three fewer instructions per ray-march iteration in C0/planet PS do not show at frame level.
 - Verdict: REJECTED; G1 reverted (no default compiler change without a measured gain). Evidence .local/experiments/EXP2188-g1/evidence. Recovery rec2188h.
 - Next: EXP2189 Q2c (Wom1ComputeOwnQueue=1) on depth two with F1 (77fee465: provider withholds TA/3D until in-render compute completes).
+
+EXP2189 HARDWARE BEFORE 2026-11-05T14:22:42Z:
+Switches: Wom1ComputeOwnQueue=1 Wom1JobDiagnostics=1 (receipts). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD FULL with KMD receipts at poll 12 (mid-run job ring), b HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2184/2186/2187 (corrected): the refusal is provider phase Submitted with backend Ready -- the backend ended a render with in-render compute on TA+3D while its compute event (now on the compute Queue's own notifier) came in a later poll; F1 removes that path (provider test RED -> GREEN); (2) the firmware accepted the second Queue in all three runs (alive, compute ring consumed, 6-7.7k jobs); (3) relative to the defaults (now incl. F1) Q2c is the single variable, and depth two is where the deferred render->compute notification costs ~0.40 ms x 4 per frame.
+- WINDOWS CONTRACT: unchanged (one node, fence order, HwQueuePacketCap 2).
+- AGX/ASAHI CONTRACT: compute work queue with its own NotifierList/Notifier/Threshold/GpuContextData (Asahi Queue::new); renders on Queue A; cross-queue ordering by the existing firmware Barriers on global stamps.
+- TRANSLATION: as EXP2184 (Q2c H0), now with depth-two pairs R->C / C->R across the two Queues.
+- ATOMIC CONTRACT: Asahi Queue identity = {NotifierList, Notifier, Threshold, GpuContextData} (as EXP2184).
+- WHAT IS STILL UNKNOWN: whether every in-render compute event on the own Queue eventually arrives (if not: a TDR on the right job, F2 next); Q2 whether a Barrier releases across notifier lists; whether the head's event now fires at its own end (gap before compute < 0.1 ms); FPS effect.
+- Expected: suite 119/0; correct image; job ring: render complete -> next compute kick well below 0.4 ms; HD FULL above EXP2181 (6390 with JobDiagnostics) by +3..6 %.
+- Failure criteria: lost completion / TDR (Wom1GpuReset names the term), firmware crash, wrong image, compute before its render -> rec2189h, switch stays off.
+- Recovery: rec2189h.
+- Hashes: sys 47a0159ffc83, UmdArm64 b5420a364490, UmdX64 b7bb78b2a7bc, Umd32 04356a1056f5; manifest b5cd81672e3e, hardware-manifest 67592992fce8; probe2189.sh 2571cdcf97f1 (PROBE_LINT_OK); visible recovery rec2189h 39f66ef0ada226a3; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1ComputeOwnQueue=1 Wom1JobDiagnostics=1.
+- Recovery rec2189h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2189-q2c-f1/run2189.sh.
