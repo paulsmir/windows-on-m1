@@ -637,6 +637,17 @@ extern "C" void AgxD3d12OwnerJobDrawUav(void) {
  * reason 0..7, the reasons of its first eight compute batches after a render
  * as nibbles (low nibble first), compute batches after a render}. Written by
  * the next execution (only with the OV2 feature and measuring on). */
+/* OV2 ranges rule (opt-in APPLE_AGX_D3D12_OV2_RANGES=1, only with the OV2
+ * feature): AgxD3d12JobBarrierRefusalRanges decides independence */
+static BOOL owner_ov2_ranges(void) {
+  static const BOOL enabled = [] {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_OV2_RANGES", value, sizeof(value)) == 1 && value[0] == '1'
+               ? TRUE
+               : FALSE;
+  }();
+  return enabled;
+}
 static UINT owner_ov2_reason[8], owner_ov2_sequence, owner_ov2_pairs, owner_ov2_range_sequence;
 static void owner_ov2_receipt_locked(void) {
   UINT any = 0;
@@ -669,17 +680,6 @@ extern "C" void AgxD3d12OwnerJobResolveRange(const void *heap, unsigned long lon
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
   AgxD3d12JobBarrierResolveRange(&owner_job_barriers, heap, lo, hi);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
-}
-/* OV2 ranges rule (opt-in APPLE_AGX_D3D12_OV2_RANGES=1, only with the OV2
- * feature): AgxD3d12JobBarrierRefusalRanges decides independence */
-static BOOL owner_ov2_ranges(void) {
-  static const BOOL enabled = [] {
-    char value[2] = {};
-    return GetEnvironmentVariableA("APPLE_AGX_D3D12_OV2_RANGES", value, sizeof(value)) == 1 && value[0] == '1'
-               ? TRUE
-               : FALSE;
-  }();
-  return enabled;
 }
 extern "C" void AgxD3d12OwnerJobExecution(unsigned known) {
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
