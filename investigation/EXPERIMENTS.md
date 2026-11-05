@@ -69415,3 +69415,10 @@ Switches: Wom1ComputeOwnQueue=1 Wom1JobDiagnostics=1 (receipts). Steps: D3D12 su
 - Hashes: sys 47a0159ffc83, UmdArm64 b5420a364490, UmdX64 b7bb78b2a7bc, Umd32 04356a1056f5; manifest b5cd81672e3e, hardware-manifest 67592992fce8; probe2189.sh 2571cdcf97f1 (PROBE_LINT_OK); visible recovery rec2189h 39f66ef0ada226a3; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1ComputeOwnQueue=1 Wom1JobDiagnostics=1.
 - Recovery rec2189h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2189-q2c-f1/run2189.sh.
+
+EXP2189 HARDWARE ACTUAL (2026-11-05T14:32:55Z): **Q2c + F1 WORKS on depth two: suite 119/0, GravityMark clean, HD FULL 6769 (new best, with Wom1JobDiagnostics=1 receipts on), render->compute kick delay 1.69 -> 1.03 ms/frame.**
+- Switches Wom1ComputeOwnQueue=1 Wom1JobDiagnostics=1. GPU_RESET none, G4_SUBMIT_FAILURE none, WER 0, guest alive. a HD FULL 6769 / 40.5 FPS (EXP2181 with the same receipts 6390; EXP2188 control without receipts 6595); b HD PERF 40.485 FPS.
+- tools/agx_gpu_frame_breakdown.py (PERF arm vs EXP2188 c control): wall 25.90 -> 25.46 ms/frame (-1.7 %); c_kick_ms (4 compute kicks per frame) 1.69 -> 1.03; c_work_span 15.87 -> 14.39 ms with c_work_exact 14.43 -> 14.40 (same work, less idle between jobs); partials 0, TVB 769 pages.
+- Expected vs actual: expected the head event at its own end (gap < 0.1 ms) and +3..6 %; actual the per-kick delay fell ~40 % (0.42 -> 0.26 ms per compute kick) and HD FULL +2.6 % over the latest control (cross-boot); the remaining kick delay is the KMD/firmware start path, not the deferred notification.
+- Verdict: CONFIRMED (mechanism and stability, one boot). Q2c firmware contract (Q1/Q2) accepted on hardware. Default unchanged until a cross-boot comparison without receipts (EXP2190) and FHD.
+- Recovery rec2189h. Evidence .local/experiments/EXP2189-q2c-f1/evidence.
