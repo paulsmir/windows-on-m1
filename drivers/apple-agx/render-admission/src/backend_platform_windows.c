@@ -7109,11 +7109,13 @@ static VOID AdmissionJobThread(PVOID Context) {
 
 /* rc81: start the job thread at runtime start, before the work item that
  * makes the runtime submittable. Device values (read once): Wom1JobThreadOff
- * = 1 keeps the work item; Wom1JobThreadAnyCore = 1 starts the thread
- * unpinned. A topology without two efficiency classes is not pinned; any
+ * = 1 keeps the work item; the thread starts unpinned unless
+ * Wom1JobThreadAnyCore = 0. A topology without two efficiency classes is not pinned; any
  * failure leaves the work item as the worker. */
 static BOOLEAN AdmissionPlatformSwitchEnabled(ADMISSION_CONTEXT *Context,
                                              PCWSTR ValueName);
+static BOOLEAN AdmissionPlatformSwitchDisabled(ADMISSION_CONTEXT *Context,
+                                              PCWSTR ValueName);
 static VOID AdmissionJobThreadStart(ADMISSION_CONTEXT *Context,
     ADMISSION_PLATFORM_RUNTIME *runtime) {
   OBJECT_ATTRIBUTES attributes;
@@ -7129,7 +7131,10 @@ static VOID AdmissionJobThreadStart(ADMISSION_CONTEXT *Context,
   if (AdmissionPlatformSwitchEnabled(Context, L"Wom1JobThreadOff"))
     return;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  if (!AdmissionPlatformSwitchEnabled(Context, L"Wom1JobThreadAnyCore")) {
+  /* EXP2173/2174: a job thread pinned to the performance cores was
+   * sometimes woken late (1.6-17 ms GPU idle after a preemption); unpinned
+   * by default since the EXP2176-2179 ABBA. REG_DWORD 0 pins it again. */
+  if (AdmissionPlatformSwitchDisabled(Context, L"Wom1JobThreadAnyCore")) {
     ADMISSION_JOB_WORKER_CORE topology[32];
     ULONG count = 0u, index;
     USHORT group = 0u;
@@ -7834,10 +7839,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 #endif
   runtime->PresentTsEnabled =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1PresentTimestamps");
-  /* V1: off (0, absent) keeps one VM slot leased per job and released at
-   * its end; 1 retains per-process slots (read before G3 start). */
+  /* V1: retained per-process slots by default since the EXP2176-2179 ABBA
+   * (with the m1n1 broker-lock split: HD +2.0 %, FHD +1.5 %); REG_DWORD 0
+   * keeps one VM slot leased per job and released at its end. */
   Context->G3RetainedSlots =
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1G3RetainedSlots") ? 1u : 0u;
+      !AdmissionPlatformSwitchDisabled(Context, L"Wom1G3RetainedSlots") ? 1u : 0u;
   runtime->RcDepth2 = runtime->RcReceiptEnabled = runtime->RcExportPending = FALSE;
   runtime->Depth2General = FALSE;
   runtime->Depth2Prelude = FALSE;

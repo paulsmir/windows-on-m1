@@ -158,7 +158,7 @@ int main(void) {
         create = function(g3, 'AdmissionDdiCreateProcess')
         self.assertIn('if (adapter->G3RetainedSlots &&', create)
         platform = (RENDER / 'src/backend_platform_windows.c').read_text()
-        self.assertIn('AdmissionPlatformSwitchEnabled(Context, L"Wom1G3RetainedSlots")', platform)
+        self.assertIn('!AdmissionPlatformSwitchDisabled(Context, L"Wom1G3RetainedSlots")', platform)
 
     def test_unretained_render_takes_the_baseline_slot(self):
         """B2: a render without a retained lease (JobVmSlot 0, e.g. a job
