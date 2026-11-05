@@ -69504,3 +69504,16 @@ EXP2194 HARDWARE ACTUAL (2026-11-05T17:38:10Z): **C4 per-kernel GPU time on the 
 - Suite 119/0; WER 0; no reset. HD PERF: a control 40.538, b split P0 36.847, c split traversal stage 37.839, d control 40.648 FPS (controls without receipts at the Q2c default: the current production level).
 - Against Apple (EXP2192 HD encoders): c0 0.51 ~ our prep 0.52; c1 0.84 vs ecb5+094e+radix 1.65 (+0.8); c5 1.41 vs trio 1.52; c7 2.92 vs P1+traversal+P9+a826 ~3.66 (+0.74); c9 0.15 vs tail 0.38 (+0.23) -- mapping by kernel order, not dispatch identity.
 - Verdict: measurement confirmed; the C4 gap sits in ecb5fd57+radix and in the traversal/a826 stage. Evidence .local/experiments/EXP2194-c4split/evidence. Recovery rec2194h.
+
+EXP2195 HARDWARE BEFORE 2026-11-05T17:54:24Z:
+Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: a FHD FULL with APPLE_AGX_D3D_MAX_LAYER=1 + APPLE_AGX_D3D12_EXPAND_AHEAD=1 (correctness + image), b-g HD PERF: off, T1, IE1a, IE1a, T1, off.
+- WHY THIS HYPOTHESIS: (1) T1: R7 G-buffer PS 229 -> 202 instrs (Apple 164), C0 3558 -> 3517, planet 5999 -> 5951 offline, other 201 shaders identical; (2) IE1a: each of R1/R5/R7's v5 prelude costs ~0.13 ms GPU + ~0.58 ms compute end -> prelude start (EXP2126); expanding ahead makes them plain renders (TA_ON_COMPUTE behind a small compute job); (3) both are UMD-only and env-controlled, so one boot gives paired arms.
+- WINDOWS CONTRACT: T1 exact D3D layer clamp incl. linear and null descriptors; IE1a expansion after the application's last barrier on the argument buffers (same data the prelude reads).
+- AGX/ASAHI CONTRACT: T1 descriptor layer field; IE1a expansion compute batch flushed before its render, R waits on its compute stamp (TA_ON_COMPUTE).
+- ATOMIC CONTRACT: none -- two independent env switches, compared arm by arm against the off arms.
+- WHAT IS STILL UNKNOWN: frame-time effect of each; IE1a's net effect (3 extra compute jobs vs 3 preludes); IE1a visibility/residency on hardware.
+- Expected: suite 119/0; a: correct FHD image, no fault; T1 arms >= off (+0..0.5 %); IE1a arms vs off: unknown sign (+-3 %).
+- Failure criteria: wrong image, GPU fault, TDR, missing geometry (IE1a) -> that switch rejected; perf <= off in both pairs -> rejected.
+- Recovery: rec2195h.
+- Hashes: sys 4a58ca613b00, UmdArm64 5cd3759e61b1, UmdX64 eac28d6ccb77, Umd32 fbbe3749f69d; manifest 5f410f4ca878, hardware-manifest 045620ed490c; probe2195.sh 69bc1e6e3454 (PROBE_LINT_OK); visible recovery rec2195h 68c4997645b64b46; m1n1 0d3a75b3.
+- Recovery rec2195h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2195-t1-ie1a/run2195.sh.
