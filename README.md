@@ -20,8 +20,8 @@ USB, and an **Apple GPU driver written for Windows from scratch**.
 | Storage | Apple ANS SSD exposed to Windows as an NVMe controller by the hypervisor |
 | Input | USB, built-in keyboard and Precision Touchpad (own SPI-HID driver) |
 | Display | internal panel through Apple's display coprocessor (DCP) |
-| **GPU** | own WDDM driver: **Direct3D 12 at feature level 12_1**, Direct3D 11, desktop composition (DWM) on the GPU |
-| Benchmarks | GravityMark D3D12 runs at **~68 % of macOS Metal** on the same machine; 3DMark Night Raid completes |
+| **GPU** | own WDDM driver: **Direct3D 12 at feature level 12_1**, Direct3D 11, OpenGL 2.1 (also for x86 apps under emulation), desktop composition (DWM) on the GPU |
+| Benchmarks | GravityMark D3D12 runs at **~68 % of macOS Metal** on the same machine; 3DMark Night Raid completes; Counter-Strike 1.6 (OpenGL, x86) about 47 FPS in its timedemo |
 | Standalone | basic system boots standalone; the GPU driver still needs the assisted (second-Mac) setup |
 
 ### GPU performance
@@ -39,6 +39,13 @@ with macOS 15 + Metal **on the same MacBook Air**:
 One month earlier the same driver needed about 30 seconds to redraw the desktop. Recent gains came
 from measuring the whole frame and removing waits between GPU jobs: giving compute work its own
 firmware queue, keeping GPU address spaces resident, and compiler fixes.
+
+### OpenGL: Counter-Strike 1.6
+
+Counter-Strike 1.6 is a 32-bit x86 game; it runs under Windows' x86 emulation and draws through our
+x86 OpenGL driver (Mesa, OpenGL 2.1) on the Apple GPU. In a fixed recorded-demo benchmark
+(`timedemo`) it went from 40.5 FPS on its first measured run to about 47 FPS a few days later
+(3,771 frames, mid-October 2026); live play on a server measured 37–42 FPS (median).
 
 <details>
 <summary>1280x720 result</summary>
@@ -115,7 +122,8 @@ Goal: match macOS in GravityMark at 1920x1080, repeatably, with correct output a
 
 - `m1n1_windows/` — pinned hypervisor fork submodule.
 - `mu/` — pinned Apple Silicon Project Mu fork submodule.
-- `drivers/` — Windows drivers (input; the Apple GPU driver on the GPU development branches).
+- `drivers/` — Windows drivers: built-in input and the Apple GPU driver (the newest GPU work is on
+  the [`integration/ad04-windows-compiler`](https://github.com/paulsmir/windows-on-m1/tree/integration/ad04-windows-compiler) branch).
 - `scripts/` — build, ESP-install, standalone, and assisted-mode entry points.
 - `tools/` — layout, packaging, and analysis tools.
 - `config/j313-guest-layout.json` — canonical guest physical-memory contract.
