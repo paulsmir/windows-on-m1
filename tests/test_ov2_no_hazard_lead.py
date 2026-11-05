@@ -5,7 +5,9 @@ verdict is a real data race (the compute reads a render target or UAV the
 render still writes). The UMD rule (agx_d3d12_job_barriers.h) must say
 independent only for: previous batch a render of the same execution, no
 barrier in the gap, no barrier but UAV barriers inside the compute batch, a
-render that bound no UAV, and fully logged barriers. The KMD decision
+render that bound no UAV, fully logged barriers, no other owner work
+(e.g. ResolveQueryData: Asahi copies the query result in the next compute
+batch, which then depends on the render) and no dispatch from before the render. The KMD decision
 (render_job_window.c) must waive only COMPUTE_ON_3D pairs of a flagged
 compute behind a render of the same WDDM context and process, and the wait
 value must otherwise stay the running job's end.
@@ -47,11 +49,23 @@ static unsigned values[AGX_D3D12_JOB_BARRIER_VALUES];
  * batch C whose first dispatch lazily submits R; gap barriers before C, inside
  * barriers between C's dispatches, then the next render's first draw submits
  * C after a C->R gap of transitions (which must not count). */
+enum { QUERY = 9, COPY = 1 };
+static unsigned scenario_ex(unsigned known, unsigned uav_draw, unsigned gap, unsigned inside_type,
+                            unsigned prev_compute, unsigned resolve_trigger, unsigned copy_inside,
+                            unsigned early_dispatch);
 static unsigned scenario(unsigned known, unsigned uav_draw, unsigned gap, unsigned inside_type,
                          unsigned prev_compute) {
+  return scenario_ex(known, uav_draw, gap, inside_type, prev_compute, 0, 0, 0);
+}
+static unsigned scenario_ex(unsigned known, unsigned uav_draw, unsigned gap, unsigned inside_type,
+                            unsigned prev_compute, unsigned resolve_trigger, unsigned copy_inside,
+                            unsigned early_dispatch) {
   AgxD3d12JobBarriersInit(&j);
   AgxD3d12JobBarrierExecution(&j, known);
   if (prev_compute) { /* a compute batch right before R's own submission */
+    AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierEnd(&j);
+  }
+  if (early_dispatch) { /* a dispatch kept in an open compute batch across R */
     AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierEnd(&j);
   }
   AgxD3d12JobBarrierBegin(&j, DRAW);
@@ -60,9 +74,17 @@ static unsigned scenario(unsigned known, unsigned uav_draw, unsigned gap, unsign
   AgxD3d12JobBarrierEnd(&j);
   AgxD3d12JobBarrierBegin(&j, DRAW); AgxD3d12JobBarrierEnd(&j);
   if (gap) AgxD3d12JobBarrierAdd(&j, gap == 1 ? TRANSITION : UAV, 0, 4, 8, 77);
-  AgxD3d12JobBarrierBegin(&j, DISPATCH);          /* C's first dispatch */
-  AgxD3d12JobBarrierBatch(&j, 1u, values);        /* R submitted */
+  if (resolve_trigger) { /* ResolveQueryData flushes R and copies into C */
+    AgxD3d12JobBarrierBegin(&j, QUERY);
+    AgxD3d12JobBarrierBatch(&j, 1u, values);
+    AgxD3d12JobBarrierEnd(&j);
+    AgxD3d12JobBarrierBegin(&j, DISPATCH);
+  } else {
+    AgxD3d12JobBarrierBegin(&j, DISPATCH);        /* C's first dispatch */
+    AgxD3d12JobBarrierBatch(&j, 1u, values);      /* R submitted */
+  }
   AgxD3d12JobBarrierEnd(&j);
+  if (copy_inside) { AgxD3d12JobBarrierBegin(&j, COPY); AgxD3d12JobBarrierEnd(&j); }
   if (inside_type != 9u) AgxD3d12JobBarrierAdd(&j, inside_type, 0, 8, 4, 78);
   AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierEnd(&j);
   AgxD3d12JobBarrierAdd(&j, TRANSITION, 0, 8, 0x80, 79); /* C -> next R gap */
@@ -85,6 +107,9 @@ int main(void) {
   printf("render_uav %u\n", scenario(1, 1, 0, 9, 0));
   printf("unknown %u\n", scenario(0, 0, 0, 9, 0));
   printf("after_compute_render %u\n", scenario(1, 0, 0, 9, 1));
+  printf("resolve_trigger %u\n", scenario_ex(1, 0, 0, 9, 0, 1, 0, 0));
+  printf("copy_inside %u\n", scenario_ex(1, 0, 0, 9, 0, 0, 1, 0));
+  printf("early_dispatch %u\n", scenario_ex(1, 0, 0, 9, 0, 0, 0, 1));
   /* compute after compute is never independent of a render */
   AgxD3d12JobBarriersInit(&j); AgxD3d12JobBarrierExecution(&j, 1);
   AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierBatch(&j, 2u, values);
@@ -155,7 +180,8 @@ class Ov2NoHazardLead(unittest.TestCase):
         self.assertEqual(got, {
             'base': '1', 'inside_uav': '1', 'inside_transition': '0', 'inside_aliasing': '0',
             'gap_transition': '0', 'gap_uav': '0', 'render_uav': '0', 'unknown': '0',
-            'after_compute_render': '1', 'compute_after_compute': '0', 'fresh': '0'})
+            'after_compute_render': '1', 'compute_after_compute': '0', 'fresh': '0',
+            'resolve_trigger': '0', 'copy_inside': '0', 'early_dispatch': '0'})
 
     def test_kmd_waiver_decision(self):
         ran = build_run(KMD_RULE, [RENDER / 'src/render_job_window.c'],

@@ -42,6 +42,13 @@ typedef struct AGX_D3D12_JOB_BARRIERS {
    * batches), whether the last render may have bound a UAV, and whether this
    * ExecuteCommandLists' barriers are incompletely known. */
   unsigned NonUavSince, GapAfterRender, UavDraws, UavDrawsBase[2], RenderUav, Unknown;
+  /* OV2: owner work other than a dispatch ran at or after the last batch's
+   * submission (e.g. ResolveQueryData: Asahi flushes the query's render
+   * writer and copies the result in the next compute batch, which then
+   * depends on that render); dispatches recorded but still unsubmitted when
+   * a render was submitted (the next compute batch would hold work from
+   * before that render). */
+  unsigned ForeignSince, DispatchesPending, EarlyDispatch;
 } AGX_D3D12_JOB_BARRIERS;
 
 /* a 32-bit identity of a D3D12DDI_HRESOURCE pDrvPrivate value; 0 = null */
@@ -69,6 +76,8 @@ static inline void AgxD3d12JobBarriersInit(AGX_D3D12_JOB_BARRIERS *j) {
   j->UavDraws = j->UavDrawsBase[0] = j->UavDrawsBase[1] = 0u;
   j->RenderUav = 1u;
   j->Unknown = 1u;
+  j->ForeignSince = j->DispatchesPending = 0u;
+  j->EarlyDispatch = 1u;
 }
 
 /* type 0 transition, 1 aliasing, 2 UAV (id 0 = global), 3 0022 ranged
@@ -110,6 +119,9 @@ static inline void AgxD3d12JobBarrierBegin(AGX_D3D12_JOB_BARRIERS *j, unsigned k
   j->Before = j->Open;
   AgxD3d12JobBarrierSetClear(&j->Open);
   j->Active = kind ? kind : 0xffu;
+  /* OV2: command kinds 2 dispatch, 5 draw (agx_d3d12_ddi.cpp kCommand*) */
+  if (kind == 2u) ++j->DispatchesPending;
+  else if (kind != 5u) ++j->ForeignSince;
 }
 
 static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) { j->Active = 0u; }
@@ -136,7 +148,17 @@ static inline void AgxD3d12JobBarrierBatch(AGX_D3D12_JOB_BARRIERS *j, unsigned k
   values[10] = s->GlobalUav;
   values[11] = (j->Active & 0xffu) | (s->IdOverflow << 8) | ((s->Flags & 0xfu) << 16);
   values[12] = j->Total;
-  /* OV2 state for the next batch */
+  /* OV2 state for the next batch. The command whose owner work submits
+   * this batch is already counted: a non-dispatch trigger stays foreign for
+   * the next batch, a dispatch trigger belongs to it. */
+  if (kind == 1u) {
+    j->EarlyDispatch = j->DispatchesPending > (j->Active == 2u ? 1u : 0u) ? 1u : 0u;
+    j->ForeignSince = (j->Active && j->Active != 2u && j->Active != 5u) ? 1u : 0u;
+  } else {
+    j->EarlyDispatch = 0u;
+    j->ForeignSince = 0u;
+  }
+  j->DispatchesPending = j->Active == 2u ? 1u : 0u;
   j->GapAfterRender = kind == 1u ? s->Count : ~0u;
   if (kind == 1u) j->RenderUav = j->UavDraws != j->UavDrawsBase[0] ? 1u : 0u;
   j->UavDrawsBase[0] = j->UavDrawsBase[1];
@@ -168,8 +190,15 @@ static inline void AgxD3d12JobBarrierPoison(AGX_D3D12_JOB_BARRIERS *j) { j->Unkn
 static inline unsigned AgxD3d12JobBarrierIndependent(const AGX_D3D12_JOB_BARRIERS *j) {
   const AGX_D3D12_JOB_BARRIER_SET *after = j->Active ? &j->Before : &j->Open;
   unsigned inside;
-  if (j->Unknown || j->PreviousKind != 1u || j->GapAfterRender != 0u || j->RenderUav)
+  unsigned foreign;
+  if (j->Unknown || j->PreviousKind != 1u || j->GapAfterRender != 0u || j->RenderUav ||
+      j->EarlyDispatch)
     return 0u;
+  /* the active command (a draw or other work that submits this batch
+   * lazily) comes after it */
+  foreign = j->ForeignSince;
+  if (j->Active && j->Active != 2u && j->Active != 5u && foreign) --foreign;
+  if (foreign) return 0u;
   if (after->NonUav > j->NonUavSince) return 0u;
   inside = j->NonUavSince - after->NonUav;
   return inside == 0u ? 1u : 0u;
