@@ -260,5 +260,76 @@ class Ov2NoHazardLead(unittest.TestCase):
         self.assertIn('AGX_BARRIER_ALL | AGX_PREGFX', into)
 
 
+    def test_ov3b_never_creates_a_prelude(self):
+        """EXP2197: OV3 put the resolve copies into renders without a compute
+        prelude, adding ~1.3 prelude renders per frame (3.1 -> 4.4), each
+        starting behind the overlapping compute, and lost ~9 % at HD. OV3b
+        (ExistingPrelude) must copy only into a render batch whose CDM exists
+        already: it never allocates one, never touches a compute batch or a
+        batch without draws, and without OV3b the old placement stays."""
+        group = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_query_group.h').read_text()
+        start = group.index('int\nAgxWin32AsahiQueryResolveIntoRender(')
+        body = group[start:group.index('\n}\n', start) + 3]
+        code = r"""
+#include <stdio.h>
+#include <stdint.h>
+#include <stddef.h>
+struct pipe_context { int unused; };
+struct pipe_query { int unused; };
+struct pipe_resource { unsigned width0; };
+enum { PIPE_QUERY_PIPELINE_STATISTICS_SINGLE = 9, PIPE_QUERY_TYPE_U64 = 4,
+       AGX_BARRIER_ALL = 1, AGX_PREGFX = 2 };
+struct agx_encoder { void *bo; };
+struct agx_batch { int compute, draws; struct agx_encoder cdm; };
+struct agx_query { int type; void *bo; struct { uint64_t gpu; } ptr; unsigned writer_generation[4]; };
+struct agx_context { int any_faults; struct agx_batch *batch; struct { unsigned generation[4]; } batches;
+                     struct pipe_context base_unused; struct { void *screen; } base; };
+struct agx_resource { struct pipe_resource base; };
+static struct agx_context C; static int allocs, copies, adds; static char bo;
+static struct agx_context *agx_context(struct pipe_context *p) { (void)p; return &C; }
+static int agx_batch_is_compute(struct agx_batch *b) { return b->compute; }
+static unsigned agx_batch_idx(struct agx_batch *b) { (void)b; return 0; }
+static void *agx_device(void *s) { return s; }
+static struct agx_encoder agx_encoder_allocate(struct agx_batch *b, void *d) {
+  (void)b; (void)d; ++allocs; struct agx_encoder e = {&bo}; return e; }
+static struct agx_resource *agx_resource(struct pipe_resource *r) { return (struct agx_resource *)r; }
+static void agx_add_query_to_batch(struct agx_batch *b, struct agx_query *q) { (void)b; (void)q; ++adds; }
+static void agx_batch_writes_range(struct agx_batch *b, struct agx_resource *r, unsigned o, unsigned n) {
+  (void)b; (void)r; (void)o; (void)n; }
+static uint64_t agx_map_gpu(struct agx_resource *r) { (void)r; return 0x1000; }
+static int agx_1d(int n) { return n; }
+static void libagx_copy_query_gl(struct agx_batch *b, int g, int bar, uint64_t s, uint64_t d, int t, int x) {
+  (void)b; (void)g; (void)bar; (void)s; (void)d; (void)t; (void)x; ++copies; }
+""" + body + r"""
+static int run(int compute, int draws, int has_cdm, int existing) {
+  static struct agx_batch b; struct agx_batch z = {0}; b = z;
+  b.compute = compute; b.draws = draws; b.cdm.bo = has_cdm ? &bo : NULL; C.batch = &b;
+  struct agx_query q = {PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, &bo, {0x2000}, {0}};
+  C.batches.generation[0] = 1;
+  struct agx_resource r = {{64}}; allocs = copies = adds = 0;
+  int st = AgxWin32AsahiQueryResolveIntoRender((struct pipe_context *)&C, (struct pipe_query *)&q,
+                                               &r.base, 8, existing);
+  printf("%d,%d,%d ", st, allocs, copies);
+  return st;
+}
+int main(void) {
+  run(0, 2, 0, 1); run(0, 2, 1, 1); run(1, 0, 1, 1); run(0, 0, 1, 1);
+  run(0, 2, 0, 0); run(0, 2, 1, 0); printf("\n"); return 0;
+}
+"""
+        ran = build_run(code, [], [])
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+        self.assertEqual(ran.stdout.split(), [
+            '0,0,0',   # OV3b, render without prelude: keep pending, no CDM
+            '1,0,1',   # OV3b, render with a prelude: copy into it
+            '0,0,0',   # compute batch: never
+            '0,0,0',   # render batch without draws: never
+            '1,1,1',   # OV3 (EXP2197): allocates a new prelude
+            '1,0,1'])
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        self.assertIn('owner_resolve_existing_prelude())) == 1)', owner)
+        self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D12_OV3B", option, sizeof(option)) == 1 && option[0] == \'1\'',
+                      owner)
+
 if __name__ == '__main__':
     unittest.main()

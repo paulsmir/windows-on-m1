@@ -138,10 +138,15 @@ AgxWin32AsahiQueryGroupBegin(struct pipe_context *pctx, unsigned type,
  * fresh storage) and a writer of the destination range.
  * FlushWriters: 0 = not a GPU-resolved statistic; resolve the native way.
  * IntoRender: 1 = copied; 0 = no render batch with a draw now (keep it);
- * -1 = this batch cannot take it (resolve the native way). */
+ * -1 = this batch cannot take it (resolve the native way).
+ * OV3b (ExistingPrelude != 0, EXP2197: OV3's own preludes added ~1.3 prelude
+ * renders per frame, each starting behind the overlapping compute): copy only
+ * into a render batch whose CDM prelude already exists (RC67 IA statistics or
+ * an ExecuteIndirect expansion allocated it); otherwise 0, so no render gains
+ * a prelude or its lead barrier. */
 int AgxWin32AsahiQueryResolveFlushWriters(struct pipe_context *, struct pipe_query *);
 int AgxWin32AsahiQueryResolveIntoRender(struct pipe_context *, struct pipe_query *,
-                                        struct pipe_resource *, unsigned);
+                                        struct pipe_resource *, unsigned, int);
 
 int
 AgxWin32AsahiQueryResolveFlushWriters(struct pipe_context *pctx, struct pipe_query *pq)
@@ -157,12 +162,17 @@ AgxWin32AsahiQueryResolveFlushWriters(struct pipe_context *pctx, struct pipe_que
 
 int
 AgxWin32AsahiQueryResolveIntoRender(struct pipe_context *pctx, struct pipe_query *pq,
-                                    struct pipe_resource *prsrc, unsigned offset)
+                                    struct pipe_resource *prsrc, unsigned offset,
+                                    int existing_prelude)
 {
    struct agx_context *ctx = agx_context(pctx);
    struct agx_query *query = (struct agx_query *)pq;
    struct agx_batch *batch = ctx ? ctx->batch : NULL;
    if (!ctx || ctx->any_faults || !batch || agx_batch_is_compute(batch) || !batch->draws)
+      return 0;
+   /* OV3b: the render batch CDM is allocated lazily by its first prelude
+    * dispatch (agx_state.c, agx_win32_query_ia.h, indirect stream emit) */
+   if (existing_prelude && !batch->cdm.bo)
       return 0;
    if (!query || !prsrc || query->type != PIPE_QUERY_PIPELINE_STATISTICS_SINGLE ||
        !query->bo || !query->ptr.gpu ||

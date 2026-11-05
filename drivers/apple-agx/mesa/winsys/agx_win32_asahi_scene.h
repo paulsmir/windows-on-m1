@@ -178,10 +178,11 @@ int AgxWin32AsahiQueryGroupBegin(struct pipe_context *, unsigned Type,
 /* OV3 (GPUVA, agx_win32_query_group.h): submit a pipeline-statistics
  * query's writers; later copy its U64 value into Resource at Offset from the
  * compute prelude of the current render batch (which has a draw and does not
- * use the query). 0 = not done; resolve the native way. */
+ * use the query; with ExistingPrelude only one whose prelude exists already).
+ * 0 = not done; resolve the native way. */
 int AgxWin32AsahiQueryResolveFlushWriters(struct pipe_context *, struct pipe_query *Query);
 int AgxWin32AsahiQueryResolveIntoRender(struct pipe_context *, struct pipe_query *Query,
-    struct pipe_resource *Resource, unsigned Offset);
+    struct pipe_resource *Resource, unsigned Offset, int ExistingPrelude);
 int AgxWin32AsahiContextFlushForPresent(struct pipe_context *);
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *);
 

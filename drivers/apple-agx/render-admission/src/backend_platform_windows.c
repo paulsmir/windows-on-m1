@@ -338,6 +338,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN Ov2Enabled;
   BOOLEAN Ov2Waive;
   ADMISSION_JOB_WINDOW_OV2_RECEIPT Ov2Receipt;
+  /* QPC of the last Wom1Ov2Receipt export without Wom1JobDiagnostics. */
+  ULONGLONG Ov2ExportQpc;
   BOOLEAN Depth2Noted;
   ULONG Depth2Sampled;
   /* rc102: device value Wom1JobDepth2Kick = 1, on top of Wom1JobDepth2Caps
@@ -1338,7 +1340,7 @@ static VOID AdmissionJobTimingExportWindows(
   ULONGLONG before;
   if (runtime == NULL ||
       (!runtime->JobDiagnostics && !runtime->RcReceiptEnabled && !runtime->Depth2Drill.Mode &&
-       !runtime->PresentTsEnabled) ||
+       !runtime->PresentTsEnabled && !runtime->Ov2Enabled) ||
       runtime->Adapter == NULL ||
       runtime->Adapter->PhysicalDeviceObject == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return;
@@ -1347,6 +1349,28 @@ static VOID AdmissionJobTimingExportWindows(
    * a second. Export at most every two seconds and never flush: the probe
    * reads the live values. Opt-in Q3 changes bypass this throttle so a
    * short probe exports its final pair without waiting for another job. */
+#if defined(ADMISSION_OV2_ON)
+  /* EXP2197: without Wom1JobDiagnostics the OV2 receipt was never written.
+   * Export it on its own at most every two seconds, never flushed (the
+   * worker owns the receipt; EXP1117: an export costs ~1 ms). */
+  if (!runtime->JobDiagnostics && runtime->Ov2Enabled) {
+    LARGE_INTEGER frequency;
+    const ULONGLONG now = (ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
+    if (runtime->Ov2ExportQpc == 0ULL ||
+        now - runtime->Ov2ExportQpc >= 2ULL * (ULONGLONG)frequency.QuadPart) {
+      ADMISSION_JOB_WINDOW_OV2_RECEIPT ov2 = runtime->Ov2Receipt;
+      runtime->Ov2ExportQpc = now;
+      status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
+      if (NT_SUCCESS(status)) {
+        RtlInitUnicodeString(&name, L"Wom1Ov2Receipt");
+        (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &ov2, sizeof(ov2));
+        ZwClose(key);
+        key = NULL;
+      }
+    }
+  }
+#endif
   if (!runtime->JobDiagnostics && runtime->PresentTsEnabled) {
     /* T1: the present ring at most every two seconds */
     LARGE_INTEGER frequency;
@@ -7105,7 +7129,7 @@ AdoptedKicked:
   AdmissionPublishFirmwareRecovery(runtime);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (runtime->JobDiagnostics || runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode ||
-      runtime->PresentTsEnabled)
+      runtime->PresentTsEnabled || runtime->Ov2Enabled)
     AdmissionJobTimingExportWindows(runtime);
 #endif
 #if ADMISSION_JOB_AHEAD_BUILD
