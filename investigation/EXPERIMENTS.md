@@ -69544,3 +69544,18 @@ EXP2196 HARDWARE ACTUAL (2026-11-05T18:56:15Z): **INCONCLUSIVE -- OV2/OV3 never 
 - UMD receipt measure-soft-faults ... 00000001 00000003 00000001 -> device features 1, bit 0x2 missing although Wom1Ov2NoHazardLead=1 reached the devnode.
 - Root cause: the RuntimeStart success path resets GpuSoftFaults and GpuIndependentSubqueue (=0) after the earlier OV2 enable; fixed in ddcdbe9c (regression test test_start_publishes_feature_after_reset, RED on 4c097f70).
 - Verdict: inconclusive for OV2/OV3 (not exercised); the scores are a valid switch-off control of package 4c097f70. Recovery rec2196h. Next: EXP2197 = same arms with ddcdbe9c, switch on, then cross-boot off control.
+
+EXP2197 HARDWARE BEFORE 2026-11-05T19:21:52Z:
+Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: a FHD FULL (first arm), b HD FULL, c HD PERF, d HD PERF (KMD receipts at poll 12). Same arms as EXP2196.
+- WHY THIS HYPOTHESIS: (1) EXP2196 UMD receipt measure-soft-faults showed Features=1 with the switch set: OV2/OV3 were never exercised; (2) source: RuntimeStart's soft-fault reset zeroed GpuIndependentSubqueue after the OV2 enable (test RED on 4c097f70, GREEN on ddcdbe9c); (3) EXP2192/2193: Apple overlaps independent render and compute, the only R->C dependency is the driver's ResolveQueryData copy (OV3 defers it).
+- WINDOWS CONTRACT: D3D12 barrier rules (no barrier = may overlap); query results resolved before any consumer (deferred copy ordered into the next render prelude).
+- AGX/ASAHI CONTRACT: compute on its own Asahi Queue (Q2c); satisfied cross-queue Barrier; render and compute run concurrently.
+- ATOMIC CONTRACT: OV2 waiver + OV3 deferral together (as EXP2196); the fix only makes the published feature match the KMD's Ov2Enabled.
+- WHAT IS STILL UNKNOWN: whether the firmware runs TA/3D concurrently with CDM on the second queue; USC contention; resolve correctness under deferral; FPS effect.
+- Expected: suite 119/0; correct images; UMD Features=3; measure-d3d12-ov2 independent R->C pairs; resolve-defer deferred ~3 into_render ~33 drained 0; Wom1Ov2Receipt Waived > 0; FHD > 5370 and HD PERF > 40.81/40.71 (EXP2196 = switch-off-equivalent control of the same source).
+- Failure criteria: wrong image, GPU fault, TDR, lost completion, query errors -> rec2197h, switch stays off.
+- Recovery: rec2197h (AT_PROXY after a reset; save full.log first).
+- Probe: agx_d3d12_probe_e2197_arm64.exe is a byte copy of e2196 (probe source unchanged 4c097f70..704c8695).
+- Hashes: sys 8613cfe7a7ad, UmdArm64 5b822adcaea4, UmdX64 a17e4fe048a9, Umd32 0c4e6327a91d; manifest f291474a65fc, hardware-manifest 05d1a87b928b; probe2197.sh 8f2df2beb772 (PROBE_LINT_OK); visible recovery rec2197h 2f7e35dc4b6a4cad; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
+- Recovery rec2197h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2197-ov3-fix/run2197.sh.
