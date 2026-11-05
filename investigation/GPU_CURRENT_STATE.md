@@ -8,6 +8,14 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-11-05 07:00Z -- DEFAULTS: retained VM slots + unpinned job thread (10fd111e); WORKING m1n1 = broker-lock split
+- Working/lastgood m1n1: .local/experiments/m1n1-brokerlock-split/m1n1-g2-abi6-iomfb-owner-brokerlock-split.macho
+  (exp/m1n1-brokerlock 550c7f23, AGX_BROKER_LOCK_SPLIT=1, sha 1c35a20b; user-approved). Emergency: m1n1-075e3980-guestram.
+  Launch with AGX_M1N1=<split> AGX_M1N1_LASTGOOD=<split or 075e3980>.
+- ABBA EXP2176-2179 + checks EXP2180/2181: B-behaviour FHD 5200 / HD 6456 vs A 5150 / 6385 (+1.0 % / +1.1 %).
+  Bests: HD 6581 / FHD 5266 (EXP2175, single run). Run-to-run spread across boots ~1.5-2 %.
+- Defaults verified by receipts (EXP2181): retained slots active, job thread unpinned. REG_DWORD 0 restores either.
+
 ## CURRENT 2026-11-05 03:00Z -- BEST HD 6581 / FHD 5266 (EXP2175, combined stack)
 - Stack: experimental m1n1 exp/m1n1-brokerlock 550c7f23 AGX_BROKER_LOCK_SPLIT=1 (macho 1c35a20b, user-approved, not
   lastgood) + Wom1G3RetainedSlots=1 + Wom1JobThreadAnyCore=1. Frame idle R7->C0 ~1.0 ms (was ~1.25).

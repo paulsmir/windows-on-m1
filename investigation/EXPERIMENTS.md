@@ -69246,3 +69246,8 @@ Switches: Wom1JobDiagnostics=1 (receipts only; no feature switch). Steps: D3D12 
 - Hashes: sys c76e7c972e3c, UmdArm64 12c9f4b609d8, UmdX64 b3e3b717e9ae, Umd32 a9b92b24e2df; manifest f82e5690873a, hardware-manifest f79a6f95a7f2; probe2181.sh bcac38c2e5b5 (PROBE_LINT_OK); visible recovery rec2181h 270683cd93bce961; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1.
 - Recovery rec2181h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2181-defcheck/run2181.sh.
+
+EXP2181 HARDWARE ACTUAL (2026-11-05T03:07:10Z): **The default path engages: with no feature switches, Wom1G3RetainedSlotsReceipt shows retained slots active (first 2, count 4, leases 1969, reuses 59738) and the job-timing WorkerFlags 0x1 (dedicated thread, not pinned). FHD FULL 5212, HD FULL 6390 (with Wom1JobDiagnostics), suite 119/0.**
+- EXP2180's A-level scores were run-to-run noise. All B-behaviour runs (EXP2177, 2178, 2180, 2181): FHD mean 5200, HD 6456; A runs (EXP2176, 2179): FHD 5150, HD 6385 -> +1.0 % / +1.1 %.
+- Verdict: defaults CONFIRMED active and kept. The m1n1 broker-lock split (exp/m1n1-brokerlock 550c7f23, macho 1c35a20b) becomes the working launch m1n1 and lastgood; m1n1 075e3980 stays the emergency fallback.
+- Recovery: rec2181h.
