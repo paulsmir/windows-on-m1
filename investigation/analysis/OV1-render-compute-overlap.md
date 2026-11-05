@@ -217,3 +217,47 @@ answer:
   - no `event wait` lies between them.
   It refutes the hypothesis if those resources are tracked, or if a fence or event links the pair and Apple
   still overlaps it. Then the answer is in userland AGXMetal.
+
+## OV5: compute -> render overlap at the TA stage (2026-11-05, offline, from EXP2201 mtlhazard)
+- Apple's mechanism (EXP2201 hazard-fhd.csv, cb 750, scratchpad mtlpairs.py). c15 shares 21 tracked
+  resources with R16. Its only memoryBarrier names texture 0x...02d850, and that texture is R16's color
+  attachment (rpass attachment 0x36502d850). So R16 does depend on c15, but only for its fragment/3D
+  work: Metal lets R16's vertex/TA work run while c15 runs (c15's 1.94 ms lies inside R16's 7.05 ms)
+  and orders only the 3D stage. Same pattern for c19 -> R20: c19 binds 0318a0 (R20: fragment-only, m2)
+  and barriers bec710. The resources both bind at vertex stage (671370, 677e50, 78ea10, 790320,
+  72ca00) are not named by c15's barrier, i.e. read-read.
+- WINDOWS CONTRACT: R after C with no barrier naming a range both access, where one writes, is
+  unordered. With a transition between them (C UAV-writes X; X -> RENDER_TARGET or -> PIXEL_SHADER_
+  RESOURCE), R must not access X before C's writes complete. Nothing requires R's vertex work, which
+  does not touch X, to wait.
+- AGX/ASAHI CONTRACT: a render job is a TA (VDM) part and a 3D part in separate firmware
+  microsequences. Today the KMD window gives the whole render a TA_ON_COMPUTE lead barrier, so the TA
+  waits for C. The 3D part runs after the TA by construction. A counted-ExecuteIndirect render's prelude
+  (v5 expansion, IA statistics, OV3 copies) runs on the compute queue behind C, and the TA waits for it
+  (D3D-G1b).
+- TRANSLATION:
+  - UMD, per render R after compute C. Track C's accessed ranges, the same way the ranges rule tracks a
+    render's, from ReplayDispatch bindings with UAVs marked as writes. Split R's accesses by stage:
+    vertex = VB, IB, indirect args/count, SO, and VS views; fragment = RTV, DSV, PS views and absorbed
+    clears.
+  - Flag R as "TA independent" when all of these hold:
+    - C's UAV-written ranges are disjoint from R's vertex ranges;
+    - C's accessed ranges are disjoint from R's vertex-stage writes (SO, VS UAVs);
+    - no global UAV barrier sits in the gap while both use UAVs;
+    - nothing is unplaceable;
+    - R has no compute prelude.
+  - KMD: for a flagged render, waive the TA lead wait on C's stamp, but put the wait on C's stamp into
+    the 3D microsequence. The 3D always waits, so fragment-stage dependencies (c15 -> R16 attachment)
+    stay ordered without tracking.
+- Blocker for our C5 -> R6: R6 (4 counted-EI draws) has a compute prelude, which queues behind C5 on
+  the compute FIFO. Only OV5 plus moving that expansion ahead of C5 (IE1b: it reads args C3 wrote;
+  Metal c13 writes R14/R16's indirect buffer 79ae60) ports c15/R16. Our C7 -> R8 (6 direct draws, no
+  prelude under OV3b) ports with OV5 alone: c19/R20 is 1.45 ms FHD / 0.72 ms HD on macOS, and our
+  C7 is 0.65 ms HD.
+- WHAT IS STILL UNKNOWN:
+  - Whether the firmware 3D microsequence can wait on a compute stamp: KMD/firmware work for fork 6,
+    with m1n1 or Asahi as reference.
+  - Which of our 17 C5 -> R6 gap barriers / 2 C7 -> R8 gap barriers name C's ranges. A receipt run
+    with the C-range tracker will show it.
+  - Whether hoisting R6's expansion ahead of C5 is legal per frame. Count/args writers would have to
+    be C3 only; that needs a receipt.
