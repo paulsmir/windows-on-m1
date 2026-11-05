@@ -227,6 +227,10 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformBuildSubmission(
         !Job->ComputeExpectedStamp ||
         Job->ComputeExpectedDonePointer >= APPLE_AGX_G13_RING_CAPACITY ||
         (sidecar == PLATFORM_NULL && !provider->ExternalRenderReady) ||
+        /* Q2c: an externally built RunCompute names notifier 11, which is
+         * not on the compute Queue's own notifier list. */
+        (sidecar == PLATFORM_NULL && provider->RenderSharedMemory != PLATFORM_NULL &&
+         provider->RenderSharedMemory->ComputeOwnQueue) ||
         provider->Transport.NowTicks == PLATFORM_NULL)
       return APPLE_AGX_BACKEND_FALSE;
     AppleAgxPlatformZero(Submission,
