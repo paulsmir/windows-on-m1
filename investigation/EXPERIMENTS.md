@@ -69439,3 +69439,15 @@ EXP2190 HARDWARE ACTUAL (2026-11-05T14:55:13Z): **Q2c on, no receipts: FHD FULL 
 - Switches Wom1ComputeOwnQueue=1. Suite 119 PASS / 0 FAIL; WER 0; guest alive; no reset.
 - Against the receipt-free controls (EXP2182-2188): FHD first-arm 5268 / 5174 -> 5396 (+2.4 % over the best); HD FULL 6628 / 6595 / 6592 / 6468 -> 6575 (within spread); HD PERF controls 39.7-40.45 -> 40.29 / 40.38 (within spread).
 - Verdict: positive for FHD, neutral for HD within cross-boot noise; not enough for a default flip. Next: EXP2191 = same package design and arm order with Q2c off (cross-boot control pair). Recovery rec2190h.
+
+EXP2191 HARDWARE BEFORE 2026-11-05T15:02:23Z:
+Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: a FHD FULL (first arm), b HD FULL, c HD PERF, d HD PERF (EXP2190's arm order).
+- WHY THIS HYPOTHESIS: (1) EXP2190 (Q2c on) FHD 5396 vs earlier first-arm controls 5268/5174 suggests +2.4 % FHD, HD within spread; (2) the switch is read at adapter start, so the comparison must be cross-boot with identical arms and package; (3) the control pair decides the default flip.
+- WINDOWS / AGX CONTRACT: defaults (one Queue).
+- ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: boot-to-boot spread for this arm order.
+- Expected: FHD below EXP2190 if Q2c helps FHD; HD equal.
+- Failure criteria: suite regression / reset (the control must be clean).
+- Recovery: rec2191h.
+- Hashes: sys b8813d8ba4ec, UmdArm64 df913ef90dc9, UmdX64 cceb5efc0236, Umd32 9697bdd26d16; manifest bb3f49abd39a, hardware-manifest 80e51539eea9; probe2191.sh 0061f181360a (PROBE_LINT_OK); visible recovery rec2191h 7f5e16e85e4c4371; m1n1 0d3a75b3.
+- Recovery rec2191h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2191-q2c-off/run2191.sh.
