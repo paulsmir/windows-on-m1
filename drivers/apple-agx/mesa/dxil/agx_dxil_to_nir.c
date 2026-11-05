@@ -838,10 +838,51 @@ agx_dxil_shift_of(nir_alu_instr *alu, unsigned *other)
    return 0;
 }
 
+/* M1b: ((x & M) + y) * 2^s == (x + y) * 2^s in 32-bit arithmetic when M
+ * keeps the low 32 - s bits: the dropped bits of x are multiplied out of the
+ * 32-bit result, through the carry chain of the add as well. dxc emits this
+ * form for element offsets (index & 0x3fffffff) + k, which hides the
+ * adjacency of neighbouring words from the load/store vectorizer. Only the
+ * multiply's operand is rewritten; the mask keeps its other uses.
+ * APPLE_AGX_DXIL_INDEX_MASK_ADD=0 keeps these masks (measurement control). */
+static bool
+agx_dxil_drop_index_mask_add(nir_builder *b, nir_alu_instr *alu, unsigned other,
+                             uint32_t need)
+{
+   static int enabled = -1;
+   if (enabled < 0) {
+      const char *off = getenv("APPLE_AGX_DXIL_INDEX_MASK_ADD");
+      enabled = !(off && off[0] == '0');
+   }
+   if (!enabled)
+      return false;
+   nir_scalar sum = nir_get_scalar(alu->src[other].src.ssa, alu->src[other].swizzle[0]);
+   if (sum.def->bit_size != 32)
+      return false;
+   for (unsigned j = 0; j < 2; ++j) {
+      nir_scalar m = nir_scalar_chase_alu_src(sum, j);
+      if (!nir_scalar_is_alu(m) || nir_scalar_alu_op(m) != nir_op_iand || m.def->bit_size != 32)
+         continue;
+      for (unsigned i = 0; i < 2; ++i) {
+         nir_scalar c = nir_scalar_chase_alu_src(m, i);
+         if (!nir_scalar_is_const(c) || ((uint32_t)nir_scalar_as_uint(c) & need) != need)
+            continue;
+         nir_scalar keep = nir_scalar_chase_alu_src(m, 1 - i);
+         nir_scalar addend = nir_scalar_chase_alu_src(sum, 1 - j);
+         b->cursor = nir_before_instr(&alu->instr);
+         nir_def *s2 = nir_iadd(b, nir_mov_scalar(b, keep), nir_mov_scalar(b, addend));
+         nir_src_rewrite(&alu->src[other].src, s2);
+         alu->src[other].swizzle[0] = 0;
+         return true;
+      }
+   }
+   return false;
+}
+
 static bool
 agx_dxil_drop_index_mask_instr(nir_builder *b, nir_alu_instr *alu, void *data)
 {
-   (void)b; (void)data;
+   (void)data;
    if ((alu->op != nir_op_amul && alu->op != nir_op_imul && alu->op != nir_op_ishl) ||
        alu->def.bit_size != 32 || alu->def.num_components != 1)
       return false;
@@ -851,10 +892,12 @@ agx_dxil_drop_index_mask_instr(nir_builder *b, nir_alu_instr *alu, void *data)
    nir_instr *def_instr = nir_def_instr(alu->src[other].src.ssa);
    if (def_instr->type != nir_instr_type_alu)
       return false;
+   const uint32_t need = 0xffffffffu >> shift;
+   if (nir_instr_as_alu(def_instr)->op == nir_op_iadd)
+      return agx_dxil_drop_index_mask_add(b, alu, other, need);
    nir_alu_instr *mask = nir_instr_as_alu(def_instr);
    if (mask->op != nir_op_iand || mask->def.bit_size != 32)
       return false;
-   const uint32_t need = 0xffffffffu >> shift;
    for (unsigned i = 0; i < 2; ++i) {
       if (!nir_src_is_const(mask->src[i].src))
          continue;

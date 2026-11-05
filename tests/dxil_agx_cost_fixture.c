@@ -559,12 +559,16 @@ selftest_index_masks(void)
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "m1-index-masks");
    b.shader->info.num_ssbos = 1;
    nir_def *x = nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
-   nir_def *v[4];
+   nir_def *v[7];
    v[0] = nir_amul(&b, nir_iand_imm(&b, x, 0x3fffffff), nir_imm_int(&b, 4));  /* drop */
    v[1] = nir_imul(&b, nir_iand_imm(&b, x, 0x0fffffff), nir_imm_int(&b, 4));  /* keep: bits 28-29 */
    v[2] = nir_ishl(&b, nir_iand_imm(&b, x, 0x1fffffff), nir_imm_int(&b, 3));  /* drop */
    v[3] = nir_imul(&b, nir_imm_int(&b, 8), nir_iand_imm(&b, x, 0x3fffffff));  /* drop: covers 0x1fffffff */
-   for (unsigned i = 0; i < 4; ++i)
+   /* M1b: the masked index plus an element offset */
+   v[4] = nir_amul(&b, nir_iadd_imm(&b, nir_iand_imm(&b, x, 0x3fffffff), 3), nir_imm_int(&b, 4));  /* drop */
+   v[5] = nir_imul(&b, nir_iadd_imm(&b, nir_iand_imm(&b, x, 0x0fffffff), 3), nir_imm_int(&b, 4));  /* keep */
+   v[6] = nir_ishl(&b, nir_iadd(&b, nir_imm_int(&b, 5), nir_iand_imm(&b, x, 0x1fffffff)), nir_imm_int(&b, 3)); /* drop */
+   for (unsigned i = 0; i < 7; ++i)
       nir_store_ssbo(&b, v[i], nir_imm_int(&b, 0), nir_imm_int(&b, 4 * i), .write_mask = 1,
                      .access = ACCESS_NON_READABLE, .align_mul = 4, .align_offset = 0);
    agx_dxil_drop_index_masks(b.shader);
@@ -578,13 +582,22 @@ selftest_index_masks(void)
          bool masked = false;
          for (unsigned k = 0; k < 2; ++k) {
             nir_instr *src = nir_def_instr(mul->src[k].src.ssa);
-            masked |= src->type == nir_instr_type_alu && nir_instr_as_alu(src)->op == nir_op_iand;
+            if (src->type != nir_instr_type_alu)
+               continue;
+            nir_alu_instr *s = nir_instr_as_alu(src);
+            masked |= s->op == nir_op_iand;
+            if (s->op == nir_op_iadd) {
+               for (unsigned j = 0; j < 2; ++j) {
+                  nir_instr *a = nir_def_instr(s->src[j].src.ssa);
+                  masked |= a->type == nir_instr_type_alu && nir_instr_as_alu(a)->op == nir_op_iand;
+               }
+            }
          }
          printf("MASK %u %s\n", i++, masked ? "kept" : "dropped");
       }
    }
    ralloc_free(b.shader);
-   return i == 4 ? 0 : 3;
+   return i == 7 ? 0 : 3;
 }
 
 /* Independent shared-memory reads with real producer stores and a group
