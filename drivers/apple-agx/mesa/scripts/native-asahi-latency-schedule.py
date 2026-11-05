@@ -395,7 +395,9 @@ CONTEXT = '''   /* Promoted constants. These will be appended to the binary at t
 /* RC122: allocate narrow values packed (agx_register_allocate.c) */
 #define AGX_WIN32_RA_PACK          0x200u
 /* RC123: reserve pending phi-web registers (agx_register_allocate.c) */
-#define AGX_WIN32_RA_WEB           0x400u'''
+#define AGX_WIN32_RA_WEB           0x400u
+/* O1: bound a compute function to one more resident workgroup */
+#define AGX_WIN32_RA_GROUPS        0x800u'''
 
 
 def project_compiler_h(text):
@@ -465,6 +467,20 @@ agx_win32_ra_pack_enabled(void)
       enabled = !(env && env[0] == '0' && !env[1]);
    }
    return enabled != 0;
+}
+
+/* O1: APPLE_AGX_RA_GROUPS=1 tries the one-more-workgroup bound for compute
+ * functions and keeps it at most 1/16 more instructions; =2 keeps it at any
+ * instruction cost (measurement). Default off pending hardware. Read once. */
+static unsigned
+agx_win32_ra_groups_mode(void)
+{
+   static int mode = -1;
+   if (mode < 0) {
+      const char *env = getenv("APPLE_AGX_RA_GROUPS");
+      mode = env && (env[0] == '1' || env[0] == '2') && !env[1] ? env[0] - '0' : 0;
+   }
+   return (unsigned)mode;
 }
 
 /* RC123: APPLE_AGX_RA_WEB=0 disables phi-web reservation. Read once. */
@@ -581,6 +597,38 @@ agx_win32_compile_function(nir_shader *nir, nir_function_impl *impl, struct agx_
                break;
             code = kept;
             memcpy(code, (uint8_t *)binary->data + start, bytes);
+         }
+      }
+   }
+
+   /* O1 (opt-in APPLE_AGX_RA_GROUPS=1): the chosen variant bounded to the
+    * register count of one more resident workgroup (agx_ra spills to it);
+    * kept only when it really runs more threads (and, at =1, costs at
+    * most 1/16 more instructions). */
+   const unsigned groups_mode = agx_win32_ra_groups_mode();
+   if (groups_mode && nir->info.stage == MESA_SHADER_COMPUTE) {
+      binary->size = start;
+      *out = before;
+      unsigned blocks = 0;
+      const unsigned grouped = agx_compile_function_nir(nir, impl, key, binary, out,
+                                                        chosen_target | AGX_WIN32_RA_GROUPS, &blocks);
+      if (out->stats.threads > chosen.stats.threads &&
+          (groups_mode == 2 || out->stats.instrs <= chosen.stats.instrs + chosen.stats.instrs / 16)) {
+         chosen_target |= AGX_WIN32_RA_GROUPS;
+         chosen = *out;
+         offset = grouped;
+         bytes = binary->size - start;
+         void *kept = realloc(code, bytes ? bytes : 1);
+         if (kept) {
+            code = kept;
+            memcpy(code, (uint8_t *)binary->data + start, bytes);
+         } else {
+            /* the copy of the chosen code is still the old one: keep both
+             * consistent by restoring the pinned result below */
+            free(code);
+            binary->size = start;
+            *out = before;
+            return agx_compile_function_nir(nir, impl, key, binary, out, 0, NULL);
          }
       }
    }
@@ -1028,9 +1076,39 @@ RA_WEB_FIND = '''   /* RC123: keep registers promised to pending phi webs free i
 ''' + RA_WEB_FIND_ANCHOR
 
 
+# O1 (C4 analysis 2026-11-05): a compute function's register bound is the
+# occupancy of one workgroup at most; the allocator never targets the tier
+# that holds one more whole workgroup. GravityMark's a826 family (256-thread
+# groups, 111-127 halfregs, 1.48 ms/frame) sits in tiers 112/128 (896/832
+# threads), i.e. 3 resident groups, where 104 halfregs (1024 threads) hold 4.
+# With AGX_WIN32_RA_GROUPS the bound becomes the largest register count that
+# keeps one more whole group resident, and agx_spill spills down to it.
+RA_GROUPS_ANCHOR = '''   bool spilling = (effective_demand > max_possible_regs);
+'''
+RA_GROUPS = RA_GROUPS_ANCHOR + '''   /* O1 (native-asahi-latency-schedule.py): one more resident workgroup */
+   if ((ctx->windows_latency_target & AGX_WIN32_RA_GROUPS) && !spilling &&
+       !force_spilling && mesa_shader_stage_is_compute(ctx->stage) &&
+       !ctx->nir->info.workgroup_size_variable && ctx->key->has_scratch &&
+       !ctx->key->is_helper) {
+      const unsigned w = ctx->nir->info.workgroup_size[0] *
+                         ctx->nir->info.workgroup_size[1] *
+                         ctx->nir->info.workgroup_size[2];
+      const unsigned groups = w ? agx_occupancy_for_register_count(effective_demand).max_threads / w : 0;
+      if (w >= 32 && groups && (groups + 1) * w <= 1024) {
+         const unsigned bound = agx_max_registers_for_occupancy((groups + 1) * w);
+         if (bound < effective_demand && bound >= 64) {
+            max_possible_regs = bound;
+            spilling = true;
+         }
+      }
+   }
+'''
+
+
 def project_ra(text):
     if 'RC122' in text:
         raise RuntimeError('agx_register_allocate.c already projected')
+    text = once(text, RA_GROUPS_ANCHOR, RA_GROUPS)
     text = once(text, RA_ANCHOR, RA)
     text = once(text, RA_WEB_FIELD_ANCHOR, RA_WEB_FIELD)
     text = once(text, RA_WEB_BLOCK_ANCHOR, RA_WEB_BLOCK)
