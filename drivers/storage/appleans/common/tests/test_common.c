@@ -7,8 +7,14 @@
 static struct ans_namespace ns = {
     .blocks = 0x100000010ULL, .block_size = 4096, .nsid = 1,
     .ready = 1, .cache_known = 1, .write_cache_enabled = 1,
-    .vendor = "TEST    ", .product = "OFFLINE FIXTURE ", .revision = "0001"
 };
+/* SCSI INQUIRY fields are fixed-width and not NUL-terminated. */
+static void fixture_strings(void)
+{
+    memcpy(ns.vendor, "TEST    ", sizeof ns.vendor);
+    memcpy(ns.product, "OFFLINE FIXTURE ", sizeof ns.product);
+    memcpy(ns.revision, "0001", sizeof ns.revision);
+}
 static void put(uint8_t *p, uint64_t v, size_t n)
 { while (n) { p[--n] = (uint8_t)v; v >>= 8; } }
 static void sense(struct ans_scsi_plan p, uint8_t key, uint8_t asc)
@@ -226,6 +232,7 @@ static void status_tests(void)
 }
 int main(void)
 {
+    fixture_strings();
     rw_tests(); discovery_tests(); cache_tests(); prp_tests(); status_tests();
     puts("ANS common SCSI + SG/PRP deterministic tests PASS");
     return 0;

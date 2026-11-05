@@ -69,7 +69,7 @@ class QualificationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'output aliases'):self.call(contract_output=output)
         self.assertEqual(target.read_bytes(),before)
         from tools.ans_qualification import reject_output_aliases
-        with tempfile.TemporaryDirectory() as root:
+        with tempfile.TemporaryDirectory(dir=target.parent) as root:  # hardlink needs one device
             log=Path(root)/'hv.log';os.link(target,log)
             with self.assertRaisesRegex(ValueError,'output aliases'):
                 reject_output_aliases(root,self.paths,self.path)
