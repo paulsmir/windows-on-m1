@@ -69689,3 +69689,16 @@ EXP2203 HARDWARE ACTUAL (2026-11-05T23:08:18Z): **CONFIRMED (diagnostic): OV5 ve
 - GPU_RESET resets 1 ok 1 entry ENGINE status 0x0 faulted tag 1 line 537 (AppleAgxSchedulerBeginBoundaryPreemption refused) packet 2 fence 0x39f completed 0x39d; PREEMPT_REFUSAL PreemptionFence 0xb0 while PendingPreemptionFence 0xaf, CutoffFence 0x39f, ActiveFence 0. Same first entry as EXP2183: an intermittent KMD defect (a new preemption request while one is pending), not caused by this package's change set; proposed as its own task.
 - EXP2203-B (live guest after the arm; Wom1Ov2NoHazardLead=1; after GravityMark and the reset): cs-bench-run.sh (recreated EXP1184 harness), hl.exe started 23:59:07+01:00, alive at the 300 s timeout with 288 s CPU, no timedemo result line (done=False, demo present). EXP1378 reference 3771 frames / 84.2 s / 44.784 fps.
 - Verdict: OV5 for C7->R8 blocked by reason 6 (to locate the driver work between C7 and R8); CS regression reproduced, cause unknown. Next: EXP2204 (default driver, no switches, no GravityMark, CS after the suite) to separate default-path regression from switch/GravityMark state. Recovery rec2203h.
+
+EXP2204 HARDWARE BEFORE 2026-11-05T23:12:44Z:
+Steps: D3D12 suite; then (EXP2204-B, outside the probe, same boot) the standard CS 1.6 benchmark (EXP1184 harness: timedemo agxbench, fullscreen 2560x1600, SteamNoOverlayUIDrawing=1) via cs-bench-run.sh; Steam launch allowed by the user 2026-11-05.
+- WHY THIS HYPOTHESIS: (1) the user measured ~5 fps on de_dust2 at 22:07Z on the EXP2200 guest (experimental package, Wom1Ov2NoHazardLead=1, after GravityMark arms); (2) EXP2203-B reproduced it: the benchmark did not finish in 300 s (hl.exe alive, 288 s CPU) on the EXP2203 guest (Wom1Ov2NoHazardLead=1, after GravityMark, one engine reset in the suite); (3) the last standard CS result is EXP1378 44.784 fps (2026-10-18); no CS/GL check has run since, while Q2c+F1 and other defaults changed.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (measurement).
+- ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: whether the default driver (no OV2 switch, no prior GravityMark) is also slow; if yes, a default-path regression since EXP1378 to bisect; if no, the OV2 switch or GravityMark-left state.
+- Expected: suite 119/0; CS benchmark completes; fps ~44.8 (no regression) or a clear failure.
+- Failure criteria: benchmark not completing or fps << 44.8 -> default-path regression; any fault/TDR/WER recorded.
+- Recovery: rec2204h (recover.sh directly on the running guest, no manual reboot).
+- Probe: agx_d3d12_probe_e2204_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys f3db5be681c4, UmdArm64 8f74222780ed, UmdX64 c0ab7e1378b1, Umd32 cf4fb55cc834; manifest ad0535333740, hardware-manifest ec5a7906bca6; probe2204.sh 36bc23aac8a0 (PROBE_LINT_OK); visible recovery rec2204h cd5eb9c50b365149; m1n1 0d3a75b3.
+- Recovery rec2204h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2204-cs16-default/run2204.sh.
