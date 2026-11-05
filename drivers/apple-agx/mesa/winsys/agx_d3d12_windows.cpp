@@ -632,8 +632,28 @@ extern "C" void AgxD3d12OwnerJobDrawUav(void) {
   AgxD3d12JobBarrierDrawUav(&owner_job_barriers);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
+/* OV2 receipt (EXP2198): per ExecuteCommandLists, the refusal reasons
+ * (AgxD3d12JobBarrierRefusal) of its compute batches: values {count of each
+ * reason 0..7, the reasons of its first eight compute batches after a render
+ * as nibbles (low nibble first), compute batches after a render}. Written by
+ * the next execution (only with the OV2 feature and measuring on). */
+static UINT owner_ov2_reason[8], owner_ov2_sequence, owner_ov2_pairs;
+static void owner_ov2_receipt_locked(void) {
+  UINT any = 0;
+  for (unsigned i = 0; i < 8u; ++i) any |= owner_ov2_reason[i];
+  if (any && AdmissionUmdMeasureEnabled()) {
+    UINT values[10];
+    for (unsigned i = 0; i < 8u; ++i) values[i] = owner_ov2_reason[i];
+    values[8] = owner_ov2_sequence;
+    values[9] = owner_ov2_pairs;
+    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 10u);
+  }
+  for (unsigned i = 0; i < 8u; ++i) owner_ov2_reason[i] = 0;
+  owner_ov2_sequence = owner_ov2_pairs = 0;
+}
 extern "C" void AgxD3d12OwnerJobExecution(unsigned known) {
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  owner_ov2_receipt_locked();
   AgxD3d12JobBarrierExecution(&owner_job_barriers, known);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
@@ -674,8 +694,15 @@ static unsigned owner_batch_kind(unsigned kind) {
   unsigned independent = 0u;
   if (!AgxD3d12OwnerJobBarriersEnabled()) return 0u;
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
-  if (kind == 2u && AgxWin32Ov2Feature)
-    independent = AgxD3d12JobBarrierIndependent(&owner_job_barriers);
+  if (kind == 2u && AgxWin32Ov2Feature) {
+    const unsigned reason = AgxD3d12JobBarrierRefusal(&owner_job_barriers);
+    independent = reason == 0u ? 1u : 0u;
+    ++owner_ov2_reason[reason & 7u];
+    if (owner_job_barriers.PreviousKind == 1u) {
+      if (owner_ov2_pairs < 8u) owner_ov2_sequence |= (reason & 0xfu) << (4u * owner_ov2_pairs);
+      ++owner_ov2_pairs;
+    }
+  }
   AgxD3d12JobBarrierBatch(&owner_job_barriers, kind, owner_job_values);
   owner_job_values_valid = 1u;
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);

@@ -209,21 +209,34 @@ static inline void AgxD3d12JobBarrierPoison(AGX_D3D12_JOB_BARRIERS *j) { j->Unkn
  * render was the previous batch, no barrier between them, no barrier but UAV
  * barriers inside the compute batch, and the render bound no UAV. Call before
  * AgxD3d12JobBarrierBatch for the compute batch. Any doubt -> 0. */
-static inline unsigned AgxD3d12JobBarrierIndependent(const AGX_D3D12_JOB_BARRIERS *j) {
+/* OV2 refusal reason for the compute batch now being submitted (EXP2198:
+ * the KMD saw ~no flagged pair): 0 independent, 1 barriers not all known,
+ * 2 previous batch not a render of this execution, 3 barriers between the
+ * render and this batch, 4 the render may have written a UAV, 5 a dispatch
+ * recorded before the render, 6 other owner work since the render, 7 a
+ * non-UAV barrier inside this batch. First match in that order. */
+static inline unsigned AgxD3d12JobBarrierRefusal(const AGX_D3D12_JOB_BARRIERS *j) {
   const AGX_D3D12_JOB_BARRIER_SET *after = j->Active ? &j->Before : &j->Open;
-  unsigned inside;
   unsigned foreign;
-  if (j->Unknown || j->PreviousKind != 1u || j->GapAfterRender != 0u || j->RenderUav ||
-      j->EarlyDispatch)
-    return 0u;
+  if (j->Unknown) return 1u;
+  if (j->PreviousKind != 1u) return 2u;
+  if (j->GapAfterRender != 0u) return 3u;
+  if (j->RenderUav) return 4u;
+  if (j->EarlyDispatch) return 5u;
   /* the active command (a draw or other work that submits this batch
    * lazily) comes after it */
   foreign = j->ForeignSince;
   if (AgxD3d12JobBarrierForeignActive(j) && foreign) --foreign;
-  if (foreign) return 0u;
-  if (after->NonUav > j->NonUavSince) return 0u;
-  inside = j->NonUavSince - after->NonUav;
-  return inside == 0u ? 1u : 0u;
+  if (foreign) return 6u;
+  if (after->NonUav > j->NonUavSince) return 7u;
+  return j->NonUavSince - after->NonUav == 0u ? 0u : 7u;
 }
-
+/* OV2: the compute batch now being submitted is independent of the render
+ * batch submitted just before it under D3D12 rules: same execution, that
+ * render was the previous batch, no barrier between them, no barrier but UAV
+ * barriers inside the compute batch, and the render bound no UAV. Call before
+ * AgxD3d12JobBarrierBatch for the compute batch. Any doubt -> 0. */
+static inline unsigned AgxD3d12JobBarrierIndependent(const AGX_D3D12_JOB_BARRIERS *j) {
+  return AgxD3d12JobBarrierRefusal(j) == 0u ? 1u : 0u;
+}
 #endif

@@ -50,6 +50,7 @@ static unsigned values[AGX_D3D12_JOB_BARRIER_VALUES];
  * barriers between C's dispatches, then the next render's first draw submits
  * C after a C->R gap of transitions (which must not count). */
 enum { QUERY = 9, COPY = 1 };
+static unsigned last_reason;
 static unsigned scenario_ex(unsigned known, unsigned uav_draw, unsigned gap, unsigned inside_type,
                             unsigned prev_compute, unsigned resolve_trigger, unsigned copy_inside,
                             unsigned early_dispatch);
@@ -96,6 +97,8 @@ static unsigned scenario_ex(unsigned known, unsigned uav_draw, unsigned gap, uns
   AgxD3d12JobBarrierBegin(&j, DRAW);              /* next R's first draw */
   {
     unsigned r = AgxD3d12JobBarrierIndependent(&j);
+    last_reason = AgxD3d12JobBarrierRefusal(&j);
+    if ((last_reason == 0u) != (r == 1u)) return 99u;
     AgxD3d12JobBarrierBatch(&j, 2u, values);      /* C submitted */
     return r;
   }
@@ -117,6 +120,16 @@ int main(void) {
   printf("resolve_deferred_unknown %u\n", scenario_ex(0, 0, 0, 9, 0, 2, 0, 0));
   printf("copy_inside %u\n", scenario_ex(1, 0, 0, 9, 0, 0, 1, 0));
   printf("early_dispatch %u\n", scenario_ex(1, 0, 0, 9, 0, 0, 0, 1));
+  /* EXP2198 receipt measure-d3d12-ov2-refusal: the reason per scenario */
+  printf("reasons");
+  scenario(1, 0, 0, 9, 0); printf(" %u", last_reason);
+  scenario(0, 0, 0, 9, 0); printf(" %u", last_reason);
+  scenario(1, 0, 1, 9, 0); printf(" %u", last_reason);
+  scenario(1, 1, 0, 9, 0); printf(" %u", last_reason);
+  scenario_ex(1, 0, 0, 9, 0, 0, 0, 1); printf(" %u", last_reason);
+  scenario_ex(1, 0, 0, 9, 0, 1, 0, 0); printf(" %u", last_reason);
+  scenario(1, 0, 0, TRANSITION, 0); printf(" %u", last_reason);
+  scenario_ex(1, 0, 0, 9, 0, 2, 0, 0); printf(" %u\n", last_reason);
   /* compute after compute is never independent of a render */
   AgxD3d12JobBarriersInit(&j); AgxD3d12JobBarrierExecution(&j, 1);
   AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierBatch(&j, 2u, values);
@@ -183,7 +196,10 @@ class Ov2NoHazardLead(unittest.TestCase):
     def test_umd_independence_rule(self):
         ran = build_run(UMD_RULE, [], [D3D12])
         self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
-        got = dict(line.split() for line in ran.stdout.split('\n') if line)
+        lines = [line for line in ran.stdout.split('\n') if line]
+        reasons = [line for line in lines if line.startswith('reasons')]
+        self.assertEqual(reasons, ['reasons 0 1 3 4 5 6 7 0'])
+        got = dict(line.split() for line in lines if not line.startswith('reasons'))
         self.assertEqual(got, {
             'base': '1', 'inside_uav': '1', 'inside_transition': '0', 'inside_aliasing': '0',
             'gap_transition': '0', 'gap_uav': '0', 'render_uav': '0', 'unknown': '0',
